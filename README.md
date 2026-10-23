@@ -5,8 +5,9 @@ Açık kaynak VMware sunucu yönetim platformunun başlangıç deposu.
 **Durum: geliştirme iskeleti. Üretime ve müşteri kullanımına hazır değildir.**
 
 ## Çalışan bileşenler
-- Next.js kullanıcı ve yönetim başlangıç ekranları.
+- Next.js (TypeScript) kullanıcı ve yönetim başlangıç ekranları.
 - NestJS/Fastify API: canlılık, PostgreSQL/Redis hazır olma kontrolü, sistem durumu ve Prometheus metrikleri.
+  `/metrics` yalnızca iç ağdan erişilir; Caddy üzerinden `/api/metrics` 404 döner.
 - BullMQ worker: Redis bağlantısı, PostgreSQL heartbeat ve bilinmeyen işleri reddetme.
 - PostgreSQL başlangıç şeması; Redis AOF; Caddy ters proxy.
 - İsteğe bağlı Prometheus, Grafana, Loki ve OpenTelemetry Collector.

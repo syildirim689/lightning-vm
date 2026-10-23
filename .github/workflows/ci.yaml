@@ -3,6 +3,25 @@ on: [push, pull_request]
 permissions:
   contents: read
 jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - {app: api, run: npm test}
+          - {app: web, run: npm run build}
+          - {app: worker, run: npm run check}
+    defaults:
+      run:
+        working-directory: apps/${{ matrix.app }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+      - run: ${{ matrix.run }}
+      - run: npm audit --omit=dev --audit-level=high
   build:
     runs-on: ubuntu-latest
     strategy:
@@ -24,6 +43,7 @@ jobs:
           sh scripts/install.sh
           curl --fail --retry 10 --retry-delay 3 --retry-all-errors http://127.0.0.1:8080/api/ready
           curl --fail --retry 10 --retry-delay 3 --retry-all-errors http://127.0.0.1:8080/admin
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8080/api/metrics)" = 404
       - name: Logs on failure
         if: failure()
         run: docker compose logs --tail=80

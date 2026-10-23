@@ -8,3 +8,7 @@ dist/
 backups/
 coverage/
 .DS_Store
+.codegraph/
+.worklog.md
+*.tsbuildinfo
+next-env.d.ts

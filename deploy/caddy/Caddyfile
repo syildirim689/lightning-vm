@@ -1,4 +1,8 @@
 :80 {
+  # Metrics are for Prometheus on the internal network only.
+  handle /api/metrics* {
+    respond 404
+  }
   handle_path /api/* {
     reverse_proxy api:4000
   }
