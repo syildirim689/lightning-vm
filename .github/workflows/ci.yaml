@@ -9,7 +9,7 @@ jobs:
       matrix:
         include:
           - {app: api, run: npm test}
-          - {app: web, run: npm run build}
+          - {app: web, run: npm test && npm run build && npx playwright install --with-deps chromium && npm run test:e2e}
           - {app: worker, run: npm run check}
     defaults:
       run:

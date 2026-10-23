@@ -1,0 +1,61 @@
+{
+  "Metadata": {
+    "description": "VMware management platform, early development build"
+  },
+  "Layout": {
+    "tagline": "INFRASTRUCTURE MANAGEMENT",
+    "navUser": "User panel",
+    "navAdmin": "Admin panel",
+    "build": "v{version} · Development scaffold",
+    "notice": "Early build · Authentication and the VMware connection are not implemented yet.",
+    "language": "Language"
+  },
+  "UserPanel": {
+    "eyebrow": "USER PANEL",
+    "title": "Your servers",
+    "intro": "Manage your resources and server operations in one place.",
+    "packageTitle": "Package server",
+    "packageText": "Create a server from predefined CPU, RAM and disk packages.",
+    "customTitle": "Custom resource server",
+    "customText": "Choose processor, memory and storage to fit your needs.",
+    "comingSoon": "Coming soon",
+    "serversTitle": "Server list",
+    "serversEmpty": "No VMware connection yet. No sample servers or fake usage data are shown.",
+    "consoleTitle": "Browser console",
+    "consoleText": "Available here once WebMKS integration and server ownership checks are complete."
+  },
+  "AdminPanel": {
+    "eyebrow": "ADMIN PANEL",
+    "title": "Infrastructure control center",
+    "intro": "Connections, resource pools and operations.",
+    "planned": "Planned module",
+    "notImplemented": "Not implemented yet",
+    "modules": {
+      "connections": "ESXi / vCenter connections",
+      "pools": "Resource and IP pools",
+      "packages": "Packages and images",
+      "customers": "Customers and permissions",
+      "servers": "All servers and consoles",
+      "audit": "Audit and operation history"
+    }
+  },
+  "Status": {
+    "title": "System health",
+    "checking": "Checking",
+    "reachable": "API, PostgreSQL and Redis are reachable",
+    "worker": "Background worker: {state}",
+    "workerWaiting": "Waiting",
+    "workerRunning": "Running (last signal {time})",
+    "workerNoHeartbeat": "Waiting for heartbeat",
+    "workerUnknown": "Unknown",
+    "disclaimer": "This check does not measure VMware or customer VM health."
+  },
+  "errors": {
+    "NETWORK": "The server could not be reached. Check your network connection or reverse proxy.",
+    "DEPENDENCY_UNAVAILABLE": "PostgreSQL or Redis is currently unreachable.",
+    "NOT_FOUND": "The requested resource was not found.",
+    "BAD_REQUEST": "The request is invalid.",
+    "INTERNAL_ERROR": "An unexpected server error occurred.",
+    "UNKNOWN": "An unknown error occurred."
+  }
+}

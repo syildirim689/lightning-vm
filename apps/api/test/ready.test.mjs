@@ -19,9 +19,16 @@ test('health stays alive without dependencies', async () => {
 test('ready returns 503 when PostgreSQL and Redis are unreachable', async () => {
   const res = await app.inject({ method: 'GET', url: '/ready' });
   assert.equal(res.statusCode, 503);
+  assert.equal(res.json().code, 'DEPENDENCY_UNAVAILABLE');
 });
 
 test('system returns 503 instead of 500 when PostgreSQL is unreachable', async () => {
   const res = await app.inject({ method: 'GET', url: '/system' });
   assert.equal(res.statusCode, 503);
+});
+
+test('unknown routes return a stable error code', async () => {
+  const res = await app.inject({ method: 'GET', url: '/does-not-exist' });
+  assert.equal(res.statusCode, 404);
+  assert.equal(res.json().code, 'NOT_FOUND');
 });

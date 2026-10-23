@@ -10,6 +10,27 @@ Windows Server 2025, Node 24.21, npm 11.19 (Docker yok).
 - `npm audit --omit=dev`: üç uygulamada 0 açık. API'de Nest'in getirdiği eski fastify
   `overrides` ile 5.12.7'ye sabitlendi.
 
+## 2. aşama: Türkçe/İngilizce — 2026-10-23
+Geliştirme makinesi:
+- API `npm test`: 4/4 geçti. Yeni test: bilinmeyen yol `{code: 'NOT_FOUND'}` dönüyor;
+  `/ready` 503 cevabı `DEPENDENCY_UNAVAILABLE` kodunu taşıyor.
+- Web `npm test` (çeviri kontrolü): 45 anahtar, tr/en eşit.
+  Bozuk bir kopyayla denendi: eksik anahtar, farklı değişken ve eksik hata kodu yakalandı.
+- Web `npm run build`: başarılı. Kodda olmayan bir anahtar kullanılınca TypeScript hatası verdiği denendi.
+- Playwright (Chromium, `next start`): 8/8 geçti.
+
+Docker test sunucusu (Compose + Caddy, gerçek API):
+- `Accept-Language: tr` → Türkçe; `en-US` → İngilizce.
+- `NEXT_LOCALE=en` cookie'si Türkçe tarayıcıda İngilizce gösteriyor.
+- Geçersiz cookie değeri yok sayılıyor.
+- `/api/nope` → `{"code":"NOT_FOUND",...}`; Redis durdurulunca `/api/ready` → `DEPENDENCY_UNAVAILABLE`.
+- Aynı Playwright paketi SSH tüneliyle Caddy arkasındaki standalone imaja karşı çalıştırıldı:
+  8/8 geçti (`E2E_BASE_URL`).
+
+Bulunan ve düzeltilen hata: kök `.dockerignore` web build context'i (`apps/web`) için
+geçerli değildi. Yerel `node_modules` ve `.next` imaja kopyalanabiliyordu.
+`apps/web/.dockerignore` eklendi.
+
 ## Docker test sunucusu — 2026-10-23
 Ubuntu 24.04.5 LTS, aarch64, 8 vCPU, 15 GiB RAM. Docker Engine 29.9.2,
 Compose v5.6.1 (resmî Docker apt deposundan kuruldu).

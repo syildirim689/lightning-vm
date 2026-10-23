@@ -1,0 +1,61 @@
+{
+  "Metadata": {
+    "description": "VMware yönetim platformu başlangıç sürümü"
+  },
+  "Layout": {
+    "tagline": "ALTYAPI YÖNETİMİ",
+    "navUser": "Kullanıcı paneli",
+    "navAdmin": "Yönetim paneli",
+    "build": "v{version} · Geliştirme iskeleti",
+    "notice": "Başlangıç sürümü · Kimlik doğrulama ve VMware bağlantısı henüz uygulanmadı.",
+    "language": "Dil"
+  },
+  "UserPanel": {
+    "eyebrow": "KULLANICI PANELİ",
+    "title": "Sunucularınız",
+    "intro": "Kaynaklarınızı ve sunucu işlemlerinizi tek yerden yönetin.",
+    "packageTitle": "Paket sunucu",
+    "packageText": "Hazır CPU, RAM ve disk paketlerinden sunucu oluşturma.",
+    "customTitle": "Özel kaynaklı sunucu",
+    "customText": "İhtiyacınıza göre işlemci, bellek ve depolama seçimi.",
+    "comingSoon": "Yakında",
+    "serversTitle": "Sunucu listesi",
+    "serversEmpty": "Henüz VMware bağlantısı yok. Örnek sunucu veya sahte kullanım verisi gösterilmiyor.",
+    "consoleTitle": "Tarayıcı konsolu",
+    "consoleText": "WebMKS entegrasyonu ve sunucu sahipliği kontrolü tamamlandığında burada erişilebilir olacak."
+  },
+  "AdminPanel": {
+    "eyebrow": "YÖNETİM PANELİ",
+    "title": "Altyapı kontrol merkezi",
+    "intro": "Bağlantılar, kaynak havuzları ve operasyonlar.",
+    "planned": "Planlanan modül",
+    "notImplemented": "Henüz uygulanmadı",
+    "modules": {
+      "connections": "ESXi / vCenter bağlantıları",
+      "pools": "Kaynak ve IP havuzları",
+      "packages": "Paketler ve imajlar",
+      "customers": "Müşteriler ve yetkiler",
+      "servers": "Tüm sunucular ve konsollar",
+      "audit": "Denetim ve işlem geçmişi"
+    }
+  },
+  "Status": {
+    "title": "Sistem sağlığı",
+    "checking": "Kontrol ediliyor",
+    "reachable": "API, PostgreSQL ve Redis erişilebilir",
+    "worker": "Arka plan çalışanı: {state}",
+    "workerWaiting": "Bekleniyor",
+    "workerRunning": "Çalışıyor (son sinyal {time})",
+    "workerNoHeartbeat": "Heartbeat bekleniyor",
+    "workerUnknown": "Bilinmiyor",
+    "disclaimer": "Bu kontrol VMware veya müşteri VM sağlığını ölçmez."
+  },
+  "errors": {
+    "NETWORK": "Sunucuya ulaşılamadı. Ağ bağlantınızı veya ters proxy'yi kontrol edin.",
+    "DEPENDENCY_UNAVAILABLE": "PostgreSQL veya Redis şu anda erişilemiyor.",
+    "NOT_FOUND": "İstenen kaynak bulunamadı.",
+    "BAD_REQUEST": "İstek geçersiz.",
+    "INTERNAL_ERROR": "Beklenmeyen bir sunucu hatası oluştu.",
+    "UNKNOWN": "Bilinmeyen bir hata oluştu."
+  }
+}
