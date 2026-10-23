@@ -10,6 +10,40 @@ Windows Server 2025, Node 24.21, npm 11.19 (Docker yok).
 - `npm audit --omit=dev`: üç uygulamada 0 açık. API'de Nest'in getirdiği eski fastify
   `overrides` ile 5.12.7'ye sabitlendi.
 
+## 3. aşama: kimlik doğrulama, roller, güvenli bootstrap — 2026-10-23
+Geliştirme makinesi:
+- API `npm test`: 7/7 geçti. Kapsam: CSRF başlığı yok veya Origin farklıysa 403; geçersiz girişte
+  alan kodları; oturumsuz yönetici isteğinde 401; hata kodları.
+- Web: `npm test` geçti (83 anahtar). Kontrol artık API'deki alan hata kodlarını da tarıyor;
+  çevirisiz bırakılan iki kodu yakaladığı denendi. `npm run build` geçti.
+- `npm audit --omit=dev`: api ve web için 0.
+
+Docker test sunucusu (gerçek PostgreSQL 17 + Redis 7):
+- `npm run test:integration` 11/11 geçti. Kapsam:
+  - migration'lar ikinci çalıştırmada hiçbir şey yapmıyor;
+  - yanlış ya da süresi dolmuş kurulum anahtarı reddediliyor;
+  - aynı anda gelen 5 kurulum isteğinden tam 1 yönetici oluşuyor, sonra kurulum kapanıyor;
+  - yanlış parola ile bilinmeyen e-posta aynı yanıtı alıyor;
+  - cookie bayrakları doğru; HTTPS proxy arkasında `Secure` ekleniyor;
+  - kayıt kapalı/açık durumları ve aynı e-postayla kayıt reddi;
+  - kullanıcının yönetici API'lerine erişimi 403 ve ret denetim kaydına yazılıyor;
+  - çıkış oturumu iptal ediyor; süresi dolan oturum ve devre dışı kullanıcı reddediliyor;
+  - 11. hatalı girişte 429.
+- Boş veriyle `install.sh`:
+  - `migrate` servisi 0 çıkış koduyla bitti; api, worker ve web sağlıklı;
+  - betik kurulum anahtarını yazdı.
+- Playwright (SSH tüneliyle Caddy arkasındaki gerçek kurulum): 11/11 geçti. Kapsam:
+  - kurulum anahtarı akışı ve kurulumun kapanması;
+  - sunucu tarafı doğrulama mesajlarının çevrilmesi;
+  - yönetici paneli ve kayıt ayarı;
+  - kayıtlı kullanıcının yönetici sayfası ve API'sinde 403 alması;
+  - çıkış;
+  - dil seçimi ve kalıcılığı;
+  - API hata kodu ve ağ hatası çevirisi;
+  - konsol hatası olmaması.
+- `install.sh` ikinci kez çalıştırıldı: "Yönetici hesabı zaten var", yeni anahtar üretilmedi.
+  Veritabanında 1 admin + 1 user var; denetim kayıtları test akışıyla eşleşiyor.
+
 ## 2. aşama: Türkçe/İngilizce — 2026-10-23
 Geliştirme makinesi:
 - API `npm test`: 4/4 geçti. Yeni test: bilinmeyen yol `{code: 'NOT_FOUND'}` dönüyor;

@@ -6,17 +6,19 @@ Açık kaynak VMware sunucu yönetim platformunun başlangıç deposu.
 
 ## Çalışan bileşenler
 - Next.js (TypeScript) kullanıcı ve yönetim başlangıç ekranları; Türkçe/İngilizce (docs/i18n.md).
-- NestJS/Fastify API: canlılık, PostgreSQL/Redis hazır olma kontrolü, sistem durumu ve Prometheus metrikleri.
+- Kimlik doğrulama: e-posta/parola girişi, `admin`/`user` rolleri, sunucu tarafı oturumlar, CSRF ve
+  hız sınırı, kurulum anahtarıyla güvenli ilk yönetici, denetim kayıtları (docs/auth.md).
+- NestJS/Fastify API: canlılık, PostgreSQL/Redis hazır olma kontrolü, yönetici sistem durumu ve Prometheus metrikleri.
   `/metrics` yalnızca iç ağdan erişilir; Caddy üzerinden `/api/metrics` 404 döner.
 - BullMQ worker: Redis bağlantısı, PostgreSQL heartbeat ve bilinmeyen işleri reddetme.
-- PostgreSQL başlangıç şeması; Redis AOF; Caddy ters proxy.
+- PostgreSQL sürümlü migration'lar (`migrate` servisi); Redis AOF; Caddy ters proxy.
 - İsteğe bağlı Prometheus, Grafana, Loki ve OpenTelemetry Collector.
 - GitHub Actions derleme kontrolü ve sürüm etiketinden GHCR imaj yayını.
 
 ## Henüz uygulanmayanlar
-Kullanıcı oturumu/RBAC, müşteri izolasyonu, VMware bağlantısı, VM işlemleri, konsol geçidi,
+Kurulum sihirbazının kalan adımları, MFA, parola sıfırlama, proje/müşteri modeli, VMware bağlantısı, VM işlemleri, konsol geçidi,
 IP tahsisi, faturalama, yedekleme otomasyonu ve otomatik güncelleme.
-Paneldeki kapalı düğmeler bu işlevleri gerçekleştirmez. İki ekran bulunması yetkilendirme değildir.
+Paneldeki kapalı düğmeler bu işlevleri gerçekleştirmez.
 
 ## Gereksinimler ve ilk çalıştırma
 Docker Engine + Compose v2 ve OpenSSL bulunan Linux sunucu.
@@ -27,6 +29,13 @@ docker compose ps
 curl -fsS http://127.0.0.1:8080/api/ready
 ```
 
+Kurulum betiği sonunda **1 saat geçerli bir kurulum anahtarı** yazar. http://127.0.0.1:8080/setup
+adresinde bu anahtarla ilk yönetici hesabını oluşturun. Anahtarın süresi dolduysa:
+
+```sh
+docker compose exec api node dist/cli.js bootstrap-token
+```
+
 Panel: http://127.0.0.1:8080 — yönetim: /admin.
 Uzak sunucudan erişim için kendi bilgisayarında:
 
@@ -34,8 +43,8 @@ Uzak sunucudan erişim için kendi bilgisayarında:
 ssh -L 8080:127.0.0.1:8080 KULLANICI@SUNUCU
 ```
 
-Varsayılan portlar yalnızca loopback üzerinde açılır. Kimlik doğrulama uygulanmadan
-LISTEN_ADDRESS değerini 0.0.0.0 yapmayın veya internete yayınlamayın.
+Varsayılan portlar yalnızca loopback üzerinde açılır. HTTPS (5. aşama) yapılandırılmadan
+LISTEN_ADDRESS değerini 0.0.0.0 yapmayın veya internete yayınlamayın: parolalar düz HTTP ile gider.
 Windows'ta Docker Desktop Linux container ortamı ve WSL2 içinden aynı komut kullanılabilir.
 
 ## İzleme
@@ -54,8 +63,8 @@ docker compose logs -f --tail=100 api worker
 docker compose down
 ```
 `down` verileri korur. `down -v` veritabanı dahil kalıcı verileri siler.
-SQL başlangıcı yalnızca boş PostgreSQL veri alanında çalışır; sonraki sürümler için migration
-sistemi henüz yoktur. Otomatik güncelleme bu nedenle etkin değildir.
+Şema değişiklikleri `apps/api/migrations` altındaki sürümlü SQL dosyalarıyla, her `up` sırasında
+`migrate` servisi tarafından uygulanır. Otomatik güncelleme henüz yoktur.
 
 ## Dağıtım
 Kaynak kurulum compose.yaml ile yerelde derlenir. v* etiketi GitHub Actions ile GHCR'ye

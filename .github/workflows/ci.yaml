@@ -9,7 +9,7 @@ jobs:
       matrix:
         include:
           - {app: api, run: npm test}
-          - {app: web, run: npm test && npm run build && npx playwright install --with-deps chromium && npm run test:e2e}
+          - {app: web, run: npm test && npm run build}
           - {app: worker, run: npm run check}
     defaults:
       run:
@@ -22,6 +22,32 @@ jobs:
       - run: npm ci
       - run: ${{ matrix.run }}
       - run: npm audit --omit=dev --audit-level=high
+  api-integration:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env: {POSTGRES_USER: ci, POSTGRES_PASSWORD: ci, POSTGRES_DB: lightning_test}
+        ports: ["5432:5432"]
+        options: --health-cmd "pg_isready -U ci" --health-interval 5s --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+        options: --health-cmd "redis-cli ping" --health-interval 5s --health-retries 10
+    defaults:
+      run:
+        working-directory: apps/api
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+      - run: npm run test:integration
+        env:
+          TEST_DATABASE_URL: postgresql://ci:ci@127.0.0.1:5432/lightning_test
+          REDIS_HOST: 127.0.0.1
+          REDIS_DB: "15"
   build:
     runs-on: ubuntu-latest
     strategy:
@@ -42,8 +68,17 @@ jobs:
         run: |
           sh scripts/install.sh
           curl --fail --retry 10 --retry-delay 3 --retry-all-errors http://127.0.0.1:8080/api/ready
-          curl --fail --retry 10 --retry-delay 3 --retry-all-errors http://127.0.0.1:8080/admin
+          curl --fail --retry 10 --retry-delay 3 --retry-all-errors http://127.0.0.1:8080/login
           test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8080/api/metrics)" = 404
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: End-to-end tests against the Compose stack
+        working-directory: apps/web
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+          E2E_BOOTSTRAP_TOKEN="$(docker compose --project-directory ../.. exec -T api node dist/cli.js bootstrap-token)" npm run test:e2e
       - name: Logs on failure
         if: failure()
         run: docker compose logs --tail=80

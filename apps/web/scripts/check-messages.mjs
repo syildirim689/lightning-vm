@@ -1,5 +1,5 @@
 // Fails when a locale misses a key, has an empty text, uses different {placeholders},
-// or when the API emits an error code that has no translation.
+// or when the API emits an error or field code that has no translation.
 import { readdirSync, readFileSync, existsSync } from 'node:fs';
 
 const dir = new URL('../messages/', import.meta.url);
@@ -23,8 +23,14 @@ for (const [locale, messages] of Object.entries(locales)) {
 const apiSrc = new URL('../../api/src/', import.meta.url);
 if (existsSync(apiSrc)) {
   for (const file of readdirSync(apiSrc, { recursive: true }).filter((f) => f.endsWith('.ts'))) {
-    for (const [, code] of readFileSync(new URL(file.replaceAll('\\', '/'), apiSrc), 'utf8').matchAll(/code: '([A-Z_]+)'/g)) {
+    const source = readFileSync(new URL(file.replaceAll('\\', '/'), apiSrc), 'utf8');
+    // Error codes: apiError(status, 'CODE', ...) and literal { code: 'CODE' } bodies.
+    for (const [, code] of source.matchAll(/(?:apiError\(\s*\d+,\s*|code: )'([A-Z_]+)'/g)) {
       if (!reference.has(`errors.${code}`)) problems.push(`api: error code ${code} has no errors.${code} translation`);
+    }
+    // Field codes: fields.name = 'CODE' and { name: 'CODE' } passed as apiError fields.
+    for (const [, code] of source.matchAll(/(?:fields\.\w+ = |\{ (?!code:)\w+: )'([A-Z_]+)'/g)) {
+      if (!reference.has(`fieldErrors.${code}`)) problems.push(`api: field code ${code} has no fieldErrors.${code} translation`);
     }
   }
 }

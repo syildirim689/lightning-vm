@@ -7,8 +7,10 @@
     "navUser": "User panel",
     "navAdmin": "Admin panel",
     "build": "v{version} · Development scaffold",
-    "notice": "Early build · Authentication and the VMware connection are not implemented yet.",
-    "language": "Language"
+    "notice": "Early build · VMware connection, server provisioning and the console are not implemented yet.",
+    "language": "Language",
+    "signedInAs": "Signed in: {email}",
+    "logout": "Sign out"
   },
   "UserPanel": {
     "eyebrow": "USER PANEL",
@@ -37,7 +39,11 @@
       "customers": "Customers and permissions",
       "servers": "All servers and consoles",
       "audit": "Audit and operation history"
-    }
+    },
+    "registrationTitle": "User registration",
+    "registrationHelp": "When open, anyone can create a user account at /register. When closed, only existing accounts can sign in.",
+    "registrationOpen": "Allow new user registration",
+    "saved": "Saved."
   },
   "Status": {
     "title": "System health",
@@ -56,6 +62,42 @@
     "NOT_FOUND": "The requested resource was not found.",
     "BAD_REQUEST": "The request is invalid.",
     "INTERNAL_ERROR": "An unexpected server error occurred.",
-    "UNKNOWN": "An unknown error occurred."
+    "UNKNOWN": "An unknown error occurred.",
+    "UNAUTHENTICATED": "You are not signed in or your session expired. Please sign in again.",
+    "INVALID_CREDENTIALS": "Incorrect email or password.",
+    "RATE_LIMITED": "Too many attempts. Please try again in a few minutes.",
+    "REGISTRATION_CLOSED": "New user registration is currently closed.",
+    "EMAIL_TAKEN": "An account with this email already exists.",
+    "FORBIDDEN": "You do not have permission for this action.",
+    "CSRF_REJECTED": "The request failed a security check. Reload the page and try again.",
+    "VALIDATION_FAILED": "Please correct the highlighted fields.",
+    "SETUP_CLOSED": "Initial setup is already complete. Use the sign-in page.",
+    "BOOTSTRAP_TOKEN_INVALID": "The setup token is invalid or expired. Generate a new one on the server."
+  },
+  "Auth": {
+    "required": "required",
+    "email": "Email",
+    "emailHelp": "The address you sign in with.",
+    "password": "Password",
+    "passwordHelp": "At least 12 characters. A long passphrase is recommended.",
+    "token": "Setup token",
+    "tokenHelp": "One-time token generated on the server; valid for 1 hour.",
+    "loginTitle": "Sign in",
+    "loginSubmit": "Sign in",
+    "registerTitle": "Create account",
+    "registerIntro": "Available when an administrator has opened registration.",
+    "registerSubmit": "Create account",
+    "setupTitle": "First administrator account",
+    "setupIntro": "Only someone with access to the server can complete setup. Enter the token printed by the installer, or generate a new one on the server with:",
+    "setupSubmit": "Create administrator account",
+    "working": "Working…",
+    "toRegister": "No account? Register",
+    "toLogin": "Already have an account? Sign in"
+  },
+  "fieldErrors": {
+    "INVALID_EMAIL": "Enter a valid email address.",
+    "PASSWORD_TOO_SHORT": "Password must be at least 12 characters.",
+    "PASSWORD_TOO_LONG": "Password can be at most 256 characters.",
+    "INVALID_VALUE": "Invalid value."
   }
 }

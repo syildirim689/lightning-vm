@@ -10,11 +10,12 @@ Periyodik reconciliation ve kilitli IP/kaynak rezervasyonu zorunludur.
 
 Şu anda worker yalnızca altyapı heartbeat'i yazar. Provisioning endpoint'i yoktur.
 İş kuyruğuna dışarıdan eklenen işler desteklenmediği için reddedilir.
-Denetim tablosu mevcut, kullanıcı sistemi ve olay üretimi henüz yoktur.
+Kimlik doğrulama, roller, kurulum anahtarı ve denetim olayları uygulandı (docs/auth.md).
 
 Güvenlik hedefi: müşteri/proje RBAC, MFA destekli yönetici oturumu, güvenli cookie,
 CSRF koruması, secret encryption ve sınırlı servis kimlikleri.
-Mevcut sürüm bu hedefleri uygulamaz; yalnızca loopback üzerinde kullanılmalı.
+Uygulananlar: rol kontrolü, güvenli cookie, CSRF, hız sınırı. Henüz yok: MFA, proje/müşteri
+izolasyonu, secret encryption. HTTPS olmadan yalnızca loopback üzerinde kullanılmalı.
 
 Güncellemeler GitHub kararlı sürümlerinden ileride alınacak. Web servisine Docker
 socket bağlanmayacak. Migration, yedek doğrulama ve iş boşaltma uygulanmadan

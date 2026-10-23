@@ -7,8 +7,10 @@
     "navUser": "Kullanıcı paneli",
     "navAdmin": "Yönetim paneli",
     "build": "v{version} · Geliştirme iskeleti",
-    "notice": "Başlangıç sürümü · Kimlik doğrulama ve VMware bağlantısı henüz uygulanmadı.",
-    "language": "Dil"
+    "notice": "Başlangıç sürümü · VMware bağlantısı, sunucu oluşturma ve konsol henüz uygulanmadı.",
+    "language": "Dil",
+    "signedInAs": "Oturum: {email}",
+    "logout": "Çıkış yap"
   },
   "UserPanel": {
     "eyebrow": "KULLANICI PANELİ",
@@ -37,7 +39,11 @@
       "customers": "Müşteriler ve yetkiler",
       "servers": "Tüm sunucular ve konsollar",
       "audit": "Denetim ve işlem geçmişi"
-    }
+    },
+    "registrationTitle": "Kullanıcı kaydı",
+    "registrationHelp": "Açıkken herkes /register sayfasından kullanıcı hesabı oluşturabilir. Kapalıyken yalnızca mevcut hesaplar giriş yapabilir.",
+    "registrationOpen": "Yeni kullanıcı kaydına izin ver",
+    "saved": "Kaydedildi."
   },
   "Status": {
     "title": "Sistem sağlığı",
@@ -56,6 +62,42 @@
     "NOT_FOUND": "İstenen kaynak bulunamadı.",
     "BAD_REQUEST": "İstek geçersiz.",
     "INTERNAL_ERROR": "Beklenmeyen bir sunucu hatası oluştu.",
-    "UNKNOWN": "Bilinmeyen bir hata oluştu."
+    "UNKNOWN": "Bilinmeyen bir hata oluştu.",
+    "UNAUTHENTICATED": "Oturumunuz yok veya süresi doldu. Lütfen tekrar giriş yapın.",
+    "INVALID_CREDENTIALS": "E-posta veya parola hatalı.",
+    "RATE_LIMITED": "Çok fazla deneme yapıldı. Lütfen birkaç dakika sonra tekrar deneyin.",
+    "REGISTRATION_CLOSED": "Yeni kullanıcı kaydı şu anda kapalı.",
+    "EMAIL_TAKEN": "Bu e-posta adresiyle zaten bir hesap var.",
+    "FORBIDDEN": "Bu işlem için yetkiniz yok.",
+    "CSRF_REJECTED": "İstek güvenlik kontrolünden geçemedi. Sayfayı yenileyip tekrar deneyin.",
+    "VALIDATION_FAILED": "Lütfen işaretli alanları düzeltin.",
+    "SETUP_CLOSED": "İlk kurulum zaten tamamlandı. Giriş sayfasını kullanın.",
+    "BOOTSTRAP_TOKEN_INVALID": "Kurulum anahtarı geçersiz veya süresi dolmuş. Sunucuda yeni anahtar üretin."
+  },
+  "Auth": {
+    "required": "zorunlu",
+    "email": "E-posta",
+    "emailHelp": "Giriş için kullanılacak adres.",
+    "password": "Parola",
+    "passwordHelp": "En az 12 karakter. Uzun bir parola cümlesi önerilir.",
+    "token": "Kurulum anahtarı",
+    "tokenHelp": "Sunucuda üretilen tek kullanımlık anahtar; 1 saat geçerlidir.",
+    "loginTitle": "Giriş yap",
+    "loginSubmit": "Giriş yap",
+    "registerTitle": "Hesap oluştur",
+    "registerIntro": "Kayıt yönetici tarafından açılmışsa kullanılabilir.",
+    "registerSubmit": "Hesap oluştur",
+    "setupTitle": "İlk yönetici hesabı",
+    "setupIntro": "Kurulumu yalnızca sunucuya erişimi olan kişi tamamlayabilir. Kurulum betiğinin verdiği anahtarı girin ya da sunucuda şu komutla yenisini üretin:",
+    "setupSubmit": "Yönetici hesabını oluştur",
+    "working": "İşleniyor…",
+    "toRegister": "Hesabınız yok mu? Kayıt olun",
+    "toLogin": "Zaten hesabınız var mı? Giriş yapın"
+  },
+  "fieldErrors": {
+    "INVALID_EMAIL": "Geçerli bir e-posta adresi girin.",
+    "PASSWORD_TOO_SHORT": "Parola en az 12 karakter olmalı.",
+    "PASSWORD_TOO_LONG": "Parola en fazla 256 karakter olabilir.",
+    "INVALID_VALUE": "Geçersiz değer."
   }
 }
