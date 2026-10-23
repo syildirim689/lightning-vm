@@ -26,6 +26,10 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 
 func failureStatus(code string) int {
 	switch code {
+	case "VM_NOT_FOUND":
+		return http.StatusNotFound
+	case "VM_POWERED_OFF":
+		return http.StatusConflict
 	case "INVALID_LOGIN", "PERMISSION_DENIED":
 		return http.StatusUnauthorized
 	case "INVALID_CA", "INVALID_PIN", "INVALID_TLS_MODE", "INVALID_REQUEST", "ENDPOINT_BLOCKED":
@@ -55,6 +59,24 @@ func handler(token string, guard *netGuard) http.Handler {
 		}
 		logger.Info("discover_succeeded", "kind", res.Product.Kind, "hosts", len(res.Hosts), "vms", len(res.VMs), "duration_ms", time.Since(start).Milliseconds())
 		writeJSON(w, 200, res)
+	})
+	mux.HandleFunc("POST /v1/console-ticket", func(w http.ResponseWriter, r *http.Request) {
+		var req TicketRequest
+		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 64<<10)).Decode(&req); err != nil || req.Host == "" || req.Username == "" {
+			writeJSON(w, 400, Failure{Code: "INVALID_REQUEST", Message: "host, username and vm are required"})
+			return
+		}
+		ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+		defer cancel()
+		t, err := consoleTicket(ctx, guard, req)
+		if err != nil {
+			f := classify(err)
+			logger.Warn("console_ticket_failed", "code", f.Code)
+			writeJSON(w, failureStatus(f.Code), f)
+			return
+		}
+		logger.Info("console_ticket_issued", "endpoint", t.Endpoint) // never the ticket or its URL
+		writeJSON(w, 200, t)
 	})
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/healthz" {

@@ -1,6 +1,6 @@
 import { Body, CanActivate, Controller, ExecutionContext, Get, HttpCode, Injectable, Post, Req, Res, UseGuards } from '@nestjs/common';
 import type { FastifyReply, FastifyRequest } from 'fastify';
-import { pool } from './db';
+import { pool, redis } from './db';
 import { apiError } from './errors';
 import { dummyHash, hashPassword, newToken, rateLimit, sha256, verifyPassword } from './security';
 
@@ -102,6 +102,8 @@ export class AuthController {
   @Post('logout') @HttpCode(204) @UseGuards(SessionGuard)
   async logout(@Req() req: AuthedRequest, @Res({ passthrough: true }) reply: FastifyReply) {
     await pool.query('UPDATE sessions SET revoked_at = now() WHERE token_hash = $1', [sha256(req.cookies[sessionCookie]!)]);
+    // Signing out also ends this session's open consoles (the gateway listens for this).
+    await redis.publish('console:revoke', JSON.stringify({ authHash: sha256(req.cookies[sessionCookie]!).toString('hex') })).catch(() => undefined);
     reply.clearCookie(sessionCookie, { path: '/' });
     await audit(req, 'auth.logout', 'success', req.user.id);
   }

@@ -6,6 +6,7 @@ import (
 	"crypto/tls"
 	"flag"
 	"log"
+	"net"
 	"net/url"
 
 	"github.com/vmware/govmomi/simulator"
@@ -19,6 +20,7 @@ func main() {
 	clusters := flag.Int("cluster", 1, "clusters (vCenter only)")
 	hosts := flag.Int("host", 1, "standalone hosts (vCenter only)")
 	clusterHosts := flag.Int("cluster-host", 1, "hosts per cluster (vCenter only)")
+	webmks := flag.String("webmks", "", "TEST ONLY: host:port for a fake WebMKS endpoint returned by AcquireTicket")
 	flag.Parse()
 
 	model := simulator.VPX()
@@ -29,6 +31,13 @@ func main() {
 	}
 	if err := model.Create(); err != nil {
 		log.Fatal(err)
+	}
+	if *webmks != "" {
+		host, port, err := net.SplitHostPort(*webmks)
+		if err != nil {
+			log.Fatal(err)
+		}
+		enableWebMKS(model, host, port)
 	}
 	// Credentials in the listen URL make the simulator reject any other user name or password.
 	model.Service.Listen = &url.URL{Host: *addr, User: url.UserPassword(*user, *pass)}

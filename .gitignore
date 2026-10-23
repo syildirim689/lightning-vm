@@ -15,3 +15,5 @@ next-env.d.ts
 test-results/
 playwright-report/
 secrets/
+console-sdk/*
+!console-sdk/README.md

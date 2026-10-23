@@ -10,6 +10,50 @@ Windows Server 2025, Node 24.21, npm 11.19 (Docker yok).
 - `npm audit --omit=dev`: üç uygulamada 0 açık. API'de Nest'in getirdiği eski fastify
   `overrides` ile 5.12.7'ye sabitlendi.
 
+## 7. aşama: tarayıcı konsolu — 2026-10-24
+**Gerçek ESXi, vCenter veya VMware HTML Console SDK kullanılmadı.** VMware tarafı, teste özel
+simülatördeki sahte bir WebMKS ucudur: bilet verir, TLS WebSocket üzerinden selam verir ve gelen
+veriyi geri yollar. Bu sonuçlar zinciri doğrular; VMware konsol protokolünü veya ekranı doğrulamaz.
+
+- Go konsol geçidi testleri 6/6 geçti; 5 kez tekrar çalıştırıldı:
+  - başka origin'den veya origin'siz bağlantı yükseltilmeden önce `403` alıyor;
+  - bilinmeyen oturum `4401`;
+  - aktarım (metin ve binary) ve oturumun ikinci kez kullanılamaması;
+  - yanlış parmak izinde `4503`;
+  - loopback hedef engelli;
+  - kullanıcı başına sınır `4429`;
+  - iptalde `4403`;
+  - denetim olayları üretiliyor.
+- Adaptör (`go vet`, `go test`): önceki 7 test geçiyor; konsol bileti uç noktası eklendi.
+- API entegrasyon testleri 29/29 geçti; gerçek geçit, test worker'ı ve simülatör kullanıldı.
+  Konsol testi şunları doğruladı:
+  - yanıtta bilet veya `wss` adresi yok;
+  - çerez `Max-Age=60; Path=/console/ws; HttpOnly; SameSite=Strict`;
+  - Redis anahtarı token'ın kendisi değil özeti;
+  - geçit üzerinden simüle VM'den selam alındı;
+  - ikinci kullanım `4401`;
+  - çıkış yapınca açık konsol `4403 CONSOLE_REVOKED` ile kapandı;
+  - normal kullanıcı `403`, bilinmeyen VM `VM_NOT_FOUND`;
+  - worker `console.opened`, `console.denied` ve `console.closed` olaylarını denetim kaydına yazdı.
+- Bu testlerin bulduğu ve düzeltilen iki worker hatası:
+  1. Yazılamayan konsol olayları yeniden denenmiyordu.
+  2. Redis olay akışı veya tüketici grubu silindiğinde yeniden oluşturulmuyordu.
+- Playwright 12/12 geçti; `https://49-12-109-190.sslip.io` üzerinden, gerçek Let's Encrypt
+  sertifikası ve Caddy ile:
+  - yönetici VM listesinden konsolu açtı; sayfa SDK'nın olmadığını ve işletim sistemi girişinin
+    atlanmadığını gösterdi;
+  - "Geçit bağlantısını test et" düğmesiyle tarayıcıdan `wss` → Caddy → geçit → simüle uç zinciri
+    başarılı oldu;
+  - çerez bayrakları doğru ve URL'de değil.
+- Proxy, geçit, adaptör, API, web ve worker loglarında `/ticket/` ve çerez değeri sayısı 0.
+
+Doğrulanmayanlar:
+- Gerçek WebMKS ve gerçek SDK ile ekran, klavye ve fare.
+- ESXi/vCenter'ın bilet biçimi (host, port, parmak izi türleri).
+- Müşteri konsolu (sunucu sahipliği 9. aşamada).
+- Birden fazla geçit örneği.
+- Nginx/Cloudflare arkasında WebSocket.
+
 ## 6. aşama: ESXi/vCenter bağlantısı ve envanter — 2026-10-24
 **Gerçek bir ESXi veya vCenter kullanılmadı.** Bütün VMware testleri govmomi v0.56.1'in simülatörüne
 karşı yapıldı. Bunlar adaptörün ve API'nin mantığını kanıtlar, gerçek donanım davranışını değil.

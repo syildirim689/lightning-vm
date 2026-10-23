@@ -103,7 +103,11 @@
     "INVALID_PIN": "Parmak izi geçerli bir SHA-256 değeri değil.",
     "INVALID_TLS_MODE": "Geçersiz TLS modu.",
     "INVALID_REQUEST": "İstek eksik.",
-    "UNAUTHORIZED": "İç servis yetkilendirmesi başarısız."
+    "UNAUTHORIZED": "İç servis yetkilendirmesi başarısız.",
+    "VM_POWERED_OFF": "Sanal makine kapalı. Konsol yalnızca çalışan bir sanal makinede açılabilir.",
+    "VM_NOT_FOUND": "Sanal makine bulunamadı. Envanteri yeniden keşfedin.",
+    "CONSOLE_TLS_UNVERIFIABLE": "VMware konsol bileti sertifika parmak izi içermiyor; doğrulanamayan bir bağlantı kurulmaz.",
+    "CONSOLE_NOT_PERMITTED": "Servis hesabının konsol yetkisi (VirtualMachine.Interact.ConsoleInteract) yok."
   },
   "Auth": {
     "required": "zorunlu",
@@ -438,6 +442,48 @@
       "confirm": "Onaylamak için “{name}” yazın",
       "button": "Bağlantıyı kaldır"
     },
-    "removed": "Bağlantı kaldırıldı."
+    "removed": "Bağlantı kaldırıldı.",
+    "console": "Konsol"
+  },
+  "Console": {
+    "title": "Konsol: {name}",
+    "osLogin": "Konsol, sanal makinenin ekranına bağlanır; işletim sistemi girişini atlamaz. Kullanıcı adı ve parola yine gerekir.",
+    "sdkMissing": "VMware HTML Console SDK bu kurulumda yok. Lisans koşulları nedeniyle projeyle birlikte dağıtılmıyor; Broadcom geliştirici portalından indirip sunucuda şu dosyaları console-sdk/ klasörüne koyun (docs/console.md):",
+    "cad": "Ctrl+Alt+Del gönder",
+    "state": {
+      "requesting": "Konsol oturumu isteniyor…",
+      "loadingSdk": "Konsol bileşeni yükleniyor…",
+      "sdkMissing": "Konsol bileşeni yüklü değil",
+      "connecting": "Bağlanıyor…",
+      "connected": "Bağlı",
+      "closed": "Bağlantı kapandı",
+      "error": "Konsol açılamadı"
+    },
+    "probe": {
+      "button": "Geçit bağlantısını test et",
+      "running": "Test ediliyor…",
+      "ok": "Başarılı: ağ geçidi VM'nin konsol uç noktasına ulaştı ve veri aldı (ağ yolu, sertifika sabitleme ve bilet çalışıyor).",
+      "failed": "Başarısız (kod {code})."
+    },
+    "reason": {
+      "CONSOLE_SESSION_INVALID": "Konsol oturumu geçersiz, süresi dolmuş veya zaten kullanılmış. Konsolu yeniden açın.",
+      "CONSOLE_REVOKED": "Konsol kapatıldı: oturum sonlandırıldı veya yetki geri alındı.",
+      "CONSOLE_EXPIRED": "Konsol en uzun süreye ulaştı ve kapatıldı. Yeniden açabilirsiniz.",
+      "CONSOLE_LIMIT": "Aynı anda açık konsol sınırına ulaşıldı. Başka bir konsolu kapatın.",
+      "CONSOLE_UNREACHABLE": "Konsol geçidi VM'nin hostuna ulaşamadı (ağ erişimi). Panel sunucusundan ESXi yönetim ağına erişimi kontrol edin.",
+      "CONSOLE_TLS_MISMATCH": "Hostun sertifikası VMware'in bildirdiği parmak iziyle eşleşmedi; bağlantı güvenlik için kuruldu.",
+      "CONSOLE_TICKET_REJECTED": "Host konsol biletini reddetti. Konsolu yeniden açın.",
+      "CONSOLE_ENDPOINT_BLOCKED": "VMware'in verdiği konsol adresine bağlanmaya izin verilmiyor (yerel veya iç ağ).",
+      "CONSOLE_CLOSED": "Konsol bağlantısı kapandı."
+    },
+    "activeTitle": "Açık konsollar",
+    "activeEmpty": "Şu anda açık konsol yok.",
+    "revoke": "Kapat",
+    "revoked": "Konsol kapatıldı.",
+    "col": {
+      "user": "Kullanıcı",
+      "vm": "Sanal makine",
+      "since": "Başlangıç"
+    }
   }
 }

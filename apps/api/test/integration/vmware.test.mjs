@@ -97,6 +97,54 @@ test('inventory and physical capacity come from discovery', { skip }, async () =
   assert.doesNotMatch(JSON.stringify(d), /sim-password|password_enc/);
 });
 
+// The simulated vCenter answers AcquireTicket with a fake WebMKS echo endpoint (test only).
+const consoleWs = process.env.CONSOLE_WS_URL;
+function openGateway(token) {
+  return new Promise((resolve) => {
+    const ws = new WebSocket(consoleWs, { protocols: ['binary'], headers: { origin: new URL(consoleWs).origin.replace('ws', 'http'), cookie: `lvm_console=${token}` } });
+    const result = { messages: [], close: null, ws };
+    ws.onmessage = (m) => { result.messages.push(String(m.data)); resolve(result); };
+    ws.onclose = (e) => { result.close = { code: e.code, reason: e.reason }; resolve(result); };
+  });
+}
+const closed = (r) => new Promise((resolve) => { if (r.close) resolve(r.close); else r.ws.onclose = (e) => resolve({ code: e.code, reason: e.reason }); });
+
+test('console sessions are one-time, cookie-only and the ticket never reaches the browser', { skip: skip || (!consoleWs && 'needs CONSOLE_WS_URL') }, async () => {
+  const { rows: [vm] } = await pool.query("SELECT moref, name FROM vmware_vms WHERE connection_id = $1 AND power_state = 'poweredOn' AND NOT template LIMIT 1", [vcId]);
+  const res = await send('POST', `/admin/vmware/connections/${vcId}/vms/${vm.moref}/console`);
+  assert.equal(res.statusCode, 201, res.body);
+  assert.doesNotMatch(res.body, /ticket|wss:/);
+  const cookie = res.headers['set-cookie'].toString();
+  assert.match(cookie, /lvm_console=[^;]+; Max-Age=60; Path=\/console\/ws; HttpOnly; SameSite=Strict/);
+  const token = cookie.match(/lvm_console=([^;]+)/)[1];
+  const keys = await redis.keys('console:session:*');
+  assert.equal(keys.length, 1);
+  assert.ok(!keys[0].includes(token), 'only a hash of the token is used as the key');
+  assert.ok((await redis.ttl(keys[0])) <= 60);
+
+  const first = await openGateway(token);
+  assert.deepEqual(first.messages, [`fake-webmks ${vm.name}`], 'relayed from the (simulated) VM console endpoint');
+  const second = await openGateway(token);
+  assert.deepEqual([second.close?.code, second.close?.reason], [4401, 'CONSOLE_SESSION_INVALID'], 'a session works once');
+
+  // Signing out revokes this session's live consoles.
+  await send('POST', '/auth/logout');
+  assert.deepEqual(await closed(first), { code: 4403, reason: 'CONSOLE_REVOKED' });
+  admin = cookieOf(await send('POST', '/auth/login', { email: 'admin@example.test', password: 'correct horse battery staple' }, null));
+
+  assert.equal((await send('POST', `/admin/vmware/connections/${vcId}/vms/${vm.moref}/console`, undefined, user)).statusCode, 403);
+  const missing = await send('POST', `/admin/vmware/connections/${vcId}/vms/vm-999999/console`);
+  assert.equal(missing.json().code, 'VM_NOT_FOUND');
+
+  // The worker turns gateway events into audit records.
+  let actions = [];
+  for (let i = 0; i < 30 && !actions.includes('console.closed'); i++) {
+    await new Promise((r) => setTimeout(r, 200));
+    actions = (await pool.query("SELECT action FROM audit_events WHERE action LIKE 'console.%'")).rows.map((r) => r.action);
+  }
+  for (const a of ['console.session_issued', 'console.opened', 'console.denied', 'console.closed']) assert.ok(actions.includes(a), `${a} in ${actions}`);
+});
+
 test('the same vCenter cannot be added twice under another address', { skip }, async () => {
   const again = await send('POST', '/admin/vmware/connections', { name: 'Sim vCenter by IP', host: process.env.VCSIM_VCENTER_IP ?? '172.29.250.10', port: 8989, ...vcCreds, tls: { mode: 'pinned', sha256: vcPin } });
   assert.equal(again.json().code, 'CONNECTION_EXISTS');

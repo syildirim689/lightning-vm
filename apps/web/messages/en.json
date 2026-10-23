@@ -103,7 +103,11 @@
     "INVALID_PIN": "The fingerprint is not a valid SHA-256 value.",
     "INVALID_TLS_MODE": "Invalid TLS mode.",
     "INVALID_REQUEST": "The request is incomplete.",
-    "UNAUTHORIZED": "Internal service authorization failed."
+    "UNAUTHORIZED": "Internal service authorization failed.",
+    "VM_POWERED_OFF": "The virtual machine is powered off. The console opens only on a running virtual machine.",
+    "VM_NOT_FOUND": "Virtual machine not found. Discover the inventory again.",
+    "CONSOLE_TLS_UNVERIFIABLE": "The VMware console ticket carries no certificate thumbprint; an unverifiable connection is not made.",
+    "CONSOLE_NOT_PERMITTED": "The service account lacks the console privilege (VirtualMachine.Interact.ConsoleInteract)."
   },
   "Auth": {
     "required": "required",
@@ -438,6 +442,48 @@
       "confirm": "Type “{name}” to confirm",
       "button": "Remove connection"
     },
-    "removed": "Connection removed."
+    "removed": "Connection removed.",
+    "console": "Console"
+  },
+  "Console": {
+    "title": "Console: {name}",
+    "osLogin": "The console connects to the virtual machine's screen; it does not bypass the operating system's login. A user name and password are still needed.",
+    "sdkMissing": "The VMware HTML Console SDK is not installed. Its license terms keep it out of this project; download it from Broadcom's developer portal and put these files into the console-sdk/ folder on the server (docs/console.md):",
+    "cad": "Send Ctrl+Alt+Del",
+    "state": {
+      "requesting": "Requesting a console session…",
+      "loadingSdk": "Loading the console component…",
+      "sdkMissing": "Console component not installed",
+      "connecting": "Connecting…",
+      "connected": "Connected",
+      "closed": "Connection closed",
+      "error": "The console could not be opened"
+    },
+    "probe": {
+      "button": "Test the gateway connection",
+      "running": "Testing…",
+      "ok": "Success: the gateway reached the VM's console endpoint and received data (network path, certificate pinning and ticket work).",
+      "failed": "Failed (code {code})."
+    },
+    "reason": {
+      "CONSOLE_SESSION_INVALID": "The console session is invalid, expired or already used. Open the console again.",
+      "CONSOLE_REVOKED": "The console was closed: the session ended or access was withdrawn.",
+      "CONSOLE_EXPIRED": "The console reached its maximum duration and was closed. You can open it again.",
+      "CONSOLE_LIMIT": "The limit of simultaneous consoles was reached. Close another console.",
+      "CONSOLE_UNREACHABLE": "The console gateway could not reach the VM's host (network access). Check that the panel server can reach the ESXi management network.",
+      "CONSOLE_TLS_MISMATCH": "The host's certificate did not match the thumbprint VMware reported; the connection was not made, for safety.",
+      "CONSOLE_TICKET_REJECTED": "The host rejected the console ticket. Open the console again.",
+      "CONSOLE_ENDPOINT_BLOCKED": "Connecting to the console address VMware returned is not allowed (local or internal network).",
+      "CONSOLE_CLOSED": "The console connection closed."
+    },
+    "activeTitle": "Open consoles",
+    "activeEmpty": "No consoles are open right now.",
+    "revoke": "Close",
+    "revoked": "Console closed.",
+    "col": {
+      "user": "User",
+      "vm": "Virtual machine",
+      "since": "Started"
+    }
   }
 }

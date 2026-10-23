@@ -86,6 +86,26 @@ services:
       timeout: 5s
       retries: 5
     logging: *logging
+  # Browser console gateway: wss://<panel>/console/ws -> VM WebMKS on the management network.
+  console:
+    build: ./services/console
+    restart: unless-stopped
+    read_only: true
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+    environment:
+      REDIS_ADDR: redis:6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      CONSOLE_MAX_PER_USER: ${CONSOLE_MAX_PER_USER:-3}
+      CONSOLE_MAX_MINUTES: ${CONSOLE_MAX_MINUTES:-60}
+    depends_on:
+      redis: {condition: service_healthy}
+    healthcheck:
+      test: [CMD, /console, healthcheck]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    logging: *logging
   worker:
     build: ./apps/worker
     restart: unless-stopped
@@ -129,6 +149,7 @@ services:
       TRUSTED_PROXY_CIDRS: ${TRUSTED_PROXY_CIDRS:-127.0.0.1/32}
     volumes:
       - ./deploy/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./console-sdk:/srv/console-sdk:ro
       # Certificates and ACME account survive restarts and upgrades; losing them means re-issuing.
       - caddy_data:/data
       - caddy_config:/config

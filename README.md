@@ -24,11 +24,16 @@ Açık kaynak VMware sunucu yönetim platformunun başlangıç deposu.
   host, datastore, ağ/VLAN, küme ve VM envanteri; fiziksel kapasite. TLS sistem CA, özel CA veya
   sabitlenmiş parmak iziyle doğrulanır. Parolalar ayrı anahtarla şifrelenir. Aynı host iki kez
   sayılmaz (docs/vmware.md). Gerçek ESXi/vCenter ile değil, govmomi simülatörüyle test edildi.
+- Yönetici tarayıcı konsolu: ayrı WebSocket geçidi, tek kullanımlık HttpOnly çerez (bilet
+  tarayıcıya gitmez), Origin kontrolü, sınırlar, çıkışta ve yönetici kararıyla iptal, denetim
+  kaydı (docs/console.md). VMware HTML Console SDK lisansı nedeniyle dahil değildir; kurulumu
+  yapan kişi ekler. Ekran gerçek SDK ve gerçek ESXi ile henüz denenmedi.
 
 ## Henüz uygulanmayanlar
 - Sihirbazda kaynak havuzu adımı (şimdilik yalnızca atlanabilir).
 - MFA, parola sıfırlama, proje/müşteri modeli.
-- VM oluşturma ve güç işlemleri, konsol geçidi, IP tahsisi, kaynak havuzları ve kotalar.
+- VM oluşturma ve güç işlemleri, müşterinin kendi sunucusuna konsol erişimi, IP tahsisi,
+  kaynak havuzları ve kotalar.
 - Faturalama, yedekleme otomasyonu, otomatik güncelleme.
 
 Paneldeki kapalı düğmeler bu işlevleri gerçekleştirmez.
@@ -106,5 +111,5 @@ Kaynak kurulum compose.yaml ile yerelde derlenir. v* etiketi GitHub Actions ile 
 üç uygulama imajı (web, api, worker) yayımlar.
 GHCR imajlarını kullanan sürümlü üretim Compose paketi ve güncelleyici henüz yoktur.
 
-Detaylar: docs/setup.md, docs/vmware.md, docs/domain-https.md, docs/auth.md, docs/i18n.md, docs/architecture.md, docs/roadmap.md, docs/validation.md, CONTRIBUTING.md, SECURITY.md.
+Detaylar: docs/setup.md, docs/vmware.md, docs/console.md, docs/domain-https.md, docs/auth.md, docs/i18n.md, docs/architecture.md, docs/roadmap.md, docs/validation.md, CONTRIBUTING.md, SECURITY.md.
 Lisans: Apache-2.0.

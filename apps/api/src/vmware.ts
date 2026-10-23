@@ -40,18 +40,26 @@ function readTarget(body: unknown, requirePassword = true): Target & { name: str
 }
 
 // Calls the internal Go adapter. Its failure code (and the untrusted certificate, if any) is passed on.
-async function discover(target: Target): Promise<Discovery> {
+export async function callAdapter<T>(path: string, body: unknown, timeoutMs: number): Promise<T> {
   let token: string;
   try { token = readFileSync(process.env.VMWARE_SERVICE_TOKEN_FILE ?? '/run/secrets/vmware_token', 'utf8').trim(); }
   catch { throw apiError(503, 'VMWARE_SERVICE_UNAVAILABLE', 'Service token missing'); }
-  const res = await fetch(`${process.env.VMWARE_SERVICE_URL ?? 'http://vmware:8080'}/v1/discover`, {
+  const res = await fetch(`${process.env.VMWARE_SERVICE_URL ?? 'http://vmware:8080'}${path}`, {
     method: 'POST', headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
-    body: JSON.stringify(target), signal: AbortSignal.timeout(70_000),
+    body: JSON.stringify(body), signal: AbortSignal.timeout(timeoutMs),
   }).catch(() => { throw apiError(503, 'VMWARE_SERVICE_UNAVAILABLE', 'VMware adapter unreachable'); });
-  const body = await res.json().catch(() => null);
-  if (!res.ok) throw apiError(422, body?.code ?? 'VMWARE_ERROR', body?.message ?? 'Discovery failed', undefined, body?.certificate ? { certificate: body.certificate } : undefined);
-  return body;
+  const out = await res.json().catch(() => null);
+  if (!res.ok) throw apiError(422, out?.code ?? 'VMWARE_ERROR', out?.message ?? 'VMware call failed', undefined, out?.certificate ? { certificate: out.certificate } : undefined);
+  return out;
 }
+
+// Rebuilds the adapter request from a stored connection row, decrypting the password in memory only.
+export function storedTarget(c: Record<string, string | number>): Target {
+  return { host: String(c.host), port: Number(c.port), username: String(c.username), password: decryptSecret(String(c.password_enc), String(c.id)),
+    tls: { mode: c.tls_mode as TlsSettings['mode'], ...(c.tls_ca_pem && { caPem: String(c.tls_ca_pem) }), ...(c.tls_sha256 && { sha256: String(c.tls_sha256) }) } };
+}
+
+const discover = (target: Target) => callAdapter<Discovery>('/v1/discover', target, 70_000);
 
 function summary(d: Discovery) {
   return { product: d.product, writeApi: d.writeApi, operations: d.operations, warnings: d.warnings,
@@ -171,8 +179,7 @@ export class VmwareController {
   async refresh(@Req() req: AuthedRequest, @Param('id', ParseUUIDPipe) id: string) {
     const { rows: [c] } = await pool.query('SELECT * FROM vmware_connections WHERE id = $1', [id]);
     if (!c) throw apiError(404, 'NOT_FOUND', 'Unknown connection');
-    const target: Target = { host: c.host, port: c.port, username: c.username, password: decryptSecret(c.password_enc, id),
-      tls: { mode: c.tls_mode, ...(c.tls_ca_pem && { caPem: c.tls_ca_pem }), ...(c.tls_sha256 && { sha256: c.tls_sha256 }) } };
+    const target = storedTarget(c);
     let d: Discovery;
     try { d = await discover(target); }
     catch (err) {

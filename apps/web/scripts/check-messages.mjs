@@ -53,5 +53,16 @@ if (existsSync(goSrc)) {
   }
 }
 
+// Console gateway close reasons reach the console page.
+const consoleSrc = new URL('../../../services/console/', import.meta.url);
+if (existsSync(consoleSrc)) {
+  for (const file of readdirSync(consoleSrc).filter((f) => f.endsWith('.go') && !f.endsWith('_test.go'))) {
+    for (const [, code] of readFileSync(new URL(file, consoleSrc), 'utf8').matchAll(/"(CONSOLE_[A-Z_]+)"/g)) {
+      if (code !== 'CONSOLE_ALLOW_NETWORKS' && code !== 'CONSOLE_DENY_NETWORKS' && code !== 'CONSOLE_ALLOWED_ORIGINS' && !code.startsWith('CONSOLE_MAX_')
+        && !reference.has(`Console.reason.${code}`)) problems.push(`console: close reason ${code} has no Console.reason.${code} translation`);
+    }
+  }
+}
+
 if (problems.length) { console.error(problems.join('\n')); process.exit(1); }
 console.log(`messages ok: ${Object.keys(locales).join(', ')} (${reference.size} keys)`);

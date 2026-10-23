@@ -205,6 +205,20 @@ test.describe('VMware connections (simulator, English browser)', () => {
     await expect(page.getByRole('listitem').filter({ hasText: 'vCenter Automation REST API' })).toContainText('yes');
     await page.getByRole('button', { name: 'Discover again' }).click();
     await expect(page.getByText('Inventory updated.')).toBeVisible();
+
+    // Console: browser -> Caddy (wss) -> console gateway -> the simulator's fake WebMKS endpoint.
+    // Without the operator-installed VMware SDK the page says so; the gateway test still runs end to end.
+    await page.getByRole('link', { name: 'Console' }).first().click();
+    await expect(page.getByRole('heading', { name: /^Console: / })).toBeVisible();
+    await expect(page.getByText('does not bypass the operating system', { exact: false })).toBeVisible();
+    await expect(page.getByRole('status')).toHaveText('Console component not installed');
+    await page.getByRole('button', { name: 'Test the gateway connection' }).click();
+    await expect(page.getByText('Success: the gateway reached the VM', { exact: false })).toBeVisible();
+    const consoleCookie = (await page.context().cookies()).find((c) => c.name === 'lvm_console');
+    expect(consoleCookie?.httpOnly && consoleCookie.path === '/console/ws' && consoleCookie.sameSite === 'Strict').toBe(true);
+    expect(page.url()).not.toContain(consoleCookie!.value);
+    await page.goto('/admin/vmware');
+    await page.getByRole('row', { name: /Simülatör vCenter/ }).getByRole('button', { name: 'Details' }).click();
     const remove = page.getByRole('button', { name: 'Remove connection' });
     await expect(remove).toBeDisabled();
     await page.getByLabel('Type “Simülatör vCenter” to confirm').fill('Simülatör vCenter');

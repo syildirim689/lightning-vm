@@ -67,8 +67,10 @@ export default function Connections() {
       <table><thead><tr><th>{t('col.name')}</th><th>{t('col.type')}</th><th>{t('col.hosts')}</th></tr></thead>
         <tbody>{detail.compute.map((c) => <tr key={String(c.moref)}><td>{c.name}</td><td>{t(`computeKind.${c.kind as 'cluster'}`)}</td><td>{c.hosts}</td></tr>)}</tbody></table>
       <h3>{t('vmsTitle', { count: detail.vms.length })}</h3>
-      <table><thead><tr><th>{t('col.name')}</th><th>{t('col.power')}</th><th>vCPU</th><th>RAM</th><th>{t('col.guest')}</th></tr></thead>
-        <tbody>{detail.vms.map((v) => <tr key={String(v.moref)}><td>{v.name}{v.template ? ` (${t('template')})` : ''}</td><td>{v.power_state}</td><td>{v.cpu}</td><td>{format.number(Number(v.memory_mb) / 1024, { maximumFractionDigits: 1 })} GiB</td><td>{v.guest}</td></tr>)}</tbody></table>
+      <table><thead><tr><th>{t('col.name')}</th><th>{t('col.power')}</th><th>vCPU</th><th>RAM</th><th>{t('col.guest')}</th><th/></tr></thead>
+        <tbody>{detail.vms.map((v) => <tr key={String(v.moref)}><td>{v.name}{v.template ? ` (${t('template')})` : ''}</td><td>{v.power_state}</td><td>{v.cpu}</td><td>{format.number(Number(v.memory_mb) / 1024, { maximumFractionDigits: 1 })} GiB</td><td>{v.guest}</td>
+          <td>{v.power_state === 'poweredOn' && !v.template && detail.connection.operations.console &&
+            <a className="button" href={`/admin/vmware/console?c=${detail.connection.id}&vm=${encodeURIComponent(String(v.moref))}`}>{t('console')}</a>}</td></tr>)}</tbody></table>
 
       <div className="actions">
         <button type="button" className="secondary" onClick={() => act(() => apiFetch(`/admin/vmware/connections/${detail.connection.id}/discover`, { method: 'POST' }).then(() => open(detail.connection.id)), t('refreshed'))}>{t('refresh')}</button>

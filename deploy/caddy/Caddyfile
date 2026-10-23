@@ -22,6 +22,15 @@
 	handle /api/metrics* {
 		respond 404
 	}
+	# Browser console WebSocket -> console gateway (same host and TLS as the panel).
+	handle /console/ws {
+		reverse_proxy console:8080
+	}
+	# VMware HTML Console SDK files the operator downloads from Broadcom (not shipped; see console-sdk/README.md).
+	handle_path /console-sdk/* {
+		root * /srv/console-sdk
+		file_server
+	}
 	handle_path /api/* {
 		reverse_proxy api:4000
 	}

@@ -13,6 +13,7 @@ import { AuthController } from './auth';
 import { SetupController } from './setup';
 import { AdminController } from './admin';
 import { VmwareController } from './vmware';
+import { ConsoleController } from './console';
 
 export { closeConnections };
 collectDefaultMetrics({ prefix: 'lightning_api_' });
@@ -29,7 +30,7 @@ class HealthController {
   }
 }
 
-@Module({ controllers: [HealthController, AuthController, SetupController, AdminController, VmwareController] })
+@Module({ controllers: [HealthController, AuthController, SetupController, AdminController, VmwareController, ConsoleController] })
 class AppModule {}
 
 // Only Caddy on the Compose network talks to the API; its X-Forwarded-* headers are trusted.
