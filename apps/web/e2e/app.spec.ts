@@ -191,6 +191,68 @@ test.describe('roles and sessions (English browser)', () => {
   });
 });
 
+test.describe('catalog and order preview (simulator)', () => {
+  test('admin opens capacity for sale; a Turkish customer prices a package and a custom server', async ({ browser }) => {
+    test.skip(!process.env.E2E_VCSIM_HOST, 'needs compose.simulator.yaml and E2E_VCSIM_HOST');
+    const adminPage = await (await browser.newContext({ locale: 'en-US' })).newPage();
+    await signIn(adminPage, admin);
+    await expect(adminPage).toHaveURL(/\/admin$/);
+    await adminPage.goto('/admin/catalog');
+    await adminPage.getByLabel('Name').first().fill('E2E Pool');
+    await adminPage.getByLabel('Location', { exact: true }).fill('Lab');
+    const compute = adminPage.getByLabel('Cluster or host');
+    await expect(compute.locator('option', { hasText: '(cluster)' })).toHaveCount(1);
+    await compute.selectOption({ label: (await compute.locator('option', { hasText: '(cluster)' }).textContent())! });
+    await adminPage.getByRole('group', { name: 'Datastores' }).getByRole('checkbox').first().check();
+    const network = adminPage.getByLabel('Network (port group)');
+    await network.selectOption({ index: 1 });
+    await adminPage.getByRole('button', { name: 'Create pool' }).click();
+    await expect(adminPage.getByRole('heading', { name: /E2E Pool/ })).toBeVisible();
+    await expect(adminPage.getByRole('rowheader', { name: 'Physical total' })).toBeVisible();
+    await expect(adminPage.getByRole('rowheader', { name: 'Management and safety headroom' })).toBeVisible();
+
+    await adminPage.getByText('Add custom resource rule').click();
+    await adminPage.getByLabel('Price per vCPU').fill('5');
+    await adminPage.getByLabel('Price per GB RAM').fill('2');
+    await adminPage.getByLabel('Price per GB disk').fill('0.1');
+    await adminPage.getByRole('button', { name: 'Save rule' }).click();
+    await expect(adminPage.getByText('Edit custom resource rule')).toBeVisible();
+
+    const pkg = adminPage.locator('form', { has: adminPage.getByRole('heading', { name: 'New package' }) });
+    await pkg.getByLabel('Name').fill('E2E Small');
+    await pkg.getByLabel('Monthly price').fill('12.1x');
+    await pkg.getByRole('button', { name: 'Create package' }).click();
+    await expect(pkg.getByText('Enter a valid amount (example: 12.50).')).toBeVisible();
+    await expect(pkg.getByText('This field is required.')).toBeVisible();
+    await pkg.getByLabel('Monthly price').fill('12.10');
+    await pkg.getByRole('group', { name: 'Offered in pools' }).getByLabel('E2E Pool').check();
+    await pkg.getByRole('button', { name: 'Create package' }).click();
+    await expect(adminPage.getByRole('row', { name: /E2E Small/ })).toContainText('€12.10');
+
+    const customer = await (await browser.newContext({ locale: 'tr-TR' })).newPage();
+    await signIn(customer, user);
+    await expect(customer).toHaveURL(/\/$/);
+    await customer.getByRole('combobox', { name: 'Paket' }).selectOption({ index: 1 });
+    await customer.getByRole('button', { name: 'Fiyatı hesapla' }).click();
+    await expect(customer.locator('.quote')).toContainText('Aylık: €12,10');
+    await customer.getByLabel('Özel kaynaklı').check();
+    await expect(customer.getByText('fiziksel olarak ayrılmış (dedicated) işlemci garantisi değildir', { exact: false })).toBeVisible();
+    await customer.getByLabel('RAM (MB)').fill('4000');
+    await customer.getByRole('button', { name: 'Fiyatı hesapla' }).click();
+    await expect(customer.getByText('Değer, izin verilen artış adımına uymuyor.')).toBeVisible();
+    await customer.getByLabel('RAM (MB)').fill('4096');
+    await customer.getByRole('button', { name: 'Fiyatı hesapla' }).click();
+    // 2 x 5 + 4 GB x 2 + 40 GB x 0.1 = 22.00
+    await expect(customer.locator('.quote')).toContainText('Aylık: €22,00');
+    await expect(customer.locator('.quote')).toContainText('Sunucu oluşturma henüz bu sürümde yok');
+
+    // Leave the connection removable for the next test.
+    await adminPage.getByRole('row', { name: /E2E Small/ }).getByRole('button', { name: 'Remove' }).click();
+    await adminPage.locator('article', { has: adminPage.getByRole('heading', { name: /E2E Pool/ }) }).getByRole('button', { name: 'Remove' }).click();
+    await expect(adminPage.getByRole('heading', { name: /E2E Pool/ })).toHaveCount(0);
+  });
+});
+
 test.describe('VMware connections (simulator, English browser)', () => {
   test.use({ locale: 'en-US' });
   test('admin sees discovered inventory, refreshes it and removes the connection only after typed confirmation', async ({ page }) => {

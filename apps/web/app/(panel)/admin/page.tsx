@@ -18,5 +18,6 @@ export default async function AdminPage() {
 
 function Admin({ setupOpen }: { setupOpen: boolean }) {
   const t = useTranslations('AdminPanel');
-  return <><header><p className="eyebrow">{t('eyebrow')}</p><h1>{t('title')}</h1><p>{t('intro')}</p></header>{setupOpen && <p className="notice">{t('setupIncomplete')} <Link href="/setup">{t('continueSetup')}</Link></p>}<Status/><RegistrationSetting/><section className="grid">{modules.map(m=><article key={m}><h2>{t(`modules.${m}`)}</h2>{m === 'connections' ? <><p className="muted">{t('connectionsText')}</p><Link className="button" href="/admin/vmware">{t('open')}</Link></> : <><p className="muted">{t('planned')}</p><button disabled>{t('notImplemented')}</button></>}</article>)}</section></>;
+  return <><header><p className="eyebrow">{t('eyebrow')}</p><h1>{t('title')}</h1><p>{t('intro')}</p></header>{setupOpen && <p className="notice">{t('setupIncomplete')} <Link href="/setup">{t('continueSetup')}</Link></p>}<Status/><RegistrationSetting/><section className="grid">{modules.map(m=><article key={m}><h2>{t(`modules.${m}`)}</h2>{m === 'connections' ? <><p className="muted">{t('connectionsText')}</p><Link className="button" href="/admin/vmware">{t('open')}</Link></>
+    : m === 'pools' || m === 'packages' ? <><p className="muted">{t('catalogText')}</p><Link className="button" href="/admin/catalog">{t('open')}</Link></> : <><p className="muted">{t('planned')}</p><button disabled>{t('notImplemented')}</button></>}</article>)}</section></>;
 }

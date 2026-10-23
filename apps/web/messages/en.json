@@ -15,12 +15,7 @@
   "UserPanel": {
     "eyebrow": "USER PANEL",
     "title": "Your servers",
-    "intro": "Manage your resources and server operations in one place.",
-    "packageTitle": "Package server",
-    "packageText": "Create a server from predefined CPU, RAM and disk packages.",
-    "customTitle": "Custom resource server",
-    "customText": "Choose processor, memory and storage to fit your needs.",
-    "comingSoon": "Coming soon",
+    "intro": "Manage your projects and see the price of a server configuration.",
     "serversTitle": "Server list",
     "serversEmpty": "No VMware connection yet. No sample servers or fake usage data are shown.",
     "consoleTitle": "Browser console",
@@ -47,7 +42,8 @@
     "setupIncomplete": "Initial setup is not finished yet.",
     "continueSetup": "Continue the setup wizard",
     "connectionsText": "ESXi and vCenter connections, real inventory and physical capacity.",
-    "open": "Open"
+    "open": "Open",
+    "catalogText": "Resource pools, capacity, packages, custom resource rules, images, IP pools and quotas."
   },
   "Status": {
     "title": "System health",
@@ -107,7 +103,8 @@
     "VM_POWERED_OFF": "The virtual machine is powered off. The console opens only on a running virtual machine.",
     "VM_NOT_FOUND": "Virtual machine not found. Discover the inventory again.",
     "CONSOLE_TLS_UNVERIFIABLE": "The VMware console ticket carries no certificate thumbprint; an unverifiable connection is not made.",
-    "CONSOLE_NOT_PERMITTED": "The service account lacks the console privilege (VirtualMachine.Interact.ConsoleInteract)."
+    "CONSOLE_NOT_PERMITTED": "The service account lacks the console privilege (VirtualMachine.Interact.ConsoleInteract).",
+    "IN_USE": "This record is still used by other records; remove those first."
   },
   "Auth": {
     "required": "required",
@@ -139,7 +136,21 @@
     "INVALID_PORT": "Port must be between 1 and 65535.",
     "INVALID_CERTIFICATE": "Paste a PEM certificate starting with -----BEGIN CERTIFICATE-----.",
     "INVALID_FINGERPRINT": "64-character SHA-256 fingerprint (lowercase, no colons).",
-    "NAME_TAKEN": "This name is already used."
+    "NAME_TAKEN": "This name is already used.",
+    "OUT_OF_RANGE": "Outside the allowed range.",
+    "INVALID_STEP": "The value does not follow the allowed step.",
+    "RATIO_NOT_ALLOWED": "This amount of RAM is outside the allowed ratio for the chosen vCPU count.",
+    "MIN_ABOVE_MAX": "The minimum cannot be larger than the maximum.",
+    "INVALID_AMOUNT": "Enter a valid amount (example: 12.50).",
+    "INVALID_CURRENCY": "Enter a three-letter ISO currency code (example: EUR, TRY, USD).",
+    "NOT_IN_INVENTORY": "The selected item is not in this connection's discovered inventory; discover it again.",
+    "NOT_A_TEMPLATE": "The selected virtual machine is not a template.",
+    "IP_OUTSIDE_SUBNET": "Gateway and range must be inside the subnet; the start cannot be after the end and the gateway cannot be inside the range.",
+    "INVALID_ADDRESS": "Enter a valid IPv4 address or subnet.",
+    "RANGE_OVERLAPS": "This range overlaps another IP pool of the same resource pool.",
+    "NOT_AVAILABLE": "This choice is not offered at this location.",
+    "NO_CUSTOM_OFFERING": "Custom resource servers are not offered at this location.",
+    "BELOW_IMAGE_MINIMUM": "The disk is smaller than the minimum disk size of the chosen operating system image."
   },
   "Setup": {
     "title": "Setup wizard",
@@ -484,6 +495,170 @@
       "user": "User",
       "vm": "Virtual machine",
       "since": "Started"
+    }
+  },
+  "Order": {
+    "title": "New server",
+    "nothingOffered": "No location is offered right now.",
+    "location": "Location",
+    "image": "Operating system",
+    "project": "Project",
+    "kind": "Server type",
+    "package": "Package",
+    "custom": "Custom resources",
+    "noCustom": "not offered here",
+    "disk": "Disk (GB)",
+    "packageOption": "{name}: {vcpu} vCPU, {memory} GB RAM, {disk} GB disk, {price} per month",
+    "customNote": "Choosing custom resources is not a guarantee of physically dedicated CPU. vCPUs run on shared physical cores.",
+    "range": "{min}–{max}, step {step}",
+    "price": "Calculate price",
+    "monthly": "Monthly: {price}",
+    "shape": "{vcpu} vCPU, {memory} GB RAM, {disk} GB disk",
+    "quotaExceeded": "This exceeds your quota: {limits}.",
+    "noCapacity": "Not enough free capacity at this location right now.",
+    "notYet": "Creating servers is not available in this version yet (phase 9). This screen only validates and prices the configuration.",
+    "quota": {
+      "servers": "number of servers",
+      "vcpu": "vCPU",
+      "memoryMb": "RAM",
+      "diskGb": "disk"
+    },
+    "projects": {
+      "title": "Projects",
+      "empty": "No projects yet.",
+      "name": "Project name",
+      "create": "Create project",
+      "remove": "Delete"
+    }
+  },
+  "Catalog": {
+    "eyebrow": "ADMIN · CATALOG",
+    "title": "Resource pools and catalog",
+    "intro": "Open existing VMware capacity for sale or use; manage packages, rules, images, IP pools and quotas.",
+    "loading": "Loading…",
+    "saved": "Saved.",
+    "removed": "Removed.",
+    "remove": "Remove",
+    "poolsExplain": "A resource pool creates no physical resources; it opens part of the existing infrastructure's capacity for sale or use. Physical total, management/safety headroom, offered, reserved and really used capacity are shown separately.",
+    "col": {
+      "name": "Name",
+      "disk": "Disk",
+      "price": "Monthly price",
+      "cpu": "CPU (cores / vCPU)",
+      "storage": "Storage"
+    },
+    "layer": {
+      "physical": "Physical total",
+      "headroom": "Management and safety headroom",
+      "offered": "Offered",
+      "reserved": "Reserved (created servers)",
+      "used": "Real use (existing VMs)",
+      "available": "Still available"
+    },
+    "warning": {
+      "STORAGE_FREE_BELOW_HEADROOM": "Real free space on the datastores is below the safety headroom.",
+      "STORAGE_OVERPROVISIONED": "Thin disks promise more than the physical capacity; space may run out as disks fill.",
+      "MEMORY_OVERCOMMITTED": "RAM assigned to existing VMs exceeds physical RAM."
+    },
+    "pools": {
+      "title": "Resource pools",
+      "empty": "No resource pools yet.",
+      "needConnection": "Add an ESXi/vCenter connection first.",
+      "new": "New resource pool",
+      "create": "Create pool",
+      "ratios": "Overcommit: CPU {cpu}x, RAM {memory}x, storage {storage}x",
+      "storageNote": "Storage: {written} GB written, {provisioned} GB provisioned (thin), real free space {free} GB.",
+      "location": "Location",
+      "locationHelp": "Location name shown to customers (example: Frankfurt).",
+      "connection": "Connection",
+      "compute": "Cluster or host",
+      "datastores": "Datastores",
+      "network": "Network (port group)",
+      "cpuOvercommit": "CPU overcommit ratio",
+      "cpuOvercommitHelp": "vCPUs offered per physical core (1–32).",
+      "memoryOvercommit": "RAM overcommit ratio",
+      "memoryOvercommitHelp": "1 is recommended; RAM overcommit causes performance problems (1–4).",
+      "storageOvercommit": "Storage overcommit ratio",
+      "storageOvercommitHelp": "How many times the capacity may be offered with thin disks (1–10).",
+      "reserveCpuPct": "CPU headroom (%)",
+      "reserveCpuPctHelp": "Management and safety headroom that is never offered.",
+      "reserveMemoryPct": "RAM headroom (%)",
+      "reserveMemoryPctHelp": "Management and safety headroom that is never offered.",
+      "reserveStoragePct": "Storage headroom (%)",
+      "reserveStoragePctHelp": "Never offered; you are warned when real free space falls below it."
+    },
+    "rule": {
+      "add": "Add custom resource rule",
+      "edit": "Edit custom resource rule",
+      "save": "Save rule",
+      "explain": "Ranges, steps, allowed RAM per vCPU and unit prices (monthly) customers can choose in this pool.",
+      "cpuMin": "vCPU minimum",
+      "cpuMax": "vCPU maximum",
+      "cpuStep": "vCPU step",
+      "memoryMinMb": "RAM minimum (MB)",
+      "memoryMaxMb": "RAM maximum (MB)",
+      "memoryStepMb": "RAM step (MB)",
+      "diskMinGb": "Disk minimum (GB)",
+      "diskMaxGb": "Disk maximum (GB)",
+      "diskStepGb": "Disk step (GB)",
+      "minMemoryMbPerVcpu": "Minimum RAM per vCPU (MB)",
+      "maxMemoryMbPerVcpu": "Maximum RAM per vCPU (MB)",
+      "priceVcpu": "Price per vCPU",
+      "priceMemoryGb": "Price per GB RAM",
+      "priceDiskGb": "Price per GB disk",
+      "currency": "Currency"
+    },
+    "images": {
+      "title": "Operating system images",
+      "new": "New image",
+      "create": "Add image",
+      "family": "Family",
+      "template": "Template",
+      "minDisk": "Minimum disk",
+      "explain": "Images are VM templates in a connection's inventory. The template is prepared in VMware; the platform only selects it here.",
+      "noTemplates": "No templates found in this connection."
+    },
+    "packages": {
+      "title": "Packages",
+      "new": "New package",
+      "create": "Create package",
+      "needPool": "Create a resource pool first.",
+      "priceMonthly": "Monthly price",
+      "priceHourly": "Hourly price (optional)",
+      "currency": "Currency",
+      "currencyHelp": "ISO 4217 code: EUR, TRY, USD…",
+      "pools": "Offered in pools",
+      "images": "Allowed images"
+    },
+    "ip": {
+      "title": "IP pools",
+      "new": "New IP pool",
+      "create": "Add IP pool",
+      "pool": "Resource pool",
+      "subnet": "Subnet (CIDR)",
+      "gateway": "Gateway",
+      "range": "Range",
+      "size": "Addresses",
+      "start": "Range start",
+      "end": "Range end",
+      "excluded": "Excluded addresses",
+      "listHelp": "Separate with commas or spaces.",
+      "explain": "IPv4 only for now. Ranges cannot overlap within one resource pool. Address assignment comes with server creation (phase 9)."
+    },
+    "quotas": {
+      "title": "Quotas",
+      "explain": "The default quota applies to everyone; a user quota replaces the default. An empty field is unlimited.",
+      "scope": "Scope",
+      "default": "Default",
+      "servers": "Servers",
+      "unlimited": "unlimited",
+      "set": "Set quota",
+      "save": "Save quota",
+      "emptyUnlimited": "Empty = unlimited",
+      "maxServers": "Maximum servers",
+      "maxVcpu": "Maximum vCPU",
+      "maxMemoryMb": "Maximum RAM (MB)",
+      "maxDiskGb": "Maximum disk (GB)"
     }
   }
 }

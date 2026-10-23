@@ -15,12 +15,7 @@
   "UserPanel": {
     "eyebrow": "KULLANICI PANELİ",
     "title": "Sunucularınız",
-    "intro": "Kaynaklarınızı ve sunucu işlemlerinizi tek yerden yönetin.",
-    "packageTitle": "Paket sunucu",
-    "packageText": "Hazır CPU, RAM ve disk paketlerinden sunucu oluşturma.",
-    "customTitle": "Özel kaynaklı sunucu",
-    "customText": "İhtiyacınıza göre işlemci, bellek ve depolama seçimi.",
-    "comingSoon": "Yakında",
+    "intro": "Projelerinizi yönetin ve sunucu yapılandırmanızın fiyatını görün.",
     "serversTitle": "Sunucu listesi",
     "serversEmpty": "Henüz VMware bağlantısı yok. Örnek sunucu veya sahte kullanım verisi gösterilmiyor.",
     "consoleTitle": "Tarayıcı konsolu",
@@ -47,7 +42,8 @@
     "setupIncomplete": "İlk kurulum henüz tamamlanmadı.",
     "continueSetup": "Kurulum sihirbazına devam et",
     "connectionsText": "ESXi ve vCenter bağlantıları, gerçek envanter ve fiziksel kapasite.",
-    "open": "Aç"
+    "open": "Aç",
+    "catalogText": "Kaynak havuzları, kapasite, paketler, özel kaynak kuralları, imajlar, IP havuzları ve kotalar."
   },
   "Status": {
     "title": "Sistem sağlığı",
@@ -107,7 +103,8 @@
     "VM_POWERED_OFF": "Sanal makine kapalı. Konsol yalnızca çalışan bir sanal makinede açılabilir.",
     "VM_NOT_FOUND": "Sanal makine bulunamadı. Envanteri yeniden keşfedin.",
     "CONSOLE_TLS_UNVERIFIABLE": "VMware konsol bileti sertifika parmak izi içermiyor; doğrulanamayan bir bağlantı kurulmaz.",
-    "CONSOLE_NOT_PERMITTED": "Servis hesabının konsol yetkisi (VirtualMachine.Interact.ConsoleInteract) yok."
+    "CONSOLE_NOT_PERMITTED": "Servis hesabının konsol yetkisi (VirtualMachine.Interact.ConsoleInteract) yok.",
+    "IN_USE": "Bu kayıt başka kayıtlarda kullanılıyor; önce onları kaldırın."
   },
   "Auth": {
     "required": "zorunlu",
@@ -139,7 +136,21 @@
     "INVALID_PORT": "Port 1-65535 arasında olmalı.",
     "INVALID_CERTIFICATE": "-----BEGIN CERTIFICATE----- ile başlayan PEM sertifika yapıştırın.",
     "INVALID_FINGERPRINT": "64 karakterlik SHA-256 parmak izi (küçük harf, iki nokta olmadan).",
-    "NAME_TAKEN": "Bu ad zaten kullanılıyor."
+    "NAME_TAKEN": "Bu ad zaten kullanılıyor.",
+    "OUT_OF_RANGE": "İzin verilen aralığın dışında.",
+    "INVALID_STEP": "Değer, izin verilen artış adımına uymuyor.",
+    "RATIO_NOT_ALLOWED": "Bu RAM miktarı seçilen vCPU sayısı için izin verilen oranın dışında.",
+    "MIN_ABOVE_MAX": "En az değer, en çok değerden büyük olamaz.",
+    "INVALID_AMOUNT": "Geçerli bir tutar girin (örnek: 12.50).",
+    "INVALID_CURRENCY": "Üç harfli ISO para birimi kodu girin (örnek: EUR, TRY, USD).",
+    "NOT_IN_INVENTORY": "Seçilen öğe bu bağlantının keşfedilen envanterinde yok; envanteri yeniden keşfedin.",
+    "NOT_A_TEMPLATE": "Seçilen sanal makine bir şablon (template) değil.",
+    "IP_OUTSIDE_SUBNET": "Ağ geçidi ve aralık alt ağın içinde olmalı; başlangıç bitişten büyük olamaz ve ağ geçidi aralığın içinde olamaz.",
+    "INVALID_ADDRESS": "Geçerli bir IPv4 adresi veya alt ağ girin.",
+    "RANGE_OVERLAPS": "Bu aralık aynı havuzdaki başka bir IP havuzuyla çakışıyor.",
+    "NOT_AVAILABLE": "Bu seçim bu konumda sunulmuyor.",
+    "NO_CUSTOM_OFFERING": "Bu konumda özel kaynaklı sunucu sunulmuyor.",
+    "BELOW_IMAGE_MINIMUM": "Disk, seçilen işletim sistemi imajının en az disk boyutundan küçük."
   },
   "Setup": {
     "title": "Kurulum sihirbazı",
@@ -484,6 +495,170 @@
       "user": "Kullanıcı",
       "vm": "Sanal makine",
       "since": "Başlangıç"
+    }
+  },
+  "Order": {
+    "title": "Yeni sunucu",
+    "nothingOffered": "Şu anda sunulan bir konum yok.",
+    "location": "Konum",
+    "image": "İşletim sistemi",
+    "project": "Proje",
+    "kind": "Sunucu türü",
+    "package": "Paket",
+    "custom": "Özel kaynaklı",
+    "noCustom": "bu konumda yok",
+    "disk": "Disk (GB)",
+    "packageOption": "{name}: {vcpu} vCPU, {memory} GB RAM, {disk} GB disk, aylık {price}",
+    "customNote": "Özel kaynak seçimi, fiziksel olarak ayrılmış (dedicated) işlemci garantisi değildir. vCPU'lar paylaşılan fiziksel çekirdeklerde çalışır.",
+    "range": "{min}–{max}, adım {step}",
+    "price": "Fiyatı hesapla",
+    "monthly": "Aylık: {price}",
+    "shape": "{vcpu} vCPU, {memory} GB RAM, {disk} GB disk",
+    "quotaExceeded": "Kotanız aşılıyor: {limits}.",
+    "noCapacity": "Bu konumda şu anda yeterli boş kapasite yok.",
+    "notYet": "Sunucu oluşturma henüz bu sürümde yok (9. aşama). Bu ekran yalnızca yapılandırmayı doğrular ve fiyatlandırır.",
+    "quota": {
+      "servers": "sunucu sayısı",
+      "vcpu": "vCPU",
+      "memoryMb": "RAM",
+      "diskGb": "disk"
+    },
+    "projects": {
+      "title": "Projeler",
+      "empty": "Henüz proje yok.",
+      "name": "Proje adı",
+      "create": "Proje oluştur",
+      "remove": "Sil"
+    }
+  },
+  "Catalog": {
+    "eyebrow": "YÖNETİM · KATALOG",
+    "title": "Kaynak havuzları ve katalog",
+    "intro": "Mevcut VMware kapasitesini satışa veya kullanıma açın; paketleri, kuralları, imajları, IP havuzlarını ve kotaları yönetin.",
+    "loading": "Yükleniyor…",
+    "saved": "Kaydedildi.",
+    "removed": "Kaldırıldı.",
+    "remove": "Kaldır",
+    "poolsExplain": "Kaynak havuzu fiziksel kaynak üretmez; mevcut altyapıdaki kapasitenin bir kısmını satışa veya kullanıma açar. Fiziksel toplam, yönetim/güvenlik payı, satışa açılan, rezerve edilen ve gerçekte kullanılan kapasite ayrı gösterilir.",
+    "col": {
+      "name": "Ad",
+      "disk": "Disk",
+      "price": "Aylık fiyat",
+      "cpu": "CPU (çekirdek / vCPU)",
+      "storage": "Depolama"
+    },
+    "layer": {
+      "physical": "Fiziksel toplam",
+      "headroom": "Yönetim ve güvenlik payı",
+      "offered": "Satışa açılan",
+      "reserved": "Rezerve (oluşturulan sunucular)",
+      "used": "Gerçek kullanım (mevcut VM'ler)",
+      "available": "Kalan satılabilir"
+    },
+    "warning": {
+      "STORAGE_FREE_BELOW_HEADROOM": "Datastore'lardaki gerçek boş alan, güvenlik payının altında.",
+      "STORAGE_OVERPROVISIONED": "Thin diskler fiziksel kapasiteden fazlasına söz veriyor; diskler doldukça alan yetmeyebilir.",
+      "MEMORY_OVERCOMMITTED": "Mevcut VM'lere atanmış RAM, fiziksel RAM'den fazla."
+    },
+    "pools": {
+      "title": "Kaynak havuzları",
+      "empty": "Henüz kaynak havuzu yok.",
+      "needConnection": "Önce bir ESXi/vCenter bağlantısı ekleyin.",
+      "new": "Yeni kaynak havuzu",
+      "create": "Havuz oluştur",
+      "ratios": "Fazla tahsis: CPU {cpu}x, RAM {memory}x, depolama {storage}x",
+      "storageNote": "Depolama: {written} GB yazılmış, {provisioned} GB tahsis edilmiş (thin), gerçek boş alan {free} GB.",
+      "location": "Konum",
+      "locationHelp": "Müşteriye gösterilen konum adı (örnek: İstanbul).",
+      "connection": "Bağlantı",
+      "compute": "Küme veya host",
+      "datastores": "Datastore'lar",
+      "network": "Ağ (port group)",
+      "cpuOvercommit": "CPU fazla tahsis oranı",
+      "cpuOvercommitHelp": "Fiziksel çekirdek başına satılacak vCPU (1–32).",
+      "memoryOvercommit": "RAM fazla tahsis oranı",
+      "memoryOvercommitHelp": "1 önerilir; RAM fazla tahsisi performans sorunlarına yol açar (1–4).",
+      "storageOvercommit": "Depolama fazla tahsis oranı",
+      "storageOvercommitHelp": "Thin diskler için kapasitenin kaç katı satılabilir (1–10).",
+      "reserveCpuPct": "CPU payı (%)",
+      "reserveCpuPctHelp": "Satışa açılmayan yönetim ve güvenlik payı.",
+      "reserveMemoryPct": "RAM payı (%)",
+      "reserveMemoryPctHelp": "Satışa açılmayan yönetim ve güvenlik payı.",
+      "reserveStoragePct": "Depolama payı (%)",
+      "reserveStoragePctHelp": "Satışa açılmayan pay; gerçek boş alan bunun altına düşerse uyarılırsınız."
+    },
+    "rule": {
+      "add": "Özel kaynak kuralı ekle",
+      "edit": "Özel kaynak kuralını düzenle",
+      "save": "Kuralı kaydet",
+      "explain": "Müşterinin bu havuzda seçebileceği aralıklar, artış adımları, vCPU başına izin verilen RAM ve birim fiyatlar (aylık).",
+      "cpuMin": "vCPU en az",
+      "cpuMax": "vCPU en çok",
+      "cpuStep": "vCPU adımı",
+      "memoryMinMb": "RAM en az (MB)",
+      "memoryMaxMb": "RAM en çok (MB)",
+      "memoryStepMb": "RAM adımı (MB)",
+      "diskMinGb": "Disk en az (GB)",
+      "diskMaxGb": "Disk en çok (GB)",
+      "diskStepGb": "Disk adımı (GB)",
+      "minMemoryMbPerVcpu": "vCPU başına en az RAM (MB)",
+      "maxMemoryMbPerVcpu": "vCPU başına en çok RAM (MB)",
+      "priceVcpu": "vCPU başına fiyat",
+      "priceMemoryGb": "GB RAM başına fiyat",
+      "priceDiskGb": "GB disk başına fiyat",
+      "currency": "Para birimi"
+    },
+    "images": {
+      "title": "İşletim sistemi imajları",
+      "new": "Yeni imaj",
+      "create": "İmaj ekle",
+      "family": "Aile",
+      "template": "Şablon (template)",
+      "minDisk": "En az disk",
+      "explain": "İmajlar, bağlantının envanterindeki VM şablonlarıdır. Şablon VMware'de hazırlanır; platform burada yalnızca seçer.",
+      "noTemplates": "Bu bağlantıda şablon bulunamadı."
+    },
+    "packages": {
+      "title": "Paketler",
+      "new": "Yeni paket",
+      "create": "Paket oluştur",
+      "needPool": "Önce bir kaynak havuzu oluşturun.",
+      "priceMonthly": "Aylık fiyat",
+      "priceHourly": "Saatlik fiyat (isteğe bağlı)",
+      "currency": "Para birimi",
+      "currencyHelp": "ISO 4217 kodu: EUR, TRY, USD…",
+      "pools": "Sunulduğu havuzlar",
+      "images": "İzin verilen imajlar"
+    },
+    "ip": {
+      "title": "IP havuzları",
+      "new": "Yeni IP havuzu",
+      "create": "IP havuzu ekle",
+      "pool": "Kaynak havuzu",
+      "subnet": "Alt ağ (CIDR)",
+      "gateway": "Ağ geçidi",
+      "range": "Aralık",
+      "size": "Adres sayısı",
+      "start": "Aralık başlangıcı",
+      "end": "Aralık sonu",
+      "excluded": "Hariç tutulan adresler",
+      "listHelp": "Virgül veya boşlukla ayırın.",
+      "explain": "Şimdilik yalnızca IPv4. Aralıklar aynı kaynak havuzunda çakışamaz. Adres ataması sunucu oluşturmayla birlikte (9. aşama) gelecek."
+    },
+    "quotas": {
+      "title": "Kotalar",
+      "explain": "Varsayılan kota herkese uygulanır; kullanıcıya özel kota varsayılanın yerine geçer. Boş bırakılan alan sınırsızdır.",
+      "scope": "Kapsam",
+      "default": "Varsayılan",
+      "servers": "Sunucu",
+      "unlimited": "sınırsız",
+      "set": "Kota belirle",
+      "save": "Kotayı kaydet",
+      "emptyUnlimited": "Boş = sınırsız",
+      "maxServers": "En çok sunucu",
+      "maxVcpu": "En çok vCPU",
+      "maxMemoryMb": "En çok RAM (MB)",
+      "maxDiskGb": "En çok disk (GB)"
     }
   }
 }

@@ -10,6 +10,45 @@ Windows Server 2025, Node 24.21, npm 11.19 (Docker yok).
 - `npm audit --omit=dev`: üç uygulamada 0 açık. API'de Nest'in getirdiği eski fastify
   `overrides` ile 5.12.7'ye sabitlendi.
 
+## 8. aşama: kaynak havuzları, paketler, kotalar — 2026-10-24
+Envanter simüle vCenter'dan geldi; kapasite rakamları simülasyondur.
+
+- API birim testleri 14/14 geçti. 5 yeni test kapasite katmanlarını, kuralları ve kotaları kapsıyor:
+  - fiziksel, pay, satışa açılan, kullanılan ve kalan değerlerin elle hesaplanan beklenen değerlere
+    eşit olması;
+  - CPU, RAM ve depolama oranlarının birbirinden ayrı uygulanması;
+  - şablonların kullanımda sayılmaması;
+  - thin disklerde "yazılmış" ve "tahsis edilmiş" değerlerin ayrılması;
+  - eksiye düşmeme;
+  - düşük boş alan ve fazla tahsis uyarıları;
+  - özel kaynakta aralık, adım ve vCPU başına RAM oranı;
+  - kotada sınırsız (`null`) değer.
+- API entegrasyon testleri 37/37 geçti. 8 yeni katalog testi:
+  - envanterde olmayan kaynakların reddi ve kapasite katmanları;
+  - kuralın bir bütün olarak doğrulanması;
+  - imajın şablon olmasının zorunlu tutulması;
+  - paket tutarının ondalık metin olarak saklanması;
+  - IP havuzu: alt ağ dışı ve geçersiz adres reddi; aynı anda 3 çakışan istekten yalnızca 1'inin
+    kaydedilmesi; hariç tutulan adresin sayıdan düşülmesi;
+  - kullanımdaki havuz ve bağlantının silinememesi (`IN_USE`);
+  - yönetici dışına 403;
+  - proje sahipliği;
+  - teklif: adım hatası, oran hatası, imaj minimum diski, tam fiyat (34,00), kullanıcı kotası,
+    diğer kullanıcının varsayılan kotada kalması, müşteriye altyapı ayrıntısı verilmemesi.
+- **Bulunan hata:** havuzu olan bir bağlantıyı silmek 500 dönecekti; artık `409 IN_USE`.
+- Playwright 13/13 geçti (`https://49-12-109-190.sslip.io`):
+  - yönetici havuz oluşturdu ve kapasite katmanlarını gördü, özel kural ekledi;
+  - hatalı tutarla paket reddedildi;
+  - Türkçe müşteri paket fiyatını `€12,10`, özel yapılandırmayı `€22,00` olarak gördü;
+  - adım hatası Türkçe gösterildi; "ayrılmış CPU garantisi değildir" notu görünüyor;
+  - sunucu oluşturmanın henüz olmadığı yazıyor.
+
+Doğrulanmayanlar:
+- Gerçek altyapıda kapasite rakamları.
+- Rezerve kapasite ve kota kullanımı (9. aşamaya kadar 0).
+- IPv6.
+- Faturalama.
+
 ## 7. aşama: tarayıcı konsolu — 2026-10-24
 **Gerçek ESXi, vCenter veya VMware HTML Console SDK kullanılmadı.** VMware tarafı, teste özel
 simülatördeki sahte bir WebMKS ucudur: bilet verir, TLS WebSocket üzerinden selam verir ve gelen

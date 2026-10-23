@@ -36,8 +36,8 @@ if (existsSync(apiSrc)) {
     for (const [, code] of source.matchAll(/(?:apiError\(\s*\d+,\s*|(?<!ok: \w+, )code: )'([A-Z_]+)'/g)) {
       if (!reference.has(`errors.${code}`)) problems.push(`api: error code ${code} has no errors.${code} translation`);
     }
-    // Field codes: fields.name = 'CODE' and { name: 'CODE' } passed as apiError fields.
-    for (const [, code] of source.matchAll(/(?:fields\.\w+ = |\{ (?!code:)\w+: )'([A-Z_]+)'/g)) {
+    // Field codes: fields.x / errors.x / fields[x] = 'CODE' and { x: 'CODE' } passed as apiError fields.
+    for (const [, code] of source.matchAll(/(?:(?:fields|errors)(?:\.\w+|\[\w+\]) = |\{ (?!code:)\w+: )'([A-Z_]+)'/g)) {
       if (!reference.has(`fieldErrors.${code}`)) problems.push(`api: field code ${code} has no fieldErrors.${code} translation`);
     }
   }

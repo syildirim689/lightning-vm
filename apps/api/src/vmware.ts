@@ -201,7 +201,9 @@ export class VmwareController {
   // Forgets the connection and its cached inventory. Nothing is changed on the ESXi/vCenter side.
   @Delete('connections/:id') @HttpCode(204)
   async remove(@Req() req: AuthedRequest, @Param('id', ParseUUIDPipe) id: string) {
-    const { rows: [c] } = await pool.query('DELETE FROM vmware_connections WHERE id = $1 RETURNING name', [id]);
+    // Pools and images reference connections with ON DELETE RESTRICT: report that, not a 500.
+    const { rows: [c] } = await pool.query('DELETE FROM vmware_connections WHERE id = $1 RETURNING name', [id])
+      .catch((err) => { if (err.code === '23503') throw apiError(409, 'IN_USE', 'Used by resource pools or images'); throw err; });
     if (!c) throw apiError(404, 'NOT_FOUND', 'Unknown connection');
     await audit(req, 'vmware.connection_deleted', 'success', req.user.id, { id, name: c.name });
   }
