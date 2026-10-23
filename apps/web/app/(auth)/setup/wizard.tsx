@@ -1,6 +1,6 @@
 "use client";
 import { useRouter } from 'next/navigation';
-import { useLocale, useTranslations } from 'next-intl';
+import { useFormatter, useLocale, useTranslations } from 'next-intl';
 import { useCallback, useEffect, useState } from 'react';
 import { apiFetch, useErrorText, type ApiError } from '../../../lib/api';
 import { setLocale } from '../../../i18n/actions';
@@ -14,13 +14,16 @@ type Progress = { steps: Record<string, Saved>; adminCreated: boolean };
 const steps = ['language', 'checks', 'access', 'domain', 'services', 'admin', 'vmware', 'discovery', 'pools', 'monitoring', 'summary'] as const;
 type Step = (typeof steps)[number];
 const required: Step[] = ['language', 'checks', 'access', 'services', 'admin'];
-const notYetAvailable: Step[] = ['domain', 'vmware', 'discovery', 'pools'];
+const notYetAvailable: Step[] = ['vmware', 'discovery', 'pools'];
 
 function CheckList({ checks }: { checks: Check[] }) {
   const t = useTranslations('Setup');
+  const format = useFormatter();
   return <ul className="checks">{checks.map((c) => <li key={c.id} className={c.ok ? 'ok' : 'fail'}>
     <span aria-hidden>{c.ok ? '✓' : '✗'}</span> <strong>{t(`checkNames.${c.id}` as 'checkNames.postgres')}</strong>: {t(`checkCodes.${c.code}` as 'checkCodes.OK')}
     {c.detail?.version !== undefined && <span className="muted"> ({t('version', { version: String(c.detail.version) })})</span>}
+    {c.detail?.a !== undefined && <span className="muted"> ({t('dnsDetail', { a: String(c.detail.a) || '–', aaaa: String(c.detail.aaaa) || '–' })})</span>}
+    {c.detail?.issuer !== undefined && <span className="muted"> ({t('certDetail', { issuer: String(c.detail.issuer), validTo: c.detail.validTo ? format.dateTime(new Date(String(c.detail.validTo)), { dateStyle: 'medium' }) : '–' })})</span>}
   </li>)}</ul>;
 }
 
@@ -36,6 +39,7 @@ export default function Wizard() {
   const [failure, setFailure] = useState<ApiError & { text: string }>();
   const [busy, setBusy] = useState(false);
   const [publicUrl, setPublicUrl] = useState('');
+  const [domain, setDomain] = useState('');
   const [monitoring, setMonitoring] = useState(false);
 
   const load = useCallback(async (jump = false) => {
@@ -46,6 +50,9 @@ export default function Wizard() {
       if (jump) setCurrent(steps.find((s) => s !== 'summary' && !done(s)) ?? 'summary');
       setPublicUrl((p.steps.access?.data.publicUrl as string) ?? window.location.origin);
       setMonitoring(p.steps.monitoring?.data.enabled === true);
+      // Suggest the host of the saved panel address when it is a name, not an IP or localhost.
+      const host = p.steps.access?.data.publicUrl ? new URL(p.steps.access.data.publicUrl as string).hostname : '';
+      setDomain((p.steps.domain?.data.domain as string) ?? (/[a-z]/.test(host.split('.').pop() ?? '') && host.includes('.') ? host : ''));
     } catch (e) {
       const code = (e as ApiError).code;
       if (code === 'BOOTSTRAP_REQUIRED') setGate('token');
@@ -76,7 +83,7 @@ export default function Wizard() {
   const status = (s: Step) => s === 'admin' ? (progress.adminCreated ? 'completed' : undefined) : progress.steps[s]?.status;
   const isRequired = required.includes(current);
   const testButton = (path: string) => <button type="button" className="secondary" disabled={busy}
-    onClick={() => run(() => apiFetch<{ checks: Check[] }>(path, { method: 'POST', body: current === 'access' ? { publicUrl } : undefined }), (r) => setChecks(r.checks))}>
+    onClick={() => run(() => apiFetch<{ checks: Check[] }>(path, { method: 'POST', body: current === 'access' ? { publicUrl } : current === 'domain' ? { domain } : undefined }), (r) => setChecks(r.checks))}>
     {busy ? t('testing') : t('test')}</button>;
   const saveButton = (data?: object) => <button type="button" className="primary" disabled={busy} onClick={() => save('completed', data)}>{t('saveAndContinue')}</button>;
   const skipButton = <button type="button" className="secondary" disabled={busy} onClick={() => save('skipped')}>{t('skip')}</button>;
@@ -98,13 +105,21 @@ export default function Wizard() {
         <input id="publicUrl" type="text" inputMode="url" value={publicUrl} onChange={(e) => setPublicUrl(e.target.value)} aria-invalid={!!failure?.fields?.publicUrl} aria-describedby="publicUrl-help"/>
         <small id="publicUrl-help" className={failure?.fields?.publicUrl ? 'error' : 'muted'}>{field(failure?.fields?.publicUrl) ?? t('access.help')}</small></>}
       {current === 'admin' && (progress.adminCreated ? <p>{t('admin.done')}</p> : <CredentialsForm mode="setup" noToken onDone={() => load(true)}/>)}
-      {notYetAvailable.includes(current) && <p className="notice">{t(`notAvailable.${current as 'domain'}`)}</p>}
+      {current === 'domain' && <><label htmlFor="domain">{t('domain.label')}<span className="muted"> · {t('optional')}</span></label>
+        <input id="domain" type="text" value={domain} onChange={(e) => setDomain(e.target.value)} placeholder="panel.example.com" aria-invalid={!!failure?.fields?.domain} aria-describedby="domain-help"/>
+        <small id="domain-help" className={failure?.fields?.domain ? 'error' : 'muted'}>{field(failure?.fields?.domain) ?? t('domain.help')}</small>
+        <ol className="howto">{(['dnsRecord', 'ports', 'apply', 'test'] as const).map((k) => <li key={k}>{t(`domain.howto.${k}`)}</li>)}</ol>
+        <pre><code>{`sudo sh scripts/install.sh domain ${domain || 'panel.example.com'} --acme-staging\nsudo sh scripts/install.sh domain ${domain || 'panel.example.com'}`}</code></pre>
+        <p className="muted">{t('domain.behindProxy')}</p></>}
+      {notYetAvailable.includes(current) && <p className="notice">{t(`notAvailable.${current as 'vmware'}`)}</p>}
       {current === 'monitoring' && <><label className="check"><input type="checkbox" checked={monitoring} onChange={(e) => setMonitoring(e.target.checked)}/>{t('monitoring.enable')}</label>
         <p className="muted">{t('monitoring.help')}</p><pre><code>docker compose --profile observability up -d</code></pre></>}
       {current === 'summary' && <Summary progress={progress} status={status}/>}
 
       {checks && <CheckList checks={checks}/>}
       {current === 'access' && checks?.[0] && !checks[0].ok && <p className="muted">{t(`access.hint.${checks[0].code}` as 'access.hint.DNS_FAILED')}</p>}
+      {current === 'domain' && checks?.filter((c) => !c.ok).map((c) => <p key={c.id} className="muted">{t(`domain.hint.${c.code}` as 'domain.hint.DNS_FAILED')}</p>)}
+      {current === 'domain' && checks?.some((c) => c.id === 'dns' && c.detail?.aaaa) && <p className="muted">{t('domain.aaaaWarning')}</p>}
       {failure && <p role="alert" className="error">{failure.text}</p>}
 
       <div className="actions">
@@ -112,6 +127,7 @@ export default function Wizard() {
         {current === 'language' && saveButton({ locale })}
         {current === 'checks' && <>{testButton('/setup/checks')}{saveButton()}</>}
         {current === 'access' && <>{testButton('/setup/test/access')}{saveButton({ publicUrl })}</>}
+        {current === 'domain' && <>{testButton('/setup/test/domain')}{saveButton({ domain })}{skipButton}</>}
         {current === 'services' && <>{testButton('/setup/test/services')}{saveButton()}</>}
         {current === 'admin' && progress.adminCreated && <button type="button" className="primary" onClick={next}>{t('continue')}</button>}
         {notYetAvailable.includes(current) && skipButton}

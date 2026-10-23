@@ -1,9 +1,11 @@
 import { readdirSync } from 'node:fs';
 import { join } from 'node:path';
+import { promises as dns } from 'node:dns';
+import { connect } from 'node:tls';
 import { pool, redis } from './db';
 
 // Every result code the wizard can show; the web check script requires a translation for each.
-export const checkCodes = ['OK', 'UNREACHABLE', 'MIGRATIONS_PENDING', 'NO_HEARTBEAT', 'HTTP_ERROR', 'TIMEOUT', 'DNS_FAILED', 'CONNECTION_REFUSED', 'TLS_ERROR', 'WRONG_TARGET', 'LOOPBACK_NOT_VERIFIABLE'] as const;
+export const checkCodes = ['OK', 'UNREACHABLE', 'MIGRATIONS_PENDING', 'NO_HEARTBEAT', 'HTTP_ERROR', 'TIMEOUT', 'DNS_FAILED', 'CONNECTION_REFUSED', 'TLS_ERROR', 'WRONG_TARGET', 'LOOPBACK_NOT_VERIFIABLE', 'NO_ADDRESS_RECORDS', 'REDIRECT_HTTPS', 'CERT_STAGING'] as const;
 export type CheckCode = (typeof checkCodes)[number];
 export type Check = { id: string; ok: boolean; code: CheckCode; detail?: Record<string, string | number> };
 
@@ -62,3 +64,50 @@ export function parsePublicUrl(value: unknown): string | null {
 }
 
 export const isLoopback = (origin: string) => /^(localhost|127\.\d+\.\d+\.\d+|\[::1\])$/.test(new URL(origin).hostname);
+
+// Plain host name: lowercase labels, at least one dot, no scheme, port or path.
+export function parseDomain(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const host = value.trim().toLowerCase();
+  return /^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/.test(host) && host.length <= 253 ? host : null;
+}
+
+// Reads the certificate the name serves on 443, verified against the system CAs.
+function tlsCheck(host: string): Promise<Check> {
+  return new Promise((resolve) => {
+    // rejectUnauthorized: false only so the certificate can be inspected; trust is decided by socket.authorized.
+    const socket = connect({ host, port: 443, servername: host, timeout: 5000, rejectUnauthorized: false }, () => {
+      const cert = socket.getPeerCertificate();
+      const issuer = [cert.issuer?.O, cert.issuer?.CN].filter(Boolean).join(' / ');
+      const detail = { issuer, validTo: cert.valid_to ?? '' };
+      socket.end();
+      if (socket.authorized) resolve({ id: 'https', ok: true, code: 'OK', detail });
+      else resolve({ id: 'https', ok: false, code: /STAGING/i.test(issuer) ? 'CERT_STAGING' : 'TLS_ERROR', detail: { ...detail, reason: String(socket.authorizationError ?? '') } });
+    });
+    socket.on('timeout', () => { socket.destroy(); resolve({ id: 'https', ok: false, code: 'TIMEOUT' }); });
+    socket.on('error', (err) => resolve({ id: 'https', ok: false, code: networkErrorCode({ cause: err }) }));
+  });
+}
+
+// DNS, HTTP and HTTPS are reported separately: one passing says nothing about the others.
+export async function domainChecks(host: string, probe: (origin: string) => Promise<Check>): Promise<Check[]> {
+  const [a, aaaa] = await Promise.allSettled([dns.resolve4(host), dns.resolve6(host)]);
+  const v4 = a.status === 'fulfilled' ? a.value : [];
+  const v6 = aaaa.status === 'fulfilled' ? aaaa.value : [];
+  const notFound = [a, aaaa].every((r) => r.status === 'rejected' && (r.reason as { code?: string }).code === 'ENOTFOUND');
+  const dnsResult: Check = v4.length || v6.length
+    ? { id: 'dns', ok: v4.length > 0, code: v4.length ? 'OK' : 'NO_ADDRESS_RECORDS', detail: { a: v4.join(', '), aaaa: v6.join(', ') } }
+    : { id: 'dns', ok: false, code: notFound ? 'DNS_FAILED' : 'NO_ADDRESS_RECORDS' };
+  if (!dnsResult.ok) return [dnsResult];
+
+  const http = await fetch(`http://${host}/`, { redirect: 'manual', signal: AbortSignal.timeout(5000) }).then((r): Check => {
+    const location = r.headers.get('location') ?? '';
+    if (r.status >= 300 && r.status < 400 && location.startsWith(`https://${host}`)) return { id: 'http', ok: true, code: 'REDIRECT_HTTPS' };
+    return r.ok ? { id: 'http', ok: true, code: 'OK' } : { id: 'http', ok: false, code: 'HTTP_ERROR', detail: { status: r.status } };
+  }, (err): Check => ({ id: 'http', ok: false, code: networkErrorCode(err) }));
+
+  const tls = await tlsCheck(host);
+  // A trusted certificate must also belong to this installation, not to some other server on that name.
+  const https = tls.ok ? { ...(await probe(`https://${host}`)), id: 'https', detail: tls.detail } : tls;
+  return [dnsResult, http, https];
+}

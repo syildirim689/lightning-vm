@@ -95,6 +95,18 @@ test('access test tells DNS, refused, wrong target, loopback and success apart',
   assert.deepEqual([ok.publicUrl, ok.checks[0].code], [panelOrigin, 'OK']);
 });
 
+test('domain step validates names and reports DNS failure without trying HTTP or TLS', async () => {
+  const check = async (domain) => (await send('POST', '/setup/test/domain', { setup: setupCookie, payload: { domain } })).json();
+  for (const invalid of ['https://panel.example.com', 'panel', 'panel.example.com/x', '-bad.example.com']) {
+    assert.deepEqual((await check(invalid)).fields, { domain: 'INVALID_DOMAIN' }, invalid);
+  }
+  const missing = await check('lightning-vm-does-not-exist.invalid');
+  assert.deepEqual(missing.checks.map((c) => [c.id, c.code]), [['dns', 'DNS_FAILED']]);
+  const save = await send('PUT', '/setup/steps/domain', { setup: setupCookie, payload: { status: 'completed', data: { domain: 'lightning-vm-does-not-exist.invalid' } } });
+  assert.equal(save.json().code, 'CHECKS_FAILED');
+  assert.equal((await send('PUT', '/setup/steps/domain', { setup: setupCookie, payload: { status: 'skipped' } })).statusCode, 200);
+});
+
 test('finishing needs an admin; creating it moves the wizard to the admin session', async () => {
   assert.equal((await send('POST', '/setup/complete', { setup: setupCookie })).json().code, 'ADMIN_REQUIRED');
   const res = await send('POST', '/setup/admin', { setup: setupCookie, payload: { email: 'admin@example.test', password } });

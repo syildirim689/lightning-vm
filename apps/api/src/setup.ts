@@ -5,7 +5,7 @@ import { pool, redis } from './db';
 import { apiError } from './errors';
 import { audit, currentUser, readCredentials, startSession, type User } from './auth';
 import { hashPassword, newToken, rateLimit, sha256 } from './security';
-import { isLoopback, monitoringChecks, networkErrorCode, parsePublicUrl, serviceChecks, systemChecks, type Check } from './checks';
+import { domainChecks, isLoopback, monitoringChecks, networkErrorCode, parseDomain, parsePublicUrl, serviceChecks, systemChecks, type Check } from './checks';
 
 const bootstrapMinutes = 60;
 const setupCookie = 'lvm_setup';
@@ -14,7 +14,7 @@ const steps = ['language', 'checks', 'access', 'domain', 'services', 'vmware', '
 type Step = (typeof steps)[number];
 const required: Step[] = ['language', 'checks', 'access', 'services'];
 // Steps whose features arrive in later phases: they can only be skipped for now.
-const notYetAvailable: Step[] = ['domain', 'vmware', 'discovery', 'pools'];
+const notYetAvailable: Step[] = ['vmware', 'discovery', 'pools'];
 
 // Called from the CLI on the server only: whoever can run it already controls the host.
 export async function issueBootstrapToken() {
@@ -130,6 +130,14 @@ export class SetupController {
     return { publicUrl: origin, checks: [await probeAccess(origin)] };
   }
 
+  @Post('test/domain') @HttpCode(200) @UseGuards(SetupGuard)
+  async testDomain(@Req() req: FastifyRequest, @Body() body: unknown) {
+    await rateLimit(`setup:probe:${req.ip}`, 30, 900);
+    const domain = parseDomain((body as { domain?: unknown })?.domain);
+    if (!domain) throw apiError(400, 'VALIDATION_FAILED', 'Invalid input', { domain: 'INVALID_DOMAIN' });
+    return { domain, checks: await domainChecks(domain, probeAccess) };
+  }
+
   // Server-side validation per step; a step can only be marked done when its own checks pass now.
   @Put('steps/:step') @UseGuards(SetupGuard)
   async saveStep(@Req() req: FastifyRequest & { user?: User }, @Param('step') step: string, @Body() body: unknown) {
@@ -155,6 +163,12 @@ export class SetupController {
         const check = await probeAccess(origin);
         saved = { publicUrl: origin, verified: check.ok, code: check.code };
         await pool.query("UPDATE settings SET value = $1, updated_at = now() WHERE key = 'public_url'", [JSON.stringify(origin)]);
+      } else if (step === 'domain') {
+        const domain = parseDomain(data?.domain);
+        if (!domain) throw apiError(400, 'VALIDATION_FAILED', 'Invalid input', { domain: 'INVALID_DOMAIN' });
+        const checks = await domainChecks(domain, probeAccess);
+        if (!allOk(checks)) throw apiError(409, 'CHECKS_FAILED', 'Checks are not passing');
+        saved = { domain, checks };
       } else if (step === 'monitoring') {
         const enabled = data?.enabled === true;
         saved = enabled ? { enabled, checks: await monitoringChecks() } : { enabled };

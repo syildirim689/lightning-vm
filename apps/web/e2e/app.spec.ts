@@ -56,14 +56,28 @@ test.describe('first run (Turkish browser)', () => {
     await page.getByLabel('Panel adresi').fill('http://panel.example.com/yol');
     await saveAndContinue();
     await expect(page.getByText('Yalnızca şema, alan adı/IP ve isteğe bağlı port girin.', { exact: false })).toBeVisible();
-    await page.getByLabel('Panel adresi').fill('http://127.0.0.1:8080');
+    const domain = process.env.E2E_DOMAIN;
+    await page.getByLabel('Panel adresi').fill(domain ? `https://${domain}` : 'http://127.0.0.1:8080');
     await page.getByRole('button', { name: 'Bağlantıyı test et' }).click();
-    await expect(page.locator('li.fail', { hasText: 'Panel adresi' })).toContainText('Yerel adres; doğrulanamaz');
+    if (domain) await expect(page.locator('li.ok', { hasText: 'Panel adresi' })).toContainText('Başarılı');
+    else await expect(page.locator('li.fail', { hasText: 'Panel adresi' })).toContainText('Yerel adres; doğrulanamaz');
     await saveAndContinue();
 
     await expect(heading).toHaveText('Alan adı ve HTTPS');
-    await expect(page.getByRole('button', { name: 'Kaydet ve devam et' })).toHaveCount(0);
-    await skip();
+    await page.getByLabel('Alan adı').fill('https://panel.example.com');
+    await page.getByRole('button', { name: 'Bağlantıyı test et' }).click();
+    await expect(page.getByText('Yalnızca alan adını girin', { exact: false })).toBeVisible();
+    if (domain) {
+      // Real deployment with a public name: DNS, HTTP and the certificate are each checked for real.
+      await page.getByLabel('Alan adı').fill(domain);
+      await page.getByRole('button', { name: 'Bağlantıyı test et' }).click();
+      await expect(page.locator('li.ok', { hasText: 'DNS' })).toContainText('Başarılı');
+      await expect(page.locator('li.ok', { hasText: 'HTTP (80)' })).toContainText("HTTPS'e yönlendiriyor");
+      await expect(page.locator('li.ok', { hasText: 'HTTPS sertifikası' })).toContainText('Başarılı');
+      await saveAndContinue();
+    } else {
+      await skip();
+    }
     await expect(heading).toHaveText('PostgreSQL ve Redis');
     await saveAndContinue();
 
@@ -83,8 +97,8 @@ test.describe('first run (Turkish browser)', () => {
 
     await expect(heading).toHaveText('Son kontrol ve özet');
     await expect(page.getByText('VMware bağlantısı yapılandırılmadı', { exact: false })).toBeVisible();
-    await expect(page.getByText('Panel adresi bu sunucudan doğrulanamadı', { exact: false })).toBeVisible();
-    await expect(page.getByText('HTTPS yapılandırılmadı', { exact: false })).toBeVisible();
+    await expect(page.getByText('Panel adresi bu sunucudan doğrulanamadı', { exact: false })).toHaveCount(domain ? 0 : 1);
+    await expect(page.getByText('HTTPS yapılandırılmadı', { exact: false })).toHaveCount(domain ? 0 : 1);
     await page.getByRole('button', { name: 'Kurulumu tamamla' }).click();
     await expect(page).toHaveURL(/\/admin$/);
     await expect(page.getByText('İlk kurulum henüz tamamlanmadı.')).toHaveCount(0);

@@ -98,8 +98,19 @@ services:
   proxy:
     image: caddy:2-alpine
     restart: unless-stopped
-    ports: ["${LISTEN_ADDRESS:-127.0.0.1}:${HTTP_PORT:-8080}:80"]
-    volumes: [./deploy/caddy/Caddyfile:/etc/caddy/Caddyfile:ro]
+    ports:
+      - "${LISTEN_ADDRESS:-127.0.0.1}:${HTTP_PORT:-8080}:80"
+      - "${LISTEN_ADDRESS:-127.0.0.1}:${HTTPS_PORT:-8443}:443"
+      - "${LISTEN_ADDRESS:-127.0.0.1}:${HTTPS_PORT:-8443}:443/udp"
+    environment:
+      PANEL_SITE: ${PANEL_SITE:-:80}
+      ACME_CA: ${ACME_CA:-https://acme-v02.api.letsencrypt.org/directory}
+      TRUSTED_PROXY_CIDRS: ${TRUSTED_PROXY_CIDRS:-127.0.0.1/32}
+    volumes:
+      - ./deploy/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      # Certificates and ACME account survive restarts and upgrades; losing them means re-issuing.
+      - caddy_data:/data
+      - caddy_config:/config
     depends_on:
       api: {condition: service_healthy}
       web: {condition: service_healthy}
@@ -139,6 +150,8 @@ services:
     volumes: [./deploy/observability/otel.yaml:/etc/otelcol/config.yaml:ro]
 volumes:
   postgres_data:
+  caddy_data:
+  caddy_config:
   redis_data:
   prometheus_data:
   grafana_data:

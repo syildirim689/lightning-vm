@@ -106,7 +106,8 @@
     "PASSWORD_TOO_LONG": "Parola en fazla 256 karakter olabilir.",
     "INVALID_VALUE": "Geçersiz değer.",
     "INVALID_URL": "Yalnızca şema, alan adı/IP ve isteğe bağlı port girin. Örnek: https://panel.example.com",
-    "REQUIRED": "Bu alan zorunludur."
+    "REQUIRED": "Bu alan zorunludur.",
+    "INVALID_DOMAIN": "Yalnızca alan adını girin, şema veya yol olmadan. Örnek: panel.example.com"
   },
   "Setup": {
     "title": "Kurulum sihirbazı",
@@ -146,7 +147,7 @@
       },
       "domain": {
         "title": "Alan adı ve HTTPS",
-        "help": "DNS kayıtları, Caddy ile otomatik HTTPS ve sertifika kontrolleri."
+        "help": "Panelin internetten HTTPS ile açılacağı ad. DNS, HTTP erişimi ve sertifika ayrı ayrı test edilir; birinin geçmesi diğerlerinin de geçtiği anlamına gelmez. Alan adı olmadan da çalışabilirsiniz: bu adımı atlayıp 127.0.0.1 veya SSH tüneli kullanın."
       },
       "services": {
         "title": "PostgreSQL ve Redis",
@@ -178,7 +179,6 @@
       }
     },
     "notAvailable": {
-      "domain": "Alan adı doğrulaması ve HTTPS akışı sonraki sürümde (5. aşama) gelecek. Şimdilik sistemi yalnızca 127.0.0.1 veya SSH tüneli üzerinden kullanın.",
       "vmware": "ESXi/vCenter bağlantısı sonraki sürümde (6. aşama) gelecek. Bu adım atlandığında platform henüz sanal sunucu yönetemez.",
       "discovery": "Keşif, ESXi/vCenter bağlantısıyla birlikte gelecek.",
       "pools": "Kaynak havuzları ve IP planı sonraki sürümde (8. aşama) gelecek."
@@ -211,7 +211,7 @@
       "publicUrl": "Panel adresi: {url}",
       "warnVmware": "VMware bağlantısı yapılandırılmadı: platform henüz sanal sunucu oluşturamaz veya yönetemez.",
       "warnAccess": "Panel adresi bu sunucudan doğrulanamadı. Adresi başka bir cihazdan açarak kontrol edin.",
-      "warnHttps": "HTTPS yapılandırılmadı. Paneli internete açmayın; 127.0.0.1 veya SSH tüneli kullanın."
+      "warnHttps": "HTTPS yapılandırılmadı. Paneli internete açmayın; 127.0.0.1 veya SSH tüneli kullanın ya da alan adı adımını tamamlayın."
     },
     "checkNames": {
       "postgres": "PostgreSQL",
@@ -221,7 +221,10 @@
       "access": "Panel adresi",
       "prometheus": "Prometheus",
       "grafana": "Grafana",
-      "loki": "Loki"
+      "loki": "Loki",
+      "dns": "DNS",
+      "http": "HTTP (80)",
+      "https": "HTTPS sertifikası (443)"
     },
     "checkCodes": {
       "OK": "Başarılı",
@@ -234,7 +237,35 @@
       "CONNECTION_REFUSED": "Bağlantı reddedildi",
       "TLS_ERROR": "TLS sertifikası doğrulanamadı",
       "WRONG_TARGET": "Başka bir sunucu yanıt verdi",
-      "LOOPBACK_NOT_VERIFIABLE": "Yerel adres; doğrulanamaz"
+      "LOOPBACK_NOT_VERIFIABLE": "Yerel adres; doğrulanamaz",
+      "NO_ADDRESS_RECORDS": "A kaydı yok",
+      "REDIRECT_HTTPS": "HTTPS'e yönlendiriyor",
+      "CERT_STAGING": "Let's Encrypt test (staging) sertifikası; tarayıcılar güvenmez"
+    },
+    "dnsDetail": "A: {a}; AAAA: {aaaa}",
+    "certDetail": "veren: {issuer}; bitiş: {validTo}",
+    "domain": {
+      "label": "Alan adı",
+      "help": "Örnek: panel.example.com. Ana alan adı yerine bir alt alan adı (subdomain) kullanmanız önerilir.",
+      "howto": {
+        "dnsRecord": "DNS sağlayıcınızda bu ad için sunucunun genel IPv4 adresini gösteren bir A kaydı oluşturun. AAAA kaydını yalnızca sunucuda çalışan genel IPv6 varsa ekleyin. Özel (10.x, 172.16-31.x, 192.168.x) adres yazmayın; NAT arkasındaysanız modeminizin genel adresini yazın ve 80/443 portlarını bu sunucuya yönlendirin.",
+        "ports": "80 ve 443 portları internetten bu sunucuya ulaşmalı: Let's Encrypt doğrulaması 80 (HTTP-01) veya 443 (TLS-ALPN-01) üzerinden yapılır. Bu portlarda başka bir web sunucusu varsa 'behind-proxy' modunu kullanın.",
+        "apply": "Sunucuda aşağıdaki komutu çalıştırın. Denemelerde önce --acme-staging kullanın; tekrarlanan denemeler gerçek sertifika limitlerine takılmaz. Çalıştığını gördükten sonra seçeneği kaldırıp tekrar çalıştırın.",
+        "test": "Ardından 'Bağlantıyı test et' ile DNS, HTTP ve sertifikayı ayrı ayrı kontrol edin. Sertifika Caddy tarafından otomatik yenilenir ve kalıcı birimde (caddy_data) saklanır."
+      },
+      "behindProxy": "Mevcut bir Nginx/Caddy/Traefik arkasında çalıştırmak için 'sudo sh scripts/install.sh behind-proxy' kullanın: panel 127.0.0.1 üzerinde düz HTTP dinler, TLS'i önünüzdeki proxy sonlandırır. Ayrıntılar: docs/domain-https.md",
+      "aaaaWarning": "Bu adın AAAA (IPv6) kaydı var. Sunucuda IPv6 gerçekten çalışmıyorsa kaydı kaldırın; aksi halde bazı ziyaretçiler ve sertifika doğrulaması başarısız olur.",
+      "hint": {
+        "DNS_FAILED": "Ad çözümlenemedi. A kaydını oluşturun ve yayılmasını bekleyin (birkaç dakika ile birkaç saat).",
+        "NO_ADDRESS_RECORDS": "Ad var ama A kaydı yok. Sunucunun genel IPv4 adresini gösteren bir A kaydı ekleyin.",
+        "CONNECTION_REFUSED": "Bağlantı reddedildi: bu portta dinleyen yok. Kurulum betiğinin 'domain' komutunu çalıştırdınız mı? Güvenlik duvarı veya port yönlendirmesi 80/443'ü engelliyor olabilir.",
+        "TIMEOUT": "Zaman aşımı: bir güvenlik duvarı veya NAT bağlantıyı düşürüyor olabilir. Bulut sağlayıcınızın güvenlik duvarında 80/443'ü açın.",
+        "HTTP_ERROR": "Beklenmeyen HTTP yanıtı. Önünüzdeki bir proxy veya CDN istekleri bu kuruluma iletmiyor olabilir.",
+        "TLS_ERROR": "Sertifika doğrulanamadı (süresi dolmuş, başka ada ait veya kendinden imzalı). Sertifika doğrulamasını kapatmayın; alan adını ve Caddy loglarını kontrol edin: docker compose logs proxy",
+        "CERT_STAGING": "Bu bir test sertifikası. Her şey çalışıyorsa komutu --acme-staging olmadan tekrar çalıştırarak gerçek sertifika alın.",
+        "WRONG_TARGET": "Bu ad yanıt veriyor ama bu kuruluma ait değil. DNS veya önünüzdeki proxy başka bir sunucuyu gösteriyor.",
+        "UNREACHABLE": "Adrese ulaşılamadı."
+      }
     }
   }
 }

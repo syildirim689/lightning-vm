@@ -1,16 +1,35 @@
-:80 {
-  # Metrics are for Prometheus on the internal network only.
-  handle /api/metrics* {
-    respond 404
-  }
-  handle_path /api/* {
-    reverse_proxy api:4000
-  }
-  handle {
-    reverse_proxy web:3000
-  }
-  log {
-    output stdout
-    format json
-  }
+# Values come from .env via compose.yaml; scripts/install.sh (domain | behind-proxy | local-only) sets them.
+#   PANEL_SITE           ":80" = plain HTTP on any host name (loopback / SSH tunnel / behind another proxy)
+#                        "panel.example.com" = automatic HTTPS for that name (ACME HTTP-01/TLS-ALPN on 80/443)
+#   ACME_CA              Let's Encrypt production by default; the staging URL avoids rate limits while testing
+#   TRUSTED_PROXY_CIDRS  only these peers may set X-Forwarded-*; everyone else's headers are replaced
+{
+	acme_ca {$ACME_CA:https://acme-v02.api.letsencrypt.org/directory}
+	servers {
+		trusted_proxies static {$TRUSTED_PROXY_CIDRS:127.0.0.1/32}
+		trusted_proxies_strict
+	}
+}
+
+{$PANEL_SITE::80} {
+	header {
+		-Server
+		X-Content-Type-Options nosniff
+		Referrer-Policy same-origin
+		X-Frame-Options DENY
+	}
+	# Metrics are for Prometheus on the internal network only.
+	handle /api/metrics* {
+		respond 404
+	}
+	handle_path /api/* {
+		reverse_proxy api:4000
+	}
+	handle {
+		reverse_proxy web:3000
+	}
+	log {
+		output stdout
+		format json
+	}
 }

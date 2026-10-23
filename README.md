@@ -17,9 +17,12 @@ Açık kaynak VMware sunucu yönetim platformunun başlangıç deposu.
 
 - Kurulum: `scripts/install.sh` (`install`, `check`, `recover-setup` modları; ön kontroller;
   iki dilli hata kodları) ve tarayıcıda 11 adımlı kurulum sihirbazı (docs/setup.md).
+- Erişim modları: yalnızca yerel (SSH tüneli), alan adıyla Caddy otomatik HTTPS (Let's Encrypt,
+  staging seçeneğiyle) veya mevcut bir Nginx/Caddy/Traefik arkasında güvenilen proxy sınırıyla
+  (docs/domain-https.md).
 
 ## Henüz uygulanmayanlar
-- Sihirbazda alan adı/HTTPS, VMware ve kaynak havuzu adımları (şimdilik yalnızca atlanabilir).
+- Sihirbazda VMware ve kaynak havuzu adımları (şimdilik yalnızca atlanabilir).
 - MFA, parola sıfırlama, proje/müşteri modeli.
 - VMware bağlantısı, VM işlemleri, konsol geçidi, IP tahsisi.
 - Faturalama, yedekleme otomasyonu, otomatik güncelleme.
@@ -61,8 +64,19 @@ Ardından http://127.0.0.1:8080/setup adresini açın, anahtarı girin ve sihirb
 Kurulum yarıda kalırsa aynı `install` komutunu tekrar çalıştırın. Mevcut sırlar, veriler ve
 yönetici hesabı korunur.
 
-Varsayılan port yalnızca loopback üzerinde açılır. HTTPS (5. aşama) yapılandırılmadan
-`LISTEN_ADDRESS` değerini `0.0.0.0` yapmayın ve paneli internete açmayın: parolalar düz HTTP ile gider.
+**5. (İsteğe bağlı) Alan adı ve HTTPS.** Alan adınızın A kaydı sunucuyu göstermeli ve 80/443
+portları internetten açık olmalı. Önce test sertifikasıyla deneyin, sonra gerçek sertifikayı alın:
+```sh
+sudo sh scripts/install.sh domain panel.example.com --acme-staging
+```
+```sh
+sudo sh scripts/install.sh domain panel.example.com
+```
+Mevcut bir web sunucusunun arkasında çalıştırmak için `behind-proxy` modunu kullanın. Ayrıntılar
+docs/domain-https.md dosyasında.
+
+Varsayılan port yalnızca loopback üzerinde açılır. `LISTEN_ADDRESS` değerini elle `0.0.0.0` yapıp
+paneli HTTPS'siz internete açmayın: parolalar düz HTTP ile gider.
 
 ## İzleme
 ```sh

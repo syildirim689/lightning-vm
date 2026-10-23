@@ -10,6 +10,52 @@ Windows Server 2025, Node 24.21, npm 11.19 (Docker yok).
 - `npm audit --omit=dev`: üç uygulamada 0 açık. API'de Nest'in getirdiği eski fastify
   `overrides` ile 5.12.7'ye sabitlendi.
 
+## 5. aşama: alan adı, reverse proxy ve HTTPS — 2026-10-23
+Test sunucusu: Ubuntu 24.04 arm64, genel IP 49.12.109.190. Gerçek bir alan adı verilmediği için
+herkese açık sslip.io servisi kullanıldı: `49-12-109-190.sslip.io` → 49.12.109.190.
+
+- `shellcheck`: temiz. Yerelde API birim testi 7/7; web çeviri kontrolü (201 anahtar) ve build geçti.
+- API entegrasyon testleri 19/19 geçti. Yeni testler:
+  - geçersiz alan adı biçimleri `INVALID_DOMAIN` alıyor;
+  - çözülmeyen ad yalnızca `DNS_FAILED` döndürüyor ve HTTP/TLS denenmiyor;
+  - başarısız kontrolle adım kaydedilemiyor; adım atlanabiliyor.
+- `install.sh domain ... --acme-staging`:
+  - 80/443 boş, DNS bu sunucuyu gösteriyor;
+  - HTTP 308 ile HTTPS'e yönlendiriyor;
+  - sertifika "Let's Encrypt staging" olarak ayrı raporlandı (`W_CERT_STAGING`).
+  - Sunucu dışından (geliştirme makinesi): doğrulamasız HTTPS 200, doğrulamalı HTTPS beklendiği
+    gibi başarısız, HTTP → 308.
+- `install.sh domain ...` (gerçek sertifika, tek deneme):
+  - sertifikayı Let's Encrypt YE2 verdi, bitiş tarihi 21 Ocak 2027;
+  - sunucu dışından doğrulamalı HTTPS 200.
+- Playwright, doğrudan `https://49-12-109-190.sslip.io` üzerinden (tünel yok, rastgele yönetici
+  parolası) 11/11 geçti. Sihirbazda:
+  - erişim adresi testi `OK`;
+  - alan adı adımında DNS `OK`, HTTP "HTTPS'e yönlendiriyor", sertifika `OK`; adım tamamlandı;
+  - özet ekranında HTTPS ve erişim uyarıları yok.
+- Gerçek HTTPS üzerinden kayıt:
+  - çerez `HttpOnly; Secure; SameSite=Lax`;
+  - `X-Frame-Options: DENY` var, `Server` başlığı yok;
+  - istemcinin gönderdiği sahte `X-Forwarded-For: 6.6.6.6` yok sayıldı; denetim kaydına gerçek
+    istemci IP'si yazıldı.
+- `install.sh behind-proxy`:
+  - `TRUSTED_PROXY_CIDRS` otomatik olarak Docker ağ geçidi (172.18.0.1/32) bulundu.
+  - Sunucuda 80. porta konan test Nginx'i (`X-Forwarded-Proto: https`) üzerinden: çerez `Secure`
+    aldı, gerçek IP kaydedildi, sahte XFF yok sayıldı.
+  - Güvenilmeyen bir container'dan Caddy'ye doğrudan sahte `X-Forwarded-For`/`Proto`
+    gönderildiğinde: çerez `Secure` almadı, IP olarak container'ın kendi adresi kaydedildi.
+- Alan adı moduna geri dönüş: sertifika `caddy_data` biriminden yeniden kullanıldı, yeni sertifika
+  istenmedi. `install.sh check` DNS, HTTP ve sertifikayı ayrı ayrı `OK` gösterdi.
+
+Doğrulanmayanlar:
+- Gerçek bir kullanıcı alan adı.
+- NAT arkası kurulum ve port yönlendirme.
+- Çalışan IPv6 (sunucuda genel IPv6 yok).
+- Cloudflare proxy modu.
+- Traefik ve harici Caddy (yalnızca Nginx test edildi).
+- WebSocket: konsol geçidi henüz yok. Nginx örneğinde Upgrade başlıkları belgelendi ama denenmedi.
+- Sertifika yenilemesi (süre dolmadan gözlemlenemez).
+
 ## 4. aşama: kurulum betiği ve sihirbaz — 2026-10-23
 Geliştirme makinesi:
 - API `npm test` 7/7; web `npm test` (176 anahtar; API kontrol sonuç kodları da taranıyor);

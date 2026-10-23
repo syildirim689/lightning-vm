@@ -106,7 +106,8 @@
     "PASSWORD_TOO_LONG": "Password can be at most 256 characters.",
     "INVALID_VALUE": "Invalid value.",
     "INVALID_URL": "Enter only scheme, host name/IP and optional port. Example: https://panel.example.com",
-    "REQUIRED": "This field is required."
+    "REQUIRED": "This field is required.",
+    "INVALID_DOMAIN": "Enter only the domain name, without scheme or path. Example: panel.example.com"
   },
   "Setup": {
     "title": "Setup wizard",
@@ -146,7 +147,7 @@
       },
       "domain": {
         "title": "Domain and HTTPS",
-        "help": "DNS records, automatic HTTPS with Caddy and certificate checks."
+        "help": "The name the panel will be opened at over HTTPS from the internet. DNS, HTTP reachability and the certificate are tested separately; one passing does not mean the others pass. You can also run without a domain: skip this step and use 127.0.0.1 or an SSH tunnel."
       },
       "services": {
         "title": "PostgreSQL and Redis",
@@ -178,7 +179,6 @@
       }
     },
     "notAvailable": {
-      "domain": "Domain verification and the HTTPS flow arrive in a later version (phase 5). Until then use the system only via 127.0.0.1 or an SSH tunnel.",
       "vmware": "The ESXi/vCenter connection arrives in a later version (phase 6). With this step skipped the platform cannot manage virtual servers yet.",
       "discovery": "Discovery arrives together with the ESXi/vCenter connection.",
       "pools": "Resource pools and the IP plan arrive in a later version (phase 8)."
@@ -211,7 +211,7 @@
       "publicUrl": "Panel address: {url}",
       "warnVmware": "No VMware connection configured: the platform cannot create or manage virtual servers yet.",
       "warnAccess": "The panel address could not be verified from this server. Open it from another device to check.",
-      "warnHttps": "HTTPS is not configured. Do not expose the panel to the internet; use 127.0.0.1 or an SSH tunnel."
+      "warnHttps": "HTTPS is not configured. Do not expose the panel to the internet; use 127.0.0.1 or an SSH tunnel, or complete the domain step."
     },
     "checkNames": {
       "postgres": "PostgreSQL",
@@ -221,7 +221,10 @@
       "access": "Panel address",
       "prometheus": "Prometheus",
       "grafana": "Grafana",
-      "loki": "Loki"
+      "loki": "Loki",
+      "dns": "DNS",
+      "http": "HTTP (80)",
+      "https": "HTTPS certificate (443)"
     },
     "checkCodes": {
       "OK": "Passed",
@@ -234,7 +237,35 @@
       "CONNECTION_REFUSED": "Connection refused",
       "TLS_ERROR": "TLS certificate could not be verified",
       "WRONG_TARGET": "Another server answered",
-      "LOOPBACK_NOT_VERIFIABLE": "Local address; cannot be verified"
+      "LOOPBACK_NOT_VERIFIABLE": "Local address; cannot be verified",
+      "NO_ADDRESS_RECORDS": "No A record",
+      "REDIRECT_HTTPS": "Redirects to HTTPS",
+      "CERT_STAGING": "Let's Encrypt test (staging) certificate; browsers do not trust it"
+    },
+    "dnsDetail": "A: {a}; AAAA: {aaaa}",
+    "certDetail": "issuer: {issuer}; expires: {validTo}",
+    "domain": {
+      "label": "Domain name",
+      "help": "Example: panel.example.com. A subdomain is recommended rather than the bare domain.",
+      "howto": {
+        "dnsRecord": "At your DNS provider create an A record for this name pointing to the server's public IPv4 address. Add an AAAA record only if the server has working public IPv6. Do not enter a private address (10.x, 172.16-31.x, 192.168.x); behind NAT enter your router's public address and forward ports 80/443 to this server.",
+        "ports": "Ports 80 and 443 must reach this server from the internet: Let's Encrypt validates over 80 (HTTP-01) or 443 (TLS-ALPN-01). If another web server uses these ports, use the 'behind-proxy' mode.",
+        "apply": "Run the command below on the server. Use --acme-staging first while testing so repeated attempts do not hit real certificate rate limits. Once it works, run it again without that option.",
+        "test": "Then use 'Test connection' to check DNS, HTTP and the certificate separately. Caddy renews the certificate automatically and keeps it in a persistent volume (caddy_data)."
+      },
+      "behindProxy": "To run behind an existing Nginx/Caddy/Traefik use 'sudo sh scripts/install.sh behind-proxy': the panel listens with plain HTTP on 127.0.0.1 and your proxy terminates TLS. Details: docs/domain-https.md",
+      "aaaaWarning": "This name has an AAAA (IPv6) record. If IPv6 does not really work on the server, remove the record; otherwise some visitors and certificate validation will fail.",
+      "hint": {
+        "DNS_FAILED": "The name did not resolve. Create the A record and wait for it to propagate (minutes to hours).",
+        "NO_ADDRESS_RECORDS": "The name exists but has no A record. Add an A record pointing to the server's public IPv4 address.",
+        "CONNECTION_REFUSED": "Connection refused: nothing listens on that port. Did you run the installer's 'domain' command? A firewall or port forwarding may block 80/443.",
+        "TIMEOUT": "Timed out: a firewall or NAT may be dropping the connection. Open 80/443 in your cloud provider's firewall.",
+        "HTTP_ERROR": "Unexpected HTTP response. A proxy or CDN in front may not forward requests to this installation.",
+        "TLS_ERROR": "The certificate could not be verified (expired, for another name or self-signed). Do not disable certificate checks; check the domain and Caddy logs: docker compose logs proxy",
+        "CERT_STAGING": "This is a test certificate. If everything works, run the command again without --acme-staging to get a real certificate.",
+        "WRONG_TARGET": "This name answers but is not this installation. DNS or a proxy in front points to another server.",
+        "UNREACHABLE": "The address could not be reached."
+      }
     }
   }
 }

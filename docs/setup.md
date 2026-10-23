@@ -16,6 +16,7 @@ sh scripts/install.sh [install|check|recover-setup|update] [--lang tr|en] [--ins
 | `check` | Ön kontroller ve mevcut kurulumun durumu | **Hayır** |
 | `recover-setup` | Tamamlanmış sihirbazı yönetici için yeniden açar | Yalnızca kurulum durumu |
 | `update` | Henüz yok; kod 20 ile çıkar | Hayır |
+| `domain`, `behind-proxy`, `local-only` | Erişim modunu değiştirir (docs/domain-https.md) | Yalnızca `.env` ve proxy |
 
 **Yarıda kalan kurulum:** `install` tekrar çalıştırılarak devam ettirilir. Her adım tekrarlanabilir:
 - `.env` yalnızca bir kez oluşturulur. Sonraki çalıştırmalar yalnızca eksik anahtarları ekler,
@@ -87,7 +88,7 @@ yalnızca bir kez gösterilir.
 | 1 | Dil | Zorunlu | – |
 | 2 | Sistem ön kontrolleri | Zorunlu | PostgreSQL, Redis, migration'lar, worker sinyali |
 | 3 | Erişim adresi | Zorunlu | Sunucu bu adresten kendine ulaşıyor mu (tek seferlik nonce) |
-| 4 | Alan adı ve HTTPS | Şimdilik yalnızca atlanabilir | 5. aşama |
+| 4 | Alan adı ve HTTPS | İsteğe bağlı | DNS, HTTP (80) ve sertifika (443) ayrı ayrı (docs/domain-https.md) |
 | 5 | PostgreSQL ve Redis | Zorunlu | Gerçek bağlantı ve sürüm |
 | 6 | Yönetici hesabı | Zorunlu | – |
 | 7 | ESXi / vCenter | Şimdilik yalnızca atlanabilir | 6. aşama |
