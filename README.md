@@ -20,11 +20,15 @@ Açık kaynak VMware sunucu yönetim platformunun başlangıç deposu.
 - Erişim modları: yalnızca yerel (SSH tüneli), alan adıyla Caddy otomatik HTTPS (Let's Encrypt,
   staging seçeneğiyle) veya mevcut bir Nginx/Caddy/Traefik arkasında güvenilen proxy sınırıyla
   (docs/domain-https.md).
+- ESXi ve vCenter bağlantısı (yalnızca okuma): ürün, lisans, yetki ve desteklenen işlem keşfi;
+  host, datastore, ağ/VLAN, küme ve VM envanteri; fiziksel kapasite. TLS sistem CA, özel CA veya
+  sabitlenmiş parmak iziyle doğrulanır. Parolalar ayrı anahtarla şifrelenir. Aynı host iki kez
+  sayılmaz (docs/vmware.md). Gerçek ESXi/vCenter ile değil, govmomi simülatörüyle test edildi.
 
 ## Henüz uygulanmayanlar
-- Sihirbazda VMware ve kaynak havuzu adımları (şimdilik yalnızca atlanabilir).
+- Sihirbazda kaynak havuzu adımı (şimdilik yalnızca atlanabilir).
 - MFA, parola sıfırlama, proje/müşteri modeli.
-- VMware bağlantısı, VM işlemleri, konsol geçidi, IP tahsisi.
+- VM oluşturma ve güç işlemleri, konsol geçidi, IP tahsisi, kaynak havuzları ve kotalar.
 - Faturalama, yedekleme otomasyonu, otomatik güncelleme.
 
 Paneldeki kapalı düğmeler bu işlevleri gerçekleştirmez.
@@ -102,5 +106,5 @@ Kaynak kurulum compose.yaml ile yerelde derlenir. v* etiketi GitHub Actions ile 
 üç uygulama imajı (web, api, worker) yayımlar.
 GHCR imajlarını kullanan sürümlü üretim Compose paketi ve güncelleyici henüz yoktur.
 
-Detaylar: docs/setup.md, docs/auth.md, docs/i18n.md, docs/architecture.md, docs/roadmap.md, docs/validation.md, CONTRIBUTING.md, SECURITY.md.
+Detaylar: docs/setup.md, docs/vmware.md, docs/domain-https.md, docs/auth.md, docs/i18n.md, docs/architecture.md, docs/roadmap.md, docs/validation.md, CONTRIBUTING.md, SECURITY.md.
 Lisans: Apache-2.0.

@@ -3,12 +3,13 @@ import { STATUS_CODES } from 'node:http';
 import type { FastifyReply } from 'fastify';
 import { logEvent } from './log';
 
-// `code` is a stable English key the web UI translates; `fields` maps input names to codes.
-export function apiError(status: number, code: string, message: string, fields?: Record<string, string>) {
-  return new HttpException({ code, message, ...(fields && { fields }) }, status);
+// `code` is a stable English key the web UI translates; `fields` maps input names to codes;
+// `extra` carries structured, non-secret context (for example a certificate to show the admin).
+export function apiError(status: number, code: string, message: string, fields?: Record<string, string>, extra?: Record<string, unknown>) {
+  return new HttpException({ code, message, ...(fields && { fields }), ...extra }, status);
 }
 
-// Every error body is { code, message, fields? }.
+// Every error body is { code, message, fields?, ...extra }.
 @Catch()
 export class ErrorCodeFilter implements ExceptionFilter {
   catch(err: unknown, host: ArgumentsHost) {

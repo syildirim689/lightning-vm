@@ -1,10 +1,18 @@
-# VMware adapter — henüz uygulanmadı
-Hedef: Go + govmomi. Ayrı container daha sonra eklenecek.
+# VMware adapter (Go + govmomi)
 
-API sözleşmesi: discover, listServers, createServer, getOperation, powerOn,
-shutdownGuest, reset, reinstall, deleteServer ve acquireConsoleTicket.
+Internal HTTP service the API calls to talk to ESXi and vCenter through the vSphere Web Services
+API (`/sdk`). Stateless, no published port, bearer token from `VMWARE_SERVICE_TOKEN_FILE`.
 
-Bağlantı türü ESXi veya vCenter; gerçek yetenekler sürüm/lisans kontrolüyle belirlenir.
-Her çağrıda işlem kimliği, idempotency key ve sunucu kimliği gerekir.
-TLS doğrulama varsayılan açık; özel CA desteği olmalı.
-Yönetim kimlik bilgileri şifreli tutulmalı; hiçbir sır loglanmamalı.
+- `POST /v1/discover`: product, licenses (no keys), privileges, supported operations and the full
+  inventory (hosts, datastores, networks, clusters, VMs). Read-only.
+- `GET /healthz`
+
+TLS modes `system`, `ca` and `pinned` (SHA-256 of the leaf); verification is never disabled.
+Destination addresses are checked before every connection (see `netguard.go`).
+
+```sh
+go vet ./... && go test ./...   # tests run against govmomi's simulator, not real hardware
+```
+
+`cmd/simulator` is a test-only simulated vCenter/ESXi used by `compose.simulator.yaml`.
+Details and the real-hardware acceptance list: `docs/vmware.md`.

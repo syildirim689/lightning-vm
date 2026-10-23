@@ -13,7 +13,8 @@ export async function apiFetch<T = unknown>(path: string, init: { method?: strin
   }).catch((e) => { throw init.signal?.aborted ? e : ({ code: 'NETWORK' } satisfies ApiError); });
   if (!res.ok) {
     const body = await res.json().catch(() => null);
-    throw { code: body?.code ?? 'UNKNOWN', fields: body?.fields } satisfies ApiError;
+    // Keep structured context (certificate, conflicts) for the UI; only the code is required.
+    throw { ...body, code: body?.code ?? 'UNKNOWN' } satisfies ApiError;
   }
   return res.status === 204 ? (undefined as T) : res.json();
 }

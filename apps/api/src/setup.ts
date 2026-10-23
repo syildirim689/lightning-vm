@@ -14,7 +14,7 @@ const steps = ['language', 'checks', 'access', 'domain', 'services', 'vmware', '
 type Step = (typeof steps)[number];
 const required: Step[] = ['language', 'checks', 'access', 'services'];
 // Steps whose features arrive in later phases: they can only be skipped for now.
-const notYetAvailable: Step[] = ['vmware', 'discovery', 'pools'];
+const notYetAvailable: Step[] = ['pools'];
 
 // Called from the CLI on the server only: whoever can run it already controls the host.
 export async function issueBootstrapToken() {
@@ -169,6 +169,13 @@ export class SetupController {
         const checks = await domainChecks(domain, probeAccess);
         if (!allOk(checks)) throw apiError(409, 'CHECKS_FAILED', 'Checks are not passing');
         saved = { domain, checks };
+      } else if (step === 'vmware' || step === 'discovery') {
+        // Connections are added through /admin/vmware; the step only records that one works.
+        const { rows: [c] } = await pool.query(`SELECT count(*) FILTER (WHERE status = 'ok')::int AS ok,
+          (SELECT count(*)::int FROM vmware_hosts) AS hosts FROM vmware_connections`);
+        if (!c.ok) throw apiError(409, 'NO_VMWARE_CONNECTION', 'Add a working ESXi or vCenter connection first');
+        if (step === 'discovery' && !c.hosts) throw apiError(409, 'CHECKS_FAILED', 'No hosts discovered');
+        saved = { connections: c.ok, hosts: c.hosts };
       } else if (step === 'monitoring') {
         const enabled = data?.enabled === true;
         saved = enabled ? { enabled, checks: await monitoringChecks() } : { enabled };

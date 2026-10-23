@@ -12,7 +12,11 @@ jobs:
       packages: write
     strategy:
       matrix:
-        app: [web, api, worker]
+        include:
+          - {app: web, context: apps/web}
+          - {app: api, context: apps/api}
+          - {app: worker, context: apps/worker}
+          - {app: vmware, context: services/vmware}
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3
@@ -28,7 +32,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
       - uses: docker/build-push-action@v6
         with:
-          context: apps/${{ matrix.app }}
+          context: ${{ matrix.context }}
           push: true
           tags: ${{ steps.image.outputs.name }}:${{ github.ref_name }}
           labels: org.opencontainers.image.source=https://github.com/${{ github.repository }}

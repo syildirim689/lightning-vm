@@ -45,7 +45,9 @@
     "registrationOpen": "Yeni kullanıcı kaydına izin ver",
     "saved": "Kaydedildi.",
     "setupIncomplete": "İlk kurulum henüz tamamlanmadı.",
-    "continueSetup": "Kurulum sihirbazına devam et"
+    "continueSetup": "Kurulum sihirbazına devam et",
+    "connectionsText": "ESXi ve vCenter bağlantıları, gerçek envanter ve fiziksel kapasite.",
+    "open": "Aç"
   },
   "Status": {
     "title": "Sistem sağlığı",
@@ -80,7 +82,28 @@
     "STEP_NOT_AVAILABLE": "Bu adım bu sürümde henüz kullanılamıyor; şimdilik atlayın.",
     "CHECKS_FAILED": "Kontroller geçmiyor. Sonuçları düzeltip tekrar deneyin.",
     "ADMIN_REQUIRED": "Önce yönetici hesabını oluşturun.",
-    "STEPS_INCOMPLETE": "Zorunlu adımlar tamamlanmadan kurulum bitirilemez."
+    "STEPS_INCOMPLETE": "Zorunlu adımlar tamamlanmadan kurulum bitirilemez.",
+    "SECRET_KEY_UNAVAILABLE": "Şifreleme anahtarı dosyası bulunamadı (secrets/master.key). Kurulumu kontrol edin.",
+    "VMWARE_SERVICE_UNAVAILABLE": "VMware bağlantı servisine ulaşılamıyor (vmware container'ı).",
+    "VMWARE_ERROR": "VMware ile iletişimde beklenmeyen bir hata oluştu.",
+    "HOSTS_ALREADY_MANAGED": "Bu bağlantıdaki bazı hostlar başka bir bağlantı üzerinden zaten ekli. Kapasite iki kez sayılmasın diye kaydedilmedi.",
+    "CONNECTION_EXISTS": "Bu ESXi/vCenter zaten ekli (aynı adres veya aynı vCenter farklı adresle).",
+    "NO_VMWARE_CONNECTION": "Önce çalışan bir ESXi veya vCenter bağlantısı ekleyin.",
+    "TLS_UNTRUSTED": "Sunucunun sertifikası güvenilir değil. Aşağıdaki parmak izini ESXi/vCenter'daki ile karşılaştırın; doğruysa sabitleyin veya kurumunuzun CA sertifikasını ekleyin.",
+    "TLS_HOSTNAME_MISMATCH": "Sertifika bu adres için verilmemiş. Sertifikadaki adı kullanın, ya da parmak izini doğrulayıp sabitleyin.",
+    "TLS_PIN_MISMATCH": "Sunucunun sertifikası kayıtlı parmak iziyle eşleşmiyor. Sertifika yenilenmiş olabilir ya da araya başka bir sunucu girmiş olabilir; doğrulamadan yeni parmak izini kabul etmeyin.",
+    "INVALID_LOGIN": "Kullanıcı adı veya parola ESXi/vCenter tarafından reddedildi.",
+    "PERMISSION_DENIED": "Servis hesabının bu işlem için yetkisi yok.",
+    "ENDPOINT_BLOCKED": "Bu adrese bağlanmaya izin verilmiyor (yerel, link-local veya platformun kendi iç ağı). Yönetim ağı adresini girin.",
+    "DNS_FAILED": "Ad çözümlenemedi.",
+    "CONNECTION_REFUSED": "Bağlantı reddedildi. Adres ve portu (varsayılan 443) kontrol edin.",
+    "TIMEOUT": "Zaman aşımı. Platform sunucusundan yönetim ağına erişimi ve güvenlik duvarını kontrol edin.",
+    "NOT_VSPHERE": "Bu adreste vSphere Web Services API (/sdk) yanıt vermedi.",
+    "INVALID_CA": "CA sertifikası geçerli PEM değil.",
+    "INVALID_PIN": "Parmak izi geçerli bir SHA-256 değeri değil.",
+    "INVALID_TLS_MODE": "Geçersiz TLS modu.",
+    "INVALID_REQUEST": "İstek eksik.",
+    "UNAUTHORIZED": "İç servis yetkilendirmesi başarısız."
   },
   "Auth": {
     "required": "zorunlu",
@@ -107,7 +130,12 @@
     "INVALID_VALUE": "Geçersiz değer.",
     "INVALID_URL": "Yalnızca şema, alan adı/IP ve isteğe bağlı port girin. Örnek: https://panel.example.com",
     "REQUIRED": "Bu alan zorunludur.",
-    "INVALID_DOMAIN": "Yalnızca alan adını girin, şema veya yol olmadan. Örnek: panel.example.com"
+    "INVALID_DOMAIN": "Yalnızca alan adını girin, şema veya yol olmadan. Örnek: panel.example.com",
+    "INVALID_HOST": "Yalnızca ad veya IP girin (https:// veya /sdk olmadan).",
+    "INVALID_PORT": "Port 1-65535 arasında olmalı.",
+    "INVALID_CERTIFICATE": "-----BEGIN CERTIFICATE----- ile başlayan PEM sertifika yapıştırın.",
+    "INVALID_FINGERPRINT": "64 karakterlik SHA-256 parmak izi (küçük harf, iki nokta olmadan).",
+    "NAME_TAKEN": "Bu ad zaten kullanılıyor."
   },
   "Setup": {
     "title": "Kurulum sihirbazı",
@@ -159,11 +187,11 @@
       },
       "vmware": {
         "title": "ESXi / vCenter bağlantısı",
-        "help": "VMware altyapısına bağlantı. Bu adım atlanırsa platform sanal sunucu yönetemez."
+        "help": "Platformun sanal sunucuları yöneteceği VMware altyapısı. Standalone ESXi veya vCenter ekleyebilirsiniz. vCenter ESXi'nin yerine geçmez; hostları merkezi yönetir. vCenter'a bağlı bir hostu ayrıca ESXi olarak eklemeyin."
       },
       "discovery": {
         "title": "Datastore ve ağ keşfi",
-        "help": "Bağlanan altyapıdaki gerçek datastore, ağ ve port group bilgileri."
+        "help": "Bağlantılardan okunan gerçek hostlar, datastore'lar, ağlar ve sanal makineler."
       },
       "pools": {
         "title": "Kaynak havuzu ve IP planı",
@@ -179,8 +207,6 @@
       }
     },
     "notAvailable": {
-      "vmware": "ESXi/vCenter bağlantısı sonraki sürümde (6. aşama) gelecek. Bu adım atlandığında platform henüz sanal sunucu yönetemez.",
-      "discovery": "Keşif, ESXi/vCenter bağlantısıyla birlikte gelecek.",
       "pools": "Kaynak havuzları ve IP planı sonraki sürümde (8. aşama) gelecek."
     },
     "access": {
@@ -266,6 +292,152 @@
         "WRONG_TARGET": "Bu ad yanıt veriyor ama bu kuruluma ait değil. DNS veya önünüzdeki proxy başka bir sunucuyu gösteriyor.",
         "UNREACHABLE": "Adrese ulaşılamadı."
       }
+    },
+    "vmware": {
+      "note": "Bağlantı eklendiğinde adım tamamlanır. Ayrıntılı envanter yönetim panelindeki VMware sayfasındadır. Bu adımı atlarsanız platform sanal sunucu yönetemez."
+    },
+    "discovery": {
+      "none": "Henüz bağlantı yok. Önceki adıma dönün veya bu adımı atlayın.",
+      "row": "{name}: {hosts} host, {vms} sanal makine bulundu"
     }
+  },
+  "Vmware": {
+    "eyebrow": "YÖNETİM · VMWARE",
+    "title": "ESXi ve vCenter bağlantıları",
+    "intro": "Gerçek envanter ve fiziksel kapasite. Platform burada hiçbir şeyi değiştirmez; yalnızca okur.",
+    "loading": "Yükleniyor…",
+    "empty": "Henüz bağlantı yok.",
+    "add": "Bağlantı ekle",
+    "addTitle": "Yeni bağlantı",
+    "required": "zorunlu",
+    "optional": "isteğe bağlı",
+    "test": "Bağlantıyı test et",
+    "save": "Kaydet",
+    "working": "Bağlanıyor…",
+    "saved": "Bağlantı kaydedildi.",
+    "details": "Ayrıntılar",
+    "testOk": "Bağlantı başarılı: {kind}. {hosts} host, {vms} sanal makine bulundu. Henüz kaydedilmedi.",
+    "conflict": "{host} zaten “{connection}” bağlantısında",
+    "form": {
+      "name": "Görünen ad",
+      "nameHelp": "Panelde gösterilecek ad, örneğin 'İstanbul vCenter'.",
+      "host": "Adres",
+      "hostHelp": "ESXi veya vCenter'ın yönetim adı ya da IP'si. Platform sunucusundan erişilebilmeli; tarayıcınızdan erişilmesi gerekmez.",
+      "port": "Port",
+      "portHelp": "Varsayılan 443.",
+      "username": "Servis hesabı",
+      "usernameHelp": "Bu platform için ayrılmış, gerekli yetkilere sahip bir hesap önerilir (vCenter'da örnek: lightning@vsphere.local).",
+      "password": "Parola",
+      "passwordHelp": "Şifreli saklanır; tarayıcıya hiçbir zaman geri gönderilmez ve loglanmaz.",
+      "tls": "Sertifika doğrulama",
+      "tlsHelp": "Doğrulama hiçbir modda kapatılmaz.",
+      "caPem": "CA sertifikası (PEM)",
+      "caPemHelp": "vCenter VMCA kök sertifikası veya kurumunuzun CA'sı.",
+      "sha256": "SHA-256 parmak izi",
+      "sha256Help": "Yalnızca bu tam sertifika kabul edilir. Sertifika yenilenince güncellemeniz gerekir."
+    },
+    "tlsMode": {
+      "system": "Sistem CA'ları (varsayılan)",
+      "ca": "Özel CA sertifikası",
+      "pinned": "Sertifikayı parmak iziyle sabitle"
+    },
+    "cert": {
+      "title": "Sunulan sertifika",
+      "explain": "Bu sertifikaya henüz güvenilmiyor. Bağlanmadan önce parmak izini sunucunun kendisinden doğrulayın.",
+      "subject": "Konu",
+      "issuer": "Veren",
+      "notAfter": "Bitiş",
+      "names": "Adlar",
+      "verify": "ESXi üzerinde (SSH) doğrulamak için:",
+      "pin": "Parmak izini doğruladım, bu sertifikayı sabitle"
+    },
+    "col": {
+      "name": "Ad",
+      "kind": "Tür",
+      "endpoint": "Adres",
+      "status": "Durum",
+      "hosts": "Host",
+      "vms": "VM",
+      "writeApi": "API yazma",
+      "state": "Durum",
+      "version": "Sürüm",
+      "type": "Tür",
+      "switch": "Switch",
+      "power": "Güç",
+      "guest": "İşletim sistemi"
+    },
+    "kind": {
+      "esxi": "Standalone ESXi",
+      "vcenter": "vCenter"
+    },
+    "status": {
+      "ok": "Bağlı"
+    },
+    "writeApi": {
+      "available": "Var",
+      "restricted": "Kısıtlı (ücretsiz lisans)",
+      "unknown": "Bilinmiyor"
+    },
+    "writeApiNote": {
+      "restricted": "Lisans ücretsiz vSphere Hypervisor görünüyor: VMware API yalnızca okuma izni verir. Sunucu oluşturma ve güç işlemleri bu bağlantıda yapılamaz.",
+      "unknown": "Lisans okunamadı; yazma işlemlerinin desteklenip desteklenmediği gerçek bir işlemle doğrulanmalı."
+    },
+    "warning": {
+      "HOST_MANAGED_BY_VCENTER": "Bu ESXi bir vCenter tarafından yönetiliyor. Hostu ayrıca eklemek yerine vCenter'ı ekleyin.",
+      "LICENSE_UNREADABLE": "Lisans bilgisi okunamadı.",
+      "PRIVILEGES_UNREADABLE": "Servis hesabının yetkileri okunamadı; işlemler kullanılamaz görünür."
+    },
+    "operationsTitle": "Desteklenen işlemler (yetki ve lisansa göre)",
+    "yes": "evet",
+    "no": "hayır",
+    "operation": {
+      "inventory": "Envanter okuma",
+      "createVm": "Sanal makine oluşturma",
+      "cloneFromImage": "Şablondan kopyalama (yalnızca vCenter)",
+      "power": "Güç işlemleri",
+      "resize": "Kaynak değiştirme",
+      "deleteVm": "Silme",
+      "snapshot": "Snapshot",
+      "console": "Konsol",
+      "automationApi": "vCenter Automation REST API"
+    },
+    "capacityTitle": "Fiziksel kapasite",
+    "capacityNote": "Hostların ve datastore'ların gerçek değerleri. Yönetim payı, satışa açılan ve rezerve kapasite kaynak havuzlarıyla birlikte (8. aşama) gösterilecek.",
+    "cap": {
+      "cpu": "İşlemci",
+      "cpuValue": "{cores} çekirdek / {threads} iş parçacığı, {ghz} GHz",
+      "memory": "Bellek",
+      "storage": "Depolama",
+      "storageValue": "{capacity} toplam, {free} boş, {provisioned} tahsis edilmiş (thin diskler dahil)",
+      "capacity": "Kapasite",
+      "free": "Boş",
+      "uncommitted": "Henüz yazılmamış (thin)"
+    },
+    "hostsTitle": "Hostlar",
+    "datastoresTitle": "Datastore'lar",
+    "networksTitle": "Ağlar ve port group'lar",
+    "computeTitle": "Kümeler ve kaynaklar",
+    "vmsTitle": "Sanal makineler ({count})",
+    "maintenance": "bakım modunda",
+    "inaccessible": "erişilemiyor",
+    "template": "şablon",
+    "networkKind": {
+      "standard": "Standart",
+      "distributed": "Dağıtık"
+    },
+    "computeKind": {
+      "cluster": "Küme",
+      "standalone": "Tek host"
+    },
+    "lastDiscovered": "Son keşif: {time}",
+    "refresh": "Yeniden keşfet",
+    "refreshed": "Envanter güncellendi.",
+    "remove": {
+      "title": "Bağlantıyı kaldır",
+      "explain": "Yalnızca bu panelden kaldırılır: ESXi/vCenter'a ve sanal makinelere dokunulmaz. Kaydedilen parola ve envanter silinir.",
+      "confirm": "Onaylamak için “{name}” yazın",
+      "button": "Bağlantıyı kaldır"
+    },
+    "removed": "Bağlantı kaldırıldı."
   }
 }

@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { apiFetch, useErrorText, type ApiError } from '../../../lib/api';
 import { setLocale } from '../../../i18n/actions';
 import CredentialsForm from '../credentials-form';
+import ConnectionForm from '../../(panel)/admin/vmware/connection-form';
 
 type Check = { id: string; ok: boolean; code: string; detail?: Record<string, string | number> };
 type Saved = { status: 'completed' | 'skipped'; data: Record<string, unknown> };
@@ -14,7 +15,7 @@ type Progress = { steps: Record<string, Saved>; adminCreated: boolean };
 const steps = ['language', 'checks', 'access', 'domain', 'services', 'admin', 'vmware', 'discovery', 'pools', 'monitoring', 'summary'] as const;
 type Step = (typeof steps)[number];
 const required: Step[] = ['language', 'checks', 'access', 'services', 'admin'];
-const notYetAvailable: Step[] = ['vmware', 'discovery', 'pools'];
+const notYetAvailable: Step[] = ['pools'];
 
 function CheckList({ checks }: { checks: Check[] }) {
   const t = useTranslations('Setup');
@@ -111,7 +112,9 @@ export default function Wizard() {
         <ol className="howto">{(['dnsRecord', 'ports', 'apply', 'test'] as const).map((k) => <li key={k}>{t(`domain.howto.${k}`)}</li>)}</ol>
         <pre><code>{`sudo sh scripts/install.sh domain ${domain || 'panel.example.com'} --acme-staging\nsudo sh scripts/install.sh domain ${domain || 'panel.example.com'}`}</code></pre>
         <p className="muted">{t('domain.behindProxy')}</p></>}
-      {notYetAvailable.includes(current) && <p className="notice">{t(`notAvailable.${current as 'vmware'}`)}</p>}
+      {current === 'vmware' && <><p className="muted">{t('vmware.note')}</p><ConnectionForm onSaved={() => save('completed')}/></>}
+      {current === 'discovery' && <Discovered/>}
+      {notYetAvailable.includes(current) && <p className="notice">{t(`notAvailable.${current as 'pools'}`)}</p>}
       {current === 'monitoring' && <><label className="check"><input type="checkbox" checked={monitoring} onChange={(e) => setMonitoring(e.target.checked)}/>{t('monitoring.enable')}</label>
         <p className="muted">{t('monitoring.help')}</p><pre><code>docker compose --profile observability up -d</code></pre></>}
       {current === 'summary' && <Summary progress={progress} status={status}/>}
@@ -130,6 +133,8 @@ export default function Wizard() {
         {current === 'domain' && <>{testButton('/setup/test/domain')}{saveButton({ domain })}{skipButton}</>}
         {current === 'services' && <>{testButton('/setup/test/services')}{saveButton()}</>}
         {current === 'admin' && progress.adminCreated && <button type="button" className="primary" onClick={next}>{t('continue')}</button>}
+        {current === 'vmware' && <>{saveButton()}{skipButton}</>}
+        {current === 'discovery' && <>{saveButton()}{skipButton}</>}
         {notYetAvailable.includes(current) && skipButton}
         {current === 'monitoring' && <>{monitoring && testButton('/setup/test/monitoring')}{saveButton({ enabled: monitoring })}{skipButton}</>}
         {current === 'summary' && <button type="button" className="primary" disabled={busy}
@@ -173,4 +178,17 @@ function TokenGate({ onDone }: { onDone: () => void }) {
       {failure && <p role="alert" className="error">{failure}</p>}
       <button type="submit" className="primary">{t('gate.submit')}</button>
     </form></article>;
+}
+
+// Summary of what the saved connections discovered; details live on the admin VMware page.
+function Discovered() {
+  const t = useTranslations('Setup');
+  const { error } = useErrorText();
+  const [rows, setRows] = useState<{ id: string; name: string; kind: string; hosts: number; vms: number }[]>();
+  const [failure, setFailure] = useState<string>();
+  useEffect(() => { apiFetch<{ connections: typeof rows }>('/admin/vmware/connections').then((r) => setRows(r.connections), (e) => setFailure(error(e))); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  if (failure) return <p role="alert" className="error">{failure}</p>;
+  if (!rows) return <p>{t('loading')}</p>;
+  if (!rows.length) return <p className="notice">{t('discovery.none')}</p>;
+  return <ul className="checks">{rows.map((c) => <li key={c.id} className={c.hosts ? 'ok' : 'fail'}>{t('discovery.row', { name: c.name, hosts: c.hosts, vms: c.vms })}</li>)}</ul>;
 }

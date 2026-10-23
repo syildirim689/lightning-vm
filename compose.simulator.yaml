@@ -1,0 +1,24 @@
+# TEST ONLY - never use with real infrastructure.
+#   docker compose -f compose.yaml -f compose.simulator.yaml up -d --build
+# Adds govmomi's vcsim as a simulated vCenter and a simulated standalone ESXi on an isolated
+# network. Everything discovered from them (hosts, datastores, VMs, capacity) is simulated.
+services:
+  vmware:
+    networks: [default, simnet]
+    environment:
+      # The adapter normally refuses its own Docker subnets; the simulator network is allowed explicitly.
+      VMWARE_ALLOW_NETWORKS: 172.29.250.0/24
+  vcsim-vcenter:
+    build: {context: ./services/vmware, dockerfile: ../../deploy/simulator/Dockerfile}
+    command: [-l, "0.0.0.0:8989", -username, sim-admin, -password, sim-password-1, -cluster, "1", -host, "1"]
+    networks:
+      simnet: {ipv4_address: 172.29.250.10}
+  vcsim-esxi:
+    build: {context: ./services/vmware, dockerfile: ../../deploy/simulator/Dockerfile}
+    command: [-l, "0.0.0.0:8989", -esx, -username, sim-root, -password, sim-password-2]
+    networks:
+      simnet: {ipv4_address: 172.29.250.11}
+networks:
+  simnet:
+    ipam:
+      config: [{subnet: 172.29.250.0/24}]

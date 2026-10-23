@@ -138,6 +138,19 @@ write_env() {
   if grep -q CHANGE_ME .env; then die 17 E_ENV_PLACEHOLDER ".env örnek parola (CHANGE_ME) içeriyor; değiştirin" ".env contains a placeholder password (CHANGE_ME); replace it"; fi
 }
 
+# Encryption key for stored VMware credentials and the API<->adapter token. Created once, never
+# replaced: a new master key would make every stored VMware password unreadable. Containers run as
+# uid 1000, so the files belong to that uid and nobody else can read them. Back them up (docs/vmware.md).
+write_secrets() {
+  (umask 077; mkdir -p secrets)
+  chmod 700 secrets
+  [ -s secrets/master.key ] || (umask 077; openssl rand -base64 32 > secrets/master.key)
+  [ -s secrets/vmware.token ] || (umask 077; openssl rand -hex 32 > secrets/vmware.token)
+  if [ "$(id -u)" = 0 ]; then chown 1000:1000 secrets/master.key secrets/vmware.token
+  elif [ "$(id -u)" != 1000 ]; then die 17 E_SECRETS_OWNER "secrets/ dosyaları uid 1000'e ait olmalı; kurulumu sudo ile çalıştırın" "secrets/ files must belong to uid 1000; run the installer with sudo"; fi
+  chmod 400 secrets/master.key secrets/vmware.token
+}
+
 install_state() {
   if [ ! -f .env ]; then msg INFO STATE "Kurulum yok (.env bulunmadı)" "Not installed (.env not found)"; return; fi
   perms=$(stat -c %a .env)
@@ -252,6 +265,7 @@ if [ "$INSTALL_DOCKER" = 1 ] && ! command -v docker >/dev/null; then install_doc
 host_checks
 [ "$FAILED" -eq 0 ] || die 1 E_PRECHECK "Ön kontroller başarısız; yukarıdaki FAIL satırlarını düzeltin" "Pre-checks failed; fix the FAIL lines above"
 write_env
+write_secrets
 docker compose config --quiet || die 17 E_COMPOSE_INVALID "Compose yapılandırması geçersiz" "Compose configuration is invalid"
 msg INFO STARTING "Servisler derleniyor ve başlatılıyor (birkaç dakika sürebilir)" "Building and starting services (may take a few minutes)"
 docker compose up -d --build --wait --wait-timeout 300 >/dev/null 2>&1 || die 18 E_START_FAILED "Servisler başlamadı: docker compose ps; docker compose logs" "Services did not start: docker compose ps; docker compose logs"

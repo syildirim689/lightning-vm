@@ -16,6 +16,8 @@ for (const [locale, messages] of Object.entries(locales)) {
   for (const [key, text] of messages) {
     if (!reference.has(key)) problems.push(`${locale}: extra ${key}`);
     if (typeof text !== 'string' || !text.trim()) problems.push(`${locale}: empty ${key}`);
+    // In ICU messages an apostrophe before "{" starts an escape, so '{name}' prints the literal text.
+    else if (/'\{/.test(text)) problems.push(`${locale}: ${key} has '{ which ICU treats as an escape; use “{x}”`);
     else if (reference.has(key) && args(text) !== args(reference.get(key))) problems.push(`${locale}: placeholders differ in ${key}`);
   }
 }
@@ -37,6 +39,16 @@ if (existsSync(apiSrc)) {
     // Field codes: fields.name = 'CODE' and { name: 'CODE' } passed as apiError fields.
     for (const [, code] of source.matchAll(/(?:fields\.\w+ = |\{ (?!code:)\w+: )'([A-Z_]+)'/g)) {
       if (!reference.has(`fieldErrors.${code}`)) problems.push(`api: field code ${code} has no fieldErrors.${code} translation`);
+    }
+  }
+}
+
+// The Go VMware adapter's failure codes reach the UI through the API unchanged.
+const goSrc = new URL('../../../services/vmware/', import.meta.url);
+if (existsSync(goSrc)) {
+  for (const file of readdirSync(goSrc).filter((f) => f.endsWith('.go') && !f.endsWith('_test.go'))) {
+    for (const [, code] of readFileSync(new URL(file, goSrc), 'utf8').matchAll(/Code: "([A-Z_]+)"/g)) {
+      if (!reference.has(`errors.${code}`)) problems.push(`vmware: error code ${code} has no errors.${code} translation`);
     }
   }
 }

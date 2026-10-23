@@ -86,17 +86,38 @@ test.describe('first run (Turkish browser)', () => {
     await page.getByLabel('Parola').fill(admin.password);
     await page.getByRole('button', { name: 'Yönetici hesabını oluştur' }).click();
     await expect(heading).toHaveText('ESXi / vCenter bağlantısı');
-    await expect(page.getByText('platform henüz sanal sunucu yönetemez', { exact: false })).toBeVisible();
-    await skip();
-    await expect(heading).toHaveText('Datastore ve ağ keşfi');
-    await skip();
+    await expect(page.getByText('platform sanal sunucu yönetemez', { exact: false })).toBeVisible();
+    // With compose.simulator.yaml running, connect the simulated vCenter (simulated data, not real hardware).
+    const sim = process.env.E2E_VCSIM_HOST;
+    if (sim) {
+      await page.getByLabel('Görünen ad').fill('Simülatör vCenter');
+      await page.getByLabel('Adres').fill(sim);
+      await page.getByLabel('Port').fill('8989');
+      await page.getByLabel('Servis hesabı').fill('sim-admin');
+      await page.getByLabel('Parola').fill('sim-password-1');
+      await page.getByRole('button', { name: 'Bağlantıyı test et' }).click();
+      // The simulator's self-signed certificate must be refused and shown, then pinned explicitly.
+      await expect(page.getByRole('heading', { name: 'Sunulan sertifika' })).toBeVisible();
+      await page.getByRole('button', { name: 'Parmak izini doğruladım, bu sertifikayı sabitle' }).click();
+      await expect(page.getByLabel('Sertifika doğrulama')).toHaveValue('pinned');
+      await page.getByRole('button', { name: 'Bağlantıyı test et' }).click();
+      await expect(page.getByText('Bağlantı başarılı', { exact: false })).toBeVisible();
+      await page.getByRole('button', { name: 'Kaydet', exact: true }).click();
+      await expect(heading).toHaveText('Datastore ve ağ keşfi');
+      await expect(page.locator('li.ok', { hasText: 'Simülatör vCenter' })).toContainText('2 host');
+      await saveAndContinue();
+    } else {
+      await skip();
+      await expect(heading).toHaveText('Datastore ve ağ keşfi');
+      await skip();
+    }
     await expect(heading).toHaveText('Kaynak havuzu ve IP planı');
     await skip();
     await expect(heading).toHaveText('İzleme ve bildirimler');
     await skip();
 
     await expect(heading).toHaveText('Son kontrol ve özet');
-    await expect(page.getByText('VMware bağlantısı yapılandırılmadı', { exact: false })).toBeVisible();
+    await expect(page.getByText('VMware bağlantısı yapılandırılmadı', { exact: false })).toHaveCount(sim ? 0 : 1);
     await expect(page.getByText('Panel adresi bu sunucudan doğrulanamadı', { exact: false })).toHaveCount(domain ? 0 : 1);
     await expect(page.getByText('HTTPS yapılandırılmadı', { exact: false })).toHaveCount(domain ? 0 : 1);
     await page.getByRole('button', { name: 'Kurulumu tamamla' }).click();
@@ -167,6 +188,29 @@ test.describe('roles and sessions (English browser)', () => {
     expect((await page.request.get('/api/auth/me')).status()).toBe(401);
     await page.goto('/');
     await expect(page).toHaveURL(/\/login$/);
+  });
+});
+
+test.describe('VMware connections (simulator, English browser)', () => {
+  test.use({ locale: 'en-US' });
+  test('admin sees discovered inventory, refreshes it and removes the connection only after typed confirmation', async ({ page }) => {
+    test.skip(!process.env.E2E_VCSIM_HOST, 'needs compose.simulator.yaml and E2E_VCSIM_HOST');
+    await signIn(page, admin);
+    await expect(page).toHaveURL(/\/admin$/);
+    await page.goto('/admin/vmware');
+    await page.getByRole('row', { name: /Simülatör vCenter/ }).getByRole('button', { name: 'Details' }).click();
+    await expect(page.getByRole('heading', { name: 'Physical capacity' })).toBeVisible();
+    await expect(page.getByText(/\d+ cores \/ \d+ threads/).first()).toBeVisible();
+    await expect(page.getByRole('heading', { name: /Virtual machines \(\d+\)/ })).toBeVisible();
+    await expect(page.getByRole('listitem').filter({ hasText: 'vCenter Automation REST API' })).toContainText('yes');
+    await page.getByRole('button', { name: 'Discover again' }).click();
+    await expect(page.getByText('Inventory updated.')).toBeVisible();
+    const remove = page.getByRole('button', { name: 'Remove connection' });
+    await expect(remove).toBeDisabled();
+    await page.getByLabel('Type “Simülatör vCenter” to confirm').fill('Simülatör vCenter');
+    await remove.click();
+    await expect(page.getByText('Connection removed.')).toBeVisible();
+    await expect(page.getByRole('row', { name: /Simülatör vCenter/ })).toHaveCount(0);
   });
 });
 

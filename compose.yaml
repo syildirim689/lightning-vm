@@ -56,11 +56,32 @@ services:
       DATABASE_URL: postgresql://${POSTGRES_USER:-lightning}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-lightning}
       REDIS_HOST: redis
       REDIS_PASSWORD: ${REDIS_PASSWORD}
+      MASTER_KEY_FILE: /run/secrets/master_key
+      VMWARE_SERVICE_URL: http://vmware:8080
+      VMWARE_SERVICE_TOKEN_FILE: /run/secrets/vmware_token
+    # Kept as files outside the database and .env; see docs/vmware.md for backup.
+    secrets: [master_key, vmware_token]
     depends_on:
       migrate: {condition: service_completed_successfully}
       redis: {condition: service_healthy}
     healthcheck:
       test: [CMD, node, -e, "fetch('http://127.0.0.1:4000/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    logging: *logging
+  # Internal govmomi adapter. No published port; only the API calls it, with a shared token.
+  vmware:
+    build: ./services/vmware
+    restart: unless-stopped
+    read_only: true
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+    environment:
+      VMWARE_SERVICE_TOKEN_FILE: /run/secrets/vmware_token
+    secrets: [vmware_token]
+    healthcheck:
+      test: [CMD, /vmware, healthcheck]
       interval: 15s
       timeout: 5s
       retries: 5
@@ -148,6 +169,11 @@ services:
     restart: unless-stopped
     command: [--config=/etc/otelcol/config.yaml]
     volumes: [./deploy/observability/otel.yaml:/etc/otelcol/config.yaml:ro]
+secrets:
+  master_key:
+    file: ./secrets/master.key
+  vmware_token:
+    file: ./secrets/vmware.token
 volumes:
   postgres_data:
   caddy_data:

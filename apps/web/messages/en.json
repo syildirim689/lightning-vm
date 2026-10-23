@@ -45,7 +45,9 @@
     "registrationOpen": "Allow new user registration",
     "saved": "Saved.",
     "setupIncomplete": "Initial setup is not finished yet.",
-    "continueSetup": "Continue the setup wizard"
+    "continueSetup": "Continue the setup wizard",
+    "connectionsText": "ESXi and vCenter connections, real inventory and physical capacity.",
+    "open": "Open"
   },
   "Status": {
     "title": "System health",
@@ -80,7 +82,28 @@
     "STEP_NOT_AVAILABLE": "This step is not available in this version yet; skip it for now.",
     "CHECKS_FAILED": "Checks are not passing. Fix the results and try again.",
     "ADMIN_REQUIRED": "Create the administrator account first.",
-    "STEPS_INCOMPLETE": "Setup cannot finish until the required steps are done."
+    "STEPS_INCOMPLETE": "Setup cannot finish until the required steps are done.",
+    "SECRET_KEY_UNAVAILABLE": "The encryption key file is missing (secrets/master.key). Check the installation.",
+    "VMWARE_SERVICE_UNAVAILABLE": "The VMware connection service is unreachable (vmware container).",
+    "VMWARE_ERROR": "An unexpected error occurred while talking to VMware.",
+    "HOSTS_ALREADY_MANAGED": "Some hosts of this connection are already added through another connection. Not saved, so capacity is not counted twice.",
+    "CONNECTION_EXISTS": "This ESXi/vCenter is already added (same address, or the same vCenter under another address).",
+    "NO_VMWARE_CONNECTION": "Add a working ESXi or vCenter connection first.",
+    "TLS_UNTRUSTED": "The server's certificate is not trusted. Compare the fingerprint below with the one on the ESXi/vCenter; if it matches, pin it or add your organisation's CA certificate.",
+    "TLS_HOSTNAME_MISMATCH": "The certificate was not issued for this address. Use the name in the certificate, or verify and pin the fingerprint.",
+    "TLS_PIN_MISMATCH": "The server's certificate does not match the pinned fingerprint. It may have been renewed, or another server is in the way; do not accept a new fingerprint without verifying it.",
+    "INVALID_LOGIN": "The user name or password was rejected by ESXi/vCenter.",
+    "PERMISSION_DENIED": "The service account lacks a privilege for this action.",
+    "ENDPOINT_BLOCKED": "Connecting to this address is not allowed (local, link-local or the platform's own internal network). Enter the management network address.",
+    "DNS_FAILED": "The name did not resolve.",
+    "CONNECTION_REFUSED": "Connection refused. Check the address and port (default 443).",
+    "TIMEOUT": "Timed out. Check that the platform server can reach the management network and the firewall.",
+    "NOT_VSPHERE": "No vSphere Web Services API (/sdk) answered at this address.",
+    "INVALID_CA": "The CA certificate is not valid PEM.",
+    "INVALID_PIN": "The fingerprint is not a valid SHA-256 value.",
+    "INVALID_TLS_MODE": "Invalid TLS mode.",
+    "INVALID_REQUEST": "The request is incomplete.",
+    "UNAUTHORIZED": "Internal service authorization failed."
   },
   "Auth": {
     "required": "required",
@@ -107,7 +130,12 @@
     "INVALID_VALUE": "Invalid value.",
     "INVALID_URL": "Enter only scheme, host name/IP and optional port. Example: https://panel.example.com",
     "REQUIRED": "This field is required.",
-    "INVALID_DOMAIN": "Enter only the domain name, without scheme or path. Example: panel.example.com"
+    "INVALID_DOMAIN": "Enter only the domain name, without scheme or path. Example: panel.example.com",
+    "INVALID_HOST": "Enter only a name or IP (no https:// or /sdk).",
+    "INVALID_PORT": "Port must be between 1 and 65535.",
+    "INVALID_CERTIFICATE": "Paste a PEM certificate starting with -----BEGIN CERTIFICATE-----.",
+    "INVALID_FINGERPRINT": "64-character SHA-256 fingerprint (lowercase, no colons).",
+    "NAME_TAKEN": "This name is already used."
   },
   "Setup": {
     "title": "Setup wizard",
@@ -159,11 +187,11 @@
       },
       "vmware": {
         "title": "ESXi / vCenter connection",
-        "help": "Connection to the VMware infrastructure. If skipped, the platform cannot manage virtual servers."
+        "help": "The VMware infrastructure the platform will manage virtual servers on. Add a standalone ESXi or a vCenter. vCenter does not replace ESXi; it manages hosts centrally. Do not also add a vCenter-managed host as a standalone ESXi."
       },
       "discovery": {
         "title": "Datastore and network discovery",
-        "help": "Real datastore, network and port group information from the connected infrastructure."
+        "help": "The real hosts, datastores, networks and virtual machines read from the connections."
       },
       "pools": {
         "title": "Resource pool and IP plan",
@@ -179,8 +207,6 @@
       }
     },
     "notAvailable": {
-      "vmware": "The ESXi/vCenter connection arrives in a later version (phase 6). With this step skipped the platform cannot manage virtual servers yet.",
-      "discovery": "Discovery arrives together with the ESXi/vCenter connection.",
       "pools": "Resource pools and the IP plan arrive in a later version (phase 8)."
     },
     "access": {
@@ -266,6 +292,152 @@
         "WRONG_TARGET": "This name answers but is not this installation. DNS or a proxy in front points to another server.",
         "UNREACHABLE": "The address could not be reached."
       }
+    },
+    "vmware": {
+      "note": "The step completes once a connection is added. The detailed inventory is on the VMware page of the admin panel. If you skip this step the platform cannot manage virtual servers."
+    },
+    "discovery": {
+      "none": "No connections yet. Go back a step or skip this one.",
+      "row": "{name}: found {hosts} hosts and {vms} virtual machines"
     }
+  },
+  "Vmware": {
+    "eyebrow": "ADMIN · VMWARE",
+    "title": "ESXi and vCenter connections",
+    "intro": "Real inventory and physical capacity. The platform changes nothing here; it only reads.",
+    "loading": "Loading…",
+    "empty": "No connections yet.",
+    "add": "Add connection",
+    "addTitle": "New connection",
+    "required": "required",
+    "optional": "optional",
+    "test": "Test connection",
+    "save": "Save",
+    "working": "Connecting…",
+    "saved": "Connection saved.",
+    "details": "Details",
+    "testOk": "Connection succeeded: {kind}. Found {hosts} hosts and {vms} virtual machines. Not saved yet.",
+    "conflict": "{host} is already in connection “{connection}”",
+    "form": {
+      "name": "Display name",
+      "nameHelp": "Name shown in the panel, for example 'Frankfurt vCenter'.",
+      "host": "Address",
+      "hostHelp": "Management name or IP of the ESXi or vCenter. It must be reachable from the platform server; your browser does not need to reach it.",
+      "port": "Port",
+      "portHelp": "Default 443.",
+      "username": "Service account",
+      "usernameHelp": "A dedicated account with the needed privileges is recommended (vCenter example: lightning@vsphere.local).",
+      "password": "Password",
+      "passwordHelp": "Stored encrypted; never sent back to the browser and never logged.",
+      "tls": "Certificate verification",
+      "tlsHelp": "Verification is never turned off in any mode.",
+      "caPem": "CA certificate (PEM)",
+      "caPemHelp": "The vCenter VMCA root certificate or your organisation's CA.",
+      "sha256": "SHA-256 fingerprint",
+      "sha256Help": "Only this exact certificate is accepted. Update it when the certificate is renewed."
+    },
+    "tlsMode": {
+      "system": "System CAs (default)",
+      "ca": "Custom CA certificate",
+      "pinned": "Pin the certificate by fingerprint"
+    },
+    "cert": {
+      "title": "Presented certificate",
+      "explain": "This certificate is not trusted yet. Verify the fingerprint on the server itself before connecting.",
+      "subject": "Subject",
+      "issuer": "Issuer",
+      "notAfter": "Expires",
+      "names": "Names",
+      "verify": "To verify on the ESXi (SSH):",
+      "pin": "I verified the fingerprint, pin this certificate"
+    },
+    "col": {
+      "name": "Name",
+      "kind": "Type",
+      "endpoint": "Address",
+      "status": "Status",
+      "hosts": "Hosts",
+      "vms": "VMs",
+      "writeApi": "API write",
+      "state": "State",
+      "version": "Version",
+      "type": "Type",
+      "switch": "Switch",
+      "power": "Power",
+      "guest": "Operating system"
+    },
+    "kind": {
+      "esxi": "Standalone ESXi",
+      "vcenter": "vCenter"
+    },
+    "status": {
+      "ok": "Connected"
+    },
+    "writeApi": {
+      "available": "Available",
+      "restricted": "Restricted (free license)",
+      "unknown": "Unknown"
+    },
+    "writeApiNote": {
+      "restricted": "The license looks like the free vSphere Hypervisor: the VMware API is read-only. Server creation and power actions are not possible through this connection.",
+      "unknown": "The license could not be read; whether write operations work must be confirmed with a real operation."
+    },
+    "warning": {
+      "HOST_MANAGED_BY_VCENTER": "This ESXi is managed by a vCenter. Add the vCenter instead of the host.",
+      "LICENSE_UNREADABLE": "License information could not be read.",
+      "PRIVILEGES_UNREADABLE": "The service account's privileges could not be read; operations show as unavailable."
+    },
+    "operationsTitle": "Supported operations (by privileges and license)",
+    "yes": "yes",
+    "no": "no",
+    "operation": {
+      "inventory": "Read inventory",
+      "createVm": "Create virtual machines",
+      "cloneFromImage": "Clone from template (vCenter only)",
+      "power": "Power actions",
+      "resize": "Change resources",
+      "deleteVm": "Delete",
+      "snapshot": "Snapshots",
+      "console": "Console",
+      "automationApi": "vCenter Automation REST API"
+    },
+    "capacityTitle": "Physical capacity",
+    "capacityNote": "Real values of the hosts and datastores. Management headroom, capacity offered for sale and reserved capacity come with resource pools (phase 8).",
+    "cap": {
+      "cpu": "Processor",
+      "cpuValue": "{cores} cores / {threads} threads, {ghz} GHz",
+      "memory": "Memory",
+      "storage": "Storage",
+      "storageValue": "{capacity} total, {free} free, {provisioned} provisioned (thin disks included)",
+      "capacity": "Capacity",
+      "free": "Free",
+      "uncommitted": "Not yet written (thin)"
+    },
+    "hostsTitle": "Hosts",
+    "datastoresTitle": "Datastores",
+    "networksTitle": "Networks and port groups",
+    "computeTitle": "Clusters and resources",
+    "vmsTitle": "Virtual machines ({count})",
+    "maintenance": "in maintenance",
+    "inaccessible": "inaccessible",
+    "template": "template",
+    "networkKind": {
+      "standard": "Standard",
+      "distributed": "Distributed"
+    },
+    "computeKind": {
+      "cluster": "Cluster",
+      "standalone": "Single host"
+    },
+    "lastDiscovered": "Last discovery: {time}",
+    "refresh": "Discover again",
+    "refreshed": "Inventory updated.",
+    "remove": {
+      "title": "Remove connection",
+      "explain": "Removed only from this panel: the ESXi/vCenter and its virtual machines are not touched. The stored password and inventory are deleted.",
+      "confirm": "Type “{name}” to confirm",
+      "button": "Remove connection"
+    },
+    "removed": "Connection removed."
   }
 }

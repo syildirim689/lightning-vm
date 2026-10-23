@@ -64,7 +64,8 @@ test('steps are validated on the server and progress persists', async () => {
   assert.deepEqual(bad.json().fields, { locale: 'INVALID_VALUE' });
   await send('PUT', '/setup/steps/language', { setup: setupCookie, payload: { status: 'completed', data: { locale: 'tr' } } });
   assert.equal((await send('PUT', '/setup/steps/checks', { setup: setupCookie, payload: { status: 'skipped' } })).json().code, 'STEP_REQUIRED');
-  assert.equal((await send('PUT', '/setup/steps/vmware', { setup: setupCookie, payload: { status: 'completed' } })).json().code, 'STEP_NOT_AVAILABLE');
+  assert.equal((await send('PUT', '/setup/steps/pools', { setup: setupCookie, payload: { status: 'completed' } })).json().code, 'STEP_NOT_AVAILABLE');
+  assert.equal((await send('PUT', '/setup/steps/vmware', { setup: setupCookie, payload: { status: 'completed' } })).json().code, 'NO_VMWARE_CONNECTION');
   assert.equal((await send('PUT', '/setup/steps/vmware', { setup: setupCookie, payload: { status: 'skipped' } })).statusCode, 200);
   assert.equal((await send('PUT', '/setup/steps/nope', { setup: setupCookie, payload: { status: 'skipped' } })).statusCode, 404);
   const { steps } = (await send('GET', '/setup/progress', { setup: setupCookie })).json();

@@ -48,17 +48,31 @@ jobs:
           TEST_DATABASE_URL: postgresql://ci:ci@127.0.0.1:5432/lightning_test
           REDIS_HOST: 127.0.0.1
           REDIS_DB: "15"
+  vmware-adapter:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/vmware
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: services/vmware/go.mod
+      - run: test -z "$(gofmt -l .)"
+      - run: go vet ./...
+      # Runs against govmomi's simulator: proves adapter logic, not real ESXi/vCenter behaviour.
+      - run: go test -count=1 ./...
   build:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        app: [web, api, worker]
+        context: [apps/web, apps/api, apps/worker, services/vmware]
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3
       - uses: docker/build-push-action@v6
         with:
-          context: apps/${{ matrix.app }}
+          context: ${{ matrix.context }}
           push: false
   compose:
     runs-on: ubuntu-latest
@@ -69,8 +83,10 @@ jobs:
       - name: Validate and smoke test
         run: |
           sh scripts/install.sh check
-          sh scripts/install.sh
-          sh scripts/install.sh check
+          # sudo: the secrets/ files must belong to uid 1000, the containers' user
+          sudo sh scripts/install.sh
+          sudo sh scripts/install.sh check
+          sudo docker compose -f compose.yaml -f compose.simulator.yaml up -d --build --wait
           curl --fail --retry 10 --retry-delay 3 --retry-all-errors http://127.0.0.1:8080/api/ready
           curl --fail --retry 10 --retry-delay 3 --retry-all-errors http://127.0.0.1:8080/login
           test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8080/api/metrics)" = 404
@@ -82,10 +98,10 @@ jobs:
         run: |
           npm ci
           npx playwright install --with-deps chromium
-          E2E_BOOTSTRAP_TOKEN="$(docker compose --project-directory ../.. exec -T api node dist/cli.js bootstrap-token)" npm run test:e2e
+          E2E_VCSIM_HOST=vcsim-vcenter E2E_BOOTSTRAP_TOKEN="$(sudo docker compose --project-directory ../.. exec -T api node dist/cli.js bootstrap-token)" npm run test:e2e
       - name: Logs on failure
         if: failure()
-        run: docker compose logs --tail=80
+        run: sudo docker compose -f compose.yaml -f compose.simulator.yaml logs --tail=80
       - name: Cleanup
         if: always()
-        run: docker compose down -v
+        run: sudo docker compose -f compose.yaml -f compose.simulator.yaml down -v

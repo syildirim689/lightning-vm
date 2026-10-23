@@ -10,6 +10,62 @@ Windows Server 2025, Node 24.21, npm 11.19 (Docker yok).
 - `npm audit --omit=dev`: üç uygulamada 0 açık. API'de Nest'in getirdiği eski fastify
   `overrides` ile 5.12.7'ye sabitlendi.
 
+## 6. aşama: ESXi/vCenter bağlantısı ve envanter — 2026-10-24
+**Gerçek bir ESXi veya vCenter kullanılmadı.** Bütün VMware testleri govmomi v0.56.1'in simülatörüne
+karşı yapıldı. Bunlar adaptörün ve API'nin mantığını kanıtlar, gerçek donanım davranışını değil.
+Gerçek ortam kabul listesi: docs/vmware.md.
+
+Geliştirme makinesi:
+- API birim testleri 9/9 geçti (yeni: şifrelemede AES-GCM gidiş-dönüş, başka satıra taşınan ve
+  bozulan şifreli metnin reddi).
+- Web çeviri kontrolü: 339 anahtar. Kontrol artık Go adaptörünün hata kodlarını ve ICU tırnak
+  hatasını da yakalıyor. `npm run build` geçti.
+
+Test sunucusu (Go 1.27.3; resmî `vmware/vcsim` imajı yalnızca amd64 olduğu için simülatör
+govmomi'nin simulator paketinden derlendi):
+- `go vet` ve `gofmt` temiz. `go test` 7/7 geçti:
+  - kendinden imzalı sertifikanın reddi ve parmak izinin gösterilmesi;
+  - sabitlenmiş sertifika ve uyuşmazlık;
+  - loopback ve metadata adresinin engellenmesi;
+  - hatalı giriş;
+  - ESXi ve vCenter ayrımı (3 host, 1 küme, farklı donanım UUID'leri);
+  - servis token'ı.
+- **Bulunan güvenlik hatası:** govmomi'nin kendi `DialTLSContext` fonksiyonu adres engelini
+  atlıyordu; loopback'e bağlanılabiliyordu. Düzeltildi ve test bunu kanıtlıyor.
+- Kurulum betiği `secrets/master.key` ve `secrets/vmware.token` dosyalarını oluşturdu (uid 1000, 400).
+  `vmware` container'ı sağlıklı.
+- API entegrasyon testleri 28/28 geçti. VMware için 9 yeni test, Go adaptörü ve iki simülatör
+  üzerinden çalıştı:
+  - güvenilmeyen sertifika reddedilip PEM ve parmak iziyle gösteriliyor;
+  - sunucu tarafı doğrulama;
+  - `INVALID_LOGIN`, `TLS_PIN_MISMATCH` ve `ENDPOINT_BLOCKED` (`postgres`, `169.254.169.254`,
+    `127.0.0.1`) ayrı kodlar;
+  - vCenter ve ESXi ayrımı;
+  - parola `v1:` biçiminde şifreli ve hiçbir yanıtta yok;
+  - envanter ve fiziksel kapasite;
+  - aynı vCenter'ın IP ile tekrar eklenemesi (`CONNECTION_EXISTS`);
+  - aynı hostun iki bağlantıda sayılmaması (`HOSTS_ALREADY_MANAGED`; yarım kayıt kalmıyor);
+  - yenileme hatasının bağlantıya kaydedilmesi;
+  - normal kullanıcıya 403;
+  - denetim kayıtları.
+- `vmware` container logunda parola geçmiyor.
+- Playwright, `https://49-12-109-190.sslip.io` üzerinden 12/12 geçti:
+  - sihirbazda simüle vCenter'ın sertifikası önce reddedilip gösterildi, sonra açıkça sabitlenerek
+    bağlantı kuruldu; keşif adımı 2 host gösterdi; özet ekranında VMware uyarısı yok;
+  - yönetim sayfasında kapasite, işlemler, yenileme ve adı yazarak onaylanan kaldırma.
+
+E2E'nin bulduğu ve düzeltilen hatalar:
+- Arayüz, hata yanıtındaki sertifika ve çakışma bilgisini atıyordu (`apiFetch`).
+- `'{name}'` biçimindeki çeviriler ICU kaçışı yüzünden ad yerine `{name}` metnini gösteriyordu.
+
+Doğrulanmayanlar:
+- Gerçek ESXi 7/8 ve vCenter 7/8.
+- Ücretsiz lisansın gerçek davranışı (`writeApi` tespiti yalnızca lisans adına dayalı bir çıkarım).
+- Gerçek yetki kısıtlı hesaplar.
+- Büyük envanterde performans.
+- amd64 simülatör imajı.
+- GitHub Actions'ta Go işi.
+
 ## 5. aşama: alan adı, reverse proxy ve HTTPS — 2026-10-23
 Test sunucusu: Ubuntu 24.04 arm64, genel IP 49.12.109.190. Gerçek bir alan adı verilmediği için
 herkese açık sslip.io servisi kullanıldı: `49-12-109-190.sslip.io` → 49.12.109.190.
