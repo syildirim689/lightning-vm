@@ -1,0 +1,32 @@
+name: CI
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        app: [web, api, worker]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: apps/${{ matrix.app }}
+          push: false
+  compose:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate and smoke test
+        run: |
+          sh scripts/install.sh
+          curl --fail --retry 10 --retry-delay 3 --retry-all-errors http://127.0.0.1:8080/api/ready
+          curl --fail --retry 10 --retry-delay 3 --retry-all-errors http://127.0.0.1:8080/admin
+      - name: Logs on failure
+        if: failure()
+        run: docker compose logs --tail=80
+      - name: Cleanup
+        if: always()
+        run: docker compose down -v

@@ -1,0 +1,10 @@
+groups:
+  - name: lightning
+    rules:
+      - alert: LightningApiUnavailable
+        expr: up{job="lightning-api"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: Lightning API metriklerine iki dakikadır erişilemiyor

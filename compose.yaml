@@ -1,0 +1,118 @@
+name: lightning-vm
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-lightning}
+      POSTGRES_USER: ${POSTGRES_USER:-lightning}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Run scripts/install.sh}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./deploy/postgres/001-init.sql:/docker-entrypoint-initdb.d/001-init.sql:ro
+    healthcheck:
+      test: [CMD-SHELL, 'pg_isready -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"']
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    logging: *logging
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?Run scripts/install.sh}
+      REDISCLI_AUTH: ${REDIS_PASSWORD}
+    command: [sh, -c, 'exec redis-server --appendonly yes --maxmemory-policy noeviction --requirepass "$$REDIS_PASSWORD"']
+    volumes: [redis_data:/data]
+    healthcheck:
+      test: [CMD, redis-cli, ping]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    logging: *logging
+  api:
+    build: ./apps/api
+    restart: unless-stopped
+    environment: &appenv
+      DATABASE_URL: postgresql://${POSTGRES_USER:-lightning}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-lightning}
+      REDIS_HOST: redis
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+    depends_on:
+      postgres: {condition: service_healthy}
+      redis: {condition: service_healthy}
+    healthcheck:
+      test: [CMD, node, -e, "fetch('http://127.0.0.1:4000/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    logging: *logging
+  worker:
+    build: ./apps/worker
+    restart: unless-stopped
+    environment: *appenv
+    depends_on:
+      postgres: {condition: service_healthy}
+      redis: {condition: service_healthy}
+    healthcheck:
+      test: [CMD, node, health.mjs]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+    logging: *logging
+  web:
+    build: ./apps/web
+    restart: unless-stopped
+    logging: *logging
+  proxy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports: ["${LISTEN_ADDRESS:-127.0.0.1}:${HTTP_PORT:-8080}:80"]
+    volumes: [./deploy/caddy/Caddyfile:/etc/caddy/Caddyfile:ro]
+    depends_on:
+      api: {condition: service_healthy}
+      web: {condition: service_started}
+    logging: *logging
+  prometheus:
+    image: prom/prometheus:v3.2.1
+    profiles: [observability]
+    restart: unless-stopped
+    ports: ["127.0.0.1:9090:9090"]
+    volumes:
+      - ./deploy/observability/prometheus.yaml:/etc/prometheus/prometheus.yml:ro
+      - ./deploy/observability/alerts.yaml:/etc/prometheus/alerts.yaml:ro
+      - prometheus_data:/prometheus
+    command: [--config.file=/etc/prometheus/prometheus.yml, --storage.tsdb.retention.time=15d]
+  grafana:
+    image: grafana/grafana:11.6.0
+    profiles: [observability]
+    restart: unless-stopped
+    ports: ["127.0.0.1:3001:3000"]
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:?Run scripts/install.sh}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./deploy/observability/datasources.yaml:/etc/grafana/provisioning/datasources/default.yaml:ro
+  loki:
+    image: grafana/loki:3.4.2
+    profiles: [observability]
+    restart: unless-stopped
+    command: [-config.file=/etc/loki/local-config.yaml]
+    volumes: [loki_data:/loki]
+  otel:
+    image: otel/opentelemetry-collector-contrib:0.123.0
+    profiles: [observability]
+    restart: unless-stopped
+    command: [--config=/etc/otelcol/config.yaml]
+    volumes: [./deploy/observability/otel.yaml:/etc/otelcol/config.yaml:ro]
+volumes:
+  postgres_data:
+  redis_data:
+  prometheus_data:
+  grafana_data:
+  loki_data:

@@ -1,0 +1,14 @@
+{
+  "name": "@lightning-vm/worker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node index.mjs",
+    "check": "node --check index.mjs"
+  },
+  "dependencies": {
+    "bullmq": "6.4.0",
+    "pg": "8.23.1"
+  }
+}

@@ -1,0 +1,13 @@
+# Yol haritası
+1. Tamamlanan başlangıç: panellerin kabuğu, API sağlık kontrolleri, DB/Redis,
+   worker heartbeat, Compose, metrik endpoint'i ve CI dosyaları.
+2. Kullanıcı oturumları, RBAC, proje sahipliği ve denetim kayıtları.
+3. ESXi/vCenter bağlantı doğrulama ve gerçek envanter keşfi.
+4. Yönetici/kullanıcı konsol erişimi ve WebMKS geçidi.
+5. Kaynak havuzları, paket/özel kaynak, atomik kapasite ve IP rezervasyonu.
+6. cloud-init imajları, provisioning ve reconciliation.
+7. Merkezi log aktarımı, panolar, alarmlar ve bağımsız yedekler.
+8. Sürümlü deployment manifesti, migration ve güvenli otomatik güncelleme.
+
+İlk gerçek entegrasyon kabul testi: test VM oluşturma, IP/SSH hazırlığı,
+her iki yetkiyle konsol erişimi, yetkisiz erişim reddi ve güvenli silme.

@@ -1,0 +1,2 @@
+import Status from './status';
+export default function Admin() { return <><header><p className="eyebrow">YÖNETİM PANELİ</p><h1>Altyapı kontrol merkezi</h1><p>Bağlantılar, kaynak havuzları ve operasyonlar.</p></header><Status/><section className="grid">{['ESXi / vCenter bağlantıları','Kaynak ve IP havuzları','Paketler ve imajlar','Müşteriler ve yetkiler','Tüm sunucular ve konsollar','Denetim ve işlem geçmişi'].map(x=><article key={x}><h2>{x}</h2><p className="muted">Planlanan modül</p><button disabled>Henüz uygulanmadı</button></article>)}</section></>; }
