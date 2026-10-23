@@ -23,30 +23,83 @@ test.describe('first run (Turkish browser)', () => {
     await expect(page.locator('html')).toHaveAttribute('lang', 'tr');
   });
 
-  test('setup rejects a wrong token, then creates the first admin', async ({ page, request }) => {
-    const { adminCreated } = await (await request.get('/api/setup/status')).json();
-    test.skip(adminCreated, 'admin already exists on this deployment');
+  test('the setup wizard runs end to end, resumes after reload, then closes', async ({ page, request }) => {
+    const { completed } = await (await request.get('/api/setup/status')).json();
+    test.skip(completed, 'setup already completed on this deployment');
     const token = process.env.E2E_BOOTSTRAP_TOKEN;
     expect(token, 'E2E_BOOTSTRAP_TOKEN is required on a fresh install').toBeTruthy();
+    const heading = page.getByRole('heading', { level: 1 });
+    const saveAndContinue = () => page.getByRole('button', { name: 'Kaydet ve devam et' }).click();
+    const skip = () => page.getByRole('button', { name: 'Şimdilik atla' }).click();
 
     await page.goto('/setup');
     await page.getByLabel('Kurulum anahtarı').fill('wrong-token');
+    await page.getByRole('button', { name: 'Kuruluma başla' }).click();
+    await expect(page.locator('main [role=alert]')).toHaveText('Kurulum anahtarı geçersiz veya süresi dolmuş. Sunucuda yeni anahtar üretin.');
+    await page.getByLabel('Kurulum anahtarı').fill(token!);
+    await page.getByRole('button', { name: 'Kuruluma başla' }).click();
+
+    await expect(heading).toHaveText('Dil');
+    await saveAndContinue();
+    await expect(heading).toHaveText('Sistem ön kontrolleri');
+    await page.getByRole('button', { name: 'Bağlantıyı test et' }).click();
+    for (const name of ['PostgreSQL', 'Redis', "Veritabanı migration'ları", 'Arka plan çalışanı']) {
+      await expect(page.locator('li.ok', { hasText: name })).toContainText('Başarılı');
+    }
+    await saveAndContinue();
+    await expect(heading).toHaveText('Dağıtım ve erişim adresi');
+
+    // Progress lives on the server: a reload returns to the first unfinished step.
+    await page.reload();
+    await expect(heading).toHaveText('Dağıtım ve erişim adresi');
+
+    await page.getByLabel('Panel adresi').fill('http://panel.example.com/yol');
+    await saveAndContinue();
+    await expect(page.getByText('Yalnızca şema, alan adı/IP ve isteğe bağlı port girin.', { exact: false })).toBeVisible();
+    await page.getByLabel('Panel adresi').fill('http://127.0.0.1:8080');
+    await page.getByRole('button', { name: 'Bağlantıyı test et' }).click();
+    await expect(page.locator('li.fail', { hasText: 'Panel adresi' })).toContainText('Yerel adres; doğrulanamaz');
+    await saveAndContinue();
+
+    await expect(heading).toHaveText('Alan adı ve HTTPS');
+    await expect(page.getByRole('button', { name: 'Kaydet ve devam et' })).toHaveCount(0);
+    await skip();
+    await expect(heading).toHaveText('PostgreSQL ve Redis');
+    await saveAndContinue();
+
+    await expect(heading).toHaveText('Yönetici hesabı');
     await page.getByLabel('E-posta').fill(admin.email);
     await page.getByLabel('Parola').fill(admin.password);
     await page.getByRole('button', { name: 'Yönetici hesabını oluştur' }).click();
-    await expect(page.locator('main [role=alert]')).toHaveText('Kurulum anahtarı geçersiz veya süresi dolmuş. Sunucuda yeni anahtar üretin.');
+    await expect(heading).toHaveText('ESXi / vCenter bağlantısı');
+    await expect(page.getByText('platform henüz sanal sunucu yönetemez', { exact: false })).toBeVisible();
+    await skip();
+    await expect(heading).toHaveText('Datastore ve ağ keşfi');
+    await skip();
+    await expect(heading).toHaveText('Kaynak havuzu ve IP planı');
+    await skip();
+    await expect(heading).toHaveText('İzleme ve bildirimler');
+    await skip();
 
-    await page.getByLabel('Kurulum anahtarı').fill(token!);
-    await page.getByRole('button', { name: 'Yönetici hesabını oluştur' }).click();
+    await expect(heading).toHaveText('Son kontrol ve özet');
+    await expect(page.getByText('VMware bağlantısı yapılandırılmadı', { exact: false })).toBeVisible();
+    await expect(page.getByText('Panel adresi bu sunucudan doğrulanamadı', { exact: false })).toBeVisible();
+    await expect(page.getByText('HTTPS yapılandırılmadı', { exact: false })).toBeVisible();
+    await page.getByRole('button', { name: 'Kurulumu tamamla' }).click();
     await expect(page).toHaveURL(/\/admin$/);
-    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Altyapı kontrol merkezi');
-  });
+    await expect(page.getByText('İlk kurulum henüz tamamlanmadı.')).toHaveCount(0);
 
-  test('setup is closed once an admin exists', async ({ page, request }) => {
+    // Closed for good: the page redirects and the API refuses even an admin session.
+    expect((await (await page.request.get('/api/setup/progress')).json()).code).toBe('SETUP_CLOSED');
     await page.goto('/setup');
     await expect(page).toHaveURL(/\/login$/);
+  });
+
+  test('setup endpoints stay closed once an admin exists', async ({ request }) => {
     const res = await request.post('/api/setup/admin', { headers: { 'x-lightning-csrf': '1' }, data: { token: process.env.E2E_BOOTSTRAP_TOKEN ?? 'x', email: 'late@example.test', password: 'another long passphrase' } });
     expect((await res.json()).code).toBe('SETUP_CLOSED');
+    const session = await request.post('/api/setup/session', { headers: { 'x-lightning-csrf': '1' }, data: { token: process.env.E2E_BOOTSTRAP_TOKEN ?? 'x' } });
+    expect((await session.json()).code).toBe('SETUP_CLOSED');
   });
 
   test('sign-in errors are validated on the server and translated', async ({ page }) => {

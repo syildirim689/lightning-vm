@@ -43,7 +43,9 @@
     "registrationTitle": "User registration",
     "registrationHelp": "When open, anyone can create a user account at /register. When closed, only existing accounts can sign in.",
     "registrationOpen": "Allow new user registration",
-    "saved": "Saved."
+    "saved": "Saved.",
+    "setupIncomplete": "Initial setup is not finished yet.",
+    "continueSetup": "Continue the setup wizard"
   },
   "Status": {
     "title": "System health",
@@ -72,7 +74,13 @@
     "CSRF_REJECTED": "The request failed a security check. Reload the page and try again.",
     "VALIDATION_FAILED": "Please correct the highlighted fields.",
     "SETUP_CLOSED": "Initial setup is already complete. Use the sign-in page.",
-    "BOOTSTRAP_TOKEN_INVALID": "The setup token is invalid or expired. Generate a new one on the server."
+    "BOOTSTRAP_TOKEN_INVALID": "The setup token is invalid or expired. Generate a new one on the server.",
+    "BOOTSTRAP_REQUIRED": "A setup token is required to continue setup.",
+    "STEP_REQUIRED": "This step is required and cannot be skipped.",
+    "STEP_NOT_AVAILABLE": "This step is not available in this version yet; skip it for now.",
+    "CHECKS_FAILED": "Checks are not passing. Fix the results and try again.",
+    "ADMIN_REQUIRED": "Create the administrator account first.",
+    "STEPS_INCOMPLETE": "Setup cannot finish until the required steps are done."
   },
   "Auth": {
     "required": "required",
@@ -87,8 +95,6 @@
     "registerTitle": "Create account",
     "registerIntro": "Available when an administrator has opened registration.",
     "registerSubmit": "Create account",
-    "setupTitle": "First administrator account",
-    "setupIntro": "Only someone with access to the server can complete setup. Enter the token printed by the installer, or generate a new one on the server with:",
     "setupSubmit": "Create administrator account",
     "working": "Working…",
     "toRegister": "No account? Register",
@@ -98,6 +104,137 @@
     "INVALID_EMAIL": "Enter a valid email address.",
     "PASSWORD_TOO_SHORT": "Password must be at least 12 characters.",
     "PASSWORD_TOO_LONG": "Password can be at most 256 characters.",
-    "INVALID_VALUE": "Invalid value."
+    "INVALID_VALUE": "Invalid value.",
+    "INVALID_URL": "Enter only scheme, host name/IP and optional port. Example: https://panel.example.com",
+    "REQUIRED": "This field is required."
+  },
+  "Setup": {
+    "title": "Setup wizard",
+    "loading": "Loading setup state…",
+    "stepOf": "Step {n} of {total}",
+    "required": "required",
+    "optional": "optional",
+    "back": "Back",
+    "saveAndContinue": "Save and continue",
+    "continue": "Continue",
+    "skip": "Skip for now",
+    "skippedShort": "skipped",
+    "test": "Test connection",
+    "testing": "Testing…",
+    "finish": "Finish setup",
+    "version": "version {version}",
+    "gate": {
+      "text": "Only someone with access to the server can start setup. Enter the token printed by the installer, or generate a new one on the server with:",
+      "token": "Setup token",
+      "tokenHelp": "Valid for 1 hour. The browser keeps it only in a secure cookie.",
+      "submit": "Start setup",
+      "adminExists": "An administrator account exists. Sign in as an administrator to continue setup.",
+      "toLogin": "Go to sign-in"
+    },
+    "steps": {
+      "language": {
+        "title": "Language",
+        "help": "Default language for setup and the administrator account. You can change it in the panel at any time."
+      },
+      "checks": {
+        "title": "System pre-checks",
+        "help": "Checks the API can verify from its own container: PostgreSQL, Redis, database migrations and the background worker. Operating system, disk and port checks run on the server with \"sh scripts/install.sh check\"."
+      },
+      "access": {
+        "title": "Deployment and access address",
+        "help": "The address users will open the panel at. The test checks whether the server can reach itself through this address. Behind NAT a server may not reach its own public address; then the address is saved as unverified."
+      },
+      "domain": {
+        "title": "Domain and HTTPS",
+        "help": "DNS records, automatic HTTPS with Caddy and certificate checks."
+      },
+      "services": {
+        "title": "PostgreSQL and Redis",
+        "help": "The application's database and queue connections. These services run only on the internal Docker network and are never exposed to the internet."
+      },
+      "admin": {
+        "title": "Administrator account",
+        "help": "The first account that manages the panel. After this step the setup token stops working and setup continues only with this account."
+      },
+      "vmware": {
+        "title": "ESXi / vCenter connection",
+        "help": "Connection to the VMware infrastructure. If skipped, the platform cannot manage virtual servers."
+      },
+      "discovery": {
+        "title": "Datastore and network discovery",
+        "help": "Real datastore, network and port group information from the connected infrastructure."
+      },
+      "pools": {
+        "title": "Resource pool and IP plan",
+        "help": "Capacity and IP ranges to offer for sale or use."
+      },
+      "monitoring": {
+        "title": "Monitoring and notifications",
+        "help": "Prometheus, Grafana and Loki are optional and run in a separate Compose profile. Notification channels are not available yet."
+      },
+      "summary": {
+        "title": "Final check and summary",
+        "help": "Status of each step. Setup cannot finish until required steps are done. Once finished, setup endpoints close; reopening needs \"node dist/cli.js recover-setup\" on the server."
+      }
+    },
+    "notAvailable": {
+      "domain": "Domain verification and the HTTPS flow arrive in a later version (phase 5). Until then use the system only via 127.0.0.1 or an SSH tunnel.",
+      "vmware": "The ESXi/vCenter connection arrives in a later version (phase 6). With this step skipped the platform cannot manage virtual servers yet.",
+      "discovery": "Discovery arrives together with the ESXi/vCenter connection.",
+      "pools": "Resource pools and the IP plan arrive in a later version (phase 8)."
+    },
+    "access": {
+      "label": "Panel address",
+      "help": "Examples: https://panel.example.com or http://127.0.0.1:8080 through an SSH tunnel. Do not add a path, query or user info.",
+      "hint": {
+        "DNS_FAILED": "The domain did not resolve. Check that the A record points to the server's public IP and has propagated.",
+        "CONNECTION_REFUSED": "Connection refused. Check port forwarding, the firewall and the address Caddy listens on (LISTEN_ADDRESS).",
+        "TIMEOUT": "Timed out. A firewall or NAT may be dropping the connection.",
+        "TLS_ERROR": "The TLS certificate could not be verified. Do not disable certificate checks; fix the certificate and domain.",
+        "WRONG_TARGET": "This address answers but is not this installation. DNS or a proxy points to another server.",
+        "HTTP_ERROR": "The address returned an unexpected HTTP response. A proxy in front may not forward /api to this installation.",
+        "LOOPBACK_NOT_VERIFIABLE": "127.0.0.1 and localhost cannot be verified from inside the container. You can save it for use through an SSH tunnel.",
+        "UNREACHABLE": "The address could not be reached. Check the address and the network path."
+      }
+    },
+    "admin": {
+      "done": "The administrator account has been created."
+    },
+    "monitoring": {
+      "enable": "I will use the monitoring components",
+      "help": "First start the monitoring profile on the server, then test the connection:"
+    },
+    "summary": {
+      "completed": "completed",
+      "skipped": "skipped",
+      "missing": "missing",
+      "publicUrl": "Panel address: {url}",
+      "warnVmware": "No VMware connection configured: the platform cannot create or manage virtual servers yet.",
+      "warnAccess": "The panel address could not be verified from this server. Open it from another device to check.",
+      "warnHttps": "HTTPS is not configured. Do not expose the panel to the internet; use 127.0.0.1 or an SSH tunnel."
+    },
+    "checkNames": {
+      "postgres": "PostgreSQL",
+      "redis": "Redis",
+      "migrations": "Database migrations",
+      "worker": "Background worker",
+      "access": "Panel address",
+      "prometheus": "Prometheus",
+      "grafana": "Grafana",
+      "loki": "Loki"
+    },
+    "checkCodes": {
+      "OK": "Passed",
+      "UNREACHABLE": "Unreachable",
+      "MIGRATIONS_PENDING": "Pending migrations",
+      "NO_HEARTBEAT": "No signal in the last 90 seconds",
+      "HTTP_ERROR": "Unexpected HTTP response",
+      "TIMEOUT": "Timed out",
+      "DNS_FAILED": "DNS resolution failed",
+      "CONNECTION_REFUSED": "Connection refused",
+      "TLS_ERROR": "TLS certificate could not be verified",
+      "WRONG_TARGET": "Another server answered",
+      "LOOPBACK_NOT_VERIFIABLE": "Local address; cannot be verified"
+    }
   }
 }

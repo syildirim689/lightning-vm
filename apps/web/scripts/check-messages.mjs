@@ -24,8 +24,14 @@ const apiSrc = new URL('../../api/src/', import.meta.url);
 if (existsSync(apiSrc)) {
   for (const file of readdirSync(apiSrc, { recursive: true }).filter((f) => f.endsWith('.ts'))) {
     const source = readFileSync(new URL(file.replaceAll('\\', '/'), apiSrc), 'utf8');
-    // Error codes: apiError(status, 'CODE', ...) and literal { code: 'CODE' } bodies.
-    for (const [, code] of source.matchAll(/(?:apiError\(\s*\d+,\s*|code: )'([A-Z_]+)'/g)) {
+    // Check result codes: the closed list in checks.ts.
+    for (const [, list] of source.matchAll(/checkCodes = \[([^\]]+)\]/g)) {
+      for (const [, code] of list.matchAll(/'([A-Z_]+)'/g)) {
+        if (!reference.has(`Setup.checkCodes.${code}`)) problems.push(`api: check code ${code} has no Setup.checkCodes.${code} translation`);
+      }
+    }
+    // Error codes: apiError(status, 'CODE', ...) and literal { code: 'CODE' } bodies (check results excluded).
+    for (const [, code] of source.matchAll(/(?:apiError\(\s*\d+,\s*|(?<!ok: \w+, )code: )'([A-Z_]+)'/g)) {
       if (!reference.has(`errors.${code}`)) problems.push(`api: error code ${code} has no errors.${code} translation`);
     }
     // Field codes: fields.name = 'CODE' and { name: 'CODE' } passed as apiError fields.

@@ -1,10 +1,11 @@
 // Operator commands, run inside the api container:
 //   node dist/cli.js migrate           apply pending database migrations
 //   node dist/cli.js bootstrap-token   print a one-hour token for creating the first admin
+//   node dist/cli.js recover-setup     reopen the setup wizard for admins (accounts and data are kept)
 import { closeConnections, pool } from './db';
 import { logEvent } from './log';
 import { runMigrations } from './migrate';
-import { issueBootstrapToken } from './setup';
+import { issueBootstrapToken, reopenSetup } from './setup';
 
 async function main(command: string | undefined) {
   if (command === 'migrate') {
@@ -18,7 +19,11 @@ async function main(command: string | undefined) {
     process.stdout.write(`${issued.token}\n`); // stdout only: the caller decides where it goes
     return 0;
   }
-  process.stderr.write('usage: node dist/cli.js migrate | bootstrap-token\n');
+  if (command === 'recover-setup') {
+    logEvent('info', (await reopenSetup()) ? 'setup_reopened' : 'setup_not_completed');
+    return 0;
+  }
+  process.stderr.write('usage: node dist/cli.js migrate | bootstrap-token | recover-setup\n');
   return 2;
 }
 

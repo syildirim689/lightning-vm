@@ -15,37 +15,54 @@ Açık kaynak VMware sunucu yönetim platformunun başlangıç deposu.
 - İsteğe bağlı Prometheus, Grafana, Loki ve OpenTelemetry Collector.
 - GitHub Actions derleme kontrolü ve sürüm etiketinden GHCR imaj yayını.
 
+- Kurulum: `scripts/install.sh` (`install`, `check`, `recover-setup` modları; ön kontroller;
+  iki dilli hata kodları) ve tarayıcıda 11 adımlı kurulum sihirbazı (docs/setup.md).
+
 ## Henüz uygulanmayanlar
-Kurulum sihirbazının kalan adımları, MFA, parola sıfırlama, proje/müşteri modeli, VMware bağlantısı, VM işlemleri, konsol geçidi,
-IP tahsisi, faturalama, yedekleme otomasyonu ve otomatik güncelleme.
+- Sihirbazda alan adı/HTTPS, VMware ve kaynak havuzu adımları (şimdilik yalnızca atlanabilir).
+- MFA, parola sıfırlama, proje/müşteri modeli.
+- VMware bağlantısı, VM işlemleri, konsol geçidi, IP tahsisi.
+- Faturalama, yedekleme otomasyonu, otomatik güncelleme.
+
 Paneldeki kapalı düğmeler bu işlevleri gerçekleştirmez.
 
-## Gereksinimler ve ilk çalıştırma
-Docker Engine + Compose v2 ve OpenSSL bulunan Linux sunucu.
+## Boş bir sunucuda deneme
+Desteklenen sistemler: Ubuntu 22.04 veya 24.04 (amd64/arm64). En az 2 GB RAM ve 10 GB boş disk gerekir.
 
+**1. Kaynağı alın.** Depo adresi bu belgede bilerek yazılmamıştır; kendi GitHub adresinizi kullanın:
 ```sh
-sh scripts/install.sh
-docker compose ps
-curl -fsS http://127.0.0.1:8080/api/ready
+git clone <DEPO_ADRESİ> lightning-vm
+```
+```sh
+cd lightning-vm
 ```
 
-Kurulum betiği sonunda **1 saat geçerli bir kurulum anahtarı** yazar. http://127.0.0.1:8080/setup
-adresinde bu anahtarla ilk yönetici hesabını oluşturun. Anahtarın süresi dolduysa:
-
+**2. Sunucuyu kontrol edin.** Bu komut hiçbir şeyi değiştirmez:
 ```sh
-docker compose exec api node dist/cli.js bootstrap-token
+sh scripts/install.sh check
 ```
 
-Panel: http://127.0.0.1:8080 — yönetim: /admin.
-Uzak sunucudan erişim için kendi bilgisayarında:
+**3. Kurun.** Docker yoksa `--install-docker` ekleyin; Docker resmî deposundan kurulur ve
+bunun için root gerekir:
+```sh
+sudo sh scripts/install.sh --install-docker
+```
+Betik sonunda **1 saat geçerli bir kurulum anahtarı** yazar. Anahtarın süresi dolduysa:
+```sh
+sudo docker compose exec api node dist/cli.js bootstrap-token
+```
 
+**4. Panele kendi bilgisayarınızdan bağlanın (SSH tüneli):**
 ```sh
 ssh -L 8080:127.0.0.1:8080 KULLANICI@SUNUCU
 ```
+Ardından http://127.0.0.1:8080/setup adresini açın, anahtarı girin ve sihirbazı tamamlayın.
 
-Varsayılan portlar yalnızca loopback üzerinde açılır. HTTPS (5. aşama) yapılandırılmadan
-LISTEN_ADDRESS değerini 0.0.0.0 yapmayın veya internete yayınlamayın: parolalar düz HTTP ile gider.
-Windows'ta Docker Desktop Linux container ortamı ve WSL2 içinden aynı komut kullanılabilir.
+Kurulum yarıda kalırsa aynı `install` komutunu tekrar çalıştırın. Mevcut sırlar, veriler ve
+yönetici hesabı korunur.
+
+Varsayılan port yalnızca loopback üzerinde açılır. HTTPS (5. aşama) yapılandırılmadan
+`LISTEN_ADDRESS` değerini `0.0.0.0` yapmayın ve paneli internete açmayın: parolalar düz HTTP ile gider.
 
 ## İzleme
 ```sh
@@ -71,5 +88,5 @@ Kaynak kurulum compose.yaml ile yerelde derlenir. v* etiketi GitHub Actions ile 
 üç uygulama imajı (web, api, worker) yayımlar.
 GHCR imajlarını kullanan sürümlü üretim Compose paketi ve güncelleyici henüz yoktur.
 
-Detaylar: docs/architecture.md, docs/roadmap.md, CONTRIBUTING.md, SECURITY.md.
+Detaylar: docs/setup.md, docs/auth.md, docs/i18n.md, docs/architecture.md, docs/roadmap.md, docs/validation.md, CONTRIBUTING.md, SECURITY.md.
 Lisans: Apache-2.0.

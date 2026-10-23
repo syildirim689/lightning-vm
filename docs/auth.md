@@ -17,7 +17,8 @@ göstermemek içindir; güvenlik sınırı değildir.
    ```
    Yeni anahtar bir öncekini geçersiz kılar. Veritabanında anahtarın kendisi değil,
    yalnızca SHA-256 özeti tutulur.
-3. `/setup` sayfasında anahtar, e-posta ve parola girilir. API şunları yapar:
+3. `/setup` sihirbazında önce anahtar girilir (HttpOnly çerezde tutulur). Yönetici hesabı
+   adımında e-posta ve parola girilir. API şunları yapar:
    - kurulum satırını `FOR UPDATE` ile kilitler;
    - anahtarı sabit sürede karşılaştırır ve süresini kontrol eder;
    - yöneticiyi oluşturur ve anahtarı siler.
@@ -26,12 +27,13 @@ göstermemek içindir; güvenlik sınırı değildir.
 4. Yönetici oluştuktan sonra:
    - `POST /setup/admin` her istekte `409 SETUP_CLOSED` döner;
    - CLI yeni anahtar üretmez;
-   - `/setup` sayfası `/login` sayfasına yönlendirir.
+   - sihirbaza yalnızca yönetici oturumuyla devam edilir;
+   - sihirbaz tamamlanınca `/setup` sayfası `/login` sayfasına yönlendirir (docs/setup.md).
 
    Kurulum betiği tekrar çalıştırıldığında yöneticiye ve sırlara dokunmaz.
 
-Yönetici parolasını unutma durumu için kontrollü kurtarma işlemi henüz yok
-(4. aşamada sihirbazla birlikte eklenecek).
+`sh scripts/install.sh recover-setup` yalnızca sihirbazı yeniden açar. Yönetici parolasını
+unutma durumu için kontrollü bir kurtarma işlemi henüz yok.
 
 ## Oturumlar
 - Girişte 32 baytlık rastgele bir anahtar üretilir. Cookie (`lvm_session`) bu anahtarı taşır;
@@ -103,4 +105,4 @@ Bu, e-postanın kayıtlı olduğunu açığa çıkarır; açık kayıtlı bir pa
 - Kullanıcı bazlı dil ve saat dilimi kaydı.
 - Proje ve müşteri modeli (8. aşama).
 - Oturum listesi ve "tüm oturumları kapat".
-- Yönetici kurtarma (4. aşama).
+- Yönetici parolası kurtarma.

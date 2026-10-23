@@ -30,10 +30,10 @@ before(async () => {
   await app.init();
   await app.getHttpAdapter().getInstance().ready();
 });
-after(async () => { await app.close(); await closeConnections(); });
+after(async () => { await app?.close(); await closeConnections(); });
 
 test('migrations apply once and are idempotent', async () => {
-  assert.deepEqual(await runMigrations(pool), ['001_init', '002_auth']);
+  assert.deepEqual(await runMigrations(pool), ['001_init', '002_auth', '003_setup_wizard']);
   assert.deepEqual(await runMigrations(pool), []);
 });
 

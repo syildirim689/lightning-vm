@@ -64,9 +64,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Lint installer
+        run: shellcheck -s sh scripts/install.sh
       - name: Validate and smoke test
         run: |
+          sh scripts/install.sh check
           sh scripts/install.sh
+          sh scripts/install.sh check
           curl --fail --retry 10 --retry-delay 3 --retry-all-errors http://127.0.0.1:8080/api/ready
           curl --fail --retry 10 --retry-delay 3 --retry-all-errors http://127.0.0.1:8080/login
           test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8080/api/metrics)" = 404

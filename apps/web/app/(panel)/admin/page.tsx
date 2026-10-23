@@ -1,6 +1,7 @@
 import { useTranslations } from 'next-intl';
 import { getTranslations } from 'next-intl/server';
-import { getUser } from '../../../lib/session';
+import Link from 'next/link';
+import { getSetupStatus, getUser } from '../../../lib/session';
 import Status from './status';
 import RegistrationSetting from './registration-setting';
 
@@ -12,10 +13,10 @@ export default async function AdminPage() {
     const t = await getTranslations('errors');
     return <article role="alert"><h1>403</h1><p>{t('FORBIDDEN')}</p></article>;
   }
-  return <Admin/>;
+  return <Admin setupOpen={!(await getSetupStatus()).completed}/>;
 }
 
-function Admin() {
+function Admin({ setupOpen }: { setupOpen: boolean }) {
   const t = useTranslations('AdminPanel');
-  return <><header><p className="eyebrow">{t('eyebrow')}</p><h1>{t('title')}</h1><p>{t('intro')}</p></header><Status/><RegistrationSetting/><section className="grid">{modules.map(m=><article key={m}><h2>{t(`modules.${m}`)}</h2><p className="muted">{t('planned')}</p><button disabled>{t('notImplemented')}</button></article>)}</section></>;
+  return <><header><p className="eyebrow">{t('eyebrow')}</p><h1>{t('title')}</h1><p>{t('intro')}</p></header>{setupOpen && <p className="notice">{t('setupIncomplete')} <Link href="/setup">{t('continueSetup')}</Link></p>}<Status/><RegistrationSetting/><section className="grid">{modules.map(m=><article key={m}><h2>{t(`modules.${m}`)}</h2><p className="muted">{t('planned')}</p><button disabled>{t('notImplemented')}</button></article>)}</section></>;
 }

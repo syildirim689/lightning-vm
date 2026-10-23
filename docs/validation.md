@@ -10,6 +10,53 @@ Windows Server 2025, Node 24.21, npm 11.19 (Docker yok).
 - `npm audit --omit=dev`: üç uygulamada 0 açık. API'de Nest'in getirdiği eski fastify
   `overrides` ile 5.12.7'ye sabitlendi.
 
+## 4. aşama: kurulum betiği ve sihirbaz — 2026-10-23
+Geliştirme makinesi:
+- API `npm test` 7/7; web `npm test` (176 anahtar; API kontrol sonuç kodları da taranıyor);
+  `npm run build` geçti.
+
+Docker test sunucusu (Ubuntu 24.04 arm64):
+- `shellcheck -s sh scripts/install.sh`: temiz.
+- `install.sh check` (boş sunucu): tüm ön kontroller OK, "kurulum yok", çıkış 0.
+  İlk denemede `.env` olmadığında betiğin sessizce çıktığı bulundu ve düzeltildi
+  (`set -e` altında `[ -f .env ] &&`).
+- Port çakışması: 8080'de başka bir süreç dinlerken `install` `E_PORT_IN_USE` ile durdu;
+  `.env` oluşturulmadı.
+- Boş veriyle `install --lang tr`: çıkış 0, kurulum anahtarı yazıldı, `.env` 600.
+- Kurulum sonrası `check`: kendi proxy'miz port çakışması sayılmadı; READY ve kurulum durumu doğru.
+- Yarıda kalan kurulum: api, web ve proxy container'ları silindi, `install` tekrar çalıştırıldı.
+  Çıkış 0, `.env` aynı (sha256), kullanıcı sayısı aynı, yeni anahtar üretilmedi.
+- `update`: `E_NOT_IMPLEMENTED`, çıkış 20.
+- `recover-setup`: sihirbaz yeniden açıldı, denetim kaydı `setup.reopened`.
+- Geçersiz argüman: çıkış 2.
+- API entegrasyon testleri 18/18 geçti (auth 11 + sihirbaz 7). Kapsam:
+  - anahtar kapısı;
+  - sunucu tarafı adım doğrulaması;
+  - worker sinyali yokken `CHECKS_FAILED`;
+  - erişim testinin `DNS_FAILED`, `CONNECTION_REFUSED`, `WRONG_TARGET`,
+    `LOOPBACK_NOT_VERIFIABLE` ve gerçek bir HTTP sunucusu üzerinden `OK` sonuçlarını ayırması;
+  - yönetici oluşunca anahtar çerezinin geçersizleşmesi;
+  - eksik adımla tamamlamanın reddi;
+  - tamamlanınca tüm uç noktaların kapanması;
+  - kurtarma.
+
+  Testte port 1 kullanılınca `fetch`'in kendi engelli port listesi devreye girdi; test yeni
+  boşaltılmış bir porta çevrildi.
+- Playwright (SSH tüneli, gerçek kurulum): 11/11 geçti. Kapsam:
+  - sihirbazın 11 adımının Türkçe yürütülmesi ve yanlış anahtarın reddi;
+  - ön kontrollerin gerçek sonuçları;
+  - sayfa yenilenince kalınan adımdan devam edilmesi;
+  - geçersiz adresin sunucuda reddi ve yerel adres uyarısı;
+  - atlanan VMware/HTTPS uyarıları;
+  - tamamlanınca `/setup` yönlendirmesi ve API'nin `SETUP_CLOSED` dönmesi.
+
+Doğrulanmayanlar:
+- 22.04 üzerinde çalışma.
+- amd64 üzerinde çalışma.
+- `--install-docker` yolu (sunucuda Docker zaten kuruluydu).
+- Gerçek bir alan adıyla erişim testi.
+- İzleme adımının gerçek Prometheus/Grafana/Loki testi (E2E'de atlandı).
+
 ## 3. aşama: kimlik doğrulama, roller, güvenli bootstrap — 2026-10-23
 Geliştirme makinesi:
 - API `npm test`: 7/7 geçti. Kapsam: CSRF başlığı yok veya Origin farklıysa 403; geçersiz girişte

@@ -7,7 +7,8 @@ import { apiFetch, useErrorText, type ApiError } from '../../lib/api';
 type Mode = 'login' | 'register' | 'setup';
 const endpoints: Record<Mode, string> = { login: '/auth/login', register: '/auth/register', setup: '/setup/admin' };
 
-export default function CredentialsForm({ mode }: { mode: Mode }) {
+// In the setup wizard the token already sits in an HttpOnly cookie (noToken) and the wizard moves on (onDone).
+export default function CredentialsForm({ mode, noToken, onDone }: { mode: Mode; noToken?: boolean; onDone?: () => void }) {
   const t = useTranslations('Auth');
   const { error, field } = useErrorText();
   const locale = useLocale();
@@ -21,6 +22,7 @@ export default function CredentialsForm({ mode }: { mode: Mode }) {
     const form = Object.fromEntries(new FormData(e.currentTarget));
     try {
       const user = await apiFetch<{ role: string }>(endpoints[mode], { method: 'POST', body: { ...form, locale } });
+      if (onDone) { setBusy(false); onDone(); return; }
       router.replace(user.role === 'admin' ? '/admin' : '/');
       router.refresh();
     } catch (err) { setFailure({ ...(err as ApiError), text: error(err) }); setBusy(false); }
@@ -34,7 +36,7 @@ export default function CredentialsForm({ mode }: { mode: Mode }) {
   </>;
 
   return <form onSubmit={submit} noValidate>
-    {mode === 'setup' && input('token', 'password', 'one-time-code', { spellCheck: false })}
+    {mode === 'setup' && !noToken && input('token', 'password', 'one-time-code', { spellCheck: false })}
     {input('email', 'email', 'username', { maxLength: 254 })}
     {input('password', 'password', mode === 'login' ? 'current-password' : 'new-password', { minLength: mode === 'login' ? undefined : 12, maxLength: 256 })}
     {failure && <p role="alert" className="error">{failure.text}</p>}

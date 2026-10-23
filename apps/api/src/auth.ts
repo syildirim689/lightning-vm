@@ -33,7 +33,7 @@ export async function startSession(req: FastifyRequest, reply: FastifyReply, use
   reply.setCookie(sessionCookie, token, { path: '/', httpOnly: true, sameSite: 'lax', secure: req.protocol === 'https', maxAge: sessionHours * 3600 });
 }
 
-async function currentUser(req: FastifyRequest): Promise<User | null> {
+export async function currentUser(req: FastifyRequest): Promise<User | null> {
   const token = req.cookies[sessionCookie];
   if (!token) return null;
   const { rows } = await pool.query(

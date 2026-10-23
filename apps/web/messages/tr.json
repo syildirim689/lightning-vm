@@ -43,7 +43,9 @@
     "registrationTitle": "Kullanıcı kaydı",
     "registrationHelp": "Açıkken herkes /register sayfasından kullanıcı hesabı oluşturabilir. Kapalıyken yalnızca mevcut hesaplar giriş yapabilir.",
     "registrationOpen": "Yeni kullanıcı kaydına izin ver",
-    "saved": "Kaydedildi."
+    "saved": "Kaydedildi.",
+    "setupIncomplete": "İlk kurulum henüz tamamlanmadı.",
+    "continueSetup": "Kurulum sihirbazına devam et"
   },
   "Status": {
     "title": "Sistem sağlığı",
@@ -72,7 +74,13 @@
     "CSRF_REJECTED": "İstek güvenlik kontrolünden geçemedi. Sayfayı yenileyip tekrar deneyin.",
     "VALIDATION_FAILED": "Lütfen işaretli alanları düzeltin.",
     "SETUP_CLOSED": "İlk kurulum zaten tamamlandı. Giriş sayfasını kullanın.",
-    "BOOTSTRAP_TOKEN_INVALID": "Kurulum anahtarı geçersiz veya süresi dolmuş. Sunucuda yeni anahtar üretin."
+    "BOOTSTRAP_TOKEN_INVALID": "Kurulum anahtarı geçersiz veya süresi dolmuş. Sunucuda yeni anahtar üretin.",
+    "BOOTSTRAP_REQUIRED": "Kuruluma devam etmek için kurulum anahtarı gerekiyor.",
+    "STEP_REQUIRED": "Bu adım zorunludur ve atlanamaz.",
+    "STEP_NOT_AVAILABLE": "Bu adım bu sürümde henüz kullanılamıyor; şimdilik atlayın.",
+    "CHECKS_FAILED": "Kontroller geçmiyor. Sonuçları düzeltip tekrar deneyin.",
+    "ADMIN_REQUIRED": "Önce yönetici hesabını oluşturun.",
+    "STEPS_INCOMPLETE": "Zorunlu adımlar tamamlanmadan kurulum bitirilemez."
   },
   "Auth": {
     "required": "zorunlu",
@@ -87,8 +95,6 @@
     "registerTitle": "Hesap oluştur",
     "registerIntro": "Kayıt yönetici tarafından açılmışsa kullanılabilir.",
     "registerSubmit": "Hesap oluştur",
-    "setupTitle": "İlk yönetici hesabı",
-    "setupIntro": "Kurulumu yalnızca sunucuya erişimi olan kişi tamamlayabilir. Kurulum betiğinin verdiği anahtarı girin ya da sunucuda şu komutla yenisini üretin:",
     "setupSubmit": "Yönetici hesabını oluştur",
     "working": "İşleniyor…",
     "toRegister": "Hesabınız yok mu? Kayıt olun",
@@ -98,6 +104,137 @@
     "INVALID_EMAIL": "Geçerli bir e-posta adresi girin.",
     "PASSWORD_TOO_SHORT": "Parola en az 12 karakter olmalı.",
     "PASSWORD_TOO_LONG": "Parola en fazla 256 karakter olabilir.",
-    "INVALID_VALUE": "Geçersiz değer."
+    "INVALID_VALUE": "Geçersiz değer.",
+    "INVALID_URL": "Yalnızca şema, alan adı/IP ve isteğe bağlı port girin. Örnek: https://panel.example.com",
+    "REQUIRED": "Bu alan zorunludur."
+  },
+  "Setup": {
+    "title": "Kurulum sihirbazı",
+    "loading": "Kurulum durumu yükleniyor…",
+    "stepOf": "Adım {n} / {total}",
+    "required": "zorunlu",
+    "optional": "isteğe bağlı",
+    "back": "Geri",
+    "saveAndContinue": "Kaydet ve devam et",
+    "continue": "Devam et",
+    "skip": "Şimdilik atla",
+    "skippedShort": "atlandı",
+    "test": "Bağlantıyı test et",
+    "testing": "Test ediliyor…",
+    "finish": "Kurulumu tamamla",
+    "version": "sürüm {version}",
+    "gate": {
+      "text": "Kurulumu yalnızca sunucuya erişimi olan kişi başlatabilir. Kurulum betiğinin yazdığı anahtarı girin veya sunucuda şu komutla yeni bir anahtar üretin:",
+      "token": "Kurulum anahtarı",
+      "tokenHelp": "1 saat geçerlidir. Tarayıcıda yalnızca güvenli bir çerezde tutulur.",
+      "submit": "Kuruluma başla",
+      "adminExists": "Yönetici hesabı oluşturulmuş. Kuruluma devam etmek için yönetici olarak giriş yapın.",
+      "toLogin": "Giriş sayfasına git"
+    },
+    "steps": {
+      "language": {
+        "title": "Dil",
+        "help": "Kurulumun ve yönetici hesabının varsayılan dili. Panelde istediğiniz zaman değiştirebilirsiniz."
+      },
+      "checks": {
+        "title": "Sistem ön kontrolleri",
+        "help": "API'nin kendi container'ından doğrulayabildiği kontroller: PostgreSQL, Redis, veritabanı migration'ları ve arka plan çalışanı. İşletim sistemi, disk ve port kontrolleri sunucuda \"sh scripts/install.sh check\" ile yapılır."
+      },
+      "access": {
+        "title": "Dağıtım ve erişim adresi",
+        "help": "Kullanıcıların paneli açacağı adres. Test, sunucunun bu adres üzerinden kendine ulaşıp ulaşamadığını kontrol eder. NAT arkasında sunucu kendi genel adresine ulaşamayabilir; bu durumda adres doğrulanmamış olarak kaydedilir."
+      },
+      "domain": {
+        "title": "Alan adı ve HTTPS",
+        "help": "DNS kayıtları, Caddy ile otomatik HTTPS ve sertifika kontrolleri."
+      },
+      "services": {
+        "title": "PostgreSQL ve Redis",
+        "help": "Uygulamanın veritabanı ve kuyruk bağlantıları. Bu servisler yalnızca iç Docker ağında çalışır ve internete açılmaz."
+      },
+      "admin": {
+        "title": "Yönetici hesabı",
+        "help": "Paneli yönetecek ilk hesap. Kurulum anahtarı bu adımdan sonra geçersiz olur ve sihirbaza yalnızca bu hesapla devam edilir."
+      },
+      "vmware": {
+        "title": "ESXi / vCenter bağlantısı",
+        "help": "VMware altyapısına bağlantı. Bu adım atlanırsa platform sanal sunucu yönetemez."
+      },
+      "discovery": {
+        "title": "Datastore ve ağ keşfi",
+        "help": "Bağlanan altyapıdaki gerçek datastore, ağ ve port group bilgileri."
+      },
+      "pools": {
+        "title": "Kaynak havuzu ve IP planı",
+        "help": "Satışa veya kullanıma açılacak kapasite ve IP aralıkları."
+      },
+      "monitoring": {
+        "title": "İzleme ve bildirimler",
+        "help": "Prometheus, Grafana ve Loki isteğe bağlıdır ve ayrı bir Compose profiliyle çalışır. Bildirim kanalları henüz yok."
+      },
+      "summary": {
+        "title": "Son kontrol ve özet",
+        "help": "Adımların durumu. Zorunlu adımlar tamamlanmadan kurulum bitirilemez. Tamamlandıktan sonra kurulum uç noktaları kapanır; yeniden açmak için sunucuda \"node dist/cli.js recover-setup\" gerekir."
+      }
+    },
+    "notAvailable": {
+      "domain": "Alan adı doğrulaması ve HTTPS akışı sonraki sürümde (5. aşama) gelecek. Şimdilik sistemi yalnızca 127.0.0.1 veya SSH tüneli üzerinden kullanın.",
+      "vmware": "ESXi/vCenter bağlantısı sonraki sürümde (6. aşama) gelecek. Bu adım atlandığında platform henüz sanal sunucu yönetemez.",
+      "discovery": "Keşif, ESXi/vCenter bağlantısıyla birlikte gelecek.",
+      "pools": "Kaynak havuzları ve IP planı sonraki sürümde (8. aşama) gelecek."
+    },
+    "access": {
+      "label": "Panel adresi",
+      "help": "Örnekler: https://panel.example.com veya SSH tüneliyle http://127.0.0.1:8080. Yol, sorgu veya kullanıcı bilgisi eklemeyin.",
+      "hint": {
+        "DNS_FAILED": "Alan adı çözümlenemedi. A kaydının sunucunun genel IP'sini gösterdiğini ve kaydın yayıldığını kontrol edin.",
+        "CONNECTION_REFUSED": "Bağlantı reddedildi. Port yönlendirmesini, güvenlik duvarını ve Caddy'nin dinlediği adresi (LISTEN_ADDRESS) kontrol edin.",
+        "TIMEOUT": "Zaman aşımı. Güvenlik duvarı veya NAT bağlantıyı düşürüyor olabilir.",
+        "TLS_ERROR": "TLS sertifikası doğrulanamadı. Sertifika doğrulamasını kapatmayın; sertifikayı ve alan adını düzeltin.",
+        "WRONG_TARGET": "Bu adres yanıt veriyor ama bu kuruluma ait değil. DNS veya proxy başka bir sunucuyu gösteriyor.",
+        "HTTP_ERROR": "Adres beklenmeyen bir HTTP yanıtı döndürdü. Önünüzdeki proxy /api yolunu bu kuruluma iletmiyor olabilir.",
+        "LOOPBACK_NOT_VERIFIABLE": "127.0.0.1 ve localhost container içinden doğrulanamaz. SSH tüneliyle kullanım için kaydedebilirsiniz.",
+        "UNREACHABLE": "Adrese ulaşılamadı. Adresi ve ağ yolunu kontrol edin."
+      }
+    },
+    "admin": {
+      "done": "Yönetici hesabı oluşturuldu."
+    },
+    "monitoring": {
+      "enable": "İzleme bileşenlerini kullanacağım",
+      "help": "Önce sunucuda izleme profilini başlatın, sonra bağlantıyı test edin:"
+    },
+    "summary": {
+      "completed": "tamamlandı",
+      "skipped": "atlandı",
+      "missing": "eksik",
+      "publicUrl": "Panel adresi: {url}",
+      "warnVmware": "VMware bağlantısı yapılandırılmadı: platform henüz sanal sunucu oluşturamaz veya yönetemez.",
+      "warnAccess": "Panel adresi bu sunucudan doğrulanamadı. Adresi başka bir cihazdan açarak kontrol edin.",
+      "warnHttps": "HTTPS yapılandırılmadı. Paneli internete açmayın; 127.0.0.1 veya SSH tüneli kullanın."
+    },
+    "checkNames": {
+      "postgres": "PostgreSQL",
+      "redis": "Redis",
+      "migrations": "Veritabanı migration'ları",
+      "worker": "Arka plan çalışanı",
+      "access": "Panel adresi",
+      "prometheus": "Prometheus",
+      "grafana": "Grafana",
+      "loki": "Loki"
+    },
+    "checkCodes": {
+      "OK": "Başarılı",
+      "UNREACHABLE": "Ulaşılamıyor",
+      "MIGRATIONS_PENDING": "Uygulanmamış migration var",
+      "NO_HEARTBEAT": "Son 90 saniyede sinyal yok",
+      "HTTP_ERROR": "Beklenmeyen HTTP yanıtı",
+      "TIMEOUT": "Zaman aşımı",
+      "DNS_FAILED": "DNS çözümlemesi başarısız",
+      "CONNECTION_REFUSED": "Bağlantı reddedildi",
+      "TLS_ERROR": "TLS sertifikası doğrulanamadı",
+      "WRONG_TARGET": "Başka bir sunucu yanıt verdi",
+      "LOOPBACK_NOT_VERIFIABLE": "Yerel adres; doğrulanamaz"
+    }
   }
 }
