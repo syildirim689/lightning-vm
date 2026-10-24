@@ -281,7 +281,7 @@ test.describe('catalog and order preview (simulator)', () => {
     dialog = adminPage.getByRole('dialog');
     await dialog.getByLabel('Name').fill('lab-net');
     await dialog.getByLabel('Subnet (CIDR)').fill('10.30.0.0/24');
-    await dialog.getByLabel('Gateway').fill('10.30.0.1');
+    await dialog.getByLabel('Gateway', { exact: true }).fill('10.30.0.1');
     await dialog.getByLabel('Range start').fill('10.30.0.20');
     await dialog.getByLabel('Range end').fill('10.20.0.30');
     await dialog.getByRole('button', { name: 'Add IP pool' }).click();
