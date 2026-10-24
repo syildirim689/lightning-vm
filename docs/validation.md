@@ -519,3 +519,16 @@ Doğrulanmayanlar:
   - konsol testi simülatörün klonladığı VM'i seçebiliyordu.
 - CI: ayar sırları için geçici bir master key eklendi (önceden runner'da 503 veriyordu).
 - Gerçek vCenter'da doğrulanmadı: trafik yönü eşlemesi ve paketlerin gerçekten düştüğü.
+
+## Ödeme yöntemleri — 2026-10-24
+- Birim: 10 test (`payment-providers.test.mjs`).
+  - İmzaları doğrulananlar: iyzico IYZWSv2, PayTR token, Moka CheckKey, Garanti HashData.
+  - Sınıflandırma: "sipariş bulunamadı" kabul, "kullanıcı bulunamadı" ret, kimlik hatası ret, IP kısıtı ağ hatası sayılıyor.
+  - Gizli değerler mesajlarda geri gösterilmiyor.
+- Entegrasyon (platform 13/13):
+  - canlı ve test bilgileri ayrı tutuluyor, şifreli saklanıyor ve gizli alanlar geri dönmüyor;
+  - test edilmeden etkinleştirme reddediliyor;
+  - gizli alan değişince sağlayıcı devre dışı kalıyor;
+  - iç adresler reddediliyor.
+- E2E: kaydet → etkinleştirme reddi → test → etkinleştir → listede görünme → kaldır akışı ve 390 px kontrolü geçti.
+- Gerçek üye işyeri hesaplarıyla hiçbir sağlayıcı denenmedi.

@@ -26,6 +26,7 @@ const apiSrc = new URL('../../api/src/', import.meta.url);
 if (existsSync(apiSrc)) {
   for (const file of readdirSync(apiSrc, { recursive: true }).filter((f) => f.endsWith('.ts'))) {
     const source = readFileSync(new URL(file.replaceAll('\\', '/'), apiSrc), 'utf8');
+    if (file.endsWith('payment-providers.ts')) continue; // provider request bodies (currency_code: 'TRY' …), not API codes
     // Check result codes: the closed list in checks.ts.
     for (const [, list] of source.matchAll(/checkCodes = \[([^\]]+)\]/g)) {
       for (const [, code] of list.matchAll(/'([A-Z_]+)'/g)) {

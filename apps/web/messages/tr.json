@@ -206,7 +206,10 @@
     "FIREWALL_NEEDS_DVS": "Sunucunun ağ kartı distributed switch üzerinde değil; firewall uygulanamıyor. Sağlayıcınıza başvurun.",
     "FIREWALL_NO_PORT": "Sunucunun ağ kartına distributed port atanmamış (port grubu static binding kullanmalı). Sağlayıcınıza başvurun.",
     "FIREWALL_TOO_MANY_RULES": "Bu sunucunun firewall'larında toplam kural sayısı çok fazla (en fazla 500 filtre kuralı).",
-    "FIREWALL_APPLY_FAILED": "VMware firewall kurallarını kabul etmedi."
+    "FIREWALL_APPLY_FAILED": "VMware firewall kurallarını kabul etmedi.",
+    "PAYMENT_NOT_TESTED": "Önce bu modun kayıtlı bilgilerini test edin.",
+    "PAYMENT_TEST_FAILED": "Bu bilgilerin son testi başarısız oldu; düzeltip yeniden test edin.",
+    "PAYMENT_INCOMPLETE": "Önce bu modun tüm bilgilerini doldurup kaydedin."
   },
   "Auth": {
     "required": "zorunlu",
@@ -305,7 +308,8 @@
     "NOT_SUPPORTED_BY_VERSION": "Bu vSphere sürümü bu yöntemi desteklemiyor.",
     "INVALID_NETWORK": "203.0.113.0/24 gibi IP adresleri veya ağlar girin (1-100 adet).",
     "TOO_MANY_RULES": "Bir firewall'da en fazla 50 kural olabilir.",
-    "FIREWALL_LIMIT": "Sunucu başına en fazla 5 firewall."
+    "FIREWALL_LIMIT": "Sunucu başına en fazla 5 firewall.",
+    "INVALID_ENDPOINT": "Herkese açık bir https adresi girin (iç adreslere izin verilmez)."
   },
   "Setup": {
     "title": "Kurulum sihirbazı",
@@ -1757,7 +1761,8 @@
       "mail": "E-posta",
       "captcha": "Bot koruması",
       "sms": "SMS",
-      "notifications": "Bildirim kuralları"
+      "notifications": "Bildirim kuralları",
+      "payments": "Ödeme"
     },
     "saved": "Kaydedildi.",
     "save": "Kaydet",
@@ -1970,6 +1975,114 @@
       "testTo": "Telefon",
       "testToHelp": "Ülke koduyla, örneğin +905321234567.",
       "sendTest": "Test SMS’i gönder"
+    },
+    "payments": {
+      "loading": "Yükleniyor…",
+      "activeTitle": "Etkin ödeme yöntemleri",
+      "activeHelp": "Müşterilere bu sırayla sunulur. Her biri seçtiğiniz modda (canlı veya test) çalışır.",
+      "noneActive": "Etkin ödeme yöntemi yok. Aşağıdan bir sağlayıcı seçin, bilgilerini girin, test edin ve etkinleştirin.",
+      "moveUp": "Yukarı taşı",
+      "moveDown": "Aşağı taşı",
+      "search": "Sağlayıcı ara",
+      "kindLabel": "Tür",
+      "nothingFound": "Eşleşen sağlayıcı yok.",
+      "kind": {
+        "all": "Tümü",
+        "gateway": "Ödeme kuruluşları",
+        "bank": "Banka sanal POS",
+        "wallet": "Cüzdanlar"
+      },
+      "count": "{n} sağlayıcı",
+      "checkable": "Test edilebilir",
+      "notCheckable": "Çevrim içi test yok",
+      "state": {
+        "activeLive": "Etkin · canlı",
+        "activeTest": "Etkin · test",
+        "failed": "Test başarısız",
+        "saved": "Kaydedildi",
+        "notSet": "Ayarlanmadı"
+      },
+      "mode": {
+        "live": "Canlı",
+        "test": "Test"
+      },
+      "credentialsFor": {
+        "live": "Canlı bilgiler",
+        "test": "Test bilgileri"
+      },
+      "credentials": "Bilgiler",
+      "website": "Web sitesi",
+      "docs": "Geliştirici dokümanı",
+      "confidence": {
+        "docs": "resmi dokümana göre",
+        "partial": "kısmen resmi dokümana göre",
+        "community": "açık kaynak entegrasyonlara göre; sağlayıcıyla teyit edin"
+      },
+      "label": "Müşteriye görünen ad",
+      "labelHelp": "İsteğe bağlı; boşsa sağlayıcının adı kullanılır.",
+      "useMode": "Kullanılan mod",
+      "useModeHelp": "İki bilgi seti de saklanır; ödemelerde hangisinin kullanılacağını bu seçer.",
+      "modeReady": "bilgiler tam",
+      "modeMissing": "bilgiler eksik",
+      "optional": "isteğe bağlı",
+      "secretSet": "Kayıtlı, değiştirmek için yazın",
+      "only3d": "yalnızca gerçek bir 3D Secure ödemesiyle doğrulanır",
+      "liveWarning": "Canlı bilgilerle gerçek ödeme alınır. Değerleri sağlayıcının canlı üye işyeri panelinden girin.",
+      "testHelp": "Test (sandbox) bilgileri: burada yapılan ödemelerde para hareketi olmaz. Sağlayıcının test panelini ve test kartlarını kullanın.",
+      "fillTest": "Herkese açık test hesabını doldur",
+      "fillTestHelp": "Sağlayıcı veya entegratörleri tarafından yayımlanmıştır; değişebilir.",
+      "advanced": "Gelişmiş",
+      "endpoint": "API adresi (değiştir)",
+      "endpointHelp": "Gösterilen adresi kullanmak için boş bırakın. Yalnızca sağlayıcı size farklı bir adres verdiyse doldurun.",
+      "testCards": "Test kartları",
+      "checkTitle": "Bilgi testi",
+      "runCheck": "{mode} bilgilerini test et",
+      "checkHow": "Para hareketi olmayan bir istek gönderir (kart BIN veya taksit sorgusu, erişim anahtarı isteği ya da var olmayan bir sipariş için durum sorgusu) ve yanıtı okur.",
+      "checkNone": "Bu sağlayıcıda ödeme başlatmadan bilgileri doğrulayan bir istek yok. Bilgileri bir test ödemesiyle doğrulayın.",
+      "check": {
+        "ok": "Kabul edildi",
+        "rejected": "Reddedildi",
+        "inconclusive": "Belirsiz",
+        "network": "Ulaşılamadı",
+        "unverifiable": "Test edilemez"
+      },
+      "checkExplain": {
+        "ok": "Sağlayıcı bu bilgileri kabul etti.",
+        "rejected": "Sağlayıcı reddetti; mesajına bakın.",
+        "inconclusive": "Sağlayıcı yanıt verdi ama yanıt bilgilerin doğruluğunu kanıtlamıyor. Mesajı okuyun.",
+        "network": "Ağ, TLS veya IP kısıtı sorunu. Çoğu sağlayıcı yalnızca tanımlı sunucu IP'lerini kabul eder.",
+        "unverifiable": "Bu sağlayıcı için çevrim içi test yok."
+      },
+      "unverified": "Hiçbir API ile doğrulanamayan alanlar: {fields}. Bir test 3D Secure ödemesiyle doğrulayın.",
+      "notRecorded": "Bu değerler kayıtlı olanlardan farklı: etkinleştirebilmek için önce kaydedin, sonra yeniden test edin.",
+      "lastCheck": "Son test: {time}",
+      "outdated": "önceki bilgilerle yapıldı",
+      "unsaved": "Bu sekmede kaydedilmemiş değişiklikler var.",
+      "threeD": "3D Secure modelleri",
+      "activeIn": "Etkin ({mode})",
+      "inactive": "Etkin değil",
+      "activated": "{mode} modunda etkinleştirildi.",
+      "deactivated": "Devre dışı bırakıldı.",
+      "remove": "Kaldır",
+      "removed": "Sağlayıcı kaldırıldı.",
+      "removeTitle": "{name} kaldırılsın mı?",
+      "removeBody": "İki bilgi seti ve test sonuçları silinir.",
+      "cancel": "Vazgeç",
+      "close": "Kapat",
+      "save": "Kaydet",
+      "saved": "Kaydedildi.",
+      "notes": {
+        "NO_SANDBOX_HOST": "Ayrı bir test sunucusu yok: test bilgileri canlı adresle kullanılır.",
+        "TEST_HOST_UNCERTAIN": "Kaynaklar test adresi konusunda farklı. Test ulaşamazsa sağlayıcıya sorun ve Gelişmiş bölümünden girin.",
+        "FIXED_IP": "Sağlayıcı yalnızca kayıtlı sabit IP'den gelen istekleri kabul eder: bu sunucunun genel IP'sini panelinde tanımlayın.",
+        "TOKEN_ROTATES": "Her test yeni bir erişim anahtarı alır ve öncekini geçersiz kılar. Canlı trafik varken canlı bilgileri test etmeyin.",
+        "WALLET_ONLY": "Cüzdanla ödeme (müşteri kendi hesabından öder); kartlı sanal POS değildir.",
+        "NO_SERVER_CHECK": "Bu sağlayıcının bilgileri çevrim içi doğrulanamaz; etkinleştirmede doğrulanmadığı kaydedilir.",
+        "THREE_D_KEY": "3D Secure anahtarı yalnızca bankanın 3D formunda kullanılır; yalnızca gerçek bir test ödemesi doğrular.",
+        "IP_WHITELIST": "Bankalar canlı kullanım için genellikle sunucu IP'sinin tanımlanmasını ister.",
+        "SAME_HOST_FOR_TEST": "Test ve canlı aynı adresi kullanır; test modu bilgilerle veya bir test bayrağıyla seçilir."
+      },
+      "saveFirst": "Kaydedin, test edin, sonra etkinleştirin."
     }
   },
   "Firewalls": {

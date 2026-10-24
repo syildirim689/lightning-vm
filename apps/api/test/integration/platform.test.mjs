@@ -262,3 +262,39 @@ test('insights explain what needs attention; the task list starts empty', async 
   assert.ok(!mine.includes('ENABLE_2FA'), 'two-factor is on for this user');
   assert.deepEqual((await get('/operations/active', user)).json().operations, []);
 });
+
+test('payment methods: live and test credentials are kept apart, secrets stay on the server, activation needs a check', async () => {
+  const list = (await get('/admin/settings/payments', admin)).json();
+  assert.ok(list.providers.length >= 35);
+  assert.ok(list.providers.find((p) => p.id === 'nestpay-isbank').testCredentials);
+  assert.equal((await get('/admin/settings/payments', user)).statusCode, 403);
+
+  // Missing fields per mode; internal endpoints are refused.
+  let r = await put('/admin/settings/payments/shopier', { live: { apiKey: 'k' }, test: { apiKey: 'tk', apiSecret: 'ts', endpoint: 'https://127.0.0.1/x' } }, admin);
+  assert.deepEqual(r.json().fields, { 'live.apiSecret': 'REQUIRED', 'test.endpoint': 'INVALID_ENDPOINT' });
+  r = await put('/admin/settings/payments/shopier', { mode: 'live', live: { apiKey: 'live-key', apiSecret: 'live-secret' }, test: { apiKey: 'test-key', apiSecret: 'test-secret' } }, admin);
+  assert.equal(r.statusCode, 200, r.body);
+  const g = r.json();
+  assert.deepEqual([g.live.values.apiKey, g.test.values.apiKey, g.live.secretsSet.apiSecret, g.enabled], ['live-key', 'test-key', true, false]);
+  assert.ok(!r.body.includes('live-secret') && !r.body.includes('test-secret'));
+  const { rows: [row] } = await pool.query("SELECT live_enc FROM payment_gateways WHERE id = 'shopier'");
+  assert.ok(!row.live_enc.includes('live-secret'), 'stored encrypted');
+
+  // Not checked yet: cannot be turned on.
+  assert.equal((await post('/admin/settings/payments/shopier/state', { enabled: true, mode: 'live' }, admin)).json().code, 'PAYMENT_NOT_TESTED');
+  // Shopier has no read-only API: the check says so, and that is recorded for the saved credentials.
+  const t = (await post('/admin/settings/payments/shopier/test', { mode: 'live' }, admin)).json();
+  assert.deepEqual([t.status, t.recorded], ['unverifiable', true]);
+  // A check of values that differ from the saved ones is shown but not recorded.
+  assert.equal((await post('/admin/settings/payments/shopier/test', { mode: 'live', credentials: { apiKey: 'other', apiSecret: '' } }, admin)).json().recorded, false);
+  r = await post('/admin/settings/payments/shopier/state', { enabled: true, mode: 'live' }, admin);
+  assert.deepEqual([r.json().enabled, r.json().mode], [true, 'live']);
+  // An empty secret keeps the stored one (no change, stays active); a new secret deactivates until checked again.
+  assert.equal((await put('/admin/settings/payments/shopier', { live: { apiKey: 'live-key', apiSecret: '' } }, admin)).json().enabled, true);
+  assert.equal((await put('/admin/settings/payments/shopier', { live: { apiKey: 'live-key', apiSecret: 'rotated' } }, admin)).json().enabled, false);
+  // Test credentials are untouched by all this, and can be cleared on their own.
+  r = await put('/admin/settings/payments/shopier', { clear: ['test'] }, admin);
+  assert.deepEqual([r.json().test.configured, r.json().live.configured], [false, true]);
+  assert.equal((await call('DELETE', '/admin/settings/payments/shopier', admin)).statusCode, 204);
+  assert.ok((await pool.query("SELECT 1 FROM audit_events WHERE action = 'settings.payment_enabled'")).rowCount);
+});

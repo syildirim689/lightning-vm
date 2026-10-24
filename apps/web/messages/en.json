@@ -206,7 +206,10 @@
     "FIREWALL_NEEDS_DVS": "The server’s network card is not on a distributed switch, so the firewall cannot be enforced. Ask your provider.",
     "FIREWALL_NO_PORT": "The server’s network card has no distributed port (the port group must use static binding). Ask your provider.",
     "FIREWALL_TOO_MANY_RULES": "Together the firewalls of this server have too many rules (at most 500 filter rules).",
-    "FIREWALL_APPLY_FAILED": "VMware refused the firewall rules."
+    "FIREWALL_APPLY_FAILED": "VMware refused the firewall rules.",
+    "PAYMENT_NOT_TESTED": "Check the saved credentials of this mode first.",
+    "PAYMENT_TEST_FAILED": "The last check of these credentials failed; fix them and check again.",
+    "PAYMENT_INCOMPLETE": "Fill in and save all credentials of this mode first."
   },
   "Auth": {
     "required": "required",
@@ -305,7 +308,8 @@
     "NOT_SUPPORTED_BY_VERSION": "This vSphere version does not support this method.",
     "INVALID_NETWORK": "Enter IP addresses or networks such as 203.0.113.0/24 (1 to 100).",
     "TOO_MANY_RULES": "At most 50 rules per firewall.",
-    "FIREWALL_LIMIT": "At most 5 firewalls per server."
+    "FIREWALL_LIMIT": "At most 5 firewalls per server.",
+    "INVALID_ENDPOINT": "Enter a public https address (internal addresses are not allowed)."
   },
   "Setup": {
     "title": "Setup wizard",
@@ -1757,7 +1761,8 @@
       "mail": "E-mail",
       "captcha": "Bot protection",
       "sms": "SMS",
-      "notifications": "Notification rules"
+      "notifications": "Notification rules",
+      "payments": "Payments"
     },
     "saved": "Saved.",
     "save": "Save",
@@ -1970,6 +1975,114 @@
       "testTo": "Phone",
       "testToHelp": "With the country code, e.g. +905321234567.",
       "sendTest": "Send a test SMS"
+    },
+    "payments": {
+      "loading": "Loading…",
+      "activeTitle": "Active payment methods",
+      "activeHelp": "Offered to customers in this order. Each one runs in the mode you chose (live or test).",
+      "noneActive": "No payment method is active. Pick a provider below, enter its credentials, check them and activate it.",
+      "moveUp": "Move up",
+      "moveDown": "Move down",
+      "search": "Search providers",
+      "kindLabel": "Type",
+      "nothingFound": "No provider matches.",
+      "kind": {
+        "all": "All",
+        "gateway": "Payment institutions",
+        "bank": "Bank virtual POS",
+        "wallet": "Wallets"
+      },
+      "count": "{n} providers",
+      "checkable": "Can be checked",
+      "notCheckable": "No online check",
+      "state": {
+        "activeLive": "Active · live",
+        "activeTest": "Active · test",
+        "failed": "Check failed",
+        "saved": "Saved",
+        "notSet": "Not set up"
+      },
+      "mode": {
+        "live": "Live",
+        "test": "Test"
+      },
+      "credentialsFor": {
+        "live": "Live credentials",
+        "test": "Test credentials"
+      },
+      "credentials": "Credentials",
+      "website": "Website",
+      "docs": "Developer docs",
+      "confidence": {
+        "docs": "from the official docs",
+        "partial": "partly from the official docs",
+        "community": "from open-source integrations; confirm with the provider"
+      },
+      "label": "Name shown to customers",
+      "labelHelp": "Optional; the provider name is used otherwise.",
+      "useMode": "Mode in use",
+      "useModeHelp": "Both credential sets are kept; this decides which one payments use.",
+      "modeReady": "credentials complete",
+      "modeMissing": "credentials missing",
+      "optional": "optional",
+      "secretSet": "Saved, type to replace",
+      "only3d": "checked only by a real 3D Secure payment",
+      "liveWarning": "Live credentials take real payments. Enter the values from the provider’s production merchant panel.",
+      "testHelp": "Test (sandbox) credentials: payments here never move money. Use the provider’s test panel and test cards.",
+      "fillTest": "Fill in the public test account",
+      "fillTestHelp": "Published by the provider or its integrators; may change.",
+      "advanced": "Advanced",
+      "endpoint": "API address (override)",
+      "endpointHelp": "Leave empty to use the address shown. Only if the provider gave you a different one.",
+      "testCards": "Test cards",
+      "checkTitle": "Credential check",
+      "runCheck": "Check {mode} credentials",
+      "checkHow": "Sends a request that moves no money (a card BIN or installment query, a token request, or a status query for an order that does not exist) and reads the answer.",
+      "checkNone": "This provider has no request that can check credentials without starting a payment. Verify them with a test payment.",
+      "check": {
+        "ok": "Accepted",
+        "rejected": "Rejected",
+        "inconclusive": "Unclear",
+        "network": "Could not reach",
+        "unverifiable": "Cannot be checked"
+      },
+      "checkExplain": {
+        "ok": "The provider accepted these credentials.",
+        "rejected": "The provider refused them; see its message.",
+        "inconclusive": "The provider answered, but not in a way that proves the credentials. Read its message.",
+        "network": "Network, TLS or IP restriction problem. Many providers only accept registered server IPs.",
+        "unverifiable": "No online check exists for this provider."
+      },
+      "unverified": "Not verifiable by any API: {fields}. Confirm with a test 3D Secure payment.",
+      "notRecorded": "These values differ from the saved ones: save them, then check again to be able to activate.",
+      "lastCheck": "Last check: {time}",
+      "outdated": "made on earlier credentials",
+      "unsaved": "Unsaved changes in this tab.",
+      "threeD": "3D Secure models",
+      "activeIn": "Active ({mode})",
+      "inactive": "Inactive",
+      "activated": "Activated in {mode} mode.",
+      "deactivated": "Deactivated.",
+      "remove": "Remove",
+      "removed": "Provider removed.",
+      "removeTitle": "Remove {name}?",
+      "removeBody": "Both credential sets and check results are deleted.",
+      "cancel": "Cancel",
+      "close": "Close",
+      "save": "Save",
+      "saved": "Saved.",
+      "notes": {
+        "NO_SANDBOX_HOST": "There is no separate test server: test credentials use the live address.",
+        "TEST_HOST_UNCERTAIN": "Sources disagree about the test address. If the check cannot reach it, ask the provider and set it under Advanced.",
+        "FIXED_IP": "The provider only accepts requests from a registered fixed IP: register this server’s public IP in its panel.",
+        "TOKEN_ROTATES": "Each check issues a new access token, which ends the previous one. Avoid checking live credentials during live traffic.",
+        "WALLET_ONLY": "A wallet payment (the customer pays from their account), not a card virtual POS.",
+        "NO_SERVER_CHECK": "Credentials cannot be checked online for this provider; activation records that it was not verified.",
+        "THREE_D_KEY": "The 3D Secure key is used only in the bank’s 3D form; only a real test payment proves it.",
+        "IP_WHITELIST": "Banks usually require the server’s IP to be registered for live use.",
+        "SAME_HOST_FOR_TEST": "Test and live use the same address; test mode is chosen by the credentials or a test flag."
+      },
+      "saveFirst": "Save, check, then activate."
     }
   },
   "Firewalls": {

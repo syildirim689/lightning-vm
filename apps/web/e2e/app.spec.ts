@@ -448,7 +448,7 @@ test.describe('language', () => {
     await signIn(page, admin);
     await expect(page).toHaveURL(/\/admin$/);
     for (const path of ['/admin/servers', '/admin/vmware', '/admin/catalog', '/admin/system', '/admin/users', '/admin/roles', '/admin/settings',
-      '/admin/settings?tab=mail', '/admin/settings?tab=captcha', '/admin/settings?tab=sms', '/admin/settings?tab=notifications', '/', '/order', '/firewalls', '/account',
+      '/admin/settings?tab=mail', '/admin/settings?tab=captcha', '/admin/settings?tab=sms', '/admin/settings?tab=payments', '/admin/settings?tab=notifications', '/', '/order', '/firewalls', '/account',
       '/account?tab=security', '/account?tab=notifications']) {
       await page.goto(path);
       await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
@@ -533,6 +533,38 @@ test.describe('people, settings and smart features (English browser)', () => {
     await page.getByRole('alertdialog').getByRole('button', { name: 'Delete' }).click();
     await expect(page).toHaveURL(/\/firewalls$/);
     await expect(page.getByRole('link', { name: new RegExp(name) })).toHaveCount(0);
+  });
+
+  test('payments: live credentials saved apart from test ones, checked, activated and removed', async ({ page }) => {
+    await signIn(page, admin);
+    await expect(page).toHaveURL(/\/admin$/);
+    await page.goto('/admin/settings?tab=payments');
+    await expect(page.getByText('No payment method is active.', { exact: false })).toBeVisible();
+    await page.getByLabel('Search providers').fill('shopier');
+    await page.getByRole('button', { name: /Shopier/ }).click();
+    const dialog = page.getByRole('dialog');
+    await dialog.getByRole('tab', { name: 'Live credentials' }).click();
+    await dialog.getByRole('textbox', { name: 'API key' }).fill('e2e-live-key');
+    await dialog.getByLabel('API secret').fill('e2e-live-secret');
+    await dialog.getByRole('button', { name: 'Mode in use' }).click();
+    await page.getByRole('option', { name: /^Live/ }).click();
+    await dialog.getByRole('button', { name: 'Save' }).click();
+    await expect(page.getByText('Saved.').first()).toBeVisible();
+    // Not checked yet: activating is refused with the reason.
+    await dialog.getByRole('switch').dispatchEvent('click'); // a toast may cover its spot
+    await expect(page.getByText('Check the saved credentials of this mode first.')).toBeVisible();
+    await dialog.getByRole('button', { name: 'Check Live credentials' }).click();
+    await expect(dialog.getByText('Cannot be checked').first()).toBeVisible();
+    await dialog.getByRole('switch').dispatchEvent('click'); // a toast may cover its spot
+    await expect(page.getByText('Activated in Live mode.')).toBeVisible();
+    // The secret is never sent back: the field stays empty with a "saved" hint.
+    await expect(dialog.getByLabel('API secret')).toHaveValue('');
+    await dialog.getByRole('button', { name: 'Close' }).last().click();
+    await expect(page.getByRole('button', { name: /Shopier/ }).last()).toContainText('Active · live'); // the card; the first one is the active list
+    await page.getByRole('button', { name: /Shopier/ }).last().click();
+    await page.getByRole('dialog').getByRole('button', { name: 'Remove' }).click();
+    await page.getByRole('alertdialog').getByRole('button', { name: 'Remove' }).click();
+    await expect(page.getByText('Provider removed.')).toBeVisible();
   });
 
   test('every page fits a 390 px phone without sideways scrolling', async ({ browser }) => {
