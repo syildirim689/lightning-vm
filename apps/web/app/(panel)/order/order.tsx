@@ -30,6 +30,9 @@ export default function Order() {
   const d = useOrder();
   const queryClient = useQueryClient();
   const keys = useSshKeys();
+  const tf = useTranslations('Firewalls');
+  const firewalls = useApiQuery<{ firewalls: { id: string; name: string }[] }>(['firewalls'], '/firewalls').data?.firewalls ?? [];
+  const [firewallIds, setFirewallIds] = useState<string[]>([]);
   const catalog = useApiQuery<Catalog>(['catalog'], '/catalog').data;
   const projects = useApiQuery<{ projects: Project[] }>(['projects'], '/projects').data?.projects ?? [];
   const mine = useApiQuery<{ servers: { name: string }[] }>(['servers'], '/servers').data?.servers ?? [];
@@ -84,7 +87,7 @@ export default function Order() {
     if (taken.has(d.name)) { setNameError(field('NAME_TAKEN')); return; }
     setBusy(true);
     try {
-      const out = await apiFetch<{ serverId: string }>('/servers', { method: 'POST', body: { ...body, name: d.name, sshKeyIds: d.sshKeyIds }, headers: { 'idempotency-key': intent.key() } });
+      const out = await apiFetch<{ serverId: string }>('/servers', { method: 'POST', body: { ...body, name: d.name, sshKeyIds: d.sshKeyIds, firewallIds }, headers: { 'idempotency-key': intent.key() } });
       intent.reset(); d.clear(); queryClient.invalidateQueries({ queryKey: ['tasks'] }); router.push(`/servers/${out.serverId}`);
     } catch (e) {
       setFailure({ ...(e as ApiError), text: error(e) });
@@ -156,6 +159,8 @@ export default function Order() {
             {keys.length === 0 ? <Notice tone="warning">{t('noKeys')} <ButtonLink href="/account" size="sm" variant="secondary" className="ml-2">{t('manageKeys')}</ButtonLink></Notice>
               : <CheckboxList label={t('sshKeys')} value={d.sshKeyIds} onChange={(v) => d.set({ sshKeyIds: v })} error={quoteField('sshKeyIds')}
                   options={keys.map((k) => ({ id: k.id, label: k.name }))}/>}
+            {firewalls.length > 0 && <CheckboxList label={tf('title')} value={firewallIds} onChange={setFirewallIds} error={quoteField('firewallIds')}
+              help={tf('orderHelp')} options={firewalls.map((f) => ({ id: f.id, label: f.name }))}/>}
           </div>
         </Section>
       </div>

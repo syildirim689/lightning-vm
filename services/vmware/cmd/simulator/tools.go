@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/lightning-vm/lightning-vm/services/vmware/simfw"
 	"github.com/vmware/govmomi/simulator"
 	"github.com/vmware/govmomi/vim25/types"
 )
@@ -26,6 +27,7 @@ func simulateGuestTools(model *simulator.Model) {
 				continue
 			}
 			ctx.WithLock(e, func() {
+				simfw.AssignPorts(vm) // static port binding, so firewalls can be applied
 				want, status := types.VirtualMachineToolsRunningStatusGuestToolsNotRunning, types.VirtualMachineToolsStatusToolsNotRunning
 				if vm.Runtime.PowerState == types.VirtualMachinePowerStatePoweredOn {
 					want, status = types.VirtualMachineToolsRunningStatusGuestToolsRunning, types.VirtualMachineToolsStatusToolsOk

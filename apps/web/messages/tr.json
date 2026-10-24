@@ -199,7 +199,14 @@
     "YOU_CANNOT_BAN_YOURSELF": "Kendinizi yasaklayamazsınız.",
     "YOU_CANNOT_REMOVE_YOURSELF": "Kendinizi silemezsiniz.",
     "YOU_CANNOT_IMPERSONATE_ADMINS": "Yöneticiler adına giriş yapılamaz.",
-    "BANNED_USER": "Hesabınız yasaklandı."
+    "BANNED_USER": "Hesabınız yasaklandı.",
+    "FIREWALL_NOT_SUPPORTED": "Bu konum firewall uygulayamıyor (distributed switch'li vCenter gerekir).",
+    "FIREWALL_LIMIT": "Bir sunucuya en fazla 5 firewall bağlanabilir.",
+    "FIREWALL_IN_USE": "Silmeden önce firewall'u sunuculardan ayırın.",
+    "FIREWALL_NEEDS_DVS": "Sunucunun ağ kartı distributed switch üzerinde değil; firewall uygulanamıyor. Sağlayıcınıza başvurun.",
+    "FIREWALL_NO_PORT": "Sunucunun ağ kartına distributed port atanmamış (port grubu static binding kullanmalı). Sağlayıcınıza başvurun.",
+    "FIREWALL_TOO_MANY_RULES": "Bu sunucunun firewall'larında toplam kural sayısı çok fazla (en fazla 500 filtre kuralı).",
+    "FIREWALL_APPLY_FAILED": "VMware firewall kurallarını kabul etmedi."
   },
   "Auth": {
     "required": "zorunlu",
@@ -295,7 +302,10 @@
     "INVALID_ROLE_KEY": "Küçük harfle başlayan 2-32 karakter: harf, rakam, - ve _.",
     "ROLE_EXISTS": "Bu anahtarla bir rol zaten var.",
     "NOT_FOR_ADMINS": "Yönetici rolüne kişiye özel izin eklenemez.",
-    "NOT_SUPPORTED_BY_VERSION": "Bu vSphere sürümü bu yöntemi desteklemiyor."
+    "NOT_SUPPORTED_BY_VERSION": "Bu vSphere sürümü bu yöntemi desteklemiyor.",
+    "INVALID_NETWORK": "203.0.113.0/24 gibi IP adresleri veya ağlar girin (1-100 adet).",
+    "TOO_MANY_RULES": "Bir firewall'da en fazla 50 kural olabilir.",
+    "FIREWALL_LIMIT": "Sunucu başına en fazla 5 firewall."
   },
   "Setup": {
     "title": "Kurulum sihirbazı",
@@ -966,7 +976,8 @@
       "reset": "resetleniyor",
       "destroy": "VM siliniyor",
       "verify_gone": "silindiği doğrulanıyor",
-      "done": "bitti"
+      "done": "bitti",
+      "firewall": "firewall uygulanıyor"
     },
     "action": {
       "power_on": "Aç",
@@ -1126,7 +1137,8 @@
     "impersonating": "{email} adına görüntülüyorsunuz.",
     "stopImpersonating": "Kendi hesabıma dön",
     "search": "Ara veya git…",
-    "staffBadge": "Ekip"
+    "staffBadge": "Ekip",
+    "firewalls": "Firewall'lar"
   },
   "Dashboard": {
     "eyebrow": "YÖNETİM",
@@ -1506,6 +1518,10 @@
       "admin_insight": {
         "title": "Kritik uyarı",
         "help": "Kapasite, IP, bağlantı, çalışan veya yedekle ilgili kritik bir içgörü çıktığında (günde en fazla bir kez)."
+      },
+      "server_firewall_failed": {
+        "title": "Firewall uygulanamadı",
+        "help": "Bir firewall'un kuralları sunucuya yazılamadığında."
       }
     },
     "policyTitle": "Önce yönetici, sonra kullanıcı",
@@ -1701,7 +1717,8 @@
       "settings_view": "Ayarları görme",
       "settings_manage": "Ayarları değiştirme",
       "system_view": "Sistemi görme",
-      "audit_view": "Denetim kayıtlarını görme"
+      "audit_view": "Denetim kayıtlarını görme",
+      "firewalls_manage": "Firewall yönetimi"
     },
     "help": {
       "dashboard_view": "Yönetim panosu, içgörüler ve özet grafikler.",
@@ -1725,7 +1742,8 @@
       "settings_view": "Marka, e-posta, bot koruması, SMS ve bildirim ayarlarını görme.",
       "settings_manage": "Bu ayarları değiştirme ve entegrasyonları test etme.",
       "system_view": "Sistem sağlığı, yedekler ve güncellemeler.",
-      "audit_view": "Kim, ne zaman, ne yaptı kayıtları."
+      "audit_view": "Kim, ne zaman, ne yaptı kayıtları.",
+      "firewalls_manage": "Firewall oluşturur ve kendi sunucularına bağlar."
     }
   },
   "Settings": {
@@ -1953,5 +1971,83 @@
       "testToHelp": "Ülke koduyla, örneğin +905321234567.",
       "sendTest": "Test SMS’i gönder"
     }
+  },
+  "Firewalls": {
+    "title": "Firewall'lar",
+    "loading": "Yükleniyor…",
+    "create": "Firewall oluştur",
+    "created": "Firewall oluşturuldu.",
+    "cancel": "Vazgeç",
+    "save": "Kaydet",
+    "saved": "Kaydedildi.",
+    "intro": "Sunucularınıza bağladığınız kural setleri. Hiçbir kuralın izin vermediği gelen trafik engellenir; giden kural eklemezseniz giden trafik serbesttir. Kuralları VMware sanal anahtarda uygular; sunucunun içinde ne çalışırsa çalışsın geçerlidir.",
+    "emptyTitle": "Henüz firewall yok",
+    "emptyBody": "Bir şablondan oluşturun (örneğin web sunucusu: SSH, HTTP, HTTPS ve ping) ve sunucularınıza bağlayın.",
+    "ruleCount": "{in} gelen · {out} giden kural",
+    "ruleShort": "{n} kural",
+    "noServers": "Hiçbir sunucuya bağlı değil.",
+    "name": "Ad",
+    "template": "Başlangıç",
+    "templateHelp": "Tüm kuralları sonradan değiştirebilirsiniz.",
+    "templates": {
+      "empty": "Boş (tüm gelen trafiği engeller)",
+      "web": "Web sunucusu",
+      "ssh": "Yalnızca SSH",
+      "windows": "Windows (RDP)"
+    },
+    "templateDesc": {
+      "empty": "Kural yok: kural ekleyene kadar sunucuya hiçbir şey ulaşmaz.",
+      "web": "Her yerden SSH, HTTP, HTTPS ve ping.",
+      "ssh": "Her yerden SSH ve ping.",
+      "windows": "Her yerden Uzak Masaüstü ve ping."
+    },
+    "applyTo": "Uygulanacak sunucular",
+    "applyHelp": "Bir sunucuya en fazla {n} firewall bağlanabilir; kuralları toplanır.",
+    "rename": "Yeniden adlandır",
+    "remove": "Sil",
+    "removed": "Firewall silindi.",
+    "removeTitle": "{name} silinsin mi?",
+    "removeBody": "Firewall ve kuralları silinir.",
+    "removeInUse": "Hâlâ {n} sunucuya bağlı. Önce bağlantıyı kaldırın.",
+    "howTitle": "Kurallar nasıl çalışır",
+    "howBody": "Gelen: yalnızca bir kuralın izin verdiği trafik girer (sunucunun kendi açtığı bağlantıların yanıtlarına her zaman izin verilir). Giden: giden kural ekleyene kadar her şeye izin verilir; ekledikten sonra yalnızca kuralların izin verdiği trafik çıkar. Değişiklikler birkaç saniye içinde bağlı tüm sunuculara uygulanır.",
+    "inbound": "Gelen kurallar",
+    "outbound": "Giden kurallar",
+    "inboundHelp": "Sunucunuza gelen trafik. Kaynak: hangi adreslerin bağlanabileceği.",
+    "outboundHelp": "Sunucunuzdan çıkan trafik. Tüm giden trafiğe izin vermek için boş bırakın.",
+    "noInbound": "Gelen kural yok: tüm gelen trafik engellenir.",
+    "noOutbound": "Giden kural yok: tüm giden trafiğe izin verilir.",
+    "addRule": "Kural",
+    "removeRule": "Kuralı kaldır",
+    "protocol": "Protokol",
+    "port": "Port veya aralık",
+    "allPorts": "tümü",
+    "sources": "Kaynak adresler",
+    "destinations": "Hedef adresler",
+    "anywhere": "Her yer (IPv4 ve IPv6)",
+    "ipsHelp": "adresler veya ağlar, virgülle ayrılmış",
+    "description": "Açıklama",
+    "unsaved": "Kaydedilmemiş değişiklikler",
+    "ruleTotal": "{n} / {max} kural",
+    "discard": "Geri al",
+    "saveRules": "Kuralları kaydet",
+    "servers": "Sunucular",
+    "serversHelp": "Bu firewall'un koruduğu sunucular (sunucu başına en fazla {n} firewall).",
+    "server": "Sunucu",
+    "state": "Kurallar",
+    "attach": "Bağla",
+    "detach": "Bağlantıyı kaldır",
+    "reapply": "Yeniden uygula",
+    "pendingHelp": "yeni kuralların VMware'e yazıldığını gösterir.",
+    "status": {
+      "applied": "Uygulandı",
+      "pending": "Uygulanıyor",
+      "failed": "Başarısız"
+    },
+    "manage": "Firewall'lar",
+    "serverProtected": "Bu sunucuya bağlı firewall'lar.",
+    "serverOpen": "Firewall yok: bu sunucunun tüm portlarına erişilebilir.",
+    "serverNone": "Bağlı firewall yok. Firewall'lar sayfasından bağlayabilirsiniz.",
+    "orderHelp": "İsteğe bağlı. Sunucu ilk kez açılmadan önce uygulanır."
   }
 }

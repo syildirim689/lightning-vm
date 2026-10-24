@@ -1,5 +1,5 @@
 import { Queue, Worker } from 'bullmq';
-import { processOperation, reconcile } from './operations.mjs';
+import { processFirewall, processOperation, reconcile } from './operations.mjs';
 import pg from 'pg';
 import { Redis } from 'ioredis';
 import { writeFile } from 'node:fs/promises';
@@ -14,6 +14,9 @@ const notify = (event, to, data) => notifications.add('notify', { event, to, dat
   { attempts: 3, backoff: { type: 'exponential', delay: 10_000 }, removeOnComplete: true, removeOnFail: 100 }).catch(() => log('error', 'notify_enqueue_failed', { event }));
 const worker = new Worker('operations', (job) => processOperation(pool, job, log, notify), { connection: redis, concurrency: 4 });
 const operations = new Queue('operations', { connection: redis });
+// Firewall changes are applied one at a time, so an older job can never overwrite newer rules.
+const firewallWorker = new Worker('firewalls', (job) => processFirewall(pool, job, log, notify), { connection: redis.duplicate(), concurrency: 1 });
+const firewalls = new Queue('firewalls', { connection: redis });
 const jobOptions = { attempts: 6, backoff: { type: 'exponential', delay: 5000 }, removeOnComplete: true, removeOnFail: true };
 
 // Recovery: an operation still open in PostgreSQL but without a queued job (Redis lost it, the API
@@ -30,6 +33,10 @@ async function recover() {
       count++;
     }
     if (count) log('info', 'operations_recovered', { count });
+    // Firewall versions not yet applied (a lost job, or the API could not queue): queued again.
+    const { rows: fw } = await pool.query(`SELECT id, firewall_version FROM servers WHERE firewall_applied_version < firewall_version AND firewall_error IS NULL
+      AND vm_moref IS NOT NULL AND state NOT IN ('deleted', 'deleting', 'provisioning') AND updated_at < now() - make_interval(secs => $1)`, [Number(process.env.RECOVERY_STALE_SECONDS) || 90]);
+    for (const r of fw) await firewalls.add('apply', { serverId: r.id }, { attempts: 5, backoff: { type: 'exponential', delay: 5000 }, removeOnComplete: true, removeOnFail: true, jobId: `fw-${r.id}-${r.firewall_version}` });
   } catch (e) { log('error', 'recovery_failed', { code: e.code, error: String(e.message).slice(0, 200) }); }
 }
 const recoveryTimer = setInterval(recover, (Number(process.env.RECOVERY_SECONDS) || 60) * 1000);
@@ -86,6 +93,6 @@ async function copyConsoleEvents() {
 }
 copyConsoleEvents();
 
-async function close() { if (closing) return; closing = true; clearInterval(timer); clearInterval(recoveryTimer); clearInterval(reconcileTimer); await worker.close(); await maintenance.close(); await operations.close(); events.disconnect(); redis.disconnect(); await pool.end(); }
+async function close() { if (closing) return; closing = true; clearInterval(timer); clearInterval(recoveryTimer); clearInterval(reconcileTimer); await worker.close(); await firewallWorker.close(); await firewalls.close(); await maintenance.close(); await operations.close(); events.disconnect(); redis.disconnect(); await pool.end(); }
 process.on('SIGTERM', close); process.on('SIGINT', close);
 log('info', 'started');

@@ -239,3 +239,50 @@ test('deleting releases the IP and reservation only after VMware confirms the VM
   const steps = (await pool.query("SELECT step FROM operations WHERE server_id = $1 AND kind = 'delete'", [id])).rows[0].step;
   assert.equal(steps, 'done');
 });
+
+test('firewalls: rules are validated and owned, and applied to the distributed port before first boot', { skip }, async () => {
+  const bad = await send('POST', '/firewalls', { name: 'web', rules: [{ direction: 'in', protocol: 'tcp', port: '99999', ips: ['0.0.0.0/0'] },
+    { direction: 'sideways', protocol: 'tcp', port: '22', ips: ['nope'] }] }, user);
+  assert.equal(bad.statusCode, 400);
+  assert.deepEqual(bad.json().fields, { 'rules.0.port': 'INVALID_PORT', 'rules.1.direction': 'INVALID_VALUE', 'rules.1.ips': 'INVALID_NETWORK' });
+  const rules = [{ direction: 'in', protocol: 'tcp', port: '22', ips: ['0.0.0.0/0', '::/0'], description: 'ssh' }, { direction: 'in', protocol: 'icmp', ips: ['0.0.0.0/0'] }];
+  const fw = (await send('POST', '/firewalls', { name: 'web', rules }, user)).json();
+  assert.equal(fw.rules[1].port, null);
+  assert.equal((await send('POST', '/firewalls', { name: 'web', rules: [] }, user)).json().fields.name, 'NAME_TAKEN');
+  assert.equal((await send('GET', `/firewalls/${fw.id}`, undefined, other)).statusCode, 404);
+  assert.equal((await send('GET', '/firewalls', undefined, other)).json().firewalls.length, 0);
+
+  // A server on a standard switch: the firewall cannot be enforced, and the server shows why.
+  const std = (await create(order('fw-std'))).json().serverId;
+  await until(async () => (await serverRow(std)).state === 'ready', 'standard-switch server ready');
+  assert.equal((await send('POST', `/firewalls/${fw.id}/servers`, { serverIds: [std] }, other)).statusCode, 404);
+  assert.equal((await send('POST', `/firewalls/${fw.id}/servers`, { serverIds: [std] }, user)).statusCode, 200);
+  const failed = await until(async () => { const s = (await send('GET', `/firewalls/${fw.id}`, undefined, user)).json().servers[0]; return s.status === 'failed' && s; }, 'firewall failure recorded');
+  assert.equal(failed.errorCode, 'FIREWALL_NEEDS_DVS');
+  assert.equal((await send('DELETE', `/firewalls/${fw.id}`, undefined, user)).json().code, 'FIREWALL_IN_USE');
+
+  // A location on the distributed switch: ordered with the firewall, which is in place before the first boot.
+  const { rows: [dv] } = await pool.query("SELECT moref FROM vmware_networks WHERE connection_id = $1 AND kind = 'distributed' AND name NOT ILIKE '%uplink%' LIMIT 1", [connectionId]);
+  const p = (await send('GET', '/admin/pools')).json().pools.find((x) => x.id === poolId);
+  const dvPool = (await send('POST', '/admin/pools', { name: 'Sim DVS', connectionId, computeMoref: p.computeMoref, datastoreMorefs: p.datastoreMorefs, networkMoref: dv.moref,
+    cpuOvercommit: 16, memoryOvercommit: 4, storageOvercommit: 10, reserveCpuPct: 0, reserveMemoryPct: 0, reserveStoragePct: 0 })).json().id;
+  await send('POST', '/admin/ip-pools', { name: 'dvs', poolId: dvPool, cidr: '10.40.0.0/24', gateway: '10.40.0.1', dns: ['10.40.0.53'], rangeStart: '10.40.0.10', rangeEnd: '10.40.0.20' });
+  const pkg = (await send('POST', '/admin/packages', { name: 'Tiny DVS', vcpu: 1, memoryMb: 512, diskGb: 10, priceMonthly: '1.00', currency: 'EUR', poolIds: [dvPool], imageIds: [imageId] })).json().id;
+  const res = await create({ ...order('fw-dvs'), poolId: dvPool, packageId: pkg, firewallIds: [fw.id] });
+  assert.equal(res.statusCode, 202, res.body);
+  const dvs = res.json().serverId;
+  await until(async () => (await serverRow(dvs)).state === 'ready', 'distributed-switch server ready');
+  let row = await serverRow(dvs);
+  assert.deepEqual([row.firewall_version, row.firewall_applied_version, row.firewall_error], [1, 1, null]);
+  assert.ok((await pool.query("SELECT 1 FROM operations WHERE server_id = $1 AND kind = 'create' AND status = 'succeeded'", [dvs])).rowCount);
+
+  // Changing the rules or detaching re-applies; each change is a new version.
+  assert.equal((await send('PUT', `/firewalls/${fw.id}`, { rules: [rules[0]] }, user)).statusCode, 200);
+  await until(async () => (await serverRow(dvs)).firewall_applied_version === 2, 'changed rules applied');
+  assert.equal((await send('DELETE', `/firewalls/${fw.id}/servers/${dvs}`, undefined, user)).statusCode, 200);
+  await until(async () => (await serverRow(dvs)).firewall_applied_version === 3, 'detach applied');
+  row = await serverRow(dvs);
+  assert.equal(row.firewall_error, null);
+  assert.equal((await send('DELETE', `/firewalls/${fw.id}/servers/${std}`, undefined, user)).statusCode, 200);
+  assert.equal((await send('DELETE', `/firewalls/${fw.id}`, undefined, user)).statusCode, 204);
+});

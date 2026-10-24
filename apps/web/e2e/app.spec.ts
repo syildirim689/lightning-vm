@@ -448,7 +448,7 @@ test.describe('language', () => {
     await signIn(page, admin);
     await expect(page).toHaveURL(/\/admin$/);
     for (const path of ['/admin/servers', '/admin/vmware', '/admin/catalog', '/admin/system', '/admin/users', '/admin/roles', '/admin/settings',
-      '/admin/settings?tab=mail', '/admin/settings?tab=captcha', '/admin/settings?tab=sms', '/admin/settings?tab=notifications', '/', '/order', '/account',
+      '/admin/settings?tab=mail', '/admin/settings?tab=captcha', '/admin/settings?tab=sms', '/admin/settings?tab=notifications', '/', '/order', '/firewalls', '/account',
       '/account?tab=security', '/account?tab=notifications']) {
       await page.goto(path);
       await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
@@ -500,15 +500,56 @@ test.describe('people, settings and smart features (English browser)', () => {
     await expect(page).toHaveURL(/\/admin\/roles$/);
   });
 
+  test('firewalls: created from a template, rules edited and checked, deleted', async ({ page }) => {
+    await signIn(page, admin);
+    await expect(page).toHaveURL(/\/admin$/);
+    await page.getByRole('link', { name: 'Firewalls' }).click();
+    await page.getByRole('button', { name: 'Create firewall' }).first().click();
+    const dialog = page.getByRole('dialog');
+    const name = 'e2e-web-' + Date.now().toString(36);
+    await dialog.getByLabel('Name').fill(name);
+    await dialog.getByRole('button', { name: 'Create firewall' }).click();
+    await expect(page).toHaveURL(/\/firewalls\/[0-9a-f-]{36}$/);
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText(name);
+    // The web template: SSH, HTTP, HTTPS and ping.
+    const descriptions = page.getByRole('textbox', { name: 'Description' });
+    await expect(descriptions).toHaveCount(4);
+    for (const [i, d] of ['SSH', 'HTTP', 'HTTPS', 'Ping'].entries()) await expect(descriptions.nth(i)).toHaveValue(d);
+    await expect(page.getByText('No outbound rules: all outgoing traffic is allowed.')).toBeVisible();
+    // A bad port is refused by the API and shown under the field.
+    await page.getByRole('button', { name: 'Rule', exact: true }).first().click();
+    await page.getByRole('textbox', { name: 'Port or range' }).last().fill('70000');
+    await page.getByRole('button', { name: 'Save rules' }).click();
+    await expect(page.getByText('Port must be between 1 and 65535.')).toBeVisible();
+    await page.getByRole('textbox', { name: 'Port or range' }).last().fill('8000-8100');
+    await page.getByRole('button', { name: 'Save rules' }).click();
+    await expect(page.getByText('Saved.').first()).toBeVisible();
+    await expect(page.getByText('5 of 50 rules')).toBeVisible();
+    await page.goto('/firewalls');
+    const card = page.getByRole('link', { name: new RegExp(name) });
+    await expect(card).toContainText('5 inbound · 0 outbound rules');
+    await card.click();
+    await page.getByRole('button', { name: 'Delete' }).click();
+    await page.getByRole('alertdialog').getByRole('button', { name: 'Delete' }).click();
+    await expect(page).toHaveURL(/\/firewalls$/);
+    await expect(page.getByRole('link', { name: new RegExp(name) })).toHaveCount(0);
+  });
+
   test('every page fits a 390 px phone without sideways scrolling', async ({ browser }) => {
     const page = await (await browser.newContext({ locale: 'en-US', viewport: { width: 390, height: 844 } })).newPage();
     await signIn(page, admin);
     await expect(page).toHaveURL(/\/admin$/);
-    for (const path of ['/admin', '/admin/servers', '/admin/vmware', '/admin/catalog', '/admin/users', '/admin/roles', '/admin/settings?tab=mail', '/admin/system', '/', '/order', '/account?tab=security']) {
+    for (const path of ['/admin', '/admin/servers', '/admin/vmware', '/admin/catalog', '/admin/users', '/admin/roles', '/admin/settings?tab=mail', '/admin/system', '/', '/order', '/firewalls', '/account?tab=security']) {
       await page.goto(path);
       await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
-      const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
-      expect(overflow, path).toBeLessThanOrEqual(1);
+      // On failure the message names the innermost elements sticking out, so a CI run alone is enough to fix it.
+      const [overflow, culprits] = await page.evaluate(() => {
+        const w = window.innerWidth;
+        const out = [...document.querySelectorAll('body *')].filter((e) => e.getBoundingClientRect().right > w + 1
+          && ![...e.children].some((c) => c.getBoundingClientRect().right > w + 1));
+        return [document.documentElement.scrollWidth - w, out.slice(0, 5).map((e) => `${e.tagName.toLowerCase()}.${String(e.className).slice(0, 60)} "${(e.textContent ?? '').trim().slice(0, 30)}"`).join(' | ')];
+      });
+      expect(overflow, `${path}: ${culprits}`).toBeLessThanOrEqual(1);
     }
   });
 });

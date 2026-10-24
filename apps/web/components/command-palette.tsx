@@ -51,6 +51,7 @@ export default function CommandPalette({ permissions, isOpen, onOpenChange }: { 
       ['/admin/system', tn('system'), <I key="i" name="activity" size={16}/>, can(permissions, 'system.view')],
       ['/', tn('myServers'), <I key="i" name="gauge" size={16}/>, true],
       ['/order', tn('newServer'), <I key="i" name="plus" size={16}/>, can(permissions, 'servers.create')],
+      ['/firewalls', tn('firewalls'), <I key="i" name="brick-wall-fire" size={16}/>, can(permissions, 'firewalls.manage') || can(permissions, 'servers.view_all')],
       ['/account', tn('account'), <I key="i" name="key-round" size={16}/>, true],
       ['/account?tab=notifications', t('notificationSettings'), <I key="i" name="bell" size={16}/>, true],
     ];

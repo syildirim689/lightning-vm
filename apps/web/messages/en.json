@@ -199,7 +199,14 @@
     "YOU_CANNOT_BAN_YOURSELF": "You cannot ban yourself.",
     "YOU_CANNOT_REMOVE_YOURSELF": "You cannot remove yourself.",
     "YOU_CANNOT_IMPERSONATE_ADMINS": "Administrators cannot be impersonated.",
-    "BANNED_USER": "Your account is banned."
+    "BANNED_USER": "Your account is banned.",
+    "FIREWALL_NOT_SUPPORTED": "This location cannot enforce firewalls (it needs vCenter with a distributed switch).",
+    "FIREWALL_LIMIT": "A server can have at most 5 firewalls.",
+    "FIREWALL_IN_USE": "Detach the firewall from its servers before deleting it.",
+    "FIREWALL_NEEDS_DVS": "The server’s network card is not on a distributed switch, so the firewall cannot be enforced. Ask your provider.",
+    "FIREWALL_NO_PORT": "The server’s network card has no distributed port (the port group must use static binding). Ask your provider.",
+    "FIREWALL_TOO_MANY_RULES": "Together the firewalls of this server have too many rules (at most 500 filter rules).",
+    "FIREWALL_APPLY_FAILED": "VMware refused the firewall rules."
   },
   "Auth": {
     "required": "required",
@@ -295,7 +302,10 @@
     "INVALID_ROLE_KEY": "2–32 characters starting with a lowercase letter: letters, digits, - and _.",
     "ROLE_EXISTS": "A role with this key exists.",
     "NOT_FOR_ADMINS": "The administrator role takes no personal permissions.",
-    "NOT_SUPPORTED_BY_VERSION": "This vSphere version does not support this method."
+    "NOT_SUPPORTED_BY_VERSION": "This vSphere version does not support this method.",
+    "INVALID_NETWORK": "Enter IP addresses or networks such as 203.0.113.0/24 (1 to 100).",
+    "TOO_MANY_RULES": "At most 50 rules per firewall.",
+    "FIREWALL_LIMIT": "At most 5 firewalls per server."
   },
   "Setup": {
     "title": "Setup wizard",
@@ -966,7 +976,8 @@
       "reset": "resetting",
       "destroy": "deleting the VM",
       "verify_gone": "verifying it is gone",
-      "done": "done"
+      "done": "done",
+      "firewall": "applying the firewall"
     },
     "action": {
       "power_on": "Power on",
@@ -1126,7 +1137,8 @@
     "impersonating": "You are viewing as {email}.",
     "stopImpersonating": "Back to my account",
     "search": "Search or jump to…",
-    "staffBadge": "Team"
+    "staffBadge": "Team",
+    "firewalls": "Firewalls"
   },
   "Dashboard": {
     "eyebrow": "ADMINISTRATION",
@@ -1506,6 +1518,10 @@
       "admin_insight": {
         "title": "Critical alert",
         "help": "When a critical insight about capacity, IPs, a connection, the worker or backups appears (at most daily)."
+      },
+      "server_firewall_failed": {
+        "title": "Firewall not applied",
+        "help": "When the rules of a firewall could not be written to a server."
       }
     },
     "policyTitle": "The admin first, then each user",
@@ -1701,7 +1717,8 @@
       "settings_view": "See settings",
       "settings_manage": "Change settings",
       "system_view": "See the system",
-      "audit_view": "See the audit log"
+      "audit_view": "See the audit log",
+      "firewalls_manage": "Manage firewalls"
     },
     "help": {
       "dashboard_view": "The admin dashboard, insights and summary charts.",
@@ -1725,7 +1742,8 @@
       "settings_view": "Branding, e-mail, bot protection, SMS and notification settings.",
       "settings_manage": "Change those settings and test the integrations.",
       "system_view": "System health, backups and updates.",
-      "audit_view": "Who did what, and when."
+      "audit_view": "Who did what, and when.",
+      "firewalls_manage": "Create firewalls and attach them to their own servers."
     }
   },
   "Settings": {
@@ -1953,5 +1971,83 @@
       "testToHelp": "With the country code, e.g. +905321234567.",
       "sendTest": "Send a test SMS"
     }
+  },
+  "Firewalls": {
+    "title": "Firewalls",
+    "loading": "Loading…",
+    "create": "Create firewall",
+    "created": "Firewall created.",
+    "cancel": "Cancel",
+    "save": "Save",
+    "saved": "Saved.",
+    "intro": "Rule sets you attach to your servers. Everything coming in that no rule allows is dropped; outgoing traffic is open unless you add outbound rules. VMware enforces the rules on the virtual switch, so they work whatever runs inside the server.",
+    "emptyTitle": "No firewalls yet",
+    "emptyBody": "Create one from a template (for example a web server: SSH, HTTP, HTTPS and ping) and attach it to your servers.",
+    "ruleCount": "{in} inbound · {out} outbound rules",
+    "ruleShort": "{n} rules",
+    "noServers": "Not attached to any server.",
+    "name": "Name",
+    "template": "Start from",
+    "templateHelp": "You can change every rule afterwards.",
+    "templates": {
+      "empty": "Empty (blocks all inbound traffic)",
+      "web": "Web server",
+      "ssh": "SSH only",
+      "windows": "Windows (RDP)"
+    },
+    "templateDesc": {
+      "empty": "No rules: nothing reaches the server until you add some.",
+      "web": "SSH, HTTP, HTTPS and ping from anywhere.",
+      "ssh": "SSH and ping from anywhere.",
+      "windows": "Remote Desktop and ping from anywhere."
+    },
+    "applyTo": "Apply to servers",
+    "applyHelp": "A server can have up to {n} firewalls; their rules add up.",
+    "rename": "Rename",
+    "remove": "Delete",
+    "removed": "Firewall deleted.",
+    "removeTitle": "Delete {name}?",
+    "removeBody": "The firewall and its rules are deleted.",
+    "removeInUse": "It is still attached to {n, plural, one {# server} other {# servers}}. Detach it first.",
+    "howTitle": "How the rules work",
+    "howBody": "Inbound: only what a rule allows gets in (replies to connections the server opens itself are always allowed). Outbound: everything is allowed until you add an outbound rule; then only what the rules allow goes out. Changes are applied to all attached servers within seconds.",
+    "inbound": "Inbound rules",
+    "outbound": "Outbound rules",
+    "inboundHelp": "Traffic to your server. Sources: which addresses may connect.",
+    "outboundHelp": "Traffic from your server. Leave empty to allow all outgoing traffic.",
+    "noInbound": "No inbound rules: all incoming traffic is blocked.",
+    "noOutbound": "No outbound rules: all outgoing traffic is allowed.",
+    "addRule": "Rule",
+    "removeRule": "Remove rule",
+    "protocol": "Protocol",
+    "port": "Port or range",
+    "allPorts": "all",
+    "sources": "Source addresses",
+    "destinations": "Destination addresses",
+    "anywhere": "Anywhere (IPv4 and IPv6)",
+    "ipsHelp": "addresses or networks, separated by commas",
+    "description": "Description",
+    "unsaved": "Unsaved changes",
+    "ruleTotal": "{n} of {max} rules",
+    "discard": "Discard",
+    "saveRules": "Save rules",
+    "servers": "Servers",
+    "serversHelp": "Servers protected by this firewall (at most {n} firewalls per server).",
+    "server": "Server",
+    "state": "Rules",
+    "attach": "Attach",
+    "detach": "Detach",
+    "reapply": "Apply again",
+    "pendingHelp": "means the new rules are being written to VMware.",
+    "status": {
+      "applied": "Applied",
+      "pending": "Applying",
+      "failed": "Failed"
+    },
+    "manage": "Firewalls",
+    "serverProtected": "Firewalls attached to this server.",
+    "serverOpen": "No firewall: every port of this server is reachable.",
+    "serverNone": "No firewall is attached. Attach one from the Firewalls page.",
+    "orderHelp": "Optional. Applied before the server first starts."
   }
 }

@@ -11,6 +11,7 @@ import { capacityOf, limitsFor, resolveOrder, usageOf } from './catalog';
 import { exceededQuota } from './capacity';
 import { openConsole } from './console';
 import { callAdapter, storedTarget } from './vmware';
+import { limits } from './firewalls';
 
 type Input = Record<string, unknown>;
 // BullMQ carries only the operation id (also the job id, so re-adding is harmless);
@@ -65,6 +66,8 @@ async function startOperation(req: AuthedRequest, server: { id: string; owner_id
 const serverColumns = `s.id, s.name, s.state, s.power_state AS "powerState", s.guest_ready AS "guestReady", s.vcpu, s.memory_mb AS "memoryMb", s.disk_gb AS "diskGb",
   s.price_monthly::text AS "priceMonthly", s.currency, s.error_code AS "errorCode", s.created_at AS "createdAt", s.project_id AS "projectId",
   p.name AS "poolName", p.location, i.name AS "imageName", host(a.address) AS address,
+  CASE WHEN s.firewall_applied_version >= s.firewall_version THEN 'applied' WHEN s.firewall_error IS NOT NULL THEN 'failed' ELSE 'pending' END AS "firewallStatus",
+  s.firewall_error AS "firewallError", (SELECT count(*)::int FROM firewall_servers fs WHERE fs.server_id = s.id) AS "firewallCount",
   (SELECT row_to_json(o) FROM (SELECT id, kind, status, step, error_code AS "errorCode", created_at AS "createdAt" FROM operations
     WHERE server_id = s.id ORDER BY created_at DESC LIMIT 1) o) AS "lastOperation"`;
 const serverJoins = 'FROM servers s JOIN resource_pools p ON p.id = s.pool_id JOIN os_images i ON i.id = s.image_id LEFT JOIN ip_allocations a ON a.server_id = s.id';
@@ -165,8 +168,15 @@ export class ServersController {
     const order = await resolveOrder(String(body.poolId ?? ''), body);
     const { rows: keys } = await pool.query('SELECT public_key FROM ssh_keys WHERE owner_id = $1 AND id = ANY($2::uuid[])', [req.user.id, sshKeyIds]).catch(() => ({ rows: [] }));
     if (keys.length !== sshKeyIds.length) throw apiError(400, 'VALIDATION_FAILED', 'Unknown key', { sshKeyIds: 'NOT_AVAILABLE' });
+    // Firewalls chosen at order time are applied before the VM is first powered on.
+    const firewallIds = Array.isArray(body.firewallIds) ? [...new Set(body.firewallIds.map(String))] : [];
+    if (firewallIds.length > limits.firewallsPerServer) throw apiError(400, 'VALIDATION_FAILED', 'Too many firewalls', { firewallIds: 'FIREWALL_LIMIT' });
+    if (firewallIds.length && (await pool.query('SELECT 1 FROM firewalls WHERE owner_id = $1 AND id = ANY($2::uuid[])', [req.user.id, firewallIds]).catch(() => ({ rowCount: 0 }))).rowCount !== firewallIds.length) {
+      throw apiError(400, 'VALIDATION_FAILED', 'Unknown firewall', { firewallIds: 'NOT_AVAILABLE' });
+    }
     const { rows: [conn] } = await pool.query('SELECT kind, operations FROM vmware_connections WHERE id = $1', [order.rp.connection_id]);
     if (conn.kind !== 'vcenter' || !conn.operations?.cloneFromImage) throw apiError(409, 'PROVISIONING_NOT_SUPPORTED', 'This location cannot create servers (needs vCenter with clone rights)');
+    if (firewallIds.length && !conn.operations?.firewall) throw apiError(409, 'FIREWALL_NOT_SUPPORTED', 'This location cannot enforce firewalls (needs vCenter with a distributed switch)');
 
     // Short transaction, no external calls: quota, capacity and IP are checked and taken under row
     // locks (owner, then pool), so concurrent requests can never take the same address or capacity twice.
@@ -194,6 +204,10 @@ export class ServersController {
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'provisioning', $12) RETURNING id`,
         [req.user.id, projectId, order.rp.id, order.imageId, order.packageId, name, order.shape.vcpu, order.shape.memoryMb, order.shape.diskGb, order.price.monthly, order.price.currency, keys.map((k) => k.public_key)]);
       await client.query('INSERT INTO ip_allocations (ip_pool_id, address, server_id) VALUES ($1, $2, $3)', [ip.ip_pool_id, ip.address, s.id]);
+      if (firewallIds.length) {
+        await client.query('INSERT INTO firewall_servers (firewall_id, server_id) SELECT unnest($1::uuid[]), $2', [firewallIds, s.id]);
+        await client.query('UPDATE servers SET firewall_version = 1 WHERE id = $1', [s.id]);
+      }
       const { rows: [op] } = await client.query(`INSERT INTO operations (kind, status, idempotency_key, request_hash, server_id, owner_id, step, deadline_at)
         VALUES ('create', 'pending', $1, $2, $3, $4, 'queued', now() + make_interval(mins => $5)) RETURNING id, kind, status`, [key, requestHash, s.id, req.user.id, deadlineMinutes.create]);
       await client.query('COMMIT');

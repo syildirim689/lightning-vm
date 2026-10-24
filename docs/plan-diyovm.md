@@ -72,3 +72,16 @@ orkestrasyonu kanıtlar.
   bağlantılar, katalog, yedek/güncelleme, ayarlar.
 - Müşteri: sunucularım, sipariş, sunucu detayı, SSH anahtarları.
 - Açık/koyu tema; TR/EN.
+
+## DiyoVM modülleri (diyovm.com/modullerimiz, 2026-10-24) ve Lightning VM karşılığı
+| Modül | Ne yapıyor | Lightning VM'de |
+|---|---|---|
+| Web Konsol | HTML5 konsol, Türkçe karakter | **Var** (WebMKS ağ geçidi, müşteri + yönetici). Türkçe klavye düzeni gerçek vCenter'da doğrulanmalı. |
+| Şifrede Reklam | Zayıf parola seçilince firma reklamı içeren güçlü parola atar | **Yok.** Sunucular SSH anahtarıyla kuruluyor; root parolası seçeneği eklenirse güçlü parola üretici + isteğe bağlı önek. |
+| PowerAdmin (rDNS) | PowerDNS-Admin ile otomatik rDNS | **Yok.** IP bloğu için PTR yönetimi: PowerDNS API (doğrudan) veya PowerDNS-Admin API; müşteri kendi IP'sinin PTR'ını düzenler, ileri DNS doğrulaması isteğe bağlı. |
+| Güç Takip | Fiziksel sunucularda günlük/haftalık/aylık kWh ve maliyet | **Yok.** vCenter host `power.power.average` sayacı (IPMI/iLO/iDRAC'tan) ile kWh ve TL maliyeti; yönetici paneli raporu. |
+| Nested Sunucu | Müşteriye nested ESXi kurar | **Yok.** Paket bayrağı: VM'de `nestedHVEnabled` + ESXi şablonu; promiscuous/forged transmit gerektirir. |
+| Hazır cPanel & Plesk | Sipariş sonrası lisanslı otomatik kurulum | **Yok.** Şablon başına cloud-init "uygulama": cPanel/Plesk kurulum betiği + lisans anahtarı/API (lisans sağlayıcı entegrasyonu ayrı). |
+| Sanal Veri Merkezi (VDC) | Toplu sunucu yönetimi, müşteriye kaynak havuzu | **Kısmen** (havuzlar, kotalar, projeler). Eksik: müşteriye ayrılmış kaynak havuzu (vCPU/RAM/disk kotası içinde kendi sunucularını oluşturma), toplu işlemler. |
+| Port Takip | IP'lerde açık/kapalı port kontrolü, mining gibi kötüye kullanım tespiti | **Yok.** Worker'da periyodik TCP tarama (izin verilen port listesi), madencilik havuzu portları/hedefleri için uyarı, yönetici bildirimi. |
+| Özel API Sunucusu | Müşteriye ayrılmış API sunucusu | **Kapsam dışı** (DiyoVM'in kendi barındırma hizmeti). Karşılığı: API anahtarları + OpenAPI (listede 7. madde). |

@@ -5,6 +5,7 @@ WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
 COPY cmd/simulator ./cmd/simulator
+COPY simfw ./simfw
 RUN CGO_ENABLED=0 go build -trimpath -o /simulator ./cmd/simulator
 
 FROM alpine:3.22

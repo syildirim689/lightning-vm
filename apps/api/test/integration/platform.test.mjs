@@ -72,7 +72,7 @@ test('built-in roles exist and permissions come with the session', async () => {
   assert.deepEqual(roles.sort(), ['admin', 'auditor', 'operator', 'support', 'user']);
   const me = (await get('/auth/me', user)).json();
   assert.deepEqual(me.roles, ['user']);
-  assert.deepEqual(me.permissions, ['servers.create']);
+  assert.deepEqual(me.permissions.sort(), ['firewalls.manage', 'servers.create']);
   assert.equal((await get('/admin/roles', user)).statusCode, 403);
   // Deny by default, and the denial is audited.
   assert.equal((await get('/admin/pools', user)).statusCode, 403);
@@ -89,7 +89,7 @@ test('a custom role grants exactly its permissions; overrides add or remove sing
   assert.equal((await get('/admin/pools', user)).statusCode, 200);
   assert.equal((await get('/admin/users', user)).statusCode, 403);
   const access = (await get(`/admin/users/${userId}/access`, admin)).json();
-  assert.deepEqual(access.effective, ['catalog.view', 'servers.create']);
+  assert.deepEqual(access.effective, ['catalog.view', 'firewalls.manage', 'servers.create']);
   await put(`/admin/users/${userId}/access`, { roles: ['user', 'helper'], overrides: [] }, admin);
 });
 

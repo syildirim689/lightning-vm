@@ -171,7 +171,7 @@ var privilegeChecks = []string{
 	"VirtualMachine.Interact.PowerOn", "VirtualMachine.Interact.PowerOff", "VirtualMachine.Interact.Reset",
 	"VirtualMachine.Interact.ConsoleInteract", "VirtualMachine.Config.CPUCount", "VirtualMachine.Config.Memory",
 	"VirtualMachine.Config.AddNewDisk", "VirtualMachine.Provisioning.Clone", "VirtualMachine.State.CreateSnapshot",
-	"Datastore.AllocateSpace", "Network.Assign", "Resource.AssignVMToPool",
+	"Datastore.AllocateSpace", "Network.Assign", "Resource.AssignVMToPool", "DVSwitch.PortConfig", "DVPortgroup.PolicyOp",
 }
 
 type Product struct {
@@ -399,6 +399,8 @@ func discover(ctx context.Context, g *netGuard, r Request) (*Result, error) {
 		"deleteVm":       write && has("VirtualMachine.Inventory.Delete"),
 		"snapshot":       write && has("VirtualMachine.State.CreateSnapshot"),
 		"console":        has("VirtualMachine.Interact.ConsoleInteract"),
+		// Firewalls are traffic filters on distributed switch ports (vCenter only).
+		"firewall": write && res.Product.Kind == "vcenter" && has("DVSwitch.PortConfig", "DVPortgroup.PolicyOp"),
 		// The vCenter Automation REST API (/api) exists only on vCenter, never on a standalone ESXi.
 		"automationApi": res.Product.Kind == "vcenter",
 	}

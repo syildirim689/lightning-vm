@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"sort"
 
+	"github.com/lightning-vm/lightning-vm/services/vmware/simfw"
 	"github.com/vmware/govmomi/simulator"
 	"github.com/vmware/govmomi/vim25/types"
 )
@@ -48,6 +49,7 @@ func main() {
 		vm.Config.Template, vm.Summary.Config.Template = true, true
 		vm.Runtime.PowerState, vm.Summary.Runtime.PowerState = types.VirtualMachinePowerStatePoweredOff, types.VirtualMachinePowerStatePoweredOff
 	}
+	simfw.Enable(model) // distributed-port traffic filters (firewalls)
 	if *webmks != "" {
 		host, port, err := net.SplitHostPort(*webmks)
 		if err != nil {

@@ -110,7 +110,7 @@ function openGateway(token) {
 const closed = (r) => new Promise((resolve) => { if (r.close) resolve(r.close); else r.ws.onclose = (e) => resolve({ code: e.code, reason: e.reason }); });
 
 test('console sessions are one-time, cookie-only and the ticket never reaches the browser', { skip: skip || (!consoleWs && 'needs CONSOLE_WS_URL') }, async () => {
-  const { rows: [vm] } = await pool.query("SELECT moref, name FROM vmware_vms WHERE connection_id = $1 AND power_state = 'poweredOn' AND NOT template LIMIT 1", [vcId]);
+  const { rows: [vm] } = await pool.query("SELECT moref, name FROM vmware_vms WHERE connection_id = $1 AND power_state = 'poweredOn' AND NOT template AND name NOT LIKE 'lvm-%' ORDER BY name LIMIT 1", [vcId]);
   const res = await send('POST', `/admin/vmware/connections/${vcId}/vms/${vm.moref}/console`);
   assert.equal(res.statusCode, 201, res.body);
   assert.doesNotMatch(res.body, /ticket|wss:/);

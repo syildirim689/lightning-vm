@@ -16,7 +16,7 @@ import { ButtonLink, ConfirmButton, DataTable, Empty, Mono, Notice, PageHeader, 
 
 export type Server = { id: string; name: string; state: string; powerState: string; guestReady: boolean; vcpu: number; memoryMb: number; diskGb: number;
   priceMonthly: string; currency: string; errorCode: string | null; poolName: string; location: string; imageName: string; address: string | null;
-  createdAt: string; ownerEmail?: string; lastOperation: { id: string; kind: string; status: string; step: string | null; errorCode: string | null } | null };
+  createdAt: string; ownerEmail?: string; firewallStatus?: 'applied' | 'pending' | 'failed'; firewallError?: string | null; firewallCount?: number; lastOperation: { id: string; kind: string; status: string; step: string | null; errorCode: string | null } | null };
 type Operation = { id: string; kind: string; status: string; step: string | null; attempts: number; errorCode: string | null; createdAt: string; finishedAt: string | null };
 
 // One Idempotency-Key per user intention: a double click or a retry after a timeout reuses it,
@@ -160,6 +160,8 @@ export function ServerDetail({ id }: { id: string }) {
       </Section>
     </div>
 
+    <ServerFirewalls server={s}/>
+
     <ServerMetrics id={id} live={s.state === 'ready' && s.powerState === 'poweredOn'}/>
 
     <Section title={t('detail.history')}>
@@ -178,4 +180,27 @@ export function ServerDetail({ id }: { id: string }) {
       </div>
     </Section>
   </div>;
+}
+
+// The firewalls protecting this server and whether VMware has their current rules.
+function ServerFirewalls({ server }: { server: Server }) {
+  const t = useTranslations('Firewalls');
+  const { error } = useErrorText();
+  const list = useApiQuery<{ firewalls: { id: string; name: string; rules: { direction: string }[] }[] }>(['firewalls', 'server', server.id], `/firewalls?serverId=${server.id}`).data?.firewalls;
+  if (!list) return null;
+  const tone = { applied: 'success', pending: 'accent', failed: 'danger' } as const;
+  return <Section title={t('title')} description={list.length ? t('serverProtected') : t('serverOpen')}
+    actions={<ButtonLink size="sm" variant="secondary" href="/firewalls"><I name="brick-wall-fire" size={14}/>{t('manage')}</ButtonLink>}>
+    <div className="flex flex-col gap-3">
+      {list.length > 0 && server.firewallStatus && <div className="flex flex-wrap items-center gap-2 text-sm">
+        <StatusChip tone={tone[server.firewallStatus]}>{t(`status.${server.firewallStatus}`)}</StatusChip>
+        {server.firewallStatus === 'failed' && server.firewallError && <span className="text-danger">{error({ code: server.firewallError })}</span>}
+      </div>}
+      {list.length === 0 ? <p className="text-sm text-muted">{t('serverNone')}</p>
+        : <ul className="flex flex-wrap gap-2">{list.map((f) => <li key={f.id}>
+          <NextLink href={`/firewalls/${f.id}`} className="inline-flex items-center gap-2 rounded-xl border border-border px-3 py-2 text-sm hover:border-accent">
+            <I name="shield-check" size={14}/>{f.name}<span className="text-xs text-muted">{t('ruleShort', { n: f.rules.length })}</span>
+          </NextLink></li>)}</ul>}
+    </div>
+  </Section>;
 }

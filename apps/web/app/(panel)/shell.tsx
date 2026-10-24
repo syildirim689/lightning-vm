@@ -15,7 +15,7 @@ import { authClient, signOut } from '../../lib/auth-client';
 import { can, type Permission } from '../../lib/permissions';
 import type { Branding, User } from '../../lib/session';
 
-type Key = 'dashboard' | 'servers' | 'connections' | 'catalog' | 'users' | 'roles' | 'settings' | 'system' | 'myServers' | 'newServer' | 'account';
+type Key = 'dashboard' | 'servers' | 'connections' | 'catalog' | 'users' | 'roles' | 'settings' | 'system' | 'myServers' | 'newServer' | 'firewalls' | 'account';
 type Item = { href: string; key: Key; icon: React.ReactNode; exact?: boolean; need?: Permission[] };
 
 // Staff entries appear only with a permission that opens them; the API checks every call anyway.
@@ -35,6 +35,7 @@ const sections: { title: 'adminSection' | 'peopleSection' | 'customerSection'; i
   { title: 'customerSection', items: [
     { href: '/', key: 'myServers', icon: <I name="gauge" size={18}/>, exact: true },
     { href: '/order', key: 'newServer', icon: <I name="plus" size={18}/>, need: ['servers.create'] },
+    { href: '/firewalls', key: 'firewalls', icon: <I name="brick-wall-fire" size={18}/>, need: ['firewalls.manage', 'servers.view_all'] },
     { href: '/account', key: 'account', icon: <I name="key-round" size={18}/> },
   ] },
 ];

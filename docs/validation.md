@@ -504,3 +504,18 @@ Doğrulanmayanlar:
 - Gerçek SMTP sunucusu, reCAPTCHA ve hCaptcha'nın gerçek anahtarları.
 - Gerçek ESXi/vCenter 6.x–9.x. Sürüm tablosu VMware belgelerinden alındı; testler simülatörle yapıldı.
 - Gerçek cihazlarda passkey ve Web Push teslimi.
+
+## Firewall — 2026-10-24
+- Go (simülatör): kural çevirisi, uygulama/düzenleme/kaldırma, port grubunda override izni, `FIREWALL_NEEDS_DVS` ve `FIREWALL_NO_PORT` geçti.
+- API entegrasyonu: tam paket 66/66, bunların içinde gerçek worker, adaptör ve simülatörle firewall akışı da var:
+  - sipariş anında ilk açılıştan önce uygulama;
+  - kural değişikliği ve bağlantı kaldırmada yeniden uygulama;
+  - standart switch'te hata kodu.
+- E2E: firewall sayfası (şablondan oluşturma, hatalı port, kaydetme, silme) ve 390 px kontrolü geçti.
+- Önceki koşuda çıkan hatalar düzeltildi:
+  - jsonb anahtar sırası yüzünden kayıttan sonra hep "kaydedilmemiş değişiklik" görünüyordu;
+  - müşteri izni (`firewalls.manage`) yönetici alanını açıyordu (`isStaff`);
+  - destek rolü müşteri adına giriş yapamıyordu;
+  - konsol testi simülatörün klonladığı VM'i seçebiliyordu.
+- CI: ayar sırları için geçici bir master key eklendi (önceden runner'da 503 veriyordu).
+- Gerçek vCenter'da doğrulanmadı: trafik yönü eşlemesi ve paketlerin gerçekten düştüğü.

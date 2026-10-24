@@ -13,7 +13,8 @@ export class OperationError extends Error {
 // Codes that will not change by retrying; everything else (network, timeouts, 5xx) is retried with backoff.
 const permanent = new Set(['INVALID_LOGIN', 'PERMISSION_DENIED', 'WRITE_RESTRICTED', 'PROVISIONING_NOT_SUPPORTED', 'TEMPLATE_NOT_FOUND',
   'NETWORK_NOT_FOUND', 'TEMPLATE_HAS_NO_NIC', 'DISK_SMALLER_THAN_TEMPLATE', 'INSUFFICIENT_RESOURCES', 'NOT_MANAGED', 'TOOLS_NOT_RUNNING',
-  'TLS_UNTRUSTED', 'TLS_HOSTNAME_MISMATCH', 'TLS_PIN_MISMATCH', 'ENDPOINT_BLOCKED', 'INVALID_REQUEST', 'SECRET_KEY_UNAVAILABLE', 'INVALID_STATE', 'VM_NOT_FOUND']);
+  'TLS_UNTRUSTED', 'TLS_HOSTNAME_MISMATCH', 'TLS_PIN_MISMATCH', 'ENDPOINT_BLOCKED', 'INVALID_REQUEST', 'SECRET_KEY_UNAVAILABLE', 'INVALID_STATE', 'VM_NOT_FOUND',
+  'FIREWALL_NEEDS_DVS', 'FIREWALL_TOO_MANY_RULES']);
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const readinessPollMs = Number(process.env.READINESS_POLL_MS) || 5000;
@@ -47,14 +48,19 @@ async function adapter(path, body) {
 async function load(db, opId) {
   const { rows: [op] } = await db.query('SELECT * FROM operations WHERE id = $1', [opId]);
   if (!op) return null;
+  return { op, ...(await loadServer(db, op.server_id)) };
+}
+
+async function loadServer(db, serverId) {
   const { rows: [s] } = await db.query(`SELECT s.*, p.connection_id, p.datastore_morefs, p.network_moref, p.compute_moref, i.template_moref,
       host(a.address) AS address, masklen(ip.cidr) AS prefix, host(ip.gateway) AS gateway, ARRAY(SELECT host(x) FROM unnest(ip.dns) x) AS dns
     FROM servers s JOIN resource_pools p ON p.id = s.pool_id JOIN os_images i ON i.id = s.image_id
-    LEFT JOIN ip_allocations a ON a.server_id = s.id LEFT JOIN ip_pools ip ON ip.id = a.ip_pool_id WHERE s.id = $1`, [op.server_id]);
+    LEFT JOIN ip_allocations a ON a.server_id = s.id LEFT JOIN ip_pools ip ON ip.id = a.ip_pool_id WHERE s.id = $1`, [serverId]);
+  if (!s) return null;
   const { rows: [c] } = await db.query('SELECT * FROM vmware_connections WHERE id = $1', [s.connection_id]);
   const target = { host: c.host, port: c.port, username: c.username, password: decrypt(c.password_enc, c.id), ...(c.api_version && { apiVersion: c.api_version }),
     tls: { mode: c.tls_mode, ...(c.tls_ca_pem && { caPem: c.tls_ca_pem }), ...(c.tls_sha256 && { sha256: c.tls_sha256 }) } };
-  return { op, s, target, vmName: `lvm-${s.id}`, customization: c.customization ?? 'auto', compat: c.compat };
+  return { s, target, vmName: `lvm-${s.id}`, customization: c.customization ?? 'auto', compat: c.compat };
 }
 
 const setStep = (db, op, step) => db.query('UPDATE operations SET step = $2, updated_at = now() WHERE id = $1', [op.id, step]);
@@ -183,10 +189,43 @@ async function destroy(db, ctx) {
   } catch (e) { await client.query('ROLLBACK'); throw e; } finally { client.release(); }
 }
 
+// Writes the union of the server's firewalls to VMware. The version is read first, so the recorded version
+// never claims rules newer than the ones written. No firewall attached removes the filter.
+async function writeFirewall(db, ctx) {
+  const { rows: [v] } = await db.query('SELECT firewall_version FROM servers WHERE id = $1', [ctx.s.id]);
+  const { rows } = await db.query('SELECT f.rules FROM firewall_servers fs JOIN firewalls f ON f.id = fs.firewall_id WHERE fs.server_id = $1', [ctx.s.id]);
+  const rules = rows.flatMap((r) => r.rules).map((r) => ({ direction: r.direction, protocol: r.protocol, port: r.port ?? '', ips: r.ips }));
+  await adapter('/v1/vm/firewall', { ...ctx.target, vm: ctx.s.vm_moref, enabled: rows.length > 0, rules });
+  await db.query(`UPDATE servers SET firewall_applied_version = GREATEST(firewall_applied_version, $2), firewall_error = NULL,
+    firewall_applied_at = now() WHERE id = $1`, [ctx.s.id, v.firewall_version]);
+}
+
+// A firewall job (queue "firewalls", one at a time): applies the server's current rules if they are newer than
+// what VMware has. A server still being created is skipped; its create operation applies them before boot.
+export async function processFirewall(db, job, log, notify = async () => {}) {
+  const ctx = await loadServer(db, job.data.serverId);
+  if (!ctx || !ctx.s.vm_moref || ['deleted', 'deleting', 'provisioning'].includes(ctx.s.state)) return;
+  if (ctx.s.firewall_applied_version >= ctx.s.firewall_version) return;
+  try {
+    await writeFirewall(db, ctx);
+    log('info', 'firewall_applied', { serverId: ctx.s.id, version: ctx.s.firewall_version });
+  } catch (err) {
+    const code = err.code ?? 'INTERNAL_ERROR';
+    const last = err.permanent || job.attemptsMade + 1 >= (job.opts.attempts ?? 1);
+    log(last ? 'error' : 'warn', 'firewall_failed', { serverId: ctx.s.id, code, final: last });
+    if (!last) throw err;
+    await db.query('UPDATE servers SET firewall_error = $2 WHERE id = $1', [ctx.s.id, code]);
+    await notify('server.firewall_failed', [ctx.s.owner_id], { serverId: ctx.s.id, name: ctx.s.name, code });
+    throw new UnrecoverableError(code);
+  }
+}
+
 const kinds = {
   async create(db, ctx) {
     ctx.s.vm_moref = await ensureVM(db, ctx);
     await guard(db, ctx.op);
+    // Firewalls chosen at order time are in place before the guest first boots.
+    if (ctx.s.firewall_applied_version < ctx.s.firewall_version) { await setStep(db, ctx.op, 'firewall'); await writeFirewall(db, ctx); }
     await setStep(db, ctx.op, 'power_on');
     const st = await find(ctx);
     if (st?.powerState !== 'poweredOn') await power(db, ctx, 'on');

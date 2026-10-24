@@ -24,6 +24,7 @@ import { VmwareController } from './vmware';
 import { ConsoleController } from './console';
 import { CatalogAdminController, CatalogController } from './catalog';
 import { ServersAdminController, ServersController } from './servers';
+import { FirewallsController } from './firewalls';
 import { httpDuration } from './metrics';
 
 export { closeConnections };
@@ -41,7 +42,7 @@ class HealthController {
   }
 }
 
-@Module({ controllers: [HealthController, AuthController, PublicController, SetupController, AdminController, VmwareController, ConsoleController, CatalogAdminController, CatalogController, ServersController, ServersAdminController,
+@Module({ controllers: [HealthController, AuthController, PublicController, SetupController, AdminController, VmwareController, ConsoleController, CatalogAdminController, CatalogController, ServersController, ServersAdminController, FirewallsController,
   SettingsController, SmsSettingsController, RolesController, NotificationsController, NotificationPolicyController,
   InsightsController, StaffInsightsController] })
 class AppModule {}

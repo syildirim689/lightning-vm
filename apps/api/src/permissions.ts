@@ -5,7 +5,7 @@ import { pool } from './db';
 // The catalog: group → permissions. The web panel shows these with translated names and explanations.
 export const permissionCatalog = {
   dashboard: ['dashboard.view'],
-  servers: ['servers.create', 'servers.view_all', 'servers.manage_all', 'operations.retry', 'reconcile.run', 'consoles.any'],
+  servers: ['servers.create', 'firewalls.manage', 'servers.view_all', 'servers.manage_all', 'operations.retry', 'reconcile.run', 'consoles.any'],
   catalog: ['catalog.view', 'catalog.manage'],
   vmware: ['vmware.view', 'vmware.manage'],
   users: ['users.view', 'users.manage', 'users.roles', 'users.ban', 'users.sessions', 'users.impersonate'],
