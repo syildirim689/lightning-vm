@@ -59,7 +59,8 @@ if [ -d "$DIR/.git" ]; then
 else
   [ ! -e "$DIR" ] || [ -z "$(ls -A "$DIR" 2>/dev/null)" ] || die "$DIR exists and is not a git checkout; choose another --dir"
   say INFO "downloading $REPO to $DIR"
-  gitc clone --quiet "$REPO" "$DIR" || die "git clone failed (private repository? use --token or an SSH URL with a deploy key)"
+  # No checkout here: the version to install is checked out below.
+  gitc clone --quiet --no-checkout "$REPO" "$DIR" || die "git clone failed (private repository? use --token or an SSH URL with a deploy key)"
 fi
 [ -z "$TOKEN" ] || git_ -C "$DIR" config credential.helper "store --file=$cred"
 
