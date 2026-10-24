@@ -328,3 +328,22 @@ test('updates from the panel: requests go to the host agent, validated, one at a
   const m = (await get('/admin/maintenance', admin)).json();
   assert.deepEqual([m.agent.installed, m.agent.pending, m.agent.status.state, m.agent.log.length], [true, 1, 'running', 2]);
 });
+
+test('several API copies: a role change made on one copy reaches the others at once', async () => {
+  // A second copy is a separate process with its own in-memory roles, subscribed like a real one.
+  const { spawn } = await import('node:child_process');
+  const child = spawn(process.execPath, ['--input-type=module', '-e', `
+    const { loadRoles, watchRoles, roleExists } = await import('${new URL('../../dist/permissions.js', import.meta.url).href}');
+    await loadRoles(); watchRoles();
+    console.log('ready');
+    setInterval(() => { if (roleExists('copy-check')) { console.log('seen'); process.exit(0); } }, 100);
+    setTimeout(() => process.exit(1), 15000);`], { env: process.env, stdio: ['ignore', 'pipe', 'inherit'] });
+  let out = '';
+  child.stdout.on('data', (d) => { out += d; });
+  assert.ok(await until(() => out.includes('ready'), 15000), 'second copy started');
+  await new Promise((r) => setTimeout(r, 300)); // its subscription is in place
+  assert.equal((await post('/admin/roles', { key: 'copy-check', name: 'Copy check', permissions: ['users.view'] }, admin)).statusCode, 201);
+  const code = await new Promise((r) => child.on('exit', r));
+  assert.equal(code, 0, 'the other copy saw the new role without a restart');
+  assert.ok(out.includes('seen'));
+});

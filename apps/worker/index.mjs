@@ -3,6 +3,9 @@ import { processFirewall, processOperation, reconcile } from './operations.mjs';
 import pg from 'pg';
 import { Redis } from 'ioredis';
 import { writeFile } from 'node:fs/promises';
+import { hostname } from 'node:os';
+// Names this copy in the heartbeat table (the container's host name in Docker).
+const instance = process.env.WORKER_NAME || hostname();
 const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL, connectionTimeoutMillis: 5000 });
 const log = (level, event, fields = {}) => console.log(JSON.stringify({ level, service: 'worker', env: process.env.APP_ENV || 'production', event, time: new Date().toISOString(), ...fields }));
 pool.on('error', () => log('error', 'postgres_unavailable'));
@@ -20,6 +23,8 @@ const operations = new Queue('operations', { connection: redis });
 // Firewall changes are applied one at a time, so an older job can never overwrite newer rules.
 const firewallWorker = new Worker('firewalls', (job) => processFirewall(pool, job, log, notify), { connection: redis.duplicate(), concurrency: 1 });
 const firewalls = new Queue('firewalls', { connection: redis });
+// One firewall job at a time across every worker copy, not just within this one.
+await firewalls.setGlobalConcurrency(1).catch(() => log('error', 'firewall_concurrency_unset'));
 const jobOptions = { attempts: 6, backoff: { type: 'exponential', delay: 5000 }, removeOnComplete: true, removeOnFail: true };
 
 // Recovery: an operation still open in PostgreSQL but without a queued job (Redis lost it, the API
@@ -57,7 +62,9 @@ async function heartbeat() {
   try {
     if (!worker.isRunning()) throw new Error('worker stopped');
     await redis.ping();
-    await pool.query("INSERT INTO worker_heartbeats(name) VALUES ('default') ON CONFLICT(name) DO UPDATE SET last_seen=now()");
+    // One row per copy (several workers in a cluster); rows of copies gone for a day are dropped.
+    await pool.query('INSERT INTO worker_heartbeats(name) VALUES ($1) ON CONFLICT(name) DO UPDATE SET last_seen=now()', [instance]);
+    await pool.query("DELETE FROM worker_heartbeats WHERE last_seen < now() - interval '1 day'");
     await writeFile('/tmp/lightning-worker-heartbeat', String(Date.now()));
   } catch { log('error', 'heartbeat_failed'); }
 }

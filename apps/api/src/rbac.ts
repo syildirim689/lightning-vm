@@ -6,7 +6,7 @@ import { Reflector } from '@nestjs/core';
 import { pool } from './db';
 import { apiError } from './errors';
 import { audit, SessionGuard, type AuthedRequest } from './auth';
-import { can, covers, effectivePermissions, known, loadRoles, permissionCatalog, permissionsOf, roles, splitRoles, type Permission } from './permissions';
+import { can, covers, effectivePermissions, known, permissionCatalog, rolesChanged, permissionsOf, roles, splitRoles, type Permission } from './permissions';
 
 // Throws unless the actor may act on the target account (its permissions are within the actor's).
 export async function assertCovers(req: AuthedRequest, targetId: string) {
@@ -64,7 +64,7 @@ export class RolesController {
     if (!covers(req.user.permissions, r.permissions)) throw apiError(403, 'FORBIDDEN_TARGET', 'You cannot grant permissions you do not have');
     await pool.query('INSERT INTO roles (key, name, description, permissions) VALUES ($1, $2, $3, $4)', [r.key, r.name, r.description, r.permissions])
       .catch((e) => { if (e.code === '23505') throw apiError(409, 'VALIDATION_FAILED', 'Exists', { key: 'ROLE_EXISTS' }); throw e; });
-    await loadRoles();
+    await rolesChanged();
     await audit(req, 'role.created', 'success', req.user.id, r);
     return r;
   }
@@ -76,7 +76,7 @@ export class RolesController {
     if (!covers(req.user.permissions, r.permissions)) throw apiError(403, 'FORBIDDEN_TARGET', 'You cannot grant permissions you do not have');
     const { rowCount } = await pool.query('UPDATE roles SET name = $2, description = $3, permissions = $4, updated_at = now() WHERE key = $1', [key, r.name, r.description, r.permissions]);
     if (!rowCount) throw apiError(404, 'NOT_FOUND', 'Unknown role');
-    await loadRoles();
+    await rolesChanged();
     await audit(req, 'role.updated', 'success', req.user.id, { key, permissions: r.permissions });
     return { ...r, key };
   }
@@ -94,7 +94,7 @@ export class RolesController {
         updated_at = now() WHERE $1 = ANY(string_to_array(coalesce(role, 'user'), ','))`, [key]);
       await client.query('COMMIT');
     } catch (e) { await client.query('ROLLBACK'); throw e; } finally { client.release(); }
-    await loadRoles();
+    await rolesChanged();
     await audit(req, 'role.deleted', 'success', req.user.id, { key });
   }
 

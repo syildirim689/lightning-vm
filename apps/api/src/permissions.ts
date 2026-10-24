@@ -1,6 +1,6 @@
 // Roles and permissions, without HTTP: the catalog, the role cache and effective permissions.
 // Shared by the guards (rbac.ts), the session (auth.ts) and better-auth's hooks.
-import { pool } from './db';
+import { pool, redis } from './db';
 
 // The catalog: group → permissions. The web panel shows these with translated names and explanations.
 export const permissionCatalog = {
@@ -67,3 +67,18 @@ export const adminEndpointPermission: Record<string, Permission | null> = {
   '/admin/stop-impersonating': null, // called by the impersonated session itself
   '/admin/has-permission': null,
 };
+
+// Several API copies each keep the roles in memory: a change made on one copy is announced on Redis so every
+// copy reloads at once (a removed permission must stop working everywhere), with a periodic reload as a backstop.
+const rolesChannel = `lvm:roles-changed:${Number(process.env.REDIS_DB) || 0}`;
+export async function rolesChanged() {
+  await loadRoles();
+  await redis.publish(rolesChannel, '1').catch(() => undefined);
+}
+export function watchRoles() {
+  const sub = redis.duplicate();
+  sub.subscribe(rolesChannel).catch(() => undefined);
+  sub.on('message', () => { loadRoles().catch(() => undefined); });
+  const timer = setInterval(() => { loadRoles().catch(() => undefined); }, 60_000).unref();
+  return { close: () => { clearInterval(timer); sub.disconnect(); } };
+}

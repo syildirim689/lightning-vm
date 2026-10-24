@@ -14,7 +14,7 @@ import { PublicController, SettingsController, SmsSettingsController } from './s
 import { RolesController } from './rbac';
 import { NotificationPolicyController, NotificationsController } from './notifications';
 import { startNotificationWorker } from './notify';
-import { ensureRoles } from './permissions';
+import { ensureRoles, watchRoles } from './permissions';
 import { InsightsController, startInsightAlerts, StaffInsightsController } from './insights';
 import { fromNodeHeaders } from 'better-auth/node';
 import { getAuth } from './better-auth';
@@ -95,6 +95,7 @@ async function main() {
   app.enableShutdownHooks();
   startNotificationWorker();
   startRdnsWorker();
+  watchRoles();
   startInsightAlerts();
   await app.listen(4000, '0.0.0.0');
   process.on('SIGTERM', closeConnections); process.on('SIGINT', closeConnections);
