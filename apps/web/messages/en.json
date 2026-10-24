@@ -2192,7 +2192,7 @@
       "defaultsTitle": "Defaults and customers",
       "defaultsHelp": "New servers get this PTR on all their addresses. Deleting a server removes its records.",
       "template": "Default PTR",
-      "templateHelp": "Variables: '{ip}', '{ip-dashed}', '{name}'. Empty: new servers get no PTR.",
+      "templateHelp": "Variables: {ip}, {ipDashed}, {name}. Empty: new servers get no PTR.",
       "preview": "Example: {ptr}",
       "customerEdit": "Customers may change the PTR of their addresses",
       "forwardCheck": "Only names that resolve back to the address (forward-confirmed)",

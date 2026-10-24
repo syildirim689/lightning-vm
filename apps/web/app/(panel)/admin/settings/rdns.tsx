@@ -53,7 +53,7 @@ export default function ReverseDns({ readOnly }: { readOnly: boolean }) {
     </FormSection>
     {on && <FormSection title={t('defaultsTitle')} description={t('defaultsHelp')} icon={<I name="sparkles" size={18}/>}>
       <TextInput label={t('template')} value={v.template} onChange={(x) => set({ template: x })} placeholder="{ip-dashed}.static.example.com" error={field(fields.template)} isDisabled={readOnly} spellCheck={false}
-        help={v.template ? t('preview', { ptr: preview(v.template) }) : t('templateHelp')}/>
+        help={v.template ? t('preview', { ptr: preview(v.template) }) : t('templateHelp', { ip: '{ip}', ipDashed: '{ip-dashed}', name: '{name}' })}/>
       <SwitchInput label={t('customerEdit')} isSelected={v.customerEdit} onChange={(x) => set({ customerEdit: x })} isDisabled={readOnly}/>
       <SwitchInput label={t('forwardCheck')} isSelected={v.forwardCheck} onChange={(x) => set({ forwardCheck: x })} isDisabled={readOnly || !v.customerEdit}/>
       <p className="text-xs text-muted">{t('forwardHelp')}</p>

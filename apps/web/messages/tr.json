@@ -2192,7 +2192,7 @@
       "defaultsTitle": "Varsayılanlar ve müşteriler",
       "defaultsHelp": "Yeni sunucuların tüm adresleri bu PTR'ı alır. Sunucu silinince kayıtları kaldırılır.",
       "template": "Varsayılan PTR",
-      "templateHelp": "Değişkenler: '{ip}', '{ip-dashed}', '{name}'. Boş: yeni sunuculara PTR yazılmaz.",
+      "templateHelp": "Değişkenler: {ip}, {ipDashed}, {name}. Boş: yeni sunuculara PTR yazılmaz.",
       "preview": "Örnek: {ptr}",
       "customerEdit": "Müşteriler kendi adreslerinin PTR'ını değiştirebilir",
       "forwardCheck": "Yalnızca adrese geri çözülen adlar (ileri doğrulamalı)",
