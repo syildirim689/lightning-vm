@@ -151,6 +151,8 @@ test.describe('first run (Turkish browser)', () => {
     await expect(page.getByText('Geçerli bir e-posta adresi girin.')).toBeVisible();
     await signIn(page, { email: admin.email, password: 'wrong passphrase here' });
     await expect(page.locator('main [role=alert]')).toHaveText('E-posta veya parola yanlış.');
+    // Typing clears a field's error; a cleared error must not read as "invalid value".
+    await expect(page.getByText('Geçersiz değer.')).toHaveCount(0);
   });
 });
 
