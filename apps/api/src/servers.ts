@@ -12,9 +12,9 @@ import { exceededQuota } from './capacity';
 import { openConsole } from './console';
 import { callAdapter, storedTarget } from './vmware';
 import { limits } from './firewalls';
-import { choosePassword, sha512Crypt } from './passwords';
+import { choosePassword, generatePassword, sha512Crypt } from './passwords';
 import { decryptSecret, encryptSecret } from './secrets';
-import { getSettings } from './settings-store';
+import { getSettings, type ServerSettings } from './settings-store';
 import { prepareApplication } from './applications';
 import { renderPtr } from './rdns-names';
 
@@ -47,6 +47,16 @@ const fingerprint = (blob: string) => 'SHA256:' + createHash('sha256').update(Bu
 
 // Owners see and act on their servers; staff with servers.view_all see all, with servers.manage_all act on all.
 // A server id alone gives no access (404 for others).
+// The admin's server settings decide what customers may do themselves; staff always may.
+export async function customerMay(req: AuthedRequest, action: keyof ServerSettings['customer']) {
+  if (can(req.user.permissions, 'servers.manage_all')) return;
+  if (!(await getSettings('servers')).customer[action]) throw apiError(403, 'ACTION_DISABLED', 'The administrator turned this off');
+}
+const allowedFor = async (req: AuthedRequest) => {
+  const c = (await getSettings('servers')).customer;
+  return can(req.user.permissions, 'servers.manage_all') ? Object.fromEntries(Object.keys(c).map((k) => [k, true])) : c;
+};
+
 export async function findServer(req: AuthedRequest, id: string, manage = false) {
   const staff = manage ? can(req.user.permissions, 'servers.manage_all') : can(req.user.permissions, 'servers.view_all') || can(req.user.permissions, 'servers.manage_all');
   const { rows: [s] } = await pool.query(`SELECT * FROM servers WHERE id = $1 AND state <> 'deleted' AND (owner_id = $2 OR $3)`, [id, req.user.id, staff]);
@@ -70,13 +80,13 @@ async function startOperation(req: AuthedRequest, server: { id: string; owner_id
 
 const serverColumns = `s.id, s.name, s.state, s.power_state AS "powerState", s.guest_ready AS "guestReady", s.vcpu, s.memory_mb AS "memoryMb", s.disk_gb AS "diskGb",
   s.price_monthly::text AS "priceMonthly", s.currency, s.error_code AS "errorCode", s.created_at AS "createdAt", s.project_id AS "projectId",
-  p.name AS "poolName", p.location, i.name AS "imageName", host(a.address) AS address,
+  p.name AS "poolName", p.location, l.city AS "locationCity", l.country_code AS "locationCountry", l.datacenter AS "locationDatacenter", i.name AS "imageName", host(a.address) AS address,
   CASE WHEN s.firewall_applied_version >= s.firewall_version THEN 'applied' WHEN s.firewall_error IS NOT NULL THEN 'failed' ELSE 'pending' END AS "firewallStatus",
   s.firewall_error AS "firewallError", s.root_password_enc IS NOT NULL AS "hasRootPassword",
   (SELECT name FROM applications ap WHERE ap.id = s.application_id) AS "applicationName", s.app_state AS "appState", s.app_message AS "appMessage", (SELECT count(*)::int FROM firewall_servers fs WHERE fs.server_id = s.id) AS "firewallCount",
   (SELECT row_to_json(o) FROM (SELECT id, kind, status, step, error_code AS "errorCode", created_at AS "createdAt" FROM operations
     WHERE server_id = s.id ORDER BY created_at DESC LIMIT 1) o) AS "lastOperation"`;
-const serverJoins = "FROM servers s JOIN resource_pools p ON p.id = s.pool_id JOIN os_images i ON i.id = s.image_id LEFT JOIN ip_allocations a ON a.server_id = s.id AND a.kind = 'primary'";
+const serverJoins = "FROM servers s JOIN resource_pools p ON p.id = s.pool_id LEFT JOIN locations l ON l.id = p.location_id JOIN os_images i ON i.id = s.image_id LEFT JOIN ip_allocations a ON a.server_id = s.id AND a.kind = 'primary'";
 
 @Controller() @UseGuards(SessionGuard)
 export class ServersController {
@@ -150,7 +160,7 @@ export class ServersController {
       pool.query(`SELECT id, kind, status, step, attempts, error_code AS "errorCode", created_at AS "createdAt", started_at AS "startedAt", finished_at AS "finishedAt"
         FROM operations WHERE server_id = $1 ORDER BY created_at DESC LIMIT 50`, [id]),
     ]);
-    return { server, operations };
+    return { server, operations, allowed: await allowedFor(req) };
   }
 
   @Post('servers') @HttpCode(202)
@@ -176,7 +186,12 @@ export class ServersController {
     // Optional root password (console/RDP): a weak one is replaced by a strong one that starts with the brand.
     if (body.rootPassword !== undefined && (typeof body.rootPassword !== 'string' || body.rootPassword.length > 128)) throw apiError(400, 'VALIDATION_FAILED', 'Invalid input', { rootPassword: 'INVALID_VALUE' });
     const branding = await getSettings('branding');
-    const root = choosePassword((body.rootPassword as string | undefined) || undefined, branding.passwordPrefix || branding.name, [name, req.user.email.split('@')[0]]);
+    const { rows: [img] } = await pool.query('SELECT family FROM os_images WHERE id = $1', [order.imageId]).catch(() => ({ rows: [] }));
+    // Nested ESXi: at least 2 vCPU and 4 GB, and always a root password (it is the host's login; generated when none is given).
+    if (img?.family === 'esxi' && (order.shape.vcpu < 2 || order.shape.memoryMb < 4096)) throw apiError(400, 'VALIDATION_FAILED', 'ESXi needs 2 vCPU and 4 GB', { imageId: 'ESXI_NEEDS_MORE' });
+    const prefix = branding.passwordPrefix || branding.name;
+    const root = choosePassword((body.rootPassword as string | undefined) || undefined, prefix, [name, req.user.email.split('@')[0]])
+      ?? (img?.family === 'esxi' ? { password: generatePassword(prefix), replaced: true } : null);
     if (keys.length !== sshKeyIds.length) throw apiError(400, 'VALIDATION_FAILED', 'Unknown key', { sshKeyIds: 'NOT_AVAILABLE' });
     // Firewalls chosen at order time are applied before the VM is first powered on.
     const firewallIds = Array.isArray(body.firewallIds) ? [...new Set(body.firewallIds.map(String))] : [];
@@ -262,6 +277,7 @@ export class ServersController {
   @Get('servers/:id/root-password')
   async rootPassword(@Req() req: AuthedRequest, @Param('id', ParseUUIDPipe) id: string) {
     const s = await findServer(req, id, true);
+    await customerMay(req, 'rootPassword');
     if (!s.root_password_enc) throw apiError(404, 'NOT_FOUND', 'No stored password');
     await audit(req, 'server.root_password_viewed', 'success', req.user.id, { serverId: id });
     return { password: decryptSecret(s.root_password_enc, 'server-root-password') };
@@ -283,6 +299,7 @@ export class ServersController {
     const kind = body.action as Kind;
     if (!['power_on', 'shutdown', 'power_off', 'reset'].includes(kind)) throw apiError(400, 'VALIDATION_FAILED', 'Invalid input', { action: 'INVALID_VALUE' });
     const server = await findServer(req, id, true);
+    await customerMay(req, 'power');
     // A failed create may have left no VM to act on.
     if ((server.state !== 'ready' && server.state !== 'error') || !server.vm_moref) throw apiError(409, 'INVALID_SERVER_STATE', 'Not possible in this state');
     return { serverId: id, operation: await startOperation(req, server, kind, key, requestHash) };
@@ -297,6 +314,7 @@ export class ServersController {
     const earlier = await replay(key, requestHash);
     if (earlier) return earlier;
     const server = await findServer(req, id, true);
+    await customerMay(req, 'delete');
     if (body?.confirm !== server.name) throw apiError(400, 'VALIDATION_FAILED', 'Confirmation required', { confirm: 'CONFIRMATION_MISMATCH' });
     if (server.state === 'deleting') throw apiError(409, 'OPERATION_IN_PROGRESS', 'Already being deleted');
     // A running create is cancelled first; the delete then removes whatever it left.
@@ -320,6 +338,7 @@ export class ServersController {
   @Post('servers/:id/console') @HttpCode(201)
   async console(@Req() req: AuthedRequest, @Res({ passthrough: true }) reply: FastifyReply, @Param('id', ParseUUIDPipe) id: string) {
     const s = await findServer(req, id, true);
+    await customerMay(req, 'console');
     if (!s.vm_moref || s.state !== 'ready') throw apiError(409, 'INVALID_SERVER_STATE', 'The server is not ready');
     const { rows: [p] } = await pool.query('SELECT connection_id FROM resource_pools WHERE id = $1', [s.pool_id]);
     return openConsole(req, reply, p.connection_id, s.vm_moref, true);

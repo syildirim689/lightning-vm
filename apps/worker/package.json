@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "start": "node index.mjs",
-    "check": "node --check index.mjs && node --check operations.mjs && node --check iso.mjs"
+    "check": "node --check index.mjs && node --check operations.mjs && node --check iso.mjs && node --test test/*.test.mjs"
   },
   "dependencies": {
     "bullmq": "6.4.0",

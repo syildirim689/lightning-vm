@@ -6,6 +6,7 @@ import { apiError } from './errors';
 import { audit, SessionGuard, type AuthedRequest } from './auth';
 import { Can, PermissionGuard } from './rbac';
 import { checkCustom, exceededQuota, poolCapacity, type Limits, type Shape } from './capacity';
+import { locationColumns } from './locations';
 import type { Application } from './applications';
 
 type Input = Record<string, unknown>;
@@ -153,7 +154,7 @@ function readLimits(body: Input): Limits {
   return l;
 }
 
-const poolColumns = `p.id, p.name, p.location, p.connection_id AS "connectionId", c.name AS "connectionName", p.compute_moref AS "computeMoref",
+const poolColumns = `p.id, p.name, p.location, p.location_id AS "locationId", p.connection_id AS "connectionId", c.name AS "connectionName", p.compute_moref AS "computeMoref",
   p.datastore_morefs AS "datastoreMorefs", p.network_moref AS "networkMoref", p.cpu_overcommit::float AS "cpuOvercommit",
   p.memory_overcommit::float AS "memoryOvercommit", p.storage_overcommit::float AS "storageOvercommit", p.reserve_cpu_pct AS "reserveCpuPct",
   p.reserve_memory_pct AS "reserveMemoryPct", p.reserve_storage_pct AS "reserveStoragePct", p.active,
@@ -173,10 +174,17 @@ export class CatalogAdminController {
   @Post('pools') @HttpCode(201) @Can('catalog.manage')
   async createPool(@Req() req: AuthedRequest, @Body() body: Input) {
     const v = await readPool(body);
+    const locationId = typeof body.locationId === 'string' && body.locationId ? body.locationId : null;
+    if (locationId) {
+      const { rows: [l] } = await pool.query('SELECT name FROM locations WHERE id = $1', [locationId]).catch(() => ({ rows: [] }));
+      if (!l) throw apiError(400, 'VALIDATION_FAILED', 'Invalid input', { locationId: 'INVALID_VALUE' });
+      v.location = l.name;
+    }
     const { rows: [p] } = await guarded(() => pool.query(`INSERT INTO resource_pools (name, location, connection_id, compute_moref, datastore_morefs, network_moref,
       cpu_overcommit, memory_overcommit, storage_overcommit, reserve_cpu_pct, reserve_memory_pct, reserve_storage_pct, active, extra_ipv4_max, extra_ipv4_price)
       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING id`, [v.name, v.location, v.connectionId, v.computeMoref, v.datastoreMorefs, v.networkMoref,
       v.cpuOvercommit, v.memoryOvercommit, v.storageOvercommit, v.reserveCpuPct, v.reserveMemoryPct, v.reserveStoragePct, v.active, v.extraIpv4Max, v.extraIpv4Price]));
+    if (locationId) await pool.query('UPDATE resource_pools SET location_id = $2 WHERE id = $1', [p.id, locationId]);
     await audit(req, 'catalog.pool_created', 'success', req.user.id, { id: p.id, name: v.name });
     return { id: p.id };
   }
@@ -239,7 +247,7 @@ export class CatalogAdminController {
   @Post('images') @HttpCode(201) @Can('catalog.manage')
   async createImage(@Req() req: AuthedRequest, @Body() body: Input) {
     const f = new Fields(body);
-    const v = { name: f.text('name'), family: body.family === 'windows' ? 'windows' : body.family === 'linux' ? 'linux' : (f.errors.family = 'INVALID_VALUE', ''),
+    const v = { name: f.text('name'), family: ['linux', 'windows', 'esxi'].includes(String(body.family)) ? String(body.family) : (f.errors.family = 'INVALID_VALUE', ''),
       connectionId: f.text('connectionId', 36), templateMoref: f.text('templateMoref', 80), minDiskGb: f.int('minDiskGb', 1, 65536, 10), cloudInit: body.cloudInit !== false };
     f.done();
     const { rows: [t] } = await pool.query('SELECT template FROM vmware_vms WHERE connection_id = $1 AND moref = $2', [v.connectionId, v.templateMoref]).catch(() => ({ rows: [] }));
@@ -418,8 +426,11 @@ export class CatalogAdminController {
 export type Order = { rp: Record<string, unknown>; shape: Shape; price: { monthly: string; currency: string }; extraIpv4: number; application: Application | null; packageId: string | null; imageId: string | null };
 // Validates the chosen pool, package or custom shape and image, and prices it. Shared by quote and create.
 export async function resolveOrder(poolId: string, body: Input): Promise<Order> {
-    const { rows: [rp] } = await pool.query('SELECT * FROM resource_pools WHERE id = $1 AND active', [poolId]).catch(() => ({ rows: [] }));
+    const { rows: [rp] } = await pool.query(`SELECT r.*, l.status AS location_status FROM resource_pools r LEFT JOIN locations l ON l.id = r.location_id
+      WHERE r.id = $1 AND r.active`, [poolId]).catch(() => ({ rows: [] }));
     if (!rp) throw apiError(400, 'VALIDATION_FAILED', 'Unknown pool', { poolId: 'NOT_AVAILABLE' });
+    // A location under maintenance (or hidden) takes no new servers; existing ones keep running.
+    if (rp.location_status && rp.location_status !== 'active') throw apiError(409, 'LOCATION_UNAVAILABLE', 'This location takes no new servers right now');
 
     let shape: Shape; let price: { monthly: string; currency: string };
     if (body.type === 'package') {
@@ -506,25 +517,28 @@ export class CatalogController {
   // What a customer may order: active packages and active pools' custom offerings. No internals.
   @Get('catalog')
   async catalog() {
-    const [packages, pools, images, applications] = await Promise.all([
+    const [packages, pools, images, applications, locations] = await Promise.all([
       pool.query(`SELECT p.id, p.name, p.vcpu, p.memory_mb AS "memoryMb", p.disk_gb AS "diskGb", p.price_monthly::text AS "priceMonthly",
         p.price_hourly::text AS "priceHourly", p.currency,
         ARRAY(SELECT pp.pool_id FROM package_pools pp JOIN resource_pools r ON r.id = pp.pool_id AND r.active WHERE pp.package_id = p.id) AS "poolIds",
         ARRAY(SELECT pi.image_id FROM package_images pi JOIN os_images i ON i.id = pi.image_id AND i.active WHERE pi.package_id = p.id) AS "imageIds"
         FROM packages p WHERE p.active ORDER BY p.sort, p.name`),
-      pool.query(`SELECT r.id, r.name, r.location, CASE WHEN c.active THEN json_build_object('cpuMin', c.cpu_min, 'cpuMax', c.cpu_max, 'cpuStep', c.cpu_step,
+      pool.query(`SELECT r.id, r.name, r.location, r.location_id AS "locationId", CASE WHEN c.active THEN json_build_object('cpuMin', c.cpu_min, 'cpuMax', c.cpu_max, 'cpuStep', c.cpu_step,
         'memoryMinMb', c.memory_min_mb, 'memoryMaxMb', c.memory_max_mb, 'memoryStepMb', c.memory_step_mb, 'diskMinGb', c.disk_min_gb, 'diskMaxGb', c.disk_max_gb,
         'diskStepGb', c.disk_step_gb, 'minMemoryMbPerVcpu', c.min_memory_mb_per_vcpu, 'maxMemoryMbPerVcpu', c.max_memory_mb_per_vcpu,
         'priceVcpu', c.price_vcpu::text, 'priceMemoryGb', c.price_memory_gb::text, 'priceDiskGb', c.price_disk_gb::text, 'currency', c.currency) END AS custom,
         r.extra_ipv4_max AS "extraIpv4Max", r.extra_ipv4_price::text AS "extraIpv4Price",
         EXISTS (SELECT 1 FROM ip_pools i WHERE i.pool_id = r.id AND i.ipv6_prefix IS NOT NULL) AS ipv6
-        FROM resource_pools r LEFT JOIN custom_rules c ON c.pool_id = r.id WHERE r.active ORDER BY r.name`),
+        FROM resource_pools r LEFT JOIN custom_rules c ON c.pool_id = r.id LEFT JOIN locations l ON l.id = r.location_id
+        WHERE r.active AND (l.status IS NULL OR l.status <> 'hidden') ORDER BY r.name`),
       pool.query('SELECT id, name, family, min_disk_gb AS "minDiskGb" FROM os_images WHERE active ORDER BY name'),
       pool.query(`SELECT id, name, kind, description, min_memory_mb AS "minMemoryMb", min_disk_gb AS "minDiskGb", price_monthly::text AS "priceMonthly",
         (license_mode = 'none' OR EXISTS (SELECT 1 FROM application_licenses l WHERE l.application_id = a.id AND l.server_id IS NULL)) AS available
         FROM applications a WHERE active ORDER BY name`),
+      pool.query(`SELECT ${locationColumns} FROM locations l WHERE l.status <> 'hidden'
+        AND EXISTS (SELECT 1 FROM resource_pools r WHERE r.location_id = l.id AND r.active) ORDER BY l.sort, l.name`),
     ]);
-    return { packages: packages.rows, pools: pools.rows, images: images.rows, applications: applications.rows };
+    return { packages: packages.rows, pools: pools.rows, images: images.rows, applications: applications.rows, locations: locations.rows };
   }
 
   // For the order page: which packages of a location can be ordered right now by this user, and if not, why

@@ -20,15 +20,16 @@ import Payments from './payments';
 import ReverseDns from './rdns';
 import Domain from './domain';
 import Security from './security';
+import ServerSettings from './servers';
 
-const tabs = ['general', 'branding', 'domain', 'security', 'mail', 'captcha', 'sms', 'payments', 'rdns', 'notifications'] as const;
+const tabs = ['general', 'branding', 'domain', 'security', 'servers', 'mail', 'captcha', 'sms', 'payments', 'rdns', 'notifications'] as const;
 
 export default function Settings() {
   const t = useTranslations('Settings');
   const [tab, setTab] = useQueryState('tab', parseAsString.withDefault('general'));
   const me = useMe();
   const readOnly = !can(me?.permissions, 'settings.manage');
-  const icon = { general: <I name="settings-2" size={16}/>, branding: <I name="palette" size={16}/>, domain: <I name="globe-lock" size={16}/>, security: <I name="shield-check" size={16}/>, mail: <I name="mail" size={16}/>, captcha: <I name="bot" size={16}/>,
+  const icon = { general: <I name="settings-2" size={16}/>, branding: <I name="palette" size={16}/>, domain: <I name="globe-lock" size={16}/>, security: <I name="shield-check" size={16}/>, servers: <I name="server-cog" size={16}/>, mail: <I name="mail" size={16}/>, captcha: <I name="bot" size={16}/>,
     sms: <I name="message-square" size={16}/>, payments: <I name="credit-card" size={16}/>, rdns: <I name="globe" size={16}/>, notifications: <I name="bell" size={16}/> };
   return <>
     <PageHeader eyebrow={t('eyebrow')} title={t('title')} description={t('intro')}/>
@@ -40,6 +41,7 @@ export default function Settings() {
       <Tabs.Panel id="general" className="pt-5"><RegistrationSetting/></Tabs.Panel>
       <Tabs.Panel id="branding" className="pt-5"><Branding readOnly={readOnly}/></Tabs.Panel>
       <Tabs.Panel id="domain" className="pt-5"><Domain readOnly={readOnly || !can(me?.permissions, 'system.update')}/></Tabs.Panel>
+      <Tabs.Panel id="servers" className="pt-5"><ServerSettings readOnly={readOnly}/></Tabs.Panel>
       <Tabs.Panel id="security" className="pt-5"><Security readOnly={readOnly}/></Tabs.Panel>
       <Tabs.Panel id="mail" className="pt-5"><Mail readOnly={readOnly} myEmail={me?.email ?? ''}/></Tabs.Panel>
       <Tabs.Panel id="captcha" className="pt-5"><Captcha readOnly={readOnly}/></Tabs.Panel>

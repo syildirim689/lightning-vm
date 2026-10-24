@@ -9,12 +9,14 @@ import { I } from '../../../components/icon';
 import { ButtonLink, CheckboxList, Empty, Notice, NumberInput, PageHeader, Section, SelectInput, TextInput } from '../../../components/ui';
 import { apiFetch, useErrorText, type ApiError } from '../../../lib/api';
 import { hostnameSchema, orderBody, useOrder } from '../../../lib/order-store';
+import { LocationPicker, type OrderLocation } from './locations';
 import { useApiQuery } from '../../../lib/query';
 import { useIntentKey, useSshKeys } from '../servers-ui';
 
 type Custom = { cpuMin: number; cpuMax: number; cpuStep: number; memoryMinMb: number; memoryMaxMb: number; memoryStepMb: number; diskMinGb: number; diskMaxGb: number; diskStepGb: number; currency: string };
 type Catalog = { packages: { id: string; name: string; vcpu: number; memoryMb: number; diskGb: number; priceMonthly: string; currency: string; poolIds: string[]; imageIds: string[] }[];
-  pools: { id: string; name: string; location: string; custom: Custom | null; extraIpv4Max: number; extraIpv4Price: string; ipv6: boolean }[]; images: { id: string; name: string; family: string; minDiskGb: number }[];
+  locations: OrderLocation[];
+  pools: { id: string; name: string; location: string; locationId: string | null; custom: Custom | null; extraIpv4Max: number; extraIpv4Price: string; ipv6: boolean }[]; images: { id: string; name: string; family: string; minDiskGb: number }[];
   applications: { id: string; name: string; kind: string; description: string; minMemoryMb: number; minDiskGb: number; priceMonthly: string; available: boolean }[] };
 type Quote = { shape: { vcpu: number; memoryMb: number; diskGb: number }; price: { monthly: string; currency: string }; quota: { exceeded: string[] }; capacityAvailable: boolean };
 type Project = { id: string; name: string };
@@ -68,6 +70,7 @@ export default function Order() {
   const image = catalog.images.find((i) => i.id === d.imageId);
   // Why a package cannot be ordered right now, if it cannot (the API checks again on create).
   const blocked = (p: Catalog['packages'][number]) => image && p.diskGb < image.minDiskGb ? t('why.imageDisk', { min: image.minDiskGb })
+    : image?.family === 'esxi' && (p.vcpu < 2 || p.memoryMb < 4096) ? t('why.esxi')
     : availability?.packages[p.id] && !availability.packages[p.id].capacity ? t('why.capacity')
     : availability?.packages[p.id]?.quota.length ? t('why.quota', { limits: availability.packages[p.id].quota.map((x) => t(`quota.${x as 'vcpu'}`)).join(', ') }) : null;
   const orderable = packages.filter((p) => !blocked(p));
@@ -116,9 +119,11 @@ export default function Order() {
     <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_22rem]">
       <div className="flex flex-col gap-6">
         <Section title={t('location')}>
+          {catalog.locations.length > 0 && <div className="mb-4"><LocationPicker locations={catalog.locations} pools={catalog.pools} poolId={d.poolId}
+            onPool={(v) => d.set({ poolId: v, packageId: '' })}/></div>}
           <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-            <SelectInput label={t('location')} value={d.poolId} onChange={(v) => d.set({ poolId: v, packageId: '' })}
-              options={catalog.pools.map((p) => ({ id: p.id, label: p.location ? `${p.name} · ${p.location}` : p.name }))}/>
+            {!catalog.locations.length && <SelectInput label={t('location')} value={d.poolId} onChange={(v) => d.set({ poolId: v, packageId: '' })}
+              options={catalog.pools.map((p) => ({ id: p.id, label: p.location ? `${p.name} · ${p.location}` : p.name }))}/>}
             <SelectInput label={t('image')} value={d.imageId} onChange={(v) => d.set({ imageId: v })} error={quoteField('imageId')}
               options={catalog.images.map((i) => ({ id: i.id, label: i.name, description: i.family }))}/>
             <SelectInput label={t('project')} value={d.projectId} onChange={(v) => d.set({ projectId: v })}
@@ -166,6 +171,7 @@ export default function Order() {
             {keys.length === 0 ? <Notice tone="warning">{t('noKeys')} <ButtonLink href="/account" size="sm" variant="secondary" className="ml-2">{t('manageKeys')}</ButtonLink></Notice>
               : <CheckboxList label={t('sshKeys')} value={d.sshKeyIds} onChange={(v) => d.set({ sshKeyIds: v })} error={quoteField('sshKeyIds')}
                   options={keys.map((k) => ({ id: k.id, label: k.name }))}/>}
+            {image?.family === 'esxi' && <Notice tone="default">{t('esxiNote')}</Notice>}
             <TextInput label={t('rootPassword')} type="password" value={rootPassword} onChange={setRootPassword} autoComplete="new-password" maxLength={128}
               help={t('rootPasswordHelp')} error={quoteField('rootPassword')}/>
             {pool && pool.extraIpv4Max > 0 && <NumberInput label={t('extraIpv4')} value={Math.min(d.extraIpv4 ?? 0, pool.extraIpv4Max)} onChange={(v) => d.set({ extraIpv4: v ?? 0 })} minValue={0} maxValue={pool.extraIpv4Max}

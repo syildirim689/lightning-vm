@@ -233,7 +233,9 @@
     "TWO_FACTOR_SETUP_REQUIRED": "Set up two-factor authentication to continue.",
     "EMAIL_CODE_SIGN_IN_DISABLED": "Sign-in with an e-mail code is off on this panel.",
     "TWO_FACTOR_USE_PASSWORD": "Accounts with two-factor sign in with their password.",
-    "USER_NOT_FOUND": "No account is registered with this e-mail address."
+    "USER_NOT_FOUND": "No account is registered with this e-mail address.",
+    "LOCATION_UNAVAILABLE": "This location takes no new servers right now (maintenance).",
+    "ACTION_DISABLED": "The administrator turned this off for customers."
   },
   "Auth": {
     "required": "required",
@@ -394,7 +396,9 @@
     "KEY_MISMATCH": "The key does not belong to this certificate.",
     "CERT_EXPIRED": "The certificate has expired.",
     "CERT_NOT_YET_VALID": "The certificate is not valid yet.",
-    "CERT_NAME_MISMATCH": "The certificate does not cover this domain (check its SAN list)."
+    "CERT_NAME_MISMATCH": "The certificate does not cover this domain (check its SAN list).",
+    "INVALID_IP": "Enter a valid IP address.",
+    "ESXI_NEEDS_MORE": "ESXi needs at least 2 vCPU and 4 GB RAM."
   },
   "Setup": {
     "title": "Setup wizard",
@@ -832,7 +836,8 @@
       "quota": "Over your quota: {limits}.",
       "appNoLicense": "No free licence right now",
       "appLinux": "Linux images only",
-      "appShape": "Needs at least {memory} GB RAM and {disk} GB disk"
+      "appShape": "Needs at least {memory} GB RAM and {disk} GB disk",
+      "esxi": "ESXi needs at least 2 vCPU and 4 GB RAM"
     },
     "bestValue": "Best value",
     "suggest": "Suggest",
@@ -851,7 +856,19 @@
     "passwordReplaced": "Your password was weak, so a strong one was generated. See it on the server page.",
     "application": "Ready-made application",
     "applicationHelp": "Installed in the background after the first boot; the server page shows its progress.",
-    "noApplication": "No application"
+    "noApplication": "No application",
+    "locations": {
+      "label": "Location",
+      "pool": "Resource pool in this location",
+      "maintenance": "Maintenance",
+      "testIp": "Test IP: {ip}",
+      "measure": "Measure latency",
+      "measuring": "Measuring…",
+      "latency": "{ms} ms",
+      "unreachable": "Unreachable",
+      "lookingGlass": "Looking glass"
+    },
+    "esxiNote": "ESXi (nested): the root password is the ESXi login; leave it empty and a strong one is generated and shown on the server page. SSH keys are not used. Manage it at https://IP after setup."
   },
   "Catalog": {
     "eyebrow": "ADMIN · CATALOG",
@@ -891,7 +908,7 @@
       "ratios": "Overcommit: CPU {cpu}x, RAM {memory}x, storage {storage}x",
       "storageNote": "Storage: {written} GB written, {provisioned} GB provisioned (thin), real free space {free} GB.",
       "location": "Location",
-      "locationHelp": "Location name shown to customers (example: Frankfurt).",
+      "locationHelp": "Where its servers run (from the Locations tab).",
       "connection": "Connection",
       "compute": "Cluster or host",
       "datastores": "Datastores",
@@ -939,7 +956,9 @@
       "minDisk": "Minimum disk",
       "explain": "Images are VM templates in a connection's inventory. The template is prepared in VMware; the platform only selects it here.",
       "noTemplates": "No templates found in this connection.",
-      "empty": "No images yet."
+      "empty": "No images yet.",
+      "esxi": "VMware ESXi (nested)",
+      "esxiHelp": "Network and password come through vApp (OVF) properties; nested virtualization is turned on."
     },
     "packages": {
       "title": "Packages",
@@ -1258,6 +1277,59 @@
       "publicHelp": "When off, only staff can insert it.",
       "copy": "Copy",
       "copyStarted": "Copy started; follow its progress in the library."
+    },
+    "locations": {
+      "title": "Locations",
+      "explain": "The places customers pick when ordering: city, country, datacenter, coordinates and test endpoints. Resource pools belong to a location; one under maintenance takes no new orders, a hidden one is not shown at all.",
+      "new": "New location",
+      "editTitle": "Edit location",
+      "edit": "Edit",
+      "remove": "Remove",
+      "cancel": "Cancel",
+      "save": "Save",
+      "saved": "Location saved.",
+      "removed": "Location removed.",
+      "removeConfirm": "Remove this location? Move its pools to another location first.",
+      "empty": "No locations yet.",
+      "name": "Name",
+      "place": "Place",
+      "status": "Status",
+      "pools": "Pools",
+      "servers": "Servers",
+      "actions": "Actions",
+      "statuses": {
+        "active": "Active",
+        "maintenance": "Maintenance",
+        "hidden": "Hidden"
+      },
+      "statusHelp": {
+        "active": "Shown and orderable.",
+        "maintenance": "Shown, but takes no new servers; existing ones keep running.",
+        "hidden": "Not shown when ordering."
+      },
+      "identity": "Identity",
+      "description": "Description",
+      "descriptionHelp": "Shown under the card when ordering (e.g. 10 Gbit uplink, Tier III).",
+      "where": "Place",
+      "whereHelp": "Coordinates are used on the map and topology screens.",
+      "city": "City",
+      "country": "Country code",
+      "countryHelp": "ISO 3166 two letters: TR, DE, NL…",
+      "datacenter": "Datacenter",
+      "latitude": "Latitude",
+      "longitude": "Longitude",
+      "sort": "Order",
+      "sortHelp": "Lower comes first.",
+      "testing": "Test endpoints",
+      "testingHelp": "Customers can measure connection quality from their own browser before ordering.",
+      "pingUrl": "Latency test URL",
+      "pingUrlHelp": "A small, fast HTTPS URL in this location; the browser measures the round trip.",
+      "lookingGlass": "Looking glass URL",
+      "testIp": "Test IP address",
+      "testIpHelp": "An address customers can ping or traceroute.",
+      "poolLocation": "Location",
+      "noLocation": "No location",
+      "assigned": "The location of the pool changed."
     }
   },
   "Servers": {
@@ -1335,7 +1407,8 @@
       "power": "Power",
       "metrics": "Metrics",
       "history": "Operation history",
-      "application": "Application"
+      "application": "Application",
+      "location": "Location"
     },
     "delete": {
       "title": "Delete server",
@@ -2162,7 +2235,8 @@
       "payments": "Payments",
       "rdns": "Reverse DNS",
       "security": "Sign-in security",
-      "domain": "Domain and SSL"
+      "domain": "Domain and SSL",
+      "servers": "Servers"
     },
     "saved": "Saved.",
     "save": "Save",
@@ -2608,6 +2682,40 @@
       "rolledBack": "The previous address and certificate were restored; details in the log below.",
       "mayDisconnect": "When it completes this page may stop answering on the old address; open https://{domain}.",
       "log": "Agent log"
+    },
+    "servers": {
+      "customer": "What customers may do",
+      "customerHelp": "Actions turned off disappear from the customer's server page and the API refuses them too. Staff always may.",
+      "actions": {
+        "power": "Power actions",
+        "console": "Browser console",
+        "iso": "Insert ISO / boot from ISO",
+        "rootPassword": "See the root password",
+        "delete": "Delete the server"
+      },
+      "actionHelp": {
+        "power": "Power on, shut down, restart, reset.",
+        "console": "The VM screen in the browser.",
+        "iso": "Insert images from the location's ISO library.",
+        "rootPassword": "See the password set or generated at order time.",
+        "delete": "Remove the server and its disks permanently."
+      },
+      "rolesNote": "Other rights, such as managing firewalls, are set on the Roles page.",
+      "hardware": "Hardware of new servers",
+      "hardwareHelp": "Applies to VMs created from now on; existing ones do not change.",
+      "hw": {
+        "cpuHotAdd": "CPU hot add",
+        "memoryHotAdd": "Memory hot add",
+        "nestedHv": "Nested virtualization"
+      },
+      "hwHelp": {
+        "cpuHotAdd": "vCPUs can be added while the server runs (the guest OS must support it).",
+        "memoryHotAdd": "RAM can be added while the server runs.",
+        "nestedHv": "Hardware virtualization inside the guest (KVM, Hyper-V, Docker Desktop). Always on for ESXi images."
+      },
+      "hardwareNote": "Hot add affects some licensing and NUMA settings; measure performance on large VMs.",
+      "save": "Save",
+      "saved": "Server settings saved."
     }
   },
   "Firewalls": {

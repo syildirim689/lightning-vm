@@ -8,7 +8,7 @@ import { apiError } from './errors';
 import { audit, SessionGuard, type AuthedRequest } from './auth';
 import { Can, PermissionGuard } from './rbac';
 import { decryptSecret, encryptSecret } from './secrets';
-import { findServer } from './servers';
+import { customerMay, findServer } from './servers';
 import { callAdapter, storedTarget } from './vmware';
 
 type Input = Record<string, unknown>;
@@ -235,6 +235,7 @@ export class ServerIsoController {
   @Put('servers/:id/iso')
   async insert(@Req() req: AuthedRequest, @Param('id', ParseUUIDPipe) id: string, @Body() body: Input) {
     const s = await findServer(req, id, true);
+    await customerMay(req, 'iso');
     if (!s.vm_moref || !['ready', 'error'].includes(s.state)) throw apiError(409, 'INVALID_STATE', 'The server is not ready');
     const isoId = typeof body?.isoId === 'string' && body.isoId ? body.isoId : null;
     const boot = isoId !== null && body?.boot === true;

@@ -22,6 +22,9 @@ export type SmsUse = { twoFactor: boolean; phoneVerification: boolean };
 export type SmsSettings = { provider: string; sender: string; credentialsEnc: string | null; commercial: boolean; use: SmsUse };
 export type Channel = 'inApp' | 'push' | 'email' | 'sms';
 // Sign-in policy: who must use two-factor, and whether a one-time e-mail code can replace the password.
+// Servers: what customers may do on their own servers (staff always may), and hardware options for new VMs.
+export type ServerSettings = { customer: { power: boolean; console: boolean; iso: boolean; rootPassword: boolean; delete: boolean };
+  hardware: { cpuHotAdd: boolean; memoryHotAdd: boolean; nestedHv: boolean } };
 export type SecuritySettings = { require2fa: 'none' | 'staff' | 'all'; emailCodeSignIn: boolean };
 export type NotificationPolicy = { enabled: boolean; allowed: Channel[]; defaults: Channel[]; userCanChange: boolean };
 export type CaptchaSettings = { provider: CaptchaProvider; siteKey: string; secretEnc: string | null; minScore: number; use: CaptchaUse };
@@ -39,6 +42,7 @@ const defaults = {
   // Per notification event (notify.ts): the admin's policy. Missing events use the catalog defaults.
   notifications: {} as Record<string, NotificationPolicy>,
   security: { require2fa: 'none', emailCodeSignIn: false } as SecuritySettings,
+  servers: { customer: { power: true, console: true, iso: true, rootPassword: true, delete: true }, hardware: { cpuHotAdd: false, memoryHotAdd: false, nestedHv: false } } as ServerSettings,
   rdns: { provider: 'none', apiUrl: '', apiKeyEnc: null, serverId: 'localhost', template: '', ttl: 3600, customerEdit: true, forwardCheck: true } as RdnsSettings,
   // Web Push (VAPID) keys, generated on first use.
   vapid: { publicKey: '', privateKeyEnc: null } as { publicKey: string; privateKeyEnc: string | null },

@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/base64"
+	"sort"
 	"strings"
 
 	"github.com/vmware/govmomi/fault"
@@ -32,6 +33,13 @@ type CloneRequest struct {
 	// "cloudinit": vCenter's native cloud-init customization (7.0U3+). "guestinfo": the same data in
 	// guestinfo.* extraConfig for cloud-init's VMware datasource (any version; cloud-init 21.3+ in the template).
 	Customization string `json:"customization"`
+	// Hardware options from the panel's server settings.
+	CPUHotAdd    bool `json:"cpuHotAdd"`
+	MemoryHotAdd bool `json:"memoryHotAdd"`
+	NestedHV     bool `json:"nestedHv"` // hardware virtualization exposed to the guest (nested ESXi, KVM, Hyper-V)
+	// "appliance": no cloud-init; the template reads its settings from vApp (OVF) properties, as the nested ESXi
+	// appliance does. Matching template properties get these values, and each is also set as extraConfig.
+	VAppProperties map[string]string `json:"vappProperties"`
 }
 
 type VMState struct {
@@ -123,7 +131,7 @@ func cloneVM(ctx context.Context, g *netGuard, r CloneRequest) (map[string]any, 
 
 	template := object.NewVirtualMachine(c, types.ManagedObjectReference{Type: "VirtualMachine", Value: r.Template})
 	var tpl mo.VirtualMachine
-	if err := template.Properties(ctx, template.Reference(), []string{"parent"}, &tpl); err != nil || tpl.Parent == nil {
+	if err := template.Properties(ctx, template.Reference(), []string{"parent", "config.vAppConfig"}, &tpl); err != nil || tpl.Parent == nil {
 		return nil, &Failure{Code: "TEMPLATE_NOT_FOUND", Message: "template not found"}
 	}
 	devices, err := template.Device(ctx)
@@ -153,30 +161,67 @@ func cloneVM(ctx context.Context, g *netGuard, r CloneRequest) (map[string]any, 
 	}
 	pool := types.ManagedObjectReference{Type: "ResourcePool", Value: r.Pool}
 	ds := types.ManagedObjectReference{Type: "Datastore", Value: r.Datastore}
-	extra := []types.BaseOptionValue{&types.OptionValue{Key: "lightning.server-id", Value: r.ServerID}}
+	config, customization := cloneConfig(r, tpl.Config)
 	spec := types.VirtualMachineCloneSpec{
-		Location: types.VirtualMachineRelocateSpec{Pool: &pool, Datastore: &ds, DeviceChange: changes},
-		PowerOn:  false,
-		Config: &types.VirtualMachineConfigSpec{NumCPUs: r.VCPU, MemoryMB: r.MemoryMB,
-			Annotation: "Managed by Lightning VM (server " + r.ServerID + ")"},
+		Location:      types.VirtualMachineRelocateSpec{Pool: &pool, Datastore: &ds, DeviceChange: changes},
+		PowerOn:       false,
+		Config:        config,
+		Customization: customization,
 	}
-	if r.Customization == "guestinfo" {
-		b64 := func(s string) string { return base64.StdEncoding.EncodeToString([]byte(s)) }
-		extra = append(extra,
-			&types.OptionValue{Key: "guestinfo.metadata", Value: b64(r.Metadata)}, &types.OptionValue{Key: "guestinfo.metadata.encoding", Value: "base64"},
-			&types.OptionValue{Key: "guestinfo.userdata", Value: b64(r.Userdata)}, &types.OptionValue{Key: "guestinfo.userdata.encoding", Value: "base64"})
-	} else {
-		spec.Customization = &types.CustomizationSpec{
-			Identity:         &types.CustomizationCloudinitPrep{Metadata: r.Metadata, Userdata: r.Userdata},
-			GlobalIPSettings: types.CustomizationGlobalIPSettings{},
-		}
-	}
-	spec.Config.ExtraConfig = extra
 	task, err := template.Clone(ctx, object.NewFolder(c, *tpl.Parent), r.Name, spec)
 	if err != nil {
 		return nil, classify(err)
 	}
 	return map[string]any{"task": task.Reference().Value, "existed": false}, nil
+}
+
+// cloneConfig is the new VM's configuration: size, hardware options, the server id, and how the guest is set
+// up (vCenter's cloud-init, cloud-init through guestinfo, or an appliance's vApp properties).
+func cloneConfig(r CloneRequest, tpl *types.VirtualMachineConfigInfo) (*types.VirtualMachineConfigSpec, *types.CustomizationSpec) {
+	config := &types.VirtualMachineConfigSpec{NumCPUs: r.VCPU, MemoryMB: r.MemoryMB,
+		Annotation:          "Managed by Lightning VM (server " + r.ServerID + ")",
+		CpuHotAddEnabled:    types.NewBool(r.CPUHotAdd),
+		MemoryHotAddEnabled: types.NewBool(r.MemoryHotAdd),
+		NestedHVEnabled:     types.NewBool(r.NestedHV)}
+	extra := []types.BaseOptionValue{&types.OptionValue{Key: "lightning.server-id", Value: r.ServerID}}
+	var customization *types.CustomizationSpec
+	switch r.Customization {
+	case "appliance":
+		var props []types.VAppPropertySpec
+		if tpl != nil && tpl.VAppConfig != nil {
+			for _, p := range tpl.VAppConfig.GetVmConfigInfo().Property {
+				if v, ok := r.VAppProperties[p.Id]; ok {
+					props = append(props, types.VAppPropertySpec{ArrayUpdateSpec: types.ArrayUpdateSpec{Operation: types.ArrayUpdateOperationEdit},
+						Info: &types.VAppPropertyInfo{Key: p.Key, Id: p.Id, Value: v}})
+				}
+			}
+		}
+		if len(props) > 0 {
+			config.VAppConfig = &types.VmConfigSpec{Property: props}
+		}
+		keys := make([]string, 0, len(r.VAppProperties))
+		for k := range r.VAppProperties {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		for _, k := range keys {
+			if strings.HasPrefix(k, "guestinfo.") {
+				extra = append(extra, &types.OptionValue{Key: k, Value: r.VAppProperties[k]})
+			}
+		}
+	case "guestinfo":
+		b64 := func(s string) string { return base64.StdEncoding.EncodeToString([]byte(s)) }
+		extra = append(extra,
+			&types.OptionValue{Key: "guestinfo.metadata", Value: b64(r.Metadata)}, &types.OptionValue{Key: "guestinfo.metadata.encoding", Value: "base64"},
+			&types.OptionValue{Key: "guestinfo.userdata", Value: b64(r.Userdata)}, &types.OptionValue{Key: "guestinfo.userdata.encoding", Value: "base64"})
+	default:
+		customization = &types.CustomizationSpec{
+			Identity:         &types.CustomizationCloudinitPrep{Metadata: r.Metadata, Userdata: r.Userdata},
+			GlobalIPSettings: types.CustomizationGlobalIPSettings{},
+		}
+	}
+	config.ExtraConfig = extra
+	return config, customization
 }
 
 func taskFault(f *types.LocalizedMethodFault) (string, string) {

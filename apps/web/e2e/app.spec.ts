@@ -222,7 +222,6 @@ test.describe('catalog and order preview (simulator)', () => {
     await adminPage.getByRole('button', { name: 'New resource pool' }).click();
     let dialog = adminPage.getByRole('dialog');
     await dialog.getByLabel('Name').fill('E2E Pool');
-    await dialog.getByLabel('Location', { exact: true }).fill('Lab');
     await choose(adminPage, dialog, /Cluster or host/, /cluster/);
     await tick(dialog.getByRole('group', { name: 'Datastores' }).getByRole('checkbox').first());
     await choose(adminPage, dialog, /Network \(port group\)/, /.+/);

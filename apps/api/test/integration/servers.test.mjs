@@ -473,3 +473,57 @@ test('ISO library: storages over WebDAV/FTP/SFTP, copy into a location, insert/b
   await send('DELETE', `/servers/${id}`, { confirm: 'iso-1' }, user, { 'idempotency-key': randomUUID() });
   await send('DELETE', `/admin/iso-sources/${sourceId}`);
 });
+
+test('locations: details, a pool assigned, maintenance blocks orders, hidden removes it from the catalog', { skip }, async () => {
+  assert.equal((await send('POST', '/admin/locations', { name: 'Bad', countryCode: 'TUR', pingUrl: 'ftp://x', latitude: 41 })).json().fields.countryCode, 'INVALID_VALUE');
+  const created = await send('POST', '/admin/locations', { name: 'Istanbul DC1', city: 'İstanbul', countryCode: 'tr', datacenter: 'Equinix IL2', latitude: 41.0082, longitude: 28.9784,
+    pingUrl: 'https://speed.example.com/ping', testIp: '203.0.113.9', description: '10G uplink' });
+  assert.equal(created.statusCode, 201, created.body);
+  const id = created.json().id;
+  const dvPool = (await pool.query("SELECT id FROM resource_pools WHERE name = 'Sim DVS'")).rows[0].id;
+  assert.equal((await send('PUT', `/admin/pools/${dvPool}/location`, { locationId: id })).statusCode, 200);
+  const cat = (await send('GET', '/catalog', undefined, user)).json();
+  const loc = cat.locations.find((l) => l.id === id);
+  assert.deepEqual([loc.countryCode, loc.city, loc.testIp, loc.latitude], ['TR', 'İstanbul', '203.0.113.9', 41.0082]);
+  assert.equal(cat.pools.find((p) => p.id === dvPool).locationId, id);
+  const pkg = (await pool.query("SELECT id FROM packages WHERE name = 'Tiny DVS'")).rows[0].id;
+  const body = { ...order('loc-1'), poolId: dvPool, packageId: pkg };
+  const edit = (status) => send('PUT', `/admin/locations/${id}`, { name: 'Istanbul DC1', city: 'İstanbul', countryCode: 'TR', status });
+  assert.equal((await edit('maintenance')).statusCode, 200);
+  assert.equal((await send('POST', '/catalog/quote', body, user)).json().code, 'LOCATION_UNAVAILABLE');
+  assert.equal((await edit('hidden')).statusCode, 200);
+  assert.ok(!(await send('GET', '/catalog', undefined, user)).json().pools.some((p) => p.id === dvPool), 'pools of a hidden location are not offered');
+  assert.equal((await edit('active')).statusCode, 200);
+  assert.equal((await send('POST', '/catalog/quote', body, user)).statusCode, 200);
+  assert.equal((await send('DELETE', `/admin/locations/${id}`)).json().code, 'IN_USE');
+  // The pool keeps showing the location's name, also after a rename.
+  await send('PUT', `/admin/locations/${id}`, { name: 'Istanbul-1', countryCode: 'TR' });
+  assert.equal((await pool.query('SELECT location FROM resource_pools WHERE id = $1', [dvPool])).rows[0].location, 'Istanbul-1');
+  await send('PUT', `/admin/pools/${dvPool}/location`, { locationId: null });
+  assert.equal((await send('DELETE', `/admin/locations/${id}`)).statusCode, 204);
+});
+
+test('server settings: customers lose actions the admin turns off (staff keep them); ESXi images need a bigger shape', { skip }, async () => {
+  const id = serverId;
+  const set = (customer) => send('PUT', '/admin/settings/servers', { customer });
+  assert.deepEqual((await send('GET', `/servers/${id}`, undefined, user)).json().allowed, { power: true, console: true, iso: true, rootPassword: true, delete: true });
+  assert.equal((await set({ power: false, delete: false, console: false })).statusCode, 200);
+  const detail = (await send('GET', `/servers/${id}`, undefined, user)).json();
+  assert.equal(detail.allowed.power, false);
+  const act = await send('POST', `/servers/${id}/actions`, { action: 'reset' }, user, { 'idempotency-key': randomUUID() });
+  assert.equal(act.json().code, 'ACTION_DISABLED');
+  assert.equal((await send('DELETE', `/servers/${id}`, { confirm: 'x' }, user, { 'idempotency-key': randomUUID() })).json().code, 'ACTION_DISABLED');
+  assert.equal((await send('POST', `/servers/${id}/console`, {}, user)).json().code, 'ACTION_DISABLED');
+  assert.equal((await send('GET', `/servers/${id}`)).json().allowed.power, true, 'staff are not limited');
+  assert.equal((await set({ power: true, delete: true, console: true })).statusCode, 200);
+
+  const conn = (await pool.query('SELECT connection_id FROM os_images WHERE id = $1', [imageId])).rows[0].connection_id;
+  await pool.query("INSERT INTO os_images (name, family, connection_id, template_moref, min_disk_gb) VALUES ('Sim ESXi', 'esxi', $1, 'vm-esxi-tpl', 10)", [conn]);
+  const esxi = (await pool.query("SELECT id FROM os_images WHERE name = 'Sim ESXi'")).rows[0].id;
+  await pool.query('INSERT INTO package_images (package_id, image_id) VALUES ($1, $2)', [packageId, esxi]);
+  const shape = (await send('POST', '/catalog/quote', order('esx-1'), user)).json().shape;
+  assert.ok(shape.vcpu < 2 || shape.memoryMb < 4096, 'the test package is smaller than ESXi needs');
+  assert.equal((await create({ ...order('esx-1'), imageId: esxi })).json().fields.imageId, 'ESXI_NEEDS_MORE');
+  await pool.query('DELETE FROM package_images WHERE image_id = $1', [esxi]);
+  await pool.query('DELETE FROM os_images WHERE id = $1', [esxi]);
+});

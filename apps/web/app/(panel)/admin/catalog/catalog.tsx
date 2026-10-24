@@ -11,13 +11,14 @@ import { useApiForm } from '../../../../lib/form';
 import { useApiAction, useApiQuery } from '../../../../lib/query';
 import { Applications } from './apps-ui';
 import { IsoLibrary } from './iso-ui';
+import { flag, Locations, PoolLocation, useLocations } from './locations-ui';
 import { IpAddresses, IpPoolEdit, PoolIpOptions, type IpPoolRow } from './ip-ui';
 
 type Inventory = { compute: { moref: string; name: string; kind: string }[]; datastores: { moref: string; name: string }[]; networks: { moref: string; name: string; vlan: number | null }[]; vms: { moref: string; name: string; template: boolean }[] };
 type Connection = { id: string; name: string };
 type Layer = Record<string, number>;
 type Capacity = { physical: Layer; headroom: Layer; offered: Layer; used: Layer; reserved: Layer; available: Layer; realFreeGb: number; warnings: string[] };
-type Pool = { id: string; name: string; location: string; connectionName: string; cpuOvercommit: number; memoryOvercommit: number; storageOvercommit: number; capacity: Capacity; customRule: Record<string, unknown> | null;
+type Pool = { id: string; name: string; location: string; locationId: string | null; connectionName: string; cpuOvercommit: number; memoryOvercommit: number; storageOvercommit: number; capacity: Capacity; customRule: Record<string, unknown> | null;
   extraIpv4Max: number; extraIpv4Price: string };
 type Pkg = { id: string; name: string; vcpu: number; memoryMb: number; diskGb: number; priceMonthly: string; currency: string; poolIds: string[] };
 type Image = { id: string; name: string; family: string; templateName: string | null; minDiskGb: number };
@@ -66,9 +67,11 @@ export default function Catalog() {
     <Tabs selectedKey={tab} onSelectionChange={(k) => setTab(String(k))}>
       <Tabs.ListContainer>
         <Tabs.List aria-label={t('title')}>
-          {(['pools', 'packages', 'images', 'isos', 'ip', 'apps', 'quotas'] as const).map((k) => <Tabs.Tab key={k} id={k}>{t(`${k}.title`)}<Tabs.Indicator/></Tabs.Tab>)}
+          {(['locations', 'pools', 'packages', 'images', 'isos', 'ip', 'apps', 'quotas'] as const).map((k) => <Tabs.Tab key={k} id={k}>{t(`${k}.title`)}<Tabs.Indicator/></Tabs.Tab>)}
         </Tabs.List>
       </Tabs.ListContainer>
+
+      <Tabs.Panel id="locations" className="flex flex-col gap-4 pt-5"><Locations/></Tabs.Panel>
 
       <Tabs.Panel id="pools" className="flex flex-col gap-4 pt-5">
         <div className="flex flex-wrap items-start justify-between gap-3">
@@ -158,6 +161,7 @@ function PoolCard({ pool, removeButton }: { pool: Pool; removeButton: React.Reac
       {removeButton}
     </Card.Header>
     <Card.Content className="flex flex-col gap-4">
+      <PoolLocation poolId={pool.id} locationId={pool.locationId}/>
       <div className="grid gap-3">
         {meter('vCPU', c.available.vcpu ?? 0, c.offered.vcpu ?? 0, '')}
         {meter('RAM', Math.round((c.available.memoryMb ?? 0) / 1024), Math.round((c.offered.memoryMb ?? 0) / 1024), 'GB')}
@@ -202,7 +206,8 @@ const str = (v: number | undefined) => (v === undefined ? '' : String(v));
 function PoolForm({ connections, onSaved }: { connections: Connection[]; onSaved: () => void }) {
   const t = useTranslations('Catalog');
   const saved = useSaved(onSaved);
-  const f = useApiForm({ name: '', location: '', connectionId: connections[0].id, computeMoref: '', networkMoref: '', cpuOvercommit: '4', memoryOvercommit: '1', storageOvercommit: '1',
+  const locations = useLocations();
+  const f = useApiForm({ name: '', locationId: '', connectionId: connections[0].id, computeMoref: '', networkMoref: '', cpuOvercommit: '4', memoryOvercommit: '1', storageOvercommit: '1',
     reserveCpuPct: '10', reserveMemoryPct: '10', reserveStoragePct: '15' });
   const inv = useApiQuery<Inventory>(['vmware', 'connection', f.values.connectionId], `/admin/vmware/connections/${f.values.connectionId}`).data;
   const [stores, setStores] = useState<string[]>([]);
@@ -215,7 +220,8 @@ function PoolForm({ connections, onSaved }: { connections: Connection[]; onSaved
   return <form className="flex flex-col gap-4" noValidate onSubmit={async (e) => { e.preventDefault(); saved(await f.submit('POST', '/admin/pools', { ...f.values, datastoreMorefs: stores })); }}>
     <FieldGroup title={t('form.identity')} description={t('form.poolIdentityHelp')}>
       <TextInput label={t('col.name')} value={f.values.name} onChange={f.set('name')} error={f.fieldError('name')} isRequired placeholder="Istanbul-1"/>
-      <TextInput label={t('pools.location')} help={t('pools.locationHelp')} value={f.values.location} onChange={f.set('location')} placeholder="İstanbul"/>
+      <SelectInput label={t('pools.location')} help={t('pools.locationHelp')} value={f.values.locationId} onChange={f.set('locationId')} error={f.fieldError('locationId')}
+        options={[{ id: '', label: '–' }, ...locations.map((l) => ({ id: l.id, label: `${flag(l.countryCode)} ${l.name}`.trim(), description: [l.city, l.datacenter].filter(Boolean).join(' · ') || undefined }))]}/>
     </FieldGroup>
     <FieldGroup title={t('form.vmware')} description={t('form.vmwareHelp')}>
       <SelectInput label={t('pools.connection')} value={f.values.connectionId} onChange={f.set('connectionId')} options={connections.map((c) => ({ id: c.id, label: c.name }))}/>
@@ -271,7 +277,7 @@ function ImageForm({ connections, onSaved }: { connections: Connection[]; onSave
   return <form className="flex flex-col gap-4" noValidate onSubmit={async (e) => { e.preventDefault(); saved(await f.submit('POST', '/admin/images')); }}>
     <FieldGroup title={t('form.identity')} description={t('form.imageIdentityHelp')}>
       <TextInput label={t('col.name')} value={f.values.name} onChange={f.set('name')} error={f.fieldError('name')} isRequired placeholder="Ubuntu 24.04 LTS"/>
-      <SelectInput label={t('images.family')} value={f.values.family} onChange={f.set('family')} options={[{ id: 'linux', label: 'Linux' }, { id: 'windows', label: 'Windows' }]}/>
+      <SelectInput label={t('images.family')} value={f.values.family} onChange={f.set('family')} options={[{ id: 'linux', label: 'Linux' }, { id: 'windows', label: 'Windows' }, { id: 'esxi', label: t('images.esxi'), description: t('images.esxiHelp') }]}/>
     </FieldGroup>
     <FieldGroup title={t('form.template')} description={t('form.templateHelp')}>
       <SelectInput label={t('pools.connection')} value={f.values.connectionId} onChange={f.set('connectionId')} options={connections.map((c) => ({ id: c.id, label: c.name }))}/>

@@ -13,10 +13,11 @@ import { useApiForm } from '../../lib/form';
 import { useApiAction, useApiQuery } from '../../lib/query';
 import ServerMetrics from './metrics';
 import { ServerIso } from './server-iso';
+import { flag } from '../../lib/flag';
 import { ButtonLink, ConfirmButton, DataTable, Empty, Mono, Notice, PageHeader, Section, StatusChip, TextInput, type Tone } from '../../components/ui';
 
 export type Server = { id: string; name: string; state: string; powerState: string; guestReady: boolean; vcpu: number; memoryMb: number; diskGb: number;
-  priceMonthly: string; currency: string; errorCode: string | null; poolName: string; location: string; imageName: string; address: string | null;
+  priceMonthly: string; currency: string; errorCode: string | null; poolName: string; location: string; locationCity?: string | null; locationCountry?: string | null; locationDatacenter?: string | null; imageName: string; address: string | null;
   createdAt: string; ownerEmail?: string; hasRootPassword?: boolean; applicationName?: string | null; appState?: 'pending' | 'installing' | 'installed' | 'failed' | null; appMessage?: string | null; firewallStatus?: 'applied' | 'pending' | 'failed'; firewallError?: string | null; firewallCount?: number; lastOperation: { id: string; kind: string; status: string; step: string | null; errorCode: string | null } | null };
 type Operation = { id: string; kind: string; status: string; step: string | null; attempts: number; errorCode: string | null; createdAt: string; finishedAt: string | null };
 
@@ -107,11 +108,13 @@ export function ServerDetail({ id }: { id: string }) {
   const client = useQueryClient();
   const [message, setMessage] = useState<string>();
   const [deleteName, setDeleteName] = useState('');
-  const q = useApiQuery<{ server: Server; operations: Operation[] }>(['servers', id], `/servers/${id}`, { refetchInterval: 3_000 });
+  const q = useApiQuery<{ server: Server; operations: Operation[]; allowed?: Record<'power' | 'console' | 'iso' | 'rootPassword' | 'delete', boolean> }>(['servers', id], `/servers/${id}`, { refetchInterval: 3_000 });
   const gone = (q.error as { code?: string } | null)?.code === 'NOT_FOUND';
   useEffect(() => { if (gone) router.replace('/'); }, [gone, router]);
   if (!q.data) return <p role="status" className="text-sm text-muted">{q.error && !gone ? error(q.error) : t('loading')}</p>;
   const { server: s, operations } = q.data;
+  // What the admin lets customers do here (missing: an older API, everything allowed).
+  const allowed = { power: true, console: true, iso: true, rootPassword: true, delete: true, ...q.data.allowed };
   const open = operations.find((o) => runningStates.includes(o.status));
   // The same Idempotency-Key is kept until the server answers; only a network failure keeps it for a retry.
   async function act(path: string, method: string, body?: object) {
@@ -128,7 +131,7 @@ export function ServerDetail({ id }: { id: string }) {
 
   return <div className="flex flex-col gap-6">
     <PageHeader eyebrow={s.location || s.poolName} title={s.name} description={<span className="mt-2 inline-flex"><StateBadge server={s}/></span>}
-      actions={s.state === 'ready' && <ButtonLink variant="secondary" href={`/servers/${id}/console`}><I name="square-terminal" size={16}/>{actionLabel('console')}</ButtonLink>}/>
+      actions={s.state === 'ready' && allowed.console && <ButtonLink variant="secondary" href={`/servers/${id}/console`}><I name="square-terminal" size={16}/>{actionLabel('console')}</ButtonLink>}/>
     {message && <div role="alert"><Notice tone="danger">{message}</Notice></div>}
     {s.errorCode && <Notice tone="danger">{t('errorCode', { message: error({ code: s.errorCode }), code: s.errorCode })}</Notice>}
 
@@ -145,6 +148,9 @@ export function ServerDetail({ id }: { id: string }) {
         <dl className="grid gap-x-6 gap-y-3 text-sm sm:grid-cols-2">
           <div><dt className="text-muted">IP</dt><dd className="mt-0.5">{s.address ? <Mono>{s.address}</Mono> : '–'}</dd></div>
           <div><dt className="text-muted">{t('col.size')}</dt><dd className="mt-0.5">{size(t, s)}</dd></div>
+          <div><dt className="text-muted">{t('detail.location')}</dt><dd className="mt-0.5 flex flex-col">
+            <span><span aria-hidden className="mr-1.5">{flag(s.locationCountry ?? '')}</span>{s.location || s.poolName}</span>
+            {(s.locationCity || s.locationDatacenter) && <span className="text-xs text-muted">{[s.locationCity, s.locationDatacenter].filter(Boolean).join(' · ')}</span>}</dd></div>
           <div><dt className="text-muted">{t('detail.image')}</dt><dd className="mt-0.5">{s.imageName}</dd></div>
           <div><dt className="text-muted">{t('detail.price')}</dt><dd className="mt-0.5">{format.number(Number(s.priceMonthly), { style: 'currency', currency: s.currency })}</dd></div>
           {s.applicationName && <div><dt className="text-muted">{t('detail.application')}</dt><dd className="mt-0.5 flex flex-wrap items-center gap-2">{s.applicationName}
@@ -154,19 +160,19 @@ export function ServerDetail({ id }: { id: string }) {
         </dl>
         <p className="mt-4 text-xs text-muted">{t('readinessExplain')}</p>
       </Section>
-      <Section title={t('detail.power')} description={t('powerExplain')}>
+      {allowed.power && <Section title={t('detail.power')} description={t('powerExplain')}>
         <div className="flex flex-wrap gap-2">
           {power('power_on', <I name="play" size={16}/>)}
           {power('shutdown', <I name="power" size={16}/>)}
           {risky('power_off', <I name="square" size={16}/>)}
           {risky('reset', <I name="rotate-ccw" size={16}/>)}
         </div>
-      </Section>
+      </Section>}
     </div>
 
     <ServerIps server={s}/>
-    <ServerIso id={s.id} ready={s.state === 'ready' || s.state === 'error'}/>
-    {s.hasRootPassword && <RootPassword id={s.id}/>}
+    {allowed.iso && <ServerIso id={s.id} ready={s.state === 'ready' || s.state === 'error'}/>}
+    {s.hasRootPassword && allowed.rootPassword && <RootPassword id={s.id}/>}
     <ServerFirewalls server={s}/>
 
     <ServerMetrics id={id} live={s.state === 'ready' && s.powerState === 'poweredOn'}/>
@@ -179,13 +185,13 @@ export function ServerDetail({ id }: { id: string }) {
           o.errorCode ? t('errorCode', { message: error({ code: o.errorCode }), code: o.errorCode }) : o.step ? t(`step.${o.step as 'queued'}`) : '']}/>
     </Section>
 
-    <Section title={t('delete.title')} description={t('delete.explain')} className="border border-danger/30">
+    {allowed.delete && <Section title={t('delete.title')} description={t('delete.explain')} className="border border-danger/30">
       <div className="flex flex-wrap items-end gap-3">
         <TextInput className="min-w-64 flex-1" label={t('delete.confirm', { name: s.name })} value={deleteName} onChange={setDeleteName} autoComplete="off"/>
         <Button variant="danger" isDisabled={deleteName !== s.name || s.state === 'deleting'} onPress={() => act(`/servers/${id}`, 'DELETE', { confirm: deleteName })}>
           <I name="trash-2" size={16}/>{t('delete.button')}</Button>
       </div>
-    </Section>
+    </Section>}
   </div>;
 }
 

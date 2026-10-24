@@ -233,7 +233,9 @@
     "TWO_FACTOR_SETUP_REQUIRED": "Devam etmek için iki adımlı doğrulamayı kurun.",
     "EMAIL_CODE_SIGN_IN_DISABLED": "E-posta koduyla giriş bu panelde kapalı.",
     "TWO_FACTOR_USE_PASSWORD": "İki adımlı doğrulaması açık hesaplar parolayla giriş yapar.",
-    "USER_NOT_FOUND": "Bu e-posta adresiyle kayıtlı bir hesap bulunamadı."
+    "USER_NOT_FOUND": "Bu e-posta adresiyle kayıtlı bir hesap bulunamadı.",
+    "LOCATION_UNAVAILABLE": "Bu lokasyon şu an yeni sunucu almıyor (bakımda).",
+    "ACTION_DISABLED": "Yönetici bu işlemi müşterilere kapattı."
   },
   "Auth": {
     "required": "zorunlu",
@@ -394,7 +396,9 @@
     "KEY_MISMATCH": "Anahtar bu sertifikaya ait değil.",
     "CERT_EXPIRED": "Sertifikanın süresi dolmuş.",
     "CERT_NOT_YET_VALID": "Sertifika henüz geçerli değil.",
-    "CERT_NAME_MISMATCH": "Sertifika bu alan adını kapsamıyor (SAN listesine bakın)."
+    "CERT_NAME_MISMATCH": "Sertifika bu alan adını kapsamıyor (SAN listesine bakın).",
+    "INVALID_IP": "Geçerli bir IP adresi girin.",
+    "ESXI_NEEDS_MORE": "ESXi için en az 2 vCPU ve 4 GB RAM gerekir."
   },
   "Setup": {
     "title": "Kurulum sihirbazı",
@@ -832,7 +836,8 @@
       "quota": "Kotanızı aşar: {limits}.",
       "appNoLicense": "Şu an boşta lisans yok",
       "appLinux": "Yalnızca Linux imajlarında",
-      "appShape": "En az {memory} GB RAM ve {disk} GB disk gerekir"
+      "appShape": "En az {memory} GB RAM ve {disk} GB disk gerekir",
+      "esxi": "ESXi için en az 2 vCPU ve 4 GB RAM gerekir"
     },
     "bestValue": "En uygun",
     "suggest": "Öner",
@@ -851,7 +856,19 @@
     "passwordReplaced": "Parolanız zayıf olduğu için güçlü bir parola üretildi. Sunucu sayfasından görebilirsiniz.",
     "application": "Hazır uygulama",
     "applicationHelp": "İlk açılıştan sonra arka planda kurulur; sunucu sayfasında durumunu görürsünüz.",
-    "noApplication": "Uygulama yok"
+    "noApplication": "Uygulama yok",
+    "locations": {
+      "label": "Lokasyon",
+      "pool": "Bu lokasyondaki kaynak havuzu",
+      "maintenance": "Bakımda",
+      "testIp": "Test IP: {ip}",
+      "measure": "Gecikmeyi ölç",
+      "measuring": "Ölçülüyor…",
+      "latency": "{ms} ms",
+      "unreachable": "Ulaşılamadı",
+      "lookingGlass": "Looking glass"
+    },
+    "esxiNote": "ESXi (iç içe): root parolası ESXi girişidir; boş bırakırsanız güçlü bir parola üretilir ve sunucu sayfasında gösterilir. SSH anahtarları kullanılmaz. Kurulumdan sonra https://IP adresinden yönetin."
   },
   "Catalog": {
     "eyebrow": "YÖNETİM · KATALOG",
@@ -891,7 +908,7 @@
       "ratios": "Fazla tahsis: CPU {cpu}x, RAM {memory}x, depolama {storage}x",
       "storageNote": "Depolama: {written} GB yazılmış, {provisioned} GB tahsis edilmiş (thin), gerçek boş alan {free} GB.",
       "location": "Konum",
-      "locationHelp": "Müşteriye gösterilen konum adı (örnek: İstanbul).",
+      "locationHelp": "Sunucuların çalıştığı yer (Lokasyonlar sekmesinden).",
       "connection": "Bağlantı",
       "compute": "Küme veya host",
       "datastores": "Datastore'lar",
@@ -939,7 +956,9 @@
       "minDisk": "En az disk",
       "explain": "İmajlar, bağlantının envanterindeki VM şablonlarıdır. Şablon VMware'de hazırlanır; platform burada yalnızca seçer.",
       "noTemplates": "Bu bağlantıda şablon bulunamadı.",
-      "empty": "Henüz imaj yok."
+      "empty": "Henüz imaj yok.",
+      "esxi": "VMware ESXi (iç içe)",
+      "esxiHelp": "Ağ ve parola vApp (OVF) özellikleriyle verilir; iç içe sanallaştırma açılır."
     },
     "packages": {
       "title": "Paketler",
@@ -1258,6 +1277,59 @@
       "publicHelp": "Kapalıysa yalnızca yöneticiler takabilir.",
       "copy": "Kopyala",
       "copyStarted": "Kopyalama başladı; ilerlemeyi kütüphanede izleyebilirsiniz."
+    },
+    "locations": {
+      "title": "Lokasyonlar",
+      "explain": "Müşterilerin sipariş verirken seçtiği yerler: şehir, ülke, veri merkezi, koordinat ve test adresleri. Kaynak havuzları bir lokasyona bağlanır; bakımdaki lokasyon yeni sipariş almaz, gizli lokasyon hiç gösterilmez.",
+      "new": "Yeni lokasyon",
+      "editTitle": "Lokasyonu düzenle",
+      "edit": "Düzenle",
+      "remove": "Kaldır",
+      "cancel": "Vazgeç",
+      "save": "Kaydet",
+      "saved": "Lokasyon kaydedildi.",
+      "removed": "Lokasyon kaldırıldı.",
+      "removeConfirm": "Lokasyon kaldırılsın mı? Önce havuzları başka bir lokasyona taşıyın.",
+      "empty": "Henüz lokasyon yok.",
+      "name": "Ad",
+      "place": "Yer",
+      "status": "Durum",
+      "pools": "Havuz",
+      "servers": "Sunucu",
+      "actions": "İşlemler",
+      "statuses": {
+        "active": "Aktif",
+        "maintenance": "Bakımda",
+        "hidden": "Gizli"
+      },
+      "statusHelp": {
+        "active": "Siparişte görünür ve seçilebilir.",
+        "maintenance": "Görünür ama yeni sunucu alınmaz; mevcutlar çalışır.",
+        "hidden": "Siparişte gösterilmez."
+      },
+      "identity": "Tanım",
+      "description": "Açıklama",
+      "descriptionHelp": "Siparişte kartın altında görünür (ör. 10 Gbit uplink, Tier III).",
+      "where": "Konum",
+      "whereHelp": "Koordinatlar harita ve topoloji ekranında kullanılır.",
+      "city": "Şehir",
+      "country": "Ülke kodu",
+      "countryHelp": "ISO 3166 iki harf: TR, DE, NL…",
+      "datacenter": "Veri merkezi",
+      "latitude": "Enlem",
+      "longitude": "Boylam",
+      "sort": "Sıra",
+      "sortHelp": "Küçük değer önce gösterilir.",
+      "testing": "Test adresleri",
+      "testingHelp": "Müşteriler sipariş öncesi bağlantı kalitesini kendi tarayıcılarından ölçebilir.",
+      "pingUrl": "Gecikme testi adresi",
+      "pingUrlHelp": "Bu lokasyonda hızlı yanıt veren küçük bir HTTPS adresi; tarayıcıdan gidiş-dönüş süresi ölçülür.",
+      "lookingGlass": "Looking glass adresi",
+      "testIp": "Test IP adresi",
+      "testIpHelp": "Müşterilerin ping/traceroute yapabileceği adres.",
+      "poolLocation": "Lokasyon",
+      "noLocation": "Lokasyon yok",
+      "assigned": "Havuzun lokasyonu değişti."
     }
   },
   "Servers": {
@@ -1335,7 +1407,8 @@
       "power": "Güç",
       "metrics": "Metrikler",
       "history": "İşlem geçmişi",
-      "application": "Uygulama"
+      "application": "Uygulama",
+      "location": "Lokasyon"
     },
     "delete": {
       "title": "Sunucuyu sil",
@@ -2162,7 +2235,8 @@
       "payments": "Ödeme",
       "rdns": "Ters DNS",
       "security": "Giriş güvenliği",
-      "domain": "Alan adı ve SSL"
+      "domain": "Alan adı ve SSL",
+      "servers": "Sunucular"
     },
     "saved": "Kaydedildi.",
     "save": "Kaydet",
@@ -2608,6 +2682,40 @@
       "rolledBack": "Önceki adres ve sertifika geri yüklendi; ayrıntılar aşağıdaki kayıtta.",
       "mayDisconnect": "Değişiklik tamamlandığında bu sayfa eski adreste yanıt vermeyebilir; https://{domain} adresini açın.",
       "log": "Ajan kaydı"
+    },
+    "servers": {
+      "customer": "Müşterinin yapabilecekleri",
+      "customerHelp": "Kapalı olan işlemler müşterinin sunucu sayfasında görünmez ve API tarafından da reddedilir. Yöneticiler her zaman yapabilir.",
+      "actions": {
+        "power": "Güç işlemleri",
+        "console": "Tarayıcı konsolu",
+        "iso": "ISO takma / ISO'dan başlatma",
+        "rootPassword": "Root parolasını görme",
+        "delete": "Sunucuyu silme"
+      },
+      "actionHelp": {
+        "power": "Açma, kapatma, yeniden başlatma, sıfırlama.",
+        "console": "VM ekranına tarayıcıdan erişim.",
+        "iso": "Lokasyonun ISO kütüphanesinden imaj takma.",
+        "rootPassword": "Siparişte belirlenen veya üretilen parolayı panelden görme.",
+        "delete": "Sunucuyu ve disklerini kalıcı olarak kaldırma."
+      },
+      "rolesNote": "Firewall yönetimi gibi diğer yetkiler Roller sayfasından ayarlanır.",
+      "hardware": "Yeni sunucuların donanımı",
+      "hardwareHelp": "Bundan sonra oluşturulan sanal makinelere uygulanır; mevcutlar değişmez.",
+      "hw": {
+        "cpuHotAdd": "CPU sıcak ekleme",
+        "memoryHotAdd": "RAM sıcak ekleme",
+        "nestedHv": "İç içe sanallaştırma"
+      },
+      "hwHelp": {
+        "cpuHotAdd": "Sunucu kapanmadan vCPU artırılabilir (konuk işletim sistemi desteklemeli).",
+        "memoryHotAdd": "Sunucu kapanmadan RAM artırılabilir.",
+        "nestedHv": "Konukta donanım sanallaştırması (KVM, Hyper-V, Docker Desktop). ESXi imajlarında her zaman açıktır."
+      },
+      "hardwareNote": "Sıcak ekleme bazı lisans ve NUMA ayarlarını etkiler; büyük VM'lerde performans ölçümü yapın.",
+      "save": "Kaydet",
+      "saved": "Sunucu ayarları kaydedildi."
     }
   },
   "Firewalls": {

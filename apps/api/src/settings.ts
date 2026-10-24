@@ -77,6 +77,22 @@ export class SettingsController {
     return { sent: true, to };
   }
 
+  @Get('servers') @Can('settings.view', 'settings.manage')
+  servers() { return getSettings('servers'); }
+
+  @Put('servers') @Can('settings.manage')
+  async saveServers(@Req() req: AuthedRequest, @Body() body: Input) {
+    const pick = <T extends Record<string, boolean>>(given: unknown, defaults: T): T => {
+      const g = (given ?? {}) as Record<string, unknown>;
+      return Object.fromEntries(Object.entries(defaults).map(([k, d]) => [k, typeof g[k] === 'boolean' ? g[k] : d])) as T;
+    };
+    const current = await getSettings('servers');
+    const value = { customer: pick(body?.customer, current.customer), hardware: pick(body?.hardware, current.hardware) };
+    await saveSettings('servers', value);
+    await audit(req, 'settings.servers', 'success', req.user.id, value);
+    return value;
+  }
+
   @Get('security') @Can('settings.view', 'settings.manage')
   security() { return getSettings('security'); }
 

@@ -181,3 +181,63 @@ func TestCloneWithGuestinfo(t *testing.T) {
 		t.Fatalf("guestinfo not set: %v", got)
 	}
 }
+
+func TestCloneApplianceWithHardwareOptions(t *testing.T) {
+	e := setupVPX(t)
+	ctx := context.Background()
+	// A nested-ESXi-like template: its settings are vApp (OVF) properties.
+	tpl := object.NewVirtualMachine(e.c, types.ManagedObjectReference{Type: "VirtualMachine", Value: e.template})
+	// Templates cannot be reconfigured: back to a VM, add the properties, template again.
+	if err := tpl.MarkAsVirtualMachine(ctx, *object.NewResourcePool(e.c, types.ManagedObjectReference{Type: "ResourcePool", Value: e.pool}), nil); err != nil {
+		t.Fatal(err)
+	}
+	task, err := tpl.Reconfigure(ctx, types.VirtualMachineConfigSpec{VAppConfig: &types.VmConfigSpec{Property: []types.VAppPropertySpec{
+		{ArrayUpdateSpec: types.ArrayUpdateSpec{Operation: types.ArrayUpdateOperationAdd}, Info: &types.VAppPropertyInfo{Key: 1, Id: "guestinfo.hostname", Type: "string"}},
+		{ArrayUpdateSpec: types.ArrayUpdateSpec{Operation: types.ArrayUpdateOperationAdd}, Info: &types.VAppPropertyInfo{Key: 2, Id: "guestinfo.password", Type: "password"}},
+	}}})
+	if err == nil {
+		err = task.Wait(ctx)
+	}
+	if err == nil {
+		err = tpl.MarkAsTemplate(ctx)
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+	out, err := cloneVM(ctx, testGuard(), CloneRequest{Request: e.req, Name: "lvm-esx", Template: e.template, Pool: e.pool, Datastore: e.store, Network: e.network,
+		VCPU: 2, MemoryMB: 8192, DiskGB: 10, ServerID: "esx", Customization: "appliance", CPUHotAdd: true, MemoryHotAdd: true, NestedHV: true,
+		VAppProperties: map[string]string{"guestinfo.hostname": "esx1.lab", "guestinfo.password": "Secret-1", "not.a.property": "x"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	vm := waitTask(t, e, out["task"].(string)).VM
+	var v mo.VirtualMachine
+	if err := object.NewVirtualMachine(e.c, types.ManagedObjectReference{Type: "VirtualMachine", Value: vm}).Properties(ctx,
+		types.ManagedObjectReference{Type: "VirtualMachine", Value: vm}, []string{"config"}, &v); err != nil {
+		t.Fatal(err)
+	}
+	// The simulator does not apply the hardware flags on clone; the spec is checked directly.
+	cfg, cust := cloneConfig(CloneRequest{CPUHotAdd: true, MemoryHotAdd: true, NestedHV: true, Customization: "appliance"}, nil)
+	if !*cfg.NestedHVEnabled || !*cfg.CpuHotAddEnabled || !*cfg.MemoryHotAddEnabled || cust != nil {
+		t.Fatalf("hardware options or customization wrong: %+v %+v", cfg, cust)
+	}
+	if cfg, cust := cloneConfig(CloneRequest{}, nil); *cfg.NestedHVEnabled || cust == nil {
+		t.Fatal("defaults: no nested virtualization, vCenter cloud-init customization")
+	}
+	got := map[string]string{}
+	for _, o := range v.Config.ExtraConfig {
+		if ov := o.GetOptionValue(); strings.HasPrefix(ov.Key, "guestinfo.") {
+			got[ov.Key] = ov.Value.(string)
+		}
+	}
+	if got["guestinfo.hostname"] != "esx1.lab" || got["guestinfo.password"] != "Secret-1" || got["guestinfo.metadata"] != "" {
+		t.Fatalf("appliance extraConfig: %v", got)
+	}
+	if v.Config.VAppConfig != nil {
+		for _, p := range v.Config.VAppConfig.GetVmConfigInfo().Property {
+			if p.Id == "guestinfo.hostname" && p.Value != "esx1.lab" {
+				t.Fatalf("vApp property not set: %+v", p)
+			}
+		}
+	}
+}

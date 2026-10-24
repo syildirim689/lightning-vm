@@ -56,7 +56,7 @@ async function load(db, opId) {
 }
 
 async function loadServer(db, serverId) {
-  const { rows: [s] } = await db.query(`SELECT s.*, p.connection_id, p.datastore_morefs, p.network_moref, p.compute_moref, i.template_moref,
+  const { rows: [s] } = await db.query(`SELECT s.*, p.connection_id, p.datastore_morefs, p.network_moref, p.compute_moref, i.template_moref, i.family AS image_family,
       host(a.address) AS address, masklen(ip.cidr) AS prefix, host(ip.gateway) AS gateway, ARRAY(SELECT host(x) FROM unnest(ip.dns) x) AS dns,
       ARRAY(SELECT host(e.address) FROM ip_allocations e WHERE e.server_id = s.id AND e.kind = 'extra' ORDER BY e.address) AS extra,
       (SELECT host(v.address) FROM ip_allocations v WHERE v.server_id = s.id AND v.kind = 'ipv6') AS ipv6,
@@ -101,6 +101,17 @@ async function bestDatastore(db, s) {
   return { datastore: d.moref, pool: r.resource_pool };
 }
 
+// Nested ESXi (William Lam's appliance and similar): the host reads its network, password and SSH setting from
+// these vApp (OVF) properties on first boot. The root password is the one stored (encrypted) with the order.
+export function esxiProperties(s) {
+  const mask = (bits) => [24, 16, 8, 0].map((sh) => (Number(bits) >= 32 - sh ? 255 : Number(bits) <= 24 - sh ? 0 : (0xff << (32 - sh - Number(bits))) & 0xff)).join('.');
+  return {
+    'guestinfo.hostname': s.name, 'guestinfo.ipaddress': s.address ?? '', 'guestinfo.netmask': s.prefix ? mask(s.prefix) : '', 'guestinfo.gateway': s.gateway ?? '',
+    'guestinfo.dns': (s.dns ?? []).join(','), 'guestinfo.domain': '', 'guestinfo.ntp': 'pool.ntp.org', 'guestinfo.ssh': 'True', 'guestinfo.createvmfs': 'False',
+    'guestinfo.password': s.root_password_enc ? decrypt(s.root_password_enc, 'server-root-password') : '',
+  };
+}
+
 // cloud-init (JSON is valid YAML): every allocated address (primary and extra IPv4 on one subnet, the IPv6
 // one if the pool has a prefix) and the customer's SSH keys.
 export function cloudInit(s) {
@@ -136,8 +147,11 @@ async function ensureVM(db, ctx) {
     // How the guest gets its cloud-init data: the admin's choice, else what discovery found the version supports.
     const customization = ctx.customization === 'auto' ? (ctx.compat?.customization ?? 'cloudinit') : ctx.customization;
     if (customization === 'none') throw new OperationError('PROVISIONING_NOT_SUPPORTED', 'this endpoint cannot customize guests', true);
+    const { rows: [st] } = await db.query("SELECT value FROM settings WHERE key = 'servers'");
+    const hw = { cpuHotAdd: false, memoryHotAdd: false, nestedHv: false, ...st?.value?.hardware };
+    const guest = s.image_family === 'esxi' ? { customization: 'appliance', nestedHv: true, vappProperties: esxiProperties(s) } : { customization, ...cloudInit(s) };
     const out = await adapter('/v1/vm/clone', { ...ctx.target, name: ctx.vmName, serverId: s.id, template: s.template_moref, pool, datastore,
-      network: s.network_moref, vcpu: s.vcpu, memoryMb: s.memory_mb, diskGb: s.disk_gb, customization, ...cloudInit(s) });
+      network: s.network_moref, vcpu: s.vcpu, memoryMb: s.memory_mb, diskGb: s.disk_gb, ...hw, ...guest });
     if (out.vm) vm = out.vm;
     else {
       await saveTask(db, op, out.task);
