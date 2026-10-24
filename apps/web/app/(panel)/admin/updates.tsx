@@ -15,7 +15,7 @@ import { can } from '../../../lib/permissions';
 import { useApiQuery } from '../../../lib/query';
 
 type Release = { version: string; date: string; notes: string };
-type Status = { id: string; action: 'check' | 'update' | 'backup' | 'auto-update'; state: 'running' | 'succeeded' | 'failed' | 'rejected'; startedAt: string; finishedAt: string; exitCode: number | null; code: string };
+type Status = { id: string; action: 'check' | 'update' | 'backup' | 'auto-update' | 'domain'; state: 'running' | 'succeeded' | 'failed' | 'rejected'; startedAt: string; finishedAt: string; exitCode: number | null; code: string };
 type Data = {
   version: string; settings: Record<string, string>;
   releases: { checkedAt: string; channel: string; branch?: string; current: string; commit?: string; latest: string; updateAvailable: boolean; error: string; releases: Release[] } | null;

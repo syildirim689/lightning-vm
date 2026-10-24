@@ -340,7 +340,7 @@
     "INVALID_DOMAIN": "Yalnızca alan adını girin, şema veya yol olmadan. Örnek: panel.example.com",
     "INVALID_HOST": "Yalnızca ad veya IP girin (https:// veya /sdk olmadan).",
     "INVALID_PORT": "Port 1-65535 arasında olmalı.",
-    "INVALID_CERTIFICATE": "-----BEGIN CERTIFICATE----- ile başlayan PEM sertifika yapıştırın.",
+    "INVALID_CERTIFICATE": "Geçerli bir PEM sertifika bulunamadı (-----BEGIN CERTIFICATE----- ile başlamalı).",
     "INVALID_FINGERPRINT": "64 karakterlik SHA-256 parmak izi (küçük harf, iki nokta olmadan).",
     "NAME_TAKEN": "Bu ad zaten kullanılıyor.",
     "OUT_OF_RANGE": "İzin verilen aralığın dışında.",
@@ -388,7 +388,13 @@
     "LICENSE_PLACEHOLDER_MISSING": "Lisans havuzu kullanılıyorsa betik lisans yer tutucusunu (süslü parantez içinde LICENSE) içermeli.",
     "TOO_LONG": "Çok uzun.",
     "NOT_AN_ISO": "Yalnızca .iso dosyaları kopyalanabilir.",
-    "ISO_EXISTS": "Bu ISO bu konumda zaten var."
+    "ISO_EXISTS": "Bu ISO bu konumda zaten var.",
+    "INVALID_PRIVATE_KEY": "Özel anahtar okunamadı (PEM biçiminde olmalı).",
+    "KEY_ENCRYPTED": "Özel anahtar parolayla şifreli; parolasız (çözülmüş) anahtarı yükleyin.",
+    "KEY_MISMATCH": "Anahtar bu sertifikaya ait değil.",
+    "CERT_EXPIRED": "Sertifikanın süresi dolmuş.",
+    "CERT_NOT_YET_VALID": "Sertifika henüz geçerli değil.",
+    "CERT_NAME_MISMATCH": "Sertifika bu alan adını kapsamıyor (SAN listesine bakın)."
   },
   "Setup": {
     "title": "Kurulum sihirbazı",
@@ -2155,7 +2161,8 @@
       "notifications": "Bildirim kuralları",
       "payments": "Ödeme",
       "rdns": "Ters DNS",
-      "security": "Giriş güvenliği"
+      "security": "Giriş güvenliği",
+      "domain": "Alan adı ve SSL"
     },
     "saved": "Kaydedildi.",
     "save": "Kaydet",
@@ -2533,6 +2540,74 @@
       "needsMail": "E-posta (SMTP) ayarlı değil veya iki adımlı kodlar için kapalı; seçenek giriş ekranında görünmez.",
       "save": "Kaydet",
       "saved": "Giriş güvenliği kaydedildi."
+    },
+    "domain": {
+      "current": "Şu anki adres",
+      "currentHelp": "Panelin yayınlandığı alan adı ve sunduğu sertifika.",
+      "noDomain": "Panel bir alan adıyla değil, yerel veya başka bir proxy arkasından yayınlanıyor.",
+      "noCertificate": "Sertifika okunamadı (proxy yanıt vermiyor olabilir).",
+      "issuer": "Veren",
+      "names": "Kapsadığı adlar",
+      "validity": "Geçerlilik",
+      "validRange": "{from} – {to} · {days} gün kaldı",
+      "trusted": "Güvenilir",
+      "untrusted": "Tarayıcılar güvenmez",
+      "stagingCert": "Let's Encrypt test",
+      "modes": {
+        "acme": "Let's Encrypt",
+        "staging": "Let's Encrypt (test)",
+        "custom": "Kendi sertifikam",
+        "none": "TLS yok / dış proxy"
+      },
+      "modeHelp": {
+        "acme": "Ücretsiz, otomatik alınır ve süresi dolmadan yenilenir. 80 ve 443 portları dışarıdan açık olmalı.",
+        "staging": "Hız sınırına takılmadan denemek için; tarayıcılar güvenmez.",
+        "custom": "Kurumsal veya ücretli sertifika: tam zincir ve özel anahtar (PEM). Yenilemeyi siz yaparsınız."
+      },
+      "change": "Alan adını değiştir",
+      "changeHelp": "Yeni adın A kaydı bu sunucunun genel IP adresini göstermeli. Değişiklik sunucudaki ajan tarafından uygulanır; başarısız olursa önceki adres geri yüklenir.",
+      "agentMissingTitle": "Sunucu ajanı kurulu değil",
+      "agentMissing": "Panelden alan adı değiştirmek için sunucuda bir kez çalıştırın:",
+      "newDomain": "Yeni alan adı",
+      "newDomainHelp": "Yalnızca ad: panel.example.com (şema veya yol olmadan).",
+      "checkDns": "DNS'i kontrol et",
+      "noARecord": "Bu adın A kaydı yok; DNS sağlayıcınızda bu sunucunun IP adresine bir A kaydı ekleyin.",
+      "sameServer": "Ad, şu anki adresle aynı sunucuyu gösteriyor.",
+      "otherServer": "Ad farklı bir adresi gösteriyor; NAT/yük dengeleyici yoksa sertifika alınamaz.",
+      "cannotCompare": "Karşılaştırılacak mevcut alan adı yok; A kaydının bu sunucuyu gösterdiğinden emin olun.",
+      "certificate": "Sertifika",
+      "certificateHelp": "HTTPS için sertifikanın nasıl sağlanacağı.",
+      "certPem": "Sertifika zinciri (PEM)",
+      "certPemHelp": "Önce sunucu sertifikası, ardından ara sertifikalar (fullchain.pem).",
+      "keyPem": "Özel anahtar (PEM)",
+      "keyPemHelp": "Şifresiz özel anahtar. Sunucuda yalnız root okuyabilir; panelde saklanmaz, geri gösterilmez.",
+      "fromFile": "Dosyadan yükle",
+      "validate": "Sertifikayı doğrula",
+      "certOk": "Sertifika ve anahtar eşleşiyor ({chain} sertifikalık zincir, {key} anahtar).",
+      "warnings": {
+        "SELF_SIGNED": "Kendinden imzalı sertifika: tarayıcılar uyarı gösterir.",
+        "CHAIN_INCOMPLETE": "Ara sertifikalar eksik görünüyor; bazı istemciler bağlantıyı reddedebilir. fullchain.pem kullanın.",
+        "CHAIN_ORDER": "Zincirdeki sıra hatalı görünüyor (önce sunucu sertifikası, sonra ara sertifikalar).",
+        "EXPIRES_SOON": "Sertifikanın süresi 30 günden az."
+      },
+      "apply": "Değişikliği uygula",
+      "cancel": "Vazgeç",
+      "confirmTitle": "{domain} adresine geçilsin mi?",
+      "confirm": {
+        "c1": "Proxy yeni adla yeniden başlatılır; birkaç saniye bağlantı kesilebilir.",
+        "c2": "Panel yalnızca {domain} adresinden yayınlanır; eski adres çalışmaz.",
+        "c3": "Oturumlar adrese bağlıdır: yeni adreste yeniden giriş yapmanız gerekir.",
+        "c4": "Sertifika alınamazsa veya doğrulanamazsa önceki ayar otomatik geri yüklenir."
+      },
+      "queued": "Değişiklik sıraya alındı.",
+      "waiting": "Ajanın almasını bekliyor…",
+      "running": "Uygulanıyor…",
+      "succeeded": "Alan adı değiştirildi.",
+      "failed": "Başarısız ({code}).",
+      "goTo": "Panel artık şu adreste:",
+      "rolledBack": "Önceki adres ve sertifika geri yüklendi; ayrıntılar aşağıdaki kayıtta.",
+      "mayDisconnect": "Değişiklik tamamlandığında bu sayfa eski adreste yanıt vermeyebilir; https://{domain} adresini açın.",
+      "log": "Ajan kaydı"
     }
   },
   "Firewalls": {
@@ -2660,7 +2735,8 @@
       "check": "Güncellemeler denetleniyor",
       "update": "Güncelleniyor",
       "backup": "Yedekleniyor",
-      "auto-update": "Otomatik güncelleme ayarları"
+      "auto-update": "Otomatik güncelleme ayarları",
+      "domain": "Alan adı değiştiriliyor"
     },
     "stateOf": {
       "running": "Sürüyor",
@@ -2689,7 +2765,8 @@
       "check": "Güncelleme denetimi",
       "update": "Güncelleme",
       "auto-update": "Otomatik güncelleme ayarları",
-      "backup": "Yedekleme"
+      "backup": "Yedekleme",
+      "domain": "Alan adı değişikliği"
     }
   },
   "A11y": {

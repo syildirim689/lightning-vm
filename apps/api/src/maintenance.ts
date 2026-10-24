@@ -49,9 +49,11 @@ export function pendingRequests() {
   try { return readdirSync(requests).filter((f) => f.endsWith('.req')).length; } catch { return -1; } // -1: the drop folder is missing
 }
 
-export function queueRequest(fields: Record<string, string>) {
+export function queueRequest(fields: Record<string, string>, files: Record<string, string> = {}) {
   const id = randomUUID();
   const body = Object.entries({ ...fields, id }).map(([k, v]) => `${k}=${v}`).join('\n') + '\n';
+  // Larger content (a certificate and key) goes next to the request as <id>.<name>, written before the request appears.
+  for (const [name, content] of Object.entries(files)) writeFileSync(join(requests, `${id}.${name}`), content, { mode: 0o600 });
   // Written under a temporary name and renamed, so the agent never reads half a file.
   writeFileSync(join(requests, `.${id}.tmp`), body, { mode: 0o600 });
   renameSync(join(requests, `.${id}.tmp`), join(requests, `${id}.req`));

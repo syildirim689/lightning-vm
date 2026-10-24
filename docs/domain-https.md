@@ -139,6 +139,49 @@ Bir kontrolün başarılı olması diğerlerinin de başarılı olduğu anlamın
 çözüm hiçbir zaman doğrulamayı kapatmak değildir; adı, DNS'i ve `docker compose logs proxy`
 çıktısını kontrol edin.
 
+## 6b. Panelden alan adı ve sertifika değiştirme
+
+**Ayarlar → Alan adı ve SSL** sekmesi şunları yapar:
+- Şu anki adresi, sertifikayı veren kurumu, kapsadığı adları, geçerlilik süresini (kalan gün) ve SHA-256
+  parmak izini gösterir. Bunlar proxy'den TLS ile okunur.
+- Yeni adın DNS kaydını denetler. A/AAAA kayıtlarını ve şu anki adla aynı sunucuyu gösterip göstermediğini
+  bildirir.
+- Sertifika için üç seçenek sunar:
+  - **Let's Encrypt:** otomatik alınır ve yenilenir.
+  - **Let's Encrypt test:** staging ortamı.
+  - **Kendi sertifikam:** PEM tam zincir ve şifresiz özel anahtar, dosyadan da yüklenebilir. Uygulanmadan
+    önce denetlenir:
+    - Anahtar sertifikaya ait olmalı.
+    - Sertifikanın süresi dolmamış ve başlamış olmalı.
+    - Alan adı sertifikanın SAN listesinde olmalı.
+    - Uyarı verilir: kendinden imzalı sertifika, eksik ara sertifika, hatalı zincir sırası, 30 günden kısa
+      süre.
+- Değişikliği sunucudaki ajan uygular (`sh scripts/install.sh agent on` gerekir). Ajanın çalıştırdığı komut
+  komut satırındakiyle aynıdır:
+
+```bash
+sudo sh scripts/install.sh domain panel.example.com                       # Let's Encrypt
+sudo sh scripts/install.sh domain panel.example.com --acme-staging        # Let's Encrypt test
+sudo sh scripts/install.sh domain panel.example.com --tls custom --cert fullchain.pem --key key.pem
+```
+
+Kendi sertifikanız `data/tls/` altına kopyalanır (yalnızca root okur). Caddy bu klasördeki `site.caddy`
+parçasını site bloğuna aktarır (`tls /etc/caddy/site.d/cert.pem …`). Let's Encrypt kullanıldığında parça
+boştur.
+
+Başarısızlıkta önceki ayar otomatik geri yüklenir: `.env`, `data/tls` ve proxy önceki haline döner, eski adres
+çalışmaya devam eder. Başarısızlık sayılan durumlar:
+- Proxy başlamazsa.
+- Let's Encrypt sertifika veremezse.
+- Yüklenen sertifika 443'te sunulmuyorsa (parmak izi karşılaştırılır).
+
+Kendi sertifikanızın yenilenmesi sizdedir. Süresi dolmadan aynı ekrandan yenisini yükleyin.
+
+Demo sunucusunda denendi. Sistemd ajanı üzerinden şu akışlar sırayla doğrulandı:
+1. Kendi sertifikasına geçiş: sertifika sunuldu.
+2. Bozuk sertifika: önceki sertifika geri yüklendi.
+3. Let's Encrypt'e dönüş.
+
 ## 7. Alan adını değiştirmenin etkileri
 - **Oturumlar:** oturum çerezi alan adına bağlıdır; eski adla açılmış oturumlar yeni adda geçmez ve
   herkesin tekrar giriş yapması gerekir.

@@ -212,3 +212,15 @@ test('two-factor can be required for staff or everyone; e-mail code sign-in stay
   assert.equal((await post('/auth/email-otp/send-verification-otp', { email: 'policy@example.test', type: 'sign-in' })).json().code, 'EMAIL_CODE_SIGN_IN_DISABLED');
   await put({ require2fa: 'none', emailCodeSignIn: false });
 });
+
+test('domain settings: current state, checks and validation before anything reaches the host agent', async () => {
+  const admin = cookieOf(await post('/auth/sign-in/email', { email: adminEmail, password }));
+  const cur = (await get('/admin/domain', admin)).json();
+  assert.equal(cur.site, null, 'no host settings in the test environment');
+  assert.equal((await post('/admin/domain/check', { domain: 'https://bad/' }, admin)).json().fields.domain, 'INVALID_DOMAIN');
+  assert.equal((await post('/admin/domain/certificate', { cert: 'x', key: 'y', domain: 'panel.example.com' }, admin)).json().fields.cert, 'INVALID_CERTIFICATE');
+  assert.equal((await post('/admin/domain', { domain: 'panel.example.com', tls: 'acme' }, admin)).json().code, 'MAINTENANCE_AGENT_MISSING');
+  assert.equal((await post('/admin/domain', { domain: 'panel.example.com', tls: 'other' }, admin)).json().fields.tls, 'INVALID_VALUE');
+  const user = cookieOf(await post('/auth/sign-in/email', { email: 'policy@example.test', password }));
+  assert.equal((await post('/admin/domain', { domain: 'panel.example.com' }, user)).statusCode, 403);
+});

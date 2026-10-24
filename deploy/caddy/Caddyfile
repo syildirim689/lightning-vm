@@ -12,6 +12,8 @@
 }
 
 {$PANEL_SITE::80} {
+	# Your own certificate when one was uploaded (install.sh domain --tls custom, or the panel); empty otherwise.
+	import /etc/caddy/site.d/*.caddy
 	header {
 		-Server
 		X-Content-Type-Options nosniff

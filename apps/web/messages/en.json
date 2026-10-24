@@ -340,7 +340,7 @@
     "INVALID_DOMAIN": "Enter only the domain name, without scheme or path. Example: panel.example.com",
     "INVALID_HOST": "Enter only a name or IP (no https:// or /sdk).",
     "INVALID_PORT": "Port must be between 1 and 65535.",
-    "INVALID_CERTIFICATE": "Paste a PEM certificate starting with -----BEGIN CERTIFICATE-----.",
+    "INVALID_CERTIFICATE": "No valid PEM certificate found (it must start with -----BEGIN CERTIFICATE-----).",
     "INVALID_FINGERPRINT": "64-character SHA-256 fingerprint (lowercase, no colons).",
     "NAME_TAKEN": "This name is already used.",
     "OUT_OF_RANGE": "Outside the allowed range.",
@@ -388,7 +388,13 @@
     "LICENSE_PLACEHOLDER_MISSING": "With a licence pool the script must contain the licence placeholder (LICENSE in curly braces).",
     "TOO_LONG": "Too long.",
     "NOT_AN_ISO": "Only .iso files can be copied.",
-    "ISO_EXISTS": "This ISO is already in that location."
+    "ISO_EXISTS": "This ISO is already in that location.",
+    "INVALID_PRIVATE_KEY": "The private key could not be read (it must be PEM).",
+    "KEY_ENCRYPTED": "The private key is password-protected; upload the decrypted key.",
+    "KEY_MISMATCH": "The key does not belong to this certificate.",
+    "CERT_EXPIRED": "The certificate has expired.",
+    "CERT_NOT_YET_VALID": "The certificate is not valid yet.",
+    "CERT_NAME_MISMATCH": "The certificate does not cover this domain (check its SAN list)."
   },
   "Setup": {
     "title": "Setup wizard",
@@ -2155,7 +2161,8 @@
       "notifications": "Notification rules",
       "payments": "Payments",
       "rdns": "Reverse DNS",
-      "security": "Sign-in security"
+      "security": "Sign-in security",
+      "domain": "Domain and SSL"
     },
     "saved": "Saved.",
     "save": "Save",
@@ -2533,6 +2540,74 @@
       "needsMail": "E-mail (SMTP) is not set up or is off for two-factor codes; the option does not appear on the sign-in screen.",
       "save": "Save",
       "saved": "Sign-in security saved."
+    },
+    "domain": {
+      "current": "Current address",
+      "currentHelp": "The domain the panel is served on and the certificate it presents.",
+      "noDomain": "The panel is not served on a domain (local, or behind another proxy).",
+      "noCertificate": "The certificate could not be read (the proxy may not be answering).",
+      "issuer": "Issuer",
+      "names": "Names covered",
+      "validity": "Validity",
+      "validRange": "{from} – {to} · {days} days left",
+      "trusted": "Trusted",
+      "untrusted": "Not trusted by browsers",
+      "stagingCert": "Let's Encrypt staging",
+      "modes": {
+        "acme": "Let's Encrypt",
+        "staging": "Let's Encrypt (staging)",
+        "custom": "My own certificate",
+        "none": "No TLS / outer proxy"
+      },
+      "modeHelp": {
+        "acme": "Free, obtained automatically and renewed before it expires. Ports 80 and 443 must be open from outside.",
+        "staging": "To test without hitting rate limits; browsers do not trust it.",
+        "custom": "A corporate or paid certificate: full chain and private key (PEM). You renew it."
+      },
+      "change": "Change the domain",
+      "changeHelp": "The new name's A record must point to this server's public IP. The agent on the server applies the change; on failure the previous address is restored.",
+      "agentMissingTitle": "The server agent is not installed",
+      "agentMissing": "To change the domain from the panel, run once on the server:",
+      "newDomain": "New domain",
+      "newDomainHelp": "The name only: panel.example.com (no scheme or path).",
+      "checkDns": "Check DNS",
+      "noARecord": "This name has no A record; add one pointing to this server's IP at your DNS provider.",
+      "sameServer": "The name points to the same server as the current address.",
+      "otherServer": "The name points elsewhere; without NAT or a load balancer no certificate can be obtained.",
+      "cannotCompare": "No current domain to compare with; make sure the A record points to this server.",
+      "certificate": "Certificate",
+      "certificateHelp": "How the HTTPS certificate is provided.",
+      "certPem": "Certificate chain (PEM)",
+      "certPemHelp": "The server certificate first, then the intermediates (fullchain.pem).",
+      "keyPem": "Private key (PEM)",
+      "keyPemHelp": "An unencrypted private key. Only root reads it on the server; the panel does not keep or show it.",
+      "fromFile": "Load from file",
+      "validate": "Validate certificate",
+      "certOk": "The certificate and key match ({chain}-certificate chain, {key} key).",
+      "warnings": {
+        "SELF_SIGNED": "Self-signed certificate: browsers show a warning.",
+        "CHAIN_INCOMPLETE": "Intermediate certificates seem to be missing; some clients may refuse the connection. Use fullchain.pem.",
+        "CHAIN_ORDER": "The chain order looks wrong (server certificate first, then intermediates).",
+        "EXPIRES_SOON": "The certificate expires in less than 30 days."
+      },
+      "apply": "Apply the change",
+      "cancel": "Cancel",
+      "confirmTitle": "Move to {domain}?",
+      "confirm": {
+        "c1": "The proxy restarts with the new name; connections may drop for a few seconds.",
+        "c2": "The panel is served only on {domain}; the old address stops working.",
+        "c3": "Sessions are tied to the address: sign in again at the new one.",
+        "c4": "If no certificate can be obtained or verified, the previous settings are restored automatically."
+      },
+      "queued": "Change queued.",
+      "waiting": "Waiting for the agent…",
+      "running": "Applying…",
+      "succeeded": "Domain changed.",
+      "failed": "Failed ({code}).",
+      "goTo": "The panel is now at:",
+      "rolledBack": "The previous address and certificate were restored; details in the log below.",
+      "mayDisconnect": "When it completes this page may stop answering on the old address; open https://{domain}.",
+      "log": "Agent log"
     }
   },
   "Firewalls": {
@@ -2660,7 +2735,8 @@
       "check": "Checking for updates",
       "update": "Updating",
       "backup": "Backing up",
-      "auto-update": "Automatic update settings"
+      "auto-update": "Automatic update settings",
+      "domain": "Changing the domain"
     },
     "stateOf": {
       "running": "Running",
@@ -2689,7 +2765,8 @@
       "check": "Update check",
       "update": "Update",
       "auto-update": "Automatic update settings",
-      "backup": "Backup"
+      "backup": "Backup",
+      "domain": "Domain change"
     }
   },
   "A11y": {

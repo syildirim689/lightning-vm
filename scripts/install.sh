@@ -21,7 +21,7 @@
 #   sh scripts/install.sh run-requests   process the panel's requests now (the agent runs this)
 #   sh scripts/install.sh auto-update on|off [--channel stable|beta|edge] [--window 03:00-05:00]
 #                                        edge follows the branch in UPDATE_BRANCH (default main), for testing
-#   sh scripts/install.sh domain panel.example.com [--acme-staging]
+#   sh scripts/install.sh domain panel.example.com [--acme-staging | --tls custom --cert fullchain.pem --key key.pem]
 #                                        serve the panel on that name with automatic HTTPS (ports 80/443)
 #   sh scripts/install.sh behind-proxy [--port 8080] [--trusted-cidr CIDR]
 #                                        plain HTTP on 127.0.0.1 for an existing Nginx/Caddy/Traefik in front
@@ -38,7 +38,7 @@ else case " $* " in *" update "*|*" maintenance "*|*" run-requests "*)
   copy=$(mktemp); cp scripts/install.sh "$copy"; LVM_ROOT=$(pwd) LVM_REEXEC=1 exec sh "$copy" "$@" ;;
 esac; fi
 
-MODE=install INSTALL_DOCKER=0 ALLOW_OS=0 DOMAIN="" ACME_STAGING=0 PROXY_PORT=8080 TRUSTED_CIDR=""
+MODE=install INSTALL_DOCKER=0 ALLOW_OS=0 DOMAIN="" ACME_STAGING=0 PROXY_PORT=8080 TRUSTED_CIDR="" TLS_MODE="" CERT_FILE="" KEY_FILE=""
 RESTORE_FILE="" YES=0 TO="" AUTO=0 SWITCH="" CHANNEL="" WINDOW="" BRANCH=""
 LOCAL=0 WIZARD=0 MONITORING=1 SCHEDULE=1 ADMIN_EMAIL=""
 case "${LANG:-}" in tr*) UI="tr" ;; *) UI="en" ;; esac
@@ -57,6 +57,9 @@ while [ $# -gt 0 ]; do
     --window) shift; WINDOW=${1:-} ;;
     domain) MODE=domain; if [ $# -gt 1 ]; then shift; DOMAIN=$1; fi ;;
     --acme-staging) ACME_STAGING=1 ;;
+    --tls) shift; TLS_MODE=${1:-} ;;
+    --cert) shift; CERT_FILE=${1:-} ;;
+    --key) shift; KEY_FILE=${1:-} ;;
     --domain) shift; DOMAIN=${1:-} ;;
     --local) LOCAL=1 ;;
     --admin-email) shift; ADMIN_EMAIL=${1:-} ;;
@@ -272,8 +275,9 @@ write_settings() {
   if [ -f /etc/systemd/system/lightning-vm-requests.path ]; then agent=on; else agent=off; fi
   b=$(env_value BACKUP_SCHEDULE); k=$(env_value BACKUP_KEEP); a=$(env_value AUTO_UPDATE); c=$(env_value UPDATE_CHANNEL); w=$(env_value UPDATE_WINDOW); br=$(env_value UPDATE_BRANCH)
   (umask 022; mkdir -p data/maintenance)
-  printf '{"schedule":"%s","backupSchedule":"%s","backupKeep":"%s","backupCopy":"%s","autoUpdate":"%s","updateChannel":"%s","updateWindow":"%s","updateBranch":"%s","agent":"%s"}\n' \
-    "$timer" "${b:-daily}" "${k:-7}" "$copy" "${a:-off}" "${c:-stable}" "${w:-03:00-05:00}" "${br:-main}" "$agent" > data/maintenance/settings.json
+  site=$(env_value PANEL_SITE); tlsm=$(env_value PANEL_TLS_MODE)
+  printf '{"schedule":"%s","backupSchedule":"%s","backupKeep":"%s","backupCopy":"%s","autoUpdate":"%s","updateChannel":"%s","updateWindow":"%s","updateBranch":"%s","agent":"%s","site":"%s","tlsMode":"%s"}\n' \
+    "$timer" "${b:-daily}" "${k:-7}" "$copy" "${a:-off}" "${c:-stable}" "${w:-03:00-05:00}" "${br:-main}" "$agent" "${site:-:80}" "${tlsm:-}" > data/maintenance/settings.json
   request_dir
 }
 
@@ -589,7 +593,7 @@ run_requests() {
     ok=1
     [ "$(wc -c < "$f")" -le 1024 ] || ok=0
     val() { sed -n "s/^$1=//p" "$f" | head -n 1; }
-    action=$(val action); to=$(val to); channel=$(val channel); window=$(val window); switch=$(val switch); by=$(val by)
+    action=$(val action); to=$(val to); channel=$(val channel); window=$(val window); switch=$(val switch); by=$(val by); domain=$(val domain); tls=$(val tls)
     rm -f "$f"
     echo "$by" | grep -Eq '^[0-9a-f-]{36}$' || by=""
     set -- --lang "$UI"
@@ -598,6 +602,19 @@ run_requests() {
       backup) set -- backup "$@" ;;
       update) set -- update "$@"
         if [ -n "$to" ]; then echo "$to" | grep -Eq '^(v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?|[0-9a-f]{7,40})$' && set -- "$@" --to "$to" || ok=0; fi ;;
+      domain) d=$domain
+        echo "$d" | grep -Eq '^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$' || ok=0
+        set -- domain "$d" "$@"
+        case "$tls" in
+          acme) ;;
+          staging) set -- "$@" --tls staging ;;
+          custom) c=data/maintenance-requests/$id.cert; k=data/maintenance-requests/$id.key
+            if [ -s "$c" ] && [ -s "$k" ] && [ "$(wc -c < "$c")" -le 65536 ] && [ "$(wc -c < "$k")" -le 16384 ]; then
+              tlsdir=$(mktemp -d); mv "$c" "$tlsdir/cert.pem"; mv "$k" "$tlsdir/key.pem"; chmod 600 "$tlsdir"/*.pem
+              set -- "$@" --tls custom --cert "$tlsdir/cert.pem" --key "$tlsdir/key.pem"
+            else ok=0; fi ;;
+          *) ok=0 ;;
+        esac ;;
       auto-update) case "$switch" in on|off) set -- auto-update "$switch" "$@" ;; *) ok=0 ;; esac
         case "$channel" in '') ;; stable|beta|edge) set -- "$@" --channel "$channel" ;; *) ok=0 ;; esac
         if [ -n "$window" ]; then echo "$window" | grep -Eq '^([01][0-9]|2[0-3]):[0-5][0-9]-([01][0-9]|2[0-3]):[0-5][0-9]$' && set -- "$@" --window "$window" || ok=0; fi ;;
@@ -609,13 +626,16 @@ run_requests() {
         "$id" "$(printf '%s' "$action" | tr -cd 'a-z-')" "$by" "$1" "$started" "$( [ "$1" = running ] || date -u +%Y-%m-%dT%H:%M:%SZ)" "$2" "$3" > data/maintenance/status.tmp
       chmod 644 data/maintenance/status.tmp; mv data/maintenance/status.tmp data/maintenance/status.json
     }
-    if [ "$ok" = 0 ]; then status rejected 2 E_REQUEST_INVALID; continue; fi
+    # A certificate and key travel next to their request; never left behind.
+    rm -f "data/maintenance-requests/$id.cert" "data/maintenance-requests/$id.key"
+    if [ "$ok" = 0 ]; then status rejected 2 E_REQUEST_INVALID; [ -n "${tlsdir:-}" ] && rm -rf "$tlsdir"; tlsdir=""; continue; fi
     status running null ""
     log=data/maintenance/runs/$id.log
     (umask 022; : > "$log")
     if sh "$(pwd)/scripts/install.sh" "$@" > "$log" 2>&1; then rc=0; else rc=$?; fi
     code=$(awk 'NF >= 2 { c = $2 } END { print c }' "$log" | tr -cd 'A-Z0-9_')
     if [ "$rc" = 0 ]; then status succeeded 0 "$code"; else status failed "$rc" "$code"; fi
+    if [ -n "${tlsdir:-}" ]; then rm -rf "$tlsdir"; tlsdir=""; fi
     # After an update the version list describes the old version: refresh it (best effort, quietly).
     if [ "$action" = update ]; then sh "$(pwd)/scripts/install.sh" releases --lang "$UI" >/dev/null 2>&1 || true; fi
     find data/maintenance/runs -name '*.log' -type f -printf '%T@ %p\n' | sort -rn | tail -n +21 | cut -d' ' -f2- | xargs -r rm -f
@@ -651,11 +671,48 @@ configure_domain() {
   set_env PANEL_SITE "$d"; set_env LISTEN_ADDRESS 0.0.0.0; set_env HTTP_PORT 80; set_env HTTPS_PORT 443; set_env ACME_CA "$ca"
   set_env TRUSTED_PROXY_CIDRS 127.0.0.1/32
   set_env PANEL_PROBE_URL "https://$d/api/health"; set_env PANEL_TLS 1
-  load_settings; restart_proxy
-  msg INFO ACME "Sertifika isteniyor (en fazla 2 dk)" "Requesting certificate (up to 2 min)"
+  if [ "$TLS_MODE" = custom ]; then write_tls custom || return 1; set_env PANEL_TLS_MODE custom
+  else write_tls auto; if [ "$ACME_STAGING" = 1 ]; then set_env PANEL_TLS_MODE staging; else set_env PANEL_TLS_MODE acme; fi; fi
+  load_settings
+  # Not restart_proxy: a proxy that does not start (a bad certificate, say) must leave the caller room to roll back.
+  proxy_apply || { fail E_PROXY_FAILED "Proxy yeni ayarla başlamadı: docker compose logs proxy" "The proxy did not start with the new settings: docker compose logs proxy"; return 1; }
+  [ "$TLS_MODE" = custom ] || msg INFO ACME "Sertifika isteniyor (en fazla 2 dk)" "Requesting certificate (up to 2 min)"
   i=0; until local_get /api/ready >/dev/null 2>&1 || [ $i -ge 24 ]; do sleep 5; i=$((i + 1)); done
-  web_report "$d"
+  if [ "$TLS_MODE" = custom ]; then custom_report "$d"; else web_report "$d"; fi
+  write_settings
   [ "$FAILED" -eq 0 ]
+}
+
+# Starts the proxy with the current .env (recreated when it changed) and reloads its configuration: a changed
+# TLS snippet alone does not recreate the container. Fails on an invalid certificate or configuration.
+proxy_apply() {
+  docker compose up -d --wait --wait-timeout 120 proxy >/dev/null 2>&1 &&
+    docker compose exec -T proxy caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile >/dev/null 2>&1
+}
+
+# Caddy's per-site TLS snippet (data/tls/site.caddy, imported in the site block): your own certificate and
+# key, or nothing (automatic HTTPS for a domain, plain HTTP otherwise). Only root reads the key.
+write_tls() { # custom | auto
+  (umask 077; mkdir -p data/tls)
+  if [ "$1" = custom ]; then
+    cp "$CERT_FILE" data/tls/cert.pem && cp "$KEY_FILE" data/tls/key.pem && chmod 600 data/tls/cert.pem data/tls/key.pem || return 1
+    printf 'tls /etc/caddy/site.d/cert.pem /etc/caddy/site.d/key.pem\n' > data/tls/site.caddy
+  else
+    rm -f data/tls/cert.pem data/tls/key.pem
+    printf '# automatic HTTPS (ACME) for a domain, plain HTTP otherwise\n' > data/tls/site.caddy
+  fi
+  chmod 644 data/tls/site.caddy
+}
+
+# Your own certificate: port 80 answers and port 443 serves exactly the uploaded certificate.
+custom_report() {
+  code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 8 "http://$1/" 2>/dev/null || true)
+  case "$code" in 30[1278]|2??) msg OK HTTP "http://$1 ($code)" "http://$1 ($code)" ;;
+    *) msg WARN W_HTTP_UNREACHABLE "HTTP: http://$1 erişilemiyor (kod ${code:-yok})" "HTTP: http://$1 unreachable (code ${code:-none})" ;; esac
+  want=$(openssl x509 -in data/tls/cert.pem -noout -fingerprint -sha256 2>/dev/null)
+  got=$(echo | openssl s_client -connect 127.0.0.1:443 -servername "$1" 2>/dev/null | openssl x509 -noout -fingerprint -sha256 2>/dev/null)
+  if [ -n "$want" ] && [ "$want" = "$got" ]; then msg OK CERT "https://$1: yüklenen sertifika sunuluyor" "https://$1: the uploaded certificate is served"
+  else fail E_CERT_NOT_SERVED "https://$1: yüklenen sertifika sunulmuyor; docker compose logs proxy" "https://$1: the uploaded certificate is not served; docker compose logs proxy"; fi
 }
 
 restart_proxy() {
@@ -665,7 +722,23 @@ restart_proxy() {
 case "$MODE" in
   domain)
     [ -f .env ] || die 17 E_NOT_INSTALLED "Önce kurulum yapın: sh scripts/install.sh" "Install first: sh scripts/install.sh"
-    configure_domain "$DOMAIN" || die 1 E_DOMAIN_FAILED "HTTPS kurulamadı; yukarıdaki satırlara bakın" "HTTPS could not be set up; see the lines above"
+    case "$TLS_MODE" in
+      ''|acme) TLS_MODE="" ;;
+      staging) ACME_STAGING=1; TLS_MODE="" ;;
+      custom) { [ -s "$CERT_FILE" ] && [ -s "$KEY_FILE" ] && grep -q 'BEGIN CERTIFICATE' "$CERT_FILE" && grep -q 'PRIVATE KEY' "$KEY_FILE"; } ||
+          die 2 E_CERT_FILES "Sertifika ve anahtar için PEM dosyaları gerekli: --cert FILE --key FILE" "PEM files are required for the certificate and key: --cert FILE --key FILE" ;;
+      *) die 2 E_TLS_MODE "--tls: acme, staging veya custom" "--tls: acme, staging or custom" ;;
+    esac
+    # A failed change puts the previous address and certificate back, so the panel stays reachable.
+    cp .env .env.before-domain; rm -rf data/tls.before; if [ -d data/tls ]; then cp -a data/tls data/tls.before; fi
+    if ! configure_domain "$DOMAIN"; then
+      msg WARN W_ROLLBACK "Önceki adres ve sertifika geri yükleniyor" "Restoring the previous address and certificate"
+      # Contents only: the proxy bind-mounts data/tls, and a replaced directory would no longer be the one it sees.
+      mv .env.before-domain .env; (umask 077; mkdir -p data/tls); rm -f data/tls/*; if [ -d data/tls.before ]; then cp -a data/tls.before/. data/tls/; rm -rf data/tls.before; fi
+      load_settings; proxy_apply || true; write_settings
+      die 1 E_DOMAIN_FAILED "HTTPS kurulamadı; yukarıdaki satırlara bakın" "HTTPS could not be set up; see the lines above"
+    fi
+    rm -rf .env.before-domain data/tls.before
     msg OK READY "https://$DOMAIN" "https://$DOMAIN"
     msg INFO NEXT "Mevcut oturumlar yeni adreste geçerli olmaz; yeniden giriş yapın" "Existing sessions do not carry over to the new address; sign in again"
     exit 0 ;;
@@ -687,7 +760,8 @@ case "$MODE" in
     else
       set_env TRUSTED_PROXY_CIDRS 127.0.0.1/32
     fi
-    load_settings; restart_proxy
+    write_tls auto; set_env PANEL_TLS_MODE none
+    load_settings; restart_proxy; proxy_apply || true; write_settings
     local_get /api/ready >/dev/null 2>&1 || die 19 E_NOT_READY "API hazır değil: docker compose logs proxy api" "API is not ready: docker compose logs proxy api"
     msg OK READY "http://127.0.0.1:$PORT" "http://127.0.0.1:$PORT"
     if [ "$MODE" = behind-proxy ]; then
