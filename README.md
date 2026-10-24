@@ -48,7 +48,7 @@ Açık kaynak VMware sunucu yönetim platformunun başlangıç deposu.
 Paneldeki kapalı düğmeler bu işlevleri gerçekleştirmez.
 
 ## Boş bir sunucuda deneme
-Desteklenen sistemler: Ubuntu 22.04 veya 24.04 (amd64/arm64). En az 2 GB RAM ve 10 GB boş disk gerekir.
+Desteklenen sistemler: Ubuntu 22.04, 24.04 veya 26.04 (amd64/arm64). En az 2 GB RAM ve 10 GB boş disk gerekir.
 
 **1. Kaynağı alın.** Depo adresi bu belgede bilerek yazılmamıştır; kendi GitHub adresinizi kullanın:
 ```sh

@@ -38,7 +38,7 @@ yalnızca bir kez gösterilir.
 ### Ön kontroller
 | Kod | Koşul | Sonuç |
 |---|---|---|
-| `E_OS_UNSUPPORTED` | Ubuntu 22.04 / 24.04 değil | Hata (`--allow-unsupported-os` ile uyarı) |
+| `E_OS_UNSUPPORTED` | Ubuntu 22.04 / 24.04 / 26.04 değil | Hata (`--allow-unsupported-os` ile uyarı) |
 | `E_ARCH_UNSUPPORTED` | amd64/arm64 değil | Hata |
 | `W_CPU_LOW` | < 2 vCPU | Uyarı |
 | `E_RAM_LOW` / `W_RAM_LOW` | < 2 GB / < 4 GB | Hata / uyarı |

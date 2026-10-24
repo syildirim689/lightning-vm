@@ -130,7 +130,7 @@ jobs:
           E2E_VCSIM_HOST=vcsim-vcenter E2E_BOOTSTRAP_TOKEN="$(sudo docker compose --project-directory ../.. exec -T api node dist/cli.js bootstrap-token)" npm run test:e2e
       - name: Logs on failure
         if: failure()
-        run: sudo docker compose -f compose.yaml -f compose.simulator.yaml --profile observability logs --tail=80
+        run: sudo docker compose -f compose.yaml -f compose.simulator.yaml --profile observability logs --tail=80 || true
       - name: Cleanup
         if: always()
-        run: sudo docker compose -f compose.yaml -f compose.simulator.yaml --profile observability down -v
+        run: sudo docker compose -f compose.yaml -f compose.simulator.yaml --profile observability down -v || true

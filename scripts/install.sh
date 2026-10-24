@@ -92,9 +92,9 @@ ports_free() {
 host_checks() {
   os_id=$(. /etc/os-release 2>/dev/null && echo "${ID:-}"); os_ver=$(. /etc/os-release 2>/dev/null && echo "${VERSION_ID:-}")
   case "$os_id $os_ver" in
-    "ubuntu 22.04"|"ubuntu 24.04") msg OK OS "Ubuntu $os_ver" "Ubuntu $os_ver" ;;
+    "ubuntu 22.04"|"ubuntu 24.04"|"ubuntu 26.04") msg OK OS "Ubuntu $os_ver" "Ubuntu $os_ver" ;;
     *) if [ "$ALLOW_OS" = 1 ]; then msg WARN E_OS_UNSUPPORTED "Desteklenmeyen işletim sistemi: $os_id $os_ver (izin verildi)" "Unsupported OS: $os_id $os_ver (allowed)"
-       else fail E_OS_UNSUPPORTED "Desteklenen: Ubuntu 22.04/24.04. Bulunan: $os_id $os_ver (--allow-unsupported-os)" "Supported: Ubuntu 22.04/24.04. Found: $os_id $os_ver (--allow-unsupported-os)"; fi ;;
+       else fail E_OS_UNSUPPORTED "Desteklenen: Ubuntu 22.04/24.04/26.04. Bulunan: $os_id $os_ver (--allow-unsupported-os)" "Supported: Ubuntu 22.04/24.04/26.04. Found: $os_id $os_ver (--allow-unsupported-os)"; fi ;;
   esac
 
   case "$(uname -m)" in
