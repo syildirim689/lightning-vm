@@ -9,7 +9,8 @@ import { apiError } from './errors';
 import { logEvent } from './log';
 import { decryptSecret, encryptSecret } from './secrets';
 
-export type Branding = { name: string; accent: string | null; logo: string | null; favicon: string | null };
+// passwordPrefix: starts the strong root password generated when a customer picks a weak one (passwords.ts).
+export type Branding = { name: string; accent: string | null; logo: string | null; favicon: string | null; passwordPrefix: string };
 // Transactional mail only; notifications choose their channels in notify.ts.
 export type MailUse = { passwordReset: boolean; twoFactor: boolean };
 export type MailSettings = { enabled: boolean; host: string; port: number; security: 'none' | 'starttls' | 'tls'; username: string; passwordEnc: string | null;
@@ -28,7 +29,7 @@ export type RdnsSettings = { provider: 'none' | 'powerdns'; apiUrl: string; apiK
   customerEdit: boolean; forwardCheck: boolean };
 
 const defaults = {
-  branding: { name: 'Lightning VM', accent: null, logo: null, favicon: null } as Branding,
+  branding: { name: 'Lightning VM', accent: null, logo: null, favicon: null, passwordPrefix: '' } as Branding,
   mail: { enabled: false, host: '', port: 587, security: 'starttls', username: '', passwordEnc: null, fromName: '', fromAddress: '',
     use: { passwordReset: true, twoFactor: true } } as MailSettings,
   captcha: { provider: 'none', siteKey: '', secretEnc: null, minScore: 0.5, use: { signIn: true, signUp: true, passwordReset: true } } as CaptchaSettings,
@@ -150,8 +151,10 @@ export function readBranding(body: Input): Branding {
     : typeof body.accent === 'string' && /^#[0-9a-fA-F]{6}$/.test(body.accent) ? body.accent.toLowerCase() : (fields.accent = 'INVALID_COLOR', null);
   const logo = readImage(body.logo, 'logo', fields);
   const favicon = readImage(body.favicon, 'favicon', fields);
+  const passwordPrefix = typeof body.passwordPrefix === 'string' ? body.passwordPrefix.trim() : '';
+  if (!/^[A-Za-z0-9]{0,20}$/.test(passwordPrefix)) fields.passwordPrefix = 'INVALID_PASSWORD_PREFIX';
   if (Object.keys(fields).length) throw apiError(400, 'VALIDATION_FAILED', 'Invalid input', fields);
-  return { name, accent, logo, favicon };
+  return { name, accent, logo, favicon, passwordPrefix };
 }
 
 const bool = (v: unknown) => v === true;

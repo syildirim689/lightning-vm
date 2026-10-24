@@ -105,7 +105,9 @@ export function cloudInit(s) {
   if (s.ipv6) { addresses.push(`${s.ipv6}/${s.ipv6_prefix_len}`); routes.push({ to: '::/0', via: s.ipv6_gateway, 'on-link': true }); }
   const metadata = JSON.stringify({ 'instance-id': s.id, 'local-hostname': s.name, network: { version: 2, ethernets: { nic0: {
     match: { name: 'e*' }, addresses, routes, nameservers: { addresses: s.dns } } } } });
-  const userdata = '#cloud-config\n' + JSON.stringify({ hostname: s.name, ssh_authorized_keys: s.ssh_public_keys, ssh_pwauth: false });
+  // The root password, when one was chosen, arrives only as a SHA-512 crypt hash (console and RDP; SSH stays key-only).
+  const userdata = '#cloud-config\n' + JSON.stringify({ hostname: s.name, ssh_authorized_keys: s.ssh_public_keys, ssh_pwauth: false,
+    ...(s.root_password_hash && { chpasswd: { expire: false, list: `root:${s.root_password_hash}` } }) });
   return { metadata, userdata };
 }
 

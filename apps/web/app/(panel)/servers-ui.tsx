@@ -16,7 +16,7 @@ import { ButtonLink, ConfirmButton, DataTable, Empty, Mono, Notice, PageHeader, 
 
 export type Server = { id: string; name: string; state: string; powerState: string; guestReady: boolean; vcpu: number; memoryMb: number; diskGb: number;
   priceMonthly: string; currency: string; errorCode: string | null; poolName: string; location: string; imageName: string; address: string | null;
-  createdAt: string; ownerEmail?: string; firewallStatus?: 'applied' | 'pending' | 'failed'; firewallError?: string | null; firewallCount?: number; lastOperation: { id: string; kind: string; status: string; step: string | null; errorCode: string | null } | null };
+  createdAt: string; ownerEmail?: string; hasRootPassword?: boolean; firewallStatus?: 'applied' | 'pending' | 'failed'; firewallError?: string | null; firewallCount?: number; lastOperation: { id: string; kind: string; status: string; step: string | null; errorCode: string | null } | null };
 type Operation = { id: string; kind: string; status: string; step: string | null; attempts: number; errorCode: string | null; createdAt: string; finishedAt: string | null };
 
 // One Idempotency-Key per user intention: a double click or a retry after a timeout reuses it,
@@ -161,6 +161,7 @@ export function ServerDetail({ id }: { id: string }) {
     </div>
 
     <ServerIps server={s}/>
+    {s.hasRootPassword && <RootPassword id={s.id}/>}
     <ServerFirewalls server={s}/>
 
     <ServerMetrics id={id} live={s.state === 'ready' && s.powerState === 'poweredOn'}/>
@@ -184,6 +185,30 @@ export function ServerDetail({ id }: { id: string }) {
 }
 
 // The firewalls protecting this server and whether VMware has their current rules.
+// The root password chosen (or generated) at order time: shown on request, and the panel's copy can be forgotten.
+function RootPassword({ id }: { id: string }) {
+  const t = useTranslations('Servers.password');
+  const { error } = useErrorText();
+  const client = useQueryClient();
+  const [shown, setShown] = useState<string>();
+  async function reveal() {
+    try { setShown((await apiFetch<{ password: string }>(`/servers/${id}/root-password`)).password); } catch (e) { toast.danger(error(e)); }
+  }
+  async function forget() {
+    try { await apiFetch(`/servers/${id}/root-password`, { method: 'DELETE' }); setShown(undefined); toast.success(t('forgotten')); client.invalidateQueries({ queryKey: ['servers', id] }); }
+    catch (e) { toast.danger(error(e)); throw e; }
+  }
+  return <Section title={t('title')} description={t('help')}>
+    <div className="flex flex-wrap items-center gap-2">
+      {shown ? <><Mono>{shown}</Mono><Button size="sm" variant="ghost" onPress={() => { navigator.clipboard?.writeText(shown); toast.success(t('copied')); }}><I name="copy" size={14}/>{t('copy')}</Button>
+          <Button size="sm" variant="ghost" onPress={() => setShown(undefined)}><I name="eye-off" size={14}/>{t('hide')}</Button></>
+        : <Button size="sm" variant="secondary" onPress={reveal}><I name="eye" size={14}/>{t('show')}</Button>}
+      <ConfirmButton size="sm" variant="ghost" icon={<I name="trash-2" size={14}/>} label={t('forget')} title={t('forgetTitle')} body={t('forgetBody')}
+        confirmLabel={t('forget')} cancelLabel={t('cancel')} onConfirm={forget}/>
+    </div>
+  </Section>;
+}
+
 // The server's addresses (primary, extra IPv4, IPv6) and their reverse DNS, editable when the admin allows it.
 function ServerIps({ server }: { server: Server }) {
   const t = useTranslations('Servers.ips');

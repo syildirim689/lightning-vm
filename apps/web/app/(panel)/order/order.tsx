@@ -1,5 +1,5 @@
 "use client";
-import { Button, Card, Radio, RadioGroup, Separator, Spinner } from '@heroui/react';
+import { Button, Card, Radio, RadioGroup, Separator, Spinner, toast } from '@heroui/react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { motion } from 'motion/react';
 import { useRouter } from 'next/navigation';
@@ -33,6 +33,8 @@ export default function Order() {
   const tf = useTranslations('Firewalls');
   const firewalls = useApiQuery<{ firewalls: { id: string; name: string }[] }>(['firewalls'], '/firewalls').data?.firewalls ?? [];
   const [firewallIds, setFirewallIds] = useState<string[]>([]);
+  // Not kept in the draft (sessionStorage): a password stays only on this page.
+  const [rootPassword, setRootPassword] = useState('');
   const catalog = useApiQuery<Catalog>(['catalog'], '/catalog').data;
   const projects = useApiQuery<{ projects: Project[] }>(['projects'], '/projects').data?.projects ?? [];
   const mine = useApiQuery<{ servers: { name: string }[] }>(['servers'], '/servers').data?.servers ?? [];
@@ -89,8 +91,9 @@ export default function Order() {
     if (taken.has(d.name)) { setNameError(field('NAME_TAKEN')); return; }
     setBusy(true);
     try {
-      const out = await apiFetch<{ serverId: string }>('/servers', { method: 'POST', body: { ...body, name: d.name, sshKeyIds: d.sshKeyIds, firewallIds }, headers: { 'idempotency-key': intent.key() } });
-      intent.reset(); d.clear(); queryClient.invalidateQueries({ queryKey: ['tasks'] }); router.push(`/servers/${out.serverId}`);
+      const out = await apiFetch<{ serverId: string; passwordReplaced?: boolean }>('/servers', { method: 'POST', body: { ...body, name: d.name, sshKeyIds: d.sshKeyIds, firewallIds, ...(rootPassword && { rootPassword }) }, headers: { 'idempotency-key': intent.key() } });
+      if (out.passwordReplaced) toast.info(t('passwordReplaced'));
+      intent.reset(); d.clear(); setRootPassword(''); queryClient.invalidateQueries({ queryKey: ['tasks'] }); router.push(`/servers/${out.serverId}`);
     } catch (e) {
       setFailure({ ...(e as ApiError), text: error(e) });
       if ((e as ApiError).code !== 'NETWORK') intent.reset();
@@ -161,6 +164,8 @@ export default function Order() {
             {keys.length === 0 ? <Notice tone="warning">{t('noKeys')} <ButtonLink href="/account" size="sm" variant="secondary" className="ml-2">{t('manageKeys')}</ButtonLink></Notice>
               : <CheckboxList label={t('sshKeys')} value={d.sshKeyIds} onChange={(v) => d.set({ sshKeyIds: v })} error={quoteField('sshKeyIds')}
                   options={keys.map((k) => ({ id: k.id, label: k.name }))}/>}
+            <TextInput label={t('rootPassword')} type="password" value={rootPassword} onChange={setRootPassword} autoComplete="new-password" maxLength={128}
+              help={t('rootPasswordHelp')} error={quoteField('rootPassword')}/>
             {pool && pool.extraIpv4Max > 0 && <NumberInput label={t('extraIpv4')} value={Math.min(d.extraIpv4 ?? 0, pool.extraIpv4Max)} onChange={(v) => d.set({ extraIpv4: v ?? 0 })} minValue={0} maxValue={pool.extraIpv4Max}
               error={quoteField('extraIpv4')} help={t('extraIpv4Help', { max: pool.extraIpv4Max, price: money(pool.extraIpv4Price, quote.data?.price.currency ?? 'EUR') })}/>}
             {pool?.ipv6 && <p className="flex items-center gap-2 text-sm text-muted"><I name="globe" size={14}/>{t('ipv6Included')}</p>}

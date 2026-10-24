@@ -325,7 +325,8 @@
     "INVALID_HOSTNAME_FQDN": "mail.example.com gibi tam bir ana makine adı girin.",
     "PTR_FORWARD_MISMATCH": "Bu ad henüz adrese çözülmüyor. Önce A/AAAA kaydını oluşturun.",
     "INVALID_IPV6_PREFIX": "2001:db8:40::/64 gibi /48 ile /64 arası bir önek girin.",
-    "IPV6_GATEWAY_OUTSIDE": "Ağ geçidi IPv6 önekinin içinde olmalı."
+    "IPV6_GATEWAY_OUTSIDE": "Ağ geçidi IPv6 önekinin içinde olmalı.",
+    "INVALID_PASSWORD_PREFIX": "En fazla 20 harf ve rakam."
   },
   "Setup": {
     "title": "Kurulum sihirbazı",
@@ -773,7 +774,10 @@
     },
     "extraIpv4": "Ek IPv4 adresi",
     "extraIpv4Help": "En fazla {max}, adet başı aylık {price}. Sunucuya otomatik yapılandırılır.",
-    "ipv6Included": "Bir IPv6 adresi dahildir ve otomatik yapılandırılır."
+    "ipv6Included": "Bir IPv6 adresi dahildir ve otomatik yapılandırılır.",
+    "rootPassword": "Root parolası (isteğe bağlı)",
+    "rootPasswordHelp": "Konsol girişi için. SSH yalnızca anahtarla kalır. Zayıf bir parola, üretilen güçlü bir parolayla değiştirilir ve sunucu sayfasında gösterilir.",
+    "passwordReplaced": "Parolanız zayıf olduğu için güçlü bir parola üretildi. Sunucu sayfasından görebilirsiniz."
   },
   "Catalog": {
     "eyebrow": "YÖNETİM · KATALOG",
@@ -1145,6 +1149,19 @@
       "cancel": "Vazgeç",
       "edit": "PTR düzenle",
       "saved": "Ters DNS güncellendi."
+    },
+    "password": {
+      "title": "Root parolası",
+      "help": "Siparişte konsol girişi için belirlendi. Başka bir yere kaydettikten sonra buradan unutturabilirsiniz.",
+      "show": "Göster",
+      "hide": "Gizle",
+      "copy": "Kopyala",
+      "copied": "Kopyalandı.",
+      "forget": "Unut",
+      "forgetTitle": "Kayıtlı parola unutulsun mu?",
+      "forgetBody": "Panel kendi kopyasını siler; parola sunucuda kalır. Bir daha gösterilemez.",
+      "forgotten": "Panel artık bu parolayı saklamıyor.",
+      "cancel": "Vazgeç"
     }
   },
   "Maintenance": {
@@ -1883,7 +1900,9 @@
       "logo": "Logo",
       "logoSection": "Menüde ve giriş sayfasında adın yanında görünür.",
       "favicon": "Favicon",
-      "faviconSection": "Tarayıcı sekmesinde ve bildirimlerde görünen küçük simge."
+      "faviconSection": "Tarayıcı sekmesinde ve bildirimlerde görünen küçük simge.",
+      "passwordPrefix": "Parola öneki",
+      "passwordPrefixHelp": "Müşteri zayıf bir root parolası seçerse bununla başlayan güçlü bir parola üretilir (harf ve rakam; boşsa panel adı). Örnek: {example}"
     },
     "mail": {
       "testOk": "Test e-postası {to} adresine gönderildi.",

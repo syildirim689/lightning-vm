@@ -12,6 +12,9 @@ import { exceededQuota } from './capacity';
 import { openConsole } from './console';
 import { callAdapter, storedTarget } from './vmware';
 import { limits } from './firewalls';
+import { choosePassword, sha512Crypt } from './passwords';
+import { decryptSecret, encryptSecret } from './secrets';
+import { getSettings } from './settings-store';
 
 type Input = Record<string, unknown>;
 // BullMQ carries only the operation id (also the job id, so re-adding is harmless);
@@ -67,7 +70,7 @@ const serverColumns = `s.id, s.name, s.state, s.power_state AS "powerState", s.g
   s.price_monthly::text AS "priceMonthly", s.currency, s.error_code AS "errorCode", s.created_at AS "createdAt", s.project_id AS "projectId",
   p.name AS "poolName", p.location, i.name AS "imageName", host(a.address) AS address,
   CASE WHEN s.firewall_applied_version >= s.firewall_version THEN 'applied' WHEN s.firewall_error IS NOT NULL THEN 'failed' ELSE 'pending' END AS "firewallStatus",
-  s.firewall_error AS "firewallError", (SELECT count(*)::int FROM firewall_servers fs WHERE fs.server_id = s.id) AS "firewallCount",
+  s.firewall_error AS "firewallError", s.root_password_enc IS NOT NULL AS "hasRootPassword", (SELECT count(*)::int FROM firewall_servers fs WHERE fs.server_id = s.id) AS "firewallCount",
   (SELECT row_to_json(o) FROM (SELECT id, kind, status, step, error_code AS "errorCode", created_at AS "createdAt" FROM operations
     WHERE server_id = s.id ORDER BY created_at DESC LIMIT 1) o) AS "lastOperation"`;
 const serverJoins = "FROM servers s JOIN resource_pools p ON p.id = s.pool_id JOIN os_images i ON i.id = s.image_id LEFT JOIN ip_allocations a ON a.server_id = s.id AND a.kind = 'primary'";
@@ -167,6 +170,10 @@ export class ServersController {
     }
     const order = await resolveOrder(String(body.poolId ?? ''), body);
     const { rows: keys } = await pool.query('SELECT public_key FROM ssh_keys WHERE owner_id = $1 AND id = ANY($2::uuid[])', [req.user.id, sshKeyIds]).catch(() => ({ rows: [] }));
+    // Optional root password (console/RDP): a weak one is replaced by a strong one that starts with the brand.
+    if (body.rootPassword !== undefined && (typeof body.rootPassword !== 'string' || body.rootPassword.length > 128)) throw apiError(400, 'VALIDATION_FAILED', 'Invalid input', { rootPassword: 'INVALID_VALUE' });
+    const branding = await getSettings('branding');
+    const root = choosePassword((body.rootPassword as string | undefined) || undefined, branding.passwordPrefix || branding.name, [name, req.user.email.split('@')[0]]);
     if (keys.length !== sshKeyIds.length) throw apiError(400, 'VALIDATION_FAILED', 'Unknown key', { sshKeyIds: 'NOT_AVAILABLE' });
     // Firewalls chosen at order time are applied before the VM is first powered on.
     const firewallIds = Array.isArray(body.firewallIds) ? [...new Set(body.firewallIds.map(String))] : [];
@@ -181,7 +188,7 @@ export class ServersController {
     // Short transaction, no external calls: quota, capacity and IP are checked and taken under row
     // locks (owner, then pool), so concurrent requests can never take the same address or capacity twice.
     const client = await pool.connect();
-    let result: { serverId: string; operation: { id: string; kind: string; status: string } };
+    let result: { serverId: string; operation: { id: string; kind: string; status: string }; passwordReplaced?: boolean };
     try {
       await client.query('BEGIN');
       await client.query('SELECT 1 FROM users WHERE id = $1 FOR UPDATE', [req.user.id]);
@@ -205,17 +212,18 @@ export class ServersController {
         roomy AS (SELECT id, name FROM free GROUP BY id, name HAVING count(*) >= $2 ORDER BY name LIMIT 1)
         SELECT f.id AS ip_pool_id, host(f.a) AS address FROM free f JOIN roomy r ON r.id = f.id ORDER BY f.g LIMIT $2`, [order.rp.id, wanted]);
       if (ips.length < wanted) throw apiError(409, 'IP_EXHAUSTED', 'No free IP address in this location');
-      const { rows: [s] } = await client.query(`INSERT INTO servers (owner_id, project_id, pool_id, image_id, package_id, name, vcpu, memory_mb, disk_gb, price_monthly, currency, state, ssh_public_keys, extra_ipv4)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'provisioning', $12, $13) RETURNING id`,
-        [req.user.id, projectId, order.rp.id, order.imageId, order.packageId, name, order.shape.vcpu, order.shape.memoryMb, order.shape.diskGb, order.price.monthly, order.price.currency, keys.map((k) => k.public_key), order.extraIpv4]);
+      const { rows: [s] } = await client.query(`INSERT INTO servers (owner_id, project_id, pool_id, image_id, package_id, name, vcpu, memory_mb, disk_gb, price_monthly, currency, state, ssh_public_keys, extra_ipv4, root_password_hash, root_password_enc)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'provisioning', $12, $13, $14, $15) RETURNING id`,
+        [req.user.id, projectId, order.rp.id, order.imageId, order.packageId, name, order.shape.vcpu, order.shape.memoryMb, order.shape.diskGb, order.price.monthly, order.price.currency, keys.map((k) => k.public_key), order.extraIpv4,
+          root ? sha512Crypt(root.password) : null, root ? encryptSecret(root.password, 'server-root-password') : null]);
       for (const [i, ip] of ips.entries()) {
         await client.query('INSERT INTO ip_allocations (ip_pool_id, address, server_id, kind) VALUES ($1, $2, $3, $4)', [ip.ip_pool_id, ip.address, s.id, i === 0 ? 'primary' : 'extra']);
       }
       // One IPv6 address when that IP pool has a prefix: the lowest free host from ::10 up.
-      const { rows: [v6] } = await client.query(`SELECT host(network(i.ipv6_prefix)::inet + g) AS address FROM ip_pools i, generate_series(16::bigint, 65535) g
+      const { rows: [v6] } = await client.query(`SELECT host(host(network(i.ipv6_prefix))::inet + g) AS address FROM ip_pools i, generate_series(16::bigint, 65535) g
         WHERE i.id = $1 AND i.ipv6_prefix IS NOT NULL
-          AND NOT EXISTS (SELECT 1 FROM ip_allocations a WHERE a.address = network(i.ipv6_prefix)::inet + g)
-          AND NOT EXISTS (SELECT 1 FROM ip_quarantine q WHERE q.address = network(i.ipv6_prefix)::inet + g AND q.available_at > now())
+          AND NOT EXISTS (SELECT 1 FROM ip_allocations a WHERE a.address = host(network(i.ipv6_prefix))::inet + g)
+          AND NOT EXISTS (SELECT 1 FROM ip_quarantine q WHERE q.address = host(network(i.ipv6_prefix))::inet + g AND q.available_at > now())
         ORDER BY g LIMIT 1`, [ips[0].ip_pool_id]);
       if (v6) await client.query("INSERT INTO ip_allocations (ip_pool_id, address, server_id, kind) VALUES ($1, $2, $3, 'ipv6')", [ips[0].ip_pool_id, v6.address, s.id]);
       if (firewallIds.length) {
@@ -225,7 +233,7 @@ export class ServersController {
       const { rows: [op] } = await client.query(`INSERT INTO operations (kind, status, idempotency_key, request_hash, server_id, owner_id, step, deadline_at)
         VALUES ('create', 'pending', $1, $2, $3, $4, 'queued', now() + make_interval(mins => $5)) RETURNING id, kind, status`, [key, requestHash, s.id, req.user.id, deadlineMinutes.create]);
       await client.query('COMMIT');
-      result = { serverId: s.id, operation: op };
+      result = { serverId: s.id, operation: op, ...(root && { passwordReplaced: root.replaced }) };
     } catch (err) {
       await client.query('ROLLBACK');
       if ((err as { constraint?: string }).constraint === 'servers_owner_name_key') throw apiError(409, 'VALIDATION_FAILED', 'Name taken', { name: 'NAME_TAKEN' });
@@ -237,6 +245,22 @@ export class ServersController {
     await enqueue(result.operation.id);
     await audit(req, 'server.create', 'success', req.user.id, { serverId: result.serverId, operationId: result.operation.id });
     return result;
+  }
+
+  // The root password chosen (or generated) at order time; every look is audited. Forgetting deletes the panel's copy.
+  @Get('servers/:id/root-password')
+  async rootPassword(@Req() req: AuthedRequest, @Param('id', ParseUUIDPipe) id: string) {
+    const s = await findServer(req, id, true);
+    if (!s.root_password_enc) throw apiError(404, 'NOT_FOUND', 'No stored password');
+    await audit(req, 'server.root_password_viewed', 'success', req.user.id, { serverId: id });
+    return { password: decryptSecret(s.root_password_enc, 'server-root-password') };
+  }
+
+  @Delete('servers/:id/root-password') @HttpCode(204)
+  async forgetRootPassword(@Req() req: AuthedRequest, @Param('id', ParseUUIDPipe) id: string) {
+    await findServer(req, id, true);
+    await pool.query('UPDATE servers SET root_password_enc = NULL, updated_at = now() WHERE id = $1', [id]);
+    await audit(req, 'server.root_password_forgotten', 'success', req.user.id, { serverId: id });
   }
 
   @Post('servers/:id/actions') @HttpCode(202)

@@ -70,7 +70,7 @@ function useSettingsForm<T extends object>(path: string, key: string) {
 }
 
 // ---------- Branding ----------
-type BrandingDoc = { name: string; accent: string | null; logo: string | null; favicon: string | null };
+type BrandingDoc = { name: string; accent: string | null; logo: string | null; favicon: string | null; passwordPrefix: string };
 const swatches = ['#f5a524', '#e5484d', '#30a46c', '#0090ff', '#6e56cf', '#e93d82', '#12a594', '#1f2937'];
 // WCAG contrast of the colour against white and against the dark background.
 function contrast(hex: string, bg: [number, number, number]) {
@@ -118,6 +118,8 @@ function Branding({ readOnly }: { readOnly: boolean }) {
   return <Card><Card.Content className="flex flex-col">
     <FormSection title={t('branding.identity')} description={t('branding.identityHelp')} icon={<I name="tag" size={16}/>}>
       <TextInput label={t('branding.name')} value={v.name} onChange={f.set('name')} error={f.err('name')} maxLength={40} isDisabled={readOnly} help={t('branding.nameHelp')}/>
+      <TextInput label={t('branding.passwordPrefix')} value={v.passwordPrefix ?? ''} onChange={f.set('passwordPrefix')} error={f.err('passwordPrefix')} maxLength={20} isDisabled={readOnly}
+        placeholder={v.name.replace(/[^A-Za-z0-9]/g, '')} help={t('branding.passwordPrefixHelp', { example: `${(v.passwordPrefix || v.name).replace(/[^A-Za-z0-9]/g, '') || 'Server'}-K7qp-3xTm-9wZc-Rt4e` })}/>
     </FormSection>
     <FormSection title={t('branding.color')} description={t('branding.colorHelp')} icon={<I name="palette" size={16}/>}>
       <div className="flex flex-wrap items-center gap-2" role="radiogroup" aria-label={t('branding.color')}>

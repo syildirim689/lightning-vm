@@ -339,6 +339,34 @@ test('IP management: extra IPv4 and IPv6 in one order, default PTR in PowerDNS, 
     const next = (await create({ ...base, name: 'ip-2' })).json().serverId;
     const nextIp = (await pool.query("SELECT host(address) AS a FROM ip_allocations WHERE server_id = $1 AND kind = 'primary'", [next])).rows[0].a;
     assert.notEqual(nextIp, primary.address);
+    const nextV6 = (await pool.query("SELECT host(address) AS a FROM ip_allocations WHERE server_id = $1 AND kind = 'ipv6'", [next])).rows[0].a;
+    assert.notEqual(nextV6, v6.address, 'the quarantined IPv6 is not handed out again');
     assert.equal((await send('DELETE', `/admin/ip-quarantine/${primary.address}`)).statusCode, 204);
   } finally { await rdnsWorker.close(); }
+});
+
+test('root password: a weak one is replaced by a branded strong one, shown only to the owner, and can be forgotten', { skip }, async () => {
+  await send('PUT', '/admin/settings/branding', { name: 'Lightning VM', passwordPrefix: 'Acme' });
+  const pkg = (await pool.query("SELECT id FROM packages WHERE name = 'Tiny DVS'")).rows[0].id;
+  const dvPool = (await pool.query("SELECT id FROM resource_pools WHERE name = 'Sim DVS'")).rows[0].id;
+  const res = await create({ ...order('pw-1'), poolId: dvPool, packageId: pkg, rootPassword: '123456' });
+  assert.equal(res.statusCode, 202, res.body);
+  assert.equal(res.json().passwordReplaced, true);
+  const id = res.json().serverId;
+  const row = await serverRow(id);
+  assert.match(row.root_password_hash, /^\$6\$/);
+  const shown = (await send('GET', `/servers/${id}/root-password`, undefined, user)).json().password;
+  assert.match(shown, /^Acme(-[A-Za-z2-9]{4}){4}$/);
+  assert.ok(!row.root_password_enc.includes(shown), 'stored encrypted');
+  assert.equal((await send('GET', `/servers/${id}/root-password`, undefined, other)).statusCode, 404);
+  assert.equal((await send('DELETE', `/servers/${id}/root-password`, undefined, user)).statusCode, 204);
+  assert.equal((await send('GET', `/servers/${id}/root-password`, undefined, user)).statusCode, 404);
+  // A strong password is kept as typed.
+  const strong = await create({ ...order('pw-2'), poolId: dvPool, packageId: pkg, rootPassword: 'Tr0ub4dor&3-horse-Battery' });
+  assert.equal(strong.json().passwordReplaced, false);
+  assert.equal((await send('GET', `/servers/${strong.json().serverId}/root-password`, undefined, user)).json().password, 'Tr0ub4dor&3-horse-Battery');
+  for (const s of [id, strong.json().serverId]) {
+    await until(async () => (await serverRow(s)).state === 'ready', 'ready');
+    await send('DELETE', `/servers/${s}`, { confirm: (await serverRow(s)).name }, user, { 'idempotency-key': randomUUID() });
+  }
 });

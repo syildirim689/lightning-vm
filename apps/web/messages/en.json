@@ -325,7 +325,8 @@
     "INVALID_HOSTNAME_FQDN": "Enter a full host name such as mail.example.com.",
     "PTR_FORWARD_MISMATCH": "This name does not resolve to the address yet. Create its A/AAAA record first.",
     "INVALID_IPV6_PREFIX": "Enter a prefix from /48 to /64, such as 2001:db8:40::/64.",
-    "IPV6_GATEWAY_OUTSIDE": "The gateway must be inside the IPv6 prefix."
+    "IPV6_GATEWAY_OUTSIDE": "The gateway must be inside the IPv6 prefix.",
+    "INVALID_PASSWORD_PREFIX": "Up to 20 letters and digits."
   },
   "Setup": {
     "title": "Setup wizard",
@@ -773,7 +774,10 @@
     },
     "extraIpv4": "Extra IPv4 addresses",
     "extraIpv4Help": "Up to {max}, {price} a month each. Configured on the server automatically.",
-    "ipv6Included": "An IPv6 address is included and configured automatically."
+    "ipv6Included": "An IPv6 address is included and configured automatically.",
+    "rootPassword": "Root password (optional)",
+    "rootPasswordHelp": "For the console. SSH stays key-only. A weak password is replaced by a strong generated one, shown on the server page.",
+    "passwordReplaced": "Your password was weak, so a strong one was generated. See it on the server page."
   },
   "Catalog": {
     "eyebrow": "ADMIN · CATALOG",
@@ -1145,6 +1149,19 @@
       "cancel": "Cancel",
       "edit": "Edit PTR",
       "saved": "Reverse DNS updated."
+    },
+    "password": {
+      "title": "Root password",
+      "help": "Set at order time for console sign-in. Forget it here once you have stored it elsewhere.",
+      "show": "Show",
+      "hide": "Hide",
+      "copy": "Copy",
+      "copied": "Copied.",
+      "forget": "Forget",
+      "forgetTitle": "Forget the stored password?",
+      "forgetBody": "The panel deletes its copy; the server keeps the password. It cannot be shown again.",
+      "forgotten": "The panel no longer stores this password.",
+      "cancel": "Cancel"
     }
   },
   "Maintenance": {
@@ -1883,7 +1900,9 @@
       "logo": "Logo",
       "logoSection": "Shown next to the name in the menu and on the sign-in page.",
       "favicon": "Favicon",
-      "faviconSection": "The small icon in the browser tab and in notifications."
+      "faviconSection": "The small icon in the browser tab and in notifications.",
+      "passwordPrefix": "Password prefix",
+      "passwordPrefixHelp": "When a customer picks a weak root password, a strong one is generated that starts with this (letters and digits; the panel name if empty). Example: {example}"
     },
     "mail": {
       "testOk": "Test e-mail sent to {to}.",
