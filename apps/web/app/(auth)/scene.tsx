@@ -2,6 +2,7 @@
 // The sign-in panel's living picture: a small datacenter (panel, hosts, VMs) with packets flowing along its
 // links. Decorative only (aria-hidden); with "reduce motion" it is a still picture.
 import { motion, useReducedMotion } from 'motion/react';
+import { useEffect, useState } from 'react';
 
 const nodes = [
   { id: 'panel', x: 200, y: 60, r: 22, label: 'panel' },
@@ -14,7 +15,12 @@ const links: [string, string][] = [['panel', 'h1'], ['panel', 'h2'], ['panel', '
 const at = (id: string) => nodes.find((n) => n.id === id)!;
 
 export function AuthScene() {
-  const still = useReducedMotion();
+  const reduced = useReducedMotion();
+  // Drawn after hydration: the server cannot know the visitor's motion preference.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+  const still = !!reduced;
+  if (!mounted) return <svg aria-hidden viewBox="0 0 400 320" className="h-auto w-full max-w-md"/>;
   return <svg aria-hidden viewBox="0 0 400 320" className="h-auto w-full max-w-md text-accent">
     <defs>
       <radialGradient id="auth-node" cx="50%" cy="40%" r="60%"><stop offset="0%" stopColor="currentColor" stopOpacity="0.9"/><stop offset="100%" stopColor="currentColor" stopOpacity="0.35"/></radialGradient>

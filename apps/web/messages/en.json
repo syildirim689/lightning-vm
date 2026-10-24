@@ -229,7 +229,11 @@
     "STORAGE_TIMEOUT": "The storage did not answer in time.",
     "RCLONE_MISSING": "rclone is missing from the worker container; update the worker image.",
     "NO_CDROM_CONTROLLER": "The server has no free IDE slot for a CD-ROM drive.",
-    "DATASTORE_NOT_FOUND": "The datastore holding the ISO no longer exists."
+    "DATASTORE_NOT_FOUND": "The datastore holding the ISO no longer exists.",
+    "TWO_FACTOR_SETUP_REQUIRED": "Set up two-factor authentication to continue.",
+    "EMAIL_CODE_SIGN_IN_DISABLED": "Sign-in with an e-mail code is off on this panel.",
+    "TWO_FACTOR_USE_PASSWORD": "Accounts with two-factor sign in with their password.",
+    "USER_NOT_FOUND": "No account is registered with this e-mail address."
   },
   "Auth": {
     "required": "required",
@@ -282,7 +286,48 @@
       "trust": "Trust this device for 30 days",
       "trustHelp": "This browser will not ask for the second step for 30 days.",
       "verify": "Verify and sign in",
-      "back": "Back"
+      "back": "Back",
+      "codeSentTo": "Code sent {channel}; valid for 5 minutes.",
+      "channelSms": "by SMS",
+      "channelEmail": "to your e-mail",
+      "resendIn": "Resend in {s}s",
+      "lost": "If you cannot reach your app or your backup codes, contact your administrator."
+    },
+    "switchLabel": "Sign in or register",
+    "capsLock": "Caps Lock is on.",
+    "show": "Show",
+    "hide": "Hide",
+    "remember": "Remember me",
+    "redirecting": "Redirecting…",
+    "didYouMean": "Did you mean {email}?",
+    "strength": "Password strength",
+    "levels": {
+      "0": "Very weak",
+      "1": "Weak",
+      "2": "Fair",
+      "3": "Good",
+      "4": "Strong"
+    },
+    "rules": {
+      "length": "At least 12 characters",
+      "case": "Upper and lower case",
+      "digit": "A digit",
+      "symbol": "A symbol"
+    },
+    "emailCode": {
+      "button": "Sign in with an e-mail code",
+      "title": "Sign in with an e-mail code",
+      "intro": "We send a 6-digit one-time code to your account's e-mail address.",
+      "sent": "A code was sent to {email} (valid for 5 minutes). Check your inbox and spam folder.",
+      "send": "Send code",
+      "verify": "Sign in",
+      "back": "Sign in with password"
+    },
+    "gate": {
+      "title": "Two-factor authentication required",
+      "intro": "Your administrator requires two-factor authentication for this account. The panel opens once it is set up.",
+      "signOut": "Sign out",
+      "continue": "Continue to the panel"
     }
   },
   "fieldErrors": {
@@ -2108,7 +2153,8 @@
       "sms": "SMS",
       "notifications": "Notification rules",
       "payments": "Payments",
-      "rdns": "Reverse DNS"
+      "rdns": "Reverse DNS",
+      "security": "Sign-in security"
     },
     "saved": "Saved.",
     "save": "Save",
@@ -2464,6 +2510,28 @@
       "missing": "no zone",
       "test": "Test the connection",
       "save": "Save"
+    },
+    "security": {
+      "require": "Require two-factor authentication",
+      "requireHelp": "The chosen accounts see only the setup screen until they set it up; the API refuses every other request too.",
+      "levels": {
+        "none": "Optional",
+        "staff": "Required for staff",
+        "all": "Required for everyone"
+      },
+      "levelHelp": {
+        "none": "Users turn it on if they want.",
+        "staff": "Every account with management rights.",
+        "all": "All accounts, customers included."
+      },
+      "selfWarning": "Two-factor is off on your own account: after saving, you are sent to the setup screen too.",
+      "methods": "Methods: authenticator app (TOTP), one-time codes by SMS or e-mail, backup codes; 10 wrong codes lock verification for 15 minutes. Users can trust a device for 30 days.",
+      "emailCode": "Sign-in with an e-mail code",
+      "emailCodeHelp": "The sign-in screen offers \"Sign in with an e-mail code\": no password, a 6-digit code by e-mail. Accounts with two-factor still use password + second step.",
+      "emailCodeOn": "Allow sign-in with an e-mail code",
+      "needsMail": "E-mail (SMTP) is not set up or is off for two-factor codes; the option does not appear on the sign-in screen.",
+      "save": "Save",
+      "saved": "Sign-in security saved."
     }
   },
   "Firewalls": {

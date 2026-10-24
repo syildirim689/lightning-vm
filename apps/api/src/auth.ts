@@ -5,10 +5,11 @@ import { getAuth } from './better-auth';
 import { pool } from './db';
 import { apiError } from './errors';
 import { permissionsOf, splitRoles } from './permissions';
+import { getSettings } from './settings-store';
 
 // roles: the role keys; permissions: the effective set ('*' for administrators). impersonatedBy: the staff
 // member signed in as this user, if any.
-export type User = { id: string; email: string; name: string; roles: string[]; permissions: string[]; locale: 'tr' | 'en';
+export type User = { id: string; email: string; name: string; roles: string[]; permissions: string[]; locale: 'tr' | 'en'; twoFactorRequired?: boolean;
   impersonatedBy: string | null; twoFactorEnabled: boolean; phoneNumber: string | null; phoneNumberVerified: boolean };
 // sessionToken: better-auth's stored token; the console gateway keys its revocations on its hash.
 export type AuthedRequest = FastifyRequest & { user: User; sessionToken: string };
@@ -37,8 +38,13 @@ export async function currentSession(req: FastifyRequest): Promise<{ user: User;
     phoneNumber?: string | null; phoneNumberVerified?: boolean };
   if (u.disabledAt || u.banned) return null;
   const impersonatedBy = (s.session as { impersonatedBy?: string | null }).impersonatedBy ?? null;
-  return { user: { id: u.id, email: u.email, name: u.name ?? '', roles: splitRoles(u.role), permissions: await permissionsOf(u.id, u.role ?? null),
-    locale: u.locale === 'tr' ? 'tr' : 'en', impersonatedBy, twoFactorEnabled: !!u.twoFactorEnabled, phoneNumber: u.phoneNumber ?? null,
+  const permissions = await permissionsOf(u.id, u.role ?? null);
+  // The admin's sign-in policy: without two-factor, such an account may only set it up (impersonation is exempt).
+  const policy = (await getSettings('security')).require2fa;
+  const staff = permissions.some((p) => !['servers.create', 'firewalls.manage'].includes(p));
+  const twoFactorRequired = !u.twoFactorEnabled && !impersonatedBy && (policy === 'all' || (policy === 'staff' && staff));
+  return { user: { id: u.id, email: u.email, name: u.name ?? '', roles: splitRoles(u.role), permissions,
+    locale: u.locale === 'tr' ? 'tr' : 'en', impersonatedBy, twoFactorEnabled: !!u.twoFactorEnabled, twoFactorRequired, phoneNumber: u.phoneNumber ?? null,
     phoneNumberVerified: !!u.phoneNumberVerified }, token: s.session.token };
 }
 export const currentUser = async (req: FastifyRequest) => (await currentSession(req))?.user ?? null;
@@ -50,6 +56,9 @@ export class SessionGuard implements CanActivate {
     const s = await currentSession(req);
     if (!s) throw apiError(401, 'UNAUTHENTICATED', 'Sign in required');
     req.user = s.user; req.sessionToken = s.token;
+    // Two-factor required but not set up: only "who am I" answers (the panel then shows the setup; better-auth's
+    // own routes for it are not behind this guard).
+    if (s.user.twoFactorRequired && req.routeOptions.url !== '/auth/me') throw apiError(403, 'TWO_FACTOR_SETUP_REQUIRED', 'Set up two-factor authentication first');
     return true;
   }
 }

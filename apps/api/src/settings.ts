@@ -77,6 +77,19 @@ export class SettingsController {
     return { sent: true, to };
   }
 
+  @Get('security') @Can('settings.view', 'settings.manage')
+  security() { return getSettings('security'); }
+
+  @Put('security') @Can('settings.manage')
+  async saveSecurity(@Req() req: AuthedRequest, @Body() body: Input) {
+    const require2fa = ['none', 'staff', 'all'].includes(String(body?.require2fa)) ? String(body.require2fa) as 'none' | 'staff' | 'all' : null;
+    if (!require2fa) throw apiError(400, 'VALIDATION_FAILED', 'Invalid input', { require2fa: 'INVALID_VALUE' });
+    const value = { require2fa, emailCodeSignIn: body?.emailCodeSignIn === true };
+    await saveSettings('security', value);
+    await audit(req, 'settings.security', 'success', req.user.id, value);
+    return value;
+  }
+
   @Get('captcha') @Can('settings.view', 'settings.manage')
   async captcha() {
     const { secretEnc, ...c } = await getSettings('captcha');

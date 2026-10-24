@@ -47,6 +47,23 @@
 .rise { animation: rise 0.5s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
 .glow { animation: glow 1.2s ease-out both; }
 
+/* Sign-in backgrounds: a faint grid on the brand panel, a slowly drifting aurora behind the form. */
+.auth-grid {
+  background-image: linear-gradient(color-mix(in oklab, var(--foreground) 6%, transparent) 1px, transparent 1px),
+    linear-gradient(90deg, color-mix(in oklab, var(--foreground) 6%, transparent) 1px, transparent 1px);
+  background-size: 32px 32px;
+  mask-image: radial-gradient(ellipse at 50% 45%, black 30%, transparent 75%);
+}
+@keyframes aurora { 0%, 100% { transform: translate3d(-6%, -4%, 0) rotate(0deg); } 50% { transform: translate3d(6%, 5%, 0) rotate(8deg); } }
+.auth-aurora::before, .auth-aurora::after {
+  content: ""; position: absolute; width: 60%; aspect-ratio: 1; border-radius: 9999px; filter: blur(80px); opacity: 0.22;
+  background: radial-gradient(circle, var(--accent), transparent 65%); animation: aurora 18s ease-in-out infinite;
+}
+.auth-aurora::before { top: -20%; right: -15%; }
+.auth-aurora::after { bottom: -25%; left: -10%; opacity: 0.14; animation-delay: -9s; animation-duration: 22s; }
+@keyframes shake { 0%, 100% { transform: none; } 20%, 60% { transform: translateX(-6px); } 40%, 80% { transform: translateX(6px); } }
+.shake { animation: shake 0.4s ease-in-out; }
+
 /* Browser console canvas (VMware WebMKS draws into it). */
 .wmks { width: 100%; min-height: 480px; background: #000; border-radius: var(--radius); }
 

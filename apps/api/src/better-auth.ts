@@ -3,7 +3,7 @@
 // Users stay in the existing "users" table; better-auth's tables are auth_* (migrations 007, 008).
 import { betterAuth } from 'better-auth';
 import { APIError, createAuthMiddleware } from 'better-auth/api';
-import { admin, lastLoginMethod, phoneNumber, twoFactor } from 'better-auth/plugins';
+import { admin, emailOTP, lastLoginMethod, phoneNumber, twoFactor } from 'better-auth/plugins';
 import { passkey } from '@better-auth/passkey';
 import { authSecret, config } from './config';
 import { pool, redis } from './db';
@@ -29,7 +29,8 @@ const adminActions: Record<string, string> = { '/admin/create-user': 'create', '
 const targetsAccount = new Set(['/admin/ban-user', '/admin/unban-user', '/admin/set-user-password', '/admin/remove-user', '/admin/revoke-user-session',
   '/admin/revoke-user-sessions', '/admin/impersonate-user', '/admin/update-user']);
 // Forms a captcha can protect, and the setting that turns it on for each.
-const captchaPaths: Record<string, 'signIn' | 'signUp' | 'passwordReset'> = { '/sign-in/email': 'signIn', '/sign-up/email': 'signUp', '/request-password-reset': 'passwordReset' };
+const captchaPaths: Record<string, 'signIn' | 'signUp' | 'passwordReset'> = { '/sign-in/email': 'signIn', '/sign-up/email': 'signUp', '/request-password-reset': 'passwordReset',
+  '/email-otp/send-verification-otp': 'signIn' };
 
 const auditAuth = (actorId: string | null, action: string, outcome: 'success' | 'failure' | 'denied', ip: string | null, metadata: object = {}) =>
   pool.query('INSERT INTO audit_events (actor_id, action, outcome, ip, metadata) VALUES ($1, $2, $3, $4, $5)', [actorId, action, outcome, ip, metadata])
@@ -162,6 +163,17 @@ function createAuth() {
           const email = String(body.email ?? '').toLowerCase();
           if (email) await limit(`login:email:${email}`, 10, 900);
         }
+        // E-mail code sign-in: only when the admin turned it on, only for sign-in, never instead of two-factor.
+        if (ctx.path.startsWith('/email-otp/') || ctx.path === '/sign-in/email-otp') {
+          const email = String(body.email ?? '').toLowerCase();
+          if (!(await getSettings('security')).emailCodeSignIn || !(await mailUse('twoFactor'))) throw new APIError('FORBIDDEN', { code: 'EMAIL_CODE_SIGN_IN_DISABLED', message: 'Sign-in with an e-mail code is off' });
+          if (ctx.path !== '/sign-in/email-otp' && (ctx.path !== '/email-otp/send-verification-otp' || body.type !== 'sign-in')) throw new APIError('FORBIDDEN', { code: 'EMAIL_CODE_SIGN_IN_DISABLED', message: 'Only sign-in codes' });
+          if (email) await limit(`login:email:${email}`, 10, 900);
+          if (ctx.path === '/sign-in/email-otp') {
+            const { rows: [u] } = await pool.query('SELECT two_factor_enabled FROM users WHERE lower(email) = $1', [email]);
+            if (u?.two_factor_enabled) throw new APIError('FORBIDDEN', { code: 'TWO_FACTOR_USE_PASSWORD', message: 'Accounts with two-factor sign in with their password' });
+          }
+        }
       }),
       after: createAuthMiddleware(async (ctx) => {
         if (!ctx.request) return;
@@ -190,12 +202,12 @@ function createAuth() {
           if (uid) await notify('auth.password_changed', [uid], {});
           return;
         }
-        if (ctx.path !== '/sign-in/email' && ctx.path !== '/sign-up/email' && ctx.path !== '/sign-in/passkey' && !ctx.path.startsWith('/two-factor/verify-')) return;
+        if (ctx.path !== '/sign-in/email' && ctx.path !== '/sign-up/email' && ctx.path !== '/sign-in/passkey' && ctx.path !== '/sign-in/email-otp' && !ctx.path.startsWith('/two-factor/verify-')) return;
         const created = ctx.context.newSession;
         // A password sign-in that still needs the second factor is neither a success nor a failure yet.
         if (!created && (ctx.context.returned as { twoFactorRedirect?: boolean } | undefined)?.twoFactorRedirect) return;
         const action = ctx.path === '/sign-up/email' ? 'auth.register' : 'auth.login';
-        const method = ctx.path === '/sign-in/passkey' ? 'passkey' : ctx.path.startsWith('/two-factor/') ? 'password+2fa' : 'password';
+        const method = ctx.path === '/sign-in/passkey' ? 'passkey' : ctx.path === '/sign-in/email-otp' ? 'email-code' : ctx.path.startsWith('/two-factor/') ? 'password+2fa' : 'password';
         await auditAuth(created?.user.id ?? null, action, created ? 'success' : 'failure', ip,
           created ? { method } : { email: String((ctx.body as { email?: unknown })?.email ?? '').toLowerCase() });
         if (!created) return;
@@ -254,6 +266,15 @@ function createAuth() {
         expiresIn: 300,
         allowedAttempts: 5,
         schema: { user: { fields: { phoneNumber: 'phone_number', phoneNumberVerified: 'phone_number_verified' } } },
+      }),
+      // One-time code by e-mail instead of the password (Settings → Sign-in security). No sign-up through it.
+      emailOTP({
+        disableSignUp: true, otpLength: 6, expiresIn: 300, allowedAttempts: 5,
+        sendVerificationOTP: async ({ email, otp, type }) => {
+          if (type !== 'sign-in') return;
+          const { rows: [u] } = await pool.query('SELECT locale FROM users WHERE lower(email) = lower($1)', [email]);
+          if (u) await sendOtpMail(email, u.locale, otp); // unknown addresses get nothing, and the answer is the same
+        },
       }),
       lastLoginMethod({ storeInDatabase: true, schema: { user: { lastLoginMethod: 'last_login_method' } } }),
       passkey({

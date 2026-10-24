@@ -178,3 +178,37 @@ test('repeated sign-in failures for one email are rate limited', async () => {
   assert.equal(codes.slice(0, 10).every((c) => c === 'INVALID_EMAIL_OR_PASSWORD'), true);
   assert.equal(codes[10], 'RATE_LIMITED');
 });
+
+test('two-factor can be required for staff or everyone; e-mail code sign-in stays off until allowed', async () => {
+  const admin = cookieOf(await post('/auth/sign-in/email', { email: adminEmail, password }));
+  const created = await post('/auth/admin/create-user', { email: 'policy@example.test', password, name: '', role: 'user' }, admin);
+  assert.equal(created.statusCode, 200, created.body);
+  const customer = cookieOf(await post('/auth/sign-in/email', { email: 'policy@example.test', password }));
+  const put = (body) => app.inject({ method: 'PUT', url: '/admin/settings/security', payload: body, headers: { ...csrf, cookie: `lvm.session_token=${admin}` } });
+  assert.equal((await put({ require2fa: 'sometimes' })).json().fields.require2fa, 'INVALID_VALUE');
+
+  assert.equal((await put({ require2fa: 'staff', emailCodeSignIn: false })).statusCode, 200);
+  assert.equal((await get('/auth/me', admin)).json().twoFactorRequired, true, 'staff without two-factor must set it up');
+  const blocked = await get('/admin/settings/security', admin);
+  assert.equal(blocked.statusCode, 403);
+  assert.equal(blocked.json().code, 'TWO_FACTOR_SETUP_REQUIRED');
+  assert.equal((await get('/auth/me', customer)).json().twoFactorRequired, false, 'customers are not staff');
+  assert.equal((await get('/servers', customer)).statusCode, 200);
+
+  // The admin cannot use the API now; the policy is reset directly, as an operator would on the server.
+  await pool.query("UPDATE settings SET value = '{\"require2fa\":\"all\",\"emailCodeSignIn\":false}' WHERE key = 'security'");
+  await new Promise((r) => setTimeout(r, 10_500)); // settings cache
+  assert.equal((await get('/servers', customer)).json().code, 'TWO_FACTOR_SETUP_REQUIRED');
+  await pool.query("UPDATE settings SET value = '{\"require2fa\":\"none\",\"emailCodeSignIn\":false}' WHERE key = 'security'");
+  await new Promise((r) => setTimeout(r, 10_500));
+  assert.equal((await get('/servers', customer)).statusCode, 200);
+
+  const send = await post('/auth/email-otp/send-verification-otp', { email: 'policy@example.test', type: 'sign-in' });
+  assert.equal(send.json().code, 'EMAIL_CODE_SIGN_IN_DISABLED');
+  assert.equal((await post('/auth/sign-in/email-otp', { email: 'policy@example.test', otp: '123456' })).json().code, 'EMAIL_CODE_SIGN_IN_DISABLED');
+  // Allowed, but without working mail the option stays off as well.
+  assert.equal((await put({ require2fa: 'none', emailCodeSignIn: true })).statusCode, 200);
+  assert.equal((await get('/public/config')).json().emailCodeSignIn, false);
+  assert.equal((await post('/auth/email-otp/send-verification-otp', { email: 'policy@example.test', type: 'sign-in' })).json().code, 'EMAIL_CODE_SIGN_IN_DISABLED');
+  await put({ require2fa: 'none', emailCodeSignIn: false });
+});

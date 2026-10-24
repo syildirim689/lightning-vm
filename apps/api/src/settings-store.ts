@@ -21,6 +21,8 @@ export type SmsUse = { twoFactor: boolean; phoneVerification: boolean };
 // credentialsEnc: the provider's account fields (sms.ts), encrypted as one JSON document.
 export type SmsSettings = { provider: string; sender: string; credentialsEnc: string | null; commercial: boolean; use: SmsUse };
 export type Channel = 'inApp' | 'push' | 'email' | 'sms';
+// Sign-in policy: who must use two-factor, and whether a one-time e-mail code can replace the password.
+export type SecuritySettings = { require2fa: 'none' | 'staff' | 'all'; emailCodeSignIn: boolean };
 export type NotificationPolicy = { enabled: boolean; allowed: Channel[]; defaults: Channel[]; userCanChange: boolean };
 export type CaptchaSettings = { provider: CaptchaProvider; siteKey: string; secretEnc: string | null; minScore: number; use: CaptchaUse };
 // Reverse DNS (rdns.ts): PowerDNS's HTTP API holds the in-addr.arpa / ip6.arpa zones of the routed blocks.
@@ -36,6 +38,7 @@ const defaults = {
   sms: { provider: 'none', sender: '', credentialsEnc: null, commercial: false, use: { twoFactor: true, phoneVerification: true } } as SmsSettings,
   // Per notification event (notify.ts): the admin's policy. Missing events use the catalog defaults.
   notifications: {} as Record<string, NotificationPolicy>,
+  security: { require2fa: 'none', emailCodeSignIn: false } as SecuritySettings,
   rdns: { provider: 'none', apiUrl: '', apiKeyEnc: null, serverId: 'localhost', template: '', ttl: 3600, customerEdit: true, forwardCheck: true } as RdnsSettings,
   // Web Push (VAPID) keys, generated on first use.
   vapid: { publicKey: '', privateKeyEnc: null } as { publicKey: string; privateKeyEnc: string | null },
@@ -214,6 +217,8 @@ export async function publicConfig() {
     // Phone numbers can be verified (SMS), and where two-factor codes can be sent besides an authenticator app.
     phoneVerification: phone,
     otpChannels: { sms: smsCodes, email: mailCodes },
+    // Sign-in with a one-time code sent by e-mail (the admin turns it on; needs working mail).
+    emailCodeSignIn: mailCodes && (await getSettings('security')).emailCodeSignIn,
     captcha: captcha ? { provider: captcha.provider, siteKey: captcha.siteKey, use: captcha.use } : null,
     // Older web builds read this field.
     turnstileSiteKey: captcha?.provider === 'turnstile' ? captcha.siteKey : null,

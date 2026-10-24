@@ -229,7 +229,11 @@
     "STORAGE_TIMEOUT": "Depo zamanında yanıt vermedi.",
     "RCLONE_MISSING": "Worker kapsayıcısında rclone yok; worker imajını güncelleyin.",
     "NO_CDROM_CONTROLLER": "Sunucuda CD-ROM sürücüsü için boş IDE yuvası yok.",
-    "DATASTORE_NOT_FOUND": "ISO'nun bulunduğu datastore artık yok."
+    "DATASTORE_NOT_FOUND": "ISO'nun bulunduğu datastore artık yok.",
+    "TWO_FACTOR_SETUP_REQUIRED": "Devam etmek için iki adımlı doğrulamayı kurun.",
+    "EMAIL_CODE_SIGN_IN_DISABLED": "E-posta koduyla giriş bu panelde kapalı.",
+    "TWO_FACTOR_USE_PASSWORD": "İki adımlı doğrulaması açık hesaplar parolayla giriş yapar.",
+    "USER_NOT_FOUND": "Bu e-posta adresiyle kayıtlı bir hesap bulunamadı."
   },
   "Auth": {
     "required": "zorunlu",
@@ -282,7 +286,48 @@
       "trust": "Bu cihaza 30 gün güven",
       "trustHelp": "Bu tarayıcıda 30 gün boyunca ikinci adım sorulmaz.",
       "verify": "Doğrula ve giriş yap",
-      "back": "Geri"
+      "back": "Geri",
+      "codeSentTo": "Kod {channel} gönderildi; 5 dakika geçerli.",
+      "channelSms": "SMS ile",
+      "channelEmail": "e-postanıza",
+      "resendIn": "{s} sn sonra yeniden gönder",
+      "lost": "Uygulamanıza ve yedek kodlarınıza erişemiyorsanız yöneticinize başvurun."
+    },
+    "switchLabel": "Giriş veya kayıt",
+    "capsLock": "Caps Lock açık.",
+    "show": "Göster",
+    "hide": "Gizle",
+    "remember": "Beni hatırla",
+    "redirecting": "Yönlendiriliyor…",
+    "didYouMean": "{email} mi demek istediniz?",
+    "strength": "Parola gücü",
+    "levels": {
+      "0": "Çok zayıf",
+      "1": "Zayıf",
+      "2": "Orta",
+      "3": "İyi",
+      "4": "Güçlü"
+    },
+    "rules": {
+      "length": "En az 12 karakter",
+      "case": "Büyük ve küçük harf",
+      "digit": "Rakam",
+      "symbol": "Simge"
+    },
+    "emailCode": {
+      "button": "E-posta koduyla giriş",
+      "title": "E-posta koduyla giriş",
+      "intro": "Hesabınızın e-posta adresine 6 haneli tek kullanımlık bir kod gönderelim.",
+      "sent": "{email} adresine bir kod gönderildi (5 dakika geçerli). Gelen kutunuza ve gereksiz klasörüne bakın.",
+      "send": "Kod gönder",
+      "verify": "Giriş yap",
+      "back": "Parolayla giriş"
+    },
+    "gate": {
+      "title": "İki adımlı doğrulama gerekli",
+      "intro": "Yönetici bu hesap için iki adımlı doğrulamayı zorunlu kıldı. Kurulumu tamamlayınca panel açılır.",
+      "signOut": "Çıkış yap",
+      "continue": "Panele geç"
     }
   },
   "fieldErrors": {
@@ -2108,7 +2153,8 @@
       "sms": "SMS",
       "notifications": "Bildirim kuralları",
       "payments": "Ödeme",
-      "rdns": "Ters DNS"
+      "rdns": "Ters DNS",
+      "security": "Giriş güvenliği"
     },
     "saved": "Kaydedildi.",
     "save": "Kaydet",
@@ -2464,6 +2510,28 @@
       "missing": "zone yok",
       "test": "Bağlantıyı test et",
       "save": "Kaydet"
+    },
+    "security": {
+      "require": "İki adımlı doğrulama zorunluluğu",
+      "requireHelp": "Seçilen hesaplar, kurulum yapana kadar yalnızca kurulum ekranını görür; API de diğer tüm istekleri reddeder.",
+      "levels": {
+        "none": "İsteğe bağlı",
+        "staff": "Personel için zorunlu",
+        "all": "Herkes için zorunlu"
+      },
+      "levelHelp": {
+        "none": "Kullanıcılar dilerse açar.",
+        "staff": "Yönetim yetkisi olan tüm hesaplar.",
+        "all": "Müşteriler dahil bütün hesaplar."
+      },
+      "selfWarning": "Sizin hesabınızda iki adımlı doğrulama kapalı: kaydedince siz de kurulum ekranına yönlendirilirsiniz.",
+      "methods": "Yöntemler: doğrulayıcı uygulama (TOTP), SMS veya e-posta ile tek kullanımlık kod, yedek kodlar; 10 hatalı denemede doğrulama 15 dakika kilitlenir. Kullanıcı bir cihaza 30 gün güvenebilir.",
+      "emailCode": "E-posta koduyla giriş",
+      "emailCodeHelp": "Giriş ekranında \"E-posta koduyla giriş\" seçeneği çıkar: parolasız, e-postaya gelen 6 haneli kodla. İki adımlı doğrulaması açık hesaplar yine parola + ikinci adım kullanır.",
+      "emailCodeOn": "E-posta koduyla girişe izin ver",
+      "needsMail": "E-posta (SMTP) ayarlı değil veya iki adımlı kodlar için kapalı; seçenek giriş ekranında görünmez.",
+      "save": "Kaydet",
+      "saved": "Giriş güvenliği kaydedildi."
     }
   },
   "Firewalls": {
