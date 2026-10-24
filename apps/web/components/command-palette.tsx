@@ -12,8 +12,9 @@ import { can } from '../lib/permissions';
 import { useApiQuery } from '../lib/query';
 import { I } from './icon';
 import { openShortcuts } from './shortcuts';
+import { recent } from '../lib/recent';
 
-type Cmd = { id: string; group: 'pages' | 'servers' | 'actions'; label: string; hint?: string; icon: React.ReactNode; run: () => void };
+type Cmd = { id: string; group: 'recent' | 'pages' | 'servers' | 'actions'; label: string; hint?: string; icon: React.ReactNode; run: () => void };
 type ServerRow = { id: string; name: string; address: string | null; ownerEmail?: string };
 const fold = (s: string) => s.toLocaleLowerCase('tr').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/ı/g, 'i');
 
@@ -62,6 +63,7 @@ export default function CommandPalette({ permissions, isOpen, onOpenChange }: { 
       ['/account?tab=notifications', t('notificationSettings'), <I key="i" name="bell" size={16}/>, true],
     ];
     return [
+      ...(isOpen ? recent() : []).map((r) => ({ id: `r:${r.href}`, group: 'recent' as const, label: r.label, icon: <I name="history" size={16}/>, run: go(r.href) })),
       ...pages.filter((p) => p[3]).map(([href, label, icon]) => ({ id: `p:${href}`, group: 'pages' as const, label, icon, run: go(href) })),
       ...servers.map((s) => ({ id: `s:${s.id}`, group: 'servers' as const, label: s.name, hint: [s.address, s.ownerEmail].filter(Boolean).join(' · '), icon: <I name="server" size={16}/>, run: go(`/servers/${s.id}`) })),
       { id: 'a:theme', group: 'actions', label: resolvedTheme === 'dark' ? t('lightTheme') : t('darkTheme'), icon: resolvedTheme === 'dark' ? <I name="sun" size={16}/> : <I name="moon" size={16}/>,
@@ -71,10 +73,10 @@ export default function CommandPalette({ permissions, isOpen, onOpenChange }: { 
       { id: 'a:shortcuts', group: 'actions', label: t('shortcuts'), icon: <I name="keyboard" size={16}/>, run: () => { onOpenChange(false); openShortcuts(); } },
       { id: 'a:logout', group: 'actions', label: tn('logout'), icon: <I name="log-out" size={16}/>, run: () => { onOpenChange(false); void signOut().then(() => { router.replace('/login'); router.refresh(); }); } },
     ];
-  }, [permissions, servers, resolvedTheme, locale]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [permissions, servers, resolvedTheme, locale, isOpen]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const q = fold(query.trim());
-  const results = q ? commands.filter((c) => fold(`${c.label} ${c.hint ?? ''}`).includes(q)) : commands.filter((c) => c.group !== 'servers' || commands.indexOf(c) < 40);
+  const results = q ? commands.filter((c) => c.group !== 'recent').filter((c) => fold(`${c.label} ${c.hint ?? ''}`).includes(q)) : commands.filter((c) => c.group !== 'servers' || commands.indexOf(c) < 40);
   useEffect(() => setActive(0), [query, isOpen]);
   useEffect(() => { if (!isOpen) setQuery(''); }, [isOpen]);
   useEffect(() => { listRef.current?.querySelector(`[data-index="${active}"]`)?.scrollIntoView({ block: 'nearest' }); }, [active]);
@@ -84,7 +86,7 @@ export default function CommandPalette({ permissions, isOpen, onOpenChange }: { 
     if (e.key === 'ArrowUp') { e.preventDefault(); setActive((i) => Math.max(0, i - 1)); }
     if (e.key === 'Enter') { e.preventDefault(); results[active]?.run(); }
   };
-  const groups = (['pages', 'servers', 'actions'] as const).map((g) => ({ g, items: results.filter((c) => c.group === g) })).filter((x) => x.items.length);
+  const groups = (['recent', 'pages', 'servers', 'actions'] as const).map((g) => ({ g, items: results.filter((c) => c.group === g) })).filter((x) => x.items.length);
 
   return <Modal.Backdrop isOpen={isOpen} onOpenChange={onOpenChange}>
     <Modal.Container placement="top" className="pt-[12vh]">

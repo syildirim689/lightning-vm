@@ -1,5 +1,5 @@
 "use client";
-import { Button, Card, SearchField, Tabs } from '@heroui/react';
+import { Button, Card, Tabs } from '@heroui/react';
 import NextLink from 'next/link';
 import { useFormatter, useTranslations } from 'next-intl';
 import { parseAsString, useQueryState } from 'nuqs';
@@ -8,6 +8,7 @@ import { DataTable, Mono, Notice, PageHeader, StatusChip } from '../../../../com
 import { apiFetch, useErrorText } from '../../../../lib/api';
 import { useApiAction, useApiQuery } from '../../../../lib/query';
 import { StateBadge, type Server } from '../../servers-ui';
+import { ServerFilters, stateGroup, useServerFilters } from '../../server-filters';
 
 type Operation = { id: string; kind: string; status: string; step: string | null; attempts: number; errorCode: string | null; errorDetail: string | null;
   createdAt: string; serverName: string | null; serverId: string | null; ownerEmail: string | null };
@@ -19,15 +20,14 @@ export default function AdminServers() {
   const { error } = useErrorText();
   // Tab and search live in the URL, so a view can be bookmarked and the back button works.
   const [tab, setTab] = useQueryState('tab', parseAsString.withDefault('servers'));
-  const [search, setSearch] = useQueryState('q', parseAsString.withDefault(''));
   const servers = useApiQuery<{ servers: Server[] }>(['admin', 'servers'], '/admin/servers', { refetchInterval: 5_000 }).data?.servers ?? [];
   const ops = useApiQuery<{ operations: Operation[] }>(['admin', 'operations'], '/admin/operations', { refetchInterval: 5_000 }).data?.operations ?? [];
   const findings = useApiQuery<{ findings: Finding[] }>(['admin', 'findings'], '/admin/reconciliation', { refetchInterval: 15_000 }).data?.findings ?? [];
   const retry = useApiAction((id: string) => apiFetch(`/admin/operations/${id}/retry`, { method: 'POST' }), { invalidate: [['admin']], success: t('admin.retried') });
   const reconcile = useApiAction(() => apiFetch('/admin/reconcile', { method: 'POST' }), { invalidate: [['admin', 'findings']], success: t('admin.reconcileQueued') });
 
-  const needle = search.trim().toLowerCase();
-  const shown = needle ? servers.filter((s) => [s.name, s.ownerEmail, s.address, s.poolName].some((v) => v?.toLowerCase().includes(needle))) : servers;
+  const filters = useServerFilters(servers);
+  const shown = filters.shown;
   const failed = ops.filter((o) => o.status === 'failed').length;
   const opTone = (s: string) => (s === 'succeeded' ? 'success' : s === 'failed' ? 'danger' : s === 'cancelled' ? 'default' : 'accent') as 'success';
 
@@ -46,13 +46,16 @@ export default function AdminServers() {
 
           <Tabs.Panel id="servers" className="flex flex-col gap-4 pt-4">
             <h2 className="sr-only">{t('admin.servers')}</h2>
-            <SearchField aria-label={t('admin.search')} value={search} onChange={(v) => setSearch(v || null)} className="max-w-sm">
-              <SearchField.Group><SearchField.SearchIcon/><SearchField.Input placeholder={t('admin.search')}/><SearchField.ClearButton/></SearchField.Group>
-            </SearchField>
+            <ServerFilters f={filters} placeholder={t('admin.search')}/>
+            <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-muted">
+              <span role="status">{t('admin.shown', { shown: shown.length, total: servers.length })}</span>
+              <Button size="sm" variant="secondary" isDisabled={!shown.length} onPress={() => exportCsv(shown)}><I name="download" size={15}/>{t('admin.exportCsv')}</Button>
+            </div>
             <DataTable label={t('admin.servers')} rows={shown} rowKey={(s) => s.id} empty={t('list.empty')}
-              columns={[{ id: 'name', label: t('col.name') }, { id: 'owner', label: t('admin.owner') }, { id: 'state', label: t('col.state') }, { id: 'ip', label: 'IP' }, { id: 'size', label: t('col.size') }, { id: 'loc', label: t('col.location') }]}
+              columns={[{ id: 'name', label: t('col.name') }, { id: 'owner', label: t('admin.owner') }, { id: 'state', label: t('col.state') }, { id: 'ip', label: 'IP' }, { id: 'size', label: t('col.size') }, { id: 'loc', label: t('col.location') }, { id: 'tags', label: t('admin.tags') }]}
               cells={(s) => [<NextLink key="n" href={`/servers/${s.id}`} className="font-medium text-accent hover:underline">{s.name}</NextLink>, s.ownerEmail ?? '–', <StateBadge key="b" server={s}/>,
-                s.address ? <Mono key="ip">{s.address}</Mono> : '–', t('size', { vcpu: s.vcpu, memory: s.memoryMb / 1024, disk: s.diskGb }), s.poolName]}/>
+                s.address ? <Mono key="ip">{s.address}</Mono> : '–', t('size', { vcpu: s.vcpu, memory: s.memoryMb / 1024, disk: s.diskGb }), s.poolName,
+                s.tags?.length ? <span key="t" className="flex flex-wrap gap-1">{s.tags.map((x) => <span key={x} className="rounded-full bg-default px-2 py-0.5 text-xs">{x}</span>)}</span> : '–']}/>
           </Tabs.Panel>
 
           <Tabs.Panel id="operations" className="pt-4">
@@ -81,4 +84,15 @@ export default function AdminServers() {
       </Card.Content>
     </Card>
   </>;
+}
+
+// The filtered rows as a spreadsheet (UTF-8 with BOM so Excel keeps Turkish letters; cells quoted, formulas defused).
+function exportCsv(rows: Server[]) {
+  const cell = (v: unknown) => { const x = String(v ?? ''); return `"${(/^[=+\-@]/.test(x) ? `'${x}` : x).replace(/"/g, '""')}"`; };
+  const head = ['name', 'owner', 'state', 'power', 'group', 'ip', 'vcpu', 'memory_mb', 'disk_gb', 'location', 'image', 'price_monthly', 'currency', 'tags', 'created_at'];
+  const lines = rows.map((s) => [s.name, s.ownerEmail, s.state, s.powerState, stateGroup(s), s.address, s.vcpu, s.memoryMb, s.diskGb, s.location || s.poolName, s.imageName, s.priceMonthly, s.currency, (s.tags ?? []).join(' '), s.createdAt].map(cell).join(','));
+  const url = URL.createObjectURL(new Blob(['\ufeff' + [head.join(','), ...lines].join('\r\n')], { type: 'text/csv;charset=utf-8' }));
+  const a = Object.assign(document.createElement('a'), { href: url, download: `servers-${new Date().toISOString().slice(0, 10)}.csv` });
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }

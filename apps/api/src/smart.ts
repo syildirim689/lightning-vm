@@ -1,14 +1,15 @@
 // Smart features: a server's health score with its reasons and right-sizing advice, the customer's cost
 // forecast for this month, and the admin's getting-started checklist. The rules are in smart-rules.ts.
-import { Controller, Get, Param, ParseUUIDPipe, Req, UseGuards } from '@nestjs/common';
-import { SessionGuard, type AuthedRequest } from './auth';
+import { Body, Controller, Get, Param, ParseUUIDPipe, Put, Req, UseGuards } from '@nestjs/common';
+import { audit, SessionGuard, type AuthedRequest } from './auth';
 import { usageOf } from './catalog';
 import { pool } from './db';
+import { apiError } from './errors';
 import { summary as maintenance } from './maintenance';
 import { Can, PermissionGuard } from './rbac';
 import { findServer } from './servers';
 import { mailReady } from './settings-store';
-import { health, monthCost, sizing, type CpuStats } from './smart-rules';
+import { cleanLabels, health, monthCost, sizing, type CpuStats } from './smart-rules';
 
 // CPU of the servers given over the last 7 days (server_cpu_samples, written with each energy sample).
 export async function cpuStats(ids: string[]): Promise<Map<string, CpuStats>> {
@@ -31,6 +32,17 @@ export class SmartController {
     const size = sizing(s.vcpu, cpu);
     return { ...health({ state: s.state, powerState: s.power_state, abuseOpen: x.abuse, failedOps24h: x.failed, cpuP95: cpu && cpu.samples >= 24 ? cpu.p95 : null, advice: size.advice }),
       cpu: cpu && { avg: Math.round(cpu.avg * 10) / 10, p95: Math.round(cpu.p95 * 10) / 10, samples: cpu.samples, days: Math.round(cpu.days * 10) / 10 }, vcpu: s.vcpu, ...size };
+  }
+
+  // The owner's tags and notes (staff need servers.manage_all to change someone else's).
+  @Put('servers/:id/labels')
+  async labels(@Req() req: AuthedRequest, @Param('id', ParseUUIDPipe) id: string, @Body() body: Record<string, unknown>) {
+    await findServer(req, id, true);
+    const v = cleanLabels(body);
+    if ('fields' in v) throw apiError(400, 'VALIDATION_FAILED', 'Invalid input', v.fields);
+    await pool.query('UPDATE servers SET tags = $2, notes = $3, updated_at = now() WHERE id = $1', [id, v.tags, v.notes]);
+    await audit(req, 'server.labels', 'success', req.user.id, { id, tags: v.tags });
+    return v;
   }
 
   // Spending of this month per currency (servers and virtual data centers), with the resources in use.

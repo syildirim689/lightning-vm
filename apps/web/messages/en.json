@@ -404,7 +404,9 @@
     "INVALID_PORT_LIST": "One port (1–65535) per line with an optional label; at most 100, no repeats.",
     "VDC_LIMIT": "More than what is left in the virtual datacenter.",
     "VDC_BELOW_USAGE": "Cannot be below what is in use.",
-    "DISK_TOO_SMALL": "Smaller than the image needs."
+    "DISK_TOO_SMALL": "Smaller than the image needs.",
+    "TOO_MANY": "Too many items.",
+    "INVALID_TAG": "A tag starts with a letter or digit and uses only letters, digits, space, dot, _ and -."
   },
   "Setup": {
     "title": "Setup wizard",
@@ -1427,7 +1429,23 @@
     },
     "list": {
       "title": "Your servers",
-      "empty": "You have no servers yet."
+      "empty": "You have no servers yet.",
+      "search": "Search",
+      "searchPlaceholder": "Name, IP, location or tag",
+      "state": "Filter by state",
+      "tag": "Tag",
+      "allTags": "All tags",
+      "sort": "Sort",
+      "newest": "Newest first",
+      "byName": "By name",
+      "noMatch": "No server matches these filters.",
+      "filter": {
+        "all": "All",
+        "running": "Running",
+        "stopped": "Stopped",
+        "problem": "Problem",
+        "busy": "In progress"
+      }
     },
     "col": {
       "name": "Name",
@@ -1463,7 +1481,10 @@
       "reconcileQueued": "Reconciliation queued.",
       "noFindings": "No open findings.",
       "finding": "Finding",
-      "search": "Search by name, owner, IP or pool"
+      "search": "Search by name, owner, IP or pool",
+      "shown": "Showing {shown} of {total}",
+      "exportCsv": "Export CSV",
+      "tags": "Tags"
     },
     "finding": {
       "vm_missing": "VM missing in VMware",
@@ -1794,7 +1815,8 @@
     "lightTheme": "Switch to light theme",
     "darkTheme": "Switch to dark theme",
     "notificationSettings": "Notification settings",
-    "shortcuts": "Keyboard shortcuts"
+    "shortcuts": "Keyboard shortcuts",
+    "recent": "Recent"
   },
   "Insights": {
     "title": "Needs attention",
@@ -3271,5 +3293,27 @@
       "s": "All servers",
       "c": "Catalog"
     }
+  },
+  "Extras": {
+    "copy": "Copy",
+    "copied": "{what} copied.",
+    "ip": "IP",
+    "ssh": "SSH",
+    "scp": "Copy file",
+    "connect": "Connect",
+    "connectHelp": "Commands to reach the server, ready to copy. Use the SSH key you chose when ordering.",
+    "labels": "Tags and notes",
+    "labelsHelp": "Only you see these. Tags group and filter your server list.",
+    "tags": "Tags",
+    "removeTag": "Remove tag {tag}",
+    "addTag": "New tag",
+    "tagPlaceholder": "web, production…",
+    "tagHelp": "Up to 10 tags, 24 characters each. Press Enter to add.",
+    "add": "Add",
+    "notes": "Notes",
+    "notesHelp": "{n} characters left.",
+    "save": "Save",
+    "saved": "Tags and notes saved.",
+    "orderSimilar": "Order similar"
   }
 }

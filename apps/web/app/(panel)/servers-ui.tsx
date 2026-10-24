@@ -14,12 +14,15 @@ import { useApiAction, useApiQuery } from '../../lib/query';
 import ServerMetrics from './metrics';
 import { ServerIso } from './server-iso';
 import { ServerHealth } from '../../components/smart';
+import { OrderSimilar, QuickConnect, ServerLabels } from './server-extras';
+import { remember } from '../../lib/recent';
+import { ServerFilters, useServerFilters } from './server-filters';
 import { flag } from '../../lib/flag';
 import { ButtonLink, ConfirmButton, DataTable, Empty, Mono, Notice, PageHeader, Section, StatusChip, TextInput, type Tone } from '../../components/ui';
 
 export type Server = { id: string; name: string; state: string; powerState: string; guestReady: boolean; vcpu: number; memoryMb: number; diskGb: number;
   priceMonthly: string; currency: string; errorCode: string | null; poolName: string; location: string; locationCity?: string | null; locationCountry?: string | null; locationDatacenter?: string | null; imageName: string; address: string | null;
-  createdAt: string; ownerEmail?: string; hasRootPassword?: boolean; applicationName?: string | null; appState?: 'pending' | 'installing' | 'installed' | 'failed' | null; appMessage?: string | null; firewallStatus?: 'applied' | 'pending' | 'failed'; firewallError?: string | null; firewallCount?: number; lastOperation: { id: string; kind: string; status: string; step: string | null; errorCode: string | null } | null };
+  createdAt: string; tags?: string[]; notes?: string; poolId: string; imageId: string; packageId: string | null; vdcId?: string | null; ownerEmail?: string; hasRootPassword?: boolean; applicationName?: string | null; appState?: 'pending' | 'installing' | 'installed' | 'failed' | null; appMessage?: string | null; firewallStatus?: 'applied' | 'pending' | 'failed'; firewallError?: string | null; firewallCount?: number; lastOperation: { id: string; kind: string; status: string; step: string | null; errorCode: string | null } | null };
 type Operation = { id: string; kind: string; status: string; step: string | null; attempts: number; errorCode: string | null; createdAt: string; finishedAt: string | null };
 
 // One Idempotency-Key per user intention: a double click or a retry after a timeout reuses it,
@@ -76,10 +79,15 @@ export function ServerList() {
   const tn = useTranslations('Nav');
   const servers = useApiQuery<{ servers: Server[] }>(['servers'], '/servers', { refetchInterval: 5_000 }).data?.servers;
   const [gridRef] = useAutoAnimate<HTMLUListElement>();
+  const f = useServerFilters(servers ?? []);
   if (!servers) return <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3" aria-busy>{[0, 1, 2].map((i) => <Card key={i} className="h-36 animate-pulse"><span className="sr-only">…</span></Card>)}</div>;
   if (!servers.length) return <Empty icon={<I name="server" size={28}/>} title={t('list.empty')}><ButtonLink href="/order" className="mt-3"><I name="plus" size={16}/>{tn('newServer')}</ButtonLink></Empty>;
-  return <ul ref={gridRef} className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3" aria-label={t('list.title')}>
-    {servers.map((s, i) => <motion.li key={s.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: Math.min(i, 8) * 0.05, duration: 0.25 }}>
+  const shown = f.shown;
+  return <div className="flex flex-col gap-4">
+    {(servers.length > 1 || f.q || f.state !== 'all' || f.tag) && <div className="rounded-xl border border-border bg-surface p-3"><ServerFilters f={f} placeholder={t('list.searchPlaceholder')}/></div>}
+    {!shown.length ? <p role="status" className="rounded-xl border border-dashed border-border px-4 py-8 text-center text-sm text-muted">{t('list.noMatch')}</p>
+    : <ul ref={gridRef} className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3" aria-label={t('list.title')}>
+    {shown.map((s, i) => <motion.li key={s.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: Math.min(i, 8) * 0.05, duration: 0.25 }}>
       <NextLink href={`/servers/${s.id}`} className="block rounded-xl outline-offset-2 transition-all duration-200 hover:-translate-y-1 hover:shadow-lg focus-visible:outline-2">
         <Card className="h-full">
           <Card.Header className="flex flex-row items-start justify-between gap-2">
@@ -91,11 +99,13 @@ export function ServerList() {
             <span className="flex items-center gap-2"><span className="text-muted">IP</span>{s.address ? <Mono>{s.address}</Mono> : '–'}</span>
             <span className="flex items-center gap-2 text-muted"><I name="cpu" size={14}/>{size(t, s)}</span>
             <span className="truncate text-xs text-muted">{s.imageName}</span>
+            {!!s.tags?.length && <span className="flex flex-wrap gap-1 pt-1">{s.tags.map((x) => <span key={x} className="rounded-full bg-default px-2 py-0.5 text-xs">{x}</span>)}</span>}
           </Card.Content>
         </Card>
       </NextLink>
     </motion.li>)}
-  </ul>;
+  </ul>}
+  </div>;
 }
 
 const runningStates = ['pending', 'running'];
@@ -111,12 +121,17 @@ export function ServerDetail({ id }: { id: string }) {
   const [deleteName, setDeleteName] = useState('');
   const q = useApiQuery<{ server: Server; operations: Operation[]; allowed?: Record<'power' | 'console' | 'iso' | 'rootPassword' | 'delete', boolean> }>(['servers', id], `/servers/${id}`, { refetchInterval: 3_000 });
   const gone = (q.error as { code?: string } | null)?.code === 'NOT_FOUND';
+  // The viewer's own servers: owner-only helpers (tags, order similar) show for these.
+  const mine = useApiQuery<{ servers: Server[] }>(['servers'], '/servers').data?.servers;
+  const name = q.data?.server.name;
+  useEffect(() => { if (name) remember({ href: `/servers/${id}`, label: name }); }, [name, id]);
   useEffect(() => { if (gone) router.replace('/'); }, [gone, router]);
   if (!q.data) return <p role="status" className="text-sm text-muted">{q.error && !gone ? error(q.error) : t('loading')}</p>;
   const { server: s, operations } = q.data;
   // What the admin lets customers do here (missing: an older API, everything allowed).
   const allowed = { power: true, console: true, iso: true, rootPassword: true, delete: true, ...q.data.allowed };
   const open = operations.find((o) => runningStates.includes(o.status));
+  const own = !!mine?.some((x) => x.id === s.id);
   // The same Idempotency-Key is kept until the server answers; only a network failure keeps it for a retry.
   async function act(path: string, method: string, body?: object) {
     setMessage(undefined);
@@ -132,7 +147,8 @@ export function ServerDetail({ id }: { id: string }) {
 
   return <div className="flex flex-col gap-6">
     <PageHeader eyebrow={s.location || s.poolName} title={s.name} description={<span className="mt-2 inline-flex"><StateBadge server={s}/></span>}
-      actions={s.state === 'ready' && allowed.console && <ButtonLink variant="secondary" href={`/servers/${id}/console`}><I name="square-terminal" size={16}/>{actionLabel('console')}</ButtonLink>}/>
+      actions={<>{s.state === 'ready' && allowed.console && <ButtonLink variant="secondary" href={`/servers/${id}/console`}><I name="square-terminal" size={16}/>{actionLabel('console')}</ButtonLink>}
+        {own && <OrderSimilar server={s} names={mine!.map((x) => x.name)}/>}</>}/>
     {message && <div role="alert"><Notice tone="danger">{message}</Notice></div>}
     {s.errorCode && <Notice tone="danger">{t('errorCode', { message: error({ code: s.errorCode }), code: s.errorCode })}</Notice>}
 
@@ -171,7 +187,8 @@ export function ServerDetail({ id }: { id: string }) {
       </Section>}
     </div>
 
-    <ServerHealth id={s.id}/>
+    <div className={`grid gap-6 ${s.address ? 'lg:grid-cols-2' : ''}`}><ServerHealth id={s.id}/><QuickConnect server={s}/></div>
+    {own && <ServerLabels key={`${s.tags?.join()}|${s.notes}`} server={s}/>}
     <ServerIps server={s}/>
     {allowed.iso && <ServerIso id={s.id} ready={s.state === 'ready' || s.state === 'error'}/>}
     {s.hasRootPassword && allowed.rootPassword && <RootPassword id={s.id}/>}

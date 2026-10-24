@@ -45,3 +45,17 @@ export function monthCost(items: { price: number; createdAt: Date }[], now: Date
   const r = (x: number) => Math.round(x * 100) / 100;
   return { monthly: r(monthly), accrued: r(accrued), forecast: r(forecast), daysLeft: Math.ceil((end - now.getTime()) / 86_400_000) };
 }
+
+// A server's tags (up to 10, letters/digits/space . _ -, 1-24 characters, case-insensitively unique) and notes.
+export function cleanLabels(body: Record<string, unknown>): { tags: string[]; notes: string } | { fields: Record<string, string> } {
+  const fields: Record<string, string> = {};
+  const raw = Array.isArray(body?.tags) ? body.tags : [];
+  const tags = [...new Map(raw.map((t) => String(t).trim().replace(/\s+/g, ' ')).filter(Boolean).map((t) => [t.toLocaleLowerCase('tr'), t])).values()];
+  if (!Array.isArray(body?.tags) && body?.tags !== undefined) fields.tags = 'INVALID_VALUE';
+  else if (tags.length > 10) fields.tags = 'TOO_MANY';
+  else if (tags.some((t) => !/^[\p{L}\p{N}][\p{L}\p{N} ._-]{0,23}$/u.test(t))) fields.tags = 'INVALID_TAG';
+  const notes = typeof body?.notes === 'string' ? body.notes.trim() : '';
+  if (body?.notes !== undefined && typeof body.notes !== 'string') fields.notes = 'INVALID_VALUE';
+  else if (notes.length > 2000) fields.notes = 'TOO_LONG';
+  return Object.keys(fields).length ? { fields } : { tags, notes };
+}

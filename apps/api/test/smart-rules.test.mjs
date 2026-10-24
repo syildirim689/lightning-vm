@@ -30,3 +30,12 @@ test('the month is prorated by the days each item exists', () => {
   const c = monthCost([{ price: 30, createdAt: new Date(Date.UTC(2026, 0, 1)) }, { price: 30, createdAt: new Date(Date.UTC(2026, 3, 11)) }], now);
   assert.deepEqual(c, { monthly: 60, accrued: 15 + 5, forecast: 30 + 20, daysLeft: 15 });
 });
+
+test('labels: tags are trimmed, de-duplicated without case and limited; notes have a cap', async () => {
+  const { cleanLabels } = await import('../dist/smart-rules.js');
+  assert.deepEqual(cleanLabels({ tags: [' web ', 'Web', 'prod  db', ''], notes: ' hi ' }), { tags: ['Web', 'prod db'], notes: 'hi' });
+  assert.deepEqual(cleanLabels({ tags: ['İstanbul-1'] }), { tags: ['İstanbul-1'], notes: '' });
+  assert.deepEqual(cleanLabels({ tags: ['-bad'] }), { fields: { tags: 'INVALID_TAG' } });
+  assert.deepEqual(cleanLabels({ tags: [...Array(11)].map((_, i) => `t${i}`) }), { fields: { tags: 'TOO_MANY' } });
+  assert.deepEqual(cleanLabels({ tags: 'web', notes: 'x'.repeat(2001) }), { fields: { tags: 'INVALID_VALUE', notes: 'TOO_LONG' } });
+});

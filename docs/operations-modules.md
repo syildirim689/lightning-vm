@@ -82,3 +82,22 @@ Kurallar `apps/api/src/smart-rules.ts` içindedir ve birim testleri vardır. Ver
   pencerelerde çalışmaz. Komut paletinde (Ctrl+K) yeni sayfalar ve "Klavye kısayolları" eylemi de vardır.
 - **Duyarlılık:** E2E, her sayfayı 390 px ve 768 px genişlikte yatay kaydırma olmadan açar. Sunucu sayfası da iki
   genişlikte denetlenir.
+
+## İşi kolaylaştıran araçlar
+
+- **Etiketler ve notlar** (`PUT /servers/:id/labels`, `{ tags, notes }`): sunucu sahibinin kendi etiketleri ve notlarıdır.
+  - En fazla 10 etiket olur, her biri 1–24 karakterdir. Etiket harf veya rakamla başlar; boşluk, `.`, `_` ve `-`
+    içerebilir. Büyük/küçük harf farkı yok sayılarak tekrarlar atılır.
+  - Notlar en fazla 2000 karakterdir.
+  - Başkasının sunucusunu değiştirmek için `servers.manage_all` gerekir.
+  - Migration: `020_server_labels`.
+- **Liste süzgeçleri:** müşteri kartları ve yönetici tablosu aynı süzgeci kullanır (`server-filters.tsx`).
+  - Arama ad, IP, lokasyon, şablon, sahip ve etiketlerde yapılır. Durum süzgeçleri: çalışıyor, kapalı, sorunlu,
+    işlemde. Etiket ve sıralama (en yeni, ada göre) da seçilebilir.
+  - Seçimler URL'de tutulur (`?q=&state=&tag=&sort=`), bu yüzden görünüm yer imine eklenebilir.
+- **CSV indir** (yönetici): süzgeçten geçen satırlar UTF-8 BOM ile indirilir. `= + - @` ile başlayan hücreler
+  formül olarak çalışmasın diye başına `'` eklenir.
+- **Bağlan kartı:** IP, `ssh root@IP` ve `scp` komutları tek tıkla kopyalanır.
+- **Benzerini sipariş et:** sipariş formu aynı lokasyon, şablon ve boyutla (paket veya özel) açılır. Ad olarak
+  sıradaki boş `ad-N` önerilir. VDC sunucularında bu düğme yoktur.
+- **Son açılanlar:** komut paleti, bu tarayıcıda son açılan 5 sunucuyu gösterir (`localStorage`).

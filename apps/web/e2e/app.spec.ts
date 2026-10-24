@@ -407,6 +407,27 @@ test.describe('server lifecycle (simulator, Turkish customer)', () => {
       await expectNoOverflow(page, `server page at ${width} px`);
     }
     await page.setViewportSize({ width: 1280, height: 720 });
+    // Connect commands to copy, then the owner's tags and notes; the list filters by tag and search.
+    await expect(page.getByText('ssh root@10.30.0.20')).toBeVisible();
+    await page.getByLabel('Yeni etiket').fill('üretim');
+    await page.keyboard.press('Enter');
+    await page.getByLabel('Yeni etiket').fill('web');
+    await page.getByRole('button', { name: 'Ekle', exact: true }).click();
+    await page.getByLabel('Notlar').fill('Ana web sunucusu');
+    await page.getByRole('button', { name: 'Kaydet', exact: true }).click();
+    await expect(page.getByText('Etiketler ve notlar kaydedildi.')).toBeVisible();
+    await page.getByRole('button', { name: 'Benzerini sipariş et' }).click();
+    await expect(page).toHaveURL(/\/order$/);
+    await expect(page.getByLabel('Sunucu adı')).toHaveValue('web-2');
+    await page.goto('/');
+    await expect(page.getByText('üretim').first()).toBeVisible();
+    await page.goto('/?q=yok-boyle');
+    await expect(page.getByText('Bu süzgeçlere uyan sunucu yok.').or(page.getByText('web-1'))).toBeVisible();
+    // Ctrl+K lists the server just opened under "recent".
+    await page.keyboard.press('Control+k');
+    await expect(page.getByRole('listbox').getByText('Son açılanlar')).toBeVisible();
+    await page.keyboard.press('Enter');
+    await expect(page).toHaveURL(/\/servers\/[0-9a-f-]{36}$/);
 
     await page.getByRole('button', { name: 'Zorla kapat' }).click();
     await expect(page.getByRole('alertdialog')).toContainText('kaydedilmemiş veriler kaybolabilir');

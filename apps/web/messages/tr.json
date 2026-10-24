@@ -404,7 +404,9 @@
     "INVALID_PORT_LIST": "Her satıra bir port (1–65535) ve isteğe bağlı açıklama; en fazla 100, tekrar yok.",
     "VDC_LIMIT": "Sanal veri merkezinin kalan kaynağını aşıyor.",
     "VDC_BELOW_USAGE": "Şu an kullanılandan az olamaz.",
-    "DISK_TOO_SMALL": "İmajın gerektirdiği diskten küçük."
+    "DISK_TOO_SMALL": "İmajın gerektirdiği diskten küçük.",
+    "TOO_MANY": "Çok fazla öğe.",
+    "INVALID_TAG": "Etiket harf veya rakamla başlar; yalnızca harf, rakam, boşluk, nokta, _ ve - içerir."
   },
   "Setup": {
     "title": "Kurulum sihirbazı",
@@ -1427,7 +1429,23 @@
     },
     "list": {
       "title": "Sunucularınız",
-      "empty": "Henüz sunucunuz yok."
+      "empty": "Henüz sunucunuz yok.",
+      "search": "Ara",
+      "searchPlaceholder": "Ad, IP, lokasyon veya etiket",
+      "state": "Duruma göre süz",
+      "tag": "Etiket",
+      "allTags": "Tüm etiketler",
+      "sort": "Sırala",
+      "newest": "Önce en yeni",
+      "byName": "Ada göre",
+      "noMatch": "Bu süzgeçlere uyan sunucu yok.",
+      "filter": {
+        "all": "Tümü",
+        "running": "Çalışıyor",
+        "stopped": "Kapalı",
+        "problem": "Sorunlu",
+        "busy": "İşlemde"
+      }
     },
     "col": {
       "name": "Ad",
@@ -1463,7 +1481,10 @@
       "reconcileQueued": "Uzlaştırma kuyruğa alındı.",
       "noFindings": "Açık bulgu yok.",
       "finding": "Bulgu",
-      "search": "Ad, sahip, IP veya havuza göre ara"
+      "search": "Ad, sahip, IP veya havuza göre ara",
+      "shown": "{total} sunucudan {shown} gösteriliyor",
+      "exportCsv": "CSV indir",
+      "tags": "Etiketler"
     },
     "finding": {
       "vm_missing": "VM VMware'de yok",
@@ -1794,7 +1815,8 @@
     "lightTheme": "Açık temaya geç",
     "darkTheme": "Koyu temaya geç",
     "notificationSettings": "Bildirim ayarları",
-    "shortcuts": "Klavye kısayolları"
+    "shortcuts": "Klavye kısayolları",
+    "recent": "Son açılanlar"
   },
   "Insights": {
     "title": "Dikkat gerektirenler",
@@ -3271,5 +3293,27 @@
       "s": "Tüm sunucular",
       "c": "Katalog"
     }
+  },
+  "Extras": {
+    "copy": "Kopyala",
+    "copied": "{what} kopyalandı.",
+    "ip": "IP",
+    "ssh": "SSH",
+    "scp": "Dosya kopyala",
+    "connect": "Bağlan",
+    "connectHelp": "Sunucuya erişmek için kopyalamaya hazır komutlar. Siparişte seçtiğiniz SSH anahtarını kullanın.",
+    "labels": "Etiketler ve notlar",
+    "labelsHelp": "Bunları yalnızca siz görürsünüz. Etiketler sunucu listenizi gruplar ve süzer.",
+    "tags": "Etiketler",
+    "removeTag": "{tag} etiketini kaldır",
+    "addTag": "Yeni etiket",
+    "tagPlaceholder": "web, üretim…",
+    "tagHelp": "En fazla 10 etiket, her biri 24 karakter. Eklemek için Enter tuşuna basın.",
+    "add": "Ekle",
+    "notes": "Notlar",
+    "notesHelp": "{n} karakter kaldı.",
+    "save": "Kaydet",
+    "saved": "Etiketler ve notlar kaydedildi.",
+    "orderSimilar": "Benzerini sipariş et"
   }
 }
