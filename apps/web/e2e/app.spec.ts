@@ -1,4 +1,4 @@
-import { expect, test, type Locator, type Page } from '@playwright/test';
+import { expect, test, type BrowserContext, type Locator, type Page } from '@playwright/test';
 
 // Serial: the first tests perform first-run setup that later tests rely on.
 test.describe.configure({ mode: 'serial' });
@@ -457,11 +457,21 @@ test.describe('language', () => {
   });
 });
 
+// These tests sign the admin in once and share the session: signing in for every test would hit the
+// per-account sign-in limit (15 per 15 minutes) that the API enforces.
+let adminCookies: Awaited<ReturnType<BrowserContext['cookies']>> | undefined;
+async function signInAdmin(page: Page) {
+  if (adminCookies) { await page.context().addCookies(adminCookies); await page.goto('/admin'); return; }
+  await signIn(page, admin);
+  await expect(page).toHaveURL(/\/admin$/);
+  adminCookies = await page.context().cookies();
+}
+
 test.describe('people, settings and smart features (English browser)', () => {
   test.use({ locale: 'en-US' });
 
   test('users, roles and permissions are managed from the panel', async ({ page }) => {
-    await signIn(page, admin);
+    await signInAdmin(page);
     await expect(page).toHaveURL(/\/admin$/);
     await page.getByRole('link', { name: 'Users' }).click();
     await expect(page.getByRole('heading', { level: 1 })).toHaveText('Users');
@@ -479,7 +489,7 @@ test.describe('people, settings and smart features (English browser)', () => {
   });
 
   test('settings: branding colour and notification rules; inbox and command palette', async ({ page }) => {
-    await signIn(page, admin);
+    await signInAdmin(page);
     await expect(page).toHaveURL(/\/admin$/);
     await page.goto('/admin/settings?tab=branding');
     await page.getByLabel('Panel name').fill('Lightning VM');
@@ -501,7 +511,7 @@ test.describe('people, settings and smart features (English browser)', () => {
   });
 
   test('firewalls: created from a template, rules edited and checked, deleted', async ({ page }) => {
-    await signIn(page, admin);
+    await signInAdmin(page);
     await expect(page).toHaveURL(/\/admin$/);
     await page.getByRole('link', { name: 'Firewalls' }).click();
     await page.getByRole('button', { name: 'Create firewall' }).first().click();
@@ -536,7 +546,7 @@ test.describe('people, settings and smart features (English browser)', () => {
   });
 
   test('payments: live credentials saved apart from test ones, checked, activated and removed', async ({ page }) => {
-    await signIn(page, admin);
+    await signInAdmin(page);
     await expect(page).toHaveURL(/\/admin$/);
     await page.goto('/admin/settings?tab=payments');
     await expect(page.getByText('No payment method is active.', { exact: false })).toBeVisible();
@@ -569,7 +579,7 @@ test.describe('people, settings and smart features (English browser)', () => {
 
   test('every page fits a 390 px phone without sideways scrolling', async ({ browser }) => {
     const page = await (await browser.newContext({ locale: 'en-US', viewport: { width: 390, height: 844 } })).newPage();
-    await signIn(page, admin);
+    await signInAdmin(page);
     await expect(page).toHaveURL(/\/admin$/);
     for (const path of ['/admin', '/admin/servers', '/admin/vmware', '/admin/catalog', '/admin/users', '/admin/roles', '/admin/settings?tab=mail', '/admin/system', '/', '/order', '/firewalls', '/account?tab=security']) {
       await page.goto(path);
