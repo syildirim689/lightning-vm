@@ -118,6 +118,12 @@ jobs:
             sleep 5
           done
           curl -s --data-urlencode 'query=lightning_dependency_up' http://127.0.0.1:9090/api/v1/query | jq -e '.data.result | length == 2'
+          # Targets read "unknown" until their first scrape; wait for every one to be up.
+          for i in $(seq 1 24); do
+            curl -s http://127.0.0.1:9090/api/v1/targets | jq -e '[.data.activeTargets[] | select(.health != "up")] | length == 0' >/dev/null && break
+            sleep 5
+          done
+          curl -s http://127.0.0.1:9090/api/v1/targets | jq -c '.data.activeTargets[] | {job: .labels.job, health, lastError}'
           curl -s http://127.0.0.1:9090/api/v1/targets | jq -e '[.data.activeTargets[] | select(.health != "up")] | length == 0'
       - uses: actions/setup-node@v4
         with:
