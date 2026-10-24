@@ -583,7 +583,7 @@ test.describe('people, settings and smart features (English browser)', () => {
     await page.goto('/admin/catalog?tab=ip');
     await page.getByRole('button', { name: 'Edit' }).first().click();
     const dialog = page.getByRole('dialog');
-    await dialog.getByLabel('Quarantine (hours)').fill('12');
+    await dialog.getByRole('textbox', { name: 'Quarantine (hours)' }).fill('12');
     await dialog.getByLabel('IPv6 prefix').fill('2001:db8:30::/64');
     await dialog.getByLabel('IPv6 gateway').fill('2001:db8:99::1');
     await dialog.getByRole('button', { name: 'Save' }).click();
