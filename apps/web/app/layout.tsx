@@ -1,12 +1,15 @@
 import './style.css';
-import { Fira_Code, Fira_Sans } from 'next/font/google';
+import { Atkinson_Hyperlegible, Fira_Code, Fira_Sans } from 'next/font/google';
 import { NextIntlClientProvider } from 'next-intl';
 import { getLocale, getTranslations } from 'next-intl/server';
 import { accentCss } from '../components/brand';
+import { a11yBootScript } from '../lib/a11y-prefs';
 import { getPublicConfig } from '../lib/session';
 import Providers from './providers';
 
 const sans = Fira_Sans({ subsets: ['latin', 'latin-ext'], weight: ['400', '500', '600', '700'], variable: '--font-fira-sans', display: 'swap' });
+// Offered in the accessibility settings (high legibility for low vision and dyslexia).
+const legible = Atkinson_Hyperlegible({ subsets: ['latin', 'latin-ext'], weight: ['400', '700'], variable: '--font-legible', display: 'swap' });
 const mono = Fira_Code({ subsets: ['latin', 'latin-ext'], weight: ['400', '500'], variable: '--font-fira-code', display: 'swap' });
 
 export async function generateMetadata() {
@@ -20,9 +23,13 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   const locale = await getLocale();
   const { branding } = await getPublicConfig();
   const css = accentCss(branding.accent);
-  return <html lang={locale} className={`${sans.variable} ${mono.variable}`} suppressHydrationWarning>
+  return <html lang={locale} className={`${sans.variable} ${mono.variable} ${legible.variable}`} suppressHydrationWarning>
     {/* The accent is validated as #rrggbb by the API before it is stored. */}
-    {css && <head><style dangerouslySetInnerHTML={{ __html: css }}/></head>}
+    <head>
+      {/* Saved accessibility preferences, applied before the first paint. */}
+      <script dangerouslySetInnerHTML={{ __html: a11yBootScript }}/>
+      {css && <style dangerouslySetInnerHTML={{ __html: css }}/>}
+    </head>
     <body className="bg-background text-foreground font-sans antialiased">
       <NextIntlClientProvider><Providers locale={locale}>{children}</Providers></NextIntlClientProvider>
     </body>

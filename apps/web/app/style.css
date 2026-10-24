@@ -64,9 +64,38 @@
 @keyframes shake { 0%, 100% { transform: none; } 20%, 60% { transform: translateX(-6px); } 40%, 80% { transform: translateX(6px); } }
 .shake { animation: shake 0.4s ease-in-out; }
 
+/* Accessibility preferences (lib/a11y.ts sets data-a11y-* on <html>). */
+html[data-a11y-text="112"] { font-size: 112.5%; }
+html[data-a11y-text="125"] { font-size: 125%; }
+html[data-a11y-text="150"] { font-size: 150%; }
+:root:root[data-a11y-contrast="high"] {
+  --muted: color-mix(in oklab, var(--foreground) 88%, var(--background));
+  --border: color-mix(in oklab, var(--foreground) 55%, var(--background));
+  --separator: color-mix(in oklab, var(--foreground) 40%, var(--background));
+  --field-border: color-mix(in oklab, var(--foreground) 60%, var(--background));
+  --field-border-width: 2px;
+}
+html[data-a11y-font="legible"] { --font-fira-sans: var(--font-legible); }
+html[data-a11y-spacing="wide"] body { letter-spacing: 0.04em; word-spacing: 0.14em; }
+html[data-a11y-spacing="wide"] :where(p, li, dd, td, label, span) { line-height: 1.8; }
+html[data-a11y-transparency="reduce"] * { backdrop-filter: none !important; }
+html[data-a11y-transparency="reduce"] .auth-aurora, html[data-a11y-transparency="reduce"] .glow { display: none; }
+html[data-a11y-links="underline"] a { text-decoration: underline; text-underline-offset: 3px; }
+html[data-a11y-focus="strong"] :focus-visible { outline: 3px solid var(--focus) !important; outline-offset: 3px !important;
+  box-shadow: 0 0 0 6px color-mix(in oklab, var(--focus) 30%, transparent) !important; }
+html[data-a11y-targets="large"] :where(button, [role="button"], [role="tab"], [role="radio"], [role="checkbox"], [role="switch"], input, select, a[href]) { min-height: 44px; }
+html[data-a11y-targets="large"] :where(button, [role="button"]):not(:has(> span:not([aria-hidden]))) { min-width: 44px; }
+html[data-a11y-cursor="large"], html[data-a11y-cursor="large"] * {
+  cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40' viewBox='0 0 24 24'%3E%3Cpath d='M4 2l16 9-7 2-3 7z' fill='black' stroke='white' stroke-width='1.5' stroke-linejoin='round'/%3E%3C/svg%3E") 4 2, auto !important;
+}
+html[data-a11y-motion="reduce"] *, html[data-a11y-motion="reduce"] *::before, html[data-a11y-motion="reduce"] *::after {
+  animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; scroll-behavior: auto !important;
+}
+
 /* Browser console canvas (VMware WebMKS draws into it). */
 .wmks { width: 100%; min-height: 480px; background: #000; border-radius: var(--radius); }
 
 @media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+  /* Unless the user chose "allow motion" in the accessibility settings. */
+  html:not([data-a11y-motion="allow"]) *, html:not([data-a11y-motion="allow"]) *::before, html:not([data-a11y-motion="allow"]) *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
 }

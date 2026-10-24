@@ -6,6 +6,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { useCallback, useState } from 'react';
 import { Brand } from '../../components/brand';
+import { AccessibilityButton } from '../../components/accessibility';
 import { LanguageMenu, ThemeToggle } from '../../components/chrome';
 import CommandPalette, { usePaletteShortcut } from '../../components/command-palette';
 import { I } from '../../components/icon';
@@ -135,7 +136,7 @@ export default function Shell({ user, branding, version, children }: { user: Use
             <Button isIconOnly variant="ghost" size="sm" aria-label={t('search')} className="md:hidden" onPress={() => setPalette(true)}><I name="search" size={18}/></Button>
             {roleLabel && <Chip size="sm" variant="soft" color="accent" className="mr-1 hidden xl:inline-flex">{roleLabel}</Chip>}
             <NotificationBell/>
-            <span className="hidden sm:contents"><LanguageMenu/><ThemeToggle/></span>
+            <span className="hidden sm:contents"><AccessibilityButton/><LanguageMenu/><ThemeToggle/></span>
             <UserMenu user={user}/>
           </div>
         </header>

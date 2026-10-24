@@ -4,6 +4,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useTranslations } from 'next-intl';
 import { parseAsString, useQueryState } from 'nuqs';
 import { useEffect, useState } from 'react';
+import { AccessibilitySettings } from '../../../components/accessibility';
 import { I } from '../../../components/icon';
 import { Section, TextInput } from '../../../components/ui';
 import { useErrorText } from '../../../lib/api';
@@ -40,7 +41,7 @@ function Profile() {
   </Section>;
 }
 
-const tabs = ['profile', 'security', 'notifications', 'keys', 'projects'] as const;
+const tabs = ['profile', 'security', 'notifications', 'accessibility', 'keys', 'projects'] as const;
 export default function AccountTabs() {
   const t = useTranslations('Account');
   const [tab, setTab] = useQueryState('tab', parseAsString.withDefault('profile'));
@@ -56,6 +57,7 @@ export default function AccountTabs() {
       <Security/>
     </Tabs.Panel>
     <Tabs.Panel id="notifications" className="pt-5"><NotificationPrefs/></Tabs.Panel>
+    <Tabs.Panel id="accessibility" className="pt-5"><Section><AccessibilitySettings/></Section></Tabs.Panel>
     <Tabs.Panel id="keys" className="pt-5"><SshKeys/></Tabs.Panel>
     <Tabs.Panel id="projects" className="pt-5"><Projects/></Tabs.Panel>
   </Tabs>;

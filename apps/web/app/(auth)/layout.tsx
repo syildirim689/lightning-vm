@@ -1,4 +1,5 @@
 import { getTranslations } from 'next-intl/server';
+import { AccessibilityButton } from '../../components/accessibility';
 import { LanguageMenu, ThemeToggle } from '../../components/chrome';
 import { Brand } from '../../components/brand';
 import { I } from '../../components/icon';
@@ -35,7 +36,7 @@ export default async function AuthLayout({ children }: { children: React.ReactNo
       <div aria-hidden className="auth-aurora pointer-events-none absolute inset-0"/>
       <header className="relative flex items-center justify-between gap-2 px-4 py-3 md:px-8">
         <span className="lg:invisible"><Brand branding={branding} href="/login"/></span>
-        <div className="flex items-center gap-1"><LanguageMenu/><ThemeToggle/></div>
+        <div className="flex items-center gap-1"><AccessibilityButton/><LanguageMenu/><ThemeToggle/></div>
       </header>
       <main className="relative flex flex-1 items-center justify-center px-4 py-8 md:px-8">{children}</main>
     </div>

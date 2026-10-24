@@ -1602,7 +1602,8 @@
       "security": "Security",
       "notifications": "Notifications",
       "keys": "SSH keys",
-      "projects": "Projects"
+      "projects": "Projects",
+      "accessibility": "Accessibility"
     },
     "profile": {
       "title": "Profile",
@@ -2689,6 +2690,86 @@
       "update": "Update",
       "auto-update": "Automatic update settings",
       "backup": "Backup"
+    }
+  },
+  "A11y": {
+    "title": "Accessibility",
+    "intro": "Adjust the panel to your vision, reading, motion and navigation needs. Changes apply immediately.",
+    "stored": "Preferences are stored in this browser and also apply on the sign-in screen.",
+    "reset": "Reset to defaults",
+    "groups": {
+      "reading": "Reading and vision",
+      "motion": "Motion and effects",
+      "navigation": "Navigation and pointer"
+    },
+    "text": {
+      "100": "100%",
+      "112": "112%",
+      "125": "125%",
+      "150": "150%",
+      "label": "Text size",
+      "help": "Enlarges all text and the interface."
+    },
+    "contrast": {
+      "label": "Contrast",
+      "help": "Makes faint text and borders stand out.",
+      "normal": "Normal",
+      "high": "High"
+    },
+    "font": {
+      "label": "Typeface",
+      "help": "Atkinson Hyperlegible: easier to tell letters apart for low vision and dyslexia.",
+      "default": "Default",
+      "legible": "Legible"
+    },
+    "spacing": {
+      "label": "Text spacing",
+      "help": "Increases letter, word and line spacing.",
+      "normal": "Normal",
+      "wide": "Wide"
+    },
+    "motion": {
+      "label": "Motion",
+      "help": "Reduces animations or overrides the system setting.",
+      "system": "System",
+      "reduce": "Reduce",
+      "allow": "Allow"
+    },
+    "transparency": {
+      "label": "Transparency",
+      "help": "Turns off blurred glass effects and background glows.",
+      "normal": "Normal",
+      "reduce": "Reduce"
+    },
+    "links": {
+      "label": "Links",
+      "help": "Underlines every link.",
+      "normal": "Normal",
+      "underline": "Underlined"
+    },
+    "focus": {
+      "label": "Focus indicator",
+      "help": "Shows the focused element with a thick outline when using the keyboard.",
+      "normal": "Normal",
+      "strong": "Strong"
+    },
+    "targets": {
+      "label": "Click targets",
+      "help": "Makes buttons and fields at least 44 pixels tall.",
+      "normal": "Normal",
+      "large": "Large"
+    },
+    "cursor": {
+      "label": "Pointer",
+      "help": "Enlarges the mouse pointer.",
+      "normal": "Normal",
+      "large": "Large"
+    },
+    "guide": {
+      "label": "Reading guide",
+      "help": "Highlights the line you read with a band that follows the pointer.",
+      "off": "Off",
+      "on": "On"
     }
   }
 }

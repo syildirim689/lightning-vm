@@ -1602,7 +1602,8 @@
       "security": "Güvenlik",
       "notifications": "Bildirimler",
       "keys": "SSH anahtarları",
-      "projects": "Projeler"
+      "projects": "Projeler",
+      "accessibility": "Erişilebilirlik"
     },
     "profile": {
       "title": "Profil",
@@ -2689,6 +2690,86 @@
       "update": "Güncelleme",
       "auto-update": "Otomatik güncelleme ayarları",
       "backup": "Yedekleme"
+    }
+  },
+  "A11y": {
+    "title": "Erişilebilirlik",
+    "intro": "Paneli görme, okuma, hareket ve gezinme ihtiyaçlarınıza göre ayarlayın. Değişiklikler hemen uygulanır.",
+    "stored": "Tercihler bu tarayıcıda saklanır ve giriş ekranında da geçerlidir.",
+    "reset": "Varsayılana dön",
+    "groups": {
+      "reading": "Okuma ve görme",
+      "motion": "Hareket ve efektler",
+      "navigation": "Gezinme ve imleç"
+    },
+    "text": {
+      "100": "%100",
+      "112": "%112",
+      "125": "%125",
+      "150": "%150",
+      "label": "Yazı boyutu",
+      "help": "Tüm metinleri ve arayüzü büyütür."
+    },
+    "contrast": {
+      "label": "Kontrast",
+      "help": "Soluk metinleri ve kenarlıkları belirginleştirir.",
+      "normal": "Normal",
+      "high": "Yüksek"
+    },
+    "font": {
+      "label": "Yazı tipi",
+      "help": "Atkinson Hyperlegible: az görenler ve disleksi için harfleri ayırt etmeyi kolaylaştırır.",
+      "default": "Varsayılan",
+      "legible": "Okunaklı"
+    },
+    "spacing": {
+      "label": "Metin aralığı",
+      "help": "Harf, sözcük ve satır aralığını artırır.",
+      "normal": "Normal",
+      "wide": "Geniş"
+    },
+    "motion": {
+      "label": "Hareket",
+      "help": "Animasyonları azaltır veya sistem ayarını geçersiz kılar.",
+      "system": "Sistem",
+      "reduce": "Azalt",
+      "allow": "İzin ver"
+    },
+    "transparency": {
+      "label": "Saydamlık",
+      "help": "Bulanık cam efektlerini ve arka plan ışımalarını kapatır.",
+      "normal": "Normal",
+      "reduce": "Azalt"
+    },
+    "links": {
+      "label": "Bağlantılar",
+      "help": "Tüm bağlantıların altını çizer.",
+      "normal": "Normal",
+      "underline": "Altı çizili"
+    },
+    "focus": {
+      "label": "Odak göstergesi",
+      "help": "Klavyeyle gezinirken odaktaki öğeyi kalın bir çerçeveyle gösterir.",
+      "normal": "Normal",
+      "strong": "Güçlü"
+    },
+    "targets": {
+      "label": "Tıklama alanları",
+      "help": "Düğme ve alanları en az 44 piksel yüksekliğe getirir.",
+      "normal": "Normal",
+      "large": "Büyük"
+    },
+    "cursor": {
+      "label": "İmleç",
+      "help": "Fare imlecini büyütür.",
+      "normal": "Normal",
+      "large": "Büyük"
+    },
+    "guide": {
+      "label": "Okuma kılavuzu",
+      "help": "İmleci izleyen yatay bir şeritle okunan satırı vurgular.",
+      "off": "Kapalı",
+      "on": "Açık"
     }
   }
 }
