@@ -1,13 +1,16 @@
-import { Body, Controller, Delete, Get, Headers, HttpCode, Param, ParseUUIDPipe, Post, Req, Res, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Headers, HttpCode, Param, ParseUUIDPipe, Post, Query, Req, Res, UseGuards } from '@nestjs/common';
 import { Queue } from 'bullmq';
 import { createHash } from 'node:crypto';
 import type { FastifyReply } from 'fastify';
 import { pool, redis } from './db';
 import { apiError } from './errors';
-import { AdminGuard, audit, SessionGuard, type AuthedRequest } from './auth';
+import { audit, SessionGuard, type AuthedRequest } from './auth';
+import { Can, PermissionGuard } from './rbac';
+import { can } from './permissions';
 import { capacityOf, limitsFor, resolveOrder, usageOf } from './catalog';
 import { exceededQuota } from './capacity';
 import { openConsole } from './console';
+import { callAdapter, storedTarget } from './vmware';
 
 type Input = Record<string, unknown>;
 // BullMQ carries only the operation id (also the job id, so re-adding is harmless);
@@ -36,9 +39,11 @@ async function replay(key: string, requestHash: string) {
 const sshKeyPattern = /^(ssh-ed25519|ssh-rsa|ecdsa-sha2-nistp(256|384|521)) ([A-Za-z0-9+/]+={0,2})( [^\r\n]{0,200})?$/;
 const fingerprint = (blob: string) => 'SHA256:' + createHash('sha256').update(Buffer.from(blob, 'base64')).digest('base64').replace(/=+$/, '');
 
-// Owners see their servers; admins see all. A server id alone gives no access (404 for others).
-async function findServer(req: AuthedRequest, id: string) {
-  const { rows: [s] } = await pool.query(`SELECT * FROM servers WHERE id = $1 AND state <> 'deleted' AND (owner_id = $2 OR $3)`, [id, req.user.id, req.user.role === 'admin']);
+// Owners see and act on their servers; staff with servers.view_all see all, with servers.manage_all act on all.
+// A server id alone gives no access (404 for others).
+async function findServer(req: AuthedRequest, id: string, manage = false) {
+  const staff = manage ? can(req.user.permissions, 'servers.manage_all') : can(req.user.permissions, 'servers.view_all') || can(req.user.permissions, 'servers.manage_all');
+  const { rows: [s] } = await pool.query(`SELECT * FROM servers WHERE id = $1 AND state <> 'deleted' AND (owner_id = $2 OR $3)`, [id, req.user.id, staff]);
   if (!s) throw apiError(404, 'NOT_FOUND', 'Unknown server');
   return s;
 }
@@ -99,6 +104,35 @@ export class ServersController {
     return { servers: rows };
   }
 
+  // Background work for the task manager: what is running now and what finished in the last 15 minutes.
+  // scope=all (staff with servers.view_all) shows everyone's.
+  @Get('operations/active')
+  async active(@Req() req: AuthedRequest, @Query('scope') scope?: string) {
+    const all = scope === 'all' && can(req.user.permissions, 'servers.view_all');
+    const { rows } = await pool.query(`SELECT o.id, o.kind, o.status, o.step, o.attempts, o.error_code AS "errorCode", o.created_at AS "createdAt",
+        o.started_at AS "startedAt", o.finished_at AS "finishedAt", s.id AS "serverId", s.name AS "serverName"
+      FROM operations o JOIN servers s ON s.id = o.server_id
+      WHERE (o.status IN ('pending', 'running') OR o.finished_at > now() - interval '15 minutes') AND ($2 OR o.owner_id = $1)
+      ORDER BY (o.status IN ('pending', 'running')) DESC, o.created_at DESC LIMIT 20`, [req.user.id, all]);
+    return { operations: rows };
+  }
+
+  // Live performance from vCenter/ESXi (20-second samples, about the last 15 minutes), cached briefly
+  // so several open tabs do not each query VMware.
+  @Get('servers/:id/metrics')
+  async metrics(@Req() req: AuthedRequest, @Param('id', ParseUUIDPipe) id: string) {
+    const s = await findServer(req, id);
+    if (!s.vm_moref || s.state !== 'ready') throw apiError(409, 'INVALID_SERVER_STATE', 'The server is not ready');
+    const cached = await redis.get(`metrics:${id}`).catch(() => null);
+    if (cached) return JSON.parse(cached);
+    const { rows: [c] } = await pool.query('SELECT c.* FROM vmware_connections c JOIN resource_pools p ON p.connection_id = c.id WHERE p.id = $1', [s.pool_id]);
+    const out = await callAdapter<{ interval: number; samples: { t: string; cpu: number | null; mem: number | null; net: number | null; disk: number | null }[];
+      quick: Record<string, number> }>('/v1/vm/metrics', { ...storedTarget(c), vm: s.vm_moref }, 30_000);
+    const body = { ...out, vcpu: s.vcpu, memoryMb: s.memory_mb, fetchedAt: new Date().toISOString() };
+    await redis.set(`metrics:${id}`, JSON.stringify(body), 'EX', 15).catch(() => undefined);
+    return body;
+  }
+
   @Get('servers/:id')
   async detail(@Req() req: AuthedRequest, @Param('id', ParseUUIDPipe) id: string) {
     await findServer(req, id);
@@ -112,6 +146,7 @@ export class ServersController {
 
   @Post('servers') @HttpCode(202)
   async create(@Req() req: AuthedRequest, @Headers('idempotency-key') header: string | undefined, @Body() body: Input) {
+    if (!can(req.user.permissions, 'servers.create')) throw apiError(403, 'FORBIDDEN', 'Permission required');
     const key = idempotencyKey(header, req.user.id);
     const requestHash = hashOf(body);
     const earlier = await replay(key, requestHash);
@@ -184,7 +219,7 @@ export class ServersController {
     if (earlier) return earlier;
     const kind = body.action as Kind;
     if (!['power_on', 'shutdown', 'power_off', 'reset'].includes(kind)) throw apiError(400, 'VALIDATION_FAILED', 'Invalid input', { action: 'INVALID_VALUE' });
-    const server = await findServer(req, id);
+    const server = await findServer(req, id, true);
     // A failed create may have left no VM to act on.
     if ((server.state !== 'ready' && server.state !== 'error') || !server.vm_moref) throw apiError(409, 'INVALID_SERVER_STATE', 'Not possible in this state');
     return { serverId: id, operation: await startOperation(req, server, kind, key, requestHash) };
@@ -198,7 +233,7 @@ export class ServersController {
     const requestHash = hashOf({ id, delete: true });
     const earlier = await replay(key, requestHash);
     if (earlier) return earlier;
-    const server = await findServer(req, id);
+    const server = await findServer(req, id, true);
     if (body?.confirm !== server.name) throw apiError(400, 'VALIDATION_FAILED', 'Confirmation required', { confirm: 'CONFIRMATION_MISMATCH' });
     if (server.state === 'deleting') throw apiError(409, 'OPERATION_IN_PROGRESS', 'Already being deleted');
     // A running create is cancelled first; the delete then removes whatever it left.
@@ -211,7 +246,7 @@ export class ServersController {
 
   @Post('servers/:id/operations/:op/cancel') @HttpCode(202)
   async cancel(@Req() req: AuthedRequest, @Param('id', ParseUUIDPipe) id: string, @Param('op', ParseUUIDPipe) op: string) {
-    await findServer(req, id);
+    await findServer(req, id, true);
     const { rowCount } = await pool.query("UPDATE operations SET cancel_requested = true, updated_at = now() WHERE id = $1 AND server_id = $2 AND status IN ('pending', 'running')", [op, id]);
     if (!rowCount) throw apiError(409, 'INVALID_SERVER_STATE', 'Nothing to cancel');
     await audit(req, 'server.cancel', 'success', req.user.id, { serverId: id, operationId: op });
@@ -221,23 +256,23 @@ export class ServersController {
   // The customer's own server only (admins: any). Ownership is checked here, not by knowing the id.
   @Post('servers/:id/console') @HttpCode(201)
   async console(@Req() req: AuthedRequest, @Res({ passthrough: true }) reply: FastifyReply, @Param('id', ParseUUIDPipe) id: string) {
-    const s = await findServer(req, id);
+    const s = await findServer(req, id, true);
     if (!s.vm_moref || s.state !== 'ready') throw apiError(409, 'INVALID_SERVER_STATE', 'The server is not ready');
     const { rows: [p] } = await pool.query('SELECT connection_id FROM resource_pools WHERE id = $1', [s.pool_id]);
     return openConsole(req, reply, p.connection_id, s.vm_moref, true);
   }
 }
 
-@Controller('admin') @UseGuards(AdminGuard)
+@Controller('admin') @UseGuards(PermissionGuard)
 export class ServersAdminController {
-  @Get('servers')
+  @Get('servers') @Can('servers.view_all', 'dashboard.view')
   async all() {
     const { rows } = await pool.query(`SELECT ${serverColumns}, u.email AS "ownerEmail" ${serverJoins} JOIN users u ON u.id = s.owner_id
       WHERE s.state <> 'deleted' ORDER BY s.created_at DESC`);
     return { servers: rows };
   }
 
-  @Get('operations')
+  @Get('operations') @Can('servers.view_all', 'dashboard.view')
   async operations() {
     const { rows } = await pool.query(`SELECT o.id, o.kind, o.status, o.step, o.attempts, o.error_code AS "errorCode", o.error_detail AS "errorDetail",
       o.created_at AS "createdAt", o.finished_at AS "finishedAt", s.name AS "serverName", s.id AS "serverId", u.email AS "ownerEmail"
@@ -246,7 +281,7 @@ export class ServersAdminController {
   }
 
   // A failed operation resumes from its persisted step; nothing already done is repeated.
-  @Post('operations/:id/retry') @HttpCode(202)
+  @Post('operations/:id/retry') @HttpCode(202) @Can('operations.retry')
   async retry(@Req() req: AuthedRequest, @Param('id', ParseUUIDPipe) id: string) {
     const { rows: [op] } = await pool.query(`UPDATE operations SET status = 'pending', error_code = NULL, error_detail = NULL, finished_at = NULL,
       deadline_at = now() + interval '45 minutes', updated_at = now() WHERE id = $1 AND status = 'failed' RETURNING id, server_id`, [id])
@@ -258,7 +293,7 @@ export class ServersAdminController {
     return { id, status: 'pending' };
   }
 
-  @Get('reconciliation')
+  @Get('reconciliation') @Can('servers.view_all')
   async findings() {
     const { rows } = await pool.query(`SELECT f.id, f.kind, f.server_id AS "serverId", s.name AS "serverName", f.vm_moref AS "vmMoref", f.detail,
       f.first_seen AS "firstSeen", f.last_seen AS "lastSeen", c.name AS "connectionName" FROM reconciliation_findings f
@@ -266,7 +301,7 @@ export class ServersAdminController {
     return { findings: rows };
   }
 
-  @Post('reconcile') @HttpCode(202)
+  @Post('reconcile') @HttpCode(202) @Can('reconcile.run')
   async reconcile(@Req() req: AuthedRequest) {
     await new Queue('maintenance', { connection: redis }).add('reconcile', {}, { removeOnComplete: true, removeOnFail: true });
     await audit(req, 'reconcile.requested', 'success', req.user.id);

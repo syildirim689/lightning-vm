@@ -1,8 +1,9 @@
-import { Body, Controller, Delete, Get, HttpCode, Param, ParseUUIDPipe, Post, Put, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, Param, ParseUUIDPipe, Post, Put, Query, Req, UseGuards } from '@nestjs/common';
 import type { PoolClient } from 'pg';
 import { pool } from './db';
 import { apiError } from './errors';
-import { AdminGuard, audit, SessionGuard, type AuthedRequest } from './auth';
+import { audit, SessionGuard, type AuthedRequest } from './auth';
+import { Can, PermissionGuard } from './rbac';
 import { checkCustom, exceededQuota, poolCapacity, type Limits, type Shape } from './capacity';
 
 type Input = Record<string, unknown>;
@@ -141,9 +142,9 @@ const poolColumns = `p.id, p.name, p.location, p.connection_id AS "connectionId"
   p.memory_overcommit::float AS "memoryOvercommit", p.storage_overcommit::float AS "storageOvercommit", p.reserve_cpu_pct AS "reserveCpuPct",
   p.reserve_memory_pct AS "reserveMemoryPct", p.reserve_storage_pct AS "reserveStoragePct", p.active`;
 
-@Controller('admin') @UseGuards(AdminGuard)
+@Controller('admin') @UseGuards(PermissionGuard)
 export class CatalogAdminController {
-  @Get('pools')
+  @Get('pools') @Can('catalog.view', 'catalog.manage', 'dashboard.view')
   async pools() {
     const { rows } = await pool.query(`SELECT ${poolColumns}, row_to_json(r) AS "customRule" FROM resource_pools p
       JOIN vmware_connections c ON c.id = p.connection_id LEFT JOIN custom_rules r ON r.pool_id = p.id ORDER BY p.name`);
@@ -152,7 +153,7 @@ export class CatalogAdminController {
     return { pools: await Promise.all(rows.map(async (p) => ({ ...p, capacity: await capacityOf(byId.get(p.id)) }))) };
   }
 
-  @Post('pools') @HttpCode(201)
+  @Post('pools') @HttpCode(201) @Can('catalog.manage')
   async createPool(@Req() req: AuthedRequest, @Body() body: Input) {
     const v = await readPool(body);
     const { rows: [p] } = await guarded(() => pool.query(`INSERT INTO resource_pools (name, location, connection_id, compute_moref, datastore_morefs, network_moref,
@@ -163,7 +164,7 @@ export class CatalogAdminController {
     return { id: p.id };
   }
 
-  @Put('pools/:id')
+  @Put('pools/:id') @Can('catalog.manage')
   async updatePool(@Req() req: AuthedRequest, @Param('id', ParseUUIDPipe) id: string, @Body() body: Input) {
     const v = await readPool(body);
     const { rowCount } = await guarded(() => pool.query(`UPDATE resource_pools SET name=$2, location=$3, connection_id=$4, compute_moref=$5, datastore_morefs=$6,
@@ -175,14 +176,14 @@ export class CatalogAdminController {
     return { id };
   }
 
-  @Delete('pools/:id') @HttpCode(204)
+  @Delete('pools/:id') @HttpCode(204) @Can('catalog.manage')
   async deletePool(@Req() req: AuthedRequest, @Param('id', ParseUUIDPipe) id: string) {
     const { rowCount } = await guarded(() => pool.query('DELETE FROM resource_pools WHERE id = $1', [id]));
     if (!rowCount) throw apiError(404, 'NOT_FOUND', 'Unknown pool');
     await audit(req, 'catalog.pool_deleted', 'success', req.user.id, { id });
   }
 
-  @Put('pools/:id/custom-rule')
+  @Put('pools/:id/custom-rule') @Can('catalog.manage')
   async setRule(@Req() req: AuthedRequest, @Param('id', ParseUUIDPipe) id: string, @Body() body: Input) {
     const r = readRule(body);
     await guarded(() => pool.query(`INSERT INTO custom_rules (pool_id, cpu_min, cpu_max, cpu_step, memory_min_mb, memory_max_mb, memory_step_mb,
@@ -198,7 +199,7 @@ export class CatalogAdminController {
     return { poolId: id };
   }
 
-  @Get('images')
+  @Get('images') @Can('catalog.view', 'catalog.manage', 'dashboard.view')
   async images() {
     const { rows } = await pool.query(`SELECT i.id, i.name, i.family, i.connection_id AS "connectionId", i.template_moref AS "templateMoref",
       v.name AS "templateName", i.min_disk_gb AS "minDiskGb", i.cloud_init AS "cloudInit", i.active FROM os_images i
@@ -206,7 +207,7 @@ export class CatalogAdminController {
     return { images: rows };
   }
 
-  @Post('images') @HttpCode(201)
+  @Post('images') @HttpCode(201) @Can('catalog.manage')
   async createImage(@Req() req: AuthedRequest, @Body() body: Input) {
     const f = new Fields(body);
     const v = { name: f.text('name'), family: body.family === 'windows' ? 'windows' : body.family === 'linux' ? 'linux' : (f.errors.family = 'INVALID_VALUE', ''),
@@ -221,14 +222,14 @@ export class CatalogAdminController {
     return { id: i.id };
   }
 
-  @Delete('images/:id') @HttpCode(204)
+  @Delete('images/:id') @HttpCode(204) @Can('catalog.manage')
   async deleteImage(@Req() req: AuthedRequest, @Param('id', ParseUUIDPipe) id: string) {
     const { rowCount } = await guarded(() => pool.query('DELETE FROM os_images WHERE id = $1', [id]));
     if (!rowCount) throw apiError(404, 'NOT_FOUND', 'Unknown image');
     await audit(req, 'catalog.image_deleted', 'success', req.user.id, { id });
   }
 
-  @Get('packages')
+  @Get('packages') @Can('catalog.view', 'catalog.manage', 'dashboard.view')
   async packages() {
     const { rows } = await pool.query(`SELECT p.id, p.name, p.vcpu, p.memory_mb AS "memoryMb", p.disk_gb AS "diskGb", p.price_monthly::text AS "priceMonthly",
       p.price_hourly::text AS "priceHourly", p.currency, p.active, p.sort,
@@ -238,7 +239,7 @@ export class CatalogAdminController {
     return { packages: rows };
   }
 
-  @Post('packages') @HttpCode(201)
+  @Post('packages') @HttpCode(201) @Can('catalog.manage')
   async createPackage(@Req() req: AuthedRequest, @Body() body: Input) {
     const f = new Fields(body);
     const v = { name: f.text('name'), vcpu: f.int('vcpu', 1, 256), memoryMb: f.int('memoryMb', 512, 4194304), diskGb: f.int('diskGb', 1, 65536),
@@ -262,14 +263,14 @@ export class CatalogAdminController {
     return { id };
   }
 
-  @Delete('packages/:id') @HttpCode(204)
+  @Delete('packages/:id') @HttpCode(204) @Can('catalog.manage')
   async deletePackage(@Req() req: AuthedRequest, @Param('id', ParseUUIDPipe) id: string) {
     const { rowCount } = await guarded(() => pool.query('DELETE FROM packages WHERE id = $1', [id]));
     if (!rowCount) throw apiError(404, 'NOT_FOUND', 'Unknown package');
     await audit(req, 'catalog.package_deleted', 'success', req.user.id, { id });
   }
 
-  @Get('ip-pools')
+  @Get('ip-pools') @Can('catalog.view', 'catalog.manage', 'dashboard.view')
   async ipPools() {
     const { rows } = await pool.query(`SELECT i.id, i.name, i.pool_id AS "poolId", p.name AS "poolName", host(i.gateway) AS gateway, i.cidr::text AS cidr,
       host(i.range_start) AS "rangeStart", host(i.range_end) AS "rangeEnd", ARRAY(SELECT host(x) FROM unnest(i.dns) x) AS dns,
@@ -280,7 +281,7 @@ export class CatalogAdminController {
   }
 
   // IPv4 only for now. Ranges on the same resource-pool network must not overlap.
-  @Post('ip-pools') @HttpCode(201)
+  @Post('ip-pools') @HttpCode(201) @Can('catalog.manage')
   async createIpPool(@Req() req: AuthedRequest, @Body() body: Input) {
     const f = new Fields(body);
     const v = { name: f.text('name'), poolId: f.text('poolId', 36), cidr: f.text('cidr', 43), gateway: f.text('gateway', 39),
@@ -306,21 +307,21 @@ export class CatalogAdminController {
     return { id };
   }
 
-  @Delete('ip-pools/:id') @HttpCode(204)
+  @Delete('ip-pools/:id') @HttpCode(204) @Can('catalog.manage')
   async deleteIpPool(@Req() req: AuthedRequest, @Param('id', ParseUUIDPipe) id: string) {
     const { rowCount } = await guarded(() => pool.query('DELETE FROM ip_pools WHERE id = $1', [id]));
     if (!rowCount) throw apiError(404, 'NOT_FOUND', 'Unknown IP pool');
     await audit(req, 'catalog.ip_pool_deleted', 'success', req.user.id, { id });
   }
 
-  @Get('quotas')
+  @Get('quotas') @Can('catalog.view', 'catalog.manage')
   async quotas() {
     const { rows } = await pool.query(`SELECT q.scope, q.subject_id AS "subjectId", u.email, q.max_servers AS "maxServers", q.max_vcpu AS "maxVcpu",
       q.max_memory_mb AS "maxMemoryMb", q.max_disk_gb AS "maxDiskGb" FROM quotas q LEFT JOIN users u ON u.id = q.subject_id ORDER BY q.scope, u.email`);
     return { quotas: rows };
   }
 
-  @Put('quotas/default')
+  @Put('quotas/default') @Can('catalog.manage')
   async setDefaultQuota(@Req() req: AuthedRequest, @Body() body: Input) {
     const l = readLimits(body);
     await pool.query("UPDATE quotas SET max_servers=$1, max_vcpu=$2, max_memory_mb=$3, max_disk_gb=$4 WHERE scope='default'",
@@ -329,7 +330,7 @@ export class CatalogAdminController {
     return l;
   }
 
-  @Put('quotas/users/:id')
+  @Put('quotas/users/:id') @Can('catalog.manage')
   async setUserQuota(@Req() req: AuthedRequest, @Param('id', ParseUUIDPipe) id: string, @Body() body: Input) {
     const l = readLimits(body);
     await guarded(() => pool.query(`INSERT INTO quotas (scope, subject_id, max_servers, max_vcpu, max_memory_mb, max_disk_gb) VALUES ('user', $1, $2, $3, $4, $5)
@@ -426,6 +427,22 @@ export class CatalogController {
       pool.query('SELECT id, name, family, min_disk_gb AS "minDiskGb" FROM os_images WHERE active ORDER BY name'),
     ]);
     return { packages: packages.rows, pools: pools.rows, images: images.rows };
+  }
+
+  // For the order page: which packages of a location can be ordered right now by this user, and if not, why
+  // (no capacity there, over the user's quota). The API checks again on create.
+  @Get('catalog/availability')
+  async availability(@Req() req: AuthedRequest, @Query('poolId') poolId?: string) {
+    const { rows: [rp] } = await pool.query('SELECT * FROM resource_pools WHERE id = $1 AND active', [poolId]).catch(() => ({ rows: [] }));
+    if (!rp) throw apiError(404, 'NOT_FOUND', 'Unknown pool');
+    const [cap, limits, usage, { rows: pkgs }] = await Promise.all([capacityOf(rp), limitsFor(req.user.id), usageOf(req.user.id),
+      pool.query('SELECT p.id, p.vcpu, p.memory_mb, p.disk_gb FROM packages p JOIN package_pools pp ON pp.package_id = p.id AND pp.pool_id = $1 WHERE p.active', [rp.id])]);
+    const packages = Object.fromEntries(pkgs.map((p) => {
+      const shape = { vcpu: p.vcpu, memoryMb: p.memory_mb, diskGb: p.disk_gb };
+      const capacity = shape.vcpu <= cap.available.vcpu && shape.memoryMb <= cap.available.memoryMb && shape.diskGb <= cap.available.storageGb;
+      return [p.id, { capacity, quota: exceededQuota(limits, usage, shape) }];
+    }));
+    return { packages, available: cap.available };
   }
 
   // Validates an order on the server and prices it. Creating the server comes with provisioning.

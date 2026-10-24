@@ -122,6 +122,10 @@ func handler(token string, guard *netGuard) http.Handler {
 		q := r.(*VMRequest)
 		return withClient(ctx, guard, q.Request, func(c *vim25.Client) (any, error) { return destroyVM(ctx, c, *q) })
 	})
+	handle("/v1/vm/metrics", 30*time.Second, newVM, func(ctx context.Context, r any) (any, error) {
+		q := r.(*VMRequest)
+		return withClient(ctx, guard, q.Request, func(c *vim25.Client) (any, error) { return vmMetrics(ctx, c, q.VM, 45) })
+	})
 	handle("/v1/vms/managed", 60*time.Second, newVM, func(ctx context.Context, r any) (any, error) {
 		q := r.(*VMRequest)
 		return withClient(ctx, guard, q.Request, func(c *vim25.Client) (any, error) {

@@ -1,6 +1,11 @@
 import { cookies } from 'next/headers';
 
-export type User = { id: string; email: string; role: 'admin' | 'user'; locale: 'tr' | 'en' };
+// permissions: the effective set from the API ('*' = administrator). impersonatedBy: a staff member signed in as this user.
+export type User = { id: string; email: string; name: string; roles: string[]; permissions: string[]; locale: 'tr' | 'en'; impersonatedBy: string | null;
+  twoFactorEnabled: boolean; phoneNumber: string | null; phoneNumberVerified: boolean };
+export type Branding = { name: string; accent: string | null; logo: boolean; favicon: boolean; version: string };
+export type CaptchaConfig = { provider: 'turnstile' | 'recaptcha-v2' | 'recaptcha-v3' | 'hcaptcha'; siteKey: string; use: { signIn: boolean; signUp: boolean; passwordReset: boolean } };
+export type PublicConfig = { branding: Branding; passwordReset: boolean; captcha: CaptchaConfig | null; phoneVerification: boolean; otpChannels: { sms: boolean; email: boolean } };
 
 // Server components talk to the API directly on the internal network, forwarding the session cookie.
 const apiUrl = process.env.API_INTERNAL_URL || 'http://api:4000';
@@ -21,4 +26,14 @@ export async function getSetupStatus(): Promise<{ adminCreated: boolean; complet
   const res = await serverGet('/setup/status');
   if (!res.ok) throw new Error(`setup/status failed: ${res.status}`);
   return res.json();
+}
+
+const fallback: PublicConfig = { branding: { name: 'Lightning VM', accent: null, logo: false, favicon: false, version: '0' }, passwordReset: false, captcha: null,
+  phoneVerification: false, otpChannels: { sms: false, email: false } };
+// Branding is needed on every page; if the API is down the page still renders with the defaults.
+export async function getPublicConfig(): Promise<PublicConfig> {
+  try {
+    const res = await fetch(`${apiUrl}/public/config`, { next: { revalidate: 30 } });
+    return res.ok ? await res.json() : fallback;
+  } catch { return fallback; }
 }

@@ -119,6 +119,10 @@ func TestDiscoverVCenter(t *testing.T) {
 	if res.Product.Kind != "vcenter" || !res.Operations["automationApi"] {
 		t.Fatalf("vCenter misdetected: %+v", res.Product)
 	}
+	// The negotiated API version drives the compatibility decisions (simulator: whatever vcsim reports).
+	if res.Compat.APIVersion != res.Product.APIVersion || !res.Compat.Clone || res.Compat.Customization == "none" {
+		t.Fatalf("compat: %+v (api %s)", res.Compat, res.Product.APIVersion)
+	}
 	seen := map[string]bool{}
 	for _, h := range res.Hosts {
 		if h.HardwareUUID == "" || seen[h.HardwareUUID] {

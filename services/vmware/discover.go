@@ -44,6 +44,8 @@ type Request struct {
 	Username string      `json:"username"`
 	Password string      `json:"password"`
 	TLS      TLSSettings `json:"tls"`
+	// APIVersion pins the vSphere API (SOAP) version, e.g. "6.7.3" or "7.0.3.0". Empty: use the endpoint's own.
+	APIVersion string `json:"apiVersion,omitempty"`
 }
 
 // Failure carries a stable code; Certificate is filled when the server's certificate was not trusted.
@@ -265,6 +267,7 @@ type Result struct {
 	Networks   []Network         `json:"networks"`
 	Compute    []ComputeResource `json:"compute"`
 	VMs        []VM              `json:"vms"`
+	Compat     Compat            `json:"compat"`
 }
 
 func connect(ctx context.Context, g *netGuard, r Request) (*vim25.Client, *session.Manager, error) {
@@ -294,6 +297,13 @@ func connect(ctx context.Context, g *netGuard, r Request) (*vim25.Client, *sessi
 			return nil, err
 		}
 		return conn, nil
+	}
+	// Speak the endpoint's own API version (6.x … 9.x) instead of govmomi's newest default, unless the
+	// admin pinned one. If the endpoint does not publish it, govmomi's default is used.
+	if r.APIVersion != "" {
+		sc.Version = r.APIVersion
+	} else if err := sc.UseServiceVersion(); err != nil {
+		sc.Version, sc.Namespace = "", ""
 	}
 	c, err := vim25.NewClient(ctx, sc)
 	if err != nil {
@@ -497,5 +507,7 @@ func discover(ctx context.Context, g *netGuard, r Request) (*Result, error) {
 		}
 		res.VMs = append(res.VMs, item)
 	}
+	res.Compat = compatFor(res.Product.Kind, res.Product.APIVersion, res.WriteAPI)
+	res.Warnings = append(res.Warnings, compatWarnings(res.Product.Kind, res.Compat)...)
 	return res, nil
 }

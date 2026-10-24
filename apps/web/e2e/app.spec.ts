@@ -169,6 +169,9 @@ test.describe('roles and sessions (English browser)', () => {
     const history = page.getByRole('grid', { name: 'Backups and updates' });
     await expect(history).toContainText('Backup');
     await expect(history).toContainText('succeeded');
+    // Registration moved to Settings → General.
+    await page.getByRole('link', { name: 'Settings' }).click();
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Settings');
     const toggle = page.getByRole('switch', { name: 'Allow new user registration' });
     await expect(toggle).toBeEnabled();
     // Off then on, so the save path runs whatever state a previous run left; the switch follows the API answer.
@@ -218,7 +221,7 @@ test.describe('catalog and order preview (simulator)', () => {
     let dialog = adminPage.getByRole('dialog');
     await dialog.getByLabel('Name').fill('E2E Pool');
     await dialog.getByLabel('Location', { exact: true }).fill('Lab');
-    await choose(adminPage, dialog, /Cluster or host/, /\(cluster\)/);
+    await choose(adminPage, dialog, /Cluster or host/, /cluster/);
     await tick(dialog.getByRole('group', { name: 'Datastores' }).getByRole('checkbox').first());
     await choose(adminPage, dialog, /Network \(port group\)/, /.+/);
     await dialog.getByRole('button', { name: 'Create pool' }).click();
@@ -240,9 +243,9 @@ test.describe('catalog and order preview (simulator)', () => {
     await dialog.getByLabel('Monthly price').fill('12.1x');
     await dialog.getByRole('button', { name: 'Create package' }).click();
     await expect(dialog.getByText('Enter a valid amount (example: 12.50).')).toBeVisible();
-    await expect(dialog.getByText('This field is required.')).toBeVisible();
+    // The only pool is preselected.
+    await expect(dialog.getByRole('group', { name: 'Offered in pools' }).getByRole('checkbox', { name: 'E2E Pool' })).toBeChecked();
     await dialog.getByLabel('Monthly price').fill('12.10');
-    await tick(dialog.getByRole('group', { name: 'Offered in pools' }).getByRole('checkbox', { name: 'E2E Pool' }));
     await dialog.getByRole('button', { name: 'Create package' }).click();
     await expect(adminPage.getByRole('row', { name: /E2E Small/ })).toContainText('€12.10');
 
@@ -250,8 +253,9 @@ test.describe('catalog and order preview (simulator)', () => {
     await signIn(customer, user);
     await expect(customer).toHaveURL(/\/$/);
     await customer.goto('/order');
-    await tick(customer.getByRole('radio', { name: /E2E Small/ }));
-    await expect(customer.locator('.quote')).toContainText('Aylık: €12,10');
+    // The simulated pool has too little memory for 4 GB: the package is shown with the reason and cannot be picked.
+    await expect(customer.getByRole('radio', { name: /E2E Small/ })).toBeDisabled();
+    await expect(customer.getByText('Bu konumda şu an yer yok.')).toBeVisible();
     await tick(customer.getByRole('radio', { name: 'Özel kaynaklı' }));
     await expect(customer.getByText('fiziksel olarak ayrılmış (dedicated) işlemci garantisi değildir', { exact: false })).toBeVisible();
     // The field snaps to the allowed step (1024 MB) itself; the API still checks steps (integration tests).
@@ -267,7 +271,8 @@ test.describe('catalog and order preview (simulator)', () => {
     dialog = adminPage.getByRole('dialog');
     await dialog.getByLabel('Name').fill('Sim Linux');
     await choose(adminPage, dialog, /^Template|Template/, /.+/);
-    await dialog.getByLabel('Minimum disk').fill('10');
+    await dialog.getByRole('textbox', { name: /Minimum disk/ }).fill('10');
+    await dialog.getByRole('textbox', { name: /Minimum disk/ }).press('Tab');
     await dialog.getByRole('button', { name: 'Add image' }).click();
     await expect(adminPage.getByRole('row', { name: /Sim Linux/ })).toBeVisible();
 
@@ -289,11 +294,11 @@ test.describe('catalog and order preview (simulator)', () => {
     await adminPage.getByRole('button', { name: 'New package' }).click();
     dialog = adminPage.getByRole('dialog');
     await dialog.getByLabel('Name').fill('E2E Tiny');
-    await dialog.getByLabel('vCPU').fill('1');
-    await dialog.getByLabel('RAM (MB)').fill('512');
-    await dialog.getByLabel('Disk (GB)').fill('10');
+    for (const [name, value] of [['vCPU', '1'], ['RAM (GB)', '0.5'], ['Disk (GB)', '10']]) {
+      await dialog.getByRole('textbox', { name }).fill(value);
+      await dialog.getByRole('textbox', { name }).press('Tab');
+    }
     await dialog.getByLabel('Monthly price').fill('3.00');
-    await tick(dialog.getByRole('group', { name: 'Offered in pools' }).getByRole('checkbox', { name: 'E2E Pool' }));
     await tick(dialog.getByRole('group', { name: 'Allowed images' }).getByRole('checkbox', { name: 'Sim Linux' }));
     await dialog.getByRole('button', { name: 'Create package' }).click();
     await expect(adminPage.getByRole('row', { name: /E2E Tiny/ })).toBeVisible();
@@ -357,7 +362,7 @@ test.describe('server lifecycle (simulator, Turkish customer)', () => {
     test.skip(!process.env.E2E_VCSIM_HOST, 'needs compose.simulator.yaml and E2E_VCSIM_HOST');
     await signIn(page, user);
     await expect(page).toHaveURL(/\/$/);
-    await page.goto('/account');
+    await page.goto('/account?tab=keys');
     await page.getByLabel('Anahtar adı').fill('dizüstü');
     await page.getByLabel('Açık anahtar').fill('ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMa0iBTtZu9kbSNXzg5M6pZ1rn8F1143iWq3JIcGimfn e2e');
     await page.getByRole('button', { name: 'Anahtar ekle' }).click();
@@ -376,9 +381,13 @@ test.describe('server lifecycle (simulator, Turkish customer)', () => {
 
     await expect(page).toHaveURL(/\/servers\/[0-9a-f-]{36}$/);
     await expect(page.getByRole('heading', { level: 1 })).toHaveText('web-1');
+    // The task manager (bottom right) shows the background work while it runs.
+    await expect(page.getByRole('button', { name: /iş sürüyor|Son işler/ })).toBeVisible();
     await expect(page.getByText(/Hazır · açık/).first()).toBeVisible({ timeout: 60_000 });
     await expect(page.getByText('10.30.0.20')).toBeVisible();
-    await expect(page.getByText('henüz metrik toplanmıyor', { exact: false })).toBeVisible();
+    // Live metrics from the simulator's performance manager (20-second samples).
+    await expect(page.getByText('Canlı performans')).toBeVisible();
+    await expect(page.getByText(/\d+ örnek, 20 saniye aralıkla/)).toBeVisible({ timeout: 30_000 });
 
     await page.getByRole('button', { name: 'Zorla kapat' }).click();
     await expect(page.getByRole('alertdialog')).toContainText('kaydedilmemiş veriler kaybolabilir');
@@ -438,10 +447,68 @@ test.describe('language', () => {
     for (const path of ['/login', '/register', '/forgot-password']) await page.goto(path);
     await signIn(page, admin);
     await expect(page).toHaveURL(/\/admin$/);
-    for (const path of ['/admin/servers', '/admin/vmware', '/admin/catalog', '/admin/system', '/', '/order', '/account']) {
+    for (const path of ['/admin/servers', '/admin/vmware', '/admin/catalog', '/admin/system', '/admin/users', '/admin/roles', '/admin/settings',
+      '/admin/settings?tab=mail', '/admin/settings?tab=captcha', '/admin/settings?tab=sms', '/admin/settings?tab=notifications', '/', '/order', '/account',
+      '/account?tab=security', '/account?tab=notifications']) {
       await page.goto(path);
       await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
     }
     expect(errors).toEqual([]);
+  });
+});
+
+test.describe('people, settings and smart features (English browser)', () => {
+  test.use({ locale: 'en-US' });
+
+  test('users, roles and permissions are managed from the panel', async ({ page }) => {
+    await signIn(page, admin);
+    await expect(page).toHaveURL(/\/admin$/);
+    await page.getByRole('link', { name: 'Users' }).click();
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Users');
+    await expect(page.getByRole('grid', { name: 'Users' })).toContainText(admin.email);
+    await page.getByRole('link', { name: 'Roles' }).click();
+    for (const name of ['Administrator', 'Customer', 'Operator', 'Support', 'Auditor']) await expect(page.getByRole('heading', { name: new RegExp('^' + name) })).toBeVisible();
+    // A custom role with one permission.
+    await page.getByRole('button', { name: 'New role' }).click();
+    const dialog = page.getByRole('dialog');
+    await dialog.getByLabel('Name').fill('E2E Viewer');
+    await tick(dialog.getByRole('checkbox', { name: /See the catalog/ }));
+    await dialog.getByRole('button', { name: 'Save' }).click();
+    await expect(page.getByText('Role saved.')).toBeVisible();
+    await expect(page.getByText('E2E Viewer')).toBeVisible();
+  });
+
+  test('settings: branding colour and notification rules; inbox and command palette', async ({ page }) => {
+    await signIn(page, admin);
+    await expect(page).toHaveURL(/\/admin$/);
+    await page.goto('/admin/settings?tab=branding');
+    await page.getByLabel('Panel name').fill('Lightning VM');
+    await page.getByRole('button', { name: 'Save' }).click();
+    await expect(page.getByText('Saved.').first()).toBeVisible();
+    await page.goto('/admin/settings?tab=notifications');
+    await expect(page.getByText('User notifications')).toBeVisible();
+    await expect(page.getByText('Server ready').first()).toBeVisible();
+    // The sign-in above produced an in-app notification (written in the language saved on the account).
+    await page.getByRole('button', { name: /notifications/i }).first().click();
+    await expect(page.getByText(/New sign-in to your account|Hesabınıza yeni giriş/).first()).toBeVisible();
+    await page.keyboard.press('Escape');
+    // Ctrl+K jumps anywhere.
+    await page.keyboard.press('Control+k');
+    const palette = page.getByRole('combobox', { name: 'Command palette' });
+    await palette.fill('roles');
+    await page.keyboard.press('Enter');
+    await expect(page).toHaveURL(/\/admin\/roles$/);
+  });
+
+  test('every page fits a 390 px phone without sideways scrolling', async ({ browser }) => {
+    const page = await (await browser.newContext({ locale: 'en-US', viewport: { width: 390, height: 844 } })).newPage();
+    await signIn(page, admin);
+    await expect(page).toHaveURL(/\/admin$/);
+    for (const path of ['/admin', '/admin/servers', '/admin/vmware', '/admin/catalog', '/admin/users', '/admin/roles', '/admin/settings?tab=mail', '/admin/system', '/', '/order', '/account?tab=security']) {
+      await page.goto(path);
+      await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+      const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+      expect(overflow, path).toBeLessThanOrEqual(1);
+    }
   });
 });

@@ -15,7 +15,9 @@ export class ErrorCodeFilter implements ExceptionFilter {
   catch(err: unknown, host: ArgumentsHost) {
     const reply = host.switchToHttp().getResponse<FastifyReply>();
     if (!(err instanceof HttpException)) {
-      logEvent('error', 'unhandled_error', { error: err instanceof Error ? err.name : 'unknown' });
+      // The SQLSTATE (or Node error code) is safe to log; messages can contain data, so only when asked for.
+      logEvent('error', 'unhandled_error', { error: err instanceof Error ? err.name : 'unknown', code: (err as { code?: string })?.code,
+        ...(process.env.LOG_ERROR_DETAIL === '1' && { detail: String((err as Error)?.stack ?? err).slice(0, 800) }) });
       return reply.status(500).send({ code: 'INTERNAL_ERROR', message: 'Internal error' });
     }
     const body = err.getResponse();

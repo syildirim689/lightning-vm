@@ -7,7 +7,8 @@ import { useState } from 'react';
 import { apiFetch, useErrorText } from '../../../../../lib/api';
 import { useApiAction, useApiQuery } from '../../../../../lib/query';
 import { ButtonLink, DataTable, Notice, PageHeader, Section, Stat, StatusChip, TextInput } from '../../../../../components/ui';
-import type { Connection } from '../connections';
+import { apiVersions, versionLabel, type Connection } from '../connections';
+import { SelectInput } from '../../../../../components/ui';
 
 type Row = Record<string, string | number | boolean | null | string[]>;
 type Detail = { connection: Connection; capacity: Record<string, number>; hosts: Row[]; datastores: Row[]; networks: Row[]; compute: Row[]; vms: Row[] };
@@ -38,6 +39,7 @@ export default function ConnectionDetail({ id }: { id: string }) {
 
     {c.warnings.map((w) => <Notice key={w} tone="warning">{t(`warning.${w as 'HOST_MANAGED_BY_VCENTER'}`)}</Notice>)}
     {c.writeApi !== 'available' && <Notice tone="warning">{t(`writeApiNote.${c.writeApi as 'restricted'}`)}</Notice>}
+    <CompatSection connection={c}/>
 
     <section aria-labelledby="cap-title" className="flex flex-col gap-3">
       <h2 id="cap-title" className="text-lg font-semibold">{t('capacityTitle')}</h2>
@@ -114,4 +116,33 @@ export default function ConnectionDetail({ id }: { id: string }) {
       </div>
     </Section>
   </div>;
+}
+
+// What this endpoint's vSphere version allows, and the admin's override (pin an older API, choose the
+// customization method). Saving re-discovers with the new settings, so a wrong choice is refused at once.
+function CompatSection({ connection: c }: { connection: Connection }) {
+  const t = useTranslations('Vmware');
+  const [v, setV] = useState({ apiVersion: c.apiVersion ?? '', customization: c.customization ?? 'auto' });
+  const save = useApiAction(() => apiFetch(`/admin/vmware/connections/${c.id}/compat`, { method: 'POST', body: v }), { invalidate: [['vmware']], success: t('compat.saved') });
+  const k = c.compat;
+  const effective = v.customization === 'auto' ? k?.customization ?? 'cloudinit' : v.customization;
+  return <Section title={t('compat.title')} description={t('compat.intro')}>
+    <div className="flex flex-col gap-4">
+      {k && <dl className="grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
+        <div className="rounded-lg bg-default/50 px-3 py-2"><dt className="text-xs text-muted">{t('compat.detected')}</dt><dd className="font-medium">{versionLabel(k.apiVersion)} <span className="text-xs text-muted">(API {k.apiVersion})</span></dd></div>
+        <div className="rounded-lg bg-default/50 px-3 py-2"><dt className="text-xs text-muted">{t('compat.support')}</dt>
+          <dd><StatusChip tone={k.support === 'supported' ? 'success' : k.support === 'legacy' ? 'danger' : 'warning'}>{t(`compat.supportState.${k.support}`)}</StatusChip></dd></div>
+        <div className="rounded-lg bg-default/50 px-3 py-2"><dt className="text-xs text-muted">{t('compat.customization')}</dt><dd className="font-medium">{t(`compat.method.${effective}` as 'compat.method.auto')}</dd></div>
+        <div className="rounded-lg bg-default/50 px-3 py-2"><dt className="text-xs text-muted">{t('compat.cloning')}</dt><dd>{k.clone ? t('yes') : t('compat.needsVcenter')}</dd></div>
+      </dl>}
+      <div className="grid gap-4 sm:grid-cols-2">
+        <SelectInput label={t('compat.version')} value={v.apiVersion} onChange={(x) => setV((s) => ({ ...s, apiVersion: x }))} help={t('compat.versionHelp')}
+          options={[{ id: '', label: t('compat.auto') }, ...apiVersions.map((x) => ({ id: x, label: versionLabel(x), description: `API ${x}` }))]}/>
+        <SelectInput label={t('compat.customization')} value={v.customization} onChange={(x) => setV((s) => ({ ...s, customization: x as 'auto' }))} help={t('compat.customizationHelp')}
+          options={(['auto', 'cloudinit', 'guestinfo'] as const).map((m) => ({ id: m, label: t(`compat.method.${m}`), description: t(`compat.methodHelp.${m}`),
+            isDisabled: m === 'cloudinit' && k?.customization !== 'cloudinit' }))}/>
+      </div>
+      <div className="flex justify-end"><Button variant="secondary" isPending={save.isPending} onPress={() => save.mutate()}><I name="check" size={16}/>{t('compat.save')}</Button></div>
+    </div>
+  </Section>;
 }

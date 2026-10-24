@@ -7,9 +7,25 @@ Açık kaynak VMware sunucu yönetim platformunun başlangıç deposu.
 ## Çalışan bileşenler
 - Next.js (TypeScript) yönetim ve müşteri paneli: HeroUI bileşenleri, koyu/açık tema, mobil uyumlu
   yan menü, grafikli genel bakış; Türkçe/İngilizce (docs/i18n.md).
-- Kimlik doğrulama better-auth ile: e-posta/parola, passkey (WebAuthn), oturum listesi ve kapatma,
-  SMTP tanımlıysa e-postayla parola sıfırlama, isteğe bağlı Cloudflare Turnstile, `admin`/`user`
-  rolleri, CSRF ve hız sınırı, denetim kayıtları (docs/auth.md).
+- Kimlik doğrulama better-auth ile:
+  - e-posta/parola ve passkey;
+  - iki adımlı doğrulama (uygulama, SMS/e-posta kodu, yedek kodlar) ve telefon doğrulama;
+  - oturum yönetimi ve e-postayla parola sıfırlama;
+  - kullanıcı yönetimi: yasaklama, parola, oturumlar, kullanıcı adına giriş;
+  - izin tabanlı roller: hazır ve özel roller, çoklu rol, kişiye özel izin ekleme/çıkarma, yetki yükseltme koruması;
+  - CSRF, hız sınırı ve denetim kayıtları (docs/auth.md).
+- Ayarlar (docs/settings.md):
+  - marka: ad, renk, logo, favicon;
+  - SMTP: hazır profiller ve test;
+  - CAPTCHA: Turnstile, reCAPTCHA v2/v3, hCaptcha; formlar için ayrı ayrı, testli;
+  - Türkiye'deki 18 SMS sağlayıcısı ve özel HTTP API.
+- Bildirimler: panel içi, tarayıcı (Web Push), e-posta ve SMS kanalları; önce yöneticinin kuralı, sonra
+  kullanıcının seçimi (docs/notifications.md).
+- Akıllı panel:
+  - içgörüler: dolan havuz ve gün tahmini, azalan IP, takılan işler, yedek, güvenlik;
+  - canlı VM metrikleri;
+  - görev yöneticisi ve komut paleti (Ctrl/⌘+K);
+  - akıllı sipariş: uygun olmayan paketler gerekçesiyle, en uygun paket, ad önerisi.
 - NestJS/Fastify API: canlılık, PostgreSQL/Redis hazır olma kontrolü, yönetici sistem durumu ve Prometheus metrikleri.
   `/metrics` yalnızca iç ağdan erişilir; Caddy üzerinden `/api/metrics` 404 döner.
 - BullMQ worker: Redis bağlantısı, PostgreSQL heartbeat ve bilinmeyen işleri reddetme.
@@ -22,6 +38,8 @@ Açık kaynak VMware sunucu yönetim platformunun başlangıç deposu.
 - Erişim modları: yalnızca yerel (SSH tüneli), alan adıyla Caddy otomatik HTTPS (Let's Encrypt,
   staging seçeneğiyle) veya mevcut bir Nginx/Caddy/Traefik arkasında güvenilen proxy sınırıyla
   (docs/domain-https.md).
+- vSphere 6.0 – 9.x uyumluluğu: API sürümü otomatik algılanır veya sabitlenir; kişiselleştirme sürüme
+  göre seçilir (docs/vmware.md, Sürüm uyumluluğu).
 - ESXi ve vCenter bağlantısı (yalnızca okuma): ürün, lisans, yetki ve desteklenen işlem keşfi;
   host, datastore, ağ/VLAN, küme ve VM envanteri; fiziksel kapasite. TLS sistem CA, özel CA veya
   sabitlenmiş parmak iziyle doğrulanır. Parolalar ayrı anahtarla şifrelenir. Aynı host iki kez
@@ -43,7 +61,7 @@ Açık kaynak VMware sunucu yönetim platformunun başlangıç deposu.
 
 ## Henüz uygulanmayanlar
 - Sihirbazda kaynak havuzu adımı (havuzlar Yönetim → Katalog'dan oluşturulur).
-- TOTP ile iki adımlı doğrulama, e-posta doğrulama.
+- E-posta adresi doğrulama; bayi (reseller) yapısı.
 - Standalone ESXi üzerinde oluşturma, yeniden kurulum, snapshot, müşteri VM metrikleri, IPv6.
 - Faturalama; GHCR imajlarıyla sürümlü kurulum paketi; dağıtık iz (tracing).
 

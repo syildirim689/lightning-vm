@@ -1,6 +1,6 @@
 "use client";
 import { Button, Card, Radio, RadioGroup, Separator, Spinner } from '@heroui/react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { motion } from 'motion/react';
 import { useRouter } from 'next/navigation';
 import { useFormatter, useTranslations } from 'next-intl';
@@ -17,6 +17,8 @@ type Catalog = { packages: { id: string; name: string; vcpu: number; memoryMb: n
   pools: { id: string; name: string; location: string; custom: Custom | null }[]; images: { id: string; name: string; family: string; minDiskGb: number }[] };
 type Quote = { shape: { vcpu: number; memoryMb: number; diskGb: number }; price: { monthly: string; currency: string }; quota: { exceeded: string[] }; capacityAvailable: boolean };
 type Project = { id: string; name: string };
+type Availability = { packages: Record<string, { capacity: boolean; quota: string[] }> };
+const slug = (s: string) => s.toLocaleLowerCase('en').normalize('NFD').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'server';
 
 // Builds, prices and places an order. Every value is validated again by the API.
 export default function Order() {
@@ -26,9 +28,12 @@ export default function Order() {
   const router = useRouter();
   const intent = useIntentKey();
   const d = useOrder();
+  const queryClient = useQueryClient();
   const keys = useSshKeys();
   const catalog = useApiQuery<Catalog>(['catalog'], '/catalog').data;
   const projects = useApiQuery<{ projects: Project[] }>(['projects'], '/projects').data?.projects ?? [];
+  const mine = useApiQuery<{ servers: { name: string }[] }>(['servers'], '/servers').data?.servers ?? [];
+  const availability = useApiQuery<Availability>(['availability', d.poolId], d.poolId ? `/catalog/availability?poolId=${d.poolId}` : null).data;
   const [failure, setFailure] = useState<ApiError & { text: string }>();
   const [busy, setBusy] = useState(false);
   const [nameError, setNameError] = useState<string>();
@@ -51,19 +56,36 @@ export default function Order() {
   if (!catalog) return <p role="status" className="text-sm text-muted">…</p>;
   if (!catalog.pools.length) return <><PageHeader title={t('title')}/><Empty icon={<I name="map-pin" size={28}/>} title={t('nothingOffered')}/></>;
   const packages = catalog.packages.filter((p) => p.poolIds.includes(d.poolId));
+  const image = catalog.images.find((i) => i.id === d.imageId);
+  // Why a package cannot be ordered right now, if it cannot (the API checks again on create).
+  const blocked = (p: Catalog['packages'][number]) => image && p.diskGb < image.minDiskGb ? t('why.imageDisk', { min: image.minDiskGb })
+    : availability?.packages[p.id] && !availability.packages[p.id].capacity ? t('why.capacity')
+    : availability?.packages[p.id]?.quota.length ? t('why.quota', { limits: availability.packages[p.id].quota.map((x) => t(`quota.${x as 'vcpu'}`)).join(', ') }) : null;
+  const orderable = packages.filter((p) => !blocked(p));
+  const bestValue = orderable.length > 1 ? orderable.reduce((a, b) => (Number(a.priceMonthly) / a.vcpu <= Number(b.priceMonthly) / b.vcpu ? a : b)).id : null;
+  const taken = new Set(mine.map((m) => m.name));
+  const suggest = () => { const base = slug(image?.name.split(/\s/)[0] ?? 'server'); let n = 1; while (taken.has(`${base}-${n}`)) n++; return `${base}-${n}`; };
+  const canCreate = ready && quote.data && !quote.data.quota.exceeded.length && quote.data.capacityAvailable;
+  const nameTaken = !!d.name && taken.has(d.name);
+  const steps = [
+    { label: t('steps.location'), done: !!d.poolId && !!d.imageId },
+    { label: t('steps.plan'), done: ready },
+    { label: t('steps.access'), done: hostnameSchema.safeParse(d.name).success && !taken.has(d.name) && d.sshKeyIds.length > 0 },
+    { label: t('steps.review'), done: !!canCreate },
+  ];
   const custom = pool?.custom;
   const money = (v: string | number, currency: string) => format.number(Number(v), { style: 'currency', currency });
   const gb = (mb: number) => format.number(mb / 1024, { maximumFractionDigits: 1 });
   const quoteField = (name: string) => field(quote.error?.fields?.[name]) ?? field(failure?.fields?.[name]);
-  const canCreate = ready && quote.data && !quote.data.quota.exceeded.length && quote.data.capacityAvailable;
 
   async function create() {
     setFailure(undefined); setNameError(undefined);
     if (!hostnameSchema.safeParse(d.name).success) { setNameError(field('INVALID_HOSTNAME')); return; }
+    if (taken.has(d.name)) { setNameError(field('NAME_TAKEN')); return; }
     setBusy(true);
     try {
       const out = await apiFetch<{ serverId: string }>('/servers', { method: 'POST', body: { ...body, name: d.name, sshKeyIds: d.sshKeyIds }, headers: { 'idempotency-key': intent.key() } });
-      intent.reset(); d.clear(); router.push(`/servers/${out.serverId}`);
+      intent.reset(); d.clear(); queryClient.invalidateQueries({ queryKey: ['tasks'] }); router.push(`/servers/${out.serverId}`);
     } catch (e) {
       setFailure({ ...(e as ApiError), text: error(e) });
       if ((e as ApiError).code !== 'NETWORK') intent.reset();
@@ -72,6 +94,15 @@ export default function Order() {
 
   return <>
     <PageHeader title={t('title')} description={t('customNote')}/>
+    <ol className="mb-6 flex flex-wrap items-center gap-2" aria-label={t('steps.label')}>
+      {steps.map((st, i) => <li key={st.label} className="flex items-center gap-2">
+        <motion.span animate={{ scale: st.done ? [1, 1.15, 1] : 1 }} transition={{ duration: 0.3 }}
+          className={`grid size-7 place-items-center rounded-full text-xs font-semibold ${st.done ? 'bg-success text-success-foreground' : 'bg-default text-muted'}`}>
+          {st.done ? <I name="check" size={14}/> : i + 1}</motion.span>
+        <span className={`text-sm ${st.done ? 'text-foreground' : 'text-muted'}`}>{st.label}</span>
+        {i < steps.length - 1 && <span aria-hidden className="mx-1 hidden h-px w-8 bg-separator sm:block"/>}
+      </li>)}
+    </ol>
     <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_22rem]">
       <div className="flex flex-col gap-6">
         <Section title={t('location')}>
@@ -91,14 +122,16 @@ export default function Order() {
             <Radio value="custom" isDisabled={!custom}><Radio.Content><Radio.Control><Radio.Indicator/></Radio.Control>{t('custom')}{!custom && ` (${t('noCustom')})`}</Radio.Content></Radio>
           </RadioGroup>
           {d.type === 'package' && <RadioGroup aria-label={t('package')} value={d.packageId} onChange={(v) => d.set({ packageId: v })} className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-            {packages.map((p) => <Radio key={p.id} value={p.id} aria-label={t('packageOption', { name: p.name, vcpu: p.vcpu, memory: gb(p.memoryMb), disk: p.diskGb, price: money(p.priceMonthly, p.currency) })}
-              className="group rounded-xl border border-border p-4 transition-colors duration-150 data-[selected=true]:border-accent data-[selected=true]:bg-accent-soft">
+            {packages.map((p) => <Radio key={p.id} value={p.id} isDisabled={!!blocked(p)} aria-label={t('packageOption', { name: p.name, vcpu: p.vcpu, memory: gb(p.memoryMb), disk: p.diskGb, price: money(p.priceMonthly, p.currency) })}
+              className="group relative rounded-xl border border-border p-4 transition-all duration-150 hover:-translate-y-0.5 hover:shadow-md data-[disabled=true]:translate-y-0 data-[disabled=true]:opacity-60 data-[disabled=true]:shadow-none data-[selected=true]:border-accent data-[selected=true]:bg-accent-soft">
+              {bestValue === p.id && <span className="absolute -top-2.5 right-3 rounded-full bg-success px-2 py-0.5 text-[10px] font-semibold uppercase text-success-foreground">{t('bestValue')}</span>}
               <Radio.Content className="flex w-full items-start gap-3">
                 <Radio.Control className="mt-0.5"><Radio.Indicator/></Radio.Control>
                 <span className="flex flex-col gap-1">
                   <span className="font-semibold">{p.name}</span>
                   <span className="text-xs text-muted">{t('shape', { vcpu: p.vcpu, memory: gb(p.memoryMb), disk: p.diskGb })}</span>
                   <span className="text-lg font-semibold tabular-nums">{money(p.priceMonthly, p.currency)}<span className="text-xs font-normal text-muted"> / {t('perMonth')}</span></span>
+                  {blocked(p) && <span className="flex items-center gap-1 text-xs text-warning"><I name="triangle-alert" size={12}/>{blocked(p)}</span>}
                 </span>
               </Radio.Content>
             </Radio>)}
@@ -115,7 +148,11 @@ export default function Order() {
 
         <Section title={t('access')}>
           <div className="flex flex-col gap-4">
-            <TextInput label={t('name')} value={d.name} onChange={(v) => { d.set({ name: v }); setNameError(undefined); }} help={t('nameHelp')} error={nameError ?? quoteField('name')} autoComplete="off" spellCheck={false}/>
+            <div className="flex items-start gap-2">
+              <TextInput className="flex-1" label={t('name')} value={d.name} onChange={(v) => { d.set({ name: v.toLowerCase() }); setNameError(undefined); }} help={t('nameHelp')}
+                error={nameError ?? (nameTaken ? field('NAME_TAKEN') : undefined) ?? quoteField('name')} autoComplete="off" spellCheck={false}/>
+              <Button className="mt-6" variant="secondary" onPress={() => { d.set({ name: suggest() }); setNameError(undefined); }}><I name="sparkles" size={16}/>{t('suggest')}</Button>
+            </div>
             {keys.length === 0 ? <Notice tone="warning">{t('noKeys')} <ButtonLink href="/account" size="sm" variant="secondary" className="ml-2">{t('manageKeys')}</ButtonLink></Notice>
               : <CheckboxList label={t('sshKeys')} value={d.sshKeyIds} onChange={(v) => d.set({ sshKeyIds: v })} error={quoteField('sshKeyIds')}
                   options={keys.map((k) => ({ id: k.id, label: k.name }))}/>}

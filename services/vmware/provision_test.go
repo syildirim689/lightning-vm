@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/base64"
 	"strings"
 	"testing"
 	"time"
@@ -150,5 +151,33 @@ func TestStandaloneESXiCannotClone(t *testing.T) {
 		TLS: TLSSettings{Mode: "pinned", SHA256: fingerprint(srv.Certificate().Raw)}}, Name: "lvm-x", Template: "vm-1", Pool: "p", Datastore: "d", Network: "n"})
 	if classify(err).Code != "PROVISIONING_NOT_SUPPORTED" {
 		t.Fatalf("got %v", err)
+	}
+}
+
+// Before vCenter 7.0U3 there is no native cloud-init customization: the same metadata and user data go
+// into guestinfo.* extraConfig for cloud-init's VMware datasource, and no customization spec is sent.
+func TestCloneWithGuestinfo(t *testing.T) {
+	e := setupVPX(t)
+	ctx := context.Background()
+	out, err := cloneVM(ctx, testGuard(), CloneRequest{Request: e.req, Name: "lvm-s3", Template: e.template, Pool: e.pool, Datastore: e.store, Network: e.network,
+		VCPU: 1, MemoryMB: 1024, DiskGB: 10, Metadata: metadata, Userdata: "#cloud-config\n", ServerID: "s3", Customization: "guestinfo"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	done := waitTask(t, e, out["task"].(string))
+	if done.State != "success" {
+		t.Fatalf("clone failed: %+v", done)
+	}
+	var cfg mo.VirtualMachine
+	ref := types.ManagedObjectReference{Type: "VirtualMachine", Value: done.VM}
+	_ = object.NewVirtualMachine(e.c, ref).Properties(ctx, ref, []string{"config.extraConfig"}, &cfg)
+	got := map[string]string{}
+	for _, o := range cfg.Config.ExtraConfig {
+		kv := o.GetOptionValue()
+		got[kv.Key], _ = kv.Value.(string)
+	}
+	raw, _ := base64.StdEncoding.DecodeString(got["guestinfo.metadata"])
+	if string(raw) != metadata || got["guestinfo.metadata.encoding"] != "base64" || got["guestinfo.userdata.encoding"] != "base64" || got["lightning.server-id"] != "s3" {
+		t.Fatalf("guestinfo not set: %v", got)
 	}
 }

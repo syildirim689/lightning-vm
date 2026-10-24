@@ -5,16 +5,21 @@ import { isIP } from 'node:net';
 import type { PoolClient } from 'pg';
 import { pool } from './db';
 import { apiError } from './errors';
-import { AdminGuard, audit, type AuthedRequest } from './auth';
+import { audit, type AuthedRequest } from './auth';
+import { Can, PermissionGuard } from './rbac';
 import { decryptSecret, encryptSecret } from './secrets';
 
 type TlsSettings = { mode: 'system' | 'ca' | 'pinned'; caPem?: string; sha256?: string };
-type Target = { host: string; port: number; username: string; password: string; tls: TlsSettings };
+type Target = { host: string; port: number; username: string; password: string; tls: TlsSettings; apiVersion?: string };
+type Compat = { apiVersion: string; customization: 'cloudinit' | 'guestinfo' | 'none'; clone: boolean; consoleUrl: boolean; support: string };
 type Discovery = {
   product: { kind: 'esxi' | 'vcenter'; instanceUuid: string } & Record<string, string>;
   licenses: unknown[]; writeApi: string; privileges: Record<string, boolean>; operations: Record<string, boolean>; warnings: string[];
-  hosts: { hardwareUuid: string; name: string }[]; datastores: unknown[]; networks: unknown[]; compute: unknown[]; vms: unknown[];
+  hosts: { hardwareUuid: string; name: string }[]; datastores: unknown[]; networks: unknown[]; compute: unknown[]; vms: unknown[]; compat: Compat;
 };
+// vSphere API versions an admin may pin (Broadcom API reference per release); empty = what the endpoint reports.
+export const apiVersions = ['9.0.0.0', '8.0.3.0', '8.0.2.0', '8.0.1.0', '8.0.0.1', '7.0.3.0', '7.0.2.0', '7.0.1.0', '7.0.0.0', '6.7.3', '6.7.2', '6.7.1', '6.7', '6.5', '6.0'];
+const customizations = ['auto', 'cloudinit', 'guestinfo'];
 
 const hostnamePattern = /^(?=.{1,253}$)([a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)(\.[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$/;
 
@@ -32,8 +37,10 @@ function readTarget(body: unknown, requirePassword = true): Target & { name: str
   if (!['system', 'ca', 'pinned'].includes(tls.mode as string)) fields.tlsMode = 'INVALID_VALUE';
   if (tls.mode === 'ca' && (typeof tls.caPem !== 'string' || !tls.caPem.includes('BEGIN CERTIFICATE') || tls.caPem.length > 20000)) fields.caPem = 'INVALID_CERTIFICATE';
   if (tls.mode === 'pinned' && (typeof tls.sha256 !== 'string' || !/^[0-9a-f]{64}$/.test(tls.sha256))) fields.sha256 = 'INVALID_FINGERPRINT';
+  if (b.apiVersion !== undefined && b.apiVersion !== '' && !apiVersions.includes(b.apiVersion as string)) fields.apiVersion = 'INVALID_VALUE';
   if (Object.keys(fields).length) throw apiError(400, 'VALIDATION_FAILED', 'Invalid input', fields);
   return {
+    ...(b.apiVersion ? { apiVersion: b.apiVersion as string } : {}),
     name: (b.name as string).trim(), host: (b.host as string).toLowerCase(), port, username: b.username as string, password: (b.password as string) ?? '',
     tls: { mode: tls.mode as TlsSettings['mode'], ...(tls.mode === 'ca' && { caPem: tls.caPem as string }), ...(tls.mode === 'pinned' && { sha256: tls.sha256 as string }) },
   };
@@ -56,13 +63,22 @@ export async function callAdapter<T>(path: string, body: unknown, timeoutMs: num
 // Rebuilds the adapter request from a stored connection row, decrypting the password in memory only.
 export function storedTarget(c: Record<string, string | number>): Target {
   return { host: String(c.host), port: Number(c.port), username: String(c.username), password: decryptSecret(String(c.password_enc), String(c.id)),
+    ...(c.api_version ? { apiVersion: String(c.api_version) } : {}),
     tls: { mode: c.tls_mode as TlsSettings['mode'], ...(c.tls_ca_pem && { caPem: String(c.tls_ca_pem) }), ...(c.tls_sha256 && { sha256: String(c.tls_sha256) }) } };
 }
 
 const discover = (target: Target) => callAdapter<Discovery>('/v1/discover', target, 70_000);
 
+// The admin's customization choice may only use what the endpoint supports ("cloudinit" needs vCenter 7.0U3+).
+function readCustomization(body: unknown, compat?: Compat | null) {
+  const v = ((body ?? {}) as Record<string, unknown>).customization ?? 'auto';
+  if (!customizations.includes(v as string)) throw apiError(400, 'VALIDATION_FAILED', 'Invalid input', { customization: 'INVALID_VALUE' });
+  if (v === 'cloudinit' && compat && compat.customization !== 'cloudinit') throw apiError(400, 'VALIDATION_FAILED', 'Invalid input', { customization: 'NOT_SUPPORTED_BY_VERSION' });
+  return v as string;
+}
+
 function summary(d: Discovery) {
-  return { product: d.product, writeApi: d.writeApi, operations: d.operations, warnings: d.warnings,
+  return { product: d.product, writeApi: d.writeApi, operations: d.operations, warnings: d.warnings, compat: d.compat,
     counts: { hosts: d.hosts.length, datastores: d.datastores.length, networks: d.networks.length, compute: d.compute.length, vms: d.vms.length } };
 }
 
@@ -116,17 +132,17 @@ async function inTransaction<T>(work: (client: PoolClient) => Promise<T>) {
 }
 
 const connectionColumns = `id, name, kind, host, port, username, tls_mode AS "tlsMode", tls_sha256 AS "tlsSha256", product, licenses,
-  write_api AS "writeApi", privileges, operations, warnings, status, last_error_code AS "lastErrorCode", last_discovered_at AS "lastDiscoveredAt", created_at AS "createdAt"`;
+  write_api AS "writeApi", privileges, operations, warnings, api_version AS "apiVersion", customization, compat, status, last_error_code AS "lastErrorCode", last_discovered_at AS "lastDiscoveredAt", created_at AS "createdAt"`;
 
-@Controller('admin/vmware') @UseGuards(AdminGuard)
+@Controller('admin/vmware') @UseGuards(PermissionGuard)
 export class VmwareController {
   // Connects and discovers without saving anything: the wizard's and the form's "Test connection".
-  @Post('test') @HttpCode(200)
+  @Post('test') @HttpCode(200) @Can('vmware.manage')
   async test(@Body() body: unknown) {
     return summary(await discover(readTarget(body)));
   }
 
-  @Get('connections')
+  @Get('connections') @Can('vmware.view', 'vmware.manage', 'catalog.manage', 'dashboard.view')
   async list() {
     const { rows } = await pool.query(`SELECT ${connectionColumns},
       (SELECT count(*)::int FROM vmware_hosts h WHERE h.connection_id = c.id) AS hosts,
@@ -135,26 +151,27 @@ export class VmwareController {
     return { connections: rows };
   }
 
-  @Post('connections') @HttpCode(201)
+  @Post('connections') @HttpCode(201) @Can('vmware.manage')
   async create(@Req() req: AuthedRequest, @Body() body: unknown) {
     const target = readTarget(body);
     const d = await discover(target); // outside any transaction: this can take seconds
+    const customization = readCustomization(body, d.compat);
     const id = randomUUID();
     await inTransaction(async (client) => {
       await client.query(
         `INSERT INTO vmware_connections (id, name, kind, host, port, username, password_enc, tls_mode, tls_ca_pem, tls_sha256, instance_uuid,
-           product, licenses, write_api, privileges, operations, warnings, last_discovered_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, now())`,
+           product, licenses, write_api, privileges, operations, warnings, last_discovered_at, api_version, customization, compat)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, now(), $18, $19, $20)`,
         [id, target.name, d.product.kind, target.host, target.port, target.username, encryptSecret(target.password, id), target.tls.mode,
           target.tls.caPem ?? null, target.tls.sha256 ?? null, d.product.instanceUuid || null, d.product, JSON.stringify(d.licenses ?? []), d.writeApi,
-          d.privileges, d.operations, JSON.stringify(d.warnings)]);
+          d.privileges, d.operations, JSON.stringify(d.warnings), target.apiVersion ?? null, customization, d.compat ?? null]);
       await storeInventory(client, id, d);
     });
     await audit(req, 'vmware.connection_created', 'success', req.user.id, { id, name: target.name, host: target.host, kind: d.product.kind });
     return { id, ...summary(d) };
   }
 
-  @Get('connections/:id')
+  @Get('connections/:id') @Can('vmware.view', 'vmware.manage', 'catalog.manage')
   async detail(@Param('id', ParseUUIDPipe) id: string) {
     const { rows: [connection] } = await pool.query(`SELECT ${connectionColumns} FROM vmware_connections c WHERE id = $1`, [id]);
     if (!connection) throw apiError(404, 'NOT_FOUND', 'Unknown connection');
@@ -175,7 +192,7 @@ export class VmwareController {
     return { connection, capacity, hosts, datastores, networks, compute, vms };
   }
 
-  @Post('connections/:id/discover') @HttpCode(200)
+  @Post('connections/:id/discover') @HttpCode(200) @Can('vmware.manage')
   async refresh(@Req() req: AuthedRequest, @Param('id', ParseUUIDPipe) id: string) {
     const { rows: [c] } = await pool.query('SELECT * FROM vmware_connections WHERE id = $1', [id]);
     if (!c) throw apiError(404, 'NOT_FOUND', 'Unknown connection');
@@ -190,16 +207,32 @@ export class VmwareController {
     }
     await inTransaction(async (client) => {
       await client.query(`UPDATE vmware_connections SET status = 'ok', last_error_code = NULL, product = $2, licenses = $3, write_api = $4,
-        privileges = $5, operations = $6, warnings = $7, last_discovered_at = now(), updated_at = now() WHERE id = $1`,
-        [id, d.product, JSON.stringify(d.licenses ?? []), d.writeApi, d.privileges, d.operations, JSON.stringify(d.warnings)]);
+        privileges = $5, operations = $6, warnings = $7, compat = $8, last_discovered_at = now(), updated_at = now() WHERE id = $1`,
+        [id, d.product, JSON.stringify(d.licenses ?? []), d.writeApi, d.privileges, d.operations, JSON.stringify(d.warnings), d.compat ?? null]);
       await storeInventory(client, id, d);
     });
     await audit(req, 'vmware.discovery', 'success', req.user.id, { id });
     return summary(d);
   }
 
+  // Version pinning and the customization method of an existing connection; checked against a fresh discovery.
+  @Post('connections/:id/compat') @HttpCode(200) @Can('vmware.manage')
+  async setCompat(@Req() req: AuthedRequest, @Param('id', ParseUUIDPipe) id: string, @Body() body: unknown) {
+    const { rows: [c] } = await pool.query('SELECT * FROM vmware_connections WHERE id = $1', [id]);
+    if (!c) throw apiError(404, 'NOT_FOUND', 'Unknown connection');
+    const b = (body ?? {}) as Record<string, unknown>;
+    const apiVersion = b.apiVersion === '' || b.apiVersion === undefined || b.apiVersion === null ? null : String(b.apiVersion);
+    if (apiVersion && !apiVersions.includes(apiVersion)) throw apiError(400, 'VALIDATION_FAILED', 'Invalid input', { apiVersion: 'INVALID_VALUE' });
+    const { apiVersion: _old, ...base } = storedTarget(c);
+    const d = await discover({ ...base, ...(apiVersion ? { apiVersion } : {}) });
+    const customization = readCustomization(body, d.compat);
+    await pool.query('UPDATE vmware_connections SET api_version = $2, customization = $3, compat = $4, updated_at = now() WHERE id = $1', [id, apiVersion, customization, d.compat]);
+    await audit(req, 'vmware.compat_changed', 'success', req.user.id, { id, apiVersion, customization });
+    return { apiVersion, customization, compat: d.compat };
+  }
+
   // Forgets the connection and its cached inventory. Nothing is changed on the ESXi/vCenter side.
-  @Delete('connections/:id') @HttpCode(204)
+  @Delete('connections/:id') @HttpCode(204) @Can('vmware.manage')
   async remove(@Req() req: AuthedRequest, @Param('id', ParseUUIDPipe) id: string) {
     // Pools and images reference connections with ON DELETE RESTRICT: report that, not a 500.
     const { rows: [c] } = await pool.query('DELETE FROM vmware_connections WHERE id = $1 RETURNING name', [id])

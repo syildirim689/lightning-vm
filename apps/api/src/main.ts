@@ -9,7 +9,13 @@ import { closeConnections, pool, redis } from './db';
 import { apiError, ErrorCodeFilter } from './errors';
 import { logEvent } from './log';
 import { csrfRejected } from './security';
-import { AuthController, PublicController } from './auth';
+import { AuthController } from './auth';
+import { PublicController, SettingsController, SmsSettingsController } from './settings';
+import { RolesController } from './rbac';
+import { NotificationPolicyController, NotificationsController } from './notifications';
+import { startNotificationWorker } from './notify';
+import { ensureRoles } from './permissions';
+import { InsightsController, startInsightAlerts, StaffInsightsController } from './insights';
 import { fromNodeHeaders } from 'better-auth/node';
 import { getAuth } from './better-auth';
 import { SetupController } from './setup';
@@ -35,7 +41,9 @@ class HealthController {
   }
 }
 
-@Module({ controllers: [HealthController, AuthController, PublicController, SetupController, AdminController, VmwareController, ConsoleController, CatalogAdminController, CatalogController, ServersController, ServersAdminController] })
+@Module({ controllers: [HealthController, AuthController, PublicController, SetupController, AdminController, VmwareController, ConsoleController, CatalogAdminController, CatalogController, ServersController, ServersAdminController,
+  SettingsController, SmsSettingsController, RolesController, NotificationsController, NotificationPolicyController,
+  InsightsController, StaffInsightsController] })
 class AppModule {}
 
 // Only Caddy on the Compose network talks to the API; its X-Forwarded-* headers are trusted.
@@ -74,12 +82,16 @@ export async function createApp() {
     },
   });
   app.useGlobalFilters(new ErrorCodeFilter());
+  // better-auth asks synchronously whether a role exists; load them before the first request.
+  await ensureRoles().catch(() => logEvent('error', 'roles_load_failed'));
   return app;
 }
 
 async function main() {
   const app = await createApp();
   app.enableShutdownHooks();
+  startNotificationWorker();
+  startInsightAlerts();
   await app.listen(4000, '0.0.0.0');
   process.on('SIGTERM', closeConnections); process.on('SIGINT', closeConnections);
 }

@@ -1,0 +1,120 @@
+"use client";
+// Roles: named permission sets. Built-in ones can be edited (except Administrator, which always has
+// everything); custom ones can be added and removed. Users get roles on the Users page.
+import { Button, Card, Checkbox, Chip, Modal, toast } from '@heroui/react';
+import { useQueryClient } from '@tanstack/react-query';
+import { motion } from 'motion/react';
+import { useTranslations } from 'next-intl';
+import { useState } from 'react';
+import { I } from '../../../../components/icon';
+import { ConfirmButton, Notice, PageHeader, TextInput } from '../../../../components/ui';
+import { apiFetch, useErrorText } from '../../../../lib/api';
+import { useMe } from '../../../../lib/me';
+import { can } from '../../../../lib/permissions';
+import { useApiQuery } from '../../../../lib/query';
+
+type Role = { key: string; name: string; description: string; permissions: string[]; builtin: boolean; members: number };
+
+export default function Roles() {
+  const t = useTranslations('Roles');
+  const tp = useTranslations('Permissions');
+  const { error } = useErrorText();
+  const client = useQueryClient();
+  const me = useMe();
+  const manage = can(me?.permissions, 'roles.manage');
+  const roles = useApiQuery<{ roles: Role[] }>(['admin', 'roles'], '/admin/roles').data?.roles;
+  const groups = useApiQuery<{ groups: Record<string, string[]> }>(['admin', 'permissions'], '/admin/permissions').data?.groups;
+  const [editing, setEditing] = useState<Role | 'new' | null>(null);
+  const remove = async (key: string) => { await apiFetch(`/admin/roles/${key}`, { method: 'DELETE' }).catch((e) => { toast.danger(error(e)); throw e; }); toast.success(t('removed')); client.invalidateQueries({ queryKey: ['admin', 'roles'] }); };
+
+  return <>
+    <PageHeader eyebrow={t('eyebrow')} title={t('title')} description={t('intro')} actions={manage && <Button onPress={() => setEditing('new')}><I name="plus" size={16}/>{t('new')}</Button>}/>
+    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+      {(roles ?? []).map((r, i) => <motion.div key={r.key} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.04 }}>
+        <Card className="h-full">
+          <Card.Header className="flex flex-row items-start justify-between gap-2">
+            <div className="min-w-0">
+              <Card.Title className="flex items-center gap-2 text-base font-semibold">{t.has(`builtinName.${r.key}` as 'builtinName.admin') ? t(`builtinName.${r.key}` as 'builtinName.admin') : r.name}{r.builtin && <Chip size="sm" variant="soft">{t('builtin')}</Chip>}</Card.Title>
+              <Card.Description className="text-xs text-muted"><code>{r.key}</code> · {t('members', { n: r.members })}</Card.Description>
+            </div>
+            <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-accent-soft text-accent"><I name="shield-check" size={18}/></span>
+          </Card.Header>
+          <Card.Content className="flex flex-1 flex-col gap-3">
+            <p className="text-sm text-muted">{t.has(`desc.${r.key}` as 'desc.admin') ? t(`desc.${r.key}` as 'desc.admin') : r.description || t('noDescription')}</p>
+            <div className="flex flex-wrap gap-1">
+              {r.permissions.includes('*') ? <Chip size="sm" color="accent" variant="soft">{t('everything')}</Chip>
+                : r.permissions.length === 0 ? <span className="text-xs text-muted">{t('nothing')}</span>
+                : r.permissions.map((p) => <Chip key={p} size="sm" variant="secondary">{tp(`p.${p.replace('.', '_')}` as 'p.servers_create')}</Chip>)}
+            </div>
+          </Card.Content>
+          {manage && r.key !== 'admin' && <Card.Footer className="flex justify-end gap-2">
+            {r.key !== 'user' && <ConfirmButton size="sm" variant="ghost" icon={<I name="trash-2" size={15}/>} label={t('remove')} title={t('removeTitle', { name: r.name })}
+              body={t('removeBody', { n: r.members })} confirmLabel={t('remove')} cancelLabel={t('cancel')} onConfirm={() => remove(r.key)}/>}
+            <Button size="sm" variant="secondary" onPress={() => setEditing(r)}><I name="pencil" size={15}/>{t('edit')}</Button>
+          </Card.Footer>}
+        </Card>
+      </motion.div>)}
+    </div>
+    {editing && groups && <RoleEditor role={editing === 'new' ? null : editing} groups={groups} mine={me?.permissions ?? []} onClose={() => setEditing(null)}/>}
+  </>;
+}
+
+function RoleEditor({ role, groups, mine, onClose }: { role: Role | null; groups: Record<string, string[]>; mine: string[]; onClose: () => void }) {
+  const t = useTranslations('Roles');
+  const tp = useTranslations('Permissions');
+  const { error, field } = useErrorText();
+  const client = useQueryClient();
+  const [v, setV] = useState({ key: role?.key ?? '', name: role?.name ?? '', description: role?.description ?? '', permissions: role?.permissions ?? [] });
+  const [fields, setFields] = useState<Record<string, string>>({});
+  const [busy, setBusy] = useState(false);
+  const toggle = (p: string, on: boolean) => setV((x) => ({ ...x, permissions: on ? [...x.permissions, p] : x.permissions.filter((y) => y !== p) }));
+  // Permissions you do not hold cannot be granted (the API refuses them too).
+  const grantable = (p: string) => mine.includes('*') || mine.includes(p);
+  async function save() {
+    setBusy(true); setFields({});
+    try {
+      await apiFetch(role ? `/admin/roles/${role.key}` : '/admin/roles', { method: role ? 'PUT' : 'POST', body: v });
+      toast.success(t('saved')); client.invalidateQueries({ queryKey: ['admin', 'roles'] }); onClose();
+    } catch (e) { setFields((e as { fields?: Record<string, string> }).fields ?? {}); toast.danger(error(e)); } finally { setBusy(false); }
+  }
+  return <Modal.Backdrop isOpen onOpenChange={(o) => { if (!o) onClose(); }}>
+    <Modal.Container size="lg" scroll="inside">
+      <Modal.Dialog>
+        <Modal.CloseTrigger/>
+        <Modal.Header><Modal.Heading>{role ? t('editTitle', { name: role.name }) : t('new')}</Modal.Heading></Modal.Header>
+        <Modal.Body className="flex flex-col gap-5">
+          <fieldset className="grid gap-4 sm:grid-cols-2">
+            <legend className="mb-2 text-sm font-semibold">{t('identity')}</legend>
+            <TextInput label={t('name')} value={v.name} onChange={(name) => setV((x) => ({ ...x, name, key: role ? x.key : name.toLocaleLowerCase('en').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 32) }))} error={field(fields.name)} isRequired/>
+            <TextInput label={t('key')} value={v.key} onChange={(key) => setV((x) => ({ ...x, key }))} isDisabled={!!role} error={field(fields.key)} help={t('keyHelp')} spellCheck={false}/>
+            <TextInput className="sm:col-span-2" label={t('description')} value={v.description} onChange={(description) => setV((x) => ({ ...x, description }))} maxLength={300}/>
+          </fieldset>
+          <fieldset className="flex flex-col gap-3">
+            <legend className="mb-1 text-sm font-semibold">{t('permissions')} <span className="font-normal text-muted">· {t('selected', { n: v.permissions.length })}</span></legend>
+            <div className="grid gap-3 md:grid-cols-2">
+              {Object.entries(groups).map(([g, list]) => <div key={g} className="rounded-xl border border-border p-3">
+                <div className="mb-2 flex items-center justify-between">
+                  <p className="text-xs font-semibold uppercase tracking-wider text-muted">{tp(`group.${g}` as 'group.servers')}</p>
+                  <button type="button" className="text-xs text-accent hover:underline" onClick={() => {
+                    const all = list.filter(grantable).every((p) => v.permissions.includes(p));
+                    setV((x) => ({ ...x, permissions: all ? x.permissions.filter((p) => !list.includes(p)) : [...new Set([...x.permissions, ...list.filter(grantable)])] }));
+                  }}>{t('toggleGroup')}</button>
+                </div>
+                <ul className="flex flex-col gap-2">{list.map((p) => <li key={p}>
+                  <Checkbox isSelected={v.permissions.includes(p)} onChange={(on) => toggle(p, on)} isDisabled={!grantable(p)}>
+                    <Checkbox.Content><Checkbox.Control><Checkbox.Indicator/></Checkbox.Control>
+                      <span className="flex flex-col"><span className="text-sm">{tp(`p.${p.replace('.', '_')}` as 'p.servers_create')}</span>
+                        <span className="text-xs text-muted">{tp(`help.${p.replace('.', '_')}` as 'help.servers_create')}</span></span>
+                    </Checkbox.Content>
+                  </Checkbox>
+                </li>)}</ul>
+              </div>)}
+            </div>
+            {fields.permissions && <Notice tone="danger">{field(fields.permissions)}</Notice>}
+          </fieldset>
+        </Modal.Body>
+        <Modal.Footer className="flex justify-end gap-2"><Button variant="tertiary" onPress={onClose}>{t('cancel')}</Button><Button isPending={busy} onPress={save}>{t('save')}</Button></Modal.Footer>
+      </Modal.Dialog>
+    </Modal.Container>
+  </Modal.Backdrop>;
+}

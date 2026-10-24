@@ -5,11 +5,13 @@ import NextLink from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useFormatter, useTranslations } from 'next-intl';
 import { useAutoAnimate } from '@formkit/auto-animate/react';
+import { motion } from 'motion/react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
 import { apiFetch, useErrorText } from '../../lib/api';
 import { useApiForm } from '../../lib/form';
 import { useApiAction, useApiQuery } from '../../lib/query';
+import ServerMetrics from './metrics';
 import { ButtonLink, ConfirmButton, DataTable, Empty, Mono, Notice, PageHeader, Section, StatusChip, TextInput, type Tone } from '../../components/ui';
 
 export type Server = { id: string; name: string; state: string; powerState: string; guestReady: boolean; vcpu: number; memoryMb: number; diskGb: number;
@@ -74,8 +76,8 @@ export function ServerList() {
   if (!servers) return <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3" aria-busy>{[0, 1, 2].map((i) => <Card key={i} className="h-36 animate-pulse"><span className="sr-only">…</span></Card>)}</div>;
   if (!servers.length) return <Empty icon={<I name="server" size={28}/>} title={t('list.empty')}><ButtonLink href="/order" className="mt-3"><I name="plus" size={16}/>{tn('newServer')}</ButtonLink></Empty>;
   return <ul ref={gridRef} className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3" aria-label={t('list.title')}>
-    {servers.map((s) => <li key={s.id}>
-      <NextLink href={`/servers/${s.id}`} className="block rounded-xl outline-offset-2 transition-transform duration-150 hover:-translate-y-0.5 focus-visible:outline-2">
+    {servers.map((s, i) => <motion.li key={s.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: Math.min(i, 8) * 0.05, duration: 0.25 }}>
+      <NextLink href={`/servers/${s.id}`} className="block rounded-xl outline-offset-2 transition-all duration-200 hover:-translate-y-1 hover:shadow-lg focus-visible:outline-2">
         <Card className="h-full">
           <Card.Header className="flex flex-row items-start justify-between gap-2">
             <div className="min-w-0"><Card.Title className="truncate text-base font-semibold">{s.name}</Card.Title>
@@ -89,7 +91,7 @@ export function ServerList() {
           </Card.Content>
         </Card>
       </NextLink>
-    </li>)}
+    </motion.li>)}
   </ul>;
 }
 
@@ -113,7 +115,7 @@ export function ServerDetail({ id }: { id: string }) {
   // The same Idempotency-Key is kept until the server answers; only a network failure keeps it for a retry.
   async function act(path: string, method: string, body?: object) {
     setMessage(undefined);
-    try { await apiFetch(path, { method, body, headers: { 'idempotency-key': intent.key() } }); intent.reset(); client.invalidateQueries({ queryKey: ['servers'] }); }
+    try { await apiFetch(path, { method, body, headers: { 'idempotency-key': intent.key() } }); intent.reset(); client.invalidateQueries({ queryKey: ['servers'] }); client.invalidateQueries({ queryKey: ['tasks'] }); }
     catch (e) { setMessage(error(e)); toast.danger(error(e)); if ((e as { code?: string }).code !== 'NETWORK') intent.reset(); }
   }
   const canAct = !open && ['ready', 'error'].includes(s.state);
@@ -158,7 +160,7 @@ export function ServerDetail({ id }: { id: string }) {
       </Section>
     </div>
 
-    <Section title={t('detail.metrics')}><p className="text-sm text-muted">{t('metricsEmpty')}</p></Section>
+    <ServerMetrics id={id} live={s.state === 'ready' && s.powerState === 'poweredOn'}/>
 
     <Section title={t('detail.history')}>
       <DataTable label={t('detail.history')} rows={operations} rowKey={(o) => o.id}

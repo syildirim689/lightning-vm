@@ -8,7 +8,11 @@ const log = (level, event, fields = {}) => console.log(JSON.stringify({ level, s
 pool.on('error', () => log('error', 'postgres_unavailable'));
 // BullMQ 6 treats ioredis as optional; in ESM it must receive a constructed client.
 const redis = new Redis({ host: process.env.REDIS_HOST || 'redis', db: Number(process.env.REDIS_DB) || 0, password: process.env.REDIS_PASSWORD, maxRetriesPerRequest: null });
-const worker = new Worker('operations', (job) => processOperation(pool, job, log), { connection: redis, concurrency: 4 });
+// Results go to the API's notification queue; a lost notification never fails the operation.
+const notifications = new Queue('notifications', { connection: redis });
+const notify = (event, to, data) => notifications.add('notify', { event, to, data: Object.fromEntries(Object.entries(data).map(([k, v]) => [k, String(v ?? '')])) },
+  { attempts: 3, backoff: { type: 'exponential', delay: 10_000 }, removeOnComplete: true, removeOnFail: 100 }).catch(() => log('error', 'notify_enqueue_failed', { event }));
+const worker = new Worker('operations', (job) => processOperation(pool, job, log, notify), { connection: redis, concurrency: 4 });
 const operations = new Queue('operations', { connection: redis });
 const jobOptions = { attempts: 6, backoff: { type: 'exponential', delay: 5000 }, removeOnComplete: true, removeOnFail: true };
 
@@ -26,7 +30,7 @@ async function recover() {
       count++;
     }
     if (count) log('info', 'operations_recovered', { count });
-  } catch { log('error', 'recovery_failed'); }
+  } catch (e) { log('error', 'recovery_failed', { code: e.code, error: String(e.message).slice(0, 200) }); }
 }
 const recoveryTimer = setInterval(recover, (Number(process.env.RECOVERY_SECONDS) || 60) * 1000);
 
@@ -37,7 +41,7 @@ async function reconcileOnce() {
 }
 const reconcileTimer = setInterval(reconcileOnce, (Number(process.env.RECONCILE_MINUTES) || 5) * 60000);
 const maintenance = new Worker('maintenance', () => reconcileOnce(), { connection: redis.duplicate(), concurrency: 1 });
-worker.on('error', () => log('error', 'queue_error'));
+worker.on('error', (e) => log('error', 'queue_error', { error: String(e?.message).slice(0, 200) }));
 
 async function heartbeat() {
   try {

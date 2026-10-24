@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/base64"
 	"strings"
 
 	"github.com/vmware/govmomi/fault"
@@ -28,6 +29,9 @@ type CloneRequest struct {
 	Metadata  string `json:"metadata"` // cloud-init metadata (instance id, hostname, network)
 	Userdata  string `json:"userdata"` // cloud-init user data (SSH keys); never logged
 	ServerID  string `json:"serverId"`
+	// "cloudinit": vCenter's native cloud-init customization (7.0U3+). "guestinfo": the same data in
+	// guestinfo.* extraConfig for cloud-init's VMware datasource (any version; cloud-init 21.3+ in the template).
+	Customization string `json:"customization"`
 }
 
 type VMState struct {
@@ -149,17 +153,25 @@ func cloneVM(ctx context.Context, g *netGuard, r CloneRequest) (map[string]any, 
 	}
 	pool := types.ManagedObjectReference{Type: "ResourcePool", Value: r.Pool}
 	ds := types.ManagedObjectReference{Type: "Datastore", Value: r.Datastore}
+	extra := []types.BaseOptionValue{&types.OptionValue{Key: "lightning.server-id", Value: r.ServerID}}
 	spec := types.VirtualMachineCloneSpec{
 		Location: types.VirtualMachineRelocateSpec{Pool: &pool, Datastore: &ds, DeviceChange: changes},
 		PowerOn:  false,
 		Config: &types.VirtualMachineConfigSpec{NumCPUs: r.VCPU, MemoryMB: r.MemoryMB,
-			Annotation:  "Managed by Lightning VM (server " + r.ServerID + ")",
-			ExtraConfig: []types.BaseOptionValue{&types.OptionValue{Key: "lightning.server-id", Value: r.ServerID}}},
-		Customization: &types.CustomizationSpec{
+			Annotation: "Managed by Lightning VM (server " + r.ServerID + ")"},
+	}
+	if r.Customization == "guestinfo" {
+		b64 := func(s string) string { return base64.StdEncoding.EncodeToString([]byte(s)) }
+		extra = append(extra,
+			&types.OptionValue{Key: "guestinfo.metadata", Value: b64(r.Metadata)}, &types.OptionValue{Key: "guestinfo.metadata.encoding", Value: "base64"},
+			&types.OptionValue{Key: "guestinfo.userdata", Value: b64(r.Userdata)}, &types.OptionValue{Key: "guestinfo.userdata.encoding", Value: "base64"})
+	} else {
+		spec.Customization = &types.CustomizationSpec{
 			Identity:         &types.CustomizationCloudinitPrep{Metadata: r.Metadata, Userdata: r.Userdata},
 			GlobalIPSettings: types.CustomizationGlobalIPSettings{},
-		},
+		}
 	}
+	spec.Config.ExtraConfig = extra
 	task, err := template.Clone(ctx, object.NewFolder(c, *tpl.Parent), r.Name, spec)
 	if err != nil {
 		return nil, classify(err)

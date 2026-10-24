@@ -10,7 +10,14 @@ import { ButtonLink, DataTable, Empty, Mono, PageHeader, StatusChip } from '../.
 import ConnectionForm from './connection-form';
 
 export type Connection = { id: string; name: string; kind: string; host: string; port: number; tlsMode: string; writeApi: string; status: string;
-  lastErrorCode: string | null; lastDiscoveredAt: string | null; hosts: number; vms: number; product: { fullName: string }; operations: Record<string, boolean>; warnings: string[] };
+  lastErrorCode: string | null; lastDiscoveredAt: string | null; hosts: number; vms: number; product: { fullName: string }; operations: Record<string, boolean>; warnings: string[];
+  apiVersion: string | null; customization: 'auto' | 'cloudinit' | 'guestinfo'; compat: Compat | null };
+export type Compat = { apiVersion: string; customization: 'cloudinit' | 'guestinfo' | 'none'; clone: boolean; consoleUrl: boolean; support: 'supported' | 'end-of-support' | 'legacy' };
+// The versions an admin may pin; the API accepts the same list.
+export const apiVersions = ['9.0.0.0', '8.0.3.0', '8.0.2.0', '8.0.1.0', '8.0.0.1', '7.0.3.0', '7.0.2.0', '7.0.1.0', '7.0.0.0', '6.7.3', '6.7.2', '6.7.1', '6.7', '6.5', '6.0'];
+export const versionLabel = (v: string) => ({ '9.0.0.0': 'vSphere 9.0', '8.0.3.0': 'vSphere 8.0 U3', '8.0.2.0': 'vSphere 8.0 U2', '8.0.1.0': 'vSphere 8.0 U1', '8.0.0.1': 'vSphere 8.0',
+  '7.0.3.0': 'vSphere 7.0 U3', '7.0.2.0': 'vSphere 7.0 U2', '7.0.1.0': 'vSphere 7.0 U1', '7.0.0.0': 'vSphere 7.0', '6.7.3': 'vSphere 6.7 U3', '6.7.2': 'vSphere 6.7 U2',
+  '6.7.1': 'vSphere 6.7 U1', '6.7': 'vSphere 6.7', '6.5': 'vSphere 6.5', '6.0': 'vSphere 6.0' } as Record<string, string>)[v] ?? v;
 
 export default function Connections({ eyebrow, title, intro }: { eyebrow: string; title: string; intro: string }) {
   const t = useTranslations('Vmware');

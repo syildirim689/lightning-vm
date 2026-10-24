@@ -4,6 +4,8 @@ import NextLink from 'next/link';
 import { useFormatter, useNow, useTranslations } from 'next-intl';
 import { Bar, BarChart, CartesianGrid, Cell, Legend, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { I } from '../../../components/icon';
+import CountUp from '../../../components/count-up';
+import Insights from '../../../components/insights';
 import { DataTable, Notice, PageHeader, Section, Stat, StatusChip } from '../../../components/ui';
 import { useApiQuery } from '../../../lib/query';
 import type { Server } from '../servers-ui';
@@ -12,7 +14,6 @@ type Layer = Record<string, number>;
 type Pool = { id: string; name: string; capacity: { offered: Layer; reserved: Layer; used: Layer; available: Layer } };
 type Operation = { id: string; kind: string; status: string; createdAt: string; serverName: string | null };
 type Connection = { id: string; status: string };
-type Maintenance = { lastSuccessfulBackup: { time: string } | null; lastBackup: { status: string } | null };
 
 const chartColors = { success: 'var(--success)', danger: 'var(--danger)', warning: 'var(--warning)', accent: 'var(--accent)', muted: 'var(--muted)', default: 'color-mix(in oklab, var(--muted) 45%, transparent)' };
 const tooltipStyle = { background: 'var(--overlay)', border: '1px solid var(--border)', borderRadius: 8, color: 'var(--overlay-foreground)', fontSize: 12 };
@@ -30,7 +31,6 @@ export default function Dashboard({ setupOpen }: { setupOpen: boolean }) {
   const packages = useApiQuery<{ packages: unknown[] }>(['catalog', 'packages'], '/admin/packages').data?.packages;
   const images = useApiQuery<{ images: unknown[] }>(['catalog', 'images'], '/admin/images').data?.images;
   const ipPools = useApiQuery<{ ipPools: unknown[] }>(['catalog', 'ip'], '/admin/ip-pools').data?.ipPools;
-  const maintenance = useApiQuery<Maintenance>(['admin', 'maintenance'], '/admin/maintenance').data;
 
   const ready = servers?.filter((s) => s.state === 'ready').length ?? 0;
   const failed24h = ops?.filter((o) => o.status === 'failed' && Date.now() - Date.parse(o.createdAt) < 86_400_000).length ?? 0;
@@ -78,14 +78,13 @@ export default function Dashboard({ setupOpen }: { setupOpen: boolean }) {
     </Section>}
 
     <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
-      <Stat label={t('stat.servers')} value={servers ? `${ready} / ${servers.length}` : '…'} hint={t('stat.serversHint')} icon={<I name="server"/>} tone="success"/>
-      <Stat label={t('stat.capacity')} value={pools ? format.number(freeVcpu) : '…'} hint={t('stat.capacityHint', { offered: format.number(offeredVcpu) })} icon={<I name="cpu"/>} tone="accent"/>
-      <Stat label={t('stat.operations')} value={ops ? open : '…'} hint={t('stat.failed', { n: failed24h })} icon={<I name="activity"/>} tone={failed24h ? 'danger' : 'default'}/>
-      <Stat label={t('stat.connections')} value={connections ? `${connOk} / ${connections.length}` : '…'} hint={t('stat.connectionsHint')} icon={<I name="cable"/>} tone={connections && connOk < connections.length ? 'warning' : 'default'}/>
+      <Stat label={t('stat.servers')} value={servers ? <><CountUp value={ready}/> / <CountUp value={servers.length}/></> : '…'} hint={t('stat.serversHint')} icon={<I name="server"/>} tone="success"/>
+      <Stat label={t('stat.capacity')} value={pools ? <CountUp value={freeVcpu} format={(n) => format.number(Math.round(n))}/> : '…'} hint={t('stat.capacityHint', { offered: format.number(offeredVcpu) })} icon={<I name="cpu"/>} tone="accent"/>
+      <Stat label={t('stat.operations')} value={ops ? <CountUp value={open}/> : '…'} hint={t('stat.failed', { n: failed24h })} icon={<I name="activity"/>} tone={failed24h ? 'danger' : 'default'}/>
+      <Stat label={t('stat.connections')} value={connections ? <><CountUp value={connOk}/> / <CountUp value={connections.length}/></> : '…'} hint={t('stat.connectionsHint')} icon={<I name="cable"/>} tone={connections && connOk < connections.length ? 'warning' : 'default'}/>
     </div>
 
-    {maintenance && !maintenance.lastSuccessfulBackup && <Notice tone="warning" title={t('noBackup')}>{t('noBackupHelp')}</Notice>}
-    {maintenance?.lastBackup?.status === 'failed' && <Notice tone="danger" title={t('backupFailed')}><NextLink href="/admin/system" className="underline">{t('openSystem')}</NextLink></Notice>}
+    <Insights scope="staff"/>
 
     <div className="grid gap-6 xl:grid-cols-3">
       <Card className="xl:col-span-2">

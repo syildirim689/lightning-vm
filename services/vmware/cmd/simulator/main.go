@@ -23,6 +23,9 @@ func main() {
 	hosts := flag.Int("host", 1, "standalone hosts (vCenter only)")
 	clusterHosts := flag.Int("cluster-host", 1, "hosts per cluster (vCenter only)")
 	webmks := flag.String("webmks", "", "TEST ONLY: host:port for a fake WebMKS endpoint returned by AcquireTicket")
+	// vcsim reports API 6.5 by default; its cloud-init customization is what a 7.0U3+ vCenter does, so the
+	// simulated vCenter presents itself as 8.0 U3 (the adapter picks the customization method from this).
+	apiVersion := flag.String("api-version", "8.0.3.0", "API version reported in ServiceContent.About")
 	flag.Parse()
 
 	model := simulator.VPX()
@@ -30,6 +33,9 @@ func main() {
 		model = simulator.ESX()
 	} else {
 		model.Cluster, model.Host, model.ClusterHost = *clusters, *hosts, *clusterHosts
+	}
+	if !*esx && *apiVersion != "" {
+		model.ServiceContent.About.ApiVersion = *apiVersion
 	}
 	if err := model.Create(); err != nil {
 		log.Fatal(err)

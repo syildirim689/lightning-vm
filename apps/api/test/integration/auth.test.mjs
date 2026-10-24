@@ -34,7 +34,7 @@ before(async () => {
 after(async () => { await app?.close(); await closeConnections(); });
 
 test('migrations apply once and are idempotent', async () => {
-  assert.deepEqual(await runMigrations(pool), ['001_init', '002_auth', '003_setup_wizard', '004_vmware', '005_catalog', '006_servers', '007_better_auth']);
+  assert.deepEqual(await runMigrations(pool), ['001_init', '002_auth', '003_setup_wizard', '004_vmware', '005_catalog', '006_servers', '007_better_auth', '008_two_factor_branding']);
   assert.deepEqual(await runMigrations(pool), []);
 });
 
@@ -90,7 +90,8 @@ test('sign-in sets a signed, hardened session cookie and never returns the passw
   // The cookie is token.signature: the stored token alone, without the server's signature, is not accepted.
   const { rows: [s] } = await pool.query('SELECT token FROM auth_sessions ORDER BY created_at DESC LIMIT 1');
   assert.equal((await get('/auth/me', s.token)).statusCode, 401);
-  assert.equal((await get('/auth/me', adminCookie)).json().role, 'admin');
+  assert.deepEqual((await get('/auth/me', adminCookie)).json().roles, ['admin']);
+  assert.deepEqual((await get('/auth/me', adminCookie)).json().permissions, ['*']);
   const users = await get('/admin/users', adminCookie);
   assert.equal(users.statusCode, 200);
   assert.doesNotMatch(users.body, /scrypt|password/);

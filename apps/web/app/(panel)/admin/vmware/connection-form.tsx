@@ -4,7 +4,8 @@ import { I } from '../../../../components/icon';
 import { useTranslations } from 'next-intl';
 import { useState } from 'react';
 import { apiFetch, useErrorText, type ApiError } from '../../../../lib/api';
-import { Mono, Notice, SelectInput, TextInput } from '../../../../components/ui';
+import { FieldGroup, Mono, Notice, SelectInput, TextInput } from '../../../../components/ui';
+import { apiVersions, versionLabel } from './connections';
 
 type Certificate = { subject: string; issuer: string; notAfter: string; sha256: string; dnsNames: string[] | null; ips: string[] | null };
 type Failure = ApiError & { text: string; certificate?: Certificate; conflicts?: { host: string; connection: string }[] };
@@ -17,12 +18,12 @@ const fingerprintPairs = (hex: string) => hex.match(/../g)?.join(':').toUpperCas
 export default function ConnectionForm({ onSaved }: { onSaved: (s: Summary) => void }) {
   const t = useTranslations('Vmware');
   const { error, field } = useErrorText();
-  const [form, setForm] = useState({ name: '', host: '', port: '443', username: '', password: '', mode: 'system', caPem: '', sha256: '' });
+  const [form, setForm] = useState({ name: '', host: '', port: '443', username: '', password: '', mode: 'system', caPem: '', sha256: '', apiVersion: '', customization: 'auto' });
   const [failure, setFailure] = useState<Failure>();
   const [tested, setTested] = useState<Summary>();
   const [busy, setBusy] = useState<'test' | 'save'>();
   const set = (k: keyof typeof form) => (v: string) => setForm((f) => ({ ...f, [k]: v }));
-  const body = () => ({ name: form.name, host: form.host, port: Number(form.port), username: form.username, password: form.password,
+  const body = () => ({ name: form.name, host: form.host, port: Number(form.port), username: form.username, password: form.password, apiVersion: form.apiVersion, customization: form.customization,
     tls: { mode: form.mode, ...(form.mode === 'ca' && { caPem: form.caPem }), ...(form.mode === 'pinned' && { sha256: form.sha256 }) } });
 
   async function run(kind: 'test' | 'save', path: string, onOk: (s: Summary) => void) {
@@ -35,17 +36,26 @@ export default function ConnectionForm({ onSaved }: { onSaved: (s: Summary) => v
   const help = (k: string) => t(`form.${k}Help` as 'form.nameHelp');
 
   return <form className="flex flex-col gap-4" onSubmit={(e) => { e.preventDefault(); run('save', '/admin/vmware/connections', onSaved); }} noValidate>
-    <div className="grid gap-4 sm:grid-cols-2">
+    <FieldGroup title={t('form.groupEndpoint')} description={t('form.groupEndpointHelp')}>
       <TextInput label={t('form.name')} value={form.name} onChange={set('name')} error={err('name')} help={help('name')} isRequired/>
       <TextInput label={t('form.host')} value={form.host} onChange={set('host')} error={err('host')} help={help('host')} isRequired autoComplete="off" spellCheck={false}/>
       <TextInput label={t('form.port')} value={form.port} onChange={set('port')} error={err('port')} help={help('port')} autoComplete="off"/>
+    </FieldGroup>
+    <FieldGroup title={t('form.groupAccount')} description={t('form.groupAccountHelp')}>
       <TextInput label={t('form.username')} value={form.username} onChange={set('username')} error={err('username')} help={help('username')} isRequired autoComplete="off"/>
       <TextInput label={t('form.password')} type="password" value={form.password} onChange={set('password')} error={err('password')} help={help('password')} isRequired autoComplete="new-password"/>
-      <SelectInput label={t('form.tls')} value={form.mode} onChange={set('mode')} help={t('form.tlsHelp')}
-        options={(['system', 'ca', 'pinned'] as const).map((m) => ({ id: m, label: t(`tlsMode.${m}`) }))}/>
-    </div>
-    {form.mode === 'ca' && <TextInput multiline label={t('form.caPem')} value={form.caPem} onChange={set('caPem')} error={err('caPem')} help={t('form.caPemHelp')} spellCheck={false}/>}
-    {form.mode === 'pinned' && <TextInput label={t('form.sha256')} value={form.sha256} onChange={set('sha256')} error={err('sha256')} help={t('form.sha256Help')} spellCheck={false}/>}
+    </FieldGroup>
+    <FieldGroup title={t('form.groupTls')} description={t('form.tlsHelp')} cols={1}>
+      <SelectInput label={t('form.tls')} value={form.mode} onChange={set('mode')} options={(['system', 'ca', 'pinned'] as const).map((m) => ({ id: m, label: t(`tlsMode.${m}`) }))}/>
+      {form.mode === 'ca' && <TextInput multiline label={t('form.caPem')} value={form.caPem} onChange={set('caPem')} error={err('caPem')} help={t('form.caPemHelp')} spellCheck={false}/>}
+      {form.mode === 'pinned' && <TextInput label={t('form.sha256')} value={form.sha256} onChange={set('sha256')} error={err('sha256')} help={t('form.sha256Help')} spellCheck={false}/>}
+    </FieldGroup>
+    <FieldGroup title={t('compat.title')} description={t('compat.formHelp')}>
+      <SelectInput label={t('compat.version')} value={form.apiVersion} onChange={set('apiVersion')} error={err('apiVersion')} help={t('compat.versionHelp')}
+        options={[{ id: '', label: t('compat.auto') }, ...apiVersions.map((v) => ({ id: v, label: versionLabel(v), description: `API ${v}` }))]}/>
+      <SelectInput label={t('compat.customization')} value={form.customization} onChange={set('customization')} error={err('customization')} help={t('compat.customizationHelp')}
+        options={(['auto', 'cloudinit', 'guestinfo'] as const).map((m) => ({ id: m, label: t(`compat.method.${m}`), description: t(`compat.methodHelp.${m}`) }))}/>
+    </FieldGroup>
 
     {failure && <div role="alert"><Notice tone="danger" title={failure.text}>
       {failure.conflicts && <ul className="list-disc pl-5">{failure.conflicts.map((c) => <li key={c.host}>{t('conflict', { host: c.host, connection: c.connection })}</li>)}</ul>}

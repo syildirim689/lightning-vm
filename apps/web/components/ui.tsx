@@ -37,7 +37,7 @@ export function Section({ title, description, actions, children, className = '' 
 
 export function Stat({ label, value, hint, icon, tone = 'default' }: { label: string; value: React.ReactNode; hint?: React.ReactNode; icon?: React.ReactNode; tone?: 'default' | 'success' | 'warning' | 'danger' | 'accent' }) {
   const toneClass = { default: 'text-foreground', success: 'text-success', warning: 'text-warning', danger: 'text-danger', accent: 'text-accent' }[tone];
-  return <Card>
+  return <Card className="rise transition-shadow duration-200 hover:shadow-lg">
     <Card.Content className="flex items-start justify-between gap-3">
       <div className="min-w-0">
         <p className="text-xs font-medium uppercase tracking-wider text-muted">{label}</p>
@@ -74,11 +74,11 @@ export function TextInput({ label, value, onChange, error, help, type = 'text', 
   </TextField>;
 }
 
-export function NumberInput({ label, value, onChange, error, help, minValue, maxValue, step, className, formatOptions }: {
+export function NumberInput({ label, value, onChange, error, help, minValue, maxValue, step, className, formatOptions, isDisabled }: {
   label: string; value: number | undefined; onChange: (v: number | undefined) => void; error?: string; help?: React.ReactNode; minValue?: number; maxValue?: number; step?: number; className?: string;
-  formatOptions?: Intl.NumberFormatOptions;
+  formatOptions?: Intl.NumberFormatOptions; isDisabled?: boolean;
 }) {
-  return <NumberField className={className} value={value ?? NaN} onChange={(v) => onChange(Number.isNaN(v) ? undefined : v)} minValue={minValue} maxValue={maxValue} step={step}
+  return <NumberField className={className} isDisabled={isDisabled} value={value ?? NaN} onChange={(v) => onChange(Number.isNaN(v) ? undefined : v)} minValue={minValue} maxValue={maxValue} step={step}
     isInvalid={!!error} validationBehavior="aria" formatOptions={formatOptions ?? { useGrouping: false, maximumFractionDigits: 2 }}>
     <Label>{label}</Label>
     <NumberField.Group>
@@ -94,7 +94,8 @@ export type Option = { id: string; label: string; description?: string; isDisabl
 export function SelectInput({ label, value, onChange, options, error, help, placeholder, className, isDisabled }: {
   label: string; value: string; onChange: (v: string) => void; options: Option[]; error?: string; help?: React.ReactNode; placeholder?: string; className?: string; isDisabled?: boolean;
 }) {
-  return <Select className={className} value={value || null} onChange={(k) => onChange(k == null ? '' : String(k))} placeholder={placeholder ?? '–'}
+  // '' is a real choice when an option has that id (e.g. "All"); otherwise it means nothing selected.
+  return <Select className={className} value={options.some((o) => o.id === value) ? value : null} onChange={(k) => onChange(k == null ? '' : String(k))} placeholder={placeholder ?? '–'}
     isInvalid={!!error} isDisabled={isDisabled} disabledKeys={options.filter((o) => o.isDisabled).map((o) => o.id)}>
     <Label>{label}</Label>
     <Select.Trigger><Select.Value/><Select.Indicator/></Select.Trigger>
@@ -170,7 +171,19 @@ export type Column = { id: string; label: React.ReactNode; className?: string };
 export function DataTable<T>({ label, columns, rows, rowKey, cells, empty, minWidth = 640 }: {
   label: string; columns: Column[]; rows: T[]; rowKey: (row: T) => string; cells: (row: T) => React.ReactNode[]; empty?: React.ReactNode; minWidth?: number;
 }) {
-  return <Table>
+  // Phones get one card per row (label: value); wider screens the table.
+  const cards = <ul className="flex flex-col gap-2 sm:hidden" aria-label={label}>
+    {rows.length === 0 && <li className="rounded-xl border border-dashed border-border py-6 text-center text-sm text-muted">{empty ?? '–'}</li>}
+    {rows.map((r) => { const c = cells(r); return <li key={rowKey(r)} className="rounded-xl border border-border bg-surface p-3">
+      <div className="mb-2 flex items-start justify-between gap-2 font-medium">{c[0]}{columns.at(-1)?.id === 'act' && <span className="shrink-0">{c.at(-1)}</span>}</div>
+      <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1.5 text-sm">
+        {c.slice(1, columns.at(-1)?.id === 'act' ? -1 : undefined).map((cell, i) => <div key={columns[i + 1]?.id ?? i} className="contents">
+          <dt className="text-xs text-muted">{columns[i + 1]?.label}</dt><dd className="min-w-0 break-words">{cell}</dd>
+        </div>)}
+      </dl>
+    </li>; })}
+  </ul>;
+  return <>{cards}<Table className="hidden sm:block">
     <Table.ScrollContainer>
       <Table.Content aria-label={label} style={{ minWidth }}>
         <Table.Header>
@@ -183,7 +196,7 @@ export function DataTable<T>({ label, columns, rows, rowKey, cells, empty, minWi
         </Table.Body>
       </Table.Content>
     </Table.ScrollContainer>
-  </Table>;
+  </Table></>;
 }
 
 export function Notice({ tone = 'default', title, children }: { tone?: Tone; title?: React.ReactNode; children?: React.ReactNode }) {
@@ -194,4 +207,34 @@ export function Notice({ tone = 'default', title, children }: { tone?: Tone; tit
       {children && <Alert.Description>{children}</Alert.Description>}
     </Alert.Content>
   </Alert>;
+}
+
+// A form block with its explanation beside it (stacked on phones): what the fields are for, then the fields.
+export function FormSection({ title, description, icon, children, aside }: { title: React.ReactNode; description?: React.ReactNode; icon?: React.ReactNode; children: React.ReactNode; aside?: React.ReactNode }) {
+  return <section className="grid gap-x-8 gap-y-4 border-b border-separator py-6 first:pt-0 last:border-0 last:pb-0 lg:grid-cols-[minmax(0,18rem)_minmax(0,1fr)]">
+    <div className="flex flex-col gap-1">
+      <h3 className="flex items-center gap-2 font-semibold">{icon && <span aria-hidden className="text-accent">{icon}</span>}{title}</h3>
+      {description && <p className="text-sm text-muted">{description}</p>}
+      {aside}
+    </div>
+    <div className="flex min-w-0 flex-col gap-4">{children}</div>
+  </section>;
+}
+
+// Related fields inside a dialog: a small heading and a responsive grid.
+export function FieldGroup({ title, description, children, cols = 2 }: { title: string; description?: string; children: React.ReactNode; cols?: 1 | 2 | 3 }) {
+  const grid = { 1: '', 2: 'sm:grid-cols-2', 3: 'sm:grid-cols-3' }[cols];
+  return <fieldset className="flex flex-col gap-3 rounded-xl border border-border p-4">
+    <legend className="px-1 text-sm font-semibold">{title}</legend>
+    {description && <p className="-mt-1 text-xs text-muted">{description}</p>}
+    <div className={`grid gap-4 ${grid}`}>{children}</div>
+  </fieldset>;
+}
+
+// Save bar under a form: the status of the last action on the left, buttons on the right.
+export function FormActions({ children, status }: { children: React.ReactNode; status?: React.ReactNode }) {
+  return <div className="flex flex-wrap items-center justify-end gap-2 border-t border-separator pt-4">
+    {status && <div className="mr-auto min-w-0 text-sm" role="status">{status}</div>}
+    {children}
+  </div>;
 }

@@ -5,7 +5,7 @@ import { useFormatter, useTranslations } from 'next-intl';
 import { parseAsString, useQueryState } from 'nuqs';
 import { useState } from 'react';
 import { I } from '../../../../components/icon';
-import { CheckboxList, ConfirmButton, DataTable, Empty, Mono, Notice, PageHeader, SelectInput, TextInput } from '../../../../components/ui';
+import { CheckboxList, ConfirmButton, DataTable, Empty, FieldGroup, Mono, Notice, NumberInput, PageHeader, SelectInput, TextInput } from '../../../../components/ui';
 import { apiFetch } from '../../../../lib/api';
 import { useApiForm } from '../../../../lib/form';
 import { useApiAction, useApiQuery } from '../../../../lib/query';
@@ -29,7 +29,7 @@ function FormModal({ title, label, children }: { title: string; label: string; c
     <Button onPress={() => setOpen(true)}><I name="plus" size={16}/>{label}</Button>
     <Modal.Backdrop isOpen={open} onOpenChange={setOpen}>
       <Modal.Container size="lg" scroll="inside">
-        <Modal.Dialog>
+        <Modal.Dialog className="sm:max-w-3xl">
           <Modal.CloseTrigger/>
           <Modal.Header><Modal.Heading>{title}</Modal.Heading></Modal.Header>
           <Modal.Body>{children(() => setOpen(false))}</Modal.Body>
@@ -39,9 +39,6 @@ function FormModal({ title, label, children }: { title: string; label: string; c
   </>;
 }
 
-function Submit({ busy, children }: { busy: boolean; children: React.ReactNode }) {
-  return <div className="flex justify-end pt-2"><Button type="submit" isPending={busy}>{children}</Button></div>;
-}
 
 export default function Catalog() {
   const t = useTranslations('Catalog');
@@ -167,6 +164,20 @@ function useSaved(onSaved?: () => void) {
   return async (ok: unknown) => { if (!ok) return; await client.invalidateQueries({ queryKey: ['catalog'] }); toast.success(t('saved')); onSaved?.(); };
 }
 
+// The error banner and the action bar every catalog form ends with (sticky at the bottom of the dialog).
+function FormFooter({ failure, busy, label, onCancel }: { failure?: string; busy: boolean; label: string; onCancel?: () => void }) {
+  const t = useTranslations('Catalog');
+  return <>
+    {failure && <div role="alert"><Notice tone="danger">{failure}</Notice></div>}
+    <div className="sticky bottom-0 -mx-1 flex flex-wrap justify-end gap-2 border-t border-separator bg-overlay px-1 py-3">
+      {onCancel && <Button variant="tertiary" onPress={onCancel}>{t('cancel')}</Button>}
+      <Button type="submit" isPending={busy}><I name="check" size={16}/>{label}</Button>
+    </div>
+  </>;
+}
+const num = (v: string) => (v === '' ? undefined : Number(v));
+const str = (v: number | undefined) => (v === undefined ? '' : String(v));
+
 function PoolForm({ connections, onSaved }: { connections: Connection[]; onSaved: () => void }) {
   const t = useTranslations('Catalog');
   const saved = useSaved(onSaved);
@@ -174,23 +185,29 @@ function PoolForm({ connections, onSaved }: { connections: Connection[]; onSaved
     reserveCpuPct: '10', reserveMemoryPct: '10', reserveStoragePct: '15' });
   const inv = useApiQuery<Inventory>(['vmware', 'connection', f.values.connectionId], `/admin/vmware/connections/${f.values.connectionId}`).data;
   const [stores, setStores] = useState<string[]>([]);
-  const num = (k: 'cpuOvercommit' | 'memoryOvercommit' | 'storageOvercommit' | 'reserveCpuPct' | 'reserveMemoryPct' | 'reserveStoragePct') =>
-    <TextInput type="number" label={t(`pools.${k}`)} help={t(`pools.${k}Help`)} value={f.values[k]} onChange={f.set(k)} error={f.fieldError(k)}/>;
+  const ratio = (k: 'cpuOvercommit' | 'memoryOvercommit' | 'storageOvercommit', max: number) =>
+    <NumberInput label={t(`pools.${k}`)} help={t(`pools.${k}Help`)} value={num(f.values[k])} onChange={(v) => f.set(k)(str(v))} minValue={1} maxValue={max} step={0.5} error={f.fieldError(k)}
+      formatOptions={{ maximumFractionDigits: 2, style: 'decimal' }}/>;
+  const pct = (k: 'reserveCpuPct' | 'reserveMemoryPct' | 'reserveStoragePct') =>
+    <NumberInput label={t(`pools.${k}`)} value={num(f.values[k]) !== undefined ? num(f.values[k])! / 100 : undefined} onChange={(v) => f.set(k)(str(v === undefined ? undefined : Math.round(v * 100)))}
+      minValue={0} maxValue={0.9} step={0.05} error={f.fieldError(k)} formatOptions={{ style: 'percent' }}/>;
   return <form className="flex flex-col gap-4" noValidate onSubmit={async (e) => { e.preventDefault(); saved(await f.submit('POST', '/admin/pools', { ...f.values, datastoreMorefs: stores })); }}>
-    <div className="grid gap-4 sm:grid-cols-2">
-      <TextInput label={t('col.name')} value={f.values.name} onChange={f.set('name')} error={f.fieldError('name')}/>
-      <TextInput label={t('pools.location')} help={t('pools.locationHelp')} value={f.values.location} onChange={f.set('location')}/>
+    <FieldGroup title={t('form.identity')} description={t('form.poolIdentityHelp')}>
+      <TextInput label={t('col.name')} value={f.values.name} onChange={f.set('name')} error={f.fieldError('name')} isRequired placeholder="Istanbul-1"/>
+      <TextInput label={t('pools.location')} help={t('pools.locationHelp')} value={f.values.location} onChange={f.set('location')} placeholder="İstanbul"/>
+    </FieldGroup>
+    <FieldGroup title={t('form.vmware')} description={t('form.vmwareHelp')}>
       <SelectInput label={t('pools.connection')} value={f.values.connectionId} onChange={f.set('connectionId')} options={connections.map((c) => ({ id: c.id, label: c.name }))}/>
       <SelectInput label={t('pools.compute')} value={f.values.computeMoref} onChange={f.set('computeMoref')} error={f.fieldError('computeMoref')}
-        options={inv?.compute.map((c) => ({ id: c.moref, label: `${c.name} (${c.kind})` })) ?? []}/>
-      <SelectInput label={t('pools.network')} value={f.values.networkMoref} onChange={f.set('networkMoref')} error={f.fieldError('networkMoref')}
-        options={inv?.networks.map((n) => ({ id: n.moref, label: `${n.name}${n.vlan !== null ? ` (VLAN ${n.vlan})` : ''}` })) ?? []}/>
-    </div>
-    <CheckboxList label={t('pools.datastores')} value={stores} onChange={setStores} error={f.fieldError('datastoreMorefs')} options={inv?.datastores.map((d) => ({ id: d.moref, label: d.name })) ?? []}/>
-    <div className="grid gap-4 sm:grid-cols-3">{num('cpuOvercommit')}{num('memoryOvercommit')}{num('storageOvercommit')}</div>
-    <div className="grid gap-4 sm:grid-cols-3">{num('reserveCpuPct')}{num('reserveMemoryPct')}{num('reserveStoragePct')}</div>
-    {f.failure && <p role="alert" className="text-sm text-danger">{f.failure.text}</p>}
-    <Submit busy={f.busy}>{t('pools.create')}</Submit>
+        options={inv?.compute.map((c) => ({ id: c.moref, label: c.name, description: c.kind })) ?? []}/>
+      <SelectInput className="sm:col-span-2" label={t('pools.network')} value={f.values.networkMoref} onChange={f.set('networkMoref')} error={f.fieldError('networkMoref')}
+        options={inv?.networks.map((n) => ({ id: n.moref, label: n.name, description: n.vlan !== null ? `VLAN ${n.vlan}` : undefined })) ?? []}/>
+      <div className="sm:col-span-2"><CheckboxList label={t('pools.datastores')} value={stores} onChange={setStores} error={f.fieldError('datastoreMorefs')} help={t('form.datastoresHelp')}
+        options={inv?.datastores.map((d) => ({ id: d.moref, label: d.name })) ?? []}/></div>
+    </FieldGroup>
+    <FieldGroup title={t('form.overcommit')} description={t('form.overcommitHelp')} cols={3}>{ratio('cpuOvercommit', 32)}{ratio('memoryOvercommit', 4)}{ratio('storageOvercommit', 10)}</FieldGroup>
+    <FieldGroup title={t('form.reserve')} description={t('form.reserveHelp')} cols={3}>{pct('reserveCpuPct')}{pct('reserveMemoryPct')}{pct('reserveStoragePct')}</FieldGroup>
+    <FormFooter failure={f.failure?.text} busy={f.busy} label={t('pools.create')} onCancel={onSaved}/>
   </form>;
 }
 
@@ -200,16 +217,28 @@ const ruleColumns: Record<(typeof ruleKeys)[number], string> = { cpuMin: 'cpu_mi
   maxMemoryMbPerVcpu: 'max_memory_mb_per_vcpu', priceVcpu: 'price_vcpu', priceMemoryGb: 'price_memory_gb', priceDiskGb: 'price_disk_gb', currency: 'currency' };
 const ruleDefaults = { cpuMin: '1', cpuMax: '16', cpuStep: '1', memoryMinMb: '1024', memoryMaxMb: '65536', memoryStepMb: '1024', diskMinGb: '20', diskMaxGb: '1000', diskStepGb: '10',
   minMemoryMbPerVcpu: '1024', maxMemoryMbPerVcpu: '8192', priceVcpu: '', priceMemoryGb: '', priceDiskGb: '', currency: 'EUR' };
+const currencies = ['EUR', 'USD', 'TRY', 'GBP'];
 
 function RuleForm({ poolId, rule }: { poolId: string; rule: Record<string, unknown> | null }) {
   const t = useTranslations('Catalog');
   const saved = useSaved();
   const f = useApiForm(Object.fromEntries(ruleKeys.map((k) => [k, rule ? String(rule[ruleColumns[k]]) : ruleDefaults[k]])) as Record<(typeof ruleKeys)[number], string>);
+  // Memory is entered in GB here and stored in MB.
+  const field = (k: (typeof ruleKeys)[number], gb = false) => <NumberInput key={k} label={t(`rule.${k}`)} error={f.fieldError(k)} minValue={0}
+    value={num(f.values[k]) !== undefined ? (gb ? num(f.values[k])! / 1024 : num(f.values[k])) : undefined} step={gb ? 0.5 : 1}
+    onChange={(v) => f.set(k)(str(v === undefined ? undefined : gb ? Math.round(v * 1024) : v))}/>;
+  const money = (k: 'priceVcpu' | 'priceMemoryGb' | 'priceDiskGb') => <TextInput key={k} label={t(`rule.${k}`)} value={f.values[k]} onChange={f.set(k)} error={f.fieldError(k)} placeholder="0.00"/>;
   return <form className="flex flex-col gap-4" noValidate onSubmit={async (e) => { e.preventDefault(); saved(await f.submit('PUT', `/admin/pools/${poolId}/custom-rule`)); }}>
     <p className="text-sm text-muted">{t('rule.explain')}</p>
-    <div className="grid gap-4 sm:grid-cols-3">{ruleKeys.map((k) => <TextInput key={k} label={t(`rule.${k}`)} value={f.values[k]} onChange={f.set(k)} error={f.fieldError(k)}/>)}</div>
-    {f.failure && <p role="alert" className="text-sm text-danger">{f.failure.text}</p>}
-    <Submit busy={f.busy}>{t('rule.save')}</Submit>
+    <FieldGroup title={t('form.cpuRange')} cols={3}>{field('cpuMin')}{field('cpuMax')}{field('cpuStep')}</FieldGroup>
+    <FieldGroup title={t('form.memoryRange')} cols={3}>{field('memoryMinMb', true)}{field('memoryMaxMb', true)}{field('memoryStepMb', true)}</FieldGroup>
+    <FieldGroup title={t('form.diskRange')} cols={3}>{field('diskMinGb')}{field('diskMaxGb')}{field('diskStepGb')}</FieldGroup>
+    <FieldGroup title={t('form.balance')} description={t('form.balanceHelp')}>{field('minMemoryMbPerVcpu', true)}{field('maxMemoryMbPerVcpu', true)}</FieldGroup>
+    <FieldGroup title={t('form.pricing')} description={t('form.pricingHelp')} cols={3}>
+      {money('priceVcpu')}{money('priceMemoryGb')}{money('priceDiskGb')}
+      <SelectInput label={t('packages.currency')} value={f.values.currency} onChange={f.set('currency')} options={currencies.map((c) => ({ id: c, label: c }))}/>
+    </FieldGroup>
+    <FormFooter failure={f.failure?.text} busy={f.busy} label={t('rule.save')}/>
   </form>;
 }
 
@@ -219,60 +248,101 @@ function ImageForm({ connections, onSaved }: { connections: Connection[]; onSave
   const f = useApiForm({ name: '', family: 'linux', connectionId: connections[0]?.id ?? '', templateMoref: '', minDiskGb: '20' });
   const vms = useApiQuery<Inventory>(['vmware', 'connection', f.values.connectionId], f.values.connectionId ? `/admin/vmware/connections/${f.values.connectionId}` : null).data?.vms.filter((v) => v.template) ?? [];
   return <form className="flex flex-col gap-4" noValidate onSubmit={async (e) => { e.preventDefault(); saved(await f.submit('POST', '/admin/images')); }}>
-    <div className="grid gap-4 sm:grid-cols-2">
-      <TextInput label={t('col.name')} value={f.values.name} onChange={f.set('name')} error={f.fieldError('name')}/>
+    <FieldGroup title={t('form.identity')} description={t('form.imageIdentityHelp')}>
+      <TextInput label={t('col.name')} value={f.values.name} onChange={f.set('name')} error={f.fieldError('name')} isRequired placeholder="Ubuntu 24.04 LTS"/>
       <SelectInput label={t('images.family')} value={f.values.family} onChange={f.set('family')} options={[{ id: 'linux', label: 'Linux' }, { id: 'windows', label: 'Windows' }]}/>
+    </FieldGroup>
+    <FieldGroup title={t('form.template')} description={t('form.templateHelp')}>
       <SelectInput label={t('pools.connection')} value={f.values.connectionId} onChange={f.set('connectionId')} options={connections.map((c) => ({ id: c.id, label: c.name }))}/>
       <SelectInput label={t('images.template')} value={f.values.templateMoref} onChange={f.set('templateMoref')} error={f.fieldError('templateMoref')}
         help={vms.length ? undefined : t('images.noTemplates')} options={vms.map((v) => ({ id: v.moref, label: v.name }))}/>
-      <TextInput type="number" label={t('images.minDisk')} value={f.values.minDiskGb} onChange={f.set('minDiskGb')} error={f.fieldError('minDiskGb')}/>
-    </div>
-    {f.failure && <p role="alert" className="text-sm text-danger">{f.failure.text}</p>}
-    <Submit busy={f.busy}>{t('images.create')}</Submit>
+    </FieldGroup>
+    <FieldGroup title={t('form.requirements')} cols={1}>
+      <NumberInput label={t('images.minDisk')} value={num(f.values.minDiskGb)} onChange={(v) => f.set('minDiskGb')(str(v))} minValue={1} maxValue={65536} error={f.fieldError('minDiskGb')} help={t('form.minDiskHelp')}/>
+    </FieldGroup>
+    <FormFooter failure={f.failure?.text} busy={f.busy} label={t('images.create')} onCancel={onSaved}/>
   </form>;
 }
 
 function PackageForm({ pools, images, onSaved }: { pools: Pool[]; images: Image[]; onSaved: () => void }) {
   const t = useTranslations('Catalog');
+  const format = useFormatter();
   const saved = useSaved(onSaved);
   const f = useApiForm({ name: '', vcpu: '2', memoryMb: '4096', diskGb: '40', priceMonthly: '', priceHourly: '', currency: 'EUR' });
-  const [poolIds, setPoolIds] = useState<string[]>([]);
+  const [poolIds, setPoolIds] = useState<string[]>(pools.length === 1 ? [pools[0].id] : []);
   const [imageIds, setImageIds] = useState<string[]>([]);
-  return <form className="flex flex-col gap-4" noValidate onSubmit={async (e) => { e.preventDefault(); saved(await f.submit('POST', '/admin/packages', { ...f.values, poolIds, imageIds })); }}>
-    <TextInput label={t('col.name')} value={f.values.name} onChange={f.set('name')} error={f.fieldError('name')}/>
-    <div className="grid gap-4 sm:grid-cols-3">
-      <TextInput type="number" label="vCPU" value={f.values.vcpu} onChange={f.set('vcpu')} error={f.fieldError('vcpu')}/>
-      <TextInput type="number" label="RAM (MB)" value={f.values.memoryMb} onChange={f.set('memoryMb')} error={f.fieldError('memoryMb')}/>
-      <TextInput type="number" label={`${t('col.disk')} (GB)`} value={f.values.diskGb} onChange={f.set('diskGb')} error={f.fieldError('diskGb')}/>
-      <TextInput label={t('packages.priceMonthly')} value={f.values.priceMonthly} onChange={f.set('priceMonthly')} error={f.fieldError('priceMonthly')}/>
-      <TextInput label={t('packages.priceHourly')} value={f.values.priceHourly} onChange={f.set('priceHourly')} error={f.fieldError('priceHourly')}/>
-      <TextInput label={t('packages.currency')} help={t('packages.currencyHelp')} value={f.values.currency} onChange={f.set('currency')} error={f.fieldError('currency')} maxLength={3}/>
+  const price = Number(f.values.priceMonthly.replace(',', '.'));
+  // Hourly price suggested from the monthly one (730 hours), unless the admin typed their own.
+  const hourly = Number.isFinite(price) && price > 0 ? (price / 730).toFixed(4) : '';
+  const tooSmall = images.filter((i) => imageIds.includes(i.id) && i.minDiskGb > Number(f.values.diskGb));
+  return <form className="flex flex-col gap-4" noValidate
+    onSubmit={async (e) => { e.preventDefault(); saved(await f.submit('POST', '/admin/packages', { ...f.values, priceMonthly: f.values.priceMonthly.replace(',', '.'), priceHourly: (f.values.priceHourly || hourly).replace(',', '.'), poolIds, imageIds })); }}>
+    <FieldGroup title={t('form.identity')} cols={1}>
+      <TextInput label={t('col.name')} value={f.values.name} onChange={f.set('name')} error={f.fieldError('name')} isRequired placeholder="Standard 2"/>
+    </FieldGroup>
+    <FieldGroup title={t('form.resources')} description={t('form.resourcesHelp')} cols={3}>
+      <NumberInput label="vCPU" value={num(f.values.vcpu)} onChange={(v) => f.set('vcpu')(str(v))} minValue={1} maxValue={256} error={f.fieldError('vcpu')}/>
+      <NumberInput label="RAM (GB)" value={num(f.values.memoryMb) !== undefined ? num(f.values.memoryMb)! / 1024 : undefined} step={0.5} minValue={0.5}
+        onChange={(v) => f.set('memoryMb')(str(v === undefined ? undefined : Math.round(v * 1024)))} error={f.fieldError('memoryMb')}/>
+      <NumberInput label={`${t('col.disk')} (GB)`} value={num(f.values.diskGb)} onChange={(v) => f.set('diskGb')(str(v))} minValue={1} maxValue={65536} step={10} error={f.fieldError('diskGb')}/>
+    </FieldGroup>
+    <FieldGroup title={t('form.pricing')} cols={3}>
+      <TextInput label={t('packages.priceMonthly')} value={f.values.priceMonthly} onChange={f.set('priceMonthly')} error={f.fieldError('priceMonthly')} placeholder="9.90"/>
+      <TextInput label={t('packages.priceHourly')} value={f.values.priceHourly} onChange={f.set('priceHourly')} error={f.fieldError('priceHourly')} placeholder={hourly || '0.0136'} help={t('form.hourlyHelp')}/>
+      <SelectInput label={t('packages.currency')} value={f.values.currency} onChange={f.set('currency')} options={currencies.map((c) => ({ id: c, label: c }))} error={f.fieldError('currency')}/>
+    </FieldGroup>
+    <FieldGroup title={t('form.where')} description={t('form.whereHelp')} cols={1}>
+      <CheckboxList label={t('packages.pools')} value={poolIds} onChange={setPoolIds} error={f.fieldError('poolIds')} options={pools.map((p) => ({ id: p.id, label: p.name }))}/>
+      <CheckboxList label={t('packages.images')} value={imageIds} onChange={setImageIds} options={images.map((i) => ({ id: i.id, label: `${i.name} (≥ ${i.minDiskGb} GB)` }))}/>
+      {tooSmall.length > 0 && <Notice tone="warning">{t('form.diskTooSmall', { images: tooSmall.map((i) => i.name).join(', ') })}</Notice>}
+    </FieldGroup>
+    <div className="flex flex-wrap items-center gap-3 rounded-xl border border-accent/40 bg-accent-soft px-4 py-3 text-sm" aria-live="polite">
+      <I name="package" size={18} className="text-accent"/>
+      <span className="font-semibold">{f.values.name || t('form.preview')}</span>
+      <span className="text-muted">{t('form.previewShape', { vcpu: f.values.vcpu || 0, memory: format.number(Number(f.values.memoryMb || 0) / 1024, { maximumFractionDigits: 1 }), disk: f.values.diskGb || 0 })}</span>
+      {price > 0 && <span className="ml-auto font-semibold tabular-nums">{format.number(price, { style: 'currency', currency: f.values.currency })} / {t('form.month')}</span>}
     </div>
-    <CheckboxList label={t('packages.pools')} value={poolIds} onChange={setPoolIds} error={f.fieldError('poolIds')} options={pools.map((p) => ({ id: p.id, label: p.name }))}/>
-    <CheckboxList label={t('packages.images')} value={imageIds} onChange={setImageIds} options={images.map((i) => ({ id: i.id, label: i.name }))}/>
-    {f.failure && <p role="alert" className="text-sm text-danger">{f.failure.text}</p>}
-    <Submit busy={f.busy}>{t('packages.create')}</Submit>
+    <FormFooter failure={f.failure?.text} busy={f.busy} label={t('packages.create')} onCancel={onSaved}/>
   </form>;
+}
+
+// From "203.0.113.0/24": gateway .1, usable range .2 – .254 (IPv4 only).
+function cidrSuggest(cidr: string) {
+  const m = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})\/(\d{1,2})$/.exec(cidr.trim());
+  if (!m || m.slice(1, 5).some((x) => Number(x) > 255) || Number(m[5]) < 16 || Number(m[5]) > 30) return null;
+  const ip = m.slice(1, 5).reduce((a, x) => a * 256 + Number(x), 0);
+  const size = 2 ** (32 - Number(m[5]));
+  const net = ip - (ip % size);
+  const dot = (n: number) => [24, 16, 8, 0].map((s) => Math.floor(n / 2 ** s) % 256).join('.');
+  return { gateway: dot(net + 1), start: dot(net + 2), end: dot(net + size - 2), usable: size - 3 };
 }
 
 function IpPoolForm({ pools, onSaved }: { pools: Pool[]; onSaved: () => void }) {
   const t = useTranslations('Catalog');
   const saved = useSaved(onSaved);
-  const f = useApiForm({ name: '', poolId: pools[0].id, cidr: '', gateway: '', rangeStart: '', rangeEnd: '', dns: '', excluded: '' });
+  const f = useApiForm({ name: '', poolId: pools[0].id, cidr: '', gateway: '', rangeStart: '', rangeEnd: '', dns: '1.1.1.1, 8.8.8.8', excluded: '' });
   const list = (s: string) => s.split(/[\s,]+/).filter(Boolean);
+  const hint = cidrSuggest(f.values.cidr);
+  const fill = () => hint && f.setValues((v) => ({ ...v, gateway: hint.gateway, rangeStart: hint.start, rangeEnd: hint.end }));
   return <form className="flex flex-col gap-4" noValidate onSubmit={async (e) => { e.preventDefault(); saved(await f.submit('POST', '/admin/ip-pools', { ...f.values, dns: list(f.values.dns), excluded: list(f.values.excluded) })); }}>
-    <div className="grid gap-4 sm:grid-cols-2">
-      <TextInput label={t('col.name')} value={f.values.name} onChange={f.set('name')} error={f.fieldError('name')}/>
+    <FieldGroup title={t('form.identity')}>
+      <TextInput label={t('col.name')} value={f.values.name} onChange={f.set('name')} error={f.fieldError('name')} isRequired placeholder="Public v4"/>
       <SelectInput label={t('ip.pool')} value={f.values.poolId} onChange={f.set('poolId')} options={pools.map((p) => ({ id: p.id, label: p.name }))}/>
-      <TextInput label={t('ip.subnet')} help="203.0.113.0/24" value={f.values.cidr} onChange={f.set('cidr')} error={f.fieldError('cidr')} spellCheck={false}/>
+    </FieldGroup>
+    <FieldGroup title={t('form.network')} description={t('form.networkHelp')}>
+      <TextInput label={t('ip.subnet')} help="203.0.113.0/24" value={f.values.cidr} onChange={(v) => { f.set('cidr')(v); const h = cidrSuggest(v); if (h && !f.values.gateway && !f.values.rangeStart) f.setValues((x) => ({ ...x, cidr: v, gateway: h.gateway, rangeStart: h.start, rangeEnd: h.end })); }}
+        error={f.fieldError('cidr')} spellCheck={false}/>
       <TextInput label={t('ip.gateway')} value={f.values.gateway} onChange={f.set('gateway')} error={f.fieldError('gateway')} spellCheck={false}/>
+      {hint && <div className="flex flex-wrap items-center gap-2 text-xs text-muted sm:col-span-2"><I name="sparkles" size={14} className="text-accent"/>{t('form.cidrHint', { gateway: hint.gateway, start: hint.start, end: hint.end, n: hint.usable })}
+        <Button size="sm" variant="ghost" onPress={fill}>{t('form.apply')}</Button></div>}
+    </FieldGroup>
+    <FieldGroup title={t('form.range')} description={t('form.rangeHelp')}>
       <TextInput label={t('ip.start')} value={f.values.rangeStart} onChange={f.set('rangeStart')} error={f.fieldError('range')} spellCheck={false}/>
       <TextInput label={t('ip.end')} value={f.values.rangeEnd} onChange={f.set('rangeEnd')} spellCheck={false}/>
-      <TextInput label="DNS" help={t('ip.listHelp')} value={f.values.dns} onChange={f.set('dns')} spellCheck={false}/>
-      <TextInput label={t('ip.excluded')} help={t('ip.listHelp')} value={f.values.excluded} onChange={f.set('excluded')} spellCheck={false}/>
-    </div>
-    {f.failure && <p role="alert" className="text-sm text-danger">{f.failure.text}</p>}
-    <Submit busy={f.busy}>{t('ip.create')}</Submit>
+      <TextInput className="sm:col-span-2" label={t('ip.excluded')} help={t('ip.listHelp')} value={f.values.excluded} onChange={f.set('excluded')} spellCheck={false}/>
+    </FieldGroup>
+    <FieldGroup title="DNS" cols={1}><TextInput label={t('form.dnsServers')} help={t('ip.listHelp')} value={f.values.dns} onChange={f.set('dns')} spellCheck={false}/></FieldGroup>
+    <FormFooter failure={f.failure?.text} busy={f.busy} label={t('ip.create')} onCancel={onSaved}/>
   </form>;
 }
 
@@ -281,13 +351,16 @@ function QuotaForm({ users, onSaved }: { users: { id: string; email: string }[];
   const saved = useSaved(onSaved);
   const f = useApiForm({ subject: 'default', maxServers: '', maxVcpu: '', maxMemoryMb: '', maxDiskGb: '' });
   const value = (s: string) => (s === '' ? null : Number(s));
+  const limit = (k: 'maxServers' | 'maxVcpu' | 'maxMemoryMb' | 'maxDiskGb', gb = false) => <NumberInput key={k} label={gb ? `${t(`quotas.${k}`)} (GB)` : t(`quotas.${k}`)} minValue={0}
+    value={num(f.values[k]) !== undefined ? (gb ? num(f.values[k])! / 1024 : num(f.values[k])) : undefined}
+    onChange={(v) => f.set(k)(str(v === undefined ? undefined : gb ? Math.round(v * 1024) : v))} error={f.fieldError(k)} help={t('quotas.emptyUnlimited')}/>;
   return <form className="flex flex-col gap-4" noValidate onSubmit={async (e) => { e.preventDefault();
     const body = { maxServers: value(f.values.maxServers), maxVcpu: value(f.values.maxVcpu), maxMemoryMb: value(f.values.maxMemoryMb), maxDiskGb: value(f.values.maxDiskGb) };
     saved(await f.submit('PUT', f.values.subject === 'default' ? '/admin/quotas/default' : `/admin/quotas/users/${f.values.subject}`, body)); }}>
-    <SelectInput label={t('quotas.scope')} value={f.values.subject} onChange={f.set('subject')} options={[{ id: 'default', label: t('quotas.default') }, ...users.map((u) => ({ id: u.id, label: u.email }))]}/>
-    <div className="grid gap-4 sm:grid-cols-2">{(['maxServers', 'maxVcpu', 'maxMemoryMb', 'maxDiskGb'] as const).map((k) =>
-      <TextInput key={k} type="number" label={t(`quotas.${k}`)} help={t('quotas.emptyUnlimited')} value={f.values[k]} onChange={f.set(k)} error={f.fieldError(k)}/>)}</div>
-    {f.failure && <p role="alert" className="text-sm text-danger">{f.failure.text}</p>}
-    <Submit busy={f.busy}>{t('quotas.save')}</Submit>
+    <FieldGroup title={t('quotas.scope')} description={t('form.scopeHelp')} cols={1}>
+      <SelectInput label={t('quotas.scope')} value={f.values.subject} onChange={f.set('subject')} options={[{ id: 'default', label: t('quotas.default') }, ...users.map((u) => ({ id: u.id, label: u.email }))]}/>
+    </FieldGroup>
+    <FieldGroup title={t('form.limits')}>{limit('maxServers')}{limit('maxVcpu')}{limit('maxMemoryMb', true)}{limit('maxDiskGb')}</FieldGroup>
+    <FormFooter failure={f.failure?.text} busy={f.busy} label={t('quotas.save')} onCancel={onSaved}/>
   </form>;
 }

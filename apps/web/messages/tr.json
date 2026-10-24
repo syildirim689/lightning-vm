@@ -149,7 +149,57 @@
     "PREVIOUSLY_REGISTERED": "Bu passkey zaten kayıtlı.",
     "YOU_ARE_NOT_ALLOWED_TO_REGISTER_THIS_PASSKEY": "Bu passkey hesabınıza eklenemez.",
     "CREDENTIAL_ACCOUNT_NOT_FOUND": "Bu hesabın parolası yok; passkey ile giriş yapın.",
-    "UNKNOWN_ERROR": "Bir sorun oluştu. Yeniden deneyin."
+    "UNKNOWN_ERROR": "Bir sorun oluştu. Yeniden deneyin.",
+    "CANNOT_CHANGE_OWN_ACCOUNT": "Bunu kendi hesabınızda yapamazsınız.",
+    "USER_HAS_SERVERS": "Kullanıcının sunucuları var; önce onlar silinmeli.",
+    "CAPTCHA_REQUIRED": "Bot doğrulamasını tamamlayın.",
+    "CAPTCHA_FAILED": "Bot doğrulaması başarısız. Tekrar deneyin.",
+    "CAPTCHA_UNAVAILABLE": "Bot doğrulama sağlayıcısına ulaşılamadı.",
+    "OTP_CHANNEL_UNAVAILABLE": "Kod gönderilecek SMS veya e-posta ayarlı değil.",
+    "SMS_NOT_CONFIGURED": "SMS gönderimi ayarlanmadı.",
+    "NOTIFICATION_LOCKED": "Bu bildirimi yönetici sabitledi.",
+    "CHANNEL_UNAVAILABLE": "Bu kanal henüz ayarlanmadı.",
+    "PHONE_NOT_VERIFIED": "Önce telefon numaranızı doğrulayın.",
+    "PUSH_NOT_SUBSCRIBED": "Önce bu tarayıcıda bildirimleri açın.",
+    "NOTIFICATION_TEST_FAILED": "Test bildirimi gönderilemedi.",
+    "FORBIDDEN_TARGET": "Sizde olmayan izinleri veremez, sizden yetkili birini değiştiremezsiniz.",
+    "ROLE_LOCKED": "Bu hazır rol değiştirilemez veya silinemez.",
+    "LAST_ADMIN": "En az bir yönetici kalmalı.",
+    "MAIL_AUTH_FAILED": "SMTP kullanıcı adı veya parolası kabul edilmedi.",
+    "MAIL_TLS_FAILED": "SMTP sunucusuyla güvenli bağlantı kurulamadı (port ve güvenlik ayarını kontrol edin).",
+    "MAIL_REJECTED": "SMTP sunucusu iletiyi reddetti (gönderen adresini kontrol edin).",
+    "MAIL_HOST_NOT_FOUND": "SMTP sunucusu bulunamadı.",
+    "MAIL_CONNECTION_FAILED": "SMTP sunucusuna bağlanılamadı.",
+    "SMS_AUTH_FAILED": "SMS sağlayıcısı hesap bilgilerini kabul etmedi.",
+    "SMS_REJECTED": "SMS sağlayıcısı mesajı reddetti.",
+    "SMS_PROVIDER_UNREACHABLE": "SMS sağlayıcısına ulaşılamadı.",
+    "SMS_PROVIDER_UNKNOWN": "Bilinmeyen SMS sağlayıcısı.",
+    "SMS_INVALID_SETTINGS": "SMS ayarları eksik veya hatalı.",
+    "OTP_NOT_ENABLED": "Kodla doğrulama açık değil.",
+    "OTP_NOT_CONFIGURED": "Kodla doğrulama kullanılamıyor.",
+    "OTP_HAS_EXPIRED": "Kodun süresi doldu; yenisini isteyin.",
+    "TOTP_NOT_ENABLED": "Doğrulayıcı uygulama açık değil.",
+    "TOTP_ALREADY_ENABLED": "Doğrulayıcı uygulama zaten açık.",
+    "TOTP_NOT_CONFIGURED": "Doğrulayıcı uygulama kurulmamış.",
+    "TWO_FACTOR_NOT_ENABLED": "İki adımlı doğrulama açık değil.",
+    "BACKUP_CODES_NOT_ENABLED": "Yedek kodlar açık değil.",
+    "INVALID_BACKUP_CODE": "Yedek kod geçersiz.",
+    "INVALID_CODE": "Kod geçersiz.",
+    "TOO_MANY_ATTEMPTS_REQUEST_NEW_CODE": "Çok fazla deneme; yeni kod isteyin.",
+    "ACCOUNT_TEMPORARILY_LOCKED": "Çok fazla hatalı deneme; hesap bir süre kilitlendi.",
+    "INVALID_TWO_FACTOR_COOKIE": "Doğrulama oturumu sona erdi; yeniden giriş yapın.",
+    "INVALID_PHONE_NUMBER": "Telefon numarası geçersiz.",
+    "PHONE_NUMBER_EXIST": "Bu numara başka bir hesapta kayıtlı.",
+    "PHONE_NUMBER_NOT_EXIST": "Bu numara kayıtlı değil.",
+    "OTP_NOT_FOUND": "Kod bulunamadı; yenisini isteyin.",
+    "OTP_EXPIRED": "Kodun süresi doldu; yenisini isteyin.",
+    "INVALID_OTP": "Kod hatalı.",
+    "PHONE_NUMBER_NOT_VERIFIED": "Telefon numarası doğrulanmadı.",
+    "TOO_MANY_ATTEMPTS": "Çok fazla deneme; biraz sonra tekrar deneyin.",
+    "YOU_CANNOT_BAN_YOURSELF": "Kendinizi yasaklayamazsınız.",
+    "YOU_CANNOT_REMOVE_YOURSELF": "Kendinizi silemezsiniz.",
+    "YOU_CANNOT_IMPERSONATE_ADMINS": "Yöneticiler adına giriş yapılamaz.",
+    "BANNED_USER": "Hesabınız yasaklandı."
   },
   "Auth": {
     "required": "zorunlu",
@@ -182,7 +232,28 @@
     "resetIntro": "E-postadaki bağlantı bir saat geçerlidir.",
     "newPassword": "Yeni parola",
     "resetSubmit": "Yeni parolayı kaydet",
-    "resetDone": "Parolanız değiştirildi. Yeni parolanızla giriş yapın; diğer oturumlar kapatıldı."
+    "resetDone": "Parolanız değiştirildi. Yeni parolanızla giriş yapın; diğer oturumlar kapatıldı.",
+    "lastUsed": "Son kullanılan",
+    "captchaLoadFailed": "Bot doğrulaması yüklenemedi. Sayfayı yenileyin veya reklam engelleyiciyi bu site için kapatın.",
+    "twoFactor": {
+      "code": "Doğrulama kodu",
+      "title": "İki adımlı doğrulama",
+      "intro": "Parolanız doğru. Giriş için ikinci adımı tamamlayın.",
+      "app": "Uygulama",
+      "sendCode": "SMS / e-posta",
+      "backup": "Yedek kod",
+      "appHelp": "Doğrulayıcı uygulamanızdaki 6 haneli kodu girin.",
+      "codeSent": "Kod gönderildi. 5 dakika geçerli.",
+      "codeHelp": "Kodu kayıtlı telefonunuza ya da e-postanıza gönderelim.",
+      "send": "Kodu gönder",
+      "resend": "Yeniden gönder",
+      "backupLabel": "Yedek kod",
+      "backupHelp": "İki adımlı doğrulamayı açarken kaydettiğiniz kodlardan biri; her kod bir kez kullanılır.",
+      "trust": "Bu cihaza 30 gün güven",
+      "trustHelp": "Bu tarayıcıda 30 gün boyunca ikinci adım sorulmaz.",
+      "verify": "Doğrula ve giriş yap",
+      "back": "Geri"
+    }
   },
   "fieldErrors": {
     "INVALID_EMAIL": "Geçerli bir e-posta adresi girin.",
@@ -215,7 +286,16 @@
     "INVALID_SSH_KEY": "Geçerli bir OpenSSH açık anahtarı girin (ssh-ed25519, ssh-rsa veya ecdsa).",
     "KEY_EXISTS": "Bu anahtar zaten ekli.",
     "CONFIRMATION_MISMATCH": "Onay için sunucu adını aynen yazın.",
-    "QUOTA_EXCEEDED": "Kota aşılıyor."
+    "QUOTA_EXCEEDED": "Kota aşılıyor.",
+    "INVALID_PHONE": "Geçerli bir telefon numarası girin (ülke koduyla).",
+    "INVALID_COLOR": "#rrggbb biçiminde bir renk girin.",
+    "INVALID_IMAGE": "PNG, JPEG, WebP veya ICO dosyası seçin.",
+    "IMAGE_TOO_LARGE": "Dosya 256 KB’den büyük.",
+    "INVALID_JSON": "Geçerli bir JSON girin.",
+    "INVALID_ROLE_KEY": "Küçük harfle başlayan 2-32 karakter: harf, rakam, - ve _.",
+    "ROLE_EXISTS": "Bu anahtarla bir rol zaten var.",
+    "NOT_FOR_ADMINS": "Yönetici rolüne kişiye özel izin eklenemez.",
+    "NOT_SUPPORTED_BY_VERSION": "Bu vSphere sürümü bu yöntemi desteklemiyor."
   },
   "Setup": {
     "title": "Kurulum sihirbazı",
@@ -414,7 +494,12 @@
       "caPem": "CA sertifikası (PEM)",
       "caPemHelp": "vCenter VMCA kök sertifikası veya kurumunuzun CA'sı.",
       "sha256": "SHA-256 parmak izi",
-      "sha256Help": "Yalnızca bu tam sertifika kabul edilir. Sertifika yenilenince güncellemeniz gerekir."
+      "sha256Help": "Yalnızca bu tam sertifika kabul edilir. Sertifika yenilenince güncellemeniz gerekir.",
+      "groupEndpoint": "Uç nokta",
+      "groupEndpointHelp": "vCenter veya ESXi’nin panelden erişilebilen adı ya da IP adresi.",
+      "groupAccount": "Kimlik bilgileri",
+      "groupAccountHelp": "Panelin kullanacağı hesap. Yalnızca gereken yetkileri olan ayrı bir hesap önerilir.",
+      "groupTls": "Sertifika doğrulaması"
     },
     "tlsMode": {
       "system": "Sistem CA'ları (varsayılan)",
@@ -465,7 +550,11 @@
     "warning": {
       "HOST_MANAGED_BY_VCENTER": "Bu ESXi bir vCenter tarafından yönetiliyor. Hostu ayrıca eklemek yerine vCenter'ı ekleyin.",
       "LICENSE_UNREADABLE": "Lisans bilgisi okunamadı.",
-      "PRIVILEGES_UNREADABLE": "Servis hesabının yetkileri okunamadı; işlemler kullanılamaz görünür."
+      "PRIVILEGES_UNREADABLE": "Servis hesabının yetkileri okunamadı; işlemler kullanılamaz görünür.",
+      "VERSION_LEGACY": "Bu vSphere sürümü (7.0 öncesi) üreticinin desteği dışında ve kullandığımız kütüphanece resmî olarak desteklenmiyor. Temel işlemler çalışır; güvenlik güncellemesi almadığını unutmayın.",
+      "VERSION_END_OF_SUPPORT": "Bu vSphere sürümünün genel desteği sona erdi (6.7 ve 7.0). Çalışmaya devam eder; 8.0 veya üstüne yükseltmeniz önerilir.",
+      "CUSTOMIZATION_GUESTINFO": "vCenter 7.0 U3 öncesinde yerleşik cloud-init kişiselleştirmesi yok. Yeni sunucular cloud-init verisini guestinfo üzerinden alır; şablonda cloud-init 21.3 veya üstü ve VMware veri kaynağı açık olmalı.",
+      "FEDERATED_LOGIN_BLOCKED": "vCenter 9 kimlik federasyonu kullanan hesaplarla parola girişini engeller. Bu bağlantı için vsphere.local veya LDAP/AD servis hesabı kullanın."
     },
     "operationsTitle": "Desteklenen işlemler (yetki ve lisansa göre)",
     "yes": "evet",
@@ -519,7 +608,39 @@
       "button": "Bağlantıyı kaldır"
     },
     "removed": "Bağlantı kaldırıldı.",
-    "console": "Konsol"
+    "console": "Konsol",
+    "compat": {
+      "title": "Sürüm uyumluluğu",
+      "intro": "Algılanan vSphere sürümü ve bu sürümle kullanılan yöntemler. Gerekirse eski bir API sürümünü sabitleyebilir veya kişiselleştirme yöntemini seçebilirsiniz.",
+      "formHelp": "Çoğu durumda “Otomatik algıla” doğru seçimdir. Elle seçim yalnızca algılanan sürümden eskiye inebilir.",
+      "version": "vSphere API sürümü",
+      "versionHelp": "Otomatik: sunucunun kendi bildirdiği sürüm kullanılır (6.0 – 9.x).",
+      "auto": "Otomatik algıla (önerilen)",
+      "customization": "Kişiselleştirme yöntemi",
+      "customizationHelp": "Yeni sunucuların ağ, ad ve SSH anahtarını nasıl alacağı.",
+      "method": {
+        "auto": "Otomatik",
+        "cloudinit": "Yerleşik cloud-init (vCenter 7.0 U3+)",
+        "guestinfo": "guestinfo veri kaynağı",
+        "none": "Desteklenmiyor"
+      },
+      "methodHelp": {
+        "auto": "Sürüme göre en uygun yöntem seçilir.",
+        "cloudinit": "vCenter’ın kendi cloud-init kişiselleştirmesi.",
+        "guestinfo": "Her sürümde çalışır; şablonda cloud-init 21.3+ gerekir."
+      },
+      "detected": "Algılanan sürüm",
+      "support": "Destek durumu",
+      "supportState": {
+        "supported": "Destekleniyor",
+        "end-of-support": "Desteği bitti",
+        "legacy": "Eski sürüm"
+      },
+      "cloning": "Şablondan oluşturma",
+      "needsVcenter": "vCenter gerekir",
+      "save": "Uyumluluk ayarını kaydet",
+      "saved": "Kaydedildi; bağlantı yeni ayarla yeniden tarandı."
+    }
   },
   "Console": {
     "title": "Konsol: {name}",
@@ -605,7 +726,21 @@
     "summary": "Özet",
     "choosePlan": "Bir konum ve paket ya da özel kaynak seçin.",
     "pricing": "Fiyat hesaplanıyor…",
-    "manageKeys": "SSH anahtarlarını yönet"
+    "manageKeys": "SSH anahtarlarını yönet",
+    "why": {
+      "imageDisk": "Seçili imaj en az {min} GB disk ister.",
+      "capacity": "Bu konumda şu an yer yok.",
+      "quota": "Kotanızı aşar: {limits}."
+    },
+    "bestValue": "En uygun",
+    "suggest": "Öner",
+    "steps": {
+      "label": "Sipariş adımları",
+      "location": "Konum ve sistem",
+      "plan": "Paket",
+      "access": "Ad ve erişim",
+      "review": "Onay"
+    }
   },
   "Catalog": {
     "eyebrow": "YÖNETİM · KATALOG",
@@ -671,14 +806,14 @@
       "cpuMin": "vCPU en az",
       "cpuMax": "vCPU en çok",
       "cpuStep": "vCPU adımı",
-      "memoryMinMb": "RAM en az (MB)",
-      "memoryMaxMb": "RAM en çok (MB)",
-      "memoryStepMb": "RAM adımı (MB)",
+      "memoryMinMb": "RAM en az",
+      "memoryMaxMb": "RAM en çok",
+      "memoryStepMb": "RAM adımı",
       "diskMinGb": "Disk en az (GB)",
       "diskMaxGb": "Disk en çok (GB)",
       "diskStepGb": "Disk adımı (GB)",
-      "minMemoryMbPerVcpu": "vCPU başına en az RAM (MB)",
-      "maxMemoryMbPerVcpu": "vCPU başına en çok RAM (MB)",
+      "minMemoryMbPerVcpu": "vCPU başına en az RAM (GB)",
+      "maxMemoryMbPerVcpu": "vCPU başına en çok RAM (GB)",
       "priceVcpu": "vCPU başına fiyat",
       "priceMemoryGb": "GB RAM başına fiyat",
       "priceDiskGb": "GB disk başına fiyat",
@@ -736,13 +871,54 @@
       "emptyUnlimited": "Boş = sınırsız",
       "maxServers": "En çok sunucu",
       "maxVcpu": "En çok vCPU",
-      "maxMemoryMb": "En çok RAM (MB)",
+      "maxMemoryMb": "En çok RAM",
       "maxDiskGb": "En çok disk (GB)"
     },
     "removeConfirm": "“{name}” kaldırılsın mı? Bu işlem geri alınamaz.",
     "cancel": "Vazgeç",
     "capacity": "Kapasite",
-    "availableOf": "{offered} {unit} içinden {available} boş"
+    "availableOf": "{offered} {unit} içinden {available} boş",
+    "form": {
+      "identity": "Kimlik",
+      "poolIdentityHelp": "Müşterinin sipariş ederken gördüğü konum adı.",
+      "vmware": "VMware kaynakları",
+      "vmwareHelp": "Bu havuzun sunucularının oluşturulacağı küme/host, ağ ve veri depoları.",
+      "datastoresHelp": "Birden fazla seçerseniz en fazla boş alanı olan kullanılır.",
+      "overcommit": "Fazla tahsis",
+      "overcommitHelp": "1 fiziksel kaynak karşılığı kaç sanal kaynak satılacağı. CPU için 4 yaygındır; bellek için 1 güvenlidir.",
+      "reserve": "Güvenlik payı",
+      "reserveHelp": "Fiziksel kapasitenin satışa açılmayan, yönetim ve ani yük için ayrılan kısmı.",
+      "cpuRange": "vCPU aralığı",
+      "memoryRange": "Bellek aralığı (GB)",
+      "diskRange": "Disk aralığı (GB)",
+      "balance": "vCPU başına bellek",
+      "balanceHelp": "Dengesiz yapılandırmaları engeller (ör. 1 vCPU + 64 GB).",
+      "pricing": "Fiyat",
+      "pricingHelp": "Aylık birim fiyatlar; toplam bunlardan hesaplanır.",
+      "imageIdentityHelp": "Müşterinin sipariş ederken seçtiği işletim sistemi adı.",
+      "template": "VMware şablonu",
+      "templateHelp": "cloud-init kurulu bir şablon seçin. Listede yalnızca şablon olarak işaretli makineler var.",
+      "requirements": "Gereksinim",
+      "minDiskHelp": "Bu imaj bundan küçük diskle kurulamaz; daha küçük paketler bu imajı sunmaz.",
+      "resources": "Kaynaklar",
+      "resourcesHelp": "Sunucunun alacağı sanal donanım.",
+      "hourlyHelp": "Boş bırakırsanız aylık fiyat / 730 olarak hesaplanır.",
+      "where": "Nerede ve hangi imajlarla",
+      "whereHelp": "Paketin satılacağı konumlar ve kurulabilecek işletim sistemleri.",
+      "diskTooSmall": "Disk şu imajlar için küçük: {images}.",
+      "preview": "Yeni paket",
+      "previewShape": "{vcpu} vCPU · {memory} GB RAM · {disk} GB disk",
+      "month": "ay",
+      "network": "Ağ",
+      "networkHelp": "Alt ağ ve ağ geçidi. CIDR girdiğinizde geçit ve aralık önerilir.",
+      "cidrHint": "Öneri: geçit {gateway}, aralık {start} – {end} ({n} adres).",
+      "apply": "Uygula",
+      "range": "Adres aralığı",
+      "rangeHelp": "Sunuculara bu aralıktan sırayla adres verilir. Dışarıda tutulanlar atlanır.",
+      "dnsServers": "DNS sunucuları",
+      "scopeHelp": "Varsayılan herkese uygulanır; kullanıcı seçerseniz yalnızca ona.",
+      "limits": "Sınırlar"
+    }
   },
   "Servers": {
     "loading": "Yükleniyor…",
@@ -933,7 +1109,7 @@
     "system": "Sistem",
     "myServers": "Sunucularım",
     "newServer": "Yeni sunucu",
-    "account": "Anahtarlar ve projeler",
+    "account": "Hesabım",
     "lightTheme": "Açık temaya geç",
     "darkTheme": "Koyu temaya geç",
     "language": "Dil",
@@ -941,7 +1117,16 @@
     "logout": "Çıkış yap",
     "openMenu": "Menüyü aç",
     "adminBadge": "Yönetici",
-    "earlyBuild": "Erken sürüm"
+    "earlyBuild": "Erken sürüm",
+    "peopleSection": "Kişiler ve ayarlar",
+    "users": "Kullanıcılar",
+    "roles": "Roller",
+    "settings": "Ayarlar",
+    "notifications": "Bildirimler",
+    "impersonating": "{email} adına görüntülüyorsunuz.",
+    "stopImpersonating": "Kendi hesabıma dön",
+    "search": "Ara veya git…",
+    "staffBadge": "Ekip"
   },
   "Dashboard": {
     "eyebrow": "YÖNETİM",
@@ -999,8 +1184,8 @@
     "intro": "Panelin kendi sağlığı, kullanıcı kaydı, yedekler ve güncellemeler."
   },
   "Account": {
-    "title": "Anahtarlar ve projeler",
-    "intro": "Giriş güvenliğiniz, yeni sunuculara yüklenen SSH anahtarlarınız ve projeleriniz.",
+    "title": "Hesabım",
+    "intro": "Profiliniz, güvenliğiniz, bildirimleriniz, SSH anahtarlarınız ve projeleriniz.",
     "security": {
       "title": "Giriş ve güvenlik",
       "intro": "Parolanız, passkey'leriniz ve oturumu açık cihazlarınız.",
@@ -1023,6 +1208,63 @@
       "revoke": "Oturumu kapat",
       "mobile": "Mobil",
       "desktop": "Bilgisayar"
+    },
+    "tabs": {
+      "profile": "Profil",
+      "security": "Güvenlik",
+      "notifications": "Bildirimler",
+      "keys": "SSH anahtarları",
+      "projects": "Projeler"
+    },
+    "profile": {
+      "title": "Profil",
+      "intro": "Panelde görünen adınız.",
+      "name": "Ad soyad",
+      "email": "E-posta",
+      "emailHelp": "Giriş adınızdır; değiştirmek için yöneticinize başvurun.",
+      "save": "Kaydet",
+      "saved": "Profil kaydedildi."
+    },
+    "twoFactor": {
+      "sectionTitle": "İki adımlı doğrulama ve telefon",
+      "sectionIntro": "Parolanıza ek olarak bir doğrulayıcı uygulama, SMS veya e-posta kodu.",
+      "title": "Doğrulayıcı uygulama",
+      "on": "Açık",
+      "off": "Kapalı",
+      "intro": "Google Authenticator, Microsoft Authenticator, 1Password gibi bir uygulamayla 6 haneli kodlar.",
+      "enable": "İki adımlı doğrulamayı aç",
+      "newCodes": "Yeni yedek kodlar",
+      "disable": "Kapat",
+      "confirmPassword": "Devam etmek için parolanızı girin.",
+      "continue": "Devam",
+      "scan1": "Doğrulayıcı uygulamanızla bu QR kodu tarayın.",
+      "scan2": "Uygulamanın gösterdiği 6 haneli kodu girin.",
+      "qrAlt": "İki adımlı doğrulama QR kodu",
+      "manual": "Tarayamıyorsanız bu anahtarı girin:",
+      "code": "Doğrulama kodu",
+      "verify": "Doğrula",
+      "done": "Kodları kaydettim",
+      "enabled": "İki adımlı doğrulama açıldı.",
+      "disabled": "İki adımlı doğrulama kapatıldı.",
+      "backupTitle": "Yedek kodlarınız",
+      "backupHelp": "Telefonunuza ulaşamazsanız bu kodlarla giriş yaparsınız. Her kod bir kez kullanılır; güvenli bir yerde saklayın. Bir daha gösterilmez.",
+      "copy": "Kopyala",
+      "copied": "Kodlar kopyalandı.",
+      "download": "İndir"
+    },
+    "phone": {
+      "title": "Telefon numarası",
+      "intro": "Doğrulanmış numaranıza SMS ile giriş kodu ve bildirim gönderilebilir.",
+      "unavailable": "SMS gönderimi henüz ayarlanmadı; yöneticiniz SMS sağlayıcısını eklediğinde numara doğrulayabilirsiniz.",
+      "change": "Yeni numara",
+      "number": "Cep telefonu",
+      "help": "Ülke koduyla girin. 05xx ile başlayan numaralar +90 olarak tamamlanır.",
+      "sendCode": "Kod gönder",
+      "codeSent": "{phone} numarasına 6 haneli kod gönderildi.",
+      "code": "SMS kodu",
+      "verify": "Doğrula",
+      "cancel": "Vazgeç",
+      "verified": "Telefon numarası doğrulandı."
     }
   },
   "AuthLayout": {
@@ -1035,5 +1277,681 @@
       "backup": "Şifreli yedek, alarm ve güvenli güncelleme"
     },
     "footer": "Açık kaynak · kendi sunucunuzda çalışır"
+  },
+  "Tasks": {
+    "title": "Arka plan işleri",
+    "everyone": "Herkes",
+    "mine": "Benimkiler",
+    "close": "Kapat",
+    "empty": "Şu an iş yok.",
+    "progress": "İlerleme",
+    "running": "{n} iş sürüyor",
+    "recent": "Son işler ({n})"
+  },
+  "Inbox": {
+    "title": "Bildirimler",
+    "unreadLabel": "{n} okunmamış bildirim",
+    "markAll": "Tümünü okundu say",
+    "settings": "Ayarlar",
+    "empty": "Henüz bildirim yok."
+  },
+  "Palette": {
+    "title": "Komut paleti",
+    "placeholder": "Sayfa, sunucu ya da işlem arayın…",
+    "empty": "“{query}” için sonuç yok. Başka bir ad, IP ya da sayfa deneyin.",
+    "pages": "Sayfalar",
+    "servers": "Sunucular",
+    "actions": "İşlemler",
+    "navigate": "gez",
+    "open": "aç",
+    "lightTheme": "Açık temaya geç",
+    "darkTheme": "Koyu temaya geç",
+    "notificationSettings": "Bildirim ayarları"
+  },
+  "Insights": {
+    "title": "Dikkat gerektirenler",
+    "allGood": "Her şey yolunda; dikkat gerektiren bir durum yok.",
+    "severity": {
+      "danger": "Kritik",
+      "warning": "Uyarı",
+      "info": "Öneri"
+    },
+    "resource": {
+      "vcpu": "vCPU",
+      "memoryMb": "RAM",
+      "storageGb": "Depolama",
+      "servers": "Sunucu",
+      "diskGb": "Disk"
+    },
+    "codes": {
+      "POOL_NEARLY_FULL": {
+        "title": "{pool} dolmak üzere",
+        "body": "{resource} kullanımı %{used}. Yeni sunucular için kapasite ekleyin ya da fazla tahsisi gözden geçirin."
+      },
+      "POOL_FILLING": {
+        "title": "{pool} doluyor",
+        "body": "{resource} kullanımı %{used}."
+      },
+      "POOL_FORECAST": {
+        "title": "{pool} yaklaşık {days} günde dolacak",
+        "body": "Son 30 günün sipariş hızına göre vCPU tahmini."
+      },
+      "IP_POOL_EMPTY": {
+        "title": "{pool}: boş IP kalmadı",
+        "body": "Bu havuzda yeni sunucu oluşturulamaz. Yeni bir aralık ekleyin."
+      },
+      "IP_POOL_LOW": {
+        "title": "{pool}: {free} boş IP kaldı",
+        "body": "Yakında yeni sunucular IP bulamayabilir."
+      },
+      "CONNECTION_DOWN": {
+        "title": "{connection} erişilemiyor",
+        "body": "Son hata: {code}. Bağlantıyı yeniden tarayın."
+      },
+      "OPERATIONS_STUCK": {
+        "title": "{count} işlem süresini aştı",
+        "body": "İşlemler sekmesinden durumlarını kontrol edin."
+      },
+      "OPERATIONS_FAILED": {
+        "title": "Son 24 saatte {count} işlem başarısız",
+        "body": "Hata kodlarına bakıp yeniden deneyebilirsiniz."
+      },
+      "RECONCILE_FINDINGS": {
+        "title": "{count} uzlaştırma bulgusu açık",
+        "body": "Panel ile VMware arasında farklar var."
+      },
+      "WORKER_DOWN": {
+        "title": "Arka plan çalışanı yanıt vermiyor",
+        "body": "Sunucu işlemleri ilerlemiyor; worker konteynerini kontrol edin."
+      },
+      "BACKUP_FAILED": {
+        "title": "Son yedek başarısız",
+        "body": "Hata kodu: {code}."
+      },
+      "BACKUP_NEVER": {
+        "title": "Henüz yedek alınmadı",
+        "body": "Sunucuda yedekleme zamanlayıcısını açın."
+      },
+      "BACKUP_STALE": {
+        "title": "Son başarılı yedek {hours} saat önce",
+        "body": "Günlük yedek zamanlayıcısını kontrol edin."
+      },
+      "PACKAGE_UNSELLABLE": {
+        "title": "{package} şu an satılamıyor",
+        "body": "Sunulduğu konumlarda yeterli kapasite yok."
+      },
+      "ADMINS_WITHOUT_2FA": {
+        "title": "{count} yöneticide iki adımlı doğrulama kapalı",
+        "body": "Yönetici hesapları için iki adımlı doğrulama önerilir."
+      },
+      "REGISTRATION_WITHOUT_CAPTCHA": {
+        "title": "Kayıt açık ama bot koruması kapalı",
+        "body": "Kayıt formu için CAPTCHA açmanız önerilir."
+      },
+      "MAIL_NOT_CONFIGURED": {
+        "title": "E-posta gönderimi ayarlı değil",
+        "body": "Parola sıfırlama ve e-posta bildirimleri çalışmaz."
+      },
+      "SERVER_PROBLEM": {
+        "title": "{name} sorunlu",
+        "body": "Sunucu sayfasında hatayı görün."
+      },
+      "SERVER_OFF_LONG": {
+        "title": "{name} bir haftadır kapalı",
+        "body": "Kullanmıyorsanız silerek kaynağı serbest bırakabilirsiniz."
+      },
+      "QUOTA_NEAR": {
+        "title": "{resource} kotanız dolmak üzere",
+        "body": "{used} / {max} kullanılıyor."
+      },
+      "NO_SSH_KEYS": {
+        "title": "SSH anahtarı eklemediniz",
+        "body": "Sunucu oluşturmak için en az bir açık anahtar gerekir."
+      },
+      "ENABLE_2FA": {
+        "title": "İki adımlı doğrulamayı açın",
+        "body": "Hesabınızı parola sızıntılarına karşı korur."
+      }
+    }
+  },
+  "Metrics": {
+    "title": "Canlı performans",
+    "intro": "VMware’den 20 saniyelik örnekler, son 15 dakika.",
+    "offline": "Sunucu çalışmıyor.",
+    "offlineHelp": "Grafikler sunucu açıkken görünür.",
+    "resume": "Sürdür",
+    "pause": "Duraklat",
+    "cpu": "CPU",
+    "memory": "Bellek",
+    "network": "Ağ",
+    "disk": "Disk",
+    "noSamples": "Henüz örnek yok; birkaç dakika içinde görünür.",
+    "footer": "{n} örnek, {interval} saniye aralıkla",
+    "uptime": "çalışma süresi {h} sa {m} dk"
+  },
+  "Notify": {
+    "title": "Bildirim tercihleri",
+    "intro": "Her bildirimin size hangi kanaldan geleceğini seçin. Seçenekler yöneticinizin izin verdiği kanallarla sınırlıdır.",
+    "none": "Size gönderilebilecek bildirim yok.",
+    "channelsTitle": "Kanallar",
+    "channelsIntro": "Bildirimlerin size ulaşabileceği yollar ve durumları. Her kanalı buradan test edebilirsiniz.",
+    "channel": {
+      "inApp": "Panel içi",
+      "push": "Tarayıcı",
+      "email": "E-posta",
+      "sms": "SMS"
+    },
+    "channelHelp": {
+      "inApp": "Sağ üstteki zil simgesinde görünür.",
+      "push": "Panel kapalıyken bile bu cihazda sistem bildirimi olarak gelir.",
+      "email": "Hesabınızın e-posta adresine gönderilir.",
+      "sms": "Doğrulanmış telefon numaranıza gönderilir."
+    },
+    "unavailable": {
+      "inApp": "Kullanılamıyor.",
+      "push": "Bu tarayıcı desteklemiyor.",
+      "email": "E-posta gönderimi ayarlanmadı.",
+      "sms": "SMS gönderimi ayarlanmadı."
+    },
+    "needPhone": "Önce Güvenlik sekmesinden telefon numaranızı doğrulayın.",
+    "needPush": "Önce bu cihazda tarayıcı bildirimlerini açın.",
+    "pushOn": "Bu cihazda aç",
+    "pushOff": "Bu cihazda kapat",
+    "pushDenied": "Tarayıcı bildirim iznini reddetti. Site ayarlarından izin verebilirsiniz.",
+    "pushUnsupported": "Bu tarayıcı Web Push desteklemiyor.",
+    "test": "Test gönder",
+    "testSent": "{channel} kanalından test gönderildi.",
+    "event": "Bildirim",
+    "locked": "Yönetici sabitledi",
+    "lockedHelp": "Bu bildirimi yöneticiniz sabitledi; değiştirilemez.",
+    "notOffered": "Bu kanal bu bildirim için sunulmuyor",
+    "policyNote": "Kilitli bildirimler ve sunulmayan kanallar yöneticinizin bildirim kurallarından gelir.",
+    "events": {
+      "server_ready": {
+        "title": "Sunucu hazır",
+        "help": "Yeni sunucunuz kurulup açıldığında."
+      },
+      "server_failed": {
+        "title": "Sunucu işlemi başarısız",
+        "help": "Oluşturma, güç veya silme işlemi başarısız olduğunda."
+      },
+      "server_deleted": {
+        "title": "Sunucu silindi",
+        "help": "Bir sunucu ve diskleri kaldırıldığında."
+      },
+      "server_power": {
+        "title": "Güç işlemi tamamlandı",
+        "help": "Açma, kapatma, sıfırlama bittiğinde."
+      },
+      "auth_sign_in": {
+        "title": "Yeni giriş",
+        "help": "Hesabınıza yeni bir giriş yapıldığında."
+      },
+      "auth_password_changed": {
+        "title": "Parola değişti",
+        "help": "Parolanız değiştirildiğinde veya sıfırlandığında."
+      },
+      "auth_two_factor_changed": {
+        "title": "İki adımlı doğrulama değişti",
+        "help": "Açıldığında veya kapatıldığında."
+      },
+      "admin_user_registered": {
+        "title": "Yeni kullanıcı kaydı",
+        "help": "Biri kendi kendine kayıt olduğunda."
+      },
+      "admin_operation_failed": {
+        "title": "Müşteri işlemi başarısız",
+        "help": "Herhangi bir müşterinin işlemi kalıcı olarak başarısız olduğunda."
+      },
+      "admin_insight": {
+        "title": "Kritik uyarı",
+        "help": "Kapasite, IP, bağlantı, çalışan veya yedekle ilgili kritik bir içgörü çıktığında (günde en fazla bir kez)."
+      }
+    },
+    "policyTitle": "Önce yönetici, sonra kullanıcı",
+    "policyIntro": "Her bildirim için hangi kanalların kullanılabileceğini, hangilerinin varsayılan olarak açık olduğunu ve kullanıcıların değiştirip değiştiremeyeceğini belirleyin. Kullanıcılar yalnızca burada izin verilenler arasından seçim yapar.",
+    "ready": "hazır",
+    "notConfigured": "ayarlanmadı",
+    "audience": {
+      "user": "Kullanıcı bildirimleri",
+      "staff": "Ekip bildirimleri"
+    },
+    "audienceHelp": {
+      "user": "Her kullanıcıya kendi hesabı ve sunucularıyla ilgili gider.",
+      "staff": "İlgili izne sahip ekip üyelerine gider."
+    },
+    "on": "Açık",
+    "userCanChange": "Kullanıcı değiştirebilir",
+    "allow": "İzin ver",
+    "default": "varsayılan",
+    "legend": "Onay kutusu: kanal kullanılabilir. “varsayılan”: kullanıcı bir seçim yapmadıysa açık."
+  },
+  "Users": {
+    "eyebrow": "Kişiler",
+    "title": "Kullanıcılar",
+    "intro": "Hesaplar, roller, kişiye özel izinler, oturumlar ve güvenlik durumu.",
+    "new": "Yeni kullanıcı",
+    "stat": {
+      "total": "kullanıcı",
+      "staff": "ekip üyesi",
+      "twoFactor": "iki adımlı doğrulama açık",
+      "banned": "yasaklı"
+    },
+    "search": "E-posta, ad veya telefonla ara",
+    "filterRole": "Rol",
+    "filterStatus": "Durum",
+    "all": "Tümü",
+    "active": "Etkin",
+    "banned": "Yasaklı",
+    "no2fa": "İki adımlı doğrulama kapalı",
+    "empty": "Eşleşen kullanıcı yok.",
+    "col": {
+      "user": "Kullanıcı",
+      "roles": "Roller",
+      "status": "Durum",
+      "security": "Güvenlik",
+      "servers": "Sunucu",
+      "lastSeen": "Son giriş",
+      "actions": "İşlemler"
+    },
+    "overrides": "{n} özel izin",
+    "until": "{date} tarihine kadar",
+    "no2faShort": "2FA yok",
+    "method": {
+      "passkey": "passkey ile",
+      "email": "parola ile"
+    },
+    "never": "hiç",
+    "action": {
+      "access": "Rol ve izinler",
+      "sessions": "Oturumlar",
+      "password": "Parola belirle",
+      "impersonate": "Kullanıcı adına gir",
+      "ban": "Yasakla",
+      "unban": "Yasağı kaldır",
+      "remove": "Sil"
+    },
+    "actionsFor": "{email} işlemleri",
+    "unbanned": "Yasak kaldırıldı.",
+    "cancel": "Vazgeç",
+    "create": "Oluştur",
+    "created": "{email} oluşturuldu.",
+    "form": {
+      "identity": "Kimlik",
+      "email": "E-posta",
+      "name": "Ad soyad",
+      "password": "İlk parola",
+      "initialPassword": "Parola",
+      "passwordHelp": "Güçlü bir parola üretildi; kullanıcıya güvenli bir yoldan iletin.",
+      "generate": "Yeni parola üret",
+      "roles": "Roller",
+      "rolesHelp": "Birden fazla rol seçilebilir; izinler birleşir.",
+      "newPassword": "Yeni parola",
+      "copiedOnSave": "Kaydedince panoya kopyalanır."
+    },
+    "accessSaved": "Erişim kaydedildi.",
+    "accessTitle": "{email}: rol ve izinler",
+    "save": "Kaydet",
+    "rolesExplain": "Rollerin izinleri birleşir. Kendinizde olmayan izni veremezsiniz.",
+    "adminHasAll": "Yönetici rolü her izne sahiptir; kişiye özel izin gerekmez.",
+    "overridesTitle": "Kişiye özel izinler",
+    "overridesHelp": "Bir izne tıklayın: rolden gelen izni kaldırır ya da rolde olmayan izni ekler. Tekrar tıklamak geri alır.",
+    "effect": {
+      "allow": "eklendi",
+      "deny": "kaldırıldı"
+    },
+    "fromRole": "rolden",
+    "bannedDone": "{email} yasaklandı ve oturumları kapatıldı.",
+    "banTitle": "{email} yasaklansın mı?",
+    "banExplain": "Yasaklı kullanıcı giriş yapamaz; açık oturumları ve konsolları hemen kapanır. Sunucuları silinmez.",
+    "banReason": "Gerekçe",
+    "banReasonHelp": "Denetim kaydına ve kullanıcı listesine yazılır.",
+    "banDuration": "Süre",
+    "forever": "Süresiz",
+    "hours": "{n} saat",
+    "days": "{n} gün",
+    "passwordSet": "Parola değiştirildi ve panoya kopyalandı.",
+    "passwordTitle": "{email}: parola belirle",
+    "passwordExplain": "Kullanıcının mevcut parolası değişir. Yeni parolayı güvenli bir yoldan iletin.",
+    "sessionsRevoked": "Oturumlar kapatıldı.",
+    "sessionsTitle": "{email}: oturumlar",
+    "revokeAll": "Tümünü kapat",
+    "close": "Kapat",
+    "noSessions": "Açık oturum yok.",
+    "impersonated": "ekip tarafından açıldı",
+    "revoke": "Kapat",
+    "removed": "{email} silindi.",
+    "removeTitle": "{email} silinsin mi?",
+    "hasServers": "Bu kullanıcının {n} sunucusu var. Önce sunucuları silinmeli.",
+    "removeExplain": "Hesap, oturumlar, passkey’ler ve SSH anahtarları kalıcı olarak silinir. Geri alınamaz.",
+    "typeEmail": "Onaylamak için {email} yazın"
+  },
+  "Roles": {
+    "eyebrow": "Kişiler",
+    "title": "Roller",
+    "intro": "Rol, izinlerin adlandırılmış bir kümesidir. Kullanıcılara Kullanıcılar sayfasından bir veya birden fazla rol verilir; tek tek izinler kişiye özel de eklenip çıkarılabilir.",
+    "new": "Yeni rol",
+    "builtin": "Hazır",
+    "members": "{n} üye",
+    "noDescription": "Açıklama yok.",
+    "everything": "Tüm izinler",
+    "nothing": "İzin yok",
+    "remove": "Sil",
+    "removeTitle": "{name} silinsin mi?",
+    "removeBody": "Bu roldeki {n} kullanıcı kalan rolleriyle devam eder; başka rolü yoksa “Müşteri” olur.",
+    "cancel": "Vazgeç",
+    "edit": "Düzenle",
+    "removed": "Rol silindi.",
+    "saved": "Rol kaydedildi.",
+    "editTitle": "{name} rolünü düzenle",
+    "identity": "Kimlik",
+    "name": "Ad",
+    "key": "Anahtar",
+    "keyHelp": "Küçük harf, rakam, - ve _ ; sonradan değiştirilemez.",
+    "description": "Açıklama",
+    "permissions": "İzinler",
+    "selected": "{n} seçili",
+    "toggleGroup": "Tümünü seç / kaldır",
+    "save": "Kaydet",
+    "desc": {
+      "admin": "Her şey: roller ve ayarlar dahil.",
+      "user": "Kendi sunucularını sipariş eder ve yönetir.",
+      "operator": "Altyapıyı işletir: tüm sunucular, işlemler, VMware ve kapasite.",
+      "support": "Müşterilere yardım eder: kullanıcıları ve sunucuları görür, müşteri adına giriş yapabilir.",
+      "auditor": "Her şeyi salt okunur görür; denetim kaydı dahil."
+    },
+    "builtinName": {
+      "admin": "Yönetici",
+      "user": "Müşteri",
+      "operator": "Operatör",
+      "support": "Destek",
+      "auditor": "Denetçi"
+    }
+  },
+  "Permissions": {
+    "group": {
+      "dashboard": "Genel bakış",
+      "servers": "Sunucular",
+      "catalog": "Katalog",
+      "vmware": "VMware",
+      "users": "Kullanıcılar",
+      "roles": "Roller",
+      "settings": "Ayarlar",
+      "system": "Sistem"
+    },
+    "p": {
+      "dashboard_view": "Genel bakışı görme",
+      "servers_create": "Sunucu sipariş etme",
+      "servers_view_all": "Tüm sunucuları görme",
+      "servers_manage_all": "Tüm sunucuları yönetme",
+      "operations_retry": "İşlemi yeniden deneme",
+      "reconcile_run": "Uzlaştırma başlatma",
+      "consoles_any": "Her konsolu açma",
+      "catalog_view": "Kataloğu görme",
+      "catalog_manage": "Kataloğu yönetme",
+      "vmware_view": "VMware bağlantılarını görme",
+      "vmware_manage": "VMware bağlantılarını yönetme",
+      "users_view": "Kullanıcıları görme",
+      "users_manage": "Kullanıcıları yönetme",
+      "users_roles": "Rol atama",
+      "users_ban": "Yasaklama",
+      "users_sessions": "Oturumları kapatma",
+      "users_impersonate": "Kullanıcı yerine giriş",
+      "roles_manage": "Rolleri yönetme",
+      "settings_view": "Ayarları görme",
+      "settings_manage": "Ayarları değiştirme",
+      "system_view": "Sistemi görme",
+      "audit_view": "Denetim kayıtlarını görme"
+    },
+    "help": {
+      "dashboard_view": "Yönetim panosu, içgörüler ve özet grafikler.",
+      "servers_create": "Kendi hesabı için yeni sunucu oluşturma.",
+      "servers_view_all": "Herkesin sunucularını, işlemleri ve uzlaştırma bulgularını görme.",
+      "servers_manage_all": "Başkasının sunucusunu açma, kapatma, sıfırlama ve silme.",
+      "operations_retry": "Başarısız bir otomasyon işlemini kaldığı adımdan sürdürme.",
+      "reconcile_run": "Panel ile VMware arasındaki farkları hemen taratma.",
+      "consoles_any": "Herhangi bir sanal makinenin tarayıcı konsolunu açma ve açık konsolları kapatma.",
+      "catalog_view": "Havuzlar, paketler, imajlar, IP havuzları ve kotalar (yalnızca okuma).",
+      "catalog_manage": "Havuz, paket, imaj, IP havuzu ve kota ekleme, değiştirme, silme.",
+      "vmware_view": "Bağlantıları, envanteri ve kapasiteyi görme.",
+      "vmware_manage": "Bağlantı ekleme, yeniden tarama ve kaldırma.",
+      "users_view": "Kullanıcı listesi, roller, oturumlar ve güvenlik durumu.",
+      "users_manage": "Kullanıcı oluşturma, bilgilerini ve parolasını değiştirme, silme.",
+      "users_roles": "Kullanıcılara rol ve kişiye özel izin verme (yalnızca kendi izinleri kadar).",
+      "users_ban": "Kullanıcıyı süreli veya kalıcı olarak yasaklama ve yasağı kaldırma.",
+      "users_sessions": "Kullanıcıların açık oturumlarını sonlandırma.",
+      "users_impersonate": "Destek için kullanıcının hesabını onun gözünden görme (kayıt altında).",
+      "roles_manage": "Rol oluşturma, izinlerini değiştirme ve silme.",
+      "settings_view": "Marka, e-posta, bot koruması, SMS ve bildirim ayarlarını görme.",
+      "settings_manage": "Bu ayarları değiştirme ve entegrasyonları test etme.",
+      "system_view": "Sistem sağlığı, yedekler ve güncellemeler.",
+      "audit_view": "Kim, ne zaman, ne yaptı kayıtları."
+    }
+  },
+  "Settings": {
+    "eyebrow": "Kişiler ve ayarlar",
+    "title": "Ayarlar",
+    "intro": "Marka, e-posta, bot koruması, SMS ve bildirim kuralları. Her entegrasyonu kaydetmeden önce test edebilirsiniz.",
+    "readOnly": "Ayarları görebilirsiniz ama değiştiremezsiniz.",
+    "tabs": {
+      "general": "Genel",
+      "branding": "Marka",
+      "mail": "E-posta",
+      "captcha": "Bot koruması",
+      "sms": "SMS",
+      "notifications": "Bildirim kuralları"
+    },
+    "saved": "Kaydedildi.",
+    "save": "Kaydet",
+    "active": "Etkin",
+    "inactive": "Kapalı",
+    "secretKept": "•••••••• (kayıtlı)",
+    "secretHelp": "Boş bırakırsanız kayıtlı değer korunur.",
+    "optional": "isteğe bağlı",
+    "branding": {
+      "image_type": "PNG, JPEG, WebP veya ICO seçin.",
+      "image_size": "Dosya 256 KB’den büyük olamaz.",
+      "image_read": "Dosya okunamadı.",
+      "upload": "Dosya seç",
+      "removeImage": "Kaldır",
+      "logoHelp": "Kare, en az 64×64 px PNG/WebP önerilir; en fazla 256 KB.",
+      "faviconHelp": "32×32 veya 48×48 px PNG ya da ICO; en fazla 256 KB.",
+      "identity": "Ad",
+      "identityHelp": "Menüde, giriş sayfasında, sekme başlığında ve e-postalarda görünen ad.",
+      "name": "Panel adı",
+      "nameHelp": "En fazla 40 karakter.",
+      "color": "Vurgu rengi",
+      "colorHelp": "Düğmeler, bağlantılar ve seçili öğeler bu rengi kullanır. Yazı rengi okunabilirliğe göre otomatik seçilir.",
+      "custom": "Özel renk",
+      "hex": "Renk kodu",
+      "default": "Varsayılana dön",
+      "lowContrast": "Bu renk okunabilirlik için zayıf olabilir (açık zemin {light}:1, koyu zemin {dark}:1; en az 3:1 önerilir).",
+      "preview": "Önizleme",
+      "sampleButton": "Düğme",
+      "sampleLink": "Bağlantı",
+      "logo": "Logo",
+      "logoSection": "Menüde ve giriş sayfasında adın yanında görünür.",
+      "favicon": "Favicon",
+      "faviconSection": "Tarayıcı sekmesinde ve bildirimlerde görünen küçük simge."
+    },
+    "mail": {
+      "testOk": "Test e-postası {to} adresine gönderildi.",
+      "server": "SMTP sunucusu",
+      "serverHelp": "Panelin e-posta göndereceği sunucu. Hazır bir sağlayıcı seçip bilgileri tamamlayabilirsiniz.",
+      "enabled": "E-posta gönderimini aç",
+      "envFallback": "Şu an kurulum dosyasındaki (.env) SMTP_URL kullanılıyor. Burada kaydettiğinizde bu ayar geçerli olur.",
+      "preset": "Hazır sağlayıcı",
+      "presetHelp": "Sunucu, port ve güvenliği doldurur; kullanıcı adı ve parolayı siz girersiniz.",
+      "presets": {
+        "gmail": "Gmail / Google Workspace",
+        "outlook": "Outlook / Microsoft 365",
+        "yandex": "Yandex Mail",
+        "zoho": "Zoho Mail",
+        "sendgrid": "SendGrid",
+        "mailgun": "Mailgun (AB)",
+        "ses": "Amazon SES (Frankfurt)",
+        "brevo": "Brevo"
+      },
+      "host": "Sunucu",
+      "port": "Port",
+      "security": "Güvenlik",
+      "sec": {
+        "starttls": "STARTTLS (587)",
+        "tls": "SSL/TLS (465)",
+        "none": "Şifresiz (25)"
+      },
+      "insecure": "Şifresiz bağlantıda parola ve e-postalar açık metin gider. Yalnızca güvenilir iç ağda kullanın.",
+      "auth": "Kimlik doğrulama",
+      "authHelp": "SMTP kullanıcı adı ve parolası. Gmail ve Microsoft 365 için uygulama parolası gerekir.",
+      "username": "Kullanıcı adı",
+      "password": "Parola",
+      "sender": "Gönderen",
+      "senderHelp": "Alıcının göreceği ad ve adres. Adres, SMTP sağlayıcısında doğrulanmış olmalıdır.",
+      "fromName": "Gönderen adı",
+      "fromAddress": "Gönderen adresi",
+      "use": "Ne için kullanılsın",
+      "useHelp": "İşlemle ilgili e-postalar. Bildirimlerin hangi kanaldan gideceği “Bildirim kuralları” sekmesindedir.",
+      "usePasswordReset": "Parola sıfırlama bağlantıları",
+      "usePasswordResetHelp": "Giriş sayfasında “Parolamı unuttum” görünür.",
+      "useTwoFactor": "İki adımlı doğrulama kodları",
+      "useTwoFactorHelp": "SMS yoksa giriş kodu e-postayla gönderilir.",
+      "notificationsNote": "Bildirim e-postaları (sunucu hazır, yeni giriş vb.) için Bildirim kuralları sekmesinden e-posta kanalını açın.",
+      "test": "Test",
+      "testHelp": "Formdaki değerlerle (kaydetmeden) bağlanır, oturum açar ve bir test e-postası gönderir.",
+      "testTo": "Alıcı",
+      "sendTest": "Test e-postası gönder"
+    },
+    "captcha": {
+      "solveFirst": "Önce doğrulamayı tamamlayın.",
+      "provider": "Sağlayıcı",
+      "providerHelp": "Giriş, kayıt ve parola sıfırlama formlarını botlara karşı korur. Anahtarları sağlayıcının panelinden alırsınız.",
+      "envFallback": "Şu an kurulum dosyasındaki Turnstile anahtarları kullanılıyor. Burada kaydettiğinizde bu ayar geçerli olur.",
+      "p": {
+        "none": "Kapalı",
+        "turnstile": "Cloudflare Turnstile",
+        "recaptcha-v2": "Google reCAPTCHA v2",
+        "recaptcha-v3": "Google reCAPTCHA v3",
+        "hcaptcha": "hCaptcha"
+      },
+      "d": {
+        "none": "Bot koruması yok.",
+        "turnstile": "Ücretsiz, çoğu zaman görünmez; gizlilik dostu.",
+        "recaptcha-v2": "“Ben robot değilim” kutusu.",
+        "recaptcha-v3": "Görünmez; her isteğe bir skor verir.",
+        "hcaptcha": "Gizlilik odaklı resim doğrulaması."
+      },
+      "keys": "Anahtarlar",
+      "keysHelp": "Site anahtarı tarayıcıda, gizli anahtar yalnızca sunucuda kullanılır. Alan adınızı sağlayıcıda tanımlamayı unutmayın.",
+      "getKeys": "Anahtar al",
+      "siteKey": "Site anahtarı",
+      "secret": "Gizli anahtar",
+      "minScore": "En düşük skor",
+      "minScoreHelp": "0 ile 1 arası; altındaki istekler reddedilir. 0,5 önerilir.",
+      "where": "Hangi formlarda",
+      "whereHelp": "Seçtiğiniz formlar gönderilmeden önce doğrulama ister.",
+      "use": {
+        "signIn": "Giriş",
+        "signUp": "Kayıt",
+        "passwordReset": "Parola sıfırlama isteği"
+      },
+      "test": "Test",
+      "testHelp": "Girdiğiniz site anahtarıyla doğrulamayı çözün, ardından gizli anahtarla sağlayıcıya doğrulatın.",
+      "invisible": "reCAPTCHA v3 görünmezdir; testte arka planda çalışır.",
+      "widgetFailed": "Doğrulama yüklenemedi; site anahtarını ve alan adı ayarını kontrol edin.",
+      "runTest": "Doğrulamayı test et",
+      "testOk": "Sağlayıcı doğrulamayı onayladı.",
+      "testFail": "Sağlayıcı doğrulamayı reddetti.",
+      "hostname": "alan adı",
+      "score": "skor"
+    },
+    "sms": {
+      "testOk": "Test SMS’i {to} numarasına gönderildi.",
+      "provider": "SMS sağlayıcısı",
+      "providerHelp": "Türkiye’deki sağlayıcıların API’leri hazır; listede olmayan bir servis için “Özel HTTP API” kullanın.",
+      "none": "Kapalı",
+      "confidence": {
+        "docs": "Resmî API belgesine göre",
+        "partial": "Resmî belge eksik",
+        "community": "Topluluk kaynaklı"
+      },
+      "docs": "API belgesi",
+      "website": "Web sitesi",
+      "confidenceHelp": {
+        "partial": "Bu sağlayıcının belgesi yanıt biçimini tam anlatmıyor. Kaydetmeden önce test gönderin.",
+        "community": "Bu sağlayıcının herkese açık API belgesi bulunamadı; entegrasyon başka projelerden alındı. Mutlaka test edin."
+      },
+      "account": "Hesap bilgileri",
+      "accountHelp": "Sağlayıcının panelinden aldığınız API bilgileri. Gizli alanlar şifreli saklanır ve bir daha gösterilmez.",
+      "field": {
+        "username": "Kullanıcı adı",
+        "password": "Parola",
+        "apiId": "API kimliği",
+        "apiKey": "API anahtarı",
+        "apiHash": "API hash (gizli)",
+        "apiSecret": "API gizli anahtarı",
+        "apiToken": "API jetonu",
+        "recipientType": "İYS alıcı türü",
+        "brandCode": "İYS marka kodu",
+        "customerCode": "Müşteri kodu",
+        "vendorCode": "Bayi kodu",
+        "accountNumber": "Hesap numarası",
+        "shortNumber": "Kısa numara",
+        "operator": "Operatör",
+        "channelCode": "Kanal kodu",
+        "url": "İstek adresi (URL)",
+        "method": "Yöntem",
+        "contentType": "Gövde biçimi",
+        "body": "İstek gövdesi",
+        "headers": "Başlıklar (JSON)",
+        "phoneFormat": "Numara biçimi",
+        "successPattern": "Başarı deseni (regex)"
+      },
+      "option": {
+        "1": "Turkcell",
+        "2": "Türk Telekom",
+        "3": "Vodafone",
+        "4": "Superonline",
+        "BIREYSEL": "Bireysel",
+        "TACIR": "Tacir",
+        "birey": "Bireysel",
+        "tacir": "Tacir",
+        "GET": "GET",
+        "POST": "POST",
+        "form": "Form",
+        "json": "JSON",
+        "e164": "+905321234567",
+        "international": "905321234567",
+        "national": "5321234567",
+        "zeroNational": "05321234567"
+      },
+      "fieldHelp": {
+        "url": "{to}, {text} ve {sender} yer tutucuları doldurulur.",
+        "body": "POST gövdesi; aynı yer tutucular kullanılabilir.",
+        "headers": "JSON nesnesi; örneğin Authorization başlığı için anahtar ve değer.",
+        "successPattern": "Yanıtta bu düzenli ifade bulunursa gönderim başarılı sayılır. Örnek: ^OK",
+        "phoneFormat": "Sağlayıcının beklediği numara biçimi.",
+        "apiHash": "Panelde Ayarlar > Güvenlik > API Erişimi altında.",
+        "operator": "Hesabınızın bağlı olduğu operatör."
+      },
+      "sender": "Gönderici",
+      "senderHelp": "Mesajlarda görünen başlık. Sağlayıcıda onaylanmış olmalıdır.",
+      "senderLabel": "Başlık (originator)",
+      "senderNumeric": "Bu sağlayıcıda başlığın adı değil sayısal kimliği girilir.",
+      "senderLabelHelp": "En fazla 11 karakter, sağlayıcıda tanımlı olduğu gibi.",
+      "commercial": "Ticari ileti (İYS)",
+      "commercialHelp": "Kampanya/duyuru niteliğindeki mesajlar İYS kontrolünden geçer. Kod ve bildirimler bilgilendirme amaçlıdır; genelde kapalı bırakın.",
+      "use": "Ne için kullanılsın",
+      "useHelp": "İşlemle ilgili SMS’ler. Bildirimlerin SMS ile gitmesi için Bildirim kuralları sekmesinden SMS kanalını açın.",
+      "useTwoFactor": "İki adımlı doğrulama kodları",
+      "useTwoFactorHelp": "Telefonu doğrulanmış kullanıcılara giriş kodu SMS ile gider.",
+      "usePhone": "Telefon doğrulama",
+      "usePhoneHelp": "Kullanıcılar Hesabım sayfasından numaralarını SMS koduyla doğrular.",
+      "notificationsNote": "Bildirim SMS’leri yalnızca telefonunu doğrulamış kullanıcılara gider.",
+      "test": "Test",
+      "testHelp": "Formdaki değerlerle (kaydetmeden) gerçek bir SMS gönderir.",
+      "testTo": "Telefon",
+      "testToHelp": "Ülke koduyla, örneğin +905321234567.",
+      "sendTest": "Test SMS’i gönder"
+    }
   }
 }

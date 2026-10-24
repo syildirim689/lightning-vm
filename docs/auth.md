@@ -1,12 +1,54 @@
 # Kimlik doğrulama, roller ve ilk kurulum
 
-## Roller
-- `admin`: yönetim paneli ve `/api/admin/*` uç noktaları.
-- `user`: kullanıcı paneli. Yönetici API'leri `403 FORBIDDEN` döner; her ret
-  `audit_events` tablosuna `admin.access / denied` olarak yazılır.
+## Roller ve izinler
+Yetki, izinler üzerinden verilir (`apps/api/src/permissions.ts`). Rol, izinlerin adlandırılmış bir
+kümesidir. Bir kullanıcının birden fazla rolü olabilir (`users.role`, virgülle ayrılmış); rollerin
+izinleri birleşir. Bunun üstüne kişiye özel istisnalar tanımlanabilir: tek bir izin eklenir (`allow`)
+veya çıkarılır (`deny`).
 
-Rol kontrolü API'de yapılır (`AdminGuard`). Web arayüzündeki kontrol yalnızca gereksiz sayfa
-göstermemek içindir; güvenlik sınırı değildir.
+| İzin | Ne verir |
+|---|---|
+| `dashboard.view` | Yönetim panosu ve içgörüler |
+| `servers.create` | Kendi hesabına sunucu sipariş etme |
+| `servers.view_all` / `servers.manage_all` | Tüm sunucuları görme / yönetme (güç, silme) |
+| `operations.retry`, `reconcile.run`, `consoles.any` | İşlemi yeniden deneme, uzlaştırma, her VM'in konsolu |
+| `catalog.view` / `catalog.manage` | Havuz, paket, imaj, IP havuzu ve kotalar |
+| `vmware.view` / `vmware.manage` | VMware bağlantıları |
+| `users.view`, `users.manage`, `users.roles`, `users.ban`, `users.sessions`, `users.impersonate` | Kullanıcı yönetimi |
+| `roles.manage` | Rolleri oluşturma ve değiştirme |
+| `settings.view` / `settings.manage` | Marka, e-posta, CAPTCHA, SMS ve bildirim ayarları |
+| `system.view`, `audit.view` | Sistem sağlığı, yedekler ve denetim kayıtları |
+
+Hazır roller:
+- **Yönetici** (`admin`): her izin (`*`); değiştirilemez.
+- **Müşteri** (`user`): yalnızca sunucu sipariş etme.
+- **Operatör, Destek, Denetçi:** düzenlenebilir veya silinebilir.
+
+Yönetici Roller sayfasından yeni roller oluşturabilir.
+
+Kurallar:
+- **Varsayılan ret:** her yönetim uç noktası gerektirdiği izni `@Can(...)` ile bildirir. İzni belirtilmemiş
+  bir uç nokta reddedilir; ret `admin.access / denied` olarak denetim kaydına yazılır. better-auth'un
+  `/api/auth/admin/*` uç noktaları da aynı tablodan (`adminEndpointPermission`) denetlenir.
+- **Yetki yükseltme yok:** kimse kendinde olmayan bir izni bir role veya kullanıcıya veremez. Kimse
+  izinleri kendisininkinden geniş olan bir hesabı yasaklayamaz, silemez, parolasını değiştiremez ya da onun adına giriş yapamaz.
+- **Kilitlenmeme:** yönetici kendi hesabını yasaklayamaz, silemez ve kendi rolünü değiştiremez. En az bir yönetici her zaman kalır (`LAST_ADMIN`).
+- **Kaynak sahipliği:** sahibi kendi sunucularını her zaman görür ve yönetir. Başkasının sunucusuna erişmek için
+  `servers.view_all` (görme) veya `servers.manage_all` (işlem) gerekir.
+
+Web arayüzündeki kontroller yalnızca açılamayacak sayfaları göstermemek içindir. Güvenlik sınırı API'dir.
+
+## Kullanıcı yönetimi
+Kullanıcılar sayfası better-auth'un admin eklentisini kullanır. Her işlem ilgili izni gerektirir ve
+denetim kaydına `admin.user.<işlem>` olarak yazılır:
+- arama ve filtreleme;
+- kullanıcı oluşturma (güçlü ilk parola üretilir);
+- rol ve kişiye özel izin atama (etkin izinler canlı önizlenir);
+- süreli veya kalıcı yasaklama (gerekçeyle); yasaklanınca oturumlar ve konsollar hemen kapanır;
+- parola belirleme;
+- oturumları listeleme ve kapatma;
+- kullanıcı adına giriş: 1 saatlik oturumdur; panelde uyarı şeridi gösterilir ve tek tıkla kendi hesabına dönülür;
+- silme: kullanıcının sunucusu varsa reddedilir (`USER_HAS_SERVERS`).
 
 ## İlk yönetici
 Varsayılan kurulumda (`sudo sh scripts/install.sh`) yöneticiyi betik oluşturur:
@@ -65,9 +107,30 @@ tanımlıysa giriş sayfasında "Parolamı unuttum" bağlantısı görünür. Ba
 tüm oturumları kapatılır. SMTP tanımlı değilse özellik gizlenir; API `MAIL_NOT_CONFIGURED` döner.
 Gerçek bir SMTP sunucusuyla henüz denenmedi.
 
+## İki adımlı doğrulama
+Hesabım → Güvenlik'ten açılır (better-auth `twoFactor` eklentisi):
+- **Doğrulayıcı uygulama (TOTP):** kurulumda QR kod ve elle girilecek anahtar gösterilir. Açmadan önce
+  ilk kod doğrulanır.
+- **Yedek kodlar:** 10 adet, her biri bir kez kullanılır. Kopyalanabilir, indirilebilir ve parolayla yeniden üretilebilir.
+- **SMS veya e-posta kodu:** telefonu doğrulanmış kullanıcıya SMS ile, yoksa e-postayla gider (docs/settings.md).
+  Kod 5 dakika geçerlidir.
+- **Bu cihaza güven:** 30 gün boyunca bu tarayıcıda ikinci adım sorulmaz.
+- **Kilitlenme:** 10 hatalı denemeden sonra doğrulama 15 dakika kilitlenir.
+- Passkey ile giriş, iki adımlı doğrulamanın yerini tutar.
+
+İçgörüler, iki adımlı doğrulaması kapalı yöneticileri gösterir.
+
+## Telefon numarası
+Kullanıcı numarasını SMS koduyla doğrular (better-auth `phoneNumber` eklentisi; E.164 biçimi; kod 5
+dakika geçerli, en fazla 5 deneme). Doğrulanmış numaraya SMS ile iki adımlı doğrulama kodu ve SMS
+bildirimleri gönderilebilir. SMS ayarlanmamışsa bu bölüm bilgilendirme gösterir.
+
+## Son giriş yöntemi
+Giriş sayfası son kullanılan yöntemi (parola veya passkey) işaretler. Bu bilgi kullanıcı listesinde de görünür.
+
 ## Bot koruması (isteğe bağlı)
-`TURNSTILE_SITE_KEY` ve `TURNSTILE_SECRET_KEY` tanımlıysa giriş, kayıt ve parola sıfırlama
-formları Cloudflare Turnstile doğrulaması ister. Tanımlı değilse kapalıdır.
+Ayarlar → Bot koruması'ndan yönetilir: Turnstile, reCAPTCHA v2/v3 veya hCaptcha; giriş, kayıt ve
+parola sıfırlama formları için ayrı ayrı açılır (docs/settings.md).
 
 ## CSRF
 GET/HEAD/OPTIONS dışındaki her istekte (`/api/auth/*` dahil) iki koşul aranır:
@@ -125,6 +188,6 @@ Bu, e-postanın kayıtlı olduğunu açığa çıkarır; açık kayıtlı bir pa
   Boş kurulumda `E2E_BOOTSTRAP_TOKEN` gerekir.
 
 ## Henüz yok
-- TOTP tabanlı iki adımlı doğrulama (MFA).
-- E-posta doğrulama.
-- SMTP olmadan yönetici parolası kurtarma.
+- E-posta adresi doğrulama.
+- SMTP ve SMS olmadan yönetici parolası kurtarma (CLI ile yeni yönetici oluşturulabilir).
+- Organizasyon / bayi (reseller) yapısı.

@@ -52,9 +52,9 @@ async function load(db, opId) {
     FROM servers s JOIN resource_pools p ON p.id = s.pool_id JOIN os_images i ON i.id = s.image_id
     LEFT JOIN ip_allocations a ON a.server_id = s.id LEFT JOIN ip_pools ip ON ip.id = a.ip_pool_id WHERE s.id = $1`, [op.server_id]);
   const { rows: [c] } = await db.query('SELECT * FROM vmware_connections WHERE id = $1', [s.connection_id]);
-  const target = { host: c.host, port: c.port, username: c.username, password: decrypt(c.password_enc, c.id),
+  const target = { host: c.host, port: c.port, username: c.username, password: decrypt(c.password_enc, c.id), ...(c.api_version && { apiVersion: c.api_version }),
     tls: { mode: c.tls_mode, ...(c.tls_ca_pem && { caPem: c.tls_ca_pem }), ...(c.tls_sha256 && { sha256: c.tls_sha256 }) } };
-  return { op, s, target, vmName: `lvm-${s.id}` };
+  return { op, s, target, vmName: `lvm-${s.id}`, customization: c.customization ?? 'auto', compat: c.compat };
 }
 
 const setStep = (db, op, step) => db.query('UPDATE operations SET step = $2, updated_at = now() WHERE id = $1', [op.id, step]);
@@ -109,8 +109,11 @@ async function ensureVM(db, ctx) {
   if (!vm) {
     const { datastore, pool } = await bestDatastore(db, s);
     // The adapter looks the name up first, so a retry after a lost response returns the earlier VM.
+    // How the guest gets its cloud-init data: the admin's choice, else what discovery found the version supports.
+    const customization = ctx.customization === 'auto' ? (ctx.compat?.customization ?? 'cloudinit') : ctx.customization;
+    if (customization === 'none') throw new OperationError('PROVISIONING_NOT_SUPPORTED', 'this endpoint cannot customize guests', true);
     const out = await adapter('/v1/vm/clone', { ...ctx.target, name: ctx.vmName, serverId: s.id, template: s.template_moref, pool, datastore,
-      network: s.network_moref, vcpu: s.vcpu, memoryMb: s.memory_mb, diskGb: s.disk_gb, ...cloudInit(s) });
+      network: s.network_moref, vcpu: s.vcpu, memoryMb: s.memory_mb, diskGb: s.disk_gb, customization, ...cloudInit(s) });
     if (out.vm) vm = out.vm;
     else {
       await saveTask(db, op, out.task);
@@ -216,7 +219,8 @@ async function rollbackCreate(db, ctx) {
   try { await destroy(db, { ...ctx, op: { ...ctx.op, provider_task_id: null } }); return true; } catch { return false; }
 }
 
-export async function processOperation(db, job, log) {
+// notify(event, to, data): enqueues on the API's notification queue (apps/api/src/notify.ts decides the channels).
+export async function processOperation(db, job, log, notify = async () => {}) {
   // Loading can fail too (database, key file); log it instead of failing silently.
   const ctx = await load(db, job.id).catch((e) => { log('error', 'operation_load_failed', { operationId: job.id, error: e.code ?? e.message }); throw e; });
   if (!ctx || ['succeeded', 'failed', 'cancelled'].includes(ctx.op.status)) return; // already settled
@@ -226,6 +230,10 @@ export async function processOperation(db, job, log) {
     await kinds[ctx.op.kind](db, ctx);
     await db.query("UPDATE operations SET status = 'succeeded', step = 'done', finished_at = now(), error_code = NULL, updated_at = now() WHERE id = $1", [ctx.op.id]);
     log('info', 'operation_succeeded', { kind: ctx.op.kind, operationId: ctx.op.id });
+    const d = { serverId: ctx.s.id, name: ctx.s.name, kind: ctx.op.kind };
+    if (ctx.op.kind === 'create') await notify('server.ready', [ctx.s.owner_id], { ...d, address: ctx.s.address ?? '' });
+    else if (ctx.op.kind === 'delete') await notify('server.deleted', [ctx.s.owner_id], d);
+    else await notify('server.power', [ctx.s.owner_id], d);
   } catch (err) {
     const code = err.code ?? 'INTERNAL_ERROR';
     const last = err.permanent || job.attemptsMade + 1 >= (job.opts.attempts ?? 1);
@@ -240,6 +248,12 @@ export async function processOperation(db, job, log) {
       [ctx.op.id, status, code, String(err.detail ?? '').slice(0, 500)]);
     if (ctx.op.kind === 'create' && status === 'failed') await db.query("UPDATE servers SET state = 'error', error_code = $2, updated_at = now() WHERE id = $1 AND state <> 'deleted'", [ctx.s.id, code]);
     if (ctx.op.kind === 'delete') await db.query("UPDATE servers SET state = 'error', error_code = $2, updated_at = now() WHERE id = $1 AND state = 'deleting'", [ctx.s.id, code]);
+    if (status === 'failed') {
+      const { rows: [o] } = await db.query('SELECT email FROM users WHERE id = $1', [ctx.s.owner_id]).catch(() => ({ rows: [] }));
+      const d = { serverId: ctx.s.id, name: ctx.s.name, kind: ctx.op.kind, code };
+      await notify('server.failed', [ctx.s.owner_id], d);
+      await notify('admin.operation_failed', 'staff:servers.view_all', { ...d, owner: o?.email ?? '' });
+    }
     throw new UnrecoverableError(code);
   }
 }
@@ -249,7 +263,7 @@ export async function processOperation(db, job, log) {
 export async function reconcile(db, log) {
   const { rows: conns } = await db.query("SELECT DISTINCT c.* FROM vmware_connections c JOIN resource_pools p ON p.connection_id = c.id WHERE c.kind = 'vcenter'");
   for (const c of conns) {
-    const target = { host: c.host, port: c.port, username: c.username, password: decrypt(c.password_enc, c.id),
+    const target = { host: c.host, port: c.port, username: c.username, password: decrypt(c.password_enc, c.id), ...(c.api_version && { apiVersion: c.api_version }),
       tls: { mode: c.tls_mode, ...(c.tls_ca_pem && { caPem: c.tls_ca_pem }), ...(c.tls_sha256 && { sha256: c.tls_sha256 }) } };
     let vms;
     try { vms = (await adapter('/v1/vms/managed', target)).vms; }

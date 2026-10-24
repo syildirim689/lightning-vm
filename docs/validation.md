@@ -470,3 +470,37 @@ Doğrulanmayanlar:
 - Passkey'ler gerçek bir doğrulayıcıyla, parola sıfırlama gerçek bir SMTP sunucusuyla,
   Turnstile gerçek anahtarlarla denenmedi.
 - Gerçek ESXi/vCenter yerine govmomi simülatörü kullanıldı.
+
+## Akıllı özellikler, ayarlar, roller, bildirimler ve VMware sürüm uyumu — 2026-10-24
+Demo sunucusu (Ubuntu 24.04 arm64), `install.sh --setup-wizard` + `compose.simulator.yaml`.
+
+Gerçekten çalıştırılanlar:
+- API birim testleri: 22/22 (SMS sağlayıcı istek/yanıt biçimleri dahil).
+- API entegrasyon testleri (gerçek PostgreSQL ve Redis): 65/65. Yeni `platform` dosyası 12/12:
+  roller, kişiye özel izinler, yetki yükseltme reddi, kullanıcı adına giriş, yasaklama,
+  TOTP + yedek kodla 2FA, marka dosyaları, SMTP testi, CAPTCHA (Cloudflare'in test anahtarlarıyla),
+  SMS (yerel sahte sağlayıcıyla), bildirim kuyruğu ve içgörüler.
+- Go adaptörü (simülatör): tüm testler geçti. Metrikler, sürüm uyumu tablosu ve guestinfo ile
+  klonlama da dahil.
+- Playwright E2E (HTTPS, gerçek kurulum): 17/17. Görev yöneticisi, kullanıcılar ve roller, ayarlar,
+  bildirim kutusu, komut paleti ve 390 px genişlikte yatay kaydırma olmaması da dahil.
+- `npm audit --omit=dev` (api, web, worker): 0. `govulncheck` (golang:1.27; console, vmware):
+  bulgu yok. Açık Dependabot uyarıları yalnızca `main`'deki eski iç içe fastify için; bu dalda yok.
+
+Bu testlerde bulunan ve düzeltilen hatalar:
+- Simülatör API 6.5 bildirdiği için guestinfo yöntemi seçiliyor, VM hazır olmuyordu. Simülatör
+  artık `-api-version` ile (varsayılan 8.0.3.0) başlıyor.
+- Görev yöneticisi düğmesinin erişilebilir adı yoktu: içindeki `role=status` öğesi ad hesabına
+  girmiyordu, Spinner da "Loading" adını veriyordu.
+- `users_role_check` kısıtı özel ve çoklu rolleri reddediyordu (008'de değiştirildi).
+- Bildirim işçisinin Redis bağlantısı kapanmadığı için test süreci bitmiyordu.
+
+Bilinçli davranış: uygulama içi bildirimler gönderildiği anda hesabın kayıtlı dilinde yazılır
+(e-posta ve SMS gibi). Arayüz dili sonradan değişirse eski bildirimler eski dilde kalır.
+
+Doğrulanmayanlar:
+- Gerçek SMS sağlayıcıları. İstek biçimleri belgelerden alındı, her sağlayıcının güven etiketi
+  panelde görünür.
+- Gerçek SMTP sunucusu, reCAPTCHA ve hCaptcha'nın gerçek anahtarları.
+- Gerçek ESXi/vCenter 6.x–9.x. Sürüm tablosu VMware belgelerinden alındı; testler simülatörle yapıldı.
+- Gerçek cihazlarda passkey ve Web Push teslimi.

@@ -1,8 +1,8 @@
 "use client";
 import { Button } from '@heroui/react';
-import { Turnstile } from '@marsidev/react-turnstile';
 import NextLink from 'next/link';
-import { useLocale, useTranslations } from 'next-intl';
+import { useTranslations } from 'next-intl';
+import { useCaptcha } from '../../../components/captcha';
 import { useState } from 'react';
 import { z } from 'zod';
 import { Notice, TextInput } from '../../../components/ui';
@@ -15,21 +15,22 @@ import type { PublicConfig } from '../credentials-form';
 export default function ForgotPassword() {
   const t = useTranslations('Auth');
   const { error, field } = useErrorText();
-  const locale = useLocale();
   const cfg = useApiQuery<PublicConfig>(['public-config'], '/public/config').data;
   const [email, setEmail] = useState('');
   const [emailError, setEmailError] = useState<string>();
-  const [captcha, setCaptcha] = useState<string>();
   const [state, setState] = useState<'idle' | 'busy' | 'sent'>('idle');
   const [failure, setFailure] = useState<string>();
+  const captcha = useCaptcha(cfg?.captcha?.use.passwordReset ? cfg.captcha : null, 'password_reset');
 
   async function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault(); setFailure(undefined);
     if (!z.string().email().safeParse(email).success) { setEmailError(field('INVALID_EMAIL')); return; }
     setState('busy');
+    const token = captcha.active ? await captcha.getToken() : undefined;
+    if (captcha.active && !token) { setFailure(t('captchaRequired')); setState('idle'); return; }
     const { error: err } = await authClient.requestPasswordReset({ email, redirectTo: '/reset-password',
-      fetchOptions: captcha ? { headers: { 'x-captcha-response': captcha } } : undefined });
-    if (err) { setFailure(error({ code: err.code ?? (err.status === 429 ? 'RATE_LIMITED' : 'UNKNOWN') })); setState('idle'); return; }
+      fetchOptions: token ? { headers: { 'x-captcha-response': token } } : undefined });
+    if (err) { captcha.reset(); setFailure(error({ code: err.code ?? (err.status === 429 ? 'RATE_LIMITED' : 'UNKNOWN') })); setState('idle'); return; }
     setState('sent');
   }
 
@@ -40,7 +41,7 @@ export default function ForgotPassword() {
       : state === 'sent' ? <div role="status"><Notice tone="success" title={t('resetSent')}/></div>
       : <form onSubmit={submit} noValidate className="flex flex-col gap-4">
           <TextInput label={t('email')} type="email" value={email} onChange={(v) => { setEmail(v); setEmailError(undefined); }} error={emailError} autoComplete="username" isRequired/>
-          {cfg?.turnstileSiteKey && <Turnstile siteKey={cfg.turnstileSiteKey} onSuccess={setCaptcha} options={{ language: locale, theme: 'auto', size: 'flexible' }}/>}
+          {captcha.element}
           {failure && <div role="alert"><Notice tone="danger">{failure}</Notice></div>}
           <Button type="submit" size="lg" fullWidth isPending={state === 'busy'}>{t('resetSend')}</Button>
         </form>}

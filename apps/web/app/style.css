@@ -41,6 +41,12 @@
   :focus-visible { outline-color: var(--focus); }
 }
 
+/* Entrance effects (once, never looping); the reduced-motion rule below turns them off. */
+@keyframes rise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+@keyframes glow { from { opacity: 0; transform: scale(0.85); } to { opacity: 1; transform: none; } }
+.rise { animation: rise 0.5s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+.glow { animation: glow 1.2s ease-out both; }
+
 /* Browser console canvas (VMware WebMKS draws into it). */
 .wmks { width: 100%; min-height: 480px; background: #000; border-radius: var(--radius); }
 

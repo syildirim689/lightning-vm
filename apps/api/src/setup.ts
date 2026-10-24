@@ -6,6 +6,7 @@ import { pool, redis } from './db';
 import { apiError } from './errors';
 import { audit, currentUser, readCredentials, type User } from './auth';
 import { getAuth } from './better-auth';
+import { can, ensureRoles } from './permissions';
 import { newToken, rateLimit, sha256 } from './security';
 import { domainChecks, isLoopback, monitoringChecks, networkErrorCode, parseDomain, parsePublicUrl, serviceChecks, systemChecks, type Check } from './checks';
 
@@ -31,6 +32,7 @@ export async function issueBootstrapToken() {
 // then better-auth creates the account. If that fails the claim is undone so setup can be retried.
 // check runs inside the lock and throws to refuse (e.g. a wrong bootstrap token).
 async function createFirstAdmin(email: string, password: string, locale: 'tr' | 'en', check: (s: { bootstrap_token_hash: Buffer | null; fresh: boolean }) => void, completeSetup: boolean) {
+  await ensureRoles(); // better-auth checks that the "admin" role exists
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -91,7 +93,7 @@ export class SetupGuard implements CanActivate {
     }
     const user = await currentUser(req);
     if (!user) throw apiError(401, 'UNAUTHENTICATED', 'Sign in required');
-    if (user.role !== 'admin') throw apiError(403, 'FORBIDDEN', 'Admin role required');
+    if (!can(user.permissions, 'settings.manage')) throw apiError(403, 'FORBIDDEN', 'Permission required');
     req.user = user;
     return true;
   }

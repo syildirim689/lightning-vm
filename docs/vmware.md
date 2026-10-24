@@ -40,6 +40,39 @@ Tarayıcı ─▶ Caddy ─▶ API (NestJS) ──token──▶ vmware (Go + go
 "tahsis edilmiş" alan şöyle hesaplanır: kapasite − boş + henüz yazılmamış alan. Yönetim payı,
 satışa açılan ve rezerve kapasite 8. aşamada (kaynak havuzları) gelecek.
 
+## Sürüm uyumluluğu
+Adaptör, bağlandığı sunucunun API sürümünü kullanır: `/sdk/vimServiceVersions.xml` okunur
+(`UseServiceVersion`). Sunucu bu bilgiyi yayımlamıyorsa govmomi'nin varsayılanına düşülür. Yönetici, bağlantı
+eklerken veya sonradan bir API sürümünü elle sabitleyebilir (6.0 – 9.0). Elle seçim yalnızca algılanan
+sürümün altına inebilir; kaydedilirken bağlantı yeni ayarla yeniden taranır, böylece yanlış seçim hemen reddedilir.
+
+Keşif, sürümden şu sonuçları çıkarır (`services/vmware/compat.go`):
+
+| Algılanan | Şablondan oluşturma | Misafir kişiselleştirme | Not |
+|---|---|---|---|
+| vCenter 7.0 U3 ve üstü (8.x, 9.x) | var | yerleşik cloud-init (`CustomizationCloudinitPrep`) | şablonda VMware Tools 11.3+ ve cloud-init 21.3+ |
+| vCenter 6.0 – 7.0 U2 | var | guestinfo (`guestinfo.metadata` / `guestinfo.userdata`, base64) | şablonda cloud-init 21.3+ ve VMware datasource |
+| Tek başına ESXi | yok (klonlama vCenter ister) | — | envanter, konsol ve metrikler çalışır |
+| Ücretsiz ESXi | yok | — | API salt okunur |
+
+Uyarılar:
+- **7.0 öncesi:** üretici desteği dışında; kullandığımız govmomi kütüphanesi de resmî olarak 7.0+ destekliyor.
+- **6.7 ve 7.0:** genel desteği bitmiş sürüm.
+- **vCenter 9:** kimlik federasyonu kullanan hesaplarla parola girişi engelli. vsphere.local veya LDAP/AD
+  servis hesabı kullanın.
+
+Kişiselleştirme yöntemi bağlantı başına "otomatik", "yerleşik cloud-init" veya "guestinfo" olarak
+seçilir. "Yerleşik cloud-init" yalnızca destekleyen sürümlerde seçilebilir.
+
+Diğer sürüm farkları:
+- **Konsol:** 7.0+ `AcquireTicket` yanıtındaki hazır adresi kullanır; daha eski sürümlerde adres
+  `wss://host:port/ticket/...` olarak kurulur.
+- **Performans:** canlı metrikler `PerformanceManager`'ın 20 saniyelik gerçek zamanlı aralığından okunur.
+  Bu veriyi VM'in bulunduğu host tutar, bu yüzden vCenter'da da tek başına ESXi'de de çalışır.
+
+Bu tablo Broadcom'un API başvurusu ve KB 311864 temel alınarak hazırlandı ve govmomi simülatörüyle
+test edildi. Gerçek 6.x, 7.x, 8.x veya 9.x vCenter ile henüz denenmedi.
+
 ## Ücretsiz ESXi lisansı
 Ücretsiz vSphere Hypervisor lisansında VMware API'si salt okunurdur. Lisans sürümü `esxBasic` ise
 veya adında "Hypervisor" geçiyorsa `writeApi = restricted` olur ve yazma gerektiren tüm işlemler

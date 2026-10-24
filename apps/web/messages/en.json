@@ -149,7 +149,57 @@
     "PREVIOUSLY_REGISTERED": "This passkey is already registered.",
     "YOU_ARE_NOT_ALLOWED_TO_REGISTER_THIS_PASSKEY": "This passkey cannot be added to your account.",
     "CREDENTIAL_ACCOUNT_NOT_FOUND": "This account has no password; sign in with a passkey.",
-    "UNKNOWN_ERROR": "Something went wrong. Try again."
+    "UNKNOWN_ERROR": "Something went wrong. Try again.",
+    "CANNOT_CHANGE_OWN_ACCOUNT": "You cannot do this to your own account.",
+    "USER_HAS_SERVERS": "The user has servers; delete them first.",
+    "CAPTCHA_REQUIRED": "Complete the bot check.",
+    "CAPTCHA_FAILED": "The bot check failed. Try again.",
+    "CAPTCHA_UNAVAILABLE": "The bot check provider could not be reached.",
+    "OTP_CHANNEL_UNAVAILABLE": "No SMS or e-mail is set up to send the code.",
+    "SMS_NOT_CONFIGURED": "SMS is not set up.",
+    "NOTIFICATION_LOCKED": "Your administrator fixed this notification.",
+    "CHANNEL_UNAVAILABLE": "This channel is not set up yet.",
+    "PHONE_NOT_VERIFIED": "Verify your phone number first.",
+    "PUSH_NOT_SUBSCRIBED": "Turn on notifications in this browser first.",
+    "NOTIFICATION_TEST_FAILED": "The test notification could not be sent.",
+    "FORBIDDEN_TARGET": "You cannot grant permissions you lack or change someone with more access than you.",
+    "ROLE_LOCKED": "This built-in role cannot be changed or removed.",
+    "LAST_ADMIN": "At least one administrator must remain.",
+    "MAIL_AUTH_FAILED": "The SMTP username or password was refused.",
+    "MAIL_TLS_FAILED": "No secure connection to the SMTP server (check the port and security setting).",
+    "MAIL_REJECTED": "The SMTP server refused the message (check the sender address).",
+    "MAIL_HOST_NOT_FOUND": "The SMTP server was not found.",
+    "MAIL_CONNECTION_FAILED": "Could not connect to the SMTP server.",
+    "SMS_AUTH_FAILED": "The SMS provider refused the account details.",
+    "SMS_REJECTED": "The SMS provider refused the message.",
+    "SMS_PROVIDER_UNREACHABLE": "The SMS provider could not be reached.",
+    "SMS_PROVIDER_UNKNOWN": "Unknown SMS provider.",
+    "SMS_INVALID_SETTINGS": "The SMS settings are missing or wrong.",
+    "OTP_NOT_ENABLED": "Code verification is not on.",
+    "OTP_NOT_CONFIGURED": "Code verification is not available.",
+    "OTP_HAS_EXPIRED": "The code expired; ask for a new one.",
+    "TOTP_NOT_ENABLED": "The authenticator app is not on.",
+    "TOTP_ALREADY_ENABLED": "The authenticator app is already on.",
+    "TOTP_NOT_CONFIGURED": "The authenticator app is not set up.",
+    "TWO_FACTOR_NOT_ENABLED": "Two-factor is not on.",
+    "BACKUP_CODES_NOT_ENABLED": "Backup codes are not on.",
+    "INVALID_BACKUP_CODE": "The backup code is invalid.",
+    "INVALID_CODE": "The code is invalid.",
+    "TOO_MANY_ATTEMPTS_REQUEST_NEW_CODE": "Too many attempts; ask for a new code.",
+    "ACCOUNT_TEMPORARILY_LOCKED": "Too many wrong attempts; the account is locked for a while.",
+    "INVALID_TWO_FACTOR_COOKIE": "The verification step expired; sign in again.",
+    "INVALID_PHONE_NUMBER": "The phone number is invalid.",
+    "PHONE_NUMBER_EXIST": "This number belongs to another account.",
+    "PHONE_NUMBER_NOT_EXIST": "This number is not registered.",
+    "OTP_NOT_FOUND": "No code found; ask for a new one.",
+    "OTP_EXPIRED": "The code expired; ask for a new one.",
+    "INVALID_OTP": "The code is wrong.",
+    "PHONE_NUMBER_NOT_VERIFIED": "The phone number is not verified.",
+    "TOO_MANY_ATTEMPTS": "Too many attempts; try again later.",
+    "YOU_CANNOT_BAN_YOURSELF": "You cannot ban yourself.",
+    "YOU_CANNOT_REMOVE_YOURSELF": "You cannot remove yourself.",
+    "YOU_CANNOT_IMPERSONATE_ADMINS": "Administrators cannot be impersonated.",
+    "BANNED_USER": "Your account is banned."
   },
   "Auth": {
     "required": "required",
@@ -182,7 +232,28 @@
     "resetIntro": "The link from the e-mail is valid for one hour.",
     "newPassword": "New password",
     "resetSubmit": "Set new password",
-    "resetDone": "Your password was changed. Sign in with the new one; other sessions were signed out."
+    "resetDone": "Your password was changed. Sign in with the new one; other sessions were signed out.",
+    "lastUsed": "Last used",
+    "captchaLoadFailed": "The bot check could not load. Reload the page or allow it in your ad blocker for this site.",
+    "twoFactor": {
+      "code": "Verification code",
+      "title": "Two-factor authentication",
+      "intro": "Your password is right. Complete the second step to sign in.",
+      "app": "App",
+      "sendCode": "SMS / e-mail",
+      "backup": "Backup code",
+      "appHelp": "Enter the 6-digit code from your authenticator app.",
+      "codeSent": "Code sent. Valid for 5 minutes.",
+      "codeHelp": "We send a code to your verified phone or your e-mail.",
+      "send": "Send the code",
+      "resend": "Send again",
+      "backupLabel": "Backup code",
+      "backupHelp": "One of the codes you saved when turning on two-factor; each works once.",
+      "trust": "Trust this device for 30 days",
+      "trustHelp": "This browser will not ask for the second step for 30 days.",
+      "verify": "Verify and sign in",
+      "back": "Back"
+    }
   },
   "fieldErrors": {
     "INVALID_EMAIL": "Enter a valid email address.",
@@ -215,7 +286,16 @@
     "INVALID_SSH_KEY": "Enter a valid OpenSSH public key (ssh-ed25519, ssh-rsa or ecdsa).",
     "KEY_EXISTS": "This key is already added.",
     "CONFIRMATION_MISMATCH": "Type the server name exactly to confirm.",
-    "QUOTA_EXCEEDED": "Quota exceeded."
+    "QUOTA_EXCEEDED": "Quota exceeded.",
+    "INVALID_PHONE": "Enter a valid phone number (with the country code).",
+    "INVALID_COLOR": "Enter a colour as #rrggbb.",
+    "INVALID_IMAGE": "Choose a PNG, JPEG, WebP or ICO file.",
+    "IMAGE_TOO_LARGE": "The file is larger than 256 KB.",
+    "INVALID_JSON": "Enter valid JSON.",
+    "INVALID_ROLE_KEY": "2–32 characters starting with a lowercase letter: letters, digits, - and _.",
+    "ROLE_EXISTS": "A role with this key exists.",
+    "NOT_FOR_ADMINS": "The administrator role takes no personal permissions.",
+    "NOT_SUPPORTED_BY_VERSION": "This vSphere version does not support this method."
   },
   "Setup": {
     "title": "Setup wizard",
@@ -414,7 +494,12 @@
       "caPem": "CA certificate (PEM)",
       "caPemHelp": "The vCenter VMCA root certificate or your organisation's CA.",
       "sha256": "SHA-256 fingerprint",
-      "sha256Help": "Only this exact certificate is accepted. Update it when the certificate is renewed."
+      "sha256Help": "Only this exact certificate is accepted. Update it when the certificate is renewed.",
+      "groupEndpoint": "Endpoint",
+      "groupEndpointHelp": "The name or IP address of vCenter or ESXi, as the panel reaches it.",
+      "groupAccount": "Credentials",
+      "groupAccountHelp": "The account the panel uses. A separate account with only the needed privileges is recommended.",
+      "groupTls": "Certificate check"
     },
     "tlsMode": {
       "system": "System CAs (default)",
@@ -465,7 +550,11 @@
     "warning": {
       "HOST_MANAGED_BY_VCENTER": "This ESXi is managed by a vCenter. Add the vCenter instead of the host.",
       "LICENSE_UNREADABLE": "License information could not be read.",
-      "PRIVILEGES_UNREADABLE": "The service account's privileges could not be read; operations show as unavailable."
+      "PRIVILEGES_UNREADABLE": "The service account's privileges could not be read; operations show as unavailable.",
+      "VERSION_LEGACY": "This vSphere version (before 7.0) is out of vendor support and not officially supported by our library. Basic operations work; it receives no security updates.",
+      "VERSION_END_OF_SUPPORT": "General support for this vSphere version has ended (6.7 and 7.0). It keeps working; upgrading to 8.0 or later is recommended.",
+      "CUSTOMIZATION_GUESTINFO": "Before vCenter 7.0 U3 there is no native cloud-init customization. New servers get their cloud-init data through guestinfo; the template needs cloud-init 21.3+ with the VMware datasource.",
+      "FEDERATED_LOGIN_BLOCKED": "vCenter 9 blocks password sign-in for identity-federated accounts. Use a vsphere.local or LDAP/AD service account for this connection."
     },
     "operationsTitle": "Supported operations (by privileges and license)",
     "yes": "yes",
@@ -519,7 +608,39 @@
       "button": "Remove connection"
     },
     "removed": "Connection removed.",
-    "console": "Console"
+    "console": "Console",
+    "compat": {
+      "title": "Version compatibility",
+      "intro": "The detected vSphere version and the methods used with it. You can pin an older API version or choose the customization method if needed.",
+      "formHelp": "“Detect automatically” is right in most cases. A manual choice can only go below the detected version.",
+      "version": "vSphere API version",
+      "versionHelp": "Automatic: the version the server reports is used (6.0 – 9.x).",
+      "auto": "Detect automatically (recommended)",
+      "customization": "Customization method",
+      "customizationHelp": "How new servers get their network, name and SSH keys.",
+      "method": {
+        "auto": "Automatic",
+        "cloudinit": "Native cloud-init (vCenter 7.0 U3+)",
+        "guestinfo": "guestinfo datasource",
+        "none": "Not supported"
+      },
+      "methodHelp": {
+        "auto": "The best method for the version is chosen.",
+        "cloudinit": "vCenter's own cloud-init customization.",
+        "guestinfo": "Works on every version; needs cloud-init 21.3+ in the template."
+      },
+      "detected": "Detected version",
+      "support": "Support status",
+      "supportState": {
+        "supported": "Supported",
+        "end-of-support": "End of support",
+        "legacy": "Legacy"
+      },
+      "cloning": "Create from template",
+      "needsVcenter": "Needs vCenter",
+      "save": "Save compatibility setting",
+      "saved": "Saved; the connection was re-discovered with the new setting."
+    }
   },
   "Console": {
     "title": "Console: {name}",
@@ -605,7 +726,21 @@
     "summary": "Summary",
     "choosePlan": "Choose a location and a package or custom resources.",
     "pricing": "Calculating price…",
-    "manageKeys": "Manage SSH keys"
+    "manageKeys": "Manage SSH keys",
+    "why": {
+      "imageDisk": "The chosen image needs at least {min} GB disk.",
+      "capacity": "No room in this location right now.",
+      "quota": "Over your quota: {limits}."
+    },
+    "bestValue": "Best value",
+    "suggest": "Suggest",
+    "steps": {
+      "label": "Order steps",
+      "location": "Location and system",
+      "plan": "Plan",
+      "access": "Name and access",
+      "review": "Confirm"
+    }
   },
   "Catalog": {
     "eyebrow": "ADMIN · CATALOG",
@@ -671,14 +806,14 @@
       "cpuMin": "vCPU minimum",
       "cpuMax": "vCPU maximum",
       "cpuStep": "vCPU step",
-      "memoryMinMb": "RAM minimum (MB)",
-      "memoryMaxMb": "RAM maximum (MB)",
-      "memoryStepMb": "RAM step (MB)",
+      "memoryMinMb": "Memory min",
+      "memoryMaxMb": "Memory max",
+      "memoryStepMb": "Memory step",
       "diskMinGb": "Disk minimum (GB)",
       "diskMaxGb": "Disk maximum (GB)",
       "diskStepGb": "Disk step (GB)",
-      "minMemoryMbPerVcpu": "Minimum RAM per vCPU (MB)",
-      "maxMemoryMbPerVcpu": "Maximum RAM per vCPU (MB)",
+      "minMemoryMbPerVcpu": "Min memory per vCPU (GB)",
+      "maxMemoryMbPerVcpu": "Max memory per vCPU (GB)",
       "priceVcpu": "Price per vCPU",
       "priceMemoryGb": "Price per GB RAM",
       "priceDiskGb": "Price per GB disk",
@@ -736,13 +871,54 @@
       "emptyUnlimited": "Empty = unlimited",
       "maxServers": "Maximum servers",
       "maxVcpu": "Maximum vCPU",
-      "maxMemoryMb": "Maximum RAM (MB)",
+      "maxMemoryMb": "Max memory",
       "maxDiskGb": "Maximum disk (GB)"
     },
     "removeConfirm": "Remove “{name}”? This cannot be undone.",
     "cancel": "Cancel",
     "capacity": "Capacity",
-    "availableOf": "{available} of {offered} {unit} free"
+    "availableOf": "{available} of {offered} {unit} free",
+    "form": {
+      "identity": "Identity",
+      "poolIdentityHelp": "The location name customers see when ordering.",
+      "vmware": "VMware resources",
+      "vmwareHelp": "The cluster/host, network and datastores this pool's servers are created on.",
+      "datastoresHelp": "With several, the one with most free space is used.",
+      "overcommit": "Overcommit",
+      "overcommitHelp": "How many virtual units are sold per physical one. 4 is common for CPU; 1 is safe for memory.",
+      "reserve": "Headroom",
+      "reserveHelp": "The part of physical capacity kept off sale for management and load spikes.",
+      "cpuRange": "vCPU range",
+      "memoryRange": "Memory range (GB)",
+      "diskRange": "Disk range (GB)",
+      "balance": "Memory per vCPU",
+      "balanceHelp": "Prevents lopsided shapes (e.g. 1 vCPU + 64 GB).",
+      "pricing": "Price",
+      "pricingHelp": "Monthly unit prices; the total is computed from them.",
+      "imageIdentityHelp": "The operating system name customers pick when ordering.",
+      "template": "VMware template",
+      "templateHelp": "Pick a template with cloud-init. Only machines marked as templates are listed.",
+      "requirements": "Requirement",
+      "minDiskHelp": "This image cannot be installed on a smaller disk; smaller packages do not offer it.",
+      "resources": "Resources",
+      "resourcesHelp": "The virtual hardware the server gets.",
+      "hourlyHelp": "Leave empty to use the monthly price / 730.",
+      "where": "Where and with which images",
+      "whereHelp": "The locations the package is sold in and the operating systems it can run.",
+      "diskTooSmall": "The disk is too small for: {images}.",
+      "preview": "New package",
+      "previewShape": "{vcpu} vCPU · {memory} GB RAM · {disk} GB disk",
+      "month": "month",
+      "network": "Network",
+      "networkHelp": "Subnet and gateway. Typing a CIDR suggests the gateway and range.",
+      "cidrHint": "Suggestion: gateway {gateway}, range {start} – {end} ({n} addresses).",
+      "apply": "Apply",
+      "range": "Address range",
+      "rangeHelp": "Servers get addresses from this range in order. Excluded ones are skipped.",
+      "dnsServers": "DNS servers",
+      "scopeHelp": "The default applies to everyone; pick a user to set theirs.",
+      "limits": "Limits"
+    }
   },
   "Servers": {
     "loading": "Loading…",
@@ -933,7 +1109,7 @@
     "system": "System",
     "myServers": "My servers",
     "newServer": "New server",
-    "account": "Keys and projects",
+    "account": "My account",
     "lightTheme": "Switch to light theme",
     "darkTheme": "Switch to dark theme",
     "language": "Language",
@@ -941,7 +1117,16 @@
     "logout": "Sign out",
     "openMenu": "Open menu",
     "adminBadge": "Admin",
-    "earlyBuild": "Early build"
+    "earlyBuild": "Early build",
+    "peopleSection": "People and settings",
+    "users": "Users",
+    "roles": "Roles",
+    "settings": "Settings",
+    "notifications": "Notifications",
+    "impersonating": "You are viewing as {email}.",
+    "stopImpersonating": "Back to my account",
+    "search": "Search or jump to…",
+    "staffBadge": "Team"
   },
   "Dashboard": {
     "eyebrow": "ADMINISTRATION",
@@ -999,8 +1184,8 @@
     "intro": "Health of the panel itself, user registration, backups and updates."
   },
   "Account": {
-    "title": "Keys and projects",
-    "intro": "Your sign-in security, SSH keys used for new servers, and projects.",
+    "title": "My account",
+    "intro": "Your profile, security, notifications, SSH keys and projects.",
     "security": {
       "title": "Sign-in and security",
       "intro": "Your password, passkeys and the devices that are signed in.",
@@ -1023,6 +1208,63 @@
       "revoke": "Sign out",
       "mobile": "Mobile",
       "desktop": "Computer"
+    },
+    "tabs": {
+      "profile": "Profile",
+      "security": "Security",
+      "notifications": "Notifications",
+      "keys": "SSH keys",
+      "projects": "Projects"
+    },
+    "profile": {
+      "title": "Profile",
+      "intro": "The name shown in the panel.",
+      "name": "Full name",
+      "email": "E-mail",
+      "emailHelp": "This is your sign-in name; ask an administrator to change it.",
+      "save": "Save",
+      "saved": "Profile saved."
+    },
+    "twoFactor": {
+      "sectionTitle": "Two-factor and phone",
+      "sectionIntro": "Besides your password: an authenticator app, or a code by SMS or e-mail.",
+      "title": "Authenticator app",
+      "on": "On",
+      "off": "Off",
+      "intro": "6-digit codes from an app such as Google Authenticator, Microsoft Authenticator or 1Password.",
+      "enable": "Turn on two-factor",
+      "newCodes": "New backup codes",
+      "disable": "Turn off",
+      "confirmPassword": "Enter your password to continue.",
+      "continue": "Continue",
+      "scan1": "Scan this QR code with your authenticator app.",
+      "scan2": "Enter the 6-digit code the app shows.",
+      "qrAlt": "Two-factor QR code",
+      "manual": "If you cannot scan, enter this key:",
+      "code": "Verification code",
+      "verify": "Verify",
+      "done": "I saved the codes",
+      "enabled": "Two-factor authentication is on.",
+      "disabled": "Two-factor authentication is off.",
+      "backupTitle": "Your backup codes",
+      "backupHelp": "Use these to sign in if you lose your phone. Each works once; keep them somewhere safe. They are not shown again.",
+      "copy": "Copy",
+      "copied": "Codes copied.",
+      "download": "Download"
+    },
+    "phone": {
+      "title": "Phone number",
+      "intro": "A verified number can receive sign-in codes and notifications by SMS.",
+      "unavailable": "SMS is not set up yet; once your administrator adds an SMS provider you can verify a number.",
+      "change": "New number",
+      "number": "Mobile phone",
+      "help": "With the country code. Numbers starting with 05xx are completed as +90.",
+      "sendCode": "Send code",
+      "codeSent": "A 6-digit code was sent to {phone}.",
+      "code": "SMS code",
+      "verify": "Verify",
+      "cancel": "Cancel",
+      "verified": "Phone number verified."
     }
   },
   "AuthLayout": {
@@ -1035,5 +1277,681 @@
       "backup": "Encrypted backups, alerts and safe updates"
     },
     "footer": "Open source · runs on your own server"
+  },
+  "Tasks": {
+    "title": "Background work",
+    "everyone": "Everyone",
+    "mine": "Mine",
+    "close": "Close",
+    "empty": "Nothing running.",
+    "progress": "Progress",
+    "running": "{n} running",
+    "recent": "Recent ({n})"
+  },
+  "Inbox": {
+    "title": "Notifications",
+    "unreadLabel": "{n} unread notifications",
+    "markAll": "Mark all read",
+    "settings": "Settings",
+    "empty": "No notifications yet."
+  },
+  "Palette": {
+    "title": "Command palette",
+    "placeholder": "Search pages, servers or actions…",
+    "empty": "Nothing for “{query}”. Try another name, IP or page.",
+    "pages": "Pages",
+    "servers": "Servers",
+    "actions": "Actions",
+    "navigate": "move",
+    "open": "open",
+    "lightTheme": "Switch to light theme",
+    "darkTheme": "Switch to dark theme",
+    "notificationSettings": "Notification settings"
+  },
+  "Insights": {
+    "title": "Needs attention",
+    "allGood": "All good; nothing needs attention.",
+    "severity": {
+      "danger": "Critical",
+      "warning": "Warning",
+      "info": "Suggestion"
+    },
+    "resource": {
+      "vcpu": "vCPU",
+      "memoryMb": "memory",
+      "storageGb": "storage",
+      "servers": "servers",
+      "diskGb": "disk"
+    },
+    "codes": {
+      "POOL_NEARLY_FULL": {
+        "title": "{pool} is nearly full",
+        "body": "{resource} usage is {used}%. Add capacity or review overcommit."
+      },
+      "POOL_FILLING": {
+        "title": "{pool} is filling up",
+        "body": "{resource} usage is {used}%."
+      },
+      "POOL_FORECAST": {
+        "title": "{pool} fills in about {days} days",
+        "body": "vCPU estimate from the last 30 days of orders."
+      },
+      "IP_POOL_EMPTY": {
+        "title": "{pool}: no free IP address",
+        "body": "No new server can be created here. Add another range."
+      },
+      "IP_POOL_LOW": {
+        "title": "{pool}: {free} free IP addresses left",
+        "body": "New servers may soon find no address."
+      },
+      "CONNECTION_DOWN": {
+        "title": "{connection} is unreachable",
+        "body": "Last error: {code}. Re-discover the connection."
+      },
+      "OPERATIONS_STUCK": {
+        "title": "{count} operations passed their deadline",
+        "body": "Check them on the Operations tab."
+      },
+      "OPERATIONS_FAILED": {
+        "title": "{count} operations failed in the last 24 hours",
+        "body": "Look at the error codes and retry."
+      },
+      "RECONCILE_FINDINGS": {
+        "title": "{count} reconciliation findings open",
+        "body": "The panel and VMware disagree."
+      },
+      "WORKER_DOWN": {
+        "title": "The background worker is not responding",
+        "body": "Server operations are not progressing; check the worker container."
+      },
+      "BACKUP_FAILED": {
+        "title": "The last backup failed",
+        "body": "Error code: {code}."
+      },
+      "BACKUP_NEVER": {
+        "title": "No backup yet",
+        "body": "Turn on the backup schedule on the server."
+      },
+      "BACKUP_STALE": {
+        "title": "Last successful backup {hours} hours ago",
+        "body": "Check the daily backup schedule."
+      },
+      "PACKAGE_UNSELLABLE": {
+        "title": "{package} cannot be sold right now",
+        "body": "Its locations do not have enough capacity."
+      },
+      "ADMINS_WITHOUT_2FA": {
+        "title": "{count} administrators have no two-factor",
+        "body": "Two-factor authentication is recommended for administrators."
+      },
+      "REGISTRATION_WITHOUT_CAPTCHA": {
+        "title": "Registration is open without bot protection",
+        "body": "Turn on a captcha for the sign-up form."
+      },
+      "MAIL_NOT_CONFIGURED": {
+        "title": "Outgoing mail is not set up",
+        "body": "Password reset and e-mail notifications do not work."
+      },
+      "SERVER_PROBLEM": {
+        "title": "{name} has a problem",
+        "body": "See the error on the server page."
+      },
+      "SERVER_OFF_LONG": {
+        "title": "{name} has been off for a week",
+        "body": "If you do not use it, delete it to free its resources."
+      },
+      "QUOTA_NEAR": {
+        "title": "Your {resource} quota is nearly used",
+        "body": "{used} of {max} in use."
+      },
+      "NO_SSH_KEYS": {
+        "title": "No SSH key yet",
+        "body": "Creating a server needs at least one public key."
+      },
+      "ENABLE_2FA": {
+        "title": "Turn on two-factor authentication",
+        "body": "It protects your account against leaked passwords."
+      }
+    }
+  },
+  "Metrics": {
+    "title": "Live performance",
+    "intro": "20-second samples from VMware, last 15 minutes.",
+    "offline": "The server is not running.",
+    "offlineHelp": "Charts appear while the server is on.",
+    "resume": "Resume",
+    "pause": "Pause",
+    "cpu": "CPU",
+    "memory": "Memory",
+    "network": "Network",
+    "disk": "Disk",
+    "noSamples": "No samples yet; they appear within a few minutes.",
+    "footer": "{n} samples, every {interval} seconds",
+    "uptime": "up {h} h {m} min"
+  },
+  "Notify": {
+    "title": "Notification preferences",
+    "intro": "Choose how each notification reaches you. The choices are limited to the channels your administrator allows.",
+    "none": "No notifications can be sent to you.",
+    "channelsTitle": "Channels",
+    "channelsIntro": "The ways notifications can reach you, and their status. Test each one here.",
+    "channel": {
+      "inApp": "In the panel",
+      "push": "Browser",
+      "email": "E-mail",
+      "sms": "SMS"
+    },
+    "channelHelp": {
+      "inApp": "Shown under the bell, top right.",
+      "push": "A system notification on this device, even when the panel is closed.",
+      "email": "Sent to your account e-mail.",
+      "sms": "Sent to your verified phone number."
+    },
+    "unavailable": {
+      "inApp": "Not available.",
+      "push": "This browser does not support it.",
+      "email": "Outgoing mail is not set up.",
+      "sms": "SMS is not set up."
+    },
+    "needPhone": "Verify your phone number on the Security tab first.",
+    "needPush": "Turn on browser notifications on this device first.",
+    "pushOn": "Turn on for this device",
+    "pushOff": "Turn off for this device",
+    "pushDenied": "The browser refused notifications. You can allow them in the site settings.",
+    "pushUnsupported": "This browser does not support Web Push.",
+    "test": "Send a test",
+    "testSent": "Test sent through {channel}.",
+    "event": "Notification",
+    "locked": "Fixed by your administrator",
+    "lockedHelp": "Your administrator fixed this notification; it cannot be changed.",
+    "notOffered": "This channel is not offered for this notification",
+    "policyNote": "Locked notifications and channels not offered come from your administrator's notification rules.",
+    "events": {
+      "server_ready": {
+        "title": "Server ready",
+        "help": "When your new server is set up and running."
+      },
+      "server_failed": {
+        "title": "Server operation failed",
+        "help": "When a create, power or delete operation fails."
+      },
+      "server_deleted": {
+        "title": "Server deleted",
+        "help": "When a server and its disks were removed."
+      },
+      "server_power": {
+        "title": "Power operation done",
+        "help": "When power on, off or reset finishes."
+      },
+      "auth_sign_in": {
+        "title": "New sign-in",
+        "help": "When someone signs in to your account."
+      },
+      "auth_password_changed": {
+        "title": "Password changed",
+        "help": "When your password is changed or reset."
+      },
+      "auth_two_factor_changed": {
+        "title": "Two-factor changed",
+        "help": "When it is turned on or off."
+      },
+      "admin_user_registered": {
+        "title": "New user registered",
+        "help": "When someone signs up by themselves."
+      },
+      "admin_operation_failed": {
+        "title": "A customer's operation failed",
+        "help": "When any customer's operation fails for good."
+      },
+      "admin_insight": {
+        "title": "Critical alert",
+        "help": "When a critical insight about capacity, IPs, a connection, the worker or backups appears (at most daily)."
+      }
+    },
+    "policyTitle": "The admin first, then each user",
+    "policyIntro": "For each notification, choose which channels may be used, which are on by default, and whether users may change it. Users can only choose among what you allow here.",
+    "ready": "ready",
+    "notConfigured": "not set up",
+    "audience": {
+      "user": "User notifications",
+      "staff": "Team notifications"
+    },
+    "audienceHelp": {
+      "user": "Sent to each user about their own account and servers.",
+      "staff": "Sent to team members with the matching permission."
+    },
+    "on": "On",
+    "userCanChange": "Users may change",
+    "allow": "Allow",
+    "default": "default",
+    "legend": "Checkbox: the channel may be used. “default”: on unless the user chose otherwise."
+  },
+  "Users": {
+    "eyebrow": "People",
+    "title": "Users",
+    "intro": "Accounts, roles, personal permissions, sessions and security status.",
+    "new": "New user",
+    "stat": {
+      "total": "users",
+      "staff": "team members",
+      "twoFactor": "with two-factor",
+      "banned": "banned"
+    },
+    "search": "Search by e-mail, name or phone",
+    "filterRole": "Role",
+    "filterStatus": "Status",
+    "all": "All",
+    "active": "Active",
+    "banned": "Banned",
+    "no2fa": "Without two-factor",
+    "empty": "No matching users.",
+    "col": {
+      "user": "User",
+      "roles": "Roles",
+      "status": "Status",
+      "security": "Security",
+      "servers": "Servers",
+      "lastSeen": "Last sign-in",
+      "actions": "Actions"
+    },
+    "overrides": "{n} personal permissions",
+    "until": "until {date}",
+    "no2faShort": "no 2FA",
+    "method": {
+      "passkey": "with passkey",
+      "email": "with password"
+    },
+    "never": "never",
+    "action": {
+      "access": "Roles and permissions",
+      "sessions": "Sessions",
+      "password": "Set password",
+      "impersonate": "Sign in as user",
+      "ban": "Ban",
+      "unban": "Lift ban",
+      "remove": "Remove"
+    },
+    "actionsFor": "Actions for {email}",
+    "unbanned": "Ban lifted.",
+    "cancel": "Cancel",
+    "create": "Create",
+    "created": "{email} created.",
+    "form": {
+      "identity": "Identity",
+      "email": "E-mail",
+      "name": "Full name",
+      "password": "First password",
+      "initialPassword": "Password",
+      "passwordHelp": "A strong password was generated; give it to the user securely.",
+      "generate": "Generate a new password",
+      "roles": "Roles",
+      "rolesHelp": "Several roles can be chosen; their permissions add up.",
+      "newPassword": "New password",
+      "copiedOnSave": "Copied to the clipboard when saved."
+    },
+    "accessSaved": "Access saved.",
+    "accessTitle": "{email}: roles and permissions",
+    "save": "Save",
+    "rolesExplain": "Roles' permissions add up. You cannot give a permission you do not have.",
+    "adminHasAll": "The administrator role has every permission; no personal permissions are needed.",
+    "overridesTitle": "Personal permissions",
+    "overridesHelp": "Click a permission: it removes one that comes from a role, or adds one the roles lack. Click again to undo.",
+    "effect": {
+      "allow": "added",
+      "deny": "removed"
+    },
+    "fromRole": "from role",
+    "bannedDone": "{email} banned; their sessions are closed.",
+    "banTitle": "Ban {email}?",
+    "banExplain": "A banned user cannot sign in; their sessions and consoles close at once. Their servers are not deleted.",
+    "banReason": "Reason",
+    "banReasonHelp": "Written to the audit log and the user list.",
+    "banDuration": "Duration",
+    "forever": "Indefinitely",
+    "hours": "{n} hours",
+    "days": "{n} days",
+    "passwordSet": "Password changed and copied to the clipboard.",
+    "passwordTitle": "{email}: set password",
+    "passwordExplain": "The user's current password changes. Give the new one to them securely.",
+    "sessionsRevoked": "Sessions closed.",
+    "sessionsTitle": "{email}: sessions",
+    "revokeAll": "Close all",
+    "close": "Close",
+    "noSessions": "No open sessions.",
+    "impersonated": "opened by the team",
+    "revoke": "Close",
+    "removed": "{email} removed.",
+    "removeTitle": "Remove {email}?",
+    "hasServers": "This user has {n} servers. Delete them first.",
+    "removeExplain": "The account, sessions, passkeys and SSH keys are removed for good. This cannot be undone.",
+    "typeEmail": "Type {email} to confirm"
+  },
+  "Roles": {
+    "eyebrow": "People",
+    "title": "Roles",
+    "intro": "A role is a named set of permissions. Users get one or more roles on the Users page; single permissions can also be added or removed per user.",
+    "new": "New role",
+    "builtin": "Built-in",
+    "members": "{n} members",
+    "noDescription": "No description.",
+    "everything": "All permissions",
+    "nothing": "No permissions",
+    "remove": "Remove",
+    "removeTitle": "Remove {name}?",
+    "removeBody": "Its {n} members keep their other roles; anyone left without one becomes “Customer”.",
+    "cancel": "Cancel",
+    "edit": "Edit",
+    "removed": "Role removed.",
+    "saved": "Role saved.",
+    "editTitle": "Edit {name}",
+    "identity": "Identity",
+    "name": "Name",
+    "key": "Key",
+    "keyHelp": "Lowercase letters, digits, - and _; cannot be changed later.",
+    "description": "Description",
+    "permissions": "Permissions",
+    "selected": "{n} selected",
+    "toggleGroup": "Select / clear all",
+    "save": "Save",
+    "desc": {
+      "admin": "Everything, including roles and settings.",
+      "user": "Orders and manages their own servers.",
+      "operator": "Runs the infrastructure: all servers, operations, VMware and capacity.",
+      "support": "Helps customers: sees users and servers, can sign in as a customer.",
+      "auditor": "Sees everything read-only, including the audit log."
+    },
+    "builtinName": {
+      "admin": "Administrator",
+      "user": "Customer",
+      "operator": "Operator",
+      "support": "Support",
+      "auditor": "Auditor"
+    }
+  },
+  "Permissions": {
+    "group": {
+      "dashboard": "Overview",
+      "servers": "Servers",
+      "catalog": "Catalog",
+      "vmware": "VMware",
+      "users": "Users",
+      "roles": "Roles",
+      "settings": "Settings",
+      "system": "System"
+    },
+    "p": {
+      "dashboard_view": "View the overview",
+      "servers_create": "Order servers",
+      "servers_view_all": "See all servers",
+      "servers_manage_all": "Manage all servers",
+      "operations_retry": "Retry operations",
+      "reconcile_run": "Run reconciliation",
+      "consoles_any": "Open any console",
+      "catalog_view": "See the catalog",
+      "catalog_manage": "Manage the catalog",
+      "vmware_view": "See VMware connections",
+      "vmware_manage": "Manage VMware connections",
+      "users_view": "See users",
+      "users_manage": "Manage users",
+      "users_roles": "Assign roles",
+      "users_ban": "Ban users",
+      "users_sessions": "End sessions",
+      "users_impersonate": "Sign in as a user",
+      "roles_manage": "Manage roles",
+      "settings_view": "See settings",
+      "settings_manage": "Change settings",
+      "system_view": "See the system",
+      "audit_view": "See the audit log"
+    },
+    "help": {
+      "dashboard_view": "The admin dashboard, insights and summary charts.",
+      "servers_create": "Create new servers for their own account.",
+      "servers_view_all": "See everyone's servers, operations and reconciliation findings.",
+      "servers_manage_all": "Power on, off, reset and delete other people's servers.",
+      "operations_retry": "Resume a failed automation operation from its last step.",
+      "reconcile_run": "Check the panel against VMware right away.",
+      "consoles_any": "Open the browser console of any VM and close open consoles.",
+      "catalog_view": "Pools, packages, images, IP pools and quotas (read only).",
+      "catalog_manage": "Add, change and remove pools, packages, images, IP pools and quotas.",
+      "vmware_view": "See connections, inventory and capacity.",
+      "vmware_manage": "Add, re-discover and remove connections.",
+      "users_view": "User list, roles, sessions and security status.",
+      "users_manage": "Create users, change their details and password, remove them.",
+      "users_roles": "Give users roles and personal permissions (only up to their own).",
+      "users_ban": "Ban users for a while or for good, and lift bans.",
+      "users_sessions": "End users' open sessions.",
+      "users_impersonate": "See a user's account as they do, for support (recorded).",
+      "roles_manage": "Create roles, change their permissions, remove them.",
+      "settings_view": "Branding, e-mail, bot protection, SMS and notification settings.",
+      "settings_manage": "Change those settings and test the integrations.",
+      "system_view": "System health, backups and updates.",
+      "audit_view": "Who did what, and when."
+    }
+  },
+  "Settings": {
+    "eyebrow": "People and settings",
+    "title": "Settings",
+    "intro": "Branding, e-mail, bot protection, SMS and notification rules. Every integration can be tested before you save it.",
+    "readOnly": "You can see the settings but not change them.",
+    "tabs": {
+      "general": "General",
+      "branding": "Branding",
+      "mail": "E-mail",
+      "captcha": "Bot protection",
+      "sms": "SMS",
+      "notifications": "Notification rules"
+    },
+    "saved": "Saved.",
+    "save": "Save",
+    "active": "On",
+    "inactive": "Off",
+    "secretKept": "•••••••• (stored)",
+    "secretHelp": "Leave empty to keep the stored value.",
+    "optional": "optional",
+    "branding": {
+      "image_type": "Choose a PNG, JPEG, WebP or ICO file.",
+      "image_size": "The file cannot be larger than 256 KB.",
+      "image_read": "The file could not be read.",
+      "upload": "Choose file",
+      "removeImage": "Remove",
+      "logoHelp": "Square, at least 64×64 px PNG/WebP recommended; at most 256 KB.",
+      "faviconHelp": "32×32 or 48×48 px PNG or ICO; at most 256 KB.",
+      "identity": "Name",
+      "identityHelp": "Shown in the menu, on the sign-in page, in the tab title and in e-mails.",
+      "name": "Panel name",
+      "nameHelp": "Up to 40 characters.",
+      "color": "Accent colour",
+      "colorHelp": "Buttons, links and selected items use this colour. The text colour on it is picked for readability.",
+      "custom": "Custom colour",
+      "hex": "Colour code",
+      "default": "Back to default",
+      "lowContrast": "This colour may be hard to read (light background {light}:1, dark background {dark}:1; at least 3:1 recommended).",
+      "preview": "Preview",
+      "sampleButton": "Button",
+      "sampleLink": "Link",
+      "logo": "Logo",
+      "logoSection": "Shown next to the name in the menu and on the sign-in page.",
+      "favicon": "Favicon",
+      "faviconSection": "The small icon in the browser tab and in notifications."
+    },
+    "mail": {
+      "testOk": "Test e-mail sent to {to}.",
+      "server": "SMTP server",
+      "serverHelp": "The server the panel sends e-mail through. Pick a known provider and fill in the rest.",
+      "enabled": "Send e-mail",
+      "envFallback": "SMTP_URL from the install file (.env) is used now. Once you save here, these settings apply.",
+      "preset": "Known provider",
+      "presetHelp": "Fills in server, port and security; you enter the username and password.",
+      "presets": {
+        "gmail": "Gmail / Google Workspace",
+        "outlook": "Outlook / Microsoft 365",
+        "yandex": "Yandex Mail",
+        "zoho": "Zoho Mail",
+        "sendgrid": "SendGrid",
+        "mailgun": "Mailgun (EU)",
+        "ses": "Amazon SES (Frankfurt)",
+        "brevo": "Brevo"
+      },
+      "host": "Server",
+      "port": "Port",
+      "security": "Security",
+      "sec": {
+        "starttls": "STARTTLS (587)",
+        "tls": "SSL/TLS (465)",
+        "none": "Unencrypted (25)"
+      },
+      "insecure": "Without encryption, the password and e-mails travel in plain text. Use only on a trusted internal network.",
+      "auth": "Authentication",
+      "authHelp": "SMTP username and password. Gmail and Microsoft 365 need an app password.",
+      "username": "Username",
+      "password": "Password",
+      "sender": "Sender",
+      "senderHelp": "The name and address recipients see. The address must be verified with your SMTP provider.",
+      "fromName": "Sender name",
+      "fromAddress": "Sender address",
+      "use": "Use it for",
+      "useHelp": "E-mails that are part of a task. Which channel each notification uses is on the “Notification rules” tab.",
+      "usePasswordReset": "Password reset links",
+      "usePasswordResetHelp": "“Forgot password” appears on the sign-in page.",
+      "useTwoFactor": "Two-factor codes",
+      "useTwoFactorHelp": "Without SMS, sign-in codes are sent by e-mail.",
+      "notificationsNote": "For notification e-mails (server ready, new sign-in…), turn on the e-mail channel on the Notification rules tab.",
+      "test": "Test",
+      "testHelp": "Connects, signs in and sends one test e-mail with the values in the form (without saving).",
+      "testTo": "Recipient",
+      "sendTest": "Send a test e-mail"
+    },
+    "captcha": {
+      "solveFirst": "Complete the check first.",
+      "provider": "Provider",
+      "providerHelp": "Protects the sign-in, sign-up and password reset forms from bots. You get the keys from the provider.",
+      "envFallback": "The Turnstile keys from the install file are used now. Once you save here, these settings apply.",
+      "p": {
+        "none": "Off",
+        "turnstile": "Cloudflare Turnstile",
+        "recaptcha-v2": "Google reCAPTCHA v2",
+        "recaptcha-v3": "Google reCAPTCHA v3",
+        "hcaptcha": "hCaptcha"
+      },
+      "d": {
+        "none": "No bot protection.",
+        "turnstile": "Free, mostly invisible, privacy friendly.",
+        "recaptcha-v2": "The “I am not a robot” checkbox.",
+        "recaptcha-v3": "Invisible; scores every request.",
+        "hcaptcha": "Privacy-focused image check."
+      },
+      "keys": "Keys",
+      "keysHelp": "The site key is used in the browser, the secret only on the server. Remember to add your domain at the provider.",
+      "getKeys": "Get keys",
+      "siteKey": "Site key",
+      "secret": "Secret key",
+      "minScore": "Minimum score",
+      "minScoreHelp": "Between 0 and 1; requests below are refused. 0.5 is a good start.",
+      "where": "On which forms",
+      "whereHelp": "The chosen forms ask for the check before they are sent.",
+      "use": {
+        "signIn": "Sign-in",
+        "signUp": "Sign-up",
+        "passwordReset": "Password reset request"
+      },
+      "test": "Test",
+      "testHelp": "Solve the check with the site key you entered, then have the provider verify it with the secret.",
+      "invisible": "reCAPTCHA v3 is invisible; the test runs it in the background.",
+      "widgetFailed": "The check could not load; verify the site key and the domain setting.",
+      "runTest": "Test the check",
+      "testOk": "The provider confirmed the check.",
+      "testFail": "The provider refused the check.",
+      "hostname": "host",
+      "score": "score"
+    },
+    "sms": {
+      "testOk": "Test SMS sent to {to}.",
+      "provider": "SMS provider",
+      "providerHelp": "The APIs of Turkish providers are built in; for any other service use “Custom HTTP API”.",
+      "none": "Off",
+      "confidence": {
+        "docs": "From the official API docs",
+        "partial": "Official docs incomplete",
+        "community": "Community-sourced"
+      },
+      "docs": "API docs",
+      "website": "Website",
+      "confidenceHelp": {
+        "partial": "This provider's docs do not fully describe the response. Send a test before you save.",
+        "community": "No public API docs were found for this provider; the integration follows other projects. Test it."
+      },
+      "account": "Account details",
+      "accountHelp": "The API details from the provider's panel. Secret fields are stored encrypted and never shown again.",
+      "field": {
+        "username": "Username",
+        "password": "Password",
+        "apiId": "API ID",
+        "apiKey": "API key",
+        "apiHash": "API hash (secret)",
+        "apiSecret": "API secret",
+        "apiToken": "API token",
+        "recipientType": "İYS recipient type",
+        "brandCode": "İYS brand code",
+        "customerCode": "Customer code",
+        "vendorCode": "Vendor code",
+        "accountNumber": "Account number",
+        "shortNumber": "Short number",
+        "operator": "Operator",
+        "channelCode": "Channel code",
+        "url": "Request URL",
+        "method": "Method",
+        "contentType": "Body format",
+        "body": "Request body",
+        "headers": "Headers (JSON)",
+        "phoneFormat": "Number format",
+        "successPattern": "Success pattern (regex)"
+      },
+      "option": {
+        "1": "Turkcell",
+        "2": "Türk Telekom",
+        "3": "Vodafone",
+        "4": "Superonline",
+        "BIREYSEL": "Individual",
+        "TACIR": "Merchant",
+        "birey": "Individual",
+        "tacir": "Merchant",
+        "GET": "GET",
+        "POST": "POST",
+        "form": "Form",
+        "json": "JSON",
+        "e164": "+905321234567",
+        "international": "905321234567",
+        "national": "5321234567",
+        "zeroNational": "05321234567"
+      },
+      "fieldHelp": {
+        "url": "The {to}, {text} and {sender} placeholders are filled in.",
+        "body": "POST body; the same placeholders work.",
+        "headers": "A JSON object, for example with an Authorization key and value.",
+        "successPattern": "If the response matches this regular expression, the message counts as sent. Example: ^OK",
+        "phoneFormat": "The number format the provider expects.",
+        "apiHash": "In the panel under Settings > Security > API Access.",
+        "operator": "The operator your account belongs to."
+      },
+      "sender": "Sender",
+      "senderHelp": "The header shown on messages. It must be approved at the provider.",
+      "senderLabel": "Header (originator)",
+      "senderNumeric": "This provider takes the numeric id of the header, not its name.",
+      "senderLabelHelp": "Up to 11 characters, exactly as registered at the provider.",
+      "commercial": "Commercial message (İYS)",
+      "commercialHelp": "Campaign-type messages go through the İYS check. Codes and notifications are informational; usually leave this off.",
+      "use": "Use it for",
+      "useHelp": "SMS that are part of a task. To send notifications by SMS, turn on the SMS channel on the Notification rules tab.",
+      "useTwoFactor": "Two-factor codes",
+      "useTwoFactorHelp": "Users with a verified phone get sign-in codes by SMS.",
+      "usePhone": "Phone verification",
+      "usePhoneHelp": "Users verify their number with an SMS code on My account.",
+      "notificationsNote": "Notification SMS go only to users who verified their phone.",
+      "test": "Test",
+      "testHelp": "Sends one real SMS with the values in the form (without saving).",
+      "testTo": "Phone",
+      "testToHelp": "With the country code, e.g. +905321234567.",
+      "sendTest": "Send a test SMS"
+    }
   }
 }

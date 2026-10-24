@@ -2,7 +2,9 @@ import { Controller, Get, HttpCode, Param, ParseUUIDPipe, Post, Req, Res, UseGua
 import type { FastifyReply } from 'fastify';
 import { pool, redis } from './db';
 import { apiError } from './errors';
-import { AdminGuard, audit, type AuthedRequest } from './auth';
+import { audit, type AuthedRequest } from './auth';
+import { Can, PermissionGuard } from './rbac';
+import { can } from './permissions';
 import { newToken, sha256 } from './security';
 import { callAdapter, storedTarget } from './vmware';
 
@@ -25,7 +27,7 @@ export async function openConsole(req: AuthedRequest, reply: FastifyReply, conne
   if (!c) throw apiError(404, 'NOT_FOUND', 'Unknown connection');
   if (!c.operations?.console) throw apiError(409, 'CONSOLE_NOT_PERMITTED', 'The service account lacks the console privilege');
   // Admin route: any VM of a connection. Customer route (ownedServer): the caller already proved ownership.
-  if (!ownedServer && req.user.role !== 'admin') throw apiError(403, 'FORBIDDEN', 'Admin role required');
+  if (!ownedServer && !can(req.user.permissions, 'consoles.any')) throw apiError(403, 'FORBIDDEN', 'Permission required');
   let ticket: Ticket;
   try { ticket = await callAdapter<Ticket>('/v1/console-ticket', { ...storedTarget(c), vm }, 30_000); }
   catch (err) {
@@ -44,16 +46,16 @@ export async function openConsole(req: AuthedRequest, reply: FastifyReply, conne
   return { vmName: ticket.vmName, expiresInSeconds: sessionSeconds, path: '/console/ws' };
 }
 
-@Controller('admin') @UseGuards(AdminGuard)
+@Controller('admin') @UseGuards(PermissionGuard)
 export class ConsoleController {
   // Admins may open the console of any VM in a connected inventory. Customer consoles (own servers
   // only) arrive with servers and ownership in the provisioning phase.
-  @Post('vmware/connections/:id/vms/:vm/console') @HttpCode(201)
+  @Post('vmware/connections/:id/vms/:vm/console') @HttpCode(201) @Can('consoles.any')
   open(@Req() req: AuthedRequest, @Res({ passthrough: true }) reply: FastifyReply, @Param('id', ParseUUIDPipe) id: string, @Param('vm') vm: string) {
     return openConsole(req, reply, id, vm);
   }
 
-  @Get('console/sessions')
+  @Get('console/sessions') @Can('consoles.any', 'vmware.manage')
   async sessions() {
     const active = await redis.hgetall('console:active');
     const entries = Object.entries(active).map(([key, v]) => ({ key, ...JSON.parse(v) }));
@@ -62,7 +64,7 @@ export class ConsoleController {
     return { sessions: entries.map((e) => ({ ...e, email: email.get(e.userId) ?? null })) };
   }
 
-  @Post('console/sessions/:key/revoke') @HttpCode(204)
+  @Post('console/sessions/:key/revoke') @HttpCode(204) @Can('consoles.any', 'vmware.manage')
   async revoke(@Req() req: AuthedRequest, @Param('key') key: string) {
     if (!/^[0-9a-f]{64}$/.test(key)) throw apiError(400, 'VALIDATION_FAILED', 'Invalid input', { key: 'INVALID_VALUE' });
     await revokeConsoles({ sessionKey: key });

@@ -2,11 +2,14 @@ import { CanActivate, Controller, ExecutionContext, Get, Injectable, Req, UseGua
 import { fromNodeHeaders } from 'better-auth/node';
 import type { FastifyRequest } from 'fastify';
 import { getAuth } from './better-auth';
-import { captchaEnabled, config, mailEnabled } from './config';
 import { pool } from './db';
 import { apiError } from './errors';
+import { permissionsOf, splitRoles } from './permissions';
 
-export type User = { id: string; email: string; role: 'admin' | 'user'; locale: 'tr' | 'en' };
+// roles: the role keys; permissions: the effective set ('*' for administrators). impersonatedBy: the staff
+// member signed in as this user, if any.
+export type User = { id: string; email: string; name: string; roles: string[]; permissions: string[]; locale: 'tr' | 'en';
+  impersonatedBy: string | null; twoFactorEnabled: boolean; phoneNumber: string | null; phoneNumberVerified: boolean };
 // sessionToken: better-auth's stored token; the console gateway keys its revocations on its hash.
 export type AuthedRequest = FastifyRequest & { user: User; sessionToken: string };
 
@@ -30,9 +33,13 @@ export function readCredentials(body: unknown) {
 export async function currentSession(req: FastifyRequest): Promise<{ user: User; token: string } | null> {
   const s = await getAuth().api.getSession({ headers: fromNodeHeaders(req.headers) }).catch(() => null);
   if (!s) return null;
-  const u = s.user as typeof s.user & { role?: string; locale?: string; disabledAt?: Date | null; banned?: boolean | null };
+  const u = s.user as typeof s.user & { role?: string; locale?: string; disabledAt?: Date | null; banned?: boolean | null; twoFactorEnabled?: boolean;
+    phoneNumber?: string | null; phoneNumberVerified?: boolean };
   if (u.disabledAt || u.banned) return null;
-  return { user: { id: u.id, email: u.email, role: u.role === 'admin' ? 'admin' : 'user', locale: u.locale === 'tr' ? 'tr' : 'en' }, token: s.session.token };
+  const impersonatedBy = (s.session as { impersonatedBy?: string | null }).impersonatedBy ?? null;
+  return { user: { id: u.id, email: u.email, name: u.name ?? '', roles: splitRoles(u.role), permissions: await permissionsOf(u.id, u.role ?? null),
+    locale: u.locale === 'tr' ? 'tr' : 'en', impersonatedBy, twoFactorEnabled: !!u.twoFactorEnabled, phoneNumber: u.phoneNumber ?? null,
+    phoneNumberVerified: !!u.phoneNumberVerified }, token: s.session.token };
 }
 export const currentUser = async (req: FastifyRequest) => (await currentSession(req))?.user ?? null;
 
@@ -47,17 +54,6 @@ export class SessionGuard implements CanActivate {
   }
 }
 
-@Injectable()
-export class AdminGuard extends SessionGuard {
-  async canActivate(ctx: ExecutionContext) {
-    await super.canActivate(ctx);
-    const req = ctx.switchToHttp().getRequest<AuthedRequest>();
-    if (req.user.role === 'admin') return true;
-    await audit(req, 'admin.access', 'denied', req.user.id, { path: req.routeOptions.url });
-    throw apiError(403, 'FORBIDDEN', 'Admin role required');
-  }
-}
-
 // Sign-in, sign-up, sign-out and the rest are better-auth's routes under /auth/* (registered in main.ts).
 @Controller('auth')
 export class AuthController {
@@ -65,11 +61,3 @@ export class AuthController {
   me(@Req() req: AuthedRequest) { return req.user; }
 }
 
-// What the sign-in page may offer; no secrets.
-@Controller('public')
-export class PublicController {
-  @Get('config')
-  publicConfig() {
-    return { passwordReset: mailEnabled(), turnstileSiteKey: captchaEnabled() ? config.TURNSTILE_SITE_KEY : null };
-  }
-}
