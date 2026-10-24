@@ -1622,7 +1622,12 @@
       "pool": "Create a resource pool",
       "image": "Add an OS template",
       "ip": "Add an IP pool",
-      "package": "Create a package"
+      "package": "Create a package",
+      "location": "Add a location",
+      "mail": "Configure e-mail",
+      "backup": "Take a first backup",
+      "twoFactor": "Turn on two-factor sign-in",
+      "progress": "{done} of {total} done"
     },
     "stat": {
       "servers": "Ready servers",
@@ -1788,7 +1793,8 @@
     "open": "open",
     "lightTheme": "Switch to light theme",
     "darkTheme": "Switch to dark theme",
-    "notificationSettings": "Notification settings"
+    "notificationSettings": "Notification settings",
+    "shortcuts": "Keyboard shortcuts"
   },
   "Insights": {
     "title": "Needs attention",
@@ -1893,6 +1899,22 @@
       "ENABLE_2FA": {
         "title": "Turn on two-factor authentication",
         "body": "It protects your account against leaked passwords."
+      },
+      "IDLE_SERVER": {
+        "title": "{name} looks idle",
+        "body": "Average CPU was {avg}% over the last week. If you no longer need it, power it off or delete it to save cost."
+      },
+      "RIGHT_SIZE_DOWN": {
+        "title": "{name} is larger than it needs",
+        "body": "Average CPU {avg}% on {vcpu} vCPU; {suggested} vCPU would very likely be enough."
+      },
+      "RIGHT_SIZE_UP": {
+        "title": "{name} is running out of CPU",
+        "body": "CPU is often above 85% on {vcpu} vCPU; {suggested} vCPU would give it headroom."
+      },
+      "OVERSIZED_SERVERS": {
+        "title": "{count} servers barely use their CPU",
+        "body": "Right-sizing them would free about {vcpu} vCPU of pool capacity."
       }
     }
   },
@@ -3192,5 +3214,62 @@
     "sshKeys": "SSH keys",
     "create": "Create",
     "creating": "Creating the server."
+  },
+  "Smart": {
+    "health": "Health",
+    "healthHelp": "A score from the server state, open security findings, failed operations and CPU use over the last 7 days.",
+    "grade": {
+      "good": "Healthy",
+      "fair": "Needs a look",
+      "poor": "Unhealthy"
+    },
+    "score": "Health score {score} of 100",
+    "noIssues": "No problems found.",
+    "factor": {
+      "STATE_ERROR": "The server is in an error state",
+      "POWERED_OFF": "The server is powered off",
+      "ABUSE_OPEN": "Open security findings",
+      "OPS_FAILED": "Operations failed in the last 24 hours",
+      "CPU_SATURATED": "CPU is saturated (95th percentile above 90%)",
+      "CPU_HIGH": "CPU is often high",
+      "IDLE": "The server is almost idle"
+    },
+    "cpuAvg": "Average CPU (7 days)",
+    "cpuP95": "Busy hours (95th percentile)",
+    "samples": "{n, plural, one {# sample} other {# samples}} over {days} days",
+    "noData": "Not enough data yet; the recommendation appears after 3 days of measurements.",
+    "advice": {
+      "idle": "Almost idle: consider powering it off or deleting it.",
+      "down": "Oversized: {suggested} vCPU would very likely be enough (now {vcpu}).",
+      "up": "Undersized: {suggested} vCPU would give it headroom (now {vcpu}).",
+      "none": "The size fits the load."
+    },
+    "cost": "This month",
+    "costHelp": "Prorated by the days each server and virtual datacenter exists this month.",
+    "accrued": "So far",
+    "forecast": "Expected by month end",
+    "monthly": "Monthly total",
+    "daysLeft": "{n, plural, one {# day left} other {# days left}}",
+    "noCost": "Nothing billed this month.",
+    "resources": "In use",
+    "resourcesValue": "{servers} servers · {vcpu} vCPU · {memory} GB RAM · {disk} GB disk"
+  },
+  "Shortcuts": {
+    "title": "Keyboard shortcuts",
+    "open": "Keyboard shortcuts",
+    "intro": "Shortcuts work anywhere outside text fields.",
+    "palette": "Open the command palette",
+    "help": "Show this list",
+    "goTo": "Go to…",
+    "then": "then",
+    "g": {
+      "h": "My servers",
+      "o": "New server",
+      "a": "Account",
+      "t": "Topology",
+      "d": "Admin overview",
+      "s": "All servers",
+      "c": "Catalog"
+    }
   }
 }

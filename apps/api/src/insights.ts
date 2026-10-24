@@ -11,6 +11,8 @@ import { notify } from './notify';
 import { can } from './permissions';
 import { Can, PermissionGuard } from './rbac';
 import { activeCaptcha, mailReady } from './settings-store';
+import { cpuStats } from './smart';
+import { sizing } from './smart-rules';
 
 export type Insight = { code: string; severity: 'danger' | 'warning' | 'info'; params: Record<string, string | number>; link: string; key: string };
 const pct = (part: number, whole: number) => (whole > 0 ? Math.round((part / whole) * 100) : 0);
@@ -79,6 +81,11 @@ export async function staffInsights(): Promise<Insight[]> {
   if (reg?.value === true && !(captcha && captcha.use.signUp)) add('REGISTRATION_WITHOUT_CAPTCHA', 'info', {}, '/admin/settings?tab=captcha');
   if (!(await mailReady())) add('MAIL_NOT_CONFIGURED', 'info', {}, '/admin/settings?tab=mail');
 
+  // Servers that use far less CPU than they reserve hold pool capacity other customers could buy.
+  const { rows: on } = await pool.query("SELECT id, vcpu FROM servers WHERE state = 'ready' AND power_state = 'poweredOn' AND vdc_id IS NULL");
+  const st = await cpuStats(on.map((s) => s.id));
+  const spare = on.map((s) => ({ s, r: sizing(s.vcpu, st.get(s.id) ?? null) })).filter((x) => x.r.advice === 'idle' || x.r.advice === 'down');
+  if (spare.length) add('OVERSIZED_SERVERS', 'info', { count: spare.length, vcpu: spare.reduce((a, x) => a + x.s.vcpu - x.r.suggestedVcpu, 0) }, '/admin/servers');
   const order = { danger: 0, warning: 1, info: 2 };
   return out.sort((x, y) => order[x.severity] - order[y.severity]);
 }
@@ -90,6 +97,16 @@ export async function customerInsights(userId: string): Promise<Insight[]> {
   for (const s of bad) add('SERVER_PROBLEM', 'danger', { name: s.name }, `/servers/${s.id}`, `srv:${s.id}`);
   const { rows: off } = await pool.query(`SELECT id, name FROM servers WHERE owner_id = $1 AND state = 'ready' AND power_state = 'poweredOff' AND updated_at < now() - interval '7 days'`, [userId]);
   for (const s of off) add('SERVER_OFF_LONG', 'info', { name: s.name }, `/servers/${s.id}`, `off:${s.id}`);
+  // Right-sizing from the last 7 days of CPU use (VDC servers are sized inside their allocation, so skipped).
+  const { rows: running } = await pool.query("SELECT id, name, vcpu FROM servers WHERE owner_id = $1 AND state = 'ready' AND power_state = 'poweredOn' AND vdc_id IS NULL", [userId]);
+  const stats = await cpuStats(running.map((s) => s.id));
+  for (const s of running) {
+    const r = sizing(s.vcpu, stats.get(s.id) ?? null);
+    const avg = Math.round(stats.get(s.id)?.avg ?? 0);
+    if (r.advice === 'idle') add('IDLE_SERVER', 'info', { name: s.name, avg }, `/servers/${s.id}`, `idle:${s.id}`);
+    if (r.advice === 'down') add('RIGHT_SIZE_DOWN', 'info', { name: s.name, avg, vcpu: s.vcpu, suggested: r.suggestedVcpu }, `/servers/${s.id}`, `size:${s.id}`);
+    if (r.advice === 'up') add('RIGHT_SIZE_UP', 'warning', { name: s.name, avg, vcpu: s.vcpu, suggested: r.suggestedVcpu }, `/servers/${s.id}`, `size:${s.id}`);
+  }
   const [limits, usage] = await Promise.all([limitsFor(userId), usageOf(userId)]);
   for (const [k, l] of [['servers', 'max_servers'], ['vcpu', 'max_vcpu'], ['memoryMb', 'max_memory_mb'], ['diskGb', 'max_disk_gb']] as const) {
     const max = (limits as unknown as Record<string, number | null>)?.[l];

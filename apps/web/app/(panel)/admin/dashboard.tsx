@@ -1,5 +1,5 @@
 "use client";
-import { Card } from '@heroui/react';
+import { Card, ProgressBar } from '@heroui/react';
 import NextLink from 'next/link';
 import { useFormatter, useNow, useTranslations } from 'next-intl';
 import { Bar, BarChart, CartesianGrid, Cell, Legend, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
@@ -28,9 +28,9 @@ export default function Dashboard({ setupOpen }: { setupOpen: boolean }) {
   const pools = useApiQuery<{ pools: Pool[] }>(['catalog', 'pools'], '/admin/pools', { refetchInterval: 30_000 }).data?.pools;
   const ops = useApiQuery<{ operations: Operation[] }>(['admin', 'operations'], '/admin/operations', { refetchInterval: 15_000 }).data?.operations;
   const connections = useApiQuery<{ connections: Connection[] }>(['vmware', 'connections'], '/admin/vmware/connections').data?.connections;
-  const packages = useApiQuery<{ packages: unknown[] }>(['catalog', 'packages'], '/admin/packages').data?.packages;
-  const images = useApiQuery<{ images: unknown[] }>(['catalog', 'images'], '/admin/images').data?.images;
-  const ipPools = useApiQuery<{ ipPools: unknown[] }>(['catalog', 'ip'], '/admin/ip-pools').data?.ipPools;
+  // Getting-started checklist, shown until every step is done.
+  const steps = useApiQuery<{ steps: { key: string; done: boolean; link: string }[] }>(['admin', 'onboarding'], '/admin/onboarding').data?.steps;
+  const doneSteps = steps?.filter((x) => x.done).length ?? 0;
 
   const ready = servers?.filter((s) => s.state === 'ready').length ?? 0;
   const failed24h = ops?.filter((o) => o.status === 'failed' && Date.now() - Date.parse(o.createdAt) < 86_400_000).length ?? 0;
@@ -38,16 +38,6 @@ export default function Dashboard({ setupOpen }: { setupOpen: boolean }) {
   const connOk = connections?.filter((c) => c.status === 'ok').length ?? 0;
   const freeVcpu = pools?.reduce((s, p) => s + (p.capacity.available.vcpu ?? 0), 0) ?? 0;
   const offeredVcpu = pools?.reduce((s, p) => s + (p.capacity.offered.vcpu ?? 0), 0) ?? 0;
-
-  // Setup checklist until the platform can actually sell a server.
-  const steps = [
-    { done: !!connections?.length, href: '/admin/vmware', label: t('steps.connection') },
-    { done: !!pools?.length, href: '/admin/catalog?tab=pools', label: t('steps.pool') },
-    { done: !!images?.length, href: '/admin/catalog?tab=images', label: t('steps.image') },
-    { done: !!ipPools?.length, href: '/admin/catalog?tab=ip', label: t('steps.ip') },
-    { done: !!packages?.length, href: '/admin/catalog?tab=packages', label: t('steps.package') },
-  ];
-  const loaded = connections && pools && images && ipPools && packages;
 
   const stateData = Object.entries((servers ?? []).reduce<Record<string, number>>((acc, s) => {
     const k = s.state === 'ready' ? (s.powerState === 'poweredOn' ? 'running' : 'stopped') : s.state === 'error' || s.state === 'missing' ? 'problem' : 'busy';
@@ -66,12 +56,16 @@ export default function Dashboard({ setupOpen }: { setupOpen: boolean }) {
     <PageHeader eyebrow={t('eyebrow')} title={t('title')} description={t('intro')}/>
     {setupOpen && <Notice tone="accent" title={t('setupIncomplete')}><NextLink href="/setup" className="underline">{t('continueSetup')}</NextLink></Notice>}
 
-    {loaded && steps.some((s) => !s.done) && <Section title={t('gettingStarted')} description={t('gettingStartedHelp')}>
-      <ol className="grid gap-2 md:grid-cols-5">
-        {steps.map((s, i) => <li key={s.href}>
-          <NextLink href={s.href} className={`flex h-full items-center gap-3 rounded-lg border px-3 py-3 text-sm transition-colors duration-150 ${s.done ? 'border-success/40 text-muted' : 'border-border hover:border-accent'}`}>
+    {steps && doneSteps < steps.length && <Section title={t('gettingStarted')} description={t('gettingStartedHelp')}
+      actions={<span className="text-xs tabular-nums text-muted">{t('steps.progress', { done: doneSteps, total: steps.length })}</span>}>
+      <ProgressBar aria-label={t('steps.progress', { done: doneSteps, total: steps.length })} value={Math.round((doneSteps / steps.length) * 100)} size="sm" color="success" className="mb-3">
+        <ProgressBar.Track><ProgressBar.Fill/></ProgressBar.Track></ProgressBar>
+      <ol className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+        {steps.map((s, i) => <li key={s.key}>
+          <NextLink href={s.link} className={`flex h-full min-h-11 items-center gap-3 rounded-lg border px-3 py-3 text-sm transition-colors duration-150 ${s.done ? 'border-success/40 text-muted' : 'border-border hover:border-accent'}`}>
             <span className={`grid size-7 shrink-0 place-items-center rounded-full text-xs font-semibold ${s.done ? 'bg-success text-success-foreground' : 'bg-default'}`}>{s.done ? <I name="check" size={14}/> : i + 1}</span>
-            <span className={s.done ? 'line-through' : 'font-medium'}>{s.label}</span>
+            <span className={`min-w-0 flex-1 ${s.done ? 'line-through' : 'font-medium'}`}>{s.done && <span className="sr-only">✓ </span>}{t(`steps.${s.key as 'pool'}`)}</span>
+            {!s.done && <I name="arrow-right" size={14} className="shrink-0 text-muted"/>}
           </NextLink>
         </li>)}
       </ol>

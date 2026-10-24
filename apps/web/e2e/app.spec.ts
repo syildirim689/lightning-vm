@@ -21,6 +21,16 @@ async function choose(page: Page, scope: Page | Locator, label: string | RegExp,
 // React Aria keeps the real input visually hidden under its styled control.
 // Controlled inputs change only after the app (or the API) answers, so click and let expect() wait.
 const tick = (box: Locator) => box.click({ force: true });
+// No sideways scrolling at the page's current width; on failure the message names the innermost elements sticking out.
+async function expectNoOverflow(page: Page, label: string) {
+  const [overflow, culprits] = await page.evaluate(() => {
+    const w = window.innerWidth;
+    const out = [...document.querySelectorAll('body *')].filter((e) => e.getBoundingClientRect().right > w + 1
+      && ![...e.children].some((c) => c.getBoundingClientRect().right > w + 1));
+    return [document.documentElement.scrollWidth - w, out.slice(0, 5).map((e) => `${e.tagName.toLowerCase()}.${String(e.className).slice(0, 60)} "${(e.textContent ?? '').trim().slice(0, 30)}"`).join(' | ')];
+  });
+  expect(overflow, `${label}: ${culprits}`).toBeLessThanOrEqual(1);
+}
 
 test.describe('first run (Turkish browser)', () => {
   test.use({ locale: 'tr-TR' });
@@ -389,6 +399,14 @@ test.describe('server lifecycle (simulator, Turkish customer)', () => {
     // Live metrics from the simulator's performance manager (20-second samples).
     await expect(page.getByText('Canlı performans')).toBeVisible();
     await expect(page.getByText(/\d+ örnek, 20 saniye aralıkla/)).toBeVisible({ timeout: 30_000 });
+    // Health score with its reasons; a new server has no week of CPU data, so no sizing advice yet.
+    await expect(page.getByRole('img', { name: /Sağlık puanı 100 üzerinden \d+/ })).toBeVisible();
+    await expect(page.getByText('Henüz yeterli veri yok', { exact: false })).toBeVisible();
+    for (const width of [390, 768]) {
+      await page.setViewportSize({ width, height: 900 });
+      await expectNoOverflow(page, `server page at ${width} px`);
+    }
+    await page.setViewportSize({ width: 1280, height: 720 });
 
     await page.getByRole('button', { name: 'Zorla kapat' }).click();
     await expect(page.getByRole('alertdialog')).toContainText('kaydedilmemiş veriler kaybolabilir');
@@ -509,6 +527,14 @@ test.describe('people, settings and smart features (English browser)', () => {
     await palette.fill('roles');
     await page.keyboard.press('Enter');
     await expect(page).toHaveURL(/\/admin\/roles$/);
+    // "?" lists the shortcuts; "g" then "d" goes to the overview.
+    await page.getByRole('heading', { level: 1 }).click();
+    await page.keyboard.press('Shift+?');
+    await expect(page.getByRole('dialog', { name: 'Keyboard shortcuts' })).toBeVisible();
+    await page.keyboard.press('Escape');
+    await page.keyboard.press('g');
+    await page.keyboard.press('d');
+    await expect(page).toHaveURL(/\/admin$/);
   });
 
   test('firewalls: created from a template, rules edited and checked, deleted', async ({ page }) => {
@@ -603,22 +629,18 @@ test.describe('people, settings and smart features (English browser)', () => {
     await expect(page.getByText('This field is required.')).toBeVisible();
   });
 
-  test('every page fits a 390 px phone without sideways scrolling', async ({ browser }) => {
-    const page = await (await browser.newContext({ locale: 'en-US', viewport: { width: 390, height: 844 } })).newPage();
+  // Phone and tablet: every page without sideways scrolling.
+  for (const viewport of [{ width: 390, height: 844 }, { width: 768, height: 1024 }]) test(`every page fits ${viewport.width} px without sideways scrolling`, async ({ browser }) => {
+    test.setTimeout(150_000);
+    const page = await (await browser.newContext({ locale: 'en-US', viewport })).newPage();
     await signInAdmin(page);
     await expect(page).toHaveURL(/\/admin$/);
     for (const path of ['/admin', '/admin/servers', '/admin/vmware', '/admin/catalog', '/admin/users', '/admin/roles', '/admin/settings?tab=mail', '/admin/system', '/', '/order', '/firewalls', '/admin/settings?tab=rdns', '/admin/catalog?tab=ip', '/account?tab=security',
-      '/admin/topology', '/admin/energy', '/admin/abuse', '/admin/catalog?tab=locations', '/admin/catalog?tab=isos', '/admin/catalog?tab=vdcs', '/admin/settings?tab=domain', '/admin/settings?tab=servers', '/topology', '/vdc', '/account?tab=accessibility']) {
+      '/admin/topology', '/admin/energy', '/admin/abuse', '/admin/catalog?tab=locations', '/admin/catalog?tab=isos', '/admin/catalog?tab=vdcs', '/admin/settings?tab=domain', '/admin/settings?tab=servers', '/topology', '/vdc', '/account?tab=accessibility',
+      '/admin/catalog?tab=packages', '/admin/catalog?tab=apps', '/admin/settings?tab=security', '/admin/settings?tab=notifications', '/account?tab=keys', '/account?tab=notifications']) {
       await page.goto(path);
       await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
-      // On failure the message names the innermost elements sticking out, so a CI run alone is enough to fix it.
-      const [overflow, culprits] = await page.evaluate(() => {
-        const w = window.innerWidth;
-        const out = [...document.querySelectorAll('body *')].filter((e) => e.getBoundingClientRect().right > w + 1
-          && ![...e.children].some((c) => c.getBoundingClientRect().right > w + 1));
-        return [document.documentElement.scrollWidth - w, out.slice(0, 5).map((e) => `${e.tagName.toLowerCase()}.${String(e.className).slice(0, 60)} "${(e.textContent ?? '').trim().slice(0, 30)}"`).join(' | ')];
-      });
-      expect(overflow, `${path}: ${culprits}`).toBeLessThanOrEqual(1);
+      await expectNoOverflow(page, `${path} at ${viewport.width} px`);
     }
   });
 
@@ -638,7 +660,7 @@ test.describe('people, settings and smart features (English browser)', () => {
     await page.goto('/admin/energy');
     await page.getByRole('button', { name: 'Measure now' }).click();
     await page.waitForTimeout(6000);
-    for (const [path, name] of [['/admin/topology', 'admin-topology'], ['/admin/energy', 'energy'], ['/admin/abuse', 'abuse'], ['/admin/catalog?tab=locations', 'locations'],
+    for (const [path, name] of [['/admin', 'admin-dashboard'], ['/', 'my-servers'], ['/admin/topology', 'admin-topology'], ['/admin/energy', 'energy'], ['/admin/abuse', 'abuse'], ['/admin/catalog?tab=locations', 'locations'],
       ['/admin/catalog?tab=isos', 'isos'], ['/admin/catalog?tab=apps', 'apps'], ['/admin/catalog?tab=vdcs', 'vdcs'], ['/admin/settings?tab=domain', 'domain'],
       ['/admin/settings?tab=security', 'security'], ['/admin/settings?tab=servers', 'server-settings'], ['/topology', 'my-topology'], ['/vdc', 'my-vdc'], ['/order', 'order']] as const) {
       await page.goto(path);
@@ -649,5 +671,21 @@ test.describe('people, settings and smart features (English browser)', () => {
     await page.getByRole('button', { name: 'Accessibility' }).click();
     await expect(page.getByRole('dialog')).toBeVisible();
     await shot(page, 'accessibility');
+    await page.keyboard.press('Escape');
+    await page.getByRole('heading', { level: 1 }).click();
+    await page.keyboard.press('Shift+?');
+    await expect(page.getByRole('dialog', { name: 'Keyboard shortcuts' })).toBeVisible();
+    await shot(page, 'shortcuts');
+    // The same overview screens at phone and tablet width.
+    for (const width of [390, 768]) {
+      const small = await (await browser.newContext({ locale: 'en-US', viewport: { width, height: 1000 } })).newPage();
+      await signInAdmin(small);
+      for (const [path, name] of [['/admin', 'admin-dashboard'], ['/', 'my-servers'], ['/admin/energy', 'energy']] as const) {
+        await small.goto(path);
+        await expect(small.getByRole('heading', { level: 1 })).toBeVisible();
+        await small.waitForTimeout(1200);
+        await shot(small, `${name}-${width}`);
+      }
+    }
   });
 });

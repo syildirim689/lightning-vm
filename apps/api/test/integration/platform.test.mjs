@@ -268,6 +268,15 @@ test('insights explain what needs attention; the task list starts empty', async 
   assert.ok(mine.includes('NO_SSH_KEYS'), mine.join());
   assert.ok(!mine.includes('ENABLE_2FA'), 'two-factor is on for this user');
   assert.deepEqual((await get('/operations/active', user)).json().operations, []);
+
+  // Smart cards: the getting-started list for staff, this month's cost for the customer.
+  const steps = (await get('/admin/onboarding', admin)).json().steps;
+  assert.equal(steps.length, 9);
+  assert.equal(steps.find((s) => s.key === 'backup').done, false);
+  assert.equal((await get('/admin/onboarding', user)).statusCode, 403);
+  const usage = (await get('/usage/summary', user)).json();
+  assert.ok(Array.isArray(usage.costs) && typeof usage.usage.servers === 'number', JSON.stringify(usage));
+  assert.equal((await get('/servers/00000000-0000-4000-8000-000000000000/health', user)).statusCode, 404);
 });
 
 test('payment methods: live and test credentials are kept apart, secrets stay on the server, activation needs a check', async () => {

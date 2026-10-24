@@ -13,6 +13,7 @@ import { useApiForm } from '../../lib/form';
 import { useApiAction, useApiQuery } from '../../lib/query';
 import ServerMetrics from './metrics';
 import { ServerIso } from './server-iso';
+import { ServerHealth } from '../../components/smart';
 import { flag } from '../../lib/flag';
 import { ButtonLink, ConfirmButton, DataTable, Empty, Mono, Notice, PageHeader, Section, StatusChip, TextInput, type Tone } from '../../components/ui';
 
@@ -170,6 +171,7 @@ export function ServerDetail({ id }: { id: string }) {
       </Section>}
     </div>
 
+    <ServerHealth id={s.id}/>
     <ServerIps server={s}/>
     {allowed.iso && <ServerIso id={s.id} ready={s.state === 'ready' || s.state === 'error'}/>}
     {s.hasRootPassword && allowed.rootPassword && <RootPassword id={s.id}/>}

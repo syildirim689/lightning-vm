@@ -11,6 +11,7 @@ import { signOut } from '../lib/auth-client';
 import { can } from '../lib/permissions';
 import { useApiQuery } from '../lib/query';
 import { I } from './icon';
+import { openShortcuts } from './shortcuts';
 
 type Cmd = { id: string; group: 'pages' | 'servers' | 'actions'; label: string; hint?: string; icon: React.ReactNode; run: () => void };
 type ServerRow = { id: string; name: string; address: string | null; ownerEmail?: string };
@@ -49,9 +50,14 @@ export default function CommandPalette({ permissions, isOpen, onOpenChange }: { 
       ['/admin/roles', tn('roles'), <I key="i" name="shield-check" size={16}/>, can(permissions, 'roles.manage', 'users.roles')],
       ['/admin/settings', tn('settings'), <I key="i" name="settings-2" size={16}/>, can(permissions, 'settings.view', 'settings.manage')],
       ['/admin/system', tn('system'), <I key="i" name="activity" size={16}/>, can(permissions, 'system.view')],
+      ['/admin/topology', tn('topology'), <I key="i" name="network" size={16}/>, can(permissions, 'dashboard.view', 'servers.view_all')],
+      ['/admin/abuse', tn('abuse'), <I key="i" name="shield-alert" size={16}/>, can(permissions, 'servers.view_all')],
+      ['/admin/energy', tn('energy'), <I key="i" name="zap" size={16}/>, can(permissions, 'dashboard.view', 'system.view')],
       ['/', tn('myServers'), <I key="i" name="gauge" size={16}/>, true],
       ['/order', tn('newServer'), <I key="i" name="plus" size={16}/>, can(permissions, 'servers.create')],
       ['/firewalls', tn('firewalls'), <I key="i" name="brick-wall-fire" size={16}/>, can(permissions, 'firewalls.manage') || can(permissions, 'servers.view_all')],
+      ['/topology', tn('myTopology'), <I key="i" name="waypoints" size={16}/>, true],
+      ['/vdc', tn('myVdc'), <I key="i" name="building-2" size={16}/>, true],
       ['/account', tn('account'), <I key="i" name="key-round" size={16}/>, true],
       ['/account?tab=notifications', t('notificationSettings'), <I key="i" name="bell" size={16}/>, true],
     ];
@@ -62,6 +68,7 @@ export default function CommandPalette({ permissions, isOpen, onOpenChange }: { 
         run: () => { setTheme(resolvedTheme === 'dark' ? 'light' : 'dark'); onOpenChange(false); } },
       { id: 'a:lang', group: 'actions', label: locale === 'tr' ? 'English' : 'Türkçe', icon: <I name="languages" size={16}/>,
         run: () => { onOpenChange(false); start(async () => { const f = new FormData(); f.set('locale', locale === 'tr' ? 'en' : 'tr'); await setLocale(f); router.refresh(); }); } },
+      { id: 'a:shortcuts', group: 'actions', label: t('shortcuts'), icon: <I name="keyboard" size={16}/>, run: () => { onOpenChange(false); openShortcuts(); } },
       { id: 'a:logout', group: 'actions', label: tn('logout'), icon: <I name="log-out" size={16}/>, run: () => { onOpenChange(false); void signOut().then(() => { router.replace('/login'); router.refresh(); }); } },
     ];
   }, [permissions, servers, resolvedTheme, locale]); // eslint-disable-line react-hooks/exhaustive-deps

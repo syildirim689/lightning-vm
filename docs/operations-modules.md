@@ -52,3 +52,33 @@
   - Bu sunucular ücretsizdir ve kullanıcı kotasına sayılmaz.
   - Kullanım çubuklarını görür ve toplu güç işlemleri yapabilir: tümünü aç, kapat, sıfırla.
 - **Silme:** VDC, içinde sunucu varken silinemez.
+
+## Akıllı özellikler
+
+Kurallar `apps/api/src/smart-rules.ts` içindedir ve birim testleri vardır. Veriler `apps/api/src/smart.ts` uçlarından gelir.
+
+- **Doğru boyutlandırma:** son 7 günün CPU örnekleri (`server_cpu_samples`) kullanılır. Öneri için en az 3 gün ve 24
+  örnek gerekir.
+  - Ortalama < %2 ve 95. yüzdelik < %5: **boşta** (`IDLE_SERVER`).
+  - Ortalama < %10 ve 95. yüzdelik < %30 (1 vCPU'dan büyükse): **büyük** (`RIGHT_SIZE_DOWN`).
+  - 95. yüzdelik > %85: **küçük** (`RIGHT_SIZE_UP`).
+  - Önerilen vCPU, 95. yüzdeliği yaklaşık %60'a getirecek sayıdır.
+  - Müşteri bunları içgörü olarak görür. Yönetici, boşta veya büyük sunucuların sayısını ve boşalacak vCPU'yu
+    görür (`OVERSIZED_SERVERS`). VDC sunucuları hariçtir.
+- **Sağlık puanı** (`GET /servers/:id/health`): 100'den başlar. Düşüşler şöyledir:
+  - hata durumu −60
+  - açık güvenlik bulgusu −15 (en fazla −30)
+  - son 24 saatte başarısız işlem −10 (en fazla −20)
+  - CPU doygun −15, CPU sık yüksek −8
+  - kapalı −5, boşta −5
+
+  85 ve üstü sağlıklı, 60 ve üstü göz atılmalı, altı sorunlu sayılır. Nedenler sunucu sayfasında listelenir.
+- **Bu ayın maliyeti** (`GET /usage/summary`): sunucu ve VDC aylık fiyatları, bu ay var oldukları günlere göre
+  oranlanır (UTC). Şu ana kadarki tutar, ay sonu tahmini ve aylık toplam para birimi başına gösterilir.
+- **Kurulum listesi** (`GET /admin/onboarding`): vCenter, lokasyon, havuz, şablon, paket, IP havuzu, e-posta, ilk
+  yedek ve iki adımlı giriş. Tüm adımlar bitene kadar yönetim özetinde görünür.
+- **Klavye kısayolları:** `?` listeyi açar. `g` ardından bir harf sayfaya gider: `h` sunucularım, `o` yeni sunucu,
+  `a` hesap, `t` topoloji, `d` yönetim özeti, `s` tüm sunucular, `c` katalog. Kısayollar metin alanlarında ve açık
+  pencerelerde çalışmaz. Komut paletinde (Ctrl+K) yeni sayfalar ve "Klavye kısayolları" eylemi de vardır.
+- **Duyarlılık:** E2E, her sayfayı 390 px ve 768 px genişlikte yatay kaydırma olmadan açar. Sunucu sayfası da iki
+  genişlikte denetlenir.

@@ -9,6 +9,7 @@ import { Brand } from '../../components/brand';
 import { AccessibilityButton } from '../../components/accessibility';
 import { LanguageMenu, ThemeToggle } from '../../components/chrome';
 import CommandPalette, { usePaletteShortcut } from '../../components/command-palette';
+import Shortcuts from '../../components/shortcuts';
 import { I } from '../../components/icon';
 import NotificationBell from '../../components/notification-bell';
 import TaskManager from '../../components/task-manager';
@@ -153,5 +154,6 @@ export default function Shell({ user, branding, version, children }: { user: Use
     </div>
     <TaskManager permissions={user.permissions}/>
     <CommandPalette permissions={user.permissions} isOpen={palette} onOpenChange={setPalette}/>
+    <Shortcuts permissions={user.permissions}/>
   </div>;
 }

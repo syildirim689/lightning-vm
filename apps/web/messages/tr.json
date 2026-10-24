@@ -1622,7 +1622,12 @@
       "pool": "Kaynak havuzu oluşturun",
       "image": "İşletim sistemi şablonu ekleyin",
       "ip": "IP havuzu ekleyin",
-      "package": "Paket oluşturun"
+      "package": "Paket oluşturun",
+      "location": "Lokasyon ekleyin",
+      "mail": "E-postayı yapılandırın",
+      "backup": "İlk yedeği alın",
+      "twoFactor": "İki adımlı girişi açın",
+      "progress": "{total} adımdan {done} tamamlandı"
     },
     "stat": {
       "servers": "Hazır sunucular",
@@ -1788,7 +1793,8 @@
     "open": "aç",
     "lightTheme": "Açık temaya geç",
     "darkTheme": "Koyu temaya geç",
-    "notificationSettings": "Bildirim ayarları"
+    "notificationSettings": "Bildirim ayarları",
+    "shortcuts": "Klavye kısayolları"
   },
   "Insights": {
     "title": "Dikkat gerektirenler",
@@ -1893,6 +1899,22 @@
       "ENABLE_2FA": {
         "title": "İki adımlı doğrulamayı açın",
         "body": "Hesabınızı parola sızıntılarına karşı korur."
+      },
+      "IDLE_SERVER": {
+        "title": "{name} boşta görünüyor",
+        "body": "Geçen hafta ortalama CPU %{avg} oldu. Artık gerekmiyorsa kapatarak veya silerek tasarruf edebilirsiniz."
+      },
+      "RIGHT_SIZE_DOWN": {
+        "title": "{name} ihtiyacından büyük",
+        "body": "{vcpu} vCPU üzerinde ortalama CPU %{avg}; büyük olasılıkla {suggested} vCPU yeterli olur."
+      },
+      "RIGHT_SIZE_UP": {
+        "title": "{name} CPU sıkıntısı çekiyor",
+        "body": "{vcpu} vCPU üzerinde CPU sık sık %85’in üstünde; {suggested} vCPU rahat çalışmasını sağlar."
+      },
+      "OVERSIZED_SERVERS": {
+        "title": "{count} sunucu CPU’sunu neredeyse kullanmıyor",
+        "body": "Doğru boyutlandırılırlarsa havuzda yaklaşık {vcpu} vCPU boşalır."
       }
     }
   },
@@ -3192,5 +3214,62 @@
     "sshKeys": "SSH anahtarları",
     "create": "Oluştur",
     "creating": "Sunucu oluşturuluyor."
+  },
+  "Smart": {
+    "health": "Sağlık",
+    "healthHelp": "Sunucu durumu, açık güvenlik bulguları, başarısız işlemler ve son 7 günün CPU kullanımından hesaplanan puan.",
+    "grade": {
+      "good": "Sağlıklı",
+      "fair": "Göz atılmalı",
+      "poor": "Sorunlu"
+    },
+    "score": "Sağlık puanı 100 üzerinden {score}",
+    "noIssues": "Sorun bulunmadı.",
+    "factor": {
+      "STATE_ERROR": "Sunucu hata durumunda",
+      "POWERED_OFF": "Sunucu kapalı",
+      "ABUSE_OPEN": "Açık güvenlik bulguları var",
+      "OPS_FAILED": "Son 24 saatte başarısız işlemler var",
+      "CPU_SATURATED": "CPU doymuş (95. yüzdelik %90’ın üstünde)",
+      "CPU_HIGH": "CPU sık sık yüksek",
+      "IDLE": "Sunucu neredeyse boşta"
+    },
+    "cpuAvg": "Ortalama CPU (7 gün)",
+    "cpuP95": "Yoğun saatler (95. yüzdelik)",
+    "samples": "{days} günde {n} ölçüm",
+    "noData": "Henüz yeterli veri yok; öneri 3 günlük ölçümden sonra görünür.",
+    "advice": {
+      "idle": "Neredeyse boşta: kapatmayı veya silmeyi düşünün.",
+      "down": "Büyük: büyük olasılıkla {suggested} vCPU yeterli (şu an {vcpu}).",
+      "up": "Küçük: {suggested} vCPU rahatlatır (şu an {vcpu}).",
+      "none": "Boyut yüke uygun."
+    },
+    "cost": "Bu ay",
+    "costHelp": "Her sunucu ve sanal veri merkezinin bu ay var olduğu günlere göre oranlanır.",
+    "accrued": "Şu ana kadar",
+    "forecast": "Ay sonu beklenen",
+    "monthly": "Aylık toplam",
+    "daysLeft": "{n} gün kaldı",
+    "noCost": "Bu ay ücretlendirilen bir şey yok.",
+    "resources": "Kullanımda",
+    "resourcesValue": "{servers} sunucu · {vcpu} vCPU · {memory} GB RAM · {disk} GB disk"
+  },
+  "Shortcuts": {
+    "title": "Klavye kısayolları",
+    "open": "Klavye kısayolları",
+    "intro": "Kısayollar metin alanları dışında her yerde çalışır.",
+    "palette": "Komut paletini aç",
+    "help": "Bu listeyi göster",
+    "goTo": "Şuraya git…",
+    "then": "sonra",
+    "g": {
+      "h": "Sunucularım",
+      "o": "Yeni sunucu",
+      "a": "Hesap",
+      "t": "Topoloji",
+      "d": "Yönetim özeti",
+      "s": "Tüm sunucular",
+      "c": "Katalog"
+    }
   }
 }
