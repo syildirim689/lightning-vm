@@ -66,9 +66,9 @@ export default function Catalog() {
   return <>
     <PageHeader eyebrow={t('eyebrow')} title={t('title')} description={t('intro')}/>
     <Tabs selectedKey={tab} onSelectionChange={(k) => setTab(String(k))}>
-      <Tabs.ListContainer>
+      <Tabs.ListContainer className="overflow-x-auto">
         <Tabs.List aria-label={t('title')}>
-          {(['locations', 'pools', 'packages', 'images', 'isos', 'ip', 'apps', 'vdcs', 'quotas'] as const).map((k) => <Tabs.Tab key={k} id={k}>{t(`${k}.title`)}<Tabs.Indicator/></Tabs.Tab>)}
+          {(['locations', 'pools', 'packages', 'images', 'isos', 'ip', 'apps', 'vdcs', 'quotas'] as const).map((k) => <Tabs.Tab key={k} id={k} className="whitespace-nowrap">{t(`${k}.title`)}<Tabs.Indicator/></Tabs.Tab>)}
         </Tabs.List>
       </Tabs.ListContainer>
 

@@ -94,14 +94,14 @@ export default function Energy() {
     {!d ? <p role="status" className="text-sm text-muted">{t('loading')}</p> : <div className="flex flex-col gap-6">
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <Stat label={t('now')} value={`${n(d.now.watts / 1000, 2)} kW`} hint={t('facility', { kw: n(d.now.facilityWatts / 1000, 2), pue: d.settings.pue })} icon={<I name="zap" size={18}/>} tone="accent"/>
-        <Stat label={t('today')} value={`${n(d.energy.todayKwh)} kWh`} hint={money(d.energy.costToday)} icon={<I name="calendar-clock" size={18}/>}/>
-        <Stat label={t('month')} value={`${n(d.energy.monthKwh)} kWh`} hint={t('monthHint', { cost: money(d.energy.costMonth), facility: n(d.energy.facilityMonthKwh) })} icon={<I name="calendar" size={18}/>}/>
-        <Stat label={t('co2Month')} value={`${n(d.energy.co2MonthKg)} kg`} hint={t('co2Hint', { g: d.settings.co2GramsPerKwh })} icon={<I name="leaf" size={18}/>} tone="success"/>
+        <Stat label={t('today')} value={`${n(d.energy.todayKwh, 2)} kWh`} hint={money(d.energy.costToday)} icon={<I name="calendar-clock" size={18}/>}/>
+        <Stat label={t('month')} value={`${n(d.energy.monthKwh, 2)} kWh`} hint={t('monthHint', { cost: money(d.energy.costMonth), facility: n(d.energy.facilityMonthKwh) })} icon={<I name="calendar" size={18}/>}/>
+        <Stat label={t('co2Month')} value={`${n(d.energy.co2MonthKg, 2)} kg`} hint={t('co2Hint', { g: d.settings.co2GramsPerKwh })} icon={<I name="leaf" size={18}/>} tone="success"/>
       </div>
       <p className="text-xs text-muted">{t('measuredOf', { measured: d.now.measured, hosts: d.now.hosts })}</p>
 
       <Section title={t('history')} actions={<Tabs selectedKey={range} onSelectionChange={(k) => setRange(String(k))}>
-        <Tabs.ListContainer><Tabs.List aria-label={t('history')}>{['1d', '7d', '30d'].map((r) => <Tabs.Tab key={r} id={r}>{t(`ranges.${r}` as 'ranges.1d')}<Tabs.Indicator/></Tabs.Tab>)}</Tabs.List></Tabs.ListContainer>
+        <Tabs.ListContainer><Tabs.List aria-label={t('history')}>{['1d', '7d', '30d'].map((r) => <Tabs.Tab key={r} id={r} className="whitespace-nowrap">{t(`ranges.${r}` as 'ranges.1d')}<Tabs.Indicator/></Tabs.Tab>)}</Tabs.List></Tabs.ListContainer>
       </Tabs>}>
         {chart.length === 0 ? <p className="text-sm text-muted">{t('noData')}</p> : <Card variant="secondary"><Card.Content className="p-3">
           <div className="h-64" role="img" aria-label={t('chartLabel', { kwh: n(d.energy.rangeKwh), cost: money(d.energy.costRange) })}>

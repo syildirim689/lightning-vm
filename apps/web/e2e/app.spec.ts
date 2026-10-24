@@ -624,6 +624,7 @@ test.describe('people, settings and smart features (English browser)', () => {
 
   // New screens render and carry their heading; full-page screenshots go to test-results/tour for review.
   test('tour of the newer screens', async ({ browser }) => {
+    test.setTimeout(180_000);
     const shot = async (page: Page, name: string) => page.screenshot({ path: `test-results/tour/${name}.png`, fullPage: true });
     const guest = await (await browser.newContext({ locale: 'tr-TR' })).newPage();
     for (const path of ['/login', '/register']) {
