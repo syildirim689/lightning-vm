@@ -3,6 +3,7 @@
 process.env.DATABASE_URL = 'postgresql://nobody:nobody@127.0.0.1:1/none';
 process.env.REDIS_HOST = '127.0.0.1';
 process.env.REDIS_PORT = '1';
+process.env.BETTER_AUTH_SECRET = 'unit-test-only-better-auth-secret-0123456789';
 import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
 
@@ -36,18 +37,18 @@ test('admin endpoints require a session', async () => {
 });
 
 test('state-changing requests without the CSRF header are rejected', async () => {
-  const res = await app.inject({ method: 'POST', url: '/auth/login', payload: { email: 'a@b.co', password: 'x'.repeat(12) } });
+  const res = await app.inject({ method: 'POST', url: '/auth/sign-in/email', payload: { email: 'a@b.co', password: 'x'.repeat(12) } });
   assert.equal(res.statusCode, 403);
   assert.equal(res.json().code, 'CSRF_REJECTED');
 });
 
 test('cross-origin requests are rejected even with the header', async () => {
-  const res = await app.inject({ method: 'POST', url: '/auth/login', headers: { 'x-lightning-csrf': '1', origin: 'https://evil.example', host: 'panel.local' }, payload: {} });
+  const res = await app.inject({ method: 'POST', url: '/auth/sign-in/email', headers: { 'x-lightning-csrf': '1', origin: 'https://evil.example', host: 'panel.local' }, payload: {} });
   assert.equal(res.json().code, 'CSRF_REJECTED');
 });
 
-test('invalid credentials input is rejected on the server with field codes', async () => {
-  const res = await app.inject({ method: 'POST', url: '/auth/login', headers: { 'x-lightning-csrf': '1' }, payload: { email: 'not-an-email', password: 'short' } });
-  assert.equal(res.statusCode, 400);
-  assert.deepEqual(res.json().fields, { email: 'INVALID_EMAIL', password: 'PASSWORD_TOO_SHORT' });
+test('sign-in fails closed when the database and Redis are unreachable', async () => {
+  const res = await app.inject({ method: 'POST', url: '/auth/sign-in/email', headers: { 'x-lightning-csrf': '1' }, payload: { email: 'a@example.test', password: 'long enough password' } });
+  assert.ok(res.statusCode >= 500, String(res.statusCode));
+  assert.equal(res.headers['set-cookie'], undefined);
 });
