@@ -22,7 +22,10 @@ PostgreSQL ve Redis'tedir:
 **Doğrulama:** API entegrasyon testleri iki worker kopyasıyla 70/70 geçti; buna firewall, sunucu yaşam döngüsü
 ve kurtarma testleri dahil. Rol değişikliğinin başka bir süreçteki kopyaya hemen ulaştığı ayrıca test edildi.
 
-## 2. Cluster modu (planlandı, test sunucuları gerekiyor)
+## 2. Cluster modu (ertelendi, 2026-10-24)
+Kullanıcı kararı: en az 3 test sunucusu hazır olunca eklenecek. Sunucu kaybı denemesi yapılmadan yazılmayacak.
+Bugünkü tek sunuculu kurulum bu adıma hazırdır: uygulama çoklu kopyada test edildi (1. bölüm), veriler
+PostgreSQL ve Redis'te, yedekler ve güncelleme `install.sh` ile yapılıyor. Plan:
 - **Docker Swarm** (Docker'ın içinde gelir).
   - `sudo sh scripts/install.sh cluster init`: ilk sunucuda cluster'ı kurar ve katılım komutunu basar.
   - `sudo sh scripts/install.sh cluster join <adres> <anahtar>`: yeni sunucuyu ekler.
