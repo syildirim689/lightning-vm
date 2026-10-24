@@ -161,13 +161,13 @@ export class ServersController {
 
   @Get('servers/:id')
   async detail(@Req() req: AuthedRequest, @Param('id', ParseUUIDPipe) id: string) {
-    await findServer(req, id);
+    const own = (await findServer(req, id)).owner_id === req.user.id;
     const [{ rows: [server] }, { rows: operations }] = await Promise.all([
       pool.query(`SELECT ${serverColumns} ${serverJoins} WHERE s.id = $1`, [id]),
       pool.query(`SELECT id, kind, status, step, attempts, error_code AS "errorCode", created_at AS "createdAt", started_at AS "startedAt", finished_at AS "finishedAt"
         FROM operations WHERE server_id = $1 ORDER BY created_at DESC LIMIT 50`, [id]),
     ]);
-    return { server, operations, allowed: await allowedFor(req) };
+    return { server, operations, own, allowed: await allowedFor(req) };
   }
 
   @Post('servers') @HttpCode(202)

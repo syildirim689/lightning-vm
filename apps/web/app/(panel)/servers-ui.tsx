@@ -119,9 +119,9 @@ export function ServerDetail({ id }: { id: string }) {
   const client = useQueryClient();
   const [message, setMessage] = useState<string>();
   const [deleteName, setDeleteName] = useState('');
-  const q = useApiQuery<{ server: Server; operations: Operation[]; allowed?: Record<'power' | 'console' | 'iso' | 'rootPassword' | 'delete', boolean> }>(['servers', id], `/servers/${id}`, { refetchInterval: 3_000 });
+  const q = useApiQuery<{ server: Server; operations: Operation[]; own?: boolean; allowed?: Record<'power' | 'console' | 'iso' | 'rootPassword' | 'delete', boolean> }>(['servers', id], `/servers/${id}`, { refetchInterval: 3_000 });
   const gone = (q.error as { code?: string } | null)?.code === 'NOT_FOUND';
-  // The viewer's own servers: owner-only helpers (tags, order similar) show for these.
+  // The viewer's own server names, for the next free name in "order similar".
   const mine = useApiQuery<{ servers: Server[] }>(['servers'], '/servers').data?.servers;
   const name = q.data?.server.name;
   useEffect(() => { if (name) remember({ href: `/servers/${id}`, label: name }); }, [name, id]);
@@ -131,7 +131,7 @@ export function ServerDetail({ id }: { id: string }) {
   // What the admin lets customers do here (missing: an older API, everything allowed).
   const allowed = { power: true, console: true, iso: true, rootPassword: true, delete: true, ...q.data.allowed };
   const open = operations.find((o) => runningStates.includes(o.status));
-  const own = !!mine?.some((x) => x.id === s.id);
+  const own = !!q.data.own; // owner-only helpers: tags and notes, order similar
   // The same Idempotency-Key is kept until the server answers; only a network failure keeps it for a retry.
   async function act(path: string, method: string, body?: object) {
     setMessage(undefined);
@@ -148,7 +148,7 @@ export function ServerDetail({ id }: { id: string }) {
   return <div className="flex flex-col gap-6">
     <PageHeader eyebrow={s.location || s.poolName} title={s.name} description={<span className="mt-2 inline-flex"><StateBadge server={s}/></span>}
       actions={<>{s.state === 'ready' && allowed.console && <ButtonLink variant="secondary" href={`/servers/${id}/console`}><I name="square-terminal" size={16}/>{actionLabel('console')}</ButtonLink>}
-        {own && <OrderSimilar server={s} names={mine!.map((x) => x.name)}/>}</>}/>
+        {own && <OrderSimilar server={s} names={(mine ?? []).map((x) => x.name)}/>}</>}/>
     {message && <div role="alert"><Notice tone="danger">{message}</Notice></div>}
     {s.errorCode && <Notice tone="danger">{t('errorCode', { message: error({ code: s.errorCode }), code: s.errorCode })}</Notice>}
 

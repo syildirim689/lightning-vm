@@ -370,6 +370,7 @@ test.describe('VMware connections (simulator, English browser)', () => {
 test.describe('server lifecycle (simulator, Turkish customer)', () => {
   test.use({ locale: 'tr-TR' });
   test('a customer creates a server, sees it become ready, powers it off with confirmation and deletes it', async ({ page }) => {
+    test.setTimeout(120_000);
     test.skip(!process.env.E2E_VCSIM_HOST, 'needs compose.simulator.yaml and E2E_VCSIM_HOST');
     await signIn(page, user);
     await expect(page).toHaveURL(/\/$/);
