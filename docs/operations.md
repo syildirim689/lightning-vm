@@ -41,6 +41,8 @@ ayrı bir yedekleme çözümü gerekir.
 | `BACKUP_COPY_TO` | boş | `rsync` hedefi: `kullanici@yedek:/yol` (SSH) veya bağlı bir klasör. Hedefteki saklama süresini hedefin kendisi yönetir. |
 | `BACKUP_SCHEDULE` | `daily` | Zamanlayıcı açıkken günlük yedek. `off`: kapalı. |
 
+SSH hedefinde kopya root'un SSH anahtarıyla yapılır (zamanlayıcı da root olarak çalışır).
+Anahtarı ve kullanıcıyı `/root/.ssh/config` içinde o host için tanımlayın.
 Harici kopya başarısız olursa yerel yedek yine kalır, ama sonuç "başarısız" (`E_BACKUP_COPY`)
 olarak kaydedilir ve alarm üretir.
 

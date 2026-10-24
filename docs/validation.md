@@ -36,6 +36,10 @@ yine simülatördür.
   - Otomatik güncelleme: `schedule on` systemd zamanlayıcısını kurdu. Pencere dışındayken hiçbir
     şey yapmadı. Pencere içinde zamanlayıcı servisi beta kanalından `v0.11.0-rc.1`'e geçti.
     `schedule off` birimleri sildi; geçersiz pencere reddedildi.
+- **Ek denemeler:**
+  - Açık bir işlem varken otomatik güncelleme ertelendi (`W_UPDATE_BUSY`, sürüm değişmedi).
+  - Yedek SSH üzerinden `rsync` ile uzak hedefe kopyalandı; sağlama tuttu.
+  - Erişilemeyen hedefte yerel yedek kaldı ve sonuç `E_BACKUP_COPY` olarak kaydedildi.
 - **İzleme:**
   - Prometheus hedeflerinin hepsi `up`: api, node, probe, prometheus.
   - Worker yaşam sinyali, bağımlılıklar, yedek yaşı, sürüm, kuyruk, DB bağlantıları, host RAM ve
@@ -69,8 +73,6 @@ yine simülatördür.
   - Yönetim sayfasındaki ikinci canlı bölge, E2E seçicisini belirsiz yapıyordu.
 
 Doğrulanmayanlar:
-- Açık işlem varken otomatik güncellemenin ertelenmesi (`W_UPDATE_BUSY`) gerçek bir işlemle denenmedi.
-- Uzak SSH hedefine `rsync` kopyası (yalnızca yerel klasör hedefi denendi).
 - E-posta alıcısı (yalnızca webhook denendi).
 - GitHub Actions'ta yeni CI adımları henüz çalışmadı (depoya push yapılmadı).
 - GHCR imajlarıyla kurulum, imzalı paket ve tracing yok.
