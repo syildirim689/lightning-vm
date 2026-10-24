@@ -11,6 +11,7 @@ import { audit, type AuthedRequest } from './auth';
 import { notify } from './notify';
 import { Can, PermissionGuard } from './rbac';
 import { decryptSecret, encryptSecret } from './secrets';
+import { presets } from './app-presets';
 import { type Application, defaultScripts, keyPattern, marker, renderInstall, tokenHash } from './application-scripts';
 export type { Application } from './application-scripts';
 
@@ -61,7 +62,7 @@ export class ApplicationsController {
         (SELECT count(*)::int FROM application_licenses l WHERE l.application_id = a.id) AS "licensesTotal",
         (SELECT count(*)::int FROM servers s WHERE s.application_id = a.id AND s.state <> 'deleted') AS servers
       FROM applications a ORDER BY a.name`);
-    return { applications: rows, defaults: defaultScripts };
+    return { applications: rows, defaults: defaultScripts, presets: presets.map((p) => ({ ...p, script: p.script || defaultScripts[p.kind] })) };
   }
 
   @Post() @HttpCode(201) @Can('catalog.manage')

@@ -14,6 +14,7 @@ import { useApiAction, useApiQuery } from '../../../../lib/query';
 type Kind = 'cpanel' | 'plesk' | 'custom';
 type App = { id: string; name: string; kind: Kind; description: string; script: string; licenseMode: 'none' | 'pool'; minMemoryMb: number; minDiskGb: number;
   priceMonthly: string; active: boolean; licensesFree: number; licensesTotal: number; servers: number };
+type Preset = { id: string; name: string; kind: Kind; minMemoryMb: number; minDiskGb: number; licenseMode: 'none' | 'pool'; script: string };
 type License = { id: string; hint: string; assignedAt: string | null; serverId: string | null; serverName: string | null };
 const key = ['catalog', 'applications'];
 
@@ -32,7 +33,7 @@ function Dialog({ open, setOpen, title, children }: { open: boolean; setOpen: (v
 export function Applications({ currency }: { currency: string }) {
   const t = useTranslations('Catalog.apps');
   const format = useFormatter();
-  const q = useApiQuery<{ applications: App[]; defaults: Record<Kind, string> }>(key, '/admin/applications').data;
+  const q = useApiQuery<{ applications: App[]; defaults: Record<Kind, string>; presets: Preset[] }>(key, '/admin/applications').data;
   const [editing, setEditing] = useState<App | 'new' | null>(null);
   const [keys, setKeys] = useState<App | null>(null);
   const remove = useApiAction((id: string) => apiFetch(`/admin/applications/${id}`, { method: 'DELETE' }), { invalidate: [key], success: t('removed') });
@@ -57,7 +58,7 @@ export function Applications({ currency }: { currency: string }) {
             confirmLabel={t('remove')} cancelLabel={t('cancel')} isDisabled={a.servers > 0} onConfirm={() => remove.mutateAsync(a.id).then(() => undefined)}/>
         </span>]}/>
     <Dialog open={editing !== null} setOpen={(v) => !v && setEditing(null)} title={editing === 'new' ? t('new') : t('editTitle')}>
-      {editing && <AppForm app={editing === 'new' ? null : editing} defaults={q.defaults} onDone={() => setEditing(null)}/>}
+      {editing === 'new' ? <Presets presets={q.presets} defaults={q.defaults} onDone={() => setEditing(null)}/> : editing && <AppForm app={editing} defaults={q.defaults} onDone={() => setEditing(null)}/>}
     </Dialog>
     <Dialog open={keys !== null} setOpen={(v) => !v && setKeys(null)} title={keys ? t('keysTitle', { name: keys.name }) : ''}>
       {keys && <Licenses app={keys}/>}
@@ -65,11 +66,33 @@ export function Applications({ currency }: { currency: string }) {
   </>;
 }
 
-function AppForm({ app, defaults, onDone }: { app: App | null; defaults: Record<Kind, string>; onDone: () => void }) {
+// A new application starts from a template (or an empty script); the form then shows it for editing.
+function Presets({ presets, defaults, onDone }: { presets: Preset[]; defaults: Record<Kind, string>; onDone: () => void }) {
+  const t = useTranslations('Catalog.apps');
+  const [picked, setPicked] = useState<Preset | null>(null);
+  if (picked) return <AppForm app={null} preset={picked} defaults={defaults} onDone={onDone}/>;
+  const blank: Preset = { id: 'blank', name: '', kind: 'custom', minMemoryMb: 512, minDiskGb: 10, licenseMode: 'none', script: defaults.custom };
+  return <div className="flex flex-col gap-3">
+    <p className="text-sm text-muted">{t('presetsExplain')}</p>
+    <ul className="grid gap-2 sm:grid-cols-2">
+      {[...presets, blank].map((p) => <li key={p.id}>
+        <button type="button" onClick={() => setPicked(p)} className="flex h-full w-full items-start gap-3 rounded-xl border border-border p-3 text-left transition hover:border-accent hover:bg-accent-soft focus-visible:outline-2 focus-visible:outline-accent">
+          <I name={{ blank: 'file-code', custom: 'package', cpanel: 'layout-panel-left', plesk: 'layout-panel-left' }[p.id === 'blank' ? 'blank' : p.kind]} size={20} className="mt-0.5 shrink-0 text-accent"/>
+          <span className="flex flex-col">
+            <span className="font-medium">{p.id === 'blank' ? t('blank') : p.name}</span>
+            <span className="text-xs text-muted">{t.has(`presets.${p.id}` as 'presets.docker') ? t(`presets.${p.id}` as 'presets.docker') : ''}</span>
+          </span>
+        </button>
+      </li>)}
+    </ul>
+  </div>;
+}
+
+function AppForm({ app, preset, defaults, onDone }: { app: App | null; preset?: Preset; defaults: Record<Kind, string>; onDone: () => void }) {
   const t = useTranslations('Catalog.apps');
   const client = useQueryClient();
-  const f = useApiForm({ name: app?.name ?? '', kind: app?.kind ?? 'plesk', description: app?.description ?? '', script: app?.script ?? defaults.plesk,
-    licenseMode: app?.licenseMode ?? 'pool', minMemoryMb: String(app?.minMemoryMb ?? 2048), minDiskGb: String(app?.minDiskGb ?? 40), priceMonthly: app?.priceMonthly ?? '0' });
+  const f = useApiForm({ name: app?.name ?? preset?.name ?? '', kind: app?.kind ?? preset?.kind ?? 'custom', description: app?.description ?? '', script: app?.script ?? preset?.script ?? defaults.custom,
+    licenseMode: app?.licenseMode ?? preset?.licenseMode ?? 'none', minMemoryMb: String(app?.minMemoryMb ?? preset?.minMemoryMb ?? 512), minDiskGb: String(app?.minDiskGb ?? preset?.minDiskGb ?? 10), priceMonthly: app?.priceMonthly ?? '0' });
   const [active, setActive] = useState(app?.active ?? true);
   // Switching the kind of a new application brings its starting script, unless the admin already changed it.
   const kind = (k: string) => f.setValues((v) => ({ ...v, kind: k as Kind, script: Object.values(defaults).includes(v.script) ? defaults[k as Kind] : v.script,

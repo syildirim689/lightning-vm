@@ -4,12 +4,12 @@ import { toast } from '@heroui/react';
 import { apiFetch, useErrorText } from './api';
 
 // GET through the API with React Query: shared cache per key, optional polling for live state.
-export function useApiQuery<T>(key: QueryKey, path: string | null, opts: { refetchInterval?: number | false; enabled?: boolean } = {}) {
+export function useApiQuery<T>(key: QueryKey, path: string | null, opts: { refetchInterval?: number | false | ((data: T | undefined) => number | false); enabled?: boolean } = {}) {
   return useQuery<T>({
     queryKey: key,
     queryFn: ({ signal }) => apiFetch<T>(path!, { signal }),
     enabled: path !== null && opts.enabled !== false,
-    refetchInterval: opts.refetchInterval,
+    refetchInterval: typeof opts.refetchInterval === 'function' ? ((f) => (query) => f(query.state.data as T | undefined))(opts.refetchInterval) : opts.refetchInterval,
   });
 }
 

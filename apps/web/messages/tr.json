@@ -220,7 +220,16 @@
     "RDNS_AUTH_FAILED": "DNS sunucusu API anahtarını reddetti.",
     "RDNS_FAILED": "DNS sunucusu değişikliği reddetti.",
     "RDNS_EDIT_DISABLED": "Burada ters DNS değiştirilemez.",
-    "LICENSE_EXHAUSTED": "Bu uygulama için boşta lisans kalmadı; yönetici yeni lisans ekleyene kadar başka bir seçim yapın."
+    "LICENSE_EXHAUSTED": "Bu uygulama için boşta lisans kalmadı; yönetici yeni lisans ekleyene kadar başka bir seçim yapın.",
+    "STORAGE_AUTH_FAILED": "Depo kullanıcı adını, parolayı veya anahtarı kabul etmedi.",
+    "STORAGE_NOT_FOUND": "Depoda bu klasör ya da dosya bulunamadı.",
+    "STORAGE_TLS_FAILED": "Deponun TLS sertifikası doğrulanamadı.",
+    "STORAGE_UNREACHABLE": "Depoya ulaşılamadı (adres, port veya güvenlik duvarı).",
+    "STORAGE_ERROR": "Depo isteği başarısız oldu.",
+    "STORAGE_TIMEOUT": "Depo zamanında yanıt vermedi.",
+    "RCLONE_MISSING": "Worker kapsayıcısında rclone yok; worker imajını güncelleyin.",
+    "NO_CDROM_CONTROLLER": "Sunucuda CD-ROM sürücüsü için boş IDE yuvası yok.",
+    "DATASTORE_NOT_FOUND": "ISO'nun bulunduğu datastore artık yok."
   },
   "Auth": {
     "required": "zorunlu",
@@ -332,7 +341,9 @@
     "APP_NEEDS_LINUX": "Bu uygulama yalnızca Linux imajlarında kurulabilir.",
     "INVALID_LICENSE_KEYS": "Her satıra bir anahtar yazın; boşluk ve tırnak kullanılamaz (en fazla 500 anahtar).",
     "LICENSE_PLACEHOLDER_MISSING": "Lisans havuzu kullanılıyorsa betik lisans yer tutucusunu (süslü parantez içinde LICENSE) içermeli.",
-    "TOO_LONG": "Çok uzun."
+    "TOO_LONG": "Çok uzun.",
+    "NOT_AN_ISO": "Yalnızca .iso dosyaları kopyalanabilir.",
+    "ISO_EXISTS": "Bu ISO bu konumda zaten var."
   },
   "Setup": {
     "title": "Kurulum sihirbazı",
@@ -1076,7 +1087,126 @@
       "keysEmpty": "Henüz anahtar yok.",
       "key": "Anahtar",
       "assignedTo": "Sunucu",
-      "keyFree": "Boşta"
+      "keyFree": "Boşta",
+      "presetsExplain": "Hazır bir şablonla başlayın; betik, gereksinimler ve fiyat sonraki adımda düzenlenebilir. Şablonlar Debian/Ubuntu imajları içindir (cPanel ve Plesk kendi desteklediği sistemlerde çalışır). Üretilen parolalar sunucuda /root/lightning-app-credentials.txt dosyasına yazılır.",
+      "blank": "Boş betik",
+      "presets": {
+        "cpanel": "Web barındırma paneli; lisans IP adresine bağlı.",
+        "plesk": "Web barındırma paneli; anahtar havuzundan lisans.",
+        "wordpress": "Apache, MariaDB, PHP ve en güncel WordPress; veritabanı hazır.",
+        "lemp": "Nginx, MariaDB ve PHP-FPM yığını.",
+        "docker": "Docker Engine ve Compose eklentisi.",
+        "portainer": "Docker ve web arayüzlü kapsayıcı yönetimi (9443).",
+        "coolify": "Kendi sunucunuzda Heroku/Netlify benzeri dağıtım platformu (8000).",
+        "nodejs": "Node.js LTS ve PM2 süreç yöneticisi.",
+        "nextcloud": "Kendi bulut depolamanız; yönetici parolası üretilir.",
+        "webmin": "Web tabanlı sunucu yönetimi (10000).",
+        "n8n": "İş akışı otomasyonu (5678).",
+        "uptime-kuma": "Site ve servis izleme paneli (3001).",
+        "mariadb": "Güvenli ayarlarla MariaDB; root parolası üretilir.",
+        "postgresql": "PostgreSQL; postgres parolası üretilir."
+      }
+    },
+    "isos": {
+      "title": "ISO kütüphanesi",
+      "loading": "Yükleniyor…",
+      "explain": "FTP/FTPS, SFTP, WebDAV, S3 uyumlu, SMB veya HTTP depolarını bağlayın, içlerinde gezinin ve seçtiğiniz ISO'yu bir ya da birden fazla konumun datastore'una kopyalayın. Kopyalama arka planda akış olarak yapılır; müşteriler hazır ISO'ları sunucularına takıp çıkarabilir.",
+      "newSource": "Depo bağla",
+      "editSource": "Depoyu düzenle",
+      "sources": "Depolar",
+      "noSources": "Henüz depo yok.",
+      "noSourcesHelp": "ISO dosyalarınızın durduğu depoyu bağlayarak başlayın.",
+      "isoCount": "{n, plural, one {# ISO} other {# ISO}}",
+      "browse": "Gözat",
+      "edit": "Düzenle",
+      "remove": "Kaldır",
+      "cancel": "Vazgeç",
+      "save": "Kaydet",
+      "test": "Bağlantıyı test et",
+      "removeSourceConfirm": "Depo bağlantısı kaldırılsın mı? Kopyalanmış ISO'lar kütüphanede kalır.",
+      "library": "Kütüphane",
+      "noIsos": "Kütüphanede henüz ISO yok.",
+      "name": "Ad",
+      "location": "Konum",
+      "size": "Boyut",
+      "state": "Durum",
+      "servers": "Takılı sunucu",
+      "actions": "İşlemler",
+      "staffOnly": "yalnız yöneticiler",
+      "states": {
+        "copying": "Kopyalanıyor",
+        "ready": "Hazır",
+        "failed": "Başarısız",
+        "deleting": "Siliniyor"
+      },
+      "progress": "{name} kopyalanıyor",
+      "retry": "Yeniden dene",
+      "removeIsoConfirm": "ISO datastore'dan silinsin mi?",
+      "removed": "Depo kaldırıldı.",
+      "isoRemoving": "ISO siliniyor.",
+      "saved": "Depo kaydedildi.",
+      "identity": "Tanım",
+      "protocol": "Protokol",
+      "connection": "Bağlantı",
+      "basePath": "Kök klasör",
+      "basePathHelp": "Gezinmenin başlayacağı klasör; boşsa en üst klasör.",
+      "basePathS3": "Kova ve isteğe bağlı önek: iso-bucket/linux",
+      "basePathSmb": "Paylaşım ve klasör: ISO/linux",
+      "testOk": "Bağlantı başarılı: {entries} öğe, {isos} ISO.",
+      "secretKept": "Kayıtlı; değiştirmek için yenisini yazın.",
+      "protocols": {
+        "ftp": "FTP / FTPS",
+        "sftp": "SFTP (SSH)",
+        "webdav": "WebDAV",
+        "s3": "S3 uyumlu",
+        "smb": "SMB / CIFS",
+        "http": "HTTP dizini"
+      },
+      "protocolHelp": {
+        "ftp": "Klasik FTP; TLS için \"Açık TLS\" (FTPES) ya da \"Örtük TLS\" (FTPS, genellikle port 990) seçin.",
+        "sftp": "SSH üzerinden dosya aktarımı; parola veya özel anahtar.",
+        "webdav": "Nextcloud, ownCloud, NAS cihazları ve WebDAV sunucuları.",
+        "s3": "MinIO, Ceph, Wasabi, Cloudflare R2, AWS S3 ve S3 uyumlu her depo.",
+        "smb": "Windows paylaşımları, Samba ve NAS cihazları.",
+        "http": "Dizin listelemesi açık bir HTTP/HTTPS adresi (yalnız okuma, ör. dağıtım aynaları)."
+      },
+      "fields": {
+        "host": "Sunucu",
+        "port": "Port",
+        "user": "Kullanıcı adı",
+        "pass": "Parola",
+        "explicit_tls": "Açık TLS (FTPES)",
+        "tls": "Örtük TLS (FTPS)",
+        "no_check_certificate": "Sertifikayı doğrulama",
+        "key_pem": "Özel anahtar (PEM)",
+        "url": "Adres",
+        "endpoint": "Uç nokta",
+        "region": "Bölge",
+        "access_key_id": "Erişim anahtarı",
+        "secret_access_key": "Gizli anahtar",
+        "force_path_style": "Yol tarzı adresleme",
+        "domain": "Etki alanı"
+      },
+      "fieldHelp": {
+        "no_check_certificate": "Yalnızca kendi imzalı sertifikalı güvenilir iç ağ depoları için.",
+        "key_pem": "Parola yerine veya parolayla birlikte kullanılır.",
+        "force_path_style": "MinIO ve çoğu S3 uyumlu depo için açık kalsın.",
+        "explicit_tls": "Bağlantı düz başlar, AUTH TLS ile şifrelenir.",
+        "tls": "Bağlantı baştan TLS ile açılır."
+      },
+      "browseTitle": "{name}: gözat",
+      "path": "Klasör yolu",
+      "listing": "Listeleniyor…",
+      "emptyFolder": "Bu klasörde alt klasör veya ISO yok.",
+      "copyTitle": "{file} ({size}) kopyalanacak",
+      "displayName": "Görünen ad",
+      "displayNameHelp": "Müşterilerin göreceği ad.",
+      "locations": "Konumlar",
+      "locationsHelp": "Her konuma ayrı kopya yapılır (konumun ilk datastore'u).",
+      "public": "Müşteriler kullanabilsin",
+      "publicHelp": "Kapalıysa yalnızca yöneticiler takabilir.",
+      "copy": "Kopyala",
+      "copyStarted": "Kopyalama başladı; ilerlemeyi kütüphanede izleyebilirsiniz."
     }
   },
   "Servers": {
@@ -1243,6 +1373,20 @@
       "installing": "Kuruluyor",
       "installed": "Kuruldu",
       "failed": "Kurulamadı"
+    },
+    "iso": {
+      "title": "ISO / CD-ROM",
+      "explain": "Bulunduğunuz konumun ISO kütüphanesinden bir imajı sunucunun sanal CD sürücüsüne takın; kurulum veya kurtarma için ISO'dan başlatabilirsiniz.",
+      "mounted": "Takılı",
+      "bootsFromIso": "ISO'dan başlatılıyor",
+      "eject": "Çıkar",
+      "choose": "ISO",
+      "insert": "Tak",
+      "boot": "ISO'dan başlat",
+      "bootHelp": "Önyükleme sırası CD-ROM → disk olur. Etkisi için sunucuyu yeniden başlatın; ISO çıkarılınca sıra varsayılana döner.",
+      "notReady": "Sunucu hazır olduğunda ISO takılabilir.",
+      "inserted": "ISO takıldı.",
+      "ejected": "ISO çıkarıldı."
     }
   },
   "Maintenance": {
@@ -1717,6 +1861,14 @@
       "server_app_failed": {
         "title": "Uygulama kurulamadı",
         "help": "Uygulama kurulumu hata ile bittiğinde."
+      },
+      "admin_iso_ready": {
+        "title": "ISO hazır",
+        "help": "Bir depodan kopyalanan ISO konumda kullanıma açıldığında."
+      },
+      "admin_iso_failed": {
+        "title": "ISO kopyalanamadı",
+        "help": "Depodan datastore'a kopyalama başarısız olduğunda."
       }
     },
     "policyTitle": "Önce yönetici, sonra kullanıcı",

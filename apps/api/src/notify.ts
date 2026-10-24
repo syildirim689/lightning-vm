@@ -58,6 +58,11 @@ export const catalog: Record<string, EventDef> = {
   'admin.operation_failed': { audience: 'staff', permission: 'servers.view_all', channels: all, defaults: ['inApp', 'push'], link: (d) => `/servers/${d.serverId}`,
     text: { tr: (d) => ({ title: `İşlem başarısız: ${d.name}`, body: `${d.kind} · ${d.code} · ${d.owner}` }),
       en: (d) => ({ title: `Operation failed: ${d.name}`, body: `${d.kind} · ${d.code} · ${d.owner}` }) } },
+  'admin.iso_ready': { audience: 'staff', permission: 'catalog.manage', channels: ['inApp', 'push', 'email'], defaults: ['inApp'], link: () => '/admin/catalog?tab=isos',
+    text: { tr: (d) => ({ title: 'ISO hazır: ' + d.name, body: d.pool + ' konumunda müşterilerin kullanımına açık.' }),
+      en: (d) => ({ title: 'ISO ready: ' + d.name, body: 'Available in ' + d.pool + '.' }) } },
+  'admin.iso_failed': { audience: 'staff', permission: 'catalog.manage', channels: ['inApp', 'push', 'email'], defaults: ['inApp', 'push'], link: () => '/admin/catalog?tab=isos',
+    text: { tr: (d) => ({ title: 'ISO kopyalanamadı: ' + d.name, body: d.error }), en: (d) => ({ title: 'ISO copy failed: ' + d.name, body: d.error }) } },
   'admin.insight': { audience: 'staff', permission: 'dashboard.view', channels: all, defaults: ['inApp', 'email'], link: () => '/admin',
     text: { tr: (d) => ({ title: d.titleTr, body: d.bodyTr }), en: (d) => ({ title: d.titleEn, body: d.bodyEn }) } },
 };

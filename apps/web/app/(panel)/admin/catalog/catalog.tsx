@@ -10,6 +10,7 @@ import { apiFetch } from '../../../../lib/api';
 import { useApiForm } from '../../../../lib/form';
 import { useApiAction, useApiQuery } from '../../../../lib/query';
 import { Applications } from './apps-ui';
+import { IsoLibrary } from './iso-ui';
 import { IpAddresses, IpPoolEdit, PoolIpOptions, type IpPoolRow } from './ip-ui';
 
 type Inventory = { compute: { moref: string; name: string; kind: string }[]; datastores: { moref: string; name: string }[]; networks: { moref: string; name: string; vlan: number | null }[]; vms: { moref: string; name: string; template: boolean }[] };
@@ -65,7 +66,7 @@ export default function Catalog() {
     <Tabs selectedKey={tab} onSelectionChange={(k) => setTab(String(k))}>
       <Tabs.ListContainer>
         <Tabs.List aria-label={t('title')}>
-          {(['pools', 'packages', 'images', 'ip', 'apps', 'quotas'] as const).map((k) => <Tabs.Tab key={k} id={k}>{t(`${k}.title`)}<Tabs.Indicator/></Tabs.Tab>)}
+          {(['pools', 'packages', 'images', 'isos', 'ip', 'apps', 'quotas'] as const).map((k) => <Tabs.Tab key={k} id={k}>{t(`${k}.title`)}<Tabs.Indicator/></Tabs.Tab>)}
         </Tabs.List>
       </Tabs.ListContainer>
 
@@ -110,6 +111,10 @@ export default function Catalog() {
             i.ipv6Prefix ? <Mono key="v6">{i.ipv6Prefix}</Mono> : '–',
             <span key="a" className="flex gap-1"><IpPoolEdit ipPool={i}/>{removeButton(`/admin/ip-pools/${i.id}`, i.name)}</span>]}/>
         <IpAddresses ipPools={ipPools}/>
+      </Tabs.Panel>
+
+      <Tabs.Panel id="isos" className="flex flex-col gap-4 pt-5">
+        <IsoLibrary pools={pools.map((p) => ({ id: p.id, name: p.location ? `${p.name} · ${p.location}` : p.name }))}/>
       </Tabs.Panel>
 
       <Tabs.Panel id="apps" className="flex flex-col gap-4 pt-5">

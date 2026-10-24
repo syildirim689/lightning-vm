@@ -12,6 +12,7 @@ import { apiFetch, useErrorText } from '../../lib/api';
 import { useApiForm } from '../../lib/form';
 import { useApiAction, useApiQuery } from '../../lib/query';
 import ServerMetrics from './metrics';
+import { ServerIso } from './server-iso';
 import { ButtonLink, ConfirmButton, DataTable, Empty, Mono, Notice, PageHeader, Section, StatusChip, TextInput, type Tone } from '../../components/ui';
 
 export type Server = { id: string; name: string; state: string; powerState: string; guestReady: boolean; vcpu: number; memoryMb: number; diskGb: number;
@@ -164,6 +165,7 @@ export function ServerDetail({ id }: { id: string }) {
     </div>
 
     <ServerIps server={s}/>
+    <ServerIso id={s.id} ready={s.state === 'ready' || s.state === 'error'}/>
     {s.hasRootPassword && <RootPassword id={s.id}/>}
     <ServerFirewalls server={s}/>
 

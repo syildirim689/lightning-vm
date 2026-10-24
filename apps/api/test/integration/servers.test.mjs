@@ -420,3 +420,56 @@ test('applications: a licence from the pool per order, price added, the guest re
   }
   assert.equal((await send('GET', `/admin/applications/${appId}/licenses`)).json().licenses.filter((l) => !l.serverId).length, 2, 'both keys are free again');
 });
+
+test('ISO library: storages over WebDAV/FTP/SFTP, copy into a location, insert/boot/eject on a server, delete', { skip: skip || (!process.env.ISO_TEST_HOST && 'needs the iso-src-test storage (run-it.sh)') }, async () => {
+  const host = process.env.ISO_TEST_HOST;
+  const dav = { name: 'Test DAV', protocol: 'webdav', config: { url: `http://${host}:8080`, user: 'isouser', pass: 'isopass' } };
+  assert.equal((await send('POST', '/admin/iso-sources/test', { ...dav, config: { ...dav.config, pass: 'wrong' } })).json().code, 'STORAGE_AUTH_FAILED');
+  assert.equal((await send('POST', '/admin/iso-sources/test', { ...dav, config: { url: 'ftp://x' } })).json().fields.url, 'INVALID_URL');
+  for (const body of [dav, { protocol: 'ftp', config: { host, port: 2121, user: 'isouser', pass: 'isopass' } }, { protocol: 'sftp', config: { host, port: 2222, user: 'isouser', pass: 'isopass' } }]) {
+    const t = await send('POST', '/admin/iso-sources/test', body);
+    assert.equal(t.statusCode, 200, `${body.protocol}: ${t.body}`);
+  }
+  const created = await send('POST', '/admin/iso-sources', { ...dav, basePath: '' });
+  assert.equal(created.statusCode, 201, created.body);
+  const sourceId = created.json().id;
+  const listed = (await send('GET', '/admin/iso-sources')).json().sources.find((s) => s.id === sourceId);
+  assert.deepEqual(listed.secretsSet, ['pass']);
+  assert.ok(!JSON.stringify(listed).includes('isopass'), 'secrets never leave the API');
+  // Saving without the password keeps the stored one.
+  assert.equal((await send('PUT', `/admin/iso-sources/${sourceId}`, { ...dav, config: { ...dav.config, pass: '' } })).statusCode, 200);
+  const root = (await send('POST', `/admin/iso-sources/${sourceId}/browse`, { path: '' })).json();
+  assert.ok(root.entries.some((e) => e.dir && e.name === 'isos'), JSON.stringify(root));
+  const dir = (await send('POST', `/admin/iso-sources/${sourceId}/browse`, { path: 'isos' })).json().entries;
+  assert.deepEqual(dir.map((e) => e.name), ['sub', 'test-1.iso'], 'folders first, only .iso files');
+  assert.equal(dir[1].size, 3145728);
+  assert.equal((await send('POST', `/admin/iso-sources/${sourceId}/browse`, { path: '../etc' })).json().fields.path, 'INVALID_VALUE');
+
+  const dvPool = (await pool.query("SELECT id FROM resource_pools WHERE name = 'Sim DVS'")).rows[0].id;
+  const imp = await send('POST', '/admin/isos', { sourceId, path: 'isos/test-1.iso', name: 'Test ISO', poolIds: [dvPool] });
+  assert.equal(imp.statusCode, 202, imp.body);
+  const isoId = imp.json().ids[0];
+  await until(async () => (await pool.query('SELECT state FROM isos WHERE id = $1', [isoId])).rows[0].state !== 'copying', 'copied', 120);
+  const iso = (await send('GET', '/admin/isos')).json().isos.find((i) => i.id === isoId);
+  assert.equal(iso.state, 'ready', iso.error);
+  assert.equal(iso.copiedBytes, 3145728);
+  assert.equal((await send('POST', '/admin/isos', { sourceId, path: 'isos/test-1.iso', poolIds: [dvPool] })).json().fields.path, 'ISO_EXISTS');
+  assert.equal((await send('POST', '/admin/isos', { sourceId, path: 'isos/readme.txt', poolIds: [dvPool] })).json().fields.path, 'NOT_AN_ISO');
+
+  const pkg = (await pool.query("SELECT id FROM packages WHERE name = 'Tiny DVS'")).rows[0].id;
+  const r = await create({ ...order('iso-1'), poolId: dvPool, packageId: pkg });
+  const id = r.json().serverId;
+  await until(async () => (await serverRow(id)).state === 'ready', 'ready');
+  assert.ok((await send('GET', `/servers/${id}/isos`, undefined, user)).json().isos.some((i) => i.id === isoId));
+  assert.equal((await send('PUT', `/servers/${id}/iso`, { isoId: randomUUID() }, user)).json().fields.isoId, 'NOT_AVAILABLE');
+  const ins = await send('PUT', `/servers/${id}/iso`, { isoId, boot: true }, user);
+  assert.equal(ins.statusCode, 200, ins.body);
+  assert.equal((await serverRow(id)).iso_id, isoId);
+  assert.equal((await send('DELETE', `/admin/isos/${isoId}`)).json().code, 'IN_USE');
+  assert.equal((await send('PUT', `/servers/${id}/iso`, { isoId: null }, user)).json().inserted, null);
+  assert.equal((await serverRow(id)).iso_id, null);
+  assert.equal((await send('DELETE', `/admin/isos/${isoId}`)).statusCode, 202);
+  await until(async () => !(await pool.query('SELECT 1 FROM isos WHERE id = $1', [isoId])).rowCount, 'ISO removed');
+  await send('DELETE', `/servers/${id}`, { confirm: 'iso-1' }, user, { 'idempotency-key': randomUUID() });
+  await send('DELETE', `/admin/iso-sources/${sourceId}`);
+});

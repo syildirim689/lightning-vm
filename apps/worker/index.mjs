@@ -1,5 +1,6 @@
 import { Queue, Worker } from 'bullmq';
 import { processFirewall, processOperation, reconcile } from './operations.mjs';
+import { processIso } from './iso.mjs';
 import pg from 'pg';
 import { Redis } from 'ioredis';
 import { writeFile } from 'node:fs/promises';
@@ -25,6 +26,9 @@ const firewallWorker = new Worker('firewalls', (job) => processFirewall(pool, jo
 const firewalls = new Queue('firewalls', { connection: redis });
 // One firewall job at a time across every worker copy, not just within this one.
 await firewalls.setGlobalConcurrency(1).catch(() => log('error', 'firewall_concurrency_unset'));
+// ISO library: browsing answers the API while it waits; copies run for minutes to hours.
+const isoWorker = new Worker('isos', (job) => processIso(pool, job, log, notify), { connection: redis.duplicate(), concurrency: 3, lockDuration: 120_000 });
+isoWorker.on('error', (e) => log('error', 'iso_queue_error', { error: String(e?.message).slice(0, 200) }));
 const jobOptions = { attempts: 6, backoff: { type: 'exponential', delay: 5000 }, removeOnComplete: true, removeOnFail: true };
 
 // Recovery: an operation still open in PostgreSQL but without a queued job (Redis lost it, the API
@@ -103,6 +107,6 @@ async function copyConsoleEvents() {
 }
 copyConsoleEvents();
 
-async function close() { if (closing) return; closing = true; clearInterval(timer); clearInterval(recoveryTimer); clearInterval(reconcileTimer); await worker.close(); await firewallWorker.close(); await firewalls.close(); await rdnsQueue.close(); await maintenance.close(); await operations.close(); events.disconnect(); redis.disconnect(); await pool.end(); }
+async function close() { if (closing) return; closing = true; clearInterval(timer); clearInterval(recoveryTimer); clearInterval(reconcileTimer); await worker.close(); await firewallWorker.close(); await isoWorker.close(); await firewalls.close(); await rdnsQueue.close(); await maintenance.close(); await operations.close(); events.disconnect(); redis.disconnect(); await pool.end(); }
 process.on('SIGTERM', close); process.on('SIGINT', close);
 log('info', 'started');

@@ -20,7 +20,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const readinessPollMs = Number(process.env.READINESS_POLL_MS) || 5000;
 
 let key;
-function decrypt(blob, context) {
+export function decrypt(blob, context) {
   key ??= Buffer.from(readFileSync(process.env.MASTER_KEY_FILE ?? '/run/secrets/master_key', 'utf8').trim(), 'base64');
   const raw = Buffer.from(blob.replace(/^v1:/, ''), 'base64');
   const d = createDecipheriv('aes-256-gcm', key, raw.subarray(0, 12));
@@ -29,7 +29,11 @@ function decrypt(blob, context) {
   return Buffer.concat([d.update(raw.subarray(12, raw.length - 16)), d.final()]).toString('utf8');
 }
 
-async function adapter(path, body) {
+// The adapter request for a stored VMware connection (password decrypted in memory only).
+export const connectionTarget = (c) => ({ host: c.host, port: c.port, username: c.username, password: decrypt(c.password_enc, c.id), ...(c.api_version && { apiVersion: c.api_version }),
+  tls: { mode: c.tls_mode, ...(c.tls_ca_pem && { caPem: c.tls_ca_pem }), ...(c.tls_sha256 && { sha256: c.tls_sha256 }) } });
+
+export async function adapter(path, body) {
   let token;
   try { token = readFileSync(process.env.VMWARE_SERVICE_TOKEN_FILE ?? '/run/secrets/vmware_token', 'utf8').trim(); }
   catch { throw new OperationError('VMWARE_SERVICE_UNAVAILABLE', 'service token missing'); }

@@ -15,4 +15,6 @@ redis.on('error', () => logEvent('error', 'redis_unavailable'));
 pool.on('error', () => logEvent('error', 'postgres_unavailable'));
 
 let closing = false;
-export async function closeConnections() { if (closing) return; closing = true; redis.disconnect(); await pool.end(); }
+// Extra connections (a QueueEvents subscriber, say) close with the rest.
+export const onClose: (() => Promise<unknown>)[] = [];
+export async function closeConnections() { if (closing) return; closing = true; await Promise.allSettled(onClose.map((f) => f())); redis.disconnect(); await pool.end(); }

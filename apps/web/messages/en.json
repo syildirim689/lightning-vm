@@ -220,7 +220,16 @@
     "RDNS_AUTH_FAILED": "The DNS server refused the API key.",
     "RDNS_FAILED": "The DNS server refused the change.",
     "RDNS_EDIT_DISABLED": "Changing reverse DNS is not allowed here.",
-    "LICENSE_EXHAUSTED": "No free licence is left for this application; choose another until an administrator adds more."
+    "LICENSE_EXHAUSTED": "No free licence is left for this application; choose another until an administrator adds more.",
+    "STORAGE_AUTH_FAILED": "The storage rejected the user name, password or key.",
+    "STORAGE_NOT_FOUND": "That folder or file was not found on the storage.",
+    "STORAGE_TLS_FAILED": "The storage's TLS certificate could not be verified.",
+    "STORAGE_UNREACHABLE": "The storage could not be reached (address, port or firewall).",
+    "STORAGE_ERROR": "The storage request failed.",
+    "STORAGE_TIMEOUT": "The storage did not answer in time.",
+    "RCLONE_MISSING": "rclone is missing from the worker container; update the worker image.",
+    "NO_CDROM_CONTROLLER": "The server has no free IDE slot for a CD-ROM drive.",
+    "DATASTORE_NOT_FOUND": "The datastore holding the ISO no longer exists."
   },
   "Auth": {
     "required": "required",
@@ -332,7 +341,9 @@
     "APP_NEEDS_LINUX": "This application can only be installed on Linux images.",
     "INVALID_LICENSE_KEYS": "One key per line, without spaces or quotes (at most 500 keys).",
     "LICENSE_PLACEHOLDER_MISSING": "With a licence pool the script must contain the licence placeholder (LICENSE in curly braces).",
-    "TOO_LONG": "Too long."
+    "TOO_LONG": "Too long.",
+    "NOT_AN_ISO": "Only .iso files can be copied.",
+    "ISO_EXISTS": "This ISO is already in that location."
   },
   "Setup": {
     "title": "Setup wizard",
@@ -1076,7 +1087,126 @@
       "keysEmpty": "No keys yet.",
       "key": "Key",
       "assignedTo": "Server",
-      "keyFree": "Free"
+      "keyFree": "Free",
+      "presetsExplain": "Start from a template; the script, requirements and price can be edited in the next step. Templates are for Debian/Ubuntu images (cPanel and Plesk run on the systems they support). Generated passwords are written on the server to /root/lightning-app-credentials.txt.",
+      "blank": "Empty script",
+      "presets": {
+        "cpanel": "Web hosting panel; the licence is bound to the IP.",
+        "plesk": "Web hosting panel; licence from the key pool.",
+        "wordpress": "Apache, MariaDB, PHP and the latest WordPress with its database ready.",
+        "lemp": "Nginx, MariaDB and PHP-FPM stack.",
+        "docker": "Docker Engine and the Compose plugin.",
+        "portainer": "Docker with web-based container management (9443).",
+        "coolify": "A self-hosted Heroku/Netlify-like deployment platform (8000).",
+        "nodejs": "Node.js LTS and the PM2 process manager.",
+        "nextcloud": "Your own cloud storage; an admin password is generated.",
+        "webmin": "Web-based server administration (10000).",
+        "n8n": "Workflow automation (5678).",
+        "uptime-kuma": "Site and service monitoring dashboard (3001).",
+        "mariadb": "MariaDB with secure settings; a root password is generated.",
+        "postgresql": "PostgreSQL; a postgres password is generated."
+      }
+    },
+    "isos": {
+      "title": "ISO library",
+      "loading": "Loading…",
+      "explain": "Connect FTP/FTPS, SFTP, WebDAV, S3-compatible, SMB or HTTP storages, browse them, and copy the ISO you choose into the datastore of one or more locations. Copies stream in the background; customers insert and eject ready ISOs on their servers.",
+      "newSource": "Connect storage",
+      "editSource": "Edit storage",
+      "sources": "Storages",
+      "noSources": "No storages yet.",
+      "noSourcesHelp": "Start by connecting the storage that holds your ISO files.",
+      "isoCount": "{n, plural, one {# ISO} other {# ISOs}}",
+      "browse": "Browse",
+      "edit": "Edit",
+      "remove": "Remove",
+      "cancel": "Cancel",
+      "save": "Save",
+      "test": "Test connection",
+      "removeSourceConfirm": "Remove this storage connection? ISOs already copied stay in the library.",
+      "library": "Library",
+      "noIsos": "No ISOs in the library yet.",
+      "name": "Name",
+      "location": "Location",
+      "size": "Size",
+      "state": "State",
+      "servers": "Inserted in",
+      "actions": "Actions",
+      "staffOnly": "staff only",
+      "states": {
+        "copying": "Copying",
+        "ready": "Ready",
+        "failed": "Failed",
+        "deleting": "Deleting"
+      },
+      "progress": "Copying {name}",
+      "retry": "Retry",
+      "removeIsoConfirm": "Delete the ISO from the datastore?",
+      "removed": "Storage removed.",
+      "isoRemoving": "Deleting the ISO.",
+      "saved": "Storage saved.",
+      "identity": "Identity",
+      "protocol": "Protocol",
+      "connection": "Connection",
+      "basePath": "Root folder",
+      "basePathHelp": "Where browsing starts; empty means the top folder.",
+      "basePathS3": "Bucket and optional prefix: iso-bucket/linux",
+      "basePathSmb": "Share and folder: ISO/linux",
+      "testOk": "Connected: {entries} items, {isos} ISOs.",
+      "secretKept": "Saved; type a new one to change it.",
+      "protocols": {
+        "ftp": "FTP / FTPS",
+        "sftp": "SFTP (SSH)",
+        "webdav": "WebDAV",
+        "s3": "S3-compatible",
+        "smb": "SMB / CIFS",
+        "http": "HTTP directory"
+      },
+      "protocolHelp": {
+        "ftp": "Classic FTP; for TLS choose \"Explicit TLS\" (FTPES) or \"Implicit TLS\" (FTPS, usually port 990).",
+        "sftp": "File transfer over SSH; password or private key.",
+        "webdav": "Nextcloud, ownCloud, NAS devices and WebDAV servers.",
+        "s3": "MinIO, Ceph, Wasabi, Cloudflare R2, AWS S3 and any S3-compatible storage.",
+        "smb": "Windows shares, Samba and NAS devices.",
+        "http": "An HTTP/HTTPS address with directory listing (read-only, e.g. distribution mirrors)."
+      },
+      "fields": {
+        "host": "Server",
+        "port": "Port",
+        "user": "User name",
+        "pass": "Password",
+        "explicit_tls": "Explicit TLS (FTPES)",
+        "tls": "Implicit TLS (FTPS)",
+        "no_check_certificate": "Skip certificate check",
+        "key_pem": "Private key (PEM)",
+        "url": "URL",
+        "endpoint": "Endpoint",
+        "region": "Region",
+        "access_key_id": "Access key",
+        "secret_access_key": "Secret key",
+        "force_path_style": "Path-style addressing",
+        "domain": "Domain"
+      },
+      "fieldHelp": {
+        "no_check_certificate": "Only for trusted internal storages with self-signed certificates.",
+        "key_pem": "Used instead of, or with, the password.",
+        "force_path_style": "Keep on for MinIO and most S3-compatible storages.",
+        "explicit_tls": "Starts plain, then encrypts with AUTH TLS.",
+        "tls": "TLS from the first byte."
+      },
+      "browseTitle": "Browse {name}",
+      "path": "Folder path",
+      "listing": "Listing…",
+      "emptyFolder": "No folders or ISOs in this folder.",
+      "copyTitle": "Copy {file} ({size})",
+      "displayName": "Display name",
+      "displayNameHelp": "The name customers see.",
+      "locations": "Locations",
+      "locationsHelp": "Each location gets its own copy (its first datastore).",
+      "public": "Customers may use it",
+      "publicHelp": "When off, only staff can insert it.",
+      "copy": "Copy",
+      "copyStarted": "Copy started; follow its progress in the library."
     }
   },
   "Servers": {
@@ -1243,6 +1373,20 @@
       "installing": "Installing",
       "installed": "Installed",
       "failed": "Failed"
+    },
+    "iso": {
+      "title": "ISO / CD-ROM",
+      "explain": "Insert an image from your location's ISO library into the server's virtual CD drive; boot from it to install or rescue.",
+      "mounted": "Inserted",
+      "bootsFromIso": "Booting from the ISO",
+      "eject": "Eject",
+      "choose": "ISO",
+      "insert": "Insert",
+      "boot": "Boot from the ISO",
+      "bootHelp": "The boot order becomes CD-ROM, then disk. Restart the server for it to apply; ejecting restores the default order.",
+      "notReady": "An ISO can be inserted once the server is ready.",
+      "inserted": "ISO inserted.",
+      "ejected": "ISO ejected."
     }
   },
   "Maintenance": {
@@ -1717,6 +1861,14 @@
       "server_app_failed": {
         "title": "Application failed",
         "help": "When an application installation ends with an error."
+      },
+      "admin_iso_ready": {
+        "title": "ISO ready",
+        "help": "When an ISO copied from a storage becomes available in a location."
+      },
+      "admin_iso_failed": {
+        "title": "ISO copy failed",
+        "help": "When copying from a storage to a datastore fails."
       }
     },
     "policyTitle": "The admin first, then each user",
