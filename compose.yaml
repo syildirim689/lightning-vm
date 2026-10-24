@@ -69,8 +69,9 @@ services:
       MAIL_FROM: ${MAIL_FROM:-}
       TURNSTILE_SITE_KEY: ${TURNSTILE_SITE_KEY:-}
       TURNSTILE_SECRET_KEY: ${TURNSTILE_SECRET_KEY:-}
-    # Backup/update results written by scripts/install.sh on the host.
-    volumes: [./data/maintenance:/maintenance:ro]
+    # Backup/update results and progress written by scripts/install.sh on the host (read-only here), and the
+    # request drop for the host agent (install.sh agent): the only host path the panel can write to.
+    volumes: [./data/maintenance:/maintenance:ro, ./data/maintenance-requests:/maintenance-requests]
     # Kept as files outside the database and .env; see docs/vmware.md for backup.
     secrets: [master_key, vmware_token]
     depends_on:

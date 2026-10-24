@@ -1,0 +1,84 @@
+#!/bin/sh
+# Lightning VM: install (or reinstall) on a fresh server with one command. Gets the source with git, so the
+# installation can update itself later (from the admin panel or `sh scripts/install.sh update`).
+#
+#   curl -fsSL https://raw.githubusercontent.com/OWNER/lightning-vm/main/scripts/get.sh | sudo sh -s -- [options] [-- install options]
+#
+# Options:
+#   --repo URL        git repository (default: the one below; SSH URLs work with a deploy key)
+#   --dir DIR         where the source goes (default /opt/lightning-vm)
+#   --version vX.Y.Z  a released version (default: the latest stable release)
+#   --branch NAME     a branch instead of releases; updates then follow it (channel "edge", test servers)
+#   --token TOKEN     read-only access token for a private repository (or GIT_TOKEN in the environment);
+#                     kept in a root-only credential file so later updates can fetch too
+# Everything after "--" goes to scripts/install.sh, for example: -- --domain panel.example.com --lang tr
+set -eu
+
+REPO=${LVM_REPO:-https://github.com/syildirim689/lightning-vm.git}
+DIR=/opt/lightning-vm VERSION="" BRANCH="" TOKEN=${GIT_TOKEN:-}
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --repo) shift; REPO=${1:-} ;;
+    --dir) shift; DIR=${1:-} ;;
+    --version) shift; VERSION=${1:-} ;;
+    --branch) shift; BRANCH=${1:-} ;;
+    --token) shift; TOKEN=${1:-} ;;
+    --) shift; break ;;
+    *) echo "unknown option: $1 (install options go after --)" >&2; exit 2 ;;
+  esac
+  shift
+done
+
+say() { printf '%-5s %s\n' "$1" "$2"; }
+die() { say FAIL "$1"; exit 1; }
+[ "$(id -u)" = 0 ] || die "run as root (sudo)"
+[ -z "$VERSION" ] || echo "$VERSION" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$' || die "--version must look like v1.2.3"
+[ -z "$BRANCH" ] || echo "$BRANCH" | grep -Eq '^[A-Za-z0-9._/-]{1,100}$' || die "invalid --branch"
+[ -z "$VERSION" ] || [ -z "$BRANCH" ] || die "use --version or --branch, not both"
+
+if ! command -v git >/dev/null; then
+  say INFO "installing git"
+  if command -v apt-get >/dev/null; then DEBIAN_FRONTEND=noninteractive apt-get update -qq >/dev/null && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq git ca-certificates >/dev/null
+  elif command -v dnf >/dev/null; then dnf install -y -q git >/dev/null
+  else die "install git first"; fi
+fi
+
+git_() { git -c safe.directory="$DIR" "$@"; }
+# A private repository: the token goes to a root-only credential store, never into the remote URL.
+if [ -n "$TOKEN" ]; then
+  cred=/root/.lightning-vm-git-credentials
+  host=$(echo "$REPO" | sed -n 's#^https://\([^/]*\)/.*#\1#p')
+  [ -n "$host" ] || die "--token works with https repository URLs"
+  (umask 077; printf 'https://x-access-token:%s@%s\n' "$TOKEN" "$host" > "$cred")
+fi
+gitc() { if [ -n "$TOKEN" ]; then git_ -c "credential.helper=store --file=$cred" "$@"; else git_ "$@"; fi; }
+
+if [ -d "$DIR/.git" ]; then
+  say INFO "updating the source in $DIR"
+  gitc -C "$DIR" fetch --quiet --tags --force origin || die "git fetch failed (access to $REPO?)"
+else
+  [ ! -e "$DIR" ] || [ -z "$(ls -A "$DIR" 2>/dev/null)" ] || die "$DIR exists and is not a git checkout; choose another --dir"
+  say INFO "downloading $REPO to $DIR"
+  gitc clone --quiet "$REPO" "$DIR" || die "git clone failed (private repository? use --token or an SSH URL with a deploy key)"
+fi
+[ -z "$TOKEN" ] || git_ -C "$DIR" config credential.helper "store --file=$cred"
+
+cd "$DIR"
+if [ -n "$BRANCH" ]; then
+  target="origin/$BRANCH"; extra="--channel edge --branch $BRANCH"
+elif [ -n "$VERSION" ]; then
+  target=$VERSION; extra="--channel stable"
+else
+  target=$(git_ -c versionsort.suffix=- tag -l 'v[0-9]*' --sort=-v:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -n 1 || true)
+  extra="--channel stable"
+  if [ -z "$target" ]; then
+    branch=$(git_ symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null | sed 's#^origin/##'); branch=${branch:-main}
+    say WARN "no released version yet; installing the $branch branch (updates follow it)"
+    target="origin/$branch"; extra="--channel edge --branch $branch"
+  fi
+fi
+git_ rev-parse -q --verify "$target^{commit}" >/dev/null || die "unknown version or branch: $target"
+git_ -c advice.detachedHead=false checkout -q --detach "$target"
+say OK "source at $(git_ describe --tags --always)"
+# shellcheck disable=SC2086 # extra holds separate arguments on purpose
+exec sh scripts/install.sh install $extra "$@"

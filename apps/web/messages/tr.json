@@ -209,7 +209,11 @@
     "FIREWALL_APPLY_FAILED": "VMware firewall kurallarını kabul etmedi.",
     "PAYMENT_NOT_TESTED": "Önce bu modun kayıtlı bilgilerini test edin.",
     "PAYMENT_TEST_FAILED": "Bu bilgilerin son testi başarısız oldu; düzeltip yeniden test edin.",
-    "PAYMENT_INCOMPLETE": "Önce bu modun tüm bilgilerini doldurup kaydedin."
+    "PAYMENT_INCOMPLETE": "Önce bu modun tüm bilgilerini doldurup kaydedin.",
+    "MAINTENANCE_AGENT_MISSING": "Sunucuda güncelleme ajanı kurulu değil (sudo sh scripts/install.sh agent on).",
+    "MAINTENANCE_BUSY": "Sırada veya çalışan başka bir bakım işi var; bitmesini bekleyin.",
+    "E_UPDATE_NO_GIT": "Bu kurulum bir git kopyası değil, kendini güncelleyemez. scripts/get.sh ile yeniden kurun.",
+    "E_UPDATE_FETCH": "Kod deposuna ulaşılamadı (git fetch). Sunucunun internet ve depo erişimini kontrol edin."
   },
   "Auth": {
     "required": "zorunlu",
@@ -309,7 +313,8 @@
     "INVALID_NETWORK": "203.0.113.0/24 gibi IP adresleri veya ağlar girin (1-100 adet).",
     "TOO_MANY_RULES": "Bir firewall'da en fazla 50 kural olabilir.",
     "FIREWALL_LIMIT": "Sunucu başına en fazla 5 firewall.",
-    "INVALID_ENDPOINT": "Herkese açık bir https adresi girin (iç adreslere izin verilmez)."
+    "INVALID_ENDPOINT": "Herkese açık bir https adresi girin (iç adreslere izin verilmez).",
+    "INVALID_WINDOW": "SS:DD-SS:DD biçiminde girin, örnek 03:00-05:00."
   },
   "Setup": {
     "title": "Kurulum sihirbazı",
@@ -1722,7 +1727,8 @@
       "settings_manage": "Ayarları değiştirme",
       "system_view": "Sistemi görme",
       "audit_view": "Denetim kayıtlarını görme",
-      "firewalls_manage": "Firewall yönetimi"
+      "firewalls_manage": "Firewall yönetimi",
+      "system_update": "Platformu güncelleme"
     },
     "help": {
       "dashboard_view": "Yönetim panosu, içgörüler ve özet grafikler.",
@@ -1747,7 +1753,8 @@
       "settings_manage": "Bu ayarları değiştirme ve entegrasyonları test etme.",
       "system_view": "Sistem sağlığı, yedekler ve güncellemeler.",
       "audit_view": "Kim, ne zaman, ne yaptı kayıtları.",
-      "firewalls_manage": "Firewall oluşturur ve kendi sunucularına bağlar."
+      "firewalls_manage": "Firewall oluşturur ve kendi sunucularına bağlar.",
+      "system_update": "Panelden güncelleme denetler, günceller, yedek alır ve otomatik güncellemeyi ayarlar."
     }
   },
   "Settings": {
@@ -2162,5 +2169,78 @@
     "serverOpen": "Firewall yok: bu sunucunun tüm portlarına erişilebilir.",
     "serverNone": "Bağlı firewall yok. Firewall'lar sayfasından bağlayabilirsiniz.",
     "orderHelp": "İsteğe bağlı. Sunucu ilk kez açılmadan önce uygulanır."
+  },
+  "Updates": {
+    "title": "Güncellemeler",
+    "loading": "Yükleniyor…",
+    "intro": "Yeni sürümleri buradan denetleyin ve güncelleyin. Sunucu komut satırıyla aynı güncellemeyi yapar: önce yedek alınır, çalışan işler duraklatılır, yeni sürüm başlatılıp kontrol edilir; açılmazsa otomatik olarak geri alınır.",
+    "check": "Güncellemeleri denetle",
+    "backupNow": "Şimdi yedekle",
+    "checkQueued": "Güncellemeler denetleniyor…",
+    "backupQueued": "Yedekleme başladı.",
+    "updateQueued": "Güncelleme başladı.",
+    "settingsQueued": "Otomatik güncelleme ayarları kaydediliyor…",
+    "agentMissingTitle": "Bu sunucuda güncelleme ajanı kurulu değil",
+    "agentMissing": "Panel sunucuda tek başına hiçbir şey çalıştıramaz. Ajanı bir kez kurun (yeni kurulumlarda zaten vardır):",
+    "running": "Çalışan sürüm",
+    "channel": "Kanal",
+    "state": "Durum",
+    "lastCheck": "Son denetim",
+    "channels": {
+      "stable": "Kararlı",
+      "beta": "Beta",
+      "edge": "Edge (dal)"
+    },
+    "channelHelp": {
+      "stable": "Yalnızca yayımlanmış sürümler (vX.Y.Z).",
+      "beta": "Ön sürümler de (vX.Y.Z-rc.1).",
+      "edge": "Daldaki her değişiklik; test sunucuları için."
+    },
+    "neverChecked": "Henüz denetlenmedi",
+    "upToDate": "Güncel",
+    "available": "Yeni: {version}",
+    "availableTitle": "{version} sürümü hazır",
+    "availableHelp": "Birkaç dakika sürer. Panel yeniden başlar ve kısa bir süre yanıt vermeyebilir.",
+    "updateNow": "Şimdi güncelle",
+    "cancel": "Vazgeç",
+    "confirmTitle": "{from} → {to} güncellensin mi?",
+    "confirm": {
+      "step1": "Önce şifreli bir yedek alınır; yedek başarısız olursa hiçbir şey değişmez.",
+      "step2": "Çalışan sunucu işleri duraklatılır, sonra kaldıkları adımdan devam eder.",
+      "step3": "Yeni sürüm derlenip başlatılır; panel birkaç dakika erişilemez.",
+      "step4": "Yeni sürüm hazır olmazsa önceki sürüm otomatik olarak yeniden başlatılır.",
+      "step5": "Veritabanı değişiklikleri otomatik geri alınmaz; gerekirse yedekten dönülür."
+    },
+    "queued": "Sunucu ajanı bekleniyor…",
+    "elapsed": "{m}:{s}",
+    "action": {
+      "check": "Güncellemeler denetleniyor",
+      "update": "Güncelleniyor",
+      "backup": "Yedekleniyor",
+      "auto-update": "Otomatik güncelleme ayarları"
+    },
+    "stateOf": {
+      "running": "Sürüyor",
+      "succeeded": "Tamamlandı",
+      "failed": "Başarısız",
+      "rejected": "Reddedildi"
+    },
+    "restarting": "Panel yeni sürümle yeniden başlıyor. Bu sayfa denemeye devam eder ve kendiliğinden sürer.",
+    "failed": "İş başarısız oldu ({code}). Nedeni aşağıdaki kayıtta; başarısız bir güncellemede önceki sürüm yeniden çalışır.",
+    "log": "İlerleme kaydı",
+    "nowRunning": "{version} sürümü çalışıyor.",
+    "releases": "Sürümler ({n})",
+    "latest": "En yeni",
+    "switchTo": "Bu sürüme geç",
+    "switchHelp": "Aynı güvenlik adımlarıyla bu sürüme geçer. Veritabanı daha yeni bir sürümce değiştirildiyse eski sürüme dönüş reddedilir.",
+    "autoTitle": "Otomatik güncelleme",
+    "autoHelp": "Saatlik bakım zamanlayıcısı, kanaldaki yeni sürümleri pencere içinde (sunucu saatiyle) kurar; çalışan sunucu işleri varken erteler.",
+    "autoOn": "Otomatik güncelleme açık",
+    "autoOff": "Otomatik güncelleme kapalı",
+    "window": "Bakım penceresi",
+    "windowHelp": "SS:DD-SS:DD, gece yarısını geçebilir (23:00-02:00).",
+    "windowInvalid": "SS:DD-SS:DD biçiminde girin, örnek 03:00-05:00.",
+    "saveAuto": "Kaydet",
+    "noTimer": "Saatlik bakım zamanlayıcısı kapalı; otomatik hiçbir şey çalışmaz. Açmak için:"
   }
 }

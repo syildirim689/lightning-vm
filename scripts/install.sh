@@ -13,9 +13,14 @@
 #                                        restore a backup (without the flag it only checks and explains)
 #   sh scripts/install.sh update [--to vX.Y.Z]
 #                                        update a git checkout to the latest release of UPDATE_CHANNEL
+#   sh scripts/install.sh releases       fetch and list available versions (data/maintenance/releases.json)
 #   sh scripts/install.sh schedule on|off
 #                                        hourly systemd timer: daily backup and the automatic update
-#   sh scripts/install.sh auto-update on|off [--channel stable|beta] [--window 03:00-05:00]
+#   sh scripts/install.sh agent on|off   systemd path unit that runs what the admin panel asks for
+#                                        (check for updates, update, backup, automatic-update settings)
+#   sh scripts/install.sh run-requests   process the panel's requests now (the agent runs this)
+#   sh scripts/install.sh auto-update on|off [--channel stable|beta|edge] [--window 03:00-05:00]
+#                                        edge follows the branch in UPDATE_BRANCH (default main), for testing
 #   sh scripts/install.sh domain panel.example.com [--acme-staging]
 #                                        serve the panel on that name with automatic HTTPS (ports 80/443)
 #   sh scripts/install.sh behind-proxy [--port 8080] [--trusted-cidr CIDR]
@@ -28,24 +33,26 @@ set -eu
 cd "${LVM_ROOT:-$(dirname "$0")/..}"
 # update checks out another version of this very file: run from a copy so sh never reads a changed script.
 if [ -n "${LVM_REEXEC:-}" ]; then rm -f "$0"
-else case " $* " in *" update "*|*" maintenance "*)
+else case " $* " in *" update "*|*" maintenance "*|*" run-requests "*)
   copy=$(mktemp); cp scripts/install.sh "$copy"; LVM_ROOT=$(pwd) LVM_REEXEC=1 exec sh "$copy" "$@" ;;
 esac; fi
 
 MODE=install INSTALL_DOCKER=0 ALLOW_OS=0 DOMAIN="" ACME_STAGING=0 PROXY_PORT=8080 TRUSTED_CIDR=""
-RESTORE_FILE="" YES=0 TO="" AUTO=0 SWITCH="" CHANNEL="" WINDOW=""
+RESTORE_FILE="" YES=0 TO="" AUTO=0 SWITCH="" CHANNEL="" WINDOW="" BRANCH=""
 LOCAL=0 WIZARD=0 MONITORING=1 SCHEDULE=1 ADMIN_EMAIL=""
 case "${LANG:-}" in tr*) UI="tr" ;; *) UI="en" ;; esac
 while [ $# -gt 0 ]; do
   case "$1" in
-    install|check|recover-setup|update|behind-proxy|local-only|backup|maintenance) MODE=$1 ;;
+    install|check|recover-setup|update|behind-proxy|local-only|backup|maintenance|releases|run-requests) MODE=$1 ;;
     restore) MODE=restore; if [ $# -gt 1 ]; then shift; RESTORE_FILE=$1; fi ;;
-    schedule|auto-update) MODE=$1; if [ $# -gt 1 ]; then shift; SWITCH=$1; fi
+    schedule|auto-update|agent) MODE=$1; if [ $# -gt 1 ]; then shift; SWITCH=$1; fi
       case "$SWITCH" in on|off) ;; *) echo "$MODE: on or off" >&2; exit 2 ;; esac ;;
     --yes-replace-data) YES=1 ;;
     --to) shift; TO=${1:-} ;;
     --auto) AUTO=1 ;;
     --channel) shift; CHANNEL=${1:-} ;;
+    --branch) shift; BRANCH=${1:-}
+      echo "$BRANCH" | grep -Eq '^[A-Za-z0-9._/-]{1,100}$' || { echo "invalid --branch" >&2; exit 2; } ;;
     --window) shift; WINDOW=${1:-} ;;
     domain) MODE=domain; if [ $# -gt 1 ]; then shift; DOMAIN=$1; fi ;;
     --acme-staging) ACME_STAGING=1 ;;
@@ -261,11 +268,22 @@ record() { # kind status code [extra JSON fields, each starting with a comma]
 write_settings() {
   if [ -n "$(env_value BACKUP_COPY_TO)" ]; then copy=on; else copy=off; fi
   if [ -f /etc/systemd/system/lightning-vm-maintenance.timer ]; then timer=on; else timer=off; fi
-  b=$(env_value BACKUP_SCHEDULE); k=$(env_value BACKUP_KEEP); a=$(env_value AUTO_UPDATE); c=$(env_value UPDATE_CHANNEL); w=$(env_value UPDATE_WINDOW)
+  if [ -f /etc/systemd/system/lightning-vm-requests.path ]; then agent=on; else agent=off; fi
+  b=$(env_value BACKUP_SCHEDULE); k=$(env_value BACKUP_KEEP); a=$(env_value AUTO_UPDATE); c=$(env_value UPDATE_CHANNEL); w=$(env_value UPDATE_WINDOW); br=$(env_value UPDATE_BRANCH)
   (umask 022; mkdir -p data/maintenance)
-  printf '{"schedule":"%s","backupSchedule":"%s","backupKeep":"%s","backupCopy":"%s","autoUpdate":"%s","updateChannel":"%s","updateWindow":"%s"}\n' \
-    "$timer" "${b:-daily}" "${k:-7}" "$copy" "${a:-off}" "${c:-stable}" "${w:-03:00-05:00}" > data/maintenance/settings.json
+  printf '{"schedule":"%s","backupSchedule":"%s","backupKeep":"%s","backupCopy":"%s","autoUpdate":"%s","updateChannel":"%s","updateWindow":"%s","updateBranch":"%s","agent":"%s"}\n' \
+    "$timer" "${b:-daily}" "${k:-7}" "$copy" "${a:-off}" "${c:-stable}" "${w:-03:00-05:00}" "${br:-main}" "$agent" > data/maintenance/settings.json
+  request_dir
 }
+
+# The panel (API container, user node = uid 1000) drops requests here; only that user and root can write.
+request_dir() {
+  mkdir -p data/maintenance-requests
+  if [ "$(id -u)" = 0 ]; then chown 1000:1000 data/maintenance-requests; chmod 700 data/maintenance-requests; fi
+}
+
+# JSON string from stdin: escapes \ and ", turns newlines into \n and drops other control characters.
+json_str() { awk 'BEGIN { ORS = "" } { gsub(/\\/, "\\\\"); gsub(/"/, "\\\""); gsub(/[[:cntrl:]]/, " "); if (NR > 1) print "\\n"; print }'; }
 
 # Operator-owned monitoring settings live in data/observability, outside git, so editing them never
 # blocks an update. Existing files are kept.
@@ -384,10 +402,13 @@ in_window() { # HH:MM-HH:MM in local time, may wrap past midnight
   if [ "$s" -le "$e" ]; then [ "$now" -ge "$s" ] && [ "$now" -lt "$e" ]; else [ "$now" -ge "$s" ] || [ "$now" -lt "$e" ]; fi
 }
 
-latest_tag() { # stable: vX.Y.Z only; beta: also vX.Y.Z-rc.1 and similar
-  if [ "$1" = beta ]; then re='^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$'; else re='^v[0-9]+\.[0-9]+\.[0-9]+$'; fi
-  git -c versionsort.suffix=- tag -l 'v[0-9]*' --sort=-v:refname | grep -E "$re" | head -n 1
+tag_pattern() { # stable: vX.Y.Z only; beta: also vX.Y.Z-rc.1 and similar
+  if [ "$1" = beta ]; then echo '^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$'; else echo '^v[0-9]+\.[0-9]+\.[0-9]+$'; fi
 }
+latest_tag() { git -c versionsort.suffix=- tag -l 'v[0-9]*' --sort=-v:refname | grep -E "$(tag_pattern "$1")" | head -n 1 || true; }
+# edge: the tip of UPDATE_BRANCH on the remote (for test servers; not a release).
+edge_ref() { b=$(env_value UPDATE_BRANCH); echo "$(git remote | head -n 1)/${b:-main}"; }
+target_for() { if [ "$1" = edge ]; then git rev-parse -q --verify "$(edge_ref)^{commit}" 2>/dev/null || true; else latest_tag "$1"; fi; }
 
 up_and_ready() {
   docker compose up -d --build --wait --wait-timeout 600 >/dev/null 2>&1 || return 1
@@ -410,7 +431,7 @@ do_update() {
     git fetch --quiet --tags --force "$(git remote | head -n 1)" 2>/dev/null || { record update failed E_UPDATE_FETCH; die 20 E_UPDATE_FETCH "Sürümler alınamadı (git fetch)" "Could not fetch releases (git fetch)"; }
   fi
   current=$(git rev-parse HEAD); current_name=$(app_version)
-  if [ -n "$TO" ]; then target=$TO; else target=$(latest_tag "$channel"); fi
+  if [ -n "$TO" ]; then target=$TO; else target=$(target_for "$channel"); fi
   [ -n "$target" ] || die 20 E_UPDATE_NO_RELEASE "Yayımlanmış sürüm etiketi (vX.Y.Z) yok" "No released version tag (vX.Y.Z)"
   git rev-parse -q --verify "$target^{commit}" >/dev/null || die 20 E_UPDATE_UNKNOWN_VERSION "Bilinmeyen sürüm: $target" "Unknown version: $target"
   if [ "$(git rev-parse "$target^{commit}")" = "$current" ]; then msg OK UP_TO_DATE "Güncel: $current_name" "Up to date: $current_name"; exit 0; fi
@@ -451,6 +472,9 @@ do_update() {
 # Hourly systemd timer: a daily backup (when the last good one is older than 23 h) and, when
 # enabled, the automatic update inside the maintenance window.
 do_maintenance() {
+  # Never alongside something the panel asked for (same lock as run_requests).
+  exec 9> data/maintenance/.lock
+  flock -n 9 || exit 0
   if [ "$(env_value BACKUP_SCHEDULE)" != off ]; then
     last=$(grep '"kind":"backup","status":"ok"' data/maintenance/history.jsonl 2>/dev/null | tail -n 1 | sed 's/^{"time":"\([^"]*\)".*/\1/')
     age=$(( $(date +%s) - $(date -d "${last:-1970-01-01T00:00:00Z}" +%s) ))
@@ -477,17 +501,122 @@ set_schedule() {
 }
 
 set_auto_update() {
-  case "$CHANNEL" in ''|stable|beta) ;; *) die 2 E_CHANNEL_INVALID "Kanal stable veya beta olmalı" "Channel must be stable or beta" ;; esac
+  case "$CHANNEL" in ''|stable|beta|edge) ;; *) die 2 E_CHANNEL_INVALID "Kanal stable, beta veya edge olmalı" "Channel must be stable, beta or edge" ;; esac
   if [ -n "$WINDOW" ] && ! echo "$WINDOW" | grep -Eq '^([01][0-9]|2[0-3]):[0-5][0-9]-([01][0-9]|2[0-3]):[0-5][0-9]$'; then
     die 2 E_WINDOW_INVALID "Bakım penceresi SS:DD-SS:DD olmalı (örnek 03:00-05:00)" "The maintenance window must be HH:MM-HH:MM (example 03:00-05:00)"
   fi
   set_env AUTO_UPDATE "$SWITCH"
   [ -z "$CHANNEL" ] || set_env UPDATE_CHANNEL "$CHANNEL"
   [ -z "$WINDOW" ] || set_env UPDATE_WINDOW "$WINDOW"
+  [ -z "$BRANCH" ] || set_env UPDATE_BRANCH "$BRANCH"
   write_settings
   c=$(env_value UPDATE_CHANNEL); w=$(env_value UPDATE_WINDOW)
   msg OK AUTO_UPDATE "Otomatik güncelleme: $SWITCH (kanal ${c:-stable}, pencere ${w:-03:00-05:00})" "Automatic update: $SWITCH (channel ${c:-stable}, window ${w:-03:00-05:00})"
   [ -f /etc/systemd/system/lightning-vm-maintenance.timer ] || [ "$SWITCH" = off ] || msg WARN W_NO_TIMER "Zamanlayıcı kurulu değil: sudo sh scripts/install.sh schedule on" "The timer is not installed: sudo sh scripts/install.sh schedule on"
+}
+
+# ---- Updates from the admin panel ------------------------------------------------------------------
+# The panel cannot (and must not) run anything on the host. It drops a small request file into
+# data/maintenance-requests; a systemd path unit (agent) runs `run-requests`, which accepts only a fixed
+# set of actions with validated values and runs this script for them. Progress and results are written to
+# data/maintenance (read-only for the panel), so the panel can follow an update that restarts it.
+
+# Available versions for the configured channel: data/maintenance/releases.json.
+do_releases() {
+  (umask 022; mkdir -p data/maintenance)
+  out=data/maintenance/releases.json
+  now=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+  channel=$(env_value UPDATE_CHANNEL); channel=${channel:-stable}
+  if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    printf '{"checkedAt":"%s","channel":"%s","current":"%s","error":"E_UPDATE_NO_GIT","releases":[]}\n' "$now" "$channel" "$(app_version)" > "$out"
+    die 20 E_UPDATE_NO_GIT "Güncelleme, git ile alınmış kaynak gerektirir (git clone)" "Updating needs a source checkout made with git clone"
+  fi
+  err=""
+  if [ -n "$(git remote)" ]; then git fetch --quiet --tags --force "$(git remote | head -n 1)" 2>/dev/null || err=E_UPDATE_FETCH; fi
+  target=$(target_for "$channel")
+  available=false
+  if [ -n "$target" ] && [ "$(git rev-parse "$target^{commit}")" != "$(git rev-parse HEAD)" ]; then available=true; fi
+  # Newest first: tags of the channel, or for edge the commits on the branch that are not here yet.
+  list=""
+  if [ "$channel" = edge ]; then
+    for c in $(git log --format=%H -n 20 "HEAD..$(edge_ref)" 2>/dev/null || true); do
+      list="$list,{\"version\":\"$(git rev-parse --short "$c")\",\"date\":\"$(git log -1 --format=%cI "$c")\",\"notes\":\"$(git log -1 --format=%B "$c" | head -c 2000 | json_str)\"}"
+    done
+  else
+    for t in $(git -c versionsort.suffix=- tag -l 'v[0-9]*' --sort=-v:refname | grep -E "$(tag_pattern "$channel")" | head -n 10); do
+      notes=$(git tag -l --format='%(contents)' "$t"); [ -n "$notes" ] || notes=$(git log -1 --format=%B "$t")
+      list="$list,{\"version\":\"$t\",\"date\":\"$(git log -1 --format=%cI "$t")\",\"notes\":\"$(printf '%s' "$notes" | head -c 2000 | json_str)\"}"
+    done
+  fi
+  latest=""; [ -z "$target" ] || latest=$(git describe --tags --always "$target")
+  printf '{"checkedAt":"%s","channel":"%s","branch":"%s","current":"%s","commit":"%s","latest":"%s","updateAvailable":%s,"error":"%s","releases":[%s]}\n' \
+    "$now" "$channel" "$(env_value UPDATE_BRANCH)" "$(app_version)" "$(git rev-parse --short HEAD)" "$latest" "$available" "$err" "${list#,}" > "$out.tmp"
+  chmod 644 "$out.tmp"; mv "$out.tmp" "$out"
+  if [ -n "$err" ]; then die 20 E_UPDATE_FETCH "Sürümler alınamadı (git fetch)" "Could not fetch releases (git fetch)"; fi
+  if [ "$available" = true ]; then msg OK UPDATE_AVAILABLE "Yeni sürüm: $latest" "New version: $latest"; else msg OK UP_TO_DATE "Güncel: $(app_version)" "Up to date: $(app_version)"; fi
+}
+
+set_agent() {
+  [ "$(id -u)" = 0 ] || die 13 E_NEEDS_ROOT "Ajan için root gerekir (sudo)" "The agent needs root (sudo)"
+  command -v systemctl >/dev/null || die 18 E_NO_SYSTEMD "systemd yok; panel istekleri için cron ile çalıştırın: sh scripts/install.sh run-requests" "No systemd; run sh scripts/install.sh run-requests from cron to serve panel requests"
+  unit=/etc/systemd/system/lightning-vm-requests
+  if [ "$SWITCH" = on ]; then
+    request_dir
+    printf '[Unit]\nDescription=Lightning VM: run what the admin panel asked for\n\n[Service]\nType=oneshot\nExecStart=/bin/sh %s/scripts/install.sh run-requests --lang %s\nTimeoutStartSec=3h\n' "$(pwd)" "$UI" > "$unit.service"
+    printf '[Unit]\nDescription=Lightning VM: watch for admin panel requests\n\n[Path]\nPathExistsGlob=%s/data/maintenance-requests/*.req\nMakeDirectory=yes\n\n[Install]\nWantedBy=multi-user.target\n' "$(pwd)" > "$unit.path"
+    systemctl daemon-reload; systemctl enable --now lightning-vm-requests.path >/dev/null 2>&1 || die 18 E_AGENT "Panel ajanı etkinleştirilemedi" "Could not enable the panel agent"
+    msg OK AGENT "Panel ajanı açık: güncelleme ve yedek panelden başlatılabilir" "Panel agent on: updates and backups can be started from the panel"
+  else
+    systemctl disable --now lightning-vm-requests.path >/dev/null 2>&1 || true
+    rm -f "$unit.service" "$unit.path"; systemctl daemon-reload
+    msg OK AGENT "Panel ajanı kapatıldı" "Panel agent off"
+  fi
+  write_settings
+}
+
+# Each request is a few key=value lines. Everything is validated here: the panel is not trusted with the host.
+run_requests() {
+  [ -d data/maintenance-requests ] || exit 0
+  (umask 022; mkdir -p data/maintenance/runs)
+  exec 9> data/maintenance/.lock
+  flock 9
+  # The API queues one request at a time, so the order of several (should it happen) does not matter.
+  for f in data/maintenance-requests/*.req; do
+    [ -f "$f" ] || continue
+    id=$(basename "$f" .req)
+    echo "$id" | grep -Eq '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' || { rm -f "$f"; continue; }
+    ok=1
+    [ "$(wc -c < "$f")" -le 1024 ] || ok=0
+    val() { sed -n "s/^$1=//p" "$f" | head -n 1; }
+    action=$(val action); to=$(val to); channel=$(val channel); window=$(val window); switch=$(val switch); by=$(val by)
+    rm -f "$f"
+    echo "$by" | grep -Eq '^[0-9a-f-]{36}$' || by=""
+    set -- --lang "$UI"
+    case "$action" in
+      check) set -- releases "$@" ;;
+      backup) set -- backup "$@" ;;
+      update) set -- update "$@"
+        if [ -n "$to" ]; then echo "$to" | grep -Eq '^(v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?|[0-9a-f]{7,40})$' && set -- "$@" --to "$to" || ok=0; fi ;;
+      auto-update) case "$switch" in on|off) set -- auto-update "$switch" "$@" ;; *) ok=0 ;; esac
+        case "$channel" in '') ;; stable|beta|edge) set -- "$@" --channel "$channel" ;; *) ok=0 ;; esac
+        if [ -n "$window" ]; then echo "$window" | grep -Eq '^([01][0-9]|2[0-3]):[0-5][0-9]-([01][0-9]|2[0-3]):[0-5][0-9]$' && set -- "$@" --window "$window" || ok=0; fi ;;
+      *) ok=0 ;;
+    esac
+    started=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+    status() { # state exit code
+      printf '{"id":"%s","action":"%s","by":"%s","state":"%s","startedAt":"%s","finishedAt":"%s","exitCode":%s,"code":"%s"}\n' \
+        "$id" "$(printf '%s' "$action" | tr -cd 'a-z-')" "$by" "$1" "$started" "$( [ "$1" = running ] || date -u +%Y-%m-%dT%H:%M:%SZ)" "$2" "$3" > data/maintenance/status.tmp
+      chmod 644 data/maintenance/status.tmp; mv data/maintenance/status.tmp data/maintenance/status.json
+    }
+    if [ "$ok" = 0 ]; then status rejected 2 E_REQUEST_INVALID; continue; fi
+    status running null ""
+    log=data/maintenance/runs/$id.log
+    (umask 022; : > "$log")
+    if sh "$(pwd)/scripts/install.sh" "$@" > "$log" 2>&1; then rc=0; else rc=$?; fi
+    code=$(awk 'NF >= 2 { c = $2 } END { print c }' "$log" | tr -cd 'A-Z0-9_')
+    if [ "$rc" = 0 ]; then status succeeded 0 "$code"; else status failed "$rc" "$code"; fi
+    find data/maintenance/runs -name '*.log' -type f -printf '%T@ %p\n' | sort -rn | tail -n +21 | cut -d' ' -f2- | xargs -r rm -f
+  done
 }
 
 # The host's own public IPv4 (no outside service is asked); empty behind NAT or on a private network.
@@ -570,7 +699,10 @@ case "$MODE" in
   restore) [ -f .env ] || die 17 E_NOT_INSTALLED "Önce kurulum yapın: sh scripts/install.sh" "Install first: sh scripts/install.sh"
     do_restore; exit 0 ;;
   update) do_update ;;
-  maintenance) do_maintenance ;;
+  maintenance) (umask 022; mkdir -p data/maintenance); do_maintenance ;;
+  releases) do_releases; exit 0 ;;
+  run-requests) run_requests; exit 0 ;;
+  agent) set_agent; exit 0 ;;
   schedule) set_schedule; exit 0 ;;
   auto-update) [ -f .env ] || die 17 E_NOT_INSTALLED "Önce kurulum yapın: sh scripts/install.sh" "Install first: sh scripts/install.sh"
     set_auto_update; exit 0 ;;
@@ -593,6 +725,10 @@ write_env
 write_secrets
 write_observability
 set_env APP_VERSION "$(app_version)"
+# Where updates come from (scripts/get.sh passes these): released versions, or a branch for test servers.
+case "$CHANNEL" in ''|stable|beta|edge) ;; *) die 2 E_CHANNEL_INVALID "Kanal stable, beta veya edge olmalı" "Channel must be stable, beta or edge" ;; esac
+[ -z "$CHANNEL" ] || set_env UPDATE_CHANNEL "$CHANNEL"
+[ -z "$BRANCH" ] || set_env UPDATE_BRANCH "$BRANCH"
 # Monitoring runs by default where it fits (4 GB RAM); COMPOSE_PROFILES in .env applies to every compose command.
 if [ "$MONITORING" = 1 ] && ! grep -q '^COMPOSE_PROFILES=' .env && [ "${mem_mb:-0}" -ge 3800 ]; then set_env COMPOSE_PROFILES observability; fi
 [ "$MONITORING" = 1 ] || set_env COMPOSE_PROFILES ""
@@ -642,6 +778,10 @@ fi
 # Daily backups (hourly timer) and a first backup right away.
 if [ "$SCHEDULE" = 1 ] && [ "$(id -u)" = 0 ] && command -v systemctl >/dev/null && [ ! -f /etc/systemd/system/lightning-vm-maintenance.timer ]; then
   (SWITCH=on; set_schedule) >/dev/null 2>&1 || msg WARN W_TIMER "Zamanlanmış yedek kurulamadı: sh scripts/install.sh schedule on" "Scheduled backups not set up: sh scripts/install.sh schedule on"
+fi
+# Updates and backups from the admin panel (the agent runs on the host, not in a container).
+if [ "$(id -u)" = 0 ] && command -v systemctl >/dev/null && [ ! -f /etc/systemd/system/lightning-vm-requests.path ]; then
+  (SWITCH=on; set_agent) >/dev/null 2>&1 || msg WARN W_AGENT "Panel ajanı kurulamadı: sudo sh scripts/install.sh agent on" "Panel agent not set up: sudo sh scripts/install.sh agent on"
 fi
 (do_backup install) >/dev/null 2>&1 || msg WARN W_BACKUP "İlk yedek alınamadı: sh scripts/install.sh backup" "The first backup failed: sh scripts/install.sh backup"
 write_settings

@@ -1,4 +1,5 @@
-import { readFileSync } from 'node:fs';
+import { randomUUID } from 'node:crypto';
+import { readdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 // Backup, restore and update results are written on the host by scripts/install.sh (it keeps working
@@ -24,4 +25,35 @@ export function summary() {
   const last = (kind: Run['kind'], status?: Run['status']) => [...runs].reverse().find((r) => r.kind === kind && r.status !== 'postponed' && (!status || r.status === status)) ?? null;
   return { version: process.env.APP_VERSION || 'dev', settings: settings(), lastBackup: last('backup'), lastSuccessfulBackup: last('backup', 'ok'),
     lastUpdate: last('update'), lastRestore: last('restore'), history: runs.slice(-20).reverse() };
+}
+
+// ---- Requests to the host agent (scripts/install.sh agent / run-requests) ----
+// The panel writes one small key=value file; the agent validates it again and runs install.sh. Results come
+// back through the read-only mount: status.json (the current or last request), runs/<id>.log, releases.json.
+const requests = process.env.MAINTENANCE_REQUESTS_DIR ?? '/maintenance-requests';
+export type Action = 'check' | 'update' | 'backup' | 'auto-update';
+export type AgentStatus = { id: string; action: Action; by: string; state: 'running' | 'succeeded' | 'failed' | 'rejected'; startedAt: string; finishedAt: string; exitCode: number | null; code: string };
+
+const readJson = <T>(file: string): T | null => { try { return JSON.parse(readFileSync(join(dir, file), 'utf8')) as T; } catch { return null; } };
+export const releases = () => readJson<{ checkedAt: string; channel: string; branch?: string; current: string; commit?: string; latest: string; updateAvailable: boolean; error: string;
+  releases: { version: string; date: string; notes: string }[] }>('releases.json');
+export const agentStatus = () => readJson<AgentStatus>('status.json');
+
+// The last lines of a run's log (the installer's own TR/EN progress lines; no secrets are printed there).
+export function runLog(id: string, lines = 80) {
+  if (!/^[0-9a-f-]{36}$/.test(id)) return [];
+  try { return readFileSync(join(dir, 'runs', `${id}.log`), 'utf8').split('\n').filter(Boolean).slice(-lines); } catch { return []; }
+}
+
+export function pendingRequests() {
+  try { return readdirSync(requests).filter((f) => f.endsWith('.req')).length; } catch { return -1; } // -1: the drop folder is missing
+}
+
+export function queueRequest(fields: Record<string, string>) {
+  const id = randomUUID();
+  const body = Object.entries({ ...fields, id }).map(([k, v]) => `${k}=${v}`).join('\n') + '\n';
+  // Written under a temporary name and renamed, so the agent never reads half a file.
+  writeFileSync(join(requests, `.${id}.tmp`), body, { mode: 0o600 });
+  renameSync(join(requests, `.${id}.tmp`), join(requests, `${id}.req`));
+  return id;
 }

@@ -1,9 +1,9 @@
-import { Body, Controller, Get, Put, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, Post, Put, Req, UseGuards } from '@nestjs/common';
 import { pool } from './db';
 import { apiError } from './errors';
 import { audit, type AuthedRequest } from './auth';
 import { Can, PermissionGuard } from './rbac';
-import { summary } from './maintenance';
+import { agentStatus, pendingRequests, queueRequest, releases, runLog, settings as maintenanceSettings, summary } from './maintenance';
 
 @Controller('admin') @UseGuards(PermissionGuard)
 export class AdminController {
@@ -15,7 +15,38 @@ export class AdminController {
   }
 
   @Get('maintenance') @Can('system.view', 'dashboard.view')
-  maintenance() { return summary(); }
+  maintenance() {
+    const status = agentStatus();
+    return { ...summary(), releases: releases(),
+      agent: { installed: maintenanceSettings().agent === 'on', pending: Math.max(0, pendingRequests()), status, log: status ? runLog(status.id) : [] } };
+  }
+
+  // Asks the host agent to check for updates, update, back up or change the automatic-update settings.
+  // One request at a time; the agent validates everything again before running scripts/install.sh.
+  @Post('maintenance/requests') @HttpCode(202) @Can('system.update')
+  async request(@Req() req: AuthedRequest, @Body() body: Record<string, unknown>) {
+    const action = String(body?.action ?? '');
+    const fields: Record<string, string> = {};
+    const out: Record<string, string> = { action };
+    if (!['check', 'update', 'backup', 'auto-update'].includes(action)) fields.action = 'INVALID_VALUE';
+    if (action === 'update' && body?.to) {
+      if (/^(v\d+\.\d+\.\d+(-[0-9A-Za-z.]+)?|[0-9a-f]{7,40})$/.test(String(body.to))) out.to = String(body.to); else fields.to = 'INVALID_VALUE';
+    }
+    if (action === 'auto-update') {
+      out.switch = body?.enabled === true ? 'on' : 'off';
+      if (body?.channel !== undefined) { if (['stable', 'beta', 'edge'].includes(String(body.channel))) out.channel = String(body.channel); else fields.channel = 'INVALID_VALUE'; }
+      if (body?.window !== undefined) { if (/^([01]\d|2[0-3]):[0-5]\d-([01]\d|2[0-3]):[0-5]\d$/.test(String(body.window))) out.window = String(body.window); else fields.window = 'INVALID_WINDOW'; }
+    }
+    if (Object.keys(fields).length) throw apiError(400, 'VALIDATION_FAILED', 'Invalid input', fields);
+    if (maintenanceSettings().agent !== 'on' || pendingRequests() < 0) throw apiError(409, 'MAINTENANCE_AGENT_MISSING', 'The host agent is not installed (sudo sh scripts/install.sh agent on)');
+    const status = agentStatus();
+    // A run older than three hours is treated as dead (the agent's own limit), not as busy.
+    const running = status?.state === 'running' && Date.now() - Date.parse(status.startedAt) < 3 * 3600_000;
+    if (pendingRequests() > 0 || running) throw apiError(409, 'MAINTENANCE_BUSY', 'Another maintenance task is queued or running');
+    const id = queueRequest({ ...out, by: req.user.id });
+    await audit(req, 'maintenance.request', 'success', req.user.id, { id, ...out });
+    return { id };
+  }
 
   @Get('users') @Can('users.view', 'catalog.manage')
   async users() {

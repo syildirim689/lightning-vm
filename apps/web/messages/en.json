@@ -209,7 +209,11 @@
     "FIREWALL_APPLY_FAILED": "VMware refused the firewall rules.",
     "PAYMENT_NOT_TESTED": "Check the saved credentials of this mode first.",
     "PAYMENT_TEST_FAILED": "The last check of these credentials failed; fix them and check again.",
-    "PAYMENT_INCOMPLETE": "Fill in and save all credentials of this mode first."
+    "PAYMENT_INCOMPLETE": "Fill in and save all credentials of this mode first.",
+    "MAINTENANCE_AGENT_MISSING": "The update agent is not installed on the server (sudo sh scripts/install.sh agent on).",
+    "MAINTENANCE_BUSY": "Another maintenance task is queued or running; wait for it to finish.",
+    "E_UPDATE_NO_GIT": "This installation is not a git checkout, so it cannot update itself. Reinstall with scripts/get.sh.",
+    "E_UPDATE_FETCH": "Could not reach the code repository (git fetch). Check the server’s internet access and repository access."
   },
   "Auth": {
     "required": "required",
@@ -309,7 +313,8 @@
     "INVALID_NETWORK": "Enter IP addresses or networks such as 203.0.113.0/24 (1 to 100).",
     "TOO_MANY_RULES": "At most 50 rules per firewall.",
     "FIREWALL_LIMIT": "At most 5 firewalls per server.",
-    "INVALID_ENDPOINT": "Enter a public https address (internal addresses are not allowed)."
+    "INVALID_ENDPOINT": "Enter a public https address (internal addresses are not allowed).",
+    "INVALID_WINDOW": "Use HH:MM-HH:MM, for example 03:00-05:00."
   },
   "Setup": {
     "title": "Setup wizard",
@@ -1722,7 +1727,8 @@
       "settings_manage": "Change settings",
       "system_view": "See the system",
       "audit_view": "See the audit log",
-      "firewalls_manage": "Manage firewalls"
+      "firewalls_manage": "Manage firewalls",
+      "system_update": "Update the platform"
     },
     "help": {
       "dashboard_view": "The admin dashboard, insights and summary charts.",
@@ -1747,7 +1753,8 @@
       "settings_manage": "Change those settings and test the integrations.",
       "system_view": "System health, backups and updates.",
       "audit_view": "Who did what, and when.",
-      "firewalls_manage": "Create firewalls and attach them to their own servers."
+      "firewalls_manage": "Create firewalls and attach them to their own servers.",
+      "system_update": "Check for updates, update, back up and set automatic updates from the panel."
     }
   },
   "Settings": {
@@ -2162,5 +2169,78 @@
     "serverOpen": "No firewall: every port of this server is reachable.",
     "serverNone": "No firewall is attached. Attach one from the Firewalls page.",
     "orderHelp": "Optional. Applied before the server first starts."
+  },
+  "Updates": {
+    "title": "Updates",
+    "loading": "Loading…",
+    "intro": "Check for new versions and update from here. The server runs the same update as the command line: a backup first, running tasks paused, the new version started and checked, and an automatic rollback if it does not come up.",
+    "check": "Check for updates",
+    "backupNow": "Back up now",
+    "checkQueued": "Checking for updates…",
+    "backupQueued": "Backup started.",
+    "updateQueued": "Update started.",
+    "settingsQueued": "Saving the automatic update settings…",
+    "agentMissingTitle": "The update agent is not installed on this server",
+    "agentMissing": "The panel cannot run anything on the host by itself. Install the agent once (new installs have it):",
+    "running": "Running version",
+    "channel": "Channel",
+    "state": "Status",
+    "lastCheck": "Last check",
+    "channels": {
+      "stable": "Stable",
+      "beta": "Beta",
+      "edge": "Edge (branch)"
+    },
+    "channelHelp": {
+      "stable": "Released versions only (vX.Y.Z).",
+      "beta": "Also pre-releases (vX.Y.Z-rc.1).",
+      "edge": "Every change on the branch; for test servers."
+    },
+    "neverChecked": "Not checked yet",
+    "upToDate": "Up to date",
+    "available": "New: {version}",
+    "availableTitle": "Version {version} is available",
+    "availableHelp": "Takes a few minutes. The panel restarts and may not answer for a short while.",
+    "updateNow": "Update now",
+    "cancel": "Cancel",
+    "confirmTitle": "Update {from} → {to}?",
+    "confirm": {
+      "step1": "An encrypted backup is taken first; nothing changes if it fails.",
+      "step2": "Running server tasks are paused and continue afterwards from their last step.",
+      "step3": "The new version is built and started; the panel is unavailable for a few minutes.",
+      "step4": "If it does not become ready, the previous version is started again automatically.",
+      "step5": "Database changes are not undone automatically; the backup can restore them."
+    },
+    "queued": "Waiting for the server agent…",
+    "elapsed": "{m}:{s}",
+    "action": {
+      "check": "Checking for updates",
+      "update": "Updating",
+      "backup": "Backing up",
+      "auto-update": "Automatic update settings"
+    },
+    "stateOf": {
+      "running": "Running",
+      "succeeded": "Done",
+      "failed": "Failed",
+      "rejected": "Rejected"
+    },
+    "restarting": "The panel is restarting with the new version. This page keeps trying and continues on its own.",
+    "failed": "The task failed ({code}). The log below says why; with a failed update the previous version is running again.",
+    "log": "Progress log",
+    "nowRunning": "Version {version} is running.",
+    "releases": "Versions ({n})",
+    "latest": "Latest",
+    "switchTo": "Switch to this version",
+    "switchHelp": "Moves to this version with the same safety steps. Going back to an older version is refused when the database was already changed by a newer one.",
+    "autoTitle": "Automatic updates",
+    "autoHelp": "The hourly maintenance timer installs new versions of the channel inside the window (server time), and postpones while server tasks are running.",
+    "autoOn": "Automatic updates on",
+    "autoOff": "Automatic updates off",
+    "window": "Maintenance window",
+    "windowHelp": "HH:MM-HH:MM, may pass midnight (23:00-02:00).",
+    "windowInvalid": "Use HH:MM-HH:MM, for example 03:00-05:00.",
+    "saveAuto": "Save",
+    "noTimer": "The hourly maintenance timer is off, so nothing runs automatically. Turn it on with:"
   }
 }

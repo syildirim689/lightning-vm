@@ -12,6 +12,13 @@ if (!/\/\w+_test(\?|$)/.test(url) || process.env.REDIS_DB !== '15') {
   process.exit(1);
 }
 process.env.DATABASE_URL = url;
+// The host agent's folders (scripts/install.sh agent): temporary ones here.
+const { mkdtempSync, mkdirSync, readdirSync, readFileSync: readFile, writeFileSync } = await import('node:fs');
+const { tmpdir } = await import('node:os');
+const maint = mkdtempSync(tmpdir() + '/lvm-maint-');
+process.env.MAINTENANCE_DIR = maint;
+process.env.MAINTENANCE_REQUESTS_DIR = maint + '/requests';
+mkdirSync(maint + '/requests');
 
 const { createApp, closeConnections } = await import('../../dist/main.js');
 const { pool, redis } = await import('../../dist/db.js');
@@ -297,4 +304,27 @@ test('payment methods: live and test credentials are kept apart, secrets stay on
   assert.deepEqual([r.json().test.configured, r.json().live.configured], [false, true]);
   assert.equal((await call('DELETE', '/admin/settings/payments/shopier', admin)).statusCode, 204);
   assert.ok((await pool.query("SELECT 1 FROM audit_events WHERE action = 'settings.payment_enabled'")).rowCount);
+});
+
+test('updates from the panel: requests go to the host agent, validated, one at a time', async () => {
+  const req = (body, cookie = admin) => post('/admin/maintenance/requests', body, cookie);
+  assert.equal((await req({ action: 'update' }, user)).statusCode, 403);
+  assert.equal((await req({ action: 'update' })).json().code, 'MAINTENANCE_AGENT_MISSING');
+  writeFileSync(`${maint}/settings.json`, JSON.stringify({ agent: 'on', updateChannel: 'stable' }));
+  assert.deepEqual((await req({ action: 'reboot' })).json().fields, { action: 'INVALID_VALUE' });
+  assert.deepEqual((await req({ action: 'update', to: '1.0; rm -rf /' })).json().fields, { to: 'INVALID_VALUE' });
+  assert.deepEqual((await req({ action: 'auto-update', enabled: true, window: '25:00-26:00' })).json().fields, { window: 'INVALID_WINDOW' });
+  const r = await req({ action: 'update', to: 'v1.2.3' });
+  assert.equal(r.statusCode, 202, r.body);
+  const files = readdirSync(`${maint}/requests`);
+  assert.deepEqual(files, [`${r.json().id}.req`]);
+  const content = readFile(`${maint}/requests/${files[0]}`, 'utf8');
+  assert.match(content, /^action=update\nto=v1\.2\.3\nby=[0-9a-f-]{36}\nid=[0-9a-f-]{36}\n$/);
+  assert.equal((await req({ action: 'check' })).json().code, 'MAINTENANCE_BUSY');
+  // The agent's progress comes back through the read-only folder.
+  writeFileSync(`${maint}/status.json`, JSON.stringify({ id: r.json().id, action: 'update', state: 'running', startedAt: new Date().toISOString(), finishedAt: '', exitCode: null, code: '' }));
+  mkdirSync(`${maint}/runs`);
+  writeFileSync(`${maint}/runs/${r.json().id}.log`, 'INFO  UPDATE                 v1.2.2 -> v1.2.3\nINFO  DRAINING               Stopping the worker\n');
+  const m = (await get('/admin/maintenance', admin)).json();
+  assert.deepEqual([m.agent.installed, m.agent.pending, m.agent.status.state, m.agent.log.length], [true, 1, 'running', 2]);
 });
