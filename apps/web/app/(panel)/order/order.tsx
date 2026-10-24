@@ -14,7 +14,7 @@ import { useIntentKey, useSshKeys } from '../servers-ui';
 
 type Custom = { cpuMin: number; cpuMax: number; cpuStep: number; memoryMinMb: number; memoryMaxMb: number; memoryStepMb: number; diskMinGb: number; diskMaxGb: number; diskStepGb: number; currency: string };
 type Catalog = { packages: { id: string; name: string; vcpu: number; memoryMb: number; diskGb: number; priceMonthly: string; currency: string; poolIds: string[]; imageIds: string[] }[];
-  pools: { id: string; name: string; location: string; custom: Custom | null }[]; images: { id: string; name: string; family: string; minDiskGb: number }[] };
+  pools: { id: string; name: string; location: string; custom: Custom | null; extraIpv4Max: number; extraIpv4Price: string; ipv6: boolean }[]; images: { id: string; name: string; family: string; minDiskGb: number }[] };
 type Quote = { shape: { vcpu: number; memoryMb: number; diskGb: number }; price: { monthly: string; currency: string }; quota: { exceeded: string[] }; capacityAvailable: boolean };
 type Project = { id: string; name: string };
 type Availability = { packages: Record<string, { capacity: boolean; quota: string[] }> };
@@ -50,6 +50,8 @@ export default function Order() {
 
   const body = orderBody(d);
   const pool = catalog?.pools.find((p) => p.id === d.poolId);
+  // Another location may sell fewer extra addresses (or none).
+  useEffect(() => { if (pool && (d.extraIpv4 ?? 0) > pool.extraIpv4Max) d.set({ extraIpv4: pool.extraIpv4Max }); }, [pool?.id]); // eslint-disable-line react-hooks/exhaustive-deps
   const ready = !!d.poolId && (d.type === 'custom' ? !!pool?.custom : !!d.packageId);
   const quote = useQuery<Quote, ApiError>({
     queryKey: ['quote', body], enabled: ready,
@@ -159,6 +161,9 @@ export default function Order() {
             {keys.length === 0 ? <Notice tone="warning">{t('noKeys')} <ButtonLink href="/account" size="sm" variant="secondary" className="ml-2">{t('manageKeys')}</ButtonLink></Notice>
               : <CheckboxList label={t('sshKeys')} value={d.sshKeyIds} onChange={(v) => d.set({ sshKeyIds: v })} error={quoteField('sshKeyIds')}
                   options={keys.map((k) => ({ id: k.id, label: k.name }))}/>}
+            {pool && pool.extraIpv4Max > 0 && <NumberInput label={t('extraIpv4')} value={Math.min(d.extraIpv4 ?? 0, pool.extraIpv4Max)} onChange={(v) => d.set({ extraIpv4: v ?? 0 })} minValue={0} maxValue={pool.extraIpv4Max}
+              error={quoteField('extraIpv4')} help={t('extraIpv4Help', { max: pool.extraIpv4Max, price: money(pool.extraIpv4Price, quote.data?.price.currency ?? 'EUR') })}/>}
+            {pool?.ipv6 && <p className="flex items-center gap-2 text-sm text-muted"><I name="globe" size={14}/>{t('ipv6Included')}</p>}
             {firewalls.length > 0 && <CheckboxList label={tf('title')} value={firewallIds} onChange={setFirewallIds} error={quoteField('firewallIds')}
               help={tf('orderHelp')} options={firewalls.map((f) => ({ id: f.id, label: f.name }))}/>}
           </div>

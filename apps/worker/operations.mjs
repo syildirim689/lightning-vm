@@ -53,9 +53,12 @@ async function load(db, opId) {
 
 async function loadServer(db, serverId) {
   const { rows: [s] } = await db.query(`SELECT s.*, p.connection_id, p.datastore_morefs, p.network_moref, p.compute_moref, i.template_moref,
-      host(a.address) AS address, masklen(ip.cidr) AS prefix, host(ip.gateway) AS gateway, ARRAY(SELECT host(x) FROM unnest(ip.dns) x) AS dns
+      host(a.address) AS address, masklen(ip.cidr) AS prefix, host(ip.gateway) AS gateway, ARRAY(SELECT host(x) FROM unnest(ip.dns) x) AS dns,
+      ARRAY(SELECT host(e.address) FROM ip_allocations e WHERE e.server_id = s.id AND e.kind = 'extra' ORDER BY e.address) AS extra,
+      (SELECT host(v.address) FROM ip_allocations v WHERE v.server_id = s.id AND v.kind = 'ipv6') AS ipv6,
+      masklen(ip.ipv6_prefix) AS ipv6_prefix_len, host(ip.ipv6_gateway) AS ipv6_gateway
     FROM servers s JOIN resource_pools p ON p.id = s.pool_id JOIN os_images i ON i.id = s.image_id
-    LEFT JOIN ip_allocations a ON a.server_id = s.id LEFT JOIN ip_pools ip ON ip.id = a.ip_pool_id WHERE s.id = $1`, [serverId]);
+    LEFT JOIN ip_allocations a ON a.server_id = s.id AND a.kind = 'primary' LEFT JOIN ip_pools ip ON ip.id = a.ip_pool_id WHERE s.id = $1`, [serverId]);
   if (!s) return null;
   const { rows: [c] } = await db.query('SELECT * FROM vmware_connections WHERE id = $1', [s.connection_id]);
   const target = { host: c.host, port: c.port, username: c.username, password: decrypt(c.password_enc, c.id), ...(c.api_version && { apiVersion: c.api_version }),
@@ -94,10 +97,14 @@ async function bestDatastore(db, s) {
   return { datastore: d.moref, pool: r.resource_pool };
 }
 
-// cloud-init (JSON is valid YAML): the allocated static address and the customer's SSH keys.
-function cloudInit(s) {
+// cloud-init (JSON is valid YAML): every allocated address (primary and extra IPv4 on one subnet, the IPv6
+// one if the pool has a prefix) and the customer's SSH keys.
+export function cloudInit(s) {
+  const addresses = [`${s.address}/${s.prefix}`, ...(s.extra ?? []).map((a) => `${a}/${s.prefix}`)];
+  const routes = [{ to: 'default', via: s.gateway }];
+  if (s.ipv6) { addresses.push(`${s.ipv6}/${s.ipv6_prefix_len}`); routes.push({ to: '::/0', via: s.ipv6_gateway, 'on-link': true }); }
   const metadata = JSON.stringify({ 'instance-id': s.id, 'local-hostname': s.name, network: { version: 2, ethernets: { nic0: {
-    match: { name: 'e*' }, addresses: [`${s.address}/${s.prefix}`], routes: [{ to: 'default', via: s.gateway }], nameservers: { addresses: s.dns } } } } });
+    match: { name: 'e*' }, addresses, routes, nameservers: { addresses: s.dns } } } } });
   const userdata = '#cloud-config\n' + JSON.stringify({ hostname: s.name, ssh_authorized_keys: s.ssh_public_keys, ssh_pwauth: false });
   return { metadata, userdata };
 }
@@ -183,7 +190,16 @@ async function destroy(db, ctx) {
   const client = await db.connect();
   try {
     await client.query('BEGIN');
-    await client.query('DELETE FROM ip_allocations WHERE server_id = $1', [ctx.s.id]);
+    // A deleted server's addresses wait out their pool's quarantine before anyone else gets them (their
+    // reputation may still be this customer's); a cancelled create never used them and frees them at once.
+    if (ctx.op.kind === 'delete') {
+      await client.query(`INSERT INTO ip_quarantine (address, ip_pool_id, available_at, server_name)
+        SELECT a.address, a.ip_pool_id, now() + make_interval(hours => ip.quarantine_hours), $2 FROM ip_allocations a JOIN ip_pools ip ON ip.id = a.ip_pool_id
+        WHERE a.server_id = $1 AND ip.quarantine_hours > 0
+        ON CONFLICT (address) DO UPDATE SET released_at = now(), available_at = EXCLUDED.available_at, server_name = EXCLUDED.server_name`, [ctx.s.id, ctx.s.name]);
+    }
+    const { rows: released } = await client.query('DELETE FROM ip_allocations WHERE server_id = $1 RETURNING host(address) AS address, ptr', [ctx.s.id]);
+    ctx.released = released;
     await client.query("UPDATE servers SET state = 'deleted', deleted_at = now(), power_state = 'unknown', updated_at = now() WHERE id = $1", [ctx.s.id]);
     await client.query('COMMIT');
   } catch (e) { await client.query('ROLLBACK'); throw e; } finally { client.release(); }
@@ -259,7 +275,8 @@ async function rollbackCreate(db, ctx) {
 }
 
 // notify(event, to, data): enqueues on the API's notification queue (apps/api/src/notify.ts decides the channels).
-export async function processOperation(db, job, log, notify = async () => {}) {
+// rdns(job): enqueues on the API's reverse-DNS queue (apps/api/src/rdns.ts writes the PTR records).
+export async function processOperation(db, job, log, notify = async () => {}, rdns = async () => {}) {
   // Loading can fail too (database, key file); log it instead of failing silently.
   const ctx = await load(db, job.id).catch((e) => { log('error', 'operation_load_failed', { operationId: job.id, error: e.code ?? e.message }); throw e; });
   if (!ctx || ['succeeded', 'failed', 'cancelled'].includes(ctx.op.status)) return; // already settled
@@ -270,8 +287,8 @@ export async function processOperation(db, job, log, notify = async () => {}) {
     await db.query("UPDATE operations SET status = 'succeeded', step = 'done', finished_at = now(), error_code = NULL, updated_at = now() WHERE id = $1", [ctx.op.id]);
     log('info', 'operation_succeeded', { kind: ctx.op.kind, operationId: ctx.op.id });
     const d = { serverId: ctx.s.id, name: ctx.s.name, kind: ctx.op.kind };
-    if (ctx.op.kind === 'create') await notify('server.ready', [ctx.s.owner_id], { ...d, address: ctx.s.address ?? '' });
-    else if (ctx.op.kind === 'delete') await notify('server.deleted', [ctx.s.owner_id], d);
+    if (ctx.op.kind === 'create') { await notify('server.ready', [ctx.s.owner_id], { ...d, address: ctx.s.address ?? '' }); await rdns({ action: 'default', serverId: ctx.s.id }); }
+    else if (ctx.op.kind === 'delete') { await notify('server.deleted', [ctx.s.owner_id], d); if (ctx.released?.length) await rdns({ action: 'clear', addresses: ctx.released.map((a) => a.address) }); }
     else await notify('server.power', [ctx.s.owner_id], d);
   } catch (err) {
     const code = err.code ?? 'INTERNAL_ERROR';

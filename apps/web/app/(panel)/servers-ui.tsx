@@ -160,6 +160,7 @@ export function ServerDetail({ id }: { id: string }) {
       </Section>
     </div>
 
+    <ServerIps server={s}/>
     <ServerFirewalls server={s}/>
 
     <ServerMetrics id={id} live={s.state === 'ready' && s.powerState === 'poweredOn'}/>
@@ -183,6 +184,48 @@ export function ServerDetail({ id }: { id: string }) {
 }
 
 // The firewalls protecting this server and whether VMware has their current rules.
+// The server's addresses (primary, extra IPv4, IPv6) and their reverse DNS, editable when the admin allows it.
+function ServerIps({ server }: { server: Server }) {
+  const t = useTranslations('Servers.ips');
+  const { error, field } = useErrorText();
+  const client = useQueryClient();
+  const q = useApiQuery<{ addresses: { address: string; family: number; kind: 'primary' | 'extra' | 'ipv6'; ptr: string | null }[]; rdns: { enabled: boolean; customerEdit: boolean; forwardCheck: boolean } }>(
+    ['servers', server.id, 'ips'], `/servers/${server.id}/ips`);
+  const [editing, setEditing] = useState<string | null>(null);
+  const [value, setValue] = useState('');
+  const [fieldError, setFieldError] = useState<string>();
+  const [busy, setBusy] = useState(false);
+  if (!q.data || q.data.addresses.length === 0) return null;
+  const { addresses, rdns } = q.data;
+  async function save(address: string, ptr: string) {
+    setBusy(true); setFieldError(undefined);
+    try {
+      await apiFetch(`/servers/${server.id}/ips/${encodeURIComponent(address)}/ptr`, { method: 'PUT', body: { ptr } });
+      toast.success(t('saved')); setEditing(null); client.invalidateQueries({ queryKey: ['servers', server.id, 'ips'] });
+    } catch (e) { setFieldError((e as { fields?: Record<string, string> }).fields?.ptr); toast.danger(error(e)); } finally { setBusy(false); }
+  }
+  const canEdit = rdns.enabled && rdns.customerEdit && server.state !== 'deleting';
+  return <Section title={t('title')} description={rdns.enabled ? (rdns.customerEdit ? (rdns.forwardCheck ? t('helpForward') : t('help')) : t('helpLocked')) : t('helpNoRdns')}>
+    <ul className="flex flex-col divide-y divide-separator">
+      {addresses.map((a) => <li key={a.address} className="flex flex-col gap-2 py-3 sm:flex-row sm:items-center">
+        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+          <Mono>{a.address}</Mono>
+          <StatusChip tone={a.kind === 'primary' ? 'accent' : 'default'}>{t(`kind.${a.kind}`)}</StatusChip>
+          {editing !== a.address && <span className="min-w-0 truncate text-sm text-muted">PTR: {a.ptr ? <Mono>{a.ptr.replace(/\.$/, '')}</Mono> : '–'}</span>}
+        </div>
+        {editing === a.address
+          ? <div className="flex flex-wrap items-start gap-2">
+              <TextInput className="min-w-64" label={t('ptr')} value={value} onChange={setValue} error={field(fieldError)} placeholder="mail.example.com" spellCheck={false}/>
+              <Button className="mt-6" size="sm" isPending={busy} onPress={() => save(a.address, value)}>{t('save')}</Button>
+              <Button className="mt-6" size="sm" variant="ghost" isDisabled={busy} onPress={() => save(a.address, '')}>{t('reset')}</Button>
+              <Button className="mt-6" size="sm" variant="tertiary" onPress={() => setEditing(null)}>{t('cancel')}</Button>
+            </div>
+          : canEdit && <Button size="sm" variant="ghost" onPress={() => { setEditing(a.address); setValue(a.ptr?.replace(/\.$/, '') ?? ''); setFieldError(undefined); }}><I name="pencil" size={14}/>{t('edit')}</Button>}
+      </li>)}
+    </ul>
+  </Section>;
+}
+
 function ServerFirewalls({ server }: { server: Server }) {
   const t = useTranslations('Firewalls');
   const { error } = useErrorText();

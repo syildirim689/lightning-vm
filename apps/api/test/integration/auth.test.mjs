@@ -34,7 +34,7 @@ before(async () => {
 after(async () => { await app?.close(); await closeConnections(); });
 
 test('migrations apply once and are idempotent', async () => {
-  assert.deepEqual(await runMigrations(pool), ['001_init', '002_auth', '003_setup_wizard', '004_vmware', '005_catalog', '006_servers', '007_better_auth', '008_two_factor_branding', '009_firewalls', '010_payments']);
+  assert.deepEqual(await runMigrations(pool), ['001_init', '002_auth', '003_setup_wizard', '004_vmware', '005_catalog', '006_servers', '007_better_auth', '008_two_factor_branding', '009_firewalls', '010_payments', '011_ip_management']);
   assert.deepEqual(await runMigrations(pool), []);
 });
 

@@ -69,7 +69,8 @@ before(async () => {
   const network = (await pool.query("SELECT moref FROM vmware_networks WHERE connection_id = $1 AND kind = 'standard' LIMIT 1", [connectionId])).rows[0].moref;
   poolId = (await send('POST', '/admin/pools', { name: 'Sim', connectionId, computeMoref: cluster, datastoreMorefs: datastores, networkMoref: network,
     cpuOvercommit: 16, memoryOvercommit: 4, storageOvercommit: 10, reserveCpuPct: 0, reserveMemoryPct: 0, reserveStoragePct: 0 })).json().id;
-  await send('POST', '/admin/ip-pools', { name: 'tiny', poolId, cidr: '10.20.0.0/24', gateway: '10.20.0.1', dns: ['10.20.0.53'], rangeStart: '10.20.0.10', rangeEnd: '10.20.0.12', excluded: ['10.20.0.11'] });
+  await send('POST', '/admin/ip-pools', { name: 'tiny', poolId, cidr: '10.20.0.0/24', gateway: '10.20.0.1', dns: ['10.20.0.53'], rangeStart: '10.20.0.10', rangeEnd: '10.20.0.12', excluded: ['10.20.0.11'],
+    quarantineHours: 0 }); // these tests reuse the two addresses at once
   // The simulator has no templates; one inventory VM is marked as one (simulated data).
   await pool.query('UPDATE vmware_vms SET template = true WHERE connection_id = $1 AND moref = $2', [connectionId, vm.moref]);
   imageId = (await send('POST', '/admin/images', { name: 'Sim Linux', family: 'linux', connectionId, templateMoref: vm.moref, minDiskGb: 10 })).json().id;
@@ -285,4 +286,59 @@ test('firewalls: rules are validated and owned, and applied to the distributed p
   assert.equal(row.firewall_error, null);
   assert.equal((await send('DELETE', `/firewalls/${fw.id}/servers/${std}`, undefined, user)).statusCode, 200);
   assert.equal((await send('DELETE', `/firewalls/${fw.id}`, undefined, user)).statusCode, 204);
+});
+
+test('IP management: extra IPv4 and IPv6 in one order, default PTR in PowerDNS, customer edits, quarantine after delete', { skip: skip || (!process.env.RDNS_TEST_URL && 'needs RDNS_TEST_URL (PowerDNS)') }, async () => {
+  const pdnsUrl = process.env.RDNS_TEST_URL, pdnsKey = process.env.RDNS_TEST_KEY;
+  const pdns = (path, init = {}) => fetch(`${pdnsUrl}/api/v1/servers/localhost${path}`, { ...init, headers: { 'x-api-key': pdnsKey, 'content-type': 'application/json' } });
+  for (const name of ['0.40.10.in-addr.arpa.', '8.b.d.0.1.0.0.2.ip6.arpa.']) {
+    await pdns(`/zones/${name}`, { method: 'DELETE' });
+    assert.equal((await pdns('/zones', { method: 'POST', body: JSON.stringify({ name, kind: 'Native', nameservers: ['ns1.example.com.'] }) })).status, 201);
+  }
+  const ptrOf = async (rev, zone) => (await (await pdns(`/zones/${zone}`)).json()).rrsets.find((r) => r.name === rev && r.type === 'PTR')?.records[0]?.content ?? null;
+  const { startRdnsWorker } = await import('../../dist/rdns.js');
+  const rdnsWorker = startRdnsWorker();
+  try {
+    // Admin: PowerDNS settings, checked against the server; IPv6 and quarantine on the IP pool; extra IPs for sale.
+    let r = await send('PUT', '/admin/settings/rdns', { provider: 'powerdns', apiUrl: pdnsUrl, apiKey: pdnsKey, serverId: 'localhost', template: '{ip-dashed}.static.example.com', ttl: 3600 });
+    assert.equal(r.statusCode, 200, r.body);
+    assert.equal(r.json().apiKeySet, true);
+    assert.ok(!r.body.includes(pdnsKey));
+    const t = (await send('POST', '/admin/settings/rdns/test', { apiUrl: pdnsUrl, serverId: 'localhost' })).json();
+    assert.ok(t.zones.includes('0.40.10.in-addr.arpa.'), JSON.stringify(t));
+    const ipPool = (await send('GET', '/admin/ip-pools')).json().ipPools.find((p) => p.name === 'dvs');
+    assert.equal((await send('PUT', `/admin/ip-pools/${ipPool.id}`, { quarantineHours: 24, ipv6Prefix: '2001:db8:40::/64', ipv6Gateway: '2001:db8:40::1', dns: ['10.40.0.53'], excluded: [] })).statusCode, 200);
+    assert.equal((await send('PUT', `/admin/ip-pools/${ipPool.id}`, { ipv6Prefix: '2001:db8:40::/64', ipv6Gateway: '2001:db8:99::1' })).json().fields.ipv6Gateway, 'IPV6_GATEWAY_OUTSIDE');
+    await pool.query("UPDATE resource_pools SET extra_ipv4_max = 2, extra_ipv4_price = 2.50 WHERE id = $1", [ipPool.poolId]);
+    const pkg = (await pool.query("SELECT id FROM packages WHERE name = 'Tiny DVS'")).rows[0].id;
+    const base = { ...order('ip-1'), poolId: ipPool.poolId, packageId: pkg };
+    assert.equal((await send('POST', '/catalog/quote', { ...base, extraIpv4: 1 }, user)).json().price.monthly, '3.50');
+    assert.equal((await send('POST', '/catalog/quote', { ...base, extraIpv4: 3 }, user)).json().fields.extraIpv4, 'OUT_OF_RANGE');
+
+    const id = (await create({ ...base, extraIpv4: 1 })).json().serverId;
+    await until(async () => (await serverRow(id)).state === 'ready', 'server with extra IPs ready');
+    const ips = await until(async () => { const x = (await send('GET', `/servers/${id}/ips`, undefined, user)).json().addresses; return x.length === 3 && x.every((a) => a.ptr) && x; }, 'default PTRs');
+    assert.deepEqual(ips.map((a) => a.kind), ['primary', 'extra', 'ipv6']);
+    const [primary, , v6] = ips;
+    assert.match(v6.address, /^2001:db8:40::/);
+    const rev = `${primary.address.split('.').reverse().join('.')}.in-addr.arpa.`;
+    assert.equal(await ptrOf(rev, '0.40.10.in-addr.arpa.'), `${primary.address.replaceAll('.', '-')}.static.example.com.`);
+
+    // A customer's own name must resolve back to the address; staff may set any valid name.
+    assert.equal((await send('PUT', `/servers/${id}/ips/${primary.address}/ptr`, { ptr: 'mail.no-such-name.invalid' }, user)).json().fields.ptr, 'PTR_FORWARD_MISMATCH');
+    assert.equal((await send('PUT', `/servers/${id}/ips/${primary.address}/ptr`, { ptr: 'mail.example.com' }, other)).statusCode, 404);
+    assert.equal((await send('PUT', `/servers/${id}/ips/${primary.address}/ptr`, { ptr: 'mail.example.com' })).statusCode, 200);
+    assert.equal(await ptrOf(rev, '0.40.10.in-addr.arpa.'), 'mail.example.com.');
+
+    // Delete: the PTRs go away and the addresses wait in quarantine; the next order does not get them.
+    assert.equal((await send('DELETE', `/servers/${id}`, { confirm: 'ip-1' }, user, { 'idempotency-key': randomUUID() })).statusCode, 202);
+    await until(async () => (await serverRow(id)).state === 'deleted', 'deleted');
+    await until(async () => (await ptrOf(rev, '0.40.10.in-addr.arpa.')) === null, 'PTR removed');
+    const q = (await send('GET', `/admin/ip-addresses?ipPoolId=${ipPool.id}`)).json().addresses.filter((a) => a.state === 'quarantine').map((a) => a.address);
+    assert.ok(q.includes(primary.address) && q.includes(v6.address), JSON.stringify(q));
+    const next = (await create({ ...base, name: 'ip-2' })).json().serverId;
+    const nextIp = (await pool.query("SELECT host(address) AS a FROM ip_allocations WHERE server_id = $1 AND kind = 'primary'", [next])).rows[0].a;
+    assert.notEqual(nextIp, primary.address);
+    assert.equal((await send('DELETE', `/admin/ip-quarantine/${primary.address}`)).statusCode, 204);
+  } finally { await rdnsWorker.close(); }
 });

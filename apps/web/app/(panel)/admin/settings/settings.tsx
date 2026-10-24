@@ -17,8 +17,9 @@ import { useApiQuery } from '../../../../lib/query';
 import RegistrationSetting from '../registration-setting';
 import NotificationPolicy from './notification-policy';
 import Payments from './payments';
+import ReverseDns from './rdns';
 
-const tabs = ['general', 'branding', 'mail', 'captcha', 'sms', 'payments', 'notifications'] as const;
+const tabs = ['general', 'branding', 'mail', 'captcha', 'sms', 'payments', 'rdns', 'notifications'] as const;
 
 export default function Settings() {
   const t = useTranslations('Settings');
@@ -26,7 +27,7 @@ export default function Settings() {
   const me = useMe();
   const readOnly = !can(me?.permissions, 'settings.manage');
   const icon = { general: <I name="settings-2" size={16}/>, branding: <I name="palette" size={16}/>, mail: <I name="mail" size={16}/>, captcha: <I name="bot" size={16}/>,
-    sms: <I name="message-square" size={16}/>, payments: <I name="credit-card" size={16}/>, notifications: <I name="bell" size={16}/> };
+    sms: <I name="message-square" size={16}/>, payments: <I name="credit-card" size={16}/>, rdns: <I name="globe" size={16}/>, notifications: <I name="bell" size={16}/> };
   return <>
     <PageHeader eyebrow={t('eyebrow')} title={t('title')} description={t('intro')}/>
     {readOnly && <div className="mb-4"><Notice tone="default">{t('readOnly')}</Notice></div>}
@@ -40,6 +41,7 @@ export default function Settings() {
       <Tabs.Panel id="captcha" className="pt-5"><Captcha readOnly={readOnly}/></Tabs.Panel>
       <Tabs.Panel id="sms" className="pt-5"><Sms readOnly={readOnly} myPhone={me?.phoneNumber ?? ''}/></Tabs.Panel>
       <Tabs.Panel id="payments" className="pt-5"><Payments readOnly={readOnly}/></Tabs.Panel>
+      <Tabs.Panel id="rdns" className="pt-5"><ReverseDns readOnly={readOnly}/></Tabs.Panel>
       <Tabs.Panel id="notifications" className="pt-5"><NotificationPolicy readOnly={readOnly}/></Tabs.Panel>
     </Tabs>
   </>;

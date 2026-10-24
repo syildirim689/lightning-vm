@@ -26,6 +26,7 @@ import { CatalogAdminController, CatalogController } from './catalog';
 import { ServersAdminController, ServersController } from './servers';
 import { FirewallsController } from './firewalls';
 import { PaymentsController } from './payments';
+import { RdnsSettingsController, ServerIpsController, startRdnsWorker } from './rdns';
 import { httpDuration } from './metrics';
 
 export { closeConnections };
@@ -43,7 +44,7 @@ class HealthController {
   }
 }
 
-@Module({ controllers: [HealthController, AuthController, PublicController, SetupController, AdminController, VmwareController, ConsoleController, CatalogAdminController, CatalogController, ServersController, ServersAdminController, FirewallsController, PaymentsController,
+@Module({ controllers: [HealthController, AuthController, PublicController, SetupController, AdminController, VmwareController, ConsoleController, CatalogAdminController, CatalogController, ServersController, ServersAdminController, FirewallsController, PaymentsController, RdnsSettingsController, ServerIpsController,
   SettingsController, SmsSettingsController, RolesController, NotificationsController, NotificationPolicyController,
   InsightsController, StaffInsightsController] })
 class AppModule {}
@@ -93,6 +94,7 @@ async function main() {
   const app = await createApp();
   app.enableShutdownHooks();
   startNotificationWorker();
+  startRdnsWorker();
   startInsightAlerts();
   await app.listen(4000, '0.0.0.0');
   process.on('SIGTERM', closeConnections); process.on('SIGINT', closeConnections);

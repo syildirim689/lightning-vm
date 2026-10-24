@@ -151,7 +151,7 @@ export class FirewallsController {
     const f = await findFirewall(req, id, false);
     const { rows: servers } = await pool.query(`SELECT s.id, s.name, s.state, host(a.address) AS address, ${status} AS status, s.firewall_error AS "errorCode",
         s.firewall_applied_at AS "appliedAt" FROM firewall_servers fs JOIN servers s ON s.id = fs.server_id
-        LEFT JOIN ip_allocations a ON a.server_id = s.id WHERE fs.firewall_id = $1 AND s.state <> 'deleted' ORDER BY s.name`, [id]);
+        LEFT JOIN ip_allocations a ON a.server_id = s.id AND a.kind = 'primary' WHERE fs.firewall_id = $1 AND s.state <> 'deleted' ORDER BY s.name`, [id]);
     return { ...view(f), servers, limits };
   }
 

@@ -1,5 +1,6 @@
 import { Body, Controller, Delete, Get, HttpCode, Param, ParseUUIDPipe, Post, Put, Query, Req, UseGuards } from '@nestjs/common';
 import type { PoolClient } from 'pg';
+import { isIP } from 'node:net';
 import { pool } from './db';
 import { apiError } from './errors';
 import { audit, SessionGuard, type AuthedRequest } from './auth';
@@ -54,10 +55,22 @@ async function guarded<T>(work: () => Promise<T>): Promise<T> {
     const pg = err as { code?: string; constraint?: string };
     if (pg.code === '23505') throw apiError(409, 'VALIDATION_FAILED', 'Duplicate', { name: 'NAME_TAKEN' });
     if (pg.code === '23503') throw apiError(409, 'IN_USE', 'Still referenced by other records');
+    if (pg.code === '23514' && pg.constraint?.startsWith('ip_pools_ipv6')) throw apiError(400, 'VALIDATION_FAILED', 'Invalid IPv6', { ipv6Gateway: 'IPV6_GATEWAY_OUTSIDE' });
     if (pg.code === '23514' && pg.constraint?.startsWith('ip_pools')) throw apiError(400, 'VALIDATION_FAILED', 'Invalid range', { range: 'IP_OUTSIDE_SUBNET' });
     if (pg.code === '22P02') throw apiError(400, 'VALIDATION_FAILED', 'Invalid address', { cidr: 'INVALID_ADDRESS' });
     throw err;
   }
+}
+
+// Optional IPv6 for an IP pool: a prefix of /48 to /64 and a gateway inside it (each server gets one address).
+function readIpv6(body: Input, f: Fields) {
+  const prefix = typeof body.ipv6Prefix === 'string' ? body.ipv6Prefix.trim() : '';
+  const gateway = typeof body.ipv6Gateway === 'string' ? body.ipv6Gateway.trim() : '';
+  if (!prefix && !gateway) return { ipv6Prefix: null, ipv6Gateway: null };
+  const m = /^([0-9a-f:]+)\/(\d{1,3})$/i.exec(prefix);
+  if (!m || isIP(m[1]) !== 6 || Number(m[2]) < 48 || Number(m[2]) > 64) f.errors.ipv6Prefix = 'INVALID_IPV6_PREFIX';
+  if (isIP(gateway) !== 6) f.errors.ipv6Gateway = 'INVALID_ADDRESS';
+  return { ipv6Prefix: prefix, ipv6Gateway: gateway };
 }
 
 type Db = PoolClient | typeof pool;
@@ -95,6 +108,8 @@ async function readPool(body: Input, client: PoolClient | typeof pool = pool) {
     cpuOvercommit: f.ratio('cpuOvercommit', 1, 32, 4), memoryOvercommit: f.ratio('memoryOvercommit', 1, 4, 1), storageOvercommit: f.ratio('storageOvercommit', 1, 10, 1),
     reserveCpuPct: f.int('reserveCpuPct', 0, 90, 10), reserveMemoryPct: f.int('reserveMemoryPct', 0, 90, 10), reserveStoragePct: f.int('reserveStoragePct', 0, 90, 15),
     active: body.active !== false,
+    // Extra IPv4 addresses a customer may add to a server here, and their monthly price each (offering currency).
+    extraIpv4Max: f.int('extraIpv4Max', 0, 32, 0), extraIpv4Price: f.decimal('extraIpv4Price', 100000, false) ?? '0',
   };
   f.done();
   // Everything referenced must exist in the discovered inventory of that connection.
@@ -140,7 +155,8 @@ function readLimits(body: Input): Limits {
 const poolColumns = `p.id, p.name, p.location, p.connection_id AS "connectionId", c.name AS "connectionName", p.compute_moref AS "computeMoref",
   p.datastore_morefs AS "datastoreMorefs", p.network_moref AS "networkMoref", p.cpu_overcommit::float AS "cpuOvercommit",
   p.memory_overcommit::float AS "memoryOvercommit", p.storage_overcommit::float AS "storageOvercommit", p.reserve_cpu_pct AS "reserveCpuPct",
-  p.reserve_memory_pct AS "reserveMemoryPct", p.reserve_storage_pct AS "reserveStoragePct", p.active`;
+  p.reserve_memory_pct AS "reserveMemoryPct", p.reserve_storage_pct AS "reserveStoragePct", p.active,
+  p.extra_ipv4_max AS "extraIpv4Max", p.extra_ipv4_price::text AS "extraIpv4Price"`;
 
 @Controller('admin') @UseGuards(PermissionGuard)
 export class CatalogAdminController {
@@ -157,9 +173,9 @@ export class CatalogAdminController {
   async createPool(@Req() req: AuthedRequest, @Body() body: Input) {
     const v = await readPool(body);
     const { rows: [p] } = await guarded(() => pool.query(`INSERT INTO resource_pools (name, location, connection_id, compute_moref, datastore_morefs, network_moref,
-      cpu_overcommit, memory_overcommit, storage_overcommit, reserve_cpu_pct, reserve_memory_pct, reserve_storage_pct, active)
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING id`, [v.name, v.location, v.connectionId, v.computeMoref, v.datastoreMorefs, v.networkMoref,
-      v.cpuOvercommit, v.memoryOvercommit, v.storageOvercommit, v.reserveCpuPct, v.reserveMemoryPct, v.reserveStoragePct, v.active]));
+      cpu_overcommit, memory_overcommit, storage_overcommit, reserve_cpu_pct, reserve_memory_pct, reserve_storage_pct, active, extra_ipv4_max, extra_ipv4_price)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING id`, [v.name, v.location, v.connectionId, v.computeMoref, v.datastoreMorefs, v.networkMoref,
+      v.cpuOvercommit, v.memoryOvercommit, v.storageOvercommit, v.reserveCpuPct, v.reserveMemoryPct, v.reserveStoragePct, v.active, v.extraIpv4Max, v.extraIpv4Price]));
     await audit(req, 'catalog.pool_created', 'success', req.user.id, { id: p.id, name: v.name });
     return { id: p.id };
   }
@@ -169,11 +185,23 @@ export class CatalogAdminController {
     const v = await readPool(body);
     const { rowCount } = await guarded(() => pool.query(`UPDATE resource_pools SET name=$2, location=$3, connection_id=$4, compute_moref=$5, datastore_morefs=$6,
       network_moref=$7, cpu_overcommit=$8, memory_overcommit=$9, storage_overcommit=$10, reserve_cpu_pct=$11, reserve_memory_pct=$12, reserve_storage_pct=$13,
-      active=$14, updated_at=now() WHERE id=$1`, [id, v.name, v.location, v.connectionId, v.computeMoref, v.datastoreMorefs, v.networkMoref,
-      v.cpuOvercommit, v.memoryOvercommit, v.storageOvercommit, v.reserveCpuPct, v.reserveMemoryPct, v.reserveStoragePct, v.active]));
+      active=$14, extra_ipv4_max=$15, extra_ipv4_price=$16, updated_at=now() WHERE id=$1`, [id, v.name, v.location, v.connectionId, v.computeMoref, v.datastoreMorefs, v.networkMoref,
+      v.cpuOvercommit, v.memoryOvercommit, v.storageOvercommit, v.reserveCpuPct, v.reserveMemoryPct, v.reserveStoragePct, v.active, v.extraIpv4Max, v.extraIpv4Price]));
     if (!rowCount) throw apiError(404, 'NOT_FOUND', 'Unknown pool');
     await audit(req, 'catalog.pool_updated', 'success', req.user.id, { id });
     return { id };
+  }
+
+  // Extra IPv4 for sale in this location (how many per server, monthly price each), without the full pool form.
+  @Put('pools/:id/ip-options') @Can('catalog.manage')
+  async poolIpOptions(@Req() req: AuthedRequest, @Param('id', ParseUUIDPipe) id: string, @Body() body: Input) {
+    const f = new Fields(body);
+    const v = { max: f.int('extraIpv4Max', 0, 32, 0), price: f.decimal('extraIpv4Price', 100000, false) ?? '0' };
+    f.done();
+    const { rowCount } = await pool.query('UPDATE resource_pools SET extra_ipv4_max = $2, extra_ipv4_price = $3, updated_at = now() WHERE id = $1', [id, v.max, v.price]);
+    if (!rowCount) throw apiError(404, 'NOT_FOUND', 'Unknown pool');
+    await audit(req, 'catalog.pool_ip_options', 'success', req.user.id, { id, ...v });
+    return { id, extraIpv4Max: v.max, extraIpv4Price: v.price };
   }
 
   @Delete('pools/:id') @HttpCode(204) @Can('catalog.manage')
@@ -275,9 +303,51 @@ export class CatalogAdminController {
     const { rows } = await pool.query(`SELECT i.id, i.name, i.pool_id AS "poolId", p.name AS "poolName", host(i.gateway) AS gateway, i.cidr::text AS cidr,
       host(i.range_start) AS "rangeStart", host(i.range_end) AS "rangeEnd", ARRAY(SELECT host(x) FROM unnest(i.dns) x) AS dns,
       ARRAY(SELECT host(x) FROM unnest(i.excluded) x) AS excluded,
-      (i.range_end - i.range_start + 1 - (SELECT count(*) FROM unnest(i.excluded) x WHERE x BETWEEN i.range_start AND i.range_end))::int AS size
+      (i.range_end - i.range_start + 1 - (SELECT count(*) FROM unnest(i.excluded) x WHERE x BETWEEN i.range_start AND i.range_end))::int AS size,
+      i.quarantine_hours AS "quarantineHours", i.ipv6_prefix::text AS "ipv6Prefix", host(i.ipv6_gateway) AS "ipv6Gateway",
+      (SELECT count(*)::int FROM ip_allocations a WHERE a.ip_pool_id = i.id AND family(a.address) = 4) AS used,
+      (SELECT count(*)::int FROM ip_quarantine q WHERE q.ip_pool_id = i.id AND q.available_at > now() AND family(q.address) = 4) AS quarantined
       FROM ip_pools i JOIN resource_pools p ON p.id = i.pool_id ORDER BY i.name`);
     return { ipPools: rows };
+  }
+
+  // Every address that is not simply free: in use (with server, owner, kind, PTR), in quarantine, or excluded.
+  @Get('ip-addresses') @Can('catalog.view', 'catalog.manage', 'servers.view_all')
+  async ipAddresses(@Query('ipPoolId') ipPoolId?: string) {
+    const only = ipPoolId && /^[0-9a-f-]{36}$/.test(ipPoolId) ? ipPoolId : null;
+    const { rows } = await pool.query(`
+      SELECT host(a.address) AS address, a.ip_pool_id AS "ipPoolId", 'used' AS state, a.kind, a.ptr, s.id AS "serverId", s.name AS "serverName", u.email AS owner,
+        a.allocated_at AS since, NULL::timestamptz AS until
+        FROM ip_allocations a JOIN servers s ON s.id = a.server_id JOIN users u ON u.id = s.owner_id WHERE ($1::uuid IS NULL OR a.ip_pool_id = $1)
+      UNION ALL
+      SELECT host(q.address), q.ip_pool_id, 'quarantine', NULL, NULL, NULL, q.server_name, NULL, q.released_at, q.available_at
+        FROM ip_quarantine q WHERE q.available_at > now() AND ($1::uuid IS NULL OR q.ip_pool_id = $1)
+      UNION ALL
+      SELECT host(x), i.id, 'excluded', NULL, NULL, NULL, NULL, NULL, NULL, NULL FROM ip_pools i, unnest(i.excluded) x WHERE ($1::uuid IS NULL OR i.id = $1)
+      ORDER BY 1`, [only]);
+    return { addresses: rows };
+  }
+
+  // Hands a quarantined address back early (for example the same customer wants it again).
+  @Delete('ip-quarantine/:address') @HttpCode(204) @Can('catalog.manage')
+  async releaseQuarantine(@Req() req: AuthedRequest, @Param('address') address: string) {
+    const { rowCount } = await guarded(() => pool.query('DELETE FROM ip_quarantine WHERE address = $1::inet', [address]));
+    if (!rowCount) throw apiError(404, 'NOT_FOUND', 'Not in quarantine');
+    await audit(req, 'catalog.ip_quarantine_released', 'success', req.user.id, { address });
+  }
+
+  // Quarantine length, IPv6, DNS servers and excluded addresses; the range itself stays as created.
+  @Put('ip-pools/:id') @Can('catalog.manage')
+  async updateIpPool(@Req() req: AuthedRequest, @Param('id', ParseUUIDPipe) id: string, @Body() body: Input) {
+    const f = new Fields(body);
+    const v = { quarantineHours: f.int('quarantineHours', 0, 8760, 24), ...readIpv6(body, f),
+      dns: Array.isArray(body.dns) ? body.dns.map(String) : [], excluded: Array.isArray(body.excluded) ? body.excluded.map(String) : [] };
+    f.done();
+    const { rowCount } = await guarded(() => pool.query(`UPDATE ip_pools SET quarantine_hours = $2, ipv6_prefix = $3::cidr, ipv6_gateway = $4::inet, dns = $5::inet[], excluded = $6::inet[]
+      WHERE id = $1`, [id, v.quarantineHours, v.ipv6Prefix, v.ipv6Gateway, v.dns, v.excluded]));
+    if (!rowCount) throw apiError(404, 'NOT_FOUND', 'Unknown IP pool');
+    await audit(req, 'catalog.ip_pool_updated', 'success', req.user.id, { id, quarantineHours: v.quarantineHours, ipv6: !!v.ipv6Prefix });
+    return { id };
   }
 
   // IPv4 only for now. Ranges on the same resource-pool network must not overlap.
@@ -286,7 +356,8 @@ export class CatalogAdminController {
     const f = new Fields(body);
     const v = { name: f.text('name'), poolId: f.text('poolId', 36), cidr: f.text('cidr', 43), gateway: f.text('gateway', 39),
       rangeStart: f.text('rangeStart', 39), rangeEnd: f.text('rangeEnd', 39),
-      dns: Array.isArray(body.dns) ? body.dns.map(String) : [], excluded: Array.isArray(body.excluded) ? body.excluded.map(String) : [] };
+      dns: Array.isArray(body.dns) ? body.dns.map(String) : [], excluded: Array.isArray(body.excluded) ? body.excluded.map(String) : [],
+      quarantineHours: f.int('quarantineHours', 0, 8760, 24), ...readIpv6(body, f) };
     f.done();
     const id = await guarded(async () => {
       const client = await pool.connect();
@@ -296,9 +367,9 @@ export class CatalogAdminController {
         const { rows: [overlap] } = await client.query(`SELECT name FROM ip_pools WHERE pool_id = $1 AND range_start <= $3::inet AND range_end >= $2::inet`,
           [v.poolId, v.rangeStart, v.rangeEnd]);
         if (overlap) throw apiError(409, 'VALIDATION_FAILED', 'Overlapping range', { range: 'RANGE_OVERLAPS' }, { overlaps: overlap.name });
-        const { rows: [i] } = await client.query(`INSERT INTO ip_pools (name, pool_id, cidr, gateway, dns, range_start, range_end, excluded)
-          VALUES ($1, $2, $3::cidr, $4::inet, $5::inet[], $6::inet, $7::inet, $8::inet[]) RETURNING id`,
-          [v.name, v.poolId, v.cidr, v.gateway, v.dns, v.rangeStart, v.rangeEnd, v.excluded]);
+        const { rows: [i] } = await client.query(`INSERT INTO ip_pools (name, pool_id, cidr, gateway, dns, range_start, range_end, excluded, quarantine_hours, ipv6_prefix, ipv6_gateway)
+          VALUES ($1, $2, $3::cidr, $4::inet, $5::inet[], $6::inet, $7::inet, $8::inet[], $9, $10::cidr, $11::inet) RETURNING id`,
+          [v.name, v.poolId, v.cidr, v.gateway, v.dns, v.rangeStart, v.rangeEnd, v.excluded, v.quarantineHours, v.ipv6Prefix, v.ipv6Gateway]);
         await client.query('COMMIT');
         return i.id;
       } catch (err) { await client.query('ROLLBACK'); throw err; } finally { client.release(); }
@@ -343,7 +414,7 @@ export class CatalogAdminController {
 }
 
 
-export type Order = { rp: Record<string, unknown>; shape: Shape; price: { monthly: string; currency: string }; packageId: string | null; imageId: string | null };
+export type Order = { rp: Record<string, unknown>; shape: Shape; price: { monthly: string; currency: string }; extraIpv4: number; packageId: string | null; imageId: string | null };
 // Validates the chosen pool, package or custom shape and image, and prices it. Shared by quote and create.
 export async function resolveOrder(poolId: string, body: Input): Promise<Order> {
     const { rows: [rp] } = await pool.query('SELECT * FROM resource_pools WHERE id = $1 AND active', [poolId]).catch(() => ({ rows: [] }));
@@ -374,7 +445,14 @@ export async function resolveOrder(poolId: string, body: Input): Promise<Order> 
       if (!img) throw apiError(400, 'VALIDATION_FAILED', 'Unknown image', { imageId: 'NOT_AVAILABLE' });
       if (shape.diskGb < img.min_disk_gb) throw apiError(400, 'VALIDATION_FAILED', 'Disk too small', { diskGb: 'BELOW_IMAGE_MINIMUM' });
     }
-  return { rp, shape, price, packageId: body.type === 'package' ? String(body.packageId) : null, imageId: body.imageId ? String(body.imageId) : null };
+    // Extra IPv4 addresses, if this location sells them; their price is added to the monthly total.
+    const extraIpv4 = body.extraIpv4 === undefined || body.extraIpv4 === null || body.extraIpv4 === '' ? 0 : Number(body.extraIpv4);
+    if (!Number.isInteger(extraIpv4) || extraIpv4 < 0 || extraIpv4 > Number(rp.extra_ipv4_max)) throw apiError(400, 'VALIDATION_FAILED', 'Not allowed', { extraIpv4: 'OUT_OF_RANGE' });
+    if (extraIpv4) {
+      const { rows: [t] } = await pool.query('SELECT ($1::numeric + $2::int * $3::numeric)::numeric(12,2)::text AS monthly', [price.monthly, extraIpv4, rp.extra_ipv4_price]);
+      price = { ...price, monthly: t.monthly };
+    }
+  return { rp, shape, price, extraIpv4, packageId: body.type === 'package' ? String(body.packageId) : null, imageId: body.imageId ? String(body.imageId) : null };
 }
 
 // Effective limits: project override, else user override, else the default row.
@@ -422,7 +500,9 @@ export class CatalogController {
       pool.query(`SELECT r.id, r.name, r.location, CASE WHEN c.active THEN json_build_object('cpuMin', c.cpu_min, 'cpuMax', c.cpu_max, 'cpuStep', c.cpu_step,
         'memoryMinMb', c.memory_min_mb, 'memoryMaxMb', c.memory_max_mb, 'memoryStepMb', c.memory_step_mb, 'diskMinGb', c.disk_min_gb, 'diskMaxGb', c.disk_max_gb,
         'diskStepGb', c.disk_step_gb, 'minMemoryMbPerVcpu', c.min_memory_mb_per_vcpu, 'maxMemoryMbPerVcpu', c.max_memory_mb_per_vcpu,
-        'priceVcpu', c.price_vcpu::text, 'priceMemoryGb', c.price_memory_gb::text, 'priceDiskGb', c.price_disk_gb::text, 'currency', c.currency) END AS custom
+        'priceVcpu', c.price_vcpu::text, 'priceMemoryGb', c.price_memory_gb::text, 'priceDiskGb', c.price_disk_gb::text, 'currency', c.currency) END AS custom,
+        r.extra_ipv4_max AS "extraIpv4Max", r.extra_ipv4_price::text AS "extraIpv4Price",
+        EXISTS (SELECT 1 FROM ip_pools i WHERE i.pool_id = r.id AND i.ipv6_prefix IS NOT NULL) AS ipv6
         FROM resource_pools r LEFT JOIN custom_rules c ON c.pool_id = r.id WHERE r.active ORDER BY r.name`),
       pool.query('SELECT id, name, family, min_disk_gb AS "minDiskGb" FROM os_images WHERE active ORDER BY name'),
     ]);

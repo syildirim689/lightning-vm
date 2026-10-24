@@ -448,7 +448,7 @@ test.describe('language', () => {
     await signIn(page, admin);
     await expect(page).toHaveURL(/\/admin$/);
     for (const path of ['/admin/servers', '/admin/vmware', '/admin/catalog', '/admin/system', '/admin/users', '/admin/roles', '/admin/settings',
-      '/admin/settings?tab=mail', '/admin/settings?tab=captcha', '/admin/settings?tab=sms', '/admin/settings?tab=payments', '/admin/settings?tab=notifications', '/', '/order', '/firewalls', '/account',
+      '/admin/settings?tab=mail', '/admin/settings?tab=captcha', '/admin/settings?tab=sms', '/admin/settings?tab=payments', '/admin/settings?tab=rdns', '/admin/settings?tab=notifications', '/admin/catalog?tab=ip', '/', '/order', '/firewalls', '/account',
       '/account?tab=security', '/account?tab=notifications']) {
       await page.goto(path);
       await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
@@ -577,11 +577,36 @@ test.describe('people, settings and smart features (English browser)', () => {
     await expect(page.getByText('Provider removed.')).toBeVisible();
   });
 
+  test('IP pools: quarantine and IPv6 are edited, addresses are listed; reverse DNS settings validate', async ({ page }) => {
+    await signInAdmin(page);
+    await page.goto('/admin/catalog?tab=ip');
+    await page.getByRole('button', { name: 'Edit' }).first().click();
+    const dialog = page.getByRole('dialog');
+    await dialog.getByLabel('Quarantine (hours)').fill('12');
+    await dialog.getByLabel('IPv6 prefix').fill('2001:db8:30::/64');
+    await dialog.getByLabel('IPv6 gateway').fill('2001:db8:99::1');
+    await dialog.getByRole('button', { name: 'Save' }).click();
+    await expect(dialog.getByText('The gateway must be inside the IPv6 prefix.')).toBeVisible();
+    await dialog.getByLabel('IPv6 gateway').fill('2001:db8:30::1');
+    await dialog.getByRole('button', { name: 'Save' }).click();
+    await expect(page.getByText('quarantine 12 h').first()).toBeVisible();
+    await expect(page.getByText('2001:db8:30::/64').first()).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Addresses' })).toBeVisible();
+
+    await page.goto('/admin/settings?tab=rdns');
+    await page.getByRole('button', { name: 'Provider' }).click();
+    await page.getByRole('option', { name: /PowerDNS/ }).click();
+    await page.getByLabel('API address').fill('not a url');
+    await page.getByRole('button', { name: 'Save' }).click();
+    await expect(page.getByText('Enter only scheme, host name/IP and optional port.', { exact: false })).toBeVisible();
+    await expect(page.getByText('This field is required.')).toBeVisible();
+  });
+
   test('every page fits a 390 px phone without sideways scrolling', async ({ browser }) => {
     const page = await (await browser.newContext({ locale: 'en-US', viewport: { width: 390, height: 844 } })).newPage();
     await signInAdmin(page);
     await expect(page).toHaveURL(/\/admin$/);
-    for (const path of ['/admin', '/admin/servers', '/admin/vmware', '/admin/catalog', '/admin/users', '/admin/roles', '/admin/settings?tab=mail', '/admin/system', '/', '/order', '/firewalls', '/account?tab=security']) {
+    for (const path of ['/admin', '/admin/servers', '/admin/vmware', '/admin/catalog', '/admin/users', '/admin/roles', '/admin/settings?tab=mail', '/admin/system', '/', '/order', '/firewalls', '/admin/settings?tab=rdns', '/admin/catalog?tab=ip', '/account?tab=security']) {
       await page.goto(path);
       await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
       // On failure the message names the innermost elements sticking out, so a CI run alone is enough to fix it.

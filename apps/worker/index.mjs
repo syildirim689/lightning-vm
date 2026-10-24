@@ -12,7 +12,10 @@ const redis = new Redis({ host: process.env.REDIS_HOST || 'redis', db: Number(pr
 const notifications = new Queue('notifications', { connection: redis });
 const notify = (event, to, data) => notifications.add('notify', { event, to, data: Object.fromEntries(Object.entries(data).map(([k, v]) => [k, String(v ?? '')])) },
   { attempts: 3, backoff: { type: 'exponential', delay: 10_000 }, removeOnComplete: true, removeOnFail: 100 }).catch(() => log('error', 'notify_enqueue_failed', { event }));
-const worker = new Worker('operations', (job) => processOperation(pool, job, log, notify), { connection: redis, concurrency: 4 });
+// Reverse DNS records are written by the API (it holds the DNS settings); a lost job only leaves a PTR to fix by hand.
+const rdnsQueue = new Queue('rdns', { connection: redis });
+const rdns = (data) => rdnsQueue.add('rdns', data, { attempts: 5, backoff: { type: 'exponential', delay: 10_000 }, removeOnComplete: true, removeOnFail: 100 }).catch(() => log('error', 'rdns_enqueue_failed', { action: data.action }));
+const worker = new Worker('operations', (job) => processOperation(pool, job, log, notify, rdns), { connection: redis, concurrency: 4 });
 const operations = new Queue('operations', { connection: redis });
 // Firewall changes are applied one at a time, so an older job can never overwrite newer rules.
 const firewallWorker = new Worker('firewalls', (job) => processFirewall(pool, job, log, notify), { connection: redis.duplicate(), concurrency: 1 });
@@ -93,6 +96,6 @@ async function copyConsoleEvents() {
 }
 copyConsoleEvents();
 
-async function close() { if (closing) return; closing = true; clearInterval(timer); clearInterval(recoveryTimer); clearInterval(reconcileTimer); await worker.close(); await firewallWorker.close(); await firewalls.close(); await maintenance.close(); await operations.close(); events.disconnect(); redis.disconnect(); await pool.end(); }
+async function close() { if (closing) return; closing = true; clearInterval(timer); clearInterval(recoveryTimer); clearInterval(reconcileTimer); await worker.close(); await firewallWorker.close(); await firewalls.close(); await rdnsQueue.close(); await maintenance.close(); await operations.close(); events.disconnect(); redis.disconnect(); await pool.end(); }
 process.on('SIGTERM', close); process.on('SIGINT', close);
 log('info', 'started');

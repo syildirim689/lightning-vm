@@ -555,3 +555,13 @@ yalnızca orada oluşturulan test etiketleri kullanıldı.
 - **Doğrulanmayanlar:**
   - GitHub'dan özel depo ile `--token` ve SSH deploy key ile kurulum;
   - başarısız bir güncellemede otomatik geri dönüş (önceki aşamada komut satırından denenmişti, panel üzerinden denenmedi).
+
+## IP yönetimi ve ters DNS — 2026-10-24
+- Entegrasyon testleri tam paket 69/69 geçti; bunlara gerçek worker, simülatör ve gerçek PowerDNS 4.x ile yapılan IP testi dahil.
+  - Ek IPv4 ve IPv6 içeren siparişin fiyatı doğru hesaplanıyor.
+  - Varsayılan PTR'lar PowerDNS'e yazılıyor; müşterinin ileri doğrulamasız adı reddediliyor; yönetici değiştirebiliyor.
+  - Silmede PTR'lar kaldırılıyor, adresler karantinaya alınıyor ve yeni sipariş karantinadaki adresi almıyor.
+- Birim testleri: ters ad (IPv4 ve IPv6 nibble) ve PTR şablonu.
+- Yeni davranış nedeniyle değiştirilen test: iki adresli test havuzu artık karantinasız (`quarantineHours: 0`).
+  Aksi halde silinen adres 24 saat beklediği için sonraki testler `IP_EXHAUSTED` alıyordu.
+- Gerçek colocation bloğunda ve gerçek bir konuk işletim sisteminde (IPv6 ile ek IPv4 için netplan) denenmedi.

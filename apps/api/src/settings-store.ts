@@ -22,6 +22,10 @@ export type SmsSettings = { provider: string; sender: string; credentialsEnc: st
 export type Channel = 'inApp' | 'push' | 'email' | 'sms';
 export type NotificationPolicy = { enabled: boolean; allowed: Channel[]; defaults: Channel[]; userCanChange: boolean };
 export type CaptchaSettings = { provider: CaptchaProvider; siteKey: string; secretEnc: string | null; minScore: number; use: CaptchaUse };
+// Reverse DNS (rdns.ts): PowerDNS's HTTP API holds the in-addr.arpa / ip6.arpa zones of the routed blocks.
+// template: the default PTR of a new server's addresses ({ip}, {ip-dashed}, {name}); empty = none.
+export type RdnsSettings = { provider: 'none' | 'powerdns'; apiUrl: string; apiKeyEnc: string | null; serverId: string; template: string; ttl: number;
+  customerEdit: boolean; forwardCheck: boolean };
 
 const defaults = {
   branding: { name: 'Lightning VM', accent: null, logo: null, favicon: null } as Branding,
@@ -31,6 +35,7 @@ const defaults = {
   sms: { provider: 'none', sender: '', credentialsEnc: null, commercial: false, use: { twoFactor: true, phoneVerification: true } } as SmsSettings,
   // Per notification event (notify.ts): the admin's policy. Missing events use the catalog defaults.
   notifications: {} as Record<string, NotificationPolicy>,
+  rdns: { provider: 'none', apiUrl: '', apiKeyEnc: null, serverId: 'localhost', template: '', ttl: 3600, customerEdit: true, forwardCheck: true } as RdnsSettings,
   // Web Push (VAPID) keys, generated on first use.
   vapid: { publicKey: '', privateKeyEnc: null } as { publicKey: string; privateKeyEnc: string | null },
 };

@@ -42,7 +42,7 @@ const fingerprint = (blob: string) => 'SHA256:' + createHash('sha256').update(Bu
 
 // Owners see and act on their servers; staff with servers.view_all see all, with servers.manage_all act on all.
 // A server id alone gives no access (404 for others).
-async function findServer(req: AuthedRequest, id: string, manage = false) {
+export async function findServer(req: AuthedRequest, id: string, manage = false) {
   const staff = manage ? can(req.user.permissions, 'servers.manage_all') : can(req.user.permissions, 'servers.view_all') || can(req.user.permissions, 'servers.manage_all');
   const { rows: [s] } = await pool.query(`SELECT * FROM servers WHERE id = $1 AND state <> 'deleted' AND (owner_id = $2 OR $3)`, [id, req.user.id, staff]);
   if (!s) throw apiError(404, 'NOT_FOUND', 'Unknown server');
@@ -70,7 +70,7 @@ const serverColumns = `s.id, s.name, s.state, s.power_state AS "powerState", s.g
   s.firewall_error AS "firewallError", (SELECT count(*)::int FROM firewall_servers fs WHERE fs.server_id = s.id) AS "firewallCount",
   (SELECT row_to_json(o) FROM (SELECT id, kind, status, step, error_code AS "errorCode", created_at AS "createdAt" FROM operations
     WHERE server_id = s.id ORDER BY created_at DESC LIMIT 1) o) AS "lastOperation"`;
-const serverJoins = 'FROM servers s JOIN resource_pools p ON p.id = s.pool_id JOIN os_images i ON i.id = s.image_id LEFT JOIN ip_allocations a ON a.server_id = s.id';
+const serverJoins = "FROM servers s JOIN resource_pools p ON p.id = s.pool_id JOIN os_images i ON i.id = s.image_id LEFT JOIN ip_allocations a ON a.server_id = s.id AND a.kind = 'primary'";
 
 @Controller() @UseGuards(SessionGuard)
 export class ServersController {
@@ -194,16 +194,30 @@ export class ServersController {
       if (order.shape.vcpu > cap.available.vcpu || order.shape.memoryMb > cap.available.memoryMb || order.shape.diskGb > cap.available.storageGb) {
         throw apiError(409, 'CAPACITY_EXHAUSTED', 'Not enough capacity in this location');
       }
-      const { rows: [ip] } = await client.query(`SELECT i.id AS ip_pool_id, host(i.range_start + g) AS address FROM ip_pools i,
-          generate_series(0::bigint, i.range_end - i.range_start) g
-        WHERE i.pool_id = $1 AND (i.range_start + g) <> ALL(i.excluded) AND (i.range_start + g) <> i.gateway
-          AND NOT EXISTS (SELECT 1 FROM ip_allocations a WHERE a.address = i.range_start + g)
-        ORDER BY i.name, g LIMIT 1`, [order.rp.id]);
-      if (!ip) throw apiError(409, 'IP_EXHAUSTED', 'No free IP address in this location');
-      const { rows: [s] } = await client.query(`INSERT INTO servers (owner_id, project_id, pool_id, image_id, package_id, name, vcpu, memory_mb, disk_gb, price_monthly, currency, state, ssh_public_keys)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'provisioning', $12) RETURNING id`,
-        [req.user.id, projectId, order.rp.id, order.imageId, order.packageId, name, order.shape.vcpu, order.shape.memoryMb, order.shape.diskGb, order.price.monthly, order.price.currency, keys.map((k) => k.public_key)]);
-      await client.query('INSERT INTO ip_allocations (ip_pool_id, address, server_id) VALUES ($1, $2, $3)', [ip.ip_pool_id, ip.address, s.id]);
+      // The primary and any extra IPv4 come from one IP pool (one subnet and gateway in the guest), skipping
+      // excluded, gateway, used and quarantined addresses; the first pool (by name) with enough room wins.
+      const wanted = 1 + order.extraIpv4;
+      const { rows: ips } = await client.query(`WITH free AS (
+          SELECT i.id, i.name, i.range_start + g AS a, g FROM ip_pools i, generate_series(0::bigint, i.range_end - i.range_start) g
+          WHERE i.pool_id = $1 AND (i.range_start + g) <> ALL(i.excluded) AND (i.range_start + g) <> i.gateway
+            AND NOT EXISTS (SELECT 1 FROM ip_allocations a WHERE a.address = i.range_start + g)
+            AND NOT EXISTS (SELECT 1 FROM ip_quarantine q WHERE q.address = i.range_start + g AND q.available_at > now())),
+        roomy AS (SELECT id, name FROM free GROUP BY id, name HAVING count(*) >= $2 ORDER BY name LIMIT 1)
+        SELECT f.id AS ip_pool_id, host(f.a) AS address FROM free f JOIN roomy r ON r.id = f.id ORDER BY f.g LIMIT $2`, [order.rp.id, wanted]);
+      if (ips.length < wanted) throw apiError(409, 'IP_EXHAUSTED', 'No free IP address in this location');
+      const { rows: [s] } = await client.query(`INSERT INTO servers (owner_id, project_id, pool_id, image_id, package_id, name, vcpu, memory_mb, disk_gb, price_monthly, currency, state, ssh_public_keys, extra_ipv4)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'provisioning', $12, $13) RETURNING id`,
+        [req.user.id, projectId, order.rp.id, order.imageId, order.packageId, name, order.shape.vcpu, order.shape.memoryMb, order.shape.diskGb, order.price.monthly, order.price.currency, keys.map((k) => k.public_key), order.extraIpv4]);
+      for (const [i, ip] of ips.entries()) {
+        await client.query('INSERT INTO ip_allocations (ip_pool_id, address, server_id, kind) VALUES ($1, $2, $3, $4)', [ip.ip_pool_id, ip.address, s.id, i === 0 ? 'primary' : 'extra']);
+      }
+      // One IPv6 address when that IP pool has a prefix: the lowest free host from ::10 up.
+      const { rows: [v6] } = await client.query(`SELECT host(network(i.ipv6_prefix)::inet + g) AS address FROM ip_pools i, generate_series(16::bigint, 65535) g
+        WHERE i.id = $1 AND i.ipv6_prefix IS NOT NULL
+          AND NOT EXISTS (SELECT 1 FROM ip_allocations a WHERE a.address = network(i.ipv6_prefix)::inet + g)
+          AND NOT EXISTS (SELECT 1 FROM ip_quarantine q WHERE q.address = network(i.ipv6_prefix)::inet + g AND q.available_at > now())
+        ORDER BY g LIMIT 1`, [ips[0].ip_pool_id]);
+      if (v6) await client.query("INSERT INTO ip_allocations (ip_pool_id, address, server_id, kind) VALUES ($1, $2, $3, 'ipv6')", [ips[0].ip_pool_id, v6.address, s.id]);
       if (firewallIds.length) {
         await client.query('INSERT INTO firewall_servers (firewall_id, server_id) SELECT unnest($1::uuid[]), $2', [firewallIds, s.id]);
         await client.query('UPDATE servers SET firewall_version = 1 WHERE id = $1', [s.id]);

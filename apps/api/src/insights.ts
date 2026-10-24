@@ -37,7 +37,8 @@ export async function staffInsights(): Promise<Insight[]> {
 
   const { rows: ips } = await pool.query(`SELECT i.id, i.name, (i.range_end - i.range_start + 1 - (SELECT count(*) FROM unnest(i.excluded) x WHERE x BETWEEN i.range_start AND i.range_end)
       - (CASE WHEN i.gateway BETWEEN i.range_start AND i.range_end THEN 1 ELSE 0 END))::int AS size,
-    (SELECT count(*)::int FROM ip_allocations a WHERE a.ip_pool_id = i.id) AS used FROM ip_pools i`);
+    (SELECT count(*)::int FROM ip_allocations a WHERE a.ip_pool_id = i.id AND family(a.address) = 4)
+      + (SELECT count(*)::int FROM ip_quarantine q WHERE q.ip_pool_id = i.id AND q.available_at > now() AND family(q.address) = 4) AS used FROM ip_pools i`);
   for (const i of ips) {
     const free = i.size - i.used;
     if (free <= 0) add('IP_POOL_EMPTY', 'danger', { pool: i.name }, '/admin/catalog?tab=ip', `ip:${i.id}`);

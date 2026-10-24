@@ -213,7 +213,13 @@
     "MAINTENANCE_AGENT_MISSING": "Sunucuda güncelleme ajanı kurulu değil (sudo sh scripts/install.sh agent on).",
     "MAINTENANCE_BUSY": "Sırada veya çalışan başka bir bakım işi var; bitmesini bekleyin.",
     "E_UPDATE_NO_GIT": "Bu kurulum bir git kopyası değil, kendini güncelleyemez. scripts/get.sh ile yeniden kurun.",
-    "E_UPDATE_FETCH": "Kod deposuna ulaşılamadı (git fetch). Sunucunun internet ve depo erişimini kontrol edin."
+    "E_UPDATE_FETCH": "Kod deposuna ulaşılamadı (git fetch). Sunucunun internet ve depo erişimini kontrol edin.",
+    "RDNS_NOT_CONFIGURED": "Ters DNS ayarlanmamış.",
+    "RDNS_ZONE_NOT_FOUND": "DNS sunucusunda bu adres için ters zone yok.",
+    "RDNS_UNREACHABLE": "DNS sunucusu yanıt vermedi.",
+    "RDNS_AUTH_FAILED": "DNS sunucusu API anahtarını reddetti.",
+    "RDNS_FAILED": "DNS sunucusu değişikliği reddetti.",
+    "RDNS_EDIT_DISABLED": "Burada ters DNS değiştirilemez."
   },
   "Auth": {
     "required": "zorunlu",
@@ -314,7 +320,12 @@
     "TOO_MANY_RULES": "Bir firewall'da en fazla 50 kural olabilir.",
     "FIREWALL_LIMIT": "Sunucu başına en fazla 5 firewall.",
     "INVALID_ENDPOINT": "Herkese açık bir https adresi girin (iç adreslere izin verilmez).",
-    "INVALID_WINDOW": "SS:DD-SS:DD biçiminde girin, örnek 03:00-05:00."
+    "INVALID_WINDOW": "SS:DD-SS:DD biçiminde girin, örnek 03:00-05:00.",
+    "INVALID_PTR_TEMPLATE": "Şablon geçerli bir ana makine adı vermiyor.",
+    "INVALID_HOSTNAME_FQDN": "mail.example.com gibi tam bir ana makine adı girin.",
+    "PTR_FORWARD_MISMATCH": "Bu ad henüz adrese çözülmüyor. Önce A/AAAA kaydını oluşturun.",
+    "INVALID_IPV6_PREFIX": "2001:db8:40::/64 gibi /48 ile /64 arası bir önek girin.",
+    "IPV6_GATEWAY_OUTSIDE": "Ağ geçidi IPv6 önekinin içinde olmalı."
   },
   "Setup": {
     "title": "Kurulum sihirbazı",
@@ -759,7 +770,10 @@
       "plan": "Paket",
       "access": "Ad ve erişim",
       "review": "Onay"
-    }
+    },
+    "extraIpv4": "Ek IPv4 adresi",
+    "extraIpv4Help": "En fazla {max}, adet başı aylık {price}. Sunucuya otomatik yapılandırılır.",
+    "ipv6Included": "Bir IPv6 adresi dahildir ve otomatik yapılandırılır."
   },
   "Catalog": {
     "eyebrow": "YÖNETİM · KATALOG",
@@ -937,6 +951,54 @@
       "dnsServers": "DNS sunucuları",
       "scopeHelp": "Varsayılan herkese uygulanır; kullanıcı seçerseniz yalnızca ona.",
       "limits": "Sınırlar"
+    },
+    "ipm": {
+      "extraTitle": "Satılık ek IPv4 (sunucu başına en fazla {n})",
+      "extraMax": "Sunucu başına ek IPv4",
+      "extraMaxHelp": "0 = burada sunulmaz",
+      "extraPrice": "Adet başı aylık fiyat",
+      "extraPriceHelp": "Paketin veya özel teklifin para biriminde",
+      "save": "Kaydet",
+      "saved": "Kaydedildi.",
+      "cancel": "Vazgeç",
+      "edit": "Düzenle",
+      "editTitle": "{name} IP havuzu",
+      "quarantine": "Karantina",
+      "quarantineHelp": "Silinen sunucunun adresleri bu süre boyunca başka müşteriye verilmez (itibarı hâlâ önceki müşteriye ait olabilir). 0 = karantina yok.",
+      "quarantineHours": "Karantina (saat)",
+      "ipv6Help": "İsteğe bağlı: aynı ağa yönlendirilmiş /48–/64 önek. Her yeni sunucu buradan bir IPv6 adresi alır ve otomatik yapılandırılır.",
+      "ipv6Prefix": "IPv6 öneki",
+      "ipv6Gateway": "IPv6 ağ geçidi",
+      "other": "DNS ve hariç tutulanlar",
+      "dns": "DNS sunucuları",
+      "listHelp": "Virgül veya boşlukla ayırın",
+      "excluded": "Hariç tutulan adresler",
+      "excludedHelp": "Hiç verilmez (router'lar, kendi makineleriniz, müşteriye ayrılanlar)",
+      "addresses": "Adresler",
+      "addressesHelp": "Boş olmayan her adres: kullanımda (sunucu, sahibi ve ters DNS ile), karantinada veya hariç tutulmuş.",
+      "search": "Ara",
+      "pool": "IP havuzu",
+      "state": "Durum",
+      "all": "Tümü",
+      "states": {
+        "used": "Kullanımda",
+        "quarantine": "Karantinada",
+        "excluded": "Hariç"
+      },
+      "kinds": {
+        "extra": "Ek",
+        "ipv6": "IPv6"
+      },
+      "none": "Burada bir şey yok.",
+      "server": "Sunucu",
+      "when": "Başlangıç / bitiş",
+      "until": "{time} serbest",
+      "release": "Şimdi serbest bırak",
+      "released": "Adres karantinadan çıkarıldı.",
+      "usage": "Kullanım",
+      "usageOf": "{size} adresin {used} tanesi kullanımda",
+      "inQuarantine": "{n} adres karantinada",
+      "quarantineFor": "karantina {h} saat"
     }
   },
   "Servers": {
@@ -1065,6 +1127,24 @@
       "vm_missing": "VM VMware'de yok",
       "orphan_vm": "Kaydı olmayan platform VM'si",
       "power_drift": "Güç durumu farklı"
+    },
+    "ips": {
+      "title": "IP adresleri",
+      "help": "Her adres için ters DNS (PTR) ayarlanabilir.",
+      "helpForward": "Her adres için ters DNS (PTR) ayarlanabilir. Ad önce adrese çözülmelidir (A veya AAAA kaydı).",
+      "helpLocked": "Ters DNS sağlayıcınız tarafından yönetiliyor.",
+      "helpNoRdns": "Bu sunucunun adresleri.",
+      "kind": {
+        "primary": "Birincil",
+        "extra": "Ek",
+        "ipv6": "IPv6"
+      },
+      "ptr": "Ters DNS adı",
+      "save": "Kaydet",
+      "reset": "Varsayılan",
+      "cancel": "Vazgeç",
+      "edit": "PTR düzenle",
+      "saved": "Ters DNS güncellendi."
     }
   },
   "Maintenance": {
@@ -1769,7 +1849,8 @@
       "captcha": "Bot koruması",
       "sms": "SMS",
       "notifications": "Bildirim kuralları",
-      "payments": "Ödeme"
+      "payments": "Ödeme",
+      "rdns": "Ters DNS"
     },
     "saved": "Kaydedildi.",
     "save": "Kaydet",
@@ -2090,6 +2171,39 @@
         "SAME_HOST_FOR_TEST": "Test ve canlı aynı adresi kullanır; test modu bilgilerle veya bir test bayrağıyla seçilir."
       },
       "saveFirst": "Kaydedin, test edin, sonra etkinleştirin."
+    },
+    "rdns": {
+      "loading": "Yükleniyor…",
+      "saved": "Kaydedildi.",
+      "providerTitle": "DNS sunucusu",
+      "providerHelp": "IP bloklarınızın ters zone'larını (in-addr.arpa, ip6.arpa) tutan PowerDNS sunucusu. Panel PTR kayıtlarını HTTP API'si üzerinden yazar.",
+      "provider": "Sağlayıcı",
+      "providers": {
+        "none": "Kapalı (ters DNS yok)",
+        "powerdns": "PowerDNS-Admin kurulumları da: panel doğrudan PowerDNS ile konuşur."
+      },
+      "apiUrl": "API adresi",
+      "apiUrlHelp": "PowerDNS web sunucusu, örneğin http://10.0.0.53:8081 (api=yes; webserver-allow-from bu sunucuyu içermeli)",
+      "apiKey": "API anahtarı",
+      "secretSet": "Kayıtlı, değiştirmek için yazın",
+      "serverId": "Sunucu kimliği",
+      "serverIdHelp": "Neredeyse her zaman localhost",
+      "ttlHelp": "Kayıtların önbellekte tutulabileceği süre (saniye)",
+      "defaultsTitle": "Varsayılanlar ve müşteriler",
+      "defaultsHelp": "Yeni sunucuların tüm adresleri bu PTR'ı alır. Sunucu silinince kayıtları kaldırılır.",
+      "template": "Varsayılan PTR",
+      "templateHelp": "Değişkenler: '{ip}', '{ip-dashed}', '{name}'. Boş: yeni sunuculara PTR yazılmaz.",
+      "preview": "Örnek: {ptr}",
+      "customerEdit": "Müşteriler kendi adreslerinin PTR'ını değiştirebilir",
+      "forwardCheck": "Yalnızca adrese geri çözülen adlar (ileri doğrulamalı)",
+      "forwardHelp": "İleri doğrulama, müşterinin kontrol etmediği bir alan adını adrese vermesini engeller. Yöneticiler kontrol edilmez.",
+      "resultTitle": "Bağlantı testi",
+      "resultHelp": "PowerDNS {version} yanıt verdi. Bulunan ters zone'lar:",
+      "noZones": "Bu sunucuda ters zone yok. Önce bloklarınızın zone'larını oluşturun (örneğin 113.0.203.in-addr.arpa).",
+      "covered": "zone var",
+      "missing": "zone yok",
+      "test": "Bağlantıyı test et",
+      "save": "Kaydet"
     }
   },
   "Firewalls": {

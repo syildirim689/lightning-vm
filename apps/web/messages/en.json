@@ -213,7 +213,13 @@
     "MAINTENANCE_AGENT_MISSING": "The update agent is not installed on the server (sudo sh scripts/install.sh agent on).",
     "MAINTENANCE_BUSY": "Another maintenance task is queued or running; wait for it to finish.",
     "E_UPDATE_NO_GIT": "This installation is not a git checkout, so it cannot update itself. Reinstall with scripts/get.sh.",
-    "E_UPDATE_FETCH": "Could not reach the code repository (git fetch). Check the server’s internet access and repository access."
+    "E_UPDATE_FETCH": "Could not reach the code repository (git fetch). Check the server’s internet access and repository access.",
+    "RDNS_NOT_CONFIGURED": "Reverse DNS is not set up.",
+    "RDNS_ZONE_NOT_FOUND": "The DNS server has no reverse zone for this address.",
+    "RDNS_UNREACHABLE": "The DNS server did not answer.",
+    "RDNS_AUTH_FAILED": "The DNS server refused the API key.",
+    "RDNS_FAILED": "The DNS server refused the change.",
+    "RDNS_EDIT_DISABLED": "Changing reverse DNS is not allowed here."
   },
   "Auth": {
     "required": "required",
@@ -314,7 +320,12 @@
     "TOO_MANY_RULES": "At most 50 rules per firewall.",
     "FIREWALL_LIMIT": "At most 5 firewalls per server.",
     "INVALID_ENDPOINT": "Enter a public https address (internal addresses are not allowed).",
-    "INVALID_WINDOW": "Use HH:MM-HH:MM, for example 03:00-05:00."
+    "INVALID_WINDOW": "Use HH:MM-HH:MM, for example 03:00-05:00.",
+    "INVALID_PTR_TEMPLATE": "The template does not give a valid host name.",
+    "INVALID_HOSTNAME_FQDN": "Enter a full host name such as mail.example.com.",
+    "PTR_FORWARD_MISMATCH": "This name does not resolve to the address yet. Create its A/AAAA record first.",
+    "INVALID_IPV6_PREFIX": "Enter a prefix from /48 to /64, such as 2001:db8:40::/64.",
+    "IPV6_GATEWAY_OUTSIDE": "The gateway must be inside the IPv6 prefix."
   },
   "Setup": {
     "title": "Setup wizard",
@@ -759,7 +770,10 @@
       "plan": "Plan",
       "access": "Name and access",
       "review": "Confirm"
-    }
+    },
+    "extraIpv4": "Extra IPv4 addresses",
+    "extraIpv4Help": "Up to {max}, {price} a month each. Configured on the server automatically.",
+    "ipv6Included": "An IPv6 address is included and configured automatically."
   },
   "Catalog": {
     "eyebrow": "ADMIN · CATALOG",
@@ -937,6 +951,54 @@
       "dnsServers": "DNS servers",
       "scopeHelp": "The default applies to everyone; pick a user to set theirs.",
       "limits": "Limits"
+    },
+    "ipm": {
+      "extraTitle": "Extra IPv4 for sale (up to {n} per server)",
+      "extraMax": "Extra IPv4 per server",
+      "extraMaxHelp": "0 = not offered here",
+      "extraPrice": "Monthly price each",
+      "extraPriceHelp": "In the currency of the package or custom offer",
+      "save": "Save",
+      "saved": "Saved.",
+      "cancel": "Cancel",
+      "edit": "Edit",
+      "editTitle": "IP pool {name}",
+      "quarantine": "Quarantine",
+      "quarantineHelp": "A deleted server’s addresses wait this long before another customer gets them (their reputation may still be the previous customer’s). 0 = no quarantine.",
+      "quarantineHours": "Quarantine (hours)",
+      "ipv6Help": "Optional: a /48–/64 prefix routed to the same network. Every new server gets one IPv6 address from it, configured automatically.",
+      "ipv6Prefix": "IPv6 prefix",
+      "ipv6Gateway": "IPv6 gateway",
+      "other": "DNS and exclusions",
+      "dns": "DNS servers",
+      "listHelp": "Separated by commas or spaces",
+      "excluded": "Excluded addresses",
+      "excludedHelp": "Never handed out (routers, your own machines, reserved for customers)",
+      "addresses": "Addresses",
+      "addressesHelp": "Every address that is not simply free: in use (with the server, its owner and reverse DNS), in quarantine, or excluded.",
+      "search": "Search",
+      "pool": "IP pool",
+      "state": "State",
+      "all": "All",
+      "states": {
+        "used": "In use",
+        "quarantine": "Quarantine",
+        "excluded": "Excluded"
+      },
+      "kinds": {
+        "extra": "Extra",
+        "ipv6": "IPv6"
+      },
+      "none": "Nothing here.",
+      "server": "Server",
+      "when": "Since / until",
+      "until": "free on {time}",
+      "release": "Release now",
+      "released": "Address released from quarantine.",
+      "usage": "Usage",
+      "usageOf": "{used} of {size} in use",
+      "inQuarantine": "{n} in quarantine",
+      "quarantineFor": "quarantine {h} h"
     }
   },
   "Servers": {
@@ -1065,6 +1127,24 @@
       "vm_missing": "VM missing in VMware",
       "orphan_vm": "Platform VM without a record",
       "power_drift": "Power state differs"
+    },
+    "ips": {
+      "title": "IP addresses",
+      "help": "Reverse DNS (PTR) can be set for each address.",
+      "helpForward": "Reverse DNS (PTR) can be set for each address. The name must resolve to the address first (A or AAAA record).",
+      "helpLocked": "Reverse DNS is managed by your provider.",
+      "helpNoRdns": "Addresses of this server.",
+      "kind": {
+        "primary": "Primary",
+        "extra": "Extra",
+        "ipv6": "IPv6"
+      },
+      "ptr": "Reverse DNS name",
+      "save": "Save",
+      "reset": "Default",
+      "cancel": "Cancel",
+      "edit": "Edit PTR",
+      "saved": "Reverse DNS updated."
     }
   },
   "Maintenance": {
@@ -1769,7 +1849,8 @@
       "captcha": "Bot protection",
       "sms": "SMS",
       "notifications": "Notification rules",
-      "payments": "Payments"
+      "payments": "Payments",
+      "rdns": "Reverse DNS"
     },
     "saved": "Saved.",
     "save": "Save",
@@ -2090,6 +2171,39 @@
         "SAME_HOST_FOR_TEST": "Test and live use the same address; test mode is chosen by the credentials or a test flag."
       },
       "saveFirst": "Save, check, then activate."
+    },
+    "rdns": {
+      "loading": "Loading…",
+      "saved": "Saved.",
+      "providerTitle": "DNS server",
+      "providerHelp": "The PowerDNS server that holds the reverse zones (in-addr.arpa, ip6.arpa) of your IP blocks. The panel writes PTR records through its HTTP API.",
+      "provider": "Provider",
+      "providers": {
+        "none": "Off (no reverse DNS)",
+        "powerdns": "Also PowerDNS-Admin setups: the panel talks to PowerDNS directly."
+      },
+      "apiUrl": "API address",
+      "apiUrlHelp": "The PowerDNS webserver, for example http://10.0.0.53:8081 (api=yes, webserver-allow-from must include this server)",
+      "apiKey": "API key",
+      "secretSet": "Saved, type to replace",
+      "serverId": "Server id",
+      "serverIdHelp": "Almost always localhost",
+      "ttlHelp": "Seconds the records may be cached",
+      "defaultsTitle": "Defaults and customers",
+      "defaultsHelp": "New servers get this PTR on all their addresses. Deleting a server removes its records.",
+      "template": "Default PTR",
+      "templateHelp": "Variables: '{ip}', '{ip-dashed}', '{name}'. Empty: new servers get no PTR.",
+      "preview": "Example: {ptr}",
+      "customerEdit": "Customers may change the PTR of their addresses",
+      "forwardCheck": "Only names that resolve back to the address (forward-confirmed)",
+      "forwardHelp": "The forward check stops customers from naming an address after a domain they do not control. Staff are not checked.",
+      "resultTitle": "Connection test",
+      "resultHelp": "PowerDNS {version} answered. Reverse zones found:",
+      "noZones": "No reverse zones on this server. Create the zones of your blocks first (for example 113.0.203.in-addr.arpa).",
+      "covered": "zone found",
+      "missing": "no zone",
+      "test": "Test the connection",
+      "save": "Save"
     }
   },
   "Firewalls": {

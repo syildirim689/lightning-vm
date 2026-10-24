@@ -9,15 +9,17 @@ import { CheckboxList, ConfirmButton, DataTable, Empty, FieldGroup, Mono, Notice
 import { apiFetch } from '../../../../lib/api';
 import { useApiForm } from '../../../../lib/form';
 import { useApiAction, useApiQuery } from '../../../../lib/query';
+import { IpAddresses, IpPoolEdit, PoolIpOptions, type IpPoolRow } from './ip-ui';
 
 type Inventory = { compute: { moref: string; name: string; kind: string }[]; datastores: { moref: string; name: string }[]; networks: { moref: string; name: string; vlan: number | null }[]; vms: { moref: string; name: string; template: boolean }[] };
 type Connection = { id: string; name: string };
 type Layer = Record<string, number>;
 type Capacity = { physical: Layer; headroom: Layer; offered: Layer; used: Layer; reserved: Layer; available: Layer; realFreeGb: number; warnings: string[] };
-type Pool = { id: string; name: string; location: string; connectionName: string; cpuOvercommit: number; memoryOvercommit: number; storageOvercommit: number; capacity: Capacity; customRule: Record<string, unknown> | null };
+type Pool = { id: string; name: string; location: string; connectionName: string; cpuOvercommit: number; memoryOvercommit: number; storageOvercommit: number; capacity: Capacity; customRule: Record<string, unknown> | null;
+  extraIpv4Max: number; extraIpv4Price: string };
 type Pkg = { id: string; name: string; vcpu: number; memoryMb: number; diskGb: number; priceMonthly: string; currency: string; poolIds: string[] };
 type Image = { id: string; name: string; family: string; templateName: string | null; minDiskGb: number };
-type IpPool = { id: string; name: string; poolName: string; cidr: string; gateway: string; rangeStart: string; rangeEnd: string; size: number };
+type IpPool = IpPoolRow;
 type Quota = { scope: string; email: string | null; maxServers: number | null; maxVcpu: number | null; maxMemoryMb: number | null; maxDiskGb: number | null };
 
 const keys = { pools: ['catalog', 'pools'], packages: ['catalog', 'packages'], images: ['catalog', 'images'], ip: ['catalog', 'ip'], quotas: ['catalog', 'quotas'] };
@@ -100,8 +102,13 @@ export default function Catalog() {
           {pools.length > 0 && <FormModal title={t('ip.new')} label={t('ip.new')}>{(close) => <IpPoolForm pools={pools} onSaved={close}/>}</FormModal>}
         </div>
         <DataTable label={t('ip.title')} rows={ipPools} rowKey={(i) => i.id} empty={t('ip.empty')} minWidth={760}
-          columns={[{ id: 'name', label: t('col.name') }, { id: 'pool', label: t('ip.pool') }, { id: 'cidr', label: t('ip.subnet') }, { id: 'gw', label: t('ip.gateway') }, { id: 'range', label: t('ip.range') }, { id: 'size', label: t('ip.size') }, { id: 'act', label: <span className="sr-only">{t('remove')}</span> }]}
-          cells={(i) => [<span key="n" className="font-medium">{i.name}</span>, i.poolName, <Mono key="c">{i.cidr}</Mono>, <Mono key="g">{i.gateway}</Mono>, <Mono key="r">{i.rangeStart} – {i.rangeEnd}</Mono>, i.size, removeButton(`/admin/ip-pools/${i.id}`, i.name)]}/>
+          columns={[{ id: 'name', label: t('col.name') }, { id: 'pool', label: t('ip.pool') }, { id: 'cidr', label: t('ip.subnet') }, { id: 'gw', label: t('ip.gateway') }, { id: 'range', label: t('ip.range') },
+            { id: 'size', label: t('ipm.usage') }, { id: 'v6', label: 'IPv6' }, { id: 'act', label: <span className="sr-only">{t('remove')}</span> }]}
+          cells={(i) => [<span key="n" className="font-medium">{i.name}</span>, i.poolName, <Mono key="c">{i.cidr}</Mono>, <Mono key="g">{i.gateway}</Mono>, <Mono key="r">{i.rangeStart} – {i.rangeEnd}</Mono>,
+            <span key="u" className="flex flex-col text-sm"><span className="tabular-nums">{t('ipm.usageOf', { used: i.used, size: i.size })}</span>{i.quarantined > 0 && <span className="text-xs text-warning">{t('ipm.inQuarantine', { n: i.quarantined })}</span>}<span className="text-xs text-muted">{t('ipm.quarantineFor', { h: i.quarantineHours })}</span></span>,
+            i.ipv6Prefix ? <Mono key="v6">{i.ipv6Prefix}</Mono> : '–',
+            <span key="a" className="flex gap-1"><IpPoolEdit ipPool={i}/>{removeButton(`/admin/ip-pools/${i.id}`, i.name)}</span>]}/>
+        <IpAddresses ipPools={ipPools}/>
       </Tabs.Panel>
 
       <Tabs.Panel id="quotas" className="flex flex-col gap-4 pt-5">
@@ -153,6 +160,10 @@ function PoolCard({ pool, removeButton }: { pool: Pool; removeButton: React.Reac
       <Disclosure>
         <Disclosure.Heading><Disclosure.Trigger className="flex items-center gap-2 text-sm font-medium text-accent">{pool.customRule ? t('rule.edit') : t('rule.add')}<Disclosure.Indicator/></Disclosure.Trigger></Disclosure.Heading>
         <Disclosure.Content><Disclosure.Body className="pt-3"><RuleForm poolId={pool.id} rule={pool.customRule}/></Disclosure.Body></Disclosure.Content>
+      </Disclosure>
+      <Disclosure>
+        <Disclosure.Heading><Disclosure.Trigger className="flex items-center gap-2 text-sm font-medium text-accent">{t('ipm.extraTitle', { n: pool.extraIpv4Max })}<Disclosure.Indicator/></Disclosure.Trigger></Disclosure.Heading>
+        <Disclosure.Content><Disclosure.Body className="pt-3"><PoolIpOptions pool={pool}/></Disclosure.Body></Disclosure.Content>
       </Disclosure>
     </Card.Content>
   </Card>;
@@ -320,7 +331,7 @@ function cidrSuggest(cidr: string) {
 function IpPoolForm({ pools, onSaved }: { pools: Pool[]; onSaved: () => void }) {
   const t = useTranslations('Catalog');
   const saved = useSaved(onSaved);
-  const f = useApiForm({ name: '', poolId: pools[0].id, cidr: '', gateway: '', rangeStart: '', rangeEnd: '', dns: '1.1.1.1, 8.8.8.8', excluded: '' });
+  const f = useApiForm({ name: '', poolId: pools[0].id, cidr: '', gateway: '', rangeStart: '', rangeEnd: '', dns: '1.1.1.1, 8.8.8.8', excluded: '', quarantineHours: '24', ipv6Prefix: '', ipv6Gateway: '' });
   const list = (s: string) => s.split(/[\s,]+/).filter(Boolean);
   const hint = cidrSuggest(f.values.cidr);
   const fill = () => hint && f.setValues((v) => ({ ...v, gateway: hint.gateway, rangeStart: hint.start, rangeEnd: hint.end }));
@@ -342,6 +353,13 @@ function IpPoolForm({ pools, onSaved }: { pools: Pool[]; onSaved: () => void }) 
       <TextInput className="sm:col-span-2" label={t('ip.excluded')} help={t('ip.listHelp')} value={f.values.excluded} onChange={f.set('excluded')} spellCheck={false}/>
     </FieldGroup>
     <FieldGroup title="DNS" cols={1}><TextInput label={t('form.dnsServers')} help={t('ip.listHelp')} value={f.values.dns} onChange={f.set('dns')} spellCheck={false}/></FieldGroup>
+    <FieldGroup title={t('ipm.quarantine')} description={t('ipm.quarantineHelp')} cols={1}>
+      <NumberInput label={t('ipm.quarantineHours')} value={num(f.values.quarantineHours)} onChange={(v) => f.set('quarantineHours')(str(v))} minValue={0} maxValue={8760} error={f.fieldError('quarantineHours')}/>
+    </FieldGroup>
+    <FieldGroup title="IPv6" description={t('ipm.ipv6Help')}>
+      <TextInput label={t('ipm.ipv6Prefix')} value={f.values.ipv6Prefix} onChange={f.set('ipv6Prefix')} placeholder="2001:db8:40::/64" error={f.fieldError('ipv6Prefix')} spellCheck={false}/>
+      <TextInput label={t('ipm.ipv6Gateway')} value={f.values.ipv6Gateway} onChange={f.set('ipv6Gateway')} placeholder="2001:db8:40::1" error={f.fieldError('ipv6Gateway')} spellCheck={false}/>
+    </FieldGroup>
     <FormFooter failure={f.failure?.text} busy={f.busy} label={t('ip.create')} onCancel={onSaved}/>
   </form>;
 }
