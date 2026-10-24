@@ -154,6 +154,8 @@ func classify(err error) *Failure {
 		return &Failure{Code: "TIMEOUT", Message: "timed out"}
 	case fault.Is(err, &types.InvalidLogin{}):
 		return &Failure{Code: "INVALID_LOGIN", Message: "user name or password rejected"}
+	case fault.Is(err, &types.ManagedObjectNotFound{}):
+		return &Failure{Code: "VM_NOT_FOUND", Message: "virtual machine not found"}
 	case fault.Is(err, &types.NoPermission{}):
 		return &Failure{Code: "PERMISSION_DENIED", Message: "the account lacks a required privilege"}
 	}

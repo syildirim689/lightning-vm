@@ -59,20 +59,30 @@ async function guarded<T>(work: () => Promise<T>): Promise<T> {
   }
 }
 
-// Reservations arrive with provisioning; until then nothing is reserved and nothing is in use.
-async function reservedFor(_poolId: string) { return { vcpu: 0, memoryMb: 0, diskGb: 0 }; }
-async function usageOf(_userId: string, _projectId?: string) { return { servers: 0, vcpu: 0, memoryMb: 0, diskGb: 0 }; }
+type Db = PoolClient | typeof pool;
+// Live (not deleted) servers are the pool's reserved capacity and the owner's quota usage.
+export async function reservedFor(poolId: string, db: Db = pool) {
+  const { rows: [r] } = await db.query(`SELECT COALESCE(sum(vcpu), 0)::int AS vcpu, COALESCE(sum(memory_mb), 0)::int AS "memoryMb", COALESCE(sum(disk_gb), 0)::int AS "diskGb"
+    FROM servers WHERE pool_id = $1 AND state <> 'deleted'`, [poolId]);
+  return r as { vcpu: number; memoryMb: number; diskGb: number };
+}
+export async function usageOf(userId: string, projectId?: string, db: Db = pool) {
+  const { rows: [u] } = await db.query(`SELECT count(*)::int AS servers, COALESCE(sum(vcpu), 0)::int AS vcpu, COALESCE(sum(memory_mb), 0)::int AS "memoryMb",
+    COALESCE(sum(disk_gb), 0)::int AS "diskGb" FROM servers WHERE state <> 'deleted' AND (CASE WHEN $2::uuid IS NULL THEN owner_id = $1 ELSE project_id = $2 END)`, [userId, projectId ?? null]);
+  return u as { servers: number; vcpu: number; memoryMb: number; diskGb: number };
+}
 
-async function capacityOf(p: Record<string, unknown>) {
+export async function capacityOf(p: Record<string, unknown>, db: Db = pool) {
   const [hosts, datastores, vms] = await Promise.all([
-    pool.query('SELECT cpu_cores, memory_bytes, moref FROM vmware_hosts WHERE connection_id = $1 AND parent = $2', [p.connection_id, p.compute_moref]),
-    pool.query('SELECT capacity_bytes, free_bytes, uncommitted_bytes FROM vmware_datastores WHERE connection_id = $1 AND moref = ANY($2)', [p.connection_id, p.datastore_morefs]),
-    pool.query(`SELECT v.cpu, v.memory_mb, v.committed_bytes, v.template FROM vmware_vms v
-      JOIN vmware_hosts h ON h.connection_id = v.connection_id AND h.moref = v.host_moref WHERE v.connection_id = $1 AND h.parent = $2`, [p.connection_id, p.compute_moref]),
+    db.query('SELECT cpu_cores, memory_bytes, moref FROM vmware_hosts WHERE connection_id = $1 AND parent = $2', [p.connection_id, p.compute_moref]),
+    db.query('SELECT capacity_bytes, free_bytes, uncommitted_bytes FROM vmware_datastores WHERE connection_id = $1 AND moref = ANY($2)', [p.connection_id, p.datastore_morefs]),
+    // The platform's own VMs (lvm-*) are counted as reserved below, not again as foreign use.
+    db.query(`SELECT v.cpu, v.memory_mb, v.committed_bytes, v.template FROM vmware_vms v
+      JOIN vmware_hosts h ON h.connection_id = v.connection_id AND h.moref = v.host_moref WHERE v.connection_id = $1 AND h.parent = $2 AND v.name NOT LIKE 'lvm-%'`, [p.connection_id, p.compute_moref]),
   ]);
   const settings = { cpu_overcommit: Number(p.cpu_overcommit), memory_overcommit: Number(p.memory_overcommit), storage_overcommit: Number(p.storage_overcommit),
     reserve_cpu_pct: Number(p.reserve_cpu_pct), reserve_memory_pct: Number(p.reserve_memory_pct), reserve_storage_pct: Number(p.reserve_storage_pct) };
-  return poolCapacity(settings, hosts.rows, datastores.rows, vms.rows, await reservedFor(String(p.id)));
+  return poolCapacity(settings, hosts.rows, datastores.rows, vms.rows, await reservedFor(String(p.id), db));
 }
 
 async function readPool(body: Input, client: PoolClient | typeof pool = pool) {
@@ -331,9 +341,44 @@ export class CatalogAdminController {
   }
 }
 
+
+export type Order = { rp: Record<string, unknown>; shape: Shape; price: { monthly: string; currency: string }; packageId: string | null; imageId: string | null };
+// Validates the chosen pool, package or custom shape and image, and prices it. Shared by quote and create.
+export async function resolveOrder(poolId: string, body: Input): Promise<Order> {
+    const { rows: [rp] } = await pool.query('SELECT * FROM resource_pools WHERE id = $1 AND active', [poolId]).catch(() => ({ rows: [] }));
+    if (!rp) throw apiError(400, 'VALIDATION_FAILED', 'Unknown pool', { poolId: 'NOT_AVAILABLE' });
+
+    let shape: Shape; let price: { monthly: string; currency: string };
+    if (body.type === 'package') {
+      const { rows: [p] } = await pool.query(`SELECT p.vcpu, p.memory_mb, p.disk_gb, p.price_monthly::text, p.currency FROM packages p
+        JOIN package_pools pp ON pp.package_id = p.id AND pp.pool_id = $2 WHERE p.id = $1 AND p.active`, [body.packageId, poolId]).catch(() => ({ rows: [] }));
+      if (!p) throw apiError(400, 'VALIDATION_FAILED', 'Package not offered here', { packageId: 'NOT_AVAILABLE' });
+      shape = { vcpu: p.vcpu, memoryMb: p.memory_mb, diskGb: p.disk_gb };
+      price = { monthly: p.price_monthly, currency: p.currency };
+    } else if (body.type === 'custom') {
+      const { rows: [rule] } = await pool.query('SELECT * FROM custom_rules WHERE pool_id = $1 AND active', [poolId]);
+      if (!rule) throw apiError(400, 'VALIDATION_FAILED', 'No custom offering', { poolId: 'NO_CUSTOM_OFFERING' });
+      shape = { vcpu: Number(body.vcpu), memoryMb: Number(body.memoryMb), diskGb: Number(body.diskGb) };
+      const fields = checkCustom(rule, shape);
+      if (Object.keys(fields).length) throw apiError(400, 'VALIDATION_FAILED', 'Not allowed', fields);
+      // Priced in PostgreSQL numeric: no binary floating point in money.
+      const { rows: [q] } = await pool.query('SELECT ($1::int * price_vcpu + $2::numeric / 1024 * price_memory_gb + $3::int * price_disk_gb)::numeric(12,2)::text AS monthly FROM custom_rules WHERE pool_id = $4',
+        [shape.vcpu, shape.memoryMb, shape.diskGb, poolId]);
+      price = { monthly: q.monthly, currency: rule.currency };
+    } else {
+      throw apiError(400, 'VALIDATION_FAILED', 'Invalid input', { type: 'INVALID_VALUE' });
+    }
+    if (body.imageId !== undefined && body.imageId !== null) {
+      const { rows: [img] } = await pool.query('SELECT min_disk_gb FROM os_images WHERE id = $1 AND active', [body.imageId]).catch(() => ({ rows: [] }));
+      if (!img) throw apiError(400, 'VALIDATION_FAILED', 'Unknown image', { imageId: 'NOT_AVAILABLE' });
+      if (shape.diskGb < img.min_disk_gb) throw apiError(400, 'VALIDATION_FAILED', 'Disk too small', { diskGb: 'BELOW_IMAGE_MINIMUM' });
+    }
+  return { rp, shape, price, packageId: body.type === 'package' ? String(body.packageId) : null, imageId: body.imageId ? String(body.imageId) : null };
+}
+
 // Effective limits: project override, else user override, else the default row.
-async function limitsFor(userId: string, projectId?: string): Promise<Limits> {
-  const { rows } = await pool.query(`SELECT scope, max_servers, max_vcpu, max_memory_mb, max_disk_gb FROM quotas
+export async function limitsFor(userId: string, projectId?: string, db: Db = pool): Promise<Limits> {
+  const { rows } = await db.query(`SELECT scope, max_servers, max_vcpu, max_memory_mb, max_disk_gb FROM quotas
     WHERE scope = 'default' OR (scope = 'user' AND subject_id = $1) OR (scope = 'project' AND subject_id = $2)`, [userId, projectId ?? null]);
   return rows.find((r) => r.scope === 'project') ?? rows.find((r) => r.scope === 'user') ?? rows.find((r) => r.scope === 'default');
 }
@@ -394,34 +439,7 @@ export class CatalogController {
       const { rowCount } = await pool.query('SELECT 1 FROM projects WHERE id = $1 AND owner_id = $2', [projectId, req.user.id]).catch(() => ({ rowCount: 0 }));
       if (!rowCount) throw apiError(404, 'NOT_FOUND', 'Unknown project');
     }
-    const { rows: [rp] } = await pool.query('SELECT * FROM resource_pools WHERE id = $1 AND active', [poolId]).catch(() => ({ rows: [] }));
-    if (!rp) throw apiError(400, 'VALIDATION_FAILED', 'Unknown pool', { poolId: 'NOT_AVAILABLE' });
-
-    let shape: Shape; let price: { monthly: string; currency: string };
-    if (body.type === 'package') {
-      const { rows: [p] } = await pool.query(`SELECT p.vcpu, p.memory_mb, p.disk_gb, p.price_monthly::text, p.currency FROM packages p
-        JOIN package_pools pp ON pp.package_id = p.id AND pp.pool_id = $2 WHERE p.id = $1 AND p.active`, [body.packageId, poolId]).catch(() => ({ rows: [] }));
-      if (!p) throw apiError(400, 'VALIDATION_FAILED', 'Package not offered here', { packageId: 'NOT_AVAILABLE' });
-      shape = { vcpu: p.vcpu, memoryMb: p.memory_mb, diskGb: p.disk_gb };
-      price = { monthly: p.price_monthly, currency: p.currency };
-    } else if (body.type === 'custom') {
-      const { rows: [rule] } = await pool.query('SELECT * FROM custom_rules WHERE pool_id = $1 AND active', [poolId]);
-      if (!rule) throw apiError(400, 'VALIDATION_FAILED', 'No custom offering', { poolId: 'NO_CUSTOM_OFFERING' });
-      shape = { vcpu: Number(body.vcpu), memoryMb: Number(body.memoryMb), diskGb: Number(body.diskGb) };
-      const fields = checkCustom(rule, shape);
-      if (Object.keys(fields).length) throw apiError(400, 'VALIDATION_FAILED', 'Not allowed', fields);
-      // Priced in PostgreSQL numeric: no binary floating point in money.
-      const { rows: [q] } = await pool.query('SELECT ($1::int * price_vcpu + $2::numeric / 1024 * price_memory_gb + $3::int * price_disk_gb)::numeric(12,2)::text AS monthly FROM custom_rules WHERE pool_id = $4',
-        [shape.vcpu, shape.memoryMb, shape.diskGb, poolId]);
-      price = { monthly: q.monthly, currency: rule.currency };
-    } else {
-      throw apiError(400, 'VALIDATION_FAILED', 'Invalid input', { type: 'INVALID_VALUE' });
-    }
-    if (body.imageId !== undefined) {
-      const { rows: [img] } = await pool.query('SELECT min_disk_gb FROM os_images WHERE id = $1 AND active', [body.imageId]).catch(() => ({ rows: [] }));
-      if (!img) throw apiError(400, 'VALIDATION_FAILED', 'Unknown image', { imageId: 'NOT_AVAILABLE' });
-      if (shape.diskGb < img.min_disk_gb) throw apiError(400, 'VALIDATION_FAILED', 'Disk too small', { diskGb: 'BELOW_IMAGE_MINIMUM' });
-    }
+    const { rp, shape, price } = await resolveOrder(poolId as string, body);
     const limits = await limitsFor(req.user.id, projectId);
     const over = exceededQuota(limits, await usageOf(req.user.id, projectId), shape);
     const cap = await capacityOf(rp);

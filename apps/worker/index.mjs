@@ -1,18 +1,44 @@
-import { Worker } from 'bullmq';
+import { Queue, Worker } from 'bullmq';
+import { processOperation, reconcile } from './operations.mjs';
 import pg from 'pg';
 import { Redis } from 'ioredis';
 import { writeFile } from 'node:fs/promises';
 const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL, connectionTimeoutMillis: 5000 });
-const log = (level, event) => console.log(JSON.stringify({ level, service: 'worker', event, time: new Date().toISOString() }));
+const log = (level, event, fields = {}) => console.log(JSON.stringify({ level, service: 'worker', event, time: new Date().toISOString(), ...fields }));
 pool.on('error', () => log('error', 'postgres_unavailable'));
 // BullMQ 6 treats ioredis as optional; in ESM it must receive a constructed client.
 const redis = new Redis({ host: process.env.REDIS_HOST || 'redis', db: Number(process.env.REDIS_DB) || 0, password: process.env.REDIS_PASSWORD, maxRetriesPerRequest: null });
-const worker = new Worker('operations', async job => {
-  log('warn', 'unsupported_operation');
-  throw new Error('VMware provisioning is not implemented; operation rejected');
-}, { connection: redis, concurrency: 1 });
+const worker = new Worker('operations', (job) => processOperation(pool, job, log), { connection: redis, concurrency: 4 });
+const operations = new Queue('operations', { connection: redis });
+const jobOptions = { attempts: 6, backoff: { type: 'exponential', delay: 5000 }, removeOnComplete: true, removeOnFail: true };
+
+// Recovery: an operation still open in PostgreSQL but without a queued job (Redis lost it, the API
+// could not enqueue, or a crash between commit and enqueue) is queued again. The job id is the
+// operation id, so an operation that still has a live job is not queued twice.
+async function recover() {
+  try {
+    const { rows } = await pool.query("SELECT id FROM operations WHERE status IN ('pending', 'running') AND updated_at < now() - make_interval(secs => $1)",
+      [Number(process.env.RECOVERY_STALE_SECONDS) || 90]);
+    let count = 0;
+    for (const { id } of rows) {
+      if (await operations.getJob(id)) continue; // still queued, delayed for a retry or running (a long wait)
+      await operations.add('operation', {}, { ...jobOptions, jobId: id });
+      count++;
+    }
+    if (count) log('info', 'operations_recovered', { count });
+  } catch { log('error', 'recovery_failed'); }
+}
+const recoveryTimer = setInterval(recover, (Number(process.env.RECOVERY_SECONDS) || 60) * 1000);
+
+// Reconciliation every RECONCILE_MINUTES (default 5) and on admin request; a Redis lock keeps one run at a time.
+async function reconcileOnce() {
+  if (!(await redis.set('lock:reconcile', '1', 'EX', 600, 'NX'))) return;
+  try { await reconcile(pool, log); } catch (e) { log('error', 'reconcile_failed', { code: e.code }); } finally { await redis.del('lock:reconcile'); }
+}
+const reconcileTimer = setInterval(reconcileOnce, (Number(process.env.RECONCILE_MINUTES) || 5) * 60000);
+const maintenance = new Worker('maintenance', () => reconcileOnce(), { connection: redis.duplicate(), concurrency: 1 });
 worker.on('error', () => log('error', 'queue_error'));
-worker.on('failed', () => log('error', 'operation_failed'));
+
 async function heartbeat() {
   try {
     if (!worker.isRunning()) throw new Error('worker stopped');
@@ -56,6 +82,6 @@ async function copyConsoleEvents() {
 }
 copyConsoleEvents();
 
-async function close() { if (closing) return; closing = true; clearInterval(timer); await worker.close(); events.disconnect(); redis.disconnect(); await pool.end(); }
+async function close() { if (closing) return; closing = true; clearInterval(timer); clearInterval(recoveryTimer); clearInterval(reconcileTimer); await worker.close(); await maintenance.close(); await operations.close(); events.disconnect(); redis.disconnect(); await pool.end(); }
 process.on('SIGTERM', close); process.on('SIGINT', close);
 log('info', 'started');

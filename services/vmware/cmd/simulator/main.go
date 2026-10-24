@@ -8,8 +8,10 @@ import (
 	"log"
 	"net"
 	"net/url"
+	"sort"
 
 	"github.com/vmware/govmomi/simulator"
+	"github.com/vmware/govmomi/vim25/types"
 )
 
 func main() {
@@ -32,6 +34,14 @@ func main() {
 	if err := model.Create(); err != nil {
 		log.Fatal(err)
 	}
+	// A vCenter normally has templates to deploy from; turn the first VM into one (powered off).
+	if !*esx {
+		vms := model.Map().All("VirtualMachine")
+		sort.Slice(vms, func(i, j int) bool { return vms[i].Entity().Name < vms[j].Entity().Name })
+		vm := vms[0].(*simulator.VirtualMachine)
+		vm.Config.Template, vm.Summary.Config.Template = true, true
+		vm.Runtime.PowerState, vm.Summary.Runtime.PowerState = types.VirtualMachinePowerStatePoweredOff, types.VirtualMachinePowerStatePoweredOff
+	}
 	if *webmks != "" {
 		host, port, err := net.SplitHostPort(*webmks)
 		if err != nil {
@@ -43,6 +53,7 @@ func main() {
 	model.Service.Listen = &url.URL{Host: *addr, User: url.UserPassword(*user, *pass)}
 	model.Service.TLS = new(tls.Config) // self-signed certificate generated at start
 	s := model.Service.NewServer()
+	go simulateGuestTools(model)
 	log.Printf("simulator listening on %s (esx=%v)", s.URL.Host, *esx)
 	select {}
 }

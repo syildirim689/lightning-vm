@@ -3,6 +3,8 @@ import { useFormatter, useTranslations } from 'next-intl';
 import { useEffect, useState } from 'react';
 import { apiFetch, useErrorText } from '../../lib/api';
 import { Field, useApiForm } from '../../lib/form';
+import { useRouter } from 'next/navigation';
+import { useIntentKey } from './servers-ui';
 
 type Custom = { cpuMin: number; cpuMax: number; cpuStep: number; memoryMinMb: number; memoryMaxMb: number; memoryStepMb: number; diskMinGb: number; diskMaxGb: number; diskStepGb: number; currency: string };
 type Catalog = { packages: { id: string; name: string; vcpu: number; memoryMb: number; diskGb: number; priceMonthly: string; currency: string; poolIds: string[]; imageIds: string[] }[];
@@ -29,25 +31,36 @@ export function Projects({ onChange }: { onChange: (p: Project[]) => void }) {
   </article>;
 }
 
-// Builds and prices an order. The server validates everything; creating the server comes with provisioning.
-export function Order({ projects }: { projects: Project[] }) {
+// Builds, prices and places an order. The server validates everything.
+export function Order({ projects, keys }: { projects: Project[]; keys: { id: string; name: string }[] }) {
   const t = useTranslations('Order');
   const format = useFormatter();
   const [catalog, setCatalog] = useState<Catalog>();
   const [quote, setQuote] = useState<Quote>();
-  const f = useApiForm({ type: 'package', poolId: '', packageId: '', imageId: '', projectId: '', vcpu: '2', memoryMb: '4096', diskGb: '40' });
+  const f = useApiForm({ type: 'package', poolId: '', packageId: '', imageId: '', projectId: '', vcpu: '2', memoryMb: '4096', diskGb: '40', name: '' });
+  const [keyIds, setKeyIds] = useState<string[]>([]);
+  const intent = useIntentKey();
+  const router = useRouter();
   useEffect(() => { apiFetch<Catalog>('/catalog').then((c) => { setCatalog(c); f.setValues((v) => ({ ...v, poolId: c.pools[0]?.id ?? '' })); }, () => undefined); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (f.failure && f.failure.code !== 'NETWORK') intent.reset(); }, [f.failure]); // eslint-disable-line react-hooks/exhaustive-deps
   if (!catalog) return null;
   if (!catalog.pools.length) return <article><h2>{t('title')}</h2><p className="muted">{t('nothingOffered')}</p></article>;
   const pool = catalog.pools.find((p) => p.id === f.values.poolId);
   const packages = catalog.packages.filter((p) => p.poolIds.includes(f.values.poolId));
   const custom = pool?.custom;
+  const orderBody = () => {
+    const v = f.values;
+    return { type: v.type, poolId: v.poolId, ...(v.imageId && { imageId: v.imageId }), ...(v.projectId && { projectId: v.projectId }),
+      ...(v.type === 'package' ? { packageId: v.packageId } : { vcpu: Number(v.vcpu), memoryMb: Number(v.memoryMb), diskGb: Number(v.diskGb) }) };
+  };
   async function price(e: React.FormEvent) {
     e.preventDefault(); setQuote(undefined);
-    const v = f.values;
-    const body = { type: v.type, poolId: v.poolId, ...(v.imageId && { imageId: v.imageId }), ...(v.projectId && { projectId: v.projectId }),
-      ...(v.type === 'package' ? { packageId: v.packageId } : { vcpu: Number(v.vcpu), memoryMb: Number(v.memoryMb), diskGb: Number(v.diskGb) }) };
-    setQuote(await f.submit<Quote>('POST', '/catalog/quote', body));
+    setQuote(await f.submit<Quote>('POST', '/catalog/quote', orderBody()));
+  }
+  // The same key is reused until the server has answered; only a network failure keeps it for a retry.
+  async function create() {
+    const out = await f.submit<{ serverId: string }>('POST', '/servers', { ...orderBody(), name: f.values.name, sshKeyIds: keyIds }, { 'idempotency-key': intent.key() });
+    if (out) { intent.reset(); router.push(`/servers/${out.serverId}`); }
   }
   const gb = (mb: number) => format.number(mb / 1024, { maximumFractionDigits: 1 });
   return <article><h2>{t('title')}</h2>
@@ -85,7 +98,16 @@ export function Order({ projects }: { projects: Project[] }) {
       <p>{t('shape', { vcpu: quote.shape.vcpu, memory: gb(quote.shape.memoryMb), disk: quote.shape.diskGb })}</p>
       {quote.quota.exceeded.length > 0 && <p className="error">{t('quotaExceeded', { limits: quote.quota.exceeded.map((q) => t(`quota.${q as 'vcpu'}`)).join(', ') })}</p>}
       {!quote.capacityAvailable && <p className="error">{t('noCapacity')}</p>}
-      <p className="notice">{t('notYet')}</p>
+    </div>}
+    {quote && !quote.quota.exceeded.length && quote.capacityAvailable && <div className="create">
+      <Field id="o-name" label={t('name')} help={t('nameHelp')} error={f.fieldError('name')}><input id="o-name" value={f.values.name} onChange={f.set('name')} autoComplete="off"/></Field>
+      <fieldset><legend>{t('sshKeys')}</legend>
+        {keys.length === 0 && <span className="muted">{t('noKeys')}</span>}
+        {keys.map((k) => <label key={k.id} className="check"><input type="checkbox" checked={keyIds.includes(k.id)}
+          onChange={(e) => setKeyIds(e.target.checked ? [...keyIds, k.id] : keyIds.filter((x) => x !== k.id))}/>{k.name}</label>)}
+        {f.fieldError('sshKeyIds') && <small className="error">{f.fieldError('sshKeyIds')}</small>}
+      </fieldset>
+      <button type="button" className="primary" disabled={f.busy} onClick={create}>{t('create')}</button>
     </div>}
   </article>;
 }

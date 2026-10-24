@@ -7,7 +7,7 @@
     "navUser": "Kullanıcı paneli",
     "navAdmin": "Yönetim paneli",
     "build": "v{version} · Geliştirme iskeleti",
-    "notice": "Başlangıç sürümü · VMware bağlantısı, sunucu oluşturma ve konsol henüz uygulanmadı.",
+    "notice": "Başlangıç sürümü · Şimdiye kadar yalnızca VMware simülatörüyle test edildi, gerçek ESXi/vCenter ile değil. İzleme, yedekleme ve güncelleme henüz yok.",
     "language": "Dil",
     "signedInAs": "Oturum: {email}",
     "logout": "Çıkış yap"
@@ -15,11 +15,7 @@
   "UserPanel": {
     "eyebrow": "KULLANICI PANELİ",
     "title": "Sunucularınız",
-    "intro": "Projelerinizi yönetin ve sunucu yapılandırmanızın fiyatını görün.",
-    "serversTitle": "Sunucu listesi",
-    "serversEmpty": "Henüz VMware bağlantısı yok. Örnek sunucu veya sahte kullanım verisi gösterilmiyor.",
-    "consoleTitle": "Tarayıcı konsolu",
-    "consoleText": "WebMKS entegrasyonu ve sunucu sahipliği kontrolü tamamlandığında burada erişilebilir olacak."
+    "intro": "Sunucularınızı, SSH anahtarlarınızı ve projelerinizi yönetin."
   },
   "AdminPanel": {
     "eyebrow": "YÖNETİM PANELİ",
@@ -43,7 +39,8 @@
     "continueSetup": "Kurulum sihirbazına devam et",
     "connectionsText": "ESXi ve vCenter bağlantıları, gerçek envanter ve fiziksel kapasite.",
     "open": "Aç",
-    "catalogText": "Kaynak havuzları, kapasite, paketler, özel kaynak kuralları, imajlar, IP havuzları ve kotalar."
+    "catalogText": "Kaynak havuzları, kapasite, paketler, özel kaynak kuralları, imajlar, IP havuzları ve kotalar.",
+    "serversText": "Tüm sunucular, işlemler, başarısız işlemlerin yeniden denenmesi ve VMware ile uzlaştırma."
   },
   "Status": {
     "title": "Sistem sağlığı",
@@ -104,7 +101,33 @@
     "VM_NOT_FOUND": "Sanal makine bulunamadı. Envanteri yeniden keşfedin.",
     "CONSOLE_TLS_UNVERIFIABLE": "VMware konsol bileti sertifika parmak izi içermiyor; doğrulanamayan bir bağlantı kurulmaz.",
     "CONSOLE_NOT_PERMITTED": "Servis hesabının konsol yetkisi (VirtualMachine.Interact.ConsoleInteract) yok.",
-    "IN_USE": "Bu kayıt başka kayıtlarda kullanılıyor; önce onları kaldırın."
+    "IN_USE": "Bu kayıt başka kayıtlarda kullanılıyor; önce onları kaldırın.",
+    "CAPACITY_EXHAUSTED": "Bu konumda yeterli boş kapasite kalmadı.",
+    "IP_EXHAUSTED": "Bu konumda boş IP adresi kalmadı.",
+    "QUOTA_EXCEEDED": "Kotanız bu sunucu için yetmiyor.",
+    "IDEMPOTENCY_KEY_REQUIRED": "İstek tekrar korumasız gönderildi; sayfayı yenileyip tekrar deneyin.",
+    "IDEMPOTENCY_MISMATCH": "Bu istek anahtarı farklı bir istek için kullanılmış; sayfayı yenileyin.",
+    "OPERATION_IN_PROGRESS": "Bu sunucuda devam eden bir işlem var; bitmesini bekleyin.",
+    "INVALID_SERVER_STATE": "Sunucu bu işlem için uygun durumda değil.",
+    "PROVISIONING_NOT_SUPPORTED": "Bu konumda sunucu oluşturulamıyor: vCenter ve şablondan kopyalama yetkisi gerekir (standalone ESXi API ile kopyalama yapamaz).",
+    "DISK_SMALLER_THAN_TEMPLATE": "İstenen disk, şablonun diskinden küçük.",
+    "NETWORK_NOT_FOUND": "Havuzun ağı VMware'de bulunamadı.",
+    "NOT_MANAGED": "Bu VM platform tarafından oluşturulmamış; dokunulmadı.",
+    "TASK_NOT_FOUND": "VMware görevi artık bulunamıyor; sonuç VM'nin kendisinden kontrol edildi.",
+    "TEMPLATE_HAS_NO_NIC": "Şablonda ağ kartı yok.",
+    "TEMPLATE_NOT_FOUND": "Şablon VMware'de bulunamadı.",
+    "TOOLS_NOT_RUNNING": "Düzgün kapatma için misafir işletim sisteminde VMware Tools çalışmalı. Zorla kapatmayı kullanabilirsiniz.",
+    "CANCELLED": "İşlem iptal edildi.",
+    "CLONE_RESULT_MISSING": "Kopyalama bitti ama VM bulunamadı.",
+    "INVENTORY_STALE": "Envanter güncel değil; bağlantıyı yeniden keşfedin.",
+    "VM_MISSING": "VM VMware'de bulunamıyor.",
+    "VM_STILL_PRESENT": "VMware VM'yi hâlâ listeliyor; kaynaklar serbest bırakılmadı.",
+    "WRITE_RESTRICTED": "VMware lisansı API ile değişikliğe izin vermiyor (ücretsiz lisans).",
+    "INSUFFICIENT_RESOURCES": "VMware'de yeterli kaynak yok.",
+    "DUPLICATE_NAME": "VMware'de aynı adlı bir VM var.",
+    "INVALID_STATE": "VM bu işlem için uygun durumda değil.",
+    "TASK_FAILED": "VMware görevi başarısız oldu.",
+    "READINESS_TIMEOUT": "Sunucu süre içinde hazır olmadı."
   },
   "Auth": {
     "required": "zorunlu",
@@ -150,7 +173,12 @@
     "RANGE_OVERLAPS": "Bu aralık aynı havuzdaki başka bir IP havuzuyla çakışıyor.",
     "NOT_AVAILABLE": "Bu seçim bu konumda sunulmuyor.",
     "NO_CUSTOM_OFFERING": "Bu konumda özel kaynaklı sunucu sunulmuyor.",
-    "BELOW_IMAGE_MINIMUM": "Disk, seçilen işletim sistemi imajının en az disk boyutundan küçük."
+    "BELOW_IMAGE_MINIMUM": "Disk, seçilen işletim sistemi imajının en az disk boyutundan küçük.",
+    "INVALID_HOSTNAME": "Küçük harf, rakam ve tire kullanın (en çok 63 karakter, tireyle başlayıp bitemez).",
+    "INVALID_SSH_KEY": "Geçerli bir OpenSSH açık anahtarı girin (ssh-ed25519, ssh-rsa veya ecdsa).",
+    "KEY_EXISTS": "Bu anahtar zaten ekli.",
+    "CONFIRMATION_MISMATCH": "Onay için sunucu adını aynen yazın.",
+    "QUOTA_EXCEEDED": "Kota aşılıyor."
   },
   "Setup": {
     "title": "Kurulum sihirbazı",
@@ -516,7 +544,6 @@
     "shape": "{vcpu} vCPU, {memory} GB RAM, {disk} GB disk",
     "quotaExceeded": "Kotanız aşılıyor: {limits}.",
     "noCapacity": "Bu konumda şu anda yeterli boş kapasite yok.",
-    "notYet": "Sunucu oluşturma henüz bu sürümde yok (9. aşama). Bu ekran yalnızca yapılandırmayı doğrular ve fiyatlandırır.",
     "quota": {
       "servers": "sunucu sayısı",
       "vcpu": "vCPU",
@@ -529,7 +556,12 @@
       "name": "Proje adı",
       "create": "Proje oluştur",
       "remove": "Sil"
-    }
+    },
+    "name": "Sunucu adı",
+    "nameHelp": "Ana bilgisayar adı olarak da kullanılır, örnek: web-1.",
+    "sshKeys": "SSH anahtarları",
+    "noKeys": "Önce aşağıdan bir SSH anahtarı ekleyin.",
+    "create": "Sunucuyu oluştur"
   },
   "Catalog": {
     "eyebrow": "YÖNETİM · KATALOG",
@@ -643,7 +675,7 @@
       "end": "Aralık sonu",
       "excluded": "Hariç tutulan adresler",
       "listHelp": "Virgül veya boşlukla ayırın.",
-      "explain": "Şimdilik yalnızca IPv4. Aralıklar aynı kaynak havuzunda çakışamaz. Adres ataması sunucu oluşturmayla birlikte (9. aşama) gelecek."
+      "explain": "Şimdilik yalnızca IPv4. Aralıklar aynı kaynak havuzunda çakışamaz. Adresler sunucu oluşturulurken otomatik atanır ve sunucu silindikten sonra bırakılır."
     },
     "quotas": {
       "title": "Kotalar",
@@ -659,6 +691,131 @@
       "maxVcpu": "En çok vCPU",
       "maxMemoryMb": "En çok RAM (MB)",
       "maxDiskGb": "En çok disk (GB)"
+    }
+  },
+  "Servers": {
+    "loading": "Yükleniyor…",
+    "guestNotReady": "işletim sistemi hazır değil",
+    "size": "{vcpu} vCPU, {memory} GB RAM, {disk} GB disk",
+    "attempt": "deneme {n}",
+    "errorCode": "{message} ({code})",
+    "state": {
+      "provisioning": "Hazırlanıyor",
+      "ready": "Hazır",
+      "error": "Hata",
+      "deleting": "Siliniyor",
+      "deleted": "Silindi",
+      "missing": "VMware'de bulunamıyor"
+    },
+    "power": {
+      "poweredOn": "açık",
+      "poweredOff": "kapalı",
+      "suspended": "askıda",
+      "unknown": "bilinmiyor"
+    },
+    "kind": {
+      "create": "Oluşturma",
+      "delete": "Silme",
+      "power_on": "Açma",
+      "shutdown": "Düzgün kapatma",
+      "power_off": "Zorla kapatma",
+      "reset": "Reset"
+    },
+    "opStatus": {
+      "pending": "Sırada",
+      "running": "Çalışıyor",
+      "succeeded": "Tamamlandı",
+      "failed": "Başarısız",
+      "cancelled": "İptal edildi"
+    },
+    "step": {
+      "queued": "kuyrukta",
+      "clone": "şablondan kopyalanıyor",
+      "power_on": "açılıyor",
+      "readiness": "işletim sisteminin hazır olması bekleniyor",
+      "on": "açılıyor",
+      "off": "kapatılıyor",
+      "shutdown": "düzgün kapatılıyor",
+      "reset": "resetleniyor",
+      "destroy": "VM siliniyor",
+      "verify_gone": "silindiği doğrulanıyor",
+      "done": "bitti"
+    },
+    "action": {
+      "power_on": "Aç",
+      "shutdown": "Düzgün kapat",
+      "power_off": "Zorla kapat",
+      "reset": "Reset",
+      "console": "Konsol",
+      "cancel": "İptal et"
+    },
+    "confirm": {
+      "power_off": "Zorla kapatma, işletim sistemine haber vermeden gücü keser; kaydedilmemiş veriler kaybolabilir.",
+      "reset": "Reset, işletim sistemine haber vermeden yeniden başlatır; kaydedilmemiş veriler kaybolabilir.",
+      "yes": "Evet, {action}",
+      "no": "Vazgeç"
+    },
+    "powerExplain": "Düzgün kapatma işletim sistemine kapanmasını söyler (VMware Tools gerekir). Zorla kapatma ve reset bunu yapmaz.",
+    "readinessExplain": "\"Hazır\": VM açık, VMware Tools çalışıyor ve işletim sistemi atanan IP adresini bildiriyor. VM'nin açık olması tek başına hazır olduğu anlamına gelmez.",
+    "metricsEmpty": "Bu sunucu için henüz metrik toplanmıyor. Örnek veya tahmini değer gösterilmez.",
+    "detail": {
+      "overview": "Genel bakış",
+      "image": "İşletim sistemi",
+      "price": "Aylık fiyat",
+      "created": "Oluşturulma",
+      "progress": "İşlem ilerlemesi",
+      "power": "Güç",
+      "metrics": "Metrikler",
+      "history": "İşlem geçmişi"
+    },
+    "delete": {
+      "title": "Sunucuyu sil",
+      "explain": "VM VMware'de silinir. IP adresi ve rezerve kapasite, VM'nin silindiği VMware'de doğrulandıktan sonra serbest bırakılır. Bu işlem geri alınamaz.",
+      "confirm": "Onaylamak için “{name}” yazın",
+      "button": "Sunucuyu kalıcı olarak sil"
+    },
+    "list": {
+      "title": "Sunucularınız",
+      "empty": "Henüz sunucunuz yok."
+    },
+    "col": {
+      "name": "Ad",
+      "state": "Durum",
+      "size": "Boyut",
+      "location": "Konum",
+      "when": "Zaman",
+      "operation": "İşlem",
+      "detail": "Ayrıntı"
+    },
+    "keys": {
+      "title": "SSH anahtarları",
+      "explain": "Açık anahtarlar sunucuya cloud-init ile yüklenir. Parola ile SSH girişi kapalı oluşturulur.",
+      "name": "Anahtar adı",
+      "publicKey": "Açık anahtar",
+      "publicKeyHelp": "Örnek: ~/.ssh/id_ed25519.pub dosyasının içeriği.",
+      "add": "Anahtar ekle",
+      "remove": "Sil"
+    },
+    "admin": {
+      "eyebrow": "YÖNETİM · SUNUCULAR",
+      "title": "Sunucular ve işlemler",
+      "intro": "Tüm sunucular, otomasyon işleri, başarısız işlemler ve VMware ile uzlaştırma.",
+      "servers": "Tüm sunucular",
+      "owner": "Sahibi",
+      "operations": "İşlemler",
+      "retry": "Yeniden dene",
+      "retried": "İşlem yeniden kuyruğa alındı.",
+      "reconciliation": "Uzlaştırma",
+      "reconcileExplain": "Platform kayıtlarını VMware'deki gerçek durumla karşılaştırır. Bulguları raporlar; hiçbir şeyi kendiliğinden silmez.",
+      "reconcile": "Şimdi uzlaştır",
+      "reconcileQueued": "Uzlaştırma kuyruğa alındı.",
+      "noFindings": "Açık bulgu yok.",
+      "finding": "Bulgu"
+    },
+    "finding": {
+      "vm_missing": "VM VMware'de yok",
+      "orphan_vm": "Kaydı olmayan platform VM'si",
+      "power_drift": "Güç durumu farklı"
     }
   }
 }

@@ -244,12 +244,35 @@ test.describe('catalog and order preview (simulator)', () => {
     await customer.getByRole('button', { name: 'Fiyatı hesapla' }).click();
     // 2 x 5 + 4 GB x 2 + 40 GB x 0.1 = 22.00
     await expect(customer.locator('.quote')).toContainText('Aylık: €22,00');
-    await expect(customer.locator('.quote')).toContainText('Sunucu oluşturma henüz bu sürümde yok');
 
-    // Leave the connection removable for the next test.
-    await adminPage.getByRole('row', { name: /E2E Small/ }).getByRole('button', { name: 'Remove' }).click();
-    await adminPage.locator('article', { has: adminPage.getByRole('heading', { name: /E2E Pool/ }) }).getByRole('button', { name: 'Remove' }).click();
-    await expect(adminPage.getByRole('heading', { name: /E2E Pool/ })).toHaveCount(0);
+    // An image (the simulator's template) and an IP pool, so the next test can create a server.
+    const img = adminPage.locator('form', { has: adminPage.getByRole('heading', { name: 'New image' }) });
+    await img.getByLabel('Name').fill('Sim Linux');
+    await img.getByLabel('Template').selectOption({ index: 1 });
+    await img.getByLabel('Minimum disk').fill('10');
+    await img.getByRole('button', { name: 'Add image' }).click();
+    await expect(adminPage.getByRole('row', { name: /Sim Linux/ })).toBeVisible();
+    const ip = adminPage.locator('form', { has: adminPage.getByRole('heading', { name: 'New IP pool' }) });
+    await ip.getByLabel('Name').fill('lab-net');
+    await ip.getByLabel('Subnet (CIDR)').fill('10.30.0.0/24');
+    await ip.getByLabel('Gateway').fill('10.30.0.1');
+    await ip.getByLabel('Range start').fill('10.30.0.20');
+    await ip.getByLabel('Range end').fill('10.20.0.30');
+    await ip.getByRole('button', { name: 'Add IP pool' }).click();
+    await expect(ip.getByText('Gateway and range must be inside the subnet', { exact: false })).toBeVisible();
+    await ip.getByLabel('Range end').fill('10.30.0.30');
+    await ip.getByRole('button', { name: 'Add IP pool' }).click();
+    await expect(adminPage.getByRole('row', { name: /lab-net/ })).toContainText('11');
+    const small = adminPage.locator('form', { has: adminPage.getByRole('heading', { name: 'New package' }) });
+    await small.getByLabel('Name').fill('E2E Tiny');
+    await small.getByLabel('vCPU').fill('1');
+    await small.getByLabel('RAM (MB)').fill('512');
+    await small.getByLabel('Disk (GB)').fill('10');
+    await small.getByLabel('Monthly price').fill('3.00');
+    await small.getByRole('group', { name: 'Offered in pools' }).getByLabel('E2E Pool').check();
+    await small.getByRole('group', { name: 'Allowed images' }).getByLabel('Sim Linux').check();
+    await small.getByRole('button', { name: 'Create package' }).click();
+    await expect(adminPage.getByRole('row', { name: /E2E Tiny/ })).toBeVisible();
   });
 });
 
@@ -279,14 +302,68 @@ test.describe('VMware connections (simulator, English browser)', () => {
     const consoleCookie = (await page.context().cookies()).find((c) => c.name === 'lvm_console');
     expect(consoleCookie?.httpOnly && consoleCookie.path === '/console/ws' && consoleCookie.sameSite === 'Strict').toBe(true);
     expect(page.url()).not.toContain(consoleCookie!.value);
+    // The vCenter now backs a resource pool, so a separate simulated ESXi is added and removed.
     await page.goto('/admin/vmware');
-    await page.getByRole('row', { name: /Simülatör vCenter/ }).getByRole('button', { name: 'Details' }).click();
+    await page.getByRole('button', { name: 'Add connection' }).click();
+    await page.getByLabel('Display name').fill('Sim ESXi');
+    await page.getByLabel('Address').fill(process.env.E2E_VCSIM_ESXI ?? 'vcsim-esxi');
+    await page.getByLabel('Port').fill('8989');
+    await page.getByLabel('Service account').fill('sim-root');
+    await page.getByLabel('Password').fill('sim-password-2');
+    await page.getByRole('button', { name: 'Test connection' }).click();
+    await page.getByRole('button', { name: 'I verified the fingerprint, pin this certificate' }).click();
+    await page.getByRole('button', { name: 'Save', exact: true }).click();
+    await page.getByRole('row', { name: /Sim ESXi/ }).getByRole('button', { name: 'Details' }).click();
+    await expect(page.getByRole('listitem').filter({ hasText: 'vCenter Automation REST API' })).toContainText('no');
     const remove = page.getByRole('button', { name: 'Remove connection' });
     await expect(remove).toBeDisabled();
-    await page.getByLabel('Type “Simülatör vCenter” to confirm').fill('Simülatör vCenter');
+    await page.getByLabel('Type “Sim ESXi” to confirm').fill('Sim ESXi');
     await remove.click();
     await expect(page.getByText('Connection removed.')).toBeVisible();
-    await expect(page.getByRole('row', { name: /Simülatör vCenter/ })).toHaveCount(0);
+    await expect(page.getByRole('row', { name: /Sim ESXi/ })).toHaveCount(0);
+  });
+});
+
+test.describe('server lifecycle (simulator, Turkish customer)', () => {
+  test.use({ locale: 'tr-TR' });
+  test('a customer creates a server, sees it become ready, powers it off with confirmation and deletes it', async ({ page }) => {
+    test.skip(!process.env.E2E_VCSIM_HOST, 'needs compose.simulator.yaml and E2E_VCSIM_HOST');
+    await signIn(page, user);
+    await expect(page).toHaveURL(/\/$/);
+    await page.getByLabel('Anahtar adı').fill('dizüstü');
+    await page.getByLabel('Açık anahtar').fill('ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMa0iBTtZu9kbSNXzg5M6pZ1rn8F1143iWq3JIcGimfn e2e');
+    await page.getByRole('button', { name: 'Anahtar ekle' }).click();
+    await expect(page.getByText('SHA256:', { exact: false })).toBeVisible();
+    await page.getByLabel('İşletim sistemi').selectOption({ label: 'Sim Linux' });
+    await page.getByRole('combobox', { name: 'Paket' }).selectOption({ label: 'E2E Tiny: 1 vCPU, 0,5 GB RAM, 10 GB disk, aylık €3,00' });
+    await page.getByRole('button', { name: 'Fiyatı hesapla' }).click();
+    await page.getByLabel('Sunucu adı').fill('Web_1');
+    await page.getByLabel('dizüstü').check();
+    await page.getByRole('button', { name: 'Sunucuyu oluştur' }).click();
+    await expect(page.getByText('Küçük harf, rakam ve tire kullanın', { exact: false })).toBeVisible();
+    await page.getByLabel('Sunucu adı').fill('web-1');
+    await page.getByRole('button', { name: 'Sunucuyu oluştur' }).click();
+
+    await expect(page).toHaveURL(/\/servers\/[0-9a-f-]{36}$/);
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('web-1');
+    await expect(page.locator('header').getByText(/Hazır · açık/)).toBeVisible({ timeout: 60_000 });
+    await expect(page.getByText('10.30.0.20')).toBeVisible();
+    await expect(page.getByText('henüz metrik toplanmıyor', { exact: false })).toBeVisible();
+
+    await page.getByRole('button', { name: 'Zorla kapat' }).click();
+    await expect(page.getByRole('alertdialog')).toContainText('kaydedilmemiş veriler kaybolabilir');
+    await page.getByRole('button', { name: 'Evet, Zorla kapat' }).click();
+    await expect(page.locator('header').getByText(/Hazır · kapalı/)).toBeVisible({ timeout: 30_000 });
+    await page.getByRole('button', { name: 'Aç', exact: true }).click();
+    await expect(page.locator('header').getByText(/Hazır · açık/)).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByRole('table').last()).toContainText('Oluşturma');
+
+    const del = page.getByRole('button', { name: 'Sunucuyu kalıcı olarak sil' });
+    await expect(del).toBeDisabled();
+    await page.getByLabel('Onaylamak için “web-1” yazın').fill('web-1');
+    await del.click();
+    await expect(page).toHaveURL(/\/$/, { timeout: 60_000 });
+    await expect(page.getByText('Henüz sunucunuz yok.')).toBeVisible();
   });
 });
 

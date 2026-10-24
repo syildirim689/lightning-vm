@@ -13,5 +13,5 @@ export default async function ConsolePage({ searchParams }: { searchParams: Prom
     const t = await getTranslations('errors');
     return <article role="alert"><p>{t('NOT_FOUND')}</p></article>;
   }
-  return <ConsoleView connection={c} vm={vm}/>;
+  return <ConsoleView sessionPath={`/admin/vmware/connections/${c}/vms/${encodeURIComponent(vm)}/console`} title={vm}/>;
 }

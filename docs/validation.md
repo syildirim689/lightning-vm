@@ -10,6 +10,59 @@ Windows Server 2025, Node 24.21, npm 11.19 (Docker yok).
 - `npm audit --omit=dev`: üç uygulamada 0 açık. API'de Nest'in getirdiği eski fastify
   `overrides` ile 5.12.7'ye sabitlendi.
 
+## 9. aşama: otomatik sunucu oluşturma ve uzlaştırma — 2026-10-24
+Tüm VMware tarafı govmomi simülatörüdür (vcsim motoru). Bu testler orkestrasyonu, idempotency'yi,
+kilitlemeyi, kurtarmayı ve kaynak bırakma kurallarını kanıtlar; gerçek vCenter davranışını kanıtlamaz.
+
+- Go adaptör testleri geçti (gofmt ve go vet temiz). 3 yeni provisioning testi:
+  - aynı adla ikinci klon yeni VM üretmez, cloud-init IP'si misafirde görünür;
+  - yalnızca `lvm-` adlı VM'ler silinir;
+  - standalone ESXi'de oluşturma `PROVISIONING_NOT_SUPPORTED` ile reddedilir.
+- API birim testleri 14/14 geçti.
+- API entegrasyon testleri 49/49 geçti. Gerçek worker, adaptör ve simüle vCenter kullanıldı.
+  12 yeni sunucu testi:
+  - Idempotency-Key zorunlu; aynı anahtar aynı sunucuyu döndürür, farklı istek
+    `IDEMPOTENCY_MISMATCH` alır;
+  - aynı anda verilen siparişler aynı IP'yi alamaz ve havuzu aşamaz;
+  - başka müşterinin sunucusu görünmez (404);
+  - güç işlemleri sırayla çalışır (aynı anda gelen ikincisi 409);
+  - kaybolan yanıttan sonra yeniden deneme ikinci VM oluşturmaz;
+  - kuyruktan kaybolan iş PostgreSQL'den kurtarılır;
+  - iptal VM'yi siler ve IP'yi bırakır;
+  - kalıcı hata (`INVALID_LOGIN`) tek denemede başarısız olur; yönetici yeniden deneyince tamamlanır;
+  - kota oluşturmada uygulanır;
+  - uzlaştırma dışarıdan silinen VM'yi (`vm_missing`) ve kaydı olmayan VM'yi (`orphan_vm`)
+    raporlar, hiçbir şeyi silmez;
+  - silmede IP ve rezervasyon, VM'nin yokluğu doğrulandıktan sonra bırakılır.
+- Playwright 14/14 geçti (`https://49-12-109-190.sslip.io`). Yeni test Türkçe müşteriyle şunları yapar:
+  - SSH anahtarı ekler;
+  - hatalı ad (`Web_1`) için Türkçe hatayı görür;
+  - sipariş verir, "Hazır · açık" durumunu ve IP'yi görür;
+  - metrik boş durumunu görür;
+  - onayla zorla kapatır, sonra açar;
+  - işlem geçmişini görür;
+  - sunucuyu adını yazarak siler.
+- **Bulunan ve düzeltilen hatalar:**
+  - Oluşturması başarısız olmuş, VM'si olmayan sunucuda güç işlemi kabul ediliyor ve sürekli
+    yeniden deneniyordu. Artık API `INVALID_SERVER_STATE` döner. Adaptör `ManagedObjectNotFound`
+    hatasını `VM_NOT_FOUND` olarak sınıflar ve bu hata kalıcı sayılır.
+  - Sipariş formunda bir React hook'u erken dönüşün altındaydı. Katalog yüklenince form çöküyordu;
+    bunu E2E yakaladı.
+  - Kurtarma taraması, hâlâ çalışan işleri de "kurtarıldı" diye logluyordu.
+  - Panel bandı hâlâ "sunucu oluşturma yok" diyordu.
+- **Simülatör sınırları** (yalnızca test aracında telafi edildi):
+  - vcsim'de şablon yok; ilk VM kapalı bir şablona çevrildi.
+  - vcsim, klonlanan VM'lerde VMware Tools'u hiç başlatmıyor. Test simülatörü, açık VM'lerde
+    Tools'u "çalışıyor" gösterir.
+
+Doğrulanmayanlar:
+- Gerçek vCenter 7.0 U3+/8 ve gerçek bir Ubuntu cloud-init şablonu (docs/provisioning.md, kabul testleri).
+- Gerçek ağda SSH erişimi, DVS port group, datastore'un dolması ve yetkisi kısıtlı servis hesabı.
+- Müşterinin kendi sunucusuna konsol: yalnızca API yetki kontrolü test edildi; simülatörde klonların
+  konsol bileti yok.
+- CI'de `servers.test.mjs` atlanır (worker ve simülatör gerekir). CI'de yaşam döngüsünü compose
+  işindeki E2E kapsar.
+
 ## 8. aşama: kaynak havuzları, paketler, kotalar — 2026-10-24
 Envanter simüle vCenter'dan geldi; kapasite rakamları simülasyondur.
 

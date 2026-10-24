@@ -31,12 +31,15 @@ Açık kaynak VMware sunucu yönetim platformunun başlangıç deposu.
 - Katalog: kaynak havuzları (fiziksel / pay / satışa açılan / rezerve / kullanılan kapasite ayrı;
   CPU, RAM ve depolama fazla tahsisi ayrı; thin disk farkı), özel kaynak kuralları, paketler,
   imajlar, IPv4 IP havuzları, kotalar, projeler ve fiyat teklifi (docs/catalog.md).
+- Sunucu oluşturma (yalnızca vCenter, şablondan kopyalama + cloud-init), güç işlemleri, silme,
+  IP ataması, kapasite rezervasyonu ve kota; Idempotency-Key, kaldığı adımdan devam eden worker,
+  kurtarma taraması ve yalnızca raporlayan uzlaştırma. Müşteri kendi sunucusunun konsolunu açabilir
+  (docs/provisioning.md). Gerçek vCenter ile değil, govmomi simülatörüyle test edildi.
 
 ## Henüz uygulanmayanlar
 - Sihirbazda kaynak havuzu adımı (havuzlar Yönetim → Katalog'dan oluşturulur).
 - MFA, parola sıfırlama, proje/müşteri modeli.
-- Sunucu oluşturma, güç işlemleri, IP ataması, kapasite rezervasyonu ve kota kullanımı (9. aşama),
-  müşterinin kendi sunucusuna konsol erişimi, IPv6, faturalama.
+- Standalone ESXi üzerinde oluşturma, yeniden kurulum, snapshot, metrikler, IPv6.
 - Faturalama, yedekleme otomasyonu, otomatik güncelleme.
 
 Paneldeki kapalı düğmeler bu işlevleri gerçekleştirmez.

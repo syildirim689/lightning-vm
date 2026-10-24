@@ -19,11 +19,13 @@ export async function revokeConsoles(revocation: { authHash?: string; userId?: s
   await redis.publish('console:revoke', JSON.stringify(revocation)).catch(() => undefined);
 }
 
-async function openConsole(req: AuthedRequest, reply: FastifyReply, connectionId: string, vm: string) {
+export async function openConsole(req: AuthedRequest, reply: FastifyReply, connectionId: string, vm: string, ownedServer = false) {
   if (!/^[\w-]{1,80}$/.test(vm)) throw apiError(400, 'VALIDATION_FAILED', 'Invalid input', { vm: 'INVALID_VALUE' });
   const { rows: [c] } = await pool.query('SELECT * FROM vmware_connections WHERE id = $1', [connectionId]);
   if (!c) throw apiError(404, 'NOT_FOUND', 'Unknown connection');
   if (!c.operations?.console) throw apiError(409, 'CONSOLE_NOT_PERMITTED', 'The service account lacks the console privilege');
+  // Admin route: any VM of a connection. Customer route (ownedServer): the caller already proved ownership.
+  if (!ownedServer && req.user.role !== 'admin') throw apiError(403, 'FORBIDDEN', 'Admin role required');
   let ticket: Ticket;
   try { ticket = await callAdapter<Ticket>('/v1/console-ticket', { ...storedTarget(c), vm }, 30_000); }
   catch (err) {

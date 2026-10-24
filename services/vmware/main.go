@@ -14,6 +14,8 @@ import (
 	"strings"
 	"syscall"
 	"time"
+
+	"github.com/vmware/govmomi/vim25"
 )
 
 var logger = slog.New(slog.NewJSONHandler(os.Stdout, nil)).With("service", "vmware")
@@ -28,11 +30,11 @@ func failureStatus(code string) int {
 	switch code {
 	case "VM_NOT_FOUND":
 		return http.StatusNotFound
-	case "VM_POWERED_OFF":
+	case "VM_POWERED_OFF", "TOOLS_NOT_RUNNING", "NOT_MANAGED":
 		return http.StatusConflict
 	case "INVALID_LOGIN", "PERMISSION_DENIED":
 		return http.StatusUnauthorized
-	case "INVALID_CA", "INVALID_PIN", "INVALID_TLS_MODE", "INVALID_REQUEST", "ENDPOINT_BLOCKED":
+	case "INVALID_CA", "INVALID_PIN", "INVALID_TLS_MODE", "INVALID_REQUEST", "ENDPOINT_BLOCKED", "PROVISIONING_NOT_SUPPORTED", "TEMPLATE_NOT_FOUND", "NETWORK_NOT_FOUND", "TEMPLATE_HAS_NO_NIC", "DISK_SMALLER_THAN_TEMPLATE":
 		return http.StatusBadRequest
 	}
 	return http.StatusBadGateway
@@ -77,6 +79,54 @@ func handler(token string, guard *netGuard) http.Handler {
 		}
 		logger.Info("console_ticket_issued", "endpoint", t.Endpoint) // never the ticket or its URL
 		writeJSON(w, 200, t)
+	})
+	// Provisioning endpoints share decode -> call -> classified error handling; bodies are never logged.
+	handle := func(path string, timeout time.Duration, newReq func() any, call func(context.Context, any) (any, error)) {
+		mux.HandleFunc("POST "+path, func(w http.ResponseWriter, r *http.Request) {
+			req := newReq()
+			if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 256<<10)).Decode(req); err != nil {
+				writeJSON(w, 400, Failure{Code: "INVALID_REQUEST", Message: "invalid JSON"})
+				return
+			}
+			ctx, cancel := context.WithTimeout(r.Context(), timeout)
+			defer cancel()
+			out, err := call(ctx, req)
+			if err != nil {
+				f := classify(err)
+				logger.Warn("vm_call_failed", "path", path, "code", f.Code)
+				writeJSON(w, failureStatus(f.Code), f)
+				return
+			}
+			writeJSON(w, 200, out)
+		})
+	}
+	newVM := func() any { return &VMRequest{} }
+	handle("/v1/vm/clone", 60*time.Second, func() any { return &CloneRequest{} }, func(ctx context.Context, r any) (any, error) { return cloneVM(ctx, guard, *r.(*CloneRequest)) })
+	handle("/v1/vm/find", 30*time.Second, newVM, func(ctx context.Context, r any) (any, error) {
+		q := r.(*VMRequest)
+		return withClient(ctx, guard, q.Request, func(c *vim25.Client) (any, error) {
+			vm, err := findVM(ctx, c, q.Name)
+			return map[string]any{"vm": vm}, err
+		})
+	})
+	handle("/v1/task", 30*time.Second, newVM, func(ctx context.Context, r any) (any, error) {
+		q := r.(*VMRequest)
+		return withClient(ctx, guard, q.Request, func(c *vim25.Client) (any, error) { return taskState(ctx, c, q.Task) })
+	})
+	handle("/v1/vm/power", 60*time.Second, newVM, func(ctx context.Context, r any) (any, error) {
+		q := r.(*VMRequest)
+		return withClient(ctx, guard, q.Request, func(c *vim25.Client) (any, error) { return powerAction(ctx, c, *q) })
+	})
+	handle("/v1/vm/destroy", 120*time.Second, newVM, func(ctx context.Context, r any) (any, error) {
+		q := r.(*VMRequest)
+		return withClient(ctx, guard, q.Request, func(c *vim25.Client) (any, error) { return destroyVM(ctx, c, *q) })
+	})
+	handle("/v1/vms/managed", 60*time.Second, newVM, func(ctx context.Context, r any) (any, error) {
+		q := r.(*VMRequest)
+		return withClient(ctx, guard, q.Request, func(c *vim25.Client) (any, error) {
+			vms, err := vmStates(ctx, c, func(n string) bool { return strings.HasPrefix(n, managedPrefix) })
+			return map[string]any{"vms": vms}, err
+		})
 	})
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/healthz" {

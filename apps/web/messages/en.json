@@ -7,7 +7,7 @@
     "navUser": "User panel",
     "navAdmin": "Admin panel",
     "build": "v{version} · Development scaffold",
-    "notice": "Early build · VMware connection, server provisioning and the console are not implemented yet.",
+    "notice": "Early build · Tested only against a VMware simulator so far, not against real ESXi/vCenter. Monitoring, backups and updates are not implemented yet.",
     "language": "Language",
     "signedInAs": "Signed in: {email}",
     "logout": "Sign out"
@@ -15,11 +15,7 @@
   "UserPanel": {
     "eyebrow": "USER PANEL",
     "title": "Your servers",
-    "intro": "Manage your projects and see the price of a server configuration.",
-    "serversTitle": "Server list",
-    "serversEmpty": "No VMware connection yet. No sample servers or fake usage data are shown.",
-    "consoleTitle": "Browser console",
-    "consoleText": "Available here once WebMKS integration and server ownership checks are complete."
+    "intro": "Manage your servers, SSH keys and projects."
   },
   "AdminPanel": {
     "eyebrow": "ADMIN PANEL",
@@ -43,7 +39,8 @@
     "continueSetup": "Continue the setup wizard",
     "connectionsText": "ESXi and vCenter connections, real inventory and physical capacity.",
     "open": "Open",
-    "catalogText": "Resource pools, capacity, packages, custom resource rules, images, IP pools and quotas."
+    "catalogText": "Resource pools, capacity, packages, custom resource rules, images, IP pools and quotas.",
+    "serversText": "All servers, operations, retrying failed operations and reconciliation with VMware."
   },
   "Status": {
     "title": "System health",
@@ -104,7 +101,33 @@
     "VM_NOT_FOUND": "Virtual machine not found. Discover the inventory again.",
     "CONSOLE_TLS_UNVERIFIABLE": "The VMware console ticket carries no certificate thumbprint; an unverifiable connection is not made.",
     "CONSOLE_NOT_PERMITTED": "The service account lacks the console privilege (VirtualMachine.Interact.ConsoleInteract).",
-    "IN_USE": "This record is still used by other records; remove those first."
+    "IN_USE": "This record is still used by other records; remove those first.",
+    "CAPACITY_EXHAUSTED": "Not enough free capacity left at this location.",
+    "IP_EXHAUSTED": "No free IP address left at this location.",
+    "QUOTA_EXCEEDED": "Your quota does not allow this server.",
+    "IDEMPOTENCY_KEY_REQUIRED": "The request was sent without repeat protection; reload the page and try again.",
+    "IDEMPOTENCY_MISMATCH": "This request key was used for a different request; reload the page.",
+    "OPERATION_IN_PROGRESS": "An operation is still running on this server; wait for it to finish.",
+    "INVALID_SERVER_STATE": "The server is not in a state that allows this.",
+    "PROVISIONING_NOT_SUPPORTED": "Servers cannot be created at this location: vCenter with clone rights is required (a standalone ESXi cannot clone through the API).",
+    "DISK_SMALLER_THAN_TEMPLATE": "The requested disk is smaller than the template's disk.",
+    "NETWORK_NOT_FOUND": "The pool's network was not found in VMware.",
+    "NOT_MANAGED": "This VM was not created by the platform; it was not touched.",
+    "TASK_NOT_FOUND": "The VMware task is no longer known; the result was checked on the VM itself.",
+    "TEMPLATE_HAS_NO_NIC": "The template has no network adapter.",
+    "TEMPLATE_NOT_FOUND": "The template was not found in VMware.",
+    "TOOLS_NOT_RUNNING": "A clean shutdown needs VMware Tools running in the guest. You can force it off instead.",
+    "CANCELLED": "The operation was cancelled.",
+    "CLONE_RESULT_MISSING": "The clone finished but no VM was found.",
+    "INVENTORY_STALE": "The inventory is out of date; discover the connection again.",
+    "VM_MISSING": "The VM is not found in VMware.",
+    "VM_STILL_PRESENT": "VMware still lists the VM; resources were not released.",
+    "WRITE_RESTRICTED": "The VMware license does not allow changes through the API (free license).",
+    "INSUFFICIENT_RESOURCES": "Not enough resources in VMware.",
+    "DUPLICATE_NAME": "A VM with the same name exists in VMware.",
+    "INVALID_STATE": "The VM is not in a state that allows this.",
+    "TASK_FAILED": "The VMware task failed.",
+    "READINESS_TIMEOUT": "The server did not become ready in time."
   },
   "Auth": {
     "required": "required",
@@ -150,7 +173,12 @@
     "RANGE_OVERLAPS": "This range overlaps another IP pool of the same resource pool.",
     "NOT_AVAILABLE": "This choice is not offered at this location.",
     "NO_CUSTOM_OFFERING": "Custom resource servers are not offered at this location.",
-    "BELOW_IMAGE_MINIMUM": "The disk is smaller than the minimum disk size of the chosen operating system image."
+    "BELOW_IMAGE_MINIMUM": "The disk is smaller than the minimum disk size of the chosen operating system image.",
+    "INVALID_HOSTNAME": "Use lowercase letters, digits and hyphens (up to 63 characters, not starting or ending with a hyphen).",
+    "INVALID_SSH_KEY": "Enter a valid OpenSSH public key (ssh-ed25519, ssh-rsa or ecdsa).",
+    "KEY_EXISTS": "This key is already added.",
+    "CONFIRMATION_MISMATCH": "Type the server name exactly to confirm.",
+    "QUOTA_EXCEEDED": "Quota exceeded."
   },
   "Setup": {
     "title": "Setup wizard",
@@ -516,7 +544,6 @@
     "shape": "{vcpu} vCPU, {memory} GB RAM, {disk} GB disk",
     "quotaExceeded": "This exceeds your quota: {limits}.",
     "noCapacity": "Not enough free capacity at this location right now.",
-    "notYet": "Creating servers is not available in this version yet (phase 9). This screen only validates and prices the configuration.",
     "quota": {
       "servers": "number of servers",
       "vcpu": "vCPU",
@@ -529,7 +556,12 @@
       "name": "Project name",
       "create": "Create project",
       "remove": "Delete"
-    }
+    },
+    "name": "Server name",
+    "nameHelp": "Also used as the host name, for example web-1.",
+    "sshKeys": "SSH keys",
+    "noKeys": "Add an SSH key below first.",
+    "create": "Create server"
   },
   "Catalog": {
     "eyebrow": "ADMIN · CATALOG",
@@ -643,7 +675,7 @@
       "end": "Range end",
       "excluded": "Excluded addresses",
       "listHelp": "Separate with commas or spaces.",
-      "explain": "IPv4 only for now. Ranges cannot overlap within one resource pool. Address assignment comes with server creation (phase 9)."
+      "explain": "IPv4 only for now. Ranges cannot overlap within one resource pool. Addresses are assigned automatically when a server is created and released after it is deleted."
     },
     "quotas": {
       "title": "Quotas",
@@ -659,6 +691,131 @@
       "maxVcpu": "Maximum vCPU",
       "maxMemoryMb": "Maximum RAM (MB)",
       "maxDiskGb": "Maximum disk (GB)"
+    }
+  },
+  "Servers": {
+    "loading": "Loading…",
+    "guestNotReady": "operating system not ready",
+    "size": "{vcpu} vCPU, {memory} GB RAM, {disk} GB disk",
+    "attempt": "attempt {n}",
+    "errorCode": "{message} ({code})",
+    "state": {
+      "provisioning": "Provisioning",
+      "ready": "Ready",
+      "error": "Error",
+      "deleting": "Deleting",
+      "deleted": "Deleted",
+      "missing": "Not found in VMware"
+    },
+    "power": {
+      "poweredOn": "on",
+      "poweredOff": "off",
+      "suspended": "suspended",
+      "unknown": "unknown"
+    },
+    "kind": {
+      "create": "Create",
+      "delete": "Delete",
+      "power_on": "Power on",
+      "shutdown": "Clean shutdown",
+      "power_off": "Force off",
+      "reset": "Reset"
+    },
+    "opStatus": {
+      "pending": "Queued",
+      "running": "Running",
+      "succeeded": "Done",
+      "failed": "Failed",
+      "cancelled": "Cancelled"
+    },
+    "step": {
+      "queued": "queued",
+      "clone": "cloning from the template",
+      "power_on": "powering on",
+      "readiness": "waiting for the operating system to be ready",
+      "on": "powering on",
+      "off": "powering off",
+      "shutdown": "shutting down cleanly",
+      "reset": "resetting",
+      "destroy": "deleting the VM",
+      "verify_gone": "verifying it is gone",
+      "done": "done"
+    },
+    "action": {
+      "power_on": "Power on",
+      "shutdown": "Shut down",
+      "power_off": "Force off",
+      "reset": "Reset",
+      "console": "Console",
+      "cancel": "Cancel"
+    },
+    "confirm": {
+      "power_off": "Force off cuts power without telling the operating system; unsaved data may be lost.",
+      "reset": "Reset restarts without telling the operating system; unsaved data may be lost.",
+      "yes": "Yes, {action}",
+      "no": "Cancel"
+    },
+    "powerExplain": "Shut down asks the operating system to stop (needs VMware Tools). Force off and reset do not.",
+    "readinessExplain": "\"Ready\": the VM is on, VMware Tools runs and the operating system reports the assigned IP address. A powered-on VM alone is not ready.",
+    "metricsEmpty": "No metrics are collected for this server yet. No sample or estimated values are shown.",
+    "detail": {
+      "overview": "Overview",
+      "image": "Operating system",
+      "price": "Monthly price",
+      "created": "Created",
+      "progress": "Operation progress",
+      "power": "Power",
+      "metrics": "Metrics",
+      "history": "Operation history"
+    },
+    "delete": {
+      "title": "Delete server",
+      "explain": "The VM is deleted in VMware. The IP address and reserved capacity are released only after VMware confirms the VM is gone. This cannot be undone.",
+      "confirm": "Type “{name}” to confirm",
+      "button": "Delete the server permanently"
+    },
+    "list": {
+      "title": "Your servers",
+      "empty": "You have no servers yet."
+    },
+    "col": {
+      "name": "Name",
+      "state": "State",
+      "size": "Size",
+      "location": "Location",
+      "when": "When",
+      "operation": "Operation",
+      "detail": "Detail"
+    },
+    "keys": {
+      "title": "SSH keys",
+      "explain": "Public keys are installed on the server with cloud-init. SSH password login is created disabled.",
+      "name": "Key name",
+      "publicKey": "Public key",
+      "publicKeyHelp": "For example the content of ~/.ssh/id_ed25519.pub.",
+      "add": "Add key",
+      "remove": "Delete"
+    },
+    "admin": {
+      "eyebrow": "ADMIN · SERVERS",
+      "title": "Servers and operations",
+      "intro": "All servers, automation jobs, failed operations and reconciliation with VMware.",
+      "servers": "All servers",
+      "owner": "Owner",
+      "operations": "Operations",
+      "retry": "Retry",
+      "retried": "The operation was queued again.",
+      "reconciliation": "Reconciliation",
+      "reconcileExplain": "Compares the platform's records with the real state in VMware. It reports findings; it never deletes anything by itself.",
+      "reconcile": "Reconcile now",
+      "reconcileQueued": "Reconciliation queued.",
+      "noFindings": "No open findings.",
+      "finding": "Finding"
+    },
+    "finding": {
+      "vm_missing": "VM missing in VMware",
+      "orphan_vm": "Platform VM without a record",
+      "power_drift": "Power state differs"
     }
   }
 }

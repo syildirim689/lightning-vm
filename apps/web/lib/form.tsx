@@ -10,9 +10,9 @@ export function useApiForm<T extends Record<string, unknown>>(initial: T) {
   const [busy, setBusy] = useState(false);
   const set = (k: keyof T) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
     setValues((v) => ({ ...v, [k]: e.target.type === 'checkbox' ? (e.target as HTMLInputElement).checked : e.target.value }));
-  async function submit<R>(method: string, path: string, body: unknown = values): Promise<R | undefined> {
+  async function submit<R>(method: string, path: string, body: unknown = values, headers?: Record<string, string>): Promise<R | undefined> {
     setBusy(true); setFailure(undefined);
-    try { return await apiFetch<R>(path, { method, body }); }
+    try { return await apiFetch<R>(path, { method, body, headers }); }
     catch (e) { setFailure({ ...(e as ApiError), text: error(e) }); return undefined; }
     finally { setBusy(false); }
   }

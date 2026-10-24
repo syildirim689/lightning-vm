@@ -43,6 +43,8 @@ jobs:
         with:
           node-version: 22
       - run: npm ci
+      # servers.test.mjs needs a worker, the VMware adapter and vcsim (WORKER_TEST); it skips here and the
+      # compose job covers provisioning end to end. Run it locally with the simulator stack.
       - run: npm run test:integration
         env:
           TEST_DATABASE_URL: postgresql://ci:ci@127.0.0.1:5432/lightning_test

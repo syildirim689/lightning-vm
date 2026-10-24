@@ -4,11 +4,11 @@ import { useTranslations } from 'next-intl';
 export type ApiError = { code: string; fields?: Record<string, string> };
 
 // Browser calls go through Caddy at /api. The CSRF header is required by the API on every state change.
-export async function apiFetch<T = unknown>(path: string, init: { method?: string; body?: unknown; signal?: AbortSignal } = {}): Promise<T> {
+export async function apiFetch<T = unknown>(path: string, init: { method?: string; body?: unknown; signal?: AbortSignal; headers?: Record<string, string> } = {}): Promise<T> {
   const res = await fetch(`/api${path}`, {
     method: init.method ?? 'GET',
     signal: init.signal,
-    headers: { 'x-lightning-csrf': '1', ...(init.body !== undefined && { 'content-type': 'application/json' }) },
+    headers: { 'x-lightning-csrf': '1', ...(init.body !== undefined && { 'content-type': 'application/json' }), ...init.headers },
     body: init.body === undefined ? undefined : JSON.stringify(init.body),
   }).catch((e) => { throw init.signal?.aborted ? e : ({ code: 'NETWORK' } satisfies ApiError); });
   if (!res.ok) {

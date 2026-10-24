@@ -53,6 +53,14 @@ if (existsSync(goSrc)) {
   }
 }
 
+// Worker operation error codes are shown on servers and in the admin operations list.
+const workerSrc = new URL('../../worker/operations.mjs', import.meta.url);
+if (existsSync(workerSrc)) {
+  for (const [, code] of readFileSync(workerSrc, 'utf8').matchAll(/new OperationError\('([A-Z_]+)'/g)) {
+    if (!reference.has(`errors.${code}`)) problems.push(`worker: error code ${code} has no errors.${code} translation`);
+  }
+}
+
 // Console gateway close reasons reach the console page.
 const consoleSrc = new URL('../../../services/console/', import.meta.url);
 if (existsSync(consoleSrc)) {

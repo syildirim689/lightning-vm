@@ -25,10 +25,10 @@ function load(tag: 'script' | 'link', src: string) {
 }
 
 // Each request issues a fresh one-time console session (HttpOnly cookie, 60 s) for this VM.
-const requestSession = (connection: string, vm: string) =>
-  apiFetch<{ vmName: string }>(`/admin/vmware/connections/${connection}/vms/${encodeURIComponent(vm)}/console`, { method: 'POST' });
+const requestSession = (sessionPath: string) => apiFetch<{ vmName: string }>(sessionPath, { method: 'POST' });
 
-export default function ConsoleView({ connection, vm }: { connection: string; vm: string }) {
+// sessionPath: the admin route for any inventory VM, or the customer route for an owned server.
+export default function ConsoleView({ sessionPath, title }: { sessionPath: string; title: string }) {
   const t = useTranslations('Console');
   const { error } = useErrorText();
   const [state, setState] = useState<State>('requesting');
@@ -43,7 +43,7 @@ export default function ConsoleView({ connection, vm }: { connection: string; vm
       try {
         const sdk = await fetch('/console-sdk/wmks.min.js', { method: 'HEAD' });
         if (!sdk.ok) { setState('sdkMissing'); return; }
-        const session = await requestSession(connection, vm);
+        const session = await requestSession(sessionPath);
         if (cancelled) return;
         setVmName(session.vmName);
         setState('loadingSdk');
@@ -67,14 +67,14 @@ export default function ConsoleView({ connection, vm }: { connection: string; vm
       }
     })();
     return () => { cancelled = true; wmks.current?.disconnect(); wmks.current?.destroy(); };
-  }, [connection, vm]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [sessionPath]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Diagnostic without the SDK: opens the gateway WebSocket with a fresh session and reports whether
   // the VM's console endpoint answered (network path, pinned TLS and ticket all worked), then closes.
   async function testGateway() {
     setProbe(t('probe.running'));
     try {
-      setVmName((await requestSession(connection, vm)).vmName);
+      setVmName((await requestSession(sessionPath)).vmName);
     } catch (e) { setProbe(error(e)); return; }
     const ws = new WebSocket(gatewayUrl(), ['binary']);
     let received = 0;
@@ -83,7 +83,7 @@ export default function ConsoleView({ connection, vm }: { connection: string; vm
   }
 
   return <article className="console">
-    <h1>{t('title', { name: vmName ?? vm })}</h1>
+    <h1>{t('title', { name: vmName ?? title })}</h1>
     <p className="notice">{t('osLogin')}</p>
     <p role="status">{t(`state.${state}`)}{detail && ` · ${detail}`}</p>
     {state === 'sdkMissing' && <div className="notice"><p>{t('sdkMissing')}</p><pre><code>console-sdk/wmks.min.js{'\n'}console-sdk/jquery.min.js{'\n'}console-sdk/jquery-ui.min.js{'\n'}console-sdk/css/wmks-all.css</code></pre></div>}
