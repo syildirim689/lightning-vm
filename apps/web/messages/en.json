@@ -1891,7 +1891,7 @@
         "body": "Its locations do not have enough capacity."
       },
       "ADMINS_WITHOUT_2FA": {
-        "title": "{count} administrators have no two-factor",
+        "title": "{count, plural, one {# administrator has} other {# administrators have}} no two-factor",
         "body": "Two-factor authentication is recommended for administrators."
       },
       "REGISTRATION_WITHOUT_CAPTCHA": {
@@ -1935,7 +1935,7 @@
         "body": "CPU is often above 85% on {vcpu} vCPU; {suggested} vCPU would give it headroom."
       },
       "OVERSIZED_SERVERS": {
-        "title": "{count} servers barely use their CPU",
+        "title": "{count, plural, one {# server barely uses its} other {# servers barely use their}} CPU",
         "body": "Right-sizing them would free about {vcpu} vCPU of pool capacity."
       }
     }
@@ -3274,7 +3274,7 @@
     "daysLeft": "{n, plural, one {# day left} other {# days left}}",
     "noCost": "Nothing billed this month.",
     "resources": "In use",
-    "resourcesValue": "{servers} servers · {vcpu} vCPU · {memory} GB RAM · {disk} GB disk"
+    "resourcesValue": "{servers, plural, one {# server} other {# servers}} · {vcpu} vCPU · {memory} GB RAM · {disk} GB disk"
   },
   "Shortcuts": {
     "title": "Keyboard shortcuts",
