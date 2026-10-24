@@ -1,6 +1,11 @@
 #!/bin/sh
 # Lightning VM installer.
-#   sh scripts/install.sh [install]      first install, or resume/repair an existing one (idempotent)
+#   sudo sh scripts/install.sh [install] [--domain panel.example.com] [--admin-email you@example.com]
+#                                        does everything: Docker (if missing), services, HTTPS (your domain, or
+#                                        <public-ip>.sslip.io when the server has a public IPv4), monitoring,
+#                                        the first admin, daily backups; ends with a summary. Safe to run again.
+#                                        --local (no public access), --setup-wizard (create the admin in the
+#                                        browser with a token), --no-monitoring, --no-schedule
 #   sh scripts/install.sh check          read-only: host pre-checks and state of an existing install
 #   sh scripts/install.sh recover-setup  reopen the browser setup wizard (accounts and data are kept)
 #   sh scripts/install.sh backup         encrypted backup of the database, settings, keys and certificates
@@ -29,6 +34,7 @@ esac; fi
 
 MODE=install INSTALL_DOCKER=0 ALLOW_OS=0 DOMAIN="" ACME_STAGING=0 PROXY_PORT=8080 TRUSTED_CIDR=""
 RESTORE_FILE="" YES=0 TO="" AUTO=0 SWITCH="" CHANNEL="" WINDOW=""
+LOCAL=0 WIZARD=0 MONITORING=1 SCHEDULE=1 ADMIN_EMAIL=""
 case "${LANG:-}" in tr*) UI="tr" ;; *) UI="en" ;; esac
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -43,6 +49,12 @@ while [ $# -gt 0 ]; do
     --window) shift; WINDOW=${1:-} ;;
     domain) MODE=domain; if [ $# -gt 1 ]; then shift; DOMAIN=$1; fi ;;
     --acme-staging) ACME_STAGING=1 ;;
+    --domain) shift; DOMAIN=${1:-} ;;
+    --local) LOCAL=1 ;;
+    --admin-email) shift; ADMIN_EMAIL=${1:-} ;;
+    --setup-wizard) WIZARD=1 ;;
+    --no-monitoring) MONITORING=0 ;;
+    --no-schedule) SCHEDULE=0 ;;
     --port) shift; PROXY_PORT=${1:-} ;;
     --trusted-cidr) shift; TRUSTED_CIDR=${1:-} ;;
     --lang) shift; UI=${1:-en} ;;
@@ -478,6 +490,42 @@ set_auto_update() {
   [ -f /etc/systemd/system/lightning-vm-maintenance.timer ] || [ "$SWITCH" = off ] || msg WARN W_NO_TIMER "Zamanlayıcı kurulu değil: sudo sh scripts/install.sh schedule on" "The timer is not installed: sudo sh scripts/install.sh schedule on"
 }
 
+# The host's own public IPv4 (no outside service is asked); empty behind NAT or on a private network.
+public_ipv4() {
+  addr=$(ip -4 route get 1.1.1.1 2>/dev/null | sed -n 's/.* src \([0-9.]*\).*/\1/p')
+  case "$addr" in
+    ''|10.*|127.*|169.254.*|192.168.*|172.1[6-9].*|172.2[0-9].*|172.3[01].*|100.6[4-9].*|100.[7-9][0-9].*|100.1[01][0-9].*|100.12[0-7].*) return 1 ;;
+  esac
+  echo "$addr"
+}
+
+revert_local_settings() {
+  set_env PANEL_SITE :80; set_env LISTEN_ADDRESS 127.0.0.1; set_env HTTP_PORT 8080; set_env HTTPS_PORT 8443
+  set_env TRUSTED_PROXY_CIDRS 127.0.0.1/32; set_env PANEL_PROBE_URL ""; set_env PANEL_TLS 0
+  load_settings
+}
+
+# Serves the panel on $1 with automatic HTTPS. Returns 1 when the ports, DNS or the certificate fail;
+# the caller decides whether that is fatal.
+configure_domain() {
+  d=$1
+  echo "$d" | grep -Eq '^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$' || die 2 E_DOMAIN_INVALID "Geçersiz alan adı: '$d' (örnek: panel.example.com, şema veya yol olmadan)" "Invalid domain: '$d' (example: panel.example.com, no scheme or path)"
+  LISTEN=0.0.0.0; FAILED=0; ports_free 80 443
+  [ "$FAILED" -eq 0 ] || return 1
+  dns_report "$d"
+  [ -n "${v4:-}" ] || return 1
+  FAILED=0
+  if [ "$ACME_STAGING" = 1 ]; then ca=https://acme-staging-v02.api.letsencrypt.org/directory; else ca=https://acme-v02.api.letsencrypt.org/directory; fi
+  set_env PANEL_SITE "$d"; set_env LISTEN_ADDRESS 0.0.0.0; set_env HTTP_PORT 80; set_env HTTPS_PORT 443; set_env ACME_CA "$ca"
+  set_env TRUSTED_PROXY_CIDRS 127.0.0.1/32
+  set_env PANEL_PROBE_URL "https://$d/api/health"; set_env PANEL_TLS 1
+  load_settings; restart_proxy
+  msg INFO ACME "Sertifika isteniyor (en fazla 2 dk)" "Requesting certificate (up to 2 min)"
+  i=0; until local_get /api/ready >/dev/null 2>&1 || [ $i -ge 24 ]; do sleep 5; i=$((i + 1)); done
+  web_report "$d"
+  [ "$FAILED" -eq 0 ]
+}
+
 restart_proxy() {
   docker compose up -d --wait --wait-timeout 120 proxy >/dev/null 2>&1 || die 18 E_START_FAILED "Proxy başlamadı: docker compose logs proxy" "Proxy did not start: docker compose logs proxy"
 }
@@ -485,28 +533,17 @@ restart_proxy() {
 case "$MODE" in
   domain)
     [ -f .env ] || die 17 E_NOT_INSTALLED "Önce kurulum yapın: sh scripts/install.sh" "Install first: sh scripts/install.sh"
-    echo "$DOMAIN" | grep -Eq '^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$' || die 2 E_DOMAIN_INVALID "Geçersiz alan adı: '$DOMAIN' (örnek: panel.example.com, şema veya yol olmadan)" "Invalid domain: '$DOMAIN' (example: panel.example.com, no scheme or path)"
-    LISTEN=0.0.0.0; ports_free 80 443
-    [ "$FAILED" -eq 0 ] || die 1 E_PRECHECK "Ön kontroller başarısız" "Pre-checks failed"
-    dns_report "$DOMAIN"
-    if [ -z "${v4:-}" ]; then die 1 E_DNS_NO_A "Önce A kaydını oluşturun; sertifika alınamaz" "Create the A record first; a certificate cannot be issued"; fi
-    FAILED=0
-    if [ "$ACME_STAGING" = 1 ]; then ca=https://acme-staging-v02.api.letsencrypt.org/directory; else ca=https://acme-v02.api.letsencrypt.org/directory; fi
-    set_env PANEL_SITE "$DOMAIN"; set_env LISTEN_ADDRESS 0.0.0.0; set_env HTTP_PORT 80; set_env HTTPS_PORT 443; set_env ACME_CA "$ca"
-    set_env TRUSTED_PROXY_CIDRS 127.0.0.1/32
-    set_env PANEL_PROBE_URL "https://$DOMAIN/api/health"
-    load_settings; restart_proxy
-    msg INFO ACME "Sertifika isteniyor (en fazla 2 dk)" "Requesting certificate (up to 2 min)"
-    i=0; until local_get /api/ready >/dev/null 2>&1 || [ $i -ge 24 ]; do sleep 5; i=$((i + 1)); done
-    dns_report "$DOMAIN"; web_report "$DOMAIN"
-    msg INFO NEXT "Panel adresini sihirbazda veya yönetimde https://$DOMAIN olarak güncelleyin; mevcut oturumlar yeni adreste geçerli olmaz" "Update the panel address to https://$DOMAIN in the wizard or admin; existing sessions do not carry over to the new address"
-    [ "$FAILED" -eq 0 ] || exit 1
+    configure_domain "$DOMAIN" || die 1 E_DOMAIN_FAILED "HTTPS kurulamadı; yukarıdaki satırlara bakın" "HTTPS could not be set up; see the lines above"
+    msg OK READY "https://$DOMAIN" "https://$DOMAIN"
+    msg INFO NEXT "Mevcut oturumlar yeni adreste geçerli olmaz; yeniden giriş yapın" "Existing sessions do not carry over to the new address; sign in again"
     exit 0 ;;
   behind-proxy|local-only)
     [ -f .env ] || die 17 E_NOT_INSTALLED "Önce kurulum yapın: sh scripts/install.sh" "Install first: sh scripts/install.sh"
     echo "$PROXY_PORT" | grep -Eq '^[0-9]{2,5}$' || die 2 E_PORT_INVALID "Geçersiz port: $PROXY_PORT" "Invalid port: $PROXY_PORT"
     set_env PANEL_SITE :80; set_env LISTEN_ADDRESS 127.0.0.1; set_env HTTP_PORT "$PROXY_PORT"; set_env HTTPS_PORT 8443
     set_env PANEL_PROBE_URL "" # no public address known; Prometheus probes the API from inside
+    # behind-proxy: the outer proxy is expected to serve HTTPS, so session cookies are Secure (PANEL_TLS=0 in .env for plain HTTP).
+    if [ "$MODE" = behind-proxy ]; then set_env PANEL_TLS 1; else set_env PANEL_TLS 0; fi
     if [ "$MODE" = behind-proxy ]; then
       # The host proxy reaches Caddy through Docker's port publishing, so Caddy sees the network gateway.
       if [ -z "$TRUSTED_CIDR" ]; then
@@ -549,29 +586,88 @@ case "$MODE" in
 esac
 
 # install (also resumes an interrupted install: every step below is safe to repeat)
-if [ "$INSTALL_DOCKER" = 1 ] && ! command -v docker >/dev/null; then install_docker; fi
+if ! command -v docker >/dev/null && { [ "$INSTALL_DOCKER" = 1 ] || [ "$(id -u)" = 0 ]; }; then install_docker; fi
 host_checks
 [ "$FAILED" -eq 0 ] || die 1 E_PRECHECK "Ön kontroller başarısız; yukarıdaki FAIL satırlarını düzeltin" "Pre-checks failed; fix the FAIL lines above"
 write_env
 write_secrets
 write_observability
 set_env APP_VERSION "$(app_version)"
+# Monitoring runs by default where it fits (4 GB RAM); COMPOSE_PROFILES in .env applies to every compose command.
+if [ "$MONITORING" = 1 ] && ! grep -q '^COMPOSE_PROFILES=' .env && [ "${mem_mb:-0}" -ge 3800 ]; then set_env COMPOSE_PROFILES observability; fi
+[ "$MONITORING" = 1 ] || set_env COMPOSE_PROFILES ""
+[ "$LOCAL" = 1 ] && revert_local_settings
+# Installs from before PANEL_TLS: derive it from the access mode already configured.
+if ! grep -q '^PANEL_TLS=' .env; then case "$SITE" in :*) set_env PANEL_TLS 0 ;; *) set_env PANEL_TLS 1 ;; esac; fi
 write_settings
 docker compose config --quiet || die 17 E_COMPOSE_INVALID "Compose yapılandırması geçersiz" "Compose configuration is invalid"
 msg INFO STARTING "Servisler derleniyor ve başlatılıyor (birkaç dakika sürebilir)" "Building and starting services (may take a few minutes)"
-docker compose up -d --build --wait --wait-timeout 300 >/dev/null 2>&1 || die 18 E_START_FAILED "Servisler başlamadı: docker compose ps; docker compose logs" "Services did not start: docker compose ps; docker compose logs"
+docker compose up -d --build --wait --wait-timeout 600 >/dev/null 2>&1 || die 18 E_START_FAILED "Servisler başlamadı: docker compose ps; docker compose logs" "Services did not start: docker compose ps; docker compose logs"
 i=0; until local_get /api/ready >/dev/null 2>&1 || [ $i -ge 12 ]; do sleep 5; i=$((i + 1)); done
 local_get /api/ready >/dev/null 2>&1 || die 19 E_NOT_READY "API hazır değil: docker compose logs api" "API is not ready: docker compose logs api"
-case "$SITE" in :*) msg OK READY "http://$LISTEN:$PORT" "http://$LISTEN:$PORT" ;; *) msg OK READY "https://$SITE" "https://$SITE" ;; esac
-
-# A one-hour token gates creation of the first admin; once an admin exists none is issued.
-if token=$(docker compose exec -T api node dist/cli.js bootstrap-token 2>/dev/null); then
-  msg INFO SETUP_TOKEN "Kurulum anahtarı (1 saat geçerli, yalnızca burada gösterilir):" "Setup token (valid 1 hour, shown only here):"
-  echo "      $token"
-  msg INFO SETUP_URL "Tarayıcıda /setup açın. Yeni anahtar: docker compose exec api node dist/cli.js bootstrap-token" "Open /setup in a browser. New token: docker compose exec api node dist/cli.js bootstrap-token"
-else
-  msg INFO SETUP "Yönetici hesabı zaten var; kurulum anahtarı üretilmedi" "Admin account already exists; no setup token issued"
+# Grafana takes its admin password only on first start; keep it equal to .env when its volume is older.
+if grep -q '^COMPOSE_PROFILES=observability' .env; then
+  docker compose exec -T grafana grafana cli admin reset-admin-password "$(env_value GRAFANA_PASSWORD)" >/dev/null 2>&1 || msg WARN W_GRAFANA "Grafana parolası eşitlenemedi" "Could not sync the Grafana password"
 fi
+
+# Access: an explicit --domain; on a first install with a public IPv4, <ip>.sslip.io (a public DNS name that
+# resolves to that IP) with a real certificate; otherwise local only. A failed attempt falls back to local.
+site_target=""
+if [ -n "$DOMAIN" ] && [ "$DOMAIN" != "$SITE" ]; then site_target=$DOMAIN
+elif [ -z "$(env_value PANEL_SITE)" ] && ip4=$(public_ipv4) && [ -n "$ip4" ]; then
+  site_target="$(echo "$ip4" | tr . -).sslip.io"
+  msg INFO AUTO_DOMAIN "Genel IP $ip4 bulundu; HTTPS için $site_target kullanılacak (kendi alan adınız için: --domain)" "Public IP $ip4 found; using $site_target for HTTPS (for your own name: --domain)"
+fi
+if [ -n "$site_target" ] && ! configure_domain "$site_target"; then
+  msg WARN W_DOMAIN_FALLBACK "$site_target için HTTPS kurulamadı; panel yalnızca yerelde açık (80/443 dışarıdan açık mı?)" "HTTPS could not be set up for $site_target; the panel is local only (are 80/443 open from outside?)"
+  revert_local_settings; restart_proxy
+fi
+[ -n "$(env_value PANEL_SITE)" ] || set_env PANEL_SITE :80
+load_settings
+
+# The first admin: created here with a generated password unless --setup-wizard asks for the browser wizard.
+admin_email="" admin_password=""
+if [ "$WIZARD" = 1 ]; then
+  if token=$(docker compose exec -T api node dist/cli.js bootstrap-token 2>/dev/null); then
+    msg INFO SETUP_TOKEN "Kurulum anahtarı (1 saat geçerli, yalnızca burada gösterilir):" "Setup token (valid 1 hour, shown only here):"
+    echo "      $token"
+  fi
+else
+  case "$SITE" in :*) admin_email=${ADMIN_EMAIL:-admin@lightning.local} ;; *) admin_email=${ADMIN_EMAIL:-admin@$SITE} ;; esac
+  if admin_password=$(docker compose exec -T api node dist/cli.js create-admin "$admin_email" "$UI" 2>/dev/null) && [ -n "$admin_password" ]; then
+    (umask 077; printf 'email=%s\npassword=%s\n' "$admin_email" "$admin_password" > secrets/initial-admin.txt)
+  else admin_email=""; fi
+fi
+
+# Daily backups (hourly timer) and a first backup right away.
+if [ "$SCHEDULE" = 1 ] && [ "$(id -u)" = 0 ] && command -v systemctl >/dev/null && [ ! -f /etc/systemd/system/lightning-vm-maintenance.timer ]; then
+  (SWITCH=on; set_schedule) >/dev/null 2>&1 || msg WARN W_TIMER "Zamanlanmış yedek kurulamadı: sh scripts/install.sh schedule on" "Scheduled backups not set up: sh scripts/install.sh schedule on"
+fi
+(do_backup install) >/dev/null 2>&1 || msg WARN W_BACKUP "İlk yedek alınamadı: sh scripts/install.sh backup" "The first backup failed: sh scripts/install.sh backup"
+write_settings
+
+# Summary: everything needed to start, in one place.
+row() { if [ "$UI" = tr ]; then printf '  %-12s %s\n' "$1" "$3"; else printf '  %-12s %s\n' "$2" "$3"; fi; }
+host_ip=$(public_ipv4 || true); host_ip=${host_ip:-SUNUCU_IP}
+echo
+msg OK DONE "Lightning VM hazır" "Lightning VM is ready"
 case "$SITE" in
-  :*) msg WARN W_NO_HTTPS "HTTPS yok; uzak erişim için SSH tüneli: ssh -L $PORT:127.0.0.1:$PORT KULLANICI@SUNUCU. Alan adı için: sh scripts/install.sh domain panel.example.com" "No HTTPS; for remote access use an SSH tunnel: ssh -L $PORT:127.0.0.1:$PORT USER@SERVER. For a domain: sh scripts/install.sh domain panel.example.com" ;;
+  :*) row "Panel" "Panel" "http://127.0.0.1:$PORT  (uzaktan: ssh -L $PORT:127.0.0.1:$PORT root@$host_ip)" ;;
+  *) row "Panel" "Panel" "https://$SITE" ;;
 esac
+if [ -n "$admin_email" ]; then
+  row "E-posta" "E-mail" "$admin_email"
+  row "Parola" "Password" "$admin_password"
+  row "" "" "$(if [ "$UI" = tr ]; then echo 'secrets/initial-admin.txt dosyasında da var; saklayıp silin'; else echo 'also in secrets/initial-admin.txt; store it and delete the file'; fi)"
+elif [ "$WIZARD" != 1 ]; then
+  row "Hesap" "Admin" "$(if [ "$UI" = tr ]; then echo 'zaten var (mevcut hesabınızla girin)'; else echo 'already exists (sign in with your account)'; fi)"
+else
+  row "Kurulum" "Setup" "/setup"
+fi
+if grep -q '^COMPOSE_PROFILES=observability' .env; then
+  row "Grafana" "Grafana" "http://127.0.0.1:3001  (ssh -L 3001:127.0.0.1:3001 root@$host_ip), admin / .env GRAFANA_PASSWORD"
+fi
+if [ -f /etc/systemd/system/lightning-vm-maintenance.timer ]; then row "Yedek" "Backups" "$(if [ "$UI" = tr ]; then echo 'her gün'; else echo daily; fi) -> backups/"
+else row "Yedek" "Backups" "$(if [ "$UI" = tr ]; then echo 'elle: sh scripts/install.sh backup'; else echo 'manual: sh scripts/install.sh backup'; fi)"; fi
+msg INFO NEXT "Panelde: Yönetim → Bağlantılar → vCenter ekleyin, sonra Katalog'dan havuz, şablon, IP havuzu ve paket oluşturun" "In the panel: Admin → Connections → add vCenter, then create a pool, template, IP pool and package in Catalog"
+msg WARN BACKUP_KEY "secrets/backup.key dosyasını sunucu dışında saklayın; o olmadan yedekler açılamaz" "Keep a copy of secrets/backup.key off this server; backups cannot be opened without it"

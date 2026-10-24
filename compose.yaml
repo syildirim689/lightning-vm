@@ -63,6 +63,12 @@ services:
       VMWARE_SERVICE_TOKEN_FILE: /run/secrets/vmware_token
       APP_VERSION: ${APP_VERSION:-dev}
       APP_ENV: ${APP_ENV:-production}
+      # Sessions (better-auth): Secure cookies when browsers use HTTPS; optional SMTP and Cloudflare Turnstile.
+      PANEL_TLS: ${PANEL_TLS:-0}
+      SMTP_URL: ${SMTP_URL:-}
+      MAIL_FROM: ${MAIL_FROM:-}
+      TURNSTILE_SITE_KEY: ${TURNSTILE_SITE_KEY:-}
+      TURNSTILE_SECRET_KEY: ${TURNSTILE_SECRET_KEY:-}
     # Backup/update results written by scripts/install.sh on the host.
     volumes: [./data/maintenance:/maintenance:ro]
     # Kept as files outside the database and .env; see docs/vmware.md for backup.

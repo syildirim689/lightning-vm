@@ -445,3 +445,28 @@ Doğrulanmayanlar:
 - GitHub Actions iş akışları henüz GitHub üzerinde çalışmadı.
 - amd64 imajları yalnızca CI'da derlenecek; sunucu testleri arm64'te yapıldı.
 - VMware ve konsol henüz uygulanmadığı için gerçek ESXi/vCenter testi yapılmadı.
+
+## Otomatik kurulum, HeroUI arayüzü ve better-auth — 2026-10-24
+Ubuntu 24.04 arm64 demo sunucusu, genel IPv4 ile.
+
+Gerçekten çalıştırılanlar:
+- Boş veriyle `sudo sh scripts/install.sh` (seçeneksiz): yaklaşık 1 dakikada bitti. Erişim
+  `49-12-109-190.sslip.io` olarak seçildi, Let's Encrypt sertifikası alındı, izleme açıldı,
+  yönetici oluşturuldu, yedek zamanlayıcısı kuruldu ve ilk yedek alındı. Özetteki parolayla
+  giriş 200, Grafana 200. İkinci çalıştırma yöneticiyi ve sırları değiştirmedi.
+- API entegrasyon testleri (better-auth dahil): 53/53.
+- Playwright E2E (`--setup-wizard` kurulumuna karşı, HTTPS): 14/14.
+- Ekran kontrolü: koyu/açık tema, 1440 px ve 390 px genişlikte giriş, genel bakış, katalog,
+  sunucular, bağlantılar, sistem, sipariş ve hesap sayfaları.
+- `npm audit` (api, web): 0; `govulncheck` v1.9.0 (console, vmware): bulgu yok.
+
+Bu testlerde bulunan ve düzeltilen hatalar:
+- Kullanıcının sistemi açık temadaysa bile panel koyu açılıyordu; tema artık sistemi izliyor.
+- Koşullu ikonlar (sihirbaz kontrolleri, oturum cihaz türü) ikon alt kümesine girmiyordu.
+- Koyu temada form alanları ve seçilmemiş radyo düğmeleri kart zemininden ayırt edilmiyordu.
+- Açık temada amber bağlantı metninin kontrastı yetersizdi.
+
+Doğrulanmayanlar:
+- Passkey'ler gerçek bir doğrulayıcıyla, parola sıfırlama gerçek bir SMTP sunucusuyla,
+  Turnstile gerçek anahtarlarla denenmedi.
+- Gerçek ESXi/vCenter yerine govmomi simülatörü kullanıldı.

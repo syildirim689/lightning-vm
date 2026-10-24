@@ -5,9 +5,11 @@ Açık kaynak VMware sunucu yönetim platformunun başlangıç deposu.
 **Durum: geliştirme iskeleti. Üretime ve müşteri kullanımına hazır değildir.**
 
 ## Çalışan bileşenler
-- Next.js (TypeScript) kullanıcı ve yönetim başlangıç ekranları; Türkçe/İngilizce (docs/i18n.md).
-- Kimlik doğrulama: e-posta/parola girişi, `admin`/`user` rolleri, sunucu tarafı oturumlar, CSRF ve
-  hız sınırı, kurulum anahtarıyla güvenli ilk yönetici, denetim kayıtları (docs/auth.md).
+- Next.js (TypeScript) yönetim ve müşteri paneli: HeroUI bileşenleri, koyu/açık tema, mobil uyumlu
+  yan menü, grafikli genel bakış; Türkçe/İngilizce (docs/i18n.md).
+- Kimlik doğrulama better-auth ile: e-posta/parola, passkey (WebAuthn), oturum listesi ve kapatma,
+  SMTP tanımlıysa e-postayla parola sıfırlama, isteğe bağlı Cloudflare Turnstile, `admin`/`user`
+  rolleri, CSRF ve hız sınırı, denetim kayıtları (docs/auth.md).
 - NestJS/Fastify API: canlılık, PostgreSQL/Redis hazır olma kontrolü, yönetici sistem durumu ve Prometheus metrikleri.
   `/metrics` yalnızca iç ağdan erişilir; Caddy üzerinden `/api/metrics` 404 döner.
 - BullMQ worker: Redis bağlantısı, PostgreSQL heartbeat ve bilinmeyen işleri reddetme.
@@ -15,8 +17,8 @@ Açık kaynak VMware sunucu yönetim platformunun başlangıç deposu.
 - İsteğe bağlı Prometheus, Grafana, Loki ve OpenTelemetry Collector.
 - GitHub Actions derleme kontrolü ve sürüm etiketinden GHCR imaj yayını.
 
-- Kurulum: `scripts/install.sh` (`install`, `check`, `recover-setup` modları; ön kontroller;
-  iki dilli hata kodları) ve tarayıcıda 11 adımlı kurulum sihirbazı (docs/setup.md).
+- Kurulum: tek komut; Docker, HTTPS (alan adı veya `<ip>.sslip.io`), izleme, ilk yönetici ve yedek
+  zamanlayıcısını kurup sonucu özetler. İsteğe bağlı tarayıcı sihirbazı (docs/setup.md).
 - Erişim modları: yalnızca yerel (SSH tüneli), alan adıyla Caddy otomatik HTTPS (Let's Encrypt,
   staging seçeneğiyle) veya mevcut bir Nginx/Caddy/Traefik arkasında güvenilen proxy sınırıyla
   (docs/domain-https.md).
@@ -41,7 +43,7 @@ Açık kaynak VMware sunucu yönetim platformunun başlangıç deposu.
 
 ## Henüz uygulanmayanlar
 - Sihirbazda kaynak havuzu adımı (havuzlar Yönetim → Katalog'dan oluşturulur).
-- MFA, parola sıfırlama, proje/müşteri modeli.
+- TOTP ile iki adımlı doğrulama, e-posta doğrulama.
 - Standalone ESXi üzerinde oluşturma, yeniden kurulum, snapshot, müşteri VM metrikleri, IPv6.
 - Faturalama; GHCR imajlarıyla sürümlü kurulum paketi; dağıtık iz (tracing).
 
@@ -58,31 +60,32 @@ git clone <DEPO_ADRESİ> lightning-vm
 cd lightning-vm
 ```
 
-**2. Sunucuyu kontrol edin.** Bu komut hiçbir şeyi değiştirmez:
+**2. Kurun.** Root olarak çalıştırın; gerisini betik yapar:
 ```sh
-sh scripts/install.sh check
+sudo sh scripts/install.sh
 ```
+Docker yoksa resmî deposundan kurulur. Sunucunun genel bir IPv4 adresi varsa panel
+`https://<ip-tireli>.sslip.io` adresinde Let's Encrypt sertifikasıyla açılır. Kendi alan adınız için
+`--domain panel.example.com` ekleyin (A kaydı sunucuyu göstermeli, 80/443 açık olmalı). Betik
+sonunda panel adresini, yönetici e-postasını ve parolasını yazar; parola
+`secrets/initial-admin.txt` dosyasında da bulunur. İlk girişten sonra parolayı değiştirip
+dosyayı silin.
 
-**3. Kurun.** Docker yoksa `--install-docker` ekleyin; Docker resmî deposundan kurulur ve
-bunun için root gerekir:
-```sh
-sudo sh scripts/install.sh --install-docker
-```
-Betik sonunda **1 saat geçerli bir kurulum anahtarı** yazar. Anahtarın süresi dolduysa:
-```sh
-sudo docker compose exec api node dist/cli.js bootstrap-token
-```
+Yalnızca kontrol etmek için (hiçbir şeyi değiştirmez): `sh scripts/install.sh check`.
+Diğer seçenekler (`--local`, `--admin-email`, `--setup-wizard`, `--no-monitoring`,
+`--no-schedule`) docs/setup.md dosyasında.
 
-**4. Panele kendi bilgisayarınızdan bağlanın (SSH tüneli):**
+**3. Genel IP yoksa (`--local`):** panel yalnızca sunucuda açılır. Kendi bilgisayarınızdan
+SSH tüneliyle bağlanın:
 ```sh
 ssh -L 8080:127.0.0.1:8080 KULLANICI@SUNUCU
 ```
-Ardından http://127.0.0.1:8080/setup adresini açın, anahtarı girin ve sihirbazı tamamlayın.
+Ardından http://127.0.0.1:8080 adresini açın.
 
-Kurulum yarıda kalırsa aynı `install` komutunu tekrar çalıştırın. Mevcut sırlar, veriler ve
-yönetici hesabı korunur.
+Kurulum yarıda kalırsa aynı komutu tekrar çalıştırın. Mevcut sırlar, veriler ve yönetici hesabı
+korunur.
 
-**5. (İsteğe bağlı) Alan adı ve HTTPS.** Alan adınızın A kaydı sunucuyu göstermeli ve 80/443
+**4. (İsteğe bağlı) Alan adını sonradan değiştirmek.** Alan adınızın A kaydı sunucuyu göstermeli ve 80/443
 portları internetten açık olmalı. Önce test sertifikasıyla deneyin, sonra gerçek sertifikayı alın:
 ```sh
 sudo sh scripts/install.sh domain panel.example.com --acme-staging

@@ -21,7 +21,7 @@ const password = 'correct horse battery staple';
 const cookieValue = (res, name) => res.headers['set-cookie']?.toString().match(new RegExp(`${name}=([^;]*)`))?.[1];
 const send = (method, path, { payload, setup, session } = {}) => app.inject({
   method, url: path, payload,
-  headers: { 'x-lightning-csrf': '1', cookie: [setup && `lvm_setup=${setup}`, session && `lvm_session=${session}`].filter(Boolean).join('; ') },
+  headers: { 'x-lightning-csrf': '1', origin: 'http://localhost', host: 'localhost', cookie: [setup && `lvm_setup=${setup}`, session && `lvm.session_token=${session}`].filter(Boolean).join('; ') },
 });
 
 // A real HTTP endpoint on a non-loopback address that forwards to the app, like Caddy would.
@@ -113,7 +113,7 @@ test('finishing needs an admin; creating it moves the wizard to the admin sessio
   const res = await send('POST', '/setup/admin', { setup: setupCookie, payload: { email: 'admin@example.test', password } });
   assert.equal(res.statusCode, 201);
   assert.equal(cookieValue(res, 'lvm_setup'), '');
-  adminCookie = cookieValue(res, 'lvm_session');
+  adminCookie = cookieValue(res, 'lvm.session_token');
   assert.equal((await send('GET', '/setup/progress', { setup: setupCookie })).json().code, 'UNAUTHENTICATED');
   assert.equal((await send('GET', '/setup/progress', { session: adminCookie })).json().adminCreated, true);
 });

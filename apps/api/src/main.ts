@@ -9,7 +9,9 @@ import { closeConnections, pool, redis } from './db';
 import { apiError, ErrorCodeFilter } from './errors';
 import { logEvent } from './log';
 import { csrfRejected } from './security';
-import { AuthController } from './auth';
+import { AuthController, PublicController } from './auth';
+import { fromNodeHeaders } from 'better-auth/node';
+import { getAuth } from './better-auth';
 import { SetupController } from './setup';
 import { AdminController } from './admin';
 import { VmwareController } from './vmware';
@@ -33,7 +35,7 @@ class HealthController {
   }
 }
 
-@Module({ controllers: [HealthController, AuthController, SetupController, AdminController, VmwareController, ConsoleController, CatalogAdminController, CatalogController, ServersController, ServersAdminController] })
+@Module({ controllers: [HealthController, AuthController, PublicController, SetupController, AdminController, VmwareController, ConsoleController, CatalogAdminController, CatalogController, ServersController, ServersAdminController] })
 class AppModule {}
 
 // Only Caddy on the Compose network talks to the API; its X-Forwarded-* headers are trusted.
@@ -50,6 +52,26 @@ export async function createApp() {
   // Route templates (/servers/:id), not raw URLs, keep the label set bounded.
   app.getHttpAdapter().getInstance().addHook('onResponse', async (req, reply) => {
     httpDuration.observe({ method: req.method, route: req.routeOptions.url ?? 'unmatched', status: `${Math.floor(reply.statusCode / 100)}xx` }, reply.elapsedTime / 1000);
+  });
+  // better-auth's routes (sign-in, sign-up, sign-out, sessions, password reset, passkeys). Caddy strips /api,
+  // so the prefix is put back to match better-auth's basePath and the URLs it builds. The CSRF hook above
+  // still runs first; static routes such as GET /auth/me take precedence over this wildcard. The instance
+  // is built on the first request, after migrations (better-auth validates and caches the schema once).
+  app.getHttpAdapter().getInstance().route({
+    method: ['GET', 'POST'],
+    url: '/auth/*',
+    async handler(req, reply) {
+      const headers = fromNodeHeaders(req.headers);
+      headers.set('x-lvm-client-ip', req.ip);
+      const res = await getAuth().handler(new Request(new URL(`/api${req.url}`, `${req.protocol}://${req.host}`), {
+        method: req.method, headers, body: req.method === 'GET' || req.body === undefined ? undefined : JSON.stringify(req.body),
+      }));
+      reply.status(res.status);
+      res.headers.forEach((v, k) => { if (k !== 'set-cookie') reply.header(k, v); });
+      const cookies = res.headers.getSetCookie();
+      if (cookies.length) reply.header('set-cookie', cookies);
+      return reply.send(res.body ? await res.text() : null);
+    },
   });
   app.useGlobalFilters(new ErrorCodeFilter());
   return app;

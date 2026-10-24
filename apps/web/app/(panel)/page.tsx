@@ -1,7 +1,13 @@
-import { useTranslations } from 'next-intl';
-import UserPanel from './user-panel';
+import { getTranslations } from 'next-intl/server';
+import { I } from '../../components/icon';
+import { ButtonLink, PageHeader } from '../../components/ui';
+import { ServerList } from './servers-ui';
 
-export default function Page() {
-  const t = useTranslations('UserPanel');
-  return <><header><p className="eyebrow">{t('eyebrow')}</p><h1>{t('title')}</h1><p>{t('intro')}</p></header><UserPanel/></>;
+export default async function Page() {
+  const t = await getTranslations('UserPanel');
+  const tn = await getTranslations('Nav');
+  return <>
+    <PageHeader title={t('title')} description={t('intro')} actions={<ButtonLink href="/order"><I name="plus" size={16}/>{tn('newServer')}</ButtonLink>}/>
+    <ServerList/>
+  </>;
 }

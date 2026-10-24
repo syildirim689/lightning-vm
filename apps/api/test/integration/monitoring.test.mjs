@@ -23,8 +23,8 @@ const { issueBootstrapToken } = await import('../../dist/setup.js');
 
 let app, admin, user;
 const password = 'correct horse battery staple';
-const send = (method, path, payload, session) => app.inject({ method, url: path, payload, headers: { 'x-lightning-csrf': '1', ...(session && { cookie: `lvm_session=${session}` }) } });
-const cookieOf = (res) => res.headers['set-cookie']?.toString().match(/lvm_session=([^;]+)/)?.[1];
+const send = (method, path, payload, session) => app.inject({ method, url: path, payload, headers: { 'x-lightning-csrf': '1', origin: 'http://localhost', host: 'localhost', ...(session && { cookie: `lvm.session_token=${session}` }) } });
+const cookieOf = (res) => res.headers['set-cookie']?.toString().match(/lvm\.session_token=([^;]+)/)?.[1];
 const metric = (text, name) => text.split('\n').filter((l) => l.startsWith(name));
 
 before(async () => {
@@ -37,7 +37,7 @@ before(async () => {
   const { token } = await issueBootstrapToken();
   admin = cookieOf(await send('POST', '/setup/admin', { token, email: 'admin@example.test', password }));
   await send('PUT', '/admin/settings', { registrationOpen: true }, admin);
-  user = cookieOf(await send('POST', '/auth/register', { email: 'user@example.test', password }));
+  user = cookieOf(await send('POST', '/auth/sign-up/email', { name: '', email: 'user@example.test', password }));
 });
 after(async () => { await app?.close(); await closeConnections(); });
 

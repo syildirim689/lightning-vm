@@ -7,7 +7,7 @@
     "navUser": "Kullanıcı paneli",
     "navAdmin": "Yönetim paneli",
     "build": "v{version} · Başlangıç sürümü",
-    "notice": "Başlangıç sürümü · Şimdiye kadar yalnızca VMware simülatörüyle test edildi, gerçek ESXi/vCenter ile değil. İzleme, yedekleme ve güncelleme henüz yok.",
+    "notice": "Erken sürüm: VMware simülatörüyle test edildi, henüz gerçek ESXi/vCenter ile değil.",
     "language": "Dil",
     "signedInAs": "Oturum: {email}",
     "logout": "Çıkış yap"
@@ -127,7 +127,29 @@
     "DUPLICATE_NAME": "VMware'de aynı adlı bir VM var.",
     "INVALID_STATE": "VM bu işlem için uygun durumda değil.",
     "TASK_FAILED": "VMware görevi başarısız oldu.",
-    "READINESS_TIMEOUT": "Sunucu süre içinde hazır olmadı."
+    "READINESS_TIMEOUT": "Sunucu süre içinde hazır olmadı.",
+    "INVALID_EMAIL_OR_PASSWORD": "E-posta veya parola yanlış.",
+    "USER_ALREADY_EXISTS": "Bu e-postayla bir hesap zaten var.",
+    "USER_ALREADY_EXISTS_USE_ANOTHER_EMAIL": "Bu e-postayla bir hesap zaten var.",
+    "PASSWORD_TOO_SHORT": "Parola en az 12 karakter olmalı.",
+    "PASSWORD_TOO_LONG": "Parola çok uzun.",
+    "INVALID_PASSWORD": "Mevcut parola yanlış.",
+    "INVALID_EMAIL": "Geçerli bir e-posta adresi girin.",
+    "INVALID_ORIGIN": "Bu istek başka bir siteden geldiği için reddedildi.",
+    "FAILED_TO_CREATE_SESSION": "Bu hesapla giriş yapılamıyor; hesap devre dışı olabilir.",
+    "INVALID_TOKEN": "Bağlantı geçersiz veya süresi dolmuş. Yenisini isteyin.",
+    "SESSION_EXPIRED": "Oturumunuzun süresi doldu. Yeniden giriş yapın.",
+    "MISSING_RESPONSE": "Önce doğrulamayı tamamlayın.",
+    "VERIFICATION_FAILED": "Doğrulama başarısız oldu. Yeniden deneyin.",
+    "MAIL_NOT_CONFIGURED": "Bu panelde e-posta ayarlanmamış.",
+    "PASSKEY_NOT_FOUND": "Bu passkey burada kayıtlı değil.",
+    "AUTHENTICATION_FAILED": "Passkey doğrulanamadı.",
+    "CHALLENGE_NOT_FOUND": "Passkey isteğinin süresi doldu. Yeniden deneyin.",
+    "FAILED_TO_VERIFY_REGISTRATION": "Passkey eklenemedi.",
+    "PREVIOUSLY_REGISTERED": "Bu passkey zaten kayıtlı.",
+    "YOU_ARE_NOT_ALLOWED_TO_REGISTER_THIS_PASSKEY": "Bu passkey hesabınıza eklenemez.",
+    "CREDENTIAL_ACCOUNT_NOT_FOUND": "Bu hesabın parolası yok; passkey ile giriş yapın.",
+    "UNKNOWN_ERROR": "Bir sorun oluştu. Yeniden deneyin."
   },
   "Auth": {
     "required": "zorunlu",
@@ -145,7 +167,22 @@
     "setupSubmit": "Yönetici hesabını oluştur",
     "working": "İşleniyor…",
     "toRegister": "Hesabınız yok mu? Kayıt olun",
-    "toLogin": "Zaten hesabınız var mı? Giriş yapın"
+    "toLogin": "Zaten hesabınız var mı? Giriş yapın",
+    "loginIntro": "Sunucularınızı yönetmek için giriş yapın.",
+    "forgot": "Parolamı unuttum",
+    "or": "veya",
+    "passkeySignIn": "Passkey ile giriş yap",
+    "captchaRequired": "Önce doğrulamayı tamamlayın.",
+    "forgotTitle": "Parolanızı sıfırlayın",
+    "forgotIntro": "E-posta adresinizi girin. Hesap varsa yeni parola belirlemeniz için bir bağlantı gönderilir.",
+    "resetSend": "Sıfırlama bağlantısı gönder",
+    "resetSent": "Bu adrese ait bir hesap varsa sıfırlama bağlantısı gönderildi. Gelen kutunuza bakın.",
+    "resetUnavailable": "Bu panelde e-posta ile parola sıfırlama ayarlanmamış. Yöneticinize başvurun.",
+    "resetTitle": "Yeni parola belirleyin",
+    "resetIntro": "E-postadaki bağlantı bir saat geçerlidir.",
+    "newPassword": "Yeni parola",
+    "resetSubmit": "Yeni parolayı kaydet",
+    "resetDone": "Parolanız değiştirildi. Yeni parolanızla giriş yapın; diğer oturumlar kapatıldı."
   },
   "fieldErrors": {
     "INVALID_EMAIL": "Geçerli bir e-posta adresi girin.",
@@ -555,13 +592,20 @@
       "empty": "Henüz proje yok.",
       "name": "Proje adı",
       "create": "Proje oluştur",
-      "remove": "Sil"
+      "remove": "Sil",
+      "created": "Proje oluşturuldu."
     },
     "name": "Sunucu adı",
     "nameHelp": "Ana bilgisayar adı olarak da kullanılır, örnek: web-1.",
     "sshKeys": "SSH anahtarları",
+    "access": "Ad ve erişim",
     "noKeys": "Önce aşağıdan bir SSH anahtarı ekleyin.",
-    "create": "Sunucuyu oluştur"
+    "create": "Sunucuyu oluştur",
+    "perMonth": "ay",
+    "summary": "Özet",
+    "choosePlan": "Bir konum ve paket ya da özel kaynak seçin.",
+    "pricing": "Fiyat hesaplanıyor…",
+    "manageKeys": "SSH anahtarlarını yönet"
   },
   "Catalog": {
     "eyebrow": "YÖNETİM · KATALOG",
@@ -648,7 +692,8 @@
       "template": "Şablon (template)",
       "minDisk": "En az disk",
       "explain": "İmajlar, bağlantının envanterindeki VM şablonlarıdır. Şablon VMware'de hazırlanır; platform burada yalnızca seçer.",
-      "noTemplates": "Bu bağlantıda şablon bulunamadı."
+      "noTemplates": "Bu bağlantıda şablon bulunamadı.",
+      "empty": "Henüz imaj yok."
     },
     "packages": {
       "title": "Paketler",
@@ -660,7 +705,8 @@
       "currency": "Para birimi",
       "currencyHelp": "ISO 4217 kodu: EUR, TRY, USD…",
       "pools": "Sunulduğu havuzlar",
-      "images": "İzin verilen imajlar"
+      "images": "İzin verilen imajlar",
+      "empty": "Henüz paket yok."
     },
     "ip": {
       "title": "IP havuzları",
@@ -675,7 +721,8 @@
       "end": "Aralık sonu",
       "excluded": "Hariç tutulan adresler",
       "listHelp": "Virgül veya boşlukla ayırın.",
-      "explain": "Şimdilik yalnızca IPv4. Aralıklar aynı kaynak havuzunda çakışamaz. Adresler sunucu oluşturulurken otomatik atanır ve sunucu silindikten sonra bırakılır."
+      "explain": "Şimdilik yalnızca IPv4. Aralıklar aynı kaynak havuzunda çakışamaz. Adresler sunucu oluşturulurken otomatik atanır ve sunucu silindikten sonra bırakılır.",
+      "empty": "Henüz IP havuzu yok."
     },
     "quotas": {
       "title": "Kotalar",
@@ -691,7 +738,11 @@
       "maxVcpu": "En çok vCPU",
       "maxMemoryMb": "En çok RAM (MB)",
       "maxDiskGb": "En çok disk (GB)"
-    }
+    },
+    "removeConfirm": "“{name}” kaldırılsın mı? Bu işlem geri alınamaz.",
+    "cancel": "Vazgeç",
+    "capacity": "Kapasite",
+    "availableOf": "{offered} {unit} içinden {available} boş"
   },
   "Servers": {
     "loading": "Yükleniyor…",
@@ -794,7 +845,8 @@
       "publicKey": "Açık anahtar",
       "publicKeyHelp": "Örnek: ~/.ssh/id_ed25519.pub dosyasının içeriği.",
       "add": "Anahtar ekle",
-      "remove": "Sil"
+      "remove": "Sil",
+      "added": "Anahtar eklendi."
     },
     "admin": {
       "eyebrow": "YÖNETİM · SUNUCULAR",
@@ -810,7 +862,8 @@
       "reconcile": "Şimdi uzlaştır",
       "reconcileQueued": "Uzlaştırma kuyruğa alındı.",
       "noFindings": "Açık bulgu yok.",
-      "finding": "Bulgu"
+      "finding": "Bulgu",
+      "search": "Ad, sahip, IP veya havuza göre ara"
     },
     "finding": {
       "vm_missing": "VM VMware'de yok",
@@ -863,6 +916,124 @@
       "E_UPDATE_INCOMPATIBLE": "o sürüm, uygulanmış bir migration'ı içermiyor (veritabanı geri alınamaz)",
       "E_UPDATE_FAILED": "yeni sürüm hazır olmadı",
       "W_UPDATE_BUSY": "çalışan işlemler vardı; bir sonraki saatte yeniden denenir"
+    },
+    "versionLabel": "Sürüm",
+    "lastBackupLabel": "Son yedek",
+    "lastUpdateLabel": "Son güncelleme",
+    "settingsLabel": "Zamanlama"
+  },
+  "Nav": {
+    "label": "Ana menü",
+    "adminSection": "Yönetim",
+    "customerSection": "Çalışma alanım",
+    "dashboard": "Genel bakış",
+    "servers": "Sunucular",
+    "connections": "Bağlantılar",
+    "catalog": "Katalog",
+    "system": "Sistem",
+    "myServers": "Sunucularım",
+    "newServer": "Yeni sunucu",
+    "account": "Anahtarlar ve projeler",
+    "lightTheme": "Açık temaya geç",
+    "darkTheme": "Koyu temaya geç",
+    "language": "Dil",
+    "userMenu": "Hesap menüsü",
+    "logout": "Çıkış yap",
+    "openMenu": "Menüyü aç",
+    "adminBadge": "Yönetici",
+    "earlyBuild": "Erken sürüm"
+  },
+  "Dashboard": {
+    "eyebrow": "YÖNETİM",
+    "title": "Genel bakış",
+    "intro": "Sunucular, satılabilir kapasite, işlemler ve bağlantılar tek bakışta.",
+    "setupIncomplete": "İlk kurulum henüz bitmedi.",
+    "continueSetup": "Kurulum sihirbazına devam et",
+    "gettingStarted": "Başlarken",
+    "gettingStartedHelp": "Müşterilerin sunucu oluşturabilmesi için bu adımları tamamlayın.",
+    "steps": {
+      "connection": "vCenter bağlayın",
+      "pool": "Kaynak havuzu oluşturun",
+      "image": "İşletim sistemi şablonu ekleyin",
+      "ip": "IP havuzu ekleyin",
+      "package": "Paket oluşturun"
+    },
+    "stat": {
+      "servers": "Hazır sunucular",
+      "serversHint": "hazır / toplam",
+      "capacity": "Satılabilir vCPU",
+      "capacityHint": "satışa açılan {offered} içinden",
+      "operations": "Süren işlemler",
+      "failed": "{n, plural, =0 {0 başarısız (24 sa)} one {# başarısız (24 sa)} other {# başarısız (24 sa)}}",
+      "connections": "Bağlantılar",
+      "connectionsHint": "erişilebilen / toplam"
+    },
+    "noBackup": "Henüz başarılı bir yedek yok",
+    "noBackupHelp": "Sunucuda sudo sh scripts/install.sh backup çalıştırın veya günlük zamanlamayı açın.",
+    "backupFailed": "Son yedek başarısız oldu",
+    "openSystem": "Sistem sayfasını aç",
+    "chart": {
+      "capacity": "Havuz başına vCPU kapasitesi",
+      "capacityHelp": "Diğer VM'lerin kullandığı, Lightning VM sunucularına ayrılan ve hâlâ satılabilir olan.",
+      "used": "Kullanımda",
+      "reserved": "Rezerve",
+      "available": "Boş",
+      "servers": "Durumlarına göre sunucular",
+      "operations": "Son 7 günün işlemleri",
+      "succeeded": "Başarılı",
+      "failed": "Başarısız"
+    },
+    "serverState": {
+      "running": "Çalışıyor",
+      "stopped": "Kapalı",
+      "problem": "İlgi bekliyor",
+      "busy": "İşlemde"
+    },
+    "recent": "Son işlemler",
+    "viewAll": "Tümünü gör",
+    "noData": "Henüz veri yok."
+  },
+  "SystemPage": {
+    "eyebrow": "YÖNETİM",
+    "title": "Sistem",
+    "intro": "Panelin kendi sağlığı, kullanıcı kaydı, yedekler ve güncellemeler."
+  },
+  "Account": {
+    "title": "Anahtarlar ve projeler",
+    "intro": "Giriş güvenliğiniz, yeni sunuculara yüklenen SSH anahtarlarınız ve projeleriniz.",
+    "security": {
+      "title": "Giriş ve güvenlik",
+      "intro": "Parolanız, passkey'leriniz ve oturumu açık cihazlarınız.",
+      "password": "Parola",
+      "currentPassword": "Mevcut parola",
+      "signOutOthers": "Diğer cihazlarımdaki oturumları kapat",
+      "changePassword": "Parolayı değiştir",
+      "passwordChanged": "Parola değiştirildi.",
+      "passkeys": "Passkey'ler",
+      "passkeysHelp": "Parola yerine parmak iziniz, yüzünüz veya güvenlik anahtarınızla giriş yapın. Passkey'ler bu panelin adresine bağlıdır.",
+      "passkeysNeedHttps": "Passkey için HTTPS (veya localhost) gerekir. Eklemek için paneli HTTPS adresinden açın.",
+      "passkeyName": "Ad (isteğe bağlı)",
+      "passkeyNamePlaceholder": "örn. Dizüstü",
+      "addPasskey": "Passkey ekle",
+      "passkeyAdded": "Passkey eklendi.",
+      "passkeyUnnamed": "Passkey",
+      "remove": "Kaldır",
+      "sessions": "Oturumu açık cihazlar",
+      "thisDevice": "Bu cihaz",
+      "revoke": "Oturumu kapat",
+      "mobile": "Mobil",
+      "desktop": "Bilgisayar"
     }
+  },
+  "AuthLayout": {
+    "headline": "VMware sunucuları dakikalar içinde hazır.",
+    "subline": "Kendi ESXi/vCenter altyapınızda sanal sunucuları oluşturun, yönetin ve izleyin; müşterileriniz de aynı paneli kullansın.",
+    "points": {
+      "provision": "cloud-init ile otomatik kurulum",
+      "console": "Yönetici ve müşteri için tarayıcı konsolu",
+      "capacity": "Dürüst kapasite, kota ve IP havuzları",
+      "backup": "Şifreli yedek, alarm ve güvenli güncelleme"
+    },
+    "footer": "Açık kaynak · kendi sunucunuzda çalışır"
   }
 }

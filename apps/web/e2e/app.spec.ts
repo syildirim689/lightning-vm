@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Locator, type Page } from '@playwright/test';
 
 // Serial: the first tests perform first-run setup that later tests rely on.
 test.describe.configure({ mode: 'serial' });
@@ -6,14 +6,21 @@ test.describe.configure({ mode: 'serial' });
 const admin = { email: process.env.E2E_ADMIN_EMAIL ?? 'admin@example.test', password: process.env.E2E_ADMIN_PASSWORD ?? 'e2e admin passphrase 2026' };
 const user = { email: `user-${Date.now()}@example.test`, password: 'e2e user passphrase 2026' };
 
-// The admin page has more than one live region; this is the system health one.
-const health = (page: Page) => page.locator('article', { has: page.getByRole('heading', { name: /^(System health|Sistem sağlığı)$/ }) }).getByRole('status');
+const health = (page: Page) => page.getByTestId('health');
 async function signIn(page: Page, who: { email: string; password: string }) {
   await page.goto('/login');
   await page.getByLabel(/E-posta|Email/).fill(who.email);
   await page.getByLabel(/Parola|Password/).fill(who.password);
-  await page.getByRole('button', { name: /Giriş yap|Sign in/ }).click();
+  await page.getByRole('button', { name: /^(Giriş yap|Sign in)$/ }).click();
 }
+// HeroUI (React Aria) select: the trigger is a button named after its label; options open in a listbox.
+async function choose(page: Page, scope: Page | Locator, label: string | RegExp, option: string | RegExp) {
+  await scope.getByRole('button', { name: label }).click();
+  await page.getByRole('option', { name: option }).first().click();
+}
+// React Aria keeps the real input visually hidden under its styled control.
+// Controlled inputs change only after the app (or the API) answers, so click and let expect() wait.
+const tick = (box: Locator) => box.click({ force: true });
 
 test.describe('first run (Turkish browser)', () => {
   test.use({ locale: 'tr-TR' });
@@ -101,7 +108,7 @@ test.describe('first run (Turkish browser)', () => {
       // The simulator's self-signed certificate must be refused and shown, then pinned explicitly.
       await expect(page.getByRole('heading', { name: 'Sunulan sertifika' })).toBeVisible();
       await page.getByRole('button', { name: 'Parmak izini doğruladım, bu sertifikayı sabitle' }).click();
-      await expect(page.getByLabel('Sertifika doğrulama')).toHaveValue('pinned');
+      await expect(page.getByRole('button', { name: /Sertifika doğrulama/ })).toContainText('Sertifikayı parmak iziyle sabitle');
       await page.getByRole('button', { name: 'Bağlantıyı test et' }).click();
       await expect(page.getByText('Bağlantı başarılı', { exact: false })).toBeVisible();
       await page.getByRole('button', { name: 'Kaydet', exact: true }).click();
@@ -124,7 +131,7 @@ test.describe('first run (Turkish browser)', () => {
     await expect(page.getByText('HTTPS yapılandırılmadı', { exact: false })).toHaveCount(domain ? 0 : 1);
     await page.getByRole('button', { name: 'Kurulumu tamamla' }).click();
     await expect(page).toHaveURL(/\/admin$/);
-    await expect(page.getByText('İlk kurulum henüz tamamlanmadı.')).toHaveCount(0);
+    await expect(page.getByText('İlk kurulum henüz bitmedi.')).toHaveCount(0);
 
     // Closed for good: the page redirects and the API refuses even an admin session.
     expect((await (await page.request.get('/api/setup/progress')).json()).code).toBe('SETUP_CLOSED');
@@ -139,37 +146,38 @@ test.describe('first run (Turkish browser)', () => {
     expect((await session.json()).code).toBe('SETUP_CLOSED');
   });
 
-  test('sign-in errors are validated on the server and translated', async ({ page }) => {
+  test('sign-in errors are validated and translated', async ({ page }) => {
     await signIn(page, { email: 'not-an-email', password: 'short' });
     await expect(page.getByText('Geçerli bir e-posta adresi girin.')).toBeVisible();
     await signIn(page, { email: admin.email, password: 'wrong passphrase here' });
-    await expect(page.locator('main [role=alert]')).toHaveText('E-posta veya parola hatalı.');
+    await expect(page.locator('main [role=alert]')).toHaveText('E-posta veya parola yanlış.');
   });
 });
 
 test.describe('roles and sessions (English browser)', () => {
   test.use({ locale: 'en-US' });
 
-  test('admin sees live system health and opens registration', async ({ page }) => {
+  test('admin sees live system health, backups, and opens registration', async ({ page }) => {
     await signIn(page, admin);
     await expect(page).toHaveURL(/\/admin$/);
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Overview');
+    await page.getByRole('link', { name: 'System' }).click();
     await expect(health(page)).toHaveText('API, PostgreSQL and Redis are reachable');
     await expect(page.getByText(/Background worker: Running \(last signal .*\d{4}/)).toBeVisible();
     // The run script and CI take one backup with scripts/install.sh before the tests.
-    const maintenance = page.locator('article', { has: page.getByRole('heading', { name: 'Backups and updates' }) });
-    await expect(maintenance).toContainText(/Last successful backup: .*\d{4}/);
-    await expect(maintenance.getByRole('table')).toContainText('Backup');
-    await expect(maintenance.getByRole('table')).toContainText('succeeded');
-    const toggle = page.getByLabel('Allow new user registration');
+    await expect(page.getByText(/Last successful backup: .*\d{4}/)).toBeVisible();
+    const history = page.getByRole('grid', { name: 'Backups and updates' });
+    await expect(history).toContainText('Backup');
+    await expect(history).toContainText('succeeded');
+    const toggle = page.getByRole('switch', { name: 'Allow new user registration' });
     await expect(toggle).toBeEnabled();
-    // Toggle off then on so the save path is exercised whatever state a previous run left.
-    // Controlled input: its state flips only after the API answers.
-    if (await toggle.isChecked()) { await toggle.click(); await expect(toggle).not.toBeChecked(); }
-    await toggle.click();
+    // Off then on, so the save path runs whatever state a previous run left; the switch follows the API answer.
+    if (await toggle.isChecked()) { await tick(toggle); await expect(toggle).not.toBeChecked(); }
+    await tick(toggle);
     await expect(toggle).toBeChecked();
-    await expect(page.getByText('Saved.')).toBeVisible();
+    await expect(page.getByText('Saved.').first()).toBeVisible();
     await page.reload();
-    await expect(page.getByLabel('Allow new user registration')).toBeChecked();
+    await expect(page.getByRole('switch', { name: 'Allow new user registration' })).toBeChecked();
   });
 
   test('a registered user gets the user panel but not the admin panel or admin API', async ({ page }) => {
@@ -179,7 +187,7 @@ test.describe('roles and sessions (English browser)', () => {
     await page.getByRole('button', { name: 'Create account' }).click();
     await expect(page).toHaveURL(/\/$/);
     await expect(page.getByRole('heading', { level: 1 })).toHaveText('Your servers');
-    await expect(page.getByRole('link', { name: 'Admin panel' })).toHaveCount(0);
+    await expect(page.getByRole('link', { name: 'Overview' })).toHaveCount(0);
 
     await page.goto('/admin');
     await expect(page.locator('main [role=alert]')).toContainText('You do not have permission for this action.');
@@ -190,7 +198,8 @@ test.describe('roles and sessions (English browser)', () => {
   test('sign-out ends the session on the server', async ({ page }) => {
     await signIn(page, user);
     await expect(page).toHaveURL(/\/$/);
-    await page.getByRole('button', { name: 'Sign out' }).click();
+    await page.getByRole('button', { name: 'Account menu' }).click();
+    await page.getByRole('menuitem', { name: 'Sign out' }).click();
     await expect(page).toHaveURL(/\/login$/);
     expect((await page.request.get('/api/auth/me')).status()).toBe(401);
     await page.goto('/');
@@ -205,95 +214,103 @@ test.describe('catalog and order preview (simulator)', () => {
     await signIn(adminPage, admin);
     await expect(adminPage).toHaveURL(/\/admin$/);
     await adminPage.goto('/admin/catalog');
-    await adminPage.getByLabel('Name').first().fill('E2E Pool');
-    await adminPage.getByLabel('Location', { exact: true }).fill('Lab');
-    const compute = adminPage.getByLabel('Cluster or host');
-    await expect(compute.locator('option', { hasText: '(cluster)' })).toHaveCount(1);
-    await compute.selectOption({ label: (await compute.locator('option', { hasText: '(cluster)' }).textContent())! });
-    await adminPage.getByRole('group', { name: 'Datastores' }).getByRole('checkbox').first().check();
-    const network = adminPage.getByLabel('Network (port group)');
-    await network.selectOption({ index: 1 });
-    await adminPage.getByRole('button', { name: 'Create pool' }).click();
+    await adminPage.getByRole('button', { name: 'New resource pool' }).click();
+    let dialog = adminPage.getByRole('dialog');
+    await dialog.getByLabel('Name').fill('E2E Pool');
+    await dialog.getByLabel('Location', { exact: true }).fill('Lab');
+    await choose(adminPage, dialog, /Cluster or host/, /\(cluster\)/);
+    await tick(dialog.getByRole('group', { name: 'Datastores' }).getByRole('checkbox').first());
+    await choose(adminPage, dialog, /Network \(port group\)/, /.+/);
+    await dialog.getByRole('button', { name: 'Create pool' }).click();
     await expect(adminPage.getByRole('heading', { name: /E2E Pool/ })).toBeVisible();
     await expect(adminPage.getByRole('rowheader', { name: 'Physical total' })).toBeVisible();
     await expect(adminPage.getByRole('rowheader', { name: 'Management and safety headroom' })).toBeVisible();
 
-    await adminPage.getByText('Add custom resource rule').click();
+    await adminPage.getByRole('button', { name: 'Add custom resource rule' }).click();
     await adminPage.getByLabel('Price per vCPU').fill('5');
     await adminPage.getByLabel('Price per GB RAM').fill('2');
     await adminPage.getByLabel('Price per GB disk').fill('0.1');
     await adminPage.getByRole('button', { name: 'Save rule' }).click();
-    await expect(adminPage.getByText('Edit custom resource rule')).toBeVisible();
+    await expect(adminPage.getByRole('button', { name: 'Edit custom resource rule' })).toBeVisible();
 
-    const pkg = adminPage.locator('form', { has: adminPage.getByRole('heading', { name: 'New package' }) });
-    await pkg.getByLabel('Name').fill('E2E Small');
-    await pkg.getByLabel('Monthly price').fill('12.1x');
-    await pkg.getByRole('button', { name: 'Create package' }).click();
-    await expect(pkg.getByText('Enter a valid amount (example: 12.50).')).toBeVisible();
-    await expect(pkg.getByText('This field is required.')).toBeVisible();
-    await pkg.getByLabel('Monthly price').fill('12.10');
-    await pkg.getByRole('group', { name: 'Offered in pools' }).getByLabel('E2E Pool').check();
-    await pkg.getByRole('button', { name: 'Create package' }).click();
+    await adminPage.getByRole('tab', { name: 'Packages' }).click();
+    await adminPage.getByRole('button', { name: 'New package' }).click();
+    dialog = adminPage.getByRole('dialog');
+    await dialog.getByLabel('Name').fill('E2E Small');
+    await dialog.getByLabel('Monthly price').fill('12.1x');
+    await dialog.getByRole('button', { name: 'Create package' }).click();
+    await expect(dialog.getByText('Enter a valid amount (example: 12.50).')).toBeVisible();
+    await expect(dialog.getByText('This field is required.')).toBeVisible();
+    await dialog.getByLabel('Monthly price').fill('12.10');
+    await tick(dialog.getByRole('group', { name: 'Offered in pools' }).getByRole('checkbox', { name: 'E2E Pool' }));
+    await dialog.getByRole('button', { name: 'Create package' }).click();
     await expect(adminPage.getByRole('row', { name: /E2E Small/ })).toContainText('€12.10');
 
     const customer = await (await browser.newContext({ locale: 'tr-TR' })).newPage();
     await signIn(customer, user);
     await expect(customer).toHaveURL(/\/$/);
-    await customer.getByRole('combobox', { name: 'Paket' }).selectOption({ index: 1 });
-    await customer.getByRole('button', { name: 'Fiyatı hesapla' }).click();
+    await customer.goto('/order');
+    await tick(customer.getByRole('radio', { name: /E2E Small/ }));
     await expect(customer.locator('.quote')).toContainText('Aylık: €12,10');
-    await customer.getByLabel('Özel kaynaklı').check();
+    await tick(customer.getByRole('radio', { name: 'Özel kaynaklı' }));
     await expect(customer.getByText('fiziksel olarak ayrılmış (dedicated) işlemci garantisi değildir', { exact: false })).toBeVisible();
-    await customer.getByLabel('RAM (MB)').fill('4000');
-    await customer.getByRole('button', { name: 'Fiyatı hesapla' }).click();
-    await expect(customer.getByText('Değer, izin verilen artış adımına uymuyor.')).toBeVisible();
-    await customer.getByLabel('RAM (MB)').fill('4096');
-    await customer.getByRole('button', { name: 'Fiyatı hesapla' }).click();
+    // The field snaps to the allowed step (1024 MB) itself; the API still checks steps (integration tests).
+    await customer.getByRole('textbox', { name: 'RAM (MB)' }).fill('4000');
+    await customer.getByRole('textbox', { name: 'RAM (MB)' }).press('Tab');
+    await expect(customer.getByRole('textbox', { name: 'RAM (MB)' })).toHaveValue('4096');
     // 2 x 5 + 4 GB x 2 + 40 GB x 0.1 = 22.00
     await expect(customer.locator('.quote')).toContainText('Aylık: €22,00');
 
     // An image (the simulator's template) and an IP pool, so the next test can create a server.
-    const img = adminPage.locator('form', { has: adminPage.getByRole('heading', { name: 'New image' }) });
-    await img.getByLabel('Name').fill('Sim Linux');
-    await img.getByLabel('Template').selectOption({ index: 1 });
-    await img.getByLabel('Minimum disk').fill('10');
-    await img.getByRole('button', { name: 'Add image' }).click();
+    await adminPage.getByRole('tab', { name: 'Operating system images' }).click();
+    await adminPage.getByRole('button', { name: 'New image' }).click();
+    dialog = adminPage.getByRole('dialog');
+    await dialog.getByLabel('Name').fill('Sim Linux');
+    await choose(adminPage, dialog, /^Template|Template/, /.+/);
+    await dialog.getByLabel('Minimum disk').fill('10');
+    await dialog.getByRole('button', { name: 'Add image' }).click();
     await expect(adminPage.getByRole('row', { name: /Sim Linux/ })).toBeVisible();
-    const ip = adminPage.locator('form', { has: adminPage.getByRole('heading', { name: 'New IP pool' }) });
-    await ip.getByLabel('Name').fill('lab-net');
-    await ip.getByLabel('Subnet (CIDR)').fill('10.30.0.0/24');
-    await ip.getByLabel('Gateway').fill('10.30.0.1');
-    await ip.getByLabel('Range start').fill('10.30.0.20');
-    await ip.getByLabel('Range end').fill('10.20.0.30');
-    await ip.getByRole('button', { name: 'Add IP pool' }).click();
-    await expect(ip.getByText('Gateway and range must be inside the subnet', { exact: false })).toBeVisible();
-    await ip.getByLabel('Range end').fill('10.30.0.30');
-    await ip.getByRole('button', { name: 'Add IP pool' }).click();
+
+    await adminPage.getByRole('tab', { name: 'IP pools' }).click();
+    await adminPage.getByRole('button', { name: 'New IP pool' }).click();
+    dialog = adminPage.getByRole('dialog');
+    await dialog.getByLabel('Name').fill('lab-net');
+    await dialog.getByLabel('Subnet (CIDR)').fill('10.30.0.0/24');
+    await dialog.getByLabel('Gateway').fill('10.30.0.1');
+    await dialog.getByLabel('Range start').fill('10.30.0.20');
+    await dialog.getByLabel('Range end').fill('10.20.0.30');
+    await dialog.getByRole('button', { name: 'Add IP pool' }).click();
+    await expect(dialog.getByText('Gateway and range must be inside the subnet', { exact: false })).toBeVisible();
+    await dialog.getByLabel('Range end').fill('10.30.0.30');
+    await dialog.getByRole('button', { name: 'Add IP pool' }).click();
     await expect(adminPage.getByRole('row', { name: /lab-net/ })).toContainText('11');
-    const small = adminPage.locator('form', { has: adminPage.getByRole('heading', { name: 'New package' }) });
-    await small.getByLabel('Name').fill('E2E Tiny');
-    await small.getByLabel('vCPU').fill('1');
-    await small.getByLabel('RAM (MB)').fill('512');
-    await small.getByLabel('Disk (GB)').fill('10');
-    await small.getByLabel('Monthly price').fill('3.00');
-    await small.getByRole('group', { name: 'Offered in pools' }).getByLabel('E2E Pool').check();
-    await small.getByRole('group', { name: 'Allowed images' }).getByLabel('Sim Linux').check();
-    await small.getByRole('button', { name: 'Create package' }).click();
+
+    await adminPage.getByRole('tab', { name: 'Packages' }).click();
+    await adminPage.getByRole('button', { name: 'New package' }).click();
+    dialog = adminPage.getByRole('dialog');
+    await dialog.getByLabel('Name').fill('E2E Tiny');
+    await dialog.getByLabel('vCPU').fill('1');
+    await dialog.getByLabel('RAM (MB)').fill('512');
+    await dialog.getByLabel('Disk (GB)').fill('10');
+    await dialog.getByLabel('Monthly price').fill('3.00');
+    await tick(dialog.getByRole('group', { name: 'Offered in pools' }).getByRole('checkbox', { name: 'E2E Pool' }));
+    await tick(dialog.getByRole('group', { name: 'Allowed images' }).getByRole('checkbox', { name: 'Sim Linux' }));
+    await dialog.getByRole('button', { name: 'Create package' }).click();
     await expect(adminPage.getByRole('row', { name: /E2E Tiny/ })).toBeVisible();
   });
 });
 
 test.describe('VMware connections (simulator, English browser)', () => {
   test.use({ locale: 'en-US' });
-  test('admin sees discovered inventory, refreshes it and removes the connection only after typed confirmation', async ({ page }) => {
+  test('admin sees discovered inventory, refreshes it and removes a connection only after typed confirmation', async ({ page }) => {
     test.skip(!process.env.E2E_VCSIM_HOST, 'needs compose.simulator.yaml and E2E_VCSIM_HOST');
     await signIn(page, admin);
     await expect(page).toHaveURL(/\/admin$/);
     await page.goto('/admin/vmware');
-    await page.getByRole('row', { name: /Simülatör vCenter/ }).getByRole('button', { name: 'Details' }).click();
+    await page.getByRole('row', { name: /Simülatör vCenter/ }).getByRole('link', { name: 'Details' }).click();
     await expect(page.getByRole('heading', { name: 'Physical capacity' })).toBeVisible();
     await expect(page.getByText(/\d+ cores \/ \d+ threads/).first()).toBeVisible();
-    await expect(page.getByRole('heading', { name: /Virtual machines \(\d+\)/ })).toBeVisible();
+    await expect(page.getByRole('heading', { name: /Virtual machines \(\d+\)/ })).toBeAttached();
     await expect(page.getByRole('listitem').filter({ hasText: 'vCenter Automation REST API' })).toContainText('yes');
     await page.getByRole('button', { name: 'Discover again' }).click();
     await expect(page.getByText('Inventory updated.')).toBeVisible();
@@ -303,30 +320,33 @@ test.describe('VMware connections (simulator, English browser)', () => {
     await page.getByRole('link', { name: 'Console' }).first().click();
     await expect(page.getByRole('heading', { name: /^Console: / })).toBeVisible();
     await expect(page.getByText('does not bypass the operating system', { exact: false })).toBeVisible();
-    await expect(page.getByRole('status')).toHaveText('Console component not installed');
+    await expect(page.getByRole('status').filter({ hasText: 'Console component not installed' })).toBeVisible();
     await page.getByRole('button', { name: 'Test the gateway connection' }).click();
     await expect(page.getByText('Success: the gateway reached the VM', { exact: false })).toBeVisible();
     const consoleCookie = (await page.context().cookies()).find((c) => c.name === 'lvm_console');
     expect(consoleCookie?.httpOnly && consoleCookie.path === '/console/ws' && consoleCookie.sameSite === 'Strict').toBe(true);
     expect(page.url()).not.toContain(consoleCookie!.value);
+
     // The vCenter now backs a resource pool, so a separate simulated ESXi is added and removed.
     await page.goto('/admin/vmware');
     await page.getByRole('button', { name: 'Add connection' }).click();
-    await page.getByLabel('Display name').fill('Sim ESXi');
-    await page.getByLabel('Address').fill(process.env.E2E_VCSIM_ESXI ?? 'vcsim-esxi');
-    await page.getByLabel('Port').fill('8989');
-    await page.getByLabel('Service account').fill('sim-root');
-    await page.getByLabel('Password').fill('sim-password-2');
-    await page.getByRole('button', { name: 'Test connection' }).click();
-    await page.getByRole('button', { name: 'I verified the fingerprint, pin this certificate' }).click();
-    await page.getByRole('button', { name: 'Save', exact: true }).click();
-    await page.getByRole('row', { name: /Sim ESXi/ }).getByRole('button', { name: 'Details' }).click();
+    const dialog = page.getByRole('dialog');
+    await dialog.getByLabel('Display name').fill('Sim ESXi');
+    await dialog.getByLabel('Address').fill(process.env.E2E_VCSIM_ESXI ?? 'vcsim-esxi');
+    await dialog.getByLabel('Port').fill('8989');
+    await dialog.getByLabel('Service account').fill('sim-root');
+    await dialog.getByLabel('Password').fill('sim-password-2');
+    await dialog.getByRole('button', { name: 'Test connection' }).click();
+    await dialog.getByRole('button', { name: 'I verified the fingerprint, pin this certificate' }).click();
+    await dialog.getByRole('button', { name: 'Save', exact: true }).click();
+    await page.getByRole('row', { name: /Sim ESXi/ }).getByRole('link', { name: 'Details' }).click();
     await expect(page.getByRole('listitem').filter({ hasText: 'vCenter Automation REST API' })).toContainText('no');
     const remove = page.getByRole('button', { name: 'Remove connection' });
     await expect(remove).toBeDisabled();
     await page.getByLabel('Type “Sim ESXi” to confirm').fill('Sim ESXi');
     await remove.click();
     await expect(page.getByText('Connection removed.')).toBeVisible();
+    await expect(page).toHaveURL(/\/admin\/vmware$/);
     await expect(page.getByRole('row', { name: /Sim ESXi/ })).toHaveCount(0);
   });
 });
@@ -337,15 +357,18 @@ test.describe('server lifecycle (simulator, Turkish customer)', () => {
     test.skip(!process.env.E2E_VCSIM_HOST, 'needs compose.simulator.yaml and E2E_VCSIM_HOST');
     await signIn(page, user);
     await expect(page).toHaveURL(/\/$/);
+    await page.goto('/account');
     await page.getByLabel('Anahtar adı').fill('dizüstü');
     await page.getByLabel('Açık anahtar').fill('ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMa0iBTtZu9kbSNXzg5M6pZ1rn8F1143iWq3JIcGimfn e2e');
     await page.getByRole('button', { name: 'Anahtar ekle' }).click();
     await expect(page.getByText('SHA256:', { exact: false })).toBeVisible();
-    await page.getByLabel('İşletim sistemi').selectOption({ label: 'Sim Linux' });
-    await page.getByRole('combobox', { name: 'Paket' }).selectOption({ label: 'E2E Tiny: 1 vCPU, 0,5 GB RAM, 10 GB disk, aylık €3,00' });
-    await page.getByRole('button', { name: 'Fiyatı hesapla' }).click();
+
+    await page.goto('/order');
+    await choose(page, page, /İşletim sistemi/, /Sim Linux/);
+    await tick(page.getByRole('radio', { name: /E2E Tiny/ }));
+    await expect(page.locator('.quote')).toContainText('Aylık: €3,00');
     await page.getByLabel('Sunucu adı').fill('Web_1');
-    await page.getByLabel('dizüstü').check();
+    await tick(page.getByRole('checkbox', { name: 'dizüstü' }));
     await page.getByRole('button', { name: 'Sunucuyu oluştur' }).click();
     await expect(page.getByText('Küçük harf, rakam ve tire kullanın', { exact: false })).toBeVisible();
     await page.getByLabel('Sunucu adı').fill('web-1');
@@ -353,17 +376,17 @@ test.describe('server lifecycle (simulator, Turkish customer)', () => {
 
     await expect(page).toHaveURL(/\/servers\/[0-9a-f-]{36}$/);
     await expect(page.getByRole('heading', { level: 1 })).toHaveText('web-1');
-    await expect(page.locator('header').getByText(/Hazır · açık/)).toBeVisible({ timeout: 60_000 });
+    await expect(page.getByText(/Hazır · açık/).first()).toBeVisible({ timeout: 60_000 });
     await expect(page.getByText('10.30.0.20')).toBeVisible();
     await expect(page.getByText('henüz metrik toplanmıyor', { exact: false })).toBeVisible();
 
     await page.getByRole('button', { name: 'Zorla kapat' }).click();
     await expect(page.getByRole('alertdialog')).toContainText('kaydedilmemiş veriler kaybolabilir');
     await page.getByRole('button', { name: 'Evet, Zorla kapat' }).click();
-    await expect(page.locator('header').getByText(/Hazır · kapalı/)).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByText(/Hazır · kapalı/).first()).toBeVisible({ timeout: 30_000 });
     await page.getByRole('button', { name: 'Aç', exact: true }).click();
-    await expect(page.locator('header').getByText(/Hazır · açık/)).toBeVisible({ timeout: 30_000 });
-    await expect(page.getByRole('table').last()).toContainText('Oluşturma');
+    await expect(page.getByText(/Hazır · açık/).first()).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByRole('grid', { name: 'İşlem geçmişi' })).toContainText('Oluşturma');
 
     const del = page.getByRole('button', { name: 'Sunucuyu kalıcı olarak sil' });
     await expect(del).toBeDisabled();
@@ -385,7 +408,8 @@ test.describe('language', () => {
     const context = await browser.newContext({ locale: 'en-US' });
     const page = await context.newPage();
     await page.goto('/login');
-    await page.getByRole('button', { name: 'Türkçe' }).click();
+    await page.getByRole('button', { name: 'Language' }).click();
+    await page.getByRole('menuitem', { name: 'Türkçe' }).click();
     await expect(page.getByRole('heading', { level: 1 })).toHaveText('Giriş yap');
     await page.reload();
     await expect(page.locator('html')).toHaveAttribute('lang', 'tr');
@@ -397,7 +421,7 @@ test.describe('language', () => {
     await signIn(page, admin);
     await expect(page).toHaveURL(/\/admin$/);
     await page.route('**/api/ready', (r) => r.fulfill({ status: 503, json: { code: 'DEPENDENCY_UNAVAILABLE', message: 'x' } }));
-    await page.reload();
+    await page.goto('/admin/system');
     await expect(health(page)).toHaveText('PostgreSQL veya Redis şu anda erişilemiyor.');
     await page.route('**/api/ready', (r) => r.fulfill({ status: 500, json: { code: 'SOMETHING_NEW' } }));
     await page.reload();
@@ -411,10 +435,13 @@ test.describe('language', () => {
     const page = await (await browser.newContext({ locale: 'en-US' })).newPage();
     const errors: string[] = [];
     page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
-    for (const path of ['/login', '/register']) await page.goto(path);
+    for (const path of ['/login', '/register', '/forgot-password']) await page.goto(path);
     await signIn(page, admin);
     await expect(page).toHaveURL(/\/admin$/);
-    await page.goto('/');
+    for (const path of ['/admin/servers', '/admin/vmware', '/admin/catalog', '/admin/system', '/', '/order', '/account']) {
+      await page.goto(path);
+      await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+    }
     expect(errors).toEqual([]);
   });
 });

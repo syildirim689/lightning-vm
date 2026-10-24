@@ -23,8 +23,8 @@ let app, admin, user, vcPin, esxPin, vcId, esxId;
 const vcCreds = { username: 'sim-admin', password: 'sim-password-1' };
 const esxCreds = { username: 'sim-root', password: 'sim-password-2' };
 const send = (method, path, payload, session = admin) => app.inject({
-  method, url: path, payload, headers: { 'x-lightning-csrf': '1', ...(session && { cookie: `lvm_session=${session}` }) } });
-const cookieOf = (res) => res.headers['set-cookie']?.toString().match(/lvm_session=([^;]+)/)?.[1];
+  method, url: path, payload, headers: { 'x-lightning-csrf': '1', origin: 'http://localhost', host: 'localhost', ...(session && { cookie: `lvm.session_token=${session}` }) } });
+const cookieOf = (res) => res.headers['set-cookie']?.toString().match(/lvm\.session_token=([^;]+)/)?.[1];
 
 before(async () => {
   if (skip) return;
@@ -37,7 +37,7 @@ before(async () => {
   const { token } = await issueBootstrapToken();
   admin = cookieOf(await send('POST', '/setup/admin', { token, email: 'admin@example.test', password: 'correct horse battery staple' }, null));
   await send('PUT', '/admin/settings', { registrationOpen: true });
-  user = cookieOf(await send('POST', '/auth/register', { email: 'user@example.test', password: 'correct horse battery staple' }, null));
+  user = cookieOf(await send('POST', '/auth/sign-up/email', { name: '', email: 'user@example.test', password: 'correct horse battery staple' }, null));
 });
 after(async () => { await app?.close(); await closeConnections(); });
 
@@ -128,9 +128,9 @@ test('console sessions are one-time, cookie-only and the ticket never reaches th
   assert.deepEqual([second.close?.code, second.close?.reason], [4401, 'CONSOLE_SESSION_INVALID'], 'a session works once');
 
   // Signing out revokes this session's live consoles.
-  await send('POST', '/auth/logout');
+  await send('POST', '/auth/sign-out', {});
   assert.deepEqual(await closed(first), { code: 4403, reason: 'CONSOLE_REVOKED' });
-  admin = cookieOf(await send('POST', '/auth/login', { email: 'admin@example.test', password: 'correct horse battery staple' }, null));
+  admin = cookieOf(await send('POST', '/auth/sign-in/email', { email: 'admin@example.test', password: 'correct horse battery staple' }, null));
 
   assert.equal((await send('POST', `/admin/vmware/connections/${vcId}/vms/${vm.moref}/console`, undefined, user)).statusCode, 403);
   const missing = await send('POST', `/admin/vmware/connections/${vcId}/vms/vm-999999/console`);

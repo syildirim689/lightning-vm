@@ -20,8 +20,8 @@ const { issueBootstrapToken } = await import('../../dist/setup.js');
 let app, admin, user, other, connectionId, cluster, datastores, network, poolId, imageId, packageId;
 const password = 'correct horse battery staple';
 const send = (method, path, payload, session = admin) => app.inject({
-  method, url: path, payload, headers: { 'x-lightning-csrf': '1', ...(session && { cookie: `lvm_session=${session}` }) } });
-const cookieOf = (res) => res.headers['set-cookie']?.toString().match(/lvm_session=([^;]+)/)?.[1];
+  method, url: path, payload, headers: { 'x-lightning-csrf': '1', origin: 'http://localhost', host: 'localhost', ...(session && { cookie: `lvm.session_token=${session}` }) } });
+const cookieOf = (res) => res.headers['set-cookie']?.toString().match(/lvm\.session_token=([^;]+)/)?.[1];
 
 before(async () => {
   if (skip) return;
@@ -34,8 +34,8 @@ before(async () => {
   const { token } = await issueBootstrapToken();
   admin = cookieOf(await send('POST', '/setup/admin', { token, email: 'admin@example.test', password }, null));
   await send('PUT', '/admin/settings', { registrationOpen: true });
-  user = cookieOf(await send('POST', '/auth/register', { email: 'user@example.test', password }, null));
-  other = cookieOf(await send('POST', '/auth/register', { email: 'other@example.test', password }, null));
+  user = cookieOf(await send('POST', '/auth/sign-up/email', { name: '', email: 'user@example.test', password }, null));
+  other = cookieOf(await send('POST', '/auth/sign-up/email', { name: '', email: 'other@example.test', password }, null));
   const target = { name: 'Sim', host: vcenter, port: 8989, username: 'sim-admin', password: 'sim-password-1' };
   const pin = (await send('POST', '/admin/vmware/test', { ...target, tls: { mode: 'system' } })).json().certificate.sha256;
   connectionId = (await send('POST', '/admin/vmware/connections', { ...target, tls: { mode: 'pinned', sha256: pin } })).json().id;

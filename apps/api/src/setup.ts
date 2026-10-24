@@ -1,10 +1,12 @@
 import { Body, CanActivate, Controller, ExecutionContext, Get, HttpCode, Injectable, Param, Post, Put, Req, Res, UseGuards } from '@nestjs/common';
 import { randomBytes, timingSafeEqual } from 'node:crypto';
 import type { FastifyReply, FastifyRequest } from 'fastify';
+import { fromNodeHeaders } from 'better-auth/node';
 import { pool, redis } from './db';
 import { apiError } from './errors';
-import { audit, currentUser, readCredentials, startSession, type User } from './auth';
-import { hashPassword, newToken, rateLimit, sha256 } from './security';
+import { audit, currentUser, readCredentials, type User } from './auth';
+import { getAuth } from './better-auth';
+import { newToken, rateLimit, sha256 } from './security';
 import { domainChecks, isLoopback, monitoringChecks, networkErrorCode, parseDomain, parsePublicUrl, serviceChecks, systemChecks, type Check } from './checks';
 
 const bootstrapMinutes = 60;
@@ -23,6 +25,44 @@ export async function issueBootstrapToken() {
     "UPDATE setup_state SET bootstrap_token_hash = $1, bootstrap_expires_at = now() + make_interval(mins => $2) WHERE admin_created_at IS NULL",
     [sha256(token), bootstrapMinutes]);
   return rowCount ? { token, expiresInMinutes: bootstrapMinutes } : null;
+}
+
+// The first admin: the setup slot is claimed under a row lock (one winner even with concurrent requests),
+// then better-auth creates the account. If that fails the claim is undone so setup can be retried.
+// check runs inside the lock and throws to refuse (e.g. a wrong bootstrap token).
+async function createFirstAdmin(email: string, password: string, locale: 'tr' | 'en', check: (s: { bootstrap_token_hash: Buffer | null; fresh: boolean }) => void, completeSetup: boolean) {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const { rows: [s] } = await client.query('SELECT bootstrap_token_hash, bootstrap_expires_at > now() AS fresh, admin_created_at FROM setup_state FOR UPDATE');
+    if (s.admin_created_at) { await client.query('ROLLBACK'); return null; }
+    check(s);
+    await client.query(`UPDATE setup_state SET admin_created_at = now(), bootstrap_token_hash = NULL, bootstrap_expires_at = NULL${completeSetup ? ', completed_at = now()' : ''}`);
+    await client.query('COMMIT');
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => undefined);
+    throw err;
+  } finally {
+    client.release();
+  }
+  try {
+    const { user } = await getAuth().api.createUser({ body: { email, password, name: '', role: 'admin', data: { locale } } });
+    return user.id;
+  } catch (err) {
+    await pool.query('UPDATE setup_state SET admin_created_at = NULL, completed_at = NULL');
+    throw err;
+  }
+}
+
+// Unattended install (CLI on the server): creates the first admin with a generated password and closes
+// the wizard. Returns null when an admin already exists; accounts are never replaced.
+export async function provisionAdmin(email: string, locale: 'tr' | 'en') {
+  const password = randomBytes(18).toString('base64url');
+  const creds = readCredentials({ email, password });
+  const id = await createFirstAdmin(creds.email, password, locale, () => undefined, true);
+  if (!id) return null;
+  await pool.query("INSERT INTO audit_events (actor_id, action, outcome, metadata) VALUES ($1, 'setup.admin_created', 'success', '{\"via\":\"installer\"}')", [id]);
+  return { email: creds.email, password };
 }
 
 // CLI recovery: lets an existing admin run the wizard again. It never touches accounts or data.
@@ -205,30 +245,24 @@ export class SetupController {
     const token = (body as { token?: unknown })?.token ?? req.cookies[setupCookie];
     const { email, password } = readCredentials(body);
     const locale = (body as { locale?: string }).locale === 'tr' ? 'tr' : 'en';
-    const hash = await hashPassword(password); // slow; done before taking the row lock
-
-    const client = await pool.connect();
+    let id: string | null;
     try {
-      await client.query('BEGIN');
-      const { rows: [s] } = await client.query('SELECT bootstrap_token_hash, bootstrap_expires_at > now() AS fresh, admin_created_at FROM setup_state FOR UPDATE');
-      if (s.admin_created_at) throw apiError(409, 'SETUP_CLOSED', 'Setup admin already exists');
-      if (typeof token !== 'string' || !s.bootstrap_token_hash || !s.fresh || !timingSafeEqual(sha256(token), s.bootstrap_token_hash)) {
-        throw apiError(403, 'BOOTSTRAP_TOKEN_INVALID', 'Bootstrap token invalid or expired');
-      }
-      const { rows: [admin] } = await client.query(
-        "INSERT INTO users (email, password_hash, role, locale) VALUES ($1, $2, 'admin', $3) RETURNING id, email, role, locale", [email, hash, locale]);
-      await client.query('UPDATE setup_state SET admin_created_at = now(), bootstrap_token_hash = NULL, bootstrap_expires_at = NULL');
-      await client.query('COMMIT');
-      reply.clearCookie(setupCookie, { path: '/' });
-      await startSession(req, reply, admin.id);
-      await audit(req, 'setup.admin_created', 'success', admin.id);
-      return admin;
+      id = await createFirstAdmin(email, password, locale, (s) => {
+        if (typeof token !== 'string' || !s.bootstrap_token_hash || !s.fresh || !timingSafeEqual(sha256(token), s.bootstrap_token_hash)) {
+          throw apiError(403, 'BOOTSTRAP_TOKEN_INVALID', 'Bootstrap token invalid or expired');
+        }
+      }, false);
     } catch (err) {
-      await client.query('ROLLBACK');
       if ((err as { getResponse?: () => { code?: string } }).getResponse?.().code === 'BOOTSTRAP_TOKEN_INVALID') await audit(req, 'setup.admin_created', 'denied', null);
       throw err;
-    } finally {
-      client.release();
     }
+    if (!id) throw apiError(409, 'SETUP_CLOSED', 'Setup admin already exists');
+    reply.clearCookie(setupCookie, { path: '/' });
+    // Sign the new admin in through better-auth so the wizard continues with a normal session.
+    const signIn = await getAuth().api.signInEmail({ body: { email, password }, headers: fromNodeHeaders(req.headers), returnHeaders: true });
+    const cookies = signIn.headers.getSetCookie();
+    if (cookies.length) reply.header('set-cookie', cookies);
+    await audit(req, 'setup.admin_created', 'success', id);
+    return { id, email, role: 'admin', locale };
   }
 }

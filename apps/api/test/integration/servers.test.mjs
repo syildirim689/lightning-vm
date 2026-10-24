@@ -25,8 +25,8 @@ const { Queue } = await import('bullmq');
 let queueRedis, app, admin, user, other, connectionId, poolId, imageId, packageId, keyId, queue, target, serverId;
 const password = 'correct horse battery staple';
 const send = (method, path, payload, session = admin, headers = {}) => app.inject({
-  method, url: path, payload, headers: { 'x-lightning-csrf': '1', ...headers, ...(session && { cookie: `lvm_session=${session}` }) } });
-const cookieOf = (res) => res.headers['set-cookie']?.toString().match(/lvm_session=([^;]+)/)?.[1];
+  method, url: path, payload, headers: { 'x-lightning-csrf': '1', origin: 'http://localhost', host: 'localhost', ...headers, ...(session && { cookie: `lvm.session_token=${session}` }) } });
+const cookieOf = (res) => res.headers['set-cookie']?.toString().match(/lvm\.session_token=([^;]+)/)?.[1];
 const order = (name, extra = {}) => ({ type: 'package', poolId, packageId, imageId, name, sshKeyIds: [keyId], ...extra });
 const create = (body, key = randomUUID(), session = user) => send('POST', '/servers', body, session, { 'idempotency-key': key });
 const adapter = async (path, body) => (await fetch(`${process.env.VMWARE_SERVICE_URL}${path}`, { method: 'POST',
@@ -57,8 +57,8 @@ before(async () => {
   const { token } = await issueBootstrapToken();
   admin = cookieOf(await send('POST', '/setup/admin', { token, email: 'admin@example.test', password }, null));
   await send('PUT', '/admin/settings', { registrationOpen: true });
-  user = cookieOf(await send('POST', '/auth/register', { email: 'user@example.test', password }, null));
-  other = cookieOf(await send('POST', '/auth/register', { email: 'other@example.test', password }, null));
+  user = cookieOf(await send('POST', '/auth/sign-up/email', { name: '', email: 'user@example.test', password }, null));
+  other = cookieOf(await send('POST', '/auth/sign-up/email', { name: '', email: 'other@example.test', password }, null));
   const conn = { name: 'Sim', host: vcenter, port: 8989, username: 'sim-admin', password: 'sim-password-1' };
   const pin = (await send('POST', '/admin/vmware/test', { ...conn, tls: { mode: 'system' } })).json().certificate.sha256;
   connectionId = (await send('POST', '/admin/vmware/connections', { ...conn, tls: { mode: 'pinned', sha256: pin } })).json().id;

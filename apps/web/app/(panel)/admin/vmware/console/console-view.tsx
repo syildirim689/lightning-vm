@@ -1,7 +1,10 @@
 "use client";
+import { Button } from '@heroui/react';
+import { I } from '../../../../../components/icon';
 import { useTranslations } from 'next-intl';
 import { useEffect, useRef, useState } from 'react';
 import { apiFetch, useErrorText } from '../../../../../lib/api';
+import { Notice, PageHeader, StatusChip } from '../../../../../components/ui';
 
 // Minimal typing of the operator-provided VMware HTML Console SDK (wmks.min.js), per its programming guide.
 type Wmks = { register: (event: string, fn: (e: unknown, data: { state?: string; code?: number; reason?: string }) => void) => Wmks;
@@ -82,16 +85,22 @@ export default function ConsoleView({ sessionPath, title }: { sessionPath: strin
     ws.onclose = (e) => { if (!received) setProbe(knownReasons.includes(e.reason) ? t(`reason.${e.reason as 'CONSOLE_CLOSED'}`) : t('probe.failed', { code: e.code })); };
   }
 
-  return <article className="console">
-    <h1>{t('title', { name: vmName ?? title })}</h1>
-    <p className="notice">{t('osLogin')}</p>
-    <p role="status">{t(`state.${state}`)}{detail && ` · ${detail}`}</p>
-    {state === 'sdkMissing' && <div className="notice"><p>{t('sdkMissing')}</p><pre><code>console-sdk/wmks.min.js{'\n'}console-sdk/jquery.min.js{'\n'}console-sdk/jquery-ui.min.js{'\n'}console-sdk/css/wmks-all.css</code></pre></div>}
-    <div id="wmks-container" className="wmks" hidden={state !== 'connected' && state !== 'connecting'}/>
-    <div className="actions">
-      {state === 'connected' && <button type="button" className="secondary" onClick={() => wmks.current?.sendCAD()}>{t('cad')}</button>}
-      <button type="button" className="secondary" onClick={testGateway}>{t('probe.button')}</button>
+  const tone = state === 'connected' ? 'success' : state === 'error' || state === 'closed' ? 'danger' : state === 'sdkMissing' ? 'warning' : 'default';
+  return <div className="flex flex-col gap-4">
+    <PageHeader title={t('title', { name: vmName ?? title })}
+      actions={<>
+        {state === 'connected' && <Button variant="secondary" onPress={() => wmks.current?.sendCAD()}><I name="keyboard" size={16}/>{t('cad')}</Button>}
+        <Button variant="secondary" onPress={testGateway}><I name="activity" size={16}/>{t('probe.button')}</Button>
+      </>}/>
+    <Notice tone="warning">{t('osLogin')}</Notice>
+    <div className="flex flex-wrap items-center gap-2 text-sm">
+      <StatusChip tone={tone}><span role="status">{t(`state.${state}`)}</span></StatusChip>
+      {detail && <span className="text-muted">{detail}</span>}
+      {probe && <span aria-live="polite" className="font-medium">{probe}</span>}
     </div>
-    {probe && <p aria-live="polite" className="probe">{probe}</p>}
-  </article>;
+    {state === 'sdkMissing' && <Notice tone="warning" title={t('sdkMissing')}>
+      <pre className="mt-2 overflow-x-auto font-mono text-xs">{['console-sdk/wmks.min.js', 'console-sdk/jquery.min.js', 'console-sdk/jquery-ui.min.js', 'console-sdk/css/wmks-all.css'].join('\n')}</pre>
+    </Notice>}
+    <div id="wmks-container" className="wmks" hidden={state !== 'connected' && state !== 'connecting'}/>
+  </div>;
 }

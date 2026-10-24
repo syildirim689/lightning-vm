@@ -1,21 +1,44 @@
 # Kurulum: betik ve tarayıcı sihirbazı
 
-Kurulum iki katmandan oluşur:
-1. Sunucuda `scripts/install.sh`: işletim sistemi ve kaynak kontrolleri, sırlar ve servisler.
-2. Tarayıcıda `/setup`: uygulama ayarları ve ilk yönetici hesabı.
+Varsayılan kurulum tek komuttur ve sonunda çalışan bir panel verir:
+```sh
+sudo sh scripts/install.sh
+```
+Betik sırasıyla şunları yapar:
+1. İşletim sistemi ve kaynak kontrolleri. Docker yoksa Docker'ın resmî apt deposundan kurar.
+2. Sırları ve `.env`'i oluşturur, servisleri derleyip başlatır, hazır olmasını bekler.
+3. Erişim: `--domain` verildiyse o ad; sunucunun genel bir IPv4 adresi varsa
+   `<ip-tireli>.sslip.io` (ör. `49-12-109-190.sslip.io`). İki durumda da Caddy Let's Encrypt
+   sertifikası alır. Genel IP yoksa veya `--local` verildiyse panel yalnızca
+   `127.0.0.1:8080`'de açılır (SSH tüneli).
+4. RAM 3.8 GB veya üstündeyse izleme yığınını (Prometheus, Grafana, Loki) açar.
+5. İlk yöneticiyi rastgele parolayla oluşturur (docs/auth.md).
+6. Günlük yedek zamanlayıcısını kurar ve ilk yedeği alır.
+7. Panel adresini, yönetici e-postasını ve parolasını, Grafana bilgilerini özetler.
+
+| Seçenek | Etki |
+|---|---|
+| `--domain panel.example.com` | Kendi alan adınız (A kaydı sunucuyu göstermeli, 80/443 açık olmalı) |
+| `--local` | Dışarıya açma; yalnızca SSH tüneliyle eriş |
+| `--admin-email you@example.com` | Yönetici e-postası |
+| `--setup-wizard` | Yöneticiyi betik değil tarayıcı sihirbazı oluşturur (kurulum anahtarıyla) |
+| `--no-monitoring` | İzleme yığınını açma |
+| `--no-schedule` | Yedek zamanlayıcısını kurma |
+
+Betiği tekrar çalıştırmak güvenlidir: mevcut yönetici, sırlar ve veriler korunur.
 
 ## 1. Kurulum betiği
 
 ```sh
-sh scripts/install.sh [install|check|recover-setup|update] [--lang tr|en] [--install-docker] [--allow-unsupported-os]
+sh scripts/install.sh [install|check|recover-setup|update|...] [--lang tr|en] [--install-docker] [--allow-unsupported-os]
 ```
 
 | Mod | Ne yapar | Değişiklik yapar mı |
 |---|---|---|
-| `install` (varsayılan) | Ön kontrol, `.env`, derleme, başlatma, hazır olma kontrolü, kurulum anahtarı | Evet |
+| `install` (varsayılan) | Yukarıdaki tam kurulum | Evet |
 | `check` | Ön kontroller ve mevcut kurulumun durumu | **Hayır** |
 | `recover-setup` | Tamamlanmış sihirbazı yönetici için yeniden açar | Yalnızca kurulum durumu |
-| `update` | Henüz yok; kod 20 ile çıkar | Hayır |
+| `backup`, `restore`, `update`, `schedule`, `auto-update` | İşletim (docs/operations.md) | Evet |
 | `domain`, `behind-proxy`, `local-only` | Erişim modunu değiştirir (docs/domain-https.md) | Yalnızca `.env` ve proxy |
 
 **Yarıda kalan kurulum:** `install` tekrar çalıştırılarak devam ettirilir. Her adım tekrarlanabilir:
@@ -28,12 +51,13 @@ Bu davranış test sunucusunda denendi: container'lar silinip betik yeniden çal
 `.env` aynı kaldı, kullanıcı sayısı değişmedi.
 
 **Dokunulmayanlar:** güvenlik duvarı, SSH ayarları, mevcut Nginx/Caddy/Traefik ve sistem paketleri.
-Tek istisna: Docker, yalnızca `--install-docker` verilirse ve yalnızca Docker'ın resmî apt
+Tek istisna: Docker yoksa (root ile ya da `--install-docker` ile) yalnızca Docker'ın resmî apt
 deposundan kurulur (docs.docker.com/engine/install/ubuntu).
 
 **Sırlar:** `openssl rand` ile üretilir ve `.env` dosyasına `600` izinle yazılır. Terminale
-yazdırılmaz. Tek istisna, 1 saat geçerli kurulum anahtarıdır; yönetici olmadığı sürece
-yalnızca bir kez gösterilir.
+yazdırılmaz. İstisnalar: ilk yönetici parolası (kurulum özetinde bir kez gösterilir ve
+`secrets/initial-admin.txt`'e `600` izinle yazılır) ve `--setup-wizard` ile 1 saat geçerli
+kurulum anahtarı.
 
 ### Ön kontroller
 | Kod | Koşul | Sonuç |
@@ -64,6 +88,8 @@ yalnızca bir kez gösterilir.
 | 20 | Henüz yok |
 
 ## 2. Tarayıcı sihirbazı (`/setup`)
+Varsayılan kurulumda sihirbaz atlanır; ayarlar panelden yapılır. `--setup-wizard` ile kurulduysa
+yönetici ve ilk ayarlar burada oluşturulur.
 
 ### Erişim güvenliği
 - **Yönetici oluşturulmadan önce:** sihirbaz yalnızca kurulum anahtarıyla açılır.

@@ -7,7 +7,7 @@
     "navUser": "User panel",
     "navAdmin": "Admin panel",
     "build": "v{version} · Early build",
-    "notice": "Early build · Tested only against a VMware simulator so far, not against real ESXi/vCenter. Monitoring, backups and updates are not implemented yet.",
+    "notice": "Early build: tested against a VMware simulator, not yet against real ESXi/vCenter.",
     "language": "Language",
     "signedInAs": "Signed in: {email}",
     "logout": "Sign out"
@@ -127,7 +127,29 @@
     "DUPLICATE_NAME": "A VM with the same name exists in VMware.",
     "INVALID_STATE": "The VM is not in a state that allows this.",
     "TASK_FAILED": "The VMware task failed.",
-    "READINESS_TIMEOUT": "The server did not become ready in time."
+    "READINESS_TIMEOUT": "The server did not become ready in time.",
+    "INVALID_EMAIL_OR_PASSWORD": "Wrong e-mail or password.",
+    "USER_ALREADY_EXISTS": "An account with this e-mail already exists.",
+    "USER_ALREADY_EXISTS_USE_ANOTHER_EMAIL": "An account with this e-mail already exists.",
+    "PASSWORD_TOO_SHORT": "The password must be at least 12 characters.",
+    "PASSWORD_TOO_LONG": "The password is too long.",
+    "INVALID_PASSWORD": "The current password is wrong.",
+    "INVALID_EMAIL": "Enter a valid e-mail address.",
+    "INVALID_ORIGIN": "This request came from another site and was refused.",
+    "FAILED_TO_CREATE_SESSION": "This account cannot sign in. It may be disabled.",
+    "INVALID_TOKEN": "The link is invalid or has expired. Ask for a new one.",
+    "SESSION_EXPIRED": "Your session has expired. Sign in again.",
+    "MISSING_RESPONSE": "Complete the verification first.",
+    "VERIFICATION_FAILED": "The verification failed. Try again.",
+    "MAIL_NOT_CONFIGURED": "E-mail is not set up on this panel.",
+    "PASSKEY_NOT_FOUND": "This passkey is not registered here.",
+    "AUTHENTICATION_FAILED": "The passkey could not be verified.",
+    "CHALLENGE_NOT_FOUND": "The passkey request expired. Try again.",
+    "FAILED_TO_VERIFY_REGISTRATION": "The passkey could not be added.",
+    "PREVIOUSLY_REGISTERED": "This passkey is already registered.",
+    "YOU_ARE_NOT_ALLOWED_TO_REGISTER_THIS_PASSKEY": "This passkey cannot be added to your account.",
+    "CREDENTIAL_ACCOUNT_NOT_FOUND": "This account has no password; sign in with a passkey.",
+    "UNKNOWN_ERROR": "Something went wrong. Try again."
   },
   "Auth": {
     "required": "required",
@@ -145,7 +167,22 @@
     "setupSubmit": "Create administrator account",
     "working": "Working…",
     "toRegister": "No account? Register",
-    "toLogin": "Already have an account? Sign in"
+    "toLogin": "Already have an account? Sign in",
+    "loginIntro": "Sign in to manage your servers.",
+    "forgot": "Forgot your password?",
+    "or": "or",
+    "passkeySignIn": "Sign in with a passkey",
+    "captchaRequired": "Complete the verification first.",
+    "forgotTitle": "Reset your password",
+    "forgotIntro": "Enter your e-mail address. If an account exists, we send a link to set a new password.",
+    "resetSend": "Send reset link",
+    "resetSent": "If an account exists for that address, a reset link is on its way. Check your inbox.",
+    "resetUnavailable": "Password reset by e-mail is not set up on this panel. Ask the administrator.",
+    "resetTitle": "Choose a new password",
+    "resetIntro": "The link from the e-mail is valid for one hour.",
+    "newPassword": "New password",
+    "resetSubmit": "Set new password",
+    "resetDone": "Your password was changed. Sign in with the new one; other sessions were signed out."
   },
   "fieldErrors": {
     "INVALID_EMAIL": "Enter a valid email address.",
@@ -555,13 +592,20 @@
       "empty": "No projects yet.",
       "name": "Project name",
       "create": "Create project",
-      "remove": "Delete"
+      "remove": "Delete",
+      "created": "Project created."
     },
     "name": "Server name",
     "nameHelp": "Also used as the host name, for example web-1.",
     "sshKeys": "SSH keys",
+    "access": "Name and access",
     "noKeys": "Add an SSH key below first.",
-    "create": "Create server"
+    "create": "Create server",
+    "perMonth": "month",
+    "summary": "Summary",
+    "choosePlan": "Choose a location and a package or custom resources.",
+    "pricing": "Calculating price…",
+    "manageKeys": "Manage SSH keys"
   },
   "Catalog": {
     "eyebrow": "ADMIN · CATALOG",
@@ -648,7 +692,8 @@
       "template": "Template",
       "minDisk": "Minimum disk",
       "explain": "Images are VM templates in a connection's inventory. The template is prepared in VMware; the platform only selects it here.",
-      "noTemplates": "No templates found in this connection."
+      "noTemplates": "No templates found in this connection.",
+      "empty": "No images yet."
     },
     "packages": {
       "title": "Packages",
@@ -660,7 +705,8 @@
       "currency": "Currency",
       "currencyHelp": "ISO 4217 code: EUR, TRY, USD…",
       "pools": "Offered in pools",
-      "images": "Allowed images"
+      "images": "Allowed images",
+      "empty": "No packages yet."
     },
     "ip": {
       "title": "IP pools",
@@ -675,7 +721,8 @@
       "end": "Range end",
       "excluded": "Excluded addresses",
       "listHelp": "Separate with commas or spaces.",
-      "explain": "IPv4 only for now. Ranges cannot overlap within one resource pool. Addresses are assigned automatically when a server is created and released after it is deleted."
+      "explain": "IPv4 only for now. Ranges cannot overlap within one resource pool. Addresses are assigned automatically when a server is created and released after it is deleted.",
+      "empty": "No IP pools yet."
     },
     "quotas": {
       "title": "Quotas",
@@ -691,7 +738,11 @@
       "maxVcpu": "Maximum vCPU",
       "maxMemoryMb": "Maximum RAM (MB)",
       "maxDiskGb": "Maximum disk (GB)"
-    }
+    },
+    "removeConfirm": "Remove “{name}”? This cannot be undone.",
+    "cancel": "Cancel",
+    "capacity": "Capacity",
+    "availableOf": "{available} of {offered} {unit} free"
   },
   "Servers": {
     "loading": "Loading…",
@@ -794,7 +845,8 @@
       "publicKey": "Public key",
       "publicKeyHelp": "For example the content of ~/.ssh/id_ed25519.pub.",
       "add": "Add key",
-      "remove": "Delete"
+      "remove": "Delete",
+      "added": "Key added."
     },
     "admin": {
       "eyebrow": "ADMIN · SERVERS",
@@ -810,7 +862,8 @@
       "reconcile": "Reconcile now",
       "reconcileQueued": "Reconciliation queued.",
       "noFindings": "No open findings.",
-      "finding": "Finding"
+      "finding": "Finding",
+      "search": "Search by name, owner, IP or pool"
     },
     "finding": {
       "vm_missing": "VM missing in VMware",
@@ -863,6 +916,124 @@
       "E_UPDATE_INCOMPATIBLE": "that version lacks a migration already applied (no database downgrade)",
       "E_UPDATE_FAILED": "the new version did not become ready",
       "W_UPDATE_BUSY": "operations were running; tried again in the next hour"
+    },
+    "versionLabel": "Version",
+    "lastBackupLabel": "Last backup",
+    "lastUpdateLabel": "Last update",
+    "settingsLabel": "Schedule"
+  },
+  "Nav": {
+    "label": "Main navigation",
+    "adminSection": "Administration",
+    "customerSection": "My workspace",
+    "dashboard": "Overview",
+    "servers": "Servers",
+    "connections": "Connections",
+    "catalog": "Catalog",
+    "system": "System",
+    "myServers": "My servers",
+    "newServer": "New server",
+    "account": "Keys and projects",
+    "lightTheme": "Switch to light theme",
+    "darkTheme": "Switch to dark theme",
+    "language": "Language",
+    "userMenu": "Account menu",
+    "logout": "Sign out",
+    "openMenu": "Open menu",
+    "adminBadge": "Admin",
+    "earlyBuild": "Early build"
+  },
+  "Dashboard": {
+    "eyebrow": "ADMINISTRATION",
+    "title": "Overview",
+    "intro": "Servers, sellable capacity, operations and connections at a glance.",
+    "setupIncomplete": "Initial setup is not finished yet.",
+    "continueSetup": "Continue the setup wizard",
+    "gettingStarted": "Getting started",
+    "gettingStartedHelp": "Complete these steps before customers can create servers.",
+    "steps": {
+      "connection": "Connect vCenter",
+      "pool": "Create a resource pool",
+      "image": "Add an OS template",
+      "ip": "Add an IP pool",
+      "package": "Create a package"
+    },
+    "stat": {
+      "servers": "Ready servers",
+      "serversHint": "ready / all",
+      "capacity": "Sellable vCPU",
+      "capacityHint": "of {offered} offered",
+      "operations": "Operations in progress",
+      "failed": "{n, plural, =0 {0 failed in 24 h} one {# failed in 24 h} other {# failed in 24 h}}",
+      "connections": "Connections",
+      "connectionsHint": "reachable / all"
+    },
+    "noBackup": "No successful backup yet",
+    "noBackupHelp": "Run sudo sh scripts/install.sh backup on the server, or enable the daily schedule.",
+    "backupFailed": "The last backup failed",
+    "openSystem": "Open System",
+    "chart": {
+      "capacity": "vCPU capacity per pool",
+      "capacityHelp": "Used by other VMs, reserved by Lightning VM servers, still sellable.",
+      "used": "In use",
+      "reserved": "Reserved",
+      "available": "Available",
+      "servers": "Servers by state",
+      "operations": "Operations, last 7 days",
+      "succeeded": "Succeeded",
+      "failed": "Failed"
+    },
+    "serverState": {
+      "running": "Running",
+      "stopped": "Stopped",
+      "problem": "Needs attention",
+      "busy": "In progress"
+    },
+    "recent": "Recent operations",
+    "viewAll": "View all",
+    "noData": "No data yet."
+  },
+  "SystemPage": {
+    "eyebrow": "ADMINISTRATION",
+    "title": "System",
+    "intro": "Health of the panel itself, user registration, backups and updates."
+  },
+  "Account": {
+    "title": "Keys and projects",
+    "intro": "Your sign-in security, SSH keys used for new servers, and projects.",
+    "security": {
+      "title": "Sign-in and security",
+      "intro": "Your password, passkeys and the devices that are signed in.",
+      "password": "Password",
+      "currentPassword": "Current password",
+      "signOutOthers": "Sign out my other devices",
+      "changePassword": "Change password",
+      "passwordChanged": "Password changed.",
+      "passkeys": "Passkeys",
+      "passkeysHelp": "Sign in with your fingerprint, face or security key instead of a password. Passkeys belong to this panel's address.",
+      "passkeysNeedHttps": "Passkeys need HTTPS (or localhost). Open the panel over its HTTPS address to add one.",
+      "passkeyName": "Name (optional)",
+      "passkeyNamePlaceholder": "e.g. Laptop",
+      "addPasskey": "Add passkey",
+      "passkeyAdded": "Passkey added.",
+      "passkeyUnnamed": "Passkey",
+      "remove": "Remove",
+      "sessions": "Signed-in devices",
+      "thisDevice": "This device",
+      "revoke": "Sign out",
+      "mobile": "Mobile",
+      "desktop": "Computer"
     }
+  },
+  "AuthLayout": {
+    "headline": "VMware servers, ready in minutes.",
+    "subline": "Create, power and watch virtual servers on your own ESXi/vCenter, with the panel your customers use.",
+    "points": {
+      "provision": "Automatic provisioning with cloud-init",
+      "console": "Browser console for admins and customers",
+      "capacity": "Honest capacity, quotas and IP pools",
+      "backup": "Encrypted backups, alerts and safe updates"
+    },
+    "footer": "Open source · runs on your own server"
   }
 }

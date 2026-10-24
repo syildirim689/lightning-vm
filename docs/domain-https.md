@@ -142,6 +142,9 @@ Bir kontrolün başarılı olması diğerlerinin de başarılı olduğu anlamın
 ## 7. Alan adını değiştirmenin etkileri
 - **Oturumlar:** oturum çerezi alan adına bağlıdır; eski adla açılmış oturumlar yeni adda geçmez ve
   herkesin tekrar giriş yapması gerekir.
+- **Passkey'ler:** alan adına bağlıdır; yeni adda kullanıcıların passkey'lerini yeniden eklemesi gerekir.
+- **Secure çerez:** `domain` ve `behind-proxy` modları `.env`'de `PANEL_TLS=1`, `local-only` modu `0` yazar.
+  Çerezin `Secure` bayrağı bu değere göre API başlarken belirlenir.
 - **Origin kontrolü:** API ve Next.js, isteğin `Origin` başlığını `Host` ile karşılaştırır. Bu yüzden
   ek bir izin listesi gerekmez; ancak önünüzdeki proxy `Host` başlığını korumalıdır.
 - **Panel adresi:** sihirbazdaki "erişim adresi" (`settings.public_url`) ayarını yeni adla

@@ -1,11 +1,26 @@
 "use client";
+import { Button, Separator } from '@heroui/react';
+import { Turnstile } from '@marsidev/react-turnstile';
+import NextLink from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useLocale, useTranslations } from 'next-intl';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { z } from 'zod';
+import { I } from '../../components/icon';
+import { Notice, TextInput } from '../../components/ui';
 import { apiFetch, useErrorText, type ApiError } from '../../lib/api';
+import { authClient } from '../../lib/auth-client';
+import { useApiQuery } from '../../lib/query';
 
 type Mode = 'login' | 'register' | 'setup';
-const endpoints: Record<Mode, string> = { login: '/auth/login', register: '/auth/register', setup: '/setup/admin' };
+export type PublicConfig = { passwordReset: boolean; turnstileSiteKey: string | null };
+
+// Same limits as the API; the server stays the authority, this only answers early and in the user's language.
+const schema = z.object({ email: z.string().email().max(254), password: z.string().min(12).max(256) });
+const loginSchema = z.object({ email: z.string().email().max(254), password: z.string().min(1) });
+
+// better-auth's client returns { error: { code, status } }; a 429 carries no code.
+const asApiError = (e: { code?: string; status?: number } | null | undefined): ApiError => ({ code: e?.code ?? (e?.status === 429 ? 'RATE_LIMITED' : 'UNKNOWN') });
 
 // In the setup wizard the token already sits in an HttpOnly cookie (noToken) and the wizard moves on (onDone).
 export default function CredentialsForm({ mode, noToken, onDone }: { mode: Mode; noToken?: boolean; onDone?: () => void }) {
@@ -13,33 +28,83 @@ export default function CredentialsForm({ mode, noToken, onDone }: { mode: Mode;
   const { error, field } = useErrorText();
   const locale = useLocale();
   const router = useRouter();
-  const [failure, setFailure] = useState<ApiError & { text: string }>();
-  const [busy, setBusy] = useState(false);
+  const cfg = useApiQuery<PublicConfig>(['public-config'], '/public/config').data;
+  const [values, setValues] = useState({ token: '', email: '', password: '' });
+  const [fields, setFields] = useState<Record<string, string>>({});
+  const [failure, setFailure] = useState<string>();
+  const [busy, setBusy] = useState<'password' | 'passkey'>();
+  const [captcha, setCaptcha] = useState<string>();
+  const set = (k: keyof typeof values) => (v: string) => { setValues((x) => ({ ...x, [k]: v })); setFields((f) => ({ ...f, [k]: '' })); };
+  const needsCaptcha = mode !== 'setup' && !!cfg?.turnstileSiteKey;
+
+  async function landed() {
+    const me = await apiFetch<{ role: string }>('/auth/me');
+    router.replace(me.role === 'admin' ? '/admin' : '/');
+    router.refresh();
+  }
+
+  // Passkeys offered by the browser's autofill on the e-mail field (conditional mediation), where supported.
+  useEffect(() => {
+    if (mode !== 'login' || typeof window === 'undefined' || !window.PublicKeyCredential?.isConditionalMediationAvailable) return;
+    let active = true;
+    window.PublicKeyCredential.isConditionalMediationAvailable().then((ok) => {
+      if (ok && active) void authClient.signIn.passkey({ autoFill: true }).then(({ error: e }) => { if (!e && active) void landed(); });
+    }).catch(() => undefined);
+    return () => { active = false; };
+  }, [mode]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    setBusy(true); setFailure(undefined);
-    const form = Object.fromEntries(new FormData(e.currentTarget));
+    setFailure(undefined);
+    const parsed = (mode === 'login' ? loginSchema : schema).safeParse(values);
+    if (!parsed.success) {
+      const next: Record<string, string> = {};
+      for (const issue of parsed.error.issues) {
+        const k = String(issue.path[0]);
+        next[k] = k === 'email' ? 'INVALID_EMAIL' : issue.code === 'too_big' ? 'PASSWORD_TOO_LONG' : mode === 'login' ? 'REQUIRED' : 'PASSWORD_TOO_SHORT';
+      }
+      setFields(next); return;
+    }
+    if (needsCaptcha && !captcha) { setFailure(t('captchaRequired')); return; }
+    setBusy('password');
+    const fetchOptions = captcha ? { headers: { 'x-captcha-response': captcha } } : undefined;
     try {
-      const user = await apiFetch<{ role: string }>(endpoints[mode], { method: 'POST', body: { ...form, locale } });
-      if (onDone) { setBusy(false); onDone(); return; }
-      router.replace(user.role === 'admin' ? '/admin' : '/');
-      router.refresh();
-    } catch (err) { setFailure({ ...(err as ApiError), text: error(err) }); setBusy(false); }
+      if (mode === 'setup') {
+        await apiFetch('/setup/admin', { method: 'POST', body: { ...(noToken ? {} : { token: values.token }), email: values.email, password: values.password, locale } });
+        onDone?.(); return;
+      }
+      const { error: err } = mode === 'login'
+        ? await authClient.signIn.email({ email: values.email, password: values.password, fetchOptions })
+        : await authClient.signUp.email({ email: values.email, password: values.password, name: '', locale, fetchOptions } as Parameters<typeof authClient.signUp.email>[0]);
+      if (err) { setFailure(error(asApiError(err))); return; }
+      await landed();
+    } catch (err) {
+      const apiErr = err as ApiError;
+      setFields(apiErr.fields ?? {}); setFailure(error(apiErr));
+    } finally { setBusy(undefined); }
   }
 
-  const fieldError = (name: string) => field(failure?.fields?.[name]);
-  const input = (name: string, type: string, autoComplete: string, extra: object = {}) => <>
-    <label htmlFor={name}>{t(name as 'email')}<span className="muted"> · {t('required')}</span></label>
-    <input id={name} name={name} type={type} autoComplete={autoComplete} required aria-invalid={!!fieldError(name)} aria-describedby={`${name}-help`} {...extra}/>
-    <small id={`${name}-help`} className={fieldError(name) ? 'error' : 'muted'}>{fieldError(name) ?? t(`${name}Help` as 'emailHelp')}</small>
-  </>;
+  async function passkey() {
+    setFailure(undefined); setBusy('passkey');
+    const { error: err } = await authClient.signIn.passkey();
+    setBusy(undefined);
+    if (err) { if (asApiError(err).code !== 'AUTH_CANCELLED') setFailure(error(asApiError(err))); return; }
+    await landed();
+  }
 
-  return <form onSubmit={submit} noValidate>
-    {mode === 'setup' && !noToken && input('token', 'password', 'one-time-code', { spellCheck: false })}
-    {input('email', 'email', 'username', { maxLength: 254 })}
-    {input('password', 'password', mode === 'login' ? 'current-password' : 'new-password', { minLength: mode === 'login' ? undefined : 12, maxLength: 256 })}
-    {failure && <p role="alert" className="error">{failure.text}</p>}
-    <button type="submit" className="primary" disabled={busy}>{busy ? t('working') : t(`${mode}Submit`)}</button>
+  return <form onSubmit={submit} noValidate className="flex flex-col gap-4">
+    {mode === 'setup' && !noToken && <TextInput label={t('token')} type="password" value={values.token} onChange={set('token')} autoComplete="one-time-code" spellCheck={false} help={t('tokenHelp')} isRequired/>}
+    <TextInput label={t('email')} type="email" value={values.email} onChange={set('email')} autoComplete={mode === 'login' ? 'username webauthn' : 'username'} maxLength={254}
+      error={field(fields.email)} help={t('emailHelp')} isRequired/>
+    <TextInput label={t('password')} type="password" value={values.password} onChange={set('password')} autoComplete={mode === 'login' ? 'current-password webauthn' : 'new-password'} maxLength={256}
+      error={field(fields.password)} help={mode === 'login' ? undefined : t('passwordHelp')} isRequired/>
+    {mode === 'login' && cfg?.passwordReset && <NextLink href="/forgot-password" className="-mt-2 self-end text-sm text-accent hover:underline">{t('forgot')}</NextLink>}
+    {needsCaptcha && <Turnstile siteKey={cfg!.turnstileSiteKey!} onSuccess={setCaptcha} onExpire={() => setCaptcha(undefined)} options={{ language: locale, theme: 'auto', size: 'flexible' }}/>}
+    {failure && <div role="alert"><Notice tone="danger">{failure}</Notice></div>}
+    <Button type="submit" size="lg" fullWidth isPending={busy === 'password'} isDisabled={!!busy}>{busy === 'password' ? t('working') : t(`${mode}Submit`)}</Button>
+    {mode === 'login' && <>
+      <div className="flex items-center gap-3 text-xs text-muted"><Separator className="flex-1"/>{t('or')}<Separator className="flex-1"/></div>
+      <Button variant="secondary" size="lg" fullWidth isPending={busy === 'passkey'} isDisabled={!!busy} onPress={passkey}><I name="fingerprint" size={18}/>{t('passkeySignIn')}</Button>
+    </>}
   </form>;
 }

@@ -93,7 +93,8 @@ jobs:
         run: |
           sh scripts/install.sh check
           # sudo: the secrets/ files must belong to uid 1000, the containers' user
-          sudo sh scripts/install.sh
+          # --local: no public name on the runner; --setup-wizard: the E2E suite creates the admin in the browser.
+          sudo sh scripts/install.sh --local --setup-wizard
           sudo sh scripts/install.sh check
           sudo docker compose -f compose.yaml -f compose.simulator.yaml up -d --build --wait
           curl --fail --retry 10 --retry-delay 3 --retry-all-errors http://127.0.0.1:8080/api/ready

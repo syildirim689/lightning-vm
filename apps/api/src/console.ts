@@ -2,7 +2,7 @@ import { Controller, Get, HttpCode, Param, ParseUUIDPipe, Post, Req, Res, UseGua
 import type { FastifyReply } from 'fastify';
 import { pool, redis } from './db';
 import { apiError } from './errors';
-import { AdminGuard, audit, sessionCookie, type AuthedRequest } from './auth';
+import { AdminGuard, audit, type AuthedRequest } from './auth';
 import { newToken, sha256 } from './security';
 import { callAdapter, storedTarget } from './vmware';
 
@@ -12,7 +12,7 @@ const consoleCookie = 'lvm_console';
 const sessionSeconds = 60;
 type Ticket = { url: string; sha1?: string; sha256?: string[]; certPem?: string; vmName: string };
 
-const authHash = (req: AuthedRequest) => sha256(req.cookies[sessionCookie] ?? '').toString('hex');
+const authHash = (req: AuthedRequest) => sha256(req.sessionToken).toString('hex');
 
 // Live consoles of a signed-out or disabled user are closed by the gateway.
 export async function revokeConsoles(revocation: { authHash?: string; userId?: string; sessionKey?: string; all?: boolean }) {

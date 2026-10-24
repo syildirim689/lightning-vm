@@ -8,51 +8,75 @@
 Rol kontrolü API'de yapılır (`AdminGuard`). Web arayüzündeki kontrol yalnızca gereksiz sayfa
 göstermemek içindir; güvenlik sınırı değildir.
 
-## İlk yönetici (güvenli bootstrap)
-1. `scripts/install.sh` servisleri başlatır. Henüz yönetici yoksa terminale **1 saat geçerli**
-   bir kurulum anahtarı yazar. Anahtar log dosyasına yazılmaz.
-2. Anahtarı yalnızca sunucuda komut çalıştırabilen kişi alabilir. Yeni anahtar üretmek için:
+## İlk yönetici
+Varsayılan kurulumda (`sudo sh scripts/install.sh`) yöneticiyi betik oluşturur:
+- E-posta `--admin-email` ile verilir; verilmezse `admin@<alan adı>` (yerel modda `admin@lightning.local`) kullanılır.
+- Parola rastgele üretilir. Kurulum sonunda ekrana yazılır ve `secrets/initial-admin.txt`
+  dosyasına (yalnız root okuyabilir) kaydedilir. İlk girişten sonra parolayı değiştirip bu
+  dosyayı silin.
+- Elle oluşturmak için: `docker compose exec api node dist/cli.js create-admin EPOSTA [tr|en]`.
+  Bu komut yalnızca henüz yönetici yoksa çalışır.
+
+### Tarayıcı sihirbazıyla (`--setup-wizard`)
+1. Betik terminale **1 saat geçerli** bir kurulum anahtarı yazar. Anahtar log dosyasına yazılmaz.
+   Yeni anahtar üretmek için:
    ```sh
    docker compose exec api node dist/cli.js bootstrap-token
    ```
-   Yeni anahtar bir öncekini geçersiz kılar. Veritabanında anahtarın kendisi değil,
-   yalnızca SHA-256 özeti tutulur.
-3. `/setup` sihirbazında önce anahtar girilir (HttpOnly çerezde tutulur). Yönetici hesabı
-   adımında e-posta ve parola girilir. API şunları yapar:
-   - kurulum satırını `FOR UPDATE` ile kilitler;
-   - anahtarı sabit sürede karşılaştırır ve süresini kontrol eder;
-   - yöneticiyi oluşturur ve anahtarı siler.
+   Yeni anahtar bir öncekini geçersiz kılar. Veritabanında yalnızca SHA-256 özeti tutulur.
+2. `/setup` sihirbazında önce anahtar girilir (HttpOnly çerezde tutulur). Yönetici hesabı
+   adımında API kurulum satırını `FOR UPDATE` ile kilitler, anahtarı sabit sürede karşılaştırır,
+   yöneticiyi better-auth ile oluşturur ve anahtarı siler. Aynı anda gelen istekler arasından
+   yalnızca biri yönetici oluşturabilir; bu durum test edildi.
+3. Yönetici oluştuktan sonra `POST /setup/admin` `409 SETUP_CLOSED` döner, CLI yeni anahtar
+   üretmez ve sihirbaza yalnızca yönetici oturumuyla devam edilir (docs/setup.md).
 
-   Aynı anda gelen istekler arasından yalnızca biri yönetici oluşturabilir; bu durum test edildi.
-4. Yönetici oluştuktan sonra:
-   - `POST /setup/admin` her istekte `409 SETUP_CLOSED` döner;
-   - CLI yeni anahtar üretmez;
-   - sihirbaza yalnızca yönetici oturumuyla devam edilir;
-   - sihirbaz tamamlanınca `/setup` sayfası `/login` sayfasına yönlendirir (docs/setup.md).
+Kurulum betiği tekrar çalıştırıldığında yöneticiye ve sırlara dokunmaz.
+`sh scripts/install.sh recover-setup` yalnızca sihirbazı yeniden açar.
 
-   Kurulum betiği tekrar çalıştırıldığında yöneticiye ve sırlara dokunmaz.
+## Oturumlar (better-auth)
+Kayıt, giriş, çıkış, oturumlar, parola değiştirme/sıfırlama ve passkey'ler
+[better-auth](https://www.better-auth.com) ile yönetilir (`apps/api/src/better-auth.ts`).
+Uç noktalar `/api/auth/*` altındadır; Fastify bunları better-auth'a iletir.
+- Kullanıcılar mevcut `users` tablosunda kalır. better-auth tabloları `auth_sessions`,
+  `auth_accounts`, `auth_verifications` ve `auth_passkeys`'tir (migration 007).
+  Eski parola özetleri `auth_accounts`'a taşınır; eski hesaplar aynı parolayla girer.
+- Cookie: `lvm.session_token`, imzalı, `HttpOnly`, `SameSite=Lax`, `Path=/`. Panel HTTPS ile
+  sunuluyorsa (`PANEL_TLS=1`, kurulum betiği ayarlar) `Secure` ve `__Secure-` öneki eklenir.
+- İmza anahtarı `secrets/master.key`'den türetilir (HMAC); ayrı bir sır gerekmez.
+- Süre: varsayılan 12 saat (`SESSION_TTL_HOURS`). Süresi dolan oturumlar ve devre dışı veya
+  yasaklı kullanıcılar reddedilir; devre dışı kullanıcıya yeni oturum açılmaz.
+- Kullanıcı Hesap sayfasında açık oturumlarını görür ve tek tek kapatabilir. Parola
+  değiştirirken diğer oturumları kapatma seçeneği vardır.
+- Bir oturum hangi yolla biterse bitsin (çıkış, iptal, parola sıfırlama), o oturumla açılmış
+  tarayıcı konsolları da kapatılır.
 
-`sh scripts/install.sh recover-setup` yalnızca sihirbazı yeniden açar. Yönetici parolasını
-unutma durumu için kontrollü bir kurtarma işlemi henüz yok.
+## Passkey'ler
+Kullanıcı Hesap sayfasından passkey ekler (`@better-auth/passkey`, WebAuthn). Giriş sayfasında
+"Passkey ile giriş yap" düğmesi ve tarayıcının otomatik doldurma önerisi kullanılır. Passkey,
+panelin açıldığı alan adına bağlıdır (RP ID isteğin host'undan alınır). Alan adı değişirse
+passkey'ler yeniden eklenmelidir. Tarayıcılar WebAuthn'i yalnızca HTTPS'te veya `localhost`'ta
+açar. Gerçek bir doğrulayıcıyla (Touch ID, Windows Hello, güvenlik anahtarı) henüz denenmedi.
 
-## Oturumlar
-- Girişte 32 baytlık rastgele bir anahtar üretilir. Cookie (`lvm_session`) bu anahtarı taşır;
-  veritabanında yalnızca SHA-256 özeti saklanır.
-- Cookie bayrakları: `HttpOnly`, `SameSite=Lax`, `Path=/`. İstek HTTPS ile geldiyse `Secure`
-  da eklenir. Bunu Caddy'nin `X-Forwarded-Proto` başlığı belirler; yalnızca `TRUSTED_PROXIES`
-  içindeki adreslerden gelen başlığa güvenilir.
-- Süre: varsayılan 12 saat (`SESSION_TTL_HOURS`). Çıkış yapınca oturum veritabanında iptal edilir.
-  Süresi dolan oturumlar ve devre dışı bırakılan kullanıcılar anında reddedilir.
-- Her girişte yeni bir anahtar üretilir; bu, oturum sabitleme (session fixation) saldırısını önler.
+## Parola sıfırlama (e-posta)
+`.env` içinde `SMTP_URL` (ör. `smtps://kullanici:parola@smtp.example.com:465`) ve `MAIL_FROM`
+tanımlıysa giriş sayfasında "Parolamı unuttum" bağlantısı görünür. Bağlantı e-postayla gider
+(nodemailer, kullanıcının diline göre TR/EN), tek kullanımlıktır ve sıfırlamadan sonra kullanıcının
+tüm oturumları kapatılır. SMTP tanımlı değilse özellik gizlenir; API `MAIL_NOT_CONFIGURED` döner.
+Gerçek bir SMTP sunucusuyla henüz denenmedi.
+
+## Bot koruması (isteğe bağlı)
+`TURNSTILE_SITE_KEY` ve `TURNSTILE_SECRET_KEY` tanımlıysa giriş, kayıt ve parola sıfırlama
+formları Cloudflare Turnstile doğrulaması ister. Tanımlı değilse kapalıdır.
 
 ## CSRF
-GET/HEAD/OPTIONS dışındaki her istekte iki koşul aranır:
+GET/HEAD/OPTIONS dışındaki her istekte (`/api/auth/*` dahil) iki koşul aranır:
 - `X-Lightning-CSRF: 1` başlığı zorunludur. Başka bir siteden bu başlıkla istek atmak
   CORS ön kontrolü (preflight) gerektirir ve API buna hiç izin vermez.
 - `Origin` başlığı varsa, `Host` ile aynı olmalıdır.
 
-Bu koşullar sağlanmazsa API `403 CSRF_REJECTED` döner. Dil seçimi Next.js Server Action ile
-yapılır; Next.js'in kendi Origin kontrolü buna uygulanır.
+Bu koşullar sağlanmazsa API `403 CSRF_REJECTED` döner. better-auth ayrıca çerezli isteklerde
+`Origin` başlığını kendisi de kontrol eder.
 
 ## Parolalar
 - Algoritma: Node.js `crypto.scrypt` (N=2^17, r=8, p=1; OWASP önerisi). Ek bir native
@@ -60,9 +84,8 @@ yapılır; Next.js'in kendi Origin kontrolü buna uygulanır.
 - Parametreler her hash'in içinde saklanır; ileride güçlendirilebilir.
 - Uzunluk: en az 12, en fazla 256 karakter. Doğrulama sunucuda yapılır; alan hata kodları
   arayüzde çevrilir.
-- Kayıtlı olmayan bir e-postayla giriş denendiğinde de sahte bir parola doğrulaması yapılır.
-  Böylece yanıt süresinden hesabın var olup olmadığı anlaşılamaz. İki durumda da yanıt aynıdır:
-  `401 INVALID_CREDENTIALS`.
+- Yanlış parola ve kayıtlı olmayan e-posta için yanıt aynıdır: `401 INVALID_EMAIL_OR_PASSWORD`.
+  İkisi de denetim kaydına `auth.login / failure` olarak yazılır.
 
 ## Hız sınırları (Redis, sabit pencere)
 | Uç nokta | Sınır |
@@ -70,14 +93,16 @@ yapılır; Next.js'in kendi Origin kontrolü buna uygulanır.
 | Giriş, IP başına | 30 / 15 dk |
 | Giriş, e-posta başına | 10 / 15 dk |
 | Kayıt, IP başına | 5 / saat |
+| Parola sıfırlama isteği, IP başına | 5 / saat |
+| Diğer `/api/auth/*`, IP başına | 100 / dk |
 | Kurulum, IP başına | 10 / 15 dk |
 
-Sınır aşılırsa `429 RATE_LIMITED` döner. Redis'e ulaşılamazsa giriş reddedilir
-(`503 DEPENDENCY_UNAVAILABLE`); sınırlayıcı devre dışı kalıp girişe izin vermez.
+Sınır aşılırsa `429` döner. Redis'e ulaşılamazsa istek reddedilir; sınırlayıcı devre dışı kalıp
+girişe izin vermez.
 
 ## Kayıt
 Varsayılan olarak kapalıdır (`settings.registration_open = false`). Yönetici panelden açar;
-bu değişiklik denetim kaydına yazılır. Kayıtta aynı e-posta varsa `409 EMAIL_TAKEN` döner.
+bu değişiklik denetim kaydına yazılır. Kayıtta aynı e-posta varsa `USER_ALREADY_EXISTS` döner.
 Bu, e-postanın kayıtlı olduğunu açığa çıkarır; açık kayıtlı bir panel için kabul edilen bir
 ödünleşimdir.
 
@@ -100,9 +125,6 @@ Bu, e-postanın kayıtlı olduğunu açığa çıkarır; açık kayıtlı bir pa
   Boş kurulumda `E2E_BOOTSTRAP_TOKEN` gerekir.
 
 ## Henüz yok
-- Yöneticiler için MFA.
-- Parola sıfırlama ve e-posta doğrulama.
-- Kullanıcı bazlı dil ve saat dilimi kaydı.
-- Proje ve müşteri modeli (8. aşama).
-- Oturum listesi ve "tüm oturumları kapat".
-- Yönetici parolası kurtarma.
+- TOTP tabanlı iki adımlı doğrulama (MFA).
+- E-posta doğrulama.
+- SMTP olmadan yönetici parolası kurtarma.

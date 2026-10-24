@@ -1,7 +1,10 @@
 "use client";
+import { Button, Card } from '@heroui/react';
+import { I } from '../../../../components/icon';
 import { useTranslations } from 'next-intl';
 import { useState } from 'react';
 import { apiFetch, useErrorText, type ApiError } from '../../../../lib/api';
+import { Mono, Notice, SelectInput, TextInput } from '../../../../components/ui';
 
 type Certificate = { subject: string; issuer: string; notAfter: string; sha256: string; dnsNames: string[] | null; ips: string[] | null };
 type Failure = ApiError & { text: string; certificate?: Certificate; conflicts?: { host: string; connection: string }[] };
@@ -17,52 +20,59 @@ export default function ConnectionForm({ onSaved }: { onSaved: (s: Summary) => v
   const [form, setForm] = useState({ name: '', host: '', port: '443', username: '', password: '', mode: 'system', caPem: '', sha256: '' });
   const [failure, setFailure] = useState<Failure>();
   const [tested, setTested] = useState<Summary>();
-  const [busy, setBusy] = useState(false);
-  const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => setForm({ ...form, [k]: e.target.value });
+  const [busy, setBusy] = useState<'test' | 'save'>();
+  const set = (k: keyof typeof form) => (v: string) => setForm((f) => ({ ...f, [k]: v }));
   const body = () => ({ name: form.name, host: form.host, port: Number(form.port), username: form.username, password: form.password,
     tls: { mode: form.mode, ...(form.mode === 'ca' && { caPem: form.caPem }), ...(form.mode === 'pinned' && { sha256: form.sha256 }) } });
 
-  async function run(path: string, onOk: (s: Summary) => void) {
-    setBusy(true); setFailure(undefined); setTested(undefined);
+  async function run(kind: 'test' | 'save', path: string, onOk: (s: Summary) => void) {
+    setBusy(kind); setFailure(undefined); setTested(undefined);
     try { onOk(await apiFetch<Summary>(path, { method: 'POST', body: body() })); }
     catch (e) { setFailure({ ...(e as Failure), text: error(e) }); }
-    finally { setBusy(false); }
+    finally { setBusy(undefined); }
   }
+  const err = (k: string) => field(failure?.fields?.[k]);
+  const help = (k: string) => t(`form.${k}Help` as 'form.nameHelp');
 
-  const input = (k: keyof typeof form, type = 'text', required = true) => <>
-    <label htmlFor={`vm-${k}`}>{t(`form.${k}` as 'form.name')}<span className="muted"> · {required ? t('required') : t('optional')}</span></label>
-    <input id={`vm-${k}`} type={type} value={form[k]} onChange={set(k)} autoComplete={type === 'password' ? 'new-password' : 'off'} aria-invalid={!!failure?.fields?.[k]} aria-describedby={`vm-${k}-help`}/>
-    <small id={`vm-${k}-help`} className={failure?.fields?.[k] ? 'error' : 'muted'}>{field(failure?.fields?.[k]) ?? t(`form.${k}Help` as 'form.nameHelp')}</small>
-  </>;
+  return <form className="flex flex-col gap-4" onSubmit={(e) => { e.preventDefault(); run('save', '/admin/vmware/connections', onSaved); }} noValidate>
+    <div className="grid gap-4 sm:grid-cols-2">
+      <TextInput label={t('form.name')} value={form.name} onChange={set('name')} error={err('name')} help={help('name')} isRequired/>
+      <TextInput label={t('form.host')} value={form.host} onChange={set('host')} error={err('host')} help={help('host')} isRequired autoComplete="off" spellCheck={false}/>
+      <TextInput label={t('form.port')} value={form.port} onChange={set('port')} error={err('port')} help={help('port')} autoComplete="off"/>
+      <TextInput label={t('form.username')} value={form.username} onChange={set('username')} error={err('username')} help={help('username')} isRequired autoComplete="off"/>
+      <TextInput label={t('form.password')} type="password" value={form.password} onChange={set('password')} error={err('password')} help={help('password')} isRequired autoComplete="new-password"/>
+      <SelectInput label={t('form.tls')} value={form.mode} onChange={set('mode')} help={t('form.tlsHelp')}
+        options={(['system', 'ca', 'pinned'] as const).map((m) => ({ id: m, label: t(`tlsMode.${m}`) }))}/>
+    </div>
+    {form.mode === 'ca' && <TextInput multiline label={t('form.caPem')} value={form.caPem} onChange={set('caPem')} error={err('caPem')} help={t('form.caPemHelp')} spellCheck={false}/>}
+    {form.mode === 'pinned' && <TextInput label={t('form.sha256')} value={form.sha256} onChange={set('sha256')} error={err('sha256')} help={t('form.sha256Help')} spellCheck={false}/>}
 
-  return <form onSubmit={(e) => { e.preventDefault(); run('/admin/vmware/connections', onSaved); }} noValidate>
-    {input('name')}{input('host')}{input('port', 'text', false)}{input('username')}{input('password', 'password')}
-    <label htmlFor="vm-mode">{t('form.tls')}</label>
-    <select id="vm-mode" value={form.mode} onChange={set('mode')}>
-      {(['system', 'ca', 'pinned'] as const).map((m) => <option key={m} value={m}>{t(`tlsMode.${m}`)}</option>)}
-    </select>
-    <small className="muted">{t('form.tlsHelp')}</small>
-    {form.mode === 'ca' && <><label htmlFor="vm-caPem">{t('form.caPem')}</label><textarea id="vm-caPem" rows={6} value={form.caPem} onChange={set('caPem')} aria-invalid={!!failure?.fields?.caPem}/>
-      <small className={failure?.fields?.caPem ? 'error' : 'muted'}>{field(failure?.fields?.caPem) ?? t('form.caPemHelp')}</small></>}
-    {form.mode === 'pinned' && <><label htmlFor="vm-sha256">{t('form.sha256')}</label><input id="vm-sha256" value={form.sha256} onChange={set('sha256')} aria-invalid={!!failure?.fields?.sha256}/>
-      <small className={failure?.fields?.sha256 ? 'error' : 'muted'}>{field(failure?.fields?.sha256) ?? t('form.sha256Help')}</small></>}
+    {failure && <div role="alert"><Notice tone="danger" title={failure.text}>
+      {failure.conflicts && <ul className="list-disc pl-5">{failure.conflicts.map((c) => <li key={c.host}>{t('conflict', { host: c.host, connection: c.connection })}</li>)}</ul>}
+    </Notice></div>}
+    {failure?.certificate && <Card variant="secondary" className="border border-warning/40">
+      <Card.Header>
+        <Card.Title className="flex items-center gap-2 text-base"><I name="shield-alert" size={18} className="text-warning"/>{t('cert.title')}</Card.Title>
+        <Card.Description>{t('cert.explain')}</Card.Description>
+      </Card.Header>
+      <Card.Content className="flex flex-col gap-3 text-sm">
+        <dl className="grid grid-cols-[max-content_1fr] gap-x-4 gap-y-1">
+          <dt className="text-muted">{t('cert.subject')}</dt><dd className="break-all">{failure.certificate.subject}</dd>
+          <dt className="text-muted">{t('cert.issuer')}</dt><dd className="break-all">{failure.certificate.issuer}</dd>
+          <dt className="text-muted">{t('cert.notAfter')}</dt><dd>{failure.certificate.notAfter}</dd>
+          <dt className="text-muted">{t('cert.names')}</dt><dd className="break-all">{[...(failure.certificate.dnsNames ?? []), ...(failure.certificate.ips ?? [])].join(', ') || '–'}</dd>
+          <dt className="text-muted">SHA-256</dt><dd className="break-all"><Mono>{fingerprintPairs(failure.certificate.sha256)}</Mono></dd>
+        </dl>
+        <p className="text-muted">{t('cert.verify')}</p>
+        <pre className="overflow-x-auto rounded-lg bg-default p-3 font-mono text-xs">openssl x509 -in /etc/vmware/ssl/rui.crt -noout -fingerprint -sha256</pre>
+        <div><Button variant="secondary" onPress={() => { setForm((f) => ({ ...f, mode: 'pinned', sha256: failure.certificate!.sha256 })); setFailure(undefined); }}>{t('cert.pin')}</Button></div>
+      </Card.Content>
+    </Card>}
+    {tested && <div role="status"><Notice tone="success" title={t('testOk', { kind: tested.product.fullName, hosts: tested.counts.hosts, vms: tested.counts.vms })}/></div>}
 
-    {failure && <div role="alert" className="error"><p>{failure.text}</p>
-      {failure.conflicts && <ul>{failure.conflicts.map((c) => <li key={c.host}>{t('conflict', { host: c.host, connection: c.connection })}</li>)}</ul>}</div>}
-    {failure?.certificate && <article className="cert">
-      <h3>{t('cert.title')}</h3><p className="muted">{t('cert.explain')}</p>
-      <dl><dt>{t('cert.subject')}</dt><dd>{failure.certificate.subject}</dd><dt>{t('cert.issuer')}</dt><dd>{failure.certificate.issuer}</dd>
-        <dt>{t('cert.notAfter')}</dt><dd>{failure.certificate.notAfter}</dd>
-        <dt>{t('cert.names')}</dt><dd>{[...(failure.certificate.dnsNames ?? []), ...(failure.certificate.ips ?? [])].join(', ') || '–'}</dd>
-        <dt>SHA-256</dt><dd><code>{fingerprintPairs(failure.certificate.sha256)}</code></dd></dl>
-      <p className="muted">{t('cert.verify')}</p><pre><code>openssl x509 -in /etc/vmware/ssl/rui.crt -noout -fingerprint -sha256</code></pre>
-      <button type="button" className="secondary" onClick={() => { setForm({ ...form, mode: 'pinned', sha256: failure.certificate!.sha256 }); setFailure(undefined); }}>{t('cert.pin')}</button>
-    </article>}
-    {tested && <p role="status" className="ok-text">{t('testOk', { kind: tested.product.fullName, hosts: tested.counts.hosts, vms: tested.counts.vms })}</p>}
-
-    <div className="actions">
-      <button type="button" className="secondary" disabled={busy} onClick={() => run('/admin/vmware/test', setTested)}>{busy ? t('working') : t('test')}</button>
-      <button type="submit" className="primary" disabled={busy}>{t('save')}</button>
+    <div className="flex flex-wrap justify-end gap-2">
+      <Button variant="secondary" isPending={busy === 'test'} isDisabled={!!busy} onPress={() => run('test', '/admin/vmware/test', setTested)}>{busy === 'test' ? t('working') : t('test')}</Button>
+      <Button type="submit" isPending={busy === 'save'} isDisabled={!!busy}>{t('save')}</Button>
     </div>
   </form>;
 }

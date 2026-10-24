@@ -1,0 +1,117 @@
+"use client";
+import { Breadcrumbs, Button, Card, Tabs } from '@heroui/react';
+import { I } from '../../../../../components/icon';
+import { useRouter } from 'next/navigation';
+import { useFormatter, useTranslations } from 'next-intl';
+import { useState } from 'react';
+import { apiFetch, useErrorText } from '../../../../../lib/api';
+import { useApiAction, useApiQuery } from '../../../../../lib/query';
+import { ButtonLink, DataTable, Notice, PageHeader, Section, Stat, StatusChip, TextInput } from '../../../../../components/ui';
+import type { Connection } from '../connections';
+
+type Row = Record<string, string | number | boolean | null | string[]>;
+type Detail = { connection: Connection; capacity: Record<string, number>; hosts: Row[]; datastores: Row[]; networks: Row[]; compute: Row[]; vms: Row[] };
+
+export default function ConnectionDetail({ id }: { id: string }) {
+  const t = useTranslations('Vmware');
+  const tn = useTranslations('Nav');
+  const format = useFormatter();
+  const { error } = useErrorText();
+  const router = useRouter();
+  const [confirmName, setConfirmName] = useState('');
+  const q = useApiQuery<Detail>(['vmware', 'connection', id], `/admin/vmware/connections/${id}`);
+  const discover = useApiAction(() => apiFetch(`/admin/vmware/connections/${id}/discover`, { method: 'POST' }), { invalidate: [['vmware']], success: t('refreshed') });
+  const removeConn = useApiAction(() => apiFetch(`/admin/vmware/connections/${id}`, { method: 'DELETE' }), { invalidate: [['vmware', 'connections']], success: t('removed'), onSuccess: () => router.push('/admin/vmware') });
+  const gb = (bytes: unknown) => format.number(Number(bytes) / 1024 ** 3, { maximumFractionDigits: 1 }) + ' GiB';
+
+  const d = q.data;
+  if (!d) return <p role="status" className="text-sm text-muted">{q.error ? error(q.error) : t('loading')}</p>;
+  const c = d.connection;
+
+  return <div className="flex flex-col gap-6">
+    <Breadcrumbs>
+      <Breadcrumbs.Item href="/admin/vmware">{tn('connections')}</Breadcrumbs.Item>
+      <Breadcrumbs.Item>{c.name}</Breadcrumbs.Item>
+    </Breadcrumbs>
+    <PageHeader title={c.name} description={<>{c.product.fullName}{c.lastDiscoveredAt && <> · {t('lastDiscovered', { time: format.dateTime(new Date(c.lastDiscoveredAt), { dateStyle: 'medium', timeStyle: 'short' }) })}</>}</>}
+      actions={<Button variant="secondary" isPending={discover.isPending} onPress={() => discover.mutate()}><I name="refresh-cw" size={16}/>{t('refresh')}</Button>}/>
+
+    {c.warnings.map((w) => <Notice key={w} tone="warning">{t(`warning.${w as 'HOST_MANAGED_BY_VCENTER'}`)}</Notice>)}
+    {c.writeApi !== 'available' && <Notice tone="warning">{t(`writeApiNote.${c.writeApi as 'restricted'}`)}</Notice>}
+
+    <section aria-labelledby="cap-title" className="flex flex-col gap-3">
+      <h2 id="cap-title" className="text-lg font-semibold">{t('capacityTitle')}</h2>
+      <p className="text-sm text-muted">{t('capacityNote')}</p>
+      <div className="grid gap-4 md:grid-cols-3">
+        <Stat label={t('cap.cpu')} icon={<I name="cpu" size={18}/>} value={t('cap.cpuValue', { cores: d.capacity.cpuCores, threads: d.capacity.cpuThreads, ghz: format.number(d.capacity.cpuMhz / 1000, { maximumFractionDigits: 1 }) })}/>
+        <Stat label={t('cap.memory')} icon={<I name="memory-stick" size={18}/>} value={gb(d.capacity.memoryBytes)}/>
+        <Stat label={t('cap.storage')} icon={<I name="database" size={18}/>} value={gb(d.capacity.storageCapacityBytes)}
+          hint={t('cap.storageValue', { capacity: gb(d.capacity.storageCapacityBytes), free: gb(d.capacity.storageFreeBytes), provisioned: gb(d.capacity.storageProvisionedBytes) })}/>
+      </div>
+    </section>
+
+    <Section title={t('operationsTitle')}>
+      <ul className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+        {Object.entries(c.operations).map(([op, ok]) => <li key={op} className="flex items-center justify-between gap-2 rounded-lg bg-default/60 px-3 py-2 text-sm">
+          {t(`operation.${op as 'inventory'}`)}: <StatusChip tone={ok ? 'success' : 'default'}>{ok ? t('yes') : t('no')}</StatusChip>
+        </li>)}
+      </ul>
+    </Section>
+
+    <Card>
+      <Card.Content>
+        <Tabs defaultSelectedKey="vms">
+          <Tabs.ListContainer>
+            <Tabs.List aria-label={t('title')}>
+              <Tabs.Tab id="vms">{t('vmsTitle', { count: d.vms.length })}<Tabs.Indicator/></Tabs.Tab>
+              <Tabs.Tab id="hosts">{t('hostsTitle')}<Tabs.Indicator/></Tabs.Tab>
+              <Tabs.Tab id="datastores">{t('datastoresTitle')}<Tabs.Indicator/></Tabs.Tab>
+              <Tabs.Tab id="networks">{t('networksTitle')}<Tabs.Indicator/></Tabs.Tab>
+              <Tabs.Tab id="compute">{t('computeTitle')}<Tabs.Indicator/></Tabs.Tab>
+            </Tabs.List>
+          </Tabs.ListContainer>
+          <Tabs.Panel id="vms" className="pt-4">
+            <h2 className="sr-only">{t('vmsTitle', { count: d.vms.length })}</h2>
+            <DataTable label={t('vmsTitle', { count: d.vms.length })} rows={d.vms} rowKey={(v) => String(v.moref)}
+              columns={[{ id: 'name', label: t('col.name') }, { id: 'power', label: t('col.power') }, { id: 'cpu', label: 'vCPU' }, { id: 'ram', label: 'RAM' }, { id: 'guest', label: t('col.guest') }, { id: 'act', label: <span className="sr-only">{t('console')}</span> }]}
+              cells={(v) => [<span key="n">{String(v.name)}{v.template ? <> <StatusChip tone="accent">{t('template')}</StatusChip></> : null}</span>,
+                <StatusChip key="p" tone={v.power_state === 'poweredOn' ? 'success' : 'default'}>{String(v.power_state)}</StatusChip>, String(v.cpu),
+                `${format.number(Number(v.memory_mb) / 1024, { maximumFractionDigits: 1 })} GiB`, String(v.guest ?? '–'),
+                v.power_state === 'poweredOn' && !v.template && c.operations.console
+                  ? <ButtonLink key="c" size="sm" variant="secondary" href={`/admin/vmware/console?c=${c.id}&vm=${encodeURIComponent(String(v.moref))}`}><I name="square-terminal" size={14}/>{t('console')}</ButtonLink> : null]}/>
+          </Tabs.Panel>
+          <Tabs.Panel id="hosts" className="pt-4">
+            <DataTable label={t('hostsTitle')} rows={d.hosts} rowKey={(h) => String(h.moref)}
+              columns={[{ id: 'name', label: t('col.name') }, { id: 'state', label: t('col.state') }, { id: 'cpu', label: 'CPU' }, { id: 'mem', label: t('cap.memory') }, { id: 'ver', label: t('col.version') }]}
+              cells={(h) => [String(h.name), `${h.connection_state} / ${h.power_state}${h.in_maintenance ? ` · ${t('maintenance')}` : ''}`,
+                t('cap.cpuValue', { cores: Number(h.cpu_cores), threads: Number(h.cpu_threads), ghz: format.number(Number(h.cpu_mhz) / 1000, { maximumFractionDigits: 2 }) }), gb(h.memory_bytes), String(h.version ?? '–')]}/>
+          </Tabs.Panel>
+          <Tabs.Panel id="datastores" className="pt-4">
+            <DataTable label={t('datastoresTitle')} rows={d.datastores} rowKey={(x) => String(x.moref)}
+              columns={[{ id: 'name', label: t('col.name') }, { id: 'type', label: t('col.type') }, { id: 'cap', label: t('cap.capacity') }, { id: 'free', label: t('cap.free') }, { id: 'unc', label: t('cap.uncommitted') }, { id: 'state', label: t('col.state') }]}
+              cells={(x) => [String(x.name), String(x.type), gb(x.capacity_bytes), gb(x.free_bytes), gb(x.uncommitted_bytes),
+                x.accessible ? <StatusChip key="s" tone="success">{t('status.ok')}</StatusChip> : <StatusChip key="s" tone="danger">{t('inaccessible')}</StatusChip>]}/>
+          </Tabs.Panel>
+          <Tabs.Panel id="networks" className="pt-4">
+            <DataTable label={t('networksTitle')} rows={d.networks} rowKey={(n) => String(n.moref)} minWidth={480}
+              columns={[{ id: 'name', label: t('col.name') }, { id: 'type', label: t('col.type') }, { id: 'vlan', label: 'VLAN' }, { id: 'sw', label: t('col.switch') }]}
+              cells={(n) => [String(n.name), t(`networkKind.${n.kind as 'standard'}`), String(n.vlan ?? '–'), String(n.switch ?? '–')]}/>
+          </Tabs.Panel>
+          <Tabs.Panel id="compute" className="pt-4">
+            <DataTable label={t('computeTitle')} rows={d.compute} rowKey={(x) => String(x.moref)} minWidth={420}
+              columns={[{ id: 'name', label: t('col.name') }, { id: 'type', label: t('col.type') }, { id: 'hosts', label: t('col.hosts') }]}
+              cells={(x) => [String(x.name), t(`computeKind.${x.kind as 'cluster'}`), String(x.hosts)]}/>
+          </Tabs.Panel>
+        </Tabs>
+      </Card.Content>
+    </Card>
+
+    {/* Removing only forgets the connection here; the ESXi/vCenter and its VMs are not touched. */}
+    <Section title={t('remove.title')} description={t('remove.explain')} className="border border-danger/30">
+      <div className="flex flex-wrap items-end gap-3">
+        <TextInput className="min-w-64 flex-1" label={t('remove.confirm', { name: c.name })} value={confirmName} onChange={setConfirmName} autoComplete="off"/>
+        <Button variant="danger" isDisabled={confirmName !== c.name} isPending={removeConn.isPending} onPress={() => removeConn.mutate()}>{t('remove.button')}</Button>
+      </div>
+    </Section>
+  </div>;
+}

@@ -1,29 +1,31 @@
 "use client";
-import { useEffect, useState } from 'react';
 import { useFormatter, useTranslations } from 'next-intl';
-import { apiFetch, useErrorText } from '../../../lib/api';
+import { Section, StatusChip } from '../../../components/ui';
+import { useErrorText } from '../../../lib/api';
+import { useApiQuery } from '../../../lib/query';
 
 type Worker = { healthy: boolean; last_seen: string };
-type State = { phase: 'checking' } | { phase: 'ok'; worker?: Worker } | { phase: 'error'; error: unknown };
 
 export default function Status() {
   const t = useTranslations('Status');
   const { error } = useErrorText();
   const format = useFormatter();
-  const [state, setState] = useState<State>({ phase: 'checking' });
-  useEffect(() => { let active = true; const controller = new AbortController();
-    async function load() { try {
-      await apiFetch('/ready', { signal: controller.signal });
-      const data = await apiFetch<{ worker: Worker[] }>('/admin/system', { signal: controller.signal });
-      if (active) setState({ phase: 'ok', worker: data.worker.find(w => w.healthy) });
-    } catch (e) { if (active) setState({ phase: 'error', error: e }); } }
-    load(); const timer = setInterval(load, 15000); return () => { active = false; controller.abort(); clearInterval(timer); }; }, []);
-
-  const worker = state.phase === 'checking' ? t('workerWaiting')
-    : state.phase === 'error' ? t('workerUnknown')
-    : state.worker ? t('workerRunning', { time: format.dateTime(new Date(state.worker.last_seen), { dateStyle: 'medium', timeStyle: 'medium' }) })
-    : t('workerNoHeartbeat');
-  return <article><h2>{t('title')}</h2>
-    <p role="status">{state.phase === 'checking' ? t('checking') : state.phase === 'ok' ? t('reachable') : error(state.error)}</p>
-    <p>{t('worker', { state: worker })}</p><small>{t('disclaimer')}</small></article>;
+  const ready = useApiQuery(['ready'], '/ready', { refetchInterval: 15_000 });
+  const system = useApiQuery<{ worker: Worker[] }>(['admin', 'system'], '/admin/system', { refetchInterval: 15_000 });
+  const worker = system.data?.worker.find((w) => w.healthy);
+  const health = ready.isPending ? t('checking') : ready.isError ? error(ready.error) : t('reachable');
+  const workerText = system.isPending ? t('workerWaiting') : system.isError ? t('workerUnknown')
+    : worker ? t('workerRunning', { time: format.dateTime(new Date(worker.last_seen), { dateStyle: 'medium', timeStyle: 'medium' }) }) : t('workerNoHeartbeat');
+  return <Section title={t('title')} description={t('disclaimer')}>
+    <ul className="flex flex-col gap-3 text-sm">
+      <li className="flex flex-wrap items-center gap-2">
+        <StatusChip tone={ready.isPending ? 'default' : ready.isError ? 'danger' : 'success'}>{ready.isError ? '!' : 'API'}</StatusChip>
+        <span role="status" data-testid="health">{health}</span>
+      </li>
+      <li className="flex flex-wrap items-center gap-2">
+        <StatusChip tone={worker ? 'success' : system.isPending ? 'default' : 'warning'}>Worker</StatusChip>
+        <span>{t('worker', { state: workerText })}</span>
+      </li>
+    </ul>
+  </Section>;
 }
