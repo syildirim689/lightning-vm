@@ -108,10 +108,10 @@ export default function Order() {
         {i < steps.length - 1 && <span aria-hidden className="mx-1 hidden h-px w-8 bg-separator sm:block"/>}
       </li>)}
     </ol>
-    <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_22rem]">
+    <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_22rem]">
       <div className="flex flex-col gap-6">
         <Section title={t('location')}>
-          <div className="grid gap-4 md:grid-cols-3">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
             <SelectInput label={t('location')} value={d.poolId} onChange={(v) => d.set({ poolId: v, packageId: '' })}
               options={catalog.pools.map((p) => ({ id: p.id, label: p.location ? `${p.name} · ${p.location}` : p.name }))}/>
             <SelectInput label={t('image')} value={d.imageId} onChange={(v) => d.set({ imageId: v })} error={quoteField('imageId')}
@@ -126,7 +126,7 @@ export default function Order() {
             <Radio value="package"><Radio.Content><Radio.Control><Radio.Indicator/></Radio.Control>{t('package')}</Radio.Content></Radio>
             <Radio value="custom" isDisabled={!custom}><Radio.Content><Radio.Control><Radio.Indicator/></Radio.Control>{t('custom')}{!custom && ` (${t('noCustom')})`}</Radio.Content></Radio>
           </RadioGroup>
-          {d.type === 'package' && <RadioGroup aria-label={t('package')} value={d.packageId} onChange={(v) => d.set({ packageId: v })} className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          {d.type === 'package' && <RadioGroup aria-label={t('package')} value={d.packageId} onChange={(v) => d.set({ packageId: v })} className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
             {packages.map((p) => <Radio key={p.id} value={p.id} isDisabled={!!blocked(p)} aria-label={t('packageOption', { name: p.name, vcpu: p.vcpu, memory: gb(p.memoryMb), disk: p.diskGb, price: money(p.priceMonthly, p.currency) })}
               className="group relative rounded-xl border border-border p-4 transition-all duration-150 hover:-translate-y-0.5 hover:shadow-md data-[disabled=true]:translate-y-0 data-[disabled=true]:opacity-60 data-[disabled=true]:shadow-none data-[selected=true]:border-accent data-[selected=true]:bg-accent-soft">
               {bestValue === p.id && <span className="absolute -top-2.5 right-3 rounded-full bg-success px-2 py-0.5 text-[10px] font-semibold uppercase text-success-foreground">{t('bestValue')}</span>}
@@ -141,7 +141,7 @@ export default function Order() {
               </Radio.Content>
             </Radio>)}
           </RadioGroup>}
-          {d.type === 'custom' && custom && <div className="grid gap-4 md:grid-cols-3">
+          {d.type === 'custom' && custom && <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
             <NumberInput label="vCPU" value={d.vcpu} onChange={(v) => d.set({ vcpu: v ?? custom.cpuMin })} minValue={custom.cpuMin} maxValue={custom.cpuMax} step={custom.cpuStep}
               error={quoteField('vcpu')} help={t('range', { min: custom.cpuMin, max: custom.cpuMax, step: custom.cpuStep })}/>
             <NumberInput label="RAM (MB)" value={d.memoryMb} onChange={(v) => d.set({ memoryMb: v ?? custom.memoryMinMb })} minValue={custom.memoryMinMb} maxValue={custom.memoryMaxMb} step={custom.memoryStepMb}
