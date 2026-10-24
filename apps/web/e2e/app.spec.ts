@@ -590,8 +590,8 @@ test.describe('people, settings and smart features (English browser)', () => {
     await expect(dialog.getByText('The gateway must be inside the IPv6 prefix.')).toBeVisible();
     await dialog.getByLabel('IPv6 gateway').fill('2001:db8:30::1');
     await dialog.getByRole('button', { name: 'Save' }).click();
-    await expect(page.getByText('quarantine 12 h').first()).toBeVisible();
-    await expect(page.getByText('2001:db8:30::/64').first()).toBeVisible();
+    await expect(page.getByText('quarantine 12 h').filter({ visible: true }).first()).toBeVisible();
+    await expect(page.getByText('2001:db8:30::/64').filter({ visible: true }).first()).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Addresses' })).toBeVisible();
 
     await page.goto('/admin/settings?tab=rdns');
