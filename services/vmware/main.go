@@ -29,9 +29,9 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 
 func failureStatus(code string) int {
 	switch code {
-	case "VM_NOT_FOUND":
+	case "VM_NOT_FOUND", "DATASTORE_NOT_FOUND":
 		return http.StatusNotFound
-	case "VM_POWERED_OFF", "TOOLS_NOT_RUNNING", "NOT_MANAGED":
+	case "VM_POWERED_OFF", "TOOLS_NOT_RUNNING", "NOT_MANAGED", "NO_CDROM_CONTROLLER":
 		return http.StatusConflict
 	case "INVALID_LOGIN", "PERMISSION_DENIED":
 		return http.StatusUnauthorized
@@ -137,6 +137,15 @@ func handler(token string, guard *netGuard) http.Handler {
 			return map[string]any{"vms": vms}, err
 		})
 	})
+	handle("/v1/vm/cdrom", 60*time.Second, func() any { return &CdromRequest{} }, func(ctx context.Context, r any) (any, error) {
+		q := r.(*CdromRequest)
+		return withClient(ctx, guard, q.Request, func(c *vim25.Client) (any, error) { return setCdrom(ctx, c, *q) })
+	})
+	handle("/v1/iso/delete", 120*time.Second, func() any { return &FileRequest{} }, func(ctx context.Context, r any) (any, error) {
+		q := r.(*FileRequest)
+		return withClient(ctx, guard, q.Request, func(c *vim25.Client) (any, error) { return deleteISO(ctx, c, *q) })
+	})
+	mux.HandleFunc("PUT /v1/iso/upload", uploadHandler(guard))
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/healthz" {
 			got := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
