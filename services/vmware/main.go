@@ -149,6 +149,10 @@ func handler(token string, guard *netGuard) http.Handler {
 		q := r.(*VMRequest)
 		return withClient(ctx, guard, q.Request, func(c *vim25.Client) (any, error) { return topology(ctx, c) })
 	})
+	handle("/v1/power", 60*time.Second, newVM, func(ctx context.Context, r any) (any, error) {
+		q := r.(*VMRequest)
+		return withClient(ctx, guard, q.Request, func(c *vim25.Client) (any, error) { return powerReport(ctx, c) })
+	})
 	mux.HandleFunc("PUT /v1/iso/upload", uploadHandler(guard))
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/healthz" {

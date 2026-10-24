@@ -12,6 +12,7 @@ import { useApiAction, useApiQuery } from '../../../../lib/query';
 import { Applications } from './apps-ui';
 import { IsoLibrary } from './iso-ui';
 import { flag, Locations, PoolLocation, useLocations } from './locations-ui';
+import { VdcAdmin } from './vdc-ui';
 import { IpAddresses, IpPoolEdit, PoolIpOptions, type IpPoolRow } from './ip-ui';
 
 type Inventory = { compute: { moref: string; name: string; kind: string }[]; datastores: { moref: string; name: string }[]; networks: { moref: string; name: string; vlan: number | null }[]; vms: { moref: string; name: string; template: boolean }[] };
@@ -67,7 +68,7 @@ export default function Catalog() {
     <Tabs selectedKey={tab} onSelectionChange={(k) => setTab(String(k))}>
       <Tabs.ListContainer>
         <Tabs.List aria-label={t('title')}>
-          {(['locations', 'pools', 'packages', 'images', 'isos', 'ip', 'apps', 'quotas'] as const).map((k) => <Tabs.Tab key={k} id={k}>{t(`${k}.title`)}<Tabs.Indicator/></Tabs.Tab>)}
+          {(['locations', 'pools', 'packages', 'images', 'isos', 'ip', 'apps', 'vdcs', 'quotas'] as const).map((k) => <Tabs.Tab key={k} id={k}>{t(`${k}.title`)}<Tabs.Indicator/></Tabs.Tab>)}
         </Tabs.List>
       </Tabs.ListContainer>
 
@@ -123,6 +124,8 @@ export default function Catalog() {
       <Tabs.Panel id="apps" className="flex flex-col gap-4 pt-5">
         <Applications currency={packages[0]?.currency ?? 'EUR'}/>
       </Tabs.Panel>
+
+      <Tabs.Panel id="vdcs" className="flex flex-col gap-4 pt-5"><VdcAdmin pools={pools.map((p) => ({ id: p.id, name: p.location ? `${p.name} · ${p.location}` : p.name }))}/></Tabs.Panel>
 
       <Tabs.Panel id="quotas" className="flex flex-col gap-4 pt-5">
         <div className="flex flex-wrap items-start justify-between gap-3">

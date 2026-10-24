@@ -607,7 +607,8 @@ test.describe('people, settings and smart features (English browser)', () => {
     const page = await (await browser.newContext({ locale: 'en-US', viewport: { width: 390, height: 844 } })).newPage();
     await signInAdmin(page);
     await expect(page).toHaveURL(/\/admin$/);
-    for (const path of ['/admin', '/admin/servers', '/admin/vmware', '/admin/catalog', '/admin/users', '/admin/roles', '/admin/settings?tab=mail', '/admin/system', '/', '/order', '/firewalls', '/admin/settings?tab=rdns', '/admin/catalog?tab=ip', '/account?tab=security']) {
+    for (const path of ['/admin', '/admin/servers', '/admin/vmware', '/admin/catalog', '/admin/users', '/admin/roles', '/admin/settings?tab=mail', '/admin/system', '/', '/order', '/firewalls', '/admin/settings?tab=rdns', '/admin/catalog?tab=ip', '/account?tab=security',
+      '/admin/topology', '/admin/energy', '/admin/abuse', '/admin/catalog?tab=locations', '/admin/catalog?tab=isos', '/admin/catalog?tab=vdcs', '/admin/settings?tab=domain', '/admin/settings?tab=servers', '/topology', '/vdc', '/account?tab=accessibility']) {
       await page.goto(path);
       await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
       // On failure the message names the innermost elements sticking out, so a CI run alone is enough to fix it.
@@ -619,5 +620,33 @@ test.describe('people, settings and smart features (English browser)', () => {
       });
       expect(overflow, `${path}: ${culprits}`).toBeLessThanOrEqual(1);
     }
+  });
+
+  // New screens render and carry their heading; full-page screenshots go to test-results/tour for review.
+  test('tour of the newer screens', async ({ browser }) => {
+    const shot = async (page: Page, name: string) => page.screenshot({ path: `test-results/tour/${name}.png`, fullPage: true });
+    const guest = await (await browser.newContext({ locale: 'tr-TR' })).newPage();
+    for (const path of ['/login', '/register']) {
+      await guest.goto(path);
+      await expect(guest.getByRole('heading', { level: 1 })).toBeVisible();
+      await guest.waitForTimeout(1200);
+      await shot(guest, path.slice(1));
+    }
+    const page = await (await browser.newContext({ locale: 'en-US', viewport: { width: 1440, height: 900 } })).newPage();
+    await signInAdmin(page);
+    await page.goto('/admin/energy');
+    await page.getByRole('button', { name: 'Measure now' }).click();
+    await page.waitForTimeout(6000);
+    for (const [path, name] of [['/admin/topology', 'admin-topology'], ['/admin/energy', 'energy'], ['/admin/abuse', 'abuse'], ['/admin/catalog?tab=locations', 'locations'],
+      ['/admin/catalog?tab=isos', 'isos'], ['/admin/catalog?tab=apps', 'apps'], ['/admin/catalog?tab=vdcs', 'vdcs'], ['/admin/settings?tab=domain', 'domain'],
+      ['/admin/settings?tab=security', 'security'], ['/admin/settings?tab=servers', 'server-settings'], ['/topology', 'my-topology'], ['/vdc', 'my-vdc'], ['/order', 'order']] as const) {
+      await page.goto(path);
+      await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+      await page.waitForTimeout(1500);
+      await shot(page, name);
+    }
+    await page.getByRole('button', { name: 'Accessibility' }).click();
+    await expect(page.getByRole('dialog')).toBeVisible();
+    await shot(page, 'accessibility');
   });
 });

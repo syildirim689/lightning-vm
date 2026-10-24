@@ -527,3 +527,110 @@ test('server settings: customers lose actions the admin turns off (staff keep th
   await pool.query('DELETE FROM package_images WHERE image_id = $1', [esxi]);
   await pool.query('DELETE FROM os_images WHERE id = $1', [esxi]);
 });
+
+test('energy: samples estimated from a host profile, shares per server, kWh, cost and carbon', { skip }, async () => {
+  assert.equal((await send('PUT', '/admin/settings/energy', { pricePerKwh: 'x', currency: 'TL', pue: 5, co2GramsPerKwh: -1 })).json().fields.pricePerKwh, 'INVALID_AMOUNT');
+  assert.equal((await send('PUT', '/admin/settings/energy', { pricePerKwh: '3,50', currency: 'try', pue: 1.4, co2GramsPerKwh: 450 })).json().pricePerKwh, '3.50');
+  const sample = async () => {
+    const before = (await pool.query('SELECT count(*)::int AS n FROM power_samples')).rows[0].n;
+    assert.equal((await send('POST', '/admin/power/sample')).statusCode, 202);
+    await until(async () => (await pool.query('SELECT count(*)::int AS n FROM power_samples')).rows[0].n > before, 'a power sample', 60);
+  };
+  await sample();
+  let r = (await send('GET', '/admin/power?range=1d')).json();
+  assert.ok(r.hosts.length > 0 && r.now.hosts > 0, JSON.stringify(r.now));
+  const h = r.hosts[0];
+  assert.equal(h.source, 'estimated', 'the simulator reports no power counter');
+  assert.ok(h.watts >= 120 && h.watts <= 400, `default profile: ${h.watts}`);
+  assert.equal(r.settings.currency, 'TRY');
+  assert.equal(r.now.facilityWatts.toFixed(2), (r.now.watts * 1.4).toFixed(2));
+
+  assert.equal((await send('PUT', '/admin/power/profiles', { connectionId: h.connectionId, hostMoref: h.moref, idleWatts: 500, maxWatts: 100 })).json().fields.maxWatts, 'OUT_OF_RANGE');
+  assert.equal((await send('PUT', '/admin/power/profiles', { connectionId: h.connectionId, hostMoref: h.moref, idleWatts: 1000, maxWatts: 1000 })).statusCode, 200);
+  await new Promise((res) => setTimeout(res, 1500));
+  await sample();
+  r = (await send('GET', '/admin/power?range=1d')).json();
+  assert.equal(r.hosts.find((x) => x.moref === h.moref).watts, 1000, 'the profile drives the estimate');
+  assert.ok(r.energy.rangeKwh > 0 && Number(r.energy.costRange) >= 0);
+  // Running servers got a share of their host's watts.
+  assert.ok((await pool.query('SELECT count(*)::int AS n FROM power_server_samples')).rows[0].n > 0, 'server shares stored');
+  await send('PUT', '/admin/power/profiles', { connectionId: h.connectionId, hostMoref: h.moref, idleWatts: null, maxWatts: null });
+});
+
+test('abuse: an open risky port is found and resolved, sustained full CPU is a mining suspicion', { skip: skip || (!process.env.RDNS_TEST_URL && 'needs pdns-test (run-it.sh)') }, async () => {
+  const { lookup } = await import('node:dns/promises');
+  const target = (await lookup(new URL(process.env.RDNS_TEST_URL).hostname, { family: 4 })).address;
+  assert.equal((await send('PUT', '/admin/settings/abuse', { portScan: true, scanMinutes: 30, cpu: true, cpuThreshold: 90, cpuHours: 1, ports: [{ port: 70000 }] })).json().fields.ports, 'INVALID_PORT_LIST');
+  assert.equal((await send('PUT', '/admin/settings/abuse', { portScan: true, scanMinutes: 30, cpu: true, cpuThreshold: 90, cpuHours: 1, notifyCustomer: true,
+    ports: [{ port: 8081, label: 'PowerDNS API' }] })).statusCode, 200);
+  // A ready server pretends to own the PowerDNS container's address (an extra allocation, no pool range needed).
+  const s = (await pool.query("SELECT id FROM servers WHERE state = 'ready' LIMIT 1")).rows[0].id;
+  const ipPool = (await pool.query('SELECT id FROM ip_pools LIMIT 1')).rows[0].id;
+  await pool.query("INSERT INTO ip_allocations (ip_pool_id, address, server_id, kind) VALUES ($1, $2, $3, 'extra')", [ipPool, target, s]);
+  const scan = async () => { assert.equal((await send('POST', '/admin/abuse/scan')).statusCode, 202); };
+  await scan();
+  await until(async () => (await pool.query("SELECT 1 FROM abuse_findings WHERE kind = 'port' AND server_id = $1 AND port = 8081 AND resolved_at IS NULL", [s])).rowCount, 'open port found', 90);
+  const f = (await send('GET', '/admin/abuse')).json().findings.find((x) => x.serverId === s && x.port === 8081);
+  assert.equal(f.address, target);
+  assert.equal(f.detail.label, 'PowerDNS API');
+  assert.equal((await send('PUT', `/admin/abuse/${f.id}/acknowledge`, { note: 'test container' })).statusCode, 200);
+  // Queued for staff (and the customer, notifyCustomer); the API's notification worker delivers them.
+  const nq = new Queue('notifications', { connection: queueRedis });
+  const events = (await nq.getJobs(['waiting', 'delayed', 'active', 'completed', 'failed'])).map((j) => j?.data?.event);
+  await nq.close();
+  assert.ok(events.includes('admin.abuse') && events.includes('server.port_open'), JSON.stringify(events));
+
+  // The address goes away: the next scan resolves the finding.
+  await pool.query('DELETE FROM ip_allocations WHERE server_id = $1 AND address = $2', [s, target]);
+  await new Promise((r) => setTimeout(r, 1500));
+  await scan();
+  await until(async () => (await pool.query('SELECT 1 FROM abuse_findings WHERE id = $1 AND resolved_at IS NOT NULL', [f.id])).rowCount, 'port finding resolved', 90);
+
+  // An hour of samples near 100%: the next CPU check (with the energy sample) opens a suspicion.
+  await pool.query('DELETE FROM server_cpu_samples WHERE server_id = $1', [s]);
+  for (let i = 1; i <= 14; i++) await pool.query("INSERT INTO server_cpu_samples (server_id, at, cpu_pct) VALUES ($1, now() - make_interval(mins => $2), 97)", [s, i * 4]);
+  await scan();
+  await until(async () => (await pool.query("SELECT 1 FROM abuse_findings WHERE kind = 'cpu' AND server_id = $1 AND resolved_at IS NULL", [s])).rowCount, 'mining suspicion', 90);
+  await send('PUT', '/admin/settings/abuse', { portScan: false, scanMinutes: 30, cpu: false, cpuThreshold: 90, cpuHours: 6, ports: [] });
+});
+
+test('virtual data center: an allocation reserved in the pool, free shapes inside it, its limits, bulk power', { skip }, async () => {
+  const userId = (await pool.query("SELECT id FROM users WHERE email LIKE 'user%' ORDER BY created_at LIMIT 1")).rows[0].id;
+  const dvPool = (await pool.query("SELECT id FROM resource_pools WHERE name = 'Sim DVS'")).rows[0];
+  const capBefore = (await send('GET', '/admin/pools')).json().pools.find((p) => p.id === dvPool.id).capacity.available;
+  const big = await send('POST', '/admin/vdcs', { ownerId: userId, poolId: dvPool.id, name: 'Too big', vcpu: 100000, memoryMb: 512, diskGb: 10, maxServers: 1 });
+  assert.equal(big.json().code, 'CAPACITY_EXHAUSTED');
+  const made = await send('POST', '/admin/vdcs', { ownerId: userId, poolId: dvPool.id, name: 'Team A', vcpu: 2, memoryMb: 2048, diskGb: 40, maxServers: 2, priceMonthly: '49.90', currency: 'EUR' });
+  assert.equal(made.statusCode, 201, made.body);
+  const vdcId = made.json().id;
+  const capAfter = (await send('GET', '/admin/pools')).json().pools.find((p) => p.id === dvPool.id).capacity.available;
+  assert.equal(capBefore.vcpu - capAfter.vcpu, 2, 'the allocation is reserved in the pool');
+
+  const mine = (await send('GET', '/vdcs', undefined, user)).json().vdcs.find((v) => v.id === vdcId);
+  assert.equal(mine.priceMonthly, '49.90');
+  const img = mine.images[0].id;
+  const make = (name, shape) => create({ vdcId, imageId: img, name, sshKeyIds: [keyId], ...shape });
+  assert.equal((await make('vdc-x', { vcpu: 3, memoryMb: 1024, diskGb: 10 })).json().fields.vcpu, 'OUT_OF_RANGE');
+  const a = await make('vdc-a', { vcpu: 1, memoryMb: 1024, diskGb: 20 });
+  assert.equal(a.statusCode, 202, a.body);
+  const row = await serverRow(a.json().serverId);
+  assert.equal(row.vdc_id, vdcId);
+  assert.equal(Number(row.price_monthly), 0, 'no price of its own');
+  assert.equal((await make('vdc-b', { vcpu: 1, memoryMb: 1536, diskGb: 10 })).json().fields.memoryMb, 'VDC_LIMIT');
+  const b = await make('vdc-b', { vcpu: 1, memoryMb: 1024, diskGb: 20 });
+  assert.equal(b.statusCode, 202, b.body);
+  assert.equal((await make('vdc-c', { vcpu: 1, memoryMb: 512, diskGb: 10 })).json().code, 'VDC_LIMIT');
+  assert.equal((await send('PUT', `/admin/vdcs/${vdcId}`, { name: 'Team A', vcpu: 1, memoryMb: 2048, diskGb: 40, maxServers: 2 })).json().fields.vcpu, 'VDC_BELOW_USAGE');
+
+  for (const id of [a.json().serverId, b.json().serverId]) await until(async () => (await serverRow(id)).state === 'ready', 'ready');
+  const bulk = await send('POST', `/vdcs/${vdcId}/actions`, { action: 'reset' }, user, { 'idempotency-key': randomUUID() });
+  assert.equal(bulk.statusCode, 202, bulk.body);
+  assert.equal(bulk.json().started.length, 2);
+  assert.equal((await send('DELETE', `/admin/vdcs/${vdcId}`)).json().code, 'IN_USE');
+  for (const id of [a.json().serverId, b.json().serverId]) {
+    await until(async () => !(await pool.query("SELECT 1 FROM operations WHERE server_id = $1 AND status IN ('pending', 'running')", [id])).rowCount, 'reset done');
+    await send('DELETE', `/servers/${id}`, { confirm: (await serverRow(id)).name }, user, { 'idempotency-key': randomUUID() });
+    await until(async () => (await serverRow(id)).state === 'deleted', 'deleted');
+  }
+  assert.equal((await send('DELETE', `/admin/vdcs/${vdcId}`)).statusCode, 204);
+});

@@ -77,14 +77,16 @@ function readIpv6(body: Input, f: Fields) {
 
 type Db = PoolClient | typeof pool;
 // Live (not deleted) servers are the pool's reserved capacity and the owner's quota usage.
+// Reserved in a pool: its servers outside VDCs, plus every active VDC allocation (whose servers live inside it).
 export async function reservedFor(poolId: string, db: Db = pool) {
-  const { rows: [r] } = await db.query(`SELECT COALESCE(sum(vcpu), 0)::int AS vcpu, COALESCE(sum(memory_mb), 0)::int AS "memoryMb", COALESCE(sum(disk_gb), 0)::int AS "diskGb"
-    FROM servers WHERE pool_id = $1 AND state <> 'deleted'`, [poolId]);
+  const { rows: [r] } = await db.query(`SELECT COALESCE(sum(vcpu), 0)::int AS vcpu, COALESCE(sum(memory_mb), 0)::int AS "memoryMb", COALESCE(sum(disk_gb), 0)::int AS "diskGb" FROM (
+      SELECT vcpu, memory_mb, disk_gb FROM servers WHERE pool_id = $1 AND state <> 'deleted' AND vdc_id IS NULL
+      UNION ALL SELECT vcpu, memory_mb, disk_gb FROM vdcs WHERE pool_id = $1 AND active) x`, [poolId]);
   return r as { vcpu: number; memoryMb: number; diskGb: number };
 }
 export async function usageOf(userId: string, projectId?: string, db: Db = pool) {
   const { rows: [u] } = await db.query(`SELECT count(*)::int AS servers, COALESCE(sum(vcpu), 0)::int AS vcpu, COALESCE(sum(memory_mb), 0)::int AS "memoryMb",
-    COALESCE(sum(disk_gb), 0)::int AS "diskGb" FROM servers WHERE state <> 'deleted' AND (CASE WHEN $2::uuid IS NULL THEN owner_id = $1 ELSE project_id = $2 END)`, [userId, projectId ?? null]);
+    COALESCE(sum(disk_gb), 0)::int AS "diskGb" FROM servers WHERE state <> 'deleted' AND vdc_id IS NULL AND (CASE WHEN $2::uuid IS NULL THEN owner_id = $1 ELSE project_id = $2 END)`, [userId, projectId ?? null]);
   return u as { servers: number; vcpu: number; memoryMb: number; diskGb: number };
 }
 

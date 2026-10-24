@@ -31,6 +31,9 @@ import { IsoAdminController, ServerIsoController } from './isos';
 import { DomainController } from './domain';
 import { LocationsController } from './locations';
 import { TopologyAdminController, TopologyController } from './topology';
+import { PowerController } from './power';
+import { AbuseController } from './abuse';
+import { VdcAdminController, VdcController } from './vdc';
 import { RdnsSettingsController, ServerIpsController, startRdnsWorker } from './rdns';
 import { httpDuration } from './metrics';
 
@@ -51,7 +54,7 @@ class HealthController {
 
 @Module({ controllers: [HealthController, AuthController, PublicController, SetupController, AdminController, VmwareController, ConsoleController, CatalogAdminController, CatalogController, ServersController, ServersAdminController, FirewallsController, PaymentsController, RdnsSettingsController, ServerIpsController,
   SettingsController, SmsSettingsController, RolesController, NotificationsController, NotificationPolicyController,
-  InsightsController, StaffInsightsController, ApplicationsController, ApplicationCallbackController, IsoAdminController, ServerIsoController, DomainController, LocationsController, TopologyAdminController, TopologyController] })
+  InsightsController, StaffInsightsController, ApplicationsController, ApplicationCallbackController, IsoAdminController, ServerIsoController, DomainController, LocationsController, TopologyAdminController, TopologyController, PowerController, AbuseController, VdcAdminController, VdcController] })
 class AppModule {}
 
 // Only Caddy on the Compose network talks to the API; its X-Forwarded-* headers are trusted.

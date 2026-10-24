@@ -1,6 +1,8 @@
 import { Queue, Worker } from 'bullmq';
 import { processFirewall, processOperation, reconcile } from './operations.mjs';
 import { processIso } from './iso.mjs';
+import { samplePower } from './power.mjs';
+import { scanPorts } from './abuse.mjs';
 import pg from 'pg';
 import { Redis } from 'ioredis';
 import { writeFile } from 'node:fs/promises';
@@ -59,6 +61,27 @@ async function reconcileOnce() {
   try { await reconcile(pool, log); } catch (e) { log('error', 'reconcile_failed', { code: e.code }); } finally { await redis.del('lock:reconcile'); }
 }
 const reconcileTimer = setInterval(reconcileOnce, (Number(process.env.RECONCILE_MINUTES) || 5) * 60000);
+// Energy samples (power.mjs); one copy samples at a time.
+async function powerOnce(wait = false) {
+  // A requested sample waits (up to a minute) for one already running; the timer just skips.
+  for (let i = 0; !(await redis.set('lock:power', '1', 'EX', 240, 'NX')); i++) { if (!wait || i >= 60) return; await new Promise((r) => setTimeout(r, 1000)); }
+  try { await samplePower(pool, log, notify); } catch (e) { log('error', 'power_failed', { code: e.code, error: String(e.message).slice(0, 200) }); } finally { await redis.del('lock:power'); }
+}
+const powerTimer = setInterval(powerOnce, (Number(process.env.POWER_SAMPLE_MINUTES) || 5) * 60000);
+// "Measure now" from the energy page.
+const powerWorker = new Worker('power', () => powerOnce(true), { connection: redis.duplicate(), concurrency: 1 });
+// Port scan of every server address (abuse.mjs) at the admin's interval, and "scan now".
+async function scanOnce(wait = false) {
+  // A requested scan waits (up to a minute) for one already running; the timer just skips.
+  for (let i = 0; !(await redis.set('lock:portscan', '1', 'EX', 1800, 'NX')); i++) { if (!wait || i >= 60) return; await new Promise((r) => setTimeout(r, 1000)); }
+  try { await scanPorts(pool, log, notify); } catch (e) { log('error', 'port_scan_failed', { error: String(e.message).slice(0, 200) }); } finally { await redis.del('lock:portscan'); }
+}
+let lastScan = 0;
+const scanTimer = setInterval(async () => {
+  const { rows: [s] } = await pool.query("SELECT value FROM settings WHERE key = 'abuse'").catch(() => ({ rows: [] }));
+  if (Date.now() - lastScan >= (Number(s?.value?.scanMinutes) || 30) * 60000) { lastScan = Date.now(); await scanOnce(); }
+}, 60000);
+const abuseWorker = new Worker('abuse', () => scanOnce(true), { connection: redis.duplicate(), concurrency: 1 });
 const maintenance = new Worker('maintenance', () => reconcileOnce(), { connection: redis.duplicate(), concurrency: 1 });
 worker.on('error', (e) => log('error', 'queue_error', { error: String(e?.message).slice(0, 200) }));
 
@@ -107,6 +130,6 @@ async function copyConsoleEvents() {
 }
 copyConsoleEvents();
 
-async function close() { if (closing) return; closing = true; clearInterval(timer); clearInterval(recoveryTimer); clearInterval(reconcileTimer); await worker.close(); await firewallWorker.close(); await isoWorker.close(); await firewalls.close(); await rdnsQueue.close(); await maintenance.close(); await operations.close(); events.disconnect(); redis.disconnect(); await pool.end(); }
+async function close() { if (closing) return; closing = true; clearInterval(timer); clearInterval(recoveryTimer); clearInterval(reconcileTimer); clearInterval(powerTimer); clearInterval(scanTimer); await worker.close(); await firewallWorker.close(); await isoWorker.close(); await powerWorker.close(); await abuseWorker.close(); await firewalls.close(); await rdnsQueue.close(); await maintenance.close(); await operations.close(); events.disconnect(); redis.disconnect(); await pool.end(); }
 process.on('SIGTERM', close); process.on('SIGINT', close);
 log('info', 'started');

@@ -16,6 +16,7 @@ import { choosePassword, generatePassword, sha512Crypt } from './passwords';
 import { decryptSecret, encryptSecret } from './secrets';
 import { getSettings, type ServerSettings } from './settings-store';
 import { prepareApplication } from './applications';
+import { checkVdcRoom, resolveVdcOrder } from './vdc';
 import { renderPtr } from './rdns-names';
 
 type Input = Record<string, unknown>;
@@ -62,6 +63,11 @@ export async function findServer(req: AuthedRequest, id: string, manage = false)
   const { rows: [s] } = await pool.query(`SELECT * FROM servers WHERE id = $1 AND state <> 'deleted' AND (owner_id = $2 OR $3)`, [id, req.user.id, staff]);
   if (!s) throw apiError(404, 'NOT_FOUND', 'Unknown server');
   return s;
+}
+
+// A power action started for a VDC's bulk request: one operation per server, its own idempotency key.
+export function startPowerOperation(req: AuthedRequest, server: { id: string; owner_id: string }, action: string, key: string) {
+  return startOperation(req, server, action as Kind, key, hashOf({ id: server.id, action, bulk: true }));
 }
 
 async function startOperation(req: AuthedRequest, server: { id: string; owner_id: string }, kind: Kind, key: string, requestHash: string) {
@@ -181,7 +187,9 @@ export class ServersController {
     if (projectId && !(await pool.query('SELECT 1 FROM projects WHERE id = $1 AND owner_id = $2', [projectId, req.user.id]).catch(() => ({ rowCount: 0 }))).rowCount) {
       throw apiError(404, 'NOT_FOUND', 'Unknown project');
     }
-    const order = await resolveOrder(String(body.poolId ?? ''), body);
+    // Inside a virtual data center the shape is free within its allocation, with no price of its own.
+    const vdc = body.vdcId ? await resolveVdcOrder(req.user.id, body) : null;
+    const order = vdc ? vdc.order : await resolveOrder(String(body.poolId ?? ''), body);
     const { rows: keys } = await pool.query('SELECT public_key FROM ssh_keys WHERE owner_id = $1 AND id = ANY($2::uuid[])', [req.user.id, sshKeyIds]).catch(() => ({ rows: [] }));
     // Optional root password (console/RDP): a weak one is replaced by a strong one that starts with the brand.
     if (body.rootPassword !== undefined && (typeof body.rootPassword !== 'string' || body.rootPassword.length > 128)) throw apiError(400, 'VALIDATION_FAILED', 'Invalid input', { rootPassword: 'INVALID_VALUE' });
@@ -213,11 +221,14 @@ export class ServersController {
       await client.query('SELECT 1 FROM resource_pools WHERE id = $1 FOR UPDATE', [order.rp.id]);
       const again = await client.query('SELECT 1 FROM operations WHERE idempotency_key = $1', [key]);
       if (again.rowCount) { await client.query('ROLLBACK'); return (await replay(key, requestHash))!; }
-      const over = exceededQuota(await limitsFor(req.user.id, projectId ?? undefined, client), await usageOf(req.user.id, projectId ?? undefined, client), order.shape);
-      if (over.length) throw apiError(409, 'QUOTA_EXCEEDED', 'Quota exceeded', Object.fromEntries(over.map((o) => [o, 'QUOTA_EXCEEDED'])));
-      const cap = await capacityOf(order.rp, client);
-      if (order.shape.vcpu > cap.available.vcpu || order.shape.memoryMb > cap.available.memoryMb || order.shape.diskGb > cap.available.storageGb) {
-        throw apiError(409, 'CAPACITY_EXHAUSTED', 'Not enough capacity in this location');
+      if (vdc) await checkVdcRoom(client, vdc.vdcId, order.shape); // reserved in the pool already; the VDC's own limits apply
+      else {
+        const over = exceededQuota(await limitsFor(req.user.id, projectId ?? undefined, client), await usageOf(req.user.id, projectId ?? undefined, client), order.shape);
+        if (over.length) throw apiError(409, 'QUOTA_EXCEEDED', 'Quota exceeded', Object.fromEntries(over.map((o) => [o, 'QUOTA_EXCEEDED'])));
+        const cap = await capacityOf(order.rp, client);
+        if (order.shape.vcpu > cap.available.vcpu || order.shape.memoryMb > cap.available.memoryMb || order.shape.diskGb > cap.available.storageGb) {
+          throw apiError(409, 'CAPACITY_EXHAUSTED', 'Not enough capacity in this location');
+        }
       }
       // The primary and any extra IPv4 come from one IP pool (one subnet and gateway in the guest), skipping
       // excluded, gateway, used and quarantined addresses; the first pool (by name) with enough room wins.
@@ -252,6 +263,7 @@ export class ServersController {
         const origin = typeof req.headers.origin === 'string' && /^https?:\/\//.test(req.headers.origin) ? req.headers.origin : `${req.protocol}://${req.headers.host}`;
         await prepareApplication(client, order.application, s.id, { hostname, ip: ips[0].address }, `${origin}/api/servers/${s.id}/app-callback`);
       }
+      if (vdc) await client.query('UPDATE servers SET vdc_id = $2 WHERE id = $1', [s.id, vdc.vdcId]);
       if (firewallIds.length) {
         await client.query('INSERT INTO firewall_servers (firewall_id, server_id) SELECT unnest($1::uuid[]), $2', [firewallIds, s.id]);
         await client.query('UPDATE servers SET firewall_version = 1 WHERE id = $1', [s.id]);
