@@ -15,6 +15,8 @@ import { limits } from './firewalls';
 import { choosePassword, sha512Crypt } from './passwords';
 import { decryptSecret, encryptSecret } from './secrets';
 import { getSettings } from './settings-store';
+import { prepareApplication } from './applications';
+import { renderPtr } from './rdns-names';
 
 type Input = Record<string, unknown>;
 // BullMQ carries only the operation id (also the job id, so re-adding is harmless);
@@ -70,7 +72,8 @@ const serverColumns = `s.id, s.name, s.state, s.power_state AS "powerState", s.g
   s.price_monthly::text AS "priceMonthly", s.currency, s.error_code AS "errorCode", s.created_at AS "createdAt", s.project_id AS "projectId",
   p.name AS "poolName", p.location, i.name AS "imageName", host(a.address) AS address,
   CASE WHEN s.firewall_applied_version >= s.firewall_version THEN 'applied' WHEN s.firewall_error IS NOT NULL THEN 'failed' ELSE 'pending' END AS "firewallStatus",
-  s.firewall_error AS "firewallError", s.root_password_enc IS NOT NULL AS "hasRootPassword", (SELECT count(*)::int FROM firewall_servers fs WHERE fs.server_id = s.id) AS "firewallCount",
+  s.firewall_error AS "firewallError", s.root_password_enc IS NOT NULL AS "hasRootPassword",
+  (SELECT name FROM applications ap WHERE ap.id = s.application_id) AS "applicationName", s.app_state AS "appState", s.app_message AS "appMessage", (SELECT count(*)::int FROM firewall_servers fs WHERE fs.server_id = s.id) AS "firewallCount",
   (SELECT row_to_json(o) FROM (SELECT id, kind, status, step, error_code AS "errorCode", created_at AS "createdAt" FROM operations
     WHERE server_id = s.id ORDER BY created_at DESC LIMIT 1) o) AS "lastOperation"`;
 const serverJoins = "FROM servers s JOIN resource_pools p ON p.id = s.pool_id JOIN os_images i ON i.id = s.image_id LEFT JOIN ip_allocations a ON a.server_id = s.id AND a.kind = 'primary'";
@@ -226,6 +229,14 @@ export class ServersController {
           AND NOT EXISTS (SELECT 1 FROM ip_quarantine q WHERE q.address = host(network(i.ipv6_prefix))::inet + g AND q.available_at > now())
         ORDER BY g LIMIT 1`, [ips[0].ip_pool_id]);
       if (v6) await client.query("INSERT INTO ip_allocations (ip_pool_id, address, server_id, kind) VALUES ($1, $2, $3, 'ipv6')", [ips[0].ip_pool_id, v6.address, s.id]);
+      // An application to install: its licence is taken here, so two orders can never get the same key. The guest
+      // reports back to the address the customer ordered through (the panel's public origin).
+      if (order.application) {
+        const rdns = await getSettings('rdns');
+        const hostname = (rdns.template ? renderPtr(rdns.template, ips[0].address, name) : `${name}.localdomain.`).replace(/\.$/, '');
+        const origin = typeof req.headers.origin === 'string' && /^https?:\/\//.test(req.headers.origin) ? req.headers.origin : `${req.protocol}://${req.headers.host}`;
+        await prepareApplication(client, order.application, s.id, { hostname, ip: ips[0].address }, `${origin}/api/servers/${s.id}/app-callback`);
+      }
       if (firewallIds.length) {
         await client.query('INSERT INTO firewall_servers (firewall_id, server_id) SELECT unnest($1::uuid[]), $2', [firewallIds, s.id]);
         await client.query('UPDATE servers SET firewall_version = 1 WHERE id = $1', [s.id]);

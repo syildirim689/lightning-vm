@@ -107,7 +107,12 @@ export function cloudInit(s) {
     match: { name: 'e*' }, addresses, routes, nameservers: { addresses: s.dns } } } } });
   // The root password, when one was chosen, arrives only as a SHA-512 crypt hash (console and RDP; SSH stays key-only).
   const userdata = '#cloud-config\n' + JSON.stringify({ hostname: s.name, ssh_authorized_keys: s.ssh_public_keys, ssh_pwauth: false,
-    ...(s.root_password_hash && { chpasswd: { expire: false, list: `root:${s.root_password_hash}` } }) });
+    ...(s.root_password_hash && { chpasswd: { expire: false, list: `root:${s.root_password_hash}` } }),
+    // An application (cPanel, Plesk, ...): its script runs in the background so the server becomes ready meanwhile.
+    ...(s.app_script_enc && {
+      write_files: [{ path: '/root/lightning-app.sh', permissions: '0700', content: decrypt(s.app_script_enc, 'server-app-script') }],
+      runcmd: [['sh', '-c', 'nohup sh /root/lightning-app.sh > /var/log/lightning-app.log 2>&1 &']],
+    }) });
   return { metadata, userdata };
 }
 
@@ -201,6 +206,8 @@ async function destroy(db, ctx) {
         ON CONFLICT (address) DO UPDATE SET released_at = now(), available_at = EXCLUDED.available_at, server_name = EXCLUDED.server_name`, [ctx.s.id, ctx.s.name]);
     }
     const { rows: released } = await client.query('DELETE FROM ip_allocations WHERE server_id = $1 RETURNING host(address) AS address, ptr', [ctx.s.id]);
+    // A key-based licence goes back to the pool for the next order.
+    await client.query('UPDATE application_licenses SET server_id = NULL, assigned_at = NULL WHERE server_id = $1', [ctx.s.id]);
     ctx.released = released;
     await client.query("UPDATE servers SET state = 'deleted', deleted_at = now(), power_state = 'unknown', updated_at = now() WHERE id = $1", [ctx.s.id]);
     await client.query('COMMIT');

@@ -219,7 +219,8 @@
     "RDNS_UNREACHABLE": "The DNS server did not answer.",
     "RDNS_AUTH_FAILED": "The DNS server refused the API key.",
     "RDNS_FAILED": "The DNS server refused the change.",
-    "RDNS_EDIT_DISABLED": "Changing reverse DNS is not allowed here."
+    "RDNS_EDIT_DISABLED": "Changing reverse DNS is not allowed here.",
+    "LICENSE_EXHAUSTED": "No free licence is left for this application; choose another until an administrator adds more."
   },
   "Auth": {
     "required": "required",
@@ -326,7 +327,12 @@
     "PTR_FORWARD_MISMATCH": "This name does not resolve to the address yet. Create its A/AAAA record first.",
     "INVALID_IPV6_PREFIX": "Enter a prefix from /48 to /64, such as 2001:db8:40::/64.",
     "IPV6_GATEWAY_OUTSIDE": "The gateway must be inside the IPv6 prefix.",
-    "INVALID_PASSWORD_PREFIX": "Up to 20 letters and digits."
+    "INVALID_PASSWORD_PREFIX": "Up to 20 letters and digits.",
+    "APP_NEEDS_MORE": "This plan is too small for the application: it needs more RAM or disk.",
+    "APP_NEEDS_LINUX": "This application can only be installed on Linux images.",
+    "INVALID_LICENSE_KEYS": "One key per line, without spaces or quotes (at most 500 keys).",
+    "LICENSE_PLACEHOLDER_MISSING": "With a licence pool the script must contain the licence placeholder (LICENSE in curly braces).",
+    "TOO_LONG": "Too long."
   },
   "Setup": {
     "title": "Setup wizard",
@@ -761,7 +767,10 @@
     "why": {
       "imageDisk": "The chosen image needs at least {min} GB disk.",
       "capacity": "No room in this location right now.",
-      "quota": "Over your quota: {limits}."
+      "quota": "Over your quota: {limits}.",
+      "appNoLicense": "No free licence right now",
+      "appLinux": "Linux images only",
+      "appShape": "Needs at least {memory} GB RAM and {disk} GB disk"
     },
     "bestValue": "Best value",
     "suggest": "Suggest",
@@ -777,7 +786,10 @@
     "ipv6Included": "An IPv6 address is included and configured automatically.",
     "rootPassword": "Root password (optional)",
     "rootPasswordHelp": "For the console. SSH stays key-only. A weak password is replaced by a strong generated one, shown on the server page.",
-    "passwordReplaced": "Your password was weak, so a strong one was generated. See it on the server page."
+    "passwordReplaced": "Your password was weak, so a strong one was generated. See it on the server page.",
+    "application": "Ready-made application",
+    "applicationHelp": "Installed in the background after the first boot; the server page shows its progress.",
+    "noApplication": "No application"
   },
   "Catalog": {
     "eyebrow": "ADMIN · CATALOG",
@@ -1003,6 +1015,68 @@
       "usageOf": "{used} of {size} in use",
       "inQuarantine": "{n} in quarantine",
       "quarantineFor": "quarantine {h} h"
+    },
+    "apps": {
+      "title": "Applications",
+      "loading": "Loading…",
+      "new": "New application",
+      "editTitle": "Edit application",
+      "edit": "Edit",
+      "remove": "Remove",
+      "cancel": "Cancel",
+      "save": "Save",
+      "saved": "Application saved.",
+      "removed": "Application removed.",
+      "removeConfirm": "Remove {name}? Its licence keys are deleted too.",
+      "explain": "The application chosen with an order (cPanel, Plesk or your own script) is installed automatically after the server first boots. Its price is added to the monthly fee; for key-based licences each order takes a key from the pool, and the key returns when the server is deleted.",
+      "empty": "No applications yet.",
+      "name": "Name",
+      "kind": "Kind",
+      "minimum": "Minimum",
+      "price": "Monthly price",
+      "licenses": "Licences",
+      "servers": "Servers",
+      "actions": "Actions",
+      "inactive": "Off: not offered",
+      "free": "Free",
+      "noLicense": "Not needed",
+      "licensesFree": "{free} / {total} free",
+      "minShape": "{memory} GB RAM, {disk} GB disk",
+      "keys": "Keys",
+      "kinds": {
+        "cpanel": "cPanel & WHM",
+        "plesk": "Plesk",
+        "custom": "Custom script"
+      },
+      "identity": "Identity",
+      "description": "Description",
+      "descriptionHelp": "Shown under the application when ordering.",
+      "requirements": "Requirements and price",
+      "requirementsHelp": "Smaller plans and Windows images cannot choose this application.",
+      "minMemory": "Minimum RAM (GB)",
+      "minDisk": "Minimum disk (GB)",
+      "priceHelp": "0 means free.",
+      "licensing": "Licence",
+      "licensingHelp": "A cPanel licence is bound to the IP address and bought from the vendor; use the pool for key-based licences such as Plesk.",
+      "licenseMode": "Licensing",
+      "modes": {
+        "none": "No key needed (or an IP licence)",
+        "pool": "From the key pool, one per server"
+      },
+      "script": "Installation script",
+      "scriptHelp": "Runs as root. Placeholders: {license} (a key from the pool), {hostname} (the server name), {ip} (primary IPv4). Exit code 0 counts as \"installed\".",
+      "resetScript": "Back to the default script",
+      "active": "Offer with orders",
+      "keysTitle": "{name}: licence keys",
+      "keysExplain": "Keys are stored encrypted and shown only by their last four characters. A key given to a server cannot be removed until the server is deleted.",
+      "keysAdd": "Add keys",
+      "keysAddHelp": "One key per line.",
+      "keysAddButton": "Add",
+      "keysAdded": "{n, plural, one {# key added.} other {# keys added.}}",
+      "keysEmpty": "No keys yet.",
+      "key": "Key",
+      "assignedTo": "Server",
+      "keyFree": "Free"
     }
   },
   "Servers": {
@@ -1079,7 +1153,8 @@
       "progress": "Operation progress",
       "power": "Power",
       "metrics": "Metrics",
-      "history": "Operation history"
+      "history": "Operation history",
+      "application": "Application"
     },
     "delete": {
       "title": "Delete server",
@@ -1162,6 +1237,12 @@
       "forgetBody": "The panel deletes its copy; the server keeps the password. It cannot be shown again.",
       "forgotten": "The panel no longer stores this password.",
       "cancel": "Cancel"
+    },
+    "appState": {
+      "pending": "Queued",
+      "installing": "Installing",
+      "installed": "Installed",
+      "failed": "Failed"
     }
   },
   "Maintenance": {
@@ -1628,6 +1709,14 @@
       "server_firewall_failed": {
         "title": "Firewall not applied",
         "help": "When the rules of a firewall could not be written to a server."
+      },
+      "server_app_installed": {
+        "title": "Application installed",
+        "help": "When the ordered application (cPanel, Plesk…) is installed on the server."
+      },
+      "server_app_failed": {
+        "title": "Application failed",
+        "help": "When an application installation ends with an error."
       }
     },
     "policyTitle": "The admin first, then each user",

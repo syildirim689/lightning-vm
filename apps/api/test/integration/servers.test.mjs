@@ -370,3 +370,53 @@ test('root password: a weak one is replaced by a branded strong one, shown only 
     await send('DELETE', `/servers/${s}`, { confirm: (await serverRow(s)).name }, user, { 'idempotency-key': randomUUID() });
   }
 });
+
+test('applications: a licence from the pool per order, price added, the guest reports back, the licence returns on delete', { skip }, async () => {
+  const app_ = await send('POST', '/admin/applications', { name: 'Plesk test', kind: 'plesk', licenseMode: 'pool', priceMonthly: '5.00', minMemoryMb: 512, minDiskGb: 10 });
+  assert.equal(app_.statusCode, 201, app_.body);
+  const appId = app_.json().id;
+  assert.equal((await send('POST', `/admin/applications/${appId}/licenses`, { keys: 'bad key with spaces' })).json().fields.keys, 'INVALID_LICENSE_KEYS');
+  assert.equal((await send('POST', `/admin/applications/${appId}/licenses`, { keys: 'PLSK-AAAA-1111\nPLSK-BBBB-2222' })).json().added, 2);
+  const pkg = (await pool.query("SELECT id FROM packages WHERE name = 'Tiny DVS'")).rows[0].id;
+  const dvPool = (await pool.query("SELECT id FROM resource_pools WHERE name = 'Sim DVS'")).rows[0].id;
+  const plain = { ...order('app-1'), poolId: dvPool, packageId: pkg };
+  const base = { ...plain, applicationId: appId };
+  const monthly = async (body) => Number((await send('POST', '/catalog/quote', body, user)).json().price.monthly);
+  assert.equal(await monthly(base), await monthly(plain) + 5);
+  assert.equal((await send('GET', '/catalog', undefined, user)).json().applications.find((a) => a.id === appId).available, true);
+
+  const r = await create(base);
+  assert.equal(r.statusCode, 202, r.body);
+  const id = r.json().serverId;
+  let row = await serverRow(id);
+  assert.equal(row.app_state, 'pending');
+  assert.ok(row.app_script_enc && !row.app_script_enc.includes('PLSK-'), 'the rendered script (with the key) is stored encrypted');
+  const lic = (await send('GET', `/admin/applications/${appId}/licenses`)).json().licenses.find((l) => l.serverId === id);
+  assert.ok(lic && ['1111', '2222'].includes(lic.hint));
+
+  // The guest's report: only with the token from its script, and without a session.
+  const cb = (body) => send('POST', `/servers/${id}/app-callback`, body, null);
+  assert.equal((await cb({ token: 'wrong', status: 'installed' })).statusCode, 404);
+  const { decryptSecret } = await import('../../dist/secrets.js');
+  const script = decryptSecret(row.app_script_enc, 'server-app-script');
+  const token = /token\\":\\"([A-Za-z0-9_-]+)/.exec(script)[1];
+  assert.match(script, /plesk bin license --install PLSK-[AB]{4}-\d{4}/);
+  assert.equal((await cb({ token, status: 'installing' })).statusCode, 204);
+  assert.equal((await cb({ token, status: 'installed' })).statusCode, 204);
+  row = await serverRow(id);
+  assert.equal(row.app_state, 'installed');
+  assert.equal((await send('GET', `/servers/${id}`, undefined, user)).json().server.appState, 'installed');
+
+  // Two keys: a second order gets the other one, a third finds none.
+  const second = await create({ ...base, name: 'app-2' });
+  assert.equal(second.statusCode, 202, second.body);
+  assert.equal((await create({ ...base, name: 'app-3' })).json().code, 'LICENSE_EXHAUSTED');
+  assert.equal((await send('GET', '/catalog', undefined, user)).json().applications.find((a) => a.id === appId).available, false);
+  assert.equal((await send('DELETE', `/admin/applications/${appId}`)).json().code, 'IN_USE');
+  for (const s of [id, second.json().serverId]) {
+    await until(async () => (await serverRow(s)).state === 'ready', 'ready');
+    await send('DELETE', `/servers/${s}`, { confirm: (await serverRow(s)).name }, user, { 'idempotency-key': randomUUID() });
+    await until(async () => (await serverRow(s)).state === 'deleted', 'deleted');
+  }
+  assert.equal((await send('GET', `/admin/applications/${appId}/licenses`)).json().licenses.filter((l) => !l.serverId).length, 2, 'both keys are free again');
+});

@@ -219,7 +219,8 @@
     "RDNS_UNREACHABLE": "DNS sunucusu yanıt vermedi.",
     "RDNS_AUTH_FAILED": "DNS sunucusu API anahtarını reddetti.",
     "RDNS_FAILED": "DNS sunucusu değişikliği reddetti.",
-    "RDNS_EDIT_DISABLED": "Burada ters DNS değiştirilemez."
+    "RDNS_EDIT_DISABLED": "Burada ters DNS değiştirilemez.",
+    "LICENSE_EXHAUSTED": "Bu uygulama için boşta lisans kalmadı; yönetici yeni lisans ekleyene kadar başka bir seçim yapın."
   },
   "Auth": {
     "required": "zorunlu",
@@ -326,7 +327,12 @@
     "PTR_FORWARD_MISMATCH": "Bu ad henüz adrese çözülmüyor. Önce A/AAAA kaydını oluşturun.",
     "INVALID_IPV6_PREFIX": "2001:db8:40::/64 gibi /48 ile /64 arası bir önek girin.",
     "IPV6_GATEWAY_OUTSIDE": "Ağ geçidi IPv6 önekinin içinde olmalı.",
-    "INVALID_PASSWORD_PREFIX": "En fazla 20 harf ve rakam."
+    "INVALID_PASSWORD_PREFIX": "En fazla 20 harf ve rakam.",
+    "APP_NEEDS_MORE": "Bu uygulama için paket çok küçük: daha fazla RAM veya disk gerekiyor.",
+    "APP_NEEDS_LINUX": "Bu uygulama yalnızca Linux imajlarında kurulabilir.",
+    "INVALID_LICENSE_KEYS": "Her satıra bir anahtar yazın; boşluk ve tırnak kullanılamaz (en fazla 500 anahtar).",
+    "LICENSE_PLACEHOLDER_MISSING": "Lisans havuzu kullanılıyorsa betik lisans yer tutucusunu (süslü parantez içinde LICENSE) içermeli.",
+    "TOO_LONG": "Çok uzun."
   },
   "Setup": {
     "title": "Kurulum sihirbazı",
@@ -761,7 +767,10 @@
     "why": {
       "imageDisk": "Seçili imaj en az {min} GB disk ister.",
       "capacity": "Bu konumda şu an yer yok.",
-      "quota": "Kotanızı aşar: {limits}."
+      "quota": "Kotanızı aşar: {limits}.",
+      "appNoLicense": "Şu an boşta lisans yok",
+      "appLinux": "Yalnızca Linux imajlarında",
+      "appShape": "En az {memory} GB RAM ve {disk} GB disk gerekir"
     },
     "bestValue": "En uygun",
     "suggest": "Öner",
@@ -777,7 +786,10 @@
     "ipv6Included": "Bir IPv6 adresi dahildir ve otomatik yapılandırılır.",
     "rootPassword": "Root parolası (isteğe bağlı)",
     "rootPasswordHelp": "Konsol girişi için. SSH yalnızca anahtarla kalır. Zayıf bir parola, üretilen güçlü bir parolayla değiştirilir ve sunucu sayfasında gösterilir.",
-    "passwordReplaced": "Parolanız zayıf olduğu için güçlü bir parola üretildi. Sunucu sayfasından görebilirsiniz."
+    "passwordReplaced": "Parolanız zayıf olduğu için güçlü bir parola üretildi. Sunucu sayfasından görebilirsiniz.",
+    "application": "Hazır uygulama",
+    "applicationHelp": "İlk açılıştan sonra arka planda kurulur; sunucu sayfasında durumunu görürsünüz.",
+    "noApplication": "Uygulama yok"
   },
   "Catalog": {
     "eyebrow": "YÖNETİM · KATALOG",
@@ -1003,6 +1015,68 @@
       "usageOf": "{size} adresin {used} tanesi kullanımda",
       "inQuarantine": "{n} adres karantinada",
       "quarantineFor": "karantina {h} saat"
+    },
+    "apps": {
+      "title": "Uygulamalar",
+      "loading": "Yükleniyor…",
+      "new": "Yeni uygulama",
+      "editTitle": "Uygulamayı düzenle",
+      "edit": "Düzenle",
+      "remove": "Kaldır",
+      "cancel": "Vazgeç",
+      "save": "Kaydet",
+      "saved": "Uygulama kaydedildi.",
+      "removed": "Uygulama kaldırıldı.",
+      "removeConfirm": "{name} kaldırılsın mı? Lisans anahtarları da silinir.",
+      "explain": "Siparişte seçilen uygulama (cPanel, Plesk veya kendi betiğiniz) sunucunun ilk açılışından sonra otomatik kurulur. Fiyat aylık ücrete eklenir; anahtarlı lisanslarda her siparişe havuzdan bir anahtar verilir ve sunucu silinince geri döner.",
+      "empty": "Henüz uygulama yok.",
+      "name": "Ad",
+      "kind": "Tür",
+      "minimum": "En az",
+      "price": "Aylık fiyat",
+      "licenses": "Lisans",
+      "servers": "Sunucu",
+      "actions": "İşlemler",
+      "inactive": "Kapalı: siparişte görünmez",
+      "free": "Ücretsiz",
+      "noLicense": "Gerekmiyor",
+      "licensesFree": "{free} / {total} boşta",
+      "minShape": "{memory} GB RAM, {disk} GB disk",
+      "keys": "Anahtarlar",
+      "kinds": {
+        "cpanel": "cPanel & WHM",
+        "plesk": "Plesk",
+        "custom": "Özel betik"
+      },
+      "identity": "Tanım",
+      "description": "Açıklama",
+      "descriptionHelp": "Siparişte uygulamanın altında gösterilir.",
+      "requirements": "Gereksinimler ve fiyat",
+      "requirementsHelp": "Daha küçük paketlerde ve Windows imajlarında bu uygulama seçilemez.",
+      "minMemory": "En az RAM (GB)",
+      "minDisk": "En az disk (GB)",
+      "priceHelp": "0 ise ücretsiz.",
+      "licensing": "Lisans",
+      "licensingHelp": "cPanel lisansı IP adresine bağlıdır ve sağlayıcıdan alınır; Plesk gibi anahtarlı lisanslar için havuz kullanın.",
+      "licenseMode": "Lisans yöntemi",
+      "modes": {
+        "none": "Anahtar gerekmiyor (veya IP lisansı)",
+        "pool": "Anahtar havuzundan, her sunucuya bir tane"
+      },
+      "script": "Kurulum betiği",
+      "scriptHelp": "root olarak çalışır. Yer tutucular: {license} (havuzdan anahtar), {hostname} (sunucunun adı), {ip} (birincil IPv4). Çıkış kodu 0 ise \"kuruldu\" sayılır.",
+      "resetScript": "Varsayılan betiğe dön",
+      "active": "Siparişte sunulsun",
+      "keysTitle": "{name}: lisans anahtarları",
+      "keysExplain": "Anahtarlar şifreli saklanır ve yalnızca son dört karakteri gösterilir. Bir sunucuya verilmiş anahtar, sunucu silinene kadar kaldırılamaz.",
+      "keysAdd": "Anahtar ekle",
+      "keysAddHelp": "Her satıra bir anahtar.",
+      "keysAddButton": "Ekle",
+      "keysAdded": "{n, plural, one {# anahtar eklendi.} other {# anahtar eklendi.}}",
+      "keysEmpty": "Henüz anahtar yok.",
+      "key": "Anahtar",
+      "assignedTo": "Sunucu",
+      "keyFree": "Boşta"
     }
   },
   "Servers": {
@@ -1079,7 +1153,8 @@
       "progress": "İşlem ilerlemesi",
       "power": "Güç",
       "metrics": "Metrikler",
-      "history": "İşlem geçmişi"
+      "history": "İşlem geçmişi",
+      "application": "Uygulama"
     },
     "delete": {
       "title": "Sunucuyu sil",
@@ -1162,6 +1237,12 @@
       "forgetBody": "Panel kendi kopyasını siler; parola sunucuda kalır. Bir daha gösterilemez.",
       "forgotten": "Panel artık bu parolayı saklamıyor.",
       "cancel": "Vazgeç"
+    },
+    "appState": {
+      "pending": "Sırada",
+      "installing": "Kuruluyor",
+      "installed": "Kuruldu",
+      "failed": "Kurulamadı"
     }
   },
   "Maintenance": {
@@ -1628,6 +1709,14 @@
       "server_firewall_failed": {
         "title": "Firewall uygulanamadı",
         "help": "Bir firewall'un kuralları sunucuya yazılamadığında."
+      },
+      "server_app_installed": {
+        "title": "Uygulama kuruldu",
+        "help": "Sipariş edilen uygulama (cPanel, Plesk…) sunucuya kurulduğunda."
+      },
+      "server_app_failed": {
+        "title": "Uygulama kurulamadı",
+        "help": "Uygulama kurulumu hata ile bittiğinde."
       }
     },
     "policyTitle": "Önce yönetici, sonra kullanıcı",

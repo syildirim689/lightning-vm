@@ -26,6 +26,7 @@ import { CatalogAdminController, CatalogController } from './catalog';
 import { ServersAdminController, ServersController } from './servers';
 import { FirewallsController } from './firewalls';
 import { PaymentsController } from './payments';
+import { ApplicationCallbackController, ApplicationsController } from './applications';
 import { RdnsSettingsController, ServerIpsController, startRdnsWorker } from './rdns';
 import { httpDuration } from './metrics';
 
@@ -46,7 +47,7 @@ class HealthController {
 
 @Module({ controllers: [HealthController, AuthController, PublicController, SetupController, AdminController, VmwareController, ConsoleController, CatalogAdminController, CatalogController, ServersController, ServersAdminController, FirewallsController, PaymentsController, RdnsSettingsController, ServerIpsController,
   SettingsController, SmsSettingsController, RolesController, NotificationsController, NotificationPolicyController,
-  InsightsController, StaffInsightsController] })
+  InsightsController, StaffInsightsController, ApplicationsController, ApplicationCallbackController] })
 class AppModule {}
 
 // Only Caddy on the Compose network talks to the API; its X-Forwarded-* headers are trusted.

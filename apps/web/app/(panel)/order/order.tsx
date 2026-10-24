@@ -14,7 +14,8 @@ import { useIntentKey, useSshKeys } from '../servers-ui';
 
 type Custom = { cpuMin: number; cpuMax: number; cpuStep: number; memoryMinMb: number; memoryMaxMb: number; memoryStepMb: number; diskMinGb: number; diskMaxGb: number; diskStepGb: number; currency: string };
 type Catalog = { packages: { id: string; name: string; vcpu: number; memoryMb: number; diskGb: number; priceMonthly: string; currency: string; poolIds: string[]; imageIds: string[] }[];
-  pools: { id: string; name: string; location: string; custom: Custom | null; extraIpv4Max: number; extraIpv4Price: string; ipv6: boolean }[]; images: { id: string; name: string; family: string; minDiskGb: number }[] };
+  pools: { id: string; name: string; location: string; custom: Custom | null; extraIpv4Max: number; extraIpv4Price: string; ipv6: boolean }[]; images: { id: string; name: string; family: string; minDiskGb: number }[];
+  applications: { id: string; name: string; kind: string; description: string; minMemoryMb: number; minDiskGb: number; priceMonthly: string; available: boolean }[] };
 type Quote = { shape: { vcpu: number; memoryMb: number; diskGb: number }; price: { monthly: string; currency: string }; quota: { exceeded: string[] }; capacityAvailable: boolean };
 type Project = { id: string; name: string };
 type Availability = { packages: Record<string, { capacity: boolean; quota: string[] }> };
@@ -48,6 +49,7 @@ export default function Order() {
     if (!catalog) return;
     if (!catalog.pools.some((p) => p.id === d.poolId)) d.set({ poolId: catalog.pools[0]?.id ?? '' });
     if (d.packageId && !catalog.packages.some((p) => p.id === d.packageId)) d.set({ packageId: '' });
+    if (d.applicationId && !catalog.applications.some((a) => a.id === d.applicationId)) d.set({ applicationId: '' });
   }, [catalog]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const body = orderBody(d);
@@ -169,6 +171,14 @@ export default function Order() {
             {pool && pool.extraIpv4Max > 0 && <NumberInput label={t('extraIpv4')} value={Math.min(d.extraIpv4 ?? 0, pool.extraIpv4Max)} onChange={(v) => d.set({ extraIpv4: v ?? 0 })} minValue={0} maxValue={pool.extraIpv4Max}
               error={quoteField('extraIpv4')} help={t('extraIpv4Help', { max: pool.extraIpv4Max, price: money(pool.extraIpv4Price, quote.data?.price.currency ?? 'EUR') })}/>}
             {pool?.ipv6 && <p className="flex items-center gap-2 text-sm text-muted"><I name="globe" size={14}/>{t('ipv6Included')}</p>}
+            {catalog.applications.length > 0 && <SelectInput label={t('application')} value={d.applicationId} onChange={(v) => d.set({ applicationId: v })} error={quoteField('applicationId')}
+              help={t('applicationHelp')} options={[{ id: '', label: t('noApplication') }, ...catalog.applications.map((a) => {
+                const shape = quote.data?.shape;
+                // Why an application cannot go on this server (the API checks again).
+                const why = !a.available ? t('why.appNoLicense') : image && image.family !== 'linux' ? t('why.appLinux')
+                  : shape && (shape.memoryMb < a.minMemoryMb || shape.diskGb < a.minDiskGb) ? t('why.appShape', { memory: gb(a.minMemoryMb), disk: a.minDiskGb }) : null;
+                return { id: a.id, label: Number(a.priceMonthly) ? `${a.name} · +${money(a.priceMonthly, quote.data?.price.currency ?? 'EUR')}` : a.name, description: why ?? (a.description || undefined), isDisabled: !!why && a.id !== d.applicationId };
+              })]}/>}
             {firewalls.length > 0 && <CheckboxList label={tf('title')} value={firewallIds} onChange={setFirewallIds} error={quoteField('firewallIds')}
               help={tf('orderHelp')} options={firewalls.map((f) => ({ id: f.id, label: f.name }))}/>}
           </div>

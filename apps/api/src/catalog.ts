@@ -6,6 +6,7 @@ import { apiError } from './errors';
 import { audit, SessionGuard, type AuthedRequest } from './auth';
 import { Can, PermissionGuard } from './rbac';
 import { checkCustom, exceededQuota, poolCapacity, type Limits, type Shape } from './capacity';
+import type { Application } from './applications';
 
 type Input = Record<string, unknown>;
 
@@ -414,7 +415,7 @@ export class CatalogAdminController {
 }
 
 
-export type Order = { rp: Record<string, unknown>; shape: Shape; price: { monthly: string; currency: string }; extraIpv4: number; packageId: string | null; imageId: string | null };
+export type Order = { rp: Record<string, unknown>; shape: Shape; price: { monthly: string; currency: string }; extraIpv4: number; application: Application | null; packageId: string | null; imageId: string | null };
 // Validates the chosen pool, package or custom shape and image, and prices it. Shared by quote and create.
 export async function resolveOrder(poolId: string, body: Input): Promise<Order> {
     const { rows: [rp] } = await pool.query('SELECT * FROM resource_pools WHERE id = $1 AND active', [poolId]).catch(() => ({ rows: [] }));
@@ -452,7 +453,21 @@ export async function resolveOrder(poolId: string, body: Input): Promise<Order> 
       const { rows: [t] } = await pool.query('SELECT ($1::numeric + $2::int * $3::numeric)::numeric(12,2)::text AS monthly', [price.monthly, extraIpv4, rp.extra_ipv4_price]);
       price = { ...price, monthly: t.monthly };
     }
-  return { rp, shape, price, extraIpv4, packageId: body.type === 'package' ? String(body.packageId) : null, imageId: body.imageId ? String(body.imageId) : null };
+    // An application to install (cPanel, Plesk, ...): Linux images only, enough memory and disk, its price added.
+    let application: Application | null = null;
+    if (body.applicationId) {
+      const { rows: [a] } = await pool.query('SELECT * FROM applications WHERE id = $1 AND active', [body.applicationId]).catch(() => ({ rows: [] }));
+      if (!a) throw apiError(400, 'VALIDATION_FAILED', 'Unknown application', { applicationId: 'NOT_AVAILABLE' });
+      if (shape.memoryMb < a.min_memory_mb || shape.diskGb < a.min_disk_gb) throw apiError(400, 'VALIDATION_FAILED', 'Too small', { applicationId: 'APP_NEEDS_MORE' });
+      if (body.imageId) {
+        const { rows: [img] } = await pool.query('SELECT family FROM os_images WHERE id = $1', [body.imageId]);
+        if (img?.family !== 'linux') throw apiError(400, 'VALIDATION_FAILED', 'Linux only', { applicationId: 'APP_NEEDS_LINUX' });
+      }
+      const { rows: [t] } = await pool.query('SELECT ($1::numeric + $2::numeric)::numeric(12,2)::text AS monthly', [price.monthly, a.price_monthly]);
+      price = { ...price, monthly: t.monthly };
+      application = a;
+    }
+  return { rp, shape, price, extraIpv4, application, packageId: body.type === 'package' ? String(body.packageId) : null, imageId: body.imageId ? String(body.imageId) : null };
 }
 
 // Effective limits: project override, else user override, else the default row.
@@ -491,7 +506,7 @@ export class CatalogController {
   // What a customer may order: active packages and active pools' custom offerings. No internals.
   @Get('catalog')
   async catalog() {
-    const [packages, pools, images] = await Promise.all([
+    const [packages, pools, images, applications] = await Promise.all([
       pool.query(`SELECT p.id, p.name, p.vcpu, p.memory_mb AS "memoryMb", p.disk_gb AS "diskGb", p.price_monthly::text AS "priceMonthly",
         p.price_hourly::text AS "priceHourly", p.currency,
         ARRAY(SELECT pp.pool_id FROM package_pools pp JOIN resource_pools r ON r.id = pp.pool_id AND r.active WHERE pp.package_id = p.id) AS "poolIds",
@@ -505,8 +520,11 @@ export class CatalogController {
         EXISTS (SELECT 1 FROM ip_pools i WHERE i.pool_id = r.id AND i.ipv6_prefix IS NOT NULL) AS ipv6
         FROM resource_pools r LEFT JOIN custom_rules c ON c.pool_id = r.id WHERE r.active ORDER BY r.name`),
       pool.query('SELECT id, name, family, min_disk_gb AS "minDiskGb" FROM os_images WHERE active ORDER BY name'),
+      pool.query(`SELECT id, name, kind, description, min_memory_mb AS "minMemoryMb", min_disk_gb AS "minDiskGb", price_monthly::text AS "priceMonthly",
+        (license_mode = 'none' OR EXISTS (SELECT 1 FROM application_licenses l WHERE l.application_id = a.id AND l.server_id IS NULL)) AS available
+        FROM applications a WHERE active ORDER BY name`),
     ]);
-    return { packages: packages.rows, pools: pools.rows, images: images.rows };
+    return { packages: packages.rows, pools: pools.rows, images: images.rows, applications: applications.rows };
   }
 
   // For the order page: which packages of a location can be ordered right now by this user, and if not, why
