@@ -1593,7 +1593,9 @@
     "stopImpersonating": "Back to my account",
     "search": "Search or jump to…",
     "staffBadge": "Team",
-    "firewalls": "Firewalls"
+    "firewalls": "Firewalls",
+    "topology": "Topology",
+    "myTopology": "Topology"
   },
   "Dashboard": {
     "eyebrow": "ADMINISTRATION",
@@ -2955,6 +2957,60 @@
       "help": "Highlights the line you read with a band that follows the pointer.",
       "off": "Off",
       "on": "On"
+    }
+  },
+  "Topology": {
+    "title": "Topology",
+    "eyebrowAdmin": "Infrastructure",
+    "loading": "Loading…",
+    "introAdmin": "The live structure from the Internet to locations, clusters, hosts and servers. Packets flow with the real traffic; host bars show CPU and memory use. Refreshed every 15 seconds.",
+    "intro": "Where your servers run and their traffic. A shield on a link means a firewall is applied.",
+    "inbound": "Inbound",
+    "outbound": "Outbound",
+    "motionOff": "Packet animation is off because motion is reduced.",
+    "close": "Close",
+    "internet": "Internet",
+    "more": "+{n} servers",
+    "otherLocation": "Other",
+    "unreachable": "Unreachable ({code})",
+    "servers": "Servers",
+    "running": "{n} running",
+    "hostCpu": "Host CPU",
+    "hostsN": "{n} hosts",
+    "firewalled": "Servers with a firewall",
+    "connectionError": "No live data from {name} ({code}).",
+    "map": "Map",
+    "table": "Table",
+    "empty": "No servers to show.",
+    "refresh": "Data is refreshed from VMware every 15 seconds; traffic is the average of the last 20 seconds.",
+    "server": "Server",
+    "state": "State",
+    "address": "Address",
+    "size": "Size",
+    "power": "Power",
+    "owner": "Owner",
+    "firewalls": "Firewalls",
+    "connection": "Connection",
+    "hosts": "Hosts",
+    "kinds": {
+      "internet": "Internet",
+      "location": "Location",
+      "connection": "VMware connection",
+      "compute": "Cluster",
+      "host": "Host",
+      "server": "Server",
+      "more": "More servers"
+    },
+    "computeKinds": {
+      "cluster": "cluster",
+      "host": "single host"
+    },
+    "states": {
+      "ready": "Ready",
+      "provisioning": "Provisioning",
+      "error": "Error",
+      "deleting": "Deleting",
+      "pending": "Pending"
     }
   }
 }

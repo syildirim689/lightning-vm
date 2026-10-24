@@ -1593,7 +1593,9 @@
     "stopImpersonating": "Kendi hesabıma dön",
     "search": "Ara veya git…",
     "staffBadge": "Ekip",
-    "firewalls": "Firewall'lar"
+    "firewalls": "Firewall'lar",
+    "topology": "Topoloji",
+    "myTopology": "Topoloji"
   },
   "Dashboard": {
     "eyebrow": "YÖNETİM",
@@ -2955,6 +2957,60 @@
       "help": "İmleci izleyen yatay bir şeritle okunan satırı vurgular.",
       "off": "Kapalı",
       "on": "Açık"
+    }
+  },
+  "Topology": {
+    "title": "Topoloji",
+    "eyebrowAdmin": "Altyapı",
+    "loading": "Yükleniyor…",
+    "introAdmin": "İnternetten lokasyonlara, kümelere, hostlara ve sunuculara kadar canlı yapı. Paketler gerçek trafiğe göre akar; host çubukları CPU ve RAM kullanımını gösterir. 15 saniyede bir yenilenir.",
+    "intro": "Sunucularınızın bulunduğu lokasyonlar ve trafiği. Bağlantı üzerindeki kalkan simgesi firewall uygulandığını gösterir.",
+    "inbound": "Gelen",
+    "outbound": "Giden",
+    "motionOff": "Hareket azaltıldığı için paket animasyonu kapalı.",
+    "close": "Kapat",
+    "internet": "İnternet",
+    "more": "+{n} sunucu",
+    "otherLocation": "Diğer",
+    "unreachable": "Ulaşılamıyor ({code})",
+    "servers": "Sunucular",
+    "running": "{n} çalışıyor",
+    "hostCpu": "Host CPU",
+    "hostsN": "{n} host",
+    "firewalled": "Firewall'lu sunucu",
+    "connectionError": "{name} bağlantısından canlı veri alınamadı ({code}).",
+    "map": "Harita",
+    "table": "Tablo",
+    "empty": "Gösterilecek sunucu yok.",
+    "refresh": "Veriler 15 saniyede bir VMware'den yenilenir; trafik son 20 saniyelik ortalamadır.",
+    "server": "Sunucu",
+    "state": "Durum",
+    "address": "Adres",
+    "size": "Boyut",
+    "power": "Güç",
+    "owner": "Sahip",
+    "firewalls": "Firewall'lar",
+    "connection": "Bağlantı",
+    "hosts": "Host",
+    "kinds": {
+      "internet": "İnternet",
+      "location": "Lokasyon",
+      "connection": "VMware bağlantısı",
+      "compute": "Küme",
+      "host": "Host",
+      "server": "Sunucu",
+      "more": "Diğer sunucular"
+    },
+    "computeKinds": {
+      "cluster": "küme",
+      "host": "tek host"
+    },
+    "states": {
+      "ready": "Hazır",
+      "provisioning": "Kuruluyor",
+      "error": "Hata",
+      "deleting": "Siliniyor",
+      "pending": "Bekliyor"
     }
   }
 }
