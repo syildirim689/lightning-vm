@@ -32,7 +32,8 @@
 set -eu
 cd "${LVM_ROOT:-$(dirname "$0")/..}"
 # update checks out another version of this very file: run from a copy so sh never reads a changed script.
-if [ -n "${LVM_REEXEC:-}" ]; then rm -f "$0"
+# Unset after use: run-requests starts this script again, and that child must not think it is the copy.
+if [ -n "${LVM_REEXEC:-}" ]; then rm -f "$0"; unset LVM_REEXEC
 else case " $* " in *" update "*|*" maintenance "*|*" run-requests "*)
   copy=$(mktemp); cp scripts/install.sh "$copy"; LVM_ROOT=$(pwd) LVM_REEXEC=1 exec sh "$copy" "$@" ;;
 esac; fi
