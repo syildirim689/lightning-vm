@@ -553,6 +553,7 @@ test.describe('people, settings and smart features (English browser)', () => {
     await page.keyboard.press('Shift+?');
     await expect(page.getByRole('dialog', { name: 'Keyboard shortcuts' })).toBeVisible();
     await page.keyboard.press('Escape');
+    await expect(page.getByRole('dialog')).toBeHidden();
     await page.keyboard.press('g');
     await page.keyboard.press('d');
     await expect(page).toHaveURL(/\/admin$/);
