@@ -77,13 +77,13 @@ export default function Updates() {
         <Fact label={t('state')}>
           {!r ? <StatusChip tone="default">{t('neverChecked')}</StatusChip>
             : r.error ? <StatusChip tone="danger">{error({ code: r.error })}</StatusChip>
-            : r.updateAvailable ? <StatusChip tone="accent">{t('available', { version: r.latest })}</StatusChip>
+            : r.updateAvailable && r.latest !== data.version ? <StatusChip tone="accent">{t('available', { version: r.latest })}</StatusChip>
             : <StatusChip tone="success">{t('upToDate')}</StatusChip>}
         </Fact>
         <Fact label={t('lastCheck')}>{r ? format.relativeTime(new Date(r.checkedAt), now) : '–'}</Fact>
       </dl>
 
-      {r?.updateAvailable && manage && <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-accent/40 bg-accent-soft/40 p-4">
+      {r?.updateAvailable && r.latest !== data.version && manage && <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-accent/40 bg-accent-soft/40 p-4">
         <div className="min-w-0">
           <p className="font-semibold">{t('availableTitle', { version: r.latest })}</p>
           <p className="text-sm text-muted">{t('availableHelp')}</p>

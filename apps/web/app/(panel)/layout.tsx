@@ -7,5 +7,7 @@ export default async function PanelLayout({ children }: { children: React.ReactN
   const user = await getUser();
   if (!user) redirect((await getSetupStatus()).adminCreated ? '/login' : '/setup');
   const { branding } = await getPublicConfig();
-  return <Shell user={user} branding={branding} version={pkg.version}>{children}</Shell>;
+  // The installed release (vX.Y.Z or a commit); package.json's version when run outside Compose.
+  const installed = process.env.APP_VERSION && process.env.APP_VERSION !== 'dev' ? process.env.APP_VERSION.replace(/^v/, '') : pkg.version;
+  return <Shell user={user} branding={branding} version={installed}>{children}</Shell>;
 }

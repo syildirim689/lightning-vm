@@ -140,6 +140,8 @@ services:
     restart: unless-stopped
     environment:
       API_INTERNAL_URL: http://api:4000
+      # The installed release (install.sh keeps it in .env), shown in the panel's sidebar.
+      APP_VERSION: ${APP_VERSION:-dev}
     depends_on:
       api: {condition: service_healthy}
     security_opt: [no-new-privileges:true]

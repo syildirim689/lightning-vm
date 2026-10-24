@@ -616,6 +616,8 @@ run_requests() {
     if sh "$(pwd)/scripts/install.sh" "$@" > "$log" 2>&1; then rc=0; else rc=$?; fi
     code=$(awk 'NF >= 2 { c = $2 } END { print c }' "$log" | tr -cd 'A-Z0-9_')
     if [ "$rc" = 0 ]; then status succeeded 0 "$code"; else status failed "$rc" "$code"; fi
+    # After an update the version list describes the old version: refresh it (best effort, quietly).
+    if [ "$action" = update ]; then sh "$(pwd)/scripts/install.sh" releases --lang "$UI" >/dev/null 2>&1 || true; fi
     find data/maintenance/runs -name '*.log' -type f -printf '%T@ %p\n' | sort -rn | tail -n +21 | cut -d' ' -f2- | xargs -r rm -f
   done
 }
