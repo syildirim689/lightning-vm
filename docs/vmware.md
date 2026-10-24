@@ -120,10 +120,11 @@ Panel her bağlantı için hangi işlemlerin yetki ve lisansa göre mümkün old
   (uid 1000, izin 400). Bu dosya Compose secret olarak yalnızca API container'ına bağlanır.
 - **Görünürlük:** parola tarayıcıya hiçbir zaman geri gönderilmez, API yanıtlarında yer almaz ve
   loglanmaz. Lisans anahtarları da saklanmaz.
-- **Ayrı yedek:** `secrets/` klasörünü veritabanı yedeğinden **ayrı ve güvenli** bir yere yedekleyin.
-  Bu klasör olmadan veritabanı yedeği geri yüklenebilir, ancak kayıtlı VMware parolaları çözülemez
-  (`SECRET_KEY_UNAVAILABLE`); her bağlantının parolası yeniden girilmelidir. Veritabanı yedeğiyle
-  aynı yere koyarsanız şifrelemenin koruması kalmaz.
+- **Yedek:** `sh scripts/install.sh backup` veritabanını ve bu anahtarı tek bir arşivde, ayrı bir
+  anahtarla (`secrets/backup.key`) şifreli olarak saklar (docs/operations.md). Koruma artık
+  `backup.key`'in ayrı tutulmasına dayanır: onu yedeklerle aynı yere koymayın. `master.key` olmadan
+  veritabanı geri yüklenebilir, ama kayıtlı VMware parolaları çözülemez (`SECRET_KEY_UNAVAILABLE`);
+  her bağlantının parolası yeniden girilmelidir.
 - **Kurtarma:** `secrets/master.key` dosyasını aynı izinlerle geri koyun ve API'yi yeniden başlatın:
   ```sh
   sudo docker compose up -d api

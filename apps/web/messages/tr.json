@@ -6,7 +6,7 @@
     "tagline": "ALTYAPI YÖNETİMİ",
     "navUser": "Kullanıcı paneli",
     "navAdmin": "Yönetim paneli",
-    "build": "v{version} · Geliştirme iskeleti",
+    "build": "v{version} · Başlangıç sürümü",
     "notice": "Başlangıç sürümü · Şimdiye kadar yalnızca VMware simülatörüyle test edildi, gerçek ESXi/vCenter ile değil. İzleme, yedekleme ve güncelleme henüz yok.",
     "language": "Dil",
     "signedInAs": "Oturum: {email}",
@@ -242,7 +242,7 @@
       },
       "monitoring": {
         "title": "İzleme ve bildirimler",
-        "help": "Prometheus, Grafana ve Loki isteğe bağlıdır ve ayrı bir Compose profiliyle çalışır. Bildirim kanalları henüz yok."
+        "help": "Prometheus, Grafana, Loki ve Alertmanager isteğe bağlıdır ve ayrı bir Compose profilinde çalışır. Alarm bildirimi almak için sunucudaki data/observability/alertmanager.yml dosyasına webhook veya e-posta alıcısı ekleyin."
       },
       "summary": {
         "title": "Son kontrol ve özet",
@@ -250,7 +250,7 @@
       }
     },
     "notAvailable": {
-      "pools": "Kaynak havuzları ve IP planı sonraki sürümde (8. aşama) gelecek."
+      "pools": "Kaynak havuzları Yönetim → Katalog'dan oluşturulur; bu sihirbaz adımı sonra gelecek."
     },
     "access": {
       "label": "Panel adresi",
@@ -445,7 +445,7 @@
       "automationApi": "vCenter Automation REST API"
     },
     "capacityTitle": "Fiziksel kapasite",
-    "capacityNote": "Hostların ve datastore'ların gerçek değerleri. Yönetim payı, satışa açılan ve rezerve kapasite kaynak havuzlarıyla birlikte (8. aşama) gösterilecek.",
+    "capacityNote": "Hostların ve datastore'ların gerçek değerleri. Yönetim payı, satışa açılan ve rezerve kapasite Yönetim → Katalog'da kaynak havuzu başına gösterilir.",
     "cap": {
       "cpu": "İşlemci",
       "cpuValue": "{cores} çekirdek / {threads} iş parçacığı, {ghz} GHz",
@@ -816,6 +816,53 @@
       "vm_missing": "VM VMware'de yok",
       "orphan_vm": "Kaydı olmayan platform VM'si",
       "power_drift": "Güç durumu farklı"
+    }
+  },
+  "Maintenance": {
+    "title": "Yedekler ve güncellemeler",
+    "loading": "Yükleniyor…",
+    "version": "Çalışan sürüm: {version}",
+    "lastGoodBackup": "Son başarılı yedek: {time}",
+    "noBackup": "Henüz başarılı bir yedek yok.",
+    "lastBackupFailed": "Son yedek başarısız oldu ({time}): {reason}",
+    "lastUpdate": "Son güncelleme: {time}, {status}. {detail}",
+    "noUpdate": "Henüz güncelleme yapılmadı.",
+    "settings": "Zamanlanmış bakım: {schedule} · yerelde {keep} yedek tutulur · harici kopya: {copy} · otomatik güncelleme: {auto} (kanal {channel}, pencere {window})",
+    "explain": "Yedekleme, geri yükleme ve güncelleme sunucuda scripts/install.sh ile çalışır (backup, restore, update, schedule, auto-update). Panel yalnızca sonuçları gösterir. Yedekler panelin kendi verisidir, müşteri VM'leri değildir; VMware snapshot'ı yedek değildir.",
+    "copied": "sunucu dışına kopyalandı",
+    "rolledBack": "container'lar geri alındı",
+    "notRolledBack": "geri dönüş ayağa kalkmadı",
+    "onOff": {
+      "on": "açık",
+      "off": "kapalı"
+    },
+    "status": {
+      "ok": "başarılı",
+      "failed": "başarısız",
+      "postponed": "ertelendi"
+    },
+    "kind": {
+      "backup": "Yedek",
+      "restore": "Geri yükleme",
+      "update": "Güncelleme"
+    },
+    "col": {
+      "time": "Zaman",
+      "kind": "Tür",
+      "status": "Sonuç",
+      "detail": "Ayrıntı"
+    },
+    "code": {
+      "E_BACKUP_KEY_MISSING": "yedek anahtarı secrets/backup.key yok",
+      "E_BACKUP_DB": "veritabanı yedeği alınamadı",
+      "E_BACKUP_VERIFY": "yedek dosyası geri okunamadı (disk dolu mu?)",
+      "E_BACKUP_COPY": "yerelde alındı ama harici hedefe kopyalanamadı",
+      "E_RESTORE_DB": "veritabanı geri yüklenemedi",
+      "E_RESTORE_START": "veri geri yüklendi ama servisler hazır olmadı",
+      "E_UPDATE_FETCH": "sürümler alınamadı",
+      "E_UPDATE_INCOMPATIBLE": "o sürüm, uygulanmış bir migration'ı içermiyor (veritabanı geri alınamaz)",
+      "E_UPDATE_FAILED": "yeni sürüm hazır olmadı",
+      "W_UPDATE_BUSY": "çalışan işlemler vardı; bir sonraki saatte yeniden denenir"
     }
   }
 }

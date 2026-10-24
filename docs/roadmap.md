@@ -6,8 +6,9 @@
 4. Yönetici/kullanıcı konsol erişimi ve WebMKS geçidi.
 5. Kaynak havuzları, paket/özel kaynak, atomik kapasite ve IP rezervasyonu.
 6. cloud-init imajları, provisioning ve reconciliation.
-7. Merkezi log aktarımı, panolar, alarmlar ve bağımsız yedekler.
-8. Sürümlü deployment manifesti, migration ve güvenli otomatik güncelleme.
+7. Merkezi log aktarımı, panolar, alarmlar ve bağımsız yedekler (tamamlandı, docs/operations.md).
+8. Güvenli otomatik güncelleme (kaynak checkout ile tamamlandı). Sırada: GHCR imajlarıyla sürümlü
+   deployment paketi, imzalı kurulum paketi ve release notları.
 
 İlk gerçek entegrasyon kabul testi: test VM oluşturma, IP/SSH hazırlığı,
 her iki yetkiyle konsol erişimi, yetkisiz erişim reddi ve güvenli silme.

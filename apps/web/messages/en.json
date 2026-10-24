@@ -6,7 +6,7 @@
     "tagline": "INFRASTRUCTURE MANAGEMENT",
     "navUser": "User panel",
     "navAdmin": "Admin panel",
-    "build": "v{version} · Development scaffold",
+    "build": "v{version} · Early build",
     "notice": "Early build · Tested only against a VMware simulator so far, not against real ESXi/vCenter. Monitoring, backups and updates are not implemented yet.",
     "language": "Language",
     "signedInAs": "Signed in: {email}",
@@ -242,7 +242,7 @@
       },
       "monitoring": {
         "title": "Monitoring and notifications",
-        "help": "Prometheus, Grafana and Loki are optional and run in a separate Compose profile. Notification channels are not available yet."
+        "help": "Prometheus, Grafana, Loki and Alertmanager are optional and run in a separate Compose profile. To receive alerts, add a webhook or e-mail receiver to data/observability/alertmanager.yml on the server."
       },
       "summary": {
         "title": "Final check and summary",
@@ -250,7 +250,7 @@
       }
     },
     "notAvailable": {
-      "pools": "Resource pools and the IP plan arrive in a later version (phase 8)."
+      "pools": "Resource pools are created in Admin → Catalog; this wizard step comes later."
     },
     "access": {
       "label": "Panel address",
@@ -445,7 +445,7 @@
       "automationApi": "vCenter Automation REST API"
     },
     "capacityTitle": "Physical capacity",
-    "capacityNote": "Real values of the hosts and datastores. Management headroom, capacity offered for sale and reserved capacity come with resource pools (phase 8).",
+    "capacityNote": "Real values of the hosts and datastores. Headroom, capacity offered for sale and reserved capacity are shown per resource pool in Admin → Catalog.",
     "cap": {
       "cpu": "Processor",
       "cpuValue": "{cores} cores / {threads} threads, {ghz} GHz",
@@ -816,6 +816,53 @@
       "vm_missing": "VM missing in VMware",
       "orphan_vm": "Platform VM without a record",
       "power_drift": "Power state differs"
+    }
+  },
+  "Maintenance": {
+    "title": "Backups and updates",
+    "loading": "Loading…",
+    "version": "Running version: {version}",
+    "lastGoodBackup": "Last successful backup: {time}",
+    "noBackup": "No successful backup yet.",
+    "lastBackupFailed": "The last backup failed ({time}): {reason}",
+    "lastUpdate": "Last update: {time}, {status}. {detail}",
+    "noUpdate": "No update has run yet.",
+    "settings": "Scheduled maintenance: {schedule} · keep {keep} local backups · external copy: {copy} · automatic update: {auto} (channel {channel}, window {window})",
+    "explain": "Backups, restores and updates run on the server with scripts/install.sh (backup, restore, update, schedule, auto-update). The panel only shows their results. Backups hold the panel's own data, not customer VMs; a VMware snapshot is not a backup.",
+    "copied": "copied off the server",
+    "rolledBack": "containers rolled back",
+    "notRolledBack": "rollback did not come up",
+    "onOff": {
+      "on": "on",
+      "off": "off"
+    },
+    "status": {
+      "ok": "succeeded",
+      "failed": "failed",
+      "postponed": "postponed"
+    },
+    "kind": {
+      "backup": "Backup",
+      "restore": "Restore",
+      "update": "Update"
+    },
+    "col": {
+      "time": "Time",
+      "kind": "Type",
+      "status": "Result",
+      "detail": "Detail"
+    },
+    "code": {
+      "E_BACKUP_KEY_MISSING": "the backup key secrets/backup.key is missing",
+      "E_BACKUP_DB": "the database could not be dumped",
+      "E_BACKUP_VERIFY": "the backup file could not be read back (disk full?)",
+      "E_BACKUP_COPY": "written locally but not copied to the external target",
+      "E_RESTORE_DB": "the database could not be restored",
+      "E_RESTORE_START": "data restored but the services did not become ready",
+      "E_UPDATE_FETCH": "releases could not be fetched",
+      "E_UPDATE_INCOMPATIBLE": "that version lacks a migration already applied (no database downgrade)",
+      "E_UPDATE_FAILED": "the new version did not become ready",
+      "W_UPDATE_BUSY": "operations were running; tried again in the next hour"
     }
   }
 }

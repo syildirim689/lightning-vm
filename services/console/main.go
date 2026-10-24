@@ -4,6 +4,7 @@
 package main
 
 import (
+	"cmp"
 	"context"
 	"log/slog"
 	"net/http"
@@ -17,7 +18,7 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-var logger = slog.New(slog.NewJSONHandler(os.Stdout, nil)).With("service", "console")
+var logger = slog.New(slog.NewJSONHandler(os.Stdout, nil)).With("service", "console", "env", cmp.Or(os.Getenv("APP_ENV"), "production"))
 
 func envInt(name string, def int) int {
 	if v, err := strconv.Atoi(os.Getenv(name)); err == nil && v > 0 {

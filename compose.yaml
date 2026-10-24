@@ -4,6 +4,8 @@ x-logging: &logging
   options:
     max-size: "10m"
     max-file: "3"
+    # Adds the service name to every line so the log collector can label it.
+    labels: com.docker.compose.service
 services:
   postgres:
     image: postgres:17-alpine
@@ -59,6 +61,10 @@ services:
       MASTER_KEY_FILE: /run/secrets/master_key
       VMWARE_SERVICE_URL: http://vmware:8080
       VMWARE_SERVICE_TOKEN_FILE: /run/secrets/vmware_token
+      APP_VERSION: ${APP_VERSION:-dev}
+      APP_ENV: ${APP_ENV:-production}
+    # Backup/update results written by scripts/install.sh on the host.
+    volumes: [./data/maintenance:/maintenance:ro]
     # Kept as files outside the database and .env; see docs/vmware.md for backup.
     secrets: [master_key, vmware_token]
     depends_on:
@@ -158,16 +164,49 @@ services:
       api: {condition: service_healthy}
       web: {condition: service_healthy}
     logging: *logging
+  # Monitoring (docker compose --profile observability up -d). Nothing here is published beyond 127.0.0.1.
   prometheus:
     image: prom/prometheus:v3.2.1
     profiles: [observability]
     restart: unless-stopped
     ports: ["127.0.0.1:9090:9090"]
+    environment:
+      # Public panel URL probed from outside the stack (set by install.sh domain); the API otherwise.
+      PROBE_URL: ${PANEL_PROBE_URL:-http://api:4000/health}
     volumes:
       - ./deploy/observability/prometheus.yaml:/etc/prometheus/prometheus.yml:ro
       - ./deploy/observability/alerts.yaml:/etc/prometheus/alerts.yaml:ro
       - prometheus_data:/prometheus
-    command: [--config.file=/etc/prometheus/prometheus.yml, --storage.tsdb.retention.time=15d]
+    entrypoint: [/bin/sh, -c]
+    command:
+      - printf '[{"targets":["%s"]}]' "$$PROBE_URL" > /prometheus/probe-targets.json &&
+        exec /bin/prometheus --config.file=/etc/prometheus/prometheus.yml --storage.tsdb.path=/prometheus --storage.tsdb.retention.time=15d
+    logging: *logging
+  alertmanager:
+    image: prom/alertmanager:v0.28.1
+    profiles: [observability]
+    restart: unless-stopped
+    ports: ["127.0.0.1:9093:9093"]
+    # Receivers are the operator's: data/observability/alertmanager.yml (created by install.sh).
+    volumes:
+      - ./data/observability/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - alertmanager_data:/alertmanager
+    logging: *logging
+  node-exporter:
+    image: prom/node-exporter:v1.9.1
+    profiles: [observability]
+    restart: unless-stopped
+    pid: host
+    read_only: true
+    command: [--path.rootfs=/host]
+    volumes: ["/:/host:ro,rslave"]
+    logging: *logging
+  blackbox:
+    image: prom/blackbox-exporter:v0.26.0
+    profiles: [observability]
+    restart: unless-stopped
+    read_only: true
+    logging: *logging
   grafana:
     image: grafana/grafana:11.6.0
     profiles: [observability]
@@ -179,18 +218,33 @@ services:
     volumes:
       - grafana_data:/var/lib/grafana
       - ./deploy/observability/datasources.yaml:/etc/grafana/provisioning/datasources/default.yaml:ro
+      - ./deploy/observability/dashboards.yaml:/etc/grafana/provisioning/dashboards/default.yaml:ro
+      - ./deploy/observability/dashboards:/etc/grafana/dashboards:ro
+    logging: *logging
   loki:
     image: grafana/loki:3.4.2
     profiles: [observability]
     restart: unless-stopped
-    command: [-config.file=/etc/loki/local-config.yaml]
-    volumes: [loki_data:/loki]
+    command: [-config.file=/etc/loki/loki.yaml]
+    volumes:
+      - ./deploy/observability/loki.yaml:/etc/loki/loki.yaml:ro
+      - loki_data:/loki
+    logging: *logging
+  # Ships every service's container log (JSON) to Loki. Reads Docker's log files read-only; runs as
+  # root only because those files are root's.
   otel:
     image: otel/opentelemetry-collector-contrib:0.123.0
     profiles: [observability]
     restart: unless-stopped
+    user: "0"
+    read_only: true
+    cap_drop: [ALL]
     command: [--config=/etc/otelcol/config.yaml]
-    volumes: [./deploy/observability/otel.yaml:/etc/otelcol/config.yaml:ro]
+    volumes:
+      - ./deploy/observability/otel.yaml:/etc/otelcol/config.yaml:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - otel_data:/var/lib/otelcol
+    logging: *logging
 secrets:
   master_key:
     file: ./secrets/master.key
@@ -204,3 +258,5 @@ volumes:
   prometheus_data:
   grafana_data:
   loki_data:
+  alertmanager_data:
+  otel_data:

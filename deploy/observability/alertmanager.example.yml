@@ -1,0 +1,21 @@
+# Copied by scripts/install.sh to data/observability/alertmanager.yml, which is yours to edit
+# (outside git, kept across updates). Restart after editing:
+#   docker compose --profile observability restart alertmanager
+# Until a receiver is configured, alerts are visible at http://127.0.0.1:9093 and in Grafana only.
+route:
+  receiver: default
+  group_by: [alertname]
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+receivers:
+  - name: default
+    # Examples (uncomment one):
+    # webhook_configs:
+    #   - url: https://hooks.example.com/lightning
+    # email_configs:
+    #   - to: ops@example.com
+    #     from: lightning@example.com
+    #     smarthost: smtp.example.com:587
+    #     auth_username: lightning@example.com
+    #     auth_password_file: /etc/alertmanager/smtp_password

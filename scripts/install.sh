@@ -3,7 +3,14 @@
 #   sh scripts/install.sh [install]      first install, or resume/repair an existing one (idempotent)
 #   sh scripts/install.sh check          read-only: host pre-checks and state of an existing install
 #   sh scripts/install.sh recover-setup  reopen the browser setup wizard (accounts and data are kept)
-#   sh scripts/install.sh update         not available yet
+#   sh scripts/install.sh backup         encrypted backup of the database, settings, keys and certificates
+#   sh scripts/install.sh restore FILE [--yes-replace-data]
+#                                        restore a backup (without the flag it only checks and explains)
+#   sh scripts/install.sh update [--to vX.Y.Z]
+#                                        update a git checkout to the latest release of UPDATE_CHANNEL
+#   sh scripts/install.sh schedule on|off
+#                                        hourly systemd timer: daily backup and the automatic update
+#   sh scripts/install.sh auto-update on|off [--channel stable|beta] [--window 03:00-05:00]
 #   sh scripts/install.sh domain panel.example.com [--acme-staging]
 #                                        serve the panel on that name with automatic HTTPS (ports 80/443)
 #   sh scripts/install.sh behind-proxy [--port 8080] [--trusted-cidr CIDR]
@@ -13,13 +20,27 @@
 # It never changes firewall, SSH or other web server settings, and never prints secrets.
 # shellcheck disable=SC1091 # /etc/os-release exists only on the target host
 set -eu
-cd "$(dirname "$0")/.."
+cd "${LVM_ROOT:-$(dirname "$0")/..}"
+# update checks out another version of this very file: run from a copy so sh never reads a changed script.
+if [ -n "${LVM_REEXEC:-}" ]; then rm -f "$0"
+else case " $* " in *" update "*|*" maintenance "*)
+  copy=$(mktemp); cp scripts/install.sh "$copy"; LVM_ROOT=$(pwd) LVM_REEXEC=1 exec sh "$copy" "$@" ;;
+esac; fi
 
 MODE=install INSTALL_DOCKER=0 ALLOW_OS=0 DOMAIN="" ACME_STAGING=0 PROXY_PORT=8080 TRUSTED_CIDR=""
+RESTORE_FILE="" YES=0 TO="" AUTO=0 SWITCH="" CHANNEL="" WINDOW=""
 case "${LANG:-}" in tr*) UI="tr" ;; *) UI="en" ;; esac
 while [ $# -gt 0 ]; do
   case "$1" in
-    install|check|recover-setup|update|behind-proxy|local-only) MODE=$1 ;;
+    install|check|recover-setup|update|behind-proxy|local-only|backup|maintenance) MODE=$1 ;;
+    restore) MODE=restore; if [ $# -gt 1 ]; then shift; RESTORE_FILE=$1; fi ;;
+    schedule|auto-update) MODE=$1; if [ $# -gt 1 ]; then shift; SWITCH=$1; fi
+      case "$SWITCH" in on|off) ;; *) echo "$MODE: on or off" >&2; exit 2 ;; esac ;;
+    --yes-replace-data) YES=1 ;;
+    --to) shift; TO=${1:-} ;;
+    --auto) AUTO=1 ;;
+    --channel) shift; CHANNEL=${1:-} ;;
+    --window) shift; WINDOW=${1:-} ;;
     domain) MODE=domain; if [ $# -gt 1 ]; then shift; DOMAIN=$1; fi ;;
     --acme-staging) ACME_STAGING=1 ;;
     --port) shift; PROXY_PORT=${1:-} ;;
@@ -146,6 +167,11 @@ write_secrets() {
   chmod 700 secrets
   [ -s secrets/master.key ] || (umask 077; openssl rand -base64 32 > secrets/master.key)
   [ -s secrets/vmware.token ] || (umask 077; openssl rand -hex 32 > secrets/vmware.token)
+  # Backups are encrypted with this key; it stays with the installing user, containers never read it.
+  if [ ! -s secrets/backup.key ]; then
+    (umask 077; openssl rand -base64 48 > secrets/backup.key); chmod 400 secrets/backup.key
+    msg WARN BACKUP_KEY "secrets/backup.key oluşturuldu: bu sunucunun dışında güvenli bir yere kopyalayın, o olmadan yedekler açılamaz" "secrets/backup.key created: copy it somewhere safe off this server, backups cannot be opened without it"
+  fi
   if [ "$(id -u)" = 0 ]; then chown 1000:1000 secrets/master.key secrets/vmware.token
   elif [ "$(id -u)" != 1000 ]; then die 17 E_SECRETS_OWNER "secrets/ dosyaları uid 1000'e ait olmalı; kurulumu sudo ile çalıştırın" "secrets/ files must belong to uid 1000; run the installer with sudo"; fi
   chmod 400 secrets/master.key secrets/vmware.token
@@ -201,6 +227,257 @@ web_report() {
   else fail E_CERT_MISSING "Sertifika alınamadı; docker compose logs proxy" "No certificate yet; docker compose logs proxy"; fi
 }
 
+# ---- Backup, restore and update -------------------------------------------------------------------
+# Results go to data/maintenance/history.jsonl (one JSON line each). The admin panel and Prometheus
+# read that file through a read-only mount, so it is written even when the API is down.
+
+# The checkout often belongs to the user who cloned it while this runs with sudo; trust only this directory.
+git() { command git -c safe.directory="$(pwd)" "$@"; }
+
+app_version() {
+  git describe --tags --always 2>/dev/null || sed -n 's/^  "version": "\(.*\)",$/v\1/p' apps/api/package.json | head -n 1
+}
+
+record() { # kind status code [extra JSON fields, each starting with a comma]
+  (umask 022; mkdir -p data/maintenance)
+  printf '{"time":"%s","kind":"%s","status":"%s","code":"%s","version":"%s"%s}\n' \
+    "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$1" "$2" "$3" "$(app_version)" "${4:-}" >> data/maintenance/history.jsonl
+  tail -n 500 data/maintenance/history.jsonl > data/maintenance/history.tmp && mv data/maintenance/history.tmp data/maintenance/history.jsonl
+  chmod 644 data/maintenance/history.jsonl
+}
+
+write_settings() {
+  if [ -n "$(env_value BACKUP_COPY_TO)" ]; then copy=on; else copy=off; fi
+  if [ -f /etc/systemd/system/lightning-vm-maintenance.timer ]; then timer=on; else timer=off; fi
+  b=$(env_value BACKUP_SCHEDULE); k=$(env_value BACKUP_KEEP); a=$(env_value AUTO_UPDATE); c=$(env_value UPDATE_CHANNEL); w=$(env_value UPDATE_WINDOW)
+  (umask 022; mkdir -p data/maintenance)
+  printf '{"schedule":"%s","backupSchedule":"%s","backupKeep":"%s","backupCopy":"%s","autoUpdate":"%s","updateChannel":"%s","updateWindow":"%s"}\n' \
+    "$timer" "${b:-daily}" "${k:-7}" "$copy" "${a:-off}" "${c:-stable}" "${w:-03:00-05:00}" > data/maintenance/settings.json
+}
+
+# Operator-owned monitoring settings live in data/observability, outside git, so editing them never
+# blocks an update. Existing files are kept.
+write_observability() {
+  (umask 022; mkdir -p data/observability)
+  [ -f data/observability/alertmanager.yml ] || cp deploy/observability/alertmanager.example.yml data/observability/alertmanager.yml
+}
+
+psql_value() { docker compose exec -T postgres sh -c "psql -U \"\$POSTGRES_USER\" -d \"\$POSTGRES_DB\" -Atc \"$1\""; }
+
+# PostgreSQL (custom-format dump), .env, the encryption keys and Caddy's certificates, in one tar
+# encrypted with secrets/backup.key. Redis is not included: it holds only queue copies and
+# sessions; open operations are queued again from PostgreSQL.
+# Its variables are prefixed or private to it: restore calls it while holding its own.
+do_backup() { # reason
+  reason=$1
+  dir=$(env_value BACKUP_DIR); dir=${dir:-backups}
+  keep=$(env_value BACKUP_KEEP); keep=${keep:-7}
+  [ -s secrets/backup.key ] || { record backup failed E_BACKUP_KEY_MISSING ",\"reason\":\"$reason\""; die 21 E_BACKUP_KEY_MISSING "secrets/backup.key yok; önce: sh scripts/install.sh" "secrets/backup.key missing; run first: sh scripts/install.sh"; }
+  (umask 077; mkdir -p "$dir")
+  name="lightning-$(date -u +%Y%m%dT%H%M%SZ)"; bwork="$dir/.work-$$"
+  (umask 077; mkdir "$bwork")
+  if ! docker compose exec -T postgres sh -c 'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Fc' > "$bwork/db.dump" 2>/dev/null || [ ! -s "$bwork/db.dump" ]; then
+    rm -rf "$bwork"; record backup failed E_BACKUP_DB ",\"reason\":\"$reason\""
+    die 21 E_BACKUP_DB "Veritabanı yedeği alınamadı; postgres çalışıyor mu?" "Database dump failed; is postgres running?"
+  fi
+  psql_value 'SELECT version FROM schema_migrations ORDER BY 1' > "$bwork/migrations"
+  app_version > "$bwork/version"
+  cp .env "$bwork/env"; cp secrets/master.key secrets/vmware.token "$bwork/"
+  if [ -f data/observability/alertmanager.yml ]; then cp data/observability/alertmanager.yml "$bwork/"; fi
+  docker compose exec -T proxy tar -C /data -czf - . > "$bwork/caddy_data.tgz" 2>/dev/null || rm -f "$bwork/caddy_data.tgz"
+  out="$dir/$name.tar.enc"
+  tar -C "$bwork" -cf - . | (umask 077; openssl enc -aes-256-cbc -pbkdf2 -iter 200000 -salt -pass file:secrets/backup.key -out "$out")
+  rm -rf "$bwork"
+  # Read it back before calling it a backup.
+  if ! openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -pass file:secrets/backup.key -in "$out" 2>/dev/null | tar -tf - 2>/dev/null | grep -q 'db.dump'; then
+    rm -f "$out"; record backup failed E_BACKUP_VERIFY ",\"reason\":\"$reason\""
+    die 21 E_BACKUP_VERIFY "Yedek dosyası geri okunamadı (disk dolu olabilir)" "The backup file could not be read back (the disk may be full)"
+  fi
+  (cd "$dir" && sha256sum "$name.tar.enc" > "$name.tar.enc.sha256" && chmod 600 "$name.tar.enc.sha256")
+  # Retention: the newest $keep local backups stay; the external copy keeps its own policy.
+  set -- "$dir"/lightning-*.tar.enc # glob order is name order, and the names are UTC timestamps
+  while [ $# -gt "$keep" ]; do rm -f "$1" "$1.sha256"; shift; done
+  bytes=$(stat -c %s "$out"); copied=false; copy_to=$(env_value BACKUP_COPY_TO)
+  BACKUP_FILE=$out
+  if [ -n "$copy_to" ]; then
+    if rsync -a "$out" "$out.sha256" "$copy_to/" 2>/dev/null; then copied=true
+    else
+      record backup failed E_BACKUP_COPY ",\"reason\":\"$reason\",\"file\":\"$name.tar.enc\",\"bytes\":$bytes,\"copied\":false"
+      msg WARN E_BACKUP_COPY "Yedek yerelde alındı ama $copy_to hedefine kopyalanamadı" "Backup written locally but not copied to $copy_to"
+      return 1
+    fi
+  fi
+  record backup ok - ",\"reason\":\"$reason\",\"file\":\"$name.tar.enc\",\"bytes\":$bytes,\"copied\":$copied"
+  msg OK BACKUP "$out ($bytes bayt)" "$out ($bytes bytes)"
+}
+
+do_restore() {
+  file=$RESTORE_FILE
+  [ -f "$file" ] || die 2 E_RESTORE_FILE "Yedek dosyası bulunamadı: '$file'" "Backup file not found: '$file'"
+  [ -f "$file.sha256" ] || die 22 E_RESTORE_CHECKSUM "Sağlama dosyası yok: $file.sha256" "Checksum file missing: $file.sha256"
+  (cd "$(dirname "$file")" && sha256sum -c --quiet "$(basename "$file").sha256" >/dev/null 2>&1) || die 22 E_RESTORE_CHECKSUM "Sağlama tutmuyor; dosya bozuk veya değiştirilmiş" "Checksum mismatch; the file is damaged or was changed"
+  work=$(mktemp -d)
+  if ! openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -pass file:secrets/backup.key -in "$file" 2>/dev/null | tar -C "$work" -xf - 2>/dev/null; then
+    rm -rf "$work"; die 22 E_RESTORE_DECRYPT "Yedek açılamadı: secrets/backup.key bu yedeğin anahtarı değil" "Backup could not be opened: secrets/backup.key is not this backup's key"
+  fi
+  for f in db.dump master.key vmware.token migrations; do
+    [ -s "$work/$f" ] || { rm -rf "$work"; die 22 E_RESTORE_INCOMPLETE "Yedekte $f yok" "$f missing from the backup"; }
+  done
+  # The code must know every migration recorded in the backup: no restoring a newer schema into older code.
+  while read -r v; do
+    [ -f "apps/api/migrations/$v.sql" ] || { rm -rf "$work"; die 22 E_RESTORE_NEWER "Yedek daha yeni bir sürümden ($(cat "$work/version" 2>/dev/null)); önce o sürüme güncelleyin" "The backup is from a newer version ($(cat "$work/version" 2>/dev/null)); update to that version first"; }
+  done < "$work/migrations"
+  msg WARN RESTORE_PLAN "Şunlar DEĞİŞTİRİLECEK: tüm veritabanı, secrets/master.key, secrets/vmware.token ve sertifikalar ($(cat "$work/version" 2>/dev/null) yedeği)" "This REPLACES: the whole database, secrets/master.key, secrets/vmware.token and the certificates (backup of $(cat "$work/version" 2>/dev/null))"
+  if [ "$YES" != 1 ]; then
+    rm -rf "$work"
+    msg INFO CONFIRM "Hiçbir şey değiştirilmedi. Onaylamak için --yes-replace-data ekleyin" "Nothing was changed. Add --yes-replace-data to confirm"
+    exit 3
+  fi
+  safety=""
+  if docker compose exec -T postgres pg_isready -q >/dev/null 2>&1; then
+    msg INFO SAFETY_BACKUP "Önce mevcut verinin yedeği alınıyor" "Backing up the current data first"
+    do_backup pre-restore || true
+    safety=${BACKUP_FILE:-}
+    [ -n "$safety" ] || die 22 E_RESTORE_NO_SAFETY "Mevcut verinin yedeği alınamadı; geri yükleme yapılmadı" "The current data could not be backed up; nothing was restored"
+  fi
+  docker compose stop api worker web console vmware proxy >/dev/null 2>&1 || true
+  if ! docker compose exec -T postgres sh -c 'psql -q -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public;" && pg_restore -U "$POSTGRES_USER" -d "$POSTGRES_DB" --no-owner --exit-on-error' < "$work/db.dump" >/dev/null 2>&1; then
+    rm -rf "$work"; record restore failed E_RESTORE_DB ",\"file\":\"$(basename "$file")\""
+    die 22 E_RESTORE_DB "Veritabanı geri yüklenemedi; uygulama servisleri durduruldu. Önceki veri: $safety" "Database restore failed; the app services are stopped. Previous data: $safety"
+  fi
+  # The stored VMware passwords are encrypted with the backup's master key: both keys come back with the data.
+  for f in master.key vmware.token; do
+    rm -f "secrets/$f"; cp "$work/$f" "secrets/$f"
+    if [ "$(id -u)" = 0 ]; then chown 1000:1000 "secrets/$f"; fi
+    chmod 400 "secrets/$f"
+  done
+  (umask 077; cp "$work/env" .env.from-backup)
+  if [ -f "$work/alertmanager.yml" ]; then cp "$work/alertmanager.yml" data/observability/alertmanager.yml.from-backup; fi
+  if [ -s "$work/caddy_data.tgz" ]; then
+    docker compose run --rm --no-deps -T --entrypoint sh proxy -c 'find /data -mindepth 1 -delete && tar -xzf - -C /data' < "$work/caddy_data.tgz" >/dev/null 2>&1 \
+      || msg WARN W_RESTORE_CERTS "Sertifikalar geri yüklenemedi; Caddy yenilerini alır" "Certificates not restored; Caddy will request new ones"
+  fi
+  rm -rf "$work"
+  if docker compose up -d --wait --wait-timeout 300 >/dev/null 2>&1 && local_get /api/ready >/dev/null 2>&1; then
+    record restore ok - ",\"file\":\"$(basename "$file")\""
+    msg OK RESTORED "Geri yüklendi. Yedekteki ayarlar: .env.from-backup ve data/observability/alertmanager.yml.from-backup (geçerli ayarlar değiştirilmedi). Önceki veri: $safety" "Restored. Settings from the backup: .env.from-backup and data/observability/alertmanager.yml.from-backup (the current settings were kept). Previous data: $safety"
+  else
+    record restore failed E_RESTORE_START ",\"file\":\"$(basename "$file")\""
+    die 22 E_RESTORE_START "Veri geri yüklendi ama servisler hazır değil: docker compose logs" "Data restored but services are not ready: docker compose logs"
+  fi
+}
+
+in_window() { # HH:MM-HH:MM in local time, may wrap past midnight
+  w=${1:-03:00-05:00}; now=$(date +%H%M); s=$(echo "${w%-*}" | tr -d :); e=$(echo "${w#*-}" | tr -d :)
+  if [ "$s" -le "$e" ]; then [ "$now" -ge "$s" ] && [ "$now" -lt "$e" ]; else [ "$now" -ge "$s" ] || [ "$now" -lt "$e" ]; fi
+}
+
+latest_tag() { # stable: vX.Y.Z only; beta: also vX.Y.Z-rc.1 and similar
+  if [ "$1" = beta ]; then re='^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$'; else re='^v[0-9]+\.[0-9]+\.[0-9]+$'; fi
+  git -c versionsort.suffix=- tag -l 'v[0-9]*' --sort=-v:refname | grep -E "$re" | head -n 1
+}
+
+up_and_ready() {
+  docker compose up -d --build --wait --wait-timeout 600 >/dev/null 2>&1 || return 1
+  i=0; until local_get /api/ready >/dev/null 2>&1 || [ $i -ge 12 ]; do sleep 5; i=$((i + 1)); done
+  local_get /api/ready >/dev/null 2>&1
+}
+
+# Source installs follow released git tags. Containers can be rolled back; the database cannot be
+# rolled back automatically, so a backup is taken first and named in every failure message.
+do_update() {
+  git rev-parse --is-inside-work-tree >/dev/null 2>&1 || die 20 E_UPDATE_NO_GIT "Güncelleme, git ile alınmış kaynak gerektirir (git clone)" "Updating needs a source checkout made with git clone"
+  [ -f .env ] || die 17 E_NOT_INSTALLED "Önce kurulum yapın: sh scripts/install.sh" "Install first: sh scripts/install.sh"
+  [ -z "$(git status --porcelain --untracked-files=no)" ] || die 20 E_UPDATE_LOCAL_CHANGES "Kaynakta yerel değişiklikler var (git status); güncelleme yapılmadı" "The source has local changes (git status); not updating"
+  channel=$(env_value UPDATE_CHANNEL); channel=${channel:-stable}
+  if [ "$AUTO" = 1 ]; then
+    [ "$(env_value AUTO_UPDATE)" = on ] || exit 0
+    in_window "$(env_value UPDATE_WINDOW)" || exit 0
+  fi
+  if [ -n "$(git remote)" ]; then
+    git fetch --quiet --tags --force "$(git remote | head -n 1)" 2>/dev/null || { record update failed E_UPDATE_FETCH; die 20 E_UPDATE_FETCH "Sürümler alınamadı (git fetch)" "Could not fetch releases (git fetch)"; }
+  fi
+  current=$(git rev-parse HEAD); current_name=$(app_version)
+  if [ -n "$TO" ]; then target=$TO; else target=$(latest_tag "$channel"); fi
+  [ -n "$target" ] || die 20 E_UPDATE_NO_RELEASE "Yayımlanmış sürüm etiketi (vX.Y.Z) yok" "No released version tag (vX.Y.Z)"
+  git rev-parse -q --verify "$target^{commit}" >/dev/null || die 20 E_UPDATE_UNKNOWN_VERSION "Bilinmeyen sürüm: $target" "Unknown version: $target"
+  if [ "$(git rev-parse "$target^{commit}")" = "$current" ]; then msg OK UP_TO_DATE "Güncel: $current_name" "Up to date: $current_name"; exit 0; fi
+  applied=$(psql_value 'SELECT version FROM schema_migrations ORDER BY 1') || die 20 E_UPDATE_DB "Veritabanına ulaşılamadı" "Database not reachable"
+  for v in $applied; do
+    git cat-file -e "$target:apps/api/migrations/$v.sql" 2>/dev/null || {
+      record update failed E_UPDATE_INCOMPATIBLE ",\"from\":\"$current_name\",\"to\":\"$target\""
+      die 20 E_UPDATE_INCOMPATIBLE "$target, uygulanmış $v migration'ını içermiyor (veritabanı geri alınamaz)" "$target does not contain the applied migration $v (the database cannot be downgraded)"; }
+  done
+  open=$(psql_value "SELECT count(*) FROM operations WHERE status IN ('pending', 'running')")
+  if [ "${open:-0}" -gt 0 ]; then
+    if [ "$AUTO" = 1 ]; then
+      record update postponed W_UPDATE_BUSY ",\"from\":\"$current_name\",\"to\":\"$target\""
+      msg INFO W_UPDATE_BUSY "$open açık işlem var; otomatik güncelleme sonraya bırakıldı" "$open open operations; automatic update postponed"; exit 0
+    fi
+    msg WARN W_UPDATE_BUSY "$open açık işlem var; worker durdurulacak, yeni sürümde kaldığı adımdan sürer" "$open open operations; the worker stops and the new version continues them from their last step"
+  fi
+  msg INFO UPDATE "$current_name -> $target" "$current_name -> $target"
+  do_backup pre-update || die 21 E_BACKUP_COPY "Güncelleme öncesi yedek tamamlanmadı; güncelleme yapılmadı" "The pre-update backup did not complete; not updating"
+  pre=$BACKUP_FILE
+  msg INFO DRAINING "Worker durduruluyor (çalışan adımın bitmesi en çok 120 sn beklenir)" "Stopping the worker (waits up to 120 s for the running step)"
+  docker compose stop -t 120 worker >/dev/null 2>&1 || true
+  git -c advice.detachedHead=false checkout -q --detach "$target"
+  set_env APP_VERSION "$(app_version)"
+  if up_and_ready; then
+    record update ok - ",\"from\":\"$current_name\",\"to\":\"$target\""
+    msg OK UPDATED "$target çalışıyor" "$target is running"; exit 0
+  fi
+  msg FAIL E_UPDATE_FAILED "$target hazır olmadı; $current_name sürümüne geri dönülüyor" "$target did not become ready; rolling back to $current_name"
+  git -c advice.detachedHead=false checkout -q --detach "$current"
+  set_env APP_VERSION "$current_name"
+  if up_and_ready; then rb=true; else rb=false; fi
+  record update failed E_UPDATE_FAILED ",\"from\":\"$current_name\",\"to\":\"$target\",\"rolledBack\":$rb"
+  msg WARN DB_NOT_ROLLED_BACK "Container'lar geri alındı (çalışıyor: $rb). Veritabanı otomatik geri alınmaz; eski sürüm sorun çıkarırsa: sh scripts/install.sh restore $pre --yes-replace-data" "Containers rolled back (running: $rb). The database is not rolled back automatically; if the old version misbehaves: sh scripts/install.sh restore $pre --yes-replace-data"
+  exit 23
+}
+
+# Hourly systemd timer: a daily backup (when the last good one is older than 23 h) and, when
+# enabled, the automatic update inside the maintenance window.
+do_maintenance() {
+  if [ "$(env_value BACKUP_SCHEDULE)" != off ]; then
+    last=$(grep '"kind":"backup","status":"ok"' data/maintenance/history.jsonl 2>/dev/null | tail -n 1 | sed 's/^{"time":"\([^"]*\)".*/\1/')
+    age=$(( $(date +%s) - $(date -d "${last:-1970-01-01T00:00:00Z}" +%s) ))
+    if [ "$age" -gt 82800 ]; then (do_backup scheduled) || true; fi
+  fi
+  AUTO=1; do_update
+}
+
+set_schedule() {
+  [ "$(id -u)" = 0 ] || die 13 E_NEEDS_ROOT "Zamanlayıcı için root gerekir (sudo)" "The timer needs root (sudo)"
+  unit=/etc/systemd/system/lightning-vm-maintenance
+  if [ "$SWITCH" = on ]; then
+    printf '[Unit]\nDescription=Lightning VM scheduled backup and automatic update\n\n[Service]\nType=oneshot\nExecStart=/bin/sh %s/scripts/install.sh maintenance --lang %s\n' "$(pwd)" "$UI" > "$unit.service"
+    printf '[Unit]\nDescription=Lightning VM maintenance, hourly\n\n[Timer]\nOnCalendar=hourly\nRandomizedDelaySec=300\nPersistent=true\n\n[Install]\nWantedBy=timers.target\n' > "$unit.timer"
+    systemctl daemon-reload; systemctl enable --now lightning-vm-maintenance.timer >/dev/null 2>&1 || die 18 E_TIMER "systemd zamanlayıcısı etkinleştirilemedi" "Could not enable the systemd timer"
+    grep -q '^BACKUP_SCHEDULE=' .env || echo 'BACKUP_SCHEDULE=daily' >> .env
+    msg OK SCHEDULE "Saatlik bakım: günlük yedek$( [ "$(env_value AUTO_UPDATE)" = on ] && echo ' ve otomatik güncelleme')" "Hourly maintenance: daily backup$( [ "$(env_value AUTO_UPDATE)" = on ] && echo ' and automatic update')"
+  else
+    systemctl disable --now lightning-vm-maintenance.timer >/dev/null 2>&1 || true
+    rm -f "$unit.service" "$unit.timer"; systemctl daemon-reload
+    msg OK SCHEDULE "Zamanlanmış bakım kapatıldı" "Scheduled maintenance disabled"
+  fi
+  write_settings
+}
+
+set_auto_update() {
+  case "$CHANNEL" in ''|stable|beta) ;; *) die 2 E_CHANNEL_INVALID "Kanal stable veya beta olmalı" "Channel must be stable or beta" ;; esac
+  if [ -n "$WINDOW" ] && ! echo "$WINDOW" | grep -Eq '^([01][0-9]|2[0-3]):[0-5][0-9]-([01][0-9]|2[0-3]):[0-5][0-9]$'; then
+    die 2 E_WINDOW_INVALID "Bakım penceresi SS:DD-SS:DD olmalı (örnek 03:00-05:00)" "The maintenance window must be HH:MM-HH:MM (example 03:00-05:00)"
+  fi
+  set_env AUTO_UPDATE "$SWITCH"
+  [ -z "$CHANNEL" ] || set_env UPDATE_CHANNEL "$CHANNEL"
+  [ -z "$WINDOW" ] || set_env UPDATE_WINDOW "$WINDOW"
+  write_settings
+  c=$(env_value UPDATE_CHANNEL); w=$(env_value UPDATE_WINDOW)
+  msg OK AUTO_UPDATE "Otomatik güncelleme: $SWITCH (kanal ${c:-stable}, pencere ${w:-03:00-05:00})" "Automatic update: $SWITCH (channel ${c:-stable}, window ${w:-03:00-05:00})"
+  [ -f /etc/systemd/system/lightning-vm-maintenance.timer ] || [ "$SWITCH" = off ] || msg WARN W_NO_TIMER "Zamanlayıcı kurulu değil: sudo sh scripts/install.sh schedule on" "The timer is not installed: sudo sh scripts/install.sh schedule on"
+}
+
 restart_proxy() {
   docker compose up -d --wait --wait-timeout 120 proxy >/dev/null 2>&1 || die 18 E_START_FAILED "Proxy başlamadı: docker compose logs proxy" "Proxy did not start: docker compose logs proxy"
 }
@@ -217,6 +494,7 @@ case "$MODE" in
     if [ "$ACME_STAGING" = 1 ]; then ca=https://acme-staging-v02.api.letsencrypt.org/directory; else ca=https://acme-v02.api.letsencrypt.org/directory; fi
     set_env PANEL_SITE "$DOMAIN"; set_env LISTEN_ADDRESS 0.0.0.0; set_env HTTP_PORT 80; set_env HTTPS_PORT 443; set_env ACME_CA "$ca"
     set_env TRUSTED_PROXY_CIDRS 127.0.0.1/32
+    set_env PANEL_PROBE_URL "https://$DOMAIN/api/health"
     load_settings; restart_proxy
     msg INFO ACME "Sertifika isteniyor (en fazla 2 dk)" "Requesting certificate (up to 2 min)"
     i=0; until local_get /api/ready >/dev/null 2>&1 || [ $i -ge 24 ]; do sleep 5; i=$((i + 1)); done
@@ -228,6 +506,7 @@ case "$MODE" in
     [ -f .env ] || die 17 E_NOT_INSTALLED "Önce kurulum yapın: sh scripts/install.sh" "Install first: sh scripts/install.sh"
     echo "$PROXY_PORT" | grep -Eq '^[0-9]{2,5}$' || die 2 E_PORT_INVALID "Geçersiz port: $PROXY_PORT" "Invalid port: $PROXY_PORT"
     set_env PANEL_SITE :80; set_env LISTEN_ADDRESS 127.0.0.1; set_env HTTP_PORT "$PROXY_PORT"; set_env HTTPS_PORT 8443
+    set_env PANEL_PROBE_URL "" # no public address known; Prometheus probes the API from inside
     if [ "$MODE" = behind-proxy ]; then
       # The host proxy reaches Caddy through Docker's port publishing, so Caddy sees the network gateway.
       if [ -z "$TRUSTED_CIDR" ]; then
@@ -247,8 +526,17 @@ case "$MODE" in
       msg INFO NEXT "Proxy'nizde: proxy_pass http://127.0.0.1:$PORT; Host, X-Forwarded-For, X-Forwarded-Proto ve WebSocket Upgrade başlıklarını iletin (docs/domain-https.md)" "In your proxy: proxy_pass http://127.0.0.1:$PORT; forward Host, X-Forwarded-For, X-Forwarded-Proto and WebSocket Upgrade headers (docs/domain-https.md)"
     fi
     exit 0 ;;
-  update)
-    die 20 E_NOT_IMPLEMENTED "Güncelleme henüz yok (yayımlanmış sürüm ve güncelleyici sonraki aşamada)" "Update is not available yet (released versions and the updater come in a later phase)" ;;
+  backup)
+    [ -f .env ] || die 17 E_NOT_INSTALLED "Önce kurulum yapın: sh scripts/install.sh" "Install first: sh scripts/install.sh"
+    do_backup manual || exit 21
+    exit 0 ;;
+  restore) [ -f .env ] || die 17 E_NOT_INSTALLED "Önce kurulum yapın: sh scripts/install.sh" "Install first: sh scripts/install.sh"
+    do_restore; exit 0 ;;
+  update) do_update ;;
+  maintenance) do_maintenance ;;
+  schedule) set_schedule; exit 0 ;;
+  auto-update) [ -f .env ] || die 17 E_NOT_INSTALLED "Önce kurulum yapın: sh scripts/install.sh" "Install first: sh scripts/install.sh"
+    set_auto_update; exit 0 ;;
   recover-setup)
     docker compose exec -T api node dist/cli.js recover-setup >/dev/null 2>&1 || die 18 E_RECOVER_FAILED "Kurtarma çalışmadı; servisler çalışıyor mu?" "Recovery failed; are the services running?"
     msg OK SETUP_REOPENED "Sihirbaz yeniden açıldı: yönetici olarak giriş yapıp /setup adresine gidin" "Wizard reopened: sign in as an administrator and open /setup"
@@ -266,6 +554,9 @@ host_checks
 [ "$FAILED" -eq 0 ] || die 1 E_PRECHECK "Ön kontroller başarısız; yukarıdaki FAIL satırlarını düzeltin" "Pre-checks failed; fix the FAIL lines above"
 write_env
 write_secrets
+write_observability
+set_env APP_VERSION "$(app_version)"
+write_settings
 docker compose config --quiet || die 17 E_COMPOSE_INVALID "Compose yapılandırması geçersiz" "Compose configuration is invalid"
 msg INFO STARTING "Servisler derleniyor ve başlatılıyor (birkaç dakika sürebilir)" "Building and starting services (may take a few minutes)"
 docker compose up -d --build --wait --wait-timeout 300 >/dev/null 2>&1 || die 18 E_START_FAILED "Servisler başlamadı: docker compose ps; docker compose logs" "Services did not start: docker compose ps; docker compose logs"

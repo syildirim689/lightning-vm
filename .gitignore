@@ -6,6 +6,7 @@ dist/
 !.env.example
 *.log
 backups/
+data/
 coverage/
 .DS_Store
 .codegraph/

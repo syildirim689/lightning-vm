@@ -4,6 +4,7 @@
 package main
 
 import (
+	"cmp"
 	"context"
 	"crypto/subtle"
 	"encoding/json"
@@ -18,7 +19,7 @@ import (
 	"github.com/vmware/govmomi/vim25"
 )
 
-var logger = slog.New(slog.NewJSONHandler(os.Stdout, nil)).With("service", "vmware")
+var logger = slog.New(slog.NewJSONHandler(os.Stdout, nil)).With("service", "vmware", "env", cmp.Or(os.Getenv("APP_ENV"), "production"))
 
 func writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")

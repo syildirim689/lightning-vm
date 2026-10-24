@@ -253,7 +253,12 @@ export async function reconcile(db, log) {
       tls: { mode: c.tls_mode, ...(c.tls_ca_pem && { caPem: c.tls_ca_pem }), ...(c.tls_sha256 && { sha256: c.tls_sha256 }) } };
     let vms;
     try { vms = (await adapter('/v1/vms/managed', target)).vms; }
-    catch (e) { log('warn', 'reconcile_unreachable', { connectionId: c.id, code: e.code }); continue; }
+    catch (e) {
+      log('warn', 'reconcile_unreachable', { connectionId: c.id, code: e.code });
+      await db.query("UPDATE vmware_connections SET status = 'error', last_error_code = $2 WHERE id = $1", [c.id, e.code ?? 'VMWARE_ERROR']);
+      continue;
+    }
+    await db.query("UPDATE vmware_connections SET status = 'ok', last_error_code = NULL WHERE id = $1 AND status <> 'ok'", [c.id]);
     const byName = new Map(vms.map((v) => [v.name, v]));
     const { rows: servers } = await db.query(`SELECT s.id, s.state, s.power_state FROM servers s JOIN resource_pools p ON p.id = s.pool_id
       WHERE p.connection_id = $1 AND s.state IN ('ready', 'error', 'missing') AND s.vm_moref IS NOT NULL`, [c.id]);

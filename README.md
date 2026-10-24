@@ -35,12 +35,15 @@ Açık kaynak VMware sunucu yönetim platformunun başlangıç deposu.
   IP ataması, kapasite rezervasyonu ve kota; Idempotency-Key, kaldığı adımdan devam eden worker,
   kurtarma taraması ve yalnızca raporlayan uzlaştırma. Müşteri kendi sunucusunun konsolunu açabilir
   (docs/provisioning.md). Gerçek vCenter ile değil, govmomi simülatörüyle test edildi.
+- İşletim: şifreli yedek ve kontrollü geri yükleme, git etiketleriyle güvenli güncelleme (yedek,
+  migration uyumluluğu, iş boşaltma, geri dönüş), zamanlanmış bakım; Prometheus/Alertmanager alarmları,
+  Grafana panosu ve Loki'ye log aktarımı (docs/operations.md).
 
 ## Henüz uygulanmayanlar
 - Sihirbazda kaynak havuzu adımı (havuzlar Yönetim → Katalog'dan oluşturulur).
 - MFA, parola sıfırlama, proje/müşteri modeli.
-- Standalone ESXi üzerinde oluşturma, yeniden kurulum, snapshot, metrikler, IPv6.
-- Faturalama, yedekleme otomasyonu, otomatik güncelleme.
+- Standalone ESXi üzerinde oluşturma, yeniden kurulum, snapshot, müşteri VM metrikleri, IPv6.
+- Faturalama; GHCR imajlarıyla sürümlü kurulum paketi; dağıtık iz (tracing).
 
 Paneldeki kapalı düğmeler bu işlevleri gerçekleştirmez.
 
@@ -93,29 +96,46 @@ docs/domain-https.md dosyasında.
 Varsayılan port yalnızca loopback üzerinde açılır. `LISTEN_ADDRESS` değerini elle `0.0.0.0` yapıp
 paneli HTTPS'siz internete açmayın: parolalar düz HTTP ile gider.
 
-## İzleme
+## Yedekleme, güncelleme ve izleme
 ```sh
-docker compose --profile observability up -d --build
+sudo sh scripts/install.sh backup
 ```
-Grafana: http://127.0.0.1:3001; kullanıcı admin, parola .env içindeki GRAFANA_PASSWORD.
-Prometheus: http://127.0.0.1:9090. Veri kaynakları otomatik tanımlanır.
-API ve worker JSON log üretir. OTel Collector OTLP log kabul eder; uygulama loglarının
-Loki'ye otomatik gönderimi ve dağıtık tracing henüz bağlı değildir. Alarm kuralları başlangıç
-olarak sağlanır; bildirim kanalı ve Alertmanager sonraki aşamadır.
+```sh
+sudo sh scripts/install.sh restore backups/DOSYA.tar.enc --yes-replace-data
+```
+```sh
+sudo sh scripts/install.sh update
+```
+```sh
+sudo sh scripts/install.sh schedule on
+```
+- **Yedek:** veritabanı, `.env`, şifreleme anahtarları ve sertifikalar `secrets/backup.key` ile
+  şifrelenir. Bu anahtarı sunucu dışında saklayın.
+- **Geri yükleme:** onay bayrağı olmadan yalnızca kontrol eder; onaylı çalıştırmada önce mevcut
+  verinin yedeğini alır.
+- **Güncelleme:** git etiketlerini izler. Önce yedek alır, migration uyumluluğunu kontrol eder ve
+  worker'ı boşaltır. Başarısız olursa container'ları geri alır. Veritabanı otomatik geri alınmaz.
+- **Zamanlayıcı:** `schedule on` günlük yedek kurar. Otomatik güncellemeyi `auto-update on` ile
+  açarsınız (bakım penceresi ve kanal seçilir).
+- **İzleme:** Prometheus, Alertmanager, Grafana panosu, Loki'ye log aktarımı, host metrikleri ve dış
+  erişim probe'u:
+  ```sh
+  sudo docker compose --profile observability up -d
+  ```
 
-## Veri ve işlemler
+Ayrıntılar: docs/operations.md.
+
 ```sh
 docker compose logs -f --tail=100 api worker
-docker compose down
 ```
-`down` verileri korur. `down -v` veritabanı dahil kalıcı verileri siler.
-Şema değişiklikleri `apps/api/migrations` altındaki sürümlü SQL dosyalarıyla, her `up` sırasında
-`migrate` servisi tarafından uygulanır. Otomatik güncelleme henüz yoktur.
+`down` verileri korur. `down -v` veritabanı dahil kalıcı verileri siler. Şema değişiklikleri
+`apps/api/migrations` altındaki sürümlü SQL dosyalarıyla, her `up` sırasında `migrate` servisi
+tarafından uygulanır.
 
 ## Dağıtım
 Kaynak kurulum compose.yaml ile yerelde derlenir. v* etiketi GitHub Actions ile GHCR'ye
-üç uygulama imajı (web, api, worker) yayımlar.
-GHCR imajlarını kullanan sürümlü üretim Compose paketi ve güncelleyici henüz yoktur.
+imajları yayımlar. GHCR imajlarını kullanan sürümlü üretim paketi henüz yoktur; güncelleme kaynak
+checkout'u ile çalışır.
 
-Detaylar: docs/setup.md, docs/catalog.md, docs/vmware.md, docs/console.md, docs/domain-https.md, docs/auth.md, docs/i18n.md, docs/architecture.md, docs/roadmap.md, docs/validation.md, CONTRIBUTING.md, SECURITY.md.
+Detaylar: docs/setup.md, docs/operations.md, docs/catalog.md, docs/vmware.md, docs/console.md, docs/domain-https.md, docs/auth.md, docs/i18n.md, docs/architecture.md, docs/roadmap.md, docs/validation.md, CONTRIBUTING.md, SECURITY.md.
 Lisans: Apache-2.0.

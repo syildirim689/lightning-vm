@@ -6,6 +6,8 @@ test.describe.configure({ mode: 'serial' });
 const admin = { email: process.env.E2E_ADMIN_EMAIL ?? 'admin@example.test', password: process.env.E2E_ADMIN_PASSWORD ?? 'e2e admin passphrase 2026' };
 const user = { email: `user-${Date.now()}@example.test`, password: 'e2e user passphrase 2026' };
 
+// The admin page has more than one live region; this is the system health one.
+const health = (page: Page) => page.locator('article', { has: page.getByRole('heading', { name: /^(System health|Sistem sağlığı)$/ }) }).getByRole('status');
 async function signIn(page: Page, who: { email: string; password: string }) {
   await page.goto('/login');
   await page.getByLabel(/E-posta|Email/).fill(who.email);
@@ -151,8 +153,13 @@ test.describe('roles and sessions (English browser)', () => {
   test('admin sees live system health and opens registration', async ({ page }) => {
     await signIn(page, admin);
     await expect(page).toHaveURL(/\/admin$/);
-    await expect(page.getByRole('status')).toHaveText('API, PostgreSQL and Redis are reachable');
+    await expect(health(page)).toHaveText('API, PostgreSQL and Redis are reachable');
     await expect(page.getByText(/Background worker: Running \(last signal .*\d{4}/)).toBeVisible();
+    // The run script and CI take one backup with scripts/install.sh before the tests.
+    const maintenance = page.locator('article', { has: page.getByRole('heading', { name: 'Backups and updates' }) });
+    await expect(maintenance).toContainText(/Last successful backup: .*\d{4}/);
+    await expect(maintenance.getByRole('table')).toContainText('Backup');
+    await expect(maintenance.getByRole('table')).toContainText('succeeded');
     const toggle = page.getByLabel('Allow new user registration');
     await expect(toggle).toBeEnabled();
     // Toggle off then on so the save path is exercised whatever state a previous run left.
@@ -391,13 +398,13 @@ test.describe('language', () => {
     await expect(page).toHaveURL(/\/admin$/);
     await page.route('**/api/ready', (r) => r.fulfill({ status: 503, json: { code: 'DEPENDENCY_UNAVAILABLE', message: 'x' } }));
     await page.reload();
-    await expect(page.getByRole('status')).toHaveText('PostgreSQL veya Redis şu anda erişilemiyor.');
+    await expect(health(page)).toHaveText('PostgreSQL veya Redis şu anda erişilemiyor.');
     await page.route('**/api/ready', (r) => r.fulfill({ status: 500, json: { code: 'SOMETHING_NEW' } }));
     await page.reload();
-    await expect(page.getByRole('status')).toHaveText('Bilinmeyen bir hata oluştu.');
+    await expect(health(page)).toHaveText('Bilinmeyen bir hata oluştu.');
     await page.route('**/api/ready', (r) => r.abort());
     await page.reload();
-    await expect(page.getByRole('status')).toContainText('Sunucuya ulaşılamadı');
+    await expect(health(page)).toContainText('Sunucuya ulaşılamadı');
   });
 
   test('pages render without console errors', async ({ browser }) => {

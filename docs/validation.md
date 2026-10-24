@@ -10,6 +10,71 @@ Windows Server 2025, Node 24.21, npm 11.19 (Docker yok).
 - `npm audit --omit=dev`: üç uygulamada 0 açık. API'de Nest'in getirdiği eski fastify
   `overrides` ile 5.12.7'ye sabitlendi.
 
+## 10. aşama: loglama, izleme, yedekleme ve güncelleme — 2026-10-24
+Demo sunucuda (Ubuntu 24.04 arm64, Docker Compose) gerçek bileşenlerle denendi. VMware tarafı
+yine simülatördür.
+
+- **Yedek (gerçek koşu):**
+  - Arşiv alındı ve şifresi çözülerek geri okundu.
+  - `BACKUP_KEEP=2` ile 3 yedekten 2'si yerelde kaldı; `BACKUP_COPY_TO` hedefine 3'ü de kopyalandı.
+  - Geçmiş dosyası ve panelde "son başarılı yedek" doğru göründü.
+- **Geri yükleme (gerçek koşu):**
+  - Yedekten sonra bir ayar değiştirildi ve yeni bir tablo eklendi.
+  - Onaysız çalıştırma çıkış kodu 3 verdi ve hiçbir şeyi değiştirmedi.
+  - Onaylı çalıştırma önce güvenlik yedeği aldı. Ardından ayar ve şema yedek anına döndü, eklenen
+    tablo kayboldu, anahtarlar aynı kaldı ve servisler hazır oldu.
+  - Alan adı modunda sertifika yedekten geldi ve yeniden istenmedi.
+  - Bozuk dosya (`E_RESTORE_CHECKSUM`) ve yanlış anahtar (`E_RESTORE_DECRYPT`) reddedildi.
+- **Güncelleme:** sunucudaki ayrı bir git checkout'unda, yalnızca orada oluşturulan test etiketleriyle denendi.
+  - `v0.10.0 → v0.10.1`: yedek alındı, worker boşaltıldı, sağlık kontrolü geçti (2 dk 26 sn).
+    Aynı komut tekrar çalışınca "güncel" dedi.
+  - `v0.10.2` (kasıtlı bozuk migration): migration başarısız oldu, container'lar otomatik olarak
+    `v0.10.1`'e döndü, API hazır (200). Geçmişe `rolledBack: true` yazıldı ve geri yükleme komutu
+    gösterildi.
+  - `--to v0.8.0`: uygulanmış `006_servers` migration'ı o sürümde olmadığı için hiç başlamadan
+    reddedildi (`E_UPDATE_INCOMPATIBLE`).
+  - Otomatik güncelleme: `schedule on` systemd zamanlayıcısını kurdu. Pencere dışındayken hiçbir
+    şey yapmadı. Pencere içinde zamanlayıcı servisi beta kanalından `v0.11.0-rc.1`'e geçti.
+    `schedule off` birimleri sildi; geçersiz pencere reddedildi.
+- **İzleme:**
+  - Prometheus hedeflerinin hepsi `up`: api, node, probe, prometheus.
+  - Worker yaşam sinyali, bağımlılıklar, yedek yaşı, sürüm, kuyruk, DB bağlantıları, host RAM ve
+    probe metrikleri gerçek değer döndürdü.
+- **Alarm (gerçek koşu):**
+  - Worker durduruldu. `LightningWorkerHeartbeatStale` Prometheus'ta başladı, Alertmanager'a ulaştı
+    ve test webhook'una `firing` bildirimi gitti.
+  - Worker başlatılınca `resolved` bildirimi geldi.
+  - `promtool`: 16 kural geçerli. `amtool`: örnek yapılandırma geçerli.
+- **Loglar:**
+  - Container logları OTel Collector üzerinden Loki'ye ulaştı (`service_name`, `detected_level`,
+    `event`). Servis başına sayımlar alındı.
+  - Sahte bir `"password":"…"` ve `token=…` satırı Loki'de `***` olarak göründü; ham değer aranınca
+    sonuç çıkmadı.
+- **Grafana:** "Lightning VM" panosu (23 panel) otomatik yüklendi. Prometheus ve Loki sorguları
+  Grafana üzerinden veri döndürdü.
+- **Testler:**
+  - API birim 14/14.
+  - API entegrasyon 51/51. 2 yeni test: metrik değerleri; rota şablonuyla sınırlı etiket; yedek ve
+    güncelleme özetinin yalnızca yöneticiye açık olması; bozuk geçmiş satırının atlanması.
+  - Go testleri geçti (gofmt ve go vet temiz).
+  - Playwright 14/14 (yönetim sayfasında "son başarılı yedek" kontrolü eklendi).
+  - shellcheck temiz.
+- **Bulunan ve düzeltilen hatalar:**
+  - Güvenlik yedeği, geri yüklemenin çalışma klasörünü siliyordu (paylaşılan sh değişkeni).
+  - Yedek, güncellemenin hedef sürüm değişkenini eziyordu.
+  - `set --`, yedeğin sebep bilgisini eziyordu.
+  - Depo başka bir kullanıcıya aitken `sudo` ile git "dubious ownership" veriyordu; git yalnızca bu
+    klasöre güvenecek şekilde çağrılıyor.
+  - OTel'deki bir `remove` adımı alan yokken hata veriyordu.
+  - Yönetim sayfasındaki ikinci canlı bölge, E2E seçicisini belirsiz yapıyordu.
+
+Doğrulanmayanlar:
+- Açık işlem varken otomatik güncellemenin ertelenmesi (`W_UPDATE_BUSY`) gerçek bir işlemle denenmedi.
+- Uzak SSH hedefine `rsync` kopyası (yalnızca yerel klasör hedefi denendi).
+- E-posta alıcısı (yalnızca webhook denendi).
+- GitHub Actions'ta yeni CI adımları henüz çalışmadı (depoya push yapılmadı).
+- GHCR imajlarıyla kurulum, imzalı paket ve tracing yok.
+
 ## 9. aşama: otomatik sunucu oluşturma ve uzlaştırma — 2026-10-24
 Tüm VMware tarafı govmomi simülatörüdür (vcsim motoru). Bu testler orkestrasyonu, idempotency'yi,
 kilitlemeyi, kurtarmayı ve kaynak bırakma kurallarını kanıtlar; gerçek vCenter davranışını kanıtlamaz.

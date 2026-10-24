@@ -1,10 +1,96 @@
+# Each alert names one condition. "No data" (the API or a dependency cannot be reached) has its own
+# alerts, so a missing value is never read as a healthy zero.
 groups:
   - name: lightning
     rules:
       - alert: LightningApiUnavailable
         expr: up{job="lightning-api"} == 0
         for: 2m
-        labels:
-          severity: critical
+        labels: {severity: critical}
         annotations:
-          summary: Lightning API metriklerine iki dakikadır erişilemiyor
+          summary: Lightning API metriklerine iki dakikadır erişilemiyor / API metrics unreachable for 2 minutes
+      - alert: LightningDependencyDown
+        expr: lightning_dependency_up == 0
+        for: 2m
+        labels: {severity: critical}
+        annotations:
+          summary: "API {{ $labels.dependency }} bağımlılığına ulaşamıyor / API cannot reach {{ $labels.dependency }}"
+      - alert: LightningWorkerHeartbeatStale
+        expr: lightning_worker_heartbeat_age_seconds > 120 or absent(lightning_worker_heartbeat_age_seconds)
+        for: 1m
+        labels: {severity: critical}
+        annotations:
+          summary: Worker iki dakikadır yaşam sinyali vermiyor / worker heartbeat older than 2 minutes
+      - alert: LightningQueueBacklog
+        expr: lightning_operations_oldest_pending_seconds > 600
+        for: 5m
+        labels: {severity: warning}
+        annotations:
+          summary: Bir işlem 10 dakikadan uzun süredir sırada bekliyor / an operation has waited over 10 minutes
+      - alert: LightningOperationsStuck
+        expr: lightning_operations_stuck > 0
+        for: 5m
+        labels: {severity: warning}
+        annotations:
+          summary: "{{ $value }} işlem 15 dakikadır ilerlemiyor / operations without progress for 15 minutes"
+      - alert: LightningOperationsFailing
+        expr: sum(lightning_operations_failed_24h) > 0
+        labels: {severity: warning}
+        annotations:
+          summary: "Son 24 saatte {{ $value }} başarısız işlem / failed operations in the last 24 hours"
+      - alert: LightningVmwareConnectionDown
+        expr: lightning_vmware_connection_up == 0
+        for: 10m
+        labels: {severity: critical}
+        annotations:
+          summary: "{{ $labels.connection }} bağlantısına ulaşılamıyor / connection unreachable"
+      - alert: LightningDatastoreFull
+        expr: lightning_datastore_used_ratio > 0.85
+        for: 15m
+        labels: {severity: warning}
+        annotations:
+          summary: "{{ $labels.datastore }} %85'ten fazla dolu / over 85% full"
+      - alert: LightningPoolCapacityLow
+        expr: lightning_pool_capacity{layer="available"} / ignoring(layer) lightning_pool_capacity{layer="offered"} < 0.1
+        for: 30m
+        labels: {severity: warning}
+        annotations:
+          summary: "{{ $labels.pool }} havuzunda {{ $labels.resource }} satılabilir kapasitesi %10'un altında / sellable capacity below 10%"
+      - alert: LightningConsoleFailures
+        expr: lightning_console_events_24h{event="failed"} > 5
+        labels: {severity: warning}
+        annotations:
+          summary: "Son 24 saatte {{ $value }} konsol bağlantı hatası / console connection failures in 24 hours"
+      - alert: LightningBackupMissing
+        expr: time() - lightning_backup_last_success_timestamp_seconds > 26 * 3600
+        labels: {severity: critical}
+        annotations:
+          summary: Son 26 saatte başarılı yedek yok / no successful backup in 26 hours
+      - alert: LightningMaintenanceFailed
+        expr: lightning_maintenance_last_ok == 0
+        labels: {severity: critical}
+        annotations:
+          summary: "Son {{ $labels.kind }} başarısız oldu / the last {{ $labels.kind }} failed"
+      - alert: LightningPanelUnreachable
+        expr: probe_success{job="probe"} == 0
+        for: 3m
+        labels: {severity: critical}
+        annotations:
+          summary: "Panel {{ $labels.instance }} adresinden yanıt vermiyor / the panel does not answer"
+      - alert: LightningCertificateExpiring
+        expr: probe_ssl_earliest_cert_expiry{job="probe"} - time() < 14 * 86400
+        labels: {severity: warning}
+        annotations:
+          summary: Panel sertifikası 14 gün içinde bitiyor / the panel certificate expires within 14 days
+      - alert: LightningHostDiskFull
+        expr: 1 - node_filesystem_avail_bytes{mountpoint="/",fstype!~"tmpfs|overlay"} / node_filesystem_size_bytes{mountpoint="/",fstype!~"tmpfs|overlay"} > 0.85
+        for: 10m
+        labels: {severity: warning}
+        annotations:
+          summary: Panel sunucusunun diski %85'ten fazla dolu / host disk over 85% full
+      - alert: LightningHostMemoryLow
+        expr: node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes < 0.1
+        for: 10m
+        labels: {severity: warning}
+        annotations:
+          summary: Panel sunucusunda boş RAM %10'un altında / host available memory below 10%

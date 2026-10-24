@@ -16,6 +16,7 @@ import { VmwareController } from './vmware';
 import { ConsoleController } from './console';
 import { CatalogAdminController, CatalogController } from './catalog';
 import { ServersAdminController, ServersController } from './servers';
+import { httpDuration } from './metrics';
 
 export { closeConnections };
 collectDefaultMetrics({ prefix: 'lightning_api_' });
@@ -39,11 +40,16 @@ class AppModule {}
 const trustedProxies = process.env.TRUSTED_PROXIES?.split(',') ?? ['127.0.0.0/8', '10.0.0.0/8', '172.16.0.0/12', '192.168.0.0/16'];
 
 export async function createApp() {
-  const adapter = new FastifyAdapter({ trustProxy: trustedProxies, logger: { redact: ['req.headers.authorization', 'req.headers.cookie'] }, bodyLimit: 1048576 });
+  const adapter = new FastifyAdapter({ trustProxy: trustedProxies, logger: { base: { service: 'api', env: process.env.APP_ENV || 'production' }, formatters: { level: (level) => ({ level }) },
+    redact: ['req.headers.authorization', 'req.headers.cookie', 'res.headers["set-cookie"]'] }, bodyLimit: 1048576 });
   const app = await NestFactory.create<NestFastifyApplication>(AppModule, adapter);
   await app.register(fastifyCookie);
   app.getHttpAdapter().getInstance().addHook('onRequest', async (req, reply) => {
     if (csrfRejected(req)) return reply.status(403).send({ code: 'CSRF_REJECTED', message: 'Cross-site request rejected' });
+  });
+  // Route templates (/servers/:id), not raw URLs, keep the label set bounded.
+  app.getHttpAdapter().getInstance().addHook('onResponse', async (req, reply) => {
+    httpDuration.observe({ method: req.method, route: req.routeOptions.url ?? 'unmatched', status: `${Math.floor(reply.statusCode / 100)}xx` }, reply.elapsedTime / 1000);
   });
   app.useGlobalFilters(new ErrorCodeFilter());
   return app;

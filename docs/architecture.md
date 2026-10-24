@@ -14,9 +14,11 @@ Kimlik doğrulama, roller, kurulum anahtarı ve denetim olayları uygulandı (do
 
 Güvenlik hedefi: müşteri/proje RBAC, MFA destekli yönetici oturumu, güvenli cookie,
 CSRF koruması, secret encryption ve sınırlı servis kimlikleri.
-Uygulananlar: rol kontrolü, güvenli cookie, CSRF, hız sınırı. Henüz yok: MFA, proje/müşteri
-izolasyonu, secret encryption. HTTPS olmadan yalnızca loopback üzerinde kullanılmalı.
+Uygulananlar: rol kontrolü, güvenli cookie, CSRF, hız sınırı, sahiplik kontrolü, VMware parolalarının
+ayrı anahtarla şifrelenmesi. Henüz yok: MFA, çok kullanıcılı proje/ekip izolasyonu. HTTPS olmadan
+yalnızca loopback üzerinde kullanılmalı.
 
-Güncellemeler GitHub kararlı sürümlerinden ileride alınacak. Web servisine Docker
-socket bağlanmayacak. Migration, yedek doğrulama ve iş boşaltma uygulanmadan
-otomatik updater etkinleştirilmeyecek.
+Yedekleme, geri yükleme ve güncelleme hostta `scripts/install.sh` ile çalışır (docs/operations.md).
+Web ve API container'larına Docker socket veya host yetkisi verilmez; panel sonuçları salt okunur bir
+klasörden okur. Güncelleme yedek, migration uyumluluğu, iş boşaltma, sağlık kontrolü ve container
+geri dönüşü içerir; veritabanı geri dönüşü yedekten elle yapılır.

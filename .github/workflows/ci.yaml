@@ -85,6 +85,10 @@ jobs:
       - uses: actions/checkout@v4
       - name: Lint installer
         run: shellcheck -s sh scripts/install.sh
+      - name: Validate monitoring config
+        run: |
+          docker run --rm -v "$PWD/deploy/observability:/c:ro" --entrypoint promtool prom/prometheus:v3.2.1 check rules /c/alerts.yaml
+          docker run --rm -v "$PWD/deploy/observability:/c:ro" --entrypoint amtool prom/alertmanager:v0.28.1 check-config /c/alertmanager.example.yml
       - name: Validate and smoke test
         run: |
           sh scripts/install.sh check
@@ -95,6 +99,26 @@ jobs:
           curl --fail --retry 10 --retry-delay 3 --retry-all-errors http://127.0.0.1:8080/api/ready
           curl --fail --retry 10 --retry-delay 3 --retry-all-errors http://127.0.0.1:8080/login
           test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8080/api/metrics)" = 404
+      - name: Backup and restore round trip
+        run: |
+          sudo sh scripts/install.sh backup
+          file=$(sudo sh -c 'ls -1 backups/lightning-*.tar.enc | tail -n 1')
+          # Without the flag nothing changes (exit 3); with it the data is replaced and the stack comes back.
+          set +e; sudo sh scripts/install.sh restore "$file"; test $? -eq 3; set -e
+          sudo sh scripts/install.sh restore "$file" --yes-replace-data
+          sudo grep -c '"kind":"restore","status":"ok"' data/maintenance/history.jsonl
+          # restore starts the base stack; the simulators need their overlay again
+          sudo docker compose -f compose.yaml -f compose.simulator.yaml up -d --wait
+      - name: Monitoring data flow
+        run: |
+          sudo docker compose -f compose.yaml -f compose.simulator.yaml --profile observability up -d --wait
+          # The worker heartbeat travels worker -> PostgreSQL -> API metrics -> Prometheus.
+          for i in $(seq 1 24); do
+            curl -s --data-urlencode 'query=lightning_worker_heartbeat_age_seconds' http://127.0.0.1:9090/api/v1/query               | jq -e '.data.result[0].value[1] | tonumber < 120' >/dev/null && break
+            sleep 5
+          done
+          curl -s --data-urlencode 'query=lightning_dependency_up' http://127.0.0.1:9090/api/v1/query | jq -e '.data.result | length == 2'
+          curl -s http://127.0.0.1:9090/api/v1/targets | jq -e '[.data.activeTargets[] | select(.health != "up")] | length == 0'
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -106,7 +130,7 @@ jobs:
           E2E_VCSIM_HOST=vcsim-vcenter E2E_BOOTSTRAP_TOKEN="$(sudo docker compose --project-directory ../.. exec -T api node dist/cli.js bootstrap-token)" npm run test:e2e
       - name: Logs on failure
         if: failure()
-        run: sudo docker compose -f compose.yaml -f compose.simulator.yaml logs --tail=80
+        run: sudo docker compose -f compose.yaml -f compose.simulator.yaml --profile observability logs --tail=80
       - name: Cleanup
         if: always()
-        run: sudo docker compose -f compose.yaml -f compose.simulator.yaml down -v
+        run: sudo docker compose -f compose.yaml -f compose.simulator.yaml --profile observability down -v

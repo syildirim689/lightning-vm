@@ -1,0 +1,665 @@
+{
+ "uid": "lightning-overview",
+ "title": "Lightning VM",
+ "tags": [
+  "lightning"
+ ],
+ "timezone": "browser",
+ "schemaVersion": 39,
+ "refresh": "30s",
+ "time": {
+  "from": "now-6h",
+  "to": "now"
+ },
+ "panels": [
+  {
+   "id": 1,
+   "title": "Servis sağlığı / Service health (1 = up)",
+   "type": "stat",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "gridPos": {
+    "x": 0,
+    "y": 0,
+    "w": 12,
+    "h": 7
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     },
+     "expr": "up",
+     "legendFormat": "{{job}}"
+    },
+    {
+     "refId": "B",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     },
+     "expr": "lightning_dependency_up",
+     "legendFormat": "api→{{dependency}}"
+    }
+   ]
+  },
+  {
+   "id": 2,
+   "title": "Panel dış erişim / External probe",
+   "type": "stat",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "gridPos": {
+    "x": 12,
+    "y": 0,
+    "w": 6,
+    "h": 7
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     },
+     "expr": "probe_success{job=\"probe\"}",
+     "legendFormat": "{{instance}}"
+    }
+   ]
+  },
+  {
+   "id": 3,
+   "title": "Sürüm / Version",
+   "type": "stat",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "gridPos": {
+    "x": 18,
+    "y": 0,
+    "w": 6,
+    "h": 7
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     },
+     "expr": "lightning_info",
+     "legendFormat": "{{version}}"
+    }
+   ],
+   "options": {
+    "textMode": "name"
+   }
+  },
+  {
+   "id": 4,
+   "title": "API gecikmesi p95 (s) / API latency p95",
+   "type": "timeseries",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "gridPos": {
+    "x": 0,
+    "y": 7,
+    "w": 12,
+    "h": 7
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     },
+     "expr": "histogram_quantile(0.95, sum by (le, route) (rate(lightning_api_http_request_duration_seconds_bucket[5m])))",
+     "legendFormat": "{{route}}"
+    }
+   ]
+  },
+  {
+   "id": 5,
+   "title": "API hata oranı (5xx) / API error rate",
+   "type": "timeseries",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "gridPos": {
+    "x": 12,
+    "y": 7,
+    "w": 12,
+    "h": 7
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     },
+     "expr": "sum(rate(lightning_api_http_request_duration_seconds_count{status=\"5xx\"}[5m])) / sum(rate(lightning_api_http_request_duration_seconds_count[5m]))",
+     "legendFormat": "5xx"
+    }
+   ]
+  },
+  {
+   "id": 6,
+   "title": "Worker yaşam sinyali yaşı (s) / Worker heartbeat age",
+   "type": "stat",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "gridPos": {
+    "x": 0,
+    "y": 14,
+    "w": 6,
+    "h": 7
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     },
+     "expr": "lightning_worker_heartbeat_age_seconds",
+     "legendFormat": ""
+    }
+   ]
+  },
+  {
+   "id": 7,
+   "title": "Kuyruk / Queue",
+   "type": "timeseries",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "gridPos": {
+    "x": 6,
+    "y": 14,
+    "w": 9,
+    "h": 7
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     },
+     "expr": "lightning_queue_jobs",
+     "legendFormat": "{{queue}} {{state}}"
+    }
+   ]
+  },
+  {
+   "id": 8,
+   "title": "En eski bekleyen işlem (s) / Oldest pending operation",
+   "type": "stat",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "gridPos": {
+    "x": 15,
+    "y": 14,
+    "w": 4,
+    "h": 7
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     },
+     "expr": "lightning_operations_oldest_pending_seconds",
+     "legendFormat": ""
+    }
+   ]
+  },
+  {
+   "id": 9,
+   "title": "Takılmış / Stuck",
+   "type": "stat",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "gridPos": {
+    "x": 19,
+    "y": 14,
+    "w": 5,
+    "h": 7
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     },
+     "expr": "lightning_operations_stuck",
+     "legendFormat": ""
+    }
+   ]
+  },
+  {
+   "id": 10,
+   "title": "Başarısız işlemler (24 sa) / Failed operations",
+   "type": "bargauge",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "gridPos": {
+    "x": 0,
+    "y": 21,
+    "w": 8,
+    "h": 7
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     },
+     "expr": "lightning_operations_failed_24h",
+     "legendFormat": "{{kind}}"
+    }
+   ]
+  },
+  {
+   "id": 11,
+   "title": "Sunucular / Servers (state · power · guest)",
+   "type": "table",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "gridPos": {
+    "x": 8,
+    "y": 21,
+    "w": 8,
+    "h": 7
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     },
+     "expr": "lightning_servers",
+     "legendFormat": "{{state}} · {{power}} · {{guest}}"
+    }
+   ],
+   "options": {
+    "showHeader": true
+   },
+   "transformations": [
+    {
+     "id": "reduce",
+     "options": {
+      "reducers": [
+       "lastNotNull"
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": 12,
+   "title": "ESXi/vCenter bağlantıları / Connections",
+   "type": "stat",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "gridPos": {
+    "x": 16,
+    "y": 21,
+    "w": 8,
+    "h": 7
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     },
+     "expr": "lightning_vmware_connection_up",
+     "legendFormat": "{{connection}}"
+    }
+   ]
+  },
+  {
+   "id": 13,
+   "title": "Datastore doluluğu / Datastore usage",
+   "type": "bargauge",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "gridPos": {
+    "x": 0,
+    "y": 28,
+    "w": 8,
+    "h": 7
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     },
+     "expr": "lightning_datastore_used_ratio",
+     "legendFormat": "{{connection}} {{datastore}}"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "percentunit",
+     "min": 0,
+     "max": 1
+    }
+   }
+  },
+  {
+   "id": 14,
+   "title": "Satılabilir kapasite / Available capacity",
+   "type": "bargauge",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "gridPos": {
+    "x": 8,
+    "y": 28,
+    "w": 8,
+    "h": 7
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     },
+     "expr": "lightning_pool_capacity{layer=\"available\"}",
+     "legendFormat": "{{pool}} {{resource}}"
+    }
+   ]
+  },
+  {
+   "id": 15,
+   "title": "Rezerve kapasite / Reserved capacity",
+   "type": "bargauge",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "gridPos": {
+    "x": 16,
+    "y": 28,
+    "w": 8,
+    "h": 7
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     },
+     "expr": "lightning_pool_capacity{layer=\"reserved\"}",
+     "legendFormat": "{{pool}} {{resource}}"
+    }
+   ]
+  },
+  {
+   "id": 16,
+   "title": "Konsol olayları (24 sa) / Console events",
+   "type": "bargauge",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "gridPos": {
+    "x": 0,
+    "y": 35,
+    "w": 8,
+    "h": 7
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     },
+     "expr": "lightning_console_events_24h",
+     "legendFormat": "{{event}}"
+    }
+   ]
+  },
+  {
+   "id": 17,
+   "title": "Veritabanı bağlantıları / DB connections",
+   "type": "timeseries",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "gridPos": {
+    "x": 8,
+    "y": 35,
+    "w": 8,
+    "h": 7
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     },
+     "expr": "lightning_db_connections",
+     "legendFormat": "{{state}}"
+    }
+   ]
+  },
+  {
+   "id": 18,
+   "title": "Son başarılı yedekten beri (sa) / Hours since last good backup",
+   "type": "stat",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "gridPos": {
+    "x": 16,
+    "y": 35,
+    "w": 8,
+    "h": 7
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     },
+     "expr": "(time() - lightning_backup_last_success_timestamp_seconds) / 3600",
+     "legendFormat": ""
+    }
+   ]
+  },
+  {
+   "id": 19,
+   "title": "Son yedek/güncelleme sonucu (1 = başarılı) / Last backup/update result",
+   "type": "stat",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "gridPos": {
+    "x": 0,
+    "y": 42,
+    "w": 8,
+    "h": 7
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     },
+     "expr": "lightning_maintenance_last_ok",
+     "legendFormat": "{{kind}}"
+    }
+   ]
+  },
+  {
+   "id": 20,
+   "title": "Host CPU",
+   "type": "timeseries",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "gridPos": {
+    "x": 8,
+    "y": 42,
+    "w": 8,
+    "h": 7
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     },
+     "expr": "1 - avg(rate(node_cpu_seconds_total{mode=\"idle\"}[5m]))",
+     "legendFormat": "cpu"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "percentunit"
+    }
+   }
+  },
+  {
+   "id": 21,
+   "title": "Host RAM / disk",
+   "type": "timeseries",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "gridPos": {
+    "x": 16,
+    "y": 42,
+    "w": 8,
+    "h": 7
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     },
+     "expr": "1 - node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes",
+     "legendFormat": "ram"
+    },
+    {
+     "refId": "B",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     },
+     "expr": "1 - node_filesystem_avail_bytes{mountpoint=\"/\"} / node_filesystem_size_bytes{mountpoint=\"/\"}",
+     "legendFormat": "disk /"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "percentunit"
+    }
+   }
+  },
+  {
+   "id": 22,
+   "title": "Aktif alarmlar / Firing alerts",
+   "type": "table",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "gridPos": {
+    "x": 0,
+    "y": 49,
+    "w": 8,
+    "h": 7
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     },
+     "expr": "ALERTS{alertstate=\"firing\"}",
+     "legendFormat": "{{alertname}}"
+    }
+   ]
+  },
+  {
+   "id": 23,
+   "title": "Hata logları / Error logs",
+   "type": "logs",
+   "datasource": {
+    "type": "loki",
+    "uid": "loki"
+   },
+   "gridPos": {
+    "x": 0,
+    "y": 56,
+    "w": 24,
+    "h": 9
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "loki",
+      "uid": "loki"
+     },
+     "expr": "{service_name=~\".+\"} | detected_level=~\"error|fatal\"",
+     "legendFormat": ""
+    }
+   ]
+  }
+ ]
+}

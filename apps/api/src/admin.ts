@@ -2,6 +2,7 @@ import { Body, Controller, Get, Put, Req, UseGuards } from '@nestjs/common';
 import { pool } from './db';
 import { apiError } from './errors';
 import { AdminGuard, audit, type AuthedRequest } from './auth';
+import { summary } from './maintenance';
 
 @Controller('admin') @UseGuards(AdminGuard)
 export class AdminController {
@@ -9,8 +10,11 @@ export class AdminController {
   async system() {
     const rows = await pool.query("SELECT name, last_seen, last_seen > now() - interval '90 seconds' AS healthy FROM worker_heartbeats")
       .then((r) => r.rows, () => { throw apiError(503, 'DEPENDENCY_UNAVAILABLE', 'Dependencies unavailable'); });
-    return { stage: 'scaffold', worker: rows, capabilities: { authentication: true, vmware: false, console: false, provisioning: false } };
+    return { worker: rows };
   }
+
+  @Get('maintenance')
+  maintenance() { return summary(); }
 
   @Get('users')
   async users() {

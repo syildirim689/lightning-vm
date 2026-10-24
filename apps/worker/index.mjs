@@ -4,7 +4,7 @@ import pg from 'pg';
 import { Redis } from 'ioredis';
 import { writeFile } from 'node:fs/promises';
 const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL, connectionTimeoutMillis: 5000 });
-const log = (level, event, fields = {}) => console.log(JSON.stringify({ level, service: 'worker', event, time: new Date().toISOString(), ...fields }));
+const log = (level, event, fields = {}) => console.log(JSON.stringify({ level, service: 'worker', env: process.env.APP_ENV || 'production', event, time: new Date().toISOString(), ...fields }));
 pool.on('error', () => log('error', 'postgres_unavailable'));
 // BullMQ 6 treats ioredis as optional; in ESM it must receive a constructed client.
 const redis = new Redis({ host: process.env.REDIS_HOST || 'redis', db: Number(process.env.REDIS_DB) || 0, password: process.env.REDIS_PASSWORD, maxRetriesPerRequest: null });
