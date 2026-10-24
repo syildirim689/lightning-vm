@@ -97,7 +97,7 @@ export default function Updates() {
         {(st || data.agent.pending > 0) && <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="flex flex-col gap-2 rounded-2xl border border-border p-4">
           <div className="flex flex-wrap items-center gap-2">
             {watching && <Spinner size="sm" color="current"/>}
-            <p className="font-medium">{data.agent.pending > 0 && st?.state !== 'running' ? t('queued') : st ? t(`action.${st.action}`) : ''}</p>
+            <p className="font-medium">{data.agent.pending > 0 && st?.state !== 'running' ? t('queued') : st ? t(st.state === 'running' ? `action.${st.action}` : `actionDone.${st.action}`) : ''}</p>
             {st && <StatusChip tone={stateTone[st.state]}>{t(`stateOf.${st.state}`)}</StatusChip>}
             {st?.state === 'running' && <span className="text-xs text-muted tabular-nums">{t('elapsed', { m: Math.floor(elapsed / 60), s: String(elapsed % 60).padStart(2, '0') })}</span>}
             {st && st.state !== 'running' && st.finishedAt && <span className="text-xs text-muted">{format.dateTime(new Date(st.finishedAt), { dateStyle: 'medium', timeStyle: 'short' })}</span>}

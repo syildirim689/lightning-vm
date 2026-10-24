@@ -532,3 +532,26 @@ Doğrulanmayanlar:
   - iç adresler reddediliyor.
 - E2E: kaydet → etkinleştirme reddi → test → etkinleştir → listede görünme → kaldır akışı ve 390 px kontrolü geçti.
 - Gerçek üye işyeri hesaplarıyla hiçbir sağlayıcı denenmedi.
+
+## Panelden güncelleme ve get.sh — 2026-10-24
+Demo sunucuda gerçek bir akışla denendi. Kod deposu olarak sunucudaki çıplak (bare) bir git deposu ve
+yalnızca orada oluşturulan test etiketleri kullanıldı.
+
+- **get.sh ile kurulum:** boş sunucuda `sh get.sh --repo /opt/lightning-repo.git` komutu `v0.1.0`'ı kurdu.
+  HTTPS, yönetici, yedek zamanlayıcısı ve panel ajanı (systemd path) kuruldu; istek dizini uid 1000'e ait ve 700 izinli.
+- **Panelden güncelleme (Playwright, gerçek tarayıcı):**
+  - "Güncellemeleri denetle" yeni sürümü ve etiket notlarını gösterdi.
+  - "Şimdi güncelle" sırasıyla şunları yaptı: yedek, worker'ı durdurma, yeni sürüm, sağlık kontrolü.
+  - Panel yeniden başlarken sayfa beklemeye devam etti ve yeni sürümü bildirdi.
+  - `v0.2.0 → v0.2.1` yaklaşık 2,5 dk, `v0.2.1 → v0.2.2` yaklaşık 3,5 dk sürdü; kenar çubuğu ve durum yeni sürümü gösterdi.
+- **Komut satırından güncelleme:** `v0.1.0 → v0.2.0` geçti.
+- **API entegrasyonu:**
+  - geçersiz işlem, sürüm ve pencere değerleri reddediliyor;
+  - ajan yokken ve iş sürerken istek reddediliyor;
+  - istek dosyasının biçimi ve ilerlemenin geri okunması doğrulandı.
+- **Testte bulunan kritik hata (düzeltildi):** ajanın çalıştırdığı alt `install.sh`, kopyadan çalıştığını
+  sanıp kendi dosyasını siliyordu (`LVM_REEXEC` ortam değişkeni sızıyordu). İlk denemede güncelleme
+  `E_UPDATE_LOCAL_CHANGES` ile durdu ve hiçbir şey değişmedi.
+- **Doğrulanmayanlar:**
+  - GitHub'dan özel depo ile `--token` ve SSH deploy key ile kurulum;
+  - başarısız bir güncellemede otomatik geri dönüş (önceki aşamada komut satırından denenmişti, panel üzerinden denenmedi).

@@ -2241,6 +2241,12 @@
     "windowHelp": "HH:MM-HH:MM, may pass midnight (23:00-02:00).",
     "windowInvalid": "Use HH:MM-HH:MM, for example 03:00-05:00.",
     "saveAuto": "Save",
-    "noTimer": "The hourly maintenance timer is off, so nothing runs automatically. Turn it on with:"
+    "noTimer": "The hourly maintenance timer is off, so nothing runs automatically. Turn it on with:",
+    "actionDone": {
+      "check": "Update check",
+      "update": "Update",
+      "auto-update": "Automatic update settings",
+      "backup": "Backup"
+    }
   }
 }

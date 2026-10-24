@@ -2241,6 +2241,12 @@
     "windowHelp": "SS:DD-SS:DD, gece yarısını geçebilir (23:00-02:00).",
     "windowInvalid": "SS:DD-SS:DD biçiminde girin, örnek 03:00-05:00.",
     "saveAuto": "Kaydet",
-    "noTimer": "Saatlik bakım zamanlayıcısı kapalı; otomatik hiçbir şey çalışmaz. Açmak için:"
+    "noTimer": "Saatlik bakım zamanlayıcısı kapalı; otomatik hiçbir şey çalışmaz. Açmak için:",
+    "actionDone": {
+      "check": "Güncelleme denetimi",
+      "update": "Güncelleme",
+      "auto-update": "Otomatik güncelleme ayarları",
+      "backup": "Yedekleme"
+    }
   }
 }
