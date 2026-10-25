@@ -15,7 +15,13 @@ export type AuditEvent = { id: string; at: string; action: string; outcome: 'suc
 export function useActionLabel() {
   const t = useTranslations('Activity');
   // A translated label for known actions ("auth.login" → actions.auth_login), else the raw code.
-  return (action: string) => { const k = `actions.${action.replace(/\./g, '_')}` as 'actions.auth_login'; return t.has(k) ? t(k) : action; };
+  return (action: string) => {
+    const k = `actions.${action.replace(/\./g, '_')}` as 'actions.auth_login';
+    if (t.has(k)) return t(k);
+    // Actions with a variable tail: setup.step.<step>, admin.user.<action>.
+    const m = /^(setup\.step|admin\.user)\.(.+)$/.exec(action);
+    return m ? t(`prefixed.${m[1].replace('.', '_') as 'setup_step'}`, { name: m[2].replace(/[-_]/g, ' ') }) : action;
+  };
 }
 
 export const outcomeTone = { success: 'success', failure: 'danger', denied: 'warning' } as const;
