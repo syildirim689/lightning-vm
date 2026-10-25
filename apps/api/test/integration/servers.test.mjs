@@ -506,7 +506,7 @@ test('locations: details, a pool assigned, maintenance blocks orders, hidden rem
 test('server settings: customers lose actions the admin turns off (staff keep them); ESXi images need a bigger shape', { skip }, async () => {
   const id = serverId;
   const set = (customer) => send('PUT', '/admin/settings/servers', { customer });
-  assert.deepEqual((await send('GET', `/servers/${id}`, undefined, user)).json().allowed, { power: true, console: true, iso: true, rootPassword: true, delete: true });
+  assert.deepEqual((await send('GET', `/servers/${id}`, undefined, user)).json().allowed, { power: true, console: true, iso: true, rootPassword: true, delete: true, snapshots: true });
   assert.equal((await set({ power: false, delete: false, console: false })).statusCode, 200);
   const detail = (await send('GET', `/servers/${id}`, undefined, user)).json();
   assert.equal(detail.allowed.power, false);
