@@ -1,5 +1,7 @@
 name: CI
-on: [push, pull_request]
+# Manual only (Actions tab → CI → Run workflow): the private repo has a limited free Actions quota;
+# every change is tested on the demo server instead (unit, integration and browser tests).
+on: workflow_dispatch
 permissions:
   contents: read
 jobs:
