@@ -637,6 +637,7 @@ test('virtual data center: an allocation reserved in the pool, free shapes insid
 
 test('power schedules: validated, owned, limited per server; a due one starts the operation once', { skip }, async () => {
   const { runSchedules } = await import('../../dist/schedules.js');
+  await pool.query('DELETE FROM ip_quarantine'); // earlier tests' deleted servers hold the small test range
   const made = await create(order('sched-1'));
   assert.equal(made.statusCode, 202, made.body);
   const id = made.json().serverId;
