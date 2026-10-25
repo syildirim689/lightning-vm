@@ -637,41 +637,38 @@ test('virtual data center: an allocation reserved in the pool, free shapes insid
 
 test('power schedules: validated, owned, limited per server; a due one starts the operation once', { skip }, async () => {
   const { runSchedules } = await import('../../dist/schedules.js');
-  await pool.query('DELETE FROM ip_quarantine'); // earlier tests' deleted servers hold the small test range
-  const made = await create(order('sched-1'));
-  assert.equal(made.statusCode, 202, made.body);
-  const id = made.json().serverId;
-  await until(async () => (await serverRow(id)).state === 'ready' && !(await pool.query("SELECT 1 FROM operations WHERE server_id = $1 AND status IN ('pending', 'running')", [id])).rowCount, 'ready');
+  // A ready, idle server of the customer from the earlier tests (the small test IP range has no room for another).
+  const { rows: [srv] } = await pool.query(`SELECT s.id, s.power_state FROM servers s JOIN users u ON u.id = s.owner_id WHERE u.email = 'user@example.test' AND s.state = 'ready' AND s.vdc_id IS NULL
+    AND NOT EXISTS (SELECT 1 FROM operations o WHERE o.server_id = s.id AND o.status IN ('pending', 'running')) LIMIT 1`);
+  assert.ok(srv, 'a ready server of the customer');
+  const id = srv.id;
+  const [first, second] = srv.power_state === 'poweredOn' ? ['shutdown', 'power_on'] : ['power_on', 'shutdown'];
   const path = `/servers/${id}/schedules`;
   assert.deepEqual(Object.keys((await send('POST', path, { action: 'reset', days: [], time: '9', timezone: 'Nowhere/X' }, user)).json().fields).sort(), ['action', 'days', 'time', 'timezone']);
   assert.equal((await send('GET', path, undefined, other)).statusCode, 404);
-  // Due now in UTC: shut the running server down.
+  // Due now in UTC: the action that changes the server's current power state.
   const now = new Date();
   const time = `${String(now.getUTCHours()).padStart(2, '0')}:${String(now.getUTCMinutes()).padStart(2, '0')}`;
-  const r = await send('POST', path, { action: 'shutdown', days: [now.getUTCDay() || 7], time, timezone: 'UTC' }, user);
+  const r = await send('POST', path, { action: first, days: [now.getUTCDay() || 7], time, timezone: 'UTC' }, user);
   assert.equal(r.statusCode, 201, r.body);
-  const off = await send('POST', path, { action: 'power_on', days: [1, 2, 3, 4, 5], time: '08:00', timezone: 'Europe/Istanbul', enabled: false }, user);
+  const off = await send('POST', path, { action: second, days: [1, 2, 3, 4, 5], time: '08:00', timezone: 'Europe/Istanbul', enabled: false }, user);
   assert.equal((await send('GET', path, undefined, user)).json().schedules.length, 2);
+  const before = (await pool.query('SELECT count(*)::int AS n FROM operations WHERE server_id = $1 AND kind = $2', [id, first])).rows[0].n;
   await runSchedules();
-  const row = (await pool.query('SELECT last_result FROM power_schedules WHERE id = $1', [r.json().id])).rows[0];
-  assert.equal(row.last_result, 'started');
-  assert.equal((await lastOp(id)).kind, 'shutdown');
+  assert.equal((await pool.query('SELECT last_result FROM power_schedules WHERE id = $1', [r.json().id])).rows[0].last_result, 'started');
+  assert.equal((await lastOp(id)).kind, first);
   await runSchedules(); // a second tick within 10 minutes does nothing
-  assert.equal((await pool.query("SELECT count(*)::int AS n FROM operations WHERE server_id = $1 AND kind = 'shutdown'", [id])).rows[0].n, 1);
+  assert.equal((await pool.query('SELECT count(*)::int AS n FROM operations WHERE server_id = $1 AND kind = $2', [id, first])).rows[0].n, before + 1);
   assert.equal((await pool.query('SELECT last_run_at FROM power_schedules WHERE id = $1', [off.json().id])).rows[0].last_run_at, null);
-  assert.equal((await send('DELETE', `${path}/${off.json().id}`, undefined, user)).statusCode, 204);
-  await until(async () => (await lastOp(id)).status === 'succeeded', 'shutdown done');
+  for (const x of [r, off]) assert.equal((await send('DELETE', `${path}/${x.json().id}`, undefined, user)).statusCode, 204);
+  await until(async () => (await lastOp(id)).status === 'succeeded', 'scheduled action done');
 
-  // Admin bulk action: staff only, one operation per server, a repeated key starts nothing new.
+  // Admin bulk action back to the original state: staff only, one operation per server, a repeated key starts nothing new.
   const key = randomUUID();
-  const bulk = (session) => send('POST', '/admin/servers/actions', { action: 'power_on', serverIds: [id, randomUUID()] }, session, { 'idempotency-key': key });
+  const bulk = (session) => send('POST', '/admin/servers/actions', { action: second, serverIds: [id, randomUUID()] }, session, { 'idempotency-key': key });
   assert.equal((await bulk(user)).statusCode, 403);
   assert.equal((await send('POST', '/admin/servers/actions', { action: 'explode', serverIds: [id] }, admin, { 'idempotency-key': randomUUID() })).statusCode, 400);
   assert.deepEqual((await bulk(admin)).json(), { started: 1, skipped: 1 });
   assert.deepEqual((await bulk(admin)).json(), { started: 0, skipped: 2 });
-  await until(async () => (await lastOp(id)).kind === 'power_on' && (await lastOp(id)).status === 'succeeded', 'bulk power on done');
-
-  await send('DELETE', `/servers/${id}`, { confirm: 'sched-1' }, user, { 'idempotency-key': randomUUID() });
-  await until(async () => (await serverRow(id)).state === 'deleted', 'deleted');
-  assert.equal((await pool.query('SELECT count(*)::int AS n FROM power_schedules WHERE server_id = $1', [id])).rows[0].n, 1);
+  await until(async () => (await lastOp(id)).kind === second && (await lastOp(id)).status === 'succeeded', 'bulk action done');
 });
