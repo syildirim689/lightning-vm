@@ -10,6 +10,7 @@ import { AccessibilityButton } from '../../components/accessibility';
 import { LanguageMenu, ThemeToggle } from '../../components/chrome';
 import CommandPalette, { usePaletteShortcut } from '../../components/command-palette';
 import Shortcuts from '../../components/shortcuts';
+import { AnnouncementBar } from '../../components/activity';
 import { I } from '../../components/icon';
 import NotificationBell from '../../components/notification-bell';
 import TaskManager from '../../components/task-manager';
@@ -17,7 +18,7 @@ import { authClient, signOut } from '../../lib/auth-client';
 import { can, type Permission } from '../../lib/permissions';
 import type { Branding, User } from '../../lib/session';
 
-type Key = 'dashboard' | 'servers' | 'abuse' | 'energy' | 'topology' | 'myTopology' | 'myVdc' | 'connections' | 'catalog' | 'users' | 'roles' | 'settings' | 'system' | 'myServers' | 'newServer' | 'firewalls' | 'account';
+type Key = 'dashboard' | 'servers' | 'abuse' | 'energy' | 'topology' | 'myTopology' | 'myVdc' | 'connections' | 'catalog' | 'users' | 'roles' | 'settings' | 'system' | 'myServers' | 'newServer' | 'firewalls' | 'account' | 'audit';
 type Item = { href: string; key: Key; icon: React.ReactNode; exact?: boolean; need?: Permission[] };
 
 // Staff entries appear only with a permission that opens them; the API checks every call anyway.
@@ -31,6 +32,7 @@ const sections: { title: 'adminSection' | 'peopleSection' | 'customerSection'; i
     { href: '/admin/abuse', key: 'abuse', icon: <I name="shield-alert" size={18}/>, need: ['servers.view_all'] },
     { href: '/admin/energy', key: 'energy', icon: <I name="zap" size={18}/>, need: ['dashboard.view', 'system.view'] },
     { href: '/admin/system', key: 'system', icon: <I name="activity" size={18}/>, need: ['system.view'] },
+    { href: '/admin/audit', key: 'audit', icon: <I name="scroll-text" size={18}/>, need: ['audit.view'] },
   ] },
   { title: 'peopleSection', items: [
     { href: '/admin/users', key: 'users', icon: <I name="users" size={18}/>, need: ['users.view'] },
@@ -114,6 +116,7 @@ export default function Shell({ user, branding, version, children }: { user: Use
   const home = can(user.permissions, 'dashboard.view') ? '/admin' : '/';
   return <div className="flex min-h-dvh flex-col">
     <ImpersonationBanner user={user}/>
+    <AnnouncementBar/>
     <div className="flex min-h-0 flex-1">
       <aside className="sticky top-0 hidden h-dvh w-64 shrink-0 flex-col gap-4 overflow-y-auto border-r border-separator bg-surface px-3 py-5 lg:flex">
         <Brand branding={branding} href={home}/>

@@ -356,3 +356,29 @@ test('several API copies: a role change made on one copy reaches the others at o
   assert.equal(code, 0, 'the other copy saw the new role without a restart');
   assert.ok(out.includes('seen'));
 });
+
+test('announcement: validated, shown to signed-in users only inside its time window, a new id per save', async () => {
+  assert.deepEqual(Object.keys((await put('/admin/settings/announcement', { active: true, link: 'javascript:alert(1)', startsAt: '2030-01-02', endsAt: '2030-01-01' }, admin)).json().fields).sort(),
+    ['endsAt', 'link', 'textTr']);
+  assert.equal((await put('/admin/settings/announcement', { active: true, textTr: 'x' }, user)).statusCode, 403);
+  const a = (await put('/admin/settings/announcement', { active: true, tone: 'warning', textTr: 'Bakım 22:00', textEn: 'Maintenance at 22:00', link: '/admin/system' }, admin)).json();
+  assert.equal(a.live, true);
+  assert.deepEqual((await get('/announcement', user)).json().announcement, { id: a.id, tone: 'warning', textTr: 'Bakım 22:00', textEn: 'Maintenance at 22:00', link: '/admin/system', endsAt: null });
+  assert.equal((await get('/announcement')).statusCode, 401);
+  const later = (await put('/admin/settings/announcement', { active: true, textEn: 'Soon', startsAt: new Date(Date.now() + 3600_000).toISOString() }, admin)).json();
+  assert.notEqual(later.id, a.id);
+  assert.equal((await get('/announcement', user)).json().announcement, null);
+  await put('/admin/settings/announcement', { active: false }, admin);
+});
+
+test('audit log: staff search with filters and pages; each user sees only their own activity', async () => {
+  assert.equal((await get('/admin/audit', user)).statusCode, 403);
+  const all = (await get('/admin/audit', admin)).json();
+  assert.ok(all.events.length > 0 && all.categories.includes('settings'), JSON.stringify(all.categories));
+  const found = (await get('/admin/audit?category=settings&q=announcement&outcome=success', admin)).json().events;
+  assert.ok(found.length >= 2 && found.every((e) => e.action === 'settings.announcement' && e.outcome === 'success'));
+  if (all.nextBefore) assert.ok((await get(`/admin/audit?before=${all.nextBefore}`, admin)).json().events.every((e) => BigInt(e.id) < BigInt(all.nextBefore)));
+  const mine = (await get('/activity', user)).json().events;
+  assert.ok(mine.length > 0 && mine.every((e) => e.actorId === userId), JSON.stringify(mine.map((e) => e.action)));
+  assert.equal((await get('/activity')).statusCode, 401);
+});

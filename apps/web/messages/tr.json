@@ -406,7 +406,8 @@
     "VDC_BELOW_USAGE": "Şu an kullanılandan az olamaz.",
     "DISK_TOO_SMALL": "İmajın gerektirdiği diskten küçük.",
     "TOO_MANY": "Çok fazla öğe.",
-    "INVALID_TAG": "Etiket harf veya rakamla başlar; yalnızca harf, rakam, boşluk, nokta, _ ve - içerir."
+    "INVALID_TAG": "Etiket harf veya rakamla başlar; yalnızca harf, rakam, boşluk, nokta, _ ve - içerir.",
+    "END_BEFORE_START": "Bitiş, başlangıçtan sonra olmalı."
   },
   "Setup": {
     "title": "Kurulum sihirbazı",
@@ -1633,7 +1634,8 @@
     "myTopology": "Topoloji",
     "energy": "Enerji",
     "abuse": "Kötüye kullanım",
-    "myVdc": "Sanal veri merkezi"
+    "myVdc": "Sanal veri merkezi",
+    "audit": "Denetim kaydı"
   },
   "Dashboard": {
     "eyebrow": "YÖNETİM",
@@ -1727,7 +1729,8 @@
       "notifications": "Bildirimler",
       "keys": "SSH anahtarları",
       "projects": "Projeler",
-      "accessibility": "Erişilebilirlik"
+      "accessibility": "Erişilebilirlik",
+      "activity": "Etkinlik"
     },
     "profile": {
       "title": "Profil",
@@ -1778,6 +1781,10 @@
       "verify": "Doğrula",
       "cancel": "Vazgeç",
       "verified": "Telefon numarası doğrulandı."
+    },
+    "activity": {
+      "title": "Hesap etkinliği",
+      "intro": "Hesabınızdaki ve sunucularınızdaki girişler ve değişiklikler, en yenisi önce. Tanımadığınız bir şey mi var? Şifrenizi değiştirin ve iki adımlı girişi açın."
     }
   },
   "AuthLayout": {
@@ -1821,7 +1828,8 @@
     "darkTheme": "Koyu temaya geç",
     "notificationSettings": "Bildirim ayarları",
     "shortcuts": "Klavye kısayolları",
-    "recent": "Son açılanlar"
+    "recent": "Son açılanlar",
+    "activity": "Etkinliklerim"
   },
   "Insights": {
     "title": "Dikkat gerektirenler",
@@ -2307,7 +2315,8 @@
       "rdns": "Ters DNS",
       "security": "Giriş güvenliği",
       "domain": "Alan adı ve SSL",
-      "servers": "Sunucular"
+      "servers": "Sunucular",
+      "announcement": "Duyuru"
     },
     "saved": "Kaydedildi.",
     "save": "Kaydet",
@@ -2787,6 +2796,29 @@
       "hardwareNote": "Sıcak ekleme bazı lisans ve NUMA ayarlarını etkiler; büyük VM'lerde performans ölçümü yapın.",
       "save": "Kaydet",
       "saved": "Sunucu ayarları kaydedildi."
+    },
+    "announcement": {
+      "title": "Duyuru",
+      "help": "Planlı bakım veya haberler için oturum açılmış her sayfada görünen bir not. Kullanıcılar kapatabilir; bir değişikliği kaydettiğinizde yeniden görünür.",
+      "active": "Duyuruyu göster",
+      "notLive": "Kaydedildi ama şu an görünmüyor: zaman aralığının dışında.",
+      "textTr": "Metin (Türkçe)",
+      "textEn": "Metin (İngilizce)",
+      "chars": "{n} karakter kaldı.",
+      "tone": "Ton",
+      "tones": {
+        "info": "Bilgi",
+        "warning": "Uyarı",
+        "danger": "Kritik",
+        "success": "İyi haber"
+      },
+      "link": "Bağlantı (isteğe bağlı)",
+      "linkHelp": "/admin/system gibi bir panel yolu veya https:// adresi.",
+      "startsAt": "Başlangıç",
+      "endsAt": "Bitiş",
+      "optional": "İsteğe bağlı; kendi saat diliminizde.",
+      "save": "Kaydet",
+      "saved": "Duyuru kaydedildi."
     }
   },
   "Firewalls": {
@@ -3348,5 +3380,53 @@
       "skipped_disabled": "Atlandı: güç işlemleri kapalı",
       "failed": "Başarısız"
     }
+  },
+  "Activity": {
+    "actions": {
+      "auth_login": "Giriş yapıldı",
+      "auth_sign_in": "Giriş yapıldı",
+      "auth_register": "Hesap oluşturuldu",
+      "auth_password_changed": "Şifre değiştirildi",
+      "auth_two_factor_enabled": "İki adımlı giriş açıldı",
+      "auth_two_factor_disabled": "İki adımlı giriş kapatıldı",
+      "auth_two_factor_changed": "İki adımlı giriş değişti",
+      "server_create": "Sunucu sipariş edildi",
+      "server_delete": "Sunucu silindi",
+      "server_power_on": "Sunucu açıldı",
+      "server_shutdown": "Sunucu kapatıldı",
+      "server_power_off": "Sunucu zorla kapatıldı",
+      "server_reset": "Sunucu sıfırlandı",
+      "server_labels": "Sunucu etiketleri ve notları değişti",
+      "server_schedule_created": "Güç zamanlaması eklendi",
+      "server_schedule_updated": "Güç zamanlaması değişti",
+      "server_schedule_deleted": "Güç zamanlaması kaldırıldı",
+      "server_bulk_action": "Toplu güç işlemi",
+      "settings_announcement": "Duyuru kaydedildi",
+      "console_open": "Konsol açıldı",
+      "firewall_created": "Firewall oluşturuldu",
+      "firewall_updated": "Firewall değişti",
+      "firewall_deleted": "Firewall silindi"
+    },
+    "outcome": {
+      "success": "Tamamlandı",
+      "failure": "Başarısız",
+      "denied": "Reddedildi"
+    },
+    "bySchedule": "Zamanlama",
+    "empty": "Henüz etkinlik yok.",
+    "more": "Daha fazla göster",
+    "eyebrow": "GÜVENLİK",
+    "title": "Denetim kaydı",
+    "intro": "Kim neyi ne zaman yaptı: girişler, değişiklikler ve sunucu işlemleri; sonucu ve adresiyle.",
+    "search": "Denetim kaydında ara",
+    "searchPlaceholder": "İşlem, e-posta, IP veya ayrıntı",
+    "outcomeLabel": "Sonuç",
+    "category": "Kategori",
+    "all": "Tümü",
+    "noMatch": "Bu süzgeçlere uyan kayıt yok.",
+    "system": "Sistem",
+    "details": "Ayrıntılar",
+    "until": "{time} tarihine kadar",
+    "close": "Duyuruyu kapat"
   }
 }

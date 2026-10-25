@@ -29,6 +29,8 @@ export type ServerSettings = { customer: { power: boolean; console: boolean; iso
 export type EnergySettings = { pricePerKwh: string; currency: string; pue: number; co2GramsPerKwh: number };
 // Abuse monitoring (worker/abuse.mjs keeps the same defaults).
 export type AbuseSettings = { portScan: boolean; scanMinutes: number; cpu: boolean; cpuThreshold: number; cpuHours: number; notifyCustomer: boolean; ports: { port: number; label: string }[] };
+// A notice on every signed-in page (announcement.ts); a new id per saved version.
+export type Announcement = { id: string; active: boolean; tone: 'info' | 'warning' | 'danger' | 'success'; textTr: string; textEn: string; link: string; startsAt: string | null; endsAt: string | null };
 export type SecuritySettings = { require2fa: 'none' | 'staff' | 'all'; emailCodeSignIn: boolean };
 export type NotificationPolicy = { enabled: boolean; allowed: Channel[]; defaults: Channel[]; userCanChange: boolean };
 export type CaptchaSettings = { provider: CaptchaProvider; siteKey: string; secretEnc: string | null; minScore: number; use: CaptchaUse };
@@ -46,6 +48,7 @@ const defaults = {
   // Per notification event (notify.ts): the admin's policy. Missing events use the catalog defaults.
   notifications: {} as Record<string, NotificationPolicy>,
   security: { require2fa: 'none', emailCodeSignIn: false } as SecuritySettings,
+  announcement: { id: '', active: false, tone: 'info', textTr: '', textEn: '', link: '', startsAt: null, endsAt: null } as Announcement,
   energy: { pricePerKwh: '0', currency: 'TRY', pue: 1.5, co2GramsPerKwh: 420 } as EnergySettings,
   abuse: { portScan: true, scanMinutes: 30, cpu: true, cpuThreshold: 90, cpuHours: 6, notifyCustomer: false,
     ports: [{ port: 23, label: 'Telnet' }, { port: 445, label: 'SMB' }, { port: 1433, label: 'MS SQL' }, { port: 2375, label: 'Docker API' }, { port: 3306, label: 'MySQL' },

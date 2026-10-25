@@ -406,7 +406,8 @@
     "VDC_BELOW_USAGE": "Cannot be below what is in use.",
     "DISK_TOO_SMALL": "Smaller than the image needs.",
     "TOO_MANY": "Too many items.",
-    "INVALID_TAG": "A tag starts with a letter or digit and uses only letters, digits, space, dot, _ and -."
+    "INVALID_TAG": "A tag starts with a letter or digit and uses only letters, digits, space, dot, _ and -.",
+    "END_BEFORE_START": "The end must be after the start."
   },
   "Setup": {
     "title": "Setup wizard",
@@ -1633,7 +1634,8 @@
     "myTopology": "Topology",
     "energy": "Energy",
     "abuse": "Abuse",
-    "myVdc": "Virtual datacenter"
+    "myVdc": "Virtual datacenter",
+    "audit": "Audit log"
   },
   "Dashboard": {
     "eyebrow": "ADMINISTRATION",
@@ -1727,7 +1729,8 @@
       "notifications": "Notifications",
       "keys": "SSH keys",
       "projects": "Projects",
-      "accessibility": "Accessibility"
+      "accessibility": "Accessibility",
+      "activity": "Activity"
     },
     "profile": {
       "title": "Profile",
@@ -1778,6 +1781,10 @@
       "verify": "Verify",
       "cancel": "Cancel",
       "verified": "Phone number verified."
+    },
+    "activity": {
+      "title": "Account activity",
+      "intro": "Sign-ins and changes on your account and servers, newest first. Something you do not recognise? Change your password and turn on two-factor."
     }
   },
   "AuthLayout": {
@@ -1821,7 +1828,8 @@
     "darkTheme": "Switch to dark theme",
     "notificationSettings": "Notification settings",
     "shortcuts": "Keyboard shortcuts",
-    "recent": "Recent"
+    "recent": "Recent",
+    "activity": "My activity"
   },
   "Insights": {
     "title": "Needs attention",
@@ -2307,7 +2315,8 @@
       "rdns": "Reverse DNS",
       "security": "Sign-in security",
       "domain": "Domain and SSL",
-      "servers": "Servers"
+      "servers": "Servers",
+      "announcement": "Announcement"
     },
     "saved": "Saved.",
     "save": "Save",
@@ -2787,6 +2796,29 @@
       "hardwareNote": "Hot add affects some licensing and NUMA settings; measure performance on large VMs.",
       "save": "Save",
       "saved": "Server settings saved."
+    },
+    "announcement": {
+      "title": "Announcement",
+      "help": "A notice on every signed-in page, for planned maintenance or news. Users can close it; it comes back when you save a change.",
+      "active": "Show the announcement",
+      "notLive": "Saved, but not shown right now: it is outside its time window.",
+      "textTr": "Text (Turkish)",
+      "textEn": "Text (English)",
+      "chars": "{n} characters left.",
+      "tone": "Tone",
+      "tones": {
+        "info": "Information",
+        "warning": "Warning",
+        "danger": "Critical",
+        "success": "Good news"
+      },
+      "link": "Link (optional)",
+      "linkHelp": "A panel path like /admin/system or an https:// address.",
+      "startsAt": "Show from",
+      "endsAt": "Show until",
+      "optional": "Optional; in your time zone.",
+      "save": "Save",
+      "saved": "Announcement saved."
     }
   },
   "Firewalls": {
@@ -3348,5 +3380,53 @@
       "skipped_disabled": "Skipped: power actions are turned off",
       "failed": "Failed"
     }
+  },
+  "Activity": {
+    "actions": {
+      "auth_login": "Signed in",
+      "auth_sign_in": "Signed in",
+      "auth_register": "Account created",
+      "auth_password_changed": "Password changed",
+      "auth_two_factor_enabled": "Two-factor turned on",
+      "auth_two_factor_disabled": "Two-factor turned off",
+      "auth_two_factor_changed": "Two-factor changed",
+      "server_create": "Server ordered",
+      "server_delete": "Server deleted",
+      "server_power_on": "Server powered on",
+      "server_shutdown": "Server shut down",
+      "server_power_off": "Server forced off",
+      "server_reset": "Server reset",
+      "server_labels": "Server tags and notes changed",
+      "server_schedule_created": "Power schedule added",
+      "server_schedule_updated": "Power schedule changed",
+      "server_schedule_deleted": "Power schedule removed",
+      "server_bulk_action": "Bulk power action",
+      "settings_announcement": "Announcement saved",
+      "console_open": "Console opened",
+      "firewall_created": "Firewall created",
+      "firewall_updated": "Firewall changed",
+      "firewall_deleted": "Firewall deleted"
+    },
+    "outcome": {
+      "success": "Done",
+      "failure": "Failed",
+      "denied": "Denied"
+    },
+    "bySchedule": "Schedule",
+    "empty": "No activity yet.",
+    "more": "Show more",
+    "eyebrow": "SECURITY",
+    "title": "Audit log",
+    "intro": "Who did what and when: sign-ins, changes and server actions, with the outcome and address.",
+    "search": "Search the audit log",
+    "searchPlaceholder": "Action, e-mail, IP or detail",
+    "outcomeLabel": "Outcome",
+    "category": "Category",
+    "all": "All",
+    "noMatch": "No event matches these filters.",
+    "system": "System",
+    "details": "Details",
+    "until": "until {time}",
+    "close": "Close the announcement"
   }
 }

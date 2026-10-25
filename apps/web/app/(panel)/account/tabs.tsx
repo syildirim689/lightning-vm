@@ -15,6 +15,7 @@ import { Projects } from './account';
 import NotificationPrefs from './notifications';
 import Security from './security';
 import { PhoneNumber, TwoFactor } from './two-factor';
+import { MyActivity } from '../../../components/activity';
 
 // Name and language; the e-mail address is the sign-in name and changes only through an administrator.
 function Profile() {
@@ -41,7 +42,7 @@ function Profile() {
   </Section>;
 }
 
-const tabs = ['profile', 'security', 'notifications', 'accessibility', 'keys', 'projects'] as const;
+const tabs = ['profile', 'security', 'activity', 'notifications', 'accessibility', 'keys', 'projects'] as const;
 export default function AccountTabs() {
   const t = useTranslations('Account');
   const [tab, setTab] = useQueryState('tab', parseAsString.withDefault('profile'));
@@ -59,6 +60,7 @@ export default function AccountTabs() {
     <Tabs.Panel id="notifications" className="pt-5"><NotificationPrefs/></Tabs.Panel>
     <Tabs.Panel id="accessibility" className="pt-5"><Section><AccessibilitySettings/></Section></Tabs.Panel>
     <Tabs.Panel id="keys" className="pt-5"><SshKeys/></Tabs.Panel>
+    <Tabs.Panel id="activity" className="pt-5"><Section title={t('activity.title')} description={t('activity.intro')}><MyActivity/></Section></Tabs.Panel>
     <Tabs.Panel id="projects" className="pt-5"><Projects/></Tabs.Panel>
   </Tabs>;
 }

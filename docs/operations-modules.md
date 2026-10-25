@@ -120,3 +120,19 @@ Kurallar `apps/api/src/smart-rules.ts` içindedir ve birim testleri vardır. Ver
   - Uygulamadan önce onay istenir. Her sunucuya ayrı işlem açılır. İşlemi süren veya uygun olmayan sunucular
     atlanır ve sayılır.
   - Aynı Idempotency-Key ile tekrarlanan istek yeni işlem başlatmaz.
+
+## Denetim kaydı, hesap etkinliği ve duyuru
+
+- **Denetim kaydı** (`/admin/audit`, `GET /admin/audit`, `audit.view` izni): tüm olaylar en yenisi önce, sayfa başına
+  50 kayıt (`before` ile).
+  - Arama işlem adında, e-postada, IP'de ve ayrıntılarda yapılır. Sonuç (başarılı, başarısız, reddedildi) ve
+    kategori (`auth`, `server`, `settings`…) ile süzülür. Süzgeçler URL'de tutulur.
+  - Her kaydın ayrıntısı açılabilir. Bilinen işlemler Türkçe/İngilizce adla gösterilir.
+- **Hesap etkinliği** (Hesabım → Etkinlik, `GET /activity`): kullanıcının kendi girişleri ve değişiklikleri,
+  sunucularında güç zamanlamalarının yaptıkları da dahil ("Zamanlama" etiketiyle).
+- **Duyuru** (Ayarlar → Duyuru, `PUT /admin/settings/announcement`; okuma: `GET /announcement`): oturum açılmış
+  her sayfanın üstünde görünen nottur.
+  - Metin Türkçe ve İngilizce girilir. Ton (bilgi, uyarı, kritik, iyi haber), isteğe bağlı bağlantı (panel yolu
+    veya https) ve başlangıç/bitiş zamanı seçilebilir.
+  - Kullanıcı duyuruyu kapatabilir (tarayıcıda saklanır). Her kayıt yeni bir kimlik aldığı için, değiştirilen
+    duyuru yeniden görünür.

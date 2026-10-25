@@ -51,6 +51,8 @@ export default function CommandPalette({ permissions, isOpen, onOpenChange }: { 
       ['/admin/roles', tn('roles'), <I key="i" name="shield-check" size={16}/>, can(permissions, 'roles.manage', 'users.roles')],
       ['/admin/settings', tn('settings'), <I key="i" name="settings-2" size={16}/>, can(permissions, 'settings.view', 'settings.manage')],
       ['/admin/system', tn('system'), <I key="i" name="activity" size={16}/>, can(permissions, 'system.view')],
+      ['/admin/audit', tn('audit'), <I key="i" name="scroll-text" size={16}/>, can(permissions, 'audit.view')],
+      ['/account?tab=activity', t('activity'), <I key="i" name="history" size={16}/>, true],
       ['/admin/topology', tn('topology'), <I key="i" name="network" size={16}/>, can(permissions, 'dashboard.view', 'servers.view_all')],
       ['/admin/abuse', tn('abuse'), <I key="i" name="shield-alert" size={16}/>, can(permissions, 'servers.view_all')],
       ['/admin/energy', tn('energy'), <I key="i" name="zap" size={16}/>, can(permissions, 'dashboard.view', 'system.view')],

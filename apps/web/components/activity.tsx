@@ -1,0 +1,89 @@
+"use client";
+// Audit events in words (known actions are translated, others shown as their code), the user's own activity
+// timeline, and the admin's announcement bar on every signed-in page.
+import { Button } from '@heroui/react';
+import NextLink from 'next/link';
+import { useFormatter, useLocale, useTranslations } from 'next-intl';
+import { useEffect, useState } from 'react';
+import { apiFetch } from '../lib/api';
+import { useApiQuery } from '../lib/query';
+import { I } from './icon';
+import { StatusChip } from './ui';
+
+export type AuditEvent = { id: string; at: string; action: string; outcome: 'success' | 'failure' | 'denied'; ip: string | null; metadata: Record<string, unknown>; actorEmail: string | null; actorId: string | null };
+
+export function useActionLabel() {
+  const t = useTranslations('Activity');
+  // A translated label for known actions ("auth.login" → actions.auth_login), else the raw code.
+  return (action: string) => { const k = `actions.${action.replace(/\./g, '_')}` as 'actions.auth_login'; return t.has(k) ? t(k) : action; };
+}
+
+export const outcomeTone = { success: 'success', failure: 'danger', denied: 'warning' } as const;
+
+export function ActivityIcon({ action }: { action: string }) {
+  const c = action.split('.')[0];
+  return <span aria-hidden className="grid size-8 shrink-0 place-items-center rounded-full bg-default text-muted">
+    {c === 'auth' ? <I name="log-in" size={15}/> : c === 'server' ? <I name="server" size={15}/> : c === 'settings' ? <I name="settings-2" size={15}/> : c === 'firewall' ? <I name="brick-wall-fire" size={15}/>
+      : c === 'admin' ? <I name="user-cog" size={15}/> : <I name="activity" size={15}/>}
+  </span>;
+}
+
+// The signed-in user's own events, newest first, 50 per page.
+export function MyActivity() {
+  const t = useTranslations('Activity');
+  const format = useFormatter();
+  const label = useActionLabel();
+  const first = useApiQuery<{ events: AuditEvent[]; nextBefore: string | null }>(['activity'], '/activity').data;
+  const [extra, setExtra] = useState<AuditEvent[]>([]);
+  const [next, setNext] = useState<string | null | undefined>(undefined);
+  const [busy, setBusy] = useState(false);
+  if (!first) return <p role="status" className="text-sm text-muted">…</p>;
+  const events = [...first.events, ...extra];
+  const cursor = next === undefined ? first.nextBefore : next;
+  if (!events.length) return <p className="text-sm text-muted">{t('empty')}</p>;
+  return <div className="flex flex-col gap-3">
+    <ol className="flex flex-col">
+      {events.map((e) => <li key={e.id} className="flex gap-3 border-b border-separator py-2.5 last:border-0">
+        <ActivityIcon action={e.action}/>
+        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+          <span className="flex flex-wrap items-center gap-2 text-sm font-medium">{label(e.action)}
+            {e.outcome !== 'success' && <StatusChip tone={outcomeTone[e.outcome]}>{t(`outcome.${e.outcome}`)}</StatusChip>}
+            {!e.actorId && <StatusChip tone="accent">{t('bySchedule')}</StatusChip>}</span>
+          <span className="text-xs text-muted">
+            <time dateTime={e.at} title={format.dateTime(new Date(e.at), { dateStyle: 'medium', timeStyle: 'medium' })}>{format.relativeTime(new Date(e.at))}</time>
+            {e.ip && <> · {e.ip}</>}</span>
+        </div>
+      </li>)}
+    </ol>
+    {cursor && <div><Button variant="secondary" size="sm" isPending={busy} onPress={async () => {
+      setBusy(true);
+      try { const r = await apiFetch<{ events: AuditEvent[]; nextBefore: string | null }>(`/activity?before=${cursor}`); setExtra((x) => [...x, ...r.events]); setNext(r.nextBefore); }
+      finally { setBusy(false); }
+    }}><I name="chevrons-down" size={15}/>{t('more')}</Button></div>}
+  </div>;
+}
+
+type Announcement = { id: string; tone: 'info' | 'warning' | 'danger' | 'success'; textTr: string; textEn: string; link: string; endsAt: string | null };
+const KEY = 'lvm-announcement-closed';
+
+export function AnnouncementBar() {
+  const t = useTranslations('Activity');
+  const locale = useLocale();
+  const format = useFormatter();
+  const a = useApiQuery<{ announcement: Announcement | null }>(['announcement'], '/announcement', { refetchInterval: 300_000 }).data?.announcement;
+  const [closed, setClosed] = useState<string | null>(null);
+  useEffect(() => { try { setClosed(localStorage.getItem(KEY)); } catch { /* storage blocked */ } }, []);
+  if (!a || closed === a.id) return null;
+  const text = (locale === 'tr' ? a.textTr || a.textEn : a.textEn || a.textTr);
+  const tone = { info: 'bg-accent-soft text-accent-soft-foreground', warning: 'bg-warning text-warning-foreground', danger: 'bg-danger text-danger-foreground', success: 'bg-success text-success-foreground' }[a.tone];
+  return <div role="status" className={`flex items-start gap-3 px-4 py-2 text-sm md:items-center md:px-6 ${tone}`}>
+    <span className="mt-0.5 shrink-0 md:mt-0">{a.tone === 'danger' || a.tone === 'warning' ? <I name="triangle-alert" size={16}/> : <I name="megaphone" size={16}/>}</span>
+    <p className="min-w-0 flex-1">
+      <span className="font-medium">{text}</span>
+      {a.endsAt && <span className="opacity-80"> · {t('until', { time: format.dateTime(new Date(a.endsAt), { dateStyle: 'medium', timeStyle: 'short' }) })}</span>}
+      {a.link && <> · <NextLink href={a.link} className="font-semibold underline underline-offset-2">{t('details')}</NextLink></>}
+    </p>
+    <button type="button" aria-label={t('close')} className="-my-1 grid size-9 shrink-0 place-items-center rounded-md hover:bg-black/10"
+      onClick={() => { setClosed(a.id); try { localStorage.setItem(KEY, a.id); } catch { /* storage blocked */ } }}><I name="x" size={16}/></button>
+  </div>;
+}
