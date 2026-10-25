@@ -237,7 +237,10 @@
     "LOCATION_UNAVAILABLE": "This location takes no new servers right now (maintenance).",
     "ACTION_DISABLED": "The administrator turned this off for customers.",
     "VDC_LIMIT": "Not enough room left in the virtual datacenter.",
-    "VDC_INACTIVE": "This virtual datacenter is not active."
+    "VDC_INACTIVE": "This virtual datacenter is not active.",
+    "SNAPSHOT_LIMIT": "At most 5 snapshots per server: remove one first.",
+    "SNAPSHOT_NOT_FOUND": "This snapshot no longer exists.",
+    "GITHUB_UNREACHABLE": "GitHub did not answer; try again later."
   },
   "Auth": {
     "required": "required",
@@ -407,7 +410,12 @@
     "DISK_TOO_SMALL": "Smaller than the image needs.",
     "TOO_MANY": "Too many items.",
     "INVALID_TAG": "A tag starts with a letter or digit and uses only letters, digits, space, dot, _ and -.",
-    "END_BEFORE_START": "The end must be after the start."
+    "END_BEFORE_START": "The end must be after the start.",
+    "INVALID_SNAPSHOT_NAME": "Start with a letter or digit; letters, digits, space and . _ : ( ) - are allowed (80 at most).",
+    "SNAPSHOT_LIMIT": "At most 5 snapshots per server: remove one first.",
+    "INVALID_GITHUB_USER": "A GitHub user name has letters, digits and single hyphens (39 at most).",
+    "GITHUB_USER_NOT_FOUND": "No such GitHub user.",
+    "GITHUB_NO_KEYS": "This GitHub user has published no SSH key."
   },
   "Setup": {
     "title": "Setup wizard",
@@ -1370,7 +1378,10 @@
       "power_on": "Power on",
       "shutdown": "Clean shutdown",
       "power_off": "Force off",
-      "reset": "Reset"
+      "reset": "Reset",
+      "snapshot_create": "Take snapshot",
+      "snapshot_revert": "Go back to snapshot",
+      "snapshot_delete": "Remove snapshot"
     },
     "opStatus": {
       "pending": "Queued",
@@ -1391,7 +1402,8 @@
       "destroy": "deleting the VM",
       "verify_gone": "verifying it is gone",
       "done": "done",
-      "firewall": "applying the firewall"
+      "firewall": "applying the firewall",
+      "snapshot": "working on the snapshot"
     },
     "action": {
       "power_on": "Power on",
@@ -1465,7 +1477,11 @@
       "publicKeyHelp": "For example the content of ~/.ssh/id_ed25519.pub.",
       "add": "Add key",
       "remove": "Delete",
-      "added": "Key added."
+      "added": "Key added.",
+      "github": "GitHub user name",
+      "githubHelp": "Imports the public keys published at github.com/<user>.keys.",
+      "githubImport": "Import from GitHub",
+      "githubDone": "{added} added, {skipped} already here."
     },
     "admin": {
       "eyebrow": "ADMIN · SERVERS",
@@ -1829,7 +1845,8 @@
     "notificationSettings": "Notification settings",
     "shortcuts": "Keyboard shortcuts",
     "recent": "Recent",
-    "activity": "My activity"
+    "activity": "My activity",
+    "users": "Users"
   },
   "Insights": {
     "title": "Needs attention",
@@ -2073,6 +2090,10 @@
       "server_port_open": {
         "title": "Risky port open on a server",
         "help": "When a risky port on your server is open to the Internet (if the admin enables it)."
+      },
+      "server_snapshot": {
+        "title": "Snapshot done",
+        "help": "When a snapshot is taken, restored or removed."
       }
     },
     "policyTitle": "The admin first, then each user",
@@ -2771,14 +2792,16 @@
         "console": "Browser console",
         "iso": "Insert ISO / boot from ISO",
         "rootPassword": "See the root password",
-        "delete": "Delete the server"
+        "delete": "Delete the server",
+        "snapshots": "Snapshots"
       },
       "actionHelp": {
         "power": "Power on, shut down, restart, reset.",
         "console": "The VM screen in the browser.",
         "iso": "Insert images from the location's ISO library.",
         "rootPassword": "See the password set or generated at order time.",
-        "delete": "Remove the server and its disks permanently."
+        "delete": "Remove the server and its disks permanently.",
+        "snapshots": "Take, restore and remove snapshots (at most 5 per server)."
       },
       "rolesNote": "Other rights, such as managing firewalls, are set on the Roles page.",
       "hardware": "Hardware of new servers",
@@ -3496,7 +3519,10 @@
       "vmware_connection_deleted": "vCenter connection removed",
       "vmware_discovery": "Inventory refreshed",
       "server_iso_inserted": "ISO inserted",
-      "server_iso_ejected": "ISO ejected"
+      "server_iso_ejected": "ISO ejected",
+      "server_snapshot_create": "Take snapshot",
+      "server_snapshot_revert": "Go back to snapshot",
+      "server_snapshot_delete": "Remove snapshot"
     },
     "outcome": {
       "success": "Done",
@@ -3523,5 +3549,30 @@
       "setup_step": "Setup step: {name}",
       "admin_user": "User account: {name}"
     }
+  },
+  "Snapshots": {
+    "title": "Snapshots",
+    "help": "A restore point of the disks, taken in seconds. Take one before an update or a risky change; go back to it if something breaks. Snapshots are not backups: they live on the same storage and slow the disk a little while they exist.",
+    "count": "{n} / {max}",
+    "empty": "No snapshot yet.",
+    "current": "Current state is based on this",
+    "revert": "Go back",
+    "remove": "Remove",
+    "cancel": "Cancel",
+    "started": "Started; follow it in the task list.",
+    "revertTitle": "Go back to “{name}”?",
+    "revertBody": "Everything written to the disks after this snapshot is lost. The server restarts if it was running.",
+    "revertYes": "Yes, go back",
+    "removeTitle": "Remove “{name}”?",
+    "removeBody": "The restore point is merged into the disks; the server keeps running and its data stays as it is now.",
+    "removeYes": "Yes, remove",
+    "name": "Name",
+    "namePlaceholder": "before-upgrade",
+    "nameHelp": "Empty: the date and time.",
+    "description": "Note",
+    "optional": "Optional.",
+    "auto": "Snapshot",
+    "take": "Take snapshot",
+    "full": "At most {max} snapshots per server: remove one first."
   }
 }

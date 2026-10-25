@@ -136,3 +136,20 @@ Kurallar `apps/api/src/smart-rules.ts` içindedir ve birim testleri vardır. Ver
     veya https) ve başlangıç/bitiş zamanı seçilebilir.
   - Kullanıcı duyuruyu kapatabilir (tarayıcıda saklanır). Her kayıt yeni bir kimlik aldığı için, değiştirilen
     duyuru yeniden görünür.
+
+## Anlık görüntüler, GitHub anahtarları, palette kullanıcılar
+
+- **Anlık görüntüler** (sunucu sayfası; `GET/POST /servers/:id/snapshots`, `POST …/:sid/revert`, `DELETE …/:sid`):
+  disklerin bellek olmadan alınan geri dönüş noktalarıdır. VMware Tools gerekmez.
+  - Alma, geri dönme ve kaldırma normal işlemlerdir: sunucu başına tek işlem, görev listesi, geçmiş, yeniden
+    deneme ve `server.snapshot` bildirimi.
+  - Geri dönmede o noktadan sonra yazılanlar kaybolur. Sunucu açıksa geri dönüşten sonra yeniden açılır.
+  - Sunucu başına en fazla 5 görüntü olur. Görüntünün o sanal makineye ait olduğu bağdaştırıcıda doğrulanır.
+  - Yönetici, Ayarlar → Sunucular → "Anlık görüntüler" ile müşteriler için kapatabilir.
+  - Migration: `022_snapshots` (yeni işlem türleri ve `operations.params`).
+- **GitHub'dan SSH anahtarı** (Hesabım → SSH anahtarları, `POST /ssh-keys/github`): `github.com/<kullanıcı>.keys`
+  adresindeki açık anahtarlar içe aktarılır (en fazla 20). Var olanlar atlanır.
+- **Komut paleti:** `users.view` izni olan personel, kullanıcıları e-postayla arar. Seçince kullanıcı listesi o
+  e-postayla süzülmüş olarak açılır.
+- Ayarlar artık bir seviye derin birleştirilir. Sonradan eklenen bir anahtar (ör. `servers.customer.snapshots`),
+  eski kayıtlı ayarda da varsayılan değerini alır.

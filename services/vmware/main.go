@@ -149,6 +149,18 @@ func handler(token string, guard *netGuard) http.Handler {
 		q := r.(*VMRequest)
 		return withClient(ctx, guard, q.Request, func(c *vim25.Client) (any, error) { return topology(ctx, c) })
 	})
+	newSnap := func() any { return &SnapshotRequest{} }
+	handle("/v1/vm/snapshots", 30*time.Second, newSnap, func(ctx context.Context, r any) (any, error) {
+		q := r.(*SnapshotRequest)
+		return withClient(ctx, guard, q.Request, func(c *vim25.Client) (any, error) {
+			list, err := listSnapshots(ctx, c, q.VM)
+			return map[string]any{"snapshots": list}, err
+		})
+	})
+	handle("/v1/vm/snapshot", 60*time.Second, newSnap, func(ctx context.Context, r any) (any, error) {
+		q := r.(*SnapshotRequest)
+		return withClient(ctx, guard, q.Request, func(c *vim25.Client) (any, error) { return snapshotAction(ctx, c, *q) })
+	})
 	handle("/v1/power", 60*time.Second, newVM, func(ctx context.Context, r any) (any, error) {
 		q := r.(*VMRequest)
 		return withClient(ctx, guard, q.Request, func(c *vim25.Client) (any, error) { return powerReport(ctx, c) })

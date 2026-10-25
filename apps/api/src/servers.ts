@@ -18,6 +18,7 @@ import { getSettings, type ServerSettings } from './settings-store';
 import { prepareApplication } from './applications';
 import { checkVdcRoom, resolveVdcOrder } from './vdc';
 import { renderPtr } from './rdns-names';
+import { fingerprint, parseKeyList, sshKeyPattern } from './smart-rules';
 
 type Input = Record<string, unknown>;
 // BullMQ carries only the operation id (also the job id, so re-adding is harmless);
@@ -26,25 +27,23 @@ const queue = new Queue('operations', { connection: redis });
 export const enqueue = (operationId: string) => queue.add('operation', {}, {
   jobId: operationId, attempts: 6, backoff: { type: 'exponential', delay: 5000 }, removeOnComplete: true, removeOnFail: true,
 }).catch(() => undefined); // if Redis is down the worker's recovery scan enqueues it later
-const deadlineMinutes = { create: 45, delete: 20, power_on: 10, shutdown: 10, power_off: 10, reset: 10 } as const;
-type Kind = keyof typeof deadlineMinutes;
+const deadlineMinutes = { create: 45, delete: 20, power_on: 10, shutdown: 10, power_off: 10, reset: 10, snapshot_create: 30, snapshot_revert: 30, snapshot_delete: 60 } as const;
+export type Kind = keyof typeof deadlineMinutes;
 
-function idempotencyKey(header: string | undefined, userId: string) {
+export function idempotencyKey(header: string | undefined, userId: string) {
   if (!header || !/^[\w-]{8,100}$/.test(header)) throw apiError(400, 'IDEMPOTENCY_KEY_REQUIRED', 'Send an Idempotency-Key header (8-100 characters)');
   return `${userId}:${header}`;
 }
-const hashOf = (value: unknown) => createHash('sha256').update(JSON.stringify(value)).digest('hex');
+export const hashOf = (value: unknown) => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 
 // The same key with the same request returns the first result; with a different request it is refused.
-async function replay(key: string, requestHash: string) {
+export async function replay(key: string, requestHash: string) {
   const { rows: [op] } = await pool.query('SELECT id, server_id, request_hash, kind, status FROM operations WHERE idempotency_key = $1', [key]);
   if (!op) return null;
   if (op.request_hash !== requestHash) throw apiError(409, 'IDEMPOTENCY_MISMATCH', 'This Idempotency-Key was used for a different request');
   return { serverId: op.server_id, operation: { id: op.id, kind: op.kind, status: op.status }, replayed: true };
 }
 
-const sshKeyPattern = /^(ssh-ed25519|ssh-rsa|ecdsa-sha2-nistp(256|384|521)) ([A-Za-z0-9+/]+={0,2})( [^\r\n]{0,200})?$/;
-const fingerprint = (blob: string) => 'SHA256:' + createHash('sha256').update(Buffer.from(blob, 'base64')).digest('base64').replace(/=+$/, '');
 
 // Owners see and act on their servers; staff with servers.view_all see all, with servers.manage_all act on all.
 // A server id alone gives no access (404 for others).
@@ -70,13 +69,13 @@ export function startPowerOperation(req: AuthedRequest, server: { id: string; ow
   return startOperation(req, server, action as Kind, key, hashOf({ id: server.id, action, bulk: true }));
 }
 
-async function startOperation(req: AuthedRequest, server: { id: string; owner_id: string }, kind: Kind, key: string, requestHash: string) {
+export async function startOperation(req: AuthedRequest, server: { id: string; owner_id: string }, kind: Kind, key: string, requestHash: string, params: object = {}) {
   try {
-    const { rows: [op] } = await pool.query(`INSERT INTO operations (kind, status, idempotency_key, request_hash, server_id, owner_id, step, deadline_at)
-      VALUES ($1, 'pending', $2, $3, $4, $5, 'queued', now() + make_interval(mins => $6)) RETURNING id, kind, status`,
-      [kind, key, requestHash, server.id, server.owner_id, deadlineMinutes[kind]]);
+    const { rows: [op] } = await pool.query(`INSERT INTO operations (kind, status, idempotency_key, request_hash, server_id, owner_id, step, deadline_at, params)
+      VALUES ($1, 'pending', $2, $3, $4, $5, 'queued', now() + make_interval(mins => $6), $7) RETURNING id, kind, status`,
+      [kind, key, requestHash, server.id, server.owner_id, deadlineMinutes[kind], params]);
     await enqueue(op.id);
-    await audit(req, `server.${kind}`, 'success', req.user.id, { serverId: server.id, operationId: op.id });
+    await audit(req, `server.${kind}`, 'success', req.user.id, { serverId: server.id, operationId: op.id, ...params });
     return op;
   } catch (err) {
     if ((err as { constraint?: string }).constraint === 'operations_one_open_per_server') throw apiError(409, 'OPERATION_IN_PROGRESS', 'Another operation is still running on this server');
@@ -116,6 +115,25 @@ export class ServersController {
       [req.user.id, name, key, fingerprint(m![3])]);
     if (!k) throw apiError(409, 'VALIDATION_FAILED', 'Key exists', { publicKey: 'KEY_EXISTS' });
     return k;
+  }
+
+  // Imports the public keys a GitHub user published (github.com/<user>.keys); keys already here are skipped.
+  @Post('ssh-keys/github') @HttpCode(201)
+  async importGithub(@Req() req: AuthedRequest, @Body() body: Input) {
+    const user = typeof body?.username === 'string' ? body.username.trim().replace(/^@/, '') : '';
+    if (!/^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$/.test(user)) throw apiError(400, 'VALIDATION_FAILED', 'Invalid input', { username: 'INVALID_GITHUB_USER' });
+    const res = await fetch(`https://github.com/${user}.keys`, { redirect: 'error', signal: AbortSignal.timeout(10_000) }).catch(() => null);
+    if (res?.status === 404) throw apiError(400, 'VALIDATION_FAILED', 'Unknown user', { username: 'GITHUB_USER_NOT_FOUND' });
+    if (!res?.ok) throw apiError(502, 'GITHUB_UNREACHABLE', 'GitHub did not answer');
+    const keys = parseKeyList((await res.text()).slice(0, 65_536));
+    if (!keys.length) throw apiError(400, 'VALIDATION_FAILED', 'No keys', { username: 'GITHUB_NO_KEYS' });
+    let added = 0;
+    for (const [i, k] of keys.entries()) {
+      const r = await pool.query('INSERT INTO ssh_keys (owner_id, name, public_key, fingerprint) VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING',
+        [req.user.id, keys.length > 1 ? `github:${user} #${i + 1}` : `github:${user}`, k.publicKey, k.fingerprint]);
+      added += r.rowCount ?? 0;
+    }
+    return { added, skipped: keys.length - added };
   }
 
   @Delete('ssh-keys/:id') @HttpCode(204)

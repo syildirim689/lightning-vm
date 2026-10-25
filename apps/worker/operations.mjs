@@ -11,7 +11,7 @@ export class OperationError extends Error {
 }
 
 // Codes that will not change by retrying; everything else (network, timeouts, 5xx) is retried with backoff.
-const permanent = new Set(['INVALID_LOGIN', 'PERMISSION_DENIED', 'WRITE_RESTRICTED', 'PROVISIONING_NOT_SUPPORTED', 'TEMPLATE_NOT_FOUND',
+const permanent = new Set(['SNAPSHOT_NOT_FOUND', 'INVALID_LOGIN', 'PERMISSION_DENIED', 'WRITE_RESTRICTED', 'PROVISIONING_NOT_SUPPORTED', 'TEMPLATE_NOT_FOUND',
   'NETWORK_NOT_FOUND', 'TEMPLATE_HAS_NO_NIC', 'DISK_SMALLER_THAN_TEMPLATE', 'INSUFFICIENT_RESOURCES', 'NOT_MANAGED', 'TOOLS_NOT_RUNNING',
   'TLS_UNTRUSTED', 'TLS_HOSTNAME_MISMATCH', 'TLS_PIN_MISMATCH', 'ENDPOINT_BLOCKED', 'INVALID_REQUEST', 'SECRET_KEY_UNAVAILABLE', 'INVALID_STATE', 'VM_NOT_FOUND',
   'FIREWALL_NEEDS_DVS', 'FIREWALL_TOO_MANY_RULES']);
@@ -288,7 +288,24 @@ const kinds = {
   },
   async power_off(db, ctx) { await power(db, ctx, 'off'); await refreshPower(db, ctx); },
   async reset(db, ctx) { await power(db, ctx, 'reset'); await refreshPower(db, ctx); },
+  snapshot_create: (db, ctx) => snapshot(db, ctx, { action: 'create', name: ctx.op.params.name, description: ctx.op.params.description ?? '' }),
+  snapshot_delete: (db, ctx) => snapshot(db, ctx, { action: 'remove', snapshot: ctx.op.params.snapshot }),
+  // A snapshot without memory comes back powered off: start the VM again if it was running. A retry after the
+  // revert finished (step "on") only powers on.
+  async snapshot_revert(db, ctx) {
+    if (ctx.op.step !== 'on') await snapshot(db, ctx, { action: 'revert', snapshot: ctx.op.params.snapshot });
+    if (ctx.op.params.powerOn) { await saveTask(db, ctx.op, null); ctx.op.provider_task_id = null; await power(db, ctx, 'on'); }
+    await refreshPower(db, ctx);
+  },
 };
+
+async function snapshot(db, ctx, body) {
+  await setStep(db, ctx.op, 'snapshot');
+  if (ctx.op.provider_task_id) { await waitTask(db, ctx, ctx.op.provider_task_id); return; }
+  const out = await adapter('/v1/vm/snapshot', { ...ctx.target, vm: ctx.s.vm_moref, ...body });
+  await saveTask(db, ctx.op, out.task);
+  await waitTask(db, ctx, out.task);
+}
 
 async function refreshPower(db, ctx) {
   const st = await find(ctx);
@@ -316,6 +333,7 @@ export async function processOperation(db, job, log, notify = async () => {}, rd
     const d = { serverId: ctx.s.id, name: ctx.s.name, kind: ctx.op.kind };
     if (ctx.op.kind === 'create') { await notify('server.ready', [ctx.s.owner_id], { ...d, address: ctx.s.address ?? '' }); await rdns({ action: 'default', serverId: ctx.s.id }); }
     else if (ctx.op.kind === 'delete') { await notify('server.deleted', [ctx.s.owner_id], d); if (ctx.released?.length) await rdns({ action: 'clear', addresses: ctx.released.map((a) => a.address) }); }
+    else if (ctx.op.kind.startsWith('snapshot_')) await notify('server.snapshot', [ctx.s.owner_id], { ...d, snapshot: ctx.op.params.name ?? '' });
     else await notify('server.power', [ctx.s.owner_id], d);
   } catch (err) {
     const code = err.code ?? 'INTERNAL_ERROR';

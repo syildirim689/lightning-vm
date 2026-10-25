@@ -423,6 +423,11 @@ test.describe('server lifecycle (simulator, Turkish customer)', () => {
     await expect(page.getByText('19:00', { exact: true })).toBeVisible();
     await page.getByRole('button', { name: /19:00 Kapat zamanlamasını kaldır/ }).click();
     await expect(page.getByText('19:00', { exact: true })).toBeHidden();
+    // Snapshot: taken as an operation, then listed as the current state.
+    await page.getByLabel('Ad', { exact: true }).fill('guncelleme-oncesi');
+    await page.getByRole('button', { name: 'Anlık görüntü al' }).click();
+    await expect(page.getByText('guncelleme-oncesi')).toBeVisible({ timeout: 45_000 });
+    await expect(page.getByText('Şu anki durum buna dayanıyor')).toBeVisible();
     await page.screenshot({ path: 'test-results/tour/server-page.png', fullPage: true });
     await page.setViewportSize({ width: 390, height: 900 });
     await expectNoOverflow(page, 'server page with schedules at 390 px');

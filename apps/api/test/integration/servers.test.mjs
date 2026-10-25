@@ -672,3 +672,33 @@ test('power schedules: validated, owned, limited per server; a due one starts th
   assert.deepEqual((await bulk(admin)).json(), { started: 0, skipped: 2 });
   await until(async () => (await lastOp(id)).kind === second && (await lastOp(id)).status === 'succeeded', 'bulk action done');
 });
+
+test('snapshots: taken, listed, reverted (power kept) and removed as operations; owner-only; the admin can turn them off', { skip }, async () => {
+  const { rows: [srv] } = await pool.query(`SELECT s.id, s.power_state FROM servers s JOIN users u ON u.id = s.owner_id WHERE u.email = 'user@example.test' AND s.state = 'ready' AND s.vdc_id IS NULL
+    AND NOT EXISTS (SELECT 1 FROM operations o WHERE o.server_id = s.id AND o.status IN ('pending', 'running')) LIMIT 1`);
+  const id = srv.id, path = `/servers/${id}/snapshots`;
+  const key = () => ({ 'idempotency-key': randomUUID() });
+  const done = (kind) => until(async () => { const o = await lastOp(id); return o.kind === kind && o.status === 'succeeded'; }, `${kind} done`);
+  assert.equal((await send('POST', path, { name: '-bad' }, user, key())).json().fields.name, 'INVALID_SNAPSHOT_NAME');
+  assert.equal((await send('POST', '/ssh-keys/github', { username: 'bad_name!' }, user)).json().fields.username, 'INVALID_GITHUB_USER');
+  assert.equal((await send('GET', path, undefined, other)).statusCode, 404);
+  const made = await send('POST', path, { name: 'before upgrade', description: 'kernel 6.12' }, user, key());
+  assert.equal(made.statusCode, 202, made.body);
+  await done('snapshot_create');
+  const list = (await send('GET', path, undefined, user)).json();
+  assert.equal(list.max, 5);
+  const snap = list.snapshots.find((s) => s.name === 'before upgrade');
+  assert.ok(snap && snap.current && snap.description === 'kernel 6.12', JSON.stringify(list));
+  assert.equal((await send('POST', `${path}/snapshot-999999/revert`, undefined, user, key())).statusCode, 202); // checked by VMware: fails as an operation
+  await until(async () => (await lastOp(id)).status === 'failed', 'unknown snapshot fails');
+  assert.equal((await lastOp(id)).error_code, 'SNAPSHOT_NOT_FOUND');
+  assert.equal((await send('POST', `${path}/${snap.id}/revert`, undefined, user, key())).statusCode, 202);
+  await done('snapshot_revert');
+  assert.equal((await serverRow(id)).power_state, srv.power_state);
+  await send('PUT', '/admin/settings/servers', { customer: { snapshots: false } });
+  assert.equal((await send('DELETE', `${path}/${snap.id}`, undefined, user, key())).json().code, 'ACTION_DISABLED');
+  await send('PUT', '/admin/settings/servers', { customer: { snapshots: true } });
+  assert.equal((await send('DELETE', `${path}/${snap.id}`, undefined, user, key())).statusCode, 202);
+  await done('snapshot_delete');
+  assert.equal((await send('GET', path, undefined, user)).json().snapshots.some((s) => s.id === snap.id), false);
+});

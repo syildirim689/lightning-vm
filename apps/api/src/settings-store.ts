@@ -23,7 +23,7 @@ export type SmsSettings = { provider: string; sender: string; credentialsEnc: st
 export type Channel = 'inApp' | 'push' | 'email' | 'sms';
 // Sign-in policy: who must use two-factor, and whether a one-time e-mail code can replace the password.
 // Servers: what customers may do on their own servers (staff always may), and hardware options for new VMs.
-export type ServerSettings = { customer: { power: boolean; console: boolean; iso: boolean; rootPassword: boolean; delete: boolean };
+export type ServerSettings = { customer: { power: boolean; console: boolean; iso: boolean; rootPassword: boolean; delete: boolean; snapshots: boolean };
   hardware: { cpuHotAdd: boolean; memoryHotAdd: boolean; nestedHv: boolean } };
 // Energy report: electricity price, datacenter overhead (PUE) and grid carbon intensity.
 export type EnergySettings = { pricePerKwh: string; currency: string; pue: number; co2GramsPerKwh: number };
@@ -53,7 +53,7 @@ const defaults = {
   abuse: { portScan: true, scanMinutes: 30, cpu: true, cpuThreshold: 90, cpuHours: 6, notifyCustomer: false,
     ports: [{ port: 23, label: 'Telnet' }, { port: 445, label: 'SMB' }, { port: 1433, label: 'MS SQL' }, { port: 2375, label: 'Docker API' }, { port: 3306, label: 'MySQL' },
       { port: 5432, label: 'PostgreSQL' }, { port: 6379, label: 'Redis' }, { port: 9200, label: 'Elasticsearch' }, { port: 11211, label: 'Memcached' }, { port: 27017, label: 'MongoDB' }] } as AbuseSettings,
-  servers: { customer: { power: true, console: true, iso: true, rootPassword: true, delete: true }, hardware: { cpuHotAdd: false, memoryHotAdd: false, nestedHv: false } } as ServerSettings,
+  servers: { customer: { power: true, console: true, iso: true, rootPassword: true, delete: true, snapshots: true }, hardware: { cpuHotAdd: false, memoryHotAdd: false, nestedHv: false } } as ServerSettings,
   rdns: { provider: 'none', apiUrl: '', apiKeyEnc: null, serverId: 'localhost', template: '', ttl: 3600, customerEdit: true, forwardCheck: true } as RdnsSettings,
   // Web Push (VAPID) keys, generated on first use.
   vapid: { publicKey: '', privateKeyEnc: null } as { publicKey: string; privateKeyEnc: string | null },
@@ -65,7 +65,10 @@ export async function getSettings<K extends Key>(key: K): Promise<(typeof defaul
   const hit = cache.get(key);
   if (hit && Date.now() - hit.at < 10_000) return hit.value as (typeof defaults)[K];
   const { rows: [r] } = await pool.query('SELECT value FROM settings WHERE key = $1', [key]);
-  const value = { ...defaults[key], ...(r?.value ?? {}) };
+  // One level deep, so a setting added later (servers.customer.snapshots) gets its default under an older saved object.
+  const d = defaults[key] as Record<string, unknown>;
+  const plain = (x: unknown): x is Record<string, unknown> => !!x && typeof x === 'object' && !Array.isArray(x);
+  const value = Object.fromEntries(Object.entries({ ...d, ...(r?.value ?? {}) }).map(([k, v]) => [k, plain(d[k]) && plain(v) ? { ...d[k], ...v } : v])) as (typeof defaults)[K];
   cache.set(key, { at: Date.now(), value });
   return value;
 }

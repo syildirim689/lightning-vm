@@ -48,3 +48,13 @@ test('a power schedule needs an action, weekdays, a time and a real time zone', 
     { fields: { action: 'INVALID_VALUE', days: 'REQUIRED', time: 'INVALID_VALUE', timezone: 'INVALID_VALUE' } });
   assert.equal(cleanSchedule({ action: 'power_on', days: [7], time: '08:00', timezone: 'UTC', enabled: false }).enabled, false);
 });
+
+test('a GitHub .keys file: valid keys kept with fingerprints, junk lines dropped, at most 20', async () => {
+  const { parseKeyList } = await import('../dist/smart-rules.js');
+  const k = 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMa0iBTtZu9kbSNXzg5M6pZ1rn8F1143iWq3JIcGimfn';
+  const out = parseKeyList(`${k}\r\n<html>nope</html>\n\nssh-dss AAAA\n${k} laptop`);
+  assert.equal(out.length, 2);
+  assert.match(out[0].fingerprint, /^SHA256:[A-Za-z0-9+/]{43}$/);
+  assert.equal(out[0].fingerprint, out[1].fingerprint);
+  assert.equal(parseKeyList(Array(30).fill(k).join('\n')).length, 20);
+});

@@ -1,4 +1,5 @@
 // Pure rules behind the smart features (no database, so unit tests need no Redis or Postgres):
+import { createHash } from 'node:crypto';
 // right-sizing from a server's CPU samples, a 0-100 health score, and this month's cost forecast.
 
 export type CpuStats = { avg: number; p95: number; samples: number; days: number };
@@ -73,4 +74,14 @@ export function cleanSchedule(body: Record<string, unknown>) {
   try { if (!timezone || timezone.length > 64) throw 0; new Intl.DateTimeFormat('en', { timeZone: timezone }); } catch { fields.timezone = 'INVALID_VALUE'; }
   const enabled = body?.enabled !== false;
   return Object.keys(fields).length ? { fields } : { action, days, time, timezone, enabled };
+}
+
+// OpenSSH public keys (type, base64 blob, optional comment) and their SHA256 fingerprint as ssh-keygen shows it.
+export const sshKeyPattern = /^(ssh-ed25519|ssh-rsa|ecdsa-sha2-nistp(256|384|521)) ([A-Za-z0-9+/]+={0,2})( [^\r\n]{0,200})?$/;
+export const fingerprint = (blob: string) => 'SHA256:' + createHash('sha256').update(Buffer.from(blob, 'base64')).digest('base64').replace(/=+$/, '');
+
+// github.com/<user>.keys: one key per line; valid ones are kept (at most 20), with their fingerprints.
+export function parseKeyList(text: string) {
+  return text.split(/\r?\n/).map((l) => l.trim()).map((l) => ({ line: l, m: sshKeyPattern.exec(l) })).filter((x) => x.m).slice(0, 20)
+    .map((x) => ({ publicKey: x.line, fingerprint: fingerprint(x.m![3]) }));
 }

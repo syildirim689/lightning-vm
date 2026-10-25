@@ -17,6 +17,7 @@ import { ServerHealth } from '../../components/smart';
 import { OrderSimilar, QuickConnect, ServerLabels } from './server-extras';
 import { remember } from '../../lib/recent';
 import { PowerSchedules } from './server-schedules';
+import { ServerSnapshots } from './server-snapshots';
 import { ServerFilters, useServerFilters } from './server-filters';
 import { flag } from '../../lib/flag';
 import { ButtonLink, ConfirmButton, DataTable, Empty, Mono, Notice, PageHeader, Section, StatusChip, TextInput, type Tone } from '../../components/ui';
@@ -53,6 +54,7 @@ export function SshKeys() {
   const keys = useSshKeys();
   const [listRef] = useAutoAnimate<HTMLUListElement>();
   const f = useApiForm({ name: '', publicKey: '' });
+  const gh = useApiForm({ username: '' });
   const remove = useApiAction((id: string) => apiFetch(`/ssh-keys/${id}`, { method: 'DELETE' }), { invalidate: [['ssh-keys']] });
   return <Section title={t('keys.title')} description={t('keys.explain')}>
     <div className="flex flex-col gap-5">
@@ -70,6 +72,13 @@ export function SshKeys() {
         <TextInput label={t('keys.publicKey')} value={f.values.publicKey} onChange={f.set('publicKey')} error={f.fieldError('publicKey')} help={t('keys.publicKeyHelp')}
           placeholder="ssh-ed25519 AAAA… user@host" spellCheck={false}/>
         <Button type="submit" className="md:mt-6" isPending={f.busy}><I name="plus" size={16}/>{t('keys.add')}</Button>
+      </form>
+      <form className="flex flex-col gap-3 border-t border-separator pt-4 sm:flex-row sm:items-start" noValidate
+        onSubmit={async (e) => { e.preventDefault(); const r = await gh.submit<{ added: number; skipped: number }>('POST', '/ssh-keys/github');
+          if (r) { gh.reset(); client.invalidateQueries({ queryKey: ['ssh-keys'] }); toast.success(t('keys.githubDone', { added: r.added, skipped: r.skipped })); } }}>
+        <TextInput className="sm:w-72" label={t('keys.github')} value={gh.values.username} onChange={gh.set('username')} error={gh.fieldError('username')} help={t('keys.githubHelp')}
+          placeholder="octocat" spellCheck={false} autoComplete="off"/>
+        <Button type="submit" variant="secondary" className="sm:mt-6" isPending={gh.busy} isDisabled={!gh.values.username.trim()}><I name="github" size={16}/>{t('keys.githubImport')}</Button>
       </form>
     </div>
   </Section>;
@@ -120,7 +129,7 @@ export function ServerDetail({ id }: { id: string }) {
   const client = useQueryClient();
   const [message, setMessage] = useState<string>();
   const [deleteName, setDeleteName] = useState('');
-  const q = useApiQuery<{ server: Server; operations: Operation[]; own?: boolean; allowed?: Record<'power' | 'console' | 'iso' | 'rootPassword' | 'delete', boolean> }>(['servers', id], `/servers/${id}`, { refetchInterval: 3_000 });
+  const q = useApiQuery<{ server: Server; operations: Operation[]; own?: boolean; allowed?: Record<'power' | 'console' | 'iso' | 'rootPassword' | 'delete' | 'snapshots', boolean> }>(['servers', id], `/servers/${id}`, { refetchInterval: 3_000 });
   const gone = (q.error as { code?: string } | null)?.code === 'NOT_FOUND';
   // The viewer's own server names, for the next free name in "order similar".
   const mine = useApiQuery<{ servers: Server[] }>(['servers'], '/servers').data?.servers;
@@ -130,7 +139,7 @@ export function ServerDetail({ id }: { id: string }) {
   if (!q.data) return <p role="status" className="text-sm text-muted">{q.error && !gone ? error(q.error) : t('loading')}</p>;
   const { server: s, operations } = q.data;
   // What the admin lets customers do here (missing: an older API, everything allowed).
-  const allowed = { power: true, console: true, iso: true, rootPassword: true, delete: true, ...q.data.allowed };
+  const allowed = { power: true, console: true, iso: true, rootPassword: true, delete: true, snapshots: true, ...q.data.allowed };
   const open = operations.find((o) => runningStates.includes(o.status));
   const own = !!q.data.own; // owner-only helpers: tags and notes, order similar
   // The same Idempotency-Key is kept until the server answers; only a network failure keeps it for a retry.
@@ -191,6 +200,7 @@ export function ServerDetail({ id }: { id: string }) {
     <div className={`grid grid-cols-1 gap-6 ${s.address ? 'lg:grid-cols-2' : ''}`}><ServerHealth id={s.id}/><QuickConnect server={s}/></div>
     {own && <ServerLabels key={`${s.tags?.join()}|${s.notes}`} server={s}/>}
     {own && allowed.power && s.state !== 'provisioning' && <PowerSchedules serverId={s.id}/>}
+    {allowed.snapshots && ['ready', 'error'].includes(s.state) && <ServerSnapshots serverId={s.id} busy={!!open}/>}
     <ServerIps server={s}/>
     {allowed.iso && <ServerIso id={s.id} ready={s.state === 'ready' || s.state === 'error'}/>}
     {s.hasRootPassword && allowed.rootPassword && <RootPassword id={s.id}/>}

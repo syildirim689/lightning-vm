@@ -237,7 +237,10 @@
     "LOCATION_UNAVAILABLE": "Bu lokasyon şu an yeni sunucu almıyor (bakımda).",
     "ACTION_DISABLED": "Yönetici bu işlemi müşterilere kapattı.",
     "VDC_LIMIT": "Sanal veri merkezinde yeterli kaynak kalmadı.",
-    "VDC_INACTIVE": "Bu sanal veri merkezi etkin değil."
+    "VDC_INACTIVE": "Bu sanal veri merkezi etkin değil.",
+    "SNAPSHOT_LIMIT": "Sunucu başına en fazla 5 anlık görüntü: önce birini kaldırın.",
+    "SNAPSHOT_NOT_FOUND": "Bu anlık görüntü artık yok.",
+    "GITHUB_UNREACHABLE": "GitHub yanıt vermedi; daha sonra yeniden deneyin."
   },
   "Auth": {
     "required": "zorunlu",
@@ -407,7 +410,12 @@
     "DISK_TOO_SMALL": "İmajın gerektirdiği diskten küçük.",
     "TOO_MANY": "Çok fazla öğe.",
     "INVALID_TAG": "Etiket harf veya rakamla başlar; yalnızca harf, rakam, boşluk, nokta, _ ve - içerir.",
-    "END_BEFORE_START": "Bitiş, başlangıçtan sonra olmalı."
+    "END_BEFORE_START": "Bitiş, başlangıçtan sonra olmalı.",
+    "INVALID_SNAPSHOT_NAME": "Harf veya rakamla başlayın; harf, rakam, boşluk ve . _ : ( ) - kullanılabilir (en fazla 80).",
+    "SNAPSHOT_LIMIT": "Sunucu başına en fazla 5 anlık görüntü: önce birini kaldırın.",
+    "INVALID_GITHUB_USER": "GitHub kullanıcı adı harf, rakam ve tek tirelerden oluşur (en fazla 39).",
+    "GITHUB_USER_NOT_FOUND": "Böyle bir GitHub kullanıcısı yok.",
+    "GITHUB_NO_KEYS": "Bu GitHub kullanıcısı SSH anahtarı yayınlamamış."
   },
   "Setup": {
     "title": "Kurulum sihirbazı",
@@ -1370,7 +1378,10 @@
       "power_on": "Açma",
       "shutdown": "Düzgün kapatma",
       "power_off": "Zorla kapatma",
-      "reset": "Reset"
+      "reset": "Reset",
+      "snapshot_create": "Anlık görüntü alma",
+      "snapshot_revert": "Anlık görüntüye dönme",
+      "snapshot_delete": "Anlık görüntü kaldırma"
     },
     "opStatus": {
       "pending": "Sırada",
@@ -1391,7 +1402,8 @@
       "destroy": "VM siliniyor",
       "verify_gone": "silindiği doğrulanıyor",
       "done": "bitti",
-      "firewall": "firewall uygulanıyor"
+      "firewall": "firewall uygulanıyor",
+      "snapshot": "anlık görüntü işleniyor"
     },
     "action": {
       "power_on": "Aç",
@@ -1465,7 +1477,11 @@
       "publicKeyHelp": "Örnek: ~/.ssh/id_ed25519.pub dosyasının içeriği.",
       "add": "Anahtar ekle",
       "remove": "Sil",
-      "added": "Anahtar eklendi."
+      "added": "Anahtar eklendi.",
+      "github": "GitHub kullanıcı adı",
+      "githubHelp": "github.com/<kullanıcı>.keys adresinde yayınlanan açık anahtarları içe aktarır.",
+      "githubImport": "GitHub’dan içe aktar",
+      "githubDone": "{added} eklendi, {skipped} zaten vardı."
     },
     "admin": {
       "eyebrow": "YÖNETİM · SUNUCULAR",
@@ -1829,7 +1845,8 @@
     "notificationSettings": "Bildirim ayarları",
     "shortcuts": "Klavye kısayolları",
     "recent": "Son açılanlar",
-    "activity": "Etkinliklerim"
+    "activity": "Etkinliklerim",
+    "users": "Kullanıcılar"
   },
   "Insights": {
     "title": "Dikkat gerektirenler",
@@ -2073,6 +2090,10 @@
       "server_port_open": {
         "title": "Sunucuda açık riskli port",
         "help": "Sunucunuzda internete açık riskli bir port bulunduğunda (yönetici açarsa)."
+      },
+      "server_snapshot": {
+        "title": "Anlık görüntü tamamlandı",
+        "help": "Bir anlık görüntü alındığında, geri yüklendiğinde veya kaldırıldığında."
       }
     },
     "policyTitle": "Önce yönetici, sonra kullanıcı",
@@ -2771,14 +2792,16 @@
         "console": "Tarayıcı konsolu",
         "iso": "ISO takma / ISO'dan başlatma",
         "rootPassword": "Root parolasını görme",
-        "delete": "Sunucuyu silme"
+        "delete": "Sunucuyu silme",
+        "snapshots": "Anlık görüntüler"
       },
       "actionHelp": {
         "power": "Açma, kapatma, yeniden başlatma, sıfırlama.",
         "console": "VM ekranına tarayıcıdan erişim.",
         "iso": "Lokasyonun ISO kütüphanesinden imaj takma.",
         "rootPassword": "Siparişte belirlenen veya üretilen parolayı panelden görme.",
-        "delete": "Sunucuyu ve disklerini kalıcı olarak kaldırma."
+        "delete": "Sunucuyu ve disklerini kalıcı olarak kaldırma.",
+        "snapshots": "Anlık görüntü alma, geri dönme ve kaldırma (sunucu başına en fazla 5)."
       },
       "rolesNote": "Firewall yönetimi gibi diğer yetkiler Roller sayfasından ayarlanır.",
       "hardware": "Yeni sunucuların donanımı",
@@ -3496,7 +3519,10 @@
       "vmware_connection_deleted": "vCenter bağlantısı kaldırıldı",
       "vmware_discovery": "Envanter yenilendi",
       "server_iso_inserted": "ISO takıldı",
-      "server_iso_ejected": "ISO çıkarıldı"
+      "server_iso_ejected": "ISO çıkarıldı",
+      "server_snapshot_create": "Anlık görüntü alma",
+      "server_snapshot_revert": "Anlık görüntüye dönme",
+      "server_snapshot_delete": "Anlık görüntü kaldırma"
     },
     "outcome": {
       "success": "Tamamlandı",
@@ -3523,5 +3549,30 @@
       "setup_step": "Kurulum adımı: {name}",
       "admin_user": "Kullanıcı hesabı: {name}"
     }
+  },
+  "Snapshots": {
+    "title": "Anlık görüntüler",
+    "help": "Disklerin saniyeler içinde alınan bir geri dönüş noktası. Güncellemeden veya riskli bir değişiklikten önce alın; bir şey bozulursa ona dönün. Anlık görüntü yedek değildir: aynı depolamada durur ve var olduğu sürece diski biraz yavaşlatır.",
+    "count": "{n} / {max}",
+    "empty": "Henüz anlık görüntü yok.",
+    "current": "Şu anki durum buna dayanıyor",
+    "revert": "Geri dön",
+    "remove": "Kaldır",
+    "cancel": "Vazgeç",
+    "started": "Başlatıldı; görev listesinden izleyebilirsiniz.",
+    "revertTitle": "“{name}” noktasına dönülsün mü?",
+    "revertBody": "Bu anlık görüntüden sonra disklere yazılan her şey kaybolur. Sunucu açıksa yeniden başlatılır.",
+    "revertYes": "Evet, geri dön",
+    "removeTitle": "“{name}” kaldırılsın mı?",
+    "removeBody": "Geri dönüş noktası disklere birleştirilir; sunucu çalışmaya devam eder ve veriler şu anki haliyle kalır.",
+    "removeYes": "Evet, kaldır",
+    "name": "Ad",
+    "namePlaceholder": "guncelleme-oncesi",
+    "nameHelp": "Boş bırakılırsa tarih ve saat.",
+    "description": "Not",
+    "optional": "İsteğe bağlı.",
+    "auto": "Anlık görüntü",
+    "take": "Anlık görüntü al",
+    "full": "Sunucu başına en fazla {max} anlık görüntü: önce birini kaldırın."
   }
 }
