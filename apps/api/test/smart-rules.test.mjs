@@ -39,3 +39,12 @@ test('labels: tags are trimmed, de-duplicated without case and limited; notes ha
   assert.deepEqual(cleanLabels({ tags: [...Array(11)].map((_, i) => `t${i}`) }), { fields: { tags: 'TOO_MANY' } });
   assert.deepEqual(cleanLabels({ tags: 'web', notes: 'x'.repeat(2001) }), { fields: { tags: 'INVALID_VALUE', notes: 'TOO_LONG' } });
 });
+
+test('a power schedule needs an action, weekdays, a time and a real time zone', async () => {
+  const { cleanSchedule } = await import('../dist/smart-rules.js');
+  assert.deepEqual(cleanSchedule({ action: 'shutdown', days: [5, 1, 1, '3'], time: '20:30', timezone: 'Europe/Istanbul' }),
+    { action: 'shutdown', days: [1, 3, 5], time: '20:30', timezone: 'Europe/Istanbul', enabled: true });
+  assert.deepEqual(cleanSchedule({ action: 'reset', days: [0], time: '24:00', timezone: 'Mars/Base' }),
+    { fields: { action: 'INVALID_VALUE', days: 'REQUIRED', time: 'INVALID_VALUE', timezone: 'INVALID_VALUE' } });
+  assert.equal(cleanSchedule({ action: 'power_on', days: [7], time: '08:00', timezone: 'UTC', enabled: false }).enabled, false);
+});

@@ -634,3 +634,43 @@ test('virtual data center: an allocation reserved in the pool, free shapes insid
   }
   assert.equal((await send('DELETE', `/admin/vdcs/${vdcId}`)).statusCode, 204);
 });
+
+test('power schedules: validated, owned, limited per server; a due one starts the operation once', { skip }, async () => {
+  const { runSchedules } = await import('../../dist/schedules.js');
+  const made = await create(order('sched-1'));
+  assert.equal(made.statusCode, 202, made.body);
+  const id = made.json().serverId;
+  await until(async () => (await serverRow(id)).state === 'ready' && !(await pool.query("SELECT 1 FROM operations WHERE server_id = $1 AND status IN ('pending', 'running')", [id])).rowCount, 'ready');
+  const path = `/servers/${id}/schedules`;
+  assert.deepEqual(Object.keys((await send('POST', path, { action: 'reset', days: [], time: '9', timezone: 'Nowhere/X' }, user)).json().fields).sort(), ['action', 'days', 'time', 'timezone']);
+  assert.equal((await send('GET', path, undefined, other)).statusCode, 404);
+  // Due now in UTC: shut the running server down.
+  const now = new Date();
+  const time = `${String(now.getUTCHours()).padStart(2, '0')}:${String(now.getUTCMinutes()).padStart(2, '0')}`;
+  const r = await send('POST', path, { action: 'shutdown', days: [now.getUTCDay() || 7], time, timezone: 'UTC' }, user);
+  assert.equal(r.statusCode, 201, r.body);
+  const off = await send('POST', path, { action: 'power_on', days: [1, 2, 3, 4, 5], time: '08:00', timezone: 'Europe/Istanbul', enabled: false }, user);
+  assert.equal((await send('GET', path, undefined, user)).json().schedules.length, 2);
+  await runSchedules();
+  const row = (await pool.query('SELECT last_result FROM power_schedules WHERE id = $1', [r.json().id])).rows[0];
+  assert.equal(row.last_result, 'started');
+  assert.equal((await lastOp(id)).kind, 'shutdown');
+  await runSchedules(); // a second tick within 10 minutes does nothing
+  assert.equal((await pool.query("SELECT count(*)::int AS n FROM operations WHERE server_id = $1 AND kind = 'shutdown'", [id])).rows[0].n, 1);
+  assert.equal((await pool.query('SELECT last_run_at FROM power_schedules WHERE id = $1', [off.json().id])).rows[0].last_run_at, null);
+  assert.equal((await send('DELETE', `${path}/${off.json().id}`, undefined, user)).statusCode, 204);
+  await until(async () => (await lastOp(id)).status === 'succeeded', 'shutdown done');
+
+  // Admin bulk action: staff only, one operation per server, a repeated key starts nothing new.
+  const key = randomUUID();
+  const bulk = (session) => send('POST', '/admin/servers/actions', { action: 'power_on', serverIds: [id, randomUUID()] }, session, { 'idempotency-key': key });
+  assert.equal((await bulk(user)).statusCode, 403);
+  assert.equal((await send('POST', '/admin/servers/actions', { action: 'explode', serverIds: [id] }, admin, { 'idempotency-key': randomUUID() })).statusCode, 400);
+  assert.deepEqual((await bulk(admin)).json(), { started: 1, skipped: 1 });
+  assert.deepEqual((await bulk(admin)).json(), { started: 0, skipped: 2 });
+  await until(async () => (await lastOp(id)).kind === 'power_on' && (await lastOp(id)).status === 'succeeded', 'bulk power on done');
+
+  await send('DELETE', `/servers/${id}`, { confirm: 'sched-1' }, user, { 'idempotency-key': randomUUID() });
+  await until(async () => (await serverRow(id)).state === 'deleted', 'deleted');
+  assert.equal((await pool.query('SELECT count(*)::int AS n FROM power_schedules WHERE server_id = $1', [id])).rows[0].n, 1);
+});

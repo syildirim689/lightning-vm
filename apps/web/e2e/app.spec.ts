@@ -417,6 +417,17 @@ test.describe('server lifecycle (simulator, Turkish customer)', () => {
     await page.getByLabel('Notlar').fill('Ana web sunucusu');
     await page.getByRole('button', { name: 'Kaydet', exact: true }).click();
     await expect(page.getByText('Etiketler ve notlar kaydedildi.')).toBeVisible();
+    // Power schedule: "office hours" adds a weekday start and shutdown in one click.
+    await page.getByRole('button', { name: 'Mesai saatleri' }).click();
+    await expect(page.getByText('08:00', { exact: true })).toBeVisible();
+    await expect(page.getByText('19:00', { exact: true })).toBeVisible();
+    await page.getByRole('button', { name: /19:00 Kapat zamanlamasını kaldır/ }).click();
+    await expect(page.getByText('19:00', { exact: true })).toBeHidden();
+    await page.screenshot({ path: 'test-results/tour/server-page.png', fullPage: true });
+    await page.setViewportSize({ width: 390, height: 900 });
+    await expectNoOverflow(page, 'server page with schedules at 390 px');
+    await page.screenshot({ path: 'test-results/tour/server-page-390.png', fullPage: true });
+    await page.setViewportSize({ width: 1280, height: 720 });
     await page.getByRole('button', { name: 'Benzerini sipariş et' }).click();
     await expect(page).toHaveURL(/\/order$/);
     await expect(page.getByLabel('Sunucu adı')).toHaveValue('web-2');

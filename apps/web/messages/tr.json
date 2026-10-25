@@ -1484,7 +1484,12 @@
       "search": "Ad, sahip, IP veya havuza göre ara",
       "shown": "{total} sunucudan {shown} gösteriliyor",
       "exportCsv": "CSV indir",
-      "tags": "Etiketler"
+      "tags": "Etiketler",
+      "bulkAction": "Görünen sunucular için işlem",
+      "bulkApply": "{n} sunucuya uygula",
+      "bulkConfirm": "Süzgecin gösterdiği {n} sunucuda “{action}” yapılsın mı? İşlemi süren sunucular atlanır.",
+      "bulkDone": "{started} başlatıldı, {skipped} atlandı.",
+      "bulkHelp": "Önce süzün (durum, etiket, arama); bir seferde en fazla 200."
     },
     "finding": {
       "vm_missing": "VM VMware'de yok",
@@ -3315,5 +3320,33 @@
     "save": "Kaydet",
     "saved": "Etiketler ve notlar kaydedildi.",
     "orderSimilar": "Benzerini sipariş et"
+  },
+  "Schedules": {
+    "title": "Güç zamanlaması",
+    "help": "Sunucu kendiliğinden açılsın veya kapansın. Saatler {zone} saat dilimindedir.",
+    "officeHours": "Mesai saatleri",
+    "empty": "Henüz zamanlama yok. Mesai saatleri, hafta içi 08:00’de açar ve 19:00’da kapatır.",
+    "action": {
+      "power_on": "Aç",
+      "shutdown": "Kapat"
+    },
+    "what": "İşlem",
+    "at": "Saat",
+    "days": "Günler",
+    "weekdays": "Hafta içi",
+    "weekend": "Hafta sonu",
+    "everyDay": "Her gün",
+    "add": "Zamanlama ekle",
+    "added": "Zamanlama kaydedildi.",
+    "removed": "Zamanlama kaldırıldı.",
+    "enabledFor": "{time} {action} açık",
+    "remove": "{time} {action} zamanlamasını kaldır",
+    "result": {
+      "started": "Çalıştı",
+      "skipped_state": "Atlandı: zaten o durumda",
+      "skipped_busy": "Atlandı: başka işlem sürüyordu",
+      "skipped_disabled": "Atlandı: güç işlemleri kapalı",
+      "failed": "Başarısız"
+    }
   }
 }

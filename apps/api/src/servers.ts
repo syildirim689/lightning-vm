@@ -375,6 +375,26 @@ export class ServersAdminController {
     return { operations: rows };
   }
 
+  // One power action on many servers (the admin list's current filter): busy or unsuitable ones are skipped
+  // and counted, the rest get their own operation. The Idempotency-Key makes a repeated click start nothing new.
+  @Post('servers/actions') @HttpCode(202) @Can('servers.manage_all')
+  async bulk(@Req() req: AuthedRequest, @Headers('idempotency-key') header: string | undefined, @Body() body: Input) {
+    const action = String(body?.action ?? '');
+    if (!['power_on', 'shutdown', 'power_off', 'reset'].includes(action)) throw apiError(400, 'VALIDATION_FAILED', 'Invalid input', { action: 'INVALID_VALUE' });
+    const ids = Array.isArray(body?.serverIds) ? [...new Set(body.serverIds.map(String))] : [];
+    if (!ids.length || ids.length > 200 || ids.some((x) => !/^[0-9a-f-]{36}$/.test(x))) throw apiError(400, 'VALIDATION_FAILED', 'Invalid input', { serverIds: 'INVALID_VALUE' });
+    const base = idempotencyKey(header, req.user.id);
+    const { rows } = await pool.query(`SELECT s.*, EXISTS (SELECT 1 FROM operations o WHERE o.server_id = s.id AND o.status IN ('pending', 'running')) AS busy
+      FROM servers s WHERE s.id = ANY($1::uuid[]) AND s.state <> 'deleted'`, [ids]);
+    const started: string[] = [], skipped: string[] = [];
+    for (const s of rows) {
+      if (s.busy || !['ready', 'error'].includes(s.state) || !s.vm_moref) { skipped.push(s.id); continue; }
+      await startPowerOperation(req, s, action, `${base}:${s.id}`).then(() => started.push(s.id), () => skipped.push(s.id));
+    }
+    await audit(req, 'server.bulk_action', 'success', req.user.id, { action, started: started.length, skipped: skipped.length });
+    return { started: started.length, skipped: skipped.length + ids.length - rows.length };
+  }
+
   // A failed operation resumes from its persisted step; nothing already done is repeated.
   @Post('operations/:id/retry') @HttpCode(202) @Can('operations.retry')
   async retry(@Req() req: AuthedRequest, @Param('id', ParseUUIDPipe) id: string) {

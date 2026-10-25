@@ -16,6 +16,7 @@ import { ServerIso } from './server-iso';
 import { ServerHealth } from '../../components/smart';
 import { OrderSimilar, QuickConnect, ServerLabels } from './server-extras';
 import { remember } from '../../lib/recent';
+import { PowerSchedules } from './server-schedules';
 import { ServerFilters, useServerFilters } from './server-filters';
 import { flag } from '../../lib/flag';
 import { ButtonLink, ConfirmButton, DataTable, Empty, Mono, Notice, PageHeader, Section, StatusChip, TextInput, type Tone } from '../../components/ui';
@@ -189,6 +190,7 @@ export function ServerDetail({ id }: { id: string }) {
 
     <div className={`grid grid-cols-1 gap-6 ${s.address ? 'lg:grid-cols-2' : ''}`}><ServerHealth id={s.id}/><QuickConnect server={s}/></div>
     {own && <ServerLabels key={`${s.tags?.join()}|${s.notes}`} server={s}/>}
+    {own && allowed.power && s.state !== 'provisioning' && <PowerSchedules serverId={s.id}/>}
     <ServerIps server={s}/>
     {allowed.iso && <ServerIso id={s.id} ready={s.state === 'ready' || s.state === 'error'}/>}
     {s.hasRootPassword && allowed.rootPassword && <RootPassword id={s.id}/>}

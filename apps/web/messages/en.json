@@ -1484,7 +1484,12 @@
       "search": "Search by name, owner, IP or pool",
       "shown": "Showing {shown} of {total}",
       "exportCsv": "Export CSV",
-      "tags": "Tags"
+      "tags": "Tags",
+      "bulkAction": "Action for the servers shown",
+      "bulkApply": "Apply to {n, plural, one {# server} other {# servers}}",
+      "bulkConfirm": "{action} on {n, plural, one {# server} other {# servers}} shown by the current filter? Busy servers are skipped.",
+      "bulkDone": "{started} started, {skipped} skipped.",
+      "bulkHelp": "Filter first (state, tag, search); at most 200 at a time."
     },
     "finding": {
       "vm_missing": "VM missing in VMware",
@@ -3315,5 +3320,33 @@
     "save": "Save",
     "saved": "Tags and notes saved.",
     "orderSimilar": "Order similar"
+  },
+  "Schedules": {
+    "title": "Power schedule",
+    "help": "Start or shut the server down by itself. Times are in {zone}.",
+    "officeHours": "Office hours",
+    "empty": "No schedule yet. Office hours starts it at 08:00 and shuts it down at 19:00 on weekdays.",
+    "action": {
+      "power_on": "Start",
+      "shutdown": "Shut down"
+    },
+    "what": "Action",
+    "at": "Time",
+    "days": "Days",
+    "weekdays": "Weekdays",
+    "weekend": "Weekend",
+    "everyDay": "Every day",
+    "add": "Add schedule",
+    "added": "Schedule saved.",
+    "removed": "Schedule removed.",
+    "enabledFor": "{action} at {time} is on",
+    "remove": "Remove {action} at {time}",
+    "result": {
+      "started": "Ran",
+      "skipped_state": "Skipped: already in that state",
+      "skipped_busy": "Skipped: another operation was running",
+      "skipped_disabled": "Skipped: power actions are turned off",
+      "failed": "Failed"
+    }
   }
 }

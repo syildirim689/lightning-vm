@@ -4,7 +4,10 @@ import NextLink from 'next/link';
 import { useFormatter, useTranslations } from 'next-intl';
 import { parseAsString, useQueryState } from 'nuqs';
 import { I } from '../../../../components/icon';
-import { DataTable, Mono, Notice, PageHeader, StatusChip } from '../../../../components/ui';
+import { ConfirmButton, DataTable, Mono, Notice, PageHeader, SelectInput, StatusChip } from '../../../../components/ui';
+import { useState } from 'react';
+import { can } from '../../../../lib/permissions';
+import { useMe } from '../../../../lib/me';
 import { apiFetch, useErrorText } from '../../../../lib/api';
 import { useApiAction, useApiQuery } from '../../../../lib/query';
 import { StateBadge, type Server } from '../../servers-ui';
@@ -27,6 +30,10 @@ export default function AdminServers() {
   const reconcile = useApiAction(() => apiFetch('/admin/reconcile', { method: 'POST' }), { invalidate: [['admin', 'findings']], success: t('admin.reconcileQueued') });
 
   const filters = useServerFilters(servers);
+  const me = useMe();
+  const [bulkAction, setBulkAction] = useState('shutdown');
+  const bulk = useApiAction((ids: string[]) => apiFetch<{ started: number; skipped: number }>('/admin/servers/actions', { method: 'POST', body: { action: bulkAction, serverIds: ids }, headers: { 'idempotency-key': crypto.randomUUID() } }),
+    { invalidate: [['admin']], success: (r) => t('admin.bulkDone', { started: r.started, skipped: r.skipped }) });
   const shown = filters.shown;
   const failed = ops.filter((o) => o.status === 'failed').length;
   const opTone = (s: string) => (s === 'succeeded' ? 'success' : s === 'failed' ? 'danger' : s === 'cancelled' ? 'default' : 'accent') as 'success';
@@ -51,6 +58,16 @@ export default function AdminServers() {
               <span role="status">{t('admin.shown', { shown: shown.length, total: servers.length })}</span>
               <Button size="sm" variant="secondary" isDisabled={!shown.length} onPress={() => exportCsv(shown)}><I name="download" size={15}/>{t('admin.exportCsv')}</Button>
             </div>
+            {me && can(me.permissions, 'servers.manage_all') && shown.length > 0 && <div className="flex flex-col gap-3 rounded-lg border border-border p-3 sm:flex-row sm:items-end">
+              <SelectInput className="sm:w-56" label={t('admin.bulkAction')} value={bulkAction} onChange={setBulkAction}
+                options={(['shutdown', 'power_on', 'power_off', 'reset'] as const).map((a) => ({ id: a, label: t(`action.${a}`) }))}/>
+              <ConfirmButton variant={bulkAction === 'power_off' || bulkAction === 'reset' ? 'danger' : 'primary'} icon={<I name="zap" size={15}/>} isDisabled={bulk.isPending}
+                label={t('admin.bulkApply', { n: Math.min(shown.length, 200) })} title={t('admin.bulkApply', { n: Math.min(shown.length, 200) })}
+                body={t('admin.bulkConfirm', { action: t(`action.${bulkAction as 'shutdown'}`), n: Math.min(shown.length, 200) })}
+                confirmLabel={t('confirm.yes', { action: t(`action.${bulkAction as 'shutdown'}`) })} cancelLabel={t('confirm.no')}
+                onConfirm={() => bulk.mutate(shown.slice(0, 200).map((x) => x.id))}/>
+              <p className="text-xs text-muted sm:ml-2 sm:self-center">{t('admin.bulkHelp')}</p>
+            </div>}
             <DataTable label={t('admin.servers')} rows={shown} rowKey={(s) => s.id} empty={t('list.empty')}
               columns={[{ id: 'name', label: t('col.name') }, { id: 'owner', label: t('admin.owner') }, { id: 'state', label: t('col.state') }, { id: 'ip', label: 'IP' }, { id: 'size', label: t('col.size') }, { id: 'loc', label: t('col.location') }, { id: 'tags', label: t('admin.tags') }]}
               cells={(s) => [<NextLink key="n" href={`/servers/${s.id}`} className="font-medium text-accent hover:underline">{s.name}</NextLink>, s.ownerEmail ?? '–', <StateBadge key="b" server={s}/>,

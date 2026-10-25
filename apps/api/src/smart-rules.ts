@@ -59,3 +59,18 @@ export function cleanLabels(body: Record<string, unknown>): { tags: string[]; no
   else if (notes.length > 2000) fields.notes = 'TOO_LONG';
   return Object.keys(fields).length ? { fields } : { tags, notes };
 }
+
+// A power schedule from the panel: start or shut down, ISO weekdays 1-7, "HH:MM" and an IANA time zone.
+export function cleanSchedule(body: Record<string, unknown>) {
+  const fields: Record<string, string> = {};
+  const action = String(body?.action ?? '');
+  if (!['power_on', 'shutdown'].includes(action)) fields.action = 'INVALID_VALUE';
+  const days = Array.isArray(body?.days) ? [...new Set(body.days.map(Number))].sort() : [];
+  if (!days.length || days.some((d) => !Number.isInteger(d) || d < 1 || d > 7)) fields.days = 'REQUIRED';
+  const time = String(body?.time ?? '');
+  if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(time)) fields.time = 'INVALID_VALUE';
+  const timezone = String(body?.timezone ?? '');
+  try { if (!timezone || timezone.length > 64) throw 0; new Intl.DateTimeFormat('en', { timeZone: timezone }); } catch { fields.timezone = 'INVALID_VALUE'; }
+  const enabled = body?.enabled !== false;
+  return Object.keys(fields).length ? { fields } : { action, days, time, timezone, enabled };
+}

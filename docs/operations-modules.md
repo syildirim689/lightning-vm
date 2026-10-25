@@ -101,3 +101,22 @@ Kurallar `apps/api/src/smart-rules.ts` içindedir ve birim testleri vardır. Ver
 - **Benzerini sipariş et:** sipariş formu aynı lokasyon, şablon ve boyutla (paket veya özel) açılır. Ad olarak
   sıradaki boş `ad-N` önerilir. VDC sunucularında bu düğme yoktur.
 - **Son açılanlar:** komut paleti, bu tarayıcıda son açılan 5 sunucuyu gösterir (`localStorage`).
+
+## Güç zamanlaması ve toplu işlemler
+
+- **Güç zamanlaması** (`/servers/:id/schedules`, sunucu sayfasında "Güç zamanlaması"): sunucu seçilen günlerde
+  (ISO 1 = Pazartesi), yerel bir saatte açılır veya kapatılır (düzgün kapatma).
+  - Saat dilimi tarayıcıdan alınır ve zamanlamayla birlikte saklanır.
+  - "Mesai saatleri" düğmesi tek tıkla hafta içi 08:00 aç ve 19:00 kapat ekler.
+  - Sunucu başına en fazla 10 zamanlama olur. Müşteri güç işlemleri yönetici ayarlarında kapalıysa eklenemez;
+    eklenmiş zamanlamalar da atlanır.
+  - Zamanlayıcı API'de dakikada bir çalışır. Redis kilidi sayesinde tek örnek çalışır. Belirlenen saatten sonraki
+    5 dakika içinde ve son 10 dakikada çalışmamışsa normal bir işlem başlatır. Sunucu zaten istenen durumdaysa
+    veya başka bir işlem sürüyorsa atlar. Son sonuç ve zamanı listede görünür.
+  - 5 dakikadan uzun süren bir API kesintisinde o çalıştırma kaçırılır; telafi edilmez.
+  - Migration: `021_power_schedules`.
+- **Toplu güç işlemi** (yönetici, `POST /admin/servers/actions`, `servers.manage_all`): süzgecin gösterdiği
+  sunuculara (en fazla 200) aç, kapat, zorla kapat veya sıfırla uygulanır.
+  - Uygulamadan önce onay istenir. Her sunucuya ayrı işlem açılır. İşlemi süren veya uygun olmayan sunucular
+    atlanır ve sayılır.
+  - Aynı Idempotency-Key ile tekrarlanan istek yeni işlem başlatmaz.
