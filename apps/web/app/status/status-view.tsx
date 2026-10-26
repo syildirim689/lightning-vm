@@ -17,7 +17,6 @@ const look: Record<State, { icon: string; text: string; bg: string; dot: string 
   degraded: { icon: 'triangle-alert', text: 'text-warning', bg: 'bg-warning/10 border-warning/30', dot: 'bg-warning' },
   down: { icon: 'circle-x', text: 'text-danger', bg: 'bg-danger/10 border-danger/30', dot: 'bg-danger' },
 };
-const serviceIcon: Record<string, string> = { panel: 'layout-dashboard', database: 'database', queue: 'layers', automation: 'cog', virtualization: 'server' };
 
 export default function StatusView() {
   const t = useTranslations('PublicStatus');
@@ -37,7 +36,7 @@ export default function StatusView() {
         <I name={o.icon} size={24}/></span>
       <div className="min-w-0">
         <h2 className="text-lg font-semibold sm:text-xl">{t(`overall.${d.overall}`)}</h2>
-        <p className="text-sm text-muted">{t('checked', { when: format.relativeTime(new Date(d.checkedAt), now) })}</p>
+        <p className="text-sm text-muted">{t('checked', { when: format.relativeTime(new Date(Math.min(Date.parse(d.checkedAt), now.getTime())), now) })}</p>
       </div>
     </motion.section>
 
@@ -48,7 +47,7 @@ export default function StatusView() {
       <h2 id="services" className="mb-3 text-sm font-semibold uppercase tracking-wider text-muted">{t('services')}</h2>
       <ul className="divide-y divide-separator overflow-hidden rounded-2xl border border-border bg-surface">
         {d.services.map((s, i) => <motion.li key={s.key} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: i * 0.04 }} className="flex items-center gap-3 px-4 py-3.5">
-          <I name={serviceIcon[s.key] ?? 'circle'} size={18} className="shrink-0 text-muted"/>
+          <I name={({ panel: 'layout-dashboard', database: 'database', queue: 'layers', automation: 'cog', virtualization: 'server' } as Record<string, string>)[s.key] ?? 'circle'} size={18} className="shrink-0 text-muted"/>
           <span className="min-w-0 flex-1"><span className="block text-sm font-medium">{t(`service.${s.key}.name` as 'service.panel.name')}</span><span className="block text-xs text-muted">{t(`service.${s.key}.help` as 'service.panel.help')}</span></span>
           <span className={`inline-flex shrink-0 items-center gap-1.5 text-sm font-medium ${look[s.state].text}`}><span aria-hidden className={`size-2 rounded-full ${look[s.state].dot}`}/>{t(`state.${s.state}`)}</span>
         </motion.li>)}

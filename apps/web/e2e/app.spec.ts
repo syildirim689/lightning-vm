@@ -849,7 +849,7 @@ test.describe('people, settings and smart features (English browser)', () => {
     await page.goto('/admin/users');
     await page.getByRole('button', { name: /admin@example.test/ }).first().click();
     await expect(page.getByRole('dialog')).toContainText('Recent activity');
-    await page.waitForTimeout(400);
+    await page.waitForTimeout(900);
     await shot(page, 'user-summary');
     await page.keyboard.press('Escape');
     // The role editor: permissions, then limits.
@@ -863,7 +863,7 @@ test.describe('people, settings and smart features (English browser)', () => {
     await page.goto('/admin/settings?tab=rdns');
     await page.getByRole('button', { name: 'What is it, how to set it up?' }).click();
     await expect(page.getByRole('dialog')).toContainText('PowerDNS');
-    await page.waitForTimeout(400);
+    await page.waitForTimeout(900);
     await shot(page, 'guide-powerdns');
     await page.keyboard.press('Escape');
     await page.getByRole('button', { name: 'Accessibility' }).click();

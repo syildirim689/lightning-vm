@@ -28,7 +28,7 @@ export function UserSummary({ id, onClose }: { id: string; onClose: () => void }
   const action = (a: string) => (ta.has(`actions.${a.replace(/\./g, '_')}` as 'actions.settings_sms') ? ta(`actions.${a.replace(/\./g, '_')}` as 'actions.settings_sms') : a);
   return <Modal.Backdrop isOpen onOpenChange={(o) => { if (!o) onClose(); }}>
     <Modal.Container size="lg" scroll="inside">
-      <Modal.Dialog>
+      <Modal.Dialog className="bg-surface">
         <Modal.CloseTrigger/>
         <Modal.Header><Modal.Heading className="flex flex-col">
           <span>{d ? d.user.name || d.user.email : '…'}</span>
@@ -46,7 +46,7 @@ export function UserSummary({ id, onClose }: { id: string; onClose: () => void }
               <Stat label={t('servers')} value={d.servers.length} icon={<I name="server" size={16}/>}/>
               <Stat label={t('monthly')} value={d.spend.length ? d.spend.map((s) => money(s.monthly, s.currency)).join(' + ') : '–'} icon={<I name="wallet" size={16}/>} tone="accent"/>
               <Stat label={t('sessions')} value={d.sessions.active} hint={d.sessions.lastSeen ? t('lastSeen', { when: format.relativeTime(new Date(d.sessions.lastSeen), now) }) : undefined} icon={<I name="monitor-smartphone" size={16}/>}/>
-              <Stat label={t('member')} value={format.relativeTime(new Date(d.user.createdAt), now)} icon={<I name="calendar" size={16}/>}/>
+              <Stat label={t('member')} value={format.dateTime(new Date(d.user.createdAt), { dateStyle: 'medium' })} icon={<I name="calendar" size={16}/>}/>
             </div>
             {d.user.budgetMonthly && <p className="text-sm text-muted"><I name="wallet" size={14} className="mr-1 inline"/>{t('budget', { amount: money(d.user.budgetMonthly, d.user.budgetCurrency ?? 'EUR') })}</p>}
             <section>
