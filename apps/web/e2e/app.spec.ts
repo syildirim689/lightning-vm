@@ -163,6 +163,9 @@ test.describe('first run (Turkish browser)', () => {
     await skip();
 
     await expect(heading).toHaveText('Son kontrol ve özet');
+    // Focus on the last button must not slide a clipped container sideways (overflow-hidden scrolls, overflow-clip does not).
+    await page.getByRole('button', { name: 'Kurulumu tamamla' }).focus();
+    expect(await page.evaluate(() => [...document.querySelectorAll('body *')].filter((e) => e.scrollLeft !== 0).length)).toBe(0);
     await shot('11-summary');
     await expect(page.getByText('VMware bağlantısı yapılandırılmadı', { exact: false })).toHaveCount(sim ? 0 : 1);
     await expect(page.getByText('Panel adresi bu sunucudan doğrulanamadı', { exact: false })).toHaveCount(domain ? 0 : 1);

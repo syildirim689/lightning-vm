@@ -19,7 +19,7 @@ export default async function AuthLayout({ children }: { children: React.ReactNo
     { icon: <I name="shield-check" size={16}/>, text: t('points.backup') },
   ];
   return <div className="grid min-h-dvh lg:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)]">
-    <aside className="relative hidden overflow-hidden border-r border-separator bg-surface p-10 lg:flex lg:flex-col">
+    <aside className="relative hidden overflow-clip border-r border-separator bg-surface p-10 lg:flex lg:flex-col">
       <div aria-hidden className="auth-grid pointer-events-none absolute inset-0 opacity-60"/>
       <div aria-hidden className="glow pointer-events-none absolute -left-32 -top-32 size-[28rem] rounded-full bg-accent/15 blur-3xl"/>
       <div aria-hidden className="glow pointer-events-none absolute -bottom-40 right-[-8rem] size-[24rem] rounded-full bg-accent/10 blur-3xl" style={{ animationDelay: '300ms' }}/>
@@ -32,7 +32,7 @@ export default async function AuthLayout({ children }: { children: React.ReactNo
       </div>
       <p className="relative mt-10 text-xs text-muted">{t('footer')}</p>
     </aside>
-    <div className="relative flex flex-col overflow-hidden">
+    <div className="relative flex flex-col overflow-clip">
       <div aria-hidden className="auth-aurora pointer-events-none absolute inset-0"/>
       <header className="relative flex items-center justify-between gap-2 px-4 py-3 md:px-8">
         <span className="lg:invisible"><Brand branding={branding} href="/login"/></span>
