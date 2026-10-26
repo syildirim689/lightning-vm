@@ -1,0 +1,15 @@
+# Bundled default (do not edit; it is replaced on update): every alert goes to the panel, which sends it as the
+# "admin.alert" notification by each administrator's notification settings. Used while data/observability/
+# alertmanager.yml defines no receiver of its own; see compose.yaml (alertmanager) and docs/operations.md.
+route:
+  receiver: panel
+  group_by: [alertname]
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+receivers:
+  - name: panel
+    webhook_configs:
+      - url: http://api:4000/internal/alerts
+        send_resolved: true
+        max_alerts: 20

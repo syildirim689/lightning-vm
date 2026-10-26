@@ -198,10 +198,16 @@ services:
     profiles: [observability]
     restart: unless-stopped
     ports: ["127.0.0.1:9093:9093"]
-    # Receivers are the operator's: data/observability/alertmanager.yml (created by install.sh).
+    # The operator's data/observability/alertmanager.yml is used once it defines a receiver; until then the bundled
+    # one sends every alert to the panel's notifications (nothing to edit on the server).
     volumes:
-      - ./data/observability/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - ./data/observability/alertmanager.yml:/etc/alertmanager/operator.yml:ro
+      - ./deploy/observability/alertmanager.panel.yml:/etc/alertmanager/panel.yml:ro
       - alertmanager_data:/alertmanager
+    entrypoint: [/bin/sh, -c]
+    command:
+      - if grep -Eq '^[^#]*_configs:' /etc/alertmanager/operator.yml 2>/dev/null; then cfg=operator; else cfg=panel; fi;
+        exec /bin/alertmanager --config.file=/etc/alertmanager/$$cfg.yml --storage.path=/alertmanager
     logging: *logging
   node-exporter:
     image: prom/node-exporter:v1.9.1

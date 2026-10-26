@@ -58,3 +58,18 @@ test('a GitHub .keys file: valid keys kept with fingerprints, junk lines dropped
   assert.equal(out[0].fingerprint, out[1].fingerprint);
   assert.equal(parseKeyList(Array(30).fill(k).join('\n')).length, 20);
 });
+
+test('Alertmanager alerts become bilingual notices; resolved ones say so; at most 20', async () => {
+  const { alertNotices } = await import('../dist/smart-rules.js');
+  const out = alertNotices({ version: '4', alerts: [
+    { status: 'firing', labels: { alertname: 'LightningWorkerHeartbeatStale', severity: 'critical' }, annotations: { summary: 'Worker iki dakikadır yaşam sinyali vermiyor / worker heartbeat older than 2 minutes' }, fingerprint: 'abc' },
+    { status: 'resolved', labels: { alertname: 'DiskFull' }, annotations: { summary: 'Disk almost full' } },
+  ] });
+  assert.equal(out[0].titleTr, 'Kritik alarm: LightningWorkerHeartbeatStale');
+  assert.equal(out[0].bodyTr, 'Worker iki dakikadır yaşam sinyali vermiyor');
+  assert.equal(out[0].bodyEn, 'worker heartbeat older than 2 minutes');
+  assert.equal(out[1].titleEn, 'Resolved: DiskFull');
+  assert.equal(out[1].bodyTr, 'Disk almost full');
+  assert.deepEqual(alertNotices({}), []);
+  assert.equal(alertNotices({ alerts: Array(30).fill({ labels: { alertname: 'X' } }) }).length, 20);
+});

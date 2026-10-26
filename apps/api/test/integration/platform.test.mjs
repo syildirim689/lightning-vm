@@ -397,3 +397,15 @@ test('CLI password reset: a new generated password works, the old one and every 
   const audit = (await pool.query("SELECT 1 FROM audit_events WHERE action = 'auth.password_reset_cli'")).rowCount;
   assert.equal(audit, 1);
 });
+
+test('Alertmanager alerts reach staff as in-app notifications; proxied calls are refused', async () => {
+  const payload = { version: '4', status: 'firing', alerts: [{ status: 'firing', labels: { alertname: 'LightningWorkerHeartbeatStale', severity: 'critical' },
+    annotations: { summary: 'Worker iki dakikadır yaşam sinyali vermiyor / worker heartbeat older than 2 minutes' }, fingerprint: 'it-1' }] };
+  const raw = (headers) => app.inject({ method: 'POST', url: '/internal/alerts', payload, headers });
+  assert.equal((await raw({ 'x-forwarded-for': '203.0.113.9' })).statusCode, 404);
+  assert.equal((await raw({})).statusCode, 204);
+  const { rows: [boss] } = await pool.query("SELECT id FROM users WHERE email = 'boss@example.test'");
+  const row = await until(async () => (await pool.query("SELECT title, body FROM notifications WHERE user_id = $1 AND event = 'admin.alert' ORDER BY created_at DESC LIMIT 1", [boss.id])).rows[0]);
+  assert.ok(row, 'admin.alert notification for the admin');
+  assert.match(`${row.title} ${row.body}`, /LightningWorkerHeartbeatStale/);
+});

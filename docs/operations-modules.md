@@ -153,3 +153,16 @@ Kurallar `apps/api/src/smart-rules.ts` içindedir ve birim testleri vardır. Ver
   e-postayla süzülmüş olarak açılır.
 - Ayarlar artık bir seviye derin birleştirilir. Sonradan eklenen bir anahtar (ör. `servers.customer.snapshots`),
   eski kayıtlı ayarda da varsayılan değerini alır.
+
+## Alarmlar panel bildirimlerinde
+
+- **Varsayılan akış:** Alertmanager'ın hazır yapılandırması (`deploy/observability/alertmanager.panel.yml`) her
+  alarmı iç ağdan API'ye gönderir (`POST /internal/alerts`). API bunu `admin.alert` bildirimine çevirir.
+  - Bildirim `system.view` izni olan yöneticilere gider: panel içi, e-posta, push. Yönetici politikası ve
+    kişisel tercihler uygulanır.
+  - Alarmın "Türkçe / English" özeti iki dile ayrılır. Sorun çözüldüğünde "Çözüldü" bildirimi gelir.
+- **Sunucuda düzenlenecek dosya yok:** `data/observability/alertmanager.yml` kendi alıcılarını tanımlamadıkça
+  hazır yapılandırma kullanılır. Alıcı eklenirse o dosya geçerli olur; paneli de korumak için
+  `http://api:4000/internal/alerts` adresine giden bir webhook alıcısı eklenir.
+- **Güvenlik:** Caddy `/api/internal/*` yolunu dışarıya 404 ile kapatır. Vekil üzerinden gelen (X-Forwarded-*)
+  istekler de reddedilir. Bu uç çerezsiz çağrıldığı için CSRF başlığı istenmez.

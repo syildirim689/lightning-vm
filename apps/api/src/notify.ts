@@ -74,6 +74,9 @@ export const catalog: Record<string, EventDef> = {
       en: (d) => ({ title: 'ISO ready: ' + d.name, body: 'Available in ' + d.pool + '.' }) } },
   'admin.iso_failed': { audience: 'staff', permission: 'catalog.manage', channels: ['inApp', 'push', 'email'], defaults: ['inApp', 'push'], link: () => '/admin/catalog?tab=isos',
     text: { tr: (d) => ({ title: 'ISO kopyalanamadı: ' + d.name, body: d.error }), en: (d) => ({ title: 'ISO copy failed: ' + d.name, body: d.error }) } },
+  // From Alertmanager (alerts.ts): the monitoring stack's alert rules, firing and resolved.
+  'admin.alert': { audience: 'staff', permission: 'system.view', channels: all, defaults: ['inApp', 'email', 'push'], link: () => '/admin/system',
+    text: { tr: (d) => ({ title: d.titleTr, body: d.bodyTr }), en: (d) => ({ title: d.titleEn, body: d.bodyEn }) } },
   'admin.insight': { audience: 'staff', permission: 'dashboard.view', channels: all, defaults: ['inApp', 'email'], link: () => '/admin',
     text: { tr: (d) => ({ title: d.titleTr, body: d.bodyTr }), en: (d) => ({ title: d.titleEn, body: d.bodyEn }) } },
 };

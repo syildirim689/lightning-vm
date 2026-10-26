@@ -1,7 +1,9 @@
 # Copied by scripts/install.sh to data/observability/alertmanager.yml, which is yours to edit
 # (outside git, kept across updates). Restart after editing:
 #   docker compose --profile observability restart alertmanager
-# Until a receiver is configured, alerts are visible at http://127.0.0.1:9093 and in Grafana only.
+# Until a receiver is configured here, alerts go to the panel (notifications for administrators): nothing to edit.
+# Once you add receivers here, this file is used instead; keep the panel too with a receiver whose webhook is
+# http://api:4000/internal/alerts (send_resolved: true).
 route:
   receiver: default
   group_by: [alertname]

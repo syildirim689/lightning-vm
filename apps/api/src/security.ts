@@ -40,6 +40,8 @@ export async function rateLimit(key: string, max: number, windowSeconds: number)
 // and a present Origin must match the Host the browser used.
 export function csrfRejected(req: FastifyRequest) {
   if (['GET', 'HEAD', 'OPTIONS'].includes(req.method)) return false;
+  // Alertmanager's webhook: no cookies, internal network only (alerts.ts); it cannot send the CSRF header.
+  if (req.url === '/internal/alerts' && !req.headers.cookie) return false;
   if (req.headers['x-lightning-csrf'] !== '1') return true;
   const origin = req.headers.origin;
   if (!origin) return false;

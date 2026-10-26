@@ -2112,6 +2112,10 @@
       "server_snapshot": {
         "title": "Anlık görüntü tamamlandı",
         "help": "Bir anlık görüntü alındığında, geri yüklendiğinde veya kaldırıldığında."
+      },
+      "admin_alert": {
+        "title": "Sistem alarmı",
+        "help": "İzleme bir sorun bildirdiğinde (API, worker, yedek, disk…) ve sorun çözüldüğünde."
       }
     },
     "policyTitle": "Önce yönetici, sonra kullanıcı",

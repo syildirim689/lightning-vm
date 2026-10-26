@@ -85,3 +85,21 @@ export function parseKeyList(text: string) {
   return text.split(/\r?\n/).map((l) => l.trim()).map((l) => ({ line: l, m: sshKeyPattern.exec(l) })).filter((x) => x.m).slice(0, 20)
     .map((x) => ({ publicKey: x.line, fingerprint: fingerprint(x.m![3]) }));
 }
+
+// Alertmanager webhook (version 4) to panel notices: one per alert, the rule's "Türkçe / English" summary split
+// into both languages, resolved ones marked. At most 20 per call (a storm becomes a summary line, not 200 mails).
+type AmAlert = { status?: string; labels?: Record<string, string>; annotations?: Record<string, string>; startsAt?: string; fingerprint?: string };
+export function alertNotices(body: unknown) {
+  const alerts = Array.isArray((body as { alerts?: unknown })?.alerts) ? (body as { alerts: AmAlert[] }).alerts : [];
+  const clip = (s: string, n: number) => (s.length > n ? s.slice(0, n - 1) + '…' : s);
+  return alerts.slice(0, 20).map((a) => {
+    const name = clip(String(a.labels?.alertname ?? 'Alert'), 80);
+    const summary = String(a.annotations?.summary ?? a.annotations?.description ?? '');
+    const [tr, en] = summary.includes(' / ') ? summary.split(' / ', 2) : [summary, summary];
+    const resolved = a.status === 'resolved';
+    const severity = ['critical', 'warning', 'info'].includes(String(a.labels?.severity)) ? String(a.labels!.severity) : 'warning';
+    return { key: clip(String(a.fingerprint ?? name), 64), name, severity, resolved,
+      titleTr: `${resolved ? 'Çözüldü' : severity === 'critical' ? 'Kritik alarm' : 'Alarm'}: ${name}`, titleEn: `${resolved ? 'Resolved' : severity === 'critical' ? 'Critical alert' : 'Alert'}: ${name}`,
+      bodyTr: clip(tr.trim() || name, 500), bodyEn: clip((en ?? tr).trim() || name, 500) };
+  });
+}

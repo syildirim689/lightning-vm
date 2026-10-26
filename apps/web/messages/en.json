@@ -2112,6 +2112,10 @@
       "server_snapshot": {
         "title": "Snapshot done",
         "help": "When a snapshot is taken, restored or removed."
+      },
+      "admin_alert": {
+        "title": "System alert",
+        "help": "When monitoring reports a problem (API, worker, backup, disk…) and when it clears."
       }
     },
     "policyTitle": "The admin first, then each user",
