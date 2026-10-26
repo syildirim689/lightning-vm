@@ -18,9 +18,15 @@ function client(s: LdapSettings) {
 }
 async function open(s: LdapSettings, dn: string, password: string) {
   const { c, tls } = client(s);
-  if (s.startTls && s.url.startsWith('ldap:')) await c.startTLS(tls);
-  await c.bind(dn, password);
-  return c;
+  try {
+    if (s.startTls && s.url.startsWith('ldap:')) await c.startTLS(tls);
+    await c.bind(dn, password);
+    return c;
+  } catch (err) {
+    // A failed bind (wrong password, unreachable server) must not leave its connection open.
+    await c.unbind().catch(() => undefined);
+    throw err;
+  }
 }
 const first = (v: unknown) => (Array.isArray(v) ? String(v[0] ?? '') : v === undefined ? '' : String(v));
 const many = (v: unknown) => (Array.isArray(v) ? v.map(String) : v === undefined ? [] : [String(v)]);
