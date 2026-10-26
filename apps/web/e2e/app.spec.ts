@@ -48,8 +48,11 @@ test.describe('first run (Turkish browser)', () => {
     const token = process.env.E2E_BOOTSTRAP_TOKEN;
     expect(token, 'E2E_BOOTSTRAP_TOKEN is required on a fresh install').toBeTruthy();
     const heading = page.getByRole('heading', { level: 1 });
-    const saveAndContinue = () => page.getByRole('button', { name: 'Kaydet ve devam et' }).click();
+    // One primary action per state: "Devam et" appears only once the step's checks pass.
+    const saveAndContinue = () => page.getByRole('button', { name: 'Devam et' }).click();
     const skip = () => page.getByRole('button', { name: 'Şimdilik atla' }).click();
+    const check = () => page.getByRole('button', { name: 'Kontrol et' }).click();
+    const shot = (name: string) => page.screenshot({ path: `test-results/tour/wizard-${name}.png`, fullPage: true });
 
     await page.goto('/setup');
     await page.getByLabel('Kurulum anahtarı').fill('wrong-token');
@@ -59,12 +62,22 @@ test.describe('first run (Turkish browser)', () => {
     await page.getByRole('button', { name: 'Kuruluma başla' }).click();
 
     await expect(heading).toHaveText('Dil');
+    // Later required steps stay locked until the earlier ones are done.
+    await expect(page.getByRole('button', { name: /Yönetici hesabı/ })).toBeDisabled();
+    await shot('1-language');
     await saveAndContinue();
     await expect(heading).toHaveText('Sistem ön kontrolleri');
-    await page.getByRole('button', { name: 'Bağlantıyı test et' }).click();
+    // The checks run by themselves; "Devam et" appears only after they pass, never next to an untested "test" button.
     for (const name of ['PostgreSQL', 'Redis', "Veritabanı migration'ları", 'Arka plan çalışanı']) {
       await expect(page.locator('li.ok', { hasText: name })).toContainText('Başarılı');
     }
+    await expect(page.getByText('Tüm kontroller başarılı.')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Bağlantıyı test et' })).toHaveCount(0);
+    await shot('2-checks');
+    await page.setViewportSize({ width: 390, height: 844 });
+    await shot('2-checks-390');
+    await expectNoOverflow(page, 'wizard at 390 px');
+    await page.setViewportSize({ width: 1280, height: 720 });
     await saveAndContinue();
     await expect(heading).toHaveText('Dağıtım ve erişim adresi');
 
@@ -72,24 +85,29 @@ test.describe('first run (Turkish browser)', () => {
     await page.reload();
     await expect(heading).toHaveText('Dağıtım ve erişim adresi');
 
+    // A changed address makes the earlier result stale: the action becomes "Kontrol et" again.
     await page.getByLabel('Panel adresi').fill('http://panel.example.com/yol');
-    await saveAndContinue();
+    await check();
     await expect(page.getByText('Yalnızca şema, alan adı/IP ve isteğe bağlı port girin.', { exact: false })).toBeVisible();
     const domain = process.env.E2E_DOMAIN;
     await page.getByLabel('Panel adresi').fill(domain ? `https://${domain}` : 'http://127.0.0.1:8080');
-    await page.getByRole('button', { name: 'Bağlantıyı test et' }).click();
-    if (domain) await expect(page.locator('li.ok', { hasText: 'Panel adresi' })).toContainText('Başarılı');
-    else await expect(page.locator('li.fail', { hasText: 'Panel adresi' })).toContainText('Yerel adres; doğrulanamaz');
-    await saveAndContinue();
+    await check();
+    if (domain) { await expect(page.locator('li.ok', { hasText: 'Panel adresi' })).toContainText('Başarılı'); await saveAndContinue(); }
+    else {
+      await expect(page.locator('li.fail', { hasText: 'Panel adresi' })).toContainText('Yerel adres; doğrulanamaz');
+      await expect(page.getByRole('button', { name: 'Devam et' })).toHaveCount(0);
+      await shot('3-access-failed');
+      await page.getByRole('button', { name: 'Doğrulamadan kaydet' }).click();
+    }
 
     await expect(heading).toHaveText('Alan adı ve HTTPS');
     await page.getByLabel('Alan adı').fill('https://panel.example.com');
-    await page.getByRole('button', { name: 'Bağlantıyı test et' }).click();
+    await check();
     await expect(page.getByText('Yalnızca alan adını girin', { exact: false })).toBeVisible();
     if (domain) {
       // Real deployment with a public name: DNS, HTTP and the certificate are each checked for real.
       await page.getByLabel('Alan adı').fill(domain);
-      await page.getByRole('button', { name: 'Bağlantıyı test et' }).click();
+      await check();
       await expect(page.locator('li.ok', { hasText: 'DNS' })).toContainText('Başarılı');
       await expect(page.locator('li.ok', { hasText: 'HTTP (80)' })).toContainText("HTTPS'e yönlendiriyor");
       await expect(page.locator('li.ok', { hasText: 'HTTPS sertifikası' })).toContainText('Başarılı');
@@ -98,6 +116,7 @@ test.describe('first run (Turkish browser)', () => {
       await skip();
     }
     await expect(heading).toHaveText('PostgreSQL ve Redis');
+    await expect(page.getByText('Tüm kontroller başarılı.')).toBeVisible();
     await saveAndContinue();
 
     await expect(heading).toHaveText('Yönetici hesabı');
@@ -136,6 +155,7 @@ test.describe('first run (Turkish browser)', () => {
     await skip();
 
     await expect(heading).toHaveText('Son kontrol ve özet');
+    await shot('11-summary');
     await expect(page.getByText('VMware bağlantısı yapılandırılmadı', { exact: false })).toHaveCount(sim ? 0 : 1);
     await expect(page.getByText('Panel adresi bu sunucudan doğrulanamadı', { exact: false })).toHaveCount(domain ? 0 : 1);
     await expect(page.getByText('HTTPS yapılandırılmadı', { exact: false })).toHaveCount(domain ? 0 : 1);
@@ -354,6 +374,9 @@ test.describe('VMware connections (simulator, English browser)', () => {
     await dialog.getByLabel('Password').fill('sim-password-2');
     await dialog.getByRole('button', { name: 'Test connection' }).click();
     await dialog.getByRole('button', { name: 'I verified the fingerprint, pin this certificate' }).click();
+    // Pinning changed the form: it is tested again before "Save" is offered.
+    await expect(dialog.getByRole('button', { name: 'Save', exact: true })).toHaveCount(0);
+    await dialog.getByRole('button', { name: 'Test connection' }).click();
     await dialog.getByRole('button', { name: 'Save', exact: true }).click();
     await page.getByRole('row', { name: /Sim ESXi/ }).getByRole('link', { name: 'Details' }).click();
     await expect(page.getByRole('listitem').filter({ hasText: 'vCenter Automation REST API' })).toContainText('no');

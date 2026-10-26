@@ -571,15 +571,27 @@
         "CERT_STAGING": "Bu bir test sertifikası. Her şey çalışıyorsa komutu --acme-staging olmadan tekrar çalıştırarak gerçek sertifika alın.",
         "WRONG_TARGET": "Bu ad yanıt veriyor ama bu kuruluma ait değil. DNS veya önünüzdeki proxy başka bir sunucuyu gösteriyor.",
         "UNREACHABLE": "Adrese ulaşılamadı."
-      }
+      },
+      "howtoTitle": "HTTPS nasıl kurulur?"
     },
     "vmware": {
-      "note": "Bağlantı eklendiğinde adım tamamlanır. Ayrıntılı envanter yönetim panelindeki VMware sayfasındadır. Bu adımı atlarsanız platform sanal sunucu yönetemez."
+      "note": "Bağlantı eklendiğinde adım tamamlanır. Ayrıntılı envanter yönetim panelindeki VMware sayfasındadır. Bu adımı atlarsanız platform sanal sunucu yönetemez.",
+      "done": "Çalışan bir bağlantı kaydedildi. İsterseniz başka bir bağlantı ekleyin veya devam edin."
     },
     "discovery": {
       "none": "Henüz bağlantı yok. Önceki adıma dönün veya bu adımı atlayın.",
       "row": "{name}: {hosts} host, {vms} sanal makine bulundu"
-    }
+    },
+    "check": "Kontrol et",
+    "checking": "Kontrol ediliyor…",
+    "recheck": "Yeniden kontrol et",
+    "allPassed": "Tüm kontroller başarılı.",
+    "someFailed": "{n} kontrol başarısız: sorunu giderip yeniden kontrol edin.",
+    "saveUnverified": "Doğrulamadan kaydet",
+    "unverifiedHelp": "Kullanıcıların açacağı adres gerçekten buysa (örneğin NAT arkasında), doğrulamadan kaydedebilirsiniz.",
+    "locked": "Önce bundan önceki zorunlu adımları tamamlayın.",
+    "finishBlocked": "Tamamlanmamış zorunlu adımlar var: {steps}.",
+    "doneOf": "{n}/{total} tamamlandı"
   },
   "Vmware": {
     "eyebrow": "YÖNETİM · VMWARE",

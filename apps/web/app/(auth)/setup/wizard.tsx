@@ -1,4 +1,8 @@
 "use client";
+// First-run wizard. Each step shows one primary action for its state: steps with checks run them on arrival,
+// "Continue" appears only after they pass, a changed field makes the result stale ("Check" again), a failure
+// offers "Check again". The API repeats every check when a step is saved, so the browser is never trusted.
+// Required steps must be done in order; optional ones can be skipped.
 import { Button, Card, ProgressBar } from '@heroui/react';
 import { useRouter } from 'next/navigation';
 import { useFormatter, useLocale, useTranslations } from 'next-intl';
@@ -19,13 +23,18 @@ const steps = ['language', 'checks', 'access', 'domain', 'services', 'admin', 'v
 type Step = (typeof steps)[number];
 const required: Step[] = ['language', 'checks', 'access', 'services', 'admin'];
 const notYetAvailable: Step[] = ['pools'];
+const stepIcon: Record<Step, React.ReactNode> = {
+  language: <I name="languages" size={18}/>, checks: <I name="list-checks" size={18}/>, access: <I name="globe" size={18}/>, domain: <I name="lock" size={18}/>,
+  services: <I name="database" size={18}/>, admin: <I name="user-plus" size={18}/>, vmware: <I name="server" size={18}/>, discovery: <I name="radar" size={18}/>,
+  pools: <I name="boxes" size={18}/>, monitoring: <I name="activity" size={18}/>, summary: <I name="flag" size={18}/>,
+};
 
 function CheckList({ checks }: { checks: Check[] }) {
   const t = useTranslations('Setup');
   const format = useFormatter();
-  return <ul className="checks flex flex-col gap-2">{checks.map((c) => <li key={c.id} className={`flex items-start gap-2 rounded-lg px-3 py-2 text-sm ${c.ok ? 'ok bg-success/10' : 'fail bg-danger/10'}`}>
-    <I name={c.ok ? 'circle-check' : 'circle-x'} size={18} className={c.ok ? 'text-success' : 'text-danger'}/>
-    <span><strong>{t(`checkNames.${c.id}` as 'checkNames.postgres')}</strong>: {t(`checkCodes.${c.code}` as 'checkCodes.OK')}
+  return <ul className="checks flex flex-col gap-2">{checks.map((c) => <li key={c.id} className={`flex items-start gap-3 rounded-xl border px-3 py-2.5 text-sm ${c.ok ? 'ok border-success/30 bg-success/5' : 'fail border-danger/30 bg-danger/5'}`}>
+    <I name={c.ok ? 'circle-check' : 'circle-x'} size={18} className={`mt-0.5 shrink-0 ${c.ok ? 'text-success' : 'text-danger'}`}/>
+    <span className="min-w-0"><strong>{t(`checkNames.${c.id}` as 'checkNames.postgres')}</strong>: {t(`checkCodes.${c.code}` as 'checkCodes.OK')}
       {c.detail?.version !== undefined && <span className="text-muted"> ({t('version', { version: String(c.detail.version) })})</span>}
       {c.detail?.a !== undefined && <span className="text-muted"> ({t('dnsDetail', { a: String(c.detail.a) || '–', aaaa: String(c.detail.aaaa) || '–' })})</span>}
       {c.detail?.issuer !== undefined && <span className="text-muted"> ({t('certDetail', { issuer: String(c.detail.issuer), validTo: c.detail.validTo ? format.dateTime(new Date(String(c.detail.validTo)), { dateStyle: 'medium' }) : '–' })})</span>}</span>
@@ -41,12 +50,14 @@ export default function Wizard() {
   const [progress, setProgress] = useState<Progress>();
   const [gate, setGate] = useState<'token' | 'login'>();
   const [current, setCurrent] = useState<Step>('language');
-  const [checks, setChecks] = useState<Check[]>();
+  const [result, setResult] = useState<{ step: Step; key: string; checks: Check[] }>();
+  const [checking, setChecking] = useState(false);
   const [failure, setFailure] = useState<ApiError & { text: string }>();
   const [busy, setBusy] = useState(false);
   const [publicUrl, setPublicUrl] = useState('');
   const [domain, setDomain] = useState('');
   const [monitoring, setMonitoring] = useState(false);
+  const [hosts, setHosts] = useState<number>();
 
   const load = useCallback(async (jump = false) => {
     try {
@@ -69,16 +80,39 @@ export default function Wizard() {
   }, [router]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { load(true); }, [load]);
 
-  async function run<T>(action: () => Promise<T>, onOk?: (value: T) => void) {
-    setBusy(true); setFailure(undefined);
-    try { const value = await action(); onOk?.(value); return true; }
-    catch (e) { setFailure({ ...(e as ApiError), text: error(e) }); return false; }
-    finally { setBusy(false); }
+  // What the current step checks, and the input the result belongs to (a changed input makes it stale).
+  const probe = (): { path: string; body?: object; key: string } | null => {
+    if (current === 'checks') return { path: '/setup/checks', key: '-' };
+    if (current === 'services') return { path: '/setup/test/services', key: '-' };
+    if (current === 'access') return { path: '/setup/test/access', body: { publicUrl }, key: publicUrl.trim() };
+    if (current === 'domain') return domain.trim() ? { path: '/setup/test/domain', body: { domain }, key: domain.trim() } : null;
+    if (current === 'monitoring') return monitoring ? { path: '/setup/test/monitoring', key: 'on' } : null;
+    return null;
+  };
+  const p = probe();
+  const fresh = !!p && result?.step === current && result.key === p.key;
+  const passed = fresh && result!.checks.every((c) => c.ok);
+
+  async function runChecks() {
+    const pr = probe();
+    if (!pr) return;
+    setChecking(true); setFailure(undefined);
+    try { const r = await apiFetch<{ checks: Check[] }>(pr.path, { method: 'POST', body: pr.body }); setResult({ step: current, key: pr.key, checks: r.checks }); }
+    catch (e) { setResult(undefined); setFailure({ ...(e as ApiError), text: error(e) }); }
+    finally { setChecking(false); }
   }
-  const go = (step: Step) => { setCurrent(step); setChecks(undefined); setFailure(undefined); };
+  // Checks that need no input run as soon as the step opens (and the monitoring check when it is switched on).
+  useEffect(() => {
+    if (progress && (current === 'checks' || current === 'services' || current === 'access' || (current === 'monitoring' && monitoring))) void runChecks();
+  }, [current, progress?.adminCreated, monitoring]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const go = (step: Step) => { setCurrent(step); setResult(undefined); setFailure(undefined); };
   const next = () => go(steps[Math.min(steps.indexOf(current) + 1, steps.length - 1)]);
   async function save(status: 'completed' | 'skipped', data?: object) {
-    if (await run(() => apiFetch(`/setup/steps/${current}`, { method: 'PUT', body: { status, data } }))) { await load(); next(); }
+    setBusy(true); setFailure(undefined);
+    try { await apiFetch(`/setup/steps/${current}`, { method: 'PUT', body: { status, data } }); await load(); next(); }
+    catch (e) { setFailure({ ...(e as ApiError), text: error(e) }); }
+    finally { setBusy(false); }
   }
   const chooseLocale = (l: string) => startLocale(async () => { const f = new FormData(); f.set('locale', l); await setLocale(f); router.refresh(); });
 
@@ -91,76 +125,117 @@ export default function Wizard() {
   const index = steps.indexOf(current);
   const status = (s: Step) => s === 'admin' ? (progress.adminCreated ? 'completed' : undefined) : progress.steps[s]?.status;
   const isRequired = required.includes(current);
-  const doneCount = steps.filter((s) => status(s)).length;
-  const testButton = (path: string) => <Button variant="secondary" isPending={busy}
-    onPress={() => run(() => apiFetch<{ checks: Check[] }>(path, { method: 'POST', body: current === 'access' ? { publicUrl } : current === 'domain' ? { domain } : undefined }), (r) => setChecks(r.checks))}>
-    {busy ? t('testing') : t('test')}</Button>;
-  const saveButton = (data?: object) => <Button isDisabled={busy} onPress={() => save('completed', data)}>{t('saveAndContinue')}</Button>;
-  const skipButton = <Button variant="ghost" isDisabled={busy} onPress={() => save('skipped')}>{t('skip')}</Button>;
+  const doneCount = steps.filter((s) => s !== 'summary' && status(s)).length;
+  // A step opens once every required step before it is done (later steps need the admin's session, too).
+  const reachable = (s: Step) => steps.slice(0, steps.indexOf(s)).every((x) => !required.includes(x) || !!status(x));
+  const missing = required.filter((s) => !status(s));
+
+  const skipButton = !isRequired && current !== 'summary' && <Button variant="ghost" isDisabled={busy || checking} onPress={() => save('skipped')}>{t('skip')}</Button>;
+  const continueButton = (onPress: () => void, isDisabled = false) => <Button isPending={busy} isDisabled={isDisabled || checking} onPress={onPress}>{t('continue')}<I name="arrow-right" size={16}/></Button>;
+  const checkButtons = (data: object) => checking ? <Button isPending>{t('checking')}</Button>
+    : !fresh ? <Button isDisabled={!p} onPress={runChecks}><I name="search-check" size={16}/>{t('check')}</Button>
+    : passed ? continueButton(() => save('completed', data))
+    : <>{current === 'access' && <Button variant="secondary" isDisabled={busy} onPress={() => save('completed', data)}>{t('saveUnverified')}</Button>}
+      <Button onPress={runChecks}><I name="rotate-cw" size={16}/>{t('recheck')}</Button></>;
+
+  const actions = (() => {
+    switch (current) {
+      case 'language': return continueButton(() => save('completed', { locale }));
+      case 'checks': case 'services': return checkButtons({});
+      case 'access': return checkButtons({ publicUrl });
+      case 'domain': return checkButtons({ domain });
+      case 'admin': return progress.adminCreated && continueButton(next);
+      case 'vmware': return status('vmware') === 'completed' && continueButton(next);
+      case 'discovery': return continueButton(() => save('completed'), !hosts);
+      case 'monitoring': return monitoring ? checkButtons({ enabled: true }) : continueButton(() => save('completed', { enabled: false }));
+      case 'summary': return <Button isPending={busy} isDisabled={missing.length > 0} onPress={async () => {
+        setBusy(true); setFailure(undefined);
+        try { await apiFetch('/setup/complete', { method: 'POST' }); router.replace('/admin'); router.refresh(); }
+        catch (e) { setFailure({ ...(e as ApiError), text: error(e) }); setBusy(false); }
+      }}><I name="flag" size={16}/>{t('finish')}</Button>;
+      default: return null;
+    }
+  })();
 
   return <div className="wizard grid w-full max-w-6xl gap-6 lg:grid-cols-[17rem_minmax(0,1fr)]">
-    <Card className="self-start">
+    <Card className="hidden self-start lg:block">
       <Card.Content className="flex flex-col gap-3">
-        <ProgressBar aria-label={t('title')} value={doneCount} maxValue={steps.length - 1} size="sm"><ProgressBar.Track><ProgressBar.Fill/></ProgressBar.Track></ProgressBar>
-        <nav aria-label={t('title')} className="steps"><ol className="flex flex-col gap-0.5">{steps.map((s, i) => <li key={s}>
-          <button type="button" aria-current={s === current ? 'step' : undefined} onClick={() => go(s)}
-            className={`flex w-full min-h-9 cursor-pointer items-center gap-2 rounded-lg px-2.5 text-left text-sm transition-colors duration-150 ${s === current ? 'bg-accent-soft font-medium text-accent-soft-foreground' : 'hover:bg-default'}`}>
-            <span className={`grid size-6 shrink-0 place-items-center rounded-full text-xs ${status(s) === 'completed' ? 'bg-success text-success-foreground' : 'bg-default'}`}>
-              {status(s) === 'completed' ? <I name="check" size={13}/> : i + 1}</span>
-            <span className="flex-1">{t(`steps.${s}.title`)}</span>
-            {status(s) === 'skipped' && <span className="text-xs text-muted">{t('skippedShort')}</span>}
-          </button></li>)}</ol></nav>
+        <div className="flex items-baseline justify-between text-xs text-muted"><span className="font-semibold uppercase tracking-wider">{t('title')}</span><span className="tabular-nums">{t('doneOf', { n: doneCount, total: steps.length - 1 })}</span></div>
+        <ProgressBar aria-label={t('title')} value={doneCount} maxValue={steps.length - 1} size="sm" color="success"><ProgressBar.Track><ProgressBar.Fill/></ProgressBar.Track></ProgressBar>
+        <nav aria-label={t('title')} className="steps"><ol className="flex flex-col gap-0.5">{steps.map((s, i) => {
+          const st = status(s), open = reachable(s);
+          return <li key={s}>
+            <button type="button" aria-current={s === current ? 'step' : undefined} disabled={!open} onClick={() => go(s)} title={open ? undefined : t('locked')}
+              className={`flex min-h-10 w-full items-center gap-2.5 rounded-lg px-2.5 text-left text-sm transition-colors duration-150 ${s === current ? 'bg-accent-soft font-medium text-accent-soft-foreground' : open ? 'cursor-pointer hover:bg-default' : 'cursor-not-allowed opacity-50'}`}>
+              <span className={`grid size-6 shrink-0 place-items-center rounded-full text-xs tabular-nums ${st === 'completed' ? 'bg-success text-success-foreground' : st === 'skipped' ? 'bg-default text-muted' : s === current ? 'ring-2 ring-accent' : 'bg-default'}`}>
+                {st === 'completed' ? <I name="check" size={13}/> : st === 'skipped' ? <I name="minus" size={13}/> : !open ? <I name="lock" size={11}/> : i + 1}</span>
+              <span className="flex-1">{t(`steps.${s}.title`)}</span>
+              {required.includes(s) && !st && <span aria-label={t('required')} className="size-1.5 rounded-full bg-accent"/>}
+              {st === 'skipped' && <span className="text-xs text-muted">{t('skippedShort')}</span>}
+            </button></li>;
+        })}</ol></nav>
       </Card.Content>
     </Card>
     <Card>
       <Card.Content className="flex flex-col gap-5">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-wider text-muted">{t('stepOf', { n: index + 1, total: steps.length })} · {isRequired ? t('required') : t('optional')}</p>
-          <h1 className="mt-1 text-2xl font-semibold tracking-tight">{t(`steps.${current}.title`)}</h1>
-          <p className="mt-1 text-sm text-muted">{t(`steps.${current}.help`)}</p>
+        <div className="flex flex-col gap-2 lg:hidden">
+          <div className="flex items-center justify-between text-xs text-muted"><span>{t('stepOf', { n: index + 1, total: steps.length })}</span><span className="tabular-nums">{t('doneOf', { n: doneCount, total: steps.length - 1 })}</span></div>
+          <ProgressBar aria-label={t('title')} value={doneCount} maxValue={steps.length - 1} size="sm" color="success"><ProgressBar.Track><ProgressBar.Fill/></ProgressBar.Track></ProgressBar>
+        </div>
+        <div className="flex items-start gap-4">
+          <span aria-hidden className="grid size-11 shrink-0 place-items-center rounded-xl bg-accent-soft text-accent-soft-foreground">{stepIcon[current]}</span>
+          <div className="min-w-0">
+            <p className="flex flex-wrap items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted"><span className="hidden lg:inline">{t('stepOf', { n: index + 1, total: steps.length })}</span>
+              {current !== 'summary' && <StatusChip tone={isRequired ? 'accent' : 'default'}>{isRequired ? t('required') : t('optional')}</StatusChip>}
+              {status(current) === 'completed' && <StatusChip tone="success">{t('summary.completed')}</StatusChip>}</p>
+            <h1 className="mt-1 text-2xl font-semibold tracking-tight">{t(`steps.${current}.title`)}</h1>
+            <p className="mt-1 text-sm text-muted">{t(`steps.${current}.help`)}</p>
+          </div>
         </div>
 
-        {current === 'language' && <div className="flex gap-2">
-          {(['tr', 'en'] as const).map((l) => <Button key={l} lang={l} variant={l === locale ? 'primary' : 'secondary'} aria-pressed={l === locale} onPress={() => chooseLocale(l)}>{l === 'tr' ? 'Türkçe' : 'English'}</Button>)}
+        {current === 'language' && <div className="grid grid-cols-1 gap-3 sm:grid-cols-2" role="radiogroup" aria-label={t('steps.language.title')}>
+          {(['tr', 'en'] as const).map((l) => <button key={l} type="button" lang={l} role="radio" aria-checked={l === locale} onClick={() => chooseLocale(l)}
+            className={`flex min-h-14 items-center gap-3 rounded-xl border px-4 text-left transition-colors ${l === locale ? 'border-accent bg-accent-soft' : 'border-border hover:border-accent'}`}>
+            <span aria-hidden className="grid size-9 place-items-center rounded-lg bg-default font-mono text-xs font-semibold uppercase">{l}</span><span className="flex-1 font-medium">{l === 'tr' ? 'Türkçe' : 'English'}</span>
+            {l === locale && <I name="circle-check" size={18} className="text-accent"/>}
+          </button>)}
         </div>}
         {current === 'access' && <TextInput label={t('access.label')} value={publicUrl} onChange={setPublicUrl} error={field(failure?.fields?.publicUrl)} help={t('access.help')} isRequired/>}
         {current === 'admin' && (progress.adminCreated ? <Notice tone="success">{t('admin.done')}</Notice> : <CredentialsForm mode="setup" noToken onDone={() => load(true)}/>)}
         {current === 'domain' && <div className="flex flex-col gap-4">
           <TextInput label={t('domain.label')} value={domain} onChange={setDomain} placeholder="panel.example.com" error={field(failure?.fields?.domain)} help={t('domain.help')}/>
-          <ol className="howto flex list-decimal flex-col gap-1 pl-5 text-sm text-muted">{(['dnsRecord', 'ports', 'apply', 'test'] as const).map((k) => <li key={k}>{t(`domain.howto.${k}`)}</li>)}</ol>
-          <pre className="overflow-x-auto rounded-lg bg-default p-3 font-mono text-xs">{`sudo sh scripts/install.sh domain ${domain || 'panel.example.com'} --acme-staging\nsudo sh scripts/install.sh domain ${domain || 'panel.example.com'}`}</pre>
-          <p className="text-sm text-muted">{t('domain.behindProxy')}</p>
+          <details className="rounded-xl border border-border p-3 text-sm">
+            <summary className="cursor-pointer font-medium">{t('domain.howtoTitle')}</summary>
+            <ol className="howto mt-3 flex list-decimal flex-col gap-1 pl-5 text-muted">{(['dnsRecord', 'ports', 'apply', 'test'] as const).map((k) => <li key={k}>{t(`domain.howto.${k}`)}</li>)}</ol>
+            <pre className="mt-3 overflow-x-auto rounded-lg bg-default p-3 font-mono text-xs">{`sudo sh scripts/install.sh domain ${domain || 'panel.example.com'} --acme-staging\nsudo sh scripts/install.sh domain ${domain || 'panel.example.com'}`}</pre>
+            <p className="mt-3 text-muted">{t('domain.behindProxy')}</p>
+          </details>
         </div>}
-        {current === 'vmware' && <><p className="text-sm text-muted">{t('vmware.note')}</p><ConnectionForm onSaved={() => save('completed')}/></>}
-        {current === 'discovery' && <Discovered/>}
-        {notYetAvailable.includes(current) && <Notice tone="warning">{t(`notAvailable.${current as 'pools'}`)}</Notice>}
+        {current === 'vmware' && <>{status('vmware') === 'completed' ? <Notice tone="success">{t('vmware.done')}</Notice> : <p className="text-sm text-muted">{t('vmware.note')}</p>}
+          <ConnectionForm onSaved={() => save('completed')}/></>}
+        {current === 'discovery' && <Discovered onHosts={setHosts}/>}
+        {notYetAvailable.includes(current) && <Notice tone="default">{t(`notAvailable.${current as 'pools'}`)}</Notice>}
         {current === 'monitoring' && <div className="flex flex-col gap-3">
           <CheckboxInput label={t('monitoring.enable')} isSelected={monitoring} onChange={setMonitoring}/>
-          <p className="text-sm text-muted">{t('monitoring.help')}</p><pre className="rounded-lg bg-default p-3 font-mono text-xs">docker compose --profile observability up -d</pre>
+          <p className="text-sm text-muted">{t('monitoring.help')}</p><pre className="overflow-x-auto rounded-lg bg-default p-3 font-mono text-xs">docker compose --profile observability up -d</pre>
         </div>}
         {current === 'summary' && <Summary progress={progress} status={status}/>}
 
-        {checks && <CheckList checks={checks}/>}
-        {current === 'access' && checks?.[0] && !checks[0].ok && <p className="text-sm text-muted">{t(`access.hint.${checks[0].code}` as 'access.hint.DNS_FAILED')}</p>}
-        {current === 'domain' && checks?.filter((c) => !c.ok).map((c) => <p key={c.id} className="text-sm text-muted">{t(`domain.hint.${c.code}` as 'domain.hint.DNS_FAILED')}</p>)}
-        {current === 'domain' && checks?.some((c) => c.id === 'dns' && c.detail?.aaaa) && <p className="text-sm text-muted">{t('domain.aaaaWarning')}</p>}
-        {failure && <div role="alert"><Notice tone="danger">{failure.text}</Notice></div>}
+        {checking && !fresh && <ul aria-busy className="flex flex-col gap-2">{[0, 1, 2].map((i) => <li key={i} className="h-11 animate-pulse rounded-xl bg-default"/>)}</ul>}
+        {fresh && <>
+          <p role="status" className={`flex items-center gap-2 text-sm font-medium ${passed ? 'text-success' : 'text-danger'}`}>
+            <I name={passed ? 'circle-check' : 'circle-alert'} size={16}/>{passed ? t('allPassed') : t('someFailed', { n: result!.checks.filter((c) => !c.ok).length })}</p>
+          <CheckList checks={result!.checks}/>
+        </>}
+        {current === 'access' && fresh && !passed && <p className="text-sm text-muted">{t(`access.hint.${result!.checks[0].code}` as 'access.hint.DNS_FAILED')} {t('unverifiedHelp')}</p>}
+        {current === 'domain' && fresh && result!.checks.filter((c) => !c.ok).map((c) => <p key={c.id} className="text-sm text-muted">{t(`domain.hint.${c.code}` as 'domain.hint.DNS_FAILED')}</p>)}
+        {current === 'domain' && fresh && result!.checks.some((c) => c.id === 'dns' && c.detail?.aaaa) && <p className="text-sm text-muted">{t('domain.aaaaWarning')}</p>}
+        {current === 'summary' && missing.length > 0 && <Notice tone="warning">{t('finishBlocked', { steps: missing.map((s) => t(`steps.${s}.title`)).join(', ') })}</Notice>}
+        {failure && !failure.fields && <div role="alert"><Notice tone="danger">{failure.text}</Notice></div>}
 
-        <div className="flex flex-wrap items-center gap-2 border-t border-separator pt-4">
+        <div className="flex flex-col-reverse gap-2 border-t border-separator pt-4 sm:flex-row sm:items-center">
           {index > 0 && <Button variant="tertiary" onPress={() => go(steps[index - 1])}><I name="arrow-left" size={16}/>{t('back')}</Button>}
-          <div className="ml-auto flex flex-wrap gap-2">
-            {current === 'language' && saveButton({ locale })}
-            {current === 'checks' && <>{testButton('/setup/checks')}{saveButton()}</>}
-            {current === 'access' && <>{testButton('/setup/test/access')}{saveButton({ publicUrl })}</>}
-            {current === 'domain' && <>{skipButton}{testButton('/setup/test/domain')}{saveButton({ domain })}</>}
-            {current === 'services' && <>{testButton('/setup/test/services')}{saveButton()}</>}
-            {current === 'admin' && progress.adminCreated && <Button onPress={next}>{t('continue')}</Button>}
-            {current === 'vmware' && <>{skipButton}{saveButton()}</>}
-            {current === 'discovery' && <>{skipButton}{saveButton()}</>}
-            {notYetAvailable.includes(current) && skipButton}
-            {current === 'monitoring' && <>{skipButton}{monitoring && testButton('/setup/test/monitoring')}{saveButton({ enabled: monitoring })}</>}
-            {current === 'summary' && <Button isPending={busy} onPress={() => run(() => apiFetch('/setup/complete', { method: 'POST' }), () => { router.replace('/admin'); router.refresh(); })}>{t('finish')}</Button>}
-          </div>
+          <div className="flex flex-col-reverse gap-2 sm:ml-auto sm:flex-row sm:items-center">{skipButton}{actions}</div>
         </div>
       </Card.Content>
     </Card>
@@ -177,7 +252,7 @@ function Summary({ progress, status }: { progress: Progress; status: (s: Step) =
   ].filter(Boolean) as string[];
   return <div className="flex flex-col gap-3">
     <ul className="checks flex flex-col gap-1.5">{steps.filter((s) => s !== 'summary').map((s) => <li key={s} className={`flex items-center justify-between gap-2 rounded-lg bg-default/60 px-3 py-2 text-sm ${status(s) === 'completed' ? 'ok' : status(s) === 'skipped' ? '' : 'fail'}`}>
-      <span><strong>{t(`steps.${s}.title`)}</strong>{required.includes(s) && <span className="text-muted"> · {t('required')}</span>}</span>
+      <span className="flex items-center gap-2"><span className="text-muted" aria-hidden>{stepIcon[s]}</span><strong>{t(`steps.${s}.title`)}</strong>{required.includes(s) && <span className="text-muted"> · {t('required')}</span>}</span>
       <StatusChip tone={status(s) === 'completed' ? 'success' : status(s) === 'skipped' ? 'default' : 'danger'}>{t(`summary.${status(s) ?? 'missing'}` as 'summary.missing')}</StatusChip>
     </li>)}</ul>
     {access && <p className="text-sm">{t('summary.publicUrl', { url: String(access.publicUrl) })}</p>}
@@ -193,29 +268,33 @@ function TokenGate({ onDone }: { onDone: () => void }) {
   const [busy, setBusy] = useState(false);
   async function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault(); setFailure(undefined); setBusy(true);
-    try { await apiFetch('/setup/session', { method: 'POST', body: { token } }); onDone(); }
+    try { await apiFetch('/setup/session', { method: 'POST', body: { token: token.trim() } }); onDone(); }
     catch (err) { setFailure(error(err)); } finally { setBusy(false); }
   }
   return <Card className="mx-auto w-full max-w-lg"><Card.Content className="flex flex-col gap-4">
+    <span aria-hidden className="grid size-12 place-items-center rounded-xl bg-accent-soft text-accent-soft-foreground"><I name="key-round" size={22}/></span>
     <h1 className="text-xl font-semibold">{t('title')}</h1><p className="text-sm text-muted">{t('gate.text')}</p>
     <pre className="overflow-x-auto rounded-lg bg-default p-3 font-mono text-xs">docker compose exec api node dist/cli.js bootstrap-token</pre>
     <form onSubmit={submit} noValidate className="flex flex-col gap-4">
       <TextInput label={t('gate.token')} type="password" value={token} onChange={setToken} autoComplete="one-time-code" spellCheck={false} help={t('gate.tokenHelp')} isRequired/>
       {failure && <p role="alert" className="text-sm text-danger">{failure}</p>}
-      <Button type="submit" isPending={busy}>{t('gate.submit')}</Button>
+      <Button type="submit" isPending={busy} isDisabled={!token.trim()}>{t('gate.submit')}<I name="arrow-right" size={16}/></Button>
     </form>
   </Card.Content></Card>;
 }
 
 // Summary of what the saved connections discovered; details live on the admin VMware page.
-function Discovered() {
+function Discovered({ onHosts }: { onHosts: (n: number) => void }) {
   const t = useTranslations('Setup');
   const { error } = useErrorText();
   const [rows, setRows] = useState<{ id: string; name: string; kind: string; hosts: number; vms: number }[]>();
   const [failure, setFailure] = useState<string>();
-  useEffect(() => { apiFetch<{ connections: typeof rows }>('/admin/vmware/connections').then((r) => setRows(r.connections), (e) => setFailure(error(e))); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    apiFetch<{ connections: NonNullable<typeof rows> }>('/admin/vmware/connections').then((r) => { setRows(r.connections); onHosts(r.connections.reduce((a, c) => a + c.hosts, 0)); }, (e) => setFailure(error(e)));
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
   if (failure) return <p role="alert" className="text-sm text-danger">{failure}</p>;
-  if (!rows) return <p className="text-sm text-muted">{t('loading')}</p>;
+  if (!rows) return <ul aria-busy className="flex flex-col gap-2">{[0, 1].map((i) => <li key={i} className="h-11 animate-pulse rounded-xl bg-default"/>)}</ul>;
   if (!rows.length) return <Notice tone="warning">{t('discovery.none')}</Notice>;
-  return <ul className="checks flex flex-col gap-2">{rows.map((c) => <li key={c.id} className={`rounded-lg px-3 py-2 text-sm ${c.hosts ? 'ok bg-success/10' : 'fail bg-danger/10'}`}>{t('discovery.row', { name: c.name, hosts: c.hosts, vms: c.vms })}</li>)}</ul>;
+  return <ul className="checks flex flex-col gap-2">{rows.map((c) => <li key={c.id} className={`flex items-center gap-3 rounded-xl border px-3 py-2.5 text-sm ${c.hosts ? 'ok border-success/30 bg-success/5' : 'fail border-danger/30 bg-danger/5'}`}>
+    <I name={c.hosts ? 'circle-check' : 'circle-x'} size={18} className={c.hosts ? 'text-success' : 'text-danger'}/>{t('discovery.row', { name: c.name, hosts: c.hosts, vms: c.vms })}</li>)}</ul>;
 }

@@ -571,15 +571,27 @@
         "CERT_STAGING": "This is a test certificate. If everything works, run the command again without --acme-staging to get a real certificate.",
         "WRONG_TARGET": "This name answers but is not this installation. DNS or a proxy in front points to another server.",
         "UNREACHABLE": "The address could not be reached."
-      }
+      },
+      "howtoTitle": "How to set up HTTPS"
     },
     "vmware": {
-      "note": "The step completes once a connection is added. The detailed inventory is on the VMware page of the admin panel. If you skip this step the platform cannot manage virtual servers."
+      "note": "The step completes once a connection is added. The detailed inventory is on the VMware page of the admin panel. If you skip this step the platform cannot manage virtual servers.",
+      "done": "A working connection is saved. You can add another one or continue."
     },
     "discovery": {
       "none": "No connections yet. Go back a step or skip this one.",
       "row": "{name}: found {hosts} hosts and {vms} virtual machines"
-    }
+    },
+    "check": "Check",
+    "checking": "Checking…",
+    "recheck": "Check again",
+    "allPassed": "All checks passed.",
+    "someFailed": "{n, plural, one {# check failed} other {# checks failed}}: fix it and check again.",
+    "saveUnverified": "Save without verifying",
+    "unverifiedHelp": "If this address really is the one users will open (behind NAT, for example), you can save it without verifying.",
+    "locked": "Finish the required steps before this one first.",
+    "finishBlocked": "Required steps are not finished yet: {steps}.",
+    "doneOf": "{n}/{total} done"
   },
   "Vmware": {
     "eyebrow": "ADMIN · VMWARE",

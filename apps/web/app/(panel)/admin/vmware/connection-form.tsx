@@ -21,6 +21,7 @@ export default function ConnectionForm({ onSaved }: { onSaved: (s: Summary) => v
   const [form, setForm] = useState({ name: '', host: '', port: '443', username: '', password: '', mode: 'system', caPem: '', sha256: '', apiVersion: '', customization: 'auto' });
   const [failure, setFailure] = useState<Failure>();
   const [tested, setTested] = useState<Summary>();
+  const [testedFor, setTestedFor] = useState('');
   const [busy, setBusy] = useState<'test' | 'save'>();
   const set = (k: keyof typeof form) => (v: string) => setForm((f) => ({ ...f, [k]: v }));
   const body = () => ({ name: form.name, host: form.host, port: Number(form.port), username: form.username, password: form.password, apiVersion: form.apiVersion, customization: form.customization,
@@ -35,7 +36,7 @@ export default function ConnectionForm({ onSaved }: { onSaved: (s: Summary) => v
   const err = (k: string) => field(failure?.fields?.[k]);
   const help = (k: string) => t(`form.${k}Help` as 'form.nameHelp');
 
-  return <form className="flex flex-col gap-4" onSubmit={(e) => { e.preventDefault(); run('save', '/admin/vmware/connections', onSaved); }} noValidate>
+  return <form className="flex flex-col gap-4" onSubmit={(e) => { e.preventDefault(); if (tested && testedFor === JSON.stringify(body())) void run('save', '/admin/vmware/connections', onSaved); }} noValidate>
     <FieldGroup title={t('form.groupEndpoint')} description={t('form.groupEndpointHelp')}>
       <TextInput label={t('form.name')} value={form.name} onChange={set('name')} error={err('name')} help={help('name')} isRequired/>
       <TextInput label={t('form.host')} value={form.host} onChange={set('host')} error={err('host')} help={help('host')} isRequired autoComplete="off" spellCheck={false}/>
@@ -80,9 +81,12 @@ export default function ConnectionForm({ onSaved }: { onSaved: (s: Summary) => v
     </Card>}
     {tested && <div role="status"><Notice tone="success" title={t('testOk', { kind: tested.product.fullName, hosts: tested.counts.hosts, vms: tested.counts.vms })}/></div>}
 
+    {/* One action at a time: test first; "Save" replaces it once this exact form passed (any change tests again). */}
     <div className="flex flex-wrap justify-end gap-2">
-      <Button variant="secondary" isPending={busy === 'test'} isDisabled={!!busy} onPress={() => run('test', '/admin/vmware/test', setTested)}>{busy === 'test' ? t('working') : t('test')}</Button>
-      <Button type="submit" isPending={busy === 'save'} isDisabled={!!busy}>{t('save')}</Button>
+      {tested && testedFor === JSON.stringify(body())
+        ? <Button type="submit" isPending={busy === 'save'} isDisabled={!!busy}><I name="check" size={16}/>{t('save')}</Button>
+        : <Button type="button" isPending={busy === 'test'} isDisabled={!!busy} onPress={() => { const k = JSON.stringify(body()); void run('test', '/admin/vmware/test', (s) => { setTested(s); setTestedFor(k); }); }}>
+          <I name="plug-zap" size={16}/>{busy === 'test' ? t('working') : t('test')}</Button>}
     </div>
   </form>;
 }
