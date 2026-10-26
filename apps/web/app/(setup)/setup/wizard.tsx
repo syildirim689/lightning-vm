@@ -2,11 +2,13 @@
 // First-run wizard. Each step shows one primary action for its state: steps with checks run them on arrival,
 // "Continue" appears only after they pass, a changed field makes the result stale ("Check" again), a failure
 // offers "Check again". The API repeats every check when a step is saved, so the browser is never trusted.
-// Required steps must be done in order; optional ones can be skipped.
+// Required steps must be done in order; optional ones can be skipped. Motion follows the user's "reduce motion"
+// choice through the app's MotionConfig (movement is dropped, fades stay).
 import { Button, Card, ProgressBar } from '@heroui/react';
+import { motion } from 'motion/react';
 import { useRouter } from 'next/navigation';
 import { useFormatter, useLocale, useTranslations } from 'next-intl';
-import { useCallback, useEffect, useState, useTransition } from 'react';
+import { useCallback, useEffect, useRef, useState, useTransition } from 'react';
 import { I } from '../../../components/icon';
 import { ButtonLink, CheckboxInput, Notice, StatusChip, TextInput } from '../../../components/ui';
 import { apiFetch, useErrorText, type ApiError } from '../../../lib/api';
@@ -32,13 +34,14 @@ const stepIcon: Record<Step, React.ReactNode> = {
 function CheckList({ checks }: { checks: Check[] }) {
   const t = useTranslations('Setup');
   const format = useFormatter();
-  return <ul className="checks flex flex-col gap-2">{checks.map((c) => <li key={c.id} className={`flex items-start gap-3 rounded-xl border px-3 py-2.5 text-sm ${c.ok ? 'ok border-success/30 bg-success/5' : 'fail border-danger/30 bg-danger/5'}`}>
+  return <ul className="checks flex flex-col gap-2">{checks.map((c, i) => <motion.li key={c.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.07, duration: 0.25, ease: 'easeOut' }}
+    className={`flex items-start gap-3 rounded-xl border px-3 py-2.5 text-sm ${c.ok ? 'ok border-success/30 bg-success/5' : 'fail border-danger/30 bg-danger/5'}`}>
     <I name={c.ok ? 'circle-check' : 'circle-x'} size={18} className={`mt-0.5 shrink-0 ${c.ok ? 'text-success' : 'text-danger'}`}/>
     <span className="min-w-0"><strong>{t(`checkNames.${c.id}` as 'checkNames.postgres')}</strong>: {t(`checkCodes.${c.code}` as 'checkCodes.OK')}
       {c.detail?.version !== undefined && <span className="text-muted"> ({t('version', { version: String(c.detail.version) })})</span>}
       {c.detail?.a !== undefined && <span className="text-muted"> ({t('dnsDetail', { a: String(c.detail.a) || '–', aaaa: String(c.detail.aaaa) || '–' })})</span>}
       {c.detail?.issuer !== undefined && <span className="text-muted"> ({t('certDetail', { issuer: String(c.detail.issuer), validTo: c.detail.validTo ? format.dateTime(new Date(String(c.detail.validTo)), { dateStyle: 'medium' }) : '–' })})</span>}</span>
-  </li>)}</ul>;
+  </motion.li>)}</ul>;
 }
 
 export default function Wizard() {
@@ -131,7 +134,8 @@ export default function Wizard() {
   }, [current, monitoring, fresh, passed, checking, starting, polls]); // eslint-disable-line react-hooks/exhaustive-deps
   const startingNow = current === 'monitoring' && monitoring && starting === 'requested' && !passed && polls < 36;
 
-  const go = (step: Step) => { setCurrent(step); setResult(undefined); setFailure(undefined); };
+  const direction = useRef(1);
+  const go = (step: Step) => { direction.current = steps.indexOf(step) >= steps.indexOf(current) ? 1 : -1; setCurrent(step); setResult(undefined); setFailure(undefined); };
   const next = () => go(steps[Math.min(steps.indexOf(current) + 1, steps.length - 1)]);
   async function save(status: 'completed' | 'skipped', data?: object) {
     setBusy(true); setFailure(undefined);
@@ -142,11 +146,11 @@ export default function Wizard() {
   const chooseLocale = (l: string) => startLocale(async () => { const f = new FormData(); f.set('locale', l); await setLocale(f); router.refresh(); });
 
   if (gate === 'token') return <TokenGate onDone={() => load(true)}/>;
-  if (gate === 'login') return <Card className="w-full max-w-md"><Card.Content className="flex flex-col gap-4 p-2">
+  if (gate === 'login') return <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35, ease: 'easeOut' }} className="w-full max-w-md"><Card><Card.Content className="flex flex-col gap-4 p-2">
     <span aria-hidden className="grid size-12 place-items-center rounded-xl bg-accent-soft text-accent-soft-foreground"><I name="user-check" size={22}/></span>
     <div><h1 className="text-xl font-semibold">{t('title')}</h1><p className="mt-1 text-sm text-muted">{t('gate.adminExists')}</p></div>
     <ButtonLink href="/login" className="w-full justify-center">{t('gate.toLogin')}<I name="arrow-right" size={16}/></ButtonLink>
-  </Card.Content></Card>;
+  </Card.Content></Card></motion.div>;
   if (!progress) return <p role="status" className="text-center text-sm text-muted">{failure?.text ?? t('loading')}</p>;
 
   const index = steps.indexOf(current);
@@ -190,7 +194,7 @@ export default function Wizard() {
     }
   })();
 
-  return <div className="wizard grid w-full max-w-6xl gap-6 lg:grid-cols-[17rem_minmax(0,1fr)]">
+  return <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35, ease: 'easeOut' }} className="wizard grid w-full max-w-6xl gap-6 lg:grid-cols-[17rem_minmax(0,1fr)]">
     <Card className="hidden self-start lg:block">
       <Card.Content className="flex flex-col gap-3">
         <div className="flex items-baseline justify-between text-xs text-muted"><span className="font-semibold uppercase tracking-wider">{t('title')}</span><span className="tabular-nums">{t('doneOf', { n: doneCount, total: steps.length - 1 })}</span></div>
@@ -199,12 +203,13 @@ export default function Wizard() {
           const st = status(s), open = reachable(s);
           return <li key={s}>
             <button type="button" aria-current={s === current ? 'step' : undefined} disabled={!open} onClick={() => go(s)} title={open ? undefined : t('locked')}
-              className={`flex min-h-10 w-full items-center gap-2.5 rounded-lg px-2.5 text-left text-sm transition-colors duration-150 ${s === current ? 'bg-accent-soft font-medium text-accent-soft-foreground' : open ? 'cursor-pointer hover:bg-default' : 'cursor-not-allowed opacity-50'}`}>
-              <span className={`grid size-6 shrink-0 place-items-center rounded-full text-xs tabular-nums ${st === 'completed' ? 'bg-success text-success-foreground' : st === 'skipped' ? 'bg-default text-muted' : s === current ? 'ring-2 ring-accent' : 'bg-default'}`}>
-                {st === 'completed' ? <I name="check" size={13}/> : st === 'skipped' ? <I name="minus" size={13}/> : !open ? <I name="lock" size={11}/> : i + 1}</span>
-              <span className="flex-1">{t(`steps.${s}.title`)}</span>
-              {required.includes(s) && !st && <span aria-label={t('required')} className="size-1.5 rounded-full bg-accent"/>}
-              {st === 'skipped' && <span className="text-xs text-muted">{t('skippedShort')}</span>}
+              className={`relative flex min-h-10 w-full items-center gap-2.5 rounded-lg px-2.5 text-left text-sm transition-colors duration-150 ${s === current ? 'font-medium text-accent-soft-foreground' : open ? 'cursor-pointer hover:bg-default' : 'cursor-not-allowed opacity-50'}`}>
+              {s === current && <motion.span layoutId="wizard-current" aria-hidden className="absolute inset-0 rounded-lg bg-accent-soft" transition={{ type: 'spring', stiffness: 420, damping: 34 }}/>}
+              <span className={`relative grid size-6 shrink-0 place-items-center rounded-full text-xs tabular-nums transition-colors duration-300 ${st === 'completed' ? 'bg-success text-success-foreground' : st === 'skipped' ? 'bg-default text-muted' : s === current ? 'ring-2 ring-accent' : 'bg-default'}`}>
+                {st === 'completed' ? <motion.span key="done" initial={{ scale: 0.3, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ type: 'spring', stiffness: 500, damping: 18 }}><I name="check" size={13}/></motion.span> : st === 'skipped' ? <I name="minus" size={13}/> : !open ? <I name="lock" size={11}/> : i + 1}</span>
+              <span className="relative flex-1">{t(`steps.${s}.title`)}</span>
+              {required.includes(s) && !st && <span aria-label={t('required')} className="relative size-1.5 rounded-full bg-accent"/>}
+              {st === 'skipped' && <span className="relative text-xs text-muted">{t('skippedShort')}</span>}
             </button></li>;
         })}</ol></nav>
       </Card.Content>
@@ -215,8 +220,10 @@ export default function Wizard() {
           <div className="flex items-center justify-between text-xs text-muted"><span>{t('stepOf', { n: index + 1, total: steps.length })}</span><span className="tabular-nums">{t('doneOf', { n: doneCount, total: steps.length - 1 })}</span></div>
           <ProgressBar aria-label={t('title')} value={doneCount} maxValue={steps.length - 1} size="sm" color="success"><ProgressBar.Track><ProgressBar.Fill/></ProgressBar.Track></ProgressBar>
         </div>
+        <motion.div key={current} initial={{ opacity: 0, x: 28 * direction.current }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }} className="flex flex-col gap-5">
         <div className="flex items-start gap-4">
-          <span aria-hidden className="grid size-11 shrink-0 place-items-center rounded-xl bg-accent-soft text-accent-soft-foreground">{stepIcon[current]}</span>
+          <motion.span aria-hidden initial={{ scale: 0.6, rotate: -12 }} animate={{ scale: 1, rotate: 0 }} transition={{ type: 'spring', stiffness: 380, damping: 16, delay: 0.05 }}
+            className="grid size-11 shrink-0 place-items-center rounded-xl bg-accent-soft text-accent-soft-foreground">{stepIcon[current]}</motion.span>
           <div className="min-w-0">
             <p className="flex flex-wrap items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted"><span className="hidden lg:inline">{t('stepOf', { n: index + 1, total: steps.length })}</span>
               {current !== 'summary' && <StatusChip tone={isRequired ? 'accent' : 'default'}>{isRequired ? t('required') : t('optional')}</StatusChip>}
@@ -253,8 +260,8 @@ export default function Wizard() {
 
         {checking && !fresh && <ul aria-busy className="flex flex-col gap-2">{[0, 1, 2].map((i) => <li key={i} className="h-11 animate-pulse rounded-xl bg-default"/>)}</ul>}
         {fresh && <>
-          <p role="status" className={`flex items-center gap-2 text-sm font-medium ${passed ? 'text-success' : 'text-danger'}`}>
-            <I name={passed ? 'circle-check' : 'circle-alert'} size={16}/>{passed ? t('allPassed') : t('someFailed', { n: result!.checks.filter((c) => !c.ok).length })}</p>
+          <motion.p key={String(passed)} initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.2 }} role="status" className={`flex items-center gap-2 text-sm font-medium ${passed ? 'text-success' : 'text-danger'}`}>
+            <I name={passed ? 'circle-check' : 'circle-alert'} size={16}/>{passed ? t('allPassed') : t('someFailed', { n: result!.checks.filter((c) => !c.ok).length })}</motion.p>
           <CheckList checks={result!.checks}/>
         </>}
         {current === 'access' && fresh && !passed && <p className="text-sm text-muted">{t(`access.hint.${result!.checks[0].code}` as 'access.hint.DNS_FAILED')} {t('unverifiedHelp')}</p>}
@@ -263,6 +270,8 @@ export default function Wizard() {
         {current === 'summary' && missing.length > 0 && <Notice tone="warning">{t('finishBlocked', { steps: missing.map((s) => t(`steps.${s}.title`)).join(', ') })}</Notice>}
         {failure && !failure.fields && <div role="alert"><Notice tone="danger">{failure.text}</Notice></div>}
 
+        </motion.div>
+
         {/* Back on the left, the step's action on the right; on a narrow screen the actions wrap under each other, right-aligned. */}
         <div className="flex flex-wrap items-center gap-2 border-t border-separator pt-4">
           {index > 0 && <Button variant="tertiary" onPress={() => go(steps[index - 1])}><I name="arrow-left" size={16}/>{t('back')}</Button>}
@@ -270,7 +279,7 @@ export default function Wizard() {
         </div>
       </Card.Content>
     </Card>
-  </div>;
+  </motion.div>;
 }
 
 function Summary({ progress, status }: { progress: Progress; status: (s: Step) => string | undefined }) {
@@ -302,7 +311,7 @@ function TokenGate({ onDone }: { onDone: () => void }) {
     try { await apiFetch('/setup/session', { method: 'POST', body: { token: token.trim() } }); onDone(); }
     catch (err) { setFailure(error(err)); } finally { setBusy(false); }
   }
-  return <Card className="w-full max-w-lg"><Card.Content className="flex flex-col gap-4 p-2">
+  return <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35, ease: 'easeOut' }} className="w-full max-w-lg"><Card><Card.Content className="flex flex-col gap-4 p-2">
     <span aria-hidden className="grid size-12 place-items-center rounded-xl bg-accent-soft text-accent-soft-foreground"><I name="key-round" size={22}/></span>
     <h1 className="text-xl font-semibold">{t('title')}</h1><p className="text-sm text-muted">{t('gate.text')}</p>
     <pre className="overflow-x-auto rounded-lg bg-default p-3 font-mono text-xs">docker compose exec api node dist/cli.js bootstrap-token</pre>
@@ -311,7 +320,7 @@ function TokenGate({ onDone }: { onDone: () => void }) {
       {failure && <p role="alert" className="text-sm text-danger">{failure}</p>}
       <Button type="submit" isPending={busy} isDisabled={!token.trim()}>{t('gate.submit')}<I name="arrow-right" size={16}/></Button>
     </form>
-  </Card.Content></Card>;
+  </Card.Content></Card></motion.div>;
 }
 
 // Summary of what the saved connections discovered; details live on the admin VMware page.
