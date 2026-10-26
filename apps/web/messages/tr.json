@@ -2550,7 +2550,15 @@
         "body": "İstek gövdesi",
         "headers": "Başlıklar (JSON)",
         "phoneFormat": "Numara biçimi",
-        "successPattern": "Başarı deseni (regex)"
+        "successPattern": "Başarı deseni (regex)",
+        "accountSid": "Hesap SID",
+        "authToken": "Kimlik anahtarı (auth token)",
+        "baseUrl": "Temel adres (xxxxx.api.infobip.com)",
+        "authId": "Kimlik (auth ID)",
+        "servicePlanId": "Hizmet planı kimliği",
+        "region": "Bölge",
+        "messagingProfileId": "Mesajlaşma profili kimliği",
+        "accessKey": "Erişim anahtarı"
       },
       "option": {
         "1": "Turkcell",
@@ -2613,7 +2621,8 @@
         "all": "Tümü",
         "gateway": "Ödeme kuruluşları",
         "bank": "Banka sanal POS",
-        "wallet": "Cüzdanlar"
+        "wallet": "Cüzdanlar",
+        "international": "Uluslararası"
       },
       "count": "{n} sağlayıcı",
       "checkable": "Test edilebilir",

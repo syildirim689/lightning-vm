@@ -111,3 +111,13 @@ Ayarlar → E-posta'dan bir sağlayıcı seçilir:
 Her sağlayıcının alanları, paneli ve API belgesi ekranda gösterilir. Gizli alanlar şifrelenmiş saklanır ve hiçbir
 yanıtta geri dönmez; boş bırakılırsa kayıtlı değer korunur. "Deneme e-postası gönder" seçili sağlayıcıyla gerçek bir
 ileti gönderir. Hatalar şu kodlarla gösterilir: `MAIL_AUTH_FAILED`, `MAIL_REJECTED`, `MAIL_CONNECTION_FAILED`.
+
+## SMS ve ödeme: uluslararası sağlayıcılar
+
+- **SMS:** Türk sağlayıcılarının yanında Twilio, Vonage (Nexmo), Infobip, Plivo, Sinch (bölge seçimli), Telnyx,
+  Clickatell ve MessageBird (Bird) var. Numaralar E.164 biçiminde gönderilir. Twilio'da gönderen olarak bir
+  Messaging Service SID'i (`MG...`) de girilebilir.
+- **Ödeme:** "Uluslararası" grubunda Stripe, PayPal, Mollie, Adyen, Checkout.com, Razorpay, Square ve Paddle var.
+  - Kimlik kontrolü para hareket ettirmez: bakiye, yöntem veya konum listesi okunur, token istenir ya da olmayan
+    bir ödeme sorgulanır.
+  - Canlı anahtar test modunda (veya tersi) verilirse istek gönderilmeden uyarılır.

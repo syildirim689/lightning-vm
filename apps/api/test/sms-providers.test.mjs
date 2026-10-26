@@ -73,3 +73,21 @@ test('Custom API: templates are filled and the success pattern decides', async (
   assert.equal(seen.url, 'https://sms.example/send?to=%2B905321234567');
   assert.deepEqual(JSON.parse(seen.init.body), { t: 'he said "hi"' });
 });
+
+test('international: Twilio (form, basic auth, Messaging Service), Vonage status codes, Infobip host check, Sinch region', async () => {
+  const base = { sender: '+15005550006', commercial: false };
+  reply(201, JSON.stringify({ sid: 'SM1' }));
+  assert.deepEqual(await providers.twilio.send({ ...base, credentials: { accountSid: 'AC1', authToken: 't' } }, to, 'hi'), { ok: true, ref: 'SM1' });
+  assert.equal(seen.url, 'https://api.twilio.com/2010-04-01/Accounts/AC1/Messages.json');
+  assert.match(seen.init.body, /To=%2B905321234567/);
+  assert.match(seen.init.body, /From=%2B15005550006/);
+  reply(201, '{}');
+  await providers.twilio.send({ ...base, sender: 'MG123', credentials: { accountSid: 'AC1', authToken: 't' } }, to, 'hi');
+  assert.match(seen.init.body, /MessagingServiceSid=MG123/);
+  reply(200, JSON.stringify({ messages: [{ status: '4', 'error-text': 'Bad Credentials' }] }));
+  assert.equal((await providers.vonage.send({ ...base, credentials: { apiKey: 'k', apiSecret: 's' } }, to, 'hi')).code, 'SMS_AUTH_FAILED');
+  assert.equal((await providers.infobip.send({ ...base, credentials: { baseUrl: 'evil.example.com', apiKey: 'k' } }, to, 'hi')).code, 'SMS_INVALID_SETTINGS');
+  reply(201, JSON.stringify({ id: 'b1' }));
+  await providers.sinch.send({ ...base, credentials: { servicePlanId: 'p1', apiToken: 't', region: 'eu' } }, to, 'hi');
+  assert.equal(seen.url, 'https://eu.sms.api.sinch.com/xms/v1/p1/batches');
+});

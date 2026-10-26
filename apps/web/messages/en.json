@@ -2550,7 +2550,15 @@
         "body": "Request body",
         "headers": "Headers (JSON)",
         "phoneFormat": "Number format",
-        "successPattern": "Success pattern (regex)"
+        "successPattern": "Success pattern (regex)",
+        "accountSid": "Account SID",
+        "authToken": "Auth token",
+        "baseUrl": "Base URL (xxxxx.api.infobip.com)",
+        "authId": "Auth ID",
+        "servicePlanId": "Service plan ID",
+        "region": "Region",
+        "messagingProfileId": "Messaging profile ID",
+        "accessKey": "Access key"
       },
       "option": {
         "1": "Turkcell",
@@ -2613,7 +2621,8 @@
         "all": "All",
         "gateway": "Payment institutions",
         "bank": "Bank virtual POS",
-        "wallet": "Wallets"
+        "wallet": "Wallets",
+        "international": "International"
       },
       "count": "{n} providers",
       "checkable": "Can be checked",

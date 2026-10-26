@@ -104,3 +104,24 @@ test('an endpoint override replaces the host for that mode', async () => {
   await checkCredentials('paynet', { secret_key: 'k', endpoint: 'https://pay.example.com/' }, 'test');
   assert.equal(seen.url, 'https://pay.example.com/v1/ratio/Get');
 });
+
+test('international: key/mode mismatch caught before any call; Stripe, Checkout.com (404 = key accepted), PayPal token', async () => {
+  const { checkCredentials } = await import('../dist/payment-providers.js');
+  let calls = 0;
+  const answer = (status, body) => { globalThis.fetch = async (url, init) => { calls++; answer.last = { url: String(url), init }; return new Response(body, { status }); }; };
+  answer(200, '{}');
+  assert.equal((await checkCredentials('stripe', { secretKey: 'sk_live_abc' }, 'test')).status, 'rejected');
+  assert.equal(calls, 0);
+  assert.equal((await checkCredentials('stripe', { secretKey: 'sk_test_abc' }, 'test')).status, 'ok');
+  assert.equal(answer.last.url, 'https://api.stripe.com/v1/balance');
+  assert.equal(answer.last.init.headers.authorization, 'Bearer sk_test_abc');
+  answer(404, '');
+  assert.equal((await checkCredentials('checkoutcom', { secretKey: 'sk_sbox_x' }, 'test')).status, 'ok');
+  assert.match(answer.last.url, /^https:\/\/api\.sandbox\.checkout\.com\/payments\//);
+  answer(401, JSON.stringify({ error: 'invalid_client', error_description: 'Client Authentication failed' }));
+  const pp = await checkCredentials('paypal', { clientId: 'id', clientSecret: 'secret' }, 'test');
+  assert.equal(pp.status, 'rejected');
+  assert.equal(answer.last.url, 'https://api-m.sandbox.paypal.com/v1/oauth2/token');
+  answer(401, '{"message":"Unauthorized"}');
+  assert.equal((await checkCredentials('mollie', { apiKey: 'test_x' }, 'test')).status, 'rejected');
+});

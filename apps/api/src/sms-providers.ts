@@ -277,6 +277,101 @@ export const providers: Record<string, Provider> = {
       return r.status === 401 ? auth(r.text) : rejected(r.text);
     },
   },
+  // ---- International providers (any country; numbers in E.164). The sender is a registered number, an
+  // alphanumeric sender ID where the country allows it, or the provider's own service ID.
+  twilio: {
+    name: 'Twilio', website: 'https://www.twilio.com', docs: 'https://www.twilio.com/docs/messaging/api/message-resource#create-a-message-resource', confidence: 'docs', senderRequired: true, iys: false,
+    fields: [{ key: 'accountSid' }, { key: 'authToken', secret: true }],
+    async send(i, to, text) {
+      // A Messaging Service SID (MG...) as the sender lets Twilio pick the number.
+      const from: Record<string, string> = i.sender.startsWith('MG') ? { MessagingServiceSid: i.sender } : { From: i.sender };
+      const r = await call(`https://api.twilio.com/2010-04-01/Accounts/${encodeURIComponent(i.credentials.accountSid)}/Messages.json`, { method: 'POST',
+        headers: { authorization: basic(i.credentials.accountSid, i.credentials.authToken), 'content-type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({ To: to.e164, Body: text, ...from }).toString() });
+      const b = parse(r.text);
+      if (r.status === 201) return ok(b?.sid);
+      return r.status === 401 ? auth(r.text) : rejected(r.text);
+    },
+  },
+  vonage: {
+    name: 'Vonage (Nexmo)', website: 'https://www.vonage.com/communications-apis/sms/', docs: 'https://developer.vonage.com/en/api/sms', confidence: 'docs', senderRequired: true, iys: false,
+    fields: [{ key: 'apiKey' }, { key: 'apiSecret', secret: true }],
+    async send(i, to, text) {
+      const r = await call('https://rest.nexmo.com/sms/json', { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({ api_key: i.credentials.apiKey, api_secret: i.credentials.apiSecret, from: i.sender, to: to.international, text, type: 'unicode' }).toString() });
+      const m = parse(r.text)?.messages?.[0];
+      if (m?.status === '0') return ok(m['message-id']);
+      return m?.status === '4' ? auth(r.text) : rejected(r.text);
+    },
+  },
+  infobip: {
+    name: 'Infobip', website: 'https://www.infobip.com', docs: 'https://www.infobip.com/docs/api/channels/sms/sms-messaging/outbound-sms/send-sms-messages', confidence: 'docs', senderRequired: false, iys: false,
+    fields: [{ key: 'baseUrl' }, { key: 'apiKey', secret: true }],
+    async send(i, to, text) {
+      const host = i.credentials.baseUrl.replace(/^https?:\/\//, '').replace(/\/.*$/, '');
+      if (!/^[a-z0-9-]+\.api\.infobip\.com$/.test(host)) return fail('SMS_INVALID_SETTINGS', 'baseUrl (xxxxx.api.infobip.com)');
+      const r = await json(`https://${host}/sms/2/text/advanced`, { messages: [{ destinations: [{ to: to.international }], ...(i.sender && { from: i.sender }), text }] },
+        { authorization: `App ${i.credentials.apiKey}` });
+      const b = parse(r.text);
+      if (r.status === 200) return ok(b?.messages?.[0]?.messageId);
+      return r.status === 401 ? auth(r.text) : rejected(r.text);
+    },
+  },
+  plivo: {
+    name: 'Plivo', website: 'https://www.plivo.com', docs: 'https://www.plivo.com/docs/messaging/api/message/send-a-message', confidence: 'docs', senderRequired: true, iys: false,
+    fields: [{ key: 'authId' }, { key: 'authToken', secret: true }],
+    async send(i, to, text) {
+      const r = await json(`https://api.plivo.com/v1/Account/${encodeURIComponent(i.credentials.authId)}/Message/`, { src: i.sender, dst: to.international, text },
+        { authorization: basic(i.credentials.authId, i.credentials.authToken) });
+      const b = parse(r.text);
+      if (r.status === 202) return ok(b?.message_uuid?.[0]);
+      return r.status === 401 ? auth(r.text) : rejected(r.text);
+    },
+  },
+  sinch: {
+    name: 'Sinch', website: 'https://sinch.com', docs: 'https://developers.sinch.com/docs/sms/api-reference/sms/tag/Batches/', confidence: 'docs', senderRequired: true, iys: false,
+    fields: [{ key: 'servicePlanId' }, { key: 'apiToken', secret: true }, { key: 'region', options: ['us', 'eu', 'au', 'br', 'ca'] }],
+    async send(i, to, text) {
+      const region = ['us', 'eu', 'au', 'br', 'ca'].includes(i.credentials.region) ? i.credentials.region : 'us';
+      const r = await json(`https://${region}.sms.api.sinch.com/xms/v1/${encodeURIComponent(i.credentials.servicePlanId)}/batches`, { from: i.sender, to: [to.international], body: text },
+        { authorization: `Bearer ${i.credentials.apiToken}` });
+      const b = parse(r.text);
+      if (r.status === 201) return ok(b?.id);
+      return r.status === 401 || r.status === 403 ? auth(r.text) : rejected(r.text);
+    },
+  },
+  telnyx: {
+    name: 'Telnyx', website: 'https://telnyx.com', docs: 'https://developers.telnyx.com/api/messaging/send-message', confidence: 'docs', senderRequired: true, iys: false,
+    fields: [{ key: 'apiKey', secret: true }, { key: 'messagingProfileId', optional: true }],
+    async send(i, to, text) {
+      const r = await json('https://api.telnyx.com/v2/messages', { from: i.sender, to: to.e164, text, ...(i.credentials.messagingProfileId && { messaging_profile_id: i.credentials.messagingProfileId }) },
+        { authorization: `Bearer ${i.credentials.apiKey}` });
+      const b = parse(r.text);
+      if (r.status === 200) return ok(b?.data?.id);
+      return r.status === 401 ? auth(r.text) : rejected(r.text);
+    },
+  },
+  clickatell: {
+    name: 'Clickatell', website: 'https://www.clickatell.com', docs: 'https://docs.clickatell.com/channels/sms-channels/sms-api-reference/', confidence: 'docs', senderRequired: false, iys: false,
+    fields: [{ key: 'apiKey', secret: true }],
+    async send(i, to, text) {
+      const r = await json('https://platform.clickatell.com/v1/message', { messages: [{ channel: 'sms', to: to.international, content: text, ...(i.sender && { from: i.sender }) }] },
+        { authorization: i.credentials.apiKey });
+      const m = parse(r.text)?.messages?.[0];
+      if (r.status === 202 && m?.accepted) return ok(m.apiMessageId);
+      return r.status === 401 ? auth(r.text) : rejected(r.text);
+    },
+  },
+  messagebird: {
+    name: 'MessageBird (Bird)', website: 'https://bird.com', docs: 'https://developers.messagebird.com/api/sms-messaging/#send-outbound-sms', confidence: 'partial', senderRequired: true, iys: false,
+    fields: [{ key: 'accessKey', secret: true }],
+    async send(i, to, text) {
+      const r = await json('https://rest.messagebird.com/messages', { originator: i.sender, recipients: [to.international], body: text }, { authorization: `AccessKey ${i.credentials.accessKey}` });
+      const b = parse(r.text);
+      if (r.status === 201) return ok(b?.id);
+      return r.status === 401 ? auth(r.text) : rejected(r.text);
+    },
+  },
   // Any HTTP API not listed: URL and body templates with {to}, {text}, {sender} placeholders.
   custom: {
     name: 'Custom HTTP API', website: '', docs: '', confidence: 'docs', senderRequired: false, iys: false,

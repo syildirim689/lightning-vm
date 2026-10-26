@@ -1,5 +1,5 @@
-// Payment providers usable in Turkey: payment institutions (aggregators), bank virtual POS platforms and
-// wallets. Each entry declares the account fields the merchant panel gives, the live and test hosts, and a
+// Payment providers: payment institutions (aggregators), bank virtual POS platforms and wallets in Turkey, and
+// international card processors. Each entry declares the account fields the merchant panel gives, the live and test hosts, and a
 // credential check that moves no money (a BIN/installment query, a token request, or a status query for a
 // made-up order: "order not found" proves the credentials). Sources and confidence: docs/research-payments.md.
 // None of these were called with real merchant accounts during development; results are classified
@@ -12,7 +12,7 @@ export type Field = { key: string; label: [tr: string, en: string]; secret?: boo
   unverifiable?: boolean; options?: string[] };
 export type CheckStatus = 'ok' | 'rejected' | 'inconclusive' | 'network' | 'unverifiable';
 export type CheckResult = { status: CheckStatus; message?: string; httpStatus?: number; unverified?: string[] };
-export type Kind = 'gateway' | 'bank' | 'wallet';
+export type Kind = 'gateway' | 'bank' | 'wallet' | 'international';
 // Notes the panel explains (translated there).
 export type Note = 'NO_SANDBOX_HOST' | 'TEST_HOST_UNCERTAIN' | 'FIXED_IP' | 'TOKEN_ROTATES' | 'WALLET_ONLY' | 'NO_SERVER_CHECK' | 'THREE_D_KEY' | 'IP_WHITELIST' | 'SAME_HOST_FOR_TEST';
 export type Provider = {
@@ -390,6 +390,83 @@ const boa = (name: string, website: string, hosts: Record<Mode, string>, extra: 
   hosts, threeD: ['3D'], notes: ['IP_WHITELIST'], ...extra,
 });
 
+
+// ---------------------------------------------------------------- international (cards worldwide)
+// Each check is a read or a token request: no payment, no refund, nothing created.
+const bearer = (t: string) => ({ authorization: `Bearer ${t}`, accept: 'application/json' });
+const basicAuth = (u: string, p: string) => `Basic ${Buffer.from(`${u}:${p}`).toString('base64')}`;
+async function readCheck(url: string, headers: Record<string, string>, accepted = [200]): Promise<CheckResult> {
+  const r = await send(url, { method: 'GET', headers });
+  if (accepted.includes(r.status)) return ok();
+  return r.status === 401 || r.status === 403 ? rejected(r.text.slice(0, 300) || `HTTP ${r.status}`, r.status) : judge(r.text, r.status);
+}
+// A live key in test mode (or the reverse) is the usual mistake: said before any call.
+const keyMode = (key: string, mode: Mode, live: RegExp, test: RegExp) =>
+  mode === 'test' && live.test(key) ? rejected('A live key was given for test mode') : mode === 'live' && test.test(key) ? rejected('A test key was given for live mode') : null;
+
+const stripe: Provider = {
+  name: 'Stripe', kind: 'international', platform: 'Stripe', website: 'https://stripe.com', docs: 'https://docs.stripe.com/api', confidence: 'docs',
+  fields: [secret('secretKey', 'Gizli anahtar (sk_...)', 'Secret key (sk_...)'), f('publishableKey', 'Yayımlanabilir anahtar (pk_...)', 'Publishable key (pk_...)', { optional: true }),
+    secret('webhookSecret', 'Webhook imza anahtarı (whsec_...)', 'Webhook signing secret (whsec_...)', { optional: true, unverifiable: true })],
+  hosts: { live: 'https://api.stripe.com', test: 'https://api.stripe.com' }, threeD: ['Payment Intents (3DS2)', 'Checkout'], notes: ['SAME_HOST_FOR_TEST'],
+  testCards: ['4242424242424242', '4000002500003155'],
+  check: async (c, base, mode) => keyMode(c.secretKey, mode, /^(sk|rk)_live_/, /^(sk|rk)_test_/) ?? readCheck(`${base}/v1/balance`, bearer(c.secretKey)),
+};
+const paypal: Provider = {
+  name: 'PayPal', kind: 'international', platform: 'PayPal', website: 'https://www.paypal.com/business', docs: 'https://developer.paypal.com/api/rest/', confidence: 'docs',
+  fields: [f('clientId', 'Client ID', 'Client ID'), secret('clientSecret', 'Client secret', 'Client secret')],
+  hosts: { live: 'https://api-m.paypal.com', test: 'https://api-m.sandbox.paypal.com' }, threeD: ['PayPal Checkout', 'Advanced card payments (3DS)'], notes: ['TOKEN_ROTATES'],
+  async check(c, base) {
+    const r = await send(`${base}/v1/oauth2/token`, { method: 'POST', headers: { authorization: basicAuth(c.clientId, c.clientSecret), 'content-type': 'application/x-www-form-urlencoded' }, body: 'grant_type=client_credentials' });
+    if (r.status === 200 && parse(r.text)?.access_token) return ok();
+    return r.status === 401 ? rejected(parse(r.text)?.error_description ?? r.text, r.status) : judge(r.text, r.status);
+  },
+};
+const mollie: Provider = {
+  name: 'Mollie', kind: 'international', platform: 'Mollie', website: 'https://www.mollie.com', docs: 'https://docs.mollie.com/reference/overview', confidence: 'docs',
+  fields: [secret('apiKey', 'API anahtarı (live_/test_)', 'API key (live_/test_)')],
+  hosts: { live: 'https://api.mollie.com', test: 'https://api.mollie.com' }, threeD: ['Payments API (3DS2)'], notes: ['SAME_HOST_FOR_TEST'],
+  check: async (c, base, mode) => keyMode(c.apiKey, mode, /^live_/, /^test_/) ?? readCheck(`${base}/v2/methods`, bearer(c.apiKey)),
+};
+const adyen: Provider = {
+  name: 'Adyen', kind: 'international', platform: 'Adyen', website: 'https://www.adyen.com', docs: 'https://docs.adyen.com/api-explorer/Checkout/latest/overview', confidence: 'docs',
+  fields: [secret('apiKey', 'API anahtarı', 'API key'), f('merchantAccount', 'Merchant account', 'Merchant account'),
+    f('endpoint', 'Canlı uç noktası (https://{prefix}-checkout-live.adyenpayments.com/checkout)', 'Live endpoint (https://{prefix}-checkout-live.adyenpayments.com/checkout)', { optional: true })],
+  hosts: { live: 'https://checkout-live.adyenpayments.com/checkout', test: 'https://checkout-test.adyen.com' }, threeD: ['Checkout API (3DS2)', 'Drop-in'], notes: [],
+  testCards: ['4111111145551142'],
+  async check(c, base) {
+    const r = await postJson(`${base}/v71/paymentMethods`, { merchantAccount: c.merchantAccount }, { 'x-api-key': c.apiKey });
+    if (r.status === 200) return ok();
+    return r.status === 401 || r.status === 403 ? rejected(r.text.slice(0, 300) || `HTTP ${r.status}`, r.status) : judge(r.text, r.status);
+  },
+};
+const checkoutcom: Provider = {
+  name: 'Checkout.com', kind: 'international', platform: 'Checkout.com', website: 'https://www.checkout.com', docs: 'https://api-reference.checkout.com/', confidence: 'docs',
+  fields: [secret('secretKey', 'Gizli anahtar (sk_...)', 'Secret key (sk_...)'), f('publicKey', 'Açık anahtar (pk_...)', 'Public key (pk_...)', { optional: true })],
+  hosts: { live: 'https://api.checkout.com', test: 'https://api.sandbox.checkout.com' }, threeD: ['Payments API (3DS2)', 'Hosted Payments Page'], notes: [],
+  testCards: ['4242424242424242'],
+  // A made-up payment id: 404 means the key was accepted, 401 that it was not.
+  check: async (c, base) => readCheck(`${base}/payments/pay_credcheck0000000000000000000`, bearer(c.secretKey), [200, 404]),
+};
+const razorpay: Provider = {
+  name: 'Razorpay', kind: 'international', platform: 'Razorpay', website: 'https://razorpay.com', docs: 'https://razorpay.com/docs/api/', confidence: 'docs',
+  fields: [f('keyId', 'Key ID (rzp_...)', 'Key ID (rzp_...)'), secret('keySecret', 'Key secret', 'Key secret')],
+  hosts: { live: 'https://api.razorpay.com', test: 'https://api.razorpay.com' }, threeD: ['Standard Checkout'], notes: ['SAME_HOST_FOR_TEST'],
+  check: async (c, base, mode) => keyMode(c.keyId, mode, /^rzp_live_/, /^rzp_test_/) ?? readCheck(`${base}/v1/payments?count=1`, { authorization: basicAuth(c.keyId, c.keySecret) }),
+};
+const square: Provider = {
+  name: 'Square', kind: 'international', platform: 'Square', website: 'https://squareup.com', docs: 'https://developer.squareup.com/reference/square', confidence: 'docs',
+  fields: [secret('accessToken', 'Erişim anahtarı', 'Access token'), f('locationId', 'Location ID', 'Location ID', { optional: true })],
+  hosts: { live: 'https://connect.squareup.com', test: 'https://connect.squareupsandbox.com' }, threeD: ['Web Payments SDK (SCA)'], notes: [],
+  check: async (c, base) => readCheck(`${base}/v2/locations`, { ...bearer(c.accessToken), 'square-version': '2025-01-23' }),
+};
+const paddle: Provider = {
+  name: 'Paddle', kind: 'international', platform: 'Paddle Billing', website: 'https://www.paddle.com', docs: 'https://developer.paddle.com/api-reference/overview', confidence: 'docs',
+  fields: [secret('apiKey', 'API anahtarı', 'API key'), f('clientToken', 'İstemci anahtarı (client-side token)', 'Client-side token', { optional: true })],
+  hosts: { live: 'https://api.paddle.com', test: 'https://sandbox-api.paddle.com' }, threeD: ['Paddle Checkout (merchant of record)'], notes: [],
+  check: async (c, base) => readCheck(`${base}/event-types`, bearer(c.apiKey)),
+};
+
 export const providers: Record<string, Provider> = {
   iyzico, paytr, param,
   sipay: ccpayment('Sipay', 'https://sipay.com.tr', 'https://apidocs.sipay.com.tr', { live: 'https://app.sipay.com.tr/ccpayment', test: 'https://provisioning.sipay.com.tr/ccpayment' }, 'partial'),
@@ -422,6 +499,7 @@ export const providers: Record<string, Provider> = {
     { testCards: ['5188961939192544'] }),
   vakifkatilim: boa('Vakıf Katılım', 'https://www.vakifkatilim.com.tr', { live: 'https://boa.vakifkatilim.com.tr/VirtualPOS.Gateway/Home', test: 'https://boa.vakifkatilim.com.tr/VirtualPOS.Gateway/Home' },
     { notes: ['IP_WHITELIST', 'SAME_HOST_FOR_TEST'] }),
+  stripe, paypal, mollie, adyen, checkoutcom, razorpay, square, paddle,
 };
 
 // Runs the provider's check; failures to reach it are reported as network problems with the reason.

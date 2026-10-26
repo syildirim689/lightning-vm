@@ -14,7 +14,7 @@ import { useApiQuery } from '../../../../lib/query';
 
 type Mode = 'live' | 'test';
 type Field = { key: string; label: [string, string]; secret?: boolean; optional?: boolean; unverifiable?: boolean };
-type Provider = { id: string; name: string; kind: 'gateway' | 'bank' | 'wallet'; platform: string; website: string; docs: string; confidence: 'docs' | 'partial' | 'community';
+type Provider = { id: string; name: string; kind: 'gateway' | 'bank' | 'wallet' | 'international'; platform: string; website: string; docs: string; confidence: 'docs' | 'partial' | 'community';
   fields: Field[]; hosts: Record<Mode, string>; threeD: string[]; notes: string[]; checkable: boolean; testCredentials: Record<string, string> | null; testCards: string[] };
 type CheckStatus = 'ok' | 'rejected' | 'inconclusive' | 'network' | 'unverifiable';
 type Check = { status: CheckStatus; message?: string; unverified?: string[]; at: string; current: boolean };
@@ -67,7 +67,7 @@ export default function Payments({ readOnly }: { readOnly: boolean }) {
       <div className="flex flex-wrap items-end gap-3">
         <TextInput className="min-w-56 flex-1" label={t('search')} value={search} onChange={setSearch} placeholder="iyzico, Garanti, Nestpay…"/>
         <SelectInput className="w-56" label={t('kindLabel')} value={kind} onChange={setKind}
-          options={[{ id: '', label: t('kind.all') }, ...(['gateway', 'bank', 'wallet'] as const).map((k) => ({ id: k, label: t(`kind.${k}`) }))]}/>
+          options={[{ id: '', label: t('kind.all') }, ...(['gateway', 'bank', 'wallet', 'international'] as const).map((k) => ({ id: k, label: t(`kind.${k}`) }))]}/>
       </div>
       <p className="text-sm text-muted">{t('count', { n: list.length })}</p>
       {list.length === 0 && <Empty icon={<I name="search" size={24}/>} title={t('nothingFound')}/>}
@@ -79,7 +79,7 @@ export default function Payments({ readOnly }: { readOnly: boolean }) {
             className="flex flex-col gap-2 rounded-2xl border border-border bg-surface p-4 text-left outline-offset-2 transition hover:-translate-y-0.5 hover:border-accent hover:shadow-lg">
             <span className="flex items-start justify-between gap-2">
               <span className="min-w-0"><span className="block truncate font-semibold">{p.name}</span><span className="block truncate text-xs text-muted">{p.platform}</span></span>
-              <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-default text-muted"><I name={({ bank: 'landmark', wallet: 'wallet', gateway: 'credit-card' } as const)[p.kind]} size={18}/></span>
+              <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-default text-muted"><I name={({ bank: 'landmark', wallet: 'wallet', gateway: 'credit-card', international: 'globe' } as const)[p.kind]} size={18}/></span>
             </span>
             <span className="flex flex-wrap gap-1.5">
               <StatusChip tone={tone}>{t(`state.${label}`)}</StatusChip>
