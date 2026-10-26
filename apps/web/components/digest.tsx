@@ -3,7 +3,7 @@
 // refused access). The time of the visit is kept in this browser only; the first visit looks at the last day.
 import { motion } from 'motion/react';
 import NextLink from 'next/link';
-import { useFormatter, useTranslations } from 'next-intl';
+import { useFormatter, useNow, useTranslations } from 'next-intl';
 import { useEffect, useState } from 'react';
 import { useApiQuery } from '../lib/query';
 import { I } from './icon';
@@ -25,6 +25,7 @@ const toneClass = { default: 'bg-default text-foreground', warning: 'bg-warning/
 export default function Digest() {
   const t = useTranslations('Digest');
   const format = useFormatter();
+  const now = useNow({ updateInterval: 60_000 });
   // Read once: the previous visit. The new one is written after the counts arrive.
   const [since] = useState(() => { try { return localStorage.getItem(key); } catch { return null; } });
   const q = useApiQuery<{ since: string; counts: Counts }>(['admin', 'digest', since ?? ''], `/admin/digest${since ? `?since=${encodeURIComponent(since)}` : ''}`);
@@ -34,7 +35,7 @@ export default function Digest() {
   return <section aria-labelledby="digest" className="rounded-3xl border border-border bg-surface p-4 sm:p-5">
     <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
       <h2 id="digest" className="flex items-center gap-2 font-semibold"><I name="history" size={17} className="text-accent"/>{since ? t('title') : t('titleDay')}</h2>
-      <span className="text-xs text-muted">{format.relativeTime(new Date(q.data.since))}</span>
+      <span className="text-xs text-muted">{format.relativeTime(new Date(q.data.since), now)}</span>
     </div>
     {shown.length === 0 ? <p className="flex items-center gap-2 text-sm text-muted"><I name="circle-check" size={15} className="text-success"/>{t('nothing')}</p>
       : <ul className="flex flex-wrap gap-2">{shown.map((i, n) => <motion.li key={i.k} initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: n * 0.04 }}>

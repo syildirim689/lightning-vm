@@ -9,6 +9,8 @@ export default getRequestConfig(async () => {
     locale,
     // shortcut: one server-wide zone, add a per-user time zone setting with user profiles.
     timeZone: process.env.APP_TIME_ZONE || 'UTC',
+    // Relative times ("5 minutes ago") count from the request; components that tick pass their own useNow().
+    now: new Date(),
     messages: (await import(`../messages/${locale}.json`)).default,
   };
 });
