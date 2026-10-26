@@ -9,10 +9,11 @@ import { can } from './permissions';
 import { Can, PermissionGuard } from './rbac';
 import { getSettings, mailReady, saveSettings, type Channel, type NotificationPolicy } from './settings-store';
 import { smsReady } from './sms';
+import { chatReady } from './chat-delivery';
 
 const channelList = (v: unknown, from: Channel[]) => (Array.isArray(v) ? [...new Set(v.map(String))] : []).filter((c): c is Channel => from.includes(c as Channel));
 async function availability() {
-  return { inApp: true, push: true, email: await mailReady(), sms: await smsReady() };
+  return { inApp: true, push: true, email: await mailReady(), sms: await smsReady(), chat: await chatReady() };
 }
 
 @Controller('notifications') @UseGuards(SessionGuard)
@@ -43,7 +44,8 @@ export class NotificationsController {
       .filter(([k]) => p[k].enabled)
       .map(([k]) => ({ event: k, allowed: p[k].allowed, locked: !p[k].userCanChange, channels: !p[k].userCanChange ? p[k].defaults : (chosen[k] ?? p[k].defaults).filter((c: Channel) => p[k].allowed.includes(c)) }));
     const { rows: [push] } = await pool.query('SELECT count(*)::int AS n FROM push_subscriptions WHERE user_id = $1', [req.user.id]);
-    return { events, available: await availability(), pushDevices: push.n, phoneVerified: req.user.phoneNumberVerified };
+    const { rows: [chat] } = await pool.query('SELECT count(*)::int AS n FROM chat_connections WHERE user_id = $1 AND enabled', [req.user.id]);
+    return { events, available: await availability(), pushDevices: push.n, chatConnections: chat.n, phoneVerified: req.user.phoneNumberVerified };
   }
 
   @Put('preferences')
@@ -85,6 +87,10 @@ export class NotificationsController {
     const avail = await availability();
     if (!avail[channel]) throw apiError(409, 'CHANNEL_UNAVAILABLE', 'This channel is not configured');
     if (channel === 'sms' && !req.user.phoneNumberVerified) throw apiError(409, 'PHONE_NOT_VERIFIED', 'Verify your phone number first');
+    if (channel === 'chat') {
+      const { rows: [n] } = await pool.query('SELECT count(*)::int AS n FROM chat_connections WHERE user_id = $1 AND enabled', [req.user.id]);
+      if (!n.n) throw apiError(409, 'CHAT_NOT_CONNECTED', 'Connect a messaging app first');
+    }
     if (channel === 'push') {
       const { rows: [n] } = await pool.query('SELECT count(*)::int AS n FROM push_subscriptions WHERE user_id = $1', [req.user.id]);
       if (!n.n) throw apiError(409, 'PUSH_NOT_SUBSCRIBED', 'Allow notifications in this browser first');

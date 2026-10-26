@@ -244,7 +244,20 @@
     "GITHUB_UNREACHABLE": "GitHub did not answer; try again later.",
     "TERMINAL_NEEDS_2FA": "Turn on two-factor sign-in to use the terminal.",
     "TERMINAL_IMPERSONATED": "Not available while acting as another user.",
-    "TERMINAL_OFF": "The terminal is turned off."
+    "TERMINAL_OFF": "The terminal is turned off.",
+    "CHAT_INVALID_URL": "Invalid address: it must be a public HTTPS URL (on the service's own domain).",
+    "CHAT_AUTH_FAILED": "The token or address was rejected.",
+    "CHAT_TARGET_NOT_FOUND": "Target not found (the webhook was deleted or the URL is wrong).",
+    "CHAT_REJECTED": "The app did not accept the message.",
+    "CHAT_UNREACHABLE": "The app could not be reached.",
+    "CHAT_TELEGRAM_BLOCKED": "The bot is blocked; unblock it in Telegram.",
+    "CHAT_TELEGRAM_FAILED": "Telegram did not answer.",
+    "CHAT_TELEGRAM_WAITING": "Press \"Start\" in Telegram first, then try again.",
+    "CHAT_LINK_EXPIRED": "The link expired; start again.",
+    "CHAT_LIMIT": "At most 10 apps can be connected.",
+    "CHAT_APP_UNAVAILABLE": "The administrator switched this app off.",
+    "CHAT_NOT_CONNECTED": "Connect a messaging app first.",
+    "DUPLICATE_REQUEST": "The same request is already being processed; no need to press again."
   },
   "Auth": {
     "required": "required",
@@ -419,7 +432,9 @@
     "SNAPSHOT_LIMIT": "At most 5 snapshots per server: remove one first.",
     "INVALID_GITHUB_USER": "A GitHub user name has letters, digits and single hyphens (39 at most).",
     "GITHUB_USER_NOT_FOUND": "No such GitHub user.",
-    "GITHUB_NO_KEYS": "This GitHub user has published no SSH key."
+    "GITHUB_NO_KEYS": "This GitHub user has published no SSH key.",
+    "CHAT_INVALID_URL": "Must be a public HTTPS URL (on this service's domain).",
+    "CHAT_AUTH_FAILED": "The token was rejected."
   },
   "Setup": {
     "title": "Setup wizard",
@@ -2018,19 +2033,22 @@
       "inApp": "In the panel",
       "push": "Browser",
       "email": "E-mail",
-      "sms": "SMS"
+      "sms": "SMS",
+      "chat": "Messaging"
     },
     "channelHelp": {
       "inApp": "Shown under the bell, top right.",
       "push": "A system notification on this device, even when the panel is closed.",
       "email": "Sent to your account e-mail.",
-      "sms": "Sent to your verified phone number."
+      "sms": "Sent to your verified phone number.",
+      "chat": "Sent to the Telegram, WhatsApp, Slack, Discord, Teams… apps you connect."
     },
     "unavailable": {
       "inApp": "Not available.",
       "push": "This browser does not support it.",
       "email": "Outgoing mail is not set up.",
-      "sms": "SMS is not set up."
+      "sms": "SMS is not set up.",
+      "chat": "The administrator has not switched on a messaging app yet."
     },
     "needPhone": "Verify your phone number on the Security tab first.",
     "needPush": "Turn on browser notifications on this device first.",
@@ -2139,7 +2157,8 @@
     "userCanChange": "Users may change",
     "allow": "Allow",
     "default": "default",
-    "legend": "Checkbox: the channel may be used. “default”: on unless the user chose otherwise."
+    "legend": "Checkbox: the channel may be used. “default”: on unless the user chose otherwise.",
+    "needChat": "Connect an app below first."
   },
   "Users": {
     "eyebrow": "People",
@@ -2366,7 +2385,8 @@
       "security": "Sign-in security",
       "domain": "Domain and SSL",
       "servers": "Servers",
-      "announcement": "Announcement"
+      "announcement": "Announcement",
+      "chat": "Messaging"
     },
     "saved": "Saved.",
     "save": "Save",
@@ -2898,6 +2918,27 @@
       "optional": "Optional; in your time zone.",
       "save": "Save",
       "saved": "Announcement saved."
+    },
+    "chat": {
+      "apps": "Apps users may connect",
+      "appsHelp": "The chosen apps appear on users' Account → Notifications page. Webhook-based ones need nothing more.",
+      "appsNote": "Which notifications may go to messaging is set on the \"Notification rules\" tab.",
+      "ready": "Ready",
+      "needsSetup": "Needs setup",
+      "telegramHelp": "Create a bot with @BotFather (/newbot) in Telegram and enter the token it gives. Users pair with this bot.",
+      "telegramBot": "Connected bot: {bot}",
+      "telegramToken": "Bot token",
+      "telegramTokenHelp": "Checked with Telegram when saved. The bot must not have a webhook set.",
+      "whatsappHelp": "Meta WhatsApp Cloud API: needs an app and a WhatsApp number on Meta for Developers. Messages a business starts use an approved template.",
+      "whatsappToken": "Permanent access token",
+      "whatsappTokenHelp": "A permanent token for a system user is recommended.",
+      "whatsappPhoneId": "Phone number ID",
+      "whatsappTemplate": "Template name",
+      "whatsappTemplateHelp": "An approved template whose body has two variables: '{{1}}' title, '{{2}}' text.",
+      "whatsappLanguage": "Template language",
+      "pushoverHelp": "Create an application on pushover.net and enter its API token; users add their own user keys.",
+      "pushoverToken": "Application API token",
+      "testNote": "To test, connect an app on your own Account → Notifications page."
     }
   },
   "Firewalls": {
@@ -3589,7 +3630,10 @@
       "terminal_denied": "Terminal refused",
       "terminal_failed": "Terminal failed",
       "terminal_switched": "Terminal turned on or off",
-      "terminal_revoked": "Terminal ended"
+      "terminal_revoked": "Terminal ended",
+      "chat_connect": "Messaging app connected",
+      "chat_disconnect": "Messaging app removed",
+      "settings_chat": "Messaging settings changed"
     },
     "outcome": {
       "success": "Done",
@@ -3684,6 +3728,68 @@
       "TERMINAL_LIMIT": "You already have a terminal open (one at a time).",
       "TERMINAL_START_FAILED": "The shell could not be started on the server.",
       "TERMINAL_CLOSED": "The terminal is closed."
+    }
+  },
+  "Chat": {
+    "title": "Messaging apps",
+    "intro": "Get notifications in Telegram, WhatsApp, Slack, Discord, Microsoft Teams and more. Pick which ones arrive there in the \"Messaging\" column of the table below.",
+    "connect": "Connect an app",
+    "emptyTitle": "No app connected yet",
+    "emptyHelp": "You can connect: {apps}.",
+    "enabled": "{name} on/off",
+    "lastSent": "Last sent: {at, date, short} {at, time, short}",
+    "neverSent": "Nothing sent yet",
+    "test": "Send test",
+    "testSent": "Test sent to {name}.",
+    "remove": "Remove",
+    "removeTitle": "Remove {name}?",
+    "removeBody": "No more notifications go to this app. You can connect it again at any time.",
+    "removed": "Connection removed.",
+    "cancel": "Cancel",
+    "pick": "Choose an app",
+    "connectTo": "Connect {name}",
+    "connected": "{name} connected; a first message was sent.",
+    "back": "Back",
+    "connectAndTest": "Connect and test",
+    "label": "Display name",
+    "optional": "optional",
+    "docs": "Where do I get this? (docs)",
+    "telegramStep1": "Press \"Open Telegram\"; a chat with {bot} opens.",
+    "telegramStep2": "Press \"Start\" in Telegram.",
+    "telegramStep3": "Come back and press \"Verify connection\".",
+    "telegramOpen": "Open Telegram",
+    "telegramOpenAgain": "Open the Telegram link again",
+    "telegramVerify": "Verify connection",
+    "whatsappTo": "Messages will go to {phone}",
+    "whatsappHelp": "The verified phone number on your account is used. Connect again if you change the number.",
+    "needPhone": "Verify your phone number first",
+    "needPhoneHelp": "Add and verify your phone number on the Profile tab, then come back.",
+    "field": {
+      "url": "Webhook URL",
+      "secret": "Signing secret",
+      "homeserver": "Homeserver",
+      "roomId": "Room ID",
+      "accessToken": "Access token",
+      "token": "Access token",
+      "userKey": "User key"
+    },
+    "fieldHelp": {
+      "secret": "When set, each request is signed with an X-Lightning-Signature: sha256=… header."
+    },
+    "help": {
+      "telegram": "The panel's Telegram bot messages you directly.",
+      "whatsapp": "Messages arrive from the business WhatsApp account with an approved template.",
+      "slack": "Create an \"Incoming Webhook\" for a Slack channel and paste its URL.",
+      "discord": "Channel settings → Integrations → create a webhook and copy its URL.",
+      "teams": "In the Teams channel, create a Workflows flow \"Post to a channel when a webhook request is received\" and paste its URL.",
+      "googlechat": "In the Google Chat space: Apps & integrations → add a webhook.",
+      "mattermost": "In Mattermost: Integrations → Incoming Webhook.",
+      "rocketchat": "In Rocket.Chat administration: Integrations → Incoming webhook.",
+      "matrix": "Needs a bot account's access token and the ID of a room the bot joined (!…:server).",
+      "ntfy": "The URL of the topic you subscribe to in the ntfy app (e.g. https://ntfy.sh/secret-topic).",
+      "gotify": "Create an application on your Gotify server and enter its token.",
+      "pushover": "Enter your Pushover user key.",
+      "webhook": "Each notification is POSTed as JSON to your URL (event, title, body, link)."
     }
   }
 }

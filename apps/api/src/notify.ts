@@ -10,6 +10,7 @@ import { can, permissionsOf, type Permission } from './permissions';
 import { decryptSecret, encryptSecret } from './secrets';
 import { getSettings, mailReady, saveSettings, sendMail, type Channel, type NotificationPolicy } from './settings-store';
 import { sendSms, smsReady } from './sms';
+import { deliverChat } from './chat-delivery';
 
 export type Text = { title: string; body: string };
 type EventDef = {
@@ -21,7 +22,7 @@ type EventDef = {
   text: { tr: (d: Record<string, string>) => Text; en: (d: Record<string, string>) => Text };
 };
 
-export const all: Channel[] = ['inApp', 'push', 'email', 'sms'];
+export const all: Channel[] = ['inApp', 'push', 'email', 'sms', 'chat'];
 export const catalog: Record<string, EventDef> = {
   'server.ready': { audience: 'user', channels: all, defaults: ['inApp', 'push', 'email'], link: (d) => `/servers/${d.serverId}`,
     text: { tr: (d) => ({ title: `${d.name} hazır`, body: `Sunucunuz kuruldu ve çalışıyor. IP: ${d.address || '-'}` }),
@@ -29,13 +30,13 @@ export const catalog: Record<string, EventDef> = {
   'server.failed': { audience: 'user', channels: all, defaults: ['inApp', 'push', 'email'], link: (d) => `/servers/${d.serverId}`,
     text: { tr: (d) => ({ title: `${d.name}: işlem başarısız`, body: `${d.kind} işlemi tamamlanamadı (${d.code}).` }),
       en: (d) => ({ title: `${d.name}: operation failed`, body: `The ${d.kind} operation could not finish (${d.code}).` }) } },
-  'server.deleted': { audience: 'user', channels: ['inApp', 'push', 'email'], defaults: ['inApp'],
+  'server.deleted': { audience: 'user', channels: ['inApp', 'push', 'email', 'chat'], defaults: ['inApp'],
     text: { tr: (d) => ({ title: `${d.name} silindi`, body: 'Sunucu ve diskleri kaldırıldı; IP adresi serbest bırakıldı.' }),
       en: (d) => ({ title: `${d.name} deleted`, body: 'The server and its disks were removed; its IP address was released.' }) } },
-  'server.power': { audience: 'user', channels: ['inApp', 'push'], defaults: ['inApp'], link: (d) => `/servers/${d.serverId}`,
+  'server.power': { audience: 'user', channels: ['inApp', 'push', 'chat'], defaults: ['inApp'], link: (d) => `/servers/${d.serverId}`,
     text: { tr: (d) => ({ title: `${d.name}: ${d.kind} tamamlandı`, body: 'Güç işlemi tamamlandı.' }),
       en: (d) => ({ title: `${d.name}: ${d.kind} done`, body: 'The power operation finished.' }) } },
-  'server.snapshot': { audience: 'user', channels: ['inApp', 'push', 'email'], defaults: ['inApp'], link: (d) => `/servers/${d.serverId}`,
+  'server.snapshot': { audience: 'user', channels: ['inApp', 'push', 'email', 'chat'], defaults: ['inApp'], link: (d) => `/servers/${d.serverId}`,
     text: { tr: (d) => ({ title: `${d.name}: anlık görüntü ${({ snapshot_create: 'alındı', snapshot_revert: 'geri yüklendi', snapshot_delete: 'silindi' } as Record<string, string>)[String(d.kind)] ?? 'işlendi'}`, body: String(d.snapshot ?? '') }),
       en: (d) => ({ title: `${d.name}: snapshot ${({ snapshot_create: 'taken', snapshot_revert: 'restored', snapshot_delete: 'removed' } as Record<string, string>)[String(d.kind)] ?? 'done'}`, body: String(d.snapshot ?? '') }) } },
   'server.firewall_failed': { audience: 'user', channels: all, defaults: ['inApp', 'push', 'email'], link: (d) => `/servers/${d.serverId}`,
@@ -56,7 +57,7 @@ export const catalog: Record<string, EventDef> = {
   'auth.two_factor_changed': { audience: 'user', channels: all, defaults: ['inApp', 'email'], link: () => '/account?tab=security',
     text: { tr: (d) => ({ title: d.enabled === 'true' ? 'İki adımlı doğrulama açıldı' : 'İki adımlı doğrulama kapatıldı', body: 'Hesap güvenlik ayarınız değişti.' }),
       en: (d) => ({ title: d.enabled === 'true' ? 'Two-factor authentication on' : 'Two-factor authentication off', body: 'Your account security setting changed.' }) } },
-  'admin.user_registered': { audience: 'staff', permission: 'users.view', channels: ['inApp', 'push', 'email'], defaults: ['inApp'], link: () => '/admin/users',
+  'admin.user_registered': { audience: 'staff', permission: 'users.view', channels: ['inApp', 'push', 'email', 'chat'], defaults: ['inApp'], link: () => '/admin/users',
     text: { tr: (d) => ({ title: 'Yeni kullanıcı kaydı', body: d.email }), en: (d) => ({ title: 'New user registered', body: d.email }) } },
   'admin.operation_failed': { audience: 'staff', permission: 'servers.view_all', channels: all, defaults: ['inApp', 'push'], link: (d) => `/servers/${d.serverId}`,
     text: { tr: (d) => ({ title: `İşlem başarısız: ${d.name}`, body: `${d.kind} · ${d.code} · ${d.owner}` }),
@@ -69,10 +70,10 @@ export const catalog: Record<string, EventDef> = {
   'server.port_open': { audience: 'user', channels: all, defaults: ['inApp', 'email'], link: (d) => '/servers/' + d.serverId,
     text: { tr: (d) => ({ title: d.name + ': ' + (d.label || 'port') + ' internete açık', body: d.address + ':' + d.port + ' herkese açık görünüyor. Gerekmiyorsa kapatın veya bir firewall uygulayın.' }),
       en: (d) => ({ title: d.name + ': ' + (d.label || 'port') + ' open to the Internet', body: d.address + ':' + d.port + ' is reachable by anyone. Close it or apply a firewall if it is not needed.' }) } },
-  'admin.iso_ready': { audience: 'staff', permission: 'catalog.manage', channels: ['inApp', 'push', 'email'], defaults: ['inApp'], link: () => '/admin/catalog?tab=isos',
+  'admin.iso_ready': { audience: 'staff', permission: 'catalog.manage', channels: ['inApp', 'push', 'email', 'chat'], defaults: ['inApp'], link: () => '/admin/catalog?tab=isos',
     text: { tr: (d) => ({ title: 'ISO hazır: ' + d.name, body: d.pool + ' konumunda müşterilerin kullanımına açık.' }),
       en: (d) => ({ title: 'ISO ready: ' + d.name, body: 'Available in ' + d.pool + '.' }) } },
-  'admin.iso_failed': { audience: 'staff', permission: 'catalog.manage', channels: ['inApp', 'push', 'email'], defaults: ['inApp', 'push'], link: () => '/admin/catalog?tab=isos',
+  'admin.iso_failed': { audience: 'staff', permission: 'catalog.manage', channels: ['inApp', 'push', 'email', 'chat'], defaults: ['inApp', 'push'], link: () => '/admin/catalog?tab=isos',
     text: { tr: (d) => ({ title: 'ISO kopyalanamadı: ' + d.name, body: d.error }), en: (d) => ({ title: 'ISO copy failed: ' + d.name, body: d.error }) } },
   // From Alertmanager (alerts.ts): the monitoring stack's alert rules, firing and resolved.
   'admin.alert': { audience: 'staff', permission: 'system.view', channels: all, defaults: ['inApp', 'email', 'push'], link: () => '/admin/system',
@@ -151,6 +152,7 @@ export async function deliver(u: Recipient, channel: Channel, t: Text, link: str
   if (channel === 'inApp') await pool.query('INSERT INTO notifications (user_id, event, title, body, link) VALUES ($1, $2, $3, $4, $5)', [u.id, event, t.title, t.body, link]);
   if (channel === 'push') await sendPush(u.id, { title: t.title, body: t.body, link });
   if (channel === 'email' && (await mailReady())) await sendMail(u.email, `${brand}: ${t.title}`, `${t.body}${link ? `\n\n${link}` : ''}`);
+  if (channel === 'chat') await deliverChat(u.id, t, link, event);
   if (channel === 'sms' && u.phone_number && u.phone_number_verified && (await smsReady())) await sendSms(u.phone_number, `${brand}: ${t.title}. ${t.body}`.slice(0, 300));
 }
 

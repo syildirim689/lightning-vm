@@ -434,3 +434,43 @@ test('mail through an API provider: secrets never come back, empty secret fields
   assert.equal((await get('/admin/settings/mail', user)).statusCode, 403);
   await put('/admin/settings/mail', { enabled: false, provider: 'smtp', use: {} }, admin);
 });
+
+test('messaging apps: offered by the admin, unsafe addresses refused, nothing saved before a first message arrives', async () => {
+  let s = (await get('/admin/settings/chat', admin)).json();
+  assert.ok(s.catalog.some((a) => a.id === 'telegram') && s.usable.includes('slack') && !s.usable.includes('telegram'));
+  // Apps that need an account cannot be offered without it; a malformed token is refused before Telegram is asked.
+  let r = await put('/admin/settings/chat', { apps: ['slack', 'telegram', 'whatsapp'], telegram: { token: 'nope' } }, admin);
+  assert.equal(r.statusCode, 400);
+  assert.deepEqual(Object.keys(r.json().fields).sort(), ['telegram.token', 'whatsapp.phoneNumberId', 'whatsapp.template', 'whatsapp.token']);
+  s = (await put('/admin/settings/chat', { apps: ['slack', 'webhook'] }, admin)).json();
+  assert.deepEqual(s.usable, ['slack', 'webhook']);
+  assert.equal((await put('/admin/settings/chat', { apps: [] }, user)).statusCode, 403);
+
+  const list = (await get('/chat', user)).json();
+  assert.deepEqual(list.apps.map((a) => a.id), ['slack', 'webhook']);
+  assert.deepEqual(list.connections, []);
+  // The panel's own network, plain HTTP and a Slack URL off Slack's host are refused; nothing is stored.
+  for (const [app, url] of [['webhook', 'https://127.0.0.1/x'], ['webhook', 'https://api:4000/internal/alerts'], ['webhook', 'http://example.com/x'], ['slack', 'https://example.com/services/x']]) {
+    r = await post('/chat/connections', { app, fields: { url } }, user);
+    assert.equal(r.statusCode, 400, url);
+    assert.equal(r.json().fields['fields.url'], 'CHAT_INVALID_URL');
+  }
+  assert.equal((await post('/chat/connections', { app: 'discord', fields: { url: 'https://discord.com/api/webhooks/1/x' } }, user)).statusCode, 400, 'not offered');
+  assert.equal((await post('/chat/telegram/link', {}, user)).statusCode, 409);
+  assert.equal((await get('/chat', user)).json().connections.length, 0);
+  // The channel exists in the policy, and testing it needs a connection.
+  assert.ok((await get('/admin/settings/notifications', admin)).json().events.find((e) => e.event === 'server.ready').channels.includes('chat'));
+  assert.equal((await post('/notifications/test', { channel: 'chat' }, user)).json().code, 'CHAT_NOT_CONNECTED');
+  await put('/admin/settings/chat', { apps: ['slack', 'discord', 'teams', 'googlechat', 'mattermost', 'rocketchat', 'matrix', 'ntfy', 'gotify', 'webhook'] }, admin);
+});
+
+test('a double click sends one request: the same POST while the first runs is refused, a later one runs', async () => {
+  const body = { app: 'webhook', fields: { url: 'https://127.0.0.1/double' } };
+  const [a, b] = await Promise.all([post('/chat/connections', body, user), post('/chat/connections', body, user)]);
+  assert.deepEqual([a.statusCode, b.statusCode].sort(), [400, 409]);
+  assert.equal((a.statusCode === 409 ? a : b).json().code, 'DUPLICATE_REQUEST');
+  // Another user, or a different body, is not held up.
+  assert.equal((await post('/chat/connections', { ...body, fields: { url: 'https://127.0.0.1/other' } }, user)).statusCode, 400);
+  await new Promise((r) => setTimeout(r, 2200));
+  assert.equal((await post('/chat/connections', body, user)).statusCode, 400);
+});

@@ -11,11 +11,12 @@ import { Notice, Section } from '../../../components/ui';
 import { apiFetch, useErrorText } from '../../../lib/api';
 import { currentSubscription, disablePush, enablePush, pushSupported } from '../../../lib/push';
 import { useApiQuery } from '../../../lib/query';
+import ChatConnections from './chat-connections';
 
-export type Channel = 'inApp' | 'push' | 'email' | 'sms';
-export const channels: Channel[] = ['inApp', 'push', 'email', 'sms'];
-type Prefs = { events: { event: string; allowed: Channel[]; locked: boolean; channels: Channel[] }[]; available: Record<Channel, boolean>; pushDevices: number; phoneVerified: boolean };
-export const channelIcon: Record<Channel, React.ReactNode> = { inApp: <I name="bell" size={15}/>, push: <I name="monitor-smartphone" size={15}/>, email: <I name="mail" size={15}/>, sms: <I name="message-square" size={15}/> };
+export type Channel = 'inApp' | 'push' | 'email' | 'sms' | 'chat';
+export const channels: Channel[] = ['inApp', 'push', 'email', 'sms', 'chat'];
+type Prefs = { events: { event: string; allowed: Channel[]; locked: boolean; channels: Channel[] }[]; available: Record<Channel, boolean>; pushDevices: number; chatConnections: number; phoneVerified: boolean };
+export const channelIcon: Record<Channel, React.ReactNode> = { inApp: <I name="bell" size={15}/>, push: <I name="monitor-smartphone" size={15}/>, email: <I name="mail" size={15}/>, sms: <I name="message-square" size={15}/>, chat: <I name="messages-square" size={15}/> };
 
 export default function NotificationPrefs() {
   const t = useTranslations('Notify');
@@ -29,7 +30,7 @@ export default function NotificationPrefs() {
   const { events, available, phoneVerified } = q.data;
 
   // Why a channel cannot be used right now, if it cannot.
-  const blocked = (c: Channel) => !available[c] ? t(`unavailable.${c}`) : c === 'sms' && !phoneVerified ? t('needPhone') : c === 'push' && !q.data!.pushDevices ? t('needPush') : null;
+  const blocked = (c: Channel) => !available[c] ? t(`unavailable.${c}`) : c === 'sms' && !phoneVerified ? t('needPhone') : c === 'push' && !q.data!.pushDevices ? t('needPush') : c === 'chat' && !q.data!.chatConnections ? t('needChat') : null;
 
   async function toggle(event: string, current: Channel[], c: Channel, on: boolean) {
     const next = on ? [...current, c] : current.filter((x) => x !== c);
@@ -55,7 +56,7 @@ export default function NotificationPrefs() {
 
   return <div className="flex flex-col gap-6">
     <Section title={t('channelsTitle')} description={t('channelsIntro')}>
-      <ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5">
         {channels.map((c) => <li key={c} className="flex flex-col gap-3 rounded-xl border border-border p-4">
           <div className="flex items-center gap-2 font-medium"><span className="text-accent">{channelIcon[c]}</span>{t(`channel.${c}`)}</div>
           <p className="flex-1 text-xs text-muted">{blocked(c) ?? t(`channelHelp.${c}`)}</p>
@@ -65,6 +66,8 @@ export default function NotificationPrefs() {
         </li>)}
       </ul>
     </Section>
+
+    <ChatConnections/>
 
     <Section title={t('title')} description={t('intro')}>
       {events.length === 0 ? <p className="text-sm text-muted">{t('none')}</p> : <div className="overflow-x-auto">

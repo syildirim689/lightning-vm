@@ -23,7 +23,11 @@ export type CaptchaUse = { signIn: boolean; signUp: boolean; passwordReset: bool
 export type SmsUse = { twoFactor: boolean; phoneVerification: boolean };
 // credentialsEnc: the provider's account fields (sms.ts), encrypted as one JSON document.
 export type SmsSettings = { provider: string; sender: string; credentialsEnc: string | null; commercial: boolean; use: SmsUse };
-export type Channel = 'inApp' | 'push' | 'email' | 'sms';
+// chat: the messaging apps (Telegram, WhatsApp, Slack, ...) each user connects in chat.ts.
+export type Channel = 'inApp' | 'push' | 'email' | 'sms' | 'chat';
+// Messaging apps users may connect (chat-apps.ts) and the admin accounts some of them need; secrets encrypted.
+export type ChatSettings = { apps: string[]; telegram: { tokenEnc: string | null; username: string };
+  whatsapp: { tokenEnc: string | null; phoneNumberId: string; template: string; language: string }; pushover: { tokenEnc: string | null } };
 // Sign-in policy: who must use two-factor, and whether a one-time e-mail code can replace the password.
 // Servers: what customers may do on their own servers (staff always may), and hardware options for new VMs.
 export type ServerSettings = { customer: { power: boolean; console: boolean; iso: boolean; rootPassword: boolean; delete: boolean; snapshots: boolean };
@@ -58,6 +62,8 @@ const defaults = {
       { port: 5432, label: 'PostgreSQL' }, { port: 6379, label: 'Redis' }, { port: 9200, label: 'Elasticsearch' }, { port: 11211, label: 'Memcached' }, { port: 27017, label: 'MongoDB' }] } as AbuseSettings,
   servers: { customer: { power: true, console: true, iso: true, rootPassword: true, delete: true, snapshots: true }, hardware: { cpuHotAdd: false, memoryHotAdd: false, nestedHv: false } } as ServerSettings,
   rdns: { provider: 'none', apiUrl: '', apiKeyEnc: null, serverId: 'localhost', template: '', ttl: 3600, customerEdit: true, forwardCheck: true } as RdnsSettings,
+  chat: { apps: ['slack', 'discord', 'teams', 'googlechat', 'mattermost', 'rocketchat', 'matrix', 'ntfy', 'gotify', 'webhook'], telegram: { tokenEnc: null, username: '' },
+    whatsapp: { tokenEnc: null, phoneNumberId: '', template: '', language: 'tr' }, pushover: { tokenEnc: null } } as ChatSettings,
   // Web Push (VAPID) keys, generated on first use.
   vapid: { publicKey: '', privateKeyEnc: null } as { publicKey: string; privateKeyEnc: string | null },
 };

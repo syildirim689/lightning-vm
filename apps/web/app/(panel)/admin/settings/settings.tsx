@@ -22,8 +22,9 @@ import Domain from './domain';
 import Security from './security';
 import AnnouncementSettings from './announcement';
 import ServerSettings from './servers';
+import ChatSettings from './chat';
 
-const tabs = ['general', 'branding', 'domain', 'security', 'servers', 'mail', 'captcha', 'sms', 'payments', 'rdns', 'notifications', 'announcement'] as const;
+const tabs = ['general', 'branding', 'domain', 'security', 'servers', 'mail', 'captcha', 'sms', 'chat', 'payments', 'rdns', 'notifications', 'announcement'] as const;
 
 export default function Settings() {
   const t = useTranslations('Settings');
@@ -31,7 +32,7 @@ export default function Settings() {
   const me = useMe();
   const readOnly = !can(me?.permissions, 'settings.manage');
   const icon = { general: <I name="settings-2" size={16}/>, branding: <I name="palette" size={16}/>, domain: <I name="globe-lock" size={16}/>, security: <I name="shield-check" size={16}/>, servers: <I name="server-cog" size={16}/>, mail: <I name="mail" size={16}/>, captcha: <I name="bot" size={16}/>,
-    sms: <I name="message-square" size={16}/>, payments: <I name="credit-card" size={16}/>, rdns: <I name="globe" size={16}/>, notifications: <I name="bell" size={16}/>, announcement: <I name="megaphone" size={16}/> };
+    sms: <I name="message-square" size={16}/>, chat: <I name="messages-square" size={16}/>, payments: <I name="credit-card" size={16}/>, rdns: <I name="globe" size={16}/>, notifications: <I name="bell" size={16}/>, announcement: <I name="megaphone" size={16}/> };
   return <>
     <PageHeader eyebrow={t('eyebrow')} title={t('title')} description={t('intro')}/>
     {readOnly && <div className="mb-4"><Notice tone="default">{t('readOnly')}</Notice></div>}
@@ -47,6 +48,7 @@ export default function Settings() {
       <Tabs.Panel id="mail" className="pt-5"><Mail readOnly={readOnly} myEmail={me?.email ?? ''}/></Tabs.Panel>
       <Tabs.Panel id="captcha" className="pt-5"><Captcha readOnly={readOnly}/></Tabs.Panel>
       <Tabs.Panel id="sms" className="pt-5"><Sms readOnly={readOnly} myPhone={me?.phoneNumber ?? ''}/></Tabs.Panel>
+      <Tabs.Panel id="chat" className="pt-5"><ChatSettings readOnly={readOnly}/></Tabs.Panel>
       <Tabs.Panel id="payments" className="pt-5"><Payments readOnly={readOnly}/></Tabs.Panel>
       <Tabs.Panel id="rdns" className="pt-5"><ReverseDns readOnly={readOnly}/></Tabs.Panel>
       <Tabs.Panel id="notifications" className="pt-5"><NotificationPolicy readOnly={readOnly}/></Tabs.Panel>

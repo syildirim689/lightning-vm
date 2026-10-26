@@ -244,7 +244,20 @@
     "GITHUB_UNREACHABLE": "GitHub yanıt vermedi; daha sonra yeniden deneyin.",
     "TERMINAL_NEEDS_2FA": "Terminali kullanmak için iki adımlı girişi açın.",
     "TERMINAL_IMPERSONATED": "Başka bir kullanıcı olarak çalışırken kullanılamaz.",
-    "TERMINAL_OFF": "Terminal kapalı."
+    "TERMINAL_OFF": "Terminal kapalı.",
+    "CHAT_INVALID_URL": "Adres geçersiz: herkese açık bir HTTPS adresi olmalı (ve bu servisin kendi alan adında).",
+    "CHAT_AUTH_FAILED": "Anahtar veya adres reddedildi.",
+    "CHAT_TARGET_NOT_FOUND": "Hedef bulunamadı (webhook silinmiş veya adres yanlış).",
+    "CHAT_REJECTED": "Uygulama mesajı kabul etmedi.",
+    "CHAT_UNREACHABLE": "Uygulamaya ulaşılamadı.",
+    "CHAT_TELEGRAM_BLOCKED": "Bot engellenmiş; Telegram'da botun engelini kaldırın.",
+    "CHAT_TELEGRAM_FAILED": "Telegram yanıt vermedi.",
+    "CHAT_TELEGRAM_WAITING": "Önce Telegram'da \"Başlat\"a basın, sonra yeniden deneyin.",
+    "CHAT_LINK_EXPIRED": "Bağlantının süresi doldu; yeniden başlayın.",
+    "CHAT_LIMIT": "En fazla 10 uygulama bağlanabilir.",
+    "CHAT_APP_UNAVAILABLE": "Bu uygulama yönetici tarafından kapatıldı.",
+    "CHAT_NOT_CONNECTED": "Önce bir mesajlaşma uygulaması bağlayın.",
+    "DUPLICATE_REQUEST": "Aynı istek zaten işleniyor; tekrar basmanıza gerek yok."
   },
   "Auth": {
     "required": "zorunlu",
@@ -419,7 +432,9 @@
     "SNAPSHOT_LIMIT": "Sunucu başına en fazla 5 anlık görüntü: önce birini kaldırın.",
     "INVALID_GITHUB_USER": "GitHub kullanıcı adı harf, rakam ve tek tirelerden oluşur (en fazla 39).",
     "GITHUB_USER_NOT_FOUND": "Böyle bir GitHub kullanıcısı yok.",
-    "GITHUB_NO_KEYS": "Bu GitHub kullanıcısı SSH anahtarı yayınlamamış."
+    "GITHUB_NO_KEYS": "Bu GitHub kullanıcısı SSH anahtarı yayınlamamış.",
+    "CHAT_INVALID_URL": "Herkese açık bir HTTPS adresi olmalı (bu servisin alan adında).",
+    "CHAT_AUTH_FAILED": "Anahtar reddedildi."
   },
   "Setup": {
     "title": "Kurulum sihirbazı",
@@ -2018,19 +2033,22 @@
       "inApp": "Panel içi",
       "push": "Tarayıcı",
       "email": "E-posta",
-      "sms": "SMS"
+      "sms": "SMS",
+      "chat": "Mesajlaşma"
     },
     "channelHelp": {
       "inApp": "Sağ üstteki zil simgesinde görünür.",
       "push": "Panel kapalıyken bile bu cihazda sistem bildirimi olarak gelir.",
       "email": "Hesabınızın e-posta adresine gönderilir.",
-      "sms": "Doğrulanmış telefon numaranıza gönderilir."
+      "sms": "Doğrulanmış telefon numaranıza gönderilir.",
+      "chat": "Bağladığınız Telegram, WhatsApp, Slack, Discord, Teams… uygulamalarına gönderilir."
     },
     "unavailable": {
       "inApp": "Kullanılamıyor.",
       "push": "Bu tarayıcı desteklemiyor.",
       "email": "E-posta gönderimi ayarlanmadı.",
-      "sms": "SMS gönderimi ayarlanmadı."
+      "sms": "SMS gönderimi ayarlanmadı.",
+      "chat": "Yönetici henüz bir mesajlaşma uygulaması açmadı."
     },
     "needPhone": "Önce Güvenlik sekmesinden telefon numaranızı doğrulayın.",
     "needPush": "Önce bu cihazda tarayıcı bildirimlerini açın.",
@@ -2139,7 +2157,8 @@
     "userCanChange": "Kullanıcı değiştirebilir",
     "allow": "İzin ver",
     "default": "varsayılan",
-    "legend": "Onay kutusu: kanal kullanılabilir. “varsayılan”: kullanıcı bir seçim yapmadıysa açık."
+    "legend": "Onay kutusu: kanal kullanılabilir. “varsayılan”: kullanıcı bir seçim yapmadıysa açık.",
+    "needChat": "Aşağıdan önce bir uygulama bağlayın."
   },
   "Users": {
     "eyebrow": "Kişiler",
@@ -2366,7 +2385,8 @@
       "security": "Giriş güvenliği",
       "domain": "Alan adı ve SSL",
       "servers": "Sunucular",
-      "announcement": "Duyuru"
+      "announcement": "Duyuru",
+      "chat": "Mesajlaşma"
     },
     "saved": "Kaydedildi.",
     "save": "Kaydet",
@@ -2898,6 +2918,27 @@
       "optional": "İsteğe bağlı; kendi saat diliminizde.",
       "save": "Kaydet",
       "saved": "Duyuru kaydedildi."
+    },
+    "chat": {
+      "apps": "Kullanıcıların bağlayabileceği uygulamalar",
+      "appsHelp": "Seçilen uygulamalar kullanıcıların Hesap → Bildirimler sayfasında görünür. Webhook tabanlı olanlar ek ayar istemez.",
+      "appsNote": "Hangi bildirimin mesajlaşmaya gidebileceğini \"Bildirim kuralları\" sekmesinden belirlersiniz.",
+      "ready": "Hazır",
+      "needsSetup": "Ayar gerekli",
+      "telegramHelp": "Telegram'da @BotFather ile /newbot komutuyla bir bot oluşturun ve verdiği anahtarı girin. Kullanıcılar bu botla eşleşir.",
+      "telegramBot": "Bağlı bot: {bot}",
+      "telegramToken": "Bot anahtarı (token)",
+      "telegramTokenHelp": "Kaydederken Telegram'a sorulup doğrulanır. Botta webhook tanımlı olmamalı.",
+      "whatsappHelp": "Meta WhatsApp Cloud API: Meta for Developers'ta bir uygulama ve WhatsApp numarası gerekir. İşletmenin başlattığı mesajlar onaylı şablonla gönderilir.",
+      "whatsappToken": "Kalıcı erişim anahtarı",
+      "whatsappTokenHelp": "Sistem kullanıcısı için oluşturulan kalıcı anahtar önerilir.",
+      "whatsappPhoneId": "Telefon numarası kimliği (Phone number ID)",
+      "whatsappTemplate": "Şablon adı",
+      "whatsappTemplateHelp": "Gövdesi iki değişken içeren onaylı şablon: '{{1}}' başlık, '{{2}}' metin.",
+      "whatsappLanguage": "Şablon dili",
+      "pushoverHelp": "pushover.net'te bir uygulama oluşturup API anahtarını girin; kullanıcılar kendi user key'lerini ekler.",
+      "pushoverToken": "Uygulama API anahtarı",
+      "testNote": "Test için kendi hesabınızda Hesap → Bildirimler → Uygulama bağla kullanın."
     }
   },
   "Firewalls": {
@@ -3589,7 +3630,10 @@
       "terminal_denied": "Terminal reddedildi",
       "terminal_failed": "Terminal başarısız",
       "terminal_switched": "Terminal açıldı veya kapatıldı",
-      "terminal_revoked": "Terminal sonlandırıldı"
+      "terminal_revoked": "Terminal sonlandırıldı",
+      "chat_connect": "Mesajlaşma uygulaması bağlandı",
+      "chat_disconnect": "Mesajlaşma uygulaması kaldırıldı",
+      "settings_chat": "Mesajlaşma ayarları değişti"
     },
     "outcome": {
       "success": "Tamamlandı",
@@ -3684,6 +3728,68 @@
       "TERMINAL_LIMIT": "Zaten açık bir terminaliniz var (aynı anda bir tane).",
       "TERMINAL_START_FAILED": "Kabuk sunucuda başlatılamadı.",
       "TERMINAL_CLOSED": "Terminal kapandı."
+    }
+  },
+  "Chat": {
+    "title": "Mesajlaşma uygulamaları",
+    "intro": "Bildirimleri Telegram, WhatsApp, Slack, Discord, Microsoft Teams ve diğer uygulamalarınıza da alın. Hangi bildirimin geleceğini aşağıdaki tablodaki \"Mesajlaşma\" sütunundan seçin.",
+    "connect": "Uygulama bağla",
+    "emptyTitle": "Henüz bağlı uygulama yok",
+    "emptyHelp": "Bağlayabilecekleriniz: {apps}.",
+    "enabled": "{name} açık/kapalı",
+    "lastSent": "Son gönderim: {at, date, short} {at, time, short}",
+    "neverSent": "Henüz gönderim yok",
+    "test": "Test gönder",
+    "testSent": "{name} adresine test gönderildi.",
+    "remove": "Kaldır",
+    "removeTitle": "{name} kaldırılsın mı?",
+    "removeBody": "Bu uygulamaya artık bildirim gönderilmez. İstediğiniz zaman yeniden bağlayabilirsiniz.",
+    "removed": "Bağlantı kaldırıldı.",
+    "cancel": "Vazgeç",
+    "pick": "Bir uygulama seçin",
+    "connectTo": "{name} bağla",
+    "connected": "{name} bağlandı; ilk mesaj gönderildi.",
+    "back": "Geri",
+    "connectAndTest": "Bağla ve test et",
+    "label": "Görünen ad",
+    "optional": "isteğe bağlı",
+    "docs": "Nasıl alınır? (belgeler)",
+    "telegramStep1": "\"Telegram'ı aç\" düğmesine basın; {bot} sohbeti açılır.",
+    "telegramStep2": "Telegram'da \"Başlat\" (Start) düğmesine basın.",
+    "telegramStep3": "Buraya dönüp \"Bağlantıyı doğrula\"ya basın.",
+    "telegramOpen": "Telegram'ı aç",
+    "telegramOpenAgain": "Telegram bağlantısını yeniden aç",
+    "telegramVerify": "Bağlantıyı doğrula",
+    "whatsappTo": "Mesajlar {phone} numarasına gelecek",
+    "whatsappHelp": "Hesabınızda doğrulanmış telefon numaranız kullanılır. Numarayı değiştirirseniz bağlantıyı yeniden kurun.",
+    "needPhone": "Önce telefon numaranızı doğrulayın",
+    "needPhoneHelp": "Profil sekmesinden telefon numaranızı ekleyip doğrulayın, sonra buraya dönün.",
+    "field": {
+      "url": "Webhook adresi",
+      "secret": "İmza anahtarı",
+      "homeserver": "Sunucu (homeserver)",
+      "roomId": "Oda kimliği",
+      "accessToken": "Erişim anahtarı",
+      "token": "Erişim anahtarı (token)",
+      "userKey": "Kullanıcı anahtarı (user key)"
+    },
+    "fieldHelp": {
+      "secret": "Verilirse her istek X-Lightning-Signature: sha256=… başlığıyla imzalanır."
+    },
+    "help": {
+      "telegram": "Panelin Telegram botu size doğrudan mesaj gönderir.",
+      "whatsapp": "İşletmenin WhatsApp hesabından onaylı bir şablonla mesaj gelir.",
+      "slack": "Slack'te bir kanal için \"Incoming Webhook\" oluşturup adresini yapıştırın.",
+      "discord": "Kanal ayarları → Entegrasyonlar → Webhook oluşturun ve adresini kopyalayın.",
+      "teams": "Teams kanalında Workflows ile \"Webhook isteği alındığında kanala gönder\" akışını oluşturup adresini yapıştırın.",
+      "googlechat": "Google Chat alanında Uygulamalar ve entegrasyonlar → Webhook ekleyin.",
+      "mattermost": "Mattermost'ta Entegrasyonlar → Gelen Webhook oluşturun.",
+      "rocketchat": "Rocket.Chat yönetiminde Entegrasyonlar → Gelen Webhook oluşturun.",
+      "matrix": "Bir bot hesabının erişim anahtarı ve botun katıldığı odanın kimliği (!…:sunucu) gerekir.",
+      "ntfy": "ntfy uygulamasında abone olduğunuz konunun adresi (ör. https://ntfy.sh/gizli-konu).",
+      "gotify": "Gotify sunucunuzda bir uygulama oluşturup anahtarını girin.",
+      "pushover": "Pushover uygulamanızdaki kullanıcı anahtarınızı (user key) girin.",
+      "webhook": "Her bildirim JSON olarak kendi adresinize POST edilir (event, title, body, link)."
     }
   }
 }

@@ -8,11 +8,12 @@ import type { FastifyReply } from 'fastify';
 import { closeConnections, pool, redis } from './db';
 import { apiError, ErrorCodeFilter } from './errors';
 import { logEvent } from './log';
-import { csrfRejected } from './security';
+import { claimRequest, csrfRejected, duplicateKey, releaseRequest } from './security';
 import { AuthController } from './auth';
 import { PublicController, SettingsController, SmsSettingsController } from './settings';
 import { RolesController } from './rbac';
 import { NotificationPolicyController, NotificationsController } from './notifications';
+import { ChatController, ChatSettingsController } from './chat';
 import { startNotificationWorker } from './notify';
 import { ensureRoles, watchRoles } from './permissions';
 import { InsightsController, startInsightAlerts, StaffInsightsController } from './insights';
@@ -61,7 +62,7 @@ class HealthController {
 
 @Module({ controllers: [HealthController, AuthController, PublicController, SetupController, AdminController, VmwareController, ConsoleController, CatalogAdminController, CatalogController, ServersController, ServersAdminController, FirewallsController, PaymentsController, RdnsSettingsController, ServerIpsController,
   SettingsController, SmsSettingsController, RolesController, NotificationsController, NotificationPolicyController,
-  InsightsController, StaffInsightsController, ApplicationsController, ApplicationCallbackController, IsoAdminController, ServerIsoController, DomainController, LocationsController, TopologyAdminController, TopologyController, PowerController, AbuseController, VdcAdminController, VdcController, SmartController, OnboardingController, SchedulesController, AuditController, ActivityController, AnnouncementController, AnnouncementAdminController, SnapshotsController, AlertsController, TerminalController] })
+  InsightsController, StaffInsightsController, ApplicationsController, ApplicationCallbackController, IsoAdminController, ServerIsoController, DomainController, LocationsController, TopologyAdminController, TopologyController, PowerController, AbuseController, VdcAdminController, VdcController, SmartController, OnboardingController, SchedulesController, AuditController, ActivityController, AnnouncementController, AnnouncementAdminController, SnapshotsController, AlertsController, TerminalController, ChatController, ChatSettingsController] })
 class AppModule {}
 
 // Only Caddy on the Compose network talks to the API; its X-Forwarded-* headers are trusted.
@@ -75,8 +76,16 @@ export async function createApp() {
   app.getHttpAdapter().getInstance().addHook('onRequest', async (req, reply) => {
     if (csrfRejected(req)) return reply.status(403).send({ code: 'CSRF_REJECTED', message: 'Cross-site request rejected' });
   });
+  app.getHttpAdapter().getInstance().addHook('preHandler', async (req, reply) => {
+    const key = duplicateKey(req);
+    if (!key) return;
+    if (!(await claimRequest(key))) return reply.status(409).send({ code: 'DUPLICATE_REQUEST', message: 'The same request is already being processed' });
+    (req as { dedupeKey?: string }).dedupeKey = key;
+  });
   // Route templates (/servers/:id), not raw URLs, keep the label set bounded.
   app.getHttpAdapter().getInstance().addHook('onResponse', async (req, reply) => {
+    const key = (req as { dedupeKey?: string }).dedupeKey;
+    if (key) await releaseRequest(key);
     httpDuration.observe({ method: req.method, route: req.routeOptions.url ?? 'unmatched', status: `${Math.floor(reply.statusCode / 100)}xx` }, reply.elapsedTime / 1000);
   });
   // better-auth's routes (sign-in, sign-up, sign-out, sessions, password reset, passkeys). Caddy strips /api,
