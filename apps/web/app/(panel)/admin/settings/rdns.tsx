@@ -6,6 +6,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useTranslations } from 'next-intl';
 import { useEffect, useState } from 'react';
 import { I } from '../../../../components/icon';
+import { GuideButton } from '../../../../components/setup-guide';
 import { FormActions, FormSection, Mono, Notice, NumberInput, SelectInput, StatusChip, SwitchInput, TextInput } from '../../../../components/ui';
 import { apiFetch, useErrorText } from '../../../../lib/api';
 import { useApiQuery } from '../../../../lib/query';
@@ -41,7 +42,7 @@ export default function ReverseDns({ readOnly }: { readOnly: boolean }) {
   const on = v.provider === 'powerdns';
 
   return <div className="flex flex-col">
-    <FormSection title={t('providerTitle')} description={t('providerHelp')} icon={<I name="globe" size={18}/>}>
+    <FormSection title={t('providerTitle')} description={t('providerHelp')} icon={<I name="globe" size={18}/>} aside={<GuideButton id="powerdns"/>}>
       <SelectInput label={t('provider')} value={v.provider} onChange={(x) => set({ provider: (x || 'none') as Rdns['provider'] })} isDisabled={readOnly}
         options={[{ id: 'none', label: t('providers.none') }, { id: 'powerdns', label: 'PowerDNS (HTTP API)', description: t('providers.powerdns') }]}/>
       {on && <div className="grid gap-4 sm:grid-cols-2">

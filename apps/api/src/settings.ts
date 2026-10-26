@@ -7,8 +7,13 @@ import { apiError } from './errors';
 import { Can, PermissionGuard } from './rbac';
 import { decryptSecret } from './secrets';
 import { decryptCredentials, encryptCredentials, providers, sendWith } from './sms';
-import { emailPattern, getSettings, imagePattern, mailErrorCode, mailSecrets, publicConfig, readBranding, readCaptcha, readMail, saveSettings, sendViaProvider, transportFor, verifyCaptcha, type SmsSettings } from './settings-store';
+import { emailPattern, getSettings, imagePattern, mailErrorCode, mailReady, mailSecrets, publicConfig, readBranding, readCaptcha, readMail, saveSettings, sendViaProvider, transportFor, verifyCaptcha, type SmsSettings } from './settings-store';
 import { mailProviders } from './mail-providers';
+import { usableApps } from './chat-delivery';
+import { pool } from './db';
+import { summary } from './maintenance';
+import { policies } from './notify';
+import { smsReady } from './sms';
 
 type Input = Record<string, unknown>;
 
@@ -202,4 +207,42 @@ function readSms(body: Input, saved: SmsSettings): { value: SmsSettings; credent
   const use = (body.use ?? {}) as Input;
   return { value: { provider, sender, commercial: body.commercial === true, credentialsEnc: provider === 'none' ? null : encryptCredentials(credentials),
     use: { twoFactor: use.twoFactor === true, phoneVerification: use.phoneVerification === true } }, credentials };
+}
+
+// Settings → General: every integration's state in one call, for the overview cards and the completion bar.
+// state: ok (working), todo (not set up, optional), warn (set up in a risky way or needs attention).
+@Controller('admin/settings/overview') @UseGuards(PermissionGuard)
+export class SettingsOverviewController {
+  @Get() @Can('settings.view', 'settings.manage')
+  async get() {
+    const [branding, security, captcha, rdns, announcement, chat, notifications] = await Promise.all([getSettings('branding'), getSettings('security'), getSettings('captcha'),
+      getSettings('rdns'), getSettings('announcement'), getSettings('chat'), policies()]);
+    const one = async (sql: string) => (await pool.query(sql)).rows[0];
+    const [reg, url, pay, counts] = await Promise.all([
+      one("SELECT value FROM settings WHERE key = 'registration_open'"), one("SELECT value FROM settings WHERE key = 'public_url'"),
+      one('SELECT count(*) FILTER (WHERE enabled)::int AS on, count(*)::int AS saved FROM payment_gateways'),
+      one(`SELECT (SELECT count(*)::int FROM users WHERE NOT coalesce(banned, false)) AS users,
+        (SELECT count(*)::int FROM users WHERE 'admin' = ANY(string_to_array(coalesce(role, ''), ',')) AND NOT two_factor_enabled AND NOT coalesce(banned, false)) AS "adminsNo2fa",
+        (SELECT count(*)::int FROM servers WHERE state <> 'deleted') AS servers`)]);
+    const registrationOpen = reg?.value === true;
+    const now = Date.now();
+    const backup = summary().lastSuccessfulBackup;
+    const backupAgeH = backup ? Math.round((now - Date.parse(backup.time)) / 3_600_000) : null;
+    const events = Object.values(notifications);
+    const items = [
+      { key: 'branding', tab: 'branding', state: branding.name !== 'Lightning VM' || branding.logo ? 'ok' : 'todo', detail: { name: branding.name, logo: !!branding.logo } },
+      { key: 'domain', tab: 'domain', state: config.PANEL_TLS === '1' ? 'ok' : 'warn', detail: { url: typeof url?.value === 'string' ? url.value : null, https: config.PANEL_TLS === '1' } },
+      { key: 'security', tab: 'security', state: counts.adminsNo2fa ? 'warn' : security.require2fa !== 'none' ? 'ok' : 'todo', detail: { require2fa: security.require2fa, adminsNo2fa: counts.adminsNo2fa } },
+      { key: 'mail', tab: 'mail', state: (await mailReady()) ? 'ok' : 'warn', detail: { provider: (await getSettings('mail')).provider } },
+      { key: 'captcha', tab: 'captcha', state: captcha.provider !== 'none' ? 'ok' : registrationOpen ? 'warn' : 'todo', detail: { provider: captcha.provider } },
+      { key: 'sms', tab: 'sms', state: (await smsReady()) ? 'ok' : 'todo', detail: { provider: (await getSettings('sms')).provider } },
+      { key: 'chat', tab: 'chat', state: usableApps(chat).length ? 'ok' : 'todo', detail: { apps: usableApps(chat).length } },
+      { key: 'payments', tab: 'payments', state: pay.on ? 'ok' : 'todo', detail: { active: pay.on, saved: pay.saved } },
+      { key: 'rdns', tab: 'rdns', state: rdns.provider !== 'none' ? 'ok' : 'todo', detail: { provider: rdns.provider } },
+      { key: 'notifications', tab: 'notifications', state: 'ok', detail: { enabled: events.filter((e) => e.enabled).length, total: events.length } },
+      { key: 'announcement', tab: 'announcement', state: announcement.active ? 'ok' : 'todo', detail: { active: announcement.active } },
+      { key: 'backup', tab: null, state: backupAgeH === null || backupAgeH > 48 ? 'warn' : 'ok', detail: { hoursAgo: backupAgeH } },
+    ];
+    return { items, registrationOpen, version: process.env.APP_VERSION || 'dev', users: counts.users, servers: counts.servers, startedAt: new Date(now - process.uptime() * 1000).toISOString() };
+  }
 }

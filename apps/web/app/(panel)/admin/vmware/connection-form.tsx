@@ -1,6 +1,7 @@
 "use client";
 import { Button, Card } from '@heroui/react';
 import { I } from '../../../../components/icon';
+import { GuideButton } from '../../../../components/setup-guide';
 import { useTranslations } from 'next-intl';
 import { useState } from 'react';
 import { apiFetch, useErrorText, type ApiError } from '../../../../lib/api';
@@ -37,6 +38,7 @@ export default function ConnectionForm({ onSaved }: { onSaved: (s: Summary) => v
   const help = (k: string) => t(`form.${k}Help` as 'form.nameHelp');
 
   return <form className="flex flex-col gap-4" onSubmit={(e) => { e.preventDefault(); if (tested && testedFor === JSON.stringify(body())) void run('save', '/admin/vmware/connections', onSaved); }} noValidate>
+    <GuideButton id="vmware"/>
     <FieldGroup title={t('form.groupEndpoint')} description={t('form.groupEndpointHelp')}>
       <TextInput label={t('form.name')} value={form.name} onChange={set('name')} error={err('name')} help={help('name')} isRequired/>
       <TextInput label={t('form.host')} value={form.host} onChange={set('host')} error={err('host')} help={help('host')} isRequired autoComplete="off" spellCheck={false}/>

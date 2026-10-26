@@ -9,12 +9,12 @@ import { parseAsString, useQueryState } from 'nuqs';
 import { useEffect, useState } from 'react';
 import { useCaptcha } from '../../../../components/captcha';
 import { I } from '../../../../components/icon';
+import { GuideButton } from '../../../../components/setup-guide';
 import { CheckboxInput, FormActions, FormSection, Notice, NumberInput, PageHeader, SelectInput, StatusChip, SwitchInput, TextInput } from '../../../../components/ui';
 import { apiFetch, useErrorText, type ApiError } from '../../../../lib/api';
 import { useMe } from '../../../../lib/me';
 import { can } from '../../../../lib/permissions';
 import { useApiQuery } from '../../../../lib/query';
-import RegistrationSetting from '../registration-setting';
 import NotificationPolicy from './notification-policy';
 import Payments from './payments';
 import ReverseDns from './rdns';
@@ -23,6 +23,7 @@ import Security from './security';
 import AnnouncementSettings from './announcement';
 import ServerSettings from './servers';
 import ChatSettings from './chat';
+import GeneralSettings from './general';
 
 const tabs = ['general', 'branding', 'domain', 'security', 'servers', 'mail', 'captcha', 'sms', 'chat', 'payments', 'rdns', 'notifications', 'announcement'] as const;
 
@@ -40,7 +41,7 @@ export default function Settings() {
       <Tabs.ListContainer className="overflow-x-auto">
         <Tabs.List aria-label={t('title')}>{tabs.map((k) => <Tabs.Tab key={k} id={k} className="gap-2 whitespace-nowrap">{icon[k]}{t(`tabs.${k}`)}<Tabs.Indicator/></Tabs.Tab>)}</Tabs.List>
       </Tabs.ListContainer>
-      <Tabs.Panel id="general" className="pt-5"><RegistrationSetting/></Tabs.Panel>
+      <Tabs.Panel id="general" className="pt-5"><GeneralSettings onOpen={(k) => setTab(k)}/></Tabs.Panel>
       <Tabs.Panel id="branding" className="pt-5"><Branding readOnly={readOnly}/></Tabs.Panel>
       <Tabs.Panel id="domain" className="pt-5"><Domain readOnly={readOnly || !can(me?.permissions, 'system.update')}/></Tabs.Panel>
       <Tabs.Panel id="servers" className="pt-5"><ServerSettings readOnly={readOnly}/></Tabs.Panel>
@@ -190,7 +191,7 @@ function Mail({ readOnly, myEmail }: { readOnly: boolean; myEmail: string }) {
   }
   const dis = readOnly || !v.enabled;
   return <Card><Card.Content className="flex flex-col">
-    <FormSection title={t('mail.provider')} description={t('mail.providerHelp')} icon={<I name="mail" size={16}/>}>
+    <FormSection title={t('mail.provider')} description={t('mail.providerHelp')} icon={<I name="mail" size={16}/>} aside={<GuideButton id="mail"/>}>
       <SwitchInput label={t('mail.enabled')} isSelected={v.enabled} onChange={f.set('enabled')} isDisabled={readOnly}/>
       {v.envFallback && <Notice tone="default">{t('mail.envFallback')}</Notice>}
       <div role="radiogroup" aria-label={t('mail.provider')} className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-7">
@@ -279,7 +280,7 @@ function Captcha({ readOnly }: { readOnly: boolean }) {
   }
   const on = v.provider !== 'none';
   return <Card><Card.Content className="flex flex-col">
-    <FormSection title={t('captcha.provider')} description={t('captcha.providerHelp')} icon={<I name="bot" size={16}/>}>
+    <FormSection title={t('captcha.provider')} description={t('captcha.providerHelp')} icon={<I name="bot" size={16}/>} aside={<GuideButton id="captcha"/>}>
       {v.envFallback && <Notice tone="default">{t('captcha.envFallback')}</Notice>}
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3" role="radiogroup" aria-label={t('captcha.provider')}>
         {(['none', 'turnstile', 'recaptcha-v2', 'recaptcha-v3', 'hcaptcha'] as const).map((p) => <button key={p} type="button" role="radio" aria-checked={v.provider === p} disabled={readOnly}

@@ -785,7 +785,7 @@ test.describe('people, settings and smart features (English browser)', () => {
     await page.waitForTimeout(6000);
     for (const [path, name] of [['/admin', 'admin-dashboard'], ['/', 'my-servers'], ['/admin/topology', 'admin-topology'], ['/admin/energy', 'energy'], ['/admin/abuse', 'abuse'], ['/admin/catalog?tab=locations', 'locations'],
       ['/admin/catalog?tab=isos', 'isos'], ['/admin/catalog?tab=apps', 'apps'], ['/admin/catalog?tab=vdcs', 'vdcs'], ['/admin/settings?tab=domain', 'domain'],
-      ['/admin/settings?tab=security', 'security'], ['/admin/settings?tab=servers', 'server-settings'], ['/topology', 'my-topology'], ['/vdc', 'my-vdc'], ['/order', 'order'], ['/admin/audit', 'audit'], ['/account?tab=activity', 'activity'], ['/admin/settings?tab=announcement', 'announcement'], ['/admin/terminal', 'terminal'], ['/admin/settings?tab=mail', 'mail'], ['/admin/settings?tab=payments', 'payments'], ['/admin/settings?tab=sms', 'sms'], ['/admin/settings?tab=chat', 'chat-settings'], ['/account?tab=notifications', 'my-notifications']] as const) {
+      ['/admin/settings?tab=security', 'security'], ['/admin/settings?tab=servers', 'server-settings'], ['/topology', 'my-topology'], ['/vdc', 'my-vdc'], ['/order', 'order'], ['/admin/audit', 'audit'], ['/account?tab=activity', 'activity'], ['/admin/settings?tab=announcement', 'announcement'], ['/admin/terminal', 'terminal'], ['/admin/settings?tab=mail', 'mail'], ['/admin/settings?tab=payments', 'payments'], ['/admin/settings?tab=sms', 'sms'], ['/admin/settings?tab=chat', 'chat-settings'], ['/admin/settings', 'settings-general'], ['/account?tab=notifications', 'my-notifications']] as const) {
       await page.goto(path);
       await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
       await page.waitForTimeout(1500);
@@ -799,6 +799,13 @@ test.describe('people, settings and smart features (English browser)', () => {
     await page.getByRole('dialog').getByRole('button', { name: 'Slack' }).click();
     await expect(page.getByLabel('Webhook URL')).toBeVisible();
     await shot(page, 'chat-connect-slack');
+    await page.keyboard.press('Escape');
+    // A setup guide opens in a dialog.
+    await page.goto('/admin/settings?tab=rdns');
+    await page.getByRole('button', { name: 'What is it, how to set it up?' }).click();
+    await expect(page.getByRole('dialog')).toContainText('PowerDNS');
+    await page.waitForTimeout(400);
+    await shot(page, 'guide-powerdns');
     await page.keyboard.press('Escape');
     await page.getByRole('button', { name: 'Accessibility' }).click();
     await expect(page.getByRole('dialog')).toBeVisible();

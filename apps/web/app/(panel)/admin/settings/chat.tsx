@@ -7,6 +7,7 @@ import { useTranslations } from 'next-intl';
 import { useEffect, useState } from 'react';
 import { AppBadge } from '../../../../components/chat-app-badge';
 import { I } from '../../../../components/icon';
+import { GuideButton } from '../../../../components/setup-guide';
 import { FormActions, FormSection, Notice, TextInput } from '../../../../components/ui';
 import { apiFetch, useErrorText, type ApiError } from '../../../../lib/api';
 import { useApiQuery } from '../../../../lib/query';
@@ -63,13 +64,13 @@ export default function ChatSettings({ readOnly }: { readOnly: boolean }) {
       <p className="text-xs text-muted">{t('chat.appsNote')}</p>
     </FormSection>
 
-    {on('telegram') && <FormSection title="Telegram" description={t('chat.telegramHelp')} icon={<AppBadge app="telegram" size={20}/>}>
+    {on('telegram') && <FormSection title="Telegram" description={t('chat.telegramHelp')} icon={<AppBadge app="telegram" size={20}/>} aside={<GuideButton id="telegram"/>}>
       {d.telegram.username && <Notice tone="success" title={t('chat.telegramBot', { bot: `@${d.telegram.username}` })}/>}
       <TextInput label={t('chat.telegramToken')} type="password" value={tg} onChange={setTg} isDisabled={readOnly} error={err('telegram.token')} autoComplete="off" spellCheck={false}
         placeholder={d.telegram.tokenSet ? t('secretKept') : '123456789:AA…'} help={t('chat.telegramTokenHelp')}/>
     </FormSection>}
 
-    {on('whatsapp') && <FormSection title="WhatsApp (Cloud API)" description={t('chat.whatsappHelp')} icon={<AppBadge app="whatsapp" size={20}/>}>
+    {on('whatsapp') && <FormSection title="WhatsApp (Cloud API)" description={t('chat.whatsappHelp')} icon={<AppBadge app="whatsapp" size={20}/>} aside={<GuideButton id="whatsapp"/>}>
       <div className="grid gap-4 sm:grid-cols-2">
         <TextInput label={t('chat.whatsappToken')} type="password" value={wa.token} onChange={(x) => setWa({ ...wa, token: x })} isDisabled={readOnly} error={err('whatsapp.token')}
           autoComplete="off" spellCheck={false} placeholder={d.whatsapp.tokenSet ? t('secretKept') : 'EAAG…'} help={t('chat.whatsappTokenHelp')}/>
@@ -80,7 +81,7 @@ export default function ChatSettings({ readOnly }: { readOnly: boolean }) {
       </div>
     </FormSection>}
 
-    {on('pushover') && <FormSection title="Pushover" description={t('chat.pushoverHelp')} icon={<AppBadge app="pushover" size={20}/>}>
+    {on('pushover') && <FormSection title="Pushover" description={t('chat.pushoverHelp')} icon={<AppBadge app="pushover" size={20}/>} aside={<GuideButton id="pushover"/>}>
       <TextInput label={t('chat.pushoverToken')} type="password" value={po} onChange={setPo} isDisabled={readOnly} error={err('pushover.token')} autoComplete="off" spellCheck={false}
         placeholder={d.pushover.tokenSet ? t('secretKept') : ''}/>
     </FormSection>}

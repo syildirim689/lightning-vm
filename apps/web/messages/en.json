@@ -2939,6 +2939,93 @@
       "pushoverHelp": "Create an application on pushover.net and enter its API token; users add their own user keys.",
       "pushoverToken": "Application API token",
       "testNote": "To test, connect an app on your own Account → Notifications page."
+    },
+    "general": {
+      "title": "Setup status",
+      "summary": "{ok} of {total} areas are ready. Click a card to open its settings.",
+      "allGood": "Nothing needs attention.",
+      "panel": "Panel",
+      "version": "Version",
+      "address": "Address",
+      "running": "Running since",
+      "users": "Users",
+      "servers": "Servers",
+      "integrations": "Settings and integrations",
+      "state": {
+        "ok": "Ready",
+        "todo": "Not set up",
+        "warn": "Attention"
+      },
+      "require2fa": {
+        "none": "is optional",
+        "staff": "is required for staff",
+        "all": "is required for everyone"
+      },
+      "name": {
+        "branding": "Branding",
+        "domain": "Domain and HTTPS",
+        "security": "Sign-in security",
+        "mail": "E-mail",
+        "captcha": "Bot protection",
+        "sms": "SMS",
+        "chat": "Messaging",
+        "payments": "Payments",
+        "rdns": "Reverse DNS",
+        "notifications": "Notification rules",
+        "announcement": "Announcement",
+        "backup": "Backup"
+      },
+      "detail": {
+        "branding": {
+          "ok": "Panel name: {name}",
+          "todo": "The default name and logo are in use."
+        },
+        "domain": {
+          "ok": "{url} · HTTPS on",
+          "warn": "HTTPS is off; passwords may travel unencrypted."
+        },
+        "security": {
+          "ok": "Two-factor {require2fa}.",
+          "todo": "Two-factor is optional.",
+          "warn": "{adminsNo2fa} administrator(s) without two-factor."
+        },
+        "mail": {
+          "ok": "Sending through {provider}.",
+          "warn": "Not set up; password reset and e-mail notifications do not work."
+        },
+        "captcha": {
+          "ok": "{provider} is on.",
+          "todo": "Off.",
+          "warn": "Registration is open without bot protection."
+        },
+        "sms": {
+          "ok": "Sending through {provider}.",
+          "todo": "Off; two-factor codes go by e-mail."
+        },
+        "chat": {
+          "ok": "{apps} apps offered to users.",
+          "todo": "No messaging apps offered to users."
+        },
+        "payments": {
+          "ok": "{active} payment method(s) active.",
+          "todo": "No active payment method ({saved} saved)."
+        },
+        "rdns": {
+          "ok": "PTR records managed through {provider}.",
+          "todo": "Off."
+        },
+        "notifications": {
+          "ok": "{enabled} of {total} notifications on."
+        },
+        "announcement": {
+          "ok": "An announcement is live.",
+          "todo": "No live announcement."
+        },
+        "backup": {
+          "ok": "Last good backup {hoursAgo} hours ago.",
+          "warn": "No good backup in the last 48 hours; take one on the System page."
+        }
+      }
     }
   },
   "Firewalls": {
@@ -3790,6 +3877,391 @@
       "gotify": "Create an application on your Gotify server and enter its token.",
       "pushover": "Enter your Pushover user key.",
       "webhook": "Each notification is POSTed as JSON to your URL (event, title, body, link)."
+    }
+  },
+  "Guides": {
+    "open": "What is it, how to set it up?",
+    "copy": "Copy",
+    "sources": "Sources",
+    "disclaimer": "This guide follows the services' official documentation. Services change their interfaces; if a step does not match, check the current documentation linked above.",
+    "powerdns": {
+      "title": "Reverse DNS (PTR) with PowerDNS",
+      "intro": "Reverse DNS tells which name an IP address belongs to (e.g. 192.0.2.10 → web1.example.com). Many mail servers distrust mail from IPs without a PTR record. The panel writes PTR records through the HTTP API of a PowerDNS Authoritative server that hosts the reverse zones of your IP blocks: new servers get the default name, customers may change theirs, a deleted server's record is removed.",
+      "sections": [
+        {
+          "title": "Prerequisite: the reverse zone is delegated to you",
+          "text": "PTR records are visible on the Internet only when the block's reverse zone (2.0.192.in-addr.arpa for 192.0.2.0/24) is delegated to your name servers. If the block is registered to you (an LIR in the RIPE region), create a \"domain\" object in the RIPE Database with at least two nserver entries; RIPE checks your name servers on submission and the delegation can take up to 24 hours to appear. If you rent the block from a data centre or provider, ask them for the delegation.",
+          "note": "The panel works with whole zones: IPv4 blocks of /24 and larger, and ip6.arpa zones for IPv6. RFC 2317 classless delegation (CNAMEs, used for blocks smaller than /24) is not supported yet."
+        },
+        {
+          "title": "Install PowerDNS (Ubuntu / Debian)",
+          "text": "A server separate from the panel is recommended. Delegation needs at least two name servers (one can be a secondary). The distribution package is enough; repo.powerdns.com has newer versions.",
+          "code": "sudo apt install pdns-server pdns-backend-sqlite3 sqlite3",
+          "note": "PowerDNS will not start if another service (e.g. systemd-resolved) uses port 53; check with \"sudo ss -lunp | grep :53\"."
+        },
+        {
+          "title": "Create the database (SQLite)",
+          "text": "SQLite is enough for small and medium setups; large ones can use the PostgreSQL backend (pdns-backend-pgsql).",
+          "code": "sudo mkdir -p /var/lib/powerdns\nsudo sqlite3 /var/lib/powerdns/pdns.sqlite3 < /usr/share/doc/pdns-backend-sqlite3/schema.sqlite3.sql\nsudo chown -R pdns:pdns /var/lib/powerdns"
+        },
+        {
+          "title": "Turn on the API: /etc/powerdns/pdns.conf",
+          "text": "Remove other launch= lines (e.g. in files under /etc/powerdns/pdns.d/), then add the following. Generate the key with \"openssl rand -hex 32\".",
+          "code": "launch=gsqlite3\ngsqlite3-database=/var/lib/powerdns/pdns.sqlite3\napi=yes\napi-key=A-LONG-RANDOM-KEY\nwebserver=yes\nwebserver-address=0.0.0.0\nwebserver-port=8081\nwebserver-allow-from=PANEL_SERVER_IP/32\n\n# then:\nsudo systemctl restart pdns",
+          "note": "Never expose the API to the Internet: webserver-allow-from must list only the panel's IP, and the firewall should open port 8081 to the panel only."
+        },
+        {
+          "title": "Create the reverse zone",
+          "text": "The zone name is the first three octets in reverse: 192.0.2.0/24 → 2.0.192.in-addr.arpa. ns1.example.com is your name server.",
+          "code": "# PowerDNS 4.x (the Ubuntu 24.04 package):\nsudo -u pdns pdnsutil create-zone 2.0.192.in-addr.arpa ns1.example.com\n\n# PowerDNS 5.0 and later:\nsudo -u pdns pdnsutil zone create 2.0.192.in-addr.arpa ns1.example.com"
+        },
+        {
+          "title": "Test",
+          "code": "curl -H 'X-API-Key: KEY' http://DNS_SERVER:8081/api/v1/servers/localhost/zones\ndig -x 192.0.2.10 @DNS_SERVER"
+        },
+        {
+          "title": "In the panel",
+          "steps": [
+            "Provider: PowerDNS.",
+            "API URL: http://DNS_SERVER:8081 (no path; the panel adds /api/v1/...).",
+            "API key: the api-key from pdns.conf.",
+            "Server ID: localhost (the PowerDNS default).",
+            "Default PTR template, e.g. {ipDashed}.customers.example.com.",
+            "Test: the reverse zones found are listed. Then Save."
+          ]
+        }
+      ],
+      "links": [
+        {
+          "label": "PowerDNS: HTTP API",
+          "url": "https://doc.powerdns.com/authoritative/http-api/index.html"
+        },
+        {
+          "label": "PowerDNS: basic SQLite setup",
+          "url": "https://doc.powerdns.com/authoritative/guides/basic-database.html"
+        },
+        {
+          "label": "PowerDNS: installation",
+          "url": "https://doc.powerdns.com/authoritative/installation.html"
+        },
+        {
+          "label": "RIPE: configuring reverse DNS",
+          "url": "https://docs.db.ripe.net/Database-Support/Configuring-Reverse-DNS/"
+        }
+      ]
+    },
+    "telegram": {
+      "title": "Telegram bot",
+      "intro": "The panel sends notifications through a Telegram bot you create. Creating a bot is free and takes a few minutes.",
+      "sections": [
+        {
+          "title": "Create the bot",
+          "steps": [
+            "Open a chat with @BotFather in Telegram (Telegram's official, verified account).",
+            "Send /newbot.",
+            "Give the bot a display name (e.g. \"Lightning VM Notifications\").",
+            "Give it a username ending in \"bot\" (e.g. lightningvm_alerts_bot).",
+            "BotFather replies with a token like 123456789:AA…; copy it."
+          ],
+          "note": "The token is full control of the bot; keep it secret. If it leaks, use /revoke in BotFather and enter the new token in the panel."
+        },
+        {
+          "title": "Appearance (optional)",
+          "text": "In BotFather, /setuserpic sets a picture and /setdescription the text users see when they first open the bot."
+        },
+        {
+          "title": "In the panel",
+          "steps": [
+            "Settings → Messaging → tick Telegram.",
+            "Paste the token and Save. The panel checks it with Telegram and shows the bot's name."
+          ]
+        },
+        {
+          "title": "Important: no webhook on the bot",
+          "text": "The panel reads pairings with getUpdates. If another application set a webhook on the bot, Telegram refuses that call. Use the bot for this panel only, or remove the webhook:",
+          "code": "curl https://api.telegram.org/bot<TOKEN>/deleteWebhook"
+        },
+        {
+          "title": "How users connect",
+          "text": "Account → Notifications → Connect an app → Telegram. The panel opens a one-time link; the user presses Start in Telegram, then \"Verify connection\" in the panel. The link is valid for 15 minutes."
+        }
+      ],
+      "links": [
+        {
+          "label": "Telegram: BotFather",
+          "url": "https://core.telegram.org/bots/features#botfather"
+        },
+        {
+          "label": "Telegram Bot API: getUpdates",
+          "url": "https://core.telegram.org/bots/api#getupdates"
+        }
+      ]
+    },
+    "whatsapp": {
+      "title": "WhatsApp Business (Cloud API)",
+      "intro": "Notifications are sent with Meta's WhatsApp Cloud API from a number your business owns. Because the business starts the conversation, Meta requires an approved message template. Template messages may be charged at Meta's current prices.",
+      "sections": [
+        {
+          "title": "What you need",
+          "steps": [
+            "A Meta business account (business.facebook.com).",
+            "A phone number for the business. If it is registered in the WhatsApp app, delete it there first.",
+            "A payment method in Meta for template messages."
+          ]
+        },
+        {
+          "title": "Create the app",
+          "steps": [
+            "developers.facebook.com → My Apps → Create App; pick the WhatsApp / business use case.",
+            "Add the WhatsApp product and connect your business account.",
+            "On WhatsApp → API Setup, add and verify your number and copy its \"Phone number ID\"."
+          ],
+          "note": "The test number on API Setup can only message recipients you add there; add your own number for real use."
+        },
+        {
+          "title": "Permanent access token",
+          "steps": [
+            "business.facebook.com → Business settings → Users → System users → Add.",
+            "Assign your app and WhatsApp account to the system user with full control.",
+            "\"Generate token\": pick the app; tick whatsapp_business_messaging and whatsapp_business_management.",
+            "The token is shown once; copy it right away."
+          ],
+          "note": "The temporary token on API Setup expires quickly; enter the permanent one in the panel."
+        },
+        {
+          "title": "Message template",
+          "steps": [
+            "WhatsApp Manager → Message templates → Create template.",
+            "Category: Utility (transactional notification).",
+            "Name: lowercase letters, digits and underscores (e.g. panel_notification). Language: English (en_US) or another.",
+            "Put two variables in the body: the panel fills {{1}} with the title and {{2}} with the text.",
+            "Submit for review; use it once its status is \"Active\"."
+          ],
+          "code": "Notification: {{1}}\nDetails: {{2}}\nThis message was sent automatically.",
+          "note": "Meta does not allow the body to start or end with a variable; keep fixed text before and after the variables."
+        },
+        {
+          "title": "In the panel",
+          "steps": [
+            "Settings → Messaging → tick WhatsApp.",
+            "Enter the permanent token, Phone number ID, template name and the template's language code (e.g. en_US or tr), then Save.",
+            "Users connect with the verified phone number on their account."
+          ]
+        }
+      ],
+      "links": [
+        {
+          "label": "Meta: WhatsApp Cloud API get started",
+          "url": "https://developers.facebook.com/docs/whatsapp/cloud-api/get-started"
+        },
+        {
+          "label": "Meta: message templates",
+          "url": "https://developers.facebook.com/docs/whatsapp/business-management-api/message-templates"
+        },
+        {
+          "label": "Meta: WhatsApp pricing",
+          "url": "https://developers.facebook.com/docs/whatsapp/pricing"
+        }
+      ]
+    },
+    "pushover": {
+      "title": "Pushover",
+      "intro": "Pushover is a push notification service for iOS, Android and desktop. You create an application token; each user has their own Pushover account and app (a one-time purchase per platform after the trial).",
+      "sections": [
+        {
+          "title": "Application token",
+          "steps": [
+            "Sign up and sign in at pushover.net.",
+            "Under \"Your Applications\", choose \"Create an Application/API Token\".",
+            "Name it (e.g. Lightning VM), accept the terms and create it.",
+            "Enter the 30-character API Token/Key in Settings → Messaging → Pushover."
+          ]
+        },
+        {
+          "title": "Users",
+          "text": "Each user enters their own User Key, shown on the pushover.net home page after signing in, in Account → Notifications → Connect an app → Pushover."
+        }
+      ],
+      "links": [
+        {
+          "label": "Pushover: API",
+          "url": "https://pushover.net/api"
+        },
+        {
+          "label": "Pushover: create an application",
+          "url": "https://pushover.net/apps/build"
+        }
+      ]
+    },
+    "captcha": {
+      "title": "Bot protection (CAPTCHA) keys",
+      "intro": "Protects sign-up, sign-in and password reset forms from automated attacks. All three providers have free use. Each gives a site key (sent to the browser) and a secret key (kept on the server).",
+      "sections": [
+        {
+          "title": "Cloudflare Turnstile",
+          "steps": [
+            "dash.cloudflare.com → Turnstile → Add widget. Your domain does not have to be on Cloudflare.",
+            "Name the widget and add the panel's hostname.",
+            "\"Managed\" mode is recommended.",
+            "Copy the Site Key and Secret Key."
+          ]
+        },
+        {
+          "title": "Google reCAPTCHA",
+          "steps": [
+            "Go to google.com/recaptcha/admin/create.",
+            "Type: v2 \"I'm not a robot\" checkbox, or v3 (invisible, scored).",
+            "Add the panel's domain and copy the site key and secret key."
+          ],
+          "note": "v3 scores each request from 0.0 (bot) to 1.0 (human); requests below the panel's minimum score are refused. The type chosen in the panel must match the key's type."
+        },
+        {
+          "title": "hCaptcha",
+          "steps": [
+            "dashboard.hcaptcha.com → Sites → New Site; add the panel's domain and copy the Sitekey.",
+            "The secret is account-wide: Account Settings → Secret Keys."
+          ]
+        },
+        {
+          "title": "Test",
+          "text": "Use Test on Settings → Bot protection before saving. If the domain is not in the provider's list, the request is refused."
+        }
+      ],
+      "links": [
+        {
+          "label": "Cloudflare: Turnstile",
+          "url": "https://developers.cloudflare.com/turnstile/get-started/"
+        },
+        {
+          "label": "Google: reCAPTCHA",
+          "url": "https://developers.google.com/recaptcha/intro"
+        },
+        {
+          "label": "hCaptcha: docs",
+          "url": "https://docs.hcaptcha.com/"
+        }
+      ]
+    },
+    "mail": {
+      "title": "Sending e-mail",
+      "intro": "The panel sends e-mail for password resets, two-factor codes and notifications. Use your own SMTP server or an e-mail service's API.",
+      "sections": [
+        {
+          "title": "SMTP or API?",
+          "text": "SMTP works with any mail server. API providers (Resend, SendGrid, Amazon SES…) send over HTTPS and are not affected by the SMTP ports many cloud providers block."
+        },
+        {
+          "title": "SMTP settings",
+          "steps": [
+            "587 with STARTTLS is the most common; 465 uses TLS directly.",
+            "Gmail / Google Workspace: with two-step verification on, create an \"App password\" and use it as the password.",
+            "Microsoft 365: SMTP sending must be allowed for the mailbox; Microsoft is restricting basic authentication, so check its current documentation or choose an API provider.",
+            "The sender address must be one the signed-in account may send as."
+          ]
+        },
+        {
+          "title": "Domain authentication: SPF, DKIM, DMARC",
+          "text": "To stay out of spam, add the records your provider gives you to the sending domain's DNS:",
+          "steps": [
+            "SPF: a TXT record listing who may send for you (e.g. v=spf1 include:provider-host ~all). One SPF record per domain.",
+            "DKIM: the signing record your provider gives (TXT or CNAME).",
+            "DMARC: a TXT record on _dmarc. To start with:"
+          ],
+          "code": "_dmarc.example.com  TXT  \"v=DMARC1; p=none; rua=mailto:dmarc@example.com\"",
+          "note": "Gmail and Yahoo require SPF, DKIM and DMARC from bulk senders; adding all three helps delivery even at low volume."
+        },
+        {
+          "title": "Test",
+          "text": "Use Test on the E-mail tab to send a real message before saving; the error tells you where the problem is."
+        }
+      ],
+      "links": [
+        {
+          "label": "Google: app passwords",
+          "url": "https://support.google.com/accounts/answer/185833"
+        },
+        {
+          "label": "Google: e-mail sender guidelines",
+          "url": "https://support.google.com/a/answer/81126"
+        },
+        {
+          "label": "DMARC.org",
+          "url": "https://dmarc.org/overview/"
+        }
+      ]
+    },
+    "domain": {
+      "title": "Domain and HTTPS",
+      "intro": "The panel gets a free Let's Encrypt certificate for your domain and renews it before it expires.",
+      "sections": [
+        {
+          "title": "DNS record",
+          "steps": [
+            "Add an A record in your domain's DNS: e.g. panel.example.com → the server's IPv4 address.",
+            "If the server has a working IPv6 address, add an AAAA record too. A wrong AAAA record breaks certificate validation; leave it out if unsure.",
+            "Wait for it to propagate (usually minutes; depends on the record's TTL)."
+          ],
+          "code": "dig +short panel.example.com"
+        },
+        {
+          "title": "Ports",
+          "text": "Ports 80 and 443 must be open from the Internet to the server: in your cloud provider's security group and in the server's firewall. Let's Encrypt validates over these ports."
+        },
+        {
+          "title": "Using Cloudflare",
+          "text": "Setting the record to \"DNS only\" (grey cloud) while the first certificate is issued avoids problems; turn the proxy on afterwards. With the proxy on, choose SSL/TLS mode \"Full (strict)\"."
+        },
+        {
+          "title": "In the panel",
+          "text": "Enter the domain and press Check: DNS, HTTP and the certificate are checked one by one. Save when all pass.",
+          "note": "Let's Encrypt limits certificates and failed attempts per domain; many attempts in a row can lead to a temporary block. Check DNS and ports first."
+        }
+      ],
+      "links": [
+        {
+          "label": "Let's Encrypt: challenge types",
+          "url": "https://letsencrypt.org/docs/challenge-types/"
+        },
+        {
+          "label": "Let's Encrypt: rate limits",
+          "url": "https://letsencrypt.org/docs/rate-limits/"
+        }
+      ]
+    },
+    "vmware": {
+      "title": "ESXi / vCenter connection",
+      "intro": "The panel connects to VMware with a service account, reads the inventory and creates servers through vCenter. Creating servers needs vCenter; on a standalone ESXi the inventory, console and metrics work.",
+      "sections": [
+        {
+          "title": "Service account",
+          "steps": [
+            "vSphere Client → Administration → Single Sign On → Users and Groups → new user in vsphere.local (e.g. lightning).",
+            "Give it a strong password. vsphere.local passwords expire under the default password policy; an expired password breaks the connection, so check the policy."
+          ],
+          "note": "In vCenter 9, accounts using identity federation cannot sign in with a password; use a vsphere.local or LDAP/AD account."
+        },
+        {
+          "title": "Role and privileges",
+          "text": "Administration → Access Control → Roles → create a role with these privileges (discovery checks them; actions that depend on a missing one show as \"not supported\"):",
+          "code": "System.View, System.Read\nVirtualMachine.Inventory.Create, VirtualMachine.Inventory.Delete\nVirtualMachine.Interact.PowerOn, .PowerOff, .Reset, .ConsoleInteract\nVirtualMachine.Config.CPUCount, .Memory, .AddNewDisk\nVirtualMachine.Provisioning.Clone\nVirtualMachine.State.CreateSnapshot, .RevertToSnapshot, .RemoveSnapshot\nDatastore.AllocateSpace, Network.Assign, Resource.AssignVMToPool"
+        },
+        {
+          "title": "Assign the permission",
+          "steps": [
+            "In Hosts and Clusters, right-click the vCenter root → Add Permission.",
+            "Pick the user and the role; keep \"Propagate to children\" ticked."
+          ]
+        },
+        {
+          "title": "Template",
+          "text": "Servers are cloned from a VM template. The template needs cloud-init (with VMware Tools / open-vm-tools); the panel sets the network, hostname and SSH keys through it."
+        },
+        {
+          "title": "TLS",
+          "text": "If vCenter's certificate is not from a trusted CA (such as the default VMCA certificate), the connection test shows its subject, issuer and SHA-256 fingerprint. Compare the fingerprint with the one in vSphere Client or on the server, then pin it. Validation is never switched off."
+        }
+      ],
+      "links": []
     }
   }
 }

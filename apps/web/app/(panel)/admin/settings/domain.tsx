@@ -5,6 +5,7 @@ import { Button, Card, Meter, Spinner, toast } from '@heroui/react';
 import { useFormatter, useTranslations } from 'next-intl';
 import { useEffect, useRef, useState } from 'react';
 import { I } from '../../../../components/icon';
+import { GuideButton } from '../../../../components/setup-guide';
 import { ConfirmButton, FormSection, Mono, Notice, StatusChip, TextInput } from '../../../../components/ui';
 import { apiFetch, useErrorText, type ApiError } from '../../../../lib/api';
 import { useApiQuery } from '../../../../lib/query';
@@ -62,7 +63,7 @@ export default function Domain({ readOnly }: { readOnly: boolean }) {
   const done = queued && st?.id === queued && st.state !== 'running';
 
   return <Card><Card.Content className="flex flex-col">
-    <FormSection title={t('current')} description={t('currentHelp')} icon={<I name="globe" size={16}/>}>
+    <FormSection title={t('current')} description={t('currentHelp')} icon={<I name="globe" size={16}/>} aside={<GuideButton id="domain"/>}>
       {!cur.site ? <Notice tone="default">{t('noDomain')}</Notice> : <>
         <div className="flex flex-wrap items-center gap-2">
           <a href={`https://${cur.site}`} className="font-mono text-base font-semibold text-accent hover:underline">{cur.site}</a>

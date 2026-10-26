@@ -2939,6 +2939,93 @@
       "pushoverHelp": "pushover.net'te bir uygulama oluşturup API anahtarını girin; kullanıcılar kendi user key'lerini ekler.",
       "pushoverToken": "Uygulama API anahtarı",
       "testNote": "Test için kendi hesabınızda Hesap → Bildirimler → Uygulama bağla kullanın."
+    },
+    "general": {
+      "title": "Kurulum durumu",
+      "summary": "{total} alandan {ok} tanesi hazır. Bir karta tıklayarak ayarına gidin.",
+      "allGood": "Dikkat gerektiren bir şey yok.",
+      "panel": "Panel",
+      "version": "Sürüm",
+      "address": "Adres",
+      "running": "Çalışıyor",
+      "users": "Kullanıcı",
+      "servers": "Sunucu",
+      "integrations": "Ayarlar ve entegrasyonlar",
+      "state": {
+        "ok": "Hazır",
+        "todo": "Ayarlanmadı",
+        "warn": "Dikkat"
+      },
+      "require2fa": {
+        "none": "zorunlu değil",
+        "staff": "personel için zorunlu",
+        "all": "herkes için zorunlu"
+      },
+      "name": {
+        "branding": "Marka",
+        "domain": "Alan adı ve HTTPS",
+        "security": "Giriş güvenliği",
+        "mail": "E-posta",
+        "captcha": "Bot koruması",
+        "sms": "SMS",
+        "chat": "Mesajlaşma",
+        "payments": "Ödeme",
+        "rdns": "Ters DNS",
+        "notifications": "Bildirim kuralları",
+        "announcement": "Duyuru",
+        "backup": "Yedek"
+      },
+      "detail": {
+        "branding": {
+          "ok": "Panel adı: {name}",
+          "todo": "Varsayılan ad ve logo kullanılıyor."
+        },
+        "domain": {
+          "ok": "{url} · HTTPS açık",
+          "warn": "HTTPS kapalı; parolalar şifresiz gidebilir."
+        },
+        "security": {
+          "ok": "İki adımlı doğrulama {require2fa}.",
+          "todo": "İki adımlı doğrulama zorunlu değil.",
+          "warn": "{adminsNo2fa} yönetici iki adımlı doğrulamasız."
+        },
+        "mail": {
+          "ok": "{provider} ile gönderiliyor.",
+          "warn": "Ayarlanmadı; parola sıfırlama ve e-posta bildirimleri çalışmaz."
+        },
+        "captcha": {
+          "ok": "{provider} etkin.",
+          "todo": "Kapalı.",
+          "warn": "Kayıt açık ama bot koruması yok."
+        },
+        "sms": {
+          "ok": "{provider} ile gönderiliyor.",
+          "todo": "Kapalı; iki adımlı kodlar e-postayla gider."
+        },
+        "chat": {
+          "ok": "Kullanıcılara {apps} uygulama sunuluyor.",
+          "todo": "Kullanıcılara mesajlaşma uygulaması sunulmuyor."
+        },
+        "payments": {
+          "ok": "{active} ödeme yöntemi etkin.",
+          "todo": "Etkin ödeme yöntemi yok ({saved} kayıtlı)."
+        },
+        "rdns": {
+          "ok": "{provider} ile PTR kayıtları yönetiliyor.",
+          "todo": "Kapalı."
+        },
+        "notifications": {
+          "ok": "{total} bildirimden {enabled} tanesi açık."
+        },
+        "announcement": {
+          "ok": "Bir duyuru yayında.",
+          "todo": "Yayında duyuru yok."
+        },
+        "backup": {
+          "ok": "Son başarılı yedek {hoursAgo} saat önce.",
+          "warn": "Son 48 saatte başarılı yedek yok; Sistem sayfasından alın."
+        }
+      }
     }
   },
   "Firewalls": {
@@ -3790,6 +3877,391 @@
       "gotify": "Gotify sunucunuzda bir uygulama oluşturup anahtarını girin.",
       "pushover": "Pushover uygulamanızdaki kullanıcı anahtarınızı (user key) girin.",
       "webhook": "Her bildirim JSON olarak kendi adresinize POST edilir (event, title, body, link)."
+    }
+  },
+  "Guides": {
+    "open": "Nedir, nasıl kurulur?",
+    "copy": "Kopyala",
+    "sources": "Kaynaklar",
+    "disclaimer": "Bu rehber ilgili servislerin resmî belgelerine göre hazırlandı. Servisler arayüzlerini değiştirebilir; adımlar uymazsa yukarıdaki bağlantılardaki güncel belgeye bakın.",
+    "powerdns": {
+      "title": "PowerDNS ile ters DNS (PTR)",
+      "intro": "Ters DNS, bir IP adresinin hangi ada ait olduğunu söyler (ör. 192.0.2.10 → web1.ornek.com). Birçok e-posta sunucusu PTR kaydı olmayan IP'lerden gelen postaya güvenmez. Panel, IP bloklarınızın ters bölgelerini barındıran bir PowerDNS Authoritative sunucusuna HTTP API ile PTR kayıtları yazar: yeni sunuculara varsayılan adı verir, müşteriler kendi kayıtlarını değiştirebilir, silinen sunucunun kaydı kaldırılır.",
+      "sections": [
+        {
+          "title": "Ön koşul: ters bölgenin size devredilmesi",
+          "text": "PTR kayıtları ancak bloğun ters bölgesi (ör. 192.0.2.0/24 için 2.0.192.in-addr.arpa) sizin ad sunucularınıza devredilmişse internette görünür. Blok sizin adınıza kayıtlıysa (RIPE bölgesinde LIR iseniz) RIPE veritabanında bir \"domain\" nesnesi oluşturup en az iki nserver (ad sunucusu) yazarsınız; RIPE gönderimde ad sunucularınızı denetler ve devrin görünmesi 24 saate kadar sürebilir. Bloğu bir veri merkezinden ya da sağlayıcıdan kiraladıysanız devri onlardan isteyin.",
+          "note": "Panel tam bölgelerle çalışır: IPv4'te /24 ve daha büyük bloklar, IPv6'da ip6.arpa bölgeleri. /24'ten küçük bloklar için kullanılan RFC 2317 (CNAME ile sınıfsız devir) şu an desteklenmiyor."
+        },
+        {
+          "title": "PowerDNS'i kurun (Ubuntu / Debian)",
+          "text": "Panelden ayrı bir sunucu önerilir. Devir için en az iki ad sunucusu gerekir (biri ikincil/yedek olabilir). Dağıtımın paketi yeterlidir; daha yeni sürüm için repo.powerdns.com depolarını kullanabilirsiniz.",
+          "code": "sudo apt install pdns-server pdns-backend-sqlite3 sqlite3",
+          "note": "53. port başka bir servis (ör. systemd-resolved) tarafından kullanılıyorsa PowerDNS başlamaz; \"sudo ss -lunp | grep :53\" ile kontrol edin."
+        },
+        {
+          "title": "Veritabanını oluşturun (SQLite)",
+          "text": "Küçük ve orta kurulumlar için SQLite yeterlidir; büyük kurulumlarda PostgreSQL arka ucu (pdns-backend-pgsql) kullanılabilir.",
+          "code": "sudo mkdir -p /var/lib/powerdns\nsudo sqlite3 /var/lib/powerdns/pdns.sqlite3 < /usr/share/doc/pdns-backend-sqlite3/schema.sqlite3.sql\nsudo chown -R pdns:pdns /var/lib/powerdns"
+        },
+        {
+          "title": "API'yi açın: /etc/powerdns/pdns.conf",
+          "text": "Başka launch= satırları varsa (ör. /etc/powerdns/pdns.d/ altındaki dosyalarda) kaldırın, sonra şunları ekleyin. Anahtarı \"openssl rand -hex 32\" ile üretebilirsiniz.",
+          "code": "launch=gsqlite3\ngsqlite3-database=/var/lib/powerdns/pdns.sqlite3\napi=yes\napi-key=BURAYA-UZUN-RASTGELE-ANAHTAR\nwebserver=yes\nwebserver-address=0.0.0.0\nwebserver-port=8081\nwebserver-allow-from=PANEL_SUNUCUSU_IP/32\n\n# ardından:\nsudo systemctl restart pdns",
+          "note": "API'yi internete açmayın: webserver-allow-from yalnızca panelin IP'sini içermeli; 8081 portunu güvenlik duvarında da sadece panele açın."
+        },
+        {
+          "title": "Ters bölgeyi oluşturun",
+          "text": "Bölge adı bloğun ilk üç sekizlisinin ters sırasıdır: 192.0.2.0/24 → 2.0.192.in-addr.arpa. ns1.ornek.com sizin ad sunucunuzun adıdır.",
+          "code": "# PowerDNS 4.x (Ubuntu 24.04 deposundaki sürüm):\nsudo -u pdns pdnsutil create-zone 2.0.192.in-addr.arpa ns1.ornek.com\n\n# PowerDNS 5.0 ve sonrası:\nsudo -u pdns pdnsutil zone create 2.0.192.in-addr.arpa ns1.ornek.com"
+        },
+        {
+          "title": "Test edin",
+          "code": "curl -H 'X-API-Key: ANAHTAR' http://DNS_SUNUCUSU:8081/api/v1/servers/localhost/zones\ndig -x 192.0.2.10 @DNS_SUNUCUSU"
+        },
+        {
+          "title": "Panele girin",
+          "steps": [
+            "Sağlayıcı: PowerDNS.",
+            "API adresi: http://DNS_SUNUCUSU:8081 (yol eklemeyin; panel /api/v1/... kısmını kendisi ekler).",
+            "API anahtarı: pdns.conf'taki api-key.",
+            "Sunucu kimliği: localhost (PowerDNS'in varsayılanı).",
+            "Varsayılan PTR şablonu, ör. {ipDashed}.musteri.ornek.com.",
+            "Test et: bulunan ters bölgeler listelenmeli. Ardından Kaydet."
+          ]
+        }
+      ],
+      "links": [
+        {
+          "label": "PowerDNS: HTTP API",
+          "url": "https://doc.powerdns.com/authoritative/http-api/index.html"
+        },
+        {
+          "label": "PowerDNS: SQLite ile temel kurulum",
+          "url": "https://doc.powerdns.com/authoritative/guides/basic-database.html"
+        },
+        {
+          "label": "PowerDNS: Kurulum",
+          "url": "https://doc.powerdns.com/authoritative/installation.html"
+        },
+        {
+          "label": "RIPE: Ters DNS yapılandırma",
+          "url": "https://docs.db.ripe.net/Database-Support/Configuring-Reverse-DNS/"
+        }
+      ]
+    },
+    "telegram": {
+      "title": "Telegram botu",
+      "intro": "Panel, bildirimleri sizin oluşturduğunuz bir Telegram botuyla gönderir. Bot oluşturmak ücretsizdir ve birkaç dakika sürer.",
+      "sections": [
+        {
+          "title": "Botu oluşturun",
+          "steps": [
+            "Telegram'da @BotFather ile sohbet açın (Telegram'ın resmî, onay işaretli hesabı).",
+            "/newbot yazın.",
+            "Bota görünen bir ad verin (ör. \"Lightning VM Bildirimleri\").",
+            "Bir kullanıcı adı verin; \"bot\" ile bitmelidir (ör. lightningvm_bildirim_bot).",
+            "BotFather 123456789:AA… biçiminde bir anahtar (token) verir; kopyalayın."
+          ],
+          "note": "Anahtar botun tam yetkisidir; paylaşmayın. Sızarsa BotFather'da /revoke ile yenileyip panele yeni anahtarı girin."
+        },
+        {
+          "title": "Görünüm (isteğe bağlı)",
+          "text": "BotFather'da /setuserpic ile profil resmi, /setdescription ile kullanıcıların botu ilk açtığında gördüğü açıklamayı ayarlayabilirsiniz."
+        },
+        {
+          "title": "Panele girin",
+          "steps": [
+            "Ayarlar → Mesajlaşma → Telegram'ı işaretleyin.",
+            "Bot anahtarını yapıştırıp Kaydet'e basın. Panel anahtarı Telegram'a sorup doğrular ve botun adını gösterir."
+          ]
+        },
+        {
+          "title": "Önemli: botta webhook olmamalı",
+          "text": "Panel kullanıcı eşleşmelerini getUpdates ile okur. Bota başka bir uygulama webhook tanımladıysa Telegram bu çağrıyı reddeder. Botu yalnızca bu panel için kullanın ya da webhook'u kaldırın:",
+          "code": "curl https://api.telegram.org/bot<ANAHTAR>/deleteWebhook"
+        },
+        {
+          "title": "Kullanıcılar nasıl bağlanır?",
+          "text": "Hesap → Bildirimler → Uygulama bağla → Telegram. Panel tek kullanımlık bir bağlantı açar; kullanıcı Telegram'da Başlat'a basar, sonra panelde \"Bağlantıyı doğrula\"ya tıklar. Bağlantı 15 dakika geçerlidir."
+        }
+      ],
+      "links": [
+        {
+          "label": "Telegram: BotFather",
+          "url": "https://core.telegram.org/bots/features#botfather"
+        },
+        {
+          "label": "Telegram Bot API: getUpdates",
+          "url": "https://core.telegram.org/bots/api#getupdates"
+        }
+      ]
+    },
+    "whatsapp": {
+      "title": "WhatsApp Business (Cloud API)",
+      "intro": "Bildirimler Meta'nın WhatsApp Cloud API'siyle, işletmenize ait bir numaradan gönderilir. İlk mesajı işletme başlattığı için Meta onaylı bir mesaj şablonu ister. Şablon mesajları Meta'nın güncel fiyatlandırmasına göre ücretlendirilebilir.",
+      "sections": [
+        {
+          "title": "Gerekenler",
+          "steps": [
+            "Bir Meta işletme hesabı (business.facebook.com).",
+            "İşletme numarası olarak kullanılacak bir telefon numarası. Numara WhatsApp uygulamasında kayıtlıysa önce oradan silinmelidir.",
+            "Şablon mesajları için Meta'da bir ödeme yöntemi."
+          ]
+        },
+        {
+          "title": "Uygulamayı oluşturun",
+          "steps": [
+            "developers.facebook.com → My Apps → Create App; kullanım amacı olarak WhatsApp / işletme seçeneğini seçin.",
+            "Uygulamaya WhatsApp ürününü ekleyip işletme hesabınızı bağlayın.",
+            "WhatsApp → API Setup sayfasında numaranızı ekleyip doğrulayın ve \"Phone number ID\" değerini kopyalayın."
+          ],
+          "note": "API Setup'taki test numarası yalnızca orada alıcı olarak eklediğiniz numaralara gönderebilir; gerçek kullanım için kendi numaranızı ekleyin."
+        },
+        {
+          "title": "Kalıcı erişim anahtarı (token)",
+          "steps": [
+            "business.facebook.com → İşletme ayarları → Kullanıcılar → Sistem kullanıcıları → Ekle.",
+            "Sistem kullanıcısına uygulamanızı ve WhatsApp hesabınızı tam kontrolle atayın.",
+            "\"Token oluştur\": uygulamayı seçin; whatsapp_business_messaging ve whatsapp_business_management izinlerini işaretleyin.",
+            "Token yalnızca bir kez gösterilir; hemen kopyalayın."
+          ],
+          "note": "API Setup sayfasındaki geçici anahtar kısa sürede biter; panele kalıcı anahtarı girin."
+        },
+        {
+          "title": "Mesaj şablonu",
+          "steps": [
+            "WhatsApp Manager → Mesaj şablonları → Şablon oluştur.",
+            "Kategori: Utility (işlemsel bildirim).",
+            "Ad: küçük harf, rakam ve alt çizgi (ör. panel_bildirimi). Dil: Türkçe (tr).",
+            "Gövdeye iki değişken koyun: panel {{1}} yerine başlığı, {{2}} yerine metni yazar.",
+            "Onaya gönderin; durum \"Active\" olunca kullanılabilir."
+          ],
+          "code": "Bildirim: {{1}}\nAyrıntı: {{2}}\nBu mesaj otomatik gönderilmiştir.",
+          "note": "Meta, gövdenin bir değişkenle başlamasına veya bitmesine izin vermez; değişkenlerin önünde ve sonunda sabit metin bırakın."
+        },
+        {
+          "title": "Panele girin",
+          "steps": [
+            "Ayarlar → Mesajlaşma → WhatsApp'ı işaretleyin.",
+            "Kalıcı anahtar, Phone number ID, şablon adı ve şablonun dil kodunu (ör. tr veya en_US) girip Kaydet'e basın.",
+            "Kullanıcılar, hesaplarındaki doğrulanmış telefon numarasıyla bağlanır."
+          ]
+        }
+      ],
+      "links": [
+        {
+          "label": "Meta: WhatsApp Cloud API başlangıç",
+          "url": "https://developers.facebook.com/docs/whatsapp/cloud-api/get-started"
+        },
+        {
+          "label": "Meta: Mesaj şablonları",
+          "url": "https://developers.facebook.com/docs/whatsapp/business-management-api/message-templates"
+        },
+        {
+          "label": "Meta: WhatsApp fiyatlandırması",
+          "url": "https://developers.facebook.com/docs/whatsapp/pricing"
+        }
+      ]
+    },
+    "pushover": {
+      "title": "Pushover",
+      "intro": "Pushover iOS, Android ve masaüstü için anlık bildirim servisidir. Siz bir uygulama anahtarı oluşturursunuz; her kullanıcı kendi Pushover hesabını ve uygulamasını kullanır (uygulama deneme süresinden sonra platform başına tek seferlik ücretlidir).",
+      "sections": [
+        {
+          "title": "Uygulama anahtarı",
+          "steps": [
+            "pushover.net'te hesap açıp giriş yapın.",
+            "\"Your Applications\" altında \"Create an Application/API Token\".",
+            "Bir ad verin (ör. Lightning VM), koşulları kabul edip oluşturun.",
+            "30 karakterlik API Token/Key'i Ayarlar → Mesajlaşma → Pushover alanına girin."
+          ]
+        },
+        {
+          "title": "Kullanıcılar",
+          "text": "Her kullanıcı, pushover.net'e girişte ana sayfada görünen kendi User Key'ini Hesap → Bildirimler → Uygulama bağla → Pushover'a girer."
+        }
+      ],
+      "links": [
+        {
+          "label": "Pushover: API",
+          "url": "https://pushover.net/api"
+        },
+        {
+          "label": "Pushover: Uygulama oluştur",
+          "url": "https://pushover.net/apps/build"
+        }
+      ]
+    },
+    "captcha": {
+      "title": "Bot koruması (CAPTCHA) anahtarları",
+      "intro": "Kayıt, giriş ve parola sıfırlama formlarını otomatik saldırılara karşı korur. Üç sağlayıcının da ücretsiz kullanımı vardır. Her birinde bir site anahtarı (tarayıcıya gider) ve bir gizli anahtar (yalnızca sunucuda kalır) alırsınız.",
+      "sections": [
+        {
+          "title": "Cloudflare Turnstile",
+          "steps": [
+            "dash.cloudflare.com → Turnstile → Add widget. Alan adınızın Cloudflare'de olması gerekmez.",
+            "Widget adı verin ve panelin alan adını (hostname) ekleyin.",
+            "Mod olarak \"Managed\" önerilir.",
+            "Site Key ve Secret Key'i kopyalayın."
+          ]
+        },
+        {
+          "title": "Google reCAPTCHA",
+          "steps": [
+            "google.com/recaptcha/admin/create adresine gidin.",
+            "Tür: v2 \"Ben robot değilim\" onay kutusu ya da v3 (görünmez, puanlı).",
+            "Panelin alan adını ekleyin ve site anahtarı ile gizli anahtarı kopyalayın."
+          ],
+          "note": "v3 her isteğe 0.0 (bot) ile 1.0 (insan) arasında puan verir; paneldeki en düşük puanın altındaki istekler reddedilir. Paneldeki türle anahtarın türü aynı olmalıdır."
+        },
+        {
+          "title": "hCaptcha",
+          "steps": [
+            "dashboard.hcaptcha.com → Sites → New Site; panelin alan adını ekleyin ve Sitekey'i kopyalayın.",
+            "Gizli anahtar hesap düzeyindedir: Account Settings → Secret Keys."
+          ]
+        },
+        {
+          "title": "Test edin",
+          "text": "Ayarlar → Bot koruması sayfasındaki Test ile kaydetmeden önce doğrulayın. Alan adı sağlayıcıdaki listeyle eşleşmezse istek reddedilir."
+        }
+      ],
+      "links": [
+        {
+          "label": "Cloudflare: Turnstile",
+          "url": "https://developers.cloudflare.com/turnstile/get-started/"
+        },
+        {
+          "label": "Google: reCAPTCHA",
+          "url": "https://developers.google.com/recaptcha/intro"
+        },
+        {
+          "label": "hCaptcha: belgeler",
+          "url": "https://docs.hcaptcha.com/"
+        }
+      ]
+    },
+    "mail": {
+      "title": "E-posta gönderimi",
+      "intro": "Panel parola sıfırlama, iki adımlı doğrulama kodları ve bildirimler için e-posta gönderir. Kendi SMTP sunucunuzu ya da bir e-posta servisinin API'sini kullanabilirsiniz.",
+      "sections": [
+        {
+          "title": "SMTP mi, API mi?",
+          "text": "SMTP her posta sunucusuyla çalışır. API sağlayıcıları (Resend, SendGrid, Amazon SES…) HTTPS üzerinden gönderir; birçok bulut sağlayıcısının engellediği SMTP portlarına takılmaz."
+        },
+        {
+          "title": "SMTP ayarları",
+          "steps": [
+            "587 + STARTTLS en yaygın seçimdir; 465 doğrudan TLS kullanır.",
+            "Gmail / Google Workspace: hesapta iki adımlı doğrulama açıkken bir \"Uygulama şifresi\" oluşturup parola olarak onu girin.",
+            "Microsoft 365: SMTP ile gönderim posta kutusunda açık olmalıdır; Microsoft temel kimlik doğrulamayı kısıtladığı için güncel durumu belgelerinden kontrol edin ya da bir API sağlayıcısı seçin.",
+            "Gönderen adresi, giriş yaptığınız hesabın adına gönderebildiği bir adres olmalıdır."
+          ]
+        },
+        {
+          "title": "Alan adı doğrulama: SPF, DKIM, DMARC",
+          "text": "Spam'e düşmemek için gönderen alan adınızın DNS'ine sağlayıcının verdiği kayıtları ekleyin:",
+          "steps": [
+            "SPF: adınıza kimlerin gönderebileceğini söyleyen TXT kaydı (ör. v=spf1 include:sağlayıcı-adresi ~all). Alan adı başına yalnızca bir SPF kaydı olmalıdır.",
+            "DKIM: sağlayıcının verdiği imza kaydı (TXT veya CNAME).",
+            "DMARC: _dmarc alt adında bir TXT kaydı. Başlangıç için:"
+          ],
+          "code": "_dmarc.ornek.com  TXT  \"v=DMARC1; p=none; rua=mailto:dmarc@ornek.com\"",
+          "note": "Gmail ve Yahoo toplu gönderenlerden SPF, DKIM ve DMARC istiyor; az e-posta gönderseniz de üçünü eklemek teslim oranını artırır."
+        },
+        {
+          "title": "Test edin",
+          "text": "E-posta sekmesindeki Test ile kaydetmeden önce gerçek bir e-posta gönderin; hata mesajı sorunun nerede olduğunu söyler."
+        }
+      ],
+      "links": [
+        {
+          "label": "Google: Uygulama şifreleri",
+          "url": "https://support.google.com/accounts/answer/185833"
+        },
+        {
+          "label": "Google: E-posta gönderen yönergeleri",
+          "url": "https://support.google.com/a/answer/81126"
+        },
+        {
+          "label": "DMARC.org",
+          "url": "https://dmarc.org/overview/"
+        }
+      ]
+    },
+    "domain": {
+      "title": "Alan adı ve HTTPS",
+      "intro": "Panel, alan adınız için Let's Encrypt'ten ücretsiz bir sertifika alır ve süresi dolmadan kendiliğinden yeniler.",
+      "sections": [
+        {
+          "title": "DNS kaydı",
+          "steps": [
+            "Alan adınızın DNS yönetiminde bir A kaydı ekleyin: ör. panel.ornek.com → sunucunun IPv4 adresi.",
+            "Sunucunun çalışan bir IPv6 adresi varsa AAAA kaydı da ekleyin. Yanlış bir AAAA kaydı sertifika doğrulamasını bozar; emin değilseniz eklemeyin.",
+            "Kaydın yayılmasını bekleyin (genellikle dakikalar; kaydın TTL değerine bağlıdır)."
+          ],
+          "code": "dig +short panel.ornek.com"
+        },
+        {
+          "title": "Portlar",
+          "text": "80 ve 443 portları internetten sunucuya açık olmalıdır: hem bulut sağlayıcınızın güvenlik grubunda hem sunucunun güvenlik duvarında. Let's Encrypt doğrulamayı bu portlar üzerinden yapar."
+        },
+        {
+          "title": "Cloudflare kullanıyorsanız",
+          "text": "İlk sertifika alınırken kaydı \"DNS only\" (gri bulut) yapmak sorunları önler; sertifika alındıktan sonra proxy'yi açabilirsiniz. Proxy açıkken SSL/TLS modunu \"Full (strict)\" seçin."
+        },
+        {
+          "title": "Panelde",
+          "text": "Alan adını yazıp Kontrol et'e basın: DNS, HTTP ve sertifika ayrı ayrı denetlenir. Hepsi geçince kaydedin.",
+          "note": "Let's Encrypt aynı alan adı için sertifika ve başarısız deneme sınırları uygular; arka arkaya çok deneme geçici engellenmeye yol açabilir. Önce DNS ve portları doğrulayın."
+        }
+      ],
+      "links": [
+        {
+          "label": "Let's Encrypt: Doğrulama türleri",
+          "url": "https://letsencrypt.org/docs/challenge-types/"
+        },
+        {
+          "label": "Let's Encrypt: Sınırlar",
+          "url": "https://letsencrypt.org/docs/rate-limits/"
+        }
+      ]
+    },
+    "vmware": {
+      "title": "ESXi / vCenter bağlantısı",
+      "intro": "Panel VMware'e bir servis hesabıyla bağlanır, envanteri okur ve vCenter üzerinden sunucu oluşturur. Sunucu oluşturmak için vCenter gerekir; tek başına ESXi'de envanter, konsol ve metrikler çalışır.",
+      "sections": [
+        {
+          "title": "Servis hesabı",
+          "steps": [
+            "vSphere Client → Administration → Single Sign On → Users and Groups → vsphere.local alanında yeni kullanıcı (ör. lightning).",
+            "Güçlü bir parola verin. vsphere.local parolalarının süresi varsayılan parola politikasına göre dolar; süresi dolan parola bağlantıyı keser, politikayı kontrol edin."
+          ],
+          "note": "vCenter 9'da kimlik federasyonu kullanan hesaplarla parola girişi yapılamaz; vsphere.local ya da LDAP/AD hesabı kullanın."
+        },
+        {
+          "title": "Rol ve yetkiler",
+          "text": "Administration → Access Control → Roles → yeni rol oluşturup şu yetkileri verin (keşif bunları kontrol eder; eksik olanlara bağlı işlemler panelde \"desteklenmiyor\" görünür):",
+          "code": "System.View, System.Read\nVirtualMachine.Inventory.Create, VirtualMachine.Inventory.Delete\nVirtualMachine.Interact.PowerOn, .PowerOff, .Reset, .ConsoleInteract\nVirtualMachine.Config.CPUCount, .Memory, .AddNewDisk\nVirtualMachine.Provisioning.Clone\nVirtualMachine.State.CreateSnapshot, .RevertToSnapshot, .RemoveSnapshot\nDatastore.AllocateSpace, Network.Assign, Resource.AssignVMToPool"
+        },
+        {
+          "title": "Yetkiyi atayın",
+          "steps": [
+            "Hosts and Clusters görünümünde vCenter kök nesnesine sağ tıklayın → Add Permission.",
+            "Kullanıcıyı ve rolü seçin; \"Propagate to children\" işaretli olsun."
+          ]
+        },
+        {
+          "title": "Şablon",
+          "text": "Sunucular bir VM şablonundan kopyalanır. Şablonda cloud-init kurulu olmalıdır (VMware Tools / open-vm-tools ile birlikte); panel ağı, ana bilgisayar adını ve SSH anahtarlarını bununla ayarlar."
+        },
+        {
+          "title": "TLS",
+          "text": "vCenter'ın sertifikası güvenilir bir CA'dan değilse (varsayılan VMCA sertifikası gibi) panel bağlantı testinde sertifikanın konusunu, yayıncısını ve SHA-256 parmak izini gösterir. Parmak izini vSphere Client'taki veya sunucudaki değerle karşılaştırıp sabitleyin. Doğrulama hiçbir zaman tamamen kapatılmaz."
+        }
+      ],
+      "links": []
     }
   }
 }

@@ -10,7 +10,7 @@ import { apiError, ErrorCodeFilter } from './errors';
 import { logEvent } from './log';
 import { claimRequest, csrfRejected, duplicateKey, releaseRequest } from './security';
 import { AuthController } from './auth';
-import { PublicController, SettingsController, SmsSettingsController } from './settings';
+import { PublicController, SettingsController, SettingsOverviewController, SmsSettingsController } from './settings';
 import { RolesController } from './rbac';
 import { NotificationPolicyController, NotificationsController } from './notifications';
 import { ChatController, ChatSettingsController } from './chat';
@@ -61,7 +61,7 @@ class HealthController {
 }
 
 @Module({ controllers: [HealthController, AuthController, PublicController, SetupController, AdminController, VmwareController, ConsoleController, CatalogAdminController, CatalogController, ServersController, ServersAdminController, FirewallsController, PaymentsController, RdnsSettingsController, ServerIpsController,
-  SettingsController, SmsSettingsController, RolesController, NotificationsController, NotificationPolicyController,
+  SettingsController, SettingsOverviewController, SmsSettingsController, RolesController, NotificationsController, NotificationPolicyController,
   InsightsController, StaffInsightsController, ApplicationsController, ApplicationCallbackController, IsoAdminController, ServerIsoController, DomainController, LocationsController, TopologyAdminController, TopologyController, PowerController, AbuseController, VdcAdminController, VdcController, SmartController, OnboardingController, SchedulesController, AuditController, ActivityController, AnnouncementController, AnnouncementAdminController, SnapshotsController, AlertsController, TerminalController, ChatController, ChatSettingsController] })
 class AppModule {}
 
