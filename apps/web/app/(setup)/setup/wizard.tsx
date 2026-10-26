@@ -142,8 +142,10 @@ export default function Wizard() {
   const chooseLocale = (l: string) => startLocale(async () => { const f = new FormData(); f.set('locale', l); await setLocale(f); router.refresh(); });
 
   if (gate === 'token') return <TokenGate onDone={() => load(true)}/>;
-  if (gate === 'login') return <Card className="mx-auto w-full max-w-md"><Card.Content className="flex flex-col gap-4">
-    <h1 className="text-xl font-semibold">{t('title')}</h1><p className="text-sm text-muted">{t('gate.adminExists')}</p><ButtonLink href="/login">{t('gate.toLogin')}</ButtonLink>
+  if (gate === 'login') return <Card className="w-full max-w-md"><Card.Content className="flex flex-col gap-4 p-2">
+    <span aria-hidden className="grid size-12 place-items-center rounded-xl bg-accent-soft text-accent-soft-foreground"><I name="user-check" size={22}/></span>
+    <div><h1 className="text-xl font-semibold">{t('title')}</h1><p className="mt-1 text-sm text-muted">{t('gate.adminExists')}</p></div>
+    <ButtonLink href="/login" className="w-full justify-center">{t('gate.toLogin')}<I name="arrow-right" size={16}/></ButtonLink>
   </Card.Content></Card>;
   if (!progress) return <p role="status" className="text-center text-sm text-muted">{failure?.text ?? t('loading')}</p>;
 
@@ -300,7 +302,7 @@ function TokenGate({ onDone }: { onDone: () => void }) {
     try { await apiFetch('/setup/session', { method: 'POST', body: { token: token.trim() } }); onDone(); }
     catch (err) { setFailure(error(err)); } finally { setBusy(false); }
   }
-  return <Card className="mx-auto w-full max-w-lg"><Card.Content className="flex flex-col gap-4">
+  return <Card className="w-full max-w-lg"><Card.Content className="flex flex-col gap-4 p-2">
     <span aria-hidden className="grid size-12 place-items-center rounded-xl bg-accent-soft text-accent-soft-foreground"><I name="key-round" size={22}/></span>
     <h1 className="text-xl font-semibold">{t('title')}</h1><p className="text-sm text-muted">{t('gate.text')}</p>
     <pre className="overflow-x-auto rounded-lg bg-default p-3 font-mono text-xs">docker compose exec api node dist/cli.js bootstrap-token</pre>

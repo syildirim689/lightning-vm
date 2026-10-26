@@ -12,6 +12,6 @@ export default async function SetupLayout({ children }: { children: React.ReactN
       <Brand branding={branding} href="/setup"/>
       <div className="flex items-center gap-1"><AccessibilityButton/><LanguageMenu/><ThemeToggle/></div>
     </header>
-    <main className="relative flex flex-1 justify-center px-4 py-6 md:px-8 md:py-10">{children}</main>
+    <main className="relative flex flex-1 items-center justify-center px-4 py-6 md:px-8 md:py-10">{children}</main>
   </div>;
 }

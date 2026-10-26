@@ -55,6 +55,14 @@ test.describe('first run (Turkish browser)', () => {
     const shot = (name: string) => page.screenshot({ path: `test-results/tour/wizard-${name}.png`, fullPage: true });
 
     await page.goto('/setup');
+    // The token card keeps its own height and sits in the middle of the screen (it once stretched top to bottom).
+    const card = await page.getByLabel('Kurulum anahtarı').evaluate((el) => {
+      const r = el.closest('.card')!.getBoundingClientRect();
+      return { height: r.height, above: r.top, below: window.innerHeight - r.bottom };
+    });
+    expect(card.height).toBeLessThan(560);
+    expect(Math.abs(card.above - card.below)).toBeLessThan(120); // the header (about 60 px) sits above it
+    await shot('0-token');
     await page.getByLabel('Kurulum anahtarı').fill('wrong-token');
     await page.getByRole('button', { name: 'Kuruluma başla' }).click();
     await expect(page.locator('main [role=alert]')).toHaveText('Kurulum anahtarı geçersiz veya süresi dolmuş. Sunucuda yeni anahtar üretin.');
