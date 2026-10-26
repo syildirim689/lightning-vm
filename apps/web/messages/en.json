@@ -2107,6 +2107,10 @@
       "OVERSIZED_SERVERS": {
         "title": "{count, plural, one {# server barely uses its} other {# servers barely use their}} CPU",
         "body": "Right-sizing them would free about {vcpu} vCPU of pool capacity."
+      },
+      "OFF_BUT_BILLED": {
+        "title": "{name} has been off for {days} days",
+        "body": "Servers that are off are still billed ({price} {currency} a month). If you no longer need it, delete it to save."
       }
     }
   },
@@ -3201,6 +3205,13 @@
           "ok": "Sign-in through {url} is on.",
           "todo": "Off; everyone uses their panel password."
         }
+      },
+      "statusPage": {
+        "title": "Status page",
+        "help": "The public /status page: the state of components and locations and the live announcement. No connection names or customer data are shown.",
+        "enabled": "Publish the status page",
+        "open": "Open the page",
+        "saved": "Status page setting saved."
       }
     },
     "directory": {
@@ -4594,5 +4605,51 @@
       "servers": "{n, plural, one {new server} other {new servers}}",
       "doneOperations": "{n, plural, one {completed operation} other {completed operations}}"
     }
+  },
+  "PublicStatus": {
+    "title": "System status",
+    "intro": "How the {name} panel and its locations are doing right now.",
+    "unavailable": "The status page is not available right now.",
+    "overall": {
+      "ok": "All systems operational",
+      "degraded": "Some parts have issues or maintenance",
+      "down": "A part is not working right now"
+    },
+    "checked": "Last checked {when}",
+    "services": "Components",
+    "locations": "Locations",
+    "state": {
+      "ok": "Operational",
+      "degraded": "Partial",
+      "down": "Down"
+    },
+    "location": {
+      "active": "Operational",
+      "maintenance": "Maintenance"
+    },
+    "service": {
+      "panel": {
+        "name": "Panel",
+        "help": "Web interface and API"
+      },
+      "database": {
+        "name": "Database",
+        "help": "Accounts, servers and settings"
+      },
+      "queue": {
+        "name": "Job queue",
+        "help": "Order of background work"
+      },
+      "automation": {
+        "name": "Automation",
+        "help": "Server creation, power and backup jobs"
+      },
+      "virtualization": {
+        "name": "Virtualization",
+        "help": "VMware connections"
+      }
+    },
+    "refresh": "The page refreshes every 30 seconds.",
+    "toPanel": "Go to the panel"
   }
 }

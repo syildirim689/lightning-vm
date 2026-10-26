@@ -7,7 +7,7 @@ import { apiError } from './errors';
 import { Can, PermissionGuard } from './rbac';
 import { getSettings, saveSettings, type Announcement } from './settings-store';
 
-const live = (a: Announcement, now = Date.now()) => a.active && (!a.startsAt || Date.parse(a.startsAt) <= now) && (!a.endsAt || Date.parse(a.endsAt) > now);
+export const live = (a: Announcement, now = Date.now()) => a.active && (!a.startsAt || Date.parse(a.startsAt) <= now) && (!a.endsAt || Date.parse(a.endsAt) > now);
 
 @Controller() @UseGuards(SessionGuard)
 export class AnnouncementController {

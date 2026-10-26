@@ -644,3 +644,16 @@ test('export my data: a JSON file with the account, servers, keys and activity, 
   assert.ok(!r.body.includes('scrypt$'), 'no password hash');
   assert.ok((await pool.query("SELECT 1 FROM audit_events WHERE action = 'account.export'")).rowCount);
 });
+
+test('public status page: open to anyone, only aggregate states; the admin can turn it off', async () => {
+  const r = await get('/public/status');
+  assert.equal(r.statusCode, 200);
+  const s = r.json();
+  assert.ok(['ok', 'degraded', 'down'].includes(s.overall));
+  assert.deepEqual(s.services.map((x) => x.key), ['panel', 'database', 'queue', 'automation', 'virtualization']);
+  assert.ok(!JSON.stringify(s).includes('@'), 'no e-mail addresses');
+  assert.equal((await put('/admin/settings/status-page', { enabled: false }, user)).statusCode, 403);
+  assert.equal((await put('/admin/settings/status-page', { enabled: false }, admin)).statusCode, 200);
+  assert.equal((await get('/public/status')).statusCode, 404);
+  await put('/admin/settings/status-page', { enabled: true }, admin);
+});

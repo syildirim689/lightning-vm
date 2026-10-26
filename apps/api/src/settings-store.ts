@@ -69,6 +69,8 @@ const defaults = {
     whatsapp: { tokenEnc: null, phoneNumberId: '', template: '', language: 'tr' }, pushover: { tokenEnc: null } } as ChatSettings,
   directory: { ldap: { enabled: false, url: '', startTls: false, caPem: '', bindDn: '', bindPasswordEnc: null, baseDn: '', userFilter: '(&(objectClass=person)(mail={email}))',
     emailAttribute: 'mail', nameAttribute: 'displayName', groupAttribute: 'memberOf', groupRoles: [], defaultRole: 'user', autoCreate: true } as LdapSettings },
+  // The public status page (/status): on unless the admin turns it off.
+  statusPage: { enabled: true } as { enabled: boolean },
   // Web Push (VAPID) keys, generated on first use.
   vapid: { publicKey: '', privateKeyEnc: null } as { publicKey: string; privateKeyEnc: string | null },
 };

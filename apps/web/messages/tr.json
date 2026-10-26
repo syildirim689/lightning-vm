@@ -2107,6 +2107,10 @@
       "OVERSIZED_SERVERS": {
         "title": "{count} sunucu CPU’sunu neredeyse kullanmıyor",
         "body": "Doğru boyutlandırılırlarsa havuzda yaklaşık {vcpu} vCPU boşalır."
+      },
+      "OFF_BUT_BILLED": {
+        "title": "{name} {days} gündür kapalı",
+        "body": "Kapalı sunucular da ücretlendirilir ({price} {currency}/ay). Artık gerekmiyorsa silerek tasarruf edebilirsiniz."
       }
     }
   },
@@ -3201,6 +3205,13 @@
           "ok": "{url} ile giriş açık.",
           "todo": "Kapalı; herkes paneldeki parolasıyla girer."
         }
+      },
+      "statusPage": {
+        "title": "Durum sayfası",
+        "help": "Herkese açık /status sayfası: bileşenlerin ve konumların durumu ile etkin duyuru. Bağlantı adları ve müşteri bilgisi gösterilmez.",
+        "enabled": "Durum sayfasını yayınla",
+        "open": "Sayfayı aç",
+        "saved": "Durum sayfası ayarı kaydedildi."
       }
     },
     "directory": {
@@ -4594,5 +4605,51 @@
       "servers": "{n, plural, other {yeni sunucu}}",
       "doneOperations": "{n, plural, other {tamamlanan işlem}}"
     }
+  },
+  "PublicStatus": {
+    "title": "Sistem durumu",
+    "intro": "{name} panelinin ve konumlarının şu anki durumu.",
+    "unavailable": "Durum sayfası şu anda kullanılamıyor.",
+    "overall": {
+      "ok": "Tüm sistemler çalışıyor",
+      "degraded": "Bazı bölümlerde sorun veya bakım var",
+      "down": "Bir bölüm şu anda çalışmıyor"
+    },
+    "checked": "Son kontrol {when}",
+    "services": "Bileşenler",
+    "locations": "Konumlar",
+    "state": {
+      "ok": "Çalışıyor",
+      "degraded": "Kısmen",
+      "down": "Çalışmıyor"
+    },
+    "location": {
+      "active": "Çalışıyor",
+      "maintenance": "Bakımda"
+    },
+    "service": {
+      "panel": {
+        "name": "Panel",
+        "help": "Web arayüzü ve API"
+      },
+      "database": {
+        "name": "Veritabanı",
+        "help": "Hesaplar, sunucular ve ayarlar"
+      },
+      "queue": {
+        "name": "İş kuyruğu",
+        "help": "Arka plan işlerinin sırası"
+      },
+      "automation": {
+        "name": "Otomasyon",
+        "help": "Sunucu oluşturma, güç ve yedek işleri"
+      },
+      "virtualization": {
+        "name": "Sanallaştırma",
+        "help": "VMware bağlantıları"
+      }
+    },
+    "refresh": "Sayfa 30 saniyede bir yenilenir.",
+    "toPanel": "Panele git"
   }
 }

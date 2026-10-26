@@ -8,6 +8,10 @@ import Link from 'next/link';
 import { I } from '../../../../components/icon';
 import { useApiQuery } from '../../../../lib/query';
 import RegistrationSetting from '../registration-setting';
+import { Section, SwitchInput } from '../../../../components/ui';
+import { apiFetch } from '../../../../lib/api';
+import { useApiAction } from '../../../../lib/query';
+import { useQueryClient } from '@tanstack/react-query';
 
 type State = 'ok' | 'todo' | 'warn';
 type Item = { key: string; tab: string | null; state: State; detail: Record<string, string | number | boolean | null> };
@@ -92,6 +96,21 @@ export default function GeneralSettings({ onOpen }: { onOpen: (tab: string) => v
       </ul>
     </section>
 
-    <RegistrationSetting/>
+    <div className="grid gap-4 lg:grid-cols-2"><RegistrationSetting/><StatusPageSetting/></div>
   </div>;
+}
+
+// The public status page (/status): on or off, with a link to it.
+function StatusPageSetting() {
+  const t = useTranslations('Settings.general.statusPage');
+  const client = useQueryClient();
+  const q = useApiQuery<{ enabled: boolean }>(['settings', 'status-page'], '/admin/settings/status-page');
+  const save = useApiAction((enabled: boolean) => apiFetch<{ enabled: boolean }>('/admin/settings/status-page', { method: 'PUT', body: { enabled } }),
+    { success: t('saved'), onSuccess: (r) => client.setQueryData(['settings', 'status-page'], r) });
+  return <Section title={t('title')} description={t('help')}>
+    <div className="flex flex-wrap items-center justify-between gap-3">
+      <SwitchInput label={t('enabled')} isSelected={q.data?.enabled ?? false} isDisabled={!q.data || save.isPending} onChange={(v) => save.mutate(v)}/>
+      {q.data?.enabled && <Link href="/status" target="_blank" className="inline-flex items-center gap-1 text-sm text-accent hover:underline">{t('open')}<I name="external-link" size={13}/></Link>}
+    </div>
+  </Section>;
 }

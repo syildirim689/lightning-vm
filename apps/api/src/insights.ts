@@ -107,6 +107,14 @@ export async function customerInsights(userId: string): Promise<Insight[]> {
     if (r.advice === 'down') add('RIGHT_SIZE_DOWN', 'info', { name: s.name, avg, vcpu: s.vcpu, suggested: r.suggestedVcpu }, `/servers/${s.id}`, `size:${s.id}`);
     if (r.advice === 'up') add('RIGHT_SIZE_UP', 'warning', { name: s.name, avg, vcpu: s.vcpu, suggested: r.suggestedVcpu }, `/servers/${s.id}`, `size:${s.id}`);
   }
+  // Turned off for over a week but still billed: delete it if it is not needed (a snapshot keeps nothing after delete).
+  const { rows: idleOff } = await pool.query(`SELECT s.id, s.name, s.price_monthly::text AS price, trim(s.currency) AS currency,
+      (SELECT max(o.finished_at) FROM operations o WHERE o.server_id = s.id AND o.kind IN ('shutdown', 'power_off') AND o.status = 'succeeded') AS off_at
+    FROM servers s WHERE s.owner_id = $1 AND s.state = 'ready' AND s.power_state = 'poweredOff' AND s.price_monthly > 0`, [userId]);
+  for (const s of idleOff) {
+    const days = s.off_at ? Math.floor((Date.now() - new Date(s.off_at).getTime()) / 86_400_000) : 0;
+    if (days >= 7) add('OFF_BUT_BILLED', 'info', { name: s.name, days, price: s.price, currency: s.currency }, `/servers/${s.id}`, `off:${s.id}`);
+  }
   const [limits, usage] = await Promise.all([limitsFor(userId), usageOf(userId)]);
   for (const [k, l] of [['servers', 'max_servers'], ['vcpu', 'max_vcpu'], ['memoryMb', 'max_memory_mb'], ['diskGb', 'max_disk_gb']] as const) {
     const max = (limits as unknown as Record<string, number | null>)?.[l];

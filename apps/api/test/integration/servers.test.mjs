@@ -151,6 +151,16 @@ test('favorites and the monthly budget: a starred server is marked; an order ove
   assert.equal((await send('GET', '/usage/summary', undefined, user)).json().budget.state, 'over');
   assert.equal((await send('PUT', '/usage/budget', { amount: null }, user)).json().budget, null);
 
+  // Off for over a week and still billed: an insight says so.
+  const act = (action) => send('POST', '/servers/' + serverId + '/actions', { action }, user, { 'idempotency-key': randomUUID() });
+  const settled = (want) => until(async () => { const op = await lastOp(serverId); const r = await serverRow(serverId);
+    return op.status === 'succeeded' && r.power_state === want; }, 'power ' + want);
+  if ((await serverRow(serverId)).power_state !== 'poweredOff') { assert.equal((await act('power_off')).statusCode, 202); await settled('poweredOff'); }
+  await pool.query("UPDATE operations SET finished_at = now() - interval '8 days' WHERE server_id = $1 AND kind IN ('power_off', 'shutdown')", [serverId]);
+  assert.ok((await send('GET', '/insights', undefined, user)).json().insights.some((i) => i.code === 'OFF_BUT_BILLED' && i.params.days >= 8));
+  assert.equal((await act('power_on')).statusCode, 202);
+  await settled('poweredOn');
+
   // Locked: no power off, reset or delete (nothing changes), until unlocked; other customers cannot lock it.
   const lock = '/servers/' + serverId + '/lock';
   assert.equal((await send('PUT', lock, { locked: true }, other)).statusCode, 404);

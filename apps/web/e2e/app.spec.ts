@@ -781,6 +781,12 @@ test.describe('people, settings and smart features (English browser)', () => {
     test.setTimeout(180_000);
     const shot = async (page: Page, name: string) => page.screenshot({ path: `test-results/tour/${name}.png`, fullPage: true });
     const guest = await (await browser.newContext({ locale: 'tr-TR' })).newPage();
+    // The public status page needs no sign-in.
+    await guest.goto('/status');
+    await expect(guest.getByRole('heading', { level: 1 })).toHaveText('Sistem durumu');
+    await expect(guest.getByRole('status').first()).toBeVisible();
+    await guest.waitForTimeout(800);
+    await shot(guest, 'status-page');
     for (const path of ['/login', '/register']) {
       await guest.goto(path);
       await expect(guest.getByRole('heading', { level: 1 })).toBeVisible();
