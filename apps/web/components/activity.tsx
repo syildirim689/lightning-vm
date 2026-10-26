@@ -76,13 +76,20 @@ export function AnnouncementBar() {
   const t = useTranslations('Activity');
   const locale = useLocale();
   const format = useFormatter();
-  const a = useApiQuery<{ announcement: Announcement | null }>(['announcement'], '/announcement', { refetchInterval: 300_000 }).data?.announcement;
+  const q = useApiQuery<{ announcement: Announcement | null; incident: { id: string; title: string; impact: string; status: string } | null }>(['announcement'], '/announcement', { refetchInterval: 120_000 });
+  const a = q.data?.announcement;
+  const incident = q.data?.incident;
   const [closed, setClosed] = useState<string | null>(null);
   useEffect(() => { try { setClosed(localStorage.getItem(KEY)); } catch { /* storage blocked */ } }, []);
-  if (!a || closed === a.id) return null;
+  const incidentBar = incident && <div role="status" className={`flex items-center gap-3 px-4 py-2 text-sm md:px-6 ${incident.impact === 'major' ? 'bg-danger text-danger-foreground' : 'bg-warning text-warning-foreground'}`}>
+    <span aria-hidden className="relative flex size-2.5 shrink-0"><span className="absolute inline-flex size-full animate-ping rounded-full bg-current opacity-60"/><span className="relative inline-flex size-2.5 rounded-full bg-current"/></span>
+    <p className="min-w-0 flex-1"><span className="font-medium">{incident.title}</span><span className="opacity-80"> · {t(`incident.${incident.status as 'investigating'}`)}</span></p>
+    <NextLink href="/status" className="shrink-0 font-semibold underline underline-offset-2">{t('incident.details')}</NextLink>
+  </div>;
+  if (!a || closed === a.id) return incidentBar || null;
   const text = (locale === 'tr' ? a.textTr || a.textEn : a.textEn || a.textTr);
   const tone = { info: 'bg-accent-soft text-accent-soft-foreground', warning: 'bg-warning text-warning-foreground', danger: 'bg-danger text-danger-foreground', success: 'bg-success text-success-foreground' }[a.tone];
-  return <div role="status" className={`flex items-start gap-3 px-4 py-2 text-sm md:items-center md:px-6 ${tone}`}>
+  return <>{incidentBar}<div role="status" className={`flex items-start gap-3 px-4 py-2 text-sm md:items-center md:px-6 ${tone}`}>
     <span className="mt-0.5 shrink-0 md:mt-0">{a.tone === 'danger' || a.tone === 'warning' ? <I name="triangle-alert" size={16}/> : <I name="megaphone" size={16}/>}</span>
     <p className="min-w-0 flex-1">
       <span className="font-medium">{text}</span>
@@ -91,5 +98,5 @@ export function AnnouncementBar() {
     </p>
     <button type="button" aria-label={t('close')} className="-my-1 grid size-9 shrink-0 place-items-center rounded-md hover:bg-black/10"
       onClick={() => { setClosed(a.id); try { localStorage.setItem(KEY, a.id); } catch { /* storage blocked */ } }}><I name="x" size={16}/></button>
-  </div>;
+  </div></>;
 }

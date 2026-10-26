@@ -2578,7 +2578,8 @@
       "servers": "Servers",
       "announcement": "Announcement",
       "chat": "Messaging",
-      "directory": "Directory (LDAP)"
+      "directory": "Directory (LDAP)",
+      "status": "Status and incidents"
     },
     "saved": "Saved.",
     "save": "Save",
@@ -3274,6 +3275,27 @@
       "testSignedIn": "Person found and their password accepted.",
       "groupsFound": "Groups",
       "rolesGiven": "Roles they get"
+    },
+    "incidents": {
+      "new": "Open an incident",
+      "newHelp": "Announce a problem or planned maintenance: it shows on the public status page and, while open, at the top of every panel page.",
+      "title": "Title",
+      "titleExample": "e.g. Server creation is slow",
+      "impact": "Impact",
+      "status": "Status",
+      "components": "Affected components",
+      "message": "First update",
+      "messageHelp": "Say what happened and what is being done; customers see this.",
+      "open": "Open the incident",
+      "opened": "Incident opened.",
+      "none": "No incidents yet.",
+      "update": "Update",
+      "addUpdate": "Add the update",
+      "updated": "Update added.",
+      "remove": "Delete",
+      "removeTitle": "Delete the incident?",
+      "removeBody": "The incident and all its updates are removed from the status page.",
+      "cancel": "Cancel"
     }
   },
   "Firewalls": {
@@ -4007,6 +4029,13 @@
     "prefixed": {
       "setup_step": "Setup step: {name}",
       "admin_user": "User account: {name}"
+    },
+    "incident": {
+      "investigating": "Investigating",
+      "identified": "Identified",
+      "monitoring": "Monitoring",
+      "resolved": "Resolved",
+      "details": "Status page"
     }
   },
   "Snapshots": {
@@ -4667,6 +4696,24 @@
       }
     },
     "refresh": "The page refreshes every 30 seconds.",
-    "toPanel": "Go to the panel"
+    "toPanel": "Go to the panel",
+    "incidents": "Incidents",
+    "incident": {
+      "investigating": "Investigating",
+      "identified": "Identified",
+      "monitoring": "Monitoring",
+      "resolved": "Resolved"
+    },
+    "impact": {
+      "minor": "Minor impact",
+      "major": "Major impact",
+      "maintenance": "Planned maintenance"
+    },
+    "uptimeLabel": "{pct}% available over the last 90 days",
+    "dayValue": "{pct}% operational",
+    "noData": "No data",
+    "daysAgo": "{n} days ago",
+    "today": "Today",
+    "uptime": "{pct}% uptime"
   }
 }

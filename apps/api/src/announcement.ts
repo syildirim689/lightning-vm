@@ -1,6 +1,7 @@
 // A notice the admin shows on every signed-in page (planned maintenance, news), in Turkish and English, with an
 // optional start and end time. Each saved version gets a new id, so a notice someone closed comes back when edited.
 import { Body, Controller, Get, Put, Req, UseGuards } from '@nestjs/common';
+import { pool } from './db';
 import { randomUUID } from 'node:crypto';
 import { audit, SessionGuard, type AuthedRequest } from './auth';
 import { apiError } from './errors';
@@ -14,7 +15,8 @@ export class AnnouncementController {
   @Get('announcement')
   async current() {
     const a = await getSettings('announcement');
-    return { announcement: live(a) ? { id: a.id, tone: a.tone, textTr: a.textTr, textEn: a.textEn, link: a.link, endsAt: a.endsAt } : null };
+    const { rows: [incident] } = await pool.query("SELECT id, title, impact, status FROM incidents WHERE resolved_at IS NULL ORDER BY (impact = 'major') DESC, created_at DESC LIMIT 1");
+    return { announcement: live(a) ? { id: a.id, tone: a.tone, textTr: a.textTr, textEn: a.textEn, link: a.link, endsAt: a.endsAt } : null, incident: incident ?? null };
   }
 }
 

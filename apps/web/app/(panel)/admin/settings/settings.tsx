@@ -24,9 +24,10 @@ import AnnouncementSettings from './announcement';
 import ServerSettings from './servers';
 import ChatSettings from './chat';
 import DirectorySettings from './directory';
+import Incidents from './incidents';
 import GeneralSettings from './general';
 
-const tabs = ['general', 'branding', 'domain', 'security', 'directory', 'servers', 'mail', 'captcha', 'sms', 'chat', 'payments', 'rdns', 'notifications', 'announcement'] as const;
+const tabs = ['general', 'branding', 'domain', 'security', 'directory', 'servers', 'mail', 'captcha', 'sms', 'chat', 'payments', 'rdns', 'notifications', 'announcement', 'status'] as const;
 
 export default function Settings() {
   const t = useTranslations('Settings');
@@ -34,7 +35,7 @@ export default function Settings() {
   const me = useMe();
   const readOnly = !can(me?.permissions, 'settings.manage');
   const icon = { general: <I name="settings-2" size={16}/>, branding: <I name="palette" size={16}/>, domain: <I name="globe-lock" size={16}/>, security: <I name="shield-check" size={16}/>, directory: <I name="network" size={16}/>, servers: <I name="server-cog" size={16}/>, mail: <I name="mail" size={16}/>, captcha: <I name="bot" size={16}/>,
-    sms: <I name="message-square" size={16}/>, chat: <I name="messages-square" size={16}/>, payments: <I name="credit-card" size={16}/>, rdns: <I name="globe" size={16}/>, notifications: <I name="bell" size={16}/>, announcement: <I name="megaphone" size={16}/> };
+    sms: <I name="message-square" size={16}/>, chat: <I name="messages-square" size={16}/>, payments: <I name="credit-card" size={16}/>, rdns: <I name="globe" size={16}/>, notifications: <I name="bell" size={16}/>, announcement: <I name="megaphone" size={16}/>, status: <I name="activity" size={16}/> };
   return <>
     <PageHeader eyebrow={t('eyebrow')} title={t('title')} description={t('intro')}/>
     {readOnly && <div className="mb-4"><Notice tone="default">{t('readOnly')}</Notice></div>}
@@ -56,6 +57,7 @@ export default function Settings() {
       <Tabs.Panel id="rdns" className="pt-5"><ReverseDns readOnly={readOnly}/></Tabs.Panel>
       <Tabs.Panel id="notifications" className="pt-5"><NotificationPolicy readOnly={readOnly}/></Tabs.Panel>
       <Tabs.Panel id="announcement" className="pt-5"><AnnouncementSettings readOnly={readOnly}/></Tabs.Panel>
+      <Tabs.Panel id="status" className="pt-5"><Incidents readOnly={readOnly}/></Tabs.Panel>
     </Tabs>
   </>;
 }

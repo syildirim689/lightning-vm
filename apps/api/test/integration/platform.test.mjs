@@ -670,3 +670,34 @@ test('user summary for staff: servers, spend, sessions, activity and limits in o
   assert.equal(typeof s.limits, 'object');
   assert.equal((await get('/admin/users/00000000-0000-0000-0000-000000000000/summary', admin)).statusCode, 404);
 });
+
+test('status history and incidents: daily uptime per component; an open incident shows on the status page and in the panel banner until resolved', async () => {
+  await pool.query('DELETE FROM status_samples');
+  await pool.query(`INSERT INTO status_samples (at, services) VALUES
+    (date_trunc('day', now()) - interval '2 days' + interval '10 hours', '{"panel":"ok","database":"ok"}'),
+    (date_trunc('day', now()) - interval '2 days' + interval '10 hours 5 minutes', '{"panel":"ok","database":"down"}'),
+    (date_trunc('day', now()) - interval '1 day' + interval '10 hours', '{"panel":"ok","database":"ok"}')`);
+  // Wait out the status cache from earlier calls.
+  await new Promise((r) => setTimeout(r, 15_500));
+  let s = (await get('/public/status')).json();
+  assert.equal(s.history.uptime.panel, 100);
+  assert.equal(s.history.uptime.database, 66.67);
+  const db = s.history.days.database;
+  assert.equal(db.length, 2);
+  assert.deepEqual([db[0].ok, db[0].down, db[1].ok, db[1].down], [0.5, true, 1, false]);
+
+  assert.equal((await post('/admin/incidents', { title: 'x', impact: 'huge', body: '' }, admin)).json().fields.impact, 'INVALID_VALUE');
+  assert.equal((await post('/admin/incidents', { title: 'x', impact: 'minor', body: 'y' }, user)).statusCode, 403);
+  const id = (await post('/admin/incidents', { title: 'Slow server creation', impact: 'major', components: ['automation'], body: 'Looking into it.' }, admin)).json().id;
+  s = (await get('/public/status')).json();
+  assert.equal(s.overall, 'down', 'an open major incident counts');
+  assert.equal(s.incidents[0].title, 'Slow server creation');
+  assert.equal(s.incidents[0].updates[0].body, 'Looking into it.');
+  assert.equal((await get('/announcement', user)).json().incident.title, 'Slow server creation');
+  assert.equal((await post(`/admin/incidents/${id}/updates`, { status: 'resolved', body: 'Fixed.' }, admin)).statusCode, 201);
+  s = (await get('/public/status')).json();
+  assert.equal(s.incidents[0].status, 'resolved');
+  assert.deepEqual(s.incidents[0].updates.map((u) => u.status), ['resolved', 'investigating']);
+  assert.equal((await get('/announcement', user)).json().incident, null);
+  assert.equal((await call('DELETE', `/admin/incidents/${id}`, admin)).statusCode, 204);
+});

@@ -2578,7 +2578,8 @@
       "servers": "Sunucular",
       "announcement": "Duyuru",
       "chat": "Mesajlaşma",
-      "directory": "Dizin (LDAP)"
+      "directory": "Dizin (LDAP)",
+      "status": "Durum ve olaylar"
     },
     "saved": "Kaydedildi.",
     "save": "Kaydet",
@@ -3274,6 +3275,27 @@
       "testSignedIn": "Kişi bulundu ve parolası doğrulandı.",
       "groupsFound": "Gruplar",
       "rolesGiven": "Verilecek roller"
+    },
+    "incidents": {
+      "new": "Olay aç",
+      "newHelp": "Bir sorun veya planlı bakımı duyurun: herkese açık durum sayfasında ve açık kaldığı sürece her panel sayfasının üstünde görünür.",
+      "title": "Başlık",
+      "titleExample": "Örn. Sunucu oluşturma yavaş",
+      "impact": "Etki",
+      "status": "Durum",
+      "components": "Etkilenen bileşenler",
+      "message": "İlk açıklama",
+      "messageHelp": "Ne olduğunu ve ne yapıldığını yazın; müşteriler bunu görür.",
+      "open": "Olayı aç",
+      "opened": "Olay açıldı.",
+      "none": "Kayıtlı olay yok.",
+      "update": "Güncelleme",
+      "addUpdate": "Güncelleme ekle",
+      "updated": "Güncelleme eklendi.",
+      "remove": "Sil",
+      "removeTitle": "Olay silinsin mi?",
+      "removeBody": "Olay ve tüm güncellemeleri durum sayfasından kaldırılır.",
+      "cancel": "Vazgeç"
     }
   },
   "Firewalls": {
@@ -4007,6 +4029,13 @@
     "prefixed": {
       "setup_step": "Kurulum adımı: {name}",
       "admin_user": "Kullanıcı hesabı: {name}"
+    },
+    "incident": {
+      "investigating": "İnceleniyor",
+      "identified": "Neden bulundu",
+      "monitoring": "İzleniyor",
+      "resolved": "Çözüldü",
+      "details": "Durum sayfası"
     }
   },
   "Snapshots": {
@@ -4667,6 +4696,24 @@
       }
     },
     "refresh": "Sayfa 30 saniyede bir yenilenir.",
-    "toPanel": "Panele git"
+    "toPanel": "Panele git",
+    "incidents": "Olaylar",
+    "incident": {
+      "investigating": "İnceleniyor",
+      "identified": "Neden bulundu",
+      "monitoring": "İzleniyor",
+      "resolved": "Çözüldü"
+    },
+    "impact": {
+      "minor": "Küçük etki",
+      "major": "Büyük etki",
+      "maintenance": "Planlı bakım"
+    },
+    "uptimeLabel": "Son 90 günde erişilebilirlik %{pct}",
+    "dayValue": "%{pct} çalışır",
+    "noData": "Veri yok",
+    "daysAgo": "{n} gün önce",
+    "today": "Bugün",
+    "uptime": "%{pct} çalışma süresi"
   }
 }

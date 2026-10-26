@@ -762,7 +762,7 @@ test.describe('people, settings and smart features (English browser)', () => {
     await expect(page).toHaveURL(/\/admin$/);
     for (const path of ['/admin', '/admin/servers', '/admin/vmware', '/admin/catalog', '/admin/users', '/admin/roles', '/admin/settings?tab=mail', '/admin/system', '/', '/order', '/firewalls', '/admin/settings?tab=rdns', '/admin/catalog?tab=ip', '/account?tab=security',
       '/admin/topology', '/admin/energy', '/admin/abuse', '/admin/catalog?tab=locations', '/admin/catalog?tab=isos', '/admin/catalog?tab=vdcs', '/admin/settings?tab=domain', '/admin/settings?tab=servers', '/topology', '/vdc', '/account?tab=accessibility',
-      '/admin/catalog?tab=packages', '/admin/catalog?tab=apps', '/admin/settings?tab=security', '/admin/settings?tab=notifications', '/account?tab=keys', '/account?tab=notifications', '/admin/audit', '/account?tab=activity', '/admin/settings?tab=announcement', '/admin/terminal', '/admin/settings?tab=chat', '/admin/settings?tab=directory', '/admin/roles']) {
+      '/admin/catalog?tab=packages', '/admin/catalog?tab=apps', '/admin/settings?tab=security', '/admin/settings?tab=notifications', '/account?tab=keys', '/account?tab=notifications', '/admin/audit', '/account?tab=activity', '/admin/settings?tab=announcement', '/admin/terminal', '/admin/settings?tab=chat', '/admin/settings?tab=directory', '/admin/roles', '/admin/settings?tab=status', '/status']) {
       await page.goto(path);
       await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
       await expectNoOverflow(page, `${path} at ${viewport.width} px`);
@@ -845,6 +845,24 @@ test.describe('people, settings and smart features (English browser)', () => {
     await expect(page.getByText(/Suggested to start/)).toBeVisible();
     await page.waitForTimeout(400);
     await shot(page, 'order-advisor');
+    // An incident: opened in settings, shown in the panel bar and on the status page, then deleted.
+    await page.goto('/admin/settings?tab=status');
+    await page.getByLabel('Title').fill('Planned network work');
+    await page.getByLabel('First update').fill('We are moving the uplinks; short interruptions are possible.');
+    await page.getByRole('button', { name: 'Open the incident' }).click();
+    await expect(page.getByText('Incident opened.')).toBeVisible();
+    await shot(page, 'incidents-admin');
+    await page.goto('/');
+    await expect(page.getByText('Planned network work').first()).toBeVisible();
+    await shot(page, 'incident-banner');
+    await page.goto('/status');
+    await expect(page.getByRole('heading', { name: 'Planned network work' })).toBeVisible();
+    await page.waitForTimeout(600);
+    await shot(page, 'status-incident');
+    await page.goto('/admin/settings?tab=status');
+    await page.getByRole('button', { name: 'Delete' }).first().click();
+    await page.getByRole('alertdialog').getByRole('button', { name: 'Delete' }).click();
+    await expect(page.getByText('No incidents yet.')).toBeVisible();
     // A person at a glance from the user list.
     await page.goto('/admin/users');
     await page.getByRole('button', { name: /admin@example.test/ }).first().click();
