@@ -24,6 +24,9 @@ export type SmsUse = { twoFactor: boolean; phoneVerification: boolean };
 // credentialsEnc: the provider's account fields (sms.ts), encrypted as one JSON document.
 export type SmsSettings = { provider: string; sender: string; credentialsEnc: string | null; commercial: boolean; use: SmsUse };
 // chat: the messaging apps (Telegram, WhatsApp, Slack, ...) each user connects in chat.ts.
+// Directory sign-in (ldap.ts). userFilter has {email}; groupRoles maps a group DN to roles.
+export type LdapSettings = { enabled: boolean; url: string; startTls: boolean; caPem: string; bindDn: string; bindPasswordEnc: string | null; baseDn: string; userFilter: string;
+  emailAttribute: string; nameAttribute: string; groupAttribute: string; groupRoles: { group: string; roles: string[] }[]; defaultRole: string; autoCreate: boolean };
 export type Channel = 'inApp' | 'push' | 'email' | 'sms' | 'chat';
 // Messaging apps users may connect (chat-apps.ts) and the admin accounts some of them need; secrets encrypted.
 export type ChatSettings = { apps: string[]; telegram: { tokenEnc: string | null; username: string };
@@ -64,6 +67,8 @@ const defaults = {
   rdns: { provider: 'none', apiUrl: '', apiKeyEnc: null, serverId: 'localhost', template: '', ttl: 3600, customerEdit: true, forwardCheck: true } as RdnsSettings,
   chat: { apps: ['slack', 'discord', 'teams', 'googlechat', 'mattermost', 'rocketchat', 'matrix', 'ntfy', 'gotify', 'webhook'], telegram: { tokenEnc: null, username: '' },
     whatsapp: { tokenEnc: null, phoneNumberId: '', template: '', language: 'tr' }, pushover: { tokenEnc: null } } as ChatSettings,
+  directory: { ldap: { enabled: false, url: '', startTls: false, caPem: '', bindDn: '', bindPasswordEnc: null, baseDn: '', userFilter: '(&(objectClass=person)(mail={email}))',
+    emailAttribute: 'mail', nameAttribute: 'displayName', groupAttribute: 'memberOf', groupRoles: [], defaultRole: 'user', autoCreate: true } as LdapSettings },
   // Web Push (VAPID) keys, generated on first use.
   vapid: { publicKey: '', privateKeyEnc: null } as { publicKey: string; privateKeyEnc: string | null },
 };

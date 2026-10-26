@@ -19,6 +19,7 @@
     "bullmq": "6.4.0",
     "fastify": "5.12.7",
     "ioredis": "^5.6.1",
+    "ldapts": "9.2.0",
     "nodemailer": "10.2.1",
     "pg": "8.23.1",
     "prom-client": "^15.1.3",

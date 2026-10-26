@@ -576,3 +576,48 @@ test('role limits: checked when saved, then enforced for members (addresses, cou
   assert.equal((await post('/auth/admin/remove-user', { userId: id }, admin)).statusCode, 200);
   assert.equal((await call('DELETE', '/admin/roles/limited', admin)).statusCode, 204);
 });
+
+test('directory sign-in (LDAP): checked settings, local accounts unaffected, directory accounts created with roles from groups, directory owns their password', async () => {
+  let r = await put('/admin/settings/directory', { ldap: { enabled: true, url: 'http://x', baseDn: '', userFilter: '(mail=x)', groupRoles: [{ group: 'cn=x', roles: ['nope'] }] } }, admin);
+  assert.deepEqual(Object.keys(r.json().fields).sort(), ['baseDn', 'groupRoles', 'url', 'userFilter']);
+  // An unreachable directory: panel accounts still sign in, nobody is created, the test says why.
+  assert.equal((await put('/admin/settings/directory', { ldap: { enabled: true, url: 'ldap://127.0.0.1:1', baseDn: 'dc=example,dc=org' } }, admin)).statusCode, 200);
+  assert.equal((await post('/auth/sign-in/email', { email: 'ayse@example.test', password })).statusCode, 200);
+  assert.equal((await post('/auth/sign-in/email', { email: 'nobody@example.org', password })).statusCode, 401);
+  assert.equal((await post('/admin/settings/directory/test', { ldap: { enabled: true, url: 'ldap://127.0.0.1:1', baseDn: 'dc=example,dc=org' } }, admin)).json().code, 'LDAP_UNREACHABLE');
+
+  const url = process.env.LDAP_TEST_URL;
+  if (url) {
+    assert.equal((await post('/admin/roles', { key: 'ldap-support', name: 'LDAP support', permissions: ['users.view'] }, admin)).statusCode, 201);
+    const ldap = { enabled: true, url, bindDn: 'cn=reader,dc=example,dc=org', bindPassword: 'reader-secret', baseDn: 'dc=example,dc=org', userFilter: '(&(objectClass=inetOrgPerson)(mail={email}))',
+      groupRoles: [{ group: 'CN=panel-support, OU=groups, DC=example, DC=org', roles: ['ldap-support'] }], defaultRole: 'user', autoCreate: true };
+    const saved = (await put('/admin/settings/directory', { ldap }, admin)).json();
+    assert.equal(saved.ldap.bindPasswordSet, true);
+    assert.ok(!JSON.stringify(saved).includes('reader-secret'));
+    const found = (await post('/admin/settings/directory/test', { ldap: { ...ldap, bindPassword: '' }, email: 'ada@example.org' }, admin)).json();
+    assert.equal(found.user.dn, 'uid=ada,ou=people,dc=example,dc=org');
+    assert.deepEqual(found.user.roles, ['ldap-support']);
+    assert.equal((await post('/admin/settings/directory/test', { ldap: { ...ldap, bindPassword: '' }, email: 'ada@example.org', password: 'wrong' }, admin)).json().code, 'LDAP_AUTH_FAILED');
+
+    assert.equal((await post('/auth/sign-in/email', { email: 'ada@example.org', password: 'wrong-password-1' })).statusCode, 401);
+    const ada = cookieOf(await post('/auth/sign-in/email', { email: 'ada@example.org', password: 'ada-directory-pass' }));
+    const me = (await get('/auth/me', ada)).json();
+    assert.deepEqual(me.roles, ['ldap-support']);
+    assert.equal(me.name, 'Ada Lovelace');
+    const { rows: [row] } = await pool.query("SELECT auth_source, external_id FROM users WHERE email = 'ada@example.org'");
+    assert.deepEqual(row, { auth_source: 'ldap', external_id: 'uid=ada,ou=people,dc=example,dc=org' });
+    assert.equal((await post('/auth/change-password', { currentPassword: 'ada-directory-pass', newPassword: 'something-else-123' }, ada)).json().code, 'PASSWORD_MANAGED_BY_DIRECTORY');
+    // No group: the default role.
+    const bob = cookieOf(await post('/auth/sign-in/email', { email: 'bob@example.org', password: 'bob-directory-pass' }));
+    assert.deepEqual((await get('/auth/me', bob)).json().roles, ['user']);
+    // The directory decides: unreachable, the right password no longer works for a directory account.
+    await put('/admin/settings/directory', { ldap: { ...ldap, url: 'ldap://127.0.0.1:1', bindPassword: '' } }, admin);
+    assert.equal((await post('/auth/sign-in/email', { email: 'ada@example.org', password: 'ada-directory-pass' })).statusCode, 401);
+    for (const e of ['ada@example.org', 'bob@example.org']) {
+      const { rows: [u] } = await pool.query('SELECT id FROM users WHERE email = $1', [e]);
+      await post('/auth/admin/remove-user', { userId: u.id }, admin);
+    }
+    await call('DELETE', '/admin/roles/ldap-support', admin);
+  }
+  await put('/admin/settings/directory', { ldap: { enabled: false } }, admin);
+});

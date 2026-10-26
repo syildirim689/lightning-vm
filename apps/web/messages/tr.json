@@ -262,7 +262,15 @@
     "LIMIT_REACHED": "Rolünüzün sınırına ulaştınız.",
     "OPERATION_RATE_LIMITED": "Bu saat için işlem sınırınıza ulaştınız; biraz sonra yeniden deneyin.",
     "LOCATION_NOT_ALLOWED": "Rolünüz bu konumda sipariş veremez.",
-    "IP_NOT_ALLOWED": "Hesabınıza bu adresten giriş yapılamaz."
+    "IP_NOT_ALLOWED": "Hesabınıza bu adresten giriş yapılamaz.",
+    "LDAP_AUTH_FAILED": "Dizin bu e-posta ve parolayı kabul etmedi.",
+    "LDAP_BIND_FAILED": "Servis hesabı bağlanamadı: bind DN veya parola yanlış.",
+    "LDAP_UNREACHABLE": "Dizin sunucusuna ulaşılamadı (adres, port veya güvenlik duvarı).",
+    "LDAP_TLS_FAILED": "TLS bağlantısı kurulamadı; sertifikayı veya kök sertifikayı kontrol edin.",
+    "LDAP_FAILED": "Dizin isteği başarısız oldu.",
+    "LDAP_USER_NOT_FOUND": "Bu e-postayla dizinde kimse bulunamadı.",
+    "LDAP_AMBIGUOUS": "Bu e-postayla birden çok kişi bulundu; filtreyi daraltın.",
+    "PASSWORD_MANAGED_BY_DIRECTORY": "Bu hesabın parolası şirket dizininde yönetiliyor; oradan değiştirin."
   },
   "Auth": {
     "required": "zorunlu",
@@ -2288,7 +2296,8 @@
     "removeTitle": "{email} silinsin mi?",
     "hasServers": "Bu kullanıcının {n} sunucusu var. Önce sunucuları silinmeli.",
     "removeExplain": "Hesap, oturumlar, passkey’ler ve SSH anahtarları kalıcı olarak silinir. Geri alınamaz.",
-    "typeEmail": "Onaylamak için {email} yazın"
+    "typeEmail": "Onaylamak için {email} yazın",
+    "directory": "Dizin"
   },
   "Roles": {
     "eyebrow": "Kişiler",
@@ -2468,7 +2477,8 @@
       "domain": "Alan adı ve SSL",
       "servers": "Sunucular",
       "announcement": "Duyuru",
-      "chat": "Mesajlaşma"
+      "chat": "Mesajlaşma",
+      "directory": "Dizin (LDAP)"
     },
     "saved": "Kaydedildi.",
     "save": "Kaydet",
@@ -3055,7 +3065,8 @@
         "rdns": "Ters DNS",
         "notifications": "Bildirim kuralları",
         "announcement": "Duyuru",
-        "backup": "Yedek"
+        "backup": "Yedek",
+        "directory": "Dizin (LDAP)"
       },
       "detail": {
         "branding": {
@@ -3106,8 +3117,56 @@
         "backup": {
           "ok": "{hoursAgo, plural, =0 {Son başarılı yedek bir saatten kısa süre önce alındı.} other {Son başarılı yedek # saat önce alındı.}}",
           "warn": "Son 48 saatte başarılı yedek yok; Sistem sayfasından alın."
+        },
+        "directory": {
+          "ok": "{url} ile giriş açık.",
+          "todo": "Kapalı; herkes paneldeki parolasıyla girer."
         }
       }
+    },
+    "directory": {
+      "title": "LDAP / Active Directory ile giriş",
+      "intro": "Kullanıcılar şirket dizinindeki e-posta ve parolalarıyla giriş yapar; hesapları ve rolleri dizinden gelir.",
+      "enabled": "Dizinle girişi aç",
+      "users": "Dizinden gelen {n} hesap var.",
+      "howItWorks": "Giriş formunda e-posta ve parola yazılır. Dizinden gelen hesaplar (ve henüz hiç hesabı olmayanlar) dizinde doğrulanır; paneldeki yerel hesaplar (ör. ilk yönetici) kendi parolasıyla girmeye devam eder. İki adımlı doğrulama ve rol sınırları dizin kullanıcılarına da uygulanır. Dizin hesaplarının parolası panelde değiştirilemez ve sıfırlanamaz.",
+      "connection": "Bağlantı",
+      "connectionHelp": "Dizin sunucusu ve kişileri aramak için kullanılan servis hesabı.",
+      "url": "Sunucu adresi",
+      "urlHelp": "ldaps://sunucu:636 (önerilen) ya da ldap://sunucu:389 + StartTLS. Şifresiz ldap:// parolaları açık metin gönderir.",
+      "startTls": "StartTLS kullan",
+      "startTlsHelp": "ldap:// bağlantısını şifreli hâle getirir. ldaps:// için gerekmez.",
+      "caPem": "Kök sertifika (PEM)",
+      "caPemHelp": "Dizin sunucusunun sertifikası kurumsal bir CA'dan ise o CA'nın sertifikası. Sertifika her zaman doğrulanır.",
+      "bindDn": "Servis hesabı (bind DN)",
+      "bindDnHelp": "Yalnızca okuma yetkili bir hesap. AD'de kullanici@alan.com biçimi de olur. Boşsa anonim arama yapılır.",
+      "bindPassword": "Servis hesabı parolası",
+      "people": "Kişiler",
+      "peopleHelp": "Kişilerin nerede ve nasıl aranacağı.",
+      "baseDn": "Arama kökü (base DN)",
+      "userFilter": "Kişi filtresi",
+      "userFilterHelp": "{email} giriş formundaki e-postayla değiştirilir (güvenli biçimde kaçışlanır). Örnekler rehberde.",
+      "emailAttribute": "E-posta niteliği",
+      "nameAttribute": "Ad niteliği",
+      "groupAttribute": "Grup niteliği",
+      "autoCreate": "İlk girişte hesabı oluştur",
+      "autoCreateHelp": "Kapalıysa yalnızca panelde önceden açılmış dizin hesapları girebilir.",
+      "roles": "Roller",
+      "rolesHelp": "Grup üyeliğine göre verilen roller. Eşleme varsa roller her girişte dizine göre güncellenir; yoksa paneldeki roller korunur.",
+      "defaultRole": "Varsayılan rol",
+      "group": "Grup (DN)",
+      "removeMapping": "Eşlemeyi kaldır",
+      "addMapping": "Grup eşlemesi ekle",
+      "test": "Test",
+      "testHelp": "Formdaki değerlerle (kaydetmeden) servis hesabı bağlanır. E-posta yazarsanız kişi aranır; parolasını da yazarsanız girişi denenir. Hiçbir hesap oluşturulmaz.",
+      "testEmail": "E-posta",
+      "testPassword": "Parola",
+      "runTest": "Testi çalıştır",
+      "testBound": "Servis hesabı bağlandı.",
+      "testFound": "Kişi bulundu.",
+      "testSignedIn": "Kişi bulundu ve parolası doğrulandı.",
+      "groupsFound": "Gruplar",
+      "rolesGiven": "Verilecek roller"
     }
   },
   "Firewalls": {
@@ -4344,6 +4403,66 @@
         }
       ],
       "links": []
+    },
+    "ldap": {
+      "title": "LDAP / Active Directory ile giriş",
+      "intro": "Panel, kişileri şirket dizininizde (Active Directory, OpenLDAP, FreeIPA…) doğrular. Önce yalnızca okuma yetkili bir servis hesabıyla kişiyi e-postasından bulur, sonra kişinin kendi parolasıyla bağlanmayı (bind) dener. Parolayı dizin doğrular; panel düz parola saklamaz.",
+      "sections": [
+        {
+          "title": "Ağ ve şifreleme",
+          "steps": [
+            "Panel sunucusu dizin sunucusuna 636 (LDAPS) ya da 389 (LDAP + StartTLS) portundan erişebilmeli.",
+            "ldaps:// önerilir. Dizinin sertifikası kurumsal bir CA'dan ise o CA'nın sertifikasını \"Kök sertifika\" alanına yapıştırın."
+          ],
+          "note": "Şifresiz ldap:// kullanmayın: kullanıcı parolaları ağda açık metin gider."
+        },
+        {
+          "title": "Servis hesabı",
+          "text": "Dizinde yalnızca okuma yetkisi olan, parolası süresi dolmayan bir hesap açın. Active Directory'de bind DN olarak tam DN ya da UPN (svc-lightning@ornek.com) kullanılabilir."
+        },
+        {
+          "title": "Active Directory",
+          "text": "Arama kökü: DC=ornek,DC=com. Aşağıdaki filtre devre dışı hesapları dışarıda bırakır. Nitelikler: mail, displayName, memberOf.",
+          "code": "(&(objectClass=user)(objectCategory=person)(mail={email})(!(userAccountControl:1.2.840.113556.1.4.803:=2)))"
+        },
+        {
+          "title": "OpenLDAP",
+          "text": "Arama kökü: ou=people,dc=ornek,dc=com. Ad niteliği genellikle cn. memberOf niteliği için sunucuda memberof katmanı (overlay) açık olmalıdır.",
+          "code": "(&(objectClass=inetOrgPerson)(mail={email}))"
+        },
+        {
+          "title": "FreeIPA",
+          "text": "Arama kökü: cn=users,cn=accounts,dc=ornek,dc=com. Nitelikler: mail, displayName, memberOf.",
+          "code": "(&(objectClass=person)(mail={email}))"
+        },
+        {
+          "title": "Roller",
+          "text": "Grup eşlemesinde grubun tam DN'ini yazın (ör. CN=Panel Yoneticileri,OU=Groups,DC=ornek,DC=com) ve vereceği rolleri seçin. Bir kişi birden çok gruptaysa rollerin hepsini alır; hiçbiriyle eşleşmezse varsayılan rolü alır."
+        },
+        {
+          "title": "Deneyin",
+          "steps": [
+            "Test bölümünde yalnızca Testi çalıştır: servis hesabının bağlandığını görün.",
+            "Bir e-posta yazın: kişinin DN'i, grupları ve alacağı roller görünür.",
+            "Parolasını da yazın: girişi doğrulanır. Ardından kaydedip etkinleştirin."
+          ],
+          "note": "İlk yönetici gibi yerel hesaplar dizinden etkilenmez; dizine ulaşılamazsa onlarla giriş yapabilirsiniz."
+        }
+      ],
+      "links": [
+        {
+          "label": "Microsoft: LDAP sorgularında userAccountControl",
+          "url": "https://learn.microsoft.com/troubleshoot/windows-server/active-directory/useraccountcontrol-manipulate-account-properties"
+        },
+        {
+          "label": "OpenLDAP: memberof katmanı",
+          "url": "https://www.openldap.org/doc/admin26/overlays.html"
+        },
+        {
+          "label": "RFC 4515: LDAP arama filtreleri",
+          "url": "https://www.rfc-editor.org/rfc/rfc4515"
+        }
+      ]
     }
   }
 }

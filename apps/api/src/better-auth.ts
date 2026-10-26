@@ -13,6 +13,7 @@ import { publishLive, type LiveKind } from './live-bus';
 import { notify } from './notify';
 import { adminEndpointPermission, betterAuthRoles, can, covers, effectivePermissions, ensureRoles, limitsOf, permissionsOf } from './permissions';
 import { ipAllowed } from './role-limits';
+import { directorySignIn, refuseForDirectory } from './directory-signin';
 import { hashPassword, sha256, verifyPassword } from './security';
 import { activeCaptcha, getSettings, mailUse, verifyCaptcha } from './settings-store';
 import { sendSms, smsUse } from './sms';
@@ -146,6 +147,9 @@ function createAuth() {
         if (!ctx.request) return; // server-side calls (setup, CLI) are not gated
         const body = (ctx.body ?? {}) as Record<string, unknown>;
         if (ctx.path.startsWith('/admin/')) await checkAdminEndpoint(ctx.path, ctx.request.headers, body);
+        // Directory accounts sign in against the directory (and are created or brought up to date there).
+        if (ctx.path === '/sign-in/email') await directorySignIn(ctx, body);
+        await refuseForDirectory(ctx.path, ctx.request.headers, body);
         // A role may only be used from its addresses: said at sign-in, not after.
         if ((ctx.path === '/sign-in/email' || ctx.path === '/sign-in/email-otp' || ctx.path === '/email-otp/send-verification-otp') && typeof body.email === 'string') {
           const { rows: [u] } = await pool.query('SELECT role FROM users WHERE email = $1', [body.email.trim().toLowerCase()]);

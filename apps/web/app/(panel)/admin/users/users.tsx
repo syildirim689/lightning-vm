@@ -16,7 +16,7 @@ import { can } from '../../../../lib/permissions';
 import { useApiQuery } from '../../../../lib/query';
 
 type Row = { id: string; email: string; name: string; role: string; locale: string; createdAt: string; banned: boolean; banReason: string | null; banExpires: string | null;
-  twoFactorEnabled: boolean; lastLoginMethod: string | null; phoneNumber: string | null; servers: number; sessions: number; lastSeen: string | null; overrides: number };
+  twoFactorEnabled: boolean; authSource?: string; lastLoginMethod: string | null; phoneNumber: string | null; servers: number; sessions: number; lastSeen: string | null; overrides: number };
 type Role = { key: string; name: string; description: string; permissions: string[]; builtin: boolean; members: number };
 type Override = { permission: string; effect: 'allow' | 'deny' };
 type ClientError = { code?: string; status?: number } | null;
@@ -83,6 +83,7 @@ export default function Users() {
           : <StatusChip key="s" tone="success">{t('active')}</StatusChip>,
         <span key="sec" className="flex flex-wrap items-center gap-1">
           <StatusChip tone={u.twoFactorEnabled ? 'success' : 'default'}>{u.twoFactorEnabled ? '2FA' : t('no2faShort')}</StatusChip>
+          {u.authSource === 'ldap' && <StatusChip tone="accent">{t('directory')}</StatusChip>}
           {u.lastLoginMethod && <span className="text-xs text-muted">{t(`method.${u.lastLoginMethod === 'passkey' ? 'passkey' : 'email'}`)}</span>}
         </span>,
         <span key="srv" className="tabular-nums">{u.servers}</span>,

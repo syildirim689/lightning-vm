@@ -753,7 +753,7 @@ test.describe('people, settings and smart features (English browser)', () => {
     await expect(page).toHaveURL(/\/admin$/);
     for (const path of ['/admin', '/admin/servers', '/admin/vmware', '/admin/catalog', '/admin/users', '/admin/roles', '/admin/settings?tab=mail', '/admin/system', '/', '/order', '/firewalls', '/admin/settings?tab=rdns', '/admin/catalog?tab=ip', '/account?tab=security',
       '/admin/topology', '/admin/energy', '/admin/abuse', '/admin/catalog?tab=locations', '/admin/catalog?tab=isos', '/admin/catalog?tab=vdcs', '/admin/settings?tab=domain', '/admin/settings?tab=servers', '/topology', '/vdc', '/account?tab=accessibility',
-      '/admin/catalog?tab=packages', '/admin/catalog?tab=apps', '/admin/settings?tab=security', '/admin/settings?tab=notifications', '/account?tab=keys', '/account?tab=notifications', '/admin/audit', '/account?tab=activity', '/admin/settings?tab=announcement', '/admin/terminal', '/admin/settings?tab=chat']) {
+      '/admin/catalog?tab=packages', '/admin/catalog?tab=apps', '/admin/settings?tab=security', '/admin/settings?tab=notifications', '/account?tab=keys', '/account?tab=notifications', '/admin/audit', '/account?tab=activity', '/admin/settings?tab=announcement', '/admin/terminal', '/admin/settings?tab=chat', '/admin/settings?tab=directory', '/admin/roles']) {
       await page.goto(path);
       await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
       await expectNoOverflow(page, `${path} at ${viewport.width} px`);
@@ -785,7 +785,7 @@ test.describe('people, settings and smart features (English browser)', () => {
     await page.waitForTimeout(6000);
     for (const [path, name] of [['/admin', 'admin-dashboard'], ['/', 'my-servers'], ['/admin/topology', 'admin-topology'], ['/admin/energy', 'energy'], ['/admin/abuse', 'abuse'], ['/admin/catalog?tab=locations', 'locations'],
       ['/admin/catalog?tab=isos', 'isos'], ['/admin/catalog?tab=apps', 'apps'], ['/admin/catalog?tab=vdcs', 'vdcs'], ['/admin/settings?tab=domain', 'domain'],
-      ['/admin/settings?tab=security', 'security'], ['/admin/settings?tab=servers', 'server-settings'], ['/topology', 'my-topology'], ['/vdc', 'my-vdc'], ['/order', 'order'], ['/admin/audit', 'audit'], ['/account?tab=activity', 'activity'], ['/admin/settings?tab=announcement', 'announcement'], ['/admin/terminal', 'terminal'], ['/admin/settings?tab=mail', 'mail'], ['/admin/settings?tab=payments', 'payments'], ['/admin/settings?tab=sms', 'sms'], ['/admin/settings?tab=chat', 'chat-settings'], ['/admin/settings', 'settings-general'], ['/account?tab=notifications', 'my-notifications']] as const) {
+      ['/admin/settings?tab=security', 'security'], ['/admin/settings?tab=servers', 'server-settings'], ['/topology', 'my-topology'], ['/vdc', 'my-vdc'], ['/order', 'order'], ['/admin/audit', 'audit'], ['/account?tab=activity', 'activity'], ['/admin/settings?tab=announcement', 'announcement'], ['/admin/terminal', 'terminal'], ['/admin/settings?tab=mail', 'mail'], ['/admin/settings?tab=payments', 'payments'], ['/admin/settings?tab=sms', 'sms'], ['/admin/settings?tab=chat', 'chat-settings'], ['/admin/settings', 'settings-general'], ['/admin/settings?tab=directory', 'directory'], ['/account?tab=notifications', 'my-notifications']] as const) {
       await page.goto(path);
       await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
       await page.waitForTimeout(1500);

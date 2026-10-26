@@ -262,7 +262,15 @@
     "LIMIT_REACHED": "You reached your role's limit.",
     "OPERATION_RATE_LIMITED": "You reached your operations limit for this hour; try again later.",
     "LOCATION_NOT_ALLOWED": "Your role cannot order in this location.",
-    "IP_NOT_ALLOWED": "Your account cannot sign in from this address."
+    "IP_NOT_ALLOWED": "Your account cannot sign in from this address.",
+    "LDAP_AUTH_FAILED": "The directory did not accept this e-mail and password.",
+    "LDAP_BIND_FAILED": "The service account could not bind: wrong bind DN or password.",
+    "LDAP_UNREACHABLE": "The directory server could not be reached (address, port or firewall).",
+    "LDAP_TLS_FAILED": "The TLS connection failed; check the certificate or the root certificate.",
+    "LDAP_FAILED": "The directory request failed.",
+    "LDAP_USER_NOT_FOUND": "Nobody with this e-mail was found in the directory.",
+    "LDAP_AMBIGUOUS": "Several people have this e-mail; narrow the filter.",
+    "PASSWORD_MANAGED_BY_DIRECTORY": "This account's password is managed in the company directory; change it there."
   },
   "Auth": {
     "required": "required",
@@ -2288,7 +2296,8 @@
     "removeTitle": "Remove {email}?",
     "hasServers": "This user has {n} servers. Delete them first.",
     "removeExplain": "The account, sessions, passkeys and SSH keys are removed for good. This cannot be undone.",
-    "typeEmail": "Type {email} to confirm"
+    "typeEmail": "Type {email} to confirm",
+    "directory": "Directory"
   },
   "Roles": {
     "eyebrow": "People",
@@ -2468,7 +2477,8 @@
       "domain": "Domain and SSL",
       "servers": "Servers",
       "announcement": "Announcement",
-      "chat": "Messaging"
+      "chat": "Messaging",
+      "directory": "Directory (LDAP)"
     },
     "saved": "Saved.",
     "save": "Save",
@@ -3055,7 +3065,8 @@
         "rdns": "Reverse DNS",
         "notifications": "Notification rules",
         "announcement": "Announcement",
-        "backup": "Backup"
+        "backup": "Backup",
+        "directory": "Directory (LDAP)"
       },
       "detail": {
         "branding": {
@@ -3106,8 +3117,56 @@
         "backup": {
           "ok": "{hoursAgo, plural, =0 {Last good backup less than an hour ago.} one {Last good backup an hour ago.} other {Last good backup # hours ago.}}",
           "warn": "No good backup in the last 48 hours; take one on the System page."
+        },
+        "directory": {
+          "ok": "Sign-in through {url} is on.",
+          "todo": "Off; everyone uses their panel password."
         }
       }
+    },
+    "directory": {
+      "title": "Sign in with LDAP / Active Directory",
+      "intro": "People sign in with their company directory e-mail and password; their accounts and roles come from the directory.",
+      "enabled": "Turn on directory sign-in",
+      "users": "{n} accounts come from the directory.",
+      "howItWorks": "People type their e-mail and password on the sign-in form. Directory accounts (and people with no account yet) are checked against the directory; local panel accounts (such as the first administrator) keep signing in with their own password. Two-factor and role limits apply to directory users too. Directory passwords cannot be changed or reset in the panel.",
+      "connection": "Connection",
+      "connectionHelp": "The directory server and the service account used to find people.",
+      "url": "Server address",
+      "urlHelp": "ldaps://server:636 (recommended) or ldap://server:389 with StartTLS. Plain ldap:// sends passwords in clear text.",
+      "startTls": "Use StartTLS",
+      "startTlsHelp": "Encrypts an ldap:// connection. Not needed with ldaps://.",
+      "caPem": "Root certificate (PEM)",
+      "caPemHelp": "If the directory's certificate comes from a company CA, that CA's certificate. The certificate is always checked.",
+      "bindDn": "Service account (bind DN)",
+      "bindDnHelp": "A read-only account. In AD, user@domain.com works too. Empty: anonymous search.",
+      "bindPassword": "Service account password",
+      "people": "People",
+      "peopleHelp": "Where and how people are looked up.",
+      "baseDn": "Search base (base DN)",
+      "userFilter": "Person filter",
+      "userFilterHelp": "{email} is replaced with the e-mail from the sign-in form (safely escaped). Examples in the guide.",
+      "emailAttribute": "E-mail attribute",
+      "nameAttribute": "Name attribute",
+      "groupAttribute": "Group attribute",
+      "autoCreate": "Create the account on first sign-in",
+      "autoCreateHelp": "Off: only directory accounts already created in the panel can sign in.",
+      "roles": "Roles",
+      "rolesHelp": "Roles given by group membership. With mappings, roles follow the directory at every sign-in; without, the panel's roles stay.",
+      "defaultRole": "Default role",
+      "group": "Group (DN)",
+      "removeMapping": "Remove mapping",
+      "addMapping": "Add a group mapping",
+      "test": "Test",
+      "testHelp": "With the values in the form (not saved), the service account binds. With an e-mail, that person is looked up; with their password too, their sign-in is tried. No account is created.",
+      "testEmail": "E-mail",
+      "testPassword": "Password",
+      "runTest": "Run the test",
+      "testBound": "The service account bound.",
+      "testFound": "Person found.",
+      "testSignedIn": "Person found and their password accepted.",
+      "groupsFound": "Groups",
+      "rolesGiven": "Roles they get"
     }
   },
   "Firewalls": {
@@ -4344,6 +4403,66 @@
         }
       ],
       "links": []
+    },
+    "ldap": {
+      "title": "Sign in with LDAP / Active Directory",
+      "intro": "The panel checks people against your company directory (Active Directory, OpenLDAP, FreeIPA…). A read-only service account first finds the person by e-mail, then the panel binds as them with their own password. The directory checks the password; the panel keeps no clear-text password.",
+      "sections": [
+        {
+          "title": "Network and encryption",
+          "steps": [
+            "The panel server must reach the directory on port 636 (LDAPS) or 389 (LDAP + StartTLS).",
+            "ldaps:// is recommended. If the directory's certificate comes from a company CA, paste that CA's certificate into \"Root certificate\"."
+          ],
+          "note": "Do not use plain ldap://: passwords would cross the network in clear text."
+        },
+        {
+          "title": "Service account",
+          "text": "Create a read-only account whose password does not expire. In Active Directory, the bind DN can be the full DN or the UPN (svc-lightning@example.com)."
+        },
+        {
+          "title": "Active Directory",
+          "text": "Search base: DC=example,DC=com. This filter leaves out disabled accounts. Attributes: mail, displayName, memberOf.",
+          "code": "(&(objectClass=user)(objectCategory=person)(mail={email})(!(userAccountControl:1.2.840.113556.1.4.803:=2)))"
+        },
+        {
+          "title": "OpenLDAP",
+          "text": "Search base: ou=people,dc=example,dc=com. The name attribute is usually cn. memberOf needs the memberof overlay on the server.",
+          "code": "(&(objectClass=inetOrgPerson)(mail={email}))"
+        },
+        {
+          "title": "FreeIPA",
+          "text": "Search base: cn=users,cn=accounts,dc=example,dc=com. Attributes: mail, displayName, memberOf.",
+          "code": "(&(objectClass=person)(mail={email}))"
+        },
+        {
+          "title": "Roles",
+          "text": "In a group mapping, enter the group's full DN (e.g. CN=Panel Admins,OU=Groups,DC=example,DC=com) and pick the roles it gives. Someone in several groups gets all their roles; someone in none gets the default role."
+        },
+        {
+          "title": "Try it",
+          "steps": [
+            "In Test, run it empty: the service account should bind.",
+            "Enter an e-mail: the person's DN, groups and roles appear.",
+            "Enter their password too: their sign-in is checked. Then save and turn it on."
+          ],
+          "note": "Local accounts such as the first administrator are not affected by the directory; if the directory is unreachable, sign in with one of them."
+        }
+      ],
+      "links": [
+        {
+          "label": "Microsoft: userAccountControl",
+          "url": "https://learn.microsoft.com/troubleshoot/windows-server/active-directory/useraccountcontrol-manipulate-account-properties"
+        },
+        {
+          "label": "OpenLDAP: memberof overlay",
+          "url": "https://www.openldap.org/doc/admin26/overlays.html"
+        },
+        {
+          "label": "RFC 4515: LDAP search filters",
+          "url": "https://www.rfc-editor.org/rfc/rfc4515"
+        }
+      ]
     }
   }
 }
