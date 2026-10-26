@@ -160,6 +160,8 @@ test('favorites and the monthly budget: a starred server is marked; an order ove
   assert.ok((await send('GET', '/insights', undefined, user)).json().insights.some((i) => i.code === 'OFF_BUT_BILLED' && i.params.days >= 8));
   assert.equal((await act('power_on')).statusCode, 202);
   await settled('poweredOn');
+  // The next tests shut the guest down cleanly, which needs it running again.
+  await until(async () => (await serverRow(serverId)).guest_ready, 'guest ready');
 
   // Locked: no power off, reset or delete (nothing changes), until unlocked; other customers cannot lock it.
   const lock = '/servers/' + serverId + '/lock';

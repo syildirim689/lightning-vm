@@ -659,7 +659,10 @@ test('public status page: open to anyone, only aggregate states; the admin can t
 });
 
 test('user summary for staff: servers, spend, sessions, activity and limits in one call', async () => {
-  assert.equal((await get(`/admin/users/${userId}/summary`, user)).statusCode, 403);
+  const plainId = (await post('/auth/admin/create-user', { email: 'plain@example.test', password, name: 'Plain', role: 'user' }, admin)).json().user.id;
+  const plain = cookieOf(await post('/auth/sign-in/email', { email: 'plain@example.test', password }));
+  assert.equal((await get(`/admin/users/${userId}/summary`, plain)).statusCode, 403);
+  await post('/auth/admin/remove-user', { userId: plainId }, admin);
   const s = (await get(`/admin/users/${userId}/summary`, admin)).json();
   assert.equal(s.user.email, 'ayse@example.test');
   for (const k of ['servers', 'spend', 'activity']) assert.ok(Array.isArray(s[k]), k);
