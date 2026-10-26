@@ -68,7 +68,8 @@ export default function Terminal() {
   return <div className="flex flex-col gap-6">
     <PageHeader eyebrow={t('eyebrow')} title={t('title')} description={t('intro')}
       actions={s?.enabled && <StatusChip tone={state === 'open' ? 'success' : 'default'}>{t(`state.${state}`)}</StatusChip>}/>
-    {!s ? <Card className="h-40 animate-pulse"><span className="sr-only">…</span></Card>
+    {q.error && !s ? <Notice tone="danger">{error(q.error)}</Notice>
+    : !s ? <Card className="h-40 animate-pulse"><span className="sr-only">…</span></Card>
     : !s.twoFactor ? <Notice tone="warning" title={t('needs2faTitle')}>{t('needs2fa')} <NextLink href="/account?tab=security" className="font-medium underline">{t('to2fa')}</NextLink></Notice>
     : !s.enabled ? <Section title={t('offTitle')} description={t('offHelp')}>
         <div className="flex flex-col gap-4">

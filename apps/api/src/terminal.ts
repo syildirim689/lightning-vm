@@ -15,8 +15,15 @@ import { newToken, rateLimit, sha256 } from './security';
 const cookie = 'lvm_terminal';
 const sessionSeconds = 60;
 
-async function serviceUp() {
-  try { return (await fetch('http://terminal:8080/healthz', { signal: AbortSignal.timeout(2000) })).ok; } catch { return false; }
+// While the service is off its name does not resolve and the lookup hangs: a short timeout, and the status page
+// reuses an answer for 10 s (opening always asks again).
+let last = { at: 0, up: false };
+async function serviceUp(fresh = false) {
+  if (!fresh && Date.now() - last.at < 10_000) return last.up;
+  let up = false;
+  try { up = (await fetch('http://terminal:8080/healthz', { signal: AbortSignal.timeout(800) })).ok; } catch { up = false; }
+  last = { at: Date.now(), up };
+  return up;
 }
 function mayOpen(req: AuthedRequest) {
   if (req.user.impersonatedBy) throw apiError(403, 'TERMINAL_IMPERSONATED', 'Not while acting as another user');
@@ -54,7 +61,7 @@ export class TerminalController {
   async open(@Req() req: AuthedRequest, @Res({ passthrough: true }) reply: FastifyReply) {
     mayOpen(req);
     await rateLimit(`terminal:${req.user.id}`, 20, 600);
-    if (!(await serviceUp())) throw apiError(409, 'TERMINAL_OFF', 'The terminal is turned off');
+    if (!(await serviceUp(true))) throw apiError(409, 'TERMINAL_OFF', 'The terminal is turned off');
     const token = newToken();
     await redis.set(`terminal:session:${sha256(token).toString('hex')}`, JSON.stringify({
       userId: req.user.id, authHash: sha256(req.sessionToken).toString('hex'), vm: 'host', vmName: 'host' }), 'EX', sessionSeconds, 'NX');
