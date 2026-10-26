@@ -47,7 +47,9 @@ export function limitsOf(roleValue: string | null | undefined): RoleLimits {
   return list.some((r) => r.permissions.includes('*')) ? {} : combineLimits(list.map((r) => r.limits ?? {}));
 }
 // "a may grant/act on b": everything b has, a has too. Stops a support user from promoting themselves or acting on admins.
-export const covers = (a: string[], b: string[]) => a.includes('*') || (!b.includes('*') && b.every((p) => a.includes(p)));
+// Customer abilities (their own servers and firewalls) are not power over other people: they do not count here.
+export const customerLevel = (p: string) => p === 'servers.create' || p === 'firewalls.manage' || p.startsWith('server.');
+export const covers = (a: string[], b: string[]) => a.includes('*') || (!b.includes('*') && b.every((p) => customerLevel(p) || a.includes(p)));
 
 export async function permissionsOf(userId: string, roleValue?: string | null) {
   await ensureRoles();

@@ -4,7 +4,7 @@ import type { FastifyRequest } from 'fastify';
 import { getAuth } from './better-auth';
 import { pool } from './db';
 import { apiError } from './errors';
-import { limitsOf, permissionsOf, splitRoles } from './permissions';
+import { customerLevel, limitsOf, permissionsOf, splitRoles } from './permissions';
 import { ipAllowed } from './role-limits';
 import { getSettings } from './settings-store';
 
@@ -50,7 +50,7 @@ export async function currentSession(req: FastifyRequest): Promise<{ user: User;
   // The admin's sign-in policy: without two-factor, such an account may only set it up (impersonation is exempt).
   const policy = (await getSettings('security')).require2fa;
   // Customer permissions (their own servers and firewalls) do not make anyone staff.
-  const staff = permissions.some((p) => !['servers.create', 'firewalls.manage'].includes(p) && !p.startsWith('server.'));
+  const staff = permissions.some((p) => !customerLevel(p));
   const twoFactorRequired = !u.twoFactorEnabled && !impersonatedBy && (policy === 'all' || (policy === 'staff' && staff) || !!limits.require2fa);
   return { user: { id: u.id, email: u.email, name: u.name ?? '', roles: splitRoles(u.role), permissions,
     locale: u.locale === 'tr' ? 'tr' : 'en', impersonatedBy, twoFactorEnabled: !!u.twoFactorEnabled, twoFactorRequired, phoneNumber: u.phoneNumber ?? null,
