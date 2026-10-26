@@ -12,6 +12,7 @@ import CommandPalette, { usePaletteShortcut } from '../../components/command-pal
 import Shortcuts from '../../components/shortcuts';
 import { AnnouncementBar } from '../../components/activity';
 import { I } from '../../components/icon';
+import LiveEvents from '../../components/live-events';
 import NotificationBell from '../../components/notification-bell';
 import TaskManager from '../../components/task-manager';
 import { authClient, signOut } from '../../lib/auth-client';
@@ -116,6 +117,7 @@ export default function Shell({ user, branding, version, children }: { user: Use
   </div>;
   const home = can(user.permissions, 'dashboard.view') ? '/admin' : '/';
   return <div className="flex min-h-dvh flex-col">
+    <LiveEvents/>
     <ImpersonationBanner user={user}/>
     <AnnouncementBar/>
     <div className="flex min-h-0 flex-1">

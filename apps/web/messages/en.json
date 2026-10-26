@@ -352,6 +352,28 @@
       "intro": "Your administrator requires two-factor authentication for this account. The panel opens once it is set up.",
       "signOut": "Sign out",
       "continue": "Continue to the panel"
+    },
+    "signedOut": {
+      "banned": {
+        "title": "Your account was suspended",
+        "body": "An administrator suspended your account and your sessions were closed. Contact your administrator if you think this is a mistake."
+      },
+      "password": {
+        "title": "Your password was changed",
+        "body": "You were signed out for your security. Sign in with your new password."
+      },
+      "revoked": {
+        "title": "Your session was ended",
+        "body": "You or an administrator closed this session. Sign in again."
+      },
+      "removed": {
+        "title": "Your account was removed",
+        "body": "This account can no longer be used."
+      },
+      "expired": {
+        "title": "Your session expired",
+        "body": "Sign in again to continue."
+      }
     }
   },
   "fieldErrors": {

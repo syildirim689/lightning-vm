@@ -6,6 +6,7 @@ import { Reflector } from '@nestjs/core';
 import { pool } from './db';
 import { apiError } from './errors';
 import { audit, SessionGuard, type AuthedRequest } from './auth';
+import { publishLive } from './live-bus';
 import { can, covers, effectivePermissions, known, permissionCatalog, rolesChanged, permissionsOf, roles, splitRoles, type Permission } from './permissions';
 
 // Throws unless the actor may act on the target account (its permissions are within the actor's).
@@ -65,6 +66,7 @@ export class RolesController {
     await pool.query('INSERT INTO roles (key, name, description, permissions) VALUES ($1, $2, $3, $4)', [r.key, r.name, r.description, r.permissions])
       .catch((e) => { if (e.code === '23505') throw apiError(409, 'VALIDATION_FAILED', 'Exists', { key: 'ROLE_EXISTS' }); throw e; });
     await rolesChanged();
+    await publishLive(null, 'access');
     await audit(req, 'role.created', 'success', req.user.id, r);
     return r;
   }
@@ -77,6 +79,7 @@ export class RolesController {
     const { rowCount } = await pool.query('UPDATE roles SET name = $2, description = $3, permissions = $4, updated_at = now() WHERE key = $1', [key, r.name, r.description, r.permissions]);
     if (!rowCount) throw apiError(404, 'NOT_FOUND', 'Unknown role');
     await rolesChanged();
+    await publishLive(null, 'access');
     await audit(req, 'role.updated', 'success', req.user.id, { key, permissions: r.permissions });
     return { ...r, key };
   }
@@ -95,6 +98,7 @@ export class RolesController {
       await client.query('COMMIT');
     } catch (e) { await client.query('ROLLBACK'); throw e; } finally { client.release(); }
     await rolesChanged();
+    await publishLive(null, 'access');
     await audit(req, 'role.deleted', 'success', req.user.id, { key });
   }
 
@@ -136,6 +140,7 @@ export class RolesController {
       await client.query('COMMIT');
     } catch (e) { await client.query('ROLLBACK'); throw e; } finally { client.release(); }
     await audit(req, 'user.access_changed', 'success', req.user.id, { target: id, roles: keys, overrides: clean });
+    await publishLive(id, 'access');
     return { roles: keys, overrides: clean, effective: next };
   }
 }

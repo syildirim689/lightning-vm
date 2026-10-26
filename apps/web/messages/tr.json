@@ -352,6 +352,28 @@
       "intro": "Yönetici bu hesap için iki adımlı doğrulamayı zorunlu kıldı. Kurulumu tamamlayınca panel açılır.",
       "signOut": "Çıkış yap",
       "continue": "Panele geç"
+    },
+    "signedOut": {
+      "banned": {
+        "title": "Hesabınız askıya alındı",
+        "body": "Bir yönetici hesabınızı askıya aldı ve oturumlarınız kapatıldı. Bir hata olduğunu düşünüyorsanız yöneticinize başvurun."
+      },
+      "password": {
+        "title": "Parolanız değiştirildi",
+        "body": "Güvenliğiniz için oturumunuz kapatıldı. Yeni parolanızla giriş yapın."
+      },
+      "revoked": {
+        "title": "Oturumunuz sonlandırıldı",
+        "body": "Bu oturum siz ya da bir yönetici tarafından kapatıldı. Yeniden giriş yapın."
+      },
+      "removed": {
+        "title": "Hesabınız silindi",
+        "body": "Bu hesap artık kullanılamıyor."
+      },
+      "expired": {
+        "title": "Oturumunuzun süresi doldu",
+        "body": "Devam etmek için yeniden giriş yapın."
+      }
     }
   },
   "fieldErrors": {

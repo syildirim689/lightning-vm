@@ -9,6 +9,7 @@ import { authSecret, config } from './config';
 import { pool, redis } from './db';
 import { logEvent } from './log';
 import { otpText, sendOtpMail, sendPasswordReset } from './mail';
+import { publishLive, type LiveKind } from './live-bus';
 import { notify } from './notify';
 import { adminEndpointPermission, betterAuthRoles, can, covers, effectivePermissions, permissionsOf } from './permissions';
 import { hashPassword, sha256, verifyPassword } from './security';
@@ -185,7 +186,12 @@ function createAuth() {
           const body = (ctx.body ?? {}) as Record<string, unknown>;
           const target = (body.userId as string | undefined) ?? ((ctx.context.returned as { user?: { id?: string } } | undefined)?.user?.id ?? null);
           const extra = ctx.path === '/admin/ban-user' ? { reason: body.banReason ?? null, expiresIn: body.banExpiresIn ?? null } : {};
+          // A password set by an administrator ends every session of that account.
+          if (ctx.path === '/admin/set-user-password' && target) await ctx.context.internalAdapter.deleteUserSessions(target);
           await auditAuth(actor, `admin.user.${adminActions[ctx.path]}`, 'success', ip, { target, ...extra });
+          const live: Record<string, LiveKind> = { '/admin/ban-user': 'ban', '/admin/unban-user': 'unban', '/admin/set-user-password': 'password', '/admin/remove-user': 'removed',
+            '/admin/revoke-user-session': 'sessions', '/admin/revoke-user-sessions': 'sessions', '/admin/update-user': 'account' };
+          if (target && live[ctx.path]) await publishLive(target, live[ctx.path]);
           return;
         }
         if (['/two-factor/enable', '/two-factor/disable'].includes(ctx.path) && !failed) {
@@ -194,12 +200,13 @@ function createAuth() {
             const enabled = ctx.path === '/two-factor/enable';
             await auditAuth(uid, enabled ? 'auth.two_factor_enabled' : 'auth.two_factor_disabled', 'success', ip);
             await notify('auth.two_factor_changed', [uid], { enabled });
+            await publishLive(uid, 'account');
           }
           return;
         }
         if (ctx.path === '/change-password' && !failed) {
           const uid = (ctx.context.session as { user?: { id: string } } | null)?.user?.id;
-          if (uid) await notify('auth.password_changed', [uid], {});
+          if (uid) { await notify('auth.password_changed', [uid], {}); await publishLive(uid, 'password'); }
           return;
         }
         if (ctx.path !== '/sign-in/email' && ctx.path !== '/sign-up/email' && ctx.path !== '/sign-in/passkey' && ctx.path !== '/sign-in/email-otp' && !ctx.path.startsWith('/two-factor/verify-')) return;

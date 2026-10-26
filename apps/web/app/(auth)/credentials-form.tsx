@@ -47,13 +47,13 @@ export function emailSuggestion(email: string) {
 }
 
 // Password field with show/hide and a Caps Lock warning.
-function PasswordField({ label, value, onChange, error, help, autoComplete }: { label: string; value: string; onChange: (v: string) => void; error?: string; help?: string; autoComplete: string }) {
+function PasswordField({ label, value, onChange, error, help, autoComplete, autofill }: { label: string; value: string; onChange: (v: string) => void; error?: string; help?: string; autoComplete: string; autofill?: boolean }) {
   const t = useTranslations('Auth');
   const [shown, setShown] = useState(false);
   const [caps, setCaps] = useState(false);
   const capsState = (e: React.KeyboardEvent) => setCaps(e.getModifierState?.('CapsLock') ?? false);
   return <div className="relative" onKeyUp={capsState} onKeyDown={capsState}>
-    <TextInput label={label} type={shown ? 'text' : 'password'} value={value} onChange={onChange} autoComplete={autoComplete} maxLength={256} error={error}
+    <TextInput label={label} type={shown ? 'text' : 'password'} value={value} onChange={onChange} autoComplete={autoComplete} autofill={autofill} maxLength={256} error={error}
       help={caps ? t('capsLock') : help} isRequired spellCheck={false}/>
     <button type="button" onClick={() => setShown((v) => !v)} aria-pressed={shown}
       className="absolute right-2 top-[1.95rem] grid h-8 min-w-8 place-items-center rounded-lg px-2 text-xs font-medium text-muted hover:bg-default hover:text-foreground focus-visible:outline-2 focus-visible:outline-accent">
@@ -175,10 +175,10 @@ export default function CredentialsForm({ mode, noToken, onDone }: { mode: Mode;
   const lastBadge = <Chip size="sm" variant="soft" color="accent">{t('lastUsed')}</Chip>;
   return <motion.form method="post" animate={shake} onSubmit={submit} noValidate className="flex flex-col gap-4">
     {mode === 'setup' && !noToken && <TextInput label={t('token')} type="password" value={values.token} onChange={set('token')} autoComplete="one-time-code" spellCheck={false} help={t('tokenHelp')} isRequired/>}
-    <TextInput label={t('email')} type="email" value={values.email} onChange={set('email')} autoComplete={mode === 'login' ? 'username webauthn' : 'username'} maxLength={254}
+    <TextInput label={t('email')} type="email" value={values.email} onChange={set('email')} autoComplete="username webauthn" autofill={mode === 'login'} maxLength={254}
       error={field(fields.email)} help={t('emailHelp')} isRequired/>
     {suggestion && <button type="button" onClick={() => set('email')(suggestion)} className="-mt-2 self-start text-left text-xs text-accent hover:underline">{t('didYouMean', { email: suggestion })}</button>}
-    <PasswordField label={t('password')} value={values.password} onChange={set('password')} autoComplete={mode === 'login' ? 'current-password webauthn' : 'new-password'}
+    <PasswordField label={t('password')} value={values.password} onChange={set('password')} autoComplete="current-password webauthn" autofill={mode === 'login'}
       error={field(fields.password)} help={mode === 'login' ? undefined : t('passwordHelp')}/>
     {mode !== 'login' && <Strength password={values.password}/>}
     {mode === 'login' && <div className="-mt-1 flex flex-wrap items-center justify-between gap-2">
@@ -212,11 +212,11 @@ function useCooldown(seconds: number) {
 }
 
 function CodeInput({ value, onChange, onComplete, label, invalid }: { value: string; onChange: (v: string) => void; onComplete: () => void; label: string; invalid?: boolean }) {
-  return <InputOTP maxLength={6} value={value} onChange={onChange} onComplete={onComplete} aria-label={label} autoFocus isInvalid={invalid}>
+  return <div data-autofill="true"><InputOTP maxLength={6} value={value} onChange={onChange} onComplete={onComplete} aria-label={label} autoFocus isInvalid={invalid}>
     <InputOTP.Group>{[0, 1, 2].map((i) => <InputOTP.Slot key={i} index={i}/>)}</InputOTP.Group>
     <InputOTP.Separator/>
     <InputOTP.Group>{[3, 4, 5].map((i) => <InputOTP.Slot key={i} index={i}/>)}</InputOTP.Group>
-  </InputOTP>;
+  </InputOTP></div>;
 }
 
 const methodKey = 'lvm-2fa-method';
@@ -292,7 +292,7 @@ function SecondFactor({ onBack }: { onBack: () => void }) {
           {sent && <Button size="sm" variant="ghost" isDisabled={busy || cooldown.left > 0} onPress={send}>
             <I name="rotate-ccw" size={14}/>{cooldown.left > 0 ? t('twoFactor.resendIn', { s: cooldown.left }) : t('twoFactor.resend')}</Button>}
         </>}
-        {method === 'backup' && <div className="w-full"><TextInput label={t('twoFactor.backupLabel')} value={code} onChange={setCode} autoComplete="one-time-code" spellCheck={false} help={t('twoFactor.backupHelp')}/></div>}
+        {method === 'backup' && <div className="w-full"><TextInput label={t('twoFactor.backupLabel')} value={code} onChange={setCode} autoComplete="one-time-code" autofill spellCheck={false} help={t('twoFactor.backupHelp')}/></div>}
       </motion.div>
     </AnimatePresence>
     <CheckboxInput label={t('twoFactor.trust')} isSelected={trust} onChange={setTrust} help={t('twoFactor.trustHelp')}/>

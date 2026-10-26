@@ -4,7 +4,7 @@
 import { Alert, AlertDialog, Button, Card, Checkbox, CheckboxGroup, Chip, Description, FieldError, Input, Label, ListBox, NumberField, Select,
   Switch, Table, TextArea, TextField, buttonVariants } from '@heroui/react';
 import NextLink from 'next/link';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 export function PageHeader({ eyebrow, title, description, actions }: { eyebrow?: string; title: React.ReactNode; description?: React.ReactNode; actions?: React.ReactNode }) {
   return <header className="mb-6 flex flex-wrap items-end justify-between gap-4">
@@ -62,14 +62,25 @@ export function StatusChip({ tone, children }: { tone: Tone; children: React.Rea
   return <Chip size="sm" variant="soft" color={tone}>{children}</Chip>;
 }
 
+// Browsers and password managers never fill or remember a field unless it is part of signing in (autofill).
+// Password-type fields are shown as masked text where the browser can mask text, so password managers do not
+// treat them as passwords at all; elsewhere they stay password fields with autocomplete off.
+export const noAutofill = { autoComplete: 'off', 'data-1p-ignore': 'true', 'data-lpignore': 'true', 'data-bwignore': 'true', 'data-form-type': 'other' } as const;
+const masksText = () => typeof CSS !== 'undefined' && CSS.supports('-webkit-text-security', 'disc');
+
 // Text field with a visible label, help text, and a translated server-side error under it.
-export function TextInput({ label, value, onChange, error, help, type = 'text', name, isRequired, autoComplete, placeholder, multiline, isDisabled, maxLength, className, spellCheck }: {
+export function TextInput({ label, value, onChange, error, help, type = 'text', name, isRequired, autoComplete, autofill, placeholder, multiline, isDisabled, maxLength, className, spellCheck }: {
   label: string; value: string; onChange: (v: string) => void; error?: string; help?: React.ReactNode; type?: string; name?: string; isRequired?: boolean;
-  autoComplete?: string; placeholder?: string; multiline?: boolean; isDisabled?: boolean; maxLength?: number; className?: string; spellCheck?: boolean;
+  autoComplete?: string; autofill?: boolean; placeholder?: string; multiline?: boolean; isDisabled?: boolean; maxLength?: number; className?: string; spellCheck?: boolean;
 }) {
-  return <TextField className={className} name={name} type={type} value={value} onChange={onChange} isInvalid={!!error} isRequired={isRequired} isDisabled={isDisabled} validationBehavior="aria">
+  // Decided after mount: the server cannot know whether the browser masks text.
+  const [masked, setMasked] = useState(false);
+  useEffect(() => { if (!autofill && type === 'password') setMasked(masksText()); }, [autofill, type]);
+  const fill = autofill ? { autoComplete, 'data-autofill': 'true' } : noAutofill;
+  return <TextField className={className} name={autofill ? name : undefined} type={masked ? 'text' : type} value={value} onChange={onChange} isInvalid={!!error} isRequired={isRequired} isDisabled={isDisabled} validationBehavior="aria">
     <Label>{label}</Label>
-    {multiline ? <TextArea rows={4} placeholder={placeholder} spellCheck={spellCheck}/> : <Input placeholder={placeholder} autoComplete={autoComplete} maxLength={maxLength} spellCheck={spellCheck}/>}
+    {multiline ? <TextArea rows={4} placeholder={placeholder} spellCheck={spellCheck} {...fill}/>
+      : <Input placeholder={placeholder} maxLength={maxLength} spellCheck={masked ? false : spellCheck} {...fill} style={masked ? { WebkitTextSecurity: 'disc' } as React.CSSProperties : undefined}/>}
     {error ? <FieldError>{error}</FieldError> : help ? <Description>{help}</Description> : null}
   </TextField>;
 }

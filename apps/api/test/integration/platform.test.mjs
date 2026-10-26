@@ -4,7 +4,7 @@
 import test, { before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHmac } from 'node:crypto';
-import { createServer } from 'node:http';
+import { createServer, get as httpGet } from 'node:http';
 
 const url = process.env.TEST_DATABASE_URL ?? '';
 if (!/\/\w+_test(\?|$)/.test(url) || process.env.REDIS_DB !== '15') {
@@ -472,4 +472,63 @@ test('a double click sends one request: the same POST while the first runs is re
   // Another user, or a different body, is not held up.
   assert.equal((await post('/chat/connections', { ...body, fields: { url: 'https://127.0.0.1/other' } }, user)).statusCode, 400);
   assert.equal((await post('/chat/connections', body, user)).statusCode, 400, 'runs again once the first answered');
+});
+
+test('live line: open tabs learn at once; a role change refreshes them, a ban or a password set by an admin signs them out', async () => {
+  if (!app.getHttpServer().listening) await app.listen(0, '127.0.0.1');
+  const port = app.getHttpServer().address().port;
+  // An EventSource stand-in: collects "event: x / data: {...}" blocks; next(x) waits for the first x not yet taken.
+  const open = (cookie) => new Promise((resolve, reject) => {
+    const events = []; let buf = ''; let wake = () => {};
+    const req = httpGet({ host: '127.0.0.1', port, path: '/live', headers: cookie ? { cookie: `lvm.session_token=${cookie}` } : {} }, (res) => {
+      res.setEncoding('utf8');
+      res.on('data', (d) => {
+        buf += d;
+        for (let i; (i = buf.indexOf('\n\n')) >= 0; buf = buf.slice(i + 2)) {
+          const block = buf.slice(0, i), ev = /^event: (.+)$/m.exec(block)?.[1];
+          if (ev) events.push({ ev, data: JSON.parse(/^data: (.+)$/m.exec(block)[1]) });
+        }
+        wake();
+      });
+      res.on('end', () => { events.push({ ev: 'end' }); wake(); });
+      let taken = 0;
+      resolve({ status: res.statusCode, close: () => req.destroy(), async next(name) {
+        for (const until = Date.now() + 5000; Date.now() < until;) {
+          const i = events.findIndex((e, n) => n >= taken && e.ev === name);
+          if (i >= 0) { taken = i + 1; return events[i].data; }
+          await new Promise((r) => { wake = r; setTimeout(r, 200); });
+        }
+        throw new Error(`no "${name}" event; got ${JSON.stringify(events)}`);
+      } });
+    });
+    req.on('error', reject);
+  });
+  assert.equal((await open(null)).status, 401);
+
+  const email = 'live@example.test';
+  const id = (await post('/auth/admin/create-user', { email, password, name: 'Live', role: 'user' }, admin)).json().user.id;
+  let c = cookieOf(await post('/auth/sign-in/email', { email, password }));
+  let tab = await open(c);
+  assert.equal(tab.status, 200);
+  assert.equal((await tab.next('ready')).userId, id);
+  // Permissions: the tab is told to refresh, it stays signed in.
+  assert.equal((await put(`/admin/users/${id}/access`, { roles: ['user'], overrides: [{ permission: 'dashboard.view', effect: 'allow' }] }, admin)).statusCode, 200);
+  assert.equal((await tab.next('changed')).kind, 'access');
+  // A new in-app notification rings at once.
+  await post('/notifications/test', { channel: 'inApp' }, c);
+  await tab.next('notification');
+  // Ban: signed out with the reason, and the stream ends.
+  assert.equal((await post('/auth/admin/ban-user', { userId: id, banReason: 'test' }, admin)).statusCode, 200);
+  assert.equal((await tab.next('signed-out')).reason, 'banned');
+  await tab.next('end');
+  // A password set by an administrator ends every session of the account.
+  assert.equal((await post('/auth/admin/unban-user', { userId: id }, admin)).statusCode, 200);
+  c = cookieOf(await post('/auth/sign-in/email', { email, password }));
+  tab = await open(c);
+  await tab.next('ready');
+  assert.equal((await post('/auth/admin/set-user-password', { userId: id, newPassword: `${password} 2` }, admin)).statusCode, 200);
+  assert.equal((await tab.next('signed-out')).reason, 'password');
+  assert.equal((await get('/auth/me', c)).statusCode, 401);
+  tab.close();
+  assert.equal((await post('/auth/admin/remove-user', { userId: id }, admin)).statusCode, 200);
 });

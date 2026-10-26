@@ -800,6 +800,16 @@ test.describe('people, settings and smart features (English browser)', () => {
     await expect(page.getByLabel('Webhook URL')).toBeVisible();
     await shot(page, 'chat-connect-slack');
     await page.keyboard.press('Escape');
+    // No field outside signing in is filled or remembered by the browser: autocomplete is off everywhere and secret
+    // fields are masked text, so password managers do not see a password field.
+    for (const path of ['/admin/settings?tab=mail', '/admin/settings?tab=captcha', '/admin/users', '/account?tab=security', '/order']) {
+      await page.goto(path);
+      await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+      await page.waitForTimeout(500);
+      const bad = await page.evaluate(() => [...document.querySelectorAll('input:not([type=hidden]):not([type=file]):not([type=checkbox]):not([type=radio]), textarea')]
+        .filter((el) => el.getAttribute('autocomplete') !== 'off' || (el as HTMLInputElement).type === 'password').map((el) => el.outerHTML.slice(0, 120)));
+      expect(bad, path).toEqual([]);
+    }
     // A setup guide opens in a dialog.
     await page.goto('/admin/settings?tab=rdns');
     await page.getByRole('button', { name: 'What is it, how to set it up?' }).click();

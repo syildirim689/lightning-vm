@@ -8,6 +8,7 @@ import { NuqsAdapter } from 'nuqs/adapters/next/app';
 import { useState } from 'react';
 import { AccessibilityRuntime } from '../components/accessibility';
 import { useA11y } from '../lib/a11y';
+import AutofillGuard from '../components/autofill-guard';
 import PageLoader, { announceNavigation } from '../components/page-loader';
 
 // Theme (class on <html>), server-state cache, URL state, React Aria locale for dates and numbers,
@@ -26,6 +27,7 @@ export default function Providers({ locale, loadingLabel, children }: { locale: 
               {children}
               <AccessibilityRuntime/>
               <PageLoader label={loadingLabel}/>
+              <AutofillGuard/>
               <Toast.Provider placement="bottom end"/>
             </MotionConfig>
           </RouterProvider>

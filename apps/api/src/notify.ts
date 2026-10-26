@@ -11,6 +11,7 @@ import { decryptSecret, encryptSecret } from './secrets';
 import { getSettings, mailReady, saveSettings, sendMail, type Channel, type NotificationPolicy } from './settings-store';
 import { sendSms, smsReady } from './sms';
 import { deliverChat } from './chat-delivery';
+import { publishLive } from './live-bus';
 
 export type Text = { title: string; body: string };
 type EventDef = {
@@ -149,7 +150,10 @@ async function sendPush(userId: string, payload: object) {
 type Recipient = { id: string; email: string; locale: string; phone_number: string | null; phone_number_verified: boolean };
 export async function deliver(u: Recipient, channel: Channel, t: Text, link: string | null, event: string) {
   const brand = (await getSettings('branding')).name;
-  if (channel === 'inApp') await pool.query('INSERT INTO notifications (user_id, event, title, body, link) VALUES ($1, $2, $3, $4, $5)', [u.id, event, t.title, t.body, link]);
+  if (channel === 'inApp') {
+    await pool.query('INSERT INTO notifications (user_id, event, title, body, link) VALUES ($1, $2, $3, $4, $5)', [u.id, event, t.title, t.body, link]);
+    await publishLive(u.id, 'notification');
+  }
   if (channel === 'push') await sendPush(u.id, { title: t.title, body: t.body, link });
   if (channel === 'email' && (await mailReady())) await sendMail(u.email, `${brand}: ${t.title}`, `${t.body}${link ? `\n\n${link}` : ''}`);
   if (channel === 'chat') await deliverChat(u.id, t, link, event);

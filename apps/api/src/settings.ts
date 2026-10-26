@@ -13,6 +13,7 @@ import { usableApps } from './chat-delivery';
 import { pool } from './db';
 import { summary } from './maintenance';
 import { policies } from './notify';
+import { publishLive } from './live-bus';
 import { smsReady } from './sms';
 
 type Input = Record<string, unknown>;
@@ -116,6 +117,7 @@ export class SettingsController {
     if (!require2fa) throw apiError(400, 'VALIDATION_FAILED', 'Invalid input', { require2fa: 'INVALID_VALUE' });
     const value = { require2fa, emailCodeSignIn: body?.emailCodeSignIn === true };
     await saveSettings('security', value);
+    await publishLive(null, 'policy');
     await audit(req, 'settings.security', 'success', req.user.id, value);
     return value;
   }
