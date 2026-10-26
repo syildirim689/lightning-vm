@@ -582,7 +582,7 @@ test.describe('people, settings and smart features (English browser)', () => {
   test('users, roles and permissions are managed from the panel', async ({ page }) => {
     await signInAdmin(page);
     await expect(page).toHaveURL(/\/admin$/);
-    await page.getByRole('link', { name: 'Users' }).click();
+    await page.getByRole('link', { name: 'Users', exact: true }).click();
     await expect(page.getByRole('heading', { level: 1 })).toHaveText('Users');
     await expect(page.getByRole('grid', { name: 'Users' })).toContainText(admin.email);
     await page.getByRole('link', { name: 'Roles' }).click();
