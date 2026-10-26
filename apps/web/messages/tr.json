@@ -165,9 +165,9 @@
     "FORBIDDEN_TARGET": "Sizde olmayan izinleri veremez, sizden yetkili birini değiştiremezsiniz.",
     "ROLE_LOCKED": "Bu hazır rol değiştirilemez veya silinemez.",
     "LAST_ADMIN": "En az bir yönetici kalmalı.",
-    "MAIL_AUTH_FAILED": "SMTP kullanıcı adı veya parolası kabul edilmedi.",
+    "MAIL_AUTH_FAILED": "Posta sunucusu veya sağlayıcı kimlik bilgilerini kabul etmedi (kullanıcı adı, parola veya API anahtarı).",
     "MAIL_TLS_FAILED": "SMTP sunucusuyla güvenli bağlantı kurulamadı (port ve güvenlik ayarını kontrol edin).",
-    "MAIL_REJECTED": "SMTP sunucusu iletiyi reddetti (gönderen adresini kontrol edin).",
+    "MAIL_REJECTED": "Posta sunucusu veya sağlayıcı iletiyi reddetti (gönderen adresini ve alan adı doğrulamasını kontrol edin).",
     "MAIL_HOST_NOT_FOUND": "SMTP sunucusu bulunamadı.",
     "MAIL_CONNECTION_FAILED": "SMTP sunucusuna bağlanılamadı.",
     "SMS_AUTH_FAILED": "SMS sağlayıcısı hesap bilgilerini kabul etmedi.",
@@ -2447,7 +2447,25 @@
       "test": "Test",
       "testHelp": "Formdaki değerlerle (kaydetmeden) bağlanır, oturum açar ve bir test e-postası gönderir.",
       "testTo": "Alıcı",
-      "sendTest": "Test e-postası gönder"
+      "sendTest": "Test e-postası gönder",
+      "provider": "Sağlayıcı",
+      "providerHelp": "SMTP her posta sunucusuyla çalışır; diğerleri sağlayıcının kendi HTTP API'siyle gönderir (SMTP portu gerekmez, sunuculardan çoğu zaman daha güvenilirdir).",
+      "apiHelp": "Sağlayıcının panelinde bir API anahtarı oluşturun ve gönderen alan adını orada doğrulayın; aşağıdaki gönderen adresi o alan adına ait olmalı.",
+      "website": "Sağlayıcı paneli",
+      "docs": "API belgeleri",
+      "optional": "İsteğe bağlı.",
+      "default": "Varsayılan",
+      "fields": {
+        "apiKey": "API anahtarı",
+        "secretKey": "Gizli anahtar",
+        "region": "Bölge",
+        "domain": "Gönderim alan adı",
+        "serverToken": "Sunucu anahtarı (server token)",
+        "messageStream": "İleti akışı (message stream)",
+        "accessKeyId": "Erişim anahtarı kimliği",
+        "secretAccessKey": "Gizli erişim anahtarı",
+        "sendMailToken": "Gönderim anahtarı (send mail token)"
+      }
     },
     "captcha": {
       "solveFirst": "Önce doğrulamayı tamamlayın.",

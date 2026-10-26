@@ -603,6 +603,14 @@ test.describe('people, settings and smart features (English browser)', () => {
     await page.getByLabel('Panel name').fill('Lightning VM');
     await page.getByRole('button', { name: 'Save' }).click();
     await expect(page.getByText('Saved.').first()).toBeVisible();
+    // E-mail: an API provider instead of SMTP shows its own fields and its documentation.
+    await page.goto('/admin/settings?tab=mail');
+    await page.getByRole('radio', { name: 'Resend' }).click();
+    await expect(page.getByLabel('API key')).toBeVisible();
+    await expect(page.getByRole('link', { name: 'API documentation' })).toHaveAttribute('href', /resend\.com\/docs/);
+    await expect(page.getByLabel('Server', { exact: true })).toHaveCount(0);
+    await page.getByRole('radio', { name: 'SMTP' }).click();
+    await expect(page.getByLabel('Server', { exact: true })).toBeVisible();
     await page.goto('/admin/settings?tab=notifications');
     await expect(page.getByText('User notifications')).toBeVisible();
     await expect(page.getByText('Server ready').first()).toBeVisible();

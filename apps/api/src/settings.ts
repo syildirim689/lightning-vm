@@ -7,7 +7,8 @@ import { apiError } from './errors';
 import { Can, PermissionGuard } from './rbac';
 import { decryptSecret } from './secrets';
 import { decryptCredentials, encryptCredentials, providers, sendWith } from './sms';
-import { emailPattern, getSettings, imagePattern, mailErrorCode, publicConfig, readBranding, readCaptcha, readMail, saveSettings, transportFor, verifyCaptcha, type SmsSettings } from './settings-store';
+import { emailPattern, getSettings, imagePattern, mailErrorCode, mailSecrets, publicConfig, readBranding, readCaptcha, readMail, saveSettings, sendViaProvider, transportFor, verifyCaptcha, type SmsSettings } from './settings-store';
+import { mailProviders } from './mail-providers';
 
 type Input = Record<string, unknown>;
 
@@ -45,15 +46,17 @@ export class SettingsController {
   // The stored password and secret never leave the server; the panel only learns whether one is set.
   @Get('mail') @Can('settings.view', 'settings.manage')
   async mail() {
-    const { passwordEnc, ...m } = await getSettings('mail');
-    return { ...m, passwordSet: !!passwordEnc, envFallback: !m.enabled && !!(config.SMTP_URL && config.MAIL_FROM) };
+    const saved = await getSettings('mail');
+    const { passwordEnc, apiSecretEnc, ...m } = saved;
+    return { ...m, passwordSet: !!passwordEnc, secretsSet: apiSecretEnc ? Object.keys(mailSecrets(saved)) : [], envFallback: !m.enabled && !!(config.SMTP_URL && config.MAIL_FROM),
+      providers: Object.entries(mailProviders).map(([id, p]) => ({ id, name: p.name, website: p.website, docs: p.docs, fields: p.fields })) };
   }
 
   @Put('mail') @Can('settings.manage')
   async saveMail(@Req() req: AuthedRequest, @Body() body: Input) {
     const { value } = readMail(body ?? {}, await getSettings('mail'));
     await saveSettings('mail', value);
-    await audit(req, 'settings.mail', 'success', req.user.id, { enabled: value.enabled, host: value.host, use: value.use });
+    await audit(req, 'settings.mail', 'success', req.user.id, { enabled: value.enabled, provider: value.provider, host: value.provider === 'smtp' ? value.host : undefined, use: value.use });
     return this.mail();
   }
 
@@ -62,18 +65,24 @@ export class SettingsController {
   async testMail(@Req() req: AuthedRequest, @Body() body: Input) {
     const to = typeof body?.to === 'string' && emailPattern.test(body.to) ? body.to : null;
     if (!to) throw apiError(400, 'VALIDATION_FAILED', 'Invalid input', { to: 'INVALID_EMAIL' });
-    const { value, password } = readMail({ ...body, enabled: true }, await getSettings('mail'));
-    const t = await transportFor(value, password);
+    const saved = await getSettings('mail');
+    const { value, password, secrets } = readMail({ ...body, enabled: true }, saved);
     const name = (await getSettings('branding')).name;
+    const subject = `${name}: ${value.provider === 'smtp' ? 'SMTP' : mailProviders[value.provider].name} test`;
+    const text = `This test message from ${name} confirms that outgoing mail works.\n\nBu test iletisi ${name} e-posta gönderiminin çalıştığını doğrular.`;
     try {
-      await t!.transport.verify();
-      await t!.transport.sendMail({ from: t!.from, to, subject: `${name}: SMTP test`, text: `This test message from ${name} confirms that outgoing mail works.\n\nBu test iletisi ${name} e-posta gönderiminin çalıştığını doğrular.` });
+      if (value.provider !== 'smtp') await sendViaProvider(value, secrets, to, subject, text);
+      else {
+        const t = await transportFor(value, password);
+        await t!.transport.verify();
+        await t!.transport.sendMail({ from: t!.from, to, subject, text });
+      }
     } catch (err) {
       const code = mailErrorCode(err);
       await audit(req, 'settings.mail_test', 'failure', req.user.id, { code });
       throw apiError(422, code, 'SMTP test failed', undefined, { detail: String((err as Error)?.message ?? '').slice(0, 300) });
     }
-    await audit(req, 'settings.mail_test', 'success', req.user.id, { host: value.host });
+    await audit(req, 'settings.mail_test', 'success', req.user.id, { provider: value.provider, host: value.provider === 'smtp' ? value.host : undefined });
     return { sent: true, to };
   }
 

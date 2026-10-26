@@ -97,3 +97,17 @@ Atlananlar:
 Ayrıntılı API notları `apps/api/src/sms-providers.ts` dosyasındadır. Birim testleri
 (`apps/api/test/sms-providers.test.mjs`) her sağlayıcının belgelediği isteği kurduğunu ve başarılı
 yanıtı doğru tanıdığını sahte `fetch` ile kontrol eder.
+
+## E-posta sağlayıcıları
+
+Ayarlar → E-posta'dan bir sağlayıcı seçilir:
+
+- **SMTP:** herhangi bir posta sunucusu. Gmail, Outlook, Yandex, Zoho, SendGrid, Mailgun, SES ve Brevo için hazır
+  ayarlar vardır.
+- **HTTP API ile gönderenler** (`apps/api/src/mail-providers.ts`): Resend, SendGrid (global/EU), Mailgun (US/EU),
+  Postmark, Amazon SES (API v2, SigV4 imzalı), Brevo, Mailjet, SparkPost (US/EU), MailerSend, SMTP2GO, Elastic
+  Email, ZeptoMail. Bunlar SMTP portu gerektirmez.
+
+Her sağlayıcının alanları, paneli ve API belgesi ekranda gösterilir. Gizli alanlar şifrelenmiş saklanır ve hiçbir
+yanıtta geri dönmez; boş bırakılırsa kayıtlı değer korunur. "Deneme e-postası gönder" seçili sağlayıcıyla gerçek bir
+ileti gönderir. Hatalar şu kodlarla gösterilir: `MAIL_AUTH_FAILED`, `MAIL_REJECTED`, `MAIL_CONNECTION_FAILED`.

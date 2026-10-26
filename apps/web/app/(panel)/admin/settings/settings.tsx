@@ -157,7 +157,9 @@ function Branding({ readOnly }: { readOnly: boolean }) {
 }
 
 // ---------- Mail ----------
-type MailDoc = { enabled: boolean; host: string; port: number; security: 'none' | 'starttls' | 'tls'; username: string; fromName: string; fromAddress: string;
+type MailField = { key: string; secret?: boolean; optional?: boolean; options?: string[] };
+type MailDoc = { enabled: boolean; provider: string; host: string; port: number; security: 'none' | 'starttls' | 'tls'; username: string; fromName: string; fromAddress: string;
+  api: Record<string, string>; secretsSet: string[]; providers: { id: string; name: string; website: string; docs: string; fields: MailField[] }[];
   use: { passwordReset: boolean; twoFactor: boolean }; passwordSet: boolean; envFallback: boolean; password?: string };
 const mailPresets: Record<string, Pick<MailDoc, 'host' | 'port' | 'security'>> = {
   gmail: { host: 'smtp.gmail.com', port: 587, security: 'starttls' }, outlook: { host: 'smtp.office365.com', port: 587, security: 'starttls' },
@@ -177,6 +179,8 @@ function Mail({ readOnly, myEmail }: { readOnly: boolean; myEmail: string }) {
   if (!f.v) return <p role="status" className="text-sm text-muted">…</p>;
   const v = f.v;
   const body = { ...v, password: v.password ?? '' };
+  const api = v.providers.find((p) => p.id === v.provider);
+  const ready = !!v.fromAddress && (api ? api.fields.every((x) => x.optional || v.api[x.key] || (x.secret && v.secretsSet.includes(x.key))) : !!v.host);
   async function runTest() {
     setTesting(true); setTest(undefined);
     try { await apiFetch('/admin/settings/mail/test', { method: 'POST', body: { ...body, to } }); setTest({ ok: true, text: t('mail.testOk', { to }) }); }
@@ -184,9 +188,28 @@ function Mail({ readOnly, myEmail }: { readOnly: boolean; myEmail: string }) {
   }
   const dis = readOnly || !v.enabled;
   return <Card><Card.Content className="flex flex-col">
-    <FormSection title={t('mail.server')} description={t('mail.serverHelp')} icon={<I name="server" size={16}/>}>
+    <FormSection title={t('mail.provider')} description={t('mail.providerHelp')} icon={<I name="mail" size={16}/>}>
       <SwitchInput label={t('mail.enabled')} isSelected={v.enabled} onChange={f.set('enabled')} isDisabled={readOnly}/>
       {v.envFallback && <Notice tone="default">{t('mail.envFallback')}</Notice>}
+      <div role="radiogroup" aria-label={t('mail.provider')} className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-7">
+        {[{ id: 'smtp', name: 'SMTP' }, ...v.providers].map((p) => <button key={p.id} type="button" role="radio" aria-checked={v.provider === p.id} disabled={readOnly}
+          onClick={() => f.setV({ ...v, provider: p.id, api: p.id === v.provider ? v.api : {} })}
+          className={`flex min-h-12 items-center justify-center rounded-xl border px-3 text-center text-sm font-medium transition-colors ${v.provider === p.id ? 'border-accent bg-accent-soft text-accent-soft-foreground' : 'border-border hover:border-accent'}`}>{p.name}</button>)}
+      </div>
+    </FormSection>
+    {api ? <FormSection title={api.name} description={t('mail.apiHelp')} icon={<I name="plug" size={16}/>}>
+      <p className="flex flex-wrap gap-x-4 gap-y-1 text-sm"><a href={api.website} target="_blank" rel="noreferrer" className="text-accent underline">{t('mail.website')}</a>
+        <a href={api.docs} target="_blank" rel="noreferrer" className="text-accent underline">{t('mail.docs')}</a></p>
+      <div className="grid gap-4 sm:grid-cols-2">
+        {api.fields.map((x) => x.options
+          ? <SelectInput key={x.key} label={t(`mail.fields.${x.key}` as 'mail.fields.apiKey')} value={v.api[x.key] ?? ''} onChange={(val) => f.setV({ ...v, api: { ...v.api, [x.key]: val } })} isDisabled={dis}
+              error={f.err(`api.${x.key}`)} options={[...(x.optional ? [{ id: '', label: t('mail.default') }] : []), ...x.options.map((o) => ({ id: o, label: o }))]}/>
+          : <TextInput key={x.key} label={t(`mail.fields.${x.key}` as 'mail.fields.apiKey')} type={x.secret ? 'password' : 'text'} value={v.api[x.key] ?? ''} isDisabled={dis} spellCheck={false}
+              autoComplete={x.secret ? 'new-password' : 'off'} onChange={(val) => f.setV({ ...v, api: { ...v.api, [x.key]: val } })} error={f.err(`api.${x.key}`)}
+              placeholder={x.secret && v.secretsSet.includes(x.key) ? t('secretKept') : ''} help={x.secret && v.secretsSet.includes(x.key) ? t('secretHelp') : x.optional ? t('mail.optional') : undefined}/>)}
+      </div>
+    </FormSection> : <>
+    <FormSection title={t('mail.server')} description={t('mail.serverHelp')} icon={<I name="server" size={16}/>}>
       <SelectInput label={t('mail.preset')} value="" onChange={(k) => { if (mailPresets[k]) f.setV({ ...v, ...mailPresets[k] }); }} isDisabled={dis} help={t('mail.presetHelp')}
         options={Object.keys(mailPresets).map((k) => ({ id: k, label: t(`mail.presets.${k}` as 'mail.presets.gmail') }))}/>
       <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_8rem_12rem]">
@@ -203,7 +226,7 @@ function Mail({ readOnly, myEmail }: { readOnly: boolean; myEmail: string }) {
         <TextInput label={t('mail.password')} type="password" value={v.password ?? ''} onChange={(x) => f.setV({ ...v, password: x })} isDisabled={dis} autoComplete="new-password"
           placeholder={v.passwordSet ? t('secretKept') : ''} help={v.passwordSet ? t('secretHelp') : undefined}/>
       </div>
-    </FormSection>
+    </FormSection></>}
     <FormSection title={t('mail.sender')} description={t('mail.senderHelp')} icon={<I name="send" size={16}/>}>
       <div className="grid gap-4 sm:grid-cols-2">
         <TextInput label={t('mail.fromName')} value={v.fromName} onChange={f.set('fromName')} isDisabled={dis}/>
@@ -218,12 +241,12 @@ function Mail({ readOnly, myEmail }: { readOnly: boolean; myEmail: string }) {
     {!readOnly && <FormSection title={t('mail.test')} description={t('mail.testHelp')} icon={<I name="flask-conical" size={16}/>}>
       <div className="flex flex-wrap items-start gap-2">
         <TextInput className="min-w-60 flex-1" label={t('mail.testTo')} type="email" value={to} onChange={setTo}/>
-        <Button className="mt-6" variant="secondary" isPending={testing} isDisabled={!v.host || !v.fromAddress || !to} onPress={runTest}><I name="send" size={16}/>{t('mail.sendTest')}</Button>
+        <Button className="mt-6" variant="secondary" isPending={testing} isDisabled={!ready || !to} onPress={runTest}><I name="send" size={16}/>{t('mail.sendTest')}</Button>
       </div>
       {test && <motion.div initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }}><Notice tone={test.ok ? 'success' : 'danger'} title={test.text}>{test.detail && <code className="break-all text-xs">{test.detail}</code>}</Notice></motion.div>}
     </FormSection>}
     {!readOnly && <FormActions status={f.saved?.enabled ? <StatusChip tone="success">{t('active')}</StatusChip> : <StatusChip tone="default">{t('inactive')}</StatusChip>}>
-      <Button isPending={f.busy} onPress={async () => { if (await f.save(body, t('saved'))) f.setV({ ...v, password: '' }); }}><I name="check" size={16}/>{t('save')}</Button>
+      <Button isPending={f.busy} onPress={async () => { if (await f.save(body, t('saved'))) f.setV({ ...v, password: '', api: Object.fromEntries(Object.entries(v.api).filter(([k]) => !api?.fields.find((x) => x.key === k)?.secret)), secretsSet: [...new Set([...v.secretsSet, ...Object.keys(v.api).filter((k) => api?.fields.find((x) => x.key === k)?.secret && v.api[k])])] }); }}><I name="check" size={16}/>{t('save')}</Button>
     </FormActions>}
   </Card.Content></Card>;
 }

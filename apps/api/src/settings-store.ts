@@ -8,13 +8,16 @@ import { pool } from './db';
 import { apiError } from './errors';
 import { logEvent } from './log';
 import { decryptSecret, encryptSecret } from './secrets';
+import { mailProviders, readProviderFields } from './mail-providers';
 
 // passwordPrefix: starts the strong root password generated when a customer picks a weak one (passwords.ts).
 export type Branding = { name: string; accent: string | null; logo: string | null; favicon: string | null; passwordPrefix: string };
 // Transactional mail only; notifications choose their channels in notify.ts.
 export type MailUse = { passwordReset: boolean; twoFactor: boolean };
-export type MailSettings = { enabled: boolean; host: string; port: number; security: 'none' | 'starttls' | 'tls'; username: string; passwordEnc: string | null;
-  fromName: string; fromAddress: string; use: MailUse };
+// provider: 'smtp' (host, port, account below) or one of mail-providers.ts sent through its HTTP API, with its
+// plain fields in api and its secrets encrypted together in apiSecretEnc.
+export type MailSettings = { enabled: boolean; provider: string; host: string; port: number; security: 'none' | 'starttls' | 'tls'; username: string; passwordEnc: string | null;
+  api: Record<string, string>; apiSecretEnc: string | null; fromName: string; fromAddress: string; use: MailUse };
 export type CaptchaProvider = 'none' | 'turnstile' | 'recaptcha-v2' | 'recaptcha-v3' | 'hcaptcha';
 export type CaptchaUse = { signIn: boolean; signUp: boolean; passwordReset: boolean };
 export type SmsUse = { twoFactor: boolean; phoneVerification: boolean };
@@ -41,7 +44,7 @@ export type RdnsSettings = { provider: 'none' | 'powerdns'; apiUrl: string; apiK
 
 const defaults = {
   branding: { name: 'Lightning VM', accent: null, logo: null, favicon: null, passwordPrefix: '' } as Branding,
-  mail: { enabled: false, host: '', port: 587, security: 'starttls', username: '', passwordEnc: null, fromName: '', fromAddress: '',
+  mail: { enabled: false, provider: 'smtp', host: '', port: 587, security: 'starttls', username: '', passwordEnc: null, api: {}, apiSecretEnc: null, fromName: '', fromAddress: '',
     use: { passwordReset: true, twoFactor: true } } as MailSettings,
   captcha: { provider: 'none', siteKey: '', secretEnc: null, minScore: 0.5, use: { signIn: true, signUp: true, passwordReset: true } } as CaptchaSettings,
   sms: { provider: 'none', sender: '', credentialsEnc: null, commercial: false, use: { twoFactor: true, phoneVerification: true } } as SmsSettings,
@@ -92,7 +95,16 @@ export async function transportFor(m: MailSettings, password?: string) {
 
 export async function mailReady() {
   const m = await getSettings('mail');
-  return m.enabled ? !!(m.host && m.fromAddress) : !!(config.SMTP_URL && config.MAIL_FROM);
+  if (!m.enabled) return !!(config.SMTP_URL && config.MAIL_FROM);
+  return !!m.fromAddress && (m.provider === 'smtp' || !mailProviders[m.provider] ? !!m.host : !!m.apiSecretEnc);
+}
+export const mailSecrets = (m: MailSettings): Record<string, string> => (m.apiSecretEnc ? JSON.parse(decryptSecret(m.apiSecretEnc, 'settings:mail-api')) : {});
+
+// One message through the chosen API provider (SMTP goes through transportFor). Throws with the provider's code.
+export async function sendViaProvider(m: MailSettings, secrets: Record<string, string>, to: string, subject: string, text: string) {
+  const r = await mailProviders[m.provider].send({ ...m.api, ...secrets }, { from: { name: m.fromName, address: m.fromAddress }, to, subject, text });
+  if (!r.ok) throw Object.assign(new Error(r.detail ?? r.code ?? 'mail failed'), { mailCode: r.code });
+  return r;
 }
 export async function mailUse(kind: keyof MailUse) {
   const m = await getSettings('mail');
@@ -100,7 +112,13 @@ export async function mailUse(kind: keyof MailUse) {
 }
 
 export async function sendMail(to: string, subject: string, text: string) {
-  const t = await transportFor(await getSettings('mail'));
+  const m = await getSettings('mail');
+  if (m.enabled && m.provider !== 'smtp' && mailProviders[m.provider]) {
+    try { await sendViaProvider(m, mailSecrets(m), to, subject, text); logEvent('info', 'mail_sent', { subject, provider: m.provider }); }
+    catch (err) { logEvent('error', 'mail_failed', { provider: m.provider, error: err instanceof Error ? err.message.slice(0, 200) : 'unknown' }); throw err; }
+    return;
+  }
+  const t = await transportFor(m);
   if (!t) throw new Error('mail is not configured');
   try {
     await t.transport.sendMail({ from: t.from, to, subject, text });
@@ -113,6 +131,8 @@ export async function sendMail(to: string, subject: string, text: string) {
 
 // Nodemailer's error codes, mapped to codes the panel explains.
 export function mailErrorCode(err: unknown) {
+  const mailCode = (err as { mailCode?: string })?.mailCode;
+  if (mailCode) return mailCode;
   const code = (err as { code?: string; responseCode?: number })?.code;
   if (code === 'EAUTH') return 'MAIL_AUTH_FAILED';
   if (code === 'ETLS' || /certificate|SSL|TLS/i.test(String((err as Error)?.message))) return 'MAIL_TLS_FAILED';
@@ -183,11 +203,17 @@ const hostPattern = /^[A-Za-z0-9.-]{1,253}$/;
 export const emailPattern = /^[^\s@]{1,64}@[^\s@]{1,190}\.[^\s@]{2,}$/;
 
 // Returns the settings to store, and the plain password when a new one was typed (for a test before saving).
-export function readMail(body: Input, saved: MailSettings): { value: MailSettings; password?: string } {
+export function readMail(body: Input, saved: MailSettings): { value: MailSettings; password?: string; secrets: Record<string, string> } {
   const fields: Record<string, string> = {};
   const enabled = bool(body.enabled);
+  const provider = typeof body.provider === 'string' && (body.provider === 'smtp' || mailProviders[body.provider]) ? body.provider : (body.provider === undefined ? 'smtp' : (fields.provider = 'INVALID_VALUE', 'smtp'));
+  const smtp = provider === 'smtp';
   const host = typeof body.host === 'string' ? body.host.trim() : '';
-  if (enabled && !hostPattern.test(host)) fields.host = 'INVALID_HOST';
+  if (enabled && smtp && !hostPattern.test(host)) fields.host = 'INVALID_HOST';
+  // API providers: plain fields stored as they are, secrets encrypted together (empty secret fields keep the saved ones).
+  const savedSecrets = saved.provider === provider ? mailSecrets(saved) : {};
+  const api = smtp ? { plain: {}, secrets: {}, fields: {} } : readProviderFields(provider, (body.api ?? {}) as Input, savedSecrets);
+  if (enabled) Object.assign(fields, Object.fromEntries(Object.entries(api.fields).map(([k, v]) => [`api.${k}`, v])));
   const port = Number(body.port);
   if (!Number.isInteger(port) || port < 1 || port > 65535) fields.port = 'OUT_OF_RANGE';
   const security = ['none', 'starttls', 'tls'].includes(body.security as string) ? body.security as MailSettings['security'] : (fields.security = 'INVALID_VALUE', 'starttls');
@@ -201,8 +227,9 @@ export function readMail(body: Input, saved: MailSettings): { value: MailSetting
   const use = (body.use ?? {}) as Input;
   // An empty password field keeps the stored one; clearing the username drops it.
   const passwordEnc = !username ? null : password ? encryptSecret(password, 'settings:mail') : saved.passwordEnc;
-  return { value: { enabled, host, port, security, username, passwordEnc, fromName, fromAddress,
-    use: { passwordReset: bool(use.passwordReset), twoFactor: bool(use.twoFactor) } }, password };
+  const apiSecretEnc = smtp ? saved.apiSecretEnc : Object.keys(api.secrets).length ? encryptSecret(JSON.stringify(api.secrets), 'settings:mail-api') : null;
+  return { value: { enabled, provider, host, port, security, username, passwordEnc, api: smtp ? saved.api : api.plain, apiSecretEnc, fromName, fromAddress,
+    use: { passwordReset: bool(use.passwordReset), twoFactor: bool(use.twoFactor) } }, password, secrets: api.secrets };
 }
 
 export function readCaptcha(body: Input, saved: CaptchaSettings): { value: CaptchaSettings; secret?: string } {

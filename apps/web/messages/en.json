@@ -165,9 +165,9 @@
     "FORBIDDEN_TARGET": "You cannot grant permissions you lack or change someone with more access than you.",
     "ROLE_LOCKED": "This built-in role cannot be changed or removed.",
     "LAST_ADMIN": "At least one administrator must remain.",
-    "MAIL_AUTH_FAILED": "The SMTP username or password was refused.",
+    "MAIL_AUTH_FAILED": "The mail server or provider did not accept the credentials (user name, password or API key).",
     "MAIL_TLS_FAILED": "No secure connection to the SMTP server (check the port and security setting).",
-    "MAIL_REJECTED": "The SMTP server refused the message (check the sender address).",
+    "MAIL_REJECTED": "The mail server or provider refused the message (check the sender address and the domain verification).",
     "MAIL_HOST_NOT_FOUND": "The SMTP server was not found.",
     "MAIL_CONNECTION_FAILED": "Could not connect to the SMTP server.",
     "SMS_AUTH_FAILED": "The SMS provider refused the account details.",
@@ -2447,7 +2447,25 @@
       "test": "Test",
       "testHelp": "Connects, signs in and sends one test e-mail with the values in the form (without saving).",
       "testTo": "Recipient",
-      "sendTest": "Send a test e-mail"
+      "sendTest": "Send a test e-mail",
+      "provider": "Provider",
+      "providerHelp": "SMTP works with any mail server; the others send through the provider's own HTTP API (no SMTP port needed, often more reliable from servers).",
+      "apiHelp": "Create an API key in the provider's panel and verify the sender domain there; the sender address below must belong to it.",
+      "website": "Provider panel",
+      "docs": "API documentation",
+      "optional": "Optional.",
+      "default": "Default",
+      "fields": {
+        "apiKey": "API key",
+        "secretKey": "Secret key",
+        "region": "Region",
+        "domain": "Sending domain",
+        "serverToken": "Server token",
+        "messageStream": "Message stream",
+        "accessKeyId": "Access key ID",
+        "secretAccessKey": "Secret access key",
+        "sendMailToken": "Send mail token"
+      }
     },
     "captcha": {
       "solveFirst": "Complete the check first.",

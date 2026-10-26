@@ -419,3 +419,18 @@ test('server terminal: staff with system.terminal only, never without two-factor
   assert.equal((await post('/admin/terminal/switch', { enabled: true }, admin)).json().code, 'TERMINAL_NEEDS_2FA');
   assert.equal((await post('/admin/terminal/sessions/zz/revoke', {}, admin)).statusCode, 400);
 });
+
+test('mail through an API provider: secrets never come back, empty secret fields keep the saved ones, fields are checked', async () => {
+  const bad = (await put('/admin/settings/mail', { enabled: true, provider: 'mailgun', fromAddress: 'panel@example.com', api: { region: 'mars' }, use: {} }, admin)).json();
+  assert.deepEqual(Object.keys(bad.fields).sort(), ['api.apiKey', 'api.domain', 'api.region']);
+  assert.equal((await put('/admin/settings/mail', { enabled: true, provider: 'nope', fromAddress: 'panel@example.com', use: {} }, admin)).json().fields.provider, 'INVALID_VALUE');
+  let r = (await put('/admin/settings/mail', { enabled: true, provider: 'resend', fromAddress: 'panel@example.com', fromName: 'Panel', api: { apiKey: 're_secret_value' }, use: { passwordReset: true } }, admin)).json();
+  assert.equal(r.provider, 'resend');
+  assert.deepEqual(r.secretsSet, ['apiKey']);
+  assert.ok(!JSON.stringify(r).includes('re_secret_value') && !('apiSecretEnc' in r));
+  assert.ok(r.providers.some((p) => p.id === 'ses' && p.fields.some((f) => f.key === 'secretAccessKey' && f.secret)));
+  r = (await put('/admin/settings/mail', { enabled: true, provider: 'resend', fromAddress: 'panel@example.com', api: { apiKey: '' }, use: {} }, admin)).json();
+  assert.deepEqual(r.secretsSet, ['apiKey']); // kept
+  assert.equal((await get('/admin/settings/mail', user)).statusCode, 403);
+  await put('/admin/settings/mail', { enabled: false, provider: 'smtp', use: {} }, admin);
+});
