@@ -1100,7 +1100,15 @@
       "currencyHelp": "ISO 4217 kodu: EUR, TRY, USD…",
       "pools": "Sunulduğu havuzlar",
       "images": "İzin verilen imajlar",
-      "empty": "Henüz paket yok."
+      "empty": "Henüz paket yok.",
+      "sellable": "Satılabilir",
+      "sellableHint": "Boş kapasiteye sığan sunucu sayısı; ilk biten kaynak: {limit}",
+      "limitBy": "{limit} ile sınırlı",
+      "limit": {
+        "cpu": "CPU",
+        "ram": "RAM",
+        "disk": "disk"
+      }
     },
     "ip": {
       "title": "IP havuzları",
@@ -2239,7 +2247,18 @@
     "allow": "İzin ver",
     "default": "varsayılan",
     "legend": "Onay kutusu: kanal kullanılabilir. “varsayılan”: kullanıcı bir seçim yapmadıysa açık.",
-    "needChat": "Aşağıdan önce bir uygulama bağlayın."
+    "needChat": "Aşağıdan önce bir uygulama bağlayın.",
+    "quiet": {
+      "title": "Sessiz saatler",
+      "intro": "Belirlediğiniz saatlerde telefonunuzu titreten bildirimler (tarayıcı, SMS, mesajlaşma uygulamaları) gönderilmez.",
+      "enable": "Sessiz saatleri aç",
+      "from": "Başlangıç",
+      "to": "Bitiş",
+      "save": "Kaydet",
+      "saved": "Sessiz saatler: {start} – {end}",
+      "off": "Sessiz saatler kapatıldı.",
+      "help": "Saatler {tz} saat dilimine göre. Panel içi ve e-posta bildirimleri yine gelir; giriş ve parola gibi güvenlik bildirimleri her zaman gönderilir."
+    }
   },
   "Users": {
     "eyebrow": "Kişiler",

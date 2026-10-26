@@ -34,3 +34,10 @@ export function snap(n: Shape, r: { cpuMin: number; cpuMax: number; cpuStep: num
   const up = (v: number, min: number, max: number, step: number) => Math.min(max, Math.max(min, min + Math.ceil((v - min) / step) * step));
   return { vcpu: up(n.vcpu, r.cpuMin, r.cpuMax, r.cpuStep), memoryMb: up(n.memoryMb, r.memoryMinMb, r.memoryMaxMb, r.memoryStepMb), diskGb: up(n.diskGb, r.diskMinGb, r.diskMaxGb, r.diskStepGb) };
 }
+
+// How many more servers of a shape fit in a pool's free capacity, and which resource runs out first.
+export function sellable(available: { vcpu?: number; memoryMb?: number; storageGb?: number }, s: Shape): { count: number; limit: 'cpu' | 'ram' | 'disk' } {
+  const by = [['cpu', (available.vcpu ?? 0) / s.vcpu], ['ram', (available.memoryMb ?? 0) / s.memoryMb], ['disk', (available.storageGb ?? 0) / s.diskGb]] as const;
+  const [limit, n] = by.reduce((a, b) => (b[1] < a[1] ? b : a));
+  return { count: Math.max(0, Math.floor(n)), limit };
+}

@@ -12,6 +12,7 @@ import { getSettings, mailReady, saveSettings, sendMail, type Channel, type Noti
 import { sendSms, smsReady } from './sms';
 import { deliverChat } from './chat-delivery';
 import { publishLive } from './live-bus';
+import { alwaysSent, inQuietHours, loudChannels } from './quiet-hours';
 
 export type Text = { title: string; body: string };
 type EventDef = {
@@ -109,8 +110,8 @@ export async function notify(event: EventKey, to: string[] | `staff:${Permission
 
 async function recipients(to: string[] | string) {
   const { rows } = Array.isArray(to)
-    ? await pool.query('SELECT id, email, locale, role, phone_number, phone_number_verified FROM users WHERE id = ANY($1::uuid[]) AND NOT coalesce(banned, false)', [to])
-    : await pool.query('SELECT id, email, locale, role, phone_number, phone_number_verified FROM users WHERE NOT coalesce(banned, false) AND disabled_at IS NULL');
+    ? await pool.query('SELECT id, email, locale, role, phone_number, phone_number_verified, quiet_hours FROM users WHERE id = ANY($1::uuid[]) AND NOT coalesce(banned, false)', [to])
+    : await pool.query('SELECT id, email, locale, role, phone_number, phone_number_verified, quiet_hours FROM users WHERE NOT coalesce(banned, false) AND disabled_at IS NULL');
   if (Array.isArray(to)) return rows;
   const perm = to.replace('staff:', '') as Permission;
   const out = [];
@@ -173,7 +174,10 @@ export function startNotificationWorker() {
     const p = (await policies())[event];
     for (const u of await recipients(to)) {
       const t = def.text[u.locale === 'tr' ? 'tr' : 'en'](data);
+      // Quiet hours: nothing that buzzes a phone, except security notices; the inbox and e-mail still get it.
+      const quiet = !alwaysSent(event) && inQuietHours(u.quiet_hours);
       for (const c of await channelsFor(u.id, event, p)) {
+        if (quiet && loudChannels.has(c)) continue;
         await deliver(u, c, t, def.link?.(data) ?? null, event).catch((err) => logEvent('error', 'notification_failed', { event, channel: c, error: err instanceof Error ? err.message.slice(0, 200) : 'unknown' }));
       }
     }

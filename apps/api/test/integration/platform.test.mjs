@@ -623,3 +623,12 @@ test('directory sign-in (LDAP): checked settings, local accounts unaffected, dir
   }
   await put('/admin/settings/directory', { ldap: { enabled: false } }, admin);
 });
+
+test('quiet hours: checked, kept with the preferences, and turned off with null', async () => {
+  assert.equal((await put('/notifications/quiet-hours', { quietHours: { start: '25:00', end: '07:00', tz: 'UTC' } }, user)).statusCode, 400);
+  assert.equal((await put('/notifications/quiet-hours', { quietHours: { start: '23:00', end: '07:00', tz: 'Nowhere/City' } }, user)).statusCode, 400);
+  const q = { start: '23:00', end: '07:00', tz: 'Europe/Istanbul' };
+  assert.deepEqual((await put('/notifications/quiet-hours', { quietHours: q }, user)).json().quietHours, q);
+  assert.deepEqual((await get('/notifications/preferences', user)).json().quietHours, q);
+  assert.equal((await put('/notifications/quiet-hours', { quietHours: null }, user)).json().quietHours, null);
+});

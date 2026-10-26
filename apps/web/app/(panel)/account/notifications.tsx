@@ -7,7 +7,7 @@ import { motion } from 'motion/react';
 import { useTranslations } from 'next-intl';
 import { useEffect, useState } from 'react';
 import { I } from '../../../components/icon';
-import { Notice, Section } from '../../../components/ui';
+import { Notice, Section, SwitchInput, TextInput } from '../../../components/ui';
 import { apiFetch, useErrorText } from '../../../lib/api';
 import { currentSubscription, disablePush, enablePush, pushSupported } from '../../../lib/push';
 import { useApiQuery } from '../../../lib/query';
@@ -15,7 +15,7 @@ import ChatConnections from './chat-connections';
 
 export type Channel = 'inApp' | 'push' | 'email' | 'sms' | 'chat';
 export const channels: Channel[] = ['inApp', 'push', 'email', 'sms', 'chat'];
-type Prefs = { events: { event: string; allowed: Channel[]; locked: boolean; channels: Channel[] }[]; available: Record<Channel, boolean>; pushDevices: number; chatConnections: number; phoneVerified: boolean };
+type Prefs = { events: { event: string; allowed: Channel[]; locked: boolean; channels: Channel[] }[]; available: Record<Channel, boolean>; pushDevices: number; chatConnections: number; phoneVerified: boolean; quietHours: { start: string; end: string; tz: string } | null };
 export const channelIcon: Record<Channel, React.ReactNode> = { inApp: <I name="bell" size={15}/>, push: <I name="monitor-smartphone" size={15}/>, email: <I name="mail" size={15}/>, sms: <I name="message-square" size={15}/>, chat: <I name="messages-square" size={15}/> };
 
 export default function NotificationPrefs() {
@@ -69,6 +69,8 @@ export default function NotificationPrefs() {
 
     <ChatConnections/>
 
+    <QuietHours value={q.data.quietHours}/>
+
     <Section title={t('title')} description={t('intro')}>
       {events.length === 0 ? <p className="text-sm text-muted">{t('none')}</p> : <div className="overflow-x-auto">
         <table className="w-full min-w-[34rem] text-sm">
@@ -95,4 +97,35 @@ export default function NotificationPrefs() {
       <div className="mt-4"><Notice tone="default">{t('policyNote')}</Notice></div>
     </Section>
   </div>;
+}
+
+// Quiet hours: no browser push, SMS or messaging-app notices in a daily window (in this browser's time zone).
+function QuietHours({ value }: { value: Prefs['quietHours'] }) {
+  const t = useTranslations('Notify.quiet');
+  const { error } = useErrorText();
+  const client = useQueryClient();
+  const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const [on, setOn] = useState(!!value);
+  const [start, setStart] = useState(value?.start ?? '23:00');
+  const [end, setEnd] = useState(value?.end ?? '08:00');
+  const [busy, setBusy] = useState(false);
+  async function save(next: boolean) {
+    setBusy(true);
+    try {
+      await apiFetch('/notifications/quiet-hours', { method: 'PUT', body: { quietHours: next ? { start, end, tz: value?.tz ?? tz } : null } });
+      setOn(next); toast.success(next ? t('saved', { start, end }) : t('off'));
+      void client.invalidateQueries({ queryKey: ['notification-prefs'] });
+    } catch (e) { toast.danger(error(e)); } finally { setBusy(false); }
+  }
+  return <Section title={t('title')} description={t('intro')}>
+    <div className="flex flex-col gap-4">
+      <SwitchInput label={t('enable')} isSelected={on} onChange={(x) => void save(x)} isDisabled={busy}/>
+      {on && <div className="flex flex-wrap items-end gap-3">
+        <TextInput className="w-36" type="time" label={t('from')} value={start} onChange={setStart}/>
+        <TextInput className="w-36" type="time" label={t('to')} value={end} onChange={setEnd}/>
+        <Button variant="secondary" isPending={busy} isDisabled={start === end} onPress={() => save(true)}>{t('save')}</Button>
+      </div>}
+      <p className="text-xs text-muted">{t('help', { tz: value?.tz ?? tz })}</p>
+    </div>
+  </Section>;
 }

@@ -1100,7 +1100,15 @@
       "currencyHelp": "ISO 4217 code: EUR, TRY, USD…",
       "pools": "Offered in pools",
       "images": "Allowed images",
-      "empty": "No packages yet."
+      "empty": "No packages yet.",
+      "sellable": "Sellable",
+      "sellableHint": "Servers that still fit in the free capacity; runs out first: {limit}",
+      "limitBy": "limited by {limit}",
+      "limit": {
+        "cpu": "CPU",
+        "ram": "RAM",
+        "disk": "disk"
+      }
     },
     "ip": {
       "title": "IP pools",
@@ -2239,7 +2247,18 @@
     "allow": "Allow",
     "default": "default",
     "legend": "Checkbox: the channel may be used. “default”: on unless the user chose otherwise.",
-    "needChat": "Connect an app below first."
+    "needChat": "Connect an app below first.",
+    "quiet": {
+      "title": "Quiet hours",
+      "intro": "During the hours you choose, notices that buzz your phone (browser push, SMS, messaging apps) are not sent.",
+      "enable": "Turn on quiet hours",
+      "from": "From",
+      "to": "To",
+      "save": "Save",
+      "saved": "Quiet hours: {start} – {end}",
+      "off": "Quiet hours turned off.",
+      "help": "Times are in the {tz} time zone. In-panel and e-mail notices still arrive; security notices such as sign-ins and password changes always go out."
+    }
   },
   "Users": {
     "eyebrow": "People",

@@ -9,6 +9,7 @@ import { can } from './permissions';
 import { Can, PermissionGuard } from './rbac';
 import { getSettings, mailReady, saveSettings, type Channel, type NotificationPolicy } from './settings-store';
 import { smsReady } from './sms';
+import { validQuietHours } from './quiet-hours';
 import { chatReady } from './chat-delivery';
 
 const channelList = (v: unknown, from: Channel[]) => (Array.isArray(v) ? [...new Set(v.map(String))] : []).filter((c): c is Channel => from.includes(c as Channel));
@@ -45,7 +46,8 @@ export class NotificationsController {
       .map(([k]) => ({ event: k, allowed: p[k].allowed, locked: !p[k].userCanChange, channels: !p[k].userCanChange ? p[k].defaults : (chosen[k] ?? p[k].defaults).filter((c: Channel) => p[k].allowed.includes(c)) }));
     const { rows: [push] } = await pool.query('SELECT count(*)::int AS n FROM push_subscriptions WHERE user_id = $1', [req.user.id]);
     const { rows: [chat] } = await pool.query('SELECT count(*)::int AS n FROM chat_connections WHERE user_id = $1 AND enabled', [req.user.id]);
-    return { events, available: await availability(), pushDevices: push.n, chatConnections: chat.n, phoneVerified: req.user.phoneNumberVerified };
+    const { rows: [q] } = await pool.query('SELECT quiet_hours FROM users WHERE id = $1', [req.user.id]);
+    return { events, available: await availability(), pushDevices: push.n, chatConnections: chat.n, phoneVerified: req.user.phoneNumberVerified, quietHours: q?.quiet_hours ?? null };
   }
 
   @Put('preferences')
@@ -58,6 +60,15 @@ export class NotificationsController {
     await pool.query(`INSERT INTO notification_preferences (user_id, event, channels) VALUES ($1, $2, $3)
       ON CONFLICT (user_id, event) DO UPDATE SET channels = $3`, [req.user.id, event, channels]);
     return { event, channels };
+  }
+
+  // Quiet hours: {start, end, tz} or null to turn them off.
+  @Put('quiet-hours')
+  async quietHours(@Req() req: AuthedRequest, @Body() body: { quietHours?: unknown }) {
+    const q = validQuietHours(body?.quietHours ?? null);
+    if (q === 'invalid') throw apiError(400, 'VALIDATION_FAILED', 'Invalid input', { quietHours: 'INVALID_VALUE' });
+    await pool.query('UPDATE users SET quiet_hours = $2 WHERE id = $1', [req.user.id, q]);
+    return { quietHours: q };
   }
 
   @Get('push-key')

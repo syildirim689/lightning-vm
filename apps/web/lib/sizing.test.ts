@@ -27,3 +27,10 @@ test('a custom shape snaps up to the steps and stays in range', () => {
   assert.deepEqual(snap({ vcpu: 3, memoryMb: 3000, diskGb: 25 }, r), { vcpu: 3, memoryMb: 3072, diskGb: 30 });
   assert.deepEqual(snap({ vcpu: 16, memoryMb: 65536, diskGb: 500 }, r), { vcpu: 8, memoryMb: 16384, diskGb: 200 });
 });
+
+test('sellable: whole servers that still fit, and the resource that runs out first', async () => {
+  const { sellable } = await import('./sizing.ts');
+  assert.deepEqual(sellable({ vcpu: 10, memoryMb: 8192, storageGb: 1000 }, { vcpu: 2, memoryMb: 2048, diskGb: 50 }), { count: 4, limit: 'ram' });
+  assert.deepEqual(sellable({ vcpu: 3, memoryMb: 65536, storageGb: 1000 }, { vcpu: 2, memoryMb: 2048, diskGb: 50 }), { count: 1, limit: 'cpu' });
+  assert.deepEqual(sellable({}, { vcpu: 1, memoryMb: 1024, diskGb: 10 }).count, 0);
+});

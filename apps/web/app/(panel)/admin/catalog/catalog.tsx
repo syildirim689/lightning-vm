@@ -9,6 +9,7 @@ import { CheckboxList, ConfirmButton, DataTable, Empty, FieldGroup, Mono, Notice
 import { apiFetch } from '../../../../lib/api';
 import { useApiForm } from '../../../../lib/form';
 import { useApiAction, useApiQuery } from '../../../../lib/query';
+import { sellable } from '../../../../lib/sizing';
 import { Applications } from './apps-ui';
 import { IsoLibrary } from './iso-ui';
 import { flag, Locations, PoolLocation, useLocations } from './locations-ui';
@@ -88,8 +89,8 @@ export default function Catalog() {
         <div className="flex justify-end">{pools.length ? <FormModal title={t('packages.new')} label={t('packages.new')}>{(close) => <PackageForm pools={pools} images={images} onSaved={close}/>}</FormModal>
           : <p className="text-sm text-muted">{t('packages.needPool')}</p>}</div>
         <DataTable label={t('packages.title')} rows={packages} rowKey={(p) => p.id} empty={t('packages.empty')}
-          columns={[{ id: 'name', label: t('col.name') }, { id: 'cpu', label: 'vCPU' }, { id: 'ram', label: 'RAM' }, { id: 'disk', label: t('col.disk') }, { id: 'price', label: t('col.price') }, { id: 'act', label: <span className="sr-only">{t('remove')}</span> }]}
-          cells={(p) => [<span key="n" className="font-medium">{p.name}</span>, p.vcpu, `${p.memoryMb / 1024} GB`, `${p.diskGb} GB`, money(p.priceMonthly, p.currency), removeButton(`/admin/packages/${p.id}`, p.name)]}/>
+          columns={[{ id: 'name', label: t('col.name') }, { id: 'cpu', label: 'vCPU' }, { id: 'ram', label: 'RAM' }, { id: 'disk', label: t('col.disk') }, { id: 'price', label: t('col.price') }, { id: 'sell', label: t('packages.sellable') }, { id: 'act', label: <span className="sr-only">{t('remove')}</span> }]}
+          cells={(p) => [<span key="n" className="font-medium">{p.name}</span>, p.vcpu, `${p.memoryMb / 1024} GB`, `${p.diskGb} GB`, money(p.priceMonthly, p.currency), <Sellable key="s" pkg={p} pools={pools}/>, removeButton(`/admin/packages/${p.id}`, p.name)]}/>
       </Tabs.Panel>
 
       <Tabs.Panel id="images" className="flex flex-col gap-4 pt-5">
@@ -400,4 +401,20 @@ function QuotaForm({ users, onSaved }: { users: { id: string; email: string }[];
     <FieldGroup title={t('form.limits')}>{limit('maxServers')}{limit('maxVcpu')}{limit('maxMemoryMb', true)}{limit('maxDiskGb')}</FieldGroup>
     <FormFooter failure={f.failure?.text} busy={f.busy} label={t('quotas.save')} onCancel={onSaved}/>
   </form>;
+}
+
+// How many more of this package each of its pools can still take, and what runs out first (CPU, RAM or disk).
+function Sellable({ pkg, pools }: { pkg: Pkg; pools: Pool[] }) {
+  const t = useTranslations('Catalog');
+  const mine = pools.filter((p) => pkg.poolIds.includes(p.id));
+  if (!mine.length) return <span className="text-muted">–</span>;
+  return <ul className="flex flex-col gap-1">{mine.map((p) => {
+    const r = sellable(p.capacity.available, pkg);
+    const tone = r.count === 0 ? 'bg-danger/15 text-danger' : r.count < 5 ? 'bg-warning/15 text-warning' : 'bg-success/15 text-success';
+    const limit = t(('packages.limit.' + r.limit) as 'packages.limit.cpu');
+    return <li key={p.id} className="flex items-center gap-2 text-xs" title={t('packages.sellableHint', { limit })}>
+      <span className={'min-w-8 rounded-full px-2 py-0.5 text-center font-semibold tabular-nums ' + tone}>{r.count}</span>
+      <span className="truncate text-muted">{mine.length > 1 ? p.name + ' · ' : ''}{t('packages.limitBy', { limit })}</span>
+    </li>;
+  })}</ul>;
 }
