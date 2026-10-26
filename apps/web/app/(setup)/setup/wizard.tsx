@@ -35,8 +35,9 @@ function CheckList({ checks }: { checks: Check[] }) {
   const t = useTranslations('Setup');
   const format = useFormatter();
   return <ul className="checks flex flex-col gap-2">{checks.map((c, i) => <motion.li key={c.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.07, duration: 0.25, ease: 'easeOut' }}
-    className={`flex items-start gap-3 rounded-xl border px-3 py-2.5 text-sm ${c.ok ? 'ok border-success/30 bg-success/5' : 'fail border-danger/30 bg-danger/5'}`}>
-    <I name={c.ok ? 'circle-check' : 'circle-x'} size={18} className={`mt-0.5 shrink-0 ${c.ok ? 'text-success' : 'text-danger'}`}/>
+    className={`flex items-start gap-3 rounded-xl border px-3 py-2.5 text-sm ${c.ok ? 'ok border-success/30 bg-success/5' : c.code === 'STARTING' ? 'border-accent/30 bg-accent/5' : 'fail border-danger/30 bg-danger/5'}`}>
+    {c.code === 'STARTING' ? <I name="loader-circle" size={18} className="mt-0.5 shrink-0 animate-spin text-accent motion-reduce:animate-none"/>
+      : <I name={c.ok ? 'circle-check' : 'circle-x'} size={18} className={`mt-0.5 shrink-0 ${c.ok ? 'text-success' : 'text-danger'}`}/>}
     <span className="min-w-0"><strong>{t(`checkNames.${c.id}` as 'checkNames.postgres')}</strong>: {t(`checkCodes.${c.code}` as 'checkCodes.OK')}
       {c.detail?.version !== undefined && <span className="text-muted"> ({t('version', { version: String(c.detail.version) })})</span>}
       {c.detail?.a !== undefined && <span className="text-muted"> ({t('dnsDetail', { a: String(c.detail.a) || '–', aaaa: String(c.detail.aaaa) || '–' })})</span>}
@@ -253,18 +254,19 @@ export default function Wizard() {
         {notYetAvailable.includes(current) && <Notice tone="default">{t(`notAvailable.${current as 'pools'}`)}</Notice>}
         {current === 'monitoring' && <div className="flex flex-col gap-3">
           <CheckboxInput label={t('monitoring.enable')} isSelected={monitoring} onChange={setMonitoring}/>
-          <p className="text-sm text-muted">{monitorRunning ? t('monitoring.running') : t('monitoring.auto')}</p>
+          {!startingNow && <p className="text-sm text-muted">{monitorRunning ? t('monitoring.running') : t('monitoring.auto')}</p>}
           {startingNow && <p role="status" className="flex items-center gap-2 text-sm text-accent"><I name="loader-circle" size={16} className="animate-spin motion-reduce:animate-none"/>{t('monitoring.startingHelp')}</p>}
           {failure?.code === 'MAINTENANCE_AGENT_MISSING' && <pre className="overflow-x-auto rounded-lg bg-default p-3 font-mono text-xs">sudo sh scripts/install.sh agent on</pre>}
         </div>}
         {current === 'summary' && <Summary progress={progress} status={status}/>}
 
         {checking && !fresh && <ul aria-busy className="flex flex-col gap-2">{[0, 1, 2].map((i) => <li key={i} className="h-11 animate-pulse rounded-xl bg-default"/>)}</ul>}
-        {fresh && <>
+        {fresh && !startingNow && <>
           <motion.p key={String(passed)} initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.2 }} role="status" className={`flex items-center gap-2 text-sm font-medium ${passed ? 'text-success' : 'text-danger'}`}>
             <I name={passed ? 'circle-check' : 'circle-alert'} size={16}/>{passed ? t('allPassed') : t('someFailed', { n: result!.checks.filter((c) => !c.ok).length })}</motion.p>
           <CheckList checks={result!.checks}/>
         </>}
+        {fresh && startingNow && <CheckList checks={result!.checks.map((c) => c.ok ? c : { ...c, code: 'STARTING' })}/>}
         {current === 'access' && fresh && !passed && <p className="text-sm text-muted">{t(`access.hint.${result!.checks[0].code}` as 'access.hint.DNS_FAILED')} {t('unverifiedHelp')}</p>}
         {current === 'domain' && fresh && result!.checks.filter((c) => !c.ok).map((c) => <p key={c.id} className="text-sm text-muted">{t(`domain.hint.${c.code}` as 'domain.hint.DNS_FAILED')}</p>)}
         {current === 'domain' && fresh && result!.checks.some((c) => c.id === 'dns' && c.detail?.aaaa) && <p className="text-sm text-muted">{t('domain.aaaaWarning')}</p>}

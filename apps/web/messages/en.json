@@ -549,7 +549,8 @@
       "LOOPBACK_NOT_VERIFIABLE": "Local address; cannot be verified",
       "NO_ADDRESS_RECORDS": "No A record",
       "REDIRECT_HTTPS": "Redirects to HTTPS",
-      "CERT_STAGING": "Let's Encrypt test (staging) certificate; browsers do not trust it"
+      "CERT_STAGING": "Let's Encrypt test (staging) certificate; browsers do not trust it",
+      "STARTING": "Getting ready…"
     },
     "dnsDetail": "A: {a}; AAAA: {aaaa}",
     "certDetail": "issuer: {issuer}; expires: {validTo}",

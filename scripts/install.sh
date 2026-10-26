@@ -790,16 +790,19 @@ case "$MODE" in
     set_auto_update; exit 0 ;;
   monitoring)
     [ -f .env ] || die 17 E_NOT_INSTALLED "Önce kurulum yapın: sh scripts/install.sh" "Install first: sh scripts/install.sh"
+    # Only the services of the observability profile are touched, on and off: the panel's own services keep
+    # running exactly as they are (no recreate, whatever compose files they were started with).
+    all=$(mktemp); base=$(mktemp)
+    COMPOSE_PROFILES=observability docker compose config --services 2>/dev/null | sort > "$all"
+    COMPOSE_PROFILES= docker compose config --services 2>/dev/null | sort > "$base"
+    extra=$(comm -23 "$all" "$base" | tr '\n' ' '); rm -f "$all" "$base"
+    [ -n "$extra" ] || die 18 E_MONITORING "Compose dosyasında izleme servisi yok" "No monitoring services in the compose file"
     if [ "$SWITCH" = on ]; then
       write_observability; set_env COMPOSE_PROFILES observability
-      docker compose up -d --wait >/dev/null 2>&1 || die 18 E_MONITORING "İzleme bileşenleri başlatılamadı (docker compose ps ile bakın)" "Monitoring could not be started (see docker compose ps)"
+      # shellcheck disable=SC2086
+      COMPOSE_PROFILES=observability docker compose up -d --no-deps --wait $extra >/dev/null 2>&1 || die 18 E_MONITORING "İzleme bileşenleri başlatılamadı (docker compose ps ile bakın)" "Monitoring could not be started (see docker compose ps)"
       msg OK MONITORING "İzleme açık: Prometheus, Grafana, Loki ve Alertmanager çalışıyor" "Monitoring on: Prometheus, Grafana, Loki and Alertmanager are running"
     else
-      # Only the services of the observability profile: the panel itself keeps running.
-      all=$(mktemp); base=$(mktemp)
-      COMPOSE_PROFILES=observability docker compose config --services 2>/dev/null | sort > "$all"
-      COMPOSE_PROFILES= docker compose config --services 2>/dev/null | sort > "$base"
-      extra=$(comm -23 "$all" "$base" | tr '\n' ' '); rm -f "$all" "$base"
       set_env COMPOSE_PROFILES ""
       # shellcheck disable=SC2086
       [ -z "$extra" ] || COMPOSE_PROFILES=observability docker compose rm -sf $extra >/dev/null 2>&1 || true

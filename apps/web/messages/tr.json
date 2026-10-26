@@ -549,7 +549,8 @@
       "LOOPBACK_NOT_VERIFIABLE": "Yerel adres; doğrulanamaz",
       "NO_ADDRESS_RECORDS": "A kaydı yok",
       "REDIRECT_HTTPS": "HTTPS'e yönlendiriyor",
-      "CERT_STAGING": "Let's Encrypt test (staging) sertifikası; tarayıcılar güvenmez"
+      "CERT_STAGING": "Let's Encrypt test (staging) sertifikası; tarayıcılar güvenmez",
+      "STARTING": "Hazırlanıyor…"
     },
     "dnsDetail": "A: {a}; AAAA: {aaaa}",
     "certDetail": "veren: {issuer}; bitiş: {validTo}",
