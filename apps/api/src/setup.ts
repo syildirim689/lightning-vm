@@ -67,6 +67,24 @@ export async function provisionAdmin(email: string, locale: 'tr' | 'en') {
   return { email: creds.email, password };
 }
 
+// CLI recovery for a lost password (no e-mail needed): a new generated password, all sessions signed out.
+// Two-factor stays as it was; add --disable-2fa when the authenticator is lost too.
+export async function resetPassword(email: string, disable2fa: boolean) {
+  const { rows: [u] } = await pool.query('SELECT id FROM users WHERE lower(email) = lower($1)', [email.trim()]);
+  if (!u) return null;
+  const password = randomBytes(18).toString('base64url');
+  const ctx = await getAuth().$context;
+  if (!(await ctx.internalAdapter.findCredentialAccount(u.id))) return null;
+  await ctx.internalAdapter.updatePassword(u.id, await ctx.password.hash(password));
+  await ctx.internalAdapter.deleteSessions(u.id);
+  if (disable2fa) {
+    await pool.query('DELETE FROM auth_two_factors WHERE user_id = $1', [u.id]);
+    await pool.query('UPDATE users SET two_factor_enabled = false WHERE id = $1', [u.id]);
+  }
+  await pool.query("INSERT INTO audit_events (actor_id, action, outcome, metadata) VALUES ($1, 'auth.password_reset_cli', 'success', $2)", [u.id, { via: 'cli', disable2fa }]);
+  return { password };
+}
+
 // CLI recovery: lets an existing admin run the wizard again. It never touches accounts or data.
 export async function reopenSetup() {
   const { rowCount } = await pool.query('UPDATE setup_state SET completed_at = NULL WHERE completed_at IS NOT NULL');

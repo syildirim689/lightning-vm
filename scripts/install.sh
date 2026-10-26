@@ -8,6 +8,7 @@
 #                                        browser with a token), --no-monitoring, --no-schedule
 #   sh scripts/install.sh check          read-only: host pre-checks and state of an existing install
 #   sh scripts/install.sh recover-setup  reopen the browser setup wizard (accounts and data are kept)
+#   sh scripts/install.sh reset-password EMAIL [--disable-2fa]  lost password: a new one is shown once
 #   sh scripts/install.sh backup         encrypted backup of the database, settings, keys and certificates
 #   sh scripts/install.sh restore FILE [--yes-replace-data]
 #                                        restore a backup (without the flag it only checks and explains)
@@ -40,12 +41,14 @@ esac; fi
 
 MODE=install INSTALL_DOCKER=0 ALLOW_OS=0 DOMAIN="" ACME_STAGING=0 PROXY_PORT=8080 TRUSTED_CIDR="" TLS_MODE="" CERT_FILE="" KEY_FILE=""
 RESTORE_FILE="" YES=0 TO="" AUTO=0 SWITCH="" CHANNEL="" WINDOW="" BRANCH=""
-LOCAL=0 WIZARD=0 MONITORING=1 SCHEDULE=1 ADMIN_EMAIL=""
+LOCAL=0 WIZARD=0 MONITORING=1 SCHEDULE=1 ADMIN_EMAIL="" RESET_EMAIL="" DISABLE_2FA=""
 case "${LANG:-}" in tr*) UI="tr" ;; *) UI="en" ;; esac
 while [ $# -gt 0 ]; do
   case "$1" in
     install|check|recover-setup|update|behind-proxy|local-only|backup|maintenance|releases|run-requests) MODE=$1 ;;
     restore) MODE=restore; if [ $# -gt 1 ]; then shift; RESTORE_FILE=$1; fi ;;
+    reset-password) MODE=reset-password; if [ $# -gt 1 ]; then shift; RESET_EMAIL=$1; fi ;;
+    --disable-2fa) DISABLE_2FA=--disable-2fa ;;
     schedule|auto-update|agent) MODE=$1; if [ $# -gt 1 ]; then shift; SWITCH=$1; fi
       case "$SWITCH" in on|off) ;; *) echo "$MODE: on or off" >&2; exit 2 ;; esac ;;
     --yes-replace-data) YES=1 ;;
@@ -783,6 +786,13 @@ case "$MODE" in
   schedule) set_schedule; exit 0 ;;
   auto-update) [ -f .env ] || die 17 E_NOT_INSTALLED "Önce kurulum yapın: sh scripts/install.sh" "Install first: sh scripts/install.sh"
     set_auto_update; exit 0 ;;
+  reset-password)
+    [ -n "$RESET_EMAIL" ] || die 2 E_USAGE "Kullanım: sh scripts/install.sh reset-password E-POSTA [--disable-2fa]" "Usage: sh scripts/install.sh reset-password EMAIL [--disable-2fa]"
+    new_password=$(docker compose exec -T api node dist/cli.js reset-password "$RESET_EMAIL" $DISABLE_2FA 2>/dev/null) && [ -n "$new_password" ] ||
+      die 18 E_RESET_FAILED "Şifre sıfırlanamadı: bu e-postayla bir hesap yok veya servisler çalışmıyor" "Password not reset: no account with this e-mail, or the services are not running"
+    msg OK PASSWORD_RESET "Yeni şifre (yalnızca şimdi gösterilir; tüm oturumlar kapatıldı):" "New password (shown only now; every session was signed out):"
+    printf '\n    %s\n    %s\n\n' "$RESET_EMAIL" "$new_password"
+    exit 0 ;;
   recover-setup)
     docker compose exec -T api node dist/cli.js recover-setup >/dev/null 2>&1 || die 18 E_RECOVER_FAILED "Kurtarma çalışmadı; servisler çalışıyor mu?" "Recovery failed; are the services running?"
     msg OK SETUP_REOPENED "Sihirbaz yeniden açıldı: yönetici olarak giriş yapıp /setup adresine gidin" "Wizard reopened: sign in as an administrator and open /setup"

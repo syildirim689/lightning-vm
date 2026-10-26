@@ -382,3 +382,18 @@ test('audit log: staff search with filters and pages; each user sees only their 
   assert.ok(mine.length > 0 && mine.every((e) => e.actorId === userId), JSON.stringify(mine.map((e) => e.action)));
   assert.equal((await get('/activity')).statusCode, 401);
 });
+
+test('CLI password reset: a new generated password works, the old one and every session stop', async () => {
+  const { resetPassword } = await import('../../dist/setup.js');
+  const email = 'support@example.test';
+  const before = cookieOf(await post('/auth/sign-in/email', { email, password }));
+  assert.ok(before);
+  assert.equal(await resetPassword('nobody@example.test', false), null);
+  const { password: fresh } = await resetPassword(email.toUpperCase(), false);
+  assert.ok(fresh.length >= 20);
+  assert.equal((await get('/auth/me', before)).statusCode, 401);
+  assert.equal((await post('/auth/sign-in/email', { email, password })).statusCode, 401);
+  assert.ok(cookieOf(await post('/auth/sign-in/email', { email, password: fresh })));
+  const audit = (await pool.query("SELECT 1 FROM audit_events WHERE action = 'auth.password_reset_cli'")).rowCount;
+  assert.equal(audit, 1);
+});

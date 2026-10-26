@@ -4,10 +4,12 @@
 //   node dist/cli.js recover-setup     reopen the setup wizard for admins (accounts and data are kept)
 //   node dist/cli.js create-admin EMAIL [tr|en]
 //                                      unattended install: first admin with a generated password (printed once)
+//   node dist/cli.js reset-password EMAIL [--disable-2fa]
+//                                      lost password: a new generated one (printed once), every session signed out
 import { closeConnections, pool } from './db';
 import { logEvent } from './log';
 import { runMigrations } from './migrate';
-import { issueBootstrapToken, provisionAdmin, reopenSetup } from './setup';
+import { issueBootstrapToken, provisionAdmin, reopenSetup, resetPassword } from './setup';
 
 async function main(command: string | undefined) {
   if (command === 'migrate') {
@@ -31,7 +33,13 @@ async function main(command: string | undefined) {
     process.stdout.write(`${created.password}\n`); // stdout only: the installer shows it once
     return 0;
   }
-  process.stderr.write('usage: node dist/cli.js migrate | bootstrap-token | recover-setup | create-admin EMAIL [tr|en]\n');
+  if (command === 'reset-password') {
+    const done = await resetPassword(process.argv[3] ?? '', process.argv.includes('--disable-2fa'));
+    if (!done) { logEvent('warn', 'reset_password_unknown_user'); return 4; }
+    process.stdout.write(`${done.password}\n`); // stdout only: shown once to the operator
+    return 0;
+  }
+  process.stderr.write('usage: node dist/cli.js migrate | bootstrap-token | recover-setup | create-admin EMAIL [tr|en] | reset-password EMAIL [--disable-2fa]\n');
   return 2;
 }
 

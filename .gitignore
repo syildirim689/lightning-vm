@@ -11,6 +11,7 @@ coverage/
 .DS_Store
 .codegraph/
 .worklog.md
+ERISIM.md
 *.tsbuildinfo
 next-env.d.ts
 test-results/

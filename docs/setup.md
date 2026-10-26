@@ -38,6 +38,7 @@ sh scripts/install.sh [install|check|recover-setup|update|...] [--lang tr|en] [-
 | `install` (varsayılan) | Yukarıdaki tam kurulum | Evet |
 | `check` | Ön kontroller ve mevcut kurulumun durumu | **Hayır** |
 | `recover-setup` | Tamamlanmış sihirbazı yönetici için yeniden açar | Yalnızca kurulum durumu |
+| `reset-password E-POSTA [--disable-2fa]` | Unutulan şifre yerine yeni bir şifre üretir ve bir kez gösterir | Yalnızca o hesabın şifresi ve oturumları |
 | `backup`, `restore`, `update`, `schedule`, `auto-update` | İşletim (docs/operations.md) | Evet |
 | `domain`, `behind-proxy`, `local-only` | Erişim modunu değiştirir (docs/domain-https.md) | Yalnızca `.env` ve proxy |
 
@@ -105,6 +106,16 @@ yönetici ve ilk ayarlar burada oluşturulur.
   sh scripts/install.sh recover-setup
   ```
   Bu komut hesaplara ve verilere dokunmaz ve denetim kaydına yazılır.
+- **Şifre unutulduysa** (e-posta ayarlı değilse "Şifremi unuttum" çalışmaz): sunucuda şunu çalıştırın:
+  ```sh
+  sh scripts/install.sh reset-password admin@ornek.com
+  ```
+  - Yeni, güçlü bir şifre üretilir ve yalnızca bu komutun çıktısında bir kez gösterilir. Hiçbir yerde düz
+    metin olarak saklanmaz.
+  - Hesabın bütün oturumları kapatılır ve işlem denetim kaydına `auth.password_reset_cli` olarak yazılır.
+  - İki adımlı giriş olduğu gibi kalır. Doğrulayıcı uygulama da kaybolduysa `--disable-2fa` ekleyin; giriş
+    yaptıktan sonra iki adımlı girişi yeniden açın.
+  - Kurulum, ilk yöneticinin şifresini de yalnızca bir kez gösterir. Kaydedilmediyse bu komutla yenisi alınır.
 - **Doğrulama:** tüm doğrulama sunucuda yapılır. Bir adım ancak kendi kontrolleri o anda
   geçiyorsa "tamamlandı" olarak kaydedilir.
 
