@@ -180,7 +180,7 @@ export class SupportAdminController {
     if (assignee === 'none') where.push('t.assignee_id IS NULL');
     if (q?.trim()) {
       args.push(`%${q.trim()}%`, q.trim().replace(/^#/, ''));
-      where.push(`(t.subject ILIKE ${args.length - 1} OR o.email ILIKE ${args.length - 1} OR t.number::text = ${args.length})`);
+      where.push(`(t.subject ILIKE $${args.length - 1} OR o.email ILIKE $${args.length - 1} OR t.number::text = $${args.length})`);
     }
     const { rows } = await pool.query(`SELECT ${ticketColumns}, o.email AS "ownerEmail",
         (SELECT count(*)::int FROM ticket_messages m WHERE m.ticket_id = t.id AND NOT m.internal) AS messages
