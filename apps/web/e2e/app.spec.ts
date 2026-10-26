@@ -609,7 +609,7 @@ test.describe('people, settings and smart features (English browser)', () => {
     await expect(page.getByLabel('API key')).toBeVisible();
     await expect(page.getByRole('link', { name: 'API documentation' })).toHaveAttribute('href', /resend\.com\/docs/);
     await expect(page.getByLabel('Server', { exact: true })).toHaveCount(0);
-    await page.getByRole('radio', { name: 'SMTP' }).click();
+    await page.getByRole('radio', { name: 'SMTP', exact: true }).click();
     await expect(page.getByLabel('Server', { exact: true })).toBeVisible();
     await page.goto('/admin/settings?tab=notifications');
     await expect(page.getByText('User notifications')).toBeVisible();

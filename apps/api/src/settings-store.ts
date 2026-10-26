@@ -214,9 +214,10 @@ export function readMail(body: Input, saved: MailSettings): { value: MailSetting
   const savedSecrets = saved.provider === provider ? mailSecrets(saved) : {};
   const api = smtp ? { plain: {}, secrets: {}, fields: {} } : readProviderFields(provider, (body.api ?? {}) as Input, savedSecrets);
   if (enabled) Object.assign(fields, Object.fromEntries(Object.entries(api.fields).map(([k, v]) => [`api.${k}`, v])));
-  const port = Number(body.port);
-  if (!Number.isInteger(port) || port < 1 || port > 65535) fields.port = 'OUT_OF_RANGE';
-  const security = ['none', 'starttls', 'tls'].includes(body.security as string) ? body.security as MailSettings['security'] : (fields.security = 'INVALID_VALUE', 'starttls');
+  // Port and security matter only for SMTP; an API provider keeps the saved ones.
+  const port = smtp ? Number(body.port) : saved.port;
+  if (smtp && (!Number.isInteger(port) || port < 1 || port > 65535)) fields.port = 'OUT_OF_RANGE';
+  const security = !smtp ? saved.security : ['none', 'starttls', 'tls'].includes(body.security as string) ? body.security as MailSettings['security'] : (fields.security = 'INVALID_VALUE', 'starttls');
   const username = typeof body.username === 'string' ? body.username.trim().slice(0, 200) : '';
   const fromAddress = typeof body.fromAddress === 'string' ? body.fromAddress.trim() : '';
   if (enabled && !emailPattern.test(fromAddress)) fields.fromAddress = 'INVALID_EMAIL';
