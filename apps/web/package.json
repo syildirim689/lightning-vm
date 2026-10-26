@@ -6,7 +6,7 @@
     "dev": "next dev --hostname 0.0.0.0",
     "build": "next build",
     "start": "next start --hostname 0.0.0.0",
-    "test": "node scripts/check-messages.mjs && node scripts/icons.mjs --check",
+    "test": "node scripts/check-messages.mjs && node scripts/icons.mjs --check && node --test lib/*.test.ts",
     "test:e2e": "playwright test",
     "icons": "node scripts/icons.mjs"
   },

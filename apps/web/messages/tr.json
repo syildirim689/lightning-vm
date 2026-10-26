@@ -270,7 +270,15 @@
     "LDAP_FAILED": "Dizin isteği başarısız oldu.",
     "LDAP_USER_NOT_FOUND": "Bu e-postayla dizinde kimse bulunamadı.",
     "LDAP_AMBIGUOUS": "Bu e-postayla birden çok kişi bulundu; filtreyi daraltın.",
-    "PASSWORD_MANAGED_BY_DIRECTORY": "Bu hesabın parolası şirket dizininde yönetiliyor; oradan değiştirin."
+    "PASSWORD_MANAGED_BY_DIRECTORY": "Bu hesabın parolası şirket dizininde yönetiliyor; oradan değiştirin.",
+    "OK": "Tamam.",
+    "STATE_ERROR": "Sunucu hata durumunda.",
+    "POWERED_OFF": "Sunucu kapalı.",
+    "ABUSE_OPEN": "Açık bir kötüye kullanım bulgusu var.",
+    "OPS_FAILED": "Son işlemler başarısız oldu.",
+    "CPU_SATURATED": "CPU sürekli tam dolu.",
+    "CPU_HIGH": "CPU kullanımı yüksek.",
+    "IDLE": "Sunucu uzun süredir boşta."
   },
   "Auth": {
     "required": "zorunlu",
@@ -960,7 +968,34 @@
       "unreachable": "Ulaşılamadı",
       "lookingGlass": "Looking glass"
     },
-    "esxiNote": "ESXi (iç içe): root parolası ESXi girişidir; boş bırakırsanız güçlü bir parola üretilir ve sunucu sayfasında gösterilir. SSH anahtarları kullanılmaz. Kurulumdan sonra https://IP adresinden yönetin."
+    "esxiNote": "ESXi (iç içe): root parolası ESXi girişidir; boş bırakırsanız güçlü bir parola üretilir ve sunucu sayfasında gösterilir. SSH anahtarları kullanılmaz. Kurulumdan sonra https://IP adresinden yönetin.",
+    "advisor": {
+      "title": "Ne çalıştıracaksınız?",
+      "clear": "Temizle",
+      "traffic": "Beklenen trafik",
+      "t": {
+        "low": "Az",
+        "medium": "Orta",
+        "high": "Yoğun"
+      },
+      "w": {
+        "website": "Web sitesi",
+        "ecommerce": "E-ticaret",
+        "database": "Veritabanı",
+        "app": "Uygulama / API",
+        "containers": "Docker / K8s",
+        "game": "Oyun sunucusu",
+        "mail": "E-posta",
+        "dev": "Geliştirme / test"
+      },
+      "needs": "Başlangıç için önerilen: {vcpu} vCPU, {memory} GB RAM, {disk} GB disk",
+      "recommendedHint": "Bunu karşılayan en uygun paket \"Önerilen\" olarak işaretlendi. İhtiyaç değişirse sunucu sonra büyütülebilir.",
+      "notEnough": "Bu konumdaki paketlerin hiçbiri bu ihtiyacı tam karşılamıyor; en büyüğü işaretlendi. Özel boyut seçebilirsiniz.",
+      "noPackage": "Özel boyutta bu değerleri uygulayabilirsiniz.",
+      "choose": "Önerileni seç",
+      "apply": "Değerleri uygula",
+      "recommended": "Önerilen"
+    }
   },
   "Catalog": {
     "eyebrow": "YÖNETİM · KATALOG",
@@ -3026,7 +3061,7 @@
       "whatsappTokenHelp": "Sistem kullanıcısı için oluşturulan kalıcı anahtar önerilir.",
       "whatsappPhoneId": "Telefon numarası kimliği (Phone number ID)",
       "whatsappTemplate": "Şablon adı",
-      "whatsappTemplateHelp": "Gövdesi iki değişken içeren onaylı şablon: '{{1}}' başlık, '{{2}}' metin.",
+      "whatsappTemplateHelp": "Gövdesi iki değişken içeren onaylı şablon: “{{1}}” başlık, “{{2}}” metin.",
       "whatsappLanguage": "Şablon dili",
       "pushoverHelp": "pushover.net'te bir uygulama oluşturup API anahtarını girin; kullanıcılar kendi user key'lerini ekler.",
       "pushoverToken": "Uygulama API anahtarı",
@@ -3115,7 +3150,7 @@
           "todo": "Yayında duyuru yok."
         },
         "backup": {
-          "ok": "{hoursAgo, plural, =0 {Son başarılı yedek bir saatten kısa süre önce alındı.} other {Son başarılı yedek # saat önce alındı.}}",
+          "ok": "{hoursAgo, plural, =0 {Son başarılı yedek bir saatten kısa süre önce alındı.} one {Son başarılı yedek bir saat önce alındı.} other {Son başarılı yedek # saat önce alındı.}}",
           "warn": "Son 48 saatte başarılı yedek yok; Sistem sayfasından alın."
         },
         "directory": {
@@ -4463,6 +4498,44 @@
           "url": "https://www.rfc-editor.org/rfc/rfc4515"
         }
       ]
+    }
+  },
+  "FirstSteps": {
+    "title": "İlk adımlar",
+    "intro": "{total} adımdan {done} tanesi tamam.",
+    "hide": "Gizle",
+    "step": {
+      "sshKey": {
+        "title": "SSH anahtarı ekleyin",
+        "help": "Sunuculara parolasız ve güvenli bağlanın."
+      },
+      "server": {
+        "title": "İlk sunucunuzu oluşturun",
+        "help": "Konum, işletim sistemi ve boyut seçin."
+      },
+      "notify": {
+        "title": "Bildirim kanalı seçin",
+        "help": "Tarayıcı, SMS veya Telegram, Slack…"
+      },
+      "twoFactor": {
+        "title": "İki adımlı doğrulamayı açın",
+        "help": "Hesabınızı parola çalınmasına karşı koruyun."
+      }
+    }
+  },
+  "Digest": {
+    "title": "Son ziyaretinizden beri",
+    "titleDay": "Son 24 saatte",
+    "nothing": "Dikkat gerektiren yeni bir şey yok.",
+    "k": {
+      "failedOperations": "{n, plural, other {başarısız işlem}}",
+      "alerts": "{n, plural, other {alarm}}",
+      "abuse": "{n, plural, other {kötüye kullanım bulgusu}}",
+      "failedSignIns": "{n, plural, other {başarısız giriş}}",
+      "denied": "{n, plural, other {reddedilen erişim}}",
+      "users": "{n, plural, other {yeni kullanıcı}}",
+      "servers": "{n, plural, other {yeni sunucu}}",
+      "doneOperations": "{n, plural, other {tamamlanan işlem}}"
     }
   }
 }

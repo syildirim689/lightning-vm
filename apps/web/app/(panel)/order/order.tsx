@@ -10,6 +10,8 @@ import { ButtonLink, CheckboxList, Empty, Notice, NumberInput, PageHeader, Secti
 import { apiFetch, useErrorText, type ApiError } from '../../../lib/api';
 import { hostnameSchema, orderBody, useOrder } from '../../../lib/order-store';
 import { LocationPicker, type OrderLocation } from './locations';
+import { WorkloadAdvisor } from './advisor';
+import { needs, pick, snap, type Traffic, type Workload } from '../../../lib/sizing';
 import { useApiQuery } from '../../../lib/query';
 import { useIntentKey, useSshKeys } from '../servers-ui';
 
@@ -45,6 +47,7 @@ export default function Order() {
   const [failure, setFailure] = useState<ApiError & { text: string }>();
   const [busy, setBusy] = useState(false);
   const [nameError, setNameError] = useState<string>();
+  const [want, setWant] = useState<{ w: Workload; traffic: Traffic } | null>(null);
 
   // First pool by default, and drop selections that no longer exist in the catalog.
   useEffect(() => {
@@ -74,6 +77,10 @@ export default function Order() {
     : availability?.packages[p.id] && !availability.packages[p.id].capacity ? t('why.capacity')
     : availability?.packages[p.id]?.quota.length ? t('why.quota', { limits: availability.packages[p.id].quota.map((x) => t(`quota.${x as 'vcpu'}`)).join(', ') }) : null;
   const orderable = packages.filter((p) => !blocked(p));
+  // The advisor's starting size, and the cheapest orderable package that meets it.
+  const need = want ? needs(want.w, want.traffic, image?.minDiskGb ?? 0) : null;
+  const advice = need ? pick(orderable, need) : null;
+  const recommended = advice?.pkg?.id ?? null;
   const bestValue = orderable.length > 1 ? orderable.reduce((a, b) => (Number(a.priceMonthly) / a.vcpu <= Number(b.priceMonthly) / b.vcpu ? a : b)).id : null;
   const taken = new Set(mine.map((m) => m.name));
   const suggest = () => { const base = slug(image?.name.split(/\s/)[0] ?? 'server'); let n = 1; while (taken.has(`${base}-${n}`)) n++; return `${base}-${n}`; };
@@ -136,10 +143,14 @@ export default function Order() {
             <Radio value="package"><Radio.Content><Radio.Control><Radio.Indicator/></Radio.Control>{t('package')}</Radio.Content></Radio>
             <Radio value="custom" isDisabled={!custom}><Radio.Content><Radio.Control><Radio.Indicator/></Radio.Control>{t('custom')}{!custom && ` (${t('noCustom')})`}</Radio.Content></Radio>
           </RadioGroup>
+          <WorkloadAdvisor want={want} onWant={setWant} need={need} recommended={d.type === 'package' ? recommended : null} enough={d.type === 'package' ? !!advice?.enough : true}
+            applyLabel={d.type === 'package' ? (recommended ? t('advisor.choose') : '') : custom ? t('advisor.apply') : ''}
+            onApply={() => { if (d.type === 'package' && recommended) d.set({ packageId: recommended }); else if (custom && need) d.set(snap(need, custom)); }}/>
           {d.type === 'package' && <RadioGroup aria-label={t('package')} value={d.packageId} onChange={(v) => d.set({ packageId: v })} className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
             {packages.map((p) => <Radio key={p.id} value={p.id} isDisabled={!!blocked(p)} aria-label={t('packageOption', { name: p.name, vcpu: p.vcpu, memory: gb(p.memoryMb), disk: p.diskGb, price: money(p.priceMonthly, p.currency) })}
               className="group relative rounded-xl border border-border p-4 transition-all duration-150 hover:-translate-y-0.5 hover:shadow-md data-[disabled=true]:translate-y-0 data-[disabled=true]:opacity-60 data-[disabled=true]:shadow-none data-[selected=true]:border-accent data-[selected=true]:bg-accent-soft">
               {bestValue === p.id && <span className="absolute -top-2.5 right-3 rounded-full bg-success px-2 py-0.5 text-[10px] font-semibold uppercase text-success-foreground">{t('bestValue')}</span>}
+              {recommended === p.id && <motion.span initial={{ scale: 0.6, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="absolute -top-2.5 left-3 inline-flex items-center gap-1 rounded-full bg-accent px-2 py-0.5 text-[10px] font-semibold uppercase text-accent-foreground"><I name="wand-sparkles" size={10}/>{t('advisor.recommended')}</motion.span>}
               <Radio.Content className="flex w-full items-start gap-3">
                 <Radio.Control className="mt-0.5"><Radio.Indicator/></Radio.Control>
                 <span className="flex flex-col gap-1">

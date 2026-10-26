@@ -5,7 +5,8 @@ import { readdirSync, readFileSync, existsSync } from 'node:fs';
 const dir = new URL('../messages/', import.meta.url);
 const flatten = (obj, prefix = '') => Object.entries(obj).flatMap(([k, v]) =>
   typeof v === 'object' ? flatten(v, `${prefix}${k}.`) : [[`${prefix}${k}`, v]]);
-const args = (text) => [...text.matchAll(/\{(\w+)/g)].map((m) => m[1]).sort().join(',');
+// Placeholder names only ({name} or {name, plural ...}); the text inside plural branches differs per language.
+const args = (text) => [...new Set([...text.matchAll(/(?<!(?:zero|one|two|few|many|other|=\d+)\s*)\{(\w+)\s*[,}]/g)].map((m) => m[1]))].sort().join(',');
 const locales = Object.fromEntries(readdirSync(dir).filter((f) => f.endsWith('.json'))
   .map((f) => [f.slice(0, -5), new Map(flatten(JSON.parse(readFileSync(new URL(f, dir), 'utf8'))))]));
 

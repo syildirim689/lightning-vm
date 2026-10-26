@@ -824,6 +824,13 @@ test.describe('people, settings and smart features (English browser)', () => {
         .filter((el) => el.getAttribute('autocomplete') !== 'off' || (el as HTMLInputElement).type === 'password').map((el) => el.outerHTML.slice(0, 120)));
       expect(bad, path).toEqual([]);
     }
+    // The order page's workload advisor marks a recommended package.
+    await page.goto('/order');
+    await page.getByRole('radio', { name: 'Website' }).click();
+    await page.getByRole('radio', { name: 'Medium' }).click();
+    await expect(page.getByText(/Suggested to start/)).toBeVisible();
+    await page.waitForTimeout(400);
+    await shot(page, 'order-advisor');
     // The role editor: permissions, then limits.
     await page.goto('/admin/roles');
     await page.getByRole('button', { name: 'New role' }).click();

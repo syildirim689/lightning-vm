@@ -3,6 +3,7 @@ import { I } from '../../components/icon';
 import { ButtonLink, PageHeader } from '../../components/ui';
 import Insights from '../../components/insights';
 import { CostForecast } from '../../components/smart';
+import FirstSteps from '../../components/first-steps';
 import { ServerList } from './servers-ui';
 
 export default async function Page() {
@@ -11,6 +12,7 @@ export default async function Page() {
   return <>
     <PageHeader title={t('title')} description={t('intro')} actions={<ButtonLink href="/order"><I name="plus" size={16}/>{tn('newServer')}</ButtonLink>}/>
     <div className="flex flex-col gap-6">
+      <FirstSteps/>
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]"><Insights scope="mine"/><CostForecast/></div>
       <ServerList/>
     </div>

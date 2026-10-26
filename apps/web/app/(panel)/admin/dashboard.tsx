@@ -6,6 +6,7 @@ import { Bar, BarChart, CartesianGrid, Cell, Legend, Pie, PieChart, ResponsiveCo
 import { I } from '../../../components/icon';
 import CountUp from '../../../components/count-up';
 import Insights from '../../../components/insights';
+import Digest from '../../../components/digest';
 import { DataTable, Notice, PageHeader, Section, Stat, StatusChip } from '../../../components/ui';
 import { useApiQuery } from '../../../lib/query';
 import type { Server } from '../servers-ui';
@@ -77,6 +78,8 @@ export default function Dashboard({ setupOpen }: { setupOpen: boolean }) {
       <Stat label={t('stat.operations')} value={ops ? <CountUp value={open}/> : '…'} hint={t('stat.failed', { n: failed24h })} icon={<I name="activity"/>} tone={failed24h ? 'danger' : 'default'}/>
       <Stat label={t('stat.connections')} value={connections ? <><CountUp value={connOk}/> / <CountUp value={connections.length}/></> : '…'} hint={t('stat.connectionsHint')} icon={<I name="cable"/>} tone={connections && connOk < connections.length ? 'warning' : 'default'}/>
     </div>
+
+    <Digest/>
 
     <Insights scope="staff"/>
 

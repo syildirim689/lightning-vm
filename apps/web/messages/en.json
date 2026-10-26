@@ -270,7 +270,15 @@
     "LDAP_FAILED": "The directory request failed.",
     "LDAP_USER_NOT_FOUND": "Nobody with this e-mail was found in the directory.",
     "LDAP_AMBIGUOUS": "Several people have this e-mail; narrow the filter.",
-    "PASSWORD_MANAGED_BY_DIRECTORY": "This account's password is managed in the company directory; change it there."
+    "PASSWORD_MANAGED_BY_DIRECTORY": "This account's password is managed in the company directory; change it there.",
+    "OK": "Done.",
+    "STATE_ERROR": "The server is in an error state.",
+    "POWERED_OFF": "The server is powered off.",
+    "ABUSE_OPEN": "There is an open abuse finding.",
+    "OPS_FAILED": "Recent operations failed.",
+    "CPU_SATURATED": "The CPU is saturated.",
+    "CPU_HIGH": "CPU usage is high.",
+    "IDLE": "The server has been idle for a long time."
   },
   "Auth": {
     "required": "required",
@@ -960,7 +968,34 @@
       "unreachable": "Unreachable",
       "lookingGlass": "Looking glass"
     },
-    "esxiNote": "ESXi (nested): the root password is the ESXi login; leave it empty and a strong one is generated and shown on the server page. SSH keys are not used. Manage it at https://IP after setup."
+    "esxiNote": "ESXi (nested): the root password is the ESXi login; leave it empty and a strong one is generated and shown on the server page. SSH keys are not used. Manage it at https://IP after setup.",
+    "advisor": {
+      "title": "What will you run?",
+      "clear": "Clear",
+      "traffic": "Expected traffic",
+      "t": {
+        "low": "Low",
+        "medium": "Medium",
+        "high": "High"
+      },
+      "w": {
+        "website": "Website",
+        "ecommerce": "Online shop",
+        "database": "Database",
+        "app": "App / API",
+        "containers": "Docker / K8s",
+        "game": "Game server",
+        "mail": "E-mail",
+        "dev": "Dev / test"
+      },
+      "needs": "Suggested to start: {vcpu} vCPU, {memory} GB RAM, {disk} GB disk",
+      "recommendedHint": "The cheapest package that meets it is marked \"Recommended\". The server can be made bigger later.",
+      "notEnough": "No package here fully meets this; the biggest is marked. You can choose a custom size.",
+      "noPackage": "You can apply these values as a custom size.",
+      "choose": "Choose the recommended",
+      "apply": "Apply the values",
+      "recommended": "Recommended"
+    }
   },
   "Catalog": {
     "eyebrow": "ADMIN · CATALOG",
@@ -3026,7 +3061,7 @@
       "whatsappTokenHelp": "A permanent token for a system user is recommended.",
       "whatsappPhoneId": "Phone number ID",
       "whatsappTemplate": "Template name",
-      "whatsappTemplateHelp": "An approved template whose body has two variables: '{{1}}' title, '{{2}}' text.",
+      "whatsappTemplateHelp": "An approved template whose body has two variables: “{{1}}” title, “{{2}}” text.",
       "whatsappLanguage": "Template language",
       "pushoverHelp": "Create an application on pushover.net and enter its API token; users add their own user keys.",
       "pushoverToken": "Application API token",
@@ -4463,6 +4498,44 @@
           "url": "https://www.rfc-editor.org/rfc/rfc4515"
         }
       ]
+    }
+  },
+  "FirstSteps": {
+    "title": "First steps",
+    "intro": "{done} of {total} steps done.",
+    "hide": "Hide",
+    "step": {
+      "sshKey": {
+        "title": "Add an SSH key",
+        "help": "Connect to servers safely without a password."
+      },
+      "server": {
+        "title": "Create your first server",
+        "help": "Pick a location, an operating system and a size."
+      },
+      "notify": {
+        "title": "Choose a notification channel",
+        "help": "Browser, SMS or Telegram, Slack…"
+      },
+      "twoFactor": {
+        "title": "Turn on two-factor",
+        "help": "Protect your account if your password leaks."
+      }
+    }
+  },
+  "Digest": {
+    "title": "Since your last visit",
+    "titleDay": "In the last 24 hours",
+    "nothing": "Nothing new needs attention.",
+    "k": {
+      "failedOperations": "{n, plural, one {failed operation} other {failed operations}}",
+      "alerts": "{n, plural, one {alert} other {alerts}}",
+      "abuse": "{n, plural, one {abuse finding} other {abuse findings}}",
+      "failedSignIns": "{n, plural, one {failed sign-in} other {failed sign-ins}}",
+      "denied": "{n, plural, one {denied access} other {denied accesses}}",
+      "users": "{n, plural, one {new user} other {new users}}",
+      "servers": "{n, plural, one {new server} other {new servers}}",
+      "doneOperations": "{n, plural, one {completed operation} other {completed operations}}"
     }
   }
 }

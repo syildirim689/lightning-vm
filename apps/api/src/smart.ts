@@ -1,6 +1,6 @@
 // Smart features: a server's health score with its reasons and right-sizing advice, the customer's cost
 // forecast for this month, and the admin's getting-started checklist. The rules are in smart-rules.ts.
-import { Body, Controller, Get, Param, ParseUUIDPipe, Put, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, ParseUUIDPipe, Put, Query, Req, UseGuards } from '@nestjs/common';
 import { audit, SessionGuard, type AuthedRequest } from './auth';
 import { usageOf } from './catalog';
 import { pool } from './db';
@@ -81,5 +81,26 @@ export class OnboardingController {
       ['twoFactor', !!n.twofa, '/account?tab=security'],
     ];
     return { steps: done.map(([key, ok, link]) => ({ key, done: ok, link })) };
+  }
+}
+
+// Admin dashboard: what happened since the person last looked (the panel sends the time; at most 30 days back).
+@Controller('admin') @UseGuards(PermissionGuard)
+export class DigestController {
+  @Get('digest') @Can('dashboard.view')
+  async digest(@Req() req: AuthedRequest, @Query('since') since?: string) {
+    const floor = Date.now() - 30 * 86_400_000;
+    const t = Date.parse(since ?? '');
+    const from = new Date(Number.isFinite(t) ? Math.min(Date.now(), Math.max(floor, t)) : Date.now() - 86_400_000);
+    const { rows: [c] } = await pool.query(`SELECT
+      (SELECT count(*)::int FROM users WHERE created_at > $1) AS users,
+      (SELECT count(*)::int FROM servers WHERE created_at > $1) AS servers,
+      (SELECT count(*)::int FROM operations WHERE created_at > $1 AND status = 'failed') AS "failedOperations",
+      (SELECT count(*)::int FROM operations WHERE created_at > $1 AND status = 'succeeded') AS "doneOperations",
+      (SELECT count(*)::int FROM abuse_findings WHERE first_seen > $1) AS abuse,
+      (SELECT count(*)::int FROM notifications WHERE user_id = $2 AND event = 'admin.alert' AND created_at > $1) AS alerts,
+      (SELECT count(*)::int FROM audit_events WHERE created_at > $1 AND outcome = 'denied') AS denied,
+      (SELECT count(*)::int FROM audit_events WHERE created_at > $1 AND action = 'auth.login' AND outcome = 'failure') AS "failedSignIns"`, [from, req.user.id]);
+    return { since: from.toISOString(), counts: c };
   }
 }
