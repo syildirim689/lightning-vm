@@ -279,7 +279,9 @@
     "CPU_SATURATED": "The CPU is saturated.",
     "CPU_HIGH": "CPU usage is high.",
     "IDLE": "The server has been idle for a long time.",
-    "SERVER_LOCKED": "The server is locked; unlock it first."
+    "SERVER_LOCKED": "The server is locked; unlock it first.",
+    "TICKET_CLOSED": "This ticket is closed; open a new one.",
+    "TICKET_NOT_CLOSED": "You can rate it once it is closed."
   },
   "Auth": {
     "required": "required",
@@ -481,7 +483,10 @@
     "CHAT_AUTH_FAILED": "The token was rejected.",
     "LIMIT_REACHED": "You reached your role's limit.",
     "LOCATION_NOT_ALLOWED": "Your role cannot use this location.",
-    "WOULD_LOCK_YOU_OUT": "The address you use now is not in the list; you would lock yourself out."
+    "WOULD_LOCK_YOU_OUT": "The address you use now is not in the list; you would lock yourself out.",
+    "TOO_MANY_FILES": "At most 3 files.",
+    "FILE_TOO_LARGE": "A file can be at most 2 MB.",
+    "FILE_TYPE_NOT_ALLOWED": "This file type is not accepted."
   },
   "Setup": {
     "title": "Setup wizard",
@@ -1697,7 +1702,8 @@
       "unlock": "Unlock",
       "lockedNow": "Server locked.",
       "unlocked": "Server unlocked."
-    }
+    },
+    "getSupport": "Get support"
   },
   "Maintenance": {
     "title": "Backups and updates",
@@ -1786,7 +1792,9 @@
     "abuse": "Abuse",
     "myVdc": "Virtual datacenter",
     "audit": "Audit log",
-    "terminal": "Server terminal"
+    "terminal": "Server terminal",
+    "support": "Support tickets",
+    "mySupport": "Support"
   },
   "Dashboard": {
     "eyebrow": "ADMINISTRATION",
@@ -2249,6 +2257,22 @@
       "billing_budget_exceeded": {
         "title": "Budget exceeded",
         "help": "When your servers cost more per month than your budget (once a month)."
+      },
+      "support_reply": {
+        "title": "Support reply",
+        "help": "When support answers your ticket."
+      },
+      "support_ticket_opened": {
+        "title": "New support ticket",
+        "help": "When a customer opens a ticket."
+      },
+      "support_customer_message": {
+        "title": "Customer reply",
+        "help": "When a customer writes to a ticket (only the assignee, if there is one)."
+      },
+      "support_assigned": {
+        "title": "Ticket assigned",
+        "help": "When a ticket is assigned to you."
       }
     },
     "policyTitle": "The admin first, then each user",
@@ -2490,7 +2514,8 @@
       "roles": "Roles",
       "settings": "Settings",
       "system": "System",
-      "server": "On their own servers"
+      "server": "On their own servers",
+      "support": "Support"
     },
     "p": {
       "dashboard_view": "View the overview",
@@ -2523,7 +2548,9 @@
       "server_delete": "Delete servers",
       "server_snapshots": "Snapshots",
       "server_iso": "Mount ISOs",
-      "server_root_password": "Root password"
+      "server_root_password": "Root password",
+      "support_view": "See support tickets",
+      "support_manage": "Answer support tickets"
     },
     "help": {
       "dashboard_view": "The admin dashboard, insights and summary charts.",
@@ -2556,7 +2583,9 @@
       "server_delete": "Delete their own server.",
       "server_snapshots": "Take, restore and remove snapshots.",
       "server_iso": "Mount and eject ISOs.",
-      "server_root_password": "See and remove the root password."
+      "server_root_password": "See and remove the root password.",
+      "support_view": "Sees the queue, tickets and internal notes.",
+      "support_manage": "Answers, adds internal notes, assigns, changes status and priority."
     }
   },
   "Settings": {
@@ -2579,7 +2608,8 @@
       "announcement": "Announcement",
       "chat": "Messaging",
       "directory": "Directory (LDAP)",
-      "status": "Status and incidents"
+      "status": "Status and incidents",
+      "support": "Support"
     },
     "saved": "Saved.",
     "save": "Save",
@@ -3296,6 +3326,18 @@
       "removeTitle": "Delete the incident?",
       "removeBody": "The incident and all its updates are removed from the status page.",
       "cancel": "Cancel"
+    },
+    "support": {
+      "departments": "Departments",
+      "departmentsHelp": "The departments customers pick when they open a ticket. A switched-off department is hidden for new tickets; tickets of a removed one are kept.",
+      "nameTr": "Name (Turkish)",
+      "nameEn": "Name (English)",
+      "active": "On",
+      "up": "Move up",
+      "down": "Move down",
+      "remove": "Remove",
+      "add": "Add a department",
+      "openTickets": "{n} open tickets"
     }
   },
   "Firewalls": {
@@ -4003,7 +4045,13 @@
       "terminal_revoked": "Terminal ended",
       "chat_connect": "Messaging app connected",
       "chat_disconnect": "Messaging app removed",
-      "settings_chat": "Messaging settings changed"
+      "settings_chat": "Messaging settings changed",
+      "support_ticket_opened": "Support ticket opened",
+      "support_reply": "Wrote to a support ticket",
+      "support_note": "Internal note added",
+      "support_closed": "Support ticket closed",
+      "support_changed": "Support ticket changed",
+      "settings_support_departments": "Support departments changed"
     },
     "outcome": {
       "success": "Done",
@@ -4715,5 +4763,97 @@
     "daysAgo": "{n} days ago",
     "today": "Today",
     "uptime": "{pct}% uptime"
+  },
+  "Support": {
+    "title": "Support",
+    "intro": "Support tickets for your questions and problems. You are notified when there is an answer.",
+    "new": "New ticket",
+    "empty": "You have no support tickets yet.",
+    "status": {
+      "open": "Awaiting answer",
+      "answered": "Answered",
+      "customer_reply": "Customer replied",
+      "on_hold": "On hold",
+      "closed": "Closed"
+    },
+    "priority": {
+      "low": "Low",
+      "normal": "Normal",
+      "high": "High",
+      "urgent": "Urgent"
+    },
+    "priorityHelp": {
+      "low": "within a day",
+      "normal": "within 12 hours",
+      "high": "within 4 hours",
+      "urgent": "within an hour"
+    },
+    "hm": "{h}h {m}m",
+    "m": "{m}m",
+    "late": "{span} late",
+    "left": "{span} left",
+    "internalNote": "Internal note (the customer does not see it)",
+    "supportTeam": "Support team",
+    "customer": "Customer",
+    "canned": "Canned reply",
+    "cannedPick": "Pick a canned reply",
+    "replyLabel": "Your reply",
+    "noteLabel": "Internal note",
+    "removeFile": "Remove {name}",
+    "attach": "Attach files",
+    "internal": "Internal note",
+    "addNote": "Add the note",
+    "send": "Send",
+    "sent": "Your message was sent.",
+    "noteAdded": "Internal note added.",
+    "filesHelp": "Up to 3 files of 2 MB each: PNG, JPEG, GIF, WebP, PDF or a text/log file.",
+    "reopenHint": "This ticket is closed; writing reopens it.",
+    "notFound": "Ticket not found.",
+    "closedNow": "Ticket closed.",
+    "close": "Close the ticket",
+    "opened": "Opened {when}",
+    "rated": "Your rating:",
+    "rateQuestion": "How happy are you with the support?",
+    "stars": "{n} stars",
+    "rateComment": "Comment (optional)",
+    "rateSend": "Send the rating",
+    "assignee": "Assignee",
+    "unassigned": "Unassigned",
+    "statusLabel": "Status",
+    "priorityLabel": "Priority",
+    "saved": "Saved.",
+    "servers": "Servers",
+    "otherTickets": "Their other tickets",
+    "department": "Department",
+    "server": "Related server",
+    "noServer": "No server / general",
+    "subject": "Subject",
+    "subjectExample": "e.g. I cannot SSH into web-1",
+    "suggestHigh": "{name} looks troubled right now: make the priority High",
+    "message": "Message",
+    "messageHelp": "What happened, since when, what did you try? The more detail, the faster the answer.",
+    "cancel": "Cancel",
+    "submit": "Send the ticket",
+    "created": "Ticket #{number} opened.",
+    "staffEyebrow": "Support",
+    "queueTitle": "Support queue",
+    "queueIntro": "Late tickets first, then those whose deadline is closest. Deadlines follow the priority.",
+    "queueEmpty": "No tickets waiting.",
+    "search": "Number, subject or e-mail",
+    "stat": {
+      "waiting": "Awaiting answer",
+      "overdue": "Overdue",
+      "unassigned": "Unassigned",
+      "active": "Open tickets",
+      "firstResponse": "First response (30 days)",
+      "rating": "Satisfaction (90 days)"
+    },
+    "hours": "{n} h",
+    "filter": {
+      "active": "Open ones",
+      "all": "All",
+      "anyone": "Anyone",
+      "me": "Assigned to me"
+    }
   }
 }

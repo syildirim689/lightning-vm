@@ -19,7 +19,7 @@ import { authClient, signOut } from '../../lib/auth-client';
 import { can, type Permission } from '../../lib/permissions';
 import type { Branding, User } from '../../lib/session';
 
-type Key = 'dashboard' | 'servers' | 'abuse' | 'energy' | 'topology' | 'myTopology' | 'myVdc' | 'connections' | 'catalog' | 'users' | 'roles' | 'settings' | 'system' | 'myServers' | 'newServer' | 'firewalls' | 'account' | 'audit' | 'terminal';
+type Key = 'dashboard' | 'servers' | 'abuse' | 'energy' | 'topology' | 'myTopology' | 'myVdc' | 'connections' | 'catalog' | 'users' | 'roles' | 'settings' | 'system' | 'myServers' | 'newServer' | 'firewalls' | 'account' | 'audit' | 'terminal' | 'support' | 'mySupport';
 type Item = { href: string; key: Key; icon: React.ReactNode; exact?: boolean; need?: Permission[] };
 
 // Staff entries appear only with a permission that opens them; the API checks every call anyway.
@@ -27,6 +27,7 @@ const sections: { title: 'adminSection' | 'peopleSection' | 'customerSection'; i
   { title: 'adminSection', items: [
     { href: '/admin', key: 'dashboard', icon: <I name="layout-dashboard" size={18}/>, exact: true, need: ['dashboard.view'] },
     { href: '/admin/servers', key: 'servers', icon: <I name="server" size={18}/>, need: ['servers.view_all'] },
+    { href: '/admin/support', key: 'support', icon: <I name="life-buoy" size={18}/>, need: ['support.view'] },
     { href: '/admin/topology', key: 'topology', icon: <I name="network" size={18}/>, need: ['dashboard.view', 'servers.view_all'] },
     { href: '/admin/vmware', key: 'connections', icon: <I name="cable" size={18}/>, need: ['vmware.view', 'vmware.manage'] },
     { href: '/admin/catalog', key: 'catalog', icon: <I name="boxes" size={18}/>, need: ['catalog.view', 'catalog.manage'] },
@@ -47,6 +48,7 @@ const sections: { title: 'adminSection' | 'peopleSection' | 'customerSection'; i
     { href: '/vdc', key: 'myVdc', icon: <I name="building-2" size={18}/> },
     { href: '/topology', key: 'myTopology', icon: <I name="waypoints" size={18}/> },
     { href: '/firewalls', key: 'firewalls', icon: <I name="brick-wall-fire" size={18}/>, need: ['firewalls.manage', 'servers.view_all'] },
+    { href: '/support', key: 'mySupport', icon: <I name="life-buoy" size={18}/> },
     { href: '/account', key: 'account', icon: <I name="key-round" size={18}/> },
   ] },
 ];

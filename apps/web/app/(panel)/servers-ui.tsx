@@ -196,6 +196,7 @@ export function ServerDetail({ id }: { id: string }) {
   return <div className="flex flex-col gap-6">
     <PageHeader eyebrow={s.location || s.poolName} title={s.name} description={<span className="mt-2 inline-flex"><StateBadge server={s}/></span>}
       actions={<>{s.state === 'ready' && allowed.console && <ButtonLink variant="secondary" href={`/servers/${id}/console`}><I name="square-terminal" size={16}/>{actionLabel('console')}</ButtonLink>}
+        {own && <ButtonLink variant="ghost" href={`/support?new=1&server=${id}`}><I name="life-buoy" size={16}/>{t('getSupport')}</ButtonLink>}
         {own && <OrderSimilar server={s} names={(mine ?? []).map((x) => x.name)}/>}</>}/>
     {message && <div role="alert"><Notice tone="danger">{message}</Notice></div>}
     <LockBar id={id} locked={locked} canChange={own || allowed.delete}/>

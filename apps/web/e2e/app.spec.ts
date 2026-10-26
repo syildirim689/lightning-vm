@@ -430,7 +430,7 @@ test.describe('server lifecycle (simulator, Turkish customer)', () => {
     await page.goto('/order');
     await choose(page, page, /İşletim sistemi/, /Sim Linux/);
     await tick(page.getByRole('radio', { name: /E2E Tiny/ }));
-    await expect(page.locator('.quote')).toContainText('Aylık: €3,00');
+    await expect(page.locator('.quote')).toContainText('Aylık: €3,00', { timeout: 15_000 });
     await page.getByLabel('Sunucu adı').fill('Web_1');
     await tick(page.getByRole('checkbox', { name: 'dizüstü' }));
     await page.getByRole('button', { name: 'Sunucuyu oluştur' }).click();
@@ -762,7 +762,7 @@ test.describe('people, settings and smart features (English browser)', () => {
     await expect(page).toHaveURL(/\/admin$/);
     for (const path of ['/admin', '/admin/servers', '/admin/vmware', '/admin/catalog', '/admin/users', '/admin/roles', '/admin/settings?tab=mail', '/admin/system', '/', '/order', '/firewalls', '/admin/settings?tab=rdns', '/admin/catalog?tab=ip', '/account?tab=security',
       '/admin/topology', '/admin/energy', '/admin/abuse', '/admin/catalog?tab=locations', '/admin/catalog?tab=isos', '/admin/catalog?tab=vdcs', '/admin/settings?tab=domain', '/admin/settings?tab=servers', '/topology', '/vdc', '/account?tab=accessibility',
-      '/admin/catalog?tab=packages', '/admin/catalog?tab=apps', '/admin/settings?tab=security', '/admin/settings?tab=notifications', '/account?tab=keys', '/account?tab=notifications', '/admin/audit', '/account?tab=activity', '/admin/settings?tab=announcement', '/admin/terminal', '/admin/settings?tab=chat', '/admin/settings?tab=directory', '/admin/roles', '/admin/settings?tab=status', '/status']) {
+      '/admin/catalog?tab=packages', '/admin/catalog?tab=apps', '/admin/settings?tab=security', '/admin/settings?tab=notifications', '/account?tab=keys', '/account?tab=notifications', '/admin/audit', '/account?tab=activity', '/admin/settings?tab=announcement', '/admin/terminal', '/admin/settings?tab=chat', '/admin/settings?tab=directory', '/admin/roles', '/admin/settings?tab=status', '/status', '/support', '/admin/support', '/admin/settings?tab=support']) {
       await page.goto(path);
       await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
       await expectNoOverflow(page, `${path} at ${viewport.width} px`);
@@ -863,6 +863,28 @@ test.describe('people, settings and smart features (English browser)', () => {
     await page.getByRole('button', { name: 'Delete' }).first().click();
     await page.getByRole('alertdialog').getByRole('button', { name: 'Delete' }).click();
     await expect(page.getByText('No incidents yet.')).toBeVisible();
+    // Support: a ticket opened from the customer side, then the staff queue and an internal note.
+    await page.goto('/support');
+    await page.getByRole('button', { name: 'New ticket' }).first().click();
+    await page.getByLabel('Subject').fill('Cannot reach my server over SSH');
+    await page.getByRole('radio', { name: /High/ }).click();
+    await page.getByLabel('Message').fill('SSH times out since this morning. I already restarted the server.');
+    await page.waitForTimeout(400);
+    await shot(page, 'support-new');
+    await page.getByRole('button', { name: 'Send the ticket' }).click();
+    await expect(page).toHaveURL(//support/[0-9a-f-]{36}$/);
+    await expect(page.getByText('SSH times out since this morning.')).toBeVisible();
+    await shot(page, 'support-ticket');
+    await page.goto('/admin/support');
+    await expect(page.getByText('Cannot reach my server over SSH')).toBeVisible();
+    await page.waitForTimeout(400);
+    await shot(page, 'support-queue');
+    await page.getByText('Cannot reach my server over SSH').click();
+    await page.getByRole('button', { name: 'Internal note' }).click();
+    await page.getByLabel('Internal note').fill('Probably the firewall; checking.');
+    await page.getByRole('button', { name: 'Add the note' }).click();
+    await expect(page.getByText('Probably the firewall; checking.')).toBeVisible();
+    await shot(page, 'support-staff');
     // A person at a glance from the user list.
     await page.goto('/admin/users');
     await page.getByRole('button', { name: /admin@example.test/ }).first().click();

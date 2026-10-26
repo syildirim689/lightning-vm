@@ -279,7 +279,9 @@
     "CPU_SATURATED": "CPU sürekli tam dolu.",
     "CPU_HIGH": "CPU kullanımı yüksek.",
     "IDLE": "Sunucu uzun süredir boşta.",
-    "SERVER_LOCKED": "Sunucu kilitli; bu işlem için önce kilidi açın."
+    "SERVER_LOCKED": "Sunucu kilitli; bu işlem için önce kilidi açın.",
+    "TICKET_CLOSED": "Bu talep kapalı; yeni bir talep açın.",
+    "TICKET_NOT_CLOSED": "Talep kapandıktan sonra puanlayabilirsiniz."
   },
   "Auth": {
     "required": "zorunlu",
@@ -481,7 +483,10 @@
     "CHAT_AUTH_FAILED": "Anahtar reddedildi.",
     "LIMIT_REACHED": "Rolünüzün sınırına ulaştınız.",
     "LOCATION_NOT_ALLOWED": "Rolünüz bu konumu kullanamaz.",
-    "WOULD_LOCK_YOU_OUT": "Şu an kullandığınız adres listede yok; kendinizi dışarıda bırakırdınız."
+    "WOULD_LOCK_YOU_OUT": "Şu an kullandığınız adres listede yok; kendinizi dışarıda bırakırdınız.",
+    "TOO_MANY_FILES": "En fazla 3 dosya eklenebilir.",
+    "FILE_TOO_LARGE": "Dosya en fazla 2 MB olabilir.",
+    "FILE_TYPE_NOT_ALLOWED": "Bu dosya türü kabul edilmiyor."
   },
   "Setup": {
     "title": "Kurulum sihirbazı",
@@ -1697,7 +1702,8 @@
       "unlock": "Kilidi aç",
       "lockedNow": "Sunucu kilitlendi.",
       "unlocked": "Kilit açıldı."
-    }
+    },
+    "getSupport": "Destek iste"
   },
   "Maintenance": {
     "title": "Yedekler ve güncellemeler",
@@ -1786,7 +1792,9 @@
     "abuse": "Kötüye kullanım",
     "myVdc": "Sanal veri merkezi",
     "audit": "Denetim kaydı",
-    "terminal": "Sunucu terminali"
+    "terminal": "Sunucu terminali",
+    "support": "Destek talepleri",
+    "mySupport": "Destek"
   },
   "Dashboard": {
     "eyebrow": "YÖNETİM",
@@ -2249,6 +2257,22 @@
       "billing_budget_exceeded": {
         "title": "Bütçe aşıldı",
         "help": "Sunucularınızın aylık tutarı belirlediğiniz bütçeyi geçtiğinde (ayda bir)."
+      },
+      "support_reply": {
+        "title": "Destek yanıtı",
+        "help": "Destek ekibi talebinize yanıt verdiğinde."
+      },
+      "support_ticket_opened": {
+        "title": "Yeni destek talebi",
+        "help": "Bir müşteri talep açtığında."
+      },
+      "support_customer_message": {
+        "title": "Müşteri yanıtı",
+        "help": "Müşteri bir talebe yazdığında (atanmışsa yalnızca sorumluya)."
+      },
+      "support_assigned": {
+        "title": "Talep atandı",
+        "help": "Bir talep size atandığında."
       }
     },
     "policyTitle": "Önce yönetici, sonra kullanıcı",
@@ -2490,7 +2514,8 @@
       "roles": "Roller",
       "settings": "Ayarlar",
       "system": "Sistem",
-      "server": "Kendi sunucularında"
+      "server": "Kendi sunucularında",
+      "support": "Destek"
     },
     "p": {
       "dashboard_view": "Genel bakışı görme",
@@ -2523,7 +2548,9 @@
       "server_delete": "Sunucu silme",
       "server_snapshots": "Anlık görüntüler",
       "server_iso": "ISO bağlama",
-      "server_root_password": "Root parolası"
+      "server_root_password": "Root parolası",
+      "support_view": "Destek taleplerini gör",
+      "support_manage": "Destek taleplerini yanıtla"
     },
     "help": {
       "dashboard_view": "Yönetim panosu, içgörüler ve özet grafikler.",
@@ -2556,7 +2583,9 @@
       "server_delete": "Kendi sunucusunu silme.",
       "server_snapshots": "Anlık görüntü alma, geri yükleme ve silme.",
       "server_iso": "ISO bağlama ve çıkarma.",
-      "server_root_password": "Root parolasını görme ve silme."
+      "server_root_password": "Root parolasını görme ve silme.",
+      "support_view": "Kuyruğu, talepleri ve iç notları görür.",
+      "support_manage": "Yanıtlar, iç not ekler, atar, durum ve öncelik değiştirir."
     }
   },
   "Settings": {
@@ -2579,7 +2608,8 @@
       "announcement": "Duyuru",
       "chat": "Mesajlaşma",
       "directory": "Dizin (LDAP)",
-      "status": "Durum ve olaylar"
+      "status": "Durum ve olaylar",
+      "support": "Destek"
     },
     "saved": "Kaydedildi.",
     "save": "Kaydet",
@@ -3296,6 +3326,18 @@
       "removeTitle": "Olay silinsin mi?",
       "removeBody": "Olay ve tüm güncellemeleri durum sayfasından kaldırılır.",
       "cancel": "Vazgeç"
+    },
+    "support": {
+      "departments": "Departmanlar",
+      "departmentsHelp": "Müşterilerin talep açarken seçtiği departmanlar. Kapattığınız departman yeni taleplerde görünmez; silinen departmanın talepleri korunur.",
+      "nameTr": "Ad (Türkçe)",
+      "nameEn": "Ad (İngilizce)",
+      "active": "Açık",
+      "up": "Yukarı taşı",
+      "down": "Aşağı taşı",
+      "remove": "Kaldır",
+      "add": "Departman ekle",
+      "openTickets": "{n} açık talep"
     }
   },
   "Firewalls": {
@@ -4003,7 +4045,13 @@
       "terminal_revoked": "Terminal sonlandırıldı",
       "chat_connect": "Mesajlaşma uygulaması bağlandı",
       "chat_disconnect": "Mesajlaşma uygulaması kaldırıldı",
-      "settings_chat": "Mesajlaşma ayarları değişti"
+      "settings_chat": "Mesajlaşma ayarları değişti",
+      "support_ticket_opened": "Destek talebi açıldı",
+      "support_reply": "Destek talebine yazıldı",
+      "support_note": "İç not eklendi",
+      "support_closed": "Destek talebi kapatıldı",
+      "support_changed": "Destek talebi değiştirildi",
+      "settings_support_departments": "Destek departmanları değişti"
     },
     "outcome": {
       "success": "Tamamlandı",
@@ -4715,5 +4763,97 @@
     "daysAgo": "{n} gün önce",
     "today": "Bugün",
     "uptime": "%{pct} çalışma süresi"
+  },
+  "Support": {
+    "title": "Destek",
+    "intro": "Sorularınız ve sorunlarınız için destek talepleri. Yanıt geldiğinde bildirim alırsınız.",
+    "new": "Yeni talep",
+    "empty": "Henüz destek talebiniz yok.",
+    "status": {
+      "open": "Yanıt bekliyor",
+      "answered": "Yanıtlandı",
+      "customer_reply": "Müşteri yazdı",
+      "on_hold": "Beklemede",
+      "closed": "Kapalı"
+    },
+    "priority": {
+      "low": "Düşük",
+      "normal": "Normal",
+      "high": "Yüksek",
+      "urgent": "Acil"
+    },
+    "priorityHelp": {
+      "low": "1 gün içinde",
+      "normal": "12 saat içinde",
+      "high": "4 saat içinde",
+      "urgent": "1 saat içinde"
+    },
+    "hm": "{h} sa {m} dk",
+    "m": "{m} dk",
+    "late": "{span} gecikti",
+    "left": "{span} kaldı",
+    "internalNote": "İç not (müşteri görmez)",
+    "supportTeam": "Destek ekibi",
+    "customer": "Müşteri",
+    "canned": "Hazır yanıt",
+    "cannedPick": "Bir hazır yanıt seçin",
+    "replyLabel": "Yanıtınız",
+    "noteLabel": "İç not",
+    "removeFile": "{name} dosyasını kaldır",
+    "attach": "Dosya ekle",
+    "internal": "İç not",
+    "addNote": "Notu ekle",
+    "send": "Gönder",
+    "sent": "Mesajınız gönderildi.",
+    "noteAdded": "İç not eklendi.",
+    "filesHelp": "En fazla 3 dosya, her biri 2 MB: PNG, JPEG, GIF, WebP, PDF veya metin/günlük dosyası.",
+    "reopenHint": "Bu talep kapalı; yazarsanız yeniden açılır.",
+    "notFound": "Talep bulunamadı.",
+    "closedNow": "Talep kapatıldı.",
+    "close": "Talebi kapat",
+    "opened": "Açıldı: {when}",
+    "rated": "Puanınız:",
+    "rateQuestion": "Destekten ne kadar memnun kaldınız?",
+    "stars": "{n} yıldız",
+    "rateComment": "Yorum (isteğe bağlı)",
+    "rateSend": "Puanı gönder",
+    "assignee": "Sorumlu",
+    "unassigned": "Atanmadı",
+    "statusLabel": "Durum",
+    "priorityLabel": "Öncelik",
+    "saved": "Kaydedildi.",
+    "servers": "Sunucular",
+    "otherTickets": "Diğer talepleri",
+    "department": "Departman",
+    "server": "İlgili sunucu",
+    "noServer": "Sunucu yok / genel",
+    "subject": "Konu",
+    "subjectExample": "Örn. web-1 sunucusuna SSH ile bağlanamıyorum",
+    "suggestHigh": "{name} şu an sorunlu görünüyor: önceliği Yüksek yapın",
+    "message": "Mesaj",
+    "messageHelp": "Ne oldu, ne zamandan beri, ne denediniz? Ayrıntı ne kadar fazlaysa yanıt o kadar hızlı olur.",
+    "cancel": "Vazgeç",
+    "submit": "Talebi gönder",
+    "created": "Talep #{number} açıldı.",
+    "staffEyebrow": "Destek",
+    "queueTitle": "Destek kuyruğu",
+    "queueIntro": "Gecikenler önce, sonra yanıt süresi yaklaşanlar. Süreler önceliğe göredir.",
+    "queueEmpty": "Bekleyen talep yok.",
+    "search": "Numara, konu veya e-posta",
+    "stat": {
+      "waiting": "Yanıt bekleyen",
+      "overdue": "Geciken",
+      "unassigned": "Atanmamış",
+      "active": "Açık talep",
+      "firstResponse": "İlk yanıt (30 gün)",
+      "rating": "Memnuniyet (90 gün)"
+    },
+    "hours": "{n} sa",
+    "filter": {
+      "active": "Açık olanlar",
+      "all": "Tümü",
+      "anyone": "Herkes",
+      "me": "Bana atananlar"
+    }
   }
 }
