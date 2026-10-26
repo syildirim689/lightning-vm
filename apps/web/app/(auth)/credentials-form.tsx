@@ -8,6 +8,7 @@ import { useEffect, useState } from 'react';
 import { z } from 'zod';
 import { useCaptcha } from '../../components/captcha';
 import { I } from '../../components/icon';
+import { FailureGlow, SuccessOverlay } from './outcome';
 import { CheckboxInput, Notice, TextInput } from '../../components/ui';
 import { apiFetch, useErrorText, type ApiError } from '../../lib/api';
 import { authClient } from '../../lib/auth-client';
@@ -110,7 +111,8 @@ export default function CredentialsForm({ mode, noToken, onDone }: { mode: Mode;
   useEffect(() => setHydrated(true), []);
   const shake = useAnimationControls();
   const still = useReducedMotion();
-  const shakeForm = () => { if (!still) void shake.start({ x: [0, -8, 8, -6, 6, 0], transition: { duration: 0.4 } }); };
+  const [failures, setFailures] = useState(0);
+  const shakeForm = () => { setFailures((n) => n + 1); if (!still) void shake.start({ x: [0, -8, 8, -6, 6, 0], transition: { duration: 0.4 } }); };
   const suggestion = mode !== 'setup' ? emailSuggestion(values.email) : null;
   const set = (k: keyof typeof values) => (v: string) => { setValues((x) => ({ ...x, [k]: v })); setFields((f) => ({ ...f, [k]: '' })); };
   const form = mode === 'login' ? 'signIn' : 'signUp';
@@ -166,7 +168,8 @@ export default function CredentialsForm({ mode, noToken, onDone }: { mode: Mode;
     setFailure(undefined); setBusy('passkey');
     const { error: err } = await authClient.signIn.passkey();
     setBusy(undefined);
-    if (err) { if (asApiError(err).code !== 'AUTH_CANCELLED') setFailure(error(asApiError(err))); return; }
+    if (err) { if (asApiError(err).code !== 'AUTH_CANCELLED') { setFailure(error(asApiError(err))); shakeForm(); } return; }
+    setDone(true);
     await landed(router);
   }
 
@@ -177,7 +180,9 @@ export default function CredentialsForm({ mode, noToken, onDone }: { mode: Mode;
     {on && <span className="pointer-events-none absolute -top-2.5 right-4 inline-flex items-center gap-1 rounded-full border border-accent/40 bg-surface px-2 py-0.5 text-[11px] font-semibold text-accent shadow-sm">
       <I name="history" size={11}/>{t('lastUsed')}</span>}
   </div>;
-  return <motion.form method="post" animate={shake} onSubmit={submit} noValidate className="flex flex-col gap-4">
+  return <motion.form method="post" animate={shake} onSubmit={submit} noValidate className="relative flex flex-col gap-4">
+    <FailureGlow count={failures}/>
+    <SuccessOverlay show={done} label={t('redirecting')}/>
     {mode === 'setup' && !noToken && <TextInput label={t('token')} type="password" value={values.token} onChange={set('token')} autoComplete="one-time-code" spellCheck={false} help={t('tokenHelp')} isRequired/>}
     <TextInput label={t('email')} type="email" value={values.email} onChange={set('email')} autoComplete="username webauthn" autofill={mode === 'login'} maxLength={254}
       error={field(fields.email)} help={t('emailHelp')} isRequired/>
@@ -239,6 +244,7 @@ function SecondFactor({ onBack }: { onBack: () => void }) {
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState<string>();
   const [done, setDone] = useState(false);
+  const [failures, setFailures] = useState(0);
   const cooldown = useCooldown(60);
   const shake = useAnimationControls();
   const still = useReducedMotion();
@@ -261,7 +267,7 @@ function SecondFactor({ onBack }: { onBack: () => void }) {
       : await authClient.twoFactor.verifyBackupCode({ code: code.trim(), trustDevice: trust });
     setBusy(false);
     if (r.error) {
-      setFailure(error(asApiError(r.error))); setCode('');
+      setFailure(error(asApiError(r.error))); setCode(''); setFailures((n) => n + 1);
       if (!still) void shake.start({ x: [0, -8, 8, -6, 6, 0], transition: { duration: 0.4 } });
       return;
     }
@@ -271,7 +277,9 @@ function SecondFactor({ onBack }: { onBack: () => void }) {
 
   const tabs = [{ id: 'totp' as const, icon: 'smartphone', label: t('twoFactor.app') }, ...(otpAvailable ? [{ id: 'otp' as const, icon: 'message-square-text', label: t('twoFactor.sendCode') }] : []),
     { id: 'backup' as const, icon: 'key-round', label: t('twoFactor.backup') }];
-  return <motion.form animate={shake} onSubmit={verify} className="flex flex-col gap-5" noValidate>
+  return <motion.form animate={shake} onSubmit={verify} className="relative flex flex-col gap-5" noValidate>
+    <FailureGlow count={failures}/>
+    <SuccessOverlay show={done} label={t('redirecting')}/>
     <motion.div initial={{ opacity: 0, x: 16 }} animate={{ opacity: 1, x: 0 }} className="flex items-center gap-3">
       <motion.span aria-hidden className="grid size-11 place-items-center rounded-2xl bg-accent-soft text-accent"
         animate={still ? undefined : { rotate: [0, -8, 8, 0] }} transition={{ duration: 0.6, delay: 0.2 }}><I name="shield-check" size={22}/></motion.span>

@@ -582,7 +582,9 @@ test('directory sign-in (LDAP): checked settings, local accounts unaffected, dir
   assert.deepEqual(Object.keys(r.json().fields).sort(), ['baseDn', 'groupRoles', 'url', 'userFilter']);
   // An unreachable directory: panel accounts still sign in, nobody is created, the test says why.
   assert.equal((await put('/admin/settings/directory', { ldap: { enabled: true, url: 'ldap://127.0.0.1:1', baseDn: 'dc=example,dc=org' } }, admin)).statusCode, 200);
-  assert.equal((await post('/auth/sign-in/email', { email: 'ayse@example.test', password })).statusCode, 200);
+  const local = (await post('/auth/admin/create-user', { email: 'local@example.test', password, name: 'Local', role: 'user' }, admin)).json().user.id;
+  assert.equal((await post('/auth/sign-in/email', { email: 'local@example.test', password })).statusCode, 200);
+  await post('/auth/admin/remove-user', { userId: local }, admin);
   assert.equal((await post('/auth/sign-in/email', { email: 'nobody@example.org', password })).statusCode, 401);
   assert.equal((await post('/admin/settings/directory/test', { ldap: { enabled: true, url: 'ldap://127.0.0.1:1', baseDn: 'dc=example,dc=org' } }, admin)).json().code, 'LDAP_UNREACHABLE');
 

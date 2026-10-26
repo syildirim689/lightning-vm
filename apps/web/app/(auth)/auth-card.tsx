@@ -7,11 +7,19 @@ import NextLink from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 
+// Kept across the two pages: which tab was shown last, so a switch slides the right way and the card does not re-enter.
+let lastTab: string | null = null;
+
 export function AuthCard({ title, intro, children }: { title: string; intro: string; children: React.ReactNode }) {
   const t = useTranslations('Auth');
   const path = usePathname();
   const tabs = [{ href: '/login', label: t('loginTitle') }, { href: '/register', label: t('registerTitle') }];
-  return <motion.div initial={{ opacity: 0, y: 16, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} transition={{ type: 'spring', stiffness: 220, damping: 24 }}
+  const order = (p: string | null) => tabs.findIndex((x) => x.href === p);
+  const [from] = useState(() => lastTab);
+  useEffect(() => { lastTab = path; }, [path]);
+  const switched = from !== null && order(from) >= 0 && from !== path;
+  const dir = switched && order(path) < order(from) ? -1 : 1;
+  return <motion.div initial={switched ? false : { opacity: 0, y: 16, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} transition={{ type: 'spring', stiffness: 220, damping: 24 }}
     className="relative w-full max-w-md rounded-3xl border border-border bg-surface/80 p-6 shadow-xl shadow-black/10 backdrop-blur-xl sm:p-8">
     <div aria-hidden className="pointer-events-none absolute inset-x-10 -top-px h-px bg-gradient-to-r from-transparent via-accent/70 to-transparent"/>
     <LayoutGroup>
@@ -26,7 +34,7 @@ export function AuthCard({ title, intro, children }: { title: string; intro: str
         })}
       </nav>
     </LayoutGroup>
-    <motion.div key={path} initial={{ opacity: 0, x: 12 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.25, ease: 'easeOut' }}>
+    <motion.div key={path} initial={{ opacity: 0, x: 28 * dir, filter: 'blur(4px)' }} animate={{ opacity: 1, x: 0, filter: 'blur(0px)' }} transition={{ type: 'spring', stiffness: 260, damping: 28 }}>
       <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
       <p className="mb-6 mt-1 text-sm text-muted">{intro}</p>
       {children}
