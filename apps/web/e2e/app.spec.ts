@@ -171,6 +171,7 @@ test.describe('first run (Turkish browser)', () => {
     // Nothing to type on the server: the demo already runs monitoring, so the box comes ticked and the checks run.
     await expect(page.getByText('docker compose')).toHaveCount(0);
     await expect(page.getByRole('checkbox', { name: 'İzleme bileşenlerini kullanacağım' })).toBeChecked();
+    await page.waitForTimeout(1500); // let the step's entrance animation finish
     await shot('10-monitoring');
     await skip();
 
