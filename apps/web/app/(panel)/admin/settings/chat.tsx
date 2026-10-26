@@ -1,7 +1,7 @@
 "use client";
 // Settings → Messaging: which apps users may connect for notifications, and the accounts Telegram, WhatsApp
 // and Pushover need (set up once here). Secrets are never shown again; an empty field keeps the saved one.
-import { Button, Card, Checkbox, Chip, toast } from '@heroui/react';
+import { Button, Card, toast } from '@heroui/react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useTranslations } from 'next-intl';
 import { useEffect, useState } from 'react';
@@ -47,16 +47,17 @@ export default function ChatSettings({ readOnly }: { readOnly: boolean }) {
     <FormSection title={t('chat.apps')} description={t('chat.appsHelp')} icon={<I name="messages-square" size={16}/>}>
       <ul className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
         {d.catalog.map((a) => <li key={a.id}>
-          <Checkbox isSelected={on(a.id)} isDisabled={readOnly} onChange={(x) => setApps(x ? [...apps, a.id] : apps.filter((y) => y !== a.id))}
-            className={`flex w-full items-center gap-3 rounded-xl border p-3 transition-colors ${on(a.id) ? 'border-accent bg-accent/5' : 'border-border'}`}>
-            <Checkbox.Control><Checkbox.Indicator/></Checkbox.Control>
-            <Checkbox.Content className="flex min-w-0 flex-1 items-center gap-2">
-              <AppBadge app={a.id} size={28}/>
-              <span className="min-w-0 flex-1 truncate text-sm font-medium">{a.name}</span>
-              {on(a.id) && (d.usable.includes(a.id) ? <Chip size="sm" variant="soft" color="success">{t('chat.ready')}</Chip>
-                : <Chip size="sm" variant="soft" color="warning">{t('chat.needsSetup')}</Chip>)}
-            </Checkbox.Content>
-          </Checkbox>
+          <button type="button" role="checkbox" aria-checked={on(a.id)} disabled={readOnly} onClick={() => setApps(on(a.id) ? apps.filter((y) => y !== a.id) : [...apps, a.id])}
+            className={`flex w-full items-center gap-3 rounded-xl border p-3 text-left transition-colors focus-visible:outline-2 focus-visible:outline-accent disabled:opacity-60 ${on(a.id) ? 'border-accent bg-accent/5' : 'border-border hover:border-accent/50'}`}>
+            <AppBadge app={a.id} size={30}/>
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-sm font-medium">{a.name}</span>
+              {on(a.id) && <span className={`text-xs ${d.usable.includes(a.id) ? 'text-success' : 'text-warning'}`}>{d.usable.includes(a.id) ? t('chat.ready') : t('chat.needsSetup')}</span>}
+            </span>
+            <span className={`grid size-5 shrink-0 place-items-center rounded-full border ${on(a.id) ? 'border-accent bg-accent text-accent-foreground' : 'border-border'}`}>
+              {on(a.id) && <I name="check" size={13}/>}
+            </span>
+          </button>
         </li>)}
       </ul>
       <p className="text-xs text-muted">{t('chat.appsNote')}</p>
