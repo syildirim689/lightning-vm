@@ -15,7 +15,7 @@ import { openShortcuts } from './shortcuts';
 import { recent } from '../lib/recent';
 
 type Cmd = { id: string; group: 'recent' | 'pages' | 'servers' | 'users' | 'actions'; label: string; hint?: string; icon: React.ReactNode; run: () => void };
-type ServerRow = { id: string; name: string; address: string | null; ownerEmail?: string };
+type ServerRow = { id: string; name: string; address: string | null; ownerEmail?: string; favorite?: boolean };
 const fold = (s: string) => s.toLocaleLowerCase('tr').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/ı/g, 'i');
 
 export function usePaletteShortcut(open: () => void) {
@@ -70,7 +70,9 @@ export default function CommandPalette({ permissions, isOpen, onOpenChange }: { 
       ...(isOpen ? recent() : []).map((r) => ({ id: `r:${r.href}`, group: 'recent' as const, label: r.label, icon: <I name="history" size={16}/>, run: go(r.href) })),
       ...pages.filter((p) => p[3]).map(([href, label, icon]) => ({ id: `p:${href}`, group: 'pages' as const, label, icon, run: go(href) })),
       ...users.map((u) => ({ id: `u:${u.id}`, group: 'users' as const, label: u.email, hint: u.name, icon: <I name="user" size={16}/>, run: go(`/admin/users?q=${encodeURIComponent(u.email)}`) })),
-      ...servers.map((s) => ({ id: `s:${s.id}`, group: 'servers' as const, label: s.name, hint: [s.address, s.ownerEmail].filter(Boolean).join(' · '), icon: <I name="server" size={16}/>, run: go(`/servers/${s.id}`) })),
+      // Starred servers first, with their star.
+      ...[...servers].sort((a, b) => Number(!!b.favorite) - Number(!!a.favorite)).map((s) => ({ id: `s:${s.id}`, group: 'servers' as const, label: s.name, hint: [s.address, s.ownerEmail].filter(Boolean).join(' · '),
+        icon: <I name={s.favorite ? 'star' : 'server'} size={16} className={s.favorite ? 'fill-current text-warning' : undefined}/>, run: go(`/servers/${s.id}`) })),
       { id: 'a:theme', group: 'actions', label: resolvedTheme === 'dark' ? t('lightTheme') : t('darkTheme'), icon: resolvedTheme === 'dark' ? <I name="sun" size={16}/> : <I name="moon" size={16}/>,
         run: () => { setTheme(resolvedTheme === 'dark' ? 'light' : 'dark'); onOpenChange(false); } },
       { id: 'a:lang', group: 'actions', label: locale === 'tr' ? 'English' : 'Türkçe', icon: <I name="languages" size={16}/>,

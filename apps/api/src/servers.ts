@@ -406,9 +406,9 @@ export class ServersController {
 @Controller('admin') @UseGuards(PermissionGuard)
 export class ServersAdminController {
   @Get('servers') @Can('servers.view_all', 'dashboard.view')
-  async all() {
-    const { rows } = await pool.query(`SELECT ${serverColumns}, u.email AS "ownerEmail" ${serverJoins} JOIN users u ON u.id = s.owner_id
-      WHERE s.state <> 'deleted' ORDER BY s.created_at DESC`);
+  async all(@Req() req: AuthedRequest) {
+    const { rows } = await pool.query(`SELECT ${serverColumns}, u.email AS "ownerEmail", EXISTS (SELECT 1 FROM server_favorites f WHERE f.user_id = $1 AND f.server_id = s.id) AS favorite
+      ${serverJoins} JOIN users u ON u.id = s.owner_id WHERE s.state <> 'deleted' ORDER BY s.created_at DESC`, [req.user.id]);
     return { servers: rows };
   }
 
