@@ -15,6 +15,7 @@ import { RolesController } from './rbac';
 import { NotificationPolicyController, NotificationsController } from './notifications';
 import { ChatController, ChatSettingsController } from './chat';
 import { LiveController } from './live';
+import { startSupportJanitor, SupportAdminController, SupportController } from './support';
 import { IncidentsController, startStatusSampler, StatusController, StatusPageSettingsController } from './status';
 import { DirectorySettingsController } from './directory';
 import { startNotificationWorker } from './notify';
@@ -65,7 +66,7 @@ class HealthController {
 
 @Module({ controllers: [HealthController, AuthController, PublicController, SetupController, AdminController, VmwareController, ConsoleController, CatalogAdminController, CatalogController, ServersController, ServersAdminController, FirewallsController, PaymentsController, RdnsSettingsController, ServerIpsController,
   SettingsController, SettingsOverviewController, SmsSettingsController, RolesController, NotificationsController, NotificationPolicyController,
-  InsightsController, StaffInsightsController, ApplicationsController, ApplicationCallbackController, IsoAdminController, ServerIsoController, DomainController, LocationsController, TopologyAdminController, TopologyController, PowerController, AbuseController, VdcAdminController, VdcController, SmartController, OnboardingController, DigestController, AccountExportController, SchedulesController, AuditController, ActivityController, AnnouncementController, AnnouncementAdminController, SnapshotsController, AlertsController, TerminalController, ChatController, ChatSettingsController, LiveController, DirectorySettingsController, StatusController, StatusPageSettingsController, UserSummaryController, IncidentsController] })
+  InsightsController, StaffInsightsController, ApplicationsController, ApplicationCallbackController, IsoAdminController, ServerIsoController, DomainController, LocationsController, TopologyAdminController, TopologyController, PowerController, AbuseController, VdcAdminController, VdcController, SmartController, OnboardingController, DigestController, AccountExportController, SchedulesController, AuditController, ActivityController, AnnouncementController, AnnouncementAdminController, SnapshotsController, AlertsController, TerminalController, ChatController, ChatSettingsController, LiveController, DirectorySettingsController, StatusController, StatusPageSettingsController, UserSummaryController, IncidentsController, SupportController, SupportAdminController] })
 class AppModule {}
 
 // Only Caddy on the Compose network talks to the API; its X-Forwarded-* headers are trusted.
@@ -73,7 +74,7 @@ const trustedProxies = process.env.TRUSTED_PROXIES?.split(',') ?? ['127.0.0.0/8'
 
 export async function createApp() {
   const adapter = new FastifyAdapter({ trustProxy: trustedProxies, logger: { base: { service: 'api', env: process.env.APP_ENV || 'production' }, formatters: { level: (level) => ({ level }) },
-    redact: ['req.headers.authorization', 'req.headers.cookie', 'res.headers["set-cookie"]'] }, bodyLimit: 1048576,
+    redact: ['req.headers.authorization', 'req.headers.cookie', 'res.headers["set-cookie"]'] }, bodyLimit: 8 * 1024 * 1024,
     // Open live streams (GET /live) must not hold a restart: closing ends every connection.
     forceCloseConnections: true });
   const app = await NestFactory.create<NestFastifyApplication>(AppModule, adapter);
@@ -128,6 +129,7 @@ async function main() {
   startInsightAlerts();
   startScheduler();
   startStatusSampler();
+  startSupportJanitor();
   await app.listen(4000, '0.0.0.0');
   process.on('SIGTERM', closeConnections); process.on('SIGINT', closeConnections);
 }

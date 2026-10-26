@@ -13,6 +13,7 @@ export const permissionCatalog = {
   vmware: ['vmware.view', 'vmware.manage'],
   users: ['users.view', 'users.manage', 'users.roles', 'users.ban', 'users.sessions', 'users.impersonate'],
   roles: ['roles.manage'],
+  support: ['support.view', 'support.manage'],
   settings: ['settings.view', 'settings.manage'],
   system: ['system.view', 'system.update', 'audit.view', 'system.terminal'],
 } as const;

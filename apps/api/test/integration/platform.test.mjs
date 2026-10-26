@@ -701,3 +701,79 @@ test('status history and incidents: daily uptime per component; an open incident
   assert.equal((await get('/announcement', user)).json().incident, null);
   assert.equal((await call('DELETE', `/admin/incidents/${id}`, admin)).statusCode, 204);
 });
+
+test('support tickets: customer opens with an attachment, staff answer with an internal note, deadlines follow, closed and rated', async () => {
+  const mk = async (email, role) => {
+    const id = (await post('/auth/admin/create-user', { email, password, name: email.split('@')[0], role }, admin)).json().user.id;
+    return { id, c: cookieOf(await post('/auth/sign-in/email', { email, password })) };
+  };
+  const cust = await mk('cust@example.test', 'user');
+  const agent = await mk('agent@example.test', 'support');
+  const stranger = await mk('stranger@example.test', 'user');
+  const deps = (await get('/support/departments', cust.c)).json().departments;
+  assert.ok(deps.length >= 4);
+
+  assert.deepEqual(Object.keys((await post('/support/tickets', { subject: 'x', body: '' }, cust.c)).json().fields).sort(), ['departmentId', 'subject']);
+  const png = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.alloc(16)]).toString('base64');
+  assert.equal((await post('/support/tickets', { subject: 'Cannot reach my server', departmentId: deps[0].id, body: 'Hi', attachments: [{ name: 'a.png', type: 'image/png', data: 'TVo=' }] }, cust.c)).json().fields.attachments, 'FILE_TYPE_NOT_ALLOWED');
+  const opened = (await post('/support/tickets', { subject: 'Cannot reach my server', departmentId: deps[0].id, priority: 'high', body: 'SSH times out since this morning.',
+    attachments: [{ name: 'screen.png', type: 'image/png', data: png }] }, cust.c)).json();
+  assert.ok(opened.number >= 1001);
+  const id = opened.id;
+  let mine = (await get('/support/tickets', cust.c)).json().tickets;
+  assert.equal(mine[0].status, 'open');
+  assert.ok(Date.parse(mine[0].dueAt) - Date.now() < 4 * 3_600_000 + 60_000, 'high: 4 hours');
+
+  // Others see nothing; staff see the queue.
+  assert.equal((await get(`/support/tickets/${id}`, stranger.c)).statusCode, 404);
+  assert.equal((await get('/admin/support/tickets', cust.c)).statusCode, 403);
+  const queue = (await get('/admin/support/tickets?status=active&q=reach', agent.c)).json().tickets;
+  assert.equal(queue[0].id, id);
+  assert.equal(queue[0].ownerEmail, 'cust@example.test');
+  assert.equal((await get('/admin/support/stats', agent.c)).json().waiting >= 1, true);
+
+  // An internal note stays with staff; the answer reaches the customer.
+  assert.equal((await post(`/support/tickets/${id}/messages`, { body: 'Checking the firewall first.', internal: true }, agent.c)).statusCode, 201);
+  assert.equal((await post(`/support/tickets/${id}/messages`, { body: 'Port 22 was closed by your firewall; opened it.' }, agent.c)).statusCode, 201);
+  let view = (await get(`/support/tickets/${id}`, cust.c)).json();
+  assert.deepEqual(view.messages.map((m) => m.body), ['SSH times out since this morning.', 'Port 22 was closed by your firewall; opened it.']);
+  assert.equal(view.messages[1].author, null, 'customers see "Support", not the agent');
+  assert.equal(view.ticket.status, 'answered');
+  assert.equal(view.ticket.dueAt, null);
+  assert.equal((await get(`/support/tickets/${id}`, agent.c)).json().messages.length, 3);
+  assert.ok(await until(async () => (await pool.query("SELECT 1 FROM notifications WHERE user_id = $1 AND event = 'support.reply'", [cust.id])).rowCount));
+
+  // The attachment: the owner and staff download it; nobody else.
+  const att = view.messages[0].attachments[0];
+  const dl = await get(`/support/attachments/${att.id}`, cust.c);
+  assert.equal(dl.statusCode, 200);
+  assert.match(dl.headers['content-disposition'], /^attachment/);
+  assert.equal(dl.headers['x-content-type-options'], 'nosniff');
+  assert.equal((await get(`/support/attachments/${att.id}`, stranger.c)).statusCode, 404);
+
+  // The customer answers: waiting on staff again, with a new deadline; staff change priority and assignee.
+  await post(`/support/tickets/${id}/messages`, { body: 'Works now, thanks!' }, cust.c);
+  assert.equal((await get(`/support/tickets/${id}`, cust.c)).json().ticket.status, 'customer_reply');
+  assert.equal((await call('PATCH', `/admin/support/tickets/${id}`, cust.c, { priority: 'urgent' })).statusCode, 403);
+  assert.equal((await call('PATCH', `/admin/support/tickets/${id}`, agent.c, { priority: 'urgent', assigneeId: agent.id })).statusCode, 200);
+  view = (await get(`/support/tickets/${id}`, agent.c)).json();
+  assert.equal(view.ticket.priority, 'urgent');
+  assert.equal(view.ticket.assigneeEmail, 'agent@example.test');
+  assert.ok(Date.parse(view.ticket.dueAt) - Date.now() <= 3_600_000 + 60_000, 'urgent: 1 hour');
+
+  // Closed and rated by the customer only.
+  assert.equal((await post(`/support/tickets/${id}/rating`, { rating: 5 }, cust.c)).json().code, 'TICKET_NOT_CLOSED');
+  assert.equal((await post(`/support/tickets/${id}/close`, {}, cust.c)).statusCode, 200);
+  assert.equal((await post(`/support/tickets/${id}/rating`, { rating: 5, comment: 'Fast!' }, agent.c)).statusCode, 403);
+  assert.equal((await post(`/support/tickets/${id}/rating`, { rating: 5, comment: 'Fast!' }, cust.c)).json().rating, 5);
+  assert.equal((await get('/admin/support/stats', agent.c)).json().rating, 5);
+
+  // Canned replies and departments.
+  const canned = (await post('/admin/support/canned', { title: 'Firewall', body: 'Please check your firewall rules.' }, agent.c)).json().id;
+  assert.equal((await get('/admin/support/canned', agent.c)).json().canned[0].title, 'Firewall');
+  assert.equal((await call('DELETE', `/admin/support/canned/${canned}`, agent.c)).statusCode, 204);
+  const d = (await put('/admin/support/departments', { departments: [...deps.map((x) => ({ ...x, active: true })), { nameTr: 'Ağ', nameEn: 'Network' }] }, admin)).json().departments;
+  assert.equal(d.length, deps.length + 1);
+  assert.equal((await put('/admin/support/departments', { departments: [] }, agent.c)).statusCode, 403);
+  for (const u of [cust, agent, stranger]) await post('/auth/admin/remove-user', { userId: u.id }, admin);
+});
