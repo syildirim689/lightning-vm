@@ -38,14 +38,11 @@ function Watcher({ label }: { label: string }) {
   const timers = useRef<number[]>([]);
   const clear = () => { timers.current.forEach((t) => window.clearTimeout(t)); timers.current = []; };
 
-  // First load: the server's copy fades out, then leaves the page.
+  // First load: the server's copy fades out. It stays in the DOM: React owns it, and removing it by hand breaks the next navigation.
   useEffect(() => {
     const boot = document.getElementById('boot-loader');
-    if (!boot) return;
-    boot.classList.add('page-loader-hidden');
-    boot.setAttribute('aria-busy', 'false');
-    const t = window.setTimeout(() => boot.remove(), 400);
-    return () => window.clearTimeout(t);
+    boot?.classList.add('page-loader-hidden');
+    boot?.setAttribute('aria-busy', 'false');
   }, []);
 
   useEffect(() => {
