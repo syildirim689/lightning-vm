@@ -117,7 +117,8 @@ export default function Wizard() {
     if (current !== 'monitoring' || !progress) return;
     setStarting('no'); setPolls(0);
     apiFetch<{ checks: Check[] }>('/setup/test/monitoring', { method: 'POST' }).then((r) => {
-      const up = r.checks.every((c) => c.ok);
+      // Installed when any component answers; the others may still be starting (Loki needs a minute).
+      const up = r.checks.some((c) => c.ok);
       setMonitorRunning(up);
       if (up && !progress.steps.monitoring) setMonitoring(true);
     }, () => undefined);
