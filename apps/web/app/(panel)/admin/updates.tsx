@@ -14,7 +14,7 @@ import { useMe } from '../../../lib/me';
 import { can } from '../../../lib/permissions';
 import { useApiQuery } from '../../../lib/query';
 
-type Release = { version: string; date: string; notes: string };
+type Release = { version: string; date: string; notes: string; newer?: boolean };
 type Status = { id: string; action: 'check' | 'update' | 'backup' | 'auto-update' | 'domain'; state: 'running' | 'succeeded' | 'failed' | 'rejected'; startedAt: string; finishedAt: string; exitCode: number | null; code: string };
 type Data = {
   version: string; settings: Record<string, string>;
@@ -116,7 +116,7 @@ export default function Updates() {
               <Mono>{x.version}</Mono>
               <span className="text-xs text-muted">{format.dateTime(new Date(x.date), { dateStyle: 'medium' })}</span>
               {x.version === r.latest && <StatusChip tone="accent">{t('latest')}</StatusChip>}
-              {manage && x.version !== r.latest && r.channel !== 'edge' && <ConfirmButton size="sm" variant="ghost" label={t('switchTo')} isDisabled={blocked}
+              {manage && x.version !== r.latest && r.channel !== 'edge' && x.newer !== false && <ConfirmButton size="sm" variant="ghost" label={t('switchTo')} isDisabled={blocked}
                 title={t('confirmTitle', { from: data.version, to: x.version })} body={t('switchHelp')} confirmLabel={t('switchTo')} cancelLabel={t('cancel')}
                 onConfirm={() => ask({ action: 'update', to: x.version }, t('updateQueued'))}/>}
             </div>

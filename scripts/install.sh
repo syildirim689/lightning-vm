@@ -445,6 +445,11 @@ do_update() {
   [ -n "$target" ] || die 20 E_UPDATE_NO_RELEASE "Yayımlanmış sürüm etiketi (vX.Y.Z) yok" "No released version tag (vX.Y.Z)"
   git rev-parse -q --verify "$target^{commit}" >/dev/null || die 20 E_UPDATE_UNKNOWN_VERSION "Bilinmeyen sürüm: $target" "Unknown version: $target"
   if [ "$(git rev-parse "$target^{commit}")" = "$current" ]; then msg OK UP_TO_DATE "Güncel: $current_name" "Up to date: $current_name"; exit 0; fi
+  # The channel's newest version is behind the running one: nothing to update (an explicit --to may still go there,
+  # and the migration check below refuses what the database cannot run).
+  if [ -z "$TO" ] && ! git merge-base --is-ancestor "$current" "$target" 2>/dev/null; then
+    msg OK UP_TO_DATE "Güncel: $current_name, kanalın son sürümü ($target) bundan eski" "Up to date: $current_name; the channel's newest version ($target) is older"; exit 0
+  fi
   applied=$(psql_value 'SELECT version FROM schema_migrations ORDER BY 1') || die 20 E_UPDATE_DB "Veritabanına ulaşılamadı" "Database not reachable"
   for v in $applied; do
     git cat-file -e "$target:apps/api/migrations/$v.sql" 2>/dev/null || {
@@ -545,7 +550,9 @@ do_releases() {
   if [ -n "$(git remote)" ]; then git fetch --quiet --tags --force "$(git remote | head -n 1)" 2>/dev/null || err=E_UPDATE_FETCH; fi
   target=$(target_for "$channel")
   available=false
-  if [ -n "$target" ] && [ "$(git rev-parse "$target^{commit}")" != "$(git rev-parse HEAD)" ]; then available=true; fi
+  # Only a version that comes after the running one is an update: a checkout ahead of the newest tag (a branch
+  # build, say) is never offered that older tag.
+  if [ -n "$target" ] && [ "$(git rev-parse "$target^{commit}")" != "$(git rev-parse HEAD)" ] && git merge-base --is-ancestor HEAD "$target" 2>/dev/null; then available=true; fi
   # Newest first: tags of the channel, or for edge the commits on the branch that are not here yet.
   list=""
   if [ "$channel" = edge ]; then
@@ -555,7 +562,8 @@ do_releases() {
   else
     for t in $(git -c versionsort.suffix=- tag -l 'v[0-9]*' --sort=-v:refname | grep -E "$(tag_pattern "$channel")" | head -n 10); do
       notes=$(git tag -l --format='%(contents)' "$t"); [ -n "$notes" ] || notes=$(git log -1 --format=%B "$t")
-      list="$list,{\"version\":\"$t\",\"date\":\"$(git log -1 --format=%cI "$t")\",\"notes\":\"$(printf '%s' "$notes" | head -c 2000 | json_str)\"}"
+      if git merge-base --is-ancestor HEAD "$t" 2>/dev/null && [ "$(git rev-parse "$t^{commit}")" != "$(git rev-parse HEAD)" ]; then newer=true; else newer=false; fi
+      list="$list,{\"version\":\"$t\",\"date\":\"$(git log -1 --format=%cI "$t")\",\"notes\":\"$(printf '%s' "$notes" | head -c 2000 | json_str)\",\"newer\":$newer}"
     done
   fi
   latest=""; [ -z "$target" ] || latest=$(git describe --tags --always "$target")
