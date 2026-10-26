@@ -794,6 +794,16 @@ test.describe('people, settings and smart features (English browser)', () => {
     await page.getByRole('button', { name: 'Accessibility' }).click();
     await expect(page.getByRole('dialog')).toBeVisible();
     await shot(page, 'accessibility');
+    // Loading layer: the first-load copy leaves once the page is interactive; a page change shows it (here started by
+    // hand, so it stays long enough for the picture) and the next URL clears it.
+    await page.keyboard.press('Escape');
+    await expect(page.locator('#boot-loader')).toHaveCount(0);
+    await page.evaluate(() => window.dispatchEvent(new Event('lvm:navigation-start')));
+    await expect(page.locator('.page-loader:not(.page-loader-hidden)')).toBeVisible();
+    await page.waitForTimeout(400);
+    await shot(page, 'page-loader');
+    await page.evaluate(() => window.history.pushState(null, '', '?loader=done'));
+    await expect(page.locator('.page-loader:not(.page-loader-hidden)')).toHaveCount(0);
     await page.keyboard.press('Escape');
     await page.getByRole('heading', { level: 1 }).click();
     await page.keyboard.press('Shift+?');

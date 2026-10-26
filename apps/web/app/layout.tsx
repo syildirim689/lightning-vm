@@ -6,6 +6,7 @@ import { accentCss } from '../components/brand';
 import { a11yBootScript } from '../lib/a11y-prefs';
 import { getPublicConfig } from '../lib/session';
 import Providers from './providers';
+import { LoaderLayer } from '../components/page-loader';
 
 const sans = Fira_Sans({ subsets: ['latin', 'latin-ext'], weight: ['400', '500', '600', '700'], variable: '--font-fira-sans', display: 'swap' });
 // Offered in the accessibility settings (high legibility for low vision and dyslexia).
@@ -23,6 +24,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   const locale = await getLocale();
   const { branding } = await getPublicConfig();
   const css = accentCss(branding.accent);
+  const t = await getTranslations('Layout');
   return <html lang={locale} className={`${sans.variable} ${mono.variable} ${legible.variable}`} suppressHydrationWarning>
     {/* The accent is validated as #rrggbb by the API before it is stored. */}
     <head>
@@ -31,7 +33,9 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       {css && <style dangerouslySetInnerHTML={{ __html: css }}/>}
     </head>
     <body className="bg-background text-foreground font-sans antialiased">
-      <NextIntlClientProvider><Providers locale={locale}>{children}</Providers></NextIntlClientProvider>
+      {/* First paint: the loading layer, faded out by PageLoader once the page is interactive. */}
+      <LoaderLayer id="boot-loader" label={t('loading')}/>
+      <NextIntlClientProvider><Providers locale={locale} loadingLabel={t('loading')}>{children}</Providers></NextIntlClientProvider>
     </body>
   </html>;
 }

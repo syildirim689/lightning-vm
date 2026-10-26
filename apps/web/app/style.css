@@ -99,3 +99,28 @@ html[data-a11y-motion="reduce"] *, html[data-a11y-motion="reduce"] *::before, ht
   /* Unless the user chose "allow motion" in the accessibility settings. */
   html:not([data-a11y-motion="allow"]) *, html:not([data-a11y-motion="allow"]) *::before, html:not([data-a11y-motion="allow"]) *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
 }
+
+/* Full-screen loading layer (components/page-loader.tsx): first load and moves between pages. */
+.page-loader {
+  position: fixed; inset: 0; z-index: 200; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1rem;
+  background: color-mix(in oklab, var(--background) 55%, transparent);
+  backdrop-filter: blur(14px) saturate(1.1); -webkit-backdrop-filter: blur(14px) saturate(1.1);
+  opacity: 1; visibility: visible; transition: opacity 220ms ease-out, visibility 0s linear 0s;
+}
+.page-loader-hidden { opacity: 0; visibility: hidden; pointer-events: none; transition: opacity 260ms ease-in, visibility 0s linear 260ms; }
+.page-loader-mark {
+  position: relative; display: grid; place-items: center; width: 4rem; height: 4rem; border-radius: 1.25rem;
+  color: var(--accent); background: color-mix(in oklab, var(--surface) 85%, transparent);
+  box-shadow: 0 10px 40px -12px color-mix(in oklab, var(--accent) 45%, transparent), 0 0 0 1px var(--border);
+}
+.page-loader-ring {
+  position: absolute; inset: -6px; border-radius: 1.6rem; border: 2px solid color-mix(in oklab, var(--accent) 18%, transparent);
+  border-top-color: var(--accent); border-right-color: var(--accent); animation: page-loader-spin 900ms cubic-bezier(.5, .15, .5, .85) infinite;
+}
+.page-loader-label { font-size: .8125rem; font-weight: 500; letter-spacing: .02em; color: var(--muted); }
+@keyframes page-loader-spin { to { transform: rotate(360deg); } }
+/* Reduced motion: the ring stands still and breathes instead (opacity only). */
+@media (prefers-reduced-motion: reduce) { html:not([data-a11y-motion="allow"]) .page-loader-ring { animation: page-loader-breathe 1.6s ease-in-out infinite !important; } }
+html[data-a11y-motion="reduce"] .page-loader-ring { animation: page-loader-breathe 1.6s ease-in-out infinite !important; }
+@keyframes page-loader-breathe { 50% { opacity: .35; } }
+html[data-a11y-transparency="reduce"] .page-loader { background: var(--background); }

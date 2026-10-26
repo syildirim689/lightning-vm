@@ -10,7 +10,8 @@
     "notice": "Early build: tested against a VMware simulator, not yet against real ESXi/vCenter.",
     "language": "Language",
     "signedInAs": "Signed in: {email}",
-    "logout": "Sign out"
+    "logout": "Sign out",
+    "loading": "Loading…"
   },
   "UserPanel": {
     "eyebrow": "USER PANEL",

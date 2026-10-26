@@ -8,10 +8,11 @@ import { NuqsAdapter } from 'nuqs/adapters/next/app';
 import { useState } from 'react';
 import { AccessibilityRuntime } from '../components/accessibility';
 import { useA11y } from '../lib/a11y';
+import PageLoader, { announceNavigation } from '../components/page-loader';
 
 // Theme (class on <html>), server-state cache, URL state, React Aria locale for dates and numbers,
 // client-side routing for every HeroUI href, motion that honours "reduce motion", toasts.
-export default function Providers({ locale, children }: { locale: string; children: React.ReactNode }) {
+export default function Providers({ locale, loadingLabel, children }: { locale: string; loadingLabel: string; children: React.ReactNode }) {
   const router = useRouter();
   // The API is the source of truth: data is refetched on focus and retried once, never served stale for long.
   const motion = useA11y((s) => s.motion);
@@ -20,10 +21,11 @@ export default function Providers({ locale, children }: { locale: string; childr
     <QueryClientProvider client={client}>
       <NuqsAdapter>
         <I18nProvider locale={locale === 'tr' ? 'tr-TR' : 'en-US'}>
-          <RouterProvider navigate={router.push}>
+          <RouterProvider navigate={(href, opts) => { announceNavigation(String(href)); router.push(href, opts); }}>
             <MotionConfig reducedMotion={motion === 'reduce' ? 'always' : motion === 'allow' ? 'never' : 'user'}>
               {children}
               <AccessibilityRuntime/>
+              <PageLoader label={loadingLabel}/>
               <Toast.Provider placement="bottom end"/>
             </MotionConfig>
           </RouterProvider>

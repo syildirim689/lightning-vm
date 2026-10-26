@@ -10,7 +10,8 @@
     "notice": "Erken sürüm: VMware simülatörüyle test edildi, henüz gerçek ESXi/vCenter ile değil.",
     "language": "Dil",
     "signedInAs": "Oturum: {email}",
-    "logout": "Çıkış yap"
+    "logout": "Çıkış yap",
+    "loading": "Yükleniyor…"
   },
   "UserPanel": {
     "eyebrow": "KULLANICI PANELİ",
