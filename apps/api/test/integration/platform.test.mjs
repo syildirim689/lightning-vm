@@ -480,7 +480,7 @@ test('live line: open tabs learn at once; a role change refreshes them, a ban or
   // An EventSource stand-in: collects "event: x / data: {...}" blocks; next(x) waits for the first x not yet taken.
   const open = (cookie) => new Promise((resolve, reject) => {
     const events = []; let buf = ''; let wake = () => {};
-    const req = httpGet({ host: '127.0.0.1', port, path: '/live', headers: cookie ? { cookie: `lvm.session_token=${cookie}` } : {} }, (res) => {
+    const req = httpGet({ host: '127.0.0.1', port, path: '/live', agent: false, headers: cookie ? { cookie: `lvm.session_token=${cookie}` } : {} }, (res) => {
       res.setEncoding('utf8');
       res.on('data', (d) => {
         buf += d;

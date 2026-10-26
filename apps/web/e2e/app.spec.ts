@@ -788,7 +788,7 @@ test.describe('people, settings and smart features (English browser)', () => {
     // A wrong password: the error, the shake and the red glow.
     await guest.getByLabel('E-posta').fill('nobody@example.test');
     await guest.getByLabel('Parola', { exact: true }).fill('wrong-password-123');
-    await guest.getByRole('button', { name: 'Giriş yap' }).click();
+    await guest.getByRole('button', { name: 'Giriş yap', exact: true }).click();
     await expect(guest.getByRole('alert')).toBeVisible();
     await guest.waitForTimeout(150);
     await shot(guest, 'login-failure');

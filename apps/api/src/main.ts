@@ -72,7 +72,9 @@ const trustedProxies = process.env.TRUSTED_PROXIES?.split(',') ?? ['127.0.0.0/8'
 
 export async function createApp() {
   const adapter = new FastifyAdapter({ trustProxy: trustedProxies, logger: { base: { service: 'api', env: process.env.APP_ENV || 'production' }, formatters: { level: (level) => ({ level }) },
-    redact: ['req.headers.authorization', 'req.headers.cookie', 'res.headers["set-cookie"]'] }, bodyLimit: 1048576 });
+    redact: ['req.headers.authorization', 'req.headers.cookie', 'res.headers["set-cookie"]'] }, bodyLimit: 1048576,
+    // Open live streams (GET /live) must not hold a restart: closing ends every connection.
+    forceCloseConnections: true });
   const app = await NestFactory.create<NestFastifyApplication>(AppModule, adapter);
   await app.register(fastifyCookie);
   app.getHttpAdapter().getInstance().addHook('onRequest', async (req, reply) => {
