@@ -1,6 +1,6 @@
 // Smart features: a server's health score with its reasons and right-sizing advice, the customer's cost
 // forecast for this month, and the admin's getting-started checklist. The rules are in smart-rules.ts.
-import { Body, Controller, Get, Param, ParseUUIDPipe, Put, Query, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Put, Query, Req, UseGuards } from '@nestjs/common';
 import { audit, SessionGuard, type AuthedRequest } from './auth';
 import { usageOf } from './catalog';
 import { pool } from './db';
@@ -9,6 +9,7 @@ import { summary as maintenance } from './maintenance';
 import { Can, PermissionGuard } from './rbac';
 import { findServer } from './servers';
 import { mailReady } from './settings-store';
+import { budgetState, checkBudget } from './budget';
 import { cleanLabels, health, monthCost, sizing, type CpuStats } from './smart-rules';
 
 // CPU of the servers given over the last 7 days (server_cpu_samples, written with each energy sample).
@@ -55,7 +56,42 @@ export class SmartController {
     return {
       costs: currencies.map((c) => ({ currency: c, ...monthCost(rows.filter((r) => r.currency.trim() === c).map((r) => ({ price: r.price, createdAt: new Date(r.created_at) })), now) })),
       usage: await usageOf(req.user.id),
+      budget: await budgetState(req.user.id),
     };
+  }
+
+  // The monthly budget: an amount and a currency, or null to remove it.
+  @Put('usage/budget')
+  async setBudget(@Req() req: AuthedRequest, @Body() body: { amount?: unknown; currency?: unknown }) {
+    if (body?.amount === null || body?.amount === '' || body?.amount === undefined) {
+      await pool.query('UPDATE users SET budget_monthly = NULL, budget_currency = NULL, budget_alerted = NULL WHERE id = $1', [req.user.id]);
+    } else {
+      const amount = Number(String(body.amount).replace(',', '.'));
+      const currency = String(body?.currency ?? '').toUpperCase();
+      const fields: Record<string, string> = {};
+      if (!Number.isFinite(amount) || amount <= 0 || amount > 1e9) fields.amount = 'INVALID_AMOUNT';
+      if (!/^[A-Z]{3}$/.test(currency)) fields.currency = 'INVALID_CURRENCY';
+      if (Object.keys(fields).length) throw apiError(400, 'VALIDATION_FAILED', 'Invalid input', fields);
+      // A new amount may be exceeded again this month: the notice can go out again.
+      await pool.query('UPDATE users SET budget_monthly = $2, budget_currency = $3, budget_alerted = NULL WHERE id = $1', [req.user.id, amount.toFixed(2), currency]);
+      await checkBudget(req.user.id);
+    }
+    await audit(req, 'usage.budget', 'success', req.user.id, { amount: body?.amount ?? null, currency: body?.currency ?? null });
+    return { budget: await budgetState(req.user.id) };
+  }
+
+  // Starred servers (any server the person can see).
+  @Put('servers/:id/favorite')
+  async star(@Req() req: AuthedRequest, @Param('id', ParseUUIDPipe) id: string) {
+    await findServer(req, id);
+    await pool.query('INSERT INTO server_favorites (user_id, server_id) VALUES ($1, $2) ON CONFLICT DO NOTHING', [req.user.id, id]);
+    return { favorite: true };
+  }
+
+  @Delete('servers/:id/favorite')
+  async unstar(@Req() req: AuthedRequest, @Param('id', ParseUUIDPipe) id: string) {
+    await pool.query('DELETE FROM server_favorites WHERE user_id = $1 AND server_id = $2', [req.user.id, id]);
+    return { favorite: false };
   }
 }
 

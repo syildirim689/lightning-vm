@@ -24,7 +24,7 @@ import { ButtonLink, ConfirmButton, DataTable, Empty, Mono, Notice, PageHeader, 
 
 export type Server = { id: string; name: string; state: string; powerState: string; guestReady: boolean; vcpu: number; memoryMb: number; diskGb: number;
   priceMonthly: string; currency: string; errorCode: string | null; poolName: string; location: string; locationCity?: string | null; locationCountry?: string | null; locationDatacenter?: string | null; imageName: string; address: string | null;
-  createdAt: string; tags?: string[]; notes?: string; poolId: string; imageId: string; packageId: string | null; vdcId?: string | null; ownerEmail?: string; hasRootPassword?: boolean; applicationName?: string | null; appState?: 'pending' | 'installing' | 'installed' | 'failed' | null; appMessage?: string | null; firewallStatus?: 'applied' | 'pending' | 'failed'; firewallError?: string | null; firewallCount?: number; lastOperation: { id: string; kind: string; status: string; step: string | null; errorCode: string | null } | null };
+  createdAt: string; favorite?: boolean; tags?: string[]; notes?: string; poolId: string; imageId: string; packageId: string | null; vdcId?: string | null; ownerEmail?: string; hasRootPassword?: boolean; applicationName?: string | null; appState?: 'pending' | 'installing' | 'installed' | 'failed' | null; appMessage?: string | null; firewallStatus?: 'applied' | 'pending' | 'failed'; firewallError?: string | null; firewallCount?: number; lastOperation: { id: string; kind: string; status: string; step: string | null; errorCode: string | null } | null };
 type Operation = { id: string; kind: string; status: string; step: string | null; attempts: number; errorCode: string | null; createdAt: string; finishedAt: string | null };
 
 // One Idempotency-Key per user intention: a double click or a retry after a timeout reuses it,
@@ -92,12 +92,13 @@ export function ServerList() {
   const f = useServerFilters(servers ?? []);
   if (!servers) return <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4" aria-busy>{[0, 1, 2].map((i) => <Card key={i} className="h-36 animate-pulse"><span className="sr-only">…</span></Card>)}</div>;
   if (!servers.length) return <Empty icon={<I name="server" size={28}/>} title={t('list.empty')}><ButtonLink href="/order" className="mt-3"><I name="plus" size={16}/>{tn('newServer')}</ButtonLink></Empty>;
-  const shown = f.shown;
+  // Starred servers first, the rest in their order.
+  const shown = [...f.shown].sort((a, b) => Number(!!b.favorite) - Number(!!a.favorite));
   return <div className="flex flex-col gap-4">
     {(servers.length > 1 || f.q || f.state !== 'all' || f.tag) && <div className="rounded-xl border border-border bg-surface p-3"><ServerFilters f={f} placeholder={t('list.searchPlaceholder')}/></div>}
     {!shown.length ? <p role="status" className="rounded-xl border border-dashed border-border px-4 py-8 text-center text-sm text-muted">{t('list.noMatch')}</p>
     : <ul ref={gridRef} className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4" aria-label={t('list.title')}>
-    {shown.map((s, i) => <motion.li key={s.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: Math.min(i, 8) * 0.05, duration: 0.25 }}>
+    {shown.map((s, i) => <motion.li key={s.id} className="relative" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: Math.min(i, 8) * 0.05, duration: 0.25 }}>
       <NextLink href={`/servers/${s.id}`} className="block rounded-xl outline-offset-2 transition-all duration-200 hover:-translate-y-1 hover:shadow-lg focus-visible:outline-2">
         <Card className="h-full">
           <Card.Header className="flex flex-row items-start justify-between gap-2">
@@ -113,9 +114,26 @@ export function ServerList() {
           </Card.Content>
         </Card>
       </NextLink>
+      <FavoriteStar id={s.id} on={!!s.favorite} name={s.name}/>
     </motion.li>)}
   </ul>}
   </div>;
+}
+
+// Star / unstar a server; the list updates at once and is put right if the request fails.
+function FavoriteStar({ id, on, name }: { id: string; on: boolean; name: string }) {
+  const t = useTranslations('Servers');
+  const client = useQueryClient();
+  const flip = async () => {
+    client.setQueryData<{ servers: Server[] }>(['servers'], (d) => d && { servers: d.servers.map((x) => (x.id === id ? { ...x, favorite: !on } : x)) });
+    await apiFetch(`/servers/${id}/favorite`, { method: on ? 'DELETE' : 'PUT' }).catch(() => undefined);
+    void client.invalidateQueries({ queryKey: ['servers'] });
+  };
+  return <button type="button" onClick={flip} aria-pressed={on} aria-label={on ? t('unstar', { name }) : t('star', { name })}
+    className={`absolute bottom-3 right-3 grid size-9 place-items-center rounded-full transition-colors focus-visible:outline-2 focus-visible:outline-accent ${on ? 'text-warning hover:bg-warning/10' : 'text-muted hover:bg-default hover:text-foreground'}`}>
+    <motion.span key={String(on)} initial={{ scale: on ? 0.4 : 1 }} animate={{ scale: 1 }} transition={{ type: 'spring', stiffness: 500, damping: 15 }}>
+      <I name="star" size={17} className={on ? 'fill-current' : ''}/></motion.span>
+  </button>;
 }
 
 const runningStates = ['pending', 'running'];

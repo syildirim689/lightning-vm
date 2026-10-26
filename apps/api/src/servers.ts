@@ -9,6 +9,7 @@ import { Can, PermissionGuard } from './rbac';
 import { can, limitsOf, type Permission } from './permissions';
 import { capacityOf, limitsFor, resolveOrder, usageOf } from './catalog';
 import { exceededQuota } from './capacity';
+import { checkBudget } from './budget';
 import { openConsole } from './console';
 import { callAdapter, storedTarget } from './vmware';
 import { limits } from './firewalls';
@@ -168,7 +169,8 @@ export class ServersController {
 
   @Get('servers')
   async list(@Req() req: AuthedRequest) {
-    const { rows } = await pool.query(`SELECT ${serverColumns} ${serverJoins} WHERE s.state <> 'deleted' AND s.owner_id = $1 ORDER BY s.created_at DESC`, [req.user.id]);
+    const { rows } = await pool.query(`SELECT ${serverColumns}, EXISTS (SELECT 1 FROM server_favorites f WHERE f.user_id = $1 AND f.server_id = s.id) AS favorite
+      ${serverJoins} WHERE s.state <> 'deleted' AND s.owner_id = $1 ORDER BY s.created_at DESC`, [req.user.id]);
     return { servers: rows };
   }
 
@@ -325,6 +327,7 @@ export class ServersController {
     }
     await enqueue(result.operation.id);
     await audit(req, 'server.create', 'success', req.user.id, { serverId: result.serverId, operationId: result.operation.id });
+    await checkBudget(req.user.id).catch(() => undefined);
     return result;
   }
 

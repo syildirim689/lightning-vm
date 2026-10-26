@@ -125,6 +125,33 @@ test('other customers cannot see or act on a server they do not own', { skip }, 
   assert.deepEqual((await send('GET', '/servers', undefined, other)).json().servers, []);
 });
 
+test('favorites and the monthly budget: a starred server is marked; an order over budget is flagged; going over is noted once a month', { skip }, async () => {
+  const fav = '/servers/' + serverId + '/favorite';
+  assert.equal((await send('PUT', fav, undefined, user)).json().favorite, true);
+  assert.equal((await send('GET', '/servers', undefined, user)).json().servers.find((x) => x.id === serverId).favorite, true);
+  assert.equal((await send('PUT', fav, undefined, other)).statusCode, 404, 'only servers you can see');
+  await send('DELETE', fav, undefined, user);
+  assert.equal((await send('GET', '/servers', undefined, user)).json().servers.find((x) => x.id === serverId).favorite, false);
+
+  assert.deepEqual(Object.keys((await send('PUT', '/usage/budget', { amount: -1, currency: 'x' }, user)).json().fields).sort(), ['amount', 'currency']);
+  const mine = (await send('GET', '/servers', undefined, user)).json().servers;
+  const currency = mine[0].currency.trim();
+  const monthly = mine.filter((x) => x.currency.trim() === currency).reduce((a, x) => a + Number(x.priceMonthly), 0);
+  // A budget above today's cost: fine now, but the quote shows the next order going over it.
+  const roomy = (await send('PUT', '/usage/budget', { amount: monthly + 0.01, currency }, user)).json().budget;
+  assert.equal(roomy.currency, currency);
+  assert.notEqual(roomy.state, 'over');
+  const q = (await send('POST', '/catalog/quote', order('budget-check'), user)).json();
+  assert.equal(q.budget.state, 'over');
+  assert.ok(q.budget.monthly > roomy.monthly);
+  // Below today's cost: over, and the month is recorded so the notice goes out once.
+  assert.equal((await send('PUT', '/usage/budget', { amount: Math.max(0.01, monthly / 2), currency }, user)).json().budget.state, 'over');
+  const { rows: [u] } = await pool.query("SELECT budget_alerted FROM users WHERE budget_currency IS NOT NULL");
+  assert.equal(u.budget_alerted, new Date().toISOString().slice(0, 7));
+  assert.equal((await send('GET', '/usage/summary', undefined, user)).json().budget.state, 'over');
+  assert.equal((await send('PUT', '/usage/budget', { amount: null }, user)).json().budget, null);
+});
+
 test('power actions are separate operations, one at a time per server', { skip }, async () => {
   const act = (action) => send('POST', `/servers/${serverId}/actions`, { action }, user, { 'idempotency-key': randomUUID() });
   const [x, y] = await Promise.all([act('shutdown'), act('reset')]);

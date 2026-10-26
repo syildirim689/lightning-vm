@@ -995,7 +995,9 @@
       "choose": "Choose the recommended",
       "apply": "Apply the values",
       "recommended": "Recommended"
-    }
+    },
+    "budgetNear": "With this order you would pay {monthly} a month, close to your budget of {amount}.",
+    "budgetOver": "With this order you would pay {monthly} a month, over your budget of {amount}."
   },
   "Catalog": {
     "eyebrow": "ADMIN · CATALOG",
@@ -1673,7 +1675,9 @@
       "notReady": "An ISO can be inserted once the server is ready.",
       "inserted": "ISO inserted.",
       "ejected": "ISO ejected."
-    }
+    },
+    "star": "Add {name} to favourites",
+    "unstar": "Remove {name} from favourites"
   },
   "Maintenance": {
     "title": "Backups and updates",
@@ -2212,6 +2216,10 @@
       "admin_alert": {
         "title": "System alert",
         "help": "When monitoring reports a problem (API, worker, backup, disk…) and when it clears."
+      },
+      "billing_budget_exceeded": {
+        "title": "Budget exceeded",
+        "help": "When your servers cost more per month than your budget (once a month)."
       }
     },
     "policyTitle": "The admin first, then each user",
@@ -3698,7 +3706,20 @@
     "daysLeft": "{n, plural, one {# day left} other {# days left}}",
     "noCost": "Nothing billed this month.",
     "resources": "In use",
-    "resourcesValue": "{servers, plural, one {# server} other {# servers}} · {vcpu} vCPU · {memory} GB RAM · {disk} GB disk"
+    "resourcesValue": "{servers, plural, one {# server} other {# servers}} · {vcpu} vCPU · {memory} GB RAM · {disk} GB disk",
+    "budget": "Monthly budget",
+    "budgetSet": "Set a budget",
+    "budgetEdit": "Change",
+    "budgetRemove": "Remove",
+    "budgetAmount": "Monthly amount",
+    "budgetCurrency": "Currency",
+    "save": "Save",
+    "budgetHelp": "Set a monthly amount; you are told when it is exceeded, and the order page warns before you go over.",
+    "budgetState": {
+      "ok": "Monthly {monthly} · budget {amount} ({pct}%)",
+      "near": "{pct}% of the budget in use: {monthly} / {amount}",
+      "over": "Budget exceeded: {monthly} a month, budget {amount}"
+    }
   },
   "Shortcuts": {
     "title": "Keyboard shortcuts",

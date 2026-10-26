@@ -995,7 +995,9 @@
       "choose": "Önerileni seç",
       "apply": "Değerleri uygula",
       "recommended": "Önerilen"
-    }
+    },
+    "budgetNear": "Bu siparişle aylık tutar {monthly} olur; bütçenize ({amount}) yaklaşıyorsunuz.",
+    "budgetOver": "Bu siparişle aylık tutar {monthly} olur ve bütçenizi ({amount}) aşar."
   },
   "Catalog": {
     "eyebrow": "YÖNETİM · KATALOG",
@@ -1673,7 +1675,9 @@
       "notReady": "Sunucu hazır olduğunda ISO takılabilir.",
       "inserted": "ISO takıldı.",
       "ejected": "ISO çıkarıldı."
-    }
+    },
+    "star": "{name} sunucusunu favorilere ekle",
+    "unstar": "{name} sunucusunu favorilerden çıkar"
   },
   "Maintenance": {
     "title": "Yedekler ve güncellemeler",
@@ -2212,6 +2216,10 @@
       "admin_alert": {
         "title": "Sistem alarmı",
         "help": "İzleme bir sorun bildirdiğinde (API, worker, yedek, disk…) ve sorun çözüldüğünde."
+      },
+      "billing_budget_exceeded": {
+        "title": "Bütçe aşıldı",
+        "help": "Sunucularınızın aylık tutarı belirlediğiniz bütçeyi geçtiğinde (ayda bir)."
       }
     },
     "policyTitle": "Önce yönetici, sonra kullanıcı",
@@ -3698,7 +3706,20 @@
     "daysLeft": "{n} gün kaldı",
     "noCost": "Bu ay ücretlendirilen bir şey yok.",
     "resources": "Kullanımda",
-    "resourcesValue": "{servers} sunucu · {vcpu} vCPU · {memory} GB RAM · {disk} GB disk"
+    "resourcesValue": "{servers} sunucu · {vcpu} vCPU · {memory} GB RAM · {disk} GB disk",
+    "budget": "Aylık bütçe",
+    "budgetSet": "Bütçe belirle",
+    "budgetEdit": "Değiştir",
+    "budgetRemove": "Kaldır",
+    "budgetAmount": "Aylık tutar",
+    "budgetCurrency": "Para birimi",
+    "save": "Kaydet",
+    "budgetHelp": "Bir aylık tutar belirleyin; aşıldığında haber verilir, sipariş sayfası aşmadan önce uyarır.",
+    "budgetState": {
+      "ok": "Aylık tutar {monthly} · bütçe {amount} (%{pct})",
+      "near": "Bütçenin %{pct} kadarı kullanılıyor: {monthly} / {amount}",
+      "over": "Bütçe aşıldı: aylık {monthly}, bütçe {amount}"
+    }
   },
   "Shortcuts": {
     "title": "Klavye kısayolları",

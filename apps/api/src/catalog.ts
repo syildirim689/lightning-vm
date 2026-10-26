@@ -6,6 +6,7 @@ import { apiError } from './errors';
 import { audit, SessionGuard, type AuthedRequest } from './auth';
 import { Can, PermissionGuard } from './rbac';
 import { ensureRoles, limitsOf } from './permissions';
+import { budgetState } from './budget';
 import { checkCustom, exceededQuota, poolCapacity, type Limits, type Shape } from './capacity';
 import { locationColumns } from './locations';
 import type { Application } from './applications';
@@ -586,6 +587,9 @@ export class CatalogController {
     const over = exceededQuota(limits, await usageOf(req.user.id, projectId), shape);
     const cap = await capacityOf(rp);
     const fits = shape.vcpu <= cap.available.vcpu && shape.memoryMb <= cap.available.memoryMb && shape.diskGb <= cap.available.storageGb;
-    return { shape, price, quota: { limits, exceeded: over }, capacityAvailable: fits };
+    // The budget after this order, so the page can warn before it is placed (never a block).
+    const current = await budgetState(req.user.id);
+    const budget = current && price.currency.trim() === current.currency ? await budgetState(req.user.id, Number(price.monthly)) : current;
+    return { shape, price, quota: { limits, exceeded: over }, capacityAvailable: fits, budget };
   }
 }

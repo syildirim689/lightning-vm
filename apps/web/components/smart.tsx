@@ -1,15 +1,19 @@
 "use client";
 // Smart cards: a server's health score with its reasons and right-sizing advice, and the customer's
 // spending this month with a month-end forecast. Numbers come from /servers/:id/health and /usage/summary.
-import { ProgressBar } from '@heroui/react';
+import { Button, ProgressBar, toast } from '@heroui/react';
+import { useQueryClient } from '@tanstack/react-query';
+import { useState } from 'react';
+import { apiFetch, useErrorText } from '../lib/api';
 import { useFormatter, useTranslations } from 'next-intl';
 import { useApiQuery } from '../lib/query';
 import { I } from './icon';
-import { Section } from './ui';
+import { Section, TextInput } from './ui';
 
 type Health = { score: number; grade: 'good' | 'fair' | 'poor'; factors: { code: string; impact: number }[]; advice: 'idle' | 'down' | 'up' | null;
   suggestedVcpu: number; vcpu: number; cpu: { avg: number; p95: number; samples: number; days: number } | null };
-type Usage = { costs: { currency: string; monthly: number; accrued: number; forecast: number; daysLeft: number }[]; usage: { servers: number; vcpu: number; memoryMb: number; diskGb: number } };
+type Budget = { amount: number; currency: string; monthly: number; ratio: number; state: 'ok' | 'near' | 'over' } | null;
+type Usage = { costs: { currency: string; monthly: number; accrued: number; forecast: number; daysLeft: number }[]; usage: { servers: number; vcpu: number; memoryMb: number; diskGb: number }; budget: Budget };
 
 const gradeTone = { good: 'text-success', fair: 'text-warning', poor: 'text-danger' };
 
@@ -77,9 +81,51 @@ export function CostForecast() {
         <ProgressBar aria-label={t('accrued')} value={c.forecast > 0 ? Math.round((c.accrued / c.forecast) * 100) : 0} size="sm"><ProgressBar.Track><ProgressBar.Fill/></ProgressBar.Track></ProgressBar>
         <p className="text-xs text-muted">{t('daysLeft', { n: c.daysLeft })}</p>
       </div>)}
+      <BudgetRow budget={d.budget} currency={d.costs[0]?.currency ?? 'TRY'}/>
       <p className="flex flex-wrap items-center gap-2 border-t border-border pt-3 text-sm"><I name="layers" size={14} className="text-muted"/>
         <span className="text-muted">{t('resources')}:</span>
         <span>{t('resourcesValue', { servers: u.servers, vcpu: u.vcpu, memory: Math.round(u.memoryMb / 1024), disk: u.diskGb })}</span></p>
     </div>
   </Section>;
+}
+
+function BudgetRow({ budget, currency }: { budget: Budget; currency: string }) {
+  const t = useTranslations('Smart');
+  const format = useFormatter();
+  const client = useQueryClient();
+  const { error, field } = useErrorText();
+  const [editing, setEditing] = useState(false);
+  const [amount, setAmount] = useState('');
+  const [cur, setCur] = useState(budget?.currency ?? currency);
+  const [fields, setFields] = useState<Record<string, string>>({});
+  const [busy, setBusy] = useState(false);
+  const money = (n: number, c: string) => format.number(n, { style: 'currency', currency: c });
+  async function save(value: string | null) {
+    setBusy(true); setFields({});
+    try {
+      await apiFetch('/usage/budget', { method: 'PUT', body: { amount: value, currency: cur.toUpperCase() } });
+      await client.invalidateQueries({ queryKey: ['usage', 'summary'] }); setEditing(false);
+    } catch (e) { setFields((e as { fields?: Record<string, string> }).fields ?? {}); toast.danger(error(e)); } finally { setBusy(false); }
+  }
+  const tone = budget?.state === 'over' ? 'danger' : budget?.state === 'near' ? 'warning' : 'success';
+  return <div className="flex flex-col gap-2 border-t border-border pt-3">
+    <div className="flex flex-wrap items-center justify-between gap-2">
+      <span className="flex items-center gap-2 text-sm font-medium"><I name="wallet" size={15} className="text-muted"/>{t('budget')}</span>
+      <Button size="sm" variant="ghost" onPress={() => { setEditing((x) => !x); setAmount(budget ? String(budget.amount) : ''); }}>{budget ? t('budgetEdit') : t('budgetSet')}</Button>
+    </div>
+    {budget && <>
+      <ProgressBar aria-label={t('budget')} value={Math.min(100, Math.round(budget.ratio * 100))} size="sm" color={tone}><ProgressBar.Track><ProgressBar.Fill/></ProgressBar.Track></ProgressBar>
+      <p className={`text-xs ${budget.state === 'ok' ? 'text-muted' : budget.state === 'near' ? 'text-warning' : 'text-danger'}`}>
+        {t(`budgetState.${budget.state}`, { monthly: money(budget.monthly, budget.currency), amount: money(budget.amount, budget.currency), pct: Math.round(budget.ratio * 100) })}</p>
+    </>}
+    {!budget && !editing && <p className="text-xs text-muted">{t('budgetHelp')}</p>}
+    {editing && <form className="flex flex-wrap items-start gap-2" onSubmit={(e) => { e.preventDefault(); void save(amount); }}>
+      <TextInput className="min-w-28 flex-1" label={t('budgetAmount')} type="number" value={amount} onChange={setAmount} error={field(fields.amount)}/>
+      <TextInput className="w-24" label={t('budgetCurrency')} value={cur} onChange={(x) => setCur(x.toUpperCase().slice(0, 3))} error={field(fields.currency)} maxLength={3}/>
+      <div className="mt-6 flex gap-2">
+        <Button size="sm" type="submit" isPending={busy}>{t('save')}</Button>
+        {budget && <Button size="sm" variant="ghost" isDisabled={busy} onPress={() => save(null)}>{t('budgetRemove')}</Button>}
+      </div>
+    </form>}
+  </div>;
 }

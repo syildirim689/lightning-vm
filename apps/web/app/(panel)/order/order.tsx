@@ -20,7 +20,8 @@ type Catalog = { packages: { id: string; name: string; vcpu: number; memoryMb: n
   locations: OrderLocation[];
   pools: { id: string; name: string; location: string; locationId: string | null; custom: Custom | null; extraIpv4Max: number; extraIpv4Price: string; ipv6: boolean }[]; images: { id: string; name: string; family: string; minDiskGb: number }[];
   applications: { id: string; name: string; kind: string; description: string; minMemoryMb: number; minDiskGb: number; priceMonthly: string; available: boolean }[] };
-type Quote = { shape: { vcpu: number; memoryMb: number; diskGb: number }; price: { monthly: string; currency: string }; quota: { exceeded: string[] }; capacityAvailable: boolean };
+type Quote = { shape: { vcpu: number; memoryMb: number; diskGb: number }; price: { monthly: string; currency: string }; quota: { exceeded: string[] }; capacityAvailable: boolean;
+  budget: { amount: number; currency: string; monthly: number; state: 'ok' | 'near' | 'over' } | null };
 type Project = { id: string; name: string };
 type Availability = { packages: Record<string, { capacity: boolean; quota: string[] }> };
 const slug = (s: string) => s.toLocaleLowerCase('en').normalize('NFD').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'server';
@@ -213,6 +214,8 @@ export default function Order() {
                   <p>{t('shape', { vcpu: quote.data.shape.vcpu, memory: gb(quote.data.shape.memoryMb), disk: quote.data.shape.diskGb })}</p>
                   <Separator/>
                   <p className="text-2xl font-semibold tabular-nums">{t('monthly', { price: money(quote.data.price.monthly, quote.data.price.currency) })}</p>
+                  {quote.data.budget && quote.data.budget.state !== 'ok' && <p className={`flex items-start gap-1.5 text-sm ${quote.data.budget.state === 'over' ? 'text-danger' : 'text-warning'}`}>
+                    <I name="wallet" size={15} className="mt-0.5 shrink-0"/>{t(quote.data.budget.state === 'over' ? 'budgetOver' : 'budgetNear', { monthly: money(quote.data.budget.monthly, quote.data.budget.currency), amount: money(quote.data.budget.amount, quote.data.budget.currency) })}</p>}
                   {quote.data.quota.exceeded.length > 0 && <p className="text-danger">{t('quotaExceeded', { limits: quote.data.quota.exceeded.map((x) => t(`quota.${x as 'vcpu'}`)).join(', ') })}</p>}
                   {!quote.data.capacityAvailable && <p className="text-danger">{t('noCapacity')}</p>}
                 </motion.div>}
