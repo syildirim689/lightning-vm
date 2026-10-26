@@ -7,6 +7,7 @@ import { pool } from './db';
 import { apiError } from './errors';
 import { audit, SessionGuard, type AuthedRequest } from './auth';
 import { publishLive } from './live-bus';
+import { ipAllowed, readLimits } from './role-limits';
 import { can, covers, effectivePermissions, known, permissionCatalog, rolesChanged, permissionsOf, roles, splitRoles, type Permission } from './permissions';
 
 // Throws unless the actor may act on the target account (its permissions are within the actor's).
@@ -47,6 +48,16 @@ function readRole(body: Input, creating: boolean) {
   return { key, name, description, permissions: [...new Set(perms)].sort() };
 }
 
+// A role's limits from the form. Saving must not lock the saver out: their own role cannot exclude the address they use.
+async function roleLimits(req: AuthedRequest, key: string, input: unknown) {
+  const { rows } = await pool.query('SELECT id FROM locations');
+  const ids = new Set(rows.map((r) => r.id as string));
+  const { limits, fields } = readLimits(input, (id) => ids.has(id));
+  if (Object.keys(fields).length) throw apiError(400, 'VALIDATION_FAILED', 'Invalid input', fields);
+  if (req.user.roles.includes(key) && !ipAllowed(limits.allowedIps, req.ip)) throw apiError(400, 'VALIDATION_FAILED', 'Invalid input', { 'limits.allowedIps': 'WOULD_LOCK_YOU_OUT' });
+  return limits;
+}
+
 @Controller('admin') @UseGuards(PermissionGuard)
 export class RolesController {
   @Get('permissions') @Can('users.view', 'roles.manage', 'users.roles')
@@ -54,7 +65,7 @@ export class RolesController {
 
   @Get('roles') @Can('users.view', 'roles.manage', 'users.roles')
   async list() {
-    const { rows } = await pool.query(`SELECT r.key, r.name, r.description, r.permissions, r.builtin,
+    const { rows } = await pool.query(`SELECT r.key, r.name, r.description, r.permissions, r.builtin, r.limits,
       (SELECT count(*)::int FROM users u WHERE r.key = ANY(string_to_array(coalesce(u.role, 'user'), ','))) AS members FROM roles r ORDER BY r.builtin DESC, r.name`);
     return { roles: rows };
   }
@@ -63,7 +74,8 @@ export class RolesController {
   async create(@Req() req: AuthedRequest, @Body() body: Input) {
     const r = readRole(body ?? {}, true);
     if (!covers(req.user.permissions, r.permissions)) throw apiError(403, 'FORBIDDEN_TARGET', 'You cannot grant permissions you do not have');
-    await pool.query('INSERT INTO roles (key, name, description, permissions) VALUES ($1, $2, $3, $4)', [r.key, r.name, r.description, r.permissions])
+    const limits = await roleLimits(req, r.key, body?.limits);
+    await pool.query('INSERT INTO roles (key, name, description, permissions, limits) VALUES ($1, $2, $3, $4, $5)', [r.key, r.name, r.description, r.permissions, limits])
       .catch((e) => { if (e.code === '23505') throw apiError(409, 'VALIDATION_FAILED', 'Exists', { key: 'ROLE_EXISTS' }); throw e; });
     await rolesChanged();
     await publishLive(null, 'access');
@@ -76,12 +88,13 @@ export class RolesController {
     if (key === 'admin') throw apiError(409, 'ROLE_LOCKED', 'The administrator role always has every permission');
     const r = readRole({ ...body, key }, false);
     if (!covers(req.user.permissions, r.permissions)) throw apiError(403, 'FORBIDDEN_TARGET', 'You cannot grant permissions you do not have');
-    const { rowCount } = await pool.query('UPDATE roles SET name = $2, description = $3, permissions = $4, updated_at = now() WHERE key = $1', [key, r.name, r.description, r.permissions]);
+    const limits = await roleLimits(req, key, body?.limits);
+    const { rowCount } = await pool.query('UPDATE roles SET name = $2, description = $3, permissions = $4, limits = $5, updated_at = now() WHERE key = $1', [key, r.name, r.description, r.permissions, limits]);
     if (!rowCount) throw apiError(404, 'NOT_FOUND', 'Unknown role');
     await rolesChanged();
     await publishLive(null, 'access');
-    await audit(req, 'role.updated', 'success', req.user.id, { key, permissions: r.permissions });
-    return { ...r, key };
+    await audit(req, 'role.updated', 'success', req.user.id, { key, permissions: r.permissions, limits });
+    return { ...r, key, limits };
   }
 
   // Members fall back to the remaining roles, or to "user" if this was their only one.

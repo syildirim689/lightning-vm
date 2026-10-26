@@ -1,11 +1,14 @@
 // Roles and permissions, without HTTP: the catalog, the role cache and effective permissions.
 // Shared by the guards (rbac.ts), the session (auth.ts) and better-auth's hooks.
 import { pool, redis } from './db';
+import { combineLimits, type RoleLimits } from './role-limits';
 
 // The catalog: group → permissions. The web panel shows these with translated names and explanations.
 export const permissionCatalog = {
   dashboard: ['dashboard.view'],
   servers: ['servers.create', 'firewalls.manage', 'servers.view_all', 'servers.manage_all', 'operations.retry', 'reconcile.run', 'consoles.any'],
+  // What a member may do on their own servers (Settings → Servers can still switch an action off for everyone).
+  server: ['server.power', 'server.console', 'server.delete', 'server.snapshots', 'server.iso', 'server.root_password'],
   catalog: ['catalog.view', 'catalog.manage'],
   vmware: ['vmware.view', 'vmware.manage'],
   users: ['users.view', 'users.manage', 'users.roles', 'users.ban', 'users.sessions', 'users.impersonate'],
@@ -17,11 +20,11 @@ export type Permission = (typeof permissionCatalog)[keyof typeof permissionCatal
 export const allPermissions = Object.values(permissionCatalog).flat() as Permission[];
 export const known = new Set<string>(allPermissions);
 
-export type Role = { key: string; name: string; description: string; permissions: string[]; builtin: boolean };
+export type Role = { key: string; name: string; description: string; permissions: string[]; builtin: boolean; limits: RoleLimits };
 export let roles = new Map<string, Role>();
 // Loaded at start and after every change; better-auth asks synchronously whether a role exists.
 export async function loadRoles() {
-  const { rows } = await pool.query('SELECT key, name, description, permissions, builtin FROM roles ORDER BY builtin DESC, name');
+  const { rows } = await pool.query('SELECT key, name, description, permissions, builtin, limits FROM roles ORDER BY builtin DESC, name');
   roles = new Map(rows.map((r) => [r.key, r]));
   return [...roles.values()];
 }
@@ -38,6 +41,11 @@ export function effectivePermissions(roleValue: string | null | undefined, overr
   return [...set].filter((p) => known.has(p)).sort();
 }
 export const can = (perms: string[], p: Permission) => perms.includes('*') || perms.includes(p);
+// The limits of a user's roles together; administrators ("*") have none.
+export function limitsOf(roleValue: string | null | undefined): RoleLimits {
+  const list = splitRoles(roleValue).map((k) => roles.get(k)).filter((r): r is Role => !!r);
+  return list.some((r) => r.permissions.includes('*')) ? {} : combineLimits(list.map((r) => r.limits ?? {}));
+}
 // "a may grant/act on b": everything b has, a has too. Stops a support user from promoting themselves or acting on admins.
 export const covers = (a: string[], b: string[]) => a.includes('*') || (!b.includes('*') && b.every((p) => a.includes(p)));
 

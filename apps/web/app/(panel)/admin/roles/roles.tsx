@@ -7,13 +7,22 @@ import { motion } from 'motion/react';
 import { useTranslations } from 'next-intl';
 import { useState } from 'react';
 import { I } from '../../../../components/icon';
-import { ConfirmButton, Notice, PageHeader, TextInput } from '../../../../components/ui';
+import { ConfirmButton, Notice, PageHeader, TextInput, CheckboxInput } from '../../../../components/ui';
 import { apiFetch, useErrorText } from '../../../../lib/api';
 import { useMe } from '../../../../lib/me';
 import { can } from '../../../../lib/permissions';
 import { useApiQuery } from '../../../../lib/query';
 
-type Role = { key: string; name: string; description: string; permissions: string[]; builtin: boolean; members: number };
+type Limits = { maxServers?: number; maxVcpu?: number; maxMemoryMb?: number; maxDiskGb?: number; maxSnapshots?: number; maxFirewalls?: number; maxSshKeys?: number;
+  operationsPerHour?: number; sessionHours?: number; require2fa?: boolean; allowedLocations?: string[]; allowedIps?: string[] };
+type Role = { key: string; name: string; description: string; permissions: string[]; builtin: boolean; members: number; limits: Limits };
+// Number limits in the editor, grouped; memory is entered in GB and stored in MB.
+const numberLimits = [
+  ['quota', ['maxServers', 'maxVcpu', 'maxMemoryMb', 'maxDiskGb']],
+  ['counts', ['maxSnapshots', 'maxFirewalls', 'maxSshKeys', 'operationsPerHour']],
+  ['session', ['sessionHours']],
+] as const;
+type NumberLimit = (typeof numberLimits)[number][1][number];
 
 export default function Roles() {
   const t = useTranslations('Roles');
@@ -46,6 +55,12 @@ export default function Roles() {
                 : r.permissions.length === 0 ? <span className="text-xs text-muted">{t('nothing')}</span>
                 : r.permissions.map((p) => <Chip key={p} size="sm" variant="secondary">{tp(`p.${p.replace('.', '_')}` as 'p.servers_create')}</Chip>)}
             </div>
+            {Object.keys(r.limits ?? {}).length > 0 && <div className="flex flex-wrap gap-1 border-t border-separator pt-3">
+              <span className="mr-1 inline-flex items-center gap-1 text-xs font-medium text-muted"><I name="gauge" size={13}/>{t('limits.title')}:</span>
+              {Object.entries(r.limits).map(([k, v]) => <Chip key={k} size="sm" variant="soft" color="warning">
+                {k === 'require2fa' ? t('limits.require2faShort') : Array.isArray(v) ? t('limits.listShort', { name: t(`limits.${k}` as 'limits.allowedIps'), n: v.length })
+                  : `${t(`limits.${k}` as 'limits.maxServers')}: ${k === 'maxMemoryMb' ? `${Number(v) / 1024} GB` : v}`}</Chip>)}
+            </div>}
           </Card.Content>
           {manage && r.key !== 'admin' && <Card.Footer className="flex justify-end gap-2">
             {r.key !== 'user' && <ConfirmButton size="sm" variant="ghost" icon={<I name="trash-2" size={15}/>} label={t('remove')} title={t('removeTitle', { name: r.name })}
@@ -65,6 +80,16 @@ function RoleEditor({ role, groups, mine, onClose }: { role: Role | null; groups
   const { error, field } = useErrorText();
   const client = useQueryClient();
   const [v, setV] = useState({ key: role?.key ?? '', name: role?.name ?? '', description: role?.description ?? '', permissions: role?.permissions ?? [] });
+  const l0 = role?.limits ?? {};
+  // Kept as text while editing: empty means "no limit".
+  const [lim, setLim] = useState<Record<NumberLimit, string>>(() => Object.fromEntries(numberLimits.flatMap(([, ks]) => ks).map((k) =>
+    [k, l0[k] === undefined ? '' : String(k === 'maxMemoryMb' ? l0[k]! / 1024 : l0[k])])) as Record<NumberLimit, string>);
+  const [require2fa, setRequire2fa] = useState(!!l0.require2fa);
+  const [locs, setLocs] = useState<string[]>(l0.allowedLocations ?? []);
+  const [ips, setIps] = useState((l0.allowedIps ?? []).join('\n'));
+  const locations = useApiQuery<{ locations: { id: string; name: string; countryCode: string }[] }>(['admin', 'locations'], '/admin/locations').data?.locations;
+  const limits = () => ({ ...Object.fromEntries(Object.entries(lim).filter(([, x]) => x.trim() !== '').map(([k, x]) => [k, k === 'maxMemoryMb' ? Math.round(Number(x) * 1024) : Number(x)])),
+    require2fa, allowedLocations: locs, allowedIps: ips.split(/[\s,]+/).filter(Boolean) });
   const [fields, setFields] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
   const toggle = (p: string, on: boolean) => setV((x) => ({ ...x, permissions: on ? [...x.permissions, p] : x.permissions.filter((y) => y !== p) }));
@@ -73,7 +98,7 @@ function RoleEditor({ role, groups, mine, onClose }: { role: Role | null; groups
   async function save() {
     setBusy(true); setFields({});
     try {
-      await apiFetch(role ? `/admin/roles/${role.key}` : '/admin/roles', { method: role ? 'PUT' : 'POST', body: v });
+      await apiFetch(role ? `/admin/roles/${role.key}` : '/admin/roles', { method: role ? 'PUT' : 'POST', body: { ...v, limits: limits() } });
       toast.success(t('saved')); client.invalidateQueries({ queryKey: ['admin', 'roles'] }); onClose();
     } catch (e) { setFields((e as { fields?: Record<string, string> }).fields ?? {}); toast.danger(error(e)); } finally { setBusy(false); }
   }
@@ -112,6 +137,32 @@ function RoleEditor({ role, groups, mine, onClose }: { role: Role | null; groups
             </div>
             {fields.permissions && <Notice tone="danger">{field(fields.permissions)}</Notice>}
           </fieldset>
+          {role?.key !== 'admin' && <fieldset className="flex flex-col gap-4">
+            <legend className="mb-1 text-sm font-semibold">{t('limits.title')} <span className="font-normal text-muted">· {t('limits.intro')}</span></legend>
+            {numberLimits.map(([group, keys]) => <div key={group} className="rounded-xl border border-border p-3">
+              <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted">{t(`limits.group.${group}`)}</p>
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                {keys.map((k) => <TextInput key={k} type="number" label={t(`limits.${k}`)} value={lim[k]} onChange={(x) => setLim((s) => ({ ...s, [k]: x }))}
+                  placeholder={t('limits.unlimited')} help={t(`limits.help.${k}`)} error={field(fields[`limits.${k}`])}/>)}
+              </div>
+            </div>)}
+            <div className="rounded-xl border border-border p-3">
+              <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted">{t('limits.group.access')}</p>
+              <div className="flex flex-col gap-4">
+                <CheckboxInput label={t('limits.require2fa')} help={t('limits.help.require2fa')} isSelected={require2fa} onChange={setRequire2fa}/>
+                {locations && locations.length > 0 && <div className="flex flex-col gap-2">
+                  <p className="text-sm font-medium">{t('limits.allowedLocations')}</p>
+                  <p className="text-xs text-muted">{t('limits.help.allowedLocations')}</p>
+                  <div className="flex flex-wrap gap-2">{locations.map((x) => <button key={x.id} type="button" role="checkbox" aria-checked={locs.includes(x.id)}
+                    onClick={() => setLocs((s) => (s.includes(x.id) ? s.filter((y) => y !== x.id) : [...s, x.id]))}
+                    className={`rounded-full border px-3 py-1 text-sm transition-colors focus-visible:outline-2 focus-visible:outline-accent ${locs.includes(x.id) ? 'border-accent bg-accent/10 text-accent' : 'border-border hover:border-accent/50'}`}>{x.name}</button>)}</div>
+                  {fields['limits.allowedLocations'] && <p className="text-xs text-danger">{field(fields['limits.allowedLocations'])}</p>}
+                </div>}
+                <TextInput multiline label={t('limits.allowedIps')} value={ips} onChange={setIps} placeholder={'203.0.113.0/24\n2001:db8::/32'} help={t('limits.help.allowedIps')}
+                  error={field(fields['limits.allowedIps'])} spellCheck={false}/>
+              </div>
+            </div>
+          </fieldset>}
         </Modal.Body>
         <Modal.Footer className="flex justify-end gap-2"><Button variant="tertiary" onPress={onClose}>{t('cancel')}</Button><Button isPending={busy} onPress={save}>{t('save')}</Button></Modal.Footer>
       </Modal.Dialog>

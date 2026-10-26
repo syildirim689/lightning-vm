@@ -532,3 +532,47 @@ test('live line: open tabs learn at once; a role change refreshes them, a ban or
   tab.close();
   assert.equal((await post('/auth/admin/remove-user', { userId: id }, admin)).statusCode, 200);
 });
+
+test('role limits: checked when saved, then enforced for members (addresses, counts, two-factor, session length, server actions)', async () => {
+  const bad = (await post('/admin/roles', { key: 'limited', name: 'Limited', permissions: ['servers.create'], limits: { maxServers: -1, allowedIps: ['10.0.0.0/33'], allowedLocations: ['nope'] } }, admin)).json();
+  assert.deepEqual(Object.keys(bad.fields).sort(), ['limits.allowedIps', 'limits.allowedLocations', 'limits.maxServers']);
+  // No server.* abilities, a few counts, and an address range the test client is outside of.
+  assert.equal((await post('/admin/roles', { key: 'limited', name: 'Limited', permissions: ['servers.create', 'firewalls.manage'],
+    limits: { maxSshKeys: 1, maxFirewalls: 0, maxSnapshots: 2, allowedIps: ['203.0.113.0/24'] } }, admin)).statusCode, 201);
+  const roles = (await get('/admin/roles', admin)).json().roles;
+  assert.deepEqual(roles.find((r) => r.key === 'limited').limits, { maxSshKeys: 1, maxFirewalls: 0, maxSnapshots: 2, allowedIps: ['203.0.113.0/24'] });
+  // The built-in user role kept every server ability (migration 024).
+  assert.ok(['server.power', 'server.console', 'server.delete', 'server.snapshots', 'server.iso', 'server.root_password'].every((p) => roles.find((r) => r.key === 'user').permissions.includes(p)));
+
+  const email = 'limited@example.test';
+  const id = (await post('/auth/admin/create-user', { email, password, name: 'Lim', role: 'user' }, admin)).json().user.id;
+  assert.equal((await put(`/admin/users/${id}/access`, { roles: ['limited'], overrides: [] }, admin)).statusCode, 200);
+  const refused = await post('/auth/sign-in/email', { email, password });
+  assert.equal(refused.statusCode, 403);
+  assert.equal(refused.json().code, 'IP_NOT_ALLOWED');
+  assert.equal((await put('/admin/roles/limited', { name: 'Limited', permissions: ['servers.create', 'firewalls.manage'], limits: { maxSshKeys: 1, maxFirewalls: 0, allowedIps: ['127.0.0.0/8', '::1/128'] } }, admin)).statusCode, 200);
+  const c = cookieOf(await post('/auth/sign-in/email', { email, password }));
+  assert.equal((await get('/auth/me', c)).statusCode, 200);
+
+  const key = (n) => `ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAI${n.repeat(43).slice(0, 43)} t@x`;
+  assert.equal((await post('/ssh-keys', { name: 'one', publicKey: key('A') }, c)).statusCode, 201);
+  const second = await post('/ssh-keys', { name: 'two', publicKey: key('B') }, c);
+  assert.equal(second.statusCode, 409);
+  assert.equal(second.json().code, 'LIMIT_REACHED');
+  assert.equal((await post('/firewalls', { name: 'fw', rules: [] }, c)).json().code, 'LIMIT_REACHED');
+
+  // Two-factor required by the role: only "who am I" answers until it is set up.
+  assert.equal((await put('/admin/roles/limited', { name: 'Limited', permissions: ['servers.create'], limits: { require2fa: true } }, admin)).statusCode, 200);
+  assert.equal((await get('/auth/me', c)).json().twoFactorRequired, true);
+  assert.equal((await get('/ssh-keys', c)).json().code, 'TWO_FACTOR_SETUP_REQUIRED');
+  // A session older than the role allows is ended.
+  assert.equal((await put('/admin/roles/limited', { name: 'Limited', permissions: ['servers.create'], limits: { sessionHours: 1 } }, admin)).statusCode, 200);
+  assert.equal((await get('/ssh-keys', c)).statusCode, 200);
+  await pool.query("UPDATE auth_sessions SET created_at = now() - interval '2 hours' WHERE user_id = $1", [id]);
+  assert.equal((await get('/ssh-keys', c)).statusCode, 401);
+
+  // Clean up.
+  await pool.query("DELETE FROM ssh_keys WHERE owner_id = $1", [id]);
+  assert.equal((await post('/auth/admin/remove-user', { userId: id }, admin)).statusCode, 200);
+  assert.equal((await call('DELETE', '/admin/roles/limited', admin)).statusCode, 204);
+});

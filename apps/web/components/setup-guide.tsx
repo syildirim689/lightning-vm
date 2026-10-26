@@ -30,7 +30,7 @@ export function GuideButton({ id, size = 'sm' }: { id: string; size?: 'sm' | 'md
     <Button size={size} variant="ghost" onPress={() => setOpen(true)} className="w-fit"><I name="book-open" size={15}/>{t('open')}</Button>
     <Modal.Backdrop isOpen={open} onOpenChange={setOpen}>
       <Modal.Container scroll="inside">
-        <Modal.Dialog className="w-[44rem] max-w-[calc(100vw-1.5rem)]">
+        <Modal.Dialog className="w-[44rem] max-w-[calc(100vw-1.5rem)] bg-surface">
           <Modal.CloseTrigger/>
           <Modal.Header><Modal.Heading className="flex items-center gap-2"><I name="book-open" size={18} className="text-accent"/>{g.title}</Modal.Heading></Modal.Header>
           <Modal.Body className="flex max-h-[70vh] flex-col gap-5 overflow-y-auto">

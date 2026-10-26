@@ -257,7 +257,12 @@
     "CHAT_LIMIT": "En fazla 10 uygulama bağlanabilir.",
     "CHAT_APP_UNAVAILABLE": "Bu uygulama yönetici tarafından kapatıldı.",
     "CHAT_NOT_CONNECTED": "Önce bir mesajlaşma uygulaması bağlayın.",
-    "DUPLICATE_REQUEST": "Aynı istek zaten işleniyor; tekrar basmanıza gerek yok."
+    "DUPLICATE_REQUEST": "Aynı istek zaten işleniyor; tekrar basmanıza gerek yok.",
+    "ACTION_NOT_PERMITTED": "Rolünüz bu işleme izin vermiyor.",
+    "LIMIT_REACHED": "Rolünüzün sınırına ulaştınız.",
+    "OPERATION_RATE_LIMITED": "Bu saat için işlem sınırınıza ulaştınız; biraz sonra yeniden deneyin.",
+    "LOCATION_NOT_ALLOWED": "Rolünüz bu konumda sipariş veremez.",
+    "IP_NOT_ALLOWED": "Hesabınıza bu adresten giriş yapılamaz."
   },
   "Auth": {
     "required": "zorunlu",
@@ -456,7 +461,10 @@
     "GITHUB_USER_NOT_FOUND": "Böyle bir GitHub kullanıcısı yok.",
     "GITHUB_NO_KEYS": "Bu GitHub kullanıcısı SSH anahtarı yayınlamamış.",
     "CHAT_INVALID_URL": "Herkese açık bir HTTPS adresi olmalı (bu servisin alan adında).",
-    "CHAT_AUTH_FAILED": "Anahtar reddedildi."
+    "CHAT_AUTH_FAILED": "Anahtar reddedildi.",
+    "LIMIT_REACHED": "Rolünüzün sınırına ulaştınız.",
+    "LOCATION_NOT_ALLOWED": "Rolünüz bu konumu kullanamaz.",
+    "WOULD_LOCK_YOU_OUT": "Şu an kullandığınız adres listede yok; kendinizi dışarıda bırakırdınız."
   },
   "Setup": {
     "title": "Kurulum sihirbazı",
@@ -2322,6 +2330,45 @@
       "operator": "Operatör",
       "support": "Destek",
       "auditor": "Denetçi"
+    },
+    "limits": {
+      "title": "Sınırlar",
+      "intro": "boş bırakılan alan sınırsızdır. Birden fazla rolü olan kullanıcıya en geniş olanı uygulanır.",
+      "unlimited": "Sınırsız",
+      "require2faShort": "İki adımlı zorunlu",
+      "listShort": "{name}: {n}",
+      "group": {
+        "quota": "Kaynak kotası",
+        "counts": "Adetler ve hız",
+        "session": "Oturum",
+        "access": "Erişim"
+      },
+      "maxServers": "En fazla sunucu",
+      "maxVcpu": "En fazla vCPU",
+      "maxMemoryMb": "En fazla RAM (GB)",
+      "maxDiskGb": "En fazla disk (GB)",
+      "maxSnapshots": "Sunucu başına anlık görüntü",
+      "maxFirewalls": "En fazla firewall",
+      "maxSshKeys": "En fazla SSH anahtarı",
+      "operationsPerHour": "Saatte en fazla işlem",
+      "sessionHours": "Oturum süresi (saat)",
+      "require2fa": "İki adımlı doğrulama zorunlu",
+      "allowedLocations": "Sipariş verebileceği konumlar",
+      "allowedIps": "Giriş yapabileceği adresler",
+      "help": {
+        "maxServers": "Kullanıcının veya projenin kendi kotası varsa o geçerlidir.",
+        "maxVcpu": "Tüm sunucuların toplamı.",
+        "maxMemoryMb": "Tüm sunucuların toplamı.",
+        "maxDiskGb": "Tüm sunucuların toplamı.",
+        "maxSnapshots": "Boşsa varsayılan 5. En fazla 32.",
+        "maxFirewalls": "Oluşturabileceği firewall sayısı.",
+        "maxSshKeys": "Hesabına ekleyebileceği anahtar sayısı.",
+        "operationsPerHour": "Kendi sunucularında başlattığı oluşturma, güç ve snapshot işlemleri.",
+        "sessionHours": "Girişten bu kadar sonra oturum kapanır.",
+        "require2fa": "Kurmayan üyeler yalnızca iki adımlı doğrulamayı kurabilir.",
+        "allowedLocations": "Hiçbiri seçilmezse tüm konumlar.",
+        "allowedIps": "Her satıra bir IP veya CIDR blok (IPv4/IPv6). Boşsa her yerden. Kendi rolünüzde, şu an kullandığınız adres dışarıda kalamaz."
+      }
     }
   },
   "Permissions": {
@@ -2333,7 +2380,8 @@
       "users": "Kullanıcılar",
       "roles": "Roller",
       "settings": "Ayarlar",
-      "system": "Sistem"
+      "system": "Sistem",
+      "server": "Kendi sunucularında"
     },
     "p": {
       "dashboard_view": "Genel bakışı görme",
@@ -2360,7 +2408,13 @@
       "audit_view": "Denetim kayıtlarını görme",
       "firewalls_manage": "Firewall yönetimi",
       "system_update": "Platformu güncelleme",
-      "system_terminal": "Sunucu terminalini kullanma"
+      "system_terminal": "Sunucu terminalini kullanma",
+      "server_power": "Güç işlemleri",
+      "server_console": "Konsol",
+      "server_delete": "Sunucu silme",
+      "server_snapshots": "Anlık görüntüler",
+      "server_iso": "ISO bağlama",
+      "server_root_password": "Root parolası"
     },
     "help": {
       "dashboard_view": "Yönetim panosu, içgörüler ve özet grafikler.",
@@ -2387,7 +2441,13 @@
       "audit_view": "Kim, ne zaman, ne yaptı kayıtları.",
       "firewalls_manage": "Firewall oluşturur ve kendi sunucularına bağlar.",
       "system_update": "Panelden güncelleme denetler, günceller, yedek alır ve otomatik güncellemeyi ayarlar.",
-      "system_terminal": "Tarayıcıdan sunucuda root kabuğu (iki adımlı giriş gerekir)."
+      "system_terminal": "Tarayıcıdan sunucuda root kabuğu (iki adımlı giriş gerekir).",
+      "server_power": "Aç, kapat, yeniden başlat ve güç zamanlamaları.",
+      "server_console": "Tarayıcı konsolunu açma.",
+      "server_delete": "Kendi sunucusunu silme.",
+      "server_snapshots": "Anlık görüntü alma, geri yükleme ve silme.",
+      "server_iso": "ISO bağlama ve çıkarma.",
+      "server_root_password": "Root parolasını görme ve silme."
     }
   },
   "Settings": {
@@ -3044,7 +3104,7 @@
           "todo": "Yayında duyuru yok."
         },
         "backup": {
-          "ok": "Son başarılı yedek {hoursAgo} saat önce.",
+          "ok": "{hoursAgo, plural, =0 {Son başarılı yedek bir saatten kısa süre önce alındı.} other {Son başarılı yedek # saat önce alındı.}}",
           "warn": "Son 48 saatte başarılı yedek yok; Sistem sayfasından alın."
         }
       }

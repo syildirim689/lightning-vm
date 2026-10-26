@@ -227,13 +227,15 @@ export class SettingsOverviewController {
         (SELECT count(*)::int FROM users WHERE 'admin' = ANY(string_to_array(coalesce(role, ''), ',')) AND NOT two_factor_enabled AND NOT coalesce(banned, false)) AS "adminsNo2fa",
         (SELECT count(*)::int FROM servers WHERE state <> 'deleted') AS servers`)]);
     const registrationOpen = reg?.value === true;
+    const address = typeof url?.value === 'string' ? url.value : null;
+    const https = config.PANEL_TLS === '1' && (!address || address.startsWith('https://'));
     const now = Date.now();
     const backup = summary().lastSuccessfulBackup;
     const backupAgeH = backup ? Math.round((now - Date.parse(backup.time)) / 3_600_000) : null;
     const events = Object.values(notifications);
     const items = [
       { key: 'branding', tab: 'branding', state: branding.name !== 'Lightning VM' || branding.logo ? 'ok' : 'todo', detail: { name: branding.name, logo: !!branding.logo } },
-      { key: 'domain', tab: 'domain', state: config.PANEL_TLS === '1' ? 'ok' : 'warn', detail: { url: typeof url?.value === 'string' ? url.value : null, https: config.PANEL_TLS === '1' } },
+      { key: 'domain', tab: 'domain', state: https ? 'ok' : 'warn', detail: { url: address, https } },
       { key: 'security', tab: 'security', state: counts.adminsNo2fa ? 'warn' : security.require2fa !== 'none' ? 'ok' : 'todo', detail: { require2fa: security.require2fa, adminsNo2fa: counts.adminsNo2fa } },
       { key: 'mail', tab: 'mail', state: (await mailReady()) ? 'ok' : 'warn', detail: { provider: (await getSettings('mail')).provider } },
       { key: 'captcha', tab: 'captcha', state: captcha.provider !== 'none' ? 'ok' : registrationOpen ? 'warn' : 'todo', detail: { provider: captcha.provider } },

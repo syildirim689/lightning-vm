@@ -6,10 +6,13 @@ import { SessionGuard, type AuthedRequest } from './auth';
 import { pool } from './db';
 import { apiError } from './errors';
 import { customerMay, findServer, hashOf, idempotencyKey, replay, startOperation, type Kind } from './servers';
+import { limitsOf } from './permissions';
 import { callAdapter, storedTarget } from './vmware';
 
 // shortcut: a fixed limit per server; make it a setting when operators ask for more.
 export const MAX_SNAPSHOTS = 5;
+// The role may allow fewer or more (Roles → limits).
+const maxFor = (req: AuthedRequest) => limitsOf(req.user.roles.join(',')).maxSnapshots ?? MAX_SNAPSHOTS;
 type Snapshot = { id: string; name: string; description: string; created: string; powerState: string; current: boolean; parent: string };
 
 async function target(serverPoolId: string) {
@@ -25,9 +28,9 @@ export class SnapshotsController {
   @Get()
   async list(@Req() req: AuthedRequest, @Param('id', ParseUUIDPipe) id: string) {
     const s = await findServer(req, id);
-    if (!s.vm_moref || s.state === 'provisioning') return { snapshots: [], max: MAX_SNAPSHOTS };
+    if (!s.vm_moref || s.state === 'provisioning') return { snapshots: [], max: maxFor(req) };
     const out = await callAdapter<{ snapshots: Snapshot[] }>('/v1/vm/snapshots', { ...(await target(s.pool_id)), vm: s.vm_moref }, 30_000);
-    return { snapshots: out.snapshots, max: MAX_SNAPSHOTS };
+    return { snapshots: out.snapshots, max: maxFor(req) };
   }
 
   @Post() @HttpCode(202)
@@ -40,7 +43,7 @@ export class SnapshotsController {
     if (Object.keys(fields).length) throw apiError(400, 'VALIDATION_FAILED', 'Invalid input', fields);
     return this.start(req, header, id, 'snapshot_create', { name, description }, async (s) => {
       const out = await callAdapter<{ snapshots: Snapshot[] }>('/v1/vm/snapshots', { ...(await target(s.pool_id)), vm: s.vm_moref }, 30_000);
-      if (out.snapshots.length >= MAX_SNAPSHOTS) throw apiError(409, 'SNAPSHOT_LIMIT', 'Remove a snapshot first', { name: 'SNAPSHOT_LIMIT' });
+      if (out.snapshots.length >= maxFor(req)) throw apiError(409, 'SNAPSHOT_LIMIT', 'Remove a snapshot first', { name: 'SNAPSHOT_LIMIT' });
     });
   }
 

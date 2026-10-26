@@ -4,7 +4,8 @@ import type { FastifyRequest } from 'fastify';
 import { getAuth } from './better-auth';
 import { pool } from './db';
 import { apiError } from './errors';
-import { permissionsOf, splitRoles } from './permissions';
+import { limitsOf, permissionsOf, splitRoles } from './permissions';
+import { ipAllowed } from './role-limits';
 import { getSettings } from './settings-store';
 
 // roles: the role keys; permissions: the effective set ('*' for administrators). impersonatedBy: the staff
@@ -39,10 +40,18 @@ export async function currentSession(req: FastifyRequest): Promise<{ user: User;
   if (u.disabledAt || u.banned) return null;
   const impersonatedBy = (s.session as { impersonatedBy?: string | null }).impersonatedBy ?? null;
   const permissions = await permissionsOf(u.id, u.role ?? null);
+  // The role's sign-in rules: only from its addresses, and a session ends after its length (it is removed).
+  const limits = limitsOf(u.role ?? null);
+  if (!ipAllowed(limits.allowedIps, req.ip)) return null;
+  if (limits.sessionHours && Date.now() - new Date(s.session.createdAt).getTime() > limits.sessionHours * 3_600_000) {
+    await pool.query('DELETE FROM auth_sessions WHERE token = $1', [s.session.token]).catch(() => undefined);
+    return null;
+  }
   // The admin's sign-in policy: without two-factor, such an account may only set it up (impersonation is exempt).
   const policy = (await getSettings('security')).require2fa;
-  const staff = permissions.some((p) => !['servers.create', 'firewalls.manage'].includes(p));
-  const twoFactorRequired = !u.twoFactorEnabled && !impersonatedBy && (policy === 'all' || (policy === 'staff' && staff));
+  // Customer permissions (their own servers and firewalls) do not make anyone staff.
+  const staff = permissions.some((p) => !['servers.create', 'firewalls.manage'].includes(p) && !p.startsWith('server.'));
+  const twoFactorRequired = !u.twoFactorEnabled && !impersonatedBy && (policy === 'all' || (policy === 'staff' && staff) || !!limits.require2fa);
   return { user: { id: u.id, email: u.email, name: u.name ?? '', roles: splitRoles(u.role), permissions,
     locale: u.locale === 'tr' ? 'tr' : 'en', impersonatedBy, twoFactorEnabled: !!u.twoFactorEnabled, twoFactorRequired, phoneNumber: u.phoneNumber ?? null,
     phoneNumberVerified: !!u.phoneNumberVerified }, token: s.session.token };

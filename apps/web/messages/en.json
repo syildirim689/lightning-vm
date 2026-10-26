@@ -257,7 +257,12 @@
     "CHAT_LIMIT": "At most 10 apps can be connected.",
     "CHAT_APP_UNAVAILABLE": "The administrator switched this app off.",
     "CHAT_NOT_CONNECTED": "Connect a messaging app first.",
-    "DUPLICATE_REQUEST": "The same request is already being processed; no need to press again."
+    "DUPLICATE_REQUEST": "The same request is already being processed; no need to press again.",
+    "ACTION_NOT_PERMITTED": "Your role does not allow this.",
+    "LIMIT_REACHED": "You reached your role's limit.",
+    "OPERATION_RATE_LIMITED": "You reached your operations limit for this hour; try again later.",
+    "LOCATION_NOT_ALLOWED": "Your role cannot order in this location.",
+    "IP_NOT_ALLOWED": "Your account cannot sign in from this address."
   },
   "Auth": {
     "required": "required",
@@ -456,7 +461,10 @@
     "GITHUB_USER_NOT_FOUND": "No such GitHub user.",
     "GITHUB_NO_KEYS": "This GitHub user has published no SSH key.",
     "CHAT_INVALID_URL": "Must be a public HTTPS URL (on this service's domain).",
-    "CHAT_AUTH_FAILED": "The token was rejected."
+    "CHAT_AUTH_FAILED": "The token was rejected.",
+    "LIMIT_REACHED": "You reached your role's limit.",
+    "LOCATION_NOT_ALLOWED": "Your role cannot use this location.",
+    "WOULD_LOCK_YOU_OUT": "The address you use now is not in the list; you would lock yourself out."
   },
   "Setup": {
     "title": "Setup wizard",
@@ -2322,6 +2330,45 @@
       "operator": "Operator",
       "support": "Support",
       "auditor": "Auditor"
+    },
+    "limits": {
+      "title": "Limits",
+      "intro": "an empty field means no limit. A user with several roles gets the most generous one.",
+      "unlimited": "Unlimited",
+      "require2faShort": "Two-factor required",
+      "listShort": "{name}: {n}",
+      "group": {
+        "quota": "Resource quota",
+        "counts": "Counts and rate",
+        "session": "Session",
+        "access": "Access"
+      },
+      "maxServers": "Max servers",
+      "maxVcpu": "Max vCPU",
+      "maxMemoryMb": "Max RAM (GB)",
+      "maxDiskGb": "Max disk (GB)",
+      "maxSnapshots": "Snapshots per server",
+      "maxFirewalls": "Max firewalls",
+      "maxSshKeys": "Max SSH keys",
+      "operationsPerHour": "Operations per hour",
+      "sessionHours": "Session length (hours)",
+      "require2fa": "Two-factor authentication required",
+      "allowedLocations": "Locations they may order in",
+      "allowedIps": "Addresses they may sign in from",
+      "help": {
+        "maxServers": "A user's or project's own quota wins.",
+        "maxVcpu": "Across all their servers.",
+        "maxMemoryMb": "Across all their servers.",
+        "maxDiskGb": "Across all their servers.",
+        "maxSnapshots": "Empty: the default of 5. At most 32.",
+        "maxFirewalls": "Firewalls they may create.",
+        "maxSshKeys": "Keys they may add to their account.",
+        "operationsPerHour": "Create, power and snapshot operations they start on their own servers.",
+        "sessionHours": "A session ends this long after signing in.",
+        "require2fa": "Members without it can only set it up.",
+        "allowedLocations": "None selected: every location.",
+        "allowedIps": "One IP or CIDR block per line (IPv4/IPv6). Empty: anywhere. On your own role, the address you use now cannot be left out."
+      }
     }
   },
   "Permissions": {
@@ -2333,7 +2380,8 @@
       "users": "Users",
       "roles": "Roles",
       "settings": "Settings",
-      "system": "System"
+      "system": "System",
+      "server": "On their own servers"
     },
     "p": {
       "dashboard_view": "View the overview",
@@ -2360,7 +2408,13 @@
       "audit_view": "See the audit log",
       "firewalls_manage": "Manage firewalls",
       "system_update": "Update the platform",
-      "system_terminal": "Use the server terminal"
+      "system_terminal": "Use the server terminal",
+      "server_power": "Power actions",
+      "server_console": "Console",
+      "server_delete": "Delete servers",
+      "server_snapshots": "Snapshots",
+      "server_iso": "Mount ISOs",
+      "server_root_password": "Root password"
     },
     "help": {
       "dashboard_view": "The admin dashboard, insights and summary charts.",
@@ -2387,7 +2441,13 @@
       "audit_view": "Who did what, and when.",
       "firewalls_manage": "Create firewalls and attach them to their own servers.",
       "system_update": "Check for updates, update, back up and set automatic updates from the panel.",
-      "system_terminal": "A root shell on the host from the browser (needs two-factor sign-in)."
+      "system_terminal": "A root shell on the host from the browser (needs two-factor sign-in).",
+      "server_power": "Power on, off, restart and power schedules.",
+      "server_console": "Open the browser console.",
+      "server_delete": "Delete their own server.",
+      "server_snapshots": "Take, restore and remove snapshots.",
+      "server_iso": "Mount and eject ISOs.",
+      "server_root_password": "See and remove the root password."
     }
   },
   "Settings": {
@@ -3009,7 +3069,7 @@
         "security": {
           "ok": "Two-factor {require2fa}.",
           "todo": "Two-factor is optional.",
-          "warn": "{adminsNo2fa} administrator(s) without two-factor."
+          "warn": "{adminsNo2fa, plural, one {# administrator without two-factor.} other {# administrators without two-factor.}}"
         },
         "mail": {
           "ok": "Sending through {provider}.",
@@ -3029,7 +3089,7 @@
           "todo": "No messaging apps offered to users."
         },
         "payments": {
-          "ok": "{active} payment method(s) active.",
+          "ok": "{active, plural, one {# payment method active.} other {# payment methods active.}}",
           "todo": "No active payment method ({saved} saved)."
         },
         "rdns": {
@@ -3044,7 +3104,7 @@
           "todo": "No live announcement."
         },
         "backup": {
-          "ok": "Last good backup {hoursAgo} hours ago.",
+          "ok": "{hoursAgo, plural, =0 {Last good backup less than an hour ago.} one {Last good backup an hour ago.} other {Last good backup # hours ago.}}",
           "warn": "No good backup in the last 48 hours; take one on the System page."
         }
       }

@@ -6,7 +6,7 @@ import { pool, redis } from './db';
 import { apiError } from './errors';
 import { audit, SessionGuard, type AuthedRequest } from './auth';
 import { Can, PermissionGuard } from './rbac';
-import { can } from './permissions';
+import { can, limitsOf, type Permission } from './permissions';
 import { capacityOf, limitsFor, resolveOrder, usageOf } from './catalog';
 import { exceededQuota } from './capacity';
 import { openConsole } from './console';
@@ -48,13 +48,25 @@ export async function replay(key: string, requestHash: string) {
 // Owners see and act on their servers; staff with servers.view_all see all, with servers.manage_all act on all.
 // A server id alone gives no access (404 for others).
 // The admin's server settings decide what customers may do themselves; staff always may.
+// Each action needs the member's permission (their role) and must not be switched off for everyone (Settings → Servers).
+const actionPermission: Record<keyof ServerSettings['customer'], Permission> = { power: 'server.power', console: 'server.console', delete: 'server.delete',
+  snapshots: 'server.snapshots', iso: 'server.iso', rootPassword: 'server.root_password' };
 export async function customerMay(req: AuthedRequest, action: keyof ServerSettings['customer']) {
   if (can(req.user.permissions, 'servers.manage_all')) return;
+  if (!can(req.user.permissions, actionPermission[action])) throw apiError(403, 'ACTION_NOT_PERMITTED', 'Your role does not allow this');
   if (!(await getSettings('servers')).customer[action]) throw apiError(403, 'ACTION_DISABLED', 'The administrator turned this off');
+}
+// A count limit of the user's role (SSH keys, firewalls...): how many more may be added (Infinity: no limit).
+export async function roomFor(req: AuthedRequest, limit: 'maxSshKeys' | 'maxFirewalls', countSql: string) {
+  const max = limitsOf(req.user.roles.join(','))[limit];
+  if (max === undefined) return Infinity;
+  const { rows: [r] } = await pool.query(countSql, [req.user.id]);
+  return Math.max(0, max - r.n);
 }
 const allowedFor = async (req: AuthedRequest) => {
   const c = (await getSettings('servers')).customer;
-  return can(req.user.permissions, 'servers.manage_all') ? Object.fromEntries(Object.keys(c).map((k) => [k, true])) : c;
+  return can(req.user.permissions, 'servers.manage_all') ? Object.fromEntries(Object.keys(c).map((k) => [k, true]))
+    : Object.fromEntries(Object.entries(c).map(([k, on]) => [k, on && can(req.user.permissions, actionPermission[k as keyof typeof c])]));
 };
 
 export async function findServer(req: AuthedRequest, id: string, manage = false) {
@@ -70,6 +82,14 @@ export function startPowerOperation(req: AuthedRequest, server: { id: string; ow
 }
 
 export async function startOperation(req: AuthedRequest, server: { id: string; owner_id: string }, kind: Kind, key: string, requestHash: string, params: object = {}) {
+  // The role's operations per hour, for a member acting on their own servers (staff and schedules are not counted).
+  if (req.user?.id === server.owner_id && !can(req.user.permissions, 'servers.manage_all')) {
+    const perHour = limitsOf(req.user.roles.join(',')).operationsPerHour;
+    if (perHour !== undefined) {
+      const { rows: [n] } = await pool.query("SELECT count(*)::int AS n FROM operations WHERE owner_id = $1 AND created_at > now() - interval '1 hour'", [req.user.id]);
+      if (n.n >= perHour) throw apiError(429, 'OPERATION_RATE_LIMITED', 'Too many operations this hour');
+    }
+  }
   try {
     const { rows: [op] } = await pool.query(`INSERT INTO operations (kind, status, idempotency_key, request_hash, server_id, owner_id, step, deadline_at, params)
       VALUES ($1, 'pending', $2, $3, $4, $5, 'queued', now() + make_interval(mins => $6), $7) RETURNING id, kind, status`,
@@ -111,6 +131,7 @@ export class ServersController {
     if (!name) fields.name = 'INVALID_VALUE';
     if (!m) fields.publicKey = 'INVALID_SSH_KEY';
     if (Object.keys(fields).length) throw apiError(400, 'VALIDATION_FAILED', 'Invalid input', fields);
+    if (!(await roomFor(req, 'maxSshKeys', 'SELECT count(*)::int AS n FROM ssh_keys WHERE owner_id = $1'))) throw apiError(409, 'LIMIT_REACHED', 'Your role allows no more SSH keys', { publicKey: 'LIMIT_REACHED' });
     const { rows: [k] } = await pool.query('INSERT INTO ssh_keys (owner_id, name, public_key, fingerprint) VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING RETURNING id, fingerprint',
       [req.user.id, name, key, fingerprint(m![3])]);
     if (!k) throw apiError(409, 'VALIDATION_FAILED', 'Key exists', { publicKey: 'KEY_EXISTS' });
@@ -127,8 +148,11 @@ export class ServersController {
     if (!res?.ok) throw apiError(502, 'GITHUB_UNREACHABLE', 'GitHub did not answer');
     const keys = parseKeyList((await res.text()).slice(0, 65_536));
     if (!keys.length) throw apiError(400, 'VALIDATION_FAILED', 'No keys', { username: 'GITHUB_NO_KEYS' });
+    const room = await roomFor(req, 'maxSshKeys', 'SELECT count(*)::int AS n FROM ssh_keys WHERE owner_id = $1');
+    if (!room) throw apiError(409, 'LIMIT_REACHED', 'Your role allows no more SSH keys', { username: 'LIMIT_REACHED' });
     let added = 0;
     for (const [i, k] of keys.entries()) {
+      if (added >= room) break;
       const r = await pool.query('INSERT INTO ssh_keys (owner_id, name, public_key, fingerprint) VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING',
         [req.user.id, keys.length > 1 ? `github:${user} #${i + 1}` : `github:${user}`, k.publicKey, k.fingerprint]);
       added += r.rowCount ?? 0;
@@ -208,7 +232,7 @@ export class ServersController {
     }
     // Inside a virtual data center the shape is free within its allocation, with no price of its own.
     const vdc = body.vdcId ? await resolveVdcOrder(req.user.id, body) : null;
-    const order = vdc ? vdc.order : await resolveOrder(String(body.poolId ?? ''), body);
+    const order = vdc ? vdc.order : await resolveOrder(String(body.poolId ?? ''), body, limitsOf(req.user.roles.join(',')).allowedLocations);
     const { rows: keys } = await pool.query('SELECT public_key FROM ssh_keys WHERE owner_id = $1 AND id = ANY($2::uuid[])', [req.user.id, sshKeyIds]).catch(() => ({ rows: [] }));
     // Optional root password (console/RDP): a weak one is replaced by a strong one that starts with the brand.
     if (body.rootPassword !== undefined && (typeof body.rootPassword !== 'string' || body.rootPassword.length > 128)) throw apiError(400, 'VALIDATION_FAILED', 'Invalid input', { rootPassword: 'INVALID_VALUE' });

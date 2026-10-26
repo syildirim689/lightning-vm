@@ -5,6 +5,7 @@ import { pool } from './db';
 import { apiError } from './errors';
 import { audit, SessionGuard, type AuthedRequest } from './auth';
 import { Can, PermissionGuard } from './rbac';
+import { ensureRoles, limitsOf } from './permissions';
 import { checkCustom, exceededQuota, poolCapacity, type Limits, type Shape } from './capacity';
 import { locationColumns } from './locations';
 import type { Application } from './applications';
@@ -427,12 +428,14 @@ export class CatalogAdminController {
 
 export type Order = { rp: Record<string, unknown>; shape: Shape; price: { monthly: string; currency: string }; extraIpv4: number; application: Application | null; packageId: string | null; imageId: string | null };
 // Validates the chosen pool, package or custom shape and image, and prices it. Shared by quote and create.
-export async function resolveOrder(poolId: string, body: Input): Promise<Order> {
+export async function resolveOrder(poolId: string, body: Input, allowedLocations?: string[]): Promise<Order> {
     const { rows: [rp] } = await pool.query(`SELECT r.*, l.status AS location_status FROM resource_pools r LEFT JOIN locations l ON l.id = r.location_id
       WHERE r.id = $1 AND r.active`, [poolId]).catch(() => ({ rows: [] }));
     if (!rp) throw apiError(400, 'VALIDATION_FAILED', 'Unknown pool', { poolId: 'NOT_AVAILABLE' });
     // A location under maintenance (or hidden) takes no new servers; existing ones keep running.
     if (rp.location_status && rp.location_status !== 'active') throw apiError(409, 'LOCATION_UNAVAILABLE', 'This location takes no new servers right now');
+    // The member's role may limit where they order.
+    if (allowedLocations && !allowedLocations.includes(rp.location_id)) throw apiError(403, 'LOCATION_NOT_ALLOWED', 'Your role cannot order in this location', { poolId: 'LOCATION_NOT_ALLOWED' });
 
     let shape: Shape; let price: { monthly: string; currency: string };
     if (body.type === 'package') {
@@ -483,11 +486,17 @@ export async function resolveOrder(poolId: string, body: Input): Promise<Order> 
   return { rp, shape, price, extraIpv4, application, packageId: body.type === 'package' ? String(body.packageId) : null, imageId: body.imageId ? String(body.imageId) : null };
 }
 
-// Effective limits: project override, else user override, else the default row.
+// Effective limits: project override, else user override, else the role's limits over the default row.
 export async function limitsFor(userId: string, projectId?: string, db: Db = pool): Promise<Limits> {
   const { rows } = await db.query(`SELECT scope, max_servers, max_vcpu, max_memory_mb, max_disk_gb FROM quotas
     WHERE scope = 'default' OR (scope = 'user' AND subject_id = $1) OR (scope = 'project' AND subject_id = $2)`, [userId, projectId ?? null]);
-  return rows.find((r) => r.scope === 'project') ?? rows.find((r) => r.scope === 'user') ?? rows.find((r) => r.scope === 'default');
+  const own = rows.find((r) => r.scope === 'project') ?? rows.find((r) => r.scope === 'user');
+  if (own) return own;
+  const d = rows.find((r) => r.scope === 'default');
+  await ensureRoles();
+  const { rows: [u] } = await db.query('SELECT role FROM users WHERE id = $1', [userId]);
+  const r = limitsOf(u?.role);
+  return { max_servers: r.maxServers ?? d.max_servers, max_vcpu: r.maxVcpu ?? d.max_vcpu, max_memory_mb: r.maxMemoryMb ?? d.max_memory_mb, max_disk_gb: r.maxDiskGb ?? d.max_disk_gb };
 }
 
 @Controller() @UseGuards(SessionGuard)
@@ -518,7 +527,8 @@ export class CatalogController {
 
   // What a customer may order: active packages and active pools' custom offerings. No internals.
   @Get('catalog')
-  async catalog() {
+  async catalog(@Req() req: AuthedRequest) {
+    const only = limitsOf(req.user.roles.join(',')).allowedLocations;
     const [packages, pools, images, applications, locations] = await Promise.all([
       pool.query(`SELECT p.id, p.name, p.vcpu, p.memory_mb AS "memoryMb", p.disk_gb AS "diskGb", p.price_monthly::text AS "priceMonthly",
         p.price_hourly::text AS "priceHourly", p.currency,
@@ -540,7 +550,8 @@ export class CatalogController {
       pool.query(`SELECT ${locationColumns} FROM locations l WHERE l.status <> 'hidden'
         AND EXISTS (SELECT 1 FROM resource_pools r WHERE r.location_id = l.id AND r.active) ORDER BY l.sort, l.name`),
     ]);
-    return { packages: packages.rows, pools: pools.rows, images: images.rows, applications: applications.rows, locations: locations.rows };
+    const pools2 = only ? pools.rows.filter((p) => only.includes(p.locationId)) : pools.rows;
+    return { packages: packages.rows, pools: pools2, images: images.rows, applications: applications.rows, locations: only ? locations.rows.filter((l) => only.includes(l.id)) : locations.rows };
   }
 
   // For the order page: which packages of a location can be ordered right now by this user, and if not, why
@@ -570,7 +581,7 @@ export class CatalogController {
       const { rowCount } = await pool.query('SELECT 1 FROM projects WHERE id = $1 AND owner_id = $2', [projectId, req.user.id]).catch(() => ({ rowCount: 0 }));
       if (!rowCount) throw apiError(404, 'NOT_FOUND', 'Unknown project');
     }
-    const { rp, shape, price } = await resolveOrder(poolId as string, body);
+    const { rp, shape, price } = await resolveOrder(poolId as string, body, limitsOf(req.user.roles.join(',')).allowedLocations);
     const limits = await limitsFor(req.user.id, projectId);
     const over = exceededQuota(limits, await usageOf(req.user.id, projectId), shape);
     const cap = await capacityOf(rp);

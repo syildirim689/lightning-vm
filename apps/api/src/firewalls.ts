@@ -10,6 +10,7 @@ import { pool, redis } from './db';
 import { apiError } from './errors';
 import { audit, SessionGuard, type AuthedRequest } from './auth';
 import { can } from './permissions';
+import { roomFor } from './servers';
 
 export type Rule = { direction: 'in' | 'out'; protocol: string; port: string | null; ips: string[]; description: string };
 const protocols = ['tcp', 'udp', 'icmp', 'esp', 'gre'];
@@ -122,6 +123,7 @@ export class FirewallsController {
   @Post('firewalls') @HttpCode(201)
   async create(@Req() req: AuthedRequest, @Body() body: Record<string, unknown>) {
     if (!can(req.user.permissions, 'firewalls.manage')) throw apiError(403, 'FORBIDDEN', 'Permission required');
+    if (!(await roomFor(req, 'maxFirewalls', 'SELECT count(*)::int AS n FROM firewalls WHERE owner_id = $1'))) throw apiError(409, 'LIMIT_REACHED', 'Your role allows no more firewalls');
     const name = readName(body?.name);
     const rules = readRules(body?.rules ?? []);
     const serverIds = Array.isArray(body?.serverIds) ? body.serverIds.map(String) : [];

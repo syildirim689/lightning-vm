@@ -810,6 +810,13 @@ test.describe('people, settings and smart features (English browser)', () => {
         .filter((el) => el.getAttribute('autocomplete') !== 'off' || (el as HTMLInputElement).type === 'password').map((el) => el.outerHTML.slice(0, 120)));
       expect(bad, path).toEqual([]);
     }
+    // The role editor: permissions, then limits.
+    await page.goto('/admin/roles');
+    await page.getByRole('button', { name: 'New role' }).click();
+    await expect(page.getByRole('dialog')).toContainText('Limits');
+    await page.waitForTimeout(400);
+    await shot(page, 'role-editor');
+    await page.keyboard.press('Escape');
     // A setup guide opens in a dialog.
     await page.goto('/admin/settings?tab=rdns');
     await page.getByRole('button', { name: 'What is it, how to set it up?' }).click();
