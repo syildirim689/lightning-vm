@@ -97,6 +97,14 @@ test.describe('first run (Turkish browser)', () => {
       await expect(page.locator('li.fail', { hasText: 'Panel adresi' })).toContainText('Yerel adres; doğrulanamaz');
       await expect(page.getByRole('button', { name: 'Devam et' })).toHaveCount(0);
       await shot('3-access-failed');
+      // Three actions in the footer: nothing may stick out at desktop, tablet or phone width.
+      for (const width of [1280, 768, 390]) {
+        await page.setViewportSize({ width, height: 900 });
+        await expectNoOverflow(page, `wizard access step at ${width} px`);
+      }
+      await page.setViewportSize({ width: 390, height: 900 });
+      await shot('3-access-failed-390');
+      await page.setViewportSize({ width: 1280, height: 720 });
       await page.getByRole('button', { name: 'Doğrulamadan kaydet' }).click();
     }
 

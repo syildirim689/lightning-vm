@@ -11,7 +11,7 @@ import { I } from '../../../components/icon';
 import { ButtonLink, CheckboxInput, Notice, StatusChip, TextInput } from '../../../components/ui';
 import { apiFetch, useErrorText, type ApiError } from '../../../lib/api';
 import { setLocale } from '../../../i18n/actions';
-import CredentialsForm from '../credentials-form';
+import CredentialsForm from '../../(auth)/credentials-form';
 import ConnectionForm from '../../(panel)/admin/vmware/connection-form';
 
 type Check = { id: string; ok: boolean; code: string; detail?: Record<string, string | number> };
@@ -233,9 +233,10 @@ export default function Wizard() {
         {current === 'summary' && missing.length > 0 && <Notice tone="warning">{t('finishBlocked', { steps: missing.map((s) => t(`steps.${s}.title`)).join(', ') })}</Notice>}
         {failure && !failure.fields && <div role="alert"><Notice tone="danger">{failure.text}</Notice></div>}
 
-        <div className="flex flex-col-reverse gap-2 border-t border-separator pt-4 sm:flex-row sm:items-center">
+        {/* Back on the left, the step's action on the right; on a narrow screen the actions wrap under each other, right-aligned. */}
+        <div className="flex flex-wrap items-center gap-2 border-t border-separator pt-4">
           {index > 0 && <Button variant="tertiary" onPress={() => go(steps[index - 1])}><I name="arrow-left" size={16}/>{t('back')}</Button>}
-          <div className="flex flex-col-reverse gap-2 sm:ml-auto sm:flex-row sm:items-center">{skipButton}{actions}</div>
+          <div className="ml-auto flex flex-wrap items-center justify-end gap-2">{skipButton}{actions}</div>
         </div>
       </Card.Content>
     </Card>
