@@ -49,8 +49,8 @@ export function csrfRejected(req: FastifyRequest) {
 }
 
 // The same signed-in browser sending the same state change again while the first is running (a double click, a
-// second tab, an impatient retry) gets 409 instead of a second server, firewall, schedule or payment. The key stays
-// a moment after the answer so a click that lands right after a fast response is caught too. Endpoints with an
+// second tab, an impatient retry) gets 409 instead of a second server, firewall, schedule or payment. Once the first
+// answer is sent the same request may run again (a deliberate retry). Endpoints with an
 // Idempotency-Key already return the first result, and sign-in, internal and read-marking calls are left alone.
 const dedupeFree = /^\/(auth\/|internal\/|notifications\/read)/;
 export function duplicateKey(req: FastifyRequest) {
@@ -59,4 +59,4 @@ export function duplicateKey(req: FastifyRequest) {
 }
 // True when this request may run (Redis down: it runs, as before this guard).
 export const claimRequest = (key: string) => redis.set(key, '1', 'EX', 120, 'NX').then((r) => r === 'OK', () => true);
-export const releaseRequest = (key: string) => redis.expire(key, 2).catch(() => undefined);
+export const releaseRequest = (key: string) => redis.del(key).catch(() => undefined);

@@ -471,6 +471,5 @@ test('a double click sends one request: the same POST while the first runs is re
   assert.equal((a.statusCode === 409 ? a : b).json().code, 'DUPLICATE_REQUEST');
   // Another user, or a different body, is not held up.
   assert.equal((await post('/chat/connections', { ...body, fields: { url: 'https://127.0.0.1/other' } }, user)).statusCode, 400);
-  await new Promise((r) => setTimeout(r, 2200));
-  assert.equal((await post('/chat/connections', body, user)).statusCode, 400);
+  assert.equal((await post('/chat/connections', body, user)).statusCode, 400, 'runs again once the first answered');
 });
