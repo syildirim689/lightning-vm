@@ -1,5 +1,5 @@
 "use client";
-import { Button, Chip, InputOTP, Meter, Separator } from '@heroui/react';
+import { Button, InputOTP, Meter, Separator } from '@heroui/react';
 import { AnimatePresence, motion, useAnimationControls, useReducedMotion } from 'motion/react';
 import NextLink from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -172,7 +172,11 @@ export default function CredentialsForm({ mode, noToken, onDone }: { mode: Mode;
 
   if (secondStep) return <SecondFactor onBack={() => setSecondStep(false)}/>;
   if (emailCode) return <EmailCode initialEmail={values.email} onBack={() => setEmailCode(false)}/>;
-  const lastBadge = <Chip size="sm" variant="soft" color="accent">{t('lastUsed')}</Chip>;
+  // The method used last time: a small tag on the button's top edge, readable on any button colour.
+  const withLast = (on: boolean, button: React.ReactNode) => <div className="relative">{button}
+    {on && <span className="pointer-events-none absolute -top-2.5 right-4 inline-flex items-center gap-1 rounded-full border border-accent/40 bg-surface px-2 py-0.5 text-[11px] font-semibold text-accent shadow-sm">
+      <I name="history" size={11}/>{t('lastUsed')}</span>}
+  </div>;
   return <motion.form method="post" animate={shake} onSubmit={submit} noValidate className="flex flex-col gap-4">
     {mode === 'setup' && !noToken && <TextInput label={t('token')} type="password" value={values.token} onChange={set('token')} autoComplete="one-time-code" spellCheck={false} help={t('tokenHelp')} isRequired/>}
     <TextInput label={t('email')} type="email" value={values.email} onChange={set('email')} autoComplete="username webauthn" autofill={mode === 'login'} maxLength={254}
@@ -188,18 +192,18 @@ export default function CredentialsForm({ mode, noToken, onDone }: { mode: Mode;
     {captcha.element}
     {captcha.failed && <Notice tone="warning">{t('captchaLoadFailed')}</Notice>}
     <AnimatePresence>{failure && <motion.div role="alert" initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}><Notice tone="danger">{failure}</Notice></motion.div>}</AnimatePresence>
-    <Button type="submit" size="lg" fullWidth isPending={busy === 'password' && !done} isDisabled={!hydrated || !!busy || done}>
+    {withLast(mode === 'login' && lastMethod === 'email', <Button type="submit" size="lg" fullWidth isPending={busy === 'password' && !done} isDisabled={!hydrated || !!busy || done}>
       {done ? <motion.span initial={{ scale: 0.6, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="flex items-center gap-2"><I name="circle-check" size={18}/>{t('redirecting')}</motion.span>
-        : <>{busy === 'password' ? t('working') : t(`${mode}Submit`)}{mode === 'login' && lastMethod === 'email' && lastBadge}</>}
-    </Button>
+        : busy === 'password' ? t('working') : t(`${mode}Submit`)}
+    </Button>)}
     {mode === 'login' && <>
       <div className="flex items-center gap-3 text-xs text-muted"><Separator className="flex-1"/>{t('or')}<Separator className="flex-1"/></div>
-      <Button variant="secondary" size="lg" fullWidth isPending={busy === 'passkey'} isDisabled={!!busy} onPress={passkey}>
-        <I name="fingerprint" size={18}/>{t('passkeySignIn')}{lastMethod === 'passkey' && lastBadge}
-      </Button>
-      {cfg?.emailCodeSignIn && <Button variant="tertiary" size="lg" fullWidth isDisabled={!!busy} onPress={() => setEmailCode(true)}>
-        <I name="mail-check" size={18}/>{t('emailCode.button')}{lastMethod === 'email-otp' && lastBadge}
-      </Button>}
+      {withLast(lastMethod === 'passkey', <Button variant="secondary" size="lg" fullWidth isPending={busy === 'passkey'} isDisabled={!!busy} onPress={passkey}>
+        <I name="fingerprint" size={18}/>{t('passkeySignIn')}
+      </Button>)}
+      {cfg?.emailCodeSignIn && withLast(lastMethod === 'email-otp', <Button variant="tertiary" size="lg" fullWidth isDisabled={!!busy} onPress={() => setEmailCode(true)}>
+        <I name="mail-check" size={18}/>{t('emailCode.button')}
+      </Button>)}
     </>}
   </motion.form>;
 }

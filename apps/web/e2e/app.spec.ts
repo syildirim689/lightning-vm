@@ -779,6 +779,12 @@ test.describe('people, settings and smart features (English browser)', () => {
       await guest.waitForTimeout(1200);
       await shot(guest, path.slice(1));
     }
+    // The method used last time is a tag on its button, not text squeezed next to the label.
+    await guest.context().addCookies([{ name: 'better-auth.last_used_login_method', value: 'email', url: new URL(guest.url()).origin }]);
+    await guest.goto('/login');
+    await expect(guest.getByText('Son kullanılan')).toBeVisible();
+    await guest.waitForTimeout(800);
+    await shot(guest, 'login-last-used');
     const page = await (await browser.newContext({ locale: 'en-US', viewport: { width: 1440, height: 900 } })).newPage();
     await signInAdmin(page);
     await page.goto('/admin/energy');

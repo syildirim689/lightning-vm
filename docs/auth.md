@@ -191,3 +191,32 @@ Bu, e-postanın kayıtlı olduğunu açığa çıkarır; açık kayıtlı bir pa
 - E-posta adresi doğrulama.
 - SMTP ve SMS olmadan yönetici parolası kurtarma (CLI ile yeni yönetici oluşturulabilir).
 - Organizasyon / bayi (reseller) yapısı.
+
+## Rol sınırları
+Rol, izinlerin yanında sınırlar da taşır (Roller → Düzenle → Sınırlar; kod: `apps/api/src/role-limits.ts`). Boş alan sınırsızdır;
+birden çok rolü olan kullanıcıya en geniş olanı uygulanır (iki adımlı doğrulama ise herhangi bir rol isterse zorunludur).
+Yöneticiler (`*`) sınırsızdır. API'nin uyguladıkları:
+- **Kota:** en fazla sunucu, vCPU, RAM, disk (kullanıcının veya projenin kendi kotası varsa o geçerli).
+- **Adetler:** sunucu başına anlık görüntü (varsayılan 5), firewall, SSH anahtarı.
+- **Hız:** kendi sunucularında saatte başlatılabilen işlem sayısı (oluşturma, güç, snapshot).
+- **Oturum:** girişten sonra oturumun en uzun süresi; zorunlu iki adımlı doğrulama.
+- **Erişim:** sipariş verilebilecek konumlar; giriş yapılabilecek IP/CIDR listesi (kaydeden kişi kendini dışarıda bırakamaz).
+
+Sunucu üzerindeki müşteri işlemleri de izindir: `server.power`, `server.console`, `server.delete`, `server.snapshots`,
+`server.iso`, `server.root_password`. Ayarlar → Sunucular'daki genel anahtar kapalıysa izin olsa da işlem yapılamaz.
+Bu müşteri izinleri "personel" sayılmaz ve personelin bir kullanıcı üzerinde işlem yapabilme kontrolüne girmez.
+
+## Anlık değişiklikler
+Açık sekmeler `GET /api/live` (Server-Sent Events) ile dinler (`live.ts`, `live-bus.ts`, web: `components/live-events.tsx`).
+Yasaklama, yöneticinin parola ataması (hesabın tüm oturumları kapanır), parola değişikliği, oturum iptali ve hesap silme
+sekmeyi gerekçesiyle giriş sayfasına gönderir; rol/izin ve giriş politikası değişiklikleri menüyü ve sayfayı yeniler;
+yeni bildirim zili hemen çaldırır. Birden çok API kopyası Redis yayınıyla haberleşir.
+
+## Dizin (LDAP / Active Directory) ile giriş
+Ayarlar → Dizin (kod: `ldap.ts`, `directory-signin.ts`, `directory.ts`). Giriş formundaki e-posta ve parola, dizin hesapları
+(ve "ilk girişte oluştur" açıksa hiç hesabı olmayanlar) için dizinde doğrulanır: salt okuma servis hesabı kişiyi e-postasıyla
+bulur, ardından kişinin kendi parolasıyla bind denenir. Başarılı girişte hesap oluşturulur ya da adı ve (grup eşlemesi varsa)
+rolleri güncellenir; ardından better-auth'un normal girişi sürer, böylece iki adımlı doğrulama, oturumlar, hız sınırları ve
+denetim kaydı herkes için aynıdır. Dizin hesaplarının parolası panelde değiştirilemez veya sıfırlanamaz; dizin hata verirse
+eski parola özetiyle de girilemez. Yerel hesaplar (ilk yönetici gibi) etkilenmez. Testler gerçek bir OpenLDAP ile çalışır
+(`LDAP_TEST_URL`).
