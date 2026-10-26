@@ -766,7 +766,8 @@ test.describe('people, settings and smart features (English browser)', () => {
       await page.goto(path);
       await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
       await expectNoOverflow(page, `${path} at ${viewport.width} px`);
-      if (viewport.width >= 1600) {
+      // Panel pages use the width beside the menu; the public status page is a centred column on purpose.
+      if (viewport.width >= 1600 && path !== '/status') {
         const used = await page.evaluate(() => {
           const free = window.innerWidth - (document.querySelector('aside')?.getBoundingClientRect().width ?? 0);
           return (document.querySelector('main > div')?.getBoundingClientRect().width ?? 0) / free;
