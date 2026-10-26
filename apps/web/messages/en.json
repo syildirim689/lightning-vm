@@ -2988,7 +2988,8 @@
       "update": "Updating",
       "backup": "Backing up",
       "auto-update": "Automatic update settings",
-      "domain": "Changing the domain"
+      "domain": "Changing the domain",
+      "monitoring": "Starting or stopping monitoring"
     },
     "stateOf": {
       "running": "Running",
@@ -3018,7 +3019,8 @@
       "update": "Update",
       "auto-update": "Automatic update settings",
       "backup": "Backup",
-      "domain": "Domain change"
+      "domain": "Domain change",
+      "monitoring": "Monitoring change"
     }
   },
   "A11y": {

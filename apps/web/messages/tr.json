@@ -2988,7 +2988,8 @@
       "update": "Güncelleniyor",
       "backup": "Yedekleniyor",
       "auto-update": "Otomatik güncelleme ayarları",
-      "domain": "Alan adı değiştiriliyor"
+      "domain": "Alan adı değiştiriliyor",
+      "monitoring": "İzleme başlatılıyor veya durduruluyor"
     },
     "stateOf": {
       "running": "Sürüyor",
@@ -3018,7 +3019,8 @@
       "update": "Güncelleme",
       "auto-update": "Otomatik güncelleme ayarları",
       "backup": "Yedekleme",
-      "domain": "Alan adı değişikliği"
+      "domain": "Alan adı değişikliği",
+      "monitoring": "İzleme değişikliği"
     }
   },
   "A11y": {
