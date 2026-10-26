@@ -872,7 +872,7 @@ test.describe('people, settings and smart features (English browser)', () => {
     await page.waitForTimeout(400);
     await shot(page, 'support-new');
     await page.getByRole('button', { name: 'Send the ticket' }).click();
-    await expect(page).toHaveURL(//support/[0-9a-f-]{36}$/);
+    await expect(page).toHaveURL(/\/support\/[0-9a-f-]{36}$/);
     await expect(page.getByText('SSH times out since this morning.')).toBeVisible();
     await shot(page, 'support-ticket');
     await page.goto('/admin/support');

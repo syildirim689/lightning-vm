@@ -727,7 +727,9 @@ test('support tickets: customer opens with an attachment, staff answer with an i
   // Others see nothing; staff see the queue.
   assert.equal((await get(`/support/tickets/${id}`, stranger.c)).statusCode, 404);
   assert.equal((await get('/admin/support/tickets', cust.c)).statusCode, 403);
-  const queue = (await get('/admin/support/tickets?status=active&q=reach', agent.c)).json().tickets;
+  const qr = await get('/admin/support/tickets?status=active&q=reach', agent.c);
+  assert.equal(qr.statusCode, 200, qr.body);
+  const queue = qr.json().tickets;
   assert.equal(queue[0].id, id);
   assert.equal(queue[0].ownerEmail, 'cust@example.test');
   assert.equal((await get('/admin/support/stats', agent.c)).json().waiting >= 1, true);
