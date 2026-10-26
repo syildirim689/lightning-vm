@@ -789,7 +789,7 @@ test.describe('people, settings and smart features (English browser)', () => {
     await guest.getByLabel('E-posta').fill('nobody@example.test');
     await guest.getByLabel('Parola', { exact: true }).fill('wrong-password-123');
     await guest.getByRole('button', { name: 'Giriş yap', exact: true }).click();
-    await expect(guest.getByRole('alert')).toBeVisible();
+    await expect(guest.locator('form').getByRole('alert')).toBeVisible();
     await guest.waitForTimeout(150);
     await shot(guest, 'login-failure');
     const page = await (await browser.newContext({ locale: 'en-US', viewport: { width: 1440, height: 900 } })).newPage();
