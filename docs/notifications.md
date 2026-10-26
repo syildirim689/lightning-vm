@@ -60,3 +60,13 @@ Kullanıcı her kanalı Hesabım → Bildirimler'deki "Test gönder" düğmesiyl
 2. Olayın olduğu yerden `notify('olay', alıcılar, veri)` çağırın. Worker'da bunun yerine `notifications` kuyruğuna iş ekleyin.
 3. Panel metinlerini (`Notify.events.<olay>`) iki dile ekleyin.
 4. Entegrasyon testi yazın (`apps/api/test/integration/platform.test.mjs`).
+
+## Mesajlaşma uygulamaları (kanal: `chat`)
+Kullanıcı Hesap → Bildirimler → Mesajlaşma uygulamaları'ndan Telegram, WhatsApp, Slack, Discord, Microsoft Teams,
+Google Chat, Mattermost, Rocket.Chat, Matrix, ntfy, Gotify, Pushover veya JSON webhook bağlar (en fazla 10).
+Bağlantı yalnızca ilk mesaj ulaşırsa kaydedilir; her biri duraklatılabilir, test edilebilir, kaldırılabilir.
+Yönetici Ayarlar → Mesajlaşma'dan sunulan uygulamaları seçer ve hesap gerektirenleri kurar: Telegram botu
+(BotFather anahtarı; kullanıcı `t.me/<bot>?start=<kod>` ile eşleşir), WhatsApp Cloud API (kalıcı anahtar, telefon
+numarası kimliği, gövdesi `{{1}}` başlık `{{2}}` metin olan onaylı şablon) ve Pushover uygulama anahtarı.
+Kullanıcının verdiği adresler herkese açık HTTPS olmalıdır; özel/iç ağ adresleri reddedilir. Webhook'a imza
+anahtarı verilirse istek `X-Lightning-Signature: sha256=<HMAC>` başlığıyla gelir. Kod: `apps/api/src/chat*.ts`.
