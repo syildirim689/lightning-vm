@@ -105,6 +105,9 @@ export default function CredentialsForm({ mode, noToken, onDone }: { mode: Mode;
   const [lastMethod, setLastMethod] = useState<string | null>(null);
   const [remember, setRemember] = useState(true);
   const [done, setDone] = useState(false);
+  // Before hydration a click would submit the bare HTML form (GET /login?) and lose what was typed.
+  const [hydrated, setHydrated] = useState(false);
+  useEffect(() => setHydrated(true), []);
   const shake = useAnimationControls();
   const still = useReducedMotion();
   const shakeForm = () => { if (!still) void shake.start({ x: [0, -8, 8, -6, 6, 0], transition: { duration: 0.4 } }); };
@@ -170,7 +173,7 @@ export default function CredentialsForm({ mode, noToken, onDone }: { mode: Mode;
   if (secondStep) return <SecondFactor onBack={() => setSecondStep(false)}/>;
   if (emailCode) return <EmailCode initialEmail={values.email} onBack={() => setEmailCode(false)}/>;
   const lastBadge = <Chip size="sm" variant="soft" color="accent">{t('lastUsed')}</Chip>;
-  return <motion.form animate={shake} onSubmit={submit} noValidate className="flex flex-col gap-4">
+  return <motion.form method="post" animate={shake} onSubmit={submit} noValidate className="flex flex-col gap-4">
     {mode === 'setup' && !noToken && <TextInput label={t('token')} type="password" value={values.token} onChange={set('token')} autoComplete="one-time-code" spellCheck={false} help={t('tokenHelp')} isRequired/>}
     <TextInput label={t('email')} type="email" value={values.email} onChange={set('email')} autoComplete={mode === 'login' ? 'username webauthn' : 'username'} maxLength={254}
       error={field(fields.email)} help={t('emailHelp')} isRequired/>
@@ -185,7 +188,7 @@ export default function CredentialsForm({ mode, noToken, onDone }: { mode: Mode;
     {captcha.element}
     {captcha.failed && <Notice tone="warning">{t('captchaLoadFailed')}</Notice>}
     <AnimatePresence>{failure && <motion.div role="alert" initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}><Notice tone="danger">{failure}</Notice></motion.div>}</AnimatePresence>
-    <Button type="submit" size="lg" fullWidth isPending={busy === 'password' && !done} isDisabled={!!busy || done}>
+    <Button type="submit" size="lg" fullWidth isPending={busy === 'password' && !done} isDisabled={!hydrated || !!busy || done}>
       {done ? <motion.span initial={{ scale: 0.6, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="flex items-center gap-2"><I name="circle-check" size={18}/>{t('redirecting')}</motion.span>
         : <>{busy === 'password' ? t('working') : t(`${mode}Submit`)}{mode === 'login' && lastMethod === 'email' && lastBadge}</>}
     </Button>
