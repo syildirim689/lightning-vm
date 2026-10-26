@@ -1,4 +1,5 @@
-import { Body, Controller, Get, HttpCode, Post, Put, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, Param, ParseUUIDPipe, Post, Put, Req, UseGuards } from '@nestjs/common';
+import { ensureRoles, limitsOf } from './permissions';
 import { pool } from './db';
 import { apiError } from './errors';
 import { audit, type AuthedRequest } from './auth';
@@ -74,5 +75,28 @@ export class AdminController {
     await pool.query("UPDATE settings SET value = $1, updated_at = now() WHERE key = 'registration_open'", [JSON.stringify(open)]);
     await audit(req, 'settings.registration_open', 'success', req.user.id, { value: open });
     return { registrationOpen: open };
+  }
+}
+
+// One person at a glance for staff: their servers and what they cost, sessions, recent activity, budget and the
+// limits their roles put on them.
+@Controller('admin') @UseGuards(PermissionGuard)
+export class UserSummaryController {
+  @Get('users/:id/summary') @Can('users.view')
+  async summary(@Param('id', ParseUUIDPipe) id: string) {
+    const { rows: [u] } = await pool.query(`SELECT id, email, name, coalesce(role, 'user') AS role, locale, created_at AS "createdAt", two_factor_enabled AS "twoFactorEnabled",
+      coalesce(banned, false) AS banned, auth_source AS "authSource", budget_monthly::float8 AS "budgetMonthly", budget_currency AS "budgetCurrency" FROM users WHERE id = $1`, [id]);
+    if (!u) throw apiError(404, 'NOT_FOUND', 'Unknown user');
+    const [servers, spend, sessions, activity] = await Promise.all([
+      pool.query(`SELECT id, name, state, power_state AS "powerState", vcpu, memory_mb AS "memoryMb", disk_gb AS "diskGb", price_monthly::float8 AS price, trim(currency) AS currency, locked
+        FROM servers WHERE owner_id = $1 AND state <> 'deleted' ORDER BY created_at DESC LIMIT 50`, [id]),
+      pool.query(`SELECT trim(currency) AS currency, sum(price_monthly)::float8 AS monthly FROM (
+          SELECT currency, price_monthly FROM servers WHERE owner_id = $1 AND state <> 'deleted'
+          UNION ALL SELECT currency, price_monthly FROM vdcs WHERE owner_id = $1 AND active) x GROUP BY 1 ORDER BY 1`, [id]),
+      pool.query(`SELECT count(*) FILTER (WHERE expires_at > now())::int AS active, max(created_at) AS "lastSeen" FROM auth_sessions WHERE user_id = $1`, [id]),
+      pool.query(`SELECT action, outcome, created_at AS at FROM audit_events WHERE actor_id = $1 ORDER BY created_at DESC LIMIT 12`, [id]),
+    ]);
+    await ensureRoles();
+    return { user: u, servers: servers.rows, spend: spend.rows, sessions: sessions.rows[0], activity: activity.rows, limits: limitsOf(u.role) };
   }
 }

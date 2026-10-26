@@ -2380,7 +2380,24 @@
     "hasServers": "This user has {n} servers. Delete them first.",
     "removeExplain": "The account, sessions, passkeys and SSH keys are removed for good. This cannot be undone.",
     "typeEmail": "Type {email} to confirm",
-    "directory": "Directory"
+    "directory": "Directory",
+    "summary": {
+      "no2fa": "No 2FA",
+      "directory": "Directory",
+      "banned": "Banned",
+      "servers": "Servers",
+      "monthly": "Monthly",
+      "sessions": "Open sessions",
+      "lastSeen": "Last sign-in {when}",
+      "member": "Member",
+      "budget": "Monthly budget: {amount}",
+      "serverList": "Servers",
+      "noServers": "No servers.",
+      "limits": "Role limits",
+      "activity": "Recent activity",
+      "noActivity": "Nothing recorded.",
+      "allActivity": "Open all activity in the audit log"
+    }
   },
   "Roles": {
     "eyebrow": "People",

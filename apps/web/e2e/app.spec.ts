@@ -845,6 +845,13 @@ test.describe('people, settings and smart features (English browser)', () => {
     await expect(page.getByText(/Suggested to start/)).toBeVisible();
     await page.waitForTimeout(400);
     await shot(page, 'order-advisor');
+    // A person at a glance from the user list.
+    await page.goto('/admin/users');
+    await page.getByRole('button', { name: /admin@example.test/ }).first().click();
+    await expect(page.getByRole('dialog')).toContainText('Recent activity');
+    await page.waitForTimeout(400);
+    await shot(page, 'user-summary');
+    await page.keyboard.press('Escape');
     // The role editor: permissions, then limits.
     await page.goto('/admin/roles');
     await page.getByRole('button', { name: 'New role' }).click();

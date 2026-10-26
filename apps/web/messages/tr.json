@@ -2380,7 +2380,24 @@
     "hasServers": "Bu kullanıcının {n} sunucusu var. Önce sunucuları silinmeli.",
     "removeExplain": "Hesap, oturumlar, passkey’ler ve SSH anahtarları kalıcı olarak silinir. Geri alınamaz.",
     "typeEmail": "Onaylamak için {email} yazın",
-    "directory": "Dizin"
+    "directory": "Dizin",
+    "summary": {
+      "no2fa": "2FA yok",
+      "directory": "Dizin",
+      "banned": "Yasaklı",
+      "servers": "Sunucu",
+      "monthly": "Aylık",
+      "sessions": "Açık oturum",
+      "lastSeen": "Son giriş {when}",
+      "member": "Üyelik",
+      "budget": "Aylık bütçe: {amount}",
+      "serverList": "Sunucular",
+      "noServers": "Sunucusu yok.",
+      "limits": "Rol sınırları",
+      "activity": "Son etkinlik",
+      "noActivity": "Kayıt yok.",
+      "allActivity": "Tüm etkinliği denetim kaydında aç"
+    }
   },
   "Roles": {
     "eyebrow": "Kişiler",

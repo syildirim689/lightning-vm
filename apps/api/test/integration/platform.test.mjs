@@ -657,3 +657,13 @@ test('public status page: open to anyone, only aggregate states; the admin can t
   assert.equal((await get('/public/status')).statusCode, 404);
   await put('/admin/settings/status-page', { enabled: true }, admin);
 });
+
+test('user summary for staff: servers, spend, sessions, activity and limits in one call', async () => {
+  assert.equal((await get(`/admin/users/${userId}/summary`, user)).statusCode, 403);
+  const s = (await get(`/admin/users/${userId}/summary`, admin)).json();
+  assert.equal(s.user.email, 'ayse@example.test');
+  for (const k of ['servers', 'spend', 'activity']) assert.ok(Array.isArray(s[k]), k);
+  assert.equal(typeof s.sessions.active, 'number');
+  assert.equal(typeof s.limits, 'object');
+  assert.equal((await get('/admin/users/00000000-0000-0000-0000-000000000000/summary', admin)).statusCode, 404);
+});

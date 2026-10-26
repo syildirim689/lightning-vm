@@ -8,6 +8,7 @@ import { parseAsString, useQueryState } from 'nuqs';
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { I } from '../../../../components/icon';
+import { UserSummary } from './user-summary';
 import { CheckboxList, DataTable, Notice, PageHeader, SelectInput, StatusChip, TextInput } from '../../../../components/ui';
 import { apiFetch, useErrorText } from '../../../../lib/api';
 import { authClient } from '../../../../lib/auth-client';
@@ -34,6 +35,7 @@ export default function Users() {
   const [search, setSearch] = useQueryState('q', parseAsString.withDefault(''));
   const [role, setRole] = useQueryState('role', parseAsString.withDefault(''));
   const [status, setStatus] = useQueryState('status', parseAsString.withDefault(''));
+  const [summaryOf, setSummaryOf] = useState<string | null>(null);
   const [dialog, setDialog] = useState<{ kind: 'create' | 'access' | 'ban' | 'password' | 'sessions' | 'remove'; user?: Row }>();
   const tr = useTranslations('Roles');
   const roleName = (k: string) => (tr.has(`builtinName.${k}` as 'builtinName.admin') ? tr(`builtinName.${k}` as 'builtinName.admin') : roles.find((r) => r.key === k)?.name ?? k);
@@ -74,7 +76,7 @@ export default function Users() {
       cells={(u) => [
         <span key="u" className="flex min-w-0 items-center gap-3">
           <Avatar size="sm"><Avatar.Fallback>{(u.name || u.email).slice(0, 2).toUpperCase()}</Avatar.Fallback></Avatar>
-          <span className="min-w-0"><span className="block truncate font-medium">{u.name || u.email}</span>{u.name && <span className="block truncate text-xs text-muted">{u.email}</span>}</span>
+          <button type="button" onClick={() => setSummaryOf(u.id)} className="min-w-0 rounded text-left hover:underline focus-visible:outline-2 focus-visible:outline-accent"><span className="block truncate font-medium">{u.name || u.email}</span>{u.name && <span className="block truncate text-xs text-muted">{u.email}</span>}</button>
         </span>,
         <span key="r" className="flex flex-wrap gap-1">{u.role.split(',').map((r) => <Chip key={r} size="sm" variant={r === 'user' ? 'secondary' : 'soft'} color={r === 'admin' ? 'accent' : 'default'}>{roleName(r)}</Chip>)}
           {u.overrides > 0 && <Chip size="sm" variant="soft" color="warning">{t('overrides', { n: u.overrides })}</Chip>}</span>,
@@ -96,6 +98,7 @@ export default function Users() {
     {dialog?.kind === 'password' && dialog.user && <SetPassword user={dialog.user} onClose={() => setDialog(undefined)}/>}
     {dialog?.kind === 'sessions' && dialog.user && <UserSessions user={dialog.user} canRevoke={can(perms, 'users.sessions')} onClose={() => setDialog(undefined)}/>}
     {dialog?.kind === 'remove' && dialog.user && <RemoveUser user={dialog.user} onClose={() => setDialog(undefined)}/>}
+    {summaryOf && <UserSummary id={summaryOf} onClose={() => setSummaryOf(null)}/>}
   </>;
 }
 
