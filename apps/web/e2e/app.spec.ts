@@ -505,6 +505,14 @@ test.describe('server lifecycle (simulator, Turkish customer)', () => {
     const del = page.getByRole('button', { name: 'Sunucuyu kalıcı olarak sil' });
     await expect(del).toBeDisabled();
     await page.getByLabel('Onaylamak için “web-1” yazın').fill('web-1');
+    // Locked: deleting stays off until the lock is removed.
+    await page.getByRole('button', { name: 'Kilitle' }).click();
+    await expect(page.getByText('Silme koruması açık')).toBeVisible();
+    await expect(del).toBeDisabled();
+    await page.screenshot({ path: 'test-results/tour/server-locked.png', fullPage: true });
+    await page.getByRole('button', { name: 'Kilidi aç' }).click();
+    await expect(page.getByText('Silme koruması kapalı')).toBeVisible();
+    await expect(del).toBeEnabled();
     await del.click();
     await expect(page).toHaveURL(/\/$/, { timeout: 60_000 });
     await expect(page.getByText('Henüz sunucunuz yok.')).toBeVisible();

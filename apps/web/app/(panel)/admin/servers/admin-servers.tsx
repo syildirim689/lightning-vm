@@ -10,7 +10,7 @@ import { can } from '../../../../lib/permissions';
 import { useMe } from '../../../../lib/me';
 import { apiFetch, useErrorText } from '../../../../lib/api';
 import { useApiAction, useApiQuery } from '../../../../lib/query';
-import { StateBadge, type Server } from '../../servers-ui';
+import { FavoriteStar, StateBadge, type Server } from '../../servers-ui';
 import { ServerFilters, stateGroup, useServerFilters } from '../../server-filters';
 
 type Operation = { id: string; kind: string; status: string; step: string | null; attempts: number; errorCode: string | null; errorDetail: string | null;
@@ -34,7 +34,9 @@ export default function AdminServers() {
   const [bulkAction, setBulkAction] = useState('shutdown');
   const bulk = useApiAction((ids: string[]) => apiFetch<{ started: number; skipped: number }>('/admin/servers/actions', { method: 'POST', body: { action: bulkAction, serverIds: ids }, headers: { 'idempotency-key': crypto.randomUUID() } }),
     { invalidate: [['admin']], success: (r) => t('admin.bulkDone', { started: r.started, skipped: r.skipped }) });
-  const shown = filters.shown;
+  const [onlyStarred, setOnlyStarred] = useState(false);
+  // Starred first; optionally only them.
+  const shown = filters.shown.filter((x) => !onlyStarred || x.favorite).sort((x, y) => Number(!!y.favorite) - Number(!!x.favorite));
   const failed = ops.filter((o) => o.status === 'failed').length;
   const opTone = (s: string) => (s === 'succeeded' ? 'success' : s === 'failed' ? 'danger' : s === 'cancelled' ? 'default' : 'accent') as 'success';
 
@@ -56,6 +58,7 @@ export default function AdminServers() {
             <ServerFilters f={filters} placeholder={t('admin.search')}/>
             <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-muted">
               <span role="status">{t('admin.shown', { shown: shown.length, total: servers.length })}</span>
+              <Button size="sm" variant={onlyStarred ? 'primary' : 'ghost'} aria-pressed={onlyStarred} onPress={() => setOnlyStarred((x) => !x)}><I name="star" size={15}/>{t('admin.onlyStarred')}</Button>
               <Button size="sm" variant="secondary" isDisabled={!shown.length} onPress={() => exportCsv(shown)}><I name="download" size={15}/>{t('admin.exportCsv')}</Button>
             </div>
             {me && can(me.permissions, 'servers.manage_all') && shown.length > 0 && <div className="flex flex-col gap-3 rounded-lg border border-border p-3 sm:flex-row sm:items-end">
@@ -70,7 +73,7 @@ export default function AdminServers() {
             </div>}
             <DataTable label={t('admin.servers')} rows={shown} rowKey={(s) => s.id} empty={t('list.empty')}
               columns={[{ id: 'name', label: t('col.name') }, { id: 'owner', label: t('admin.owner') }, { id: 'state', label: t('col.state') }, { id: 'ip', label: 'IP' }, { id: 'size', label: t('col.size') }, { id: 'loc', label: t('col.location') }, { id: 'tags', label: t('admin.tags') }]}
-              cells={(s) => [<NextLink key="n" href={`/servers/${s.id}`} className="font-medium text-accent hover:underline">{s.name}</NextLink>, s.ownerEmail ?? '–', <StateBadge key="b" server={s}/>,
+              cells={(s) => [<span key="n" className="flex items-center gap-1"><FavoriteStar id={s.id} on={!!s.favorite} name={s.name} listKey={['admin', 'servers']} className="relative -ml-2 shrink-0"/><NextLink href={`/servers/${s.id}`} className="font-medium text-accent hover:underline">{s.name}</NextLink>{s.locked && <I name="lock" size={13} className="text-warning"/>}</span>, s.ownerEmail ?? '–', <StateBadge key="b" server={s}/>,
                 s.address ? <Mono key="ip">{s.address}</Mono> : '–', t('size', { vcpu: s.vcpu, memory: s.memoryMb / 1024, disk: s.diskGb }), s.poolName,
                 s.tags?.length ? <span key="t" className="flex flex-wrap gap-1">{s.tags.map((x) => <span key={x} className="rounded-full bg-default px-2 py-0.5 text-xs">{x}</span>)}</span> : '–']}/>
           </Tabs.Panel>

@@ -278,7 +278,8 @@
     "OPS_FAILED": "Recent operations failed.",
     "CPU_SATURATED": "The CPU is saturated.",
     "CPU_HIGH": "CPU usage is high.",
-    "IDLE": "The server has been idle for a long time."
+    "IDLE": "The server has been idle for a long time.",
+    "SERVER_LOCKED": "The server is locked; unlock it first."
   },
   "Auth": {
     "required": "required",
@@ -1626,7 +1627,8 @@
       "bulkApply": "Apply to {n, plural, one {# server} other {# servers}}",
       "bulkConfirm": "{action} on {n, plural, one {# server} other {# servers}} shown by the current filter? Busy servers are skipped.",
       "bulkDone": "{started} started, {skipped} skipped.",
-      "bulkHelp": "Filter first (state, tag, search); at most 200 at a time."
+      "bulkHelp": "Filter first (state, tag, search); at most 200 at a time.",
+      "onlyStarred": "Starred only"
     },
     "finding": {
       "vm_missing": "VM missing in VMware",
@@ -1685,7 +1687,17 @@
       "ejected": "ISO ejected."
     },
     "star": "Add {name} to favourites",
-    "unstar": "Remove {name} from favourites"
+    "unstar": "Remove {name} from favourites",
+    "lock": {
+      "onTitle": "Delete protection is on",
+      "onHelp": "This server cannot be deleted, forced off, reset or reverted to a snapshot; unlock it first.",
+      "offTitle": "Delete protection is off",
+      "offHelp": "Lock an important server against being deleted or turned off by mistake.",
+      "lock": "Lock",
+      "unlock": "Unlock",
+      "lockedNow": "Server locked.",
+      "unlocked": "Server unlocked."
+    }
   },
   "Maintenance": {
     "title": "Backups and updates",
@@ -1924,6 +1936,11 @@
     "activity": {
       "title": "Account activity",
       "intro": "Sign-ins and changes on your account and servers, newest first. Something you do not recognise? Change your password and turn on two-factor."
+    },
+    "export": {
+      "title": "Download my data",
+      "help": "Your account, servers, keys, notifications and activity as one JSON file. Secrets such as passwords and session tokens are not included.",
+      "button": "Download as JSON"
     }
   },
   "AuthLayout": {

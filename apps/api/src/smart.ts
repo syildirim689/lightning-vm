@@ -1,6 +1,7 @@
 // Smart features: a server's health score with its reasons and right-sizing advice, the customer's cost
 // forecast for this month, and the admin's getting-started checklist. The rules are in smart-rules.ts.
-import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Put, Query, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Put, Query, Req, Res, UseGuards } from '@nestjs/common';
+import type { FastifyReply } from 'fastify';
 import { audit, SessionGuard, type AuthedRequest } from './auth';
 import { usageOf } from './catalog';
 import { pool } from './db';
@@ -138,5 +139,39 @@ export class DigestController {
       (SELECT count(*)::int FROM audit_events WHERE created_at > $1 AND outcome = 'denied') AS denied,
       (SELECT count(*)::int FROM audit_events WHERE created_at > $1 AND action = 'auth.login' AND outcome = 'failure') AS "failedSignIns"`, [from, req.user.id]);
     return { since: from.toISOString(), counts: c };
+  }
+}
+
+// "Export my data": everything the panel keeps about the signed-in person, as one JSON file. No secrets: no
+// password hashes, session tokens, root passwords, two-factor secrets or messaging-app addresses.
+@Controller('account') @UseGuards(SessionGuard)
+export class AccountExportController {
+  @Get('export')
+  async export(@Req() req: AuthedRequest, @Res({ passthrough: true }) reply: FastifyReply) {
+    const id = req.user.id;
+    const q = async (sql: string) => (await pool.query(sql, [id])).rows;
+    const [profile] = await q(`SELECT email, name, locale, coalesce(role, 'user') AS roles, created_at AS "createdAt", two_factor_enabled AS "twoFactorEnabled", phone_number AS "phoneNumber",
+      phone_number_verified AS "phoneNumberVerified", budget_monthly::text AS "budgetMonthly", budget_currency AS "budgetCurrency", quiet_hours AS "quietHours" FROM users WHERE id = $1`);
+    const data = {
+      exportedAt: new Date().toISOString(),
+      profile,
+      servers: await q(`SELECT id, name, state, power_state AS "powerState", vcpu, memory_mb AS "memoryMb", disk_gb AS "diskGb", price_monthly::text AS "priceMonthly", currency,
+        tags, notes, locked, created_at AS "createdAt" FROM servers WHERE owner_id = $1 ORDER BY created_at`),
+      favorites: (await q('SELECT server_id FROM server_favorites WHERE user_id = $1')).map((r) => r.server_id),
+      projects: await q('SELECT id, name, created_at AS "createdAt" FROM projects WHERE owner_id = $1 ORDER BY name'),
+      sshKeys: await q('SELECT name, fingerprint, public_key AS "publicKey", created_at AS "createdAt" FROM ssh_keys WHERE owner_id = $1 ORDER BY name'),
+      firewalls: await q(`SELECT f.name, f.rules, f.created_at AS "createdAt", ARRAY(SELECT s.name FROM firewall_servers fs JOIN servers s ON s.id = fs.server_id WHERE fs.firewall_id = f.id) AS servers
+        FROM firewalls f WHERE f.owner_id = $1 ORDER BY f.name`),
+      notificationPreferences: await q('SELECT event, channels FROM notification_preferences WHERE user_id = $1 ORDER BY event'),
+      notifications: await q('SELECT event, title, body, link, created_at AS "createdAt", read_at AS "readAt" FROM notifications WHERE user_id = $1 ORDER BY created_at DESC LIMIT 500'),
+      messagingApps: await q('SELECT app, label, hint, enabled, created_at AS "createdAt" FROM chat_connections WHERE user_id = $1 ORDER BY created_at'),
+      sessions: await q('SELECT ip_address AS ip, user_agent AS "userAgent", created_at AS "createdAt", expires_at AS "expiresAt" FROM auth_sessions WHERE user_id = $1 ORDER BY created_at DESC'),
+      activity: await q('SELECT action, outcome, ip, created_at AS "at", metadata FROM audit_events WHERE actor_id = $1 ORDER BY created_at DESC LIMIT 1000'),
+    };
+    await audit(req, 'account.export', 'success', id);
+    reply.header('content-type', 'application/json; charset=utf-8');
+    reply.header('content-disposition', `attachment; filename="lightning-vm-${new Date().toISOString().slice(0, 10)}.json"`);
+    reply.header('cache-control', 'no-store');
+    return JSON.stringify(data, null, 2);
   }
 }

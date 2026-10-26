@@ -278,7 +278,8 @@
     "OPS_FAILED": "Son işlemler başarısız oldu.",
     "CPU_SATURATED": "CPU sürekli tam dolu.",
     "CPU_HIGH": "CPU kullanımı yüksek.",
-    "IDLE": "Sunucu uzun süredir boşta."
+    "IDLE": "Sunucu uzun süredir boşta.",
+    "SERVER_LOCKED": "Sunucu kilitli; bu işlem için önce kilidi açın."
   },
   "Auth": {
     "required": "zorunlu",
@@ -1626,7 +1627,8 @@
       "bulkApply": "{n} sunucuya uygula",
       "bulkConfirm": "Süzgecin gösterdiği {n} sunucuda “{action}” yapılsın mı? İşlemi süren sunucular atlanır.",
       "bulkDone": "{started} başlatıldı, {skipped} atlandı.",
-      "bulkHelp": "Önce süzün (durum, etiket, arama); bir seferde en fazla 200."
+      "bulkHelp": "Önce süzün (durum, etiket, arama); bir seferde en fazla 200.",
+      "onlyStarred": "Yalnızca favoriler"
     },
     "finding": {
       "vm_missing": "VM VMware'de yok",
@@ -1685,7 +1687,17 @@
       "ejected": "ISO çıkarıldı."
     },
     "star": "{name} sunucusunu favorilere ekle",
-    "unstar": "{name} sunucusunu favorilerden çıkar"
+    "unstar": "{name} sunucusunu favorilerden çıkar",
+    "lock": {
+      "onTitle": "Silme koruması açık",
+      "onHelp": "Bu sunucu silinemez, zorla kapatılamaz, sıfırlanamaz ve anlık görüntüye döndürülemez; önce kilidi açın.",
+      "offTitle": "Silme koruması kapalı",
+      "offHelp": "Önemli bir sunucuyu yanlışlıkla silinmeye veya kapatılmaya karşı kilitleyin.",
+      "lock": "Kilitle",
+      "unlock": "Kilidi aç",
+      "lockedNow": "Sunucu kilitlendi.",
+      "unlocked": "Kilit açıldı."
+    }
   },
   "Maintenance": {
     "title": "Yedekler ve güncellemeler",
@@ -1924,6 +1936,11 @@
     "activity": {
       "title": "Hesap etkinliği",
       "intro": "Hesabınızdaki ve sunucularınızdaki girişler ve değişiklikler, en yenisi önce. Tanımadığınız bir şey mi var? Şifrenizi değiştirin ve iki adımlı girişi açın."
+    },
+    "export": {
+      "title": "Verilerimi indir",
+      "help": "Hesabınız, sunucularınız, anahtarlarınız, bildirimleriniz ve etkinlik kaydınız tek bir JSON dosyası olarak. Parola, oturum anahtarı gibi gizli bilgiler dosyada yer almaz.",
+      "button": "JSON olarak indir"
     }
   },
   "AuthLayout": {

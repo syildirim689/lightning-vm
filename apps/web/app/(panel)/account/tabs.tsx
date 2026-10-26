@@ -50,7 +50,7 @@ export default function AccountTabs() {
     <Tabs.ListContainer className="overflow-x-auto">
       <Tabs.List aria-label={t('title')}>{tabs.map((k) => <Tabs.Tab key={k} id={k} className="whitespace-nowrap">{t(`tabs.${k}`)}<Tabs.Indicator/></Tabs.Tab>)}</Tabs.List>
     </Tabs.ListContainer>
-    <Tabs.Panel id="profile" className="pt-5"><Profile/></Tabs.Panel>
+    <Tabs.Panel id="profile" className="flex flex-col gap-6 pt-5"><Profile/><ExportData/></Tabs.Panel>
     <Tabs.Panel id="security" className="flex flex-col gap-6 pt-5">
       <Section title={t('twoFactor.sectionTitle')} description={t('twoFactor.sectionIntro')}>
         <div className="grid gap-8 lg:grid-cols-2"><TwoFactor/><PhoneNumber/></div>
@@ -63,4 +63,13 @@ export default function AccountTabs() {
     <Tabs.Panel id="activity" className="pt-5"><Section title={t('activity.title')} description={t('activity.intro')}><MyActivity/></Section></Tabs.Panel>
     <Tabs.Panel id="projects" className="pt-5"><Projects/></Tabs.Panel>
   </Tabs>;
+}
+
+// Everything the panel keeps about this person, as one JSON file (the API leaves secrets out).
+function ExportData() {
+  const t = useTranslations('Account.export');
+  return <Section title={t('title')} description={t('help')}>
+    <a href="/api/account/export" download className="inline-flex min-h-10 w-fit items-center gap-2 rounded-full border border-border px-4 text-sm font-medium transition-colors hover:border-accent hover:text-accent focus-visible:outline-2 focus-visible:outline-accent">
+      <I name="download" size={16}/>{t('button')}</a>
+  </Section>;
 }

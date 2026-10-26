@@ -150,6 +150,18 @@ test('favorites and the monthly budget: a starred server is marked; an order ove
   assert.equal(u.budget_alerted, new Date().toISOString().slice(0, 7));
   assert.equal((await send('GET', '/usage/summary', undefined, user)).json().budget.state, 'over');
   assert.equal((await send('PUT', '/usage/budget', { amount: null }, user)).json().budget, null);
+
+  // Locked: no power off, reset or delete (nothing changes), until unlocked; other customers cannot lock it.
+  const lock = '/servers/' + serverId + '/lock';
+  assert.equal((await send('PUT', lock, { locked: true }, other)).statusCode, 404);
+  assert.equal((await send('PUT', lock, { locked: true }, user)).json().locked, true);
+  assert.equal((await send('GET', '/servers/' + serverId, undefined, user)).json().server.locked, true);
+  for (const action of ['power_off', 'reset']) {
+    assert.equal((await send('POST', '/servers/' + serverId + '/actions', { action }, user, { 'idempotency-key': randomUUID() })).json().code, 'SERVER_LOCKED');
+  }
+  assert.equal((await send('DELETE', '/servers/' + serverId, { confirm: 'web-1' }, user, { 'idempotency-key': randomUUID() })).json().code, 'SERVER_LOCKED');
+  assert.equal((await serverRow(serverId)).state, 'ready');
+  assert.equal((await send('PUT', lock, { locked: false }, user)).json().locked, false);
 });
 
 test('power actions are separate operations, one at a time per server', { skip }, async () => {

@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Headers, HttpCode, Param, ParseUUIDPipe, Post, Query, Req, Res, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Headers, HttpCode, Param, ParseUUIDPipe, Post, Put, Query, Req, Res, UseGuards } from '@nestjs/common';
 import { Queue } from 'bullmq';
 import { createHash } from 'node:crypto';
 import type { FastifyReply } from 'fastify';
@@ -82,7 +82,14 @@ export function startPowerOperation(req: AuthedRequest, server: { id: string; ow
   return startOperation(req, server, action as Kind, key, hashOf({ id: server.id, action, bulk: true }));
 }
 
+// What a lock stops: anything that ends the server or loses its running state or data.
+const lockedKinds = new Set<Kind>(['delete', 'power_off', 'reset', 'snapshot_revert']);
+
 export async function startOperation(req: AuthedRequest, server: { id: string; owner_id: string }, kind: Kind, key: string, requestHash: string, params: object = {}) {
+  // Read here, for every caller (the server page, bulk actions, schedules, data centers).
+  if (lockedKinds.has(kind) && (await pool.query('SELECT 1 FROM servers WHERE id = $1 AND locked', [server.id])).rowCount) {
+    throw apiError(409, 'SERVER_LOCKED', 'The server is locked against this; unlock it first');
+  }
   // The role's operations per hour, for a member acting on their own servers (staff and schedules are not counted).
   if (req.user?.id === server.owner_id && !can(req.user.permissions, 'servers.manage_all')) {
     const perHour = limitsOf(req.user.roles.join(',')).operationsPerHour;
@@ -106,7 +113,7 @@ export async function startOperation(req: AuthedRequest, server: { id: string; o
 
 const serverColumns = `s.id, s.name, s.state, s.power_state AS "powerState", s.guest_ready AS "guestReady", s.vcpu, s.memory_mb AS "memoryMb", s.disk_gb AS "diskGb",
   s.price_monthly::text AS "priceMonthly", s.currency, s.error_code AS "errorCode", s.created_at AS "createdAt", s.project_id AS "projectId",
-  s.tags, s.notes, s.pool_id AS "poolId", s.image_id AS "imageId", s.package_id AS "packageId", s.vdc_id AS "vdcId",
+  s.tags, s.notes, s.locked, s.pool_id AS "poolId", s.image_id AS "imageId", s.package_id AS "packageId", s.vdc_id AS "vdcId",
   p.name AS "poolName", p.location, l.city AS "locationCity", l.country_code AS "locationCountry", l.datacenter AS "locationDatacenter", i.name AS "imageName", host(a.address) AS address,
   CASE WHEN s.firewall_applied_version >= s.firewall_version THEN 'applied' WHEN s.firewall_error IS NOT NULL THEN 'failed' ELSE 'pending' END AS "firewallStatus",
   s.firewall_error AS "firewallError", s.root_password_enc IS NOT NULL AS "hasRootPassword",
@@ -341,6 +348,16 @@ export class ServersController {
     return { password: decryptSecret(s.root_password_enc, 'server-root-password') };
   }
 
+  // Lock or unlock (the owner, or staff who may manage all servers).
+  @Put('servers/:id/lock')
+  async lock(@Req() req: AuthedRequest, @Param('id', ParseUUIDPipe) id: string, @Body() body: Input) {
+    if (typeof body?.locked !== 'boolean') throw apiError(400, 'VALIDATION_FAILED', 'Invalid input', { locked: 'INVALID_VALUE' });
+    await findServer(req, id, true);
+    await pool.query('UPDATE servers SET locked = $2, updated_at = now() WHERE id = $1', [id, body.locked]);
+    await audit(req, body.locked ? 'server.locked' : 'server.unlocked', 'success', req.user.id, { serverId: id });
+    return { locked: body.locked };
+  }
+
   @Delete('servers/:id/root-password') @HttpCode(204)
   async forgetRootPassword(@Req() req: AuthedRequest, @Param('id', ParseUUIDPipe) id: string) {
     await findServer(req, id, true);
@@ -375,6 +392,8 @@ export class ServersController {
     await customerMay(req, 'delete');
     if (body?.confirm !== server.name) throw apiError(400, 'VALIDATION_FAILED', 'Confirmation required', { confirm: 'CONFIRMATION_MISMATCH' });
     if (server.state === 'deleting') throw apiError(409, 'OPERATION_IN_PROGRESS', 'Already being deleted');
+    // Before anything changes (startOperation checks again for every other path).
+    if (server.locked) throw apiError(409, 'SERVER_LOCKED', 'The server is locked against this; unlock it first');
     // A running create is cancelled first; the delete then removes whatever it left.
     await pool.query("UPDATE operations SET cancel_requested = true WHERE server_id = $1 AND status IN ('pending', 'running') AND kind = 'create'", [id]);
     const { rows: [open] } = await pool.query("SELECT 1 FROM operations WHERE server_id = $1 AND status IN ('pending', 'running')", [id]);

@@ -24,7 +24,7 @@ import { ButtonLink, ConfirmButton, DataTable, Empty, Mono, Notice, PageHeader, 
 
 export type Server = { id: string; name: string; state: string; powerState: string; guestReady: boolean; vcpu: number; memoryMb: number; diskGb: number;
   priceMonthly: string; currency: string; errorCode: string | null; poolName: string; location: string; locationCity?: string | null; locationCountry?: string | null; locationDatacenter?: string | null; imageName: string; address: string | null;
-  createdAt: string; favorite?: boolean; tags?: string[]; notes?: string; poolId: string; imageId: string; packageId: string | null; vdcId?: string | null; ownerEmail?: string; hasRootPassword?: boolean; applicationName?: string | null; appState?: 'pending' | 'installing' | 'installed' | 'failed' | null; appMessage?: string | null; firewallStatus?: 'applied' | 'pending' | 'failed'; firewallError?: string | null; firewallCount?: number; lastOperation: { id: string; kind: string; status: string; step: string | null; errorCode: string | null } | null };
+  createdAt: string; favorite?: boolean; locked?: boolean; tags?: string[]; notes?: string; poolId: string; imageId: string; packageId: string | null; vdcId?: string | null; ownerEmail?: string; hasRootPassword?: boolean; applicationName?: string | null; appState?: 'pending' | 'installing' | 'installed' | 'failed' | null; appMessage?: string | null; firewallStatus?: 'applied' | 'pending' | 'failed'; firewallError?: string | null; firewallCount?: number; lastOperation: { id: string; kind: string; status: string; step: string | null; errorCode: string | null } | null };
 type Operation = { id: string; kind: string; status: string; step: string | null; attempts: number; errorCode: string | null; createdAt: string; finishedAt: string | null };
 
 // One Idempotency-Key per user intention: a double click or a retry after a timeout reuses it,
@@ -102,7 +102,7 @@ export function ServerList() {
       <NextLink href={`/servers/${s.id}`} className="block rounded-xl outline-offset-2 transition-all duration-200 hover:-translate-y-1 hover:shadow-lg focus-visible:outline-2">
         <Card className="h-full">
           <Card.Header className="flex flex-row items-start justify-between gap-2">
-            <div className="min-w-0"><Card.Title className="truncate text-base font-semibold">{s.name}</Card.Title>
+            <div className="min-w-0"><Card.Title className="flex items-center gap-1.5 truncate text-base font-semibold">{s.name}{s.locked && <I name="lock" size={13} className="shrink-0 text-warning"/>}</Card.Title>
               <Card.Description className="flex items-center gap-1 text-xs text-muted"><I name="map-pin" size={12}/>{s.location || s.poolName}</Card.Description></div>
             <StateBadge server={s}/>
           </Card.Header>
@@ -121,19 +121,37 @@ export function ServerList() {
 }
 
 // Star / unstar a server; the list updates at once and is put right if the request fails.
-function FavoriteStar({ id, on, name }: { id: string; on: boolean; name: string }) {
+export function FavoriteStar({ id, on, name, listKey = ['servers'], className = 'absolute bottom-3 right-3' }: { id: string; on: boolean; name: string; listKey?: string[]; className?: string }) {
   const t = useTranslations('Servers');
   const client = useQueryClient();
   const flip = async () => {
-    client.setQueryData<{ servers: Server[] }>(['servers'], (d) => d && { servers: d.servers.map((x) => (x.id === id ? { ...x, favorite: !on } : x)) });
+    client.setQueryData<{ servers: Server[] }>(listKey, (d) => d && { servers: d.servers.map((x) => (x.id === id ? { ...x, favorite: !on } : x)) });
     await apiFetch(`/servers/${id}/favorite`, { method: on ? 'DELETE' : 'PUT' }).catch(() => undefined);
-    void client.invalidateQueries({ queryKey: ['servers'] });
+    void client.invalidateQueries({ queryKey: listKey });
   };
   return <button type="button" onClick={flip} aria-pressed={on} aria-label={on ? t('unstar', { name }) : t('star', { name })}
-    className={`absolute bottom-3 right-3 grid size-9 place-items-center rounded-full transition-colors focus-visible:outline-2 focus-visible:outline-accent ${on ? 'text-warning hover:bg-warning/10' : 'text-muted hover:bg-default hover:text-foreground'}`}>
+    className={`${className} grid size-9 place-items-center rounded-full transition-colors focus-visible:outline-2 focus-visible:outline-accent ${on ? 'text-warning hover:bg-warning/10' : 'text-muted hover:bg-default hover:text-foreground'}`}>
     <motion.span key={String(on)} initial={{ scale: on ? 0.4 : 1 }} animate={{ scale: 1 }} transition={{ type: 'spring', stiffness: 500, damping: 15 }}>
       <I name="star" size={17} className={on ? 'fill-current' : ''}/></motion.span>
   </button>;
+}
+
+// Delete protection: a calm bar while unlocked, a clear warning-coloured one while locked.
+function LockBar({ id, locked, canChange }: { id: string; locked: boolean; canChange: boolean }) {
+  const t = useTranslations('Servers.lock');
+  const { error } = useErrorText();
+  const client = useQueryClient();
+  const [busy, setBusy] = useState(false);
+  async function flip() {
+    setBusy(true);
+    try { await apiFetch(`/servers/${id}/lock`, { method: 'PUT', body: { locked: !locked } }); toast.success(locked ? t('unlocked') : t('lockedNow')); void client.invalidateQueries({ queryKey: ['server', id] }); void client.invalidateQueries({ queryKey: ['servers'] }); }
+    catch (e) { toast.danger(error(e)); } finally { setBusy(false); }
+  }
+  return <motion.div layout className={`flex flex-wrap items-center gap-3 rounded-2xl border px-4 py-3 ${locked ? 'border-warning/40 bg-warning/10' : 'border-border bg-surface'}`}>
+    <span className={`grid size-9 shrink-0 place-items-center rounded-xl ${locked ? 'bg-warning/20 text-warning' : 'bg-default text-muted'}`}><I name={locked ? 'lock' : 'lock-open'} size={17}/></span>
+    <div className="min-w-0 flex-1"><p className="text-sm font-medium">{locked ? t('onTitle') : t('offTitle')}</p><p className="text-xs text-muted">{locked ? t('onHelp') : t('offHelp')}</p></div>
+    {canChange && <Button size="sm" variant={locked ? 'secondary' : 'ghost'} isPending={busy} onPress={flip}><I name={locked ? 'lock-open' : 'lock'} size={14}/>{locked ? t('unlock') : t('lock')}</Button>}
+  </motion.div>;
 }
 
 const runningStates = ['pending', 'running'];
@@ -167,9 +185,11 @@ export function ServerDetail({ id }: { id: string }) {
     catch (e) { setMessage(error(e)); toast.danger(error(e)); if ((e as { code?: string }).code !== 'NETWORK') intent.reset(); }
   }
   const canAct = !open && ['ready', 'error'].includes(s.state);
+  // Locked: what would end the server or lose its state waits until it is unlocked (the API refuses it too).
+  const locked = !!s.locked;
   const actionLabel = (a: string) => t(`action.${a as 'power_on'}`);
   const power = (action: string, icon: React.ReactNode) => <Button variant="secondary" isDisabled={!canAct} onPress={() => act(`/servers/${id}/actions`, 'POST', { action })}>{icon}{actionLabel(action)}</Button>;
-  const risky = (action: 'power_off' | 'reset', icon: React.ReactNode) => <ConfirmButton variant="danger-soft" isDisabled={!canAct} icon={icon} label={actionLabel(action)}
+  const risky = (action: 'power_off' | 'reset', icon: React.ReactNode) => <ConfirmButton variant="danger-soft" isDisabled={!canAct || locked} icon={icon} label={actionLabel(action)}
     title={actionLabel(action)} body={t(`confirm.${action}`)} confirmLabel={t('confirm.yes', { action: actionLabel(action) })} cancelLabel={t('confirm.no')}
     onConfirm={() => act(`/servers/${id}/actions`, 'POST', { action })}/>;
 
@@ -178,6 +198,7 @@ export function ServerDetail({ id }: { id: string }) {
       actions={<>{s.state === 'ready' && allowed.console && <ButtonLink variant="secondary" href={`/servers/${id}/console`}><I name="square-terminal" size={16}/>{actionLabel('console')}</ButtonLink>}
         {own && <OrderSimilar server={s} names={(mine ?? []).map((x) => x.name)}/>}</>}/>
     {message && <div role="alert"><Notice tone="danger">{message}</Notice></div>}
+    <LockBar id={id} locked={locked} canChange={own || allowed.delete}/>
     {s.errorCode && <Notice tone="danger">{t('errorCode', { message: error({ code: s.errorCode }), code: s.errorCode })}</Notice>}
 
     {open && <Section title={t('detail.progress')}>
@@ -237,7 +258,7 @@ export function ServerDetail({ id }: { id: string }) {
     {allowed.delete && <Section title={t('delete.title')} description={t('delete.explain')} className="border border-danger/30">
       <div className="flex flex-wrap items-end gap-3">
         <TextInput className="min-w-64 flex-1" label={t('delete.confirm', { name: s.name })} value={deleteName} onChange={setDeleteName} autoComplete="off"/>
-        <Button variant="danger" isDisabled={deleteName !== s.name || s.state === 'deleting'} onPress={() => act(`/servers/${id}`, 'DELETE', { confirm: deleteName })}>
+        <Button variant="danger" isDisabled={deleteName !== s.name || s.state === 'deleting' || locked} onPress={() => act(`/servers/${id}`, 'DELETE', { confirm: deleteName })}>
           <I name="trash-2" size={16}/>{t('delete.button')}</Button>
       </div>
     </Section>}

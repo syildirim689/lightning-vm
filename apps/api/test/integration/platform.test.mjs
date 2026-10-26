@@ -632,3 +632,15 @@ test('quiet hours: checked, kept with the preferences, and turned off with null'
   assert.deepEqual((await get('/notifications/preferences', user)).json().quietHours, q);
   assert.equal((await put('/notifications/quiet-hours', { quietHours: null }, user)).json().quietHours, null);
 });
+
+test('export my data: a JSON file with the account, servers, keys and activity, and no secrets', async () => {
+  const r = await get('/account/export', user);
+  assert.equal(r.statusCode, 200);
+  assert.match(r.headers['content-disposition'], /attachment; filename="lightning-vm-\d{4}-\d{2}-\d{2}\.json"/);
+  const data = r.json();
+  assert.equal(data.profile.email, 'ayse@example.test');
+  for (const k of ['servers', 'sshKeys', 'firewalls', 'notifications', 'sessions', 'activity', 'messagingApps']) assert.ok(Array.isArray(data[k]), k);
+  assert.ok(!/password|token|secret|target_enc/i.test(JSON.stringify(Object.keys(data.profile))));
+  assert.ok(!r.body.includes('scrypt$'), 'no password hash');
+  assert.ok((await pool.query("SELECT 1 FROM audit_events WHERE action = 'account.export'")).rowCount);
+});
