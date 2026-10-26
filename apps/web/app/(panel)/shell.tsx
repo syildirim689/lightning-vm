@@ -150,7 +150,7 @@ export default function Shell({ user, branding, version, children }: { user: Use
             <UserMenu user={user}/>
           </div>
         </header>
-        <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-6 pb-24 md:px-8 md:py-8">
+        <main className="mx-auto w-full max-w-[150rem] flex-1 px-4 py-6 pb-24 md:px-8 md:py-8 2xl:px-10">
           {/* Each page fades in; no exit animation, so navigation never waits on it. */}
           <motion.div key={path} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2, ease: 'easeOut' }}>{children}</motion.div>
         </main>

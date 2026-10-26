@@ -90,13 +90,13 @@ export function ServerList() {
   const servers = useApiQuery<{ servers: Server[] }>(['servers'], '/servers', { refetchInterval: 5_000 }).data?.servers;
   const [gridRef] = useAutoAnimate<HTMLUListElement>();
   const f = useServerFilters(servers ?? []);
-  if (!servers) return <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3" aria-busy>{[0, 1, 2].map((i) => <Card key={i} className="h-36 animate-pulse"><span className="sr-only">…</span></Card>)}</div>;
+  if (!servers) return <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4" aria-busy>{[0, 1, 2].map((i) => <Card key={i} className="h-36 animate-pulse"><span className="sr-only">…</span></Card>)}</div>;
   if (!servers.length) return <Empty icon={<I name="server" size={28}/>} title={t('list.empty')}><ButtonLink href="/order" className="mt-3"><I name="plus" size={16}/>{tn('newServer')}</ButtonLink></Empty>;
   const shown = f.shown;
   return <div className="flex flex-col gap-4">
     {(servers.length > 1 || f.q || f.state !== 'all' || f.tag) && <div className="rounded-xl border border-border bg-surface p-3"><ServerFilters f={f} placeholder={t('list.searchPlaceholder')}/></div>}
     {!shown.length ? <p role="status" className="rounded-xl border border-dashed border-border px-4 py-8 text-center text-sm text-muted">{t('list.noMatch')}</p>
-    : <ul ref={gridRef} className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3" aria-label={t('list.title')}>
+    : <ul ref={gridRef} className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4" aria-label={t('list.title')}>
     {shown.map((s, i) => <motion.li key={s.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: Math.min(i, 8) * 0.05, duration: 0.25 }}>
       <NextLink href={`/servers/${s.id}`} className="block rounded-xl outline-offset-2 transition-all duration-200 hover:-translate-y-1 hover:shadow-lg focus-visible:outline-2">
         <Card className="h-full">

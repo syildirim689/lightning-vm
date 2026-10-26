@@ -29,7 +29,7 @@ export default function Roles() {
 
   return <>
     <PageHeader eyebrow={t('eyebrow')} title={t('title')} description={t('intro')} actions={manage && <Button onPress={() => setEditing('new')}><I name="plus" size={16}/>{t('new')}</Button>}/>
-    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
       {(roles ?? []).map((r, i) => <motion.div key={r.key} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.04 }}>
         <Card className="h-full">
           <Card.Header className="flex flex-row items-start justify-between gap-2">

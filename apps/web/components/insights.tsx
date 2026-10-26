@@ -24,7 +24,7 @@ export default function Insights({ scope }: { scope: 'staff' | 'mine' }) {
     </div>
     {list.length === 0 ? <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex items-center gap-2 rounded-xl border border-success/40 bg-success/5 px-4 py-3 text-sm">
       <I name="circle-check" size={18} className="text-success"/>{t('allGood')}</motion.p>
-      : <ul className="grid gap-3 md:grid-cols-2">
+      : <ul className="grid gap-3 md:grid-cols-2 2xl:grid-cols-3">
         <AnimatePresence initial>{list.map((i, n) => <motion.li key={i.key} layout initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ delay: n * 0.04 }}>
           <NextLink href={i.link} className={`group flex h-full items-start gap-3 rounded-xl border px-4 py-3 transition-shadow hover:shadow-md ${style[i.severity]}`}>
             <span className="mt-0.5 shrink-0">{icon(i.severity)}</span>

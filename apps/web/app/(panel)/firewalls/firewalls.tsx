@@ -26,7 +26,7 @@ export default function Firewalls() {
   return <>
     <PageHeader title={t('title')} description={t('intro')} actions={manage && <Button onPress={() => setCreating(true)}><I name="plus" size={16}/>{t('create')}</Button>}/>
     {list && list.length === 0 && <Card><Card.Content><Empty icon={<I name="shield-check" size={28}/>} title={t('emptyTitle')}>{t('emptyBody')}</Empty></Card.Content></Card>}
-    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
       {(list ?? []).map((f, i) => {
         const inbound = f.rules.filter((r) => r.direction === 'in').length;
         return <motion.div key={f.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.04 }}>

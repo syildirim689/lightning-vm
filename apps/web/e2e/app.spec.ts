@@ -736,7 +736,9 @@ test.describe('people, settings and smart features (English browser)', () => {
   });
 
   // Phone and tablet: every page without sideways scrolling.
-  for (const viewport of [{ width: 390, height: 844 }, { width: 768, height: 1024 }]) test(`every page fits ${viewport.width} px without sideways scrolling`, async ({ browser }) => {
+  // Phone, tablet and a wide desktop: no sideways scrolling, and on the wide screen the content uses the width
+  // beside the menu instead of sitting in a narrow middle column.
+  for (const viewport of [{ width: 390, height: 844 }, { width: 768, height: 1024 }, { width: 1920, height: 1080 }]) test(`every page fits ${viewport.width} px without sideways scrolling`, async ({ browser }) => {
     test.setTimeout(150_000);
     const page = await (await browser.newContext({ locale: 'en-US', viewport })).newPage();
     await signInAdmin(page);
@@ -747,6 +749,13 @@ test.describe('people, settings and smart features (English browser)', () => {
       await page.goto(path);
       await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
       await expectNoOverflow(page, `${path} at ${viewport.width} px`);
+      if (viewport.width >= 1600) {
+        const used = await page.evaluate(() => {
+          const free = window.innerWidth - (document.querySelector('aside')?.getBoundingClientRect().width ?? 0);
+          return (document.querySelector('main > div')?.getBoundingClientRect().width ?? 0) / free;
+        });
+        expect(used, `${path}: content uses ${Math.round(used * 100)}% of the width beside the menu`).toBeGreaterThan(0.85);
+      }
     }
   });
 
@@ -783,10 +792,10 @@ test.describe('people, settings and smart features (English browser)', () => {
     await expect(page.getByRole('dialog', { name: 'Keyboard shortcuts' })).toBeVisible();
     await shot(page, 'shortcuts');
     // The same overview screens at phone and tablet width.
-    for (const width of [390, 768]) {
+    for (const width of [390, 768, 1920]) {
       const small = await (await browser.newContext({ locale: 'en-US', viewport: { width, height: 1000 } })).newPage();
       await signInAdmin(small);
-      for (const [path, name] of [['/admin', 'admin-dashboard'], ['/', 'my-servers'], ['/admin/energy', 'energy']] as const) {
+      for (const [path, name] of [['/admin', 'admin-dashboard'], ['/', 'my-servers'], ['/admin/energy', 'energy'], ['/admin/settings', 'settings']] as const) {
         await small.goto(path);
         await expect(small.getByRole('heading', { level: 1 })).toBeVisible();
         await small.waitForTimeout(1200);
