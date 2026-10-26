@@ -881,9 +881,10 @@ test.describe('people, settings and smart features (English browser)', () => {
     await page.waitForTimeout(400);
     await shot(page, 'support-queue');
     await page.getByText('Cannot reach my server over SSH').click();
-    await page.getByRole('button', { name: 'Internal note' }).click();
-    await page.getByLabel('Internal note').fill('Probably the firewall; checking.');
-    await page.getByRole('button', { name: 'Add the note' }).click();
+    // On your own ticket you write as a customer (internal notes are for other people's tickets).
+    await expect(page.getByRole('button', { name: 'Internal note' })).toHaveCount(0);
+    await page.getByLabel('Your reply').fill('Probably the firewall; checking.');
+    await page.getByRole('button', { name: 'Send', exact: true }).click();
     await expect(page.getByText('Probably the firewall; checking.')).toBeVisible();
     await shot(page, 'support-staff');
     // A person at a glance from the user list.

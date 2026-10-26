@@ -10,6 +10,7 @@ import { useRef, useState } from 'react';
 import { I } from '../../../components/icon';
 import { SelectInput, TextInput } from '../../../components/ui';
 import { apiFetch, useErrorText, type ApiError } from '../../../lib/api';
+import { useMe } from '../../../lib/me';
 import { useApiQuery } from '../../../lib/query';
 
 export type Ticket = { id: string; number: number; subject: string; status: Status; priority: Priority; dueAt: string | null; firstResponseAt: string | null; createdAt: string; updatedAt: string;
@@ -124,11 +125,14 @@ export function TicketPage({ id, staff }: { id: string; staff: boolean }) {
   const format = useFormatter();
   const { error } = useErrorText();
   const client = useQueryClient();
+  const me = useMe();
   const q = useApiQuery<{ ticket: Ticket; messages: Message[]; staff: boolean }>(['support', 'ticket', id], `/support/tickets/${id}`, { refetchInterval: 15_000 });
   const refresh = () => { void client.invalidateQueries({ queryKey: ['support'] }); void client.invalidateQueries({ queryKey: ['admin', 'support'] }); };
   if (q.isError) return <p className="text-sm text-muted">{t('notFound')}</p>;
   if (!q.data) return <div className="h-64 animate-pulse rounded-3xl bg-default/50"/>;
   const { ticket: tk, messages } = q.data;
+  // Staff tools (internal notes, canned replies) only on other people's tickets: on your own you write as a customer.
+  const asStaff = staff && tk.ownerId !== me?.id;
   const closed = tk.status === 'closed';
   const close = async () => { await apiFetch(`/support/tickets/${id}/close`, { method: 'POST' }).then(() => toast.success(t('closedNow')), (e) => toast.danger(error(e))); refresh(); };
   return <div className="flex flex-col gap-5">
@@ -144,7 +148,7 @@ export function TicketPage({ id, staff }: { id: string; staff: boolean }) {
       <div className="flex min-w-0 flex-col gap-5">
         <Thread messages={messages} staffView={staff}/>
         {closed && !staff && <Rating ticket={tk} onDone={refresh}/>}
-        <Composer ticketId={id} staff={staff} closed={closed} onSent={refresh}/>
+        <Composer ticketId={id} staff={asStaff} closed={closed} onSent={refresh}/>
         {!closed && <div><Button size="sm" variant="ghost" onPress={close}><I name="circle-check" size={14}/>{t('close')}</Button></div>}
       </div>
       {staff && <StaffPanel ticket={tk} onChange={refresh}/>}
