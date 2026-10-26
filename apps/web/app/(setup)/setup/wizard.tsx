@@ -58,6 +58,10 @@ export default function Wizard() {
   const [domain, setDomain] = useState('');
   const [monitoring, setMonitoring] = useState(false);
   const [hosts, setHosts] = useState<number>();
+  // Monitoring: running when the step opened, a start requested from the host agent, and how many checks since.
+  const [monitorRunning, setMonitorRunning] = useState(false);
+  const [starting, setStarting] = useState<'no' | 'requested' | 'failed'>('no');
+  const [polls, setPolls] = useState(0);
 
   const load = useCallback(async (jump = false) => {
     try {
@@ -106,6 +110,27 @@ export default function Wizard() {
     if (progress && (current === 'checks' || current === 'services' || current === 'access' || (current === 'monitoring' && monitoring))) void runChecks();
   }, [current, progress?.adminCreated, monitoring]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  useEffect(() => {
+    if (current !== 'monitoring' || !progress) return;
+    setStarting('no'); setPolls(0);
+    apiFetch<{ checks: Check[] }>('/setup/test/monitoring', { method: 'POST' }).then((r) => {
+      const up = r.checks.every((c) => c.ok);
+      setMonitorRunning(up);
+      if (up && !progress.steps.monitoring) setMonitoring(true);
+    }, () => undefined);
+  }, [current, !!progress]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Ticked but not answering: the panel starts the stack itself, then checks every 5 s for up to 3 minutes.
+  useEffect(() => {
+    if (current !== 'monitoring' || !monitoring || !fresh || passed || checking || starting === 'failed' || polls >= 36) return;
+    if (starting === 'no') {
+      setStarting('requested');
+      apiFetch('/setup/monitoring', { method: 'POST', body: { enabled: true } }).catch((e) => { setStarting('failed'); setFailure({ ...(e as ApiError), text: error(e) }); });
+    }
+    const timer = setTimeout(() => { setPolls((n) => n + 1); void runChecks(); }, 5000);
+    return () => clearTimeout(timer);
+  }, [current, monitoring, fresh, passed, checking, starting, polls]); // eslint-disable-line react-hooks/exhaustive-deps
+  const startingNow = current === 'monitoring' && monitoring && starting === 'requested' && !passed && polls < 36;
+
   const go = (step: Step) => { setCurrent(step); setResult(undefined); setFailure(undefined); };
   const next = () => go(steps[Math.min(steps.indexOf(current) + 1, steps.length - 1)]);
   async function save(status: 'completed' | 'skipped', data?: object) {
@@ -147,7 +172,13 @@ export default function Wizard() {
       case 'admin': return progress.adminCreated && continueButton(next);
       case 'vmware': return status('vmware') === 'completed' && continueButton(next);
       case 'discovery': return continueButton(() => save('completed'), !hosts);
-      case 'monitoring': return monitoring ? checkButtons({ enabled: true }) : continueButton(() => save('completed', { enabled: false }));
+      case 'monitoring': return startingNow ? <Button isPending>{t('monitoring.starting')}</Button>
+        : monitoring ? checkButtons({ enabled: true })
+        : continueButton(async () => {
+          // Unticked while it runs: stop it through the agent, then record the choice.
+          if (monitorRunning) { try { await apiFetch('/setup/monitoring', { method: 'POST', body: { enabled: false } }); } catch (e) { setFailure({ ...(e as ApiError), text: error(e) }); return; } }
+          await save('completed', { enabled: false });
+        });
       case 'summary': return <Button isPending={busy} isDisabled={missing.length > 0} onPress={async () => {
         setBusy(true); setFailure(undefined);
         try { await apiFetch('/setup/complete', { method: 'POST' }); router.replace('/admin'); router.refresh(); }
@@ -204,12 +235,7 @@ export default function Wizard() {
         {current === 'admin' && (progress.adminCreated ? <Notice tone="success">{t('admin.done')}</Notice> : <CredentialsForm mode="setup" noToken onDone={() => load(true)}/>)}
         {current === 'domain' && <div className="flex flex-col gap-4">
           <TextInput label={t('domain.label')} value={domain} onChange={setDomain} placeholder="panel.example.com" error={field(failure?.fields?.domain)} help={t('domain.help')}/>
-          <details className="rounded-xl border border-border p-3 text-sm">
-            <summary className="cursor-pointer font-medium">{t('domain.howtoTitle')}</summary>
-            <ol className="howto mt-3 flex list-decimal flex-col gap-1 pl-5 text-muted">{(['dnsRecord', 'ports', 'apply', 'test'] as const).map((k) => <li key={k}>{t(`domain.howto.${k}`)}</li>)}</ol>
-            <pre className="mt-3 overflow-x-auto rounded-lg bg-default p-3 font-mono text-xs">{`sudo sh scripts/install.sh domain ${domain || 'panel.example.com'} --acme-staging\nsudo sh scripts/install.sh domain ${domain || 'panel.example.com'}`}</pre>
-            <p className="mt-3 text-muted">{t('domain.behindProxy')}</p>
-          </details>
+          <Notice tone="default" title={t('domain.autoTitle')}>{t('domain.auto')}</Notice>
         </div>}
         {current === 'vmware' && <>{status('vmware') === 'completed' ? <Notice tone="success">{t('vmware.done')}</Notice> : <p className="text-sm text-muted">{t('vmware.note')}</p>}
           <ConnectionForm onSaved={() => save('completed')}/></>}
@@ -217,7 +243,9 @@ export default function Wizard() {
         {notYetAvailable.includes(current) && <Notice tone="default">{t(`notAvailable.${current as 'pools'}`)}</Notice>}
         {current === 'monitoring' && <div className="flex flex-col gap-3">
           <CheckboxInput label={t('monitoring.enable')} isSelected={monitoring} onChange={setMonitoring}/>
-          <p className="text-sm text-muted">{t('monitoring.help')}</p><pre className="overflow-x-auto rounded-lg bg-default p-3 font-mono text-xs">docker compose --profile observability up -d</pre>
+          <p className="text-sm text-muted">{monitorRunning ? t('monitoring.running') : t('monitoring.auto')}</p>
+          {startingNow && <p role="status" className="flex items-center gap-2 text-sm text-accent"><I name="loader-circle" size={16} className="animate-spin motion-reduce:animate-none"/>{t('monitoring.startingHelp')}</p>}
+          {failure?.code === 'MAINTENANCE_AGENT_MISSING' && <pre className="overflow-x-auto rounded-lg bg-default p-3 font-mono text-xs">sudo sh scripts/install.sh agent on</pre>}
         </div>}
         {current === 'summary' && <Summary progress={progress} status={status}/>}
 

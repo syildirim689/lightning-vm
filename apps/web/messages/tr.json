@@ -479,7 +479,7 @@
       },
       "monitoring": {
         "title": "İzleme ve bildirimler",
-        "help": "Prometheus, Grafana, Loki ve Alertmanager isteğe bağlıdır ve ayrı bir Compose profilinde çalışır. Alarm bildirimi almak için sunucudaki data/observability/alertmanager.yml dosyasına webhook veya e-posta alıcısı ekleyin."
+        "help": "Prometheus, Grafana, Loki ve Alertmanager: sunucu ve servis ölçümleri, günlükler ve alarm kuralları. İsteğe bağlıdır; panel bunları sunucuda kendisi başlatıp durdurur."
       },
       "summary": {
         "title": "Son kontrol ve özet",
@@ -508,7 +508,10 @@
     },
     "monitoring": {
       "enable": "İzleme bileşenlerini kullanacağım",
-      "help": "Önce sunucuda izleme profilini başlatın, sonra bağlantıyı test edin:"
+      "auto": "Panel bu bileşenleri sunucuda kendisi başlatır ve durdurur; sizin bir komut çalıştırmanız gerekmez.",
+      "running": "İzleme bileşenleri bu sunucuda zaten çalışıyor.",
+      "starting": "Başlatılıyor…",
+      "startingHelp": "İzleme sunucuda başlatılıyor. Bileşenlerin hazır olması bir iki dakika sürebilir; sayfa birkaç saniyede bir kontrol ediyor."
     },
     "summary": {
       "completed": "tamamlandı",
@@ -572,7 +575,9 @@
         "WRONG_TARGET": "Bu ad yanıt veriyor ama bu kuruluma ait değil. DNS veya önünüzdeki proxy başka bir sunucuyu gösteriyor.",
         "UNREACHABLE": "Adrese ulaşılamadı."
       },
-      "howtoTitle": "HTTPS nasıl kurulur?"
+      "howtoTitle": "HTTPS nasıl kurulur?",
+      "autoTitle": "HTTPS’i panel kurar",
+      "auto": "Alan adınızın A kaydı bu sunucunun IP adresini gösteriyorsa burada kontrol edin. Sertifikayı kurmak için kurulumdan sonra Ayarlar → Alan adı ve SSL sayfasını açın: panel Let’s Encrypt sertifikasını sunucuda kendisi alır, uygular ve sorun olursa eski adrese geri döner. Şimdilik bu adımı atlayabilirsiniz."
     },
     "vmware": {
       "note": "Bağlantı eklendiğinde adım tamamlanır. Ayrıntılı envanter yönetim panelindeki VMware sayfasındadır. Bu adımı atlarsanız platform sanal sunucu yönetemez.",

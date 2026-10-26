@@ -160,6 +160,10 @@ test.describe('first run (Turkish browser)', () => {
     await expect(heading).toHaveText('Kaynak havuzu ve IP planı');
     await skip();
     await expect(heading).toHaveText('İzleme ve bildirimler');
+    // Nothing to type on the server: the demo already runs monitoring, so the box comes ticked and the checks run.
+    await expect(page.getByText('docker compose')).toHaveCount(0);
+    await expect(page.getByRole('checkbox', { name: 'İzleme bileşenlerini kullanacağım' })).toBeChecked();
+    await shot('10-monitoring');
     await skip();
 
     await expect(heading).toHaveText('Son kontrol ve özet');

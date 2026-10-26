@@ -176,3 +176,15 @@ Yanıt olarak yalnızca sonuç kodu döner.
   kalınan adımdan devam edilmesi, hatalı adres doğrulaması ve tamamlanınca kurulumun kapanması.
 - `shellcheck -s sh scripts/install.sh` ile betiğin statik kontrolü.
 - `sh scripts/install.sh check`: hem kurulum öncesinde hem kurulum sonrasında çalıştırılır.
+
+### İzleme ve alan adı sihirbazda komutsuz
+
+- **İzleme adımı:** Prometheus, Grafana, Loki ve Alertmanager zaten çalışıyorsa kutucuk işaretli gelir ve
+  kontroller geçer.
+  - Kapalıyken işaretlenirse panel, sunucudaki ajana `monitoring on` isteği gönderir.
+  - Bileşenler hazır olana kadar (en fazla 3 dakika) sayfa birkaç saniyede bir kontrol eder.
+  - İşaret kaldırılırsa `monitoring off` gönderilir. Yalnızca izleme servisleri durur, verileri korunur.
+  - Ajan kurulu değilse sihirbaz bunu söyler ve tek komutu gösterir: `sudo sh scripts/install.sh agent on`.
+- **Elle karşılığı:** `sh scripts/install.sh monitoring on|off`.
+- **Alan adı adımı:** DNS'i kontrol eder. HTTPS sertifikası kurulumdan sonra Ayarlar → Alan adı ve SSL'den
+  panelin kendisi tarafından kurulur.

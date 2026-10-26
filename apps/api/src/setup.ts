@@ -8,6 +8,7 @@ import { audit, currentUser, readCredentials, type User } from './auth';
 import { getAuth } from './better-auth';
 import { can, ensureRoles } from './permissions';
 import { newToken, rateLimit, sha256 } from './security';
+import { agentStatus, pendingRequests, queueRequest, settings as hostSettings } from './maintenance';
 import { domainChecks, isLoopback, monitoringChecks, networkErrorCode, parseDomain, parsePublicUrl, serviceChecks, systemChecks, type Check } from './checks';
 
 const bootstrapMinutes = 60;
@@ -181,6 +182,19 @@ export class SetupController {
 
   @Post('test/monitoring') @HttpCode(200) @UseGuards(SetupGuard)
   async testMonitoring() { return { checks: await monitoringChecks() }; }
+
+  // Starts or stops the monitoring stack through the host agent, so nobody types commands on the server.
+  // The wizard then polls test/monitoring until the components answer (Loki needs a minute after a start).
+  @Post('monitoring') @HttpCode(202) @UseGuards(SetupGuard)
+  async monitoring(@Req() req: FastifyRequest & { user?: User }, @Body() body: unknown) {
+    const enabled = (body as { enabled?: unknown })?.enabled === true;
+    if (hostSettings().agent !== 'on' || pendingRequests() < 0) throw apiError(409, 'MAINTENANCE_AGENT_MISSING', 'The host agent is not installed (sudo sh scripts/install.sh agent on)');
+    const status = agentStatus();
+    if (pendingRequests() > 0 || (status?.state === 'running' && Date.now() - Date.parse(status.startedAt) < 3 * 3600_000)) throw apiError(409, 'MAINTENANCE_BUSY', 'Another maintenance task is queued or running');
+    const id = queueRequest({ action: 'monitoring', switch: enabled ? 'on' : 'off', by: req.user?.id ?? '' });
+    await audit(req, 'setup.monitoring', 'success', req.user?.id ?? null, { id, enabled });
+    return { id };
+  }
 
   @Post('test/access') @HttpCode(200) @UseGuards(SetupGuard)
   async testAccess(@Req() req: FastifyRequest, @Body() body: unknown) {

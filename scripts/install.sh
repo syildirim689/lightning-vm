@@ -9,6 +9,7 @@
 #   sh scripts/install.sh check          read-only: host pre-checks and state of an existing install
 #   sh scripts/install.sh recover-setup  reopen the browser setup wizard (accounts and data are kept)
 #   sh scripts/install.sh reset-password EMAIL [--disable-2fa]  lost password: a new one is shown once
+#   sh scripts/install.sh monitoring on|off  start or stop Prometheus, Grafana, Loki and Alertmanager
 #   sh scripts/install.sh backup         encrypted backup of the database, settings, keys and certificates
 #   sh scripts/install.sh restore FILE [--yes-replace-data]
 #                                        restore a backup (without the flag it only checks and explains)
@@ -49,7 +50,7 @@ while [ $# -gt 0 ]; do
     restore) MODE=restore; if [ $# -gt 1 ]; then shift; RESTORE_FILE=$1; fi ;;
     reset-password) MODE=reset-password; if [ $# -gt 1 ]; then shift; RESET_EMAIL=$1; fi ;;
     --disable-2fa) DISABLE_2FA=--disable-2fa ;;
-    schedule|auto-update|agent) MODE=$1; if [ $# -gt 1 ]; then shift; SWITCH=$1; fi
+    schedule|auto-update|agent|monitoring) MODE=$1; if [ $# -gt 1 ]; then shift; SWITCH=$1; fi
       case "$SWITCH" in on|off) ;; *) echo "$MODE: on or off" >&2; exit 2 ;; esac ;;
     --yes-replace-data) YES=1 ;;
     --to) shift; TO=${1:-} ;;
@@ -618,6 +619,7 @@ run_requests() {
             else ok=0; fi ;;
           *) ok=0 ;;
         esac ;;
+      monitoring) case "$switch" in on|off) set -- monitoring "$switch" "$@" ;; *) ok=0 ;; esac ;;
       auto-update) case "$switch" in on|off) set -- auto-update "$switch" "$@" ;; *) ok=0 ;; esac
         case "$channel" in '') ;; stable|beta|edge) set -- "$@" --channel "$channel" ;; *) ok=0 ;; esac
         if [ -n "$window" ]; then echo "$window" | grep -Eq '^([01][0-9]|2[0-3]):[0-5][0-9]-([01][0-9]|2[0-3]):[0-5][0-9]$' && set -- "$@" --window "$window" || ok=0; fi ;;
@@ -786,6 +788,24 @@ case "$MODE" in
   schedule) set_schedule; exit 0 ;;
   auto-update) [ -f .env ] || die 17 E_NOT_INSTALLED "Önce kurulum yapın: sh scripts/install.sh" "Install first: sh scripts/install.sh"
     set_auto_update; exit 0 ;;
+  monitoring)
+    [ -f .env ] || die 17 E_NOT_INSTALLED "Önce kurulum yapın: sh scripts/install.sh" "Install first: sh scripts/install.sh"
+    if [ "$SWITCH" = on ]; then
+      write_observability; set_env COMPOSE_PROFILES observability
+      docker compose up -d --wait >/dev/null 2>&1 || die 18 E_MONITORING "İzleme bileşenleri başlatılamadı (docker compose ps ile bakın)" "Monitoring could not be started (see docker compose ps)"
+      msg OK MONITORING "İzleme açık: Prometheus, Grafana, Loki ve Alertmanager çalışıyor" "Monitoring on: Prometheus, Grafana, Loki and Alertmanager are running"
+    else
+      # Only the services of the observability profile: the panel itself keeps running.
+      all=$(mktemp); base=$(mktemp)
+      COMPOSE_PROFILES=observability docker compose config --services 2>/dev/null | sort > "$all"
+      COMPOSE_PROFILES= docker compose config --services 2>/dev/null | sort > "$base"
+      extra=$(comm -23 "$all" "$base" | tr '\n' ' '); rm -f "$all" "$base"
+      set_env COMPOSE_PROFILES ""
+      # shellcheck disable=SC2086
+      [ -z "$extra" ] || COMPOSE_PROFILES=observability docker compose rm -sf $extra >/dev/null 2>&1 || true
+      msg OK MONITORING "İzleme kapatıldı (veriler korunur)" "Monitoring off (its data is kept)"
+    fi
+    exit 0 ;;
   reset-password)
     [ -n "$RESET_EMAIL" ] || die 2 E_USAGE "Kullanım: sh scripts/install.sh reset-password E-POSTA [--disable-2fa]" "Usage: sh scripts/install.sh reset-password EMAIL [--disable-2fa]"
     new_password=$(docker compose exec -T api node dist/cli.js reset-password "$RESET_EMAIL" $DISABLE_2FA 2>/dev/null) && [ -n "$new_password" ] ||

@@ -57,6 +57,9 @@ test('wizard endpoints need the bootstrap token before an admin exists', async (
   assert.match(res.headers['set-cookie'].toString(), /HttpOnly.*SameSite=Strict|SameSite=Strict.*HttpOnly/);
   setupCookie = cookieValue(res, 'lvm_setup');
   assert.deepEqual((await send('GET', '/setup/progress', { setup: setupCookie })).json(), { steps: {}, adminCreated: false });
+  // Monitoring is started through the host agent; without one the wizard is told so (no request is queued).
+  assert.equal((await send('POST', '/setup/monitoring', { payload: { enabled: true } })).json().code, 'BOOTSTRAP_REQUIRED');
+  assert.equal((await send('POST', '/setup/monitoring', { setup: setupCookie, payload: { enabled: true } })).json().code, 'MAINTENANCE_AGENT_MISSING');
 });
 
 test('steps are validated on the server and progress persists', async () => {

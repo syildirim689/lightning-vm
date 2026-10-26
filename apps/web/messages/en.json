@@ -479,7 +479,7 @@
       },
       "monitoring": {
         "title": "Monitoring and notifications",
-        "help": "Prometheus, Grafana, Loki and Alertmanager are optional and run in a separate Compose profile. To receive alerts, add a webhook or e-mail receiver to data/observability/alertmanager.yml on the server."
+        "help": "Prometheus, Grafana, Loki and Alertmanager: server and service metrics, logs and alert rules. Optional; the panel starts and stops them on the server itself."
       },
       "summary": {
         "title": "Final check and summary",
@@ -508,7 +508,10 @@
     },
     "monitoring": {
       "enable": "I will use the monitoring components",
-      "help": "First start the monitoring profile on the server, then test the connection:"
+      "auto": "The panel starts and stops these components on the server itself; no command is needed.",
+      "running": "The monitoring components are already running on this server.",
+      "starting": "Starting…",
+      "startingHelp": "Starting monitoring on the server. The components need a minute or two to be ready; this page checks every few seconds."
     },
     "summary": {
       "completed": "completed",
@@ -572,7 +575,9 @@
         "WRONG_TARGET": "This name answers but is not this installation. DNS or a proxy in front points to another server.",
         "UNREACHABLE": "The address could not be reached."
       },
-      "howtoTitle": "How to set up HTTPS"
+      "howtoTitle": "How to set up HTTPS",
+      "autoTitle": "The panel sets up HTTPS",
+      "auto": "If your domain’s A record points at this server, check it here. To install the certificate, open Settings → Domain and SSL after setup: the panel gets the Let’s Encrypt certificate on the server itself, applies it and goes back to the old address if anything fails. You can skip this step for now."
     },
     "vmware": {
       "note": "The step completes once a connection is added. The detailed inventory is on the VMware page of the admin panel. If you skip this step the platform cannot manage virtual servers.",
