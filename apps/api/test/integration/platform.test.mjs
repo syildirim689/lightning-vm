@@ -409,3 +409,13 @@ test('Alertmanager alerts reach staff as in-app notifications; proxied calls are
   assert.ok(row, 'admin.alert notification for the admin');
   assert.match(`${row.title} ${row.body}`, /LightningWorkerHeartbeatStale/);
 });
+
+test('server terminal: staff with system.terminal only, never without two-factor; off until turned on', async () => {
+  assert.equal((await get('/admin/terminal', user)).statusCode, 403);
+  const s = (await get('/admin/terminal', admin)).json();
+  assert.equal(s.enabled, false); // the service is not running in tests
+  assert.equal(s.twoFactor, false);
+  assert.equal((await post('/admin/terminal/session', {}, admin)).json().code, 'TERMINAL_NEEDS_2FA');
+  assert.equal((await post('/admin/terminal/switch', { enabled: true }, admin)).json().code, 'TERMINAL_NEEDS_2FA');
+  assert.equal((await post('/admin/terminal/sessions/zz/revoke', {}, admin)).statusCode, 400);
+});

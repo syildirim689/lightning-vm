@@ -10,6 +10,7 @@
 #   sh scripts/install.sh recover-setup  reopen the browser setup wizard (accounts and data are kept)
 #   sh scripts/install.sh reset-password EMAIL [--disable-2fa]  lost password: a new one is shown once
 #   sh scripts/install.sh monitoring on|off  start or stop Prometheus, Grafana, Loki and Alertmanager
+#   sh scripts/install.sh terminal on|off    the administrators' browser terminal to this host (off by default)
 #   sh scripts/install.sh backup         encrypted backup of the database, settings, keys and certificates
 #   sh scripts/install.sh restore FILE [--yes-replace-data]
 #                                        restore a backup (without the flag it only checks and explains)
@@ -50,7 +51,7 @@ while [ $# -gt 0 ]; do
     restore) MODE=restore; if [ $# -gt 1 ]; then shift; RESTORE_FILE=$1; fi ;;
     reset-password) MODE=reset-password; if [ $# -gt 1 ]; then shift; RESET_EMAIL=$1; fi ;;
     --disable-2fa) DISABLE_2FA=--disable-2fa ;;
-    schedule|auto-update|agent|monitoring) MODE=$1; if [ $# -gt 1 ]; then shift; SWITCH=$1; fi
+    schedule|auto-update|agent|monitoring|terminal) MODE=$1; if [ $# -gt 1 ]; then shift; SWITCH=$1; fi
       case "$SWITCH" in on|off) ;; *) echo "$MODE: on or off" >&2; exit 2 ;; esac ;;
     --yes-replace-data) YES=1 ;;
     --to) shift; TO=${1:-} ;;
@@ -619,7 +620,7 @@ run_requests() {
             else ok=0; fi ;;
           *) ok=0 ;;
         esac ;;
-      monitoring) case "$switch" in on|off) set -- monitoring "$switch" "$@" ;; *) ok=0 ;; esac ;;
+      monitoring|terminal) case "$switch" in on|off) set -- "$action" "$switch" "$@" ;; *) ok=0 ;; esac ;;
       auto-update) case "$switch" in on|off) set -- auto-update "$switch" "$@" ;; *) ok=0 ;; esac
         case "$channel" in '') ;; stable|beta|edge) set -- "$@" --channel "$channel" ;; *) ok=0 ;; esac
         if [ -n "$window" ]; then echo "$window" | grep -Eq '^([01][0-9]|2[0-3]):[0-5][0-9]-([01][0-9]|2[0-3]):[0-5][0-9]$' && set -- "$@" --window "$window" || ok=0; fi ;;
@@ -788,25 +789,32 @@ case "$MODE" in
   schedule) set_schedule; exit 0 ;;
   auto-update) [ -f .env ] || die 17 E_NOT_INSTALLED "Önce kurulum yapın: sh scripts/install.sh" "Install first: sh scripts/install.sh"
     set_auto_update; exit 0 ;;
-  monitoring)
+  monitoring|terminal)
     [ -f .env ] || die 17 E_NOT_INSTALLED "Önce kurulum yapın: sh scripts/install.sh" "Install first: sh scripts/install.sh"
-    # Only the services of the observability profile are touched, on and off: the panel's own services keep
+    if [ "$MODE" = monitoring ]; then profile=observability; else profile=terminal; fi
+    # Only the services of this compose profile are touched, on and off: the panel's own services keep
     # running exactly as they are (no recreate, whatever compose files they were started with).
     all=$(mktemp); base=$(mktemp)
-    COMPOSE_PROFILES=observability docker compose config --services 2>/dev/null | sort > "$all"
+    COMPOSE_PROFILES=$profile docker compose config --services 2>/dev/null | sort > "$all"
     COMPOSE_PROFILES= docker compose config --services 2>/dev/null | sort > "$base"
     extra=$(comm -23 "$all" "$base" | tr '\n' ' '); rm -f "$all" "$base"
-    [ -n "$extra" ] || die 18 E_MONITORING "Compose dosyasında izleme servisi yok" "No monitoring services in the compose file"
+    [ -n "$extra" ] || die 18 E_PROFILE "Compose dosyasında $profile servisi yok" "No $profile services in the compose file"
+    # COMPOSE_PROFILES in .env lists every profile that is on (observability,terminal).
+    others=$(env_value COMPOSE_PROFILES | tr ',' '\n' | grep -vx "$profile" | grep -v '^$' | paste -sd, -)
     if [ "$SWITCH" = on ]; then
-      write_observability; set_env COMPOSE_PROFILES observability
+      [ "$profile" = observability ] && write_observability
+      set_env COMPOSE_PROFILES "$(printf '%s\n%s\n' "$others" "$profile" | grep -v '^$' | paste -sd, -)"
       # shellcheck disable=SC2086
-      COMPOSE_PROFILES=observability docker compose up -d --no-deps --wait $extra >/dev/null 2>&1 || die 18 E_MONITORING "İzleme bileşenleri başlatılamadı (docker compose ps ile bakın)" "Monitoring could not be started (see docker compose ps)"
-      msg OK MONITORING "İzleme açık: Prometheus, Grafana, Loki ve Alertmanager çalışıyor" "Monitoring on: Prometheus, Grafana, Loki and Alertmanager are running"
+      COMPOSE_PROFILES=$profile docker compose up -d --no-deps --build --wait $extra >/dev/null 2>&1 ||
+        die 18 E_PROFILE "$profile bileşenleri başlatılamadı (docker compose ps ile bakın)" "$profile could not be started (see docker compose ps)"
+      if [ "$profile" = observability ]; then msg OK MONITORING "İzleme açık: Prometheus, Grafana, Loki ve Alertmanager çalışıyor" "Monitoring on: Prometheus, Grafana, Loki and Alertmanager are running"
+      else msg OK TERMINAL "Yönetici terminali açık" "Administrator terminal on"; fi
     else
-      set_env COMPOSE_PROFILES ""
+      set_env COMPOSE_PROFILES "$others"
       # shellcheck disable=SC2086
-      [ -z "$extra" ] || COMPOSE_PROFILES=observability docker compose rm -sf $extra >/dev/null 2>&1 || true
-      msg OK MONITORING "İzleme kapatıldı (veriler korunur)" "Monitoring off (its data is kept)"
+      COMPOSE_PROFILES=$profile docker compose rm -sf $extra >/dev/null 2>&1 || true
+      if [ "$profile" = observability ]; then msg OK MONITORING "İzleme kapatıldı (veriler korunur)" "Monitoring off (its data is kept)"
+      else msg OK TERMINAL "Yönetici terminali kapatıldı" "Administrator terminal off"; fi
     fi
     exit 0 ;;
   reset-password)
@@ -852,7 +860,7 @@ docker compose up -d --build --wait --wait-timeout 600 >/dev/null 2>&1 || die 18
 i=0; until local_get /api/ready >/dev/null 2>&1 || [ $i -ge 12 ]; do sleep 5; i=$((i + 1)); done
 local_get /api/ready >/dev/null 2>&1 || die 19 E_NOT_READY "API hazır değil: docker compose logs api" "API is not ready: docker compose logs api"
 # Grafana takes its admin password only on first start; keep it equal to .env when its volume is older.
-if grep -q '^COMPOSE_PROFILES=observability' .env; then
+if grep -Eq '^COMPOSE_PROFILES=(.*,)?observability(,|$)' .env; then
   docker compose exec -T grafana grafana cli admin reset-admin-password "$(env_value GRAFANA_PASSWORD)" >/dev/null 2>&1 || msg WARN W_GRAFANA "Grafana parolası eşitlenemedi" "Could not sync the Grafana password"
 fi
 
@@ -914,7 +922,7 @@ elif [ "$WIZARD" != 1 ]; then
 else
   row "Kurulum" "Setup" "/setup"
 fi
-if grep -q '^COMPOSE_PROFILES=observability' .env; then
+if grep -Eq '^COMPOSE_PROFILES=(.*,)?observability(,|$)' .env; then
   row "Grafana" "Grafana" "http://127.0.0.1:3001  (ssh -L 3001:127.0.0.1:3001 root@$host_ip), admin / .env GRAFANA_PASSWORD"
 fi
 if [ -f /etc/systemd/system/lightning-vm-maintenance.timer ]; then row "Yedek" "Backups" "$(if [ "$UI" = tr ]; then echo 'her gün'; else echo daily; fi) -> backups/"

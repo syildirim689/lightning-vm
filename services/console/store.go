@@ -10,14 +10,18 @@ import (
 
 // redisStore shares state with the API through Redis. Keys:
 //
-//	console:session:<sha256(token)>  one-time session written by the API (GETDEL here, 60 s TTL)
-//	console:active                   hash of live consoles, for the admin list
+//	<ns>:session:<sha256(token)>     one-time session written by the API (GETDEL here, 60 s TTL); ns is
+//	                                 "console" or "terminal" (the host terminal mode)
+//	<ns>:active                      hash of live sessions, for the admin list
 //	console:events                   stream the worker copies into audit_events
 //	console:revoke                   pub/sub channel the API publishes revocations on
-type redisStore struct{ rdb *redis.Client }
+type redisStore struct {
+	rdb *redis.Client
+	ns  string
+}
 
 func (s *redisStore) Consume(ctx context.Context, key string) (*Session, error) {
-	raw, err := s.rdb.GetDel(ctx, "console:session:"+key).Bytes()
+	raw, err := s.rdb.GetDel(ctx, s.ns+":session:"+key).Bytes()
 	if err == redis.Nil {
 		return nil, nil
 	}
@@ -34,11 +38,11 @@ func (s *redisStore) Consume(ctx context.Context, key string) (*Session, error) 
 
 func (s *redisStore) Active(ctx context.Context, sess *Session, started time.Time) error {
 	v, _ := json.Marshal(map[string]any{"userId": sess.UserID, "vm": sess.VM, "vmName": sess.VMName, "connectionId": sess.ConnectionID, "startedAt": started.UTC()})
-	return s.rdb.HSet(ctx, "console:active", sess.Key, v).Err()
+	return s.rdb.HSet(ctx, s.ns+":active", sess.Key, v).Err()
 }
 
 func (s *redisStore) Inactive(ctx context.Context, sess *Session) error {
-	return s.rdb.HDel(ctx, "console:active", sess.Key).Err()
+	return s.rdb.HDel(ctx, s.ns+":active", sess.Key).Err()
 }
 
 func (s *redisStore) Event(ctx context.Context, fields map[string]any) {

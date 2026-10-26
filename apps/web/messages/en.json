@@ -240,7 +240,10 @@
     "VDC_INACTIVE": "This virtual datacenter is not active.",
     "SNAPSHOT_LIMIT": "At most 5 snapshots per server: remove one first.",
     "SNAPSHOT_NOT_FOUND": "This snapshot no longer exists.",
-    "GITHUB_UNREACHABLE": "GitHub did not answer; try again later."
+    "GITHUB_UNREACHABLE": "GitHub did not answer; try again later.",
+    "TERMINAL_NEEDS_2FA": "Turn on two-factor sign-in to use the terminal.",
+    "TERMINAL_IMPERSONATED": "Not available while acting as another user.",
+    "TERMINAL_OFF": "The terminal is turned off."
   },
   "Auth": {
     "required": "required",
@@ -1669,7 +1672,8 @@
     "energy": "Energy",
     "abuse": "Abuse",
     "myVdc": "Virtual datacenter",
-    "audit": "Audit log"
+    "audit": "Audit log",
+    "terminal": "Server terminal"
   },
   "Dashboard": {
     "eyebrow": "ADMINISTRATION",
@@ -2313,7 +2317,8 @@
       "system_view": "See the system",
       "audit_view": "See the audit log",
       "firewalls_manage": "Manage firewalls",
-      "system_update": "Update the platform"
+      "system_update": "Update the platform",
+      "system_terminal": "Use the server terminal"
     },
     "help": {
       "dashboard_view": "The admin dashboard, insights and summary charts.",
@@ -2339,7 +2344,8 @@
       "system_view": "System health, backups and updates.",
       "audit_view": "Who did what, and when.",
       "firewalls_manage": "Create firewalls and attach them to their own servers.",
-      "system_update": "Check for updates, update, back up and set automatic updates from the panel."
+      "system_update": "Check for updates, update, back up and set automatic updates from the panel.",
+      "system_terminal": "A root shell on the host from the browser (needs two-factor sign-in)."
     }
   },
   "Settings": {
@@ -2993,7 +2999,8 @@
       "backup": "Backing up",
       "auto-update": "Automatic update settings",
       "domain": "Changing the domain",
-      "monitoring": "Starting or stopping monitoring"
+      "monitoring": "Starting or stopping monitoring",
+      "terminal": "Turning the terminal on or off"
     },
     "stateOf": {
       "running": "Running",
@@ -3024,7 +3031,8 @@
       "auto-update": "Automatic update settings",
       "backup": "Backup",
       "domain": "Domain change",
-      "monitoring": "Monitoring change"
+      "monitoring": "Monitoring change",
+      "terminal": "Terminal change"
     }
   },
   "A11y": {
@@ -3546,7 +3554,14 @@
       "server_iso_ejected": "ISO ejected",
       "server_snapshot_create": "Take snapshot",
       "server_snapshot_revert": "Go back to snapshot",
-      "server_snapshot_delete": "Remove snapshot"
+      "server_snapshot_delete": "Remove snapshot",
+      "terminal_session_issued": "Terminal connection started",
+      "terminal_opened": "Terminal opened",
+      "terminal_closed": "Terminal closed",
+      "terminal_denied": "Terminal refused",
+      "terminal_failed": "Terminal failed",
+      "terminal_switched": "Terminal turned on or off",
+      "terminal_revoked": "Terminal ended"
     },
     "outcome": {
       "success": "Done",
@@ -3598,5 +3613,49 @@
     "auto": "Snapshot",
     "take": "Take snapshot",
     "full": "At most {max} snapshots per server: remove one first."
+  },
+  "Terminal": {
+    "eyebrow": "SYSTEM",
+    "title": "Server terminal",
+    "intro": "A root shell on this server, in the browser: manage the host without SSH.",
+    "state": {
+      "idle": "Not connected",
+      "connecting": "Connecting…",
+      "open": "Connected",
+      "closed": "Disconnected"
+    },
+    "needs2faTitle": "Two-factor sign-in needed",
+    "needs2fa": "The terminal opens a root shell, so your account must use two-factor sign-in.",
+    "to2fa": "Turn it on",
+    "offTitle": "The terminal is off",
+    "offHelp": "For safety it is off until an administrator turns it on. The panel starts it on the server; nothing to type there.",
+    "noAgent": "The server agent is not running, so the panel cannot start the terminal.",
+    "turnOn": "Turn the terminal on",
+    "startingHelp": "Starting the terminal on the server (the first time it is built, about a minute)…",
+    "starting": "Starting the terminal…",
+    "stopping": "Turning the terminal off…",
+    "rootTitle": "You are root on the server",
+    "root": "Every command runs with full rights on the host. What you type is not recorded; opening and closing the terminal are written to the audit log. It closes after 15 minutes without input and after an hour at most.",
+    "connect": "Connect",
+    "reconnect": "Connect again",
+    "disconnect": "Disconnect",
+    "ready": "Connect to open a shell on the server.",
+    "sessions": "Open terminals",
+    "sessionsHelp": "Who is connected right now. Ending one closes that shell.",
+    "noSessions": "No one is connected.",
+    "end": "End",
+    "turnOff": "Turn the terminal off",
+    "turnOffBody": "Open terminals are closed and the service stops. You can turn it on again at any time.",
+    "turnOffYes": "Yes, turn it off",
+    "cancel": "Cancel",
+    "reason": {
+      "TERMINAL_SESSION_INVALID": "The connection ticket expired. Connect again.",
+      "TERMINAL_REVOKED": "This terminal was ended (sign-out or by an administrator).",
+      "TERMINAL_EXPIRED": "The terminal reached its one-hour limit.",
+      "TERMINAL_IDLE": "Closed after 15 minutes without input.",
+      "TERMINAL_LIMIT": "You already have a terminal open (one at a time).",
+      "TERMINAL_START_FAILED": "The shell could not be started on the server.",
+      "TERMINAL_CLOSED": "The terminal is closed."
+    }
   }
 }

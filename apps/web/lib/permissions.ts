@@ -2,7 +2,7 @@
 // uses them to show what the user can actually open.
 export type Permission = 'dashboard.view' | 'servers.create' | 'firewalls.manage' | 'servers.view_all' | 'servers.manage_all' | 'operations.retry' | 'reconcile.run' | 'consoles.any'
   | 'catalog.view' | 'catalog.manage' | 'vmware.view' | 'vmware.manage' | 'users.view' | 'users.manage' | 'users.roles' | 'users.ban' | 'users.sessions'
-  | 'users.impersonate' | 'roles.manage' | 'settings.view' | 'settings.manage' | 'system.view' | 'system.update' | 'audit.view';
+  | 'users.impersonate' | 'roles.manage' | 'settings.view' | 'settings.manage' | 'system.view' | 'system.update' | 'audit.view' | 'system.terminal';
 
 export const can = (perms: string[] | undefined, ...need: Permission[]) => !!perms && (perms.includes('*') || need.some((p) => perms.includes(p)));
 // Anyone with a permission beyond what customers have for their own servers sees the staff area.

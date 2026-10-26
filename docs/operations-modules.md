@@ -166,3 +166,22 @@ Kurallar `apps/api/src/smart-rules.ts` içindedir ve birim testleri vardır. Ver
   `http://api:4000/internal/alerts` adresine giden bir webhook alıcısı eklenir.
 - **Güvenlik:** Caddy `/api/internal/*` yolunu dışarıya 404 ile kapatır. Vekil üzerinden gelen (X-Forwarded-*)
   istekler de reddedilir. Bu uç çerezsiz çağrıldığı için CSRF başlığı istenmez.
+
+## Sunucu terminali (yönetici)
+
+- **Nedir:** Yönetim → Sunucu terminali. Tarayıcıda, bu sunucuda root kabuğu açar; SSH gerekmez.
+- **Açma ve kapatma:** varsayılan olarak kapalıdır. Yönetici "Terminali aç" der; panel, sunucudaki ajana
+  `terminal on` isteği gönderir. Ajan `terminal` Compose profilini başlatır; ilk seferde imaj derlenir.
+  "Terminali kapat" servisi durdurur.
+- **Erişim:**
+  - `system.terminal` izni ve hesapta iki adımlı giriş gerekir. Başka kullanıcı olarak çalışırken açılmaz.
+  - API, `/terminal/ws` yolu için 60 saniyelik tek kullanımlık bir çerez verir. Başka siteden bağlantı
+    reddedilir.
+- **Sınırlar:** kişi başına 1, toplamda 3 terminal açılabilir. Terminal 15 dakika girdi olmazsa
+  (`TERMINAL_IDLE_MINUTES`) ve en çok 1 saat sonra (`TERMINAL_MAX_MINUTES`) kapanır. Çıkış yapınca veya bir
+  yönetici sonlandırınca kesilir.
+- **Kayıt:** yazılanlar kaydedilmez. Açılış ve kapanış denetim kaydına `terminal.*` olarak yazılır.
+- **Nasıl çalışır:** `services/console` ikilisinin `terminal` modu, ayrıcalıklı bir kapsayıcıda ve sunucunun PID
+  ad alanında çalışır. `nsenter` ile PID 1'in ad alanlarına girer ve sunucunun kendi `bash` veya `sh`
+  kabuğunu açar.
+- **Elle karşılığı:** `sh scripts/install.sh terminal on|off`.

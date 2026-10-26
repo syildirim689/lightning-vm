@@ -240,7 +240,10 @@
     "VDC_INACTIVE": "Bu sanal veri merkezi etkin değil.",
     "SNAPSHOT_LIMIT": "Sunucu başına en fazla 5 anlık görüntü: önce birini kaldırın.",
     "SNAPSHOT_NOT_FOUND": "Bu anlık görüntü artık yok.",
-    "GITHUB_UNREACHABLE": "GitHub yanıt vermedi; daha sonra yeniden deneyin."
+    "GITHUB_UNREACHABLE": "GitHub yanıt vermedi; daha sonra yeniden deneyin.",
+    "TERMINAL_NEEDS_2FA": "Terminali kullanmak için iki adımlı girişi açın.",
+    "TERMINAL_IMPERSONATED": "Başka bir kullanıcı olarak çalışırken kullanılamaz.",
+    "TERMINAL_OFF": "Terminal kapalı."
   },
   "Auth": {
     "required": "zorunlu",
@@ -1669,7 +1672,8 @@
     "energy": "Enerji",
     "abuse": "Kötüye kullanım",
     "myVdc": "Sanal veri merkezi",
-    "audit": "Denetim kaydı"
+    "audit": "Denetim kaydı",
+    "terminal": "Sunucu terminali"
   },
   "Dashboard": {
     "eyebrow": "YÖNETİM",
@@ -2313,7 +2317,8 @@
       "system_view": "Sistemi görme",
       "audit_view": "Denetim kayıtlarını görme",
       "firewalls_manage": "Firewall yönetimi",
-      "system_update": "Platformu güncelleme"
+      "system_update": "Platformu güncelleme",
+      "system_terminal": "Sunucu terminalini kullanma"
     },
     "help": {
       "dashboard_view": "Yönetim panosu, içgörüler ve özet grafikler.",
@@ -2339,7 +2344,8 @@
       "system_view": "Sistem sağlığı, yedekler ve güncellemeler.",
       "audit_view": "Kim, ne zaman, ne yaptı kayıtları.",
       "firewalls_manage": "Firewall oluşturur ve kendi sunucularına bağlar.",
-      "system_update": "Panelden güncelleme denetler, günceller, yedek alır ve otomatik güncellemeyi ayarlar."
+      "system_update": "Panelden güncelleme denetler, günceller, yedek alır ve otomatik güncellemeyi ayarlar.",
+      "system_terminal": "Tarayıcıdan sunucuda root kabuğu (iki adımlı giriş gerekir)."
     }
   },
   "Settings": {
@@ -2993,7 +2999,8 @@
       "backup": "Yedekleniyor",
       "auto-update": "Otomatik güncelleme ayarları",
       "domain": "Alan adı değiştiriliyor",
-      "monitoring": "İzleme başlatılıyor veya durduruluyor"
+      "monitoring": "İzleme başlatılıyor veya durduruluyor",
+      "terminal": "Terminal açılıyor veya kapatılıyor"
     },
     "stateOf": {
       "running": "Sürüyor",
@@ -3024,7 +3031,8 @@
       "auto-update": "Otomatik güncelleme ayarları",
       "backup": "Yedekleme",
       "domain": "Alan adı değişikliği",
-      "monitoring": "İzleme değişikliği"
+      "monitoring": "İzleme değişikliği",
+      "terminal": "Terminal değişikliği"
     }
   },
   "A11y": {
@@ -3546,7 +3554,14 @@
       "server_iso_ejected": "ISO çıkarıldı",
       "server_snapshot_create": "Anlık görüntü alma",
       "server_snapshot_revert": "Anlık görüntüye dönme",
-      "server_snapshot_delete": "Anlık görüntü kaldırma"
+      "server_snapshot_delete": "Anlık görüntü kaldırma",
+      "terminal_session_issued": "Terminal bağlantısı başlatıldı",
+      "terminal_opened": "Terminal açıldı",
+      "terminal_closed": "Terminal kapandı",
+      "terminal_denied": "Terminal reddedildi",
+      "terminal_failed": "Terminal başarısız",
+      "terminal_switched": "Terminal açıldı veya kapatıldı",
+      "terminal_revoked": "Terminal sonlandırıldı"
     },
     "outcome": {
       "success": "Tamamlandı",
@@ -3598,5 +3613,49 @@
     "auto": "Anlık görüntü",
     "take": "Anlık görüntü al",
     "full": "Sunucu başına en fazla {max} anlık görüntü: önce birini kaldırın."
+  },
+  "Terminal": {
+    "eyebrow": "SİSTEM",
+    "title": "Sunucu terminali",
+    "intro": "Bu sunucuda, tarayıcıda root kabuğu: SSH olmadan sunucuyu yönetin.",
+    "state": {
+      "idle": "Bağlı değil",
+      "connecting": "Bağlanıyor…",
+      "open": "Bağlı",
+      "closed": "Bağlantı kesildi"
+    },
+    "needs2faTitle": "İki adımlı giriş gerekli",
+    "needs2fa": "Terminal root kabuğu açtığı için hesabınızda iki adımlı giriş açık olmalı.",
+    "to2fa": "Şimdi açın",
+    "offTitle": "Terminal kapalı",
+    "offHelp": "Güvenlik için bir yönetici açana kadar kapalıdır. Panel onu sunucuda kendisi başlatır; orada bir şey yazmanız gerekmez.",
+    "noAgent": "Sunucu ajanı çalışmıyor; panel terminali başlatamaz.",
+    "turnOn": "Terminali aç",
+    "startingHelp": "Terminal sunucuda başlatılıyor (ilk seferde hazırlanması yaklaşık bir dakika sürer)…",
+    "starting": "Terminal başlatılıyor…",
+    "stopping": "Terminal kapatılıyor…",
+    "rootTitle": "Sunucuda root olarak çalışıyorsunuz",
+    "root": "Her komut sunucuda tam yetkiyle çalışır. Yazdıklarınız kaydedilmez; terminalin açılıp kapanması denetim kaydına yazılır. 15 dakika işlem yapılmazsa ve en çok bir saat sonra kapanır.",
+    "connect": "Bağlan",
+    "reconnect": "Yeniden bağlan",
+    "disconnect": "Bağlantıyı kes",
+    "ready": "Sunucuda kabuk açmak için bağlanın.",
+    "sessions": "Açık terminaller",
+    "sessionsHelp": "Şu anda kimin bağlı olduğu. Sonlandırmak o kabuğu kapatır.",
+    "noSessions": "Bağlı kimse yok.",
+    "end": "Sonlandır",
+    "turnOff": "Terminali kapat",
+    "turnOffBody": "Açık terminaller kapanır ve servis durur. İstediğiniz zaman yeniden açabilirsiniz.",
+    "turnOffYes": "Evet, kapat",
+    "cancel": "Vazgeç",
+    "reason": {
+      "TERMINAL_SESSION_INVALID": "Bağlantı biletinin süresi doldu. Yeniden bağlanın.",
+      "TERMINAL_REVOKED": "Bu terminal sonlandırıldı (çıkış yapıldı veya bir yönetici kapattı).",
+      "TERMINAL_EXPIRED": "Terminal bir saatlik sınıra ulaştı.",
+      "TERMINAL_IDLE": "15 dakika işlem yapılmadığı için kapandı.",
+      "TERMINAL_LIMIT": "Zaten açık bir terminaliniz var (aynı anda bir tane).",
+      "TERMINAL_START_FAILED": "Kabuk sunucuda başlatılamadı.",
+      "TERMINAL_CLOSED": "Terminal kapandı."
+    }
   }
 }

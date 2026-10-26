@@ -175,6 +175,28 @@ services:
       api: {condition: service_healthy}
       web: {condition: service_healthy}
     logging: *logging
+  # Administrators' browser terminal to this host (off by default; the panel turns it on: install.sh terminal on).
+  # Privileged in the host's PID namespace so it can enter the host as root (nsenter). Reachable only through
+  # Caddy's /terminal/ws with a one-time ticket from the API (system.terminal permission and two-factor).
+  terminal:
+    build: {context: ./services/console, target: terminal}
+    profiles: [terminal]
+    restart: unless-stopped
+    privileged: true
+    pid: host
+    environment:
+      REDIS_ADDR: redis:6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      TERMINAL_IDLE_MINUTES: ${TERMINAL_IDLE_MINUTES:-15}
+      CONSOLE_MAX_MINUTES: ${TERMINAL_MAX_MINUTES:-60}
+    depends_on:
+      redis: {condition: service_healthy}
+    healthcheck:
+      test: [CMD, /console, healthcheck]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    logging: *logging
   # Monitoring (docker compose --profile observability up -d). Nothing here is published beyond 127.0.0.1.
   prometheus:
     image: prom/prometheus:v3.2.1

@@ -69,6 +69,7 @@ type Gateway struct {
 	maxPerUser     int
 	maxTotal       int
 	maxDuration    time.Duration
+	idle           time.Duration // terminal mode: closes after this long without input
 
 	mu     sync.Mutex
 	active map[*conn]struct{}

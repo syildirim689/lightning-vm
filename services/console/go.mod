@@ -4,6 +4,7 @@ go 1.27
 
 require (
 	github.com/coder/websocket v1.8.15
+	github.com/creack/pty v1.1.24
 	github.com/redis/go-redis/v9 v9.23.0
 )
 

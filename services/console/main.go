@@ -39,8 +39,13 @@ func main() {
 	rdb := redis.NewClient(&redis.Options{Addr: envOr("REDIS_ADDR", "redis:6379"), Password: os.Getenv("REDIS_PASSWORD"), DB: db})
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
 	defer stop()
-	// A restarted gateway has no live consoles; drop entries a previous process could not remove.
-	_ = rdb.Del(ctx, "console:active").Err()
+	// "console terminal": the host terminal for administrators (terminal.go); otherwise the VM console gateway.
+	ns := "console"
+	if len(os.Args) > 1 && os.Args[1] == "terminal" {
+		ns = "terminal"
+	}
+	// A restarted gateway has no live sessions; drop entries a previous process could not remove.
+	_ = rdb.Del(ctx, ns+":active").Err()
 
 	origins := map[string]bool{}
 	for _, o := range strings.Split(os.Getenv("CONSOLE_ALLOWED_ORIGINS"), ",") {
@@ -48,9 +53,12 @@ func main() {
 			origins[o] = true
 		}
 	}
-	g := &Gateway{store: &redisStore{rdb: rdb}, guard: newNetGuard(), allowedOrigins: origins, active: map[*conn]struct{}{},
+	g := &Gateway{store: &redisStore{rdb: rdb, ns: ns}, guard: newNetGuard(), allowedOrigins: origins, active: map[*conn]struct{}{},
 		maxPerUser: envInt("CONSOLE_MAX_PER_USER", 3), maxTotal: envInt("CONSOLE_MAX_TOTAL", 100),
-		maxDuration: time.Duration(envInt("CONSOLE_MAX_MINUTES", 60)) * time.Minute}
+		maxDuration: time.Duration(envInt("CONSOLE_MAX_MINUTES", 60)) * time.Minute, idle: time.Duration(envInt("TERMINAL_IDLE_MINUTES", 15)) * time.Minute}
+	if ns == "terminal" {
+		g.maxPerUser, g.maxTotal = envInt("TERMINAL_MAX_PER_USER", 1), envInt("TERMINAL_MAX_TOTAL", 3)
+	}
 	go g.revocationLoop(ctx)
 
 	mux := http.NewServeMux()
@@ -61,7 +69,11 @@ func main() {
 		}
 		w.Write([]byte("ok"))
 	})
-	mux.Handle("GET /console/ws", g)
+	if ns == "terminal" {
+		mux.HandleFunc("GET /terminal/ws", g.serveTerminal)
+	} else {
+		mux.Handle("GET /console/ws", g)
+	}
 	srv := &http.Server{Addr: ":8080", Handler: mux, ReadHeaderTimeout: 10 * time.Second}
 	go func() {
 		<-ctx.Done()

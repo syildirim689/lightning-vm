@@ -117,8 +117,10 @@ async function copyConsoleEvents() {
         const f = {};
         for (let i = 0; i < kv.length; i += 2) f[kv[i]] = kv[i + 1];
         const { event, userId, vm, at, ...metadata } = f;
+        // The host terminal shares this stream: "terminal_opened" is audited as terminal.opened.
+        const [kind, name] = String(event).startsWith('terminal_') ? ['terminal', event.slice(9)] : ['console', event];
         await pool.query('INSERT INTO audit_events (actor_id, action, outcome, resource_id, metadata, created_at) VALUES ($1, $2, $3, $4, $5, $6)',
-          [uuid.test(userId ?? '') ? userId : null, `console.${event}`, outcomes[event] ?? 'failure', vm || null, metadata, at ?? new Date().toISOString()]);
+          [uuid.test(userId ?? '') ? userId : null, `${kind}.${name}`, outcomes[name] ?? 'failure', vm || null, metadata, at ?? new Date().toISOString()]);
         await events.xack('console:events', 'audit', id);
       }
     } catch {

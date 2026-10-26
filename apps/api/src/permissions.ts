@@ -11,7 +11,7 @@ export const permissionCatalog = {
   users: ['users.view', 'users.manage', 'users.roles', 'users.ban', 'users.sessions', 'users.impersonate'],
   roles: ['roles.manage'],
   settings: ['settings.view', 'settings.manage'],
-  system: ['system.view', 'system.update', 'audit.view'],
+  system: ['system.view', 'system.update', 'audit.view', 'system.terminal'],
 } as const;
 export type Permission = (typeof permissionCatalog)[keyof typeof permissionCatalog][number];
 export const allPermissions = Object.values(permissionCatalog).flat() as Permission[];

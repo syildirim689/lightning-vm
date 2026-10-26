@@ -32,6 +32,10 @@
 	handle /console/ws {
 		reverse_proxy console:8080
 	}
+	# Administrators' host terminal -> terminal service (only while it is turned on; 502 otherwise).
+	handle /terminal/ws {
+		reverse_proxy terminal:8080
+	}
 	# VMware HTML Console SDK files the operator downloads from Broadcom (not shipped; see console-sdk/README.md).
 	handle_path /console-sdk/* {
 		root * /srv/console-sdk

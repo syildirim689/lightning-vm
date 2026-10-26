@@ -18,7 +18,7 @@ import { authClient, signOut } from '../../lib/auth-client';
 import { can, type Permission } from '../../lib/permissions';
 import type { Branding, User } from '../../lib/session';
 
-type Key = 'dashboard' | 'servers' | 'abuse' | 'energy' | 'topology' | 'myTopology' | 'myVdc' | 'connections' | 'catalog' | 'users' | 'roles' | 'settings' | 'system' | 'myServers' | 'newServer' | 'firewalls' | 'account' | 'audit';
+type Key = 'dashboard' | 'servers' | 'abuse' | 'energy' | 'topology' | 'myTopology' | 'myVdc' | 'connections' | 'catalog' | 'users' | 'roles' | 'settings' | 'system' | 'myServers' | 'newServer' | 'firewalls' | 'account' | 'audit' | 'terminal';
 type Item = { href: string; key: Key; icon: React.ReactNode; exact?: boolean; need?: Permission[] };
 
 // Staff entries appear only with a permission that opens them; the API checks every call anyway.
@@ -33,6 +33,7 @@ const sections: { title: 'adminSection' | 'peopleSection' | 'customerSection'; i
     { href: '/admin/energy', key: 'energy', icon: <I name="zap" size={18}/>, need: ['dashboard.view', 'system.view'] },
     { href: '/admin/system', key: 'system', icon: <I name="activity" size={18}/>, need: ['system.view'] },
     { href: '/admin/audit', key: 'audit', icon: <I name="scroll-text" size={18}/>, need: ['audit.view'] },
+    { href: '/admin/terminal', key: 'terminal', icon: <I name="square-terminal" size={18}/>, need: ['system.terminal'] },
   ] },
   { title: 'peopleSection', items: [
     { href: '/admin/users', key: 'users', icon: <I name="users" size={18}/>, need: ['users.view'] },
