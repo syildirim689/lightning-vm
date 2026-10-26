@@ -76,7 +76,7 @@ export async function resetPassword(email: string, disable2fa: boolean) {
   const ctx = await getAuth().$context;
   if (!(await ctx.internalAdapter.findCredentialAccount(u.id))) return null;
   await ctx.internalAdapter.updatePassword(u.id, await ctx.password.hash(password));
-  await ctx.internalAdapter.deleteSessions(u.id);
+  await ctx.internalAdapter.deleteUserSessions(u.id);
   if (disable2fa) {
     await pool.query('DELETE FROM auth_two_factors WHERE user_id = $1', [u.id]);
     await pool.query('UPDATE users SET two_factor_enabled = false WHERE id = $1', [u.id]);
