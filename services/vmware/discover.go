@@ -495,13 +495,14 @@ func discover(ctx context.Context, g *netGuard, r Request) (*Result, error) {
 		res.Compute = append(res.Compute, item)
 	}
 
-	vms, err := retrieve[mo.VirtualMachine](ctx, c, "VirtualMachine", []string{"summary"})
+	vms, err := retrieve[mo.VirtualMachine](ctx, c, "VirtualMachine", []string{"name", "summary"})
 	if err != nil {
 		return nil, classify(err)
 	}
 	for _, v := range vms {
 		s := v.Summary
-		item := VM{MoRef: v.Self.Value, Name: s.Config.Name, UUID: s.Config.Uuid, InstanceUUID: s.Config.InstanceUuid,
+		// The entity's own name: summary.config.name can lag behind a rename.
+		item := VM{MoRef: v.Self.Value, Name: v.Name, UUID: s.Config.Uuid, InstanceUUID: s.Config.InstanceUuid,
 			PowerState: string(s.Runtime.PowerState), Host: ref(s.Runtime.Host), CPU: s.Config.NumCpu, MemoryMB: s.Config.MemorySizeMB,
 			Template: s.Config.Template, Guest: s.Config.GuestFullName}
 		if s.Storage != nil {

@@ -853,12 +853,13 @@ test('resize and reinstall: priced like an order, the disk only grows, the VM ch
   await until(async () => (await serverRow(id)).state === 'deleted', 'deleted', 120);
 });
 
-test('import: a VM made outside the panel becomes a customer\'s server under the managed name, with its size and address; staff only', { skip }, async () => {
+test('import: a VM made outside the panel becomes a customer\'s server under the managed name, with its size and address; staff only', { skip }, async (t) => {
   // A fresh inventory: the simulator keeps running between test runs, so VMs taken over earlier carry managed names now.
   const disc = await send('POST', `/admin/vmware/connections/${connectionId}/discover`);
   assert.equal(disc.statusCode, 200, disc.body);
   const { rows: [vm] } = await pool.query("SELECT moref, name, cpu, memory_mb FROM vmware_vms WHERE connection_id = $1 AND NOT template AND name NOT LIKE 'lvm-%' ORDER BY name DESC LIMIT 1", [connectionId]);
-  assert.ok(vm, 'the simulator has unmanaged VMs');
+  // The simulator keeps the VMs earlier runs took over; it starts afresh when the stack restarts (E2E).
+  if (!vm) { t.skip('every simulator VM is taken over already'); return; }
   const listed = (await send('GET', `/admin/import/candidates?connectionId=${connectionId}`)).json();
   assert.ok(listed.vms.some((v) => v.moref === vm.moref) && !listed.vms.some((v) => v.name.startsWith('lvm-')));
   assert.equal((await send('GET', `/admin/import/candidates?connectionId=${connectionId}`, undefined, user)).statusCode, 403);
