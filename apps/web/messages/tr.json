@@ -2462,7 +2462,9 @@
       "activity": "Son etkinlik",
       "noActivity": "Kayıt yok.",
       "allActivity": "Tüm etkinliği denetim kaydında aç"
-    }
+    },
+    "onlineFilter": "Çevrimiçi ya da az önce aktif",
+    "sessionCount": "{n} oturum"
   },
   "Roles": {
     "eyebrow": "Kişiler",
@@ -5166,5 +5168,24 @@
       "failed": "Başarısız",
       "rejected": "Reddedildi"
     }
+  },
+  "Presence": {
+    "online": "Çevrimiçi",
+    "recent": "Az önce aktif",
+    "offline": "Çevrimdışı",
+    "onlineNow": "Şu an çevrimiçi",
+    "never": "Hiç giriş yapmadı",
+    "activeAgo": "{when} aktifti",
+    "seenAgo": "Son görülme {when}",
+    "noSessions": "Açık oturum yok.",
+    "thisDevice": "Bu cihaz",
+    "openNow": "Şu an açık",
+    "impersonated": "Personel onun adına girdi",
+    "lastActive": "{when} aktif",
+    "started": "{when} başladı",
+    "ipMoved": "{first} → {last}",
+    "ends": "{when} sona erer",
+    "end": "Sonlandır",
+    "signOutHere": "Buradan çık"
   }
 }

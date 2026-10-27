@@ -2462,7 +2462,9 @@
       "activity": "Recent activity",
       "noActivity": "Nothing recorded.",
       "allActivity": "Open all activity in the audit log"
-    }
+    },
+    "onlineFilter": "Online now or recently",
+    "sessionCount": "{n, plural, one {# session} other {# sessions}}"
   },
   "Roles": {
     "eyebrow": "People",
@@ -5166,5 +5168,24 @@
       "failed": "Failed",
       "rejected": "Rejected"
     }
+  },
+  "Presence": {
+    "online": "Online",
+    "recent": "Active recently",
+    "offline": "Offline",
+    "onlineNow": "Online now",
+    "never": "Never signed in",
+    "activeAgo": "Active {when}",
+    "seenAgo": "Last seen {when}",
+    "noSessions": "No open sessions.",
+    "thisDevice": "This device",
+    "openNow": "Open now",
+    "impersonated": "Signed in as them by staff",
+    "lastActive": "Active {when}",
+    "started": "Started {when}",
+    "ipMoved": "{first} → {last}",
+    "ends": "Ends {when}",
+    "end": "End",
+    "signOutHere": "Sign out here"
   }
 }

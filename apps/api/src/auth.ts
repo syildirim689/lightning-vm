@@ -7,14 +7,15 @@ import { apiError } from './errors';
 import { customerLevel, limitsOf, permissionsOf, splitRoles } from './permissions';
 import { ipAllowed } from './role-limits';
 import { getSettings } from './settings-store';
+import { touch } from './presence';
 
 // roles: the role keys; permissions: the effective set ('*' for administrators). impersonatedBy: the staff
 // member signed in as this user, if any.
 // timeZone: the person's chosen zone, or null for their browser's.
 export type User = { id: string; email: string; name: string; roles: string[]; permissions: string[]; locale: 'tr' | 'en'; timeZone: string | null; twoFactorRequired?: boolean;
   impersonatedBy: string | null; twoFactorEnabled: boolean; phoneNumber: string | null; phoneNumberVerified: boolean };
-// sessionToken: better-auth's stored token; the console gateway keys its revocations on its hash.
-export type AuthedRequest = FastifyRequest & { user: User; sessionToken: string };
+// sessionToken: better-auth's stored token; the console gateway keys its revocations on its hash. sessionId: its row.
+export type AuthedRequest = FastifyRequest & { user: User; sessionToken: string; sessionId: string };
 
 export async function audit(req: FastifyRequest, action: string, outcome: 'success' | 'failure' | 'denied', actorId: string | null, metadata: object = {}) {
   await pool.query('INSERT INTO audit_events (actor_id, action, outcome, request_id, ip, metadata) VALUES ($1, $2, $3, $4, $5, $6)',
@@ -33,7 +34,7 @@ export function readCredentials(body: unknown) {
 }
 
 // The signed-in user from better-auth's session cookie (always read from the database: revocation is immediate).
-export async function currentSession(req: FastifyRequest): Promise<{ user: User; token: string } | null> {
+export async function currentSession(req: FastifyRequest): Promise<{ user: User; token: string; id: string } | null> {
   const s = await getAuth().api.getSession({ headers: fromNodeHeaders(req.headers) }).catch(() => null);
   if (!s) return null;
   const u = s.user as typeof s.user & { role?: string; locale?: string; disabledAt?: Date | null; banned?: boolean | null; twoFactorEnabled?: boolean;
@@ -56,7 +57,7 @@ export async function currentSession(req: FastifyRequest): Promise<{ user: User;
   const twoFactorRequired = !u.twoFactorEnabled && !impersonatedBy && (u as { authSource?: string }).authSource !== 'oidc' && (policy === 'all' || (policy === 'staff' && staff) || !!limits.require2fa);
   return { user: { id: u.id, email: u.email, name: u.name ?? '', roles: splitRoles(u.role), permissions,
     locale: u.locale === 'tr' ? 'tr' : 'en', timeZone: (u as { timeZone?: string | null }).timeZone ?? null, impersonatedBy, twoFactorEnabled: !!u.twoFactorEnabled, twoFactorRequired, phoneNumber: u.phoneNumber ?? null,
-    phoneNumberVerified: !!u.phoneNumberVerified }, token: s.session.token };
+    phoneNumberVerified: !!u.phoneNumberVerified }, token: s.session.token, id: s.session.id };
 }
 export const currentUser = async (req: FastifyRequest) => (await currentSession(req))?.user ?? null;
 
@@ -66,7 +67,8 @@ export class SessionGuard implements CanActivate {
     const req = ctx.switchToHttp().getRequest<AuthedRequest>();
     const s = await currentSession(req);
     if (!s) throw apiError(401, 'UNAUTHENTICATED', 'Sign in required');
-    req.user = s.user; req.sessionToken = s.token;
+    req.user = s.user; req.sessionToken = s.token; req.sessionId = s.id;
+    void touch(s.id, s.user.id, req.ip);
     // Two-factor required but not set up: only "who am I" answers (the panel then shows the setup; better-auth's
     // own routes for it are not behind this guard).
     if (s.user.twoFactorRequired && req.routeOptions.url !== '/auth/me') throw apiError(403, 'TWO_FACTOR_SETUP_REQUIRED', 'Set up two-factor authentication first');

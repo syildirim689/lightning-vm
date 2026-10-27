@@ -2,12 +2,14 @@
 import { Button, toast } from '@heroui/react';
 import { useAutoAnimate } from '@formkit/auto-animate/react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useFormatter, useNow, useTranslations } from 'next-intl';
+import { useFormatter, useTranslations } from 'next-intl';
 import { useState } from 'react';
 import { z } from 'zod';
 import { I } from '../../../components/icon';
-import { CheckboxInput, Notice, Section, StatusChip, TextInput } from '../../../components/ui';
-import { useErrorText } from '../../../lib/api';
+import { CheckboxInput, Notice, Section, TextInput } from '../../../components/ui';
+import { apiFetch, useErrorText } from '../../../lib/api';
+import { useApiQuery } from '../../../lib/query';
+import SessionList, { type SessionRow } from '../../../components/session-list';
 import { authClient } from '../../../lib/auth-client';
 
 type ClientError = { code?: string; status?: number } | null;
@@ -91,31 +93,19 @@ function Passkeys() {
   </div>;
 }
 
+// The person's own sessions: each device, where from and when last active; ending the one in use signs out here.
 function Sessions() {
   const t = useTranslations('Account');
-  const format = useFormatter();
-  const now = useNow({ updateInterval: 60_000 });
   const { error } = useErrorText();
   const client = useQueryClient();
-  const current = authClient.useSession().data?.session.token;
-  const list = useQuery({ queryKey: ['sessions'], queryFn: async () => (await authClient.listSessions()).data ?? [] });
-  async function revoke(token: string) {
-    const { error: err } = await authClient.revokeSession({ token });
-    if (err) { toast.danger(error(codeOf(err))); return; }
-    client.invalidateQueries({ queryKey: ['sessions'] });
+  const list = useApiQuery<{ sessions: SessionRow[] }>(['sessions'], '/account/sessions', { refetchInterval: 30_000 });
+  async function end(s: SessionRow) {
+    try { await apiFetch(`/account/sessions/${s.id}`, { method: 'DELETE' }); } catch (e) { toast.danger(error(e)); return; }
+    if (s.current) { window.location.replace('/login'); return; }
+    void client.invalidateQueries({ queryKey: ['sessions'] });
   }
-  const device = (ua?: string | null) => !ua ? '–' : /mobile|android|iphone/i.test(ua) ? t('security.mobile') : /windows|mac os|linux/i.test(ua) ? t('security.desktop') : ua.slice(0, 40);
   return <div className="flex flex-col gap-4">
     <h3 className="font-semibold">{t('security.sessions')}</h3>
-    <ul className="flex flex-col divide-y divide-separator rounded-lg border border-border">
-      {(list.data ?? []).map((s) => <li key={s.id} className="flex items-center gap-3 px-3 py-2.5 text-sm">
-        <I name={/mobile|android|iphone/i.test(s.userAgent ?? '') ? 'smartphone' : 'monitor'} size={16} className="text-muted"/>
-        <span className="flex-1">
-          <span className="font-medium">{device(s.userAgent)}</span>{s.token === current && <> <StatusChip tone="success">{t('security.thisDevice')}</StatusChip></>}
-          <span className="block text-xs text-muted">{s.ipAddress ?? '–'} · {format.relativeTime(new Date(s.updatedAt ?? s.createdAt), now)}</span>
-        </span>
-        {s.token !== current && <Button size="sm" variant="ghost" onPress={() => revoke(s.token)}>{t('security.revoke')}</Button>}
-      </li>)}
-    </ul>
+    {list.data ? <SessionList sessions={list.data.sessions} onEnd={(s) => void end(s)}/> : <div className="h-24 animate-pulse rounded-xl bg-default/50"/>}
   </div>;
 }

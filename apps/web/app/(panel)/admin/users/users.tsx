@@ -9,6 +9,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { I } from '../../../../components/icon';
 import { UserSummary } from './user-summary';
+import SessionList, { LastSeen, PresenceDot, type Presence, type SessionRow } from '../../../../components/session-list';
 import { CheckboxList, DataTable, Notice, PageHeader, SelectInput, StatusChip, TextInput } from '../../../../components/ui';
 import { apiFetch, useErrorText } from '../../../../lib/api';
 import { authClient } from '../../../../lib/auth-client';
@@ -17,7 +18,7 @@ import { can } from '../../../../lib/permissions';
 import { useApiQuery } from '../../../../lib/query';
 
 type Row = { id: string; email: string; name: string; role: string; locale: string; createdAt: string; banned: boolean; banReason: string | null; banExpires: string | null;
-  twoFactorEnabled: boolean; authSource?: string; lastLoginMethod: string | null; phoneNumber: string | null; servers: number; sessions: number; lastSeen: string | null; overrides: number };
+  twoFactorEnabled: boolean; authSource?: string; lastLoginMethod: string | null; phoneNumber: string | null; servers: number; sessions: number; lastSeen: string | null; overrides: number; presence: Presence };
 type Role = { key: string; name: string; description: string; permissions: string[]; builtin: boolean; members: number };
 type Override = { permission: string; effect: 'allow' | 'deny' };
 type ClientError = { code?: string; status?: number } | null;
@@ -45,6 +46,7 @@ export default function Users() {
     if (q && !`${u.email} ${u.name} ${u.phoneNumber ?? ''}`.toLocaleLowerCase('tr').includes(q)) return false;
     if (role && !u.role.split(',').includes(role)) return false;
     if (status === 'banned' && !u.banned) return false;
+    if (status === 'online' && u.presence === 'offline') return false;
     if (status === 'active' && u.banned) return false;
     if (status === 'no2fa' && u.twoFactorEnabled) return false;
     return true;
@@ -68,14 +70,15 @@ export default function Users() {
       </SearchField>
       <SelectInput className="w-44" label={t('filterRole')} value={role} onChange={(v) => void setRole(v || null)} options={[{ id: '', label: t('all') }, ...roles.map((r) => ({ id: r.key, label: roleName(r.key) }))]}/>
       <SelectInput className="w-44" label={t('filterStatus')} value={status} onChange={(v) => void setStatus(v || null)}
-        options={[{ id: '', label: t('all') }, { id: 'active', label: t('active') }, { id: 'banned', label: t('banned') }, { id: 'no2fa', label: t('no2fa') }]}/>
+        options={[{ id: '', label: t('all') }, { id: 'active', label: t('active') }, { id: 'banned', label: t('banned') }, { id: 'no2fa', label: t('no2fa') }, { id: 'online', label: t('onlineFilter') }]}/>
     </div>
     <DataTable label={t('title')} rows={rows} rowKey={(u) => u.id} empty={users ? t('empty') : '…'} minWidth={900}
       columns={[{ id: 'user', label: t('col.user') }, { id: 'roles', label: t('col.roles') }, { id: 'status', label: t('col.status') }, { id: 'security', label: t('col.security') },
         { id: 'servers', label: t('col.servers') }, { id: 'seen', label: t('col.lastSeen') }, { id: 'act', label: <span className="sr-only">{t('col.actions')}</span> }]}
       cells={(u) => [
         <span key="u" className="flex min-w-0 items-center gap-3">
-          <Avatar size="sm"><Avatar.Fallback>{(u.name || u.email).slice(0, 2).toUpperCase()}</Avatar.Fallback></Avatar>
+          <span className="relative shrink-0"><Avatar size="sm"><Avatar.Fallback>{(u.name || u.email).slice(0, 2).toUpperCase()}</Avatar.Fallback></Avatar>
+            <PresenceDot presence={u.presence} className="absolute -bottom-0.5 -right-0.5 rounded-full ring-2 ring-surface"/></span>
           <button type="button" onClick={() => setSummaryOf(u.id)} className="min-w-0 rounded text-left hover:underline focus-visible:outline-2 focus-visible:outline-accent"><span className="block truncate font-medium">{u.name || u.email}</span>{u.name && <span className="block truncate text-xs text-muted">{u.email}</span>}</button>
         </span>,
         <span key="r" className="flex flex-wrap gap-1">{u.role.split(',').map((r) => <Chip key={r} size="sm" variant={r === 'user' ? 'secondary' : 'soft'} color={r === 'admin' ? 'accent' : 'default'}>{roleName(r)}</Chip>)}
@@ -89,7 +92,7 @@ export default function Users() {
           {u.lastLoginMethod && <span className="text-xs text-muted">{t(`method.${u.lastLoginMethod === 'passkey' ? 'passkey' : 'email'}`)}</span>}
         </span>,
         <span key="srv" className="tabular-nums">{u.servers}</span>,
-        <span key="seen" className="text-xs text-muted">{u.lastSeen ? format.relativeTime(new Date(u.lastSeen), now) : t('never')}</span>,
+        <span key="seen" className="flex flex-col text-xs"><LastSeen presence={u.presence} at={u.lastSeen}/>{u.sessions > 0 && <span className="text-muted">{t('sessionCount', { n: u.sessions })}</span>}</span>,
         <RowActions key="a" user={u} self={u.id === me?.id} perms={perms} open={(kind) => setDialog({ kind, user: u })}/>,
       ]}/>
     {dialog?.kind === 'create' && <CreateUser roles={roles} onClose={() => setDialog(undefined)}/>}
@@ -288,26 +291,24 @@ function SetPassword({ user, onClose }: { user: Row; onClose: () => void }) {
 
 function UserSessions({ user, canRevoke, onClose }: { user: Row; canRevoke: boolean; onClose: () => void }) {
   const t = useTranslations('Users');
-  const format = useFormatter();
-  const now = useNow({ updateInterval: 60_000 });
   const { error } = useErrorText();
-  const [list, setList] = useState<{ token: string; ipAddress?: string | null; userAgent?: string | null; createdAt: Date; impersonatedBy?: string | null }[] | null>(null);
-  const load = async () => { const r = await authClient.admin.listUserSessions({ userId: user.id }); if (r.error) toast.danger(error(codeOf(r.error))); else setList(r.data.sessions); };
-  useEffect(() => { void load(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
-  async function revoke(token?: string) {
-    const r = token ? await authClient.admin.revokeUserSession({ sessionToken: token }) : await authClient.admin.revokeUserSessions({ userId: user.id });
-    if (r.error) { toast.danger(error(codeOf(r.error))); return; }
-    toast.success(t('sessionsRevoked')); await load();
+  const client = useQueryClient();
+  const q = useApiQuery<{ presence: Presence; lastSeen: string | null; sessions: SessionRow[] }>(['admin', 'users', user.id, 'sessions'], `/admin/users/${user.id}/sessions`, { refetchInterval: 15_000 });
+  const refresh = () => { void q.refetch(); void client.invalidateQueries({ queryKey: ['admin', 'users'] }); };
+  async function end(s?: SessionRow) {
+    try {
+      if (s) await apiFetch(`/admin/users/${user.id}/sessions/${s.id}`, { method: 'DELETE' });
+      else { const r = await authClient.admin.revokeUserSessions({ userId: user.id }); if (r.error) throw codeOf(r.error); }
+      toast.success(t('sessionsRevoked')); refresh();
+    } catch (e) { toast.danger(error(e)); }
   }
+  const d = q.data;
   return <Dialog title={t('sessionsTitle', { email: user.email })} onClose={onClose}
-    footer={<>{canRevoke && !!list?.length && <Button variant="danger-soft" onPress={() => revoke()}>{t('revokeAll')}</Button>}<Button variant="tertiary" onPress={onClose}>{t('close')}</Button></>}>
-    {list === null ? <p role="status" className="text-sm text-muted">…</p> : list.length === 0 ? <p className="text-sm text-muted">{t('noSessions')}</p>
-      : <ul className="flex flex-col divide-y divide-separator rounded-lg border border-border">{list.map((s) => <li key={s.token} className="flex items-center gap-3 px-3 py-2.5 text-sm">
-          {/mobile|android|iphone/i.test(s.userAgent ?? '') ? <I name="smartphone" size={16} className="text-muted"/> : <I name="monitor" size={16} className="text-muted"/>}
-          <span className="min-w-0 flex-1"><span className="block truncate">{s.userAgent?.slice(0, 70) ?? '–'}</span>
-            <span className="text-xs text-muted">{s.ipAddress ?? '–'} · {format.relativeTime(new Date(s.createdAt), now)}{s.impersonatedBy && ` · ${t('impersonated')}`}</span></span>
-          {canRevoke && <Button size="sm" variant="ghost" onPress={() => revoke(s.token)}>{t('revoke')}</Button>}
-        </li>)}</ul>}
+    footer={<>{canRevoke && !!d?.sessions.length && <Button variant="danger-soft" onPress={() => end()}>{t('revokeAll')}</Button>}<Button variant="tertiary" onPress={onClose}>{t('close')}</Button></>}>
+    {!d ? <p role="status" className="text-sm text-muted">…</p> : <div className="flex flex-col gap-3">
+      <p className="flex items-center gap-2 text-sm"><PresenceDot presence={d.presence}/><LastSeen presence={d.presence} at={d.lastSeen}/></p>
+      <SessionList sessions={d.sessions} onEnd={canRevoke ? (s) => void end(s) : undefined}/>
+    </div>}
   </Dialog>;
 }
 

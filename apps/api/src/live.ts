@@ -7,6 +7,7 @@ import { Controller, Get, Req, Res, UseGuards } from '@nestjs/common';
 import type { FastifyReply } from 'fastify';
 import { currentSession, SessionGuard, type AuthedRequest } from './auth';
 import { listen, type LiveKind } from './live-bus';
+import { holdOnline } from './presence';
 
 // Why a tab was signed out, for the sign-in page.
 const reasonOf = (kind: LiveKind) => (kind === 'ban' ? 'banned' : kind === 'password' ? 'password' : kind === 'removed' ? 'removed' : 'revoked');
@@ -33,7 +34,9 @@ export class LiveController {
         send('changed', { kind: m.kind });
       });
     });
-    const beat = setInterval(() => res.write(': ping\n\n'), 25_000);
+    // While this line is open the person (and this session) counts as online.
+    const here = holdOnline(req.user.id, req.sessionId);
+    const beat = setInterval(() => { res.write(': ping\n\n'); void here(); }, 25_000);
     const end = () => { clearInterval(beat); stop(); if (!res.writableEnded) res.end(); };
     req.raw.on('close', end);
   }

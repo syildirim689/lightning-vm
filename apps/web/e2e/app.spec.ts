@@ -997,6 +997,17 @@ test.describe('people, settings and smart features (English browser)', () => {
     await page.waitForTimeout(900);
     await shot(page, 'user-summary');
     await page.keyboard.press('Escape');
+    // Presence and sessions: the admin's own row is online (this tab), its sessions list device and activity.
+    await expect(page.getByRole('img', { name: 'Online' }).first()).toBeVisible();
+    await page.getByRole('button', { name: /Actions for admin@example.test/ }).click();
+    await page.getByRole('menuitem', { name: 'Sessions' }).click();
+    await expect(page.getByRole('dialog').getByText('This device').or(page.getByRole('dialog').getByText('Open now')).first()).toBeVisible();
+    await page.waitForTimeout(600);
+    await shot(page, 'user-sessions');
+    await page.keyboard.press('Escape');
+    await page.goto('/account?tab=security');
+    await expect(page.getByText('Open now').first()).toBeVisible();
+    await shot(page, 'account-sessions');
     // The role editor: permissions, then limits.
     await page.goto('/admin/roles');
     await page.getByRole('button', { name: 'New role' }).click();

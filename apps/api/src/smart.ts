@@ -1,6 +1,6 @@
 // Smart features: a server's health score with its reasons and right-sizing advice, the customer's cost
 // forecast for this month, and the admin's getting-started checklist. The rules are in smart-rules.ts.
-import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Put, Query, Req, Res, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, Param, ParseUUIDPipe, Put, Query, Req, Res, UseGuards } from '@nestjs/common';
 import type { FastifyReply } from 'fastify';
 import { audit, SessionGuard, type AuthedRequest } from './auth';
 import { usageOf } from './catalog';
@@ -13,6 +13,7 @@ import { mailReady } from './settings-store';
 import { budgetState, checkBudget } from './budget';
 import { cleanLabels, health, monthCost, sizing, type CpuStats } from './smart-rules';
 import { publishLive } from './live-bus';
+import { endSession, sessionsOf } from './presence';
 import { validTimeZone } from './time-zone';
 
 // CPU of the servers given over the last 7 days (server_cpu_samples, written with each energy sample).
@@ -141,6 +142,20 @@ export class DigestController {
       (SELECT count(*)::int FROM audit_events WHERE created_at > $1 AND outcome = 'denied') AS denied,
       (SELECT count(*)::int FROM audit_events WHERE created_at > $1 AND action = 'auth.login' AND outcome = 'failure') AS "failedSignIns"`, [from, req.user.id]);
     return { since: from.toISOString(), counts: c };
+  }
+}
+
+// The person's own sessions (the one in use marked), and ending one of them.
+@Controller('account/sessions') @UseGuards(SessionGuard)
+export class MySessionsController {
+  @Get()
+  async list(@Req() req: AuthedRequest) { return { sessions: await sessionsOf(req.user.id, req.sessionId) }; }
+
+  @Delete(':sid') @HttpCode(204)
+  async end(@Req() req: AuthedRequest, @Param('sid') sid: string) {
+    if (!/^[\w-]{1,64}$/.test(sid) || !(await endSession(req.user.id, sid))) throw apiError(404, 'NOT_FOUND', 'Unknown session');
+    await audit(req, 'account.session_ended', 'success', req.user.id, { session: sid });
+    await publishLive(req.user.id, 'sessions');
   }
 }
 

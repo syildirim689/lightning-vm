@@ -248,6 +248,7 @@ test('notifications follow the admin policy, then the user choice', async () => 
   const count = async () => (await pool.query("SELECT count(*)::int AS n FROM notifications WHERE user_id = $1 AND event = 'auth.sign_in'", [s.id])).rows[0].n;
   await new Promise((r) => setTimeout(r, 1500));
   const n0 = await count();
+  const unread0 = (await get('/notifications', helperCookie)).json().unread;
   await post('/auth/sign-in/email', { email: 'support@example.test', password });
   assert.ok(await until(async () => (await count()) === n0 + 1));
   // The user turns sign-in alerts off; the next sign-in leaves no new row.
@@ -269,7 +270,7 @@ test('notifications follow the admin policy, then the user choice', async () => 
   assert.ok(await until(() => received.length > before));
   // Inbox: list, unread count, mark read; a test through one channel.
   const inbox = (await get('/notifications', helperCookie)).json();
-  assert.equal(inbox.unread, n0 + 2);
+  assert.equal(inbox.unread, unread0 + 2);
   await post('/notifications/read', {}, helperCookie);
   assert.equal((await get('/notifications', helperCookie)).json().unread, 0);
   assert.equal((await post('/notifications/test', { channel: 'inApp' }, helperCookie)).statusCode, 200);
@@ -548,6 +549,24 @@ test('live line: open tabs learn at once; a role change refreshes them, a ban or
   let tab = await open(c);
   assert.equal(tab.status, 200);
   assert.equal((await tab.next('ready')).userId, id);
+  // Presence: the open tab makes the person and that session online; a second session is listed apart and can be
+  // ended on its own (by staff, or by the person), with device and last activity, never its token.
+  const other = cookieOf(await post('/auth/sign-in/email', { email, password }));
+  assert.equal((await get('/auth/me', other)).statusCode, 200);
+  const view = (await get(`/admin/users/${id}/sessions`, admin)).json();
+  assert.equal(view.presence, 'online');
+  assert.equal(view.sessions.length, 2);
+  assert.deepEqual(view.sessions.map((s) => s.online).sort(), [false, true]);
+  assert.ok(view.sessions.every((s) => s.device && s.lastActiveAt && !('token' in s)));
+  assert.equal((await get('/admin/users', admin)).json().users.find((u) => u.id === id).presence, 'online');
+  const mine = (await get('/account/sessions', other)).json().sessions;
+  assert.equal(mine.filter((s) => s.current).length, 1);
+  const otherId = mine.find((s) => s.current).id;
+  assert.equal((await call('DELETE', `/admin/users/${id}/sessions/${otherId}`, user)).statusCode, 403);
+  assert.equal((await call('DELETE', `/admin/users/${id}/sessions/${otherId}`, admin)).statusCode, 204);
+  assert.equal((await get('/auth/me', other)).statusCode, 401, 'that session is gone at once');
+  assert.equal((await get('/auth/me', c)).statusCode, 200, 'the other one stays');
+  assert.equal((await call('DELETE', `/account/sessions/${otherId}`, c)).statusCode, 404);
   // Permissions: the tab is told to refresh, it stays signed in.
   assert.equal((await put(`/admin/users/${id}/access`, { roles: ['user'], overrides: [{ permission: 'dashboard.view', effect: 'allow' }] }, admin)).statusCode, 200);
   assert.equal((await tab.next('changed')).kind, 'access');

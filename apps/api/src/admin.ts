@@ -1,9 +1,11 @@
-import { Body, Controller, Get, HttpCode, Param, ParseUUIDPipe, Post, Put, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, Param, ParseUUIDPipe, Post, Put, Req, UseGuards } from '@nestjs/common';
 import { ensureRoles, limitsOf } from './permissions';
 import { pool } from './db';
 import { apiError } from './errors';
 import { audit, type AuthedRequest } from './auth';
-import { Can, PermissionGuard } from './rbac';
+import { assertCovers, Can, PermissionGuard } from './rbac';
+import { endSession, onlineUsers, sessionsOf, statusOf } from './presence';
+import { publishLive } from './live-bus';
 import { agentStatus, hostInfo, pendingRequests, queueRequest, releases, runLog, settings as maintenanceSettings, summary } from './maintenance';
 import { readHostChange } from './host-rules';
 
@@ -81,10 +83,31 @@ export class AdminController {
       u.last_login_method AS "lastLoginMethod", u.phone_number AS "phoneNumber", u.phone_number_verified AS "phoneNumberVerified",
       (SELECT count(*)::int FROM servers s WHERE s.owner_id = u.id AND s.state <> 'deleted') AS servers,
       (SELECT count(*)::int FROM auth_sessions a WHERE a.user_id = u.id AND a.expires_at > now()) AS sessions,
-      (SELECT max(a.created_at) FROM auth_sessions a WHERE a.user_id = u.id) AS "lastSeen",
+      coalesce(u.last_seen_at, (SELECT max(coalesce(a.last_active_at, a.created_at)) FROM auth_sessions a WHERE a.user_id = u.id)) AS "lastSeen",
       (SELECT count(*)::int FROM user_permission_overrides o WHERE o.user_id = u.id) AS overrides
       FROM users u ORDER BY u.created_at`);
-    return { users: rows };
+    // Online now (a panel tab open), recently active or offline.
+    const online = await onlineUsers(rows.map((r) => r.id));
+    return { users: rows.map((r) => ({ ...r, presence: statusOf(online.has(r.id), r.lastSeen) })) };
+  }
+
+  // A person's sessions: device, addresses, start, last activity, end, and whether a tab has it open now.
+  @Get('users/:id/sessions') @Can('users.view')
+  async userSessions(@Param('id', ParseUUIDPipe) id: string) {
+    const { rows: [u] } = await pool.query('SELECT id, last_seen_at AS "lastSeen" FROM users WHERE id = $1', [id]);
+    if (!u) throw apiError(404, 'NOT_FOUND', 'Unknown user');
+    const sessions = await sessionsOf(id);
+    const online = sessions.some((s) => s.online);
+    return { presence: statusOf(online, u.lastSeen), lastSeen: u.lastSeen, sessions };
+  }
+
+  // Ends one session of a person whose permissions are within the caller's; their tab learns at once.
+  @Delete('users/:id/sessions/:sid') @HttpCode(204) @Can('users.sessions')
+  async endUserSession(@Req() req: AuthedRequest, @Param('id', ParseUUIDPipe) id: string, @Param('sid') sid: string) {
+    await assertCovers(req, id);
+    if (!/^[\w-]{1,64}$/.test(sid) || !(await endSession(id, sid))) throw apiError(404, 'NOT_FOUND', 'Unknown session');
+    await audit(req, 'admin.user.revoke_session', 'success', req.user.id, { target: id, session: sid });
+    await publishLive(id, 'sessions');
   }
 
   @Get('settings') @Can('settings.view', 'settings.manage')
