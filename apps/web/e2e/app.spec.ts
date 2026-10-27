@@ -1152,7 +1152,7 @@ test.describe('people, settings and smart features (English browser)', () => {
     await expect(dialog.getByText('Pinned', { exact: true })).toBeVisible();
     await page.waitForTimeout(500);
     await shot(page, 'user-notes');
-    await page.keyboard.press('Escape');
+    await page.getByRole('dialog').locator('[data-slot="modal-close-trigger"]').click();
     await expect(page.getByRole('dialog')).toBeHidden(); // its closing backdrop would catch the next click
     await expect(page.getByRole('row', { name: /Prefers e-mail; renewal agreed/ })).toBeVisible();
     await shot(page, 'users-pinned-note');
