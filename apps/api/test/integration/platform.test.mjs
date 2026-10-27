@@ -81,7 +81,7 @@ test('built-in roles exist and permissions come with the session', async () => {
   assert.deepEqual(roles.sort(), ['admin', 'auditor', 'operator', 'support', 'user']);
   const me = (await get('/auth/me', user)).json();
   assert.deepEqual(me.roles, ['user']);
-  assert.deepEqual(me.permissions.sort(), ['firewalls.manage', 'server.console', 'server.delete', 'server.iso', 'server.power', 'server.root_password', 'server.snapshots', 'servers.create']);
+  assert.deepEqual(me.permissions.sort(), ['firewalls.manage', 'server.console', 'server.delete', 'server.iso', 'server.power', 'server.reinstall', 'server.resize', 'server.root_password', 'server.snapshots', 'servers.create']);
   assert.equal((await get('/admin/roles', user)).statusCode, 403);
   // Deny by default, and the denial is audited.
   assert.equal((await get('/admin/pools', user)).statusCode, 403);
@@ -98,7 +98,7 @@ test('a custom role grants exactly its permissions; overrides add or remove sing
   assert.equal((await get('/admin/pools', user)).statusCode, 200);
   assert.equal((await get('/admin/users', user)).statusCode, 403);
   const access = (await get(`/admin/users/${userId}/access`, admin)).json();
-  assert.deepEqual(access.effective, ['catalog.view', 'firewalls.manage', 'server.console', 'server.delete', 'server.iso', 'server.power', 'server.root_password', 'server.snapshots', 'servers.create']);
+  assert.deepEqual(access.effective, ['catalog.view', 'firewalls.manage', 'server.console', 'server.delete', 'server.iso', 'server.power', 'server.reinstall', 'server.resize', 'server.root_password', 'server.snapshots', 'servers.create']);
   await put(`/admin/users/${userId}/access`, { roles: ['user', 'helper'], overrides: [] }, admin);
 });
 
@@ -1169,8 +1169,8 @@ test('API tokens and webhooks: a token acts as its owner (read-only only reads),
   assert.equal((await call('DELETE', `/account/api-tokens/${write.id}`, user)).statusCode, 204);
   assert.equal((await asToken('GET', '/servers', write.token)).statusCode, 401);
   assert.equal((await asToken('GET', '/servers', 'lvm_' + 'x'.repeat(40))).statusCode, 401);
-  // The admin decides who may create them.
-  await put('/admin/settings/security', { require2fa: 'none', apiTokens: 'staff' }, admin);
+  // The admin decides who may create them (this test's user is staff by now, so: nobody).
+  await put('/admin/settings/security', { require2fa: 'none', apiTokens: 'off' }, admin);
   assert.equal((await post('/account/api-tokens', { name: 'n', scope: 'read' }, user)).json().code, 'API_TOKENS_DISABLED');
   await put('/admin/settings/security', { require2fa: 'none', apiTokens: 'everyone' }, admin);
 

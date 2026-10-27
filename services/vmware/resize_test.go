@@ -81,3 +81,25 @@ func TestRenameForImport(t *testing.T) {
 		t.Fatalf("a retry failed: %v", err)
 	}
 }
+
+func TestCloneFromServer(t *testing.T) {
+	e := setupVPX(t)
+	ctx := context.Background()
+	out, err := cloneVM(ctx, testGuard(), CloneRequest{Request: e.req, Name: "lvm-orig", Template: e.template, Pool: e.pool, Datastore: e.store,
+		Network: e.network, VCPU: 1, MemoryMB: 1024, DiskGB: 20, Metadata: metadata, ServerID: "orig"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	vm := waitTask(t, e, out["task"].(string)).VM
+	if _, err := powerAction(ctx, e.c, VMRequest{VM: vm, Action: "on"}); err != nil {
+		t.Fatal(err)
+	}
+	copyOut, err := cloneVM(ctx, testGuard(), CloneRequest{Request: e.req, Name: "lvm-copy", Template: vm, Pool: e.pool, Datastore: e.store,
+		Network: e.network, VCPU: 1, MemoryMB: 1024, DiskGB: 20, Metadata: metadata, ServerID: "copy"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s := waitTask(t, e, copyOut["task"].(string)); s.State != "success" || s.VM == "" {
+		t.Fatalf("clone of a running server: %+v", s)
+	}
+}

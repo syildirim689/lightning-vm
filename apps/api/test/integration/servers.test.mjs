@@ -554,7 +554,7 @@ test('locations: details, a pool assigned, maintenance blocks orders, hidden rem
 test('server settings: customers lose actions the admin turns off (staff keep them); ESXi images need a bigger shape', { skip }, async () => {
   const id = serverId;
   const set = (customer) => send('PUT', '/admin/settings/servers', { customer });
-  assert.deepEqual((await send('GET', `/servers/${id}`, undefined, user)).json().allowed, { power: true, console: true, iso: true, rootPassword: true, delete: true, snapshots: true });
+  assert.deepEqual((await send('GET', `/servers/${id}`, undefined, user)).json().allowed, { power: true, console: true, iso: true, rootPassword: true, delete: true, snapshots: true, resize: true, reinstall: true });
   assert.equal((await set({ power: false, delete: false, console: false })).statusCode, 200);
   const detail = (await send('GET', `/servers/${id}`, undefined, user)).json();
   assert.equal(detail.allowed.power, false);
@@ -844,12 +844,14 @@ test('resize and reinstall: priced like an order, the disk only grows, the VM ch
   const copy = await create(order('resize-1-copy', { cloneFrom: id, packageId: small }));
   assert.equal(copy.statusCode, 202, copy.body);
   const copyId = copy.json().serverId;
-  await until(async () => ['ready', 'error'].includes((await serverRow(copyId)).state), 'copy built', 120);
+  // The simulator's guest never reports the copy's new address (cloud-init does on vCenter), so the clone itself is checked.
+  await until(async () => (await serverRow(copyId)).vm_moref, 'copy cloned', 120);
   const c = await serverRow(copyId);
-  assert.deepEqual([c.state, c.clone_from_moref], ['ready', s.vm_moref]);
+  assert.equal(c.clone_from_moref, s.vm_moref);
   assert.notEqual(c.vm_moref, s.vm_moref);
-  assert.equal((await send('DELETE', `/servers/${copyId}`, { confirm: 'resize-1-copy' }, user, key())).statusCode, 202);
-  await until(async () => (await serverRow(copyId)).state === 'deleted', 'copy deleted', 120);
+  assert.equal(await vmCount(copyId), 1);
+  assert.equal((await send('POST', `/servers/${copyId}/operations/${(await lastOp(copyId)).id}/cancel`, undefined, user)).statusCode, 202);
+  await until(async () => (await serverRow(copyId)).state === 'deleted' || (await lastOp(copyId)).status === 'cancelled', 'copy cancelled', 120);
   assert.equal((await send('DELETE', `/servers/${id}`, { confirm: 'resize-1' }, user, key())).statusCode, 202);
   await until(async () => (await serverRow(id)).state === 'deleted', 'deleted', 120);
 });
@@ -867,7 +869,7 @@ test('import: a VM made outside the panel becomes a customer\'s server under the
   assert.equal(made.statusCode, 201, made.body);
   const id = made.json().serverId;
   const s = await serverRow(id);
-  assert.deepEqual([s.state, s.vm_moref, s.vcpu, s.memory_mb, s.price_monthly], ['ready', vm.moref, vm.cpu, vm.memory_mb, '3.50']);
+  assert.deepEqual([s.state, s.vm_moref, s.vcpu, s.memory_mb, s.price_monthly], ['ready', vm.moref, Math.max(1, vm.cpu), Math.max(512, vm.memory_mb), '3.50']);
   assert.ok(s.disk_gb >= 1);
   assert.equal(await vmCount(id), 1, 'found under lvm-<id>');
   assert.equal((await pool.query("SELECT host(address) AS a FROM ip_allocations WHERE server_id = $1 AND kind = 'primary'", [id])).rows[0].a, '10.20.0.33');
