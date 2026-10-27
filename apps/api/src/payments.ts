@@ -184,6 +184,18 @@ export class PaymentsController {
 }
 
 // What checkout will use: active providers in the admin's order, with the credentials of their mode.
+// The credentials billing charges with: the active mode of an enabled, checked provider; or, for a payment made earlier
+// in a given mode (its callback or refund), that mode's credentials even if the provider was switched since.
+export async function activeGateway(id: string, mode?: Mode) {
+  const row = await rowOf(id);
+  if (!row || !providers[id]) return null;
+  if (!mode && (!row.enabled || blocker(row, row.mode))) return null;
+  const m = mode ?? row.mode;
+  const creds = decrypt(row, m);
+  if (!Object.keys(creds).length) return null;
+  return { mode: m, creds: { ...creds, endpoint: creds.endpoint || providers[id].hosts[m] } };
+}
+
 export async function activePaymentMethods() {
   const { rows } = await pool.query<Row>('SELECT * FROM payment_gateways WHERE enabled ORDER BY sort, id');
   return rows.filter((r) => providers[r.id] && !blocker(r, r.mode)).map((r) => ({ id: r.id, name: r.label || providers[r.id].name, mode: r.mode, kind: providers[r.id].kind }));

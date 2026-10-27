@@ -791,3 +791,125 @@ test('automatic snapshots: a schedule takes "auto …" snapshots, keeps the newe
     await done('snapshot_delete');
   }
 });
+
+test('billing: an order waits for payment, a declined card leaves it awaiting, a paid one builds; renewals, automatic charges, overdue, hold and release; top-up, refund, manual payment, expiry', { skip }, async () => {
+  const { runBilling } = await import('../../dist/billing.js');
+  const key = () => ({ 'idempotency-key': randomUUID() });
+  await pool.query("UPDATE ip_pools SET range_end = '10.20.0.40'::inet WHERE name = 'tiny'");
+  const company = { name: 'Lightning Bilişim A.Ş.', taxId: '1234567890', taxOffice: 'Kadıköy', address: 'Moda Cd. 1', district: 'Kadıköy', city: 'İstanbul' };
+  assert.equal((await send('PUT', '/admin/settings/billing', { enabled: true, company: { name: '' } })).json().fields['company.name'], 'COMPANY_REQUIRED');
+  const set = await send('PUT', '/admin/settings/billing', { enabled: true, requirePayment: true, sandbox: true, balance: true, autoCharge: true, invoiceDaysBefore: 7, reminderDays: [3, 1],
+    suspendAfterDays: 3, terminateAfterDays: 0, orderExpiryHours: 24, invoicePrefix: 'TST', company });
+  assert.equal(set.statusCode, 200, set.body);
+  assert.equal((await send('PUT', '/admin/settings/billing', { enabled: true }, user)).statusCode, 403);
+  // The customer's invoice details: a TCKN is checked.
+  assert.equal((await send('PUT', '/billing/profile', { kind: 'individual', name: 'Ayşe Yılmaz', taxId: '12345678901', city: 'İstanbul', district: 'Kadıköy', address: 'Moda' }, user)).json().fields.taxId, 'INVALID_TCKN');
+  assert.equal((await send('PUT', '/billing/profile', { kind: 'individual', name: 'Ayşe Yılmaz', taxId: '10000000146', city: 'İstanbul', district: 'Kadıköy', address: 'Moda Cd. 1' }, user)).statusCode, 200);
+
+  // Order: the invoice awaits payment and the build waits.
+  const made = await create(order('billed-1'));
+  assert.equal(made.statusCode, 202, made.body);
+  const { serverId: sid, invoiceId, awaitingPayment } = made.json();
+  assert.ok(invoiceId && awaitingPayment);
+  let inv = (await send('GET', `/billing/invoices/${invoiceId}`, undefined, user)).json();
+  assert.deepEqual([inv.invoice.status, inv.invoice.number, inv.invoice.total, inv.invoice.taxTotal], ['unpaid', null, '1.20', '0.20'], '1.00 EUR + 20% KDV, no number yet');
+  assert.equal((await send('GET', `/billing/invoices/${invoiceId}`, undefined, other)).statusCode, 404);
+  await new Promise((r) => setTimeout(r, 2500));
+  assert.deepEqual([(await lastOp(sid)).status, (await lastOp(sid)).step], ['pending', 'awaiting_payment'], 'not built before payment');
+  // A declined card: the payment fails, the invoice still awaits payment.
+  let pay = (await send('POST', `/billing/invoices/${invoiceId}/pay`, { method: 'card', provider: 'sandbox', saveCard: true }, user)).json();
+  assert.match(pay.redirect, /^\/billing\/checkout\//);
+  assert.deepEqual((await send('POST', `/billing/payments/${pay.paymentId}/sandbox`, { card: '4000 0000 0000 0002' }, user)).json(), { status: 'failed', code: 'CARD_DECLINED' });
+  assert.equal((await send('GET', `/billing/invoices/${invoiceId}`, undefined, user)).json().invoice.status, 'unpaid');
+  assert.equal((await send('POST', `/billing/payments/${pay.paymentId}/sandbox`, { card: '4242424242424242' }, user)).json().status, 'failed', 'a settled payment is not paid twice');
+  // A good card: paid, numbered in the year's series, the card saved, the server built.
+  pay = (await send('POST', `/billing/invoices/${invoiceId}/pay`, { method: 'card', provider: 'sandbox', saveCard: true }, user)).json();
+  assert.equal((await send('POST', `/billing/payments/${pay.paymentId}/sandbox`, { card: '4242 4242 4242 4242' }, user)).json().status, 'succeeded');
+  inv = (await send('GET', `/billing/invoices/${invoiceId}`, undefined, user)).json();
+  assert.equal(inv.invoice.status, 'paid');
+  assert.match(inv.invoice.number, new RegExp(`^TST${new Date().getFullYear()}\\d{9}$`));
+  assert.equal(inv.payments.length, 2);
+  assert.equal((await send('POST', `/billing/invoices/${invoiceId}/pay`, { method: 'balance' }, user)).json().code, 'INVOICE_NOT_PAYABLE');
+  await until(async () => (await serverRow(sid)).state === 'ready', 'paid order built', 120);
+  let summary = (await send('GET', '/billing/summary', undefined, user)).json();
+  assert.equal(summary.cards.length, 1);
+  const sub = summary.subscriptions.find((b) => b.serverId === sid);
+  assert.equal(sub.status, 'active');
+
+  // Renewal: invoiced a week before the period ends and taken from the saved card at once.
+  await pool.query("UPDATE subscriptions SET period_end = (now() AT TIME ZONE 'Europe/Istanbul')::date + 3 WHERE id = $1", [sub.id]);
+  const before = (await pool.query('SELECT period_end::text AS e FROM subscriptions WHERE id = $1', [sub.id])).rows[0].e;
+  const run1 = await runBilling();
+  assert.ok(run1.renewals >= 1 && run1.charged >= 1, JSON.stringify(run1));
+  const renewal = (await pool.query("SELECT i.* FROM invoices i JOIN invoice_lines l ON l.invoice_id = i.id WHERE l.subscription_id = $1 AND i.kind = 'renewal'", [sub.id])).rows[0];
+  assert.equal(renewal.status, 'paid');
+  const after = (await pool.query('SELECT period_end::text AS e FROM subscriptions WHERE id = $1', [sub.id])).rows[0].e;
+  assert.ok(after > before, `the period moved on: ${before} -> ${after}`);
+  assert.equal((await runBilling()).renewals, 0, 'one renewal per period');
+
+  // A failing card: the next renewal stays unpaid, overdue the day after, then the server is held.
+  const owner = (await serverRow(sid)).owner_id;
+  await pool.query('UPDATE saved_cards SET token_enc = $2 WHERE owner_id = $1', [owner, encryptSecret('sandbox:0002', 'billing:card')]);
+  await pool.query("UPDATE subscriptions SET period_end = (now() AT TIME ZONE 'Europe/Istanbul')::date + 1 WHERE id = $1", [sub.id]);
+  await runBilling();
+  const late = (await pool.query("SELECT i.* FROM invoices i JOIN invoice_lines l ON l.invoice_id = i.id WHERE l.subscription_id = $1 AND i.status = 'unpaid'", [sub.id])).rows[0];
+  assert.ok(late, 'an unpaid renewal');
+  assert.ok((await pool.query("SELECT 1 FROM payments WHERE invoice_id = $1 AND status = 'failed' AND error_code = 'CARD_DECLINED'", [late.id])).rowCount);
+  await pool.query("UPDATE invoices SET due_at = now() - interval '1 day' WHERE id = $1", [late.id]);
+  assert.equal((await runBilling()).overdue, 1);
+  assert.equal((await pool.query('SELECT status FROM subscriptions WHERE id = $1', [sub.id])).rows[0].status, 'past_due');
+  await pool.query("UPDATE invoices SET due_at = now() - interval '4 days' WHERE id = $1", [late.id]);
+  assert.equal((await runBilling()).suspended, 1);
+  assert.equal((await serverRow(sid)).billing_hold, true);
+  await until(async () => (await serverRow(sid)).power_state === 'poweredOff', 'held server off', 60);
+  assert.equal((await send('POST', `/servers/${sid}/actions`, { action: 'power_on' }, user, key())).json().code, 'BILLING_HOLD');
+  assert.equal((await send('POST', `/servers/${sid}/console`, undefined, user)).json().code, 'BILLING_HOLD');
+  // Paid from the balance (a goodwill credit from staff): the hold goes and the server starts again.
+  assert.equal((await send('POST', '/admin/billing/balance', { userId: owner, amount: '5.00', currency: 'EUR', note: 'goodwill' }, user)).statusCode, 403);
+  assert.equal((await send('POST', '/admin/billing/balance', { userId: owner, amount: '5.00', currency: 'EUR', note: 'goodwill' })).statusCode, 201);
+  assert.deepEqual((await send('POST', `/billing/invoices/${late.id}/pay`, { method: 'balance' }, user)).json(), { paid: true });
+  assert.equal((await serverRow(sid)).billing_hold, false);
+  assert.equal((await pool.query('SELECT status FROM subscriptions WHERE id = $1', [sub.id])).rows[0].status, 'active');
+  await until(async () => (await serverRow(sid)).power_state === 'poweredOn', 'released server on', 60);
+  summary = (await send('GET', '/billing/summary', undefined, user)).json();
+  assert.deepEqual(summary.balance, [{ currency: 'EUR', amount: '3.80' }]);
+
+  // Top-up: money held, no legal invoice and no tax.
+  const top = (await send('POST', '/billing/topup', { amount: '100', currency: 'EUR' }, user)).json().invoiceId;
+  assert.equal((await send('POST', '/billing/topup', { amount: '1', currency: 'EUR' }, user)).json().fields.amount, 'OUT_OF_RANGE');
+  pay = (await send('POST', `/billing/invoices/${top}/pay`, { method: 'card', provider: 'sandbox' }, user)).json();
+  await send('POST', `/billing/payments/${pay.paymentId}/sandbox`, { card: '4242424242424242' }, user);
+  const topInv = (await send('GET', `/billing/invoices/${top}`, undefined, user)).json().invoice;
+  assert.deepEqual([topInv.status, topInv.number, topInv.taxTotal], ['paid', null, '0.00']);
+  assert.equal((await send('GET', '/billing/balance', undefined, user)).json().balance[0].amount, '103.80');
+
+  // Refund: part of the paid order back to the balance; the invoice says so.
+  assert.equal((await send('POST', `/admin/billing/invoices/${invoiceId}/refund`, { amount: '5.00', toBalance: true })).json().fields.amount, 'OUT_OF_RANGE');
+  assert.equal((await send('POST', `/admin/billing/invoices/${invoiceId}/refund`, { amount: '0.50', toBalance: true, reason: 'downtime' })).statusCode, 200);
+  assert.equal((await send('GET', `/admin/billing/invoices/${invoiceId}`)).json().invoice.status, 'partially_refunded');
+  // A sandbox card refund goes back through the provider.
+  assert.equal((await send('POST', `/admin/billing/invoices/${top}/refund`, { amount: '10.00' })).statusCode, 200);
+  assert.equal((await pool.query("SELECT status FROM payments WHERE invoice_id = $1 AND status <> 'failed'", [top])).rows[0].status, 'partially_refunded');
+
+  // A hand-written invoice paid by bank transfer.
+  const manual = (await send('POST', '/admin/billing/invoices', { userId: owner, currency: 'EUR', lines: [{ description: 'Kurulum hizmeti', unitPrice: '10', quantity: 2 }], dueDays: 7 })).json().invoiceId;
+  assert.equal((await send('POST', `/admin/billing/invoices/${manual}/mark-paid`, { method: 'bank_transfer', reference: 'EFT-123' })).statusCode, 200);
+  const m = (await send('GET', `/admin/billing/invoices/${manual}`)).json();
+  assert.deepEqual([m.invoice.status, m.invoice.total, m.payments[0].reference], ['paid', '24.00', 'EFT-123']);
+  const ov = (await send('GET', '/admin/billing/overview')).json();
+  assert.ok(ov.mrr.some((x) => x.currency === 'EUR'));
+  assert.ok((await send('GET', '/admin/billing/invoices?q=TST')).json().invoices.length >= 3);
+
+  // An order not paid in time: withdrawn, and the waiting build is cancelled (its address freed).
+  await send('PUT', '/admin/settings/billing', { balance: false });
+  const stale = (await create(order('billed-2'))).json();
+  assert.ok(stale.awaitingPayment, JSON.stringify(stale));
+  await pool.query("UPDATE invoices SET due_at = now() - interval '1 minute' WHERE id = $1", [stale.invoiceId]);
+  assert.equal((await runBilling()).expired, 1);
+  assert.equal((await send('GET', `/billing/invoices/${stale.invoiceId}`, undefined, user)).json().invoice.status, 'cancelled');
+  await until(async () => (await lastOp(stale.serverId)).status === 'cancelled', 'unpaid order cancelled', 60);
+  assert.equal((await pool.query('SELECT count(*)::int AS n FROM ip_allocations WHERE server_id = $1', [stale.serverId])).rows[0].n, 0);
+
+  // Billing off again for the other tests.
+  await send('PUT', '/admin/settings/billing', { enabled: false, balance: true });
+});

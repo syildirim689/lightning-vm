@@ -20,6 +20,7 @@ import { prepareApplication } from './applications';
 import { checkVdcRoom, resolveVdcOrder } from './vdc';
 import { renderPtr } from './rdns-names';
 import { fingerprint, parseKeyList, sshKeyPattern } from './smart-rules';
+import { billOrder, payFromBalance } from './billing';
 
 type Input = Record<string, unknown>;
 // BullMQ carries only the operation id (also the job id, so re-adding is harmless);
@@ -89,6 +90,10 @@ export async function startOperation(req: AuthedRequest, server: { id: string; o
   // Read here, for every caller (the server page, bulk actions, schedules, data centers).
   if (lockedKinds.has(kind) && (await pool.query('SELECT 1 FROM servers WHERE id = $1 AND locked', [server.id])).rowCount) {
     throw apiError(409, 'SERVER_LOCKED', 'The server is locked against this; unlock it first');
+  }
+  // Held for an unpaid invoice: the owner may shut it down or delete it, nothing else until it is paid (staff still may).
+  if (req.user?.id === server.owner_id && !['delete', 'shutdown', 'power_off'].includes(kind) && (await pool.query('SELECT 1 FROM servers WHERE id = $1 AND billing_hold', [server.id])).rowCount) {
+    throw apiError(409, 'BILLING_HOLD', 'The server is held until the unpaid invoice is paid');
   }
   // The role's operations per hour, for a member acting on their own servers (staff and schedules are not counted).
   if (req.user?.id === server.owner_id && !can(req.user.permissions, 'servers.manage_all')) {
@@ -266,7 +271,7 @@ export class ServersController {
     // Short transaction, no external calls: quota, capacity and IP are checked and taken under row
     // locks (owner, then pool), so concurrent requests can never take the same address or capacity twice.
     const client = await pool.connect();
-    let result: { serverId: string; operation: { id: string; kind: string; status: string }; passwordReplaced?: boolean };
+    let result: { serverId: string; operation: { id: string; kind: string; status: string }; passwordReplaced?: boolean; invoiceId?: string; awaitingPayment?: boolean };
     try {
       await client.query('BEGIN');
       await client.query('SELECT 1 FROM users WHERE id = $1 FOR UPDATE', [req.user.id]);
@@ -320,10 +325,13 @@ export class ServersController {
         await client.query('INSERT INTO firewall_servers (firewall_id, server_id) SELECT unnest($1::uuid[]), $2', [firewallIds, s.id]);
         await client.query('UPDATE servers SET firewall_version = 1 WHERE id = $1', [s.id]);
       }
+      // Billing on: the subscription and first invoice (a data center's servers are paid with the data center).
+      const bill = vdc ? null : await billOrder(client, { ownerId: req.user.id, serverId: s.id, name, monthly: order.price.monthly, currency: order.price.currency });
       const { rows: [op] } = await client.query(`INSERT INTO operations (kind, status, idempotency_key, request_hash, server_id, owner_id, step, deadline_at)
-        VALUES ('create', 'pending', $1, $2, $3, $4, 'queued', now() + make_interval(mins => $5)) RETURNING id, kind, status`, [key, requestHash, s.id, req.user.id, deadlineMinutes.create]);
+        VALUES ('create', 'pending', $1, $2, $3, $4, $6, now() + make_interval(mins => $5)) RETURNING id, kind, status`,
+        [key, requestHash, s.id, req.user.id, deadlineMinutes.create, bill?.awaitingPayment ? 'awaiting_payment' : 'queued']);
       await client.query('COMMIT');
-      result = { serverId: s.id, operation: op, ...(root && { passwordReplaced: root.replaced }) };
+      result = { serverId: s.id, operation: op, ...(root && { passwordReplaced: root.replaced }), ...(bill && { invoiceId: bill.invoiceId, awaitingPayment: bill.awaitingPayment }) };
     } catch (err) {
       await client.query('ROLLBACK');
       if ((err as { constraint?: string }).constraint === 'servers_owner_name_key') throw apiError(409, 'VALIDATION_FAILED', 'Name taken', { name: 'NAME_TAKEN' });
@@ -332,8 +340,11 @@ export class ServersController {
     } finally {
       client.release();
     }
-    await enqueue(result.operation.id);
-    await audit(req, 'server.create', 'success', req.user.id, { serverId: result.serverId, operationId: result.operation.id });
+    // Waiting for payment: a balance that covers it pays at once (the payment queues the build); otherwise the invoice waits.
+    if (result.awaitingPayment) {
+      if ((await getSettings('billing')).balance && await payFromBalance(result.invoiceId!, true, req.user.id)) result.awaitingPayment = false;
+    } else await enqueue(result.operation.id);
+    await audit(req, 'server.create', 'success', req.user.id, { serverId: result.serverId, operationId: result.operation.id, ...(result.invoiceId && { invoiceId: result.invoiceId }) });
     await checkBudget(req.user.id).catch(() => undefined);
     return result;
   }
@@ -417,6 +428,7 @@ export class ServersController {
     const s = await findServer(req, id, true);
     await customerMay(req, 'console');
     if (!s.vm_moref || s.state !== 'ready') throw apiError(409, 'INVALID_SERVER_STATE', 'The server is not ready');
+    if (s.billing_hold && s.owner_id === req.user.id) throw apiError(409, 'BILLING_HOLD', 'The server is held until the unpaid invoice is paid');
     const { rows: [p] } = await pool.query('SELECT connection_id FROM resource_pools WHERE id = $1', [s.pool_id]);
     return openConsole(req, reply, p.connection_id, s.vm_moref, true);
   }

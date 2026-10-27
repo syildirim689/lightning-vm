@@ -38,7 +38,7 @@ const jobOptions = { attempts: 6, backoff: { type: 'exponential', delay: 5000 },
 // operation id, so an operation that still has a live job is not queued twice.
 async function recover() {
   try {
-    const { rows } = await pool.query("SELECT id FROM operations WHERE status IN ('pending', 'running') AND updated_at < now() - make_interval(secs => $1)",
+    const { rows } = await pool.query("SELECT id FROM operations WHERE status IN ('pending', 'running') AND (step IS DISTINCT FROM 'awaiting_payment' OR cancel_requested) AND updated_at < now() - make_interval(secs => $1)",
       [Number(process.env.RECOVERY_STALE_SECONDS) || 90]);
     let count = 0;
     for (const { id } of rows) {

@@ -54,10 +54,24 @@ export type NotificationPolicy = { enabled: boolean; allowed: Channel[]; default
 export type CaptchaSettings = { provider: CaptchaProvider; siteKey: string; secretEnc: string | null; minScore: number; use: CaptchaUse };
 // Reverse DNS (rdns.ts): PowerDNS's HTTP API holds the in-addr.arpa / ip6.arpa zones of the routed blocks.
 // template: the default PTR of a new server's addresses ({ip}, {ip-dashed}, {name}); empty = none.
+// Billing (billing.ts): off until turned on. Seller details print on every invoice and go into the e-invoice.
+export type Company = { name: string; taxId: string; taxOffice: string; address: string; district: string; city: string; country: string; postalCode: string;
+  phone: string; email: string; website: string; mersis: string; tradeRegistry: string };
+export type BillingSettings = { enabled: boolean; requirePayment: boolean; orderExpiryHours: number; taxRate: number; pricesIncludeTax: boolean; exportExempt: boolean;
+  invoicePrefix: string; invoiceDaysBefore: number; reminderDays: number[]; suspendAfterDays: number; terminateAfterDays: number;
+  autoCharge: boolean; chargeRetries: number; balance: boolean; topupMin: number; topupMax: number; sandbox: boolean;
+  bankTransfer: { enabled: boolean; bank: string; holder: string; iban: string }; company: Company };
+// e-Fatura / e-Arşiv through an integrator (einvoice.ts); 'none' issues invoices in the panel only.
+export type EinvoiceSettings = { provider: string };
 export type RdnsSettings = { provider: 'none' | 'powerdns'; apiUrl: string; apiKeyEnc: string | null; serverId: string; template: string; ttl: number;
   customerEdit: boolean; forwardCheck: boolean };
 
 const defaults = {
+  einvoice: { provider: 'none' } as EinvoiceSettings,
+  billing: { enabled: false, requirePayment: true, orderExpiryHours: 24, taxRate: 20, pricesIncludeTax: false, exportExempt: true, invoicePrefix: 'LVM',
+    invoiceDaysBefore: 7, reminderDays: [3, 1], suspendAfterDays: 3, terminateAfterDays: 0, autoCharge: true, chargeRetries: 3, balance: true, topupMin: 50, topupMax: 50000, sandbox: false,
+    bankTransfer: { enabled: false, bank: '', holder: '', iban: '' },
+    company: { name: '', taxId: '', taxOffice: '', address: '', district: '', city: '', country: 'TR', postalCode: '', phone: '', email: '', website: '', mersis: '', tradeRegistry: '' } } as BillingSettings,
   branding: { name: 'Lightning VM', accent: null, logo: null, favicon: null, passwordPrefix: '' } as Branding,
   mail: { enabled: false, provider: 'smtp', host: '', port: 587, security: 'starttls', username: '', passwordEnc: null, api: {}, apiSecretEnc: null, fromName: '', fromAddress: '',
     use: { passwordReset: true, twoFactor: true } } as MailSettings,

@@ -324,6 +324,7 @@ export async function processOperation(db, job, log, notify = async () => {}, rd
   // Loading can fail too (database, key file); log it instead of failing silently.
   const ctx = await load(db, job.id).catch((e) => { log('error', 'operation_load_failed', { operationId: job.id, error: e.code ?? e.message }); throw e; });
   if (!ctx || ['succeeded', 'failed', 'cancelled'].includes(ctx.op.status)) return; // already settled
+  if (ctx.op.step === 'awaiting_payment' && !ctx.op.cancel_requested) return; // billing.ts queues it again once paid
   await db.query("UPDATE operations SET status = 'running', started_at = COALESCE(started_at, now()), attempts = attempts + 1, updated_at = now() WHERE id = $1", [ctx.op.id]);
   try {
     await guard(db, ctx.op);
