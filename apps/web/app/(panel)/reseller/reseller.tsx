@@ -93,8 +93,8 @@ export default function Reseller() {
   const format = useFormatter();
   const { error, field } = useErrorText();
   const client = useQueryClient();
-  const s = useApiQuery<{ allocation: Allocation; usage: Usage }>(['reseller', 'summary'], '/reseller/summary');
-  const c = useApiQuery<{ customers: Customer[] }>(['reseller', 'customers'], s.data ? '/reseller/customers' : null);
+  const s = useApiQuery<{ allocation: Allocation | null; usage?: Usage }>(['reseller', 'summary'], '/reseller/summary');
+  const c = useApiQuery<{ customers: Customer[] }>(['reseller', 'customers'], s.data?.allocation ? '/reseller/customers' : null);
   const [email, setEmail] = useState('');
   const [name, setName] = useState('');
   const [fields, setFields] = useState<Record<string, string>>({});
@@ -102,7 +102,8 @@ export default function Reseller() {
   const [search, setSearch] = useState('');
   if (s.error) return <><PageHeader title={t('title')}/><Notice tone="warning">{error(s.error)}</Notice></>;
   if (!s.data) return <div className="h-48 animate-pulse rounded-3xl bg-default/50"/>;
-  const { allocation: a, usage: u } = s.data;
+  if (!s.data.allocation || !s.data.usage) return <><PageHeader title={t('title')}/><Notice tone="default">{t('notReseller')}</Notice></>;
+  const a = s.data.allocation; const u = s.data.usage;
   async function add(e: React.FormEvent) {
     e.preventDefault(); setBusy(true); setFields({});
     try { await apiFetch('/reseller/customers', { method: 'POST', body: { email, name } }); toast.success(t('added', { email })); setEmail(''); setName(''); void client.invalidateQueries({ queryKey: ['reseller'] }); }

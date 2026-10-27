@@ -79,7 +79,7 @@ function NavList({ user, onNavigate }: { user: User; onNavigate?: () => void }) 
   const t = useTranslations('Nav');
   const billing = useBillingSummary();
   // Shown only to resellers: the summary answers 403 for everyone else.
-  const reseller = useApiQuery<{ allocation: object }>(['reseller', 'summary'], '/reseller/summary').data;
+  const reseller = useApiQuery<{ allocation: object | null }>(['reseller', 'summary'], '/reseller/summary').data?.allocation;
   const path = usePathname();
   const active = (i: Item) => (i.exact ? path === i.href : path === i.href || path.startsWith(`${i.href}/`));
   return <nav aria-label={t('label')} className="flex flex-col gap-3">

@@ -1186,7 +1186,7 @@ test('backups: a location\'s backup storage, a backup taken while the server run
 test('resellers: an allocation and a discount; customers of their own, servers ordered for them within the allocation at the discount; the reseller manages them, others cannot', { skip }, async () => {
   const key = () => ({ 'idempotency-key': randomUUID() });
   const resellerId = (await send('GET', '/auth/me', undefined, other)).json().id;
-  assert.equal((await send('GET', '/reseller/summary', undefined, other)).json().code, 'NOT_A_RESELLER');
+  assert.equal((await send('GET', '/reseller/summary', undefined, other)).json().allocation, null);
   assert.equal((await send('PUT', `/admin/resellers/${resellerId}`, { maxServers: 1 }, user)).statusCode, 403);
   assert.equal((await send('PUT', `/admin/resellers/${resellerId}`, { discountPct: 95 })).json().fields.discountPct, 'OUT_OF_RANGE');
   assert.equal((await send('PUT', `/admin/resellers/${resellerId}`, { maxCustomers: 5, maxServers: 1, maxVcpu: 4, discountPct: 20 })).statusCode, 200);

@@ -58,9 +58,12 @@ const customerColumns = `u.id, u.email, u.name, u.created_at AS "createdAt", u.l
 
 @Controller('reseller') @UseGuards(SessionGuard)
 export class ResellerController {
+  // Everyone may ask (the menu does): not a reseller answers with no allocation rather than an error.
   @Get('summary')
   async summary(@Req() req: AuthedRequest) {
-    const r = await activeReseller(req.user.id);
+    const { rows: [own] } = await pool.query('SELECT * FROM resellers WHERE user_id = $1 AND active', [req.user.id]);
+    if (!own) return { allocation: null };
+    const r = row(own);
     const { rows: [c] } = await pool.query('SELECT count(*)::int AS n FROM users WHERE reseller_id = $1', [r.id]);
     return { allocation: r, usage: { ...(await resellerUsage(r.id)), customers: c.n } };
   }

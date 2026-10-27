@@ -6545,7 +6545,8 @@
       "active": "Active",
       "stop": "No longer a reseller",
       "stopped": "No longer a reseller; their customers are ordinary accounts now"
-    }
+    },
+    "notReseller": "This account is not a reseller. Ask us if you would like to resell servers."
   },
   "Placement": {
     "title": "Placement",

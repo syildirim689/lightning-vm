@@ -6545,7 +6545,8 @@
       "active": "Etkin",
       "stop": "Bayilikten çıkar",
       "stopped": "Bayilikten çıkarıldı; müşterileri artık normal hesap"
-    }
+    },
+    "notReseller": "Bu hesap bayi değil. Sunucu satmak isterseniz bize yazın."
   },
   "Placement": {
     "title": "Yerleşim",
