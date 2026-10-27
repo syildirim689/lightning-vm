@@ -397,8 +397,13 @@
       "expired": {
         "title": "Oturumunuzun süresi doldu",
         "body": "Devam etmek için yeniden giriş yapın."
+      },
+      "sso": {
+        "title": "Tek oturum açma başarısız oldu",
+        "body": "Kurumunuzun girişi panele açılamadı: henüz bir panel hesabınız yok ya da bu e-posta adresi parolayla giriş yapan bir panel hesabına ait. Yöneticinize başvurun."
       }
-    }
+    },
+    "ssoSignIn": "{name} ile giriş yap"
   },
   "fieldErrors": {
     "INVALID_EMAIL": "Geçerli bir e-posta adresi girin.",
@@ -3310,7 +3315,30 @@
       "testFound": "Kişi bulundu.",
       "testSignedIn": "Kişi bulundu ve parolası doğrulandı.",
       "groupsFound": "Gruplar",
-      "rolesGiven": "Verilecek roller"
+      "rolesGiven": "Verilecek roller",
+      "ssoTitle": "Tek oturum açma (OpenID Connect)",
+      "ssoIntro": "Kurumunuzun kimlik sağlayıcısıyla giriş: Keycloak, Microsoft Entra ID, Okta, Google Workspace, Authentik, Zitadel ya da herhangi bir OpenID Connect sağlayıcısı.",
+      "ssoEnabled": "Tek oturum açmaya izin ver",
+      "ssoUsers": "{n} hesap tek oturum açmayla giriş yapıyor.",
+      "ssoHow": "Panel kişinin kim olduğunu sağlayıcıya sorar (PKCE ile kod akışı; kimlik belirtecinin imzası sağlayıcının anahtarlarıyla doğrulanır). Yeni kişilere hesap açılır ve rolleri aşağıdaki gruplara göre belirlenir. Bir panel ya da dizin hesabına ait e-posta adresi sağlayıcı tarafından asla ele geçirilemez. Parola ve ikinci adım sağlayıcıda kalır.",
+      "ssoName": "Düğme etiketi",
+      "ssoNameHelp": "Giriş sayfasında “… ile giriş yap” olarak görünür.",
+      "issuer": "Issuer adresi",
+      "issuerHelp": "Sağlayıcının issuer adresi; panel {issuer}/.well-known/openid-configuration belgesini okur. Yalnızca https.",
+      "clientId": "Client ID",
+      "clientSecret": "Client secret",
+      "redirect": "Sağlayıcıya kaydedilecek yönlendirme adresi (Redirect URI)",
+      "scopes": "Kapsamlar (scopes)",
+      "scopesHelp": "openid içermeli. Sağlayıcınız grupları belirtece koymak için bir kapsam istiyorsa onu da ekleyin (örneğin “groups”).",
+      "groupsClaim": "Grup alanı (claim)",
+      "groupsClaimHelp": "Kişinin gruplarını listeleyen alan (groups, roles, …).",
+      "ssoGroup": "Sağlayıcının gönderdiği grup adı",
+      "ssoAutoCreate": "Yeni kişilere hesap aç",
+      "ssoAutoCreateHelp": "Kapalıysa yalnızca daha önce tek oturum açmayla girmiş kişiler girebilir.",
+      "ssoTest": "Sağlayıcıyı kontrol et",
+      "ssoTestOk": "Sağlayıcı yanıt verdi: {issuer}",
+      "ssoClaims": "Sunduğu alanlar",
+      "ssoSave": "Tek oturum açmayı kaydet"
     },
     "incidents": {
       "new": "Olay aç",

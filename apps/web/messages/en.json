@@ -397,8 +397,13 @@
       "expired": {
         "title": "Your session expired",
         "body": "Sign in again to continue."
+      },
+      "sso": {
+        "title": "Single sign-on did not work",
+        "body": "Your organization’s sign-in could not open the panel: there is no panel account for you yet, or this e-mail address already belongs to a panel account that signs in with a password. Ask your administrator."
       }
-    }
+    },
+    "ssoSignIn": "Sign in with {name}"
   },
   "fieldErrors": {
     "INVALID_EMAIL": "Enter a valid email address.",
@@ -3310,7 +3315,30 @@
       "testFound": "Person found.",
       "testSignedIn": "Person found and their password accepted.",
       "groupsFound": "Groups",
-      "rolesGiven": "Roles they get"
+      "rolesGiven": "Roles they get",
+      "ssoTitle": "Single sign-on (OpenID Connect)",
+      "ssoIntro": "Let people sign in with your organization’s identity provider: Keycloak, Microsoft Entra ID, Okta, Google Workspace, Authentik, Zitadel or any OpenID Connect provider.",
+      "ssoEnabled": "Allow single sign-on",
+      "ssoUsers": "{n, plural, one {# account signs in with single sign-on} other {# accounts sign in with single sign-on}}.",
+      "ssoHow": "The panel asks the provider who the person is (code flow with PKCE; the ID token’s signature is checked with the provider’s keys). New people get an account, and their roles follow the groups below. An e-mail address that already belongs to a panel or directory account is never taken over by the provider. Their password and second factor stay at the provider.",
+      "ssoName": "Button label",
+      "ssoNameHelp": "Shown on the sign-in page as “Sign in with …”.",
+      "issuer": "Issuer URL",
+      "issuerHelp": "The provider’s issuer; the panel reads {issuer}/.well-known/openid-configuration. https only.",
+      "clientId": "Client ID",
+      "clientSecret": "Client secret",
+      "redirect": "Redirect URI to register at the provider",
+      "scopes": "Scopes",
+      "scopesHelp": "Must include openid. Add the scope that puts groups in the token if your provider needs one (for example “groups”).",
+      "groupsClaim": "Groups claim",
+      "groupsClaimHelp": "The claim that lists the person’s groups (groups, roles, …).",
+      "ssoGroup": "Group name as the provider sends it",
+      "ssoAutoCreate": "Create accounts for new people",
+      "ssoAutoCreateHelp": "Off: only people who already signed in with single sign-on can come in.",
+      "ssoTest": "Check the provider",
+      "ssoTestOk": "The provider answered: {issuer}",
+      "ssoClaims": "Claims it offers",
+      "ssoSave": "Save single sign-on"
     },
     "incidents": {
       "new": "Open an incident",

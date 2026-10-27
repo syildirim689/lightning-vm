@@ -100,7 +100,7 @@ export default function CredentialsForm({ mode, noToken, onDone }: { mode: Mode;
   const [values, setValues] = useState({ token: '', email: '', password: '' });
   const [fields, setFields] = useState<Record<string, string>>({});
   const [failure, setFailure] = useState<string>();
-  const [busy, setBusy] = useState<'password' | 'passkey'>();
+  const [busy, setBusy] = useState<'password' | 'passkey' | 'sso'>();
   const [secondStep, setSecondStep] = useState(false);
   const [emailCode, setEmailCode] = useState(false);
   const [lastMethod, setLastMethod] = useState<string | null>(null);
@@ -164,6 +164,15 @@ export default function CredentialsForm({ mode, noToken, onDone }: { mode: Mode;
     } finally { setBusy(undefined); }
   }
 
+  // Single sign-on: the API answers with the provider's sign-in page; the provider sends the person back signed in.
+  async function sso() {
+    setFailure(undefined); setBusy('sso');
+    try {
+      const r = await apiFetch<{ url: string }>('/auth/sign-in/social', { method: 'POST', body: { provider: 'oidc', callbackURL: '/', errorCallbackURL: '/login?reason=sso' } });
+      window.location.assign(r.url);
+    } catch (e) { setBusy(undefined); setFailure(error(e)); shakeForm(); }
+  }
+
   async function passkey() {
     setFailure(undefined); setBusy('passkey');
     const { error: err } = await authClient.signIn.passkey();
@@ -205,6 +214,9 @@ export default function CredentialsForm({ mode, noToken, onDone }: { mode: Mode;
       <div className="flex items-center gap-3 text-xs text-muted"><Separator className="flex-1"/>{t('or')}<Separator className="flex-1"/></div>
       {withLast(lastMethod === 'passkey', <Button variant="secondary" size="lg" fullWidth isPending={busy === 'passkey'} isDisabled={!!busy} onPress={passkey}>
         <I name="fingerprint" size={18}/>{t('passkeySignIn')}
+      </Button>)}
+      {cfg?.sso && withLast(lastMethod === 'oidc', <Button variant="secondary" size="lg" fullWidth isPending={busy === 'sso'} isDisabled={!!busy} onPress={sso}>
+        <I name="building-2" size={18}/>{t('ssoSignIn', { name: cfg.sso.name })}
       </Button>)}
       {cfg?.emailCodeSignIn && withLast(lastMethod === 'email-otp', <Button variant="tertiary" size="lg" fullWidth isDisabled={!!busy} onPress={() => setEmailCode(true)}>
         <I name="mail-check" size={18}/>{t('emailCode.button')}

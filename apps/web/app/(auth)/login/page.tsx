@@ -5,7 +5,7 @@ import { AuthCard } from '../auth-card';
 import CredentialsForm from '../credentials-form';
 import { Notice } from '../../../components/ui';
 
-const reasons = ['banned', 'password', 'revoked', 'removed', 'expired'] as const;
+const reasons = ['banned', 'password', 'revoked', 'removed', 'expired', 'sso'] as const;
 
 export default async function LoginPage({ searchParams }: { searchParams: Promise<{ reason?: string }> }) {
   const asked = (await searchParams).reason;
@@ -13,7 +13,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
   if (!(await getSetupStatus()).adminCreated) redirect('/setup');
   const t = await getTranslations('Auth');
   return <AuthCard title={t('loginTitle')} intro={t('loginIntro')}>
-    {reason && <div role="alert" className="mb-4"><Notice tone={reason === 'banned' || reason === 'removed' ? 'danger' : 'warning'} title={t(`signedOut.${reason}.title`)}>{t(`signedOut.${reason}.body`)}</Notice></div>}
+    {reason && <div role="alert" className="mb-4"><Notice tone={reason === 'banned' || reason === 'removed' || reason === 'sso' ? 'danger' : 'warning'} title={t(`signedOut.${reason}.title`)}>{t(`signedOut.${reason}.body`)}</Notice></div>}
     <CredentialsForm mode="login"/>
   </AuthCard>;
 }

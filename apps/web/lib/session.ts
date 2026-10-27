@@ -5,7 +5,7 @@ export type User = { id: string; email: string; name: string; roles: string[]; p
   twoFactorEnabled: boolean; twoFactorRequired?: boolean; phoneNumber: string | null; phoneNumberVerified: boolean };
 export type Branding = { name: string; accent: string | null; logo: boolean; favicon: boolean; version: string };
 export type CaptchaConfig = { provider: 'turnstile' | 'recaptcha-v2' | 'recaptcha-v3' | 'hcaptcha'; siteKey: string; use: { signIn: boolean; signUp: boolean; passwordReset: boolean } };
-export type PublicConfig = { branding: Branding; passwordReset: boolean; captcha: CaptchaConfig | null; phoneVerification: boolean; otpChannels: { sms: boolean; email: boolean }; emailCodeSignIn?: boolean };
+export type PublicConfig = { branding: Branding; passwordReset: boolean; captcha: CaptchaConfig | null; phoneVerification: boolean; otpChannels: { sms: boolean; email: boolean }; emailCodeSignIn?: boolean; sso?: { name: string } | null };
 
 // Server components talk to the API directly on the internal network, forwarding the session cookie.
 const apiUrl = process.env.API_INTERNAL_URL || 'http://api:4000';

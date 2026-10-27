@@ -222,12 +222,12 @@ function createAuth() {
           if (uid) { await notify('auth.password_changed', [uid], {}); await publishLive(uid, 'password'); }
           return;
         }
-        if (ctx.path !== '/sign-in/email' && ctx.path !== '/sign-up/email' && ctx.path !== '/sign-in/passkey' && ctx.path !== '/sign-in/email-otp' && !ctx.path.startsWith('/two-factor/verify-') && !ctx.path.startsWith('/oauth2/callback/')) return;
+        if (ctx.path !== '/sign-in/email' && ctx.path !== '/sign-up/email' && ctx.path !== '/sign-in/passkey' && ctx.path !== '/sign-in/email-otp' && !ctx.path.startsWith('/two-factor/verify-') && !ctx.path.startsWith('/callback/')) return;
         const created = ctx.context.newSession;
         // A password sign-in that still needs the second factor is neither a success nor a failure yet.
         if (!created && (ctx.context.returned as { twoFactorRedirect?: boolean } | undefined)?.twoFactorRedirect) return;
         const action = ctx.path === '/sign-up/email' ? 'auth.register' : 'auth.login';
-        const method = ctx.path.startsWith('/oauth2/') ? 'sso' : ctx.path === '/sign-in/passkey' ? 'passkey' : ctx.path === '/sign-in/email-otp' ? 'email-code' : ctx.path.startsWith('/two-factor/') ? 'password+2fa' : 'password';
+        const method = ctx.path.startsWith('/callback/') ? 'sso' : ctx.path === '/sign-in/passkey' ? 'passkey' : ctx.path === '/sign-in/email-otp' ? 'email-code' : ctx.path.startsWith('/two-factor/') ? 'password+2fa' : 'password';
         await auditAuth(created?.user.id ?? null, action, created ? 'success' : 'failure', ip,
           created ? { method } : { email: String((ctx.body as { email?: unknown })?.email ?? '').toLowerCase() });
         if (!created) return;
@@ -244,7 +244,7 @@ function createAuth() {
           before: async (session, ctx) => {
             const user = await ctx?.context.internalAdapter.findUserById(session.userId) as { disabledAt?: Date | null; banned?: boolean } | null;
             if (user?.disabledAt || user?.banned) return false;
-            if (sso && ctx?.path.startsWith('/oauth2/callback/') && !(await ssoSignedIn(sso, session.userId, ctx.request?.headers.get('x-lvm-client-ip') ?? ''))) return false;
+            if (sso && ctx?.path.startsWith('/callback/') && !(await ssoSignedIn(sso, session.userId, ctx.request?.headers.get('x-lvm-client-ip') ?? ''))) return false;
           },
         },
         delete: {

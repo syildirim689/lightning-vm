@@ -669,7 +669,7 @@ async function fakeIdp(clientId) {
 // One SSO sign-in through the API: start, the provider's answer, the callback. The session cookie and where it went.
 async function ssoSignIn(idp, person) {
   idp.person = person;
-  const start = await post('/auth/sign-in/oauth2', { providerId: 'oidc', callbackURL: '/', errorCallbackURL: '/login?reason=sso' });
+  const start = await post('/auth/sign-in/social', { provider: 'oidc', callbackURL: '/', errorCallbackURL: '/login?reason=sso' });
   assert.equal(start.statusCode, 200, start.body);
   const jar = [].concat(start.headers['set-cookie'] ?? []).map((c) => c.split(';')[0]).join('; ');
   const answer = await fetch(start.json().url, { redirect: 'manual' });
@@ -683,7 +683,7 @@ test('single sign-on (OIDC): checked settings, accounts created with roles from 
   try {
     assert.equal((await put('/admin/settings/directory/sso', { oidc: { enabled: true, issuer: 'http://evil.example', clientId: '' } }, admin)).json().code, 'VALIDATION_FAILED');
     assert.equal((await put('/admin/settings/directory/sso', { oidc: { enabled: true } }, user)).statusCode, 403);
-    assert.ok((await post('/auth/sign-in/oauth2', { providerId: 'oidc', callbackURL: '/' })).statusCode >= 400, 'off: no provider');
+    assert.ok((await post('/auth/sign-in/social', { provider: 'oidc', callbackURL: '/' })).statusCode >= 400, 'off: no provider');
     assert.equal((await post('/admin/roles', { key: 'sso-support', name: 'SSO support', permissions: ['users.view'] }, admin)).statusCode, 201);
     const oidc = { enabled: true, name: 'Company SSO', issuer: idp.issuer, clientId: 'panel-client', clientSecret: 'client-secret-1', groupRoles: [{ group: 'panel-support', roles: ['sso-support'] }] };
     assert.equal((await post('/admin/settings/directory/sso/test', { oidc }, admin)).json().issuer, idp.issuer);

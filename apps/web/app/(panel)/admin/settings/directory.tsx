@@ -81,19 +81,7 @@ export default function DirectorySettings({ readOnly }: { readOnly: boolean }) {
     <FormSection title={t('roles')} description={t('rolesHelp')} icon={<I name="shield-check" size={16}/>}>
       <SelectInput label={t('defaultRole')} value={v.defaultRole} onChange={(x) => set('defaultRole')(x)} isDisabled={readOnly} error={err('defaultRole')}
         options={roleList.map((r) => ({ id: r.key, label: r.name }))}/>
-      <ul className="flex flex-col gap-3">
-        {mapping.map((m, i) => <li key={i} className="flex flex-col gap-2 rounded-xl border border-border p-3">
-          <div className="flex items-start gap-2">
-            <TextInput className="flex-1" label={t('group')} value={m.group} onChange={(x) => setMapping(mapping.map((y, j) => (j === i ? { ...y, group: x } : y)))} placeholder="CN=Panel Admins,OU=Groups,DC=example,DC=com" isDisabled={readOnly} spellCheck={false}/>
-            {!readOnly && <Button isIconOnly size="sm" variant="ghost" className="mt-6" aria-label={t('removeMapping')} onPress={() => setMapping(mapping.filter((_, j) => j !== i))}><I name="trash-2" size={15}/></Button>}
-          </div>
-          <div className="flex flex-wrap gap-2">{roleList.map((r) => <button key={r.key} type="button" role="checkbox" aria-checked={m.roles.includes(r.key)} disabled={readOnly}
-            onClick={() => setMapping(mapping.map((y, j) => (j === i ? { ...y, roles: y.roles.includes(r.key) ? y.roles.filter((k) => k !== r.key) : [...y.roles, r.key] } : y)))}
-            className={`rounded-full border px-3 py-1 text-sm transition-colors focus-visible:outline-2 focus-visible:outline-accent ${m.roles.includes(r.key) ? 'border-accent bg-accent/10 text-accent' : 'border-border hover:border-accent/50'}`}>{r.name}</button>)}</div>
-        </li>)}
-      </ul>
-      {err('groupRoles') && <p className="text-xs text-danger">{err('groupRoles')}</p>}
-      {!readOnly && <div><Button size="sm" variant="secondary" onPress={() => setMapping([...mapping, { group: '', roles: [] }])}><I name="plus" size={15}/>{t('addMapping')}</Button></div>}
+      <GroupRoleList mapping={mapping} onChange={setMapping} roles={roleList} readOnly={readOnly} error={err('groupRoles')} placeholder="CN=Panel Admins,OU=Groups,DC=example,DC=com"/>
     </FormSection>
     {!readOnly && <FormSection title={t('test')} description={t('testHelp')} icon={<I name="flask-conical" size={16}/>}>
       <div className="grid gap-4 sm:grid-cols-2">
@@ -113,4 +101,25 @@ export default function DirectorySettings({ readOnly }: { readOnly: boolean }) {
     </FormSection>}
     {!readOnly && <FormActions><Button isPending={busy} onPress={save}><I name="check" size={16}/>{ts('save')}</Button></FormActions>}
   </Card.Content></Card>;
+}
+
+export type Mapping = { group: string; roles: string[] }[];
+export function GroupRoleList({ mapping, onChange: setMapping, roles: roleList, readOnly, error, placeholder, groupLabel }: { mapping: Mapping; onChange: (m: Mapping) => void;
+  roles: { key: string; name: string }[]; readOnly: boolean; error?: string; placeholder: string; groupLabel?: string }) {
+  const t = useTranslations('Settings.directory');
+  return <>
+      <ul className="flex flex-col gap-3">
+        {mapping.map((m, i) => <li key={i} className="flex flex-col gap-2 rounded-xl border border-border p-3">
+          <div className="flex items-start gap-2">
+            <TextInput className="flex-1" label={groupLabel ?? t('group')} value={m.group} onChange={(x) => setMapping(mapping.map((y, j) => (j === i ? { ...y, group: x } : y)))} placeholder={placeholder} isDisabled={readOnly} spellCheck={false}/>
+            {!readOnly && <Button isIconOnly size="sm" variant="ghost" className="mt-6" aria-label={t('removeMapping')} onPress={() => setMapping(mapping.filter((_, j) => j !== i))}><I name="trash-2" size={15}/></Button>}
+          </div>
+          <div className="flex flex-wrap gap-2">{roleList.map((r) => <button key={r.key} type="button" role="checkbox" aria-checked={m.roles.includes(r.key)} disabled={readOnly}
+            onClick={() => setMapping(mapping.map((y, j) => (j === i ? { ...y, roles: y.roles.includes(r.key) ? y.roles.filter((k) => k !== r.key) : [...y.roles, r.key] } : y)))}
+            className={`rounded-full border px-3 py-1 text-sm transition-colors focus-visible:outline-2 focus-visible:outline-accent ${m.roles.includes(r.key) ? 'border-accent bg-accent/10 text-accent' : 'border-border hover:border-accent/50'}`}>{r.name}</button>)}</div>
+        </li>)}
+      </ul>
+      {error && <p className="text-xs text-danger">{error}</p>}
+      {!readOnly && <div><Button size="sm" variant="secondary" onPress={() => setMapping([...mapping, { group: '', roles: [] }])}><I name="plus" size={15}/>{t('addMapping')}</Button></div>}
+  </>;
 }
