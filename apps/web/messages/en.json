@@ -336,7 +336,13 @@
     "REMOVE_EXTRA_DISKS": "Remove the extra disks before reinstalling.",
     "SYSTEM_DISK": "The system disk cannot be removed.",
     "NO_DISK_CONTROLLER": "The server has no free disk slot.",
-    "DISK_NOT_FOUND": "The new disk was not found."
+    "DISK_NOT_FOUND": "The new disk was not found.",
+    "NO_FREE_VLAN": "This location has no free private network left.",
+    "NETWORK_IN_USE": "Remove the servers from the network first.",
+    "NETWORK_FULL": "The network has no free address.",
+    "ALREADY_MEMBER": "The server is on this network already.",
+    "LEAVE_PRIVATE_NETWORKS": "Take the server off its private networks before reinstalling.",
+    "INVALID_PRIVATE_SUBNET": "Use a private range (10.x, 172.16-31.x or 192.168.x) between /16 and /28."
   },
   "Auth": {
     "required": "required",
@@ -575,7 +581,8 @@
     "BALANCE_TOO_LOW": "Top up your balance first: it must cover the first hours of the server.",
     "RESELLER_ALLOCATION_EXCEEDED": "The reseller allocation is used up.",
     "EMAIL_TAKEN": "This e-mail already has an account.",
-    "CUSTOMER_OF_A_RESELLER": "This account is a reseller's customer."
+    "CUSTOMER_OF_A_RESELLER": "This account is a reseller's customer.",
+    "INVALID_PRIVATE_SUBNET": "Use a private range (10.x, 172.16-31.x or 192.168.x) between /16 and /28."
   },
   "Setup": {
     "title": "Setup wizard",
@@ -1604,6 +1611,15 @@
       "help": "Empty: customers cannot add disks here.",
       "save": "Save",
       "saved": "Extra disk price saved"
+    },
+    "privnet": {
+      "portgroup": "Private networks",
+      "help": "A distributed port group: customers' networks are made on its switch, each with its own VLAN.",
+      "off": "Not offered",
+      "vlanMin": "VLAN from",
+      "vlanMax": "VLAN to",
+      "save": "Save",
+      "saved": "Private network settings saved"
     }
   },
   "Servers": {
@@ -1643,7 +1659,9 @@
       "backup_delete": "Remove a backup",
       "migrate": "Move",
       "disk_add": "Add a disk",
-      "disk_remove": "Remove a disk"
+      "disk_remove": "Remove a disk",
+      "nic_add": "Join a network",
+      "nic_remove": "Leave a network"
     },
     "opStatus": {
       "pending": "Queued",
@@ -1672,7 +1690,8 @@
       "restore": "Restoring the disk",
       "delete": "Removing",
       "migrate": "Moving",
-      "disk": "Changing disks"
+      "disk": "Changing disks",
+      "nic": "Changing network cards"
     },
     "action": {
       "power_on": "Power on",
@@ -1951,7 +1970,8 @@
     "billing": "Billing",
     "myBilling": "Billing",
     "unpaidInvoices": "{n, plural, one {# invoice awaits payment} other {# invoices await payment}}",
-    "reseller": "Reseller"
+    "reseller": "Reseller",
+    "networks": "Private networks"
   },
   "Dashboard": {
     "eyebrow": "ADMINISTRATION",
@@ -4691,7 +4711,12 @@
       "vmware_host_evacuate": "Host evacuated",
       "server_disk_added": "Extra disk added",
       "server_disk_removed": "Extra disk removed",
-      "catalog_pool_extra_disks": "Extra disk price changed"
+      "catalog_pool_extra_disks": "Extra disk price changed",
+      "network_created": "Private network created",
+      "network_deleted": "Private network deleted",
+      "network_server_joined": "Server added to a private network",
+      "network_server_left": "Server removed from a private network",
+      "catalog_pool_private_networks": "Private network settings changed"
     },
     "outcome": {
       "success": "Done",
@@ -6582,5 +6607,42 @@
       "failed": "Failed"
     },
     "full": "At most {max} extra disks."
+  },
+  "Networks": {
+    "title": "Private networks",
+    "intro": "Networks of your own between your servers in a location, isolated from everyone else (a VLAN of their own). Traffic on them is not counted.",
+    "create": "New network",
+    "name": "Name",
+    "location": "Location",
+    "subnet": "Subnet (optional)",
+    "subnetHelp": "A private range such as 10.10.0.0/24; empty: one is chosen.",
+    "add": "Create",
+    "created": "Network created",
+    "none": "No private networks yet",
+    "noneHelp": "Create one, then add servers of the same location.",
+    "noLocations": "No location offers private networks yet.",
+    "members": "Servers",
+    "noMembers": "No servers on it yet.",
+    "join": "Add a server",
+    "choose": "Server",
+    "joining": "The server is being connected",
+    "leave": "Remove",
+    "leaveTitle": "Take this server off the network?",
+    "leaveBody": "Its interface on this network is removed.",
+    "left": "The server is being disconnected",
+    "remove": "Delete network",
+    "removeTitle": "Delete this network?",
+    "removeBody": "Only an empty network can be deleted.",
+    "removed": "Network deleted",
+    "cancel": "Cancel",
+    "status": {
+      "joining": "Connecting",
+      "joined": "Connected",
+      "leaving": "Disconnecting",
+      "failed": "Failed"
+    },
+    "setup": "Inside the server",
+    "setupHelp": "The new interface has MAC {mac}. On Linux with netplan:",
+    "vlan": "VLAN {vlan}"
   }
 }

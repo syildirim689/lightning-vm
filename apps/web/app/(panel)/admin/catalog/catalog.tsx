@@ -6,7 +6,7 @@ import { parseAsString, useQueryState } from 'nuqs';
 import { useState } from 'react';
 import { I } from '../../../../components/icon';
 import { CheckboxList, ConfirmButton, DataTable, Empty, FieldGroup, Mono, Notice, NumberInput, PageHeader, SelectInput, TextInput } from '../../../../components/ui';
-import { apiFetch } from '../../../../lib/api';
+import { apiFetch, useErrorText } from '../../../../lib/api';
 import { useApiForm } from '../../../../lib/form';
 import { useApiAction, useApiQuery } from '../../../../lib/query';
 import { sellable } from '../../../../lib/sizing';
@@ -21,7 +21,7 @@ type Connection = { id: string; name: string };
 type Layer = Record<string, number>;
 type Capacity = { physical: Layer; headroom: Layer; offered: Layer; used: Layer; reserved: Layer; available: Layer; realFreeGb: number; warnings: string[] };
 type Pool = { id: string; name: string; location: string; locationId: string | null; connectionName: string; cpuOvercommit: number; memoryOvercommit: number; storageOvercommit: number; capacity: Capacity; customRule: Record<string, unknown> | null;
-  extraIpv4Max: number; extraIpv4Price: string; trafficGb: number | null; connectionId: string; backupDatastore: string | null; extraDiskPriceGb: string | null };
+  extraIpv4Max: number; extraIpv4Price: string; trafficGb: number | null; connectionId: string; backupDatastore: string | null; extraDiskPriceGb: string | null; privatePortgroup: string | null; privateVlanMin: number | null; privateVlanMax: number | null };
 type Pkg = { id: string; name: string; vcpu: number; memoryMb: number; diskGb: number; priceMonthly: string; currency: string; poolIds: string[]; trafficGb: number | null };
 type Image = { id: string; name: string; family: string; templateName: string | null; minDiskGb: number };
 type IpPool = IpPoolRow;
@@ -185,8 +185,35 @@ function PoolCard({ pool, removeButton }: { pool: Pool; removeButton: React.Reac
       </Disclosure>
       <PoolBackupTarget pool={pool}/>
       <PoolDiskPrice pool={pool}/>
+      <PoolPrivateNetworks pool={pool}/>
     </Card.Content>
   </Card>;
+}
+
+// Private networks here: the distributed port group whose switch carries them and the VLANs they may take.
+function PoolPrivateNetworks({ pool }: { pool: Pool }) {
+  const t = useTranslations('Catalog');
+  const { error, field } = useErrorText();
+  const client = useQueryClient();
+  const inv = useApiQuery<{ networks: { moref: string; name: string; kind: string }[] }>(['vmware', 'connection', pool.connectionId], `/admin/vmware/connections/${pool.connectionId}`).data;
+  const [pg, setPg] = useState(pool.privatePortgroup ?? '');
+  const [min, setMin] = useState<number | undefined>(pool.privateVlanMin ?? 2000);
+  const [max, setMax] = useState<number | undefined>(pool.privateVlanMax ?? 2099);
+  const [fields, setFields] = useState<Record<string, string>>({});
+  const [busy, setBusy] = useState(false);
+  async function save() {
+    setBusy(true); setFields({});
+    try { await apiFetch(`/admin/pools/${pool.id}/private-networks`, { method: 'PUT', body: { portgroupMoref: pg || null, vlanMin: min, vlanMax: max } }); toast.success(t('privnet.saved')); void client.invalidateQueries({ queryKey: keys.pools }); }
+    catch (e) { setFields((e as { fields?: Record<string, string> }).fields ?? {}); toast.danger(error(e)); } finally { setBusy(false); }
+  }
+  const distributed = (inv?.networks ?? []).filter((n) => n.kind === 'distributed');
+  return <div className="flex flex-wrap items-end gap-3 rounded-xl border border-border p-3">
+    <SelectInput className="min-w-56 flex-1" label={t('privnet.portgroup')} help={t('privnet.help')} value={pg} onChange={setPg} error={field(fields.portgroupMoref)}
+      options={[{ id: '', label: t('privnet.off') }, ...distributed.map((n) => ({ id: n.moref, label: n.name }))]}/>
+    {pg && <NumberInput className="w-32" label={t('privnet.vlanMin')} value={min} onChange={setMin} minValue={1} maxValue={4094} error={field(fields.vlanMin)}/>}
+    {pg && <NumberInput className="w-32" label={t('privnet.vlanMax')} value={max} onChange={setMax} minValue={1} maxValue={4094}/>}
+    <Button size="sm" variant="secondary" isPending={busy} onPress={save}><I name="check" size={14}/>{t('privnet.save')}</Button>
+  </div>;
 }
 
 // The monthly price per GB of extra disks here; empty: customers cannot add disks in this location.

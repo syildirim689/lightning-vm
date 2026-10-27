@@ -1269,3 +1269,36 @@ test('extra disks: sold per GB where the location sets a price, added while the 
   assert.equal((await send('DELETE', `/servers/${id}`, { confirm: 'disks-1' }, user, key())).statusCode, 202);
   await until(async () => (await serverRow(id)).state === 'deleted', 'deleted', 120);
 });
+
+test('private networks: a location offers them on a distributed switch; a customer creates one (its own VLAN), servers join with an address and a NIC, leave, and the empty network goes', { skip }, async () => {
+  const key = () => ({ 'idempotency-key': randomUUID() });
+  assert.equal((await send('GET', '/networks', undefined, user)).json().pools.some((p) => p.id === poolId), false);
+  const { rows: [dv] } = await pool.query("SELECT moref FROM vmware_networks WHERE connection_id = $1 AND kind = 'distributed' ORDER BY name LIMIT 1", [connectionId]);
+  assert.equal((await send('PUT', `/admin/pools/${poolId}/private-networks`, { portgroupMoref: dv.moref, vlanMin: 10, vlanMax: 5 })).json().fields.vlanMin, 'OUT_OF_RANGE');
+  assert.equal((await send('PUT', `/admin/pools/${poolId}/private-networks`, { portgroupMoref: dv.moref, vlanMin: 2000, vlanMax: 2001 })).statusCode, 200);
+  assert.equal((await send('POST', '/networks', { name: 'db', poolId, cidr: '8.8.8.0/24' }, user)).json().fields.cidr, 'INVALID_PRIVATE_SUBNET');
+  const net = await send('POST', '/networks', { name: 'backend', poolId, cidr: '10.77.0.0/24' }, user);
+  assert.equal(net.statusCode, 201, net.body);
+  const { id: netId, vlan } = net.json();
+  assert.equal(vlan, 2000);
+  assert.ok((await pool.query('SELECT portgroup_moref FROM private_networks WHERE id = $1', [netId])).rows[0].portgroup_moref, 'its port group exists');
+  const made = await create(order('pn-1'));
+  const sid = made.json().serverId;
+  await until(async () => (await serverRow(sid)).state === 'ready', 'server ready', 120);
+  assert.equal((await send('POST', `/networks/${netId}/servers`, { serverId: sid }, other)).statusCode, 404);
+  const joined = await send('POST', `/networks/${netId}/servers`, { serverId: sid }, user);
+  assert.equal(joined.statusCode, 202, joined.body);
+  assert.equal(joined.json().address, '10.77.0.10');
+  await until(async () => ['succeeded', 'failed'].includes((await lastOp(sid)).status) && (await lastOp(sid)).kind === 'nic_add', 'joined', 120);
+  assert.equal((await lastOp(sid)).status, 'succeeded', (await lastOp(sid)).error_detail);
+  const list = (await send('GET', '/networks', undefined, user)).json().networks.find((n) => n.id === netId);
+  assert.ok(list.members[0].status === 'joined' && list.members[0].mac, JSON.stringify(list));
+  assert.equal((await send('DELETE', `/networks/${netId}`, undefined, user)).json().code, 'NETWORK_IN_USE');
+  assert.equal((await send('POST', `/servers/${sid}/reinstall`, { imageId, confirm: 'pn-1' }, user, key())).json().code, 'LEAVE_PRIVATE_NETWORKS');
+  assert.equal((await send('DELETE', `/networks/${netId}/servers/${sid}`, undefined, user)).statusCode, 202);
+  await until(async () => !(await pool.query('SELECT 1 FROM private_network_members WHERE network_id = $1', [netId])).rowCount, 'left', 120);
+  assert.equal((await send('DELETE', `/networks/${netId}`, undefined, user)).statusCode, 204);
+  await send('PUT', `/admin/pools/${poolId}/private-networks`, { portgroupMoref: null });
+  assert.equal((await send('DELETE', `/servers/${sid}`, { confirm: 'pn-1' }, user, key())).statusCode, 202);
+  await until(async () => (await serverRow(sid)).state === 'deleted', 'deleted', 120);
+});

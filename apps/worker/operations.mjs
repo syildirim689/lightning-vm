@@ -234,6 +234,7 @@ async function destroy(db, ctx) {
     // A key-based licence goes back to the pool for the next order.
     await client.query('UPDATE application_licenses SET server_id = NULL, assigned_at = NULL WHERE server_id = $1', [ctx.s.id]);
     ctx.released = released;
+    await client.query('DELETE FROM private_network_members WHERE server_id = $1', [ctx.s.id]);
     ctx.backups = (await client.query("UPDATE backups SET status = 'deleted' WHERE server_id = $1 AND status <> 'deleted' RETURNING datastore_moref, path", [ctx.s.id])).rows;
     await client.query("UPDATE servers SET state = 'deleted', deleted_at = now(), power_state = 'unknown', updated_at = now() WHERE id = $1", [ctx.s.id]);
     await client.query('COMMIT');
@@ -359,6 +360,17 @@ const kinds = {
       await db.query('UPDATE servers SET price_monthly = greatest(0, price_monthly - $2), updated_at = now() WHERE id = $1', [ctx.s.id, d.price_monthly]);
     }
   },
+  // Joining a private network: a NIC on its port group; the MAC is kept so the guest can match the interface.
+  async nic_add(db, ctx) {
+    const pg = await networkPortgroup(db, ctx.op.params.networkId);
+    await vmTask(db, ctx, 'nic', '/v1/vm/nic-add', { portgroup: pg });
+    const { mac } = await adapter('/v1/vm/nic-mac', { ...ctx.target, vm: ctx.s.vm_moref, portgroup: pg });
+    await db.query("UPDATE private_network_members SET status = 'joined', mac = $3 WHERE network_id = $1 AND server_id = $2", [ctx.op.params.networkId, ctx.s.id, mac || null]);
+  },
+  async nic_remove(db, ctx) {
+    await vmTask(db, ctx, 'nic', '/v1/vm/nic-remove', { portgroup: await networkPortgroup(db, ctx.op.params.networkId) });
+    await db.query('DELETE FROM private_network_members WHERE network_id = $1 AND server_id = $2', [ctx.op.params.networkId, ctx.s.id]);
+  },
   async backup_delete(db, ctx) {
     const b = await backupOf(db, ctx.op.params.backupId);
     await setStep(db, ctx.op, 'delete');
@@ -419,6 +431,11 @@ async function stopForChange(db, ctx) {
   await nextStep(db, ctx);
 }
 
+const networkPortgroup = async (db, id) => {
+  const { rows: [n] } = await db.query('SELECT portgroup_moref FROM private_networks WHERE id = $1', [id]);
+  if (!n?.portgroup_moref) throw new OperationError('NETWORK_NOT_FOUND', 'private network missing', true);
+  return n.portgroup_moref;
+};
 const backupOf = async (db, id) => {
   const { rows: [b] } = await db.query('SELECT * FROM backups WHERE id = $1', [id]);
   if (!b) throw new OperationError('BACKUP_NOT_FOUND', 'backup record missing', true);
@@ -481,6 +498,8 @@ export async function processOperation(db, job, log, notify = async () => {}, rd
     if ((ctx.op.kind === 'create' || ctx.op.kind === 'reinstall') && status === 'failed') await db.query("UPDATE servers SET state = 'error', error_code = $2, updated_at = now() WHERE id = $1 AND state <> 'deleted'", [ctx.s.id, code]);
     // A restore refused after the server was stopped: it is started again as it was.
     if (ctx.op.kind === 'backup_restore' && status === 'failed' && ctx.op.params.powerOn) await adapter('/v1/vm/power', { ...ctx.target, vm: ctx.s.vm_moref, action: 'on' }).catch(() => undefined);
+    if (ctx.op.kind === 'nic_add' && status === 'failed') await db.query("UPDATE private_network_members SET status = 'failed' WHERE network_id = $1 AND server_id = $2", [ctx.op.params.networkId, ctx.s.id]);
+    if (ctx.op.kind === 'nic_remove' && status === 'failed') await db.query("UPDATE private_network_members SET status = 'joined' WHERE network_id = $1 AND server_id = $2", [ctx.op.params.networkId, ctx.s.id]);
     if (ctx.op.kind === 'disk_add' && status === 'failed') await db.query("UPDATE server_disks SET status = 'failed' WHERE id = $1", [ctx.op.params.diskId]);
     if (ctx.op.kind === 'disk_remove' && status === 'failed') await db.query("UPDATE server_disks SET status = 'ready' WHERE id = $1", [ctx.op.params.diskId]);
     if (ctx.op.kind === 'backup_create' && status === 'failed') {

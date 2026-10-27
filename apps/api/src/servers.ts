@@ -32,7 +32,7 @@ const queue = new Queue('operations', { connection: redis });
 export const enqueue = (operationId: string) => queue.add('operation', {}, {
   jobId: operationId, attempts: 6, backoff: { type: 'exponential', delay: 5000 }, removeOnComplete: true, removeOnFail: true,
 }).catch(() => undefined); // if Redis is down the worker's recovery scan enqueues it later
-const deadlineMinutes = { create: 45, delete: 20, power_on: 10, shutdown: 10, power_off: 10, reset: 10, snapshot_create: 30, snapshot_revert: 30, snapshot_delete: 60, resize: 30, reinstall: 45, backup_create: 360, backup_restore: 360, backup_delete: 30, migrate: 240, disk_add: 30, disk_remove: 30 } as const;
+const deadlineMinutes = { create: 45, delete: 20, power_on: 10, shutdown: 10, power_off: 10, reset: 10, snapshot_create: 30, snapshot_revert: 30, snapshot_delete: 60, resize: 30, reinstall: 45, backup_create: 360, backup_restore: 360, backup_delete: 30, migrate: 240, disk_add: 30, disk_remove: 30, nic_add: 30, nic_remove: 30 } as const;
 export type Kind = keyof typeof deadlineMinutes;
 
 export function idempotencyKey(header: string | undefined, userId: string) {
@@ -520,6 +520,7 @@ export class ServersController {
     if (server.locked) throw apiError(409, 'SERVER_LOCKED', 'The server is locked against this; unlock it first');
     // A new VM is built from the image: extra disks would be left behind, so they go first (by the customer).
     if ((await pool.query('SELECT 1 FROM server_disks WHERE server_id = $1', [id])).rowCount) throw apiError(409, 'REMOVE_EXTRA_DISKS', 'Remove the extra disks before reinstalling');
+    if ((await pool.query('SELECT 1 FROM private_network_members WHERE server_id = $1', [id])).rowCount) throw apiError(409, 'LEAVE_PRIVATE_NETWORKS', 'Take the server off its private networks before reinstalling');
     const { rows: [img] } = await pool.query(`SELECT i.family, i.min_disk_gb FROM os_images i JOIN resource_pools p ON p.connection_id = i.connection_id
       WHERE i.id = $1 AND i.active AND p.id = $2 AND (NOT EXISTS (SELECT 1 FROM package_images pi WHERE pi.package_id = $3)
         OR EXISTS (SELECT 1 FROM package_images pi WHERE pi.package_id = $3 AND pi.image_id = i.id))`, [String(body.imageId ?? ''), server.pool_id, server.package_id]).catch(() => ({ rows: [] }));

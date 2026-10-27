@@ -21,7 +21,7 @@ import { can, type Permission } from '../../lib/permissions';
 import { useApiQuery } from '../../lib/query';
 import type { Branding, User } from '../../lib/session';
 
-type Key = 'dashboard' | 'stats' | 'servers' | 'abuse' | 'energy' | 'topology' | 'myTopology' | 'myVdc' | 'connections' | 'catalog' | 'users' | 'roles' | 'settings' | 'system' | 'myServers' | 'newServer' | 'firewalls' | 'account' | 'audit' | 'terminal' | 'support' | 'mySupport' | 'billing' | 'myBilling' | 'reseller';
+type Key = 'dashboard' | 'stats' | 'servers' | 'abuse' | 'energy' | 'topology' | 'myTopology' | 'myVdc' | 'connections' | 'catalog' | 'users' | 'roles' | 'settings' | 'system' | 'myServers' | 'newServer' | 'firewalls' | 'account' | 'audit' | 'terminal' | 'support' | 'mySupport' | 'billing' | 'myBilling' | 'reseller' | 'networks';
 // count: a number beside the entry from GET /support/summary (tickets waiting for the customer, or for support).
 type Item = { href: string; key: Key; icon: React.ReactNode; exact?: boolean; need?: Permission[]; count?: 'waiting' | 'queue' | 'unpaid'; billing?: boolean; reseller?: boolean };
 
@@ -52,6 +52,7 @@ const sections: { title: 'adminSection' | 'peopleSection' | 'customerSection'; i
     { href: '/order', key: 'newServer', icon: <I name="plus" size={18}/>, need: ['servers.create'] },
     { href: '/vdc', key: 'myVdc', icon: <I name="building-2" size={18}/> },
     { href: '/topology', key: 'myTopology', icon: <I name="waypoints" size={18}/> },
+    { href: '/networks', key: 'networks', icon: <I name="network" size={18}/> },
     { href: '/firewalls', key: 'firewalls', icon: <I name="brick-wall-fire" size={18}/>, need: ['firewalls.manage', 'servers.view_all'] },
     { href: '/billing', key: 'myBilling', icon: <I name="wallet" size={18}/>, count: 'unpaid', billing: true },
     { href: '/reseller', key: 'reseller', icon: <I name="store" size={18}/>, reseller: true },

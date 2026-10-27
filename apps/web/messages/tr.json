@@ -336,7 +336,13 @@
     "REMOVE_EXTRA_DISKS": "Yeniden kurmadan önce ek diskleri kaldırın.",
     "SYSTEM_DISK": "Sistem diski kaldırılamaz.",
     "NO_DISK_CONTROLLER": "Sunucuda boş disk yuvası yok.",
-    "DISK_NOT_FOUND": "Yeni disk bulunamadı."
+    "DISK_NOT_FOUND": "Yeni disk bulunamadı.",
+    "NO_FREE_VLAN": "Bu konumda boş özel ağ kalmadı.",
+    "NETWORK_IN_USE": "Önce sunucuları ağdan çıkarın.",
+    "NETWORK_FULL": "Ağda boş adres kalmadı.",
+    "ALREADY_MEMBER": "Sunucu zaten bu ağda.",
+    "LEAVE_PRIVATE_NETWORKS": "Yeniden kurmadan önce sunucuyu özel ağlardan çıkarın.",
+    "INVALID_PRIVATE_SUBNET": "/16 ile /28 arasında özel bir aralık kullanın (10.x, 172.16-31.x ya da 192.168.x)."
   },
   "Auth": {
     "required": "zorunlu",
@@ -575,7 +581,8 @@
     "BALANCE_TOO_LOW": "Önce bakiye yükleyin: sunucunun ilk saatlerini karşılamalı.",
     "RESELLER_ALLOCATION_EXCEEDED": "Bayi tahsisi doldu.",
     "EMAIL_TAKEN": "Bu e-postanın zaten bir hesabı var.",
-    "CUSTOMER_OF_A_RESELLER": "Bu hesap bir bayinin müşterisi."
+    "CUSTOMER_OF_A_RESELLER": "Bu hesap bir bayinin müşterisi.",
+    "INVALID_PRIVATE_SUBNET": "/16 ile /28 arasında özel bir aralık kullanın (10.x, 172.16-31.x ya da 192.168.x)."
   },
   "Setup": {
     "title": "Kurulum sihirbazı",
@@ -1604,6 +1611,15 @@
       "help": "Boş: müşteriler burada disk ekleyemez.",
       "save": "Kaydet",
       "saved": "Ek disk fiyatı kaydedildi"
+    },
+    "privnet": {
+      "portgroup": "Özel ağlar",
+      "help": "Dağıtık bir port grubu: müşterilerin ağları bunun anahtarında, her biri kendi VLAN'ıyla açılır.",
+      "off": "Sunulmuyor",
+      "vlanMin": "VLAN başlangıç",
+      "vlanMax": "VLAN bitiş",
+      "save": "Kaydet",
+      "saved": "Özel ağ ayarları kaydedildi"
     }
   },
   "Servers": {
@@ -1643,7 +1659,9 @@
       "backup_delete": "Yedek silme",
       "migrate": "Taşıma",
       "disk_add": "Disk ekleme",
-      "disk_remove": "Disk kaldırma"
+      "disk_remove": "Disk kaldırma",
+      "nic_add": "Ağa katılma",
+      "nic_remove": "Ağdan ayrılma"
     },
     "opStatus": {
       "pending": "Sırada",
@@ -1672,7 +1690,8 @@
       "restore": "Disk geri yükleniyor",
       "delete": "Siliniyor",
       "migrate": "Taşınıyor",
-      "disk": "Diskler değiştiriliyor"
+      "disk": "Diskler değiştiriliyor",
+      "nic": "Ağ kartları değiştiriliyor"
     },
     "action": {
       "power_on": "Aç",
@@ -1951,7 +1970,8 @@
     "billing": "Faturalandırma",
     "myBilling": "Faturalar",
     "unpaidInvoices": "{n} fatura ödeme bekliyor",
-    "reseller": "Bayilik"
+    "reseller": "Bayilik",
+    "networks": "Özel ağlar"
   },
   "Dashboard": {
     "eyebrow": "YÖNETİM",
@@ -4691,7 +4711,12 @@
       "vmware_host_evacuate": "Host boşaltıldı",
       "server_disk_added": "Ek disk eklendi",
       "server_disk_removed": "Ek disk kaldırıldı",
-      "catalog_pool_extra_disks": "Ek disk fiyatı değiştirildi"
+      "catalog_pool_extra_disks": "Ek disk fiyatı değiştirildi",
+      "network_created": "Özel ağ oluşturuldu",
+      "network_deleted": "Özel ağ silindi",
+      "network_server_joined": "Sunucu özel ağa eklendi",
+      "network_server_left": "Sunucu özel ağdan çıkarıldı",
+      "catalog_pool_private_networks": "Özel ağ ayarları değiştirildi"
     },
     "outcome": {
       "success": "Tamamlandı",
@@ -6582,5 +6607,42 @@
       "failed": "Başarısız"
     },
     "full": "En çok {max} ek disk."
+  },
+  "Networks": {
+    "title": "Özel ağlar",
+    "intro": "Bir konumdaki sunucularınız arasında size ait, herkesten yalıtılmış ağlar (kendi VLAN'ı). Üzerlerindeki trafik sayılmaz.",
+    "create": "Yeni ağ",
+    "name": "Ad",
+    "location": "Konum",
+    "subnet": "Alt ağ (isteğe bağlı)",
+    "subnetHelp": "10.10.0.0/24 gibi özel bir aralık; boş: biri seçilir.",
+    "add": "Oluştur",
+    "created": "Ağ oluşturuldu",
+    "none": "Henüz özel ağ yok",
+    "noneHelp": "Bir tane oluşturun, sonra aynı konumdaki sunucuları ekleyin.",
+    "noLocations": "Henüz özel ağ sunan konum yok.",
+    "members": "Sunucular",
+    "noMembers": "Henüz sunucu yok.",
+    "join": "Sunucu ekle",
+    "choose": "Sunucu",
+    "joining": "Sunucu bağlanıyor",
+    "leave": "Çıkar",
+    "leaveTitle": "Bu sunucu ağdan çıkarılsın mı?",
+    "leaveBody": "Bu ağdaki arayüzü kaldırılır.",
+    "left": "Sunucunun bağlantısı kaldırılıyor",
+    "remove": "Ağı sil",
+    "removeTitle": "Bu ağ silinsin mi?",
+    "removeBody": "Yalnızca boş bir ağ silinebilir.",
+    "removed": "Ağ silindi",
+    "cancel": "Vazgeç",
+    "status": {
+      "joining": "Bağlanıyor",
+      "joined": "Bağlı",
+      "leaving": "Ayrılıyor",
+      "failed": "Başarısız"
+    },
+    "setup": "Sunucunun içinde",
+    "setupHelp": "Yeni arayüzün MAC adresi {mac}. Linux ve netplan ile:",
+    "vlan": "VLAN {vlan}"
   }
 }

@@ -1,0 +1,94 @@
+"use client";
+// Private networks: the customer's isolated networks per location, the servers on each with their address, joining and
+// leaving, and how to set the address inside the server (netplan, matched by the new interface's MAC).
+import { Button, toast } from '@heroui/react';
+import { useQueryClient } from '@tanstack/react-query';
+import NextLink from 'next/link';
+import { useTranslations } from 'next-intl';
+import { useState } from 'react';
+import { I } from '../../../components/icon';
+import { ConfirmButton, Empty, Mono, Notice, PageHeader, Section, SelectInput, StatusChip, TextInput } from '../../../components/ui';
+import { apiFetch, type ApiError, useErrorText } from '../../../lib/api';
+import { useApiQuery } from '../../../lib/query';
+
+type Member = { serverId: string; name: string; address: string; mac: string | null; status: 'joining' | 'joined' | 'leaving' | 'failed' };
+type Network = { id: string; name: string; cidr: string; vlan: number; poolId: string; poolName: string; createdAt: string; members: Member[] };
+type Data = { networks: Network[]; pools: { id: string; name: string; location: string }[]; max: number };
+type ServerLite = { id: string; name: string; poolId: string; state: string };
+
+function netplan(m: Member, cidr: string) {
+  const bits = cidr.split('/')[1];
+  return `network:\n  version: 2\n  ethernets:\n    private0:\n      match:\n        macaddress: "${m.mac ?? ''}"\n      set-name: private0\n      addresses: [${m.address}/${bits}]`;
+}
+
+function NetworkCard({ n, servers, onChange }: { n: Network; servers: ServerLite[]; onChange: () => void }) {
+  const t = useTranslations('Networks');
+  const { error } = useErrorText();
+  const [serverId, setServerId] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [open, setOpen] = useState<string>();
+  async function run(path: string, method: string, body: object | undefined, done: string) {
+    setBusy(true);
+    try { await apiFetch(path, { method, body }); toast.success(done); setServerId(''); onChange(); } catch (e) { toast.danger(error(e)); } finally { setBusy(false); }
+  }
+  const candidates = servers.filter((s) => s.poolId === n.poolId && s.state === 'ready' && !n.members.some((m) => m.serverId === s.id));
+  return <Section title={n.name} description={<span className="flex flex-wrap gap-2"><Mono>{n.cidr}</Mono><span>{n.poolName}</span><span>{t('vlan', { vlan: n.vlan })}</span></span>}
+    actions={<ConfirmButton size="sm" variant="ghost" icon={<I name="trash-2" size={14}/>} label={t('remove')} title={t('removeTitle')} body={t('removeBody')}
+      confirmLabel={t('remove')} cancelLabel={t('cancel')} isDisabled={n.members.length > 0} onConfirm={() => run(`/networks/${n.id}`, 'DELETE', undefined, t('removed'))}/>}>
+    <div className="flex flex-col gap-4">
+      {n.members.length === 0 ? <p className="text-sm text-muted">{t('noMembers')}</p>
+        : <ul className="flex flex-col divide-y divide-separator rounded-lg border border-border">{n.members.map((m) => <li key={m.serverId} className="flex flex-col gap-2 px-3 py-2.5">
+          <div className="flex flex-wrap items-center gap-3">
+            <NextLink href={`/servers/${m.serverId}`} className="font-medium text-accent hover:underline">{m.name}</NextLink>
+            <Mono>{m.address}</Mono>
+            <StatusChip tone={m.status === 'joined' ? 'success' : m.status === 'failed' ? 'danger' : 'accent'}>{t(`status.${m.status}`)}</StatusChip>
+            <span className="ml-auto flex gap-1">
+              {m.status === 'joined' && m.mac && <Button size="sm" variant="ghost" aria-expanded={open === m.serverId} onPress={() => setOpen(open === m.serverId ? undefined : m.serverId)}><I name="terminal" size={14}/>{t('setup')}</Button>}
+              {(m.status === 'joined' || m.status === 'failed') && <ConfirmButton size="sm" variant="ghost" icon={<I name="unplug" size={14}/>} label={t('leave')} title={t('leaveTitle')} body={t('leaveBody')}
+                confirmLabel={t('leave')} cancelLabel={t('cancel')} onConfirm={() => run(`/networks/${n.id}/servers/${m.serverId}`, 'DELETE', undefined, t('left'))}/>}
+            </span>
+          </div>
+          {open === m.serverId && <div className="flex flex-col gap-1 text-xs"><p className="text-muted">{t('setupHelp', { mac: m.mac ?? '' })}</p>
+            <pre className="overflow-x-auto rounded-lg bg-default p-3">{netplan(m, n.cidr)}</pre></div>}
+        </li>)}</ul>}
+      {candidates.length > 0 && <div className="flex flex-wrap items-end gap-3">
+        <SelectInput className="min-w-56 flex-1" label={t('choose')} value={serverId} onChange={setServerId} options={candidates.map((s) => ({ id: s.id, label: s.name }))}/>
+        <Button variant="secondary" isPending={busy} isDisabled={!serverId} onPress={() => run(`/networks/${n.id}/servers`, 'POST', { serverId }, t('joining'))}><I name="plug" size={15}/>{t('join')}</Button>
+      </div>}
+    </div>
+  </Section>;
+}
+
+export default function Networks() {
+  const t = useTranslations('Networks');
+  const { error, field } = useErrorText();
+  const client = useQueryClient();
+  const q = useApiQuery<Data>(['networks'], '/networks', { refetchInterval: 10_000 });
+  const servers = useApiQuery<{ servers: ServerLite[] }>(['servers'], '/servers').data?.servers ?? [];
+  const [v, setV] = useState({ name: '', poolId: '', cidr: '' });
+  const [fields, setFields] = useState<Record<string, string>>({});
+  const [busy, setBusy] = useState(false);
+  const refresh = () => { void client.invalidateQueries({ queryKey: ['networks'] }); void client.invalidateQueries({ queryKey: ['servers'] }); };
+  async function create(e: React.FormEvent) {
+    e.preventDefault(); setBusy(true); setFields({});
+    try { await apiFetch('/networks', { method: 'POST', body: v }); toast.success(t('created')); setV({ name: '', poolId: v.poolId, cidr: '' }); refresh(); }
+    catch (err) { setFields((err as ApiError).fields ?? {}); toast.danger(error(err)); } finally { setBusy(false); }
+  }
+  const d = q.data;
+  return <>
+    <PageHeader title={t('title')} description={t('intro')}/>
+    {!d ? <div className="h-48 animate-pulse rounded-3xl bg-default/50"/> : <div className="flex flex-col gap-6">
+      {d.pools.length === 0 ? <Notice tone="default">{t('noLocations')}</Notice>
+        : <Section title={t('create')}>
+          <form onSubmit={create} noValidate className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_auto] sm:items-end">
+            <TextInput label={t('name')} value={v.name} onChange={(x) => setV({ ...v, name: x })} maxLength={60} error={field(fields.name)} placeholder="backend"/>
+            <SelectInput label={t('location')} value={v.poolId} onChange={(x) => setV({ ...v, poolId: x })} error={field(fields.poolId)} options={d.pools.map((p) => ({ id: p.id, label: p.location ? `${p.name} · ${p.location}` : p.name }))}/>
+            <TextInput label={t('subnet')} value={v.cidr} onChange={(x) => setV({ ...v, cidr: x })} error={field(fields.cidr)} placeholder="10.10.0.0/24" help={t('subnetHelp')}/>
+            <Button type="submit" isPending={busy} isDisabled={!v.name.trim() || !v.poolId || d.networks.length >= d.max}><I name="plus" size={15}/>{t('add')}</Button>
+          </form>
+        </Section>}
+      {d.networks.length === 0 ? <Empty icon={<I name="network" size={28}/>} title={t('none')}>{t('noneHelp')}</Empty>
+        : d.networks.map((n) => <NetworkCard key={n.id} n={n} servers={servers} onChange={refresh}/>)}
+    </div>}
+  </>;
+}
