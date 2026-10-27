@@ -762,7 +762,7 @@ test.describe('people, settings and smart features (English browser)', () => {
     await expect(page).toHaveURL(/\/admin$/);
     for (const path of ['/admin', '/admin/servers', '/admin/vmware', '/admin/catalog', '/admin/users', '/admin/roles', '/admin/settings?tab=mail', '/admin/system', '/', '/order', '/firewalls', '/admin/settings?tab=rdns', '/admin/catalog?tab=ip', '/account?tab=security',
       '/admin/topology', '/admin/energy', '/admin/abuse', '/admin/catalog?tab=locations', '/admin/catalog?tab=isos', '/admin/catalog?tab=vdcs', '/admin/settings?tab=domain', '/admin/settings?tab=servers', '/topology', '/vdc', '/account?tab=accessibility',
-      '/admin/catalog?tab=packages', '/admin/catalog?tab=apps', '/admin/settings?tab=security', '/admin/settings?tab=notifications', '/account?tab=keys', '/account?tab=notifications', '/admin/audit', '/account?tab=activity', '/admin/settings?tab=announcement', '/admin/terminal', '/admin/settings?tab=chat', '/admin/settings?tab=directory', '/admin/roles', '/admin/settings?tab=status', '/status', '/support', '/admin/support', '/admin/settings?tab=support']) {
+      '/admin/catalog?tab=packages', '/admin/catalog?tab=apps', '/admin/settings?tab=security', '/admin/settings?tab=notifications', '/account?tab=keys', '/account?tab=notifications', '/admin/audit', '/account?tab=activity', '/admin/settings?tab=announcement', '/admin/terminal', '/admin/settings?tab=chat', '/admin/settings?tab=directory', '/admin/roles', '/admin/settings?tab=status', '/status', '/support', '/admin/support', '/admin/settings?tab=support', '/admin/stats']) {
       await page.goto(path);
       await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
       await expectNoOverflow(page, `${path} at ${viewport.width} px`);
@@ -901,6 +901,22 @@ test.describe('people, settings and smart features (English browser)', () => {
     await expect(page.locator('main').getByText('Probably the firewall; checking.')).toBeVisible();
     await expect(page.getByLabel('Your reply')).toHaveValue('');
     await shot(page, 'support-staff');
+    // Statistics: headline numbers with their trend, charts, breakdowns and the weekday × hour map, on desktop and a phone.
+    await page.goto('/admin/stats');
+    await expect(page.getByRole('heading', { name: 'Statistics', level: 1 })).toBeVisible();
+    await expect(page.getByText('Live servers')).toBeVisible();
+    await expect(page.getByText('When people act')).toBeVisible();
+    await page.waitForTimeout(2200);
+    await shot(page, 'stats');
+    await page.getByRole('radio', { name: '1 year' }).click();
+    await expect(page).toHaveURL(/days=365/);
+    await page.waitForTimeout(2000);
+    await shot(page, 'stats-year');
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto('/admin/stats?days=7');
+    await page.waitForTimeout(2200);
+    await shot(page, 'stats-phone');
+    await page.setViewportSize({ width: 1280, height: 720 });
     // The command palette finds a ticket by its number.
     await page.goto('/admin');
     await page.keyboard.press('Control+k');

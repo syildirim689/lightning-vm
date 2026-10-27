@@ -50,6 +50,7 @@ export default function CommandPalette({ permissions, isOpen, onOpenChange }: { 
   const commands = useMemo<Cmd[]>(() => {
     const pages: [string, string, React.ReactNode, boolean][] = [
       ['/admin', tn('dashboard'), <I key="i" name="layout-dashboard" size={16}/>, can(permissions, 'dashboard.view')],
+      ['/admin/stats', tn('stats'), <I key="i" name="chart-line" size={16}/>, can(permissions, 'dashboard.view')],
       ['/admin/servers', tn('servers'), <I key="i" name="server" size={16}/>, can(permissions, 'servers.view_all')],
       ['/admin/vmware', tn('connections'), <I key="i" name="cable" size={16}/>, can(permissions, 'vmware.view', 'vmware.manage')],
       ['/admin/catalog', tn('catalog'), <I key="i" name="boxes" size={16}/>, can(permissions, 'catalog.view', 'catalog.manage')],

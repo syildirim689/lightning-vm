@@ -20,7 +20,7 @@ import { can, type Permission } from '../../lib/permissions';
 import { useApiQuery } from '../../lib/query';
 import type { Branding, User } from '../../lib/session';
 
-type Key = 'dashboard' | 'servers' | 'abuse' | 'energy' | 'topology' | 'myTopology' | 'myVdc' | 'connections' | 'catalog' | 'users' | 'roles' | 'settings' | 'system' | 'myServers' | 'newServer' | 'firewalls' | 'account' | 'audit' | 'terminal' | 'support' | 'mySupport';
+type Key = 'dashboard' | 'stats' | 'servers' | 'abuse' | 'energy' | 'topology' | 'myTopology' | 'myVdc' | 'connections' | 'catalog' | 'users' | 'roles' | 'settings' | 'system' | 'myServers' | 'newServer' | 'firewalls' | 'account' | 'audit' | 'terminal' | 'support' | 'mySupport';
 // count: a number beside the entry from GET /support/summary (tickets waiting for the customer, or for support).
 type Item = { href: string; key: Key; icon: React.ReactNode; exact?: boolean; need?: Permission[]; count?: 'waiting' | 'queue' };
 
@@ -28,6 +28,7 @@ type Item = { href: string; key: Key; icon: React.ReactNode; exact?: boolean; ne
 const sections: { title: 'adminSection' | 'peopleSection' | 'customerSection'; items: Item[] }[] = [
   { title: 'adminSection', items: [
     { href: '/admin', key: 'dashboard', icon: <I name="layout-dashboard" size={18}/>, exact: true, need: ['dashboard.view'] },
+    { href: '/admin/stats', key: 'stats', icon: <I name="chart-line" size={18}/>, need: ['dashboard.view'] },
     { href: '/admin/servers', key: 'servers', icon: <I name="server" size={18}/>, need: ['servers.view_all'] },
     { href: '/admin/support', key: 'support', icon: <I name="life-buoy" size={18}/>, need: ['support.view'], count: 'queue' },
     { href: '/admin/topology', key: 'topology', icon: <I name="network" size={18}/>, need: ['dashboard.view', 'servers.view_all'] },

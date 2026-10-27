@@ -1803,7 +1803,8 @@
     "support": "Destek talepleri",
     "mySupport": "Destek",
     "waitingForYou": "{n} talep yanıtınızı bekliyor",
-    "waitingForSupport": "{n} talep destek bekliyor"
+    "waitingForSupport": "{n} talep destek bekliyor",
+    "stats": "İstatistikler"
   },
   "Dashboard": {
     "eyebrow": "YÖNETİM",
@@ -4995,5 +4996,85 @@
     "sendShortcut": "Ctrl + Enter (Mac’te ⌘ + Enter) gönderir. Gönderilmemiş yanıt bu tarayıcıda saklanır.",
     "presenceViewing": "{who} da bu talebi şu an açmış.",
     "presenceTyping": "{who} bir yanıt yazıyor — yanıtlamadan önce kontrol edin."
+  },
+  "Stats": {
+    "eyebrow": "Yönetim",
+    "title": "İstatistikler",
+    "intro": "Platformun nasıl büyüdüğü ve çalıştığı; her sayı aynı uzunluktaki önceki dönemle karşılaştırılır. Gün ve saatler UTC’dir.",
+    "range": "Dönem",
+    "ranges": {
+      "7": "7 gün",
+      "30": "30 gün",
+      "90": "90 gün",
+      "365": "1 yıl"
+    },
+    "new": "Yeni",
+    "vsBefore": "aynı uzunluktaki önceki döneme göre",
+    "points": "puan",
+    "kpi": {
+      "servers": "Çalışan sunucular",
+      "serversHint": "Şu an var olan sunucular; eğri oluşturulan eksi silinenleri gösterir.",
+      "monthly": "Aylık tutar",
+      "monthlyHint": "Çalışan sunucuların aylık tutarı.",
+      "otherCurrencies": "{n} para birimi daha dahil değil.",
+      "signups": "Yeni hesaplar",
+      "signupsHint": "Toplam {n} hesap.",
+      "tickets": "Destek talepleri",
+      "ticketsHint": "Puan {rating}/5 · ilk yanıt ortalama {hours} sa.",
+      "noRatings": "Bu dönemde henüz puan yok.",
+      "success": "Başarılı işlemler",
+      "successHint": "Hatasız tamamlanan sunucu işlemleri."
+    },
+    "resources": {
+      "vcpu": "Kullanılan vCPU",
+      "memory": "Kullanılan bellek",
+      "disk": "Kullanılan disk"
+    },
+    "charts": {
+      "servers": "Oluşturulan ve silinen sunucular",
+      "serversHelp": "Yeni sunucular ve kaldırılanlar.",
+      "signups": "Yeni hesaplar",
+      "signupsHelp": "Açılan hesaplar, günlük (bir yılda haftalık).",
+      "operations": "İşlemler",
+      "operationsHelp": "Başarılı ve başarısız sunucu işlemleri.",
+      "tickets": "Destek talepleri",
+      "ticketsHelp": "Açılan ve kapanan talepler."
+    },
+    "series": {
+      "created": "Oluşturulan",
+      "deleted": "Silinen",
+      "signups": "Yeni hesaplar",
+      "opsOk": "Başarılı",
+      "opsFailed": "Başarısız",
+      "opened": "Açılan",
+      "closed": "Kapanan"
+    },
+    "by": {
+      "location": "Konuma göre",
+      "image": "İşletim sistemine göre",
+      "package": "Pakete göre",
+      "custom": "Özel boyut",
+      "power": "Güç durumu"
+    },
+    "power": {
+      "poweredOn": "Çalışıyor",
+      "poweredOff": "Kapalı",
+      "suspended": "Askıda",
+      "unknown": "Bilinmiyor"
+    },
+    "noServers": "Henüz çalışan sunucu yok.",
+    "top": {
+      "title": "En büyük müşteriler",
+      "help": "Çalışan sunucularının aylık tutarına göre.",
+      "line": "{servers} sunucu · {vcpu} vCPU"
+    },
+    "heat": {
+      "title": "Ne zaman işlem yapılıyor",
+      "busiest": "En yoğun: {day}, saat {hour}:00 civarı (UTC).",
+      "empty": "Bu dönemde işlem yok.",
+      "cell": "{day} {hour}:00 — {n} işlem",
+      "less": "Az",
+      "more": "Çok"
+    }
   }
 }

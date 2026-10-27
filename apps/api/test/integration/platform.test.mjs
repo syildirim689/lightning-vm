@@ -678,6 +678,22 @@ async function ssoSignIn(idp, person) {
   return { cookie: cookieOf(done), location: done.headers.location };
 }
 
+test('statistics: a period against the one before, a bucket per day (per week for a year), staff only', async () => {
+  const week = (await get('/admin/stats?days=7', admin)).json();
+  assert.equal(week.days, 7);
+  assert.equal(week.unit, 'day');
+  assert.equal(week.series.length, 8, 'from the day a week ago to today');
+  assert.ok(week.kpis.signups.value >= 1 && week.kpis.signups.total >= week.kpis.signups.value);
+  assert.equal(week.kpis.signups.change, null, 'nobody signed up the week before: nothing to compare with');
+  assert.equal(week.series.reduce((n, p) => n + p.signups, 0), week.kpis.signups.value);
+  for (const k of ['byLocation', 'byImage', 'byPackage', 'byPower', 'top', 'heat']) assert.ok(Array.isArray(week[k]), k);
+  const year = (await get('/admin/stats?days=365', admin)).json();
+  assert.equal(year.unit, 'week');
+  assert.ok(year.series.length >= 52 && year.series.length <= 54);
+  assert.equal((await get('/admin/stats?days=3', admin)).json().days, 30, 'unknown period: 30 days');
+  assert.equal((await get('/admin/stats', user)).statusCode, 403);
+});
+
 test('single sign-on (OIDC): checked settings, accounts created with roles from groups, no takeover of panel accounts, provider owns the password', async () => {
   const idp = await fakeIdp('panel-client');
   try {
