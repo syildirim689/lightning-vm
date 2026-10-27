@@ -904,7 +904,7 @@ test.describe('people, settings and smart features (English browser)', () => {
     // Statistics: headline numbers with their trend, charts, breakdowns and the weekday × hour map, on desktop and a phone.
     await page.goto('/admin/stats');
     await expect(page.getByRole('heading', { name: 'Statistics', level: 1 })).toBeVisible();
-    await expect(page.getByText('Live servers')).toBeVisible();
+    await expect(page.getByText('Live servers', { exact: true })).toBeVisible();
     await expect(page.getByText('When people act')).toBeVisible();
     await page.waitForTimeout(2200);
     await shot(page, 'stats');
