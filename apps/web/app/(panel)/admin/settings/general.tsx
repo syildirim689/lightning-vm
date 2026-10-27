@@ -35,7 +35,7 @@ export default function GeneralSettings({ onOpen }: { onOpen: (tab: string) => v
   const warn = items.filter((i) => i.state === 'warn');
   const pct = Math.round((ok / items.length) * 100);
   const url = items.find((i) => i.key === 'domain')?.detail.url as string | null;
-  const icon = (k: string) => <I name={({ branding: 'palette', domain: 'globe-lock', security: 'shield-check', directory: 'network', mail: 'mail', captcha: 'bot', sms: 'message-square', chat: 'messages-square',
+  const icon = (k: string) => <I name={({ branding: 'palette', domain: 'globe-lock', security: 'shield-check', signin: 'log-in', directory: 'network', mail: 'mail', captcha: 'bot', sms: 'message-square', chat: 'messages-square',
     payments: 'credit-card', rdns: 'globe', notifications: 'bell', announcement: 'megaphone', backup: 'archive' } as Record<string, string>)[k] ?? 'settings-2'} size={18}/>;
   const detail = (i: Item) => t(`detail.${i.key}.${i.state}` as 'detail.mail.ok', { ...i.detail, provider: pretty(i.detail.provider), require2fa: t(`require2fa.${i.detail.require2fa ?? 'none'}` as 'require2fa.none') } as Record<string, string | number>);
 

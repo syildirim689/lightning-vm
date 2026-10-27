@@ -220,6 +220,9 @@ export class SettingsOverviewController {
     const [branding, security, captcha, rdns, announcement, chat, notifications] = await Promise.all([getSettings('branding'), getSettings('security'), getSettings('captcha'),
       getSettings('rdns'), getSettings('announcement'), getSettings('chat'), policies()]);
     const dir = await getSettings('directory');
+    const signIn = await getSettings('signIn');
+    // Ways in besides the password and passkeys: social providers, the e-mail link, user names, single sign-on.
+    const methods = (await import('./social-providers')).enabledSocial(signIn).length + Number(signIn.magicLink) + Number(signIn.username) + Number(dir.oidc.enabled);
     const one = async (sql: string) => (await pool.query(sql)).rows[0];
     const [reg, url, pay, counts] = await Promise.all([
       one("SELECT value FROM settings WHERE key = 'registration_open'"), one("SELECT value FROM settings WHERE key = 'public_url'"),
@@ -240,6 +243,7 @@ export class SettingsOverviewController {
       { key: 'security', tab: 'security', state: counts.adminsNo2fa ? 'warn' : security.require2fa !== 'none' ? 'ok' : 'todo', detail: { require2fa: security.require2fa, adminsNo2fa: counts.adminsNo2fa } },
       { key: 'mail', tab: 'mail', state: (await mailReady()) ? 'ok' : 'warn', detail: { provider: (await getSettings('mail')).provider } },
       { key: 'directory', tab: 'directory', state: dir.ldap.enabled ? 'ok' : 'todo', detail: { url: dir.ldap.url } },
+      { key: 'signin', tab: 'signin', state: methods ? 'ok' : 'todo', detail: { n: methods } },
       { key: 'captcha', tab: 'captcha', state: captcha.provider !== 'none' ? 'ok' : registrationOpen ? 'warn' : 'todo', detail: { provider: captcha.provider } },
       { key: 'sms', tab: 'sms', state: (await smsReady()) ? 'ok' : 'todo', detail: { provider: (await getSettings('sms')).provider } },
       { key: 'chat', tab: 'chat', state: usableApps(chat).length ? 'ok' : 'todo', detail: { apps: usableApps(chat).length } },

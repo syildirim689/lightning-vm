@@ -765,7 +765,8 @@ test('sign-in methods: settings checked, secrets kept, social providers register
   try {
     // Settings: checked, secrets never come back, the public config lists what is on.
     assert.equal((await put('/admin/settings/sign-in', { magicLink: true }, user)).statusCode, 403);
-    assert.deepEqual((await put('/admin/settings/sign-in', { oneTap: true, providers: { google: { enabled: true } } }, admin)).json().fields, { 'providers.google.clientId': 'REQUIRED', oneTap: 'GOOGLE_REQUIRED' });
+    assert.deepEqual((await put('/admin/settings/sign-in', { providers: { google: { enabled: true } } }, admin)).json().fields, { 'providers.google.clientId': 'REQUIRED' });
+    assert.deepEqual((await put('/admin/settings/sign-in', { oneTap: true }, admin)).json().fields, { oneTap: 'GOOGLE_REQUIRED' });
     const saved = (await put('/admin/settings/sign-in', { providers: { github: { enabled: true, clientId: 'Iv1.testclient', clientSecret: 'gh-secret-value' }, microsoft: { tenantId: 'not a tenant' } } }, admin)).json();
     assert.equal(saved.fields?.['providers.microsoft.tenantId'], 'INVALID_VALUE');
     const ok = (await put('/admin/settings/sign-in', { providers: { github: { enabled: true, clientId: 'Iv1.testclient', clientSecret: 'gh-secret-value' } } }, admin)).json();
@@ -865,6 +866,7 @@ test('single sign-on (OIDC): checked settings, accounts created with roles from 
     const { rows: [row] } = await pool.query("SELECT id, auth_source FROM users WHERE email = 'grace@corp.test'");
     assert.equal(row.auth_source, 'oidc');
     assert.equal((await post('/auth/request-password-reset', { email: 'grace@corp.test', redirectTo: '/reset-password' })).json().code, 'OK');
+    console.log('DEBUG accounts', JSON.stringify((await pool.query("SELECT a.provider_id, a.account_id FROM auth_accounts a JOIN users u ON u.id = a.user_id WHERE u.email = 'grace@corp.test'")).rows));
     // Groups changed at the provider: the next sign-in follows them.
     const again = await ssoSignIn(idp, { sub: 'u-1', email: 'grace@corp.test', name: 'Grace Hopper', groups: [] });
     assert.deepEqual((await get('/auth/me', again.cookie)).json().roles, ['user']);

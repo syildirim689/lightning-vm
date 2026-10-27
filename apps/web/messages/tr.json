@@ -283,7 +283,16 @@
     "TICKET_CLOSED": "Bu talep kapalı; yeni bir talep açın.",
     "TICKET_NOT_CLOSED": "Talep kapandıktan sonra puanlayabilirsiniz.",
     "SSO_DISCOVERY_FAILED": "Sağlayıcının keşif belgesi okunamadı. Issuer adresini ve panelin sağlayıcıya ulaşabildiğini kontrol edin.",
-    "SSO_DISCOVERY_INVALID": "Bu adres, bu issuer ile bir OpenID Connect sağlayıcısına ait değil."
+    "SSO_DISCOVERY_INVALID": "Bu adres, bu issuer ile bir OpenID Connect sağlayıcısına ait değil.",
+    "MAGIC_LINK_DISABLED": "Giriş bağlantıları kapalı.",
+    "USERNAME_SIGN_IN_DISABLED": "Kullanıcı adıyla giriş kapalı.",
+    "INVALID_USERNAME_OR_PASSWORD": "Kullanıcı adı ya da parola yanlış.",
+    "DISPOSABLE_EMAIL": "Kalıcı bir e-posta adresi kullanın; geçici adresler kabul edilmiyor.",
+    "PASSWORD_COMPROMISED": "Bu parola bilinen veri sızıntılarında geçiyor. Başka bir parola seçin.",
+    "USERNAME_IS_ALREADY_TAKEN": "Bu kullanıcı adı alınmış.",
+    "USERNAME_TOO_SHORT": "Kullanıcı adı çok kısa (en az 3 karakter).",
+    "USERNAME_TOO_LONG": "Kullanıcı adı çok uzun (en fazla 30 karakter).",
+    "INVALID_USERNAME": "Kullanıcı adında harf, rakam, nokta, tire ve alt çizgi kullanılabilir."
   },
   "Auth": {
     "required": "zorunlu",
@@ -403,9 +412,24 @@
       "sso": {
         "title": "Tek oturum açma başarısız oldu",
         "body": "Kurumunuzun girişi panele açılamadı: henüz bir panel hesabınız yok ya da bu e-posta adresi parolayla giriş yapan bir panel hesabına ait. Yöneticinize başvurun."
+      },
+      "link": {
+        "title": "Giriş bağlantısı çalışmadı",
+        "body": "Daha önce kullanılmış ya da süresi dolmuş olabilir (bağlantılar 10 dakika geçerlidir). Yeni bir bağlantı isteyin."
       }
     },
-    "ssoSignIn": "{name} ile giriş yap"
+    "ssoSignIn": "{name} ile giriş yap",
+    "emailOrUsername": "E-posta ya da kullanıcı adı",
+    "continueWith": "{name} ile devam et",
+    "magicLink": {
+      "button": "Bana giriş bağlantısı gönder",
+      "intro": "Hesabınızın e-posta adresini girin: bir dakika içinde, 10 dakika geçerli tek kullanımlık bir giriş bağlantısı gelir.",
+      "send": "Bağlantıyı gönder",
+      "sentTitle": "Gelen kutunuza bakın",
+      "sentBody": "{email} için burada bir hesap varsa giriş bağlantısı yolda. Bu cihazda açın.",
+      "again": "Başka bir adrese gönder",
+      "back": "Girişe dön"
+    }
   },
   "fieldErrors": {
     "INVALID_EMAIL": "Geçerli bir e-posta adresi girin.",
@@ -493,7 +517,8 @@
     "WOULD_LOCK_YOU_OUT": "Şu an kullandığınız adres listede yok; kendinizi dışarıda bırakırdınız.",
     "TOO_MANY_FILES": "En fazla 3 dosya eklenebilir.",
     "FILE_TOO_LARGE": "Dosya en fazla 2 MB olabilir.",
-    "FILE_TYPE_NOT_ALLOWED": "Bu dosya türü kabul edilmiyor."
+    "FILE_TYPE_NOT_ALLOWED": "Bu dosya türü kabul edilmiyor.",
+    "GOOGLE_REQUIRED": "Önce Google ile girişi açın."
   },
   "Setup": {
     "title": "Kurulum sihirbazı",
@@ -2652,7 +2677,8 @@
       "chat": "Mesajlaşma",
       "directory": "Dizin ve SSO",
       "status": "Durum ve olaylar",
-      "support": "Destek"
+      "support": "Destek",
+      "signin": "Giriş yöntemleri"
     },
     "saved": "Kaydedildi.",
     "save": "Kaydet",
@@ -3295,6 +3321,10 @@
         "directory": {
           "ok": "{url} ile giriş açık.",
           "todo": "Kapalı; herkes paneldeki parolasıyla girer."
+        },
+        "signin": {
+          "ok": "{n} ek giriş yolu açık.",
+          "todo": "Yalnızca parola ve passkey."
         }
       },
       "statusPage": {
@@ -3404,6 +3434,44 @@
       "remove": "Kaldır",
       "add": "Departman ekle",
       "openTickets": "{n} açık talep"
+    },
+    "signIn": {
+      "title": "Giriş yolları",
+      "intro": "Parola ve passkey her zaman açıktır. Buradan başka yollar açın; her biri aynı kurallara uyar (yasaklar, rolün adres sınırları, captcha, hız sınırları).",
+      "always": {
+        "password": "Parola",
+        "passkey": "Passkey"
+      },
+      "guards": "Dizin (LDAP) ve tek oturum açma hesapları, parolalarının bulunduğu yerden girmeye devam eder. Var olan bir adresi bildiren sağlayıcı o hesabı asla ele geçiremez: kişiler sağlayıcıları Hesap → Güvenlik bölümünden kendileri bağlar.",
+      "social": "Sosyal giriş",
+      "socialHelp": "Kişilerin zaten sahip olduğu bir hesapla giriş. Paneli sağlayıcıya kaydedin, client ID ve secret değerlerini yapıştırın, gösterilen yönlendirme adresini sağlayıcıya girin.",
+      "socialSignUp": "Bu sağlayıcılarla yeni hesap açılabilsin",
+      "socialSignUpHelp": "Yalnızca kayıt açıkken. Kapalıysa sağlayıcılar yalnızca onları bağlamış mevcut hesapları içeri alır.",
+      "enable": "{name} açık",
+      "clientId": "Client ID",
+      "clientSecret": "Client secret",
+      "tenantId": "Kiracı (tenant)",
+      "tenantHelp": "common (her hesap), organizations (yalnızca iş/okul), consumers ya da kiracı kimliğiniz / alan adınız.",
+      "hostedDomain": "İzin verilen Google Workspace alan adı",
+      "hostedDomainHelp": "İsteğe bağlı: yalnızca bu alan adının hesapları (* her Workspace alan adı).",
+      "redirect": "Sağlayıcıya kaydedilecek yönlendirme adresi",
+      "copy": "Kopyala",
+      "copied": "Kopyalandı",
+      "oneTap": "Google One Tap",
+      "oneTapHelp": "Giriş sayfasında Google’ın tek dokunuşla giriş penceresini gösterir. {origin} adresini Google istemcisinin “Authorized JavaScript origins” listesine ekleyin.",
+      "passwordless": "Parolasız",
+      "passwordlessHelp": "E-postayla tek kullanımlık bağlantı ya da e-posta adresi yerine kullanıcı adı.",
+      "magicLink": "E-postayla giriş bağlantısı",
+      "magicLinkHelp": "10 dakika geçerli, tek kullanımlık bağlantı. Yalnızca mevcut panel hesapları için; çalışan e-posta gerekir.",
+      "needsMail": "E-posta ayarlı değil: ayarlanana kadar bağlantı gönderilemez (Ayarlar → E-posta).",
+      "username": "Kullanıcı adıyla giriş",
+      "usernameHelp": "Kişiler Hesap → Profil’den bir kullanıcı adı seçer ve e-posta yerine onunla girebilir (yalnızca panel parolaları).",
+      "checks": "Yeni hesap ve parola denetimleri",
+      "checksHelp": "Hesap açılırken ya da parola belirlenirken çalışır.",
+      "pwned": "Veri sızıntılarında bulunan parolaları reddet",
+      "pwnedHelp": "Have I Been Pwned ile denetlenir: parolanın SHA-1 özetinin yalnızca ilk 5 karakteri sunucudan çıkar. Servise ulaşılamazsa parola kabul edilir.",
+      "disposable": "Geçici e-posta adreslerini reddet",
+      "disposableHelp": "Tek kullanımlık e-posta alan adlarından (55.000’den fazla alan adı listesi) gelen kayıtlar reddedilir."
     }
   },
   "Firewalls": {

@@ -283,7 +283,16 @@
     "TICKET_CLOSED": "This ticket is closed; open a new one.",
     "TICKET_NOT_CLOSED": "You can rate it once it is closed.",
     "SSO_DISCOVERY_FAILED": "The provider’s discovery document could not be read. Check the issuer URL and that the panel can reach the provider.",
-    "SSO_DISCOVERY_INVALID": "That address does not belong to an OpenID Connect provider with this issuer."
+    "SSO_DISCOVERY_INVALID": "That address does not belong to an OpenID Connect provider with this issuer.",
+    "MAGIC_LINK_DISABLED": "Sign-in links are off.",
+    "USERNAME_SIGN_IN_DISABLED": "Sign-in with a user name is off.",
+    "INVALID_USERNAME_OR_PASSWORD": "Wrong user name or password.",
+    "DISPOSABLE_EMAIL": "Use a permanent e-mail address; throwaway addresses are not accepted.",
+    "PASSWORD_COMPROMISED": "This password appears in known data breaches. Choose another one.",
+    "USERNAME_IS_ALREADY_TAKEN": "That user name is taken.",
+    "USERNAME_TOO_SHORT": "The user name is too short (at least 3 characters).",
+    "USERNAME_TOO_LONG": "The user name is too long (at most 30 characters).",
+    "INVALID_USERNAME": "User names use letters, digits, dots, hyphens and underscores."
   },
   "Auth": {
     "required": "required",
@@ -403,9 +412,24 @@
       "sso": {
         "title": "Single sign-on did not work",
         "body": "Your organization’s sign-in could not open the panel: there is no panel account for you yet, or this e-mail address already belongs to a panel account that signs in with a password. Ask your administrator."
+      },
+      "link": {
+        "title": "The sign-in link did not work",
+        "body": "It may have been used already or expired (links last 10 minutes). Ask for a new one."
       }
     },
-    "ssoSignIn": "Sign in with {name}"
+    "ssoSignIn": "Sign in with {name}",
+    "emailOrUsername": "E-mail or user name",
+    "continueWith": "Continue with {name}",
+    "magicLink": {
+      "button": "E-mail me a sign-in link",
+      "intro": "Enter your account’s e-mail address: a one-time link to sign in arrives within a minute and works for 10 minutes.",
+      "send": "Send the link",
+      "sentTitle": "Check your inbox",
+      "sentBody": "If {email} has an account here, a sign-in link is on its way. Open it on this device.",
+      "again": "Send to another address",
+      "back": "Back to sign-in"
+    }
   },
   "fieldErrors": {
     "INVALID_EMAIL": "Enter a valid email address.",
@@ -493,7 +517,8 @@
     "WOULD_LOCK_YOU_OUT": "The address you use now is not in the list; you would lock yourself out.",
     "TOO_MANY_FILES": "At most 3 files.",
     "FILE_TOO_LARGE": "A file can be at most 2 MB.",
-    "FILE_TYPE_NOT_ALLOWED": "This file type is not accepted."
+    "FILE_TYPE_NOT_ALLOWED": "This file type is not accepted.",
+    "GOOGLE_REQUIRED": "Turn on Google sign-in first."
   },
   "Setup": {
     "title": "Setup wizard",
@@ -2652,7 +2677,8 @@
       "chat": "Messaging",
       "directory": "Directory and SSO",
       "status": "Status and incidents",
-      "support": "Support"
+      "support": "Support",
+      "signin": "Sign-in methods"
     },
     "saved": "Saved.",
     "save": "Save",
@@ -3295,6 +3321,10 @@
         "directory": {
           "ok": "Sign-in through {url} is on.",
           "todo": "Off; everyone uses their panel password."
+        },
+        "signin": {
+          "ok": "{n, plural, one {# extra way} other {# extra ways}} to sign in.",
+          "todo": "Password and passkeys only."
         }
       },
       "statusPage": {
@@ -3404,6 +3434,44 @@
       "remove": "Remove",
       "add": "Add a department",
       "openTickets": "{n} open tickets"
+    },
+    "signIn": {
+      "title": "Ways to sign in",
+      "intro": "The password and passkeys are always available. Turn on more ways here; each one follows the same rules (bans, role address limits, captcha, rate limits).",
+      "always": {
+        "password": "Password",
+        "passkey": "Passkeys"
+      },
+      "guards": "Directory (LDAP) and single sign-on accounts keep signing in where their password lives. A provider that reports an existing address never takes over that account: people link providers themselves from Account → Security.",
+      "social": "Social sign-in",
+      "socialHelp": "Sign in with an account people already have. Register this panel at the provider, paste its client ID and secret, and give the provider the redirect URI shown.",
+      "socialSignUp": "Let new people create an account with these providers",
+      "socialSignUpHelp": "Only while registration is open. Off: providers sign in existing accounts that linked them.",
+      "enable": "Turn on {name}",
+      "clientId": "Client ID",
+      "clientSecret": "Client secret",
+      "tenantId": "Tenant",
+      "tenantHelp": "common (any account), organizations (work or school only), consumers, or your tenant ID / domain.",
+      "hostedDomain": "Allowed Google Workspace domain",
+      "hostedDomainHelp": "Optional: only accounts of this domain (* for any Workspace domain).",
+      "redirect": "Redirect URI to register at the provider",
+      "copy": "Copy",
+      "copied": "Copied",
+      "oneTap": "Google One Tap",
+      "oneTapHelp": "Shows Google’s one-tap sign-in prompt on the sign-in page. Add {origin} to “Authorized JavaScript origins” of the Google client.",
+      "passwordless": "Without a password",
+      "passwordlessHelp": "A one-time link by e-mail, or a user name instead of the e-mail address.",
+      "magicLink": "Sign-in link by e-mail",
+      "magicLinkHelp": "A link valid for 10 minutes, once. Only for existing panel accounts; needs working e-mail.",
+      "needsMail": "E-mail is not set up: links cannot be sent until it is (Settings → E-mail).",
+      "username": "Sign in with a user name",
+      "usernameHelp": "People choose a user name in Account → Profile and can then sign in with it instead of the e-mail address (panel passwords only).",
+      "checks": "Checks on new accounts and passwords",
+      "checksHelp": "Run when an account is created or a password is set.",
+      "pwned": "Refuse passwords found in data breaches",
+      "pwnedHelp": "Checked with Have I Been Pwned: only the first 5 characters of the password’s SHA-1 hash leave the server. If the service cannot be reached, the password is accepted.",
+      "disposable": "Refuse throwaway e-mail addresses",
+      "disposableHelp": "Sign-ups from disposable e-mail domains (a list of 55,000+ domains) are refused."
     }
   },
   "Firewalls": {

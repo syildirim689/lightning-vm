@@ -1,6 +1,6 @@
 "use client";
 import { passkeyClient } from '@better-auth/passkey/client';
-import { adminClient, emailOTPClient, lastLoginMethodClient, phoneNumberClient, twoFactorClient } from 'better-auth/client/plugins';
+import { adminClient, emailOTPClient, lastLoginMethodClient, magicLinkClient, phoneNumberClient, twoFactorClient, usernameClient } from 'better-auth/client/plugins';
 import { createAuthClient } from 'better-auth/react';
 
 // Sessions are better-auth's, served by the API at /api/auth. No baseURL: the browser's own origin is used.
@@ -9,7 +9,7 @@ export const authClient = createAuthClient({
   basePath: '/api/auth',
   fetchOptions: { headers: { 'x-lightning-csrf': '1' } },
   // The sign-in form handles the second step itself (twoFactorRedirect in the response), so no redirect here.
-  plugins: [adminClient(), passkeyClient(), twoFactorClient(), phoneNumberClient(), lastLoginMethodClient(), emailOTPClient()],
+  plugins: [adminClient(), passkeyClient(), twoFactorClient(), phoneNumberClient(), lastLoginMethodClient(), emailOTPClient(), magicLinkClient(), usernameClient()],
 });
 
 export const signOut = () => authClient.signOut();

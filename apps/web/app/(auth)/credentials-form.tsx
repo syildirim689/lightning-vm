@@ -9,6 +9,7 @@ import { z } from 'zod';
 import { useCaptcha } from '../../components/captcha';
 import { I } from '../../components/icon';
 import { FailureGlow, SuccessOverlay } from './outcome';
+import ProviderMark, { providerNames } from '../../components/provider-mark';
 import { CheckboxInput, Notice, TextInput } from '../../components/ui';
 import { apiFetch, useErrorText, type ApiError } from '../../lib/api';
 import { authClient } from '../../lib/auth-client';
@@ -22,6 +23,8 @@ export type { PublicConfig };
 // Same limits as the API; the server stays the authority, this only answers early and in the user's language.
 const schema = z.object({ email: z.string().email().max(254), password: z.string().min(12).max(256) });
 const loginSchema = z.object({ email: z.string().email().max(254), password: z.string().min(1) });
+// With user names on, the first field takes either an e-mail address or a user name.
+const usernamePattern = /^[a-z0-9][a-z0-9._-]{2,29}$/i;
 
 // A rough strength score (0-4) for the registration form; the API only enforces the length.
 export function passwordScore(p: string) {
@@ -100,7 +103,8 @@ export default function CredentialsForm({ mode, noToken, onDone }: { mode: Mode;
   const [values, setValues] = useState({ token: '', email: '', password: '' });
   const [fields, setFields] = useState<Record<string, string>>({});
   const [failure, setFailure] = useState<string>();
-  const [busy, setBusy] = useState<'password' | 'passkey' | 'sso'>();
+  const [busy, setBusy] = useState<string>();
+  const [linkMode, setLinkMode] = useState(false);
   const [secondStep, setSecondStep] = useState(false);
   const [emailCode, setEmailCode] = useState(false);
   const [lastMethod, setLastMethod] = useState<string | null>(null);
@@ -130,15 +134,31 @@ export default function CredentialsForm({ mode, noToken, onDone }: { mode: Mode;
     return () => { active = false; };
   }, [mode]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Google One Tap (when the admin turned it on): Google's prompt, then back here signed in. Its client is made
+  // only here, since it needs the Google client id from the public settings.
+  const oneTapId = mode === 'login' ? cfg?.signIn?.oneTap?.clientId : undefined;
+  useEffect(() => {
+    if (!oneTapId) return;
+    let stop = false;
+    void Promise.all([import('better-auth/react'), import('better-auth/client/plugins')]).then(([{ createAuthClient }, { oneTapClient }]) => {
+      if (stop) return;
+      const c = createAuthClient({ basePath: '/api/auth', fetchOptions: { headers: { 'x-lightning-csrf': '1' } }, plugins: [oneTapClient({ clientId: oneTapId, promptOptions: { maxAttempts: 1 } })] });
+      void c.oneTap({ callbackURL: '/' }).catch(() => undefined);
+    });
+    return () => { stop = true; };
+  }, [oneTapId]);
+
   async function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setFailure(undefined);
-    const parsed = (mode === 'login' ? loginSchema : schema).safeParse(values);
+    const byName = mode === 'login' && !!cfg?.signIn?.username && !values.email.includes('@');
+    const parsed = byName ? (usernamePattern.test(values.email) && values.password ? { success: true as const } : { success: false as const, error: { issues: [{ path: [values.password ? 'email' : 'password'], code: 'custom' }] } })
+      : (mode === 'login' ? loginSchema : schema).safeParse(values);
     if (!parsed.success) {
       const next: Record<string, string> = {};
       for (const issue of parsed.error.issues) {
         const k = String(issue.path[0]);
-        next[k] = k === 'email' ? 'INVALID_EMAIL' : issue.code === 'too_big' ? 'PASSWORD_TOO_LONG' : mode === 'login' ? 'REQUIRED' : 'PASSWORD_TOO_SHORT';
+        next[k] = k === 'email' ? (byName ? 'INVALID_USERNAME' : 'INVALID_EMAIL') : issue.code === 'too_big' ? 'PASSWORD_TOO_LONG' : mode === 'login' ? 'REQUIRED' : 'PASSWORD_TOO_SHORT';
       }
       setFields(next); return;
     }
@@ -151,7 +171,8 @@ export default function CredentialsForm({ mode, noToken, onDone }: { mode: Mode;
         await apiFetch('/setup/admin', { method: 'POST', body: { ...(noToken ? {} : { token: values.token }), email: values.email, password: values.password, locale } });
         onDone?.(); return;
       }
-      const res = mode === 'login'
+      const res = byName ? await authClient.signIn.username({ username: values.email.trim().toLowerCase(), password: values.password, rememberMe: remember, fetchOptions })
+        : mode === 'login'
         ? await authClient.signIn.email({ email: values.email, password: values.password, rememberMe: remember, fetchOptions })
         : await authClient.signUp.email({ email: values.email, password: values.password, name: '', locale, fetchOptions } as Parameters<typeof authClient.signUp.email>[0]);
       if (res.error) { setFailure(error(asApiError(res.error))); shakeForm(); captcha.reset(); return; }
@@ -173,6 +194,13 @@ export default function CredentialsForm({ mode, noToken, onDone }: { mode: Mode;
     } catch (e) { setBusy(undefined); setFailure(error(e)); shakeForm(); }
   }
 
+  // A social provider: the browser goes to the provider and comes back signed in (or with the reason it failed).
+  async function social(provider: string) {
+    setFailure(undefined); setBusy(provider);
+    const { error: err } = await authClient.signIn.social({ provider, callbackURL: '/', errorCallbackURL: '/login?reason=sso' });
+    if (err) { setBusy(undefined); setFailure(error(asApiError(err))); shakeForm(); }
+  }
+
   async function passkey() {
     setFailure(undefined); setBusy('passkey');
     const { error: err } = await authClient.signIn.passkey();
@@ -184,6 +212,7 @@ export default function CredentialsForm({ mode, noToken, onDone }: { mode: Mode;
 
   if (secondStep) return <SecondFactor onBack={() => setSecondStep(false)}/>;
   if (emailCode) return <EmailCode initialEmail={values.email} onBack={() => setEmailCode(false)}/>;
+  if (linkMode) return <MagicLink initialEmail={values.email.includes('@') ? values.email : ''} onBack={() => setLinkMode(false)}/>;
   // The method used last time: a small tag on the button's top edge, readable on any button colour.
   const withLast = (on: boolean, button: React.ReactNode) => <div className="relative">{button}
     {on && <span className="pointer-events-none absolute -top-2.5 right-4 inline-flex items-center gap-1 rounded-full border border-accent/40 bg-surface px-2 py-0.5 text-[11px] font-semibold text-accent shadow-sm">
@@ -193,7 +222,7 @@ export default function CredentialsForm({ mode, noToken, onDone }: { mode: Mode;
     <FailureGlow count={failures}/>
     <SuccessOverlay show={done} label={t('redirecting')}/>
     {mode === 'setup' && !noToken && <TextInput label={t('token')} type="password" value={values.token} onChange={set('token')} autoComplete="one-time-code" spellCheck={false} help={t('tokenHelp')} isRequired/>}
-    <TextInput label={t('email')} type="email" value={values.email} onChange={set('email')} autoComplete="username webauthn" autofill={mode === 'login'} maxLength={254}
+    <TextInput label={mode === 'login' && cfg?.signIn?.username ? t('emailOrUsername') : t('email')} type={mode === 'login' && cfg?.signIn?.username ? 'text' : 'email'} value={values.email} onChange={set('email')} autoComplete="username webauthn" autofill={mode === 'login'} maxLength={254}
       error={field(fields.email)} help={t('emailHelp')} isRequired/>
     {suggestion && <button type="button" onClick={() => set('email')(suggestion)} className="-mt-2 self-start text-left text-xs text-accent hover:underline">{t('didYouMean', { email: suggestion })}</button>}
     <PasswordField label={t('password')} value={values.password} onChange={set('password')} autoComplete="current-password webauthn" autofill={mode === 'login'}
@@ -217,6 +246,14 @@ export default function CredentialsForm({ mode, noToken, onDone }: { mode: Mode;
       </Button>)}
       {cfg?.sso && withLast(lastMethod === 'oidc', <Button variant="secondary" size="lg" fullWidth isPending={busy === 'sso'} isDisabled={!!busy} onPress={sso}>
         <I name="building-2" size={18}/>{t('ssoSignIn', { name: cfg.sso.name })}
+      </Button>)}
+      {!!cfg?.signIn?.social.length && <div className={`grid gap-2 ${cfg.signIn.social.length > 1 ? 'sm:grid-cols-2' : ''}`}>
+        {cfg.signIn.social.map((p) => <div key={p}>{withLast(lastMethod === p, <Button variant="secondary" size="lg" fullWidth isPending={busy === p} isDisabled={!!busy} onPress={() => social(p)}>
+          <ProviderMark id={p} size={18}/>{t('continueWith', { name: providerNames[p] ?? p })}
+        </Button>)}</div>)}
+      </div>}
+      {cfg?.signIn?.magicLink && withLast(lastMethod === 'magic-link', <Button variant="tertiary" size="lg" fullWidth isDisabled={!!busy} onPress={() => setLinkMode(true)}>
+        <I name="send" size={18}/>{t('magicLink.button')}
       </Button>)}
       {cfg?.emailCodeSignIn && withLast(lastMethod === 'email-otp', <Button variant="tertiary" size="lg" fullWidth isDisabled={!!busy} onPress={() => setEmailCode(true)}>
         <I name="mail-check" size={18}/>{t('emailCode.button')}
@@ -374,4 +411,45 @@ function EmailCode({ initialEmail, onBack }: { initialEmail: string; onBack: () 
     <AnimatePresence>{failure && <motion.div role="alert" initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}><Notice tone="danger">{failure}</Notice></motion.div>}</AnimatePresence>
     <Button variant="ghost" onPress={onBack}><I name="arrow-left" size={16}/>{t('emailCode.back')}</Button>
   </motion.div>;
+}
+
+// "E-mail me a sign-in link": the API mails a one-time link (10 minutes) to existing accounts only; the answer
+// is the same for every address, so nobody learns who has an account.
+function MagicLink({ initialEmail, onBack }: { initialEmail: string; onBack: () => void }) {
+  const t = useTranslations('Auth');
+  const { error } = useErrorText();
+  const cfg = useApiQuery<PublicConfig>(['public-config'], '/public/config').data;
+  const captcha = useCaptcha(cfg?.captcha?.use.signIn ? cfg.captcha : null, 'login');
+  const [email, setEmail] = useState(initialEmail);
+  const [busy, setBusy] = useState(false);
+  const [sent, setSent] = useState(false);
+  const [failure, setFailure] = useState<string>();
+  async function send(e?: React.FormEvent) {
+    e?.preventDefault(); setFailure(undefined);
+    if (!z.string().email().safeParse(email).success) { setFailure(error({ code: 'INVALID_EMAIL' })); return; }
+    setBusy(true);
+    try {
+      const token = captcha.active ? await captcha.getToken() : undefined;
+      const { error: err } = await authClient.signIn.magicLink({ email: email.trim().toLowerCase(), callbackURL: '/', errorCallbackURL: '/login?reason=link', fetchOptions: token ? { headers: { 'x-captcha-response': token } } : undefined });
+      if (err) { setFailure(error(asApiError(err))); captcha.reset(); return; }
+      setSent(true);
+    } finally { setBusy(false); }
+  }
+  return <form onSubmit={send} noValidate className="flex flex-col gap-4">
+    <AnimatePresence mode="wait">{sent
+      ? <motion.div key="sent" initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }} className="flex flex-col items-center gap-3 rounded-2xl border border-success/30 bg-success/5 px-4 py-6 text-center">
+          <span className="grid size-12 place-items-center rounded-full bg-success/15 text-success"><I name="mail-check" size={22}/></span>
+          <p className="font-semibold">{t('magicLink.sentTitle')}</p>
+          <p className="text-sm text-muted">{t('magicLink.sentBody', { email })}</p>
+          <Button size="sm" variant="ghost" onPress={() => setSent(false)}>{t('magicLink.again')}</Button>
+        </motion.div>
+      : <motion.div key="ask" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex flex-col gap-4">
+          <p className="text-sm text-muted">{t('magicLink.intro')}</p>
+          <TextInput label={t('email')} type="email" value={email} onChange={setEmail} autoComplete="email" autofill maxLength={254} isRequired/>
+          {captcha.element}
+          {failure && <Notice tone="danger">{failure}</Notice>}
+          <Button type="submit" size="lg" fullWidth isPending={busy}><I name="send" size={18}/>{t('magicLink.send')}</Button>
+        </motion.div>}</AnimatePresence>
+    <Button variant="ghost" onPress={onBack}><I name="arrow-left" size={16}/>{t('magicLink.back')}</Button>
+  </form>;
 }
