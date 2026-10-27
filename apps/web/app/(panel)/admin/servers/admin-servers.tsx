@@ -14,6 +14,7 @@ import { useApiAction, useApiQuery } from '../../../../lib/query';
 import { FavoriteStar, StateBadge, type Server } from '../../servers-ui';
 import { ServerFilters, stateGroup, useServerFilters } from '../../server-filters';
 import { ImportVms } from './import-vms';
+import { useBytes } from '../../server-traffic';
 
 type Operation = { id: string; kind: string; status: string; step: string | null; attempts: number; errorCode: string | null; errorDetail: string | null;
   createdAt: string; serverName: string | null; serverId: string | null; ownerEmail: string | null };
@@ -40,6 +41,7 @@ export default function AdminServers() {
   // Starred first; optionally only them.
   const shown = filters.shown.filter((x) => !onlyStarred || x.favorite).sort((x, y) => Number(!!y.favorite) - Number(!!x.favorite));
   const failed = ops.filter((o) => o.status === 'failed').length;
+  const bytes = useBytes();
   const opTone = (s: string) => (s === 'succeeded' ? 'success' : s === 'failed' ? 'danger' : s === 'cancelled' ? 'default' : 'accent') as 'success';
 
   return <>
@@ -77,7 +79,8 @@ export default function AdminServers() {
             <DataTable label={t('admin.servers')} rows={shown} rowKey={(s) => s.id} empty={t('list.empty')}
               columns={[{ id: 'name', label: t('col.name') }, { id: 'owner', label: t('admin.owner') }, { id: 'state', label: t('col.state') }, { id: 'ip', label: 'IP' }, { id: 'size', label: t('col.size') }, { id: 'loc', label: t('col.location') }, { id: 'tags', label: t('admin.tags') }]}
               cells={(s) => [<span key="n" className="flex items-center gap-1"><FavoriteStar id={s.id} on={!!s.favorite} name={s.name} listKey={['admin', 'servers']} className="relative -ml-2 shrink-0"/><NextLink href={`/servers/${s.id}`} className="font-medium text-accent hover:underline">{s.name}</NextLink>{s.locked && <I name="lock" size={13} className="text-warning"/>}</span>, s.ownerEmail ?? '–', <StateBadge key="b" server={s}/>,
-                s.address ? <Mono key="ip">{s.address}</Mono> : '–', t('size', { vcpu: s.vcpu, memory: s.memoryMb / 1024, disk: s.diskGb }), s.poolName,
+                s.address ? <Mono key="ip">{s.address}</Mono> : '–', <span key="z" className="flex flex-col"><span>{t('size', { vcpu: s.vcpu, memory: s.memoryMb / 1024, disk: s.diskGb })}</span>
+                  <span className={`text-xs ${s.trafficGb && (s.trafficBytes ?? 0) >= s.trafficGb * 1024 ** 3 ? 'text-danger' : 'text-muted'}`}>{bytes(s.trafficBytes ?? 0)}{s.trafficGb ? ` / ${s.trafficGb} GB` : ''}</span></span>, s.poolName,
                 s.tags?.length ? <span key="t" className="flex flex-wrap gap-1">{s.tags.map((x) => <span key={x} className="rounded-full bg-default px-2 py-0.5 text-xs">{x}</span>)}</span> : '–']}/>
           </Tabs.Panel>
 
@@ -112,6 +115,6 @@ export default function AdminServers() {
 
 // The filtered rows as a spreadsheet (UTF-8 with BOM so Excel keeps Turkish letters; cells quoted, formulas defused).
 function exportCsv(rows: Server[]) {
-  downloadCsv('servers', ['name', 'owner', 'state', 'power', 'group', 'ip', 'vcpu', 'memory_mb', 'disk_gb', 'location', 'image', 'price_monthly', 'currency', 'tags', 'created_at'],
-    rows.map((s) => [s.name, s.ownerEmail, s.state, s.powerState, stateGroup(s), s.address, s.vcpu, s.memoryMb, s.diskGb, s.location || s.poolName, s.imageName, s.priceMonthly, s.currency, (s.tags ?? []).join(' '), s.createdAt]));
+  downloadCsv('servers', ['name', 'owner', 'state', 'power', 'group', 'ip', 'vcpu', 'memory_mb', 'disk_gb', 'location', 'image', 'price_monthly', 'currency', 'traffic_month_bytes', 'traffic_allowance_gb', 'tags', 'created_at'],
+    rows.map((s) => [s.name, s.ownerEmail, s.state, s.powerState, stateGroup(s), s.address, s.vcpu, s.memoryMb, s.diskGb, s.location || s.poolName, s.imageName, s.priceMonthly, s.currency, s.trafficBytes ?? 0, s.trafficGb ?? '', (s.tags ?? []).join(' '), s.createdAt]));
 }
