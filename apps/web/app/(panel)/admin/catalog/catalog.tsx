@@ -21,8 +21,8 @@ type Connection = { id: string; name: string };
 type Layer = Record<string, number>;
 type Capacity = { physical: Layer; headroom: Layer; offered: Layer; used: Layer; reserved: Layer; available: Layer; realFreeGb: number; warnings: string[] };
 type Pool = { id: string; name: string; location: string; locationId: string | null; connectionName: string; cpuOvercommit: number; memoryOvercommit: number; storageOvercommit: number; capacity: Capacity; customRule: Record<string, unknown> | null;
-  extraIpv4Max: number; extraIpv4Price: string };
-type Pkg = { id: string; name: string; vcpu: number; memoryMb: number; diskGb: number; priceMonthly: string; currency: string; poolIds: string[] };
+  extraIpv4Max: number; extraIpv4Price: string; trafficGb: number | null };
+type Pkg = { id: string; name: string; vcpu: number; memoryMb: number; diskGb: number; priceMonthly: string; currency: string; poolIds: string[]; trafficGb: number | null };
 type Image = { id: string; name: string; family: string; templateName: string | null; minDiskGb: number };
 type IpPool = IpPoolRow;
 type Quota = { scope: string; email: string | null; maxServers: number | null; maxVcpu: number | null; maxMemoryMb: number | null; maxDiskGb: number | null };
@@ -90,7 +90,7 @@ export default function Catalog() {
           : <p className="text-sm text-muted">{t('packages.needPool')}</p>}</div>
         <DataTable label={t('packages.title')} rows={packages} rowKey={(p) => p.id} empty={t('packages.empty')}
           columns={[{ id: 'name', label: t('col.name') }, { id: 'cpu', label: 'vCPU' }, { id: 'ram', label: 'RAM' }, { id: 'disk', label: t('col.disk') }, { id: 'price', label: t('col.price') }, { id: 'sell', label: t('packages.sellable') }, { id: 'act', label: <span className="sr-only">{t('remove')}</span> }]}
-          cells={(p) => [<span key="n" className="font-medium">{p.name}</span>, p.vcpu, `${p.memoryMb / 1024} GB`, `${p.diskGb} GB`, money(p.priceMonthly, p.currency), <Sellable key="s" pkg={p} pools={pools}/>, removeButton(`/admin/packages/${p.id}`, p.name)]}/>
+          cells={(p) => [<span key="n" className="flex flex-col"><span className="font-medium">{p.name}</span><span className="text-xs text-muted">{p.trafficGb ? t('packages.trafficShort', { gb: p.trafficGb }) : t('packages.unlimited')}</span></span>, p.vcpu, `${p.memoryMb / 1024} GB`, `${p.diskGb} GB`, money(p.priceMonthly, p.currency), <Sellable key="s" pkg={p} pools={pools}/>, removeButton(`/admin/packages/${p.id}`, p.name)]}/>
       </Tabs.Panel>
 
       <Tabs.Panel id="images" className="flex flex-col gap-4 pt-5">
@@ -299,7 +299,7 @@ function PackageForm({ pools, images, onSaved }: { pools: Pool[]; images: Image[
   const t = useTranslations('Catalog');
   const format = useFormatter();
   const saved = useSaved(onSaved);
-  const f = useApiForm({ name: '', vcpu: '2', memoryMb: '4096', diskGb: '40', priceMonthly: '', priceHourly: '', currency: 'EUR' });
+  const f = useApiForm({ name: '', vcpu: '2', memoryMb: '4096', diskGb: '40', trafficGb: '', priceMonthly: '', priceHourly: '', currency: 'EUR' });
   const [poolIds, setPoolIds] = useState<string[]>(pools.length === 1 ? [pools[0].id] : []);
   const [imageIds, setImageIds] = useState<string[]>([]);
   const price = Number(f.values.priceMonthly.replace(',', '.'));
@@ -316,6 +316,7 @@ function PackageForm({ pools, images, onSaved }: { pools: Pool[]; images: Image[
       <NumberInput label="RAM (GB)" value={num(f.values.memoryMb) !== undefined ? num(f.values.memoryMb)! / 1024 : undefined} step={0.5} minValue={0.5}
         onChange={(v) => f.set('memoryMb')(str(v === undefined ? undefined : Math.round(v * 1024)))} error={f.fieldError('memoryMb')}/>
       <NumberInput label={`${t('col.disk')} (GB)`} value={num(f.values.diskGb)} onChange={(v) => f.set('diskGb')(str(v))} minValue={1} maxValue={65536} step={10} error={f.fieldError('diskGb')}/>
+      <NumberInput label={t('packages.traffic')} value={num(f.values.trafficGb)} onChange={(v) => f.set('trafficGb')(str(v))} minValue={1} step={100} error={f.fieldError('trafficGb')} help={t('packages.trafficHelp')}/>
     </FieldGroup>
     <FieldGroup title={t('form.pricing')} cols={3}>
       <TextInput label={t('packages.priceMonthly')} value={f.values.priceMonthly} onChange={f.set('priceMonthly')} error={f.fieldError('priceMonthly')} placeholder="9.90"/>

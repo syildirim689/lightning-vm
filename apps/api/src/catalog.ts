@@ -116,6 +116,8 @@ async function readPool(body: Input, client: PoolClient | typeof pool = pool) {
     active: body.active !== false,
     // Extra IPv4 addresses a customer may add to a server here, and their monthly price each (offering currency).
     extraIpv4Max: f.int('extraIpv4Max', 0, 32, 0), extraIpv4Price: f.decimal('extraIpv4Price', 100000, false) ?? '0',
+    // Monthly traffic allowance of custom-shaped servers here (GB in and out; empty: unlimited).
+    trafficGb: body.trafficGb === undefined || body.trafficGb === null || body.trafficGb === '' ? null : f.int('trafficGb', 1, 10_000_000),
   };
   f.done();
   // Everything referenced must exist in the discovered inventory of that connection.
@@ -162,7 +164,7 @@ const poolColumns = `p.id, p.name, p.location, p.location_id AS "locationId", p.
   p.datastore_morefs AS "datastoreMorefs", p.network_moref AS "networkMoref", p.cpu_overcommit::float AS "cpuOvercommit",
   p.memory_overcommit::float AS "memoryOvercommit", p.storage_overcommit::float AS "storageOvercommit", p.reserve_cpu_pct AS "reserveCpuPct",
   p.reserve_memory_pct AS "reserveMemoryPct", p.reserve_storage_pct AS "reserveStoragePct", p.active,
-  p.extra_ipv4_max AS "extraIpv4Max", p.extra_ipv4_price::text AS "extraIpv4Price"`;
+  p.extra_ipv4_max AS "extraIpv4Max", p.extra_ipv4_price::text AS "extraIpv4Price", p.traffic_gb AS "trafficGb"`;
 
 @Controller('admin') @UseGuards(PermissionGuard)
 export class CatalogAdminController {
@@ -185,9 +187,9 @@ export class CatalogAdminController {
       v.location = l.name;
     }
     const { rows: [p] } = await guarded(() => pool.query(`INSERT INTO resource_pools (name, location, connection_id, compute_moref, datastore_morefs, network_moref,
-      cpu_overcommit, memory_overcommit, storage_overcommit, reserve_cpu_pct, reserve_memory_pct, reserve_storage_pct, active, extra_ipv4_max, extra_ipv4_price)
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING id`, [v.name, v.location, v.connectionId, v.computeMoref, v.datastoreMorefs, v.networkMoref,
-      v.cpuOvercommit, v.memoryOvercommit, v.storageOvercommit, v.reserveCpuPct, v.reserveMemoryPct, v.reserveStoragePct, v.active, v.extraIpv4Max, v.extraIpv4Price]));
+      cpu_overcommit, memory_overcommit, storage_overcommit, reserve_cpu_pct, reserve_memory_pct, reserve_storage_pct, active, extra_ipv4_max, extra_ipv4_price, traffic_gb)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) RETURNING id`, [v.name, v.location, v.connectionId, v.computeMoref, v.datastoreMorefs, v.networkMoref,
+      v.cpuOvercommit, v.memoryOvercommit, v.storageOvercommit, v.reserveCpuPct, v.reserveMemoryPct, v.reserveStoragePct, v.active, v.extraIpv4Max, v.extraIpv4Price, v.trafficGb]));
     if (locationId) await pool.query('UPDATE resource_pools SET location_id = $2 WHERE id = $1', [p.id, locationId]);
     await audit(req, 'catalog.pool_created', 'success', req.user.id, { id: p.id, name: v.name });
     return { id: p.id };
@@ -198,8 +200,8 @@ export class CatalogAdminController {
     const v = await readPool(body);
     const { rowCount } = await guarded(() => pool.query(`UPDATE resource_pools SET name=$2, location=$3, connection_id=$4, compute_moref=$5, datastore_morefs=$6,
       network_moref=$7, cpu_overcommit=$8, memory_overcommit=$9, storage_overcommit=$10, reserve_cpu_pct=$11, reserve_memory_pct=$12, reserve_storage_pct=$13,
-      active=$14, extra_ipv4_max=$15, extra_ipv4_price=$16, updated_at=now() WHERE id=$1`, [id, v.name, v.location, v.connectionId, v.computeMoref, v.datastoreMorefs, v.networkMoref,
-      v.cpuOvercommit, v.memoryOvercommit, v.storageOvercommit, v.reserveCpuPct, v.reserveMemoryPct, v.reserveStoragePct, v.active, v.extraIpv4Max, v.extraIpv4Price]));
+      active=$14, extra_ipv4_max=$15, extra_ipv4_price=$16, traffic_gb=$17, updated_at=now() WHERE id=$1`, [id, v.name, v.location, v.connectionId, v.computeMoref, v.datastoreMorefs, v.networkMoref,
+      v.cpuOvercommit, v.memoryOvercommit, v.storageOvercommit, v.reserveCpuPct, v.reserveMemoryPct, v.reserveStoragePct, v.active, v.extraIpv4Max, v.extraIpv4Price, v.trafficGb]));
     if (!rowCount) throw apiError(404, 'NOT_FOUND', 'Unknown pool');
     await audit(req, 'catalog.pool_updated', 'success', req.user.id, { id });
     return { id };
@@ -209,12 +211,14 @@ export class CatalogAdminController {
   @Put('pools/:id/ip-options') @Can('catalog.manage')
   async poolIpOptions(@Req() req: AuthedRequest, @Param('id', ParseUUIDPipe) id: string, @Body() body: Input) {
     const f = new Fields(body);
-    const v = { max: f.int('extraIpv4Max', 0, 32, 0), price: f.decimal('extraIpv4Price', 100000, false) ?? '0' };
+    const v = { max: f.int('extraIpv4Max', 0, 32, 0), price: f.decimal('extraIpv4Price', 100000, false) ?? '0',
+      trafficGb: body.trafficGb === undefined || body.trafficGb === null || body.trafficGb === '' ? null : f.int('trafficGb', 1, 10_000_000) };
     f.done();
-    const { rowCount } = await pool.query('UPDATE resource_pools SET extra_ipv4_max = $2, extra_ipv4_price = $3, updated_at = now() WHERE id = $1', [id, v.max, v.price]);
+    // trafficGb: the monthly allowance of custom-shaped servers ordered here from now on (empty: unlimited).
+    const { rowCount } = await pool.query('UPDATE resource_pools SET extra_ipv4_max = $2, extra_ipv4_price = $3, traffic_gb = $4, updated_at = now() WHERE id = $1', [id, v.max, v.price, v.trafficGb]);
     if (!rowCount) throw apiError(404, 'NOT_FOUND', 'Unknown pool');
     await audit(req, 'catalog.pool_ip_options', 'success', req.user.id, { id, ...v });
-    return { id, extraIpv4Max: v.max, extraIpv4Price: v.price };
+    return { id, extraIpv4Max: v.max, extraIpv4Price: v.price, trafficGb: v.trafficGb };
   }
 
   @Delete('pools/:id') @HttpCode(204) @Can('catalog.manage')
@@ -273,7 +277,7 @@ export class CatalogAdminController {
   @Get('packages') @Can('catalog.view', 'catalog.manage', 'dashboard.view')
   async packages() {
     const { rows } = await pool.query(`SELECT p.id, p.name, p.vcpu, p.memory_mb AS "memoryMb", p.disk_gb AS "diskGb", p.price_monthly::text AS "priceMonthly",
-      p.price_hourly::text AS "priceHourly", p.currency, p.active, p.sort,
+      p.price_hourly::text AS "priceHourly", p.currency, p.active, p.sort, p.traffic_gb AS "trafficGb",
       COALESCE((SELECT array_agg(pool_id) FROM package_pools WHERE package_id = p.id), '{}') AS "poolIds",
       COALESCE((SELECT array_agg(image_id) FROM package_images WHERE package_id = p.id), '{}') AS "imageIds"
       FROM packages p ORDER BY p.sort, p.name`);
@@ -285,15 +289,16 @@ export class CatalogAdminController {
     const f = new Fields(body);
     const v = { name: f.text('name'), vcpu: f.int('vcpu', 1, 256), memoryMb: f.int('memoryMb', 512, 4194304), diskGb: f.int('diskGb', 1, 65536),
       priceMonthly: f.decimal('priceMonthly', 1000000), priceHourly: f.decimal('priceHourly', 10000, false), currency: f.currency('currency'),
-      poolIds: f.ids('poolIds'), imageIds: f.ids('imageIds'), sort: f.int('sort', 0, 10000, 0), active: body.active !== false };
+      poolIds: f.ids('poolIds'), imageIds: f.ids('imageIds'), sort: f.int('sort', 0, 10000, 0), active: body.active !== false,
+      trafficGb: body.trafficGb === undefined || body.trafficGb === null || body.trafficGb === '' ? null : f.int('trafficGb', 1, 10_000_000), };
     if (!f.errors.poolIds && !v.poolIds.length) f.errors.poolIds = 'REQUIRED';
     f.done();
     const id = await guarded(async () => {
       const client = await pool.connect();
       try {
         await client.query('BEGIN');
-        const { rows: [p] } = await client.query(`INSERT INTO packages (name, vcpu, memory_mb, disk_gb, price_monthly, price_hourly, currency, sort, active)
-          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id`, [v.name, v.vcpu, v.memoryMb, v.diskGb, v.priceMonthly, v.priceHourly, v.currency, v.sort, v.active]);
+        const { rows: [p] } = await client.query(`INSERT INTO packages (name, vcpu, memory_mb, disk_gb, price_monthly, price_hourly, currency, sort, active, traffic_gb)
+          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id`, [v.name, v.vcpu, v.memoryMb, v.diskGb, v.priceMonthly, v.priceHourly, v.currency, v.sort, v.active, v.trafficGb]);
         await client.query('INSERT INTO package_pools SELECT $1, unnest($2::uuid[])', [p.id, v.poolIds]);
         await client.query('INSERT INTO package_images SELECT $1, unnest($2::uuid[])', [p.id, v.imageIds]);
         await client.query('COMMIT');
@@ -427,7 +432,7 @@ export class CatalogAdminController {
 }
 
 
-export type Order = { rp: Record<string, unknown>; shape: Shape; price: { monthly: string; currency: string }; extraIpv4: number; application: Application | null; packageId: string | null; imageId: string | null };
+export type Order = { rp: Record<string, unknown>; shape: Shape; price: { monthly: string; currency: string }; extraIpv4: number; application: Application | null; packageId: string | null; imageId: string | null; trafficGb: number | null };
 // Validates the chosen pool, package or custom shape and image, and prices it. Shared by quote and create.
 export async function resolveOrder(poolId: string, body: Input, allowedLocations?: string[]): Promise<Order> {
     const { rows: [rp] } = await pool.query(`SELECT r.*, l.status AS location_status FROM resource_pools r LEFT JOIN locations l ON l.id = r.location_id
@@ -439,12 +444,14 @@ export async function resolveOrder(poolId: string, body: Input, allowedLocations
     if (allowedLocations && !allowedLocations.includes(rp.location_id)) throw apiError(403, 'LOCATION_NOT_ALLOWED', 'Your role cannot order in this location', { poolId: 'LOCATION_NOT_ALLOWED' });
 
     let shape: Shape; let price: { monthly: string; currency: string };
+    let trafficGb: number | null = (rp.traffic_gb as number | null) ?? null; // custom shapes: the location's allowance
     if (body.type === 'package') {
-      const { rows: [p] } = await pool.query(`SELECT p.vcpu, p.memory_mb, p.disk_gb, p.price_monthly::text, p.currency FROM packages p
+      const { rows: [p] } = await pool.query(`SELECT p.vcpu, p.memory_mb, p.disk_gb, p.price_monthly::text, p.currency, p.traffic_gb FROM packages p
         JOIN package_pools pp ON pp.package_id = p.id AND pp.pool_id = $2 WHERE p.id = $1 AND p.active`, [body.packageId, poolId]).catch(() => ({ rows: [] }));
       if (!p) throw apiError(400, 'VALIDATION_FAILED', 'Package not offered here', { packageId: 'NOT_AVAILABLE' });
       shape = { vcpu: p.vcpu, memoryMb: p.memory_mb, diskGb: p.disk_gb };
       price = { monthly: p.price_monthly, currency: p.currency };
+      trafficGb = p.traffic_gb;
     } else if (body.type === 'custom') {
       const { rows: [rule] } = await pool.query('SELECT * FROM custom_rules WHERE pool_id = $1 AND active', [poolId]);
       if (!rule) throw apiError(400, 'VALIDATION_FAILED', 'No custom offering', { poolId: 'NO_CUSTOM_OFFERING' });
@@ -484,7 +491,7 @@ export async function resolveOrder(poolId: string, body: Input, allowedLocations
       price = { ...price, monthly: t.monthly };
       application = a;
     }
-  return { rp, shape, price, extraIpv4, application, packageId: body.type === 'package' ? String(body.packageId) : null, imageId: body.imageId ? String(body.imageId) : null };
+  return { rp, shape, price, extraIpv4, application, packageId: body.type === 'package' ? String(body.packageId) : null, imageId: body.imageId ? String(body.imageId) : null, trafficGb };
 }
 
 // Effective limits: project override, else user override, else the role's limits over the default row.
@@ -532,7 +539,7 @@ export class CatalogController {
     const only = limitsOf(req.user.roles.join(',')).allowedLocations;
     const [packages, pools, images, applications, locations] = await Promise.all([
       pool.query(`SELECT p.id, p.name, p.vcpu, p.memory_mb AS "memoryMb", p.disk_gb AS "diskGb", p.price_monthly::text AS "priceMonthly",
-        p.price_hourly::text AS "priceHourly", p.currency,
+        p.price_hourly::text AS "priceHourly", p.currency, p.traffic_gb AS "trafficGb",
         ARRAY(SELECT pp.pool_id FROM package_pools pp JOIN resource_pools r ON r.id = pp.pool_id AND r.active WHERE pp.package_id = p.id) AS "poolIds",
         ARRAY(SELECT pi.image_id FROM package_images pi JOIN os_images i ON i.id = pi.image_id AND i.active WHERE pi.package_id = p.id) AS "imageIds"
         FROM packages p WHERE p.active ORDER BY p.sort, p.name`),
@@ -540,7 +547,7 @@ export class CatalogController {
         'memoryMinMb', c.memory_min_mb, 'memoryMaxMb', c.memory_max_mb, 'memoryStepMb', c.memory_step_mb, 'diskMinGb', c.disk_min_gb, 'diskMaxGb', c.disk_max_gb,
         'diskStepGb', c.disk_step_gb, 'minMemoryMbPerVcpu', c.min_memory_mb_per_vcpu, 'maxMemoryMbPerVcpu', c.max_memory_mb_per_vcpu,
         'priceVcpu', c.price_vcpu::text, 'priceMemoryGb', c.price_memory_gb::text, 'priceDiskGb', c.price_disk_gb::text, 'currency', c.currency) END AS custom,
-        r.extra_ipv4_max AS "extraIpv4Max", r.extra_ipv4_price::text AS "extraIpv4Price",
+        r.extra_ipv4_max AS "extraIpv4Max", r.extra_ipv4_price::text AS "extraIpv4Price", r.traffic_gb AS "trafficGb",
         EXISTS (SELECT 1 FROM ip_pools i WHERE i.pool_id = r.id AND i.ipv6_prefix IS NOT NULL) AS ipv6
         FROM resource_pools r LEFT JOIN custom_rules c ON c.pool_id = r.id LEFT JOIN locations l ON l.id = r.location_id
         WHERE r.active AND (l.status IS NULL OR l.status <> 'hidden') ORDER BY r.name`),

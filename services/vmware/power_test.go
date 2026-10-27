@@ -27,6 +27,14 @@ func TestPowerReport(t *testing.T) {
 	found := false
 	for _, v := range r.VMs {
 		found = found || (v.Name == "lvm-pwr" && v.Host != "")
+		if v.Name == "lvm-pwr" {
+			t.Logf("traffic samples: %d", len(v.Traffic))
+			for _, s := range v.Traffic {
+				if s.T.IsZero() || s.Rx < 0 || s.Tx < 0 {
+					t.Fatalf("bad traffic sample: %+v", s)
+				}
+			}
+		}
 	}
 	if !found {
 		t.Fatalf("running managed VM missing: %+v", r.VMs)

@@ -19,6 +19,7 @@ import { remember } from '../../lib/recent';
 import { PowerSchedules } from './server-schedules';
 import { ServerSnapshots } from './server-snapshots';
 import { ServerReinstall, ServerResize } from './server-change';
+import { ServerTraffic } from './server-traffic';
 import { ServerFilters, useServerFilters } from './server-filters';
 import { flag } from '../../lib/flag';
 import { ButtonLink, ConfirmButton, DataTable, Empty, Mono, Notice, PageHeader, Section, StatusChip, TextInput, type Tone } from '../../components/ui';
@@ -250,6 +251,7 @@ export function ServerDetail({ id }: { id: string }) {
     <ServerFirewalls server={s}/>
 
     <ServerMetrics id={id} live={s.state === 'ready' && s.powerState === 'poweredOn'}/>
+    {s.state !== 'provisioning' && <ServerTraffic id={s.id}/>}
     {allowed.resize && s.state === 'ready' && !s.vdcId && <ServerResize server={s} busy={!!open}/>}
     {allowed.reinstall && ['ready', 'error'].includes(s.state) && <ServerReinstall server={s} busy={!!open} own={own}/>}
 

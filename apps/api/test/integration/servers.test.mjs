@@ -796,7 +796,7 @@ test('resize and reinstall: priced like an order, the disk only grows, the VM ch
   const key = () => ({ 'idempotency-key': randomUUID() });
   const done = (id, kind) => until(async () => { const o = await lastOp(id); return o.kind === kind && ['succeeded', 'failed'].includes(o.status); }, `${kind} done`, 120);
   await pool.query("UPDATE ip_pools SET range_end = '10.20.0.40'::inet WHERE name = 'tiny'");
-  const small = (await send('POST', '/admin/packages', { name: 'Small', vcpu: 2, memoryMb: 1024, diskGb: 20, priceMonthly: '2.00', currency: 'EUR', poolIds: [poolId], imageIds: [imageId] })).json().id;
+  const small = (await send('POST', '/admin/packages', { name: 'Small', vcpu: 2, memoryMb: 1024, diskGb: 20, priceMonthly: '2.00', currency: 'EUR', poolIds: [poolId], imageIds: [imageId], trafficGb: 500 })).json().id;
   const made = await create(order('resize-1'));
   assert.equal(made.statusCode, 202, made.body);
   const id = made.json().serverId;
@@ -817,6 +817,12 @@ test('resize and reinstall: priced like an order, the disk only grows, the VM ch
   let s = await serverRow(id);
   assert.deepEqual([s.vcpu, s.memory_mb, s.disk_gb, s.price_monthly, s.package_id, s.power_state], [2, 1024, 20, '2.00', small, before.power_state]);
   assert.equal((await quote({ type: 'package', packageId })).json().fields.diskGb, 'DISK_SHRINK_NOT_SUPPORTED');
+  // The new package's traffic allowance comes with it; the page shows this month's use per day.
+  assert.equal(s.traffic_gb, 500);
+  await pool.query('INSERT INTO server_traffic (server_id, day, rx_bytes, tx_bytes) VALUES ($1, current_date, $2, $3)', [id, 3 * 1024 ** 3, 1024 ** 3]);
+  const tr = (await send('GET', `/servers/${id}/traffic`, undefined, user)).json();
+  assert.deepEqual([tr.days.length, tr.month.rx + tr.month.tx, tr.allowanceGb], [31, 4 * 1024 ** 3, 500]);
+  assert.equal((await send('GET', `/servers/${id}/traffic`, undefined, other)).statusCode, 404);
 
   // Reinstall: confirmed by name, a known image, a new VM under the same name and address.
   const reinstall = (body) => send('POST', `/servers/${id}/reinstall`, body, user, key());

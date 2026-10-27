@@ -138,7 +138,8 @@ async function resizeTarget(req: AuthedRequest, server: Record<string, any>, bod
 }
 
 const serverColumns = `s.id, s.name, s.state, s.power_state AS "powerState", s.guest_ready AS "guestReady", s.vcpu, s.memory_mb AS "memoryMb", s.disk_gb AS "diskGb",
-  s.price_monthly::text AS "priceMonthly", s.currency, s.error_code AS "errorCode", s.created_at AS "createdAt", s.project_id AS "projectId",
+  s.price_monthly::text AS "priceMonthly", s.currency, s.traffic_gb AS "trafficGb",
+  (SELECT COALESCE(sum(t.rx_bytes + t.tx_bytes), 0)::float8 FROM server_traffic t WHERE t.server_id = s.id AND t.day >= date_trunc('month', current_date)) AS "trafficBytes", s.error_code AS "errorCode", s.created_at AS "createdAt", s.project_id AS "projectId",
   s.tags, s.notes, s.locked, s.billing_hold AS "billingHold", s.pool_id AS "poolId", s.image_id AS "imageId", s.package_id AS "packageId", s.vdc_id AS "vdcId",
   p.name AS "poolName", p.location, l.city AS "locationCity", l.country_code AS "locationCountry", l.datacenter AS "locationDatacenter", i.name AS "imageName", host(a.address) AS address,
   CASE WHEN s.firewall_applied_version >= s.firewall_version THEN 'applied' WHEN s.firewall_error IS NOT NULL THEN 'failed' ELSE 'pending' END AS "firewallStatus",
@@ -234,6 +235,17 @@ export class ServersController {
     const body = { ...out, vcpu: s.vcpu, memoryMb: s.memory_mb, fetchedAt: new Date().toISOString() };
     await redis.set(`metrics:${id}`, JSON.stringify(body), 'EX', 15).catch(() => undefined);
     return body;
+  }
+
+  // Network traffic: the last 31 days (bytes in and out per day), this month's total and the monthly allowance.
+  @Get('servers/:id/traffic')
+  async traffic(@Req() req: AuthedRequest, @Param('id', ParseUUIDPipe) id: string) {
+    const s = await findServer(req, id);
+    const { rows: days } = await pool.query(`SELECT d::date::text AS day, COALESCE(t.rx_bytes, 0)::float8 AS rx, COALESCE(t.tx_bytes, 0)::float8 AS tx
+      FROM generate_series(current_date - 30, current_date, interval '1 day') d LEFT JOIN server_traffic t ON t.server_id = $1 AND t.day = d::date ORDER BY d`, [id]);
+    const { rows: [m] } = await pool.query(`SELECT COALESCE(sum(rx_bytes), 0)::float8 AS rx, COALESCE(sum(tx_bytes), 0)::float8 AS tx FROM server_traffic
+      WHERE server_id = $1 AND day >= date_trunc('month', current_date)`, [id]);
+    return { days, month: m, allowanceGb: s.traffic_gb, countedAt: s.traffic_counted_at };
   }
 
   @Get('servers/:id')
@@ -342,6 +354,7 @@ export class ServersController {
         await prepareApplication(client, order.application, s.id, { hostname, ip: ips[0].address }, `${origin}/api/servers/${s.id}/app-callback`);
       }
       if (vdc) await client.query('UPDATE servers SET vdc_id = $2 WHERE id = $1', [s.id, vdc.vdcId]);
+      else if (order.trafficGb) await client.query('UPDATE servers SET traffic_gb = $2 WHERE id = $1', [s.id, order.trafficGb]);
       if (firewallIds.length) {
         await client.query('INSERT INTO firewall_servers (firewall_id, server_id) SELECT unnest($1::uuid[]), $2', [firewallIds, s.id]);
         await client.query('UPDATE servers SET firewall_version = 1 WHERE id = $1', [s.id]);
@@ -443,7 +456,7 @@ export class ServersController {
       { vcpu: shape.vcpu, memoryMb: shape.memoryMb, diskGb: shape.diskGb, powerOn: server.power_state === 'poweredOn',
         from: { vcpu: server.vcpu, memoryMb: server.memory_mb, diskGb: server.disk_gb, priceMonthly: server.price_monthly, packageId: server.package_id } });
     // The price follows the shape at once (renewals read it); a resize that finally fails puts it back (worker).
-    await pool.query('UPDATE servers SET price_monthly = $2, package_id = $3, updated_at = now() WHERE id = $1', [id, price.monthly, r.order.packageId]);
+    await pool.query('UPDATE servers SET price_monthly = $2, package_id = $3, traffic_gb = $4, updated_at = now() WHERE id = $1', [id, price.monthly, r.order.packageId, r.order.trafficGb]);
     const invoiceId = r.charge.chargeNow !== '0.00' ? await billResize(server, r.charge.chargeNow, price.currency, shape) : null;
     if (invoiceId) await pool.query("UPDATE operations SET params = params || jsonb_build_object('invoiceId', $2::text) WHERE id = $1", [operation.id, invoiceId]);
     return { serverId: id, operation, ...(invoiceId && { invoiceId }) };

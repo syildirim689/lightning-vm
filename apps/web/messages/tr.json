@@ -1176,7 +1176,11 @@
         "cpu": "CPU",
         "ram": "RAM",
         "disk": "disk"
-      }
+      },
+      "traffic": "Trafik (GB / ay)",
+      "trafficHelp": "Gelen ve giden toplamı; boş: sınırsız.",
+      "trafficShort": "{gb} GB trafik",
+      "unlimited": "Sınırsız trafik"
     },
     "ip": {
       "title": "IP havuzları",
@@ -1300,7 +1304,9 @@
       "usage": "Kullanım",
       "usageOf": "{size} adresin {used} tanesi kullanımda",
       "inQuarantine": "{n} adres karantinada",
-      "quarantineFor": "karantina {h} saat"
+      "quarantineFor": "karantina {h} saat",
+      "traffic": "Trafik (GB / ay)",
+      "trafficHelp": "Burada sipariş edilen özel boyutlar için; boş: sınırsız."
     },
     "apps": {
       "title": "Uygulamalar",
@@ -2458,6 +2464,14 @@
       "account_webhook_disabled": {
         "title": "Webhook kapatıldı",
         "help": "Webhook'larınızdan biri çok sayıda başarısız teslimattan sonra kapatıldığında."
+      },
+      "server_traffic": {
+        "title": "Aylık trafik",
+        "help": "Bir sunucu aylık trafiğinin %80'ini ve tamamını kullandığında."
+      },
+      "admin_traffic_exceeded": {
+        "title": "Trafik kotası doldu",
+        "help": "Bir sunucu aylık trafiğinin tamamını kullandığında."
       }
     },
     "policyTitle": "Önce yönetici, sonra kullanıcı",
@@ -6135,5 +6149,17 @@
       "help": "Paneldeki her işlem bir API çağrısıdır. Sunucuları değiştiren isteklerde Idempotency-Key başlığı gerekir; böylece yeniden deneme işlemi iki kez yapmaz.",
       "docs": "Tam başvuru kurulumdaki docs/api.md dosyasındadır."
     }
+  },
+  "Traffic": {
+    "title": "Trafik",
+    "help": "Gelen ve giden ağ trafiği; birkaç dakikada bir VMware sayaçlarından hesaplanır.",
+    "month": "Bu ay",
+    "of": "{gb} GB dahil",
+    "unlimited": "Aylık sınır yok",
+    "in": "Gelen",
+    "out": "Giden",
+    "chart": "Son 31 günün trafiği: {total}",
+    "counted": "Son hesaplama {at}",
+    "notYet": "Henüz hesaplanmadı; ilk değerler sunucu çalıştıktan birkaç dakika sonra görünür."
   }
 }

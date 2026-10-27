@@ -3,6 +3,7 @@
 // watts; a default when none is set) and CPU use. Each running server gets a share by its CPU use.
 import { adapter, connectionTarget } from './operations.mjs';
 import { checkCpu } from './abuse.mjs';
+import { countTraffic } from './traffic.mjs';
 
 export const defaultProfile = { idle: 120, max: 400 };
 
@@ -27,6 +28,8 @@ export async function samplePower(db, log, notify = async () => {}) {
     let report;
     try { report = await adapter('/v1/power', connectionTarget(c)); }
     catch (e) { log('warn', 'power_sample_failed', { connection: c.id, code: e.code }); continue; }
+    // Network traffic of every running server on this connection (its own failure never stops the energy sample).
+    await countTraffic(db, report.vms ?? [], notify).catch((e) => log('warn', 'traffic_failed', { connection: c.id, error: String(e.message).slice(0, 200) }));
     for (const h of report.hosts.filter((x) => x.connected)) {
       const est = estimate(profileOf(c.id, h.moref), h.cpuUsedMhz, h.cpuTotalMhz);
       const watts = h.watts ?? est.watts;

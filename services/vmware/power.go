@@ -28,6 +28,15 @@ type PowerVM struct {
 	Name       string `json:"name"`
 	Host       string `json:"host"`
 	CPUUsedMhz int32  `json:"cpuUsedMhz"`
+	// The last 15 minutes of realtime network samples (20 s each, KB/s over all NICs), for the traffic counter:
+	// the panel counts each sample once, by its time.
+	Traffic []TrafficSample `json:"traffic"`
+}
+
+type TrafficSample struct {
+	T  time.Time `json:"t"`
+	Rx float64   `json:"rx"` // net.received.average
+	Tx float64   `json:"tx"` // net.transmitted.average
 }
 
 type PowerReport struct {
@@ -61,16 +70,21 @@ func powerReport(ctx context.Context, c *vim25.Client) (*PowerReport, error) {
 	if err != nil {
 		return nil, err
 	}
+	pm := performance.NewManager(c)
+	vmIndex := map[string]int{}
+	var vmRefs []types.ManagedObjectReference
 	for _, v := range vms {
 		if len(v.Name) > len(managedPrefix) && v.Name[:len(managedPrefix)] == managedPrefix && v.Runtime.PowerState == types.VirtualMachinePowerStatePoweredOn {
-			out.VMs = append(out.VMs, PowerVM{Name: v.Name, Host: ref(v.Runtime.Host), CPUUsedMhz: v.Summary.QuickStats.OverallCpuUsage})
+			vmIndex[v.Self.Value] = len(out.VMs)
+			vmRefs = append(vmRefs, v.Self)
+			out.VMs = append(out.VMs, PowerVM{Name: v.Name, Host: ref(v.Runtime.Host), CPUUsedMhz: v.Summary.QuickStats.OverallCpuUsage, Traffic: []TrafficSample{}})
 		}
 	}
+	vmTraffic(ctx, pm, vmRefs, vmIndex, out)
 	if len(refs) == 0 {
 		return out, nil
 	}
 	// A missing counter (no power management) leaves the watts empty; the panel then estimates.
-	pm := performance.NewManager(c)
 	series, err := pm.SampleByName(ctx, types.PerfQuerySpec{MaxSample: 1, IntervalId: 20}, []string{"power.power.average"}, refs)
 	if err != nil {
 		return out, nil
@@ -92,4 +106,45 @@ func powerReport(ctx context.Context, c *vim25.Client) (*PowerReport, error) {
 		}
 	}
 	return out, nil
+}
+
+// vmTraffic fills each VM's recent network samples; without the counters the traffic stays empty (not an error).
+func vmTraffic(ctx context.Context, pm *performance.Manager, refs []types.ManagedObjectReference, index map[string]int, out *PowerReport) {
+	if len(refs) == 0 {
+		return
+	}
+	series, err := pm.SampleByName(ctx, types.PerfQuerySpec{MaxSample: 45, IntervalId: 20}, []string{"net.received.average", "net.transmitted.average"}, refs)
+	if err != nil {
+		return
+	}
+	results, err := pm.ToMetricSeries(ctx, series)
+	if err != nil {
+		return
+	}
+	for _, r := range results {
+		i, ok := index[r.Entity.Value]
+		if !ok {
+			continue
+		}
+		samples := make([]TrafficSample, len(r.SampleInfo))
+		for j, info := range r.SampleInfo {
+			samples[j].T = info.Timestamp
+		}
+		for _, v := range r.Value {
+			if v.Instance != "" { // the aggregate over all NICs
+				continue
+			}
+			for j, x := range v.Value {
+				if j >= len(samples) || x < 0 {
+					continue
+				}
+				if v.Name == "net.received.average" {
+					samples[j].Rx = float64(x)
+				} else if v.Name == "net.transmitted.average" {
+					samples[j].Tx = float64(x)
+				}
+			}
+		}
+		out.VMs[i].Traffic = samples
+	}
 }

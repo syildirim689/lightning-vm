@@ -1176,7 +1176,11 @@
         "cpu": "CPU",
         "ram": "RAM",
         "disk": "disk"
-      }
+      },
+      "traffic": "Traffic (GB / month)",
+      "trafficHelp": "In and out together; empty: unlimited.",
+      "trafficShort": "{gb} GB traffic",
+      "unlimited": "Unlimited traffic"
     },
     "ip": {
       "title": "IP pools",
@@ -1300,7 +1304,9 @@
       "usage": "Usage",
       "usageOf": "{used} of {size} in use",
       "inQuarantine": "{n} in quarantine",
-      "quarantineFor": "quarantine {h} h"
+      "quarantineFor": "quarantine {h} h",
+      "traffic": "Traffic (GB / month)",
+      "trafficHelp": "For custom sizes ordered here; empty: unlimited."
     },
     "apps": {
       "title": "Applications",
@@ -2458,6 +2464,14 @@
       "account_webhook_disabled": {
         "title": "Webhook switched off",
         "help": "When one of your webhooks is switched off after many failed deliveries."
+      },
+      "server_traffic": {
+        "title": "Monthly traffic",
+        "help": "When a server has used 80% and 100% of its monthly traffic."
+      },
+      "admin_traffic_exceeded": {
+        "title": "Traffic allowance used up",
+        "help": "When a server uses all of its monthly traffic."
       }
     },
     "policyTitle": "The admin first, then each user",
@@ -6135,5 +6149,17 @@
       "help": "Every action of the panel is an API call. State changes on servers need an Idempotency-Key header, so a retry never runs twice.",
       "docs": "The full reference is in docs/api.md of the installation."
     }
+  },
+  "Traffic": {
+    "title": "Traffic",
+    "help": "Network traffic in and out, counted from VMware every few minutes.",
+    "month": "This month",
+    "of": "of {gb} GB included",
+    "unlimited": "No monthly limit",
+    "in": "In",
+    "out": "Out",
+    "chart": "Traffic over the last 31 days: {total}",
+    "counted": "Last counted {at}",
+    "notYet": "Not counted yet; the first figures appear a few minutes after the server runs."
   }
 }

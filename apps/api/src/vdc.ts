@@ -35,7 +35,7 @@ export async function resolveVdcOrder(userId: string, body: Input): Promise<{ or
   if (!img) fields.imageId = 'NOT_AVAILABLE';
   else if (shape.diskGb < img.min_disk_gb) fields.diskGb = 'DISK_TOO_SMALL';
   if (Object.keys(fields).length) throw apiError(400, 'VALIDATION_FAILED', 'Invalid input', fields);
-  return { vdcId: v.id, order: { rp, shape, price: { monthly: '0.00', currency: v.currency }, extraIpv4: 0, application: null, packageId: null, imageId: String(body.imageId) } };
+  return { vdcId: v.id, order: { rp, shape, price: { monthly: '0.00', currency: v.currency }, extraIpv4: 0, application: null, packageId: null, imageId: String(body.imageId), trafficGb: null } };
 }
 
 // Inside the create transaction: the VDC row is locked and what is left is checked against the new server.

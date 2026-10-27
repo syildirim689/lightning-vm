@@ -16,22 +16,24 @@ type Address = { address: string; ipPoolId: string; state: 'used' | 'quarantine'
   serverId: string | null; serverName: string | null; owner: string | null; since: string | null; until: string | null };
 
 // Extra IPv4 a location sells with each server: how many at most, and the monthly price of each.
-export function PoolIpOptions({ pool }: { pool: { id: string; extraIpv4Max: number; extraIpv4Price: string } }) {
+export function PoolIpOptions({ pool }: { pool: { id: string; extraIpv4Max: number; extraIpv4Price: string; trafficGb?: number | null } }) {
   const t = useTranslations('Catalog.ipm');
   const { error } = useErrorText();
   const client = useQueryClient();
   const [max, setMax] = useState<number | undefined>(pool.extraIpv4Max);
   const [price, setPrice] = useState(pool.extraIpv4Price);
+  const [traffic, setTraffic] = useState<number | undefined>(pool.trafficGb ?? undefined);
   const [busy, setBusy] = useState(false);
-  const changed = max !== pool.extraIpv4Max || price !== pool.extraIpv4Price;
+  const changed = max !== pool.extraIpv4Max || price !== pool.extraIpv4Price || (traffic ?? null) !== (pool.trafficGb ?? null);
   async function save() {
     setBusy(true);
-    try { await apiFetch(`/admin/pools/${pool.id}/ip-options`, { method: 'PUT', body: { extraIpv4Max: max ?? 0, extraIpv4Price: price || '0' } }); toast.success(t('saved')); client.invalidateQueries({ queryKey: ['catalog'] }); }
+    try { await apiFetch(`/admin/pools/${pool.id}/ip-options`, { method: 'PUT', body: { extraIpv4Max: max ?? 0, extraIpv4Price: price || '0', trafficGb: traffic ?? null } }); toast.success(t('saved')); client.invalidateQueries({ queryKey: ['catalog'] }); }
     catch (e) { toast.danger(error(e)); } finally { setBusy(false); }
   }
   return <div className="flex flex-wrap items-end gap-3 rounded-xl border border-border p-3">
     <NumberInput className="w-40" label={t('extraMax')} value={max} onChange={setMax} minValue={0} maxValue={32} help={t('extraMaxHelp')}/>
     <TextInput className="w-40" label={t('extraPrice')} value={price} onChange={setPrice} help={t('extraPriceHelp')}/>
+    <NumberInput className="w-48" label={t('traffic')} value={traffic} onChange={setTraffic} minValue={1} step={100} help={t('trafficHelp')}/>
     <Button size="sm" variant="secondary" isPending={busy} isDisabled={!changed} onPress={save}><I name="check" size={14}/>{t('save')}</Button>
   </div>;
 }
