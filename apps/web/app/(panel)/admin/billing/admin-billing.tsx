@@ -82,7 +82,7 @@ export default function AdminBilling() {
               <XAxis dataKey="month" tick={{ fill: 'var(--muted)', fontSize: 12 }} stroke="var(--separator)"/>
               <YAxis tick={{ fill: 'var(--muted)', fontSize: 12 }} stroke="var(--separator)" width={56}/>
               <Tooltip contentStyle={tooltipStyle} cursor={{ fill: 'color-mix(in oklab, var(--muted) 12%, transparent)' }}/>
-              {currencies.map((c, i) => <Bar key={c} dataKey={c} name={c} fill={colors[i % colors.length]} radius={[4, 4, 0, 0]}/>)}
+              {currencies.map((c, i) => <Bar key={c} dataKey={c} name={c} fill={colors[i % colors.length]} radius={[4, 4, 0, 0]} maxBarSize={48}/>)}
             </BarChart>
           </ResponsiveContainer>
         </div>}

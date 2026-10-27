@@ -809,6 +809,8 @@ test.describe('people, settings and smart features (English browser)', () => {
     await shot('billing-invoice-390');
     await page.goto('/billing');
     await expectNoOverflow(page, 'billing at 390 px');
+    await expect(page.getByText('Balance', { exact: true }).first()).toBeVisible();
+    await page.waitForTimeout(900);
     await shot('billing-customer-390');
     await page.setViewportSize({ width: 1280, height: 720 });
     // Staff: revenue, the invoice with its two payments, and the actions on it.
@@ -818,7 +820,7 @@ test.describe('people, settings and smart features (English browser)', () => {
     await page.waitForTimeout(900);
     await shot('billing-admin');
     await page.getByRole('tab', { name: 'Payments' }).click();
-    await expect(page.getByText('Failed', { exact: true }).first()).toBeVisible();
+    await expect(page.getByRole('grid', { name: 'Payments' }).getByText('Failed', { exact: true }).first()).toBeVisible();
     await page.waitForTimeout(400);
     await shot('billing-admin-payments');
     await page.goto(`/admin/billing/invoices/${invoiceId}`);
