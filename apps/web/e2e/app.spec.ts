@@ -1017,6 +1017,10 @@ test.describe('people, settings and smart features (English browser)', () => {
     await page.waitForTimeout(900);
     await shot(page, 'user-summary');
     await page.keyboard.press('Escape');
+    // Who is here: the overview's "Online now" shows this admin; the users' "Online or active" card filters to them.
+    await page.goto('/admin');
+    await expect(page.getByRole('list', { name: 'Online now' }).getByRole('listitem').first()).toBeVisible();
+    await page.goto('/admin/users');
     // Presence and sessions: the admin's own row is online (this tab), its sessions list device and activity.
     await expect(page.getByRole('img', { name: 'Online' }).first()).toBeVisible();
     await page.getByRole('button', { name: /Actions for admin@example.test/ }).click();

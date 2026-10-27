@@ -50,17 +50,18 @@ export default function Users() {
     if (status === 'active' && u.banned) return false;
     if (status === 'no2fa' && u.twoFactorEnabled) return false;
     return true;
-  }), [users, search, role, status]);
+  // Online first, then the most recently seen, when looking at who is around.
+  }).sort((a, b) => status !== 'online' ? 0 : Number(b.presence === 'online') - Number(a.presence === 'online') || Date.parse(b.lastSeen ?? '0') - Date.parse(a.lastSeen ?? '0')), [users, search, role, status]);
 
   const stats = users && { total: users.length, banned: users.filter((u) => u.banned).length, twoFactor: users.filter((u) => u.twoFactorEnabled).length,
-    staff: users.filter((u) => u.role.split(',').some((r) => r !== 'user')).length };
+    staff: users.filter((u) => u.role.split(',').some((r) => r !== 'user')).length, online: users.filter((u) => u.presence !== 'offline').length };
 
   return <>
     <PageHeader eyebrow={t('eyebrow')} title={t('title')} description={t('intro')}
       actions={can(perms, 'users.manage') && <Button onPress={() => setDialog({ kind: 'create' })}><I name="user-plus" size={16}/>{t('new')}</Button>}/>
-    {stats && <ul className="mb-5 grid grid-cols-2 gap-3 md:grid-cols-4">
-      {([['total', 'users'], ['staff', 'shield-check'], ['twoFactor', 'lock'], ['banned', 'ban']] as const).map(([k, icon]) => <li key={k} className="flex items-center gap-3 rounded-xl border border-border bg-surface px-4 py-3">
-        <span className="grid size-9 place-items-center rounded-lg bg-default text-muted">{icon === 'users' ? <I name="users" size={16}/> : icon === 'shield-check' ? <I name="shield-check" size={16}/> : icon === 'lock' ? <I name="lock" size={16}/> : <I name="ban" size={16}/>}</span>
+    {stats && <ul className="mb-5 grid grid-cols-2 gap-3 md:grid-cols-5">
+      {([['total', 'users'], ['online', 'radio'], ['staff', 'shield-check'], ['twoFactor', 'lock'], ['banned', 'ban']] as const).map(([k, icon]) => <li key={k} className={`flex items-center gap-3 rounded-xl border border-border bg-surface px-4 py-3 ${k === 'online' ? 'cursor-pointer hover:border-success/50' : ''}`} {...(k === 'online' && { role: 'button', tabIndex: 0, onClick: () => void setStatus('online'), onKeyDown: (e: React.KeyboardEvent) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); void setStatus('online'); } } })}>
+        <span className="grid size-9 place-items-center rounded-lg bg-default text-muted">{icon === 'users' ? <I name="users" size={16}/> : icon === 'shield-check' ? <I name="shield-check" size={16}/> : icon === 'lock' ? <I name="lock" size={16}/> : icon === 'radio' ? <span className="text-success"><I name="radio" size={16}/></span> : <I name="ban" size={16}/>}</span>
         <span><span className="block text-lg font-semibold tabular-nums">{stats[k]}</span><span className="text-xs text-muted">{t(`stat.${k}`)}</span></span>
       </li>)}
     </ul>}

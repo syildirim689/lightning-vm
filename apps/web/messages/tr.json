@@ -2395,7 +2395,8 @@
       "total": "kullanıcı",
       "staff": "ekip üyesi",
       "twoFactor": "iki adımlı doğrulama açık",
-      "banned": "yasaklı"
+      "banned": "yasaklı",
+      "online": "Çevrimiçi ya da aktif"
     },
     "search": "E-posta, ad veya telefonla ara",
     "filterRole": "Rol",
@@ -5352,6 +5353,10 @@
     "ipMoved": "{first} → {last}",
     "ends": "{when} sona erer",
     "end": "Sonlandır",
-    "signOutHere": "Buradan çık"
+    "signOutHere": "Buradan çık",
+    "widgetTitle": "Şu an çevrimiçi",
+    "widgetCounts": "{online} çevrimiçi · {recent} kişi son 15 dakikada aktif",
+    "nobody": "Şu an kimse yok.",
+    "seeAll": "Tümünü gör"
   }
 }

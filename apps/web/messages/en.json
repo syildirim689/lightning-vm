@@ -2395,7 +2395,8 @@
       "total": "users",
       "staff": "team members",
       "twoFactor": "with two-factor",
-      "banned": "banned"
+      "banned": "banned",
+      "online": "Online or active"
     },
     "search": "Search by e-mail, name or phone",
     "filterRole": "Role",
@@ -5352,6 +5353,10 @@
     "ipMoved": "{first} → {last}",
     "ends": "Ends {when}",
     "end": "End",
-    "signOutHere": "Sign out here"
+    "signOutHere": "Sign out here",
+    "widgetTitle": "Online now",
+    "widgetCounts": "{online} online · {recent} active in the last 15 minutes",
+    "nobody": "Nobody right now.",
+    "seeAll": "See all"
   }
 }

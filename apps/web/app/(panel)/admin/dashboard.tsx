@@ -7,6 +7,7 @@ import { I } from '../../../components/icon';
 import CountUp from '../../../components/count-up';
 import Insights from '../../../components/insights';
 import Digest from '../../../components/digest';
+import OnlineNow from '../../../components/online-now';
 import { DataTable, Notice, PageHeader, Section, Stat, StatusChip } from '../../../components/ui';
 import { useApiQuery } from '../../../lib/query';
 import type { Server } from '../servers-ui';
@@ -80,6 +81,8 @@ export default function Dashboard({ setupOpen }: { setupOpen: boolean }) {
     </div>
 
     <Digest/>
+
+    <OnlineNow/>
 
     <Insights scope="staff"/>
 
