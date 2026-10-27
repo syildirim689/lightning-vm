@@ -4967,6 +4967,16 @@
       "all": "Tümü",
       "anyone": "Herkes",
       "me": "Bana atananlar"
-    }
+    },
+    "cannedManage": "Hazır yanıtlar",
+    "cannedEmpty": "Henüz hazır yanıt yok.",
+    "cannedTitle": "Başlık",
+    "cannedBody": "Yanıt",
+    "cannedAdd": "Hazır yanıt ekle",
+    "cannedSaved": "Hazır yanıt kaydedildi",
+    "cannedRemove": "“{title}” yanıtını kaldır",
+    "cannedVars": "Yer tutucular: {a} (müşteri), {b} (talep numarası), {c} (sunucusu). Yanıtı seçtiğinizde doldurulur.",
+    "openAlready": "Bu sunucu için zaten açık bir talebiniz var: #{number} {subject}.",
+    "openAlreadyLink": "Onun yerine oraya yazın"
   }
 }

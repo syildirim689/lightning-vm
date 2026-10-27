@@ -10,6 +10,7 @@ import { useRef, useState } from 'react';
 import { I } from '../../../components/icon';
 import { SelectInput, TextInput } from '../../../components/ui';
 import { apiFetch, useErrorText, type ApiError } from '../../../lib/api';
+import { fillCanned, type CannedVars } from '../../../lib/canned';
 import { useMe } from '../../../lib/me';
 import { useApiQuery } from '../../../lib/query';
 
@@ -79,7 +80,7 @@ export function Thread({ messages, staffView }: { messages: Message[]; staffView
 }
 
 // The reply box: text, up to 3 files, and for staff an internal-note switch and canned replies.
-export function Composer({ ticketId, staff, closed, onSent }: { ticketId: string; staff: boolean; closed: boolean; onSent: () => void }) {
+export function Composer({ ticketId, staff, closed, onSent, vars }: { ticketId: string; staff: boolean; closed: boolean; onSent: () => void; vars: CannedVars }) {
   const t = useTranslations('Support');
   const { error, field } = useErrorText();
   const [body, setBody] = useState('');
@@ -98,7 +99,7 @@ export function Composer({ ticketId, staff, closed, onSent }: { ticketId: string
   }
   return <div className={`flex flex-col gap-3 rounded-2xl border p-4 ${internal ? 'border-dashed border-warning/60 bg-warning/5' : 'border-border bg-surface'}`}>
     {closed && !staff && <p className="text-xs text-muted">{t('reopenHint')}</p>}
-    {staff && canned.length > 0 && <SelectInput label={t('canned')} value="" onChange={(id) => { const c = canned.find((x) => x.id === id); if (c) setBody((b) => (b ? `${b}\n\n${c.body}` : c.body)); }}
+    {staff && canned.length > 0 && <SelectInput label={t('canned')} value="" onChange={(id) => { const c = canned.find((x) => x.id === id); if (c) { const text = fillCanned(c.body, vars); setBody((b) => (b ? `${b}\n\n${text}` : text)); } }}
       options={canned.map((c) => ({ id: c.id, label: c.title }))} placeholder={t('cannedPick')}/>}
     <TextInput multiline label={internal ? t('noteLabel') : t('replyLabel')} value={body} onChange={setBody}/>
     <AnimatePresence>{files.length > 0 && <motion.ul initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex flex-wrap gap-2">
@@ -148,7 +149,7 @@ export function TicketPage({ id, staff }: { id: string; staff: boolean }) {
       <div className="flex min-w-0 flex-col gap-5">
         <Thread messages={messages} staffView={staff}/>
         {closed && !staff && <Rating ticket={tk} onDone={refresh}/>}
-        <Composer ticketId={id} staff={asStaff} closed={closed} onSent={refresh}/>
+        <Composer ticketId={id} staff={asStaff} closed={closed} onSent={refresh} vars={{ name: tk.ownerName ?? '', ticket: `#${tk.number}`, server: tk.serverName ?? '' }}/>
         {!closed && <div><Button size="sm" variant="ghost" onPress={close}><I name="circle-check" size={14}/>{t('close')}</Button></div>}
       </div>
       {staff && <StaffPanel ticket={tk} onChange={refresh}/>}

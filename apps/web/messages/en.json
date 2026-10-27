@@ -4967,6 +4967,16 @@
       "all": "All",
       "anyone": "Anyone",
       "me": "Assigned to me"
-    }
+    },
+    "cannedManage": "Canned replies",
+    "cannedEmpty": "No canned replies yet.",
+    "cannedTitle": "Title",
+    "cannedBody": "Reply",
+    "cannedAdd": "Add canned reply",
+    "cannedSaved": "Canned reply saved",
+    "cannedRemove": "Remove “{title}”",
+    "cannedVars": "Placeholders: {a} (the customer), {b} (the ticket number), {c} (its server). They are filled in when you pick the reply.",
+    "openAlready": "You already have an open ticket about this server: #{number} {subject}.",
+    "openAlreadyLink": "Add to it instead"
   }
 }

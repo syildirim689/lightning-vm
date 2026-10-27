@@ -37,13 +37,13 @@ export default function SupportList() {
             <span className="flex shrink-0 items-center gap-2"><PriorityBadge priority={x.priority}/><StatusBadge status={x.status}/></span>
           </NextLink>
         </motion.li>)}</ul>}
-    {open && <NewTicket initialServer={params.get('server') ?? ''} onClose={() => setOpen(false)}/>}
+    {open && <NewTicket initialServer={params.get('server') ?? ''} mine={tickets ?? []} onClose={() => setOpen(false)}/>}
   </>;
 }
 
 type Srv = { id: string; name: string; state: string; powerState: string; guestReady: boolean };
 
-function NewTicket({ initialServer, onClose }: { initialServer: string; onClose: () => void }) {
+function NewTicket({ initialServer, mine, onClose }: { initialServer: string; mine: Ticket[]; onClose: () => void }) {
   const t = useTranslations('Support');
   const locale = useLocale();
   const router = useRouter();
@@ -60,6 +60,7 @@ function NewTicket({ initialServer, onClose }: { initialServer: string; onClose:
   const server = servers.find((s) => s.id === v.serverId);
   // A server in an error state or off: suggest a higher priority (the customer decides).
   const troubled = server && (server.state === 'error' || server.state === 'missing' || (server.state === 'ready' && server.powerState !== 'poweredOn'));
+  const already = v.serverId ? mine.find((x) => x.serverId === v.serverId && x.status !== 'closed') : undefined;
   async function submit() {
     setBusy(true); setFields({});
     try {
@@ -82,6 +83,10 @@ function NewTicket({ initialServer, onClose }: { initialServer: string; onClose:
             <SelectInput label={t('server')} value={v.serverId} onChange={(x) => setV({ ...v, serverId: x })} error={field(fields.serverId)}
               options={[{ id: '', label: t('noServer') }, ...servers.map((s) => ({ id: s.id, label: s.name }))]}/>
           </div>
+          {already && <NextLink href={`/support/${already.id}`} className="flex items-start gap-2 rounded-xl border border-accent/40 bg-accent/5 px-3 py-2 text-sm hover:bg-accent/10 focus-visible:outline-2 focus-visible:outline-accent">
+            <I name="lightbulb" size={16} className="mt-0.5 shrink-0 text-accent"/>
+            <span>{t('openAlready', { number: already.number, subject: already.subject })} <span className="font-medium text-accent">{t('openAlreadyLink')}</span></span>
+          </NextLink>}
           <TextInput label={t('subject')} value={v.subject} onChange={(x) => setV({ ...v, subject: x })} maxLength={160} error={field(fields.subject)} placeholder={t('subjectExample')}/>
           <div className="flex flex-col gap-2">
             <p className="text-sm font-medium">{t('priorityLabel')}</p>

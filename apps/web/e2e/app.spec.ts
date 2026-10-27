@@ -880,6 +880,15 @@ test.describe('people, settings and smart features (English browser)', () => {
     await expect(page.getByText('Cannot reach my server over SSH')).toBeVisible();
     await page.waitForTimeout(400);
     await shot(page, 'support-queue');
+    // Canned replies are kept from the queue, with placeholders filled in when picked.
+    await page.getByRole('button', { name: 'Canned replies' }).click();
+    await page.getByLabel('Title').fill('Firewall check');
+    await page.getByLabel('Reply', { exact: true }).fill('Hi {name}, about {ticket}: please check the firewall of {server}.');
+    await page.getByRole('button', { name: 'Add canned reply' }).click();
+    await expect(page.getByRole('dialog').getByText('Firewall check')).toBeVisible();
+    await page.waitForTimeout(500);
+    await shot(page, 'support-canned');
+    await page.keyboard.press('Escape');
     await page.getByText('Cannot reach my server over SSH').click();
     // On your own ticket you write as a customer (internal notes are for other people's tickets).
     await expect(page.getByRole('button', { name: 'Internal note' })).toHaveCount(0);

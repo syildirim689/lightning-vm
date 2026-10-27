@@ -8,7 +8,10 @@ import { useFormatter, useLocale, useNow, useTranslations } from 'next-intl';
 import { parseAsString, useQueryState } from 'nuqs';
 import { I } from '../../../../components/icon';
 import { Empty, PageHeader, SelectInput, Stat } from '../../../../components/ui';
+import { useMe } from '../../../../lib/me';
+import { can } from '../../../../lib/permissions';
 import { useApiQuery } from '../../../../lib/query';
+import CannedReplies from './canned';
 import { Deadline, departmentName, PriorityBadge, StatusBadge, useDepartments, type Ticket } from '../../support/ui';
 
 type Stats = { active: number; waiting: number; overdue: number; unassigned: number; firstResponseHours: number | null; rating: number | null };
@@ -19,6 +22,7 @@ export default function SupportQueue() {
   const format = useFormatter();
   const now = useNow({ updateInterval: 60_000 });
   const deps = useDepartments();
+  const me = useMe();
   const [status, setStatus] = useQueryState('status', parseAsString.withDefault('active'));
   const [priority, setPriority] = useQueryState('priority', parseAsString.withDefault(''));
   const [department, setDepartment] = useQueryState('department', parseAsString.withDefault(''));
@@ -28,7 +32,7 @@ export default function SupportQueue() {
   const tickets = useApiQuery<{ tickets: (Ticket & { ownerEmail: string })[] }>(['admin', 'support', 'queue', params], `/admin/support/tickets?${params}`, { refetchInterval: 20_000 }).data?.tickets;
   const stats = useApiQuery<Stats>(['admin', 'support', 'stats'], '/admin/support/stats', { refetchInterval: 30_000 }).data;
   return <>
-    <PageHeader eyebrow={t('staffEyebrow')} title={t('queueTitle')} description={t('queueIntro')}/>
+    <PageHeader eyebrow={t('staffEyebrow')} title={t('queueTitle')} description={t('queueIntro')} actions={me && can(me.permissions, 'support.manage') ? <CannedReplies/> : undefined}/>
     <div className="mb-5 grid grid-cols-2 gap-3 md:grid-cols-3 2xl:grid-cols-6">
       <Stat label={t('stat.waiting')} value={stats?.waiting ?? '…'} icon={<I name="inbox" size={16}/>} tone="accent"/>
       <Stat label={t('stat.overdue')} value={stats?.overdue ?? '…'} icon={<I name="alarm-clock-off" size={16}/>} tone={stats?.overdue ? 'danger' : 'default'}/>
