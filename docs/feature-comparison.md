@@ -28,7 +28,7 @@ Status values:
 | Rescue mode | SolusVM, HostBill | Yes: boot from an ISO in the library (SystemRescue, for example), then eject |
 | Change hostname | HostBill, VirtFusion | Planned |
 | Extra disks | SolusVM, HostBill | Planned |
-| Backups to remote storage (S3, SFTP) | VirtFusion, Virtualizor, SolusVM, HostBill | Planned (needs VADP/CBT on VMware) |
+| Backups | VirtFusion, Virtualizor, SolusVM, HostBill | **New**: disk copies on each location's backup datastore (an NFS store at another site works), by hand or on a schedule with retention, restored over the disk |
 | Nested ESXi | — | Yes (ESXi images) |
 | Containers (LXC/OpenVZ), GPU passthrough, NUMA | Virtualizor, SolusVM, Proxmox | N/A |
 
@@ -43,7 +43,7 @@ Status values:
 | Address quarantine after delete | — | Yes |
 | Monthly traffic count and allowance | AutoVM, VirtFusion, SolusVM, HostBill | **New**: per server and day, in and out, warnings at 80% and 100% |
 | Bandwidth graph per VM | AutoVM, VirtFusion, Virtualizor | Yes (live) and **New** (31 days) |
-| Port speed limit / throttle on overage | VirtFusion, SolusVM, HostBill | Planned (DVS traffic shaping) |
+| Port speed limit / throttle on overage | VirtFusion, SolusVM, HostBill | **New**: distributed-switch traffic shaping once the allowance is used up, lifted when it is covered again |
 | Private networks / VPC | Virtualizor, SolusVM, HostBill | Planned (port groups) |
 | Load balancer | Virtualizor | Planned |
 
@@ -55,8 +55,9 @@ Status values:
 | Pro-rata charge on upgrade | HostBill, WGS | **New** |
 | Balance top-up, saved cards, Turkish payment providers | — | Yes (iyzico, PayTR, Stripe, Craftgate, Param) |
 | e-Fatura / e-Arşiv | — | Yes (seven integrators) |
-| Hourly pay-as-you-go | AutoVM, Virtualizor, VirtFusion, HostBill | Planned |
-| WHMCS / WISECP module | AutoVM, everyone | Planned (the API and webhooks are ready for it) |
+| Hourly pay-as-you-go | AutoVM, Virtualizor, VirtFusion, HostBill | **New**: paid from the balance, with a hold when it runs out and a monthly usage invoice |
+| WHMCS / WISECP module | AutoVM, everyone | **New**: `integrations/` (WHMCS server module; WISECP module not tried on a WISECP install) |
+| Invoice disputes | — | **New**: reason, lines, files; collection paused; credit, refund or withdraw |
 
 ## Automation and API
 
@@ -78,6 +79,6 @@ Status values:
 | Roles and permissions | VirtFusion, Virtualizor, SolusVM | Yes (with per-role limits) |
 | Two-factor, LDAP, OIDC, passkeys | Proxmox (partly) | Yes |
 | Abuse detection | Synergy CP | Yes (open risky ports, mining) |
-| Resellers | Virtualizor, Hosting Controller | Planned |
+| Resellers | Virtualizor, Hosting Controller | **New**: an allocation and a discount, own customers, servers ordered and managed for them |
 | White label, two languages | Virtualizor, VirtFusion | Yes (branding, Turkish/English) |
 | Status page, support tickets, energy report | — | Yes |
