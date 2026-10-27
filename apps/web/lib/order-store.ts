@@ -7,9 +7,11 @@ import { z } from 'zod';
 export type OrderDraft = { poolId: string; imageId: string; projectId: string; type: 'package' | 'custom'; packageId: string;
   vcpu: number; memoryMb: number; diskGb: number; name: string; sshKeyIds: string[]; extraIpv4: number; applicationId: string;
   // A copy of one of the user's servers (its disk is cloned): its id and name.
-  cloneFrom: string; cloneName: string };
+  cloneFrom: string; cloneName: string;
+  // Paid monthly (an invoice per period) or by the hour from the balance.
+  billingCycle: 'monthly' | 'hourly' };
 
-const initial: OrderDraft = { poolId: '', imageId: '', projectId: '', type: 'package', packageId: '', vcpu: 2, memoryMb: 4096, diskGb: 40, name: '', sshKeyIds: [], extraIpv4: 0, applicationId: '', cloneFrom: '', cloneName: '' };
+const initial: OrderDraft = { poolId: '', imageId: '', projectId: '', type: 'package', packageId: '', vcpu: 2, memoryMb: 4096, diskGb: 40, name: '', sshKeyIds: [], extraIpv4: 0, applicationId: '', cloneFrom: '', cloneName: '', billingCycle: 'monthly' };
 
 export const useOrder = create<OrderDraft & { set: (patch: Partial<OrderDraft>) => void; clear: () => void }>()(persist(
   (set) => ({ ...initial, set: (patch) => set(patch), clear: () => set(initial) }),
@@ -20,6 +22,6 @@ export const useOrder = create<OrderDraft & { set: (patch: Partial<OrderDraft>) 
 export const hostnameSchema = z.string().regex(/^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/);
 
 export function orderBody(d: OrderDraft) {
-  return { type: d.type, poolId: d.poolId, ...(d.imageId && { imageId: d.imageId }), ...(d.projectId && { projectId: d.projectId }), ...(d.extraIpv4 > 0 && { extraIpv4: d.extraIpv4 }), ...(d.applicationId && { applicationId: d.applicationId }), ...(d.cloneFrom && { cloneFrom: d.cloneFrom }),
+  return { type: d.type, poolId: d.poolId, ...(d.imageId && { imageId: d.imageId }), ...(d.projectId && { projectId: d.projectId }), ...(d.extraIpv4 > 0 && { extraIpv4: d.extraIpv4 }), ...(d.applicationId && { applicationId: d.applicationId }), ...(d.cloneFrom && { cloneFrom: d.cloneFrom }), ...(d.billingCycle === 'hourly' && { billingCycle: 'hourly' }),
     ...(d.type === 'package' ? { packageId: d.packageId } : { vcpu: d.vcpu, memoryMb: d.memoryMb, diskGb: d.diskGb }) };
 }

@@ -108,3 +108,11 @@ export function prorate(diffCents: number, day: string, periodStart: string, per
   const left = Math.min(total, daysBetween(day, periodEnd));
   return diffCents <= 0 || left <= 0 || total <= 0 ? 0 : Math.round((diffCents * left) / total);
 }
+
+// Pay as you go: whole started hours since `billedUntil` (the first hour is charged when the server is created).
+export function hoursDue(billedUntil: Date, now: Date) {
+  const ms = now.getTime() - billedUntil.getTime();
+  return ms <= 0 ? 0 : Math.ceil(ms / 3_600_000);
+}
+// The hourly price of a monthly one (730 hours a month), to four decimals.
+export const hourlyOf = (monthly: string) => (Math.round((Number(monthly) / 730) * 10000) / 10000).toFixed(4);

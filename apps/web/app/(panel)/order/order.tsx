@@ -1,4 +1,5 @@
 "use client";
+import NextLink from 'next/link';
 import { Button, Card, Radio, RadioGroup, Separator, Spinner, toast } from '@heroui/react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { motion } from 'motion/react';
@@ -13,6 +14,7 @@ import { LocationPicker, type OrderLocation } from './locations';
 import { WorkloadAdvisor } from './advisor';
 import { needs, pick, snap, type Traffic, type Workload } from '../../../lib/sizing';
 import { useApiQuery } from '../../../lib/query';
+import type { Summary } from '../../../lib/billing';
 import { useIntentKey, useSshKeys } from '../servers-ui';
 
 type Custom = { cpuMin: number; cpuMax: number; cpuStep: number; memoryMinMb: number; memoryMaxMb: number; memoryStepMb: number; diskMinGb: number; diskMaxGb: number; diskStepGb: number; currency: string };
@@ -34,6 +36,8 @@ export default function Order() {
   const router = useRouter();
   const intent = useIntentKey();
   const d = useOrder();
+  const billing = useApiQuery<Summary>(['notifications', 'billing-summary'], '/billing/summary').data;
+  const hourly = billing?.enabled && billing.hourly?.enabled ? billing.hourly : null;
   const queryClient = useQueryClient();
   const keys = useSshKeys();
   const tf = useTranslations('Firewalls');
@@ -216,7 +220,20 @@ export default function Order() {
               : quote.data && <motion.div key={quote.data.price.monthly} initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.18 }} className="quote flex flex-col gap-2">
                   <p>{t('shape', { vcpu: quote.data.shape.vcpu, memory: gb(quote.data.shape.memoryMb), disk: quote.data.shape.diskGb })}</p>
                   <Separator/>
-                  <p className="text-2xl font-semibold tabular-nums">{t('monthly', { price: money(quote.data.price.monthly, quote.data.price.currency) })}</p>
+                  {hourly && <RadioGroup aria-label={t('cycle.label')} value={d.billingCycle} onChange={(v) => d.set({ billingCycle: v as 'monthly' | 'hourly' })} orientation="horizontal">
+                    <Radio value="monthly"><Radio.Content><Radio.Control><Radio.Indicator/></Radio.Control>{t('cycle.monthly')}</Radio.Content></Radio>
+                    <Radio value="hourly"><Radio.Content><Radio.Control><Radio.Indicator/></Radio.Control>{t('cycle.hourly')}</Radio.Content></Radio>
+                  </RadioGroup>}
+                  {hourly && d.billingCycle === 'hourly' ? <>
+                    <p className="text-2xl font-semibold tabular-nums">{t('cycle.perHour', { price: format.number(Number(quote.data.price.monthly) / 730, { style: 'currency', currency: quote.data.price.currency, maximumFractionDigits: 4 }) })}</p>
+                    <p className="text-xs text-muted">{t('cycle.hourlyHelp', { hours: hourly.minHours, max: money(quote.data.price.monthly, quote.data.price.currency) })}</p>
+                    {(() => { const cur = quote.data.price.currency;
+                      const fromBalance = billing?.enabled ? billing.balance.find((b) => b.currency === cur)?.amount : undefined;
+                      const left = Number(hourly.available.find((a) => a.currency === cur)?.amount ?? fromBalance ?? 0);
+                      const need = Number(quote.data.price.monthly) / 730 * hourly.minHours;
+                      return left < need ? <p className="flex items-start gap-1.5 text-warning"><I name="wallet" size={15} className="mt-0.5 shrink-0"/>{t('cycle.topUp', { need: money(need.toFixed(2), quote.data.price.currency) })}{' '}
+                        <NextLink href="/billing?tab=balance" className="font-medium text-accent hover:underline">{t('cycle.topUpLink')}</NextLink></p> : null; })()}
+                  </> : <p className="text-2xl font-semibold tabular-nums">{t('monthly', { price: money(quote.data.price.monthly, quote.data.price.currency) })}</p>}
                   {quote.data.budget && quote.data.budget.state !== 'ok' && <p className={`flex items-start gap-1.5 text-sm ${quote.data.budget.state === 'over' ? 'text-danger' : 'text-warning'}`}>
                     <I name="wallet" size={15} className="mt-0.5 shrink-0"/>{t(quote.data.budget.state === 'over' ? 'budgetOver' : 'budgetNear', { monthly: money(quote.data.budget.monthly, quote.data.budget.currency), amount: money(quote.data.budget.amount, quote.data.budget.currency) })}</p>}
                   {quote.data.quota.exceeded.length > 0 && <p className="text-danger">{t('quotaExceeded', { limits: quote.data.quota.exceeded.map((x) => t(`quota.${x as 'vcpu'}`)).join(', ') })}</p>}

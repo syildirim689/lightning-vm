@@ -17,7 +17,10 @@ export type Subscription = { id: string; kind: 'server' | 'vdc'; serverId: strin
 export type Card = { id: string; provider: string; mode: string; brand: string | null; last4: string | null; expMonth: number | null; expYear: number | null; isDefault: boolean };
 export type Methods = { cards: { id: string; name: string; mode: string; saved: boolean }[]; balance: boolean; bankTransfer: { bank: string; holder: string; iban: string } | null; topup: { min: number; max: number } };
 export type Summary = { enabled: false } | { enabled: true; balance: { currency: string; amount: string }[]; open: { n: number; overdue: number; amount: string; currency: string | null };
-  subscriptions: Subscription[]; cards: Card[]; profileComplete: boolean; methods: Methods; autoCharge: boolean; requirePayment: boolean };
+  subscriptions: Subscription[]; cards: Card[]; profileComplete: boolean; methods: Methods; autoCharge: boolean; requirePayment: boolean; hourly?: Hourly };
+// Pay as you go: hourly servers with this month's hours and cost, and what is left to spend per currency.
+export type Hourly = { enabled: boolean; minHours: number; servers: { id: string; name: string; priceHourly: string; currency: string; billingHold: boolean; hours: number; amount: string }[];
+  available: { currency: string; amount: string; perHour: string }[] };
 
 // What an invoice's status looks like: awaiting payment (overdue in red), paid, cancelled, refunded.
 export const invoiceTone = (i: Pick<Invoice, 'status' | 'overdue'>): Tone =>

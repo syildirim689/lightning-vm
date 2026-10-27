@@ -72,3 +72,13 @@ test('a resize mid-period charges the increase for the days left; a decrease or 
   assert.equal(r.prorate(-500, '2026-10-16', '2026-10-01', '2026-10-31'), 0);
   assert.equal(r.prorate(1000, '2026-09-20', '2026-10-01', '2026-10-31'), 1000); // before the period started: never more than the whole difference
 });
+
+test('pay as you go: started hours are charged; the hourly price of a monthly one', () => {
+  const t0 = new Date('2026-10-27T10:00:00Z');
+  assert.equal(r.hoursDue(t0, new Date('2026-10-27T09:59:00Z')), 0);
+  assert.equal(r.hoursDue(t0, t0), 0);
+  assert.equal(r.hoursDue(t0, new Date('2026-10-27T10:00:01Z')), 1);
+  assert.equal(r.hoursDue(t0, new Date('2026-10-27T12:30:00Z')), 3);
+  assert.equal(r.hourlyOf('7.30'), '0.0100');
+  assert.equal(r.hourlyOf('10'), '0.0137');
+});

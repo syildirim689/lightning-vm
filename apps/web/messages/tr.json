@@ -316,7 +316,8 @@
     "TOKEN_NOT_ALLOWED": "Bu işlem panelden yapılmalı; API anahtarıyla yapılamaz.",
     "API_TOKENS_DISABLED": "Yönetici API anahtarlarını kapattı.",
     "WEBHOOK_URL_NOT_PUBLIC": "Herkese açık bir HTTPS adresi kullanın.",
-    "NOT_IMPORTABLE": "Bu VM zaten panelin ya da bir şablon."
+    "NOT_IMPORTABLE": "Bu VM zaten panelin ya da bir şablon.",
+    "BALANCE_TOO_LOW": "Önce bakiye yükleyin: sunucunun ilk saatlerini karşılamalı."
   },
   "Auth": {
     "required": "zorunlu",
@@ -551,7 +552,8 @@
     "WEBHOOK_URL_NOT_PUBLIC": "Herkese açık bir HTTPS adresi kullanın.",
     "CLONE_MISMATCH": "Kopya, asıl sunucunun konumunda ve imajında kalır.",
     "BELOW_SOURCE_DISK": "Disk asıl sunucununkinden küçük olamaz.",
-    "NOT_WITH_CLONE": "Kopyaya uygulama kurulamaz."
+    "NOT_WITH_CLONE": "Kopyaya uygulama kurulamaz.",
+    "BALANCE_TOO_LOW": "Önce bakiye yükleyin: sunucunun ilk saatlerini karşılamalı."
   },
   "Setup": {
     "title": "Kurulum sihirbazı",
@@ -1074,6 +1076,15 @@
       "title": "{name} kopyası",
       "help": "Yeni sunucu onun diskinin bir kopyasıyla başlar; kendi adını, adresini ve anahtarlarını alır. Konum ve imaj aynı kalır; disk aynı ya da daha büyük olabilir.",
       "stop": "Bunun yerine boş sunucu sipariş et"
+    },
+    "cycle": {
+      "label": "Ödeme şekli",
+      "monthly": "Aylık",
+      "hourly": "Saatlik",
+      "perHour": "Saatlik {price}",
+      "hourlyHelp": "Silene kadar, açık ya da kapalı, başlayan her saat için bakiyenizden ödenir. Ayda en çok {max}. Başlatmak için bakiyeniz {hours} saati karşılamalı.",
+      "topUp": "Başlatmak için bakiyeniz {need} karşılamalı.",
+      "topUpLink": "Bakiye yükle"
     }
   },
   "Catalog": {
@@ -1638,7 +1649,8 @@
       "metrics": "Metrikler",
       "history": "İşlem geçmişi",
       "application": "Uygulama",
-      "location": "Lokasyon"
+      "location": "Lokasyon",
+      "hourly": "Saatlik {price} (kullandıkça öde)"
     },
     "delete": {
       "title": "Sunucuyu sil",
@@ -2482,6 +2494,14 @@
       "admin_traffic_exceeded": {
         "title": "Trafik kotası doldu",
         "help": "Bir sunucu aylık trafiğinin tamamını kullandığında."
+      },
+      "billing_balance_low": {
+        "title": "Bakiye azalıyor",
+        "help": "Bakiyeniz saatlik sunucularınıza bir günden az yettiğinde."
+      },
+      "billing_hourly_hold": {
+        "title": "Saatlik sunucular durduruldu",
+        "help": "Bakiye bitip saatlik sunucular durdurulduğunda."
       }
     },
     "policyTitle": "Önce yönetici, sonra kullanıcı",
@@ -3752,7 +3772,11 @@
       "testingHelp": "Gerçek kuruluş olmadan tüm akışı deneyin.",
       "sandbox": "Test ödeme kuruluşu",
       "sandboxHelp": "Müşteriler test kartlarıyla ödeyebilir (4242 4242 4242 4242). Gerçek müşteriler varken asla açık bırakmayın.",
-      "save": "Kaydet"
+      "save": "Kaydet",
+      "hourly": "Kullandıkça öde",
+      "hourlyHelp": "Müşteriler bakiyeden ödenen saatlik sunucu sipariş edebilir (bakiye açık olmalı). Her ayın kullanımı tek faturaya dönüşür.",
+      "hourlyMinHours": "Sipariş için bakiyenin karşılaması gereken saat",
+      "hourlyMinHoursHelp": "Örneğin 24: sunucunun bir günlük ücreti."
     },
     "einvoice": {
       "saved": "e-Fatura ayarları kaydedildi.",
@@ -5938,6 +5962,18 @@
       "card_declined": "reddedilir",
       "card_funds": "yetersiz bakiye",
       "declined": "Kart reddedildi."
+    },
+    "hourly": {
+      "title": "Kullandıkça öde",
+      "help": "Saatlik sunucular bakiyeden ödenir; her ayın kullanımı tek bir faturaya dönüşür.",
+      "left": "Kullanılabilir",
+      "burn": "Saatte {price}",
+      "lasts": "{days} g {hours} sa yeter",
+      "server": "Sunucu",
+      "price": "Saatlik",
+      "hours": "Bu ay saat",
+      "month": "Bu ay",
+      "held": "Durduruldu: bakiye bitti"
     }
   },
   "BillingAdmin": {

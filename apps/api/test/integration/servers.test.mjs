@@ -998,3 +998,51 @@ test('billing: an order waits for payment, a declined card leaves it awaiting, a
   // Billing off again for the other tests.
   await send('PUT', '/admin/settings/billing', { enabled: false, balance: true });
 });
+
+test('pay as you go: an hourly server needs balance for its first hours, adds started hours to the month, is held when the balance runs out and freed after a top-up; last month becomes one paid invoice', { skip }, async () => {
+  const { runBilling } = await import('../../dist/billing.js');
+  const key = () => ({ 'idempotency-key': randomUUID() });
+  const company = { name: 'Lightning Bilişim A.Ş.', taxId: '1234567890', taxOffice: 'Kadıköy', address: 'Moda Cd. 1', district: 'Kadıköy', city: 'İstanbul' };
+  assert.equal((await send('PUT', '/admin/settings/billing', { enabled: true, requirePayment: false, balance: true, hourly: false, company })).statusCode, 200);
+  assert.equal((await create(order('hourly-1', { billingCycle: 'hourly' }))).json().fields.billingCycle, 'NOT_AVAILABLE');
+  await send('PUT', '/admin/settings/billing', { hourly: true, hourlyMinHours: 24 });
+  const userId = (await send('GET', '/auth/me', undefined, user)).json().id;
+  const owed = Number((await pool.query("SELECT coalesce(sum(amount), 0) AS v FROM balance_entries WHERE owner_id = $1 AND currency = 'EUR'", [userId])).rows[0].v);
+  if (owed) await send('POST', '/admin/billing/balance', { userId, currency: 'EUR', amount: (-owed).toFixed(2), note: 'start from zero' });
+  assert.equal((await create(order('hourly-1', { billingCycle: 'hourly' }))).json().fields.billingCycle, 'BALANCE_TOO_LOW', 'Tiny costs 1.00/month: 24 h ≈ 0.03');
+  await send('POST', '/admin/billing/balance', { userId, currency: 'EUR', amount: '0.10', note: 'top up' });
+  const made = await create(order('hourly-1', { billingCycle: 'hourly' }));
+  assert.equal(made.statusCode, 202, made.body);
+  const id = made.json().serverId;
+  assert.equal(made.json().invoiceId, undefined, 'no subscription invoice');
+  let s = await serverRow(id);
+  assert.deepEqual([s.billing_mode, s.price_hourly], ['hourly', '0.0014']);
+  const usage = async () => (await pool.query('SELECT sum(hours)::int AS h, sum(amount)::text AS a FROM server_usage WHERE server_id = $1', [id])).rows[0];
+  assert.equal((await usage()).h, 1, 'the first hour at once');
+  // Three more started hours, counted once even when the run repeats.
+  await pool.query("UPDATE servers SET billed_until = now() - interval '2 hours 30 minutes' WHERE id = $1", [id]);
+  await runBilling(); await runBilling();
+  assert.equal((await usage()).h, 4);
+  assert.equal((await pool.query('SELECT count(*)::int AS n FROM subscriptions WHERE server_id = $1', [id])).rows[0].n, 0, 'never adopted into a subscription');
+  await until(async () => (await serverRow(id)).state === 'ready', 'hourly server ready', 120);
+  // Out of balance: held (and stopped); a top-up frees it.
+  await send('POST', '/admin/billing/balance', { userId, currency: 'EUR', amount: '-0.20', note: 'spent' });
+  assert.equal((await runBilling()).hourly.held, 1);
+  assert.equal((await serverRow(id)).billing_hold, true);
+  assert.equal((await send('POST', `/servers/${id}/actions`, { action: 'power_on' }, user, key())).json().code, 'BILLING_HOLD');
+  await send('POST', '/admin/billing/balance', { userId, currency: 'EUR', amount: '5.00', note: 'top up' });
+  assert.equal((await runBilling()).hourly.released, 1);
+  assert.equal((await serverRow(id)).billing_hold, false);
+  // Last month's use: one invoice, paid from the balance, numbered.
+  await pool.query("UPDATE server_usage SET month = (date_trunc('month', now()) - interval '1 month')::date WHERE server_id = $1", [id]);
+  assert.equal((await runBilling()).hourly.invoiced, 1);
+  const { rows: [inv] } = await pool.query("SELECT i.status, i.kind, i.number FROM invoices i JOIN server_usage u ON u.invoice_id = i.id WHERE u.server_id = $1", [id]);
+  assert.equal(inv.kind, 'usage');
+  assert.equal(inv.status, 'paid');
+  const sum = (await send('GET', '/billing/summary', undefined, user)).json().hourly;
+  assert.ok(sum.enabled && sum.servers.some((x) => x.id === id) && sum.available.length === 1, JSON.stringify(sum));
+  await until(async () => !['pending', 'running'].includes((await lastOp(id)).status), 'power on after release', 120);
+  assert.equal((await send('DELETE', `/servers/${id}`, { confirm: 'hourly-1' }, user, key())).statusCode, 202);
+  await until(async () => (await serverRow(id)).state === 'deleted', 'hourly server deleted', 120);
+  await send('PUT', '/admin/settings/billing', { enabled: false, hourly: false });
+});

@@ -16,7 +16,7 @@ import { decryptSecret, encryptSecret } from './secrets';
 import { getSettings, saveSettings, type BillingSettings } from './settings-store';
 import { enqueue, startOperation } from './servers';
 import { gateways, sandboxPay, type Result } from './billing-gateways';
-import { addDays, addMonths, cleanProfile, collectionStep, daysBetween, fromCents, invoiceNumber, lineAmounts, prorate, taxFor, toCents, totals, validPrefix } from './billing-rules';
+import { addDays, addMonths, cleanProfile, collectionStep, daysBetween, fromCents, hoursDue, invoiceNumber, lineAmounts, prorate, taxFor, toCents, totals, validPrefix } from './billing-rules';
 
 type Db = Pick<Pool, 'query'> | PoolClient;
 type Row = Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
@@ -41,7 +41,7 @@ async function buyerOf(db: Db, ownerId: string) {
 }
 
 export type LineIn = { description: string; unitCents: number; quantity?: number; unit?: string; subscriptionId?: string; periodStart?: string; periodEnd?: string };
-export async function createInvoice(db: Db, o: { ownerId: string; kind: 'order' | 'renewal' | 'topup' | 'manual'; currency: string; lines: LineIn[]; dueAt: string; note?: string; createdBy?: string | null }) {
+export async function createInvoice(db: Db, o: { ownerId: string; kind: 'order' | 'renewal' | 'topup' | 'manual' | 'usage'; currency: string; lines: LineIn[]; dueAt: string; note?: string; createdBy?: string | null }) {
   const s = await settings();
   const buyer = await buyerOf(db, o.ownerId);
   // A top-up is money held for later, not a sale: no tax, and no legal invoice (the invoices it pays are the sales).
@@ -254,7 +254,7 @@ export async function billOrder(db: PoolClient, o: { ownerId: string; serverId: 
 // Servers and data centers billed before billing was on (or by staff) get a subscription on their anniversary day.
 async function adopt() {
   const { rows } = await pool.query(`SELECT 'server' AS kind, s.id, s.owner_id, s.name, s.price_monthly::text AS amount, trim(s.currency) AS currency, s.created_at FROM servers s
-      WHERE s.state IN ('ready', 'error', 'provisioning') AND s.vdc_id IS NULL AND s.price_monthly > 0
+      WHERE s.state IN ('ready', 'error', 'provisioning') AND s.vdc_id IS NULL AND s.price_monthly > 0 AND s.billing_mode = 'monthly'
         AND NOT EXISTS (SELECT 1 FROM subscriptions b WHERE b.server_id = s.id AND b.status NOT IN ('cancelled', 'ended'))
         AND NOT EXISTS (SELECT 1 FROM operations o WHERE o.server_id = s.id AND o.step = 'awaiting_payment')
     UNION ALL SELECT 'vdc', v.id, v.owner_id, v.name, v.price_monthly::text, trim(v.currency), v.created_at FROM vdcs v
@@ -295,7 +295,8 @@ export async function runBilling(now = new Date()) {
   const s = await settings();
   if (!s.enabled) return { skipped: true };
   const day = today(now);
-  const out = { adopted: await adopt(), ended: await closeEnded(), cancelled: 0, renewals: 0, charged: 0, reminded: 0, overdue: 0, suspended: 0, terminated: 0, expired: 0 };
+  const out = { adopted: await adopt(), ended: await closeEnded(), cancelled: 0, renewals: 0, charged: 0, reminded: 0, overdue: 0, suspended: 0, terminated: 0, expired: 0,
+    hourly: await runHourly(now) };
 
   // Cancelled at the period's end: the server goes.
   const { rows: leaving } = await pool.query(`UPDATE subscriptions SET status = 'cancelled', cancelled_at = now(), updated_at = now()
@@ -382,6 +383,94 @@ export async function runBilling(now = new Date()) {
   return out;
 }
 
+// ---- Pay as you go ----
+
+const firstOfMonth = (day: string) => `${day.slice(0, 7)}-01`;
+
+// What the owner can still spend in one currency: the balance, less hourly usage not invoiced yet and unpaid usage invoices.
+export async function available(db: Db, ownerId: string, currency: string) {
+  const { rows: [a] } = await db.query(`SELECT
+      coalesce((SELECT sum(amount) FROM balance_entries WHERE owner_id = $1 AND currency = $2), 0)
+      - coalesce((SELECT sum(amount) FROM server_usage WHERE owner_id = $1 AND currency = $2 AND invoice_id IS NULL), 0)
+      - coalesce((SELECT sum(total - paid_total) FROM invoices WHERE owner_id = $1 AND currency = $2 AND kind = 'usage' AND status = 'unpaid'), 0) AS v`, [ownerId, currency]);
+  return Number(a.v);
+}
+
+// One hour of a new hourly server, in the order's transaction (servers.ts).
+export async function startHourly(db: PoolClient, o: { serverId: string; ownerId: string; hourly: string; currency: string }) {
+  await db.query("UPDATE servers SET billing_mode = 'hourly', price_hourly = $2, billed_until = now() + interval '1 hour' WHERE id = $1", [o.serverId, o.hourly]);
+  await db.query('INSERT INTO server_usage (server_id, owner_id, month, hours, amount, currency) VALUES ($1, $2, $3, 1, $4, $5)', [o.serverId, o.ownerId, firstOfMonth(today()), o.hourly, o.currency]);
+}
+
+// Each run: started hours are added to the month's usage; owners who ran out are held (and released after a top-up), warned
+// once a day when less than a day is left; last month's usage becomes an invoice paid from the balance.
+async function runHourly(now: Date) {
+  const s = await settings();
+  const out = { hours: 0, held: 0, released: 0, warned: 0, invoiced: 0 };
+  const { rows } = await pool.query(`SELECT id, owner_id, price_hourly::text AS price, trim(currency) AS currency, billed_until FROM servers
+    WHERE billing_mode = 'hourly' AND state <> 'deleted' AND billed_until < $1`, [now]);
+  for (const r of rows) {
+    const h = hoursDue(new Date(r.billed_until), now);
+    // Guarded by billed_until: a second run at the same time adds nothing.
+    const { rowCount } = await pool.query(`WITH up AS (UPDATE servers SET billed_until = billed_until + make_interval(hours => $2) WHERE id = $1 AND billed_until = $3 RETURNING id)
+      INSERT INTO server_usage (server_id, owner_id, month, hours, amount, currency) SELECT $1, $4, $5, $2, $2 * $6::numeric, $7 FROM up
+      ON CONFLICT (server_id, month) DO UPDATE SET hours = server_usage.hours + EXCLUDED.hours, amount = server_usage.amount + EXCLUDED.amount`,
+    [r.id, h, r.billed_until, r.owner_id, firstOfMonth(today(now)), r.price, r.currency]);
+    if (rowCount) out.hours += h;
+  }
+
+  // Last month's (and older) usage: one invoice per owner and currency, paid from the balance when it covers it.
+  const { rows: due } = await pool.query(`SELECT owner_id, currency, array_agg(server_id) AS servers FROM server_usage
+    WHERE invoice_id IS NULL AND month < $1::date AND amount > 0 GROUP BY owner_id, currency`, [firstOfMonth(today(now))]);
+  for (const d of due) {
+    const client = await pool.connect();
+    let invoiceId: string | null = null;
+    try {
+      await client.query('BEGIN');
+      const { rows: lines } = await client.query(`SELECT u.server_id, u.month::text AS month, u.hours, round(u.amount, 2)::text AS amount, s.name FROM server_usage u JOIN servers s ON s.id = u.server_id
+        WHERE u.owner_id = $1 AND u.currency = $2 AND u.invoice_id IS NULL AND u.month < $3::date AND u.amount > 0 ORDER BY u.month, s.name FOR UPDATE OF u`, [d.owner_id, d.currency, firstOfMonth(today(now))]);
+      if (lines.length) {
+        invoiceId = await createInvoice(client, { ownerId: d.owner_id, kind: 'usage', currency: d.currency, dueAt: new Date().toISOString(),
+          lines: lines.map((l) => ({ description: `Sunucu ${l.name} kullanımı (${l.month.slice(0, 7)}): ${l.hours} saat`, unitCents: toCents(l.amount) })) });
+        await client.query('UPDATE server_usage SET invoice_id = $3 WHERE owner_id = $1 AND currency = $2 AND invoice_id IS NULL AND month < $4::date AND amount > 0',
+          [d.owner_id, d.currency, invoiceId, firstOfMonth(today(now))]);
+      }
+      await client.query('COMMIT');
+    } catch (e) { await client.query('ROLLBACK'); throw e; } finally { client.release(); }
+    if (invoiceId) {
+      out.invoiced++;
+      if (!(await payFromBalance(invoiceId, true))) {
+        const { rows: [inv] } = await pool.query('SELECT total::text, currency FROM invoices WHERE id = $1', [invoiceId]);
+        await notify('billing.invoice', [d.owner_id], { invoiceId, total: inv.total, currency: inv.currency, due: today(now) });
+      }
+    }
+  }
+
+  // Hold, release and warn, per owner and currency of hourly servers.
+  const { rows: owners } = await pool.query(`SELECT owner_id, trim(currency) AS currency, sum(price_hourly) FILTER (WHERE state NOT IN ('deleted', 'deleting'))::float8 AS burn
+    FROM servers WHERE billing_mode = 'hourly' AND state <> 'deleted' GROUP BY owner_id, trim(currency)`);
+  for (const o of owners) {
+    const left = await available(pool, o.owner_id, o.currency);
+    if (left < 0) {
+      const { rows: held } = await pool.query(`UPDATE servers SET billing_hold = true, updated_at = now() WHERE owner_id = $1 AND trim(currency) = $2 AND billing_mode = 'hourly'
+        AND state = 'ready' AND NOT billing_hold RETURNING id, owner_id, power_state`, [o.owner_id, o.currency]);
+      for (const srv of held) if (srv.power_state === 'poweredOn') await startOperation(system, srv, 'power_off', `billing:hourly-hold:${srv.id}:${now.getTime()}`, `billing:${srv.id}:hold`).catch(() => undefined);
+      if (held.length) { out.held += held.length; await notify('billing.hourly_hold', [o.owner_id], { amount: left.toFixed(2), currency: o.currency }); }
+      continue;
+    }
+    const { rows: freed } = await pool.query(`UPDATE servers SET billing_hold = false, updated_at = now() WHERE owner_id = $1 AND trim(currency) = $2 AND billing_mode = 'hourly'
+      AND billing_hold RETURNING id, owner_id, state, power_state`, [o.owner_id, o.currency]);
+    for (const srv of freed) if (srv.state === 'ready' && srv.power_state === 'poweredOff') await startOperation(system, srv, 'power_on', `billing:hourly-release:${srv.id}:${now.getTime()}`, `billing:${srv.id}`).catch(() => undefined);
+    out.released += freed.length;
+    if (o.burn > 0 && left < o.burn * 24) {
+      const { rowCount } = await pool.query('UPDATE users SET balance_warned_on = $2 WHERE id = $1 AND balance_warned_on IS DISTINCT FROM $2', [o.owner_id, today(now)]);
+      if (rowCount) { out.warned++; await notify('billing.balance_low', [o.owner_id], { amount: left.toFixed(2), currency: o.currency, hours: String(Math.floor(left / o.burn)) }); }
+    }
+  }
+  void s;
+  return out;
+}
+
 export function startBilling() {
   const tick = async () => {
     if (!(await redis.set('lock:billing', '1', 'EX', 240, 'NX').catch(() => null))) return;
@@ -434,8 +523,16 @@ export class BillingController {
       pool.query('SELECT id, provider, mode, brand, last4, exp_month AS "expMonth", exp_year AS "expYear", is_default AS "isDefault" FROM saved_cards WHERE owner_id = $1 ORDER BY is_default DESC, created_at DESC', [id]),
       pool.query('SELECT 1 FROM billing_profiles WHERE user_id = $1', [id]),
     ]);
+    // Pay as you go: hourly servers, this month's usage so far, and what is left to spend.
+    const { rows: hourly } = await pool.query(`SELECT s.id, s.name, s.price_hourly::text AS "priceHourly", trim(s.currency) AS currency, s.billing_hold AS "billingHold",
+        coalesce((SELECT u.hours FROM server_usage u WHERE u.server_id = s.id AND u.month = $2::date), 0) AS hours,
+        coalesce((SELECT u.amount FROM server_usage u WHERE u.server_id = s.id AND u.month = $2::date), 0)::text AS amount
+      FROM servers s WHERE s.owner_id = $1 AND s.billing_mode = 'hourly' AND s.state NOT IN ('deleted', 'deleting') ORDER BY s.name`, [id, firstOfMonth(today())]);
+    const currencies = [...new Set(hourly.map((h) => h.currency))];
+    const left = await Promise.all(currencies.map(async (c) => ({ currency: c, amount: (await available(pool, id, c)).toFixed(2),
+      perHour: hourly.filter((h) => h.currency === c).reduce((a, h) => a + Number(h.priceHourly), 0).toFixed(4) })));
     return { enabled: true, balance, open: open.rows[0], subscriptions: subs.rows, cards: cards.rows, profileComplete: !!profile.rowCount, methods: await methods(),
-      autoCharge: s.autoCharge, requirePayment: s.requirePayment };
+      autoCharge: s.autoCharge, requirePayment: s.requirePayment, hourly: { enabled: s.hourly && s.balance, minHours: s.hourlyMinHours, servers: hourly, available: left } };
   }
 
   @Get('profile')
@@ -853,7 +950,7 @@ export class BillingSettingsController {
       taxRate: int('taxRate', 0, 100), pricesIncludeTax: bool('pricesIncludeTax'), exportExempt: bool('exportExempt'), invoicePrefix: prefix,
       invoiceDaysBefore: int('invoiceDaysBefore', 0, 30), reminderDays, suspendAfterDays: int('suspendAfterDays', 1, 90), terminateAfterDays: int('terminateAfterDays', 0, 365),
       autoCharge: bool('autoCharge'), chargeRetries: int('chargeRetries', 1, 10), balance: bool('balance'), topupMin: int('topupMin', 1, 1_000_000), topupMax: int('topupMax', 1, 10_000_000),
-      sandbox: bool('sandbox'), bankTransfer: bank, company };
+      sandbox: bool('sandbox'), hourly: bool('hourly'), hourlyMinHours: b.hourlyMinHours === undefined ? cur.hourlyMinHours ?? 24 : int('hourlyMinHours', 1, 720), bankTransfer: bank, company };
     if (next.topupMax < next.topupMin) fields.topupMax = 'MIN_ABOVE_MAX';
     if (next.enabled && (!company.name || !company.taxId || !company.address)) fields['company.name'] = 'COMPANY_REQUIRED';
     if (Object.keys(fields).length) throw apiError(400, 'VALIDATION_FAILED', 'Invalid input', fields);
@@ -867,7 +964,9 @@ export class BillingSettingsController {
 // without a running subscription, or for a decrease, which simply bills less from the next period).
 export async function resizeCharge(serverId: string, oldMonthly: string, newMonthly: string) {
   const s = await settings();
-  const { rows: [sub] } = await pool.query(`SELECT period_start::text AS ps, period_end::text AS pe FROM subscriptions WHERE server_id = $1 AND status IN ('active', 'past_due')`, [serverId]);
+  // An hourly server simply costs more per hour from now on.
+  const { rows: [sub] } = await pool.query(`SELECT period_start::text AS ps, period_end::text AS pe FROM subscriptions WHERE server_id = $1 AND status IN ('active', 'past_due')
+    AND EXISTS (SELECT 1 FROM servers WHERE id = $1 AND billing_mode = 'monthly')`, [serverId]);
   const cents = s.enabled && sub?.ps && sub?.pe ? prorate(toCents(newMonthly) - toCents(oldMonthly), today(), sub.ps, sub.pe) : 0;
   return { chargeNow: fromCents(cents), periodEnd: sub?.pe ?? null };
 }

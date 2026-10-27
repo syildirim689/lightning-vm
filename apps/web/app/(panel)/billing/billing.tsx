@@ -13,7 +13,7 @@ import { I } from '../../../components/icon';
 import { ConfirmButton, DataTable, Empty, FormActions, FormSection, Notice, PageHeader, SelectInput, StatusChip, SwitchInput, TextInput } from '../../../components/ui';
 import { apiFetch, useErrorText } from '../../../lib/api';
 import type { Card as SavedCard, Invoice, Subscription, Summary } from '../../../lib/billing';
-import { invoiceState, invoiceTone, subscriptionTone } from '../../../lib/billing';
+import { invoiceState, invoiceTone, subscriptionTone, type Hourly } from '../../../lib/billing';
 import { useApiQuery } from '../../../lib/query';
 
 const tabs = ['invoices', 'subscriptions', 'balance', 'cards', 'profile'] as const;
@@ -58,7 +58,7 @@ export default function Billing() {
       </Tabs.ListContainer>
       <Tabs.Panel id="invoices" className="pt-5"><Invoices/></Tabs.Panel>
       <Tabs.Panel id="subscriptions" className="pt-5"><Subscriptions list={s.subscriptions}/></Tabs.Panel>
-      <Tabs.Panel id="balance" className="pt-5"><Balance/></Tabs.Panel>
+      <Tabs.Panel id="balance" className="flex flex-col gap-5 pt-5">{s.hourly?.servers.length ? <HourlyUsage h={s.hourly}/> : null}<Balance/></Tabs.Panel>
       <Tabs.Panel id="cards" className="pt-5"><Cards cards={s.cards}/></Tabs.Panel>
       <Tabs.Panel id="profile" className="pt-5"><Profile/></Tabs.Panel>
     </Tabs>
@@ -120,6 +120,26 @@ function Subscriptions({ list }: { list: Subscription[] }) {
             confirmLabel={t('cancelConfirm')} cancelLabel={t('cancelKeep')} onConfirm={() => change(s, { cancelAtPeriodEnd: true }, t('cancelled'))}/>}
     </span>
   </li>)}</ul>;
+}
+
+// Pay as you go: what is left, how long it lasts, and each hourly server's hours and cost this month.
+function HourlyUsage({ h }: { h: Hourly }) {
+  const t = useTranslations('Billing.hourly');
+  const format = useFormatter();
+  const money = (v: string | number, c: string, digits = 2) => format.number(Number(v), { style: 'currency', currency: c, maximumFractionDigits: digits });
+  return <section className="flex flex-col gap-3 rounded-2xl border border-border p-4" aria-label={t('title')}>
+    <div className="flex flex-wrap items-baseline justify-between gap-2"><h3 className="font-semibold">{t('title')}</h3><p className="text-xs text-muted">{t('help')}</p></div>
+    <div className="grid gap-3 sm:grid-cols-3">{h.available.map((a) => { const hours = Number(a.perHour) > 0 ? Math.floor(Number(a.amount) / Number(a.perHour)) : null;
+      return <div key={a.currency} className={`rounded-xl p-3 ${Number(a.amount) < 0 ? 'bg-danger/10' : hours !== null && hours < 24 ? 'bg-warning/10' : 'bg-default/60'}`}>
+        <p className="text-xs uppercase tracking-wider text-muted">{t('left')}</p>
+        <p className="text-xl font-semibold tabular-nums">{money(a.amount, a.currency)}</p>
+        <p className="text-xs text-muted">{t('burn', { price: money(a.perHour, a.currency, 4) })}{hours !== null && hours >= 0 ? ` · ${t('lasts', { days: Math.floor(hours / 24), hours: hours % 24 })}` : ''}</p></div>; })}</div>
+    <DataTable label={t('title')} rows={h.servers} rowKey={(x) => x.id} minWidth={480}
+      columns={[{ id: 'name', label: t('server') }, { id: 'price', label: t('price') }, { id: 'hours', label: t('hours') }, { id: 'amount', label: t('month') }]}
+      cells={(x) => [<span key="n" className="flex items-center gap-2"><NextLink href={`/servers/${x.id}`} className="font-medium text-accent hover:underline">{x.name}</NextLink>
+          {x.billingHold && <StatusChip tone="danger">{t('held')}</StatusChip>}</span>,
+        money(x.priceHourly, x.currency, 4), x.hours, <span key="a" className="font-medium tabular-nums">{money(x.amount, x.currency)}</span>]}/>
+  </section>;
 }
 
 function Balance() {

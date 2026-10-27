@@ -25,7 +25,7 @@ import { flag } from '../../lib/flag';
 import { ButtonLink, ConfirmButton, DataTable, Empty, Mono, Notice, PageHeader, Section, StatusChip, TextInput, type Tone } from '../../components/ui';
 
 export type Server = { id: string; name: string; state: string; powerState: string; guestReady: boolean; vcpu: number; memoryMb: number; diskGb: number;
-  priceMonthly: string; currency: string; trafficGb?: number | null; trafficBytes?: number; errorCode: string | null; poolName: string; location: string; locationCity?: string | null; locationCountry?: string | null; locationDatacenter?: string | null; imageName: string; address: string | null;
+  priceMonthly: string; currency: string; trafficGb?: number | null; trafficBytes?: number; billingMode?: 'monthly' | 'hourly'; priceHourly?: string | null; errorCode: string | null; poolName: string; location: string; locationCity?: string | null; locationCountry?: string | null; locationDatacenter?: string | null; imageName: string; address: string | null;
   createdAt: string; favorite?: boolean; locked?: boolean; billingHold?: boolean; tags?: string[]; notes?: string; poolId: string; imageId: string; packageId: string | null; vdcId?: string | null; ownerEmail?: string; hasRootPassword?: boolean; applicationName?: string | null; appState?: 'pending' | 'installing' | 'installed' | 'failed' | null; appMessage?: string | null; firewallStatus?: 'applied' | 'pending' | 'failed'; firewallError?: string | null; firewallCount?: number; lastOperation: { id: string; kind: string; status: string; step: string | null; errorCode: string | null } | null };
 type Operation = { id: string; kind: string; status: string; step: string | null; attempts: number; errorCode: string | null; createdAt: string; finishedAt: string | null };
 
@@ -224,7 +224,9 @@ export function ServerDetail({ id }: { id: string }) {
             <span><span aria-hidden className="mr-1.5">{flag(s.locationCountry ?? '')}</span>{s.location || s.poolName}</span>
             {(s.locationCity || s.locationDatacenter) && <span className="text-xs text-muted">{[s.locationCity, s.locationDatacenter].filter(Boolean).join(' · ')}</span>}</dd></div>
           <div><dt className="text-muted">{t('detail.image')}</dt><dd className="mt-0.5">{s.imageName}</dd></div>
-          <div><dt className="text-muted">{t('detail.price')}</dt><dd className="mt-0.5">{format.number(Number(s.priceMonthly), { style: 'currency', currency: s.currency })}</dd></div>
+          <div><dt className="text-muted">{t('detail.price')}</dt><dd className="mt-0.5">{s.billingMode === 'hourly' && s.priceHourly
+            ? t('detail.hourly', { price: format.number(Number(s.priceHourly), { style: 'currency', currency: s.currency, maximumFractionDigits: 4 }) })
+            : format.number(Number(s.priceMonthly), { style: 'currency', currency: s.currency })}</dd></div>
           {s.applicationName && <div><dt className="text-muted">{t('detail.application')}</dt><dd className="mt-0.5 flex flex-wrap items-center gap-2">{s.applicationName}
             {s.appState && <StatusChip tone={s.appState === 'installed' ? 'success' : s.appState === 'failed' ? 'danger' : 'accent'}>{t(`appState.${s.appState}`)}</StatusChip>}
             {s.appState === 'failed' && s.appMessage && <span className="text-xs text-muted">{s.appMessage}</span>}</dd></div>}

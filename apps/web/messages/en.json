@@ -316,7 +316,8 @@
     "TOKEN_NOT_ALLOWED": "This needs the panel; an API token cannot do it.",
     "API_TOKENS_DISABLED": "The administrator turned API tokens off.",
     "WEBHOOK_URL_NOT_PUBLIC": "Use a public HTTPS address.",
-    "NOT_IMPORTABLE": "This VM is already the panel's or is a template."
+    "NOT_IMPORTABLE": "This VM is already the panel's or is a template.",
+    "BALANCE_TOO_LOW": "Top up your balance first: it must cover the first hours of the server."
   },
   "Auth": {
     "required": "required",
@@ -551,7 +552,8 @@
     "WEBHOOK_URL_NOT_PUBLIC": "Use a public HTTPS address.",
     "CLONE_MISMATCH": "A copy stays in the location and image of the original.",
     "BELOW_SOURCE_DISK": "The disk cannot be smaller than the original's.",
-    "NOT_WITH_CLONE": "An application cannot be installed on a copy."
+    "NOT_WITH_CLONE": "An application cannot be installed on a copy.",
+    "BALANCE_TOO_LOW": "Top up your balance first: it must cover the first hours of the server."
   },
   "Setup": {
     "title": "Setup wizard",
@@ -1074,6 +1076,15 @@
       "title": "Copy of {name}",
       "help": "The new server starts with a copy of its disk; it gets its own name, address and keys. The location and image stay the same, and the disk can only be as big or bigger.",
       "stop": "Order an empty server instead"
+    },
+    "cycle": {
+      "label": "How to pay",
+      "monthly": "Monthly",
+      "hourly": "Hourly",
+      "perHour": "{price} / hour",
+      "hourlyHelp": "Paid from your balance for every started hour, on or off, until you delete it. At most {max} a month. Your balance must cover {hours} hours to start.",
+      "topUp": "Your balance must cover {need} to start.",
+      "topUpLink": "Top up"
     }
   },
   "Catalog": {
@@ -1638,7 +1649,8 @@
       "metrics": "Metrics",
       "history": "Operation history",
       "application": "Application",
-      "location": "Location"
+      "location": "Location",
+      "hourly": "{price} / hour (pay as you go)"
     },
     "delete": {
       "title": "Delete server",
@@ -2482,6 +2494,14 @@
       "admin_traffic_exceeded": {
         "title": "Traffic allowance used up",
         "help": "When a server uses all of its monthly traffic."
+      },
+      "billing_balance_low": {
+        "title": "Balance running low",
+        "help": "When your balance lasts less than a day for your hourly servers."
+      },
+      "billing_hourly_hold": {
+        "title": "Hourly servers stopped",
+        "help": "When the balance is used up and hourly servers are stopped."
       }
     },
     "policyTitle": "The admin first, then each user",
@@ -3752,7 +3772,11 @@
       "testingHelp": "Try the whole flow without a real provider.",
       "sandbox": "Sandbox provider",
       "sandboxHelp": "Customers can pay with test cards (4242 4242 4242 4242). Never on with real customers.",
-      "save": "Save"
+      "save": "Save",
+      "hourly": "Pay as you go",
+      "hourlyHelp": "Customers may order hourly servers paid from their balance (needs the balance). Each month's use becomes one invoice.",
+      "hourlyMinHours": "Hours the balance must cover to order",
+      "hourlyMinHoursHelp": "For example 24: a day of the server's price."
     },
     "einvoice": {
       "saved": "e-Invoice settings saved.",
@@ -5938,6 +5962,18 @@
       "card_declined": "declined",
       "card_funds": "insufficient funds",
       "declined": "The card was declined."
+    },
+    "hourly": {
+      "title": "Pay as you go",
+      "help": "Hourly servers are paid from the balance; each month's use becomes one invoice.",
+      "left": "Left to spend",
+      "burn": "{price} per hour",
+      "lasts": "lasts {days} d {hours} h",
+      "server": "Server",
+      "price": "Per hour",
+      "hours": "Hours this month",
+      "month": "This month",
+      "held": "Stopped: balance used up"
     }
   },
   "BillingAdmin": {

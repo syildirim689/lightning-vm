@@ -21,7 +21,8 @@ import { prepareApplication } from './applications';
 import { checkVdcRoom, resolveVdcOrder } from './vdc';
 import { renderPtr } from './rdns-names';
 import { fingerprint, parseKeyList, sshKeyPattern } from './smart-rules';
-import { billOrder, billResize, payFromBalance, resizeCharge } from './billing';
+import { available, billOrder, billResize, payFromBalance, resizeCharge, startHourly } from './billing';
+import { hourlyOf } from './billing-rules';
 
 type Input = Record<string, unknown>;
 // BullMQ carries only the operation id (also the job id, so re-adding is harmless);
@@ -138,7 +139,7 @@ async function resizeTarget(req: AuthedRequest, server: Record<string, any>, bod
 }
 
 const serverColumns = `s.id, s.name, s.state, s.power_state AS "powerState", s.guest_ready AS "guestReady", s.vcpu, s.memory_mb AS "memoryMb", s.disk_gb AS "diskGb",
-  s.price_monthly::text AS "priceMonthly", s.currency, s.traffic_gb AS "trafficGb",
+  s.price_monthly::text AS "priceMonthly", s.currency, s.traffic_gb AS "trafficGb", s.billing_mode AS "billingMode", s.price_hourly::text AS "priceHourly",
   (SELECT COALESCE(sum(t.rx_bytes + t.tx_bytes), 0)::float8 FROM server_traffic t WHERE t.server_id = s.id AND t.day >= date_trunc('month', current_date)) AS "trafficBytes", s.error_code AS "errorCode", s.created_at AS "createdAt", s.project_id AS "projectId",
   s.tags, s.notes, s.locked, s.billing_hold AS "billingHold", s.pool_id AS "poolId", s.image_id AS "imageId", s.package_id AS "packageId", s.vdc_id AS "vdcId",
   p.name AS "poolName", p.location, l.city AS "locationCity", l.country_code AS "locationCountry", l.datacenter AS "locationDatacenter", i.name AS "imageName", host(a.address) AS address,
@@ -308,6 +309,17 @@ export class ServersController {
       if (order.application) throw apiError(400, 'VALIDATION_FAILED', 'No application on a copy', { applicationId: 'NOT_WITH_CLONE' });
       cloneFrom = src.vm_moref;
     }
+    // Pay as you go: offered when the admin allows it; the balance must cover the first hours (Settings → Billing).
+    let hourly: string | null = null;
+    if (body.billingCycle === 'hourly') {
+      const bs = await getSettings('billing');
+      if (vdc || !bs.enabled || !bs.hourly || !bs.balance) throw apiError(400, 'VALIDATION_FAILED', 'Hourly billing is not offered', { billingCycle: 'NOT_AVAILABLE' });
+      const { rows: [p] } = order.packageId ? await pool.query('SELECT price_hourly::text AS h FROM packages WHERE id = $1', [order.packageId]) : { rows: [] };
+      hourly = p?.h && Number(p.h) > 0 && !order.extraIpv4 && !order.application ? p.h : hourlyOf(order.price.monthly);
+      if (await available(pool, req.user.id, order.price.currency) < Number(hourly) * bs.hourlyMinHours) {
+        throw apiError(409, 'BALANCE_TOO_LOW', 'Top up your balance first', { billingCycle: 'BALANCE_TOO_LOW' });
+      }
+    }
     const { rows: [conn] } = await pool.query('SELECT kind, operations FROM vmware_connections WHERE id = $1', [order.rp.connection_id]);
     if (conn.kind !== 'vcenter' || !conn.operations?.cloneFromImage) throw apiError(409, 'PROVISIONING_NOT_SUPPORTED', 'This location cannot create servers (needs vCenter with clone rights)');
     if (firewallIds.length && !conn.operations?.firewall) throw apiError(409, 'FIREWALL_NOT_SUPPORTED', 'This location cannot enforce firewalls (needs vCenter with a distributed switch)');
@@ -372,7 +384,8 @@ export class ServersController {
         await client.query('UPDATE servers SET firewall_version = 1 WHERE id = $1', [s.id]);
       }
       // Billing on: the subscription and first invoice (a data center's servers are paid with the data center).
-      const bill = vdc ? null : await billOrder(client, { ownerId: req.user.id, serverId: s.id, name, monthly: order.price.monthly, currency: order.price.currency });
+      if (hourly) await startHourly(client, { serverId: s.id, ownerId: req.user.id, hourly, currency: order.price.currency });
+      const bill = vdc || hourly ? null : await billOrder(client, { ownerId: req.user.id, serverId: s.id, name, monthly: order.price.monthly, currency: order.price.currency });
       const { rows: [op] } = await client.query(`INSERT INTO operations (kind, status, idempotency_key, request_hash, server_id, owner_id, step, deadline_at)
         VALUES ('create', 'pending', $1, $2, $3, $4, $6, now() + make_interval(mins => $5)) RETURNING id, kind, status`,
         [key, requestHash, s.id, req.user.id, deadlineMinutes.create, bill?.awaitingPayment ? 'awaiting_payment' : 'queued']);
@@ -468,7 +481,8 @@ export class ServersController {
       { vcpu: shape.vcpu, memoryMb: shape.memoryMb, diskGb: shape.diskGb, powerOn: server.power_state === 'poweredOn',
         from: { vcpu: server.vcpu, memoryMb: server.memory_mb, diskGb: server.disk_gb, priceMonthly: server.price_monthly, packageId: server.package_id } });
     // The price follows the shape at once (renewals read it); a resize that finally fails puts it back (worker).
-    await pool.query('UPDATE servers SET price_monthly = $2, package_id = $3, traffic_gb = $4, updated_at = now() WHERE id = $1', [id, price.monthly, r.order.packageId, r.order.trafficGb]);
+    await pool.query(`UPDATE servers SET price_monthly = $2, package_id = $3, traffic_gb = $4, price_hourly = CASE WHEN billing_mode = 'hourly' THEN $5::numeric ELSE price_hourly END,
+      updated_at = now() WHERE id = $1`, [id, price.monthly, r.order.packageId, r.order.trafficGb, hourlyOf(price.monthly)]);
     const invoiceId = r.charge.chargeNow !== '0.00' ? await billResize(server, r.charge.chargeNow, price.currency, shape) : null;
     if (invoiceId) await pool.query("UPDATE operations SET params = params || jsonb_build_object('invoiceId', $2::text) WHERE id = $1", [operation.id, invoiceId]);
     return { serverId: id, operation, ...(invoiceId && { invoiceId }) };
