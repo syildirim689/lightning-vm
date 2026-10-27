@@ -123,7 +123,7 @@ function StaffNotes({ id }: { id: string }) {
         <div className="mt-1 flex flex-wrap items-center gap-x-2 text-xs text-muted">
           {n.pinned && <span className="inline-flex items-center gap-1 text-warning"><I name="pin" size={11}/>{t('pinned')}</span>}
           <span>{n.authorName || n.authorEmail || t('removedAuthor')}</span>
-          <time dateTime={n.createdAt} title={format.dateTime(new Date(n.createdAt), { dateStyle: 'medium', timeStyle: 'short' })}>{format.relativeTime(new Date(n.createdAt), now)}</time>
+          <time dateTime={n.createdAt} title={format.dateTime(new Date(n.createdAt), { dateStyle: 'medium', timeStyle: 'short' })}>{format.relativeTime(new Date(Math.min(Date.parse(n.createdAt), now.getTime())), now)}</time>
           {write && <span className="ml-auto flex gap-1">
             <Button size="sm" variant="ghost" isIconOnly aria-label={n.pinned ? t('unpin') : t('pin')} isDisabled={busy}
               onPress={() => void call(`/admin/users/${id}/notes/${n.id}`, { method: 'PATCH', body: { pinned: !n.pinned } })}><I name={n.pinned ? 'pin-off' : 'pin'} size={13}/></Button>

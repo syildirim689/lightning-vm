@@ -6,7 +6,8 @@ import { apiFetch, useErrorText } from './api';
 // GET through the API with React Query: shared cache per key, optional polling for live state.
 export function useApiQuery<T>(key: QueryKey, path: string | null, opts: { refetchInterval?: number | false | ((data: T | undefined) => number | false); enabled?: boolean } = {}) {
   return useQuery<T>({
-    queryKey: key,
+    // A disabled caller (no path) gets its own entry: sharing the key would hand its path-less fetch to the real query.
+    queryKey: path === null ? [...key, 'off'] : key,
     queryFn: ({ signal }) => apiFetch<T>(path!, { signal }),
     enabled: path !== null && opts.enabled !== false,
     refetchInterval: typeof opts.refetchInterval === 'function' ? ((f) => (query) => f(query.state.data as T | undefined))(opts.refetchInterval) : opts.refetchInterval,
