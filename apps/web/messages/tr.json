@@ -5023,7 +5023,7 @@
       "ticketsHint": "Puan {rating}/5 · ilk yanıt ortalama {hours} sa.",
       "noRatings": "Bu dönemde henüz puan yok.",
       "success": "Başarılı işlemler",
-      "successHint": "Hatasız tamamlanan sunucu işlemleri."
+      "successHint": "Hatasız tamamlanan sunucu işlemleri; eğri sayılarını gösterir."
     },
     "resources": {
       "vcpu": "Kullanılan vCPU",

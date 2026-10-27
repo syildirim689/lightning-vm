@@ -5023,7 +5023,7 @@
       "ticketsHint": "Rating {rating}/5 · first answer in {hours} h on average.",
       "noRatings": "No ratings in this period yet.",
       "success": "Successful operations",
-      "successHint": "Server operations that finished without an error."
+      "successHint": "Server operations that finished without an error; the curve counts them."
     },
     "resources": {
       "vcpu": "vCPU in use",

@@ -65,7 +65,7 @@ export default function Statistics() {
         <KpiCard i={3} icon="life-buoy" label={t('kpi.tickets')} kpi={s.kpis.tickets} spark={series.map((p) => p.ticketsOpened)} invert
           hint={s.kpis.tickets.rating != null ? t('kpi.ticketsHint', { rating: s.kpis.tickets.rating, hours: s.kpis.tickets.firstResponseHours ?? '–' }) : t('kpi.noRatings')}/>
         <KpiCard i={4} icon="circle-check" label={t('kpi.success')} kpi={{ value: s.kpis.successRate.value ?? 0, change: s.kpis.successRate.change }} points
-          spark={series.map((p) => (p.opsOk + p.opsFailed ? (p.opsOk / (p.opsOk + p.opsFailed)) * 100 : 100))}
+          spark={series.map((p) => p.opsOk)}
           format={(n) => (s.kpis.successRate.value == null ? '–' : `${format.number(n, { maximumFractionDigits: 1 })}%`)} hint={t('kpi.successHint')}/>
       </div>
 
