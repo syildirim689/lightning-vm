@@ -551,7 +551,8 @@ export class CatalogController {
         EXISTS (SELECT 1 FROM ip_pools i WHERE i.pool_id = r.id AND i.ipv6_prefix IS NOT NULL) AS ipv6
         FROM resource_pools r LEFT JOIN custom_rules c ON c.pool_id = r.id LEFT JOIN locations l ON l.id = r.location_id
         WHERE r.active AND (l.status IS NULL OR l.status <> 'hidden') ORDER BY r.name`),
-      pool.query('SELECT id, name, family, min_disk_gb AS "minDiskGb" FROM os_images WHERE active ORDER BY name'),
+      // The images everyone gets, and this person's own (personal images, images.ts).
+      pool.query('SELECT id, name, family, min_disk_gb AS "minDiskGb", owner_id IS NOT NULL AS own FROM os_images WHERE active AND (owner_id IS NULL OR owner_id = $1) ORDER BY owner_id IS NULL DESC, name', [req.user.id]),
       pool.query(`SELECT id, name, kind, description, min_memory_mb AS "minMemoryMb", min_disk_gb AS "minDiskGb", price_monthly::text AS "priceMonthly",
         (license_mode = 'none' OR EXISTS (SELECT 1 FROM application_licenses l WHERE l.application_id = a.id AND l.server_id IS NULL)) AS available
         FROM applications a WHERE active ORDER BY name`),

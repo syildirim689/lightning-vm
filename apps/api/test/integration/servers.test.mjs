@@ -1302,3 +1302,30 @@ test('private networks: a location offers them on a distributed switch; a custom
   assert.equal((await send('DELETE', `/servers/${sid}`, { confirm: 'pn-1' }, user, key())).statusCode, 202);
   await until(async () => (await serverRow(sid)).state === 'deleted', 'deleted', 120);
 });
+
+test('personal images: a server saved as an image is its owner\'s alone (in the catalog, orders and reinstalls), its template is not a stray VM, and it can be deleted', { skip }, async () => {
+  const key = () => ({ 'idempotency-key': randomUUID() });
+  const made = await create(order('img-src'));
+  const sid = made.json().serverId;
+  await until(async () => (await serverRow(sid)).state === 'ready', 'server ready', 120);
+  assert.equal((await send('POST', `/servers/${sid}/image`, { name: '' }, user)).json().fields.name, 'REQUIRED');
+  assert.equal((await send('POST', `/servers/${sid}/image`, { name: 'x' }, other)).statusCode, 404);
+  const saved = await send('POST', `/servers/${sid}/image`, { name: 'My web stack' }, user);
+  assert.equal(saved.statusCode, 202, saved.body);
+  const imgId = saved.json().imageId;
+  await until(async () => (await lastOp(sid)).kind === 'image_create' && ['succeeded', 'failed'].includes((await lastOp(sid)).status), 'image saved', 120);
+  assert.equal((await lastOp(sid)).status, 'succeeded', (await lastOp(sid)).error_detail);
+  const mine = (await send('GET', '/catalog', undefined, user)).json().images.find((i) => i.id === imgId);
+  assert.ok(mine && mine.own && mine.name === 'My web stack');
+  assert.equal((await send('GET', '/catalog', undefined, other)).json().images.some((i) => i.id === imgId), false, 'nobody else sees it');
+  assert.equal((await create(order('img-thief', { imageId: imgId }), randomUUID(), other)).json().fields?.imageId ?? (await create(order('img-thief', { imageId: imgId }), randomUUID(), other)).json().fields?.sshKeyIds, 'NOT_AVAILABLE');
+  assert.equal((await send('GET', '/images/mine', undefined, user)).json().images[0].id, imgId);
+  // The reconciliation does not report its template as a stray VM.
+  await send('POST', '/admin/reconcile');
+  await new Promise((r) => setTimeout(r, 3000));
+  assert.equal((await pool.query("SELECT count(*)::int AS n FROM reconciliation_findings WHERE kind = 'orphan_vm' AND detail->>'name' LIKE 'lvm-img-%' AND resolved_at IS NULL")).rows[0].n, 0);
+  assert.equal((await send('DELETE', `/images/${imgId}`, undefined, user)).statusCode, 204);
+  assert.equal((await send('GET', '/catalog', undefined, user)).json().images.some((i) => i.id === imgId), false);
+  assert.equal((await send('DELETE', `/servers/${sid}`, { confirm: 'img-src' }, user, key())).statusCode, 202);
+  await until(async () => (await serverRow(sid)).state === 'deleted', 'deleted', 120);
+});

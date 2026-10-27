@@ -140,7 +140,7 @@ export default function Order() {
             {!catalog.locations.length && <SelectInput label={t('location')} value={d.poolId} onChange={(v) => d.set({ poolId: v, packageId: '' })}
               options={catalog.pools.map((p) => ({ id: p.id, label: p.location ? `${p.name} · ${p.location}` : p.name }))}/>}
             <SelectInput label={t('image')} value={d.imageId} onChange={(v) => d.set({ imageId: v })} error={quoteField('imageId')}
-              options={catalog.images.map((i) => ({ id: i.id, label: i.name, description: i.family }))}/>
+              options={catalog.images.map((i) => ({ id: i.id, label: i.name, description: (i as { own?: boolean }).own ? t('ownImage') : i.family }))}/>
             <SelectInput label={t('project')} value={d.projectId} onChange={(v) => d.set({ projectId: v })}
               options={[{ id: '', label: '–' }, ...projects.map((p) => ({ id: p.id, label: p.name }))]}/>
           </div>

@@ -371,6 +371,21 @@ const kinds = {
     await vmTask(db, ctx, 'nic', '/v1/vm/nic-remove', { portgroup: await networkPortgroup(db, ctx.op.params.networkId) });
     await db.query('DELETE FROM private_network_members WHERE network_id = $1 AND server_id = $2', [ctx.op.params.networkId, ctx.s.id]);
   },
+  // A personal image: the server cloned into a template, then offered to its owner as an image.
+  async image_create(db, ctx) {
+    const p = ctx.op.params;
+    const name = `lvm-img-${p.imageId}`;
+    await setStep(db, ctx.op, 'image');
+    if (ctx.op.provider_task_id) await waitTask(db, ctx, ctx.op.provider_task_id);
+    else {
+      const out = await adapter('/v1/image/create', { ...ctx.target, vm: ctx.s.vm_moref, name });
+      if (out.task) { await saveTask(db, ctx.op, out.task); await waitTask(db, ctx, out.task); }
+    }
+    const tpl = (await adapter('/v1/vm/find', { ...ctx.target, name })).vm;
+    if (!tpl) throw new OperationError('IMAGE_NOT_FOUND', 'the new template is not listed', true);
+    await db.query(`INSERT INTO os_images (id, name, family, connection_id, template_moref, min_disk_gb, cloud_init, active, owner_id, source_server_id)
+      VALUES ($1, $2, $3, $4, $5, $6, true, true, $7, $8) ON CONFLICT (id) DO NOTHING`, [p.imageId, p.name, ctx.s.image_family, ctx.s.connection_id, tpl.moref, ctx.s.disk_gb, ctx.s.owner_id, ctx.s.id]);
+  },
   async backup_delete(db, ctx) {
     const b = await backupOf(db, ctx.op.params.backupId);
     await setStep(db, ctx.op, 'delete');
@@ -562,7 +577,8 @@ export async function reconcile(db, log) {
     }
     const { rows: live } = await db.query("SELECT 'lvm-' || id AS name FROM servers WHERE state <> 'deleted'");
     const known = new Set(live.map((r) => r.name));
-    for (const v of vms) if (!known.has(v.name)) await finding('orphan_vm', null, v.moref, { name: v.name });
+    // Personal images' templates (lvm-img-…) are the panel's too, not stray VMs.
+    for (const v of vms) if (!known.has(v.name) && !v.name.startsWith('lvm-img-')) await finding('orphan_vm', null, v.moref, { name: v.name });
     log('info', 'reconcile_done', { connectionId: c.id, vms: vms.length, servers: servers.length });
   }
 }

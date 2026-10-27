@@ -342,7 +342,10 @@
     "NETWORK_FULL": "Ağda boş adres kalmadı.",
     "ALREADY_MEMBER": "Sunucu zaten bu ağda.",
     "LEAVE_PRIVATE_NETWORKS": "Yeniden kurmadan önce sunucuyu özel ağlardan çıkarın.",
-    "INVALID_PRIVATE_SUBNET": "/16 ile /28 arasında özel bir aralık kullanın (10.x, 172.16-31.x ya da 192.168.x)."
+    "INVALID_PRIVATE_SUBNET": "/16 ile /28 arasında özel bir aralık kullanın (10.x, 172.16-31.x ya da 192.168.x).",
+    "IMAGE_IN_USE": "Bu imajdan çalışan sunucular var.",
+    "OWNER_ONLY": "Bunu yalnızca sahibi yapabilir.",
+    "IMAGE_NOT_FOUND": "Yeni imaj bulunamadı."
   },
   "Auth": {
     "required": "zorunlu",
@@ -1119,7 +1122,8 @@
       "hourlyHelp": "Silene kadar, açık ya da kapalı, başlayan her saat için bakiyenizden ödenir. Ayda en çok {max}. Başlatmak için bakiyeniz {hours} saati karşılamalı.",
       "topUp": "Başlatmak için bakiyeniz {need} karşılamalı.",
       "topUpLink": "Bakiye yükle"
-    }
+    },
+    "ownImage": "sizin imajınız"
   },
   "Catalog": {
     "eyebrow": "YÖNETİM · KATALOG",
@@ -1661,7 +1665,8 @@
       "disk_add": "Disk ekleme",
       "disk_remove": "Disk kaldırma",
       "nic_add": "Ağa katılma",
-      "nic_remove": "Ağdan ayrılma"
+      "nic_remove": "Ağdan ayrılma",
+      "image_create": "İmaj olarak kaydetme"
     },
     "opStatus": {
       "pending": "Sırada",
@@ -1691,7 +1696,8 @@
       "delete": "Siliniyor",
       "migrate": "Taşınıyor",
       "disk": "Diskler değiştiriliyor",
-      "nic": "Ağ kartları değiştiriliyor"
+      "nic": "Ağ kartları değiştiriliyor",
+      "image": "Disk kopyalanıyor"
     },
     "action": {
       "power_on": "Aç",
@@ -2069,7 +2075,8 @@
       "projects": "Projeler",
       "accessibility": "Erişilebilirlik",
       "activity": "Etkinlik",
-      "api": "API"
+      "api": "API",
+      "images": "İmajlar"
     },
     "profile": {
       "title": "Profil",
@@ -4716,7 +4723,9 @@
       "network_deleted": "Özel ağ silindi",
       "network_server_joined": "Sunucu özel ağa eklendi",
       "network_server_left": "Sunucu özel ağdan çıkarıldı",
-      "catalog_pool_private_networks": "Özel ağ ayarları değiştirildi"
+      "catalog_pool_private_networks": "Özel ağ ayarları değiştirildi",
+      "image_created": "İmaj kaydedildi",
+      "image_deleted": "İmaj silindi"
     },
     "outcome": {
       "success": "Tamamlandı",
@@ -6253,7 +6262,8 @@
       "confirm": "Onay için {name} yazın",
       "button": "Yeniden kur",
       "started": "Yeniden kurulum başladı; sunucu imajdan yeniden oluşturuluyor.",
-      "locked": "Sunucu kilitli; yeniden kurmak için kilidi açın."
+      "locked": "Sunucu kilitli; yeniden kurmak için kilidi açın.",
+      "own": "sizin imajınız"
     }
   },
   "Developer": {
@@ -6644,5 +6654,24 @@
     "setup": "Sunucunun içinde",
     "setupHelp": "Yeni arayüzün MAC adresi {mac}. Linux ve netplan ile:",
     "vlan": "VLAN {vlan}"
+  },
+  "Images": {
+    "title": "İmaj olarak kaydet",
+    "help": "Bu sunucunun diskinin şu anki halinden size ait bir imaj; yeni sunucu sipariş etmek ya da yeniden kurmak için. Yalnızca siz görürsünüz. Veritabanlarının temiz kopyası için önce sunucuyu kapatın.",
+    "name": "İmaj adı",
+    "save": "İmajı kaydet",
+    "saving": "İmaj hazırlanıyor; hazır olunca sipariş sayfasında görünür.",
+    "mine": "İmajlarım",
+    "mineHelp": "Sunucularınızdan kaydettiğiniz imajlar. Sipariş sayfasında bunlardan sunucu sipariş edin.",
+    "none": "Henüz imaj yok. Bir sunucunun sayfasından kaydedin.",
+    "from": "{name} sunucusundan",
+    "servers": "{n, plural, =0 {kullanılmıyor} other {# sunucu kullanıyor}}",
+    "remove": "Sil",
+    "removeTitle": "Bu imaj silinsin mi?",
+    "removeBody": "vCenter'daki kopyası silinir. Ondan yapılan sunucular çalışmaya devam eder.",
+    "removed": "İmaj silindi",
+    "cancel": "Vazgeç",
+    "count": "{n} / {max}",
+    "full": "Tutabileceğiniz en fazla imaj sayısındasınız; önce birini silin."
   }
 }

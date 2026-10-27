@@ -342,7 +342,10 @@
     "NETWORK_FULL": "The network has no free address.",
     "ALREADY_MEMBER": "The server is on this network already.",
     "LEAVE_PRIVATE_NETWORKS": "Take the server off its private networks before reinstalling.",
-    "INVALID_PRIVATE_SUBNET": "Use a private range (10.x, 172.16-31.x or 192.168.x) between /16 and /28."
+    "INVALID_PRIVATE_SUBNET": "Use a private range (10.x, 172.16-31.x or 192.168.x) between /16 and /28.",
+    "IMAGE_IN_USE": "Servers still run from this image.",
+    "OWNER_ONLY": "Only the owner can do this.",
+    "IMAGE_NOT_FOUND": "The new image was not found."
   },
   "Auth": {
     "required": "required",
@@ -1119,7 +1122,8 @@
       "hourlyHelp": "Paid from your balance for every started hour, on or off, until you delete it. At most {max} a month. Your balance must cover {hours} hours to start.",
       "topUp": "Your balance must cover {need} to start.",
       "topUpLink": "Top up"
-    }
+    },
+    "ownImage": "your image"
   },
   "Catalog": {
     "eyebrow": "ADMIN · CATALOG",
@@ -1661,7 +1665,8 @@
       "disk_add": "Add a disk",
       "disk_remove": "Remove a disk",
       "nic_add": "Join a network",
-      "nic_remove": "Leave a network"
+      "nic_remove": "Leave a network",
+      "image_create": "Save as an image"
     },
     "opStatus": {
       "pending": "Queued",
@@ -1691,7 +1696,8 @@
       "delete": "Removing",
       "migrate": "Moving",
       "disk": "Changing disks",
-      "nic": "Changing network cards"
+      "nic": "Changing network cards",
+      "image": "Copying the disk"
     },
     "action": {
       "power_on": "Power on",
@@ -2069,7 +2075,8 @@
       "projects": "Projects",
       "accessibility": "Accessibility",
       "activity": "Activity",
-      "api": "API"
+      "api": "API",
+      "images": "Images"
     },
     "profile": {
       "title": "Profile",
@@ -4716,7 +4723,9 @@
       "network_deleted": "Private network deleted",
       "network_server_joined": "Server added to a private network",
       "network_server_left": "Server removed from a private network",
-      "catalog_pool_private_networks": "Private network settings changed"
+      "catalog_pool_private_networks": "Private network settings changed",
+      "image_created": "Image saved",
+      "image_deleted": "Image deleted"
     },
     "outcome": {
       "success": "Done",
@@ -6253,7 +6262,8 @@
       "confirm": "Type {name} to confirm",
       "button": "Reinstall",
       "started": "Reinstall started; the server is rebuilt from the image.",
-      "locked": "The server is locked; unlock it to reinstall."
+      "locked": "The server is locked; unlock it to reinstall.",
+      "own": "your image"
     }
   },
   "Developer": {
@@ -6644,5 +6654,24 @@
     "setup": "Inside the server",
     "setupHelp": "The new interface has MAC {mac}. On Linux with netplan:",
     "vlan": "VLAN {vlan}"
+  },
+  "Images": {
+    "title": "Save as an image",
+    "help": "Your own image of this server's disk as it is now, to order new servers or reinstall from. Only you see it. For a clean copy of databases, shut the server down first.",
+    "name": "Image name",
+    "save": "Save image",
+    "saving": "The image is being made; it appears in the order page when it is ready.",
+    "mine": "My images",
+    "mineHelp": "Images you saved from your servers. Order a server from one on the order page.",
+    "none": "No images yet. Save one from a server's page.",
+    "from": "From {name}",
+    "servers": "{n, plural, =0 {not in use} one {# server uses it} other {# servers use it}}",
+    "remove": "Delete",
+    "removeTitle": "Delete this image?",
+    "removeBody": "Its copy in vCenter is deleted. Servers made from it keep running.",
+    "removed": "Image deleted",
+    "cancel": "Cancel",
+    "count": "{n} of {max}",
+    "full": "You have the most images you can keep; delete one first."
   }
 }

@@ -105,7 +105,7 @@ export function ServerReinstall({ server, busy, own }: { server: Server; busy: b
   return <Section title={t('reinstall.title')} description={t('reinstall.help')} className="border border-danger/30">
     <div className="flex flex-col gap-4">
       <SelectInput className="max-w-md" label={t('reinstall.image')} value={imageId} onChange={setImageId} error={field(fields.imageId)}
-        options={images.map((i) => ({ id: i.id, label: i.name, description: i.id === server.imageId ? t('reinstall.current') : undefined }))}/>
+        options={images.map((i) => ({ id: i.id, label: i.name, description: i.id === server.imageId ? t('reinstall.current') : (i as { own?: boolean }).own ? t('reinstall.own') : undefined }))}/>
       {own && <CheckboxInput label={t('reinstall.newKey')} isSelected={newKeys} onChange={setNewKeys} help={t('reinstall.keysHelp')}/>}
       {newKeys && <SelectInput className="max-w-md" label={t('reinstall.key')} value={keyId} onChange={setKeyId} error={field(fields.sshKeyIds)}
         options={keys.map((k) => ({ id: k.id, label: k.name }))}/>}

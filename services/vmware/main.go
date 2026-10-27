@@ -148,6 +148,15 @@ func handler(token string, guard *netGuard) http.Handler {
 		q := r.(*DiskRequest)
 		return withClient(ctx, guard, q.Request, func(c *vim25.Client) (any, error) { return removeDisk(ctx, c, *q) })
 	})
+	newImg := func() any { return &ImageRequest{} }
+	handle("/v1/image/create", 60*time.Second, newImg, func(ctx context.Context, r any) (any, error) {
+		q := r.(*ImageRequest)
+		return withClient(ctx, guard, q.Request, func(c *vim25.Client) (any, error) { return templateFromVM(ctx, c, *q) })
+	})
+	handle("/v1/image/delete", 120*time.Second, newImg, func(ctx context.Context, r any) (any, error) {
+		q := r.(*ImageRequest)
+		return withClient(ctx, guard, q.Request, func(c *vim25.Client) (any, error) { return deleteTemplate(ctx, c, *q) })
+	})
 	newPg := func() any { return &PortgroupRequest{} }
 	for path, call := range map[string]func(context.Context, *vim25.Client, PortgroupRequest) (any, error){
 		"/v1/network/create": createPortgroup, "/v1/network/delete": deletePortgroup, "/v1/vm/nic-add": addNic, "/v1/vm/nic-remove": removeNic, "/v1/vm/nic-mac": nicMac,
