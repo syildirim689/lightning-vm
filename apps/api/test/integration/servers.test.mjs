@@ -1046,3 +1046,58 @@ test('pay as you go: an hourly server needs balance for its first hours, adds st
   await until(async () => (await serverRow(id)).state === 'deleted', 'hourly server deleted', 120);
   await send('PUT', '/admin/settings/billing', { enabled: false, hourly: false });
 });
+
+test('invoice disputes: a reason, lines and amount with a conversation ticket; collection pauses; staff review and decide (credit, withdraw the invoice) or the customer withdraws', { skip }, async () => {
+  const { runBilling } = await import('../../dist/billing.js');
+  await send('PUT', '/admin/settings/billing', { enabled: true, autoCharge: true, balance: true, disputeAnswerDays: 7 });
+  const userId = (await send('GET', '/auth/me', undefined, user)).json().id;
+  const invoice = async (amount) => (await send('POST', '/admin/billing/invoices', { userId, currency: 'EUR', dueDays: 0,
+    lines: [{ description: 'Setup', unitPrice: amount }, { description: 'Support hours', unitPrice: '5.00', quantity: 2 }] })).json().invoiceId;
+  const inv1 = await invoice('20.00');
+  const detail = (await send('GET', `/billing/invoices/${inv1}`, undefined, user)).json();
+  const support = detail.lines.find((l) => l.description === 'Support hours');
+  assert.ok(support.id, 'lines carry their id');
+  const path = `/billing/invoices/${inv1}/disputes`;
+  const bad = (await send('POST', path, { reason: 'nope', amount: '999', message: '' }, user)).json().fields;
+  assert.deepEqual([bad.reason, bad.amount, bad.message], ['REQUIRED', 'OUT_OF_RANGE', 'REQUIRED']);
+  assert.equal((await send('POST', path, { reason: 'other', message: 'x' }, other)).statusCode, 404);
+  const made = await send('POST', path, { reason: 'wrong_amount', lineIds: [support.id], message: 'Only one support hour was used.' }, user);
+  assert.equal(made.statusCode, 201, made.body);
+  const d1 = made.json();
+  const row = async (id) => (await pool.query('SELECT * FROM invoice_disputes WHERE id = $1', [id])).rows[0];
+  assert.equal((await row(d1.id)).amount, '12.00', 'the chosen line (10.00 + 20% tax)');
+  assert.equal((await pool.query('SELECT disputed FROM invoices WHERE id = $1', [inv1])).rows[0].disputed, true);
+  assert.ok((await pool.query('SELECT 1 FROM ticket_messages WHERE ticket_id = $1', [d1.ticketId])).rowCount, 'the conversation starts with the message');
+  assert.equal((await send('POST', path, { reason: 'other', message: 'again' }, user)).json().code, 'DISPUTE_ALREADY_OPEN');
+  // Collection waits: no automatic charge while disputed.
+  await pool.query("UPDATE invoices SET next_charge_at = now() - interval '1 minute' WHERE id = $1", [inv1]);
+  await runBilling();
+  assert.equal((await pool.query('SELECT charge_attempts FROM invoices WHERE id = $1', [inv1])).rows[0].charge_attempts, 0);
+  // Staff: review, then accept in part to the balance.
+  const queue = (await send('GET', '/admin/billing/disputes?status=open')).json();
+  assert.ok(queue.disputes.some((x) => x.id === d1.id) && queue.counts.open >= 1);
+  assert.equal((await send('GET', '/admin/billing/disputes', undefined, user)).statusCode, 403);
+  assert.equal((await send('POST', `/admin/billing/disputes/${d1.id}/review`)).statusCode, 200);
+  assert.equal((await row(d1.id)).status, 'under_review');
+  const decide = (id, body) => send('POST', `/admin/billing/disputes/${id}/decide`, body);
+  assert.equal((await decide(d1.id, { decision: 'partial', amount: '50.00', remedy: 'balance', note: 'x' })).json().fields.amount, 'OUT_OF_RANGE');
+  assert.equal((await decide(d1.id, { decision: 'partial', amount: '6.00', remedy: 'cancel', note: 'x' })).json().fields.remedy, 'INVALID_VALUE');
+  const before = Number((await pool.query("SELECT coalesce(sum(amount), 0) AS v FROM balance_entries WHERE owner_id = $1 AND currency = 'EUR'", [userId])).rows[0].v);
+  assert.equal((await decide(d1.id, { decision: 'partial', amount: '6.00', remedy: 'balance', note: 'One hour is credited.' })).json().status, 'partially_accepted');
+  const after = Number((await pool.query("SELECT coalesce(sum(amount), 0) AS v FROM balance_entries WHERE owner_id = $1 AND currency = 'EUR'", [userId])).rows[0].v);
+  assert.equal((after - before).toFixed(2), '6.00');
+  assert.equal((await pool.query('SELECT disputed FROM invoices WHERE id = $1', [inv1])).rows[0].disputed, false);
+  assert.equal((await decide(d1.id, { decision: 'reject', note: 'x' })).json().code, 'DISPUTE_CLOSED');
+  // A whole unpaid invoice accepted: withdrawn.
+  const inv2 = await invoice('1.00');
+  const d2 = (await send('POST', `/billing/invoices/${inv2}/disputes`, { reason: 'duplicate', message: 'Already on another invoice.' }, user)).json();
+  assert.equal((await decide(d2.id, { decision: 'accept', remedy: 'cancel', note: 'Withdrawn, sorry.' })).json().status, 'accepted');
+  assert.equal((await pool.query('SELECT status FROM invoices WHERE id = $1', [inv2])).rows[0].status, 'cancelled');
+  // The customer withdraws one: collection resumes.
+  const inv3 = await invoice('2.00');
+  const d3 = (await send('POST', `/billing/invoices/${inv3}/disputes`, { reason: 'other', message: 'Never mind soon.' }, user)).json();
+  assert.equal((await send('POST', `/billing/disputes/${d3.id}/withdraw`, undefined, user)).statusCode, 200);
+  assert.deepEqual([(await row(d3.id)).status, (await pool.query('SELECT disputed FROM invoices WHERE id = $1', [inv3])).rows[0].disputed], ['withdrawn', false]);
+  assert.equal((await send('GET', '/billing/disputes', undefined, user)).json().disputes.length >= 3, true);
+  await send('PUT', '/admin/settings/billing', { enabled: false });
+});

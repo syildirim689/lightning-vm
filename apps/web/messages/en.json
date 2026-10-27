@@ -317,7 +317,11 @@
     "API_TOKENS_DISABLED": "The administrator turned API tokens off.",
     "WEBHOOK_URL_NOT_PUBLIC": "Use a public HTTPS address.",
     "NOT_IMPORTABLE": "This VM is already the panel's or is a template.",
-    "BALANCE_TOO_LOW": "Top up your balance first: it must cover the first hours of the server."
+    "BALANCE_TOO_LOW": "Top up your balance first: it must cover the first hours of the server.",
+    "DISPUTE_NOT_POSSIBLE": "This invoice cannot be disputed.",
+    "DISPUTE_TOO_LATE": "The time to dispute this invoice has passed.",
+    "DISPUTE_ALREADY_OPEN": "This invoice already has an open dispute.",
+    "DISPUTE_CLOSED": "This dispute is already closed."
   },
   "Auth": {
     "required": "required",
@@ -2502,6 +2506,18 @@
       "billing_hourly_hold": {
         "title": "Hourly servers stopped",
         "help": "When the balance is used up and hourly servers are stopped."
+      },
+      "billing_dispute_opened": {
+        "title": "Invoice dispute opened",
+        "help": "When a customer disputes an invoice."
+      },
+      "billing_dispute_overdue": {
+        "title": "Dispute past its decision date",
+        "help": "When a dispute waits longer than the decision days."
+      },
+      "billing_dispute_update": {
+        "title": "Dispute update",
+        "help": "When your dispute is taken into review or decided."
       }
     },
     "policyTitle": "The admin first, then each user",
@@ -3776,7 +3792,11 @@
       "hourly": "Pay as you go",
       "hourlyHelp": "Customers may order hourly servers paid from their balance (needs the balance). Each month's use becomes one invoice.",
       "hourlyMinHours": "Hours the balance must cover to order",
-      "hourlyMinHoursHelp": "For example 24: a day of the server's price."
+      "hourlyMinHoursHelp": "For example 24: a day of the server's price.",
+      "disputeWindowDays": "Days to dispute an invoice",
+      "disputeWindowHelp": "After the invoice is issued.",
+      "disputeAnswerDays": "Days to decide a dispute",
+      "disputeAnswerHelp": "Past it, staff are reminded."
     },
     "einvoice": {
       "saved": "e-Invoice settings saved.",
@@ -4584,7 +4604,11 @@
       "account_webhook_updated": "Webhook changed",
       "account_webhook_removed": "Webhook removed",
       "account_webhook_secret_rotated": "Webhook secret renewed",
-      "server_imported": "VM imported as a server"
+      "server_imported": "VM imported as a server",
+      "billing_dispute_opened": "Invoice dispute opened",
+      "billing_dispute_withdrawn": "Dispute withdrawn",
+      "billing_dispute_review": "Dispute taken into review",
+      "billing_dispute_decided": "Dispute decided"
     },
     "outcome": {
       "success": "Done",
@@ -5762,7 +5786,8 @@
       "subscriptions": "Subscriptions",
       "balance": "Balance",
       "cards": "Cards",
-      "profile": "Invoice details"
+      "profile": "Invoice details",
+      "disputes": "Disputes"
     },
     "filter": "Show",
     "filters": {
@@ -5786,7 +5811,8 @@
       "renewal": "Renewal",
       "topup": "Top-up",
       "manual": "Service",
-      "credit_note": "Return"
+      "credit_note": "Return",
+      "usage": "Usage"
     },
     "dueIn": "due {when}",
     "status": {
@@ -6012,7 +6038,8 @@
     "tabs": {
       "invoices": "Invoices",
       "subscriptions": "Subscriptions",
-      "payments": "Payments"
+      "payments": "Payments",
+      "disputes": "Disputes"
     },
     "search": "Number, name, e-mail or tax number",
     "status": "Status",
@@ -6235,5 +6262,113 @@
     "submit": "Import",
     "cancel": "Cancel",
     "done": "{name} imported"
+  },
+  "Disputes": {
+    "section": "Disputes",
+    "title": "Dispute #{number}",
+    "open": "Dispute this invoice",
+    "submit": "Send the dispute",
+    "cancel": "Cancel",
+    "none": "No disputes",
+    "noneHelp": "If an invoice looks wrong, open it and choose \"Dispute this invoice\".",
+    "forInvoice": "Invoice {invoice}",
+    "formHelp": "Tell us what is wrong. Our billing team answers in the conversation and decides; while the dispute is open the invoice is not collected.",
+    "reasonLabel": "Reason",
+    "reason": {
+      "wrong_amount": "Wrong amount",
+      "not_used": "Service not used",
+      "duplicate": "Charged twice",
+      "service_problem": "Service did not work",
+      "cancelled": "Service was cancelled",
+      "tax_details": "Wrong invoice details (tax ID, name, address)",
+      "other": "Other"
+    },
+    "reasonHelp": {
+      "wrong_amount": "The price or the period is not what was agreed.",
+      "not_used": "Billed for something you did not use.",
+      "duplicate": "The same thing appears on two invoices.",
+      "service_problem": "An outage or a fault during the period.",
+      "cancelled": "Billed after you cancelled.",
+      "tax_details": "The invoice needs other buyer details.",
+      "other": "Anything else."
+    },
+    "lines": "Which lines",
+    "amountLabel": "Amount disputed",
+    "amountHelp": "Empty: the chosen lines, or the whole invoice. At most {max}.",
+    "message": "Explain",
+    "messageHelp": "What happened and what you expect. You can add screenshots or documents.",
+    "attach": "Attach a file",
+    "removeFile": "Remove {name}",
+    "paused": "While the dispute is open, no reminders, automatic charges or suspension happen for this invoice.",
+    "opened": "Dispute #{number} sent",
+    "withdraw": "Withdraw the dispute",
+    "withdrawBody": "The invoice is collected as usual again.",
+    "withdrawn": "Dispute withdrawn",
+    "amount": "Amount",
+    "decisionBy": "Decision by",
+    "resolved": "Given back",
+    "conversation": "Conversation",
+    "openTicket": "Open the conversation",
+    "decision": "Decision",
+    "status": {
+      "open": "Received",
+      "under_review": "In review",
+      "accepted": "Accepted",
+      "partially_accepted": "Partly accepted",
+      "rejected": "Rejected",
+      "withdrawn": "Withdrawn"
+    },
+    "remedy": {
+      "balance": "credited to the balance",
+      "refund": "refunded to the card",
+      "cancel": "invoice withdrawn"
+    },
+    "remedyHelp": {
+      "balance": "Usable for any invoice; refunds a paid one into the balance.",
+      "refund": "Back through the payment provider.",
+      "cancel": "The unpaid invoice is withdrawn completely."
+    },
+    "steps": {
+      "label": "Progress",
+      "opened": "Received",
+      "review": "In review",
+      "decided": "Decided"
+    },
+    "kpi": {
+      "open": "Open",
+      "overdue": "Past decision date",
+      "accepted": "Accepted",
+      "rejected": "Rejected"
+    },
+    "filter": "Show",
+    "filters": {
+      "open": "Open",
+      "accepted": "Accepted",
+      "partially_accepted": "Partly accepted",
+      "rejected": "Rejected",
+      "withdrawn": "Withdrawn",
+      "all": "All"
+    },
+    "queueEmpty": "Nothing here.",
+    "col": {
+      "dispute": "Dispute",
+      "customer": "Customer",
+      "state": "State"
+    },
+    "takeReview": "Take into review",
+    "inReview": "Taken into review; the customer was told",
+    "decideButton": "Decide",
+    "decisionLabel": "Decision",
+    "decide": {
+      "accept": "Accept in full",
+      "partial": "Accept in part",
+      "reject": "Reject"
+    },
+    "partialHelp": "Less than {max}.",
+    "remedyLabel": "How it is given back",
+    "note": "Decision for the customer",
+    "noteHelp": "Sent in the conversation and shown on the invoice.",
+    "saveDecision": "Save the decision",
+    "decided": "Decision saved; the customer was told"
   }
 }

@@ -2,12 +2,12 @@
 import type { Tone } from '../components/ui';
 
 export type InvoiceStatus = 'unpaid' | 'paid' | 'cancelled' | 'refunded' | 'partially_refunded';
-export type Invoice = { id: string; number: string | null; kind: 'order' | 'renewal' | 'topup' | 'manual' | 'credit_note'; status: InvoiceStatus; currency: string;
+export type Invoice = { id: string; number: string | null; kind: 'order' | 'renewal' | 'topup' | 'manual' | 'credit_note' | 'usage'; status: InvoiceStatus; currency: string;
   subtotal: string; taxTotal: string; total: string; paidTotal: string; refundedTotal: string; dueAt: string; paidAt: string | null; issuedAt: string | null; createdAt: string;
   taxExemption: string | null; einvoiceStatus: string; einvoiceProfile: string | null; einvoiceError: string | null; buyerName: string; buyerEmail: string; ownerId: string; overdue: boolean };
 export type Party = { kind?: string; name: string; taxId: string; taxOffice: string; address: string; district: string; city: string; country: string; postalCode?: string;
   email?: string; phone?: string; website?: string; mersis?: string; tradeRegistry?: string };
-export type Line = { description: string; quantity: string; unit: string; unitPrice: string; taxRate: string; net: string; tax: string; gross: string; periodStart: string | null; periodEnd: string | null };
+export type Line = { id?: string; description: string; quantity: string; unit: string; unitPrice: string; taxRate: string; net: string; tax: string; gross: string; periodStart: string | null; periodEnd: string | null };
 export type Payment = { id: string; provider: string; mode: string; method: string; status: string; amount: string; currency: string; refunded: string; errorCode: string | null;
   errorMessage: string | null; reference: string | null; automatic: boolean; createdAt: string; completedAt: string | null; email?: string; invoiceId?: string; number?: string | null };
 export type InvoiceDetail = { invoice: Invoice & { buyer: Party; seller: Party; note: string | null }; lines: Line[]; payments: Payment[] };

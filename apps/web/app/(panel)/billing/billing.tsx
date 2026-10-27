@@ -13,10 +13,11 @@ import { I } from '../../../components/icon';
 import { ConfirmButton, DataTable, Empty, FormActions, FormSection, Notice, PageHeader, SelectInput, StatusChip, SwitchInput, TextInput } from '../../../components/ui';
 import { apiFetch, useErrorText } from '../../../lib/api';
 import type { Card as SavedCard, Invoice, Subscription, Summary } from '../../../lib/billing';
+import { MyDisputes } from './disputes';
 import { invoiceState, invoiceTone, subscriptionTone, type Hourly } from '../../../lib/billing';
 import { useApiQuery } from '../../../lib/query';
 
-const tabs = ['invoices', 'subscriptions', 'balance', 'cards', 'profile'] as const;
+const tabs = ['invoices', 'subscriptions', 'balance', 'cards', 'disputes', 'profile'] as const;
 
 export default function Billing() {
   const t = useTranslations('Billing');
@@ -60,6 +61,7 @@ export default function Billing() {
       <Tabs.Panel id="subscriptions" className="pt-5"><Subscriptions list={s.subscriptions}/></Tabs.Panel>
       <Tabs.Panel id="balance" className="flex flex-col gap-5 pt-5">{s.hourly?.servers.length ? <HourlyUsage h={s.hourly}/> : null}<Balance/></Tabs.Panel>
       <Tabs.Panel id="cards" className="pt-5"><Cards cards={s.cards}/></Tabs.Panel>
+      <Tabs.Panel id="disputes" className="pt-5"><MyDisputes/></Tabs.Panel>
       <Tabs.Panel id="profile" className="pt-5"><Profile/></Tabs.Panel>
     </Tabs>
     {topup && <Topup min={s.methods.topup.min} max={s.methods.topup.max} currency={s.balance[0]?.currency ?? s.subscriptions[0]?.currency ?? 'TRY'} onClose={() => setTopup(false)}/>}

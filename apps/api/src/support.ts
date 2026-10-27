@@ -29,18 +29,18 @@ async function ticketFor(req: AuthedRequest, id: string) {
   return t;
 }
 
-const readBody = (v: unknown) => {
+export const readBody = (v: unknown) => {
   const body = typeof v === 'string' ? v.trim() : '';
   if (!body || body.length > 20_000) throw apiError(400, 'VALIDATION_FAILED', 'Invalid input', { body: body ? 'TOO_LONG' : 'REQUIRED' });
   return body;
 };
-function readFiles(v: unknown): Upload[] {
+export function readFiles(v: unknown): Upload[] {
   const { files, error } = readAttachments(v);
   if (error) throw apiError(400, 'VALIDATION_FAILED', 'Invalid input', { attachments: error });
   return files;
 }
 
-async function addMessage(ticketId: string, authorId: string, staff: boolean, internal: boolean, body: string, files: Upload[]) {
+export async function addMessage(ticketId: string, authorId: string, staff: boolean, internal: boolean, body: string, files: Upload[]) {
   const { rows: [m] } = await pool.query('INSERT INTO ticket_messages (ticket_id, author_id, staff, internal, body) VALUES ($1, $2, $3, $4, $5) RETURNING id',
     [ticketId, authorId, staff, internal, body]);
   for (const f of files) await pool.query('INSERT INTO ticket_attachments (message_id, name, type, size, data) VALUES ($1, $2, $3, $4, $5)', [m.id, f.name, f.type, f.data.length, f.data]);

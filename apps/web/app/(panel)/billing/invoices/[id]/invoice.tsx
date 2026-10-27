@@ -13,6 +13,7 @@ import { CheckboxInput, Mono, Notice } from '../../../../../components/ui';
 import { apiFetch, useErrorText } from '../../../../../lib/api';
 import type { InvoiceDetail, Summary } from '../../../../../lib/billing';
 import { useApiQuery } from '../../../../../lib/query';
+import { InvoiceDisputes } from '../../disputes';
 
 export default function InvoicePage({ id }: { id: string }) {
   const t = useTranslations('Billing');
@@ -35,6 +36,7 @@ export default function InvoicePage({ id }: { id: string }) {
     {result?.status === 'pending' && <Notice tone="default" title={t('checking')}>{t('checkingHelp')}</Notice>}
     {d.invoice.status === 'unpaid' && <PayPanel d={d}/>}
     <InvoiceSheet d={d}/>
+    <InvoiceDisputes d={d}/>
   </div>;
 }
 

@@ -317,7 +317,11 @@
     "API_TOKENS_DISABLED": "Yönetici API anahtarlarını kapattı.",
     "WEBHOOK_URL_NOT_PUBLIC": "Herkese açık bir HTTPS adresi kullanın.",
     "NOT_IMPORTABLE": "Bu VM zaten panelin ya da bir şablon.",
-    "BALANCE_TOO_LOW": "Önce bakiye yükleyin: sunucunun ilk saatlerini karşılamalı."
+    "BALANCE_TOO_LOW": "Önce bakiye yükleyin: sunucunun ilk saatlerini karşılamalı.",
+    "DISPUTE_NOT_POSSIBLE": "Bu faturaya itiraz edilemez.",
+    "DISPUTE_TOO_LATE": "Bu faturaya itiraz süresi geçti.",
+    "DISPUTE_ALREADY_OPEN": "Bu faturanın zaten açık bir itirazı var.",
+    "DISPUTE_CLOSED": "Bu itiraz zaten kapandı."
   },
   "Auth": {
     "required": "zorunlu",
@@ -2502,6 +2506,18 @@
       "billing_hourly_hold": {
         "title": "Saatlik sunucular durduruldu",
         "help": "Bakiye bitip saatlik sunucular durdurulduğunda."
+      },
+      "billing_dispute_opened": {
+        "title": "Fatura itirazı açıldı",
+        "help": "Bir müşteri faturaya itiraz ettiğinde."
+      },
+      "billing_dispute_overdue": {
+        "title": "İtirazın karar süresi geçti",
+        "help": "Bir itiraz karar süresinden uzun beklediğinde."
+      },
+      "billing_dispute_update": {
+        "title": "İtiraz güncellemesi",
+        "help": "İtirazınız incelemeye alındığında ya da karara bağlandığında."
       }
     },
     "policyTitle": "Önce yönetici, sonra kullanıcı",
@@ -3776,7 +3792,11 @@
       "hourly": "Kullandıkça öde",
       "hourlyHelp": "Müşteriler bakiyeden ödenen saatlik sunucu sipariş edebilir (bakiye açık olmalı). Her ayın kullanımı tek faturaya dönüşür.",
       "hourlyMinHours": "Sipariş için bakiyenin karşılaması gereken saat",
-      "hourlyMinHoursHelp": "Örneğin 24: sunucunun bir günlük ücreti."
+      "hourlyMinHoursHelp": "Örneğin 24: sunucunun bir günlük ücreti.",
+      "disputeWindowDays": "Faturaya itiraz süresi (gün)",
+      "disputeWindowHelp": "Fatura düzenlendikten sonra.",
+      "disputeAnswerDays": "İtiraza karar süresi (gün)",
+      "disputeAnswerHelp": "Geçince ekibe hatırlatılır."
     },
     "einvoice": {
       "saved": "e-Fatura ayarları kaydedildi.",
@@ -4584,7 +4604,11 @@
       "account_webhook_updated": "Webhook değiştirildi",
       "account_webhook_removed": "Webhook kaldırıldı",
       "account_webhook_secret_rotated": "Webhook gizli anahtarı yenilendi",
-      "server_imported": "VM sunucu olarak içe aktarıldı"
+      "server_imported": "VM sunucu olarak içe aktarıldı",
+      "billing_dispute_opened": "Fatura itirazı açıldı",
+      "billing_dispute_withdrawn": "İtiraz geri çekildi",
+      "billing_dispute_review": "İtiraz incelemeye alındı",
+      "billing_dispute_decided": "İtiraz karara bağlandı"
     },
     "outcome": {
       "success": "Tamamlandı",
@@ -5762,7 +5786,8 @@
       "subscriptions": "Abonelikler",
       "balance": "Bakiye",
       "cards": "Kartlar",
-      "profile": "Fatura bilgileri"
+      "profile": "Fatura bilgileri",
+      "disputes": "İtirazlar"
     },
     "filter": "Göster",
     "filters": {
@@ -5786,7 +5811,8 @@
       "renewal": "Yenileme",
       "topup": "Bakiye yükleme",
       "manual": "Hizmet",
-      "credit_note": "İade"
+      "credit_note": "İade",
+      "usage": "Kullanım"
     },
     "dueIn": "son ödeme {when}",
     "status": {
@@ -6012,7 +6038,8 @@
     "tabs": {
       "invoices": "Faturalar",
       "subscriptions": "Abonelikler",
-      "payments": "Ödemeler"
+      "payments": "Ödemeler",
+      "disputes": "İtirazlar"
     },
     "search": "Numara, ad, e-posta ya da vergi no",
     "status": "Durum",
@@ -6235,5 +6262,113 @@
     "submit": "İçe aktar",
     "cancel": "Vazgeç",
     "done": "{name} içe aktarıldı"
+  },
+  "Disputes": {
+    "section": "İtirazlar",
+    "title": "İtiraz #{number}",
+    "open": "Bu faturaya itiraz et",
+    "submit": "İtirazı gönder",
+    "cancel": "Vazgeç",
+    "none": "İtiraz yok",
+    "noneHelp": "Bir fatura yanlış görünüyorsa açıp \"Bu faturaya itiraz et\"i seçin.",
+    "forInvoice": "Fatura {invoice}",
+    "formHelp": "Neyin yanlış olduğunu anlatın. Faturalama ekibimiz konuşmada yanıtlar ve karar verir; itiraz açıkken fatura tahsil edilmez.",
+    "reasonLabel": "Neden",
+    "reason": {
+      "wrong_amount": "Tutar yanlış",
+      "not_used": "Hizmet kullanılmadı",
+      "duplicate": "İki kez faturalandı",
+      "service_problem": "Hizmet çalışmadı",
+      "cancelled": "Hizmet iptal edilmişti",
+      "tax_details": "Fatura bilgileri yanlış (VKN/TCKN, ad, adres)",
+      "other": "Diğer"
+    },
+    "reasonHelp": {
+      "wrong_amount": "Fiyat ya da dönem anlaşılandan farklı.",
+      "not_used": "Kullanmadığınız bir şey faturalandı.",
+      "duplicate": "Aynı kalem iki faturada var.",
+      "service_problem": "Dönem içinde kesinti ya da arıza.",
+      "cancelled": "İptalden sonra faturalandı.",
+      "tax_details": "Faturada başka alıcı bilgileri olmalı.",
+      "other": "Başka bir konu."
+    },
+    "lines": "Hangi satırlar",
+    "amountLabel": "İtiraz edilen tutar",
+    "amountHelp": "Boş: seçilen satırlar ya da faturanın tamamı. En çok {max}.",
+    "message": "Açıklama",
+    "messageHelp": "Ne olduğunu ve ne beklediğinizi yazın. Ekran görüntüsü ya da belge ekleyebilirsiniz.",
+    "attach": "Dosya ekle",
+    "removeFile": "{name} kaldır",
+    "paused": "İtiraz açıkken bu fatura için hatırlatma, otomatik çekim ya da askıya alma yapılmaz.",
+    "opened": "İtiraz #{number} gönderildi",
+    "withdraw": "İtirazı geri çek",
+    "withdrawBody": "Fatura yeniden her zamanki gibi tahsil edilir.",
+    "withdrawn": "İtiraz geri çekildi",
+    "amount": "Tutar",
+    "decisionBy": "Karar tarihi",
+    "resolved": "Geri verilen",
+    "conversation": "Konuşma",
+    "openTicket": "Konuşmayı aç",
+    "decision": "Karar",
+    "status": {
+      "open": "Alındı",
+      "under_review": "İnceleniyor",
+      "accepted": "Kabul edildi",
+      "partially_accepted": "Kısmen kabul edildi",
+      "rejected": "Reddedildi",
+      "withdrawn": "Geri çekildi"
+    },
+    "remedy": {
+      "balance": "bakiyeye eklendi",
+      "refund": "karta iade edildi",
+      "cancel": "fatura geri çekildi"
+    },
+    "remedyHelp": {
+      "balance": "Herhangi bir faturada kullanılabilir; ödenmiş faturayı bakiyeye iade eder.",
+      "refund": "Ödeme kuruluşu üzerinden geri ödenir.",
+      "cancel": "Ödenmemiş fatura tamamen geri çekilir."
+    },
+    "steps": {
+      "label": "İlerleme",
+      "opened": "Alındı",
+      "review": "İnceleniyor",
+      "decided": "Karar verildi"
+    },
+    "kpi": {
+      "open": "Açık",
+      "overdue": "Karar süresi geçen",
+      "accepted": "Kabul edilen",
+      "rejected": "Reddedilen"
+    },
+    "filter": "Göster",
+    "filters": {
+      "open": "Açık",
+      "accepted": "Kabul edilen",
+      "partially_accepted": "Kısmen kabul",
+      "rejected": "Reddedilen",
+      "withdrawn": "Geri çekilen",
+      "all": "Tümü"
+    },
+    "queueEmpty": "Burada bir şey yok.",
+    "col": {
+      "dispute": "İtiraz",
+      "customer": "Müşteri",
+      "state": "Durum"
+    },
+    "takeReview": "İncelemeye al",
+    "inReview": "İncelemeye alındı; müşteriye bildirildi",
+    "decideButton": "Karar ver",
+    "decisionLabel": "Karar",
+    "decide": {
+      "accept": "Tamamen kabul",
+      "partial": "Kısmen kabul",
+      "reject": "Reddet"
+    },
+    "partialHelp": "{max} tutarından az.",
+    "remedyLabel": "Nasıl geri verilsin",
+    "note": "Müşteriye karar açıklaması",
+    "noteHelp": "Konuşmaya gönderilir ve faturada görünür.",
+    "saveDecision": "Kararı kaydet",
+    "decided": "Karar kaydedildi; müşteriye bildirildi"
   }
 }

@@ -296,7 +296,7 @@ export async function runBilling(now = new Date()) {
   if (!s.enabled) return { skipped: true };
   const day = today(now);
   const out = { adopted: await adopt(), ended: await closeEnded(), cancelled: 0, renewals: 0, charged: 0, reminded: 0, overdue: 0, suspended: 0, terminated: 0, expired: 0,
-    hourly: await runHourly(now) };
+    hourly: await runHourly(now), disputesEscalated: await (await import('./disputes')).escalateDisputes() };
 
   // Cancelled at the period's end: the server goes.
   const { rows: leaving } = await pool.query(`UPDATE subscriptions SET status = 'cancelled', cancelled_at = now(), updated_at = now()
@@ -331,7 +331,7 @@ export async function runBilling(now = new Date()) {
 
   // Automatic collection: the balance first, then the saved card; a few tries a day apart.
   if (s.autoCharge) {
-    const { rows: open } = await pool.query(`SELECT * FROM invoices WHERE status = 'unpaid' AND kind IN ('renewal', 'manual') AND next_charge_at <= now() AND charge_attempts < $1`, [s.chargeRetries]);
+    const { rows: open } = await pool.query(`SELECT * FROM invoices WHERE status = 'unpaid' AND kind IN ('renewal', 'manual') AND NOT disputed AND next_charge_at <= now() AND charge_attempts < $1`, [s.chargeRetries]);
     for (const inv of open) {
       await pool.query("UPDATE invoices SET charge_attempts = charge_attempts + 1, next_charge_at = now() + interval '1 day' WHERE id = $1", [inv.id]);
       if ((s.balance && await payFromBalance(inv.id, true)) || await chargeSavedCard(inv)) out.charged++;
@@ -341,7 +341,7 @@ export async function runBilling(now = new Date()) {
   // Reminders, overdue notices, suspension and termination of unpaid renewals.
   const { rows: unpaid } = await pool.query(`SELECT i.*, b.id AS sub_id, b.status AS sub_status, b.suspended_at, b.server_id FROM invoices i
       JOIN invoice_lines l ON l.invoice_id = i.id JOIN subscriptions b ON b.id = l.subscription_id
-      WHERE i.status = 'unpaid' AND i.kind = 'renewal' AND b.status IN ('active', 'past_due', 'suspended')`);
+      WHERE i.status = 'unpaid' AND i.kind = 'renewal' AND NOT i.disputed AND b.status IN ('active', 'past_due', 'suspended')`);
   for (const i of unpaid) {
     const step = collectionStep(daysBetween(today(i.due_at), day), s, { reminded: !!i.reminded_at && today(i.reminded_at) === day, overdueNotified: !!i.overdue_notified_at,
       suspended: i.sub_status === 'suspended', suspendedDays: i.suspended_at ? daysBetween(today(i.suspended_at), day) : 0 });
@@ -369,7 +369,7 @@ export async function runBilling(now = new Date()) {
   }
 
   // Orders not paid in time: the invoice is withdrawn and the waiting build cancelled (its address and capacity freed).
-  const { rows: stale } = await pool.query(`UPDATE invoices SET status = 'cancelled', cancelled_at = now() WHERE status = 'unpaid' AND kind = 'order' AND paid_total = 0 AND due_at < now() RETURNING id`);
+  const { rows: stale } = await pool.query(`UPDATE invoices SET status = 'cancelled', cancelled_at = now() WHERE status = 'unpaid' AND kind = 'order' AND NOT disputed AND paid_total = 0 AND due_at < now() RETURNING id`);
   for (const inv of stale) {
     const { rows: subs } = await pool.query(`UPDATE subscriptions b SET status = 'cancelled', cancelled_at = now(), updated_at = now() FROM invoice_lines l
       WHERE l.invoice_id = $1 AND l.subscription_id = b.id AND b.status = 'pending' RETURNING b.server_id`, [inv.id]);
@@ -381,6 +381,58 @@ export async function runBilling(now = new Date()) {
     out.expired++;
   }
   return out;
+}
+
+// Gives money back on a paid invoice (staff refund, or an accepted dispute): to the card at the provider, or to the balance.
+export async function refundInvoice(req: AuthedRequest, id: string, body: Record<string, unknown>) {
+  const { rows: [inv] } = await pool.query("SELECT * FROM invoices WHERE id = $1 AND status IN ('paid', 'partially_refunded')", [id]);
+  if (!inv) throw apiError(409, 'INVOICE_NOT_REFUNDABLE', 'Only a paid invoice can be refunded');
+  let cents = 0; try { cents = toCents(String(body?.amount ?? inv.total)); } catch { /* below */ }
+  const left = toCents(inv.total) - toCents(inv.refunded_total);
+  if (cents <= 0 || cents > left) throw apiError(400, 'VALIDATION_FAILED', 'Invalid amount', { amount: 'OUT_OF_RANGE' });
+  const toBalance = body?.toBalance === true;
+  const reason = typeof body?.reason === 'string' ? body.reason.trim().slice(0, 300) : '';
+  // A top-up refunded to the card takes the money out of the balance it became (refunding it to the balance changes nothing).
+  if (inv.kind === 'topup') {
+    if (toBalance) throw apiError(409, 'REFUND_NOT_SUPPORTED', 'A top-up is already balance');
+    const { rows: [b] } = await pool.query('SELECT coalesce(sum(amount), 0)::text AS amount FROM balance_entries WHERE owner_id = $1 AND currency = $2', [inv.owner_id, inv.currency]);
+    if (toCents(b.amount) < cents) throw apiError(409, 'INSUFFICIENT_BALANCE', 'That much of the top-up was already spent');
+  }
+  let remaining = cents;
+  if (!toBalance) {
+    // Back through the payments that brought the money in, newest first.
+    const { rows: pays } = await pool.query("SELECT * FROM payments WHERE invoice_id = $1 AND status IN ('succeeded', 'partially_refunded') ORDER BY completed_at DESC", [id]);
+    for (const p of pays) {
+      if (!remaining) break;
+      const part = Math.min(remaining, toCents(p.amount) - toCents(p.refunded));
+      if (part <= 0) continue;
+      if (p.provider === 'balance' || p.provider === 'manual') {
+        if (p.provider === 'manual') continue; // money that came outside the panel goes back outside it (or to the balance)
+        await pool.query("INSERT INTO balance_entries (owner_id, amount, currency, reason, invoice_id, payment_id, note, created_by) VALUES ($1, $2, $3, 'refund', $4, $5, $6, $7)",
+          [inv.owner_id, fromCents(part), inv.currency, id, p.id, reason || null, req.user.id]);
+      } else {
+        const impl = gateways[p.provider];
+        const gw = p.provider === 'sandbox' ? { mode: 'test' as const, creds: {} } : await activeGateway(p.provider, p.mode);
+        if (!impl?.refund || !gw) throw apiError(409, 'REFUND_NOT_SUPPORTED', 'This provider cannot refund from the panel; refund it in the provider panel or to the balance');
+        const r = await impl.refund(p.provider_ref, fromCents(part), p.currency, gw.creds, gw.mode);
+        if (!r.ok) throw apiError(502, 'REFUND_FAILED', r.message ?? r.code);
+      }
+      await pool.query("UPDATE payments SET refunded = refunded + $2, status = CASE WHEN refunded + $2 >= amount THEN 'refunded' ELSE 'partially_refunded' END WHERE id = $1", [p.id, fromCents(part)]);
+      remaining -= part;
+    }
+    if (remaining) throw apiError(409, 'REFUND_NOT_SUPPORTED', 'Part of this was paid outside the panel; refund that part to the balance');
+    if (inv.kind === 'topup') await pool.query("INSERT INTO balance_entries (owner_id, amount, currency, reason, invoice_id, note, created_by) VALUES ($1, $2, $3, 'refund', $4, $5, $6)",
+      [inv.owner_id, fromCents(-cents), inv.currency, id, reason || null, req.user.id]);
+  } else {
+    await pool.query("INSERT INTO balance_entries (owner_id, amount, currency, reason, invoice_id, note, created_by) VALUES ($1, $2, $3, 'refund', $4, $5, $6)",
+      [inv.owner_id, fromCents(cents), inv.currency, id, reason || null, req.user.id]);
+  }
+  await pool.query(`UPDATE invoices SET refunded_total = refunded_total + $2, status = CASE WHEN refunded_total + $2 >= total THEN 'refunded' ELSE 'partially_refunded' END WHERE id = $1`,
+    [id, fromCents(cents)]);
+  await audit(req, 'billing.refunded', 'success', req.user.id, { invoiceId: id, amount: fromCents(cents), toBalance, reason });
+  void import('./einvoice').then((e) => e.creditNote(id, fromCents(cents), reason)).catch(() => undefined);
+  await notify('billing.refunded', [inv.owner_id], { invoiceId: id, amount: fromCents(cents), currency: inv.currency });
+  return { ok: true };
 }
 
 // ---- Pay as you go ----
@@ -488,7 +540,7 @@ const invoiceColumns = `i.id, i.number, i.kind, i.status, i.currency, i.subtotal
 async function invoiceDetail(id: string, ownerId?: string) {
   const { rows: [inv] } = await pool.query(`SELECT ${invoiceColumns}, i.buyer, i.seller, i.note, i.related_invoice_id AS "relatedInvoiceId" FROM invoices i WHERE i.id = $1 AND ($2::uuid IS NULL OR i.owner_id = $2)`, [id, ownerId ?? null]);
   if (!inv) throw apiError(404, 'NOT_FOUND', 'Unknown invoice');
-  const { rows: lines } = await pool.query(`SELECT description, quantity::text, unit, unit_price::text AS "unitPrice", tax_rate::text AS "taxRate", net::text, tax::text, gross::text,
+  const { rows: lines } = await pool.query(`SELECT id, description, quantity::text, unit, unit_price::text AS "unitPrice", tax_rate::text AS "taxRate", net::text, tax::text, gross::text,
     period_start AS "periodStart", period_end AS "periodEnd" FROM invoice_lines WHERE invoice_id = $1 ORDER BY sort`, [id]);
   const { rows: payments } = await pool.query(`SELECT id, provider, mode, method, status, amount::text, currency, refunded::text, error_code AS "errorCode", error_message AS "errorMessage",
     reference, automatic, created_at AS "createdAt", completed_at AS "completedAt" FROM payments WHERE invoice_id = $1 ORDER BY created_at DESC`, [id]);
@@ -791,54 +843,7 @@ export class BillingAdminController {
   // e-invoice side issues the return invoice (einvoice.ts).
   @Post('invoices/:id/refund') @HttpCode(200) @Can('billing.manage')
   async refund(@Req() req: AuthedRequest, @Param('id', ParseUUIDPipe) id: string, @Body() body: Record<string, unknown>) {
-    const { rows: [inv] } = await pool.query("SELECT * FROM invoices WHERE id = $1 AND status IN ('paid', 'partially_refunded')", [id]);
-    if (!inv) throw apiError(409, 'INVOICE_NOT_REFUNDABLE', 'Only a paid invoice can be refunded');
-    let cents = 0; try { cents = toCents(String(body?.amount ?? inv.total)); } catch { /* below */ }
-    const left = toCents(inv.total) - toCents(inv.refunded_total);
-    if (cents <= 0 || cents > left) throw apiError(400, 'VALIDATION_FAILED', 'Invalid amount', { amount: 'OUT_OF_RANGE' });
-    const toBalance = body?.toBalance === true;
-    const reason = typeof body?.reason === 'string' ? body.reason.trim().slice(0, 300) : '';
-    // A top-up refunded to the card takes the money out of the balance it became (refunding it to the balance changes nothing).
-    if (inv.kind === 'topup') {
-      if (toBalance) throw apiError(409, 'REFUND_NOT_SUPPORTED', 'A top-up is already balance');
-      const { rows: [b] } = await pool.query('SELECT coalesce(sum(amount), 0)::text AS amount FROM balance_entries WHERE owner_id = $1 AND currency = $2', [inv.owner_id, inv.currency]);
-      if (toCents(b.amount) < cents) throw apiError(409, 'INSUFFICIENT_BALANCE', 'That much of the top-up was already spent');
-    }
-    let remaining = cents;
-    if (!toBalance) {
-      // Back through the payments that brought the money in, newest first.
-      const { rows: pays } = await pool.query("SELECT * FROM payments WHERE invoice_id = $1 AND status IN ('succeeded', 'partially_refunded') ORDER BY completed_at DESC", [id]);
-      for (const p of pays) {
-        if (!remaining) break;
-        const part = Math.min(remaining, toCents(p.amount) - toCents(p.refunded));
-        if (part <= 0) continue;
-        if (p.provider === 'balance' || p.provider === 'manual') {
-          if (p.provider === 'manual') continue; // money that came outside the panel goes back outside it (or to the balance)
-          await pool.query("INSERT INTO balance_entries (owner_id, amount, currency, reason, invoice_id, payment_id, note, created_by) VALUES ($1, $2, $3, 'refund', $4, $5, $6, $7)",
-            [inv.owner_id, fromCents(part), inv.currency, id, p.id, reason || null, req.user.id]);
-        } else {
-          const impl = gateways[p.provider];
-          const gw = p.provider === 'sandbox' ? { mode: 'test' as const, creds: {} } : await activeGateway(p.provider, p.mode);
-          if (!impl?.refund || !gw) throw apiError(409, 'REFUND_NOT_SUPPORTED', 'This provider cannot refund from the panel; refund it in the provider panel or to the balance');
-          const r = await impl.refund(p.provider_ref, fromCents(part), p.currency, gw.creds, gw.mode);
-          if (!r.ok) throw apiError(502, 'REFUND_FAILED', r.message ?? r.code);
-        }
-        await pool.query("UPDATE payments SET refunded = refunded + $2, status = CASE WHEN refunded + $2 >= amount THEN 'refunded' ELSE 'partially_refunded' END WHERE id = $1", [p.id, fromCents(part)]);
-        remaining -= part;
-      }
-      if (remaining) throw apiError(409, 'REFUND_NOT_SUPPORTED', 'Part of this was paid outside the panel; refund that part to the balance');
-      if (inv.kind === 'topup') await pool.query("INSERT INTO balance_entries (owner_id, amount, currency, reason, invoice_id, note, created_by) VALUES ($1, $2, $3, 'refund', $4, $5, $6)",
-        [inv.owner_id, fromCents(-cents), inv.currency, id, reason || null, req.user.id]);
-    } else {
-      await pool.query("INSERT INTO balance_entries (owner_id, amount, currency, reason, invoice_id, note, created_by) VALUES ($1, $2, $3, 'refund', $4, $5, $6)",
-        [inv.owner_id, fromCents(cents), inv.currency, id, reason || null, req.user.id]);
-    }
-    await pool.query(`UPDATE invoices SET refunded_total = refunded_total + $2, status = CASE WHEN refunded_total + $2 >= total THEN 'refunded' ELSE 'partially_refunded' END WHERE id = $1`,
-      [id, fromCents(cents)]);
-    await audit(req, 'billing.refunded', 'success', req.user.id, { invoiceId: id, amount: fromCents(cents), toBalance, reason });
-    void import('./einvoice').then((e) => e.creditNote(id, fromCents(cents), reason)).catch(() => undefined);
-    await notify('billing.refunded', [inv.owner_id], { invoiceId: id, amount: fromCents(cents), currency: inv.currency });
-    return { ok: true };
+    return refundInvoice(req, id, body);
   }
 
   @Get('subscriptions') @Can('billing.view')
@@ -950,7 +955,9 @@ export class BillingSettingsController {
       taxRate: int('taxRate', 0, 100), pricesIncludeTax: bool('pricesIncludeTax'), exportExempt: bool('exportExempt'), invoicePrefix: prefix,
       invoiceDaysBefore: int('invoiceDaysBefore', 0, 30), reminderDays, suspendAfterDays: int('suspendAfterDays', 1, 90), terminateAfterDays: int('terminateAfterDays', 0, 365),
       autoCharge: bool('autoCharge'), chargeRetries: int('chargeRetries', 1, 10), balance: bool('balance'), topupMin: int('topupMin', 1, 1_000_000), topupMax: int('topupMax', 1, 10_000_000),
-      sandbox: bool('sandbox'), hourly: bool('hourly'), hourlyMinHours: b.hourlyMinHours === undefined ? cur.hourlyMinHours ?? 24 : int('hourlyMinHours', 1, 720), bankTransfer: bank, company };
+      sandbox: bool('sandbox'), hourly: bool('hourly'), hourlyMinHours: b.hourlyMinHours === undefined ? cur.hourlyMinHours ?? 24 : int('hourlyMinHours', 1, 720),
+      disputeWindowDays: b.disputeWindowDays === undefined ? cur.disputeWindowDays ?? 60 : int('disputeWindowDays', 1, 730),
+      disputeAnswerDays: b.disputeAnswerDays === undefined ? cur.disputeAnswerDays ?? 7 : int('disputeAnswerDays', 1, 90), bankTransfer: bank, company };
     if (next.topupMax < next.topupMin) fields.topupMax = 'MIN_ABOVE_MAX';
     if (next.enabled && (!company.name || !company.taxId || !company.address)) fields['company.name'] = 'COMPANY_REQUIRED';
     if (Object.keys(fields).length) throw apiError(400, 'VALIDATION_FAILED', 'Invalid input', fields);

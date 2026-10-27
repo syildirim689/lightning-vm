@@ -48,13 +48,13 @@ export function Deadline({ dueAt }: { dueAt: string | null }) {
     <I name={left < 0 ? 'alarm-clock-off' : 'alarm-clock'} size={12}/>{left < 0 ? t('late', { span }) : t('left', { span })}</span>;
 }
 
-const readFile = (f: File) => new Promise<{ name: string; type: string; data: string }>((resolve, reject) => {
+export const readFile = (f: File) => new Promise<{ name: string; type: string; data: string }>((resolve, reject) => {
   const r = new FileReader();
   r.onload = () => resolve({ name: f.name, type: f.type || 'text/plain', data: String(r.result).split(',')[1] ?? '' });
   r.onerror = () => reject(r.error);
   r.readAsDataURL(f);
 });
-const accept = 'image/png,image/jpeg,image/gif,image/webp,application/pdf,text/plain,.log,.txt';
+export const accept = 'image/png,image/jpeg,image/gif,image/webp,application/pdf,text/plain,.log,.txt';
 
 // The thread, oldest first; staff answers on the right, internal notes marked.
 export function Thread({ messages, staffView }: { messages: Message[]; staffView: boolean }) {
