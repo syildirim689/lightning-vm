@@ -1026,7 +1026,7 @@ test.describe('people, settings and smart features (English browser)', () => {
     await page.waitForTimeout(500);
     await shot(page, 'user-notes');
     await page.keyboard.press('Escape');
-    await expect(page.getByText('Prefers e-mail; renewal agreed for March.').first()).toBeVisible();
+    await expect(page.getByRole('row', { name: /Prefers e-mail; renewal agreed/ })).toBeVisible();
     await shot(page, 'users-pinned-note');
     // Who is here: the overview's "Online now" shows this admin; the users' "Online or active" card filters to them.
     await page.goto('/admin');
