@@ -13,6 +13,7 @@ import { publishLive, type LiveKind } from './live-bus';
 import { notify } from './notify';
 import { adminEndpointPermission, betterAuthRoles, can, covers, effectivePermissions, ensureRoles, limitsOf, permissionsOf } from './permissions';
 import { ipAllowed } from './role-limits';
+import { deviceOf } from './device';
 import { directorySignIn, refuseForDirectory } from './directory-signin';
 import { hashPassword, sha256, verifyPassword } from './security';
 import { activeCaptcha, getSettings, mailUse, verifyCaptcha, type OidcSettings } from './settings-store';
@@ -45,6 +46,16 @@ async function limit(key: string, max: number, windowSeconds: number) {
   const res = await redis.multi().incr(`rl:${key}`).expire(`rl:${key}`, windowSeconds, 'NX').exec().catch(() => null);
   if (!res) throw new APIError('SERVICE_UNAVAILABLE', { code: 'DEPENDENCY_UNAVAILABLE', message: 'Rate limiter unavailable' });
   if (Number(res[0]?.[1]) > max) throw new APIError('TOO_MANY_REQUESTS', { code: 'RATE_LIMITED', message: 'Too many attempts' });
+}
+
+// Whether a sign-in comes from a known place: the same browser and system, or the same network (/24, IPv6 /48),
+// in a successful sign-in of the last 90 days. null: no earlier sign-in at all (nothing to compare with).
+async function seenBefore(userId: string, device: string, ip: string | null) {
+  const { rows: [r] } = await pool.query(`SELECT count(*)::int AS n,
+      count(*) FILTER (WHERE metadata->>'device' = $2 OR ($3::inet IS NOT NULL AND ip IS NOT NULL AND family(ip) = family($3::inet)
+        AND network(set_masklen(ip, CASE family(ip) WHEN 4 THEN 24 ELSE 48 END)) = network(set_masklen($3::inet, CASE family($3::inet) WHEN 4 THEN 24 ELSE 48 END))))::int AS known
+    FROM audit_events WHERE actor_id = $1 AND action = 'auth.login' AND outcome = 'success' AND created_at > now() - interval '90 days'`, [userId, device, ip]).catch(() => ({ rows: [{ n: 0, known: 0 }] }));
+  return r.n === 0 ? null : r.known > 0;
 }
 
 const forbidden = (code = 'FORBIDDEN') => new APIError('FORBIDDEN', { code, message: 'Permission required' });
@@ -229,11 +240,15 @@ function createAuth() {
         if (!created && (ctx.context.returned as { twoFactorRedirect?: boolean } | undefined)?.twoFactorRedirect) return;
         const action = ctx.path === '/sign-up/email' ? 'auth.register' : 'auth.login';
         const method = ctx.path.startsWith('/callback/') ? 'sso' : ctx.path === '/sign-in/passkey' ? 'passkey' : ctx.path === '/sign-in/email-otp' ? 'email-code' : ctx.path.startsWith('/two-factor/') ? 'password+2fa' : 'password';
+        const agent = ctx.request.headers.get('user-agent') ?? '';
+        const device = deviceOf(agent);
+        // Asked before this sign-in is recorded: has this person signed in from this device or network before?
+        const seen = created && action === 'auth.login' ? await seenBefore(created.user.id, device, ip) : null;
         await auditAuth(created?.user.id ?? null, action, created ? 'success' : 'failure', ip,
-          created ? { method } : { email: String((ctx.body as { email?: unknown })?.email ?? '').toLowerCase() });
+          created ? { method, device } : { email: String((ctx.body as { email?: unknown })?.email ?? '').toLowerCase() });
         if (!created) return;
         if (action === 'auth.register') await notify('admin.user_registered', 'staff:users.view', { email: created.user.email });
-        else await notify('auth.sign_in', [created.user.id], { ip: ip ?? '', agent: ctx.request.headers.get('user-agent') ?? '', method });
+        else await notify(seen === false ? 'auth.new_device' : 'auth.sign_in', [created.user.id], { ip: ip ?? '', agent, method, device });
       }),
     },
     databaseHooks: {

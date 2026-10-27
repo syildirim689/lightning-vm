@@ -778,6 +778,21 @@ test.describe('people, settings and smart features (English browser)', () => {
   });
 
   // New screens render and carry their heading; full-page screenshots go to test-results/tour for review.
+  // Dark mode: the newer screens keep their contrast and surfaces (charts, heatmap, cards, dialogs).
+  test('dark mode on the newer screens', async ({ browser }) => {
+    test.setTimeout(120_000);
+    const page = await (await browser.newContext({ locale: 'en-US', colorScheme: 'dark', viewport: { width: 1280, height: 900 } })).newPage();
+    await signInAdmin(page);
+    for (const [path, name, heading] of [['/admin/stats', 'dark-stats', 'Statistics'], ['/admin/system', 'dark-system', 'System'], ['/admin/support', 'dark-support', 'Support queue'],
+      ['/account', 'dark-account', 'My account']] as const) {
+      await page.goto(path);
+      await expect(page.getByRole('heading', { name: heading, level: 1 })).toBeVisible();
+      expect(await page.evaluate(() => document.documentElement.classList.contains('dark') || document.documentElement.dataset.theme === 'dark')).toBe(true);
+      await page.waitForTimeout(2000);
+      await page.screenshot({ path: `test-results/tour/${name}.png`, fullPage: true });
+    }
+  });
+
   test('tour of the newer screens', async ({ browser }) => {
     test.setTimeout(180_000);
     const shot = async (page: Page, name: string) => page.screenshot({ path: `test-results/tour/${name}.png`, fullPage: true });

@@ -2220,8 +2220,8 @@
         "help": "When power on, off or reset finishes."
       },
       "auth_sign_in": {
-        "title": "New sign-in",
-        "help": "When someone signs in to your account."
+        "title": "Every sign-in",
+        "help": "Each sign-in to your account, also from places you know."
       },
       "auth_password_changed": {
         "title": "Password changed",
@@ -2310,6 +2310,10 @@
       "support_low_rating": {
         "title": "Low rating",
         "help": "When a customer rates a ticket 1 or 2 out of 5."
+      },
+      "auth_new_device": {
+        "title": "Sign-in from a new device",
+        "help": "When your account is used from a browser and network not seen in the last 90 days."
       }
     },
     "policyTitle": "The admin first, then each user",
@@ -3924,7 +3928,11 @@
       "t": "Topology",
       "d": "Admin overview",
       "s": "All servers",
-      "c": "Catalog"
+      "c": "Catalog",
+      "i": "Statistics",
+      "q": "Support queue",
+      "u": "My support tickets",
+      "y": "System"
     }
   },
   "Extras": {

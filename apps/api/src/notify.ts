@@ -69,7 +69,11 @@ export const catalog: Record<string, EventDef> = {
     text: { tr: (d) => ({ title: 'Müşteri yazdı: #' + d.number, body: d.subject + ' · ' + d.email }), en: (d) => ({ title: 'Customer wrote: #' + d.number, body: d.subject + ' · ' + d.email }) } },
   'support.assigned': { audience: 'staff', permission: 'support.view', channels: all, defaults: ['inApp', 'push'], link: (d) => '/admin/support/' + d.ticketId,
     text: { tr: (d) => ({ title: 'Size bir talep atandı: #' + d.number, body: d.subject }), en: (d) => ({ title: 'A ticket was assigned to you: #' + d.number, body: d.subject }) } },
-  'auth.sign_in': { audience: 'user', channels: all, defaults: ['inApp', 'email'], link: () => '/account?tab=security',
+  // Every sign-in goes to the inbox; one from a device and network not seen in 90 days is announced loudly.
+  'auth.new_device': { audience: 'user', channels: all, defaults: ['inApp', 'email', 'push'], link: () => '/account?tab=security',
+    text: { tr: (d) => ({ title: 'Yeni bir cihazdan giriş', body: `${d.device} · IP ${d.ip || '-'}. Siz değilseniz hemen parolanızı değiştirin ve oturumları kapatın.` }),
+      en: (d) => ({ title: 'Sign-in from a new device', body: `${d.device} · IP ${d.ip || '-'}. If this was not you, change your password and end your sessions now.` }) } },
+  'auth.sign_in': { audience: 'user', channels: all, defaults: ['inApp'], link: () => '/account?tab=security',
     text: { tr: (d) => ({ title: 'Hesabınıza yeni giriş', body: `IP ${d.ip || '-'} · ${d.agent?.slice(0, 80) || '-'}. Siz değilseniz parolanızı değiştirin.` }),
       en: (d) => ({ title: 'New sign-in to your account', body: `IP ${d.ip || '-'} · ${d.agent?.slice(0, 80) || '-'}. If this was not you, change your password.` }) } },
   'auth.password_changed': { audience: 'user', channels: all, defaults: ['inApp', 'email'], link: () => '/account?tab=security',

@@ -225,6 +225,23 @@ test('SMS: a provider is tested, then phone numbers are verified by SMS code', a
   assert.deepEqual([me.phoneNumber, me.phoneNumberVerified], ['+905321234567', true]);
 });
 
+test('sign-in from a new device and network: a loud notice once; known places only reach the inbox', async () => {
+  const { rows: [s] } = await pool.query("SELECT id FROM users WHERE email = 'support@example.test'");
+  const count = async (event) => (await pool.query('SELECT count(*)::int AS n FROM notifications WHERE user_id = $1 AND event = $2', [s.id, event])).rows[0].n;
+  await post('/auth/sign-in/email', { email: 'support@example.test', password }); // a known place exists
+  const n0 = await count('auth.new_device');
+  const from = (ip) => app.inject({ method: 'POST', url: '/auth/sign-in/email', payload: { email: 'support@example.test', password }, remoteAddress: ip,
+    headers: { ...csrf, 'user-agent': 'Mozilla/5.0 (X11; Linux x86_64; rv:131.0) Gecko/20100101 Firefox/131.0' } });
+  assert.equal((await from('203.0.113.9')).statusCode, 200);
+  assert.ok(await until(async () => (await count('auth.new_device')) === n0 + 1), 'new device and network');
+  const body = (await pool.query("SELECT body FROM notifications WHERE user_id = $1 AND event = 'auth.new_device' ORDER BY created_at DESC LIMIT 1", [s.id])).rows[0].body;
+  assert.match(body, /Firefox · Linux/);
+  // The same device again, even from a nearby address: known.
+  assert.equal((await from('203.0.113.77')).statusCode, 200);
+  await new Promise((r) => setTimeout(r, 1500));
+  assert.equal(await count('auth.new_device'), n0 + 1);
+});
+
 test('notifications follow the admin policy, then the user choice', async () => {
   // A sign-in notifies the user in the panel by default (earlier sign-ins in this file left rows too).
   const { rows: [s] } = await pool.query("SELECT id FROM users WHERE email = 'support@example.test'");

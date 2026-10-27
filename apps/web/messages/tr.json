@@ -2220,8 +2220,8 @@
         "help": "Açma, kapatma, sıfırlama bittiğinde."
       },
       "auth_sign_in": {
-        "title": "Yeni giriş",
-        "help": "Hesabınıza yeni bir giriş yapıldığında."
+        "title": "Her giriş",
+        "help": "Hesabınıza yapılan her giriş, tanıdık yerlerden olanlar da."
       },
       "auth_password_changed": {
         "title": "Parola değişti",
@@ -2310,6 +2310,10 @@
       "support_low_rating": {
         "title": "Düşük puan",
         "help": "Bir müşteri talebe 5 üzerinden 1 ya da 2 verdiğinde."
+      },
+      "auth_new_device": {
+        "title": "Yeni cihazdan giriş",
+        "help": "Hesabınıza son 90 günde görülmemiş bir tarayıcı ve ağdan girildiğinde."
       }
     },
     "policyTitle": "Önce yönetici, sonra kullanıcı",
@@ -3924,7 +3928,11 @@
       "t": "Topoloji",
       "d": "Yönetim özeti",
       "s": "Tüm sunucular",
-      "c": "Katalog"
+      "c": "Katalog",
+      "i": "İstatistikler",
+      "q": "Destek kuyruğu",
+      "u": "Destek taleplerim",
+      "y": "Sistem"
     }
   },
   "Extras": {
