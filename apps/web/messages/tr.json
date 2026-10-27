@@ -5000,7 +5000,7 @@
   "Stats": {
     "eyebrow": "Yönetim",
     "title": "İstatistikler",
-    "intro": "Platformun nasıl büyüdüğü ve çalıştığı; her sayı aynı uzunluktaki önceki dönemle karşılaştırılır. Gün ve saatler UTC’dir.",
+    "intro": "Platformun nasıl büyüdüğü ve çalıştığı; her sayı önceki dönemle karşılaştırılır. Gün ve saatler sizin saat diliminizde ({tz}).",
     "range": "Dönem",
     "ranges": {
       "7": "7 gün",
@@ -5070,11 +5070,33 @@
     },
     "heat": {
       "title": "Ne zaman işlem yapılıyor",
-      "busiest": "En yoğun: {day}, saat {hour}:00 civarı (UTC).",
+      "busiest": "En yoğun: {day}, saat {hour}:00 civarı.",
       "empty": "Bu dönemde işlem yok.",
       "cell": "{day} {hour}:00 — {n} işlem",
       "less": "Az",
       "more": "Çok"
+    },
+    "highlights": {
+      "title": "Öne çıkanlar",
+      "signupsUp": "Yeni hesaplar önceki döneme göre %{pct} arttı.",
+      "signupsDown": "Yeni hesaplar önceki döneme göre %{pct} azaldı.",
+      "ticketsUp": "Destek talepleri %{pct} arttı — ekibin yükü artıyor.",
+      "ticketsDown": "Destek talepleri önceki döneme göre %{pct} azaldı.",
+      "failures": "Sunucu işlemlerinin %{rate} kadarı başarısız oldu — Sistem sayfasına bakmakta yarar var.",
+      "growth": "Dönem başına göre {n} sunucu daha fazla.",
+      "shrink": "Dönem başına göre {n} sunucu daha az.",
+      "peakDay": "En çok sunucu oluşturulan gün: {at} ({n}).",
+      "quiet": "Sakin bir dönem: kayda değer bir değişiklik yok."
+    },
+    "csv": {
+      "button": "CSV indir",
+      "created": "oluşturulan sunucu",
+      "deleted": "silinen sunucu",
+      "signups": "yeni hesap",
+      "opened": "açılan talep",
+      "closed": "kapanan talep",
+      "opsOk": "başarılı işlem",
+      "opsFailed": "başarısız işlem"
     }
   }
 }

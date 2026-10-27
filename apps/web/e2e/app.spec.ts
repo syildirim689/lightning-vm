@@ -906,8 +906,12 @@ test.describe('people, settings and smart features (English browser)', () => {
     await expect(page.getByRole('heading', { name: 'Statistics', level: 1 })).toBeVisible();
     await expect(page.getByText('Live servers', { exact: true })).toBeVisible();
     await expect(page.getByText('When people act')).toBeVisible();
+    await expect(page.getByRole('list', { name: 'Highlights' }).getByRole('listitem').first()).toBeVisible();
     await page.waitForTimeout(2200);
     await shot(page, 'stats');
+    // The series downloads as CSV.
+    const [csv] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'Download CSV' }).click()]);
+    expect(csv.suggestedFilename()).toBe('statistics-30d.csv');
     await page.getByRole('radio', { name: '1 year' }).click();
     await expect(page).toHaveURL(/days=365/);
     await page.waitForTimeout(2000);

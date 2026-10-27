@@ -1,6 +1,6 @@
 // Statistics (Admin → Statistics): growth and activity over a chosen period, each headline number beside the
 // same-length period before it, what the live servers are made of, the biggest customers and when people work.
-// Read-only aggregates over servers, users, operations and tickets. Days and hours are UTC.
+// Read-only aggregates over servers, users, operations and tickets. Days and hours follow the viewer's time zone.
 import { Controller, Get, Query, UseGuards } from '@nestjs/common';
 import { pool } from './db';
 import { Can, PermissionGuard } from './rbac';
@@ -12,30 +12,37 @@ const int = (v: unknown) => Number(v ?? 0);
 const liveAt = (at: string, p = '') => `${p}created_at <= ${at} AND (${p}deleted_at IS NULL OR ${p}deleted_at > ${at}) AND ${p}state <> 'provisioning'`;
 
 // Change against the previous period, in percent; null when there is nothing to compare with.
+// An IANA time zone the runtime knows (PostgreSQL uses the same names); anything else is UTC.
+export function timeZone(v: unknown) {
+  if (typeof v !== 'string' || !/^[A-Za-z_]+(\/[A-Za-z0-9_+-]+){0,2}$/.test(v)) return 'UTC';
+  try { new Intl.DateTimeFormat('en', { timeZone: v }); return v; } catch { return 'UTC'; }
+}
+
 export const change = (now: number, before: number) => (before > 0 ? Math.round(((now - before) / before) * 1000) / 10 : now > 0 ? null : 0);
 
 @Controller('admin/stats') @UseGuards(PermissionGuard)
 export class StatsController {
   @Get() @Can('dashboard.view')
-  async stats(@Query('days') raw?: string) {
+  async stats(@Query('days') raw?: string, @Query('tz') rawTz?: string) {
+    const tz = timeZone(rawTz);
     const days = ranges.find((r) => String(r) === raw) ?? 30;
     // A year is drawn by week; shorter periods by day.
     const unit = days > 90 ? 'week' : 'day';
-    const args = [days, unit];
+    const args = [days, unit, tz];
     const start = 'now() - make_interval(days => $1)', prev = 'now() - make_interval(days => $1 * 2)';
     const q = (sql: string, a: unknown[] = args) => pool.query(sql, a).then((r) => r.rows as Row[]);
 
     const [buckets, created, deleted, signups, opened, closed, ops] = await Promise.all([
-      q(`SELECT generate_series(date_trunc($2, ${start}), date_trunc($2, now()), ('1 ' || $2)::interval) AS at`),
-      q(`SELECT date_trunc($2, created_at) AS at, count(*)::int AS n FROM servers WHERE created_at > ${start} GROUP BY 1`),
-      q(`SELECT date_trunc($2, deleted_at) AS at, count(*)::int AS n FROM servers WHERE deleted_at > ${start} GROUP BY 1`),
-      q(`SELECT date_trunc($2, created_at) AS at, count(*)::int AS n FROM users WHERE created_at > ${start} GROUP BY 1`),
-      q(`SELECT date_trunc($2, created_at) AS at, count(*)::int AS n FROM tickets WHERE created_at > ${start} GROUP BY 1`),
-      q(`SELECT date_trunc($2, closed_at) AS at, count(*)::int AS n FROM tickets WHERE closed_at > ${start} GROUP BY 1`),
-      q(`SELECT date_trunc($2, created_at) AS at, count(*) FILTER (WHERE status = 'succeeded')::int AS ok, count(*) FILTER (WHERE status = 'failed')::int AS failed
+      q(`SELECT to_char(generate_series(date_trunc($2, (${start}) AT TIME ZONE $3), date_trunc($2, now() AT TIME ZONE $3), ('1 ' || $2)::interval), 'YYYY-MM-DD') AS at`),
+      q(`SELECT to_char(date_trunc($2, created_at AT TIME ZONE $3), 'YYYY-MM-DD') AS at, count(*)::int AS n FROM servers WHERE created_at > ${start} GROUP BY 1`),
+      q(`SELECT to_char(date_trunc($2, deleted_at AT TIME ZONE $3), 'YYYY-MM-DD') AS at, count(*)::int AS n FROM servers WHERE deleted_at > ${start} GROUP BY 1`),
+      q(`SELECT to_char(date_trunc($2, created_at AT TIME ZONE $3), 'YYYY-MM-DD') AS at, count(*)::int AS n FROM users WHERE created_at > ${start} GROUP BY 1`),
+      q(`SELECT to_char(date_trunc($2, created_at AT TIME ZONE $3), 'YYYY-MM-DD') AS at, count(*)::int AS n FROM tickets WHERE created_at > ${start} GROUP BY 1`),
+      q(`SELECT to_char(date_trunc($2, closed_at AT TIME ZONE $3), 'YYYY-MM-DD') AS at, count(*)::int AS n FROM tickets WHERE closed_at > ${start} GROUP BY 1`),
+      q(`SELECT to_char(date_trunc($2, created_at AT TIME ZONE $3), 'YYYY-MM-DD') AS at, count(*) FILTER (WHERE status = 'succeeded')::int AS ok, count(*) FILTER (WHERE status = 'failed')::int AS failed
          FROM operations WHERE created_at > ${start} GROUP BY 1`),
     ]);
-    const key = (v: unknown) => new Date(v as string).toISOString();
+    const key = (v: unknown) => String(v);
     const index = (rows: Row[], field = 'n') => new Map(rows.map((r) => [key(r.at), int(r[field])]));
     const [c, d, s, o, cl, ok, bad] = [index(created), index(deleted), index(signups), index(opened), index(closed), index(ops, 'ok'), index(ops, 'failed')];
     const series = buckets.map((b) => { const k = key(b.at); return { at: k, created: c.get(k) ?? 0, deleted: d.get(k) ?? 0, signups: s.get(k) ?? 0, ticketsOpened: o.get(k) ?? 0,
@@ -73,13 +80,13 @@ export class StatsController {
          FROM servers s JOIN users u ON u.id = s.owner_id WHERE ${liveAt('now()', 's.')}
          GROUP BY u.id, s.currency ORDER BY monthly DESC, servers DESC LIMIT 8`, []),
       // When things happen: operations by weekday (1 = Monday) and hour.
-      q(`SELECT extract(isodow FROM created_at)::int AS day, extract(hour FROM created_at)::int AS hour, count(*)::int AS n FROM operations WHERE created_at > ${start} GROUP BY 1, 2`, [days]),
+      q(`SELECT extract(isodow FROM created_at AT TIME ZONE $2)::int AS day, extract(hour FROM created_at AT TIME ZONE $2)::int AS hour, count(*)::int AS n FROM operations WHERE created_at > ${start} GROUP BY 1, 2`, [days, tz]),
     ]);
     const main = money[0];
     const rate = (okN: number, done: number) => (done ? Math.round((okN / done) * 1000) / 10 : null);
     const successRate = rate(int(k.opsOk), int(k.opsDone)), successBefore = rate(int(k.opsOkBefore), int(k.opsDoneBefore));
     return {
-      days, unit,
+      days, unit, tz,
       kpis: {
         servers: { value: int(k.servers), change: change(int(k.servers), int(k.serversBefore)) },
         monthly: main ? { value: main.now, currency: main.currency, change: change(Number(main.now), Number(main.before)) } : null,

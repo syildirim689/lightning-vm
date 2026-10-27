@@ -2,8 +2,8 @@
 // Admin → Statistics: a period (7 days to a year) and, against the period before it, how the platform grew and
 // worked: headline numbers with their trend, growth and activity over time, what the live servers are made of,
 // the biggest customers and when people act (weekday × hour). Everything animates in, except for people who
-// prefer less motion. Data: GET /admin/stats?days=.
-import { Card } from '@heroui/react';
+// prefer less motion. Data: GET /admin/stats?days=&tz= (days and hours in the viewer's time zone).
+import { Button, Card } from '@heroui/react';
 import { motion, useReducedMotion } from 'motion/react';
 import NextLink from 'next/link';
 import { useFormatter, useTranslations } from 'next-intl';
@@ -13,11 +13,12 @@ import CountUp from '../../../../components/count-up';
 import { I } from '../../../../components/icon';
 import { Empty, PageHeader } from '../../../../components/ui';
 import { useApiQuery } from '../../../../lib/query';
+import { highlights, seriesCsv } from '../../../../lib/stats';
 
-type Point = { at: string; created: number; deleted: number; signups: number; ticketsOpened: number; ticketsClosed: number; opsOk: number; opsFailed: number };
+type Point = { at: string; /* YYYY-MM-DD, a local day */ created: number; deleted: number; signups: number; ticketsOpened: number; ticketsClosed: number; opsOk: number; opsFailed: number };
 type Kpi = { value: number; change: number | null };
 type Stats = {
-  days: number; unit: 'day' | 'week';
+  days: number; unit: 'day' | 'week'; tz: string;
   kpis: { servers: Kpi; monthly: (Kpi & { currency: string }) | null; signups: Kpi & { total: number }; tickets: Kpi & { rating: number | null; firstResponseHours: number | null };
     successRate: { value: number | null; change: number | null }; resources: { vcpu: number; memoryGb: number; diskGb: number } };
   currencies: { currency: string; now: number; before: number; servers: number }[];
@@ -38,21 +39,26 @@ export default function Statistics() {
   const format = useFormatter();
   const reduce = useReducedMotion();
   const [days, setDays] = useQueryState('days', parseAsInteger.withDefault(30));
-  const q = useApiQuery<Stats>(['admin', 'stats', days], `/admin/stats?days=${days}`, { refetchInterval: 60_000 });
+  const tz = typeof Intl !== 'undefined' ? Intl.DateTimeFormat().resolvedOptions().timeZone : 'UTC';
+  const q = useApiQuery<Stats>(['admin', 'stats', days, tz], `/admin/stats?days=${days}&tz=${encodeURIComponent(tz)}`, { refetchInterval: 60_000 });
   const s = q.data;
-  const label = (iso: string) => format.dateTime(new Date(iso), s?.unit === 'week' ? { day: 'numeric', month: 'short' } : days <= 7 ? { weekday: 'short', day: 'numeric' } : { day: 'numeric', month: 'short' });
+  // A local calendar day from the API, read as such (not as UTC midnight).
+  const day = (ymd: string) => { const [y, m, d] = ymd.split('-').map(Number); return new Date(y, m - 1, d); };
+  const label = (ymd: string) => format.dateTime(day(ymd), s?.unit === 'week' ? { day: 'numeric', month: 'short' } : days <= 7 ? { weekday: 'short', day: 'numeric' } : { day: 'numeric', month: 'short' });
   const series = (s?.series ?? []).map((p) => ({ ...p, label: label(p.at), net: p.created - p.deleted }));
   const anim = { isAnimationActive: !reduce, animationDuration: 900 };
 
   return <div className="flex flex-col gap-6">
-    <PageHeader eyebrow={t('eyebrow')} title={t('title')} description={t('intro')} actions={
+    <PageHeader eyebrow={t('eyebrow')} title={t('title')} description={t('intro', { tz: s?.tz ?? tz })} actions={<div className="flex flex-wrap items-center gap-2">
+      <Button variant="secondary" isDisabled={!s} onPress={() => s && download(`statistics-${days}d.csv`, seriesCsv(s.series, ['date', ...(['created', 'deleted', 'signups', 'opened', 'closed', 'opsOk', 'opsFailed'] as const).map((k) => t(`csv.${k}`))]))}>
+        <I name="download" size={16}/>{t('csv.button')}</Button>
       <div role="radiogroup" aria-label={t('range')} className="relative flex rounded-full border border-border bg-surface p-1">
         {ranges.map((r) => <button key={r} type="button" role="radio" aria-checked={days === r} onClick={() => void setDays(r === 30 ? null : r)}
           className={`relative min-h-9 rounded-full px-3 text-sm font-medium transition-colors focus-visible:outline-2 focus-visible:outline-accent ${days === r ? 'text-accent-foreground' : 'text-muted hover:text-foreground'}`}>
           {days === r && <motion.span layoutId="stats-range" className="absolute inset-0 rounded-full bg-accent" transition={{ type: 'spring', stiffness: 500, damping: 38 }}/>}
           <span className="relative">{t(`ranges.${r}`)}</span>
         </button>)}
-      </div>}/>
+      </div></div>}/>
 
     {!s ? <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">{[...Array(5)].map((_, i) => <div key={i} className="h-36 animate-pulse rounded-3xl bg-default/50"/>)}</div> : <>
       {/* Headline numbers, each against the period before. */}
@@ -68,6 +74,17 @@ export default function Statistics() {
           spark={series.map((p) => p.opsOk)}
           format={(n) => (s.kpis.successRate.value == null ? '–' : `${format.number(n, { maximumFractionDigits: 1 })}%`)} hint={t('kpi.successHint')}/>
       </div>
+
+      {/* The numbers in words: what changed most, what needs a look. */}
+      <ul aria-label={t('highlights.title')} className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        {highlights(s.kpis, s.series).map((h, j) => <motion.li key={h.key} {...(reduce ? {} : { initial: { opacity: 0, scale: 0.94 }, animate: { opacity: 1, scale: 1 }, transition: { delay: 0.35 + j * 0.08, type: 'spring', stiffness: 300, damping: 22 } })}
+          className={`flex items-start gap-3 rounded-2xl border px-4 py-3 text-sm ${{ success: 'border-success/30 bg-success/5', warning: 'border-warning/30 bg-warning/5', danger: 'border-danger/30 bg-danger/5', accent: 'border-accent/30 bg-accent/5' }[h.tone]}`}>
+          <span aria-hidden className={`mt-0.5 grid size-7 shrink-0 place-items-center rounded-full ${{ success: 'bg-success/15 text-success', warning: 'bg-warning/15 text-warning', danger: 'bg-danger/15 text-danger', accent: 'bg-accent/15 text-accent' }[h.tone]}`}>
+            <I name={({ signupsUp: 'trending-up', signupsDown: 'trending-down', ticketsUp: 'life-buoy', ticketsDown: 'life-buoy', failures: 'triangle-alert', growth: 'rocket', shrink: 'trending-down', peakDay: 'calendar-days', quiet: 'coffee' } as Record<string, string>)[h.key]} size={15}/>
+          </span>
+          <span>{t(`highlights.${h.key}`, { ...h.values, ...(h.key === 'peakDay' ? { at: format.dateTime(day(String(h.values.at)), { weekday: 'long', day: 'numeric', month: 'long' }) } : {}) })}</span>
+        </motion.li>)}
+      </ul>
 
       {/* What the live servers use. */}
       <motion.div {...rise(5, reduce)} className="grid grid-cols-3 gap-px overflow-hidden rounded-3xl border border-border bg-separator">
@@ -137,6 +154,14 @@ export default function Statistics() {
       </div>
     </>}
   </div>;
+}
+
+// Saves text as a file in the browser (no server round-trip).
+function download(name: string, text: string) {
+  const url = URL.createObjectURL(new Blob(['\ufeff' + text], { type: 'text/csv;charset=utf-8' }));
+  const a = Object.assign(document.createElement('a'), { href: url, download: name });
+  document.body.append(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 function Delta({ change, invert, points }: { change: number | null; invert?: boolean; points?: boolean }) {

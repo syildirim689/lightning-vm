@@ -5000,7 +5000,7 @@
   "Stats": {
     "eyebrow": "Administration",
     "title": "Statistics",
-    "intro": "How the platform grows and works, each number against the period before it. Days and hours are UTC.",
+    "intro": "How the platform grows and works, each number against the period before it. Days and hours in your time zone ({tz}).",
     "range": "Period",
     "ranges": {
       "7": "7 days",
@@ -5070,11 +5070,33 @@
     },
     "heat": {
       "title": "When people act",
-      "busiest": "Busiest: {day} around {hour}:00 (UTC).",
+      "busiest": "Busiest: {day} around {hour}:00.",
       "empty": "No operations in this period.",
       "cell": "{day} {hour}:00 — {n, plural, one {# operation} other {# operations}}",
       "less": "Less",
       "more": "More"
+    },
+    "highlights": {
+      "title": "Highlights",
+      "signupsUp": "New accounts are up {pct}% on the period before.",
+      "signupsDown": "New accounts are down {pct}% on the period before.",
+      "ticketsUp": "Support tickets are up {pct}% — more load on the team.",
+      "ticketsDown": "Support tickets are down {pct}% on the period before.",
+      "failures": "{rate}% of server operations failed — worth a look in System.",
+      "growth": "{n, plural, one {# more server} other {# more servers}} than at the start of the period.",
+      "shrink": "{n, plural, one {# server fewer} other {# servers fewer}} than at the start of the period.",
+      "peakDay": "Busiest day for new servers: {at} ({n}).",
+      "quiet": "A quiet period: nothing changed much."
+    },
+    "csv": {
+      "button": "Download CSV",
+      "created": "servers created",
+      "deleted": "servers deleted",
+      "signups": "new accounts",
+      "opened": "tickets opened",
+      "closed": "tickets closed",
+      "opsOk": "operations succeeded",
+      "opsFailed": "operations failed"
     }
   }
 }

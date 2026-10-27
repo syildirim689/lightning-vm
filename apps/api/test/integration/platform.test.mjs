@@ -691,6 +691,12 @@ test('statistics: a period against the one before, a bucket per day (per week fo
   assert.equal(year.unit, 'week');
   assert.ok(year.series.length >= 52 && year.series.length <= 54);
   assert.equal((await get('/admin/stats?days=3', admin)).json().days, 30, 'unknown period: 30 days');
+  // Days follow the viewer's time zone; an unknown or unsafe zone is UTC.
+  const ist = (await get('/admin/stats?days=7&tz=Europe/Istanbul', admin)).json();
+  assert.equal(ist.tz, 'Europe/Istanbul');
+  assert.match(ist.series.at(-1).at, /^\d{4}-\d{2}-\d{2}$/);
+  assert.equal(ist.series.reduce((n, p) => n + p.signups, 0), ist.kpis.signups.value);
+  for (const bad of ['Nowhere/City', "UTC'; DROP TABLE users;--"]) assert.equal((await get('/admin/stats?days=7&tz=' + encodeURIComponent(bad), admin)).json().tz, 'UTC');
   assert.equal((await get('/admin/stats', user)).statusCode, 403);
 });
 
