@@ -284,6 +284,12 @@ test('insights explain what needs attention; the task list starts empty', async 
   const staff = (await get('/admin/insights', admin)).json().insights.map((i) => i.code);
   assert.ok(staff.includes('BACKUP_NEVER') && staff.includes('ADMINS_WITHOUT_2FA') && staff.includes('MAIL_NOT_CONFIGURED'), staff.join());
   assert.equal((await get('/admin/insights', user)).statusCode, 403);
+  // A staff account unused for 90 days is pointed out; one used recently is not.
+  assert.ok(!staff.includes('STAFF_INACTIVE'));
+  const idle = (await post('/auth/admin/create-user', { email: 'idle-staff@example.test', password, name: 'Idle', role: 'support' }, admin)).json().user.id;
+  await pool.query("UPDATE users SET created_at = now() - interval '200 days', last_seen_at = now() - interval '120 days' WHERE id = $1", [idle]);
+  assert.equal((await get('/admin/insights', admin)).json().insights.find((i) => i.code === 'STAFF_INACTIVE')?.params.count, 1);
+  await post('/auth/admin/remove-user', { userId: idle }, admin);
   const mine = (await get('/insights', user)).json().insights.map((i) => i.code);
   assert.ok(mine.includes('NO_SSH_KEYS'), mine.join());
   assert.ok(!mine.includes('ENABLE_2FA'), 'two-factor is on for this user');

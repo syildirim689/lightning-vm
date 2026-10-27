@@ -2180,6 +2180,10 @@
       "OFF_BUT_BILLED": {
         "title": "{name} {days} gündür kapalı",
         "body": "Kapalı sunucular da ücretlendirilir ({price} {currency}/ay). Artık gerekmiyorsa silerek tasarruf edebilirsiniz."
+      },
+      "STAFF_INACTIVE": {
+        "title": "{count} personel hesabı 90 gündür kullanılmadı",
+        "body": "Yetkili ama kullanılmayan hesaplar risktir: gerekmeyenleri yasaklayın ya da kaldırın."
       }
     }
   },

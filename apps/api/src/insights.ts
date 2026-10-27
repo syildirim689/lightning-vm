@@ -76,6 +76,10 @@ export async function staffInsights(): Promise<Insight[]> {
 
   const { rows: [a] } = await pool.query(`SELECT count(*)::int AS n FROM users WHERE 'admin' = ANY(string_to_array(coalesce(role, ''), ',')) AND NOT two_factor_enabled AND NOT coalesce(banned, false)`);
   if (a.n) add('ADMINS_WITHOUT_2FA', 'warning', { count: a.n }, '/admin/users');
+  // Staff accounts nobody has used for 90 days: open doors with permissions (worth disabling or removing).
+  const { rows: [idle] } = await pool.query(`SELECT count(*)::int AS n FROM users WHERE coalesce(role, 'user') <> 'user' AND NOT coalesce(banned, false) AND disabled_at IS NULL
+    AND created_at < now() - interval '90 days' AND coalesce(last_seen_at, (SELECT max(s.created_at) FROM auth_sessions s WHERE s.user_id = users.id), created_at) < now() - interval '90 days'`);
+  if (idle.n) add('STAFF_INACTIVE', 'warning', { count: idle.n }, '/admin/users');
   const { rows: [reg] } = await pool.query("SELECT value FROM settings WHERE key = 'registration_open'");
   const captcha = await activeCaptcha();
   if (reg?.value === true && !(captcha && captcha.use.signUp)) add('REGISTRATION_WITHOUT_CAPTCHA', 'info', {}, '/admin/settings?tab=captcha');

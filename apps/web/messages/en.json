@@ -2180,6 +2180,10 @@
       "OFF_BUT_BILLED": {
         "title": "{name} has been off for {days} days",
         "body": "Servers that are off are still billed ({price} {currency} a month). If you no longer need it, delete it to save."
+      },
+      "STAFF_INACTIVE": {
+        "title": "{count, plural, one {# staff account has} other {# staff accounts have}} not been used for 90 days",
+        "body": "Unused accounts with permissions are a risk: ban or remove the ones nobody needs."
       }
     }
   },
