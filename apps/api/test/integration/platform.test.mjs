@@ -338,6 +338,26 @@ test('updates from the panel: requests go to the host agent, validated, one at a
   assert.deepEqual([m.agent.installed, m.agent.pending, m.agent.status.state, m.agent.log.length], [true, 1, 'running', 2]);
 });
 
+test("this server's settings: checked here, sent to the host agent, recorded details read back", async () => {
+  const { rmSync } = await import('node:fs');
+  for (const x of readdirSync(`${maint}/requests`)) rmSync(`${maint}/requests/${x}`);
+  writeFileSync(`${maint}/status.json`, JSON.stringify({ id: '00000000-0000-0000-0000-000000000000', action: 'update', state: 'succeeded', startedAt: new Date().toISOString(), finishedAt: '', exitCode: 0, code: '' }));
+  assert.equal((await post('/admin/host', { hostname: 'panel' }, user)).statusCode, 403);
+  assert.deepEqual((await post('/admin/host', { hostname: 'bad name', timezone: 'Mars/Base', ntp: 'a;b', dns: 'dns.google' }, admin)).json().fields,
+    { hostname: 'INVALID_HOSTNAME', timezone: 'INVALID_VALUE', ntp: 'INVALID_VALUE', dns: 'INVALID_VALUE' });
+  const r = await post('/admin/host', { hostname: 'Panel-1.example.com', timezone: 'Europe/Istanbul', ntp: 'time.cloudflare.com', dns: '1.1.1.1, 9.9.9.9' }, admin);
+  assert.equal(r.statusCode, 202, r.body);
+  const content = readFile(`${maint}/requests/${r.json().id}.req`, 'utf8');
+  assert.match(content, /^action=host\nhostname=panel-1\.example\.com\ntimezone=Europe\/Istanbul\nntp=time\.cloudflare\.com\ndns=1\.1\.1\.1,9\.9\.9\.9\nby=[0-9a-f-]{36}\nid=[0-9a-f-]{36}\n$/);
+  assert.equal((await post('/admin/host', {}, admin)).json().code, 'MAINTENANCE_BUSY');
+  writeFileSync(`${maint}/host.json`, JSON.stringify({ checkedAt: new Date().toISOString(), time: Math.floor(Date.now() / 1000), hostname: 'panel-1', fqdn: 'panel-1.example.com', timezone: 'Europe/Istanbul',
+    ntp: 'yes', ntpSynced: 'yes', ntpServers: 'time.cloudflare.com', dnsServers: '1.1.1.1,9.9.9.9', resolvers: '127.0.0.53', timesyncd: true, resolved: true, os: 'Ubuntu 24.04', kernel: '6.8', uptime: 3600 }));
+  const h = (await get('/admin/host', admin)).json();
+  assert.equal(h.host.fqdn, 'panel-1.example.com');
+  assert.equal(h.agent.installed, true);
+  rmSync(`${maint}/requests/${r.json().id}.req`);
+});
+
 test('several API copies: a role change made on one copy reaches the others at once', async () => {
   // A second copy is a separate process with its own in-memory roles, subscribed like a real one.
   const { spawn } = await import('node:child_process');
@@ -743,6 +763,15 @@ test('single sign-on (OIDC): checked settings, accounts created with roles from 
     await put('/admin/settings/directory/sso', { oidc: { enabled: false } }, admin);
     await idp.close();
   }
+});
+
+test('time zone: chosen per person, checked, back to the browser with null', async () => {
+  assert.equal((await get('/auth/me', user)).json().timeZone, null);
+  assert.equal((await put('/account/time-zone', { timeZone: 'Mars/Base' }, user)).statusCode, 400);
+  assert.equal((await put('/account/time-zone', { timeZone: 'Europe/Istanbul' }, user)).json().timeZone, 'Europe/Istanbul');
+  assert.equal((await get('/auth/me', user)).json().timeZone, 'Europe/Istanbul');
+  assert.equal((await put('/account/time-zone', { timeZone: null }, user)).json().timeZone, null);
+  assert.equal((await get('/auth/me', user)).json().timeZone, null);
 });
 
 test('quiet hours: checked, kept with the preferences, and turned off with null', async () => {

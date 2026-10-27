@@ -4,6 +4,7 @@
 import { Controller, Get, Query, UseGuards } from '@nestjs/common';
 import { pool } from './db';
 import { Can, PermissionGuard } from './rbac';
+import { validTimeZone } from './time-zone';
 
 export const ranges = [7, 30, 90, 365] as const;
 type Row = Record<string, unknown>;
@@ -12,19 +13,13 @@ const int = (v: unknown) => Number(v ?? 0);
 const liveAt = (at: string, p = '') => `${p}created_at <= ${at} AND (${p}deleted_at IS NULL OR ${p}deleted_at > ${at}) AND ${p}state <> 'provisioning'`;
 
 // Change against the previous period, in percent; null when there is nothing to compare with.
-// An IANA time zone the runtime knows (PostgreSQL uses the same names); anything else is UTC.
-export function timeZone(v: unknown) {
-  if (typeof v !== 'string' || !/^[A-Za-z_]+(\/[A-Za-z0-9_+-]+){0,2}$/.test(v)) return 'UTC';
-  try { new Intl.DateTimeFormat('en', { timeZone: v }); return v; } catch { return 'UTC'; }
-}
-
 export const change = (now: number, before: number) => (before > 0 ? Math.round(((now - before) / before) * 1000) / 10 : now > 0 ? null : 0);
 
 @Controller('admin/stats') @UseGuards(PermissionGuard)
 export class StatsController {
   @Get() @Can('dashboard.view')
   async stats(@Query('days') raw?: string, @Query('tz') rawTz?: string) {
-    const tz = timeZone(rawTz);
+    const tz = validTimeZone(rawTz) ?? 'UTC';
     const days = ranges.find((r) => String(r) === raw) ?? 30;
     // A year is drawn by week; shorter periods by day.
     const unit = days > 90 ? 'week' : 'day';

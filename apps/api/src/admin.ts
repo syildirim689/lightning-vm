@@ -4,7 +4,8 @@ import { pool } from './db';
 import { apiError } from './errors';
 import { audit, type AuthedRequest } from './auth';
 import { Can, PermissionGuard } from './rbac';
-import { agentStatus, pendingRequests, queueRequest, releases, runLog, settings as maintenanceSettings, summary } from './maintenance';
+import { agentStatus, hostInfo, pendingRequests, queueRequest, releases, runLog, settings as maintenanceSettings, summary } from './maintenance';
+import { readHostChange } from './host-rules';
 
 @Controller('admin') @UseGuards(PermissionGuard)
 export class AdminController {
@@ -46,6 +47,30 @@ export class AdminController {
     if (pendingRequests() > 0 || running) throw apiError(409, 'MAINTENANCE_BUSY', 'Another maintenance task is queued or running');
     const id = queueRequest({ ...out, by: req.user.id });
     await audit(req, 'maintenance.request', 'success', req.user.id, { id, ...out });
+    return { id };
+  }
+
+  // This server's own settings: what the agent last recorded, and the agent's state.
+  @Get('host') @Can('system.view')
+  host() {
+    const status = agentStatus();
+    // serverTime: this machine's clock now (the API shares it), to compare with the viewer's.
+    return { host: hostInfo(), serverTime: Date.now(), agent: { installed: maintenanceSettings().agent === 'on', pending: Math.max(0, pendingRequests()), status: status?.action === 'host' ? status : null,
+      log: status?.action === 'host' ? runLog(status.id) : [] } };
+  }
+
+  // Changes the server's name, time zone, time servers or DNS servers through the host agent (it checks again).
+  // Without changes it only refreshes the recorded details.
+  @Post('host') @HttpCode(202) @Can('system.update')
+  async changeHost(@Req() req: AuthedRequest, @Body() body: Record<string, unknown>) {
+    const { change, fields } = readHostChange(body ?? {});
+    if (Object.keys(fields).length) throw apiError(400, 'VALIDATION_FAILED', 'Invalid input', fields);
+    if (maintenanceSettings().agent !== 'on' || pendingRequests() < 0) throw apiError(409, 'MAINTENANCE_AGENT_MISSING', 'The host agent is not installed (sudo sh scripts/install.sh agent on)');
+    const status = agentStatus();
+    const running = status?.state === 'running' && Date.now() - Date.parse(status.startedAt) < 3 * 3600_000;
+    if (pendingRequests() > 0 || running) throw apiError(409, 'MAINTENANCE_BUSY', 'Another maintenance task is queued or running');
+    const id = queueRequest({ action: 'host', ...change, by: req.user.id });
+    await audit(req, 'system.host', 'success', req.user.id, { id, ...change });
     return { id };
   }
 

@@ -14,6 +14,8 @@ import { I } from '../../../../components/icon';
 import { Empty, PageHeader } from '../../../../components/ui';
 import { useApiQuery } from '../../../../lib/query';
 import { highlights, seriesCsv } from '../../../../lib/stats';
+import { useMe } from '../../../../lib/me';
+import { browserTimeZone } from '../../../../components/time-zone-picker';
 
 type Point = { at: string; /* YYYY-MM-DD, a local day */ created: number; deleted: number; signups: number; ticketsOpened: number; ticketsClosed: number; opsOk: number; opsFailed: number };
 type Kpi = { value: number; change: number | null };
@@ -39,7 +41,8 @@ export default function Statistics() {
   const format = useFormatter();
   const reduce = useReducedMotion();
   const [days, setDays] = useQueryState('days', parseAsInteger.withDefault(30));
-  const tz = typeof Intl !== 'undefined' ? Intl.DateTimeFormat().resolvedOptions().timeZone : 'UTC';
+  const me = useMe();
+  const tz = me?.timeZone ?? browserTimeZone();
   const q = useApiQuery<Stats>(['admin', 'stats', days, tz], `/admin/stats?days=${days}&tz=${encodeURIComponent(tz)}`, { refetchInterval: 60_000 });
   const s = q.data;
   // A local calendar day from the API, read as such (not as UTC midnight).

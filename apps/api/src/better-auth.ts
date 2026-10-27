@@ -92,6 +92,7 @@ function createAuth() {
       additionalFields: {
         locale: { type: ['tr', 'en'], required: false, defaultValue: 'en', input: true },
         authSource: { type: 'string', required: false, defaultValue: 'local', input: false, fieldName: 'auth_source' },
+        timeZone: { type: 'string', required: false, input: false, fieldName: 'time_zone' },
         disabledAt: { type: 'date', required: false, input: false, fieldName: 'disabled_at' },
       },
       changeEmail: { enabled: false },

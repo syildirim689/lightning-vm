@@ -12,6 +12,8 @@ import { findServer } from './servers';
 import { mailReady } from './settings-store';
 import { budgetState, checkBudget } from './budget';
 import { cleanLabels, health, monthCost, sizing, type CpuStats } from './smart-rules';
+import { publishLive } from './live-bus';
+import { validTimeZone } from './time-zone';
 
 // CPU of the servers given over the last 7 days (server_cpu_samples, written with each energy sample).
 export async function cpuStats(ids: string[]): Promise<Map<string, CpuStats>> {
@@ -142,6 +144,20 @@ export class DigestController {
   }
 }
 
+// The person's time zone for dates and times in the panel; null goes back to the browser's.
+@Controller('account') @UseGuards(SessionGuard)
+export class TimeZoneController {
+  @Put('time-zone')
+  async set(@Req() req: AuthedRequest, @Body() body: { timeZone?: unknown }) {
+    const tz = body?.timeZone === null ? null : validTimeZone(body?.timeZone);
+    if (body?.timeZone !== null && !tz) throw apiError(400, 'VALIDATION_FAILED', 'Invalid input', { timeZone: 'INVALID_VALUE' });
+    await pool.query('UPDATE users SET time_zone = $2, updated_at = now() WHERE id = $1', [req.user.id, tz]);
+    await audit(req, 'account.time_zone', 'success', req.user.id, { timeZone: tz });
+    await publishLive(req.user.id, 'account');
+    return { timeZone: tz };
+  }
+}
+
 // "Export my data": everything the panel keeps about the signed-in person, as one JSON file. No secrets: no
 // password hashes, session tokens, root passwords, two-factor secrets or messaging-app addresses.
 @Controller('account') @UseGuards(SessionGuard)
@@ -151,7 +167,7 @@ export class AccountExportController {
     const id = req.user.id;
     const q = async (sql: string) => (await pool.query(sql, [id])).rows;
     const [profile] = await q(`SELECT email, name, locale, coalesce(role, 'user') AS roles, created_at AS "createdAt", two_factor_enabled AS "twoFactorEnabled", phone_number AS "phoneNumber",
-      phone_number_verified AS "phoneNumberVerified", budget_monthly::text AS "budgetMonthly", budget_currency AS "budgetCurrency", quiet_hours AS "quietHours" FROM users WHERE id = $1`);
+      phone_number_verified AS "phoneNumberVerified", budget_monthly::text AS "budgetMonthly", budget_currency AS "budgetCurrency", quiet_hours AS "quietHours", time_zone AS "timeZone" FROM users WHERE id = $1`);
     const data = {
       exportedAt: new Date().toISOString(),
       profile,

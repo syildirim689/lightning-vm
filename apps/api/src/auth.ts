@@ -10,7 +10,8 @@ import { getSettings } from './settings-store';
 
 // roles: the role keys; permissions: the effective set ('*' for administrators). impersonatedBy: the staff
 // member signed in as this user, if any.
-export type User = { id: string; email: string; name: string; roles: string[]; permissions: string[]; locale: 'tr' | 'en'; twoFactorRequired?: boolean;
+// timeZone: the person's chosen zone, or null for their browser's.
+export type User = { id: string; email: string; name: string; roles: string[]; permissions: string[]; locale: 'tr' | 'en'; timeZone: string | null; twoFactorRequired?: boolean;
   impersonatedBy: string | null; twoFactorEnabled: boolean; phoneNumber: string | null; phoneNumberVerified: boolean };
 // sessionToken: better-auth's stored token; the console gateway keys its revocations on its hash.
 export type AuthedRequest = FastifyRequest & { user: User; sessionToken: string };
@@ -54,7 +55,7 @@ export async function currentSession(req: FastifyRequest): Promise<{ user: User;
   // Single sign-on accounts have no panel password: their provider does the second factor.
   const twoFactorRequired = !u.twoFactorEnabled && !impersonatedBy && (u as { authSource?: string }).authSource !== 'oidc' && (policy === 'all' || (policy === 'staff' && staff) || !!limits.require2fa);
   return { user: { id: u.id, email: u.email, name: u.name ?? '', roles: splitRoles(u.role), permissions,
-    locale: u.locale === 'tr' ? 'tr' : 'en', impersonatedBy, twoFactorEnabled: !!u.twoFactorEnabled, twoFactorRequired, phoneNumber: u.phoneNumber ?? null,
+    locale: u.locale === 'tr' ? 'tr' : 'en', timeZone: (u as { timeZone?: string | null }).timeZone ?? null, impersonatedBy, twoFactorEnabled: !!u.twoFactorEnabled, twoFactorRequired, phoneNumber: u.phoneNumber ?? null,
     phoneNumberVerified: !!u.phoneNumberVerified }, token: s.session.token };
 }
 export const currentUser = async (req: FastifyRequest) => (await currentSession(req))?.user ?? null;

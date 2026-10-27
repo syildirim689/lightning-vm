@@ -1,13 +1,13 @@
 "use client";
 import { Button, Tabs, toast } from '@heroui/react';
 import { useQueryClient } from '@tanstack/react-query';
-import { useTranslations } from 'next-intl';
+import { useFormatter, useNow, useTranslations } from 'next-intl';
 import { parseAsString, useQueryState } from 'nuqs';
 import { useEffect, useState } from 'react';
 import { AccessibilitySettings } from '../../../components/accessibility';
 import { I } from '../../../components/icon';
 import { Section, TextInput } from '../../../components/ui';
-import { useErrorText } from '../../../lib/api';
+import { apiFetch, useErrorText } from '../../../lib/api';
 import { authClient } from '../../../lib/auth-client';
 import { useMe } from '../../../lib/me';
 import { SshKeys } from '../servers-ui';
@@ -16,6 +16,7 @@ import NotificationPrefs from './notifications';
 import Security from './security';
 import { PhoneNumber, TwoFactor } from './two-factor';
 import { MyActivity } from '../../../components/activity';
+import TimeZonePicker, { browserTimeZone } from '../../../components/time-zone-picker';
 
 // Name and language; the e-mail address is the sign-in name and changes only through an administrator.
 function Profile() {
@@ -42,6 +43,35 @@ function Profile() {
   </Section>;
 }
 
+// Time zone for every date and time in the panel (and the statistics' days); empty: the browser's.
+function Regional() {
+  const t = useTranslations('Account.regional');
+  const { error } = useErrorText();
+  const client = useQueryClient();
+  const me = useMe();
+  const format = useFormatter();
+  const now = useNow({ updateInterval: 1000 });
+  const [busy, setBusy] = useState(false);
+  if (!me) return null;
+  const zone = me.timeZone ?? browserTimeZone();
+  async function pick(v: string) {
+    if ((v || null) === me!.timeZone) return;
+    setBusy(true);
+    try { await apiFetch('/account/time-zone', { method: 'PUT', body: { timeZone: v || null } }); toast.success(t('saved')); await client.invalidateQueries({ queryKey: ['me'] }); }
+    catch (e) { toast.danger(error(e)); } finally { setBusy(false); }
+  }
+  return <Section title={t('title')} description={t('intro')}>
+    <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
+      <TimeZonePicker label={t('timeZone')} value={me.timeZone ?? ''} onChange={pick} autoLabel={t('auto')} isDisabled={busy} help={t('help')}/>
+      <div className="rounded-2xl border border-border bg-surface px-4 py-3 text-center">
+        <p className="text-xs uppercase tracking-wider text-muted">{t('now')}</p>
+        <p className="text-2xl font-semibold tabular-nums">{format.dateTime(now, { hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: zone })}</p>
+        <p className="text-xs text-muted">{format.dateTime(now, { weekday: 'long', day: 'numeric', month: 'long', timeZone: zone })}</p>
+      </div>
+    </div>
+  </Section>;
+}
+
 const tabs = ['profile', 'security', 'activity', 'notifications', 'accessibility', 'keys', 'projects'] as const;
 export default function AccountTabs() {
   const t = useTranslations('Account');
@@ -50,7 +80,7 @@ export default function AccountTabs() {
     <Tabs.ListContainer className="overflow-x-auto">
       <Tabs.List aria-label={t('title')}>{tabs.map((k) => <Tabs.Tab key={k} id={k} className="whitespace-nowrap">{t(`tabs.${k}`)}<Tabs.Indicator/></Tabs.Tab>)}</Tabs.List>
     </Tabs.ListContainer>
-    <Tabs.Panel id="profile" className="flex flex-col gap-6 pt-5"><Profile/><ExportData/></Tabs.Panel>
+    <Tabs.Panel id="profile" className="flex flex-col gap-6 pt-5"><Profile/><Regional/><ExportData/></Tabs.Panel>
     <Tabs.Panel id="security" className="flex flex-col gap-6 pt-5">
       <Section title={t('twoFactor.sectionTitle')} description={t('twoFactor.sectionIntro')}>
         <div className="grid gap-8 lg:grid-cols-2"><TwoFactor/><PhoneNumber/></div>

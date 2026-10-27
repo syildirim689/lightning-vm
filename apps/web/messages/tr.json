@@ -1959,6 +1959,15 @@
       "title": "Verilerimi indir",
       "help": "Hesabınız, sunucularınız, anahtarlarınız, bildirimleriniz ve etkinlik kaydınız tek bir JSON dosyası olarak. Parola, oturum anahtarı gibi gizli bilgiler dosyada yer almaz.",
       "button": "JSON olarak indir"
+    },
+    "regional": {
+      "title": "Bölge",
+      "intro": "Paneldeki tüm tarih ve saatlerin (istatistikler dahil) saat dilimi.",
+      "timeZone": "Saat dilimi",
+      "auto": "Otomatik (bu tarayıcı)",
+      "help": "Otomatik, kullandığınız cihaza göre belirlenir.",
+      "now": "Şu anki saatiniz",
+      "saved": "Saat dilimi kaydedildi"
     }
   },
   "AuthLayout": {
@@ -5097,6 +5106,57 @@
       "closed": "kapanan talep",
       "opsOk": "başarılı işlem",
       "opsFailed": "başarısız işlem"
+    }
+  },
+  "HostSettings": {
+    "title": "Bu sunucu",
+    "intro": "Panelin çalıştığı makine: adı, saati ve saat dilimi, zaman sunucuları ve DNS sunucuları. Değişiklikleri sunucudaki ajan yeniden denetleyip uygular.",
+    "refresh": "Bilgileri yenile",
+    "refreshQueued": "Ajan güncel bilgileri kaydedecek",
+    "agentMissingTitle": "Sunucu ajanı kurulu değil",
+    "agentMissing": "Sunucu ayarlarını ajan uygular. Sunucuda bir kez kurun:",
+    "noDetails": "Henüz bilgi kaydedilmedi: “Bilgileri yenile”ye basın.",
+    "serverClock": "Sunucu saati",
+    "synced": "Eşitlendi (NTP)",
+    "notSynced": "Eşitlenmedi",
+    "driftNone": "Bilgisayarınızla aynı saat",
+    "driftAhead": "Bilgisayarınızdan {s} saniye ileride",
+    "driftBehind": "Bilgisayarınızdan {s} saniye geride",
+    "hostname": "Sunucu adı (hostname)",
+    "os": "İşletim sistemi",
+    "kernel": "Çekirdek",
+    "uptime": "Çalışma süresi",
+    "uptimeValue": "{days, plural, =0 {} other {# gün }}{hours} sa",
+    "ntpServers": "Zaman sunucuları",
+    "distroDefault": "Dağıtımın varsayılanı",
+    "resolvers": "DNS sunucuları",
+    "recorded": "{when} kaydedildi.",
+    "timezone": "Saat dilimi",
+    "hostnameHelp": "Küçük harf, rakam, tire ve nokta (ör. panel ya da panel.example.com). /etc/hosts dosyasına da eklenir.",
+    "timezoneHelp": "Kayıtlar, yedekler ve güncelleme penceresi buna göre çalışır.",
+    "ntp": "Zaman sunucuları (NTP)",
+    "ntpHelp": "Virgülle ayrılmış en fazla dört ad ya da adres; boş: dağıtımın varsayılanı.",
+    "noTimesyncd": "systemd-timesyncd kurulu değil: zaman sunucuları buradan ayarlanamaz (chrony ya da ntpd kendi ayarlarını kullanır).",
+    "dns": "DNS sunucuları",
+    "dnsHelp": "Virgülle ayrılmış en fazla dört IP adresi; boş: ağın verdiği.",
+    "noResolved": "systemd-resolved çalışmıyor: DNS bu sunucuda başka bir yolla yönetiliyor.",
+    "apply": "Sunucuya uygula",
+    "cancel": "Vazgeç",
+    "confirmTitle": "Bu sunucunun ayarları değiştirilsin mi?",
+    "queued": "Sunucu ajanına gönderildi",
+    "pending": "{n} değişiklik henüz uygulanmadı",
+    "change": {
+      "hostname": "Sunucu adı → {value}",
+      "timezone": "Saat dilimi → {value}",
+      "ntp": "Zaman sunucuları → {value}",
+      "dns": "DNS sunucuları → {value}"
+    },
+    "lastRun": "Son değişiklik",
+    "state": {
+      "running": "Çalışıyor",
+      "succeeded": "Tamam",
+      "failed": "Başarısız",
+      "rejected": "Reddedildi"
     }
   }
 }

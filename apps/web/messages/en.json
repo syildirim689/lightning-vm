@@ -1959,6 +1959,15 @@
       "title": "Download my data",
       "help": "Your account, servers, keys, notifications and activity as one JSON file. Secrets such as passwords and session tokens are not included.",
       "button": "Download as JSON"
+    },
+    "regional": {
+      "title": "Region",
+      "intro": "The time zone for every date and time in the panel, the statistics included.",
+      "timeZone": "Time zone",
+      "auto": "Automatic (this browser)",
+      "help": "Automatic follows the device you are using.",
+      "now": "Your time now",
+      "saved": "Time zone saved"
     }
   },
   "AuthLayout": {
@@ -5097,6 +5106,57 @@
       "closed": "tickets closed",
       "opsOk": "operations succeeded",
       "opsFailed": "operations failed"
+    }
+  },
+  "HostSettings": {
+    "title": "This server",
+    "intro": "The machine the panel runs on: its name, clock and time zone, time servers and DNS servers. Changes are applied by the host agent, which checks them again.",
+    "refresh": "Refresh details",
+    "refreshQueued": "The agent will record the current details",
+    "agentMissingTitle": "The host agent is not installed",
+    "agentMissing": "Server settings are applied by the agent. Install it once on the server:",
+    "noDetails": "No details recorded yet: press “Refresh details”.",
+    "serverClock": "Server clock",
+    "synced": "Synchronized (NTP)",
+    "notSynced": "Not synchronized",
+    "driftNone": "Same time as your computer",
+    "driftAhead": "{s, plural, one {# second} other {# seconds}} ahead of your computer",
+    "driftBehind": "{s, plural, one {# second} other {# seconds}} behind your computer",
+    "hostname": "Host name",
+    "os": "Operating system",
+    "kernel": "Kernel",
+    "uptime": "Up for",
+    "uptimeValue": "{days, plural, =0 {} one {# day } other {# days }}{hours} h",
+    "ntpServers": "Time servers",
+    "distroDefault": "The distribution’s default",
+    "resolvers": "DNS servers",
+    "recorded": "Recorded {when}.",
+    "timezone": "Time zone",
+    "hostnameHelp": "Lowercase letters, digits, hyphens and dots (e.g. panel or panel.example.com). Also added to /etc/hosts.",
+    "timezoneHelp": "Logs, backups and the update window follow it.",
+    "ntp": "Time servers (NTP)",
+    "ntpHelp": "Up to four names or addresses, comma separated; empty: the distribution’s default.",
+    "noTimesyncd": "systemd-timesyncd is not installed: time servers cannot be set from here (chrony or ntpd keep their own settings).",
+    "dns": "DNS servers",
+    "dnsHelp": "Up to four IP addresses, comma separated; empty: what the network provides.",
+    "noResolved": "systemd-resolved is not running: DNS is managed another way on this server.",
+    "apply": "Apply to the server",
+    "cancel": "Cancel",
+    "confirmTitle": "Change this server’s settings?",
+    "queued": "Sent to the host agent",
+    "pending": "{n, plural, one {# change} other {# changes}} not applied yet",
+    "change": {
+      "hostname": "Host name → {value}",
+      "timezone": "Time zone → {value}",
+      "ntp": "Time servers → {value}",
+      "dns": "DNS servers → {value}"
+    },
+    "lastRun": "Last change",
+    "state": {
+      "running": "Running",
+      "succeeded": "Done",
+      "failed": "Failed",
+      "rejected": "Rejected"
     }
   }
 }

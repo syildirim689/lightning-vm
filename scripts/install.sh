@@ -29,6 +29,10 @@
 #   sh scripts/install.sh behind-proxy [--port 8080] [--trusted-cidr CIDR]
 #                                        plain HTTP on 127.0.0.1 for an existing Nginx/Caddy/Traefik in front
 #   sh scripts/install.sh local-only     plain HTTP on 127.0.0.1:8080 only (SSH tunnel)
+#   sh scripts/install.sh host [--hostname NAME] [--timezone Area/City] [--ntp a,b|default] [--dns ip,ip|default]
+#                                        this server's name, time zone, time servers (systemd-timesyncd) and DNS
+#                                        servers (systemd-resolved); without options it only records the current
+#                                        values in data/maintenance/host.json for the panel
 # Options: --lang tr|en  --install-docker  --allow-unsupported-os
 # It never changes firewall, SSH or other web server settings, and never prints secrets.
 # shellcheck disable=SC1091 # /etc/os-release exists only on the target host
@@ -43,6 +47,7 @@ esac; fi
 
 MODE=install INSTALL_DOCKER=0 ALLOW_OS=0 DOMAIN="" ACME_STAGING=0 PROXY_PORT=8080 TRUSTED_CIDR="" TLS_MODE="" CERT_FILE="" KEY_FILE=""
 RESTORE_FILE="" YES=0 TO="" AUTO=0 SWITCH="" CHANNEL="" WINDOW="" BRANCH=""
+HOST_NAME="" HOST_TZ="" HOST_NTP="" HOST_DNS=""
 LOCAL=0 WIZARD=0 MONITORING=1 SCHEDULE=1 ADMIN_EMAIL="" RESET_EMAIL="" DISABLE_2FA=""
 case "${LANG:-}" in tr*) UI="tr" ;; *) UI="en" ;; esac
 while [ $# -gt 0 ]; do
@@ -61,6 +66,11 @@ while [ $# -gt 0 ]; do
       echo "$BRANCH" | grep -Eq '^[A-Za-z0-9._/-]{1,100}$' || { echo "invalid --branch" >&2; exit 2; } ;;
     --window) shift; WINDOW=${1:-} ;;
     domain) MODE=domain; if [ $# -gt 1 ]; then shift; DOMAIN=$1; fi ;;
+    host) MODE=host ;;
+    --hostname) shift; HOST_NAME=${1:-} ;;
+    --timezone) shift; HOST_TZ=${1:-} ;;
+    --ntp) shift; HOST_NTP=${1:-} ;;
+    --dns) shift; HOST_DNS=${1:-} ;;
     --acme-staging) ACME_STAGING=1 ;;
     --tls) shift; TLS_MODE=${1:-} ;;
     --cert) shift; CERT_FILE=${1:-} ;;
@@ -607,6 +617,7 @@ run_requests() {
     [ "$(wc -c < "$f")" -le 1024 ] || ok=0
     val() { sed -n "s/^$1=//p" "$f" | head -n 1; }
     action=$(val action); to=$(val to); channel=$(val channel); window=$(val window); switch=$(val switch); by=$(val by); domain=$(val domain); tls=$(val tls)
+    hname=$(val hostname); htz=$(val timezone); hntp=$(val ntp); hdns=$(val dns)
     rm -f "$f"
     echo "$by" | grep -Eq '^[0-9a-f-]{36}$' || by=""
     set -- --lang "$UI"
@@ -628,6 +639,11 @@ run_requests() {
             else ok=0; fi ;;
           *) ok=0 ;;
         esac ;;
+      host) set -- host "$@"
+        if [ -n "$hname" ]; then valid_hostname "$hname" && set -- "$@" --hostname "$hname" || ok=0; fi
+        if [ -n "$htz" ]; then valid_timezone "$htz" && set -- "$@" --timezone "$htz" || ok=0; fi
+        if [ -n "$hntp" ]; then valid_list "$hntp" name && set -- "$@" --ntp "$hntp" || ok=0; fi
+        if [ -n "$hdns" ]; then valid_list "$hdns" ip && set -- "$@" --dns "$hdns" || ok=0; fi ;;
       monitoring|terminal) case "$switch" in on|off) set -- "$action" "$switch" "$@" ;; *) ok=0 ;; esac ;;
       auto-update) case "$switch" in on|off) set -- auto-update "$switch" "$@" ;; *) ok=0 ;; esac
         case "$channel" in '') ;; stable|beta|edge) set -- "$@" --channel "$channel" ;; *) ok=0 ;; esac
@@ -654,6 +670,77 @@ run_requests() {
     if [ "$action" = update ]; then sh "$(pwd)/scripts/install.sh" releases --lang "$UI" >/dev/null 2>&1 || true; fi
     find data/maintenance/runs -name '*.log' -type f -printf '%T@ %p\n' | sort -rn | tail -n +21 | cut -d' ' -f2- | xargs -r rm -f
   done
+}
+
+# ---- This server's own settings (name, time, time servers, DNS) ------------------------------------
+# The same checks run in the API; here they decide, since the panel is not trusted with the host.
+valid_hostname() { [ ${#1} -le 253 ] && echo "$1" | grep -Eq '^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*$'; }
+valid_timezone() { case "$1" in *..*) return 1 ;; esac; echo "$1" | grep -Eq '^[A-Za-z_]+(/[A-Za-z0-9_+-]+){0,2}$' && [ -f "/usr/share/zoneinfo/$1" ]; }
+# A comma-separated list of up to 4 entries (ip: IP addresses only; name: host names or IP addresses), or "default".
+valid_list() {
+  [ "$1" = default ] && return 0
+  n=0; for v in $(echo "$1" | tr ',' ' '); do
+    n=$((n + 1)); [ "$n" -le 4 ] || return 1
+    if echo "$v" | grep -Eq '^([0-9]{1,3}\.){3}[0-9]{1,3}$|^[0-9a-fA-F:]{2,39}$'; then continue; fi
+    [ "$2" = name ] && valid_hostname "$v" || return 1
+  done
+  [ "$n" -ge 1 ]
+}
+# Writes (or with "default" removes) a systemd drop-in: $1 file, $2 section, $3 key, $4 the list.
+drop_in() {
+  if [ "$4" = default ]; then rm -f "$1"; else mkdir -p "$(dirname "$1")"; printf '# Written by Lightning VM (Admin → System)\n[%s]\n%s=%s\n' "$2" "$3" "$(echo "$4" | tr ',' ' ')" > "$1"; fi
+}
+
+host_info() {
+  (umask 022; mkdir -p data/maintenance)
+  td() { timedatectl show -p "$1" --value 2>/dev/null || true; }
+  conf() { [ -f "$1" ] && sed -n "s/^$2=//p" "$1" | tr ' ' ',' || true; }
+  os=$( (. /etc/os-release 2>/dev/null && printf '%s' "${PRETTY_NAME:-}") || true)
+  resolvers=$(grep -E '^nameserver ' /etc/resolv.conf 2>/dev/null | awk '{ print $2 }' | paste -sd, - || true)
+  printf '{"checkedAt":"%s","time":%s,"hostname":"%s","fqdn":"%s","timezone":"%s","ntp":"%s","ntpSynced":"%s","ntpServers":"%s","dnsServers":"%s","resolvers":"%s","timesyncd":%s,"resolved":%s,"os":"%s","kernel":"%s","uptime":%s}\n' \
+    "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$(date +%s)" "$(hostname | json_str)" "$( (hostname -f 2>/dev/null || hostname) | json_str)" "$(td Timezone | json_str)" "$(td NTP)" "$(td NTPSynchronized)" \
+    "$(conf /etc/systemd/timesyncd.conf.d/lightning-vm.conf NTP | json_str)" "$(conf /etc/systemd/resolved.conf.d/lightning-vm.conf DNS | json_str)" "$(printf '%s' "$resolvers" | json_str)" \
+    "$(systemctl is-active --quiet systemd-timesyncd 2>/dev/null && echo true || echo false)" "$(systemctl is-active --quiet systemd-resolved 2>/dev/null && echo true || echo false)" \
+    "$(printf '%s' "$os" | json_str)" "$(uname -r | json_str)" "$(cut -d. -f1 /proc/uptime 2>/dev/null || echo 0)" > data/maintenance/host.tmp
+  chmod 644 data/maintenance/host.tmp; mv data/maintenance/host.tmp data/maintenance/host.json
+}
+
+do_host() {
+  if [ -n "$HOST_NAME$HOST_TZ$HOST_NTP$HOST_DNS" ]; then
+    [ "$(id -u)" = 0 ] || die 13 E_NEEDS_ROOT "Sunucu ayarları için root gerekir (sudo)" "Server settings need root (sudo)"
+    command -v timedatectl >/dev/null && command -v hostnamectl >/dev/null || die 18 E_NO_SYSTEMD "systemd (hostnamectl, timedatectl) yok" "systemd (hostnamectl, timedatectl) is missing"
+  fi
+  if [ -n "$HOST_NAME" ]; then
+    valid_hostname "$HOST_NAME" || die 2 E_HOSTNAME_INVALID "Geçersiz sunucu adı: '$HOST_NAME' (küçük harf, rakam, tire ve nokta)" "Invalid host name: '$HOST_NAME' (lowercase letters, digits, hyphens and dots)"
+    hostnamectl set-hostname "$HOST_NAME" || die 21 E_HOSTNAME "Sunucu adı değiştirilemedi" "Could not change the host name"
+    # The name resolves on this machine too (127.0.1.1), as Debian and Ubuntu set it up.
+    short=${HOST_NAME%%.*}
+    if grep -q '^127\.0\.1\.1[[:space:]]' /etc/hosts; then sed -i "s/^127\.0\.1\.1[[:space:]].*/127.0.1.1\t$HOST_NAME $short/" /etc/hosts
+    else printf '127.0.1.1\t%s %s\n' "$HOST_NAME" "$short" >> /etc/hosts; fi
+    msg OK HOSTNAME "Sunucu adı: $HOST_NAME" "Host name: $HOST_NAME"
+  fi
+  if [ -n "$HOST_TZ" ]; then
+    valid_timezone "$HOST_TZ" || die 2 E_TIMEZONE_INVALID "Bilinmeyen saat dilimi: '$HOST_TZ'" "Unknown time zone: '$HOST_TZ'"
+    timedatectl set-timezone "$HOST_TZ" || die 21 E_TIMEZONE "Saat dilimi değiştirilemedi" "Could not change the time zone"
+    msg OK TIMEZONE "Saat dilimi: $HOST_TZ" "Time zone: $HOST_TZ"
+  fi
+  if [ -n "$HOST_NTP" ]; then
+    valid_list "$HOST_NTP" name || die 2 E_NTP_INVALID "Geçersiz zaman sunucusu listesi" "Invalid time server list"
+    [ -x /lib/systemd/systemd-timesyncd ] || [ -x /usr/lib/systemd/systemd-timesyncd ] || die 18 E_NO_TIMESYNCD "systemd-timesyncd kurulu değil (chrony veya ntpd kendi ayarıyla çalışır)" "systemd-timesyncd is not installed (chrony or ntpd keep their own settings)"
+    drop_in /etc/systemd/timesyncd.conf.d/lightning-vm.conf Time NTP "$HOST_NTP"
+    timedatectl set-ntp true || true
+    systemctl restart systemd-timesyncd || die 21 E_NTP "Zaman eşitleme yeniden başlatılamadı" "Could not restart time synchronization"
+    msg OK NTP "Zaman sunucuları: $HOST_NTP" "Time servers: $HOST_NTP"
+  fi
+  if [ -n "$HOST_DNS" ]; then
+    valid_list "$HOST_DNS" ip || die 2 E_DNS_INVALID "Geçersiz DNS sunucusu listesi (yalnızca IP adresleri)" "Invalid DNS server list (IP addresses only)"
+    systemctl is-active --quiet systemd-resolved || die 18 E_NO_RESOLVED "systemd-resolved çalışmıyor; DNS bu sunucuda başka bir yolla yönetiliyor" "systemd-resolved is not running; DNS is managed another way on this server"
+    drop_in /etc/systemd/resolved.conf.d/lightning-vm.conf Resolve DNS "$HOST_DNS"
+    systemctl restart systemd-resolved || die 21 E_DNS "DNS çözümleyici yeniden başlatılamadı" "Could not restart the DNS resolver"
+    msg OK DNS "DNS sunucuları: $HOST_DNS" "DNS servers: $HOST_DNS"
+  fi
+  host_info
+  msg OK HOST_INFO "Sunucu bilgileri güncellendi" "Server details recorded"
 }
 
 # The host's own public IPv4 (no outside service is asked); empty behind NAT or on a private network.
@@ -793,6 +880,7 @@ case "$MODE" in
   maintenance) (umask 022; mkdir -p data/maintenance); do_maintenance ;;
   releases) do_releases; exit 0 ;;
   run-requests) run_requests; exit 0 ;;
+  host) do_host; exit 0 ;;
   agent) set_agent; exit 0 ;;
   schedule) set_schedule; exit 0 ;;
   auto-update) [ -f .env ] || die 17 E_NOT_INSTALLED "Önce kurulum yapın: sh scripts/install.sh" "Install first: sh scripts/install.sh"

@@ -921,6 +921,20 @@ test.describe('people, settings and smart features (English browser)', () => {
     await page.waitForTimeout(2200);
     await shot(page, 'stats-phone');
     await page.setViewportSize({ width: 1280, height: 720 });
+    // A personal time zone: searched, picked, saved; then back to automatic.
+    await page.goto('/account');
+    await page.getByRole('combobox', { name: 'Time zone' }).fill('Istanbul');
+    await page.getByRole('option', { name: /Europe\/Istanbul/ }).click();
+    await expect(page.getByText('Time zone saved').first()).toBeVisible();
+    await page.waitForTimeout(600);
+    await shot(page, 'account-region');
+    await page.getByRole('combobox', { name: 'Time zone' }).fill('Automatic');
+    await page.getByRole('option', { name: /^Automatic/ }).click();
+    // This server: its clock, details and settings form (applied by the host agent).
+    await page.goto('/admin/system');
+    await expect(page.getByRole('heading', { name: 'This server' })).toBeVisible();
+    await page.waitForTimeout(800);
+    await shot(page, 'host-settings');
     // The command palette finds a ticket by its number.
     await page.goto('/admin');
     await page.keyboard.press('Control+k');

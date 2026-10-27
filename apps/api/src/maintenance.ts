@@ -31,13 +31,17 @@ export function summary() {
 // The panel writes one small key=value file; the agent validates it again and runs install.sh. Results come
 // back through the read-only mount: status.json (the current or last request), runs/<id>.log, releases.json.
 const requests = process.env.MAINTENANCE_REQUESTS_DIR ?? '/maintenance-requests';
-export type Action = 'check' | 'update' | 'backup' | 'auto-update' | 'domain' | 'monitoring' | 'terminal';
+export type Action = 'check' | 'update' | 'backup' | 'auto-update' | 'domain' | 'monitoring' | 'terminal' | 'host';
 export type AgentStatus = { id: string; action: Action; by: string; state: 'running' | 'succeeded' | 'failed' | 'rejected'; startedAt: string; finishedAt: string; exitCode: number | null; code: string };
 
 const readJson = <T>(file: string): T | null => { try { return JSON.parse(readFileSync(join(dir, file), 'utf8')) as T; } catch { return null; } };
 export const releases = () => readJson<{ checkedAt: string; channel: string; branch?: string; current: string; commit?: string; latest: string; updateAvailable: boolean; error: string;
   releases: { version: string; date: string; notes: string }[] }>('releases.json');
 export const agentStatus = () => readJson<AgentStatus>('status.json');
+// This server's name, clock, time and DNS servers as the agent last recorded them (scripts/install.sh host).
+export type HostInfo = { checkedAt: string; time: number; hostname: string; fqdn: string; timezone: string; ntp: string; ntpSynced: string; ntpServers: string; dnsServers: string;
+  resolvers: string; timesyncd: boolean; resolved: boolean; os: string; kernel: string; uptime: number };
+export const hostInfo = () => readJson<HostInfo>('host.json');
 
 // The last lines of a run's log (the installer's own TR/EN progress lines; no secrets are printed there).
 export function runLog(id: string, lines = 80) {
