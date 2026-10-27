@@ -21,9 +21,9 @@ import { can, type Permission } from '../../lib/permissions';
 import { useApiQuery } from '../../lib/query';
 import type { Branding, User } from '../../lib/session';
 
-type Key = 'dashboard' | 'stats' | 'servers' | 'abuse' | 'energy' | 'topology' | 'myTopology' | 'myVdc' | 'connections' | 'catalog' | 'users' | 'roles' | 'settings' | 'system' | 'myServers' | 'newServer' | 'firewalls' | 'account' | 'audit' | 'terminal' | 'support' | 'mySupport' | 'billing' | 'myBilling';
+type Key = 'dashboard' | 'stats' | 'servers' | 'abuse' | 'energy' | 'topology' | 'myTopology' | 'myVdc' | 'connections' | 'catalog' | 'users' | 'roles' | 'settings' | 'system' | 'myServers' | 'newServer' | 'firewalls' | 'account' | 'audit' | 'terminal' | 'support' | 'mySupport' | 'billing' | 'myBilling' | 'reseller';
 // count: a number beside the entry from GET /support/summary (tickets waiting for the customer, or for support).
-type Item = { href: string; key: Key; icon: React.ReactNode; exact?: boolean; need?: Permission[]; count?: 'waiting' | 'queue' | 'unpaid'; billing?: boolean };
+type Item = { href: string; key: Key; icon: React.ReactNode; exact?: boolean; need?: Permission[]; count?: 'waiting' | 'queue' | 'unpaid'; billing?: boolean; reseller?: boolean };
 
 // Staff entries appear only with a permission that opens them; the API checks every call anyway.
 const sections: { title: 'adminSection' | 'peopleSection' | 'customerSection'; items: Item[] }[] = [
@@ -54,6 +54,7 @@ const sections: { title: 'adminSection' | 'peopleSection' | 'customerSection'; i
     { href: '/topology', key: 'myTopology', icon: <I name="waypoints" size={18}/> },
     { href: '/firewalls', key: 'firewalls', icon: <I name="brick-wall-fire" size={18}/>, need: ['firewalls.manage', 'servers.view_all'] },
     { href: '/billing', key: 'myBilling', icon: <I name="wallet" size={18}/>, count: 'unpaid', billing: true },
+    { href: '/reseller', key: 'reseller', icon: <I name="store" size={18}/>, reseller: true },
     { href: '/support', key: 'mySupport', icon: <I name="life-buoy" size={18}/>, count: 'waiting' },
     { href: '/account', key: 'account', icon: <I name="key-round" size={18}/> },
   ] },
@@ -77,11 +78,13 @@ const useBillingSummary = () => useApiQuery<{ enabled: boolean; open?: { n: numb
 function NavList({ user, onNavigate }: { user: User; onNavigate?: () => void }) {
   const t = useTranslations('Nav');
   const billing = useBillingSummary();
+  // Shown only to resellers: the summary answers 403 for everyone else.
+  const reseller = useApiQuery<{ allocation: object }>(['reseller', 'summary'], '/reseller/summary').data;
   const path = usePathname();
   const active = (i: Item) => (i.exact ? path === i.href : path === i.href || path.startsWith(`${i.href}/`));
   return <nav aria-label={t('label')} className="flex flex-col gap-3">
     {sections.map((s) => {
-      const items = s.items.filter((i) => (!i.need || can(user.permissions, ...i.need)) && (!i.billing || billing?.enabled));
+      const items = s.items.filter((i) => (!i.need || can(user.permissions, ...i.need)) && (!i.billing || billing?.enabled) && (!i.reseller || !!reseller));
       if (!items.length) return null;
       return <div key={s.title} className="flex flex-col gap-0.5">
         <p className="px-3 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-wider text-muted">{t(s.title)}</p>

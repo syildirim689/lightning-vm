@@ -23,6 +23,7 @@ import { renderPtr } from './rdns-names';
 import { fingerprint, parseKeyList, sshKeyPattern } from './smart-rules';
 import { available, billOrder, billResize, payFromBalance, resizeCharge, startHourly } from './billing';
 import { hourlyOf } from './billing-rules';
+import { checkResellerRoom, discounted, resellerOf } from './reseller';
 
 type Input = Record<string, unknown>;
 // BullMQ carries only the operation id (also the job id, so re-adding is harmless);
@@ -75,7 +76,9 @@ const allowedFor = async (req: AuthedRequest) => {
 
 export async function findServer(req: AuthedRequest, id: string, manage = false) {
   const staff = manage ? can(req.user.permissions, 'servers.manage_all') : can(req.user.permissions, 'servers.view_all') || can(req.user.permissions, 'servers.manage_all');
-  const { rows: [s] } = await pool.query(`SELECT * FROM servers WHERE id = $1 AND state <> 'deleted' AND (owner_id = $2 OR $3)`, [id, req.user.id, staff]);
+  // A reseller sees and manages their customers' servers too (reseller.ts).
+  const { rows: [s] } = await pool.query(`SELECT * FROM servers WHERE id = $1 AND state <> 'deleted' AND (owner_id = $2 OR $3
+    OR owner_id IN (SELECT u.id FROM users u JOIN resellers r ON r.user_id = u.reseller_id AND r.active WHERE u.reseller_id = $2))`, [id, req.user.id, staff]);
   if (!s) throw apiError(404, 'NOT_FOUND', 'Unknown server');
   return s;
 }
@@ -135,7 +138,12 @@ async function resizeTarget(req: AuthedRequest, server: Record<string, any>, bod
   if (over.length) throw apiError(409, 'QUOTA_EXCEEDED', 'Quota exceeded', Object.fromEntries(over.map((o) => [o, 'QUOTA_EXCEEDED'])));
   const cap = await capacityOf(order.rp);
   if (more.vcpu > cap.available.vcpu || more.memoryMb > cap.available.memoryMb || more.diskGb > cap.available.storageGb) throw apiError(409, 'CAPACITY_EXHAUSTED', 'Not enough capacity in this location');
-  return { order, charge: await resizeCharge(server.id, server.price_monthly, order.price.monthly) };
+  const reseller = await resellerOf(server.owner_id);
+  if (reseller) {
+    order.price = { ...order.price, monthly: discounted(order.price.monthly, reseller.discountPct) };
+    await checkResellerRoom(reseller, { servers: 0, ...more });
+  }
+  return { order, billTo: reseller?.id ?? server.owner_id, charge: await resizeCharge(server.id, server.price_monthly, order.price.monthly) };
 }
 
 const serverColumns = `s.id, s.name, s.state, s.power_state AS "powerState", s.guest_ready AS "guestReady", s.vcpu, s.memory_mb AS "memoryMb", s.disk_gb AS "diskGb",
@@ -311,6 +319,12 @@ export class ServersController {
     }
     // Pay as you go: offered when the admin allows it; the balance must cover the first hours (Settings → Billing).
     let hourly: string | null = null;
+    // A reseller's customer (or the reseller): the reseller's price, billed to the reseller, within their allocation.
+    const reseller = vdc ? null : await resellerOf(req.user.id);
+    if (reseller) {
+      order.price = { ...order.price, monthly: discounted(order.price.monthly, reseller.discountPct) };
+      if (body.billingCycle === 'hourly') throw apiError(400, 'VALIDATION_FAILED', 'Hourly billing is not offered', { billingCycle: 'NOT_AVAILABLE' });
+    }
     // Billed by an outside system (external.ts): no subscription, no invoice, no hourly usage here.
     const external = !!(req as { externalBilling?: boolean }).externalBilling;
     if (body.billingCycle === 'hourly' && !external) {
@@ -345,6 +359,7 @@ export class ServersController {
           throw apiError(409, 'CAPACITY_EXHAUSTED', 'Not enough capacity in this location');
         }
       }
+      if (reseller) await checkResellerRoom(reseller, { servers: 1, ...order.shape }, client);
       // The primary and any extra IPv4 come from one IP pool (one subnet and gateway in the guest), skipping
       // excluded, gateway, used and quarantined addresses; the first pool (by name) with enough room wins.
       const wanted = 1 + order.extraIpv4;
@@ -387,7 +402,7 @@ export class ServersController {
       }
       // Billing on: the subscription and first invoice (a data center's servers are paid with the data center).
       if (hourly) await startHourly(client, { serverId: s.id, ownerId: req.user.id, hourly, currency: order.price.currency });
-      const bill = vdc || hourly || external ? null : await billOrder(client, { ownerId: req.user.id, serverId: s.id, name, monthly: order.price.monthly, currency: order.price.currency });
+      const bill = vdc || hourly || external ? null : await billOrder(client, { ownerId: reseller?.id ?? req.user.id, serverId: s.id, name, monthly: order.price.monthly, currency: order.price.currency });
       const { rows: [op] } = await client.query(`INSERT INTO operations (kind, status, idempotency_key, request_hash, server_id, owner_id, step, deadline_at)
         VALUES ('create', 'pending', $1, $2, $3, $4, $6, now() + make_interval(mins => $5)) RETURNING id, kind, status`,
         [key, requestHash, s.id, req.user.id, deadlineMinutes.create, bill?.awaitingPayment ? 'awaiting_payment' : 'queued']);
@@ -485,7 +500,7 @@ export class ServersController {
     // The price follows the shape at once (renewals read it); a resize that finally fails puts it back (worker).
     await pool.query(`UPDATE servers SET price_monthly = $2, package_id = $3, traffic_gb = $4, price_hourly = CASE WHEN billing_mode = 'hourly' THEN $5::numeric ELSE price_hourly END,
       updated_at = now() WHERE id = $1`, [id, price.monthly, r.order.packageId, r.order.trafficGb, hourlyOf(price.monthly)]);
-    const invoiceId = r.charge.chargeNow !== '0.00' ? await billResize(server, r.charge.chargeNow, price.currency, shape) : null;
+    const invoiceId = r.charge.chargeNow !== '0.00' ? await billResize({ ...server, owner_id: r.billTo }, r.charge.chargeNow, price.currency, shape) : null;
     if (invoiceId) await pool.query("UPDATE operations SET params = params || jsonb_build_object('invoiceId', $2::text) WHERE id = $1", [operation.id, invoiceId]);
     return { serverId: id, operation, ...(invoiceId && { invoiceId }) };
   }

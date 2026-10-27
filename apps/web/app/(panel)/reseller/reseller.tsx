@@ -1,0 +1,138 @@
+"use client";
+// The reseller's page: the allocation and how much of it is used, the customers, a new customer, and per customer
+// their servers and an order made for them (billed to the reseller at the reseller's discount).
+import { Button, ProgressBar, toast } from '@heroui/react';
+import { useQueryClient } from '@tanstack/react-query';
+import NextLink from 'next/link';
+import { useFormatter, useTranslations } from 'next-intl';
+import { useState } from 'react';
+import { I } from '../../../components/icon';
+import { DataTable, Empty, Mono, Notice, PageHeader, Section, SelectInput, StatusChip, TextInput } from '../../../components/ui';
+import { apiFetch, type ApiError, useErrorText } from '../../../lib/api';
+import { useApiQuery } from '../../../lib/query';
+
+type Allocation = { discountPct: number; maxCustomers: number | null; maxServers: number | null; maxVcpu: number | null; maxMemoryMb: number | null; maxDiskGb: number | null };
+type Usage = { servers: number; vcpu: number; memoryMb: number; diskGb: number; monthly: string; customers: number };
+type Customer = { id: string; email: string; name: string; createdAt: string; lastSeenAt: string | null; servers: number; monthly: string };
+type Catalog = { packages: { id: string; name: string; vcpu: number; memoryMb: number; diskGb: number; priceMonthly: string; currency: string; poolIds: string[]; imageIds: string[] }[];
+  pools: { id: string; name: string; location: string }[]; images: { id: string; name: string; minDiskGb: number }[] };
+
+function Meter({ label, used, max, unit = '' }: { label: string; used: number; max: number | null; unit?: string }) {
+  const t = useTranslations('Reseller');
+  const pct = max ? Math.min(100, (used / max) * 100) : 0;
+  return <div className="flex flex-col gap-1.5 rounded-xl border border-border p-3">
+    <div className="flex items-baseline justify-between gap-2"><span className="text-xs uppercase tracking-wider text-muted">{label}</span>
+      <span className="text-sm font-semibold tabular-nums">{used}{unit}{max !== null ? ` / ${max}${unit}` : ` · ${t('unlimited')}`}</span></div>
+    {max !== null && <ProgressBar aria-label={label} value={pct} size="sm" color={pct >= 90 ? 'danger' : pct >= 75 ? 'warning' : 'accent'}><ProgressBar.Track><ProgressBar.Fill/></ProgressBar.Track></ProgressBar>}
+  </div>;
+}
+
+function OrderForCustomer({ customer, onDone }: { customer: Customer; onDone: () => void }) {
+  const t = useTranslations('Reseller');
+  const { error, field } = useErrorText();
+  const catalog = useApiQuery<Catalog>(['catalog'], '/catalog').data;
+  const [v, setV] = useState({ poolId: '', packageId: '', imageId: '', name: '', sshKey: '' });
+  const [fields, setFields] = useState<Record<string, string>>({});
+  const [busy, setBusy] = useState(false);
+  if (!catalog) return null;
+  const packages = catalog.packages.filter((p) => !v.poolId || p.poolIds.includes(v.poolId));
+  const pkg = catalog.packages.find((p) => p.id === v.packageId);
+  const images = catalog.images.filter((i) => !pkg?.imageIds.length || pkg.imageIds.includes(i.id));
+  const set = (k: keyof typeof v) => (x: string) => setV({ ...v, [k]: x });
+  async function submit(e: React.FormEvent) {
+    e.preventDefault(); setBusy(true); setFields({});
+    try {
+      await apiFetch(`/reseller/customers/${customer.id}/servers`, { method: 'POST', body: { ...v, type: 'package' } });
+      toast.success(t('ordered', { name: v.name })); onDone();
+    } catch (err) { setFields((err as ApiError).fields ?? {}); toast.danger(error(err)); } finally { setBusy(false); }
+  }
+  return <form onSubmit={submit} noValidate className="grid gap-3 rounded-xl border border-accent/40 bg-accent-soft/40 p-3 sm:grid-cols-2">
+    <SelectInput label={t('location')} value={v.poolId} onChange={(x) => setV({ ...v, poolId: x, packageId: '' })} error={field(fields.poolId)} options={catalog.pools.map((p) => ({ id: p.id, label: p.location ? `${p.name} · ${p.location}` : p.name }))}/>
+    <SelectInput label={t('package')} value={v.packageId} onChange={set('packageId')} error={field(fields.packageId)}
+      options={packages.map((p) => ({ id: p.id, label: p.name, description: `${p.vcpu} vCPU · ${p.memoryMb / 1024} GB · ${p.diskGb} GB` }))}/>
+    <SelectInput label={t('image')} value={v.imageId} onChange={set('imageId')} error={field(fields.imageId)} options={images.map((i) => ({ id: i.id, label: i.name }))}/>
+    <TextInput label={t('hostname')} value={v.name} onChange={(x) => setV({ ...v, name: x.toLowerCase() })} error={field(fields.name)} placeholder="web-1"/>
+    <div className="sm:col-span-2"><TextInput label={t('sshKey')} value={v.sshKey} onChange={set('sshKey')} multiline error={field(fields.sshKey) ?? field(fields.sshKeyIds)} help={t('sshKeyHelp')}/></div>
+    <div className="flex flex-wrap gap-2 sm:col-span-2">
+      <Button type="submit" isPending={busy} isDisabled={!v.poolId || !v.packageId || !v.imageId || !v.name || !v.sshKey.trim()}><I name="rocket" size={15}/>{t('order')}</Button>
+      <Button variant="ghost" onPress={onDone}>{t('cancel')}</Button>
+    </div>
+  </form>;
+}
+
+function CustomerRow({ c }: { c: Customer }) {
+  const t = useTranslations('Reseller');
+  const format = useFormatter();
+  const client = useQueryClient();
+  const [open, setOpen] = useState(false);
+  const [ordering, setOrdering] = useState(false);
+  const q = useApiQuery<{ servers: { id: string; name: string; state: string; powerState: string; vcpu: number; memoryMb: number; diskGb: number; priceMonthly: string; currency: string; address: string | null }[] }>(
+    ['reseller', 'customer', c.id], open ? `/reseller/customers/${c.id}` : null);
+  return <li className="rounded-2xl border border-border p-3">
+    <div className="flex flex-wrap items-center gap-3">
+      <span className="grid size-9 shrink-0 place-items-center rounded-full bg-default text-sm font-semibold" aria-hidden>{(c.name || c.email)[0]!.toUpperCase()}</span>
+      <span className="flex min-w-0 flex-1 flex-col"><span className="truncate font-medium">{c.name || c.email}</span><span className="truncate text-xs text-muted">{c.email}</span></span>
+      <StatusChip tone="default">{t('serverCount', { n: c.servers })}</StatusChip>
+      <span className="text-sm tabular-nums">{format.number(Number(c.monthly), { style: 'currency', currency: 'EUR' })}</span>
+      <Button size="sm" variant="ghost" aria-expanded={open} onPress={() => setOpen(!open)}><I name={open ? 'chevron-up' : 'chevron-down'} size={14}/>{t('details')}</Button>
+    </div>
+    {open && <div className="mt-3 flex flex-col gap-3">
+      {!q.data ? <div className="h-16 animate-pulse rounded-xl bg-default/50"/> : q.data.servers.length === 0 ? <p className="text-sm text-muted">{t('noServers')}</p>
+        : <DataTable label={t('servers')} rows={q.data.servers} rowKey={(s) => s.id} minWidth={520}
+          columns={[{ id: 'n', label: t('server') }, { id: 'ip', label: 'IP' }, { id: 'size', label: t('size') }, { id: 'state', label: t('state') }]}
+          cells={(s) => [<NextLink key="n" href={`/servers/${s.id}`} className="font-medium text-accent hover:underline">{s.name}</NextLink>, s.address ? <Mono key="ip">{s.address}</Mono> : '–',
+            `${s.vcpu} vCPU · ${s.memoryMb / 1024} GB · ${s.diskGb} GB`, <StatusChip key="s" tone={s.state === 'ready' ? (s.powerState === 'poweredOn' ? 'success' : 'default') : 'warning'}>{t(`states.${s.state === 'ready' ? (s.powerState === 'poweredOn' ? 'on' : 'off') : 'busy'}`)}</StatusChip>]}/>}
+      {ordering ? <OrderForCustomer customer={c} onDone={() => { setOrdering(false); void client.invalidateQueries({ queryKey: ['reseller'] }); }}/>
+        : <div><Button size="sm" variant="secondary" onPress={() => setOrdering(true)}><I name="plus" size={14}/>{t('orderFor')}</Button></div>}
+    </div>}
+  </li>;
+}
+
+export default function Reseller() {
+  const t = useTranslations('Reseller');
+  const format = useFormatter();
+  const { error, field } = useErrorText();
+  const client = useQueryClient();
+  const s = useApiQuery<{ allocation: Allocation; usage: Usage }>(['reseller', 'summary'], '/reseller/summary');
+  const c = useApiQuery<{ customers: Customer[] }>(['reseller', 'customers'], s.data ? '/reseller/customers' : null);
+  const [email, setEmail] = useState('');
+  const [name, setName] = useState('');
+  const [fields, setFields] = useState<Record<string, string>>({});
+  const [busy, setBusy] = useState(false);
+  const [search, setSearch] = useState('');
+  if (s.error) return <><PageHeader title={t('title')}/><Notice tone="warning">{error(s.error)}</Notice></>;
+  if (!s.data) return <div className="h-48 animate-pulse rounded-3xl bg-default/50"/>;
+  const { allocation: a, usage: u } = s.data;
+  async function add(e: React.FormEvent) {
+    e.preventDefault(); setBusy(true); setFields({});
+    try { await apiFetch('/reseller/customers', { method: 'POST', body: { email, name } }); toast.success(t('added', { email })); setEmail(''); setName(''); void client.invalidateQueries({ queryKey: ['reseller'] }); }
+    catch (err) { setFields((err as ApiError).fields ?? {}); toast.danger(error(err)); } finally { setBusy(false); }
+  }
+  const list = (c.data?.customers ?? []).filter((x) => !search || `${x.email} ${x.name}`.toLowerCase().includes(search.toLowerCase()));
+  return <>
+    <PageHeader title={t('title')} description={t('intro', { discount: a.discountPct })}/>
+    <div className="flex flex-col gap-6">
+      <Section title={t('allocation')} description={t('monthly', { amount: format.number(Number(u.monthly), { style: 'currency', currency: 'EUR' }) })}>
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+          <Meter label={t('customers')} used={u.customers} max={a.maxCustomers}/>
+          <Meter label={t('servers')} used={u.servers} max={a.maxServers}/>
+          <Meter label="vCPU" used={u.vcpu} max={a.maxVcpu}/>
+          <Meter label="RAM" used={Math.round(u.memoryMb / 1024)} max={a.maxMemoryMb === null ? null : Math.round(a.maxMemoryMb / 1024)} unit=" GB"/>
+          <Meter label={t('disk')} used={u.diskGb} max={a.maxDiskGb} unit=" GB"/>
+        </div>
+      </Section>
+      <Section title={t('customersTitle')} description={t('customersHelp')}>
+        <div className="flex flex-col gap-4">
+          <form onSubmit={add} noValidate className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] sm:items-end">
+            <TextInput label={t('email')} type="email" value={email} onChange={setEmail} error={field(fields.email)}/>
+            <TextInput label={t('name')} value={name} onChange={setName}/>
+            <Button type="submit" isPending={busy} isDisabled={!email}><I name="user-plus" size={15}/>{t('add')}</Button>
+          </form>
+          {(c.data?.customers.length ?? 0) > 5 && <TextInput label={t('search')} value={search} onChange={setSearch}/>}
+          {!list.length ? <Empty icon={<I name="users" size={28}/>} title={t('none')}>{t('noneHelp')}</Empty>
+            : <ul className="flex flex-col gap-2">{list.map((x) => <CustomerRow key={x.id} c={x}/>)}</ul>}
+        </div>
+      </Section>
+    </div>
+  </>;
+}

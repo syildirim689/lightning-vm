@@ -65,7 +65,7 @@
     "INVALID_CREDENTIALS": "Incorrect email or password.",
     "RATE_LIMITED": "Too many attempts. Please try again in a few minutes.",
     "REGISTRATION_CLOSED": "New user registration is currently closed.",
-    "EMAIL_TAKEN": "An account with this email already exists.",
+    "EMAIL_TAKEN": "This e-mail already has an account.",
     "FORBIDDEN": "You do not have permission for this action.",
     "CSRF_REJECTED": "The request failed a security check. Reload the page and try again.",
     "VALIDATION_FAILED": "Please correct the highlighted fields.",
@@ -326,7 +326,11 @@
     "BACKUP_LIMIT": "The backup limit is reached: remove an older backup first.",
     "VM_HAS_NO_DISK": "The server has no disk to back up.",
     "DISK_NOT_SUPPORTED": "This kind of disk cannot be backed up.",
-    "BACKUP_NOT_FOUND": "The backup is gone."
+    "BACKUP_NOT_FOUND": "The backup is gone.",
+    "NOT_A_RESELLER": "This account is not a reseller.",
+    "RESELLER_ALLOCATION_EXCEEDED": "The reseller allocation is used up.",
+    "CUSTOMER_OF_A_RESELLER": "This account is a reseller's customer.",
+    "INVALID_SSH_KEY": "Not a valid SSH public key."
   },
   "Auth": {
     "required": "required",
@@ -562,7 +566,10 @@
     "CLONE_MISMATCH": "A copy stays in the location and image of the original.",
     "BELOW_SOURCE_DISK": "The disk cannot be smaller than the original's.",
     "NOT_WITH_CLONE": "An application cannot be installed on a copy.",
-    "BALANCE_TOO_LOW": "Top up your balance first: it must cover the first hours of the server."
+    "BALANCE_TOO_LOW": "Top up your balance first: it must cover the first hours of the server.",
+    "RESELLER_ALLOCATION_EXCEEDED": "The reseller allocation is used up.",
+    "EMAIL_TAKEN": "This e-mail already has an account.",
+    "CUSTOMER_OF_A_RESELLER": "This account is a reseller's customer."
   },
   "Setup": {
     "title": "Setup wizard",
@@ -1920,7 +1927,8 @@
     "stats": "Statistics",
     "billing": "Billing",
     "myBilling": "Billing",
-    "unpaidInvoices": "{n, plural, one {# invoice awaits payment} other {# invoices await payment}}"
+    "unpaidInvoices": "{n, plural, one {# invoice awaits payment} other {# invoices await payment}}",
+    "reseller": "Reseller"
   },
   "Dashboard": {
     "eyebrow": "ADMINISTRATION",
@@ -4651,7 +4659,11 @@
       "server_backup_started": "Backup started",
       "server_backup_restore": "Backup restore started",
       "server_backup_deleted": "Backup removal started",
-      "catalog_pool_backup": "Backup storage changed"
+      "catalog_pool_backup": "Backup storage changed",
+      "reseller_customer_created": "Reseller added a customer",
+      "reseller_server_ordered": "Reseller ordered a server",
+      "reseller_saved": "Reseller allocation saved",
+      "reseller_removed": "Reseller removed"
     },
     "outcome": {
       "success": "Done",
@@ -6447,5 +6459,64 @@
     "removing": "Removing the backup",
     "restoring": "Restore started",
     "full": "The limit is reached: remove an older backup first."
+  },
+  "Reseller": {
+    "title": "Reseller",
+    "intro": "Your customers and their servers. Servers are billed to you at a {discount}% discount; what you charge your customers is up to you.",
+    "allocation": "Your allocation",
+    "monthly": "All servers together: {amount} a month (after your discount).",
+    "unlimited": "no limit",
+    "customers": "Customers",
+    "servers": "Servers",
+    "disk": "Disk",
+    "customersTitle": "Customers",
+    "customersHelp": "A new customer gets an account; they set their password with \"Forgot password\" on the sign-in page. You can see and manage their servers.",
+    "email": "E-mail",
+    "name": "Name",
+    "add": "Add customer",
+    "added": "{email} added",
+    "search": "Search",
+    "none": "No customers yet",
+    "noneHelp": "Add the first one above.",
+    "serverCount": "{n, plural, one {# server} other {# servers}}",
+    "details": "Servers",
+    "noServers": "No servers yet.",
+    "server": "Server",
+    "size": "Size",
+    "state": "State",
+    "states": {
+      "on": "Running",
+      "off": "Off",
+      "busy": "Working"
+    },
+    "orderFor": "Order a server for them",
+    "location": "Location",
+    "package": "Package",
+    "image": "Image",
+    "hostname": "Server name",
+    "sshKey": "Their SSH public key",
+    "sshKeyHelp": "Added to the customer's keys and put on the server.",
+    "order": "Order",
+    "cancel": "Cancel",
+    "ordered": "{name} is being built",
+    "admin": {
+      "title": "Reseller",
+      "help": "A reseller opens customer accounts and orders servers for them within this allocation; their servers are billed to the reseller at the discount. Empty: no limit.",
+      "customers": "Customers",
+      "servers": "Servers",
+      "memory": "Memory (GB)",
+      "disk": "Disk (GB)",
+      "discount": "Discount (%)",
+      "noLimit": "no limit",
+      "using": "Using now: {servers} servers, {vcpu} vCPU, {memory} GB, {disk} GB disk.",
+      "make": "Make a reseller",
+      "save": "Save",
+      "saved": "Reseller saved",
+      "pause": "Pause",
+      "paused": "Paused",
+      "active": "Active",
+      "stop": "No longer a reseller",
+      "stopped": "No longer a reseller; their customers are ordinary accounts now"
+    }
   }
 }

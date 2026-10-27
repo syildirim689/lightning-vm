@@ -28,6 +28,7 @@ export function UserSummary({ id, onClose }: { id: string; onClose: () => void }
   const format = useFormatter();
   const now = useNow({ updateInterval: 60_000 });
   const q = useApiQuery<Summary>(['admin', 'user-summary', id], `/admin/users/${id}/summary`);
+  const me = useMe();
   const d = q.data;
   const money = (n: number, c: string) => format.number(n, { style: 'currency', currency: c });
   const action = (a: string) => (ta.has(`actions.${a.replace(/\./g, '_')}` as 'actions.settings_sms') ? ta(`actions.${a.replace(/\./g, '_')}` as 'actions.settings_sms') : a);
@@ -70,6 +71,7 @@ export function UserSummary({ id, onClose }: { id: string; onClose: () => void }
               <div className="flex flex-wrap gap-1">{Object.entries(d.limits).map(([k, v]) => <Chip key={k} size="sm" variant="soft" color="warning">
                 {k === 'require2fa' ? tr('require2faShort') : Array.isArray(v) ? tr('listShort', { name: tr(k as 'allowedIps'), n: v.length }) : `${tr(k as 'maxServers')}: ${v}`}</Chip>)}</div>
             </section>}
+            {can(me?.permissions, 'users.manage') && <ResellerAccess id={id}/>}
             <StaffNotes id={id}/>
             <section>
               <h3 className="mb-2 text-sm font-semibold">{t('activity')}</h3>
@@ -87,6 +89,54 @@ export function UserSummary({ id, onClose }: { id: string; onClose: () => void }
       </Modal.Dialog>
     </Modal.Container>
   </Modal.Backdrop>;
+}
+
+type ResellerDoc = { maxCustomers: number | null; maxServers: number | null; maxVcpu: number | null; maxMemoryMb: number | null; maxDiskGb: number | null; discountPct: number; active?: boolean };
+
+// Makes this account a reseller with an allocation and a discount (empty: no limit), or stops it.
+function ResellerAccess({ id }: { id: string }) {
+  const t = useTranslations('Reseller.admin');
+  const { error, field } = useErrorText();
+  const client = useQueryClient();
+  const q = useApiQuery<{ reseller: ResellerDoc | null; usage?: { servers: number; vcpu: number; memoryMb: number; diskGb: number } }>(['admin', 'reseller', id], `/admin/resellers/${id}`);
+  const [v, setV] = useState<Record<string, string> | null>(null);
+  const [fields, setFields] = useState<Record<string, string>>({});
+  const [busy, setBusy] = useState(false);
+  if (!q.data) return null;
+  const r = q.data.reseller;
+  const doc = v ?? Object.fromEntries((['maxCustomers', 'maxServers', 'maxVcpu', 'maxMemoryMb', 'maxDiskGb', 'discountPct'] as const).map((k) => [k, r?.[k] == null ? '' : String(k === 'maxMemoryMb' ? (r[k] as number) / 1024 : r[k])]));
+  const set = (k: string) => (e: React.ChangeEvent<HTMLInputElement>) => setV({ ...doc, [k]: e.target.value.replace(/[^\d.]/g, '') });
+  async function save(active = true) {
+    setBusy(true); setFields({});
+    try {
+      await apiFetch(`/admin/resellers/${id}`, { method: 'PUT', body: { ...doc, maxMemoryMb: doc.maxMemoryMb === '' ? null : Math.round(Number(doc.maxMemoryMb) * 1024), active } });
+      toast.success(t('saved')); setV(null); void client.invalidateQueries({ queryKey: ['admin', 'reseller', id] });
+    } catch (e) { setFields((e as { fields?: Record<string, string> }).fields ?? {}); toast.danger(error(e)); } finally { setBusy(false); }
+  }
+  async function stop() {
+    setBusy(true);
+    try { await apiFetch(`/admin/resellers/${id}`, { method: 'DELETE' }); toast.success(t('stopped')); setV(null); void client.invalidateQueries({ queryKey: ['admin', 'reseller', id] }); }
+    catch (e) { toast.danger(error(e)); } finally { setBusy(false); }
+  }
+  const input = (k: string, label: string) => <label className="flex flex-col gap-1 text-xs"><span className="text-muted">{label}</span>
+    <input inputMode="decimal" value={doc[k]} onChange={set(k)} placeholder={t('noLimit')} className="min-h-10 rounded-lg border border-border bg-surface px-2 text-sm"/>
+    {fields[k] && <span className="text-danger">{field(fields[k])}</span>}</label>;
+  return <section className="rounded-xl border border-border p-3">
+    <div className="mb-2 flex flex-wrap items-center justify-between gap-2"><h3 className="text-sm font-semibold">{t('title')}</h3>
+      {r && <StatusChip tone={r.active ? 'success' : 'default'}>{r.active ? t('active') : t('paused')}</StatusChip>}</div>
+    <p className="mb-3 text-xs text-muted">{t('help')}</p>
+    {fields.userId && <p className="mb-2 text-sm text-danger">{field(fields.userId)}</p>}
+    <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+      {input('maxCustomers', t('customers'))}{input('maxServers', t('servers'))}{input('maxVcpu', 'vCPU')}
+      {input('maxMemoryMb', t('memory'))}{input('maxDiskGb', t('disk'))}{input('discountPct', t('discount'))}
+    </div>
+    {r && q.data.usage && <p className="mt-2 text-xs text-muted">{t('using', { servers: q.data.usage.servers, vcpu: q.data.usage.vcpu, memory: Math.round(q.data.usage.memoryMb / 1024), disk: q.data.usage.diskGb })}</p>}
+    <div className="mt-3 flex flex-wrap gap-2">
+      <Button size="sm" isPending={busy} onPress={() => void save(true)}><I name="store" size={14}/>{r ? t('save') : t('make')}</Button>
+      {r?.active && <Button size="sm" variant="ghost" isDisabled={busy} onPress={() => void save(false)}>{t('pause')}</Button>}
+      {r && <Button size="sm" variant="danger-soft" isDisabled={busy} onPress={() => void stop()}>{t('stop')}</Button>}
+    </div>
+  </section>;
 }
 
 type Note = { id: string; body: string; pinned: boolean; createdAt: string; authorId: string | null; authorName: string | null; authorEmail: string | null };

@@ -65,7 +65,7 @@
     "INVALID_CREDENTIALS": "E-posta veya parola hatalı.",
     "RATE_LIMITED": "Çok fazla deneme yapıldı. Lütfen birkaç dakika sonra tekrar deneyin.",
     "REGISTRATION_CLOSED": "Yeni kullanıcı kaydı şu anda kapalı.",
-    "EMAIL_TAKEN": "Bu e-posta adresiyle zaten bir hesap var.",
+    "EMAIL_TAKEN": "Bu e-postanın zaten bir hesabı var.",
     "FORBIDDEN": "Bu işlem için yetkiniz yok.",
     "CSRF_REJECTED": "İstek güvenlik kontrolünden geçemedi. Sayfayı yenileyip tekrar deneyin.",
     "VALIDATION_FAILED": "Lütfen işaretli alanları düzeltin.",
@@ -326,7 +326,11 @@
     "BACKUP_LIMIT": "Yedek sınırına ulaşıldı: önce eski bir yedeği silin.",
     "VM_HAS_NO_DISK": "Sunucunun yedeklenecek diski yok.",
     "DISK_NOT_SUPPORTED": "Bu tür disk yedeklenemez.",
-    "BACKUP_NOT_FOUND": "Yedek artık yok."
+    "BACKUP_NOT_FOUND": "Yedek artık yok.",
+    "NOT_A_RESELLER": "Bu hesap bayi değil.",
+    "RESELLER_ALLOCATION_EXCEEDED": "Bayi tahsisi doldu.",
+    "CUSTOMER_OF_A_RESELLER": "Bu hesap bir bayinin müşterisi.",
+    "INVALID_SSH_KEY": "Geçerli bir SSH açık anahtarı değil."
   },
   "Auth": {
     "required": "zorunlu",
@@ -562,7 +566,10 @@
     "CLONE_MISMATCH": "Kopya, asıl sunucunun konumunda ve imajında kalır.",
     "BELOW_SOURCE_DISK": "Disk asıl sunucununkinden küçük olamaz.",
     "NOT_WITH_CLONE": "Kopyaya uygulama kurulamaz.",
-    "BALANCE_TOO_LOW": "Önce bakiye yükleyin: sunucunun ilk saatlerini karşılamalı."
+    "BALANCE_TOO_LOW": "Önce bakiye yükleyin: sunucunun ilk saatlerini karşılamalı.",
+    "RESELLER_ALLOCATION_EXCEEDED": "Bayi tahsisi doldu.",
+    "EMAIL_TAKEN": "Bu e-postanın zaten bir hesabı var.",
+    "CUSTOMER_OF_A_RESELLER": "Bu hesap bir bayinin müşterisi."
   },
   "Setup": {
     "title": "Kurulum sihirbazı",
@@ -1920,7 +1927,8 @@
     "stats": "İstatistikler",
     "billing": "Faturalandırma",
     "myBilling": "Faturalar",
-    "unpaidInvoices": "{n} fatura ödeme bekliyor"
+    "unpaidInvoices": "{n} fatura ödeme bekliyor",
+    "reseller": "Bayilik"
   },
   "Dashboard": {
     "eyebrow": "YÖNETİM",
@@ -4651,7 +4659,11 @@
       "server_backup_started": "Yedekleme başlatıldı",
       "server_backup_restore": "Yedekten geri yükleme başlatıldı",
       "server_backup_deleted": "Yedek silme başlatıldı",
-      "catalog_pool_backup": "Yedek depolaması değiştirildi"
+      "catalog_pool_backup": "Yedek depolaması değiştirildi",
+      "reseller_customer_created": "Bayi müşteri ekledi",
+      "reseller_server_ordered": "Bayi sunucu sipariş etti",
+      "reseller_saved": "Bayi tahsisi kaydedildi",
+      "reseller_removed": "Bayilik kaldırıldı"
     },
     "outcome": {
       "success": "Tamamlandı",
@@ -6447,5 +6459,64 @@
     "removing": "Yedek siliniyor",
     "restoring": "Geri yükleme başladı",
     "full": "Sınıra ulaşıldı: önce eski bir yedeği silin."
+  },
+  "Reseller": {
+    "title": "Bayilik",
+    "intro": "Müşterileriniz ve sunucuları. Sunucular size %{discount} indirimle faturalanır; müşterilerinizden ne alacağınız size kalmış.",
+    "allocation": "Tahsisiniz",
+    "monthly": "Tüm sunucular birlikte: ayda {amount} (indiriminizden sonra).",
+    "unlimited": "sınırsız",
+    "customers": "Müşteriler",
+    "servers": "Sunucular",
+    "disk": "Disk",
+    "customersTitle": "Müşteriler",
+    "customersHelp": "Yeni müşteriye bir hesap açılır; parolasını giriş sayfasındaki \"Parolamı unuttum\" ile belirler. Sunucularını görebilir ve yönetebilirsiniz.",
+    "email": "E-posta",
+    "name": "Ad",
+    "add": "Müşteri ekle",
+    "added": "{email} eklendi",
+    "search": "Ara",
+    "none": "Henüz müşteri yok",
+    "noneHelp": "İlkini yukarıdan ekleyin.",
+    "serverCount": "{n} sunucu",
+    "details": "Sunucular",
+    "noServers": "Henüz sunucu yok.",
+    "server": "Sunucu",
+    "size": "Boyut",
+    "state": "Durum",
+    "states": {
+      "on": "Çalışıyor",
+      "off": "Kapalı",
+      "busy": "İşlemde"
+    },
+    "orderFor": "Ona sunucu sipariş et",
+    "location": "Konum",
+    "package": "Paket",
+    "image": "İmaj",
+    "hostname": "Sunucu adı",
+    "sshKey": "Müşterinin SSH açık anahtarı",
+    "sshKeyHelp": "Müşterinin anahtarlarına eklenir ve sunucuya konur.",
+    "order": "Sipariş et",
+    "cancel": "Vazgeç",
+    "ordered": "{name} kuruluyor",
+    "admin": {
+      "title": "Bayilik",
+      "help": "Bayi bu tahsis içinde müşteri hesapları açar ve onlara sunucu sipariş eder; sunucuları bayiye indirimle faturalanır. Boş: sınırsız.",
+      "customers": "Müşteri",
+      "servers": "Sunucu",
+      "memory": "Bellek (GB)",
+      "disk": "Disk (GB)",
+      "discount": "İndirim (%)",
+      "noLimit": "sınırsız",
+      "using": "Şu an: {servers} sunucu, {vcpu} vCPU, {memory} GB, {disk} GB disk.",
+      "make": "Bayi yap",
+      "save": "Kaydet",
+      "saved": "Bayi kaydedildi",
+      "pause": "Duraklat",
+      "paused": "Duraklatıldı",
+      "active": "Etkin",
+      "stop": "Bayilikten çıkar",
+      "stopped": "Bayilikten çıkarıldı; müşterileri artık normal hesap"
+    }
   }
 }

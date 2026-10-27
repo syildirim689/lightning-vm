@@ -1182,3 +1182,37 @@ test('backups: a location\'s backup storage, a backup taken while the server run
   assert.equal((await send('DELETE', `/servers/${id}`, { confirm: 'backup-1' }, user, { 'idempotency-key': randomUUID() })).statusCode, 202);
   await until(async () => (await serverRow(id)).state === 'deleted', 'deleted', 120);
 });
+
+test('resellers: an allocation and a discount; customers of their own, servers ordered for them within the allocation at the discount; the reseller manages them, others cannot', { skip }, async () => {
+  const key = () => ({ 'idempotency-key': randomUUID() });
+  const resellerId = (await send('GET', '/auth/me', undefined, other)).json().id;
+  assert.equal((await send('GET', '/reseller/summary', undefined, other)).json().code, 'NOT_A_RESELLER');
+  assert.equal((await send('PUT', `/admin/resellers/${resellerId}`, { maxServers: 1 }, user)).statusCode, 403);
+  assert.equal((await send('PUT', `/admin/resellers/${resellerId}`, { discountPct: 95 })).json().fields.discountPct, 'OUT_OF_RANGE');
+  assert.equal((await send('PUT', `/admin/resellers/${resellerId}`, { maxCustomers: 5, maxServers: 1, maxVcpu: 4, discountPct: 20 })).statusCode, 200);
+  const summary = (await send('GET', '/reseller/summary', undefined, other)).json();
+  assert.deepEqual([summary.allocation.maxServers, summary.allocation.discountPct, summary.usage.customers], [1, 20, 0]);
+  const c = await send('POST', '/reseller/customers', { email: 'rc1@example.test', name: 'Reseller Customer' }, other);
+  assert.equal(c.statusCode, 201, c.body);
+  const customerId = c.json().id;
+  assert.equal((await send('POST', '/reseller/customers', { email: 'user@example.test' }, other)).json().fields.email, 'EMAIL_TAKEN');
+  assert.equal((await send('GET', `/reseller/customers/${customerId}`, undefined, user)).json().code, 'NOT_A_RESELLER');
+  const sshKey = 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMa0iBTtZu9kbSNXzg5M6pZ1rn8F1143iWq3JIcGimfn rc1';
+  const body = { type: 'package', poolId, packageId, imageId, name: 'rc-1', sshKey };
+  const made = await send('POST', `/reseller/customers/${customerId}/servers`, body, other);
+  assert.equal(made.statusCode, 202, made.body);
+  const id = made.json().serverId;
+  const s = await serverRow(id);
+  assert.deepEqual([s.owner_id, s.price_monthly], [customerId, '0.80'], 'the customer\'s server at the reseller\'s price (1.00 less 20 %)');
+  assert.equal((await send('POST', `/reseller/customers/${customerId}/servers`, { ...body, name: 'rc-2' }, other)).json().code, 'RESELLER_ALLOCATION_EXCEEDED');
+  // The reseller sees and acts on it; an unrelated customer does not.
+  assert.equal((await send('GET', `/servers/${id}`, undefined, other)).statusCode, 200);
+  assert.equal((await send('GET', `/servers/${id}`, undefined, user)).statusCode, 404);
+  const list = (await send('GET', '/admin/resellers')).json().resellers.find((r) => r.id === resellerId);
+  assert.deepEqual([list.usage.servers, list.customers], [1, 1]);
+  await until(async () => (await serverRow(id)).state === 'ready', 'reseller customer server ready', 120);
+  assert.equal((await send('DELETE', `/servers/${id}`, { confirm: 'rc-1' }, other, key())).statusCode, 202);
+  await until(async () => (await serverRow(id)).state === 'deleted', 'deleted', 120);
+  assert.equal((await send('DELETE', `/admin/resellers/${resellerId}`)).statusCode, 204);
+  assert.equal((await pool.query('SELECT reseller_id FROM users WHERE id = $1', [customerId])).rows[0].reseller_id, null);
+});
