@@ -874,7 +874,7 @@ test.describe('people, settings and smart features (English browser)', () => {
     await expect(page).toHaveURL(/\/admin$/);
     for (const path of ['/admin', '/admin/servers', '/admin/vmware', '/admin/catalog', '/admin/users', '/admin/roles', '/admin/settings?tab=mail', '/admin/system', '/', '/order', '/firewalls', '/admin/settings?tab=rdns', '/admin/catalog?tab=ip', '/account?tab=security',
       '/admin/topology', '/admin/energy', '/admin/abuse', '/admin/catalog?tab=locations', '/admin/catalog?tab=isos', '/admin/catalog?tab=vdcs', '/admin/settings?tab=domain', '/admin/settings?tab=servers', '/topology', '/vdc', '/account?tab=accessibility',
-      '/admin/catalog?tab=packages', '/admin/catalog?tab=apps', '/admin/settings?tab=security', '/admin/settings?tab=notifications', '/account?tab=keys', '/account?tab=notifications', '/admin/audit', '/account?tab=activity', '/admin/settings?tab=announcement', '/admin/terminal', '/admin/settings?tab=chat', '/admin/settings?tab=directory', '/admin/roles', '/admin/settings?tab=status', '/status', '/support', '/admin/support', '/admin/settings?tab=support', '/admin/stats']) {
+      '/admin/catalog?tab=packages', '/admin/catalog?tab=apps', '/admin/settings?tab=security', '/admin/settings?tab=notifications', '/account?tab=keys', '/account?tab=notifications', '/admin/audit', '/account?tab=activity', '/admin/settings?tab=announcement', '/admin/terminal', '/admin/settings?tab=chat', '/admin/settings?tab=directory', '/admin/roles', '/admin/settings?tab=status', '/status', '/support', '/admin/support', '/admin/settings?tab=support', '/admin/stats', '/account?tab=api']) {
       await page.goto(path);
       await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
       await expectNoOverflow(page, `${path} at ${viewport.width} px`);
@@ -947,6 +947,16 @@ test.describe('people, settings and smart features (English browser)', () => {
       await page.waitForTimeout(1500);
       await shot(page, name);
     }
+    // API: a token is shown once after it is made.
+    await page.goto('/account?tab=api');
+    await page.getByLabel('Name').fill('ci');
+    await page.getByRole('button', { name: 'Create token' }).click();
+    await expect(page.getByText('Copy it now: it is shown only once')).toBeVisible();
+    await expect(page.getByText(/^lvm_/).first()).toBeVisible();
+    await page.waitForTimeout(600);
+    await shot(page, 'account-api');
+    await page.goto('/account?tab=notifications');
+    await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
     // Messaging apps: the picker, then one app's form.
     await page.getByRole('button', { name: 'Connect an app' }).click();
     await expect(page.getByRole('dialog')).toBeVisible();
