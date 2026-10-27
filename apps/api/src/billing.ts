@@ -605,7 +605,7 @@ export class BillingCallbackController {
       if (r.ok || !['PROVIDER_ERROR', 'BAD_SIGNATURE'].includes(r.code)) await settlePayment(id, r);
       logEvent(r.ok ? 'info' : 'warn', 'payment_callback', { provider, paymentId: id, ok: r.ok, ...(!r.ok && { code: r.code }) });
     }
-    if (impl.reply) return reply.type('text/plain').send(impl.reply);
+    if (impl.reply) return reply.code(200).type('text/plain').send(impl.reply);
     return reply.code(303).header('location', `/billing/invoices/${p.invoice_id}?payment=${id}`).send();
   }
 }
