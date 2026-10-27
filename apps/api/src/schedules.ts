@@ -1,6 +1,7 @@
 // Power schedules: a server starts, shuts down or takes a snapshot by itself at a local time on chosen weekdays. The scheduler
 // (in the API, every minute, one instance at a time) starts an ordinary operation, so the task list, history
 // and notifications behave as if the owner had pressed the button.
+import { randomUUID } from 'node:crypto';
 import { Body, Controller, Delete, Get, HttpCode, Param, ParseUUIDPipe, Post, Put, Req, UseGuards } from '@nestjs/common';
 import { audit, SessionGuard, type AuthedRequest } from './auth';
 import { pool, redis } from './db';
@@ -114,17 +115,18 @@ async function runSnapshot(r: Record<string, string | number | boolean | null>, 
   const autos = snapshots.filter((s) => s.name.startsWith('auto ')).sort((a, b) => Date.parse(a.created) - Date.parse(b.created));
   const pseudo = { id: `schedule:${r.id}`, ip: null, user: { id: null } } as unknown as AuthedRequest;
   const server = { id: String(r.server_id), owner_id: String(r.owner_id) };
-  const minute = Math.floor(Date.now() / 60_000);
+  // A fresh key per step: the tick lock and last_run_at/pending_since already keep a run from repeating.
+  const step = randomUUID();
   if (autos.length >= keep || snapshots.length >= max) {
     if (!autos.length) return { outcome: 'skipped_limit', pending: false };
     const params = { snapshot: autos[0].id };
-    await startOperation(pseudo, server, 'snapshot_delete', `schedule:${r.id}:delete:${minute}`, hashOf({ id: server.id, kind: 'snapshot_delete', ...params }), params);
+    await startOperation(pseudo, server, 'snapshot_delete', `schedule:${r.id}:delete:${step}`, hashOf({ id: server.id, kind: 'snapshot_delete', ...params }), params);
     return { outcome: 'rotating', pending: true };
   }
   // The local date and time of the schedule's zone, e.g. "auto 2026-10-27 02:00".
   const name = `auto ${new Intl.DateTimeFormat('sv-SE', { timeZone: String(r.timezone), dateStyle: 'short', timeStyle: 'short' }).format(new Date())}`;
   const params = { name, description: 'Automatic snapshot (schedule)' };
-  await startOperation(pseudo, server, 'snapshot_create', `schedule:${r.id}:create:${minute}`, hashOf({ id: server.id, kind: 'snapshot_create', ...params }), params);
+  await startOperation(pseudo, server, 'snapshot_create', `schedule:${r.id}:create:${step}`, hashOf({ id: server.id, kind: 'snapshot_create', ...params }), params);
   return { outcome: 'started', pending: false };
 }
 
