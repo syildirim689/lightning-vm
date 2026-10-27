@@ -22,6 +22,7 @@ import { ServerReinstall, ServerResize } from './server-change';
 import { ServerTraffic } from './server-traffic';
 import { ServerBackups } from './server-backups';
 import { ServerPlacement } from './server-placement';
+import { ServerDisks } from './server-disks';
 import { useMe } from '../../lib/me';
 import { can } from '../../lib/permissions';
 import { ServerFilters, useServerFilters } from './server-filters';
@@ -263,6 +264,7 @@ export function ServerDetail({ id }: { id: string }) {
     {can(me?.permissions, 'servers.manage_all') && s.state === 'ready' && <ServerPlacement id={s.id} busy={!!open}/>}
     {s.state !== 'provisioning' && <ServerTraffic id={s.id} throttled={s.trafficThrottled}/>}
     {allowed.resize && s.state === 'ready' && !s.vdcId && <ServerResize server={s} busy={!!open}/>}
+    {allowed.resize && s.state === 'ready' && !s.vdcId && <ServerDisks serverId={s.id} busy={!!open}/>}
     {allowed.reinstall && ['ready', 'error'].includes(s.state) && <ServerReinstall server={s} busy={!!open} own={own}/>}
 
     <Section title={t('detail.history')}>

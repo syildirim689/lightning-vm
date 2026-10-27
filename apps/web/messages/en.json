@@ -330,7 +330,13 @@
     "NOT_A_RESELLER": "This account is not a reseller.",
     "RESELLER_ALLOCATION_EXCEEDED": "The reseller allocation is used up.",
     "CUSTOMER_OF_A_RESELLER": "This account is a reseller's customer.",
-    "INVALID_SSH_KEY": "Not a valid SSH public key."
+    "INVALID_SSH_KEY": "Not a valid SSH public key.",
+    "EXTRA_DISKS_NOT_SOLD": "This location does not sell extra disks.",
+    "DISK_LIMIT": "The server has the most extra disks it can have.",
+    "REMOVE_EXTRA_DISKS": "Remove the extra disks before reinstalling.",
+    "SYSTEM_DISK": "The system disk cannot be removed.",
+    "NO_DISK_CONTROLLER": "The server has no free disk slot.",
+    "DISK_NOT_FOUND": "The new disk was not found."
   },
   "Auth": {
     "required": "required",
@@ -1591,6 +1597,13 @@
       "help": "A datastore of this vCenter; another site's NFS store keeps backups apart from the servers.",
       "none": "No backups here",
       "saved": "Backup storage saved"
+    },
+    "disks": {
+      "price": "Extra disks (per GB a month)",
+      "notSold": "not sold",
+      "help": "Empty: customers cannot add disks here.",
+      "save": "Save",
+      "saved": "Extra disk price saved"
     }
   },
   "Servers": {
@@ -1628,7 +1641,9 @@
       "backup_create": "Back up",
       "backup_restore": "Restore a backup",
       "backup_delete": "Remove a backup",
-      "migrate": "Move"
+      "migrate": "Move",
+      "disk_add": "Add a disk",
+      "disk_remove": "Remove a disk"
     },
     "opStatus": {
       "pending": "Queued",
@@ -1656,7 +1671,8 @@
       "cleanup": "Cleaning up",
       "restore": "Restoring the disk",
       "delete": "Removing",
-      "migrate": "Moving"
+      "migrate": "Moving",
+      "disk": "Changing disks"
     },
     "action": {
       "power_on": "Power on",
@@ -4672,7 +4688,10 @@
       "reseller_saved": "Reseller allocation saved",
       "reseller_removed": "Reseller removed",
       "server_migrate": "Server moved",
-      "vmware_host_evacuate": "Host evacuated"
+      "vmware_host_evacuate": "Host evacuated",
+      "server_disk_added": "Extra disk added",
+      "server_disk_removed": "Extra disk removed",
+      "catalog_pool_extra_disks": "Extra disk price changed"
     },
     "outcome": {
       "success": "Done",
@@ -6539,5 +6558,28 @@
     "keep": "Keep where it is",
     "move": "Move",
     "moving": "Move started"
+  },
+  "Disks": {
+    "title": "Extra disks",
+    "help": "More disks beside the system disk, added while the server runs. A new disk is empty: partition and mount it in the server.",
+    "notSold": "This location does not sell extra disks.",
+    "size": "Size (GB)",
+    "add": "Add disk",
+    "price": "{price} a month",
+    "perGb": "{price} per GB a month",
+    "added": "The disk is being added",
+    "remove": "Remove",
+    "removeTitle": "Remove this disk?",
+    "removeBody": "Everything on it is deleted. Unmount it in the server first.",
+    "removing": "The disk is being removed",
+    "cancel": "Cancel",
+    "none": "No extra disks.",
+    "status": {
+      "pending": "Adding",
+      "ready": "Attached",
+      "removing": "Removing",
+      "failed": "Failed"
+    },
+    "full": "At most {max} extra disks."
   }
 }

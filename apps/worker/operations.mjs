@@ -340,6 +340,25 @@ const kinds = {
     await waitTask(db, ctx, ctx.op.provider_task_id);
     if (ctx.op.params.host) await db.query('UPDATE vmware_vms SET host_moref = $3 WHERE connection_id = $1 AND moref = $2', [ctx.s.connection_id, ctx.s.vm_moref, ctx.op.params.host]);
   },
+  // An extra disk: added beside the system disk; its device key is the new one VMware lists.
+  async disk_add(db, ctx) {
+    const before = (await adapter('/v1/vm/disks', { ...ctx.target, vm: ctx.s.vm_moref })).disks.map((d) => d.key);
+    const known = ctx.op.step === 'disk' && ctx.op.provider_task_id; // a retry waits for the stored task instead
+    await vmTask(db, ctx, 'disk', '/v1/vm/disk-add', { sizeGb: ctx.op.params.sizeGb });
+    const { rows: taken } = await db.query('SELECT device_key FROM server_disks WHERE server_id = $1 AND device_key IS NOT NULL', [ctx.s.id]);
+    const disks = (await adapter('/v1/vm/disks', { ...ctx.target, vm: ctx.s.vm_moref })).disks;
+    const fresh = disks.find((d) => !d.system && (known ? true : !before.includes(d.key)) && !taken.some((t) => t.device_key === d.key));
+    if (!fresh) throw new OperationError('DISK_NOT_FOUND', 'the new disk is not listed', true);
+    await db.query("UPDATE server_disks SET device_key = $2, status = 'ready' WHERE id = $1", [ctx.op.params.diskId, fresh.key]);
+  },
+  async disk_remove(db, ctx) {
+    const { rows: [d] } = await db.query('SELECT * FROM server_disks WHERE id = $1', [ctx.op.params.diskId]);
+    if (d) {
+      await vmTask(db, ctx, 'disk', '/v1/vm/disk-remove', { key: ctx.op.params.key });
+      await db.query('DELETE FROM server_disks WHERE id = $1', [d.id]);
+      await db.query('UPDATE servers SET price_monthly = greatest(0, price_monthly - $2), updated_at = now() WHERE id = $1', [ctx.s.id, d.price_monthly]);
+    }
+  },
   async backup_delete(db, ctx) {
     const b = await backupOf(db, ctx.op.params.backupId);
     await setStep(db, ctx.op, 'delete');
@@ -412,6 +431,7 @@ async function vmTask(db, ctx, step, path, body) {
   await setStep(db, ctx.op, step);
   if (ctx.op.provider_task_id) { await waitTask(db, ctx, ctx.op.provider_task_id); return; }
   const out = await adapter(path, { ...ctx.target, vm: ctx.s.vm_moref, ...body });
+  if (!out.task) return; // nothing left to do (already done)
   await saveTask(db, ctx.op, out.task);
   await waitTask(db, ctx, out.task);
 }
@@ -461,6 +481,8 @@ export async function processOperation(db, job, log, notify = async () => {}, rd
     if ((ctx.op.kind === 'create' || ctx.op.kind === 'reinstall') && status === 'failed') await db.query("UPDATE servers SET state = 'error', error_code = $2, updated_at = now() WHERE id = $1 AND state <> 'deleted'", [ctx.s.id, code]);
     // A restore refused after the server was stopped: it is started again as it was.
     if (ctx.op.kind === 'backup_restore' && status === 'failed' && ctx.op.params.powerOn) await adapter('/v1/vm/power', { ...ctx.target, vm: ctx.s.vm_moref, action: 'on' }).catch(() => undefined);
+    if (ctx.op.kind === 'disk_add' && status === 'failed') await db.query("UPDATE server_disks SET status = 'failed' WHERE id = $1", [ctx.op.params.diskId]);
+    if (ctx.op.kind === 'disk_remove' && status === 'failed') await db.query("UPDATE server_disks SET status = 'ready' WHERE id = $1", [ctx.op.params.diskId]);
     if (ctx.op.kind === 'backup_create' && status === 'failed') {
       await db.query("UPDATE backups SET status = 'failed', error_code = $2, finished_at = now() WHERE id = $1", [ctx.op.params.backupId, code]);
       const left = await snapshotNamed(ctx, `lightning-backup ${ctx.op.params.backupId}`).catch(() => null);

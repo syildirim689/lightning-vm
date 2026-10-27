@@ -21,7 +21,7 @@ type Connection = { id: string; name: string };
 type Layer = Record<string, number>;
 type Capacity = { physical: Layer; headroom: Layer; offered: Layer; used: Layer; reserved: Layer; available: Layer; realFreeGb: number; warnings: string[] };
 type Pool = { id: string; name: string; location: string; locationId: string | null; connectionName: string; cpuOvercommit: number; memoryOvercommit: number; storageOvercommit: number; capacity: Capacity; customRule: Record<string, unknown> | null;
-  extraIpv4Max: number; extraIpv4Price: string; trafficGb: number | null; connectionId: string; backupDatastore: string | null };
+  extraIpv4Max: number; extraIpv4Price: string; trafficGb: number | null; connectionId: string; backupDatastore: string | null; extraDiskPriceGb: string | null };
 type Pkg = { id: string; name: string; vcpu: number; memoryMb: number; diskGb: number; priceMonthly: string; currency: string; poolIds: string[]; trafficGb: number | null };
 type Image = { id: string; name: string; family: string; templateName: string | null; minDiskGb: number };
 type IpPool = IpPoolRow;
@@ -184,8 +184,20 @@ function PoolCard({ pool, removeButton }: { pool: Pool; removeButton: React.Reac
         <Disclosure.Content><Disclosure.Body className="pt-3"><PoolIpOptions pool={pool}/></Disclosure.Body></Disclosure.Content>
       </Disclosure>
       <PoolBackupTarget pool={pool}/>
+      <PoolDiskPrice pool={pool}/>
     </Card.Content>
   </Card>;
+}
+
+// The monthly price per GB of extra disks here; empty: customers cannot add disks in this location.
+function PoolDiskPrice({ pool }: { pool: Pool }) {
+  const t = useTranslations('Catalog');
+  const [price, setPrice] = useState(pool.extraDiskPriceGb ?? '');
+  const save = useApiAction(() => apiFetch(`/admin/pools/${pool.id}/extra-disks`, { method: 'PUT', body: { pricePerGb: price || null } }), { invalidate: [keys.pools], success: t('disks.saved') });
+  return <div className="flex flex-wrap items-end gap-3 rounded-xl border border-border p-3">
+    <TextInput className="w-56" label={t('disks.price')} value={price} onChange={setPrice} placeholder={t('disks.notSold')} help={t('disks.help')}/>
+    <Button size="sm" variant="secondary" isPending={save.isPending} isDisabled={(pool.extraDiskPriceGb ?? '') === price} onPress={() => save.mutate()}><I name="check" size={14}/>{t('disks.save')}</Button>
+  </div>;
 }
 
 // Where this location's backups are written: a datastore of its vCenter (another site's NFS store keeps them apart).

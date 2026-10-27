@@ -330,7 +330,13 @@
     "NOT_A_RESELLER": "Bu hesap bayi değil.",
     "RESELLER_ALLOCATION_EXCEEDED": "Bayi tahsisi doldu.",
     "CUSTOMER_OF_A_RESELLER": "Bu hesap bir bayinin müşterisi.",
-    "INVALID_SSH_KEY": "Geçerli bir SSH açık anahtarı değil."
+    "INVALID_SSH_KEY": "Geçerli bir SSH açık anahtarı değil.",
+    "EXTRA_DISKS_NOT_SOLD": "Bu konumda ek disk satılmıyor.",
+    "DISK_LIMIT": "Sunucu en fazla ek disk sayısına ulaştı.",
+    "REMOVE_EXTRA_DISKS": "Yeniden kurmadan önce ek diskleri kaldırın.",
+    "SYSTEM_DISK": "Sistem diski kaldırılamaz.",
+    "NO_DISK_CONTROLLER": "Sunucuda boş disk yuvası yok.",
+    "DISK_NOT_FOUND": "Yeni disk bulunamadı."
   },
   "Auth": {
     "required": "zorunlu",
@@ -1591,6 +1597,13 @@
       "help": "Bu vCenter'ın bir datastore'u; başka bir sitedeki NFS deposu yedekleri sunuculardan ayrı tutar.",
       "none": "Burada yedek yok",
       "saved": "Yedek depolaması kaydedildi"
+    },
+    "disks": {
+      "price": "Ek disk (GB başına aylık)",
+      "notSold": "satılmıyor",
+      "help": "Boş: müşteriler burada disk ekleyemez.",
+      "save": "Kaydet",
+      "saved": "Ek disk fiyatı kaydedildi"
     }
   },
   "Servers": {
@@ -1628,7 +1641,9 @@
       "backup_create": "Yedek alma",
       "backup_restore": "Yedekten geri yükleme",
       "backup_delete": "Yedek silme",
-      "migrate": "Taşıma"
+      "migrate": "Taşıma",
+      "disk_add": "Disk ekleme",
+      "disk_remove": "Disk kaldırma"
     },
     "opStatus": {
       "pending": "Sırada",
@@ -1656,7 +1671,8 @@
       "cleanup": "Temizleniyor",
       "restore": "Disk geri yükleniyor",
       "delete": "Siliniyor",
-      "migrate": "Taşınıyor"
+      "migrate": "Taşınıyor",
+      "disk": "Diskler değiştiriliyor"
     },
     "action": {
       "power_on": "Aç",
@@ -4672,7 +4688,10 @@
       "reseller_saved": "Bayi tahsisi kaydedildi",
       "reseller_removed": "Bayilik kaldırıldı",
       "server_migrate": "Sunucu taşındı",
-      "vmware_host_evacuate": "Host boşaltıldı"
+      "vmware_host_evacuate": "Host boşaltıldı",
+      "server_disk_added": "Ek disk eklendi",
+      "server_disk_removed": "Ek disk kaldırıldı",
+      "catalog_pool_extra_disks": "Ek disk fiyatı değiştirildi"
     },
     "outcome": {
       "success": "Tamamlandı",
@@ -6539,5 +6558,28 @@
     "keep": "Yerinde kalsın",
     "move": "Taşı",
     "moving": "Taşıma başladı"
+  },
+  "Disks": {
+    "title": "Ek diskler",
+    "help": "Sistem diskinin yanına, sunucu çalışırken eklenen diskler. Yeni disk boştur: sunucuda bölümlendirip bağlayın.",
+    "notSold": "Bu konumda ek disk satılmıyor.",
+    "size": "Boyut (GB)",
+    "add": "Disk ekle",
+    "price": "Aylık {price}",
+    "perGb": "GB başına aylık {price}",
+    "added": "Disk ekleniyor",
+    "remove": "Kaldır",
+    "removeTitle": "Bu disk kaldırılsın mı?",
+    "removeBody": "Üzerindeki her şey silinir. Önce sunucuda bağlantısını kaldırın.",
+    "removing": "Disk kaldırılıyor",
+    "cancel": "Vazgeç",
+    "none": "Ek disk yok.",
+    "status": {
+      "pending": "Ekleniyor",
+      "ready": "Bağlı",
+      "removing": "Kaldırılıyor",
+      "failed": "Başarısız"
+    },
+    "full": "En çok {max} ek disk."
   }
 }

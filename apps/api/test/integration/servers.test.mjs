@@ -1240,3 +1240,32 @@ test('placement: staff see the host a server runs on and move it to another host
   assert.equal((await send('DELETE', `/servers/${id}`, { confirm: 'move-1' }, user, { 'idempotency-key': randomUUID() })).statusCode, 202);
   await until(async () => (await serverRow(id)).state === 'deleted', 'deleted', 120);
 });
+
+test('extra disks: sold per GB where the location sets a price, added while the server runs (its price grows), never the system disk; removed with their data', { skip }, async () => {
+  const key = () => ({ 'idempotency-key': randomUUID() });
+  const made = await create(order('disks-1'));
+  const id = made.json().serverId;
+  await until(async () => (await serverRow(id)).state === 'ready', 'server ready', 120);
+  const path = `/servers/${id}/disks`;
+  assert.equal((await send('GET', path, undefined, user)).json().pricePerGb, null);
+  assert.equal((await send('POST', path, { sizeGb: 20 }, user)).json().code, 'EXTRA_DISKS_NOT_SOLD');
+  assert.equal((await send('PUT', `/admin/pools/${poolId}/extra-disks`, { pricePerGb: 'x' })).json().fields.pricePerGb, 'INVALID_AMOUNT');
+  assert.equal((await send('PUT', `/admin/pools/${poolId}/extra-disks`, { pricePerGb: '0.05' }, user)).statusCode, 403);
+  assert.equal((await send('PUT', `/admin/pools/${poolId}/extra-disks`, { pricePerGb: '0.05' })).statusCode, 200);
+  assert.equal((await send('POST', path, { sizeGb: 0 }, user)).json().fields.sizeGb, 'OUT_OF_RANGE');
+  const before = (await serverRow(id)).price_monthly;
+  const added = await send('POST', path, { sizeGb: 20 }, user);
+  assert.equal(added.statusCode, 202, added.body);
+  await until(async () => ['succeeded', 'failed'].includes((await lastOp(id)).status) && (await lastOp(id)).kind === 'disk_add', 'disk added', 120);
+  assert.equal((await lastOp(id)).status, 'succeeded', (await lastOp(id)).error_detail);
+  const list = (await send('GET', path, undefined, user)).json();
+  assert.deepEqual([list.disks.length, list.disks[0].sizeGb, list.disks[0].status, list.disks[0].priceMonthly], [1, 20, 'ready', '1.00']);
+  assert.equal((Number((await serverRow(id)).price_monthly) - Number(before)).toFixed(2), '1.00');
+  assert.equal((await send('POST', `/servers/${id}/reinstall`, { imageId, confirm: 'disks-1' }, user, key())).json().code, 'REMOVE_EXTRA_DISKS');
+  assert.equal((await send('DELETE', `${path}/${list.disks[0].id}`, undefined, user)).statusCode, 202);
+  await until(async () => (await send('GET', path, undefined, user)).json().disks.length === 0, 'disk removed', 120);
+  assert.equal((await serverRow(id)).price_monthly, before);
+  await send('PUT', `/admin/pools/${poolId}/extra-disks`, { pricePerGb: null });
+  assert.equal((await send('DELETE', `/servers/${id}`, { confirm: 'disks-1' }, user, key())).statusCode, 202);
+  await until(async () => (await serverRow(id)).state === 'deleted', 'deleted', 120);
+});
