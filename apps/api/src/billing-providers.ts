@@ -1,0 +1,234 @@
+// Real card payments (billing-gateways.ts interface) with iyzico, PayTR, Stripe, Craftgate and Param, from
+// docs/research-payment-flows.md. Every flow sends the customer to the provider's own page (3D Secure there; the panel never
+// sees a card number) and confirms the result with a server-side query to the provider before anything is marked paid.
+// Stored cards are charged without the customer only where the provider stores them from its hosted page (iyzico,
+// Stripe, Craftgate) and the merchant account allows non-3D charges; PayTR and Param store cards only through direct card
+// forms, so their invoices are paid by the customer on the hosted page. None of these was run against a real merchant
+// account during development: try one payment in test mode first.
+import { createHash, createHmac, randomBytes } from 'node:crypto';
+import type { Gateway, Result } from './billing-gateways';
+
+const timeout = 30_000;
+const hmacHex = (key: string, s: string) => createHmac('sha256', key).update(s, 'utf8').digest('hex');
+const hmacB64 = (key: string, s: string) => createHmac('sha256', key).update(s, 'utf8').digest('base64');
+const cents = (amount: string) => Math.round(Number(amount) * 100);
+const fail = (code: string, message?: string, ref?: string): Result => ({ ok: false, code, message: message?.slice(0, 300), ref });
+const esc = (s = '') => s.replace(/[<>&'"]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', "'": '&apos;', '"': '&quot;' }[c]!));
+const tag = (xml: string, n: string) => new RegExp(`<(?:\\w+:)?${n}[^>]*>([\\s\\S]*?)</(?:\\w+:)?${n}>`).exec(xml)?.[1] ?? '';
+const nameParts = (full: string) => { const p = full.trim().split(/\s+/); return { name: p.length > 1 ? p.slice(0, -1).join(' ') : p[0] || 'Müşteri', surname: p.length > 1 ? p.at(-1)! : p[0] || 'Müşteri' }; };
+const oid = (paymentId: string) => paymentId.replace(/-/g, ''); // PayTR: letters and digits only
+const fromOid = (o: string) => (/^[0-9a-f]{32}$/i.test(o) ? `${o.slice(0, 8)}-${o.slice(8, 12)}-${o.slice(12, 16)}-${o.slice(16, 20)}-${o.slice(20)}` : null);
+
+async function json(url: string, init: RequestInit) {
+  const res = await fetch(url, { ...init, signal: AbortSignal.timeout(timeout) });
+  const text = await res.text();
+  try { return { status: res.status, body: JSON.parse(text) as Record<string, any> }; } // eslint-disable-line @typescript-eslint/no-explicit-any
+  catch { return { status: res.status, body: { raw: text.slice(0, 300) } as Record<string, any> }; } // eslint-disable-line @typescript-eslint/no-explicit-any
+}
+
+// ---- iyzico: Checkout Form (hosted, 3DS), card storage through it, non-3D charge of a stored card, refunds ----
+// iyzico's price format: a decimal without trailing zeros ("10.0" for 10, "10.5" for 10.50), as its SDKs send.
+export const iyziPrice = (amount: string) => { const s = Number(amount).toFixed(2).replace(/0+$/, ''); return s.endsWith('.') ? `${s}0` : s; };
+async function iyzi(c: Record<string, string>, path: string, payload: object) {
+  const body = JSON.stringify(payload);
+  const rnd = `${Date.now()}${randomBytes(4).toString('hex')}`;
+  const auth = Buffer.from(`apiKey:${c.apiKey}&randomKey:${rnd}&signature:${hmacHex(c.secretKey, rnd + path + body)}`).toString('base64');
+  return (await json(c.endpoint + path, { method: 'POST', body, headers: { 'content-type': 'application/json', 'x-iyzi-rnd': rnd, authorization: `IYZWSv2 ${auth}` } })).body;
+}
+const iyziParties = (b: { name: string; email: string; taxId: string; phone: string; address: string; city: string; country: string; ip: string; id: string }) => {
+  const n = nameParts(b.name);
+  const address = { contactName: b.name, city: b.city || 'Istanbul', country: b.country === 'TR' ? 'Turkey' : b.country, address: b.address || '-' };
+  return { buyer: { id: b.id, ...n, identityNumber: /^\d{11}$/.test(b.taxId) ? b.taxId : '11111111111', email: b.email, gsmNumber: b.phone || undefined,
+    registrationAddress: address.address, city: address.city, country: address.country, ip: b.ip }, billingAddress: address, shippingAddress: address };
+};
+export const iyzico: Gateway = {
+  async checkout(c, creds) {
+    const price = iyziPrice(c.amount);
+    const r = await iyzi(creds, '/payment/iyzipos/checkoutform/initialize/auth/ecom', { locale: 'tr', conversationId: c.paymentId, price, paidPrice: price, currency: c.currency,
+      basketId: c.paymentId, paymentGroup: 'SUBSCRIPTION', callbackUrl: c.callbackUrl, enabledInstallments: [1], forceThreeDS: 1, ...iyziParties(c.buyer),
+      basketItems: [{ id: c.paymentId, name: c.description, category1: 'Hosting', itemType: 'VIRTUAL', price }] });
+    if (r.status !== 'success' || !r.paymentPageUrl) throw new Error(`iyzico: ${r.errorCode ?? ''} ${r.errorMessage ?? r.raw ?? ''}`.trim());
+    return { redirect: r.paymentPageUrl as string };
+  },
+  async verify({ body, payment }, creds) {
+    const token = String(body.token ?? '');
+    if (!token) return fail('NO_TOKEN');
+    const r = await iyzi(creds, '/payment/iyzipos/checkoutform/auth/ecom/detail', { locale: 'tr', conversationId: payment.id, token });
+    const sig = hmacHex(creds.secretKey, [r.paymentStatus, r.paymentId, r.currency, r.basketId, r.conversationId, r.paidPrice, r.price, r.token].join(':'));
+    if (r.signature && r.signature !== sig) return fail('BAD_SIGNATURE', 'iyzico signature mismatch');
+    if (r.status !== 'success' || r.paymentStatus !== 'SUCCESS') return fail(r.errorCode ? `IYZICO_${r.errorCode}` : 'CARD_DECLINED', r.errorMessage, r.paymentId);
+    if (r.basketId !== payment.id || Math.abs(Number(r.paidPrice) - Number(payment.amount)) > 0.001 || r.currency !== payment.currency) return fail('AMOUNT_MISMATCH', 'The provider reported a different payment', r.paymentId);
+    if (r.fraudStatus !== undefined && Number(r.fraudStatus) !== 1) return fail('FRAUD_REVIEW', 'iyzico holds the payment for review', r.paymentId);
+    return { ok: true, ref: String(r.paymentId), ...(r.cardUserKey && r.cardToken && { card: { token: `${r.cardUserKey}|${r.cardToken}`, brand: r.cardAssociation, last4: r.lastFourDigits } }) };
+  },
+  async chargeSaved(token, c, creds) {
+    const [cardUserKey, cardToken] = token.split('|');
+    const price = iyziPrice(c.amount);
+    const r = await iyzi(creds, '/payment/auth', { locale: 'tr', conversationId: c.paymentId, price, paidPrice: price, currency: c.currency, installment: 1, basketId: c.paymentId,
+      paymentChannel: 'WEB', paymentGroup: 'SUBSCRIPTION', paymentCard: { cardUserKey, cardToken }, ...iyziParties(c.buyer),
+      basketItems: [{ id: c.paymentId, name: c.description, category1: 'Hosting', itemType: 'VIRTUAL', price }] });
+    return r.status === 'success' ? { ok: true, ref: String(r.paymentId) } : fail(r.errorCode ? `IYZICO_${r.errorCode}` : 'CARD_DECLINED', r.errorMessage);
+  },
+  async refund(ref, amount, currency, creds) {
+    const r = await iyzi(creds, '/v2/payment/refund', { locale: 'tr', conversationId: `rf${Date.now()}`, paymentId: ref, price: iyziPrice(amount), currency, ip: '127.0.0.1' });
+    return r.status === 'success' ? { ok: true, ref: String(r.paymentId ?? ref) } : { ok: false, code: String(r.errorCode ?? 'REFUND_FAILED'), message: r.errorMessage };
+  },
+};
+
+// ---- PayTR: iFrame API (hosted, 3DS); the result comes to the notification URL set in the PayTR panel ----
+export const paytrToken = (key: string, salt: string, parts: (string | number)[]) => hmacB64(key, parts.join('') + salt);
+export const paytr: Gateway & { paymentIdFrom(body: Record<string, unknown>): string | null; reply: string } = {
+  reply: 'OK',
+  paymentIdFrom: (body) => fromOid(String(body.merchant_oid ?? '')),
+  async checkout(c, creds, mode) {
+    const basket = Buffer.from(JSON.stringify([[c.description, Number(c.amount).toFixed(2), 1]])).toString('base64');
+    const f = { merchant_id: creds.merchant_id, user_ip: c.buyer.ip, merchant_oid: oid(c.paymentId), email: c.buyer.email, payment_amount: String(cents(c.amount)), user_basket: basket,
+      no_installment: '1', max_installment: '0', currency: c.currency === 'TRY' ? 'TL' : c.currency, test_mode: mode === 'test' ? '1' : '0' };
+    const token = paytrToken(creds.merchant_key, creds.merchant_salt, [f.merchant_id, f.user_ip, f.merchant_oid, f.email, f.payment_amount, f.user_basket, f.no_installment, f.max_installment, f.currency, f.test_mode]);
+    const res = await fetch(`${creds.endpoint}/odeme/api/get-token`, { method: 'POST', signal: AbortSignal.timeout(timeout), headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ ...f, paytr_token: token, user_name: c.buyer.name, user_address: c.buyer.address || '-', user_phone: c.buyer.phone || '0000000000',
+        merchant_ok_url: c.returnUrl, merchant_fail_url: c.returnUrl, timeout_limit: '30', debug_on: mode === 'test' ? '1' : '0', lang: 'tr' }) });
+    const r = await res.json().catch(() => ({})) as { status?: string; token?: string; reason?: string };
+    if (r.status !== 'success' || !r.token) throw new Error(`PayTR: ${r.reason ?? `HTTP ${res.status}`}`);
+    // PayTR's page lives in an iframe on ours.
+    return { html: `<!doctype html><html lang="tr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>PayTR</title>`
+      + `<style>body{margin:0;font-family:system-ui;background:#f6f6f6}main{max-width:720px;margin:24px auto;padding:0 12px}iframe{width:100%;border:0;min-height:640px;background:#fff;border-radius:12px}</style></head>`
+      + `<body><main><iframe src="https://www.paytr.com/odeme/guvenli/${esc(r.token)}" id="paytriframe" scrolling="no"></iframe></main>`
+      + `<script src="https://www.paytr.com/js/iframeResizer.min.js"></script><script>iFrameResize({},'#paytriframe');</script></body></html>` };
+  },
+  async verify({ body, payment }, creds) {
+    // hash = base64(HMAC(merchant_key, merchant_oid + merchant_salt + status + total_amount))
+    const hash = hmacB64(creds.merchant_key, `${body.merchant_oid}${creds.merchant_salt}${body.status}${body.total_amount}`);
+    if (String(body.hash ?? '') !== hash) return fail('BAD_SIGNATURE', 'PayTR hash mismatch');
+    if (body.status !== 'success') return fail(`PAYTR_${body.failed_reason_code ?? 'FAILED'}`, String(body.failed_reason_msg ?? ''));
+    if (Number(body.payment_amount ?? body.total_amount) < cents(payment.amount)) return fail('AMOUNT_MISMATCH', 'PayTR reported a smaller amount');
+    return { ok: true, ref: String(body.merchant_oid) };
+  },
+  async refund(ref, amount, _currency, creds) {
+    const r = await fetch(`${creds.endpoint}/odeme/iade`, { method: 'POST', signal: AbortSignal.timeout(timeout), headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ merchant_id: creds.merchant_id, merchant_oid: ref, return_amount: Number(amount).toFixed(2),
+        paytr_token: paytrToken(creds.merchant_key, creds.merchant_salt, [creds.merchant_id, ref, Number(amount).toFixed(2)]) }) }).then((x) => x.json()).catch(() => ({})) as { status?: string; err_no?: string; err_msg?: string };
+    return r.status === 'success' ? { ok: true, ref } : { ok: false, code: String(r.err_no ?? 'REFUND_FAILED'), message: r.err_msg };
+  },
+};
+
+// ---- Stripe: Checkout Session (hosted, 3DS), the card kept for off-session charges, refunds ----
+async function stripeApi(creds: Record<string, string>, method: string, path: string, form?: Record<string, string>, idem?: string) {
+  return (await json(`https://api.stripe.com${path}`, { method, body: form ? new URLSearchParams(form) : undefined,
+    headers: { authorization: `Bearer ${creds.secretKey}`, ...(form && { 'content-type': 'application/x-www-form-urlencoded' }), ...(idem && { 'idempotency-key': idem }) } })).body;
+}
+export const stripe: Gateway = {
+  async checkout(c, creds) {
+    const r = await stripeApi(creds, 'POST', '/v1/checkout/sessions', {
+      mode: 'payment', 'line_items[0][price_data][currency]': c.currency.toLowerCase(), 'line_items[0][price_data][unit_amount]': String(cents(c.amount)),
+      'line_items[0][price_data][product_data][name]': c.description, 'line_items[0][quantity]': '1', customer_email: c.buyer.email, client_reference_id: c.paymentId,
+      'metadata[payment_id]': c.paymentId, 'payment_intent_data[metadata][payment_id]': c.paymentId, customer_creation: 'always',
+      ...(c.saveCard && { 'payment_intent_data[setup_future_usage]': 'off_session' }),
+      success_url: `${c.callbackUrl}?session_id={CHECKOUT_SESSION_ID}`, cancel_url: c.returnUrl }, c.paymentId);
+    if (!r.url) throw new Error(`Stripe: ${r.error?.message ?? 'no checkout url'}`);
+    return { redirect: r.url as string };
+  },
+  async verify({ query, payment }, creds) {
+    const id = String(query.session_id ?? '');
+    if (!/^cs_[\w]+$/.test(id)) return fail('NO_SESSION');
+    const s = await stripeApi(creds, 'GET', `/v1/checkout/sessions/${id}?expand[]=payment_intent`);
+    if (s.client_reference_id !== payment.id) return fail('AMOUNT_MISMATCH', 'Another payment’s session');
+    if (s.payment_status !== 'paid') return fail('CARD_DECLINED', s.payment_intent?.last_payment_error?.message);
+    if (s.amount_total !== cents(payment.amount) || String(s.currency).toUpperCase() !== payment.currency) return fail('AMOUNT_MISMATCH', 'Stripe reported a different amount');
+    const pi = s.payment_intent;
+    const pm = typeof pi?.payment_method === 'string' ? pi.payment_method : pi?.payment_method?.id;
+    return { ok: true, ref: String(pi?.id ?? id), ...(s.customer && pm && pi?.setup_future_usage && { card: { token: `${s.customer}|${pm}` } }) };
+  },
+  async chargeSaved(token, c, creds) {
+    const [customer, pm] = token.split('|');
+    const r = await stripeApi(creds, 'POST', '/v1/payment_intents', { amount: String(cents(c.amount)), currency: c.currency.toLowerCase(), customer, payment_method: pm,
+      off_session: 'true', confirm: 'true', 'metadata[payment_id]': c.paymentId }, c.paymentId);
+    if (r.status === 'succeeded') return { ok: true, ref: String(r.id) };
+    return fail(String(r.error?.code ?? r.error?.decline_code ?? 'CARD_DECLINED').toUpperCase(), r.error?.message);
+  },
+  async refund(ref, amount, _currency, creds) {
+    const r = await stripeApi(creds, 'POST', '/v1/refunds', { payment_intent: ref, amount: String(cents(amount)) }, `rf_${ref}_${cents(amount)}_${Date.now()}`);
+    return r.id ? { ok: true, ref: String(r.id) } : { ok: false, code: String(r.error?.code ?? 'REFUND_FAILED'), message: r.error?.message };
+  },
+};
+
+// ---- Craftgate: Ortak Ödeme Formu (hosted, 3DS, stores the card), stored-card charge, refunds ----
+async function craft(creds: Record<string, string>, method: string, path: string, payload?: object, idem?: string) {
+  const url = `${creds.endpoint}${path}`;
+  const body = payload ? JSON.stringify(payload) : '';
+  const rnd = randomBytes(8).toString('hex');
+  const signature = createHash('sha256').update(decodeURIComponent(url) + creds.apiKey + creds.secretKey + rnd + body).digest('base64');
+  return (await json(url, { method, body: body || undefined, headers: { 'content-type': 'application/json', accept: 'application/json', 'x-api-key': creds.apiKey, 'x-rnd-key': rnd,
+    'x-auth-version': '1', 'x-signature': signature, ...(idem && { 'x-idempotency-key': idem }) } })).body;
+}
+export const craftgate: Gateway = {
+  async checkout(c, creds) {
+    const amount = Number(c.amount);
+    const r = await craft(creds, 'POST', '/payment/v1/checkout-payments/init', { price: amount, paidPrice: amount, currency: c.currency, paymentGroup: 'LISTING_OR_SUBSCRIPTION',
+      conversationId: c.paymentId, callbackUrl: c.callbackUrl, items: [{ name: c.description, price: amount, externalId: c.paymentId }], enabledInstallments: [1], forceThreeDS: true,
+      alwaysStoreCardAfterPayment: c.saveCard, clientIp: c.buyer.ip }, c.paymentId);
+    const d = r.data ?? r;
+    if (!d.pageUrl) throw new Error(`Craftgate: ${r.errors?.errorDescription ?? 'no page'}`);
+    return { redirect: d.pageUrl as string, providerRef: d.token as string };
+  },
+  async verify({ payment }, creds) {
+    if (!payment.providerRef) return fail('NO_TOKEN');
+    const r = await craft(creds, 'GET', `/payment/v1/checkout-payments/${encodeURIComponent(payment.providerRef)}`);
+    const d = r.data ?? r;
+    if (d.paymentStatus !== 'SUCCESS') return fail('CARD_DECLINED', r.errors?.errorDescription ?? d.paymentError?.errorDescription);
+    if (d.conversationId !== payment.id || Math.abs(Number(d.paidPrice) - Number(payment.amount)) > 0.001 || d.currency !== payment.currency) return fail('AMOUNT_MISMATCH', 'Craftgate reported a different payment');
+    return { ok: true, ref: String(d.id), ...(d.cardUserKey && d.cardToken && { card: { token: `${d.cardUserKey}|${d.cardToken}`, brand: d.cardAssociation, last4: d.binNumber ? String(d.lastFourDigits ?? '') : undefined } }) };
+  },
+  async chargeSaved(token, c, creds) {
+    const [cardUserKey, cardToken] = token.split('|');
+    const amount = Number(c.amount);
+    const r = await craft(creds, 'POST', '/payment/v1/card-payments', { price: amount, paidPrice: amount, walletPrice: 0, installment: 1, currency: c.currency, paymentGroup: 'LISTING_OR_SUBSCRIPTION',
+      conversationId: c.paymentId, card: { cardUserKey, cardToken }, items: [{ name: c.description, price: amount, externalId: c.paymentId }] }, c.paymentId);
+    const d = r.data ?? r;
+    return d.paymentStatus === 'SUCCESS' ? { ok: true, ref: String(d.id) } : fail(String(r.errors?.errorCode ?? 'CARD_DECLINED'), r.errors?.errorDescription);
+  },
+  async refund(ref, amount, _currency, creds) {
+    const r = await craft(creds, 'POST', '/payment/v1/refunds', { paymentId: Number(ref), refundDestinationType: 'PROVIDER', refundPrice: Number(amount) }, `rf${ref}${Date.now()}`);
+    const d = r.data ?? r;
+    return d.id || d.status === 'SUCCESS' ? { ok: true, ref: String(d.id ?? ref) } : { ok: false, code: String(r.errors?.errorCode ?? 'REFUND_FAILED'), message: r.errors?.errorDescription };
+  },
+};
+
+// ---- Param: Ortak Ödeme Sayfası (hosted, 3DS); the browser returns with a signed result; refunds. No stored cards (only
+// through a card form on our server, which would put card numbers on it). ----
+const paramSoap = async (url: string, action: string, ns: string, header: string, body: string) => {
+  const res = await fetch(url, { method: 'POST', signal: AbortSignal.timeout(timeout), headers: { 'content-type': 'text/xml; charset=utf-8', SOAPAction: `"${ns}${action}"` },
+    body: `<?xml version="1.0" encoding="utf-8"?><soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/"><soap:Header>${header}</soap:Header><soap:Body>${body}</soap:Body></soap:Envelope>` });
+  return res.text();
+};
+const paramMoney = (amount: string) => Number(amount).toFixed(2).replace('.', ',');
+const paramPage = (endpoint: string) => (/testposws|test-dmz/.test(endpoint) ? 'https://testpos.param.com.tr' : 'https://pos.param.com.tr');
+export const param: Gateway = {
+  async checkout(c, creds) {
+    const header = `<ServiceSecuritySoapHeader xmlns="https://turkodeme.com.tr/"><CLIENT_CODE>${esc(creds.CLIENT_CODE)}</CLIENT_CODE><CLIENT_USERNAME>${esc(creds.CLIENT_USERNAME)}</CLIENT_USERNAME>`
+      + `<CLIENT_PASSWORD>${esc(creds.CLIENT_PASSWORD)}</CLIENT_PASSWORD></ServiceSecuritySoapHeader>`;
+    const x = await paramSoap(`${paramPage(creds.endpoint)}/Tahsilat/to.ws/Service_Odeme.asmx`, 'TO_Pre_Encrypting_OOS', 'https://turkodeme.com.tr/', header,
+      `<TO_Pre_Encrypting_OOS xmlns="https://turkodeme.com.tr/"><Borclu_Kisi_TC>${/^\d{11}$/.test(c.buyer.taxId) ? c.buyer.taxId : ''}</Borclu_Kisi_TC><Borclu_Aciklama>r|${esc(c.description)}</Borclu_Aciklama>`
+      + `<Borclu_Tutar>r|${paramMoney(c.amount)}</Borclu_Tutar><Borclu_GSM>r|${esc((c.buyer.phone || '').replace(/\D/g, '').slice(-10))}</Borclu_GSM><Borclu_Odeme_Tip>r|</Borclu_Odeme_Tip>`
+      + `<Borclu_AdSoyad>r|${esc(c.buyer.name)}</Borclu_AdSoyad><Return_URL>r|${esc(c.callbackUrl)}</Return_URL><Islem_ID>${oid(c.paymentId)}</Islem_ID><Taksit>1</Taksit>`
+      + `<Terminal_ID>${esc(creds.CLIENT_CODE)}</Terminal_ID></TO_Pre_Encrypting_OOS>`);
+    const s = tag(x, 'TO_Pre_Encrypting_OOSResult');
+    if (!s || /hata|error|denied/i.test(s)) throw new Error(`Param: ${s || x.replace(/<[^>]+>/g, ' ').slice(0, 200)}`);
+    return { redirect: `${paramPage(creds.endpoint)}/Tahsilat/Default.aspx?s=${encodeURIComponent(s)}` };
+  },
+  async verify({ body, payment }, creds) {
+    const g = (k: string) => String(body[`TURKPOS_RETVAL_${k}`] ?? '');
+    const hash = createHash('sha1').update(Buffer.from(creds.CLIENT_CODE + g('GUID') + g('Dekont_ID') + g('Tahsilat_Tutari') + g('Siparis_ID') + g('Islem_ID'), 'latin1')).digest('base64');
+    if (g('Hash') !== hash) return fail('BAD_SIGNATURE', 'Param hash mismatch');
+    if (!(Number(g('Sonuc')) > 0)) return fail('CARD_DECLINED', g('Sonuc_Str'));
+    if (g('Islem_ID') && g('Islem_ID') !== oid(payment.id)) return fail('AMOUNT_MISMATCH', 'Another payment’s result');
+    if (Number(g('Tahsilat_Tutari').replace(',', '.')) + 0.001 < Number(payment.amount)) return fail('AMOUNT_MISMATCH', 'Param reported a smaller amount');
+    return { ok: true, ref: g('Siparis_ID') || g('Dekont_ID') };
+  },
+  async refund(ref, amount, _currency, creds) {
+    const x = await paramSoap(creds.endpoint, 'TP_Islem_Iptal_Iade_Kismi2', 'https://turkpos.com.tr/', '',
+      `<TP_Islem_Iptal_Iade_Kismi2 xmlns="https://turkpos.com.tr/"><G><CLIENT_CODE>${esc(creds.CLIENT_CODE)}</CLIENT_CODE><CLIENT_USERNAME>${esc(creds.CLIENT_USERNAME)}</CLIENT_USERNAME>`
+      + `<CLIENT_PASSWORD>${esc(creds.CLIENT_PASSWORD)}</CLIENT_PASSWORD></G><GUID>${esc(creds.GUID)}</GUID><Durum>IADE</Durum><Siparis_ID>${esc(ref)}</Siparis_ID><Tutar>${Number(amount).toFixed(2)}</Tutar></TP_Islem_Iptal_Iade_Kismi2>`);
+    return Number(tag(x, 'Sonuc')) > 0 ? { ok: true, ref } : { ok: false, code: 'REFUND_FAILED', message: tag(x, 'Sonuc_Str') };
+  },
+};

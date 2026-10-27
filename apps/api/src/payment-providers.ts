@@ -102,8 +102,8 @@ const param: Provider = {
   name: 'Param (TurkPos)', kind: 'gateway', platform: 'Param', website: 'https://param.com.tr', docs: 'https://dev.param.com.tr', confidence: 'community',
   fields: [f('CLIENT_CODE', 'Terminal no (CLIENT_CODE)', 'Client code'), f('CLIENT_USERNAME', 'Kullanıcı adı', 'User name'),
     secret('CLIENT_PASSWORD', 'Şifre', 'Password'), secret('GUID', 'Üye işyeri anahtarı (GUID)', 'Merchant key (GUID)')],
-  hosts: { live: 'https://posws.param.com.tr/turkpos.ws/service_turkpos_prod.asmx', test: 'https://test-dmz.param.com.tr/turkpos.ws/service_turkpos_test.asmx' },
-  threeD: ['3D (TP_WMD_UCD)', '3D_PAY', '3D_HOST'], notes: ['TEST_HOST_UNCERTAIN'],
+  hosts: { live: 'https://posws.param.com.tr/turkpos.ws/service_turkpos_prod.asmx', test: 'https://testposws.param.com.tr/turkpos.ws/service_turkpos_prod.asmx' },
+  threeD: ['3D (TP_WMD_UCD)', '3D_PAY', '3D_HOST'], notes: [],
   testCredentials: { CLIENT_CODE: '10738', CLIENT_USERNAME: 'Test', CLIENT_PASSWORD: 'Test', GUID: '0c13d406-873b-403b-9c09-a5766840d98c' }, testCards: ['5456165456165454'],
   async check(c, base) {
     const xml = `<?xml version="1.0" encoding="utf-8"?><soap:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/"><soap:Body>`

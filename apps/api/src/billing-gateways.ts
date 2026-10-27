@@ -4,6 +4,7 @@
 // customer; refund() gives money back. 'sandbox' is the panel's own test provider (cards below), for trying the
 // whole flow without an account anywhere.
 import { randomBytes } from 'node:crypto';
+import { craftgate, iyzico, param, paytr, stripe } from './billing-providers';
 
 export type Buyer = { id: string; name: string; email: string; taxId: string; phone: string; address: string; city: string; country: string; ip: string };
 export type Checkout = { paymentId: string; amount: string; currency: string; description: string; buyer: Buyer; saveCard: boolean; returnUrl: string; callbackUrl: string };
@@ -11,11 +12,16 @@ export type Checkout = { paymentId: string; amount: string; currency: string; de
 export type Result = { ok: true; ref: string; card?: { token: string; brand?: string; last4?: string; expMonth?: number; expYear?: number; holder?: string } }
   | { ok: false; code: string; message?: string; ref?: string };
 export type Gateway = {
-  checkout(c: Checkout, creds: Record<string, string>, mode: 'live' | 'test'): Promise<{ redirect: string } | { html: string }>;
+  // Where the customer goes (or a page to show), and the provider's own reference when it is known only now (Craftgate's token).
+  checkout(c: Checkout, creds: Record<string, string>, mode: 'live' | 'test'): Promise<({ redirect: string } | { html: string }) & { providerRef?: string }>;
   verify(input: { query: Record<string, string>; body: Record<string, unknown>; payment: { id: string; amount: string; currency: string; providerRef: string | null } },
     creds: Record<string, string>, mode: 'live' | 'test'): Promise<Result>;
   chargeSaved?(token: string, c: Omit<Checkout, 'returnUrl' | 'callbackUrl' | 'saveCard'>, creds: Record<string, string>, mode: 'live' | 'test'): Promise<Result>;
   refund?(ref: string, amount: string, currency: string, creds: Record<string, string>, mode: 'live' | 'test'): Promise<{ ok: true; ref: string } | { ok: false; code: string; message?: string }>;
+  // A server-to-server notification that does not carry our payment id in its URL (PayTR): find it in the body, and the
+  // exact text the provider expects back.
+  paymentIdFrom?(body: Record<string, unknown>): string | null;
+  reply?: string;
 };
 
 // Test cards of the sandbox: 4242 4242 4242 4242 is approved, 4000 0000 0000 0002 declined, 4000 0000 0000 9995
@@ -45,4 +51,4 @@ export const sandbox: Gateway = {
 };
 
 // Real providers register here (billing-providers/*.ts); a provider without an entry can be configured but not charge.
-export const gateways: Record<string, Gateway> = { sandbox };
+export const gateways: Record<string, Gateway> = { sandbox, iyzico, paytr, stripe, craftgate, param };

@@ -2,7 +2,8 @@
 // automatic charges, reminders, overdue notices, suspension and termination). Rules without I/O are in billing-rules.ts,
 // payment providers in billing-gateways.ts. An invoice awaits payment (a pro forma without a legal number) until it is
 // paid; then it gets its number in the year's series and is issued (e-Fatura / e-Arşiv in einvoice.ts).
-import { Body, Controller, Delete, Get, HttpCode, Param, ParseUUIDPipe, Post, Put, Query, Req, UseGuards } from '@nestjs/common';
+import { All, Body, Controller, Delete, Get, HttpCode, Param, ParseUUIDPipe, Post, Put, Query, Req, Res, UseGuards } from '@nestjs/common';
+import type { FastifyReply } from 'fastify';
 import type { Pool, PoolClient } from 'pg';
 import { audit, SessionGuard, type AuthedRequest } from './auth';
 import { pool, redis } from './db';
@@ -205,7 +206,9 @@ async function startCardPayment(req: AuthedRequest, inv: Row, provider: string, 
     const out = await impl.checkout({ paymentId: p.id, amount: fromCents(due), currency: inv.currency, description: inv.number ?? `#${String(inv.id).slice(0, 8)}`, saveCard,
       buyer: { id: inv.owner_id, name: b.name, email: b.email, taxId: b.taxId, phone: b.phone, address: b.address, city: b.city, country: b.country, ip: req.ip },
       returnUrl: `${origin}/billing/invoices/${inv.id}?payment=${p.id}`, callbackUrl: `${origin}/api/billing/callback/${provider}/${p.id}` }, gw.creds, gw.mode);
-    return { paymentId: p.id, ...out };
+    if (out.providerRef) await pool.query('UPDATE payments SET provider_ref = $2 WHERE id = $1', [p.id, out.providerRef]);
+    const { providerRef: _, ...rest } = out; // eslint-disable-line @typescript-eslint/no-unused-vars
+    return { paymentId: p.id, ...rest };
   } catch (e) {
     await settlePayment(p.id, { ok: false, code: 'PROVIDER_ERROR', message: String((e as Error)?.message ?? e).slice(0, 200) });
     throw apiError(502, 'PAYMENT_PROVIDER_ERROR', 'The payment provider did not answer');
@@ -571,19 +574,39 @@ export class BillingController {
   }
 }
 
-// A provider's server-to-server callback (no session): verified with the provider before anything is recorded.
+// The provider's answer (no session, no CSRF header: it comes from the provider or the customer's browser on its way back).
+// Nothing in it is trusted: each provider is asked (or its signature checked) before the payment is recorded. A browser is
+// then sent to the invoice; a server notification gets the text the provider expects.
 @Controller('billing/callback')
 export class BillingCallbackController {
-  @Post(':provider/:id') @HttpCode(200)
-  async callback(@Param('provider') provider: string, @Param('id', ParseUUIDPipe) id: string, @Query() query: Record<string, string>, @Body() body: Record<string, unknown>) {
-    const { rows: [p] } = await pool.query('SELECT id, amount::text, currency, provider_ref, status, mode FROM payments WHERE id = $1 AND provider = $2', [id, provider]);
+  @All(':provider/:id')
+  async back(@Res() reply: FastifyReply, @Param('provider') provider: string, @Param('id', ParseUUIDPipe) id: string, @Query() query: Record<string, string>, @Body() body: Record<string, unknown>) {
+    return this.handle(reply, provider, id, query ?? {}, body ?? {});
+  }
+
+  @Post(':provider')
+  async notification(@Res() reply: FastifyReply, @Param('provider') provider: string, @Body() body: Record<string, unknown>) {
+    const id = gateways[provider]?.paymentIdFrom?.(body ?? {});
+    if (!id) throw apiError(404, 'NOT_FOUND', 'Unknown payment');
+    return this.handle(reply, provider, id, {}, body ?? {});
+  }
+
+  private async handle(reply: FastifyReply, provider: string, id: string, query: Record<string, string>, body: Record<string, unknown>) {
+    const { rows: [p] } = await pool.query('SELECT id, invoice_id, amount::text, currency, provider_ref, status, mode FROM payments WHERE id = $1 AND provider = $2', [id, provider]);
     const impl = gateways[provider];
     if (!p || !impl) throw apiError(404, 'NOT_FOUND', 'Unknown payment');
-    if (p.status !== 'pending') return { status: p.status };
-    const gw = await activeGateway(provider, p.mode);
-    if (!gw) throw apiError(409, 'PAYMENT_METHOD_UNAVAILABLE', 'Provider not active');
-    const r = await impl.verify({ query, body: body ?? {}, payment: { id: p.id, amount: p.amount, currency: p.currency, providerRef: p.provider_ref } }, gw.creds, gw.mode);
-    return { status: await settlePayment(id, r) };
+    if (p.status === 'pending') {
+      const gw = await activeGateway(provider, p.mode);
+      if (!gw) throw apiError(409, 'PAYMENT_METHOD_UNAVAILABLE', 'Provider not active');
+      const r = await impl.verify({ query, body, payment: { id: p.id, amount: p.amount, currency: p.currency, providerRef: p.provider_ref } }, gw.creds, gw.mode)
+        .catch((e: Error) => ({ ok: false as const, code: 'PROVIDER_ERROR', message: String(e?.message ?? e).slice(0, 200) }));
+      // A provider that did not answer leaves the payment open (its notification or the customer may come back); a forged
+      // or foreign answer changes nothing.
+      if (r.ok || !['PROVIDER_ERROR', 'BAD_SIGNATURE'].includes(r.code)) await settlePayment(id, r);
+      logEvent(r.ok ? 'info' : 'warn', 'payment_callback', { provider, paymentId: id, ok: r.ok, ...(!r.ok && { code: r.code }) });
+    }
+    if (impl.reply) return reply.type('text/plain').send(impl.reply);
+    return reply.code(303).header('location', `/billing/invoices/${p.invoice_id}?payment=${id}`).send();
   }
 }
 

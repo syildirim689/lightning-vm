@@ -1195,3 +1195,34 @@ test('e-invoice: paid invoices go to the integrator as e-Arşiv or e-Fatura in t
   await put('/admin/settings/billing', { enabled: false }, admin);
   for (const p of people) await post('/auth/admin/remove-user', { userId: p.id }, admin).catch(() => undefined);
 });
+
+test('card payments: a PayTR notification is checked by its hash, pays the invoice once, answers OK; a forged one changes nothing', async () => {
+  const { encryptSecret } = await import('../../dist/secrets.js');
+  const company = { name: 'Lightning Bilişim A.Ş.', taxId: '1234567890', taxOffice: 'Kadıköy', address: 'Moda Cd. 1', district: 'Kadıköy', city: 'İstanbul' };
+  assert.equal((await put('/admin/settings/billing', { enabled: true, company }, admin)).statusCode, 200);
+  const creds = { merchant_id: '123', merchant_key: 'k3y', merchant_salt: 's4lt' };
+  await pool.query(`INSERT INTO payment_gateways (id, enabled, mode, test_enc, test_version) VALUES ('paytr', false, 'test', $1, 1) ON CONFLICT (id) DO UPDATE SET test_enc = $1`,
+    [encryptSecret(JSON.stringify(creds), 'payments:paytr:test')]);
+  const me = (await get('/auth/me', user)).json();
+  const inv = (await post('/admin/billing/invoices', { userId: me.id, currency: 'TRY', lines: [{ description: 'Hizmet', unitPrice: '100' }] }, admin)).json().invoiceId;
+  const { rows: [p] } = await pool.query(`INSERT INTO payments (invoice_id, owner_id, provider, mode, method, status, amount, currency) VALUES ($1, $2, 'paytr', 'test', 'card', 'pending', 120, 'TRY') RETURNING id`, [inv, me.id]);
+  const oid = p.id.replace(/-/g, '');
+  const form = (b) => new URLSearchParams(b).toString();
+  const hash = (b) => createHmac('sha256', creds.merchant_key).update(`${b.merchant_oid}${creds.merchant_salt}${b.status}${b.total_amount}`).digest('base64');
+  const notify = (b) => call('POST', '/billing/callback/paytr', null, form(b), { 'content-type': 'application/x-www-form-urlencoded' });
+  const good = { merchant_oid: oid, status: 'success', total_amount: '12000', payment_amount: '12000' };
+  let r = await notify({ ...good, hash: 'forged' });
+  assert.equal(r.body, 'OK');
+  assert.equal((await pool.query('SELECT status FROM payments WHERE id = $1', [p.id])).rows[0].status, 'pending', 'a forged notification changes nothing');
+  r = await notify({ ...good, hash: hash(good) });
+  assert.deepEqual([r.statusCode, r.body], [200, 'OK']);
+  assert.equal((await get(`/billing/invoices/${inv}`, user)).json().invoice.status, 'paid');
+  r = await notify({ ...good, hash: hash(good) });
+  assert.equal(r.body, 'OK', 'a repeated notification is answered and ignored');
+  assert.equal((await pool.query("SELECT count(*)::int AS n FROM payments WHERE invoice_id = $1 AND status = 'succeeded'", [inv])).rows[0].n, 1);
+  // A browser coming back from a provider is sent to the invoice.
+  r = await call('POST', `/billing/callback/paytr/${p.id}`, null, form({}), { 'content-type': 'application/x-www-form-urlencoded' });
+  assert.equal(r.body, 'OK');
+  await pool.query("DELETE FROM payment_gateways WHERE id = 'paytr'");
+  await put('/admin/settings/billing', { enabled: false }, admin);
+});

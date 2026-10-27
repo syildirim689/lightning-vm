@@ -42,6 +42,8 @@ export function csrfRejected(req: FastifyRequest) {
   if (['GET', 'HEAD', 'OPTIONS'].includes(req.method)) return false;
   // Alertmanager's webhook: no cookies, internal network only (alerts.ts); it cannot send the CSRF header.
   if (req.url === '/internal/alerts' && !req.headers.cookie) return false;
+  // Payment providers post results here (billing.ts verifies each with the provider; no session is used).
+  if (req.url.startsWith('/billing/callback/')) return false;
   if (req.headers['x-lightning-csrf'] !== '1') return true;
   const origin = req.headers.origin;
   if (!origin) return false;

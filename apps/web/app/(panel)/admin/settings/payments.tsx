@@ -206,6 +206,11 @@ function Editor({ provider: p, gateway: g, readOnly, onClose }: { provider: Prov
         </Modal.Header>
         <Modal.Body className="flex flex-col gap-5">
           {p.notes.map((n) => <Notice key={n} tone={n === 'NO_SERVER_CHECK' || n === 'TOKEN_ROTATES' ? 'warning' : 'default'}>{t(`notes.${n as 'FIXED_IP'}`)}</Notice>)}
+          {/* What billing can do with it: take payments on its hosted page (and charge saved cards), or only hold credentials for now. */}
+          {['iyzico', 'paytr', 'stripe', 'craftgate', 'param'].includes(p.id)
+            ? <Notice tone="success" title={t('charges.title')}>{t(`charges.${p.id as 'iyzico'}`)}</Notice>
+            : <Notice tone="default">{t('charges.none')}</Notice>}
+          {p.id === 'paytr' && <Notice tone="warning" title={t('charges.paytrUrl')}><Mono>{typeof window === 'undefined' ? '' : window.location.origin}/api/billing/callback/paytr</Mono></Notice>}
           <div className="grid gap-4 sm:grid-cols-2">
             <TextInput label={t('label')} value={label} onChange={setLabel} placeholder={p.name} help={t('labelHelp')} isDisabled={readOnly} maxLength={60}/>
             <SelectInput label={t('useMode')} value={mode} onChange={(v) => setMode((v || 'test') as Mode)} isDisabled={readOnly} help={t('useModeHelp')}

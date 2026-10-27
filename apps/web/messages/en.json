@@ -3165,7 +3165,17 @@
         "IP_WHITELIST": "Banks usually require the server’s IP to be registered for live use.",
         "SAME_HOST_FOR_TEST": "Test and live use the same address; test mode is chosen by the credentials or a test flag."
       },
-      "saveFirst": "Save, check, then activate."
+      "saveFirst": "Save, check, then activate.",
+      "charges": {
+        "title": "Takes payments for invoices",
+        "iyzico": "Hosted checkout with 3D Secure; saved cards renew automatically if your iyzico account allows non-3D charges.",
+        "paytr": "Hosted iFrame with 3D Secure. Saved-card renewals need PayTR’s card storage (direct API), so customers pay renewals on the page.",
+        "stripe": "Hosted Checkout with 3D Secure; saved cards are charged off-session (Stripe asks for 3D Secure again when the bank wants it). Stripe does not accept companies registered in Turkey.",
+        "craftgate": "Hosted payment form with 3D Secure that also stores the card; renewals charge it when a non-3D POS is set up in Craftgate.",
+        "param": "Hosted payment page (Ortak Ödeme) with 3D Secure; no saved cards. Your server’s IP must be allowed by Param. News reports place Param under a TMSF trustee since July 2026.",
+        "none": "Credentials can be saved and checked; taking invoice payments with this provider is not built yet.",
+        "paytrUrl": "Set this as the notification URL (Bildirim URL) in the PayTR panel"
+      }
     },
     "rdns": {
       "loading": "Loading…",

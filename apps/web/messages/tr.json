@@ -3165,7 +3165,17 @@
         "IP_WHITELIST": "Bankalar canlı kullanım için genellikle sunucu IP'sinin tanımlanmasını ister.",
         "SAME_HOST_FOR_TEST": "Test ve canlı aynı adresi kullanır; test modu bilgilerle veya bir test bayrağıyla seçilir."
       },
-      "saveFirst": "Kaydedin, test edin, sonra etkinleştirin."
+      "saveFirst": "Kaydedin, test edin, sonra etkinleştirin.",
+      "charges": {
+        "title": "Fatura ödemelerini alır",
+        "iyzico": "3D Secure ile barındırılan ödeme sayfası; iyzico hesabınız 3D’siz çekime izin veriyorsa kayıtlı kartlar otomatik yenilenir.",
+        "paytr": "3D Secure ile iFrame ödeme sayfası. Kayıtlı kartla yenileme PayTR kart saklama (Direkt API) gerektirdiği için yenilemeler sayfada ödenir.",
+        "stripe": "3D Secure ile barındırılan Checkout; kayıtlı kartlardan müşteri olmadan çekilir (banka isterse 3D Secure yeniden istenir). Stripe Türkiye’de kurulu şirketleri kabul etmiyor.",
+        "craftgate": "Kartı da saklayan, 3D Secure’lu ortak ödeme formu; Craftgate’te 3D’siz bir POS tanımlıysa yenilemeler kayıtlı karttan çekilir.",
+        "param": "3D Secure’lu Ortak Ödeme sayfası; kart saklama yok. Sunucunuzun IP adresine Param izin vermeli. Haberlere göre Param Temmuz 2026’dan beri TMSF kayyımı altında.",
+        "none": "Bilgiler kaydedilip kontrol edilebilir; bu kuruluşla fatura tahsilatı henüz yapılmadı.",
+        "paytrUrl": "PayTR panelinde Bildirim URL olarak bunu girin"
+      }
     },
     "rdns": {
       "loading": "Yükleniyor…",

@@ -117,6 +117,7 @@ export async function sendQueued() {
   for (const r of rows) {
     if (!(await redis.set(`einvoice:${r.id}`, '1', 'EX', 120, 'NX').catch(() => null))) continue; // one sender per invoice
     await sendOne(r.id, s, c).catch((e) => logEvent('error', 'einvoice_send_crashed', { invoiceId: r.id, error: String(e?.message ?? e).slice(0, 200) }));
+    await redis.del(`einvoice:${r.id}`).catch(() => undefined);
   }
   return rows.length;
 }
