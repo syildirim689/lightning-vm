@@ -76,6 +76,8 @@ test('steps are validated on the server and progress persists', async () => {
 });
 
 test('system checks report a missing worker and block the step until it is fixed', async () => {
+  // The harness's worker writes a heartbeat every 30 s into the fresh schema too; start from none.
+  await pool.query('DELETE FROM worker_heartbeats');
   const { checks } = (await send('POST', '/setup/checks', { setup: setupCookie })).json();
   assert.deepEqual(checks.map((c) => [c.id, c.code]), [['postgres', 'OK'], ['redis', 'OK'], ['migrations', 'OK'], ['worker', 'NO_HEARTBEAT']]);
   assert.equal((await send('PUT', '/setup/steps/checks', { setup: setupCookie, payload: { status: 'completed' } })).json().code, 'CHECKS_FAILED');
