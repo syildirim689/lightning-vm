@@ -73,5 +73,5 @@ anahtarı verilirse istek `X-Lightning-Signature: sha256=<HMAC>` başlığıyla 
 
 Destek: `support.reply` (yanıt geldi), `support.rate` (talebi destek ya da 7 günlük sessizlik kapattığında puan
 isteği; müşteri kendisi kapattıysa gönderilmez), personele `support.ticket_opened`, `support.customer_message`,
-`support.assigned`. Uygulama içi bildirimler iki dilde saklanır (`notifications.texts`); zil, panelin o anki diline
+`support.assigned`, `support.overdue` (yanıt süresi geçen talep; her süre için bir kez, 5 dakikada bir kontrol) ve `support.low_rating` (1–2 puan). Uygulama içi bildirimler iki dilde saklanır (`notifications.texts`); zil, panelin o anki diline
 göre gösterir. E-posta, SMS ve sohbet kanalları hesabın dilini kullanır.
