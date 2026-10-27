@@ -1213,6 +1213,11 @@ test('resellers: an allocation and a discount; customers of their own, servers o
   await until(async () => (await serverRow(id)).state === 'ready', 'reseller customer server ready', 120);
   assert.equal((await send('DELETE', `/servers/${id}`, { confirm: 'rc-1' }, other, key())).statusCode, 202);
   await until(async () => (await serverRow(id)).state === 'deleted', 'deleted', 120);
+  // Their own brand, for their customers (and themselves); a non-reseller has none.
+  assert.equal((await send('PUT', '/reseller/brand', { name: 'Acme Cloud', accent: 'blue' }, other)).json().fields.accent, 'INVALID_VALUE');
+  assert.deepEqual((await send('PUT', '/reseller/brand', { name: 'Acme Cloud', accent: '#FF6600' }, other)).json(), { name: 'Acme Cloud', accent: '#ff6600' });
+  assert.deepEqual((await send('GET', '/reseller/brand', undefined, other)).json(), { name: 'Acme Cloud', accent: '#ff6600' });
+  assert.deepEqual((await send('GET', '/reseller/brand', undefined, user)).json(), {});
   assert.equal((await send('DELETE', `/admin/resellers/${resellerId}`)).statusCode, 204);
   assert.equal((await pool.query('SELECT reseller_id FROM users WHERE id = $1', [customerId])).rows[0].reseller_id, null);
 });

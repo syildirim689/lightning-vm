@@ -88,6 +88,33 @@ function CustomerRow({ c }: { c: Customer }) {
   </li>;
 }
 
+// The reseller's name and colour, shown to their customers in the panel.
+function BrandForm() {
+  const t = useTranslations('Reseller');
+  const { error, field } = useErrorText();
+  const q = useApiQuery<{ name?: string; accent?: string | null }>(['reseller', 'brand'], '/reseller/brand');
+  const [v, setV] = useState<{ name: string; accent: string } | null>(null);
+  const [fields, setFields] = useState<Record<string, string>>({});
+  const [busy, setBusy] = useState(false);
+  if (!q.data) return null;
+  const doc = v ?? { name: q.data.name ?? '', accent: q.data.accent ?? '#2563eb' };
+  async function save() {
+    setBusy(true); setFields({});
+    try { await apiFetch('/reseller/brand', { method: 'PUT', body: doc }); toast.success(t('brandSaved')); }
+    catch (e) { setFields((e as ApiError).fields ?? {}); toast.danger(error(e)); } finally { setBusy(false); }
+  }
+  return <Section title={t('brand')} description={t('brandHelp')}>
+    <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto_auto] sm:items-end">
+      <TextInput label={t('brandName')} value={doc.name} onChange={(x) => setV({ ...doc, name: x })} maxLength={60} placeholder={t('brandNamePlaceholder')}/>
+      <label className="flex flex-col gap-1 text-sm"><span>{t('brandAccent')}</span>
+        <input type="color" value={doc.accent} onChange={(e) => setV({ ...doc, accent: e.target.value })} className="h-10 w-20 cursor-pointer rounded-lg border border-border bg-surface" aria-label={t('brandAccent')}/>
+        {fields.accent && <span className="text-xs text-danger">{field(fields.accent)}</span>}</label>
+      <Button isPending={busy} onPress={save}><I name="palette" size={15}/>{t('brandSave')}</Button>
+    </div>
+    <p className="mt-2 text-xs text-muted">{t('brandNote')}</p>
+  </Section>;
+}
+
 export default function Reseller() {
   const t = useTranslations('Reseller');
   const format = useFormatter();
@@ -122,6 +149,7 @@ export default function Reseller() {
           <Meter label={t('disk')} used={u.diskGb} max={a.maxDiskGb} unit=" GB"/>
         </div>
       </Section>
+      <BrandForm/>
       <Section title={t('customersTitle')} description={t('customersHelp')}>
         <div className="flex flex-col gap-4">
           <form onSubmit={add} noValidate className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] sm:items-end">

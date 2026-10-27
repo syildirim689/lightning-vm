@@ -4725,7 +4725,8 @@
       "network_server_left": "Sunucu özel ağdan çıkarıldı",
       "catalog_pool_private_networks": "Özel ağ ayarları değiştirildi",
       "image_created": "İmaj kaydedildi",
-      "image_deleted": "İmaj silindi"
+      "image_deleted": "İmaj silindi",
+      "reseller_brand": "Bayi markası değiştirildi"
     },
     "outcome": {
       "success": "Tamamlandı",
@@ -6581,7 +6582,15 @@
       "stop": "Bayilikten çıkar",
       "stopped": "Bayilikten çıkarıldı; müşterileri artık normal hesap"
     },
-    "notReseller": "Bu hesap bayi değil. Sunucu satmak isterseniz bize yazın."
+    "notReseller": "Bu hesap bayi değil. Sunucu satmak isterseniz bize yazın.",
+    "brand": "Markanız",
+    "brandHelp": "Müşterileriniz panelde bizim yerimize bu adı ve rengi görür.",
+    "brandName": "Marka adı",
+    "brandNamePlaceholder": "Şirketiniz",
+    "brandAccent": "Renk",
+    "brandSave": "Markayı kaydet",
+    "brandSaved": "Marka kaydedildi",
+    "brandNote": "Ad boşsa müşterileriniz paneli olduğu gibi görür. Markanızı siz de görürsünüz."
   },
   "Placement": {
     "title": "Yerleşim",

@@ -33,6 +33,11 @@ export async function getSetupStatus(): Promise<{ adminCreated: boolean; complet
 const fallback: PublicConfig = { branding: { name: 'Lightning VM', accent: null, logo: false, favicon: false, version: '0' }, passwordReset: false, captcha: null,
   phoneVerification: false, otpChannels: { sms: false, email: false } };
 // Branding is needed on every page; if the API is down the page still renders with the defaults.
+// A reseller's brand for the signed-in person (their customers see it instead of the operator's); empty when none.
+export async function getResellerBrand(): Promise<{ name?: string; accent?: string | null }> {
+  try { const res = await serverGet('/reseller/brand'); return res.ok ? await res.json() : {}; } catch { return {}; }
+}
+
 export async function getPublicConfig(): Promise<PublicConfig> {
   try {
     const res = await fetch(`${apiUrl}/public/config`, { next: { revalidate: 30 } });

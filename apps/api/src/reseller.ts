@@ -68,6 +68,25 @@ export class ResellerController {
     return { allocation: r, usage: { ...(await resellerUsage(r.id)), customers: c.n } };
   }
 
+  // The brand a signed-in person sees: their reseller's (for a reseller's customer, or the reseller), if one is set.
+  @Get('brand')
+  async brand(@Req() req: AuthedRequest) {
+    const { rows: [b] } = await pool.query(`SELECT r.brand_name AS name, r.brand_accent AS accent FROM resellers r JOIN users u ON r.user_id = coalesce(u.reseller_id, u.id)
+      WHERE u.id = $1 AND r.active AND r.brand_name IS NOT NULL`, [req.user.id]);
+    return b ?? {};
+  }
+
+  @Put('brand')
+  async setBrand(@Req() req: AuthedRequest, @Body() body: Record<string, unknown>) {
+    const r = await activeReseller(req.user.id);
+    const name = typeof body?.name === 'string' && body.name.trim() ? body.name.trim().slice(0, 60) : null;
+    const accent = typeof body?.accent === 'string' && /^#[0-9a-f]{6}$/i.test(body.accent) ? body.accent.toLowerCase() : null;
+    if (body?.accent && !accent) throw apiError(400, 'VALIDATION_FAILED', 'Invalid input', { accent: 'INVALID_VALUE' });
+    await pool.query('UPDATE resellers SET brand_name = $2, brand_accent = $3, updated_at = now() WHERE user_id = $1', [r.id, name, accent]);
+    await audit(req, 'reseller.brand', 'success', req.user.id, { name, accent });
+    return { name, accent };
+  }
+
   @Get('customers')
   async customers(@Req() req: AuthedRequest) {
     const r = await activeReseller(req.user.id);

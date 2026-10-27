@@ -4725,7 +4725,8 @@
       "network_server_left": "Server removed from a private network",
       "catalog_pool_private_networks": "Private network settings changed",
       "image_created": "Image saved",
-      "image_deleted": "Image deleted"
+      "image_deleted": "Image deleted",
+      "reseller_brand": "Reseller brand changed"
     },
     "outcome": {
       "success": "Done",
@@ -6581,7 +6582,15 @@
       "stop": "No longer a reseller",
       "stopped": "No longer a reseller; their customers are ordinary accounts now"
     },
-    "notReseller": "This account is not a reseller. Ask us if you would like to resell servers."
+    "notReseller": "This account is not a reseller. Ask us if you would like to resell servers.",
+    "brand": "Your brand",
+    "brandHelp": "Your customers see this name and colour in the panel instead of ours.",
+    "brandName": "Brand name",
+    "brandNamePlaceholder": "Your company",
+    "brandAccent": "Colour",
+    "brandSave": "Save brand",
+    "brandSaved": "Brand saved",
+    "brandNote": "Empty name: your customers see the panel as it is. You see your brand too."
   },
   "Placement": {
     "title": "Placement",
