@@ -68,7 +68,7 @@ export type RdnsSettings = { provider: 'none' | 'powerdns'; apiUrl: string; apiK
 
 const defaults = {
   einvoice: { provider: 'none' } as EinvoiceSettings,
-  billing: { enabled: false, requirePayment: true, orderExpiryHours: 24, taxRate: 20, pricesIncludeTax: false, exportExempt: true, invoicePrefix: 'LVM',
+  billing: { enabled: false, requirePayment: true, orderExpiryHours: 24, taxRate: 20, pricesIncludeTax: false, exportExempt: false, invoicePrefix: 'LVM',
     invoiceDaysBefore: 7, reminderDays: [3, 1], suspendAfterDays: 3, terminateAfterDays: 0, autoCharge: true, chargeRetries: 3, balance: true, topupMin: 50, topupMax: 50000, sandbox: false,
     bankTransfer: { enabled: false, bank: '', holder: '', iban: '' },
     company: { name: '', taxId: '', taxOffice: '', address: '', district: '', city: '', country: 'TR', postalCode: '', phone: '', email: '', website: '', mersis: '', tradeRegistry: '' } } as BillingSettings,

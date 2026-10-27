@@ -21,9 +21,9 @@ import { can, type Permission } from '../../lib/permissions';
 import { useApiQuery } from '../../lib/query';
 import type { Branding, User } from '../../lib/session';
 
-type Key = 'dashboard' | 'stats' | 'servers' | 'abuse' | 'energy' | 'topology' | 'myTopology' | 'myVdc' | 'connections' | 'catalog' | 'users' | 'roles' | 'settings' | 'system' | 'myServers' | 'newServer' | 'firewalls' | 'account' | 'audit' | 'terminal' | 'support' | 'mySupport';
+type Key = 'dashboard' | 'stats' | 'servers' | 'abuse' | 'energy' | 'topology' | 'myTopology' | 'myVdc' | 'connections' | 'catalog' | 'users' | 'roles' | 'settings' | 'system' | 'myServers' | 'newServer' | 'firewalls' | 'account' | 'audit' | 'terminal' | 'support' | 'mySupport' | 'billing' | 'myBilling';
 // count: a number beside the entry from GET /support/summary (tickets waiting for the customer, or for support).
-type Item = { href: string; key: Key; icon: React.ReactNode; exact?: boolean; need?: Permission[]; count?: 'waiting' | 'queue' };
+type Item = { href: string; key: Key; icon: React.ReactNode; exact?: boolean; need?: Permission[]; count?: 'waiting' | 'queue' | 'unpaid'; billing?: boolean };
 
 // Staff entries appear only with a permission that opens them; the API checks every call anyway.
 const sections: { title: 'adminSection' | 'peopleSection' | 'customerSection'; items: Item[] }[] = [
@@ -32,6 +32,7 @@ const sections: { title: 'adminSection' | 'peopleSection' | 'customerSection'; i
     { href: '/admin/stats', key: 'stats', icon: <I name="chart-line" size={18}/>, need: ['dashboard.view'] },
     { href: '/admin/servers', key: 'servers', icon: <I name="server" size={18}/>, need: ['servers.view_all'] },
     { href: '/admin/support', key: 'support', icon: <I name="life-buoy" size={18}/>, need: ['support.view'], count: 'queue' },
+    { href: '/admin/billing', key: 'billing', icon: <I name="receipt" size={18}/>, need: ['billing.view'] },
     { href: '/admin/topology', key: 'topology', icon: <I name="network" size={18}/>, need: ['dashboard.view', 'servers.view_all'] },
     { href: '/admin/vmware', key: 'connections', icon: <I name="cable" size={18}/>, need: ['vmware.view', 'vmware.manage'] },
     { href: '/admin/catalog', key: 'catalog', icon: <I name="boxes" size={18}/>, need: ['catalog.view', 'catalog.manage'] },
@@ -52,29 +53,35 @@ const sections: { title: 'adminSection' | 'peopleSection' | 'customerSection'; i
     { href: '/vdc', key: 'myVdc', icon: <I name="building-2" size={18}/> },
     { href: '/topology', key: 'myTopology', icon: <I name="waypoints" size={18}/> },
     { href: '/firewalls', key: 'firewalls', icon: <I name="brick-wall-fire" size={18}/>, need: ['firewalls.manage', 'servers.view_all'] },
+    { href: '/billing', key: 'myBilling', icon: <I name="wallet" size={18}/>, count: 'unpaid', billing: true },
     { href: '/support', key: 'mySupport', icon: <I name="life-buoy" size={18}/>, count: 'waiting' },
     { href: '/account', key: 'account', icon: <I name="key-round" size={18}/> },
   ] },
 ];
 
 // Under ['notifications'], so a new notification (a reply, a new ticket) refreshes it too.
-function NavCount({ kind }: { kind: 'waiting' | 'queue' }) {
+function NavCount({ kind }: { kind: 'waiting' | 'queue' | 'unpaid' }) {
   const t = useTranslations('Nav');
   const q = useApiQuery<{ waiting: number; queue: number | null }>(['notifications', 'support-summary'], '/support/summary', { refetchInterval: 60_000 });
-  const n = q.data?.[kind] ?? 0;
+  const b = useBillingSummary();
+  const n = kind === 'unpaid' ? (b?.open?.n ?? 0) : q.data?.[kind] ?? 0;
   if (!n) return null;
   return <span className="relative ml-auto grid h-5 min-w-5 place-items-center rounded-full bg-accent px-1.5 text-[11px] font-semibold text-accent-foreground">
-    {n > 99 ? '99+' : n}<span className="sr-only"> {t(kind === 'waiting' ? 'waitingForYou' : 'waitingForSupport', { n })}</span>
+    {n > 99 ? '99+' : n}<span className="sr-only"> {t(kind === 'waiting' ? 'waitingForYou' : kind === 'unpaid' ? 'unpaidInvoices' : 'waitingForSupport', { n })}</span>
   </span>;
 }
 
+// Under ['notifications'] too: a payment or a new invoice refreshes the count.
+const useBillingSummary = () => useApiQuery<{ enabled: boolean; open?: { n: number } }>(['notifications', 'billing-summary'], '/billing/summary', { refetchInterval: 60_000 }).data;
+
 function NavList({ user, onNavigate }: { user: User; onNavigate?: () => void }) {
   const t = useTranslations('Nav');
+  const billing = useBillingSummary();
   const path = usePathname();
   const active = (i: Item) => (i.exact ? path === i.href : path === i.href || path.startsWith(`${i.href}/`));
   return <nav aria-label={t('label')} className="flex flex-col gap-3">
     {sections.map((s) => {
-      const items = s.items.filter((i) => !i.need || can(user.permissions, ...i.need));
+      const items = s.items.filter((i) => (!i.need || can(user.permissions, ...i.need)) && (!i.billing || billing?.enabled));
       if (!items.length) return null;
       return <div key={s.title} className="flex flex-col gap-0.5">
         <p className="px-3 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-wider text-muted">{t(s.title)}</p>

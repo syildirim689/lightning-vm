@@ -55,7 +55,7 @@ CREATE TABLE invoices (
   currency char(3) NOT NULL,
   subtotal numeric(12,2) NOT NULL, tax_total numeric(12,2) NOT NULL, total numeric(12,2) NOT NULL,
   paid_total numeric(12,2) NOT NULL DEFAULT 0, refunded_total numeric(12,2) NOT NULL DEFAULT 0,
-  tax_exemption text, -- e.g. '301' (services abroad) when the rate is 0
+  tax_exemption text, -- e.g. '302' (service export) when the rate is 0
   due_at timestamptz NOT NULL, paid_at timestamptz, issued_at timestamptz, cancelled_at timestamptz,
   overdue_notified_at timestamptz, reminded_at timestamptz,
   buyer jsonb NOT NULL, seller jsonb NOT NULL,

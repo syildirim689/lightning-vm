@@ -104,9 +104,10 @@ export default function Order() {
     if (taken.has(d.name)) { setNameError(field('NAME_TAKEN')); return; }
     setBusy(true);
     try {
-      const out = await apiFetch<{ serverId: string; passwordReplaced?: boolean }>('/servers', { method: 'POST', body: { ...body, name: d.name, sshKeyIds: d.sshKeyIds, firewallIds, ...(rootPassword && { rootPassword }) }, headers: { 'idempotency-key': intent.key() } });
+      const out = await apiFetch<{ serverId: string; passwordReplaced?: boolean; invoiceId?: string; awaitingPayment?: boolean }>('/servers', { method: 'POST', body: { ...body, name: d.name, sshKeyIds: d.sshKeyIds, firewallIds, ...(rootPassword && { rootPassword }) }, headers: { 'idempotency-key': intent.key() } });
       if (out.passwordReplaced) toast.info(t('passwordReplaced'));
-      intent.reset(); d.clear(); setRootPassword(''); queryClient.invalidateQueries({ queryKey: ['tasks'] }); router.push(`/servers/${out.serverId}`);
+      intent.reset(); d.clear(); setRootPassword(''); queryClient.invalidateQueries({ queryKey: ['tasks'] });
+      if (out.awaitingPayment && out.invoiceId) { toast.info(t('payToStart')); router.push(`/billing/invoices/${out.invoiceId}`); } else router.push(`/servers/${out.serverId}`);
     } catch (e) {
       setFailure({ ...(e as ApiError), text: error(e) });
       if ((e as ApiError).code !== 'NETWORK') intent.reset();

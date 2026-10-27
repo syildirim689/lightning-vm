@@ -39,7 +39,7 @@ test('a billing profile: TCKN for people, VKN and tax office for companies in Tu
   assert.deepEqual(r.cleanProfile({ kind: 'company', name: 'X', taxId: '1', address: '' }).fields,
     { name: 'REQUIRED', taxId: 'INVALID_VKN', taxOffice: 'REQUIRED', city: 'REQUIRED', district: 'REQUIRED', address: 'REQUIRED' });
   assert.ok(r.cleanProfile({ kind: 'company', name: 'ACME GmbH', taxId: 'DE123456789', country: 'de', address: 'Berlin' }).profile);
-  assert.deepEqual(r.taxFor('DE', { taxRate: 20, exportExempt: true }), { rate: 0, exemption: '301' });
+  assert.deepEqual(r.taxFor('DE', { taxRate: 20, exportExempt: true }), { rate: 0, exemption: '302' });
   assert.deepEqual(r.taxFor('TR', { taxRate: 20, exportExempt: true }), { rate: 20, exemption: null });
 });
 

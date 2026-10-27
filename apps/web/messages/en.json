@@ -292,7 +292,19 @@
     "USERNAME_IS_ALREADY_TAKEN": "That user name is taken.",
     "USERNAME_TOO_SHORT": "The user name is too short (at least 3 characters).",
     "USERNAME_TOO_LONG": "The user name is too long (at most 30 characters).",
-    "INVALID_USERNAME": "User names use letters, digits, dots, hyphens and underscores."
+    "INVALID_USERNAME": "User names use letters, digits, dots, hyphens and underscores.",
+    "INVOICE_NOT_PAYABLE": "This invoice is not awaiting payment.",
+    "PAYMENT_METHOD_UNAVAILABLE": "This payment method is not available.",
+    "INSUFFICIENT_BALANCE": "The balance does not cover this.",
+    "PAYMENT_FAILED": "The payment did not go through.",
+    "PAYMENT_PROVIDER_ERROR": "The payment provider did not answer. Please try again.",
+    "INVOICE_NOT_CANCELLABLE": "Only an unpaid invoice with nothing paid can be withdrawn.",
+    "INVOICE_NOT_REFUNDABLE": "Only a paid invoice can be refunded.",
+    "REFUND_NOT_SUPPORTED": "This cannot be refunded from the panel that way; refund it to the balance or in the provider’s panel.",
+    "REFUND_FAILED": "The provider refused the refund.",
+    "BILLING_HOLD": "The server is held until the unpaid invoice is paid.",
+    "PROVIDER_ERROR": "The payment provider did not answer.",
+    "CANCELLED_BY_CUSTOMER": "Cancelled on the payment page."
   },
   "Auth": {
     "required": "required",
@@ -518,7 +530,10 @@
     "TOO_MANY_FILES": "At most 3 files.",
     "FILE_TOO_LARGE": "A file can be at most 2 MB.",
     "FILE_TYPE_NOT_ALLOWED": "This file type is not accepted.",
-    "GOOGLE_REQUIRED": "Turn on Google sign-in first."
+    "GOOGLE_REQUIRED": "Turn on Google sign-in first.",
+    "INVALID_TCKN": "Not a valid T.C. identity number.",
+    "INVALID_VKN": "Not a valid tax number.",
+    "COMPANY_REQUIRED": "Fill in the seller (title, tax number, address) first."
   },
   "Setup": {
     "title": "Setup wizard",
@@ -1035,7 +1050,8 @@
       "recommended": "Recommended"
     },
     "budgetNear": "With this order you would pay {monthly} a month, close to your budget of {amount}.",
-    "budgetOver": "With this order you would pay {monthly} a month, over your budget of {amount}."
+    "budgetOver": "With this order you would pay {monthly} a month, over your budget of {amount}.",
+    "payToStart": "Pay the invoice and your server is set up right away."
   },
   "Catalog": {
     "eyebrow": "ADMIN · CATALOG",
@@ -1735,7 +1751,12 @@
       "lockedNow": "Server locked.",
       "unlocked": "Server unlocked."
     },
-    "getSupport": "Get support"
+    "getSupport": "Get support",
+    "billingHold": "Held for an unpaid invoice",
+    "billingHoldHelp": "The server was shut down and cannot be started until the invoice is paid. It starts by itself once paid.",
+    "payNow": "Pay now",
+    "awaitingPayment": "Waiting for payment",
+    "awaitingPaymentHelp": "The server is set up as soon as its first invoice is paid."
   },
   "Maintenance": {
     "title": "Backups and updates",
@@ -1829,7 +1850,10 @@
     "mySupport": "Support",
     "waitingForYou": "{n, plural, one {# ticket waits} other {# tickets wait}} for your answer",
     "waitingForSupport": "{n, plural, one {# ticket waits} other {# tickets wait}} for support",
-    "stats": "Statistics"
+    "stats": "Statistics",
+    "billing": "Billing",
+    "myBilling": "Billing",
+    "unpaidInvoices": "{n, plural, one {# invoice awaits payment} other {# invoices await payment}}"
   },
   "Dashboard": {
     "eyebrow": "ADMINISTRATION",
@@ -2364,6 +2388,42 @@
       "account_message": {
         "title": "Message from the team",
         "help": "When staff send you a message from the panel."
+      },
+      "billing_invoice": {
+        "title": "New invoice",
+        "help": "When an invoice is created for you (a renewal or a service)."
+      },
+      "billing_paid": {
+        "title": "Payment received",
+        "help": "When your payment goes through and the invoice is issued."
+      },
+      "billing_payment_failed": {
+        "title": "Payment failed",
+        "help": "When a card payment or an automatic charge does not go through."
+      },
+      "billing_reminder": {
+        "title": "Payment reminder",
+        "help": "A few days before an invoice is due."
+      },
+      "billing_overdue": {
+        "title": "Invoice overdue",
+        "help": "The day after an invoice was due, unpaid."
+      },
+      "billing_suspended": {
+        "title": "Service suspended",
+        "help": "When a service is held for an unpaid invoice."
+      },
+      "billing_terminated": {
+        "title": "Service terminated",
+        "help": "When a service is ended for an unpaid invoice."
+      },
+      "billing_refunded": {
+        "title": "Refund",
+        "help": "When money is refunded to you."
+      },
+      "billing_payment_received": {
+        "title": "Payment received (team)",
+        "help": "Every payment a customer makes."
       }
     },
     "policyTitle": "The admin first, then each user",
@@ -2643,7 +2703,8 @@
       "settings": "Settings",
       "system": "System",
       "server": "On their own servers",
-      "support": "Support"
+      "support": "Support",
+      "billing": "Billing"
     },
     "p": {
       "dashboard_view": "View the overview",
@@ -2678,7 +2739,9 @@
       "server_iso": "Mount ISOs",
       "server_root_password": "Root password",
       "support_view": "See support tickets",
-      "support_manage": "Answer support tickets"
+      "support_manage": "Answer support tickets",
+      "billing_view": "See billing",
+      "billing_manage": "Manage billing"
     },
     "help": {
       "dashboard_view": "The admin dashboard, insights and summary charts.",
@@ -2713,7 +2776,9 @@
       "server_iso": "Mount and eject ISOs.",
       "server_root_password": "See and remove the root password.",
       "support_view": "Sees the queue, tickets and internal notes.",
-      "support_manage": "Answers, adds internal notes, assigns, changes status and priority."
+      "support_manage": "Answers, adds internal notes, assigns, changes status and priority.",
+      "billing_view": "Invoices, subscriptions, payments and revenue of every customer.",
+      "billing_manage": "Create invoices, record payments, refund, correct balances, suspend subscriptions and change billing settings."
     }
   },
   "Settings": {
@@ -2738,7 +2803,8 @@
       "directory": "Directory and SSO",
       "status": "Status and incidents",
       "support": "Support",
-      "signin": "Sign-in methods"
+      "signin": "Sign-in methods",
+      "billing": "Billing"
     },
     "saved": "Saved.",
     "save": "Save",
@@ -3532,6 +3598,75 @@
       "pwnedHelp": "Checked with Have I Been Pwned: only the first 5 characters of the password’s SHA-1 hash leave the server. If the service cannot be reached, the password is accepted.",
       "disposable": "Refuse throwaway e-mail addresses",
       "disposableHelp": "Sign-ups from disposable e-mail domains (a list of 55,000+ domains) are refused."
+    },
+    "billing": {
+      "saved": "Billing settings saved.",
+      "fixFields": "Some fields need attention.",
+      "main": "Billing",
+      "mainHelp": "Turn invoicing on and choose how payments are taken.",
+      "enabled": "Billing on",
+      "enabledHelp": "Orders and renewals are invoiced and collected. Existing servers get a subscription on their monthly anniversary.",
+      "requirePayment": "Payment before setup",
+      "requirePaymentHelp": "A new server is built only after its first invoice is paid (or covered by balance).",
+      "autoCharge": "Automatic collection",
+      "autoChargeHelp": "Renewals are paid from the balance, then the default saved card, without the customer.",
+      "balance": "Balance",
+      "balanceHelp": "Customers can top up and pay invoices from their balance.",
+      "providers": "Card payments use the providers you activate under Payments.",
+      "providersLink": "Payment providers",
+      "company": "Seller",
+      "companyHelp": "Printed on every invoice and sent in the e-invoice. Required before billing is turned on.",
+      "companyName": "Company title",
+      "taxOffice": "Tax office",
+      "address": "Address",
+      "district": "District",
+      "city": "City",
+      "phone": "Phone",
+      "email": "E-mail",
+      "website": "Website",
+      "websiteHelp": "e-Arşiv internet sales need the address of the site.",
+      "tradeRegistry": "Trade registry no",
+      "tax": "Tax and numbering",
+      "taxHelp": "KDV on hosting is 20% unless your accountant says otherwise.",
+      "taxRate": "KDV rate (%)",
+      "prefix": "Invoice series",
+      "prefixHelp": "3 characters; numbers run per year: {example}",
+      "pricesIncludeTax": "Prices include KDV",
+      "pricesIncludeTaxHelp": "Catalog prices are what the customer pays; KDV is taken out of them.",
+      "exportExempt": "No KDV for customers abroad",
+      "exportExemptHelp": "Service export (exemption 302). Turn on only if your accountant confirms it for your services.",
+      "collection": "Renewals and unpaid invoices",
+      "collectionHelp": "When renewals are invoiced, reminders sent and unpaid services held.",
+      "invoiceDaysBefore": "Invoice days before renewal",
+      "reminderDays": "Reminders (days before due)",
+      "reminderDaysHelp": "e.g. 3, 1",
+      "chargeRetries": "Automatic attempts",
+      "suspendAfterDays": "Suspend after (days overdue)",
+      "terminateAfterDays": "Delete after (days suspended)",
+      "terminateHelp": "0 never deletes.",
+      "orderExpiryHours": "Unpaid order kept (hours)",
+      "timeline": "What happens to an unpaid renewal",
+      "step": {
+        "invoice": "Invoice {n} days before",
+        "due": "Due date",
+        "overdue": "Overdue notice",
+        "suspend": "Held after {n} days",
+        "terminate": "Deleted {n} days later",
+        "never": "Never deleted"
+      },
+      "balanceAndTransfer": "Balance and bank transfer",
+      "balanceAndTransferHelp": "Top-up limits, and the account customers can transfer to.",
+      "topupMin": "Smallest top-up",
+      "topupMax": "Largest top-up",
+      "bankTransfer": "Bank transfer",
+      "bankTransferHelp": "Shown on unpaid invoices; you record the payment when it arrives.",
+      "bank": "Bank",
+      "holder": "Account holder",
+      "testing": "Testing",
+      "testingHelp": "Try the whole flow without a real provider.",
+      "sandbox": "Sandbox provider",
+      "sandboxHelp": "Customers can pay with test cards (4242 4242 4242 4242). Never on with real customers.",
+      "save": "Save"
     }
   },
   "Firewalls": {
@@ -4272,7 +4407,22 @@
       "admin_user_note_removed": "Staff note removed",
       "account_sessions_ended": "Other devices signed out",
       "admin_users_message": "Message sent to users",
-      "admin_users_end_sessions": "Users signed out everywhere"
+      "admin_users_end_sessions": "Users signed out everywhere",
+      "billing_profile_saved": "Invoice details saved",
+      "billing_paid_from_balance": "Invoice paid from balance",
+      "billing_paid_saved_card": "Invoice paid with saved card",
+      "billing_payment_started": "Card payment started",
+      "billing_topup_created": "Top-up started",
+      "billing_subscription_changed": "Subscription changed",
+      "billing_card_removed": "Saved card removed",
+      "billing_invoice_created": "Invoice created",
+      "billing_marked_paid": "Payment recorded",
+      "billing_invoice_cancelled": "Invoice withdrawn",
+      "billing_refunded": "Refund",
+      "billing_subscription_updated": "Subscription updated by staff",
+      "billing_balance_adjusted": "Balance corrected",
+      "billing_run": "Collection run",
+      "settings_billing": "Billing settings changed"
     },
     "outcome": {
       "success": "Done",
@@ -5415,5 +5565,347 @@
     "widgetCounts": "{online} online · {recent} active in the last 15 minutes",
     "nobody": "Nobody right now.",
     "seeAll": "See all"
+  },
+  "Billing": {
+    "title": "Billing",
+    "intro": "Invoices, subscriptions, your balance and saved cards. An invoice is issued as soon as it is paid.",
+    "off": "Billing is not turned on in this panel.",
+    "profileMissing": "Your invoice details are missing",
+    "profileMissingHelp": "Invoices go to your account name until you add your identity or tax number and address.",
+    "profileFill": "Add them now",
+    "kpi": {
+      "balance": "Balance",
+      "open": "Awaiting payment",
+      "nothingOpen": "Nothing open",
+      "openCount": "{n, plural, one {# invoice} other {# invoices}}{overdue, plural, =0 {} other {, # overdue}}",
+      "allPaid": "Every invoice is paid",
+      "next": "Next renewal",
+      "nextOn": "{date} · {name}",
+      "noSubscriptions": "No subscription yet",
+      "autoCharge": "Paid automatically from balance or saved card",
+      "manualCharge": "You pay each invoice yourself"
+    },
+    "topup": {
+      "open": "Top up",
+      "title": "Top up your balance",
+      "help": "Your balance pays invoices automatically. A top-up is not a sale, so it has no invoice of its own; the invoices it pays do.",
+      "amount": "Amount",
+      "currency": "Currency",
+      "range": "Between {min} and {max}",
+      "cancel": "Cancel",
+      "continue": "Continue to payment"
+    },
+    "tabs": {
+      "invoices": "Invoices",
+      "subscriptions": "Subscriptions",
+      "balance": "Balance",
+      "cards": "Cards",
+      "profile": "Invoice details"
+    },
+    "filter": "Show",
+    "filters": {
+      "all": "All",
+      "open": "Awaiting payment",
+      "done": "Settled"
+    },
+    "noInvoices": "No invoices yet.",
+    "col": {
+      "number": "Invoice",
+      "kind": "For",
+      "date": "Date",
+      "total": "Total",
+      "status": "Status",
+      "actions": "Actions",
+      "what": "What",
+      "amount": "Amount"
+    },
+    "kind": {
+      "order": "New order",
+      "renewal": "Renewal",
+      "topup": "Top-up",
+      "manual": "Service",
+      "credit_note": "Return"
+    },
+    "dueIn": "due {when}",
+    "status": {
+      "unpaid": "Awaiting payment",
+      "overdue": "Overdue",
+      "paid": "Paid",
+      "cancelled": "Cancelled",
+      "refunded": "Refunded",
+      "partially_refunded": "Partly refunded"
+    },
+    "pay": "Pay",
+    "view": "View",
+    "noSubscriptions": "No subscriptions yet: each server you order becomes one.",
+    "sub": {
+      "pending": "Awaiting first payment",
+      "active": "Active",
+      "past_due": "Payment overdue",
+      "suspended": "Suspended",
+      "cancelled": "Cancelled",
+      "ended": "Ended",
+      "ending": "Ends at period end"
+    },
+    "perMonth": "month",
+    "endsOn": "ends {date}",
+    "renewsOn": "renews {date}",
+    "autoRenew": "Renew automatically",
+    "autoRenewOn": "It renews automatically.",
+    "autoRenewOff": "It will not renew; you get no new invoice for it.",
+    "keep": "Keep it",
+    "kept": "The subscription continues.",
+    "cancelAtEnd": "Cancel",
+    "cancelTitle": "Cancel at the end of the period?",
+    "cancelBody": "{name} keeps running until {date}, then it is deleted with its data. Nothing more is charged.",
+    "cancelConfirm": "Cancel at period end",
+    "cancelKeep": "Keep it",
+    "cancelled": "It ends at the end of the period.",
+    "noMovements": "No balance movements yet.",
+    "reason": {
+      "topup": "Top-up",
+      "invoice": "Invoice paid",
+      "refund": "Refund",
+      "adjustment": "Correction by the team"
+    },
+    "cardsHelp": "Cards you chose to save at payment. Only the payment provider holds the card; the panel keeps its last four digits. The default card pays invoices automatically.",
+    "noCards": "No saved card. Tick \"save the card\" when you pay.",
+    "testMode": "test",
+    "defaultCard": "Default",
+    "defaultSet": "This card pays invoices automatically now.",
+    "makeDefault": "Make default",
+    "removeCard": "Remove the card ending {last4}",
+    "cardRemoved": "Card removed.",
+    "profile": {
+      "saved": "Invoice details saved.",
+      "who": "Who the invoice is for",
+      "whoHelp": "A person invoices with their T.C. identity number, a company with its tax number and tax office.",
+      "kind": "Type",
+      "individual": "Individual",
+      "company": "Company",
+      "country": "Country",
+      "countryHelp": "Two-letter code, e.g. TR, DE, GB.",
+      "companyName": "Company title",
+      "fullName": "Full name",
+      "foreignTaxId": "Tax / VAT number",
+      "vknHelp": "10 digits.",
+      "tcknHelp": "11 digits.",
+      "taxOffice": "Tax office",
+      "einvoiceUser": "This tax number is registered for e-Fatura: your invoices arrive in your e-invoice inbox.",
+      "address": "Address",
+      "addressHelp": "As it should appear on the invoice.",
+      "city": "City",
+      "district": "District",
+      "street": "Address",
+      "postalCode": "Postal code",
+      "phone": "Phone",
+      "email": "Invoice e-mail",
+      "emailHelp": "e-Arşiv invoices are e-mailed here; empty uses your account e-mail.",
+      "appliesTo": "Applies to unpaid and future invoices; issued ones stay as they are.",
+      "save": "Save"
+    },
+    "sheet": {
+      "taxId": "Tax no",
+      "taxOffice": "Tax office",
+      "tradeRegistry": "Trade registry",
+      "label": "Invoice",
+      "receipt": "Top-up receipt",
+      "earsiv": "e-Arşiv invoice",
+      "efatura": "e-Fatura",
+      "invoice": "Invoice",
+      "proforma": "Pro forma · awaiting payment",
+      "issued": "Issued {date}",
+      "created": "Created {date}",
+      "due": "Due {date}",
+      "seller": "Seller",
+      "buyer": "Buyer",
+      "description": "Description",
+      "quantity": "Quantity",
+      "unitPrice": "Unit price",
+      "amount": "Amount",
+      "month": "month",
+      "piece": "pcs",
+      "exemption": "KDV exemption code {code} (KDV Law 11/1-a, service export).",
+      "subtotal": "Subtotal",
+      "total": "Total",
+      "paid": "Paid",
+      "refunded": "Refunded",
+      "payments": "Payments"
+    },
+    "einvoice": {
+      "queued": "Being sent to GİB",
+      "sent": "Sent",
+      "accepted": "Accepted by GİB",
+      "rejected": "Rejected",
+      "failed": "Not sent",
+      "cancelled": "Cancelled at GİB"
+    },
+    "payment": {
+      "pending": "In progress",
+      "succeeded": "Succeeded",
+      "failed": "Failed",
+      "cancelled": "Cancelled",
+      "refunded": "Refunded",
+      "partially_refunded": "Partly refunded"
+    },
+    "method": {
+      "card": "Card",
+      "saved_card": "Saved card",
+      "balance": "Balance",
+      "bank_transfer": "Bank transfer",
+      "cash": "Cash",
+      "other": "Other"
+    },
+    "automatic": "automatic",
+    "decline": {
+      "CARD_DECLINED": "The bank declined the card.",
+      "INSUFFICIENT_FUNDS": "Insufficient funds.",
+      "CANCELLED_BY_CUSTOMER": "Cancelled on the payment page.",
+      "PROVIDER_ERROR": "The payment provider did not answer."
+    },
+    "invoiceTitle": "Invoice",
+    "paidToast": "Payment received. Thank you!",
+    "failedToast": "The payment did not go through. The invoice still awaits payment.",
+    "back": "Billing",
+    "print": "Print or save as PDF",
+    "checking": "Checking the payment…",
+    "checkingHelp": "The provider is confirming it; this page updates by itself.",
+    "payTitle": "Pay {amount}",
+    "orderWaits": "Your server is set up as soon as this is paid.",
+    "lastFailed": "The last attempt failed: {reason}",
+    "withBalance": "From your balance",
+    "balanceHas": "Balance: {amount}",
+    "balanceShort": "Balance is not enough",
+    "payAmount": "Pay {amount}",
+    "withSaved": "With your saved card",
+    "withCard": "By card",
+    "withCardHelp": "You finish the payment on the provider’s secure page with 3D Secure; the panel never sees the card.",
+    "saveCard": "Save the card for automatic payments",
+    "saveCardHelp": "The provider keeps it; renewals are then paid without you.",
+    "withTransfer": "By bank transfer",
+    "transferHelp": "Send the amount to this account; the invoice is marked paid when it arrives.",
+    "transferNote": "Description",
+    "noMethod": "No payment method is available yet. Please contact support.",
+    "checkout": {
+      "title": "Secure payment",
+      "test": "TEST",
+      "amount": "Amount",
+      "done": "This payment is already finished.",
+      "card": "Card number",
+      "pay": "Pay",
+      "cancel": "Cancel",
+      "cards": "Test cards",
+      "card_ok": "approved",
+      "card_declined": "declined",
+      "card_funds": "insufficient funds",
+      "declined": "The card was declined."
+    }
+  },
+  "BillingAdmin": {
+    "eyebrow": "Money",
+    "title": "Billing",
+    "intro": "Recurring revenue, open and overdue invoices, collected money, every invoice, subscription and payment.",
+    "ran": "Collection ran: {renewals} renewals, {charged} charged, {suspended} suspended.",
+    "payments": "{n, plural, one {# payment} other {# payments}} this month",
+    "openCount": "{n, plural, one {# invoice} other {# invoices}}",
+    "overdueHint": "invoices past their due date",
+    "run": "Run collection now",
+    "adjust": "Balance correction",
+    "newInvoice": "New invoice",
+    "offTitle": "Billing is off",
+    "off": "Orders are not invoiced and nothing is collected until billing is turned on.",
+    "openSettings": "Open billing settings",
+    "sandboxTitle": "Sandbox payments are on",
+    "sandbox": "Customers can pay with test cards. Turn it off before taking real money.",
+    "kpi": {
+      "mrr": "Monthly recurring revenue",
+      "collected": "Collected this month",
+      "open": "Awaiting payment",
+      "overdue": "Overdue"
+    },
+    "revenue": "Collected per month",
+    "noRevenue": "No payments yet.",
+    "subscriptionsByStatus": "Subscriptions",
+    "sub": {
+      "pending": "Awaiting first payment",
+      "active": "Active",
+      "past_due": "Overdue",
+      "suspended": "Suspended",
+      "cancelled": "Cancelled",
+      "ended": "Ended"
+    },
+    "tabs": {
+      "invoices": "Invoices",
+      "subscriptions": "Subscriptions",
+      "payments": "Payments"
+    },
+    "search": "Number, name, e-mail or tax number",
+    "status": "Status",
+    "all": "All",
+    "noInvoices": "No invoices.",
+    "customer": "Customer",
+    "done": {
+      "suspend": "Suspended: the server is shut down and held.",
+      "resume": "Resumed: the hold is lifted.",
+      "cancel": "Subscription cancelled."
+    },
+    "noSubscriptions": "No subscriptions.",
+    "what": "What",
+    "periodEnd": "Period ends",
+    "endsThen": "ends then",
+    "edit": "Edit {name}",
+    "resume": "Resume",
+    "suspend": "Suspend",
+    "noPayments": "No payments.",
+    "method": "Method",
+    "pickCustomer": "Choose a customer",
+    "invoiceCreated": "Invoice created; the customer was told.",
+    "cancel": "Cancel",
+    "create": "Create invoice",
+    "currency": "Currency",
+    "dueDays": "Due in days",
+    "lines": "Lines",
+    "lineDescription": "Description",
+    "linePrice": "Unit price",
+    "lineQuantity": "Qty",
+    "removeLine": "Remove line",
+    "addLine": "Add a line",
+    "netTotal": "Before tax: {amount} {currency}",
+    "note": "Note on the invoice",
+    "noteHelp": "Printed under the lines.",
+    "adjusted": "Balance corrected.",
+    "save": "Save",
+    "adjustHelp": "A goodwill credit or a correction. Positive adds to the balance, negative takes away; the reason is kept in the history.",
+    "amount": "Amount",
+    "amountHelp": "e.g. 50 or -20",
+    "reason": "Reason",
+    "saved": "Saved.",
+    "cancelNow": "Cancel now",
+    "monthlyAmount": "Monthly amount ({currency})",
+    "period": "Billing period",
+    "months": "{n, plural, one {# month} other {# months}}",
+    "editHelp": "A server’s renewal uses its current price; the next renewal invoice follows the period end you set.",
+    "print": "Print",
+    "markPaid": "Record a payment",
+    "withdraw": "Withdraw",
+    "withdrawTitle": "Withdraw this invoice?",
+    "withdrawBody": "It disappears from what the customer owes. Nothing was paid on it.",
+    "withdrawn": "Invoice withdrawn.",
+    "refund": "Refund",
+    "einvoiceFailed": "The e-invoice was not sent",
+    "markPaidHelp": "For money that arrived outside the panel: {amount} is recorded and the invoice issued.",
+    "methods": {
+      "bank_transfer": "Bank transfer",
+      "cash": "Cash",
+      "other": "Other"
+    },
+    "reference": "Reference",
+    "referenceHelp": "e.g. the transfer’s receipt number.",
+    "refundHelp": "Up to {amount}. By default it goes back to the card through the provider.",
+    "toBalance": "Refund to the customer’s balance instead",
+    "toBalanceHelp": "Immediate; no provider involved.",
+    "recorded": "Payment recorded; the invoice is issued.",
+    "refunded": "Refunded.",
+    "record": "Record"
   }
 }

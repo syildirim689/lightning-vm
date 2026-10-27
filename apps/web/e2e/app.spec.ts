@@ -731,6 +731,106 @@ test.describe('people, settings and smart features (English browser)', () => {
     await expect(page.getByText('Provider removed.')).toBeVisible();
   });
 
+  test('billing: an invoice awaits payment, a declined card keeps it awaiting, a good one pays it; staff see it all', async ({ page }) => {
+    test.setTimeout(180_000);
+    const shot = async (name: string) => page.screenshot({ path: `test-results/tour/${name}.png`, fullPage: true });
+    const csrf = { 'x-lightning-csrf': '1' };
+    await signInAdmin(page);
+    // Settings → Billing: turned on with the seller and the sandbox provider.
+    await page.goto('/admin/settings?tab=billing');
+    await expect(page.getByText('Billing on')).toBeVisible();
+    await page.getByLabel('Company title').fill('Lightning Bilişim A.Ş.');
+    await page.getByLabel('VKN').fill('1234567890');
+    await page.getByLabel('Tax office').fill('Kadıköy');
+    await page.getByLabel('Address', { exact: true }).fill('Moda Cd. 1');
+    await page.getByLabel('District').fill('Kadıköy');
+    await page.getByLabel('City').fill('İstanbul');
+    for (const name of ['Billing on', 'Sandbox provider']) await tick(page.getByRole('switch', { name }));
+    await page.waitForTimeout(400);
+    await shot('billing-settings');
+    await page.getByRole('button', { name: 'Save', exact: true }).last().click();
+    await expect(page.getByText('Billing settings saved.')).toBeVisible();
+    // An invoice for the admin's own account (a service), then the customer's side of it.
+    const me = await (await page.request.get('/api/auth/me')).json();
+    const made = await page.request.post('/api/admin/billing/invoices', { headers: csrf, data: { userId: me.id, currency: 'TRY', lines: [{ description: 'Kurulum hizmeti', unitPrice: '250', quantity: 1 }], dueDays: 7 } });
+    expect(made.ok()).toBe(true);
+    const { invoiceId } = await made.json();
+    await page.goto('/billing');
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Billing');
+    await expect(page.getByText('Your invoice details are missing')).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Billing', exact: true }).first()).toBeVisible();
+    await page.waitForTimeout(600);
+    await shot('billing-customer');
+    // Invoice details: a wrong TCKN is refused, a right one saved.
+    await page.getByRole('tab', { name: 'Invoice details' }).click();
+    await page.getByLabel('Full name').fill('Admin Example');
+    await page.getByLabel('TCKN').fill('12345678901');
+    await page.getByLabel('City').fill('İstanbul');
+    await page.getByLabel('District').fill('Kadıköy');
+    await page.getByLabel('Address', { exact: true }).fill('Moda Cd. 2');
+    await page.getByRole('button', { name: 'Save', exact: true }).click();
+    await expect(page.getByText('Not a valid T.C. identity number.')).toBeVisible();
+    await page.getByLabel('TCKN').fill('10000000146');
+    await page.getByRole('button', { name: 'Save', exact: true }).click();
+    await expect(page.getByText('Invoice details saved.')).toBeVisible();
+    await page.waitForTimeout(400);
+    await shot('billing-profile');
+    // Pay: the sandbox page, a declined card first (the invoice still awaits payment), then a good one.
+    await page.goto(`/billing/invoices/${invoiceId}`);
+    await expect(page.getByText('Pro forma · awaiting payment')).toBeVisible();
+    await expect(page.getByText('Awaiting payment', { exact: true }).first()).toBeVisible();
+    await page.waitForTimeout(500);
+    await shot('billing-invoice-unpaid');
+    await page.getByRole('button', { name: /Sandbox/ }).click();
+    await expect(page).toHaveURL(/\/billing\/checkout\//);
+    await expect(page.getByText('Secure payment')).toBeVisible();
+    await page.getByLabel('Card number').fill('4000 0000 0000 0002');
+    await page.waitForTimeout(300);
+    await shot('billing-checkout');
+    await page.getByRole('button', { name: 'Pay', exact: true }).click();
+    await expect(page).toHaveURL(new RegExp(`/billing/invoices/${invoiceId}`));
+    await expect(page.getByText(/The last attempt failed: The bank declined the card/)).toBeVisible();
+    await expect(page.getByText('Pro forma · awaiting payment')).toBeVisible();
+    await page.getByRole('button', { name: /Sandbox/ }).click();
+    await page.getByLabel('Card number').fill('4242 4242 4242 4242');
+    await page.getByRole('button', { name: 'Pay', exact: true }).click();
+    await expect(page.getByText('Paid', { exact: true }).first()).toBeVisible();
+    await expect(page.getByRole('heading', { level: 2 }).filter({ hasText: /^LVM\d{13}$/ })).toBeVisible();
+    await page.waitForTimeout(600);
+    await shot('billing-invoice-paid');
+    await page.setViewportSize({ width: 390, height: 844 });
+    await expectNoOverflow(page, 'paid invoice at 390 px');
+    await shot('billing-invoice-390');
+    await page.goto('/billing');
+    await expectNoOverflow(page, 'billing at 390 px');
+    await shot('billing-customer-390');
+    await page.setViewportSize({ width: 1280, height: 720 });
+    // Staff: revenue, the invoice with its two payments, and the actions on it.
+    await page.goto('/admin/billing');
+    await expect(page.getByText('Monthly recurring revenue')).toBeVisible();
+    await expect(page.getByRole('grid', { name: 'Invoices' })).toContainText('Admin Example');
+    await page.waitForTimeout(900);
+    await shot('billing-admin');
+    await page.getByRole('tab', { name: 'Payments' }).click();
+    await expect(page.getByText('Failed', { exact: true }).first()).toBeVisible();
+    await page.waitForTimeout(400);
+    await shot('billing-admin-payments');
+    await page.goto(`/admin/billing/invoices/${invoiceId}`);
+    await page.getByRole('button', { name: 'Refund', exact: true }).click();
+    await page.getByLabel('Amount', { exact: true }).fill('50');
+    await tick(page.getByRole('checkbox', { name: /Refund to the customer.s balance instead/ }));
+    await page.getByRole('dialog').getByRole('button', { name: 'Refund', exact: true }).click();
+    await expect(page.getByText('Partly refunded').first()).toBeVisible();
+    await page.setViewportSize({ width: 820, height: 1180 });
+    await page.goto('/admin/billing');
+    await expectNoOverflow(page, 'admin billing at 820 px');
+    await page.waitForTimeout(600);
+    await shot('billing-admin-820');
+    await page.setViewportSize({ width: 1280, height: 720 });
+    // Off again for the rest of the suite.
+    expect((await page.request.put('/api/admin/settings/billing', { headers: csrf, data: { enabled: false, sandbox: false } })).ok()).toBe(true);
+  });
+
   test('IP pools: quarantine and IPv6 are edited, addresses are listed; reverse DNS settings validate', async ({ page }) => {
     await signInAdmin(page);
     await page.goto('/admin/catalog?tab=ip');

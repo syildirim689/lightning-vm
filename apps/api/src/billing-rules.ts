@@ -74,10 +74,10 @@ export function cleanProfile(b: ProfileInput) {
   return Object.keys(fields).length ? { fields } : { profile: p };
 }
 
-// The tax on a customer's lines: the general KDV rate, or 0 with exemption 301 for a foreign buyer when the admin
+// The tax on a customer's lines: the general KDV rate, or 0 with exemption 302 (service export) for a foreign buyer when the admin
 // treats services used abroad as exempt (KDV Kanunu 11/1-a, services exported).
 export function taxFor(country: string, s: { taxRate: number; exportExempt: boolean }) {
-  return country !== 'TR' && s.exportExempt ? { rate: 0, exemption: '301' } : { rate: s.taxRate, exemption: null };
+  return country !== 'TR' && s.exportExempt ? { rate: 0, exemption: '302' } : { rate: s.taxRate, exemption: null };
 }
 
 // Dates are calendar days (YYYY-MM-DD). A period ends on the same day N months later, or the month's last day.

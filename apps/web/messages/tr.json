@@ -292,7 +292,19 @@
     "USERNAME_IS_ALREADY_TAKEN": "Bu kullanıcı adı alınmış.",
     "USERNAME_TOO_SHORT": "Kullanıcı adı çok kısa (en az 3 karakter).",
     "USERNAME_TOO_LONG": "Kullanıcı adı çok uzun (en fazla 30 karakter).",
-    "INVALID_USERNAME": "Kullanıcı adında harf, rakam, nokta, tire ve alt çizgi kullanılabilir."
+    "INVALID_USERNAME": "Kullanıcı adında harf, rakam, nokta, tire ve alt çizgi kullanılabilir.",
+    "INVOICE_NOT_PAYABLE": "Bu fatura ödeme beklemiyor.",
+    "PAYMENT_METHOD_UNAVAILABLE": "Bu ödeme yöntemi kullanılamıyor.",
+    "INSUFFICIENT_BALANCE": "Bakiye bunu karşılamıyor.",
+    "PAYMENT_FAILED": "Ödeme gerçekleşmedi.",
+    "PAYMENT_PROVIDER_ERROR": "Ödeme kuruluşu yanıt vermedi. Lütfen yeniden deneyin.",
+    "INVOICE_NOT_CANCELLABLE": "Yalnızca üzerine ödeme yapılmamış, ödenmemiş fatura geri çekilebilir.",
+    "INVOICE_NOT_REFUNDABLE": "Yalnızca ödenmiş fatura iade edilebilir.",
+    "REFUND_NOT_SUPPORTED": "Bu panelden bu şekilde iade edilemiyor; bakiyeye ya da ödeme kuruluşunun panelinden iade edin.",
+    "REFUND_FAILED": "Ödeme kuruluşu iadeyi reddetti.",
+    "BILLING_HOLD": "Sunucu, ödenmeyen fatura ödenene kadar askıda.",
+    "PROVIDER_ERROR": "Ödeme kuruluşu yanıt vermedi.",
+    "CANCELLED_BY_CUSTOMER": "Ödeme sayfasında vazgeçildi."
   },
   "Auth": {
     "required": "zorunlu",
@@ -518,7 +530,10 @@
     "TOO_MANY_FILES": "En fazla 3 dosya eklenebilir.",
     "FILE_TOO_LARGE": "Dosya en fazla 2 MB olabilir.",
     "FILE_TYPE_NOT_ALLOWED": "Bu dosya türü kabul edilmiyor.",
-    "GOOGLE_REQUIRED": "Önce Google ile girişi açın."
+    "GOOGLE_REQUIRED": "Önce Google ile girişi açın.",
+    "INVALID_TCKN": "Geçerli bir T.C. kimlik numarası değil.",
+    "INVALID_VKN": "Geçerli bir vergi numarası değil.",
+    "COMPANY_REQUIRED": "Önce satıcı bilgilerini (unvan, vergi no, adres) doldurun."
   },
   "Setup": {
     "title": "Kurulum sihirbazı",
@@ -1035,7 +1050,8 @@
       "recommended": "Önerilen"
     },
     "budgetNear": "Bu siparişle aylık tutar {monthly} olur; bütçenize ({amount}) yaklaşıyorsunuz.",
-    "budgetOver": "Bu siparişle aylık tutar {monthly} olur ve bütçenizi ({amount}) aşar."
+    "budgetOver": "Bu siparişle aylık tutar {monthly} olur ve bütçenizi ({amount}) aşar.",
+    "payToStart": "Faturayı ödeyin, sunucunuz hemen kurulsun."
   },
   "Catalog": {
     "eyebrow": "YÖNETİM · KATALOG",
@@ -1735,7 +1751,12 @@
       "lockedNow": "Sunucu kilitlendi.",
       "unlocked": "Kilit açıldı."
     },
-    "getSupport": "Destek iste"
+    "getSupport": "Destek iste",
+    "billingHold": "Ödenmeyen fatura nedeniyle askıda",
+    "billingHoldHelp": "Sunucu kapatıldı ve fatura ödenene kadar başlatılamaz. Ödeme yapılınca kendiliğinden açılır.",
+    "payNow": "Şimdi öde",
+    "awaitingPayment": "Ödeme bekleniyor",
+    "awaitingPaymentHelp": "İlk faturası ödendiği anda sunucu kurulur."
   },
   "Maintenance": {
     "title": "Yedekler ve güncellemeler",
@@ -1829,7 +1850,10 @@
     "mySupport": "Destek",
     "waitingForYou": "{n} talep yanıtınızı bekliyor",
     "waitingForSupport": "{n} talep destek bekliyor",
-    "stats": "İstatistikler"
+    "stats": "İstatistikler",
+    "billing": "Faturalandırma",
+    "myBilling": "Faturalar",
+    "unpaidInvoices": "{n} fatura ödeme bekliyor"
   },
   "Dashboard": {
     "eyebrow": "YÖNETİM",
@@ -2364,6 +2388,42 @@
       "account_message": {
         "title": "Ekipten mesaj",
         "help": "Yöneticiler size panelden bir mesaj gönderdiğinde."
+      },
+      "billing_invoice": {
+        "title": "Yeni fatura",
+        "help": "Size bir fatura kesildiğinde (yenileme ya da hizmet)."
+      },
+      "billing_paid": {
+        "title": "Ödeme alındı",
+        "help": "Ödemeniz gerçekleşip fatura düzenlendiğinde."
+      },
+      "billing_payment_failed": {
+        "title": "Ödeme başarısız",
+        "help": "Kartla ödeme ya da otomatik çekim gerçekleşmediğinde."
+      },
+      "billing_reminder": {
+        "title": "Ödeme hatırlatması",
+        "help": "Faturanın son ödeme gününden birkaç gün önce."
+      },
+      "billing_overdue": {
+        "title": "Fatura gecikti",
+        "help": "Son ödeme gününden sonraki gün, ödenmemişse."
+      },
+      "billing_suspended": {
+        "title": "Hizmet askıya alındı",
+        "help": "Ödenmeyen fatura nedeniyle hizmet askıya alındığında."
+      },
+      "billing_terminated": {
+        "title": "Hizmet sonlandırıldı",
+        "help": "Ödenmeyen fatura nedeniyle hizmet sonlandırıldığında."
+      },
+      "billing_refunded": {
+        "title": "İade",
+        "help": "Size iade yapıldığında."
+      },
+      "billing_payment_received": {
+        "title": "Ödeme alındı (ekip)",
+        "help": "Bir müşterinin yaptığı her ödeme."
       }
     },
     "policyTitle": "Önce yönetici, sonra kullanıcı",
@@ -2643,7 +2703,8 @@
       "settings": "Ayarlar",
       "system": "Sistem",
       "server": "Kendi sunucularında",
-      "support": "Destek"
+      "support": "Destek",
+      "billing": "Faturalandırma"
     },
     "p": {
       "dashboard_view": "Genel bakışı görme",
@@ -2678,7 +2739,9 @@
       "server_iso": "ISO bağlama",
       "server_root_password": "Root parolası",
       "support_view": "Destek taleplerini gör",
-      "support_manage": "Destek taleplerini yanıtla"
+      "support_manage": "Destek taleplerini yanıtla",
+      "billing_view": "Faturalandırmayı görme",
+      "billing_manage": "Faturalandırmayı yönetme"
     },
     "help": {
       "dashboard_view": "Yönetim panosu, içgörüler ve özet grafikler.",
@@ -2713,7 +2776,9 @@
       "server_iso": "ISO bağlama ve çıkarma.",
       "server_root_password": "Root parolasını görme ve silme.",
       "support_view": "Kuyruğu, talepleri ve iç notları görür.",
-      "support_manage": "Yanıtlar, iç not ekler, atar, durum ve öncelik değiştirir."
+      "support_manage": "Yanıtlar, iç not ekler, atar, durum ve öncelik değiştirir.",
+      "billing_view": "Tüm müşterilerin faturaları, abonelikleri, ödemeleri ve geliri.",
+      "billing_manage": "Fatura oluşturma, ödeme kaydetme, iade, bakiye düzeltme, aboneliği askıya alma ve faturalandırma ayarları."
     }
   },
   "Settings": {
@@ -2738,7 +2803,8 @@
       "directory": "Dizin ve SSO",
       "status": "Durum ve olaylar",
       "support": "Destek",
-      "signin": "Giriş yöntemleri"
+      "signin": "Giriş yöntemleri",
+      "billing": "Faturalandırma"
     },
     "saved": "Kaydedildi.",
     "save": "Kaydet",
@@ -3532,6 +3598,75 @@
       "pwnedHelp": "Have I Been Pwned ile denetlenir: parolanın SHA-1 özetinin yalnızca ilk 5 karakteri sunucudan çıkar. Servise ulaşılamazsa parola kabul edilir.",
       "disposable": "Geçici e-posta adreslerini reddet",
       "disposableHelp": "Tek kullanımlık e-posta alan adlarından (55.000’den fazla alan adı listesi) gelen kayıtlar reddedilir."
+    },
+    "billing": {
+      "saved": "Faturalandırma ayarları kaydedildi.",
+      "fixFields": "Bazı alanlar düzeltilmeli.",
+      "main": "Faturalandırma",
+      "mainHelp": "Faturalamayı açın ve ödemelerin nasıl alınacağını seçin.",
+      "enabled": "Faturalandırma açık",
+      "enabledHelp": "Siparişler ve yenilemeler faturalanır ve tahsil edilir. Mevcut sunuculara aylık yıl dönümlerinde abonelik açılır.",
+      "requirePayment": "Kurulumdan önce ödeme",
+      "requirePaymentHelp": "Yeni sunucu ancak ilk faturası ödenince (ya da bakiye karşılayınca) kurulur.",
+      "autoCharge": "Otomatik tahsilat",
+      "autoChargeHelp": "Yenilemeler önce bakiyeden, sonra varsayılan kayıtlı karttan müşteri olmadan ödenir.",
+      "balance": "Bakiye",
+      "balanceHelp": "Müşteriler bakiye yükleyip faturaları bakiyeden ödeyebilir.",
+      "providers": "Kartla ödeme, Ödemeler sekmesinde etkinleştirdiğiniz kuruluşlarla yapılır.",
+      "providersLink": "Ödeme kuruluşları",
+      "company": "Satıcı",
+      "companyHelp": "Her faturada yazar ve e-faturaya gönderilir. Faturalandırmayı açmadan önce gerekli.",
+      "companyName": "Şirket unvanı",
+      "taxOffice": "Vergi dairesi",
+      "address": "Adres",
+      "district": "İlçe",
+      "city": "İl",
+      "phone": "Telefon",
+      "email": "E-posta",
+      "website": "Web sitesi",
+      "websiteHelp": "e-Arşiv internet satışlarında sitenin adresi gerekir.",
+      "tradeRegistry": "Ticaret sicil no",
+      "tax": "Vergi ve numaralandırma",
+      "taxHelp": "Mali müşaviriniz aksini söylemedikçe barındırma hizmetinde KDV %20’dir.",
+      "taxRate": "KDV oranı (%)",
+      "prefix": "Fatura serisi",
+      "prefixHelp": "3 karakter; numaralar her yıl baştan başlar: {example}",
+      "pricesIncludeTax": "Fiyatlara KDV dahil",
+      "pricesIncludeTaxHelp": "Katalog fiyatı müşterinin ödediğidir; KDV içinden ayrılır.",
+      "exportExempt": "Yurt dışındaki müşterilere KDV yok",
+      "exportExemptHelp": "Hizmet ihracatı (istisna 302). Yalnızca mali müşaviriniz hizmetiniz için onaylarsa açın.",
+      "collection": "Yenilemeler ve ödenmeyen faturalar",
+      "collectionHelp": "Yenileme faturasının ne zaman kesileceği, hatırlatmalar ve ödenmeyen hizmetin askıya alınması.",
+      "invoiceDaysBefore": "Yenilemeden kaç gün önce fatura",
+      "reminderDays": "Hatırlatmalar (vadeden önce gün)",
+      "reminderDaysHelp": "ör. 3, 1",
+      "chargeRetries": "Otomatik deneme sayısı",
+      "suspendAfterDays": "Askıya alma (gecikme günü)",
+      "terminateAfterDays": "Silme (askıdaki gün)",
+      "terminateHelp": "0 hiç silmez.",
+      "orderExpiryHours": "Ödenmeyen sipariş bekleme (saat)",
+      "timeline": "Ödenmeyen bir yenilemenin akışı",
+      "step": {
+        "invoice": "{n} gün önce fatura",
+        "due": "Son ödeme günü",
+        "overdue": "Gecikme bildirimi",
+        "suspend": "{n} gün sonra askıya alma",
+        "terminate": "{n} gün sonra silme",
+        "never": "Hiç silinmez"
+      },
+      "balanceAndTransfer": "Bakiye ve havale",
+      "balanceAndTransferHelp": "Bakiye yükleme sınırları ve müşterilerin havale yapacağı hesap.",
+      "topupMin": "En az yükleme",
+      "topupMax": "En çok yükleme",
+      "bankTransfer": "Havale/EFT",
+      "bankTransferHelp": "Ödenmemiş faturalarda gösterilir; para gelince ödemeyi siz kaydedersiniz.",
+      "bank": "Banka",
+      "holder": "Hesap sahibi",
+      "testing": "Test",
+      "testingHelp": "Gerçek kuruluş olmadan tüm akışı deneyin.",
+      "sandbox": "Test ödeme kuruluşu",
+      "sandboxHelp": "Müşteriler test kartlarıyla ödeyebilir (4242 4242 4242 4242). Gerçek müşteriler varken asla açık bırakmayın.",
+      "save": "Kaydet"
     }
   },
   "Firewalls": {
@@ -4272,7 +4407,22 @@
       "admin_user_note_removed": "Personel notu silindi",
       "account_sessions_ended": "Diğer cihazlardan çıkış yapıldı",
       "admin_users_message": "Kullanıcılara mesaj gönderildi",
-      "admin_users_end_sessions": "Kullanıcıların tüm oturumları kapatıldı"
+      "admin_users_end_sessions": "Kullanıcıların tüm oturumları kapatıldı",
+      "billing_profile_saved": "Fatura bilgileri kaydedildi",
+      "billing_paid_from_balance": "Fatura bakiyeden ödendi",
+      "billing_paid_saved_card": "Fatura kayıtlı kartla ödendi",
+      "billing_payment_started": "Kartla ödeme başlatıldı",
+      "billing_topup_created": "Bakiye yükleme başlatıldı",
+      "billing_subscription_changed": "Abonelik değiştirildi",
+      "billing_card_removed": "Kayıtlı kart silindi",
+      "billing_invoice_created": "Fatura oluşturuldu",
+      "billing_marked_paid": "Ödeme kaydedildi",
+      "billing_invoice_cancelled": "Fatura geri çekildi",
+      "billing_refunded": "İade",
+      "billing_subscription_updated": "Abonelik ekip tarafından güncellendi",
+      "billing_balance_adjusted": "Bakiye düzeltildi",
+      "billing_run": "Tahsilat çalıştırıldı",
+      "settings_billing": "Faturalandırma ayarları değişti"
     },
     "outcome": {
       "success": "Tamamlandı",
@@ -5415,5 +5565,347 @@
     "widgetCounts": "{online} çevrimiçi · {recent} kişi son 15 dakikada aktif",
     "nobody": "Şu an kimse yok.",
     "seeAll": "Tümünü gör"
+  },
+  "Billing": {
+    "title": "Faturalar ve ödemeler",
+    "intro": "Faturalar, abonelikler, bakiyeniz ve kayıtlı kartlarınız. Fatura, ödeme alındığı anda düzenlenir.",
+    "off": "Bu panelde faturalandırma açık değil.",
+    "profileMissing": "Fatura bilgileriniz eksik",
+    "profileMissingHelp": "Kimlik ya da vergi numaranızı ve adresinizi girene kadar faturalar hesap adınıza düzenlenir.",
+    "profileFill": "Şimdi girin",
+    "kpi": {
+      "balance": "Bakiye",
+      "open": "Ödeme bekleyen",
+      "nothingOpen": "Açık fatura yok",
+      "openCount": "{n} fatura{overdue, plural, =0 {} other {, # tanesi gecikmiş}}",
+      "allPaid": "Tüm faturalar ödendi",
+      "next": "Sonraki yenileme",
+      "nextOn": "{date} · {name}",
+      "noSubscriptions": "Henüz abonelik yok",
+      "autoCharge": "Bakiyeden ya da kayıtlı karttan otomatik ödenir",
+      "manualCharge": "Her faturayı kendiniz ödersiniz"
+    },
+    "topup": {
+      "open": "Bakiye yükle",
+      "title": "Bakiye yükle",
+      "help": "Bakiyeniz faturaları otomatik öder. Bakiye yükleme bir satış değildir, ayrı faturası olmaz; ödediği faturalar düzenlenir.",
+      "amount": "Tutar",
+      "currency": "Para birimi",
+      "range": "{min} ile {max} arası",
+      "cancel": "Vazgeç",
+      "continue": "Ödemeye geç"
+    },
+    "tabs": {
+      "invoices": "Faturalar",
+      "subscriptions": "Abonelikler",
+      "balance": "Bakiye",
+      "cards": "Kartlar",
+      "profile": "Fatura bilgileri"
+    },
+    "filter": "Göster",
+    "filters": {
+      "all": "Tümü",
+      "open": "Ödeme bekleyen",
+      "done": "Kapanmış"
+    },
+    "noInvoices": "Henüz fatura yok.",
+    "col": {
+      "number": "Fatura",
+      "kind": "Neden",
+      "date": "Tarih",
+      "total": "Tutar",
+      "status": "Durum",
+      "actions": "İşlemler",
+      "what": "Ne",
+      "amount": "Tutar"
+    },
+    "kind": {
+      "order": "Yeni sipariş",
+      "renewal": "Yenileme",
+      "topup": "Bakiye yükleme",
+      "manual": "Hizmet",
+      "credit_note": "İade"
+    },
+    "dueIn": "son ödeme {when}",
+    "status": {
+      "unpaid": "Ödeme bekliyor",
+      "overdue": "Gecikmiş",
+      "paid": "Ödendi",
+      "cancelled": "İptal",
+      "refunded": "İade edildi",
+      "partially_refunded": "Kısmen iade"
+    },
+    "pay": "Öde",
+    "view": "Görüntüle",
+    "noSubscriptions": "Henüz abonelik yok: sipariş ettiğiniz her sunucu bir abonelik olur.",
+    "sub": {
+      "pending": "İlk ödeme bekleniyor",
+      "active": "Aktif",
+      "past_due": "Ödemesi gecikmiş",
+      "suspended": "Askıda",
+      "cancelled": "İptal",
+      "ended": "Sona erdi",
+      "ending": "Dönem sonunda bitiyor"
+    },
+    "perMonth": "ay",
+    "endsOn": "{date} tarihinde bitiyor",
+    "renewsOn": "{date} tarihinde yenilenir",
+    "autoRenew": "Otomatik yenile",
+    "autoRenewOn": "Otomatik yenilenecek.",
+    "autoRenewOff": "Yenilenmeyecek; bunun için yeni fatura kesilmez.",
+    "keep": "Devam etsin",
+    "kept": "Abonelik devam ediyor.",
+    "cancelAtEnd": "İptal et",
+    "cancelTitle": "Dönem sonunda iptal edilsin mi?",
+    "cancelBody": "{name} {date} tarihine kadar çalışır, sonra verileriyle birlikte silinir. Başka ücret alınmaz.",
+    "cancelConfirm": "Dönem sonunda iptal et",
+    "cancelKeep": "Vazgeç",
+    "cancelled": "Dönem sonunda sona erecek.",
+    "noMovements": "Henüz bakiye hareketi yok.",
+    "reason": {
+      "topup": "Bakiye yükleme",
+      "invoice": "Fatura ödemesi",
+      "refund": "İade",
+      "adjustment": "Ekip düzeltmesi"
+    },
+    "cardsHelp": "Ödeme sırasında kaydetmeyi seçtiğiniz kartlar. Kartı yalnızca ödeme kuruluşu saklar; panel son dört haneyi tutar. Varsayılan kart faturaları otomatik öder.",
+    "noCards": "Kayıtlı kart yok. Öderken \"kartı kaydet\" seçeneğini işaretleyin.",
+    "testMode": "test",
+    "defaultCard": "Varsayılan",
+    "defaultSet": "Faturalar artık bu karttan otomatik ödenecek.",
+    "makeDefault": "Varsayılan yap",
+    "removeCard": "{last4} ile biten kartı sil",
+    "cardRemoved": "Kart silindi.",
+    "profile": {
+      "saved": "Fatura bilgileri kaydedildi.",
+      "who": "Fatura kime düzenlenecek",
+      "whoHelp": "Bireyler T.C. kimlik numarasıyla, şirketler vergi numarası ve vergi dairesiyle faturalanır.",
+      "kind": "Tür",
+      "individual": "Bireysel",
+      "company": "Kurumsal",
+      "country": "Ülke",
+      "countryHelp": "İki harfli kod, ör. TR, DE, GB.",
+      "companyName": "Şirket unvanı",
+      "fullName": "Ad soyad",
+      "foreignTaxId": "Vergi / KDV numarası",
+      "vknHelp": "10 hane.",
+      "tcknHelp": "11 hane.",
+      "taxOffice": "Vergi dairesi",
+      "einvoiceUser": "Bu vergi numarası e-Fatura mükellefi: faturalarınız e-Fatura kutunuza gelir.",
+      "address": "Adres",
+      "addressHelp": "Faturada görünmesi gerektiği gibi.",
+      "city": "İl",
+      "district": "İlçe",
+      "street": "Adres",
+      "postalCode": "Posta kodu",
+      "phone": "Telefon",
+      "email": "Fatura e-postası",
+      "emailHelp": "e-Arşiv faturalar buraya gönderilir; boşsa hesap e-postanız kullanılır.",
+      "appliesTo": "Ödenmemiş ve sonraki faturalara uygulanır; düzenlenmiş faturalar değişmez.",
+      "save": "Kaydet"
+    },
+    "sheet": {
+      "taxId": "Vergi no",
+      "taxOffice": "Vergi dairesi",
+      "tradeRegistry": "Ticaret sicil",
+      "label": "Fatura",
+      "receipt": "Bakiye yükleme makbuzu",
+      "earsiv": "e-Arşiv fatura",
+      "efatura": "e-Fatura",
+      "invoice": "Fatura",
+      "proforma": "Proforma · ödeme bekliyor",
+      "issued": "Düzenlenme {date}",
+      "created": "Oluşturulma {date}",
+      "due": "Son ödeme {date}",
+      "seller": "Satıcı",
+      "buyer": "Alıcı",
+      "description": "Açıklama",
+      "quantity": "Miktar",
+      "unitPrice": "Birim fiyat",
+      "amount": "Tutar",
+      "month": "ay",
+      "piece": "adet",
+      "exemption": "KDV istisna kodu {code} (KDV Kanunu 11/1-a, hizmet ihracatı).",
+      "subtotal": "Ara toplam",
+      "total": "Genel toplam",
+      "paid": "Ödenen",
+      "refunded": "İade",
+      "payments": "Ödemeler"
+    },
+    "einvoice": {
+      "queued": "GİB’e gönderiliyor",
+      "sent": "Gönderildi",
+      "accepted": "GİB onayladı",
+      "rejected": "Reddedildi",
+      "failed": "Gönderilemedi",
+      "cancelled": "GİB’de iptal"
+    },
+    "payment": {
+      "pending": "Sürüyor",
+      "succeeded": "Başarılı",
+      "failed": "Başarısız",
+      "cancelled": "İptal",
+      "refunded": "İade edildi",
+      "partially_refunded": "Kısmen iade"
+    },
+    "method": {
+      "card": "Kart",
+      "saved_card": "Kayıtlı kart",
+      "balance": "Bakiye",
+      "bank_transfer": "Havale/EFT",
+      "cash": "Nakit",
+      "other": "Diğer"
+    },
+    "automatic": "otomatik",
+    "decline": {
+      "CARD_DECLINED": "Banka kartı reddetti.",
+      "INSUFFICIENT_FUNDS": "Yetersiz bakiye.",
+      "CANCELLED_BY_CUSTOMER": "Ödeme sayfasında vazgeçildi.",
+      "PROVIDER_ERROR": "Ödeme kuruluşu yanıt vermedi."
+    },
+    "invoiceTitle": "Fatura",
+    "paidToast": "Ödemeniz alındı. Teşekkür ederiz!",
+    "failedToast": "Ödeme gerçekleşmedi. Fatura ödeme bekliyor.",
+    "back": "Faturalar",
+    "print": "Yazdır ya da PDF kaydet",
+    "checking": "Ödeme kontrol ediliyor…",
+    "checkingHelp": "Ödeme kuruluşu onaylıyor; sayfa kendiliğinden güncellenir.",
+    "payTitle": "{amount} öde",
+    "orderWaits": "Ödeme yapıldığı anda sunucunuz kurulur.",
+    "lastFailed": "Son deneme başarısız: {reason}",
+    "withBalance": "Bakiyeden",
+    "balanceHas": "Bakiye: {amount}",
+    "balanceShort": "Bakiye yetersiz",
+    "payAmount": "{amount} öde",
+    "withSaved": "Kayıtlı kartla",
+    "withCard": "Kartla",
+    "withCardHelp": "Ödemeyi ödeme kuruluşunun güvenli sayfasında 3D Secure ile tamamlarsınız; panel kart bilgisini hiç görmez.",
+    "saveCard": "Kartı otomatik ödemeler için kaydet",
+    "saveCardHelp": "Kartı ödeme kuruluşu saklar; yenilemeler sizsiz ödenir.",
+    "withTransfer": "Havale/EFT ile",
+    "transferHelp": "Tutarı bu hesaba gönderin; para ulaştığında fatura ödendi olarak işaretlenir.",
+    "transferNote": "Açıklama",
+    "noMethod": "Henüz kullanılabilir ödeme yöntemi yok. Lütfen destekle iletişime geçin.",
+    "checkout": {
+      "title": "Güvenli ödeme",
+      "test": "TEST",
+      "amount": "Tutar",
+      "done": "Bu ödeme zaten tamamlandı.",
+      "card": "Kart numarası",
+      "pay": "Öde",
+      "cancel": "Vazgeç",
+      "cards": "Test kartları",
+      "card_ok": "onaylanır",
+      "card_declined": "reddedilir",
+      "card_funds": "yetersiz bakiye",
+      "declined": "Kart reddedildi."
+    }
+  },
+  "BillingAdmin": {
+    "eyebrow": "Gelir",
+    "title": "Faturalandırma",
+    "intro": "Tekrarlayan gelir, açık ve gecikmiş faturalar, tahsilat; tüm faturalar, abonelikler ve ödemeler.",
+    "ran": "Tahsilat çalıştı: {renewals} yenileme, {charged} tahsilat, {suspended} askıya alma.",
+    "payments": "bu ay {n} ödeme",
+    "openCount": "{n} fatura",
+    "overdueHint": "son ödeme günü geçmiş fatura",
+    "run": "Tahsilatı şimdi çalıştır",
+    "adjust": "Bakiye düzeltme",
+    "newInvoice": "Yeni fatura",
+    "offTitle": "Faturalandırma kapalı",
+    "off": "Faturalandırma açılana kadar siparişler faturalanmaz, tahsilat yapılmaz.",
+    "openSettings": "Faturalandırma ayarlarını aç",
+    "sandboxTitle": "Test ödemeleri açık",
+    "sandbox": "Müşteriler test kartlarıyla ödeyebilir. Gerçek tahsilattan önce kapatın.",
+    "kpi": {
+      "mrr": "Aylık tekrarlayan gelir",
+      "collected": "Bu ay tahsil edilen",
+      "open": "Ödeme bekleyen",
+      "overdue": "Gecikmiş"
+    },
+    "revenue": "Aylık tahsilat",
+    "noRevenue": "Henüz ödeme yok.",
+    "subscriptionsByStatus": "Abonelikler",
+    "sub": {
+      "pending": "İlk ödeme bekleniyor",
+      "active": "Aktif",
+      "past_due": "Gecikmiş",
+      "suspended": "Askıda",
+      "cancelled": "İptal",
+      "ended": "Sona erdi"
+    },
+    "tabs": {
+      "invoices": "Faturalar",
+      "subscriptions": "Abonelikler",
+      "payments": "Ödemeler"
+    },
+    "search": "Numara, ad, e-posta ya da vergi no",
+    "status": "Durum",
+    "all": "Tümü",
+    "noInvoices": "Fatura yok.",
+    "customer": "Müşteri",
+    "done": {
+      "suspend": "Askıya alındı: sunucu kapatıldı ve kilitlendi.",
+      "resume": "Devam ediyor: kilit kaldırıldı.",
+      "cancel": "Abonelik iptal edildi."
+    },
+    "noSubscriptions": "Abonelik yok.",
+    "what": "Ne",
+    "periodEnd": "Dönem sonu",
+    "endsThen": "o gün bitiyor",
+    "edit": "{name} düzenle",
+    "resume": "Devam ettir",
+    "suspend": "Askıya al",
+    "noPayments": "Ödeme yok.",
+    "method": "Yöntem",
+    "pickCustomer": "Müşteri seçin",
+    "invoiceCreated": "Fatura oluşturuldu; müşteriye bildirildi.",
+    "cancel": "Vazgeç",
+    "create": "Faturayı oluştur",
+    "currency": "Para birimi",
+    "dueDays": "Vade (gün)",
+    "lines": "Kalemler",
+    "lineDescription": "Açıklama",
+    "linePrice": "Birim fiyat",
+    "lineQuantity": "Adet",
+    "removeLine": "Kalemi sil",
+    "addLine": "Kalem ekle",
+    "netTotal": "KDV hariç: {amount} {currency}",
+    "note": "Fatura notu",
+    "noteHelp": "Kalemlerin altında yazar.",
+    "adjusted": "Bakiye düzeltildi.",
+    "save": "Kaydet",
+    "adjustHelp": "Jest olarak bakiye ya da düzeltme. Artı ekler, eksi düşer; neden geçmişte saklanır.",
+    "amount": "Tutar",
+    "amountHelp": "ör. 50 ya da -20",
+    "reason": "Neden",
+    "saved": "Kaydedildi.",
+    "cancelNow": "Şimdi iptal et",
+    "monthlyAmount": "Aylık tutar ({currency})",
+    "period": "Faturalama dönemi",
+    "months": "{n} ay",
+    "editHelp": "Sunucu yenilemesi güncel fiyatını kullanır; sonraki yenileme faturası belirlediğiniz dönem sonuna göre kesilir.",
+    "print": "Yazdır",
+    "markPaid": "Ödeme kaydet",
+    "withdraw": "Geri çek",
+    "withdrawTitle": "Bu fatura geri çekilsin mi?",
+    "withdrawBody": "Müşterinin borcundan çıkar. Üzerine hiç ödeme yapılmamış.",
+    "withdrawn": "Fatura geri çekildi.",
+    "refund": "İade et",
+    "einvoiceFailed": "e-Fatura gönderilemedi",
+    "markPaidHelp": "Panel dışında gelen para için: {amount} kaydedilir ve fatura düzenlenir.",
+    "methods": {
+      "bank_transfer": "Havale/EFT",
+      "cash": "Nakit",
+      "other": "Diğer"
+    },
+    "reference": "Referans",
+    "referenceHelp": "ör. havalenin dekont numarası.",
+    "refundHelp": "En fazla {amount}. Varsayılan olarak ödeme kuruluşu üzerinden karta iade edilir.",
+    "toBalance": "Bunun yerine müşterinin bakiyesine iade et",
+    "toBalanceHelp": "Hemen; ödeme kuruluşu gerekmez.",
+    "recorded": "Ödeme kaydedildi; fatura düzenlendi.",
+    "refunded": "İade edildi.",
+    "record": "Kaydet"
   }
 }
