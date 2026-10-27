@@ -2620,7 +2620,7 @@
       "servers": "Servers",
       "announcement": "Announcement",
       "chat": "Messaging",
-      "directory": "Directory (LDAP)",
+      "directory": "Directory and SSO",
       "status": "Status and incidents",
       "support": "Support"
     },
@@ -3210,7 +3210,7 @@
         "notifications": "Notification rules",
         "announcement": "Announcement",
         "backup": "Backup",
-        "directory": "Directory (LDAP)"
+        "directory": "Directory and SSO"
       },
       "detail": {
         "branding": {

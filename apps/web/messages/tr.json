@@ -2620,7 +2620,7 @@
       "servers": "Sunucular",
       "announcement": "Duyuru",
       "chat": "Mesajlaşma",
-      "directory": "Dizin (LDAP)",
+      "directory": "Dizin ve SSO",
       "status": "Durum ve olaylar",
       "support": "Destek"
     },
@@ -3210,7 +3210,7 @@
         "notifications": "Bildirim kuralları",
         "announcement": "Duyuru",
         "backup": "Yedek",
-        "directory": "Dizin (LDAP)"
+        "directory": "Dizin ve SSO"
       },
       "detail": {
         "branding": {
