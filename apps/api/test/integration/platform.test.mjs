@@ -804,13 +804,16 @@ test('sign-in methods: settings checked, secrets kept, social providers register
     // User names: off, refused; on, set in the profile and used to sign in (panel passwords only).
     assert.equal((await post('/auth/sign-in/username', { username: 'support.team', password })).json().code, 'USERNAME_SIGN_IN_DISABLED');
     await put('/admin/settings/sign-in', { username: true }, admin);
-    assert.equal((await post('/auth/update-user', { username: 'Support.Team' }, helperCookie)).statusCode, 200);
-    assert.equal((await pool.query("SELECT username FROM users WHERE email = 'support@example.test'")).rows[0].username, 'support.team');
+    const named = (await post('/auth/admin/create-user', { email: 'named@example.test', password, name: 'Named', role: 'user' }, admin)).json().user.id;
+    const namedCookie = cookieOf(await post('/auth/sign-in/email', { email: 'named@example.test', password }));
+    assert.equal((await post('/auth/update-user', { username: 'Support.Team' }, namedCookie)).statusCode, 200);
+    assert.equal((await pool.query("SELECT username FROM users WHERE email = 'named@example.test'")).rows[0].username, 'support.team');
     const byName = await post('/auth/sign-in/username', { username: 'support.team', password });
     assert.equal(byName.statusCode, 200, byName.body);
     assert.ok(cookieOf(byName));
     assert.equal((await post('/auth/sign-in/username', { username: 'support.team', password: 'wrong-password-123' })).statusCode, 401);
     assert.equal((await post('/auth/is-username-available', { username: 'support.team' })).statusCode, 404, 'not public');
+    await post('/auth/admin/remove-user', { userId: named }, admin);
 
     // Throwaway addresses and leaked passwords.
     await put('/admin/settings/sign-in', { blockDisposable: true, pwnedPasswords: true }, admin);
