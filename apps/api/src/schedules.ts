@@ -80,7 +80,10 @@ export async function runSchedules() {
   const allowed = customer.power;
   for (const r of rows) {
     if (r.action === 'snapshot') {
-      const { outcome, pending } = await runSnapshot(r, customer.snapshots).catch(() => ({ outcome: 'failed', pending: false }));
+      const { outcome, pending } = await runSnapshot(r, customer.snapshots).catch((e) => {
+        logEvent('error', 'schedule_snapshot_failed', { schedule: r.id, code: (e as { getResponse?: () => { code?: string } }).getResponse?.().code ?? String((e as Error)?.message ?? e).slice(0, 200) });
+        return { outcome: 'failed', pending: false };
+      });
       await pool.query(`UPDATE power_schedules SET last_run_at = now(), last_result = $2, pending_since = CASE WHEN $3 THEN coalesce(pending_since, now()) END WHERE id = $1`, [r.id, outcome, pending]);
       continue;
     }

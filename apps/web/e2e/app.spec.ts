@@ -476,7 +476,7 @@ test.describe('server lifecycle (simulator, Turkish customer)', () => {
     await expect(page.getByText(/3 tane saklar/)).toBeVisible();
     // Snapshot: taken as an operation, then listed as the current state.
     await page.getByLabel('Ad', { exact: true }).fill('guncelleme-oncesi');
-    await page.getByRole('button', { name: 'Anlık görüntü al' }).click();
+    await page.getByRole('button', { name: 'Anlık görüntü al', exact: true }).click();
     // The page, not the toast that the live notification shows at the same moment.
     await expect(page.locator('main').getByText('guncelleme-oncesi')).toBeVisible({ timeout: 45_000 });
     await expect(page.getByText('Şu anki durum buna dayanıyor')).toBeVisible();
