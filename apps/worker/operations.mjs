@@ -14,7 +14,7 @@ export class OperationError extends Error {
 const permanent = new Set(['SNAPSHOT_NOT_FOUND', 'INVALID_LOGIN', 'PERMISSION_DENIED', 'WRITE_RESTRICTED', 'PROVISIONING_NOT_SUPPORTED', 'TEMPLATE_NOT_FOUND',
   'NETWORK_NOT_FOUND', 'TEMPLATE_HAS_NO_NIC', 'DISK_SMALLER_THAN_TEMPLATE', 'INSUFFICIENT_RESOURCES', 'NOT_MANAGED', 'TOOLS_NOT_RUNNING',
   'TLS_UNTRUSTED', 'TLS_HOSTNAME_MISMATCH', 'TLS_PIN_MISMATCH', 'ENDPOINT_BLOCKED', 'INVALID_REQUEST', 'SECRET_KEY_UNAVAILABLE', 'INVALID_STATE', 'VM_NOT_FOUND',
-  'FIREWALL_NEEDS_DVS', 'FIREWALL_TOO_MANY_RULES', 'DISK_SHRINK_NOT_SUPPORTED', 'DISK_HAS_SNAPSHOTS']);
+  'FIREWALL_NEEDS_DVS', 'FIREWALL_TOO_MANY_RULES', 'DISK_SHRINK_NOT_SUPPORTED', 'DISK_HAS_SNAPSHOTS', 'VM_HAS_NO_DISK', 'DISK_NOT_SUPPORTED', 'DATASTORE_NOT_FOUND']);
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const readinessPollMs = Number(process.env.READINESS_POLL_MS) || 5000;
@@ -218,6 +218,7 @@ async function removeVM(db, ctx) {
 
 async function destroy(db, ctx) {
   await removeVM(db, ctx);
+  // Its backups go too (after the transaction below marks them; a file left behind is only space).
   const client = await db.connect();
   try {
     await client.query('BEGIN');
@@ -233,9 +234,11 @@ async function destroy(db, ctx) {
     // A key-based licence goes back to the pool for the next order.
     await client.query('UPDATE application_licenses SET server_id = NULL, assigned_at = NULL WHERE server_id = $1', [ctx.s.id]);
     ctx.released = released;
+    ctx.backups = (await client.query("UPDATE backups SET status = 'deleted' WHERE server_id = $1 AND status <> 'deleted' RETURNING datastore_moref, path", [ctx.s.id])).rows;
     await client.query("UPDATE servers SET state = 'deleted', deleted_at = now(), power_state = 'unknown', updated_at = now() WHERE id = $1", [ctx.s.id]);
     await client.query('COMMIT');
   } catch (e) { await client.query('ROLLBACK'); throw e; } finally { client.release(); }
+  for (const b of ctx.backups ?? []) await adapter('/v1/backup/delete', { ...ctx.target, datastore: b.datastore_moref, name: b.path }).catch(() => undefined);
 }
 
 // Writes the union of the server's firewalls to VMware. The version is read first, so the recorded version
@@ -295,19 +298,47 @@ const kinds = {
     Object.assign(ctx, await loadServer(db, ctx.s.id)); // the new image's template, read after the change above
     await kinds.create(db, ctx);
   },
+  // A backup: a short snapshot (the base disk stops changing), the base disk copied to the backup datastore, the
+  // snapshot removed. Each step is resumable; a retry never copies or snapshots twice.
+  async backup_create(db, ctx) {
+    const b = await backupOf(db, ctx.op.params.backupId);
+    await db.query("UPDATE backups SET status = 'running' WHERE id = $1 AND status = 'pending'", [b.id]);
+    const snap = `lightning-backup ${b.id}`;
+    if (!['copy', 'cleanup'].includes(ctx.op.step)) {
+      if (!(await snapshotNamed(ctx, snap))) await vmTask(db, ctx, 'snapshot', '/v1/vm/snapshot', { action: 'create', name: snap, description: 'Backup in progress' });
+      await nextStep(db, ctx);
+    }
+    if (ctx.op.step !== 'cleanup') {
+      await vmTask(db, ctx, 'copy', '/v1/vm/disk-copy', { datastore: b.datastore_moref, name: b.path, direction: 'backup' });
+      await nextStep(db, ctx);
+    }
+    await setStep(db, ctx.op, 'cleanup');
+    const id = await snapshotNamed(ctx, snap);
+    if (id) await vmTask(db, ctx, 'cleanup', '/v1/vm/snapshot', { action: 'remove', snapshot: id });
+    await db.query("UPDATE backups SET status = 'ready', size_gb = $2, finished_at = now() WHERE id = $1", [b.id, ctx.s.disk_gb]);
+  },
+  // A restore: stopped (cleanly first), the backup copied over the disk, started again if it ran.
+  async backup_restore(db, ctx) {
+    const b = await backupOf(db, ctx.op.params.backupId);
+    if (ctx.op.step !== 'on') {
+      if (ctx.op.step !== 'restore') await stopForChange(db, ctx);
+      await vmTask(db, ctx, 'restore', '/v1/vm/disk-copy', { datastore: b.datastore_moref, name: b.path, direction: 'restore' });
+      await nextStep(db, ctx);
+    }
+    if (ctx.op.params.powerOn) await power(db, ctx, 'on');
+    await refreshPower(db, ctx);
+  },
+  async backup_delete(db, ctx) {
+    const b = await backupOf(db, ctx.op.params.backupId);
+    await setStep(db, ctx.op, 'delete');
+    await adapter('/v1/backup/delete', { ...ctx.target, datastore: b.datastore_moref, name: b.path });
+    await db.query("UPDATE backups SET status = 'deleted', finished_at = coalesce(finished_at, now()) WHERE id = $1", [b.id]);
+  },
   // New vCPU, memory and disk size: the VM is stopped (a clean shutdown first), changed, then started again if it ran.
   async resize(db, ctx) {
     const p = ctx.op.params;
     if (ctx.op.step !== 'on') {
-      if (ctx.op.step !== 'resize') { // a retry during "resize" resumes the stored task instead
-        if ((await find(ctx))?.powerState === 'poweredOn') {
-          try { await kinds.shutdown(db, ctx); } catch { /* no VMware Tools or no answer: below */ }
-          await saveTask(db, ctx.op, null); ctx.op.provider_task_id = null;
-          if ((await find(ctx))?.powerState === 'poweredOn') await power(db, ctx, 'off');
-        }
-        await saveTask(db, ctx.op, null);
-        ctx.op.provider_task_id = null;
-      }
+      if (ctx.op.step !== 'resize') await stopForChange(db, ctx); // a retry during "resize" resumes the stored task instead
       try { await vmTask(db, ctx, 'resize', '/v1/vm/resize', { vcpu: p.vcpu, memoryMb: p.memoryMb, diskGb: p.diskGb }); }
       catch (e) {
         // Refused (snapshots on the disk, ...): the server comes back as it was before failing.
@@ -343,6 +374,26 @@ const kinds = {
 };
 
 const snapshot = (db, ctx, body) => vmTask(db, ctx, 'snapshot', '/v1/vm/snapshot', body);
+
+// The next step starts without the previous step's task id.
+async function nextStep(db, ctx) { await saveTask(db, ctx.op, null); ctx.op.provider_task_id = null; }
+
+// Off for a change of hardware or disk: a clean shutdown first, then forced off if it is still running.
+async function stopForChange(db, ctx) {
+  if ((await find(ctx))?.powerState === 'poweredOn') {
+    try { await kinds.shutdown(db, ctx); } catch { /* no VMware Tools or no answer: below */ }
+    await nextStep(db, ctx);
+    if ((await find(ctx))?.powerState === 'poweredOn') await power(db, ctx, 'off');
+  }
+  await nextStep(db, ctx);
+}
+
+const backupOf = async (db, id) => {
+  const { rows: [b] } = await db.query('SELECT * FROM backups WHERE id = $1', [id]);
+  if (!b) throw new OperationError('BACKUP_NOT_FOUND', 'backup record missing', true);
+  return b;
+};
+const snapshotNamed = async (ctx, name) => (await adapter('/v1/vm/snapshots', { ...ctx.target, vm: ctx.s.vm_moref })).snapshots.find((x) => x.name === name)?.id ?? null;
 
 // One VMware task on the server's VM; a stored task id (a retry) is waited for instead of starting another.
 async function vmTask(db, ctx, step, path, body) {
@@ -380,6 +431,7 @@ export async function processOperation(db, job, log, notify = async () => {}, rd
     const d = { serverId: ctx.s.id, name: ctx.s.name, kind: ctx.op.kind };
     if (ctx.op.kind === 'create' || ctx.op.kind === 'reinstall') { await notify('server.ready', [ctx.s.owner_id], { ...d, address: ctx.s.address ?? '' }); await rdns({ action: 'default', serverId: ctx.s.id }); }
     else if (ctx.op.kind === 'delete') { await notify('server.deleted', [ctx.s.owner_id], d); if (ctx.released?.length) await rdns({ action: 'clear', addresses: ctx.released.map((a) => a.address) }); }
+    else if (ctx.op.kind.startsWith('backup_')) await notify('server.backup', [ctx.s.owner_id], d);
     else if (ctx.op.kind.startsWith('snapshot_')) await notify('server.snapshot', [ctx.s.owner_id], { ...d, snapshot: ctx.op.params.name ?? '' });
     else await notify('server.power', [ctx.s.owner_id], d);
   } catch (err) {
@@ -395,6 +447,13 @@ export async function processOperation(db, job, log, notify = async () => {}, rd
     await db.query("UPDATE operations SET status = $2, error_code = $3, error_detail = $4, finished_at = now(), updated_at = now() WHERE id = $1",
       [ctx.op.id, status, code, String(err.detail ?? '').slice(0, 500)]);
     if ((ctx.op.kind === 'create' || ctx.op.kind === 'reinstall') && status === 'failed') await db.query("UPDATE servers SET state = 'error', error_code = $2, updated_at = now() WHERE id = $1 AND state <> 'deleted'", [ctx.s.id, code]);
+    // A restore refused after the server was stopped: it is started again as it was.
+    if (ctx.op.kind === 'backup_restore' && status === 'failed' && ctx.op.params.powerOn) await adapter('/v1/vm/power', { ...ctx.target, vm: ctx.s.vm_moref, action: 'on' }).catch(() => undefined);
+    if (ctx.op.kind === 'backup_create' && status === 'failed') {
+      await db.query("UPDATE backups SET status = 'failed', error_code = $2, finished_at = now() WHERE id = $1", [ctx.op.params.backupId, code]);
+      const left = await snapshotNamed(ctx, `lightning-backup ${ctx.op.params.backupId}`).catch(() => null);
+      if (left) await adapter('/v1/vm/snapshot', { ...ctx.target, vm: ctx.s.vm_moref, action: 'remove', snapshot: left }).catch(() => undefined);
+    }
     // A resize that did not happen: the old price again, and its unpaid invoice withdrawn (a paid one is left to staff, told below).
     if (ctx.op.kind === 'resize' && status === 'failed') {
       const f = ctx.op.params.from ?? {};

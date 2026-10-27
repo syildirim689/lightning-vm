@@ -31,7 +31,7 @@ const queue = new Queue('operations', { connection: redis });
 export const enqueue = (operationId: string) => queue.add('operation', {}, {
   jobId: operationId, attempts: 6, backoff: { type: 'exponential', delay: 5000 }, removeOnComplete: true, removeOnFail: true,
 }).catch(() => undefined); // if Redis is down the worker's recovery scan enqueues it later
-const deadlineMinutes = { create: 45, delete: 20, power_on: 10, shutdown: 10, power_off: 10, reset: 10, snapshot_create: 30, snapshot_revert: 30, snapshot_delete: 60, resize: 30, reinstall: 45 } as const;
+const deadlineMinutes = { create: 45, delete: 20, power_on: 10, shutdown: 10, power_off: 10, reset: 10, snapshot_create: 30, snapshot_revert: 30, snapshot_delete: 60, resize: 30, reinstall: 45, backup_create: 360, backup_restore: 360, backup_delete: 30 } as const;
 export type Kind = keyof typeof deadlineMinutes;
 
 export function idempotencyKey(header: string | undefined, userId: string) {
@@ -54,7 +54,7 @@ export async function replay(key: string, requestHash: string) {
 // The admin's server settings decide what customers may do themselves; staff always may.
 // Each action needs the member's permission (their role) and must not be switched off for everyone (Settings → Servers).
 const actionPermission: Record<keyof ServerSettings['customer'], Permission> = { power: 'server.power', console: 'server.console', delete: 'server.delete',
-  snapshots: 'server.snapshots', iso: 'server.iso', rootPassword: 'server.root_password', resize: 'server.resize', reinstall: 'server.reinstall' };
+  snapshots: 'server.snapshots', iso: 'server.iso', rootPassword: 'server.root_password', resize: 'server.resize', reinstall: 'server.reinstall', backups: 'server.backups' };
 export async function customerMay(req: AuthedRequest, action: keyof ServerSettings['customer']) {
   if (can(req.user.permissions, 'servers.manage_all')) return;
   if (!can(req.user.permissions, actionPermission[action])) throw apiError(403, 'ACTION_NOT_PERMITTED', 'Your role does not allow this');
@@ -86,7 +86,7 @@ export function startPowerOperation(req: AuthedRequest, server: { id: string; ow
 }
 
 // What a lock stops: anything that ends the server or loses its running state or data.
-const lockedKinds = new Set<Kind>(['delete', 'power_off', 'reset', 'snapshot_revert', 'reinstall', 'resize']);
+const lockedKinds = new Set<Kind>(['delete', 'power_off', 'reset', 'snapshot_revert', 'reinstall', 'resize', 'backup_restore']);
 
 export async function startOperation(req: AuthedRequest, server: { id: string; owner_id: string }, kind: Kind, key: string, requestHash: string, params: object = {}) {
   // Read here, for every caller (the server page, bulk actions, schedules, data centers).

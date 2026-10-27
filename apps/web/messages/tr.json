@@ -321,7 +321,12 @@
     "DISPUTE_NOT_POSSIBLE": "Bu faturaya itiraz edilemez.",
     "DISPUTE_TOO_LATE": "Bu faturaya itiraz süresi geçti.",
     "DISPUTE_ALREADY_OPEN": "Bu faturanın zaten açık bir itirazı var.",
-    "DISPUTE_CLOSED": "Bu itiraz zaten kapandı."
+    "DISPUTE_CLOSED": "Bu itiraz zaten kapandı.",
+    "BACKUPS_NOT_CONFIGURED": "Bu konum için yedekleme ayarlanmadı.",
+    "BACKUP_LIMIT": "Yedek sınırına ulaşıldı: önce eski bir yedeği silin.",
+    "VM_HAS_NO_DISK": "Sunucunun yedeklenecek diski yok.",
+    "DISK_NOT_SUPPORTED": "Bu tür disk yedeklenemez.",
+    "BACKUP_NOT_FOUND": "Yedek artık yok."
   },
   "Auth": {
     "required": "zorunlu",
@@ -1568,6 +1573,12 @@
     },
     "vdcs": {
       "title": "Sanal veri merkezleri"
+    },
+    "backup": {
+      "target": "Yedek depolaması",
+      "help": "Bu vCenter'ın bir datastore'u; başka bir sitedeki NFS deposu yedekleri sunuculardan ayrı tutar.",
+      "none": "Burada yedek yok",
+      "saved": "Yedek depolaması kaydedildi"
     }
   },
   "Servers": {
@@ -1601,7 +1612,10 @@
       "snapshot_revert": "Anlık görüntüye dönme",
       "snapshot_delete": "Anlık görüntü kaldırma",
       "resize": "Kaynak değişikliği",
-      "reinstall": "Yeniden kurulum"
+      "reinstall": "Yeniden kurulum",
+      "backup_create": "Yedek alma",
+      "backup_restore": "Yedekten geri yükleme",
+      "backup_delete": "Yedek silme"
     },
     "opStatus": {
       "pending": "Sırada",
@@ -1624,7 +1638,11 @@
       "done": "bitti",
       "firewall": "firewall uygulanıyor",
       "snapshot": "anlık görüntü işleniyor",
-      "resize": "Kaynaklar değiştiriliyor"
+      "resize": "Kaynaklar değiştiriliyor",
+      "copy": "Disk kopyalanıyor",
+      "cleanup": "Temizleniyor",
+      "restore": "Disk geri yükleniyor",
+      "delete": "Siliniyor"
     },
     "action": {
       "power_on": "Aç",
@@ -2518,6 +2536,10 @@
       "billing_dispute_update": {
         "title": "İtiraz güncellemesi",
         "help": "İtirazınız incelemeye alındığında ya da karara bağlandığında."
+      },
+      "server_backup": {
+        "title": "Yedekler",
+        "help": "Bir yedek alındığında, geri yüklendiğinde ya da silindiğinde."
       }
     },
     "policyTitle": "Önce yönetici, sonra kullanıcı",
@@ -2837,7 +2859,8 @@
       "billing_view": "Faturalandırmayı görme",
       "billing_manage": "Faturalandırmayı yönetme",
       "server_resize": "Sunucu kaynaklarını değiştirme",
-      "server_reinstall": "Sunucuyu yeniden kurma"
+      "server_reinstall": "Sunucuyu yeniden kurma",
+      "server_backups": "Sunucu yedekleme"
     },
     "help": {
       "dashboard_view": "Yönetim panosu, içgörüler ve özet grafikler.",
@@ -2876,7 +2899,8 @@
       "billing_view": "Tüm müşterilerin faturaları, abonelikleri, ödemeleri ve geliri.",
       "billing_manage": "Fatura oluşturma, ödeme kaydetme, iade, bakiye düzeltme, aboneliği askıya alma ve faturalandırma ayarları.",
       "server_resize": "Kendi sunucularının vCPU, bellek ve diskini değiştirir.",
-      "server_reinstall": "Kendi sunucularına diski silerek temiz imaj kurar."
+      "server_reinstall": "Kendi sunucularına diski silerek temiz imaj kurar.",
+      "server_backups": "Kendi sunucularının yedeklerini alır, geri yükler ve siler."
     }
   },
   "Settings": {
@@ -3406,7 +3430,8 @@
         "delete": "Sunucuyu silme",
         "snapshots": "Anlık görüntüler",
         "resize": "Kaynak değiştirme",
-        "reinstall": "Yeniden kurma"
+        "reinstall": "Yeniden kurma",
+        "backups": "Yedekler"
       },
       "actionHelp": {
         "power": "Açma, kapatma, yeniden başlatma, sıfırlama.",
@@ -3416,7 +3441,8 @@
         "delete": "Sunucuyu ve disklerini kalıcı olarak kaldırma.",
         "snapshots": "Anlık görüntü alma, geri dönme ve kaldırma (sunucu başına en fazla 5).",
         "resize": "Müşteriler vCPU, bellek ve diski kendileri değiştirir; artışlar dönemin kalanı için faturalanır.",
-        "reinstall": "Müşteriler başka bir imajdan yeniden kurar (disk silinir)."
+        "reinstall": "Müşteriler başka bir imajdan yeniden kurar (disk silinir).",
+        "backups": "Müşteriler yedek alır, geri yükler ve siler (konumun yedek depolamasında)."
       },
       "rolesNote": "Firewall yönetimi gibi diğer yetkiler Roller sayfasından ayarlanır.",
       "hardware": "Yeni sunucuların donanımı",
@@ -3440,7 +3466,11 @@
       "overLimitThrottle": "Yeniden karşılanana kadar hızı sınırla",
       "overLimitNotify": "Yalnızca bildir",
       "throttleMbps": "Hız sınırı (Mbit/s)",
-      "throttleHelp": "Gelen ve giden, sunucunun dağıtık anahtar portlarında. Ay başında ya da daha büyük pakete geçince kalkar."
+      "throttleHelp": "Gelen ve giden, sunucunun dağıtık anahtar portlarında. Ay başında ya da daha büyük pakete geçince kalkar.",
+      "backups": "Yedekler",
+      "backupsHelp": "Müşteriler kendi sunucularının yedeklerini alır ve geri yükler.",
+      "backupsTitle": "Yedekler",
+      "maxBackups": "Sunucu başına yedek"
     },
     "announcement": {
       "title": "Duyuru",
@@ -4407,7 +4437,8 @@
     "action": {
       "power_on": "Aç",
       "shutdown": "Kapat",
-      "snapshot": "Anlık görüntü al"
+      "snapshot": "Anlık görüntü al",
+      "backup": "Yedek al"
     },
     "what": "İşlem",
     "at": "Saat",
@@ -4432,7 +4463,8 @@
     "nightly": "Gece anlık görüntüsü",
     "keep": "Saklanacak en yeni",
     "keepHelp": "Saklanan otomatik görüntü sayısı; önce en eskisi silinir. Kendi aldığınız görüntülere hiç dokunulmaz.",
-    "keeps": "{n} tane saklar"
+    "keeps": "{n} tane saklar",
+    "nightlyBackup": "Gece yedeği"
   },
   "Activity": {
     "actions": {
@@ -4615,7 +4647,11 @@
       "billing_dispute_opened": "Fatura itirazı açıldı",
       "billing_dispute_withdrawn": "İtiraz geri çekildi",
       "billing_dispute_review": "İtiraz incelemeye alındı",
-      "billing_dispute_decided": "İtiraz karara bağlandı"
+      "billing_dispute_decided": "İtiraz karara bağlandı",
+      "server_backup_started": "Yedekleme başlatıldı",
+      "server_backup_restore": "Yedekten geri yükleme başlatıldı",
+      "server_backup_deleted": "Yedek silme başlatıldı",
+      "catalog_pool_backup": "Yedek depolaması değiştirildi"
     },
     "outcome": {
       "success": "Tamamlandı",
@@ -6379,5 +6415,37 @@
     "noteHelp": "Konuşmaya gönderilir ve faturada görünür.",
     "saveDecision": "Kararı kaydet",
     "decided": "Karar kaydedildi; müşteriye bildirildi"
+  },
+  "Backups": {
+    "title": "Yedekler",
+    "help": "Diskin ayrı bir yedek depolamadaki kopyası; sunucu çalışırken alınır. Geri yüklemek diskteki her şeyi yedekteki haliyle değiştirir.",
+    "notConfigured": "Bu konum için yedekleme henüz ayarlanmadı.",
+    "count": "{n} / {max}",
+    "empty": "Henüz yedek yok.",
+    "kind": {
+      "manual": "Elle alındı",
+      "scheduled": "Zamanlanmış"
+    },
+    "status": {
+      "pending": "Bekliyor",
+      "running": "Kopyalanıyor",
+      "ready": "Hazır",
+      "failed": "Başarısız"
+    },
+    "restore": "Geri yükle",
+    "restoreNow": "Bu yedeği geri yükle",
+    "restoreWarning": "Sunucu kapatılır, diski bu yedekle değiştirilir ve çalışıyorsa yeniden açılır. Yedekten sonra yazılan her şey kaybolur.",
+    "confirm": "Onay için {name} yazın",
+    "remove": "Sil",
+    "removeTitle": "Bu yedek silinsin mi?",
+    "removeBody": "Geri getirilemez.",
+    "cancel": "Vazgeç",
+    "note": "Not (isteğe bağlı)",
+    "notePlaceholder": "Güncellemeden önce",
+    "take": "Yedek al",
+    "started": "Yedekleme başladı; birkaç dakika içinde hazır olur.",
+    "removing": "Yedek siliniyor",
+    "restoring": "Geri yükleme başladı",
+    "full": "Sınıra ulaşıldı: önce eski bir yedeği silin."
   }
 }

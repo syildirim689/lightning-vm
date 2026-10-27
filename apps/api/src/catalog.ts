@@ -164,7 +164,7 @@ const poolColumns = `p.id, p.name, p.location, p.location_id AS "locationId", p.
   p.datastore_morefs AS "datastoreMorefs", p.network_moref AS "networkMoref", p.cpu_overcommit::float AS "cpuOvercommit",
   p.memory_overcommit::float AS "memoryOvercommit", p.storage_overcommit::float AS "storageOvercommit", p.reserve_cpu_pct AS "reserveCpuPct",
   p.reserve_memory_pct AS "reserveMemoryPct", p.reserve_storage_pct AS "reserveStoragePct", p.active,
-  p.extra_ipv4_max AS "extraIpv4Max", p.extra_ipv4_price::text AS "extraIpv4Price", p.traffic_gb AS "trafficGb"`;
+  p.extra_ipv4_max AS "extraIpv4Max", p.extra_ipv4_price::text AS "extraIpv4Price", p.traffic_gb AS "trafficGb", p.backup_datastore_moref AS "backupDatastore"`;
 
 @Controller('admin') @UseGuards(PermissionGuard)
 export class CatalogAdminController {

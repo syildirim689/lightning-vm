@@ -321,7 +321,12 @@
     "DISPUTE_NOT_POSSIBLE": "This invoice cannot be disputed.",
     "DISPUTE_TOO_LATE": "The time to dispute this invoice has passed.",
     "DISPUTE_ALREADY_OPEN": "This invoice already has an open dispute.",
-    "DISPUTE_CLOSED": "This dispute is already closed."
+    "DISPUTE_CLOSED": "This dispute is already closed.",
+    "BACKUPS_NOT_CONFIGURED": "Backups are not set up for this location.",
+    "BACKUP_LIMIT": "The backup limit is reached: remove an older backup first.",
+    "VM_HAS_NO_DISK": "The server has no disk to back up.",
+    "DISK_NOT_SUPPORTED": "This kind of disk cannot be backed up.",
+    "BACKUP_NOT_FOUND": "The backup is gone."
   },
   "Auth": {
     "required": "required",
@@ -1568,6 +1573,12 @@
     },
     "vdcs": {
       "title": "Virtual datacenters"
+    },
+    "backup": {
+      "target": "Backup storage",
+      "help": "A datastore of this vCenter; another site's NFS store keeps backups apart from the servers.",
+      "none": "No backups here",
+      "saved": "Backup storage saved"
     }
   },
   "Servers": {
@@ -1601,7 +1612,10 @@
       "snapshot_revert": "Go back to snapshot",
       "snapshot_delete": "Remove snapshot",
       "resize": "Change size",
-      "reinstall": "Reinstall"
+      "reinstall": "Reinstall",
+      "backup_create": "Back up",
+      "backup_restore": "Restore a backup",
+      "backup_delete": "Remove a backup"
     },
     "opStatus": {
       "pending": "Queued",
@@ -1624,7 +1638,11 @@
       "done": "done",
       "firewall": "applying the firewall",
       "snapshot": "working on the snapshot",
-      "resize": "Changing size"
+      "resize": "Changing size",
+      "copy": "Copying the disk",
+      "cleanup": "Cleaning up",
+      "restore": "Restoring the disk",
+      "delete": "Removing"
     },
     "action": {
       "power_on": "Power on",
@@ -2518,6 +2536,10 @@
       "billing_dispute_update": {
         "title": "Dispute update",
         "help": "When your dispute is taken into review or decided."
+      },
+      "server_backup": {
+        "title": "Backups",
+        "help": "When a backup is taken, restored or removed."
       }
     },
     "policyTitle": "The admin first, then each user",
@@ -2837,7 +2859,8 @@
       "billing_view": "See billing",
       "billing_manage": "Manage billing",
       "server_resize": "Change server size",
-      "server_reinstall": "Reinstall servers"
+      "server_reinstall": "Reinstall servers",
+      "server_backups": "Back up servers"
     },
     "help": {
       "dashboard_view": "The admin dashboard, insights and summary charts.",
@@ -2876,7 +2899,8 @@
       "billing_view": "Invoices, subscriptions, payments and revenue of every customer.",
       "billing_manage": "Create invoices, record payments, refund, correct balances, suspend subscriptions and change billing settings.",
       "server_resize": "Change vCPU, memory and disk of own servers.",
-      "server_reinstall": "Install a fresh image on own servers, erasing the disk."
+      "server_reinstall": "Install a fresh image on own servers, erasing the disk.",
+      "server_backups": "Take, restore and remove backups of own servers."
     }
   },
   "Settings": {
@@ -3406,7 +3430,8 @@
         "delete": "Delete the server",
         "snapshots": "Snapshots",
         "resize": "Change size",
-        "reinstall": "Reinstall"
+        "reinstall": "Reinstall",
+        "backups": "Backups"
       },
       "actionHelp": {
         "power": "Power on, shut down, restart, reset.",
@@ -3416,7 +3441,8 @@
         "delete": "Remove the server and its disks permanently.",
         "snapshots": "Take, restore and remove snapshots (at most 5 per server).",
         "resize": "Customers change vCPU, memory and disk themselves; increases are invoiced for the rest of the period.",
-        "reinstall": "Customers reinstall from another image (erases the disk)."
+        "reinstall": "Customers reinstall from another image (erases the disk).",
+        "backups": "Customers take, restore and remove backups (on the location's backup storage)."
       },
       "rolesNote": "Other rights, such as managing firewalls, are set on the Roles page.",
       "hardware": "Hardware of new servers",
@@ -3440,7 +3466,11 @@
       "overLimitThrottle": "Limit the speed until it is covered again",
       "overLimitNotify": "Only notify",
       "throttleMbps": "Speed limit (Mbit/s)",
-      "throttleHelp": "In and out, on the server's distributed switch ports. Lifted at the start of the month or after a bigger package."
+      "throttleHelp": "In and out, on the server's distributed switch ports. Lifted at the start of the month or after a bigger package.",
+      "backups": "Backups",
+      "backupsHelp": "Customers take and restore backups of their own servers.",
+      "backupsTitle": "Backups",
+      "maxBackups": "Backups per server"
     },
     "announcement": {
       "title": "Announcement",
@@ -4407,7 +4437,8 @@
     "action": {
       "power_on": "Start",
       "shutdown": "Shut down",
-      "snapshot": "Take a snapshot"
+      "snapshot": "Take a snapshot",
+      "backup": "Back up"
     },
     "what": "Action",
     "at": "Time",
@@ -4432,7 +4463,8 @@
     "nightly": "Nightly snapshot",
     "keep": "Keep the newest",
     "keepHelp": "Automatic snapshots kept; the oldest one goes first. Your own snapshots are never removed.",
-    "keeps": "keeps {n}"
+    "keeps": "keeps {n}",
+    "nightlyBackup": "Nightly backup"
   },
   "Activity": {
     "actions": {
@@ -4615,7 +4647,11 @@
       "billing_dispute_opened": "Invoice dispute opened",
       "billing_dispute_withdrawn": "Dispute withdrawn",
       "billing_dispute_review": "Dispute taken into review",
-      "billing_dispute_decided": "Dispute decided"
+      "billing_dispute_decided": "Dispute decided",
+      "server_backup_started": "Backup started",
+      "server_backup_restore": "Backup restore started",
+      "server_backup_deleted": "Backup removal started",
+      "catalog_pool_backup": "Backup storage changed"
     },
     "outcome": {
       "success": "Done",
@@ -6379,5 +6415,37 @@
     "noteHelp": "Sent in the conversation and shown on the invoice.",
     "saveDecision": "Save the decision",
     "decided": "Decision saved; the customer was told"
+  },
+  "Backups": {
+    "title": "Backups",
+    "help": "A copy of the disk on separate backup storage, taken while the server runs. Restoring one replaces everything on the disk.",
+    "notConfigured": "Backups are not set up for this location yet.",
+    "count": "{n} of {max}",
+    "empty": "No backups yet.",
+    "kind": {
+      "manual": "Taken by hand",
+      "scheduled": "Scheduled"
+    },
+    "status": {
+      "pending": "Waiting",
+      "running": "Copying",
+      "ready": "Ready",
+      "failed": "Failed"
+    },
+    "restore": "Restore",
+    "restoreNow": "Restore this backup",
+    "restoreWarning": "The server is shut down, its disk is replaced with this backup, and it starts again if it was running. Everything written after the backup is lost.",
+    "confirm": "Type {name} to confirm",
+    "remove": "Remove",
+    "removeTitle": "Remove this backup?",
+    "removeBody": "It cannot be brought back.",
+    "cancel": "Cancel",
+    "note": "Note (optional)",
+    "notePlaceholder": "Before the upgrade",
+    "take": "Take a backup",
+    "started": "Backup started; it is ready in a few minutes.",
+    "removing": "Removing the backup",
+    "restoring": "Restore started",
+    "full": "The limit is reached: remove an older backup first."
   }
 }

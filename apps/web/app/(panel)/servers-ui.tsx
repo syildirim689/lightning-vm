@@ -20,6 +20,7 @@ import { PowerSchedules } from './server-schedules';
 import { ServerSnapshots } from './server-snapshots';
 import { ServerReinstall, ServerResize } from './server-change';
 import { ServerTraffic } from './server-traffic';
+import { ServerBackups } from './server-backups';
 import { ServerFilters, useServerFilters } from './server-filters';
 import { flag } from '../../lib/flag';
 import { ButtonLink, ConfirmButton, DataTable, Empty, Mono, Notice, PageHeader, Section, StatusChip, TextInput, type Tone } from '../../components/ui';
@@ -167,7 +168,7 @@ export function ServerDetail({ id }: { id: string }) {
   const client = useQueryClient();
   const [message, setMessage] = useState<string>();
   const [deleteName, setDeleteName] = useState('');
-  const q = useApiQuery<{ server: Server; operations: Operation[]; own?: boolean; allowed?: Record<'power' | 'console' | 'iso' | 'rootPassword' | 'delete' | 'snapshots' | 'resize' | 'reinstall', boolean> }>(['servers', id], `/servers/${id}`, { refetchInterval: 3_000 });
+  const q = useApiQuery<{ server: Server; operations: Operation[]; own?: boolean; allowed?: Record<'power' | 'console' | 'iso' | 'rootPassword' | 'delete' | 'snapshots' | 'resize' | 'reinstall' | 'backups', boolean> }>(['servers', id], `/servers/${id}`, { refetchInterval: 3_000 });
   const gone = (q.error as { code?: string } | null)?.code === 'NOT_FOUND';
   // The viewer's own server names, for the next free name in "order similar".
   const mine = useApiQuery<{ servers: Server[] }>(['servers'], '/servers').data?.servers;
@@ -177,7 +178,7 @@ export function ServerDetail({ id }: { id: string }) {
   if (!q.data) return <p role="status" className="text-sm text-muted">{q.error && !gone ? error(q.error) : t('loading')}</p>;
   const { server: s, operations } = q.data;
   // What the admin lets customers do here (missing: an older API, everything allowed).
-  const allowed = { power: true, console: true, iso: true, rootPassword: true, delete: true, snapshots: true, resize: true, reinstall: true, ...q.data.allowed };
+  const allowed = { power: true, console: true, iso: true, rootPassword: true, delete: true, snapshots: true, resize: true, reinstall: true, backups: true, ...q.data.allowed };
   const open = operations.find((o) => runningStates.includes(o.status));
   const own = !!q.data.own; // owner-only helpers: tags and notes, order similar
   // The same Idempotency-Key is kept until the server answers; only a network failure keeps it for a retry.
@@ -246,8 +247,9 @@ export function ServerDetail({ id }: { id: string }) {
 
     <div className={`grid grid-cols-1 gap-6 ${s.address ? 'lg:grid-cols-2' : ''}`}><ServerHealth id={s.id}/><QuickConnect server={s}/></div>
     {own && <ServerLabels key={`${s.tags?.join()}|${s.notes}`} server={s}/>}
-    {own && (allowed.power || allowed.snapshots) && s.state !== 'provisioning' && <PowerSchedules serverId={s.id} power={allowed.power} snapshots={allowed.snapshots}/>}
+    {own && (allowed.power || allowed.snapshots || allowed.backups) && s.state !== 'provisioning' && <PowerSchedules serverId={s.id} power={allowed.power} snapshots={allowed.snapshots} backups={allowed.backups}/>}
     {allowed.snapshots && ['ready', 'error'].includes(s.state) && <ServerSnapshots serverId={s.id} busy={!!open}/>}
+    {allowed.backups && ['ready', 'error'].includes(s.state) && <ServerBackups serverId={s.id} serverName={s.name} busy={!!open}/>}
     <ServerIps server={s}/>
     {allowed.iso && <ServerIso id={s.id} ready={s.state === 'ready' || s.state === 'error'}/>}
     {s.hasRootPassword && allowed.rootPassword && <RootPassword id={s.id}/>}

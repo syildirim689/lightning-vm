@@ -8,7 +8,7 @@ export const permissionCatalog = {
   dashboard: ['dashboard.view'],
   servers: ['servers.create', 'firewalls.manage', 'servers.view_all', 'servers.manage_all', 'operations.retry', 'reconcile.run', 'consoles.any'],
   // What a member may do on their own servers (Settings → Servers can still switch an action off for everyone).
-  server: ['server.power', 'server.console', 'server.delete', 'server.snapshots', 'server.iso', 'server.root_password', 'server.resize', 'server.reinstall'],
+  server: ['server.power', 'server.console', 'server.delete', 'server.snapshots', 'server.iso', 'server.root_password', 'server.resize', 'server.reinstall', 'server.backups'],
   catalog: ['catalog.view', 'catalog.manage'],
   vmware: ['vmware.view', 'vmware.manage'],
   users: ['users.view', 'users.manage', 'users.roles', 'users.ban', 'users.sessions', 'users.impersonate'],

@@ -21,7 +21,7 @@ type Connection = { id: string; name: string };
 type Layer = Record<string, number>;
 type Capacity = { physical: Layer; headroom: Layer; offered: Layer; used: Layer; reserved: Layer; available: Layer; realFreeGb: number; warnings: string[] };
 type Pool = { id: string; name: string; location: string; locationId: string | null; connectionName: string; cpuOvercommit: number; memoryOvercommit: number; storageOvercommit: number; capacity: Capacity; customRule: Record<string, unknown> | null;
-  extraIpv4Max: number; extraIpv4Price: string; trafficGb: number | null };
+  extraIpv4Max: number; extraIpv4Price: string; trafficGb: number | null; connectionId: string; backupDatastore: string | null };
 type Pkg = { id: string; name: string; vcpu: number; memoryMb: number; diskGb: number; priceMonthly: string; currency: string; poolIds: string[]; trafficGb: number | null };
 type Image = { id: string; name: string; family: string; templateName: string | null; minDiskGb: number };
 type IpPool = IpPoolRow;
@@ -183,8 +183,23 @@ function PoolCard({ pool, removeButton }: { pool: Pool; removeButton: React.Reac
         <Disclosure.Heading><Disclosure.Trigger className="flex items-center gap-2 text-sm font-medium text-accent">{t('ipm.extraTitle', { n: pool.extraIpv4Max })}<Disclosure.Indicator/></Disclosure.Trigger></Disclosure.Heading>
         <Disclosure.Content><Disclosure.Body className="pt-3"><PoolIpOptions pool={pool}/></Disclosure.Body></Disclosure.Content>
       </Disclosure>
+      <PoolBackupTarget pool={pool}/>
     </Card.Content>
   </Card>;
+}
+
+// Where this location's backups are written: a datastore of its vCenter (another site's NFS store keeps them apart).
+function PoolBackupTarget({ pool }: { pool: Pool }) {
+  const t = useTranslations('Catalog');
+  const client = useQueryClient();
+  const inv = useApiQuery<Inventory>(['vmware', 'connection', pool.connectionId], `/admin/vmware/connections/${pool.connectionId}`).data;
+  const save = useApiAction((v: string) => apiFetch(`/admin/pools/${pool.id}/backup`, { method: 'PUT', body: { datastoreMoref: v || null } }),
+    { invalidate: [keys.pools], success: t('backup.saved') });
+  void client;
+  return <div className="flex flex-wrap items-end gap-3 rounded-xl border border-border p-3">
+    <SelectInput className="min-w-64 flex-1" label={t('backup.target')} help={t('backup.help')} value={pool.backupDatastore ?? ''} isDisabled={save.isPending}
+      onChange={(v) => save.mutate(v)} options={[{ id: '', label: t('backup.none') }, ...(inv?.datastores ?? []).map((d) => ({ id: d.moref, label: d.name }))]}/>
+  </div>;
 }
 
 function useSaved(onSaved?: () => void) {

@@ -9,7 +9,8 @@ import { FormActions, FormSection, Notice, NumberInput, SelectInput, SwitchInput
 import { apiFetch, useErrorText } from '../../../../lib/api';
 import { useApiQuery } from '../../../../lib/query';
 
-type Doc = { customer: { power: boolean; console: boolean; iso: boolean; rootPassword: boolean; delete: boolean; snapshots: boolean; resize: boolean; reinstall: boolean }; hardware: { cpuHotAdd: boolean; memoryHotAdd: boolean; nestedHv: boolean };
+type Doc = { customer: { power: boolean; console: boolean; iso: boolean; rootPassword: boolean; delete: boolean; snapshots: boolean; resize: boolean; reinstall: boolean; backups: boolean };
+  backups?: { maxPerServer: number }; hardware: { cpuHotAdd: boolean; memoryHotAdd: boolean; nestedHv: boolean };
   traffic?: { overLimit: 'notify' | 'throttle'; throttleMbps: number } };
 
 export default function ServerSettings({ readOnly }: { readOnly: boolean }) {
@@ -25,13 +26,13 @@ export default function ServerSettings({ readOnly }: { readOnly: boolean }) {
     try { setV(await apiFetch<Doc>('/admin/settings/servers', { method: 'PUT', body: v })); toast.success(t('saved')); }
     catch (e) { toast.danger(error(e)); } finally { setBusy(false); }
   }
-  const icons = { power: 'power', console: 'square-terminal', iso: 'disc-3', rootPassword: 'key-round', delete: 'trash-2', snapshots: 'camera', resize: 'gauge', reinstall: 'refresh-cw' } as const;
+  const icons = { power: 'power', console: 'square-terminal', iso: 'disc-3', rootPassword: 'key-round', delete: 'trash-2', snapshots: 'camera', resize: 'gauge', reinstall: 'refresh-cw', backups: 'archive' } as const;
   return <Card><Card.Content className="flex flex-col">
     <FormSection title={t('customer')} description={t('customerHelp')} icon={<I name="user-cog" size={16}/>}>
       <div className="grid gap-3 sm:grid-cols-2">
         {(Object.keys(icons) as (keyof Doc['customer'])[]).map((k) => <div key={k} className="flex items-start justify-between gap-3 rounded-xl border border-border p-3">
           <div className="flex items-start gap-2">
-            <I name={{ power: 'power', console: 'square-terminal', iso: 'disc-3', rootPassword: 'key-round', delete: 'trash-2', snapshots: 'camera', resize: 'gauge', reinstall: 'refresh-cw' }[k]} size={16}/>
+            <I name={{ power: 'power', console: 'square-terminal', iso: 'disc-3', rootPassword: 'key-round', delete: 'trash-2', snapshots: 'camera', resize: 'gauge', reinstall: 'refresh-cw', backups: 'archive' }[k]} size={16}/>
             <div><p className="text-sm font-medium">{t(`actions.${k}`)}</p><p className="text-xs text-muted">{t(`actionHelp.${k}`)}</p></div>
           </div>
           <SwitchInput label={<span className="sr-only">{t(`actions.${k}`)}</span>} isSelected={v.customer[k]} isDisabled={readOnly}
@@ -39,6 +40,9 @@ export default function ServerSettings({ readOnly }: { readOnly: boolean }) {
         </div>)}
       </div>
       <p className="text-xs text-muted">{t('rolesNote')}</p>
+    </FormSection>
+    <FormSection title={t('backupsTitle')} description={t('backupsHelp')} icon={<I name="archive" size={16}/>}>
+      <NumberInput className="max-w-xs" label={t('maxBackups')} value={v.backups?.maxPerServer ?? 7} minValue={1} maxValue={50} isDisabled={readOnly} onChange={(x) => setV({ ...v, backups: { maxPerServer: x ?? 7 } })}/>
     </FormSection>
     <FormSection title={t('traffic')} description={t('trafficHelp')} icon={<I name="gauge" size={16}/>}>
       <div className="grid gap-3 sm:grid-cols-2">

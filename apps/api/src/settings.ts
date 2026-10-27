@@ -106,7 +106,9 @@ export class SettingsController {
     const mbps = t.throttleMbps === undefined ? current.traffic.throttleMbps : Number(t.throttleMbps);
     if (!Number.isInteger(mbps) || mbps < 1 || mbps > 10_000) throw apiError(400, 'VALIDATION_FAILED', 'Invalid input', { 'traffic.throttleMbps': 'OUT_OF_RANGE' });
     const traffic = { overLimit: t.overLimit === 'notify' || t.overLimit === 'throttle' ? t.overLimit : current.traffic.overLimit, throttleMbps: mbps };
-    const value = { customer: pick(body?.customer, current.customer), hardware: pick(body?.hardware, current.hardware), traffic };
+    const maxBackups = (body?.backups as { maxPerServer?: unknown } | undefined)?.maxPerServer === undefined ? current.backups?.maxPerServer ?? 7 : Number((body.backups as { maxPerServer: unknown }).maxPerServer);
+    if (!Number.isInteger(maxBackups) || maxBackups < 1 || maxBackups > 50) throw apiError(400, 'VALIDATION_FAILED', 'Invalid input', { 'backups.maxPerServer': 'OUT_OF_RANGE' });
+    const value = { customer: pick(body?.customer, current.customer), hardware: pick(body?.hardware, current.hardware), traffic, backups: { maxPerServer: maxBackups } };
     await saveSettings('servers', value);
     await audit(req, 'settings.servers', 'success', req.user.id, value);
     return value;

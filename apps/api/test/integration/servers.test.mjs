@@ -554,7 +554,7 @@ test('locations: details, a pool assigned, maintenance blocks orders, hidden rem
 test('server settings: customers lose actions the admin turns off (staff keep them); ESXi images need a bigger shape', { skip }, async () => {
   const id = serverId;
   const set = (customer) => send('PUT', '/admin/settings/servers', { customer });
-  assert.deepEqual((await send('GET', `/servers/${id}`, undefined, user)).json().allowed, { power: true, console: true, iso: true, rootPassword: true, delete: true, snapshots: true, resize: true, reinstall: true });
+  assert.deepEqual((await send('GET', `/servers/${id}`, undefined, user)).json().allowed, { power: true, console: true, iso: true, rootPassword: true, delete: true, snapshots: true, resize: true, reinstall: true, backups: true });
   assert.equal((await set({ power: false, delete: false, console: false })).statusCode, 200);
   const detail = (await send('GET', `/servers/${id}`, undefined, user)).json();
   assert.equal(detail.allowed.power, false);
@@ -1136,4 +1136,49 @@ test('outside billing (WHMCS/WISECP API): a customer by e-mail, a server per ser
   assert.equal((await send('GET', '/admin/external/whmcs/servers/svc-77')).statusCode, 404);
   await send('PUT', '/admin/settings/billing', { enabled: false });
   void key;
+});
+
+test('backups: a location\'s backup storage, a backup taken while the server runs, restored over the disk (confirmed by name), removed; a schedule action', { skip }, async () => {
+  const made = await create(order('backup-1'));
+  assert.equal(made.statusCode, 202, made.body);
+  const id = made.json().serverId;
+  await until(async () => (await serverRow(id)).state === 'ready', 'server ready', 120);
+  const path = `/servers/${id}/backups`;
+  assert.equal((await send('GET', path, undefined, user)).json().available, false);
+  assert.equal((await send('POST', path, {}, user)).json().code, 'BACKUPS_NOT_CONFIGURED');
+  const { rows: [ds] } = await pool.query('SELECT moref FROM vmware_datastores WHERE connection_id = $1 ORDER BY name LIMIT 1', [connectionId]);
+  assert.equal((await send('PUT', `/admin/pools/${poolId}/backup`, { datastoreMoref: 'datastore-0' })).json().fields.datastoreMoref, 'NOT_AVAILABLE');
+  assert.equal((await send('PUT', `/admin/pools/${poolId}/backup`, { datastoreMoref: ds.moref }, user)).statusCode, 403);
+  assert.equal((await send('PUT', `/admin/pools/${poolId}/backup`, { datastoreMoref: ds.moref })).statusCode, 200);
+  assert.equal((await send('GET', path, undefined, other)).statusCode, 404);
+  const taken = await send('POST', path, { note: 'before upgrade' }, user);
+  assert.equal(taken.statusCode, 202, taken.body);
+  const bid = taken.json().backupId;
+  const backup = async () => (await pool.query('SELECT * FROM backups WHERE id = $1', [bid])).rows[0];
+  await until(async () => ['ready', 'failed'].includes((await backup()).status), 'backup done', 120);
+  const op = await lastOp(id);
+  assert.equal((await backup()).status, 'ready', `${op.error_code} ${op.error_detail}`);
+  assert.equal((await adapter('/v1/vm/snapshots', { ...target, vm: (await serverRow(id)).vm_moref })).snapshots.length, 0, 'the backup snapshot is gone');
+  const listed = (await send('GET', path, undefined, user)).json();
+  assert.ok(listed.available && listed.backups.some((b) => b.id === bid && b.status === 'ready' && b.note === 'before upgrade'));
+  // Restore: confirmed by name; the power state is kept.
+  const before = (await serverRow(id)).power_state;
+  assert.equal((await send('POST', `${path}/${bid}/restore`, { confirm: 'nope' }, user)).json().fields.confirm, 'CONFIRMATION_MISMATCH');
+  assert.equal((await send('POST', `${path}/${bid}/restore`, { confirm: 'backup-1' }, user)).statusCode, 202);
+  await until(async () => (await lastOp(id)).kind === 'backup_restore' && ['succeeded', 'failed'].includes((await lastOp(id)).status), 'restore done', 120);
+  assert.equal((await lastOp(id)).status, 'succeeded', (await lastOp(id)).error_detail);
+  assert.equal((await serverRow(id)).power_state, before);
+  // Schedules may back up, keeping a number of them.
+  assert.equal((await send('POST', `/servers/${id}/schedules`, { action: 'backup', days: [1], time: '03:00', timezone: 'UTC', keep: 99 }, user)).json().fields.keep, 'OUT_OF_RANGE');
+  assert.equal((await send('POST', `/servers/${id}/schedules`, { action: 'backup', days: [1], time: '03:00', timezone: 'UTC', keep: 7 }, user)).statusCode, 201);
+  // Remove, and the admin sees the space used per location.
+  assert.equal((await send('DELETE', `${path}/${bid}`, undefined, user)).statusCode, 202);
+  await until(async () => (await backup()).status === 'deleted', 'backup removed', 120);
+  const all = (await send('GET', '/admin/backups')).json();
+  assert.ok(all.locations.some((l) => l.poolId === poolId && l.datastore === ds.moref));
+  await send('PUT', '/admin/settings/servers', { customer: { backups: false } });
+  assert.equal((await send('POST', path, {}, user)).json().code, 'ACTION_DISABLED');
+  await send('PUT', '/admin/settings/servers', { customer: { backups: true } });
+  assert.equal((await send('DELETE', `/servers/${id}`, { confirm: 'backup-1' }, user, { 'idempotency-key': randomUUID() })).statusCode, 202);
+  await until(async () => (await serverRow(id)).state === 'deleted', 'deleted', 120);
 });

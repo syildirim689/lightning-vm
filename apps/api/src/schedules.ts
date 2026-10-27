@@ -14,6 +14,7 @@ import { limitsOf } from './permissions';
 import { MAX_SNAPSHOTS } from './snapshots';
 import { callAdapter, storedTarget } from './vmware';
 import { cleanSchedule } from './smart-rules';
+import { startBackup } from './backups';
 
 const columns = `id, action, days, to_char(at_time, 'HH24:MI') AS time, timezone, enabled, keep, last_run_at AS "lastRunAt", last_result AS "lastResult"`;
 
@@ -30,7 +31,7 @@ export class SchedulesController {
   async create(@Req() req: AuthedRequest, @Param('id', ParseUUIDPipe) id: string, @Body() body: Record<string, unknown>) {
     await findServer(req, id, true);
     const v = valid(body);
-    await customerMay(req, v.action === 'snapshot' ? 'snapshots' : 'power');
+    await customerMay(req, v.action === 'snapshot' ? 'snapshots' : v.action === 'backup' ? 'backups' : 'power');
     const { rows: [n] } = await pool.query('SELECT count(*)::int AS n FROM power_schedules WHERE server_id = $1', [id]);
     if (n.n >= 10) throw apiError(400, 'VALIDATION_FAILED', 'Too many schedules', { action: 'TOO_MANY' });
     const { rows: [row] } = await pool.query(`INSERT INTO power_schedules (server_id, action, days, at_time, timezone, enabled, keep) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING ${columns}`,
@@ -43,7 +44,7 @@ export class SchedulesController {
   async update(@Req() req: AuthedRequest, @Param('id', ParseUUIDPipe) id: string, @Param('sid', ParseUUIDPipe) sid: string, @Body() body: Record<string, unknown>) {
     await findServer(req, id, true);
     const v = valid(body);
-    await customerMay(req, v.action === 'snapshot' ? 'snapshots' : 'power');
+    await customerMay(req, v.action === 'snapshot' ? 'snapshots' : v.action === 'backup' ? 'backups' : 'power');
     const { rows: [row] } = await pool.query(`UPDATE power_schedules SET action = $3, days = $4, at_time = $5, timezone = $6, enabled = $7, keep = $8, pending_since = NULL WHERE id = $2 AND server_id = $1 RETURNING ${columns}`,
       [id, sid, v.action, v.days, v.time, v.timezone, v.enabled, v.keep ?? null]);
     if (!row) throw apiError(404, 'NOT_FOUND', 'Unknown schedule');
@@ -80,8 +81,8 @@ export async function runSchedules() {
   const customer = (await getSettings('servers')).customer;
   const allowed = customer.power;
   for (const r of rows) {
-    if (r.action === 'snapshot') {
-      const { outcome, pending } = await runSnapshot(r, customer.snapshots).catch((e) => {
+    if (r.action === 'snapshot' || r.action === 'backup') {
+      const { outcome, pending } = await (r.action === 'backup' ? runBackup(r, customer.backups) : runSnapshot(r, customer.snapshots)).catch((e) => {
         logEvent('error', 'schedule_snapshot_failed', { schedule: r.id, code: (e as { getResponse?: () => { code?: string } }).getResponse?.().code ?? String((e as Error)?.message ?? e).slice(0, 200) });
         return { outcome: 'failed', pending: false };
       });
@@ -127,6 +128,25 @@ async function runSnapshot(r: Record<string, string | number | boolean | null>, 
   const name = `auto ${new Intl.DateTimeFormat('sv-SE', { timeZone: String(r.timezone), dateStyle: 'short', timeStyle: 'short' }).format(new Date())}`;
   const params = { name, description: 'Automatic snapshot (schedule)' };
   await startOperation(pseudo, server, 'snapshot_create', `schedule:${r.id}:create:${step}`, hashOf({ id: server.id, kind: 'snapshot_create', ...params }), params);
+  return { outcome: 'started', pending: false };
+}
+
+// One step of a scheduled backup: remove the oldest scheduled one when `keep` are there, else take a new one.
+// Backups taken by hand are never removed by a schedule.
+async function runBackup(r: Record<string, string | number | boolean | null>, allowed: boolean) {
+  if (!allowed) return { outcome: 'skipped_disabled', pending: false };
+  if (r.busy) return { outcome: 'skipped_busy', pending: true };
+  if (r.state !== 'ready' || !r.vm_moref) return { outcome: 'skipped_state', pending: false };
+  const pseudo = { id: `schedule:${r.id}`, ip: null, user: { id: null } } as unknown as AuthedRequest;
+  const server = { id: String(r.server_id), owner_id: String(r.owner_id), pool_id: String(r.pool_id) };
+  const { rows: autos } = await pool.query("SELECT id FROM backups WHERE server_id = $1 AND kind = 'scheduled' AND status = 'ready' ORDER BY created_at", [server.id]);
+  const step = randomUUID();
+  if (autos.length >= Number(r.keep ?? 3)) {
+    const params = { backupId: autos[0].id };
+    await startOperation(pseudo, server, 'backup_delete', `schedule:${r.id}:backup-delete:${step}`, hashOf({ id: server.id, kind: 'backup_delete', ...params }), params);
+    return { outcome: 'rotating', pending: true };
+  }
+  await startBackup(pseudo, server, 'scheduled', '', `schedule:${r.id}:backup:${step}`);
   return { outcome: 'started', pending: false };
 }
 
