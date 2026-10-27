@@ -624,6 +624,105 @@ test('directory sign-in (LDAP): checked settings, local accounts unaffected, dir
   await put('/admin/settings/directory', { ldap: { enabled: false } }, admin);
 });
 
+// A small OpenID provider on this machine: discovery, an authorize step that answers at once with the person it
+// was told to sign in, a token endpoint with an RS256-signed ID token, user info and its keys.
+async function fakeIdp(clientId) {
+  const { generateKeyPairSync, sign, randomUUID } = await import('node:crypto');
+  const { privateKey, publicKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
+  const jwk = { ...publicKey.export({ format: 'jwk' }), kid: 'k1', alg: 'RS256', use: 'sig' };
+  const codes = new Map();
+  const idp = { person: null, issuer: '' };
+  const b64 = (o) => Buffer.from(JSON.stringify(o)).toString('base64url');
+  const server = createServer(async (req, res) => {
+    const u = new URL(req.url, idp.issuer);
+    const json = (o) => { res.setHeader('content-type', 'application/json'); res.end(JSON.stringify(o)); };
+    if (u.pathname === '/.well-known/openid-configuration') return json({ issuer: idp.issuer, authorization_endpoint: idp.issuer + '/authorize', token_endpoint: idp.issuer + '/token',
+      userinfo_endpoint: idp.issuer + '/userinfo', jwks_uri: idp.issuer + '/jwks', id_token_signing_alg_values_supported: ['RS256'], response_types_supported: ['code'],
+      subject_types_supported: ['public'], scopes_supported: ['openid', 'email', 'profile'], claims_supported: ['sub', 'email', 'name', 'groups'] });
+    if (u.pathname === '/jwks') return json({ keys: [jwk] });
+    if (u.pathname === '/authorize') {
+      const code = randomUUID();
+      codes.set(code, { person: idp.person, nonce: u.searchParams.get('nonce') });
+      const back = new URL(u.searchParams.get('redirect_uri'));
+      back.searchParams.set('code', code); back.searchParams.set('state', u.searchParams.get('state'));
+      res.writeHead(302, { location: back.toString() }); return res.end();
+    }
+    if (u.pathname === '/token') {
+      let body = ''; for await (const ch of req) body += ch;
+      const c = codes.get(new URLSearchParams(body).get('code'));
+      if (!c) { res.statusCode = 400; return json({ error: 'invalid_grant' }); }
+      const now = Math.floor(Date.now() / 1000);
+      const claims = { iss: idp.issuer, aud: clientId, iat: now, exp: now + 300, email_verified: true, ...(c.nonce && { nonce: c.nonce }), ...c.person };
+      const head = b64({ alg: 'RS256', kid: 'k1', typ: 'JWT' }) + '.' + b64(claims);
+      const idToken = head + '.' + sign('sha256', Buffer.from(head), privateKey).toString('base64url');
+      return json({ access_token: 'at-' + c.person.sub, token_type: 'Bearer', expires_in: 300, id_token: idToken, scope: 'openid email profile' });
+    }
+    if (u.pathname === '/userinfo') return json({ ...[...codes.values()].find((c) => 'at-' + c.person.sub === req.headers.authorization?.slice(7))?.person, email_verified: true });
+    res.statusCode = 404; res.end();
+  });
+  await new Promise((r) => server.listen(0, '127.0.0.1', r));
+  idp.issuer = `http://127.0.0.1:${server.address().port}`;
+  idp.close = () => new Promise((r) => server.close(r));
+  return idp;
+}
+
+// One SSO sign-in through the API: start, the provider's answer, the callback. The session cookie and where it went.
+async function ssoSignIn(idp, person) {
+  idp.person = person;
+  const start = await post('/auth/sign-in/oauth2', { providerId: 'oidc', callbackURL: '/', errorCallbackURL: '/login?reason=sso' });
+  assert.equal(start.statusCode, 200, start.body);
+  const jar = [].concat(start.headers['set-cookie'] ?? []).map((c) => c.split(';')[0]).join('; ');
+  const answer = await fetch(start.json().url, { redirect: 'manual' });
+  const back = new URL(answer.headers.get('location'));
+  const done = await app.inject({ method: 'GET', url: back.pathname.replace(/^\/api/, '') + back.search, headers: { host: 'localhost', cookie: jar } });
+  return { cookie: cookieOf(done), location: done.headers.location };
+}
+
+test('single sign-on (OIDC): checked settings, accounts created with roles from groups, no takeover of panel accounts, provider owns the password', async () => {
+  const idp = await fakeIdp('panel-client');
+  try {
+    assert.equal((await put('/admin/settings/directory/sso', { oidc: { enabled: true, issuer: 'http://evil.example', clientId: '' } }, admin)).json().code, 'VALIDATION_FAILED');
+    assert.equal((await put('/admin/settings/directory/sso', { oidc: { enabled: true } }, user)).statusCode, 403);
+    assert.ok((await post('/auth/sign-in/oauth2', { providerId: 'oidc', callbackURL: '/' })).statusCode >= 400, 'off: no provider');
+    assert.equal((await post('/admin/roles', { key: 'sso-support', name: 'SSO support', permissions: ['users.view'] }, admin)).statusCode, 201);
+    const oidc = { enabled: true, name: 'Company SSO', issuer: idp.issuer, clientId: 'panel-client', clientSecret: 'client-secret-1', groupRoles: [{ group: 'panel-support', roles: ['sso-support'] }] };
+    assert.equal((await post('/admin/settings/directory/sso/test', { oidc }, admin)).json().issuer, idp.issuer);
+    const saved = (await put('/admin/settings/directory/sso', { oidc }, admin)).json();
+    assert.equal(saved.oidc.clientSecretSet, true);
+    assert.ok(!JSON.stringify(saved).includes('client-secret-1'));
+    assert.deepEqual((await get('/public/config')).json().sso, { name: 'Company SSO' });
+
+    // A new person: created, with the role their group gives, and no two-factor demand from the panel.
+    const grace = await ssoSignIn(idp, { sub: 'u-1', email: 'grace@corp.test', name: 'Grace Hopper', groups: ['panel-support'] });
+    assert.ok(grace.cookie, 'signed in: ' + grace.location);
+    const me = (await get('/auth/me', grace.cookie)).json();
+    assert.deepEqual(me.roles, ['sso-support']);
+    assert.equal(me.name, 'Grace Hopper');
+    const { rows: [row] } = await pool.query("SELECT id, auth_source FROM users WHERE email = 'grace@corp.test'");
+    assert.equal(row.auth_source, 'oidc');
+    assert.equal((await post('/auth/request-password-reset', { email: 'grace@corp.test', redirectTo: '/reset-password' })).json().code, 'OK');
+    // Groups changed at the provider: the next sign-in follows them.
+    const again = await ssoSignIn(idp, { sub: 'u-1', email: 'grace@corp.test', name: 'Grace Hopper', groups: [] });
+    assert.deepEqual((await get('/auth/me', again.cookie)).json().roles, ['user']);
+
+    // The provider claims a panel account's address: refused, the panel account is untouched.
+    const local = (await post('/auth/admin/create-user', { email: 'boss@corp.test', password, name: 'Boss', role: 'admin' }, admin)).json().user.id;
+    const takeover = await ssoSignIn(idp, { sub: 'attacker', email: 'boss@corp.test', name: 'Mallory' });
+    assert.equal(takeover.cookie, undefined);
+    assert.equal((await pool.query("SELECT count(*)::int AS n FROM auth_accounts WHERE user_id = $1 AND provider_id = 'oidc'", [local])).rows[0].n, 0);
+
+    // Without auto-create, unknown people are not let in.
+    await put('/admin/settings/directory/sso', { oidc: { ...oidc, clientSecret: '', autoCreate: false } }, admin);
+    assert.equal((await ssoSignIn(idp, { sub: 'u-2', email: 'new@corp.test', name: 'New' })).cookie, undefined);
+
+    for (const id of [row.id, local]) await post('/auth/admin/remove-user', { userId: id }, admin);
+    await call('DELETE', '/admin/roles/sso-support', admin);
+  } finally {
+    await put('/admin/settings/directory/sso', { oidc: { enabled: false } }, admin);
+    await idp.close();
+  }
+});
+
 test('quiet hours: checked, kept with the preferences, and turned off with null', async () => {
   assert.equal((await put('/notifications/quiet-hours', { quietHours: { start: '25:00', end: '07:00', tz: 'UTC' } }, user)).statusCode, 400);
   assert.equal((await put('/notifications/quiet-hours', { quietHours: { start: '23:00', end: '07:00', tz: 'Nowhere/City' } }, user)).statusCode, 400);
@@ -744,6 +843,13 @@ test('support tickets: customer opens with an attachment, staff answer with an i
   assert.equal(view.ticket.dueAt, null);
   assert.equal((await get(`/support/tickets/${id}`, agent.c)).json().messages.length, 3);
   assert.ok(await until(async () => (await pool.query("SELECT 1 FROM notifications WHERE user_id = $1 AND event = 'support.reply'", [cust.id])).rowCount));
+  // The inbox has both languages, so it follows the panel's language rather than the account's.
+  const inbox = (await get('/notifications', cust.c)).json().notifications.find((n) => n.event === 'support.reply');
+  assert.equal(inbox.texts.tr.title, 'Destek talebinize yanıt geldi');
+  assert.equal(inbox.texts.en.title, 'Your support ticket has a reply');
+  // The menu's count: one ticket waits for the customer; the staff queue count is for staff only.
+  assert.deepEqual((await get('/support/summary', cust.c)).json(), { waiting: 1, queue: null });
+  assert.equal(typeof (await get('/support/summary', agent.c)).json().queue, 'number');
 
   // The attachment: the owner and staff download it; nobody else.
   const att = view.messages[0].attachments[0];
@@ -769,6 +875,11 @@ test('support tickets: customer opens with an attachment, staff answer with an i
   assert.equal((await post(`/support/tickets/${id}/rating`, { rating: 5, comment: 'Fast!' }, agent.c)).statusCode, 403);
   assert.equal((await post(`/support/tickets/${id}/rating`, { rating: 5, comment: 'Fast!' }, cust.c)).json().rating, 5);
   assert.equal((await get('/admin/support/stats', agent.c)).json().rating, 5);
+  assert.equal((await pool.query("SELECT 1 FROM notifications WHERE user_id = $1 AND event = 'support.rate'", [cust.id])).rowCount, 0, 'closing it yourself asks for nothing');
+  // Closed by staff: the customer is asked to rate it.
+  const second = (await post('/support/tickets', { subject: 'Another question', departmentId: deps[0].id, body: 'Is IPv6 available?' }, cust.c)).json().id;
+  assert.equal((await call('PATCH', `/admin/support/tickets/${second}`, agent.c, { status: 'closed' })).statusCode, 200);
+  assert.ok(await until(async () => (await pool.query("SELECT 1 FROM notifications WHERE user_id = $1 AND event = 'support.rate' AND link = $2", [cust.id, '/support/' + second])).rowCount));
 
   // Canned replies and departments.
   const canned = (await post('/admin/support/canned', { title: 'Firewall', body: 'Please check your firewall rules.' }, agent.c)).json().id;

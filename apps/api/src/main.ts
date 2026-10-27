@@ -29,7 +29,7 @@ import { SnapshotsController } from './snapshots';
 import { AlertsController } from './alerts';
 import { TerminalController } from './terminal';
 import { fromNodeHeaders } from 'better-auth/node';
-import { getAuth } from './better-auth';
+import { getAuth, reloadAuth } from './better-auth';
 import { SetupController } from './setup';
 import { AdminController, UserSummaryController } from './admin';
 import { VmwareController } from './vmware';
@@ -117,6 +117,7 @@ export async function createApp() {
   app.useGlobalFilters(new ErrorCodeFilter());
   // better-auth asks synchronously whether a role exists; load them before the first request.
   await ensureRoles().catch(() => logEvent('error', 'roles_load_failed'));
+  await reloadAuth().catch(() => logEvent('error', 'sso_load_failed'));
   return app;
 }
 

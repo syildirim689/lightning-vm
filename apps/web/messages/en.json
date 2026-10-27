@@ -1794,7 +1794,9 @@
     "audit": "Audit log",
     "terminal": "Server terminal",
     "support": "Support tickets",
-    "mySupport": "Support"
+    "mySupport": "Support",
+    "waitingForYou": "{n, plural, one {# ticket waits} other {# tickets wait}} for your answer",
+    "waitingForSupport": "{n, plural, one {# ticket waits} other {# tickets wait}} for support"
   },
   "Dashboard": {
     "eyebrow": "ADMINISTRATION",
@@ -2273,6 +2275,10 @@
       "support_assigned": {
         "title": "Ticket assigned",
         "help": "When a ticket is assigned to you."
+      },
+      "support_rate": {
+        "title": "Rate a closed ticket",
+        "help": "When support closes your ticket: a short request to rate it from 1 to 5."
       }
     },
     "policyTitle": "The admin first, then each user",

@@ -27,6 +27,9 @@ export type SmsSettings = { provider: string; sender: string; credentialsEnc: st
 // Directory sign-in (ldap.ts). userFilter has {email}; groupRoles maps a group DN to roles.
 export type LdapSettings = { enabled: boolean; url: string; startTls: boolean; caPem: string; bindDn: string; bindPasswordEnc: string | null; baseDn: string; userFilter: string;
   emailAttribute: string; nameAttribute: string; groupAttribute: string; groupRoles: { group: string; roles: string[] }[]; defaultRole: string; autoCreate: boolean };
+// Single sign-on with OpenID Connect (sso.ts): issuer for discovery, the client, groups claim -> roles.
+export type OidcSettings = { enabled: boolean; name: string; issuer: string; clientId: string; clientSecretEnc: string | null; scopes: string; groupsClaim: string;
+  groupRoles: { group: string; roles: string[] }[]; defaultRole: string; autoCreate: boolean };
 export type Channel = 'inApp' | 'push' | 'email' | 'sms' | 'chat';
 // Messaging apps users may connect (chat-apps.ts) and the admin accounts some of them need; secrets encrypted.
 export type ChatSettings = { apps: string[]; telegram: { tokenEnc: string | null; username: string };
@@ -68,7 +71,8 @@ const defaults = {
   chat: { apps: ['slack', 'discord', 'teams', 'googlechat', 'mattermost', 'rocketchat', 'matrix', 'ntfy', 'gotify', 'webhook'], telegram: { tokenEnc: null, username: '' },
     whatsapp: { tokenEnc: null, phoneNumberId: '', template: '', language: 'tr' }, pushover: { tokenEnc: null } } as ChatSettings,
   directory: { ldap: { enabled: false, url: '', startTls: false, caPem: '', bindDn: '', bindPasswordEnc: null, baseDn: '', userFilter: '(&(objectClass=person)(mail={email}))',
-    emailAttribute: 'mail', nameAttribute: 'displayName', groupAttribute: 'memberOf', groupRoles: [], defaultRole: 'user', autoCreate: true } as LdapSettings },
+    emailAttribute: 'mail', nameAttribute: 'displayName', groupAttribute: 'memberOf', groupRoles: [], defaultRole: 'user', autoCreate: true } as LdapSettings,
+    oidc: { enabled: false, name: 'SSO', issuer: '', clientId: '', clientSecretEnc: null, scopes: 'openid email profile', groupsClaim: 'groups', groupRoles: [], defaultRole: 'user', autoCreate: true } as OidcSettings },
   // The public status page (/status): on unless the admin turns it off.
   statusPage: { enabled: true } as { enabled: boolean },
   // Web Push (VAPID) keys, generated on first use.
@@ -278,6 +282,8 @@ export async function publicConfig() {
     otpChannels: { sms: smsCodes, email: mailCodes },
     // Sign-in with a one-time code sent by e-mail (the admin turns it on; needs working mail).
     emailCodeSignIn: mailCodes && (await getSettings('security')).emailCodeSignIn,
+    // Single sign-on: the button's label when it is on (sso.ts).
+    sso: await getSettings('directory').then((d) => (d.oidc.enabled ? { name: d.oidc.name } : null)),
     captcha: captcha ? { provider: captcha.provider, siteKey: captcha.siteKey, use: captcha.use } : null,
     // Older web builds read this field.
     turnstileSiteKey: captcha?.provider === 'turnstile' ? captcha.siteKey : null,

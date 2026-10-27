@@ -22,7 +22,7 @@ export class NotificationsController {
   @Get()
   async list(@Req() req: AuthedRequest) {
     const [{ rows }, { rows: [c] }] = await Promise.all([
-      pool.query('SELECT id, event, title, body, link, created_at AS "createdAt", read_at AS "readAt" FROM notifications WHERE user_id = $1 ORDER BY created_at DESC LIMIT 50', [req.user.id]),
+      pool.query('SELECT id, event, title, body, link, texts, created_at AS "createdAt", read_at AS "readAt" FROM notifications WHERE user_id = $1 ORDER BY created_at DESC LIMIT 50', [req.user.id]),
       pool.query('SELECT count(*)::int AS n FROM notifications WHERE user_id = $1 AND read_at IS NULL', [req.user.id]),
     ]);
     return { notifications: rows, unread: c.n };

@@ -47,6 +47,10 @@ async function addMessage(ticketId: string, authorId: string, staff: boolean, in
   return m.id as string;
 }
 
+// A ticket someone else closed (staff, or the janitor): its owner is asked to rate it.
+const askRating = (t: { id: string; number: number; subject: string; ownerId: string }) =>
+  notify('support.rate', [t.ownerId], { ticketId: t.id, number: String(t.number), subject: t.subject });
+
 // Who on staff hears about a ticket: its assignee, or everyone who can see support.
 const tellStaff = (t: { assigneeId: string | null }, data: Record<string, unknown>) =>
   notify('support.customer_message', t.assigneeId ? [t.assigneeId] : 'staff:support.view', data);
@@ -65,6 +69,14 @@ export class SupportController {
   async departments() {
     const { rows } = await pool.query('SELECT id, name_tr AS "nameTr", name_en AS "nameEn" FROM support_departments WHERE active ORDER BY sort, name_en');
     return { departments: rows };
+  }
+
+  // The menu's counts: the caller's tickets waiting for them and, for staff, tickets waiting for support.
+  @Get('summary')
+  async summary(@Req() req: AuthedRequest) {
+    const { rows: [m] } = await pool.query("SELECT count(*)::int AS n FROM tickets WHERE owner_id = $1 AND status = 'answered'", [req.user.id]);
+    const queue = staffOf(req) ? (await pool.query("SELECT count(*)::int AS n FROM tickets WHERE status IN ('open', 'customer_reply')")).rows[0].n as number : null;
+    return { waiting: m.n as number, queue };
   }
 
   @Get('tickets')
@@ -133,8 +145,9 @@ export class SupportController {
   async close(@Req() req: AuthedRequest, @Param('id', ParseUUIDPipe) id: string) {
     const t = await ticketFor(req, id);
     if (t.ownerId !== req.user.id && !manager(req)) throw apiError(403, 'FORBIDDEN', 'Permission required');
-    await pool.query("UPDATE tickets SET status = 'closed', closed_at = now(), due_at = NULL, updated_at = now() WHERE id = $1", [id]);
+    const { rowCount } = await pool.query("UPDATE tickets SET status = 'closed', closed_at = now(), due_at = NULL, updated_at = now() WHERE id = $1 AND status <> 'closed'", [id]);
     await audit(req, 'support.closed', 'success', req.user.id, { ticketId: id });
+    if (rowCount && t.ownerId !== req.user.id) await askRating(t);
     return { ok: true };
   }
 
@@ -204,7 +217,7 @@ export class SupportAdminController {
 
   @Patch('tickets/:id') @Can('support.manage')
   async change(@Req() req: AuthedRequest, @Param('id', ParseUUIDPipe) id: string, @Body() body: Input) {
-    const { rows: [t] } = await pool.query('SELECT id, number, subject, status, priority, assignee_id, created_at FROM tickets WHERE id = $1', [id]);
+    const { rows: [t] } = await pool.query('SELECT id, number, subject, status, priority, assignee_id, owner_id, created_at FROM tickets WHERE id = $1', [id]);
     if (!t) throw apiError(404, 'NOT_FOUND', 'Unknown ticket');
     const fields: Record<string, string> = {};
     const status = body?.status === undefined ? t.status : statuses.includes(body.status as Status) ? body.status as Status : (fields.status = 'INVALID_VALUE', t.status);
@@ -224,6 +237,7 @@ export class SupportAdminController {
         closed_at = CASE WHEN $2 = 'closed' THEN coalesce(closed_at, now()) ELSE NULL END,
         due_at = CASE WHEN $2 IN ('closed', 'answered', 'on_hold') THEN NULL WHEN due_at IS NOT NULL AND $3 <> priority THEN $6 ELSE due_at END WHERE id = $1`,
       [id, status, priority, assignee, departmentId ?? null, dueFrom(new Date(), priority as Priority)]);
+    if (status === 'closed' && t.status !== 'closed' && t.owner_id !== req.user.id) await askRating({ id, number: t.number, subject: t.subject, ownerId: t.owner_id });
     if (assignee && assignee !== t.assignee_id && assignee !== req.user.id) await notify('support.assigned', [assignee], { ticketId: id, number: t.number, subject: t.subject });
     await audit(req, 'support.changed', 'success', req.user.id, { ticketId: id, status, priority, assignee });
     return { ok: true };
@@ -301,8 +315,9 @@ export class SupportAdminController {
 export function startSupportJanitor() {
   const tick = async () => {
     if (!(await redis.set('lock:support-janitor', '1', 'EX', 3000, 'NX').catch(() => null))) return;
-    await pool.query("UPDATE tickets SET status = 'closed', closed_at = now(), updated_at = now() WHERE status = 'answered' AND last_staff_at < now() - interval '7 days'")
-      .catch(() => logEvent('error', 'support_janitor_failed'));
+    const { rows } = await pool.query(`UPDATE tickets SET status = 'closed', closed_at = now(), updated_at = now() WHERE status = 'answered' AND last_staff_at < now() - interval '7 days'
+      RETURNING id, number, subject, owner_id AS "ownerId"`).catch(() => { logEvent('error', 'support_janitor_failed'); return { rows: [] }; });
+    for (const t of rows) await askRating(t);
   };
   return setInterval(tick, 3_600_000).unref();
 }

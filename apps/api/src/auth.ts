@@ -51,7 +51,8 @@ export async function currentSession(req: FastifyRequest): Promise<{ user: User;
   const policy = (await getSettings('security')).require2fa;
   // Customer permissions (their own servers and firewalls) do not make anyone staff.
   const staff = permissions.some((p) => !customerLevel(p));
-  const twoFactorRequired = !u.twoFactorEnabled && !impersonatedBy && (policy === 'all' || (policy === 'staff' && staff) || !!limits.require2fa);
+  // Single sign-on accounts have no panel password: their provider does the second factor.
+  const twoFactorRequired = !u.twoFactorEnabled && !impersonatedBy && (u as { authSource?: string }).authSource !== 'oidc' && (policy === 'all' || (policy === 'staff' && staff) || !!limits.require2fa);
   return { user: { id: u.id, email: u.email, name: u.name ?? '', roles: splitRoles(u.role), permissions,
     locale: u.locale === 'tr' ? 'tr' : 'en', impersonatedBy, twoFactorEnabled: !!u.twoFactorEnabled, twoFactorRequired, phoneNumber: u.phoneNumber ?? null,
     phoneNumberVerified: !!u.phoneNumberVerified }, token: s.session.token };

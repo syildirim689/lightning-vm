@@ -1794,7 +1794,9 @@
     "audit": "Denetim kaydı",
     "terminal": "Sunucu terminali",
     "support": "Destek talepleri",
-    "mySupport": "Destek"
+    "mySupport": "Destek",
+    "waitingForYou": "{n} talep yanıtınızı bekliyor",
+    "waitingForSupport": "{n} talep destek bekliyor"
   },
   "Dashboard": {
     "eyebrow": "YÖNETİM",
@@ -2273,6 +2275,10 @@
       "support_assigned": {
         "title": "Talep atandı",
         "help": "Bir talep size atandığında."
+      },
+      "support_rate": {
+        "title": "Kapanan talebi puanlama",
+        "help": "Destek talebiniz kapatıldığında: 1–5 arası puan vermeniz için kısa bir istek."
       }
     },
     "policyTitle": "Önce yönetici, sonra kullanıcı",

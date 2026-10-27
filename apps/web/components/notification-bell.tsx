@@ -6,13 +6,15 @@ import { useQueryClient } from '@tanstack/react-query';
 import { AnimatePresence, motion } from 'motion/react';
 import NextLink from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useFormatter, useNow, useTranslations } from 'next-intl';
+import { useFormatter, useLocale, useNow, useTranslations } from 'next-intl';
 import { useEffect, useRef } from 'react';
 import { apiFetch } from '../lib/api';
 import { useApiQuery } from '../lib/query';
 import { I } from './icon';
 
-type Item = { id: string; event: string; title: string; body: string; link: string | null; createdAt: string; readAt: string | null };
+type Text = { title: string; body: string };
+// texts: both languages (newer notifications), so the inbox follows the panel's language.
+type Item = Text & { id: string; event: string; link: string | null; createdAt: string; readAt: string | null; texts: { tr: Text; en: Text } | null };
 
 export default function NotificationBell() {
   const t = useTranslations('Inbox');
@@ -21,7 +23,8 @@ export default function NotificationBell() {
   const router = useRouter();
   const client = useQueryClient();
   const q = useApiQuery<{ notifications: Item[]; unread: number }>(['notifications'], '/notifications', { refetchInterval: 20_000 });
-  const items = q.data?.notifications ?? [];
+  const locale = useLocale() === 'tr' ? 'tr' : 'en';
+  const items = (q.data?.notifications ?? []).map((n) => ({ ...n, ...n.texts?.[locale] }));
   const unread = q.data?.unread ?? 0;
 
   // Toast only for notifications that arrive after the panel loaded.

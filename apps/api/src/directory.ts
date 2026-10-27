@@ -8,9 +8,41 @@ import { ldapTest, rolesFromGroups } from './ldap';
 import { ensureRoles, roles } from './permissions';
 import { Can, PermissionGuard } from './rbac';
 import { encryptSecret } from './secrets';
-import { getSettings, saveSettings, type LdapSettings } from './settings-store';
+import { getSettings, saveSettings, type LdapSettings, type OidcSettings } from './settings-store';
+import { reloadAuth } from './better-auth';
+import { discoveryUrl, ssoSecretCtx } from './sso';
 
 type Input = Record<string, unknown>;
+
+function readGroupRoles(v: unknown) {
+  return Array.isArray(v) ? (v as Input[]).map((g) => ({ group: String(g?.group ?? '').trim().slice(0, 500), roles: Array.isArray(g?.roles) ? [...new Set(g.roles.map(String))] : [] }))
+    .filter((g) => g.group) : [];
+}
+const badMapping = (m: { roles: string[] }[]) => m.length > 50 || m.some((g) => !g.roles.length || g.roles.some((r) => !roles.has(r)));
+
+function readOidc(body: Input, saved: OidcSettings): OidcSettings {
+  const fields: Record<string, string> = {};
+  const str = (k: string, max = 500) => (typeof body[k] === 'string' ? (body[k] as string).trim().slice(0, max) : '');
+  const enabled = body.enabled === true;
+  const issuer = str('issuer').replace(/\/+$/, '');
+  // https only; plain http is for a provider on this machine (tests, a local Keycloak).
+  if ((enabled || issuer) && !/^(https:\/\/[^\s]+|http:\/\/(localhost|127\.0\.0\.1)(:\d{1,5})?(\/[^\s]*)?)$/i.test(issuer)) fields.issuer = 'INVALID_URL';
+  const clientId = str('clientId', 300);
+  if (enabled && !clientId) fields.clientId = 'REQUIRED';
+  const scopes = str('scopes', 300) || saved.scopes;
+  if (!scopes.split(/\s+/).includes('openid') || !/^[\w:./ -]+$/.test(scopes)) fields.scopes = 'INVALID_VALUE';
+  const groupsClaim = str('groupsClaim', 100) || 'groups';
+  if (!/^[\w:./-]+$/.test(groupsClaim)) fields.groupsClaim = 'INVALID_VALUE';
+  const groupRoles = readGroupRoles(body.groupRoles);
+  if (badMapping(groupRoles)) fields.groupRoles = 'INVALID_VALUE';
+  const defaultRole = str('defaultRole', 32) || 'user';
+  if (!roles.has(defaultRole)) fields.defaultRole = 'INVALID_VALUE';
+  const typed = typeof body.clientSecret === 'string' ? body.clientSecret : '';
+  if (typed.length > 500) fields.clientSecret = 'INVALID_VALUE';
+  if (Object.keys(fields).length) throw apiError(400, 'VALIDATION_FAILED', 'Invalid input', fields);
+  return { enabled, name: str('name', 40) || 'SSO', issuer, clientId, clientSecretEnc: typed ? encryptSecret(typed, ssoSecretCtx) : saved.clientSecretEnc, scopes, groupsClaim,
+    groupRoles, defaultRole, autoCreate: body.autoCreate !== false };
+}
 
 function readLdap(body: Input, saved: LdapSettings): { value: LdapSettings; bindPassword: string } {
   const fields: Record<string, string> = {};
@@ -25,9 +57,8 @@ function readLdap(body: Input, saved: LdapSettings): { value: LdapSettings; bind
   const caPem = typeof body.caPem === 'string' ? body.caPem.trim().slice(0, 20_000) : '';
   if (caPem && !/^-----BEGIN CERTIFICATE-----[\s\S]+-----END CERTIFICATE-----$/.test(caPem)) fields.caPem = 'INVALID_CERTIFICATE';
   const attr = (k: string, d: string) => { const v = str(k, 64) || d; if (!/^[A-Za-z][\w-]*$/.test(v)) fields[k] = 'INVALID_VALUE'; return v; };
-  const groupRoles = Array.isArray(body.groupRoles) ? (body.groupRoles as Input[]).map((g) => ({ group: String(g?.group ?? '').trim().slice(0, 500), roles: Array.isArray(g?.roles) ? [...new Set(g.roles.map(String))] : [] }))
-    .filter((g) => g.group) : [];
-  if (groupRoles.length > 50 || groupRoles.some((g) => !g.roles.length || g.roles.some((r) => !roles.has(r)))) fields.groupRoles = 'INVALID_VALUE';
+  const groupRoles = readGroupRoles(body.groupRoles);
+  if (badMapping(groupRoles)) fields.groupRoles = 'INVALID_VALUE';
   const defaultRole = str('defaultRole', 32) || 'user';
   if (!roles.has(defaultRole)) fields.defaultRole = 'INVALID_VALUE';
   const typed = typeof body.bindPassword === 'string' ? body.bindPassword : '';
@@ -42,18 +73,45 @@ function readLdap(body: Input, saved: LdapSettings): { value: LdapSettings; bind
 export class DirectorySettingsController {
   @Get() @Can('settings.view', 'settings.manage')
   async get() {
-    const { bindPasswordEnc, ...ldap } = (await getSettings('directory')).ldap;
-    const { rows: [n] } = await pool.query("SELECT count(*)::int AS n FROM users WHERE auth_source = 'ldap'");
-    return { ldap: { ...ldap, bindPasswordSet: !!bindPasswordEnc }, directoryUsers: n.n };
+    const d = await getSettings('directory');
+    const { bindPasswordEnc, ...ldap } = d.ldap;
+    const { clientSecretEnc, ...oidc } = d.oidc;
+    const { rows: [n] } = await pool.query("SELECT count(*) FILTER (WHERE auth_source = 'ldap')::int AS n, count(*) FILTER (WHERE auth_source = 'oidc')::int AS sso FROM users");
+    return { ldap: { ...ldap, bindPasswordSet: !!bindPasswordEnc }, oidc: { ...oidc, clientSecretSet: !!clientSecretEnc }, directoryUsers: n.n, ssoUsers: n.sso };
   }
 
   @Put() @Can('settings.manage')
   async save(@Req() req: AuthedRequest, @Body() body: Input) {
     await ensureRoles();
     const { value } = readLdap((body?.ldap ?? {}) as Input, (await getSettings('directory')).ldap);
-    await saveSettings('directory', { ldap: value });
+    await saveSettings('directory', { ...(await getSettings('directory')), ldap: value });
     await audit(req, 'settings.directory', 'success', req.user.id, { enabled: value.enabled, url: value.url, groups: value.groupRoles.length });
     return this.get();
+  }
+
+  // Single sign-on: saved, then better-auth is set up again with the new provider (no restart).
+  @Put('sso') @Can('settings.manage')
+  async saveSso(@Req() req: AuthedRequest, @Body() body: Input) {
+    await ensureRoles();
+    const d = await getSettings('directory');
+    const value = readOidc((body?.oidc ?? {}) as Input, d.oidc);
+    await saveSettings('directory', { ...d, oidc: value });
+    await reloadAuth();
+    await audit(req, 'settings.sso', 'success', req.user.id, { enabled: value.enabled, issuer: value.issuer, groups: value.groupRoles.length });
+    return this.get();
+  }
+
+  // Reads the provider's discovery document with the issuer in the form: it must name the same issuer.
+  @Post('sso/test') @HttpCode(200) @Can('settings.manage')
+  async testSso(@Req() req: AuthedRequest, @Body() body: Input) {
+    await ensureRoles();
+    const value = readOidc({ ...((body?.oidc ?? {}) as Input), enabled: true }, (await getSettings('directory')).oidc);
+    const doc = await fetch(discoveryUrl(value.issuer), { signal: AbortSignal.timeout(10_000), redirect: 'error' }).then((r) => (r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status))))
+      .catch((err: Error) => { throw apiError(422, 'SSO_DISCOVERY_FAILED', 'Discovery failed', undefined, { detail: String(err?.message ?? '').slice(0, 200) }); }) as Record<string, unknown>;
+    const ok = String(doc.issuer ?? '').replace(/\/+$/, '') === value.issuer && typeof doc.authorization_endpoint === 'string' && typeof doc.token_endpoint === 'string' && typeof doc.jwks_uri === 'string';
+    await audit(req, 'settings.sso_test', ok ? 'success' : 'failure', req.user.id, { issuer: value.issuer });
+    if (!ok) throw apiError(422, 'SSO_DISCOVERY_INVALID', 'Not an OpenID provider for this issuer', undefined, { detail: String(doc.issuer ?? '') });
+    return { ok: true, issuer: doc.issuer, scopes: Array.isArray(doc.scopes_supported) ? doc.scopes_supported.slice(0, 30) : [], claims: Array.isArray(doc.claims_supported) ? doc.claims_supported.slice(0, 50) : [] };
   }
 
   // With the values in the form (saved or not): the service account binds and, with an e-mail, finds that person;

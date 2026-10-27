@@ -55,7 +55,7 @@ export async function directorySignIn(ctx: unknown, body: Input) {
   if (nextRole !== u.role) await publishLive(u.id, 'access');
 }
 
-// The directory owns these passwords: they are not changed or reset in the panel.
+// The directory (or the single sign-on provider) owns these passwords: they are not changed or reset in the panel.
 const passwordPaths = new Set(['/change-password', '/request-password-reset', '/admin/set-user-password']);
 export async function refuseForDirectory(path: string, headers: Headers, body: Input) {
   if (!passwordPaths.has(path)) return;
@@ -69,7 +69,7 @@ export async function refuseForDirectory(path: string, headers: Headers, body: I
   if (!sql) return;
   const { rows: [u] } = await pool.query(sql, [arg]).catch(() => ({ rows: [] }));
   // A reset request for a directory account gets the same answer as any other (no account enumeration): it just sends nothing.
-  if (u?.auth_source === 'ldap') {
+  if (u?.auth_source === 'ldap' || u?.auth_source === 'oidc') {
     if (path === '/request-password-reset') throw new APIError('OK', { code: 'OK', message: 'If the account exists, an e-mail was sent' });
     throw new APIError('BAD_REQUEST', { code: 'PASSWORD_MANAGED_BY_DIRECTORY', message: 'This password is managed in the directory' });
   }

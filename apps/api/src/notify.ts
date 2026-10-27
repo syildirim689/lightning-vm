@@ -55,6 +55,9 @@ export const catalog: Record<string, EventDef> = {
       en: (d) => ({ title: 'Your monthly budget is exceeded', body: `Your servers cost ${d.monthly} ${d.currency} a month; your budget is ${d.amount} ${d.currency}.` }) } },
   'support.reply': { audience: 'user', channels: all, defaults: ['inApp', 'email', 'push'], link: (d) => '/support/' + d.ticketId,
     text: { tr: (d) => ({ title: 'Destek talebinize yanıt geldi', body: '#' + d.number + ' · ' + d.subject }), en: (d) => ({ title: 'Your support ticket has a reply', body: '#' + d.number + ' · ' + d.subject }) } },
+  'support.rate': { audience: 'user', channels: ['inApp', 'email', 'push', 'chat'], defaults: ['inApp', 'email'], link: (d) => '/support/' + d.ticketId,
+    text: { tr: (d) => ({ title: 'Destek talebiniz kapandı: #' + d.number, body: d.subject + ' · Desteği nasıl buldunuz? 1–5 arası puan verin.' }),
+      en: (d) => ({ title: 'Your support ticket is closed: #' + d.number, body: d.subject + ' · How did we do? Rate it from 1 to 5.' }) } },
   'support.ticket_opened': { audience: 'staff', permission: 'support.view', channels: all, defaults: ['inApp', 'push'], link: (d) => '/admin/support/' + d.ticketId,
     text: { tr: (d) => ({ title: 'Yeni destek talebi #' + d.number, body: d.subject + ' · ' + d.email + ' · ' + d.priority }), en: (d) => ({ title: 'New support ticket #' + d.number, body: d.subject + ' · ' + d.email + ' · ' + d.priority }) } },
   'support.customer_message': { audience: 'staff', permission: 'support.view', channels: all, defaults: ['inApp', 'push'], link: (d) => '/admin/support/' + d.ticketId,
@@ -160,10 +163,11 @@ async function sendPush(userId: string, payload: object) {
 }
 
 type Recipient = { id: string; email: string; locale: string; phone_number: string | null; phone_number_verified: boolean };
-export async function deliver(u: Recipient, channel: Channel, t: Text, link: string | null, event: string) {
+// texts: both languages, so the inbox can follow the panel's language; the other channels use the account's.
+export async function deliver(u: Recipient, channel: Channel, t: Text, link: string | null, event: string, texts?: { tr: Text; en: Text }) {
   const brand = (await getSettings('branding')).name;
   if (channel === 'inApp') {
-    await pool.query('INSERT INTO notifications (user_id, event, title, body, link) VALUES ($1, $2, $3, $4, $5)', [u.id, event, t.title, t.body, link]);
+    await pool.query('INSERT INTO notifications (user_id, event, title, body, link, texts) VALUES ($1, $2, $3, $4, $5, $6)', [u.id, event, t.title, t.body, link, texts ?? null]);
     await publishLive(u.id, 'notification');
   }
   if (channel === 'push') await sendPush(u.id, { title: t.title, body: t.body, link });
@@ -180,13 +184,14 @@ export function startNotificationWorker() {
     const def = catalog[event];
     if (!def) return;
     const p = (await policies())[event];
+    const texts = { tr: def.text.tr(data), en: def.text.en(data) };
     for (const u of await recipients(to)) {
-      const t = def.text[u.locale === 'tr' ? 'tr' : 'en'](data);
+      const t = texts[u.locale === 'tr' ? 'tr' : 'en'];
       // Quiet hours: nothing that buzzes a phone, except security notices; the inbox and e-mail still get it.
       const quiet = !alwaysSent(event) && inQuietHours(u.quiet_hours);
       for (const c of await channelsFor(u.id, event, p)) {
         if (quiet && loudChannels.has(c)) continue;
-        await deliver(u, c, t, def.link?.(data) ?? null, event).catch((err) => logEvent('error', 'notification_failed', { event, channel: c, error: err instanceof Error ? err.message.slice(0, 200) : 'unknown' }));
+        await deliver(u, c, t, def.link?.(data) ?? null, event, texts).catch((err) => logEvent('error', 'notification_failed', { event, channel: c, error: err instanceof Error ? err.message.slice(0, 200) : 'unknown' }));
       }
     }
   }, { connection, concurrency: 2 });

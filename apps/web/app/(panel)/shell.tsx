@@ -17,17 +17,19 @@ import NotificationBell from '../../components/notification-bell';
 import TaskManager from '../../components/task-manager';
 import { authClient, signOut } from '../../lib/auth-client';
 import { can, type Permission } from '../../lib/permissions';
+import { useApiQuery } from '../../lib/query';
 import type { Branding, User } from '../../lib/session';
 
 type Key = 'dashboard' | 'servers' | 'abuse' | 'energy' | 'topology' | 'myTopology' | 'myVdc' | 'connections' | 'catalog' | 'users' | 'roles' | 'settings' | 'system' | 'myServers' | 'newServer' | 'firewalls' | 'account' | 'audit' | 'terminal' | 'support' | 'mySupport';
-type Item = { href: string; key: Key; icon: React.ReactNode; exact?: boolean; need?: Permission[] };
+// count: a number beside the entry from GET /support/summary (tickets waiting for the customer, or for support).
+type Item = { href: string; key: Key; icon: React.ReactNode; exact?: boolean; need?: Permission[]; count?: 'waiting' | 'queue' };
 
 // Staff entries appear only with a permission that opens them; the API checks every call anyway.
 const sections: { title: 'adminSection' | 'peopleSection' | 'customerSection'; items: Item[] }[] = [
   { title: 'adminSection', items: [
     { href: '/admin', key: 'dashboard', icon: <I name="layout-dashboard" size={18}/>, exact: true, need: ['dashboard.view'] },
     { href: '/admin/servers', key: 'servers', icon: <I name="server" size={18}/>, need: ['servers.view_all'] },
-    { href: '/admin/support', key: 'support', icon: <I name="life-buoy" size={18}/>, need: ['support.view'] },
+    { href: '/admin/support', key: 'support', icon: <I name="life-buoy" size={18}/>, need: ['support.view'], count: 'queue' },
     { href: '/admin/topology', key: 'topology', icon: <I name="network" size={18}/>, need: ['dashboard.view', 'servers.view_all'] },
     { href: '/admin/vmware', key: 'connections', icon: <I name="cable" size={18}/>, need: ['vmware.view', 'vmware.manage'] },
     { href: '/admin/catalog', key: 'catalog', icon: <I name="boxes" size={18}/>, need: ['catalog.view', 'catalog.manage'] },
@@ -48,10 +50,21 @@ const sections: { title: 'adminSection' | 'peopleSection' | 'customerSection'; i
     { href: '/vdc', key: 'myVdc', icon: <I name="building-2" size={18}/> },
     { href: '/topology', key: 'myTopology', icon: <I name="waypoints" size={18}/> },
     { href: '/firewalls', key: 'firewalls', icon: <I name="brick-wall-fire" size={18}/>, need: ['firewalls.manage', 'servers.view_all'] },
-    { href: '/support', key: 'mySupport', icon: <I name="life-buoy" size={18}/> },
+    { href: '/support', key: 'mySupport', icon: <I name="life-buoy" size={18}/>, count: 'waiting' },
     { href: '/account', key: 'account', icon: <I name="key-round" size={18}/> },
   ] },
 ];
+
+// Under ['notifications'], so a new notification (a reply, a new ticket) refreshes it too.
+function NavCount({ kind }: { kind: 'waiting' | 'queue' }) {
+  const t = useTranslations('Nav');
+  const q = useApiQuery<{ waiting: number; queue: number | null }>(['notifications', 'support-summary'], '/support/summary', { refetchInterval: 60_000 });
+  const n = q.data?.[kind] ?? 0;
+  if (!n) return null;
+  return <span className="relative ml-auto grid h-5 min-w-5 place-items-center rounded-full bg-accent px-1.5 text-[11px] font-semibold text-accent-foreground">
+    {n > 99 ? '99+' : n}<span className="sr-only"> {t(kind === 'waiting' ? 'waitingForYou' : 'waitingForSupport', { n })}</span>
+  </span>;
+}
 
 function NavList({ user, onNavigate }: { user: User; onNavigate?: () => void }) {
   const t = useTranslations('Nav');
@@ -68,6 +81,7 @@ function NavList({ user, onNavigate }: { user: User; onNavigate?: () => void }) 
           {/* The highlight slides between entries instead of jumping. */}
           {active(i) && <motion.span layoutId={onNavigate ? 'nav-active-drawer' : 'nav-active'} className="absolute inset-0 rounded-lg bg-accent-soft" transition={{ type: 'spring', stiffness: 500, damping: 38 }}/>}
           <span aria-hidden className="relative">{i.icon}</span><span className="relative">{t(i.key)}</span>
+          {i.count && <NavCount kind={i.count}/>}
         </NextLink>)}
       </div>;
     })}

@@ -3,7 +3,7 @@
 // Users stay in the existing "users" table; better-auth's tables are auth_* (migrations 007, 008).
 import { betterAuth } from 'better-auth';
 import { APIError, createAuthMiddleware } from 'better-auth/api';
-import { admin, emailOTP, lastLoginMethod, phoneNumber, twoFactor } from 'better-auth/plugins';
+import { admin, emailOTP, genericOAuth, lastLoginMethod, phoneNumber, twoFactor } from 'better-auth/plugins';
 import { passkey } from '@better-auth/passkey';
 import { authSecret, config } from './config';
 import { pool, redis } from './db';
@@ -15,7 +15,8 @@ import { adminEndpointPermission, betterAuthRoles, can, covers, effectivePermiss
 import { ipAllowed } from './role-limits';
 import { directorySignIn, refuseForDirectory } from './directory-signin';
 import { hashPassword, sha256, verifyPassword } from './security';
-import { activeCaptcha, getSettings, mailUse, verifyCaptcha } from './settings-store';
+import { activeCaptcha, getSettings, mailUse, verifyCaptcha, type OidcSettings } from './settings-store';
+import { mayLink, providerId as ssoProviderId, ssoProvider, ssoSignedIn } from './sso';
 import { sendSms, smsUse } from './sms';
 
 // Browser consoles opened with any of these sessions are closed (the gateway matches sha256 of the token).
@@ -90,6 +91,7 @@ function createAuth() {
       fields: { emailVerified: 'email_verified', createdAt: 'created_at', updatedAt: 'updated_at' },
       additionalFields: {
         locale: { type: ['tr', 'en'], required: false, defaultValue: 'en', input: true },
+        authSource: { type: 'string', required: false, defaultValue: 'local', input: false, fieldName: 'auth_source' },
         disabledAt: { type: 'date', required: false, input: false, fieldName: 'disabled_at' },
       },
       changeEmail: { enabled: false },
@@ -220,12 +222,12 @@ function createAuth() {
           if (uid) { await notify('auth.password_changed', [uid], {}); await publishLive(uid, 'password'); }
           return;
         }
-        if (ctx.path !== '/sign-in/email' && ctx.path !== '/sign-up/email' && ctx.path !== '/sign-in/passkey' && ctx.path !== '/sign-in/email-otp' && !ctx.path.startsWith('/two-factor/verify-')) return;
+        if (ctx.path !== '/sign-in/email' && ctx.path !== '/sign-up/email' && ctx.path !== '/sign-in/passkey' && ctx.path !== '/sign-in/email-otp' && !ctx.path.startsWith('/two-factor/verify-') && !ctx.path.startsWith('/oauth2/callback/')) return;
         const created = ctx.context.newSession;
         // A password sign-in that still needs the second factor is neither a success nor a failure yet.
         if (!created && (ctx.context.returned as { twoFactorRedirect?: boolean } | undefined)?.twoFactorRedirect) return;
         const action = ctx.path === '/sign-up/email' ? 'auth.register' : 'auth.login';
-        const method = ctx.path === '/sign-in/passkey' ? 'passkey' : ctx.path === '/sign-in/email-otp' ? 'email-code' : ctx.path.startsWith('/two-factor/') ? 'password+2fa' : 'password';
+        const method = ctx.path.startsWith('/oauth2/') ? 'sso' : ctx.path === '/sign-in/passkey' ? 'passkey' : ctx.path === '/sign-in/email-otp' ? 'email-code' : ctx.path.startsWith('/two-factor/') ? 'password+2fa' : 'password';
         await auditAuth(created?.user.id ?? null, action, created ? 'success' : 'failure', ip,
           created ? { method } : { email: String((ctx.body as { email?: unknown })?.email ?? '').toLowerCase() });
         if (!created) return;
@@ -234,12 +236,15 @@ function createAuth() {
       }),
     },
     databaseHooks: {
+      // A single sign-on account never attaches to an existing panel or directory account (sso.ts).
+      account: { create: { before: async (account) => { if (account.providerId === ssoProviderId && !(await mayLink(account.userId))) return false; } } },
       session: {
         create: {
           // A disabled or banned account gets no new session (its old ones were revoked when it was disabled).
           before: async (session, ctx) => {
             const user = await ctx?.context.internalAdapter.findUserById(session.userId) as { disabledAt?: Date | null; banned?: boolean } | null;
             if (user?.disabledAt || user?.banned) return false;
+            if (sso && ctx?.path.startsWith('/oauth2/callback/') && !(await ssoSignedIn(sso, session.userId, ctx.request?.headers.get('x-lvm-client-ip') ?? ''))) return false;
           },
         },
         delete: {
@@ -295,6 +300,8 @@ function createAuth() {
         },
       }),
       lastLoginMethod({ storeInDatabase: true, schema: { user: { lastLoginMethod: 'last_login_method' } } }),
+      // Single sign-on (Settings → Directory → Single sign-on); no provider while it is off.
+      genericOAuth({ config: sso?.enabled ? [ssoProvider(sso)] : [] }),
       passkey({
         rpName: 'Lightning VM',
         schema: { passkey: { modelName: 'auth_passkeys', fields: { publicKey: 'public_key', userId: 'user_id', credentialID: 'credential_id', deviceType: 'device_type', backedUp: 'backed_up', createdAt: 'created_at' } } },
@@ -305,5 +312,8 @@ function createAuth() {
 
 export type Auth = ReturnType<typeof createAuth>;
 let instance: Auth | undefined;
+// The single sign-on provider is part of better-auth's setup: a changed setting builds a new instance.
+let sso: OidcSettings | null = null;
+export async function reloadAuth() { sso = (await getSettings('directory')).oidc; instance = undefined; }
 // Built on first use: better-auth validates the schema once and caches it, so this must happen after migrations.
 export const getAuth = () => (instance ??= createAuth());
