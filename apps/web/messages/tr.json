@@ -315,7 +315,8 @@
     "TOKEN_READ_ONLY": "Bu API anahtarı yalnızca okuyabilir.",
     "TOKEN_NOT_ALLOWED": "Bu işlem panelden yapılmalı; API anahtarıyla yapılamaz.",
     "API_TOKENS_DISABLED": "Yönetici API anahtarlarını kapattı.",
-    "WEBHOOK_URL_NOT_PUBLIC": "Herkese açık bir HTTPS adresi kullanın."
+    "WEBHOOK_URL_NOT_PUBLIC": "Herkese açık bir HTTPS adresi kullanın.",
+    "NOT_IMPORTABLE": "Bu VM zaten panelin ya da bir şablon."
   },
   "Auth": {
     "required": "zorunlu",
@@ -1704,7 +1705,8 @@
       "bulkConfirm": "Süzgecin gösterdiği {n} sunucuda “{action}” yapılsın mı? İşlemi süren sunucular atlanır.",
       "bulkDone": "{started} başlatıldı, {skipped} atlandı.",
       "bulkHelp": "Önce süzün (durum, etiket, arama); bir seferde en fazla 200.",
-      "onlyStarred": "Yalnızca favoriler"
+      "onlyStarred": "Yalnızca favoriler",
+      "import": "İçe aktar"
     },
     "finding": {
       "vm_missing": "VM VMware'de yok",
@@ -4548,7 +4550,8 @@
       "account_webhook_created": "Webhook eklendi",
       "account_webhook_updated": "Webhook değiştirildi",
       "account_webhook_removed": "Webhook kaldırıldı",
-      "account_webhook_secret_rotated": "Webhook gizli anahtarı yenilendi"
+      "account_webhook_secret_rotated": "Webhook gizli anahtarı yenilendi",
+      "server_imported": "VM sunucu olarak içe aktarıldı"
     },
     "outcome": {
       "success": "Tamamlandı",
@@ -6161,5 +6164,31 @@
     "chart": "Son 31 günün trafiği: {total}",
     "counted": "Son hesaplama {at}",
     "notYet": "Henüz hesaplanmadı; ilk değerler sunucu çalıştıktan birkaç dakika sonra görünür."
+  },
+  "Import": {
+    "title": "İçe aktarılacak VM'ler",
+    "help": "vCenter'da olup panelin oluşturmadığı VM'ler. İçe aktarılan VM bir müşteriye sunucu olarak verilir: çalışmaya devam eder, panelin ona verdiği adla yeniden adlandırılır ve bundan sonra her sunucu gibi yönetilir (güç, konsol, anlık görüntü, faturalama). IP adresi konumun IP havuzlarından kaydedilir.",
+    "connection": "vCenter",
+    "noPool": "Bu vCenter'da henüz konum (kaynak havuzu) yok; önce Katalog'dan ekleyin.",
+    "empty": "İçe aktarılacak VM yok",
+    "emptyHelp": "Buradaki her VM ya şablon ya da zaten panelin. Yenileri görmek için VMware sayfasında envanteri yenileyin.",
+    "vm": "VM",
+    "power": "Güç",
+    "size": "Boyut",
+    "on": "Açık",
+    "off": "Kapalı",
+    "owner": "Müşteri e-postası",
+    "ownerHelp": "Mevcut bir hesap.",
+    "name": "Sunucu adı",
+    "pool": "Konum",
+    "image": "İmaj",
+    "imageHelp": "Sunucu ileride yeniden kurulursa kullanılır.",
+    "address": "IP adresi",
+    "addressHelp": "İsteğe bağlı; bu konumun IP havuzlarında boş olmalı.",
+    "price": "Aylık fiyat",
+    "currency": "Para birimi",
+    "submit": "İçe aktar",
+    "cancel": "Vazgeç",
+    "done": "{name} içe aktarıldı"
   }
 }

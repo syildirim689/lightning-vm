@@ -46,3 +46,38 @@ func TestResize(t *testing.T) {
 		t.Fatalf("grow with snapshots: %v", err)
 	}
 }
+
+func TestRenameForImport(t *testing.T) {
+	e := setupVPX(t)
+	ctx := context.Background()
+	out, err := cloneVM(ctx, testGuard(), CloneRequest{Request: e.req, Name: "lvm-tmp-import", Template: e.template, Pool: e.pool, Datastore: e.store,
+		Network: e.network, VCPU: 1, MemoryMB: 1024, DiskGB: 12, Metadata: metadata, ServerID: "imp"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	vm := waitTask(t, e, out["task"].(string)).VM
+	if _, err := renameVM(ctx, e.c, RenameRequest{VM: vm, Name: "lvm-x"}); err == nil || err.(*Failure).Code != "NOT_IMPORTABLE" {
+		t.Fatalf("a managed VM was taken over: %v", err)
+	}
+	// As if it had been made outside the panel.
+	task, err := object.NewVirtualMachine(e.c, types.ManagedObjectReference{Type: "VirtualMachine", Value: vm}).Rename(ctx, "customer-web")
+	if err != nil || task.Wait(ctx) != nil {
+		t.Fatal(err)
+	}
+	if _, err := renameVM(ctx, e.c, RenameRequest{VM: vm, Name: "web"}); err == nil {
+		t.Fatal("an unmanaged name was accepted")
+	}
+	r, err := renameVM(ctx, e.c, RenameRequest{VM: vm, Name: "lvm-imported"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := r.(map[string]any); got["diskGb"].(int64) != 12 {
+		t.Fatalf("disk: %+v", got)
+	}
+	if st, _ := findVM(ctx, e.c, "lvm-imported"); st == nil {
+		t.Fatal("not found under the managed name")
+	}
+	if _, err := renameVM(ctx, e.c, RenameRequest{VM: vm, Name: "lvm-imported"}); err != nil {
+		t.Fatalf("a retry failed: %v", err)
+	}
+}

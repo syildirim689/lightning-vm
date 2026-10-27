@@ -315,7 +315,8 @@
     "TOKEN_READ_ONLY": "This API token can only read.",
     "TOKEN_NOT_ALLOWED": "This needs the panel; an API token cannot do it.",
     "API_TOKENS_DISABLED": "The administrator turned API tokens off.",
-    "WEBHOOK_URL_NOT_PUBLIC": "Use a public HTTPS address."
+    "WEBHOOK_URL_NOT_PUBLIC": "Use a public HTTPS address.",
+    "NOT_IMPORTABLE": "This VM is already the panel's or is a template."
   },
   "Auth": {
     "required": "required",
@@ -1704,7 +1705,8 @@
       "bulkConfirm": "{action} on {n, plural, one {# server} other {# servers}} shown by the current filter? Busy servers are skipped.",
       "bulkDone": "{started} started, {skipped} skipped.",
       "bulkHelp": "Filter first (state, tag, search); at most 200 at a time.",
-      "onlyStarred": "Starred only"
+      "onlyStarred": "Starred only",
+      "import": "Import"
     },
     "finding": {
       "vm_missing": "VM missing in VMware",
@@ -4548,7 +4550,8 @@
       "account_webhook_created": "Webhook added",
       "account_webhook_updated": "Webhook changed",
       "account_webhook_removed": "Webhook removed",
-      "account_webhook_secret_rotated": "Webhook secret renewed"
+      "account_webhook_secret_rotated": "Webhook secret renewed",
+      "server_imported": "VM imported as a server"
     },
     "outcome": {
       "success": "Done",
@@ -6161,5 +6164,31 @@
     "chart": "Traffic over the last 31 days: {total}",
     "counted": "Last counted {at}",
     "notYet": "Not counted yet; the first figures appear a few minutes after the server runs."
+  },
+  "Import": {
+    "title": "VMs to import",
+    "help": "VMs in vCenter that the panel did not create. Importing one gives it to a customer as a server: it keeps running, is renamed to the panel's name for it, and from then on is managed like any server (power, console, snapshots, billing). Its address is recorded from the location's IP pools.",
+    "connection": "vCenter",
+    "noPool": "This vCenter has no location (resource pool) yet; add one in Catalog first.",
+    "empty": "Nothing to import",
+    "emptyHelp": "Every VM here is a template or already the panel's. Refresh the inventory on the VMware page to see new ones.",
+    "vm": "VM",
+    "power": "Power",
+    "size": "Size",
+    "on": "On",
+    "off": "Off",
+    "owner": "Customer e-mail",
+    "ownerHelp": "An existing account.",
+    "name": "Server name",
+    "pool": "Location",
+    "image": "Image",
+    "imageHelp": "Used if the server is reinstalled later.",
+    "address": "IP address",
+    "addressHelp": "Optional; must be free in this location's IP pools.",
+    "price": "Monthly price",
+    "currency": "Currency",
+    "submit": "Import",
+    "cancel": "Cancel",
+    "done": "{name} imported"
   }
 }

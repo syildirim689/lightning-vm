@@ -843,6 +843,27 @@ test('resize and reinstall: priced like an order, the disk only grows, the VM ch
   await until(async () => (await serverRow(id)).state === 'deleted', 'deleted', 120);
 });
 
+test('import: a VM made outside the panel becomes a customer\'s server under the managed name, with its size and address; staff only', { skip }, async () => {
+  const { rows: [vm] } = await pool.query("SELECT moref, name, cpu, memory_mb FROM vmware_vms WHERE connection_id = $1 AND NOT template AND name NOT LIKE 'lvm-%' ORDER BY name DESC LIMIT 1", [connectionId]);
+  assert.ok(vm, 'the simulator has unmanaged VMs');
+  const listed = (await send('GET', `/admin/import/candidates?connectionId=${connectionId}`)).json();
+  assert.ok(listed.vms.some((v) => v.moref === vm.moref) && !listed.vms.some((v) => v.name.startsWith('lvm-')));
+  assert.equal((await send('GET', `/admin/import/candidates?connectionId=${connectionId}`, undefined, user)).statusCode, 403);
+  const body = { vmMoref: vm.moref, poolId, imageId, ownerEmail: 'user@example.test', name: 'imported-1', address: '10.20.0.33', priceMonthly: '3.50', currency: 'EUR' };
+  const bad = (await send('POST', '/admin/import', { ...body, ownerEmail: 'nobody@example.test', address: '192.0.2.1', vmMoref: 'vm-0' })).json().fields;
+  assert.deepEqual([bad.ownerEmail, bad.address, bad.vmMoref], ['NOT_AVAILABLE', 'NOT_AVAILABLE', 'NOT_AVAILABLE']);
+  const made = await send('POST', '/admin/import', body);
+  assert.equal(made.statusCode, 201, made.body);
+  const id = made.json().serverId;
+  const s = await serverRow(id);
+  assert.deepEqual([s.state, s.vm_moref, s.vcpu, s.memory_mb, s.price_monthly], ['ready', vm.moref, vm.cpu, vm.memory_mb, '3.50']);
+  assert.ok(s.disk_gb >= 1);
+  assert.equal(await vmCount(id), 1, 'found under lvm-<id>');
+  assert.equal((await pool.query("SELECT host(address) AS a FROM ip_allocations WHERE server_id = $1 AND kind = 'primary'", [id])).rows[0].a, '10.20.0.33');
+  assert.ok((await send('GET', '/servers', undefined, user)).json().servers.some((x) => x.id === id), 'the customer sees it');
+  assert.equal((await send('POST', '/admin/import', { ...body, name: 'imported-2' })).json().fields.vmMoref, 'NOT_AVAILABLE', 'not twice');
+});
+
 test('billing: an order waits for payment, a declined card leaves it awaiting, a paid one builds; renewals, automatic charges, overdue, hold and release; top-up, refund, manual payment, expiry', { skip }, async () => {
   const { runBilling } = await import('../../dist/billing.js');
   const key = () => ({ 'idempotency-key': randomUUID() });

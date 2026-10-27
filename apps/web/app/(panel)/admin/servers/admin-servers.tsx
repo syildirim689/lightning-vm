@@ -13,6 +13,7 @@ import { downloadCsv } from '../../../../lib/csv';
 import { useApiAction, useApiQuery } from '../../../../lib/query';
 import { FavoriteStar, StateBadge, type Server } from '../../servers-ui';
 import { ServerFilters, stateGroup, useServerFilters } from '../../server-filters';
+import { ImportVms } from './import-vms';
 
 type Operation = { id: string; kind: string; status: string; step: string | null; attempts: number; errorCode: string | null; errorDetail: string | null;
   createdAt: string; serverName: string | null; serverId: string | null; ownerEmail: string | null };
@@ -51,6 +52,7 @@ export default function AdminServers() {
               <Tabs.Tab id="servers">{t('admin.servers')} <span className="ml-1 text-xs text-muted">{servers.length}</span><Tabs.Indicator/></Tabs.Tab>
               <Tabs.Tab id="operations">{t('admin.operations')}{failed > 0 && <StatusChip tone="danger">{failed}</StatusChip>}<Tabs.Indicator/></Tabs.Tab>
               <Tabs.Tab id="reconciliation">{t('admin.reconciliation')}{findings.length > 0 && <StatusChip tone="warning">{findings.length}</StatusChip>}<Tabs.Indicator/></Tabs.Tab>
+              {can(me?.permissions, 'servers.manage_all') && <Tabs.Tab id="import">{t('admin.import')}<Tabs.Indicator/></Tabs.Tab>}
             </Tabs.List>
           </Tabs.ListContainer>
 
@@ -101,6 +103,7 @@ export default function AdminServers() {
                   cells={(f) => [format.dateTime(new Date(f.lastSeen), { dateStyle: 'short', timeStyle: 'short' }), <StatusChip key="k" tone="warning">{t(`finding.${f.kind as 'vm_missing'}`)}</StatusChip>,
                     f.serverName ?? f.detail.name ?? f.vmMoref ?? '–', `${f.connectionName}${f.detail.actual ? ` · ${f.detail.recorded} → ${f.detail.actual}` : ''}`]}/>}
           </Tabs.Panel>
+          {can(me?.permissions, 'servers.manage_all') && <Tabs.Panel id="import" className="pt-4"><h2 className="sr-only">{t('admin.import')}</h2><ImportVms/></Tabs.Panel>}
         </Tabs>
       </Card.Content>
     </Card>

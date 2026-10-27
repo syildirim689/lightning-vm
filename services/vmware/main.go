@@ -31,7 +31,7 @@ func failureStatus(code string) int {
 	switch code {
 	case "VM_NOT_FOUND", "DATASTORE_NOT_FOUND":
 		return http.StatusNotFound
-	case "VM_POWERED_OFF", "TOOLS_NOT_RUNNING", "NOT_MANAGED", "NO_CDROM_CONTROLLER":
+	case "VM_POWERED_OFF", "TOOLS_NOT_RUNNING", "NOT_MANAGED", "NO_CDROM_CONTROLLER", "NOT_IMPORTABLE", "DISK_HAS_SNAPSHOTS", "DISK_SHRINK_NOT_SUPPORTED":
 		return http.StatusConflict
 	case "INVALID_LOGIN", "PERMISSION_DENIED":
 		return http.StatusUnauthorized
@@ -125,6 +125,10 @@ func handler(token string, guard *netGuard) http.Handler {
 	handle("/v1/vm/resize", 60*time.Second, func() any { return &ResizeRequest{} }, func(ctx context.Context, r any) (any, error) {
 		q := r.(*ResizeRequest)
 		return withClient(ctx, guard, q.Request, func(c *vim25.Client) (any, error) { return resizeVM(ctx, c, *q) })
+	})
+	handle("/v1/vm/rename", 60*time.Second, func() any { return &RenameRequest{} }, func(ctx context.Context, r any) (any, error) {
+		q := r.(*RenameRequest)
+		return withClient(ctx, guard, q.Request, func(c *vim25.Client) (any, error) { return renameVM(ctx, c, *q) })
 	})
 	handle("/v1/vm/metrics", 30*time.Second, newVM, func(ctx context.Context, r any) (any, error) {
 		q := r.(*VMRequest)
