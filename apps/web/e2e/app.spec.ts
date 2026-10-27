@@ -953,10 +953,10 @@ test.describe('people, settings and smart features (English browser)', () => {
     // Sign-in methods: GitHub and user names on; the sign-in page then offers them. Turned off again afterwards.
     await page.goto('/admin/settings?tab=signin');
     await expect(page.getByText('Social sign-in', { exact: true })).toBeVisible();
-    await page.getByRole('switch', { name: 'Turn on GitHub' }).click();
+    await tick(page.getByRole('switch', { name: 'Turn on GitHub' }));
     await page.getByLabel('Client ID').fill('Iv1.e2etest');
     await page.getByLabel('Client secret').fill('e2e-secret-value');
-    await page.getByRole('switch', { name: 'Sign in with a user name' }).click();
+    await tick(page.getByRole('switch', { name: 'Sign in with a user name' }));
     await page.getByRole('button', { name: 'Save', exact: true }).click();
     await expect(page.getByText('Saved.').first()).toBeVisible();
     await expect(page.getByText(/\/api\/auth\/callback\/github$/)).toBeVisible();
