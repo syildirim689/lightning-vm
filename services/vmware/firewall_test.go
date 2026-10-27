@@ -162,4 +162,17 @@ func TestApplyFirewallOnDistributedPort(t *testing.T) {
 	if got := switches.Filter(key); got != nil {
 		t.Fatalf("filter must be gone, got %+v", got)
 	}
+	// A speed limit on the same port (traffic allowance used up), then lifted again.
+	if _, err := applyShaping(ctx, c, ShapingRequest{VM: vm.Reference().Value, Mbps: 10}); err != nil {
+		t.Fatal(err)
+	}
+	if got := switches.Shaping(key); got == nil || got.Inherited || got.AverageBandwidth.Value != 10_000_000 || !*got.Enabled.Value {
+		t.Fatalf("want a 10 Mbit/s limit, got %+v", got)
+	}
+	if _, err := applyShaping(ctx, c, ShapingRequest{VM: vm.Reference().Value, Mbps: 0}); err != nil {
+		t.Fatal(err)
+	}
+	if got := switches.Shaping(key); got == nil || !got.Inherited {
+		t.Fatalf("want the port group's policy again, got %+v", got)
+	}
 }

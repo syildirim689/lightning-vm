@@ -4,7 +4,7 @@
 import { ProgressBar } from '@heroui/react';
 import { useFormatter, useTranslations } from 'next-intl';
 import { Bar, BarChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
-import { Section } from '../../components/ui';
+import { Notice, Section } from '../../components/ui';
 import { useApiQuery } from '../../lib/query';
 
 type Traffic = { days: { day: string; rx: number; tx: number }[]; month: { rx: number; tx: number }; allowanceGb: number | null; countedAt: string | null };
@@ -20,7 +20,7 @@ export function useBytes() {
   };
 }
 
-export function ServerTraffic({ id }: { id: string }) {
+export function ServerTraffic({ id, throttled }: { id: string; throttled?: boolean }) {
   const t = useTranslations('Traffic');
   const format = useFormatter();
   const bytes = useBytes();
@@ -32,6 +32,7 @@ export function ServerTraffic({ id }: { id: string }) {
   const data = days.map((d) => ({ ...d, label: format.dateTime(new Date(`${d.day}T12:00:00`), { day: 'numeric', month: 'short' }) }));
   return <Section title={t('title')} description={t('help')}>
     <div className="flex flex-col gap-4">
+      {throttled && <Notice tone="warning" title={t('throttled')}>{t('throttledHelp')}</Notice>}
       <div className="grid gap-3 sm:grid-cols-3">
         <div className="rounded-xl border border-border p-3"><p className="text-xs uppercase tracking-wider text-muted">{t('month')}</p>
           <p className="text-xl font-semibold tabular-nums">{bytes(used)}</p>

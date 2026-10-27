@@ -3433,7 +3433,14 @@
       },
       "hardwareNote": "Sıcak ekleme bazı lisans ve NUMA ayarlarını etkiler; büyük VM'lerde performans ölçümü yapın.",
       "save": "Kaydet",
-      "saved": "Sunucu ayarları kaydedildi."
+      "saved": "Sunucu ayarları kaydedildi.",
+      "traffic": "Trafik kotası",
+      "trafficHelp": "Bir sunucu aylık trafiğinin tamamını kullandığında ne olacağı (müşteri her durumda %80 ve %100'de uyarılır).",
+      "overLimit": "Kota dolunca",
+      "overLimitThrottle": "Yeniden karşılanana kadar hızı sınırla",
+      "overLimitNotify": "Yalnızca bildir",
+      "throttleMbps": "Hız sınırı (Mbit/s)",
+      "throttleHelp": "Gelen ve giden, sunucunun dağıtık anahtar portlarında. Ay başında ya da daha büyük pakete geçince kalkar."
     },
     "announcement": {
       "title": "Duyuru",
@@ -6235,7 +6242,9 @@
     "out": "Giden",
     "chart": "Son 31 günün trafiği: {total}",
     "counted": "Son hesaplama {at}",
-    "notYet": "Henüz hesaplanmadı; ilk değerler sunucu çalıştıktan birkaç dakika sonra görünür."
+    "notYet": "Henüz hesaplanmadı; ilk değerler sunucu çalıştıktan birkaç dakika sonra görünür.",
+    "throttled": "Hız sınırlandı",
+    "throttledHelp": "Bu ayın trafiği bittiği için hız ay sonuna kadar sınırlandı. Daha büyük bir pakete geçmek birkaç dakika içinde kaldırır."
   },
   "Import": {
     "title": "İçe aktarılacak VM'ler",

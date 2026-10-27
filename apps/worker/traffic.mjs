@@ -1,7 +1,15 @@
 // Network traffic per server: the energy sample (power.mjs) brings each running VM's last 15 minutes of realtime
 // network counters (KB/s per 20-second sample). Each sample is counted once, by its time, into the server's day;
 // a server with a monthly allowance is warned at 80 % and 100 % (once each per month). In and out both count.
+import { adapter, connectionTarget } from './operations.mjs';
+
 const uuid = /^[0-9a-f-]{36}$/;
+
+// A speed limit on the server's distributed ports (0 lifts it).
+async function shape(db, serverId, mbps) {
+  const { rows: [s] } = await db.query(`SELECT s.vm_moref, c.* FROM servers s JOIN resource_pools p ON p.id = s.pool_id JOIN vmware_connections c ON c.id = p.connection_id WHERE s.id = $1`, [serverId]);
+  if (s?.vm_moref) await adapter('/v1/vm/shaping', { ...connectionTarget(s), vm: s.vm_moref, mbps });
+}
 
 // Bytes in the samples newer than `since`, and the newest sample's time.
 export function counted(samples, since) {
@@ -41,11 +49,26 @@ export async function countTraffic(db, vms, notify = async () => {}) {
   const { rows } = await db.query(`SELECT s.id, s.name, s.owner_id, s.traffic_gb, s.traffic_warned, to_char(current_date, 'YYYY-MM') AS month,
       COALESCE((SELECT sum(rx_bytes + tx_bytes) FROM server_traffic t WHERE t.server_id = s.id AND t.day >= date_trunc('month', current_date)), 0)::float8 AS used
     FROM servers s WHERE s.traffic_gb IS NOT NULL AND s.state NOT IN ('deleted', 'deleting')`);
+  const { rows: [st] } = await db.query("SELECT value FROM settings WHERE key = 'servers'");
+  const policy = { overLimit: 'throttle', throttleMbps: 10, ...st?.value?.traffic };
+  // Over the allowance: slowed down (once) when the admin chose so.
+  for (const s of rows.filter((r) => policy.overLimit === 'throttle' && r.used >= r.traffic_gb * 1024 ** 3)) {
+    const { rowCount } = await db.query('UPDATE servers SET traffic_throttled = true WHERE id = $1 AND NOT traffic_throttled', [s.id]);
+    if (rowCount) await shape(db, s.id, policy.throttleMbps).catch(async (e) => { await db.query('UPDATE servers SET traffic_throttled = false WHERE id = $1', [s.id]); throw e; });
+  }
+  // Covered again (a new month, a bigger package, the limit removed or the policy changed): full speed.
+  const { rows: lift } = await db.query(`SELECT s.id FROM servers s WHERE s.traffic_throttled AND (s.traffic_gb IS NULL OR $1 = 'notify' OR s.state IN ('deleted', 'deleting')
+      OR COALESCE((SELECT sum(rx_bytes + tx_bytes) FROM server_traffic t WHERE t.server_id = s.id AND t.day >= date_trunc('month', current_date)), 0) < s.traffic_gb::float8 * 1024 ^ 3)`, [policy.overLimit]);
+  for (const s of lift) {
+    await shape(db, s.id, 0).catch(() => undefined);
+    await db.query('UPDATE servers SET traffic_throttled = false WHERE id = $1', [s.id]);
+  }
   for (const s of rows) {
     const level = warning(s.used, s.traffic_gb, s.traffic_warned, s.month);
     if (!level) continue;
     await db.query('UPDATE servers SET traffic_warned = $2 WHERE id = $1', [s.id, `${s.month}:${level}`]);
-    const d = { serverId: s.id, name: s.name, level: String(level), usedGb: (s.used / 1024 ** 3).toFixed(1), allowanceGb: String(s.traffic_gb) };
+    const d = { serverId: s.id, name: s.name, level: String(level), usedGb: (s.used / 1024 ** 3).toFixed(1), allowanceGb: String(s.traffic_gb),
+      throttled: level === 100 && policy.overLimit === 'throttle' ? String(policy.throttleMbps) : '' };
     await notify('server.traffic', [s.owner_id], d);
     if (level === 100) await notify('admin.traffic_exceeded', 'staff:servers.view_all', d);
   }

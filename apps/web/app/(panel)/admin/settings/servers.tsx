@@ -5,11 +5,12 @@ import { Button, Card, toast } from '@heroui/react';
 import { useTranslations } from 'next-intl';
 import { useEffect, useState } from 'react';
 import { I } from '../../../../components/icon';
-import { FormActions, FormSection, Notice, SwitchInput } from '../../../../components/ui';
+import { FormActions, FormSection, Notice, NumberInput, SelectInput, SwitchInput } from '../../../../components/ui';
 import { apiFetch, useErrorText } from '../../../../lib/api';
 import { useApiQuery } from '../../../../lib/query';
 
-type Doc = { customer: { power: boolean; console: boolean; iso: boolean; rootPassword: boolean; delete: boolean; snapshots: boolean; resize: boolean; reinstall: boolean }; hardware: { cpuHotAdd: boolean; memoryHotAdd: boolean; nestedHv: boolean } };
+type Doc = { customer: { power: boolean; console: boolean; iso: boolean; rootPassword: boolean; delete: boolean; snapshots: boolean; resize: boolean; reinstall: boolean }; hardware: { cpuHotAdd: boolean; memoryHotAdd: boolean; nestedHv: boolean };
+  traffic?: { overLimit: 'notify' | 'throttle'; throttleMbps: number } };
 
 export default function ServerSettings({ readOnly }: { readOnly: boolean }) {
   const t = useTranslations('Settings.servers');
@@ -38,6 +39,14 @@ export default function ServerSettings({ readOnly }: { readOnly: boolean }) {
         </div>)}
       </div>
       <p className="text-xs text-muted">{t('rolesNote')}</p>
+    </FormSection>
+    <FormSection title={t('traffic')} description={t('trafficHelp')} icon={<I name="gauge" size={16}/>}>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <SelectInput label={t('overLimit')} value={v.traffic?.overLimit ?? 'throttle'} isDisabled={readOnly} onChange={(x) => setV({ ...v, traffic: { throttleMbps: 10, ...v.traffic, overLimit: x as 'throttle' } })}
+          options={[{ id: 'throttle', label: t('overLimitThrottle') }, { id: 'notify', label: t('overLimitNotify') }]}/>
+        {(v.traffic?.overLimit ?? 'throttle') === 'throttle' && <NumberInput label={t('throttleMbps')} value={v.traffic?.throttleMbps ?? 10} minValue={1} maxValue={10000} isDisabled={readOnly}
+          onChange={(x) => setV({ ...v, traffic: { overLimit: 'throttle', ...v.traffic, throttleMbps: x ?? 10 } })} help={t('throttleHelp')}/>}
+      </div>
     </FormSection>
     <FormSection title={t('hardware')} description={t('hardwareHelp')} icon={<I name="cpu" size={16}/>}>
       {(['cpuHotAdd', 'memoryHotAdd', 'nestedHv'] as const).map((k) => <div key={k} className="flex items-start justify-between gap-3 rounded-xl border border-border p-3">

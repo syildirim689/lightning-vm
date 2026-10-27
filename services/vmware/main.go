@@ -126,6 +126,10 @@ func handler(token string, guard *netGuard) http.Handler {
 		q := r.(*ResizeRequest)
 		return withClient(ctx, guard, q.Request, func(c *vim25.Client) (any, error) { return resizeVM(ctx, c, *q) })
 	})
+	handle("/v1/vm/shaping", 90*time.Second, func() any { return &ShapingRequest{} }, func(ctx context.Context, r any) (any, error) {
+		q := r.(*ShapingRequest)
+		return withClient(ctx, guard, q.Request, func(c *vim25.Client) (any, error) { return applyShaping(ctx, c, *q) })
+	})
 	handle("/v1/vm/rename", 60*time.Second, func() any { return &RenameRequest{} }, func(ctx context.Context, r any) (any, error) {
 		q := r.(*RenameRequest)
 		return withClient(ctx, guard, q.Request, func(c *vim25.Client) (any, error) { return renameVM(ctx, c, *q) })

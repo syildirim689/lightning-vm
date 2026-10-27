@@ -3433,7 +3433,14 @@
       },
       "hardwareNote": "Hot add affects some licensing and NUMA settings; measure performance on large VMs.",
       "save": "Save",
-      "saved": "Server settings saved."
+      "saved": "Server settings saved.",
+      "traffic": "Traffic allowance",
+      "trafficHelp": "What happens when a server has used all of its monthly traffic (customers are warned at 80% and 100% either way).",
+      "overLimit": "When it is used up",
+      "overLimitThrottle": "Limit the speed until it is covered again",
+      "overLimitNotify": "Only notify",
+      "throttleMbps": "Speed limit (Mbit/s)",
+      "throttleHelp": "In and out, on the server's distributed switch ports. Lifted at the start of the month or after a bigger package."
     },
     "announcement": {
       "title": "Announcement",
@@ -6235,7 +6242,9 @@
     "out": "Out",
     "chart": "Traffic over the last 31 days: {total}",
     "counted": "Last counted {at}",
-    "notYet": "Not counted yet; the first figures appear a few minutes after the server runs."
+    "notYet": "Not counted yet; the first figures appear a few minutes after the server runs.",
+    "throttled": "Hız sınırlandı",
+    "throttledHelp": "This month's traffic is used up, so the speed is limited until the month ends. A bigger package lifts it within minutes."
   },
   "Import": {
     "title": "VMs to import",

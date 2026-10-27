@@ -139,7 +139,7 @@ async function resizeTarget(req: AuthedRequest, server: Record<string, any>, bod
 }
 
 const serverColumns = `s.id, s.name, s.state, s.power_state AS "powerState", s.guest_ready AS "guestReady", s.vcpu, s.memory_mb AS "memoryMb", s.disk_gb AS "diskGb",
-  s.price_monthly::text AS "priceMonthly", s.currency, s.traffic_gb AS "trafficGb", s.billing_mode AS "billingMode", s.price_hourly::text AS "priceHourly",
+  s.price_monthly::text AS "priceMonthly", s.currency, s.traffic_gb AS "trafficGb", s.billing_mode AS "billingMode", s.price_hourly::text AS "priceHourly", s.traffic_throttled AS "trafficThrottled",
   (SELECT COALESCE(sum(t.rx_bytes + t.tx_bytes), 0)::float8 FROM server_traffic t WHERE t.server_id = s.id AND t.day >= date_trunc('month', current_date)) AS "trafficBytes", s.error_code AS "errorCode", s.created_at AS "createdAt", s.project_id AS "projectId",
   s.tags, s.notes, s.locked, s.billing_hold AS "billingHold", s.pool_id AS "poolId", s.image_id AS "imageId", s.package_id AS "packageId", s.vdc_id AS "vdcId",
   p.name AS "poolName", p.location, l.city AS "locationCity", l.country_code AS "locationCountry", l.datacenter AS "locationDatacenter", i.name AS "imageName", host(a.address) AS address,

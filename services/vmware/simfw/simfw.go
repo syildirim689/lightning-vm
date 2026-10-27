@@ -55,6 +55,10 @@ func (s *DVS) ReconfigureDVPortTask(ctx *simulator.Context, req *types.Reconfigu
 			if cur.FilterPolicy == nil {
 				cur.FilterPolicy = &types.DvsFilterPolicy{}
 			}
+			if spec.Setting != nil && spec.Setting.GetDVPortSetting().InShapingPolicy != nil {
+				cur.InShapingPolicy = spec.Setting.GetDVPortSetting().InShapingPolicy
+				cur.OutShapingPolicy = spec.Setting.GetDVPortSetting().OutShapingPolicy
+			}
 			if spec.Setting != nil && spec.Setting.GetDVPortSetting().FilterPolicy != nil {
 				for _, f := range spec.Setting.GetDVPortSetting().FilterPolicy.FilterConfig {
 					fs, ok := f.(*types.DvsTrafficFilterConfigSpec)
@@ -90,6 +94,21 @@ func (s *DVS) ReconfigureDVPortTask(ctx *simulator.Context, req *types.Reconfigu
 type Store struct {
 	mu  sync.Mutex
 	dvs map[string]*DVS
+}
+
+// Shaping returns the inbound speed limit stored on a port (nil if none), for tests.
+func (st *Store) Shaping(key string) *types.DVSTrafficShapingPolicy {
+	st.mu.Lock()
+	defer st.mu.Unlock()
+	for _, s := range st.dvs {
+		s.mu.Lock()
+		p := s.ports[key]
+		s.mu.Unlock()
+		if p != nil {
+			return p.Config.Setting.GetDVPortSetting().InShapingPolicy
+		}
+	}
+	return nil
 }
 
 // Filter returns the traffic ruleset stored on a port of any switch (nil if none), for tests.
