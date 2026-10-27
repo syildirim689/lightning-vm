@@ -845,8 +845,10 @@ test('resize and reinstall: priced like an order, the disk only grows, the VM ch
   assert.equal(copy.statusCode, 202, copy.body);
   const copyId = copy.json().serverId;
   // The simulator's guest never reports the copy's new address (cloud-init does on vCenter), so the clone itself is checked.
-  await until(async () => (await serverRow(copyId)).vm_moref, 'copy cloned', 120);
+  await until(async () => (await serverRow(copyId)).vm_moref || ['failed', 'cancelled'].includes((await lastOp(copyId)).status) || (await lastOp(copyId)).error_code, 'copy cloned', 120);
   const c = await serverRow(copyId);
+  const cop = await lastOp(copyId);
+  assert.ok(c.vm_moref, `clone: ${cop.status} ${cop.error_code} ${cop.error_detail}`);
   assert.equal(c.clone_from_moref, s.vm_moref);
   assert.notEqual(c.vm_moref, s.vm_moref);
   assert.equal(await vmCount(copyId), 1);
@@ -857,6 +859,8 @@ test('resize and reinstall: priced like an order, the disk only grows, the VM ch
 });
 
 test('import: a VM made outside the panel becomes a customer\'s server under the managed name, with its size and address; staff only', { skip }, async () => {
+  // A fresh inventory: the simulator keeps running between test runs, so VMs taken over earlier carry managed names now.
+  await send('POST', `/admin/vmware/connections/${connectionId}/discover`);
   const { rows: [vm] } = await pool.query("SELECT moref, name, cpu, memory_mb FROM vmware_vms WHERE connection_id = $1 AND NOT template AND name NOT LIKE 'lvm-%' ORDER BY name DESC LIMIT 1", [connectionId]);
   assert.ok(vm, 'the simulator has unmanaged VMs');
   const listed = (await send('GET', `/admin/import/candidates?connectionId=${connectionId}`)).json();
