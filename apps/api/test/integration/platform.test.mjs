@@ -880,6 +880,15 @@ test('support tickets: customer opens with an attachment, staff answer with an i
   const second = (await post('/support/tickets', { subject: 'Another question', departmentId: deps[0].id, body: 'Is IPv6 available?' }, cust.c)).json().id;
   assert.equal((await call('PATCH', `/admin/support/tickets/${second}`, agent.c, { status: 'closed' })).statusCode, 200);
   assert.ok(await until(async () => (await pool.query("SELECT 1 FROM notifications WHERE user_id = $1 AND event = 'support.rate' AND link = $2", [cust.id, '/support/' + second])).rowCount));
+  // A poor rating reaches the team once; a ticket past its deadline too, once per deadline.
+  assert.equal((await post(`/support/tickets/${second}/rating`, { rating: 1, comment: 'Too slow' }, cust.c)).statusCode, 200);
+  assert.ok(await until(async () => (await pool.query("SELECT 1 FROM notifications WHERE user_id = $1 AND event = 'support.low_rating' AND body LIKE '%Too slow%'", [agent.id])).rowCount));
+  const third = (await post('/support/tickets', { subject: 'Late one', departmentId: deps[0].id, priority: 'urgent', body: 'Help!' }, cust.c)).json().id;
+  await pool.query("UPDATE tickets SET due_at = now() - interval '1 minute' WHERE id = $1", [third]);
+  const { alertOverdue } = await import('../../dist/support.js');
+  assert.ok(await alertOverdue() >= 1);
+  assert.equal(await alertOverdue(), 0, 'once per deadline');
+  assert.ok(await until(async () => (await pool.query("SELECT 1 FROM notifications WHERE user_id = $1 AND event = 'support.overdue' AND link = $2", [agent.id, '/admin/support/' + third])).rowCount));
 
   // Canned replies and departments.
   const canned = (await post('/admin/support/canned', { title: 'Firewall', body: 'Please check your firewall rules.' }, agent.c)).json().id;

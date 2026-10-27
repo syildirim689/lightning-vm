@@ -1986,7 +1986,12 @@
     "unreadLabel": "{n} unread notifications",
     "markAll": "Mark all read",
     "settings": "Settings",
-    "empty": "No notifications yet."
+    "empty": "No notifications yet.",
+    "day": {
+      "today": "Today",
+      "yesterday": "Yesterday",
+      "earlier": "Earlier"
+    }
   },
   "Palette": {
     "title": "Command palette",
@@ -2286,6 +2291,14 @@
       "support_rate": {
         "title": "Rate a closed ticket",
         "help": "When support closes your ticket: a short request to rate it from 1 to 5."
+      },
+      "support_overdue": {
+        "title": "Ticket past its deadline",
+        "help": "When a ticket assigned to you (or an unassigned one) passes its response time."
+      },
+      "support_low_rating": {
+        "title": "Low rating",
+        "help": "When a customer rates a ticket 1 or 2 out of 5."
       }
     },
     "policyTitle": "The admin first, then each user",
@@ -4977,6 +4990,7 @@
     "cannedRemove": "Remove “{title}”",
     "cannedVars": "Placeholders: {a} (the customer), {b} (the ticket number), {c} (its server). They are filled in when you pick the reply.",
     "openAlready": "You already have an open ticket about this server: #{number} {subject}.",
-    "openAlreadyLink": "Add to it instead"
+    "openAlreadyLink": "Add to it instead",
+    "sendShortcut": "Ctrl + Enter (⌘ + Enter on a Mac) sends. An unsent reply is kept in this browser."
   }
 }

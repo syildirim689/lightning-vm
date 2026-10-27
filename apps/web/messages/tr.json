@@ -1986,7 +1986,12 @@
     "unreadLabel": "{n} okunmamış bildirim",
     "markAll": "Tümünü okundu say",
     "settings": "Ayarlar",
-    "empty": "Henüz bildirim yok."
+    "empty": "Henüz bildirim yok.",
+    "day": {
+      "today": "Bugün",
+      "yesterday": "Dün",
+      "earlier": "Daha önce"
+    }
   },
   "Palette": {
     "title": "Komut paleti",
@@ -2286,6 +2291,14 @@
       "support_rate": {
         "title": "Kapanan talebi puanlama",
         "help": "Destek talebiniz kapatıldığında: 1–5 arası puan vermeniz için kısa bir istek."
+      },
+      "support_overdue": {
+        "title": "Süresi geçen talep",
+        "help": "Size atanmış (ya da atanmamış) bir talebin yanıt süresi dolduğunda."
+      },
+      "support_low_rating": {
+        "title": "Düşük puan",
+        "help": "Bir müşteri talebe 5 üzerinden 1 ya da 2 verdiğinde."
       }
     },
     "policyTitle": "Önce yönetici, sonra kullanıcı",
@@ -4977,6 +4990,7 @@
     "cannedRemove": "“{title}” yanıtını kaldır",
     "cannedVars": "Yer tutucular: {a} (müşteri), {b} (talep numarası), {c} (sunucusu). Yanıtı seçtiğinizde doldurulur.",
     "openAlready": "Bu sunucu için zaten açık bir talebiniz var: #{number} {subject}.",
-    "openAlreadyLink": "Onun yerine oraya yazın"
+    "openAlreadyLink": "Onun yerine oraya yazın",
+    "sendShortcut": "Ctrl + Enter (Mac’te ⌘ + Enter) gönderir. Gönderilmemiş yanıt bu tarayıcıda saklanır."
   }
 }

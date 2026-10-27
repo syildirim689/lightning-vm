@@ -73,9 +73,10 @@ export function TextInput({ label, value, onChange, error, help, type = 'text', 
   label: string; value: string; onChange: (v: string) => void; error?: string; help?: React.ReactNode; type?: string; name?: string; isRequired?: boolean;
   autoComplete?: string; autofill?: boolean; placeholder?: string; multiline?: boolean; isDisabled?: boolean; maxLength?: number; className?: string; spellCheck?: boolean;
 }) {
-  // Decided after mount: the server cannot know whether the browser masks text.
-  const [masked, setMasked] = useState(false);
-  useEffect(() => { if (!autofill && type === 'password') setMasked(masksText()); }, [autofill, type]);
+  // Masked text from the first paint: a password field that exists even for a moment is filled by the browser
+  // (and the field before it taken for a user name). Only a browser that cannot mask text gets a password field.
+  const [masked, setMasked] = useState(!autofill && type === 'password');
+  useEffect(() => { setMasked(!autofill && type === 'password' && masksText()); }, [autofill, type]);
   const fill = autofill ? { autoComplete, 'data-autofill': 'true' } : noAutofill;
   return <TextField className={className} name={autofill ? name : undefined} type={masked ? 'text' : type} value={value} onChange={onChange} isInvalid={!!error} isRequired={isRequired} isDisabled={isDisabled} validationBehavior="aria">
     <Label>{label}</Label>

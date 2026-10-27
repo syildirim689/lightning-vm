@@ -36,6 +36,10 @@ export default function NotificationBell() {
     newest.current = top?.id ?? '';
   }, [q.data]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  const dayOf = (iso: string) => {
+    const d = new Date(iso), start = new Date(now); start.setHours(0, 0, 0, 0);
+    return d >= start ? 'today' : d.getTime() >= start.getTime() - 86_400_000 ? 'yesterday' : 'earlier';
+  };
   const markRead = async (ids?: string[]) => { await apiFetch('/notifications/read', { method: 'POST', body: ids ? { ids } : {} }); client.invalidateQueries({ queryKey: ['notifications'] }); };
   const label = unread ? t('unreadLabel', { n: unread }) : t('title');
 
@@ -55,10 +59,15 @@ export default function NotificationBell() {
         <span className="sr-only" role="status">{label}</span>
         <ul className="max-h-[60vh] divide-y divide-separator overflow-y-auto">
           {items.length === 0 && <li className="flex flex-col items-center gap-2 px-4 py-10 text-center text-sm text-muted"><I name="bell" size={22}/>{t('empty')}</li>}
-          {items.map((n) => <li key={n.id}>
+          {items.map((n, i) => <li key={n.id}>
+            {/* Today, yesterday, earlier: a heading where the day changes. */}
+            {(i === 0 || dayOf(items[i - 1].createdAt) !== dayOf(n.createdAt)) && <p className="bg-default/40 px-4 py-1 text-[11px] font-semibold uppercase tracking-wider text-muted">{t(`day.${dayOf(n.createdAt)}`)}</p>}
             <button type="button" onClick={() => { void markRead([n.id]); if (n.link) router.push(n.link); }}
               className="flex w-full gap-3 px-4 py-3 text-left transition-colors hover:bg-default focus-visible:bg-default focus-visible:outline-none">
-              <span aria-hidden className={`mt-1.5 size-2 shrink-0 rounded-full ${n.readAt ? 'bg-transparent' : 'bg-accent'}`}/>
+              <span aria-hidden className={`relative mt-0.5 grid size-8 shrink-0 place-items-center rounded-full ${n.readAt ? 'bg-default text-muted' : 'bg-accent/15 text-accent'}`}>
+                <I name={({ server: 'server', support: 'life-buoy', auth: 'shield-check', billing: 'wallet', admin: 'activity' } as Record<string, string>)[n.event.split('.')[0]] ?? 'bell'} size={15}/>
+                {!n.readAt && <span className="absolute -right-0.5 -top-0.5 size-2.5 rounded-full border-2 border-surface bg-accent"/>}
+              </span>
               <span className="flex min-w-0 flex-col gap-0.5">
                 <span className={`text-sm ${n.readAt ? '' : 'font-semibold'}`}>{n.title}</span>
                 <span className="line-clamp-2 text-xs text-muted">{n.body}</span>

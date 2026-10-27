@@ -161,6 +161,9 @@ export class SupportController {
     if (!Number.isInteger(rating) || rating < 1 || rating > 5) throw apiError(400, 'VALIDATION_FAILED', 'Invalid input', { rating: 'OUT_OF_RANGE' });
     const comment = typeof body?.comment === 'string' ? body.comment.trim().slice(0, 1000) : null;
     await pool.query('UPDATE tickets SET rating = $2, rating_comment = $3 WHERE id = $1', [id, rating, comment || null]);
+    // A poor rating (1–2) reaches whoever handled it, or the team, once.
+    if (rating <= 2 && !(t.rating && t.rating <= 2)) await notify('support.low_rating', t.assigneeId ? [t.assigneeId] : 'staff:support.view',
+      { ticketId: id, number: String(t.number), subject: t.subject, rating: String(rating), comment: comment ?? '' });
     return { rating };
   }
 
@@ -311,6 +314,15 @@ export class SupportAdminController {
   }
 }
 
+// Tickets past their deadline: their assignee (or the team) is told once per deadline.
+export async function alertOverdue() {
+  const { rows } = await pool.query(`UPDATE tickets SET overdue_alerted_at = now()
+    WHERE status <> 'closed' AND due_at < now() AND (overdue_alerted_at IS NULL OR overdue_alerted_at < due_at)
+    RETURNING id, number, subject, priority, assignee_id AS "assigneeId"`);
+  for (const t of rows) await notify('support.overdue', t.assigneeId ? [t.assigneeId] : 'staff:support.view', { ticketId: t.id, number: String(t.number), subject: t.subject, priority: t.priority });
+  return rows.length;
+}
+
 // Hourly: tickets answered by staff with no customer reply for 7 days are closed.
 export function startSupportJanitor() {
   const tick = async () => {
@@ -319,5 +331,11 @@ export function startSupportJanitor() {
       RETURNING id, number, subject, owner_id AS "ownerId"`).catch(() => { logEvent('error', 'support_janitor_failed'); return { rows: [] }; });
     for (const t of rows) await askRating(t);
   };
-  return setInterval(tick, 3_600_000).unref();
+  // Every 5 minutes: overdue tickets (an urgent one is due within the hour).
+  const overdue = async () => {
+    if (!(await redis.set('lock:support-overdue', '1', 'EX', 240, 'NX').catch(() => null))) return;
+    await alertOverdue().catch(() => logEvent('error', 'support_overdue_failed'));
+  };
+  setInterval(tick, 3_600_000).unref();
+  setInterval(overdue, 300_000).unref();
 }

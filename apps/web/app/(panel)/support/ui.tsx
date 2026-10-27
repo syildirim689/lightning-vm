@@ -6,7 +6,7 @@ import { Button, Chip, toast } from '@heroui/react';
 import { useQueryClient } from '@tanstack/react-query';
 import { AnimatePresence, motion } from 'motion/react';
 import { useFormatter, useLocale, useNow, useTranslations } from 'next-intl';
-import { useRef, useState } from 'react';
+import { useRef, useState, useEffect } from 'react';
 import { I } from '../../../components/icon';
 import { SelectInput, TextInput } from '../../../components/ui';
 import { apiFetch, useErrorText, type ApiError } from '../../../lib/api';
@@ -83,7 +83,15 @@ export function Thread({ messages, staffView }: { messages: Message[]; staffView
 export function Composer({ ticketId, staff, closed, onSent, vars }: { ticketId: string; staff: boolean; closed: boolean; onSent: () => void; vars: CannedVars }) {
   const t = useTranslations('Support');
   const { error, field } = useErrorText();
-  const [body, setBody] = useState('');
+  // An unsent reply is kept in this browser per ticket, so leaving the page loses nothing.
+  const draftKey = `lvm:support-draft:${ticketId}`;
+  const [body, setBodyState] = useState('');
+  useEffect(() => { try { setBodyState(localStorage.getItem(draftKey) ?? ''); } catch { /* storage blocked */ } }, [draftKey]);
+  const setBody = (next: string | ((b: string) => string)) => setBodyState((b) => {
+    const v = typeof next === 'function' ? next(b) : next;
+    try { if (v.trim()) localStorage.setItem(draftKey, v); else localStorage.removeItem(draftKey); } catch { /* storage blocked */ }
+    return v;
+  });
   const [files, setFiles] = useState<File[]>([]);
   const [internal, setInternal] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -91,6 +99,7 @@ export function Composer({ ticketId, staff, closed, onSent, vars }: { ticketId: 
   const pick = useRef<HTMLInputElement>(null);
   const canned = useApiQuery<{ canned: { id: string; title: string; body: string }[] }>(['admin', 'support', 'canned'], staff ? '/admin/support/canned' : null).data?.canned ?? [];
   async function send() {
+    if (busy || !body.trim()) return;
     setBusy(true); setFieldErr(undefined);
     try {
       await apiFetch(`/support/tickets/${ticketId}/messages`, { method: 'POST', body: { body, internal, attachments: await Promise.all(files.map(readFile)) } });
@@ -101,7 +110,10 @@ export function Composer({ ticketId, staff, closed, onSent, vars }: { ticketId: 
     {closed && !staff && <p className="text-xs text-muted">{t('reopenHint')}</p>}
     {staff && canned.length > 0 && <SelectInput label={t('canned')} value="" onChange={(id) => { const c = canned.find((x) => x.id === id); if (c) { const text = fillCanned(c.body, vars); setBody((b) => (b ? `${b}\n\n${text}` : text)); } }}
       options={canned.map((c) => ({ id: c.id, label: c.title }))} placeholder={t('cannedPick')}/>}
-    <TextInput multiline label={internal ? t('noteLabel') : t('replyLabel')} value={body} onChange={setBody}/>
+    {/* Ctrl/⌘ + Enter sends, from anywhere in the box. */}
+    <div onKeyDown={(e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); void send(); } }}>
+      <TextInput multiline label={internal ? t('noteLabel') : t('replyLabel')} value={body} onChange={setBody} help={t('sendShortcut')}/>
+    </div>
     <AnimatePresence>{files.length > 0 && <motion.ul initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex flex-wrap gap-2">
       {files.map((f, i) => <li key={i} className="inline-flex items-center gap-1 rounded-lg bg-default px-2 py-1 text-xs">{f.name}
         <button type="button" aria-label={t('removeFile', { name: f.name })} onClick={() => setFiles(files.filter((_, j) => j !== i))} className="grid size-5 place-items-center rounded hover:bg-default-foreground/10"><I name="x" size={12}/></button></li>)}

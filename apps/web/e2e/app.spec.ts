@@ -894,9 +894,19 @@ test.describe('people, settings and smart features (English browser)', () => {
     // On your own ticket you write as a customer (internal notes are for other people's tickets).
     await expect(page.getByRole('button', { name: 'Internal note' })).toHaveCount(0);
     await page.getByLabel('Your reply').fill('Probably the firewall; checking.');
-    await page.getByRole('button', { name: 'Send', exact: true }).click();
-    await expect(page.getByText('Probably the firewall; checking.')).toBeVisible();
+    // An unsent reply survives a reload; Ctrl+Enter sends it.
+    await page.reload();
+    await expect(page.getByLabel('Your reply')).toHaveValue('Probably the firewall; checking.');
+    await page.getByLabel('Your reply').press('Control+Enter');
+    await expect(page.locator('main').getByText('Probably the firewall; checking.')).toBeVisible();
+    await expect(page.getByLabel('Your reply')).toHaveValue('');
     await shot(page, 'support-staff');
+    // The inbox: grouped by day, an icon per kind.
+    await page.getByRole('button', { name: /notifications/i }).first().click();
+    await expect(page.getByRole('dialog').getByText('Today')).toBeVisible();
+    await page.waitForTimeout(500);
+    await page.screenshot({ path: 'test-results/tour/bell.png' });
+    await page.keyboard.press('Escape');
     // The menu counts tickets waiting for support; the list and the queue on a phone.
     await expect(page.locator('nav a[href="/admin/support"]')).toContainText(/\d/);
     await page.setViewportSize({ width: 390, height: 844 });
@@ -911,6 +921,10 @@ test.describe('people, settings and smart features (English browser)', () => {
     await page.goto('/admin/settings?tab=directory');
     await expect(page.getByText('Single sign-on (OpenID Connect)')).toBeVisible();
     await expect(page.getByText(/\/api\/auth\/callback\/oidc$/)).toBeVisible();
+    // Outside signing in there is never a password field, not even in the first HTML: browsers fill those (and the field before them).
+    expect(await (await page.request.get('/admin/settings?tab=directory')).text()).not.toContain('type="password"');
+    await expect(page.locator('input[type=password]')).toHaveCount(0);
+    expect(await page.locator('input').evaluateAll((els) => els.filter((e) => (e as HTMLInputElement).value.includes('@example.test')).length)).toBe(0);
     await page.waitForTimeout(400);
     await shot(page, 'sso-settings');
     await page.getByRole('button', { name: 'What is it, how to set it up?' }).nth(1).click();
