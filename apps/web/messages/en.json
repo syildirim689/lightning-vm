@@ -281,7 +281,9 @@
     "IDLE": "The server has been idle for a long time.",
     "SERVER_LOCKED": "The server is locked; unlock it first.",
     "TICKET_CLOSED": "This ticket is closed; open a new one.",
-    "TICKET_NOT_CLOSED": "You can rate it once it is closed."
+    "TICKET_NOT_CLOSED": "You can rate it once it is closed.",
+    "SSO_DISCOVERY_FAILED": "The provider’s discovery document could not be read. Check the issuer URL and that the panel can reach the provider.",
+    "SSO_DISCOVERY_INVALID": "That address does not belong to an OpenID Connect provider with this issuer."
   },
   "Auth": {
     "required": "required",
@@ -4692,6 +4694,83 @@
         {
           "label": "RFC 4515: LDAP search filters",
           "url": "https://www.rfc-editor.org/rfc/rfc4515"
+        }
+      ]
+    },
+    "oidc": {
+      "title": "Single sign-on with OpenID Connect",
+      "intro": "People sign in with your organization’s identity provider instead of a panel password. The panel registers as a “client” (an application) at the provider; the provider confirms who the person is and, if you want, which groups they are in.",
+      "sections": [
+        {
+          "title": "What every provider needs",
+          "steps": [
+            "Create a web application (a confidential client) using the authorization code flow.",
+            "Register the redirect URI shown on this page exactly, including https and the panel’s domain.",
+            "Copy the client ID and client secret into the panel.",
+            "Enter the issuer URL: the panel adds /.well-known/openid-configuration itself."
+          ],
+          "note": "The panel must be reachable over https at the address in the redirect URI, and it must be able to reach the provider."
+        },
+        {
+          "title": "Keycloak",
+          "text": "Clients → Create client → OpenID Connect. Turn on Client authentication and the Standard flow, and add the redirect URI under Valid redirect URIs. The secret is on the Credentials tab. For groups, add a “Group membership” mapper to the client (or a client scope it uses) with Token Claim Name groups and Full group path off.",
+          "code": "https://keycloak.example.com/realms/<realm>"
+        },
+        {
+          "title": "Microsoft Entra ID",
+          "text": "App registrations → New registration, platform Web, with the redirect URI. Create a secret under Certificates & secrets. For groups, use Token configuration → Add groups claim; Entra then sends the groups’ object IDs, so map those IDs to roles here.",
+          "code": "https://login.microsoftonline.com/<tenant-id>/v2.0"
+        },
+        {
+          "title": "Okta",
+          "text": "Applications → Create App Integration → OIDC, Web Application, with the redirect URI as a sign-in redirect URI. For groups, in the app’s Sign On tab edit the OpenID Connect ID Token section: groups claim type Filter, claim name groups, a regex such as .* (with a custom authorization server, add the claim there instead).",
+          "code": "https://<your-org>.okta.com"
+        },
+        {
+          "title": "Google Workspace",
+          "text": "Google Cloud console → APIs & Services → Credentials → Create OAuth client ID, type Web application, with the redirect URI. Google sends no groups: everyone gets the default role.",
+          "code": "https://accounts.google.com"
+        },
+        {
+          "title": "authentik",
+          "text": "Create an OAuth2/OpenID provider (confidential client) with the redirect URI, and an application that uses it. The issuer ends with the application’s slug.",
+          "code": "https://authentik.example.com/application/o/<slug>/"
+        },
+        {
+          "title": "Roles and safety",
+          "steps": [
+            "Press “Check the provider”: the panel reads the discovery document and lists the claims the provider offers.",
+            "Map each group name (exactly as the provider sends it) to roles; someone in no mapped group gets the default role.",
+            "An e-mail address that already belongs to a panel or directory account is refused: the provider cannot take over that account.",
+            "Passwords and second factors are managed at the provider; the panel does not ask these people for its own two-factor."
+          ],
+          "note": "Keep at least one local administrator account: it still signs in with its password if the provider is down."
+        }
+      ],
+      "links": [
+        {
+          "label": "OpenID Connect Discovery 1.0",
+          "url": "https://openid.net/specs/openid-connect-discovery-1_0.html"
+        },
+        {
+          "label": "Keycloak: Server Administration Guide",
+          "url": "https://www.keycloak.org/docs/latest/server_admin/"
+        },
+        {
+          "label": "Microsoft: Configure group claims",
+          "url": "https://learn.microsoft.com/entra/identity/hybrid/connect/how-to-connect-fed-group-claims"
+        },
+        {
+          "label": "Okta: Customize tokens with a groups claim",
+          "url": "https://developer.okta.com/docs/guides/customize-tokens-groups-claim/main/"
+        },
+        {
+          "label": "Google: OpenID Connect",
+          "url": "https://developers.google.com/identity/openid-connect/openid-connect"
+        },
+        {
+          "label": "authentik: OAuth2 provider",
+          "url": "https://docs.goauthentik.io/add-secure-apps/providers/oauth2/"
         }
       ]
     }

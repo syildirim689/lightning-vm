@@ -887,6 +887,27 @@ test.describe('people, settings and smart features (English browser)', () => {
     await page.getByRole('button', { name: 'Send', exact: true }).click();
     await expect(page.getByText('Probably the firewall; checking.')).toBeVisible();
     await shot(page, 'support-staff');
+    // The menu counts tickets waiting for support; the list and the queue on a phone.
+    await expect(page.locator('nav a[href="/admin/support"]')).toContainText(/\d/);
+    await page.setViewportSize({ width: 390, height: 844 });
+    for (const [path, name] of [['/support', 'support-list-phone'], ['/admin/support', 'support-queue-phone']]) {
+      await page.goto(path);
+      await expect(page.getByText('Cannot reach my server over SSH').first()).toBeVisible();
+      await page.waitForTimeout(400);
+      await shot(page, name);
+    }
+    await page.setViewportSize({ width: 1280, height: 720 });
+    // Single sign-on: the settings card and its setup guide.
+    await page.goto('/admin/settings?tab=directory');
+    await expect(page.getByText('Single sign-on (OpenID Connect)')).toBeVisible();
+    await expect(page.getByText(/\/api\/auth\/callback\/oidc$/)).toBeVisible();
+    await page.waitForTimeout(400);
+    await shot(page, 'sso-settings');
+    await page.getByRole('button', { name: 'What is it, how to set it up?' }).nth(1).click();
+    await expect(page.getByRole('dialog')).toContainText('Microsoft Entra ID');
+    await page.waitForTimeout(600);
+    await shot(page, 'sso-guide');
+    await page.keyboard.press('Escape');
     // A person at a glance from the user list.
     await page.goto('/admin/users');
     await page.getByRole('button', { name: /admin@example.test/ }).first().click();

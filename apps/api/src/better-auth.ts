@@ -125,7 +125,7 @@ function createAuth() {
       enabled: true,
       window: 60,
       max: 100,
-      customRules: { '/sign-in/email': { window: 900, max: 30 }, '/sign-up/email': { window: 3600, max: 5 }, '/request-password-reset': { window: 3600, max: 5 },
+      customRules: { '/sign-in/email': { window: 900, max: 30 }, '/sign-in/social': { window: 300, max: 30 }, '/sign-up/email': { window: 3600, max: 5 }, '/request-password-reset': { window: 3600, max: 5 },
         '/two-factor/send-otp': { window: 600, max: 5 }, '/phone-number/send-otp': { window: 600, max: 5 } },
       customStorage: {
         consume: async (key, rule) => {

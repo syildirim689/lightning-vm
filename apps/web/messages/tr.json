@@ -281,7 +281,9 @@
     "IDLE": "Sunucu uzun süredir boşta.",
     "SERVER_LOCKED": "Sunucu kilitli; bu işlem için önce kilidi açın.",
     "TICKET_CLOSED": "Bu talep kapalı; yeni bir talep açın.",
-    "TICKET_NOT_CLOSED": "Talep kapandıktan sonra puanlayabilirsiniz."
+    "TICKET_NOT_CLOSED": "Talep kapandıktan sonra puanlayabilirsiniz.",
+    "SSO_DISCOVERY_FAILED": "Sağlayıcının keşif belgesi okunamadı. Issuer adresini ve panelin sağlayıcıya ulaşabildiğini kontrol edin.",
+    "SSO_DISCOVERY_INVALID": "Bu adres, bu issuer ile bir OpenID Connect sağlayıcısına ait değil."
   },
   "Auth": {
     "required": "zorunlu",
@@ -4692,6 +4694,83 @@
         {
           "label": "RFC 4515: LDAP arama filtreleri",
           "url": "https://www.rfc-editor.org/rfc/rfc4515"
+        }
+      ]
+    },
+    "oidc": {
+      "title": "OpenID Connect ile tek oturum açma",
+      "intro": "Kişiler panel parolası yerine kurumunuzun kimlik sağlayıcısıyla giriş yapar. Panel sağlayıcıya bir “istemci” (uygulama) olarak kaydedilir; sağlayıcı kişinin kim olduğunu ve isterseniz hangi gruplarda olduğunu bildirir.",
+      "sections": [
+        {
+          "title": "Her sağlayıcıda gerekenler",
+          "steps": [
+            "Yetkilendirme kodu akışını kullanan bir web uygulaması (gizli istemci) oluşturun.",
+            "Bu sayfadaki yönlendirme adresini (Redirect URI) https ve panelin alan adı dahil birebir kaydedin.",
+            "Client ID ve client secret değerlerini panele kopyalayın.",
+            "Issuer adresini girin: /.well-known/openid-configuration kısmını panel kendisi ekler."
+          ],
+          "note": "Panele yönlendirme adresindeki adresten https ile erişilebilmeli ve panel sağlayıcıya ulaşabilmelidir."
+        },
+        {
+          "title": "Keycloak",
+          "text": "Clients → Create client → OpenID Connect. Client authentication ve Standard flow açık olsun; yönlendirme adresini Valid redirect URIs alanına ekleyin. Secret, Credentials sekmesindedir. Gruplar için istemciye (ya da kullandığı bir client scope’a) Token Claim Name groups ve Full group path kapalı olan bir “Group membership” mapper ekleyin.",
+          "code": "https://keycloak.example.com/realms/<realm>"
+        },
+        {
+          "title": "Microsoft Entra ID",
+          "text": "App registrations → New registration, platform Web, yönlendirme adresiyle. Certificates & secrets altında bir secret oluşturun. Gruplar için Token configuration → Add groups claim; Entra grupların nesne kimliklerini (object ID) gönderir, bu yüzden burada o kimlikleri rollere eşleyin.",
+          "code": "https://login.microsoftonline.com/<tenant-id>/v2.0"
+        },
+        {
+          "title": "Okta",
+          "text": "Applications → Create App Integration → OIDC, Web Application; yönlendirme adresini sign-in redirect URI olarak ekleyin. Gruplar için uygulamanın Sign On sekmesinde OpenID Connect ID Token bölümünü düzenleyin: groups claim type Filter, claim adı groups, .* gibi bir regex (özel bir authorization server kullanıyorsanız alanı orada ekleyin).",
+          "code": "https://<kurumunuz>.okta.com"
+        },
+        {
+          "title": "Google Workspace",
+          "text": "Google Cloud console → APIs & Services → Credentials → Create OAuth client ID, tür Web application, yönlendirme adresiyle. Google grup göndermez: herkes varsayılan rolü alır.",
+          "code": "https://accounts.google.com"
+        },
+        {
+          "title": "authentik",
+          "text": "Yönlendirme adresiyle bir OAuth2/OpenID provider (gizli istemci) ve onu kullanan bir application oluşturun. Issuer adresi uygulamanın slug’ıyla biter.",
+          "code": "https://authentik.example.com/application/o/<slug>/"
+        },
+        {
+          "title": "Roller ve güvenlik",
+          "steps": [
+            "“Sağlayıcıyı kontrol et”e basın: panel keşif belgesini okur ve sağlayıcının sunduğu alanları listeler.",
+            "Her grup adını (sağlayıcının gönderdiği haliyle) rollere eşleyin; eşlenmiş hiçbir grupta olmayan kişi varsayılan rolü alır.",
+            "Bir panel ya da dizin hesabına ait e-posta adresi reddedilir: sağlayıcı o hesabı ele geçiremez.",
+            "Parola ve ikinci adım sağlayıcıda yönetilir; panel bu kişilerden kendi iki adımlı doğrulamasını istemez."
+          ],
+          "note": "En az bir yerel yönetici hesabı tutun: sağlayıcı çalışmazsa parolasıyla giriş yapabilir."
+        }
+      ],
+      "links": [
+        {
+          "label": "OpenID Connect Discovery 1.0",
+          "url": "https://openid.net/specs/openid-connect-discovery-1_0.html"
+        },
+        {
+          "label": "Keycloak: Server Administration Guide",
+          "url": "https://www.keycloak.org/docs/latest/server_admin/"
+        },
+        {
+          "label": "Microsoft: Configure group claims",
+          "url": "https://learn.microsoft.com/entra/identity/hybrid/connect/how-to-connect-fed-group-claims"
+        },
+        {
+          "label": "Okta: Customize tokens with a groups claim",
+          "url": "https://developer.okta.com/docs/guides/customize-tokens-groups-claim/main/"
+        },
+        {
+          "label": "Google: OpenID Connect",
+          "url": "https://developers.google.com/identity/openid-connect/openid-connect"
+        },
+        {
+          "label": "authentik: OAuth2 provider",
+          "url": "https://docs.goauthentik.io/add-secure-apps/providers/oauth2/"
         }
       ]
     }

@@ -24,6 +24,7 @@ import AnnouncementSettings from './announcement';
 import ServerSettings from './servers';
 import ChatSettings from './chat';
 import DirectorySettings from './directory';
+import SsoSettings from './sso';
 import Incidents from './incidents';
 import SupportDepartments from './support-departments';
 import GeneralSettings from './general';
@@ -49,7 +50,7 @@ export default function Settings() {
       <Tabs.Panel id="domain" className="pt-5"><Domain readOnly={readOnly || !can(me?.permissions, 'system.update')}/></Tabs.Panel>
       <Tabs.Panel id="servers" className="pt-5"><ServerSettings readOnly={readOnly}/></Tabs.Panel>
       <Tabs.Panel id="security" className="pt-5"><Security readOnly={readOnly}/></Tabs.Panel>
-      <Tabs.Panel id="directory" className="pt-5"><DirectorySettings readOnly={readOnly}/></Tabs.Panel>
+      <Tabs.Panel id="directory" className="flex flex-col gap-5 pt-5"><DirectorySettings readOnly={readOnly}/><SsoSettings readOnly={readOnly}/></Tabs.Panel>
       <Tabs.Panel id="mail" className="pt-5"><Mail readOnly={readOnly} myEmail={me?.email ?? ''}/></Tabs.Panel>
       <Tabs.Panel id="captcha" className="pt-5"><Captcha readOnly={readOnly}/></Tabs.Panel>
       <Tabs.Panel id="sms" className="pt-5"><Sms readOnly={readOnly} myPhone={me?.phoneNumber ?? ''}/></Tabs.Panel>
