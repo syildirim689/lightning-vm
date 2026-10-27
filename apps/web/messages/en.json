@@ -2360,6 +2360,10 @@
       "auth_account_linked": {
         "title": "Account linked",
         "help": "When a sign-in provider (Google, GitHub…) is connected to your account."
+      },
+      "account_message": {
+        "title": "Message from the team",
+        "help": "When staff send you a message from the panel."
       }
     },
     "policyTitle": "The admin first, then each user",
@@ -2527,6 +2531,24 @@
       "remove": "Remove note",
       "removed": "Note removed",
       "removedAuthor": "Removed account"
+    },
+    "exportCsv": "Export CSV",
+    "bulk": {
+      "open": "{n, plural, one {Act on # person} other {Act on # people}}",
+      "title": "{n, plural, one {One action for # person} other {One action for # people}}",
+      "who": "{names}{more, plural, =0 {} other { and # more}}. Filter the list first to narrow it; people with more permissions than you are skipped.",
+      "action": "Action",
+      "action_message": "Send a message",
+      "action_end_sessions": "Sign out everywhere",
+      "subject": "Subject",
+      "message": "Message",
+      "messageHelp": "Arrives through each person’s notification channels (in-app and e-mail by default).",
+      "endHelp": "Every session of these people ends now; they have to sign in again.",
+      "cancel": "Cancel",
+      "send": "{n, plural, one {Send to # person} other {Send to # people}}",
+      "end": "{n, plural, one {Sign out # person} other {Sign out # people}}",
+      "sent": "{n, plural, one {Sent to # person} other {Sent to # people}}{skipped, plural, =0 {} other {; # skipped}}",
+      "ended": "{n, plural, one {# person signed out} other {# people signed out}}{skipped, plural, =0 {} other {; # skipped}}"
     }
   },
   "Roles": {
@@ -4241,7 +4263,9 @@
       "admin_user_note_added": "Staff note added",
       "admin_user_note_pinned": "Staff note pinned or unpinned",
       "admin_user_note_removed": "Staff note removed",
-      "account_sessions_ended": "Other devices signed out"
+      "account_sessions_ended": "Other devices signed out",
+      "admin_users_message": "Message sent to users",
+      "admin_users_end_sessions": "Users signed out everywhere"
     },
     "outcome": {
       "success": "Done",

@@ -1120,3 +1120,26 @@ test('support tickets: customer opens with an attachment, staff answer with an i
   assert.equal((await put('/admin/support/departments', { departments: [] }, agent.c)).statusCode, 403);
   for (const u of [cust, agent, stranger]) await post('/auth/admin/remove-user', { userId: u.id }, admin);
 });
+
+test('users in bulk: a message through their channels, signing them out everywhere; never the caller, never beyond the caller', async () => {
+  await freshLimits();
+  const people = [];
+  for (const n of [1, 2]) {
+    const email = `bulk${n}@example.test`;
+    const id = (await post('/auth/admin/create-user', { email, password, name: `Bulk ${n}`, role: 'user' }, admin)).json().user.id;
+    people.push({ id, c: cookieOf(await post('/auth/sign-in/email', { email, password })) });
+  }
+  const ids = people.map((p) => p.id);
+  const bossId = (await get('/auth/me', admin)).json().id;
+  assert.equal((await post('/admin/users/actions', { action: 'message', userIds: ids, subject: 'x', message: 'y' }, user)).statusCode, 403);
+  const bad = (await post('/admin/users/actions', { action: 'message', userIds: ids, subject: ' ', message: 'x'.repeat(2001) }, admin)).json().fields;
+  assert.deepEqual([bad.subject, bad.message], ['REQUIRED', 'TOO_LONG']);
+  assert.equal((await post('/admin/users/actions', { action: 'wipe', userIds: ['nope'] }, admin)).json().fields.userIds, 'INVALID_VALUE');
+  const sent = (await post('/admin/users/actions', { action: 'message', userIds: [...ids, bossId], subject: 'Maintenance tonight', message: 'Servers restart at 02:00.' }, admin)).json();
+  assert.deepEqual(sent, { done: 2, skipped: 1 });
+  for (const id of ids) assert.ok(await until(async () => (await pool.query("SELECT 1 FROM notifications WHERE user_id = $1 AND event = 'account.message' AND title = 'Maintenance tonight'", [id])).rowCount));
+  assert.deepEqual((await post('/admin/users/actions', { action: 'end_sessions', userIds: ids }, admin)).json(), { done: 2, skipped: 0 });
+  for (const p of people) assert.equal((await get('/auth/me', p.c)).statusCode, 401);
+  assert.equal((await get('/auth/me', admin)).statusCode, 200);
+  for (const id of ids) await post('/auth/admin/remove-user', { userId: id }, admin);
+});

@@ -16,6 +16,7 @@ import { authClient } from '../../../../lib/auth-client';
 import { useMe } from '../../../../lib/me';
 import { can } from '../../../../lib/permissions';
 import { useApiQuery } from '../../../../lib/query';
+import { downloadCsv } from '../../../../lib/csv';
 
 type Row = { id: string; email: string; name: string; role: string; locale: string; createdAt: string; banned: boolean; banReason: string | null; banExpires: string | null;
   twoFactorEnabled: boolean; authSource?: string; lastLoginMethod: string | null; phoneNumber: string | null; servers: number; sessions: number; lastSeen: string | null; overrides: number; presence: Presence; notes: number; pinnedNote: string | null };
@@ -37,7 +38,7 @@ export default function Users() {
   const [role, setRole] = useQueryState('role', parseAsString.withDefault(''));
   const [status, setStatus] = useQueryState('status', parseAsString.withDefault(''));
   const [summaryOf, setSummaryOf] = useState<string | null>(null);
-  const [dialog, setDialog] = useState<{ kind: 'create' | 'access' | 'ban' | 'password' | 'sessions' | 'remove'; user?: Row }>();
+  const [dialog, setDialog] = useState<{ kind: 'create' | 'access' | 'ban' | 'password' | 'sessions' | 'remove' | 'bulk'; user?: Row }>();
   const tr = useTranslations('Roles');
   const roleName = (k: string) => (tr.has(`builtinName.${k}` as 'builtinName.admin') ? tr(`builtinName.${k}` as 'builtinName.admin') : roles.find((r) => r.key === k)?.name ?? k);
 
@@ -72,6 +73,11 @@ export default function Users() {
       <SelectInput className="w-44" label={t('filterRole')} value={role} onChange={(v) => void setRole(v || null)} options={[{ id: '', label: t('all') }, ...roles.map((r) => ({ id: r.key, label: roleName(r.key) }))]}/>
       <SelectInput className="w-44" label={t('filterStatus')} value={status} onChange={(v) => void setStatus(v || null)}
         options={[{ id: '', label: t('all') }, { id: 'active', label: t('active') }, { id: 'banned', label: t('banned') }, { id: 'no2fa', label: t('no2fa') }, { id: 'online', label: t('onlineFilter') }]}/>
+      <span className="flex gap-2">
+        {(can(perms, 'users.manage') || can(perms, 'users.sessions')) && <Button variant="secondary" isDisabled={!rows.some((u) => u.id !== me?.id)} onPress={() => setDialog({ kind: 'bulk' })}><I name="users" size={16}/>{t('bulk.open', { n: Math.min(rows.filter((u) => u.id !== me?.id).length, 200) })}</Button>}
+        <Button variant="ghost" isDisabled={!rows.length} onPress={() => downloadCsv('users', ['email', 'name', 'roles', 'status', 'two_factor', 'sign_in', 'servers', 'sessions', 'last_seen', 'created_at', 'pinned_note'],
+          rows.map((u) => [u.email, u.name, u.role, u.banned ? 'banned' : 'active', u.twoFactorEnabled, u.authSource ?? '', u.servers, u.sessions, u.lastSeen ?? '', u.createdAt, u.pinnedNote ?? '']))}><I name="download" size={16}/>{t('exportCsv')}</Button>
+      </span>
     </div>
     <DataTable label={t('title')} rows={rows} rowKey={(u) => u.id} empty={users ? t('empty') : '…'} minWidth={900}
       columns={[{ id: 'user', label: t('col.user') }, { id: 'roles', label: t('col.roles') }, { id: 'status', label: t('col.status') }, { id: 'security', label: t('col.security') },
@@ -104,6 +110,7 @@ export default function Users() {
     {dialog?.kind === 'password' && dialog.user && <SetPassword user={dialog.user} onClose={() => setDialog(undefined)}/>}
     {dialog?.kind === 'sessions' && dialog.user && <UserSessions user={dialog.user} canRevoke={can(perms, 'users.sessions')} onClose={() => setDialog(undefined)}/>}
     {dialog?.kind === 'remove' && dialog.user && <RemoveUser user={dialog.user} onClose={() => setDialog(undefined)}/>}
+    {dialog?.kind === 'bulk' && <BulkAction people={rows.filter((u) => u.id !== me?.id).slice(0, 200)} perms={perms} onClose={() => setDialog(undefined)}/>}
     {summaryOf && <UserSummary id={summaryOf} onClose={() => setSummaryOf(null)}/>}
   </>;
 }
@@ -332,5 +339,38 @@ function RemoveUser({ user, onClose }: { user: Row; onClose: () => void }) {
     footer={<><Button variant="tertiary" onPress={onClose}>{t('cancel')}</Button><Button variant="danger" isPending={busy} isDisabled={confirm !== user.email || user.servers > 0} onPress={remove}><I name="trash-2" size={16}/>{t('action.remove')}</Button></>}>
     {user.servers > 0 ? <Notice tone="warning">{t('hasServers', { n: user.servers })}</Notice> : <p className="text-sm text-muted">{t('removeExplain')}</p>}
     <TextInput label={t('typeEmail', { email: user.email })} value={confirm} onChange={setConfirm} autoComplete="off" spellCheck={false}/>
+  </Dialog>;
+}
+
+// One action for everyone the list shows now (filter first; up to 200, never yourself): a message through their
+// notification channels, or signing them out everywhere. People with more permissions than you are skipped.
+function BulkAction({ people, perms, onClose }: { people: Row[]; perms?: string[]; onClose: () => void }) {
+  const t = useTranslations('Users.bulk');
+  const { error, field } = useErrorText();
+  const done = useDone(onClose);
+  const actions = (['message', 'end_sessions'] as const).filter((a) => can(perms, a === 'message' ? 'users.manage' : 'users.sessions'));
+  const [action, setAction] = useState<string>(actions[0]);
+  const [subject, setSubject] = useState('');
+  const [message, setMessage] = useState('');
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [busy, setBusy] = useState(false);
+  async function run() {
+    setBusy(true); setErrors({});
+    try {
+      const r = await apiFetch<{ done: number; skipped: number }>('/admin/users/actions', { method: 'POST', body: { action, userIds: people.map((u) => u.id), subject, message } });
+      toast.success(t(action === 'message' ? 'sent' : 'ended', { n: r.done, skipped: r.skipped })); done();
+    } catch (e) { const f = (e as { fields?: Record<string, string> })?.fields ?? {}; setErrors(Object.fromEntries(Object.entries(f).map(([k, v]) => [k, field(v) ?? v]))); if (!Object.keys(f).length) toast.danger(error(e)); } finally { setBusy(false); }
+  }
+  const names = people.slice(0, 4).map((u) => u.name || u.email);
+  return <Dialog title={t('title', { n: people.length })} onClose={onClose}
+    footer={<><Button variant="tertiary" onPress={onClose}>{t('cancel')}</Button>
+      <Button variant={action === 'message' ? 'primary' : 'danger'} isPending={busy} isDisabled={action === 'message' && (!subject.trim() || !message.trim())} onPress={() => void run()}>
+        {action === 'message' ? <I name="send" size={15}/> : <I name="log-out" size={15}/>}{t(action === 'message' ? 'send' : 'end', { n: people.length })}</Button></>}>
+    <p className="text-sm text-muted">{t('who', { names: names.join(', '), more: Math.max(people.length - names.length, 0) })}</p>
+    <SelectInput label={t('action')} value={action} onChange={setAction} options={actions.map((a) => ({ id: a, label: t(`action_${a}`) }))}/>
+    {action === 'message' ? <>
+      <TextInput label={t('subject')} value={subject} onChange={setSubject} maxLength={120} isRequired error={errors.subject} autoComplete="off"/>
+      <TextInput label={t('message')} value={message} onChange={setMessage} maxLength={2000} multiline isRequired error={errors.message} autoComplete="off" help={t('messageHelp')}/>
+    </> : <Notice tone="warning">{t('endHelp')}</Notice>}
   </Dialog>;
 }

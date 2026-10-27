@@ -9,6 +9,7 @@ import { useState } from 'react';
 import { can } from '../../../../lib/permissions';
 import { useMe } from '../../../../lib/me';
 import { apiFetch, useErrorText } from '../../../../lib/api';
+import { downloadCsv } from '../../../../lib/csv';
 import { useApiAction, useApiQuery } from '../../../../lib/query';
 import { FavoriteStar, StateBadge, type Server } from '../../servers-ui';
 import { ServerFilters, stateGroup, useServerFilters } from '../../server-filters';
@@ -108,11 +109,6 @@ export default function AdminServers() {
 
 // The filtered rows as a spreadsheet (UTF-8 with BOM so Excel keeps Turkish letters; cells quoted, formulas defused).
 function exportCsv(rows: Server[]) {
-  const cell = (v: unknown) => { const x = String(v ?? ''); return `"${(/^[=+\-@]/.test(x) ? `'${x}` : x).replace(/"/g, '""')}"`; };
-  const head = ['name', 'owner', 'state', 'power', 'group', 'ip', 'vcpu', 'memory_mb', 'disk_gb', 'location', 'image', 'price_monthly', 'currency', 'tags', 'created_at'];
-  const lines = rows.map((s) => [s.name, s.ownerEmail, s.state, s.powerState, stateGroup(s), s.address, s.vcpu, s.memoryMb, s.diskGb, s.location || s.poolName, s.imageName, s.priceMonthly, s.currency, (s.tags ?? []).join(' '), s.createdAt].map(cell).join(','));
-  const url = URL.createObjectURL(new Blob(['\ufeff' + [head.join(','), ...lines].join('\r\n')], { type: 'text/csv;charset=utf-8' }));
-  const a = Object.assign(document.createElement('a'), { href: url, download: `servers-${new Date().toISOString().slice(0, 10)}.csv` });
-  a.click();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  downloadCsv('servers', ['name', 'owner', 'state', 'power', 'group', 'ip', 'vcpu', 'memory_mb', 'disk_gb', 'location', 'image', 'price_monthly', 'currency', 'tags', 'created_at'],
+    rows.map((s) => [s.name, s.ownerEmail, s.state, s.powerState, stateGroup(s), s.address, s.vcpu, s.memoryMb, s.diskGb, s.location || s.poolName, s.imageName, s.priceMonthly, s.currency, (s.tags ?? []).join(' '), s.createdAt]));
 }

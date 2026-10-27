@@ -76,6 +76,9 @@ export const catalog: Record<string, EventDef> = {
   'auth.sign_in': { audience: 'user', channels: all, defaults: ['inApp'], link: () => '/account?tab=security',
     text: { tr: (d) => ({ title: 'Hesabınıza yeni giriş', body: `IP ${d.ip || '-'} · ${d.agent?.slice(0, 80) || '-'}. Siz değilseniz parolanızı değiştirin.` }),
       en: (d) => ({ title: 'New sign-in to your account', body: `IP ${d.ip || '-'} · ${d.agent?.slice(0, 80) || '-'}. If this was not you, change your password.` }) } },
+  // A message staff send to people picked from the users list (admin.ts, users/actions); same words in every language.
+  'account.message': { audience: 'user', channels: all, defaults: ['inApp', 'email'], link: () => '/',
+    text: { tr: (d) => ({ title: d.subject, body: d.message }), en: (d) => ({ title: d.subject, body: d.message }) } },
   'auth.account_linked': { audience: 'user', channels: all, defaults: ['inApp', 'email'], link: () => '/account?tab=security',
     text: { tr: (d) => ({ title: 'Hesabınıza bir giriş yolu bağlandı', body: `${d.provider} ile artık giriş yapılabilir. Siz yapmadıysanız Hesap → Güvenlik'ten kaldırın ve parolanızı değiştirin.` }),
       en: (d) => ({ title: 'A way to sign in was linked to your account', body: `${d.provider} can now sign in to your account. If this was not you, remove it in Account → Security and change your password.` }) } },

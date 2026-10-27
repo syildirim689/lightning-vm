@@ -1028,6 +1028,27 @@ test.describe('people, settings and smart features (English browser)', () => {
     await page.keyboard.press('Escape');
     await expect(page.getByRole('row', { name: /Prefers e-mail; renewal agreed/ })).toBeVisible();
     await shot(page, 'users-pinned-note');
+    // Bulk: one action for the people the list shows (yourself left out), and the list as CSV.
+    await page.getByRole('button', { name: /Act on \d+ (person|people)/ }).click();
+    await expect(page.getByRole('dialog')).toContainText('Filter the list first');
+    await page.getByRole('dialog').getByRole('textbox', { name: 'Subject' }).fill('Maintenance tonight');
+    await page.waitForTimeout(400);
+    await shot(page, 'users-bulk');
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.waitForTimeout(400);
+    await shot(page, 'users-bulk-390');
+    await page.setViewportSize({ width: 1280, height: 720 });
+    await page.getByRole('dialog').getByRole('button', { name: 'Cancel' }).click();
+    const download = page.waitForEvent('download');
+    await page.getByRole('button', { name: 'Export CSV' }).click();
+    expect((await download).suggestedFilename()).toMatch(/^users-\d{4}-\d{2}-\d{2}\.csv$/);
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.waitForTimeout(400);
+    await shot(page, 'users-390');
+    await page.setViewportSize({ width: 820, height: 1180 });
+    await page.waitForTimeout(400);
+    await shot(page, 'users-820');
+    await page.setViewportSize({ width: 1280, height: 720 });
     // Who is here: the overview's "Online now" shows this admin; the users' "Online or active" card filters to them.
     await page.goto('/admin');
     await expect(page.getByRole('list', { name: 'Online now' }).getByRole('listitem').first()).toBeVisible();

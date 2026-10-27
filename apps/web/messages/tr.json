@@ -2360,6 +2360,10 @@
       "auth_account_linked": {
         "title": "Hesap bağlandı",
         "help": "Hesabınıza bir giriş sağlayıcısı (Google, GitHub…) bağlandığında."
+      },
+      "account_message": {
+        "title": "Ekipten mesaj",
+        "help": "Yöneticiler size panelden bir mesaj gönderdiğinde."
       }
     },
     "policyTitle": "Önce yönetici, sonra kullanıcı",
@@ -2527,6 +2531,24 @@
       "remove": "Notu sil",
       "removed": "Not silindi",
       "removedAuthor": "Silinmiş hesap"
+    },
+    "exportCsv": "CSV indir",
+    "bulk": {
+      "open": "{n} kişiye toplu işlem",
+      "title": "{n} kişi için tek işlem",
+      "who": "{names}{more, plural, =0 {} other { ve # kişi daha}}. Daraltmak için önce listeyi süzün; sizden fazla yetkisi olanlar atlanır.",
+      "action": "İşlem",
+      "action_message": "Mesaj gönder",
+      "action_end_sessions": "Her yerden çıkış yaptır",
+      "subject": "Konu",
+      "message": "Mesaj",
+      "messageHelp": "Her kişinin bildirim kanallarından ulaşır (varsayılan olarak panel içi ve e-posta).",
+      "endHelp": "Bu kişilerin tüm oturumları şimdi kapanır; yeniden giriş yapmaları gerekir.",
+      "cancel": "Vazgeç",
+      "send": "{n} kişiye gönder",
+      "end": "{n} kişinin oturumlarını kapat",
+      "sent": "{n} kişiye gönderildi{skipped, plural, =0 {} other {; # kişi atlandı}}",
+      "ended": "{n} kişinin oturumları kapatıldı{skipped, plural, =0 {} other {; # kişi atlandı}}"
     }
   },
   "Roles": {
@@ -4241,7 +4263,9 @@
       "admin_user_note_added": "Personel notu eklendi",
       "admin_user_note_pinned": "Personel notu sabitlendi ya da sabitlemesi kaldırıldı",
       "admin_user_note_removed": "Personel notu silindi",
-      "account_sessions_ended": "Diğer cihazlardan çıkış yapıldı"
+      "account_sessions_ended": "Diğer cihazlardan çıkış yapıldı",
+      "admin_users_message": "Kullanıcılara mesaj gönderildi",
+      "admin_users_end_sessions": "Kullanıcıların tüm oturumları kapatıldı"
     },
     "outcome": {
       "success": "Tamamlandı",

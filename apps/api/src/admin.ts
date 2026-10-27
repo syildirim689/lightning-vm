@@ -6,6 +6,7 @@ import { audit, type AuthedRequest } from './auth';
 import { assertCovers, Can, PermissionGuard } from './rbac';
 import { endSession, onlineUsers, sessionsOf, statusOf } from './presence';
 import { publishLive } from './live-bus';
+import { notify } from './notify';
 import { agentStatus, hostInfo, pendingRequests, queueRequest, releases, runLog, settings as maintenanceSettings, summary } from './maintenance';
 import { readHostChange } from './host-rules';
 import { reloadAuth } from './better-auth';
@@ -113,6 +114,37 @@ export class AdminController {
     if (!/^[\w-]{1,64}$/.test(sid) || !(await endSession(id, sid))) throw apiError(404, 'NOT_FOUND', 'Unknown session');
     await audit(req, 'admin.user.revoke_session', 'success', req.user.id, { target: id, session: sid });
     await publishLive(id, 'sessions');
+  }
+
+  // One action for many people (the users list as filtered, up to 200): end all their sessions, or send them a message
+  // through their notification channels. The caller and people with permissions beyond the caller's are skipped.
+  @Post('users/actions') @Can('users.sessions', 'users.manage')
+  async bulk(@Req() req: AuthedRequest, @Body() body: unknown) {
+    const b = (body ?? {}) as { action?: unknown; userIds?: unknown; subject?: unknown; message?: unknown };
+    const ids = Array.isArray(b.userIds) ? [...new Set(b.userIds)] : [];
+    const subject = typeof b.subject === 'string' ? b.subject.trim() : '';
+    const message = typeof b.message === 'string' ? b.message.trim() : '';
+    const fields: Record<string, string> = {};
+    if (b.action !== 'end_sessions' && b.action !== 'message') fields.action = 'INVALID_VALUE';
+    if (!ids.length || ids.length > 200 || !ids.every((x) => typeof x === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(x))) fields.userIds = 'INVALID_VALUE';
+    if (b.action === 'message') {
+      if (!subject || subject.length > 120) fields.subject = subject ? 'TOO_LONG' : 'REQUIRED';
+      if (!message || message.length > 2000) fields.message = message ? 'TOO_LONG' : 'REQUIRED';
+    }
+    if (Object.keys(fields).length) throw apiError(400, 'VALIDATION_FAILED', 'Invalid input', fields);
+    if (!can(req.user.permissions, b.action === 'message' ? 'users.manage' : 'users.sessions')) throw apiError(403, 'FORBIDDEN', 'Permission required');
+    const { rows: found } = await pool.query('SELECT id FROM users WHERE id = ANY($1::uuid[]) AND id <> $2', [ids, req.user.id]);
+    const targets: string[] = [];
+    for (const { id } of found) await assertCovers(req, id).then(() => targets.push(id), () => undefined);
+    if (b.action === 'message') {
+      if (targets.length) await notify('account.message', targets, { subject, message });
+    } else {
+      const { rows } = await pool.query('SELECT id, user_id FROM auth_sessions WHERE user_id = ANY($1::uuid[])', [targets]);
+      for (const s of rows) await endSession(s.user_id, s.id);
+      for (const id of targets) await publishLive(id, 'sessions');
+    }
+    await audit(req, `admin.users.${b.action}`, 'success', req.user.id, { count: targets.length, skipped: ids.length - targets.length, ...(b.action === 'message' && { subject }) });
+    return { done: targets.length, skipped: ids.length - targets.length };
   }
 
   // Staff notes on a person, pinned first: who wrote what and when. The person never sees them.
