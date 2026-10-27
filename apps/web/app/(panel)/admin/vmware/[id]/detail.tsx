@@ -6,12 +6,21 @@ import { useFormatter, useTranslations } from 'next-intl';
 import { useState } from 'react';
 import { apiFetch, useErrorText } from '../../../../../lib/api';
 import { useApiAction, useApiQuery } from '../../../../../lib/query';
-import { ButtonLink, DataTable, Notice, PageHeader, Section, Stat, StatusChip, TextInput } from '../../../../../components/ui';
+import { ButtonLink, ConfirmButton, DataTable, Notice, PageHeader, Section, Stat, StatusChip, TextInput } from '../../../../../components/ui';
 import { apiVersions, versionLabel, type Connection } from '../connections';
 import { SelectInput } from '../../../../../components/ui';
 
 type Row = Record<string, string | number | boolean | null | string[]>;
 type Detail = { connection: Connection; capacity: Record<string, number>; hosts: Row[]; datastores: Row[]; networks: Row[]; compute: Row[]; vms: Row[] };
+
+// Moves every panel server off this host to the other hosts of its cluster (before maintenance), without stopping them.
+function Evacuate({ connectionId, host, name }: { connectionId: string; host: string; name: string }) {
+  const t = useTranslations('Vmware');
+  const go = useApiAction(() => apiFetch<{ started: string[]; skipped: { name: string; reason: string }[] }>(`/admin/vmware/connections/${connectionId}/hosts/${host}/evacuate`, { method: 'POST' }),
+    { invalidate: [['admin']], success: (r) => t('evacuated', { started: r.started.length, skipped: r.skipped.length }) });
+  return <ConfirmButton size="sm" variant="ghost" icon={<I name="truck" size={14}/>} label={t('evacuate')} title={t('evacuateTitle', { name })} body={t('evacuateBody')}
+    confirmLabel={t('evacuate')} cancelLabel={t('cancel')} isDisabled={go.isPending} onConfirm={() => go.mutate()}/>;
+}
 
 export default function ConnectionDetail({ id }: { id: string }) {
   const t = useTranslations('Vmware');
@@ -84,9 +93,9 @@ export default function ConnectionDetail({ id }: { id: string }) {
           </Tabs.Panel>
           <Tabs.Panel id="hosts" className="pt-4">
             <DataTable label={t('hostsTitle')} rows={d.hosts} rowKey={(h) => String(h.moref)}
-              columns={[{ id: 'name', label: t('col.name') }, { id: 'state', label: t('col.state') }, { id: 'cpu', label: 'CPU' }, { id: 'mem', label: t('cap.memory') }, { id: 'ver', label: t('col.version') }]}
+              columns={[{ id: 'name', label: t('col.name') }, { id: 'state', label: t('col.state') }, { id: 'cpu', label: 'CPU' }, { id: 'mem', label: t('cap.memory') }, { id: 'ver', label: t('col.version') }, { id: 'act', label: <span className="sr-only">{t('evacuate')}</span> }]}
               cells={(h) => [String(h.name), `${h.connection_state} / ${h.power_state}${h.in_maintenance ? ` · ${t('maintenance')}` : ''}`,
-                t('cap.cpuValue', { cores: Number(h.cpu_cores), threads: Number(h.cpu_threads), ghz: format.number(Number(h.cpu_mhz) / 1000, { maximumFractionDigits: 2 }) }), gb(h.memory_bytes), String(h.version ?? '–')]}/>
+                t('cap.cpuValue', { cores: Number(h.cpu_cores), threads: Number(h.cpu_threads), ghz: format.number(Number(h.cpu_mhz) / 1000, { maximumFractionDigits: 2 }) }), gb(h.memory_bytes), String(h.version ?? '–'), <Evacuate key="e" connectionId={id} host={String(h.moref)} name={String(h.name)}/>]}/>
           </Tabs.Panel>
           <Tabs.Panel id="datastores" className="pt-4">
             <DataTable label={t('datastoresTitle')} rows={d.datastores} rowKey={(x) => String(x.moref)}

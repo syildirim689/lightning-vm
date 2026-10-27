@@ -932,7 +932,12 @@
       "needsVcenter": "vCenter gerekir",
       "save": "Uyumluluk ayarını kaydet",
       "saved": "Kaydedildi; bağlantı yeni ayarla yeniden tarandı."
-    }
+    },
+    "evacuate": "Boşalt",
+    "evacuateTitle": "{name} üzerindeki tüm sunucular taşınsın mı?",
+    "evacuateBody": "Bu host'taki her panel sunucusu, çalışmaya devam ederek kümesindeki en az yüklü başka host'a taşınır. Ardından host'u bakıma alın.",
+    "evacuated": "{started} taşınıyor, {skipped} kaldı",
+    "cancel": "Vazgeç"
   },
   "Console": {
     "title": "Konsol: {name}",
@@ -1622,7 +1627,8 @@
       "reinstall": "Yeniden kurulum",
       "backup_create": "Yedek alma",
       "backup_restore": "Yedekten geri yükleme",
-      "backup_delete": "Yedek silme"
+      "backup_delete": "Yedek silme",
+      "migrate": "Taşıma"
     },
     "opStatus": {
       "pending": "Sırada",
@@ -1649,7 +1655,8 @@
       "copy": "Disk kopyalanıyor",
       "cleanup": "Temizleniyor",
       "restore": "Disk geri yükleniyor",
-      "delete": "Siliniyor"
+      "delete": "Siliniyor",
+      "migrate": "Taşınıyor"
     },
     "action": {
       "power_on": "Aç",
@@ -4663,7 +4670,9 @@
       "reseller_customer_created": "Bayi müşteri ekledi",
       "reseller_server_ordered": "Bayi sunucu sipariş etti",
       "reseller_saved": "Bayi tahsisi kaydedildi",
-      "reseller_removed": "Bayilik kaldırıldı"
+      "reseller_removed": "Bayilik kaldırıldı",
+      "server_migrate": "Sunucu taşındı",
+      "vmware_host_evacuate": "Host boşaltıldı"
     },
     "outcome": {
       "success": "Tamamlandı",
@@ -6518,5 +6527,17 @@
       "stop": "Bayilikten çıkar",
       "stopped": "Bayilikten çıkarıldı; müşterileri artık normal hesap"
     }
+  },
+  "Placement": {
+    "title": "Yerleşim",
+    "help": "Yalnızca ekip: sunucuyu çalışırken başka bir host'a ya da datastore'a taşıyın (vMotion). Yerleşim bilgisi son envanter yenilemesinden gelir.",
+    "host": "Host",
+    "datastore": "Datastore",
+    "now": "şu an burada",
+    "servers": "{n} sunucu",
+    "maintenance": "bakımda",
+    "keep": "Yerinde kalsın",
+    "move": "Taşı",
+    "moving": "Taşıma başladı"
   }
 }

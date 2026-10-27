@@ -21,6 +21,9 @@ import { ServerSnapshots } from './server-snapshots';
 import { ServerReinstall, ServerResize } from './server-change';
 import { ServerTraffic } from './server-traffic';
 import { ServerBackups } from './server-backups';
+import { ServerPlacement } from './server-placement';
+import { useMe } from '../../lib/me';
+import { can } from '../../lib/permissions';
 import { ServerFilters, useServerFilters } from './server-filters';
 import { flag } from '../../lib/flag';
 import { ButtonLink, ConfirmButton, DataTable, Empty, Mono, Notice, PageHeader, Section, StatusChip, TextInput, type Tone } from '../../components/ui';
@@ -170,6 +173,7 @@ export function ServerDetail({ id }: { id: string }) {
   const [deleteName, setDeleteName] = useState('');
   const q = useApiQuery<{ server: Server; operations: Operation[]; own?: boolean; allowed?: Record<'power' | 'console' | 'iso' | 'rootPassword' | 'delete' | 'snapshots' | 'resize' | 'reinstall' | 'backups', boolean> }>(['servers', id], `/servers/${id}`, { refetchInterval: 3_000 });
   const gone = (q.error as { code?: string } | null)?.code === 'NOT_FOUND';
+  const me = useMe();
   // The viewer's own server names, for the next free name in "order similar".
   const mine = useApiQuery<{ servers: Server[] }>(['servers'], '/servers').data?.servers;
   const name = q.data?.server.name;
@@ -256,6 +260,7 @@ export function ServerDetail({ id }: { id: string }) {
     <ServerFirewalls server={s}/>
 
     <ServerMetrics id={id} live={s.state === 'ready' && s.powerState === 'poweredOn'}/>
+    {can(me?.permissions, 'servers.manage_all') && s.state === 'ready' && <ServerPlacement id={s.id} busy={!!open}/>}
     {s.state !== 'provisioning' && <ServerTraffic id={s.id} throttled={s.trafficThrottled}/>}
     {allowed.resize && s.state === 'ready' && !s.vdcId && <ServerResize server={s} busy={!!open}/>}
     {allowed.reinstall && ['ready', 'error'].includes(s.state) && <ServerReinstall server={s} busy={!!open} own={own}/>}

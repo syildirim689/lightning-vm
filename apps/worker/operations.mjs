@@ -328,6 +328,18 @@ const kinds = {
     if (ctx.op.params.powerOn) await power(db, ctx, 'on');
     await refreshPower(db, ctx);
   },
+  // A move to another host or datastore while it runs; the inventory row gets the new host at once.
+  async migrate(db, ctx) {
+    await setStep(db, ctx.op, 'migrate');
+    if (!ctx.op.provider_task_id) {
+      const out = await adapter('/v1/vm/migrate', { ...ctx.target, vm: ctx.s.vm_moref, host: ctx.op.params.host ?? '', datastore: ctx.op.params.datastore ?? '' });
+      if (!out.task) return; // already there
+      await saveTask(db, ctx.op, out.task);
+      ctx.op.provider_task_id = out.task;
+    }
+    await waitTask(db, ctx, ctx.op.provider_task_id);
+    if (ctx.op.params.host) await db.query('UPDATE vmware_vms SET host_moref = $3 WHERE connection_id = $1 AND moref = $2', [ctx.s.connection_id, ctx.s.vm_moref, ctx.op.params.host]);
+  },
   async backup_delete(db, ctx) {
     const b = await backupOf(db, ctx.op.params.backupId);
     await setStep(db, ctx.op, 'delete');

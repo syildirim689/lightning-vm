@@ -932,7 +932,12 @@
       "needsVcenter": "Needs vCenter",
       "save": "Save compatibility setting",
       "saved": "Saved; the connection was re-discovered with the new setting."
-    }
+    },
+    "evacuate": "Evacuate",
+    "evacuateTitle": "Move every server off {name}?",
+    "evacuateBody": "Each panel server on this host moves to the least loaded other host of its cluster while it keeps running. Put the host into maintenance afterwards.",
+    "evacuated": "{started} moving, {skipped} left",
+    "cancel": "Cancel"
   },
   "Console": {
     "title": "Console: {name}",
@@ -1622,7 +1627,8 @@
       "reinstall": "Reinstall",
       "backup_create": "Back up",
       "backup_restore": "Restore a backup",
-      "backup_delete": "Remove a backup"
+      "backup_delete": "Remove a backup",
+      "migrate": "Move"
     },
     "opStatus": {
       "pending": "Queued",
@@ -1649,7 +1655,8 @@
       "copy": "Copying the disk",
       "cleanup": "Cleaning up",
       "restore": "Restoring the disk",
-      "delete": "Removing"
+      "delete": "Removing",
+      "migrate": "Moving"
     },
     "action": {
       "power_on": "Power on",
@@ -4663,7 +4670,9 @@
       "reseller_customer_created": "Reseller added a customer",
       "reseller_server_ordered": "Reseller ordered a server",
       "reseller_saved": "Reseller allocation saved",
-      "reseller_removed": "Reseller removed"
+      "reseller_removed": "Reseller removed",
+      "server_migrate": "Server moved",
+      "vmware_host_evacuate": "Host evacuated"
     },
     "outcome": {
       "success": "Done",
@@ -6518,5 +6527,17 @@
       "stop": "No longer a reseller",
       "stopped": "No longer a reseller; their customers are ordinary accounts now"
     }
+  },
+  "Placement": {
+    "title": "Placement",
+    "help": "Staff only: move the server to another host or datastore while it keeps running (vMotion). Placement is from the last inventory refresh.",
+    "host": "Host",
+    "datastore": "Datastore",
+    "now": "runs here now",
+    "servers": "{n, plural, one {# server} other {# servers}}",
+    "maintenance": "in maintenance",
+    "keep": "Keep where it is",
+    "move": "Move",
+    "moving": "Move started"
   }
 }

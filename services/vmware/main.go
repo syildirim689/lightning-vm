@@ -135,6 +135,10 @@ func handler(token string, guard *netGuard) http.Handler {
 		q := r.(*DiskCopyRequest)
 		return withClient(ctx, guard, q.Request, func(c *vim25.Client) (any, error) { return deleteBackup(ctx, c, *q) })
 	})
+	handle("/v1/vm/migrate", 60*time.Second, func() any { return &MigrateRequest{} }, func(ctx context.Context, r any) (any, error) {
+		q := r.(*MigrateRequest)
+		return withClient(ctx, guard, q.Request, func(c *vim25.Client) (any, error) { return migrateVM(ctx, c, *q) })
+	})
 	handle("/v1/vm/shaping", 90*time.Second, func() any { return &ShapingRequest{} }, func(ctx context.Context, r any) (any, error) {
 		q := r.(*ShapingRequest)
 		return withClient(ctx, guard, q.Request, func(c *vim25.Client) (any, error) { return applyShaping(ctx, c, *q) })

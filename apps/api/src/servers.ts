@@ -32,7 +32,7 @@ const queue = new Queue('operations', { connection: redis });
 export const enqueue = (operationId: string) => queue.add('operation', {}, {
   jobId: operationId, attempts: 6, backoff: { type: 'exponential', delay: 5000 }, removeOnComplete: true, removeOnFail: true,
 }).catch(() => undefined); // if Redis is down the worker's recovery scan enqueues it later
-const deadlineMinutes = { create: 45, delete: 20, power_on: 10, shutdown: 10, power_off: 10, reset: 10, snapshot_create: 30, snapshot_revert: 30, snapshot_delete: 60, resize: 30, reinstall: 45, backup_create: 360, backup_restore: 360, backup_delete: 30 } as const;
+const deadlineMinutes = { create: 45, delete: 20, power_on: 10, shutdown: 10, power_off: 10, reset: 10, snapshot_create: 30, snapshot_revert: 30, snapshot_delete: 60, resize: 30, reinstall: 45, backup_create: 360, backup_restore: 360, backup_delete: 30, migrate: 240 } as const;
 export type Kind = keyof typeof deadlineMinutes;
 
 export function idempotencyKey(header: string | undefined, userId: string) {
