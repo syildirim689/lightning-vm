@@ -104,6 +104,11 @@ export const catalog: Record<string, EventDef> = {
   'billing.payment_received': { audience: 'staff', permission: 'billing.view', channels: all, defaults: ['inApp'], link: (d) => '/admin/billing/invoices/' + d.invoiceId,
     text: { tr: (d) => ({ title: 'Ödeme alındı: ' + d.total + ' ' + d.currency, body: (d.number || 'Bakiye') + ' · ' + d.email }),
       en: (d) => ({ title: 'Payment received: ' + d.total + ' ' + d.currency, body: (d.number || 'Balance') + ' · ' + d.email }) } },
+  'billing.einvoice_failed': { audience: 'staff', permission: 'billing.view', channels: all, defaults: ['inApp', 'email'], link: (d) => '/admin/billing/invoices/' + d.invoiceId,
+    text: { tr: (d) => ({ title: 'e-Fatura gönderilemedi' + (d.number ? ': ' + d.number : ''), body: d.error }), en: (d) => ({ title: 'e-Invoice not sent' + (d.number ? ': ' + d.number : ''), body: d.error }) } },
+  'billing.einvoice_return': { audience: 'staff', permission: 'billing.view', channels: all, defaults: ['inApp', 'email'], link: (d) => '/admin/billing/invoices/' + d.invoiceId,
+    text: { tr: (d) => ({ title: 'İade faturası gerekiyor: ' + d.number, body: d.amount + ' ' + d.currency + ' iade edildi. ' + (d.who === 'buyer' ? 'e-Fatura alıcısı iade faturasını size kesmeli.' : 'e-Arşiv faturası iptal süresini geçti; iade için muhasebenizle iade faturası düzenleyin.') + (d.reason ? ' (' + d.reason + ')' : '') }),
+      en: (d) => ({ title: 'Return invoice needed: ' + d.number, body: d.amount + ' ' + d.currency + ' was refunded. ' + (d.who === 'buyer' ? 'The e-Fatura buyer must issue the return invoice to you.' : 'The e-Arşiv invoice is past its cancel window; issue a return invoice with your accountant.') + (d.reason ? ' (' + d.reason + ')' : '') }) } },
   // A message staff send to people picked from the users list (admin.ts, users/actions); same words in every language.
   'account.message': { audience: 'user', channels: all, defaults: ['inApp', 'email'], link: () => '/',
     text: { tr: (d) => ({ title: d.subject, body: d.message }), en: (d) => ({ title: d.subject, body: d.message }) } },

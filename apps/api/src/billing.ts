@@ -70,15 +70,17 @@ async function markPaid(db: PoolClient, invoiceId: string, after: After) {
   const s = await settings();
   const { rows: [inv] } = await db.query("SELECT * FROM invoices WHERE id = $1 AND status = 'unpaid' FOR UPDATE", [invoiceId]);
   if (!inv) return;
+  // With an e-invoice integrator the number comes from the e-Fatura or e-Arşiv series when it is sent (einvoice.ts).
+  const einvoice = await einvoiceOn();
   let number: string | null = null;
-  if (inv.kind !== 'topup') {
+  if (inv.kind !== 'topup' && !einvoice) {
     const year = Number(today().slice(0, 4));
     const { rows: [q] } = await db.query(`INSERT INTO invoice_sequences (prefix, year, last) VALUES ($1, $2, 1)
       ON CONFLICT (prefix, year) DO UPDATE SET last = invoice_sequences.last + 1 RETURNING last`, [s.invoicePrefix, year]);
     number = invoiceNumber(s.invoicePrefix, year, q.last);
   }
   await db.query(`UPDATE invoices SET status = 'paid', paid_at = now(), number = $2, issued_at = CASE WHEN $2::text IS NULL THEN NULL ELSE now() END,
-    einvoice_status = CASE WHEN $2::text IS NOT NULL AND $3 THEN 'queued' ELSE 'none' END WHERE id = $1`, [invoiceId, number, await einvoiceOn()]);
+    einvoice_status = CASE WHEN $3 AND $4 <> 'topup' THEN 'queued' ELSE 'none' END WHERE id = $1`, [invoiceId, number, einvoice, inv.kind]);
   if (inv.kind === 'topup') {
     await db.query("INSERT INTO balance_entries (owner_id, amount, currency, reason, invoice_id) VALUES ($1, $2, $3, 'topup', $4)", [inv.owner_id, inv.total, inv.currency, invoiceId]);
   }

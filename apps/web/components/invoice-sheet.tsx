@@ -38,6 +38,8 @@ export function InvoiceSheet({ d }: { d: InvoiceDetail }) {
       <div className="flex flex-col items-start gap-2 sm:items-end">
         <StatusChip tone={invoiceTone(inv)}>{t(`status.${state}`)}</StatusChip>
         {inv.einvoiceStatus !== 'none' && <span className="flex items-center gap-1 text-xs text-muted"><I name="file-check-2" size={13}/>{t(`einvoice.${inv.einvoiceStatus as 'sent'}`)}</span>}
+        {['sent', 'accepted', 'cancelled'].includes(inv.einvoiceStatus) && <a href={`/api/billing/invoices/${inv.id}/einvoice.pdf`} target="_blank" rel="noreferrer"
+          className="inline-flex items-center gap-1 text-xs font-medium text-accent hover:underline print:hidden"><I name="file-down" size={13}/>{t('sheet.official')}</a>}
       </div>
     </header>
     <div className="grid gap-5 border-b border-separator py-5 sm:grid-cols-2">

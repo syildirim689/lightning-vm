@@ -1143,3 +1143,55 @@ test('users in bulk: a message through their channels, signing them out everywhe
   assert.equal((await get('/auth/me', admin)).statusCode, 200);
   for (const id of ids) await post('/auth/admin/remove-user', { userId: id }, admin);
 });
+
+test('e-invoice: paid invoices go to the integrator as e-Arşiv or e-Fatura in their own series, are accepted, and a refunded e-Arşiv one is cancelled', async () => {
+  const { sendQueued, pollStatus } = await import('../../dist/einvoice.js');
+  await freshLimits();
+  const company = { name: 'Lightning Bilişim A.Ş.', taxId: '1234567890', taxOffice: 'Kadıköy', address: 'Moda Cd. 1', district: 'Kadıköy', city: 'İstanbul', website: 'https://panel.example.test' };
+  assert.equal((await put('/admin/settings/billing', { enabled: true, company, invoicePrefix: 'PNL' }, admin)).statusCode, 200);
+  assert.equal((await put('/admin/settings/einvoice', { provider: 'nope' }, admin)).json().fields.provider, 'INVALID_VALUE');
+  assert.equal((await put('/admin/settings/einvoice', { provider: 'izibiz', values: {} }, admin)).json().fields['values.username'], 'REQUIRED');
+  assert.equal((await put('/admin/settings/einvoice', { provider: 'sandbox', efaturaSeries: 'LVF', earsivSeries: 'LVF' }, admin)).json().fields.earsivSeries, 'INVALID_VALUE');
+  const set = (await put('/admin/settings/einvoice', { provider: 'sandbox', mode: 'test', efaturaSeries: 'LVF', earsivSeries: 'LVA', profile: 'TEMELFATURA' }, admin)).json();
+  assert.equal(set.provider, 'sandbox');
+  assert.ok(set.integrators.some((x) => x.id === 'izibiz' && x.verified.includes('earsiv')));
+  assert.equal((await post('/admin/settings/einvoice/test', {}, admin)).json().check.ok, true);
+  assert.equal((await put('/admin/settings/einvoice', { provider: 'sandbox' }, user)).statusCode, 403);
+
+  const people = [];
+  for (const [n, profile] of [[1, { kind: 'individual', name: 'Ayşe Yılmaz', taxId: '10000000146' }], [2, { kind: 'company', name: 'Örnek Ltd.', taxId: '1234567890', taxOffice: 'Beşiktaş' }]]) {
+    const email = `einv${n}@example.test`;
+    const id = (await post('/auth/admin/create-user', { email, password, name: `E ${n}`, role: 'user' }, admin)).json().user.id;
+    const c = cookieOf(await post('/auth/sign-in/email', { email, password }));
+    assert.equal((await put('/billing/profile', { ...profile, city: 'İstanbul', district: 'Kadıköy', address: 'Cd. 1' }, c)).statusCode, 200);
+    const inv = (await post('/admin/billing/invoices', { userId: id, currency: 'TRY', lines: [{ description: 'Hizmet', unitPrice: '100' }] }, admin)).json().invoiceId;
+    assert.equal((await post(`/admin/billing/invoices/${inv}/mark-paid`, { method: 'bank_transfer' }, admin)).statusCode, 200);
+    people.push({ id, c, inv });
+  }
+  const row = async (id) => (await pool.query('SELECT number, einvoice_status, einvoice_profile, einvoice_uuid FROM invoices WHERE id = $1', [id])).rows[0];
+  // Sent right after payment (and by the periodic run); either one, once.
+  await sendQueued();
+  assert.ok(await until(async () => (await row(people[0].inv)).einvoice_status === 'sent' && (await row(people[1].inv)).einvoice_status === 'sent'));
+  const year = new Date().getFullYear();
+  // A person (no e-Fatura) gets e-Arşiv in its series; a company whose tax number the integrator knows gets e-Fatura.
+  const earsiv = await row(people[0].inv), efatura = await row(people[1].inv);
+  assert.deepEqual([earsiv.einvoice_status, earsiv.einvoice_profile], ['sent', 'EARSIVFATURA']);
+  assert.match(earsiv.number, new RegExp(`^LVA${year}\\d{9}$`));
+  assert.deepEqual([efatura.einvoice_status, efatura.einvoice_profile], ['sent', 'TEMELFATURA']);
+  assert.match(efatura.number, new RegExp(`^LVF${year}\\d{9}$`));
+  assert.ok(earsiv.einvoice_uuid);
+  await pollStatus();
+  assert.equal((await row(people[0].inv)).einvoice_status, 'accepted');
+  // The customer sees it.
+  assert.equal((await get(`/billing/invoices/${people[0].inv}`, people[0].c)).json().invoice.einvoiceStatus, 'accepted');
+  // Fully refunded within 8 days: the e-Arşiv invoice is cancelled at the integrator.
+  assert.equal((await post(`/admin/billing/invoices/${people[0].inv}/refund`, { amount: '120.00', toBalance: true }, admin)).statusCode, 200);
+  assert.ok(await until(async () => (await row(people[0].inv)).einvoice_status === 'cancelled'));
+  // A failed one is retried on request.
+  await pool.query("UPDATE invoices SET einvoice_status = 'failed', einvoice_error = 'x' WHERE id = $1", [people[1].inv]);
+  assert.equal((await post(`/admin/billing/invoices/${people[1].inv}/einvoice/retry`, {}, admin)).json().einvoiceStatus, 'sent');
+  assert.equal((await post(`/admin/billing/invoices/${people[1].inv}/einvoice/retry`, {}, admin)).json().code, 'EINVOICE_NOT_RETRYABLE');
+  await put('/admin/settings/einvoice', { provider: 'none' }, admin);
+  await put('/admin/settings/billing', { enabled: false }, admin);
+  for (const p of people) await post('/auth/admin/remove-user', { userId: p.id }, admin).catch(() => undefined);
+});

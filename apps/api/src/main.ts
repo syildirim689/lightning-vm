@@ -26,6 +26,7 @@ import { InsightsController, startInsightAlerts, StaffInsightsController } from 
 import { OnboardingController, DigestController, AccountExportController, SmartController, TimeZoneController, MySessionsController } from './smart';
 import { SchedulesController, startScheduler } from './schedules';
 import { BillingAdminController, BillingCallbackController, BillingController, BillingSettingsController, startBilling } from './billing';
+import { EinvoiceDocumentController, EinvoiceSettingsController, startEinvoice } from './einvoice';
 import { ActivityController, AuditController } from './audit-log';
 import { AnnouncementAdminController, AnnouncementController } from './announcement';
 import { SnapshotsController } from './snapshots';
@@ -70,7 +71,7 @@ class HealthController {
 @Module({ controllers: [HealthController, AuthController, PublicController, SetupController, AdminController, VmwareController, ConsoleController, CatalogAdminController, CatalogController, ServersController, ServersAdminController, FirewallsController, PaymentsController, RdnsSettingsController, ServerIpsController,
   SettingsController, SettingsOverviewController, SmsSettingsController, RolesController, NotificationsController, NotificationPolicyController,
   InsightsController, StaffInsightsController, ApplicationsController, ApplicationCallbackController, IsoAdminController, ServerIsoController, DomainController, LocationsController, TopologyAdminController, TopologyController, PowerController, AbuseController, VdcAdminController, VdcController, SmartController, OnboardingController, DigestController, AccountExportController, TimeZoneController, MySessionsController, SchedulesController, AuditController, ActivityController, AnnouncementController, AnnouncementAdminController, SnapshotsController, AlertsController, TerminalController, ChatController, ChatSettingsController, LiveController, DirectorySettingsController, StatusController, StatusPageSettingsController, UserSummaryController, IncidentsController, SupportController, SupportAdminController, StatsController, SignInMethodsController,
-  BillingController, BillingCallbackController, BillingAdminController, BillingSettingsController] })
+  BillingController, BillingCallbackController, BillingAdminController, BillingSettingsController, EinvoiceSettingsController, EinvoiceDocumentController] })
 class AppModule {}
 
 // Only Caddy on the Compose network talks to the API; its X-Forwarded-* headers are trusted.
@@ -134,6 +135,7 @@ async function main() {
   startInsightAlerts();
   startScheduler();
   startBilling();
+  startEinvoice();
   startStatusSampler();
   startSupportJanitor();
   await app.listen(4000, '0.0.0.0');

@@ -304,7 +304,10 @@
     "REFUND_FAILED": "Ödeme kuruluşu iadeyi reddetti.",
     "BILLING_HOLD": "Sunucu, ödenmeyen fatura ödenene kadar askıda.",
     "PROVIDER_ERROR": "Ödeme kuruluşu yanıt vermedi.",
-    "CANCELLED_BY_CUSTOMER": "Ödeme sayfasında vazgeçildi."
+    "CANCELLED_BY_CUSTOMER": "Ödeme sayfasında vazgeçildi.",
+    "EINVOICE_OFF": "Önce bir entegratör seçin.",
+    "EINVOICE_NOT_RETRYABLE": "Yalnızca e-faturası gönderilemeyen ödenmiş fatura yeniden gönderilebilir.",
+    "EINVOICE_UNAVAILABLE": "Entegratör belgeyi döndürmedi."
   },
   "Auth": {
     "required": "zorunlu",
@@ -2424,6 +2427,14 @@
       "billing_payment_received": {
         "title": "Ödeme alındı (ekip)",
         "help": "Bir müşterinin yaptığı her ödeme."
+      },
+      "billing_einvoice_failed": {
+        "title": "e-Fatura gönderilemedi (ekip)",
+        "help": "Ödenen bir fatura entegratörde düzenlenemediğinde."
+      },
+      "billing_einvoice_return": {
+        "title": "İade faturası gerekiyor (ekip)",
+        "help": "Bir iade, iptal yerine iade faturası gerektirdiğinde."
       }
     },
     "policyTitle": "Önce yönetici, sonra kullanıcı",
@@ -2804,7 +2815,8 @@
       "status": "Durum ve olaylar",
       "support": "Destek",
       "signin": "Giriş yöntemleri",
-      "billing": "Faturalandırma"
+      "billing": "Faturalandırma",
+      "einvoice": "e-Fatura"
     },
     "saved": "Kaydedildi.",
     "save": "Kaydet",
@@ -3667,6 +3679,45 @@
       "sandbox": "Test ödeme kuruluşu",
       "sandboxHelp": "Müşteriler test kartlarıyla ödeyebilir (4242 4242 4242 4242). Gerçek müşteriler varken asla açık bırakmayın.",
       "save": "Kaydet"
+    },
+    "einvoice": {
+      "saved": "e-Fatura ayarları kaydedildi.",
+      "fixFields": "Bazı alanlar düzeltilmeli.",
+      "integrator": "Entegratör",
+      "integratorHelp": "Faturalarınızı imzalayıp ileten GİB onaylı özel entegratör. Ödenen faturalar kendiliğinden gönderilir.",
+      "provider": "Entegratör",
+      "none": "Yok (faturalar yalnızca panelde)",
+      "sandbox": "Sandbox (test, hesap gerekmez)",
+      "mode": "Ortam",
+      "test": "Test",
+      "live": "Canlı",
+      "verified": "Test sisteminde denendi: {what}",
+      "unverified": "Yayımlanan belgelerine göre yazıldı; önce testte bir fatura deneyin",
+      "docs": "Belgeler",
+      "sandboxHelp": "GİB’de hiçbir şey düzenlemez. Akışı denemek için: son hanesi çift olan vergi numaraları e-Fatura mükellefi sayılır.",
+      "noneHelp": "Faturalar panelde numaralanır ve gösterilir; e-fatura düzenlenmez. Gerçek tahsilattan önce bir entegratör seçin.",
+      "secretKept": "Kayıtlı; değiştirmeyecekseniz boş bırakın",
+      "endpoint": "Servis adresi (isteğe bağlı)",
+      "endpointHelp": "Yalnızca entegratörünüz farklı bir adres verdiyse.",
+      "check": "Hesabı kontrol et",
+      "checkOk": "Hesap çalışıyor · vergi numaramız: {result}",
+      "testOk": "Entegratör yanıt verdi.",
+      "testFailed": "Entegratör hesabı kabul etmedi.",
+      "numbering": "Numaralandırma ve senaryo",
+      "numberingHelp": "GİB numarası: 3 karakter, yıl, 9 hane; her seri kendi içinde boşluksuz ilerler.",
+      "efaturaSeries": "e-Fatura serisi",
+      "earsivSeries": "e-Arşiv serisi",
+      "profile": "e-Fatura senaryosu",
+      "profileHelp": "Barındırma için temel uygundur; ticaride alıcı 8 gün içinde reddedebilir.",
+      "temel": "Temel (TEMELFATURA)",
+      "ticari": "Ticari (TICARIFATURA)",
+      "senderAlias": "Gönderici etiketi (GB)",
+      "senderAliasHelp": "Entegratörden aldığınız e-Fatura gönderici etiketi; bazıları ister.",
+      "rule1": "e-Fatura mükellefi alıcıya e-Fatura kutusuna e-Fatura, diğer herkese e-postayla e-Arşiv fatura gider.",
+      "rule2": "Alıcılar listeye her gün katıldığı için mükelleflik her faturada yeniden sorgulanır.",
+      "rule3": "e-Arşiv faturalar internet satışı bilgilerini taşır (web adresi, ödeme şekli ve tarihi, ödeme aracısı).",
+      "rule4": "8 gün içindeki iade e-Arşiv faturasını iptal eder; daha geç ya da e-Fatura için iade faturası gerektiği bildirilir.",
+      "save": "Kaydet"
     }
   },
   "Firewalls": {
@@ -4422,7 +4473,10 @@
       "billing_subscription_updated": "Abonelik ekip tarafından güncellendi",
       "billing_balance_adjusted": "Bakiye düzeltildi",
       "billing_run": "Tahsilat çalıştırıldı",
-      "settings_billing": "Faturalandırma ayarları değişti"
+      "settings_billing": "Faturalandırma ayarları değişti",
+      "settings_einvoice": "e-Fatura ayarları değişti",
+      "settings_einvoice_test": "e-Fatura hesabı kontrol edildi",
+      "billing_einvoice_retry": "e-Fatura yeniden gönderildi"
     },
     "outcome": {
       "success": "Tamamlandı",
@@ -5730,7 +5784,8 @@
       "total": "Genel toplam",
       "paid": "Ödenen",
       "refunded": "İade",
-      "payments": "Ödemeler"
+      "payments": "Ödemeler",
+      "official": "Resmî e-fatura (PDF)"
     },
     "einvoice": {
       "queued": "GİB’e gönderiliyor",
@@ -5906,6 +5961,8 @@
     "toBalanceHelp": "Hemen; ödeme kuruluşu gerekmez.",
     "recorded": "Ödeme kaydedildi; fatura düzenlendi.",
     "refunded": "İade edildi.",
-    "record": "Kaydet"
+    "record": "Kaydet",
+    "resend": "e-Faturayı yeniden gönder",
+    "resent": "Entegratöre yeniden gönderildi."
   }
 }

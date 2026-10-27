@@ -41,6 +41,7 @@ export default function AdminInvoice({ id }: { id: string }) {
       <NextLink href="/admin/billing" className="inline-flex items-center gap-1 text-sm text-muted hover:text-foreground"><I name="arrow-left" size={14}/>{t('title')}</NextLink>
       <div className="flex flex-wrap gap-2">
         <Button size="sm" variant="secondary" onPress={() => window.print()}><I name="printer" size={14}/>{t('print')}</Button>
+        {manage && ['failed', 'rejected'].includes(inv.einvoiceStatus) && <Button size="sm" variant="secondary" isPending={busy} onPress={() => void post(`/admin/billing/invoices/${id}/einvoice/retry`, {}, t('resent'))}><I name="refresh-cw" size={14}/>{t('resend')}</Button>}
         {manage && inv.status === 'unpaid' && <Button size="sm" onPress={() => setDialog('paid')}><I name="badge-check" size={14}/>{t('markPaid')}</Button>}
         {manage && inv.status === 'unpaid' && Number(inv.paidTotal) === 0 && <ConfirmButton size="sm" variant="danger-soft" icon={<I name="ban" size={14}/>} label={t('withdraw')} title={t('withdrawTitle')}
           body={t('withdrawBody')} confirmLabel={t('withdraw')} cancelLabel={t('cancel')} onConfirm={() => post(`/admin/billing/invoices/${id}/cancel`, {}, t('withdrawn'))}/>}

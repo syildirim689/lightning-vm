@@ -738,7 +738,7 @@ test.describe('people, settings and smart features (English browser)', () => {
     await signInAdmin(page);
     // Settings → Billing: turned on with the seller and the sandbox provider.
     await page.goto('/admin/settings?tab=billing');
-    await expect(page.getByText('Billing on')).toBeVisible();
+    await expect(page.getByText('Billing on', { exact: true }).first()).toBeVisible();
     await page.getByLabel('Company title').fill('Lightning Bilişim A.Ş.');
     await page.getByLabel('VKN').fill('1234567890');
     await page.getByLabel('Tax office').fill('Kadıköy');
@@ -750,6 +750,12 @@ test.describe('people, settings and smart features (English browser)', () => {
     await shot('billing-settings');
     await page.getByRole('button', { name: 'Save', exact: true }).last().click();
     await expect(page.getByText('Billing settings saved.')).toBeVisible();
+    // Settings → e-Invoice: the integrators with what was tried against their test systems.
+    await page.goto('/admin/settings?tab=einvoice');
+    await choose(page, page, 'Integrator', 'İzibiz');
+    await expect(page.getByText(/Tested with its test system: e-Arşiv/)).toBeVisible();
+    await page.waitForTimeout(400);
+    await shot('einvoice-settings');
     // An invoice for the admin's own account (a service), then the customer's side of it.
     const me = await (await page.request.get('/api/auth/me')).json();
     const made = await page.request.post('/api/admin/billing/invoices', { headers: csrf, data: { userId: me.id, currency: 'TRY', lines: [{ description: 'Kurulum hizmeti', unitPrice: '250', quantity: 1 }], dueDays: 7 } });

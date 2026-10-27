@@ -304,7 +304,10 @@
     "REFUND_FAILED": "The provider refused the refund.",
     "BILLING_HOLD": "The server is held until the unpaid invoice is paid.",
     "PROVIDER_ERROR": "The payment provider did not answer.",
-    "CANCELLED_BY_CUSTOMER": "Cancelled on the payment page."
+    "CANCELLED_BY_CUSTOMER": "Cancelled on the payment page.",
+    "EINVOICE_OFF": "Choose an integrator first.",
+    "EINVOICE_NOT_RETRYABLE": "Only a paid invoice whose e-invoice failed can be sent again.",
+    "EINVOICE_UNAVAILABLE": "The integrator did not return the document."
   },
   "Auth": {
     "required": "required",
@@ -2424,6 +2427,14 @@
       "billing_payment_received": {
         "title": "Payment received (team)",
         "help": "Every payment a customer makes."
+      },
+      "billing_einvoice_failed": {
+        "title": "e-Invoice not sent (team)",
+        "help": "When a paid invoice could not be issued at the integrator."
+      },
+      "billing_einvoice_return": {
+        "title": "Return invoice needed (team)",
+        "help": "When a refund needs a return invoice instead of a cancel."
       }
     },
     "policyTitle": "The admin first, then each user",
@@ -2804,7 +2815,8 @@
       "status": "Status and incidents",
       "support": "Support",
       "signin": "Sign-in methods",
-      "billing": "Billing"
+      "billing": "Billing",
+      "einvoice": "e-Invoice"
     },
     "saved": "Saved.",
     "save": "Save",
@@ -3667,6 +3679,45 @@
       "sandbox": "Sandbox provider",
       "sandboxHelp": "Customers can pay with test cards (4242 4242 4242 4242). Never on with real customers.",
       "save": "Save"
+    },
+    "einvoice": {
+      "saved": "e-Invoice settings saved.",
+      "fixFields": "Some fields need attention.",
+      "integrator": "Integrator",
+      "integratorHelp": "The GİB-approved private integrator that signs and delivers your invoices. Paid invoices go there by themselves.",
+      "provider": "Integrator",
+      "none": "None (invoices in the panel only)",
+      "sandbox": "Sandbox (test, no account)",
+      "mode": "Environment",
+      "test": "Test",
+      "live": "Live",
+      "verified": "Tested with its test system: {what}",
+      "unverified": "Built from its published documentation; try one invoice in test first",
+      "docs": "Documentation",
+      "sandboxHelp": "Issues nothing at GİB. For trying the flow: tax numbers ending in an even digit act as e-Fatura users.",
+      "noneHelp": "Invoices are numbered and shown in the panel; no e-invoice is issued. Choose an integrator before taking real money.",
+      "secretKept": "Saved; leave empty to keep it",
+      "endpoint": "Service address (optional)",
+      "endpointHelp": "Only if your integrator gave you a different address.",
+      "check": "Check the account",
+      "checkOk": "Account works · our tax number: {result}",
+      "testOk": "The integrator answered.",
+      "testFailed": "The integrator did not accept the account.",
+      "numbering": "Numbering and scenario",
+      "numberingHelp": "GİB numbers: 3 characters, the year, 9 digits; each series counts on its own, without gaps.",
+      "efaturaSeries": "e-Fatura series",
+      "earsivSeries": "e-Arşiv series",
+      "profile": "e-Fatura scenario",
+      "profileHelp": "Basic suits hosting; with commercial the buyer may reject within 8 days.",
+      "temel": "Basic (TEMELFATURA)",
+      "ticari": "Commercial (TICARIFATURA)",
+      "senderAlias": "Sender alias (GB)",
+      "senderAliasHelp": "Your e-Fatura sender label from the integrator; some need it.",
+      "rule1": "A buyer registered for e-Fatura gets an e-Fatura in its inbox; everyone else an e-Arşiv invoice by e-mail.",
+      "rule2": "Registration is checked again at every invoice, since buyers join the list every day.",
+      "rule3": "e-Arşiv invoices carry the internet-sale details (web address, payment method and date, payment intermediary).",
+      "rule4": "A refund within 8 days cancels an e-Arşiv invoice; later, or for e-Fatura, you are told a return invoice is due.",
+      "save": "Save"
     }
   },
   "Firewalls": {
@@ -4422,7 +4473,10 @@
       "billing_subscription_updated": "Subscription updated by staff",
       "billing_balance_adjusted": "Balance corrected",
       "billing_run": "Collection run",
-      "settings_billing": "Billing settings changed"
+      "settings_billing": "Billing settings changed",
+      "settings_einvoice": "e-Invoice settings changed",
+      "settings_einvoice_test": "e-Invoice account checked",
+      "billing_einvoice_retry": "e-Invoice sent again"
     },
     "outcome": {
       "success": "Done",
@@ -5730,7 +5784,8 @@
       "total": "Total",
       "paid": "Paid",
       "refunded": "Refunded",
-      "payments": "Payments"
+      "payments": "Payments",
+      "official": "Official e-invoice (PDF)"
     },
     "einvoice": {
       "queued": "Being sent to GİB",
@@ -5906,6 +5961,8 @@
     "toBalanceHelp": "Immediate; no provider involved.",
     "recorded": "Payment recorded; the invoice is issued.",
     "refunded": "Refunded.",
-    "record": "Record"
+    "record": "Record",
+    "resend": "Send e-invoice again",
+    "resent": "Sent to the integrator again."
   }
 }

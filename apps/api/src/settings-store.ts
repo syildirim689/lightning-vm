@@ -62,12 +62,14 @@ export type BillingSettings = { enabled: boolean; requirePayment: boolean; order
   autoCharge: boolean; chargeRetries: number; balance: boolean; topupMin: number; topupMax: number; sandbox: boolean;
   bankTransfer: { enabled: boolean; bank: string; holder: string; iban: string }; company: Company };
 // e-Fatura / e-Arşiv through an integrator (einvoice.ts); 'none' issues invoices in the panel only.
-export type EinvoiceSettings = { provider: string };
+// values: the integrator's plain fields (and an endpoint override); its secrets are encrypted together in credentialsEnc.
+export type EinvoiceSettings = { provider: string; mode: 'test' | 'live'; values: Record<string, string>; credentialsEnc: string | null; efaturaSeries: string; earsivSeries: string;
+  profile: 'TEMELFATURA' | 'TICARIFATURA'; senderAlias: string; check: { ok: boolean; message: string; at: string } | null };
 export type RdnsSettings = { provider: 'none' | 'powerdns'; apiUrl: string; apiKeyEnc: string | null; serverId: string; template: string; ttl: number;
   customerEdit: boolean; forwardCheck: boolean };
 
 const defaults = {
-  einvoice: { provider: 'none' } as EinvoiceSettings,
+  einvoice: { provider: 'none', mode: 'test', values: {}, credentialsEnc: null, efaturaSeries: 'LVF', earsivSeries: 'LVA', profile: 'TEMELFATURA', senderAlias: '', check: null } as EinvoiceSettings,
   billing: { enabled: false, requirePayment: true, orderExpiryHours: 24, taxRate: 20, pricesIncludeTax: false, exportExempt: false, invoicePrefix: 'LVM',
     invoiceDaysBefore: 7, reminderDays: [3, 1], suspendAfterDays: 3, terminateAfterDays: 0, autoCharge: true, chargeRetries: 3, balance: true, topupMin: 50, topupMax: 50000, sandbox: false,
     bankTransfer: { enabled: false, bank: '', holder: '', iban: '' },
