@@ -35,6 +35,8 @@ const call = (method, url, cookie, payload, headers = {}) => app.inject({ method
 const get = (url, cookie) => call('GET', url, cookie);
 const post = (url, payload, cookie, headers) => call('POST', url, cookie, payload, headers);
 const put = (url, payload, cookie) => call('PUT', url, cookie, payload);
+// Every test signs in from 127.0.0.1: better-auth's per-address limits are reset where a test signs in a lot.
+const freshLimits = async () => { for (const k of await redis.keys('rl:ba:*')) await redis.del(k); };
 const until = async (check, ms = 8000) => { for (let i = 0; i < ms / 100; i++) { const v = await check(); if (v) return v; await new Promise((r) => setTimeout(r, 100)); } return null; };
 
 // RFC 6238 TOTP (SHA-1, 30 s, 6 digits) from an otpauth:// URI.
@@ -761,6 +763,7 @@ async function fakeSmtp() {
 }
 
 test('sign-in methods: settings checked, secrets kept, social providers registered, e-mail link, user names, leaked passwords, throwaway domains', async () => {
+  await freshLimits();
   const smtp = await fakeSmtp();
   try {
     // Settings: checked, secrets never come back, the public config lists what is on.
@@ -982,6 +985,7 @@ test('status history and incidents: daily uptime per component; an open incident
 });
 
 test('support tickets: customer opens with an attachment, staff answer with an internal note, deadlines follow, closed and rated', async () => {
+  await freshLimits();
   const mk = async (email, role) => {
     const id = (await post('/auth/admin/create-user', { email, password, name: email.split('@')[0], role }, admin)).json().user.id;
     return { id, c: cookieOf(await post('/auth/sign-in/email', { email, password })) };
