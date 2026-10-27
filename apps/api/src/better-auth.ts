@@ -166,6 +166,8 @@ function createAuth() {
       // A provider that reports someone's address never gets that account by itself; linking is done on purpose,
       // signed in, from Account → Security (linkSocial). Single sign-on accounts are kept apart too (sso.ts).
       accountLinking: { enabled: true, disableImplicitLinking: true, allowDifferentEmails: false },
+      // Providers' access and refresh tokens are stored encrypted (AES-256-GCM with the auth secret).
+      encryptOAuthTokens: true,
       modelName: 'auth_accounts',
       fields: { userId: 'user_id', accountId: 'account_id', providerId: 'provider_id', accessToken: 'access_token', refreshToken: 'refresh_token', idToken: 'id_token',
         accessTokenExpiresAt: 'access_token_expires_at', refreshTokenExpiresAt: 'refresh_token_expires_at', createdAt: 'created_at', updatedAt: 'updated_at' },
@@ -275,6 +277,11 @@ function createAuth() {
           if (target && live[ctx.path]) await publishLive(target, live[ctx.path]);
           return;
         }
+        if (ctx.path === '/unlink-account' && !failed) {
+          const uid = (ctx.context.session as { user?: { id: string } } | null)?.user?.id;
+          if (uid) await auditAuth(uid, 'auth.account_unlinked', 'success', ip, { account: String((ctx.body as { accountId?: unknown })?.accountId ?? '') });
+          return;
+        }
         if (['/two-factor/enable', '/two-factor/disable'].includes(ctx.path) && !failed) {
           const uid = (ctx.context.session as { user?: { id: string } } | null)?.user?.id;
           if (uid) {
@@ -312,7 +319,15 @@ function createAuth() {
     },
     databaseHooks: {
       // A single sign-on account never attaches to an existing panel or directory account (sso.ts).
-      account: { create: { before: async (account) => { if (account.providerId === ssoProviderId && !(await mayLink(account.userId))) return false; } } },
+      account: { create: {
+        before: async (account) => { if (account.providerId === ssoProviderId && !(await mayLink(account.userId))) return false; },
+        // A provider linked to an account (also the first one of an account it created): recorded, and the person told.
+        after: async (account, ctx) => {
+          if (account.providerId === 'credential') return;
+          await auditAuth(account.userId, 'auth.account_linked', 'success', ctx?.request?.headers.get('x-lvm-client-ip') ?? null, { provider: account.providerId });
+          await notify('auth.account_linked', [account.userId], { provider: account.providerId });
+        },
+      } },
       // An account made by a social provider is marked as such (two-factor is then the provider's, see auth.ts).
       user: { create: { before: async (user, ctx) => {
         const id = String((ctx?.params as { id?: string } | undefined)?.id ?? '');

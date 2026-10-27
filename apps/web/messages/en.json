@@ -2350,6 +2350,10 @@
       "auth_new_device": {
         "title": "Sign-in from a new device",
         "help": "When your account is used from a browser and network not seen in the last 90 days."
+      },
+      "auth_account_linked": {
+        "title": "Account linked",
+        "help": "When a sign-in provider (Google, GitHub…) is connected to your account."
       }
     },
     "policyTitle": "The admin first, then each user",
@@ -4200,7 +4204,17 @@
       "support_note": "Internal note added",
       "support_closed": "Support ticket closed",
       "support_changed": "Support ticket changed",
-      "settings_support_departments": "Support departments changed"
+      "settings_support_departments": "Support departments changed",
+      "auth_account_linked": "Linked a sign-in provider",
+      "auth_account_unlinked": "Removed a sign-in provider",
+      "settings_sign_in_methods": "Sign-in methods changed",
+      "account_session_ended": "Ended a session",
+      "admin_user_revoke_session": "Ended a session of a user",
+      "system_host": "Server settings sent to the agent",
+      "account_time_zone": "Time zone changed",
+      "settings_sso": "Single sign-on settings changed",
+      "settings_sso_test": "Single sign-on provider checked",
+      "auth_sso_user_created": "Account created by single sign-on"
     },
     "outcome": {
       "success": "Done",
@@ -4884,6 +4898,79 @@
         {
           "label": "authentik: OAuth2 provider",
           "url": "https://docs.goauthentik.io/add-secure-apps/providers/oauth2/"
+        }
+      ]
+    },
+    "social": {
+      "title": "Social sign-in (Google, Microsoft, GitHub…)",
+      "intro": "Each provider needs this panel registered as an application (an OAuth client). You give the provider the redirect URI shown under the provider in Settings; the provider gives you a client ID and a client secret.",
+      "sections": [
+        {
+          "title": "For every provider",
+          "steps": [
+            "The panel must be served over https on its final address: the redirect URI contains it.",
+            "Copy the redirect URI from the provider card exactly (…/api/auth/callback/<provider>).",
+            "Paste the client ID and secret, turn the provider on and save. The secret is stored encrypted and never shown again."
+          ],
+          "note": "Existing panel accounts are never taken over by a provider: people link a provider themselves in Account → Security. New accounts through providers only when you allow it and registration is open."
+        },
+        {
+          "title": "Google",
+          "text": "Google Cloud console → APIs & Services: set up the OAuth consent screen, then Credentials → Create credentials → OAuth client ID, type “Web application”. Add the redirect URI under “Authorized redirect URIs”. For One Tap, also add the panel address under “Authorized JavaScript origins”. Requested scopes: openid, email, profile."
+        },
+        {
+          "title": "Microsoft (Entra ID)",
+          "text": "Microsoft Entra admin center → App registrations → New registration; platform “Web” with the redirect URI. Certificates & secrets → New client secret: copy its Value (not the Secret ID). Tenant: “common” for any Microsoft account, “organizations” for work or school accounts only, or your Directory (tenant) ID from the app’s Overview."
+        },
+        {
+          "title": "GitHub",
+          "text": "GitHub → Settings → Developer settings → OAuth Apps → New OAuth App. Homepage URL: the panel address; Authorization callback URL: the redirect URI. Then “Generate a new client secret”. Requested scopes: read:user, user:email."
+        },
+        {
+          "title": "GitLab",
+          "text": "GitLab → User settings (or a group’s / the instance’s admin area) → Applications → Add new application, with the redirect URI and the read_user scope; keep it confidential."
+        },
+        {
+          "title": "Discord",
+          "text": "Discord Developer Portal → Applications → New Application → OAuth2: copy the client ID, reset to get the client secret, and add the redirect URI under Redirects. Requested scopes: identify, email."
+        },
+        {
+          "title": "Facebook",
+          "text": "Meta for Developers → My Apps → Create app, add the “Facebook Login” product, and add the redirect URI under Facebook Login → Settings → Valid OAuth Redirect URIs. App ID and App secret (App settings → Basic) are the client ID and secret. Requested permissions: email, public_profile."
+        },
+        {
+          "title": "LinkedIn",
+          "text": "LinkedIn Developers → Create app, then on Products request “Sign In with LinkedIn using OpenID Connect”. On the Auth tab add the redirect URI under Authorized redirect URLs; the Client ID and Primary Client Secret are shown there. Requested scopes: openid, profile, email."
+        }
+      ],
+      "links": [
+        {
+          "label": "Google: Using OAuth 2.0 for Web Server Applications",
+          "url": "https://developers.google.com/identity/protocols/oauth2/web-server"
+        },
+        {
+          "label": "Microsoft: Register an application",
+          "url": "https://learn.microsoft.com/entra/identity-platform/quickstart-register-app"
+        },
+        {
+          "label": "GitHub: Creating an OAuth app",
+          "url": "https://docs.github.com/apps/oauth-apps/building-oauth-apps/creating-an-oauth-app"
+        },
+        {
+          "label": "GitLab: Configure GitLab as an OAuth 2.0 provider",
+          "url": "https://docs.gitlab.com/integration/oauth_provider/"
+        },
+        {
+          "label": "Discord: OAuth2",
+          "url": "https://discord.com/developers/docs/topics/oauth2"
+        },
+        {
+          "label": "LinkedIn: Sign In with LinkedIn using OpenID Connect",
+          "url": "https://learn.microsoft.com/linkedin/consumer/integrations/self-serve/sign-in-with-linkedin-v2"
+        },
+        {
+          "label": "Better Auth: Social sign-on",
+          "url": "https://www.better-auth.com/docs/concepts/oauth"
         }
       ]
     }

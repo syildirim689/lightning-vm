@@ -2350,6 +2350,10 @@
       "auth_new_device": {
         "title": "Yeni cihazdan giriş",
         "help": "Hesabınıza son 90 günde görülmemiş bir tarayıcı ve ağdan girildiğinde."
+      },
+      "auth_account_linked": {
+        "title": "Hesap bağlandı",
+        "help": "Hesabınıza bir giriş sağlayıcısı (Google, GitHub…) bağlandığında."
       }
     },
     "policyTitle": "Önce yönetici, sonra kullanıcı",
@@ -4200,7 +4204,17 @@
       "support_note": "İç not eklendi",
       "support_closed": "Destek talebi kapatıldı",
       "support_changed": "Destek talebi değiştirildi",
-      "settings_support_departments": "Destek departmanları değişti"
+      "settings_support_departments": "Destek departmanları değişti",
+      "auth_account_linked": "Giriş sağlayıcısı bağladı",
+      "auth_account_unlinked": "Giriş sağlayıcısını kaldırdı",
+      "settings_sign_in_methods": "Giriş yöntemleri değişti",
+      "account_session_ended": "Bir oturumu sonlandırdı",
+      "admin_user_revoke_session": "Bir kullanıcının oturumunu sonlandırdı",
+      "system_host": "Sunucu ayarları ajana gönderildi",
+      "account_time_zone": "Saat dilimi değişti",
+      "settings_sso": "Tek oturum açma ayarları değişti",
+      "settings_sso_test": "Tek oturum açma sağlayıcısı denetlendi",
+      "auth_sso_user_created": "Tek oturum açmayla hesap açıldı"
     },
     "outcome": {
       "success": "Tamamlandı",
@@ -4884,6 +4898,79 @@
         {
           "label": "authentik: OAuth2 provider",
           "url": "https://docs.goauthentik.io/add-secure-apps/providers/oauth2/"
+        }
+      ]
+    },
+    "social": {
+      "title": "Sosyal giriş (Google, Microsoft, GitHub…)",
+      "intro": "Her sağlayıcıda bu paneli bir uygulama (OAuth istemcisi) olarak kaydedersiniz. Ayarlarda sağlayıcının altında gösterilen yönlendirme adresini sağlayıcıya verirsiniz; sağlayıcı da size bir client ID ve client secret verir.",
+      "sections": [
+        {
+          "title": "Her sağlayıcıda",
+          "steps": [
+            "Panel son adresinde https ile yayınlanıyor olmalı: yönlendirme adresi bu adresi içerir.",
+            "Yönlendirme adresini sağlayıcı kartından birebir kopyalayın (…/api/auth/callback/<sağlayıcı>).",
+            "Client ID ve secret değerlerini yapıştırın, sağlayıcıyı açın ve kaydedin. Secret şifreli saklanır ve bir daha gösterilmez."
+          ],
+          "note": "Mevcut panel hesapları bir sağlayıcı tarafından asla ele geçirilemez: kişiler sağlayıcıyı Hesap → Güvenlik bölümünden kendileri bağlar. Sağlayıcılarla yeni hesap yalnızca siz izin verirseniz ve kayıt açıksa açılır."
+        },
+        {
+          "title": "Google",
+          "text": "Google Cloud console → APIs & Services: önce OAuth consent screen’i ayarlayın, sonra Credentials → Create credentials → OAuth client ID, tür “Web application”. Yönlendirme adresini “Authorized redirect URIs” altına ekleyin. One Tap için panel adresini “Authorized JavaScript origins” altına da ekleyin. İstenen kapsamlar: openid, email, profile."
+        },
+        {
+          "title": "Microsoft (Entra ID)",
+          "text": "Microsoft Entra admin center → App registrations → New registration; platform “Web”, yönlendirme adresiyle. Certificates & secrets → New client secret: Value değerini kopyalayın (Secret ID değil). Kiracı: her Microsoft hesabı için “common”, yalnızca iş/okul hesapları için “organizations” ya da uygulamanın Overview sayfasındaki Directory (tenant) ID."
+        },
+        {
+          "title": "GitHub",
+          "text": "GitHub → Settings → Developer settings → OAuth Apps → New OAuth App. Homepage URL: panel adresi; Authorization callback URL: yönlendirme adresi. Sonra “Generate a new client secret”. İstenen kapsamlar: read:user, user:email."
+        },
+        {
+          "title": "GitLab",
+          "text": "GitLab → User settings (ya da bir grubun / sunucunun yönetim alanı) → Applications → Add new application; yönlendirme adresi ve read_user kapsamıyla, confidential olarak."
+        },
+        {
+          "title": "Discord",
+          "text": "Discord Developer Portal → Applications → New Application → OAuth2: client ID’yi kopyalayın, client secret için sıfırlayın ve yönlendirme adresini Redirects altına ekleyin. İstenen kapsamlar: identify, email."
+        },
+        {
+          "title": "Facebook",
+          "text": "Meta for Developers → My Apps → Create app; “Facebook Login” ürününü ekleyin ve yönlendirme adresini Facebook Login → Settings → Valid OAuth Redirect URIs altına girin. App ID ve App secret (App settings → Basic) client ID ve secret’tır. İstenen izinler: email, public_profile."
+        },
+        {
+          "title": "LinkedIn",
+          "text": "LinkedIn Developers → Create app; Products sekmesinde “Sign In with LinkedIn using OpenID Connect” isteyin. Auth sekmesinde yönlendirme adresini Authorized redirect URLs altına ekleyin; Client ID ve Primary Client Secret orada görünür. İstenen kapsamlar: openid, profile, email."
+        }
+      ],
+      "links": [
+        {
+          "label": "Google: Using OAuth 2.0 for Web Server Applications",
+          "url": "https://developers.google.com/identity/protocols/oauth2/web-server"
+        },
+        {
+          "label": "Microsoft: Register an application",
+          "url": "https://learn.microsoft.com/entra/identity-platform/quickstart-register-app"
+        },
+        {
+          "label": "GitHub: Creating an OAuth app",
+          "url": "https://docs.github.com/apps/oauth-apps/building-oauth-apps/creating-an-oauth-app"
+        },
+        {
+          "label": "GitLab: Configure GitLab as an OAuth 2.0 provider",
+          "url": "https://docs.gitlab.com/integration/oauth_provider/"
+        },
+        {
+          "label": "Discord: OAuth2",
+          "url": "https://discord.com/developers/docs/topics/oauth2"
+        },
+        {
+          "label": "LinkedIn: Sign In with LinkedIn using OpenID Connect",
+          "url": "https://learn.microsoft.com/linkedin/consumer/integrations/self-serve/sign-in-with-linkedin-v2"
+        },
+        {
+          "label": "Better Auth: Social sign-on",
+          "url": "https://www.better-auth.com/docs/concepts/oauth"
         }
       ]
     }
