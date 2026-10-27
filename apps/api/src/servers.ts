@@ -311,7 +311,9 @@ export class ServersController {
     }
     // Pay as you go: offered when the admin allows it; the balance must cover the first hours (Settings → Billing).
     let hourly: string | null = null;
-    if (body.billingCycle === 'hourly') {
+    // Billed by an outside system (external.ts): no subscription, no invoice, no hourly usage here.
+    const external = !!(req as { externalBilling?: boolean }).externalBilling;
+    if (body.billingCycle === 'hourly' && !external) {
       const bs = await getSettings('billing');
       if (vdc || !bs.enabled || !bs.hourly || !bs.balance) throw apiError(400, 'VALIDATION_FAILED', 'Hourly billing is not offered', { billingCycle: 'NOT_AVAILABLE' });
       const { rows: [p] } = order.packageId ? await pool.query('SELECT price_hourly::text AS h FROM packages WHERE id = $1', [order.packageId]) : { rows: [] };
@@ -385,7 +387,7 @@ export class ServersController {
       }
       // Billing on: the subscription and first invoice (a data center's servers are paid with the data center).
       if (hourly) await startHourly(client, { serverId: s.id, ownerId: req.user.id, hourly, currency: order.price.currency });
-      const bill = vdc || hourly ? null : await billOrder(client, { ownerId: req.user.id, serverId: s.id, name, monthly: order.price.monthly, currency: order.price.currency });
+      const bill = vdc || hourly || external ? null : await billOrder(client, { ownerId: req.user.id, serverId: s.id, name, monthly: order.price.monthly, currency: order.price.currency });
       const { rows: [op] } = await client.query(`INSERT INTO operations (kind, status, idempotency_key, request_hash, server_id, owner_id, step, deadline_at)
         VALUES ('create', 'pending', $1, $2, $3, $4, $6, now() + make_interval(mins => $5)) RETURNING id, kind, status`,
         [key, requestHash, s.id, req.user.id, deadlineMinutes.create, bill?.awaitingPayment ? 'awaiting_payment' : 'queued']);

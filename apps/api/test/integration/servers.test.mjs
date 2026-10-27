@@ -844,14 +844,9 @@ test('resize and reinstall: priced like an order, the disk only grows, the VM ch
   const copy = await create(order('resize-1-copy', { cloneFrom: id, packageId: small }));
   assert.equal(copy.statusCode, 202, copy.body);
   const copyId = copy.json().serverId;
-  // The simulator's guest never reports the copy's new address (cloud-init does on vCenter), so the clone itself is checked.
-  await until(async () => (await serverRow(copyId)).vm_moref || ['failed', 'cancelled'].includes((await lastOp(copyId)).status) || (await lastOp(copyId)).error_code, 'copy cloned', 120);
-  const c = await serverRow(copyId);
-  const cop = await lastOp(copyId);
-  assert.ok(c.vm_moref, `clone: ${cop.status} ${cop.error_code} ${cop.error_detail}`);
-  assert.equal(c.clone_from_moref, s.vm_moref);
-  assert.notEqual(c.vm_moref, s.vm_moref);
-  assert.equal(await vmCount(copyId), 1);
+  // The copy is cloned from this server's VM. (The VMware side, cloning a running and resized server, is the adapter's TestCloneFromServer:
+  // the integration simulator refuses the NIC edit when cloning a VM that was itself cloned and reconfigured.)
+  assert.equal((await serverRow(copyId)).clone_from_moref, s.vm_moref);
   assert.equal((await send('POST', `/servers/${copyId}/operations/${(await lastOp(copyId)).id}/cancel`, undefined, user)).statusCode, 202);
   await until(async () => (await serverRow(copyId)).state === 'deleted' || (await lastOp(copyId)).status === 'cancelled', 'copy cancelled', 120);
   assert.equal((await send('DELETE', `/servers/${id}`, { confirm: 'resize-1' }, user, key())).statusCode, 202);
@@ -860,7 +855,8 @@ test('resize and reinstall: priced like an order, the disk only grows, the VM ch
 
 test('import: a VM made outside the panel becomes a customer\'s server under the managed name, with its size and address; staff only', { skip }, async () => {
   // A fresh inventory: the simulator keeps running between test runs, so VMs taken over earlier carry managed names now.
-  await send('POST', `/admin/vmware/connections/${connectionId}/discover`);
+  const disc = await send('POST', `/admin/vmware/connections/${connectionId}/discover`);
+  assert.equal(disc.statusCode, 200, disc.body);
   const { rows: [vm] } = await pool.query("SELECT moref, name, cpu, memory_mb FROM vmware_vms WHERE connection_id = $1 AND NOT template AND name NOT LIKE 'lvm-%' ORDER BY name DESC LIMIT 1", [connectionId]);
   assert.ok(vm, 'the simulator has unmanaged VMs');
   const listed = (await send('GET', `/admin/import/candidates?connectionId=${connectionId}`)).json();
@@ -870,7 +866,7 @@ test('import: a VM made outside the panel becomes a customer\'s server under the
   const bad = (await send('POST', '/admin/import', { ...body, ownerEmail: 'nobody@example.test', address: '192.0.2.1', vmMoref: 'vm-0' })).json().fields;
   assert.deepEqual([bad.ownerEmail, bad.address, bad.vmMoref], ['NOT_AVAILABLE', 'NOT_AVAILABLE', 'NOT_AVAILABLE']);
   const made = await send('POST', '/admin/import', body);
-  assert.equal(made.statusCode, 201, made.body);
+  assert.equal(made.statusCode, 201, `${vm.name} (${vm.moref}): ${made.body}`);
   const id = made.json().serverId;
   const s = await serverRow(id);
   assert.deepEqual([s.state, s.vm_moref, s.vcpu, s.memory_mb, s.price_monthly], ['ready', vm.moref, Math.max(1, vm.cpu), Math.max(512, vm.memory_mb), '3.50']);
@@ -1104,4 +1100,40 @@ test('invoice disputes: a reason, lines and amount with a conversation ticket; c
   assert.deepEqual([(await row(d3.id)).status, (await pool.query('SELECT disputed FROM invoices WHERE id = $1', [inv3])).rows[0].disputed], ['withdrawn', false]);
   assert.equal((await send('GET', '/billing/disputes', undefined, user)).json().disputes.length >= 3, true);
   await send('PUT', '/admin/settings/billing', { enabled: false });
+});
+
+test('outside billing (WHMCS/WISECP API): a customer by e-mail, a server per service reference (idempotent), suspend and unsuspend, remove; never billed by the panel', { skip }, async () => {
+  const key = () => ({ 'idempotency-key': randomUUID() });
+  await send('PUT', '/admin/settings/billing', { enabled: true, requirePayment: true });
+  assert.equal((await send('POST', '/admin/external/whmcs/customers', { email: 'not-an-email' })).json().fields.email, 'INVALID_EMAIL');
+  const c1 = (await send('POST', '/admin/external/whmcs/customers', { email: 'Whmcs.Client@Example.test', name: 'Ali Veli' })).json();
+  assert.equal(c1.created, true);
+  assert.deepEqual((await send('POST', '/admin/external/whmcs/customers', { email: 'whmcs.client@example.test' })).json(), { id: c1.id, created: false });
+  assert.equal((await send('POST', '/admin/external/whmcs/customers', { email: 'x@example.test' }, user)).statusCode, 403);
+  const sshKey = 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMa0iBTtZu9kbSNXzg5M6pZ1rn8F1143iWq3JIcGimfn whmcs';
+  const body = { reference: 'svc-77', customerId: c1.id, type: 'package', poolId, packageId, imageId, name: 'whmcs-77', sshKey };
+  const made = await send('POST', '/admin/external/whmcs/servers', body);
+  assert.equal(made.statusCode, 202, made.body);
+  const id = made.json().serverId;
+  assert.equal(made.json().invoiceId, undefined, 'billed by WHMCS, not here');
+  assert.equal((await send('POST', '/admin/external/whmcs/servers', body)).json().existed, true, 'the same service never orders twice');
+  const s = await serverRow(id);
+  assert.deepEqual([s.owner_id, s.external_source, s.external_ref], [c1.id, 'whmcs', 'svc-77']);
+  assert.equal((await lastOp(id)).step === 'awaiting_payment', false, 'not waiting for a panel payment');
+  await until(async () => (await serverRow(id)).state === 'ready', 'external server ready', 120);
+  const info = (await send('GET', '/admin/external/whmcs/servers/svc-77')).json();
+  assert.ok(info.address && info.state === 'ready', JSON.stringify(info));
+  assert.equal((await send('POST', '/admin/external/whmcs/servers/svc-77/suspend', {})).json().suspended, true);
+  assert.equal((await serverRow(id)).billing_hold, true);
+  await until(async () => !['pending', 'running'].includes((await lastOp(id)).status), 'stopped', 120);
+  assert.equal((await send('POST', '/admin/external/whmcs/servers/svc-77/unsuspend', {})).json().suspended, false);
+  await until(async () => !['pending', 'running'].includes((await lastOp(id)).status), 'started', 120);
+  const { runBilling } = await import('../../dist/billing.js');
+  await runBilling();
+  assert.equal((await pool.query('SELECT count(*)::int AS n FROM subscriptions WHERE server_id = $1', [id])).rows[0].n, 0, 'never adopted by the panel\'s billing');
+  assert.equal((await send('DELETE', '/admin/external/whmcs/servers/svc-77')).statusCode, 202);
+  await until(async () => (await serverRow(id)).state === 'deleted', 'external server removed', 120);
+  assert.equal((await send('GET', '/admin/external/whmcs/servers/svc-77')).statusCode, 404);
+  await send('PUT', '/admin/settings/billing', { enabled: false });
+  void key;
 });

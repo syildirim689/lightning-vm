@@ -254,7 +254,7 @@ export async function billOrder(db: PoolClient, o: { ownerId: string; serverId: 
 // Servers and data centers billed before billing was on (or by staff) get a subscription on their anniversary day.
 async function adopt() {
   const { rows } = await pool.query(`SELECT 'server' AS kind, s.id, s.owner_id, s.name, s.price_monthly::text AS amount, trim(s.currency) AS currency, s.created_at FROM servers s
-      WHERE s.state IN ('ready', 'error', 'provisioning') AND s.vdc_id IS NULL AND s.price_monthly > 0 AND s.billing_mode = 'monthly'
+      WHERE s.state IN ('ready', 'error', 'provisioning') AND s.vdc_id IS NULL AND s.price_monthly > 0 AND s.billing_mode = 'monthly' AND s.external_source IS NULL
         AND NOT EXISTS (SELECT 1 FROM subscriptions b WHERE b.server_id = s.id AND b.status NOT IN ('cancelled', 'ended'))
         AND NOT EXISTS (SELECT 1 FROM operations o WHERE o.server_id = s.id AND o.step = 'awaiting_payment')
     UNION ALL SELECT 'vdc', v.id, v.owner_id, v.name, v.price_monthly::text, trim(v.currency), v.created_at FROM vdcs v
