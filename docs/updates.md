@@ -82,3 +82,14 @@ sh scripts/install.sh auto-update on --channel stable --window 03:00-05:00
 sudo sh scripts/install.sh agent on|off                         # panel ajanı
 sudo sh scripts/install.sh schedule on|off                      # saatlik bakım (yedek + otomatik güncelleme)
 ```
+
+## Bu sunucunun ayarları (Yönetim → Sistem → Bu sunucu)
+Panelin çalıştığı makinenin adı (hostname), saat dilimi, zaman sunucuları (NTP) ve DNS sunucuları panelden
+değiştirilir. Panel yalnızca istek bırakır; ajan (`scripts/install.sh host`) değerleri yeniden denetler ve
+`hostnamectl`, `timedatectl`, systemd-timesyncd (`/etc/systemd/timesyncd.conf.d/lightning-vm.conf`) ve
+systemd-resolved (`/etc/systemd/resolved.conf.d/lightning-vm.conf`) ile uygular; yeni ad `/etc/hosts` içinde
+`127.0.1.1` satırına da yazılır. "default" (boş alan) zaman/DNS listesini dağıtımın varsayılanına döndürür.
+Sonra `data/maintenance/host.json` dosyasına güncel bilgiler (saat, NTP eşitlemesi, işletim sistemi, çekirdek,
+çalışma süresi) yazılır; sayfa sunucu saatini ve bilgisayarınızla farkını gösterir. chrony/ntpd ya da
+systemd-resolved olmayan sunucularda ilgili alan uygulanmaz ve nedeni yazılır.
+Elle: `sudo sh scripts/install.sh host --hostname panel.example.com --timezone Europe/Istanbul --ntp time.cloudflare.com --dns 1.1.1.1,9.9.9.9`

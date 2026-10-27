@@ -81,9 +81,9 @@ export default function HostSettings() {
           </div>
         </motion.div>
         <dl className="grid gap-3 text-sm sm:grid-cols-2 xl:grid-cols-3">
-          <Fact label={t('hostname')}><Mono>{h?.fqdn || h?.hostname || '–'}</Mono></Fact>
+          <Fact label={t('hostname')}>{h ? <Mono>{h.fqdn || h.hostname}</Mono> : '–'}</Fact>
           <Fact label={t('os')}>{h?.os || '–'}</Fact>
-          <Fact label={t('kernel')}><Mono>{h?.kernel || '–'}</Mono></Fact>
+          <Fact label={t('kernel')}>{h?.kernel ? <Mono>{h.kernel}</Mono> : '–'}</Fact>
           <Fact label={t('uptime')}>{h ? t('uptimeValue', { days, hours }) : '–'}</Fact>
           <Fact label={t('ntpServers')}>{h?.ntpServers ? h.ntpServers.split(',').join(', ') : t('distroDefault')}</Fact>
           <Fact label={t('resolvers')}>{h?.dnsServers ? h.dnsServers.split(',').join(', ') : h?.resolvers ? h.resolvers.split(',').join(', ') : '–'}</Fact>
