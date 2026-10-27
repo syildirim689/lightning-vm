@@ -139,8 +139,17 @@ function Sessions() {
     if (s.current) { window.location.replace('/login'); return; }
     void client.invalidateQueries({ queryKey: ['sessions'] });
   }
+  async function endOthers() {
+    try { const r = await apiFetch<{ ended: number }>('/account/sessions', { method: 'DELETE' }); toast.success(t('security.othersEnded', { n: r.ended })); }
+    catch (e) { toast.danger(error(e)); }
+    void client.invalidateQueries({ queryKey: ['sessions'] });
+  }
+  const others = list.data?.sessions.filter((s) => !s.current).length ?? 0;
   return <div className="flex flex-col gap-4">
-    <h3 className="font-semibold">{t('security.sessions')}</h3>
+    <div className="flex flex-wrap items-center justify-between gap-2">
+      <h3 className="font-semibold">{t('security.sessions')}</h3>
+      {others > 0 && <Button size="sm" variant="danger-soft" onPress={() => void endOthers()}><I name="log-out" size={14}/>{t('security.endOthers', { n: others })}</Button>}
+    </div>
     {list.data ? <SessionList sessions={list.data.sessions} onEnd={(s) => void end(s)}/> : <div className="h-24 animate-pulse rounded-xl bg-default/50"/>}
   </div>;
 }

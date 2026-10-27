@@ -1915,7 +1915,9 @@
       "thisDevice": "Bu cihaz",
       "revoke": "Oturumu kapat",
       "mobile": "Mobil",
-      "desktop": "Bilgisayar"
+      "desktop": "Bilgisayar",
+      "endOthers": "{n, plural, one {Diğer cihazdan çık} other {Diğer # cihazdan çık}}",
+      "othersEnded": "{n, plural, =0 {Başka cihazda açık oturum yoktu} other {# cihazdan çıkış yapıldı}}"
     },
     "tabs": {
       "profile": "Profil",
@@ -2509,7 +2511,23 @@
       "allActivity": "Tüm etkinliği denetim kaydında aç"
     },
     "onlineFilter": "Çevrimiçi ya da az önce aktif",
-    "sessionCount": "{n} oturum"
+    "sessionCount": "{n} oturum",
+    "notesCount": "{n} personel notu",
+    "notes": {
+      "title": "Personel notları",
+      "private": "Yalnızca personel görür",
+      "placeholder": "Bir görüşme, bir anlaşma, sonraki kişinin bilmesi gereken bir şey…",
+      "hint": "Ctrl+Enter ile eklenir",
+      "add": "Not ekle",
+      "added": "Not eklendi",
+      "empty": "Henüz not yok.",
+      "pinned": "Sabitlendi",
+      "pin": "Kullanıcı listesine sabitle",
+      "unpin": "Sabitlemeyi kaldır",
+      "remove": "Notu sil",
+      "removed": "Not silindi",
+      "removedAuthor": "Silinmiş hesap"
+    }
   },
   "Roles": {
     "eyebrow": "Kişiler",
@@ -4219,7 +4237,11 @@
       "account_time_zone": "Saat dilimi değişti",
       "settings_sso": "Tek oturum açma ayarları değişti",
       "settings_sso_test": "Tek oturum açma sağlayıcısı denetlendi",
-      "auth_sso_user_created": "Tek oturum açmayla hesap açıldı"
+      "auth_sso_user_created": "Tek oturum açmayla hesap açıldı",
+      "admin_user_note_added": "Personel notu eklendi",
+      "admin_user_note_pinned": "Personel notu sabitlendi ya da sabitlemesi kaldırıldı",
+      "admin_user_note_removed": "Personel notu silindi",
+      "account_sessions_ended": "Diğer cihazlardan çıkış yapıldı"
     },
     "outcome": {
       "success": "Tamamlandı",

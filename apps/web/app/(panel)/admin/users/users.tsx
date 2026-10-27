@@ -18,7 +18,7 @@ import { can } from '../../../../lib/permissions';
 import { useApiQuery } from '../../../../lib/query';
 
 type Row = { id: string; email: string; name: string; role: string; locale: string; createdAt: string; banned: boolean; banReason: string | null; banExpires: string | null;
-  twoFactorEnabled: boolean; authSource?: string; lastLoginMethod: string | null; phoneNumber: string | null; servers: number; sessions: number; lastSeen: string | null; overrides: number; presence: Presence };
+  twoFactorEnabled: boolean; authSource?: string; lastLoginMethod: string | null; phoneNumber: string | null; servers: number; sessions: number; lastSeen: string | null; overrides: number; presence: Presence; notes: number; pinnedNote: string | null };
 type Role = { key: string; name: string; description: string; permissions: string[]; builtin: boolean; members: number };
 type Override = { permission: string; effect: 'allow' | 'deny' };
 type ClientError = { code?: string; status?: number } | null;
@@ -43,7 +43,7 @@ export default function Users() {
 
   const rows = useMemo(() => (users ?? []).filter((u) => {
     const q = search.trim().toLocaleLowerCase('tr');
-    if (q && !`${u.email} ${u.name} ${u.phoneNumber ?? ''}`.toLocaleLowerCase('tr').includes(q)) return false;
+    if (q && !`${u.email} ${u.name} ${u.phoneNumber ?? ''} ${u.pinnedNote ?? ''}`.toLocaleLowerCase('tr').includes(q)) return false;
     if (role && !u.role.split(',').includes(role)) return false;
     if (status === 'banned' && !u.banned) return false;
     if (status === 'online' && u.presence === 'offline') return false;
@@ -80,7 +80,9 @@ export default function Users() {
         <span key="u" className="flex min-w-0 items-center gap-3">
           <span className="relative shrink-0"><Avatar size="sm"><Avatar.Fallback>{(u.name || u.email).slice(0, 2).toUpperCase()}</Avatar.Fallback></Avatar>
             <PresenceDot presence={u.presence} className="absolute -bottom-0.5 -right-0.5 rounded-full ring-2 ring-surface"/></span>
-          <button type="button" onClick={() => setSummaryOf(u.id)} className="min-w-0 rounded text-left hover:underline focus-visible:outline-2 focus-visible:outline-accent"><span className="block truncate font-medium">{u.name || u.email}</span>{u.name && <span className="block truncate text-xs text-muted">{u.email}</span>}</button>
+          <button type="button" onClick={() => setSummaryOf(u.id)} className="min-w-0 rounded text-left hover:underline focus-visible:outline-2 focus-visible:outline-accent"><span className="block truncate font-medium">{u.name || u.email}</span>{u.name && <span className="block truncate text-xs text-muted">{u.email}</span>}
+            {u.pinnedNote && <span className="mt-0.5 flex max-w-64 items-center gap-1 truncate text-xs text-warning" title={u.pinnedNote}><I name="pin" size={11} className="shrink-0"/><span className="truncate">{u.pinnedNote}</span></span>}</button>
+          {u.notes > 0 && !u.pinnedNote && <span className="shrink-0 text-muted" title={t('notesCount', { n: u.notes })}><I name="sticky-note" size={13}/></span>}
         </span>,
         <span key="r" className="flex flex-wrap gap-1">{u.role.split(',').map((r) => <Chip key={r} size="sm" variant={r === 'user' ? 'secondary' : 'soft'} color={r === 'admin' ? 'accent' : 'default'}>{roleName(r)}</Chip>)}
           {u.overrides > 0 && <Chip size="sm" variant="soft" color="warning">{t('overrides', { n: u.overrides })}</Chip>}</span>,

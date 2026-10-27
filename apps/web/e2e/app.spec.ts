@@ -1016,7 +1016,18 @@ test.describe('people, settings and smart features (English browser)', () => {
     await expect(page.getByRole('dialog')).toContainText('Recent activity');
     await page.waitForTimeout(900);
     await shot(page, 'user-summary');
+    // Staff notes: added, pinned, and the pinned one shows under the name in the list.
+    const dialog = page.getByRole('dialog');
+    await dialog.getByRole('textbox', { name: /A call, an agreement/ }).fill('Prefers e-mail; renewal agreed for March.');
+    await dialog.getByRole('button', { name: 'Add note' }).click();
+    await expect(dialog.getByText('Prefers e-mail; renewal agreed for March.')).toBeVisible();
+    await dialog.getByRole('button', { name: 'Pin to the users list' }).click();
+    await expect(dialog.getByText('Pinned', { exact: true })).toBeVisible();
+    await page.waitForTimeout(500);
+    await shot(page, 'user-notes');
     await page.keyboard.press('Escape');
+    await expect(page.getByText('Prefers e-mail; renewal agreed for March.').first()).toBeVisible();
+    await shot(page, 'users-pinned-note');
     // Who is here: the overview's "Online now" shows this admin; the users' "Online or active" card filters to them.
     await page.goto('/admin');
     await expect(page.getByRole('list', { name: 'Online now' }).getByRole('listitem').first()).toBeVisible();

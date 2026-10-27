@@ -1,11 +1,16 @@
 "use client";
 // A person at a glance (staff): servers and their monthly cost, sessions, recent activity, budget and role limits.
-import { Chip, Modal } from '@heroui/react';
+import { Button, Chip, Modal, TextArea, toast } from '@heroui/react';
+import { useQueryClient } from '@tanstack/react-query';
+import { useState } from 'react';
 import NextLink from 'next/link';
 import { useFormatter, useNow, useTranslations } from 'next-intl';
 import { I } from '../../../../components/icon';
 import { Stat, StatusChip } from '../../../../components/ui';
 import { useApiQuery } from '../../../../lib/query';
+import { apiFetch, useErrorText } from '../../../../lib/api';
+import { useMe } from '../../../../lib/me';
+import { can } from '../../../../lib/permissions';
 
 type Summary = {
   user: { id: string; email: string; name: string; role: string; createdAt: string; twoFactorEnabled: boolean; banned: boolean; authSource: string; budgetMonthly: number | null; budgetCurrency: string | null };
@@ -65,6 +70,7 @@ export function UserSummary({ id, onClose }: { id: string; onClose: () => void }
               <div className="flex flex-wrap gap-1">{Object.entries(d.limits).map(([k, v]) => <Chip key={k} size="sm" variant="soft" color="warning">
                 {k === 'require2fa' ? tr('require2faShort') : Array.isArray(v) ? tr('listShort', { name: tr(k as 'allowedIps'), n: v.length }) : `${tr(k as 'maxServers')}: ${v}`}</Chip>)}</div>
             </section>}
+            <StaffNotes id={id}/>
             <section>
               <h3 className="mb-2 text-sm font-semibold">{t('activity')}</h3>
               {d.activity.length === 0 ? <p className="text-sm text-muted">{t('noActivity')}</p> : <ol className="flex flex-col gap-1.5">
@@ -81,4 +87,51 @@ export function UserSummary({ id, onClose }: { id: string; onClose: () => void }
       </Modal.Dialog>
     </Modal.Container>
   </Modal.Backdrop>;
+}
+
+type Note = { id: string; body: string; pinned: boolean; createdAt: string; authorId: string | null; authorName: string | null; authorEmail: string | null };
+
+// Notes staff keep on a person (a call, an agreement, a warning); pinned ones also show in the users list.
+function StaffNotes({ id }: { id: string }) {
+  const t = useTranslations('Users.notes');
+  const format = useFormatter();
+  const now = useNow({ updateInterval: 60_000 });
+  const { error } = useErrorText();
+  const client = useQueryClient();
+  const write = can(useMe()?.permissions, 'users.manage');
+  const q = useApiQuery<{ notes: Note[] }>(['admin', 'user-notes', id], `/admin/users/${id}/notes`);
+  const [text, setText] = useState('');
+  const [busy, setBusy] = useState(false);
+  const changed = () => { void q.refetch(); void client.invalidateQueries({ queryKey: ['admin', 'users'] }); };
+  async function call(path: string, init: { method: string; body?: unknown }, done?: string) {
+    setBusy(true);
+    try { await apiFetch(path, init); if (done) toast.success(done); changed(); return true; } catch (e) { toast.danger(error(e)); return false; } finally { setBusy(false); }
+  }
+  async function add() { if (await call(`/admin/users/${id}/notes`, { method: 'POST', body: { body: text } }, t('added'))) setText(''); }
+  const notes = q.data?.notes;
+  return <section>
+    <h3 className="mb-2 flex items-center gap-2 text-sm font-semibold"><I name="sticky-note" size={14}/>{t('title')}<span className="text-xs font-normal text-muted">{t('private')}</span></h3>
+    {write && <div className="mb-3 flex flex-col gap-2">
+      <TextArea aria-label={t('placeholder')} placeholder={t('placeholder')} value={text} maxLength={2000} rows={2} autoComplete="off"
+        onChange={(e) => setText(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && text.trim()) { e.preventDefault(); void add(); } }}/>
+      <div className="flex items-center justify-between gap-2"><span className="text-xs text-muted">{text.length > 1800 ? `${text.length}/2000` : t('hint')}</span>
+        <Button size="sm" isDisabled={!text.trim()} isPending={busy} onPress={() => void add()}><I name="plus" size={14}/>{t('add')}</Button></div>
+    </div>}
+    {!notes ? <div className="h-12 animate-pulse rounded-xl bg-default/50"/> : notes.length === 0 ? <p className="text-sm text-muted">{t('empty')}</p> : <ul className="flex flex-col gap-2">
+      {notes.map((n) => <li key={n.id} className={`rounded-xl border px-3 py-2 text-sm ${n.pinned ? 'border-warning/40 bg-warning/5' : 'border-border'}`}>
+        <p className="whitespace-pre-wrap break-words">{n.body}</p>
+        <div className="mt-1 flex flex-wrap items-center gap-x-2 text-xs text-muted">
+          {n.pinned && <span className="inline-flex items-center gap-1 text-warning"><I name="pin" size={11}/>{t('pinned')}</span>}
+          <span>{n.authorName || n.authorEmail || t('removedAuthor')}</span>
+          <time dateTime={n.createdAt} title={format.dateTime(new Date(n.createdAt), { dateStyle: 'medium', timeStyle: 'short' })}>{format.relativeTime(new Date(n.createdAt), now)}</time>
+          {write && <span className="ml-auto flex gap-1">
+            <Button size="sm" variant="ghost" isIconOnly aria-label={n.pinned ? t('unpin') : t('pin')} isDisabled={busy}
+              onPress={() => void call(`/admin/users/${id}/notes/${n.id}`, { method: 'PATCH', body: { pinned: !n.pinned } })}><I name={n.pinned ? 'pin-off' : 'pin'} size={13}/></Button>
+            <Button size="sm" variant="ghost" isIconOnly aria-label={t('remove')} isDisabled={busy}
+              onPress={() => void call(`/admin/users/${id}/notes/${n.id}`, { method: 'DELETE' }, t('removed'))}><I name="trash-2" size={13}/></Button>
+          </span>}
+        </div>
+      </li>)}
+    </ul>}
+  </section>;
 }

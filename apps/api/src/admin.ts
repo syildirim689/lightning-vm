@@ -1,5 +1,5 @@
-import { Body, Controller, Delete, Get, HttpCode, Param, ParseUUIDPipe, Post, Put, Req, UseGuards } from '@nestjs/common';
-import { ensureRoles, limitsOf } from './permissions';
+import { Body, Controller, Delete, Get, HttpCode, Param, ParseUUIDPipe, Patch, Post, Put, Req, UseGuards } from '@nestjs/common';
+import { can, ensureRoles, limitsOf } from './permissions';
 import { pool } from './db';
 import { apiError } from './errors';
 import { audit, type AuthedRequest } from './auth';
@@ -78,15 +78,19 @@ export class AdminController {
   }
 
   @Get('users') @Can('users.view', 'catalog.manage')
-  async users() {
+  async users(@Req() req: AuthedRequest) {
     const { rows } = await pool.query(`SELECT u.id, u.email, u.name, coalesce(u.role, 'user') AS role, u.locale, u.disabled_at, u.created_at AS "createdAt",
       coalesce(u.banned, false) AS banned, u.ban_reason AS "banReason", u.ban_expires AS "banExpires", u.two_factor_enabled AS "twoFactorEnabled", u.auth_source AS "authSource",
       u.last_login_method AS "lastLoginMethod", u.phone_number AS "phoneNumber", u.phone_number_verified AS "phoneNumberVerified",
       (SELECT count(*)::int FROM servers s WHERE s.owner_id = u.id AND s.state <> 'deleted') AS servers,
       (SELECT count(*)::int FROM auth_sessions a WHERE a.user_id = u.id AND a.expires_at > now()) AS sessions,
       coalesce(u.last_seen_at, (SELECT max(coalesce(a.last_active_at, a.created_at)) FROM auth_sessions a WHERE a.user_id = u.id)) AS "lastSeen",
-      (SELECT count(*)::int FROM user_permission_overrides o WHERE o.user_id = u.id) AS overrides
+      (SELECT count(*)::int FROM user_permission_overrides o WHERE o.user_id = u.id) AS overrides,
+      (SELECT count(*)::int FROM staff_notes n WHERE n.user_id = u.id) AS notes,
+      (SELECT n.body FROM staff_notes n WHERE n.user_id = u.id AND n.pinned ORDER BY n.created_at DESC LIMIT 1) AS "pinnedNote"
       FROM users u ORDER BY u.created_at`);
+    // Notes are for people who may see users (this list is also open to catalog managers for owner pickers).
+    if (!can(req.user.permissions, 'users.view')) for (const r of rows) { r.notes = 0; r.pinnedNote = null; }
     // Online now (a panel tab open), recently active or offline.
     const online = await onlineUsers(rows.map((r) => r.id));
     return { users: rows.map((r) => ({ ...r, presence: statusOf(online.has(r.id), r.lastSeen) })) };
@@ -109,6 +113,42 @@ export class AdminController {
     if (!/^[\w-]{1,64}$/.test(sid) || !(await endSession(id, sid))) throw apiError(404, 'NOT_FOUND', 'Unknown session');
     await audit(req, 'admin.user.revoke_session', 'success', req.user.id, { target: id, session: sid });
     await publishLive(id, 'sessions');
+  }
+
+  // Staff notes on a person, pinned first: who wrote what and when. The person never sees them.
+  @Get('users/:id/notes') @Can('users.view')
+  async notes(@Param('id', ParseUUIDPipe) id: string) {
+    const { rows } = await pool.query(`SELECT n.id, n.body, n.pinned, n.created_at AS "createdAt", n.author_id AS "authorId", a.name AS "authorName", a.email AS "authorEmail"
+      FROM staff_notes n LEFT JOIN users a ON a.id = n.author_id WHERE n.user_id = $1 ORDER BY n.pinned DESC, n.created_at DESC LIMIT 100`, [id]);
+    return { notes: rows };
+  }
+
+  @Post('users/:id/notes') @HttpCode(201) @Can('users.manage')
+  async addNote(@Req() req: AuthedRequest, @Param('id', ParseUUIDPipe) id: string, @Body() body: unknown) {
+    const b = (body ?? {}) as { body?: unknown; pinned?: unknown };
+    const text = typeof b.body === 'string' ? b.body.trim() : '';
+    if (!text || text.length > 2000) throw apiError(400, 'VALIDATION_FAILED', 'Invalid input', { body: text ? 'TOO_LONG' : 'REQUIRED' });
+    const { rows: [n] } = await pool.query(`INSERT INTO staff_notes (user_id, author_id, body, pinned) SELECT $1, $2, $3, $4 WHERE EXISTS (SELECT 1 FROM users WHERE id = $1) RETURNING id`,
+      [id, req.user.id, text, b.pinned === true]);
+    if (!n) throw apiError(404, 'NOT_FOUND', 'Unknown user');
+    await audit(req, 'admin.user.note_added', 'success', req.user.id, { target: id, note: n.id });
+    return { id: n.id };
+  }
+
+  @Patch('users/:id/notes/:nid') @HttpCode(204) @Can('users.manage')
+  async pinNote(@Req() req: AuthedRequest, @Param('id', ParseUUIDPipe) id: string, @Param('nid', ParseUUIDPipe) nid: string, @Body() body: unknown) {
+    const pinned = (body as { pinned?: unknown })?.pinned;
+    if (typeof pinned !== 'boolean') throw apiError(400, 'VALIDATION_FAILED', 'Invalid input', { pinned: 'INVALID_VALUE' });
+    const r = await pool.query('UPDATE staff_notes SET pinned = $3 WHERE id = $2 AND user_id = $1', [id, nid, pinned]);
+    if (!r.rowCount) throw apiError(404, 'NOT_FOUND', 'Unknown note');
+    await audit(req, 'admin.user.note_pinned', 'success', req.user.id, { target: id, note: nid, pinned });
+  }
+
+  @Delete('users/:id/notes/:nid') @HttpCode(204) @Can('users.manage')
+  async removeNote(@Req() req: AuthedRequest, @Param('id', ParseUUIDPipe) id: string, @Param('nid', ParseUUIDPipe) nid: string) {
+    const r = await pool.query('DELETE FROM staff_notes WHERE id = $2 AND user_id = $1', [id, nid]);
+    if (!r.rowCount) throw apiError(404, 'NOT_FOUND', 'Unknown note');
+    await audit(req, 'admin.user.note_removed', 'success', req.user.id, { target: id, note: nid });
   }
 
   @Get('settings') @Can('settings.view', 'settings.manage')

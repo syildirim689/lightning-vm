@@ -151,6 +151,16 @@ export class MySessionsController {
   @Get()
   async list(@Req() req: AuthedRequest) { return { sessions: await sessionsOf(req.user.id, req.sessionId) }; }
 
+  // Signs out every other device (the one in use stays); each ends as a single session would.
+  @Delete()
+  async endOthers(@Req() req: AuthedRequest) {
+    const { rows } = await pool.query('SELECT id FROM auth_sessions WHERE user_id = $1 AND id <> $2', [req.user.id, req.sessionId]);
+    for (const r of rows) await endSession(req.user.id, r.id);
+    await audit(req, 'account.sessions_ended', 'success', req.user.id, { count: rows.length });
+    await publishLive(req.user.id, 'sessions');
+    return { ended: rows.length };
+  }
+
   @Delete(':sid') @HttpCode(204)
   async end(@Req() req: AuthedRequest, @Param('sid') sid: string) {
     if (!/^[\w-]{1,64}$/.test(sid) || !(await endSession(req.user.id, sid))) throw apiError(404, 'NOT_FOUND', 'Unknown session');

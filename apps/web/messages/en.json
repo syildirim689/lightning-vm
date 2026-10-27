@@ -1915,7 +1915,9 @@
       "thisDevice": "This device",
       "revoke": "Sign out",
       "mobile": "Mobile",
-      "desktop": "Computer"
+      "desktop": "Computer",
+      "endOthers": "{n, plural, one {Sign out the other device} other {Sign out # other devices}}",
+      "othersEnded": "{n, plural, =0 {No other device was signed in} one {Signed out # device} other {Signed out # devices}}"
     },
     "tabs": {
       "profile": "Profile",
@@ -2509,7 +2511,23 @@
       "allActivity": "Open all activity in the audit log"
     },
     "onlineFilter": "Online now or recently",
-    "sessionCount": "{n, plural, one {# session} other {# sessions}}"
+    "sessionCount": "{n, plural, one {# session} other {# sessions}}",
+    "notesCount": "{n, plural, one {# staff note} other {# staff notes}}",
+    "notes": {
+      "title": "Staff notes",
+      "private": "Only staff see these",
+      "placeholder": "A call, an agreement, something the next person should know…",
+      "hint": "Ctrl+Enter adds it",
+      "add": "Add note",
+      "added": "Note added",
+      "empty": "No notes yet.",
+      "pinned": "Pinned",
+      "pin": "Pin to the users list",
+      "unpin": "Unpin",
+      "remove": "Remove note",
+      "removed": "Note removed",
+      "removedAuthor": "Removed account"
+    }
   },
   "Roles": {
     "eyebrow": "People",
@@ -4219,7 +4237,11 @@
       "account_time_zone": "Time zone changed",
       "settings_sso": "Single sign-on settings changed",
       "settings_sso_test": "Single sign-on provider checked",
-      "auth_sso_user_created": "Account created by single sign-on"
+      "auth_sso_user_created": "Account created by single sign-on",
+      "admin_user_note_added": "Staff note added",
+      "admin_user_note_pinned": "Staff note pinned or unpinned",
+      "admin_user_note_removed": "Staff note removed",
+      "account_sessions_ended": "Other devices signed out"
     },
     "outcome": {
       "success": "Done",

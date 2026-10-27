@@ -576,6 +576,32 @@ test('live line: open tabs learn at once; a role change refreshes them, a ban or
   assert.equal((await get('/auth/me', c)).statusCode, 200, 'the other one stays');
   assert.equal((await tab.next('changed')).kind, 'sessions', 'the open tab hears about it and stays signed in');
   assert.equal((await call('DELETE', `/account/sessions/${otherId}`, c)).statusCode, 404);
+  // Signing out every other device: the one in use stays, the others are gone at once.
+  await freshLimits();
+  const extra = [cookieOf(await post('/auth/sign-in/email', { email, password })), cookieOf(await post('/auth/sign-in/email', { email, password }))];
+  assert.equal((await call('DELETE', '/account/sessions', c)).json().ended, 2);
+  for (const x of extra) assert.equal((await get('/auth/me', x)).statusCode, 401);
+  assert.equal((await get('/auth/me', c)).statusCode, 200);
+  assert.equal((await tab.next('changed')).kind, 'sessions');
+  // Staff notes: staff only, a pinned one shows in the users list, unpinned and removed again; the person sees nothing.
+  assert.equal((await post(`/admin/users/${id}/notes`, { body: 'x' }, user)).statusCode, 403);
+  assert.equal((await get(`/admin/users/${id}/notes`, c)).statusCode, 403);
+  assert.equal((await post(`/admin/users/${id}/notes`, { body: '  ' }, admin)).json().fields.body, 'REQUIRED');
+  assert.equal((await post(`/admin/users/${id}/notes`, { body: 'x'.repeat(2001) }, admin)).json().fields.body, 'TOO_LONG');
+  const note = (await post(`/admin/users/${id}/notes`, { body: 'Called about the invoice', pinned: true }, admin)).json().id;
+  await post(`/admin/users/${id}/notes`, { body: 'Second note' }, admin);
+  const notes = (await get(`/admin/users/${id}/notes`, admin)).json().notes;
+  assert.deepEqual(notes.map((n) => n.body), ['Called about the invoice', 'Second note']);
+  assert.ok(notes[0].pinned && notes[0].authorEmail);
+  let row = (await get('/admin/users', admin)).json().users.find((u) => u.id === id);
+  assert.equal(row.pinnedNote, 'Called about the invoice');
+  assert.equal(row.notes, 2);
+  assert.equal((await call('PATCH', `/admin/users/${id}/notes/${note}`, admin, { pinned: false })).statusCode, 204);
+  assert.equal((await get('/admin/users', admin)).json().users.find((u) => u.id === id).pinnedNote, null);
+  assert.equal((await call('DELETE', `/admin/users/${id}/notes/${note}`, admin)).statusCode, 204);
+  assert.equal((await call('DELETE', `/admin/users/${id}/notes/${note}`, admin)).statusCode, 404);
+  row = (await get('/admin/users', admin)).json().users.find((u) => u.id === id);
+  assert.equal(row.notes, 1);
   // Permissions: the tab is told to refresh, it stays signed in.
   assert.equal((await put(`/admin/users/${id}/access`, { roles: ['user'], overrides: [{ permission: 'dashboard.view', effect: 'allow' }] }, admin)).statusCode, 200);
   assert.equal((await tab.next('changed')).kind, 'access');
