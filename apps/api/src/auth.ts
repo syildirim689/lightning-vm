@@ -54,7 +54,7 @@ export async function currentSession(req: FastifyRequest): Promise<{ user: User;
   // Customer permissions (their own servers and firewalls) do not make anyone staff.
   const staff = permissions.some((p) => !customerLevel(p));
   // Single sign-on accounts have no panel password: their provider does the second factor.
-  const twoFactorRequired = !u.twoFactorEnabled && !impersonatedBy && (u as { authSource?: string }).authSource !== 'oidc' && (policy === 'all' || (policy === 'staff' && staff) || !!limits.require2fa);
+  const twoFactorRequired = !u.twoFactorEnabled && !impersonatedBy && !['oidc', 'social'].includes((u as { authSource?: string }).authSource ?? '') && (policy === 'all' || (policy === 'staff' && staff) || !!limits.require2fa);
   return { user: { id: u.id, email: u.email, name: u.name ?? '', roles: splitRoles(u.role), permissions,
     locale: u.locale === 'tr' ? 'tr' : 'en', timeZone: (u as { timeZone?: string | null }).timeZone ?? null, impersonatedBy, twoFactorEnabled: !!u.twoFactorEnabled, twoFactorRequired, phoneNumber: u.phoneNumber ?? null,
     phoneNumberVerified: !!u.phoneNumberVerified }, token: s.session.token, id: s.session.id };

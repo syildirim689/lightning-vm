@@ -8,6 +8,7 @@ import { endSession, onlineUsers, sessionsOf, statusOf } from './presence';
 import { publishLive } from './live-bus';
 import { agentStatus, hostInfo, pendingRequests, queueRequest, releases, runLog, settings as maintenanceSettings, summary } from './maintenance';
 import { readHostChange } from './host-rules';
+import { reloadAuth } from './better-auth';
 
 @Controller('admin') @UseGuards(PermissionGuard)
 export class AdminController {
@@ -122,6 +123,8 @@ export class AdminController {
     if (typeof open !== 'boolean') throw apiError(400, 'VALIDATION_FAILED', 'Invalid input', { registrationOpen: 'INVALID_VALUE' });
     await pool.query("UPDATE settings SET value = $1, updated_at = now() WHERE key = 'registration_open'", [JSON.stringify(open)]);
     await audit(req, 'settings.registration_open', 'success', req.user.id, { value: open });
+    await reloadAuth(); // social sign-up follows registration
+
     return { registrationOpen: open };
   }
 }

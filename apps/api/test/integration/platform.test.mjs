@@ -566,6 +566,7 @@ test('live line: open tabs learn at once; a role change refreshes them, a ban or
   assert.equal((await call('DELETE', `/admin/users/${id}/sessions/${otherId}`, admin)).statusCode, 204);
   assert.equal((await get('/auth/me', other)).statusCode, 401, 'that session is gone at once');
   assert.equal((await get('/auth/me', c)).statusCode, 200, 'the other one stays');
+  assert.equal((await tab.next('changed')).kind, 'sessions', 'the open tab hears about it and stays signed in');
   assert.equal((await call('DELETE', `/account/sessions/${otherId}`, c)).statusCode, 404);
   // Permissions: the tab is told to refresh, it stays signed in.
   assert.equal((await put(`/admin/users/${id}/access`, { roles: ['user'], overrides: [{ permission: 'dashboard.view', effect: 'allow' }] }, admin)).statusCode, 200);
@@ -733,6 +734,91 @@ async function ssoSignIn(idp, person) {
   const done = await app.inject({ method: 'GET', url: back.pathname.replace(/^\/api/, '') + back.search, headers: { host: 'localhost', cookie: jar } });
   return { cookie: cookieOf(done), location: done.headers.location };
 }
+
+
+// A minimal SMTP server for tests: accepts every message and keeps it (plain SMTP, no TLS).
+async function fakeSmtp() {
+  const { createServer: tcp } = await import('node:net');
+  const mails = [];
+  const server = tcp((sock) => {
+    let data = false, buf = '', msg = '';
+    sock.write('220 fake ESMTP\r\n');
+    sock.on('data', (d) => {
+      buf += d.toString('utf8');
+      for (let i; (i = buf.indexOf('\r\n')) >= 0;) {
+        const line = buf.slice(0, i); buf = buf.slice(i + 2);
+        if (data) { if (line === '.') { data = false; mails.push(msg); msg = ''; sock.write('250 queued\r\n'); } else msg += line + '\n'; continue; }
+        const cmd = line.slice(0, 4).toUpperCase();
+        if (cmd === 'EHLO') sock.write('250-fake\r\n250 OK\r\n');
+        else if (cmd === 'DATA') { data = true; sock.write('354 go\r\n'); }
+        else if (cmd === 'QUIT') { sock.end('221 bye\r\n'); }
+        else sock.write('250 OK\r\n');
+      }
+    });
+  });
+  await new Promise((r) => server.listen(0, '127.0.0.1', r));
+  return { port: server.address().port, mails, close: () => new Promise((r) => server.close(r)) };
+}
+
+test('sign-in methods: settings checked, secrets kept, social providers registered, e-mail link, user names, leaked passwords, throwaway domains', async () => {
+  const smtp = await fakeSmtp();
+  try {
+    // Settings: checked, secrets never come back, the public config lists what is on.
+    assert.equal((await put('/admin/settings/sign-in', { magicLink: true }, user)).statusCode, 403);
+    assert.deepEqual((await put('/admin/settings/sign-in', { oneTap: true, providers: { google: { enabled: true } } }, admin)).json().fields, { 'providers.google.clientId': 'REQUIRED', oneTap: 'GOOGLE_REQUIRED' });
+    const saved = (await put('/admin/settings/sign-in', { providers: { github: { enabled: true, clientId: 'Iv1.testclient', clientSecret: 'gh-secret-value' }, microsoft: { tenantId: 'not a tenant' } } }, admin)).json();
+    assert.equal(saved.fields?.['providers.microsoft.tenantId'], 'INVALID_VALUE');
+    const ok = (await put('/admin/settings/sign-in', { providers: { github: { enabled: true, clientId: 'Iv1.testclient', clientSecret: 'gh-secret-value' } } }, admin)).json();
+    assert.equal(ok.providers.github.clientSecretSet, true);
+    assert.ok(!JSON.stringify(ok).includes('gh-secret-value'));
+    assert.deepEqual((await get('/public/config')).json().signIn.social, ['github']);
+    // GitHub sign-in starts at GitHub with this panel's callback (the redirect URI to register there).
+    const start = (await post('/auth/sign-in/social', { provider: 'github', callbackURL: '/' })).json();
+    const u = new URL(start.url);
+    assert.equal(u.origin + u.pathname, 'https://github.com/login/oauth/authorize');
+    assert.equal(u.searchParams.get('client_id'), 'Iv1.testclient');
+    assert.equal(u.searchParams.get('redirect_uri'), 'http://localhost/api/auth/callback/github');
+    assert.ok((await post('/auth/sign-in/social', { provider: 'google', callbackURL: '/' })).statusCode >= 400, 'not enabled');
+
+    // E-mail link: off, or without mail, refused; on, it signs in once.
+    assert.equal((await post('/auth/sign-in/magic-link', { email: 'support@example.test', callbackURL: '/' })).json().code, 'MAGIC_LINK_DISABLED');
+    assert.equal((await put('/admin/settings/mail', { enabled: true, provider: 'smtp', host: '127.0.0.1', port: smtp.port, security: 'none', fromAddress: 'panel@example.test', fromName: 'Panel', use: {} }, admin)).statusCode, 200);
+    await put('/admin/settings/sign-in', { magicLink: true }, admin);
+    assert.equal((await get('/public/config')).json().signIn.magicLink, true);
+    assert.equal((await post('/auth/sign-in/magic-link', { email: 'nobody@example.test', callbackURL: '/' })).statusCode, 200, 'same answer for unknown addresses');
+    assert.equal((await post('/auth/sign-in/magic-link', { email: 'support@example.test', callbackURL: '/' })).statusCode, 200);
+    const mail = await until(() => smtp.mails.find((m) => m.includes('support@example.test')));
+    assert.ok(mail, 'the link was mailed');
+    assert.equal(smtp.mails.filter((m) => m.includes('nobody@example.test')).length, 0);
+    const link = new URL(/(https?:\/\/\S+magic-link\/verify\S+)/.exec(mail.replace(/=\r?\n/g, '').replace(/=3D/g, '='))[1]);
+    const verify = (path) => app.inject({ method: 'GET', url: path, headers: { host: 'localhost' } });
+    const used = await verify(link.pathname.replace(/^\/api/, '') + link.search);
+    const linkCookie = cookieOf(used);
+    assert.ok(linkCookie, 'signed in by the link');
+    assert.equal((await get('/auth/me', linkCookie)).json().email, 'support@example.test');
+    assert.equal(cookieOf(await verify(link.pathname.replace(/^\/api/, '') + link.search)), undefined, 'a link works once');
+
+    // User names: off, refused; on, set in the profile and used to sign in (panel passwords only).
+    assert.equal((await post('/auth/sign-in/username', { username: 'support.team', password })).json().code, 'USERNAME_SIGN_IN_DISABLED');
+    await put('/admin/settings/sign-in', { username: true }, admin);
+    assert.equal((await post('/auth/update-user', { username: 'Support.Team' }, helperCookie)).statusCode, 200);
+    assert.equal((await pool.query("SELECT username FROM users WHERE email = 'support@example.test'")).rows[0].username, 'support.team');
+    const byName = await post('/auth/sign-in/username', { username: 'support.team', password });
+    assert.equal(byName.statusCode, 200, byName.body);
+    assert.ok(cookieOf(byName));
+    assert.equal((await post('/auth/sign-in/username', { username: 'support.team', password: 'wrong-password-123' })).statusCode, 401);
+    assert.equal((await post('/auth/is-username-available', { username: 'support.team' })).statusCode, 404, 'not public');
+
+    // Throwaway addresses and leaked passwords.
+    await put('/admin/settings/sign-in', { blockDisposable: true, pwnedPasswords: true }, admin);
+    assert.equal((await post('/auth/sign-up/email', { email: 'x@mailinator.com', password, name: 'X' })).json().code, 'DISPOSABLE_EMAIL');
+    assert.equal((await post('/auth/admin/create-user', { email: 'leak@example.test', password: 'password1234', name: 'Leak', role: 'user' }, admin)).json().code, 'PASSWORD_COMPROMISED');
+  } finally {
+    await put('/admin/settings/sign-in', { magicLink: false, username: false, oneTap: false, socialSignUp: false, pwnedPasswords: false, blockDisposable: false, providers: { github: { enabled: false } } }, admin);
+    await put('/admin/settings/mail', { enabled: false, provider: 'smtp', use: {} }, admin);
+    await smtp.close();
+  }
+});
 
 test('statistics: a period against the one before, a bucket per day (per week for a year), staff only', async () => {
   const week = (await get('/admin/stats?days=7', admin)).json();

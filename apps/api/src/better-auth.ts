@@ -3,12 +3,14 @@
 // Users stay in the existing "users" table; better-auth's tables are auth_* (migrations 007, 008).
 import { betterAuth } from 'better-auth';
 import { APIError, createAuthMiddleware } from 'better-auth/api';
-import { admin, emailOTP, genericOAuth, lastLoginMethod, phoneNumber, twoFactor } from 'better-auth/plugins';
+import { admin, emailOTP, genericOAuth, lastLoginMethod, magicLink, oneTap, phoneNumber, twoFactor, username } from 'better-auth/plugins';
+import { isPasswordCompromised } from 'better-auth/plugins/haveibeenpwned';
+import MailChecker from 'mailchecker';
 import { passkey } from '@better-auth/passkey';
 import { authSecret, config } from './config';
 import { pool, redis } from './db';
 import { logEvent } from './log';
-import { otpText, sendOtpMail, sendPasswordReset } from './mail';
+import { otpText, sendOtpMail, sendPasswordReset, sendSignInLink } from './mail';
 import { publishLive, type LiveKind } from './live-bus';
 import { notify } from './notify';
 import { adminEndpointPermission, betterAuthRoles, can, covers, effectivePermissions, ensureRoles, limitsOf, permissionsOf } from './permissions';
@@ -16,7 +18,8 @@ import { ipAllowed } from './role-limits';
 import { deviceOf } from './device';
 import { directorySignIn, refuseForDirectory } from './directory-signin';
 import { hashPassword, sha256, verifyPassword } from './security';
-import { activeCaptcha, getSettings, mailUse, verifyCaptcha, type OidcSettings } from './settings-store';
+import { activeCaptcha, getSettings, mailReady, mailUse, verifyCaptcha, type OidcSettings, type SignInSettings } from './settings-store';
+import { socialProviders, socialIds } from './social-providers';
 import { mayLink, providerId as ssoProviderId, ssoProvider, ssoSignedIn } from './sso';
 import { sendSms, smsUse } from './sms';
 
@@ -35,7 +38,12 @@ const targetsAccount = new Set(['/admin/ban-user', '/admin/unban-user', '/admin/
   '/admin/revoke-user-sessions', '/admin/impersonate-user', '/admin/update-user']);
 // Forms a captcha can protect, and the setting that turns it on for each.
 const captchaPaths: Record<string, 'signIn' | 'signUp' | 'passwordReset'> = { '/sign-in/email': 'signIn', '/sign-up/email': 'signUp', '/request-password-reset': 'passwordReset',
-  '/email-otp/send-verification-otp': 'signIn' };
+  '/email-otp/send-verification-otp': 'signIn', '/sign-in/magic-link': 'signIn', '/sign-in/username': 'signIn' };
+// Where a new password arrives (checked against known leaks when the admin turns that on), and its field.
+const passwordFields: Record<string, string> = { '/sign-up/email': 'password', '/change-password': 'newPassword', '/reset-password': 'newPassword',
+  '/admin/create-user': 'password', '/admin/set-user-password': 'newPassword' };
+// Ways in that end in a session without a password form: the role's address limits are checked as the session is made.
+const linkPaths = (p: string) => p.startsWith('/callback/') || p === '/one-tap/callback' || p === '/magic-link/verify';
 
 const auditAuth = (actorId: string | null, action: string, outcome: 'success' | 'failure' | 'denied', ip: string | null, metadata: object = {}) =>
   pool.query('INSERT INTO audit_events (actor_id, action, outcome, ip, metadata) VALUES ($1, $2, $3, $4, $5)', [actorId, action, outcome, ip, metadata])
@@ -56,6 +64,46 @@ async function seenBefore(userId: string, device: string, ip: string | null) {
         AND network(set_masklen(ip, CASE family(ip) WHEN 4 THEN 24 ELSE 48 END)) = network(set_masklen($3::inet, CASE family($3::inet) WHEN 4 THEN 24 ELSE 48 END))))::int AS known
     FROM audit_events WHERE actor_id = $1 AND action = 'auth.login' AND outcome = 'success' AND created_at > now() - interval '90 days'`, [userId, device, ip]).catch(() => ({ rows: [{ n: 0, known: 0 }] }));
   return r.n === 0 ? null : r.known > 0;
+}
+
+// The sign-in methods the admin turned on (Settings → Sign-in methods), and the checks on new passwords and addresses.
+async function checkMethods(path: string, headers: Headers, body: Record<string, unknown>) {
+  const ip = headers.get('x-lvm-client-ip') ?? '';
+  if (path === '/sign-in/magic-link') {
+    if (!signIn?.magicLink || !(await mailReady())) throw new APIError('FORBIDDEN', { code: 'MAGIC_LINK_DISABLED', message: 'Sign-in links are off' });
+    const email = String(body.email ?? '').trim().toLowerCase();
+    if (email) {
+      await limit(`login:email:${email}`, 10, 900);
+      // Directory and single sign-on accounts sign in where their password lives.
+      const { rows: [u] } = await pool.query('SELECT role, auth_source FROM users WHERE lower(email) = $1', [email]);
+      if (u && u.auth_source !== 'local' && u.auth_source !== 'social') throw new APIError('FORBIDDEN', { code: 'PASSWORD_MANAGED_BY_DIRECTORY', message: 'Sign in with your directory account' });
+      await ensureRoles();
+      if (u && !ipAllowed(limitsOf(u.role).allowedIps, ip)) throw new APIError('FORBIDDEN', { code: 'IP_NOT_ALLOWED', message: 'Not allowed from this address' });
+    }
+  }
+  if (path === '/sign-in/username') {
+    if (!signIn?.username) throw new APIError('FORBIDDEN', { code: 'USERNAME_SIGN_IN_DISABLED', message: 'Sign-in with a user name is off' });
+    const name = String(body.username ?? '').trim().toLowerCase();
+    if (name) {
+      await limit(`login:user:${name}`, 10, 900);
+      // Only panel passwords: a directory account would otherwise skip the directory.
+      const { rows: [u] } = await pool.query('SELECT role, auth_source FROM users WHERE username = $1', [name]);
+      if (u && u.auth_source !== 'local') throw new APIError('UNAUTHORIZED', { code: 'INVALID_USERNAME_OR_PASSWORD', message: 'Invalid username or password' });
+      await ensureRoles();
+      if (u && !ipAllowed(limitsOf(u.role).allowedIps, ip)) throw new APIError('FORBIDDEN', { code: 'IP_NOT_ALLOWED', message: 'Not allowed from this address' });
+    }
+  }
+  if (path === '/update-user' && body.username !== undefined && !signIn?.username) throw new APIError('FORBIDDEN', { code: 'USERNAME_SIGN_IN_DISABLED', message: 'User names are off' });
+  // Throwaway e-mail domains cannot open accounts (mailchecker's list).
+  if (path === '/sign-up/email' && signIn?.blockDisposable && typeof body.email === 'string' && !MailChecker.isValid(body.email.trim()))
+    throw new APIError('BAD_REQUEST', { code: 'DISPOSABLE_EMAIL', message: 'Use a permanent e-mail address' });
+  // A new password that appears in known leaks is refused. Only the first 5 characters of its SHA-1 leave the
+  // server (k-anonymity); if the service cannot be reached the password is accepted rather than blocking sign-up.
+  const field = passwordFields[path];
+  if (field && signIn?.pwnedPasswords && typeof body[field] === 'string' && body[field]) {
+    const leaked = await isPasswordCompromised(body[field] as string).catch(() => { logEvent('error', 'pwned_check_failed'); return false; });
+    if (leaked) throw new APIError('BAD_REQUEST', { code: 'PASSWORD_COMPROMISED', message: 'This password appears in known data breaches; choose another' });
+  }
 }
 
 const forbidden = (code = 'FORBIDDEN') => new APIError('FORBIDDEN', { code, message: 'Permission required' });
@@ -115,10 +163,17 @@ function createAuth() {
       fields: { userId: 'user_id', expiresAt: 'expires_at', ipAddress: 'ip_address', userAgent: 'user_agent', createdAt: 'created_at', updatedAt: 'updated_at' },
     },
     account: {
+      // A provider that reports someone's address never gets that account by itself; linking is done on purpose,
+      // signed in, from Account → Security (linkSocial). Single sign-on accounts are kept apart too (sso.ts).
+      accountLinking: { enabled: true, disableImplicitLinking: true, allowDifferentEmails: false },
       modelName: 'auth_accounts',
       fields: { userId: 'user_id', accountId: 'account_id', providerId: 'provider_id', accessToken: 'access_token', refreshToken: 'refresh_token', idToken: 'id_token',
         accessTokenExpiresAt: 'access_token_expires_at', refreshTokenExpiresAt: 'refresh_token_expires_at', createdAt: 'created_at', updatedAt: 'updated_at' },
     },
+    // Social sign-in (Settings → Sign-in methods): built from the settings each time better-auth is set up.
+    socialProviders: signIn ? socialProviders(signIn, registrationOpen) : {},
+    // A user name's availability is not public (it would tell who has an account).
+    disabledPaths: ['/is-username-available'],
     verification: { modelName: 'auth_verifications', fields: { expiresAt: 'expires_at', createdAt: 'created_at', updatedAt: 'updated_at' } },
     emailAndPassword: {
       enabled: true,
@@ -161,6 +216,7 @@ function createAuth() {
         if (!ctx.request) return; // server-side calls (setup, CLI) are not gated
         const body = (ctx.body ?? {}) as Record<string, unknown>;
         if (ctx.path.startsWith('/admin/')) await checkAdminEndpoint(ctx.path, ctx.request.headers, body);
+        await checkMethods(ctx.path, ctx.request.headers, body);
         // Directory accounts sign in against the directory (and are created or brought up to date there).
         if (ctx.path === '/sign-in/email') await directorySignIn(ctx, body);
         await refuseForDirectory(ctx.path, ctx.request.headers, body);
@@ -234,12 +290,15 @@ function createAuth() {
           if (uid) { await notify('auth.password_changed', [uid], {}); await publishLive(uid, 'password'); }
           return;
         }
-        if (ctx.path !== '/sign-in/email' && ctx.path !== '/sign-up/email' && ctx.path !== '/sign-in/passkey' && ctx.path !== '/sign-in/email-otp' && !ctx.path.startsWith('/two-factor/verify-') && !ctx.path.startsWith('/callback/')) return;
+        if (ctx.path !== '/sign-in/email' && ctx.path !== '/sign-up/email' && ctx.path !== '/sign-in/passkey' && ctx.path !== '/sign-in/email-otp' && !ctx.path.startsWith('/two-factor/verify-')
+          && !linkPaths(ctx.path) && ctx.path !== '/sign-in/username') return;
         const created = ctx.context.newSession;
         // A password sign-in that still needs the second factor is neither a success nor a failure yet.
         if (!created && (ctx.context.returned as { twoFactorRedirect?: boolean } | undefined)?.twoFactorRedirect) return;
         const action = ctx.path === '/sign-up/email' ? 'auth.register' : 'auth.login';
-        const method = ctx.path.startsWith('/callback/') ? 'sso' : ctx.path === '/sign-in/passkey' ? 'passkey' : ctx.path === '/sign-in/email-otp' ? 'email-code' : ctx.path.startsWith('/two-factor/') ? 'password+2fa' : 'password';
+        const provider = String((ctx.params as { id?: string } | undefined)?.id ?? '');
+        const method = ctx.path.startsWith('/callback/') ? (provider === ssoProviderId ? 'sso' : provider || 'social') : ctx.path === '/one-tap/callback' ? 'google-one-tap'
+          : ctx.path === '/magic-link/verify' ? 'magic-link' : ctx.path === '/sign-in/username' ? 'username' : ctx.path === '/sign-in/passkey' ? 'passkey' : ctx.path === '/sign-in/email-otp' ? 'email-code' : ctx.path.startsWith('/two-factor/') ? 'password+2fa' : 'password';
         const agent = ctx.request.headers.get('user-agent') ?? '';
         const device = deviceOf(agent);
         // Asked before this sign-in is recorded: has this person signed in from this device or network before?
@@ -254,13 +313,25 @@ function createAuth() {
     databaseHooks: {
       // A single sign-on account never attaches to an existing panel or directory account (sso.ts).
       account: { create: { before: async (account) => { if (account.providerId === ssoProviderId && !(await mayLink(account.userId))) return false; } } },
+      // An account made by a social provider is marked as such (two-factor is then the provider's, see auth.ts).
+      user: { create: { before: async (user, ctx) => {
+        const id = String((ctx?.params as { id?: string } | undefined)?.id ?? '');
+        if ((ctx?.path.startsWith('/callback/') && (socialIds as string[]).includes(id)) || ctx?.path === '/one-tap/callback') return { data: { ...user, authSource: 'social' } };
+      } } },
       session: {
         create: {
           // A disabled or banned account gets no new session (its old ones were revoked when it was disabled).
           before: async (session, ctx) => {
             const user = await ctx?.context.internalAdapter.findUserById(session.userId) as { disabledAt?: Date | null; banned?: boolean } | null;
             if (user?.disabledAt || user?.banned) return false;
-            if (sso && ctx?.path.startsWith('/callback/') && !(await ssoSignedIn(sso, session.userId, ctx.request?.headers.get('x-lvm-client-ip') ?? ''))) return false;
+            const via = String((ctx?.params as { id?: string } | undefined)?.id ?? '');
+            if (sso && ctx?.path.startsWith('/callback/') && via === ssoProviderId && !(await ssoSignedIn(sso, session.userId, ctx.request?.headers.get('x-lvm-client-ip') ?? ''))) return false;
+            // Social, One Tap and e-mail link sign-ins: the role's address limits apply as for a password.
+            if (ctx && linkPaths(ctx.path) && via !== ssoProviderId) {
+              const { rows: [u] } = await pool.query('SELECT role FROM users WHERE id = $1', [session.userId]);
+              await ensureRoles();
+              if (u && !ipAllowed(limitsOf(u.role).allowedIps, ctx.request?.headers.get('x-lvm-client-ip') ?? '')) return false;
+            }
           },
         },
         delete: {
@@ -315,6 +386,18 @@ function createAuth() {
           if (u) await sendOtpMail(email, u.locale, otp); // unknown addresses get nothing, and the answer is the same
         },
       }),
+      // A one-time sign-in link by e-mail (Settings → Sign-in methods); existing accounts only, the token stored hashed.
+      magicLink({
+        disableSignUp: true, expiresIn: 600, storeToken: 'hashed',
+        sendMagicLink: async ({ email, url }) => {
+          const { rows: [u] } = await pool.query('SELECT locale FROM users WHERE lower(email) = lower($1)', [email]);
+          if (u) await sendSignInLink(email, u.locale, url); // unknown addresses get nothing, and the answer is the same
+        },
+      }),
+      // Sign-in with a user name instead of the e-mail address (when the admin allows it; set in Account → Profile).
+      username({ displayUsername: false, minUsernameLength: 3, maxUsernameLength: 30, usernameValidator: (v) => /^[a-z0-9][a-z0-9._-]{2,29}$/i.test(v) }),
+      // Google One Tap, with the Google provider's client.
+      ...(signIn?.oneTap && signIn.providers.google?.enabled && signIn.providers.google.clientId ? [oneTap({ clientId: signIn.providers.google.clientId, disableSignup: !(signIn.socialSignUp && registrationOpen) })] : []),
       lastLoginMethod({ storeInDatabase: true, schema: { user: { lastLoginMethod: 'last_login_method' } } }),
       // Single sign-on (Settings → Directory → Single sign-on); no provider while it is off.
       genericOAuth({ config: sso?.enabled ? [ssoProvider(sso)] : [] }),
@@ -330,6 +413,13 @@ export type Auth = ReturnType<typeof createAuth>;
 let instance: Auth | undefined;
 // The single sign-on provider is part of better-auth's setup: a changed setting builds a new instance.
 let sso: OidcSettings | null = null;
-export async function reloadAuth() { sso = (await getSettings('directory')).oidc; instance = undefined; }
+let signIn: SignInSettings | null = null;
+let registrationOpen = false;
+export async function reloadAuth() {
+  sso = (await getSettings('directory')).oidc;
+  signIn = await getSettings('signIn');
+  registrationOpen = (await pool.query("SELECT value FROM settings WHERE key = 'registration_open'")).rows[0]?.value === true;
+  instance = undefined;
+}
 // Built on first use: better-auth validates the schema once and caches it, so this must happen after migrations.
 export const getAuth = () => (instance ??= createAuth());

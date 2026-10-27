@@ -30,6 +30,11 @@ export type LdapSettings = { enabled: boolean; url: string; startTls: boolean; c
 // Single sign-on with OpenID Connect (sso.ts): issuer for discovery, the client, groups claim -> roles.
 export type OidcSettings = { enabled: boolean; name: string; issuer: string; clientId: string; clientSecretEnc: string | null; scopes: string; groupsClaim: string;
   groupRoles: { group: string; roles: string[] }[]; defaultRole: string; autoCreate: boolean };
+// Sign-in methods (sign-in-methods.ts): social providers, magic link, user names, One Tap and two checks.
+export type SocialId = 'google' | 'microsoft' | 'github' | 'gitlab' | 'discord' | 'facebook' | 'linkedin';
+export type SocialProvider = { enabled: boolean; clientId: string; clientSecretEnc: string | null; tenantId?: string; hostedDomain?: string };
+export type SignInSettings = { magicLink: boolean; username: boolean; oneTap: boolean; socialSignUp: boolean; pwnedPasswords: boolean; blockDisposable: boolean;
+  providers: Partial<Record<SocialId, SocialProvider>> };
 export type Channel = 'inApp' | 'push' | 'email' | 'sms' | 'chat';
 // Messaging apps users may connect (chat-apps.ts) and the admin accounts some of them need; secrets encrypted.
 export type ChatSettings = { apps: string[]; telegram: { tokenEnc: string | null; username: string };
@@ -73,6 +78,7 @@ const defaults = {
   directory: { ldap: { enabled: false, url: '', startTls: false, caPem: '', bindDn: '', bindPasswordEnc: null, baseDn: '', userFilter: '(&(objectClass=person)(mail={email}))',
     emailAttribute: 'mail', nameAttribute: 'displayName', groupAttribute: 'memberOf', groupRoles: [], defaultRole: 'user', autoCreate: true } as LdapSettings,
     oidc: { enabled: false, name: 'SSO', issuer: '', clientId: '', clientSecretEnc: null, scopes: 'openid email profile', groupsClaim: 'groups', groupRoles: [], defaultRole: 'user', autoCreate: true } as OidcSettings },
+  signIn: { magicLink: false, username: false, oneTap: false, socialSignUp: false, pwnedPasswords: false, blockDisposable: false, providers: {} } as SignInSettings,
   // The public status page (/status): on unless the admin turns it off.
   statusPage: { enabled: true } as { enabled: boolean },
   // Web Push (VAPID) keys, generated on first use.
@@ -282,6 +288,12 @@ export async function publicConfig() {
     otpChannels: { sms: smsCodes, email: mailCodes },
     // Sign-in with a one-time code sent by e-mail (the admin turns it on; needs working mail).
     emailCodeSignIn: mailCodes && (await getSettings('security')).emailCodeSignIn,
+    // Other sign-in methods: social buttons, the e-mail link, user names, and One Tap's public client id.
+    signIn: await getSettings('signIn').then(async (s) => {
+      const { enabledSocial } = await import('./social-providers');
+      const social = enabledSocial(s);
+      return { social, magicLink: s.magicLink && (await mailReady()), username: s.username, oneTap: s.oneTap && social.includes('google') ? { clientId: s.providers.google!.clientId } : null };
+    }),
     // Single sign-on: the button's label when it is on (sso.ts).
     sso: await getSettings('directory').then((d) => (d.oidc.enabled ? { name: d.oidc.name } : null)),
     captcha: captcha ? { provider: captcha.provider, siteKey: captcha.siteKey, use: captcha.use } : null,
