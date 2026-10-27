@@ -1,6 +1,6 @@
 "use client";
-// Power schedules on a server's page: start or shut down at a local time on chosen weekdays. Times are in the
-// browser's time zone, saved with each schedule; "Office hours" adds the usual weekday pair in one click.
+// Schedules on a server's page: start, shut down or take a snapshot at a local time on chosen weekdays. Times are in
+// the browser's time zone, saved with each schedule; "Office hours" and "Nightly snapshot" add the usual ones in one click.
 import { Button, toast } from '@heroui/react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useFormatter, useTranslations } from 'next-intl';
@@ -11,10 +11,10 @@ import { apiFetch, useErrorText } from '../../lib/api';
 import { useApiForm } from '../../lib/form';
 import { useApiAction, useApiQuery } from '../../lib/query';
 
-type Schedule = { id: string; action: 'power_on' | 'shutdown'; days: number[]; time: string; timezone: string; enabled: boolean; lastRunAt: string | null; lastResult: string | null };
+type Schedule = { id: string; action: 'power_on' | 'shutdown' | 'snapshot'; keep: number | null; days: number[]; time: string; timezone: string; enabled: boolean; lastRunAt: string | null; lastResult: string | null };
 const week = [1, 2, 3, 4, 5, 6, 7];
 
-export function PowerSchedules({ serverId }: { serverId: string }) {
+export function PowerSchedules({ serverId, power = true, snapshots = false }: { serverId: string; power?: boolean; snapshots?: boolean }) {
   const t = useTranslations('Schedules');
   const format = useFormatter();
   const { error } = useErrorText();
@@ -22,7 +22,7 @@ export function PowerSchedules({ serverId }: { serverId: string }) {
   const key = ['servers', serverId, 'schedules'];
   const list = useApiQuery<{ schedules: Schedule[] }>(key, `/servers/${serverId}/schedules`).data?.schedules;
   const zone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
-  const f = useApiForm({ action: 'shutdown', days: [1, 2, 3, 4, 5], time: '19:00', timezone: zone });
+  const f = useApiForm({ action: power ? 'shutdown' : 'snapshot', days: [1, 2, 3, 4, 5], time: power ? '19:00' : '02:00', timezone: zone, keep: '3' });
   const [busy, setBusy] = useState(false);
   const toggle = useApiAction((s: Schedule) => apiFetch(`/servers/${serverId}/schedules/${s.id}`, { method: 'PUT', body: { ...s, enabled: !s.enabled } }), { invalidate: [key] });
   const remove = useApiAction((id: string) => apiFetch(`/servers/${serverId}/schedules/${id}`, { method: 'DELETE' }), { invalidate: [key], success: t('removed') });
@@ -31,25 +31,28 @@ export function PowerSchedules({ serverId }: { serverId: string }) {
   const daysText = (days: number[]) => days.length === 7 ? t('everyDay') : days.join() === '1,2,3,4,5' ? t('weekdays') : days.join() === '6,7' ? t('weekend') : days.map((d) => dayName(d, 'short')).join(', ');
   const reload = () => client.invalidateQueries({ queryKey: key });
 
-  async function officeHours() {
+  async function preset(items: Record<string, unknown>[]) {
     setBusy(true);
     try {
-      for (const [action, time] of [['power_on', '08:00'], ['shutdown', '19:00']]) await apiFetch(`/servers/${serverId}/schedules`, { method: 'POST', body: { action, days: [1, 2, 3, 4, 5], time, timezone: zone } });
+      for (const body of items) await apiFetch(`/servers/${serverId}/schedules`, { method: 'POST', body: { timezone: zone, ...body } });
       toast.success(t('added'));
     } catch (e) { toast.danger(error(e)); }
     finally { setBusy(false); await reload(); }
   }
 
   return <Section title={t('title')} description={t('help', { zone })}
-    actions={<Button size="sm" variant="secondary" isPending={busy} onPress={officeHours}><I name="briefcase" size={15}/>{t('officeHours')}</Button>}>
+    actions={<span className="flex flex-wrap gap-2">
+      {power && <Button size="sm" variant="secondary" isPending={busy} onPress={() => preset([{ action: 'power_on', days: [1, 2, 3, 4, 5], time: '08:00' }, { action: 'shutdown', days: [1, 2, 3, 4, 5], time: '19:00' }])}><I name="briefcase" size={15}/>{t('officeHours')}</Button>}
+      {snapshots && <Button size="sm" variant="secondary" isPending={busy} onPress={() => preset([{ action: 'snapshot', days: week, time: '02:00', keep: 3 }])}><I name="camera" size={15}/>{t('nightly')}</Button>}
+    </span>}>
     <div className="flex flex-col gap-5">
       {list && list.length > 0 && <ul className="flex flex-col divide-y divide-separator rounded-lg border border-border">
         {list.map((s) => <li key={s.id} className="flex flex-wrap items-center gap-x-4 gap-y-2 px-3 py-2.5">
           <span className={`flex items-center gap-2 font-medium ${s.enabled ? '' : 'text-muted'}`}>
-            {s.action === 'power_on' ? <I name="sunrise" size={16} className="text-success"/> : <I name="moon" size={16} className="text-accent"/>}{t(`action.${s.action}`)}</span>
+            {s.action === 'power_on' ? <I name="sunrise" size={16} className="text-success"/> : s.action === 'snapshot' ? <I name="camera" size={16} className="text-warning"/> : <I name="moon" size={16} className="text-accent"/>}{t(`action.${s.action}`)}</span>
           <span className="tabular-nums">{s.time}</span>
-          <span className="text-sm text-muted">{daysText(s.days)}{s.timezone !== zone && ` · ${s.timezone}`}</span>
-          {s.lastResult && <StatusChip tone={s.lastResult === 'started' ? 'success' : s.lastResult === 'failed' ? 'danger' : 'default'}>
+          <span className="text-sm text-muted">{daysText(s.days)}{s.timezone !== zone && ` · ${s.timezone}`}{s.action === 'snapshot' && s.keep && ` · ${t('keeps', { n: s.keep })}`}</span>
+          {s.lastResult && <StatusChip tone={s.lastResult === 'started' ? 'success' : s.lastResult === 'failed' ? 'danger' : s.lastResult === 'rotating' ? 'accent' : 'default'}>
             {t(`result.${s.lastResult as 'started'}`)}{s.lastRunAt && ` · ${format.relativeTime(new Date(s.lastRunAt))}`}</StatusChip>}
           <span className="ml-auto flex items-center gap-1">
             <SwitchInput isSelected={s.enabled} onChange={() => toggle.mutate(s)} label={<span className="sr-only">{t('enabledFor', { action: t(`action.${s.action}`), time: s.time })}</span>}/>
@@ -65,8 +68,9 @@ export function PowerSchedules({ serverId }: { serverId: string }) {
       }}>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <SelectInput label={t('what')} value={f.values.action} onChange={f.set('action')} error={f.fieldError('action')}
-            options={[{ id: 'shutdown', label: t('action.shutdown') }, { id: 'power_on', label: t('action.power_on') }]}/>
+            options={[...(power ? [{ id: 'shutdown', label: t('action.shutdown') }, { id: 'power_on', label: t('action.power_on') }] : []), ...(snapshots ? [{ id: 'snapshot', label: t('action.snapshot') }] : [])]}/>
           <TextInput label={t('at')} type="time" value={f.values.time} onChange={f.set('time')} error={f.fieldError('time')}/>
+          {f.values.action === 'snapshot' && <TextInput label={t('keep')} type="number" value={f.values.keep} onChange={f.set('keep')} error={f.fieldError('keep')} help={t('keepHelp')} autoComplete="off"/>}
         </div>
         <fieldset className="flex flex-col gap-2">
           <legend className="mb-1 text-sm font-medium">{t('days')}</legend>

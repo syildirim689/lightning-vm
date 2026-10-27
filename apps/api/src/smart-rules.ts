@@ -65,7 +65,10 @@ export function cleanLabels(body: Record<string, unknown>): { tags: string[]; no
 export function cleanSchedule(body: Record<string, unknown>) {
   const fields: Record<string, string> = {};
   const action = String(body?.action ?? '');
-  if (!['power_on', 'shutdown'].includes(action)) fields.action = 'INVALID_VALUE';
+  if (!['power_on', 'shutdown', 'snapshot'].includes(action)) fields.action = 'INVALID_VALUE';
+  // Snapshots: how many automatic ones to keep (the role's snapshot limit still applies when it runs).
+  const keep = Number(body?.keep ?? 3);
+  if (action === 'snapshot' && (!Number.isInteger(keep) || keep < 1 || keep > 32)) fields.keep = 'OUT_OF_RANGE';
   const days = Array.isArray(body?.days) ? [...new Set(body.days.map(Number))].sort() : [];
   if (!days.length || days.some((d) => !Number.isInteger(d) || d < 1 || d > 7)) fields.days = 'REQUIRED';
   const time = String(body?.time ?? '');
@@ -73,7 +76,7 @@ export function cleanSchedule(body: Record<string, unknown>) {
   const timezone = String(body?.timezone ?? '');
   try { if (!timezone || timezone.length > 64) throw 0; new Intl.DateTimeFormat('en', { timeZone: timezone }); } catch { fields.timezone = 'INVALID_VALUE'; }
   const enabled = body?.enabled !== false;
-  return Object.keys(fields).length ? { fields } : { action, days, time, timezone, enabled };
+  return Object.keys(fields).length ? { fields } : { action, days, time, timezone, enabled, ...(action === 'snapshot' && { keep }) };
 }
 
 // OpenSSH public keys (type, base64 blob, optional comment) and their SHA256 fingerprint as ssh-keygen shows it.

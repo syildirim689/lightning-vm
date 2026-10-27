@@ -47,6 +47,8 @@ test('a power schedule needs an action, weekdays, a time and a real time zone', 
   assert.deepEqual(cleanSchedule({ action: 'reset', days: [0], time: '24:00', timezone: 'Mars/Base' }),
     { fields: { action: 'INVALID_VALUE', days: 'REQUIRED', time: 'INVALID_VALUE', timezone: 'INVALID_VALUE' } });
   assert.equal(cleanSchedule({ action: 'power_on', days: [7], time: '08:00', timezone: 'UTC', enabled: false }).enabled, false);
+  assert.equal(cleanSchedule({ action: 'snapshot', days: [1], time: '02:00', timezone: 'UTC' }).keep, 3, 'three automatic snapshots by default');
+  assert.deepEqual(cleanSchedule({ action: 'snapshot', days: [1], time: '02:00', timezone: 'UTC', keep: 0 }), { fields: { keep: 'OUT_OF_RANGE' } });
 });
 
 test('a GitHub .keys file: valid keys kept with fingerprints, junk lines dropped, at most 20', async () => {

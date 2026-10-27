@@ -470,6 +470,10 @@ test.describe('server lifecycle (simulator, Turkish customer)', () => {
     await expect(page.getByText('19:00', { exact: true })).toBeVisible();
     await page.getByRole('button', { name: /19:00 Kapat zamanlamasını kaldır/ }).click();
     await expect(page.getByText('19:00', { exact: true })).toBeHidden();
+    // Automatic snapshots: "nightly snapshot" adds a daily 02:00 one that keeps the newest three.
+    await page.getByRole('button', { name: 'Gece anlık görüntüsü' }).click();
+    await expect(page.getByText('02:00', { exact: true })).toBeVisible();
+    await expect(page.getByText(/3 tane saklar/)).toBeVisible();
     // Snapshot: taken as an operation, then listed as the current state.
     await page.getByLabel('Ad', { exact: true }).fill('guncelleme-oncesi');
     await page.getByRole('button', { name: 'Anlık görüntü al' }).click();

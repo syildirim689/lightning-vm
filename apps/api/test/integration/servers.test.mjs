@@ -750,3 +750,44 @@ test('snapshots: taken, listed, reverted (power kept) and removed as operations;
   await done('snapshot_delete');
   assert.equal((await send('GET', path, undefined, user)).json().snapshots.some((s) => s.id === snap.id), false);
 });
+
+test('automatic snapshots: a schedule takes "auto …" snapshots, keeps the newest, makes room first and never touches manual ones', { skip }, async () => {
+  const { runSchedules } = await import('../../dist/schedules.js');
+  const { rows: [srv] } = await pool.query(`SELECT s.id FROM servers s JOIN users u ON u.id = s.owner_id WHERE u.email = 'user@example.test' AND s.state = 'ready' AND s.vdc_id IS NULL
+    AND NOT EXISTS (SELECT 1 FROM operations o WHERE o.server_id = s.id AND o.status IN ('pending', 'running')) LIMIT 1`);
+  const id = srv.id, snaps = `/servers/${id}/snapshots`, path = `/servers/${id}/schedules`;
+  const done = (kind) => until(async () => { const o = await lastOp(id); return o.kind === kind && o.status === 'succeeded'; }, `${kind} done`);
+  const list = async () => (await send('GET', snaps, undefined, user)).json().snapshots;
+  assert.equal((await send('POST', snaps, { name: 'manual keep' }, user, { 'idempotency-key': randomUUID() })).statusCode, 202);
+  await done('snapshot_create');
+  const now = new Date();
+  const time = `${String(now.getUTCHours()).padStart(2, '0')}:${String(now.getUTCMinutes()).padStart(2, '0')}`;
+  assert.equal((await send('POST', path, { action: 'snapshot', days: [now.getUTCDay() || 7], time, timezone: 'UTC', keep: 0 }, user)).json().fields.keep, 'OUT_OF_RANGE');
+  const sch = (await send('POST', path, { action: 'snapshot', days: [1, 2, 3, 4, 5, 6, 7], time, timezone: 'UTC', keep: 1 }, user)).json();
+  assert.equal(sch.keep, 1);
+  const result = async () => (await pool.query('SELECT last_result, pending_since FROM power_schedules WHERE id = $1', [sch.id])).rows[0];
+  await runSchedules();
+  assert.equal((await result()).last_result, 'started');
+  await done('snapshot_create');
+  const first = (await list()).find((x) => x.name.startsWith('auto '));
+  assert.ok(first, 'an automatic snapshot');
+  // The next run: one automatic is the most to keep, so the oldest goes first and the run stays pending.
+  await pool.query('UPDATE power_schedules SET last_run_at = NULL WHERE id = $1', [sch.id]);
+  await runSchedules();
+  const r = await result();
+  assert.ok(r.last_result === 'rotating' && r.pending_since, JSON.stringify(r));
+  await done('snapshot_delete');
+  await runSchedules(); // pending: outside its time window it still finishes the job
+  assert.equal((await result()).last_result, 'started');
+  assert.equal((await result()).pending_since, null);
+  await done('snapshot_create');
+  const after = await list();
+  assert.equal(after.filter((x) => x.name.startsWith('auto ')).length, 1);
+  assert.ok(!after.some((x) => x.id === first.id), 'the old automatic one is gone');
+  assert.ok(after.some((x) => x.name === 'manual keep'), 'the manual one stays');
+  assert.equal((await send('DELETE', `${path}/${sch.id}`, undefined, user)).statusCode, 204);
+  for (const x of after) {
+    assert.equal((await send('DELETE', `${snaps}/${x.id}`, undefined, user, { 'idempotency-key': randomUUID() })).statusCode, 202);
+    await done('snapshot_delete');
+  }
+});

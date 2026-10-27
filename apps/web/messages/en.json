@@ -4088,13 +4088,14 @@
     "orderSimilar": "Order similar"
   },
   "Schedules": {
-    "title": "Power schedule",
-    "help": "Start or shut the server down by itself. Times are in {zone}.",
+    "title": "Schedules",
+    "help": "Start, shut down or snapshot the server by itself. Times are in {zone}.",
     "officeHours": "Office hours",
     "empty": "No schedule yet. Office hours starts it at 08:00 and shuts it down at 19:00 on weekdays.",
     "action": {
       "power_on": "Start",
-      "shutdown": "Shut down"
+      "shutdown": "Shut down",
+      "snapshot": "Take a snapshot"
     },
     "what": "Action",
     "at": "Time",
@@ -4112,8 +4113,14 @@
       "skipped_state": "Skipped: already in that state",
       "skipped_busy": "Skipped: another operation was running",
       "skipped_disabled": "Skipped: power actions are turned off",
-      "failed": "Failed"
-    }
+      "failed": "Failed",
+      "rotating": "Made room: removed the oldest automatic snapshot",
+      "skipped_limit": "Skipped: your own snapshots fill the limit"
+    },
+    "nightly": "Nightly snapshot",
+    "keep": "Keep the newest",
+    "keepHelp": "Automatic snapshots kept; the oldest one goes first. Your own snapshots are never removed.",
+    "keeps": "keeps {n}"
   },
   "Activity": {
     "actions": {

@@ -239,7 +239,7 @@ export function ServerDetail({ id }: { id: string }) {
 
     <div className={`grid grid-cols-1 gap-6 ${s.address ? 'lg:grid-cols-2' : ''}`}><ServerHealth id={s.id}/><QuickConnect server={s}/></div>
     {own && <ServerLabels key={`${s.tags?.join()}|${s.notes}`} server={s}/>}
-    {own && allowed.power && s.state !== 'provisioning' && <PowerSchedules serverId={s.id}/>}
+    {own && (allowed.power || allowed.snapshots) && s.state !== 'provisioning' && <PowerSchedules serverId={s.id} power={allowed.power} snapshots={allowed.snapshots}/>}
     {allowed.snapshots && ['ready', 'error'].includes(s.state) && <ServerSnapshots serverId={s.id} busy={!!open}/>}
     <ServerIps server={s}/>
     {allowed.iso && <ServerIso id={s.id} ready={s.state === 'ready' || s.state === 'error'}/>}

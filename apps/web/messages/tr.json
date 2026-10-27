@@ -4088,13 +4088,14 @@
     "orderSimilar": "Benzerini sipariş et"
   },
   "Schedules": {
-    "title": "Güç zamanlaması",
-    "help": "Sunucu kendiliğinden açılsın veya kapansın. Saatler {zone} saat dilimindedir.",
+    "title": "Zamanlamalar",
+    "help": "Sunucu kendiliğinden açılsın, kapansın ya da anlık görüntü alsın. Saatler {zone} saat dilimindedir.",
     "officeHours": "Mesai saatleri",
     "empty": "Henüz zamanlama yok. Mesai saatleri, hafta içi 08:00’de açar ve 19:00’da kapatır.",
     "action": {
       "power_on": "Aç",
-      "shutdown": "Kapat"
+      "shutdown": "Kapat",
+      "snapshot": "Anlık görüntü al"
     },
     "what": "İşlem",
     "at": "Saat",
@@ -4112,8 +4113,14 @@
       "skipped_state": "Atlandı: zaten o durumda",
       "skipped_busy": "Atlandı: başka işlem sürüyordu",
       "skipped_disabled": "Atlandı: güç işlemleri kapalı",
-      "failed": "Başarısız"
-    }
+      "failed": "Başarısız",
+      "rotating": "Yer açıldı: en eski otomatik görüntü silindi",
+      "skipped_limit": "Atlandı: sınırı kendi görüntüleriniz dolduruyor"
+    },
+    "nightly": "Gece anlık görüntüsü",
+    "keep": "Saklanacak en yeni",
+    "keepHelp": "Saklanan otomatik görüntü sayısı; önce en eskisi silinir. Kendi aldığınız görüntülere hiç dokunulmaz.",
+    "keeps": "{n} tane saklar"
   },
   "Activity": {
     "actions": {
