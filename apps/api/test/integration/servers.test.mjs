@@ -1335,3 +1335,17 @@ test('personal images: a server saved as an image is its owner\'s alone (in the 
   assert.equal((await send('DELETE', `/servers/${sid}`, { confirm: 'img-src' }, user, key())).statusCode, 202);
   await until(async () => (await serverRow(sid)).state === 'deleted', 'deleted', 120);
 });
+
+test('rename: a valid, unused name in the panel; others cannot rename it', { skip }, async () => {
+  const made = await create(order('rename-1'));
+  const id = made.json().serverId;
+  assert.equal((await send('PUT', `/servers/${id}/name`, { name: 'Bad Name!' }, user)).json().fields.name, 'INVALID_HOSTNAME');
+  assert.equal((await send('PUT', `/servers/${id}/name`, { name: 'renamed-1' }, other)).statusCode, 404);
+  const { rows: [taken] } = await pool.query("SELECT s.name FROM servers s JOIN users u ON u.id = s.owner_id WHERE u.email = 'user@example.test' AND s.state <> 'deleted' AND s.id <> $1 LIMIT 1", [id]);
+  if (taken) assert.equal((await send('PUT', `/servers/${id}/name`, { name: taken.name }, user)).json().fields.name, 'NAME_TAKEN');
+  assert.deepEqual((await send('PUT', `/servers/${id}/name`, { name: 'Renamed-1' }, user)).json(), { name: 'renamed-1' });
+  assert.equal((await serverRow(id)).name, 'renamed-1');
+  await until(async () => (await serverRow(id)).state === 'ready', 'ready', 120);
+  assert.equal((await send('DELETE', `/servers/${id}`, { confirm: 'renamed-1' }, user, { 'idempotency-key': randomUUID() })).statusCode, 202);
+  await until(async () => (await serverRow(id)).state === 'deleted', 'deleted', 120);
+});

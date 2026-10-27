@@ -2235,7 +2235,7 @@
       },
       "POOL_FORECAST": {
         "title": "{pool} yaklaşık {days} günde dolacak",
-        "body": "Son 30 günün sipariş hızına göre vCPU tahmini."
+        "body": "Son 30 günde eklenen ve silinen sunuculara göre önce {resource} bitecek."
       },
       "IP_POOL_EMPTY": {
         "title": "{pool}: boş IP kalmadı",
@@ -4485,7 +4485,12 @@
     "save": "Kaydet",
     "saved": "Etiketler ve notlar kaydedildi.",
     "orderSimilar": "Benzerini sipariş et",
-    "clone": "Klonla"
+    "clone": "Klonla",
+    "rename": "Yeniden adlandır",
+    "newName": "Yeni ad",
+    "renameHelp": "Panelde ve varsayılan ters DNS kaydında; sunucunun içindeki host adını kendiniz değiştirin.",
+    "cancel": "Vazgeç",
+    "renamed": "Sunucu yeniden adlandırıldı"
   },
   "Schedules": {
     "title": "Zamanlamalar",
@@ -4726,7 +4731,8 @@
       "catalog_pool_private_networks": "Özel ağ ayarları değiştirildi",
       "image_created": "İmaj kaydedildi",
       "image_deleted": "İmaj silindi",
-      "reseller_brand": "Bayi markası değiştirildi"
+      "reseller_brand": "Bayi markası değiştirildi",
+      "server_renamed": "Sunucu yeniden adlandırıldı"
     },
     "outcome": {
       "success": "Tamamlandı",

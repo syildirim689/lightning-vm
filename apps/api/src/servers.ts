@@ -440,6 +440,32 @@ export class ServersController {
   }
 
   // Lock or unlock (the owner, or staff who may manage all servers).
+  // A new name in the panel (and in the default reverse DNS made from it; a PTR set by hand stays). The guest's own
+  // hostname is the customer's to change inside the server.
+  @Put('servers/:id/name')
+  async rename(@Req() req: AuthedRequest, @Param('id', ParseUUIDPipe) id: string, @Body() body: Input) {
+    const s = await findServer(req, id, true);
+    const name = typeof body?.name === 'string' ? body.name.trim().toLowerCase() : '';
+    if (!/^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/.test(name)) throw apiError(400, 'VALIDATION_FAILED', 'Invalid input', { name: 'INVALID_HOSTNAME' });
+    if (name === s.name) return { name };
+    try { await pool.query('UPDATE servers SET name = $2, updated_at = now() WHERE id = $1', [id, name]); }
+    catch (err) {
+      if ((err as { constraint?: string }).constraint === 'servers_owner_name_key') throw apiError(409, 'VALIDATION_FAILED', 'Name taken', { name: 'NAME_TAKEN' });
+      throw err;
+    }
+    const rdns = await getSettings('rdns');
+    if (rdns.provider !== 'none' && rdns.template) {
+      const { rows } = await pool.query('SELECT host(address) AS address, ptr FROM ip_allocations WHERE server_id = $1 AND ptr IS NOT NULL', [id]);
+      const stale = rows.filter((r) => r.ptr === renderPtr(rdns.template, r.address, s.name)).map((r) => r.address);
+      if (stale.length) {
+        await pool.query('UPDATE ip_allocations SET ptr = NULL WHERE server_id = $1 AND host(address) = ANY($2)', [id, stale]);
+        await (await import('./rdns')).rdnsQueue.add('rdns', { action: 'default', serverId: id }, { attempts: 5, backoff: { type: 'exponential', delay: 5000 }, removeOnComplete: true });
+      }
+    }
+    await audit(req, 'server.renamed', 'success', req.user.id, { serverId: id, from: s.name, to: name });
+    return { name };
+  }
+
   @Put('servers/:id/lock')
   async lock(@Req() req: AuthedRequest, @Param('id', ParseUUIDPipe) id: string, @Body() body: Input) {
     if (typeof body?.locked !== 'boolean') throw apiError(400, 'VALIDATION_FAILED', 'Invalid input', { locked: 'INVALID_VALUE' });

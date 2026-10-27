@@ -30,11 +30,15 @@ export async function staffInsights(): Promise<Insight[]> {
       if (offered > 0 && used >= 90) add('POOL_NEARLY_FULL', 'danger', { pool: p.name, resource: res, used, unit }, '/admin/catalog?tab=pools', `pool:${p.id}:${res}`);
       else if (offered > 0 && used >= 75) add('POOL_FILLING', 'warning', { pool: p.name, resource: res, used, unit }, '/admin/catalog?tab=pools', `pool:${p.id}:${res}`);
     }
-    // Linear forecast from the last 30 days of vCPU reservations in this pool.
-    const { rows: [g] } = await pool.query(`SELECT COALESCE(sum(vcpu), 0)::int AS vcpu FROM servers WHERE pool_id = $1 AND created_at > now() - interval '30 days' AND state <> 'deleted'`, [p.id]);
-    const perDay = g.vcpu / 30;
-    const free = cap.available.vcpu ?? 0;
-    if (perDay > 0 && free > 0 && free / perDay < 30) add('POOL_FORECAST', 'warning', { pool: p.name, days: Math.max(1, Math.round(free / perDay)) }, '/admin/catalog?tab=pools', `forecast:${p.id}`);
+    // Linear forecast per resource: what the last 30 days added (new servers less removed ones) against what is free.
+    const { rows: [g] } = await pool.query(`SELECT
+        coalesce(sum(vcpu) FILTER (WHERE created_at > now() - interval '30 days'), 0) - coalesce(sum(vcpu) FILTER (WHERE deleted_at > now() - interval '30 days'), 0) AS vcpu,
+        coalesce(sum(memory_mb) FILTER (WHERE created_at > now() - interval '30 days'), 0) - coalesce(sum(memory_mb) FILTER (WHERE deleted_at > now() - interval '30 days'), 0) AS "memoryMb",
+        coalesce(sum(disk_gb) FILTER (WHERE created_at > now() - interval '30 days'), 0) - coalesce(sum(disk_gb) FILTER (WHERE deleted_at > now() - interval '30 days'), 0) AS "storageGb"
+      FROM servers WHERE pool_id = $1 AND vdc_id IS NULL`, [p.id]);
+    const soonest = (['vcpu', 'memoryMb', 'storageGb'] as const).map((res) => ({ res, perDay: Number(g[res]) / 30, free: cap.available[res] ?? 0 }))
+      .filter((x) => x.perDay > 0 && x.free > 0).map((x) => ({ res: x.res, days: x.free / x.perDay })).sort((a, b) => a.days - b.days)[0];
+    if (soonest && soonest.days < 30) add('POOL_FORECAST', soonest.days < 7 ? 'danger' : 'warning', { pool: p.name, days: Math.max(1, Math.round(soonest.days)), resource: soonest.res }, '/admin/catalog?tab=pools', `forecast:${p.id}`);
   }
 
   const { rows: ips } = await pool.query(`SELECT i.id, i.name, (i.range_end - i.range_start + 1 - (SELECT count(*) FROM unnest(i.excluded) x WHERE x BETWEEN i.range_start AND i.range_end)

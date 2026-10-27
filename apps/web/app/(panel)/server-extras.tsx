@@ -8,6 +8,7 @@ import { useState } from 'react';
 import { I } from '../../components/icon';
 import { Mono, Section, TextInput } from '../../components/ui';
 import { useApiForm } from '../../lib/form';
+import { apiFetch, type ApiError, useErrorText } from '../../lib/api';
 import { useOrder } from '../../lib/order-store';
 import type { Server } from './servers-ui';
 
@@ -83,6 +84,28 @@ export function OrderSimilar({ server, names }: { server: Server; names: string[
       vcpu: server.vcpu, memoryMb: server.memoryMb, diskGb: server.diskGb, name: `${base}-${n}`.slice(0, 63) });
     router.push('/order');
   }}><I name="copy-plus" size={16}/>{t('orderSimilar')}</Button>;
+}
+
+// A new name in the panel (the default reverse DNS follows); the hostname inside the server stays the customer's.
+export function RenameServer({ server }: { server: Server }) {
+  const t = useTranslations('Extras');
+  const { error, field } = useErrorText();
+  const client = useQueryClient();
+  const [open, setOpen] = useState(false);
+  const [name, setName] = useState(server.name);
+  const [err, setErr] = useState<string>();
+  const [busy, setBusy] = useState(false);
+  async function save() {
+    setBusy(true); setErr(undefined);
+    try { await apiFetch(`/servers/${server.id}/name`, { method: 'PUT', body: { name } }); toast.success(t('renamed')); setOpen(false); client.invalidateQueries({ queryKey: ['servers'] }); }
+    catch (e) { setErr(field((e as ApiError).fields?.name) ?? error(e)); } finally { setBusy(false); }
+  }
+  if (!open) return <Button variant="ghost" onPress={() => { setName(server.name); setOpen(true); }}><I name="pencil" size={16}/>{t('rename')}</Button>;
+  return <form className="flex w-full flex-wrap items-end gap-2 sm:w-auto" onSubmit={(e) => { e.preventDefault(); void save(); }}>
+    <TextInput className="min-w-48 flex-1" label={t('newName')} value={name} onChange={(x) => setName(x.toLowerCase())} maxLength={63} error={err} help={t('renameHelp')}/>
+    <Button type="submit" isPending={busy} isDisabled={!name || name === server.name}><I name="check" size={15}/>{t('save')}</Button>
+    <Button variant="ghost" onPress={() => setOpen(false)}>{t('cancel')}</Button>
+  </form>;
 }
 
 // The same server again with its disk: the order page opens with this server's location, image and size, and the

@@ -14,7 +14,7 @@ import { useApiAction, useApiQuery } from '../../lib/query';
 import ServerMetrics from './metrics';
 import { ServerIso } from './server-iso';
 import { ServerHealth } from '../../components/smart';
-import { CloneServer, OrderSimilar, QuickConnect, ServerLabels } from './server-extras';
+import { CloneServer, OrderSimilar, QuickConnect, RenameServer, ServerLabels } from './server-extras';
 import { remember } from '../../lib/recent';
 import { PowerSchedules } from './server-schedules';
 import { ServerSnapshots } from './server-snapshots';
@@ -207,7 +207,8 @@ export function ServerDetail({ id }: { id: string }) {
       actions={<>{s.state === 'ready' && allowed.console && <ButtonLink variant="secondary" href={`/servers/${id}/console`}><I name="square-terminal" size={16}/>{actionLabel('console')}</ButtonLink>}
         {own && <ButtonLink variant="ghost" href={`/support?new=1&server=${id}`}><I name="life-buoy" size={16}/>{t('getSupport')}</ButtonLink>}
         {own && <OrderSimilar server={s} names={(mine ?? []).map((x) => x.name)}/>}
-        {own && <CloneServer server={s} names={(mine ?? []).map((x) => x.name)}/>}</>}/>
+        {own && <CloneServer server={s} names={(mine ?? []).map((x) => x.name)}/>}
+        {(own || allowed.delete) && <RenameServer key={s.name} server={s}/>}</>}/>
     {message && <div role="alert"><Notice tone="danger">{message}</Notice></div>}
     {s.billingHold && <Notice tone="danger" title={t('billingHold')}>{t('billingHoldHelp')} <NextLink href="/billing?tab=invoices" className="font-medium text-accent hover:underline">{t('payNow')}</NextLink></Notice>}
     {s.lastOperation?.step === 'awaiting_payment' && <Notice tone="warning" title={t('awaitingPayment')}>{t('awaitingPaymentHelp')} <NextLink href="/billing?tab=invoices" className="font-medium text-accent hover:underline">{t('payNow')}</NextLink></Notice>}

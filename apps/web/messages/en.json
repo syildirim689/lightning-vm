@@ -2235,7 +2235,7 @@
       },
       "POOL_FORECAST": {
         "title": "{pool} fills in about {days} days",
-        "body": "vCPU estimate from the last 30 days of orders."
+        "body": "{resource} runs out first, judging by the last 30 days of new and removed servers."
       },
       "IP_POOL_EMPTY": {
         "title": "{pool}: no free IP address",
@@ -4485,7 +4485,12 @@
     "save": "Save",
     "saved": "Tags and notes saved.",
     "orderSimilar": "Order similar",
-    "clone": "Clone"
+    "clone": "Clone",
+    "rename": "Rename",
+    "newName": "New name",
+    "renameHelp": "In the panel and the default reverse DNS; change the hostname inside the server yourself.",
+    "cancel": "Cancel",
+    "renamed": "Server renamed"
   },
   "Schedules": {
     "title": "Schedules",
@@ -4726,7 +4731,8 @@
       "catalog_pool_private_networks": "Private network settings changed",
       "image_created": "Image saved",
       "image_deleted": "Image deleted",
-      "reseller_brand": "Reseller brand changed"
+      "reseller_brand": "Reseller brand changed",
+      "server_renamed": "Server renamed"
     },
     "outcome": {
       "success": "Done",
