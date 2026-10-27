@@ -307,7 +307,11 @@
     "CANCELLED_BY_CUSTOMER": "Ödeme sayfasında vazgeçildi.",
     "EINVOICE_OFF": "Önce bir entegratör seçin.",
     "EINVOICE_NOT_RETRYABLE": "Yalnızca e-faturası gönderilemeyen ödenmiş fatura yeniden gönderilebilir.",
-    "EINVOICE_UNAVAILABLE": "Entegratör belgeyi döndürmedi."
+    "EINVOICE_UNAVAILABLE": "Entegratör belgeyi döndürmedi.",
+    "DISK_SHRINK_NOT_SUPPORTED": "Disk yalnızca büyüyebilir.",
+    "DISK_HAS_SNAPSHOTS": "Diski büyütmeden önce sunucunun anlık görüntülerini silin.",
+    "NO_CHANGE": "Sunucu zaten bu boyutta.",
+    "VDC_SERVER": "Bu sunucu bir sanal veri merkezine ait; veri merkezini değiştirin."
   },
   "Auth": {
     "required": "zorunlu",
@@ -536,7 +540,9 @@
     "GOOGLE_REQUIRED": "Önce Google ile girişi açın.",
     "INVALID_TCKN": "Geçerli bir T.C. kimlik numarası değil.",
     "INVALID_VKN": "Geçerli bir vergi numarası değil.",
-    "COMPANY_REQUIRED": "Önce satıcı bilgilerini (unvan, vergi no, adres) doldurun."
+    "COMPANY_REQUIRED": "Önce satıcı bilgilerini (unvan, vergi no, adres) doldurun.",
+    "DISK_SHRINK_NOT_SUPPORTED": "Disk yalnızca büyüyebilir.",
+    "NO_CHANGE": "Sunucu zaten bu boyutta."
   },
   "Setup": {
     "title": "Kurulum sihirbazı",
@@ -1558,7 +1564,9 @@
       "reset": "Reset",
       "snapshot_create": "Anlık görüntü alma",
       "snapshot_revert": "Anlık görüntüye dönme",
-      "snapshot_delete": "Anlık görüntü kaldırma"
+      "snapshot_delete": "Anlık görüntü kaldırma",
+      "resize": "Kaynak değişikliği",
+      "reinstall": "Yeniden kurulum"
     },
     "opStatus": {
       "pending": "Sırada",
@@ -1580,7 +1588,8 @@
       "verify_gone": "silindiği doğrulanıyor",
       "done": "bitti",
       "firewall": "firewall uygulanıyor",
-      "snapshot": "anlık görüntü işleniyor"
+      "snapshot": "anlık görüntü işleniyor",
+      "resize": "Kaynaklar değiştiriliyor"
     },
     "action": {
       "power_on": "Aç",
@@ -2752,7 +2761,9 @@
       "support_view": "Destek taleplerini gör",
       "support_manage": "Destek taleplerini yanıtla",
       "billing_view": "Faturalandırmayı görme",
-      "billing_manage": "Faturalandırmayı yönetme"
+      "billing_manage": "Faturalandırmayı yönetme",
+      "server_resize": "Sunucu kaynaklarını değiştirme",
+      "server_reinstall": "Sunucuyu yeniden kurma"
     },
     "help": {
       "dashboard_view": "Yönetim panosu, içgörüler ve özet grafikler.",
@@ -2789,7 +2800,9 @@
       "support_view": "Kuyruğu, talepleri ve iç notları görür.",
       "support_manage": "Yanıtlar, iç not ekler, atar, durum ve öncelik değiştirir.",
       "billing_view": "Tüm müşterilerin faturaları, abonelikleri, ödemeleri ve geliri.",
-      "billing_manage": "Fatura oluşturma, ödeme kaydetme, iade, bakiye düzeltme, aboneliği askıya alma ve faturalandırma ayarları."
+      "billing_manage": "Fatura oluşturma, ödeme kaydetme, iade, bakiye düzeltme, aboneliği askıya alma ve faturalandırma ayarları.",
+      "server_resize": "Kendi sunucularının vCPU, bellek ve diskini değiştirir.",
+      "server_reinstall": "Kendi sunucularına diski silerek temiz imaj kurar."
     }
   },
   "Settings": {
@@ -3309,7 +3322,9 @@
         "iso": "ISO takma / ISO'dan başlatma",
         "rootPassword": "Root parolasını görme",
         "delete": "Sunucuyu silme",
-        "snapshots": "Anlık görüntüler"
+        "snapshots": "Anlık görüntüler",
+        "resize": "Kaynak değiştirme",
+        "reinstall": "Yeniden kurma"
       },
       "actionHelp": {
         "power": "Açma, kapatma, yeniden başlatma, sıfırlama.",
@@ -3317,7 +3332,9 @@
         "iso": "Lokasyonun ISO kütüphanesinden imaj takma.",
         "rootPassword": "Siparişte belirlenen veya üretilen parolayı panelden görme.",
         "delete": "Sunucuyu ve disklerini kalıcı olarak kaldırma.",
-        "snapshots": "Anlık görüntü alma, geri dönme ve kaldırma (sunucu başına en fazla 5)."
+        "snapshots": "Anlık görüntü alma, geri dönme ve kaldırma (sunucu başına en fazla 5).",
+        "resize": "Müşteriler vCPU, bellek ve diski kendileri değiştirir; artışlar dönemin kalanı için faturalanır.",
+        "reinstall": "Müşteriler başka bir imajdan yeniden kurar (disk silinir)."
       },
       "rolesNote": "Firewall yönetimi gibi diğer yetkiler Roller sayfasından ayarlanır.",
       "hardware": "Yeni sunucuların donanımı",
@@ -4486,7 +4503,9 @@
       "settings_billing": "Faturalandırma ayarları değişti",
       "settings_einvoice": "e-Fatura ayarları değişti",
       "settings_einvoice_test": "e-Fatura hesabı kontrol edildi",
-      "billing_einvoice_retry": "e-Fatura yeniden gönderildi"
+      "billing_einvoice_retry": "e-Fatura yeniden gönderildi",
+      "server_resize": "Sunucu kaynakları değiştirildi",
+      "server_reinstall": "Sunucu yeniden kuruldu"
     },
     "outcome": {
       "success": "Tamamlandı",
@@ -5974,5 +5993,41 @@
     "record": "Kaydet",
     "resend": "e-Faturayı yeniden gönder",
     "resent": "Entegratöre yeniden gönderildi."
+  },
+  "ServerChange": {
+    "started": "Kaynak değişikliği başladı; sunucu yeni boyutuyla yeniden başlayacak.",
+    "startedInvoice": "Kaynak değişikliği başladı. Fark tutarının faturası Faturalar sayfasında.",
+    "resize": {
+      "title": "Kaynakları değiştir",
+      "help": "Daha fazla ya da daha az vCPU ve bellek, ya da daha büyük disk. Sunucu düzgünce kapatılır, değiştirilir ve yeniden açılır (yaklaşık bir dakika).",
+      "kind": "Seçim",
+      "package": "Paket",
+      "custom": "Özel boyut",
+      "disk": "Disk (GB)",
+      "diskGrowOnly": "Disk yalnızca büyüyebilir (şu an {gb} GB). Dosya sistemi bir sonraki açılışta büyür.",
+      "now": "Şu an",
+      "after": "Değişiklikten sonra",
+      "chargeNow": "Şimdi ödenecek",
+      "nothingNow": "Yok; yeni fiyat bir sonraki dönemden geçerli",
+      "until": "{date} tarihine kadarki fark",
+      "restart": "Sunucu bir kez yeniden başlar.",
+      "offline": "Sunucu kapalı ve kapalı kalır.",
+      "shrinkNote": "Daha az bellek ya da işlemci: üzerinde çalışanların sığdığından emin olun.",
+      "apply": "Kaynakları değiştir"
+    },
+    "reinstall": {
+      "title": "Yeniden kur",
+      "help": "Bir imajdan temiz kurulum. IP adresleri, güvenlik duvarları, fiyat ve sunucu adı kalır; diskteki her şey silinir.",
+      "image": "İmaj",
+      "current": "şu an kurulu",
+      "newKey": "Başka bir SSH anahtarı kullan",
+      "keysHelp": "Seçilmezse sunucudaki mevcut anahtarlar yeni kuruluma eklenir.",
+      "key": "SSH anahtarı",
+      "warning": "Sunucudaki tüm veriler, anlık görüntüleri dahil, silinir. Geri alınamaz.",
+      "confirm": "Onay için {name} yazın",
+      "button": "Yeniden kur",
+      "started": "Yeniden kurulum başladı; sunucu imajdan yeniden oluşturuluyor.",
+      "locked": "Sunucu kilitli; yeniden kurmak için kilidi açın."
+    }
   }
 }

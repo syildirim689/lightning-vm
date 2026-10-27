@@ -64,3 +64,11 @@ test('collection: remind before the due date, overdue the day after, suspend, th
   assert.equal(r.collectionStep(9, s, { ...st, suspended: true, suspendedDays: 14 }), 'terminate');
   assert.equal(r.collectionStep(99, { ...s, terminateAfterDays: 0 }, { ...st, suspended: true, suspendedDays: 99 }), null);
 });
+
+test('a resize mid-period charges the increase for the days left; a decrease or the last day costs nothing', () => {
+  assert.equal(r.prorate(3000, '2026-10-16', '2026-10-01', '2026-10-31'), 1500);
+  assert.equal(r.prorate(3000, '2026-10-01', '2026-10-01', '2026-10-31'), 3000);
+  assert.equal(r.prorate(3000, '2026-10-31', '2026-10-01', '2026-10-31'), 0);
+  assert.equal(r.prorate(-500, '2026-10-16', '2026-10-01', '2026-10-31'), 0);
+  assert.equal(r.prorate(1000, '2026-09-20', '2026-10-01', '2026-10-31'), 1000); // before the period started: never more than the whole difference
+});

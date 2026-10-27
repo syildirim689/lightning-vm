@@ -307,7 +307,11 @@
     "CANCELLED_BY_CUSTOMER": "Cancelled on the payment page.",
     "EINVOICE_OFF": "Choose an integrator first.",
     "EINVOICE_NOT_RETRYABLE": "Only a paid invoice whose e-invoice failed can be sent again.",
-    "EINVOICE_UNAVAILABLE": "The integrator did not return the document."
+    "EINVOICE_UNAVAILABLE": "The integrator did not return the document.",
+    "DISK_SHRINK_NOT_SUPPORTED": "A disk can only grow.",
+    "DISK_HAS_SNAPSHOTS": "Remove the server's snapshots before growing its disk.",
+    "NO_CHANGE": "This is the size the server has now.",
+    "VDC_SERVER": "This server belongs to a virtual data center; change the data center instead."
   },
   "Auth": {
     "required": "required",
@@ -536,7 +540,9 @@
     "GOOGLE_REQUIRED": "Turn on Google sign-in first.",
     "INVALID_TCKN": "Not a valid T.C. identity number.",
     "INVALID_VKN": "Not a valid tax number.",
-    "COMPANY_REQUIRED": "Fill in the seller (title, tax number, address) first."
+    "COMPANY_REQUIRED": "Fill in the seller (title, tax number, address) first.",
+    "DISK_SHRINK_NOT_SUPPORTED": "A disk can only grow.",
+    "NO_CHANGE": "This is the size the server has now."
   },
   "Setup": {
     "title": "Setup wizard",
@@ -1558,7 +1564,9 @@
       "reset": "Reset",
       "snapshot_create": "Take snapshot",
       "snapshot_revert": "Go back to snapshot",
-      "snapshot_delete": "Remove snapshot"
+      "snapshot_delete": "Remove snapshot",
+      "resize": "Change size",
+      "reinstall": "Reinstall"
     },
     "opStatus": {
       "pending": "Queued",
@@ -1580,7 +1588,8 @@
       "verify_gone": "verifying it is gone",
       "done": "done",
       "firewall": "applying the firewall",
-      "snapshot": "working on the snapshot"
+      "snapshot": "working on the snapshot",
+      "resize": "Changing size"
     },
     "action": {
       "power_on": "Power on",
@@ -2752,7 +2761,9 @@
       "support_view": "See support tickets",
       "support_manage": "Answer support tickets",
       "billing_view": "See billing",
-      "billing_manage": "Manage billing"
+      "billing_manage": "Manage billing",
+      "server_resize": "Change server size",
+      "server_reinstall": "Reinstall servers"
     },
     "help": {
       "dashboard_view": "The admin dashboard, insights and summary charts.",
@@ -2789,7 +2800,9 @@
       "support_view": "Sees the queue, tickets and internal notes.",
       "support_manage": "Answers, adds internal notes, assigns, changes status and priority.",
       "billing_view": "Invoices, subscriptions, payments and revenue of every customer.",
-      "billing_manage": "Create invoices, record payments, refund, correct balances, suspend subscriptions and change billing settings."
+      "billing_manage": "Create invoices, record payments, refund, correct balances, suspend subscriptions and change billing settings.",
+      "server_resize": "Change vCPU, memory and disk of own servers.",
+      "server_reinstall": "Install a fresh image on own servers, erasing the disk."
     }
   },
   "Settings": {
@@ -3309,7 +3322,9 @@
         "iso": "Insert ISO / boot from ISO",
         "rootPassword": "See the root password",
         "delete": "Delete the server",
-        "snapshots": "Snapshots"
+        "snapshots": "Snapshots",
+        "resize": "Change size",
+        "reinstall": "Reinstall"
       },
       "actionHelp": {
         "power": "Power on, shut down, restart, reset.",
@@ -3317,7 +3332,9 @@
         "iso": "Insert images from the location's ISO library.",
         "rootPassword": "See the password set or generated at order time.",
         "delete": "Remove the server and its disks permanently.",
-        "snapshots": "Take, restore and remove snapshots (at most 5 per server)."
+        "snapshots": "Take, restore and remove snapshots (at most 5 per server).",
+        "resize": "Customers change vCPU, memory and disk themselves; increases are invoiced for the rest of the period.",
+        "reinstall": "Customers reinstall from another image (erases the disk)."
       },
       "rolesNote": "Other rights, such as managing firewalls, are set on the Roles page.",
       "hardware": "Hardware of new servers",
@@ -4486,7 +4503,9 @@
       "settings_billing": "Billing settings changed",
       "settings_einvoice": "e-Invoice settings changed",
       "settings_einvoice_test": "e-Invoice account checked",
-      "billing_einvoice_retry": "e-Invoice sent again"
+      "billing_einvoice_retry": "e-Invoice sent again",
+      "server_resize": "Server size changed",
+      "server_reinstall": "Server reinstalled"
     },
     "outcome": {
       "success": "Done",
@@ -5974,5 +5993,41 @@
     "record": "Record",
     "resend": "Send e-invoice again",
     "resent": "Sent to the integrator again."
+  },
+  "ServerChange": {
+    "started": "Resize started; the server restarts with its new size.",
+    "startedInvoice": "Resize started. An invoice for the difference is in Billing.",
+    "resize": {
+      "title": "Change size",
+      "help": "More or fewer vCPUs and memory, or a bigger disk. The server is shut down cleanly, changed and started again (about a minute).",
+      "kind": "Choose from",
+      "package": "Package",
+      "custom": "Custom size",
+      "disk": "Disk (GB)",
+      "diskGrowOnly": "A disk can only grow (now {gb} GB). The file system grows on the next boot.",
+      "now": "Now",
+      "after": "After the change",
+      "chargeNow": "Due now",
+      "nothingNow": "Nothing; the new price applies from the next period",
+      "until": "the difference until {date}",
+      "restart": "The server restarts once.",
+      "offline": "The server is off and stays off.",
+      "shrinkNote": "Less memory or fewer CPUs: check that what runs on it still fits.",
+      "apply": "Change size"
+    },
+    "reinstall": {
+      "title": "Reinstall",
+      "help": "A fresh install from an image. Addresses, firewalls, the price and the server name stay; everything on the disk is erased.",
+      "image": "Image",
+      "current": "installed now",
+      "newKey": "Use another SSH key",
+      "keysHelp": "Otherwise the keys the server has now are put on the new install.",
+      "key": "SSH key",
+      "warning": "All data on the server is erased, including its snapshots. This cannot be undone.",
+      "confirm": "Type {name} to confirm",
+      "button": "Reinstall",
+      "started": "Reinstall started; the server is rebuilt from the image.",
+      "locked": "The server is locked; unlock it to reinstall."
+    }
   }
 }

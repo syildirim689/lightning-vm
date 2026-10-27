@@ -1,0 +1,48 @@
+package main
+
+import (
+	"context"
+	"testing"
+
+	"github.com/vmware/govmomi/object"
+	"github.com/vmware/govmomi/vim25/mo"
+	"github.com/vmware/govmomi/vim25/types"
+)
+
+func TestResize(t *testing.T) {
+	e := setupVPX(t)
+	ctx := context.Background()
+	out, err := cloneVM(ctx, testGuard(), CloneRequest{Request: e.req, Name: "lvm-resize", Template: e.template, Pool: e.pool, Datastore: e.store,
+		Network: e.network, VCPU: 1, MemoryMB: 1024, DiskGB: 10, Metadata: metadata, ServerID: "resize"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	vm := waitTask(t, e, out["task"].(string)).VM
+	if _, err := resizeVM(ctx, e.c, ResizeRequest{VM: vm, VCPU: 2, MemoryMB: 2048, DiskGB: 5}); err == nil || err.(*Failure).Code != "DISK_SHRINK_NOT_SUPPORTED" {
+		t.Fatalf("shrink: %v", err)
+	}
+	r, err := resizeVM(ctx, e.c, ResizeRequest{VM: vm, VCPU: 2, MemoryMB: 2048, DiskGB: 20})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s := waitTask(t, e, r.(map[string]any)["task"].(string)); s.State != "success" {
+		t.Fatalf("resize: %+v", s)
+	}
+	ref := types.ManagedObjectReference{Type: "VirtualMachine", Value: vm}
+	var v mo.VirtualMachine
+	if err := object.NewVirtualMachine(e.c, ref).Properties(ctx, ref, []string{"config"}, &v); err != nil {
+		t.Fatal(err)
+	}
+	disk := object.VirtualDeviceList(v.Config.Hardware.Device).SelectByType((*types.VirtualDisk)(nil))[0].(*types.VirtualDisk)
+	if v.Config.Hardware.NumCPU != 2 || v.Config.Hardware.MemoryMB != 2048 || disk.CapacityInBytes != 20<<30 {
+		t.Fatalf("after resize: cpu %d mem %d disk %d", v.Config.Hardware.NumCPU, v.Config.Hardware.MemoryMB, disk.CapacityInBytes)
+	}
+	s, err := snapshotAction(ctx, e.c, SnapshotRequest{VM: vm, Action: "create", Name: "keep"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitTask(t, e, s.(map[string]any)["task"].(string))
+	if _, err := resizeVM(ctx, e.c, ResizeRequest{VM: vm, VCPU: 2, MemoryMB: 2048, DiskGB: 30}); err == nil || err.(*Failure).Code != "DISK_HAS_SNAPSHOTS" {
+		t.Fatalf("grow with snapshots: %v", err)
+	}
+}

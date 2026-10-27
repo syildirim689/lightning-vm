@@ -15,7 +15,7 @@ export const MAX_SNAPSHOTS = 5;
 const maxFor = (req: AuthedRequest) => limitsOf(req.user.roles.join(',')).maxSnapshots ?? MAX_SNAPSHOTS;
 type Snapshot = { id: string; name: string; description: string; created: string; powerState: string; current: boolean; parent: string };
 
-async function target(serverPoolId: string) {
+export async function target(serverPoolId: string) {
   const { rows: [c] } = await pool.query('SELECT c.* FROM vmware_connections c JOIN resource_pools p ON p.connection_id = c.id WHERE p.id = $1', [serverPoolId]);
   return storedTarget(c);
 }

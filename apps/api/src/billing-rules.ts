@@ -101,3 +101,10 @@ export function collectionStep(daysPastDue: number, s: Dunning, state: { reminde
   if (daysPastDue <= 0 && s.reminderDays.includes(-daysPastDue) && !state.reminded) return 'remind';
   return null;
 }
+
+// A price increase mid-period: the difference for the days left (today until the period's end), in cents. A decrease costs nothing now.
+export function prorate(diffCents: number, day: string, periodStart: string, periodEnd: string) {
+  const total = daysBetween(periodStart, periodEnd);
+  const left = Math.min(total, daysBetween(day, periodEnd));
+  return diffCents <= 0 || left <= 0 || total <= 0 ? 0 : Math.round((diffCents * left) / total);
+}

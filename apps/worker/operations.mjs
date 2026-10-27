@@ -14,7 +14,7 @@ export class OperationError extends Error {
 const permanent = new Set(['SNAPSHOT_NOT_FOUND', 'INVALID_LOGIN', 'PERMISSION_DENIED', 'WRITE_RESTRICTED', 'PROVISIONING_NOT_SUPPORTED', 'TEMPLATE_NOT_FOUND',
   'NETWORK_NOT_FOUND', 'TEMPLATE_HAS_NO_NIC', 'DISK_SMALLER_THAN_TEMPLATE', 'INSUFFICIENT_RESOURCES', 'NOT_MANAGED', 'TOOLS_NOT_RUNNING',
   'TLS_UNTRUSTED', 'TLS_HOSTNAME_MISMATCH', 'TLS_PIN_MISMATCH', 'ENDPOINT_BLOCKED', 'INVALID_REQUEST', 'SECRET_KEY_UNAVAILABLE', 'INVALID_STATE', 'VM_NOT_FOUND',
-  'FIREWALL_NEEDS_DVS', 'FIREWALL_TOO_MANY_RULES']);
+  'FIREWALL_NEEDS_DVS', 'FIREWALL_TOO_MANY_RULES', 'DISK_SHRINK_NOT_SUPPORTED', 'DISK_HAS_SNAPSHOTS']);
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const readinessPollMs = Number(process.env.READINESS_POLL_MS) || 5000;
@@ -199,7 +199,7 @@ async function power(db, ctx, action) {
 }
 
 // Removes the VM, then confirms in VMware that it is gone before releasing the reservation and IP.
-async function destroy(db, ctx) {
+async function removeVM(db, ctx) {
   await setStep(db, ctx.op, 'destroy');
   const st = await find(ctx);
   const vm = st?.moref ?? ctx.s.vm_moref;
@@ -212,6 +212,12 @@ async function destroy(db, ctx) {
   }
   await setStep(db, ctx.op, 'verify_gone');
   if (await find(ctx)) throw new OperationError('VM_STILL_PRESENT', 'VMware still lists the VM');
+  await saveTask(db, ctx.op, null);
+  ctx.op.provider_task_id = null;
+}
+
+async function destroy(db, ctx) {
+  await removeVM(db, ctx);
   const client = await db.connect();
   try {
     await client.query('BEGIN');
@@ -276,6 +282,43 @@ const kinds = {
     await db.query("UPDATE servers SET state = 'ready', guest_ready = true, error_code = NULL, updated_at = now() WHERE id = $1", [ctx.s.id]);
   },
   delete: (db, ctx) => destroy(db, ctx),
+  // A fresh VM from the image the API recorded, on the same addresses, keys and firewalls. The old VM goes first;
+  // once the clone step started a retry never removes again (it would remove the new VM).
+  async reinstall(db, ctx) {
+    if (!['clone', 'firewall', 'power_on', 'readiness'].includes(ctx.op.step)) {
+      await removeVM(db, ctx);
+      // The new image; an application installed on the old disk went with it, so its licence returns to the pool.
+      await db.query(`UPDATE servers SET vm_moref = NULL, image_id = $2, firewall_applied_version = 0, guest_ready = false, application_id = NULL, app_script_enc = NULL,
+        app_state = NULL, app_message = NULL, updated_at = now() WHERE id = $1`, [ctx.s.id, ctx.op.params.imageId]);
+      await db.query('UPDATE application_licenses SET server_id = NULL, assigned_at = NULL WHERE server_id = $1', [ctx.s.id]);
+    }
+    Object.assign(ctx, await loadServer(db, ctx.s.id)); // the new image's template, read after the change above
+    await kinds.create(db, ctx);
+  },
+  // New vCPU, memory and disk size: the VM is stopped (a clean shutdown first), changed, then started again if it ran.
+  async resize(db, ctx) {
+    const p = ctx.op.params;
+    if (ctx.op.step !== 'on') {
+      if (ctx.op.step !== 'resize') { // a retry during "resize" resumes the stored task instead
+        if ((await find(ctx))?.powerState === 'poweredOn') {
+          try { await kinds.shutdown(db, ctx); } catch { /* no VMware Tools or no answer: below */ }
+          await saveTask(db, ctx.op, null); ctx.op.provider_task_id = null;
+          if ((await find(ctx))?.powerState === 'poweredOn') await power(db, ctx, 'off');
+        }
+        await saveTask(db, ctx.op, null);
+        ctx.op.provider_task_id = null;
+      }
+      try { await vmTask(db, ctx, 'resize', '/v1/vm/resize', { vcpu: p.vcpu, memoryMb: p.memoryMb, diskGb: p.diskGb }); }
+      catch (e) {
+        // Refused (snapshots on the disk, ...): the server comes back as it was before failing.
+        if (p.powerOn) { await saveTask(db, ctx.op, null); ctx.op.provider_task_id = null; await power(db, ctx, 'on').catch(() => undefined); }
+        throw e;
+      }
+      await db.query('UPDATE servers SET vcpu = $2, memory_mb = $3, disk_gb = $4, updated_at = now() WHERE id = $1', [ctx.s.id, p.vcpu, p.memoryMb, p.diskGb]);
+    }
+    if (p.powerOn) { await saveTask(db, ctx.op, null); ctx.op.provider_task_id = null; await power(db, ctx, 'on'); }
+    await refreshPower(db, ctx);
+  },
   async power_on(db, ctx) { await power(db, ctx, 'on'); await refreshPower(db, ctx); },
   async shutdown(db, ctx) {
     await power(db, ctx, 'shutdown');
@@ -299,10 +342,13 @@ const kinds = {
   },
 };
 
-async function snapshot(db, ctx, body) {
-  await setStep(db, ctx.op, 'snapshot');
+const snapshot = (db, ctx, body) => vmTask(db, ctx, 'snapshot', '/v1/vm/snapshot', body);
+
+// One VMware task on the server's VM; a stored task id (a retry) is waited for instead of starting another.
+async function vmTask(db, ctx, step, path, body) {
+  await setStep(db, ctx.op, step);
   if (ctx.op.provider_task_id) { await waitTask(db, ctx, ctx.op.provider_task_id); return; }
-  const out = await adapter('/v1/vm/snapshot', { ...ctx.target, vm: ctx.s.vm_moref, ...body });
+  const out = await adapter(path, { ...ctx.target, vm: ctx.s.vm_moref, ...body });
   await saveTask(db, ctx.op, out.task);
   await waitTask(db, ctx, out.task);
 }
@@ -332,7 +378,7 @@ export async function processOperation(db, job, log, notify = async () => {}, rd
     await db.query("UPDATE operations SET status = 'succeeded', step = 'done', finished_at = now(), error_code = NULL, updated_at = now() WHERE id = $1", [ctx.op.id]);
     log('info', 'operation_succeeded', { kind: ctx.op.kind, operationId: ctx.op.id });
     const d = { serverId: ctx.s.id, name: ctx.s.name, kind: ctx.op.kind };
-    if (ctx.op.kind === 'create') { await notify('server.ready', [ctx.s.owner_id], { ...d, address: ctx.s.address ?? '' }); await rdns({ action: 'default', serverId: ctx.s.id }); }
+    if (ctx.op.kind === 'create' || ctx.op.kind === 'reinstall') { await notify('server.ready', [ctx.s.owner_id], { ...d, address: ctx.s.address ?? '' }); await rdns({ action: 'default', serverId: ctx.s.id }); }
     else if (ctx.op.kind === 'delete') { await notify('server.deleted', [ctx.s.owner_id], d); if (ctx.released?.length) await rdns({ action: 'clear', addresses: ctx.released.map((a) => a.address) }); }
     else if (ctx.op.kind.startsWith('snapshot_')) await notify('server.snapshot', [ctx.s.owner_id], { ...d, snapshot: ctx.op.params.name ?? '' });
     else await notify('server.power', [ctx.s.owner_id], d);
@@ -348,7 +394,13 @@ export async function processOperation(db, job, log, notify = async () => {}, rd
     if (code === 'CANCELLED' && ctx.op.kind === 'create') status = (await rollbackCreate(db, ctx)) ? 'cancelled' : 'failed';
     await db.query("UPDATE operations SET status = $2, error_code = $3, error_detail = $4, finished_at = now(), updated_at = now() WHERE id = $1",
       [ctx.op.id, status, code, String(err.detail ?? '').slice(0, 500)]);
-    if (ctx.op.kind === 'create' && status === 'failed') await db.query("UPDATE servers SET state = 'error', error_code = $2, updated_at = now() WHERE id = $1 AND state <> 'deleted'", [ctx.s.id, code]);
+    if ((ctx.op.kind === 'create' || ctx.op.kind === 'reinstall') && status === 'failed') await db.query("UPDATE servers SET state = 'error', error_code = $2, updated_at = now() WHERE id = $1 AND state <> 'deleted'", [ctx.s.id, code]);
+    // A resize that did not happen: the old price again, and its unpaid invoice withdrawn (a paid one is left to staff, told below).
+    if (ctx.op.kind === 'resize' && status === 'failed') {
+      const f = ctx.op.params.from ?? {};
+      await db.query('UPDATE servers SET price_monthly = $2, package_id = $3, updated_at = now() WHERE id = $1', [ctx.s.id, f.priceMonthly ?? ctx.s.price_monthly, f.packageId ?? null]);
+      if (ctx.op.params.invoiceId) await db.query("UPDATE invoices SET status = 'cancelled', cancelled_at = now() WHERE id = $1 AND status = 'unpaid' AND paid_total = 0", [ctx.op.params.invoiceId]);
+    }
     if (ctx.op.kind === 'delete') await db.query("UPDATE servers SET state = 'error', error_code = $2, updated_at = now() WHERE id = $1 AND state = 'deleting'", [ctx.s.id, code]);
     if (status === 'failed') {
       const { rows: [o] } = await db.query('SELECT email FROM users WHERE id = $1', [ctx.s.owner_id]).catch(() => ({ rows: [] }));

@@ -18,6 +18,7 @@ import { OrderSimilar, QuickConnect, ServerLabels } from './server-extras';
 import { remember } from '../../lib/recent';
 import { PowerSchedules } from './server-schedules';
 import { ServerSnapshots } from './server-snapshots';
+import { ServerReinstall, ServerResize } from './server-change';
 import { ServerFilters, useServerFilters } from './server-filters';
 import { flag } from '../../lib/flag';
 import { ButtonLink, ConfirmButton, DataTable, Empty, Mono, Notice, PageHeader, Section, StatusChip, TextInput, type Tone } from '../../components/ui';
@@ -165,7 +166,7 @@ export function ServerDetail({ id }: { id: string }) {
   const client = useQueryClient();
   const [message, setMessage] = useState<string>();
   const [deleteName, setDeleteName] = useState('');
-  const q = useApiQuery<{ server: Server; operations: Operation[]; own?: boolean; allowed?: Record<'power' | 'console' | 'iso' | 'rootPassword' | 'delete' | 'snapshots', boolean> }>(['servers', id], `/servers/${id}`, { refetchInterval: 3_000 });
+  const q = useApiQuery<{ server: Server; operations: Operation[]; own?: boolean; allowed?: Record<'power' | 'console' | 'iso' | 'rootPassword' | 'delete' | 'snapshots' | 'resize' | 'reinstall', boolean> }>(['servers', id], `/servers/${id}`, { refetchInterval: 3_000 });
   const gone = (q.error as { code?: string } | null)?.code === 'NOT_FOUND';
   // The viewer's own server names, for the next free name in "order similar".
   const mine = useApiQuery<{ servers: Server[] }>(['servers'], '/servers').data?.servers;
@@ -175,7 +176,7 @@ export function ServerDetail({ id }: { id: string }) {
   if (!q.data) return <p role="status" className="text-sm text-muted">{q.error && !gone ? error(q.error) : t('loading')}</p>;
   const { server: s, operations } = q.data;
   // What the admin lets customers do here (missing: an older API, everything allowed).
-  const allowed = { power: true, console: true, iso: true, rootPassword: true, delete: true, snapshots: true, ...q.data.allowed };
+  const allowed = { power: true, console: true, iso: true, rootPassword: true, delete: true, snapshots: true, resize: true, reinstall: true, ...q.data.allowed };
   const open = operations.find((o) => runningStates.includes(o.status));
   const own = !!q.data.own; // owner-only helpers: tags and notes, order similar
   // The same Idempotency-Key is kept until the server answers; only a network failure keeps it for a retry.
@@ -249,6 +250,8 @@ export function ServerDetail({ id }: { id: string }) {
     <ServerFirewalls server={s}/>
 
     <ServerMetrics id={id} live={s.state === 'ready' && s.powerState === 'poweredOn'}/>
+    {allowed.resize && s.state === 'ready' && !s.vdcId && <ServerResize server={s} busy={!!open}/>}
+    {allowed.reinstall && ['ready', 'error'].includes(s.state) && <ServerReinstall server={s} busy={!!open} own={own}/>}
 
     <Section title={t('detail.history')}>
       <DataTable label={t('detail.history')} rows={operations} rowKey={(o) => o.id}

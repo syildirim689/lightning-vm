@@ -12,6 +12,7 @@ import { exceededQuota } from './capacity';
 import { checkBudget } from './budget';
 import { openConsole } from './console';
 import { callAdapter, storedTarget } from './vmware';
+import { target as snapshotTarget } from './snapshots';
 import { limits } from './firewalls';
 import { choosePassword, generatePassword, sha512Crypt } from './passwords';
 import { decryptSecret, encryptSecret } from './secrets';
@@ -20,7 +21,7 @@ import { prepareApplication } from './applications';
 import { checkVdcRoom, resolveVdcOrder } from './vdc';
 import { renderPtr } from './rdns-names';
 import { fingerprint, parseKeyList, sshKeyPattern } from './smart-rules';
-import { billOrder, payFromBalance } from './billing';
+import { billOrder, billResize, payFromBalance, resizeCharge } from './billing';
 
 type Input = Record<string, unknown>;
 // BullMQ carries only the operation id (also the job id, so re-adding is harmless);
@@ -29,7 +30,7 @@ const queue = new Queue('operations', { connection: redis });
 export const enqueue = (operationId: string) => queue.add('operation', {}, {
   jobId: operationId, attempts: 6, backoff: { type: 'exponential', delay: 5000 }, removeOnComplete: true, removeOnFail: true,
 }).catch(() => undefined); // if Redis is down the worker's recovery scan enqueues it later
-const deadlineMinutes = { create: 45, delete: 20, power_on: 10, shutdown: 10, power_off: 10, reset: 10, snapshot_create: 30, snapshot_revert: 30, snapshot_delete: 60 } as const;
+const deadlineMinutes = { create: 45, delete: 20, power_on: 10, shutdown: 10, power_off: 10, reset: 10, snapshot_create: 30, snapshot_revert: 30, snapshot_delete: 60, resize: 30, reinstall: 45 } as const;
 export type Kind = keyof typeof deadlineMinutes;
 
 export function idempotencyKey(header: string | undefined, userId: string) {
@@ -52,7 +53,7 @@ export async function replay(key: string, requestHash: string) {
 // The admin's server settings decide what customers may do themselves; staff always may.
 // Each action needs the member's permission (their role) and must not be switched off for everyone (Settings → Servers).
 const actionPermission: Record<keyof ServerSettings['customer'], Permission> = { power: 'server.power', console: 'server.console', delete: 'server.delete',
-  snapshots: 'server.snapshots', iso: 'server.iso', rootPassword: 'server.root_password' };
+  snapshots: 'server.snapshots', iso: 'server.iso', rootPassword: 'server.root_password', resize: 'server.resize', reinstall: 'server.reinstall' };
 export async function customerMay(req: AuthedRequest, action: keyof ServerSettings['customer']) {
   if (can(req.user.permissions, 'servers.manage_all')) return;
   if (!can(req.user.permissions, actionPermission[action])) throw apiError(403, 'ACTION_NOT_PERMITTED', 'Your role does not allow this');
@@ -84,7 +85,7 @@ export function startPowerOperation(req: AuthedRequest, server: { id: string; ow
 }
 
 // What a lock stops: anything that ends the server or loses its running state or data.
-const lockedKinds = new Set<Kind>(['delete', 'power_off', 'reset', 'snapshot_revert']);
+const lockedKinds = new Set<Kind>(['delete', 'power_off', 'reset', 'snapshot_revert', 'reinstall', 'resize']);
 
 export async function startOperation(req: AuthedRequest, server: { id: string; owner_id: string }, kind: Kind, key: string, requestHash: string, params: object = {}) {
   // Read here, for every caller (the server page, bulk actions, schedules, data centers).
@@ -114,6 +115,26 @@ export async function startOperation(req: AuthedRequest, server: { id: string; o
     if ((err as { constraint?: string }).constraint === 'operations_one_open_per_server') throw apiError(409, 'OPERATION_IN_PROGRESS', 'Another operation is still running on this server');
     throw err;
   }
+}
+
+// A resize's target: priced like an order in the server's own location (with its extra IPv4 and application), the disk
+// never smaller, and the increase within the owner's quota and the location's free capacity.
+async function resizeTarget(req: AuthedRequest, server: Record<string, any>, body: Input) {
+  if (server.vdc_id) throw apiError(409, 'VDC_SERVER', 'Change the virtual data center instead');
+  const order = await resolveOrder(server.pool_id, { type: body?.type, packageId: body?.packageId, vcpu: body?.vcpu, memoryMb: body?.memoryMb, diskGb: body?.diskGb,
+    extraIpv4: server.extra_ipv4, imageId: server.image_id, ...(server.application_id && { applicationId: server.application_id }) },
+    can(req.user.permissions, 'servers.manage_all') ? undefined : limitsOf(req.user.roles.join(',')).allowedLocations);
+  const { shape } = order;
+  if (shape.diskGb < server.disk_gb) throw apiError(400, 'VALIDATION_FAILED', 'A disk can only grow', { diskGb: 'DISK_SHRINK_NOT_SUPPORTED' });
+  if (shape.vcpu === server.vcpu && shape.memoryMb === server.memory_mb && shape.diskGb === server.disk_gb) throw apiError(400, 'VALIDATION_FAILED', 'Nothing changes', { type: 'NO_CHANGE' });
+  const { rows: [img] } = await pool.query('SELECT family FROM os_images WHERE id = $1', [server.image_id]);
+  if (img?.family === 'esxi' && (shape.vcpu < 2 || shape.memoryMb < 4096)) throw apiError(400, 'VALIDATION_FAILED', 'ESXi needs 2 vCPU and 4 GB', { type: 'ESXI_NEEDS_MORE' });
+  const more = { vcpu: Math.max(0, shape.vcpu - server.vcpu), memoryMb: Math.max(0, shape.memoryMb - server.memory_mb), diskGb: Math.max(0, shape.diskGb - server.disk_gb) };
+  const over = exceededQuota({ ...(await limitsFor(server.owner_id, server.project_id ?? undefined)), max_servers: null }, await usageOf(server.owner_id, server.project_id ?? undefined), more);
+  if (over.length) throw apiError(409, 'QUOTA_EXCEEDED', 'Quota exceeded', Object.fromEntries(over.map((o) => [o, 'QUOTA_EXCEEDED'])));
+  const cap = await capacityOf(order.rp);
+  if (more.vcpu > cap.available.vcpu || more.memoryMb > cap.available.memoryMb || more.diskGb > cap.available.storageGb) throw apiError(409, 'CAPACITY_EXHAUSTED', 'Not enough capacity in this location');
+  return { order, charge: await resizeCharge(server.id, server.price_monthly, order.price.monthly) };
 }
 
 const serverColumns = `s.id, s.name, s.state, s.power_state AS "powerState", s.guest_ready AS "guestReady", s.vcpu, s.memory_mb AS "memoryMb", s.disk_gb AS "diskGb",
@@ -389,6 +410,84 @@ export class ServersController {
     // A failed create may have left no VM to act on.
     if ((server.state !== 'ready' && server.state !== 'error') || !server.vm_moref) throw apiError(409, 'INVALID_SERVER_STATE', 'Not possible in this state');
     return { serverId: id, operation: await startOperation(req, server, kind, key, requestHash) };
+  }
+
+  // What a resize to this shape would cost, before anything changes (the order page's price, for the same pool and extras).
+  @Post('servers/:id/resize/quote')
+  async resizeQuote(@Req() req: AuthedRequest, @Param('id', ParseUUIDPipe) id: string, @Body() body: Input) {
+    const server = await findServer(req, id, true);
+    await customerMay(req, 'resize');
+    const r = await resizeTarget(req, server, body);
+    return { shape: r.order.shape, priceMonthly: r.order.price.monthly, currency: r.order.price.currency, ...r.charge };
+  }
+
+  // New vCPU, memory and disk size (a package of this location, or a custom shape). The disk only grows. The new monthly price
+  // applies from now: an increase is invoiced for the rest of the period, a decrease simply bills less from the next one.
+  @Post('servers/:id/resize') @HttpCode(202)
+  async resize(@Req() req: AuthedRequest, @Headers('idempotency-key') header: string | undefined, @Param('id', ParseUUIDPipe) id: string, @Body() body: Input) {
+    const key = idempotencyKey(header, req.user.id);
+    const requestHash = hashOf({ id, resize: body });
+    const earlier = await replay(key, requestHash);
+    if (earlier) return earlier;
+    const server = await findServer(req, id, true);
+    await customerMay(req, 'resize');
+    if (server.state !== 'ready' || !server.vm_moref) throw apiError(409, 'INVALID_SERVER_STATE', 'Not possible in this state');
+    const r = await resizeTarget(req, server, body);
+    const { shape, price } = r.order;
+    // vSphere cannot grow a disk under snapshots: refused here, before the server is stopped for nothing.
+    if (shape.diskGb > server.disk_gb) {
+      const { snapshots } = await callAdapter<{ snapshots: unknown[] }>('/v1/vm/snapshots', { ...(await snapshotTarget(server.pool_id)), vm: server.vm_moref }, 30_000);
+      if (snapshots.length) throw apiError(409, 'DISK_HAS_SNAPSHOTS', 'Remove the snapshots before growing the disk');
+    }
+    const operation = await startOperation(req, server, 'resize', key, requestHash,
+      { vcpu: shape.vcpu, memoryMb: shape.memoryMb, diskGb: shape.diskGb, powerOn: server.power_state === 'poweredOn',
+        from: { vcpu: server.vcpu, memoryMb: server.memory_mb, diskGb: server.disk_gb, priceMonthly: server.price_monthly, packageId: server.package_id } });
+    // The price follows the shape at once (renewals read it); a resize that finally fails puts it back (worker).
+    await pool.query('UPDATE servers SET price_monthly = $2, package_id = $3, updated_at = now() WHERE id = $1', [id, price.monthly, r.order.packageId]);
+    const invoiceId = r.charge.chargeNow !== '0.00' ? await billResize(server, r.charge.chargeNow, price.currency, shape) : null;
+    if (invoiceId) await pool.query("UPDATE operations SET params = params || jsonb_build_object('invoiceId', $2::text) WHERE id = $1", [operation.id, invoiceId]);
+    return { serverId: id, operation, ...(invoiceId && { invoiceId }) };
+  }
+
+  // A fresh install from another (or the same) image: the disk is wiped; addresses, firewalls and the price stay.
+  // Dangerous: the caller repeats the server's name.
+  @Post('servers/:id/reinstall') @HttpCode(202)
+  async reinstall(@Req() req: AuthedRequest, @Headers('idempotency-key') header: string | undefined, @Param('id', ParseUUIDPipe) id: string, @Body() body: Input) {
+    const key = idempotencyKey(header, req.user.id);
+    const requestHash = hashOf({ id, reinstall: body });
+    const earlier = await replay(key, requestHash);
+    if (earlier) return earlier;
+    const server = await findServer(req, id, true);
+    await customerMay(req, 'reinstall');
+    if (body?.confirm !== server.name) throw apiError(400, 'VALIDATION_FAILED', 'Confirmation required', { confirm: 'CONFIRMATION_MISMATCH' });
+    if (!['ready', 'error'].includes(server.state) || !server.vm_moref) throw apiError(409, 'INVALID_SERVER_STATE', 'Not possible in this state');
+    if (server.locked) throw apiError(409, 'SERVER_LOCKED', 'The server is locked against this; unlock it first');
+    const { rows: [img] } = await pool.query(`SELECT i.family, i.min_disk_gb FROM os_images i JOIN resource_pools p ON p.connection_id = i.connection_id
+      WHERE i.id = $1 AND i.active AND p.id = $2 AND (NOT EXISTS (SELECT 1 FROM package_images pi WHERE pi.package_id = $3)
+        OR EXISTS (SELECT 1 FROM package_images pi WHERE pi.package_id = $3 AND pi.image_id = i.id))`, [String(body.imageId ?? ''), server.pool_id, server.package_id]).catch(() => ({ rows: [] }));
+    if (!img) throw apiError(400, 'VALIDATION_FAILED', 'Unknown image', { imageId: 'NOT_AVAILABLE' });
+    if (server.disk_gb < img.min_disk_gb) throw apiError(400, 'VALIDATION_FAILED', 'Disk too small', { imageId: 'BELOW_IMAGE_MINIMUM' });
+    if (img.family === 'esxi' && (server.vcpu < 2 || server.memory_mb < 4096)) throw apiError(400, 'VALIDATION_FAILED', 'ESXi needs 2 vCPU and 4 GB', { imageId: 'ESXI_NEEDS_MORE' });
+    // New SSH keys and root password when given; otherwise the server's current ones go onto the new disk.
+    let keys: string[] = server.ssh_public_keys;
+    if (Array.isArray(body.sshKeyIds) && body.sshKeyIds.length) {
+      const ids = body.sshKeyIds.map(String);
+      const { rows } = await pool.query('SELECT public_key FROM ssh_keys WHERE owner_id = $1 AND id = ANY($2::uuid[])', [server.owner_id, ids]).catch(() => ({ rows: [] }));
+      if (rows.length !== ids.length) throw apiError(400, 'VALIDATION_FAILED', 'Unknown key', { sshKeyIds: 'NOT_AVAILABLE' });
+      keys = rows.map((k) => k.public_key);
+    }
+    if (body.rootPassword !== undefined && (typeof body.rootPassword !== 'string' || body.rootPassword.length > 128)) throw apiError(400, 'VALIDATION_FAILED', 'Invalid input', { rootPassword: 'INVALID_VALUE' });
+    const branding = await getSettings('branding');
+    const prefix = branding.passwordPrefix || branding.name;
+    const root = choosePassword((body.rootPassword as string | undefined) || undefined, prefix, [server.name, req.user.email.split('@')[0]])
+      ?? (img.family === 'esxi' && !server.root_password_enc ? { password: generatePassword(prefix), replaced: true } : null);
+    // Keys and password first (the worker reads them when it builds); the image is set by the worker once the old VM is gone.
+    if ((await pool.query("SELECT 1 FROM operations WHERE server_id = $1 AND status IN ('pending', 'running')", [id])).rowCount) throw apiError(409, 'OPERATION_IN_PROGRESS', 'Another operation is still running on this server');
+    await pool.query(`UPDATE servers SET ssh_public_keys = $2, root_password_hash = COALESCE($3, root_password_hash), root_password_enc = COALESCE($4, root_password_enc), updated_at = now() WHERE id = $1`,
+      [id, keys, root ? sha512Crypt(root.password) : null, root ? encryptSecret(root.password, 'server-root-password') : null]);
+    const operation = await startOperation(req, server, 'reinstall', key, requestHash, { imageId: String(body.imageId), fromImageId: server.image_id });
+    await pool.query("UPDATE servers SET state = 'provisioning', error_code = NULL, updated_at = now() WHERE id = $1 AND state <> 'deleted'", [id]);
+    return { serverId: id, operation, ...(root && { passwordReplaced: root.replaced }) };
   }
 
   // Dangerous: the caller must repeat the server's name. Resources are released only after the

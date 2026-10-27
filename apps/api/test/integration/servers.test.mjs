@@ -792,6 +792,51 @@ test('automatic snapshots: a schedule takes "auto …" snapshots, keeps the newe
   }
 });
 
+test('resize and reinstall: priced like an order, the disk only grows, the VM changed in place; a reinstall builds a new VM on the same address', { skip }, async () => {
+  const key = () => ({ 'idempotency-key': randomUUID() });
+  const done = (id, kind) => until(async () => { const o = await lastOp(id); return o.kind === kind && ['succeeded', 'failed'].includes(o.status); }, `${kind} done`, 120);
+  await pool.query("UPDATE ip_pools SET range_end = '10.20.0.40'::inet WHERE name = 'tiny'");
+  const small = (await send('POST', '/admin/packages', { name: 'Small', vcpu: 2, memoryMb: 1024, diskGb: 20, priceMonthly: '2.00', currency: 'EUR', poolIds: [poolId], imageIds: [imageId] })).json().id;
+  const made = await create(order('resize-1'));
+  assert.equal(made.statusCode, 202, made.body);
+  const id = made.json().serverId;
+  await until(async () => (await serverRow(id)).state === 'ready', 'server ready', 120);
+  const quote = (body, session = user) => send('POST', `/servers/${id}/resize/quote`, body, session);
+  assert.equal((await quote({ type: 'package', packageId })).json().fields.type, 'NO_CHANGE');
+  assert.equal((await quote({ type: 'package', packageId: small }, other)).statusCode, 404);
+  const q = (await quote({ type: 'package', packageId: small })).json();
+  assert.deepEqual([q.shape, q.priceMonthly, q.chargeNow], [{ vcpu: 2, memoryMb: 1024, diskGb: 20 }, '2.00', '0.00'], JSON.stringify(q));
+  await send('PUT', '/admin/settings/servers', { customer: { resize: false } });
+  assert.equal((await send('POST', `/servers/${id}/resize`, { type: 'package', packageId: small }, user, key())).json().code, 'ACTION_DISABLED');
+  await send('PUT', '/admin/settings/servers', { customer: { resize: true } });
+  const before = await serverRow(id);
+  const r = await send('POST', `/servers/${id}/resize`, { type: 'package', packageId: small }, user, key());
+  assert.equal(r.statusCode, 202, r.body);
+  await done(id, 'resize');
+  assert.equal((await lastOp(id)).status, 'succeeded', (await lastOp(id)).error_code);
+  let s = await serverRow(id);
+  assert.deepEqual([s.vcpu, s.memory_mb, s.disk_gb, s.price_monthly, s.package_id, s.power_state], [2, 1024, 20, '2.00', small, before.power_state]);
+  assert.equal((await quote({ type: 'package', packageId })).json().fields.diskGb, 'DISK_SHRINK_NOT_SUPPORTED');
+
+  // Reinstall: confirmed by name, a known image, a new VM under the same name and address.
+  const reinstall = (body) => send('POST', `/servers/${id}/reinstall`, body, user, key());
+  assert.equal((await reinstall({ imageId, confirm: 'wrong' })).json().fields.confirm, 'CONFIRMATION_MISMATCH');
+  assert.equal((await reinstall({ imageId: randomUUID(), confirm: 'resize-1' })).json().fields.imageId, 'NOT_AVAILABLE');
+  const address = (await pool.query("SELECT host(address) AS a FROM ip_allocations WHERE server_id = $1 AND kind = 'primary'", [id])).rows[0].a;
+  const ri = await reinstall({ imageId, confirm: 'resize-1' });
+  assert.equal(ri.statusCode, 202, ri.body);
+  assert.equal((await serverRow(id)).state, 'provisioning');
+  await done(id, 'reinstall');
+  assert.equal((await lastOp(id)).status, 'succeeded', (await lastOp(id)).error_code);
+  s = await serverRow(id);
+  assert.equal(s.state, 'ready');
+  assert.notEqual(s.vm_moref, before.vm_moref, 'a new VM');
+  assert.equal(await vmCount(id), 1);
+  assert.equal((await pool.query("SELECT host(address) AS a FROM ip_allocations WHERE server_id = $1 AND kind = 'primary'", [id])).rows[0].a, address);
+  assert.equal((await send('DELETE', `/servers/${id}`, { confirm: 'resize-1' }, user, key())).statusCode, 202);
+  await until(async () => (await serverRow(id)).state === 'deleted', 'deleted', 120);
+});
+
 test('billing: an order waits for payment, a declined card leaves it awaiting, a paid one builds; renewals, automatic charges, overdue, hold and release; top-up, refund, manual payment, expiry', { skip }, async () => {
   const { runBilling } = await import('../../dist/billing.js');
   const key = () => ({ 'idempotency-key': randomUUID() });

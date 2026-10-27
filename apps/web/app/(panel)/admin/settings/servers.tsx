@@ -9,7 +9,7 @@ import { FormActions, FormSection, Notice, SwitchInput } from '../../../../compo
 import { apiFetch, useErrorText } from '../../../../lib/api';
 import { useApiQuery } from '../../../../lib/query';
 
-type Doc = { customer: { power: boolean; console: boolean; iso: boolean; rootPassword: boolean; delete: boolean; snapshots: boolean }; hardware: { cpuHotAdd: boolean; memoryHotAdd: boolean; nestedHv: boolean } };
+type Doc = { customer: { power: boolean; console: boolean; iso: boolean; rootPassword: boolean; delete: boolean; snapshots: boolean; resize: boolean; reinstall: boolean }; hardware: { cpuHotAdd: boolean; memoryHotAdd: boolean; nestedHv: boolean } };
 
 export default function ServerSettings({ readOnly }: { readOnly: boolean }) {
   const t = useTranslations('Settings.servers');
@@ -24,13 +24,13 @@ export default function ServerSettings({ readOnly }: { readOnly: boolean }) {
     try { setV(await apiFetch<Doc>('/admin/settings/servers', { method: 'PUT', body: v })); toast.success(t('saved')); }
     catch (e) { toast.danger(error(e)); } finally { setBusy(false); }
   }
-  const icons = { power: 'power', console: 'square-terminal', iso: 'disc-3', rootPassword: 'key-round', delete: 'trash-2', snapshots: 'camera' } as const;
+  const icons = { power: 'power', console: 'square-terminal', iso: 'disc-3', rootPassword: 'key-round', delete: 'trash-2', snapshots: 'camera', resize: 'gauge', reinstall: 'refresh-cw' } as const;
   return <Card><Card.Content className="flex flex-col">
     <FormSection title={t('customer')} description={t('customerHelp')} icon={<I name="user-cog" size={16}/>}>
       <div className="grid gap-3 sm:grid-cols-2">
         {(Object.keys(icons) as (keyof Doc['customer'])[]).map((k) => <div key={k} className="flex items-start justify-between gap-3 rounded-xl border border-border p-3">
           <div className="flex items-start gap-2">
-            <I name={{ power: 'power', console: 'square-terminal', iso: 'disc-3', rootPassword: 'key-round', delete: 'trash-2', snapshots: 'camera' }[k]} size={16}/>
+            <I name={{ power: 'power', console: 'square-terminal', iso: 'disc-3', rootPassword: 'key-round', delete: 'trash-2', snapshots: 'camera', resize: 'gauge', reinstall: 'refresh-cw' }[k]} size={16}/>
             <div><p className="text-sm font-medium">{t(`actions.${k}`)}</p><p className="text-xs text-muted">{t(`actionHelp.${k}`)}</p></div>
           </div>
           <SwitchInput label={<span className="sr-only">{t(`actions.${k}`)}</span>} isSelected={v.customer[k]} isDisabled={readOnly}

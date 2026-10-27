@@ -16,7 +16,7 @@ import { decryptSecret, encryptSecret } from './secrets';
 import { getSettings, saveSettings, type BillingSettings } from './settings-store';
 import { enqueue, startOperation } from './servers';
 import { gateways, sandboxPay, type Result } from './billing-gateways';
-import { addDays, addMonths, cleanProfile, collectionStep, daysBetween, fromCents, invoiceNumber, lineAmounts, taxFor, toCents, totals, validPrefix } from './billing-rules';
+import { addDays, addMonths, cleanProfile, collectionStep, daysBetween, fromCents, invoiceNumber, lineAmounts, prorate, taxFor, toCents, totals, validPrefix } from './billing-rules';
 
 type Db = Pick<Pool, 'query'> | PoolClient;
 type Row = Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
@@ -861,4 +861,28 @@ export class BillingSettingsController {
     await audit(req, 'settings.billing', 'success', req.user.id, { enabled: next.enabled, requirePayment: next.requirePayment, sandbox: next.sandbox });
     return { billing: next };
   }
+}
+
+// What a resize costs now: the monthly increase for the rest of the server's paid period (nothing without billing,
+// without a running subscription, or for a decrease, which simply bills less from the next period).
+export async function resizeCharge(serverId: string, oldMonthly: string, newMonthly: string) {
+  const s = await settings();
+  const { rows: [sub] } = await pool.query(`SELECT period_start::text AS ps, period_end::text AS pe FROM subscriptions WHERE server_id = $1 AND status IN ('active', 'past_due')`, [serverId]);
+  const cents = s.enabled && sub?.ps && sub?.pe ? prorate(toCents(newMonthly) - toCents(oldMonthly), today(), sub.ps, sub.pe) : 0;
+  return { chargeNow: fromCents(cents), periodEnd: sub?.pe ?? null };
+}
+
+// The invoice for a resize's increase; the balance pays it at once when it covers it, otherwise it waits like any invoice.
+export async function billResize(server: { id: string; owner_id: string; name: string }, amount: string, currency: string, shape: { vcpu: number; memoryMb: number; diskGb: number }) {
+  const client = await pool.connect();
+  let id: string;
+  try {
+    await client.query('BEGIN');
+    id = await createInvoice(client, { ownerId: server.owner_id, kind: 'manual', currency, dueAt: endOfDay(addDays(today(), 7)),
+      lines: [{ description: `Sunucu ${server.name}: ${shape.vcpu} vCPU, ${shape.memoryMb / 1024} GB bellek, ${shape.diskGb} GB disk (dönem sonuna kadar fark)`, unitCents: toCents(amount) }] });
+    await client.query('COMMIT');
+  } catch (e) { await client.query('ROLLBACK'); throw e; } finally { client.release(); }
+  const paid = (await settings()).balance && await payFromBalance(id, true, server.owner_id).catch(() => false);
+  if (!paid) await notify('billing.invoice', [server.owner_id], { invoiceId: id, total: amount, currency, due: addDays(today(), 7) });
+  return id;
 }
