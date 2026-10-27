@@ -2416,7 +2416,7 @@
       "status": "Status",
       "security": "Security",
       "servers": "Servers",
-      "lastSeen": "Last sign-in",
+      "lastSeen": "Last seen",
       "actions": "Actions"
     },
     "overrides": "{n} personal permissions",

@@ -21,11 +21,11 @@ const codeOf = (e: ClientError) => ({ code: e?.code ?? (e?.status === 429 ? 'RAT
 export default function Security() {
   const t = useTranslations('Account');
   return <Section title={t('security.title')} description={t('security.intro')}>
-    <div className="grid gap-8 xl:grid-cols-3">
+    <div className="grid gap-8 lg:grid-cols-2">
       <ChangePassword/>
       <Passkeys/>
-      <Sessions/>
     </div>
+    <div className="mt-8 border-t border-separator pt-6"><Sessions/></div>
     <ConnectedAccounts/>
   </Section>;
 }

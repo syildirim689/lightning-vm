@@ -56,7 +56,7 @@ export default function SessionList({ sessions, onEnd, canEnd }: { sessions: Ses
         <span className="mt-0.5 flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-muted">
           <span title={exact(s.lastActiveAt)}><I name="activity" size={11} className="mr-1 inline"/>{t('lastActive', { when: ago(s.lastActiveAt) })}</span>
           <span title={exact(s.createdAt)}><I name="log-in" size={11} className="mr-1 inline"/>{t('started', { when: ago(s.createdAt) })}</span>
-          <span><I name="globe" size={11} className="mr-1 inline"/>{s.lastIp && s.lastIp !== s.ip ? t('ipMoved', { first: s.ip ?? '–', last: s.lastIp }) : (s.ip ?? '–')}</span>
+          <span><I name="globe" size={11} className="mr-1 inline"/>{s.ip && s.lastIp && s.lastIp !== s.ip ? t('ipMoved', { first: s.ip, last: s.lastIp }) : (s.lastIp || s.ip || '–')}</span>
           <span title={exact(s.expiresAt)}><I name="hourglass" size={11} className="mr-1 inline"/>{t('ends', { when: format.relativeTime(new Date(s.expiresAt), now) })}</span>
         </span>
       </span>

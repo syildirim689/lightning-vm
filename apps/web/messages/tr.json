@@ -2416,7 +2416,7 @@
       "status": "Durum",
       "security": "Güvenlik",
       "servers": "Sunucu",
-      "lastSeen": "Son giriş",
+      "lastSeen": "Son görülme",
       "actions": "İşlemler"
     },
     "overrides": "{n} özel izin",
