@@ -888,7 +888,8 @@ test.describe('people, settings and smart features (English browser)', () => {
     await expect(page.getByRole('dialog').getByText('Firewall check')).toBeVisible();
     await page.waitForTimeout(500);
     await shot(page, 'support-canned');
-    await page.keyboard.press('Escape');
+    await page.getByRole('dialog').getByRole('button', { name: 'Close' }).last().click();
+    await expect(page.getByRole('dialog')).toHaveCount(0);
     await page.getByText('Cannot reach my server over SSH').click();
     // On your own ticket you write as a customer (internal notes are for other people's tickets).
     await expect(page.getByRole('button', { name: 'Internal note' })).toHaveCount(0);

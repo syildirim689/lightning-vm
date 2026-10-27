@@ -70,3 +70,8 @@ Yönetici Ayarlar → Mesajlaşma'dan sunulan uygulamaları seçer ve hesap gere
 numarası kimliği, gövdesi `{{1}}` başlık `{{2}}` metin olan onaylı şablon) ve Pushover uygulama anahtarı.
 Kullanıcının verdiği adresler herkese açık HTTPS olmalıdır; özel/iç ağ adresleri reddedilir. Webhook'a imza
 anahtarı verilirse istek `X-Lightning-Signature: sha256=<HMAC>` başlığıyla gelir. Kod: `apps/api/src/chat*.ts`.
+
+Destek: `support.reply` (yanıt geldi), `support.rate` (talebi destek ya da 7 günlük sessizlik kapattığında puan
+isteği; müşteri kendisi kapattıysa gönderilmez), personele `support.ticket_opened`, `support.customer_message`,
+`support.assigned`. Uygulama içi bildirimler iki dilde saklanır (`notifications.texts`); zil, panelin o anki diline
+göre gösterir. E-posta, SMS ve sohbet kanalları hesabın dilini kullanır.

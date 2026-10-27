@@ -220,3 +220,14 @@ rolleri güncellenir; ardından better-auth'un normal girişi sürer, böylece i
 denetim kaydı herkes için aynıdır. Dizin hesaplarının parolası panelde değiştirilemez veya sıfırlanamaz; dizin hata verirse
 eski parola özetiyle de girilemez. Yerel hesaplar (ilk yönetici gibi) etkilenmez. Testler gerçek bir OpenLDAP ile çalışır
 (`LDAP_TEST_URL`).
+
+## Tek oturum açma (OpenID Connect)
+Ayarlar → Dizin → Tek oturum açma: issuer adresi (panel `/.well-known/openid-configuration` belgesini okur), client ID
+ve secret (şifreli saklanır), kapsamlar, grup alanı ve grup → rol eşlemesi. Sağlayıcıya kaydedilecek yönlendirme
+adresi `https://<panel>/api/auth/callback/oidc`. Akışı better-auth'un `genericOAuth` eklentisi yürütür (kod akışı,
+PKCE, kimlik belirtecinin imzası sağlayıcının anahtarlarıyla doğrulanır); ayar kaydedilince better-auth yeniden
+kurulur, yeniden başlatma gerekmez. SSO hesapları kendine aittir (`auth_source = 'oidc'`): bir panel ya da dizin
+hesabının e-posta adresi sağlayıcı tarafından ele geçirilemez, bağlama reddedilir. Roller her girişte gruplara
+göre güncellenir (eşleme varsa), rolün adres sınırları uygulanır; parola panelde değiştirilemez/sıfırlanamaz ve
+panel bu hesaplardan kendi iki adımlı doğrulamasını istemez. Testler süreç içinde çalışan sahte bir sağlayıcıyla
+(RS256 imzalı belirteç) yapılır. Kod: `apps/api/src/sso.ts`, `directory.ts`.

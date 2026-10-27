@@ -59,6 +59,7 @@ bildirimleri ve sistemin kendisini tek panelden yönetir. Kurulumdan sonra sunuc
 - **Kötüye kullanım:** açık riskli port taraması, madencilik şüphesi (uzun süreli tam CPU)
 - **Enerji raporu:** kWh, maliyet ve karbon tahmini
 - **Denetim kaydı**, duyuru bandı, toplu sunucu işlemleri
+- **Destek sistemi:** öncelik ve SLA, departmanlar, iç notlar, değişkenli hazır yanıtlar, puanlama ve kapanışta memnuniyet isteği
 - **Sunucu terminali** (iki adımlı doğrulama zorunlu) ve **panelden güncelleme**
 
 </td></tr>
@@ -87,6 +88,7 @@ bildirimleri ve sistemin kendisini tek panelden yönetir. Kurulumdan sonra sunuc
 
 ### Güvenlik
 - better-auth: parola, passkey, iki adımlı doğrulama (uygulama, SMS, e-posta, yedek kodlar)
+- **Kurumsal giriş:** LDAP / Active Directory ve OpenID Connect ile tek oturum açma (Keycloak, Entra ID, Okta, Google, authentik); gruplardan rol
 - CSRF koruması, hız sınırları, şifreli sırlar (ana anahtar), oturum yönetimi
 - **Mükerrer işlem koruması:** Idempotency-Key, sunucu başına tek açık işlem ve çift tıklamada ikinci isteğin reddi
 - Kullanıcının verdiği webhook adresleri yalnızca herkese açık HTTPS olabilir (iç ağa istek atılamaz)
