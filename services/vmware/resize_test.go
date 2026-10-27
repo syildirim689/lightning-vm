@@ -91,11 +91,17 @@ func TestCloneFromServer(t *testing.T) {
 		t.Fatal(err)
 	}
 	vm := waitTask(t, e, out["task"].(string)).VM
+	// As in the panel: the original was resized before it is copied.
+	r, err := resizeVM(ctx, e.c, ResizeRequest{VM: vm, VCPU: 2, MemoryMB: 1024, DiskGB: 30})
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitTask(t, e, r.(map[string]any)["task"].(string))
 	if _, err := powerAction(ctx, e.c, VMRequest{VM: vm, Action: "on"}); err != nil {
 		t.Fatal(err)
 	}
 	copyOut, err := cloneVM(ctx, testGuard(), CloneRequest{Request: e.req, Name: "lvm-copy", Template: vm, Pool: e.pool, Datastore: e.store,
-		Network: e.network, VCPU: 1, MemoryMB: 1024, DiskGB: 20, Metadata: metadata, ServerID: "copy"})
+		Network: e.network, VCPU: 2, MemoryMB: 1024, DiskGB: 30, Metadata: metadata, ServerID: "copy"})
 	if err != nil {
 		t.Fatal(err)
 	}

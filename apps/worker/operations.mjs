@@ -387,7 +387,7 @@ export async function processOperation(db, job, log, notify = async () => {}, rd
     const last = err.permanent || job.attemptsMade + 1 >= (job.opts.attempts ?? 1);
     log(last ? 'error' : 'warn', 'operation_failed', { kind: ctx.op.kind, operationId: ctx.op.id, code, final: last });
     if (!last) {
-      await db.query("UPDATE operations SET status = 'pending', error_code = $2, updated_at = now() WHERE id = $1", [ctx.op.id, code]);
+      await db.query("UPDATE operations SET status = 'pending', error_code = $2, error_detail = $3, updated_at = now() WHERE id = $1", [ctx.op.id, code, String(err.detail ?? '').slice(0, 500)]);
       throw err; // BullMQ retries with exponential backoff
     }
     let status = 'failed';

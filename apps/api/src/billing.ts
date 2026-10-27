@@ -459,15 +459,15 @@ export async function startHourly(db: PoolClient, o: { serverId: string; ownerId
 async function runHourly(now: Date) {
   const s = await settings();
   const out = { hours: 0, held: 0, released: 0, warned: 0, invoiced: 0 };
-  const { rows } = await pool.query(`SELECT id, owner_id, price_hourly::text AS price, trim(currency) AS currency, billed_until FROM servers
+  const { rows } = await pool.query(`SELECT id, owner_id, price_hourly::text AS price, trim(currency) AS currency, billed_until, billed_until::text AS billed_text FROM servers
     WHERE billing_mode = 'hourly' AND state <> 'deleted' AND billed_until < $1`, [now]);
   for (const r of rows) {
     const h = hoursDue(new Date(r.billed_until), now);
-    // Guarded by billed_until: a second run at the same time adds nothing.
-    const { rowCount } = await pool.query(`WITH up AS (UPDATE servers SET billed_until = billed_until + make_interval(hours => $2) WHERE id = $1 AND billed_until = $3 RETURNING id)
+    // Guarded by billed_until (compared as PostgreSQL's own text: a JavaScript date drops the microseconds): a second run adds nothing.
+    const { rowCount } = await pool.query(`WITH up AS (UPDATE servers SET billed_until = billed_until + make_interval(hours => $2) WHERE id = $1 AND billed_until = $3::timestamptz RETURNING id)
       INSERT INTO server_usage (server_id, owner_id, month, hours, amount, currency) SELECT $1, $4, $5, $2, $2 * $6::numeric, $7 FROM up
       ON CONFLICT (server_id, month) DO UPDATE SET hours = server_usage.hours + EXCLUDED.hours, amount = server_usage.amount + EXCLUDED.amount`,
-    [r.id, h, r.billed_until, r.owner_id, firstOfMonth(today(now)), r.price, r.currency]);
+    [r.id, h, r.billed_text, r.owner_id, firstOfMonth(today(now)), r.price, r.currency]);
     if (rowCount) out.hours += h;
   }
 
