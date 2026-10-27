@@ -950,6 +950,26 @@ test.describe('people, settings and smart features (English browser)', () => {
     await expect(page.getByRole('heading', { name: 'This server' })).toBeVisible();
     await page.waitForTimeout(800);
     await shot(page, 'host-settings');
+    // Sign-in methods: GitHub and user names on; the sign-in page then offers them. Turned off again afterwards.
+    await page.goto('/admin/settings?tab=signin');
+    await expect(page.getByText('Social sign-in', { exact: true })).toBeVisible();
+    await page.getByRole('switch', { name: 'Turn on GitHub' }).click();
+    await page.getByLabel('Client ID').fill('Iv1.e2etest');
+    await page.getByLabel('Client secret').fill('e2e-secret-value');
+    await page.getByRole('switch', { name: 'Sign in with a user name' }).click();
+    await page.getByRole('button', { name: 'Save', exact: true }).click();
+    await expect(page.getByText('Saved.').first()).toBeVisible();
+    await expect(page.getByText(/\/api\/auth\/callback\/github$/)).toBeVisible();
+    await page.waitForTimeout(500);
+    await shot(page, 'signin-settings');
+    const visitor = await (await browser.newContext({ locale: 'en-US' })).newPage();
+    await visitor.goto('/login');
+    await expect(visitor.getByRole('button', { name: 'Continue with GitHub' })).toBeVisible();
+    await expect(visitor.getByLabel('E-mail or user name')).toBeVisible();
+    await visitor.waitForTimeout(500);
+    await visitor.screenshot({ path: 'test-results/tour/login-methods.png', fullPage: true });
+    await visitor.close();
+    expect((await page.request.put('/api/admin/settings/sign-in', { headers: { 'x-lightning-csrf': '1' }, data: { username: false, providers: { github: { enabled: false } } } })).ok()).toBe(true);
     // The command palette finds a ticket by its number.
     await page.goto('/admin');
     await page.keyboard.press('Control+k');

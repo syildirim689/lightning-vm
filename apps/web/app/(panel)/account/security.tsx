@@ -11,6 +11,8 @@ import { apiFetch, useErrorText } from '../../../lib/api';
 import { useApiQuery } from '../../../lib/query';
 import SessionList, { type SessionRow } from '../../../components/session-list';
 import { authClient } from '../../../lib/auth-client';
+import type { PublicConfig } from '../../../lib/session';
+import ProviderMark, { providerNames } from '../../../components/provider-mark';
 
 type ClientError = { code?: string; status?: number } | null;
 const codeOf = (e: ClientError) => ({ code: e?.code ?? (e?.status === 429 ? 'RATE_LIMITED' : 'UNKNOWN') });
@@ -24,7 +26,40 @@ export default function Security() {
       <Passkeys/>
       <Sessions/>
     </div>
+    <ConnectedAccounts/>
   </Section>;
+}
+
+// Social providers linked to this account: link one (the provider confirms it is you), or remove one while
+// another way in remains. Linking happens only here, signed in: never because a provider reports this address.
+function ConnectedAccounts() {
+  const t = useTranslations('Account.connected');
+  const { error } = useErrorText();
+  const cfg = useApiQuery<PublicConfig>(['public-config'], '/public/config').data;
+  const list = useQuery({ queryKey: ['accounts'], queryFn: async () => (await authClient.listAccounts()).data ?? [] });
+  const client = useQueryClient();
+  const providers = cfg?.signIn?.social ?? [];
+  if (!providers.length) return null;
+  const linked = new Map((list.data ?? []).map((a) => [a.providerId, a.accountId]));
+  async function link(provider: string) {
+    const { error: err } = await authClient.linkSocial({ provider, callbackURL: '/account?tab=security', errorCallbackURL: '/account?tab=security' });
+    if (err) toast.danger(error(codeOf(err)));
+  }
+  async function unlink(providerId: string) {
+    const { error: err } = await authClient.unlinkAccount({ accountId: linked.get(providerId)! });
+    if (err) { toast.danger(error(codeOf(err))); return; }
+    toast.success(t('removed', { name: providerNames[providerId] ?? providerId })); void client.invalidateQueries({ queryKey: ['accounts'] });
+  }
+  return <div className="mt-8 flex flex-col gap-3 border-t border-separator pt-6">
+    <h3 className="font-semibold">{t('title')}</h3>
+    <p className="text-sm text-muted">{t('intro')}</p>
+    <ul className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">{providers.map((p) => <li key={p} className="flex items-center gap-3 rounded-xl border border-border px-3 py-2.5">
+      <span className="grid size-9 place-items-center rounded-lg border border-border bg-surface"><ProviderMark id={p} size={18}/></span>
+      <span className="min-w-0 flex-1"><span className="block text-sm font-medium">{providerNames[p] ?? p}</span>
+        <span className={`text-xs ${linked.has(p) ? 'text-success' : 'text-muted'}`}>{linked.has(p) ? t('linked') : t('notLinked')}</span></span>
+      {linked.has(p) ? <Button size="sm" variant="ghost" onPress={() => void unlink(p)}>{t('remove')}</Button> : <Button size="sm" variant="secondary" onPress={() => void link(p)}>{t('link')}</Button>}
+    </li>)}</ul>
+  </div>;
 }
 
 function ChangePassword() {

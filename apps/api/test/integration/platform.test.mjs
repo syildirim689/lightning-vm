@@ -786,9 +786,10 @@ test('sign-in methods: settings checked, secrets kept, social providers register
     assert.equal((await put('/admin/settings/mail', { enabled: true, provider: 'smtp', host: '127.0.0.1', port: smtp.port, security: 'none', fromAddress: 'panel@example.test', fromName: 'Panel', use: {} }, admin)).statusCode, 200);
     await put('/admin/settings/sign-in', { magicLink: true }, admin);
     assert.equal((await get('/public/config')).json().signIn.magicLink, true);
+    const linkUser = (await post('/auth/admin/create-user', { email: 'link@example.test', password, name: 'Link', role: 'user' }, admin)).json().user.id;
     assert.equal((await post('/auth/sign-in/magic-link', { email: 'nobody@example.test', callbackURL: '/' })).statusCode, 200, 'same answer for unknown addresses');
-    assert.equal((await post('/auth/sign-in/magic-link', { email: 'support@example.test', callbackURL: '/' })).statusCode, 200);
-    const mail = await until(() => smtp.mails.find((m) => m.includes('support@example.test')));
+    assert.equal((await post('/auth/sign-in/magic-link', { email: 'link@example.test', callbackURL: '/' })).statusCode, 200);
+    const mail = await until(() => smtp.mails.find((m) => m.includes('link@example.test')));
     assert.ok(mail, 'the link was mailed');
     assert.equal(smtp.mails.filter((m) => m.includes('nobody@example.test')).length, 0);
     const link = new URL(/(https?:\/\/\S+magic-link\/verify\S+)/.exec(mail.replace(/=\r?\n/g, '').replace(/=3D/g, '='))[1]);
@@ -796,8 +797,9 @@ test('sign-in methods: settings checked, secrets kept, social providers register
     const used = await verify(link.pathname.replace(/^\/api/, '') + link.search);
     const linkCookie = cookieOf(used);
     assert.ok(linkCookie, 'signed in by the link');
-    assert.equal((await get('/auth/me', linkCookie)).json().email, 'support@example.test');
+    assert.equal((await get('/auth/me', linkCookie)).json().email, 'link@example.test');
     assert.equal(cookieOf(await verify(link.pathname.replace(/^\/api/, '') + link.search)), undefined, 'a link works once');
+    await post('/auth/admin/remove-user', { userId: linkUser }, admin);
 
     // User names: off, refused; on, set in the profile and used to sign in (panel passwords only).
     assert.equal((await post('/auth/sign-in/username', { username: 'support.team', password })).json().code, 'USERNAME_SIGN_IN_DISABLED');
@@ -866,7 +868,7 @@ test('single sign-on (OIDC): checked settings, accounts created with roles from 
     const { rows: [row] } = await pool.query("SELECT id, auth_source FROM users WHERE email = 'grace@corp.test'");
     assert.equal(row.auth_source, 'oidc');
     assert.equal((await post('/auth/request-password-reset', { email: 'grace@corp.test', redirectTo: '/reset-password' })).json().code, 'OK');
-    console.log('DEBUG accounts', JSON.stringify((await pool.query("SELECT a.provider_id, a.account_id FROM auth_accounts a JOIN users u ON u.id = a.user_id WHERE u.email = 'grace@corp.test'")).rows));
+    assert.deepEqual((await pool.query("SELECT a.provider_id, a.account_id FROM auth_accounts a JOIN users u ON u.id = a.user_id WHERE u.email = 'grace@corp.test'")).rows, [{ provider_id: 'oidc', account_id: 'u-1' }], 'the provider account is kept from the first sign-in');
     // Groups changed at the provider: the next sign-in follows them.
     const again = await ssoSignIn(idp, { sub: 'u-1', email: 'grace@corp.test', name: 'Grace Hopper', groups: [] });
     assert.deepEqual((await get('/auth/me', again.cookie)).json().roles, ['user']);

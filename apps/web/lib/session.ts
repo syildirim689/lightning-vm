@@ -2,7 +2,7 @@ import { cookies } from 'next/headers';
 
 // permissions: the effective set from the API ('*' = administrator). impersonatedBy: a staff member signed in as this user.
 // timeZone: the person's chosen zone, or null for their browser's.
-export type User = { id: string; email: string; name: string; roles: string[]; permissions: string[]; locale: 'tr' | 'en'; timeZone: string | null; impersonatedBy: string | null;
+export type User = { id: string; email: string; name: string; roles: string[]; permissions: string[]; locale: 'tr' | 'en'; timeZone: string | null; username: string | null; impersonatedBy: string | null;
   twoFactorEnabled: boolean; twoFactorRequired?: boolean; phoneNumber: string | null; phoneNumberVerified: boolean };
 export type Branding = { name: string; accent: string | null; logo: boolean; favicon: boolean; version: string };
 export type CaptchaConfig = { provider: 'turnstile' | 'recaptcha-v2' | 'recaptcha-v3' | 'hcaptcha'; siteKey: string; use: { signIn: boolean; signUp: boolean; passwordReset: boolean } };

@@ -8,6 +8,8 @@ import { AccessibilitySettings } from '../../../components/accessibility';
 import { I } from '../../../components/icon';
 import { Section, TextInput } from '../../../components/ui';
 import { apiFetch, useErrorText } from '../../../lib/api';
+import { useApiQuery } from '../../../lib/query';
+import type { PublicConfig } from '../../../lib/session';
 import { authClient } from '../../../lib/auth-client';
 import { useMe } from '../../../lib/me';
 import { SshKeys } from '../servers-ui';
@@ -24,12 +26,16 @@ function Profile() {
   const { error } = useErrorText();
   const client = useQueryClient();
   const me = useMe();
+  const cfg = useApiQuery<PublicConfig>(['public-config'], '/public/config').data;
   const [name, setName] = useState('');
+  const [username, setUsername] = useState('');
   const [busy, setBusy] = useState(false);
-  useEffect(() => { if (me) setName(me.name); }, [me]);
+  useEffect(() => { if (me) { setName(me.name); setUsername(me.username ?? ''); } }, [me]);
+  const withName = !!cfg?.signIn?.username;
   async function save(e: React.FormEvent) {
     e.preventDefault(); setBusy(true);
-    const r = await authClient.updateUser({ name: name.trim().slice(0, 80) });
+    const nextName = username.trim().toLowerCase();
+    const r = await authClient.updateUser({ name: name.trim().slice(0, 80), ...(withName && nextName !== (me?.username ?? '') && nextName && { username: nextName }) } as Parameters<typeof authClient.updateUser>[0]);
     setBusy(false);
     if (r.error) { toast.danger(error({ code: r.error.code ?? 'UNKNOWN' })); return; }
     toast.success(t('profile.saved')); client.invalidateQueries({ queryKey: ['me'] });
@@ -38,6 +44,7 @@ function Profile() {
     <form onSubmit={save} className="grid max-w-2xl gap-4 sm:grid-cols-2" noValidate>
       <TextInput label={t('profile.name')} value={name} onChange={setName} autoComplete="name" maxLength={80}/>
       <TextInput label={t('profile.email')} value={me?.email ?? ''} onChange={() => undefined} isDisabled help={t('profile.emailHelp')}/>
+      {withName && <TextInput label={t('profile.username')} value={username} onChange={(x) => setUsername(x.toLowerCase())} maxLength={30} spellCheck={false} help={t('profile.usernameHelp')}/>}
       <div className="sm:col-span-2"><Button type="submit" variant="secondary" isPending={busy}><I name="check" size={16}/>{t('profile.save')}</Button></div>
     </form>
   </Section>;

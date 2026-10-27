@@ -1933,7 +1933,9 @@
       "email": "E-posta",
       "emailHelp": "Giriş adınızdır; değiştirmek için yöneticinize başvurun.",
       "save": "Kaydet",
-      "saved": "Profil kaydedildi."
+      "saved": "Profil kaydedildi.",
+      "username": "Kullanıcı adı",
+      "usernameHelp": "E-posta olmadan giriş için: 3–30 küçük harf, rakam, nokta, tire ya da alt çizgi."
     },
     "twoFactor": {
       "sectionTitle": "İki adımlı doğrulama ve telefon",
@@ -1993,6 +1995,15 @@
       "help": "Otomatik, kullandığınız cihaza göre belirlenir.",
       "now": "Şu anki saatiniz",
       "saved": "Saat dilimi kaydedildi"
+    },
+    "connected": {
+      "title": "Bağlı hesaplar",
+      "intro": "Bu hesaplarla da giriş yapın. Bağlarken sağlayıcı sizin olduğunuzu doğrular.",
+      "linked": "Bağlı",
+      "notLinked": "Bağlı değil",
+      "link": "Bağla",
+      "remove": "Kaldır",
+      "removed": "{name} kaldırıldı"
     }
   },
   "AuthLayout": {

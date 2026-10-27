@@ -1933,7 +1933,9 @@
       "email": "E-mail",
       "emailHelp": "This is your sign-in name; ask an administrator to change it.",
       "save": "Save",
-      "saved": "Profile saved."
+      "saved": "Profile saved.",
+      "username": "User name",
+      "usernameHelp": "To sign in without the e-mail address: 3–30 lowercase letters, digits, dots, hyphens or underscores."
     },
     "twoFactor": {
       "sectionTitle": "Two-factor and phone",
@@ -1993,6 +1995,15 @@
       "help": "Automatic follows the device you are using.",
       "now": "Your time now",
       "saved": "Time zone saved"
+    },
+    "connected": {
+      "title": "Connected accounts",
+      "intro": "Sign in with these accounts too. Linking asks the provider to confirm it is you.",
+      "linked": "Connected",
+      "notLinked": "Not connected",
+      "link": "Connect",
+      "remove": "Remove",
+      "removed": "{name} removed"
     }
   },
   "AuthLayout": {

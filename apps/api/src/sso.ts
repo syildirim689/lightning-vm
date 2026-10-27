@@ -43,9 +43,11 @@ export function ssoProvider(s: OidcSettings): GenericOAuthConfig {
 }
 
 // A provider account may only belong to an account it created: never linked to a panel or directory account.
+// A person the provider is creating right now is not visible yet (better-auth writes the user and the account in
+// one transaction): that is the account being made, so it may.
 export async function mayLink(userId: string) {
   const { rows: [u] } = await pool.query("SELECT auth_source, (SELECT count(*)::int FROM auth_accounts a WHERE a.user_id = users.id AND a.provider_id <> $2) AS others FROM users WHERE id = $1", [userId, providerId]);
-  return !!u && u.others === 0 && u.auth_source !== 'ldap';
+  return !u || (u.others === 0 && u.auth_source !== 'ldap');
 }
 
 // Each SSO sign-in, before its session exists: the account becomes an SSO account, its roles follow the groups
