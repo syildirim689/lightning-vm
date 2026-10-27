@@ -1153,6 +1153,7 @@ test.describe('people, settings and smart features (English browser)', () => {
     await page.waitForTimeout(500);
     await shot(page, 'user-notes');
     await page.keyboard.press('Escape');
+    await expect(page.getByRole('dialog')).toBeHidden(); // its closing backdrop would catch the next click
     await expect(page.getByRole('row', { name: /Prefers e-mail; renewal agreed/ })).toBeVisible();
     await shot(page, 'users-pinned-note');
     // Bulk: one action for the people the list shows (yourself left out), and the list as CSV.
