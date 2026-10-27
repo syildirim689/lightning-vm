@@ -1,5 +1,6 @@
 import { CanActivate, Controller, ExecutionContext, Get, Injectable, Req, UseGuards } from '@nestjs/common';
 import { fromNodeHeaders } from 'better-auth/node';
+import { createHash } from 'node:crypto';
 import type { FastifyRequest } from 'fastify';
 import { getAuth } from './better-auth';
 import { pool } from './db';
@@ -34,7 +35,24 @@ export function readCredentials(body: unknown) {
 }
 
 // The signed-in user from better-auth's session cookie (always read from the database: revocation is immediate).
+// A personal API token (developer.ts) acts as its owner: their permissions, their role's address rules; read-only
+// tokens only read. It is never a browser session (no cookie is involved).
+async function tokenSession(req: FastifyRequest, token: string): Promise<{ user: User; token: string; id: string } | null> {
+  const { rows: [t] } = await pool.query(`UPDATE api_tokens a SET last_used_at = now(), last_used_ip = $2::inet FROM users u
+      WHERE a.token_hash = $1 AND u.id = a.user_id AND (a.expires_at IS NULL OR a.expires_at > now()) AND NOT coalesce(u.banned, false) AND u.disabled_at IS NULL
+      RETURNING a.id, a.scope, u.id AS user_id, u.email, u.name, u.role, u.locale, u.time_zone, u.username, u.two_factor_enabled, u.phone_number, u.phone_number_verified`,
+  [createHash('sha256').update(token).digest('hex'), req.ip]).catch(() => ({ rows: [] }));
+  if (!t) return null;
+  if (!ipAllowed(limitsOf(t.role ?? null).allowedIps, req.ip)) return null;
+  if (t.scope === 'read' && !['GET', 'HEAD'].includes(req.method)) throw apiError(403, 'TOKEN_READ_ONLY', 'This API token can only read');
+  return { user: { id: t.user_id, email: t.email, name: t.name ?? '', roles: splitRoles(t.role), permissions: await permissionsOf(t.user_id, t.role ?? null),
+    locale: t.locale === 'tr' ? 'tr' : 'en', timeZone: t.time_zone ?? null, username: t.username ?? null, impersonatedBy: null, twoFactorEnabled: !!t.two_factor_enabled,
+    twoFactorRequired: false, phoneNumber: t.phone_number ?? null, phoneNumberVerified: !!t.phone_number_verified }, token: '', id: `token:${t.id}` };
+}
+
 export async function currentSession(req: FastifyRequest): Promise<{ user: User; token: string; id: string } | null> {
+  const bearer = req.headers.cookie ? null : /^Bearer (lvm_[\w-]{20,100})$/.exec(req.headers.authorization ?? '')?.[1];
+  if (bearer) return tokenSession(req, bearer);
   const s = await getAuth().api.getSession({ headers: fromNodeHeaders(req.headers) }).catch(() => null);
   if (!s) return null;
   const u = s.user as typeof s.user & { role?: string; locale?: string; disabledAt?: Date | null; banned?: boolean | null; twoFactorEnabled?: boolean;
@@ -68,7 +86,7 @@ export class SessionGuard implements CanActivate {
     const s = await currentSession(req);
     if (!s) throw apiError(401, 'UNAUTHENTICATED', 'Sign in required');
     req.user = s.user; req.sessionToken = s.token; req.sessionId = s.id;
-    void touch(s.id, s.user.id, req.ip);
+    if (!s.id.startsWith('token:')) void touch(s.id, s.user.id, req.ip);
     // Two-factor required but not set up: only "who am I" answers (the panel then shows the setup; better-auth's
     // own routes for it are not behind this guard).
     if (s.user.twoFactorRequired && req.routeOptions.url !== '/auth/me') throw apiError(403, 'TWO_FACTOR_SETUP_REQUIRED', 'Set up two-factor authentication first');

@@ -22,6 +22,8 @@ export async function revokeConsoles(revocation: { authHash?: string; userId?: s
 }
 
 export async function openConsole(req: AuthedRequest, reply: FastifyReply, connectionId: string, vm: string, ownedServer = false) {
+  // A console belongs to a signed-in browser (its revocation follows the browser session), never to an API token.
+  if (req.sessionId.startsWith('token:')) throw apiError(403, 'TOKEN_NOT_ALLOWED', 'Open the console from the panel');
   if (!/^[\w-]{1,80}$/.test(vm)) throw apiError(400, 'VALIDATION_FAILED', 'Invalid input', { vm: 'INVALID_VALUE' });
   const { rows: [c] } = await pool.query('SELECT * FROM vmware_connections WHERE id = $1', [connectionId]);
   if (!c) throw apiError(404, 'NOT_FOUND', 'Unknown connection');

@@ -115,7 +115,10 @@ export class SettingsController {
   async saveSecurity(@Req() req: AuthedRequest, @Body() body: Input) {
     const require2fa = ['none', 'staff', 'all'].includes(String(body?.require2fa)) ? String(body.require2fa) as 'none' | 'staff' | 'all' : null;
     if (!require2fa) throw apiError(400, 'VALIDATION_FAILED', 'Invalid input', { require2fa: 'INVALID_VALUE' });
-    const value = { require2fa, emailCodeSignIn: body?.emailCodeSignIn === true };
+    const current = await getSettings('security');
+    const apiTokens = body?.apiTokens === undefined ? current.apiTokens : ['everyone', 'staff', 'off'].includes(String(body.apiTokens)) ? String(body.apiTokens) as 'everyone' | 'staff' | 'off' : null;
+    if (!apiTokens) throw apiError(400, 'VALIDATION_FAILED', 'Invalid input', { apiTokens: 'INVALID_VALUE' });
+    const value = { require2fa, emailCodeSignIn: body?.emailCodeSignIn === true, apiTokens };
     await saveSettings('security', value);
     await publishLive(null, 'policy');
     await audit(req, 'settings.security', 'success', req.user.id, value);

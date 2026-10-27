@@ -311,7 +311,11 @@
     "DISK_SHRINK_NOT_SUPPORTED": "Disk yalnızca büyüyebilir.",
     "DISK_HAS_SNAPSHOTS": "Diski büyütmeden önce sunucunun anlık görüntülerini silin.",
     "NO_CHANGE": "Sunucu zaten bu boyutta.",
-    "VDC_SERVER": "Bu sunucu bir sanal veri merkezine ait; veri merkezini değiştirin."
+    "VDC_SERVER": "Bu sunucu bir sanal veri merkezine ait; veri merkezini değiştirin.",
+    "TOKEN_READ_ONLY": "Bu API anahtarı yalnızca okuyabilir.",
+    "TOKEN_NOT_ALLOWED": "Bu işlem panelden yapılmalı; API anahtarıyla yapılamaz.",
+    "API_TOKENS_DISABLED": "Yönetici API anahtarlarını kapattı.",
+    "WEBHOOK_URL_NOT_PUBLIC": "Herkese açık bir HTTPS adresi kullanın."
   },
   "Auth": {
     "required": "zorunlu",
@@ -542,7 +546,8 @@
     "INVALID_VKN": "Geçerli bir vergi numarası değil.",
     "COMPANY_REQUIRED": "Önce satıcı bilgilerini (unvan, vergi no, adres) doldurun.",
     "DISK_SHRINK_NOT_SUPPORTED": "Disk yalnızca büyüyebilir.",
-    "NO_CHANGE": "Sunucu zaten bu boyutta."
+    "NO_CHANGE": "Sunucu zaten bu boyutta.",
+    "WEBHOOK_URL_NOT_PUBLIC": "Herkese açık bir HTTPS adresi kullanın."
   },
   "Setup": {
     "title": "Kurulum sihirbazı",
@@ -1962,7 +1967,8 @@
       "keys": "SSH anahtarları",
       "projects": "Projeler",
       "accessibility": "Erişilebilirlik",
-      "activity": "Etkinlik"
+      "activity": "Etkinlik",
+      "api": "API"
     },
     "profile": {
       "title": "Profil",
@@ -2444,6 +2450,14 @@
       "billing_einvoice_return": {
         "title": "İade faturası gerekiyor (ekip)",
         "help": "Bir iade, iptal yerine iade faturası gerektirdiğinde."
+      },
+      "account_api_token_created": {
+        "title": "API anahtarı oluşturuldu",
+        "help": "Hesabınız için yeni bir API anahtarı oluşturulduğunda."
+      },
+      "account_webhook_disabled": {
+        "title": "Webhook kapatıldı",
+        "help": "Webhook'larınızdan biri çok sayıda başarısız teslimattan sonra kapatıldığında."
       }
     },
     "policyTitle": "Önce yönetici, sonra kullanıcı",
@@ -3243,7 +3257,15 @@
       "emailCodeOn": "E-posta koduyla girişe izin ver",
       "needsMail": "E-posta (SMTP) ayarlı değil veya iki adımlı kodlar için kapalı; seçenek giriş ekranında görünmez.",
       "save": "Kaydet",
-      "saved": "Giriş güvenliği kaydedildi."
+      "saved": "Giriş güvenliği kaydedildi.",
+      "apiTokens": "API anahtarları",
+      "apiTokensHelp": "Betikler için kişisel API anahtarını kimlerin oluşturabileceği. Mevcut anahtarlar silinene ya da süreleri dolana kadar çalışır.",
+      "apiTokensWho": "İzin verilen",
+      "apiTokenLevels": {
+        "everyone": "Herkes",
+        "staff": "Yalnızca ekip",
+        "off": "Hiç kimse"
+      }
     },
     "domain": {
       "current": "Şu anki adres",
@@ -3431,7 +3453,8 @@
         "notifications": "Bildirim kuralları",
         "announcement": "Duyuru",
         "backup": "Yedek",
-        "directory": "Dizin ve SSO"
+        "directory": "Dizin ve SSO",
+        "signin": "Giriş yöntemleri"
       },
       "detail": {
         "branding": {
@@ -4505,7 +4528,13 @@
       "settings_einvoice_test": "e-Fatura hesabı kontrol edildi",
       "billing_einvoice_retry": "e-Fatura yeniden gönderildi",
       "server_resize": "Sunucu kaynakları değiştirildi",
-      "server_reinstall": "Sunucu yeniden kuruldu"
+      "server_reinstall": "Sunucu yeniden kuruldu",
+      "account_api_token_created": "API anahtarı oluşturuldu",
+      "account_api_token_removed": "API anahtarı kaldırıldı",
+      "account_webhook_created": "Webhook eklendi",
+      "account_webhook_updated": "Webhook değiştirildi",
+      "account_webhook_removed": "Webhook kaldırıldı",
+      "account_webhook_secret_rotated": "Webhook gizli anahtarı yenilendi"
     },
     "outcome": {
       "success": "Tamamlandı",
@@ -6028,6 +6057,83 @@
       "button": "Yeniden kur",
       "started": "Yeniden kurulum başladı; sunucu imajdan yeniden oluşturuluyor.",
       "locked": "Sunucu kilitli; yeniden kurmak için kilidi açın."
+    }
+  },
+  "Developer": {
+    "copyNow": "Şimdi kopyalayın: yalnızca bir kez gösterilir",
+    "copy": "Kopyala",
+    "copied": "Kopyalandı",
+    "remove": "Kaldır",
+    "cancel": "Vazgeç",
+    "save": "Kaydet",
+    "edit": "Düzenle",
+    "tokens": {
+      "title": "API anahtarları",
+      "help": "Betikler ve araçlar için: anahtar sizin yerinize, sizin yetkilerinizle çalışır. Salt okunur anahtarlar yalnızca bakar; tam yetkili anahtarlar değişiklik de yapar. Anahtarlarla konsol açılamaz ve anahtar yönetilemez.",
+      "name": "Ad",
+      "namePlaceholder": "Yedekleme betiği",
+      "scope": "Erişim",
+      "read": "Salt okunur",
+      "write": "Tam yetki",
+      "expires": "Bitiş",
+      "days": "{n} gün",
+      "never": "Süresiz",
+      "create": "Anahtar oluştur",
+      "empty": "Henüz API anahtarı yok.",
+      "lastUsed": "Son kullanım",
+      "neverUsed": "Hiç kullanılmadı",
+      "expired": "Süresi doldu",
+      "usage": "Bu paneldeki /api/… adreslerine \"Authorization: Bearer <anahtar>\" başlığıyla gönderin.",
+      "removed": "Anahtar kaldırıldı",
+      "removeTitle": "{name} kaldırılsın mı?",
+      "removeBody": "Onu kullanan betikler hemen çalışmaz olur."
+    },
+    "webhooks": {
+      "title": "Webhook'lar",
+      "help": "Bildirimleriniz (sunucu hazır, fatura ödendi, …) imzalı JSON olarak HTTPS adresinize de gönderilir. Başarısız teslimatlar birkaç saat boyunca yeniden denenir.",
+      "add": "Webhook ekle",
+      "create": "Webhook oluştur",
+      "url": "Adres (HTTPS)",
+      "urlHelp": "Herkese açık bir HTTPS adresi; özel ağlar kabul edilmez.",
+      "description": "Açıklama",
+      "all": "Tüm olaylar",
+      "allHelp": "Şimdi ve ileride bildirim aldığınız her şey.",
+      "allShort": "Tüm olaylar",
+      "events": "Olaylar",
+      "count": "{n} olay",
+      "empty": "Henüz webhook yok.",
+      "on": "Açık",
+      "off": "Kapalı",
+      "failing": "Üst üste {n} hata",
+      "offHelp": "Çok sayıda başarısız teslimattan sonra kapatıldı. Açmak için yeniden kaydedin.",
+      "test": "Test gönder",
+      "testOk": "Test alındı (2xx).",
+      "testFailed": "Test başarısız: {detail}",
+      "deliveries": "Teslimatlar",
+      "noDeliveries": "Henüz teslimat yok.",
+      "when": "Zaman",
+      "event": "Olay",
+      "status": "Sonuç",
+      "detail": "Ayrıntı",
+      "attempts": "{n} deneme",
+      "st": {
+        "pending": "Yeniden deneniyor",
+        "succeeded": "Teslim edildi",
+        "failed": "Başarısız"
+      },
+      "rotate": "Yeni gizli anahtar",
+      "rotateBody": "Eski gizli anahtar hemen geçersiz olur; alıcınızı yenisiyle güncelleyin.",
+      "rotated": "Yeni gizli anahtar oluşturuldu",
+      "removed": "Webhook kaldırıldı",
+      "removeTitle": "Bu webhook kaldırılsın mı?",
+      "secretHelp": "Alıcınız her isteği bununla doğrular: X-Lightning-Signature başlığında t=<zaman>,v1=<\"zaman.gövde\" için HMAC-SHA256> bulunur.",
+      "verifyTitle": "İmzayı doğrulama",
+      "verifyHelp": "HMAC'ı gövdenin geldiği haliyle hesaplayın, sabit sürede karşılaştırın ve eski zaman damgalarını reddedin."
+    },
+    "usage": {
+      "title": "API'yi kullanma",
+      "help": "Paneldeki her işlem bir API çağrısıdır. Sunucuları değiştiren isteklerde Idempotency-Key başlığı gerekir; böylece yeniden deneme işlemi iki kez yapmaz.",
+      "docs": "Tam başvuru kurulumdaki docs/api.md dosyasındadır."
     }
   }
 }

@@ -311,7 +311,11 @@
     "DISK_SHRINK_NOT_SUPPORTED": "A disk can only grow.",
     "DISK_HAS_SNAPSHOTS": "Remove the server's snapshots before growing its disk.",
     "NO_CHANGE": "This is the size the server has now.",
-    "VDC_SERVER": "This server belongs to a virtual data center; change the data center instead."
+    "VDC_SERVER": "This server belongs to a virtual data center; change the data center instead.",
+    "TOKEN_READ_ONLY": "This API token can only read.",
+    "TOKEN_NOT_ALLOWED": "This needs the panel; an API token cannot do it.",
+    "API_TOKENS_DISABLED": "The administrator turned API tokens off.",
+    "WEBHOOK_URL_NOT_PUBLIC": "Use a public HTTPS address."
   },
   "Auth": {
     "required": "required",
@@ -542,7 +546,8 @@
     "INVALID_VKN": "Not a valid tax number.",
     "COMPANY_REQUIRED": "Fill in the seller (title, tax number, address) first.",
     "DISK_SHRINK_NOT_SUPPORTED": "A disk can only grow.",
-    "NO_CHANGE": "This is the size the server has now."
+    "NO_CHANGE": "This is the size the server has now.",
+    "WEBHOOK_URL_NOT_PUBLIC": "Use a public HTTPS address."
   },
   "Setup": {
     "title": "Setup wizard",
@@ -1962,7 +1967,8 @@
       "keys": "SSH keys",
       "projects": "Projects",
       "accessibility": "Accessibility",
-      "activity": "Activity"
+      "activity": "Activity",
+      "api": "API"
     },
     "profile": {
       "title": "Profile",
@@ -2444,6 +2450,14 @@
       "billing_einvoice_return": {
         "title": "Return invoice needed (team)",
         "help": "When a refund needs a return invoice instead of a cancel."
+      },
+      "account_api_token_created": {
+        "title": "API token created",
+        "help": "When a new API token is made for your account."
+      },
+      "account_webhook_disabled": {
+        "title": "Webhook switched off",
+        "help": "When one of your webhooks is switched off after many failed deliveries."
       }
     },
     "policyTitle": "The admin first, then each user",
@@ -3243,7 +3257,15 @@
       "emailCodeOn": "Allow sign-in with an e-mail code",
       "needsMail": "E-mail (SMTP) is not set up or is off for two-factor codes; the option does not appear on the sign-in screen.",
       "save": "Save",
-      "saved": "Sign-in security saved."
+      "saved": "Sign-in security saved.",
+      "apiTokens": "API tokens",
+      "apiTokensHelp": "Who may create personal API tokens for scripts. Existing tokens keep working until they are removed or expire.",
+      "apiTokensWho": "Allowed for",
+      "apiTokenLevels": {
+        "everyone": "Everyone",
+        "staff": "Staff only",
+        "off": "Nobody"
+      }
     },
     "domain": {
       "current": "Current address",
@@ -3431,7 +3453,8 @@
         "notifications": "Notification rules",
         "announcement": "Announcement",
         "backup": "Backup",
-        "directory": "Directory and SSO"
+        "directory": "Directory and SSO",
+        "signin": "Sign-in methods"
       },
       "detail": {
         "branding": {
@@ -4505,7 +4528,13 @@
       "settings_einvoice_test": "e-Invoice account checked",
       "billing_einvoice_retry": "e-Invoice sent again",
       "server_resize": "Server size changed",
-      "server_reinstall": "Server reinstalled"
+      "server_reinstall": "Server reinstalled",
+      "account_api_token_created": "API token created",
+      "account_api_token_removed": "API token removed",
+      "account_webhook_created": "Webhook added",
+      "account_webhook_updated": "Webhook changed",
+      "account_webhook_removed": "Webhook removed",
+      "account_webhook_secret_rotated": "Webhook secret renewed"
     },
     "outcome": {
       "success": "Done",
@@ -6028,6 +6057,83 @@
       "button": "Reinstall",
       "started": "Reinstall started; the server is rebuilt from the image.",
       "locked": "The server is locked; unlock it to reinstall."
+    }
+  },
+  "Developer": {
+    "copyNow": "Copy it now: it is shown only once",
+    "copy": "Copy",
+    "copied": "Copied",
+    "remove": "Remove",
+    "cancel": "Cancel",
+    "save": "Save",
+    "edit": "Edit",
+    "tokens": {
+      "title": "API tokens",
+      "help": "For scripts and tools: a token acts as you, with your permissions. Read-only tokens can only look; full tokens can also change things. Tokens cannot open consoles or manage tokens.",
+      "name": "Name",
+      "namePlaceholder": "Backup script",
+      "scope": "Access",
+      "read": "Read-only",
+      "write": "Full access",
+      "expires": "Expires",
+      "days": "{n} days",
+      "never": "Never",
+      "create": "Create token",
+      "empty": "No API tokens yet.",
+      "lastUsed": "Last used",
+      "neverUsed": "Never used",
+      "expired": "Expired",
+      "usage": "Send it as \"Authorization: Bearer <token>\" to /api/… on this panel.",
+      "removed": "Token removed",
+      "removeTitle": "Remove {name}?",
+      "removeBody": "Scripts that use it stop working at once."
+    },
+    "webhooks": {
+      "title": "Webhooks",
+      "help": "Your notifications (server ready, invoice paid, …) also sent as signed JSON to your HTTPS address. Failed deliveries are retried for a few hours.",
+      "add": "Add webhook",
+      "create": "Create webhook",
+      "url": "Address (HTTPS)",
+      "urlHelp": "A public HTTPS address; private networks are refused.",
+      "description": "Description",
+      "all": "All events",
+      "allHelp": "Everything you are notified about, now and later.",
+      "allShort": "All events",
+      "events": "Events",
+      "count": "{n, plural, one {# event} other {# events}}",
+      "empty": "No webhooks yet.",
+      "on": "On",
+      "off": "Off",
+      "failing": "{n, plural, one {# failure} other {# failures}} in a row",
+      "offHelp": "Switched off after many failed deliveries. Save it again to switch it on.",
+      "test": "Send test",
+      "testOk": "The test was received (2xx).",
+      "testFailed": "The test failed: {detail}",
+      "deliveries": "Deliveries",
+      "noDeliveries": "Nothing delivered yet.",
+      "when": "When",
+      "event": "Event",
+      "status": "Result",
+      "detail": "Detail",
+      "attempts": "{n} attempts",
+      "st": {
+        "pending": "Retrying",
+        "succeeded": "Delivered",
+        "failed": "Failed"
+      },
+      "rotate": "New secret",
+      "rotateBody": "The old secret stops working at once; update your receiver with the new one.",
+      "rotated": "New secret created",
+      "removed": "Webhook removed",
+      "removeTitle": "Remove this webhook?",
+      "secretHelp": "Your receiver checks each request with it: the X-Lightning-Signature header holds t=<time>,v1=<HMAC-SHA256 of \"time.body\">.",
+      "verifyTitle": "Checking the signature",
+      "verifyHelp": "Compute the HMAC over the raw body exactly as received, compare in constant time and refuse old timestamps."
+    },
+    "usage": {
+      "title": "Using the API",
+      "help": "Every action of the panel is an API call. State changes on servers need an Idempotency-Key header, so a retry never runs twice.",
+      "docs": "The full reference is in docs/api.md of the installation."
     }
   }
 }

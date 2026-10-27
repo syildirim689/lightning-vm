@@ -6,6 +6,7 @@ import { Queue, Worker } from 'bullmq';
 import webpush from 'web-push';
 import { pool, redis } from './db';
 import { logEvent } from './log';
+import { queueWebhooks } from './webhooks';
 import { can, permissionsOf, type Permission } from './permissions';
 import { decryptSecret, encryptSecret } from './secrets';
 import { getSettings, mailReady, saveSettings, sendMail, type Channel, type NotificationPolicy } from './settings-store';
@@ -110,6 +111,12 @@ export const catalog: Record<string, EventDef> = {
     text: { tr: (d) => ({ title: 'İade faturası gerekiyor: ' + d.number, body: d.amount + ' ' + d.currency + ' iade edildi. ' + (d.who === 'buyer' ? 'e-Fatura alıcısı iade faturasını size kesmeli.' : 'e-Arşiv faturası iptal süresini geçti; iade için muhasebenizle iade faturası düzenleyin.') + (d.reason ? ' (' + d.reason + ')' : '') }),
       en: (d) => ({ title: 'Return invoice needed: ' + d.number, body: d.amount + ' ' + d.currency + ' was refunded. ' + (d.who === 'buyer' ? 'The e-Fatura buyer must issue the return invoice to you.' : 'The e-Arşiv invoice is past its cancel window; issue a return invoice with your accountant.') + (d.reason ? ' (' + d.reason + ')' : '') }) } },
   // A message staff send to people picked from the users list (admin.ts, users/actions); same words in every language.
+  'account.api_token_created': { audience: 'user', channels: all, defaults: ['inApp', 'email'], link: () => '/account?tab=api',
+    text: { tr: (d) => ({ title: 'Yeni API anahtarı oluşturuldu', body: `"${d.name}" (${d.scope === 'read' ? 'salt okunur' : 'tam yetki'}) hesabınıza erişebilir. Siz değilseniz Hesap → API'den silin ve parolanızı değiştirin.` }),
+      en: (d) => ({ title: 'A new API token was created', body: `"${d.name}" (${d.scope === 'read' ? 'read-only' : 'full access'}) can use your account. If this was not you, remove it in Account → API and change your password.` }) } },
+  'account.webhook_disabled': { audience: 'user', channels: all, defaults: ['inApp', 'email'], link: () => '/account?tab=api',
+    text: { tr: (d) => ({ title: 'Webhook kapatıldı', body: `${d.url} adresine üst üste ${d.failures} teslimat başarısız oldu. Adresi düzeltip yeniden açın.` }),
+      en: (d) => ({ title: 'Webhook switched off', body: `${d.failures} deliveries in a row to ${d.url} failed. Fix the address and switch it on again.` }) } },
   'account.message': { audience: 'user', channels: all, defaults: ['inApp', 'email'], link: () => '/',
     text: { tr: (d) => ({ title: d.subject, body: d.message }), en: (d) => ({ title: d.subject, body: d.message }) } },
   'auth.account_linked': { audience: 'user', channels: all, defaults: ['inApp', 'email'], link: () => '/account?tab=security',
@@ -233,7 +240,10 @@ export function startNotificationWorker() {
     if (!def) return;
     const p = (await policies())[event];
     const texts = { tr: def.text.tr(data), en: def.text.en(data) };
-    for (const u of await recipients(to)) {
+    const people = await recipients(to);
+    // Webhooks get the event for everyone it reached, whatever their notification channels.
+    await queueWebhooks(event, people.map((u) => u.id), data).catch(() => logEvent('error', 'webhook_queue_failed', { event }));
+    for (const u of people) {
       const t = texts[u.locale === 'tr' ? 'tr' : 'en'];
       // Quiet hours: nothing that buzzes a phone, except security notices; the inbox and e-mail still get it.
       const quiet = !alwaysSent(event) && inQuietHours(u.quiet_hours);

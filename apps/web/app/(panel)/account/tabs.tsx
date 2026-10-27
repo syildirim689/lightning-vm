@@ -16,6 +16,7 @@ import { SshKeys } from '../servers-ui';
 import { Projects } from './account';
 import NotificationPrefs from './notifications';
 import Security from './security';
+import Developer from './developer';
 import { PhoneNumber, TwoFactor } from './two-factor';
 import { MyActivity } from '../../../components/activity';
 import TimeZonePicker, { browserTimeZone } from '../../../components/time-zone-picker';
@@ -79,7 +80,7 @@ function Regional() {
   </Section>;
 }
 
-const tabs = ['profile', 'security', 'activity', 'notifications', 'accessibility', 'keys', 'projects'] as const;
+const tabs = ['profile', 'security', 'activity', 'notifications', 'accessibility', 'keys', 'projects', 'api'] as const;
 export default function AccountTabs() {
   const t = useTranslations('Account');
   const [tab, setTab] = useQueryState('tab', parseAsString.withDefault('profile'));
@@ -99,6 +100,7 @@ export default function AccountTabs() {
     <Tabs.Panel id="keys" className="pt-5"><SshKeys/></Tabs.Panel>
     <Tabs.Panel id="activity" className="pt-5"><Section title={t('activity.title')} description={t('activity.intro')}><MyActivity/></Section></Tabs.Panel>
     <Tabs.Panel id="projects" className="pt-5"><Projects/></Tabs.Panel>
+    <Tabs.Panel id="api" className="pt-5"><Developer/></Tabs.Panel>
   </Tabs>;
 }
 

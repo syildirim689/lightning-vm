@@ -5,13 +5,13 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useTranslations } from 'next-intl';
 import { useEffect, useState } from 'react';
 import { I } from '../../../../components/icon';
-import { FormActions, FormSection, Notice, SwitchInput } from '../../../../components/ui';
+import { FormActions, FormSection, Notice, SelectInput, SwitchInput } from '../../../../components/ui';
 import { apiFetch, useErrorText } from '../../../../lib/api';
 import { useMe } from '../../../../lib/me';
 import { useApiQuery } from '../../../../lib/query';
 import type { PublicConfig } from '../../../../lib/session';
 
-type Doc = { require2fa: 'none' | 'staff' | 'all'; emailCodeSignIn: boolean };
+type Doc = { require2fa: 'none' | 'staff' | 'all'; emailCodeSignIn: boolean; apiTokens: 'everyone' | 'staff' | 'off' };
 
 export default function Security({ readOnly }: { readOnly: boolean }) {
   const t = useTranslations('Settings.security');
@@ -45,6 +45,10 @@ export default function Security({ readOnly }: { readOnly: boolean }) {
     <FormSection title={t('emailCode')} description={t('emailCodeHelp')} icon={<I name="mail-check" size={16}/>}>
       <SwitchInput label={t('emailCodeOn')} isSelected={v.emailCodeSignIn} onChange={(x) => setV({ ...v, emailCodeSignIn: x })} isDisabled={readOnly}/>
       {v.emailCodeSignIn && !mailReady && <Notice tone="warning">{t('needsMail')}</Notice>}
+    </FormSection>
+    <FormSection title={t('apiTokens')} description={t('apiTokensHelp')} icon={<I name="key-round" size={16}/>}>
+      <SelectInput className="max-w-xs" label={t('apiTokensWho')} value={v.apiTokens ?? 'everyone'} onChange={(x) => setV({ ...v, apiTokens: x as Doc['apiTokens'] })} isDisabled={readOnly}
+        options={(['everyone', 'staff', 'off'] as const).map((k) => ({ id: k, label: t(`apiTokenLevels.${k}`) }))}/>
     </FormSection>
     {!readOnly && <FormActions><Button isPending={busy} onPress={save}><I name="check" size={16}/>{t('save')}</Button></FormActions>}
   </Card.Content></Card>;

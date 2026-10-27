@@ -1144,6 +1144,52 @@ test('users in bulk: a message through their channels, signing them out everywhe
   for (const id of ids) await post('/auth/admin/remove-user', { userId: id }, admin);
 });
 
+test('API tokens and webhooks: a token acts as its owner (read-only only reads), never manages tokens or opens consoles; webhooks need a public address and receive the owner\'s events', async () => {
+  await freshLimits();
+  const bearer = (token) => ({ authorization: `Bearer ${token}` });
+  const asToken = (method, url, token, payload) => app.inject({ method, url, payload, headers: bearer(token) }); // no cookie, no CSRF header: a script
+  assert.equal((await post('/account/api-tokens', { name: '', scope: 'admin' }, user)).json().fields.scope, 'INVALID_VALUE');
+  const read = (await post('/account/api-tokens', { name: 'monitoring', scope: 'read', expiresInDays: 30 }, user)).json();
+  assert.match(read.token, /^lvm_[\w-]{40}$/);
+  assert.equal((await pool.query('SELECT count(*)::int AS n FROM api_tokens WHERE token_hash = $1', [read.token])).rows[0].n, 0, 'only a hash is stored');
+  const me = await asToken('GET', '/auth/me', read.token);
+  assert.equal(me.json().id, userId);
+  assert.equal((await asToken('GET', '/servers', read.token)).statusCode, 200);
+  assert.equal((await asToken('POST', '/projects', read.token, { name: 'x' })).json().code, 'TOKEN_READ_ONLY');
+  const write = (await post('/account/api-tokens', { name: 'deploy', scope: 'write' }, user)).json();
+  assert.equal((await asToken('POST', '/account/api-tokens', write.token, { name: 'more', scope: 'write' })).json().code, 'TOKEN_NOT_ALLOWED');
+  const project = await asToken('POST', '/projects', write.token, { name: 'from-a-script' });
+  assert.ok([200, 201].includes(project.statusCode), project.body);
+  const list = (await get('/account/api-tokens', user)).json().tokens;
+  assert.ok(list.find((t) => t.id === read.id).lastUsedAt, 'last use recorded');
+  assert.equal(list.some((t) => 'token' in t || 'token_hash' in t), false);
+  // Expired or removed: nothing.
+  await pool.query("UPDATE api_tokens SET expires_at = now() - interval '1 minute' WHERE id = $1", [read.id]);
+  assert.equal((await asToken('GET', '/servers', read.token)).statusCode, 401);
+  assert.equal((await call('DELETE', `/account/api-tokens/${write.id}`, user)).statusCode, 204);
+  assert.equal((await asToken('GET', '/servers', write.token)).statusCode, 401);
+  assert.equal((await asToken('GET', '/servers', 'lvm_' + 'x'.repeat(40))).statusCode, 401);
+  // The admin decides who may create them.
+  await put('/admin/settings/security', { require2fa: 'none', apiTokens: 'staff' }, admin);
+  assert.equal((await post('/account/api-tokens', { name: 'n', scope: 'read' }, user)).json().code, 'API_TOKENS_DISABLED');
+  await put('/admin/settings/security', { require2fa: 'none', apiTokens: 'everyone' }, admin);
+
+  // Webhooks: a public HTTPS address only; the secret is shown once; the owner's events are queued for it.
+  for (const url of ['http://example.com/hook', 'https://127.0.0.1/hook', 'https://10.1.2.3/x', 'https://[::ffff:10.0.0.1]/x']) {
+    assert.equal((await post('/account/webhooks', { url, events: ['*'] }, user)).json().fields?.url, 'WEBHOOK_URL_NOT_PUBLIC', url);
+  }
+  assert.equal((await post('/account/webhooks', { url: 'https://1.1.1.1/hook', events: ['no.such.event'] }, user)).json().fields.events, 'INVALID_VALUE');
+  const hook = (await post('/account/webhooks', { url: 'https://1.1.1.1/lightning', events: ['account.message'] }, user)).json();
+  assert.match(hook.secret, /^whsec_/);
+  assert.equal(JSON.stringify((await get('/account/webhooks', user)).json()).includes(hook.secret), false);
+  assert.equal((await get(`/account/webhooks/${hook.id}/deliveries`, admin)).statusCode, 404, 'only the owner sees it');
+  await post('/admin/users/actions', { action: 'message', userIds: [userId], subject: 'Webhook check', message: 'hello' }, admin);
+  assert.ok(await until(async () => (await pool.query("SELECT 1 FROM webhook_deliveries WHERE webhook_id = $1 AND event = 'account.message'", [hook.id])).rowCount));
+  const { sign } = await import('../../dist/webhooks.js');
+  assert.equal(sign('whsec_x', '{"a":1}', 1700000000), `t=1700000000,v1=${createHmac('sha256', 'whsec_x').update('1700000000.{"a":1}').digest('hex')}`);
+  assert.equal((await call('DELETE', `/account/webhooks/${hook.id}`, user)).statusCode, 204);
+});
+
 test('e-invoice: paid invoices go to the integrator as e-Arşiv or e-Fatura in their own series, are accepted, and a refunded e-Arşiv one is cancelled', async () => {
   const { sendQueued, pollStatus } = await import('../../dist/einvoice.js');
   await freshLimits();

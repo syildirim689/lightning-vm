@@ -44,6 +44,8 @@ export function csrfRejected(req: FastifyRequest) {
   if (req.url === '/internal/alerts' && !req.headers.cookie) return false;
   // Payment providers post results here (billing.ts verifies each with the provider; no session is used).
   if (req.url.startsWith('/billing/callback/')) return false;
+  // An API token (developer.ts) is sent by a program, not a browser: a page cannot add this header across sites.
+  if (!req.headers.cookie && /^Bearer lvm_/.test(req.headers.authorization ?? '')) return false;
   if (req.headers['x-lightning-csrf'] !== '1') return true;
   const origin = req.headers.origin;
   if (!origin) return false;
