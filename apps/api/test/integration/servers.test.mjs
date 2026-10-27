@@ -839,6 +839,17 @@ test('resize and reinstall: priced like an order, the disk only grows, the VM ch
   assert.notEqual(s.vm_moref, before.vm_moref, 'a new VM');
   assert.equal(await vmCount(id), 1);
   assert.equal((await pool.query("SELECT host(address) AS a FROM ip_allocations WHERE server_id = $1 AND kind = 'primary'", [id])).rows[0].a, address);
+  // A copy: cloned from this server's VM, in its location and image, never with a smaller disk.
+  assert.equal((await create(order('resize-1-copy', { cloneFrom: id }))).json().fields.diskGb, 'BELOW_SOURCE_DISK');
+  const copy = await create(order('resize-1-copy', { cloneFrom: id, packageId: small }));
+  assert.equal(copy.statusCode, 202, copy.body);
+  const copyId = copy.json().serverId;
+  await until(async () => ['ready', 'error'].includes((await serverRow(copyId)).state), 'copy built', 120);
+  const c = await serverRow(copyId);
+  assert.deepEqual([c.state, c.clone_from_moref], ['ready', s.vm_moref]);
+  assert.notEqual(c.vm_moref, s.vm_moref);
+  assert.equal((await send('DELETE', `/servers/${copyId}`, { confirm: 'resize-1-copy' }, user, key())).statusCode, 202);
+  await until(async () => (await serverRow(copyId)).state === 'deleted', 'copy deleted', 120);
   assert.equal((await send('DELETE', `/servers/${id}`, { confirm: 'resize-1' }, user, key())).statusCode, 202);
   await until(async () => (await serverRow(id)).state === 'deleted', 'deleted', 120);
 });

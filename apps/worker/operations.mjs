@@ -150,7 +150,7 @@ async function ensureVM(db, ctx) {
     const { rows: [st] } = await db.query("SELECT value FROM settings WHERE key = 'servers'");
     const hw = { cpuHotAdd: false, memoryHotAdd: false, nestedHv: false, ...st?.value?.hardware };
     const guest = s.image_family === 'esxi' ? { customization: 'appliance', nestedHv: true, vappProperties: esxiProperties(s) } : { customization, ...cloudInit(s) };
-    const out = await adapter('/v1/vm/clone', { ...ctx.target, name: ctx.vmName, serverId: s.id, template: s.template_moref, pool, datastore,
+    const out = await adapter('/v1/vm/clone', { ...ctx.target, name: ctx.vmName, serverId: s.id, template: s.clone_from_moref ?? s.template_moref, pool, datastore,
       network: s.network_moref, vcpu: s.vcpu, memoryMb: s.memory_mb, diskGb: s.disk_gb, ...hw, ...guest });
     if (out.vm) vm = out.vm;
     else {
@@ -288,7 +288,7 @@ const kinds = {
     if (!['clone', 'firewall', 'power_on', 'readiness'].includes(ctx.op.step)) {
       await removeVM(db, ctx);
       // The new image; an application installed on the old disk went with it, so its licence returns to the pool.
-      await db.query(`UPDATE servers SET vm_moref = NULL, image_id = $2, firewall_applied_version = 0, guest_ready = false, application_id = NULL, app_script_enc = NULL,
+      await db.query(`UPDATE servers SET vm_moref = NULL, image_id = $2, clone_from_moref = NULL, firewall_applied_version = 0, guest_ready = false, application_id = NULL, app_script_enc = NULL,
         app_state = NULL, app_message = NULL, updated_at = now() WHERE id = $1`, [ctx.s.id, ctx.op.params.imageId]);
       await db.query('UPDATE application_licenses SET server_id = NULL, assigned_at = NULL WHERE server_id = $1', [ctx.s.id]);
     }

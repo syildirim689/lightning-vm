@@ -297,6 +297,17 @@ export class ServersController {
     if (firewallIds.length && (await pool.query('SELECT 1 FROM firewalls WHERE owner_id = $1 AND id = ANY($2::uuid[])', [req.user.id, firewallIds]).catch(() => ({ rowCount: 0 }))).rowCount !== firewallIds.length) {
       throw apiError(400, 'VALIDATION_FAILED', 'Unknown firewall', { firewallIds: 'NOT_AVAILABLE' });
     }
+    // A copy of one of the user's servers: same location and image, the disk at least as big, cloned from its VM.
+    let cloneFrom: string | null = null;
+    if (body.cloneFrom) {
+      const { rows: [src] } = await pool.query(`SELECT s.vm_moref, s.pool_id, s.image_id, s.disk_gb, i.family FROM servers s JOIN os_images i ON i.id = s.image_id
+        WHERE s.id = $1 AND s.owner_id = $2 AND s.state = 'ready' AND s.vm_moref IS NOT NULL AND s.vdc_id IS NULL`, [String(body.cloneFrom), req.user.id]).catch(() => ({ rows: [] }));
+      if (!src || src.family === 'esxi') throw apiError(400, 'VALIDATION_FAILED', 'Cannot clone', { cloneFrom: 'NOT_AVAILABLE' });
+      if (src.pool_id !== order.rp.id || src.image_id !== order.imageId) throw apiError(400, 'VALIDATION_FAILED', 'A copy stays in its location and image', { cloneFrom: 'CLONE_MISMATCH' });
+      if (order.shape.diskGb < src.disk_gb) throw apiError(400, 'VALIDATION_FAILED', 'Disk smaller than the original', { diskGb: 'BELOW_SOURCE_DISK' });
+      if (order.application) throw apiError(400, 'VALIDATION_FAILED', 'No application on a copy', { applicationId: 'NOT_WITH_CLONE' });
+      cloneFrom = src.vm_moref;
+    }
     const { rows: [conn] } = await pool.query('SELECT kind, operations FROM vmware_connections WHERE id = $1', [order.rp.connection_id]);
     if (conn.kind !== 'vcenter' || !conn.operations?.cloneFromImage) throw apiError(409, 'PROVISIONING_NOT_SUPPORTED', 'This location cannot create servers (needs vCenter with clone rights)');
     if (firewallIds.length && !conn.operations?.firewall) throw apiError(409, 'FIREWALL_NOT_SUPPORTED', 'This location cannot enforce firewalls (needs vCenter with a distributed switch)');
@@ -353,6 +364,7 @@ export class ServersController {
         const origin = typeof req.headers.origin === 'string' && /^https?:\/\//.test(req.headers.origin) ? req.headers.origin : `${req.protocol}://${req.headers.host}`;
         await prepareApplication(client, order.application, s.id, { hostname, ip: ips[0].address }, `${origin}/api/servers/${s.id}/app-callback`);
       }
+      if (cloneFrom) await client.query('UPDATE servers SET clone_from_moref = $2 WHERE id = $1', [s.id, cloneFrom]);
       if (vdc) await client.query('UPDATE servers SET vdc_id = $2 WHERE id = $1', [s.id, vdc.vdcId]);
       else if (order.trafficGb) await client.query('UPDATE servers SET traffic_gb = $2 WHERE id = $1', [s.id, order.trafficGb]);
       if (firewallIds.length) {

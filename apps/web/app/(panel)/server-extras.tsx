@@ -84,3 +84,18 @@ export function OrderSimilar({ server, names }: { server: Server; names: string[
     router.push('/order');
   }}><I name="copy-plus" size={16}/>{t('orderSimilar')}</Button>;
 }
+
+// The same server again with its disk: the order page opens with this server's location, image and size, and the
+// new VM is cloned from this one (cloud-init gives it its own name, address and keys).
+export function CloneServer({ server, names }: { server: Server; names: string[] }) {
+  const t = useTranslations('Extras');
+  const router = useRouter();
+  const set = useOrder((s) => s.set);
+  if (server.vdcId || server.state !== 'ready') return null;
+  let n = 1; while (names.includes(`${server.name}-copy${n > 1 ? n : ''}`)) n++;
+  return <Button variant="ghost" onPress={() => {
+    set({ poolId: server.poolId, imageId: server.imageId, type: server.packageId ? 'package' : 'custom', packageId: server.packageId ?? '', applicationId: '',
+      vcpu: server.vcpu, memoryMb: server.memoryMb, diskGb: server.diskGb, name: `${server.name}-copy${n > 1 ? n : ''}`.slice(0, 63), cloneFrom: server.id, cloneName: server.name });
+    router.push('/order');
+  }}><I name="copy" size={16}/>{t('clone')}</Button>;
+}

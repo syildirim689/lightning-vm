@@ -949,7 +949,8 @@ test.describe('people, settings and smart features (English browser)', () => {
     }
     // API: a token is shown once after it is made.
     await page.goto('/account?tab=api');
-    await page.getByLabel('Name').fill('ci');
+    await expect(page.getByText('API tokens', { exact: true })).toBeVisible(); // the tab comes from the address after the first paint
+    await page.getByRole('textbox', { name: 'Name', exact: true }).fill('ci');
     await page.getByRole('button', { name: 'Create token' }).click();
     await expect(page.getByText('Copy it now: it is shown only once')).toBeVisible();
     await expect(page.getByText(/^lvm_/).first()).toBeVisible();

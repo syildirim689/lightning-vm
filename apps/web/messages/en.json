@@ -548,7 +548,10 @@
     "COMPANY_REQUIRED": "Fill in the seller (title, tax number, address) first.",
     "DISK_SHRINK_NOT_SUPPORTED": "A disk can only grow.",
     "NO_CHANGE": "This is the size the server has now.",
-    "WEBHOOK_URL_NOT_PUBLIC": "Use a public HTTPS address."
+    "WEBHOOK_URL_NOT_PUBLIC": "Use a public HTTPS address.",
+    "CLONE_MISMATCH": "A copy stays in the location and image of the original.",
+    "BELOW_SOURCE_DISK": "The disk cannot be smaller than the original's.",
+    "NOT_WITH_CLONE": "An application cannot be installed on a copy."
   },
   "Setup": {
     "title": "Setup wizard",
@@ -1066,7 +1069,12 @@
     },
     "budgetNear": "With this order you would pay {monthly} a month, close to your budget of {amount}.",
     "budgetOver": "With this order you would pay {monthly} a month, over your budget of {amount}.",
-    "payToStart": "Pay the invoice and your server is set up right away."
+    "payToStart": "Pay the invoice and your server is set up right away.",
+    "clone": {
+      "title": "Copy of {name}",
+      "help": "The new server starts with a copy of its disk; it gets its own name, address and keys. The location and image stay the same, and the disk can only be as big or bigger.",
+      "stop": "Order an empty server instead"
+    }
   },
   "Catalog": {
     "eyebrow": "ADMIN · CATALOG",
@@ -4337,7 +4345,8 @@
     "notesHelp": "{n} characters left.",
     "save": "Save",
     "saved": "Tags and notes saved.",
-    "orderSimilar": "Order similar"
+    "orderSimilar": "Order similar",
+    "clone": "Clone"
   },
   "Schedules": {
     "title": "Schedules",

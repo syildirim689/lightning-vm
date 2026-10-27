@@ -125,6 +125,8 @@ export default function Order() {
         {i < steps.length - 1 && <span aria-hidden className="mx-1 hidden h-px w-8 bg-separator sm:block"/>}
       </li>)}
     </ol>
+    {d.cloneFrom && <div className="mb-6"><Notice tone="accent" title={t('clone.title', { name: d.cloneName })}>{t('clone.help')}{' '}
+      <button type="button" className="font-medium text-accent hover:underline" onClick={() => d.set({ cloneFrom: '', cloneName: '' })}>{t('clone.stop')}</button></Notice></div>}
     <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_22rem]">
       <div className="flex flex-col gap-6">
         <Section title={t('location')}>

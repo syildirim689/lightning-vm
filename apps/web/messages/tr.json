@@ -548,7 +548,10 @@
     "COMPANY_REQUIRED": "Önce satıcı bilgilerini (unvan, vergi no, adres) doldurun.",
     "DISK_SHRINK_NOT_SUPPORTED": "Disk yalnızca büyüyebilir.",
     "NO_CHANGE": "Sunucu zaten bu boyutta.",
-    "WEBHOOK_URL_NOT_PUBLIC": "Herkese açık bir HTTPS adresi kullanın."
+    "WEBHOOK_URL_NOT_PUBLIC": "Herkese açık bir HTTPS adresi kullanın.",
+    "CLONE_MISMATCH": "Kopya, asıl sunucunun konumunda ve imajında kalır.",
+    "BELOW_SOURCE_DISK": "Disk asıl sunucununkinden küçük olamaz.",
+    "NOT_WITH_CLONE": "Kopyaya uygulama kurulamaz."
   },
   "Setup": {
     "title": "Kurulum sihirbazı",
@@ -1066,7 +1069,12 @@
     },
     "budgetNear": "Bu siparişle aylık tutar {monthly} olur; bütçenize ({amount}) yaklaşıyorsunuz.",
     "budgetOver": "Bu siparişle aylık tutar {monthly} olur ve bütçenizi ({amount}) aşar.",
-    "payToStart": "Faturayı ödeyin, sunucunuz hemen kurulsun."
+    "payToStart": "Faturayı ödeyin, sunucunuz hemen kurulsun.",
+    "clone": {
+      "title": "{name} kopyası",
+      "help": "Yeni sunucu onun diskinin bir kopyasıyla başlar; kendi adını, adresini ve anahtarlarını alır. Konum ve imaj aynı kalır; disk aynı ya da daha büyük olabilir.",
+      "stop": "Bunun yerine boş sunucu sipariş et"
+    }
   },
   "Catalog": {
     "eyebrow": "YÖNETİM · KATALOG",
@@ -4337,7 +4345,8 @@
     "notesHelp": "{n} karakter kaldı.",
     "save": "Kaydet",
     "saved": "Etiketler ve notlar kaydedildi.",
-    "orderSimilar": "Benzerini sipariş et"
+    "orderSimilar": "Benzerini sipariş et",
+    "clone": "Klonla"
   },
   "Schedules": {
     "title": "Zamanlamalar",
