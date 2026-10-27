@@ -868,6 +868,11 @@ test('support tickets: customer opens with an attachment, staff answer with an i
   assert.equal(view.ticket.priority, 'urgent');
   assert.equal(view.ticket.assigneeEmail, 'agent@example.test');
   assert.ok(Date.parse(view.ticket.dueAt) - Date.now() <= 3_600_000 + 60_000, 'urgent: 1 hour');
+  // Presence: two staff on one ticket see each other, and whether the other is writing; customers cannot ask.
+  assert.deepEqual((await post(`/admin/support/tickets/${id}/presence`, { typing: false }, agent.c)).json(), { others: [] });
+  assert.deepEqual((await post(`/admin/support/tickets/${id}/presence`, { typing: true }, admin)).json().others.map((o) => o.email), ['agent@example.test']);
+  assert.deepEqual((await post(`/admin/support/tickets/${id}/presence`, {}, agent.c)).json().others.map((o) => [o.email, o.typing]), [['boss@example.test', true]]);
+  assert.equal((await post(`/admin/support/tickets/${id}/presence`, {}, cust.c)).statusCode, 403);
 
   // Closed and rated by the customer only.
   assert.equal((await post(`/support/tickets/${id}/rating`, { rating: 5 }, cust.c)).json().code, 'TICKET_NOT_CLOSED');

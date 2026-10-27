@@ -901,6 +901,15 @@ test.describe('people, settings and smart features (English browser)', () => {
     await expect(page.locator('main').getByText('Probably the firewall; checking.')).toBeVisible();
     await expect(page.getByLabel('Your reply')).toHaveValue('');
     await shot(page, 'support-staff');
+    // The command palette finds a ticket by its number.
+    await page.goto('/admin');
+    await page.keyboard.press('Control+k');
+    await page.getByRole('combobox').fill('1001');
+    await expect(page.getByRole('option', { name: /#1001 Cannot reach my server over SSH/ })).toBeVisible();
+    await page.waitForTimeout(300);
+    await page.screenshot({ path: 'test-results/tour/palette-ticket.png' });
+    await page.keyboard.press('Enter');
+    await expect(page).toHaveURL(/\/admin\/support\/[0-9a-f-]{36}$/);
     // The inbox: grouped by day, an icon per kind.
     await page.getByRole('button', { name: /notifications/i }).first().click();
     await expect(page.getByRole('dialog').getByText('Today')).toBeVisible();

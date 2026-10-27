@@ -14,7 +14,8 @@ import { I } from './icon';
 import { openShortcuts } from './shortcuts';
 import { recent } from '../lib/recent';
 
-type Cmd = { id: string; group: 'recent' | 'pages' | 'servers' | 'users' | 'actions'; label: string; hint?: string; icon: React.ReactNode; run: () => void };
+type Cmd = { id: string; group: 'recent' | 'pages' | 'servers' | 'tickets' | 'users' | 'actions'; label: string; hint?: string; icon: React.ReactNode; run: () => void };
+type TicketRow = { id: string; number: number; subject: string; status: 'open' | 'answered' | 'customer_reply' | 'on_hold' | 'closed'; ownerEmail?: string };
 type ServerRow = { id: string; name: string; address: string | null; ownerEmail?: string; favorite?: boolean };
 const fold = (s: string) => s.toLocaleLowerCase('tr').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/ı/g, 'i');
 
@@ -41,6 +42,10 @@ export default function CommandPalette({ permissions, isOpen, onOpenChange }: { 
   const servers = useApiQuery<{ servers: ServerRow[] }>(staff ? ['admin', 'servers'] : ['servers'], isOpen ? (staff ? '/admin/servers' : '/servers') : null).data?.servers ?? [];
 
   const users = useApiQuery<{ users: { id: string; email: string; name: string }[] }>(['admin', 'users'], isOpen && can(permissions, 'users.view') ? '/admin/users' : null).data?.users ?? [];
+  // Tickets: staff search the whole queue, customers their own; "#1001" or the subject finds one.
+  const support = can(permissions, 'support.view');
+  const tickets = useApiQuery<{ tickets: TicketRow[] }>(support ? ['admin', 'support', 'queue', 'palette'] : ['support', 'mine'], isOpen ? (support ? '/admin/support/tickets?status=' : '/support/tickets') : null).data?.tickets ?? [];
+  const ts = useTranslations('Support');
   const go = (href: string) => () => { onOpenChange(false); router.push(href); };
   const commands = useMemo<Cmd[]>(() => {
     const pages: [string, string, React.ReactNode, boolean][] = [
@@ -63,6 +68,8 @@ export default function CommandPalette({ permissions, isOpen, onOpenChange }: { 
       ['/firewalls', tn('firewalls'), <I key="i" name="brick-wall-fire" size={16}/>, can(permissions, 'firewalls.manage') || can(permissions, 'servers.view_all')],
       ['/topology', tn('myTopology'), <I key="i" name="waypoints" size={16}/>, true],
       ['/vdc', tn('myVdc'), <I key="i" name="building-2" size={16}/>, true],
+      ['/admin/support', tn('support'), <I key="i" name="life-buoy" size={16}/>, support],
+      ['/support', tn('mySupport'), <I key="i" name="life-buoy" size={16}/>, true],
       ['/account', tn('account'), <I key="i" name="key-round" size={16}/>, true],
       ['/account?tab=notifications', t('notificationSettings'), <I key="i" name="bell" size={16}/>, true],
     ];
@@ -73,6 +80,8 @@ export default function CommandPalette({ permissions, isOpen, onOpenChange }: { 
       // Starred servers first, with their star.
       ...[...servers].sort((a, b) => Number(!!b.favorite) - Number(!!a.favorite)).map((s) => ({ id: `s:${s.id}`, group: 'servers' as const, label: s.name, hint: [s.address, s.ownerEmail].filter(Boolean).join(' · '),
         icon: <I name={s.favorite ? 'star' : 'server'} size={16} className={s.favorite ? 'fill-current text-warning' : undefined}/>, run: go(`/servers/${s.id}`) })),
+      ...tickets.map((x) => ({ id: `t:${x.id}`, group: 'tickets' as const, label: `#${x.number} ${x.subject}`, hint: [ts(`status.${x.status}`), x.ownerEmail].filter(Boolean).join(' · '),
+        icon: <I name="life-buoy" size={16}/>, run: go(support ? `/admin/support/${x.id}` : `/support/${x.id}`) })),
       { id: 'a:theme', group: 'actions', label: resolvedTheme === 'dark' ? t('lightTheme') : t('darkTheme'), icon: resolvedTheme === 'dark' ? <I name="sun" size={16}/> : <I name="moon" size={16}/>,
         run: () => { setTheme(resolvedTheme === 'dark' ? 'light' : 'dark'); onOpenChange(false); } },
       { id: 'a:lang', group: 'actions', label: locale === 'tr' ? 'English' : 'Türkçe', icon: <I name="languages" size={16}/>,
@@ -80,10 +89,10 @@ export default function CommandPalette({ permissions, isOpen, onOpenChange }: { 
       { id: 'a:shortcuts', group: 'actions', label: t('shortcuts'), icon: <I name="keyboard" size={16}/>, run: () => { onOpenChange(false); openShortcuts(); } },
       { id: 'a:logout', group: 'actions', label: tn('logout'), icon: <I name="log-out" size={16}/>, run: () => { onOpenChange(false); void signOut().then(() => { router.replace('/login'); router.refresh(); }); } },
     ];
-  }, [permissions, servers, users, resolvedTheme, locale, isOpen]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [permissions, servers, users, tickets, resolvedTheme, locale, isOpen]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const q = fold(query.trim());
-  const results = q ? commands.filter((c) => c.group !== 'recent').filter((c) => fold(`${c.label} ${c.hint ?? ''}`).includes(q)) : commands.filter((c) => (c.group !== 'servers' && c.group !== 'users') || commands.indexOf(c) < 40);
+  const results = q ? commands.filter((c) => c.group !== 'recent').filter((c) => fold(`${c.label} ${c.hint ?? ''}`).includes(q)) : commands.filter((c) => c.group !== 'tickets' && ((c.group !== 'servers' && c.group !== 'users') || commands.indexOf(c) < 40));
   useEffect(() => setActive(0), [query, isOpen]);
   useEffect(() => { if (!isOpen) setQuery(''); }, [isOpen]);
   useEffect(() => { listRef.current?.querySelector(`[data-index="${active}"]`)?.scrollIntoView({ block: 'nearest' }); }, [active]);
@@ -93,7 +102,7 @@ export default function CommandPalette({ permissions, isOpen, onOpenChange }: { 
     if (e.key === 'ArrowUp') { e.preventDefault(); setActive((i) => Math.max(0, i - 1)); }
     if (e.key === 'Enter') { e.preventDefault(); results[active]?.run(); }
   };
-  const groups = (['recent', 'pages', 'servers', 'users', 'actions'] as const).map((g) => ({ g, items: results.filter((c) => c.group === g) })).filter((x) => x.items.length);
+  const groups = (['recent', 'pages', 'servers', 'tickets', 'users', 'actions'] as const).map((g) => ({ g, items: results.filter((c) => c.group === g) })).filter((x) => x.items.length);
 
   return <Modal.Backdrop isOpen={isOpen} onOpenChange={onOpenChange}>
     <Modal.Container placement="top" className="pt-[12vh]">

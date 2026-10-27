@@ -1995,7 +1995,7 @@
   },
   "Palette": {
     "title": "Command palette",
-    "placeholder": "Search pages, servers or actions…",
+    "placeholder": "Search pages, servers, tickets or actions…",
     "empty": "Nothing for “{query}”. Try another name, IP or page.",
     "pages": "Pages",
     "servers": "Servers",
@@ -2008,7 +2008,8 @@
     "shortcuts": "Keyboard shortcuts",
     "recent": "Recent",
     "activity": "My activity",
-    "users": "Users"
+    "users": "Users",
+    "tickets": "Support tickets"
   },
   "Insights": {
     "title": "Needs attention",
@@ -4991,6 +4992,8 @@
     "cannedVars": "Placeholders: {a} (the customer), {b} (the ticket number), {c} (its server). They are filled in when you pick the reply.",
     "openAlready": "You already have an open ticket about this server: #{number} {subject}.",
     "openAlreadyLink": "Add to it instead",
-    "sendShortcut": "Ctrl + Enter (⌘ + Enter on a Mac) sends. An unsent reply is kept in this browser."
+    "sendShortcut": "Ctrl + Enter (⌘ + Enter on a Mac) sends. An unsent reply is kept in this browser.",
+    "presenceViewing": "{who} also has this ticket open.",
+    "presenceTyping": "{who} is writing a reply — check before you answer."
   }
 }

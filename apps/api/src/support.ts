@@ -246,6 +246,19 @@ export class SupportAdminController {
     return { ok: true };
   }
 
+  // Who has this ticket open: each staff page says so every 15 s; the others seen in the last 40 s are returned,
+  // so two people do not answer the same customer at once. typing: they are writing a reply.
+  @Post('tickets/:id/presence') @HttpCode(200) @Can('support.view')
+  async presence(@Req() req: AuthedRequest, @Param('id', ParseUUIDPipe) id: string, @Body() body: Input) {
+    const key = `support:presence:${id}`, now = Date.now();
+    await redis.multi().zadd(key, now, `${req.user.id}|${body?.typing === true ? 1 : 0}`).zrem(key, `${req.user.id}|${body?.typing === true ? 0 : 1}`)
+      .zremrangebyscore(key, 0, now - 40_000).expire(key, 120).exec();
+    const others = (await redis.zrange(key, 0, -1)).map((m) => m.split('|')).filter(([u]) => u !== req.user.id);
+    if (!others.length) return { others: [] };
+    const { rows } = await pool.query('SELECT id, email, name FROM users WHERE id = ANY($1::uuid[])', [others.map(([u]) => u)]);
+    return { others: rows.map((u) => ({ email: u.email, name: u.name ?? '', typing: others.some(([x, t]) => x === u.id && t === '1') })) };
+  }
+
   // Staff who can answer, for the assignee picker.
   @Get('agents') @Can('support.view')
   async agents() {

@@ -3,7 +3,7 @@
 // badges, the deadline, the message thread and the reply box (with attachments; staff also get internal notes and
 // canned replies).
 import { Button, Chip, toast } from '@heroui/react';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { AnimatePresence, motion } from 'motion/react';
 import { useFormatter, useLocale, useNow, useTranslations } from 'next-intl';
 import { useRef, useState, useEffect } from 'react';
@@ -80,13 +80,14 @@ export function Thread({ messages, staffView }: { messages: Message[]; staffView
 }
 
 // The reply box: text, up to 3 files, and for staff an internal-note switch and canned replies.
-export function Composer({ ticketId, staff, closed, onSent, vars }: { ticketId: string; staff: boolean; closed: boolean; onSent: () => void; vars: CannedVars }) {
+export function Composer({ ticketId, staff, closed, onSent, vars, onWriting }: { ticketId: string; staff: boolean; closed: boolean; onSent: () => void; vars: CannedVars; onWriting?: (writing: boolean) => void }) {
   const t = useTranslations('Support');
   const { error, field } = useErrorText();
   // An unsent reply is kept in this browser per ticket, so leaving the page loses nothing.
   const draftKey = `lvm:support-draft:${ticketId}`;
   const [body, setBodyState] = useState('');
   useEffect(() => { try { setBodyState(localStorage.getItem(draftKey) ?? ''); } catch { /* storage blocked */ } }, [draftKey]);
+  useEffect(() => { onWriting?.(!!body.trim()); }, [body]); // eslint-disable-line react-hooks/exhaustive-deps
   const setBody = (next: string | ((b: string) => string)) => setBodyState((b) => {
     const v = typeof next === 'function' ? next(b) : next;
     try { if (v.trim()) localStorage.setItem(draftKey, v); else localStorage.removeItem(draftKey); } catch { /* storage blocked */ }
@@ -131,6 +132,25 @@ export function Composer({ ticketId, staff, closed, onSent, vars }: { ticketId: 
   </div>;
 }
 
+// Staff on a ticket: say we are here (and whether we are writing) every 15 s; returns the others on it now.
+type Present = { email: string; name: string; typing: boolean };
+function usePresence(ticketId: string | null, typing: boolean) {
+  return useQuery<{ others: Present[] }>({ queryKey: ['support', 'presence', ticketId, typing], enabled: !!ticketId, refetchInterval: 15_000,
+    queryFn: () => apiFetch(`/admin/support/tickets/${ticketId}/presence`, { method: 'POST', body: { typing } }) }).data?.others ?? [];
+}
+
+function PresenceBar({ others }: { others: Present[] }) {
+  const t = useTranslations('Support');
+  const writing = others.filter((o) => o.typing);
+  if (!others.length) return null;
+  const who = (list: Present[]) => list.map((o) => o.name || o.email).join(', ');
+  return <motion.div role="status" initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }}
+    className={`flex items-center gap-2 rounded-xl px-3 py-2 text-sm ${writing.length ? 'bg-warning/10 text-warning' : 'bg-accent/10 text-accent'}`}>
+    <span aria-hidden className="relative flex size-2.5"><span className="absolute inline-flex size-full animate-ping rounded-full bg-current opacity-60 motion-reduce:animate-none"/><span className="relative inline-flex size-2.5 rounded-full bg-current"/></span>
+    {writing.length ? t('presenceTyping', { who: who(writing) }) : t('presenceViewing', { who: who(others) })}
+  </motion.div>;
+}
+
 // The whole ticket page, for the customer or for staff (with the side panel).
 export function TicketPage({ id, staff }: { id: string; staff: boolean }) {
   const t = useTranslations('Support');
@@ -139,6 +159,8 @@ export function TicketPage({ id, staff }: { id: string; staff: boolean }) {
   const { error } = useErrorText();
   const client = useQueryClient();
   const me = useMe();
+  const [writing, setWriting] = useState(false);
+  const others = usePresence(staff ? id : null, writing);
   const q = useApiQuery<{ ticket: Ticket; messages: Message[]; staff: boolean }>(['support', 'ticket', id], `/support/tickets/${id}`, { refetchInterval: 15_000 });
   const refresh = () => { void client.invalidateQueries({ queryKey: ['support'] }); void client.invalidateQueries({ queryKey: ['admin', 'support'] }); };
   if (q.isError) return <p className="text-sm text-muted">{t('notFound')}</p>;
@@ -161,7 +183,8 @@ export function TicketPage({ id, staff }: { id: string; staff: boolean }) {
       <div className="flex min-w-0 flex-col gap-5">
         <Thread messages={messages} staffView={staff}/>
         {closed && !staff && <Rating ticket={tk} onDone={refresh}/>}
-        <Composer ticketId={id} staff={asStaff} closed={closed} onSent={refresh} vars={{ name: tk.ownerName ?? '', ticket: `#${tk.number}`, server: tk.serverName ?? '' }}/>
+        {staff && <PresenceBar others={others}/>}
+        <Composer onWriting={setWriting} ticketId={id} staff={asStaff} closed={closed} onSent={refresh} vars={{ name: tk.ownerName ?? '', ticket: `#${tk.number}`, server: tk.serverName ?? '' }}/>
         {!closed && <div><Button size="sm" variant="ghost" onPress={close}><I name="circle-check" size={14}/>{t('close')}</Button></div>}
       </div>
       {staff && <StaffPanel ticket={tk} onChange={refresh}/>}

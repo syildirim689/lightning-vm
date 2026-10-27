@@ -1995,7 +1995,7 @@
   },
   "Palette": {
     "title": "Komut paleti",
-    "placeholder": "Sayfa, sunucu ya da işlem arayın…",
+    "placeholder": "Sayfa, sunucu, talep ya da işlem ara…",
     "empty": "“{query}” için sonuç yok. Başka bir ad, IP ya da sayfa deneyin.",
     "pages": "Sayfalar",
     "servers": "Sunucular",
@@ -2008,7 +2008,8 @@
     "shortcuts": "Klavye kısayolları",
     "recent": "Son açılanlar",
     "activity": "Etkinliklerim",
-    "users": "Kullanıcılar"
+    "users": "Kullanıcılar",
+    "tickets": "Destek talepleri"
   },
   "Insights": {
     "title": "Dikkat gerektirenler",
@@ -4991,6 +4992,8 @@
     "cannedVars": "Yer tutucular: {a} (müşteri), {b} (talep numarası), {c} (sunucusu). Yanıtı seçtiğinizde doldurulur.",
     "openAlready": "Bu sunucu için zaten açık bir talebiniz var: #{number} {subject}.",
     "openAlreadyLink": "Onun yerine oraya yazın",
-    "sendShortcut": "Ctrl + Enter (Mac’te ⌘ + Enter) gönderir. Gönderilmemiş yanıt bu tarayıcıda saklanır."
+    "sendShortcut": "Ctrl + Enter (Mac’te ⌘ + Enter) gönderir. Gönderilmemiş yanıt bu tarayıcıda saklanır.",
+    "presenceViewing": "{who} da bu talebi şu an açmış.",
+    "presenceTyping": "{who} bir yanıt yazıyor — yanıtlamadan önce kontrol edin."
   }
 }
