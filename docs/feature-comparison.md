@@ -27,7 +27,7 @@ Status values:
 | Root password reset | VirtFusion, WGS, HostBill | Yes (stored encrypted, shown on request) |
 | Rescue mode | SolusVM, HostBill | Yes: boot from an ISO in the library (SystemRescue, for example), then eject |
 | Change hostname | HostBill, VirtFusion | Planned |
-| Extra disks | SolusVM, HostBill | Planned |
+| Extra disks | SolusVM, HostBill | **New**: priced per GB per location, added and removed while the server runs |
 | Backups | VirtFusion, Virtualizor, SolusVM, HostBill | **New**: disk copies on each location's backup datastore (an NFS store at another site works), by hand or on a schedule with retention, restored over the disk |
 | Nested ESXi | — | Yes (ESXi images) |
 | Containers (LXC/OpenVZ), GPU passthrough, NUMA | Virtualizor, SolusVM, Proxmox | N/A |
@@ -44,7 +44,7 @@ Status values:
 | Monthly traffic count and allowance | AutoVM, VirtFusion, SolusVM, HostBill | **New**: per server and day, in and out, warnings at 80% and 100% |
 | Bandwidth graph per VM | AutoVM, VirtFusion, Virtualizor | Yes (live) and **New** (31 days) |
 | Port speed limit / throttle on overage | VirtFusion, SolusVM, HostBill | **New**: distributed-switch traffic shaping once the allowance is used up, lifted when it is covered again |
-| Private networks / VPC | Virtualizor, SolusVM, HostBill | Planned (port groups) |
+| Private networks / VPC | Virtualizor, SolusVM, HostBill | **New**: a distributed port group with its own VLAN per network, a second NIC per server |
 | Load balancer | Virtualizor | Planned |
 
 ## Billing
@@ -74,7 +74,7 @@ Status values:
 | Feature | Who has it | Lightning VM |
 |---|---|---|
 | Multiple vCenters / locations | everyone | Yes |
-| vMotion / migration between hosts | VirtFusion, Virtualizor, SolusVM, WGS | Planned (DRS covers it inside a cluster) |
+| vMotion / migration between hosts | VirtFusion, Virtualizor, SolusVM, WGS | **New**: move a server to a host or datastore while it runs; evacuate a host before maintenance |
 | Location maintenance mode | SolusVM | Yes |
 | Roles and permissions | VirtFusion, Virtualizor, SolusVM | Yes (with per-role limits) |
 | Two-factor, LDAP, OIDC, passkeys | Proxmox (partly) | Yes |
