@@ -37,8 +37,10 @@ export const catalog: Record<string, EventDef> = {
     text: { tr: (d) => ({ title: `${d.name} silindi`, body: 'Sunucu ve diskleri kaldırıldı; IP adresi serbest bırakıldı.' }),
       en: (d) => ({ title: `${d.name} deleted`, body: 'The server and its disks were removed; its IP address was released.' }) } },
   'server.delete_scheduled': { audience: 'user', channels: all, defaults: ['inApp', 'email'], link: (d) => `/servers/${d.serverId}`,
-    text: { tr: (d) => ({ title: `${d.name} silinmek üzere`, body: `Sunucu kapatıldı ve ${d.hours} saat sonra silinecek. O zamana kadar sunucu sayfasından geri alabilirsiniz.` }),
-      en: (d) => ({ title: `${d.name} is about to be deleted`, body: `The server was shut down and will be deleted in ${d.hours} hours. Until then you can take it back on its page.` }) } },
+    text: { tr: (d) => d.reminder ? { title: `${d.name} yakında silinecek`, body: `Geri alma süresi yaklaşık ${d.minutes} dakika sonra bitiyor; sunucu ve diskleri kalıcı olarak silinecek. Tutmak istiyorsanız sunucu sayfasından geri alın.` }
+        : { title: `${d.name} silinmek üzere`, body: `Sunucu kapatıldı ve ${d.hours} saat sonra silinecek. O zamana kadar sunucu sayfasından geri alabilirsiniz.` },
+      en: (d) => d.reminder ? { title: `${d.name} will be deleted soon`, body: `The grace period ends in about ${d.minutes} minutes; the server and its disks will be deleted for good. Take it back on its page to keep it.` }
+        : { title: `${d.name} is about to be deleted`, body: `The server was shut down and will be deleted in ${d.hours} hours. Until then you can take it back on its page.` } } },
   'server.power': { audience: 'user', channels: ['inApp', 'push', 'chat'], defaults: ['inApp'], link: (d) => `/servers/${d.serverId}`,
     text: { tr: (d) => d.kind === 'resize' ? { title: `${d.name}: kaynaklar değiştirildi`, body: 'İşlemci, bellek ve disk yeni değerlerinde.' } : { title: `${d.name}: ${d.kind} tamamlandı`, body: 'Güç işlemi tamamlandı.' },
       en: (d) => d.kind === 'resize' ? { title: `${d.name}: resources changed`, body: 'CPU, memory and disk are at their new values.' } : { title: `${d.name}: ${d.kind} done`, body: 'The power operation finished.' } } },

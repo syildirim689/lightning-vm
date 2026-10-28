@@ -293,6 +293,14 @@ test('insights explain what needs attention; the task list starts empty', async 
   const mine = (await get('/insights', user)).json().insights.map((i) => i.code);
   assert.ok(mine.includes('NO_SSH_KEYS'), mine.join());
   assert.ok(!mine.includes('ENABLE_2FA'), 'two-factor is on for this user');
+  // A finding can be hidden by its owner (for a while or for good) and shown again.
+  assert.equal((await put('/insights/dismissals', { key: 'keys', days: 30 }, user)).statusCode, 400);
+  assert.equal((await put('/insights/dismissals', { key: 'keys', days: 7 }, user)).statusCode, 204);
+  const hid = (await get('/insights', user)).json();
+  assert.ok(!hid.insights.some((i) => i.key === 'keys') && hid.hidden === 1);
+  assert.ok((await get('/admin/insights', admin)).json().insights.some((i) => i.code === 'BACKUP_NEVER'), 'one person hiding a finding hides it for nobody else');
+  assert.equal((await call('DELETE', '/insights/dismissals', user)).statusCode, 204);
+  assert.equal((await get('/insights', user)).json().hidden, 0);
   assert.deepEqual((await get('/operations/active', user)).json().operations, []);
 
   // Smart cards: the getting-started list for staff, this month's cost for the customer.

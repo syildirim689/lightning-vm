@@ -93,6 +93,15 @@ export function startPowerOperation(req: AuthedRequest, server: { id: string; ow
 // Servers whose deletion grace period is over (scheduler tick): deleted now. A server locked meanwhile keeps its lock and
 // is not deleted (the wait ends); one busy with an operation is tried again on the next tick.
 export async function runDueDeletions() {
+  // A reminder 2 hours before the end, once per scheduled deletion; only when the grace period is long enough
+  // (6 hours or more) that the first notice is not still fresh.
+  if ((await getSettings('servers')).deleteGraceHours >= 6) {
+    const { rows: soon } = await pool.query("SELECT id, name, owner_id, delete_at FROM servers WHERE delete_at > now() AND delete_at <= now() + interval '2 hours'");
+    for (const s of soon) {
+      if (!(await redis.set(`trash:remind:${s.id}:${s.delete_at.getTime()}`, '1', 'EX', 3 * 3600, 'NX'))) continue;
+      await notify('server.delete_scheduled', [s.owner_id], { serverId: s.id, name: s.name, reminder: true, minutes: Math.max(1, Math.round((s.delete_at.getTime() - Date.now()) / 60_000)) });
+    }
+  }
   const { rows } = await pool.query(`SELECT s.* FROM servers s WHERE s.delete_at <= now() AND s.state IN ('ready', 'error')
     AND NOT EXISTS (SELECT 1 FROM operations o WHERE o.server_id = s.id AND o.status IN ('pending', 'running')) LIMIT 50`);
   const system = { id: 'trash', ip: null, user: { id: null, permissions: [] } } as unknown as AuthedRequest;

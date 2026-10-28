@@ -533,6 +533,24 @@ test.describe('server lifecycle (simulator, Turkish customer)', () => {
     await expectNoOverflow(page, 'server waiting for deletion at 390 px');
     await page.screenshot({ path: 'test-results/tour/server-trash-390.png', fullPage: true });
     await page.setViewportSize({ width: 1280, height: 720 });
+    // The home page points it out; the finding can be hidden for a day and shown again.
+    const serverUrl = page.url();
+    await page.goto('/');
+    const finding = page.getByRole('link', { name: /web-1 yaklaşık \d+ saat içinde silinecek/ });
+    await expect(finding).toBeVisible();
+    await page.getByRole('button', { name: /^Gizle: web-1/ }).click();
+    await page.getByRole('menuitem', { name: '1 gün gizle' }).click();
+    await expect(finding).toBeHidden();
+    const showHidden = page.getByRole('button', { name: /gizli öneriyi göster/ });
+    await expect(showHidden).toBeVisible();
+    await page.setViewportSize({ width: 390, height: 900 });
+    await expectNoOverflow(page, 'home with a hidden finding at 390 px');
+    await page.screenshot({ path: 'test-results/tour/insights-hidden-390.png', fullPage: true });
+    await page.setViewportSize({ width: 1280, height: 720 });
+    await showHidden.click();
+    await expect(finding).toBeVisible();
+    await page.screenshot({ path: 'test-results/tour/insights-pending-deletion.png', fullPage: true });
+    await page.goto(serverUrl);
     await page.getByRole('button', { name: 'Geri al', exact: true }).click();
     await expect(page.getByText('Sunucu geri alındı', { exact: false })).toBeVisible();
     await expect(page.getByText('Bu sunucu silinmek üzere')).toBeHidden();

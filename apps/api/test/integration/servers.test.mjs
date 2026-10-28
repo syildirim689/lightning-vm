@@ -294,7 +294,7 @@ test('deleting releases the IP and reservation only after VMware confirms the VM
 test('deleting waits out the grace period (restorable, then deleted by the scheduler); bulk power acts on own servers only', { skip }, async () => {
   const { runDueDeletions } = await import('../../dist/servers.js');
   assert.equal((await send('PUT', '/admin/settings/servers', { deleteGraceHours: 999 })).json().fields.deleteGraceHours, 'OUT_OF_RANGE');
-  await send('PUT', '/admin/settings/servers', { deleteGraceHours: 2 });
+  await send('PUT', '/admin/settings/servers', { deleteGraceHours: 6 });
   try {
     const id = (await create(order('trash-1'))).json().serverId;
     await until(async () => (await serverRow(id)).state === 'ready', 'server ready');
@@ -307,6 +307,21 @@ test('deleting waits out the grace period (restorable, then deleted by the sched
     assert.equal((await lastOp(id)).kind, 'shutdown');
     await settled();
     assert.equal((await send('GET', `/servers/${id}`, undefined, user)).json().server.deleteAt, r.json().deleteAt);
+    assert.ok((await send('GET', '/insights', undefined, user)).json().insights.some((i) => i.code === 'PENDING_DELETION' && i.params.hours === 6));
+    // Two hours before the end the owner is reminded, once.
+    // Queued notifications (this test process runs no notification worker).
+    const reminders = async () => {
+      const nq = new Queue('notifications', { connection: queueRedis });
+      const jobs = await nq.getJobs(['waiting', 'delayed', 'active', 'completed', 'failed']);
+      await nq.close();
+      return jobs.filter((j) => j?.data?.event === 'server.delete_scheduled' && j.data.data.serverId === id && j.data.data.reminder === 'true').length;
+    };
+    assert.equal(await reminders(), 0, 'no reminder while the end is far');
+    await runDueDeletions();
+    assert.equal(await reminders(), 0);
+    await pool.query("UPDATE servers SET delete_at = now() + interval '30 minutes' WHERE id = $1", [id]);
+    await runDueDeletions(); await runDueDeletions();
+    assert.equal(await reminders(), 1, 'reminded once');
     assert.equal((await send('DELETE', `/servers/${id}/deletion`, undefined, other)).statusCode, 404);
     assert.equal((await send('DELETE', `/servers/${id}/deletion`, undefined, user)).json().restored, true);
     assert.equal((await serverRow(id)).delete_at, null);

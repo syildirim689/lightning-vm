@@ -2393,7 +2393,20 @@
       "STAFF_INACTIVE": {
         "title": "{count, plural, one {# staff account has} other {# staff accounts have}} not been used for 90 days",
         "body": "Unused accounts with permissions are a risk: ban or remove the ones nobody needs."
+      },
+      "PENDING_DELETION": {
+        "title": "{name} will be deleted in {hours, plural, one {about # hour} other {about # hours}}",
+        "body": "The server is shut down and waiting to be deleted. Take it back on its page to keep it."
       }
+    },
+    "hide": {
+      "menu": "Hide: {title}",
+      "label": "Hide for how long?",
+      "day": "Hide for 1 day",
+      "week": "Hide for 7 days",
+      "forever": "Never show again",
+      "done": "Hidden",
+      "restore": "{count, plural, one {Show # hidden finding} other {Show # hidden findings}}"
     }
   },
   "Metrics": {

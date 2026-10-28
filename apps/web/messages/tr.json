@@ -2393,7 +2393,20 @@
       "STAFF_INACTIVE": {
         "title": "{count} personel hesabı 90 gündür kullanılmadı",
         "body": "Yetkili ama kullanılmayan hesaplar risktir: gerekmeyenleri yasaklayın ya da kaldırın."
+      },
+      "PENDING_DELETION": {
+        "title": "{name} {hours, plural, other {yaklaşık # saat}} içinde silinecek",
+        "body": "Sunucu kapalı ve silinmeyi bekliyor. Tutmak istiyorsanız sunucu sayfasından geri alın."
       }
+    },
+    "hide": {
+      "menu": "Gizle: {title}",
+      "label": "Ne kadar gizlensin?",
+      "day": "1 gün gizle",
+      "week": "7 gün gizle",
+      "forever": "Bir daha gösterme",
+      "done": "Gizlendi",
+      "restore": "{count, plural, other {# gizli öneriyi göster}}"
     }
   },
   "Metrics": {

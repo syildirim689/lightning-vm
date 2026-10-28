@@ -1,10 +1,11 @@
 // Insights: findings the panel computes from its own data, each with a severity, the numbers behind it
 // and where to fix it. Staff see platform findings; customers see findings about their own servers.
 // Critical staff findings are also sent as the "admin.insight" notification, at most once a day each.
-import { Controller, Get, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, Put, Req, UseGuards } from '@nestjs/common';
 import { SessionGuard, type AuthedRequest } from './auth';
 import { capacityOf, limitsFor, usageOf } from './catalog';
 import { pool, redis } from './db';
+import { apiError } from './errors';
 import { logEvent } from './log';
 import { summary as maintenance } from './maintenance';
 import { notify } from './notify';
@@ -103,6 +104,8 @@ export async function customerInsights(userId: string): Promise<Insight[]> {
   const add = (code: string, severity: Insight['severity'], params: Insight['params'], link: string, key: string) => out.push({ code, severity, params, link, key });
   const { rows: bad } = await pool.query("SELECT id, name FROM servers WHERE owner_id = $1 AND state IN ('error', 'missing')", [userId]);
   for (const s of bad) add('SERVER_PROBLEM', 'danger', { name: s.name }, `/servers/${s.id}`, `srv:${s.id}`);
+  const { rows: trash } = await pool.query('SELECT id, name, delete_at FROM servers WHERE owner_id = $1 AND delete_at IS NOT NULL', [userId]);
+  for (const s of trash) add('PENDING_DELETION', 'warning', { name: s.name, hours: Math.max(1, Math.ceil((new Date(s.delete_at).getTime() - Date.now()) / 3600_000)) }, `/servers/${s.id}`, `trash:${s.id}`);
   const { rows: off } = await pool.query(`SELECT id, name FROM servers WHERE owner_id = $1 AND state = 'ready' AND power_state = 'poweredOff' AND updated_at < now() - interval '7 days'`, [userId]);
   for (const s of off) add('SERVER_OFF_LONG', 'info', { name: s.name }, `/servers/${s.id}`, `off:${s.id}`);
   // Right-sizing from the last 7 days of CPU use (VDC servers are sized inside their allocation, so skipped).
@@ -163,10 +166,30 @@ export function startInsightAlerts() {
   return setInterval(run, 10 * 60_000).unref();
 }
 
-@Controller()
+// Drops the findings this person hid; `hidden` says how many, so the list can offer to show them again.
+async function visible(userId: string, list: Insight[]) {
+  const { rows } = await pool.query('SELECT key FROM insight_dismissals WHERE user_id = $1 AND (until IS NULL OR until > now())', [userId]);
+  const hide = new Set(rows.map((r) => r.key));
+  const insights = list.filter((i) => !hide.has(i.key));
+  return { insights, hidden: list.length - insights.length };
+}
+
+@Controller('insights') @UseGuards(SessionGuard)
 export class InsightsController {
-  @Get('insights') @UseGuards(SessionGuard)
-  mine(@Req() req: AuthedRequest) { return customerInsights(req.user.id).then((insights) => ({ insights })); }
+  @Get()
+  async mine(@Req() req: AuthedRequest) { return visible(req.user.id, await customerInsights(req.user.id)); }
+
+  // Hide one finding for 1 or 7 days, or for good (days null). It comes back by itself when it is gone and returns.
+  @Put('dismissals') @HttpCode(204)
+  async dismiss(@Req() req: AuthedRequest, @Body() b: { key?: unknown; days?: unknown }) {
+    if (typeof b?.key !== 'string' || !b.key || b.key.length > 200) throw apiError(400, 'VALIDATION_FAILED', 'Check the key', { key: 'INVALID_VALUE' });
+    if (b.days !== null && b.days !== 1 && b.days !== 7) throw apiError(400, 'VALIDATION_FAILED', 'Check the days', { days: 'INVALID_VALUE' });
+    await pool.query(`INSERT INTO insight_dismissals (user_id, key, until) VALUES ($1, $2, CASE WHEN $3::int IS NULL THEN NULL ELSE now() + make_interval(days => $3::int) END)
+      ON CONFLICT (user_id, key) DO UPDATE SET until = EXCLUDED.until`, [req.user.id, b.key, b.days]);
+  }
+
+  @Delete('dismissals') @HttpCode(204)
+  async restore(@Req() req: AuthedRequest) { await pool.query('DELETE FROM insight_dismissals WHERE user_id = $1', [req.user.id]); }
 }
 
 @Controller('admin') @UseGuards(PermissionGuard)
@@ -175,6 +198,6 @@ export class StaffInsightsController {
   async all(@Req() req: AuthedRequest) {
     const insights = await staffInsights();
     // Links into areas the viewer cannot open are dropped.
-    return { insights: insights.filter((i) => !i.link.startsWith('/admin/settings') || can(req.user.permissions, 'settings.view') || can(req.user.permissions, 'settings.manage')) };
+    return visible(req.user.id, insights.filter((i) => !i.link.startsWith('/admin/settings') || can(req.user.permissions, 'settings.view') || can(req.user.permissions, 'settings.manage')));
   }
 }
