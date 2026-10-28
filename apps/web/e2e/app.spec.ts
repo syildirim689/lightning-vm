@@ -571,8 +571,9 @@ test.describe('server lifecycle (simulator, Turkish customer)', () => {
       } else {
         await page.getByRole('button', { name: 'Sunucuyu sil', exact: true }).click();
         await page.getByRole('button', { name: 'Şimdi kalıcı olarak sil' }).click();
-        await expect(page.getByRole('alertdialog')).toContainText('geri alınamaz');
-        await page.getByRole('alertdialog').getByRole('button', { name: 'Şimdi kalıcı olarak sil' }).click();
+        const sure = page.getByRole('alertdialog', { name: 'Şimdi kalıcı olarak sil' });
+        await expect(sure).toContainText('geri alınamaz');
+        await sure.getByRole('button', { name: 'Şimdi kalıcı olarak sil' }).click();
       }
       await expect(page).toHaveURL(/\/$/, { timeout: 60_000 });
     }
