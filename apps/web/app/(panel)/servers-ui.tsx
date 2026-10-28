@@ -152,13 +152,15 @@ export function ServerList() {
         <FavoriteStar id={s.id} on={!!s.favorite} name={s.name}/></>}
     </motion.li>; })}
   </ul>}
-  {picking && chosen.length > 0 && <BulkBar ids={chosen.map((x) => x.id)} onDone={stopPicking}/>}
+  {picking && chosen.length > 0 && <BulkBar servers={chosen} onDone={stopPicking}/>}
   </div>;
 }
 
 // The selection's actions, pinned near the bottom of the screen, above the task manager's button (safe-area aware on phones).
-function BulkBar({ ids, onDone }: { ids: string[]; onDone: () => void }) {
+function BulkBar({ servers, onDone }: { servers: Server[]; onDone: () => void }) {
   const t = useTranslations('Servers');
+  const ids = servers.map((x) => x.id);
+  const waiting = servers.filter((x) => x.deleteAt).length;
   const run = useApiAction((action: string) => apiFetch<{ started: number; skipped: number }>('/servers/actions', { method: 'POST', body: { action, serverIds: ids }, headers: { 'idempotency-key': crypto.randomUUID() } }),
     { invalidate: [['servers'], ['tasks']], success: (r) => t('list.select.bulkDone', { started: r.started, skipped: r.skipped }) });
   const act = (a: string) => run.mutateAsync(a).then(onDone, () => undefined);
@@ -171,6 +173,9 @@ function BulkBar({ ids, onDone }: { ids: string[]; onDone: () => void }) {
     <Button size="sm" isPending={run.isPending} onPress={() => act('power_on')}><I name="play" size={15}/>{label('power_on')}</Button>
     {confirm('shutdown', 'power')}
     {confirm('reset', 'rotate-ccw')}
+    {waiting > 0 && <Button size="sm" variant="secondary" isPending={run.isPending} onPress={() => act('restore')}><I name="undo-2" size={15}/>{t('list.select.restore', { n: waiting })}</Button>}
+    {waiting < servers.length && <ConfirmButton size="sm" variant="danger-soft" isDisabled={run.isPending} icon={<I name="trash-2" size={15}/>} label={t('list.select.delete')}
+      title={t('list.select.delete')} body={t('list.select.deleteConfirm', { n: servers.length - waiting })} confirmLabel={t('list.select.delete')} cancelLabel={t('confirm.no')} onConfirm={() => act('delete')}/>}
   </motion.div>;
 }
 

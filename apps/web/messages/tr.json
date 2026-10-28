@@ -1787,7 +1787,8 @@
         "running": "Çalışıyor",
         "stopped": "Kapalı",
         "problem": "Sorunlu",
-        "busy": "İşlemde"
+        "busy": "İşlemde",
+        "trash": "Silinecek"
       },
       "select": {
         "start": "Seç",
@@ -1798,7 +1799,10 @@
         "toggle": "{name} sunucusunu seç",
         "bar": "Seçili sunucular için işlemler",
         "bulkDone": "{started} sunucuda işlem başladı{skipped, plural, =0 {} other {, # sunucu atlandı (meşgul ya da uygun değil)}}.",
-        "confirm": "{n} sunucuya “{action}” uygulansın mı?"
+        "confirm": "{n} sunucuya “{action}” uygulansın mı?",
+        "restore": "{n} sunucuyu geri al",
+        "delete": "Sil",
+        "deleteConfirm": "{n} sunucu kapatılıp silinmek üzere bekletilsin mi? Geri alma süresi bitene kadar listeden geri alabilirsiniz."
       }
     },
     "col": {

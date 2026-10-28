@@ -334,6 +334,18 @@ test('deleting waits out the grace period (restorable, then deleted by the sched
     assert.deepEqual((await send('POST', '/servers/actions', { action: 'power_on', serverIds: [id] }, other, { 'idempotency-key': randomUUID() })).json(), { started: 0, skipped: 1 });
     await settled();
 
+    // Bulk delete only starts the grace period (someone else's server is skipped); bulk restore takes it back.
+    const bd = await send('POST', '/servers/actions', { action: 'delete', serverIds: [id] }, other, { 'idempotency-key': randomUUID() });
+    assert.deepEqual(bd.json(), { started: 0, skipped: 1 });
+    assert.deepEqual((await send('POST', '/servers/actions', { action: 'delete', serverIds: [id] }, user, { 'idempotency-key': randomUUID() })).json(), { started: 1, skipped: 0 });
+    assert.ok((await serverRow(id)).delete_at, 'waiting');
+    await settled();
+    assert.deepEqual((await send('POST', '/servers/actions', { action: 'restore', serverIds: [id] }, user, { 'idempotency-key': randomUUID() })).json(), { started: 1, skipped: 0 });
+    assert.equal((await serverRow(id)).delete_at, null);
+    await send('PUT', '/admin/settings/servers', { deleteGraceHours: 0 });
+    assert.equal((await send('POST', '/servers/actions', { action: 'delete', serverIds: [id] }, user, { 'idempotency-key': randomUUID() })).json().code, 'ACTION_DISABLED');
+    await send('PUT', '/admin/settings/servers', { deleteGraceHours: 6 });
+
     // Scheduled again; once its time has come the scheduler deletes it like a normal delete.
     await send('DELETE', `/servers/${id}`, { confirm: 'trash-1' }, user, { 'idempotency-key': randomUUID() });
     await settled();

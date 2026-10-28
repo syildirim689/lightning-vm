@@ -7,9 +7,9 @@ import { parseAsString, parseAsStringLiteral, useQueryState } from 'nuqs';
 import { SelectInput } from '../../components/ui';
 import type { Server } from './servers-ui';
 
-const groups = ['all', 'running', 'stopped', 'problem', 'busy'] as const;
-// Running, stopped, problem, or busy (being created or deleted).
-export const stateGroup = (s: Pick<Server, 'state' | 'powerState'>) => s.state === 'ready' ? (s.powerState === 'poweredOn' ? 'running' : 'stopped') : s.state === 'error' || s.state === 'missing' ? 'problem' : 'busy';
+const groups = ['all', 'running', 'stopped', 'problem', 'busy', 'trash'] as const;
+// Running, stopped, problem, busy (being created or deleted), or waiting out its deletion grace period.
+export const stateGroup = (s: Pick<Server, 'state' | 'powerState' | 'deleteAt'>) => s.deleteAt ? 'trash' : s.state === 'ready' ? (s.powerState === 'poweredOn' ? 'running' : 'stopped') : s.state === 'error' || s.state === 'missing' ? 'problem' : 'busy';
 const fold = (v: string) => v.toLocaleLowerCase('tr');
 
 export function useServerFilters(servers: Server[]) {

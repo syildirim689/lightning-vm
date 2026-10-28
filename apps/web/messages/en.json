@@ -1787,7 +1787,8 @@
         "running": "Running",
         "stopped": "Stopped",
         "problem": "Problem",
-        "busy": "In progress"
+        "busy": "In progress",
+        "trash": "To be deleted"
       },
       "select": {
         "start": "Select",
@@ -1798,7 +1799,10 @@
         "toggle": "Select server {name}",
         "bar": "Actions for the selected servers",
         "bulkDone": "Started on {started} servers{skipped, plural, =0 {} other {, # skipped (busy or not suitable)}}.",
-        "confirm": "Apply “{action}” to {n} servers?"
+        "confirm": "Apply “{action}” to {n} servers?",
+        "restore": "Take back {n}",
+        "delete": "Delete",
+        "deleteConfirm": "Shut down {n} servers and hold them for deletion? Until the grace period ends you can take them back from the list."
       }
     },
     "col": {

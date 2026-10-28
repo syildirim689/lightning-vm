@@ -594,12 +594,28 @@ test.describe('server lifecycle (simulator, Turkish customer)', () => {
       await expect(page.getByRole('button', { name: /Benzerini/ })).toBeVisible();
       // The bulk "power on" may still be running; deleting waits for it.
       await expect(page.getByText('İşlem ilerlemesi')).toBeHidden({ timeout: 60_000 });
-      await page.getByLabel(`Onaylamak için “${name}” yazın`).fill(name);
       if (name === 'web-2') {
+        await page.getByLabel(`Onaylamak için “${name}” yazın`).fill(name);
         await tick(page.getByRole('checkbox', { name: /Beklemeden hemen sil/ }));
         await page.getByRole('button', { name: 'Sunucuyu kalıcı olarak sil' }).click();
       } else {
-        await page.getByRole('button', { name: 'Sunucuyu sil', exact: true }).click();
+        // From the list: selected and deleted in bulk (grace period), found under "To be deleted", then deleted for good.
+        await page.goto('/');
+        await page.getByRole('button', { name: 'Seç', exact: true }).click();
+        await page.getByRole('checkbox', { name: 'web-1 sunucusunu seç' }).click();
+        const bar = page.getByRole('region', { name: 'Seçili sunucular için işlemler' });
+        await bar.getByRole('button', { name: 'Sil', exact: true }).click();
+        const ask = page.getByRole('alertdialog', { name: 'Sil' });
+        await expect(ask).toContainText('geri alabilirsiniz');
+        await ask.getByRole('button', { name: 'Sil', exact: true }).click();
+        await expect(page.getByText(/1 sunucuda işlem başladı/)).toBeVisible();
+        await page.getByRole('button', { name: /^Silinecek/ }).click();
+        await expect(page.getByText(/Silinecek · /)).toBeVisible();
+        await page.setViewportSize({ width: 390, height: 900 });
+        await expectNoOverflow(page, 'list filtered to servers awaiting deletion at 390 px');
+        await page.screenshot({ path: 'test-results/tour/servers-trash-filter-390.png', fullPage: true });
+        await page.setViewportSize({ width: 1280, height: 720 });
+        await page.getByRole('link', { name: /web-1/ }).click();
         await page.getByRole('button', { name: 'Şimdi kalıcı olarak sil' }).click();
         const sure = page.getByRole('alertdialog', { name: 'Şimdi kalıcı olarak sil' });
         await expect(sure).toContainText('geri alınamaz');

@@ -90,6 +90,15 @@ export function startPowerOperation(req: AuthedRequest, server: { id: string; ow
   return startOperation(req, server, action as Kind, key, hashOf({ id: server.id, action, bulk: true }));
 }
 
+// Starts a ready server's grace period: shut down, deleted by the scheduler when it ends (an existing one is kept).
+async function scheduleDeletion(req: AuthedRequest, server: Awaited<ReturnType<typeof findServer>>, key: string, grace: number) {
+  const { rows: [r] } = await pool.query("UPDATE servers SET delete_at = coalesce(delete_at, now() + make_interval(hours => $2)), updated_at = now() WHERE id = $1 RETURNING delete_at", [server.id, grace]);
+  if (server.power_state === 'poweredOn' && !server.delete_at) await startOperation(req, server, 'shutdown', `${key}:shutdown`, hashOf({ id: server.id, action: 'shutdown' })).catch(() => undefined);
+  await audit(req, 'server.delete_scheduled', 'success', req.user.id, { serverId: server.id, deleteAt: r.delete_at });
+  if (!server.delete_at) await notify('server.delete_scheduled', [server.owner_id], { serverId: server.id, name: server.name, hours: grace });
+  return r.delete_at as Date;
+}
+
 // Servers whose deletion grace period is over (scheduler tick): deleted now. A server locked meanwhile keeps its lock and
 // is not deleted (the wait ends); one busy with an operation is tried again on the next tick.
 export async function runDueDeletions() {
@@ -635,13 +644,7 @@ export class ServersController {
     if (open) throw apiError(409, 'OPERATION_IN_PROGRESS', 'Wait for the running operation to stop, then delete again');
     // A ready server waits out the grace period shut down (the scheduler deletes it then); `now` skips the wait.
     const grace = (await getSettings('servers')).deleteGraceHours;
-    if (grace > 0 && server.state === 'ready' && body?.now !== true) {
-      const { rows: [r] } = await pool.query("UPDATE servers SET delete_at = coalesce(delete_at, now() + make_interval(hours => $2)), updated_at = now() WHERE id = $1 RETURNING delete_at", [id, grace]);
-      if (server.power_state === 'poweredOn' && !server.delete_at) await startOperation(req, server, 'shutdown', `${key}:shutdown`, hashOf({ id, action: 'shutdown' })).catch(() => undefined);
-      await audit(req, 'server.delete_scheduled', 'success', req.user.id, { serverId: id, deleteAt: r.delete_at });
-      if (!server.delete_at) await notify('server.delete_scheduled', [server.owner_id], { serverId: id, name: server.name, hours: grace });
-      return { serverId: id, deleteAt: r.delete_at };
-    }
+    if (grace > 0 && server.state === 'ready' && body?.now !== true) return { serverId: id, deleteAt: await scheduleDeletion(req, server, key, grace) };
     await pool.query("UPDATE servers SET state = 'deleting', delete_at = NULL, updated_at = now() WHERE id = $1", [id]);
     return { serverId: id, operation: await startOperation(req, server, 'delete', key, requestHash) };
   }
@@ -662,15 +665,31 @@ export class ServersController {
   @Post('servers/actions') @HttpCode(202)
   async bulk(@Req() req: AuthedRequest, @Headers('idempotency-key') header: string | undefined, @Body() body: Input) {
     const action = String(body?.action ?? '');
-    if (!['power_on', 'shutdown', 'power_off', 'reset'].includes(action)) throw apiError(400, 'VALIDATION_FAILED', 'Invalid input', { action: 'INVALID_VALUE' });
+    if (!['power_on', 'shutdown', 'power_off', 'reset', 'delete', 'restore'].includes(action)) throw apiError(400, 'VALIDATION_FAILED', 'Invalid input', { action: 'INVALID_VALUE' });
     const ids = Array.isArray(body?.serverIds) ? [...new Set(body.serverIds.map(String))] : [];
     if (!ids.length || ids.length > 100 || ids.some((x) => !/^[0-9a-f-]{36}$/.test(x))) throw apiError(400, 'VALIDATION_FAILED', 'Invalid input', { serverIds: 'INVALID_VALUE' });
-    await customerMay(req, 'power');
+    const trash = action === 'delete' || action === 'restore';
+    await customerMay(req, trash ? 'delete' : 'power');
+    // Deleting several at once only ever starts the grace period, so a slip can be taken back.
+    const grace = (await getSettings('servers')).deleteGraceHours;
+    if (action === 'delete' && grace <= 0) throw apiError(403, 'ACTION_DISABLED', 'Deleting several servers at once needs a deletion grace period');
     const base = idempotencyKey(header, req.user.id);
     let started = 0;
     for (const id of ids) {
       const s = await findServer(req, id, true).catch(() => null);
-      if (!s || !['ready', 'error'].includes(s.state) || !s.vm_moref || s.delete_at) continue;
+      if (!s) continue;
+      if (action === 'restore') {
+        const { rowCount } = await pool.query("UPDATE servers SET delete_at = NULL, updated_at = now() WHERE id = $1 AND delete_at IS NOT NULL AND state <> 'deleting'", [id]);
+        if (rowCount) { started++; await audit(req, 'server.delete_cancelled', 'success', req.user.id, { serverId: id }); }
+        continue;
+      }
+      if (action === 'delete') {
+        const busy = (await pool.query("SELECT 1 FROM operations WHERE server_id = $1 AND status IN ('pending', 'running')", [id])).rowCount;
+        if (s.state !== 'ready' || s.locked || s.delete_at || busy) continue;
+        await scheduleDeletion(req, s, `${base}:${id}`, grace).then(() => started++, () => undefined);
+        continue;
+      }
+      if (!['ready', 'error'].includes(s.state) || !s.vm_moref || s.delete_at) continue;
       await startPowerOperation(req, s, action, `${base}:${id}`).then(() => started++, () => undefined);
     }
     await audit(req, 'server.bulk_action', 'success', req.user.id, { action, started, skipped: ids.length - started });
