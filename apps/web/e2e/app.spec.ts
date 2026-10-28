@@ -960,6 +960,22 @@ test.describe('people, settings and smart features (English browser)', () => {
     await expect(page.getByText(/^lvm_/).first()).toBeVisible();
     await page.waitForTimeout(600);
     await shot(page, 'account-api');
+    // Coupons: one made in the billing admin, then listed with its discount. Transfers: the account's tab.
+    const code = `E2E${Date.now().toString(36).toUpperCase()}`;
+    await page.goto('/admin/billing?tab=coupons');
+    await expect(page.getByText('New coupon', { exact: true })).toBeVisible();
+    await expect(async () => {
+      await page.getByRole('textbox', { name: 'Code', exact: true }).fill(code);
+      await page.getByRole('textbox', { name: 'Percent off' }).fill('10');
+      await expect(page.getByRole('textbox', { name: 'Code', exact: true })).toHaveValue(code, { timeout: 1000 });
+    }).toPass({ timeout: 20_000 });
+    await page.getByRole('button', { name: 'Create coupon' }).click();
+    await expect(page.getByText(`Coupon ${code} created.`)).toBeVisible();
+    await expect(page.getByText(code, { exact: true })).toBeVisible();
+    await shot(page, 'coupons');
+    await page.goto('/account?tab=transfers');
+    await expect(page.getByText('Offered to you', { exact: true })).toBeVisible();
+    await shot(page, 'transfers');
     await page.goto('/account?tab=notifications');
     await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
     // Messaging apps: the picker, then one app's form.

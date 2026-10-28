@@ -1350,3 +1350,91 @@ test('rename: a valid, unused name in the panel; others cannot rename it', { ski
   assert.equal((await send('DELETE', `/servers/${id}`, { confirm: 'renamed-1' }, user, { 'idempotency-key': randomUUID() })).statusCode, 202);
   await until(async () => (await serverRow(id)).state === 'deleted', 'deleted', 120);
 });
+
+test('coupons: staff make codes; the quote and the order take them off the first invoices and the renewals they cover; limits, a used one only turns off; a free first period has no invoice', { skip }, async () => {
+  const { runBilling } = await import('../../dist/billing.js');
+  await send('PUT', '/admin/settings/billing', { enabled: true, requirePayment: false, autoCharge: false });
+  assert.equal((await send('POST', '/admin/coupons', { code: 'HALF', kind: 'percent', value: '50' }, user)).statusCode, 403);
+  const bad = (await send('POST', '/admin/coupons', { code: 'a b', kind: 'percent', value: '150' })).json().fields;
+  assert.deepEqual([bad.code, bad.value], ['INVALID_COUPON_CODE', 'OUT_OF_RANGE']);
+  const otherKey = (await send('POST', '/ssh-keys', { name: 'o', publicKey: 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMa0iBTtZu9kbSNXzg5M6pZ1rn8F1143iWq3JIcGimfn other' }, other)).json().id;
+  const half = (await send('POST', '/admin/coupons', { code: 'half', kind: 'percent', value: '50', periods: 2, maxUses: 1 })).json().id;
+  assert.ok(half);
+  assert.equal((await send('POST', '/admin/coupons', { code: 'HALF', kind: 'fixed', value: '1', currency: 'EUR' })).json().fields.code, 'COUPON_CODE_TAKEN');
+  const quote = (coupon, session = user) => send('POST', '/catalog/quote', { type: 'package', packageId, poolId, imageId, coupon }, session).then((r) => r.json().coupon);
+  assert.deepEqual(await quote('NOPE'), { error: 'COUPON_UNKNOWN' });
+  assert.deepEqual(await quote(' half '), { code: 'HALF', monthly: '0.50', periods: 2 });
+
+  const made = await create(order('coupon-1', { coupon: 'half' }));
+  assert.equal(made.statusCode, 202, made.body);
+  const { serverId: id, invoiceId } = made.json();
+  const line = (await pool.query('SELECT unit_price::text AS p, description FROM invoice_lines WHERE invoice_id = $1', [invoiceId])).rows[0];
+  assert.equal(line.p, '0.50');
+  assert.match(line.description, /kupon HALF/);
+  const sub = (await pool.query('SELECT * FROM subscriptions WHERE server_id = $1', [id])).rows[0];
+  assert.deepEqual([sub.coupon_id, sub.coupon_left, sub.amount], [half, 1, '1.00'], 'the full price stays the subscription\'s; one more discounted invoice');
+  assert.deepEqual(await quote('HALF', other), { error: 'COUPON_USED_UP' });
+  assert.equal((await create(order('coupon-2', { coupon: 'HALF', sshKeyIds: [otherKey] }), randomUUID(), other)).json().fields.coupon, 'COUPON_USED_UP');
+  // The renewal it covers is discounted too; then the coupon is spent.
+  await pool.query("UPDATE subscriptions SET period_end = (now() AT TIME ZONE 'Europe/Istanbul')::date + 3 WHERE id = $1", [sub.id]);
+  await runBilling();
+  const renewal = (await pool.query("SELECT l.unit_price::text AS p FROM invoice_lines l JOIN invoices i ON i.id = l.invoice_id WHERE l.subscription_id = $1 AND i.kind = 'renewal'", [sub.id])).rows[0];
+  assert.equal(renewal.p, '0.50');
+  assert.equal((await pool.query('SELECT coupon_left FROM subscriptions WHERE id = $1', [sub.id])).rows[0].coupon_left, 0);
+  // Used: the amount stays, it cannot be deleted, only turned off.
+  assert.equal((await send('PUT', `/admin/coupons/${half}`, { kind: 'percent', value: '90' })).json().code, 'COUPON_IN_USE');
+  assert.equal((await send('DELETE', `/admin/coupons/${half}`)).json().code, 'COUPON_IN_USE');
+  assert.equal((await send('PUT', `/admin/coupons/${half}`, { active: false })).statusCode, 200);
+  assert.deepEqual(await quote('HALF'), { error: 'COUPON_UNKNOWN' });
+  const listed = (await send('GET', '/admin/coupons')).json().coupons.find((c) => c.id === half);
+  assert.deepEqual([listed.uses, listed.active, listed.activeSubscriptions], [1, false, 1]);
+  // A free first month: no invoice; an expired code is refused; an unused one can be deleted.
+  const free = (await send('POST', '/admin/coupons', { code: 'FREEMONTH', kind: 'percent', value: '100', periods: 1 })).json().id;
+  const old = (await send('POST', '/admin/coupons', { code: 'OLD', kind: 'fixed', value: '0.25', currency: 'EUR', expiresAt: '2020-01-01T00:00:00Z' })).json().id;
+  assert.deepEqual(await quote('OLD'), { error: 'COUPON_EXPIRED' });
+  assert.equal((await send('DELETE', `/admin/coupons/${old}`)).statusCode, 204);
+  assert.equal((await send('DELETE', `/servers/${id}`, { confirm: 'coupon-1' }, user, { 'idempotency-key': randomUUID() })).statusCode, 202);
+  const second = await create(order('coupon-3', { coupon: 'FREEMONTH', sshKeyIds: [otherKey] }), randomUUID(), other);
+  assert.equal(second.statusCode, 202, second.body);
+  assert.equal(second.json().invoiceId, undefined);
+  assert.deepEqual((await pool.query('SELECT status, coupon_id, coupon_left FROM subscriptions WHERE server_id = $1', [second.json().serverId])).rows[0], { status: 'active', coupon_id: free, coupon_left: 0 });
+  await until(async () => (await serverRow(id)).state === 'deleted', 'deleted', 120);
+  await until(async () => (await serverRow(second.json().serverId)).state === 'ready', 'ready', 120);
+  await send('DELETE', `/servers/${second.json().serverId}`, { confirm: 'coupon-3' }, other, { 'idempotency-key': randomUUID() });
+  await until(async () => (await serverRow(second.json().serverId)).state === 'deleted', 'deleted', 120);
+  await send('PUT', '/admin/settings/billing', { enabled: false });
+});
+
+test('transfers: the owner offers a server by e-mail, the other account accepts and it moves with its subscription; checks, decline and withdraw; staff move one at once', { skip }, async () => {
+  const otherId = (await send('GET', '/auth/me', undefined, other)).json().id;
+  const userId = (await send('GET', '/auth/me', undefined, user)).json().id;
+  const made = await create(order('handover-1'));
+  const id = made.json().serverId;
+  await until(async () => (await serverRow(id)).state === 'ready' && !(await pool.query("SELECT 1 FROM operations WHERE server_id = $1 AND status IN ('pending', 'running')", [id])).rowCount, 'ready', 120);
+  assert.equal((await send('POST', `/servers/${id}/transfer`, { email: 'nobody@example.test' }, user)).json().fields.email, 'NO_SUCH_ACCOUNT');
+  assert.equal((await send('POST', `/servers/${id}/transfer`, { email: 'user@example.test' }, user)).json().fields.server, 'SAME_OWNER');
+  assert.equal((await send('POST', `/servers/${id}/transfer`, { email: 'user@example.test' }, other)).statusCode, 404, 'only the owner offers');
+  // Offered, declined; offered again and withdrawn; offered again and accepted.
+  let offer = await send('POST', `/servers/${id}/transfer`, { email: 'Other@Example.test', note: 'yours now' }, user);
+  assert.equal(offer.statusCode, 201, offer.body);
+  assert.equal((await send('POST', `/servers/${id}/transfer`, { email: 'other@example.test' }, user)).json().fields.server, 'ALREADY_OFFERED');
+  let incoming = (await send('GET', '/transfers', undefined, other)).json().incoming;
+  assert.deepEqual([incoming[0].serverName, incoming[0].status, incoming[0].note, incoming[0].fromEmail], ['handover-1', 'pending', 'yours now', 'user@example.test']);
+  assert.equal((await send('POST', `/transfers/${offer.json().id}/accept`, undefined, user)).statusCode, 404, 'the sender cannot accept');
+  assert.equal((await send('POST', `/transfers/${offer.json().id}/decline`, undefined, other)).statusCode, 204);
+  offer = await send('POST', `/servers/${id}/transfer`, { email: 'other@example.test' }, user);
+  assert.equal((await send('POST', `/transfers/${offer.json().id}/cancel`, undefined, user)).statusCode, 204);
+  assert.equal((await send('POST', `/transfers/${offer.json().id}/accept`, undefined, other)).statusCode, 404, 'a withdrawn offer cannot be accepted');
+  offer = await send('POST', `/servers/${id}/transfer`, { email: 'other@example.test' }, user);
+  assert.deepEqual((await send('POST', `/transfers/${offer.json().id}/accept`, undefined, other)).json(), { serverId: id });
+  assert.equal((await serverRow(id)).owner_id, otherId);
+  assert.equal((await send('GET', `/servers/${id}`, undefined, user)).statusCode, 404);
+  assert.equal((await send('GET', `/servers/${id}`, undefined, other)).statusCode, 200);
+  assert.deepEqual((await send('GET', '/transfers', undefined, user)).json().outgoing.map((t) => t.status).sort(), ['accepted', 'cancelled', 'declined']);
+  // Staff move it back at once; a customer cannot use that route.
+  assert.equal((await send('PUT', `/admin/servers/${id}/owner`, { email: 'user@example.test' }, other)).statusCode, 403);
+  assert.equal((await send('PUT', `/admin/servers/${id}/owner`, { email: 'user@example.test' })).statusCode, 200);
+  assert.equal((await serverRow(id)).owner_id, userId);
+  assert.equal((await send('DELETE', `/servers/${id}`, { confirm: 'handover-1' }, user, { 'idempotency-key': randomUUID() })).statusCode, 202);
+  await until(async () => (await serverRow(id)).state === 'deleted', 'deleted', 120);
+});

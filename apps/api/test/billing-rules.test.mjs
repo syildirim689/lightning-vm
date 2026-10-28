@@ -73,6 +73,14 @@ test('a resize mid-period charges the increase for the days left; a decrease or 
   assert.equal(r.prorate(1000, '2026-09-20', '2026-10-01', '2026-10-31'), 1000); // before the period started: never more than the whole difference
 });
 
+test('a coupon takes percent or a fixed amount off, never below zero', () => {
+  assert.equal(r.couponPrice(10000, 'percent', 2500), 7500);
+  assert.equal(r.couponPrice(999, 'percent', 5000), 499); // half of 9.99, rounded
+  assert.equal(r.couponPrice(10000, 'percent', 10000), 0);
+  assert.equal(r.couponPrice(10000, 'fixed', 1500), 8500);
+  assert.equal(r.couponPrice(1000, 'fixed', 1500), 0);
+});
+
 test('pay as you go: started hours are charged; the hourly price of a monthly one', () => {
   const t0 = new Date('2026-10-27T10:00:00Z');
   assert.equal(r.hoursDue(t0, new Date('2026-10-27T09:59:00Z')), 0);

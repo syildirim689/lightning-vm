@@ -24,6 +24,7 @@ import { ServerBackups } from './server-backups';
 import { ServerPlacement } from './server-placement';
 import { ServerDisks } from './server-disks';
 import { SaveAsImage } from './server-image';
+import { TransferServer } from './server-transfer';
 import { useMe } from '../../lib/me';
 import { can } from '../../lib/permissions';
 import { ServerFilters, useServerFilters } from './server-filters';
@@ -278,6 +279,7 @@ export function ServerDetail({ id }: { id: string }) {
           o.errorCode ? t('errorCode', { message: error({ code: o.errorCode }), code: o.errorCode }) : o.step ? t(`step.${o.step as 'queued'}`) : '']}/>
     </Section>
 
+    {(own || can(me?.permissions, 'servers.manage_all')) && s.state === 'ready' && !s.vdcId && <TransferServer serverId={s.id} serverName={s.name} staff={!own} busy={!!open}/>}
     {allowed.delete && <Section title={t('delete.title')} description={t('delete.explain')} className="border border-danger/30">
       <div className="flex flex-wrap items-end gap-3">
         <TextInput className="min-w-64 flex-1" label={t('delete.confirm', { name: s.name })} value={deleteName} onChange={setDeleteName} autoComplete="off"/>

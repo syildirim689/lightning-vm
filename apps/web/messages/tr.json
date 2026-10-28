@@ -345,7 +345,10 @@
     "INVALID_PRIVATE_SUBNET": "/16 ile /28 arasında özel bir aralık kullanın (10.x, 172.16-31.x ya da 192.168.x).",
     "IMAGE_IN_USE": "Bu imajdan çalışan sunucular var.",
     "OWNER_ONLY": "Bunu yalnızca sahibi yapabilir.",
-    "IMAGE_NOT_FOUND": "Yeni imaj bulunamadı."
+    "IMAGE_NOT_FOUND": "Yeni imaj bulunamadı.",
+    "TRANSFER_NOT_POSSIBLE": "Bu sunucu şu an devredilemez.",
+    "COUPON_IN_USE": "Bu kupon kullanıldı; kodu ve tutarı değişmez, yalnızca kapatılabilir.",
+    "COUPON_CODE_TAKEN": "Bu kod başka bir kuponda kullanılıyor."
   },
   "Auth": {
     "required": "zorunlu",
@@ -585,7 +588,28 @@
     "RESELLER_ALLOCATION_EXCEEDED": "Bayi tahsisi doldu.",
     "EMAIL_TAKEN": "Bu e-postanın zaten bir hesabı var.",
     "CUSTOMER_OF_A_RESELLER": "Bu hesap bir bayinin müşterisi.",
-    "INVALID_PRIVATE_SUBNET": "/16 ile /28 arasında özel bir aralık kullanın (10.x, 172.16-31.x ya da 192.168.x)."
+    "INVALID_PRIVATE_SUBNET": "/16 ile /28 arasında özel bir aralık kullanın (10.x, 172.16-31.x ya da 192.168.x).",
+    "COUPON_UNKNOWN": "Böyle bir kupon yok.",
+    "COUPON_EXPIRED": "Bu kuponun süresi doldu.",
+    "COUPON_USED_UP": "Bu kuponun kullanım hakkı bitti.",
+    "COUPON_ALREADY_USED": "Bu kuponu daha önce kullandınız.",
+    "COUPON_NOT_FOR_PACKAGE": "Bu kupon bu paket için geçerli değil.",
+    "COUPON_CURRENCY": "Bu kupon başka bir para biriminde.",
+    "COUPON_NEW_CUSTOMERS": "Bu kupon yeni müşteriler için.",
+    "COUPON_NOT_AVAILABLE": "Kuponlar burada ödenen aylık sunucularda geçerlidir.",
+    "INVALID_COUPON_CODE": "3–32 harf, rakam, - ya da _.",
+    "COUPON_CODE_TAKEN": "Bu kod başka bir kuponda kullanılıyor.",
+    "SAME_OWNER": "Sunucu zaten bu hesaba ait.",
+    "SERVER_BUSY": "Sunucu hazır olana ve çalışan iş bitene kadar bekleyin.",
+    "IN_DATA_CENTER": "Sanal veri merkezindeki sunucu, veri merkeziyle birlikte taşınır.",
+    "BILLED_ELSEWHERE": "Saatlik sunucular ve başka sistemde faturalanan sunucular devredilemez.",
+    "RESELLER_ACCOUNT": "Bayilerin ve müşterilerinin sunucularını bayi taşır.",
+    "UNPAID_INVOICE": "Önce sunucunun açık faturasını ödeyin.",
+    "HAS_FIREWALLS": "Önce güvenlik duvarlarınızı sunucudan kaldırın.",
+    "HAS_PRIVATE_NETWORKS": "Önce sunucuyu özel ağlarınızdan çıkarın.",
+    "RECIPIENT_QUOTA": "Diğer hesabın kotasında bu sunucuya yer yok.",
+    "ALREADY_OFFERED": "Bu sunucu için açık bir teklif var; önce onu geri çekin.",
+    "NO_SUCH_ACCOUNT": "Bu e-posta ile kayıtlı hesap yok."
   },
   "Setup": {
     "title": "Kurulum sihirbazı",
@@ -1123,7 +1147,15 @@
       "topUp": "Başlatmak için bakiyeniz {need} karşılamalı.",
       "topUpLink": "Bakiye yükle"
     },
-    "ownImage": "sizin imajınız"
+    "ownImage": "sizin imajınız",
+    "coupon": {
+      "label": "Kupon kodu",
+      "apply": "Uygula",
+      "remove": "Kaldır",
+      "applied": "{code} kuponu uygulandı",
+      "always": "her faturada",
+      "periods": "{n, plural, one {ilk fatura} other {ilk # fatura}}, sonra {after}"
+    }
   },
   "Catalog": {
     "eyebrow": "YÖNETİM · KATALOG",
@@ -2076,7 +2108,8 @@
       "accessibility": "Erişilebilirlik",
       "activity": "Etkinlik",
       "api": "API",
-      "images": "İmajlar"
+      "images": "İmajlar",
+      "transfers": "Devirler"
     },
     "profile": {
       "title": "Profil",
@@ -2598,6 +2631,10 @@
       "server_backup": {
         "title": "Yedekler",
         "help": "Bir yedek alındığında, geri yüklendiğinde ya da silindiğinde."
+      },
+      "server_transfer": {
+        "title": "Sunucu devirleri",
+        "help": "Biri size sunucu devretmek istediğinde ya da yaptığınız teklif yanıtlandığında."
       }
     },
     "policyTitle": "Önce yönetici, sonra kullanıcı",
@@ -6163,7 +6200,8 @@
       "invoices": "Faturalar",
       "subscriptions": "Abonelikler",
       "payments": "Ödemeler",
-      "disputes": "İtirazlar"
+      "disputes": "İtirazlar",
+      "coupons": "Kuponlar"
     },
     "search": "Numara, ad, e-posta ya da vergi no",
     "status": "Durum",
@@ -6688,5 +6726,98 @@
     "cancel": "Vazgeç",
     "count": "{n} / {max}",
     "full": "Tutabileceğiniz en fazla imaj sayısındasınız; önce birini silin."
+  },
+  "Coupons": {
+    "title": "Kuponlar",
+    "new": "Yeni kupon",
+    "newHelp": "Müşteri aylık sunucu siparişinde kodu girer; indirim ilk faturalardan ya da hepsinden düşülür.",
+    "code": "Kod",
+    "generate": "Kod üret",
+    "kind": "İndirim türü",
+    "percent": "Yüzde",
+    "fixed": "Sabit tutar",
+    "valuePercent": "İndirim yüzdesi",
+    "valueFixed": "İndirim tutarı",
+    "currency": "Para birimi",
+    "periods": "Fatura sayısı",
+    "periodsHelp": "Boş: her fatura. 1: yalnız ilk fatura.",
+    "maxUses": "Toplam kullanım",
+    "maxUsesHelp": "Boş: sınırsız.",
+    "expires": "Son geçerlilik",
+    "expiresHelp": "Boş: süresiz.",
+    "note": "Not",
+    "noteHelp": "Yalnız ekip görür (kampanya, iş ortağı).",
+    "oncePerUser": "Müşteri başına bir kez",
+    "newCustomers": "Yalnız henüz sunucusu olmayan müşteriler",
+    "packages": "Paketler",
+    "packagesHelp": "Seçilmezse: tüm paketler ve özel boyutlar.",
+    "create": "Kupon oluştur",
+    "created": "{code} kuponu oluşturuldu.",
+    "none": "Henüz kupon yok.",
+    "discount": "İndirim",
+    "duration": "Süre",
+    "uses": "Kullanım",
+    "state": "Etkin",
+    "active": "Etkin",
+    "inactive": "Kapalı",
+    "expired": "Süresi doldu",
+    "always": "Her fatura",
+    "periodsShort": "{n, plural, one {İlk fatura} other {İlk # fatura}}",
+    "oncePerUserShort": "müşteri başına bir kez",
+    "newCustomersShort": "yeni müşteriler",
+    "packagesShort": "{n, plural, other {# paket}}",
+    "subscriptions": "{n, plural, other {# abonelikte indirim sürüyor}}",
+    "delete": "Sil",
+    "deleteTitle": "{code} silinsin mi?",
+    "deleteBody": "Henüz kullanılmadı; kalıcı olarak silinir.",
+    "deleted": "{code} kuponu silindi.",
+    "cancel": "Vazgeç"
+  },
+  "Transfers": {
+    "title": "Başka bir hesaba devret",
+    "help": "Sunucu, aboneliği, anlık görüntüleri ve yedekleri, belirttiğiniz hesap kabul edince ona geçer. Teklif 7 gün açık kalır.",
+    "staffTitle": "Başka bir hesaba taşı",
+    "staffHelp": "Sunucuyu aboneliğiyle birlikte hemen o hesaba taşır; iki sahibe de bildirilir.",
+    "email": "Hesabın e-posta adresi",
+    "note": "Mesaj",
+    "noteHelp": "Teklifle birlikte gösterilir.",
+    "keeps": "Sunucunun içindeki root parolası ve SSH anahtarları olduğu gibi kalır; yeni sahibi bunları değiştirmeli.",
+    "offer": "Teklif et",
+    "offerTitle": "{name} devredilsin mi?",
+    "offerBody": "{email} 7 gün içinde kabul edebilir. O zamana kadar sunucu sizindir.",
+    "offered": "{email} adresine teklif edildi.",
+    "move": "Taşı",
+    "moveTitle": "{name} taşınsın mı?",
+    "moveBody": "Bundan sonra aboneliğiyle birlikte {email} hesabına ait olur.",
+    "moved": "{email} hesabına taşındı.",
+    "cancel": "Vazgeç",
+    "incoming": "Size teklif edilenler",
+    "incomingHelp": "Kabul edince sunucu sizin olur; faturaları bir sonrakinden itibaren size gelir.",
+    "outgoing": "Tekliflerim",
+    "outgoingHelp": "Son 30 günde yaptığınız teklifler.",
+    "noneIn": "Size teklif edilen sunucu yok.",
+    "noneOut": "Henüz bir sunucu teklif etmediniz.",
+    "from": "{who} gönderdi",
+    "to": "{who} için",
+    "shape": "{vcpu} vCPU, {memory} GB, {disk} GB",
+    "perMonth": "/ay",
+    "until": "{date} tarihine kadar açık",
+    "accept": "Kabul et",
+    "acceptTitle": "{name} devralınsın mı?",
+    "acceptBody": "Aboneliğiyle birlikte sizin olur: bir sonraki faturadan itibaren ayda {price}.",
+    "decline": "Reddet",
+    "withdraw": "Geri çek",
+    "status": {
+      "pending": "Bekliyor",
+      "accepted": "Kabul edildi",
+      "declined": "Reddedildi",
+      "cancelled": "Geri çekildi",
+      "expired": "Süresi doldu"
+    },
+    "done": {
+      "accept": "{name} artık sizin.",
+      "decline": "{name} teklifi reddedildi.",
+      "cancel": "{name} teklifi geri çekildi."
+    }
   }
 }

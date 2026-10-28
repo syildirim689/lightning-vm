@@ -109,6 +109,10 @@ export function prorate(diffCents: number, day: string, periodStart: string, per
   return diffCents <= 0 || left <= 0 || total <= 0 ? 0 : Math.round((diffCents * left) / total);
 }
 
+// A coupon's price in cents: percent (valueCents 1250 = 12.5 %) or a fixed amount off, never below zero.
+export const couponPrice = (cents: number, kind: 'percent' | 'fixed', valueCents: number) =>
+  Math.max(0, cents - (kind === 'percent' ? Math.round((cents * valueCents) / 10000) : valueCents));
+
 // Pay as you go: whole started hours since `billedUntil` (the first hour is charged when the server is created).
 export function hoursDue(billedUntil: Date, now: Date) {
   const ms = now.getTime() - billedUntil.getTime();

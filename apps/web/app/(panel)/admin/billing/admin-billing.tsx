@@ -2,6 +2,7 @@
 // Billing for staff: monthly recurring revenue, what is open and overdue, money collected, then every invoice,
 // subscription and payment, with the hand-made actions (a new invoice, a balance correction, run collection now).
 import { AdminDisputes } from '../../billing/disputes';
+import { AdminCoupons } from '../../billing/coupons';
 import { Button, Modal, SearchField, Tabs, toast } from '@heroui/react';
 import { useQueryClient } from '@tanstack/react-query';
 import { motion } from 'motion/react';
@@ -23,7 +24,7 @@ type Money = { currency: string; amount: string };
 type Overview = { mrr: Money[]; open: (Money & { n: number; overdue: number })[]; collectedThisMonth: (Money & { n: number })[]; series: (Money & { month: string })[];
   subscriptions: Record<string, number>; recentPayments: Payment[] };
 const tooltipStyle = { background: 'var(--overlay)', border: '1px solid var(--border)', borderRadius: 8, color: 'var(--overlay-foreground)', fontSize: 12 };
-const tabs = ['invoices', 'subscriptions', 'payments', 'disputes'] as const;
+const tabs = ['invoices', 'subscriptions', 'payments', 'disputes', 'coupons'] as const;
 
 export default function AdminBilling() {
   const t = useTranslations('BillingAdmin');
@@ -108,6 +109,7 @@ export default function AdminBilling() {
       <Tabs.Panel id="subscriptions" className="pt-5"><Subscriptions manage={manage}/></Tabs.Panel>
       <Tabs.Panel id="payments" className="pt-5"><Payments/></Tabs.Panel>
       <Tabs.Panel id="disputes" className="pt-5"><AdminDisputes manage={manage}/></Tabs.Panel>
+      <Tabs.Panel id="coupons" className="pt-5"><AdminCoupons manage={manage}/></Tabs.Panel>
     </Tabs>
     {dialog === 'invoice' && <NewInvoice onClose={() => setDialog(null)}/>}
     {dialog === 'balance' && <AdjustBalance onClose={() => setDialog(null)}/>}

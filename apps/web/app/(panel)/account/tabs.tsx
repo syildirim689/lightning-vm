@@ -18,6 +18,7 @@ import NotificationPrefs from './notifications';
 import Security from './security';
 import Developer from './developer';
 import { MyImages } from '../server-image';
+import { MyTransfers } from '../server-transfer';
 import { PhoneNumber, TwoFactor } from './two-factor';
 import { MyActivity } from '../../../components/activity';
 import TimeZonePicker, { browserTimeZone } from '../../../components/time-zone-picker';
@@ -81,7 +82,7 @@ function Regional() {
   </Section>;
 }
 
-const tabs = ['profile', 'security', 'activity', 'notifications', 'accessibility', 'keys', 'projects', 'images', 'api'] as const;
+const tabs = ['profile', 'security', 'activity', 'notifications', 'accessibility', 'keys', 'projects', 'images', 'transfers', 'api'] as const;
 export default function AccountTabs() {
   const t = useTranslations('Account');
   const [tab, setTab] = useQueryState('tab', parseAsString.withDefault('profile'));
@@ -102,6 +103,7 @@ export default function AccountTabs() {
     <Tabs.Panel id="activity" className="pt-5"><Section title={t('activity.title')} description={t('activity.intro')}><MyActivity/></Section></Tabs.Panel>
     <Tabs.Panel id="projects" className="pt-5"><Projects/></Tabs.Panel>
     <Tabs.Panel id="images" className="pt-5"><MyImages/></Tabs.Panel>
+    <Tabs.Panel id="transfers" className="pt-5"><MyTransfers/></Tabs.Panel>
     <Tabs.Panel id="api" className="pt-5"><Developer/></Tabs.Panel>
   </Tabs>;
 }

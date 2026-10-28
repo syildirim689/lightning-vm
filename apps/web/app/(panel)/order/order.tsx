@@ -23,7 +23,8 @@ type Catalog = { packages: { id: string; name: string; vcpu: number; memoryMb: n
   pools: { id: string; name: string; location: string; locationId: string | null; custom: Custom | null; extraIpv4Max: number; extraIpv4Price: string; ipv6: boolean }[]; images: { id: string; name: string; family: string; minDiskGb: number }[];
   applications: { id: string; name: string; kind: string; description: string; minMemoryMb: number; minDiskGb: number; priceMonthly: string; available: boolean }[] };
 type Quote = { shape: { vcpu: number; memoryMb: number; diskGb: number }; price: { monthly: string; currency: string }; quota: { exceeded: string[] }; capacityAvailable: boolean;
-  budget: { amount: number; currency: string; monthly: number; state: 'ok' | 'near' | 'over' } | null };
+  budget: { amount: number; currency: string; monthly: number; state: 'ok' | 'near' | 'over' } | null;
+  coupon: { code: string; monthly: string; periods: number | null } | { error: string } | null };
 type Project = { id: string; name: string };
 type Availability = { packages: Record<string, { capacity: boolean; quota: string[] }> };
 const slug = (s: string) => s.toLocaleLowerCase('en').normalize('NFD').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'server';
@@ -53,6 +54,9 @@ export default function Order() {
   const [busy, setBusy] = useState(false);
   const [nameError, setNameError] = useState<string>();
   const [want, setWant] = useState<{ w: Workload; traffic: Traffic } | null>(null);
+  // The code typed, and the one applied to the quote (the API checks it again when the order is placed).
+  const [couponInput, setCouponInput] = useState('');
+  const [coupon, setCoupon] = useState('');
 
   // First pool by default, and drop selections that no longer exist in the catalog.
   useEffect(() => {
@@ -62,7 +66,7 @@ export default function Order() {
     if (d.applicationId && !catalog.applications.some((a) => a.id === d.applicationId)) d.set({ applicationId: '' });
   }, [catalog]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const body = orderBody(d);
+  const body = { ...orderBody(d), ...(coupon && d.billingCycle !== 'hourly' && { coupon }) };
   const pool = catalog?.pools.find((p) => p.id === d.poolId);
   // Another location may sell fewer extra addresses (or none).
   useEffect(() => { if (pool && (d.extraIpv4 ?? 0) > pool.extraIpv4Max) d.set({ extraIpv4: pool.extraIpv4Max }); }, [pool?.id]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -89,7 +93,9 @@ export default function Order() {
   const bestValue = orderable.length > 1 ? orderable.reduce((a, b) => (Number(a.priceMonthly) / a.vcpu <= Number(b.priceMonthly) / b.vcpu ? a : b)).id : null;
   const taken = new Set(mine.map((m) => m.name));
   const suggest = () => { const base = slug(image?.name.split(/\s/)[0] ?? 'server'); let n = 1; while (taken.has(`${base}-${n}`)) n++; return `${base}-${n}`; };
-  const canCreate = ready && quote.data && !quote.data.quota.exceeded.length && quote.data.capacityAvailable;
+  const couponOk = quote.data?.coupon && 'code' in quote.data.coupon ? quote.data.coupon : null;
+  const couponError = quote.data?.coupon && 'error' in quote.data.coupon ? quote.data.coupon.error : undefined;
+  const canCreate = ready && quote.data && !quote.data.quota.exceeded.length && quote.data.capacityAvailable && !couponError;
   const nameTaken = !!d.name && taken.has(d.name);
   const steps = [
     { label: t('steps.location'), done: !!d.poolId && !!d.imageId },
@@ -233,7 +239,19 @@ export default function Order() {
                       const need = Number(quote.data.price.monthly) / 730 * hourly.minHours;
                       return left < need ? <p className="flex items-start gap-1.5 text-warning"><I name="wallet" size={15} className="mt-0.5 shrink-0"/>{t('cycle.topUp', { need: money(need.toFixed(2), quote.data.price.currency) })}{' '}
                         <NextLink href="/billing?tab=balance" className="font-medium text-accent hover:underline">{t('cycle.topUpLink')}</NextLink></p> : null; })()}
-                  </> : <p className="text-2xl font-semibold tabular-nums">{t('monthly', { price: money(quote.data.price.monthly, quote.data.price.currency) })}</p>}
+                  </> : couponOk ? <div>
+                    <p className="text-2xl font-semibold tabular-nums">{t('monthly', { price: money(couponOk.monthly, quote.data.price.currency) })}</p>
+                    <p className="text-xs text-muted"><s className="tabular-nums">{money(quote.data.price.monthly, quote.data.price.currency)}</s>{' · '}
+                      {couponOk.periods === null ? t('coupon.always') : t('coupon.periods', { n: couponOk.periods, after: money(quote.data.price.monthly, quote.data.price.currency) })}</p>
+                  </div> : <p className="text-2xl font-semibold tabular-nums">{t('monthly', { price: money(quote.data.price.monthly, quote.data.price.currency) })}</p>}
+                  {billing?.enabled && d.billingCycle !== 'hourly' && (couponOk
+                    ? <p className="flex items-center gap-2 text-success"><I name="ticket" size={15}/><span className="font-medium">{t('coupon.applied', { code: couponOk.code })}</span>
+                      <Button size="sm" variant="ghost" onPress={() => { setCoupon(''); setCouponInput(''); }}>{t('coupon.remove')}</Button></p>
+                    : <form className="flex items-end gap-2" onSubmit={(e) => { e.preventDefault(); setCoupon(couponInput.trim().toUpperCase()); }}>
+                      <TextInput className="min-w-0 flex-1" label={t('coupon.label')} value={couponInput} onChange={(v) => { setCouponInput(v.toUpperCase()); if (couponError) setCoupon(''); }} maxLength={32} spellCheck={false}
+                        error={coupon && couponError ? field(couponError) : undefined}/>
+                      <Button type="submit" variant="secondary" isDisabled={!couponInput.trim()}>{t('coupon.apply')}</Button>
+                    </form>)}
                   {quote.data.budget && quote.data.budget.state !== 'ok' && <p className={`flex items-start gap-1.5 text-sm ${quote.data.budget.state === 'over' ? 'text-danger' : 'text-warning'}`}>
                     <I name="wallet" size={15} className="mt-0.5 shrink-0"/>{t(quote.data.budget.state === 'over' ? 'budgetOver' : 'budgetNear', { monthly: money(quote.data.budget.monthly, quote.data.budget.currency), amount: money(quote.data.budget.amount, quote.data.budget.currency) })}</p>}
                   {quote.data.quota.exceeded.length > 0 && <p className="text-danger">{t('quotaExceeded', { limits: quote.data.quota.exceeded.map((x) => t(`quota.${x as 'vcpu'}`)).join(', ') })}</p>}

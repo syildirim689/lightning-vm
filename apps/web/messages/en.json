@@ -345,7 +345,10 @@
     "INVALID_PRIVATE_SUBNET": "Use a private range (10.x, 172.16-31.x or 192.168.x) between /16 and /28.",
     "IMAGE_IN_USE": "Servers still run from this image.",
     "OWNER_ONLY": "Only the owner can do this.",
-    "IMAGE_NOT_FOUND": "The new image was not found."
+    "IMAGE_NOT_FOUND": "The new image was not found.",
+    "TRANSFER_NOT_POSSIBLE": "This server cannot be handed over now.",
+    "COUPON_IN_USE": "This coupon has been used; it keeps its code and amount and can only be turned off.",
+    "COUPON_CODE_TAKEN": "Another coupon has this code."
   },
   "Auth": {
     "required": "required",
@@ -585,7 +588,28 @@
     "RESELLER_ALLOCATION_EXCEEDED": "The reseller allocation is used up.",
     "EMAIL_TAKEN": "This e-mail already has an account.",
     "CUSTOMER_OF_A_RESELLER": "This account is a reseller's customer.",
-    "INVALID_PRIVATE_SUBNET": "Use a private range (10.x, 172.16-31.x or 192.168.x) between /16 and /28."
+    "INVALID_PRIVATE_SUBNET": "Use a private range (10.x, 172.16-31.x or 192.168.x) between /16 and /28.",
+    "COUPON_UNKNOWN": "No such coupon.",
+    "COUPON_EXPIRED": "This coupon has expired.",
+    "COUPON_USED_UP": "This coupon has been used up.",
+    "COUPON_ALREADY_USED": "You have used this coupon already.",
+    "COUPON_NOT_FOR_PACKAGE": "This coupon is not for this package.",
+    "COUPON_CURRENCY": "This coupon is in another currency.",
+    "COUPON_NEW_CUSTOMERS": "This coupon is for new customers.",
+    "COUPON_NOT_AVAILABLE": "Coupons apply to monthly servers you pay here.",
+    "INVALID_COUPON_CODE": "3 to 32 letters, digits, - or _.",
+    "COUPON_CODE_TAKEN": "Another coupon has this code.",
+    "SAME_OWNER": "The server already belongs to this account.",
+    "SERVER_BUSY": "Wait until the server is ready and no task is running.",
+    "IN_DATA_CENTER": "A virtual data center's server moves with the data center.",
+    "BILLED_ELSEWHERE": "Hourly servers and servers billed by another system cannot be handed over.",
+    "RESELLER_ACCOUNT": "Servers of resellers and their customers are moved by the reseller.",
+    "UNPAID_INVOICE": "Pay the server's open invoice first.",
+    "HAS_FIREWALLS": "Remove your firewalls from the server first.",
+    "HAS_PRIVATE_NETWORKS": "Take the server out of your private networks first.",
+    "RECIPIENT_QUOTA": "The other account has no room for this server in its limits.",
+    "ALREADY_OFFERED": "This server has an open offer; withdraw it first.",
+    "NO_SUCH_ACCOUNT": "No account uses this e-mail."
   },
   "Setup": {
     "title": "Setup wizard",
@@ -1123,7 +1147,15 @@
       "topUp": "Your balance must cover {need} to start.",
       "topUpLink": "Top up"
     },
-    "ownImage": "your image"
+    "ownImage": "your image",
+    "coupon": {
+      "label": "Coupon code",
+      "apply": "Apply",
+      "remove": "Remove",
+      "applied": "Coupon {code} applied",
+      "always": "on every invoice",
+      "periods": "{n, plural, one {first invoice} other {first # invoices}}, then {after}"
+    }
   },
   "Catalog": {
     "eyebrow": "ADMIN · CATALOG",
@@ -2076,7 +2108,8 @@
       "accessibility": "Accessibility",
       "activity": "Activity",
       "api": "API",
-      "images": "Images"
+      "images": "Images",
+      "transfers": "Transfers"
     },
     "profile": {
       "title": "Profile",
@@ -2598,6 +2631,10 @@
       "server_backup": {
         "title": "Backups",
         "help": "When a backup is taken, restored or removed."
+      },
+      "server_transfer": {
+        "title": "Server handovers",
+        "help": "When someone offers you a server, or answers an offer you made."
       }
     },
     "policyTitle": "The admin first, then each user",
@@ -6163,7 +6200,8 @@
       "invoices": "Invoices",
       "subscriptions": "Subscriptions",
       "payments": "Payments",
-      "disputes": "Disputes"
+      "disputes": "Disputes",
+      "coupons": "Coupons"
     },
     "search": "Number, name, e-mail or tax number",
     "status": "Status",
@@ -6688,5 +6726,98 @@
     "cancel": "Cancel",
     "count": "{n} of {max}",
     "full": "You have the most images you can keep; delete one first."
+  },
+  "Coupons": {
+    "title": "Coupons",
+    "new": "New coupon",
+    "newHelp": "Customers enter the code when ordering a monthly server. It takes the amount off the first invoices, or all of them.",
+    "code": "Code",
+    "generate": "Make a code",
+    "kind": "Discount type",
+    "percent": "Percent",
+    "fixed": "Fixed amount",
+    "valuePercent": "Percent off",
+    "valueFixed": "Amount off",
+    "currency": "Currency",
+    "periods": "Invoices",
+    "periodsHelp": "Empty: every invoice. 1: the first one only.",
+    "maxUses": "Uses in all",
+    "maxUsesHelp": "Empty: no limit.",
+    "expires": "Valid until",
+    "expiresHelp": "Empty: no end date.",
+    "note": "Note",
+    "noteHelp": "Only staff see it (a campaign, a partner).",
+    "oncePerUser": "Once per customer",
+    "newCustomers": "Only for customers with no server yet",
+    "packages": "Packages",
+    "packagesHelp": "None chosen: every package and custom sizes.",
+    "create": "Create coupon",
+    "created": "Coupon {code} created.",
+    "none": "No coupons yet.",
+    "discount": "Discount",
+    "duration": "For",
+    "uses": "Used",
+    "state": "Active",
+    "active": "Active",
+    "inactive": "Off",
+    "expired": "Expired",
+    "always": "Every invoice",
+    "periodsShort": "{n, plural, one {First invoice} other {First # invoices}}",
+    "oncePerUserShort": "once per customer",
+    "newCustomersShort": "new customers",
+    "packagesShort": "{n, plural, one {# package} other {# packages}}",
+    "subscriptions": "{n, plural, one {# subscription discounted} other {# subscriptions discounted}}",
+    "delete": "Delete",
+    "deleteTitle": "Delete {code}?",
+    "deleteBody": "Nobody has used it yet; it goes away for good.",
+    "deleted": "Coupon {code} deleted.",
+    "cancel": "Cancel"
+  },
+  "Transfers": {
+    "title": "Hand over to another account",
+    "help": "The server, its subscription, snapshots and backups move to the account you name once it accepts. The offer stays open for 7 days.",
+    "staffTitle": "Move to another account",
+    "staffHelp": "Moves the server and its subscription to the account at once; both owners are told.",
+    "email": "Their account e-mail",
+    "note": "Message",
+    "noteHelp": "Shown with the offer.",
+    "keeps": "The root password and SSH keys inside the server stay as they are: the new owner should change them.",
+    "offer": "Offer",
+    "offerTitle": "Offer {name}?",
+    "offerBody": "{email} can accept it within 7 days. Until then the server stays yours.",
+    "offered": "Offered to {email}.",
+    "move": "Move",
+    "moveTitle": "Move {name}?",
+    "moveBody": "It belongs to {email} from now on, with its subscription.",
+    "moved": "Moved to {email}.",
+    "cancel": "Cancel",
+    "incoming": "Offered to you",
+    "incomingHelp": "Accepting makes the server yours; its invoices come to you from the next one.",
+    "outgoing": "Your offers",
+    "outgoingHelp": "Offers you made in the last 30 days.",
+    "noneIn": "Nobody has offered you a server.",
+    "noneOut": "You have not offered a server.",
+    "from": "from {who}",
+    "to": "to {who}",
+    "shape": "{vcpu} vCPU, {memory} GB, {disk} GB",
+    "perMonth": "/mo",
+    "until": "open until {date}",
+    "accept": "Accept",
+    "acceptTitle": "Take over {name}?",
+    "acceptBody": "It becomes yours with its subscription: {price} a month from the next invoice.",
+    "decline": "Decline",
+    "withdraw": "Withdraw",
+    "status": {
+      "pending": "Waiting",
+      "accepted": "Accepted",
+      "declined": "Declined",
+      "cancelled": "Withdrawn",
+      "expired": "Expired"
+    },
+    "done": {
+      "accept": "{name} is yours now.",
+      "decline": "Offer for {name} declined.",
+      "cancel": "Offer for {name} withdrawn."
+    }
   }
 }

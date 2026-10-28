@@ -16,6 +16,7 @@ import { decryptSecret, encryptSecret } from './secrets';
 import { getSettings, saveSettings, type BillingSettings } from './settings-store';
 import { enqueue, startOperation } from './servers';
 import { gateways, sandboxPay, type Result } from './billing-gateways';
+import { renewalPrice, type CouponUse } from './coupons';
 import { addDays, addMonths, cleanProfile, collectionStep, daysBetween, fromCents, hoursDue, invoiceNumber, lineAmounts, prorate, taxFor, toCents, totals, validPrefix } from './billing-rules';
 
 type Db = Pick<Pool, 'query'> | PoolClient;
@@ -236,16 +237,21 @@ async function chargeSavedCard(inv: Row) {
 
 // A server ordered while billing is on: its subscription and first invoice, in the order's transaction. With
 // "payment before setup" the build waits (operation step awaiting_payment) until the invoice is paid.
-export async function billOrder(db: PoolClient, o: { ownerId: string; serverId: string; name: string; monthly: string; currency: string }) {
+// A coupon prices the first invoice (and keeps discounting the renewals it covers); a first period it makes free has no invoice.
+export async function billOrder(db: PoolClient, o: { ownerId: string; serverId: string; name: string; monthly: string; currency: string; coupon?: CouponUse | null }) {
   const s = await settings();
   if (!s.enabled || toCents(o.monthly) <= 0) return null;
   const start = today();
   const end = addMonths(start, 1);
-  const { rows: [sub] } = await db.query(`INSERT INTO subscriptions (owner_id, kind, server_id, description, amount, currency, status, period_start, period_end)
-    VALUES ($1, 'server', $2, $3, $4, $5, $6, $7, $8) RETURNING id`, [o.ownerId, o.serverId, `Sunucu ${o.name}`, o.monthly, o.currency, s.requirePayment ? 'pending' : 'active', start, end]);
+  const first = o.coupon ? o.coupon.monthly : o.monthly;
+  const free = toCents(first) <= 0;
+  const { rows: [sub] } = await db.query(`INSERT INTO subscriptions (owner_id, kind, server_id, description, amount, currency, status, period_start, period_end, coupon_id, coupon_left)
+    VALUES ($1, 'server', $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING id`, [o.ownerId, o.serverId, `Sunucu ${o.name}`, o.monthly, o.currency, s.requirePayment && !free ? 'pending' : 'active', start, end,
+    o.coupon?.id ?? null, o.coupon?.periods != null ? o.coupon.periods - 1 : null]);
+  if (free) return null;
   const invoiceId = await createInvoice(db, { ownerId: o.ownerId, kind: 'order', currency: o.currency,
     dueAt: s.requirePayment ? new Date(Date.now() + s.orderExpiryHours * 3600_000).toISOString() : endOfDay(addDays(start, s.invoiceDaysBefore)),
-    lines: [{ description: `Sunucu ${o.name} (${start} – ${end})`, unitCents: toCents(o.monthly), unit: 'MON', subscriptionId: sub.id, periodStart: start, periodEnd: end }] });
+    lines: [{ description: `Sunucu ${o.name} (${start} – ${end})${o.coupon ? ` · kupon ${o.coupon.code}` : ''}`, unitCents: toCents(first), unit: 'MON', subscriptionId: sub.id, periodStart: start, periodEnd: end }] });
   return { invoiceId, awaitingPayment: s.requirePayment };
 }
 
@@ -317,11 +323,13 @@ export async function runBilling(now = new Date()) {
     const { rows: [srv] } = b.server_id ? await pool.query('SELECT price_monthly::text AS price FROM servers WHERE id = $1', [b.server_id]) : { rows: [] };
     const monthly = srv?.price ?? b.amount;
     if (srv && srv.price !== b.amount) await pool.query('UPDATE subscriptions SET amount = $2, updated_at = now() WHERE id = $1', [b.id, monthly]);
+    const coupon = await renewalPrice(pool, b, monthly);
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
       await createInvoice(client, { ownerId: b.owner_id, kind: 'renewal', currency: b.currency, dueAt: endOfDay(start),
-        lines: [{ description: `${b.description} (${start} – ${end})`, unitCents: toCents(monthly), quantity: b.period_months, unit: 'MON', subscriptionId: b.id, periodStart: start, periodEnd: end }] });
+        lines: [{ description: `${b.description} (${start} – ${end})${coupon ? ` · kupon ${coupon.code}` : ''}`, unitCents: toCents(coupon?.monthly ?? monthly), quantity: b.period_months, unit: 'MON', subscriptionId: b.id, periodStart: start, periodEnd: end }] });
+      if (coupon) await client.query('UPDATE subscriptions SET coupon_left = coupon_left - 1 WHERE id = $1 AND coupon_left IS NOT NULL', [b.id]);
       await client.query('COMMIT');
       out.renewals++;
     } catch (e) { await client.query('ROLLBACK'); if ((e as { code?: string }).code !== '23505') throw e; } finally { client.release(); }
@@ -375,6 +383,7 @@ export async function runBilling(now = new Date()) {
     const { rows: subs } = await pool.query(`UPDATE subscriptions b SET status = 'cancelled', cancelled_at = now(), updated_at = now() FROM invoice_lines l
       WHERE l.invoice_id = $1 AND l.subscription_id = b.id AND b.status = 'pending' RETURNING b.server_id`, [inv.id]);
     for (const b of subs) {
+      await pool.query('DELETE FROM coupon_redemptions WHERE server_id = $1', [b.server_id]); // an order never paid gives its coupon use back
       const { rows } = await pool.query(`UPDATE operations SET cancel_requested = true, step = 'queued', updated_at = now()
         WHERE server_id = $1 AND kind = 'create' AND status = 'pending' AND step = 'awaiting_payment' RETURNING id`, [b.server_id]);
       for (const r of rows) await enqueue(r.id);

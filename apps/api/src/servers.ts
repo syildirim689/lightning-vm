@@ -23,6 +23,7 @@ import { renderPtr } from './rdns-names';
 import { fingerprint, parseKeyList, sshKeyPattern } from './smart-rules';
 import { available, billOrder, billResize, payFromBalance, resizeCharge, startHourly } from './billing';
 import { hourlyOf } from './billing-rules';
+import { checkCoupon } from './coupons';
 import { checkResellerRoom, discounted, resellerOf } from './reseller';
 
 type Input = Record<string, unknown>;
@@ -336,6 +337,10 @@ export class ServersController {
         throw apiError(409, 'BALANCE_TOO_LOW', 'Top up your balance first', { billingCycle: 'BALANCE_TOO_LOW' });
       }
     }
+    // A coupon applies to a monthly server the customer pays here (not a reseller's, an hourly one or a data center's).
+    const couponCode = typeof body.coupon === 'string' && body.coupon.trim() ? body.coupon : null;
+    if (couponCode && (vdc || reseller || hourly || external || !(await getSettings('billing')).enabled)) throw apiError(400, 'VALIDATION_FAILED', 'No coupon here', { coupon: 'COUPON_NOT_AVAILABLE' });
+    if (couponCode) await checkCoupon(pool, couponCode, req.user.id, { packageId: order.packageId, monthly: order.price.monthly, currency: order.price.currency });
     // A personal image is its owner's alone, and must be on this location's vCenter.
     if (order.imageId && !(await pool.query('SELECT 1 FROM os_images WHERE id = $1 AND (owner_id IS NULL OR owner_id = $2) AND connection_id = $3', [order.imageId, req.user.id, order.rp.connection_id])).rowCount) {
       throw apiError(400, 'VALIDATION_FAILED', 'Unknown image', { imageId: 'NOT_AVAILABLE' });
@@ -364,6 +369,7 @@ export class ServersController {
         }
       }
       if (reseller) await checkResellerRoom(reseller, { servers: 1, ...order.shape }, client);
+      const coupon = couponCode ? await checkCoupon(client, couponCode, req.user.id, { packageId: order.packageId, monthly: order.price.monthly, currency: order.price.currency }, true) : null;
       // The primary and any extra IPv4 come from one IP pool (one subnet and gateway in the guest), skipping
       // excluded, gateway, used and quarantined addresses; the first pool (by name) with enough room wins.
       const wanted = 1 + order.extraIpv4;
@@ -406,7 +412,8 @@ export class ServersController {
       }
       // Billing on: the subscription and first invoice (a data center's servers are paid with the data center).
       if (hourly) await startHourly(client, { serverId: s.id, ownerId: req.user.id, hourly, currency: order.price.currency });
-      const bill = vdc || hourly || external ? null : await billOrder(client, { ownerId: reseller?.id ?? req.user.id, serverId: s.id, name, monthly: order.price.monthly, currency: order.price.currency });
+      if (coupon) await client.query('INSERT INTO coupon_redemptions (coupon_id, user_id, server_id, once) VALUES ($1, $2, $3, $4)', [coupon.id, req.user.id, s.id, coupon.once]);
+      const bill = vdc || hourly || external ? null : await billOrder(client, { ownerId: reseller?.id ?? req.user.id, serverId: s.id, name, monthly: order.price.monthly, currency: order.price.currency, coupon });
       const { rows: [op] } = await client.query(`INSERT INTO operations (kind, status, idempotency_key, request_hash, server_id, owner_id, step, deadline_at)
         VALUES ('create', 'pending', $1, $2, $3, $4, $6, now() + make_interval(mins => $5)) RETURNING id, kind, status`,
         [key, requestHash, s.id, req.user.id, deadlineMinutes.create, bill?.awaitingPayment ? 'awaiting_payment' : 'queued']);

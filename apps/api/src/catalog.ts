@@ -7,6 +7,7 @@ import { audit, SessionGuard, type AuthedRequest } from './auth';
 import { Can, PermissionGuard } from './rbac';
 import { ensureRoles, limitsOf } from './permissions';
 import { budgetState } from './budget';
+import { checkCoupon } from './coupons';
 import { checkCustom, exceededQuota, poolCapacity, type Limits, type Shape } from './capacity';
 import { locationColumns } from './locations';
 import type { Application } from './applications';
@@ -590,7 +591,7 @@ export class CatalogController {
       const { rowCount } = await pool.query('SELECT 1 FROM projects WHERE id = $1 AND owner_id = $2', [projectId, req.user.id]).catch(() => ({ rowCount: 0 }));
       if (!rowCount) throw apiError(404, 'NOT_FOUND', 'Unknown project');
     }
-    const { rp, shape, price } = await resolveOrder(poolId as string, body, limitsOf(req.user.roles.join(',')).allowedLocations);
+    const { rp, shape, price, packageId } = await resolveOrder(poolId as string, body, limitsOf(req.user.roles.join(',')).allowedLocations);
     const limits = await limitsFor(req.user.id, projectId);
     const over = exceededQuota(limits, await usageOf(req.user.id, projectId), shape);
     const cap = await capacityOf(rp);
@@ -598,6 +599,11 @@ export class CatalogController {
     // The budget after this order, so the page can warn before it is placed (never a block).
     const current = await budgetState(req.user.id);
     const budget = current && price.currency.trim() === current.currency ? await budgetState(req.user.id, Number(price.monthly)) : current;
-    return { shape, price, quota: { limits, exceeded: over }, capacityAvailable: fits, budget };
+    // A coupon typed in: its first price and how many invoices it covers, or why it does not apply (shown at the field).
+    const coupon = typeof body.coupon === 'string' && body.coupon.trim()
+      ? await checkCoupon(pool, body.coupon, req.user.id, { packageId, monthly: price.monthly, currency: price.currency })
+        .then((c) => ({ code: c.code, monthly: c.monthly, periods: c.periods }), (e: { fields?: Record<string, string> }) => ({ error: e.fields?.coupon ?? 'COUPON_UNKNOWN' }))
+      : null;
+    return { shape, price, quota: { limits, exceeded: over }, capacityAvailable: fits, budget, coupon };
   }
 }
