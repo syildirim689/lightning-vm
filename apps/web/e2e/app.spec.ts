@@ -22,7 +22,9 @@ async function choose(page: Page, scope: Page | Locator, label: string | RegExp,
 // Controlled inputs change only after the app (or the API) answers, so click and let expect() wait.
 const tick = (box: Locator) => box.click({ force: true });
 // No sideways scrolling at the page's current width; on failure the message names the innermost elements sticking out.
+// Charts redraw at the new width a moment after a resize, so the check waits up to 3 s for the layout to settle.
 async function expectNoOverflow(page: Page, label: string) {
+  await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth), { timeout: 3_000 }).toBeLessThanOrEqual(1).catch(() => undefined);
   const [overflow, culprits] = await page.evaluate(() => {
     const w = window.innerWidth;
     const out = [...document.querySelectorAll('body *')].filter((e) => e.getBoundingClientRect().right > w + 1
