@@ -162,7 +162,7 @@ function BulkBar({ servers, onDone }: { servers: Server[]; onDone: () => void })
   const ids = servers.map((x) => x.id);
   const waiting = servers.filter((x) => x.deleteAt).length;
   const run = useApiAction((action: string) => apiFetch<{ started: number; skipped: number }>('/servers/actions', { method: 'POST', body: { action, serverIds: ids }, headers: { 'idempotency-key': crypto.randomUUID() } }),
-    { invalidate: [['servers'], ['tasks']], success: (r) => t('list.select.bulkDone', { started: r.started, skipped: r.skipped }) });
+    { invalidate: [['servers'], ['tasks'], ['insights']], success: (r) => t('list.select.bulkDone', { started: r.started, skipped: r.skipped }) });
   const act = (a: string) => run.mutateAsync(a).then(onDone, () => undefined);
   const label = (a: string) => t(`action.${a as 'power_on'}`);
   const confirm = (a: 'shutdown' | 'reset', icon: string) => <ConfirmButton size="sm" variant={a === 'reset' ? 'danger-soft' : 'secondary'} isDisabled={run.isPending} icon={<I name={icon} size={15}/>}
