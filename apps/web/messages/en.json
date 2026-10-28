@@ -2407,6 +2407,11 @@
       "forever": "Never show again",
       "done": "Hidden",
       "restore": "{count, plural, one {Show # hidden finding} other {Show # hidden findings}}"
+    },
+    "fix": {
+      "power_on": "Turn on {name}",
+      "restore": "Take {name} back",
+      "done": "Started"
     }
   },
   "Metrics": {

@@ -15,7 +15,8 @@ import { activeCaptcha, mailReady } from './settings-store';
 import { cpuStats } from './smart';
 import { sizing } from './smart-rules';
 
-export type Insight = { code: string; severity: 'danger' | 'warning' | 'info'; params: Record<string, string | number>; link: string; key: string };
+// action: a one-click fix the card offers next to its link (customer findings about one server).
+export type Insight = { code: string; severity: 'danger' | 'warning' | 'info'; params: Record<string, string | number>; link: string; key: string; action?: { kind: 'power_on' | 'restore'; serverId: string } };
 const pct = (part: number, whole: number) => (whole > 0 ? Math.round((part / whole) * 100) : 0);
 
 export async function staffInsights(): Promise<Insight[]> {
@@ -101,13 +102,13 @@ export async function staffInsights(): Promise<Insight[]> {
 
 export async function customerInsights(userId: string): Promise<Insight[]> {
   const out: Insight[] = [];
-  const add = (code: string, severity: Insight['severity'], params: Insight['params'], link: string, key: string) => out.push({ code, severity, params, link, key });
+  const add = (code: string, severity: Insight['severity'], params: Insight['params'], link: string, key: string, action?: Insight['action']) => out.push({ code, severity, params, link, key, ...(action && { action }) });
   const { rows: bad } = await pool.query("SELECT id, name FROM servers WHERE owner_id = $1 AND state IN ('error', 'missing')", [userId]);
   for (const s of bad) add('SERVER_PROBLEM', 'danger', { name: s.name }, `/servers/${s.id}`, `srv:${s.id}`);
   const { rows: trash } = await pool.query('SELECT id, name, delete_at FROM servers WHERE owner_id = $1 AND delete_at IS NOT NULL', [userId]);
-  for (const s of trash) add('PENDING_DELETION', 'warning', { name: s.name, hours: Math.max(1, Math.ceil((new Date(s.delete_at).getTime() - Date.now()) / 3600_000)) }, `/servers/${s.id}`, `trash:${s.id}`);
-  const { rows: off } = await pool.query(`SELECT id, name FROM servers WHERE owner_id = $1 AND state = 'ready' AND power_state = 'poweredOff' AND updated_at < now() - interval '7 days'`, [userId]);
-  for (const s of off) add('SERVER_OFF_LONG', 'info', { name: s.name }, `/servers/${s.id}`, `off:${s.id}`);
+  for (const s of trash) add('PENDING_DELETION', 'warning', { name: s.name, hours: Math.max(1, Math.ceil((new Date(s.delete_at).getTime() - Date.now()) / 3600_000)) }, `/servers/${s.id}`, `trash:${s.id}`, { kind: 'restore', serverId: s.id });
+  const { rows: off } = await pool.query(`SELECT id, name FROM servers WHERE owner_id = $1 AND state = 'ready' AND power_state = 'poweredOff' AND delete_at IS NULL AND updated_at < now() - interval '7 days'`, [userId]);
+  for (const s of off) add('SERVER_OFF_LONG', 'info', { name: s.name }, `/servers/${s.id}`, `off:${s.id}`, { kind: 'power_on', serverId: s.id });
   // Right-sizing from the last 7 days of CPU use (VDC servers are sized inside their allocation, so skipped).
   const { rows: running } = await pool.query("SELECT id, name, vcpu FROM servers WHERE owner_id = $1 AND state = 'ready' AND power_state = 'poweredOn' AND vdc_id IS NULL", [userId]);
   const stats = await cpuStats(running.map((s) => s.id));
@@ -121,10 +122,13 @@ export async function customerInsights(userId: string): Promise<Insight[]> {
   // Turned off for over a week but still billed: delete it if it is not needed (a snapshot keeps nothing after delete).
   const { rows: idleOff } = await pool.query(`SELECT s.id, s.name, s.price_monthly::text AS price, trim(s.currency) AS currency,
       (SELECT max(o.finished_at) FROM operations o WHERE o.server_id = s.id AND o.kind IN ('shutdown', 'power_off') AND o.status = 'succeeded') AS off_at
-    FROM servers s WHERE s.owner_id = $1 AND s.state = 'ready' AND s.power_state = 'poweredOff' AND s.price_monthly > 0`, [userId]);
+    FROM servers s WHERE s.owner_id = $1 AND s.state = 'ready' AND s.power_state = 'poweredOff' AND s.delete_at IS NULL AND s.price_monthly > 0`, [userId]);
   for (const s of idleOff) {
     const days = s.off_at ? Math.floor((Date.now() - new Date(s.off_at).getTime()) / 86_400_000) : 0;
-    if (days >= 7) add('OFF_BUT_BILLED', 'info', { name: s.name, days, price: s.price, currency: s.currency }, `/servers/${s.id}`, `off:${s.id}`);
+    // Says more than SERVER_OFF_LONG about the same server (same key), so it takes its place.
+    const prev = out.findIndex((x) => x.key === `off:${s.id}`);
+    if (days >= 7 && prev >= 0) out.splice(prev, 1);
+    if (days >= 7) add('OFF_BUT_BILLED', 'info', { name: s.name, days, price: s.price, currency: s.currency }, `/servers/${s.id}`, `off:${s.id}`, { kind: 'power_on', serverId: s.id });
   }
   const [limits, usage] = await Promise.all([limitsFor(userId), usageOf(userId)]);
   for (const [k, l] of [['servers', 'max_servers'], ['vcpu', 'max_vcpu'], ['memoryMb', 'max_memory_mb'], ['diskGb', 'max_disk_gb']] as const) {

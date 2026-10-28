@@ -549,10 +549,14 @@ test.describe('server lifecycle (simulator, Turkish customer)', () => {
     await page.setViewportSize({ width: 1280, height: 720 });
     await showHidden.click();
     await expect(finding).toBeVisible();
+    await page.waitForTimeout(800); // layout animation of the returning cards
     await page.screenshot({ path: 'test-results/tour/insights-pending-deletion.png', fullPage: true });
+    // The finding's own button takes the server back without opening it.
+    await page.getByRole('button', { name: 'web-1 sunucusunu geri al' }).click();
+    await expect(page.getByText('İşlem başlatıldı')).toBeVisible();
+    await expect(finding).toBeHidden();
     await page.goto(serverUrl);
-    await page.getByRole('button', { name: 'Geri al', exact: true }).click();
-    await expect(page.getByText('Sunucu geri alındı', { exact: false })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Benzerini sipariş et' })).toBeVisible();
     await expect(page.getByText('Bu sunucu silinmek üzere')).toBeHidden();
 
     // A second server, so the list offers selection; the bar acts on the chosen ones.

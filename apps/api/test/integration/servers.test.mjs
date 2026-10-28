@@ -307,7 +307,7 @@ test('deleting waits out the grace period (restorable, then deleted by the sched
     assert.equal((await lastOp(id)).kind, 'shutdown');
     await settled();
     assert.equal((await send('GET', `/servers/${id}`, undefined, user)).json().server.deleteAt, r.json().deleteAt);
-    assert.ok((await send('GET', '/insights', undefined, user)).json().insights.some((i) => i.code === 'PENDING_DELETION' && i.params.hours === 6));
+    assert.ok((await send('GET', '/insights', undefined, user)).json().insights.some((i) => i.code === 'PENDING_DELETION' && i.params.hours === 6 && i.action.kind === 'restore' && i.action.serverId === id));
     // Two hours before the end the owner is reminded, once.
     // Queued notifications (this test process runs no notification worker).
     const reminders = async () => {

@@ -2407,6 +2407,11 @@
       "forever": "Bir daha gösterme",
       "done": "Gizlendi",
       "restore": "{count, plural, other {# gizli öneriyi göster}}"
+    },
+    "fix": {
+      "power_on": "{name} sunucusunu aç",
+      "restore": "{name} sunucusunu geri al",
+      "done": "İşlem başlatıldı"
     }
   },
   "Metrics": {

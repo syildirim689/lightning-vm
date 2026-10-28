@@ -10,12 +10,17 @@ import { apiFetch } from '../lib/api';
 import { useApiAction, useApiQuery } from '../lib/query';
 import { I } from './icon';
 
-type Insight = { code: string; severity: 'danger' | 'warning' | 'info'; params: Record<string, string | number>; link: string; key: string };
+type Insight = { code: string; severity: 'danger' | 'warning' | 'info'; params: Record<string, string | number>; link: string; key: string; action?: { kind: 'power_on' | 'restore'; serverId: string } };
 
 export default function Insights({ scope }: { scope: 'staff' | 'mine' }) {
   const t = useTranslations('Insights');
   const q = useApiQuery<{ insights: Insight[]; hidden: number }>(['insights', scope], scope === 'staff' ? '/admin/insights' : '/insights', { refetchInterval: 60_000 });
   const dismiss = useApiAction((v: { key: string; days: number | null }) => apiFetch('/insights/dismissals', { method: 'PUT', body: v }), { invalidate: [['insights']], success: t('hide.done') });
+  // One-click fixes; the finding disappears on the next refresh once the server changed.
+  const fix = useApiAction((a: NonNullable<Insight['action']>) => a.kind === 'restore'
+    ? apiFetch(`/servers/${a.serverId}/deletion`, { method: 'DELETE' })
+    : apiFetch(`/servers/${a.serverId}/actions`, { method: 'POST', body: { action: 'power_on' }, headers: { 'idempotency-key': crypto.randomUUID() } }),
+  { invalidate: [['insights'], ['tasks'], ['servers']], success: t('fix.done') });
   const restore = useApiAction(() => apiFetch('/insights/dismissals', { method: 'DELETE' }), { invalidate: [['insights']] });
   const list = q.data?.insights;
   const hidden = q.data?.hidden ?? 0;
@@ -32,7 +37,7 @@ export default function Insights({ scope }: { scope: 'staff' | 'mine' }) {
       <I name="circle-check" size={18} className="text-success"/>{t('allGood')}</motion.p>
       : <ul className="grid gap-3 md:grid-cols-2 2xl:grid-cols-3">
         <AnimatePresence initial>{list.map((i, n) => <motion.li key={i.key} layout initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.97 }} transition={{ delay: n * 0.04 }} className="relative">
-          <NextLink href={i.link} className={`flex h-full items-start gap-3 rounded-xl border py-3 pl-4 pr-12 transition-shadow hover:shadow-md ${style[i.severity]}`}>
+          <NextLink href={i.link} className={`flex h-full items-start gap-3 rounded-xl border pl-4 pr-12 pt-3 transition-shadow ${i.action ? 'pb-14' : 'pb-3'} hover:shadow-md ${style[i.severity]}`}>
             <span className="mt-0.5 shrink-0">{icon(i.severity)}</span>
             <span className="min-w-0 flex-1 text-foreground">
               <span className="sr-only">{t(`severity.${i.severity}`)}: </span>
@@ -40,6 +45,10 @@ export default function Insights({ scope }: { scope: 'staff' | 'mine' }) {
               <span className="block text-xs text-muted">{t(`codes.${i.code}.body` as 'codes.POOL_NEARLY_FULL.body', p(i))}</span>
             </span>
           </NextLink>
+          {i.action && <Button size="sm" variant="secondary" className="absolute bottom-3 left-[2.875rem]" isPending={fix.isPending && fix.variables?.serverId === i.action.serverId}
+            onPress={() => fix.mutate(i.action!)}>
+            {i.action.kind === 'restore' ? <I name="undo-2" size={16}/> : <I name="power" size={16}/>}{t(`fix.${i.action.kind}`, { name: String(i.params.name ?? '') })}
+          </Button>}
           <Dropdown>
             <Button isIconOnly variant="ghost" size="sm" aria-label={t('hide.menu', { title: t(`codes.${i.code}.title` as 'codes.POOL_NEARLY_FULL.title', p(i)) })} className="absolute right-1.5 top-1.5 text-muted">
               <I name="eye-off" size={16}/>
