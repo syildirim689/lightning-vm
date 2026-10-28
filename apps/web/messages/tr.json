@@ -1763,9 +1763,12 @@
     },
     "delete": {
       "title": "Sunucuyu sil",
-      "explain": "VM VMware'de silinir. IP adresi ve rezerve kapasite, VM'nin silindiği VMware'de doğrulandıktan sonra serbest bırakılır. Bu işlem geri alınamaz.",
+      "explain": "VM VMware'de silinir. IP adresi ve rezerve kapasite, VM'nin silindiği VMware'de doğrulandıktan sonra serbest bırakılır.",
       "confirm": "Onaylamak için “{name}” yazın",
-      "button": "Sunucuyu kalıcı olarak sil"
+      "button": "Sunucuyu kalıcı olarak sil",
+      "soft": "Sunucuyu sil",
+      "graceHelp": "Sunucu kapatılır ve {hours} saat bekler; bu sürede tek tıkla geri alabilirsiniz. Süre dolunca kalıcı olarak silinir.",
+      "now": "Beklemeden hemen sil (geri alınamaz)"
     },
     "list": {
       "title": "Sunucularınız",
@@ -1785,6 +1788,17 @@
         "stopped": "Kapalı",
         "problem": "Sorunlu",
         "busy": "İşlemde"
+      },
+      "select": {
+        "start": "Seç",
+        "done": "Bitti",
+        "all": "Tümünü seç",
+        "none": "Seçimi temizle",
+        "count": "{n} sunucu seçili",
+        "toggle": "{name} sunucusunu seç",
+        "bar": "Seçili sunucular için işlemler",
+        "bulkDone": "{started} sunucuda işlem başladı{skipped, plural, =0 {} other {, # sunucu atlandı (meşgul ya da uygun değil)}}.",
+        "confirm": "{n} sunucuya “{action}” uygulansın mı?"
       }
     },
     "col": {
@@ -1910,7 +1924,16 @@
     "billingHoldHelp": "Sunucu kapatıldı ve fatura ödenene kadar başlatılamaz. Ödeme yapılınca kendiliğinden açılır.",
     "payNow": "Şimdi öde",
     "awaitingPayment": "Ödeme bekleniyor",
-    "awaitingPaymentHelp": "İlk faturası ödendiği anda sunucu kurulur."
+    "awaitingPaymentHelp": "İlk faturası ödendiği anda sunucu kurulur.",
+    "trash": {
+      "title": "Bu sunucu silinmek üzere",
+      "body": "{when} kalıcı olarak silinecek. Bu sürede yenileme faturası kesilmez.",
+      "restore": "Geri al",
+      "restored": "Sunucu geri alındı. Açmak için “Aç”a basın.",
+      "now": "Şimdi kalıcı olarak sil",
+      "nowConfirm": "Sunucu, diskleri ve yedeklenmemiş tüm verisi beklemeden silinir. Bu işlem geri alınamaz.",
+      "badge": "Silinecek · {when}"
+    }
   },
   "Maintenance": {
     "title": "Yedekler ve güncellemeler",
@@ -2635,6 +2658,10 @@
       "server_transfer": {
         "title": "Sunucu devirleri",
         "help": "Biri size sunucu devretmek istediğinde ya da yaptığınız teklif yanıtlandığında."
+      },
+      "server_delete_scheduled": {
+        "title": "Sunucu silinmek üzere",
+        "help": "Bir sunucu silindiğinde, geri alma süresi bitmeden önce."
       }
     },
     "policyTitle": "Önce yönetici, sonra kullanıcı",
@@ -3565,7 +3592,10 @@
       "backups": "Yedekler",
       "backupsHelp": "Müşteriler kendi sunucularının yedeklerini alır ve geri yükler.",
       "backupsTitle": "Yedekler",
-      "maxBackups": "Sunucu başına yedek"
+      "maxBackups": "Sunucu başına yedek",
+      "deleteTitle": "Silme bekleme süresi",
+      "deleteHelp": "Silinen sunucu kapatılır ve bu süre boyunca geri alınabilir; süre dolunca kalıcı olarak silinir. 0: hemen silinir.",
+      "deleteGraceHours": "Bekleme süresi (saat)"
     },
     "announcement": {
       "title": "Duyuru",
@@ -4769,7 +4799,9 @@
       "image_created": "İmaj kaydedildi",
       "image_deleted": "İmaj silindi",
       "reseller_brand": "Bayi markası değiştirildi",
-      "server_renamed": "Sunucu yeniden adlandırıldı"
+      "server_renamed": "Sunucu yeniden adlandırıldı",
+      "server_delete_scheduled": "Sunucu silinmek üzere kapatıldı",
+      "server_delete_cancelled": "Sunucu silme işlemi geri alındı"
     },
     "outcome": {
       "success": "Tamamlandı",

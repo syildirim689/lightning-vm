@@ -29,11 +29,11 @@ import { useMe } from '../../lib/me';
 import { can } from '../../lib/permissions';
 import { ServerFilters, useServerFilters } from './server-filters';
 import { flag } from '../../lib/flag';
-import { ButtonLink, ConfirmButton, DataTable, Empty, Mono, Notice, PageHeader, Section, StatusChip, TextInput, type Tone } from '../../components/ui';
+import { ButtonLink, CheckboxInput, ConfirmButton, DataTable, Empty, Mono, Notice, PageHeader, Section, StatusChip, TextInput, type Tone } from '../../components/ui';
 
 export type Server = { id: string; name: string; state: string; powerState: string; guestReady: boolean; vcpu: number; memoryMb: number; diskGb: number;
   priceMonthly: string; currency: string; trafficGb?: number | null; trafficBytes?: number; billingMode?: 'monthly' | 'hourly'; priceHourly?: string | null; trafficThrottled?: boolean; errorCode: string | null; poolName: string; location: string; locationCity?: string | null; locationCountry?: string | null; locationDatacenter?: string | null; imageName: string; address: string | null;
-  createdAt: string; favorite?: boolean; locked?: boolean; billingHold?: boolean; tags?: string[]; notes?: string; poolId: string; imageId: string; packageId: string | null; vdcId?: string | null; ownerEmail?: string; hasRootPassword?: boolean; applicationName?: string | null; appState?: 'pending' | 'installing' | 'installed' | 'failed' | null; appMessage?: string | null; firewallStatus?: 'applied' | 'pending' | 'failed'; firewallError?: string | null; firewallCount?: number; lastOperation: { id: string; kind: string; status: string; step: string | null; errorCode: string | null } | null };
+  createdAt: string; favorite?: boolean; locked?: boolean; billingHold?: boolean; deleteAt?: string | null; tags?: string[]; notes?: string; poolId: string; imageId: string; packageId: string | null; vdcId?: string | null; ownerEmail?: string; hasRootPassword?: boolean; applicationName?: string | null; appState?: 'pending' | 'installing' | 'installed' | 'failed' | null; appMessage?: string | null; firewallStatus?: 'applied' | 'pending' | 'failed'; firewallError?: string | null; firewallCount?: number; lastOperation: { id: string; kind: string; status: string; step: string | null; errorCode: string | null } | null };
 type Operation = { id: string; kind: string; status: string; step: string | null; attempts: number; errorCode: string | null; createdAt: string; finishedAt: string | null };
 
 // One Idempotency-Key per user intention: a double click or a retry after a timeout reuses it,
@@ -99,17 +99,36 @@ export function ServerList() {
   const servers = useApiQuery<{ servers: Server[] }>(['servers'], '/servers', { refetchInterval: 5_000 }).data?.servers;
   const [gridRef] = useAutoAnimate<HTMLUListElement>();
   const f = useServerFilters(servers ?? []);
+  const format = useFormatter();
+  // Selection mode: cards toggle instead of opening, and a bar acts on the chosen ones (only those still shown).
+  const [picking, setPicking] = useState(false);
+  const [picked, setPicked] = useState<Set<string>>(new Set());
+  const stopPicking = () => { setPicking(false); setPicked(new Set()); };
+  useEffect(() => {
+    if (!picking) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') stopPicking(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [picking]);
   if (!servers) return <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4" aria-busy>{[0, 1, 2].map((i) => <Card key={i} className="h-36 animate-pulse"><span className="sr-only">…</span></Card>)}</div>;
   if (!servers.length) return <Empty icon={<I name="server" size={28}/>} title={t('list.empty')}><ButtonLink href="/order" className="mt-3"><I name="plus" size={16}/>{tn('newServer')}</ButtonLink></Empty>;
   // Starred servers first, the rest in their order.
   const shown = [...f.shown].sort((a, b) => Number(!!b.favorite) - Number(!!a.favorite));
+  const chosen = shown.filter((s) => picked.has(s.id));
+  const flip = (id: string) => setPicked((p) => { const n = new Set(p); if (!n.delete(id)) n.add(id); return n; });
   return <div className="flex flex-col gap-4">
-    {(servers.length > 1 || f.q || f.state !== 'all' || f.tag) && <div className="rounded-xl border border-border bg-surface p-3"><ServerFilters f={f} placeholder={t('list.searchPlaceholder')}/></div>}
+    {(servers.length > 1 || f.q || f.state !== 'all' || f.tag) && <div className="flex flex-col gap-3 rounded-xl border border-border bg-surface p-3">
+      <ServerFilters f={f} placeholder={t('list.searchPlaceholder')}/>
+      {servers.length > 1 && <div className="flex flex-wrap items-center gap-2">
+        <Button size="sm" variant={picking ? 'primary' : 'secondary'} aria-pressed={picking} onPress={() => (picking ? stopPicking() : setPicking(true))}>
+          <I name={picking ? 'check' : 'list-checks'} size={15}/>{picking ? t('list.select.done') : t('list.select.start')}</Button>
+        {picking && <Button size="sm" variant="ghost" onPress={() => setPicked(chosen.length === shown.length ? new Set() : new Set(shown.map((x) => x.id)))}>
+          {chosen.length === shown.length ? t('list.select.none') : t('list.select.all')}</Button>}
+      </div>}
+    </div>}
     {!shown.length ? <p role="status" className="rounded-xl border border-dashed border-border px-4 py-8 text-center text-sm text-muted">{t('list.noMatch')}</p>
     : <ul ref={gridRef} className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4" aria-label={t('list.title')}>
-    {shown.map((s, i) => <motion.li key={s.id} className="relative" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: Math.min(i, 8) * 0.05, duration: 0.25 }}>
-      <NextLink href={`/servers/${s.id}`} className="block rounded-xl outline-offset-2 transition-all duration-200 hover:-translate-y-1 hover:shadow-lg focus-visible:outline-2">
-        <Card className="h-full">
+    {shown.map((s, i) => { const on = picked.has(s.id); const card = <Card className={`h-full transition-shadow ${on ? 'ring-2 ring-accent' : ''}`}>
           <Card.Header className="flex flex-row items-start justify-between gap-2">
             <div className="min-w-0"><Card.Title className="flex items-center gap-1.5 truncate text-base font-semibold">{s.name}{s.locked && <I name="lock" size={13} className="shrink-0 text-warning"/>}</Card.Title>
               <Card.Description className="flex items-center gap-1 text-xs text-muted"><I name="map-pin" size={12}/>{s.location || s.poolName}</Card.Description></div>
@@ -120,13 +139,39 @@ export function ServerList() {
             <span className="flex items-center gap-2 text-muted"><I name="cpu" size={14}/>{size(t, s)}</span>
             <span className="truncate text-xs text-muted">{s.imageName}</span>
             {!!s.tags?.length && <span className="flex flex-wrap gap-1 pt-1">{s.tags.map((x) => <span key={x} className="rounded-full bg-default px-2 py-0.5 text-xs">{x}</span>)}</span>}
+            {s.deleteAt && <span className="pt-1"><StatusChip tone="danger">{t('trash.badge', { when: format.relativeTime(new Date(s.deleteAt), new Date()) })}</StatusChip></span>}
           </Card.Content>
-        </Card>
-      </NextLink>
-      <FavoriteStar id={s.id} on={!!s.favorite} name={s.name}/>
-    </motion.li>)}
+        </Card>;
+      return <motion.li key={s.id} className="relative" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: Math.min(i, 8) * 0.05, duration: 0.25 }}>
+      {picking ? <button type="button" role="checkbox" aria-checked={on} aria-label={t('list.select.toggle', { name: s.name })} onClick={() => flip(s.id)}
+          className="block h-full w-full rounded-xl text-left outline-offset-2 focus-visible:outline-2">
+          {card}
+          <span aria-hidden className={`absolute bottom-3 right-3 grid size-6 place-items-center rounded-md border-2 transition-colors ${on ? 'border-accent bg-accent text-accent-foreground' : 'border-border bg-surface'}`}>{on && <I name="check" size={14}/>}</span>
+        </button>
+      : <><NextLink href={`/servers/${s.id}`} className="block h-full rounded-xl outline-offset-2 transition-all duration-200 hover:-translate-y-1 hover:shadow-lg focus-visible:outline-2">{card}</NextLink>
+        <FavoriteStar id={s.id} on={!!s.favorite} name={s.name}/></>}
+    </motion.li>; })}
   </ul>}
+  {picking && chosen.length > 0 && <BulkBar ids={chosen.map((x) => x.id)} onDone={stopPicking}/>}
   </div>;
+}
+
+// The selection's actions, pinned to the bottom of the screen above the content (safe-area aware on phones).
+function BulkBar({ ids, onDone }: { ids: string[]; onDone: () => void }) {
+  const t = useTranslations('Servers');
+  const run = useApiAction((action: string) => apiFetch<{ started: number; skipped: number }>('/servers/actions', { method: 'POST', body: { action, serverIds: ids }, headers: { 'idempotency-key': crypto.randomUUID() } }),
+    { invalidate: [['servers'], ['tasks']], success: (r) => t('list.select.bulkDone', { started: r.started, skipped: r.skipped }) });
+  const act = (a: string) => run.mutateAsync(a).then(onDone, () => undefined);
+  const label = (a: string) => t(`action.${a as 'power_on'}`);
+  const confirm = (a: 'shutdown' | 'reset', icon: string) => <ConfirmButton size="sm" variant={a === 'reset' ? 'danger-soft' : 'secondary'} isDisabled={run.isPending} icon={<I name={icon} size={15}/>}
+    label={label(a)} title={label(a)} body={t('list.select.confirm', { action: label(a), n: ids.length })} confirmLabel={t('confirm.yes', { action: label(a) })} cancelLabel={t('confirm.no')} onConfirm={() => act(a)}/>;
+  return <motion.div role="region" aria-label={t('list.select.bar')} initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }}
+    className="sticky bottom-[max(1rem,env(safe-area-inset-bottom))] z-20 mx-auto flex w-full max-w-3xl flex-wrap items-center gap-2 rounded-2xl border border-border bg-overlay/95 p-3 shadow-xl backdrop-blur">
+    <span role="status" className="mr-auto text-sm font-medium tabular-nums">{t('list.select.count', { n: ids.length })}</span>
+    <Button size="sm" isPending={run.isPending} onPress={() => act('power_on')}><I name="play" size={15}/>{label('power_on')}</Button>
+    {confirm('shutdown', 'power')}
+    {confirm('reset', 'rotate-ccw')}
+  </motion.div>;
 }
 
 // Star / unstar a server; the list updates at once and is put right if the request fails.
@@ -143,6 +188,36 @@ export function FavoriteStar({ id, on, name, listKey = ['servers'], className = 
     <motion.span key={String(on)} initial={{ scale: on ? 0.4 : 1 }} animate={{ scale: 1 }} transition={{ type: 'spring', stiffness: 500, damping: 15 }}>
       <I name="star" size={17} className={on ? 'fill-current' : ''}/></motion.span>
   </button>;
+}
+
+// A server waiting to be deleted: when, and the two ways out (take it back, or delete at once).
+function TrashBar({ server: s, canChange }: { server: Server; canChange: boolean }) {
+  const t = useTranslations('Servers');
+  const format = useFormatter();
+  const { error } = useErrorText();
+  const client = useQueryClient();
+  const [busy, setBusy] = useState(false);
+  const at = new Date(s.deleteAt!);
+  const refresh = () => { void client.invalidateQueries({ queryKey: ['servers'] }); void client.invalidateQueries({ queryKey: ['tasks'] }); };
+  async function restore() {
+    setBusy(true);
+    try { await apiFetch(`/servers/${s.id}/deletion`, { method: 'DELETE' }); toast.success(t('trash.restored')); refresh(); }
+    catch (e) { toast.danger(error(e)); } finally { setBusy(false); }
+  }
+  const deleteNow = async () => {
+    try { await apiFetch(`/servers/${s.id}`, { method: 'DELETE', body: { confirm: s.name, now: true }, headers: { 'idempotency-key': crypto.randomUUID() } }); refresh(); }
+    catch (e) { toast.danger(error(e)); throw e; }
+  };
+  return <motion.div role="status" initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} className="flex flex-col gap-3 rounded-2xl border border-danger/40 bg-danger/10 px-4 py-3 sm:flex-row sm:items-center">
+    <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-danger/20 text-danger"><I name="trash-2" size={17}/></span>
+    <div className="min-w-0 flex-1"><p className="text-sm font-medium">{t('trash.title')}</p>
+      <p className="text-xs text-muted">{t('trash.body', { when: format.relativeTime(at, new Date()) })} <time dateTime={s.deleteAt!}>({format.dateTime(at, { dateStyle: 'medium', timeStyle: 'short' })})</time></p></div>
+    {canChange && <div className="flex flex-wrap gap-2">
+      <Button size="sm" isPending={busy} isDisabled={s.state === 'deleting'} onPress={restore}><I name="undo-2" size={14}/>{t('trash.restore')}</Button>
+      <ConfirmButton size="sm" variant="danger-soft" isDisabled={s.state === 'deleting' || !!s.locked} icon={<I name="trash-2" size={14}/>} label={t('trash.now')} title={t('trash.now')}
+        body={t('trash.nowConfirm')} confirmLabel={t('trash.now')} cancelLabel={t('confirm.no')} onConfirm={deleteNow}/>
+    </div>}
+  </motion.div>;
 }
 
 // Delete protection: a calm bar while unlocked, a clear warning-coloured one while locked.
@@ -174,7 +249,8 @@ export function ServerDetail({ id }: { id: string }) {
   const client = useQueryClient();
   const [message, setMessage] = useState<string>();
   const [deleteName, setDeleteName] = useState('');
-  const q = useApiQuery<{ server: Server; operations: Operation[]; own?: boolean; allowed?: Record<'power' | 'console' | 'iso' | 'rootPassword' | 'delete' | 'snapshots' | 'resize' | 'reinstall' | 'backups', boolean> }>(['servers', id], `/servers/${id}`, { refetchInterval: 3_000 });
+  const [deleteNow, setDeleteNow] = useState(false);
+  const q = useApiQuery<{ server: Server; operations: Operation[]; own?: boolean; allowed?: Record<'power' | 'console' | 'iso' | 'rootPassword' | 'delete' | 'snapshots' | 'resize' | 'reinstall' | 'backups', boolean>; deleteGraceHours?: number }>(['servers', id], `/servers/${id}`, { refetchInterval: 3_000 });
   const gone = (q.error as { code?: string } | null)?.code === 'NOT_FOUND';
   const me = useMe();
   // The viewer's own server names, for the next free name in "order similar".
@@ -195,6 +271,9 @@ export function ServerDetail({ id }: { id: string }) {
     catch (e) { setMessage(error(e)); toast.danger(error(e)); if ((e as { code?: string }).code !== 'NETWORK') intent.reset(); }
   }
   const canAct = !open && ['ready', 'error'].includes(s.state);
+  // Deleting waits out the admin's grace period for a ready server, unless the person chooses to delete at once.
+  const grace = q.data.deleteGraceHours ?? 0;
+  const soft = grace > 0 && s.state === 'ready';
   // Locked: what would end the server or lose its state waits until it is unlocked (the API refuses it too).
   const locked = !!s.locked;
   const actionLabel = (a: string) => t(`action.${a as 'power_on'}`);
@@ -213,6 +292,7 @@ export function ServerDetail({ id }: { id: string }) {
     {message && <div role="alert"><Notice tone="danger">{message}</Notice></div>}
     {s.billingHold && <Notice tone="danger" title={t('billingHold')}>{t('billingHoldHelp')} <NextLink href="/billing?tab=invoices" className="font-medium text-accent hover:underline">{t('payNow')}</NextLink></Notice>}
     {s.lastOperation?.step === 'awaiting_payment' && <Notice tone="warning" title={t('awaitingPayment')}>{t('awaitingPaymentHelp')} <NextLink href="/billing?tab=invoices" className="font-medium text-accent hover:underline">{t('payNow')}</NextLink></Notice>}
+    {s.deleteAt && <TrashBar server={s} canChange={allowed.delete}/>}
     <LockBar id={id} locked={locked} canChange={own || allowed.delete}/>
     {s.errorCode && <Notice tone="danger">{t('errorCode', { message: error({ code: s.errorCode }), code: s.errorCode })}</Notice>}
 
@@ -280,12 +360,14 @@ export function ServerDetail({ id }: { id: string }) {
     </Section>
 
     {(own || can(me?.permissions, 'servers.manage_all')) && s.state === 'ready' && !s.vdcId && <TransferServer serverId={s.id} serverName={s.name} staff={!own} busy={!!open}/>}
-    {allowed.delete && <Section title={t('delete.title')} description={t('delete.explain')} className="border border-danger/30">
+    {allowed.delete && !s.deleteAt && <Section title={t('delete.title')} description={t('delete.explain')} className="border border-danger/30">
+      {soft && <p className="mb-3 flex items-start gap-2 text-sm text-muted"><I name="history" size={16} className="mt-0.5 shrink-0 text-accent"/>{t('delete.graceHelp', { hours: grace })}</p>}
       <div className="flex flex-wrap items-end gap-3">
-        <TextInput className="min-w-64 flex-1" label={t('delete.confirm', { name: s.name })} value={deleteName} onChange={setDeleteName} autoComplete="off"/>
-        <Button variant="danger" isDisabled={deleteName !== s.name || s.state === 'deleting' || locked} onPress={() => act(`/servers/${id}`, 'DELETE', { confirm: deleteName })}>
-          <I name="trash-2" size={16}/>{t('delete.button')}</Button>
+        <TextInput className="min-w-0 flex-1 sm:min-w-64" label={t('delete.confirm', { name: s.name })} value={deleteName} onChange={setDeleteName} autoComplete="off"/>
+        <Button variant="danger" isDisabled={deleteName !== s.name || s.state === 'deleting' || locked} onPress={() => act(`/servers/${id}`, 'DELETE', { confirm: deleteName, now: !soft || deleteNow })}>
+          <I name="trash-2" size={16}/>{soft && !deleteNow ? t('delete.soft') : t('delete.button')}</Button>
       </div>
+      {soft && <div className="mt-3"><CheckboxInput label={t('delete.now')} isSelected={deleteNow} onChange={setDeleteNow}/></div>}
     </Section>}
   </div>;
 }

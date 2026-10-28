@@ -11,7 +11,7 @@ import { useApiQuery } from '../../../../lib/query';
 
 type Doc = { customer: { power: boolean; console: boolean; iso: boolean; rootPassword: boolean; delete: boolean; snapshots: boolean; resize: boolean; reinstall: boolean; backups: boolean };
   backups?: { maxPerServer: number }; hardware: { cpuHotAdd: boolean; memoryHotAdd: boolean; nestedHv: boolean };
-  traffic?: { overLimit: 'notify' | 'throttle'; throttleMbps: number } };
+  traffic?: { overLimit: 'notify' | 'throttle'; throttleMbps: number }; deleteGraceHours?: number };
 
 export default function ServerSettings({ readOnly }: { readOnly: boolean }) {
   const t = useTranslations('Settings.servers');
@@ -43,6 +43,9 @@ export default function ServerSettings({ readOnly }: { readOnly: boolean }) {
     </FormSection>
     <FormSection title={t('backupsTitle')} description={t('backupsHelp')} icon={<I name="archive" size={16}/>}>
       <NumberInput className="max-w-xs" label={t('maxBackups')} value={v.backups?.maxPerServer ?? 7} minValue={1} maxValue={50} isDisabled={readOnly} onChange={(x) => setV({ ...v, backups: { maxPerServer: x ?? 7 } })}/>
+    </FormSection>
+    <FormSection title={t('deleteTitle')} description={t('deleteHelp')} icon={<I name="history" size={16}/>}>
+      <NumberInput className="max-w-xs" label={t('deleteGraceHours')} value={v.deleteGraceHours ?? 24} minValue={0} maxValue={168} isDisabled={readOnly} onChange={(x) => setV({ ...v, deleteGraceHours: x ?? 0 })}/>
     </FormSection>
     <FormSection title={t('traffic')} description={t('trafficHelp')} icon={<I name="gauge" size={16}/>}>
       <div className="grid gap-3 sm:grid-cols-2">

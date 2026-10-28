@@ -59,6 +59,8 @@ before(async () => {
   await send('PUT', '/admin/settings', { registrationOpen: true });
   user = cookieOf(await send('POST', '/auth/sign-up/email', { name: '', email: 'user@example.test', password }, null));
   other = cookieOf(await send('POST', '/auth/sign-up/email', { name: '', email: 'other@example.test', password }, null));
+  // Deletes in these tests are immediate; the grace period has its own test.
+  await send('PUT', '/admin/settings/servers', { deleteGraceHours: 0 });
   const conn = { name: 'Sim', host: vcenter, port: 8989, username: 'sim-admin', password: 'sim-password-1' };
   const pin = (await send('POST', '/admin/vmware/test', { ...conn, tls: { mode: 'system' } })).json().certificate.sha256;
   connectionId = (await send('POST', '/admin/vmware/connections', { ...conn, tls: { mode: 'pinned', sha256: pin } })).json().id;
@@ -287,6 +289,46 @@ test('deleting releases the IP and reservation only after VMware confirms the VM
   assert.equal((await send('GET', '/admin/pools')).json().pools[0].capacity.reserved.vcpu, reservedBefore - 1);
   const steps = (await pool.query("SELECT step FROM operations WHERE server_id = $1 AND kind = 'delete'", [id])).rows[0].step;
   assert.equal(steps, 'done');
+});
+
+test('deleting waits out the grace period (restorable, then deleted by the scheduler); bulk power acts on own servers only', { skip }, async () => {
+  const { runDueDeletions } = await import('../../dist/servers.js');
+  assert.equal((await send('PUT', '/admin/settings/servers', { deleteGraceHours: 999 })).json().fields.deleteGraceHours, 'OUT_OF_RANGE');
+  await send('PUT', '/admin/settings/servers', { deleteGraceHours: 2 });
+  try {
+    const id = (await create(order('trash-1'))).json().serverId;
+    await until(async () => (await serverRow(id)).state === 'ready', 'server ready');
+    const settled = () => until(async () => !['pending', 'running'].includes((await lastOp(id)).status), 'operation settled');
+    await settled();
+    const r = await send('DELETE', `/servers/${id}`, { confirm: 'trash-1' }, user, { 'idempotency-key': randomUUID() });
+    assert.equal(r.statusCode, 202);
+    assert.ok(Date.parse(r.json().deleteAt) > Date.now() + 3600_000);
+    assert.equal((await serverRow(id)).state, 'ready', 'still there, waiting');
+    assert.equal((await lastOp(id)).kind, 'shutdown');
+    await settled();
+    assert.equal((await send('GET', `/servers/${id}`, undefined, user)).json().server.deleteAt, r.json().deleteAt);
+    assert.equal((await send('DELETE', `/servers/${id}/deletion`, undefined, other)).statusCode, 404);
+    assert.equal((await send('DELETE', `/servers/${id}/deletion`, undefined, user)).json().restored, true);
+    assert.equal((await serverRow(id)).delete_at, null);
+    assert.equal((await send('DELETE', `/servers/${id}/deletion`, undefined, user)).statusCode, 409);
+
+    // Bulk: the caller's own server starts; someone else's (or an unknown id) is skipped.
+    assert.equal((await send('POST', '/servers/actions', { action: 'explode', serverIds: [id] }, user)).statusCode, 400);
+    const bulk = await send('POST', '/servers/actions', { action: 'power_on', serverIds: [id, randomUUID()] }, user, { 'idempotency-key': randomUUID() });
+    assert.deepEqual(bulk.json(), { started: 1, skipped: 1 });
+    assert.deepEqual((await send('POST', '/servers/actions', { action: 'power_on', serverIds: [id] }, other, { 'idempotency-key': randomUUID() })).json(), { started: 0, skipped: 1 });
+    await settled();
+
+    // Scheduled again; once its time has come the scheduler deletes it like a normal delete.
+    await send('DELETE', `/servers/${id}`, { confirm: 'trash-1' }, user, { 'idempotency-key': randomUUID() });
+    await settled();
+    await pool.query("UPDATE servers SET delete_at = now() - interval '1 minute' WHERE id = $1", [id]);
+    assert.equal(await runDueDeletions(), 1);
+    await until(async () => (await serverRow(id)).state === 'deleted', 'deleted by the scheduler');
+    assert.equal(await vmCount(id), 0);
+  } finally {
+    await send('PUT', '/admin/settings/servers', { deleteGraceHours: 0 });
+  }
 });
 
 test('firewalls: rules are validated and owned, and applied to the distributed port before first boot', { skip }, async () => {
@@ -1393,7 +1435,9 @@ test('coupons: staff make codes; the quote and the order take them off the first
   const old = (await send('POST', '/admin/coupons', { code: 'OLD', kind: 'fixed', value: '0.25', currency: 'EUR', expiresAt: '2020-01-01T00:00:00Z' })).json().id;
   assert.deepEqual(await quote('OLD'), { error: 'COUPON_EXPIRED' });
   assert.equal((await send('DELETE', `/admin/coupons/${old}`)).statusCode, 204);
-  assert.equal((await send('DELETE', `/servers/${id}`, { confirm: 'coupon-1' }, user, { 'idempotency-key': randomUUID() })).statusCode, 202);
+  await until(async () => !['pending', 'running'].includes((await lastOp(id)).status), 'build settled');
+  const gone = await send('DELETE', `/servers/${id}`, { confirm: 'coupon-1' }, user, { 'idempotency-key': randomUUID() });
+  assert.equal(gone.statusCode, 202, gone.body);
   const second = await create(order('coupon-3', { coupon: 'FREEMONTH', sshKeyIds: [otherKey] }), randomUUID(), other);
   assert.equal(second.statusCode, 202, second.body);
   assert.equal(second.json().invoiceId, undefined);

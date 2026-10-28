@@ -417,7 +417,7 @@ test.describe('VMware connections (simulator, English browser)', () => {
 test.describe('server lifecycle (simulator, Turkish customer)', () => {
   test.use({ locale: 'tr-TR' });
   test('a customer creates a server, sees it become ready, powers it off with confirmation and deletes it', async ({ page }) => {
-    test.setTimeout(120_000);
+    test.setTimeout(240_000);
     test.skip(!process.env.E2E_VCSIM_HOST, 'needs compose.simulator.yaml and E2E_VCSIM_HOST');
     await signIn(page, user);
     await expect(page).toHaveURL(/\/$/);
@@ -506,7 +506,9 @@ test.describe('server lifecycle (simulator, Turkish customer)', () => {
     await expect(page.getByText(/Hazır · açık/).first()).toBeVisible({ timeout: 30_000 });
     await expect(page.getByRole('grid', { name: 'İşlem geçmişi' })).toContainText('Oluşturma');
 
-    const del = page.getByRole('button', { name: 'Sunucuyu kalıcı olarak sil' });
+    // Deleting a ready server first moves it to the grace period (24 hours by default).
+    await expect(page.getByText('24 saat bekler', { exact: false })).toBeVisible();
+    const del = page.getByRole('button', { name: 'Sunucuyu sil', exact: true });
     await expect(del).toBeDisabled();
     await page.getByLabel('Onaylamak için “web-1” yazın').fill('web-1');
     // Locked: deleting stays off until the lock is removed.
@@ -518,11 +520,67 @@ test.describe('server lifecycle (simulator, Turkish customer)', () => {
     await expect(page.getByText('Silme koruması kapalı')).toBeVisible();
     await expect(del).toBeEnabled();
     await del.click();
-    await expect(page).toHaveURL(/\/$/, { timeout: 60_000 });
-    await expect(page.getByText('Henüz sunucunuz yok.')).toBeVisible();
+    await expect(page.getByText('Bu sunucu silinmek üzere')).toBeVisible();
+    await expect(page.getByText(/kalıcı olarak silinecek/)).toBeVisible();
+    await page.screenshot({ path: 'test-results/tour/server-trash.png', fullPage: true });
+    await page.setViewportSize({ width: 390, height: 900 });
+    await expectNoOverflow(page, 'server waiting for deletion at 390 px');
+    await page.screenshot({ path: 'test-results/tour/server-trash-390.png', fullPage: true });
+    await page.setViewportSize({ width: 1280, height: 720 });
+    await page.getByRole('button', { name: 'Geri al', exact: true }).click();
+    await expect(page.getByText('Sunucu geri alındı', { exact: false })).toBeVisible();
+    await expect(page.getByText('Bu sunucu silinmek üzere')).toBeHidden();
+
+    // A second server, so the list offers selection; the bar acts on the chosen ones.
+    await page.getByRole('button', { name: 'Benzerini sipariş et' }).click();
+    await expect(page.getByLabel('Sunucu adı')).toHaveValue('web-2');
+    const key = page.getByRole('checkbox', { name: 'dizüstü' });
+    if (!(await key.isChecked())) await tick(key);
+    await page.getByRole('button', { name: 'Sunucuyu oluştur' }).click();
+    await expect(page).toHaveURL(/\/servers\/[0-9a-f-]{36}$/, { timeout: 30_000 });
+    await page.goto('/');
+    await expect(page.getByRole('link', { name: /web-2/ })).toBeVisible();
+    await page.getByRole('button', { name: 'Seç', exact: true }).click();
+    await page.getByRole('checkbox', { name: 'web-1 sunucusunu seç' }).click();
+    await expect(page.getByRole('region', { name: 'Seçili sunucular için işlemler' })).toContainText('1 sunucu seçili');
+    await page.getByRole('button', { name: 'Tümünü seç' }).click();
+    await expect(page.getByText('2 sunucu seçili')).toBeVisible();
+    for (const width of [390, 768]) {
+      await page.setViewportSize({ width, height: 900 });
+      await expectNoOverflow(page, `server selection at ${width} px`);
+    }
+    await page.screenshot({ path: 'test-results/tour/servers-select-390.png', fullPage: true });
+    await page.setViewportSize({ width: 1280, height: 720 });
+    await page.screenshot({ path: 'test-results/tour/servers-select.png', fullPage: true });
+    await page.getByRole('region', { name: 'Seçili sunucular için işlemler' }).getByRole('button', { name: 'Aç', exact: true }).click();
+    await expect(page.getByText(/sunucuda işlem başladı/)).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Seçili sunucular için işlemler' })).toBeHidden();
+
+    // Both go: web-2 at once (no wait), web-1 from the grace period with "delete for good now".
+    for (const name of ['web-2', 'web-1']) {
+      await page.getByRole('link', { name: new RegExp(name) }).click();
+      await expect(page.getByRole('heading', { level: 1 })).toHaveText(name);
+      await expect(page.getByText(/Hazır · açık/).first()).toBeVisible({ timeout: 60_000 });
+      await expect(page.getByRole('button', { name: /Benzerini/ })).toBeVisible();
+      // The bulk "power on" may still be running; deleting waits for it.
+      await expect(page.getByText('İşlem ilerlemesi')).toBeHidden({ timeout: 60_000 });
+      await page.getByLabel(`Onaylamak için “${name}” yazın`).fill(name);
+      if (name === 'web-2') {
+        await tick(page.getByRole('checkbox', { name: /Beklemeden hemen sil/ }));
+        await page.getByRole('button', { name: 'Sunucuyu kalıcı olarak sil' }).click();
+      } else {
+        await page.getByRole('button', { name: 'Sunucuyu sil', exact: true }).click();
+        await page.getByRole('button', { name: 'Şimdi kalıcı olarak sil' }).click();
+        await expect(page.getByRole('alertdialog')).toContainText('geri alınamaz');
+        await page.getByRole('alertdialog').getByRole('button', { name: 'Şimdi kalıcı olarak sil' }).click();
+      }
+      await expect(page).toHaveURL(/\/$/, { timeout: 60_000 });
+    }
+    await expect(page.getByText('Henüz sunucunuz yok.')).toBeVisible({ timeout: 60_000 });
     // The account activity lists the customer's own sign-in and server actions.
     await page.goto('/account?tab=activity');
     await expect(page.getByText('Sunucu silindi').first()).toBeVisible();
+    await expect(page.getByText('Sunucu silme işlemi geri alındı').first()).toBeVisible();
     await expect(page.getByText('Güç zamanlaması eklendi').first()).toBeVisible();
   });
 });

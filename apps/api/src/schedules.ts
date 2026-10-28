@@ -7,7 +7,7 @@ import { audit, SessionGuard, type AuthedRequest } from './auth';
 import { pool, redis } from './db';
 import { apiError } from './errors';
 import { logEvent } from './log';
-import { customerMay, findServer, startPowerOperation } from './servers';
+import { customerMay, findServer, runDueDeletions, startPowerOperation } from './servers';
 import { getSettings } from './settings-store';
 import { hashOf, startOperation } from './servers';
 import { limitsOf } from './permissions';
@@ -154,6 +154,7 @@ export function startScheduler() {
   const tick = async () => {
     if (!(await redis.set('lock:schedules', '1', 'EX', 50, 'NX').catch(() => null))) return;
     await runSchedules().catch(() => logEvent('error', 'schedules_failed'));
+    await runDueDeletions().catch(() => logEvent('error', 'due_deletions_failed'));
   };
   return setInterval(tick, 60_000).unref();
 }

@@ -45,7 +45,9 @@ export type ServerSettings = { customer: { power: boolean; console: boolean; iso
   backups: { maxPerServer: number };
   hardware: { cpuHotAdd: boolean; memoryHotAdd: boolean; nestedHv: boolean };
   // What happens when a server has used its monthly traffic: a notice only, or a speed limit (Mbit/s) until it is covered again.
-  traffic: { overLimit: 'notify' | 'throttle'; throttleMbps: number } };
+  traffic: { overLimit: 'notify' | 'throttle'; throttleMbps: number };
+  // Hours a deleted server waits (shut down, restorable) before it is really deleted; 0 deletes at once.
+  deleteGraceHours: number };
 // Energy report: electricity price, datacenter overhead (PUE) and grid carbon intensity.
 export type EnergySettings = { pricePerKwh: string; currency: string; pue: number; co2GramsPerKwh: number };
 // Abuse monitoring (worker/abuse.mjs keeps the same defaults).
@@ -94,7 +96,7 @@ const defaults = {
   abuse: { portScan: true, scanMinutes: 30, cpu: true, cpuThreshold: 90, cpuHours: 6, notifyCustomer: false,
     ports: [{ port: 23, label: 'Telnet' }, { port: 445, label: 'SMB' }, { port: 1433, label: 'MS SQL' }, { port: 2375, label: 'Docker API' }, { port: 3306, label: 'MySQL' },
       { port: 5432, label: 'PostgreSQL' }, { port: 6379, label: 'Redis' }, { port: 9200, label: 'Elasticsearch' }, { port: 11211, label: 'Memcached' }, { port: 27017, label: 'MongoDB' }] } as AbuseSettings,
-  servers: { customer: { power: true, console: true, iso: true, rootPassword: true, delete: true, snapshots: true, resize: true, reinstall: true, backups: true }, backups: { maxPerServer: 7 }, hardware: { cpuHotAdd: false, memoryHotAdd: false, nestedHv: false }, traffic: { overLimit: 'throttle', throttleMbps: 10 } } as ServerSettings,
+  servers: { customer: { power: true, console: true, iso: true, rootPassword: true, delete: true, snapshots: true, resize: true, reinstall: true, backups: true }, backups: { maxPerServer: 7 }, hardware: { cpuHotAdd: false, memoryHotAdd: false, nestedHv: false }, traffic: { overLimit: 'throttle', throttleMbps: 10 }, deleteGraceHours: 24 } as ServerSettings,
   rdns: { provider: 'none', apiUrl: '', apiKeyEnc: null, serverId: 'localhost', template: '', ttl: 3600, customerEdit: true, forwardCheck: true } as RdnsSettings,
   chat: { apps: ['slack', 'discord', 'teams', 'googlechat', 'mattermost', 'rocketchat', 'matrix', 'ntfy', 'gotify', 'webhook'], telegram: { tokenEnc: null, username: '' },
     whatsapp: { tokenEnc: null, phoneNumberId: '', template: '', language: 'tr' }, pushover: { tokenEnc: null } } as ChatSettings,

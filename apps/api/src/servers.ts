@@ -17,6 +17,7 @@ import { limits } from './firewalls';
 import { choosePassword, generatePassword, sha512Crypt } from './passwords';
 import { decryptSecret, encryptSecret } from './secrets';
 import { getSettings, type ServerSettings } from './settings-store';
+import { notify } from './notify';
 import { prepareApplication } from './applications';
 import { checkVdcRoom, resolveVdcOrder } from './vdc';
 import { renderPtr } from './rdns-names';
@@ -89,6 +90,23 @@ export function startPowerOperation(req: AuthedRequest, server: { id: string; ow
   return startOperation(req, server, action as Kind, key, hashOf({ id: server.id, action, bulk: true }));
 }
 
+// Servers whose deletion grace period is over (scheduler tick): deleted now. A server locked meanwhile keeps its lock and
+// is not deleted (the wait ends); one busy with an operation is tried again on the next tick.
+export async function runDueDeletions() {
+  const { rows } = await pool.query(`SELECT s.* FROM servers s WHERE s.delete_at <= now() AND s.state IN ('ready', 'error')
+    AND NOT EXISTS (SELECT 1 FROM operations o WHERE o.server_id = s.id AND o.status IN ('pending', 'running')) LIMIT 50`);
+  const system = { id: 'trash', ip: null, user: { id: null, permissions: [] } } as unknown as AuthedRequest;
+  for (const s of rows) {
+    if (s.locked) { await pool.query('UPDATE servers SET delete_at = NULL WHERE id = $1', [s.id]); continue; }
+    const { rowCount } = await pool.query("UPDATE servers SET state = 'deleting', updated_at = now() WHERE id = $1 AND state = $2 AND delete_at IS NOT NULL", [s.id, s.state]);
+    if (!rowCount) continue;
+    await startOperation(system, s, 'delete', `trash:${s.id}:${s.delete_at.getTime()}`, hashOf({ id: s.id, delete: true }))
+      .then(() => pool.query('UPDATE servers SET delete_at = NULL WHERE id = $1', [s.id]),
+        () => pool.query("UPDATE servers SET state = $2 WHERE id = $1 AND state = 'deleting'", [s.id, s.state]));
+  }
+  return rows.length;
+}
+
 // What a lock stops: anything that ends the server or loses its running state or data.
 const lockedKinds = new Set<Kind>(['delete', 'power_off', 'reset', 'snapshot_revert', 'reinstall', 'resize', 'backup_restore']);
 
@@ -150,7 +168,7 @@ async function resizeTarget(req: AuthedRequest, server: Record<string, any>, bod
 const serverColumns = `s.id, s.name, s.state, s.power_state AS "powerState", s.guest_ready AS "guestReady", s.vcpu, s.memory_mb AS "memoryMb", s.disk_gb AS "diskGb",
   s.price_monthly::text AS "priceMonthly", s.currency, s.traffic_gb AS "trafficGb", s.billing_mode AS "billingMode", s.price_hourly::text AS "priceHourly", s.traffic_throttled AS "trafficThrottled",
   (SELECT COALESCE(sum(t.rx_bytes + t.tx_bytes), 0)::float8 FROM server_traffic t WHERE t.server_id = s.id AND t.day >= date_trunc('month', current_date)) AS "trafficBytes", s.error_code AS "errorCode", s.created_at AS "createdAt", s.project_id AS "projectId",
-  s.tags, s.notes, s.locked, s.billing_hold AS "billingHold", s.pool_id AS "poolId", s.image_id AS "imageId", s.package_id AS "packageId", s.vdc_id AS "vdcId",
+  s.tags, s.notes, s.locked, s.billing_hold AS "billingHold", s.delete_at AS "deleteAt", s.pool_id AS "poolId", s.image_id AS "imageId", s.package_id AS "packageId", s.vdc_id AS "vdcId",
   p.name AS "poolName", p.location, l.city AS "locationCity", l.country_code AS "locationCountry", l.datacenter AS "locationDatacenter", i.name AS "imageName", host(a.address) AS address,
   CASE WHEN s.firewall_applied_version >= s.firewall_version THEN 'applied' WHEN s.firewall_error IS NOT NULL THEN 'failed' ELSE 'pending' END AS "firewallStatus",
   s.firewall_error AS "firewallError", s.root_password_enc IS NOT NULL AS "hasRootPassword",
@@ -266,7 +284,7 @@ export class ServersController {
       pool.query(`SELECT id, kind, status, step, attempts, error_code AS "errorCode", created_at AS "createdAt", started_at AS "startedAt", finished_at AS "finishedAt"
         FROM operations WHERE server_id = $1 ORDER BY created_at DESC LIMIT 50`, [id]),
     ]);
-    return { server, operations, own, allowed: await allowedFor(req) };
+    return { server, operations, own, allowed: await allowedFor(req), deleteGraceHours: (await getSettings('servers')).deleteGraceHours };
   }
 
   @Post('servers') @HttpCode(202)
@@ -602,10 +620,52 @@ export class ServersController {
     if (server.locked) throw apiError(409, 'SERVER_LOCKED', 'The server is locked against this; unlock it first');
     // A running create is cancelled first; the delete then removes whatever it left.
     await pool.query("UPDATE operations SET cancel_requested = true WHERE server_id = $1 AND status IN ('pending', 'running') AND kind = 'create'", [id]);
+    // A build still waiting for its first payment never started: it ends here (its unpaid invoice is withdrawn with the server).
+    await pool.query("UPDATE operations SET status = 'cancelled', error_code = 'CANCELLED', finished_at = now(), updated_at = now() WHERE server_id = $1 AND kind = 'create' AND status = 'pending' AND step = 'awaiting_payment'", [id]);
     const { rows: [open] } = await pool.query("SELECT 1 FROM operations WHERE server_id = $1 AND status IN ('pending', 'running')", [id]);
     if (open) throw apiError(409, 'OPERATION_IN_PROGRESS', 'Wait for the running operation to stop, then delete again');
-    await pool.query("UPDATE servers SET state = 'deleting', updated_at = now() WHERE id = $1", [id]);
+    // A ready server waits out the grace period shut down (the scheduler deletes it then); `now` skips the wait.
+    const grace = (await getSettings('servers')).deleteGraceHours;
+    if (grace > 0 && server.state === 'ready' && body?.now !== true) {
+      const { rows: [r] } = await pool.query("UPDATE servers SET delete_at = coalesce(delete_at, now() + make_interval(hours => $2)), updated_at = now() WHERE id = $1 RETURNING delete_at", [id, grace]);
+      if (server.power_state === 'poweredOn' && !server.delete_at) await startOperation(req, server, 'shutdown', `${key}:shutdown`, hashOf({ id, action: 'shutdown' })).catch(() => undefined);
+      await audit(req, 'server.delete_scheduled', 'success', req.user.id, { serverId: id, deleteAt: r.delete_at });
+      if (!server.delete_at) await notify('server.delete_scheduled', [server.owner_id], { serverId: id, name: server.name, hours: grace });
+      return { serverId: id, deleteAt: r.delete_at };
+    }
+    await pool.query("UPDATE servers SET state = 'deleting', delete_at = NULL, updated_at = now() WHERE id = $1", [id]);
     return { serverId: id, operation: await startOperation(req, server, 'delete', key, requestHash) };
+  }
+
+  // Takes back a server waiting to be deleted (it stays shut down; the owner starts it again).
+  @Delete('servers/:id/deletion')
+  async restore(@Req() req: AuthedRequest, @Param('id', ParseUUIDPipe) id: string) {
+    await findServer(req, id, true);
+    await customerMay(req, 'delete');
+    const { rowCount } = await pool.query("UPDATE servers SET delete_at = NULL, updated_at = now() WHERE id = $1 AND delete_at IS NOT NULL AND state <> 'deleting'", [id]);
+    if (!rowCount) throw apiError(409, 'INVALID_SERVER_STATE', 'The server is not waiting to be deleted');
+    await audit(req, 'server.delete_cancelled', 'success', req.user.id, { serverId: id });
+    return { restored: true };
+  }
+
+  // One power action on several of the caller's servers (the list's selection). Each goes through the same checks as
+  // the server page; ones the caller may not act on, busy or unsuitable are skipped and counted.
+  @Post('servers/actions') @HttpCode(202)
+  async bulk(@Req() req: AuthedRequest, @Headers('idempotency-key') header: string | undefined, @Body() body: Input) {
+    const action = String(body?.action ?? '');
+    if (!['power_on', 'shutdown', 'power_off', 'reset'].includes(action)) throw apiError(400, 'VALIDATION_FAILED', 'Invalid input', { action: 'INVALID_VALUE' });
+    const ids = Array.isArray(body?.serverIds) ? [...new Set(body.serverIds.map(String))] : [];
+    if (!ids.length || ids.length > 100 || ids.some((x) => !/^[0-9a-f-]{36}$/.test(x))) throw apiError(400, 'VALIDATION_FAILED', 'Invalid input', { serverIds: 'INVALID_VALUE' });
+    await customerMay(req, 'power');
+    const base = idempotencyKey(header, req.user.id);
+    let started = 0;
+    for (const id of ids) {
+      const s = await findServer(req, id, true).catch(() => null);
+      if (!s || !['ready', 'error'].includes(s.state) || !s.vm_moref || s.delete_at) continue;
+      await startPowerOperation(req, s, action, `${base}:${id}`).then(() => started++, () => undefined);
+    }
+    await audit(req, 'server.bulk_action', 'success', req.user.id, { action, started, skipped: ids.length - started });
+    return { started, skipped: ids.length - started };
   }
 
   @Post('servers/:id/operations/:op/cancel') @HttpCode(202)

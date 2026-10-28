@@ -314,6 +314,7 @@ export async function runBilling(now = new Date()) {
   // Renewal invoices N days before the period ends, one per subscription and period.
   const { rows: due } = await pool.query(`SELECT b.*, b.period_end::text AS pe FROM subscriptions b WHERE b.status IN ('active', 'past_due', 'suspended') AND b.auto_renew AND NOT b.cancel_at_period_end
       AND b.period_end - $2::int <= $1::date
+      AND NOT EXISTS (SELECT 1 FROM servers s WHERE s.id = b.server_id AND s.delete_at IS NOT NULL)
       AND NOT EXISTS (SELECT 1 FROM invoice_lines l JOIN invoices i ON i.id = l.invoice_id WHERE l.subscription_id = b.id AND l.period_start = b.period_end AND i.status <> 'cancelled')`,
     [day, s.invoiceDaysBefore]);
   for (const b of due) {
@@ -470,7 +471,7 @@ async function runHourly(now: Date) {
   const s = await settings();
   const out = { hours: 0, held: 0, released: 0, warned: 0, invoiced: 0 };
   const { rows } = await pool.query(`SELECT id, owner_id, price_hourly::text AS price, trim(currency) AS currency, billed_until, billed_until::text AS billed_text FROM servers
-    WHERE billing_mode = 'hourly' AND state <> 'deleted' AND billed_until < $1`, [now]);
+    WHERE billing_mode = 'hourly' AND state <> 'deleted' AND delete_at IS NULL AND billed_until < $1`, [now]);
   for (const r of rows) {
     const h = hoursDue(new Date(r.billed_until), now);
     // Guarded by billed_until (compared as PostgreSQL's own text: a JavaScript date drops the microseconds): a second run adds nothing.

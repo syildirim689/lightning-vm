@@ -1765,7 +1765,10 @@
       "title": "Delete server",
       "explain": "The VM is deleted in VMware. The IP address and reserved capacity are released only after VMware confirms the VM is gone. This cannot be undone.",
       "confirm": "Type “{name}” to confirm",
-      "button": "Delete the server permanently"
+      "button": "Delete the server permanently",
+      "soft": "Delete server",
+      "graceHelp": "The server is shut down and waits {hours} hours; until then you can take it back with one click. After that it is deleted for good.",
+      "now": "Delete at once without waiting (cannot be undone)"
     },
     "list": {
       "title": "Your servers",
@@ -1785,6 +1788,17 @@
         "stopped": "Stopped",
         "problem": "Problem",
         "busy": "In progress"
+      },
+      "select": {
+        "start": "Select",
+        "done": "Done",
+        "all": "Select all",
+        "none": "Clear selection",
+        "count": "{n} servers selected",
+        "toggle": "Select server {name}",
+        "bar": "Actions for the selected servers",
+        "bulkDone": "Started on {started} servers{skipped, plural, =0 {} other {, # skipped (busy or not suitable)}}.",
+        "confirm": "Apply “{action}” to {n} servers?"
       }
     },
     "col": {
@@ -1910,7 +1924,16 @@
     "billingHoldHelp": "The server was shut down and cannot be started until the invoice is paid. It starts by itself once paid.",
     "payNow": "Pay now",
     "awaitingPayment": "Waiting for payment",
-    "awaitingPaymentHelp": "The server is set up as soon as its first invoice is paid."
+    "awaitingPaymentHelp": "The server is set up as soon as its first invoice is paid.",
+    "trash": {
+      "title": "This server is about to be deleted",
+      "body": "It will be deleted for good {when}. No renewal invoice is issued meanwhile.",
+      "restore": "Take back",
+      "restored": "The server was taken back. Press “Power on” to start it.",
+      "now": "Delete for good now",
+      "nowConfirm": "The server, its disks and any data not backed up are deleted without waiting. This cannot be undone.",
+      "badge": "Deleting · {when}"
+    }
   },
   "Maintenance": {
     "title": "Backups and updates",
@@ -2635,6 +2658,10 @@
       "server_transfer": {
         "title": "Server handovers",
         "help": "When someone offers you a server, or answers an offer you made."
+      },
+      "server_delete_scheduled": {
+        "title": "Server about to be deleted",
+        "help": "When a server was deleted, before its grace period ends."
       }
     },
     "policyTitle": "The admin first, then each user",
@@ -3565,7 +3592,10 @@
       "backups": "Backups",
       "backupsHelp": "Customers take and restore backups of their own servers.",
       "backupsTitle": "Backups",
-      "maxBackups": "Backups per server"
+      "maxBackups": "Backups per server",
+      "deleteTitle": "Deletion grace period",
+      "deleteHelp": "A deleted server is shut down and can be taken back during this time; then it is deleted for good. 0: deleted at once.",
+      "deleteGraceHours": "Grace period (hours)"
     },
     "announcement": {
       "title": "Announcement",
@@ -4769,7 +4799,9 @@
       "image_created": "Image saved",
       "image_deleted": "Image deleted",
       "reseller_brand": "Reseller brand changed",
-      "server_renamed": "Server renamed"
+      "server_renamed": "Server renamed",
+      "server_delete_scheduled": "Server shut down for deletion",
+      "server_delete_cancelled": "Server deletion taken back"
     },
     "outcome": {
       "success": "Done",
