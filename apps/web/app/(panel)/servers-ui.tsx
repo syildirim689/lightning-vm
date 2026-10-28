@@ -156,7 +156,7 @@ export function ServerList() {
   </div>;
 }
 
-// The selection's actions, pinned to the bottom of the screen above the content (safe-area aware on phones).
+// The selection's actions, pinned near the bottom of the screen, above the task manager's button (safe-area aware on phones).
 function BulkBar({ ids, onDone }: { ids: string[]; onDone: () => void }) {
   const t = useTranslations('Servers');
   const run = useApiAction((action: string) => apiFetch<{ started: number; skipped: number }>('/servers/actions', { method: 'POST', body: { action, serverIds: ids }, headers: { 'idempotency-key': crypto.randomUUID() } }),
@@ -166,7 +166,7 @@ function BulkBar({ ids, onDone }: { ids: string[]; onDone: () => void }) {
   const confirm = (a: 'shutdown' | 'reset', icon: string) => <ConfirmButton size="sm" variant={a === 'reset' ? 'danger-soft' : 'secondary'} isDisabled={run.isPending} icon={<I name={icon} size={15}/>}
     label={label(a)} title={label(a)} body={t('list.select.confirm', { action: label(a), n: ids.length })} confirmLabel={t('confirm.yes', { action: label(a) })} cancelLabel={t('confirm.no')} onConfirm={() => act(a)}/>;
   return <motion.div role="region" aria-label={t('list.select.bar')} initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }}
-    className="sticky bottom-[max(1rem,env(safe-area-inset-bottom))] z-20 mx-auto flex w-full max-w-3xl flex-wrap items-center gap-2 rounded-2xl border border-border bg-overlay/95 p-3 shadow-xl backdrop-blur">
+    className="sticky bottom-[calc(4.5rem+env(safe-area-inset-bottom))] z-20 mx-auto flex w-full max-w-3xl flex-wrap items-center gap-2 rounded-2xl border border-border bg-overlay/95 p-3 shadow-xl backdrop-blur">
     <span role="status" className="mr-auto text-sm font-medium tabular-nums">{t('list.select.count', { n: ids.length })}</span>
     <Button size="sm" isPending={run.isPending} onPress={() => act('power_on')}><I name="play" size={15}/>{label('power_on')}</Button>
     {confirm('shutdown', 'power')}

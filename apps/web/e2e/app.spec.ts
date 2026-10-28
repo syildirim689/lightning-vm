@@ -548,8 +548,8 @@ test.describe('server lifecycle (simulator, Turkish customer)', () => {
     for (const width of [390, 768]) {
       await page.setViewportSize({ width, height: 900 });
       await expectNoOverflow(page, `server selection at ${width} px`);
+      await page.screenshot({ path: `test-results/tour/servers-select-${width}.png` });
     }
-    await page.screenshot({ path: 'test-results/tour/servers-select-390.png', fullPage: true });
     await page.setViewportSize({ width: 1280, height: 720 });
     await page.screenshot({ path: 'test-results/tour/servers-select.png', fullPage: true });
     await page.getByRole('region', { name: 'Seçili sunucular için işlemler' }).getByRole('button', { name: 'Aç', exact: true }).click();
