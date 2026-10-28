@@ -2263,7 +2263,8 @@
     "recent": "Recent",
     "activity": "My activity",
     "users": "Users",
-    "tickets": "Support tickets"
+    "tickets": "Support tickets",
+    "actionStarted": "{name}: {action} started."
   },
   "Insights": {
     "title": "Needs attention",

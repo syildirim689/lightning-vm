@@ -1,7 +1,7 @@
 "use client";
 // Ctrl/⌘+K: jump to any page the user may open, any server by name or IP, or run a quick action.
 // A combobox with a listbox (arrow keys, Enter, Escape); results are filtered as you type.
-import { Kbd, Modal } from '@heroui/react';
+import { Kbd, Modal, toast } from '@heroui/react';
 import { useRouter } from 'next/navigation';
 import { useLocale, useTranslations } from 'next-intl';
 import { useTheme } from 'next-themes';
@@ -10,13 +10,14 @@ import { setLocale } from '../i18n/actions';
 import { signOut } from '../lib/auth-client';
 import { can } from '../lib/permissions';
 import { useApiQuery } from '../lib/query';
+import { apiFetch, useErrorText } from '../lib/api';
 import { I } from './icon';
 import { openShortcuts } from './shortcuts';
 import { recent } from '../lib/recent';
 
 type Cmd = { id: string; group: 'recent' | 'pages' | 'servers' | 'tickets' | 'users' | 'actions'; label: string; hint?: string; icon: React.ReactNode; run: () => void };
 type TicketRow = { id: string; number: number; subject: string; status: 'open' | 'answered' | 'customer_reply' | 'on_hold' | 'closed'; ownerEmail?: string };
-type ServerRow = { id: string; name: string; address: string | null; ownerEmail?: string; favorite?: boolean };
+type ServerRow = { id: string; name: string; address: string | null; ownerEmail?: string; favorite?: boolean; state: string; powerState: string; deleteAt?: string | null };
 const fold = (s: string) => s.toLocaleLowerCase('tr').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/ı/g, 'i');
 
 export function usePaletteShortcut(open: () => void) {
@@ -47,6 +48,15 @@ export default function CommandPalette({ permissions, isOpen, onOpenChange }: { 
   const tickets = useApiQuery<{ tickets: TicketRow[] }>(support ? ['admin', 'support', 'queue', 'palette'] : ['support', 'mine'], isOpen ? (support ? '/admin/support/tickets?status=' : '/support/tickets') : null).data?.tickets ?? [];
   const ts = useTranslations('Support');
   const go = (href: string) => () => { onOpenChange(false); router.push(href); };
+  const tsv = useTranslations('Servers');
+  const { error } = useErrorText();
+  const mayAct = !staff || can(permissions, 'servers.manage_all');
+  // A power action straight from the palette (same request and checks as the server page's button).
+  const power = (s: ServerRow, action: string) => () => {
+    onOpenChange(false);
+    apiFetch(`/servers/${s.id}/actions`, { method: 'POST', body: { action }, headers: { 'idempotency-key': crypto.randomUUID() } })
+      .then(() => toast.success(t('actionStarted', { name: s.name, action: tsv(`action.${action as 'power_on'}`) })), (e) => toast.danger(error(e)));
+  };
   const commands = useMemo<Cmd[]>(() => {
     const pages: [string, string, React.ReactNode, boolean][] = [
       ['/admin', tn('dashboard'), <I key="i" name="layout-dashboard" size={16}/>, can(permissions, 'dashboard.view')],
@@ -81,6 +91,13 @@ export default function CommandPalette({ permissions, isOpen, onOpenChange }: { 
       // Starred servers first, with their star.
       ...[...servers].sort((a, b) => Number(!!b.favorite) - Number(!!a.favorite)).map((s) => ({ id: `s:${s.id}`, group: 'servers' as const, label: s.name, hint: [s.address, s.ownerEmail].filter(Boolean).join(' · '),
         icon: <I name={s.favorite ? 'star' : 'server'} size={16} className={s.favorite ? 'fill-current text-warning' : undefined}/>, run: go(`/servers/${s.id}`) })),
+      // Shown only while searching: a server's console and its next power step, without opening its page.
+      ...(mayAct ? servers : []).filter((s) => s.state === 'ready' && !s.deleteAt).flatMap((s) => [
+        { id: `sa:${s.id}:console`, group: 'servers' as const, label: `${s.name}: ${tsv('action.console')}`, hint: s.address ?? undefined, icon: <I name="square-terminal" size={16}/>, run: go(`/servers/${s.id}/console`) },
+        s.powerState === 'poweredOn'
+          ? { id: `sa:${s.id}:shutdown`, group: 'servers' as const, label: `${s.name}: ${tsv('action.shutdown')}`, hint: s.address ?? undefined, icon: <I name="power" size={16}/>, run: power(s, 'shutdown') }
+          : { id: `sa:${s.id}:on`, group: 'servers' as const, label: `${s.name}: ${tsv('action.power_on')}`, hint: s.address ?? undefined, icon: <I name="play" size={16}/>, run: power(s, 'power_on') },
+      ]),
       ...tickets.map((x) => ({ id: `t:${x.id}`, group: 'tickets' as const, label: `#${x.number} ${x.subject}`, hint: [ts(`status.${x.status}`), x.ownerEmail].filter(Boolean).join(' · '),
         icon: <I name="life-buoy" size={16}/>, run: go(support ? `/admin/support/${x.id}` : `/support/${x.id}`) })),
       { id: 'a:theme', group: 'actions', label: resolvedTheme === 'dark' ? t('lightTheme') : t('darkTheme'), icon: resolvedTheme === 'dark' ? <I name="sun" size={16}/> : <I name="moon" size={16}/>,
@@ -93,7 +110,7 @@ export default function CommandPalette({ permissions, isOpen, onOpenChange }: { 
   }, [permissions, servers, users, tickets, resolvedTheme, locale, isOpen]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const q = fold(query.trim());
-  const results = q ? commands.filter((c) => c.group !== 'recent').filter((c) => fold(`${c.label} ${c.hint ?? ''}`).includes(q)) : commands.filter((c) => c.group !== 'tickets' && ((c.group !== 'servers' && c.group !== 'users') || commands.indexOf(c) < 40));
+  const results = q ? commands.filter((c) => c.group !== 'recent').filter((c) => fold(`${c.label} ${c.hint ?? ''}`).includes(q)) : commands.filter((c) => c.group !== 'tickets' && !c.id.startsWith('sa:') && ((c.group !== 'servers' && c.group !== 'users') || commands.indexOf(c) < 40));
   useEffect(() => setActive(0), [query, isOpen]);
   useEffect(() => { if (!isOpen) setQuery(''); }, [isOpen]);
   useEffect(() => { listRef.current?.querySelector(`[data-index="${active}"]`)?.scrollIntoView({ block: 'nearest' }); }, [active]);

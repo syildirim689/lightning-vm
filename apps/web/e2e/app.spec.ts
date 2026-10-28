@@ -497,6 +497,12 @@ test.describe('server lifecycle (simulator, Turkish customer)', () => {
     await expect(page.getByRole('listbox').getByText('Son açılanlar')).toBeVisible();
     await page.keyboard.press('Enter');
     await expect(page).toHaveURL(/\/servers\/[0-9a-f-]{36}$/);
+    // Typing a server's name also offers its console and next power step.
+    await page.keyboard.press('Control+k');
+    await page.keyboard.type('web-1');
+    await expect(page.getByRole('option', { name: /web-1: Konsol/ })).toBeVisible();
+    await expect(page.getByRole('option', { name: /web-1: (Düzgün kapat|Aç)/ })).toBeVisible();
+    await page.keyboard.press('Escape');
 
     await page.getByRole('button', { name: 'Zorla kapat' }).click();
     await expect(page.getByRole('alertdialog')).toContainText('kaydedilmemiş veriler kaybolabilir');

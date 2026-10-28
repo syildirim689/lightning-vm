@@ -2263,7 +2263,8 @@
     "recent": "Son açılanlar",
     "activity": "Etkinliklerim",
     "users": "Kullanıcılar",
-    "tickets": "Destek talepleri"
+    "tickets": "Destek talepleri",
+    "actionStarted": "{name}: {action} başlatıldı."
   },
   "Insights": {
     "title": "Dikkat gerektirenler",
