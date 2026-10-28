@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, HttpCode, Param, ParseUUIDPipe, Post, Put, Query, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, HttpException, Param, ParseUUIDPipe, Post, Put, Query, Req, UseGuards } from '@nestjs/common';
 import type { PoolClient } from 'pg';
 import { isIP } from 'node:net';
 import { pool } from './db';
@@ -602,7 +602,10 @@ export class CatalogController {
     // A coupon typed in: its first price and how many invoices it covers, or why it does not apply (shown at the field).
     const coupon = typeof body.coupon === 'string' && body.coupon.trim()
       ? await checkCoupon(pool, body.coupon, req.user.id, { packageId, monthly: price.monthly, currency: price.currency })
-        .then((c) => ({ code: c.code, monthly: c.monthly, periods: c.periods }), (e: { fields?: Record<string, string> }) => ({ error: e.fields?.coupon ?? 'COUPON_UNKNOWN' }))
+        .then((c) => ({ code: c.code, monthly: c.monthly, periods: c.periods }), (e: unknown) => {
+          if (!(e instanceof HttpException)) throw e;
+          return { error: (e.getResponse() as { fields?: Record<string, string> }).fields?.coupon ?? 'COUPON_UNKNOWN' };
+        })
       : null;
     return { shape, price, quota: { limits, exceeded: over }, capacityAvailable: fits, budget, coupon };
   }
