@@ -1369,7 +1369,7 @@ test('coupons: staff make codes; the quote and the order take them off the first
   assert.equal(made.statusCode, 202, made.body);
   const { serverId: id, invoiceId } = made.json();
   const line = (await pool.query('SELECT unit_price::text AS p, description FROM invoice_lines WHERE invoice_id = $1', [invoiceId])).rows[0];
-  assert.equal(line.p, '0.50');
+  assert.equal(line.p, '0.5000');
   assert.match(line.description, /kupon HALF/);
   const sub = (await pool.query('SELECT * FROM subscriptions WHERE server_id = $1', [id])).rows[0];
   assert.deepEqual([sub.coupon_id, sub.coupon_left, sub.amount], [half, 1, '1.00'], 'the full price stays the subscription\'s; one more discounted invoice');
@@ -1379,7 +1379,7 @@ test('coupons: staff make codes; the quote and the order take them off the first
   await pool.query("UPDATE subscriptions SET period_end = (now() AT TIME ZONE 'Europe/Istanbul')::date + 3 WHERE id = $1", [sub.id]);
   await runBilling();
   const renewal = (await pool.query("SELECT l.unit_price::text AS p FROM invoice_lines l JOIN invoices i ON i.id = l.invoice_id WHERE l.subscription_id = $1 AND i.kind = 'renewal'", [sub.id])).rows[0];
-  assert.equal(renewal.p, '0.50');
+  assert.equal(renewal.p, '0.5000');
   assert.equal((await pool.query('SELECT coupon_left FROM subscriptions WHERE id = $1', [sub.id])).rows[0].coupon_left, 0);
   // Used: the amount stays, it cannot be deleted, only turned off.
   assert.equal((await send('PUT', `/admin/coupons/${half}`, { kind: 'percent', value: '90' })).json().code, 'COUPON_IN_USE');
@@ -1408,6 +1408,7 @@ test('coupons: staff make codes; the quote and the order take them off the first
 test('transfers: the owner offers a server by e-mail, the other account accepts and it moves with its subscription; checks, decline and withdraw; staff move one at once', { skip }, async () => {
   const otherId = (await send('GET', '/auth/me', undefined, other)).json().id;
   const userId = (await send('GET', '/auth/me', undefined, user)).json().id;
+  await send('PUT', '/admin/settings/billing', { enabled: false }); // an unpaid order invoice would rightly block the handover
   const made = await create(order('handover-1'));
   const id = made.json().serverId;
   await until(async () => (await serverRow(id)).state === 'ready' && !(await pool.query("SELECT 1 FROM operations WHERE server_id = $1 AND status IN ('pending', 'running')", [id])).rowCount, 'ready', 120);

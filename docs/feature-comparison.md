@@ -26,7 +26,8 @@ Status values:
 | Snapshots (customer, limit, schedule) | WGS, HostBill, Proxmox | Yes (with automatic snapshots and rotation) |
 | Root password reset | VirtFusion, WGS, HostBill | Yes (stored encrypted, shown on request) |
 | Rescue mode | SolusVM, HostBill | Yes: boot from an ISO in the library (SystemRescue, for example), then eject |
-| Change hostname | HostBill, VirtFusion | Planned |
+| Change hostname | HostBill, VirtFusion | **New**: renamed in the panel, with its default reverse DNS; the name inside the guest stays the customer's |
+| Hand a server to another account | VirtFusion, HostBill | **New**: offered by e-mail and accepted within 7 days, with its subscription; staff move one at once |
 | Extra disks | SolusVM, HostBill | **New**: priced per GB per location, added and removed while the server runs |
 | Backups | VirtFusion, Virtualizor, SolusVM, HostBill | **New**: disk copies on each location's backup datastore (an NFS store at another site works), by hand or on a schedule with retention, restored over the disk |
 | Nested ESXi | — | Yes (ESXi images) |
@@ -57,6 +58,7 @@ Status values:
 | e-Fatura / e-Arşiv | — | Yes (seven integrators) |
 | Hourly pay-as-you-go | AutoVM, Virtualizor, VirtFusion, HostBill | **New**: paid from the balance, with a hold when it runs out and a monthly usage invoice |
 | WHMCS / WISECP module | AutoVM, everyone | **New**: `integrations/` (WHMCS server module; WISECP module not tried on a WISECP install) |
+| Coupons / promo codes | WHMCS, HostBill, Virtualizor (through billing) | **New**: percent or fixed, first N invoices or all, limited by uses, date, packages and new customers |
 | Invoice disputes | — | **New**: reason, lines, files; collection paused; credit, refund or withdraw |
 
 ## Automation and API

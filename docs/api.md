@@ -33,7 +33,7 @@ Requests that start an operation need an `Idempotency-Key` header (8–100 chara
 |---|---|---|
 | `GET /servers` | | Your servers |
 | `GET /servers/:id` | | One server, its operations, and what you may do on it |
-| `POST /servers` | `type` (`package` or `custom`), `poolId`, `packageId` or `vcpu`/`memoryMb`/`diskGb`, `imageId`, `name`, `sshKeyIds[]`, optional `firewallIds[]`, `rootPassword`, `extraIpv4`, `applicationId`, `projectId` | Order a server |
+| `POST /servers` | `type` (`package` or `custom`), `poolId`, `packageId` or `vcpu`/`memoryMb`/`diskGb`, `imageId`, `name`, `sshKeyIds[]`, optional `firewallIds[]`, `rootPassword`, `extraIpv4`, `applicationId`, `projectId`, `coupon` | Order a server |
 | `POST /servers/:id/actions` | `action`: `power_on`, `shutdown`, `power_off` or `reset` | Power |
 | `POST /servers/:id/resize/quote` | same shape fields as an order | New price and what is due now |
 | `POST /servers/:id/resize` | same | Change the size. The disk only grows; an increase is invoiced for the rest of the period |
@@ -42,8 +42,10 @@ Requests that start an operation need an `Idempotency-Key` header (8–100 chara
 | `DELETE /servers/:id` | `confirm` (the server's name) | Delete |
 | `GET /servers/:id/metrics` | | CPU, memory, network and disk for the last hour |
 | `GET /operations/active` | | Running operations |
+| `POST /servers/:id/transfer` | `email`, optional `note` | Offer the server to another account (open for 7 days) |
+| `GET /transfers`, `POST /transfers/:id/accept`, `…/decline`, `…/cancel` | | Offers received and made; answer or withdraw one |
 
-The catalog is at `GET /catalog`; `POST /catalog/quote` prices an order. Firewalls are under `/firewalls`, SSH keys under `/ssh-keys`, and invoices under `/billing/…`.
+The catalog is at `GET /catalog`; `POST /catalog/quote` prices an order (with `coupon`, it answers the discounted first price or why the code does not apply). Firewalls are under `/firewalls`, SSH keys under `/ssh-keys`, and invoices under `/billing/…`.
 
 ## Webhooks
 

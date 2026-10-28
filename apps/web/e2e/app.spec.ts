@@ -971,7 +971,7 @@ test.describe('people, settings and smart features (English browser)', () => {
     }).toPass({ timeout: 20_000 });
     await page.getByRole('button', { name: 'Create coupon' }).click();
     await expect(page.getByText(`Coupon ${code} created.`)).toBeVisible();
-    await expect(page.getByText(code, { exact: true })).toBeVisible();
+    await expect(page.getByRole('grid', { name: 'Coupons' }).getByText(code, { exact: true })).toBeVisible();
     await shot(page, 'coupons');
     await page.goto('/account?tab=transfers');
     await expect(page.getByText('Offered to you', { exact: true })).toBeVisible();
