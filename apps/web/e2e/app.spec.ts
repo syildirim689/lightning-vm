@@ -659,6 +659,10 @@ test.describe('server lifecycle (simulator, Turkish customer)', () => {
     await signIn(staff, admin);
     await expect(staff).toHaveURL(/\/admin$/);
     await staff.goto('/admin/servers');
+    // The table copies an IP in one tap, and the owner's e-mail opens that customer in the user list.
+    await staff.getByRole('button', { name: 'Kopyala: web-1 IP' }).click();
+    await expect(staff.getByText('web-1 IP kopyalandı.')).toBeVisible();
+    await expect(staff.getByRole('link', { name: user.email }).first()).toHaveAttribute('href', `/admin/users?q=${encodeURIComponent(user.email)}`);
     await choose(staff, staff, /Görünen sunucular için işlem/, 'Sil (geri alma süresiyle)');
     await staff.getByRole('button', { name: /sunucuya uygula/ }).click();
     await expect(staff.getByRole('alertdialog')).toContainText('sahiplerine bildirim gider');
