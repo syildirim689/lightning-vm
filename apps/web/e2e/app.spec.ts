@@ -665,13 +665,15 @@ test.describe('server lifecycle (simulator, Turkish customer)', () => {
     await expect(staff.getByRole('link', { name: user.email }).first()).toHaveAttribute('href', `/admin/users?q=${encodeURIComponent(user.email)}`);
     await choose(staff, staff, /Görünen sunucular için işlem/, 'Sil (geri alma süresiyle)');
     await staff.getByRole('button', { name: /sunucuya uygula/ }).click();
-    await expect(staff.getByRole('alertdialog')).toContainText('sahiplerine bildirim gider');
+    // The copy toast is an alertdialog too; the confirmation is the one that explains the delete.
+    const ask = staff.getByRole('alertdialog').filter({ hasText: 'sahiplerine bildirim gider' });
+    await expect(ask).toBeVisible();
     for (const width of [390, 1280]) {
       await staff.setViewportSize({ width, height: 900 });
       await staff.waitForTimeout(400);
       await staff.screenshot({ path: `test-results/tour/admin-bulk-delete-${width}.png` });
     }
-    await staff.getByRole('alertdialog').getByRole('button', { name: 'Vazgeç' }).click();
+    await ask.getByRole('button', { name: 'Vazgeç' }).click();
     await staff.context().close();
 
     // Both go: web-1 from the grace period (bulk delete while two are listed) with "delete for good now", then web-2 at once.
