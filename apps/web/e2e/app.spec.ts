@@ -632,7 +632,7 @@ test.describe('server lifecycle (simulator, Turkish customer)', () => {
         await expectNoOverflow(page, 'list filtered to servers awaiting deletion at 390 px');
         await page.screenshot({ path: 'test-results/tour/servers-trash-filter-390.png', fullPage: true });
         await page.setViewportSize({ width: 1280, height: 720 });
-        await page.getByRole('link', { name: /web-1/ }).click();
+        await page.getByRole('link', { name: /^web-1 / }).click();
         await page.getByRole('button', { name: 'Şimdi kalıcı olarak sil' }).click();
         const sure = page.getByRole('alertdialog', { name: 'Şimdi kalıcı olarak sil' });
         await expect(sure).toContainText('geri alınamaz');
