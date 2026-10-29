@@ -590,6 +590,9 @@ test.describe('server lifecycle (simulator, Turkish customer)', () => {
     await tags.getByRole('button', { name: 'Ekle', exact: true }).click();
     await expect(page.getByText('2 sunucunun etiketi güncellendi.')).toBeVisible();
     await expect(tags.getByRole('button', { name: 'e2e etiketini hepsinden kaldır' })).toBeVisible();
+    await tags.getByRole('textbox', { name: 'Yeni etiket' }).fill('ops');
+    await tags.getByRole('button', { name: 'Ekle', exact: true }).click();
+    await expect(tags.getByRole('button', { name: 'ops etiketini hepsinden kaldır' })).toBeVisible();
     await page.setViewportSize({ width: 390, height: 900 });
     await expectNoOverflow(page, 'bulk tags at 390 px');
     await page.screenshot({ path: 'test-results/tour/servers-bulk-tags-390.png' });
@@ -602,6 +605,39 @@ test.describe('server lifecycle (simulator, Turkish customer)', () => {
     await page.getByRole('region', { name: 'Seçili sunucular için işlemler' }).getByRole('button', { name: 'Aç', exact: true }).click();
     await expect(page.getByText(/sunucuda işlem başladı/)).toBeVisible();
     await expect(page.getByRole('region', { name: 'Seçili sunucular için işlemler' })).toBeHidden();
+
+    // The tag filter (from the URL) offers renaming the tag on every server, then removing it.
+    await page.goto('/?tag=ops');
+    await page.getByRole('button', { name: 'Yeniden adlandır' }).click();
+    const rename = page.getByRole('dialog');
+    await rename.getByRole('textbox', { name: 'Yeni ad' }).fill('prod');
+    await page.setViewportSize({ width: 390, height: 900 });
+    await expectNoOverflow(page, 'tag rename at 390 px');
+    await page.screenshot({ path: 'test-results/tour/servers-tag-rename-390.png' });
+    await page.setViewportSize({ width: 1280, height: 720 });
+    await rename.getByRole('button', { name: 'Kaydet' }).click();
+    await expect(page.getByText('2 sunucuda etiket yeniden adlandırıldı.')).toBeVisible();
+    await expect(page).toHaveURL(/tag=prod/);
+    await page.getByRole('button', { name: 'Etiketi kaldır' }).click();
+    await page.getByRole('alertdialog').getByRole('button', { name: 'Etiketi kaldır' }).click();
+    await expect(page.getByText('Etiket 2 sunucudan kaldırıldı.')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Etiketi kaldır' })).toBeHidden();
+
+    // The admin's bulk delete on the same two servers: asked first, with what happens to them (cancelled here).
+    const staff = await (await page.context().browser()!.newContext({ locale: 'tr-TR' })).newPage();
+    await signIn(staff, admin);
+    await expect(staff).toHaveURL(/\/admin$/);
+    await staff.goto('/admin/servers');
+    await choose(staff, staff, /Görünen sunucular için işlem/, 'Sil (geri alma süresiyle)');
+    await staff.getByRole('button', { name: /sunucuya uygula/ }).click();
+    await expect(staff.getByRole('alertdialog')).toContainText('sahiplerine bildirim gider');
+    for (const width of [390, 1280]) {
+      await staff.setViewportSize({ width, height: 900 });
+      await staff.waitForTimeout(400);
+      await staff.screenshot({ path: `test-results/tour/admin-bulk-delete-${width}.png` });
+    }
+    await staff.getByRole('alertdialog').getByRole('button', { name: 'Vazgeç' }).click();
+    await staff.context().close();
 
     // Both go: web-1 from the grace period (bulk delete while two are listed) with "delete for good now", then web-2 at once.
     for (const name of ['web-1', 'web-2']) {

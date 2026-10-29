@@ -50,6 +50,27 @@ export class SmartController {
     return v;
   }
 
+  // One of the caller's tags renamed (merged into an existing one when it clashes) or, with `to` empty, removed
+  // from all of their own servers. Matching is case-insensitive, as everywhere for tags.
+  @Put('servers/tags')
+  async retag(@Req() req: AuthedRequest, @Body() body: Record<string, unknown>) {
+    const from = cleanLabels({ tags: [body?.from ?? ''] }), to = body?.to ? cleanLabels({ tags: [body.to] }) : null;
+    if ('fields' in from || from.tags.length !== 1) throw apiError(400, 'VALIDATION_FAILED', 'Invalid input', { from: 'INVALID_TAG' });
+    if (to && ('fields' in to || to.tags.length !== 1)) throw apiError(400, 'VALIDATION_FAILED', 'Invalid input', { to: 'INVALID_TAG' });
+    const fold = (x: string) => x.toLocaleLowerCase('tr'), old = fold(from.tags[0]), next = to && !('fields' in to) ? to.tags[0] : null;
+    const { rows } = await pool.query("SELECT id, tags FROM servers WHERE owner_id = $1 AND state <> 'deleted' AND tags IS NOT NULL", [req.user.id]);
+    let changed = 0;
+    for (const s of rows as { id: string; tags: string[] }[]) {
+      if (!s.tags.some((x) => fold(x) === old)) continue;
+      const rest = s.tags.filter((x) => fold(x) !== old);
+      const tags = next && !rest.some((x) => fold(x) === fold(next)) ? [...rest, next] : rest;
+      await pool.query('UPDATE servers SET tags = $2, updated_at = now() WHERE id = $1', [s.id, tags]);
+      changed++;
+    }
+    await audit(req, 'server.labels', 'success', req.user.id, { from: from.tags[0], to: next, changed });
+    return { changed };
+  }
+
   // Spending of this month per currency (servers and virtual data centers), with the resources in use.
   @Get('usage/summary')
   async usage(@Req() req: AuthedRequest) {

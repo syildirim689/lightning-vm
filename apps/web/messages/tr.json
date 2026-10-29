@@ -1815,6 +1815,19 @@
         "tagAdd": "{tag} etiketini hepsine ekle",
         "tagRemove": "{tag} etiketini hepsinden kaldır",
         "tagDone": "{n, plural, =0 {Değişen sunucu olmadı} other {# sunucunun etiketi güncellendi}}."
+      },
+      "tags": {
+        "rename": "Yeniden adlandır",
+        "renameTitle": "“{tag}” etiketini yeniden adlandır",
+        "newName": "Yeni ad",
+        "save": "Kaydet",
+        "renameHelp": "Bu etiket tüm sunucularınızda değişir. Aynı adda bir etiket varsa ikisi birleşir.",
+        "remove": "Etiketi kaldır",
+        "removeTitle": "“{tag}” kaldırılsın mı?",
+        "removeBody": "“{tag}” etiketi tüm sunucularınızdan kaldırılır. Sunucular etkilenmez.",
+        "cancel": "Vazgeç",
+        "renamed": "{n, plural, =0 {Değişen sunucu olmadı} other {# sunucuda etiket yeniden adlandırıldı}}.",
+        "removed": "{n, plural, =0 {Değişen sunucu olmadı} other {Etiket # sunucudan kaldırıldı}}."
       }
     },
     "col": {

@@ -119,7 +119,7 @@ export function ServerList() {
   const flip = (id: string) => setPicked((p) => { const n = new Set(p); if (!n.delete(id)) n.add(id); return n; });
   return <div className="flex flex-col gap-4">
     {(servers.length > 1 || f.q || f.state !== 'all' || f.tag) && <div className="flex flex-col gap-3 rounded-xl border border-border bg-surface p-3">
-      <ServerFilters f={f} placeholder={t('list.searchPlaceholder')}/>
+      <ServerFilters f={f} placeholder={t('list.searchPlaceholder')} manageTags/>
       {servers.length > 1 && <div className="flex flex-wrap items-center gap-2">
         <Button size="sm" variant={picking ? 'primary' : 'secondary'} aria-pressed={picking} onPress={() => (picking ? stopPicking() : setPicking(true))}>
           <I name={picking ? 'check' : 'list-checks'} size={15}/>{picking ? t('list.select.done') : t('list.select.start')}</Button>

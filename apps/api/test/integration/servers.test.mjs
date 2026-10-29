@@ -355,6 +355,14 @@ test('deleting waits out the grace period (restorable, then deleted by the sched
     assert.ok((await serverRow(id)).tags.includes('Web'));
     assert.deepEqual((await tagged({ action: 'untag', tag: 'WEB' })).json(), { started: 1, skipped: 0 });
     assert.ok(!(await serverRow(id)).tags.includes('Web'));
+    // A tag renamed or removed across the caller's own servers (someone else's rename changes nothing of theirs).
+    await tagged({ action: 'tag', tag: 'Web' });
+    assert.equal((await send('PUT', '/servers/tags', { from: '-bad' }, user)).json().fields.from, 'INVALID_TAG');
+    assert.deepEqual((await send('PUT', '/servers/tags', { from: 'web', to: 'Front' }, other)).json(), { changed: 0 });
+    assert.deepEqual((await send('PUT', '/servers/tags', { from: 'web', to: 'Front' }, user)).json(), { changed: 1 });
+    assert.ok((await serverRow(id)).tags.includes('Front') && !(await serverRow(id)).tags.includes('Web'));
+    assert.deepEqual((await send('PUT', '/servers/tags', { from: 'front' }, user)).json(), { changed: 1 });
+    assert.ok(!(await serverRow(id)).tags.includes('Front'));
 
     // Scheduled again; once its time has come the scheduler deletes it like a normal delete.
     await send('DELETE', `/servers/${id}`, { confirm: 'trash-1' }, user, { 'idempotency-key': randomUUID() });

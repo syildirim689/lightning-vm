@@ -1815,6 +1815,19 @@
         "tagAdd": "Add {tag} to all",
         "tagRemove": "Remove {tag} from all",
         "tagDone": "{n, plural, =0 {No server changed} one {# server's tags updated} other {# servers' tags updated}}."
+      },
+      "tags": {
+        "rename": "Rename",
+        "renameTitle": "Rename “{tag}”",
+        "newName": "New name",
+        "save": "Save",
+        "renameHelp": "The tag changes on all of your servers. If a tag with that name exists, the two merge.",
+        "remove": "Remove tag",
+        "removeTitle": "Remove “{tag}”?",
+        "removeBody": "The “{tag}” tag is removed from all of your servers. The servers are not affected.",
+        "cancel": "Cancel",
+        "renamed": "{n, plural, =0 {No server changed} one {Tag renamed on # server} other {Tag renamed on # servers}}.",
+        "removed": "{n, plural, =0 {No server changed} one {Tag removed from # server} other {Tag removed from # servers}}."
       }
     },
     "col": {
