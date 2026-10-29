@@ -497,7 +497,7 @@ test.describe('server lifecycle (simulator, Turkish customer)', () => {
     await expect(page.locator('main li').getByText('Ana web sunucusu')).toBeVisible();
     await page.setViewportSize({ width: 390, height: 900 });
     await expectNoOverflow(page, 'server list note search at 390 px');
-    await expect(page.getByText('Yükleniyor…')).toBeHidden();
+    await expect(page.getByText('Yükleniyor…').filter({ visible: true })).toHaveCount(0);
     await page.locator('main li').getByText('Ana web sunucusu').scrollIntoViewIfNeeded();
     await page.screenshot({ path: 'test-results/tour/servers-note-search-390.png' });
     await page.setViewportSize({ width: 1280, height: 720 });
