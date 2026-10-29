@@ -14,7 +14,7 @@ import { useApiAction, useApiQuery } from '../../lib/query';
 import ServerMetrics from './metrics';
 import { ServerIso } from './server-iso';
 import { ServerHealth } from '../../components/smart';
-import { CloneServer, OrderSimilar, QuickConnect, RenameServer, ServerLabels } from './server-extras';
+import { CloneServer, Copy, OrderSimilar, QuickConnect, RenameServer, ServerLabels } from './server-extras';
 import { remember } from '../../lib/recent';
 import { PowerSchedules } from './server-schedules';
 import { ServerSnapshots } from './server-snapshots';
@@ -142,7 +142,7 @@ export function ServerList() {
             <span className="truncate text-xs text-muted">{s.imageName}</span>
             {s.notes?.trim() && <span className="flex items-center gap-1.5 text-xs text-muted"><I name="sticky-note" size={13} className="shrink-0"/>
               <span className="sr-only">{t('list.note')}: </span><span className="truncate">{noteLine(s.notes, f.q)}</span></span>}
-            {!!s.tags?.length && <span className="flex flex-wrap gap-1 pt-1">{s.tags.map((x) => <span key={x} className="rounded-full bg-default px-2 py-0.5 text-xs">{x}</span>)}</span>}
+            {!!s.tags?.length && <span className="flex flex-wrap gap-1 pr-20 pt-1">{s.tags.map((x) => <span key={x} className="rounded-full bg-default px-2 py-0.5 text-xs">{x}</span>)}</span>}
             {s.deleteAt && <span className="pt-1"><StatusChip tone="danger">{t('trash.badge', { when: format.relativeTime(new Date(s.deleteAt), new Date()) })}</StatusChip></span>}
           </Card.Content>
         </Card>;
@@ -153,6 +153,7 @@ export function ServerList() {
           <span aria-hidden className={`absolute bottom-3 right-3 grid size-6 place-items-center rounded-md border-2 transition-colors ${on ? 'border-accent bg-accent text-accent-foreground' : 'border-border bg-surface'}`}>{on && <I name="check" size={14}/>}</span>
         </button>
       : <><NextLink href={`/servers/${s.id}`} className="block h-full rounded-xl outline-offset-2 transition-all duration-200 hover:-translate-y-1 hover:shadow-lg focus-visible:outline-2">{card}</NextLink>
+        {s.address && <Copy text={s.address} label={`${s.name} IP`} className="absolute bottom-3 right-12"/>}
         <FavoriteStar id={s.id} on={!!s.favorite} name={s.name}/></>}
     </motion.li>; })}
   </ul>}

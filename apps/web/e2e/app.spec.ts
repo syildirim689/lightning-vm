@@ -499,6 +499,10 @@ test.describe('server lifecycle (simulator, Turkish customer)', () => {
     await expectNoOverflow(page, 'server list note search at 390 px');
     await expect(page.getByText('Yükleniyor…').filter({ visible: true })).toHaveCount(0);
     await page.locator('main li').getByText('Ana web sunucusu').scrollIntoViewIfNeeded();
+    // The card copies its IP in one tap, without opening the server.
+    await page.getByRole('button', { name: 'Kopyala: web-1 IP' }).click();
+    await expect(page.getByText('web-1 IP kopyalandı.')).toBeVisible();
+    await expect(page).toHaveURL(/\/\?q=/);
     await page.screenshot({ path: 'test-results/tour/servers-note-search-390.png' });
     await page.setViewportSize({ width: 1280, height: 720 });
     await page.goto('/?q=yok-boyle');

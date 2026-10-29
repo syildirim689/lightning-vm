@@ -12,9 +12,9 @@ import { apiFetch, type ApiError, useErrorText } from '../../lib/api';
 import { useOrder } from '../../lib/order-store';
 import type { Server } from './servers-ui';
 
-function Copy({ text, label }: { text: string; label: string }) {
+export function Copy({ text, label, className = '' }: { text: string; label: string; className?: string }) {
   const t = useTranslations('Extras');
-  return <Button size="sm" variant="ghost" isIconOnly aria-label={`${t('copy')}: ${label}`} className="min-h-9 min-w-9"
+  return <Button size="sm" variant="ghost" isIconOnly aria-label={`${t('copy')}: ${label}`} className={`min-h-9 min-w-9 ${className}`}
     onPress={async () => { await navigator.clipboard?.writeText(text).catch(() => undefined); toast.success(t('copied', { what: label })); }}><I name="copy" size={15}/></Button>;
 }
 
