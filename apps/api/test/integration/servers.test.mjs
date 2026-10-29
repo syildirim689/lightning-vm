@@ -804,12 +804,15 @@ test('power schedules: validated, owned, limited per server; a due one starts th
   // Admin bulk delete only starts the grace period (the owner is told); bulk restore takes it back.
   const trash = (action) => send('POST', '/admin/servers/actions', { action, serverIds: [id] }, admin, { 'idempotency-key': randomUUID() });
   await until(async () => (await lastOp(id)).kind === second && (await lastOp(id)).status === 'succeeded', 'bulk action done');
+  assert.equal((await trash('delete')).json().code, 'ACTION_DISABLED'); // the suite runs without a grace period
+  await send('PUT', '/admin/settings/servers', { deleteGraceHours: 6 });
   assert.deepEqual((await trash('delete')).json(), { started: 1, skipped: 0 });
   assert.ok((await serverRow(id)).delete_at, 'waiting');
   assert.deepEqual((await trash('delete')).json(), { started: 0, skipped: 1 });
   await until(async () => !['pending', 'running'].includes((await lastOp(id)).status), 'shutdown settled');
   assert.deepEqual((await trash('restore')).json(), { started: 1, skipped: 0 });
   assert.equal((await serverRow(id)).delete_at, null);
+  await send('PUT', '/admin/settings/servers', { deleteGraceHours: 0 });
   // The wait shut it down: back on for the tests after this one.
   if (second === 'power_on') {
     await send('POST', '/admin/servers/actions', { action: 'power_on', serverIds: [id] }, admin, { 'idempotency-key': randomUUID() });
