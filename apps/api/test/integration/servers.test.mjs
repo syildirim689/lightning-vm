@@ -346,6 +346,16 @@ test('deleting waits out the grace period (restorable, then deleted by the sched
     assert.equal((await send('POST', '/servers/actions', { action: 'delete', serverIds: [id] }, user, { 'idempotency-key': randomUUID() })).json().code, 'ACTION_DISABLED');
     await send('PUT', '/admin/settings/servers', { deleteGraceHours: 6 });
 
+    // Bulk tags: added once (case-insensitively), removed again; a bad tag is refused; someone else's server is skipped.
+    const tagged = (body, session = user) => send('POST', '/servers/actions', { serverIds: [id], ...body }, session, { 'idempotency-key': randomUUID() });
+    assert.equal((await tagged({ action: 'tag', tag: '-bad' })).json().fields.tag, 'INVALID_TAG');
+    assert.deepEqual((await tagged({ action: 'tag', tag: 'Web' })).json(), { started: 1, skipped: 0 });
+    assert.deepEqual((await tagged({ action: 'tag', tag: 'web' })).json(), { started: 0, skipped: 1 });
+    assert.deepEqual((await tagged({ action: 'tag', tag: 'x' }, other)).json(), { started: 0, skipped: 1 });
+    assert.ok((await serverRow(id)).tags.includes('Web'));
+    assert.deepEqual((await tagged({ action: 'untag', tag: 'WEB' })).json(), { started: 1, skipped: 0 });
+    assert.ok(!(await serverRow(id)).tags.includes('Web'));
+
     // Scheduled again; once its time has come the scheduler deletes it like a normal delete.
     await send('DELETE', `/servers/${id}`, { confirm: 'trash-1' }, user, { 'idempotency-key': randomUUID() });
     await settled();
@@ -787,6 +797,10 @@ test('power schedules: validated, owned, limited per server; a due one starts th
   assert.equal((await send('POST', '/admin/servers/actions', { action: 'explode', serverIds: [id] }, admin, { 'idempotency-key': randomUUID() })).statusCode, 400);
   assert.deepEqual((await bulk(admin)).json(), { started: 1, skipped: 1 });
   assert.deepEqual((await bulk(admin)).json(), { started: 0, skipped: 2 });
+  const tags = (action, session) => send('POST', '/admin/servers/actions', { action, tag: 'ops', serverIds: [id] }, session, { 'idempotency-key': randomUUID() });
+  assert.equal((await tags('tag', user)).statusCode, 403);
+  assert.deepEqual((await tags('tag', admin)).json(), { started: 1, skipped: 0 });
+  assert.deepEqual((await tags('untag', admin)).json(), { started: 1, skipped: 0 });
   await until(async () => (await lastOp(id)).kind === second && (await lastOp(id)).status === 'succeeded', 'bulk action done');
 });
 

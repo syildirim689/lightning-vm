@@ -1737,7 +1737,9 @@
       "power_off": "Force off",
       "reset": "Reset",
       "console": "Console",
-      "cancel": "Cancel"
+      "cancel": "Cancel",
+      "tag": "Add tag",
+      "untag": "Remove tag"
     },
     "confirm": {
       "power_off": "Force off cuts power without telling the operating system; unsaved data may be lost.",
@@ -1802,7 +1804,15 @@
         "confirm": "Apply “{action}” to {n} servers?",
         "restore": "Take back {n}",
         "delete": "Delete",
-        "deleteConfirm": "Shut down {n} servers and hold them for deletion? Until the grace period ends you can take them back from the list."
+        "deleteConfirm": "Shut down {n} servers and hold them for deletion? Until the grace period ends you can take them back from the list.",
+        "tags": "Tags",
+        "tagsTitle": "Tags of {n} servers",
+        "tagsKnown": "Tags you use",
+        "tagsOn": "On the selected ones",
+        "tagSome": "some",
+        "tagAdd": "Add {tag} to all",
+        "tagRemove": "Remove {tag} from all",
+        "tagDone": "{n, plural, =0 {No server changed} one {# server's tags updated} other {# servers' tags updated}}."
       }
     },
     "col": {

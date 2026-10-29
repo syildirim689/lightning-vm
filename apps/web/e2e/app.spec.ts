@@ -582,6 +582,23 @@ test.describe('server lifecycle (simulator, Turkish customer)', () => {
     }
     await page.setViewportSize({ width: 1280, height: 720 });
     await page.screenshot({ path: 'test-results/tour/servers-select.png', fullPage: true });
+    // Tags for both at once: added, shown as on the selection, removed again; Escape closes only the popover.
+    const bar = page.getByRole('region', { name: 'Seçili sunucular için işlemler' });
+    await bar.getByRole('button', { name: 'Etiket', exact: true }).click();
+    const tags = page.getByRole('dialog');
+    await tags.getByRole('textbox', { name: 'Yeni etiket' }).fill('e2e');
+    await tags.getByRole('button', { name: 'Ekle', exact: true }).click();
+    await expect(page.getByText('2 sunucunun etiketi güncellendi.')).toBeVisible();
+    await expect(tags.getByRole('button', { name: 'e2e etiketini hepsinden kaldır' })).toBeVisible();
+    await page.setViewportSize({ width: 390, height: 900 });
+    await expectNoOverflow(page, 'bulk tags at 390 px');
+    await page.screenshot({ path: 'test-results/tour/servers-bulk-tags-390.png' });
+    await page.setViewportSize({ width: 1280, height: 720 });
+    await tags.getByRole('button', { name: 'e2e etiketini hepsinden kaldır' }).click();
+    await expect(tags.getByRole('button', { name: 'e2e etiketini hepsinden kaldır' })).toBeHidden();
+    await page.keyboard.press('Escape');
+    await expect(tags).toBeHidden();
+    await expect(bar).toContainText('2 sunucu seçili');
     await page.getByRole('region', { name: 'Seçili sunucular için işlemler' }).getByRole('button', { name: 'Aç', exact: true }).click();
     await expect(page.getByText(/sunucuda işlem başladı/)).toBeVisible();
     await expect(page.getByRole('region', { name: 'Seçili sunucular için işlemler' })).toBeHidden();

@@ -1737,7 +1737,9 @@
       "power_off": "Zorla kapat",
       "reset": "Reset",
       "console": "Konsol",
-      "cancel": "İptal et"
+      "cancel": "İptal et",
+      "tag": "Etiket ekle",
+      "untag": "Etiket kaldır"
     },
     "confirm": {
       "power_off": "Zorla kapatma, işletim sistemine haber vermeden gücü keser; kaydedilmemiş veriler kaybolabilir.",
@@ -1802,7 +1804,15 @@
         "confirm": "{n} sunucuya “{action}” uygulansın mı?",
         "restore": "{n} sunucuyu geri al",
         "delete": "Sil",
-        "deleteConfirm": "{n} sunucu kapatılıp silinmek üzere bekletilsin mi? Geri alma süresi bitene kadar listeden geri alabilirsiniz."
+        "deleteConfirm": "{n} sunucu kapatılıp silinmek üzere bekletilsin mi? Geri alma süresi bitene kadar listeden geri alabilirsiniz.",
+        "tags": "Etiket",
+        "tagsTitle": "{n} sunucunun etiketleri",
+        "tagsKnown": "Kullandığınız etiketler",
+        "tagsOn": "Seçilenlerde olanlar",
+        "tagSome": "bazılarında",
+        "tagAdd": "{tag} etiketini hepsine ekle",
+        "tagRemove": "{tag} etiketini hepsinden kaldır",
+        "tagDone": "{n, plural, =0 {Değişen sunucu olmadı} other {# sunucunun etiketi güncellendi}}."
       }
     },
     "col": {

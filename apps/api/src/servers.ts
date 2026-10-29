@@ -21,7 +21,7 @@ import { notify } from './notify';
 import { prepareApplication } from './applications';
 import { checkVdcRoom, resolveVdcOrder } from './vdc';
 import { renderPtr } from './rdns-names';
-import { fingerprint, parseKeyList, sshKeyPattern } from './smart-rules';
+import { cleanLabels, fingerprint, parseKeyList, sshKeyPattern } from './smart-rules';
 import { available, billOrder, billResize, payFromBalance, resizeCharge, startHourly } from './billing';
 import { hourlyOf } from './billing-rules';
 import { checkCoupon } from './coupons';
@@ -665,11 +665,13 @@ export class ServersController {
   @Post('servers/actions') @HttpCode(202)
   async bulk(@Req() req: AuthedRequest, @Headers('idempotency-key') header: string | undefined, @Body() body: Input) {
     const action = String(body?.action ?? '');
-    if (!['power_on', 'shutdown', 'power_off', 'reset', 'delete', 'restore'].includes(action)) throw apiError(400, 'VALIDATION_FAILED', 'Invalid input', { action: 'INVALID_VALUE' });
+    if (!['power_on', 'shutdown', 'power_off', 'reset', 'delete', 'restore', 'tag', 'untag'].includes(action)) throw apiError(400, 'VALIDATION_FAILED', 'Invalid input', { action: 'INVALID_VALUE' });
     const ids = Array.isArray(body?.serverIds) ? [...new Set(body.serverIds.map(String))] : [];
     if (!ids.length || ids.length > 100 || ids.some((x) => !/^[0-9a-f-]{36}$/.test(x))) throw apiError(400, 'VALIDATION_FAILED', 'Invalid input', { serverIds: 'INVALID_VALUE' });
+    const tag = bulkTag(action, body);
     const trash = action === 'delete' || action === 'restore';
-    await customerMay(req, trash ? 'delete' : 'power');
+    // Tags need no member permission, as on the server page.
+    if (!tag) await customerMay(req, trash ? 'delete' : 'power');
     // Deleting several at once only ever starts the grace period, so a slip can be taken back.
     const grace = (await getSettings('servers')).deleteGraceHours;
     if (action === 'delete' && grace <= 0) throw apiError(403, 'ACTION_DISABLED', 'Deleting several servers at once needs a deletion grace period');
@@ -678,6 +680,7 @@ export class ServersController {
     for (const id of ids) {
       const s = await findServer(req, id, true).catch(() => null);
       if (!s) continue;
+      if (tag) { if (await retag(s, action, tag)) started++; continue; }
       if (action === 'restore') {
         const { rowCount } = await pool.query("UPDATE servers SET delete_at = NULL, updated_at = now() WHERE id = $1 AND delete_at IS NOT NULL AND state <> 'deleting'", [id]);
         if (rowCount) { started++; await audit(req, 'server.delete_cancelled', 'success', req.user.id, { serverId: id }); }
@@ -717,6 +720,24 @@ export class ServersController {
   }
 }
 
+// The one tag a bulk tag/untag carries, checked like the server page's labels (null for other actions).
+function bulkTag(action: string, body: Input): string | null {
+  if (action !== 'tag' && action !== 'untag') return null;
+  const v = cleanLabels({ tags: [body?.tag ?? ''] });
+  if ('fields' in v || v.tags.length !== 1) throw apiError(400, 'VALIDATION_FAILED', 'Invalid input', { tag: 'INVALID_TAG' });
+  return v.tags[0];
+}
+
+// Adds or removes one tag (case-insensitively); false when nothing changed or the server already has 10 tags.
+async function retag(s: { id: string; tags: string[] | null }, action: string, tag: string): Promise<boolean> {
+  const has = (x: string) => x.toLocaleLowerCase('tr') === tag.toLocaleLowerCase('tr');
+  const now = s.tags ?? [];
+  const next = action === 'tag' ? (now.some(has) || now.length >= 10 ? now : [...now, tag]) : now.filter((x) => !has(x));
+  if (next.length === now.length) return false;
+  await pool.query('UPDATE servers SET tags = $2, updated_at = now() WHERE id = $1', [s.id, next]);
+  return true;
+}
+
 @Controller('admin') @UseGuards(PermissionGuard)
 export class ServersAdminController {
   @Get('servers') @Can('servers.view_all', 'dashboard.view')
@@ -739,7 +760,8 @@ export class ServersAdminController {
   @Post('servers/actions') @HttpCode(202) @Can('servers.manage_all')
   async bulk(@Req() req: AuthedRequest, @Headers('idempotency-key') header: string | undefined, @Body() body: Input) {
     const action = String(body?.action ?? '');
-    if (!['power_on', 'shutdown', 'power_off', 'reset'].includes(action)) throw apiError(400, 'VALIDATION_FAILED', 'Invalid input', { action: 'INVALID_VALUE' });
+    if (!['power_on', 'shutdown', 'power_off', 'reset', 'tag', 'untag'].includes(action)) throw apiError(400, 'VALIDATION_FAILED', 'Invalid input', { action: 'INVALID_VALUE' });
+    const tag = bulkTag(action, body);
     const ids = Array.isArray(body?.serverIds) ? [...new Set(body.serverIds.map(String))] : [];
     if (!ids.length || ids.length > 200 || ids.some((x) => !/^[0-9a-f-]{36}$/.test(x))) throw apiError(400, 'VALIDATION_FAILED', 'Invalid input', { serverIds: 'INVALID_VALUE' });
     const base = idempotencyKey(header, req.user.id);
@@ -747,6 +769,7 @@ export class ServersAdminController {
       FROM servers s WHERE s.id = ANY($1::uuid[]) AND s.state <> 'deleted'`, [ids]);
     const started: string[] = [], skipped: string[] = [];
     for (const s of rows) {
+      if (tag) { (await retag(s, action, tag) ? started : skipped).push(s.id); continue; }
       if (s.busy || !['ready', 'error'].includes(s.state) || !s.vm_moref) { skipped.push(s.id); continue; }
       await startPowerOperation(req, s, action, `${base}:${s.id}`).then(() => started.push(s.id), () => skipped.push(s.id));
     }

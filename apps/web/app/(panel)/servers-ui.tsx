@@ -1,5 +1,5 @@
 "use client";
-import { Button, Card, ProgressBar, toast } from '@heroui/react';
+import { Button, Card, Popover, ProgressBar, toast } from '@heroui/react';
 import { I } from '../../components/icon';
 import NextLink from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -152,18 +152,18 @@ export function ServerList() {
         <FavoriteStar id={s.id} on={!!s.favorite} name={s.name}/></>}
     </motion.li>; })}
   </ul>}
-  {picking && chosen.length > 0 && <BulkBar servers={chosen} onDone={stopPicking}/>}
+  {picking && chosen.length > 0 && <BulkBar servers={chosen} known={[...new Set(servers.flatMap((x) => x.tags ?? []))]} onDone={stopPicking}/>}
   </div>;
 }
 
 // The selection's actions, pinned near the bottom of the screen, above the task manager's button (safe-area aware on phones).
-function BulkBar({ servers, onDone }: { servers: Server[]; onDone: () => void }) {
+function BulkBar({ servers, known, onDone }: { servers: Server[]; known: string[]; onDone: () => void }) {
   const t = useTranslations('Servers');
   const ids = servers.map((x) => x.id);
   const waiting = servers.filter((x) => x.deleteAt).length;
-  const run = useApiAction((action: string) => apiFetch<{ started: number; skipped: number }>('/servers/actions', { method: 'POST', body: { action, serverIds: ids }, headers: { 'idempotency-key': crypto.randomUUID() } }),
-    { invalidate: [['servers'], ['tasks'], ['insights']], success: (r) => t('list.select.bulkDone', { started: r.started, skipped: r.skipped }) });
-  const act = (a: string) => run.mutateAsync(a).then(onDone, () => undefined);
+  const run = useApiAction(({ action, tag }: { action: string; tag?: string }) => apiFetch<{ started: number; skipped: number }>('/servers/actions', { method: 'POST', body: { action, serverIds: ids, tag }, headers: { 'idempotency-key': crypto.randomUUID() } }).then((r) => ({ ...r, tag })),
+    { invalidate: [['servers'], ['tasks'], ['insights']], success: (r) => (r.tag ? t('list.select.tagDone', { n: r.started }) : t('list.select.bulkDone', { started: r.started, skipped: r.skipped })) });
+  const act = (action: string) => run.mutateAsync({ action }).then(onDone, () => undefined);
   const label = (a: string) => t(`action.${a as 'power_on'}`);
   const confirm = (a: 'shutdown' | 'reset', icon: string) => <ConfirmButton size="sm" variant={a === 'reset' ? 'danger-soft' : 'secondary'} isDisabled={run.isPending} icon={<I name={icon} size={15}/>}
     label={label(a)} title={label(a)} body={t('list.select.confirm', { action: label(a), n: ids.length })} confirmLabel={t('confirm.yes', { action: label(a) })} cancelLabel={t('confirm.no')} onConfirm={() => act(a)}/>;
@@ -173,10 +173,42 @@ function BulkBar({ servers, onDone }: { servers: Server[]; onDone: () => void })
     <Button size="sm" isPending={run.isPending} onPress={() => act('power_on')}><I name="play" size={15}/>{label('power_on')}</Button>
     {confirm('shutdown', 'power')}
     {confirm('reset', 'rotate-ccw')}
+    <BulkTags servers={servers} known={known} busy={run.isPending} onTag={(action, tag) => run.mutateAsync({ action, tag }).catch(() => undefined)}/>
     {waiting > 0 && <Button size="sm" variant="secondary" isPending={run.isPending} onPress={() => act('restore')}><I name="undo-2" size={15}/>{t('list.select.restore', { n: waiting })}</Button>}
     {waiting < servers.length && <ConfirmButton size="sm" variant="danger-soft" isDisabled={run.isPending} icon={<I name="trash-2" size={15}/>} label={t('list.select.delete')}
       title={t('list.select.delete')} body={t('list.select.deleteConfirm', { n: servers.length - waiting })} confirmLabel={t('list.select.delete')} cancelLabel={t('confirm.no')} onConfirm={() => act('delete')}/>}
   </motion.div>;
+}
+
+// Tags for the whole selection: the ones on any selected server can be taken off all of them; a new or known tag goes on all.
+function BulkTags({ servers, known, busy, onTag }: { servers: Server[]; known: string[]; busy: boolean; onTag: (action: 'tag' | 'untag', tag: string) => Promise<unknown> }) {
+  const t = useTranslations('Servers');
+  const tx = useTranslations('Extras');
+  const [draft, setDraft] = useState('');
+  const on = [...new Set(servers.flatMap((x) => x.tags ?? []))];
+  const everywhere = (tag: string) => servers.every((x) => x.tags?.includes(tag));
+  const offer = known.filter((x) => !everywhere(x)).slice(0, 12);
+  const add = (tag: string) => { if (tag.trim()) void onTag('tag', tag.trim()).then(() => setDraft('')); };
+  return <Popover>
+    <Button size="sm" variant="secondary"><I name="tag" size={15}/>{t('list.select.tags')}</Button>
+    <Popover.Content placement="top" className="w-[20rem] max-w-[calc(100vw-1.5rem)]">
+      <Popover.Dialog className="flex flex-col gap-3">
+        <Popover.Heading className="text-sm font-semibold">{t('list.select.tagsTitle', { n: servers.length })}</Popover.Heading>
+        <form className="flex items-end gap-2" onSubmit={(e) => { e.preventDefault(); add(draft); }}>
+          <TextInput className="flex-1" label={tx('addTag')} value={draft} onChange={setDraft} maxLength={24} placeholder={tx('tagPlaceholder')}/>
+          <Button type="submit" size="sm" isPending={busy} isDisabled={!draft.trim()}><I name="plus" size={15}/>{tx('add')}</Button>
+        </form>
+        {offer.length > 0 && <div className="flex flex-col gap-1.5"><p className="text-xs text-muted">{t('list.select.tagsKnown')}</p>
+          <ul className="flex flex-wrap gap-1.5">{offer.map((x) => <li key={x}><button type="button" disabled={busy} onClick={() => add(x)} aria-label={t('list.select.tagAdd', { tag: x })}
+            className="flex min-h-8 items-center gap-1 rounded-full border border-dashed border-border px-2.5 text-xs hover:border-accent hover:text-accent focus-visible:outline-2 focus-visible:outline-accent disabled:opacity-50"><I name="plus" size={12}/>{x}</button></li>)}</ul></div>}
+        {on.length > 0 && <div className="flex flex-col gap-1.5"><p className="text-xs text-muted">{t('list.select.tagsOn')}</p>
+          <ul className="flex flex-wrap gap-1.5">{on.map((x) => <li key={x} className="flex min-h-8 items-center gap-1 rounded-full bg-accent-soft py-0.5 pl-2.5 pr-1 text-xs text-accent-soft-foreground">
+            {x}{!everywhere(x) && <span className="text-[10px] opacity-70">{t('list.select.tagSome')}</span>}
+            <button type="button" disabled={busy} onClick={() => void onTag('untag', x)} aria-label={t('list.select.tagRemove', { tag: x })}
+              className="grid size-6 place-items-center rounded-full hover:bg-accent/20 focus-visible:outline-2 focus-visible:outline-accent disabled:opacity-50"><I name="x" size={12}/></button></li>)}</ul></div>}
+      </Popover.Dialog>
+    </Popover.Content>
+  </Popover>;
 }
 
 // Star / unstar a server; the list updates at once and is put right if the request fails.

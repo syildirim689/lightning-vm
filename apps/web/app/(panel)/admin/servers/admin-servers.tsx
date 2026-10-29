@@ -4,7 +4,7 @@ import NextLink from 'next/link';
 import { useFormatter, useTranslations } from 'next-intl';
 import { parseAsString, useQueryState } from 'nuqs';
 import { I } from '../../../../components/icon';
-import { ConfirmButton, DataTable, Mono, Notice, PageHeader, SelectInput, StatusChip } from '../../../../components/ui';
+import { ConfirmButton, DataTable, Mono, Notice, PageHeader, SelectInput, StatusChip, TextInput } from '../../../../components/ui';
 import { useState } from 'react';
 import { can } from '../../../../lib/permissions';
 import { useMe } from '../../../../lib/me';
@@ -35,8 +35,10 @@ export default function AdminServers() {
   const filters = useServerFilters(servers);
   const me = useMe();
   const [bulkAction, setBulkAction] = useState('shutdown');
-  const bulk = useApiAction((ids: string[]) => apiFetch<{ started: number; skipped: number }>('/admin/servers/actions', { method: 'POST', body: { action: bulkAction, serverIds: ids }, headers: { 'idempotency-key': crypto.randomUUID() } }),
-    { invalidate: [['admin']], success: (r) => t('admin.bulkDone', { started: r.started, skipped: r.skipped }) });
+  const [bulkTag, setBulkTag] = useState('');
+  const tagging = bulkAction === 'tag' || bulkAction === 'untag';
+  const bulk = useApiAction((ids: string[]) => apiFetch<{ started: number; skipped: number }>('/admin/servers/actions', { method: 'POST', body: { action: bulkAction, serverIds: ids, ...(tagging && { tag: bulkTag.trim() }) }, headers: { 'idempotency-key': crypto.randomUUID() } }),
+    { invalidate: [['admin']], success: (r) => (tagging ? t('list.select.tagDone', { n: r.started }) : t('admin.bulkDone', { started: r.started, skipped: r.skipped })) });
   const [onlyStarred, setOnlyStarred] = useState(false);
   // Starred first; optionally only them.
   const shown = filters.shown.filter((x) => !onlyStarred || x.favorite).sort((x, y) => Number(!!y.favorite) - Number(!!x.favorite));
@@ -68,8 +70,9 @@ export default function AdminServers() {
             </div>
             {me && can(me.permissions, 'servers.manage_all') && shown.length > 0 && <div className="flex flex-col gap-3 rounded-lg border border-border p-3 sm:flex-row sm:items-end">
               <SelectInput className="sm:w-56" label={t('admin.bulkAction')} value={bulkAction} onChange={setBulkAction}
-                options={(['shutdown', 'power_on', 'power_off', 'reset'] as const).map((a) => ({ id: a, label: t(`action.${a}`) }))}/>
-              <ConfirmButton variant={bulkAction === 'power_off' || bulkAction === 'reset' ? 'danger' : 'primary'} icon={<I name="zap" size={15}/>} isDisabled={bulk.isPending}
+                options={(['shutdown', 'power_on', 'power_off', 'reset', 'tag', 'untag'] as const).map((a) => ({ id: a, label: t(`action.${a}`) }))}/>
+              {tagging && <TextInput className="sm:w-48" label={t('list.select.tags')} value={bulkTag} onChange={setBulkTag} maxLength={24}/>}
+              <ConfirmButton variant={bulkAction === 'power_off' || bulkAction === 'reset' ? 'danger' : 'primary'} icon={<I name="zap" size={15}/>} isDisabled={bulk.isPending || (tagging && !bulkTag.trim())}
                 label={t('admin.bulkApply', { n: Math.min(shown.length, 200) })} title={t('admin.bulkApply', { n: Math.min(shown.length, 200) })}
                 body={t('admin.bulkConfirm', { action: t(`action.${bulkAction as 'shutdown'}`), n: Math.min(shown.length, 200) })}
                 confirmLabel={t('confirm.yes', { action: t(`action.${bulkAction as 'shutdown'}`) })} cancelLabel={t('confirm.no')}
