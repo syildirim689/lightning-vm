@@ -613,6 +613,7 @@ test.describe('server lifecycle (simulator, Turkish customer)', () => {
     await rename.getByRole('textbox', { name: 'Yeni ad' }).fill('prod');
     await page.setViewportSize({ width: 390, height: 900 });
     await expectNoOverflow(page, 'tag rename at 390 px');
+    await rename.scrollIntoViewIfNeeded();
     await page.screenshot({ path: 'test-results/tour/servers-tag-rename-390.png' });
     await page.setViewportSize({ width: 1280, height: 720 });
     await rename.getByRole('button', { name: 'Kaydet' }).click();
@@ -948,7 +949,7 @@ test.describe('people, settings and smart features (English browser)', () => {
     await shot('billing-invoice-unpaid');
     await page.getByRole('button', { name: /Sandbox/ }).click();
     await expect(page).toHaveURL(/\/billing\/checkout\//);
-    await expect(page.getByText('Secure payment')).toBeVisible();
+    await expect(page.getByText('Secure payment', { exact: true })).toBeVisible();
     await page.getByLabel('Card number').fill('4000 0000 0000 0002');
     await page.waitForTimeout(300);
     await shot('billing-checkout');
