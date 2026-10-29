@@ -493,7 +493,12 @@ test.describe('server lifecycle (simulator, Turkish customer)', () => {
     await page.goto('/');
     await expect(page.getByText('üretim').first()).toBeVisible();
     // Search reaches notes ("ana web" is only in the note), and the card shows the note line.
-    await page.goto('/?q=ana%20web');
+    // "/" jumps to the list's search from anywhere on the page, selecting what was there.
+    await page.goto('/?q=x');
+    await page.locator('main h1').click();
+    await page.keyboard.press('/');
+    await page.keyboard.type('ana web');
+    await expect(page).toHaveURL(/q=ana(\+|%20)web/);
     await expect(page.locator('main li').getByText('Ana web sunucusu')).toBeVisible();
     await page.setViewportSize({ width: 390, height: 900 });
     await expectNoOverflow(page, 'server list note search at 390 px');
@@ -824,6 +829,7 @@ test.describe('people, settings and smart features (English browser)', () => {
     await page.getByRole('heading', { level: 1 }).click();
     await page.keyboard.press('Shift+?');
     await expect(page.getByRole('dialog', { name: 'Keyboard shortcuts' })).toBeVisible();
+    await expect(page.getByRole('dialog').getByText('Jump to the page search')).toBeVisible();
     await page.keyboard.press('Escape');
     await expect(page.getByRole('dialog')).toBeHidden();
     await page.keyboard.press('g');

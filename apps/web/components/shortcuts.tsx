@@ -1,5 +1,5 @@
 "use client";
-// Keyboard shortcuts: "?" shows the list, "g" then a letter goes to a page (like GitHub and Gmail).
+// Keyboard shortcuts: "?" shows the list, "/" jumps to the page's search, "g" then a letter goes to a page (like GitHub and Gmail).
 // Ignored while typing in a field, and with Ctrl/Alt/⌘ held, so they never steal text input.
 import { Kbd, Modal } from '@heroui/react';
 import { useRouter } from 'next/navigation';
@@ -31,6 +31,8 @@ export default function Shortcuts({ permissions }: { permissions: string[] }) {
     const onKey = (e: KeyboardEvent) => {
       if (e.ctrlKey || e.metaKey || e.altKey || typing(e)) return;
       if (e.key === '?') { e.preventDefault(); setOpen(true); return; }
+      const search = e.key === '/' && document.querySelector<HTMLInputElement>('main input[type="search"]');
+      if (search) { e.preventDefault(); search.focus(); search.select(); return; }
       if (e.key === 'g') { leader = Date.now(); return; }
       const r = Date.now() - leader < 1200 && allowed.find(([k]) => k === e.key.toLowerCase());
       leader = 0;
@@ -55,6 +57,7 @@ export default function Shortcuts({ permissions }: { permissions: string[] }) {
           <ul>
             {row(<><Kbd>Ctrl</Kbd><Kbd>K</Kbd></>, t('palette'))}
             {row(<Kbd>?</Kbd>, t('help'))}
+            {row(<Kbd>/</Kbd>, t('search'))}
           </ul>
           <div>
             <h3 className="mb-1 text-xs font-semibold uppercase tracking-wider text-muted">{t('goTo')}</h3>
