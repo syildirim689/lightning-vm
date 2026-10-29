@@ -107,7 +107,7 @@ export function ServerList() {
   useEffect(() => {
     if (!picking) return;
     // Escape inside a popover or dialog closes only that, not the selection.
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape' && !e.defaultPrevented && !(e.target as Element | null)?.closest?.('[role=dialog],[role=alertdialog]')) stopPicking(); };
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape' && !e.defaultPrevented && !document.querySelector('[role=dialog],[role=alertdialog]')) stopPicking(); };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [picking]);
