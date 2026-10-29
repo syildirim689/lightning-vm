@@ -618,6 +618,7 @@ test.describe('server lifecycle (simulator, Turkish customer)', () => {
     await rename.getByRole('button', { name: 'Kaydet' }).click();
     await expect(page.getByText('2 sunucuda etiket yeniden adlandırıldı.')).toBeVisible();
     await expect(page).toHaveURL(/tag=prod/);
+    await expect(page.getByRole('group', { name: 'Etiket' }).getByRole('button', { name: 'prod 2' })).toHaveAttribute('aria-pressed', 'true');
     await page.getByRole('button', { name: 'Etiketi kaldır' }).click();
     await page.getByRole('alertdialog').getByRole('button', { name: 'Etiketi kaldır' }).click();
     await expect(page.getByText('Etiket 2 sunucudan kaldırıldı.')).toBeVisible();

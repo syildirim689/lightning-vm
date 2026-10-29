@@ -42,7 +42,13 @@ export function ServerFilters({ f, placeholder, manageTags }: { f: ReturnType<ty
         className={`min-h-11 rounded-lg border px-3 text-sm transition-colors duration-150 ${f.state === k ? 'border-accent bg-accent-soft text-accent-soft-foreground' : 'border-border hover:border-accent'}`}>
         {t(`list.filter.${k}`)} <span className="tabular-nums text-muted">{k === 'all' ? f.servers.length : counts[k] ?? 0}</span></button>)}
     </div>
-    {tags.length > 0 && <SelectInput className="w-full md:w-48" label={t('list.tag')} value={f.tag} onChange={(v) => f.setTag(v || null)} options={[{ id: '', label: t('list.allTags') }, ...tags.map((x) => ({ id: x, label: x }))]}/>}
+    {/* A few tags are one tap each (with how many servers carry them); many go in a menu. */}
+    {tags.length > 0 && tags.length <= 12 ? <div role="group" aria-label={t('list.tag')} className="flex flex-wrap gap-1.5">
+      {tags.map((x) => <button key={x} type="button" aria-pressed={f.tag === x} onClick={() => f.setTag(f.tag === x ? null : x)}
+        className={`flex min-h-11 items-center gap-1 rounded-lg border border-dashed px-3 text-sm transition-colors duration-150 ${f.tag === x ? 'border-solid border-accent bg-accent-soft text-accent-soft-foreground' : 'border-border hover:border-accent'}`}>
+        <I name="tag" size={13} className="text-muted"/>{x} <span className="tabular-nums text-muted">{f.servers.filter((s) => s.tags?.includes(x)).length}</span></button>)}
+    </div>
+    : tags.length > 12 && <SelectInput className="w-full md:w-48" label={t('list.tag')} value={f.tag} onChange={(v) => f.setTag(v || null)} options={[{ id: '', label: t('list.allTags') }, ...tags.map((x) => ({ id: x, label: x }))]}/>}
     {manageTags && f.tag && tags.includes(f.tag) && <TagTools tag={f.tag} onDone={(next) => f.setTag(next)}/>}
     <SelectInput className="w-full md:ml-auto md:w-44" label={t('list.sort')} value={f.sort} onChange={(v) => f.setSort(v === 'name' ? 'name' : null)}
       options={[{ id: 'newest', label: t('list.newest') }, { id: 'name', label: t('list.byName') }]}/>
