@@ -1739,7 +1739,9 @@
       "console": "Console",
       "cancel": "Cancel",
       "tag": "Add tag",
-      "untag": "Remove tag"
+      "untag": "Remove tag",
+      "delete": "Delete (with grace period)",
+      "restore": "Take back deletion"
     },
     "confirm": {
       "power_off": "Force off cuts power without telling the operating system; unsaved data may be lost.",
@@ -1863,7 +1865,8 @@
       "bulkDone": "{started} started, {skipped} skipped.",
       "bulkHelp": "Filter first (state, tag, search); at most 200 at a time.",
       "onlyStarred": "Starred only",
-      "import": "Import"
+      "import": "Import",
+      "bulkDeleteNote": "The servers are shut down and deleted when the grace period ends; their owners are told. With a grace period of 0, bulk delete is off."
     },
     "finding": {
       "vm_missing": "VM missing in VMware",

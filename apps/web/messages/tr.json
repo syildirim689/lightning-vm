@@ -1739,7 +1739,9 @@
       "console": "Konsol",
       "cancel": "İptal et",
       "tag": "Etiket ekle",
-      "untag": "Etiket kaldır"
+      "untag": "Etiket kaldır",
+      "delete": "Sil (geri alma süresiyle)",
+      "restore": "Silmeyi geri al"
     },
     "confirm": {
       "power_off": "Zorla kapatma, işletim sistemine haber vermeden gücü keser; kaydedilmemiş veriler kaybolabilir.",
@@ -1863,7 +1865,8 @@
       "bulkDone": "{started} başlatıldı, {skipped} atlandı.",
       "bulkHelp": "Önce süzün (durum, etiket, arama); bir seferde en fazla 200.",
       "onlyStarred": "Yalnızca favoriler",
-      "import": "İçe aktar"
+      "import": "İçe aktar",
+      "bulkDeleteNote": "Sunucular kapatılır ve geri alma süresi bitince silinir; sahiplerine bildirim gider. Bekleme süresi 0 ise toplu silme yapılmaz."
     },
     "finding": {
       "vm_missing": "VM VMware'de yok",

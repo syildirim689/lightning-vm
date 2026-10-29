@@ -801,7 +801,20 @@ test('power schedules: validated, owned, limited per server; a due one starts th
   assert.equal((await tags('tag', user)).statusCode, 403);
   assert.deepEqual((await tags('tag', admin)).json(), { started: 1, skipped: 0 });
   assert.deepEqual((await tags('untag', admin)).json(), { started: 1, skipped: 0 });
+  // Admin bulk delete only starts the grace period (the owner is told); bulk restore takes it back.
+  const trash = (action) => send('POST', '/admin/servers/actions', { action, serverIds: [id] }, admin, { 'idempotency-key': randomUUID() });
   await until(async () => (await lastOp(id)).kind === second && (await lastOp(id)).status === 'succeeded', 'bulk action done');
+  assert.deepEqual((await trash('delete')).json(), { started: 1, skipped: 0 });
+  assert.ok((await serverRow(id)).delete_at, 'waiting');
+  assert.deepEqual((await trash('delete')).json(), { started: 0, skipped: 1 });
+  await until(async () => !['pending', 'running'].includes((await lastOp(id)).status), 'shutdown settled');
+  assert.deepEqual((await trash('restore')).json(), { started: 1, skipped: 0 });
+  assert.equal((await serverRow(id)).delete_at, null);
+  // The wait shut it down: back on for the tests after this one.
+  if (second === 'power_on') {
+    await send('POST', '/admin/servers/actions', { action: 'power_on', serverIds: [id] }, admin, { 'idempotency-key': randomUUID() });
+    await until(async () => (await lastOp(id)).kind === 'power_on' && (await lastOp(id)).status === 'succeeded', 'back on');
+  }
 });
 
 test('snapshots: taken, listed, reverted (power kept) and removed as operations; owner-only; the admin can turn them off', { skip }, async () => {

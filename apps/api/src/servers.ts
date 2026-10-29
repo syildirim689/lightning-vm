@@ -681,15 +681,9 @@ export class ServersController {
       const s = await findServer(req, id, true).catch(() => null);
       if (!s) continue;
       if (tag) { if (await retag(s, action, tag)) started++; continue; }
-      if (action === 'restore') {
-        const { rowCount } = await pool.query("UPDATE servers SET delete_at = NULL, updated_at = now() WHERE id = $1 AND delete_at IS NOT NULL AND state <> 'deleting'", [id]);
-        if (rowCount) { started++; await audit(req, 'server.delete_cancelled', 'success', req.user.id, { serverId: id }); }
-        continue;
-      }
-      if (action === 'delete') {
-        const busy = (await pool.query("SELECT 1 FROM operations WHERE server_id = $1 AND status IN ('pending', 'running')", [id])).rowCount;
-        if (s.state !== 'ready' || s.locked || s.delete_at || busy) continue;
-        await scheduleDeletion(req, s, `${base}:${id}`, grace).then(() => started++, () => undefined);
+      if (trash) {
+        const busy = !!(await pool.query("SELECT 1 FROM operations WHERE server_id = $1 AND status IN ('pending', 'running')", [id])).rowCount;
+        if (await bulkTrash(req, { ...s, busy }, action, `${base}:${id}`, grace)) started++;
         continue;
       }
       if (!['ready', 'error'].includes(s.state) || !s.vm_moref || s.delete_at) continue;
@@ -718,6 +712,17 @@ export class ServersController {
     const { rows: [p] } = await pool.query('SELECT connection_id FROM resource_pools WHERE id = $1', [s.pool_id]);
     return openConsole(req, reply, p.connection_id, s.vm_moref, true);
   }
+}
+
+// Bulk delete (only starts the grace period: ready, unlocked, idle servers) or restore; false when the server was skipped.
+async function bulkTrash(req: AuthedRequest, s: Awaited<ReturnType<typeof findServer>>, action: string, key: string, grace: number): Promise<boolean> {
+  if (action === 'restore') {
+    const { rowCount } = await pool.query("UPDATE servers SET delete_at = NULL, updated_at = now() WHERE id = $1 AND delete_at IS NOT NULL AND state <> 'deleting'", [s.id]);
+    if (rowCount) await audit(req, 'server.delete_cancelled', 'success', req.user.id, { serverId: s.id });
+    return !!rowCount;
+  }
+  if (s.state !== 'ready' || s.locked || s.delete_at || s.busy) return false;
+  return scheduleDeletion(req, s, key, grace).then(() => true, () => false);
 }
 
 // The one tag a bulk tag/untag carries, checked like the server page's labels (null for other actions).
@@ -760,8 +765,11 @@ export class ServersAdminController {
   @Post('servers/actions') @HttpCode(202) @Can('servers.manage_all')
   async bulk(@Req() req: AuthedRequest, @Headers('idempotency-key') header: string | undefined, @Body() body: Input) {
     const action = String(body?.action ?? '');
-    if (!['power_on', 'shutdown', 'power_off', 'reset', 'tag', 'untag'].includes(action)) throw apiError(400, 'VALIDATION_FAILED', 'Invalid input', { action: 'INVALID_VALUE' });
+    if (!['power_on', 'shutdown', 'power_off', 'reset', 'tag', 'untag', 'delete', 'restore'].includes(action)) throw apiError(400, 'VALIDATION_FAILED', 'Invalid input', { action: 'INVALID_VALUE' });
     const tag = bulkTag(action, body);
+    const trash = action === 'delete' || action === 'restore';
+    const grace = (await getSettings('servers')).deleteGraceHours;
+    if (action === 'delete' && grace <= 0) throw apiError(403, 'ACTION_DISABLED', 'Deleting several servers at once needs a deletion grace period');
     const ids = Array.isArray(body?.serverIds) ? [...new Set(body.serverIds.map(String))] : [];
     if (!ids.length || ids.length > 200 || ids.some((x) => !/^[0-9a-f-]{36}$/.test(x))) throw apiError(400, 'VALIDATION_FAILED', 'Invalid input', { serverIds: 'INVALID_VALUE' });
     const base = idempotencyKey(header, req.user.id);
@@ -770,6 +778,7 @@ export class ServersAdminController {
     const started: string[] = [], skipped: string[] = [];
     for (const s of rows) {
       if (tag) { (await retag(s, action, tag) ? started : skipped).push(s.id); continue; }
+      if (trash) { (await bulkTrash(req, s, action, `${base}:${s.id}`, grace) ? started : skipped).push(s.id); continue; }
       if (s.busy || !['ready', 'error'].includes(s.state) || !s.vm_moref) { skipped.push(s.id); continue; }
       await startPowerOperation(req, s, action, `${base}:${s.id}`).then(() => started.push(s.id), () => skipped.push(s.id));
     }
