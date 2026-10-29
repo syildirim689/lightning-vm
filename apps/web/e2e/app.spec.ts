@@ -607,7 +607,17 @@ test.describe('server lifecycle (simulator, Turkish customer)', () => {
     await expect(page.getByRole('region', { name: 'Seçili sunucular için işlemler' })).toBeHidden();
 
     // The tag filter (from the URL) offers renaming the tag on every server, then removing it.
-    await page.goto('/?tag=ops');
+    // Searching a tag in Ctrl+K opens the list filtered to it.
+    await page.keyboard.press('Control+k');
+    await page.keyboard.type('ops');
+    const tagOption = page.getByRole('option', { name: /Etiket: ops/ });
+    await expect(tagOption).toContainText('2 sunucu');
+    await page.setViewportSize({ width: 390, height: 900 });
+    await page.screenshot({ path: 'test-results/tour/palette-tag-390.png' });
+    await page.setViewportSize({ width: 1280, height: 720 });
+    await tagOption.click();
+    await expect(page).toHaveURL(/\?tag=ops$/);
+    await expect(page.getByRole('group', { name: 'Etiket' }).getByRole('button', { name: 'ops 2' })).toHaveAttribute('aria-pressed', 'true');
     await page.getByRole('button', { name: 'Yeniden adlandır' }).click();
     const rename = page.getByRole('dialog');
     await rename.getByRole('textbox', { name: 'Yeni ad' }).fill('prod');

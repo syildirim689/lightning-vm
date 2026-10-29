@@ -17,7 +17,7 @@ import { recent } from '../lib/recent';
 
 type Cmd = { id: string; group: 'recent' | 'pages' | 'servers' | 'tickets' | 'users' | 'actions'; label: string; hint?: string; icon: React.ReactNode; run: () => void };
 type TicketRow = { id: string; number: number; subject: string; status: 'open' | 'answered' | 'customer_reply' | 'on_hold' | 'closed'; ownerEmail?: string };
-type ServerRow = { id: string; name: string; address: string | null; ownerEmail?: string; favorite?: boolean; state: string; powerState: string; deleteAt?: string | null };
+type ServerRow = { id: string; name: string; address: string | null; ownerEmail?: string; favorite?: boolean; state: string; powerState: string; deleteAt?: string | null; tags?: string[] | null };
 const fold = (s: string) => s.toLocaleLowerCase('tr').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/ı/g, 'i');
 
 export function usePaletteShortcut(open: () => void) {
@@ -98,6 +98,9 @@ export default function CommandPalette({ permissions, isOpen, onOpenChange }: { 
           ? { id: `sa:${s.id}:shutdown`, group: 'servers' as const, label: `${s.name}: ${tsv('action.shutdown')}`, hint: s.address ?? undefined, icon: <I name="power" size={16}/>, run: power(s, 'shutdown') }
           : { id: `sa:${s.id}:on`, group: 'servers' as const, label: `${s.name}: ${tsv('action.power_on')}`, hint: s.address ?? undefined, icon: <I name="play" size={16}/>, run: power(s, 'power_on') },
       ]),
+      // A tag opens the server list filtered to it (found by searching only).
+      ...[...new Set(servers.flatMap((s) => s.tags ?? []))].map((tag) => ({ id: `st:${tag}`, group: 'servers' as const, label: tsv('list.tags.palette', { tag }),
+        hint: tsv('list.tags.count', { n: servers.filter((s) => s.tags?.includes(tag)).length }), icon: <I name="tag" size={16}/>, run: go(`${staff ? '/admin/servers' : '/'}?tag=${encodeURIComponent(tag)}`) })),
       ...tickets.map((x) => ({ id: `t:${x.id}`, group: 'tickets' as const, label: `#${x.number} ${x.subject}`, hint: [ts(`status.${x.status}`), x.ownerEmail].filter(Boolean).join(' · '),
         icon: <I name="life-buoy" size={16}/>, run: go(support ? `/admin/support/${x.id}` : `/support/${x.id}`) })),
       { id: 'a:theme', group: 'actions', label: resolvedTheme === 'dark' ? t('lightTheme') : t('darkTheme'), icon: resolvedTheme === 'dark' ? <I name="sun" size={16}/> : <I name="moon" size={16}/>,
@@ -110,7 +113,7 @@ export default function CommandPalette({ permissions, isOpen, onOpenChange }: { 
   }, [permissions, servers, users, tickets, resolvedTheme, locale, isOpen]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const q = fold(query.trim());
-  const results = q ? commands.filter((c) => c.group !== 'recent').filter((c) => fold(`${c.label} ${c.hint ?? ''}`).includes(q)) : commands.filter((c) => c.group !== 'tickets' && !c.id.startsWith('sa:') && ((c.group !== 'servers' && c.group !== 'users') || commands.indexOf(c) < 40));
+  const results = q ? commands.filter((c) => c.group !== 'recent').filter((c) => fold(`${c.label} ${c.hint ?? ''}`).includes(q)) : commands.filter((c) => c.group !== 'tickets' && !c.id.startsWith('sa:') && !c.id.startsWith('st:') && ((c.group !== 'servers' && c.group !== 'users') || commands.indexOf(c) < 40));
   useEffect(() => setActive(0), [query, isOpen]);
   useEffect(() => { if (!isOpen) setQuery(''); }, [isOpen]);
   useEffect(() => { listRef.current?.querySelector(`[data-index="${active}"]`)?.scrollIntoView({ block: 'nearest' }); }, [active]);

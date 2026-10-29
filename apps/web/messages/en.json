@@ -1827,7 +1827,9 @@
         "removeBody": "The “{tag}” tag is removed from all of your servers. The servers are not affected.",
         "cancel": "Cancel",
         "renamed": "{n, plural, =0 {No server changed} one {Tag renamed on # server} other {Tag renamed on # servers}}.",
-        "removed": "{n, plural, =0 {No server changed} one {Tag removed from # server} other {Tag removed from # servers}}."
+        "removed": "{n, plural, =0 {No server changed} one {Tag removed from # server} other {Tag removed from # servers}}.",
+        "palette": "Tag: {tag}",
+        "count": "{n, plural, one {# server} other {# servers}}"
       }
     },
     "col": {
