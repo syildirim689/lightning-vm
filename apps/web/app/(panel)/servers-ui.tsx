@@ -182,10 +182,12 @@ function BulkBar({ servers, known, onDone }: { servers: Server[]; known: string[
 }
 
 // Tags for the whole selection: the ones on any selected server can be taken off all of them; a new or known tag goes on all.
+// A removed chip takes its focused button with it, so focus goes back to the field (Escape still closes the popover).
 function BulkTags({ servers, known, busy, onTag }: { servers: Server[]; known: string[]; busy: boolean; onTag: (action: 'tag' | 'untag', tag: string) => Promise<unknown> }) {
   const t = useTranslations('Servers');
   const tx = useTranslations('Extras');
   const [draft, setDraft] = useState('');
+  const form = useRef<HTMLFormElement>(null);
   const on = [...new Set(servers.flatMap((x) => x.tags ?? []))];
   const everywhere = (tag: string) => servers.every((x) => x.tags?.includes(tag));
   const offer = known.filter((x) => !everywhere(x)).slice(0, 12);
@@ -195,7 +197,7 @@ function BulkTags({ servers, known, busy, onTag }: { servers: Server[]; known: s
     <Popover.Content placement="top" className="w-[20rem] max-w-[calc(100vw-1.5rem)]">
       <Popover.Dialog className="flex flex-col gap-3">
         <Popover.Heading className="text-sm font-semibold">{t('list.select.tagsTitle', { n: servers.length })}</Popover.Heading>
-        <form className="flex items-end gap-2" onSubmit={(e) => { e.preventDefault(); add(draft); }}>
+        <form ref={form} className="flex items-end gap-2" onSubmit={(e) => { e.preventDefault(); add(draft); }}>
           <TextInput className="flex-1" label={tx('addTag')} value={draft} onChange={setDraft} maxLength={24} placeholder={tx('tagPlaceholder')}/>
           <Button type="submit" size="sm" isPending={busy} isDisabled={!draft.trim()}><I name="plus" size={15}/>{tx('add')}</Button>
         </form>
@@ -205,7 +207,7 @@ function BulkTags({ servers, known, busy, onTag }: { servers: Server[]; known: s
         {on.length > 0 && <div className="flex flex-col gap-1.5"><p className="text-xs text-muted">{t('list.select.tagsOn')}</p>
           <ul className="flex flex-wrap gap-1.5">{on.map((x) => <li key={x} className="flex min-h-8 items-center gap-1 rounded-full bg-accent-soft py-0.5 pl-2.5 pr-1 text-xs text-accent-soft-foreground">
             {x}{!everywhere(x) && <span className="text-[10px] opacity-70">{t('list.select.tagSome')}</span>}
-            <button type="button" disabled={busy} onClick={() => void onTag('untag', x)} aria-label={t('list.select.tagRemove', { tag: x })}
+            <button type="button" disabled={busy} onClick={() => void onTag('untag', x).then(() => form.current?.querySelector('input')?.focus())} aria-label={t('list.select.tagRemove', { tag: x })}
               className="grid size-6 place-items-center rounded-full hover:bg-accent/20 focus-visible:outline-2 focus-visible:outline-accent disabled:opacity-50"><I name="x" size={12}/></button></li>)}</ul></div>}
       </Popover.Dialog>
     </Popover.Content>
