@@ -8,13 +8,13 @@ import { useState } from 'react';
 import { I } from '../../components/icon';
 import { ConfirmButton, SelectInput, TextInput } from '../../components/ui';
 import { apiFetch } from '../../lib/api';
+import { fold } from '../../lib/note-line';
 import { useApiAction } from '../../lib/query';
 import type { Server } from './servers-ui';
 
 const groups = ['all', 'running', 'stopped', 'problem', 'busy', 'trash'] as const;
 // Running, stopped, problem, busy (being created or deleted), or waiting out its deletion grace period.
 export const stateGroup = (s: Pick<Server, 'state' | 'powerState' | 'deleteAt'>) => s.deleteAt ? 'trash' : s.state === 'ready' ? (s.powerState === 'poweredOn' ? 'running' : 'stopped') : s.state === 'error' || s.state === 'missing' ? 'problem' : 'busy';
-const fold = (v: string) => v.toLocaleLowerCase('tr');
 
 export function useServerFilters(servers: Server[]) {
   const [q, setQ] = useQueryState('q', parseAsString.withDefault(''));
@@ -23,7 +23,7 @@ export function useServerFilters(servers: Server[]) {
   const [sort, setSort] = useQueryState('sort', parseAsStringLiteral(['newest', 'name'] as const).withDefault('newest'));
   const needle = fold(q.trim());
   const shown = servers.filter((s) => (state === 'all' || stateGroup(s) === state) && (!tag || !!s.tags?.includes(tag))
-    && (!needle || [s.name, s.address, s.location, s.poolName, s.imageName, s.ownerEmail, ...(s.tags ?? [])].some((x) => x && fold(x).includes(needle))))
+    && (!needle || [s.name, s.address, s.location, s.poolName, s.imageName, s.ownerEmail, s.notes, ...(s.tags ?? [])].some((x) => x && fold(x).includes(needle))))
     .sort((a, b) => sort === 'name' ? a.name.localeCompare(b.name) : Date.parse(b.createdAt) - Date.parse(a.createdAt));
   return { shown, servers, q, setQ, state, setState, tag, setTag, sort, setSort };
 }

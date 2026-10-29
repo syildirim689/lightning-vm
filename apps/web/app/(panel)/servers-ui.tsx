@@ -27,6 +27,7 @@ import { SaveAsImage } from './server-image';
 import { TransferServer } from './server-transfer';
 import { useMe } from '../../lib/me';
 import { can } from '../../lib/permissions';
+import { noteLine } from '../../lib/note-line';
 import { ServerFilters, useServerFilters } from './server-filters';
 import { flag } from '../../lib/flag';
 import { ButtonLink, CheckboxInput, ConfirmButton, DataTable, Empty, Mono, Notice, PageHeader, Section, StatusChip, TextInput, type Tone } from '../../components/ui';
@@ -139,6 +140,8 @@ export function ServerList() {
             <span className="flex items-center gap-2"><span className="text-muted">IP</span>{s.address ? <Mono>{s.address}</Mono> : '–'}</span>
             <span className="flex items-center gap-2 text-muted"><I name="cpu" size={14}/>{size(t, s)}</span>
             <span className="truncate text-xs text-muted">{s.imageName}</span>
+            {s.notes?.trim() && <span className="flex items-center gap-1.5 text-xs text-muted"><I name="sticky-note" size={13} className="shrink-0"/>
+              <span className="sr-only">{t('list.note')}: </span><span className="truncate">{noteLine(s.notes, f.q)}</span></span>}
             {!!s.tags?.length && <span className="flex flex-wrap gap-1 pt-1">{s.tags.map((x) => <span key={x} className="rounded-full bg-default px-2 py-0.5 text-xs">{x}</span>)}</span>}
             {s.deleteAt && <span className="pt-1"><StatusChip tone="danger">{t('trash.badge', { when: format.relativeTime(new Date(s.deleteAt), new Date()) })}</StatusChip></span>}
           </Card.Content>

@@ -1778,7 +1778,7 @@
       "title": "Your servers",
       "empty": "You have no servers yet.",
       "search": "Search",
-      "searchPlaceholder": "Name, IP, location or tag",
+      "searchPlaceholder": "Name, IP, location, tag or note",
       "state": "Filter by state",
       "tag": "Tag",
       "allTags": "All tags",
@@ -1830,7 +1830,8 @@
         "removed": "{n, plural, =0 {No server changed} one {Tag removed from # server} other {Tag removed from # servers}}.",
         "palette": "Tag: {tag}",
         "count": "{n, plural, one {# server} other {# servers}}"
-      }
+      },
+      "note": "Note"
     },
     "col": {
       "name": "Name",

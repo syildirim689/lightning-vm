@@ -1778,7 +1778,7 @@
       "title": "Sunucularınız",
       "empty": "Henüz sunucunuz yok.",
       "search": "Ara",
-      "searchPlaceholder": "Ad, IP, lokasyon veya etiket",
+      "searchPlaceholder": "Ad, IP, lokasyon, etiket veya not",
       "state": "Duruma göre süz",
       "tag": "Etiket",
       "allTags": "Tüm etiketler",
@@ -1830,7 +1830,8 @@
         "removed": "{n, plural, =0 {Değişen sunucu olmadı} other {Etiket # sunucudan kaldırıldı}}.",
         "palette": "Etiket: {tag}",
         "count": "{n} sunucu"
-      }
+      },
+      "note": "Not"
     },
     "col": {
       "name": "Ad",

@@ -492,6 +492,13 @@ test.describe('server lifecycle (simulator, Turkish customer)', () => {
     await expect(page.getByLabel('Sunucu adı')).toHaveValue('web-2');
     await page.goto('/');
     await expect(page.getByText('üretim').first()).toBeVisible();
+    // Search reaches notes ("ana web" is only in the note), and the card shows the note line.
+    await page.goto('/?q=ana%20web');
+    await expect(page.locator('main li').getByText('Ana web sunucusu')).toBeVisible();
+    await page.setViewportSize({ width: 390, height: 900 });
+    await expectNoOverflow(page, 'server list note search at 390 px');
+    await page.screenshot({ path: 'test-results/tour/servers-note-search-390.png' });
+    await page.setViewportSize({ width: 1280, height: 720 });
     await page.goto('/?q=yok-boyle');
     await expect(page.getByText('Bu süzgeçlere uyan sunucu yok.').or(page.getByText('web-1'))).toBeVisible();
     // Ctrl+K lists the server just opened under "recent".
