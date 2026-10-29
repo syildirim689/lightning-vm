@@ -495,6 +495,7 @@ test.describe('server lifecycle (simulator, Turkish customer)', () => {
     // Search reaches notes ("ana web" is only in the note), and the card shows the note line.
     // "/" jumps to the list's search from anywhere on the page, selecting what was there.
     await page.goto('/?q=x');
+    await expect(page.getByRole('searchbox', { name: 'Ara' })).toHaveValue('x');
     await page.locator('main h1').click();
     await page.keyboard.press('/');
     await page.keyboard.type('ana web');
