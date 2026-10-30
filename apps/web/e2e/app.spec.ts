@@ -667,6 +667,7 @@ test.describe('server lifecycle (simulator, Turkish customer)', () => {
     await expect(staff).toHaveURL(/\/admin\/users\?q=/);
     await staff.setViewportSize({ width: 390, height: 900 });
     await expectNoOverflow(staff, 'user list filtered to the owner at 390 px');
+    await staff.getByRole('link', { name: `${user.email} kişisinin 2 sunucusunu göster` }).scrollIntoViewIfNeeded();
     await staff.screenshot({ path: 'test-results/tour/admin-user-servers-390.png' });
     await staff.setViewportSize({ width: 1280, height: 720 });
     await staff.getByRole('link', { name: `${user.email} kişisinin 2 sunucusunu göster` }).click();
