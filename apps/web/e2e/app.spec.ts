@@ -671,8 +671,16 @@ test.describe('server lifecycle (simulator, Turkish customer)', () => {
     await staff.screenshot({ path: 'test-results/tour/admin-user-servers-390.png' });
     await staff.setViewportSize({ width: 1280, height: 720 });
     await staff.getByRole('link', { name: `${user.email} kişisinin 2 sunucusunu göster` }).click();
-    await expect(staff).toHaveURL(/\/admin\/servers\?q=/);
-    await expect(staff.getByRole('searchbox')).toHaveValue(user.email);
+    // Exactly that owner's servers (not every e-mail containing theirs), with a chip that clears it.
+    await expect(staff).toHaveURL(/\/admin\/servers\?owner=/);
+    await expect(staff.getByRole('button', { name: `Sahip süzgecini kaldır: ${user.email}` })).toBeVisible();
+    await expect(staff.getByText('2 sunucudan 2 gösteriliyor')).toBeVisible();
+    await staff.setViewportSize({ width: 390, height: 900 });
+    await expectNoOverflow(staff, 'admin servers filtered to an owner at 390 px');
+    await staff.screenshot({ path: 'test-results/tour/admin-servers-owner-390.png' });
+    await staff.setViewportSize({ width: 1280, height: 720 });
+    await staff.getByRole('button', { name: `Sahip süzgecini kaldır: ${user.email}` }).click();
+    await expect(staff).not.toHaveURL(/owner=/);
     await choose(staff, staff, /Görünen sunucular için işlem/, 'Sil (geri alma süresiyle)');
     await staff.getByRole('button', { name: /sunucuya uygula/ }).click();
     // The copy toast is an alertdialog too; the confirmation is the one that explains the delete.

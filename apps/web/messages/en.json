@@ -1831,7 +1831,8 @@
         "palette": "Tag: {tag}",
         "count": "{n, plural, one {# server} other {# servers}}"
       },
-      "note": "Note"
+      "note": "Note",
+      "ownerClear": "Remove the owner filter: {email}"
     },
     "col": {
       "name": "Name",

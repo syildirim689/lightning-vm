@@ -1831,7 +1831,8 @@
         "palette": "Etiket: {tag}",
         "count": "{n} sunucu"
       },
-      "note": "Not"
+      "note": "Not",
+      "ownerClear": "Sahip süzgecini kaldır: {email}"
     },
     "col": {
       "name": "Ad",

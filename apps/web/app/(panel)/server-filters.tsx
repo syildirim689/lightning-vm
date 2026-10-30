@@ -20,12 +20,13 @@ export function useServerFilters(servers: Server[]) {
   const [q, setQ] = useQueryState('q', parseAsString.withDefault(''));
   const [state, setState] = useQueryState('state', parseAsStringLiteral(groups).withDefault('all'));
   const [tag, setTag] = useQueryState('tag', parseAsString.withDefault(''));
+  const [owner, setOwner] = useQueryState('owner', parseAsString.withDefault('')); // staff: one customer's servers, by exact e-mail
   const [sort, setSort] = useQueryState('sort', parseAsStringLiteral(['newest', 'name'] as const).withDefault('newest'));
   const needle = fold(q.trim());
-  const shown = servers.filter((s) => (state === 'all' || stateGroup(s) === state) && (!tag || !!s.tags?.includes(tag))
+  const shown = servers.filter((s) => (state === 'all' || stateGroup(s) === state) && (!tag || !!s.tags?.includes(tag)) && (!owner || s.ownerEmail === owner)
     && (!needle || [s.name, s.address, s.location, s.poolName, s.imageName, s.ownerEmail, s.notes, ...(s.tags ?? [])].some((x) => x && fold(x).includes(needle))))
     .sort((a, b) => sort === 'name' ? a.name.localeCompare(b.name) : Date.parse(b.createdAt) - Date.parse(a.createdAt));
-  return { shown, servers, q, setQ, state, setState, tag, setTag, sort, setSort };
+  return { shown, servers, q, setQ, state, setState, tag, setTag, owner, setOwner, sort, setSort };
 }
 
 // manageTags: the chosen tag can be renamed or removed on all of the caller's own servers (the customer's list).
@@ -37,6 +38,9 @@ export function ServerFilters({ f, placeholder, manageTags }: { f: ReturnType<ty
     <SearchField aria-label={t('list.search')} value={f.q} onChange={(v) => f.setQ(v || null)} className="w-full md:w-72">
       <SearchField.Group><SearchField.SearchIcon/><SearchField.Input placeholder={placeholder}/><SearchField.ClearButton/></SearchField.Group>
     </SearchField>
+    {f.owner && <button type="button" onClick={() => f.setOwner(null)} aria-label={t('list.ownerClear', { email: f.owner })}
+      className="flex min-h-11 max-w-full items-center gap-1.5 rounded-lg border border-accent bg-accent-soft px-3 text-sm text-accent-soft-foreground">
+      <I name="user" size={14}/><span className="truncate">{f.owner}</span><I name="x" size={14}/></button>}
     <div role="group" aria-label={t('list.state')} className="flex flex-wrap gap-1.5">
       {groups.filter((k) => k === 'all' || counts[k] || f.state === k).map((k) => <button key={k} type="button" aria-pressed={f.state === k} onClick={() => f.setState(k === 'all' ? null : k)}
         className={`min-h-11 rounded-lg border px-3 text-sm transition-colors duration-150 ${f.state === k ? 'border-accent bg-accent-soft text-accent-soft-foreground' : 'border-border hover:border-accent'}`}>
