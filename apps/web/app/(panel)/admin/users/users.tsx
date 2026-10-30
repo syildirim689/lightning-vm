@@ -6,6 +6,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useFormatter, useNow, useTranslations } from 'next-intl';
 import { parseAsString, useQueryState } from 'nuqs';
 import { useEffect, useMemo, useState } from 'react';
+import NextLink from 'next/link';
 import { useRouter } from 'next/navigation';
 import { I } from '../../../../components/icon';
 import { UserSummary } from './user-summary';
@@ -100,7 +101,9 @@ export default function Users() {
           {u.authSource === 'ldap' && <StatusChip tone="accent">{t('directory')}</StatusChip>}
           {u.lastLoginMethod && <span className="text-xs text-muted">{t(`method.${u.lastLoginMethod === 'passkey' ? 'passkey' : 'email'}`)}</span>}
         </span>,
-        <span key="srv" className="tabular-nums">{u.servers}</span>,
+        u.servers > 0 && can(perms, 'servers.view_all')
+          ? <NextLink key="srv" href={`/admin/servers?q=${encodeURIComponent(u.email)}`} aria-label={t('serversOf', { n: u.servers, email: u.email })} className="tabular-nums text-accent hover:underline">{u.servers}</NextLink>
+          : <span key="srv" className="tabular-nums">{u.servers}</span>,
         <span key="seen" className="flex flex-col text-xs"><LastSeen presence={u.presence} at={u.lastSeen}/>{u.sessions > 0 && <span className="text-muted">{t('sessionCount', { n: u.sessions })}</span>}</span>,
         <RowActions key="a" user={u} self={u.id === me?.id} perms={perms} open={(kind) => setDialog({ kind, user: u })}/>,
       ]}/>

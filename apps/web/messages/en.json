@@ -2899,7 +2899,8 @@
       "end": "{n, plural, one {Sign out # person} other {Sign out # people}}",
       "sent": "{n, plural, one {Sent to # person} other {Sent to # people}}{skipped, plural, =0 {} other {; # skipped}}",
       "ended": "{n, plural, one {# person signed out} other {# people signed out}}{skipped, plural, =0 {} other {; # skipped}}"
-    }
+    },
+    "serversOf": "Show the {n} servers of {email}"
   },
   "Roles": {
     "eyebrow": "People",

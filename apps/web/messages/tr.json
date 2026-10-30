@@ -2899,7 +2899,8 @@
       "end": "{n} kişinin oturumlarını kapat",
       "sent": "{n} kişiye gönderildi{skipped, plural, =0 {} other {; # kişi atlandı}}",
       "ended": "{n} kişinin oturumları kapatıldı{skipped, plural, =0 {} other {; # kişi atlandı}}"
-    }
+    },
+    "serversOf": "{email} kişisinin {n} sunucusunu göster"
   },
   "Roles": {
     "eyebrow": "Kişiler",

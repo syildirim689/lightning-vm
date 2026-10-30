@@ -662,7 +662,16 @@ test.describe('server lifecycle (simulator, Turkish customer)', () => {
     // The table copies an IP in one tap, and the owner's e-mail opens that customer in the user list.
     await staff.getByRole('button', { name: 'Kopyala: web-1 IP' }).click();
     await expect(staff.getByText('web-1 IP kopyalandı.')).toBeVisible();
-    await expect(staff.getByRole('link', { name: user.email }).first()).toHaveAttribute('href', `/admin/users?q=${encodeURIComponent(user.email)}`);
+    // The owner's e-mail opens that customer in the user list, and their server count leads back, filtered to them.
+    await staff.getByRole('link', { name: user.email }).first().click();
+    await expect(staff).toHaveURL(/\/admin\/users\?q=/);
+    await staff.setViewportSize({ width: 390, height: 900 });
+    await expectNoOverflow(staff, 'user list filtered to the owner at 390 px');
+    await staff.screenshot({ path: 'test-results/tour/admin-user-servers-390.png' });
+    await staff.setViewportSize({ width: 1280, height: 720 });
+    await staff.getByRole('link', { name: `${user.email} kişisinin 2 sunucusunu göster` }).click();
+    await expect(staff).toHaveURL(/\/admin\/servers\?q=/);
+    await expect(staff.getByRole('searchbox')).toHaveValue(user.email);
     await choose(staff, staff, /Görünen sunucular için işlem/, 'Sil (geri alma süresiyle)');
     await staff.getByRole('button', { name: /sunucuya uygula/ }).click();
     // The copy toast is an alertdialog too; the confirmation is the one that explains the delete.
