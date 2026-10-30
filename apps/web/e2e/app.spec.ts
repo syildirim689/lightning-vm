@@ -401,8 +401,19 @@ test.describe('VMware connections (simulator, English browser)', () => {
     await mine.scrollIntoViewIfNeeded();
     await page.screenshot({ path: 'test-results/tour/console-snippets-390.png' });
     await page.setViewportSize({ width: 1280, height: 720 });
-    await page.getByRole('button', { name: 'Delete saved command: Uptime check' }).click();
+    // Copy works without a console; editing loads the form and saves in place.
+    await page.getByRole('button', { name: 'Copy to clipboard: Uptime check' }).click();
+    await expect(page.getByText('Uptime check copied to the clipboard.')).toBeVisible();
+    await page.getByRole('button', { name: 'Edit: Uptime check' }).click();
+    await expect(page.getByRole('status').filter({ hasText: 'Editing: Uptime check' })).toBeVisible();
+    await page.getByLabel('Command or text', { exact: true }).fill('uptime -p');
+    await page.getByRole('button', { name: 'Save changes' }).click();
+    await expect(page.getByText('Command updated.')).toBeVisible();
+    const edited = page.getByRole('button', { name: 'Type into the console: Uptime check (uptime -p)' });
+    await expect(edited).toBeVisible();
     await expect(mine).toBeHidden();
+    await page.getByRole('button', { name: 'Delete saved command: Uptime check' }).click();
+    await expect(edited).toBeHidden();
     // An administrator can share a command with every user; it is listed apart and they may remove it.
     await page.getByLabel('Command or text', { exact: true }).fill('free -h');
     await tick(page.getByRole('checkbox', { name: /Share with every user/ }));

@@ -6946,6 +6946,13 @@
     },
     "shared": "Paylaşılan komutlar",
     "share": "Tüm kullanıcılarla paylaş",
-    "shareHelp": "Her müşterinin konsolunda hazır komut olarak görünür; yalnızca siz ve ayar yetkisi olanlar silebilir."
+    "shareHelp": "Her müşterinin konsolunda hazır komut olarak görünür; yalnızca siz ve ayar yetkisi olanlar silebilir.",
+    "copy": "Panoya kopyala: {name}",
+    "copied": "{name} panoya kopyalandı.",
+    "edit": "Düzenle: {name}",
+    "editing": "Düzenleniyor: {name}",
+    "update": "Değişikliği kaydet",
+    "updated": "Komut güncellendi.",
+    "cancelEdit": "Vazgeç"
   }
 }

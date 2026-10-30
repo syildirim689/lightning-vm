@@ -257,19 +257,24 @@ export class ServersController {
 
   @Post('console-snippets') @HttpCode(201)
   async addSnippet(@Req() req: AuthedRequest, @Body() body: Input) {
-    const command = typeof body?.command === 'string' ? body.command.replace(/\r\n?/g, '\n').replace(/\s+$/, '') : '';
-    const name = typeof body?.name === 'string' && body.name.trim() ? body.name.trim() : command.split('\n')[0].trim().slice(0, 60);
-    const fields: Record<string, string> = {};
-    if (!command.trim() || command.length > 2000) fields.command = 'INVALID_VALUE';
-    if (!name || name.length > 60) fields.name = 'INVALID_VALUE';
-    if (Object.keys(fields).length) throw apiError(400, 'VALIDATION_FAILED', 'Invalid input', fields);
-    const shared = body.shared === true;
-    if (shared && !can(req.user.permissions, 'settings.manage')) throw apiError(403, 'FORBIDDEN', 'Permission required');
+    const { name, command, shared } = snippetInput(req, body);
     const { rows: [{ n }] } = await pool.query('SELECT count(*)::int AS n FROM console_snippets WHERE owner_id = $1', [req.user.id]);
     if (n >= 50) throw apiError(409, 'LIMIT_REACHED', 'At most 50 saved commands', { command: 'LIMIT_REACHED' });
     const { rows: [r] } = await pool.query('INSERT INTO console_snippets (owner_id, name, command, shared) VALUES ($1, $2, $3, $4) RETURNING id, name, command, shared, true AS mine',
       [req.user.id, name, command, shared]);
     if (shared) await audit(req, 'console.snippet_shared', 'success', req.user.id, { id: r.id, name });
+    return r;
+  }
+
+  // Same rules as saving; a shared command (or sharing one) needs settings.manage.
+  @Put('console-snippets/:id')
+  async updateSnippet(@Req() req: AuthedRequest, @Param('id', ParseUUIDPipe) id: string, @Body() body: Input) {
+    const { name, command, shared } = snippetInput(req, body);
+    const { rows: [r] } = await pool.query(`UPDATE console_snippets SET name = $3, command = $4, shared = $5
+      WHERE id = $1 AND (owner_id = $2 OR (shared AND $6)) RETURNING id, name, command, shared, owner_id = $2 AS mine`,
+      [id, req.user.id, name, command, shared, can(req.user.permissions, 'settings.manage')]);
+    if (!r) throw apiError(404, 'NOT_FOUND', 'Unknown command');
+    if (shared) await audit(req, 'console.snippet_shared', 'success', req.user.id, { id, name });
     return r;
   }
 
@@ -746,6 +751,19 @@ export class ServersController {
     const { rows: [p] } = await pool.query('SELECT connection_id FROM resource_pools WHERE id = $1', [s.pool_id]);
     return openConsole(req, reply, p.connection_id, s.vm_moref, true);
   }
+}
+
+// A saved console command as sent: CRLF to LF, no trailing space; the name defaults to the first line.
+function snippetInput(req: AuthedRequest, body: Input) {
+  const command = typeof body?.command === 'string' ? body.command.replace(/\r\n?/g, '\n').replace(/\s+$/, '') : '';
+  const name = typeof body?.name === 'string' && body.name.trim() ? body.name.trim() : command.split('\n')[0].trim().slice(0, 60);
+  const fields: Record<string, string> = {};
+  if (!command.trim() || command.length > 2000) fields.command = 'INVALID_VALUE';
+  if (!name || name.length > 60) fields.name = 'INVALID_VALUE';
+  if (Object.keys(fields).length) throw apiError(400, 'VALIDATION_FAILED', 'Invalid input', fields);
+  const shared = body.shared === true;
+  if (shared && !can(req.user.permissions, 'settings.manage')) throw apiError(403, 'FORBIDDEN', 'Permission required');
+  return { name, command, shared };
 }
 
 // Bulk delete (only starts the grace period: ready, unlocked, idle servers) or restore; false when the server was skipped.

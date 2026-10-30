@@ -6946,6 +6946,13 @@
     },
     "shared": "Shared commands",
     "share": "Share with every user",
-    "shareHelp": "Shows as a ready-made command in every customer's console; only you and those who manage settings can delete it."
+    "shareHelp": "Shows as a ready-made command in every customer's console; only you and those who manage settings can delete it.",
+    "copy": "Copy to clipboard: {name}",
+    "copied": "{name} copied to the clipboard.",
+    "edit": "Edit: {name}",
+    "editing": "Editing: {name}",
+    "update": "Save changes",
+    "updated": "Command updated.",
+    "cancelEdit": "Cancel"
   }
 }

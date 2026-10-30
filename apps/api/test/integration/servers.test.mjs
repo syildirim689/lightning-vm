@@ -94,6 +94,8 @@ test('saved console commands are validated, named and owned', { skip }, async ()
   assert.deepEqual([made.name, made.command], ['df -h', 'df -h\nfree -h']);
   assert.equal((await send('GET', '/console-snippets', undefined, other)).json().snippets.length, 0);
   assert.equal((await send('DELETE', `/console-snippets/${made.id}`, undefined, other)).statusCode, 404);
+  assert.equal((await send('PUT', `/console-snippets/${made.id}`, { command: 'df -h /' }, other)).statusCode, 404);
+  assert.deepEqual(Object.values((await send('PUT', `/console-snippets/${made.id}`, { name: 'Disk', command: 'df -h /' }, user)).json()).slice(1, 4), ['Disk', 'df -h /', false]);
   assert.equal((await send('DELETE', `/console-snippets/${made.id}`, undefined, user)).statusCode, 204);
   // Only settings.manage shares; everyone sees a shared command, only it removes one.
   assert.equal((await send('POST', '/console-snippets', { command: 'uptime', shared: true }, user)).statusCode, 403);
