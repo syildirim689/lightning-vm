@@ -1833,7 +1833,8 @@
       },
       "note": "Not",
       "ownerClear": "Sahip süzgecini kaldır: {email}",
-      "ownerPalette": "Sunucuları: {email}"
+      "ownerPalette": "Sunucuları: {email}",
+      "bySize": "En büyük önce"
     },
     "col": {
       "name": "Ad",

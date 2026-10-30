@@ -1833,7 +1833,8 @@
       },
       "note": "Note",
       "ownerClear": "Remove the owner filter: {email}",
-      "ownerPalette": "Servers of {email}"
+      "ownerPalette": "Servers of {email}",
+      "bySize": "Largest first"
     },
     "col": {
       "name": "Name",

@@ -21,12 +21,14 @@ export function useServerFilters(all: Server[]) {
   const [state, setState] = useQueryState('state', parseAsStringLiteral(groups).withDefault('all'));
   const [tag, setTag] = useQueryState('tag', parseAsString.withDefault(''));
   const [owner, setOwner] = useQueryState('owner', parseAsString.withDefault('')); // staff: one customer's servers, by exact e-mail
-  const [sort, setSort] = useQueryState('sort', parseAsStringLiteral(['newest', 'name'] as const).withDefault('newest'));
+  const [sort, setSort] = useQueryState('sort', parseAsStringLiteral(['newest', 'name', 'size'] as const).withDefault('newest'));
   const servers = owner ? all.filter((s) => s.ownerEmail === owner) : all; // the counts and tags follow the chosen owner too
   const needle = fold(q.trim());
   const shown = servers.filter((s) => (state === 'all' || stateGroup(s) === state) && (!tag || !!s.tags?.includes(tag))
     && (!needle || [s.name, s.address, s.location, s.poolName, s.imageName, s.ownerEmail, s.notes, ...(s.tags ?? [])].some((x) => x && fold(x).includes(needle))))
-    .sort((a, b) => sort === 'name' ? a.name.localeCompare(b.name) : Date.parse(b.createdAt) - Date.parse(a.createdAt));
+    // Names sort numerically (web-2 before web-10); size puts the biggest machines (RAM, then vCPU) first.
+    .sort((a, b) => sort === 'name' ? a.name.localeCompare(b.name, undefined, { numeric: true })
+      : sort === 'size' ? b.memoryMb - a.memoryMb || b.vcpu - a.vcpu : Date.parse(b.createdAt) - Date.parse(a.createdAt));
   return { shown, servers, q, setQ, state, setState, tag, setTag, owner, setOwner, sort, setSort };
 }
 
@@ -55,8 +57,8 @@ export function ServerFilters({ f, placeholder, manageTags }: { f: ReturnType<ty
     </div>
     : tags.length > 12 && <SelectInput className="w-full md:w-48" label={t('list.tag')} value={f.tag} onChange={(v) => f.setTag(v || null)} options={[{ id: '', label: t('list.allTags') }, ...tags.map((x) => ({ id: x, label: x }))]}/>}
     {manageTags && f.tag && tags.includes(f.tag) && <TagTools tag={f.tag} onDone={(next) => f.setTag(next)}/>}
-    <SelectInput className="w-full md:ml-auto md:w-44" label={t('list.sort')} value={f.sort} onChange={(v) => f.setSort(v === 'name' ? 'name' : null)}
-      options={[{ id: 'newest', label: t('list.newest') }, { id: 'name', label: t('list.byName') }]}/>
+    <SelectInput className="w-full md:ml-auto md:w-44" label={t('list.sort')} value={f.sort} onChange={(v) => f.setSort(v === 'name' || v === 'size' ? v : null)}
+      options={[{ id: 'newest', label: t('list.newest') }, { id: 'name', label: t('list.byName') }, { id: 'size', label: t('list.bySize') }]}/>
   </div>;
 }
 

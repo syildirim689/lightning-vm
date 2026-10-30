@@ -511,6 +511,8 @@ test.describe('server lifecycle (simulator, Turkish customer)', () => {
     await expect(page).toHaveURL(/\/\?q=/);
     await page.screenshot({ path: 'test-results/tour/servers-note-search-390.png' });
     await page.setViewportSize({ width: 1280, height: 720 });
+    await choose(page, page, /Sırala/, 'En büyük önce');
+    await expect(page).toHaveURL(/sort=size/);
     await page.goto('/?q=yok-boyle');
     await expect(page.getByText('Bu süzgeçlere uyan sunucu yok.').or(page.getByText('web-1'))).toBeVisible();
     // Ctrl+K lists the server just opened under "recent".
