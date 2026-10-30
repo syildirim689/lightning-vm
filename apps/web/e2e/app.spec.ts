@@ -635,6 +635,7 @@ test.describe('server lifecycle (simulator, Turkish customer)', () => {
     await page.setViewportSize({ width: 1280, height: 720 });
     await sshOption.click();
     await expect(page.getByText('web-1 SSH komutu kopyalandı.')).toBeVisible();
+    await expect(page.getByRole('dialog', { name: 'Komut paleti' })).toBeHidden();
 
     // The tag filter (from the URL) offers renaming the tag on every server, then removing it.
     // Searching a tag in Ctrl+K opens the list filtered to it.

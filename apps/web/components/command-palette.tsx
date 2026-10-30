@@ -107,7 +107,8 @@ export default function CommandPalette({ permissions, isOpen, onOpenChange }: { 
         hint: tsv('list.tags.count', { n: servers.filter((s) => s.tags?.includes(tag)).length }), icon: <I name="tag" size={16}/>, run: go(`${staff ? '/admin/servers' : '/'}?tag=${encodeURIComponent(tag)}`) })),
       // Staff: a customer's e-mail opens the server list filtered to exactly them (found by searching only).
       ...(staff ? [...new Set(servers.map((s) => s.ownerEmail).filter((x): x is string => !!x))] : []).map((email) => ({ id: `so:${email}`, group: 'servers' as const,
-        label: tsv('list.ownerPalette', { email }), hint: tsv('list.tags.count', { n: servers.filter((s) => s.ownerEmail === email).length }), icon: <I name="user" size={16}/>,
+        // The count joins the label: a long e-mail would truncate it as a hint on phones.
+        label: `${tsv('list.ownerPalette', { email })} · ${tsv('list.tags.count', { n: servers.filter((s) => s.ownerEmail === email).length })}`, icon: <I name="user" size={16}/>,
         run: go(`/admin/servers?owner=${encodeURIComponent(email)}`) })),
       ...tickets.map((x) => ({ id: `t:${x.id}`, group: 'tickets' as const, label: `#${x.number} ${x.subject}`, hint: [ts(`status.${x.status}`), x.ownerEmail].filter(Boolean).join(' · '),
         icon: <I name="life-buoy" size={16}/>, run: go(support ? `/admin/support/${x.id}` : `/support/${x.id}`) })),
