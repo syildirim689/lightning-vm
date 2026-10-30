@@ -1832,7 +1832,8 @@
         "count": "{n, plural, one {# server} other {# servers}}"
       },
       "note": "Note",
-      "ownerClear": "Remove the owner filter: {email}"
+      "ownerClear": "Remove the owner filter: {email}",
+      "ownerPalette": "Servers of {email}"
     },
     "col": {
       "name": "Name",

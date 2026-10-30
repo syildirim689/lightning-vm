@@ -101,6 +101,10 @@ export default function CommandPalette({ permissions, isOpen, onOpenChange }: { 
       // A tag opens the server list filtered to it (found by searching only).
       ...[...new Set(servers.flatMap((s) => s.tags ?? []))].map((tag) => ({ id: `st:${tag}`, group: 'servers' as const, label: tsv('list.tags.palette', { tag }),
         hint: tsv('list.tags.count', { n: servers.filter((s) => s.tags?.includes(tag)).length }), icon: <I name="tag" size={16}/>, run: go(`${staff ? '/admin/servers' : '/'}?tag=${encodeURIComponent(tag)}`) })),
+      // Staff: a customer's e-mail opens the server list filtered to exactly them (found by searching only).
+      ...(staff ? [...new Set(servers.map((s) => s.ownerEmail).filter((x): x is string => !!x))] : []).map((email) => ({ id: `so:${email}`, group: 'servers' as const,
+        label: tsv('list.ownerPalette', { email }), hint: tsv('list.tags.count', { n: servers.filter((s) => s.ownerEmail === email).length }), icon: <I name="user" size={16}/>,
+        run: go(`/admin/servers?owner=${encodeURIComponent(email)}`) })),
       ...tickets.map((x) => ({ id: `t:${x.id}`, group: 'tickets' as const, label: `#${x.number} ${x.subject}`, hint: [ts(`status.${x.status}`), x.ownerEmail].filter(Boolean).join(' · '),
         icon: <I name="life-buoy" size={16}/>, run: go(support ? `/admin/support/${x.id}` : `/support/${x.id}`) })),
       { id: 'a:theme', group: 'actions', label: resolvedTheme === 'dark' ? t('lightTheme') : t('darkTheme'), icon: resolvedTheme === 'dark' ? <I name="sun" size={16}/> : <I name="moon" size={16}/>,
@@ -113,7 +117,7 @@ export default function CommandPalette({ permissions, isOpen, onOpenChange }: { 
   }, [permissions, servers, users, tickets, resolvedTheme, locale, isOpen]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const q = fold(query.trim());
-  const results = q ? commands.filter((c) => c.group !== 'recent').filter((c) => fold(`${c.label} ${c.hint ?? ''}`).includes(q)) : commands.filter((c) => c.group !== 'tickets' && !c.id.startsWith('sa:') && !c.id.startsWith('st:') && ((c.group !== 'servers' && c.group !== 'users') || commands.indexOf(c) < 40));
+  const results = q ? commands.filter((c) => c.group !== 'recent').filter((c) => fold(`${c.label} ${c.hint ?? ''}`).includes(q)) : commands.filter((c) => c.group !== 'tickets' && !/^s[ato]:/.test(c.id) && ((c.group !== 'servers' && c.group !== 'users') || commands.indexOf(c) < 40));
   useEffect(() => setActive(0), [query, isOpen]);
   useEffect(() => { if (!isOpen) setQuery(''); }, [isOpen]);
   useEffect(() => { listRef.current?.querySelector(`[data-index="${active}"]`)?.scrollIntoView({ block: 'nearest' }); }, [active]);

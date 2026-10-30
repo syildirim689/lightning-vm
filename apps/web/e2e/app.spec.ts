@@ -686,6 +686,16 @@ test.describe('server lifecycle (simulator, Turkish customer)', () => {
     await staff.setViewportSize({ width: 1280, height: 720 });
     await staff.getByRole('button', { name: `Sahip süzgecini kaldır: ${user.email}` }).click();
     await expect(staff).not.toHaveURL(/owner=/);
+    // Ctrl+K: searching a customer's e-mail offers their servers, opening the same owner filter.
+    await staff.keyboard.press('Control+k');
+    await staff.keyboard.type(user.email.slice(0, 12));
+    const ownerOption = staff.getByRole('option', { name: new RegExp(`Sunucuları: ${user.email}`) });
+    await expect(ownerOption).toContainText('2 sunucu');
+    await staff.setViewportSize({ width: 390, height: 900 });
+    await staff.screenshot({ path: 'test-results/tour/palette-owner-390.png' });
+    await staff.setViewportSize({ width: 1280, height: 720 });
+    await ownerOption.click();
+    await expect(staff).toHaveURL(/\/admin\/servers\?owner=/);
     await choose(staff, staff, /Görünen sunucular için işlem/, 'Sil (geri alma süresiyle)');
     await staff.getByRole('button', { name: /sunucuya uygula/ }).click();
     // The copy toast is an alertdialog too; the confirmation is the one that explains the delete.

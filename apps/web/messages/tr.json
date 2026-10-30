@@ -1832,7 +1832,8 @@
         "count": "{n} sunucu"
       },
       "note": "Not",
-      "ownerClear": "Sahip süzgecini kaldır: {email}"
+      "ownerClear": "Sahip süzgecini kaldır: {email}",
+      "ownerPalette": "Sunucuları: {email}"
     },
     "col": {
       "name": "Ad",
