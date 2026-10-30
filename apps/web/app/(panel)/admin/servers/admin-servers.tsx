@@ -65,7 +65,7 @@ export default function AdminServers() {
             <h2 className="sr-only">{t('admin.servers')}</h2>
             <ServerFilters f={filters} placeholder={t('admin.search')}/>
             <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-muted">
-              <span role="status">{t('admin.shown', { shown: shown.length, total: servers.length })}</span>
+              <span role="status">{t('admin.shown', { shown: shown.length, total: filters.servers.length })}</span>
               <Button size="sm" variant={onlyStarred ? 'primary' : 'ghost'} aria-pressed={onlyStarred} onPress={() => setOnlyStarred((x) => !x)}><I name="star" size={15}/>{t('admin.onlyStarred')}</Button>
               <Button size="sm" variant="secondary" isDisabled={!shown.length} onPress={() => exportCsv(shown)}><I name="download" size={15}/>{t('admin.exportCsv')}</Button>
             </div>

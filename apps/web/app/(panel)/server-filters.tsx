@@ -16,14 +16,15 @@ const groups = ['all', 'running', 'stopped', 'problem', 'busy', 'trash'] as cons
 // Running, stopped, problem, busy (being created or deleted), or waiting out its deletion grace period.
 export const stateGroup = (s: Pick<Server, 'state' | 'powerState' | 'deleteAt'>) => s.deleteAt ? 'trash' : s.state === 'ready' ? (s.powerState === 'poweredOn' ? 'running' : 'stopped') : s.state === 'error' || s.state === 'missing' ? 'problem' : 'busy';
 
-export function useServerFilters(servers: Server[]) {
+export function useServerFilters(all: Server[]) {
   const [q, setQ] = useQueryState('q', parseAsString.withDefault(''));
   const [state, setState] = useQueryState('state', parseAsStringLiteral(groups).withDefault('all'));
   const [tag, setTag] = useQueryState('tag', parseAsString.withDefault(''));
   const [owner, setOwner] = useQueryState('owner', parseAsString.withDefault('')); // staff: one customer's servers, by exact e-mail
   const [sort, setSort] = useQueryState('sort', parseAsStringLiteral(['newest', 'name'] as const).withDefault('newest'));
+  const servers = owner ? all.filter((s) => s.ownerEmail === owner) : all; // the counts and tags follow the chosen owner too
   const needle = fold(q.trim());
-  const shown = servers.filter((s) => (state === 'all' || stateGroup(s) === state) && (!tag || !!s.tags?.includes(tag)) && (!owner || s.ownerEmail === owner)
+  const shown = servers.filter((s) => (state === 'all' || stateGroup(s) === state) && (!tag || !!s.tags?.includes(tag))
     && (!needle || [s.name, s.address, s.location, s.poolName, s.imageName, s.ownerEmail, s.notes, ...(s.tags ?? [])].some((x) => x && fold(x).includes(needle))))
     .sort((a, b) => sort === 'name' ? a.name.localeCompare(b.name) : Date.parse(b.createdAt) - Date.parse(a.createdAt));
   return { shown, servers, q, setQ, state, setState, tag, setTag, owner, setOwner, sort, setSort };
