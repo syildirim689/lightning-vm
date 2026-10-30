@@ -398,7 +398,8 @@ test.describe('VMware connections (simulator, English browser)', () => {
     await expect(page.getByRole('button', { name: 'Type into the console: Disk usage (df -h)' })).toBeDisabled();
     await page.setViewportSize({ width: 390, height: 900 });
     await expectNoOverflow(page, 'console commands at 390 px');
-    await mine.scrollIntoViewIfNeeded();
+    await expect(page.getByText('Command saved.')).toBeHidden({ timeout: 15_000 });
+    await mine.evaluate((el) => el.scrollIntoView({ block: 'center' }));
     await page.screenshot({ path: 'test-results/tour/console-snippets-390.png' });
     await page.setViewportSize({ width: 1280, height: 720 });
     // Copy works without a console; editing loads the form and saves in place.
