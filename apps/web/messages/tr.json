@@ -2863,7 +2863,8 @@
       "limits": "Rol sınırları",
       "activity": "Son etkinlik",
       "noActivity": "Kayıt yok.",
-      "allActivity": "Tüm etkinliği denetim kaydında aç"
+      "allActivity": "Tüm etkinliği denetim kaydında aç",
+      "allServers": "Sunucu listesinde aç"
     },
     "onlineFilter": "Çevrimiçi ya da az önce aktif",
     "sessionCount": "{n} oturum",

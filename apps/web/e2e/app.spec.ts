@@ -670,6 +670,11 @@ test.describe('server lifecycle (simulator, Turkish customer)', () => {
     await staff.getByRole('link', { name: `${user.email} kişisinin 2 sunucusunu göster` }).scrollIntoViewIfNeeded();
     await staff.screenshot({ path: 'test-results/tour/admin-user-servers-390.png' });
     await staff.setViewportSize({ width: 1280, height: 720 });
+    // Their summary links to the same filtered server list.
+    await staff.getByRole('button', { name: new RegExp(user.email) }).first().click();
+    await expect(staff.getByRole('dialog').getByRole('link', { name: 'Sunucu listesinde aç' })).toHaveAttribute('href', `/admin/servers?owner=${encodeURIComponent(user.email)}`);
+    await staff.keyboard.press('Escape');
+    await expect(staff.getByRole('dialog')).toBeHidden();
     await staff.getByRole('link', { name: `${user.email} kişisinin 2 sunucusunu göster` }).click();
     // Exactly that owner's servers (not every e-mail containing theirs), with a chip that clears it.
     await expect(staff).toHaveURL(/\/admin\/servers\?owner=/);

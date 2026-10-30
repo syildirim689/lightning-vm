@@ -56,7 +56,8 @@ export function UserSummary({ id, onClose }: { id: string; onClose: () => void }
             </div>
             {d.user.budgetMonthly && <p className="text-sm text-muted"><I name="wallet" size={14} className="mr-1 inline"/>{t('budget', { amount: money(d.user.budgetMonthly, d.user.budgetCurrency ?? 'EUR') })}</p>}
             <section>
-              <h3 className="mb-2 text-sm font-semibold">{t('serverList')}</h3>
+              <div className="mb-2 flex items-center justify-between gap-2"><h3 className="text-sm font-semibold">{t('serverList')}</h3>
+                {d.servers.length > 0 && can(me?.permissions, 'servers.view_all') && <NextLink href={`/admin/servers?owner=${encodeURIComponent(d.user.email)}`} className="text-sm text-accent hover:underline">{t('allServers')}</NextLink>}</div>
               {d.servers.length === 0 ? <p className="text-sm text-muted">{t('noServers')}</p> : <ul className="divide-y divide-separator rounded-xl border border-border">
                 {d.servers.map((s) => <li key={s.id}><NextLink href={`/servers/${s.id}`} className="flex items-center gap-3 px-3 py-2 text-sm hover:bg-default/50">
                   <span aria-hidden className={`size-2 shrink-0 rounded-full ${s.state !== 'ready' ? 'bg-warning' : s.powerState === 'poweredOn' ? 'bg-success' : 'bg-default-foreground/30'}`}/>

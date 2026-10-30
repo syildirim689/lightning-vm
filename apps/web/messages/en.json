@@ -2863,7 +2863,8 @@
       "limits": "Role limits",
       "activity": "Recent activity",
       "noActivity": "Nothing recorded.",
-      "allActivity": "Open all activity in the audit log"
+      "allActivity": "Open all activity in the audit log",
+      "allServers": "Open in the server list"
     },
     "onlineFilter": "Online now or recently",
     "sessionCount": "{n, plural, one {# session} other {# sessions}}",
