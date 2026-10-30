@@ -250,7 +250,8 @@ export class ServersController {
   // Saved console commands: the person's own, typed into a console or the admin terminal from the panel.
   @Get('console-snippets')
   async snippets(@Req() req: AuthedRequest) {
-    const { rows } = await pool.query('SELECT id, name, command FROM console_snippets WHERE owner_id = $1 ORDER BY name, created_at', [req.user.id]);
+    const { rows } = await pool.query(`SELECT id, name, command, shared, owner_id = $1 AS mine FROM console_snippets
+      WHERE owner_id = $1 OR shared ORDER BY shared DESC, name, created_at`, [req.user.id]);
     return { snippets: rows };
   }
 
@@ -262,15 +263,21 @@ export class ServersController {
     if (!command.trim() || command.length > 2000) fields.command = 'INVALID_VALUE';
     if (!name || name.length > 60) fields.name = 'INVALID_VALUE';
     if (Object.keys(fields).length) throw apiError(400, 'VALIDATION_FAILED', 'Invalid input', fields);
+    const shared = body.shared === true;
+    if (shared && !can(req.user.permissions, 'settings.manage')) throw apiError(403, 'FORBIDDEN', 'Permission required');
     const { rows: [{ n }] } = await pool.query('SELECT count(*)::int AS n FROM console_snippets WHERE owner_id = $1', [req.user.id]);
     if (n >= 50) throw apiError(409, 'LIMIT_REACHED', 'At most 50 saved commands', { command: 'LIMIT_REACHED' });
-    const { rows: [r] } = await pool.query('INSERT INTO console_snippets (owner_id, name, command) VALUES ($1, $2, $3) RETURNING id, name, command', [req.user.id, name, command]);
+    const { rows: [r] } = await pool.query('INSERT INTO console_snippets (owner_id, name, command, shared) VALUES ($1, $2, $3, $4) RETURNING id, name, command, shared, true AS mine',
+      [req.user.id, name, command, shared]);
+    if (shared) await audit(req, 'console.snippet_shared', 'success', req.user.id, { id: r.id, name });
     return r;
   }
 
   @Delete('console-snippets/:id') @HttpCode(204)
   async deleteSnippet(@Req() req: AuthedRequest, @Param('id', ParseUUIDPipe) id: string) {
-    const { rowCount } = await pool.query('DELETE FROM console_snippets WHERE id = $1 AND owner_id = $2', [id, req.user.id]);
+    // Shared commands: whoever may share may also remove them.
+    const { rowCount } = await pool.query('DELETE FROM console_snippets WHERE id = $1 AND (owner_id = $2 OR (shared AND $3))',
+      [id, req.user.id, can(req.user.permissions, 'settings.manage')]);
     if (!rowCount) throw apiError(404, 'NOT_FOUND', 'Unknown command');
   }
 

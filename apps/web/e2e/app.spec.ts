@@ -403,6 +403,14 @@ test.describe('VMware connections (simulator, English browser)', () => {
     await page.setViewportSize({ width: 1280, height: 720 });
     await page.getByRole('button', { name: 'Delete saved command: Uptime check' }).click();
     await expect(mine).toBeHidden();
+    // An administrator can share a command with every user; it is listed apart and they may remove it.
+    await page.getByLabel('Command or text', { exact: true }).fill('free -h');
+    await tick(page.getByRole('checkbox', { name: /Share with every user/ }));
+    await page.getByRole('button', { name: 'Save command' }).click();
+    const shared = page.getByRole('list', { name: 'Shared commands' }).getByRole('button', { name: 'Type into the console: free -h (free -h)' });
+    await expect(shared).toBeVisible();
+    await page.getByRole('button', { name: 'Delete saved command: free -h' }).click();
+    await expect(shared).toBeHidden();
 
     // The vCenter now backs a resource pool, so a separate simulated ESXi is added and removed.
     await page.goto('/admin/vmware');

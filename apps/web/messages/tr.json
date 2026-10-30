@@ -4861,7 +4861,8 @@
       "reseller_brand": "Bayi markası değiştirildi",
       "server_renamed": "Sunucu yeniden adlandırıldı",
       "server_delete_scheduled": "Sunucu silinmek üzere kapatıldı",
-      "server_delete_cancelled": "Sunucu silme işlemi geri alındı"
+      "server_delete_cancelled": "Sunucu silme işlemi geri alındı",
+      "console_snippet_shared": "Konsol komutu herkesle paylaşıldı"
     },
     "outcome": {
       "success": "Tamamlandı",
@@ -6942,6 +6943,9 @@
       "failed": "Hatalı servisler",
       "logs": "Son günlükler",
       "os": "İşletim sistemi sürümü"
-    }
+    },
+    "shared": "Paylaşılan komutlar",
+    "share": "Tüm kullanıcılarla paylaş",
+    "shareHelp": "Her müşterinin konsolunda hazır komut olarak görünür; yalnızca siz ve ayar yetkisi olanlar silebilir."
   }
 }

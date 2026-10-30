@@ -4861,7 +4861,8 @@
       "reseller_brand": "Reseller brand changed",
       "server_renamed": "Server renamed",
       "server_delete_scheduled": "Server shut down for deletion",
-      "server_delete_cancelled": "Server deletion taken back"
+      "server_delete_cancelled": "Server deletion taken back",
+      "console_snippet_shared": "Console command shared with everyone"
     },
     "outcome": {
       "success": "Done",
@@ -6942,6 +6943,9 @@
       "failed": "Failed services",
       "logs": "Recent logs",
       "os": "OS version"
-    }
+    },
+    "shared": "Shared commands",
+    "share": "Share with every user",
+    "shareHelp": "Shows as a ready-made command in every customer's console; only you and those who manage settings can delete it."
   }
 }

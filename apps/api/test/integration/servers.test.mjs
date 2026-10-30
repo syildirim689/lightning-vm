@@ -95,6 +95,12 @@ test('saved console commands are validated, named and owned', { skip }, async ()
   assert.equal((await send('GET', '/console-snippets', undefined, other)).json().snippets.length, 0);
   assert.equal((await send('DELETE', `/console-snippets/${made.id}`, undefined, other)).statusCode, 404);
   assert.equal((await send('DELETE', `/console-snippets/${made.id}`, undefined, user)).statusCode, 204);
+  // Only settings.manage shares; everyone sees a shared command, only it removes one.
+  assert.equal((await send('POST', '/console-snippets', { command: 'uptime', shared: true }, user)).statusCode, 403);
+  const shared = (await send('POST', '/console-snippets', { command: 'uptime', shared: true }, admin)).json();
+  assert.deepEqual((await send('GET', '/console-snippets', undefined, other)).json().snippets.map((x) => [x.name, x.shared, x.mine]), [['uptime', true, false]]);
+  assert.equal((await send('DELETE', `/console-snippets/${shared.id}`, undefined, other)).statusCode, 404);
+  assert.equal((await send('DELETE', `/console-snippets/${shared.id}`, undefined, admin)).statusCode, 204);
 });
 
 test('creating needs an Idempotency-Key; repeating it returns the same server, never a second one', { skip }, async () => {
