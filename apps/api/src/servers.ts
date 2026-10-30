@@ -247,6 +247,33 @@ export class ServersController {
     if (!rowCount) throw apiError(404, 'NOT_FOUND', 'Unknown key');
   }
 
+  // Saved console commands: the person's own, typed into a console or the admin terminal from the panel.
+  @Get('console-snippets')
+  async snippets(@Req() req: AuthedRequest) {
+    const { rows } = await pool.query('SELECT id, name, command FROM console_snippets WHERE owner_id = $1 ORDER BY name, created_at', [req.user.id]);
+    return { snippets: rows };
+  }
+
+  @Post('console-snippets') @HttpCode(201)
+  async addSnippet(@Req() req: AuthedRequest, @Body() body: Input) {
+    const command = typeof body?.command === 'string' ? body.command.replace(/\r\n?/g, '\n').replace(/\s+$/, '') : '';
+    const name = typeof body?.name === 'string' && body.name.trim() ? body.name.trim() : command.split('\n')[0].trim().slice(0, 60);
+    const fields: Record<string, string> = {};
+    if (!command.trim() || command.length > 2000) fields.command = 'INVALID_VALUE';
+    if (!name || name.length > 60) fields.name = 'INVALID_VALUE';
+    if (Object.keys(fields).length) throw apiError(400, 'VALIDATION_FAILED', 'Invalid input', fields);
+    const { rows: [{ n }] } = await pool.query('SELECT count(*)::int AS n FROM console_snippets WHERE owner_id = $1', [req.user.id]);
+    if (n >= 50) throw apiError(409, 'LIMIT_REACHED', 'At most 50 saved commands', { command: 'LIMIT_REACHED' });
+    const { rows: [r] } = await pool.query('INSERT INTO console_snippets (owner_id, name, command) VALUES ($1, $2, $3) RETURNING id, name, command', [req.user.id, name, command]);
+    return r;
+  }
+
+  @Delete('console-snippets/:id') @HttpCode(204)
+  async deleteSnippet(@Req() req: AuthedRequest, @Param('id', ParseUUIDPipe) id: string) {
+    const { rowCount } = await pool.query('DELETE FROM console_snippets WHERE id = $1 AND owner_id = $2', [id, req.user.id]);
+    if (!rowCount) throw apiError(404, 'NOT_FOUND', 'Unknown command');
+  }
+
   @Get('servers')
   async list(@Req() req: AuthedRequest) {
     const { rows } = await pool.query(`SELECT ${serverColumns}, EXISTS (SELECT 1 FROM server_favorites f WHERE f.user_id = $1 AND f.server_id = s.id) AS favorite

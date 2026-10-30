@@ -388,6 +388,21 @@ test.describe('VMware connections (simulator, English browser)', () => {
     const consoleCookie = (await page.context().cookies()).find((c) => c.name === 'lvm_console');
     expect(consoleCookie?.httpOnly && consoleCookie.path === '/console/ws' && consoleCookie.sameSite === 'Strict').toBe(true);
     expect(page.url()).not.toContain(consoleCookie!.value);
+    // Ready-made and saved commands: saving works now; typing waits for a connected console.
+    await page.getByLabel('Command or text', { exact: true }).fill('uptime');
+    await page.getByLabel('Name to save as (optional)', { exact: true }).fill('Uptime check');
+    await page.getByRole('button', { name: 'Save command' }).click();
+    await expect(page.getByText('Command saved.')).toBeVisible();
+    const mine = page.getByRole('button', { name: 'Type into the console: Uptime check (uptime)' });
+    await expect(mine).toBeDisabled();
+    await expect(page.getByRole('button', { name: 'Type into the console: Disk usage (df -h)' })).toBeDisabled();
+    await page.setViewportSize({ width: 390, height: 900 });
+    await expectNoOverflow(page, 'console commands at 390 px');
+    await mine.scrollIntoViewIfNeeded();
+    await page.screenshot({ path: 'test-results/tour/console-snippets-390.png' });
+    await page.setViewportSize({ width: 1280, height: 720 });
+    await page.getByRole('button', { name: 'Delete saved command: Uptime check' }).click();
+    await expect(mine).toBeHidden();
 
     // The vCenter now backs a resource pool, so a separate simulated ESXi is added and removed.
     await page.goto('/admin/vmware');

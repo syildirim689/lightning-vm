@@ -45,7 +45,7 @@ Requests that start an operation need an `Idempotency-Key` header (8–100 chara
 | `POST /servers/:id/transfer` | `email`, optional `note` | Offer the server to another account (open for 7 days) |
 | `GET /transfers`, `POST /transfers/:id/accept`, `…/decline`, `…/cancel` | | Offers received and made; answer or withdraw one |
 
-The catalog is at `GET /catalog`; `POST /catalog/quote` prices an order (with `coupon`, it answers the discounted first price or why the code does not apply). Firewalls are under `/firewalls`, SSH keys under `/ssh-keys`, and invoices under `/billing/…`.
+The catalog is at `GET /catalog`; `POST /catalog/quote` prices an order (with `coupon`, it answers the discounted first price or why the code does not apply). Firewalls are under `/firewalls`, SSH keys under `/ssh-keys`, saved console commands under `/console-snippets` (at most 50 per person), and invoices under `/billing/…`.
 
 ## Webhooks
 

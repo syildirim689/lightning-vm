@@ -6911,5 +6911,37 @@
       "decline": "Offer for {name} declined.",
       "cancel": "Offer for {name} withdrawn."
     }
+  },
+  "Snippets": {
+    "title": "Ready-made commands",
+    "help": "Click a command to type it into the console. You can also type your own text and save the ones you use often.",
+    "notReady": "Commands can be typed once the console connects; you can manage your saved commands now.",
+    "enter": "Also press Enter (run it now)",
+    "enterHelp": "When off, the command is only typed; you check it and press Enter yourself.",
+    "builtIn": "Ready-made commands",
+    "mine": "My saved commands",
+    "typeOne": "Type into the console: {name} ({command})",
+    "remove": "Delete saved command: {name}",
+    "text": "Command or text",
+    "textHelp": "The console cannot paste from the clipboard; send the text from here. It may span several lines.",
+    "name": "Name to save as (optional)",
+    "nameHelp": "Empty uses the first line.",
+    "send": "Type into console",
+    "save": "Save command",
+    "saved": "Command saved.",
+    "yourText": "Your text",
+    "typed": "{name} typed into the console.",
+    "ran": "{name} typed into the console and run.",
+    "b": {
+      "summary": "System summary",
+      "disk": "Disk usage",
+      "memory": "Memory",
+      "network": "Network addresses",
+      "ports": "Listening ports",
+      "topCpu": "Top CPU users",
+      "failed": "Failed services",
+      "logs": "Recent logs",
+      "os": "OS version"
+    }
   }
 }

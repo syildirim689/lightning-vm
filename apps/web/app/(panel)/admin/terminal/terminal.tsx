@@ -13,6 +13,7 @@ import { useEffect, useRef, useState } from 'react';
 import { I } from '../../../../components/icon';
 import { ConfirmButton, Notice, PageHeader, Section, StatusChip } from '../../../../components/ui';
 import { apiFetch, useErrorText } from '../../../../lib/api';
+import { ConsoleSnippets } from '../../../../components/console-snippets';
 import { useApiQuery } from '../../../../lib/query';
 
 type Status = { enabled: boolean; agent: boolean; twoFactor: boolean; switching: boolean; sessions: { key: string; email: string | null; startedAt: string }[] };
@@ -30,6 +31,7 @@ export default function Terminal() {
   const [state, setState] = useState<'idle' | 'connecting' | 'open' | 'closed'>('idle');
   const [reason, setReason] = useState<string>();
   const cleanup = useRef<() => void>(undefined);
+  const typeIn = useRef<(text: string) => void>(undefined);
   useEffect(() => { if (s?.enabled && waiting) setWaiting(false); }, [s?.enabled, waiting]);
   useEffect(() => () => cleanup.current?.(), []);
 
@@ -60,6 +62,8 @@ export default function Terminal() {
     ws.onmessage = (e) => term.write(new Uint8Array(e.data as ArrayBuffer));
     ws.onclose = (e) => { setState('closed'); setReason(reasons.includes(e.reason) ? t(`reason.${e.reason as 'TERMINAL_CLOSED'}`) : t('reason.TERMINAL_CLOSED')); client.invalidateQueries({ queryKey: ['admin', 'terminal'] }); };
     const input = term.onData((d) => { if (ws.readyState === WebSocket.OPEN) ws.send(enc.encode(d)); });
+    // A shell reads Enter as a carriage return, as the keyboard sends it.
+    typeIn.current = (text) => { if (ws.readyState === WebSocket.OPEN) { ws.send(enc.encode(text.replace(/\n/g, '\r'))); term.focus(); } };
     const observer = new ResizeObserver(size);
     observer.observe(box.current!);
     cleanup.current = () => { observer.disconnect(); input.dispose(); ws.close(); term.dispose(); };
@@ -100,6 +104,7 @@ export default function Terminal() {
           </div>}
         </div>
       </motion.div>
+      <ConsoleSnippets ready={state === 'open'} send={(text) => typeIn.current?.(text)}/>
       <Section title={t('sessions')} description={t('sessionsHelp')}
         actions={<ConfirmButton size="sm" variant="danger-soft" icon={<I name="power-off" size={15}/>} label={t('turnOff')} title={t('turnOff')} body={t('turnOffBody')}
           confirmLabel={t('turnOffYes')} cancelLabel={t('cancel')} onConfirm={() => switchTo(false)}/>}>

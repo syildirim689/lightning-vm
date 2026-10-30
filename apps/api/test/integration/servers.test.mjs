@@ -88,6 +88,15 @@ test('SSH keys are validated and owned', { skip }, async () => {
   assert.equal((await send('GET', '/ssh-keys', undefined, other)).json().keys.length, 0);
 });
 
+test('saved console commands are validated, named and owned', { skip }, async () => {
+  assert.equal((await send('POST', '/console-snippets', { command: '   ' }, user)).json().fields.command, 'INVALID_VALUE');
+  const made = (await send('POST', '/console-snippets', { command: 'df -h\r\nfree -h  ' }, user)).json();
+  assert.deepEqual([made.name, made.command], ['df -h', 'df -h\nfree -h']);
+  assert.equal((await send('GET', '/console-snippets', undefined, other)).json().snippets.length, 0);
+  assert.equal((await send('DELETE', `/console-snippets/${made.id}`, undefined, other)).statusCode, 404);
+  assert.equal((await send('DELETE', `/console-snippets/${made.id}`, undefined, user)).statusCode, 204);
+});
+
 test('creating needs an Idempotency-Key; repeating it returns the same server, never a second one', { skip }, async () => {
   assert.equal((await send('POST', '/servers', order('web-1'), user)).json().code, 'IDEMPOTENCY_KEY_REQUIRED');
   const key = randomUUID();

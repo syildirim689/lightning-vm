@@ -6911,5 +6911,37 @@
       "decline": "{name} teklifi reddedildi.",
       "cancel": "{name} teklifi geri çekildi."
     }
+  },
+  "Snippets": {
+    "title": "Hazır komutlar",
+    "help": "Bir komuta tıklayınca konsola yazılır. Kendi metninizi de yazdırabilir, sık kullandıklarınızı kaydedebilirsiniz.",
+    "notReady": "Konsol bağlanınca komutlar yazılabilir; kayıtlı komutlarınızı şimdiden düzenleyebilirsiniz.",
+    "enter": "Enter'a da bas (hemen çalıştır)",
+    "enterHelp": "Kapalıyken komut yalnızca yazılır; kontrol edip Enter'a siz basarsınız.",
+    "builtIn": "Hazır komutlar",
+    "mine": "Kayıtlı komutlarım",
+    "typeOne": "Konsola yaz: {name} ({command})",
+    "remove": "Kayıtlı komutu sil: {name}",
+    "text": "Komut veya metin",
+    "textHelp": "Konsol panodan yapıştırmayı desteklemez; metni buradan gönderin. Birden fazla satır olabilir.",
+    "name": "Kayıt adı (isteğe bağlı)",
+    "nameHelp": "Boşsa ilk satır kullanılır.",
+    "send": "Konsola yaz",
+    "save": "Komutu kaydet",
+    "saved": "Komut kaydedildi.",
+    "yourText": "Metniniz",
+    "typed": "{name} konsola yazıldı.",
+    "ran": "{name} konsola yazıldı ve çalıştırıldı.",
+    "b": {
+      "summary": "Sistem özeti",
+      "disk": "Disk kullanımı",
+      "memory": "Bellek",
+      "network": "Ağ adresleri",
+      "ports": "Dinleyen portlar",
+      "topCpu": "En çok CPU kullananlar",
+      "failed": "Hatalı servisler",
+      "logs": "Son günlükler",
+      "os": "İşletim sistemi sürümü"
+    }
   }
 }

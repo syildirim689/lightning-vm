@@ -5,10 +5,11 @@ import { useTranslations } from 'next-intl';
 import { useEffect, useRef, useState } from 'react';
 import { apiFetch, useErrorText } from '../../../../../lib/api';
 import { Notice, PageHeader, StatusChip } from '../../../../../components/ui';
+import { ConsoleSnippets } from '../../../../../components/console-snippets';
 
 // Minimal typing of the operator-provided VMware HTML Console SDK (wmks.min.js), per its programming guide.
 type Wmks = { register: (event: string, fn: (e: unknown, data: { state?: string; code?: number; reason?: string }) => void) => Wmks;
-  connect: (url: string) => void; disconnect: () => void; destroy: () => void; sendCAD: () => void };
+  connect: (url: string) => void; disconnect: () => void; destroy: () => void; sendCAD: () => void; sendInputString: (text: string) => void };
 declare global { interface Window { WMKS?: { createWMKS: (id: string, opts: object) => Wmks; CONST: { Events: Record<string, string>; ConnectionState: Record<string, string> } } } }
 
 type State = 'requesting' | 'loadingSdk' | 'sdkMissing' | 'connecting' | 'connected' | 'closed' | 'error';
@@ -102,5 +103,6 @@ export default function ConsoleView({ sessionPath, title }: { sessionPath: strin
       <pre className="mt-2 overflow-x-auto font-mono text-xs">{['console-sdk/wmks.min.js', 'console-sdk/jquery.min.js', 'console-sdk/jquery-ui.min.js', 'console-sdk/css/wmks-all.css'].join('\n')}</pre>
     </Notice>}
     <div id="wmks-container" className="wmks" hidden={state !== 'connected' && state !== 'connecting'}/>
+    <ConsoleSnippets ready={state === 'connected'} send={(text) => wmks.current?.sendInputString(text)}/>
   </div>;
 }

@@ -222,6 +222,7 @@ export class AccountExportController {
       favorites: (await q('SELECT server_id FROM server_favorites WHERE user_id = $1')).map((r) => r.server_id),
       projects: await q('SELECT id, name, created_at AS "createdAt" FROM projects WHERE owner_id = $1 ORDER BY name'),
       sshKeys: await q('SELECT name, fingerprint, public_key AS "publicKey", created_at AS "createdAt" FROM ssh_keys WHERE owner_id = $1 ORDER BY name'),
+      consoleSnippets: await q('SELECT name, command, created_at AS "createdAt" FROM console_snippets WHERE owner_id = $1 ORDER BY name'),
       firewalls: await q(`SELECT f.name, f.rules, f.created_at AS "createdAt", ARRAY(SELECT s.name FROM firewall_servers fs JOIN servers s ON s.id = fs.server_id WHERE fs.firewall_id = f.id) AS servers
         FROM firewalls f WHERE f.owner_id = $1 ORDER BY f.name`),
       notificationPreferences: await q('SELECT event, channels FROM notification_preferences WHERE user_id = $1 ORDER BY event'),
