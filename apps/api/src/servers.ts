@@ -270,12 +270,14 @@ export class ServersController {
   @Put('console-snippets/:id')
   async updateSnippet(@Req() req: AuthedRequest, @Param('id', ParseUUIDPipe) id: string, @Body() body: Input) {
     const { name, command, shared } = snippetInput(req, body);
-    const { rows: [r] } = await pool.query(`UPDATE console_snippets SET name = $3, command = $4, shared = $5
-      WHERE id = $1 AND (owner_id = $2 OR (shared AND $6)) RETURNING id, name, command, shared, owner_id = $2 AS mine`,
+    // The self-join reads the row before the update: only newly sharing a command is audited.
+    const { rows: [r] } = await pool.query(`UPDATE console_snippets c SET name = $3, command = $4, shared = $5 FROM console_snippets old
+      WHERE c.id = $1 AND old.id = c.id AND (c.owner_id = $2 OR (c.shared AND $6)) RETURNING c.id, c.name, c.command, c.shared, c.owner_id = $2 AS mine, old.shared AS was`,
       [id, req.user.id, name, command, shared, can(req.user.permissions, 'settings.manage')]);
     if (!r) throw apiError(404, 'NOT_FOUND', 'Unknown command');
-    if (shared) await audit(req, 'console.snippet_shared', 'success', req.user.id, { id, name });
-    return r;
+    const { was, ...snippet } = r;
+    if (shared && !was) await audit(req, 'console.snippet_shared', 'success', req.user.id, { id, name });
+    return snippet;
   }
 
   @Delete('console-snippets/:id') @HttpCode(204)

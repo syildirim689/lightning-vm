@@ -1814,7 +1814,9 @@
         "tagSome": "bazılarında",
         "tagAdd": "{tag} etiketini hepsine ekle",
         "tagRemove": "{tag} etiketini hepsinden kaldır",
-        "tagDone": "{n, plural, =0 {Değişen sunucu olmadı} other {# sunucunun etiketi güncellendi}}."
+        "tagDone": "{n, plural, =0 {Değişen sunucu olmadı} other {# sunucunun etiketi güncellendi}}.",
+        "copyIps": "IP'leri kopyala",
+        "ipsCopied": "{n, plural, one {# IP} other {# IP}} panoya kopyalandı (her satırda bir tane)."
       },
       "tags": {
         "rename": "Yeniden adlandır",

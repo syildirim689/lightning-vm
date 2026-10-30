@@ -178,6 +178,12 @@ function BulkBar({ servers, known, onDone }: { servers: Server[]; known: string[
     <Button size="sm" isPending={run.isPending} onPress={() => act('power_on')}><I name="play" size={15}/>{label('power_on')}</Button>
     {confirm('shutdown', 'power')}
     {confirm('reset', 'rotate-ccw')}
+    {/* One address per line, ready for an inventory file or a hosts list. */}
+    {servers.some((x) => x.address) && <Button size="sm" variant="secondary" onPress={async () => {
+      const ips = servers.flatMap((x) => x.address ? [x.address] : []);
+      await navigator.clipboard?.writeText(ips.join('\n')).catch(() => undefined);
+      toast.success(t('list.select.ipsCopied', { n: ips.length }));
+    }}><I name="copy" size={15}/>{t('list.select.copyIps')}</Button>}
     <BulkTags servers={servers} known={known} busy={run.isPending} onTag={(action, tag) => run.mutateAsync({ action, tag }).catch(() => undefined)}/>
     {waiting > 0 && <Button size="sm" variant="secondary" isPending={run.isPending} onPress={() => act('restore')}><I name="undo-2" size={15}/>{t('list.select.restore', { n: waiting })}</Button>}
     {waiting < servers.length && <ConfirmButton size="sm" variant="danger-soft" isDisabled={run.isPending} icon={<I name="trash-2" size={15}/>} label={t('list.select.delete')}

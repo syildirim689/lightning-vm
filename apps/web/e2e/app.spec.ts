@@ -638,6 +638,8 @@ test.describe('server lifecycle (simulator, Turkish customer)', () => {
     }
     await page.setViewportSize({ width: 1280, height: 720 });
     await page.screenshot({ path: 'test-results/tour/servers-select.png', fullPage: true });
+    await page.getByRole('region', { name: 'Seçili sunucular için işlemler' }).getByRole('button', { name: "IP'leri kopyala" }).click();
+    await expect(page.getByText('2 IP panoya kopyalandı (her satırda bir tane).')).toBeVisible();
     // Tags for both at once: added, shown as on the selection, removed again; Escape closes only the popover.
     const bar = page.getByRole('region', { name: 'Seçili sunucular için işlemler' });
     await bar.getByRole('button', { name: 'Etiket', exact: true }).click();
