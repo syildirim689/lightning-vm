@@ -625,6 +625,17 @@ test.describe('server lifecycle (simulator, Turkish customer)', () => {
     await expect(page.getByText(/sunucuda işlem başladı/)).toBeVisible();
     await expect(page.getByRole('region', { name: 'Seçili sunucular için işlemler' })).toBeHidden();
 
+    // Ctrl+K copies a server's SSH command without opening its page.
+    await page.keyboard.press('Control+k');
+    await page.keyboard.type('web-1: ssh');
+    const sshOption = page.getByRole('option', { name: /web-1: SSH komutunu kopyala/ });
+    await expect(sshOption).toContainText('ssh root@');
+    await page.setViewportSize({ width: 390, height: 900 });
+    await page.screenshot({ path: 'test-results/tour/palette-ssh-390.png' });
+    await page.setViewportSize({ width: 1280, height: 720 });
+    await sshOption.click();
+    await expect(page.getByText('web-1 SSH komutu kopyalandı.')).toBeVisible();
+
     // The tag filter (from the URL) offers renaming the tag on every server, then removing it.
     // Searching a tag in Ctrl+K opens the list filtered to it.
     await page.keyboard.press('Control+k');

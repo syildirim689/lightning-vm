@@ -49,6 +49,7 @@ export default function CommandPalette({ permissions, isOpen, onOpenChange }: { 
   const ts = useTranslations('Support');
   const go = (href: string) => () => { onOpenChange(false); router.push(href); };
   const tsv = useTranslations('Servers');
+  const tx = useTranslations('Extras');
   const { error } = useErrorText();
   const mayAct = !staff || can(permissions, 'servers.manage_all');
   // A power action straight from the palette (same request and checks as the server page's button).
@@ -99,6 +100,9 @@ export default function CommandPalette({ permissions, isOpen, onOpenChange }: { 
           : { id: `sa:${s.id}:on`, group: 'servers' as const, label: `${s.name}: ${tsv('action.power_on')}`, hint: s.address ?? undefined, icon: <I name="play" size={16}/>, run: power(s, 'power_on') },
       ]),
       // A tag opens the server list filtered to it (found by searching only).
+      // Search-only too: the server's SSH command to the clipboard, as on its page.
+      ...servers.filter((s) => s.address).map((s) => ({ id: `sc:${s.id}`, group: 'servers' as const, label: t('copySsh', { name: s.name }), hint: `ssh root@${s.address}`,
+        icon: <I name="copy" size={16}/>, run: () => { onOpenChange(false); void navigator.clipboard?.writeText(`ssh root@${s.address}`).catch(() => undefined); toast.success(tx('copied', { what: t('sshCopied', { name: s.name }) })); } })),
       ...[...new Set(servers.flatMap((s) => s.tags ?? []))].map((tag) => ({ id: `st:${tag}`, group: 'servers' as const, label: tsv('list.tags.palette', { tag }),
         hint: tsv('list.tags.count', { n: servers.filter((s) => s.tags?.includes(tag)).length }), icon: <I name="tag" size={16}/>, run: go(`${staff ? '/admin/servers' : '/'}?tag=${encodeURIComponent(tag)}`) })),
       // Staff: a customer's e-mail opens the server list filtered to exactly them (found by searching only).
@@ -117,7 +121,7 @@ export default function CommandPalette({ permissions, isOpen, onOpenChange }: { 
   }, [permissions, servers, users, tickets, resolvedTheme, locale, isOpen]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const q = fold(query.trim());
-  const results = q ? commands.filter((c) => c.group !== 'recent').filter((c) => fold(`${c.label} ${c.hint ?? ''}`).includes(q)) : commands.filter((c) => c.group !== 'tickets' && !/^s[ato]:/.test(c.id) && ((c.group !== 'servers' && c.group !== 'users') || commands.indexOf(c) < 40));
+  const results = q ? commands.filter((c) => c.group !== 'recent').filter((c) => fold(`${c.label} ${c.hint ?? ''}`).includes(q)) : commands.filter((c) => c.group !== 'tickets' && !/^s[atoc]:/.test(c.id) && ((c.group !== 'servers' && c.group !== 'users') || commands.indexOf(c) < 40));
   useEffect(() => setActive(0), [query, isOpen]);
   useEffect(() => { if (!isOpen) setQuery(''); }, [isOpen]);
   useEffect(() => { listRef.current?.querySelector(`[data-index="${active}"]`)?.scrollIntoView({ block: 'nearest' }); }, [active]);

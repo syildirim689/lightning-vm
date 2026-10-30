@@ -2299,7 +2299,9 @@
     "activity": "My activity",
     "users": "Users",
     "tickets": "Support tickets",
-    "actionStarted": "{name}: {action} started."
+    "actionStarted": "{name}: {action} started.",
+    "copySsh": "{name}: Copy SSH command",
+    "sshCopied": "{name} SSH command"
   },
   "Insights": {
     "title": "Needs attention",
