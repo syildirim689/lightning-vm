@@ -147,9 +147,10 @@ export default function CommandPalette({ permissions, isOpen, onOpenChange }: { 
               const i = results.indexOf(c);
               return <li key={c.id} id={`${listId}-${c.id}`} role="option" aria-selected={i === active} data-index={i} onMouseMove={() => setActive(i)} onClick={() => c.run()}
                 className={`flex min-h-11 cursor-pointer items-center gap-3 rounded-lg px-3 text-sm ${i === active ? 'bg-accent-soft text-accent-soft-foreground' : ''}`}>
-                <span className="text-muted">{c.icon}</span><span className="font-medium">{c.label}</span>
-                {c.hint && <span className="truncate text-xs text-muted">{c.hint}</span>}
-                {i === active && <I name="corner-down-left" size={14} className="ml-auto text-muted"/>}
+                <span className="shrink-0 text-muted">{c.icon}</span><span className="max-w-[75%] font-medium [overflow-wrap:anywhere]">{c.label}</span>
+                {/* The hint only gets the room the label leaves, so a short name never wraps for it. */}
+                {c.hint ? <span className="min-w-0 flex-1 truncate text-xs text-muted">{c.hint}</span> : <span className="flex-1"/>}
+                {i === active && <I name="corner-down-left" size={14} className="shrink-0 text-muted"/>}
               </li>;
             })}</ul>
           </li>)}
