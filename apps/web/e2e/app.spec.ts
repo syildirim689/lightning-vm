@@ -1479,6 +1479,10 @@ test.describe('people, settings and smart features (English browser)', () => {
     await page.getByRole('dialog').getByRole('textbox', { name: 'Message' }).fill('Hello');
     await page.getByRole('dialog').getByRole('button', { name: 'Insert {name}' }).click();
     await expect(page.getByRole('dialog').getByRole('textbox', { name: 'Message' })).toHaveValue('Hello {name}');
+    // The first person's filled copy shows up front; a typo'd placeholder is flagged.
+    await expect(page.getByRole('dialog').getByRole('figure', { name: /^Preview: / })).not.toContainText('{name}');
+    await page.getByRole('dialog').getByRole('textbox', { name: 'Message' }).fill('Hello {name} {nmae}');
+    await expect(page.getByRole('dialog').getByText(/Unknown placeholder: \{nmae\}/)).toBeVisible();
     await page.waitForTimeout(400);
     await shot(page, 'users-bulk');
     await page.setViewportSize({ width: 390, height: 844 });

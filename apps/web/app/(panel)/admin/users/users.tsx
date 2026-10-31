@@ -365,6 +365,11 @@ function BulkAction({ people, perms, onClose }: { people: Row[]; perms?: string[
     } catch (e) { const f = (e as { fields?: Record<string, string> })?.fields ?? {}; setErrors(Object.fromEntries(Object.entries(f).map(([k, v]) => [k, field(v) ?? v]))); if (!Object.keys(f).length) toast.danger(error(e)); } finally { setBusy(false); }
   }
   const names = people.slice(0, 4).map((u) => u.name || u.email);
+  // Same fill as the API, shown for the first person so a typo is caught before 200 people get it.
+  const first = people[0];
+  const fill = (s: string) => s.replace(/\{name\}/g, first?.name?.trim() || first?.email || '').replace(/\{email\}/g, first?.email ?? '');
+  const personal = /\{(name|email)\}/.test(subject + message);
+  const unknown = [...new Set((subject + message).match(/\{[^{}\s]+\}/g) ?? [])].filter((v) => v !== '{name}' && v !== '{email}');
   return <Dialog title={t('title', { n: people.length })} onClose={onClose}
     footer={<><Button variant="tertiary" onPress={onClose}>{t('cancel')}</Button>
       <Button variant={action === 'message' ? 'primary' : 'danger'} isPending={busy} isDisabled={action === 'message' && (!subject.trim() || !message.trim())} onPress={() => void run()}>
@@ -379,6 +384,12 @@ function BulkAction({ people, perms, onClose }: { people: Row[]; perms?: string[
         {['{name}', '{email}'].map((v) => <Button key={v} size="sm" variant="secondary" aria-label={t('insert', { field: v })} onPress={() => setMessage((m) => (m && !/\s$/.test(m) ? `${m} ${v}` : m + v))}>
           <I name="plus" size={14}/><span className="font-mono">{v}</span></Button>)}
       </div>
+      {unknown.length > 0 && <Notice tone="warning">{t('unknown', { list: unknown.join(', '), name: '{name}', email: '{email}' })}</Notice>}
+      {personal && first && message.trim() && <figure className="rounded-md border border-border p-3 text-sm" aria-label={t('preview', { who: first.name || first.email })}>
+        <figcaption className="mb-1 text-xs text-muted">{t('preview', { who: first.name || first.email })}</figcaption>
+        <p className="font-medium">{fill(subject).slice(0, 120)}</p>
+        <p className="whitespace-pre-wrap break-words text-muted">{fill(message)}</p>
+      </figure>}
     </> : <Notice tone="warning">{t('endHelp')}</Notice>}
   </Dialog>;
 }

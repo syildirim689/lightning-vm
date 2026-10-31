@@ -2910,7 +2910,9 @@
       "end": "{n} kişinin oturumlarını kapat",
       "sent": "{n} kişiye gönderildi{skipped, plural, =0 {} other {; # kişi atlandı}}",
       "ended": "{n} kişinin oturumları kapatıldı{skipped, plural, =0 {} other {; # kişi atlandı}}",
-      "insert": "Ekle: {field}"
+      "insert": "Ekle: {field}",
+      "unknown": "Tanınmayan yer tutucu: {list}. Yalnızca {name} ve {email} doldurulur; diğerleri olduğu gibi gider.",
+      "preview": "Önizleme: {who}"
     },
     "serversOf": "{email} kişisinin {n} sunucusunu göster"
   },

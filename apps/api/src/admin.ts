@@ -142,7 +142,7 @@ export class AdminController {
         const { rows: people } = await pool.query('SELECT id, name, email FROM users WHERE id = ANY($1::uuid[])', [targets]);
         for (const u of people) {
           const fill = (s: string) => s.replace(/\{name\}/g, u.name?.trim() || u.email).replace(/\{email\}/g, u.email);
-          await notify('account.message', [u.id], { subject: fill(subject), message: fill(message) });
+          await notify('account.message', [u.id], { subject: fill(subject).slice(0, 120), message: fill(message) });
         }
       } else if (targets.length) await notify('account.message', targets, { subject, message });
     } else {
