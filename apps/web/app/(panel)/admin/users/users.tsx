@@ -5,7 +5,7 @@ import { Avatar, Button, Chip, Dropdown, Label, Modal, SearchField, toast } from
 import { useQueryClient } from '@tanstack/react-query';
 import { useFormatter, useNow, useTranslations } from 'next-intl';
 import { parseAsString, useQueryState } from 'nuqs';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import NextLink from 'next/link';
 import { useRouter } from 'next/navigation';
 import { I } from '../../../../components/icon';
@@ -357,6 +357,13 @@ function BulkAction({ people, perms, onClose }: { people: Row[]; perms?: string[
   const [message, setMessage] = useState('');
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
+  const last = useRef<HTMLInputElement | HTMLTextAreaElement | null>(null);
+  // Goes where the caret was, in the subject or the message (the message when neither was touched).
+  function insert(v: string) {
+    const el = last.current, inSubject = el?.tagName === 'INPUT', cur = inSubject ? subject : message;
+    const at = el?.selectionStart ?? cur.length, before = cur.slice(0, at), after = cur.slice(el?.selectionEnd ?? at);
+    (inSubject ? setSubject : setMessage)((before + (before && !/\s$/.test(before) ? ' ' : '') + v + after).slice(0, inSubject ? 120 : 2000));
+  }
   async function run() {
     setBusy(true); setErrors({});
     try {
@@ -376,12 +383,12 @@ function BulkAction({ people, perms, onClose }: { people: Row[]; perms?: string[
         {action === 'message' ? <I name="send" size={15}/> : <I name="log-out" size={15}/>}{t(action === 'message' ? 'send' : 'end', { n: people.length })}</Button></>}>
     <p className="text-sm text-muted">{t('who', { names: names.join(', '), more: Math.max(people.length - names.length, 0) })}</p>
     <SelectInput label={t('action')} value={action} onChange={setAction} options={actions.map((a) => ({ id: a, label: t(`action_${a}`) }))}/>
-    {action === 'message' ? <>
+    {action === 'message' ? <div className="contents" onFocusCapture={(e) => { if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) last.current = e.target; }}>
       <TextInput label={t('subject')} value={subject} onChange={setSubject} maxLength={120} isRequired error={errors.subject} autoComplete="off"/>
       <TextInput label={t('message')} value={message} onChange={setMessage} maxLength={2000} multiline isRequired error={errors.message} autoComplete="off"
         help={t('messageHelp', { name: '{name}', email: '{email}' })}/>
       <div className="flex flex-wrap gap-2">
-        {['{name}', '{email}'].map((v) => <Button key={v} size="sm" variant="secondary" aria-label={t('insert', { field: v })} onPress={() => setMessage((m) => (m && !/\s$/.test(m) ? `${m} ${v}` : m + v))}>
+        {['{name}', '{email}'].map((v) => <Button key={v} size="sm" variant="secondary" aria-label={t('insert', { field: v })} onPress={() => insert(v)}>
           <I name="plus" size={14}/><span className="font-mono">{v}</span></Button>)}
       </div>
       {unknown.length > 0 && <Notice tone="warning">{t('unknown', { list: unknown.join(', '), name: '{name}', email: '{email}' })}</Notice>}
@@ -390,6 +397,6 @@ function BulkAction({ people, perms, onClose }: { people: Row[]; perms?: string[
         <p className="font-medium">{fill(subject).slice(0, 120)}</p>
         <p className="whitespace-pre-wrap break-words text-muted">{fill(message)}</p>
       </figure>}
-    </> : <Notice tone="warning">{t('endHelp')}</Notice>}
+    </div> : <Notice tone="warning">{t('endHelp')}</Notice>}
   </Dialog>;
 }

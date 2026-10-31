@@ -2903,7 +2903,7 @@
       "action_end_sessions": "Her yerden çıkış yaptır",
       "subject": "Konu",
       "message": "Mesaj",
-      "messageHelp": "Her kişinin bildirim kanallarından ulaşır (varsayılan olarak panel içi ve e-posta). {name} ve {email} her kişinin kendi adı ve e-postasıyla değişir.",
+      "messageHelp": "Her kişinin bildirim kanallarından ulaşır (varsayılan olarak panel içi ve e-posta). {name} ve {email} her kişinin kendi adı ve e-postasıyla değişir. Düğmeler imlecin olduğu yere (konu ya da mesaj) ekler.",
       "endHelp": "Bu kişilerin tüm oturumları şimdi kapanır; yeniden giriş yapmaları gerekir.",
       "cancel": "Vazgeç",
       "send": "{n} kişiye gönder",

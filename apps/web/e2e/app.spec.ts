@@ -1483,6 +1483,11 @@ test.describe('people, settings and smart features (English browser)', () => {
     await expect(page.getByRole('dialog').getByRole('figure', { name: /^Preview: / })).not.toContainText('{name}');
     await page.getByRole('dialog').getByRole('textbox', { name: 'Message' }).fill('Hello {name} {nmae}');
     await expect(page.getByRole('dialog').getByText(/Unknown placeholder: \{nmae\}/)).toBeVisible();
+    // Insert follows the caret: into the subject when that was the last field.
+    await page.getByRole('dialog').getByRole('textbox', { name: 'Subject' }).click();
+    await page.keyboard.press('End');
+    await page.getByRole('dialog').getByRole('button', { name: 'Insert {email}' }).click();
+    await expect(page.getByRole('dialog').getByRole('textbox', { name: 'Subject' })).toHaveValue('Maintenance tonight {email}');
     await page.waitForTimeout(400);
     await shot(page, 'users-bulk');
     await page.setViewportSize({ width: 390, height: 844 });
