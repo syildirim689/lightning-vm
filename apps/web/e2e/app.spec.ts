@@ -1475,6 +1475,10 @@ test.describe('people, settings and smart features (English browser)', () => {
     await page.getByRole('button', { name: /Act on \d+ (person|people)/ }).click();
     await expect(page.getByRole('dialog')).toContainText('Filter the list first');
     await page.getByRole('dialog').getByRole('textbox', { name: 'Subject' }).fill('Maintenance tonight');
+    // Placeholders go in with one press and become each person's own name.
+    await page.getByRole('dialog').getByRole('textbox', { name: 'Message' }).fill('Hello');
+    await page.getByRole('dialog').getByRole('button', { name: 'Insert {name}' }).click();
+    await expect(page.getByRole('dialog').getByRole('textbox', { name: 'Message' })).toHaveValue('Hello {name}');
     await page.waitForTimeout(400);
     await shot(page, 'users-bulk');
     await page.setViewportSize({ width: 390, height: 844 });

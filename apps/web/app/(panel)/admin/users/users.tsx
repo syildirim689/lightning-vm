@@ -373,7 +373,12 @@ function BulkAction({ people, perms, onClose }: { people: Row[]; perms?: string[
     <SelectInput label={t('action')} value={action} onChange={setAction} options={actions.map((a) => ({ id: a, label: t(`action_${a}`) }))}/>
     {action === 'message' ? <>
       <TextInput label={t('subject')} value={subject} onChange={setSubject} maxLength={120} isRequired error={errors.subject} autoComplete="off"/>
-      <TextInput label={t('message')} value={message} onChange={setMessage} maxLength={2000} multiline isRequired error={errors.message} autoComplete="off" help={t('messageHelp')}/>
+      <TextInput label={t('message')} value={message} onChange={setMessage} maxLength={2000} multiline isRequired error={errors.message} autoComplete="off"
+        help={t('messageHelp', { name: '{name}', email: '{email}' })}/>
+      <div className="flex flex-wrap gap-2">
+        {['{name}', '{email}'].map((v) => <Button key={v} size="sm" variant="secondary" aria-label={t('insert', { field: v })} onPress={() => setMessage((m) => (m && !/\s$/.test(m) ? `${m} ${v}` : m + v))}>
+          <I name="plus" size={14}/><span className="font-mono">{v}</span></Button>)}
+      </div>
     </> : <Notice tone="warning">{t('endHelp')}</Notice>}
   </Dialog>;
 }

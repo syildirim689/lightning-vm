@@ -2903,13 +2903,14 @@
       "action_end_sessions": "Sign out everywhere",
       "subject": "Subject",
       "message": "Message",
-      "messageHelp": "Arrives through each person’s notification channels (in-app and e-mail by default).",
+      "messageHelp": "Arrives through each person’s notification channels (in-app and e-mail by default). {name} and {email} become each person’s own name and e-mail.",
       "endHelp": "Every session of these people ends now; they have to sign in again.",
       "cancel": "Cancel",
       "send": "{n, plural, one {Send to # person} other {Send to # people}}",
       "end": "{n, plural, one {Sign out # person} other {Sign out # people}}",
       "sent": "{n, plural, one {Sent to # person} other {Sent to # people}}{skipped, plural, =0 {} other {; # skipped}}",
-      "ended": "{n, plural, one {# person signed out} other {# people signed out}}{skipped, plural, =0 {} other {; # skipped}}"
+      "ended": "{n, plural, one {# person signed out} other {# people signed out}}{skipped, plural, =0 {} other {; # skipped}}",
+      "insert": "Insert {field}"
     },
     "serversOf": "Show the {n} servers of {email}"
   },

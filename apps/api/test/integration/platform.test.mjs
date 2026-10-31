@@ -1146,6 +1146,12 @@ test('users in bulk: a message through their channels, signing them out everywhe
   const sent = (await post('/admin/users/actions', { action: 'message', userIds: [...ids, bossId], subject: 'Maintenance tonight', message: 'Servers restart at 02:00.' }, admin)).json();
   assert.deepEqual(sent, { done: 2, skipped: 1 });
   for (const id of ids) assert.ok(await until(async () => (await pool.query("SELECT 1 FROM notifications WHERE user_id = $1 AND event = 'account.message' AND title = 'Maintenance tonight'", [id])).rowCount));
+  // {email} / {name} become each recipient's own.
+  assert.deepEqual((await post('/admin/users/actions', { action: 'message', userIds: ids, subject: 'For {email}', message: 'Hello {name}' }, admin)).json(), { done: 2, skipped: 0 });
+  for (const id of ids) {
+    const { rows: [u] } = await pool.query('SELECT email FROM users WHERE id = $1', [id]);
+    assert.ok(await until(async () => (await pool.query("SELECT 1 FROM notifications WHERE user_id = $1 AND event = 'account.message' AND title = $2", [id, `For ${u.email}`])).rowCount));
+  }
   assert.deepEqual((await post('/admin/users/actions', { action: 'end_sessions', userIds: ids }, admin)).json(), { done: 2, skipped: 0 });
   for (const p of people) assert.equal((await get('/auth/me', p.c)).statusCode, 401);
   assert.equal((await get('/auth/me', admin)).statusCode, 200);

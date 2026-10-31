@@ -137,7 +137,14 @@ export class AdminController {
     const targets: string[] = [];
     for (const { id } of found) await assertCovers(req, id).then(() => targets.push(id), () => undefined);
     if (b.action === 'message') {
-      if (targets.length) await notify('account.message', targets, { subject, message });
+      // {name} and {email} make it personal: one message each then (a name not given falls back to the e-mail).
+      if (targets.length && /\{(name|email)\}/.test(subject + message)) {
+        const { rows: people } = await pool.query('SELECT id, name, email FROM users WHERE id = ANY($1::uuid[])', [targets]);
+        for (const u of people) {
+          const fill = (s: string) => s.replace(/\{name\}/g, u.name?.trim() || u.email).replace(/\{email\}/g, u.email);
+          await notify('account.message', [u.id], { subject: fill(subject), message: fill(message) });
+        }
+      } else if (targets.length) await notify('account.message', targets, { subject, message });
     } else {
       const { rows } = await pool.query('SELECT id, user_id FROM auth_sessions WHERE user_id = ANY($1::uuid[])', [targets]);
       for (const s of rows) await endSession(s.user_id, s.id);
