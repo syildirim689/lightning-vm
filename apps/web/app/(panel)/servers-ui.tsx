@@ -104,6 +104,7 @@ export function ServerList() {
   // Selection mode: cards toggle instead of opening, and a bar acts on the chosen ones (only those still shown).
   const [picking, setPicking] = useState(false);
   const [picked, setPicked] = useState<Set<string>>(new Set());
+  const anchor = useRef<string>(undefined);
   const stopPicking = () => { setPicking(false); setPicked(new Set()); };
   useEffect(() => {
     if (!picking) return;
@@ -117,7 +118,17 @@ export function ServerList() {
   // Starred servers first, the rest in their order.
   const shown = [...f.shown].sort((a, b) => Number(!!b.favorite) - Number(!!a.favorite));
   const chosen = shown.filter((s) => picked.has(s.id));
-  const flip = (id: string) => setPicked((p) => { const n = new Set(p); if (!n.delete(id)) n.add(id); return n; });
+  // Shift+click gives every card from the last clicked one to this one the state this one takes.
+  const flip = (id: string, range: boolean) => {
+    const from = shown.findIndex((x) => x.id === anchor.current), to = shown.findIndex((x) => x.id === id);
+    setPicked((p) => {
+      const n = new Set(p), on = !p.has(id);
+      const ids = range && from >= 0 ? shown.slice(Math.min(from, to), Math.max(from, to) + 1).map((x) => x.id) : [id];
+      ids.forEach((x) => (on ? n.add(x) : n.delete(x)));
+      return n;
+    });
+    anchor.current = id;
+  };
   return <div className="flex flex-col gap-4">
     {(servers.length > 1 || f.q || f.state !== 'all' || f.tag) && <div className="flex flex-col gap-3 rounded-xl border border-border bg-surface p-3">
       <ServerFilters f={f} placeholder={t('list.searchPlaceholder')} manageTags/>
@@ -126,6 +137,7 @@ export function ServerList() {
           <I name={picking ? 'check' : 'list-checks'} size={15}/>{picking ? t('list.select.done') : t('list.select.start')}</Button>
         {picking && <Button size="sm" variant="ghost" onPress={() => setPicked(chosen.length === shown.length ? new Set() : new Set(shown.map((x) => x.id)))}>
           {chosen.length === shown.length ? t('list.select.none') : t('list.select.all')}</Button>}
+        {picking && shown.length > 2 && <span className="hidden text-xs text-muted md:inline">{t('list.select.rangeHint')}</span>}
       </div>}
     </div>}
     {!shown.length ? <p role="status" className="rounded-xl border border-dashed border-border px-4 py-8 text-center text-sm text-muted">{t('list.noMatch')}</p>
@@ -147,7 +159,7 @@ export function ServerList() {
           </Card.Content>
         </Card>;
       return <motion.li key={s.id} className="relative" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: Math.min(i, 8) * 0.05, duration: 0.25 }}>
-      {picking ? <button type="button" role="checkbox" aria-checked={on} aria-label={t('list.select.toggle', { name: s.name })} onClick={() => flip(s.id)}
+      {picking ? <button type="button" role="checkbox" aria-checked={on} aria-label={t('list.select.toggle', { name: s.name })} onClick={(e) => flip(s.id, e.shiftKey)}
           className="block h-full w-full rounded-xl text-left outline-offset-2 focus-visible:outline-2">
           {card}
           <span aria-hidden className={`absolute bottom-3 right-3 grid size-6 place-items-center rounded-md border-2 transition-colors ${on ? 'border-accent bg-accent text-accent-foreground' : 'border-border bg-surface'}`}>{on && <I name="check" size={14}/>}</span>

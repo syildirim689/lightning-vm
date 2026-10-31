@@ -1818,7 +1818,8 @@
         "copyIps": "Copy IPs",
         "ipsCopied": "{n, plural, one {# IP} other {# IPs}} copied to the clipboard (one per line).",
         "copySsh": "SSH config",
-        "sshCopied": "SSH config for {n, plural, one {# server} other {# servers}} copied; paste it into ~/.ssh/config."
+        "sshCopied": "SSH config for {n, plural, one {# server} other {# servers}} copied; paste it into ~/.ssh/config.",
+        "rangeHint": "Tip: Shift+click selects every server between the last one you clicked and this one."
       },
       "tags": {
         "rename": "Rename",

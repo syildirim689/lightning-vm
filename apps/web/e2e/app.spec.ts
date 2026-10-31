@@ -635,6 +635,11 @@ test.describe('server lifecycle (simulator, Turkish customer)', () => {
     await page.getByRole('button', { name: 'Seç', exact: true }).click();
     await page.getByRole('checkbox', { name: 'web-1 sunucusunu seç' }).click();
     await expect(page.getByRole('region', { name: 'Seçili sunucular için işlemler' })).toContainText('1 sunucu seçili');
+    // Shift+click selects the range from the last clicked card; a plain click toggles one.
+    await page.getByRole('checkbox', { name: 'web-2 sunucusunu seç' }).click({ modifiers: ['Shift'] });
+    await expect(page.getByText('2 sunucu seçili')).toBeVisible();
+    await page.getByRole('checkbox', { name: 'web-2 sunucusunu seç' }).click();
+    await expect(page.getByText('1 sunucu seçili')).toBeVisible();
     await page.getByRole('button', { name: 'Tümünü seç' }).click();
     await expect(page.getByText('2 sunucu seçili')).toBeVisible();
     for (const width of [390, 768]) {

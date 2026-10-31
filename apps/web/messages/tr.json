@@ -1818,7 +1818,8 @@
         "copyIps": "IP'leri kopyala",
         "ipsCopied": "{n, plural, one {# IP} other {# IP}} panoya kopyalandı (her satırda bir tane).",
         "copySsh": "SSH yapılandırması",
-        "sshCopied": "{n, plural, one {# sunucu} other {# sunucu}} için SSH yapılandırması panoya kopyalandı; ~/.ssh/config dosyasına yapıştırın."
+        "sshCopied": "{n, plural, one {# sunucu} other {# sunucu}} için SSH yapılandırması panoya kopyalandı; ~/.ssh/config dosyasına yapıştırın.",
+        "rangeHint": "İpucu: Shift ile tıklayınca son seçtiğinizle arasındaki tüm sunucular seçilir."
       },
       "tags": {
         "rename": "Yeniden adlandır",
