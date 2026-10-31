@@ -1816,7 +1816,9 @@
         "tagRemove": "Remove {tag} from all",
         "tagDone": "{n, plural, =0 {No server changed} one {# server's tags updated} other {# servers' tags updated}}.",
         "copyIps": "Copy IPs",
-        "ipsCopied": "{n, plural, one {# IP} other {# IPs}} copied to the clipboard (one per line)."
+        "ipsCopied": "{n, plural, one {# IP} other {# IPs}} copied to the clipboard (one per line).",
+        "copySsh": "SSH config",
+        "sshCopied": "SSH config for {n, plural, one {# server} other {# servers}} copied; paste it into ~/.ssh/config."
       },
       "tags": {
         "rename": "Rename",

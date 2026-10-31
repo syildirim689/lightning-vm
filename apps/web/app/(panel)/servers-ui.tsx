@@ -184,6 +184,12 @@ function BulkBar({ servers, known, onDone }: { servers: Server[]; known: string[
       await navigator.clipboard?.writeText(ips.join('\n')).catch(() => undefined);
       toast.success(t('list.select.ipsCopied', { n: ips.length }));
     }}><I name="copy" size={15}/>{t('list.select.copyIps')}</Button>}
+    {/* Entries for ~/.ssh/config, so "ssh <name>" works; a Host alias cannot hold spaces. */}
+    {servers.some((x) => x.address) && <Button size="sm" variant="secondary" onPress={async () => {
+      const hosts = servers.flatMap((x) => x.address ? [`Host ${x.name.trim().replace(/\s+/g, '-')}\n  HostName ${x.address}\n  User root`] : []);
+      await navigator.clipboard?.writeText(hosts.join('\n\n') + '\n').catch(() => undefined);
+      toast.success(t('list.select.sshCopied', { n: hosts.length }));
+    }}><I name="square-terminal" size={15}/>{t('list.select.copySsh')}</Button>}
     <BulkTags servers={servers} known={known} busy={run.isPending} onTag={(action, tag) => run.mutateAsync({ action, tag }).catch(() => undefined)}/>
     {waiting > 0 && <Button size="sm" variant="secondary" isPending={run.isPending} onPress={() => act('restore')}><I name="undo-2" size={15}/>{t('list.select.restore', { n: waiting })}</Button>}
     {waiting < servers.length && <ConfirmButton size="sm" variant="danger-soft" isDisabled={run.isPending} icon={<I name="trash-2" size={15}/>} label={t('list.select.delete')}

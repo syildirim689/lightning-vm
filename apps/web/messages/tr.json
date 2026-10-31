@@ -1816,7 +1816,9 @@
         "tagRemove": "{tag} etiketini hepsinden kaldır",
         "tagDone": "{n, plural, =0 {Değişen sunucu olmadı} other {# sunucunun etiketi güncellendi}}.",
         "copyIps": "IP'leri kopyala",
-        "ipsCopied": "{n, plural, one {# IP} other {# IP}} panoya kopyalandı (her satırda bir tane)."
+        "ipsCopied": "{n, plural, one {# IP} other {# IP}} panoya kopyalandı (her satırda bir tane).",
+        "copySsh": "SSH yapılandırması",
+        "sshCopied": "{n, plural, one {# sunucu} other {# sunucu}} için SSH yapılandırması panoya kopyalandı; ~/.ssh/config dosyasına yapıştırın."
       },
       "tags": {
         "rename": "Yeniden adlandır",
