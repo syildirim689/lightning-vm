@@ -162,6 +162,8 @@ export function ServerList() {
 }
 
 // The selection's actions, pinned near the bottom of the screen, above the task manager's button (safe-area aware on phones).
+// Phones: fixed, since a sticky bar that wraps to several rows stops at the list's top and slides under that button;
+// a spacer of its height keeps the last cards reachable.
 function BulkBar({ servers, known, onDone }: { servers: Server[]; known: string[]; onDone: () => void }) {
   const t = useTranslations('Servers');
   const ids = servers.map((x) => x.id);
@@ -170,10 +172,18 @@ function BulkBar({ servers, known, onDone }: { servers: Server[]; known: string[
     { invalidate: [['servers'], ['tasks'], ['insights']], success: (r) => (r.tag ? t('list.select.tagDone', { n: r.started }) : t('list.select.bulkDone', { started: r.started, skipped: r.skipped })) });
   const act = (action: string) => run.mutateAsync({ action }).then(onDone, () => undefined);
   const label = (a: string) => t(`action.${a as 'power_on'}`);
+  const bar = useRef<HTMLDivElement>(null);
+  const [height, setHeight] = useState(0);
+  useEffect(() => {
+    const o = new ResizeObserver(([e]) => setHeight(e.borderBoxSize?.[0]?.blockSize ?? e.target.getBoundingClientRect().height));
+    if (bar.current) o.observe(bar.current);
+    return () => o.disconnect();
+  }, []);
   const confirm = (a: 'shutdown' | 'reset', icon: string) => <ConfirmButton size="sm" variant={a === 'reset' ? 'danger-soft' : 'secondary'} isDisabled={run.isPending} icon={<I name={icon} size={15}/>}
     label={label(a)} title={label(a)} body={t('list.select.confirm', { action: label(a), n: ids.length })} confirmLabel={t('confirm.yes', { action: label(a) })} cancelLabel={t('confirm.no')} onConfirm={() => act(a)}/>;
-  return <motion.div role="region" aria-label={t('list.select.bar')} initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }}
-    className="sticky bottom-[calc(4.5rem+env(safe-area-inset-bottom))] z-20 mx-auto flex w-full max-w-3xl flex-wrap items-center gap-2 rounded-2xl border border-border bg-overlay/95 p-3 shadow-xl backdrop-blur">
+  return <><div aria-hidden className="md:hidden" style={{ height }}/>
+  <motion.div ref={bar} role="region" aria-label={t('list.select.bar')} initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }}
+    className="fixed inset-x-4 bottom-[calc(4.5rem+env(safe-area-inset-bottom))] z-20 mx-auto flex max-w-3xl flex-wrap items-center gap-2 rounded-2xl border border-border bg-overlay/95 p-3 shadow-xl backdrop-blur md:sticky md:inset-x-auto md:w-full">
     <span role="status" className="mr-auto text-sm font-medium tabular-nums">{t('list.select.count', { n: ids.length })}</span>
     <Button size="sm" isPending={run.isPending} onPress={() => act('power_on')}><I name="play" size={15}/>{label('power_on')}</Button>
     {confirm('shutdown', 'power')}
@@ -194,7 +204,7 @@ function BulkBar({ servers, known, onDone }: { servers: Server[]; known: string[
     {waiting > 0 && <Button size="sm" variant="secondary" isPending={run.isPending} onPress={() => act('restore')}><I name="undo-2" size={15}/>{t('list.select.restore', { n: waiting })}</Button>}
     {waiting < servers.length && <ConfirmButton size="sm" variant="danger-soft" isDisabled={run.isPending} icon={<I name="trash-2" size={15}/>} label={t('list.select.delete')}
       title={t('list.select.delete')} body={t('list.select.deleteConfirm', { n: servers.length - waiting })} confirmLabel={t('list.select.delete')} cancelLabel={t('confirm.no')} onConfirm={() => act('delete')}/>}
-  </motion.div>;
+  </motion.div></>;
 }
 
 // Tags for the whole selection: the ones on any selected server can be taken off all of them; a new or known tag goes on all.

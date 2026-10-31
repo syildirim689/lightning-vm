@@ -640,6 +640,12 @@ test.describe('server lifecycle (simulator, Turkish customer)', () => {
     for (const width of [390, 768]) {
       await page.setViewportSize({ width, height: 900 });
       await expectNoOverflow(page, `server selection at ${width} px`);
+      // The selection bar stays clear of the background-work button in the corner.
+      const tasksButton = page.getByRole('button', { name: /iş sürüyor|Son işler/ });
+      if (await tasksButton.isVisible()) {
+        const barBox = (await page.getByRole('region', { name: 'Seçili sunucular için işlemler' }).boundingBox())!;
+        expect(barBox.y + barBox.height, `selection bar above the tasks button at ${width} px`).toBeLessThanOrEqual((await tasksButton.boundingBox())!.y);
+      }
       await page.screenshot({ path: `test-results/tour/servers-select-${width}.png` });
     }
     await page.setViewportSize({ width: 1280, height: 720 });
