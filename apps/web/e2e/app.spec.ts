@@ -396,6 +396,11 @@ test.describe('VMware connections (simulator, English browser)', () => {
     const mine = page.getByRole('button', { name: 'Type into the console: Uptime check (uptime)' });
     await expect(mine).toBeDisabled();
     await expect(page.getByRole('button', { name: 'Type into the console: Disk usage (df -h)' })).toBeDisabled();
+    // Windows guests get PowerShell versions of the same commands; the choice is remembered.
+    await page.getByRole('button', { name: 'Windows (PowerShell)' }).click();
+    await expect(page.getByRole('button', { name: 'Type into the console: Disk usage (Get-PSDrive -PSProvider FileSystem)' })).toBeVisible();
+    await page.reload();
+    await expect(page.getByRole('button', { name: 'Windows (PowerShell)' })).toHaveAttribute('aria-pressed', 'true');
     await page.setViewportSize({ width: 390, height: 900 });
     await expectNoOverflow(page, 'console commands at 390 px');
     await expect(page.getByText('Command saved.')).toBeHidden({ timeout: 15_000 });

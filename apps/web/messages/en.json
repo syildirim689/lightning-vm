@@ -6955,6 +6955,13 @@
     "editing": "Editing: {name}",
     "update": "Save changes",
     "updated": "Command updated.",
-    "cancelEdit": "Cancel"
+    "cancelEdit": "Cancel",
+    "os": "System",
+    "osName": {
+      "linux": "Linux",
+      "windows": "Windows (PowerShell)"
+    },
+    "filter": "Search saved commands",
+    "noMatch": "No saved command matches the search."
   }
 }

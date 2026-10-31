@@ -3,7 +3,7 @@
 // Also the way to paste text, which the VMware console cannot take from the clipboard. Saved commands are the person's own.
 import { Button, toast } from '@heroui/react';
 import { useTranslations } from 'next-intl';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { apiFetch } from '../lib/api';
 import { useMe } from '../lib/me';
 import { can } from '../lib/permissions';
@@ -12,8 +12,8 @@ import { I } from './icon';
 import { CheckboxInput, Section, TextInput } from './ui';
 
 type Snippet = { id: string; name: string; command: string; shared: boolean; mine: boolean };
-// Linux, read-only: they show the state, never change it.
-const builtIn = [
+// Read-only: they show the state, never change it. Windows ones are PowerShell.
+const linux = [
   ['summary', 'uptime && free -h && df -h /'],
   ['disk', 'df -h'],
   ['memory', 'free -h'],
@@ -24,6 +24,18 @@ const builtIn = [
   ['logs', 'journalctl -n 50 --no-pager'],
   ['os', 'cat /etc/os-release'],
 ] as const;
+const windows: [typeof linux[number][0], string][] = [
+  ['summary', 'Get-CimInstance Win32_OperatingSystem | Select-Object Caption, LastBootUpTime, FreePhysicalMemory'],
+  ['disk', 'Get-PSDrive -PSProvider FileSystem'],
+  ['memory', 'Get-CimInstance Win32_OperatingSystem | Select-Object TotalVisibleMemorySize, FreePhysicalMemory'],
+  ['network', 'ipconfig /all'],
+  ['ports', 'Get-NetTCPConnection -State Listen | Sort-Object LocalPort'],
+  ['topCpu', 'Get-Process | Sort-Object CPU -Descending | Select-Object -First 10'],
+  ['failed', "Get-Service | Where-Object { $_.StartType -eq 'Automatic' -and $_.Status -ne 'Running' }"],
+  ['logs', 'Get-WinEvent -LogName System -MaxEvents 50'],
+  ['os', 'Get-ComputerInfo -Property OsName, OsVersion, OsBuildNumber'],
+];
+const osKey = 'lvm.snippetOs';
 
 export function ConsoleSnippets({ send, ready }: { send: (text: string) => void; ready: boolean }) {
   const t = useTranslations('Snippets');
@@ -32,8 +44,15 @@ export function ConsoleSnippets({ send, ready }: { send: (text: string) => void;
   const [enter, setEnter] = useState(false);
   const [share, setShare] = useState(false);
   const [editing, setEditing] = useState<Snippet>();
+  const [os, setOs] = useState<'linux' | 'windows'>('linux');
+  const [filter, setFilter] = useState('');
+  // The last chosen system is a per-browser convenience.
+  useEffect(() => { try { if (localStorage.getItem(osKey) === 'windows') setOs('windows'); } catch { /* storage blocked */ } }, []);
+  const pick = (v: typeof os) => { setOs(v); try { localStorage.setItem(osKey, v); } catch { /* storage blocked */ } };
   const mayShare = can(useMe()?.permissions, 'settings.manage');
-  const saved = useApiQuery<{ snippets: Snippet[] }>(['console-snippets'], '/console-snippets').data?.snippets ?? [];
+  const all = useApiQuery<{ snippets: Snippet[] }>(['console-snippets'], '/console-snippets').data?.snippets ?? [];
+  const f = filter.trim().toLowerCase();
+  const saved = f ? all.filter((s) => `${s.name}\n${s.command}`.toLowerCase().includes(f)) : all;
   const reset = (s?: Snippet) => { setEditing(s); setText(s?.command ?? ''); setName(s?.name ?? ''); setShare(!!s?.shared); };
   const save = useApiAction(() => apiFetch(editing ? `/console-snippets/${editing.id}` : '/console-snippets',
     { method: editing ? 'PUT' : 'POST', body: { name, command: text, shared: mayShare && share } }),
@@ -48,11 +67,17 @@ export function ConsoleSnippets({ send, ready }: { send: (text: string) => void;
   return <Section title={t('title')} description={ready ? t('help') : t('notReady')}>
     <div className="flex flex-col gap-4">
       <CheckboxInput label={t('enter')} isSelected={enter} onChange={setEnter} help={t('enterHelp')}/>
+      <div role="group" aria-label={t('os')} className="flex w-fit gap-1 rounded-full border border-border p-1">
+        {([['linux', 'square-terminal'], ['windows', 'monitor']] as const).map(([v, icon]) => <Button key={v} size="sm" variant={os === v ? 'primary' : 'ghost'} aria-pressed={os === v} onPress={() => pick(v)}>
+          <I name={icon} size={14}/>{t(`osName.${v}`)}</Button>)}
+      </div>
       <div role="group" aria-label={t('builtIn')} className="flex flex-wrap gap-2">
-        {builtIn.map(([key, command]) => <Button key={key} size="sm" variant="secondary" className={chip} isDisabled={!ready}
+        {(os === 'linux' ? linux : windows).map(([key, command]) => <Button key={key} size="sm" variant="secondary" className={chip} isDisabled={!ready}
           aria-label={t('typeOne', { name: t(`b.${key}`), command })} onPress={() => type(command, t(`b.${key}`))}>
           <I name="square-terminal" size={14}/>{t(`b.${key}`)}</Button>)}
       </div>
+      {all.length > 5 && <TextInput label={t('filter')} value={filter} onChange={setFilter} className="max-w-sm"/>}
+      {f && !saved.length && <p className="text-sm text-muted">{t('noMatch')}</p>}
       {/* Shared (from the administrators) first, then the person's own. */}
       {([['shared', saved.filter((s) => s.shared)], ['mine', saved.filter((s) => !s.shared)]] as const).map(([group, list]) => list.length > 0 &&
         <ul key={group} aria-label={t(group)} className="flex flex-wrap gap-2">

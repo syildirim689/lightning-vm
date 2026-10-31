@@ -6955,6 +6955,13 @@
     "editing": "Düzenleniyor: {name}",
     "update": "Değişikliği kaydet",
     "updated": "Komut güncellendi.",
-    "cancelEdit": "Vazgeç"
+    "cancelEdit": "Vazgeç",
+    "os": "Sistem",
+    "osName": {
+      "linux": "Linux",
+      "windows": "Windows (PowerShell)"
+    },
+    "filter": "Kayıtlı komutlarda ara",
+    "noMatch": "Aramaya uyan kayıtlı komut yok."
   }
 }
