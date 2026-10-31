@@ -401,7 +401,7 @@ test.describe('VMware connections (simulator, English browser)', () => {
     await expect(page.getByRole('button', { name: 'Type into the console: Disk usage (Get-PSDrive -PSProvider FileSystem)' })).toBeVisible();
     await page.reload();
     await expect(page.getByRole('button', { name: 'Windows (PowerShell)' })).toHaveAttribute('aria-pressed', 'true');
-    await expect(page.locator('.page-loader:not(.page-loader-hidden)')).toHaveCount(0);
+    await expect(page.locator('#boot-loader')).toHaveCSS('opacity', '0'); // the reload's loader fades out
     await page.setViewportSize({ width: 390, height: 900 });
     await expectNoOverflow(page, 'console commands at 390 px');
     await expect(page.getByText('Command saved.')).toBeHidden({ timeout: 15_000 });
