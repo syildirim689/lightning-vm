@@ -2915,7 +2915,9 @@
       "unknown": "Tanınmayan yer tutucu: {list}. Yalnızca {name} ve {email} doldurulur; diğerleri olduğu gibi gider.",
       "preview": "Önizleme: {who}"
     },
-    "serversOf": "{email} kişisinin {n} sunucusunu göster"
+    "serversOf": "{email} kişisinin {n} sunucusunu göster",
+    "inactiveFilter": "30 gündür görülmeyen",
+    "newFilter": "Son 7 günde katılan"
   },
   "Roles": {
     "eyebrow": "Kişiler",

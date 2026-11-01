@@ -1511,6 +1511,14 @@ test.describe('people, settings and smart features (English browser)', () => {
     // Who is here: the overview's "Online now" shows this admin; the users' "Online or active" card filters to them.
     await page.goto('/admin');
     await expect(page.getByRole('list', { name: 'Online now' }).getByRole('listitem').first()).toBeVisible();
+    // Status shortcuts: just joined lists the test's new user; dormant leaves out the admin who is here now.
+    await page.goto('/admin/users?status=new');
+    await expect(page.getByRole('main').getByText(/user-\d+@example\.test/).first()).toBeVisible();
+    await page.goto('/admin/users?status=inactive');
+    await expect(page.getByRole('main').getByText('admin@example.test')).toHaveCount(0);
+    await page.goto('/admin/users');
+    await page.getByRole('button', { name: /banned/ }).click();
+    await expect(page).toHaveURL(/status=banned/);
     await page.goto('/admin/users');
     // Presence and sessions: the admin's own row is online (this tab), its sessions list device and activity.
     await expect(page.getByRole('img', { name: 'Online' }).first()).toBeVisible();

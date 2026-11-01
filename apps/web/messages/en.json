@@ -2915,7 +2915,9 @@
       "unknown": "Unknown placeholder: {list}. Only {name} and {email} are filled; others are sent as typed.",
       "preview": "Preview: {who}"
     },
-    "serversOf": "Show the {n} servers of {email}"
+    "serversOf": "Show the {n} servers of {email}",
+    "inactiveFilter": "Not seen for 30 days",
+    "newFilter": "Joined in the last 7 days"
   },
   "Roles": {
     "eyebrow": "People",
