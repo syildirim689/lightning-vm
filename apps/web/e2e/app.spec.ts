@@ -1513,7 +1513,7 @@ test.describe('people, settings and smart features (English browser)', () => {
     await expect(page.getByRole('list', { name: 'Online now' }).getByRole('listitem').first()).toBeVisible();
     // Status shortcuts: just joined lists the test's new user; dormant leaves out the admin who is here now.
     await page.goto('/admin/users?status=new');
-    await expect(page.getByRole('main').getByText(/user-\d+@example\.test/).first()).toBeVisible();
+    await expect(page.getByRole('main').getByText(/user-\d+@example\.test/).filter({ visible: true }).first()).toBeVisible();
     await page.goto('/admin/users?status=inactive');
     await expect(page.getByRole('main').getByText('admin@example.test')).toHaveCount(0);
     await page.goto('/admin/users');
