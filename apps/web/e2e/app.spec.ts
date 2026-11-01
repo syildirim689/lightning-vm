@@ -1348,7 +1348,7 @@ test.describe('people, settings and smart features (English browser)', () => {
     await expect(page).toHaveURL(/\/support\/[0-9a-f-]{36}$/);
     await expect(page.getByText('SSH times out since this morning.')).toBeVisible();
     // A file dropped on the reply box is attached (and comes off again).
-    await page.getByRole('textbox', { name: /Reply/ }).evaluate((el) => {
+    await page.getByLabel('Your reply').evaluate((el) => {
       const dt = new DataTransfer(); dt.items.add(new File(['ssh -vvv output'], 'ssh-debug.log', { type: 'text/plain' }));
       el.dispatchEvent(new DragEvent('drop', { dataTransfer: dt, bubbles: true, cancelable: true }));
     });
