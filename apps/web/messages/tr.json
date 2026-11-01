@@ -1839,7 +1839,8 @@
       "note": "Not",
       "ownerClear": "Sahip süzgecini kaldır: {email}",
       "ownerPalette": "Sunucuları: {email}",
-      "bySize": "En büyük önce"
+      "bySize": "En büyük önce",
+      "byState": "Duruma göre (önce sorunlar)"
     },
     "col": {
       "name": "Ad",

@@ -554,6 +554,9 @@ test.describe('server lifecycle (simulator, Turkish customer)', () => {
     await page.setViewportSize({ width: 1280, height: 720 });
     await choose(page, page, /Sırala/, 'En büyük önce');
     await expect(page).toHaveURL(/sort=size/);
+    // State order puts problems and busy servers before the running ones.
+    await choose(page, page, /Sırala/, 'Duruma göre (önce sorunlar)');
+    await expect(page).toHaveURL(/sort=state/);
     await page.goto('/?q=yok-boyle');
     await expect(page.getByText('Bu süzgeçlere uyan sunucu yok.').or(page.getByText('web-1'))).toBeVisible();
     // Ctrl+K lists the server just opened under "recent".

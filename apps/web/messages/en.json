@@ -1839,7 +1839,8 @@
       "note": "Note",
       "ownerClear": "Remove the owner filter: {email}",
       "ownerPalette": "Servers of {email}",
-      "bySize": "Largest first"
+      "bySize": "Largest first",
+      "byState": "By state (problems first)"
     },
     "col": {
       "name": "Name",
