@@ -5840,7 +5840,8 @@
     "sendShortcut": "Ctrl + Enter (Mac’te ⌘ + Enter) gönderir. Gönderilmemiş yanıt bu tarayıcıda saklanır.",
     "presenceViewing": "{who} da bu talebi şu an açmış.",
     "presenceTyping": "{who} bir yanıt yazıyor — yanıtlamadan önce kontrol edin.",
-    "pasteHint": "Ekran görüntüsünü buraya yapıştırabilirsiniz (Ctrl+V); Ctrl+Enter gönderir. Taslak, gönderene kadar saklanır."
+    "pasteHint": "Ekran görüntüsünü buraya yapıştırabilirsiniz (Ctrl+V); Ctrl+Enter gönderir. Taslak, gönderene kadar saklanır.",
+    "dropHint": "Dosyayı bu kutuya sürükleyip bırakabilir ya da ekran görüntüsünü yapıştırabilirsiniz."
   },
   "Stats": {
     "eyebrow": "Yönetim",

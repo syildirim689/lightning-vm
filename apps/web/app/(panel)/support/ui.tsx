@@ -98,6 +98,8 @@ export function Composer({ ticketId, staff, closed, onSent, vars, onWriting }: {
   const [busy, setBusy] = useState(false);
   const [fieldErr, setFieldErr] = useState<string>();
   const pick = useRef<HTMLInputElement>(null);
+  const [dragging, setDragging] = useState(false);
+  const addFiles = (more: File[]) => setFiles((now) => [...now, ...more].slice(0, 3));
   const canned = useApiQuery<{ canned: { id: string; title: string; body: string }[] }>(['admin', 'support', 'canned'], staff ? '/admin/support/canned' : null).data?.canned ?? [];
   async function send() {
     if (busy || !body.trim()) return;
@@ -107,22 +109,27 @@ export function Composer({ ticketId, staff, closed, onSent, vars, onWriting }: {
       setBody(''); setFiles([]); setInternal(false); toast.success(internal ? t('noteAdded') : t('sent')); onSent();
     } catch (e) { setFieldErr((e as ApiError).fields?.attachments); toast.danger(error(e)); } finally { setBusy(false); }
   }
-  return <div className={`flex flex-col gap-3 rounded-2xl border p-4 ${internal ? 'border-dashed border-warning/60 bg-warning/5' : 'border-border bg-surface'}`}>
+  // Files dropped on the box or pasted into it (a screenshot) are attached, up to 3.
+  return <div className={`flex flex-col gap-3 rounded-2xl border p-4 transition-colors ${dragging ? 'border-dashed border-accent bg-accent/5' : internal ? 'border-dashed border-warning/60 bg-warning/5' : 'border-border bg-surface'}`}
+    onDragOver={(e) => { if (e.dataTransfer.types.includes('Files')) { e.preventDefault(); setDragging(true); } }}
+    onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setDragging(false); }}
+    onDrop={(e) => { if (e.dataTransfer.files.length) { e.preventDefault(); addFiles(Array.from(e.dataTransfer.files)); } setDragging(false); }}
+    onPaste={(e) => { const pasted = Array.from(e.clipboardData.files); if (pasted.length) { e.preventDefault(); addFiles(pasted); } }}>
     {closed && !staff && <p className="text-xs text-muted">{t('reopenHint')}</p>}
     {staff && canned.length > 0 && <SelectInput label={t('canned')} value="" onChange={(id) => { const c = canned.find((x) => x.id === id); if (c) { const text = fillCanned(c.body, vars); setBody((b) => (b ? `${b}\n\n${text}` : text)); } }}
       options={canned.map((c) => ({ id: c.id, label: c.title }))} placeholder={t('cannedPick')}/>}
     {/* Ctrl/⌘ + Enter sends, from anywhere in the box. */}
     <div onKeyDown={(e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); void send(); } }}>
-      <TextInput multiline label={internal ? t('noteLabel') : t('replyLabel')} value={body} onChange={setBody} help={t('sendShortcut')}/>
+      <TextInput multiline label={internal ? t('noteLabel') : t('replyLabel')} value={body} onChange={setBody} help={`${t('sendShortcut')} ${t('dropHint')}`}/>
     </div>
     <AnimatePresence>{files.length > 0 && <motion.ul initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex flex-wrap gap-2">
-      {files.map((f, i) => <li key={i} className="inline-flex items-center gap-1 rounded-lg bg-default px-2 py-1 text-xs">{f.name}
+      {files.map((f, i) => <li key={i} className="inline-flex max-w-full items-center gap-1 rounded-lg bg-default px-2 py-1 text-xs"><span className="truncate">{f.name}</span>
         <button type="button" aria-label={t('removeFile', { name: f.name })} onClick={() => setFiles(files.filter((_, j) => j !== i))} className="grid size-5 place-items-center rounded hover:bg-default-foreground/10"><I name="x" size={12}/></button></li>)}
     </motion.ul>}</AnimatePresence>
     {fieldErr && <p className="text-xs text-danger">{field(fieldErr)}</p>}
     <div className="flex flex-wrap items-center justify-between gap-2">
       <div className="flex flex-wrap items-center gap-2">
-        <input ref={pick} type="file" multiple accept={accept} className="sr-only" onChange={(e) => { setFiles([...files, ...Array.from(e.target.files ?? [])].slice(0, 3)); e.target.value = ''; }}/>
+        <input ref={pick} type="file" multiple accept={accept} className="sr-only" onChange={(e) => { addFiles(Array.from(e.target.files ?? [])); e.target.value = ''; }}/>
         <Button size="sm" variant="ghost" isDisabled={files.length >= 3} onPress={() => pick.current?.click()}><I name="paperclip" size={14}/>{t('attach')}</Button>
         {staff && <Button size="sm" variant={internal ? 'secondary' : 'ghost'} aria-pressed={internal} onPress={() => setInternal(!internal)}><I name="eye-off" size={14}/>{t('internal')}</Button>}
       </div>

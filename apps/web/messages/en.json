@@ -5840,7 +5840,8 @@
     "sendShortcut": "Ctrl + Enter (⌘ + Enter on a Mac) sends. An unsent reply is kept in this browser.",
     "presenceViewing": "{who} also has this ticket open.",
     "presenceTyping": "{who} is writing a reply — check before you answer.",
-    "pasteHint": "You can paste a screenshot here (Ctrl+V); Ctrl+Enter sends. The draft is kept until you send it."
+    "pasteHint": "You can paste a screenshot here (Ctrl+V); Ctrl+Enter sends. The draft is kept until you send it.",
+    "dropHint": "Drop files on this box or paste a screenshot to attach them."
   },
   "Stats": {
     "eyebrow": "Administration",
