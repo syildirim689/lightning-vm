@@ -1330,8 +1330,20 @@ test.describe('people, settings and smart features (English browser)', () => {
     await page.getByLabel('Subject').fill('Cannot reach my server over SSH');
     await page.getByRole('radio', { name: /High/ }).click();
     await page.getByLabel('Message').fill('SSH times out since this morning. I already restarted the server.');
+    // Closing keeps the draft; a pasted screenshot becomes an attachment (and can be taken off again).
+    await page.getByRole('button', { name: 'Cancel' }).click();
+    await page.getByRole('button', { name: 'New ticket' }).first().click();
+    await expect(page.getByLabel('Subject')).toHaveValue('Cannot reach my server over SSH');
+    await page.getByRole('radio', { name: /High/ }).click();
+    await page.getByLabel('Message').evaluate((el) => {
+      const dt = new DataTransfer(); dt.items.add(new File([new Uint8Array([137, 80, 78, 71])], 'pasted-shot.png', { type: 'image/png' }));
+      el.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true }));
+    });
+    await expect(page.getByRole('dialog').getByText('pasted-shot.png')).toBeVisible();
     await page.waitForTimeout(400);
     await shot(page, 'support-new');
+    await page.getByRole('button', { name: /pasted-shot\.png/ }).click();
+    await expect(page.getByRole('dialog').getByText('pasted-shot.png')).toHaveCount(0);
     await page.getByRole('button', { name: 'Send the ticket' }).click();
     await expect(page).toHaveURL(/\/support\/[0-9a-f-]{36}$/);
     await expect(page.getByText('SSH times out since this morning.')).toBeVisible();

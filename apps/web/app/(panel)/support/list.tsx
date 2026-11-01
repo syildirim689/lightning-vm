@@ -57,6 +57,12 @@ function NewTicket({ initialServer, mine, onClose }: { initialServer: string; mi
   const [busy, setBusy] = useState(false);
   const pick = useRef<HTMLInputElement>(null);
   useEffect(() => { if (!v.departmentId && deps[0]) setV((x) => ({ ...x, departmentId: deps[0].id })); }, [deps]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Subject and message survive closing the dialog or the tab, until the ticket is sent.
+  const draftKey = 'lvm:support-new-draft';
+  useEffect(() => { try { const d = JSON.parse(localStorage.getItem(draftKey) ?? 'null') as { subject?: string; body?: string } | null; if (d) setV((x) => ({ ...x, subject: d.subject ?? '', body: d.body ?? '' })); } catch { /* storage blocked */ } }, []);
+  useEffect(() => { try { if (v.subject.trim() || v.body.trim()) localStorage.setItem(draftKey, JSON.stringify({ subject: v.subject, body: v.body })); else localStorage.removeItem(draftKey); } catch { /* storage blocked */ } }, [v.subject, v.body]);
+  const addFiles = (more: File[]) => setFiles((now) => [...now, ...more].slice(0, 3));
+  const ready = v.subject.trim().length >= 3 && !!v.body.trim() && !!v.departmentId;
   const server = servers.find((s) => s.id === v.serverId);
   // A server in an error state or off: suggest a higher priority (the customer decides).
   const troubled = server && (server.state === 'error' || server.state === 'missing' || (server.state === 'ready' && server.powerState !== 'poweredOn'));
@@ -68,6 +74,7 @@ function NewTicket({ initialServer, mine, onClose }: { initialServer: string; mi
         const r = new FileReader(); r.onload = () => res({ name: f.name, type: f.type || 'text/plain', data: String(r.result).split(',')[1] ?? '' }); r.onerror = () => rej(r.error); r.readAsDataURL(f);
       })));
       const r = await apiFetch<{ id: string; number: number }>('/support/tickets', { method: 'POST', body: { ...v, serverId: v.serverId || null, attachments } });
+      try { localStorage.removeItem(draftKey); } catch { /* storage blocked */ }
       toast.success(t('created', { number: r.number })); void client.invalidateQueries({ queryKey: ['support'] }); router.push(`/support/${r.id}`);
     } catch (e) { setFields((e as ApiError).fields ?? {}); toast.danger(error(e)); } finally { setBusy(false); }
   }
@@ -76,7 +83,9 @@ function NewTicket({ initialServer, mine, onClose }: { initialServer: string; mi
       <Modal.Dialog className="bg-surface">
         <Modal.CloseTrigger/>
         <Modal.Header><Modal.Heading>{t('new')}</Modal.Heading></Modal.Header>
-        <Modal.Body className="flex flex-col gap-4">
+        {/* Ctrl/⌘ + Enter sends; a screenshot pasted anywhere in the form is attached. */}
+        <Modal.Body className="flex flex-col gap-4" onKeyDown={(e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && ready && !busy) { e.preventDefault(); void submit(); } }}
+          onPaste={(e) => { const pasted = Array.from(e.clipboardData.files); if (pasted.length) { e.preventDefault(); addFiles(pasted); } }}>
           <div className="grid gap-4 sm:grid-cols-2">
             <SelectInput label={t('department')} value={v.departmentId} onChange={(x) => setV({ ...v, departmentId: x })} error={field(fields.departmentId)}
               options={deps.map((d) => ({ id: d.id, label: locale === 'tr' ? d.nameTr : d.nameEn }))}/>
@@ -98,12 +107,12 @@ function NewTicket({ initialServer, mine, onClose }: { initialServer: string; mi
             {troubled && (v.priority === 'low' || v.priority === 'normal') && <button type="button" onClick={() => setV({ ...v, priority: 'high' })}
               className="flex items-center gap-2 self-start rounded-lg bg-warning/10 px-3 py-2 text-xs text-warning hover:bg-warning/20"><I name="lightbulb" size={14}/>{t('suggestHigh', { name: server!.name })}</button>}
           </div>
-          <TextInput multiline label={t('message')} value={v.body} onChange={(x) => setV({ ...v, body: x })} help={t('messageHelp')}/>
+          <TextInput multiline label={t('message')} value={v.body} onChange={(x) => setV({ ...v, body: x })} help={`${t('messageHelp')} ${t('pasteHint')}`}/>
           <div className="flex flex-wrap items-center gap-2">
             <input ref={pick} type="file" multiple accept="image/png,image/jpeg,image/gif,image/webp,application/pdf,text/plain,.log,.txt" className="sr-only"
-              onChange={(e) => { setFiles([...files, ...Array.from(e.target.files ?? [])].slice(0, 3)); e.target.value = ''; }}/>
+              onChange={(e) => { addFiles(Array.from(e.target.files ?? [])); e.target.value = ''; }}/>
             <Button size="sm" variant="ghost" isDisabled={files.length >= 3} onPress={() => pick.current?.click()}><I name="paperclip" size={14}/>{t('attach')}</Button>
-            {files.map((f, i) => <span key={i} className="inline-flex items-center gap-1 rounded-lg bg-default px-2 py-1 text-xs">{f.name}
+            {files.map((f, i) => <span key={i} className="inline-flex max-w-full items-center gap-1 rounded-lg bg-default px-2 py-1 text-xs"><span className="truncate">{f.name}</span>
               <button type="button" aria-label={t('removeFile', { name: f.name })} onClick={() => setFiles(files.filter((_, j) => j !== i))}><I name="x" size={12}/></button></span>)}
           </div>
           {fields.attachments && <p className="text-xs text-danger">{field(fields.attachments)}</p>}
@@ -111,7 +120,7 @@ function NewTicket({ initialServer, mine, onClose }: { initialServer: string; mi
         </Modal.Body>
         <Modal.Footer className="flex justify-end gap-2">
           <Button variant="tertiary" onPress={onClose}>{t('cancel')}</Button>
-          <Button isPending={busy} isDisabled={v.subject.trim().length < 3 || !v.body.trim() || !v.departmentId} onPress={submit}><I name="send" size={15}/>{t('submit')}</Button>
+          <Button isPending={busy} isDisabled={!ready} onPress={submit}><I name="send" size={15}/>{t('submit')}</Button>
         </Modal.Footer>
       </Modal.Dialog>
     </Modal.Container>
