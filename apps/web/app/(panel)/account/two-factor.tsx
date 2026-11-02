@@ -1,5 +1,5 @@
 "use client";
-// Two-factor authentication (authenticator app + backup codes) and the verified phone number used for
+// Two-factor authentication (authenticator app or codes by e-mail/SMS, plus backup codes) and the verified phone number used for
 // SMS codes and SMS notifications. All of it runs through better-auth's client.
 import { Button, InputOTP, Modal, toast } from '@heroui/react';
 import { useQueryClient } from '@tanstack/react-query';
@@ -32,12 +32,18 @@ function BackupCodes({ codes }: { codes: string[] }) {
   </div>;
 }
 
+const methodIcon = (m: 'app' | 'code', channel: string) => m === 'app' ? 'smartphone' : channel === 'sms' ? 'message-square-text' : 'mail';
+
 export function TwoFactor() {
   const t = useTranslations('Account');
   const { error } = useErrorText();
   const client = useQueryClient();
   const me = useMe();
-  const [step, setStep] = useState<'idle' | 'password' | 'scan' | 'codes' | 'disable' | 'regenerate'>('idle');
+  const [step, setStep] = useState<'idle' | 'password' | 'scan' | 'mail' | 'codes' | 'disable' | 'regenerate'>('idle');
+  const cfg = useApiQuery<PublicConfig>(['public-config'], '/public/config').data;
+  // Codes go by SMS to a verified phone when SMS codes are on, otherwise by e-mail (better-auth.ts sendOTP).
+  const channel = cfg?.otpChannels.sms && me?.phoneNumberVerified ? 'sms' : cfg?.otpChannels.email ? 'email' : null;
+  const [via, setVia] = useState<'app' | 'code'>('app');
   const [password, setPassword] = useState('');
   const [uri, setUri] = useState('');
   const [qr, setQr] = useState('');
@@ -56,7 +62,24 @@ export function TwoFactor() {
     setBusy(false);
     if (r.error) { toast.danger(error(codeOf(r.error))); return; }
     const d = r.data as { totpURI: string; backupCodes: string[] };
-    setUri(d.totpURI); setCodes(d.backupCodes); setStep('scan'); setPassword('');
+    setCodes(d.backupCodes); setPassword('');
+    if (via === 'app') { setUri(d.totpURI); setStep('scan'); return; }
+    setStep('mail'); await send();
+  }
+  async function send() {
+    setBusy(true);
+    const r = await authClient.twoFactor.sendOtp();
+    setBusy(false);
+    if (r.error) toast.danger(error(codeOf(r.error))); else toast.success(t('twoFactor.codeSent'));
+  }
+  async function verifyCode() {
+    setBusy(true);
+    const r = await authClient.twoFactor.verifyOtp({ code });
+    setBusy(false);
+    if (r.error) { toast.danger(error(codeOf(r.error))); setCode(''); return; }
+    // The sign-in form then opens on "send a code" instead of the authenticator app.
+    try { localStorage.setItem('lvm-2fa-method', 'otp'); } catch { /* storage off */ }
+    setStep('codes'); await refresh();
   }
   async function verify() {
     setBusy(true);
@@ -102,6 +125,14 @@ export function TwoFactor() {
             <AnimatePresence mode="wait">
               <motion.div key={step} initial={{ opacity: 0, x: 12 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -12 }} transition={{ duration: 0.18 }} className="flex flex-col gap-4">
                 {(step === 'password' || step === 'disable' || step === 'regenerate') && <form className="flex flex-col gap-4" onSubmit={(e) => { e.preventDefault(); void (step === 'password' ? start() : step === 'disable' ? disable() : regenerate()); }}>
+                  {step === 'password' && channel && <div role="radiogroup" aria-label={t('twoFactor.method')} className="grid gap-2 sm:grid-cols-2">
+                    {(['app', 'code'] as const).map((m) => <button key={m} type="button" role="radio" aria-checked={via === m} onClick={() => setVia(m)}
+                      className={`flex items-start gap-3 rounded-xl border p-3 text-left transition-colors focus-visible:outline-2 focus-visible:outline-accent ${via === m ? 'border-accent bg-accent-soft' : 'border-border hover:bg-default'}`}>
+                      <span className={`grid size-9 shrink-0 place-items-center rounded-lg ${via === m ? 'bg-accent text-accent-foreground' : 'bg-default text-muted'}`}><I name={methodIcon(m, channel)} size={18}/></span>
+                      <span className="flex flex-col gap-0.5"><span className="text-sm font-semibold">{t(m === 'app' ? 'twoFactor.viaApp' : channel === 'sms' ? 'twoFactor.viaSms' : 'twoFactor.viaEmail')}</span>
+                        <span className="text-xs text-muted">{t(m === 'app' ? 'twoFactor.viaAppHelp' : channel === 'sms' ? 'twoFactor.viaSmsHelp' : 'twoFactor.viaEmailHelp')}</span></span>
+                    </button>)}
+                  </div>}
                   <p className="text-sm text-muted">{t('twoFactor.confirmPassword')}</p>
                   <TextInput label={t('security.currentPassword')} type="password" value={password} onChange={setPassword} autoComplete="current-password"/>
                   <Button type="submit" variant={step === 'disable' ? 'danger' : 'primary'} isPending={busy} isDisabled={!password}>{t('twoFactor.continue')}</Button>
@@ -117,6 +148,18 @@ export function TwoFactor() {
                     </InputOTP>
                   </div>
                   <Button isPending={busy} isDisabled={code.length !== 6} onPress={verify}>{t('twoFactor.verify')}</Button>
+                </>}
+                {step === 'mail' && <>
+                  <p className="text-sm text-muted">{t(channel === 'sms' ? 'twoFactor.mailSentSms' : 'twoFactor.mailSent', { email: me?.email ?? '' })}</p>
+                  <div className="flex justify-center">
+                    <InputOTP maxLength={6} value={code} onChange={setCode} onComplete={() => void verifyCode()} aria-label={t('twoFactor.code')}>
+                      <InputOTP.Group>{[0, 1, 2, 3, 4, 5].map((i) => <InputOTP.Slot key={i} index={i}/>)}</InputOTP.Group>
+                    </InputOTP>
+                  </div>
+                  <div className="flex flex-wrap justify-between gap-2">
+                    <Button variant="ghost" isDisabled={busy} onPress={send}><I name="rotate-ccw" size={15}/>{t('twoFactor.resend')}</Button>
+                    <Button isPending={busy} isDisabled={code.length !== 6} onPress={verifyCode}>{t('twoFactor.verify')}</Button>
+                  </div>
                 </>}
                 {step === 'codes' && <>
                   <BackupCodes codes={codes}/>

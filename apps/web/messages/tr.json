@@ -485,7 +485,10 @@
       "sentBody": "{email} için burada bir hesap varsa giriş bağlantısı yolda. Bu cihazda açın.",
       "again": "Başka bir adrese gönder",
       "back": "Girişe dön"
-    }
+    },
+    "generate": "Güçlü parola oluştur",
+    "generatedCopied": "Parola panoya kopyalandı; parola yöneticinize kaydedin.",
+    "generatedShown": "Parola görünür hâlde; bir yere kaydedin."
   },
   "fieldErrors": {
     "INVALID_EMAIL": "Geçerli bir e-posta adresi girin.",
@@ -2195,10 +2198,10 @@
     "twoFactor": {
       "sectionTitle": "İki adımlı doğrulama ve telefon",
       "sectionIntro": "Parolanıza ek olarak bir doğrulayıcı uygulama, SMS veya e-posta kodu.",
-      "title": "Doğrulayıcı uygulama",
+      "title": "İki adımlı doğrulama",
       "on": "Açık",
       "off": "Kapalı",
-      "intro": "Google Authenticator, Microsoft Authenticator, 1Password gibi bir uygulamayla 6 haneli kodlar.",
+      "intro": "Girişte parolanıza ek olarak bir kod istenir: doğrulayıcı uygulamadan ya da e-posta/SMS ile gelen.",
       "enable": "İki adımlı doğrulamayı aç",
       "newCodes": "Yeni yedek kodlar",
       "disable": "Kapat",
@@ -2217,7 +2220,18 @@
       "backupHelp": "Telefonunuza ulaşamazsanız bu kodlarla giriş yaparsınız. Her kod bir kez kullanılır; güvenli bir yerde saklayın. Bir daha gösterilmez.",
       "copy": "Kopyala",
       "copied": "Kodlar kopyalandı.",
-      "download": "İndir"
+      "download": "İndir",
+      "method": "Kodlar nereden gelsin?",
+      "viaApp": "Doğrulayıcı uygulama",
+      "viaAppHelp": "Google Authenticator, 1Password gibi; internetsiz de çalışır.",
+      "viaEmail": "E-posta ile kod",
+      "viaEmailHelp": "Her girişte e-posta adresinize 6 haneli kod gelir.",
+      "viaSms": "SMS ile kod",
+      "viaSmsHelp": "Her girişte doğrulanmış telefonunuza 6 haneli kod gelir.",
+      "mailSent": "{email} adresine 6 haneli bir kod gönderdik. Gelen kodu girin (5 dakika geçerli).",
+      "mailSentSms": "Doğrulanmış telefonunuza 6 haneli bir kod gönderdik. Gelen kodu girin (5 dakika geçerli).",
+      "codeSent": "Kod gönderildi.",
+      "resend": "Yeniden gönder"
     },
     "phone": {
       "title": "Telefon numarası",
@@ -2828,7 +2842,9 @@
       "roles": "Roller",
       "rolesHelp": "Birden fazla rol seçilebilir; izinler birleşir.",
       "newPassword": "Yeni parola",
-      "copiedOnSave": "Kaydedince panoya kopyalanır."
+      "copiedOnSave": "Kaydedince panoya kopyalanır.",
+      "copy": "Kopyala",
+      "passwordCopied": "Parola panoya kopyalandı."
     },
     "accessSaved": "Erişim kaydedildi.",
     "accessTitle": "{email}: rol ve izinler",

@@ -485,7 +485,10 @@
       "sentBody": "If {email} has an account here, a sign-in link is on its way. Open it on this device.",
       "again": "Send to another address",
       "back": "Back to sign-in"
-    }
+    },
+    "generate": "Generate a strong password",
+    "generatedCopied": "Password copied to the clipboard; save it in your password manager.",
+    "generatedShown": "The password is shown; save it somewhere safe."
   },
   "fieldErrors": {
     "INVALID_EMAIL": "Enter a valid email address.",
@@ -2195,10 +2198,10 @@
     "twoFactor": {
       "sectionTitle": "Two-factor and phone",
       "sectionIntro": "Besides your password: an authenticator app, or a code by SMS or e-mail.",
-      "title": "Authenticator app",
+      "title": "Two-factor authentication",
       "on": "On",
       "off": "Off",
-      "intro": "6-digit codes from an app such as Google Authenticator, Microsoft Authenticator or 1Password.",
+      "intro": "Sign-in asks for a code besides your password: from an authenticator app, or sent by e-mail/SMS.",
       "enable": "Turn on two-factor",
       "newCodes": "New backup codes",
       "disable": "Turn off",
@@ -2217,7 +2220,18 @@
       "backupHelp": "Use these to sign in if you lose your phone. Each works once; keep them somewhere safe. They are not shown again.",
       "copy": "Copy",
       "copied": "Codes copied.",
-      "download": "Download"
+      "download": "Download",
+      "method": "Where should codes come from?",
+      "viaApp": "Authenticator app",
+      "viaAppHelp": "Such as Google Authenticator or 1Password; works offline.",
+      "viaEmail": "Code by e-mail",
+      "viaEmailHelp": "A 6-digit code is sent to your e-mail address at each sign-in.",
+      "viaSms": "Code by SMS",
+      "viaSmsHelp": "A 6-digit code is sent to your verified phone at each sign-in.",
+      "mailSent": "We sent a 6-digit code to {email}. Enter it here (valid for 5 minutes).",
+      "mailSentSms": "We sent a 6-digit code to your verified phone. Enter it here (valid for 5 minutes).",
+      "codeSent": "Code sent.",
+      "resend": "Send again"
     },
     "phone": {
       "title": "Phone number",
@@ -2828,7 +2842,9 @@
       "roles": "Roles",
       "rolesHelp": "Several roles can be chosen; their permissions add up.",
       "newPassword": "New password",
-      "copiedOnSave": "Copied to the clipboard when saved."
+      "copiedOnSave": "Copied to the clipboard when saved.",
+      "copy": "Copy",
+      "passwordCopied": "Password copied to the clipboard."
     },
     "accessSaved": "Access saved.",
     "accessTitle": "{email}: roles and permissions",

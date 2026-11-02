@@ -139,7 +139,18 @@ test.describe('first run (Turkish browser)', () => {
 
     await expect(heading).toHaveText('Yönetici hesabı');
     await page.getByLabel('E-posta').fill(admin.email);
-    await page.getByLabel('Parola').fill(admin.password);
+    // A generated password: 20 characters of every kind, shown, rated strong; the known one is typed after the screenshot.
+    await page.getByRole('button', { name: 'Güçlü parola oluştur' }).click();
+    await expect(page.getByRole('textbox', { name: 'Parola' })).toHaveValue(/^.{20}$/);
+    await expect(page.getByRole('textbox', { name: 'Parola' })).toHaveAttribute('type', 'text');
+    await expect(page.getByText('Parola gücü: Güçlü')).toBeVisible();
+    await expect(page.getByRole('status').filter({ hasText: /Parola (panoya kopyalandı|görünür hâlde)/ })).toBeVisible();
+    await page.screenshot({ path: 'test-results/tour/setup-password-generated.png', fullPage: true });
+    await page.setViewportSize({ width: 390, height: 900 });
+    await expectNoOverflow(page, 'setup password at 390 px');
+    await page.screenshot({ path: 'test-results/tour/setup-password-generated-390.png', fullPage: true });
+    await page.setViewportSize({ width: 1280, height: 720 });
+    await page.getByRole('textbox', { name: 'Parola' }).fill(admin.password);
     await page.getByRole('button', { name: 'Yönetici hesabını oluştur' }).click();
     await expect(heading).toHaveText('ESXi / vCenter bağlantısı');
     await expect(page.getByText('platform sanal sunucu yönetemez', { exact: false })).toBeVisible();
@@ -919,6 +930,17 @@ test.describe('people, settings and smart features (English browser)', () => {
     await page.getByRole('link', { name: 'Users', exact: true }).click();
     await expect(page.getByRole('heading', { level: 1 })).toHaveText('Users');
     await expect(page.getByRole('grid', { name: 'Users' })).toContainText(admin.email);
+    // New user: a strong password is filled in, replaced with one press, and can be copied.
+    await page.getByRole('button', { name: 'New user' }).first().click();
+    const newUser = page.getByRole('dialog');
+    const initial = await newUser.getByRole('textbox', { name: 'Password' }).inputValue();
+    expect(initial).toMatch(/^.{20}$/);
+    await newUser.getByRole('button', { name: 'Generate a new password' }).click();
+    await expect(newUser.getByRole('textbox', { name: 'Password' })).not.toHaveValue(initial);
+    await expect(newUser.getByRole('button', { name: 'Copy' })).toBeEnabled();
+    await expect(page.locator('#boot-loader')).toHaveCSS('opacity', '0');
+    await page.screenshot({ path: 'test-results/tour/user-new-password.png' });
+    await newUser.getByRole('button', { name: 'Cancel' }).click();
     await page.getByRole('link', { name: 'Roles' }).click();
     for (const name of ['Administrator', 'Customer', 'Operator', 'Support', 'Auditor']) await expect(page.getByRole('heading', { name: new RegExp('^' + name) })).toBeVisible();
     // A custom role with one permission.

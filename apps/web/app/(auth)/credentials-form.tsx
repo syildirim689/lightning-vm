@@ -15,6 +15,7 @@ import { apiFetch, useErrorText, type ApiError } from '../../lib/api';
 import { authClient } from '../../lib/auth-client';
 import { can } from '../../lib/permissions';
 import { useApiQuery } from '../../lib/query';
+import { strongPassword } from '../../lib/password';
 import type { PublicConfig, User } from '../../lib/session';
 
 type Mode = 'login' | 'register' | 'setup';
@@ -51,9 +52,16 @@ export function emailSuggestion(email: string) {
 }
 
 // Password field with show/hide and a Caps Lock warning.
-function PasswordField({ label, value, onChange, error, help, autoComplete, autofill }: { label: string; value: string; onChange: (v: string) => void; error?: string; help?: string; autoComplete: string; autofill?: boolean }) {
+// generate: offers a strong random password, shown and copied so it can go into a password manager.
+function PasswordField({ label, value, onChange, error, help, autoComplete, autofill, generate }: { label: string; value: string; onChange: (v: string) => void; error?: string; help?: string; autoComplete: string; autofill?: boolean; generate?: boolean }) {
   const t = useTranslations('Auth');
   const [shown, setShown] = useState(false);
+  const [made, setMade] = useState<'copied' | 'shown'>();
+  async function make() {
+    const p = strongPassword();
+    onChange(p); setShown(true);
+    setMade(await navigator.clipboard?.writeText(p).then(() => 'copied' as const, () => 'shown' as const) ?? 'shown');
+  }
   const [caps, setCaps] = useState(false);
   const capsState = (e: React.KeyboardEvent) => setCaps(e.getModifierState?.('CapsLock') ?? false);
   return <div className="relative" onKeyUp={capsState} onKeyDown={capsState}>
@@ -63,6 +71,10 @@ function PasswordField({ label, value, onChange, error, help, autoComplete, auto
       className="absolute right-2 top-[1.95rem] grid h-8 min-w-8 place-items-center rounded-lg px-2 text-xs font-medium text-muted hover:bg-default hover:text-foreground focus-visible:outline-2 focus-visible:outline-accent">
       <span className="flex items-center gap-1"><I name={shown ? 'eye-off' : 'eye'} size={16}/><span className="sr-only sm:not-sr-only">{shown ? t('hide') : t('show')}</span></span>
     </button>
+    {generate && <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1">
+      <Button size="sm" variant="secondary" onPress={make}><I name="wand-sparkles" size={15}/>{t('generate')}</Button>
+      {made && value && <span role="status" className="flex items-center gap-1 text-xs text-success"><I name="circle-check" size={13}/>{t(made === 'copied' ? 'generatedCopied' : 'generatedShown')}</span>}
+    </div>}
   </div>;
 }
 
@@ -225,8 +237,8 @@ export default function CredentialsForm({ mode, noToken, onDone }: { mode: Mode;
     <TextInput label={mode === 'login' && cfg?.signIn?.username ? t('emailOrUsername') : t('email')} type={mode === 'login' && cfg?.signIn?.username ? 'text' : 'email'} value={values.email} onChange={set('email')} autoComplete="username webauthn" autofill={mode === 'login'} maxLength={254}
       error={field(fields.email)} help={t('emailHelp')} isRequired/>
     {suggestion && <button type="button" onClick={() => set('email')(suggestion)} className="-mt-2 self-start text-left text-xs text-accent hover:underline">{t('didYouMean', { email: suggestion })}</button>}
-    <PasswordField label={t('password')} value={values.password} onChange={set('password')} autoComplete="current-password webauthn" autofill={mode === 'login'}
-      error={field(fields.password)} help={mode === 'login' ? undefined : t('passwordHelp')}/>
+    <PasswordField label={t('password')} value={values.password} onChange={set('password')} autoComplete={mode === 'login' ? 'current-password webauthn' : 'new-password'} autofill={mode === 'login'}
+      error={field(fields.password)} help={mode === 'login' ? undefined : t('passwordHelp')} generate={mode !== 'login'}/>
     {mode !== 'login' && <Strength password={values.password}/>}
     {mode === 'login' && <div className="-mt-1 flex flex-wrap items-center justify-between gap-2">
       <CheckboxInput label={t('remember')} isSelected={remember} onChange={setRemember}/>

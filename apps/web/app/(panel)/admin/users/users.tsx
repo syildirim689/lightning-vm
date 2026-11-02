@@ -18,6 +18,7 @@ import { useMe } from '../../../../lib/me';
 import { can } from '../../../../lib/permissions';
 import { useApiQuery } from '../../../../lib/query';
 import { downloadCsv } from '../../../../lib/csv';
+import { strongPassword } from '../../../../lib/password';
 
 type Row = { id: string; email: string; name: string; role: string; locale: string; createdAt: string; banned: boolean; banReason: string | null; banExpires: string | null;
   twoFactorEnabled: boolean; authSource?: string; lastLoginMethod: string | null; phoneNumber: string | null; servers: number; sessions: number; lastSeen: string | null; overrides: number; presence: Presence; notes: number; pinnedNote: string | null };
@@ -25,7 +26,19 @@ type Role = { key: string; name: string; description: string; permissions: strin
 type Override = { permission: string; effect: 'allow' | 'deny' };
 type ClientError = { code?: string; status?: number } | null;
 const codeOf = (e: ClientError) => ({ code: e?.code ?? (e?.status === 429 ? 'RATE_LIMITED' : 'UNKNOWN') });
-const strongPassword = () => Array.from(crypto.getRandomValues(new Uint8Array(18)), (b) => 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789'[b % 56]).join('');
+
+// A generated password the admin can see, replace and copy (it goes to the user by another channel).
+function PasswordInput({ label, value, onChange, help, error }: { label: string; value: string; onChange: (v: string) => void; help: string; error?: string }) {
+  const t = useTranslations('Users');
+  return <div className="flex flex-col gap-2">
+    <TextInput label={label} value={value} onChange={onChange} help={help} error={error} spellCheck={false}/>
+    <div className="flex flex-wrap gap-2">
+      <Button size="sm" variant="secondary" onPress={() => onChange(strongPassword())}><I name="wand-sparkles" size={15}/>{t('form.generate')}</Button>
+      <Button size="sm" variant="ghost" isDisabled={!value} onPress={async () => { await navigator.clipboard?.writeText(value).then(() => toast.success(t('form.passwordCopied')), () => undefined); }}>
+        <I name="copy" size={15}/>{t('form.copy')}</Button>
+    </div>
+  </div>;
+}
 
 export default function Users() {
   const t = useTranslations('Users');
@@ -202,9 +215,8 @@ function CreateUser({ roles, onClose }: { roles: Role[]; onClose: () => void }) 
     </fieldset>
     <fieldset className="flex flex-col gap-2">
       <legend className="mb-2 text-sm font-semibold">{t('form.password')}</legend>
-      <div className="flex items-end gap-2"><TextInput className="flex-1" label={t('form.initialPassword')} value={v.password} onChange={(password) => setV((x) => ({ ...x, password }))}
-        help={t('form.passwordHelp')} error={v.password.length && v.password.length < 12 ? field('PASSWORD_TOO_SHORT') : undefined} spellCheck={false}/>
-        <Button isIconOnly variant="secondary" aria-label={t('form.generate')} className="mb-6" onPress={() => setV((x) => ({ ...x, password: strongPassword() }))}><I name="refresh-cw" size={16}/></Button></div>
+      <PasswordInput label={t('form.initialPassword')} value={v.password} onChange={(password) => setV((x) => ({ ...x, password }))}
+        help={t('form.passwordHelp')} error={v.password.length > 0 && v.password.length < 12 ? field('PASSWORD_TOO_SHORT') : undefined}/>
     </fieldset>
     <CheckboxList label={t('form.roles')} value={v.roles} onChange={(r) => setV((x) => ({ ...x, roles: r.length ? r : ['user'] }))} options={roles.map((r) => ({ id: r.key, label: r.name }))} help={t('form.rolesHelp')}/>
     {fail && <div role="alert"><Notice tone="danger">{fail}</Notice></div>}
@@ -300,9 +312,8 @@ function SetPassword({ user, onClose }: { user: Row; onClose: () => void }) {
   }
   return <Dialog title={t('passwordTitle', { email: user.email })} onClose={onClose} footer={<><Button variant="tertiary" onPress={onClose}>{t('cancel')}</Button><Button isPending={busy} isDisabled={password.length < 12} onPress={save}>{t('save')}</Button></>}>
     <Notice tone="warning">{t('passwordExplain')}</Notice>
-    <div className="flex items-end gap-2"><TextInput className="flex-1" label={t('form.newPassword')} value={password} onChange={setPassword} spellCheck={false}
+    <PasswordInput label={t('form.newPassword')} value={password} onChange={setPassword}
       error={password.length < 12 ? field('PASSWORD_TOO_SHORT') : undefined} help={t('form.copiedOnSave')}/>
-      <Button isIconOnly variant="secondary" aria-label={t('form.generate')} className="mb-6" onPress={() => setPassword(strongPassword())}><I name="refresh-cw" size={16}/></Button></div>
   </Dialog>;
 }
 
