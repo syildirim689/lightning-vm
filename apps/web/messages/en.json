@@ -4153,7 +4153,8 @@
       "noRemote": "SSH (22) and RDP (3389) are closed: you can reach the server only through the console in the panel.",
       "openDb": "Port {port} ({name}) is open to the whole internet. Allowing only your own IP addresses is recommended.",
       "duplicate": "The \"{rule}\" rule appears twice; you can delete one."
-    }
+    },
+    "saveShortcut": "Ctrl+S saves"
   },
   "Updates": {
     "title": "Updates",

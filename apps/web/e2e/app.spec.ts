@@ -988,7 +988,8 @@ test.describe('people, settings and smart features (English browser)', () => {
     await page.getByRole('button', { name: 'Save rules' }).click();
     await expect(page.getByText('Port must be between 1 and 65535.')).toBeVisible();
     await page.getByRole('textbox', { name: 'Port or range' }).last().fill('8000-8100');
-    await page.getByRole('button', { name: 'Save rules' }).click();
+    await expect(page.getByText('Ctrl+S saves')).toBeVisible();
+    await page.keyboard.press('Control+s'); // the editor's shortcut, not the browser's "save page"
     await expect(page.getByText('Saved.').first()).toBeVisible();
     await expect(page.getByText('5 of 50 rules')).toBeVisible();
     // Hints: a database port open to everyone, fixed with "My IP"; a duplicate rule; discarded afterwards.

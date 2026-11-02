@@ -4153,7 +4153,8 @@
       "noRemote": "SSH (22) ve RDP (3389) kapalı: sunucuya yalnızca paneldeki konsoldan bağlanabilirsiniz.",
       "openDb": "{port} ({name}) portu tüm internete açık. Yalnızca kendi IP adreslerinize izin vermeniz önerilir.",
       "duplicate": "\"{rule}\" kuralı iki kez var; birini silebilirsiniz."
-    }
+    },
+    "saveShortcut": "Ctrl+S ile kaydedebilirsiniz"
   },
   "Updates": {
     "title": "Güncellemeler",

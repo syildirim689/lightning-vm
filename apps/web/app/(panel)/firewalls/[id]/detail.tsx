@@ -13,6 +13,7 @@ import { CheckboxList, ConfirmButton, DataTable, FormActions, Mono, Notice, Page
 import { apiFetch, useErrorText } from '../../../../lib/api';
 import { useMe } from '../../../../lib/me';
 import { useApiQuery } from '../../../../lib/query';
+import { useUnsaved } from '../../../../lib/unsaved';
 import { anywhere, hasPort, protocols, quick, statusTone, type Firewall, type Limits, type Rule } from '../model';
 
 type Detail = Firewall & { limits: Limits };
@@ -93,6 +94,7 @@ function RulesEditor({ firewall, onSaved }: { firewall: Detail; onSaved: () => v
     try { await apiFetch(`/firewalls/${firewall.id}`, { method: 'PUT', body: { rules: current } }); toast.success(t('saved')); onSaved(); }
     catch (e) { setFields((e as { fields?: Record<string, string> }).fields ?? {}); toast.danger(error(e)); } finally { setBusy(false); }
   }
+  useUnsaved(dirty, () => { if (!busy) void save(); });
 
   const block = (direction: 'in' | 'out') => {
     const list = rules.map((r, i) => ({ r, i })).filter(({ r }) => r.direction === direction);
@@ -134,7 +136,7 @@ function RulesEditor({ firewall, onSaved }: { firewall: Detail; onSaved: () => v
     {block('out')}
     {warnings.length > 0 && <Notice tone="warning" title={t('warn.title')}><ul className="list-disc ps-4">{warnings.map((w) => <li key={w}>{w}</li>)}</ul></Notice>}
     <div className="sticky bottom-4 z-30 rounded-2xl border border-border bg-overlay/95 p-3 shadow-lg backdrop-blur">
-      <FormActions status={dirty ? <span className="text-warning">{t('unsaved')}</span> : <span className="text-muted">{t('ruleTotal', { n: rules.length, max: firewall.limits.rulesPerFirewall })}</span>}>
+      <FormActions status={dirty ? <span className="text-warning">{t('unsaved')} <span className="hidden text-muted sm:inline">· {t('saveShortcut')}</span></span> : <span className="text-muted">{t('ruleTotal', { n: rules.length, max: firewall.limits.rulesPerFirewall })}</span>}>
         <Button variant="tertiary" isDisabled={!dirty || busy} onPress={reset}>{t('discard')}</Button>
         <Button isPending={busy} isDisabled={!dirty} onPress={save}><I name="check" size={16}/>{t('saveRules')}</Button>
       </FormActions>

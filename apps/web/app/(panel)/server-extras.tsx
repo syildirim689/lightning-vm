@@ -10,6 +10,7 @@ import { Mono, Section, TextInput } from '../../components/ui';
 import { useApiForm } from '../../lib/form';
 import { apiFetch, type ApiError, useErrorText } from '../../lib/api';
 import { useOrder } from '../../lib/order-store';
+import { useUnsaved } from '../../lib/unsaved';
 import type { Server } from './servers-ui';
 
 export function Copy({ text, label, className = '' }: { text: string; label: string; className?: string }) {
@@ -39,6 +40,7 @@ export function ServerLabels({ server }: { server: Server }) {
   const f = useApiForm({ tags: server.tags ?? [], notes: server.notes ?? '' });
   const [draft, setDraft] = useState('');
   const dirty = JSON.stringify(f.values) !== JSON.stringify({ tags: server.tags ?? [], notes: server.notes ?? '' });
+  useUnsaved(dirty);
   const add = () => {
     const v = draft.trim().replace(/\s+/g, ' ');
     if (v && !f.values.tags.some((x) => x.toLocaleLowerCase('tr') === v.toLocaleLowerCase('tr'))) f.set('tags')([...f.values.tags, v]);
