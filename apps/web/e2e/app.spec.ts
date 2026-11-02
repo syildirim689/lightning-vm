@@ -686,6 +686,27 @@ test.describe('server lifecycle (simulator, Turkish customer)', () => {
     await expect(page.getByText(/sunucuda işlem başladı/)).toBeVisible();
     await expect(page.getByRole('region', { name: 'Seçili sunucular için işlemler' })).toBeHidden();
 
+    // A firewall on web-1: its card gets the shield pill (applying, then applied); web-2's card has none.
+    await page.goto('/firewalls');
+    await page.getByRole('button', { name: 'Firewall oluştur' }).first().click();
+    const fwDialog = page.getByRole('dialog');
+    await fwDialog.getByLabel('Ad').fill('e2e-web');
+    await tick(fwDialog.getByRole('checkbox', { name: 'web-1' }));
+    await fwDialog.getByRole('button', { name: 'Firewall oluştur' }).click();
+    await expect(page).toHaveURL(/\/firewalls\/[0-9a-f-]{36}$/);
+    await page.goto('/');
+    const web1Card = page.getByRole('link', { name: /^web-1/ });
+    await expect(web1Card.getByText(/^Firewall( uygulanıyor)?$/)).toBeVisible();
+    await expect(web1Card.getByText('Firewall', { exact: true })).toBeVisible({ timeout: 60_000 });
+    await expect(page.getByRole('link', { name: /^web-2/ }).getByText(/^Firewall/)).toHaveCount(0);
+    await expect(page.locator('#boot-loader')).toHaveCSS('opacity', '0');
+    await page.screenshot({ path: 'test-results/tour/servers-firewall-pill.png' });
+    await page.setViewportSize({ width: 390, height: 900 });
+    await web1Card.scrollIntoViewIfNeeded();
+    await expectNoOverflow(page, 'firewall pill at 390 px');
+    await page.screenshot({ path: 'test-results/tour/servers-firewall-pill-390.png' });
+    await page.setViewportSize({ width: 1280, height: 720 });
+
     // Ctrl+K copies a server's SSH command without opening its page.
     await page.keyboard.press('Control+k');
     await page.keyboard.type('web-1: ssh');
