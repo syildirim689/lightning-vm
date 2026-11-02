@@ -558,7 +558,7 @@ test.describe('server lifecycle (simulator, Turkish customer)', () => {
     await choose(page, page, /Sırala/, 'Duruma göre (önce sorunlar)');
     await expect(page).toHaveURL(/sort=state/);
     await page.goto('/?q=yok-boyle');
-    await expect(page.getByText('Bu süzgeçlere uyan sunucu yok.').or(page.getByText('web-1'))).toBeVisible();
+    await expect(page.getByText('Bu süzgeçlere uyan sunucu yok.').or(page.getByText('web-1', { exact: true }))).toBeVisible();
     // Ctrl+K lists the server just opened under "recent".
     await page.keyboard.press('Control+k');
     await expect(page.getByRole('listbox').getByText('Son açılanlar')).toBeVisible();
