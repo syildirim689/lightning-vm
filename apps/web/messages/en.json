@@ -2441,6 +2441,10 @@
       "PENDING_DELETION": {
         "title": "{name} will be deleted in {hours, plural, one {about # hour} other {about # hours}}",
         "body": "The server is shut down and waiting to be deleted. Take it back on its page to keep it."
+      },
+      "NO_FIREWALL": {
+        "title": "{n, plural, one {{name} has no firewall} other {# servers have no firewall}}",
+        "body": "All incoming traffic is open. You can protect them in one click on the Firewalls page."
       }
     },
     "hide": {

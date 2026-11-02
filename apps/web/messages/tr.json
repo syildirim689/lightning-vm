@@ -2441,6 +2441,10 @@
       "PENDING_DELETION": {
         "title": "{name} {hours, plural, other {yaklaşık # saat}} içinde silinecek",
         "body": "Sunucu kapalı ve silinmeyi bekliyor. Tutmak istiyorsanız sunucu sayfasından geri alın."
+      },
+      "NO_FIREWALL": {
+        "title": "{n, plural, one {{name} sunucusunda güvenlik duvarı yok} other {# sunucuda güvenlik duvarı yok}}",
+        "body": "Gelen tüm trafik açık. Güvenlik duvarları sayfasından tek tıkla koruyabilirsiniz."
       }
     },
     "hide": {

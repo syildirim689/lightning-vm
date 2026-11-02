@@ -136,6 +136,10 @@ export async function customerInsights(userId: string): Promise<Insight[]> {
     const used = (usage as Record<string, number>)[k];
     if (max && pct(used, max) >= 80) add('QUOTA_NEAR', pct(used, max) >= 100 ? 'danger' : 'warning', { resource: k, used, max }, '/order', `quota:${k}`);
   }
+  // Servers where a firewall could be enforced but none is attached: everything coming in is open.
+  const { rows: open } = await pool.query(`SELECT s.name FROM servers s JOIN resource_pools p ON p.id = s.pool_id JOIN vmware_connections c ON c.id = p.connection_id
+    WHERE s.owner_id = $1 AND s.state = 'ready' AND s.delete_at IS NULL AND c.operations->>'firewall' = 'true' AND NOT EXISTS (SELECT 1 FROM firewall_servers fs WHERE fs.server_id = s.id) ORDER BY s.name`, [userId]);
+  if (open.length) add('NO_FIREWALL', 'info', { n: open.length, name: open[0].name }, '/firewalls', 'firewall');
   const { rows: [keys] } = await pool.query('SELECT count(*)::int AS n FROM ssh_keys WHERE owner_id = $1', [userId]);
   if (!keys.n) add('NO_SSH_KEYS', 'info', {}, '/account?tab=keys', 'keys');
   const { rows: [u] } = await pool.query('SELECT two_factor_enabled FROM users WHERE id = $1', [userId]);
