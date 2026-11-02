@@ -1840,7 +1840,12 @@
       "ownerClear": "Sahip süzgecini kaldır: {email}",
       "ownerPalette": "Sunucuları: {email}",
       "bySize": "En büyük önce",
-      "byState": "Duruma göre (önce sorunlar)"
+      "byState": "Duruma göre (önce sorunlar)",
+      "firewall": {
+        "applied": "{n, plural, one {Firewall} other {# firewall}}",
+        "pending": "Firewall uygulanıyor",
+        "failed": "Firewall hatası"
+      }
     },
     "col": {
       "name": "Ad",

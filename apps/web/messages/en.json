@@ -1840,7 +1840,12 @@
       "ownerClear": "Remove the owner filter: {email}",
       "ownerPalette": "Servers of {email}",
       "bySize": "Largest first",
-      "byState": "By state (problems first)"
+      "byState": "By state (problems first)",
+      "firewall": {
+        "applied": "{n, plural, one {Firewall} other {# firewalls}}",
+        "pending": "Firewall applying",
+        "failed": "Firewall error"
+      }
     },
     "col": {
       "name": "Name",

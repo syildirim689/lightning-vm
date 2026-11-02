@@ -35,6 +35,7 @@ import { ButtonLink, CheckboxInput, ConfirmButton, DataTable, Empty, Mono, Notic
 export type Server = { id: string; name: string; state: string; powerState: string; guestReady: boolean; vcpu: number; memoryMb: number; diskGb: number;
   priceMonthly: string; currency: string; trafficGb?: number | null; trafficBytes?: number; billingMode?: 'monthly' | 'hourly'; priceHourly?: string | null; trafficThrottled?: boolean; errorCode: string | null; poolName: string; location: string; locationCity?: string | null; locationCountry?: string | null; locationDatacenter?: string | null; imageName: string; address: string | null;
   createdAt: string; favorite?: boolean; locked?: boolean; billingHold?: boolean; deleteAt?: string | null; tags?: string[]; notes?: string; poolId: string; imageId: string; packageId: string | null; vdcId?: string | null; ownerEmail?: string; hasRootPassword?: boolean; applicationName?: string | null; appState?: 'pending' | 'installing' | 'installed' | 'failed' | null; appMessage?: string | null; firewallStatus?: 'applied' | 'pending' | 'failed'; firewallError?: string | null; firewallCount?: number; lastOperation: { id: string; kind: string; status: string; step: string | null; errorCode: string | null } | null };
+const firewallFailed = (s: Server) => s.firewallStatus === 'failed';
 type Operation = { id: string; kind: string; status: string; step: string | null; attempts: number; errorCode: string | null; createdAt: string; finishedAt: string | null };
 
 // One Idempotency-Key per user intention: a double click or a retry after a timeout reuses it,
@@ -151,7 +152,9 @@ export function ServerList() {
           <Card.Content className="flex flex-col gap-1.5 text-sm">
             <span className="flex items-center gap-2"><span className="text-muted">IP</span>{s.address ? <Mono>{s.address}</Mono> : '–'}</span>
             <span className="flex items-center gap-2 text-muted"><I name="cpu" size={14}/>{size(t, s)}</span>
-            <span className="truncate text-xs text-muted">{s.imageName}</span>
+            <span className="flex items-center justify-between gap-2 text-xs text-muted"><span className="truncate">{s.imageName}</span>
+              {!!s.firewallCount && <span className={`flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 font-medium ${s.firewallStatus === 'failed' ? 'bg-danger/10 text-danger' : s.firewallStatus === 'pending' ? 'bg-accent-soft text-accent' : 'bg-success/10 text-success'}`}>
+                <I name={firewallFailed(s) ? 'shield-x' : 'shield-check'} size={12}/>{t(`list.firewall.${s.firewallStatus ?? 'applied'}`, { n: s.firewallCount })}</span>}</span>
             {s.notes?.trim() && <span className="flex items-center gap-1.5 text-xs text-muted"><I name="sticky-note" size={13} className="shrink-0"/>
               <span className="sr-only">{t('list.note')}: </span><span className="truncate">{noteLine(s.notes, f.q)}</span></span>}
             {!!s.tags?.length && <span className="flex flex-wrap gap-1 pr-20 pt-1">{s.tags.map((x) => <span key={x} className="rounded-full bg-default px-2 py-0.5 text-xs">{x}</span>)}</span>}
