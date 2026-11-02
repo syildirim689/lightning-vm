@@ -634,7 +634,7 @@ test.describe('server lifecycle (simulator, Turkish customer)', () => {
     await page.getByRole('button', { name: 'Sunucuyu oluştur' }).click();
     await expect(page).toHaveURL(/\/servers\/[0-9a-f-]{36}$/, { timeout: 30_000 });
     await page.goto('/');
-    await expect(page.getByRole('link', { name: /web-2/ })).toBeVisible();
+    await expect(page.getByRole('link', { name: /^web-2/ })).toBeVisible();
     await page.getByRole('button', { name: 'Seç', exact: true }).click();
     await page.getByRole('checkbox', { name: 'web-1 sunucusunu seç' }).click();
     await expect(page.getByRole('region', { name: 'Seçili sunucular için işlemler' })).toContainText('1 sunucu seçili');
