@@ -13,9 +13,66 @@ import SessionList, { type SessionRow } from '../../../components/session-list';
 import { authClient } from '../../../lib/auth-client';
 import type { PublicConfig } from '../../../lib/session';
 import ProviderMark, { providerNames } from '../../../components/provider-mark';
+import { Ring } from '../../../components/smart';
+import { useMe } from '../../../lib/me';
 
 type ClientError = { code?: string; status?: number } | null;
 const codeOf = (e: ClientError) => ({ code: e?.code ?? (e?.status === 429 ? 'RATE_LIMITED' : 'UNKNOWN') });
+
+const passkeysQuery = { queryKey: ['passkeys'], queryFn: async () => (await authClient.passkey.listUserPasskeys()).data ?? [] };
+const day = 86_400_000;
+
+// Moves to a section of this tab and outlines it for a moment, so the eye lands on what to fix.
+function jump(id: string) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'center' });
+  el.classList.add('ring-2', 'ring-accent', 'ring-offset-4', 'ring-offset-surface');
+  setTimeout(() => el.classList.remove('ring-2', 'ring-accent', 'ring-offset-4', 'ring-offset-surface'), 1800);
+}
+
+// A score for this account from what protects it: two-factor, a passkey, a verified phone (when SMS is on),
+// and no forgotten sign-ins (other devices idle for 30+ days). Each missing item links to where it is fixed.
+export function SecurityScore() {
+  const t = useTranslations('Account.score');
+  const me = useMe();
+  const cfg = useApiQuery<PublicConfig>(['public-config'], '/public/config').data;
+  const passkeys = useQuery(passkeysQuery).data;
+  const sessions = useApiQuery<{ sessions: SessionRow[] }>(['sessions'], '/account/sessions', { refetchInterval: 30_000 }).data?.sessions;
+  if (!me || !passkeys || !sessions) return <div className="h-40 animate-pulse rounded-3xl bg-default/50"/>;
+  const stale = sessions.filter((s) => !s.current && Date.now() - new Date(s.lastActiveAt).getTime() > 30 * day).length;
+  const items: { key: 'twoFactor' | 'passkey' | 'phone' | 'sessions'; ok: boolean; weight: number; target: string; icon: string }[] = [
+    { key: 'twoFactor', ok: me.twoFactorEnabled, weight: 40, target: 'two-factor', icon: 'shield-check' },
+    { key: 'passkey', ok: passkeys.length > 0, weight: 25, target: 'passkeys', icon: 'fingerprint' },
+    ...(cfg?.phoneVerification ? [{ key: 'phone' as const, ok: me.phoneNumberVerified, weight: 15, target: 'phone', icon: 'smartphone' }] : []),
+    { key: 'sessions', ok: stale === 0, weight: 20, target: 'sessions', icon: 'monitor-smartphone' },
+  ];
+  const total = items.reduce((a, x) => a + x.weight, 0);
+  const score = Math.round(items.reduce((a, x) => a + (x.ok ? x.weight : 0), 0) / total * 100);
+  const grade = score >= 85 ? 'good' : score >= 60 ? 'fair' : 'poor';
+  const done = items.filter((x) => x.ok).length;
+  return <Section>
+    <div className="flex flex-col gap-5 sm:flex-row sm:items-center">
+      <div className="flex items-center gap-4 sm:w-72 sm:shrink-0">
+        <Ring score={score} grade={grade} label={t('ringLabel', { score })}/>
+        <div className="min-w-0">
+          <p className="text-xs font-medium uppercase tracking-wide text-muted">{t('title')}</p>
+          <p className={`text-lg font-semibold ${grade === 'good' ? 'text-success' : grade === 'fair' ? 'text-warning' : 'text-danger'}`}>{t(`grade.${grade}`)}</p>
+          <p className="text-sm text-muted">{t('progress', { done, total: items.length })}</p>
+        </div>
+      </div>
+      <ul className="grid flex-1 gap-2 sm:grid-cols-2">
+        {items.map((x) => <li key={x.key} className={`flex items-center gap-3 rounded-xl border p-3 ${x.ok ? 'border-success/30 bg-success/5' : 'border-border'}`}>
+          <span className={`grid size-9 shrink-0 place-items-center rounded-lg ${x.ok ? 'bg-success/10 text-success' : 'bg-warning/15 text-warning'}`}><I name={itemIcon(x.ok, x.icon)} size={18}/></span>
+          <span className="min-w-0 flex-1"><span className="block text-sm font-medium">{t(`items.${x.key}.${x.ok ? 'ok' : 'todo'}`, { n: stale })}</span>
+            <span className="block text-xs text-muted">{x.ok ? t('points', { n: x.weight }) : t(`items.${x.key}.help`)}</span></span>
+          {!x.ok && <Button size="sm" variant="secondary" onPress={() => jump(x.target)} aria-label={`${t('fix')}: ${t(`items.${x.key}.todo`, { n: stale })}`}>{t('fix')}<I name="arrow-down" size={14}/></Button>}
+        </li>)}
+      </ul>
+    </div>
+  </Section>;
+}
+const itemIcon = (ok: boolean, icon: string) => ok ? 'circle-check' : icon;
 
 // Password, passkeys and signed-in devices; all handled by better-auth through its client.
 export default function Security() {
@@ -95,7 +152,7 @@ function Passkeys() {
   const [listRef] = useAutoAnimate<HTMLUListElement>();
   const [name, setName] = useState('');
   const [busy, setBusy] = useState(false);
-  const list = useQuery({ queryKey: ['passkeys'], queryFn: async () => (await authClient.passkey.listUserPasskeys()).data ?? [] });
+  const list = useQuery(passkeysQuery);
   const secure = typeof window === 'undefined' || window.isSecureContext;
   async function add() {
     setBusy(true);
@@ -109,7 +166,7 @@ function Passkeys() {
     if (err) { toast.danger(error(codeOf(err))); return; }
     client.invalidateQueries({ queryKey: ['passkeys'] });
   }
-  return <div className="flex flex-col gap-4">
+  return <div id="passkeys" className="flex scroll-mt-24 flex-col gap-4 rounded-xl transition-shadow">
     <h3 className="font-semibold">{t('security.passkeys')}</h3>
     <p className="text-sm text-muted">{t('security.passkeysHelp')}</p>
     {!secure && <Notice tone="warning">{t('security.passkeysNeedHttps')}</Notice>}
@@ -145,7 +202,7 @@ function Sessions() {
     void client.invalidateQueries({ queryKey: ['sessions'] });
   }
   const others = list.data?.sessions.filter((s) => !s.current).length ?? 0;
-  return <div className="flex flex-col gap-4">
+  return <div id="sessions" className="flex scroll-mt-24 flex-col gap-4 rounded-xl transition-shadow">
     <div className="flex flex-wrap items-center justify-between gap-2">
       <h3 className="font-semibold">{t('security.sessions')}</h3>
       {others > 0 && <Button size="sm" variant="danger-soft" onPress={() => void endOthers()}><I name="log-out" size={14}/>{t('security.endOthers', { n: others })}</Button>}

@@ -103,7 +103,7 @@ export function TwoFactor() {
     setCodes(r.data.backupCodes); setPassword(''); setStep('codes');
   }
 
-  return <div className="flex flex-col gap-4">
+  return <div id="two-factor" className="flex scroll-mt-24 flex-col gap-4 rounded-xl transition-shadow">
     <div className="flex flex-wrap items-center gap-2">
       <h3 className="font-semibold">{t('twoFactor.title')}</h3>
       <StatusChip tone={enabled ? 'success' : 'warning'}>{enabled ? t('twoFactor.on') : t('twoFactor.off')}</StatusChip>
@@ -207,7 +207,7 @@ export function PhoneNumber() {
     setSent(''); setPhone(''); toast.success(t('phone.verified')); client.invalidateQueries({ queryKey: ['me'] });
   }
 
-  return <div className="flex flex-col gap-4">
+  return <div id="phone" className="flex scroll-mt-24 flex-col gap-4 rounded-xl transition-shadow">
     <div className="flex flex-wrap items-center gap-2">
       <h3 className="font-semibold">{t('phone.title')}</h3>
       {me?.phoneNumber && <StatusChip tone={me.phoneNumberVerified ? 'success' : 'warning'}>{me.phoneNumber}</StatusChip>}

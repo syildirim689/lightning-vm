@@ -2273,6 +2273,40 @@
       "link": "Connect",
       "remove": "Remove",
       "removed": "{name} removed"
+    },
+    "score": {
+      "title": "Account security",
+      "ringLabel": "Security score: {score} out of 100",
+      "grade": {
+        "good": "Strong",
+        "fair": "Could be better",
+        "poor": "Weak"
+      },
+      "progress": "{done} of {total} steps done",
+      "points": "+{n} points",
+      "fix": "Fix",
+      "items": {
+        "twoFactor": {
+          "ok": "Two-factor is on",
+          "todo": "Two-factor is off",
+          "help": "Keeps the account safe even if your password leaks."
+        },
+        "passkey": {
+          "ok": "Passkey added",
+          "todo": "No passkey",
+          "help": "Sign in with a fingerprint or face: no password, phishing-resistant."
+        },
+        "phone": {
+          "ok": "Phone verified",
+          "todo": "Phone not verified",
+          "help": "For SMS codes and important alerts."
+        },
+        "sessions": {
+          "ok": "No forgotten sign-ins",
+          "todo": "{n, plural, one {# old sign-in open} other {# old sign-ins open}}",
+          "help": "End devices unused for more than 30 days."
+        }
+      }
     }
   },
   "AuthLayout": {

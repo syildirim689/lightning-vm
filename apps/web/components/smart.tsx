@@ -18,7 +18,7 @@ type Usage = { costs: { currency: string; monthly: number; accrued: number; fore
 const gradeTone = { good: 'text-success', fair: 'text-warning', poor: 'text-danger' };
 
 // Score ring: the arc and the number say the same; the grade is also written out (not colour alone).
-function Ring({ score, grade, label }: { score: number; grade: Health['grade']; label: string }) {
+export function Ring({ score, grade, label }: { score: number; grade: Health['grade']; label: string }) {
   const c = 2 * Math.PI * 42;
   return <svg viewBox="0 0 100 100" className={`size-24 shrink-0 ${gradeTone[grade]}`} role="img" aria-label={label}>
     <circle cx="50" cy="50" r="42" fill="none" stroke="var(--border)" strokeWidth="9"/>

@@ -951,6 +951,22 @@ test.describe('people, settings and smart features (English browser)', () => {
     await dialog.getByRole('button', { name: 'Save' }).click();
     await expect(page.getByText('Role saved.')).toBeVisible();
     await expect(page.getByText('E2E Viewer')).toBeVisible();
+    // Account security score: what is missing, and "Fix" takes you to it (outlined for a moment).
+    await page.goto('/account?tab=security');
+    await expect(page.getByText('Account security', { exact: true })).toBeVisible();
+    await expect(page.getByRole('img', { name: /Security score: \d+ out of 100/ })).toBeVisible();
+    await expect(page.getByText('Two-factor is off')).toBeVisible();
+    await expect(page.getByText('No forgotten sign-ins')).toBeVisible();
+    await expect(page.locator('#boot-loader')).toHaveCSS('opacity', '0');
+    await page.screenshot({ path: 'test-results/tour/security-score.png' });
+    await page.getByRole('button', { name: 'Fix: Two-factor is off' }).click();
+    await expect(page.locator('#two-factor')).toHaveClass(/ring-2/);
+    await expect(page.locator('#two-factor')).toBeInViewport();
+    await page.setViewportSize({ width: 390, height: 900 });
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await expectNoOverflow(page, 'security score at 390 px');
+    await page.screenshot({ path: 'test-results/tour/security-score-390.png', fullPage: true });
+    await page.setViewportSize({ width: 1280, height: 720 });
   });
 
   test('settings: branding colour and notification rules; inbox and command palette', async ({ page }) => {

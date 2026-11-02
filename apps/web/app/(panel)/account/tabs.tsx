@@ -15,7 +15,7 @@ import { useMe } from '../../../lib/me';
 import { SshKeys } from '../servers-ui';
 import { Projects } from './account';
 import NotificationPrefs from './notifications';
-import Security from './security';
+import Security, { SecurityScore } from './security';
 import Developer from './developer';
 import { MyImages } from '../server-image';
 import { MyTransfers } from '../server-transfer';
@@ -92,6 +92,7 @@ export default function AccountTabs() {
     </Tabs.ListContainer>
     <Tabs.Panel id="profile" className="flex flex-col gap-6 pt-5"><Profile/><Regional/><ExportData/></Tabs.Panel>
     <Tabs.Panel id="security" className="flex flex-col gap-6 pt-5">
+      <SecurityScore/>
       <Section title={t('twoFactor.sectionTitle')} description={t('twoFactor.sectionIntro')}>
         <div className="grid gap-8 lg:grid-cols-2"><TwoFactor/><PhoneNumber/></div>
       </Section>

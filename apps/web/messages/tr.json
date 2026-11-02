@@ -2273,6 +2273,40 @@
       "link": "Bağla",
       "remove": "Kaldır",
       "removed": "{name} kaldırıldı"
+    },
+    "score": {
+      "title": "Hesap güvenliği",
+      "ringLabel": "Güvenlik puanı: 100 üzerinden {score}",
+      "grade": {
+        "good": "Güçlü",
+        "fair": "Geliştirilebilir",
+        "poor": "Zayıf"
+      },
+      "progress": "{total} adımdan {done} tanesi tamam",
+      "points": "+{n} puan",
+      "fix": "Düzelt",
+      "items": {
+        "twoFactor": {
+          "ok": "İki adımlı doğrulama açık",
+          "todo": "İki adımlı doğrulama kapalı",
+          "help": "Parolanız çalınsa bile hesabınız korunur."
+        },
+        "passkey": {
+          "ok": "Passkey eklendi",
+          "todo": "Passkey yok",
+          "help": "Parmak izi veya yüz tanımayla, parolasız ve oltalamaya dayanıklı giriş."
+        },
+        "phone": {
+          "ok": "Telefon doğrulandı",
+          "todo": "Telefon doğrulanmadı",
+          "help": "SMS ile kod ve önemli uyarılar için."
+        },
+        "sessions": {
+          "ok": "Unutulmuş oturum yok",
+          "todo": "{n, plural, one {# eski oturum açık} other {# eski oturum açık}}",
+          "help": "30 günden uzun süredir kullanılmayan cihazları kapatın."
+        }
+      }
     }
   },
   "AuthLayout": {
