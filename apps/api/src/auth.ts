@@ -98,6 +98,6 @@ export class SessionGuard implements CanActivate {
 @Controller('auth')
 export class AuthController {
   @Get('me') @UseGuards(SessionGuard)
-  me(@Req() req: AuthedRequest) { return req.user; }
+  me(@Req() req: AuthedRequest) { return { ...req.user, ip: req.ip }; } // ip: the firewall editor's "my IP" shortcut
 }
 

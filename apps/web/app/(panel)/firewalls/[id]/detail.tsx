@@ -11,6 +11,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { I } from '../../../../components/icon';
 import { CheckboxList, ConfirmButton, DataTable, FormActions, Mono, Notice, PageHeader, Section, SelectInput, StatusChip, TextInput } from '../../../../components/ui';
 import { apiFetch, useErrorText } from '../../../../lib/api';
+import { useMe } from '../../../../lib/me';
 import { useApiQuery } from '../../../../lib/query';
 import { anywhere, hasPort, protocols, quick, statusTone, type Firewall, type Limits, type Rule } from '../model';
 
@@ -19,6 +20,9 @@ const ipsText = (ips: string[]) => ips.join(', ');
 // The API stores rules as jsonb, which reorders keys: compare values, not JSON text.
 const canon = (rs: Rule[]) => JSON.stringify(rs.map((r) => [r.direction, r.protocol, r.port ?? null, r.ips, r.description ?? '']));
 const parseIps = (text: string) => text.split(/[\s,;]+/).map((x) => x.trim()).filter(Boolean);
+// Ports that should rarely be open to the whole internet.
+const risky: Record<string, string> = { 3306: 'MySQL', 5432: 'PostgreSQL', 6379: 'Redis', 27017: 'MongoDB', 9200: 'Elasticsearch', 11211: 'Memcached' };
+const covers = (port: string | null, n: number) => { const [a, b = a] = (port ?? '').split('-').map(Number); return a <= n && n <= b; };
 
 export default function FirewallDetail({ id }: { id: string }) {
   const t = useTranslations('Firewalls');
@@ -62,6 +66,21 @@ function RulesEditor({ firewall, onSaved }: { firewall: Detail; onSaved: () => v
   const saved = canon(firewall.rules);
   const current = useMemo(() => rules.map((r, i) => ({ ...r, ips: parseIps(ipText[i] ?? '') })), [rules, ipText]);
   const dirty = canon(current) !== saved;
+  const me = useMe();
+  const myIp = me?.ip?.replace(/^::ffff:/, '');
+  // Hints only: the editor still saves whatever the user wants.
+  const warnings = useMemo(() => {
+    const tcpIn = current.filter((r) => r.direction === 'in' && r.protocol === 'tcp');
+    const w: string[] = [];
+    if (!tcpIn.some((r) => covers(r.port, 22) || covers(r.port, 3389))) w.push(t('warn.noRemote'));
+    for (const [p, name] of Object.entries(risky)) if (tcpIn.some((r) => covers(r.port, +p) && r.ips.some((x) => anywhere.includes(x)))) w.push(t('warn.openDb', { port: p, name }));
+    const seen = new Set<string>();
+    for (const r of current) {
+      const k = JSON.stringify([r.direction, r.protocol, r.port ?? '', [...r.ips].sort()]);
+      if (seen.has(k)) w.push(t('warn.duplicate', { rule: r.description || `${r.protocol.toUpperCase()} ${r.port ?? ''}`.trim() })); else seen.add(k);
+    }
+    return w;
+  }, [current, t]);
   // Someone else saved meanwhile and this form is untouched: show their version.
   useEffect(() => { if (!dirty) { setRules(firewall.rules); setIpText(firewall.rules.map((r) => ipsText(r.ips))); } }, [saved]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -98,6 +117,7 @@ function RulesEditor({ firewall, onSaved }: { firewall: Detail; onSaved: () => v
                   error={field(fields[`rules.${i}.ips`])} spellCheck={false} placeholder="0.0.0.0/0, ::/0"/>
                 <div className="flex flex-wrap gap-1">
                   <button type="button" className="text-xs text-accent hover:underline" onClick={() => setIpText((x) => x.map((y, j) => (j === i ? ipsText(anywhere) : y)))}>{t('anywhere')}</button>
+                  {direction === 'in' && myIp && <button type="button" className="text-xs text-accent hover:underline" onClick={() => setIpText((x) => x.map((y, j) => (j === i ? `${myIp}/${myIp.includes(':') ? 128 : 32}` : y)))}>· {t('myIp', { ip: myIp })}</button>}
                   <span className="text-xs text-muted">· {t('ipsHelp')}</span>
                 </div>
               </div>
@@ -112,6 +132,7 @@ function RulesEditor({ firewall, onSaved }: { firewall: Detail; onSaved: () => v
   return <div className="flex flex-col gap-6">
     {block('in')}
     {block('out')}
+    {warnings.length > 0 && <Notice tone="warning" title={t('warn.title')}><ul className="list-disc ps-4">{warnings.map((w) => <li key={w}>{w}</li>)}</ul></Notice>}
     <div className="sticky bottom-4 z-30 rounded-2xl border border-border bg-overlay/95 p-3 shadow-lg backdrop-blur">
       <FormActions status={dirty ? <span className="text-warning">{t('unsaved')}</span> : <span className="text-muted">{t('ruleTotal', { n: rules.length, max: firewall.limits.rulesPerFirewall })}</span>}>
         <Button variant="tertiary" isDisabled={!dirty || busy} onPress={reset}>{t('discard')}</Button>

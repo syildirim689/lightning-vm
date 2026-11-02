@@ -4146,7 +4146,14 @@
     "serverProtected": "Bu sunucuya bağlı firewall'lar.",
     "serverOpen": "Firewall yok: bu sunucunun tüm portlarına erişilebilir.",
     "serverNone": "Bağlı firewall yok. Firewall'lar sayfasından bağlayabilirsiniz.",
-    "orderHelp": "İsteğe bağlı. Sunucu ilk kez açılmadan önce uygulanır."
+    "orderHelp": "İsteğe bağlı. Sunucu ilk kez açılmadan önce uygulanır.",
+    "myIp": "Benim IP'm ({ip})",
+    "warn": {
+      "title": "Kontrol etmek isteyebilirsiniz",
+      "noRemote": "SSH (22) ve RDP (3389) kapalı: sunucuya yalnızca paneldeki konsoldan bağlanabilirsiniz.",
+      "openDb": "{port} ({name}) portu tüm internete açık. Yalnızca kendi IP adreslerinize izin vermeniz önerilir.",
+      "duplicate": "\"{rule}\" kuralı iki kez var; birini silebilirsiniz."
+    }
   },
   "Updates": {
     "title": "Güncellemeler",

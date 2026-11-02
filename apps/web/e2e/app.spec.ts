@@ -991,6 +991,22 @@ test.describe('people, settings and smart features (English browser)', () => {
     await page.getByRole('button', { name: 'Save rules' }).click();
     await expect(page.getByText('Saved.').first()).toBeVisible();
     await expect(page.getByText('5 of 50 rules')).toBeVisible();
+    // Hints: a database port open to everyone, fixed with "My IP"; a duplicate rule; discarded afterwards.
+    await page.getByRole('button', { name: 'Rule', exact: true }).first().click();
+    await page.getByRole('textbox', { name: 'Port or range' }).last().fill('3306');
+    await expect(page.getByText('Port 3306 (MySQL) is open to the whole internet.', { exact: false })).toBeVisible();
+    await page.getByRole('button', { name: /My IP/ }).last().click();
+    await expect(page.getByRole('textbox', { name: 'Source addresses' }).last()).toHaveValue(/\/(32|128)$/);
+    await expect(page.getByText('Port 3306 (MySQL)', { exact: false })).toHaveCount(0);
+    await page.getByRole('button', { name: 'SSH', exact: true }).first().click();
+    await expect(page.getByText('The "SSH" rule appears twice')).toBeVisible();
+    await page.screenshot({ path: 'test-results/tour/firewall-hints.png', fullPage: true });
+    await page.setViewportSize({ width: 390, height: 900 });
+    await expectNoOverflow(page, 'firewall rules at 390 px');
+    await page.screenshot({ path: 'test-results/tour/firewall-hints-390.png', fullPage: true });
+    await page.setViewportSize({ width: 1280, height: 720 });
+    await page.getByRole('button', { name: 'Discard' }).click();
+    await expect(page.getByText('You may want to check')).toHaveCount(0);
     await page.goto('/firewalls');
     const card = page.getByRole('link', { name: new RegExp(name) });
     await expect(card).toContainText('5 inbound · 0 outbound rules');
