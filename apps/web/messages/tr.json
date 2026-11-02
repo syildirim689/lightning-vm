@@ -4159,7 +4159,17 @@
     "copyName": "{name} (kopya)",
     "copyNameN": "{name} (kopya {n})",
     "copied": "\"{name}\" oluşturuldu. Sunuculara bağlamayı unutmayın.",
-    "riskShort": "Herkese açık: {ports}"
+    "riskShort": "Herkese açık: {ports}",
+    "stats": {
+      "firewalls": "Güvenlik duvarı",
+      "protected": "Korunan sunucu",
+      "unprotectedHint": "{n, plural, =0 {Korumasız sunucu yok} other {# sunucu korumasız}}",
+      "failed": "Uygulanamayan",
+      "risky": "Riskli duvar"
+    },
+    "unprotectedTitle": "{n, plural, one {# sunucunuzda} other {# sunucunuzda}} güvenlik duvarı yok",
+    "unprotectedBody": "Bu sunuculara gelen tüm trafik açık. Tek tıkla hepsini kapsayan bir duvar oluşturabilirsiniz.",
+    "protectAll": "Bunlar için duvar oluştur"
   },
   "Updates": {
     "title": "Güncellemeler",

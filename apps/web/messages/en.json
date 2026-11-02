@@ -4159,7 +4159,17 @@
     "copyName": "{name} (copy)",
     "copyNameN": "{name} (copy {n})",
     "copied": "\"{name}\" created. Remember to attach it to servers.",
-    "riskShort": "Open to everyone: {ports}"
+    "riskShort": "Open to everyone: {ports}",
+    "stats": {
+      "firewalls": "Firewalls",
+      "protected": "Protected servers",
+      "unprotectedHint": "{n, plural, =0 {No unprotected servers} one {# server unprotected} other {# servers unprotected}}",
+      "failed": "Failed to apply",
+      "risky": "Risky firewalls"
+    },
+    "unprotectedTitle": "{n, plural, one {# server has} other {# servers have}} no firewall",
+    "unprotectedBody": "All incoming traffic to these servers is open. You can create one firewall covering all of them in one click.",
+    "protectAll": "Create a firewall for these"
   },
   "Updates": {
     "title": "Updates",

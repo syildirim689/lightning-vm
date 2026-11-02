@@ -8,7 +8,7 @@ import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { useState } from 'react';
 import { I } from '../../../components/icon';
-import { CheckboxList, Empty, PageHeader, SelectInput, StatusChip, TextInput } from '../../../components/ui';
+import { CheckboxList, Empty, Notice, PageHeader, SelectInput, Stat, StatusChip, TextInput } from '../../../components/ui';
 import { apiFetch, useErrorText } from '../../../lib/api';
 import { useMe } from '../../../lib/me';
 import { can } from '../../../lib/permissions';
@@ -19,12 +19,34 @@ export default function Firewalls() {
   const t = useTranslations('Firewalls');
   const me = useMe();
   const q = useApiQuery<{ firewalls: Firewall[]; limits: Limits }>(['firewalls'], '/firewalls', { refetchInterval: 10_000 });
-  const [creating, setCreating] = useState(false);
+  const [creating, setCreating] = useState<string[] | null>(null);
   const manage = can(me?.permissions, 'firewalls.manage');
   const list = q.data?.firewalls;
+  const mine = useApiQuery<{ servers: { id: string; name: string; state: string; firewallCount?: number }[] }>(['servers'], '/servers').data?.servers;
+  const unprotected = (mine ?? []).filter((s) => !s.firewallCount && !['deleted', 'deleting'].includes(s.state));
+  const attachedAll = (list ?? []).flatMap((f) => f.servers);
+  const failed = attachedAll.filter((s) => s.status === 'failed').length;
+  const risky = (list ?? []).filter((f) => openDbPorts(f.rules).length).length;
 
   return <>
-    <PageHeader title={t('title')} description={t('intro')} actions={manage && <Button onPress={() => setCreating(true)}><I name="plus" size={16}/>{t('create')}</Button>}/>
+    <PageHeader title={t('title')} description={t('intro')} actions={manage && <Button onPress={() => setCreating([])}><I name="plus" size={16}/>{t('create')}</Button>}/>
+    {list && list.length > 0 && <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <Stat label={t('stats.firewalls')} value={list.length} icon={<I name="brick-wall-fire" size={18}/>}/>
+      <Stat label={t('stats.protected')} value={new Set(attachedAll.map((s) => s.id)).size} icon={<I name="shield-check" size={18}/>} tone="success"
+        hint={mine && t('stats.unprotectedHint', { n: unprotected.length })}/>
+      <Stat label={t('stats.failed')} value={failed} icon={<I name="circle-x" size={18}/>} tone={failed ? 'danger' : 'default'}/>
+      <Stat label={t('stats.risky')} value={risky} icon={<I name="shield-alert" size={18}/>} tone={risky ? 'warning' : 'default'}/>
+    </div>}
+    {manage && unprotected.length > 0 && <Notice tone="warning" title={t('unprotectedTitle', { n: unprotected.length })}>
+      <div className="flex flex-col gap-2">
+        <p>{t('unprotectedBody')}</p>
+        <div className="flex flex-wrap items-center gap-1.5">
+          {unprotected.slice(0, 6).map((s) => <NextLink key={s.id} href={`/servers/${s.id}`} className="rounded-md border border-border px-2 py-0.5 text-xs font-medium hover:border-accent">{s.name}</NextLink>)}
+          {unprotected.length > 6 && <span className="text-xs text-muted">+{unprotected.length - 6}</span>}
+        </div>
+        <div><Button size="sm" onPress={() => setCreating(unprotected.map((s) => s.id))}><I name="shield-plus" size={14}/>{t('protectAll')}</Button></div>
+      </div>
+    </Notice>}
     {list && list.length === 0 && <Card><Card.Content><Empty icon={<I name="shield-check" size={28}/>} title={t('emptyTitle')}>{t('emptyBody')}</Empty></Card.Content></Card>}
     <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
       {(list ?? []).map((f, i) => {
@@ -60,11 +82,11 @@ export default function Firewalls() {
         </motion.div>;
       })}
     </div>
-    {creating && q.data && <CreateFirewall limits={q.data.limits} onClose={() => setCreating(false)}/>}
+    {creating && q.data && <CreateFirewall limits={q.data.limits} initialServers={creating} onClose={() => setCreating(null)}/>}
   </>;
 }
 
-function CreateFirewall({ limits, onClose }: { limits: Limits; onClose: () => void }) {
+function CreateFirewall({ limits, initialServers, onClose }: { limits: Limits; initialServers: string[]; onClose: () => void }) {
   const t = useTranslations('Firewalls');
   const { error, field } = useErrorText();
   const router = useRouter();
@@ -72,7 +94,7 @@ function CreateFirewall({ limits, onClose }: { limits: Limits; onClose: () => vo
   const servers = useApiQuery<{ servers: { id: string; name: string; state: string }[] }>(['servers'], '/servers').data?.servers ?? [];
   const [name, setName] = useState('');
   const [template, setTemplate] = useState('web');
-  const [serverIds, setServerIds] = useState<string[]>([]);
+  const [serverIds, setServerIds] = useState<string[]>(initialServers);
   const [fields, setFields] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
   async function save() {
