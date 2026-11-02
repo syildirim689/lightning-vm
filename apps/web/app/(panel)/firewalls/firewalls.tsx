@@ -32,7 +32,7 @@ export default function Firewalls() {
     <PageHeader title={t('title')} description={t('intro')} actions={manage && <Button onPress={() => setCreating([])}><I name="plus" size={16}/>{t('create')}</Button>}/>
     {list && list.length > 0 && <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
       <Stat label={t('stats.firewalls')} value={list.length} icon={<I name="brick-wall-fire" size={18}/>}/>
-      <Stat label={t('stats.protected')} value={new Set(attachedAll.map((s) => s.id)).size} icon={<I name="shield-check" size={18}/>} tone="success"
+      <Stat label={t('stats.protected')} value={new Set(attachedAll.map((s) => s.id)).size} icon={<I name="shield-check" size={18}/>} tone={attachedAll.length ? 'success' : 'default'}
         hint={mine && t('stats.unprotectedHint', { n: unprotected.length })}/>
       <Stat label={t('stats.failed')} value={failed} icon={<I name="circle-x" size={18}/>} tone={failed ? 'danger' : 'default'}/>
       <Stat label={t('stats.risky')} value={risky} icon={<I name="shield-alert" size={18}/>} tone={risky ? 'warning' : 'default'}/>
