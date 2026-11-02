@@ -4158,7 +4158,8 @@
     "duplicate": "Kopyala",
     "copyName": "{name} (kopya)",
     "copyNameN": "{name} (kopya {n})",
-    "copied": "\"{name}\" oluşturuldu. Sunuculara bağlamayı unutmayın."
+    "copied": "\"{name}\" oluşturuldu. Sunuculara bağlamayı unutmayın.",
+    "riskShort": "Herkese açık: {ports}"
   },
   "Updates": {
     "title": "Güncellemeler",

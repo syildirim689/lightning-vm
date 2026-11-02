@@ -26,4 +26,11 @@ export const templates: Record<string, Rule[]> = {
   windows: ['rdp', 'icmp'].map((k) => ({ direction: 'in', ...quick[k] })),
 };
 
+// Ports that should rarely be open to the whole internet.
+const risky: Record<string, string> = { 3306: 'MySQL', 5432: 'PostgreSQL', 6379: 'Redis', 27017: 'MongoDB', 9200: 'Elasticsearch', 11211: 'Memcached' };
+export const covers = (port: string | null, n: number) => { const [a, b = a] = (port ?? '').split('-').map(Number); return a <= n && n <= b; };
+export const openToAll = (r: Rule) => r.ips.some((x) => anywhere.includes(x));
+export const openDbPorts = (rules: Rule[]) => Object.entries(risky)
+  .filter(([p]) => rules.some((r) => r.direction === 'in' && r.protocol === 'tcp' && covers(r.port, +p) && openToAll(r)));
+
 export const statusTone = { applied: 'success', pending: 'accent', failed: 'danger' } as const;

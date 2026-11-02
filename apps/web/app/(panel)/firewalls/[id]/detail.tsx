@@ -14,16 +14,13 @@ import { apiFetch, useErrorText } from '../../../../lib/api';
 import { useMe } from '../../../../lib/me';
 import { useApiQuery } from '../../../../lib/query';
 import { useUnsaved } from '../../../../lib/unsaved';
-import { anywhere, hasPort, protocols, quick, statusTone, type Firewall, type Limits, type Rule } from '../model';
+import { anywhere, covers, hasPort, openDbPorts, protocols, quick, statusTone, type Firewall, type Limits, type Rule } from '../model';
 
 type Detail = Firewall & { limits: Limits };
 const ipsText = (ips: string[]) => ips.join(', ');
 // The API stores rules as jsonb, which reorders keys: compare values, not JSON text.
 const canon = (rs: Rule[]) => JSON.stringify(rs.map((r) => [r.direction, r.protocol, r.port ?? null, r.ips, r.description ?? '']));
 const parseIps = (text: string) => text.split(/[\s,;]+/).map((x) => x.trim()).filter(Boolean);
-// Ports that should rarely be open to the whole internet.
-const risky: Record<string, string> = { 3306: 'MySQL', 5432: 'PostgreSQL', 6379: 'Redis', 27017: 'MongoDB', 9200: 'Elasticsearch', 11211: 'Memcached' };
-const covers = (port: string | null, n: number) => { const [a, b = a] = (port ?? '').split('-').map(Number); return a <= n && n <= b; };
 
 export default function FirewallDetail({ id }: { id: string }) {
   const t = useTranslations('Firewalls');
@@ -90,7 +87,7 @@ function RulesEditor({ firewall, onSaved }: { firewall: Detail; onSaved: () => v
     const tcpIn = current.filter((r) => r.direction === 'in' && r.protocol === 'tcp');
     const w: string[] = [];
     if (!tcpIn.some((r) => covers(r.port, 22) || covers(r.port, 3389))) w.push(t('warn.noRemote'));
-    for (const [p, name] of Object.entries(risky)) if (tcpIn.some((r) => covers(r.port, +p) && r.ips.some((x) => anywhere.includes(x)))) w.push(t('warn.openDb', { port: p, name }));
+    for (const [p, name] of openDbPorts(current)) w.push(t('warn.openDb', { port: p, name }));
     const seen = new Set<string>();
     for (const r of current) {
       const k = JSON.stringify([r.direction, r.protocol, r.port ?? '', [...r.ips].sort()]);

@@ -4158,7 +4158,8 @@
     "duplicate": "Duplicate",
     "copyName": "{name} (copy)",
     "copyNameN": "{name} (copy {n})",
-    "copied": "\"{name}\" created. Remember to attach it to servers."
+    "copied": "\"{name}\" created. Remember to attach it to servers.",
+    "riskShort": "Open to everyone: {ports}"
   },
   "Updates": {
     "title": "Updates",

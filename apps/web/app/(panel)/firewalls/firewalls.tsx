@@ -13,7 +13,7 @@ import { apiFetch, useErrorText } from '../../../lib/api';
 import { useMe } from '../../../lib/me';
 import { can } from '../../../lib/permissions';
 import { useApiQuery } from '../../../lib/query';
-import { statusTone, templates, type Firewall, type Limits } from './model';
+import { openDbPorts, openToAll, statusTone, templates, type Firewall, type Limits } from './model';
 
 export default function Firewalls() {
   const t = useTranslations('Firewalls');
@@ -28,7 +28,9 @@ export default function Firewalls() {
     {list && list.length === 0 && <Card><Card.Content><Empty icon={<I name="shield-check" size={28}/>} title={t('emptyTitle')}>{t('emptyBody')}</Empty></Card.Content></Card>}
     <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
       {(list ?? []).map((f, i) => {
-        const inbound = f.rules.filter((r) => r.direction === 'in').length;
+        const inRules = f.rules.filter((r) => r.direction === 'in');
+        const inbound = inRules.length;
+        const risks = openDbPorts(f.rules);
         return <motion.div key={f.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.04 }}>
           <NextLink href={`/firewalls/${f.id}`} className="block h-full rounded-2xl outline-offset-2 transition hover:-translate-y-0.5 hover:shadow-lg">
             <Card className="h-full">
@@ -37,8 +39,18 @@ export default function Firewalls() {
                   <Card.Title className="truncate text-base font-semibold">{f.name}</Card.Title>
                   <Card.Description className="text-xs text-muted">{t('ruleCount', { in: inbound, out: f.rules.length - inbound })}</Card.Description>
                 </div>
-                <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-accent-soft text-accent"><I name="shield-check" size={18}/></span>
+                <span className={`grid size-9 shrink-0 place-items-center rounded-lg ${risks.length ? 'bg-warning/15 text-warning' : 'bg-accent-soft text-accent'}`}
+                  title={risks.length ? t('riskShort', { ports: risks.map(([p]) => p).join(', ') }) : undefined}>
+                  <I name={risks.length ? 'shield-alert' : 'shield-check'} size={18}/></span>
               </Card.Header>
+              {inbound > 0 && <div className="flex flex-wrap gap-1" aria-label={t('inbound')}>
+                {inRules.slice(0, 6).map((r, j) => <span key={j} title={r.ips.join(', ')}
+                  className={`inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[11px] font-medium ${openToAll(r) ? 'border-border' : 'border-success/40 text-success'}`}>
+                  {!openToAll(r) && <I name="lock" size={11}/>}{r.description || r.protocol.toUpperCase()}
+                  {r.port && <span className="font-mono text-muted">{r.port}</span>}</span>)}
+                {inbound > 6 && <span className="px-1 py-0.5 text-[11px] text-muted">+{inbound - 6}</span>}
+              </div>}
+              {risks.length > 0 && <p className="flex items-center gap-1.5 text-xs text-warning"><I name="triangle-alert" size={13}/>{t('riskShort', { ports: risks.map(([p, n]) => `${p} ${n}`).join(', ') })}</p>}
               <Card.Content className="flex flex-wrap gap-1.5">
                 {f.servers.length === 0 ? <span className="text-sm text-muted">{t('noServers')}</span>
                   : f.servers.map((s) => <StatusChip key={s.id} tone={statusTone[s.status]}>{s.name} · {t(`status.${s.status}`)}</StatusChip>)}
