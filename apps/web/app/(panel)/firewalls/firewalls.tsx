@@ -28,7 +28,7 @@ export default function Firewalls() {
   const failed = attachedAll.filter((s) => s.status === 'failed').length;
   const risky = (list ?? []).filter((f) => openDbPorts(f.rules).length).length;
 
-  return <>
+  return <div className="flex flex-col gap-4">
     <PageHeader title={t('title')} description={t('intro')} actions={manage && <Button onPress={() => setCreating([])}><I name="plus" size={16}/>{t('create')}</Button>}/>
     {list && list.length > 0 && <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
       <Stat label={t('stats.firewalls')} value={list.length} icon={<I name="brick-wall-fire" size={18}/>}/>
@@ -83,7 +83,7 @@ export default function Firewalls() {
       })}
     </div>
     {creating && q.data && <CreateFirewall limits={q.data.limits} initialServers={creating} onClose={() => setCreating(null)}/>}
-  </>;
+  </div>;
 }
 
 function CreateFirewall({ limits, initialServers, onClose }: { limits: Limits; initialServers: string[]; onClose: () => void }) {

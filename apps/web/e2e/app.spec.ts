@@ -1020,6 +1020,7 @@ test.describe('people, settings and smart features (English browser)', () => {
     await expect(card).toContainText('5 inbound · 0 outbound rules');
     await expect(card).toContainText('8000-8100'); // rule pills
     await expect(page.getByText('Protected servers', { exact: true })).toBeVisible(); // summary tiles
+    await expect(page.locator('#boot-loader')).toHaveCSS('opacity', '0');
     await page.screenshot({ path: 'test-results/tour/firewalls-list.png', fullPage: true });
     await page.setViewportSize({ width: 390, height: 900 });
     await expectNoOverflow(page, 'firewall cards at 390 px');
