@@ -1,7 +1,7 @@
 // Shared by the firewall pages, the server page and the order page.
 export type Rule = { direction: 'in' | 'out'; protocol: 'tcp' | 'udp' | 'icmp' | 'esp' | 'gre'; port: string | null; ips: string[]; description: string };
 export type FirewallServer = { id: string; name: string; status: 'applied' | 'pending' | 'failed'; address?: string | null; errorCode?: string | null; appliedAt?: string | null };
-export type Firewall = { id: string; name: string; rules: Rule[]; servers: FirewallServer[]; ownerEmail?: string; createdAt: string; updatedAt: string };
+export type Firewall = { id: string; name: string; rules: Rule[]; servers: FirewallServer[]; ownerId?: string; ownerEmail?: string; createdAt: string; updatedAt: string };
 export type Limits = { rulesPerFirewall: number; ipsPerRule: number; firewallsPerServer: number };
 
 export const anywhere = ['0.0.0.0/0', '::/0'];

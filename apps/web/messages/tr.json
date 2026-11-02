@@ -4154,7 +4154,11 @@
       "openDb": "{port} ({name}) portu tüm internete açık. Yalnızca kendi IP adreslerinize izin vermeniz önerilir.",
       "duplicate": "\"{rule}\" kuralı iki kez var; birini silebilirsiniz."
     },
-    "saveShortcut": "Ctrl+S ile kaydedebilirsiniz"
+    "saveShortcut": "Ctrl+S ile kaydedebilirsiniz",
+    "duplicate": "Kopyala",
+    "copyName": "{name} (kopya)",
+    "copyNameN": "{name} (kopya {n})",
+    "copied": "\"{name}\" oluşturuldu. Sunuculara bağlamayı unutmayın."
   },
   "Updates": {
     "title": "Güncellemeler",

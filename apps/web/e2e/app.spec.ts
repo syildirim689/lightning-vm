@@ -1008,6 +1008,13 @@ test.describe('people, settings and smart features (English browser)', () => {
     await page.setViewportSize({ width: 1280, height: 720 });
     await page.getByRole('button', { name: 'Discard' }).click();
     await expect(page.getByText('You may want to check')).toHaveCount(0);
+    // Duplicate: same rules under "(copy)", no servers; the copy is deleted again.
+    await page.getByRole('button', { name: 'Duplicate' }).click();
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText(`${name} (copy)`);
+    await expect(page.getByText('5 of 50 rules')).toBeVisible();
+    await page.getByRole('button', { name: 'Delete' }).click();
+    await page.getByRole('alertdialog').getByRole('button', { name: 'Delete' }).click();
+    await expect(page).toHaveURL(/\/firewalls$/);
     await page.goto('/firewalls');
     const card = page.getByRole('link', { name: new RegExp(name) });
     await expect(card).toContainText('5 inbound · 0 outbound rules');

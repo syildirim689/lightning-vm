@@ -32,6 +32,8 @@ export default function FirewallDetail({ id }: { id: string }) {
   const client = useQueryClient();
   const q = useApiQuery<Detail>(['firewalls', id], `/firewalls/${id}`, { refetchInterval: 5_000 });
   const [rename, setRename] = useState(false);
+  const [copying, setCopying] = useState(false);
+  const me = useMe();
   const gone = (q.error as { code?: string } | null)?.code === 'NOT_FOUND';
   useEffect(() => { if (gone) router.replace('/firewalls'); }, [gone, router]);
   if (!q.data) return <p role="status" className="text-sm text-muted">{q.error && !gone ? error(q.error) : t('loading')}</p>;
@@ -41,12 +43,26 @@ export default function FirewallDetail({ id }: { id: string }) {
     try { await apiFetch(`/firewalls/${id}`, { method: 'DELETE' }); toast.success(t('removed')); refresh(); router.push('/firewalls'); }
     catch (e) { toast.danger(error(e)); throw e; }
   }
+  // Same rules under a free name ("x (copy)", "x (copy 2)", ...), no servers; opens the copy.
+  async function duplicate() {
+    setCopying(true);
+    try {
+      for (let n = 1; ; n++) {
+        const name = (n === 1 ? t('copyName', { name: f.name }) : t('copyNameN', { name: f.name, n })).slice(0, 64);
+        try {
+          const c = await apiFetch<Firewall>('/firewalls', { method: 'POST', body: { name, rules: f.rules, serverIds: [] } });
+          toast.success(t('copied', { name })); refresh(); router.push(`/firewalls/${c.id}`); return;
+        } catch (e) { if (n >= 9 || (e as { fields?: Record<string, string> }).fields?.name !== 'NAME_TAKEN') throw e; }
+      }
+    } catch (e) { toast.danger(error(e)); } finally { setCopying(false); }
+  }
 
   return <div className="flex flex-col gap-6">
     <PageHeader eyebrow={t('title')} title={f.name}
       description={f.ownerEmail}
       actions={<>
         <Button variant="secondary" onPress={() => setRename(true)}><I name="pencil" size={16}/>{t('rename')}</Button>
+        {me && f.ownerId === me.id && <Button variant="secondary" isPending={copying} onPress={duplicate}><I name="copy" size={16}/>{t('duplicate')}</Button>}
         <ConfirmButton variant="danger-soft" icon={<I name="trash-2" size={16}/>} label={t('remove')} title={t('removeTitle', { name: f.name })}
           body={f.servers.length ? t('removeInUse', { n: f.servers.length }) : t('removeBody')} confirmLabel={t('remove')} cancelLabel={t('cancel')} onConfirm={remove}/>
       </>}/>
