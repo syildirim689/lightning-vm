@@ -4169,7 +4169,9 @@
     },
     "unprotectedTitle": "{n, plural, one {# server has} other {# servers have}} no firewall",
     "unprotectedBody": "All incoming traffic to these servers is open. You can create one firewall covering all of them in one click.",
-    "protectAll": "Create a firewall for these"
+    "protectAll": "Create a firewall for these",
+    "noneMatch": "No firewall matches this filter.",
+    "showAll": "Show all"
   },
   "Updates": {
     "title": "Updates",

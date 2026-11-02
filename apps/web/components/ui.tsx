@@ -35,16 +35,21 @@ export function Section({ title, description, actions, children, className = '' 
   </Card>;
 }
 
-export function Stat({ label, value, hint, icon, tone = 'default' }: { label: string; value: React.ReactNode; hint?: React.ReactNode; icon?: React.ReactNode; tone?: 'default' | 'success' | 'warning' | 'danger' | 'accent' }) {
+export function Stat({ label, value, hint, icon, tone = 'default', pressed, onPress }: { label: string; value: React.ReactNode; hint?: React.ReactNode; icon?: React.ReactNode; tone?: 'default' | 'success' | 'warning' | 'danger' | 'accent';
+  pressed?: boolean; onPress?: () => void }) {
   const toneClass = { default: 'text-foreground', success: 'text-success', warning: 'text-warning', danger: 'text-danger', accent: 'text-accent' }[tone];
-  return <Card className="rise transition-shadow duration-200 hover:shadow-lg">
-    <Card.Content className="flex items-start justify-between gap-3">
+  const iconClass = { default: 'bg-default text-muted', success: 'bg-success/10 text-success', warning: 'bg-warning/15 text-warning', danger: 'bg-danger/10 text-danger', accent: 'bg-accent-soft text-accent' }[tone];
+  // onPress: the tile is a filter toggle (pressed = active).
+  const press = onPress && { role: 'button', tabIndex: 0, 'aria-pressed': !!pressed, onClick: onPress,
+    onKeyDown: (e: React.KeyboardEvent) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onPress(); } } };
+  return <Card {...press} className={`rise transition-shadow duration-200 hover:shadow-lg ${onPress ? 'cursor-pointer outline-offset-2' : ''} ${pressed ? 'ring-2 ring-accent' : ''}`}>
+    <Card.Content className="flex flex-row items-start justify-between gap-3">
       <div className="min-w-0">
         <p className="text-xs font-medium uppercase tracking-wider text-muted">{label}</p>
         <p className={`mt-1 text-2xl font-semibold tabular-nums ${toneClass}`}>{value}</p>
         {hint && <p className="mt-1 text-xs text-muted">{hint}</p>}
       </div>
-      {icon && <span aria-hidden className="rounded-lg bg-default p-2 text-muted">{icon}</span>}
+      {icon && <span aria-hidden className={`shrink-0 rounded-lg p-2 ${iconClass}`}>{icon}</span>}
     </Card.Content>
   </Card>;
 }

@@ -27,6 +27,9 @@ export default function Firewalls() {
   const attachedAll = (list ?? []).flatMap((f) => f.servers);
   const failed = attachedAll.filter((s) => s.status === 'failed').length;
   const risky = (list ?? []).filter((f) => openDbPorts(f.rules).length).length;
+  const [show, setShow] = useState<'failed' | 'risky' | null>(null);
+  const toggle = (k: 'failed' | 'risky') => setShow((v) => (v === k ? null : k));
+  const shown = (list ?? []).filter((f) => show === 'failed' ? f.servers.some((s) => s.status === 'failed') : show === 'risky' ? openDbPorts(f.rules).length > 0 : true);
 
   return <div className="flex flex-col gap-4">
     <PageHeader title={t('title')} description={t('intro')} actions={manage && <Button onPress={() => setCreating([])}><I name="plus" size={16}/>{t('create')}</Button>}/>
@@ -34,8 +37,8 @@ export default function Firewalls() {
       <Stat label={t('stats.firewalls')} value={list.length} icon={<I name="brick-wall-fire" size={18}/>}/>
       <Stat label={t('stats.protected')} value={new Set(attachedAll.map((s) => s.id)).size} icon={<I name="shield-check" size={18}/>} tone={attachedAll.length ? 'success' : 'default'}
         hint={mine && t('stats.unprotectedHint', { n: unprotected.length })}/>
-      <Stat label={t('stats.failed')} value={failed} icon={<I name="circle-x" size={18}/>} tone={failed ? 'danger' : 'default'}/>
-      <Stat label={t('stats.risky')} value={risky} icon={<I name="shield-alert" size={18}/>} tone={risky ? 'warning' : 'default'}/>
+      <Stat label={t('stats.failed')} value={failed} icon={<I name="circle-x" size={18}/>} tone={failed ? 'danger' : 'default'} pressed={show === 'failed'} onPress={() => toggle('failed')}/>
+      <Stat label={t('stats.risky')} value={risky} icon={<I name="shield-alert" size={18}/>} tone={risky ? 'warning' : 'default'} pressed={show === 'risky'} onPress={() => toggle('risky')}/>
     </div>}
     {manage && unprotected.length > 0 && <Notice tone="warning" title={t('unprotectedTitle', { n: unprotected.length })}>
       <div className="flex flex-col gap-2">
@@ -49,7 +52,9 @@ export default function Firewalls() {
     </Notice>}
     {list && list.length === 0 && <Card><Card.Content><Empty icon={<I name="shield-check" size={28}/>} title={t('emptyTitle')}>{t('emptyBody')}</Empty></Card.Content></Card>}
     <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
-      {(list ?? []).map((f, i) => {
+      {show && shown.length === 0 && <p className="col-span-full rounded-xl border border-dashed border-border py-6 text-center text-sm text-muted">{t('noneMatch')}
+        {' '}<button type="button" className="text-accent hover:underline" onClick={() => setShow(null)}>{t('showAll')}</button></p>}
+      {shown.map((f, i) => {
         const inRules = f.rules.filter((r) => r.direction === 'in');
         const inbound = inRules.length;
         const risks = openDbPorts(f.rules);

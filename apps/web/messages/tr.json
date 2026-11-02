@@ -4169,7 +4169,9 @@
     },
     "unprotectedTitle": "{n, plural, one {# sunucunuzda} other {# sunucunuzda}} güvenlik duvarı yok",
     "unprotectedBody": "Bu sunuculara gelen tüm trafik açık. Tek tıkla hepsini kapsayan bir duvar oluşturabilirsiniz.",
-    "protectAll": "Bunlar için duvar oluştur"
+    "protectAll": "Bunlar için duvar oluştur",
+    "noneMatch": "Bu filtreye uyan güvenlik duvarı yok.",
+    "showAll": "Hepsini göster"
   },
   "Updates": {
     "title": "Güncellemeler",
