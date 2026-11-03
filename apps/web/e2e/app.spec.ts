@@ -1726,6 +1726,7 @@ async function totp(secret: string) {
 }
 
 test('second step at sign-in offers only the methods the account has', async ({ browser }) => {
+  test.setTimeout(120_000); // waits for the next 30-second code window
   const page = await (await browser.newContext({ locale: 'tr-TR' })).newPage();
   await signIn(page, user);
   await expect(page).toHaveURL(/\/$/);
