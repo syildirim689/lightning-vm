@@ -1,7 +1,7 @@
 "use client";
 // The customer's tickets: those with an answer first, then by last change. A new ticket opens in a dialog that
 // suggests a higher priority when the chosen server is in trouble.
-import { Button, Modal, toast } from '@heroui/react';
+import { Button, Modal, SearchField, toast } from '@heroui/react';
 import { useQueryClient } from '@tanstack/react-query';
 import { motion } from 'motion/react';
 import NextLink from 'next/link';
@@ -11,8 +11,9 @@ import { useEffect, useRef, useState } from 'react';
 import { I } from '../../../components/icon';
 import { Empty, PageHeader, SelectInput, TextInput } from '../../../components/ui';
 import { apiFetch, useErrorText, type ApiError } from '../../../lib/api';
+import { fold } from '../../../lib/note-line';
 import { useApiQuery } from '../../../lib/query';
-import { departmentName, PriorityBadge, StatusBadge, useDepartments, type Ticket } from './ui';
+import { departmentName, DraftBadge, PriorityBadge, StatusBadge, useDepartments, useDrafts, type Ticket } from './ui';
 
 export default function SupportList() {
   const t = useTranslations('Support');
@@ -24,19 +25,43 @@ export default function SupportList() {
   // /support?new=1&server=<id> opens the form (the server page links here).
   useEffect(() => { if (params.get('new')) setOpen(true); }, [params]);
   const tickets = useApiQuery<{ tickets: Ticket[] }>(['support', 'mine'], '/support/tickets', { refetchInterval: 30_000 }).data?.tickets;
+  const drafts = useDrafts();
+  // Answered (waiting for the customer), still open with support, or closed; and a search over subject, number and server.
+  const [show, setShow] = useState<'all' | 'answered' | 'open' | 'closed'>('all');
+  const [q, setQ] = useState('');
+  const group = (x: Ticket) => x.status === 'answered' ? 'answered' : x.status === 'closed' ? 'closed' : 'open';
+  const needle = fold(q.trim().replace(/^#/, ''));
+  const shown = (tickets ?? []).filter((x) => (show === 'all' || group(x) === show) && (!needle || [x.subject, String(x.number), x.serverName].some((v) => v && fold(v).includes(needle))));
+  const count = (g: string) => (tickets ?? []).filter((x) => group(x) === g).length;
   return <>
     <PageHeader title={t('title')} description={t('intro')} actions={<Button onPress={() => setOpen(true)}><I name="plus" size={16}/>{t('new')}</Button>}/>
     {!tickets ? <div className="h-40 animate-pulse rounded-3xl bg-default/50"/>
       : tickets.length === 0 ? <Empty icon={<I name="life-buoy" size={28}/>} title={t('empty')}><Button className="mt-3" onPress={() => setOpen(true)}><I name="plus" size={16}/>{t('new')}</Button></Empty>
-      : <ul className="flex flex-col gap-3">{tickets.map((x, i) => <motion.li key={x.id} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: Math.min(i, 8) * 0.03 }}>
+      : <div className="flex flex-col gap-3">
+        {tickets.length > 1 && <div className="flex flex-col gap-3 md:flex-row md:items-center">
+          <SearchField aria-label={t('mySearch')} value={q} onChange={setQ} className="w-full md:w-72">
+            <SearchField.Group><SearchField.SearchIcon/><SearchField.Input placeholder={t('mySearch')}/><SearchField.ClearButton/></SearchField.Group>
+          </SearchField>
+          <div role="group" aria-label={t('statusFilter')} className="flex flex-wrap gap-1.5">
+            {(['all', 'answered', 'open', 'closed'] as const).filter((k) => k === 'all' || count(k) || show === k).map((k) => <button key={k} type="button" aria-pressed={show === k} onClick={() => setShow(k)}
+              className={`flex min-h-11 items-center gap-1.5 rounded-lg border px-3 text-sm transition-colors ${show === k ? 'border-accent bg-accent-soft text-accent-soft-foreground' : 'border-border hover:border-accent'}`}>
+              {k === 'answered' && <span aria-hidden className="size-2 rounded-full bg-success"/>}{t(`show.${k}`)} <span className="tabular-nums text-muted">{k === 'all' ? tickets.length : count(k)}</span></button>)}
+          </div>
+        </div>}
+        {!shown.length ? <div role="status" className="flex flex-col items-center gap-3 rounded-xl border border-dashed border-border px-4 py-8 text-center text-sm text-muted">{t('noMatch')}
+          <Button size="sm" variant="secondary" onPress={() => { setQ(''); setShow('all'); }}><I name="funnel-x" size={15}/>{t('clearFilters')}</Button></div>
+        : <ul className="flex flex-col gap-3">{shown.map((x, i) => <motion.li key={x.id} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: Math.min(i, 8) * 0.03 }}>
           <NextLink href={`/support/${x.id}`} className={`flex flex-col gap-2 rounded-2xl border p-4 transition-colors hover:border-accent/60 focus-visible:outline-2 focus-visible:outline-accent sm:flex-row sm:items-center sm:gap-4 ${x.status === 'answered' ? 'border-success/40 bg-success/5' : 'border-border bg-surface'}`}>
             <span className="min-w-0 flex-1">
               <span className="flex items-center gap-2">{x.status === 'answered' && <span aria-hidden className="size-2 shrink-0 rounded-full bg-success"/>}<span className="truncate font-medium">{x.subject}</span></span>
               <span className="block truncate text-xs text-muted">#{x.number} · {departmentName(x, locale)}{x.serverName && ` · ${x.serverName}`} · {format.relativeTime(new Date(Math.min(Date.parse(x.updatedAt), now.getTime())), now)}</span>
             </span>
-            <span className="flex shrink-0 items-center gap-2"><PriorityBadge priority={x.priority}/><StatusBadge status={x.status}/></span>
+            <span className="flex shrink-0 flex-wrap items-center gap-2">{!!x.messages && <span className="inline-flex items-center gap-1 text-xs tabular-nums text-muted" title={t('messages', { n: x.messages })}>
+              <I name="messages-square" size={13}/>{x.messages}<span className="sr-only"> {t('messages', { n: x.messages })}</span></span>}
+              {drafts.has(x.id) && <DraftBadge/>}<PriorityBadge priority={x.priority}/><StatusBadge status={x.status}/></span>
           </NextLink>
         </motion.li>)}</ul>}
+      </div>}
     {open && <NewTicket initialServer={params.get('server') ?? ''} mine={tickets ?? []} onClose={() => setOpen(false)}/>}
   </>;
 }

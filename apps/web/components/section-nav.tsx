@@ -8,7 +8,8 @@ type Item = { id: string; title: string };
 const slug = (s: string) => `section-${s.toLocaleLowerCase('tr').replace(/[^\p{L}\p{N}]+/gu, '-').replace(/^-|-$/g, '')}`;
 const smooth = () => (matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth');
 
-export function SectionNav({ label, top, root }: { label: string; top: string; root: React.RefObject<HTMLElement | null> }) {
+// lead: what the page is about (a server's name and state), shown at the start of the bar once the page header scrolled away.
+export function SectionNav({ label, top, root, lead }: { label: string; top: string; root: React.RefObject<HTMLElement | null>; lead?: React.ReactNode }) {
   const [items, setItems] = useState<Item[]>([]);
   const [active, setActive] = useState<string>();
   const list = useRef<HTMLUListElement>(null);
@@ -49,7 +50,8 @@ export function SectionNav({ label, top, root }: { label: string; top: string; r
   const go = (id: string) => { document.getElementById(id)?.scrollIntoView({ behavior: smooth(), block: 'start' }); setActive(id); };
   const scrolled = active && active !== items[0].id;
   return <nav aria-label={label} className="sticky top-14 z-20 -mx-4 flex items-center gap-2 border-b border-separator bg-background/85 px-4 py-2 backdrop-blur md:-mx-8 md:px-8 2xl:-mx-10 2xl:px-10">
-    <I name="list" size={16} className="hidden shrink-0 text-muted sm:block"/>
+    {lead && <div aria-hidden={!scrolled} className={`flex shrink-0 items-center overflow-hidden transition-[max-width,opacity] duration-300 ${scrolled ? 'max-w-[45%] opacity-100 sm:max-w-xs' : 'max-w-0 opacity-0'}`}>{lead}</div>}
+    <I name="list" size={16} className={`hidden shrink-0 text-muted ${lead && scrolled ? '' : 'sm:block'}`}/>
     <ul ref={list} className="flex min-w-0 flex-1 gap-1.5 overflow-x-auto [scrollbar-width:none]">
       {items.map((i) => <li key={i.id} className="shrink-0">
         <a href={`#${i.id}`} data-id={i.id} aria-current={active === i.id ? 'location' : undefined} onClick={(e) => { e.preventDefault(); go(i.id); }}

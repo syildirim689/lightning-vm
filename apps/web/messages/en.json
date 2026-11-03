@@ -5952,7 +5952,19 @@
     "presenceViewing": "{who} also has this ticket open.",
     "presenceTyping": "{who} is writing a reply — check before you answer.",
     "pasteHint": "You can paste a screenshot here (Ctrl+V); Ctrl+Enter sends. The draft is kept until you send it.",
-    "dropHint": "Drop files on this box or paste a screenshot to attach them."
+    "dropHint": "Drop files on this box or paste a screenshot to attach them.",
+    "mySearch": "Number, subject or server",
+    "statusFilter": "By status",
+    "show": {
+      "all": "All",
+      "answered": "Answered",
+      "open": "With support",
+      "closed": "Closed"
+    },
+    "noMatch": "No ticket matches these filters.",
+    "clearFilters": "Clear filters",
+    "messages": "{n, plural, one {# message} other {# messages}}",
+    "draft": "Draft"
   },
   "Stats": {
     "eyebrow": "Administration",

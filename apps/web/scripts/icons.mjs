@@ -16,6 +16,9 @@ const walk = (dir) => {
       for (const m of src.matchAll(/<I\s+name="([a-z0-9-]+)"/g)) names.add(m[1]);
       // Conditional names: every quoted name inside name={...}.
       for (const m of src.matchAll(/<I\s+name=\{([^}]*)\}/g)) for (const q of m[1].matchAll(/'([a-z0-9-]+)'/g)) names.add(q[1]);
+      // Lookup tables of icons: `icon: 'name'` fields and objects held in a const named ...icons / ...Icons.
+      for (const m of src.matchAll(/\bicon: '([a-z0-9-]+)'/g)) names.add(m[1]);
+      for (const m of src.matchAll(/const \w*[iI]cons\b[^=]*=\s*\{([^}]*)\}/g)) for (const q of m[1].matchAll(/'([a-z0-9-]+)'/g)) names.add(q[1]);
     }
   }
 };

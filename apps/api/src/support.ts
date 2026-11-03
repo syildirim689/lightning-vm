@@ -81,7 +81,8 @@ export class SupportController {
 
   @Get('tickets')
   async mine(@Req() req: AuthedRequest) {
-    const { rows } = await pool.query(`SELECT ${ticketColumns} ${ticketJoins} WHERE t.owner_id = $1 ORDER BY (t.status = 'answered') DESC, t.updated_at DESC LIMIT 200`, [req.user.id]);
+    const { rows } = await pool.query(`SELECT ${ticketColumns}, (SELECT count(*)::int FROM ticket_messages m WHERE m.ticket_id = t.id AND NOT m.internal) AS messages
+      ${ticketJoins} WHERE t.owner_id = $1 ORDER BY (t.status = 'answered') DESC, t.updated_at DESC LIMIT 200`, [req.user.id]);
     return { tickets: rows };
   }
 

@@ -393,7 +393,8 @@ export function ServerDetail({ id }: { id: string }) {
         {own && <OrderSimilar server={s} names={(mine ?? []).map((x) => x.name)}/>}
         {own && <CloneServer server={s} names={(mine ?? []).map((x) => x.name)}/>}
         {(own || allowed.delete) && <RenameServer key={s.name} server={s}/>}</>}/>
-    <SectionNav root={page} label={t('detail.sections')} top={t('detail.toTop')}/>
+    <SectionNav root={page} label={t('detail.sections')} top={t('detail.toTop')}
+      lead={<span data-lead className="flex min-w-0 items-center gap-2 border-r border-separator pr-3"><span className="truncate text-sm font-semibold">{s.name}</span><span className="hidden shrink-0 md:inline-flex"><StateBadge server={s}/></span></span>}/>
     {message && <div role="alert"><Notice tone="danger">{message}</Notice></div>}
     {s.billingHold && <Notice tone="danger" title={t('billingHold')}>{t('billingHoldHelp')} <NextLink href="/billing?tab=invoices" className="font-medium text-accent hover:underline">{t('payNow')}</NextLink></Notice>}
     {s.lastOperation?.step === 'awaiting_payment' && <Notice tone="warning" title={t('awaitingPayment')}>{t('awaitingPaymentHelp')} <NextLink href="/billing?tab=invoices" className="font-medium text-accent hover:underline">{t('payNow')}</NextLink></Notice>}

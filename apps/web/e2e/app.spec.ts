@@ -548,6 +548,10 @@ test.describe('server lifecycle (simulator, Turkish customer)', () => {
     await expect(page.getByRole('grid', { name: 'İşlem geçmişi' })).toBeInViewport();
     await expect(sections).toBeInViewport();
     await expect(sections.getByRole('button', { name: 'Başa dön' })).toBeVisible();
+    // Once the header scrolled away, the bar names the server and shows its state.
+    await expect(sections.locator('[data-lead]')).toBeVisible();
+    await expect(sections.locator('[data-lead]')).toContainText('web-1');
+    await page.waitForTimeout(400);
     await page.screenshot({ path: 'test-results/tour/server-sections.png' });
     await page.setViewportSize({ width: 390, height: 900 });
     await expectNoOverflow(page, 'server section bar at 390 px');
@@ -557,6 +561,7 @@ test.describe('server lifecycle (simulator, Turkish customer)', () => {
     await page.screenshot({ path: 'test-results/tour/server-sections-768.png' });
     await sections.getByRole('button', { name: 'Başa dön' }).click();
     await expect.poll(() => page.evaluate(() => scrollY)).toBeLessThan(5);
+    await expect(sections.locator('[data-lead]')).toBeHidden();
     await page.setViewportSize({ width: 1280, height: 720 });
     await page.getByRole('button', { name: 'Benzerini sipariş et' }).click();
     await expect(page).toHaveURL(/\/order$/);
@@ -1447,6 +1452,9 @@ test.describe('people, settings and smart features (English browser)', () => {
     }
     // The order page's workload advisor marks a recommended package.
     await page.goto('/order');
+    // Every workload has its icon (they come from a lookup table the icon bundle must include).
+    const workloads = page.getByRole('radiogroup', { name: 'What will you run?' }).getByRole('radio');
+    for (let i = 0; i < await workloads.count(); i++) await expect(workloads.nth(i).locator('svg'), `icon of workload ${i}`).toHaveCount(1);
     await page.getByRole('radio', { name: 'Website' }).click();
     await page.getByRole('radio', { name: 'Medium' }).click();
     await expect(page.getByText(/Suggested to start/)).toBeVisible();
@@ -1590,6 +1598,7 @@ test.describe('people, settings and smart features (English browser)', () => {
     await page.screenshot({ path: 'test-results/tour/palette-ticket.png' });
     await page.keyboard.press('Enter');
     await expect(page).toHaveURL(/\/admin\/support\/[0-9a-f-]{36}$/);
+    const ticketId = page.url().split('/').pop()!;
     // The inbox: grouped by day, an icon per kind.
     await page.getByRole('button', { name: /notifications/i }).first().click();
     await expect(page.getByRole('dialog').getByText('Today')).toBeVisible();
@@ -1598,7 +1607,28 @@ test.describe('people, settings and smart features (English browser)', () => {
     await page.keyboard.press('Escape');
     // The menu counts tickets waiting for support; the list and the queue on a phone.
     await expect(page.locator('nav a[href="/admin/support"]')).toContainText(/\d/);
+    // A second ticket, so the list offers search and status filters; a reply left unsent shows as a draft.
+    const deps = await (await page.request.get('/api/support/departments')).json() as { departments: { id: string }[] };
+    expect((await page.request.post('/api/support/tickets', { headers: { 'x-lightning-csrf': '1' }, data: { subject: 'Invoice address question', departmentId: deps.departments[0].id, priority: 'low', serverId: null, body: 'Where do I change it?', attachments: [] } })).ok()).toBe(true);
+    await page.evaluate((id) => localStorage.setItem(`lvm:support-draft:${id}`, 'half written'), ticketId);
+    await page.goto('/support');
+    const ssh = page.getByRole('link', { name: /Cannot reach my server over SSH/ });
+    await expect(ssh.getByText('Draft', { exact: true })).toBeVisible();
+    await expect(ssh.getByText(/\d+ messages?/)).toBeAttached();
+    await page.getByRole('searchbox', { name: 'Number, subject or server' }).fill('invoice');
+    await expect(ssh).toBeHidden();
+    await expect(page.getByRole('link', { name: /Invoice address question/ })).toBeVisible();
+    await page.getByRole('searchbox', { name: 'Number, subject or server' }).fill('');
+    await page.getByRole('searchbox', { name: 'Number, subject or server' }).fill('nothing like this');
+    await page.getByRole('status').getByRole('button', { name: 'Clear filters' }).click();
+    await expect(ssh).toBeVisible();
+    await expect(page.getByRole('group', { name: 'By status' }).getByRole('button', { name: /^All 2/ })).toHaveAttribute('aria-pressed', 'true');
+    await page.screenshot({ path: 'test-results/tour/support-list.png' });
+    await page.goto('/admin/support');
+    await expect(page.getByRole('link', { name: /Cannot reach my server over SSH/ }).getByText('Draft', { exact: true })).toBeVisible();
     await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto('/support');
+    await expectNoOverflow(page, 'support list at 390 px');
     for (const [path, name] of [['/support', 'support-list-phone'], ['/admin/support', 'support-queue-phone']]) {
       await page.goto(path);
       await expect(page.getByText('Cannot reach my server over SSH').first()).toBeVisible();

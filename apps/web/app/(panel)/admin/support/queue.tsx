@@ -12,7 +12,7 @@ import { useMe } from '../../../../lib/me';
 import { can } from '../../../../lib/permissions';
 import { useApiQuery } from '../../../../lib/query';
 import CannedReplies from './canned';
-import { Deadline, departmentName, PriorityBadge, StatusBadge, useDepartments, type Ticket } from '../../support/ui';
+import { Deadline, departmentName, DraftBadge, PriorityBadge, StatusBadge, useDepartments, useDrafts, type Ticket } from '../../support/ui';
 
 type Stats = { active: number; waiting: number; overdue: number; unassigned: number; firstResponseHours: number | null; rating: number | null };
 
@@ -21,6 +21,7 @@ export default function SupportQueue() {
   const locale = useLocale();
   const format = useFormatter();
   const now = useNow({ updateInterval: 60_000 });
+  const drafts = useDrafts();
   const deps = useDepartments();
   const me = useMe();
   const [status, setStatus] = useQueryState('status', parseAsString.withDefault('active'));
@@ -66,7 +67,7 @@ export default function SupportQueue() {
             <span className="flex shrink-0 flex-wrap items-center gap-2">
               {x.assigneeEmail ? <span className="inline-flex items-center gap-1 text-xs text-muted"><I name="user" size={12}/>{x.assigneeEmail.split('@')[0]}</span>
                 : <span className="text-xs text-warning">{t('unassigned')}</span>}
-              <Deadline dueAt={x.dueAt}/><PriorityBadge priority={x.priority}/><StatusBadge status={x.status}/>
+              {drafts.has(x.id) && <DraftBadge/>}<Deadline dueAt={x.dueAt}/><PriorityBadge priority={x.priority}/><StatusBadge status={x.status}/>
             </span>
           </NextLink>
         </motion.li>)}</ul>}

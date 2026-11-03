@@ -28,6 +28,17 @@ export function StatusBadge({ status }: { status: Status }) {
   const t = useTranslations('Support');
   return <span className={`inline-flex shrink-0 items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${statusTone[status]}`}>{t(`status.${status}`)}</span>;
 }
+// Tickets with an unsent reply kept in this browser (the reply box saves it), read after mount.
+const draftPrefix = 'lvm:support-draft:';
+export function useDrafts() {
+  const [ids, setIds] = useState<Set<string>>(new Set());
+  useEffect(() => { try { setIds(new Set(Object.keys(localStorage).filter((k) => k.startsWith(draftPrefix) && localStorage.getItem(k)?.trim()).map((k) => k.slice(draftPrefix.length)))); } catch { /* storage blocked */ } }, []);
+  return ids;
+}
+export function DraftBadge() {
+  const t = useTranslations('Support');
+  return <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-dashed border-accent/60 px-2.5 py-0.5 text-xs font-medium text-accent"><I name="pencil-line" size={12}/>{t('draft')}</span>;
+}
 export function PriorityBadge({ priority }: { priority: Priority }) {
   const t = useTranslations('Support');
   return <span className={`inline-flex shrink-0 items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium ${priorityTone[priority]}`}>
@@ -84,7 +95,7 @@ export function Composer({ ticketId, staff, closed, onSent, vars, onWriting }: {
   const t = useTranslations('Support');
   const { error, field } = useErrorText();
   // An unsent reply is kept in this browser per ticket, so leaving the page loses nothing.
-  const draftKey = `lvm:support-draft:${ticketId}`;
+  const draftKey = `${draftPrefix}${ticketId}`;
   const [body, setBodyState] = useState('');
   useEffect(() => { try { setBodyState(localStorage.getItem(draftKey) ?? ''); } catch { /* storage blocked */ } }, [draftKey]);
   useEffect(() => { onWriting?.(!!body.trim()); }, [body]); // eslint-disable-line react-hooks/exhaustive-deps
