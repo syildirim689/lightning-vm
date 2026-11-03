@@ -4283,7 +4283,11 @@
     "unprotectedBody": "Bu sunuculara gelen tüm trafik açık. Tek tıkla hepsini kapsayan bir duvar oluşturabilirsiniz.",
     "protectAll": "Bunlar için duvar oluştur",
     "noneMatch": "Bu filtreye uyan güvenlik duvarı yok.",
-    "showAll": "Hepsini göster"
+    "showAll": "Hepsini göster",
+    "quickHas": "{name} kuralı zaten var",
+    "scopeAll": "Herkese açık",
+    "scopeSome": "{n} adrese açık",
+    "ruleLimit": "kural sınırı doldu"
   },
   "Updates": {
     "title": "Güncellemeler",
@@ -6959,7 +6963,19 @@
     "brandAccent": "Renk",
     "brandSave": "Markayı kaydet",
     "brandSaved": "Marka kaydedildi",
-    "brandNote": "Ad boşsa müşterileriniz paneli olduğu gibi görür. Markanızı siz de görürsünüz."
+    "brandNote": "Ad boşsa müşterileriniz paneli olduğu gibi görür. Markanızı siz de görürsünüz.",
+    "priceYou": "Size maliyeti:",
+    "perMonth": "/ ay, indiriminizle",
+    "lastSeen": "son görülme {when}",
+    "neverSeen": "henüz giriş yapmadı",
+    "brandPreview": "Önizleme",
+    "sort": "Sırala",
+    "sortBy": {
+      "name": "Ada göre",
+      "monthly": "Aylık tutara göre",
+      "servers": "Sunucu sayısına göre"
+    },
+    "noMatch": "Aramaya uyan müşteri yok."
   },
   "Placement": {
     "title": "Yerleşim",

@@ -113,8 +113,12 @@ function RulesEditor({ firewall, onSaved }: { firewall: Detail; onSaved: () => v
     const list = rules.map((r, i) => ({ r, i })).filter(({ r }) => r.direction === direction);
     return <Section title={t(direction === 'in' ? 'inbound' : 'outbound')} description={t(direction === 'in' ? 'inboundHelp' : 'outboundHelp')}
       actions={<div className="flex flex-wrap gap-1.5">
-        {Object.entries(quick).filter(([k]) => (direction === 'in' ? k !== 'dns' : ['dns', 'http', 'https'].includes(k))).map(([k, r]) =>
-          <Button key={k} size="sm" variant="tertiary" isDisabled={rules.length >= firewall.limits.rulesPerFirewall} onPress={() => add({ direction, ...r })}><I name="plus" size={14}/>{r.description}</Button>)}
+        {Object.entries(quick).filter(([k]) => (direction === 'in' ? k !== 'dns' : ['dns', 'http', 'https'].includes(k))).map(([k, r]) => {
+          // A shortcut whose rule is already in the list shows a tick instead of adding a duplicate.
+          const has = rules.some((x) => x.direction === direction && x.protocol === r.protocol && (x.port ?? '') === (r.port ?? ''));
+          return <Button key={k} size="sm" variant="tertiary" isDisabled={has || rules.length >= firewall.limits.rulesPerFirewall} aria-label={has ? t('quickHas', { name: r.description }) : undefined}
+            onPress={() => add({ direction, ...r })}><I name={has ? 'check' : 'plus'} size={14}/>{r.description}</Button>;
+        })}
         <Button size="sm" variant="secondary" isDisabled={rules.length >= firewall.limits.rulesPerFirewall}
           onPress={() => add({ direction, protocol: 'tcp', port: '', ips: anywhere, description: '' })}><I name="plus" size={14}/>{t('addRule')}</Button>
       </div>}>
@@ -134,6 +138,8 @@ function RulesEditor({ firewall, onSaved }: { firewall: Detail; onSaved: () => v
                   <button type="button" className="text-xs text-accent hover:underline" onClick={() => setIpText((x) => x.map((y, j) => (j === i ? ipsText(anywhere) : y)))}>{t('anywhere')}</button>
                   {direction === 'in' && myIp && <button type="button" className="text-xs text-accent hover:underline" onClick={() => setIpText((x) => x.map((y, j) => (j === i ? `${myIp}/${myIp.includes(':') ? 128 : 32}` : y)))}>· {t('myIp', { ip: myIp })}</button>}
                   <span className="text-xs text-muted">· {t('ipsHelp')}</span>
+                  {direction === 'in' && <Chip size="sm" variant="soft" color={parseIps(ipText[i] ?? '').some((x) => anywhere.includes(x)) ? 'warning' : 'success'} className="ml-auto">
+                    {parseIps(ipText[i] ?? '').some((x) => anywhere.includes(x)) ? t('scopeAll') : t('scopeSome', { n: parseIps(ipText[i] ?? '').length })}</Chip>}
                 </div>
               </div>
               <TextInput label={t('description')} value={r.description} onChange={(v) => update(i, { description: v })} maxLength={255}/>
@@ -149,7 +155,8 @@ function RulesEditor({ firewall, onSaved }: { firewall: Detail; onSaved: () => v
     {block('out')}
     {warnings.length > 0 && <Notice tone="warning" title={t('warn.title')}><ul className="list-disc ps-4">{warnings.map((w) => <li key={w}>{w}</li>)}</ul></Notice>}
     <div className="sticky bottom-4 z-30 rounded-2xl border border-border bg-overlay/95 p-3 shadow-lg backdrop-blur">
-      <FormActions status={dirty ? <span className="text-warning">{t('unsaved')} <span className="hidden text-muted sm:inline">· {t('saveShortcut')}</span></span> : <span className="text-muted">{t('ruleTotal', { n: rules.length, max: firewall.limits.rulesPerFirewall })}</span>}>
+      <FormActions status={dirty ? <span className="text-warning">{t('unsaved')} <span className="hidden text-muted sm:inline">· {t('saveShortcut')}</span></span> : <span className={rules.length >= firewall.limits.rulesPerFirewall ? 'text-warning' : 'text-muted'}>{t('ruleTotal', { n: rules.length, max: firewall.limits.rulesPerFirewall })}
+        {rules.length >= firewall.limits.rulesPerFirewall && <> · {t('ruleLimit')}</>}</span>}>
         <Button variant="tertiary" isDisabled={!dirty || busy} onPress={reset}>{t('discard')}</Button>
         <Button isPending={busy} isDisabled={!dirty} onPress={save}><I name="check" size={16}/>{t('saveRules')}</Button>
       </FormActions>

@@ -1137,8 +1137,12 @@ test.describe('people, settings and smart features (English browser)', () => {
     await page.getByRole('button', { name: /My IP/ }).last().click();
     await expect(page.getByRole('textbox', { name: 'Source addresses' }).last()).toHaveValue(/\/(32|128)$/);
     await expect(page.getByText('Port 3306 (MySQL)', { exact: false })).toHaveCount(0);
-    await page.getByRole('button', { name: 'SSH', exact: true }).first().click();
-    await expect(page.getByText('The "SSH" rule appears twice')).toBeVisible();
+    // The SSH shortcut is ticked (already there); typing the same rule by hand is flagged as a duplicate.
+    await expect(page.getByRole('button', { name: 'The SSH rule is already there' }).first()).toBeDisabled();
+    await expect(page.getByText('Open to everyone').first()).toBeVisible();
+    await page.getByRole('button', { name: 'Rule', exact: true }).first().click();
+    await page.getByRole('textbox', { name: 'Port or range' }).last().fill('22');
+    await expect(page.getByText('The "TCP 22" rule appears twice')).toBeVisible();
     await page.screenshot({ path: 'test-results/tour/firewall-hints.png', fullPage: true });
     await page.setViewportSize({ width: 390, height: 900 });
     await expectNoOverflow(page, 'firewall rules at 390 px');

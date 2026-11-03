@@ -4283,7 +4283,11 @@
     "unprotectedBody": "All incoming traffic to these servers is open. You can create one firewall covering all of them in one click.",
     "protectAll": "Create a firewall for these",
     "noneMatch": "No firewall matches this filter.",
-    "showAll": "Show all"
+    "showAll": "Show all",
+    "quickHas": "The {name} rule is already there",
+    "scopeAll": "Open to everyone",
+    "scopeSome": "Open to {n, plural, one {# address} other {# addresses}}",
+    "ruleLimit": "rule limit reached"
   },
   "Updates": {
     "title": "Updates",
@@ -6959,7 +6963,19 @@
     "brandAccent": "Colour",
     "brandSave": "Save brand",
     "brandSaved": "Brand saved",
-    "brandNote": "Empty name: your customers see the panel as it is. You see your brand too."
+    "brandNote": "Empty name: your customers see the panel as it is. You see your brand too.",
+    "priceYou": "Costs you:",
+    "perMonth": "/ month, with your discount",
+    "lastSeen": "last seen {when}",
+    "neverSeen": "not signed in yet",
+    "brandPreview": "Preview",
+    "sort": "Sort",
+    "sortBy": {
+      "name": "By name",
+      "monthly": "By monthly amount",
+      "servers": "By server count"
+    },
+    "noMatch": "No customer matches the search."
   },
   "Placement": {
     "title": "Placement",

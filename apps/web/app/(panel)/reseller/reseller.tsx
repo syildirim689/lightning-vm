@@ -9,6 +9,7 @@ import { useState } from 'react';
 import { I } from '../../../components/icon';
 import { DataTable, Empty, Mono, Notice, PageHeader, Section, SelectInput, StatusChip, TextInput } from '../../../components/ui';
 import { apiFetch, type ApiError, useErrorText } from '../../../lib/api';
+import { fold } from '../../../lib/note-line';
 import { useApiQuery } from '../../../lib/query';
 
 type Allocation = { discountPct: number; maxCustomers: number | null; maxServers: number | null; maxVcpu: number | null; maxMemoryMb: number | null; maxDiskGb: number | null };
@@ -27,8 +28,9 @@ function Meter({ label, used, max, unit = '' }: { label: string; used: number; m
   </div>;
 }
 
-function OrderForCustomer({ customer, onDone }: { customer: Customer; onDone: () => void }) {
+function OrderForCustomer({ customer, discount, onDone }: { customer: Customer; discount: number; onDone: () => void }) {
   const t = useTranslations('Reseller');
+  const format = useFormatter();
   const { error, field } = useErrorText();
   const catalog = useApiQuery<Catalog>(['catalog'], '/catalog').data;
   const [v, setV] = useState({ poolId: '', packageId: '', imageId: '', name: '', sshKey: '' });
@@ -53,6 +55,10 @@ function OrderForCustomer({ customer, onDone }: { customer: Customer; onDone: ()
     <SelectInput label={t('image')} value={v.imageId} onChange={set('imageId')} error={field(fields.imageId)} options={images.map((i) => ({ id: i.id, label: i.name }))}/>
     <TextInput label={t('hostname')} value={v.name} onChange={(x) => setV({ ...v, name: x.toLowerCase() })} error={field(fields.name)} placeholder="web-1"/>
     <div className="sm:col-span-2"><TextInput label={t('sshKey')} value={v.sshKey} onChange={set('sshKey')} multiline error={field(fields.sshKey) ?? field(fields.sshKeyIds)} help={t('sshKeyHelp')}/></div>
+    {pkg && <p className="flex flex-wrap items-baseline gap-2 text-sm sm:col-span-2"><I name="receipt" size={14} className="self-center text-muted"/>{t('priceYou')}
+      <strong className="tabular-nums">{format.number(Number(pkg.priceMonthly) * (1 - discount / 100), { style: 'currency', currency: pkg.currency })}</strong>
+      {discount > 0 && <span className="text-xs text-muted line-through tabular-nums">{format.number(Number(pkg.priceMonthly), { style: 'currency', currency: pkg.currency })}</span>}
+      <span className="text-xs text-muted">{t('perMonth')}</span></p>}
     <div className="flex flex-wrap gap-2 sm:col-span-2">
       <Button type="submit" isPending={busy} isDisabled={!v.poolId || !v.packageId || !v.imageId || !v.name || !v.sshKey.trim()}><I name="rocket" size={15}/>{t('order')}</Button>
       <Button variant="ghost" onPress={onDone}>{t('cancel')}</Button>
@@ -60,7 +66,7 @@ function OrderForCustomer({ customer, onDone }: { customer: Customer; onDone: ()
   </form>;
 }
 
-function CustomerRow({ c }: { c: Customer }) {
+function CustomerRow({ c, discount }: { c: Customer; discount: number }) {
   const t = useTranslations('Reseller');
   const format = useFormatter();
   const client = useQueryClient();
@@ -71,7 +77,7 @@ function CustomerRow({ c }: { c: Customer }) {
   return <li className="rounded-2xl border border-border p-3">
     <div className="flex flex-wrap items-center gap-3">
       <span className="grid size-9 shrink-0 place-items-center rounded-full bg-default text-sm font-semibold" aria-hidden>{(c.name || c.email)[0]!.toUpperCase()}</span>
-      <span className="flex min-w-0 flex-1 flex-col"><span className="truncate font-medium">{c.name || c.email}</span><span className="truncate text-xs text-muted">{c.email}</span></span>
+      <span className="flex min-w-0 flex-1 flex-col"><span className="truncate font-medium">{c.name || c.email}</span><span className="truncate text-xs text-muted">{c.email}{' · '}{c.lastSeenAt ? t('lastSeen', { when: format.relativeTime(new Date(c.lastSeenAt)) }) : t('neverSeen')}</span></span>
       <StatusChip tone="default">{t('serverCount', { n: c.servers })}</StatusChip>
       <span className="text-sm tabular-nums">{format.number(Number(c.monthly), { style: 'currency', currency: 'EUR' })}</span>
       <Button size="sm" variant="ghost" aria-expanded={open} onPress={() => setOpen(!open)}><I name={open ? 'chevron-up' : 'chevron-down'} size={14}/>{t('details')}</Button>
@@ -82,7 +88,7 @@ function CustomerRow({ c }: { c: Customer }) {
           columns={[{ id: 'n', label: t('server') }, { id: 'ip', label: 'IP' }, { id: 'size', label: t('size') }, { id: 'state', label: t('state') }]}
           cells={(s) => [<NextLink key="n" href={`/servers/${s.id}`} className="font-medium text-accent hover:underline">{s.name}</NextLink>, s.address ? <Mono key="ip">{s.address}</Mono> : '–',
             `${s.vcpu} vCPU · ${s.memoryMb / 1024} GB · ${s.diskGb} GB`, <StatusChip key="s" tone={s.state === 'ready' ? (s.powerState === 'poweredOn' ? 'success' : 'default') : 'warning'}>{t(`states.${s.state === 'ready' ? (s.powerState === 'poweredOn' ? 'on' : 'off') : 'busy'}`)}</StatusChip>]}/>}
-      {ordering ? <OrderForCustomer customer={c} onDone={() => { setOrdering(false); void client.invalidateQueries({ queryKey: ['reseller'] }); }}/>
+      {ordering ? <OrderForCustomer customer={c} discount={discount} onDone={() => { setOrdering(false); void client.invalidateQueries({ queryKey: ['reseller'] }); }}/>
         : <div><Button size="sm" variant="secondary" onPress={() => setOrdering(true)}><I name="plus" size={14}/>{t('orderFor')}</Button></div>}
     </div>}
   </li>;
@@ -98,6 +104,7 @@ function BrandForm() {
   const [busy, setBusy] = useState(false);
   if (!q.data) return null;
   const doc = v ?? { name: q.data.name ?? '', accent: q.data.accent ?? '#2563eb' };
+  const shown = doc.name.trim() || t('brandNamePlaceholder');
   async function save() {
     setBusy(true); setFields({});
     try { await apiFetch('/reseller/brand', { method: 'PUT', body: doc }); toast.success(t('brandSaved')); }
@@ -110,6 +117,13 @@ function BrandForm() {
         <input type="color" value={doc.accent} onChange={(e) => setV({ ...doc, accent: e.target.value })} className="h-10 w-20 cursor-pointer rounded-lg border border-border bg-surface" aria-label={t('brandAccent')}/>
         {fields.accent && <span className="text-xs text-danger">{field(fields.accent)}</span>}</label>
       <Button isPending={busy} onPress={save}><I name="palette" size={15}/>{t('brandSave')}</Button>
+    </div>
+    {/* What customers see in the panel corner, as it is being typed. */}
+    <div className="mt-3 flex flex-wrap items-center gap-3 rounded-xl border border-dashed border-border p-3">
+      <span className="text-xs uppercase tracking-wider text-muted">{t('brandPreview')}</span>
+      <span className="flex items-center gap-2"><span aria-hidden className="grid size-8 place-items-center rounded-lg text-sm font-bold text-white" style={{ background: doc.accent }}>{shown[0]!.toUpperCase()}</span>
+        <span className="font-semibold">{shown}</span></span>
+      <span aria-hidden className="rounded-full px-3 py-1 text-xs font-medium text-white" style={{ background: doc.accent }}>{t('order')}</span>
     </div>
     <p className="mt-2 text-xs text-muted">{t('brandNote')}</p>
   </Section>;
@@ -127,6 +141,7 @@ export default function Reseller() {
   const [fields, setFields] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
   const [search, setSearch] = useState('');
+  const [sort, setSort] = useState('name');
   if (s.error) return <><PageHeader title={t('title')}/><Notice tone="warning">{error(s.error)}</Notice></>;
   if (!s.data) return <div className="h-48 animate-pulse rounded-3xl bg-default/50"/>;
   if (!s.data.allocation || !s.data.usage) return <><PageHeader title={t('title')}/><Notice tone="default">{t('notReseller')}</Notice></>;
@@ -136,7 +151,8 @@ export default function Reseller() {
     try { await apiFetch('/reseller/customers', { method: 'POST', body: { email, name } }); toast.success(t('added', { email })); setEmail(''); setName(''); void client.invalidateQueries({ queryKey: ['reseller'] }); }
     catch (err) { setFields((err as ApiError).fields ?? {}); toast.danger(error(err)); } finally { setBusy(false); }
   }
-  const list = (c.data?.customers ?? []).filter((x) => !search || `${x.email} ${x.name}`.toLowerCase().includes(search.toLowerCase()));
+  const list = (c.data?.customers ?? []).filter((x) => !search || fold(`${x.email} ${x.name}`).includes(fold(search)))
+    .sort((x, y) => sort === 'monthly' ? Number(y.monthly) - Number(x.monthly) : sort === 'servers' ? y.servers - x.servers : (x.name || x.email).localeCompare(y.name || y.email, 'tr'));
   return <>
     <PageHeader title={t('title')} description={t('intro', { discount: a.discountPct })}/>
     <div className="flex flex-col gap-6">
@@ -157,9 +173,12 @@ export default function Reseller() {
             <TextInput label={t('name')} value={name} onChange={setName}/>
             <Button type="submit" isPending={busy} isDisabled={!email}><I name="user-plus" size={15}/>{t('add')}</Button>
           </form>
-          {(c.data?.customers.length ?? 0) > 5 && <TextInput label={t('search')} value={search} onChange={setSearch}/>}
-          {!list.length ? <Empty icon={<I name="users" size={28}/>} title={t('none')}>{t('noneHelp')}</Empty>
-            : <ul className="flex flex-col gap-2">{list.map((x) => <CustomerRow key={x.id} c={x}/>)}</ul>}
+          {(c.data?.customers.length ?? 0) > 1 && <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_12rem] sm:items-end">
+            <TextInput label={t('search')} value={search} onChange={setSearch}/>
+            <SelectInput label={t('sort')} value={sort} onChange={(x) => setSort(x || 'name')} options={(['name', 'monthly', 'servers'] as const).map((k) => ({ id: k, label: t(`sortBy.${k}`) }))}/>
+          </div>}
+          {!list.length ? (search ? <p className="py-6 text-center text-sm text-muted">{t('noMatch')}</p> : <Empty icon={<I name="users" size={28}/>} title={t('none')}>{t('noneHelp')}</Empty>)
+            : <ul className="flex flex-col gap-2">{list.map((x) => <CustomerRow key={x.id} c={x} discount={a.discountPct}/>)}</ul>}
         </div>
       </Section>
     </div>
