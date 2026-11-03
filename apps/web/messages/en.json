@@ -4792,7 +4792,8 @@
     "keep": "Keep the newest",
     "keepHelp": "Automatic snapshots kept; the oldest one goes first. Your own snapshots are never removed.",
     "keeps": "keeps {n}",
-    "nightlyBackup": "Nightly backup"
+    "nightlyBackup": "Nightly backup",
+    "next": "Next: {action}"
   },
   "Activity": {
     "actions": {
@@ -7193,6 +7194,8 @@
   "Connection": {
     "lost": "Connection lost",
     "lostHelp": "The panel refreshes itself once the internet is back; actions cannot be sent until then.",
-    "back": "Back online; the page is up to date."
+    "back": "Back online; the page is up to date.",
+    "server": "The panel server is not answering",
+    "serverHelp": "Your internet works but the panel does not answer (maintenance or an update, perhaps). The page refreshes itself once it answers."
   }
 }

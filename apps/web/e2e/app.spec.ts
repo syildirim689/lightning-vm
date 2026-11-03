@@ -528,6 +528,8 @@ test.describe('server lifecycle (simulator, Turkish customer)', () => {
     await page.getByRole('button', { name: 'Gece anlık görüntüsü' }).click();
     await expect(page.getByText('02:00', { exact: true })).toBeVisible();
     await expect(page.getByText(/3 tane saklar/)).toBeVisible();
+    // The next scheduled action and when it comes.
+    await expect(page.getByText(/^Sıradaki: /)).toBeVisible();
     // Snapshot: taken as an operation, then listed as the current state.
     await page.getByLabel('Ad', { exact: true }).fill('guncelleme-oncesi');
     await page.getByRole('button', { name: 'Anlık görüntü al', exact: true }).click();
@@ -1665,6 +1667,13 @@ test.describe('people, settings and smart features (English browser)', () => {
     await page.context().setOffline(false);
     await expect(page.getByText('Back online; the page is up to date.')).toBeVisible();
     await expect(page.getByRole('status').filter({ hasText: 'Connection lost' })).toBeHidden();
+    // Internet up but the panel's server gives gateway errors: its own banner, gone once it answers again.
+    await page.route('**/api/**', (r) => r.fulfill({ status: 502, contentType: 'text/html', body: '<h1>Bad Gateway</h1>' }));
+    await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
+    await page.keyboard.press('Control+k'); await page.keyboard.press('Escape');
+    await expect(page.getByRole('status').filter({ hasText: 'The panel server is not answering' })).toBeVisible({ timeout: 30_000 });
+    await page.unroute('**/api/**');
+    await expect(page.getByRole('status').filter({ hasText: 'The panel server is not answering' })).toBeHidden({ timeout: 30_000 });
     // The menu counts tickets waiting for support; the list and the queue on a phone.
     await expect(page.locator('nav a[href="/admin/support"]')).toContainText(/\d/);
     // A second ticket, so the list offers search and status filters; a reply left unsent shows as a draft.

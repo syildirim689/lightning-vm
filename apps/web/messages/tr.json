@@ -4792,7 +4792,8 @@
     "keep": "Saklanacak en yeni",
     "keepHelp": "Saklanan otomatik görüntü sayısı; önce en eskisi silinir. Kendi aldığınız görüntülere hiç dokunulmaz.",
     "keeps": "{n} tane saklar",
-    "nightlyBackup": "Gece yedeği"
+    "nightlyBackup": "Gece yedeği",
+    "next": "Sıradaki: {action}"
   },
   "Activity": {
     "actions": {
@@ -7193,6 +7194,8 @@
   "Connection": {
     "lost": "Bağlantı kesildi",
     "lostHelp": "İnternet geri gelince panel kendini güncelleyecek; bu arada yapılan işlemler gönderilemez.",
-    "back": "Bağlantı geri geldi; sayfa güncellendi."
+    "back": "Bağlantı geri geldi; sayfa güncellendi.",
+    "server": "Panel sunucusuna ulaşılamıyor",
+    "serverHelp": "İnternetiniz çalışıyor ama panel yanıt vermiyor (bakım veya güncelleme olabilir). Yanıt gelince sayfa kendini günceller."
   }
 }
