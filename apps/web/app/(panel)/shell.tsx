@@ -171,8 +171,9 @@ export default function Shell({ user, branding, version, children }: { user: Use
           </Drawer>
           <div className="min-w-0 lg:hidden"><Brand branding={branding} href={home}/></div>
           <button type="button" onClick={() => setPalette(true)} aria-label={t('search')}
-            className="ml-auto hidden h-9 min-w-56 items-center gap-2 rounded-lg border border-border bg-default/50 px-3 text-sm text-muted transition-colors hover:border-accent md:flex lg:ml-0">
-            <I name="search" size={16}/><span className="flex-1 text-left">{t('search')}</span><span className="flex gap-0.5"><Kbd>Ctrl</Kbd><Kbd>K</Kbd></span>
+            className="ml-auto hidden h-9 min-w-0 shrink items-center gap-2 rounded-lg border border-border bg-default/50 px-3 text-sm text-muted transition-colors hover:border-accent md:flex md:w-48 lg:ml-0 lg:w-auto lg:min-w-56">
+            {/* One line at every width: the text shortens and the key hint goes on narrow headers (tablets). */}
+            <I name="search" size={16} className="shrink-0"/><span className="min-w-0 flex-1 truncate whitespace-nowrap text-left">{t('search')}</span><span className="hidden shrink-0 gap-0.5 lg:flex"><Kbd>Ctrl</Kbd><Kbd>K</Kbd></span>
           </button>
           <div className="ml-auto flex items-center gap-0.5 sm:gap-1">
             <Button isIconOnly variant="ghost" size="sm" aria-label={t('search')} className="md:hidden" onPress={() => setPalette(true)}><I name="search" size={18}/></Button>

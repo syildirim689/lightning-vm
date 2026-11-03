@@ -681,6 +681,8 @@ test.describe('server lifecycle (simulator, Turkish customer)', () => {
     await expect(welcome.getByText(/sunucunuz|sunucunuzda|Sunucunuz/)).toBeVisible();
     await expect(welcome.getByRole('navigation', { name: 'Son açtıklarınız' }).getByRole('link', { name: 'web-2' })).toBeVisible();
     // What the shown servers add up to.
+    // Each card says what the server costs.
+    await expect(serverList.getByText(/\/(ay|saat)$/).first()).toBeVisible();
     const totals = page.getByRole('status', { name: 'Gösterilen sunucuların toplamı' });
     await expect(totals).toContainText('2 sunucu');
     await expect(totals).toContainText('vCPU');
@@ -1214,6 +1216,9 @@ test.describe('people, settings and smart features (English browser)', () => {
     const made = await page.request.post('/api/admin/billing/invoices', { headers: csrf, data: { userId: me.id, currency: 'TRY', lines: [{ description: 'Kurulum hizmeti', unitPrice: '250', quantity: 1 }], dueDays: 7 } });
     expect(made.ok()).toBe(true);
     const { invoiceId } = await made.json();
+    // My servers greets with the unpaid invoice, which links to billing.
+    await page.goto('/');
+    await expect(page.getByRole('region', { name: 'Welcome' }).getByRole('link', { name: /1 unpaid invoice/ })).toBeVisible();
     await page.goto('/billing');
     await expect(page.getByRole('heading', { level: 1 })).toHaveText('Billing');
     await expect(page.getByText('Your invoice details are missing')).toBeVisible();
@@ -1621,6 +1626,8 @@ test.describe('people, settings and smart features (English browser)', () => {
     if (await kinds.isVisible()) {
       await kinds.getByRole('button').first().click();
       await expect(kinds.getByRole('button').first()).toHaveAttribute('aria-pressed', 'true');
+      const bg = (n: number) => kinds.getByRole('button').nth(n).evaluate((e) => getComputedStyle(e).backgroundColor);
+      expect(await bg(0), 'the chosen kind stands out').not.toBe(await bg(1));
     }
     await page.waitForTimeout(300);
     await page.screenshot({ path: 'test-results/tour/bell-filters.png' });
@@ -1723,6 +1730,8 @@ test.describe('people, settings and smart features (English browser)', () => {
     await shot(page, 'users-390');
     await page.setViewportSize({ width: 820, height: 1180 });
     await page.waitForTimeout(400);
+    // On a tablet the header search stays on one line.
+    expect((await page.locator('header').getByRole('button', { name: /^Search or jump to/ }).first().boundingBox())!.height, 'header search height at 820 px').toBeLessThanOrEqual(40);
     await shot(page, 'users-820');
     await page.setViewportSize({ width: 1280, height: 720 });
     // Who is here: the overview's "Online now" shows this admin; the users' "Online or active" card filters to them.

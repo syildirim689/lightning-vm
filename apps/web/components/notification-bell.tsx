@@ -75,7 +75,7 @@ export default function NotificationBell() {
           </div>
           {kinds.length > 1 && <div role="group" aria-label={t('kinds')} className="flex flex-wrap gap-1.5">
             {kinds.map((k) => <button key={k} type="button" aria-pressed={kind === k} onClick={() => setKind(kind === k ? null : k)}
-              className={`flex min-h-8 items-center gap-1 rounded-full border px-2.5 text-xs transition-colors focus-visible:outline-2 focus-visible:outline-accent ${kind === k ? 'border-accent bg-accent-soft text-accent-soft-foreground' : 'border-border text-muted hover:border-accent hover:text-foreground'}`}>
+              className={`flex min-h-8 items-center gap-1 rounded-full border px-2.5 text-xs transition-colors focus-visible:outline-2 focus-visible:outline-accent ${kind === k ? 'border-accent bg-accent font-medium text-accent-foreground' : 'border-border text-muted hover:border-accent hover:text-foreground'}`}>
               <I name={kindIcons[k] ?? 'bell'} size={12}/>{t(`kind.${k as 'server'}`)}</button>)}
           </div>}
         </div>}

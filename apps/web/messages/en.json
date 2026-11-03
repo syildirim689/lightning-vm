@@ -1864,7 +1864,10 @@
         "memory": "{n} GB RAM",
         "disk": "{n} GB disk",
         "monthly": "Monthly ≈ {price}"
-      }
+      },
+      "perMonth": "{price}/mo",
+      "perHour": "{price}/h",
+      "traffic": "Traffic this month: {used} / {quota}"
     },
     "col": {
       "name": "Name",
@@ -7145,6 +7148,9 @@
       "running": "{n, plural, one {Your server is running} other {All # servers are running}}"
     },
     "show": "Show",
-    "recent": "Recently opened"
+    "recent": "Recently opened",
+    "unpaid": "{n, plural, one {# unpaid invoice} other {# unpaid invoices}} · {amount}",
+    "overdue": "{n, plural, one {# invoice overdue} other {# invoices overdue}} · {amount}",
+    "answered": "{n, plural, one {Support answered your ticket} other {Support answered # tickets}}"
   }
 }

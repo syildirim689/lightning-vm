@@ -19,7 +19,7 @@ import { remember } from '../../lib/recent';
 import { PowerSchedules } from './server-schedules';
 import { ServerSnapshots } from './server-snapshots';
 import { ServerReinstall, ServerResize } from './server-change';
-import { ServerTraffic } from './server-traffic';
+import { ServerTraffic, useBytes } from './server-traffic';
 import { ServerBackups } from './server-backups';
 import { ServerPlacement } from './server-placement';
 import { ServerDisks } from './server-disks';
@@ -103,6 +103,18 @@ export function ServerList() {
   const [gridRef] = useAutoAnimate<HTMLUListElement>();
   const f = useServerFilters(servers ?? []);
   const format = useFormatter();
+  const bytes = useBytes();
+  // What the server costs: per hour when billed hourly, else per month.
+  const price = (s: Server) => s.billingMode === 'hourly' && s.priceHourly
+    ? t('list.perHour', { price: format.number(Number(s.priceHourly), { style: 'currency', currency: s.currency }) })
+    : Number(s.priceMonthly) > 0 ? t('list.perMonth', { price: format.number(Number(s.priceMonthly), { style: 'currency', currency: s.currency }) }) : null;
+  // This month's traffic against the quota, when the server has one.
+  const traffic = (s: Server) => { if (!s.trafficGb) return null; const used = s.trafficBytes ?? 0, pct = Math.min(100, Math.round((used / (s.trafficGb * 1024 ** 3)) * 100));
+    return <span className="flex items-center gap-2 text-xs text-muted" title={t('list.traffic', { used: bytes(used), quota: `${s.trafficGb} GB` })}>
+      <I name="arrow-down-up" size={12} className="shrink-0"/>
+      <span role="meter" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100} aria-label={t('list.traffic', { used: bytes(used), quota: `${s.trafficGb} GB` })} className="h-1.5 w-20 overflow-hidden rounded-full bg-default">
+        <span className={`block h-full rounded-full ${s.trafficThrottled || pct >= 100 ? 'bg-danger' : pct >= 80 ? 'bg-warning' : 'bg-success'}`} style={{ width: `${Math.max(pct, 2)}%` }}/></span>
+      <span className="tabular-nums">%{pct}</span></span>; };
   // Selection mode: cards toggle instead of opening, and a bar acts on the chosen ones (only those still shown).
   const [picking, setPicking] = useState(false);
   const [picked, setPicked] = useState<Set<string>>(new Set());
@@ -160,7 +172,9 @@ export function ServerList() {
           <StateBadge server={s}/>
           <span className="min-w-0 sm:w-32">{s.address ? <Mono>{s.address}</Mono> : <span className="text-muted">–</span>}</span>
           <span className="flex items-center gap-1.5 text-muted"><I name="cpu" size={14}/>{size(t, s)}</span>
+          {price(s) && <span className="text-xs font-medium tabular-nums">{price(s)}</span>}
           <span className="flex items-center gap-1 text-xs text-muted"><I name="map-pin" size={12}/>{s.location || s.poolName}</span>
+          {traffic(s)}
           {!!s.tags?.length && <span className="flex flex-wrap gap-1">{s.tags.map((x) => <span key={x} className="rounded-full bg-default px-2 py-0.5 text-xs">{x}</span>)}</span>}
           {firewallFailed(s) && <StatusChip tone="danger">{t('list.firewall.failed', { n: s.firewallCount ?? 0 })}</StatusChip>}
           {s.deleteAt && <StatusChip tone="danger">{t('trash.badge', { when: format.relativeTime(new Date(s.deleteAt), new Date()) })}</StatusChip>}
@@ -172,7 +186,9 @@ export function ServerList() {
           </Card.Header>
           <Card.Content className="flex flex-col gap-1.5 text-sm">
             <span className="flex items-center gap-2"><span className="text-muted">IP</span>{s.address ? <Mono>{s.address}</Mono> : '–'}</span>
-            <span className="flex items-center gap-2 text-muted"><I name="cpu" size={14}/>{size(t, s)}</span>
+            <span className="flex items-center justify-between gap-2"><span className="flex min-w-0 items-center gap-2 text-muted"><I name="cpu" size={14} className="shrink-0"/><span className="truncate">{size(t, s)}</span></span>
+              {price(s) && <span className="shrink-0 text-xs font-semibold tabular-nums">{price(s)}</span>}</span>
+            {traffic(s)}
             <span className="flex items-center justify-between gap-2 text-xs text-muted"><span className="truncate">{s.imageName}</span>
               {!!s.firewallCount && <span className={`flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 font-medium ${s.firewallStatus === 'failed' ? 'bg-danger/10 text-danger' : s.firewallStatus === 'pending' ? 'bg-accent-soft text-accent' : 'bg-success/10 text-success'}`}>
                 <I name={firewallFailed(s) ? 'shield-x' : 'shield-check'} size={12}/>{t(`list.firewall.${s.firewallStatus ?? 'applied'}`, { n: s.firewallCount })}</span>}</span>

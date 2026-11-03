@@ -1864,7 +1864,10 @@
         "memory": "{n} GB RAM",
         "disk": "{n} GB disk",
         "monthly": "Aylık ≈ {price}"
-      }
+      },
+      "perMonth": "{price}/ay",
+      "perHour": "{price}/saat",
+      "traffic": "Bu ay trafik: {used} / {quota}"
     },
     "col": {
       "name": "Ad",
@@ -7145,6 +7148,9 @@
       "running": "{n, plural, one {Sunucunuz çalışıyor} other {# sunucunuzun hepsi çalışıyor}}"
     },
     "show": "Göster",
-    "recent": "Son açtıklarınız"
+    "recent": "Son açtıklarınız",
+    "unpaid": "{n} ödenmemiş fatura · {amount}",
+    "overdue": "{n} fatura gecikmiş · {amount}",
+    "answered": "{n, plural, one {Talebinize yanıt geldi} other {# talebinize yanıt geldi}}"
   }
 }
