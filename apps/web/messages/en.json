@@ -389,7 +389,7 @@
       "title": "Two-factor authentication",
       "intro": "Your password is right. Complete the second step to sign in.",
       "app": "App",
-      "sendCode": "SMS / e-mail",
+      "sendCode": "Get a code",
       "backup": "Backup code",
       "appHelp": "Enter the 6-digit code from your authenticator app.",
       "codeSent": "Code sent. Valid for 5 minutes.",

@@ -117,7 +117,7 @@ export default function CredentialsForm({ mode, noToken, onDone }: { mode: Mode;
   const [failure, setFailure] = useState<string>();
   const [busy, setBusy] = useState<string>();
   const [linkMode, setLinkMode] = useState(false);
-  const [secondStep, setSecondStep] = useState(false);
+  const [secondStep, setSecondStep] = useState<boolean | string[]>(false);
   const [emailCode, setEmailCode] = useState(false);
   const [lastMethod, setLastMethod] = useState<string | null>(null);
   const [remember, setRemember] = useState(true);
@@ -188,7 +188,8 @@ export default function CredentialsForm({ mode, noToken, onDone }: { mode: Mode;
         ? await authClient.signIn.email({ email: values.email, password: values.password, rememberMe: remember, fetchOptions })
         : await authClient.signUp.email({ email: values.email, password: values.password, name: '', locale, fetchOptions } as Parameters<typeof authClient.signUp.email>[0]);
       if (res.error) { setFailure(error(asApiError(res.error))); shakeForm(); captcha.reset(); return; }
-      if ((res.data as { twoFactorRedirect?: boolean } | null)?.twoFactorRedirect) { setSecondStep(true); return; }
+      const second = res.data as { twoFactorRedirect?: boolean; twoFactorMethods?: string[] } | null;
+      if (second?.twoFactorRedirect) { setSecondStep(second.twoFactorMethods ?? true); return; }
       setDone(true);
       await landed(router);
     } catch (err) {
@@ -222,7 +223,7 @@ export default function CredentialsForm({ mode, noToken, onDone }: { mode: Mode;
     await landed(router);
   }
 
-  if (secondStep) return <SecondFactor onBack={() => setSecondStep(false)}/>;
+  if (secondStep) return <SecondFactor methods={Array.isArray(secondStep) ? secondStep : undefined} onBack={() => setSecondStep(false)}/>;
   if (emailCode) return <EmailCode initialEmail={values.email} onBack={() => setEmailCode(false)}/>;
   if (linkMode) return <MagicLink initialEmail={values.email.includes('@') ? values.email : ''} onBack={() => setLinkMode(false)}/>;
   // The method used last time: a small tag on the button's top edge, readable on any button colour.
@@ -292,7 +293,8 @@ function CodeInput({ value, onChange, onComplete, label, invalid }: { value: str
 const methodKey = 'lvm-2fa-method';
 
 // The second step after a correct password: authenticator app, a code by SMS/e-mail, or a backup code.
-function SecondFactor({ onBack }: { onBack: () => void }) {
+// `methods` is what the account has (the app only once it was scanned and confirmed); unknown means all.
+function SecondFactor({ methods, onBack }: { methods?: string[]; onBack: () => void }) {
   const t = useTranslations('Auth');
   const { error } = useErrorText();
   const router = useRouter();
@@ -309,8 +311,17 @@ function SecondFactor({ onBack }: { onBack: () => void }) {
   const cooldown = useCooldown(60);
   const shake = useAnimationControls();
   const still = useReducedMotion();
-  // The method used last time on this browser comes first.
-  useEffect(() => { try { const m = localStorage.getItem(methodKey); if (m === 'otp' || m === 'backup' || m === 'totp') setMethod(m); } catch { /* storage off */ } }, []);
+  const has = (m: string) => !methods || methods.includes(m);
+  const tabs = [...(has('totp') ? [{ id: 'totp' as const, label: t('twoFactor.app') }] : []), ...(otpAvailable && has('otp') ? [{ id: 'otp' as const, label: t('twoFactor.sendCode') }] : []),
+    { id: 'backup' as const, label: t('twoFactor.backup') }];
+  const ids = tabs.map((x) => x.id).join();
+  // The method used last time on this browser comes first, when this account has it; otherwise the first one it has.
+  useEffect(() => {
+    let m: string | null = null;
+    try { m = localStorage.getItem(methodKey); } catch { /* storage off */ }
+    const list = ids.split(',') as ('totp' | 'otp' | 'backup')[];
+    setMethod(list.find((x) => x === m) ?? list[0]);
+  }, [ids]);
   const choose = (m: 'totp' | 'otp' | 'backup') => { setMethod(m); setCode(''); setFailure(undefined); try { localStorage.setItem(methodKey, m); } catch { /* storage off */ } };
 
   async function send() {
@@ -336,8 +347,6 @@ function SecondFactor({ onBack }: { onBack: () => void }) {
     await landed(router);
   }
 
-  const tabs = [{ id: 'totp' as const, icon: 'smartphone', label: t('twoFactor.app') }, ...(otpAvailable ? [{ id: 'otp' as const, icon: 'message-square-text', label: t('twoFactor.sendCode') }] : []),
-    { id: 'backup' as const, icon: 'key-round', label: t('twoFactor.backup') }];
   return <motion.form animate={shake} onSubmit={verify} className="relative flex flex-col gap-5" noValidate>
     <FailureGlow count={failures}/>
     <SuccessOverlay show={done} label={t('redirecting')}/>
@@ -348,7 +357,7 @@ function SecondFactor({ onBack }: { onBack: () => void }) {
     </motion.div>
     <div role="tablist" aria-label={t('twoFactor.title')} className="grid rounded-2xl bg-default p-1" style={{ gridTemplateColumns: `repeat(${tabs.length}, minmax(0, 1fr))` }}>
       {tabs.map((tab) => <button key={tab.id} type="button" role="tab" aria-selected={method === tab.id} onClick={() => choose(tab.id)}
-        className="relative flex items-center justify-center gap-1.5 rounded-xl px-2 py-2 text-xs font-medium outline-none focus-visible:ring-2 focus-visible:ring-accent sm:text-sm">
+        className="relative flex items-center justify-center gap-1.5 whitespace-nowrap rounded-xl px-2 py-2 text-xs font-medium outline-none focus-visible:ring-2 focus-visible:ring-accent sm:text-sm">
         {method === tab.id && <motion.span layoutId="tf-tab" className="absolute inset-0 rounded-xl bg-surface shadow-sm" transition={{ type: 'spring', stiffness: 380, damping: 32 }}/>}
         <span className={`relative flex items-center gap-1.5 ${method === tab.id ? 'text-foreground' : 'text-muted'}`}>
           <I name={{ totp: 'smartphone', otp: 'message-square-text', backup: 'key-round' }[tab.id]} size={15}/>{tab.label}</span>

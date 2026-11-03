@@ -389,7 +389,7 @@
       "title": "İki adımlı doğrulama",
       "intro": "Parolanız doğru. Giriş için ikinci adımı tamamlayın.",
       "app": "Uygulama",
-      "sendCode": "SMS / e-posta",
+      "sendCode": "Kod al",
       "backup": "Yedek kod",
       "appHelp": "Doğrulayıcı uygulamanızdaki 6 haneli kodu girin.",
       "codeSent": "Kod gönderildi. 5 dakika geçerli.",

@@ -1712,3 +1712,46 @@ test.describe('people, settings and smart features (English browser)', () => {
     }
   });
 });
+
+// RFC 6238 code for a base32 secret, as an authenticator app computes it.
+async function totp(secret: string) {
+  const { createHmac } = await import('node:crypto');
+  const bits = secret.replace(/=+$/, '').toUpperCase().split('').map((c) => 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567'.indexOf(c).toString(2).padStart(5, '0')).join('');
+  const key = Buffer.from(bits.match(/.{8}/g)!.map((b) => parseInt(b, 2)));
+  const counter = Buffer.alloc(8);
+  counter.writeBigUInt64BE(BigInt(Math.floor(Date.now() / 30_000)));
+  const h = createHmac('sha1', key).update(counter).digest();
+  const o = h[h.length - 1] & 15;
+  return String((h.readUInt32BE(o) & 0x7fffffff) % 1_000_000).padStart(6, '0');
+}
+
+test('second step at sign-in offers only the methods the account has', async ({ browser }) => {
+  const page = await (await browser.newContext({ locale: 'tr-TR' })).newPage();
+  await signIn(page, user);
+  await expect(page).toHaveURL(/\/$/);
+  await page.goto('/account?tab=security');
+  await page.getByRole('button', { name: 'İki adımlı doğrulamayı aç' }).click();
+  const dialog = page.getByRole('dialog');
+  // E2E has no mail or SMS, so the app is the only way to set it up.
+  await dialog.getByLabel('Mevcut parola').fill(user.password);
+  await dialog.getByRole('button', { name: 'Devam' }).click();
+  const secret = (await dialog.locator('code').innerText()).trim();
+  await dialog.getByRole('textbox', { name: 'Doğrulama kodu' }).fill(await totp(secret));
+  await dialog.getByRole('button', { name: 'Kodları kaydettim' }).click();
+  await expect(page.getByText('İki adımlı doğrulama açıldı.')).toBeVisible();
+
+  const again = await (await browser.newContext({ locale: 'tr-TR' })).newPage();
+  await again.setViewportSize({ width: 390, height: 844 });
+  await signIn(again, user);
+  const tabs = again.getByRole('tablist', { name: 'İki adımlı doğrulama' });
+  await expect(tabs.getByRole('tab')).toHaveText(['Uygulama', 'Yedek kod']);
+  await expect(tabs.getByRole('tab', { name: 'Uygulama' })).toHaveAttribute('aria-selected', 'true');
+  await expectNoOverflow(again, 'second step at 390 px');
+  await again.screenshot({ path: 'test-results/tour/login-second-step-390.png' });
+  await again.setViewportSize({ width: 1280, height: 800 });
+  await again.screenshot({ path: 'test-results/tour/login-second-step.png' });
+  // A fresh code (the one used for setup may not be taken twice).
+  await expect.poll(async () => totp(secret), { timeout: 35_000, intervals: [1000] }).not.toBe(await totp(secret));
+  await again.getByRole('textbox', { name: 'Doğrulama kodu' }).fill(await totp(secret));
+  await expect(again).toHaveURL(/\/$/, { timeout: 15_000 });
+});
