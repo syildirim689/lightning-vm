@@ -11,6 +11,7 @@ import { I } from '../../../../components/icon';
 import { ConfirmButton, Empty, FormSection, Mono, Notice, SelectInput, StatusChip, SwitchInput, TextInput, type Tone } from '../../../../components/ui';
 import { apiFetch, useErrorText } from '../../../../lib/api';
 import { useApiQuery } from '../../../../lib/query';
+import { fold } from '../../../../lib/note-line';
 
 type Mode = 'live' | 'test';
 type Field = { key: string; label: [string, string]; secret?: boolean; optional?: boolean; unverifiable?: boolean };
@@ -37,7 +38,6 @@ export default function Payments({ readOnly }: { readOnly: boolean }) {
   const data = q.data;
   const byId = useMemo(() => new Map((data?.gateways ?? []).map((g) => [g.id, g])), [data]);
   if (!data) return <p role="status" className="text-sm text-muted">{q.error ? error(q.error) : t('loading')}</p>;
-  const fold = (s: string) => s.toLocaleLowerCase('tr');
   const list = data.providers.filter((p) => (!kind || p.kind === kind) && (!search || fold(`${p.name} ${p.platform}`).includes(fold(search))));
   const active = data.gateways.filter((g) => g.enabled).sort((a, b) => a.sort - b.sort);
   const name = (id: string) => byId.get(id)?.label || data.providers.find((p) => p.id === id)?.name || id;

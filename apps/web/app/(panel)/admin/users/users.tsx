@@ -17,6 +17,7 @@ import { authClient } from '../../../../lib/auth-client';
 import { useMe } from '../../../../lib/me';
 import { can } from '../../../../lib/permissions';
 import { useApiQuery } from '../../../../lib/query';
+import { fold } from '../../../../lib/note-line';
 import { downloadCsv } from '../../../../lib/csv';
 import { strongPassword } from '../../../../lib/password';
 
@@ -57,8 +58,8 @@ export default function Users() {
   const roleName = (k: string) => (tr.has(`builtinName.${k}` as 'builtinName.admin') ? tr(`builtinName.${k}` as 'builtinName.admin') : roles.find((r) => r.key === k)?.name ?? k);
 
   const rows = useMemo(() => (users ?? []).filter((u) => {
-    const q = search.trim().toLocaleLowerCase('tr');
-    if (q && !`${u.email} ${u.name} ${u.phoneNumber ?? ''} ${u.pinnedNote ?? ''}`.toLocaleLowerCase('tr').includes(q)) return false;
+    const q = fold(search.trim());
+    if (q && !fold(`${u.email} ${u.name} ${u.phoneNumber ?? ''} ${u.pinnedNote ?? ''}`).includes(q)) return false;
     if (role && !u.role.split(',').includes(role)) return false;
     if (status === 'banned' && !u.banned) return false;
     if (status === 'online' && u.presence === 'offline') return false;

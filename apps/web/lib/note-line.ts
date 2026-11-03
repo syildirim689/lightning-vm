@@ -1,4 +1,5 @@
-export const fold = (v: string) => v.toLocaleLowerCase('tr');
+// Turkish lower case, with the dotless ı read as i: "Invoice" and "invoice", "IĞDIR" and "ığdır" match. One character in, one out.
+export const fold = (v: string) => v.toLocaleLowerCase('tr').replace(/ı/g, 'i');
 
 // The note line a card shows: around the search match when the note matched, else its first line.
 export function noteLine(notes: string, q: string) {
