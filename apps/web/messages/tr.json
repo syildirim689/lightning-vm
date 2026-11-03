@@ -2121,7 +2121,10 @@
       "mail": "E-postayı yapılandırın",
       "backup": "İlk yedeği alın",
       "twoFactor": "İki adımlı girişi açın",
-      "progress": "{total} adımdan {done} tamamlandı"
+      "progress": "{total} adımdan {done} tamamlandı",
+      "next": "Sıradaki adım",
+      "showDone": "Tamamlanan {n} adımı göster",
+      "hideDone": "Tamamlananları gizle"
     },
     "stat": {
       "servers": "Hazır sunucular",
@@ -5982,7 +5985,35 @@
     "noMatch": "Bu süzgeçlere uyan talep yok.",
     "clearFilters": "Süzgeçleri temizle",
     "messages": "{n} mesaj",
-    "draft": "Taslak"
+    "draft": "Taslak",
+    "quick": {
+      "title": "Hızlı başlangıç",
+      "ssh": {
+        "label": "SSH'a bağlanamıyorum",
+        "subject": "Sunucuma SSH ile bağlanamıyorum",
+        "body": "Ne zamandan beri:\nAldığım hata:\nKullandığım komut (ssh ...):\nDenediklerim (yeniden başlatma, konsol, güvenlik duvarı):"
+      },
+      "slow": {
+        "label": "Sunucu yavaş",
+        "subject": "Sunucum yavaş çalışıyor",
+        "body": "Ne zamandan beri:\nYavaş olan (web sitesi, veritabanı, disk, ağ):\nCanlı performansta gördüğüm (CPU, bellek, disk):"
+      },
+      "network": {
+        "label": "Ağ / erişim sorunu",
+        "subject": "Sunucuma erişilemiyor",
+        "body": "Ne zamandan beri:\nErişilemeyen adres veya port:\nNereden denedim (ülke, servis sağlayıcı):\nping / traceroute çıktısı:"
+      },
+      "billing": {
+        "label": "Fatura sorusu",
+        "subject": "Faturamla ilgili sorum var",
+        "body": "Fatura numarası:\nSorum:"
+      },
+      "feature": {
+        "label": "Öneri / istek",
+        "subject": "Bir önerim var",
+        "body": "Ne yapmak istiyorum:\nBu bana nasıl yardımcı olur:"
+      }
+    }
   },
   "Stats": {
     "eyebrow": "Yönetim",

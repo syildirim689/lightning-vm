@@ -2121,7 +2121,10 @@
       "mail": "Configure e-mail",
       "backup": "Take a first backup",
       "twoFactor": "Turn on two-factor sign-in",
-      "progress": "{done} of {total} done"
+      "progress": "{done} of {total} done",
+      "next": "Next step",
+      "showDone": "Show the {n} done steps",
+      "hideDone": "Hide the done steps"
     },
     "stat": {
       "servers": "Ready servers",
@@ -5982,7 +5985,35 @@
     "noMatch": "No ticket matches these filters.",
     "clearFilters": "Clear filters",
     "messages": "{n, plural, one {# message} other {# messages}}",
-    "draft": "Draft"
+    "draft": "Draft",
+    "quick": {
+      "title": "Quick start",
+      "ssh": {
+        "label": "Cannot connect over SSH",
+        "subject": "I cannot connect to my server over SSH",
+        "body": "Since when:\nThe error I get:\nThe command I use (ssh ...):\nWhat I tried (restart, console, firewall):"
+      },
+      "slow": {
+        "label": "Server is slow",
+        "subject": "My server is slow",
+        "body": "Since when:\nWhat is slow (website, database, disk, network):\nWhat live performance shows (CPU, memory, disk):"
+      },
+      "network": {
+        "label": "Network / reachability",
+        "subject": "My server cannot be reached",
+        "body": "Since when:\nThe address or port that does not answer:\nWhere I tried from (country, provider):\nping / traceroute output:"
+      },
+      "billing": {
+        "label": "Billing question",
+        "subject": "A question about my invoice",
+        "body": "Invoice number:\nMy question:"
+      },
+      "feature": {
+        "label": "Idea / request",
+        "subject": "I have a suggestion",
+        "body": "What I want to do:\nHow it would help me:"
+      }
+    }
   },
   "Stats": {
     "eyebrow": "Administration",

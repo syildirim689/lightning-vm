@@ -1406,6 +1406,15 @@ test.describe('people, settings and smart features (English browser)', () => {
     await page.goto('/admin/energy');
     await page.getByRole('button', { name: 'Measure now' }).click();
     await page.waitForTimeout(6000);
+    // The getting-started list folds its done steps away and marks the next one.
+    await page.goto('/admin');
+    const setup = page.getByRole('button', { name: /^Show the \d+ done steps$/ });
+    if (await setup.isVisible()) {
+      await expect(page.getByText('Next step', { exact: true })).toBeVisible();
+      await setup.click();
+      await expect(page.getByRole('button', { name: 'Hide the done steps' })).toHaveAttribute('aria-expanded', 'true');
+      await page.getByRole('button', { name: 'Hide the done steps' }).click();
+    }
     for (const [path, name] of [['/admin', 'admin-dashboard'], ['/', 'my-servers'], ['/admin/topology', 'admin-topology'], ['/admin/energy', 'energy'], ['/admin/abuse', 'abuse'], ['/admin/catalog?tab=locations', 'locations'],
       ['/admin/catalog?tab=isos', 'isos'], ['/admin/catalog?tab=apps', 'apps'], ['/admin/catalog?tab=vdcs', 'vdcs'], ['/admin/settings?tab=domain', 'domain'],
       ['/admin/settings?tab=security', 'security'], ['/admin/settings?tab=servers', 'server-settings'], ['/topology', 'my-topology'], ['/vdc', 'my-vdc'], ['/order', 'order'], ['/admin/audit', 'audit'], ['/account?tab=activity', 'activity'], ['/admin/settings?tab=announcement', 'announcement'], ['/admin/terminal', 'terminal'], ['/admin/settings?tab=mail', 'mail'], ['/admin/settings?tab=payments', 'payments'], ['/admin/settings?tab=sms', 'sms'], ['/admin/settings?tab=chat', 'chat-settings'], ['/admin/settings', 'settings-general'], ['/admin/settings?tab=directory', 'directory'], ['/account?tab=notifications', 'my-notifications']] as const) {
@@ -1495,6 +1504,12 @@ test.describe('people, settings and smart features (English browser)', () => {
     // Support: a ticket opened from the customer side, then the staff queue and an internal note.
     await page.goto('/support');
     await page.getByRole('button', { name: 'New ticket' }).first().click();
+    // Quick start fills the subject and a message that asks for what support needs, and raises the priority.
+    await page.getByRole('button', { name: 'Cannot connect over SSH' }).click();
+    await expect(page.getByLabel('Subject')).toHaveValue('I cannot connect to my server over SSH');
+    await expect(page.getByLabel('Message')).toHaveValue(/^Since when:/);
+    await expect(page.getByRole('radio', { name: /High/ })).toHaveAttribute('aria-checked', 'true');
+    await expect(page.getByRole('button', { name: 'Cannot connect over SSH' })).toBeHidden();
     await page.getByLabel('Subject').fill('Cannot reach my server over SSH');
     await page.getByRole('radio', { name: /High/ }).click();
     await page.getByLabel('Message').fill('SSH times out since this morning. I already restarted the server.');

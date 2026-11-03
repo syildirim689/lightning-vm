@@ -1,6 +1,7 @@
 "use client";
 import { Card, ProgressBar } from '@heroui/react';
 import NextLink from 'next/link';
+import { useState } from 'react';
 import { useFormatter, useNow, useTranslations } from 'next-intl';
 import { Bar, BarChart, CartesianGrid, Cell, Legend, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { I } from '../../../components/icon';
@@ -33,6 +34,9 @@ export default function Dashboard({ setupOpen }: { setupOpen: boolean }) {
   // Getting-started checklist, shown until every step is done.
   const steps = useApiQuery<{ steps: { key: string; done: boolean; link: string }[] }>(['admin', 'onboarding'], '/admin/onboarding').data?.steps;
   const doneSteps = steps?.filter((x) => x.done).length ?? 0;
+  // Done steps fold away (one tap shows them); the first open step is marked as the next one.
+  const [showDone, setShowDone] = useState(false);
+  const nextStep = steps?.find((x) => !x.done)?.key;
 
   const ready = servers?.filter((s) => s.state === 'ready').length ?? 0;
   const failed24h = ops?.filter((o) => o.status === 'failed' && Date.now() - Date.parse(o.createdAt) < 86_400_000).length ?? 0;
@@ -63,14 +67,17 @@ export default function Dashboard({ setupOpen }: { setupOpen: boolean }) {
       <ProgressBar aria-label={t('steps.progress', { done: doneSteps, total: steps.length })} value={Math.round((doneSteps / steps.length) * 100)} size="sm" color="success" className="mb-3">
         <ProgressBar.Track><ProgressBar.Fill/></ProgressBar.Track></ProgressBar>
       <ol className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-        {steps.map((s, i) => <li key={s.key}>
-          <NextLink href={s.link} className={`flex h-full min-h-11 items-center gap-3 rounded-lg border px-3 py-3 text-sm transition-colors duration-150 ${s.done ? 'border-success/40 text-muted' : 'border-border hover:border-accent'}`}>
+        {steps.map((s, i) => (!s.done || showDone) && <li key={s.key}>
+          <NextLink href={s.link} className={`flex h-full min-h-11 items-center gap-3 rounded-lg border px-3 py-3 text-sm transition-colors duration-150 ${s.done ? 'border-success/40 text-muted' : s.key === nextStep ? 'border-accent bg-accent-soft/40 hover:bg-accent-soft' : 'border-border hover:border-accent'}`}>
             <span className={`grid size-7 shrink-0 place-items-center rounded-full text-xs font-semibold ${s.done ? 'bg-success text-success-foreground' : 'bg-default'}`}>{s.done ? <I name="check" size={14}/> : i + 1}</span>
-            <span className={`min-w-0 flex-1 ${s.done ? 'line-through' : 'font-medium'}`}>{s.done && <span className="sr-only">✓ </span>}{t(`steps.${s.key as 'pool'}`)}</span>
+            <span className={`min-w-0 flex-1 ${s.done ? 'line-through' : 'font-medium'}`}>{s.done && <span className="sr-only">✓ </span>}{t(`steps.${s.key as 'pool'}`)}
+              {s.key === nextStep && <span className="mt-0.5 block text-[11px] font-semibold uppercase tracking-wider text-accent">{t('steps.next')}</span>}</span>
             {!s.done && <I name="arrow-right" size={14} className="shrink-0 text-muted"/>}
           </NextLink>
         </li>)}
       </ol>
+      {doneSteps > 0 && <button type="button" aria-expanded={showDone} onClick={() => setShowDone((v) => !v)} className="mt-3 flex items-center gap-1.5 text-xs font-medium text-muted hover:text-foreground">
+        <I name={showDone ? 'chevron-up' : 'chevron-down'} size={14}/>{showDone ? t('steps.hideDone') : t('steps.showDone', { n: doneSteps })}</button>}
     </Section>}
 
     <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
@@ -87,11 +94,12 @@ export default function Dashboard({ setupOpen }: { setupOpen: boolean }) {
     <Insights scope="staff"/>
 
     <div className="grid gap-6 xl:grid-cols-3">
-      <Card className="xl:col-span-2">
+      {/* With no servers yet the state chart has nothing to show; capacity takes the row. */}
+      <Card className={stateData.length ? 'xl:col-span-2' : 'xl:col-span-3'}>
         <Card.Header><Card.Title className="text-base font-semibold">{t('chart.capacity')}</Card.Title><Card.Description className="text-xs text-muted">{t('chart.capacityHelp')}</Card.Description></Card.Header>
         <Card.Content>
           {capacityData.length === 0 ? <p className="py-10 text-center text-sm text-muted">{t('noData')}</p> :
-            <div className="h-64" role="img" aria-label={t('chart.capacity')}>
+            <div role="img" aria-label={t('chart.capacity')} style={{ height: Math.min(256, 90 + capacityData.length * 48) }}>
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={capacityData} layout="vertical" margin={{ left: 12, right: 12 }}>
                   <CartesianGrid horizontal={false} stroke="var(--separator)"/>
@@ -107,10 +115,9 @@ export default function Dashboard({ setupOpen }: { setupOpen: boolean }) {
             </div>}
         </Card.Content>
       </Card>
-      <Card>
+      {stateData.length > 0 && <Card>
         <Card.Header><Card.Title className="text-base font-semibold">{t('chart.servers')}</Card.Title></Card.Header>
         <Card.Content>
-          {stateData.length === 0 ? <p className="py-10 text-center text-sm text-muted">{ts('list.empty')}</p> :
             <div className="h-64" role="img" aria-label={t('chart.servers')}>
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
@@ -121,9 +128,9 @@ export default function Dashboard({ setupOpen }: { setupOpen: boolean }) {
                   <Legend wrapperStyle={{ fontSize: 12 }}/>
                 </PieChart>
               </ResponsiveContainer>
-            </div>}
+            </div>
         </Card.Content>
-      </Card>
+      </Card>}
     </div>
 
     <div className="grid gap-6 xl:grid-cols-3">

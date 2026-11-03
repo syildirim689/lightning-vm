@@ -121,6 +121,15 @@ function NewTicket({ initialServer, mine, onClose }: { initialServer: string; mi
             <I name="lightbulb" size={16} className="mt-0.5 shrink-0 text-accent"/>
             <span>{t('openAlready', { number: already.number, subject: already.subject })} <span className="font-medium text-accent">{t('openAlreadyLink')}</span></span>
           </NextLink>}
+          {/* Quick start: a common topic fills the subject and a message that asks for what support needs to know. */}
+          {!v.subject.trim() && !v.body.trim() && <div className="flex flex-col gap-2">
+            <p className="flex items-center gap-1.5 text-sm font-medium"><I name="sparkles" size={14} className="text-accent"/>{t('quick.title')}</p>
+            <div className="flex flex-wrap gap-1.5">
+              {(['ssh', 'slow', 'network', 'billing', 'feature'] as const).map((k) => <button key={k} type="button" onClick={() => setV({ ...v, subject: t(`quick.${k}.subject`), body: t(`quick.${k}.body`), priority: k === 'ssh' || k === 'network' ? 'high' : v.priority })}
+                className="flex min-h-9 items-center gap-1.5 rounded-full border border-border bg-surface px-3 text-xs font-medium transition-colors hover:border-accent hover:text-accent focus-visible:outline-2 focus-visible:outline-accent">
+                <I name={{ ssh: 'square-terminal', slow: 'gauge', network: 'wifi-off', billing: 'receipt-text', feature: 'lightbulb' }[k]} size={13}/>{t(`quick.${k}.label`)}</button>)}
+            </div>
+          </div>}
           <TextInput label={t('subject')} value={v.subject} onChange={(x) => setV({ ...v, subject: x })} maxLength={160} error={field(fields.subject)} placeholder={t('subjectExample')}/>
           <div className="flex flex-col gap-2">
             <p className="text-sm font-medium">{t('priorityLabel')}</p>
