@@ -1430,6 +1430,13 @@ test.describe('people, settings and smart features (English browser)', () => {
     await page.locator('main h1').click();
     await page.keyboard.press('g'); await page.keyboard.press('b');
     await expect(page).toHaveURL(/\/billing$/);
+    // Notification preferences: grouped by area, and a search narrows the long list.
+    await page.goto('/account?tab=notifications');
+    await page.getByRole('searchbox', { name: /Find a notification/ }).fill('invoice');
+    await expect(page.getByText('Payment reminder', { exact: true })).toBeVisible();
+    await expect(page.getByText('Server ready', { exact: true })).toBeHidden();
+    await page.getByRole('searchbox', { name: /Find a notification/ }).fill('');
+    await expect(page.getByText('Server ready', { exact: true })).toBeVisible();
     // An empty virtual datacenter page shows staff where to create one.
     await page.goto('/vdc');
     await expect(page.getByRole('link', { name: 'Create a virtual datacenter' })).toHaveAttribute('href', '/admin/catalog?tab=vdcs');

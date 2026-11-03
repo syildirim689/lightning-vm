@@ -1,7 +1,7 @@
 "use client";
 // The user's notification choices: for each event, which channels (within what the admin allows).
 // Also turns browser notifications on for this device and sends a test through any channel.
-import { Button, Checkbox, toast } from '@heroui/react';
+import { Button, Checkbox, SearchField, toast } from '@heroui/react';
 import { useQueryClient } from '@tanstack/react-query';
 import { motion } from 'motion/react';
 import { useTranslations } from 'next-intl';
@@ -11,6 +11,7 @@ import { Notice, Section, SwitchInput, TextInput } from '../../../components/ui'
 import { apiFetch, useErrorText } from '../../../lib/api';
 import { currentSubscription, disablePush, enablePush, pushSupported } from '../../../lib/push';
 import { useApiQuery } from '../../../lib/query';
+import { fold } from '../../../lib/note-line';
 import ChatConnections from './chat-connections';
 
 export type Channel = 'inApp' | 'push' | 'email' | 'sms' | 'chat';
@@ -18,8 +19,14 @@ export const channels: Channel[] = ['inApp', 'push', 'email', 'sms', 'chat'];
 type Prefs = { events: { event: string; allowed: Channel[]; locked: boolean; channels: Channel[] }[]; available: Record<Channel, boolean>; pushDevices: number; chatConnections: number; phoneVerified: boolean; quietHours: { start: string; end: string; tz: string } | null };
 export const channelIcon: Record<Channel, React.ReactNode> = { inApp: <I name="bell" size={15}/>, push: <I name="monitor-smartphone" size={15}/>, email: <I name="mail" size={15}/>, sms: <I name="message-square" size={15}/>, chat: <I name="messages-square" size={15}/> };
 
+// Rows are grouped by the area an event comes from (its first part; account events sit with sign-in security).
+const groups = ['server', 'support', 'billing', 'auth', 'admin', 'other'] as const;
+const groupOf = (event: string) => { const k = event.split('.')[0] === 'account' ? 'auth' : event.split('.')[0]; return (groups as readonly string[]).includes(k) ? k : 'other'; };
+
 export default function NotificationPrefs() {
   const t = useTranslations('Notify');
+  const tk = useTranslations('Inbox.kind');
+  const [find, setFind] = useState('');
   const { error } = useErrorText();
   const client = useQueryClient();
   const q = useApiQuery<Prefs>(['notification-prefs'], '/notifications/preferences');
@@ -28,6 +35,9 @@ export default function NotificationPrefs() {
   useEffect(() => { void currentSubscription().then((s) => setThisDevice(!!s)); }, []);
   if (!q.data) return <Section title={t('title')}><p role="status" className="text-sm text-muted">…</p></Section>;
   const { events, available, phoneVerified } = q.data;
+  const title = (e: string) => t(`events.${e.replace('.', '_')}.title` as 'events.server_ready.title');
+  const needle = fold(find.trim());
+  const shown = events.filter((e) => !needle || fold(`${title(e.event)} ${t(`events.${e.event.replace('.', '_')}.help` as 'events.server_ready.help')} ${tk(groupOf(e.event) as 'server')}`).includes(needle));
 
   // Why a channel cannot be used right now, if it cannot.
   const blocked = (c: Channel) => !available[c] ? t(`unavailable.${c}`) : c === 'sms' && !phoneVerified ? t('needPhone') : c === 'push' && !q.data!.pushDevices ? t('needPush') : c === 'chat' && !q.data!.chatConnections ? t('needChat') : null;
@@ -72,6 +82,8 @@ export default function NotificationPrefs() {
     <QuietHours value={q.data.quietHours}/>
 
     <Section title={t('title')} description={t('intro')}>
+      {events.length > 0 && <SearchField aria-label={t('find')} value={find} onChange={setFind} className="mb-3 w-full md:w-80">
+        <SearchField.Group><SearchField.SearchIcon/><SearchField.Input placeholder={t('find')}/><SearchField.ClearButton/></SearchField.Group></SearchField>}
       {events.length === 0 ? <p className="text-sm text-muted">{t('none')}</p> : <div className="overflow-x-auto">
         <table className="w-full min-w-[34rem] text-sm">
           <thead><tr className="text-left text-xs uppercase tracking-wider text-muted">
@@ -79,7 +91,8 @@ export default function NotificationPrefs() {
             {channels.map((c) => <th key={c} scope="col" className="px-2 py-2 text-center font-semibold"><span className="inline-flex items-center gap-1">{channelIcon[c]}<span className="hidden sm:inline">{t(`channel.${c}`)}</span></span></th>)}
           </tr></thead>
           <tbody className="divide-y divide-separator">
-            {events.map((e, i) => <motion.tr key={e.event} initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.025 }}>
+            {groups.flatMap((g) => { const rows = shown.filter((e) => groupOf(e.event) === g); return rows.length ? [<tr key={g}><th colSpan={channels.length + 1} scope="colgroup"
+              className="bg-default/50 px-2 py-1.5 text-left text-xs font-semibold uppercase tracking-wider text-muted">{tk(g)} <span className="tabular-nums">{rows.length}</span></th></tr>, ...rows.map((e, i) => <motion.tr key={e.event} initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: Math.min(i, 10) * 0.025 }}>
               <th scope="row" className="py-3 pr-4 text-left font-normal">
                 <span className="flex items-center gap-2 font-medium">{t(`events.${e.event.replace('.', '_')}.title` as 'events.server_ready.title')}
                   {e.locked && <I name="lock" size={13} className="text-muted" aria-label={t('locked')}/>}</span>
@@ -90,7 +103,8 @@ export default function NotificationPrefs() {
                   onChange={(on) => toggle(e.event, e.channels, c, on)} className="inline-flex justify-center"><Checkbox.Control><Checkbox.Indicator/></Checkbox.Control></Checkbox>
                   : <span className="text-muted" aria-label={t('notOffered')}>–</span>}
               </td>)}
-            </motion.tr>)}
+            </motion.tr>)] : []; })}
+            {!shown.length && <tr><td colSpan={channels.length + 1} className="py-6 text-center text-sm text-muted">{t('noMatch')}</td></tr>}
           </tbody>
         </table>
       </div>}

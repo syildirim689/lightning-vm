@@ -2859,7 +2859,9 @@
       "saved": "Quiet hours: {start} – {end}",
       "off": "Quiet hours turned off.",
       "help": "Times are in the {tz} time zone. In-panel and e-mail notices still arrive; security notices such as sign-ins and password changes always go out."
-    }
+    },
+    "find": "Find a notification (e.g. invoice, backup, sign-in)",
+    "noMatch": "No notification matches."
   },
   "Users": {
     "eyebrow": "People",

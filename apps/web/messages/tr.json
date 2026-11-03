@@ -2859,7 +2859,9 @@
       "saved": "Sessiz saatler: {start} – {end}",
       "off": "Sessiz saatler kapatıldı.",
       "help": "Saatler {tz} saat dilimine göre. Panel içi ve e-posta bildirimleri yine gelir; giriş ve parola gibi güvenlik bildirimleri her zaman gönderilir."
-    }
+    },
+    "find": "Bildirim ara (ör. fatura, yedek, giriş)",
+    "noMatch": "Aramaya uyan bildirim yok."
   },
   "Users": {
     "eyebrow": "Kişiler",
