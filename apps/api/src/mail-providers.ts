@@ -1,10 +1,10 @@
 // E-mail providers sent to through their HTTP APIs (SMTP stays in settings-store.ts with nodemailer). Each one:
 // the account fields the admin fills in (labels are translated by the panel from the field key), and send() for
-// one plain-text message, checked the way the provider documents it. None of these were called with real
+// one message (plain text, and HTML when given), checked the way the provider documents it. None of these were called with real
 // accounts during development; the settings page has a test button that sends a real message.
 import { createHash, createHmac } from 'node:crypto';
 
-export type MailMessage = { from: { name: string; address: string }; to: string; subject: string; text: string };
+export type MailMessage = { from: { name: string; address: string }; to: string; subject: string; text: string; html?: string };
 export type MailResult = { ok: boolean; code?: 'MAIL_AUTH_FAILED' | 'MAIL_REJECTED' | 'MAIL_CONNECTION_FAILED'; detail?: string; ref?: string };
 export type MailField = { key: string; secret?: boolean; optional?: boolean; options?: string[] };
 export type MailProvider = { name: string; website: string; docs: string; fields: MailField[]; send: (c: Record<string, string>, m: MailMessage) => Promise<MailResult> };
@@ -48,21 +48,21 @@ export function sigV4(o: { method: string; host: string; path: string; region: s
 export const mailProviders: Record<string, MailProvider> = {
   resend: {
     name: 'Resend', website: 'https://resend.com', docs: 'https://resend.com/docs/api-reference/emails/send-email', fields: [apiKey],
-    send: async (c, m) => judge(await jsonPost('https://api.resend.com/emails', { from: fromLine(m.from), to: [m.to], subject: m.subject, text: m.text },
+    send: async (c, m) => judge(await jsonPost('https://api.resend.com/emails', { from: fromLine(m.from), to: [m.to], subject: m.subject, text: m.text, ...(m.html && { html: m.html }) },
       { authorization: `Bearer ${c.apiKey}` }), (b) => b.id),
   },
   sendgrid: {
     name: 'SendGrid (Twilio)', website: 'https://sendgrid.com', docs: 'https://www.twilio.com/docs/sendgrid/api-reference/mail-send/mail-send',
     fields: [apiKey, { key: 'region', options: ['global', 'eu'], optional: true }],
     send: async (c, m) => judge(await jsonPost(`https://api.${c.region === 'eu' ? 'eu.' : ''}sendgrid.com/v3/mail/send`, {
-      personalizations: [{ to: [{ email: m.to }] }], from: { email: m.from.address, ...(m.from.name && { name: m.from.name }) }, subject: m.subject, content: [{ type: 'text/plain', value: m.text }],
+      personalizations: [{ to: [{ email: m.to }] }], from: { email: m.from.address, ...(m.from.name && { name: m.from.name }) }, subject: m.subject, content: [{ type: 'text/plain', value: m.text }, ...(m.html ? [{ type: 'text/html', value: m.html }] : [])],
     }, { authorization: `Bearer ${c.apiKey}` })),
   },
   mailgun: {
     name: 'Mailgun', website: 'https://www.mailgun.com', docs: 'https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/messages',
     fields: [apiKey, { key: 'domain' }, { key: 'region', options: ['us', 'eu'], optional: true }],
     async send(c, m) {
-      const form = new URLSearchParams({ from: fromLine(m.from), to: m.to, subject: m.subject, text: m.text });
+      const form = new URLSearchParams({ from: fromLine(m.from), to: m.to, subject: m.subject, text: m.text, ...(m.html && { html: m.html }) });
       return judge(await call(`https://api.${c.region === 'eu' ? 'eu.' : ''}mailgun.net/v3/${encodeURIComponent(c.domain)}/messages`,
         { method: 'POST', headers: { authorization: basic('api', c.apiKey), 'content-type': 'application/x-www-form-urlencoded' }, body: form.toString() }), (b) => b.id);
     },
@@ -70,7 +70,7 @@ export const mailProviders: Record<string, MailProvider> = {
   postmark: {
     name: 'Postmark', website: 'https://postmarkapp.com', docs: 'https://postmarkapp.com/developer/api/email-api',
     fields: [{ key: 'serverToken', secret: true }, { key: 'messageStream', optional: true }],
-    send: async (c, m) => judge(await jsonPost('https://api.postmarkapp.com/email', { From: fromLine(m.from), To: m.to, Subject: m.subject, TextBody: m.text, MessageStream: c.messageStream || 'outbound' },
+    send: async (c, m) => judge(await jsonPost('https://api.postmarkapp.com/email', { From: fromLine(m.from), To: m.to, Subject: m.subject, TextBody: m.text, ...(m.html && { HtmlBody: m.html }), MessageStream: c.messageStream || 'outbound' },
       { 'x-postmark-server-token': c.serverToken }), (b) => b.MessageID),
   },
   ses: {
@@ -80,7 +80,7 @@ export const mailProviders: Record<string, MailProvider> = {
       if (!/^[a-z]{2}(-[a-z]+)+-\d$/.test(c.region ?? '')) return { ok: false, code: 'MAIL_REJECTED', detail: 'region must look like eu-central-1' };
       const host = `email.${c.region}.amazonaws.com`, path = '/v2/email/outbound-emails';
       const body = JSON.stringify({ FromEmailAddress: fromLine(m.from), Destination: { ToAddresses: [m.to] },
-        Content: { Simple: { Subject: { Data: m.subject, Charset: 'UTF-8' }, Body: { Text: { Data: m.text, Charset: 'UTF-8' } } } } });
+        Content: { Simple: { Subject: { Data: m.subject, Charset: 'UTF-8' }, Body: { Text: { Data: m.text, Charset: 'UTF-8' }, ...(m.html && { Html: { Data: m.html, Charset: 'UTF-8' } }) } } } });
       const sig = sigV4({ method: 'POST', host, path, region: c.region, service: 'ses', body, accessKey: c.accessKeyId, secretKey: c.secretAccessKey });
       return judge(await call(`https://${host}${path}`, { method: 'POST', headers: { 'content-type': 'application/json', ...sig }, body }), (b) => b.MessageId);
     },
@@ -88,13 +88,13 @@ export const mailProviders: Record<string, MailProvider> = {
   brevo: {
     name: 'Brevo (Sendinblue)', website: 'https://www.brevo.com', docs: 'https://developers.brevo.com/reference/sendtransacemail', fields: [apiKey],
     send: async (c, m) => judge(await jsonPost('https://api.brevo.com/v3/smtp/email', { sender: { email: m.from.address, ...(m.from.name && { name: m.from.name }) }, to: [{ email: m.to }],
-      subject: m.subject, textContent: m.text }, { 'api-key': c.apiKey }), (b) => b.messageId),
+      subject: m.subject, textContent: m.text, ...(m.html && { htmlContent: m.html }) }, { 'api-key': c.apiKey }), (b) => b.messageId),
   },
   mailjet: {
     name: 'Mailjet', website: 'https://www.mailjet.com', docs: 'https://dev.mailjet.com/email/guides/send-api-v31/',
     fields: [apiKey, { key: 'secretKey', secret: true }],
     async send(c, m) {
-      const r = await jsonPost('https://api.mailjet.com/v3.1/send', { Messages: [{ From: { Email: m.from.address, Name: m.from.name || undefined }, To: [{ Email: m.to }], Subject: m.subject, TextPart: m.text }] },
+      const r = await jsonPost('https://api.mailjet.com/v3.1/send', { Messages: [{ From: { Email: m.from.address, Name: m.from.name || undefined }, To: [{ Email: m.to }], Subject: m.subject, TextPart: m.text, ...(m.html && { HTMLPart: m.html }) }] },
         { authorization: basic(c.apiKey, c.secretKey) });
       const b = parse(r.text);
       // Mailjet answers 200 with a per-message status.
@@ -106,18 +106,18 @@ export const mailProviders: Record<string, MailProvider> = {
     name: 'SparkPost (Bird)', website: 'https://www.sparkpost.com', docs: 'https://developers.sparkpost.com/api/transmissions/',
     fields: [apiKey, { key: 'region', options: ['us', 'eu'], optional: true }],
     send: async (c, m) => judge(await jsonPost(`https://api.${c.region === 'eu' ? 'eu.' : ''}sparkpost.com/api/v1/transmissions`, {
-      content: { from: { email: m.from.address, ...(m.from.name && { name: m.from.name }) }, subject: m.subject, text: m.text }, recipients: [{ address: { email: m.to } }],
+      content: { from: { email: m.from.address, ...(m.from.name && { name: m.from.name }) }, subject: m.subject, text: m.text, ...(m.html && { html: m.html }) }, recipients: [{ address: { email: m.to } }],
     }, { authorization: c.apiKey }), (b) => (b as { results?: { id?: string } }).results?.id),
   },
   mailersend: {
     name: 'MailerSend', website: 'https://www.mailersend.com', docs: 'https://developers.mailersend.com/api/v1/email.html#send-an-email', fields: [apiKey],
     send: async (c, m) => judge(await jsonPost('https://api.mailersend.com/v1/email', { from: { email: m.from.address, ...(m.from.name && { name: m.from.name }) }, to: [{ email: m.to }],
-      subject: m.subject, text: m.text }, { authorization: `Bearer ${c.apiKey}` })),
+      subject: m.subject, text: m.text, ...(m.html && { html: m.html }) }, { authorization: `Bearer ${c.apiKey}` })),
   },
   smtp2go: {
     name: 'SMTP2GO', website: 'https://www.smtp2go.com', docs: 'https://developers.smtp2go.com/docs/send-an-email', fields: [apiKey],
     async send(c, m) {
-      const r = await jsonPost('https://api.smtp2go.com/v3/email/send', { sender: fromLine(m.from), to: [m.to], subject: m.subject, text_body: m.text }, { 'x-smtp2go-api-key': c.apiKey });
+      const r = await jsonPost('https://api.smtp2go.com/v3/email/send', { sender: fromLine(m.from), to: [m.to], subject: m.subject, text_body: m.text, ...(m.html && { html_body: m.html }) }, { 'x-smtp2go-api-key': c.apiKey });
       const b = parse(r.text);
       if (r.status === 200 && b?.data?.succeeded !== 1) return { ok: false, code: 'MAIL_REJECTED', detail: r.text.slice(0, 300) };
       return judge(r, (x) => (x as { data?: { email_id?: string } }).data?.email_id);
@@ -126,14 +126,14 @@ export const mailProviders: Record<string, MailProvider> = {
   elasticemail: {
     name: 'Elastic Email', website: 'https://elasticemail.com', docs: 'https://elasticemail.com/developers/api-documentation/rest-api#operation/emailsTransactionalPost', fields: [apiKey],
     send: async (c, m) => judge(await jsonPost('https://api.elasticemail.com/v4/emails/transactional', {
-      Recipients: { To: [m.to] }, Content: { From: fromLine(m.from), Subject: m.subject, Body: [{ ContentType: 'PlainText', Content: m.text, Charset: 'utf-8' }] },
+      Recipients: { To: [m.to] }, Content: { From: fromLine(m.from), Subject: m.subject, Body: [{ ContentType: 'PlainText', Content: m.text, Charset: 'utf-8' }, ...(m.html ? [{ ContentType: 'HTML', Content: m.html, Charset: 'utf-8' }] : [])] },
     }, { 'x-elasticemail-apikey': c.apiKey }), (b) => b.TransactionID),
   },
   zeptomail: {
     name: 'ZeptoMail (Zoho)', website: 'https://www.zoho.com/zeptomail/', docs: 'https://www.zoho.com/zeptomail/help/api/email-sending.html',
     fields: [{ key: 'sendMailToken', secret: true }, { key: 'region', options: ['com', 'eu', 'in', 'com.au', 'jp', 'ca', 'sa', 'com.cn'], optional: true }],
     send: async (c, m) => judge(await jsonPost(`https://api.zeptomail.${c.region || 'com'}/v1.1/email`, {
-      from: { address: m.from.address, ...(m.from.name && { name: m.from.name }) }, to: [{ email_address: { address: m.to } }], subject: m.subject, textbody: m.text,
+      from: { address: m.from.address, ...(m.from.name && { name: m.from.name }) }, to: [{ email_address: { address: m.to } }], subject: m.subject, textbody: m.text, ...(m.html && { htmlbody: m.html }),
     }, { authorization: c.sendMailToken.startsWith('Zoho-enczapikey') ? c.sendMailToken : `Zoho-enczapikey ${c.sendMailToken}` }), (b) => b.request_id),
   },
 };

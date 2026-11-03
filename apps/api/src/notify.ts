@@ -11,7 +11,9 @@ import { can, permissionsOf, type Permission } from './permissions';
 import { decryptSecret, encryptSecret } from './secrets';
 import { getSettings, mailReady, saveSettings, sendMail, type Channel, type NotificationPolicy } from './settings-store';
 import { sendSms, smsReady } from './sms';
-import { deliverChat } from './chat-delivery';
+import { absolute, deliverChat } from './chat-delivery';
+import { brandFor } from './mail';
+import { mailHtml, mailText, type MailContent } from './mail-layout';
 import { publishLive } from './live-bus';
 import { alwaysSent, inQuietHours, loudChannels } from './quiet-hours';
 
@@ -262,7 +264,14 @@ export async function deliver(u: Recipient, channel: Channel, t: Text, link: str
     await publishLive(u.id, 'notification');
   }
   if (channel === 'push') await sendPush(u.id, { title: t.title, body: t.body, link });
-  if (channel === 'email' && (await mailReady())) await sendMail(u.email, `${brand}: ${t.title}`, `${t.body}${link ? `\n\n${link}` : ''}`);
+  if (channel === 'email' && (await mailReady())) {
+    const b = await brandFor(u.locale);
+    const url = await absolute(link);
+    const c: MailContent = { preheader: t.body, heading: t.title, intro: [t.body], button: url ? { label: b.locale === 'tr' ? 'Panelde aç' : 'Open in the panel', url } : undefined,
+      note: b.locale === 'tr' ? 'Hangi bildirimleri e-postayla alacağınızı Hesap sayfasındaki Bildirimler bölümünden değiştirebilirsiniz.'
+        : 'Choose which notifications reach you by e-mail in the Notifications section of the Account page.' };
+    await sendMail(u.email, `${brand}: ${t.title}`, mailText(c, b), mailHtml(c, b));
+  }
   if (channel === 'chat') await deliverChat(u.id, t, link, event);
   if (channel === 'sms' && u.phone_number && u.phone_number_verified && (await smsReady())) await sendSms(u.phone_number, `${brand}: ${t.title}. ${t.body}`.slice(0, 300));
 }

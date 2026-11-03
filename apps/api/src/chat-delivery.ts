@@ -21,7 +21,8 @@ export function usableApps(s: ChatSettings) {
 }
 export async function chatReady() { return usableApps(await getSettings('chat')).length > 0; }
 
-async function absolute(link: string | null) {
+// A panel path (/servers/…) as a full URL on the address set in setup; null when none is set.
+export async function absolute(link: string | null) {
   if (!link || /^https?:\/\//.test(link)) return link;
   const { rows: [r] } = await pool.query("SELECT value FROM settings WHERE key = 'public_url'");
   return typeof r?.value === 'string' && r.value ? new URL(link, r.value).toString() : null;

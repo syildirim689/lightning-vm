@@ -9,6 +9,8 @@ import { decryptSecret } from './secrets';
 import { decryptCredentials, encryptCredentials, providers, sendWith } from './sms';
 import { emailPattern, getSettings, imagePattern, mailErrorCode, mailReady, mailSecrets, publicConfig, readBranding, readCaptcha, readMail, saveSettings, sendViaProvider, transportFor, verifyCaptcha, type SmsSettings } from './settings-store';
 import { mailProviders } from './mail-providers';
+import { brandFor } from './mail';
+import { mailHtml, mailText, type MailContent } from './mail-layout';
 import { usableApps } from './chat-delivery';
 import { pool } from './db';
 import { summary } from './maintenance';
@@ -75,13 +77,20 @@ export class SettingsController {
     const { value, password, secrets } = readMail({ ...body, enabled: true }, saved);
     const name = (await getSettings('branding')).name;
     const subject = `${name}: ${value.provider === 'smtp' ? 'SMTP' : mailProviders[value.provider].name} test`;
-    const text = `This test message from ${name} confirms that outgoing mail works.\n\nBu test iletisi ${name} e-posta gönderiminin çalıştığını doğrular.`;
+    // In the panel's design, so the admin sees what every message will look like.
+    const b = await brandFor(req.user.locale);
+    const content: MailContent = b.locale === 'tr'
+      ? { preheader: 'E-posta gönderimi çalışıyor.', heading: 'E-posta gönderimi çalışıyor',
+          intro: [`Bu test iletisi ${name} e-posta ayarlarının doğru olduğunu doğrular. Parola sıfırlama, giriş bağlantıları ve bildirimler bu görünümle gönderilir.`] }
+      : { preheader: 'Outgoing mail works.', heading: 'Outgoing mail works',
+          intro: [`This test message confirms that the ${name} mail settings are right. Password resets, sign-in links and notifications are sent in this design.`] };
+    const text = mailText(content, b), html = mailHtml(content, b);
     try {
-      if (value.provider !== 'smtp') await sendViaProvider(value, secrets, to, subject, text);
+      if (value.provider !== 'smtp') await sendViaProvider(value, secrets, to, subject, text, html);
       else {
         const t = await transportFor(value, password);
         await t!.transport.verify();
-        await t!.transport.sendMail({ from: t!.from, to, subject, text });
+        await t!.transport.sendMail({ from: t!.from, to, subject, text, html });
       }
     } catch (err) {
       const code = mailErrorCode(err);

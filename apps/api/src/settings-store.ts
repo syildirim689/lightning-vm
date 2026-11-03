@@ -149,8 +149,8 @@ export async function mailReady() {
 export const mailSecrets = (m: MailSettings): Record<string, string> => (m.apiSecretEnc ? JSON.parse(decryptSecret(m.apiSecretEnc, 'settings:mail-api')) : {});
 
 // One message through the chosen API provider (SMTP goes through transportFor). Throws with the provider's code.
-export async function sendViaProvider(m: MailSettings, secrets: Record<string, string>, to: string, subject: string, text: string) {
-  const r = await mailProviders[m.provider].send({ ...m.api, ...secrets }, { from: { name: m.fromName, address: m.fromAddress }, to, subject, text });
+export async function sendViaProvider(m: MailSettings, secrets: Record<string, string>, to: string, subject: string, text: string, html?: string) {
+  const r = await mailProviders[m.provider].send({ ...m.api, ...secrets }, { from: { name: m.fromName, address: m.fromAddress }, to, subject, text, html });
   if (!r.ok) throw Object.assign(new Error(r.detail ?? r.code ?? 'mail failed'), { mailCode: r.code });
   return r;
 }
@@ -159,17 +159,18 @@ export async function mailUse(kind: keyof MailUse) {
   return (await mailReady()) && (m.enabled ? m.use[kind] : kind === 'passwordReset');
 }
 
-export async function sendMail(to: string, subject: string, text: string) {
+// html: the designed version (mail-layout.ts); text stays as the plain alternative every client can show.
+export async function sendMail(to: string, subject: string, text: string, html?: string) {
   const m = await getSettings('mail');
   if (m.enabled && m.provider !== 'smtp' && mailProviders[m.provider]) {
-    try { await sendViaProvider(m, mailSecrets(m), to, subject, text); logEvent('info', 'mail_sent', { subject, provider: m.provider }); }
+    try { await sendViaProvider(m, mailSecrets(m), to, subject, text, html); logEvent('info', 'mail_sent', { subject, provider: m.provider }); }
     catch (err) { logEvent('error', 'mail_failed', { provider: m.provider, error: err instanceof Error ? err.message.slice(0, 200) : 'unknown' }); throw err; }
     return;
   }
   const t = await transportFor(m);
   if (!t) throw new Error('mail is not configured');
   try {
-    await t.transport.sendMail({ from: t.from, to, subject, text });
+    await t.transport.sendMail({ from: t.from, to, subject, text, html });
     logEvent('info', 'mail_sent', { subject });
   } catch (err) {
     logEvent('error', 'mail_failed', { error: err instanceof Error ? err.message : 'unknown' });
