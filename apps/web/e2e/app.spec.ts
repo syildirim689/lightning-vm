@@ -561,7 +561,7 @@ test.describe('server lifecycle (simulator, Turkish customer)', () => {
     await page.screenshot({ path: 'test-results/tour/server-sections-768.png' });
     await sections.getByRole('button', { name: 'Başa dön' }).click();
     await expect.poll(() => page.evaluate(() => scrollY)).toBeLessThan(5);
-    await expect(sections.locator('[data-lead]')).toBeHidden();
+    await expect(sections.locator('[data-lead]').locator('..')).toHaveAttribute('aria-hidden', 'true');
     await page.setViewportSize({ width: 1280, height: 720 });
     await page.getByRole('button', { name: 'Benzerini sipariş et' }).click();
     await expect(page).toHaveURL(/\/order$/);
