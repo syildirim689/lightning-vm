@@ -1766,7 +1766,9 @@
       "history": "İşlem geçmişi",
       "application": "Uygulama",
       "location": "Lokasyon",
-      "hourly": "Saatlik {price} (kullandıkça öde)"
+      "hourly": "Saatlik {price} (kullandıkça öde)",
+      "sections": "Bölümler",
+      "toTop": "Başa dön"
     },
     "delete": {
       "title": "Sunucuyu sil",

@@ -539,6 +539,25 @@ test.describe('server lifecycle (simulator, Turkish customer)', () => {
     await expectNoOverflow(page, 'server page with schedules at 390 px');
     await page.screenshot({ path: 'test-results/tour/server-page-390.png', fullPage: true });
     await page.setViewportSize({ width: 1280, height: 720 });
+    // Section bar: a chip jumps to its section, marks it and offers a way back to the top.
+    const sections = page.getByRole('navigation', { name: 'Bölümler' });
+    await expect(sections.getByRole('link')).not.toHaveCount(0);
+    expect(await sections.getByRole('link').count()).toBeGreaterThanOrEqual(4);
+    await sections.getByRole('link', { name: 'İşlem geçmişi' }).click();
+    await expect(sections.getByRole('link', { name: 'İşlem geçmişi' })).toHaveAttribute('aria-current', 'location');
+    await expect(page.getByRole('grid', { name: 'İşlem geçmişi' })).toBeInViewport();
+    await expect(sections).toBeInViewport();
+    await expect(sections.getByRole('button', { name: 'Başa dön' })).toBeVisible();
+    await page.screenshot({ path: 'test-results/tour/server-sections.png' });
+    await page.setViewportSize({ width: 390, height: 900 });
+    await expectNoOverflow(page, 'server section bar at 390 px');
+    await page.screenshot({ path: 'test-results/tour/server-sections-390.png' });
+    await page.setViewportSize({ width: 768, height: 1024 });
+    await expectNoOverflow(page, 'server section bar at 768 px');
+    await page.screenshot({ path: 'test-results/tour/server-sections-768.png' });
+    await sections.getByRole('button', { name: 'Başa dön' }).click();
+    await expect.poll(() => page.evaluate(() => scrollY)).toBeLessThan(5);
+    await page.setViewportSize({ width: 1280, height: 720 });
     await page.getByRole('button', { name: 'Benzerini sipariş et' }).click();
     await expect(page).toHaveURL(/\/order$/);
     await expect(page.getByLabel('Sunucu adı')).toHaveValue('web-2');

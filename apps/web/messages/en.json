@@ -1766,7 +1766,9 @@
       "history": "Operation history",
       "application": "Application",
       "location": "Location",
-      "hourly": "{price} / hour (pay as you go)"
+      "hourly": "{price} / hour (pay as you go)",
+      "sections": "Sections",
+      "toTop": "Back to top"
     },
     "delete": {
       "title": "Delete server",

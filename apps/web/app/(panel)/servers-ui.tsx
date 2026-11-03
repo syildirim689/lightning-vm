@@ -31,6 +31,7 @@ import { noteLine } from '../../lib/note-line';
 import { ServerFilters, useServerFilters } from './server-filters';
 import { flag } from '../../lib/flag';
 import { ButtonLink, CheckboxInput, ConfirmButton, DataTable, Empty, Mono, Notice, PageHeader, Section, StatusChip, TextInput, type Tone } from '../../components/ui';
+import { SectionNav } from '../../components/section-nav';
 
 export type Server = { id: string; name: string; state: string; powerState: string; guestReady: boolean; vcpu: number; memoryMb: number; diskGb: number;
   priceMonthly: string; currency: string; trafficGb?: number | null; trafficBytes?: number; billingMode?: 'monthly' | 'hourly'; priceHourly?: string | null; trafficThrottled?: boolean; errorCode: string | null; poolName: string; location: string; locationCity?: string | null; locationCountry?: string | null; locationDatacenter?: string | null; imageName: string; address: string | null;
@@ -331,6 +332,7 @@ export function ServerDetail({ id }: { id: string }) {
   const [message, setMessage] = useState<string>();
   const [deleteName, setDeleteName] = useState('');
   const [deleteNow, setDeleteNow] = useState(false);
+  const page = useRef<HTMLDivElement>(null);
   const q = useApiQuery<{ server: Server; operations: Operation[]; own?: boolean; allowed?: Record<'power' | 'console' | 'iso' | 'rootPassword' | 'delete' | 'snapshots' | 'resize' | 'reinstall' | 'backups', boolean>; deleteGraceHours?: number }>(['servers', id], `/servers/${id}`, { refetchInterval: 3_000 });
   const gone = (q.error as { code?: string } | null)?.code === 'NOT_FOUND';
   const me = useMe();
@@ -363,13 +365,14 @@ export function ServerDetail({ id }: { id: string }) {
     title={actionLabel(action)} body={t(`confirm.${action}`)} confirmLabel={t('confirm.yes', { action: actionLabel(action) })} cancelLabel={t('confirm.no')}
     onConfirm={() => act(`/servers/${id}/actions`, 'POST', { action })}/>;
 
-  return <div className="flex flex-col gap-6">
+  return <div ref={page} className="flex flex-col gap-6">
     <PageHeader eyebrow={s.location || s.poolName} title={s.name} description={<span className="mt-2 inline-flex"><StateBadge server={s}/></span>}
       actions={<>{s.state === 'ready' && allowed.console && <ButtonLink variant="secondary" href={`/servers/${id}/console`}><I name="square-terminal" size={16}/>{actionLabel('console')}</ButtonLink>}
         {own && <ButtonLink variant="ghost" href={`/support?new=1&server=${id}`}><I name="life-buoy" size={16}/>{t('getSupport')}</ButtonLink>}
         {own && <OrderSimilar server={s} names={(mine ?? []).map((x) => x.name)}/>}
         {own && <CloneServer server={s} names={(mine ?? []).map((x) => x.name)}/>}
         {(own || allowed.delete) && <RenameServer key={s.name} server={s}/>}</>}/>
+    <SectionNav root={page} label={t('detail.sections')} top={t('detail.toTop')}/>
     {message && <div role="alert"><Notice tone="danger">{message}</Notice></div>}
     {s.billingHold && <Notice tone="danger" title={t('billingHold')}>{t('billingHoldHelp')} <NextLink href="/billing?tab=invoices" className="font-medium text-accent hover:underline">{t('payNow')}</NextLink></Notice>}
     {s.lastOperation?.step === 'awaiting_payment' && <Notice tone="warning" title={t('awaitingPayment')}>{t('awaitingPaymentHelp')} <NextLink href="/billing?tab=invoices" className="font-medium text-accent hover:underline">{t('payNow')}</NextLink></Notice>}

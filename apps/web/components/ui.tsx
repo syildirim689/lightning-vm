@@ -23,7 +23,8 @@ export function ButtonLink({ href, variant = 'primary', size = 'md', className =
 }
 
 export function Section({ title, description, actions, children, className = '' }: { title?: React.ReactNode; description?: React.ReactNode; actions?: React.ReactNode; children: React.ReactNode; className?: string }) {
-  return <Card className={className}>
+  // Titled sections are listed by SectionNav on long pages.
+  return <Card className={`scroll-mt-28 ${className}`} data-section={typeof title === 'string' ? title : undefined}>
     {(title || actions) && <Card.Header className="flex flex-row flex-wrap items-start justify-between gap-3">
       <div className="min-w-0">
         {title && <Card.Title className="text-base font-semibold">{title}</Card.Title>}
