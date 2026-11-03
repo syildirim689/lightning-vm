@@ -865,7 +865,7 @@ test.describe('server lifecycle (simulator, Turkish customer)', () => {
 
     // Both go: web-1 from the grace period (bulk delete while two are listed) with "delete for good now", then web-2 at once.
     for (const name of ['web-1', 'web-2']) {
-      await page.getByRole('link', { name: new RegExp('^' + name) }).click();
+      await page.getByRole('list', { name: 'Sunucularınız' }).getByRole('link', { name: new RegExp('^' + name) }).click();
       await expect(page.getByRole('heading', { level: 1 })).toHaveText(name);
       await expect(page.getByText(/Hazır · açık/).first()).toBeVisible({ timeout: 60_000 });
       await expect(page.getByRole('button', { name: /Benzerini/ })).toBeVisible();
