@@ -4,6 +4,7 @@
 import { Button, Card, Checkbox, Chip, Modal, toast } from '@heroui/react';
 import { useQueryClient } from '@tanstack/react-query';
 import { motion } from 'motion/react';
+import NextLink from 'next/link';
 import { useTranslations } from 'next-intl';
 import { useState } from 'react';
 import { I } from '../../../../components/icon';
@@ -34,17 +35,20 @@ export default function Roles() {
   const roles = useApiQuery<{ roles: Role[] }>(['admin', 'roles'], '/admin/roles').data?.roles;
   const groups = useApiQuery<{ groups: Record<string, string[]> }>(['admin', 'permissions'], '/admin/permissions').data?.groups;
   const [editing, setEditing] = useState<Role | 'new' | null>(null);
+  const [copyOf, setCopyOf] = useState<Role | null>(null);
+  const total = Object.values(groups ?? {}).flat().length;
   const remove = async (key: string) => { await apiFetch(`/admin/roles/${key}`, { method: 'DELETE' }).catch((e) => { toast.danger(error(e)); throw e; }); toast.success(t('removed')); client.invalidateQueries({ queryKey: ['admin', 'roles'] }); };
 
   return <>
-    <PageHeader eyebrow={t('eyebrow')} title={t('title')} description={t('intro')} actions={manage && <Button onPress={() => setEditing('new')}><I name="plus" size={16}/>{t('new')}</Button>}/>
+    <PageHeader eyebrow={t('eyebrow')} title={t('title')} description={t('intro')} actions={manage && <Button onPress={() => { setCopyOf(null); setEditing('new'); }}><I name="plus" size={16}/>{t('new')}</Button>}/>
     <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
       {(roles ?? []).map((r, i) => <motion.div key={r.key} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.04 }}>
         <Card className="h-full">
           <Card.Header className="flex flex-row items-start justify-between gap-2">
             <div className="min-w-0">
               <Card.Title className="flex items-center gap-2 text-base font-semibold">{t.has(`builtinName.${r.key}` as 'builtinName.admin') ? t(`builtinName.${r.key}` as 'builtinName.admin') : r.name}{r.builtin && <Chip size="sm" variant="soft">{t('builtin')}</Chip>}</Card.Title>
-              <Card.Description className="text-xs text-muted"><code>{r.key}</code> · {t('members', { n: r.members })}</Card.Description>
+              <Card.Description className="text-xs text-muted"><code>{r.key}</code> · <NextLink href={`/admin/users?role=${r.key}`} className="hover:text-accent hover:underline">{t('members', { n: r.members })}</NextLink>
+                {total > 0 && !r.permissions.includes('*') && <> · {t('permCount', { n: r.permissions.length, total })}</>}</Card.Description>
             </div>
             <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-accent-soft text-accent"><I name="shield-check" size={18}/></span>
           </Card.Header>
@@ -62,25 +66,33 @@ export default function Roles() {
                   : `${t(`limits.${k}` as 'limits.maxServers')}: ${k === 'maxMemoryMb' ? `${Number(v) / 1024} GB` : v}`}</Chip>)}
             </div>}
           </Card.Content>
-          {manage && r.key !== 'admin' && <Card.Footer className="flex justify-end gap-2">
+          {manage && <Card.Footer className="flex justify-end gap-2">
+            <Button size="sm" variant="ghost" aria-label={t('duplicateOne', { name: r.name })} onPress={() => { setCopyOf(r); setEditing('new'); }}><I name="copy" size={15}/>{t('duplicate')}</Button>
+            {r.key !== 'admin' && <>
             {r.key !== 'user' && <ConfirmButton size="sm" variant="ghost" icon={<I name="trash-2" size={15}/>} label={t('remove')} title={t('removeTitle', { name: r.name })}
               body={t('removeBody', { n: r.members })} confirmLabel={t('remove')} cancelLabel={t('cancel')} onConfirm={() => remove(r.key)}/>}
-            <Button size="sm" variant="secondary" onPress={() => setEditing(r)}><I name="pencil" size={15}/>{t('edit')}</Button>
+            <Button size="sm" variant="secondary" onPress={() => setEditing(r)}><I name="pencil" size={15}/>{t('edit')}</Button></>}
           </Card.Footer>}
         </Card>
       </motion.div>)}
     </div>
-    {editing && groups && <RoleEditor role={editing === 'new' ? null : editing} groups={groups} mine={me?.permissions ?? []} onClose={() => setEditing(null)}/>}
+    {editing && groups && <RoleEditor role={editing === 'new' ? null : editing} from={editing === 'new' ? copyOf : null} groups={groups} mine={me?.permissions ?? []} onClose={() => setEditing(null)}/>}
   </>;
 }
 
-function RoleEditor({ role, groups, mine, onClose }: { role: Role | null; groups: Record<string, string[]>; mine: string[]; onClose: () => void }) {
+// `from` starts a new role as a copy of another (its permissions and limits), keeping only what you may grant.
+function RoleEditor({ role, from, groups, mine, onClose }: { role: Role | null; from?: Role | null; groups: Record<string, string[]>; mine: string[]; onClose: () => void }) {
   const t = useTranslations('Roles');
   const tp = useTranslations('Permissions');
   const { error, field } = useErrorText();
   const client = useQueryClient();
-  const [v, setV] = useState({ key: role?.key ?? '', name: role?.name ?? '', description: role?.description ?? '', permissions: role?.permissions ?? [] });
-  const l0 = role?.limits ?? {};
+  // Permissions you do not hold cannot be granted (the API refuses them too).
+  const grantable = (p: string) => mine.includes('*') || mine.includes(p);
+  const base = role ?? from;
+  const copyName = from ? t('copyName', { name: from.name }) : '';
+  const [v, setV] = useState({ key: role?.key ?? (from ? copyName.toLocaleLowerCase('en').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 32) : ''), name: role?.name ?? copyName,
+    description: base?.description ?? '', permissions: role?.permissions ?? (from ? (from.permissions.includes('*') ? Object.values(groups).flat() : from.permissions).filter(grantable) : []) });
+  const l0 = base?.limits ?? {};
   // Kept as text while editing: empty means "no limit".
   const [lim, setLim] = useState<Record<NumberLimit, string>>(() => Object.fromEntries(numberLimits.flatMap(([, ks]) => ks).map((k) =>
     [k, l0[k] === undefined ? '' : String(k === 'maxMemoryMb' ? l0[k]! / 1024 : l0[k])])) as Record<NumberLimit, string>);
@@ -93,8 +105,6 @@ function RoleEditor({ role, groups, mine, onClose }: { role: Role | null; groups
   const [fields, setFields] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
   const toggle = (p: string, on: boolean) => setV((x) => ({ ...x, permissions: on ? [...x.permissions, p] : x.permissions.filter((y) => y !== p) }));
-  // Permissions you do not hold cannot be granted (the API refuses them too).
-  const grantable = (p: string) => mine.includes('*') || mine.includes(p);
   async function save() {
     setBusy(true); setFields({});
     try {

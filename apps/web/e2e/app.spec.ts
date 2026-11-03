@@ -1021,6 +1021,10 @@ test.describe('people, settings and smart features (English browser)', () => {
     await dialog.getByRole('button', { name: 'Save' }).click();
     await expect(page.getByText('Role saved.')).toBeVisible();
     await expect(page.getByText('E2E Viewer')).toBeVisible();
+    // Duplicating a role opens a new one with its name and permissions.
+    await page.getByRole('button', { name: /^Duplicate the Support/ }).click();
+    await expect(page.getByRole('dialog').getByLabel('Name')).toHaveValue(/copy$/);
+    await page.getByRole('dialog').getByRole('button', { name: 'Cancel' }).click();
     // Account security score: what is missing, and "Fix" takes you to it (outlined for a moment).
     await page.goto('/account?tab=security');
     await expect(page.getByText('Account security', { exact: true })).toBeVisible();
@@ -1089,6 +1093,11 @@ test.describe('people, settings and smart features (English browser)', () => {
     await expect(page.getByText('Maintenance tonight at 22:00')).toBeHidden();
     await page.goto('/admin/audit?q=announcement');
     await expect(page.getByText('Announcement saved').first()).toBeVisible();
+    // Events are grouped by day, can be downloaded, and the abuse findings are searchable.
+    await expect(page.getByText(/^Today · \d+ events?$/)).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Download CSV' })).toBeVisible();
+    await page.goto('/admin/abuse');
+    await expect(page.getByRole('searchbox', { name: 'Search findings' })).toBeVisible();
     await page.goto('/admin/settings?tab=announcement');
     await page.getByText('Show the announcement').click();
     await page.getByRole('button', { name: 'Save' }).click();

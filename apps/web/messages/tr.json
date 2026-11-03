@@ -3106,7 +3106,11 @@
         "allowedLocations": "Hiçbiri seçilmezse tüm konumlar.",
         "allowedIps": "Her satıra bir IP veya CIDR blok (IPv4/IPv6). Boşsa her yerden. Kendi rolünüzde, şu an kullandığınız adres dışarıda kalamaz."
       }
-    }
+    },
+    "duplicate": "Çoğalt",
+    "duplicateOne": "{name} rolünü çoğalt",
+    "copyName": "{name} kopya",
+    "permCount": "{n}/{total} izin"
   },
   "Permissions": {
     "group": {
@@ -4611,7 +4615,11 @@
     "cpuHours": "Süre (saat)",
     "cpuHelp": "Bu süre boyunca örneklerin en az %90'ı eşiğin üstündeyse şüpheli sayılır.",
     "save": "Kaydet",
-    "saved": "İzleme ayarları kaydedildi."
+    "saved": "İzleme ayarları kaydedildi.",
+    "find": "Bulgularda ara",
+    "findPlaceholder": "Sunucu, müşteri, adres veya port",
+    "export": "CSV indir",
+    "noMatch": "Aramaya uyan bulgu yok."
   },
   "Vdc": {
     "title": "Sanal veri merkezleri",
@@ -5048,7 +5056,13 @@
       "monitoring": "İzleniyor",
       "resolved": "Çözüldü",
       "details": "Durum sayfası"
-    }
+    },
+    "today": "Bugün",
+    "yesterday": "Dün",
+    "dayCount": "{n} kayıt",
+    "filterBy": "Yalnızca {v} kayıtlarını göster",
+    "export": "CSV indir",
+    "shown": "{n} kayıt gösteriliyor"
   },
   "Snapshots": {
     "title": "Anlık görüntüler",
@@ -7017,7 +7031,14 @@
     },
     "setup": "Sunucunun içinde",
     "setupHelp": "Yeni arayüzün MAC adresi {mac}. Linux ve netplan ile:",
-    "vlan": "VLAN {vlan}"
+    "vlan": "VLAN {vlan}",
+    "usage": "Adres kullanımı",
+    "used": "{n} sunucu · {free} adres boş",
+    "netplan": "netplan ayarı",
+    "noCandidates": "{location} konumunda bu ağa eklenebilecek hazır sunucu yok.",
+    "orderOne": "Sunucu oluştur",
+    "count": "{n} / {max} ağ",
+    "limit": "Ağ sınırına ulaştınız ({max}). Yeni ağ için boş bir ağı silin."
   },
   "Images": {
     "title": "İmaj olarak kaydet",

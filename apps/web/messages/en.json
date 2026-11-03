@@ -3106,7 +3106,11 @@
         "allowedLocations": "None selected: every location.",
         "allowedIps": "One IP or CIDR block per line (IPv4/IPv6). Empty: anywhere. On your own role, the address you use now cannot be left out."
       }
-    }
+    },
+    "duplicate": "Duplicate",
+    "duplicateOne": "Duplicate the {name} role",
+    "copyName": "{name} copy",
+    "permCount": "{n}/{total} permissions"
   },
   "Permissions": {
     "group": {
@@ -4611,7 +4615,11 @@
     "cpuHours": "Duration (hours)",
     "cpuHelp": "Suspicious when at least 90% of the samples in this window are above the threshold.",
     "save": "Save",
-    "saved": "Monitoring settings saved."
+    "saved": "Monitoring settings saved.",
+    "find": "Search findings",
+    "findPlaceholder": "Server, customer, address or port",
+    "export": "Download CSV",
+    "noMatch": "No finding matches the search."
   },
   "Vdc": {
     "title": "Virtual datacenters",
@@ -5048,7 +5056,13 @@
       "monitoring": "Monitoring",
       "resolved": "Resolved",
       "details": "Status page"
-    }
+    },
+    "today": "Today",
+    "yesterday": "Yesterday",
+    "dayCount": "{n, plural, one {# event} other {# events}}",
+    "filterBy": "Show only events of {v}",
+    "export": "Download CSV",
+    "shown": "Showing {n, plural, one {# event} other {# events}}"
   },
   "Snapshots": {
     "title": "Snapshots",
@@ -7017,7 +7031,14 @@
     },
     "setup": "Inside the server",
     "setupHelp": "The new interface has MAC {mac}. On Linux with netplan:",
-    "vlan": "VLAN {vlan}"
+    "vlan": "VLAN {vlan}",
+    "usage": "Address usage",
+    "used": "{n, plural, one {# server} other {# servers}} · {free} addresses free",
+    "netplan": "netplan config",
+    "noCandidates": "No ready server in {location} to add to this network.",
+    "orderOne": "Create a server",
+    "count": "{n} / {max} networks",
+    "limit": "You have reached the network limit ({max}). Delete an empty network to add another."
   },
   "Images": {
     "title": "Save as an image",

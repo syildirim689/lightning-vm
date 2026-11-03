@@ -1,14 +1,16 @@
 "use client";
 // Abuse monitoring: risky ports open on customer servers and mining suspicions (CPU near full for hours),
 // with acknowledgement, a scan on demand, and the settings.
-import { Button, Modal, Tabs, toast } from '@heroui/react';
+import { Button, Modal, SearchField, Tabs, toast } from '@heroui/react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useFormatter, useTranslations } from 'next-intl';
 import { useEffect, useState } from 'react';
 import { I } from '../../../../components/icon';
 import { ButtonLink, DataTable, Mono, NumberInput, PageHeader, Section, Stat, StatusChip, SwitchInput, TextInput } from '../../../../components/ui';
 import { apiFetch, useErrorText, type ApiError } from '../../../../lib/api';
+import { downloadCsv } from '../../../../lib/csv';
 import { useMe } from '../../../../lib/me';
+import { fold } from '../../../../lib/note-line';
 import { can } from '../../../../lib/permissions';
 import { useApiQuery } from '../../../../lib/query';
 
@@ -60,8 +62,11 @@ export default function Abuse() {
   const [tab, setTab] = useState('open');
   const [ack, setAck] = useState<Finding | null>(null);
   const [note, setNote] = useState('');
+  const [find, setFind] = useState('');
+  const { error } = useErrorText();
   const d = q.data;
-  const list = (d?.findings ?? []).filter((f) => (tab === 'open' ? !f.resolvedAt : !!f.resolvedAt));
+  const hit = (f: Finding) => !find || fold([f.serverName, f.owner, f.location, f.address, f.port, f.detail.label].join(' ')).includes(fold(find));
+  const list = (d?.findings ?? []).filter((f) => (tab === 'open' ? !f.resolvedAt : !!f.resolvedAt) && hit(f));
   const when = (x: string) => format.relativeTime(new Date(x));
   async function scan() {
     try { await apiFetch('/admin/abuse/scan', { method: 'POST' }); toast.success(t('scanning')); setTimeout(() => client.invalidateQueries({ queryKey: key }), 15000); }
@@ -69,7 +74,7 @@ export default function Abuse() {
   }
   async function acknowledge() {
     if (!ack) return;
-    await apiFetch(`/admin/abuse/${ack.id}/acknowledge`, { method: 'PUT', body: { note } }).then(() => { toast.success(t('acknowledged')); client.invalidateQueries({ queryKey: key }); }, () => toast.danger(t('scanFailed')));
+    await apiFetch(`/admin/abuse/${ack.id}/acknowledge`, { method: 'PUT', body: { note } }).then(() => { toast.success(t('acknowledged')); client.invalidateQueries({ queryKey: key }); }, (e) => toast.danger(error(e)));
     setAck(null); setNote('');
   }
   const open = (d?.findings ?? []).filter((f) => !f.resolvedAt);
@@ -83,10 +88,19 @@ export default function Abuse() {
       </div>
       <Tabs selectedKey={tab} onSelectionChange={(k) => setTab(String(k))}>
         <Tabs.ListContainer><Tabs.List aria-label={t('title')}>
-          <Tabs.Tab id="open">{t('open')}<Tabs.Indicator/></Tabs.Tab><Tabs.Tab id="resolved">{t('resolved')}<Tabs.Indicator/></Tabs.Tab>
+          <Tabs.Tab id="open">{t('open')}<span className="ml-1.5 rounded-full bg-default px-1.5 text-xs tabular-nums">{open.length}</span><Tabs.Indicator/></Tabs.Tab>
+          <Tabs.Tab id="resolved">{t('resolved')}<span className="ml-1.5 rounded-full bg-default px-1.5 text-xs tabular-nums">{d.findings.length - open.length}</span><Tabs.Indicator/></Tabs.Tab>
         </Tabs.List></Tabs.ListContainer>
+        <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center">
+          <SearchField aria-label={t('find')} value={find} onChange={setFind} className="w-full sm:w-80">
+            <SearchField.Group><SearchField.SearchIcon/><SearchField.Input placeholder={t('findPlaceholder')}/><SearchField.ClearButton/></SearchField.Group>
+          </SearchField>
+          {list.length > 0 && <Button size="sm" variant="ghost" className="sm:ml-auto" onPress={() => downloadCsv('abuse', ['kind', 'finding', 'address', 'server', 'owner', 'location', 'first_seen', 'last_seen', 'resolved', 'acknowledged_by', 'note'],
+            list.map((f) => [f.kind, f.kind === 'port' ? f.detail.label ?? '' : `${f.detail.avg ?? 0}% / ${f.detail.hours ?? 0}h`, f.address ? `${f.address}:${f.port ?? ''}` : '', f.serverName, f.owner, f.location, f.firstSeen, f.lastSeen, f.resolvedAt ?? '', f.acknowledgedBy ?? '', f.note]))}>
+            <I name="download" size={14}/>{t('export')}</Button>}
+        </div>
         <Tabs.Panel id={tab} className="pt-4">
-          <DataTable label={t('title')} rows={list} rowKey={(f) => f.id} empty={tab === 'open' ? t('none') : t('noneResolved')} minWidth={880}
+          <DataTable label={t('title')} rows={list} rowKey={(f) => f.id} empty={find ? t('noMatch') : tab === 'open' ? t('none') : t('noneResolved')} minWidth={880}
             columns={[{ id: 'k', label: t('finding') }, { id: 's', label: t('server') }, { id: 'f', label: t('firstSeen') }, { id: 'l', label: t('lastSeen') }, { id: 'a', label: t('status') }, { id: 'x', label: <span className="sr-only">{t('actions')}</span> }]}
             cells={(f) => [
               f.kind === 'port' ? <span key="k" className="flex flex-col"><span className="flex items-center gap-1.5 font-medium"><I name="door-open" size={14} className="text-warning"/>{f.detail.label || t('port')}</span><Mono>{f.address}:{f.port}</Mono></span>
