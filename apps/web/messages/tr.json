@@ -2356,7 +2356,22 @@
       "today": "Bugün",
       "yesterday": "Dün",
       "earlier": "Daha önce"
-    }
+    },
+    "open": "Aç",
+    "show": "Gösterilenler",
+    "all": "Tümü",
+    "unread": "Okunmamış",
+    "kinds": "Türe göre",
+    "kind": {
+      "server": "Sunucu",
+      "support": "Destek",
+      "auth": "Güvenlik",
+      "billing": "Fatura",
+      "admin": "Yönetim",
+      "other": "Diğer"
+    },
+    "allRead": "Hepsini okudunuz.",
+    "noneHere": "Bu süzgece uyan bildirim yok."
   },
   "Palette": {
     "title": "Komut paleti",
@@ -6390,6 +6405,16 @@
       "hours": "Bu ay saat",
       "month": "Bu ay",
       "held": "Durduruldu: bakiye bitti"
+    },
+    "overdueCount": "{n} fatura gecikmiş",
+    "csv": {
+      "export": "CSV indir",
+      "due": "Son ödeme",
+      "currency": "Para birimi"
+    },
+    "spend": {
+      "title": "Son 12 ayda ödenen",
+      "totals": "Bu yıl {year} · 12 ayda {all}"
     }
   },
   "BillingAdmin": {

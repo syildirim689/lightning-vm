@@ -2356,7 +2356,22 @@
       "today": "Today",
       "yesterday": "Yesterday",
       "earlier": "Earlier"
-    }
+    },
+    "open": "Open",
+    "show": "Show",
+    "all": "All",
+    "unread": "Unread",
+    "kinds": "By kind",
+    "kind": {
+      "server": "Server",
+      "support": "Support",
+      "auth": "Security",
+      "billing": "Billing",
+      "admin": "Admin",
+      "other": "Other"
+    },
+    "allRead": "You have read them all.",
+    "noneHere": "No notification matches this filter."
   },
   "Palette": {
     "title": "Command palette",
@@ -6390,6 +6405,16 @@
       "hours": "Hours this month",
       "month": "This month",
       "held": "Stopped: balance used up"
+    },
+    "overdueCount": "{n} overdue",
+    "csv": {
+      "export": "Download CSV",
+      "due": "Due",
+      "currency": "Currency"
+    },
+    "spend": {
+      "title": "Paid in the last 12 months",
+      "totals": "This year {year} · 12 months {all}"
     }
   },
   "BillingAdmin": {

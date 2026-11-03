@@ -1266,6 +1266,15 @@ test.describe('people, settings and smart features (English browser)', () => {
     await page.waitForTimeout(900);
     await shot('billing-customer-390');
     await page.setViewportSize({ width: 1280, height: 720 });
+    // The paid invoice shows in this month's bar; the list counts per filter and downloads as CSV.
+    await page.reload();
+    const spend = page.getByRole('list', { name: 'Paid in the last 12 months' });
+    await expect(spend).toContainText('300');
+    await expect(page.getByRole('group', { name: 'Show', exact: true }).getByRole('button', { name: /^Settled\s*1$/ })).toBeVisible();
+    const [csvFile] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'Download CSV' }).click()]);
+    expect(csvFile.suggestedFilename()).toMatch(/^invoices-\d{4}-\d{2}-\d{2}\.csv$/);
+    await page.waitForTimeout(400);
+    await shot('billing-spend');
     // Staff: revenue, the invoice with its two payments, and the actions on it.
     await page.goto('/admin/billing');
     await expect(page.getByText('Monthly recurring revenue')).toBeVisible();
@@ -1604,6 +1613,18 @@ test.describe('people, settings and smart features (English browser)', () => {
     await expect(page.getByRole('dialog').getByText('Today')).toBeVisible();
     await page.waitForTimeout(500);
     await page.screenshot({ path: 'test-results/tour/bell.png' });
+    // Only the unread ones, then one kind; "All" brings the rest back.
+    const inbox = page.getByRole('dialog');
+    await inbox.getByRole('group', { name: 'Show' }).getByRole('button', { name: /^Unread/ }).click();
+    await expect(inbox.getByRole('group', { name: 'Show' }).getByRole('button', { name: /^Unread/ })).toHaveAttribute('aria-pressed', 'true');
+    const kinds = inbox.getByRole('group', { name: 'By kind' });
+    if (await kinds.isVisible()) {
+      await kinds.getByRole('button').first().click();
+      await expect(kinds.getByRole('button').first()).toHaveAttribute('aria-pressed', 'true');
+    }
+    await page.waitForTimeout(300);
+    await page.screenshot({ path: 'test-results/tour/bell-filters.png' });
+    await inbox.getByRole('group', { name: 'Show' }).getByRole('button', { name: 'All', exact: true }).click();
     await page.keyboard.press('Escape');
     // The menu counts tickets waiting for support; the list and the queue on a phone.
     await expect(page.locator('nav a[href="/admin/support"]')).toContainText(/\d/);

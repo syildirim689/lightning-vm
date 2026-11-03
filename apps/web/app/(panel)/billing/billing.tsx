@@ -12,6 +12,7 @@ import { useEffect, useState } from 'react';
 import { I } from '../../../components/icon';
 import { ConfirmButton, DataTable, Empty, FormActions, FormSection, Notice, PageHeader, SelectInput, StatusChip, SwitchInput, TextInput } from '../../../components/ui';
 import { apiFetch, useErrorText } from '../../../lib/api';
+import { downloadCsv } from '../../../lib/csv';
 import type { Card as SavedCard, Invoice, Subscription, Summary } from '../../../lib/billing';
 import { MyDisputes } from './disputes';
 import { invoiceState, invoiceTone, subscriptionTone, type Hourly } from '../../../lib/billing';
@@ -74,10 +75,20 @@ function Invoices() {
   const now = useNow({ updateInterval: 60_000 });
   const [filter, setFilter] = useState('all');
   const list = useApiQuery<{ invoices: Invoice[] }>(['billing', 'invoices'], '/billing/invoices').data?.invoices;
-  const rows = (list ?? []).filter((i) => filter === 'all' || (filter === 'open' ? i.status === 'unpaid' : i.status !== 'unpaid'));
-  return <div className="flex flex-col gap-3">
-    <div className="flex flex-wrap gap-2" role="group" aria-label={t('filter')}>
-      {(['all', 'open', 'done'] as const).map((k) => <Button key={k} size="sm" variant={filter === k ? 'primary' : 'ghost'} aria-pressed={filter === k} onPress={() => setFilter(k)}>{t(`filters.${k}`)}</Button>)}
+  const of = (k: string) => (list ?? []).filter((i) => k === 'all' || (k === 'open' ? i.status === 'unpaid' : i.status !== 'unpaid'));
+  const rows = of(filter);
+  const overdue = (list ?? []).filter((i) => i.status === 'unpaid' && i.overdue).length;
+  const csv = () => downloadCsv('invoices', [t('col.number'), t('col.kind'), t('col.date'), t('csv.due'), t('col.total'), t('csv.currency'), t('col.status')],
+    rows.map((i) => [i.number ?? i.id, t(`kind.${i.kind}`), (i.issuedAt ?? i.createdAt).slice(0, 10), i.dueAt.slice(0, 10), i.total, i.currency, t(`status.${invoiceState(i)}`)]));
+  return <div className="flex flex-col gap-4">
+    {list && <SpendChart invoices={list}/>}
+    <div className="flex flex-wrap items-center gap-2">
+      <div className="flex flex-wrap gap-2" role="group" aria-label={t('filter')}>
+        {(['all', 'open', 'done'] as const).map((k) => <Button key={k} size="sm" variant={filter === k ? 'primary' : 'ghost'} aria-pressed={filter === k} onPress={() => setFilter(k)}>
+          {t(`filters.${k}`)}{list && <span className="tabular-nums opacity-70">{of(k).length}</span>}</Button>)}
+      </div>
+      {overdue > 0 && <StatusChip tone="danger">{t('overdueCount', { n: overdue })}</StatusChip>}
+      <Button size="sm" variant="secondary" className="ml-auto" isDisabled={!rows.length} onPress={csv}><I name="download" size={14}/>{t('csv.export')}</Button>
     </div>
     <DataTable label={t('tabs.invoices')} rows={rows} rowKey={(i) => i.id} empty={list ? t('noInvoices') : '…'} minWidth={720}
       columns={[{ id: 'no', label: t('col.number') }, { id: 'kind', label: t('col.kind') }, { id: 'date', label: t('col.date') }, { id: 'total', label: t('col.total') }, { id: 'status', label: t('col.status') }, { id: 'act', label: <span className="sr-only">{t('col.actions')}</span> }]}
@@ -92,6 +103,40 @@ function Invoices() {
           : <NextLink key="a" href={`/billing/invoices/${i.id}`} className="text-sm text-accent hover:underline">{t('view')}</NextLink>,
       ]}/>
   </div>;
+}
+
+// Money paid in the last 12 months, one bar per month, in the currency most invoices use (top-ups and credit
+// notes left out: a top-up is spent through later invoices).
+function SpendChart({ invoices }: { invoices: Invoice[] }) {
+  const t = useTranslations('Billing.spend');
+  const format = useFormatter();
+  const paid = invoices.filter((i) => i.paidAt && i.kind !== 'topup' && i.kind !== 'credit_note' && Number(i.paidTotal) > 0);
+  if (!paid.length) return null;
+  const tally = paid.reduce<Record<string, number>>((a, i) => ({ ...a, [i.currency]: (a[i.currency] ?? 0) + 1 }), {});
+  const currency = Object.entries(tally).sort((a, b) => b[1] - a[1])[0][0];
+  const now = new Date();
+  const months = Array.from({ length: 12 }, (_, k) => new Date(now.getFullYear(), now.getMonth() - 11 + k, 1));
+  const sums = months.map((m) => paid.filter((i) => i.currency === currency && new Date(i.paidAt!).getFullYear() === m.getFullYear() && new Date(i.paidAt!).getMonth() === m.getMonth())
+    .reduce((n, i) => n + Number(i.paidTotal) - Number(i.refundedTotal || 0), 0));
+  const max = Math.max(...sums, 1);
+  const money = (v: number) => format.number(v, { style: 'currency', currency });
+  const year = sums.reduce((n, v, k) => n + (months[k].getFullYear() === now.getFullYear() ? v : 0), 0);
+  return <section aria-labelledby="spend-title" className="rounded-2xl border border-border bg-surface p-4">
+    <div className="mb-3 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+      <h3 id="spend-title" className="flex items-center gap-2 text-sm font-semibold"><I name="chart-column" size={16} className="text-accent"/>{t('title')}</h3>
+      <p className="text-xs text-muted">{t('totals', { year: money(year), all: money(sums.reduce((a, b) => a + b, 0)) })}</p>
+    </div>
+    <ol className="flex h-32 items-end gap-1 sm:gap-2" aria-label={t('title')}>
+      {months.map((m, k) => { const label = format.dateTime(m, { month: 'short' }); const current = k === 11;
+        return <li key={k} className="group flex h-full min-w-0 flex-1 flex-col items-center justify-end gap-1" title={`${format.dateTime(m, { month: 'long', year: 'numeric' })}: ${money(sums[k])}`}>
+          <span className="sr-only">{format.dateTime(m, { month: 'long', year: 'numeric' })}: {money(sums[k])}</span>
+          <span aria-hidden className="hidden text-[10px] tabular-nums text-muted group-hover:block">{sums[k] ? format.number(sums[k], { notation: 'compact' }) : ''}</span>
+          <span aria-hidden className={`w-full max-w-10 rounded-t-md transition-colors ${sums[k] ? (current ? 'bg-accent' : 'bg-accent/40 group-hover:bg-accent/70') : 'bg-default'}`}
+            style={{ height: sums[k] ? `${Math.max(6, (sums[k] / max) * 100)}%` : '3px' }}/>
+          <span aria-hidden className={`truncate text-[10px] ${current ? 'font-semibold text-foreground' : 'text-muted'}`}>{label}</span>
+        </li>; })}
+    </ol>
+  </section>;
 }
 
 function Subscriptions({ list }: { list: Subscription[] }) {
