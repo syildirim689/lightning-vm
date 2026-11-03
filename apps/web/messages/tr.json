@@ -1768,7 +1768,9 @@
       "location": "Lokasyon",
       "hourly": "Saatlik {price} (kullandıkça öde)",
       "sections": "Bölümler",
-      "toTop": "Başa dön"
+      "toTop": "Başa dön",
+      "copySummary": "Özeti kopyala",
+      "summaryCopied": "Sunucu özeti panoya kopyalandı."
     },
     "delete": {
       "title": "Sunucuyu sil",
@@ -1867,7 +1869,8 @@
       },
       "perMonth": "{price}/ay",
       "perHour": "{price}/saat",
-      "traffic": "Bu ay trafik: {used} / {quota}"
+      "traffic": "Bu ay trafik: {used} / {quota}",
+      "byPrice": "Önce en pahalı"
     },
     "col": {
       "name": "Ad",
@@ -4725,7 +4728,9 @@
       "i": "İstatistikler",
       "q": "Destek kuyruğu",
       "u": "Destek taleplerim",
-      "y": "Sistem"
+      "y": "Sistem",
+      "b": "Faturalar",
+      "f": "Güvenlik duvarları"
     },
     "search": "Sayfadaki aramaya git"
   },

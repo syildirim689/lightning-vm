@@ -427,7 +427,16 @@ export function ServerDetail({ id }: { id: string }) {
     </Section>}
 
     <div className="grid gap-6 lg:grid-cols-3">
-      <Section title={t('detail.overview')} className="lg:col-span-2">
+      {/* "Copy summary": the facts in plain lines, for a ticket, a chat or a colleague. */}
+      <Section title={t('detail.overview')} className="lg:col-span-2" actions={<Button size="sm" variant="ghost" onPress={async () => {
+        const state = `${t(`state.${s.state as 'ready'}`)}${s.state === 'ready' ? ` · ${t(`power.${s.powerState as 'poweredOn'}`)}` : ''}`;
+        const price = s.billingMode === 'hourly' && s.priceHourly ? t('detail.hourly', { price: format.number(Number(s.priceHourly), { style: 'currency', currency: s.currency, maximumFractionDigits: 4 }) })
+          : format.number(Number(s.priceMonthly), { style: 'currency', currency: s.currency });
+        const lines = [s.name, `IP: ${s.address ?? '–'}`, `${t('col.size')}: ${size(t, s)}`, `${t('detail.location')}: ${s.location || s.poolName}`, `${t('detail.image')}: ${s.imageName}`,
+          `${t('col.state')}: ${state}`, `${t('detail.price')}: ${price}`, `${t('detail.created')}: ${format.dateTime(new Date(s.createdAt), { dateStyle: 'medium', timeStyle: 'short' })}`];
+        await navigator.clipboard?.writeText(lines.join('\n')).catch(() => undefined);
+        toast.success(t('detail.summaryCopied'));
+      }}><I name="clipboard-copy" size={15}/>{t('detail.copySummary')}</Button>}>
         <dl className="grid gap-x-6 gap-y-3 text-sm sm:grid-cols-2">
           <div><dt className="text-muted">IP</dt><dd className="mt-0.5">{s.address ? <Mono>{s.address}</Mono> : '–'}</dd></div>
           <div><dt className="text-muted">{t('col.size')}</dt><dd className="mt-0.5">{size(t, s)}</dd></div>
@@ -441,7 +450,8 @@ export function ServerDetail({ id }: { id: string }) {
           {s.applicationName && <div><dt className="text-muted">{t('detail.application')}</dt><dd className="mt-0.5 flex flex-wrap items-center gap-2">{s.applicationName}
             {s.appState && <StatusChip tone={s.appState === 'installed' ? 'success' : s.appState === 'failed' ? 'danger' : 'accent'}>{t(`appState.${s.appState}`)}</StatusChip>}
             {s.appState === 'failed' && s.appMessage && <span className="text-xs text-muted">{s.appMessage}</span>}</dd></div>}
-          <div><dt className="text-muted">{t('detail.created')}</dt><dd className="mt-0.5">{format.dateTime(new Date(s.createdAt), { dateStyle: 'medium', timeStyle: 'short' })}</dd></div>
+          <div><dt className="text-muted">{t('detail.created')}</dt><dd className="mt-0.5">{format.dateTime(new Date(s.createdAt), { dateStyle: 'medium', timeStyle: 'short' })}
+            <span className="ml-1.5 text-xs text-muted">({format.relativeTime(new Date(s.createdAt))})</span></dd></div>
         </dl>
         <p className="mt-4 text-xs text-muted">{t('readinessExplain')}</p>
       </Section>

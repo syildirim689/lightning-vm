@@ -23,7 +23,7 @@ export function useServerFilters(all: Server[]) {
   const [state, setState] = useQueryState('state', parseAsStringLiteral(groups).withDefault('all'));
   const [tag, setTag] = useQueryState('tag', parseAsString.withDefault(''));
   const [owner, setOwner] = useQueryState('owner', parseAsString.withDefault('')); // staff: one customer's servers, by exact e-mail
-  const [sort, setSort] = useQueryState('sort', parseAsStringLiteral(['newest', 'name', 'size', 'state'] as const).withDefault('newest'));
+  const [sort, setSort] = useQueryState('sort', parseAsStringLiteral(['newest', 'name', 'size', 'price', 'state'] as const).withDefault('newest'));
   const servers = owner ? all.filter((s) => s.ownerEmail === owner) : all; // the counts and tags follow the chosen owner too
   const needle = fold(q.trim());
   const shown = servers.filter((s) => (state === 'all' || stateGroup(s) === state) && (!tag || !!s.tags?.includes(tag))
@@ -32,6 +32,7 @@ export function useServerFilters(all: Server[]) {
     // state puts what needs a look first (problems, then busy, stopped, running, trash), newest first within each.
     .sort((a, b) => sort === 'name' ? a.name.localeCompare(b.name, undefined, { numeric: true })
       : sort === 'size' ? b.memoryMb - a.memoryMb || b.vcpu - a.vcpu
+      : sort === 'price' ? Number(b.priceMonthly) - Number(a.priceMonthly) || a.name.localeCompare(b.name, undefined, { numeric: true })
       : (sort === 'state' ? attention.indexOf(stateGroup(a)) - attention.indexOf(stateGroup(b)) : 0) || Date.parse(b.createdAt) - Date.parse(a.createdAt));
   const filtered = !!q || state !== 'all' || !!tag;
   const clear = () => { void setQ(null); void setState(null); void setTag(null); };
@@ -64,8 +65,8 @@ export function ServerFilters({ f, placeholder, manageTags }: { f: ReturnType<ty
     : tags.length > 12 && <SelectInput className="w-full md:w-48" label={t('list.tag')} value={f.tag} onChange={(v) => f.setTag(v || null)} options={[{ id: '', label: t('list.allTags') }, ...tags.map((x) => ({ id: x, label: x }))]}/>}
     {manageTags && f.tag && tags.includes(f.tag) && <TagTools tag={f.tag} onDone={(next) => f.setTag(next)}/>}
     {f.filtered && <Button variant="ghost" className="min-h-11 self-start md:self-auto" onPress={f.clear}><I name="funnel-x" size={15}/>{t('list.clearFilters')}</Button>}
-    <SelectInput className="w-full md:ml-auto md:w-60" label={t('list.sort')} value={f.sort} onChange={(v) => f.setSort(v === 'name' || v === 'size' || v === 'state' ? v : null)}
-      options={[{ id: 'newest', label: t('list.newest') }, { id: 'name', label: t('list.byName') }, { id: 'size', label: t('list.bySize') }, { id: 'state', label: t('list.byState') }]}/>
+    <SelectInput className="w-full md:ml-auto md:w-60" label={t('list.sort')} value={f.sort} onChange={(v) => f.setSort(v === 'name' || v === 'size' || v === 'price' || v === 'state' ? v : null)}
+      options={[{ id: 'newest', label: t('list.newest') }, { id: 'name', label: t('list.byName') }, { id: 'size', label: t('list.bySize') }, { id: 'price', label: t('list.byPrice') }, { id: 'state', label: t('list.byState') }]}/>
   </div>;
 }
 

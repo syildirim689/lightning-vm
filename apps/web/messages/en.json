@@ -1768,7 +1768,9 @@
       "location": "Location",
       "hourly": "{price} / hour (pay as you go)",
       "sections": "Sections",
-      "toTop": "Back to top"
+      "toTop": "Back to top",
+      "copySummary": "Copy summary",
+      "summaryCopied": "Server summary copied."
     },
     "delete": {
       "title": "Delete server",
@@ -1867,7 +1869,8 @@
       },
       "perMonth": "{price}/mo",
       "perHour": "{price}/h",
-      "traffic": "Traffic this month: {used} / {quota}"
+      "traffic": "Traffic this month: {used} / {quota}",
+      "byPrice": "Most expensive first"
     },
     "col": {
       "name": "Name",
@@ -4725,7 +4728,9 @@
       "i": "Statistics",
       "q": "Support queue",
       "u": "My support tickets",
-      "y": "System"
+      "y": "System",
+      "b": "Billing",
+      "f": "Firewalls"
     },
     "search": "Jump to the page search"
   },

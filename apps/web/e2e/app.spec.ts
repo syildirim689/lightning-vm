@@ -530,6 +530,9 @@ test.describe('server lifecycle (simulator, Turkish customer)', () => {
     await expect(page.getByText(/3 tane saklar/)).toBeVisible();
     // The next scheduled action and when it comes.
     await expect(page.getByText(/^Sıradaki: /)).toBeVisible();
+    // The overview copies a plain summary of the server.
+    await page.getByRole('button', { name: 'Özeti kopyala' }).click();
+    await expect(page.getByText('Sunucu özeti panoya kopyalandı.')).toBeVisible();
     // Snapshot: taken as an operation, then listed as the current state.
     await page.getByLabel('Ad', { exact: true }).fill('guncelleme-oncesi');
     await page.getByRole('button', { name: 'Anlık görüntü al', exact: true }).click();
@@ -594,6 +597,8 @@ test.describe('server lifecycle (simulator, Turkish customer)', () => {
     // State order puts problems and busy servers before the running ones.
     await choose(page, page, /Sırala/, 'Duruma göre (önce sorunlar)');
     await expect(page).toHaveURL(/sort=state/);
+    await choose(page, page, /Sırala/, 'Önce en pahalı');
+    await expect(page).toHaveURL(/sort=price/);
     await page.goto('/?q=yok-boyle');
     await expect(page.getByText('Bu süzgeçlere uyan sunucu yok.')).toBeVisible();
     // Nothing matches: one tap clears the filters and the list comes back.
@@ -1411,6 +1416,10 @@ test.describe('people, settings and smart features (English browser)', () => {
     // An empty topology map says what to do next.
     await page.goto('/topology');
     await expect(page.locator('main').getByRole('link', { name: 'New server' })).toHaveAttribute('href', '/order');
+    // "g" then "b" goes to billing.
+    await page.locator('main h1').click();
+    await page.keyboard.press('g'); await page.keyboard.press('b');
+    await expect(page).toHaveURL(/\/billing$/);
     // An empty virtual datacenter page shows staff where to create one.
     await page.goto('/vdc');
     await expect(page.getByRole('link', { name: 'Create a virtual datacenter' })).toHaveAttribute('href', '/admin/catalog?tab=vdcs');

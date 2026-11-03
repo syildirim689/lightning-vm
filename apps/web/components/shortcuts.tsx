@@ -22,7 +22,7 @@ export default function Shortcuts({ permissions }: { permissions: string[] }) {
   const routes: [string, string, boolean][] = [
     ['h', '/', true], ['o', '/order', can(permissions, 'servers.create')], ['a', '/account', true], ['t', '/topology', true],
     ['d', '/admin', can(permissions, 'dashboard.view')], ['s', '/admin/servers', can(permissions, 'servers.view_all')], ['c', '/admin/catalog', can(permissions, 'catalog.view', 'catalog.manage')],
-    ['i', '/admin/stats', can(permissions, 'dashboard.view')], ['q', '/admin/support', can(permissions, 'support.view')], ['u', '/support', true], ['y', '/admin/system', can(permissions, 'system.view')],
+    ['i', '/admin/stats', can(permissions, 'dashboard.view')], ['q', '/admin/support', can(permissions, 'support.view')], ['u', '/support', true], ['b', '/billing', true], ['f', '/firewalls', true], ['y', '/admin/system', can(permissions, 'system.view')],
   ];
   const allowed = routes.filter((r) => r[2]);
 
