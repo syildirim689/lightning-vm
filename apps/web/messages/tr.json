@@ -1870,7 +1870,14 @@
       "perMonth": "{price}/ay",
       "perHour": "{price}/saat",
       "traffic": "Bu ay trafik: {used} / {quota}",
-      "byPrice": "Önce en pahalı"
+      "byPrice": "Önce en pahalı",
+      "quick": {
+        "label": "{name} için hızlı işlemler",
+        "started": "{name} açılıyor.",
+        "ssh": "SSH komutunu kopyala",
+        "sshCopied": "SSH komutu panoya kopyalandı.",
+        "ticket": "Bu sunucu için destek iste"
+      }
     },
     "col": {
       "name": "Ad",
@@ -6461,7 +6468,9 @@
     "spend": {
       "title": "Son 12 ayda ödenen",
       "totals": "Bu yıl {year} · 12 ayda {all}"
-    }
+    },
+    "offStaff": "Faturalandırmayı açınca müşteriler faturalarını, bakiyelerini ve kayıtlı kartlarını burada görür.",
+    "turnOn": "Faturalandırma ayarlarını aç"
   },
   "BillingAdmin": {
     "eyebrow": "Gelir",

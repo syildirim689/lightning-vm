@@ -1,5 +1,5 @@
 "use client";
-import { Button, Card, Popover, ProgressBar, toast } from '@heroui/react';
+import { Button, Card, Dropdown, Label, Popover, ProgressBar, toast } from '@heroui/react';
 import { I } from '../../components/icon';
 import NextLink from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -168,7 +168,7 @@ export function ServerList() {
     {!shown.length ? <div role="status" className="flex flex-col items-center gap-3 rounded-xl border border-dashed border-border px-4 py-8 text-center text-sm text-muted">{t('list.noMatch')}
       {f.filtered && <Button size="sm" variant="secondary" onPress={f.clear}><I name="funnel-x" size={15}/>{t('list.clearFilters')}</Button>}</div>
     : <ul ref={gridRef} className={rows ? 'flex flex-col gap-2' : 'grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4'} aria-label={t('list.title')}>
-    {shown.map((s, i) => { const on = picked.has(s.id); const card = rows ? <div data-row className={`flex h-full flex-wrap items-center gap-x-4 gap-y-1.5 rounded-xl border border-border bg-surface py-3 pl-4 pr-24 text-sm transition-shadow ${on ? 'ring-2 ring-accent' : ''}`}>
+    {shown.map((s, i) => { const on = picked.has(s.id); const card = rows ? <div data-row className={`flex h-full flex-wrap items-center gap-x-4 gap-y-1.5 rounded-xl border border-border bg-surface py-3 pl-4 pr-32 text-sm transition-shadow ${on ? 'ring-2 ring-accent' : ''}`}>
           <span className="flex min-w-0 items-center gap-1.5 font-semibold sm:w-44"><span className="truncate">{s.name}</span>{s.locked && <I name="lock" size={13} className="shrink-0 text-warning"/>}</span>
           <StateBadge server={s}/>
           <span className="min-w-0 sm:w-32">{s.address ? <Mono>{s.address}</Mono> : <span className="text-muted">–</span>}</span>
@@ -195,7 +195,7 @@ export function ServerList() {
                 <I name={firewallFailed(s) ? 'shield-x' : 'shield-check'} size={12}/>{t(`list.firewall.${s.firewallStatus ?? 'applied'}`, { n: s.firewallCount })}</span>}</span>
             {s.notes?.trim() && <span className="flex items-center gap-1.5 text-xs text-muted"><I name="sticky-note" size={13} className="shrink-0"/>
               <span className="sr-only">{t('list.note')}: </span><span className="truncate">{noteLine(s.notes, f.q)}</span></span>}
-            {!!s.tags?.length && <span className="flex flex-wrap gap-1 pr-20 pt-1">{s.tags.map((x) => <span key={x} className="rounded-full bg-default px-2 py-0.5 text-xs">{x}</span>)}</span>}
+            {!!s.tags?.length && <span className="flex flex-wrap gap-1 pr-28 pt-1">{s.tags.map((x) => <span key={x} className="rounded-full bg-default px-2 py-0.5 text-xs">{x}</span>)}</span>}
             {s.deleteAt && <span className="pt-1"><StatusChip tone="danger">{t('trash.badge', { when: format.relativeTime(new Date(s.deleteAt), new Date()) })}</StatusChip></span>}
           </Card.Content>
         </Card>;
@@ -207,6 +207,7 @@ export function ServerList() {
         </button>
       : <><NextLink href={`/servers/${s.id}`} className={`block h-full rounded-xl outline-offset-2 transition-all duration-200 hover:shadow-lg focus-visible:outline-2 ${rows ? 'hover:border-accent' : 'hover:-translate-y-1'}`}>{card}</NextLink>
         {s.address && <Copy text={s.address} label={`${s.name} IP`} className={`absolute ${rows ? 'right-12 top-1/2 -translate-y-1/2' : 'bottom-3 right-12'}`}/>}
+        <QuickMenu s={s} className={`absolute ${rows ? 'right-[5.25rem] top-1/2 -translate-y-1/2' : 'bottom-3 right-[5.25rem]'}`}/>
         <FavoriteStar id={s.id} on={!!s.favorite} name={s.name} className={rows ? 'absolute right-3 top-1/2 -translate-y-1/2' : undefined}/></>}
     </motion.li>; })}
   </ul>}
@@ -292,6 +293,33 @@ function BulkTags({ servers, known, busy, onTag }: { servers: Server[]; known: s
       </Popover.Dialog>
     </Popover.Content>
   </Popover>;
+}
+
+// A card's quick menu: the steps that need no confirmation, without opening the server (console, power on when
+// off, the SSH command, a ticket about it). Shutting down and deleting stay on the server page with their confirmations.
+function QuickMenu({ s, className }: { s: Server; className: string }) {
+  const t = useTranslations('Servers');
+  const router = useRouter();
+  const ready = s.state === 'ready' && !s.deleteAt;
+  const start = useApiAction(() => apiFetch(`/servers/${s.id}/actions`, { method: 'POST', body: { action: 'power_on' }, headers: { 'idempotency-key': crypto.randomUUID() } }),
+    { invalidate: [['servers'], ['tasks']], success: t('list.quick.started', { name: s.name }) });
+  const run = async (k: React.Key) => {
+    if (k === 'console') router.push(`/servers/${s.id}/console`);
+    else if (k === 'power_on') start.mutate();
+    else if (k === 'ssh' && s.address) { await navigator.clipboard?.writeText(`ssh root@${s.address}`).catch(() => undefined); toast.success(t('list.quick.sshCopied')); }
+    else if (k === 'ticket') router.push(`/support?new=1&server=${s.id}`);
+  };
+  return <Dropdown>
+    <Button isIconOnly size="sm" variant="ghost" aria-label={t('list.quick.label', { name: s.name })} className={`min-h-9 min-w-9 ${className}`}><I name="ellipsis" size={17}/></Button>
+    <Dropdown.Popover placement="bottom end">
+      <Dropdown.Menu aria-label={t('list.quick.label', { name: s.name })} onAction={run}>
+        {ready ? <Dropdown.Item id="console" textValue={t('action.console')}><I name="square-terminal" size={15}/><Label>{t('action.console')}</Label></Dropdown.Item> : null}
+        {ready && s.powerState !== 'poweredOn' ? <Dropdown.Item id="power_on" textValue={t('action.power_on')}><I name="play" size={15}/><Label>{t('action.power_on')}</Label></Dropdown.Item> : null}
+        {s.address ? <Dropdown.Item id="ssh" textValue={t('list.quick.ssh')}><I name="copy" size={15}/><Label>{t('list.quick.ssh')}</Label></Dropdown.Item> : null}
+        <Dropdown.Item id="ticket" textValue={t('list.quick.ticket')}><I name="life-buoy" size={15}/><Label>{t('list.quick.ticket')}</Label></Dropdown.Item>
+      </Dropdown.Menu>
+    </Dropdown.Popover>
+  </Dropdown>;
 }
 
 // Star / unstar a server; the list updates at once and is put right if the request fails.

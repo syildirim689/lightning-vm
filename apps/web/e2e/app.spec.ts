@@ -591,6 +591,11 @@ test.describe('server lifecycle (simulator, Turkish customer)', () => {
     // The card copies its IP in one tap, without opening the server.
     await page.getByRole('button', { name: 'Kopyala: web-1 IP' }).click();
     await expect(page.getByText('web-1 IP kopyalandı.')).toBeVisible();
+    // The card's quick menu copies the SSH command without opening the server.
+    await page.getByRole('button', { name: 'web-1 için hızlı işlemler' }).click();
+    await page.getByRole('menuitem', { name: 'SSH komutunu kopyala' }).click();
+    await expect(page.getByText('SSH komutu panoya kopyalandı.')).toBeVisible();
+    await page.screenshot({ path: 'test-results/tour/servers-quick-390.png' });
     await expect(page).toHaveURL(/\/\?q=/);
     await page.screenshot({ path: 'test-results/tour/servers-note-search-390.png' });
     await page.setViewportSize({ width: 1280, height: 720 });
@@ -1379,6 +1384,9 @@ test.describe('people, settings and smart features (English browser)', () => {
       await page.waitForTimeout(2000);
       await page.screenshot({ path: `test-results/tour/${name}.png`, fullPage: true });
     }
+    // With billing off, staff get a way to turn it on.
+    await page.goto('/billing');
+    if (await page.getByText('Billing is not turned on in this panel.').isVisible()) await expect(page.getByRole('link', { name: 'Open billing settings' })).toHaveAttribute('href', '/admin/settings?tab=billing');
   });
 
   test('tour of the newer screens', async ({ browser }) => {

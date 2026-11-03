@@ -10,13 +10,15 @@ import { useFormatter, useNow, useTranslations } from 'next-intl';
 import { parseAsString, useQueryState } from 'nuqs';
 import { useEffect, useState } from 'react';
 import { I } from '../../../components/icon';
-import { ConfirmButton, DataTable, Empty, FormActions, FormSection, Notice, PageHeader, SelectInput, StatusChip, SwitchInput, TextInput } from '../../../components/ui';
+import { ButtonLink, ConfirmButton, DataTable, Empty, FormActions, FormSection, Notice, PageHeader, SelectInput, StatusChip, SwitchInput, TextInput } from '../../../components/ui';
 import { apiFetch, useErrorText } from '../../../lib/api';
 import { downloadCsv } from '../../../lib/csv';
 import type { Card as SavedCard, Invoice, Subscription, Summary } from '../../../lib/billing';
 import { MyDisputes } from './disputes';
 import { invoiceState, invoiceTone, subscriptionTone, type Hourly } from '../../../lib/billing';
 import { useApiQuery } from '../../../lib/query';
+import { useMe } from '../../../lib/me';
+import { can } from '../../../lib/permissions';
 
 const tabs = ['invoices', 'subscriptions', 'balance', 'cards', 'disputes', 'profile'] as const;
 
@@ -26,8 +28,12 @@ export default function Billing() {
   const [tab, setTab] = useQueryState('tab', parseAsString.withDefault('invoices'));
   const [topup, setTopup] = useState(false);
   const s = useApiQuery<Summary>(['notifications', 'billing-summary'], '/billing/summary').data;
+  const me = useMe();
   if (!s) return <div className="h-48 animate-pulse rounded-3xl bg-default/50"/>;
-  if (!s.enabled) return <><PageHeader title={t('title')}/><Empty icon={<I name="receipt" size={28}/>} title={t('off')}/></>;
+  // Staff who can turn it on get the way there.
+  if (!s.enabled) return <><PageHeader title={t('title')}/><Empty icon={<I name="receipt" size={28}/>} title={t('off')}>
+    {can(me?.permissions, 'settings.manage') && <><span className="block">{t('offStaff')}</span>
+      <ButtonLink href="/admin/settings?tab=billing" variant="secondary" className="mt-3"><I name="settings" size={16}/>{t('turnOn')}</ButtonLink></>}</Empty></>;
   const money = (v: string, c: string) => format.number(Number(v), { style: 'currency', currency: c });
   const next = s.subscriptions.filter((x) => x.periodEnd && !x.cancelAtPeriodEnd)[0];
   return <>

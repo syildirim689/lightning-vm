@@ -1870,7 +1870,14 @@
       "perMonth": "{price}/mo",
       "perHour": "{price}/h",
       "traffic": "Traffic this month: {used} / {quota}",
-      "byPrice": "Most expensive first"
+      "byPrice": "Most expensive first",
+      "quick": {
+        "label": "Quick actions for {name}",
+        "started": "{name} is starting.",
+        "ssh": "Copy the SSH command",
+        "sshCopied": "SSH command copied.",
+        "ticket": "Ask support about this server"
+      }
     },
     "col": {
       "name": "Name",
@@ -6461,7 +6468,9 @@
     "spend": {
       "title": "Paid in the last 12 months",
       "totals": "This year {year} · 12 months {all}"
-    }
+    },
+    "offStaff": "Once billing is on, customers see their invoices, balance and saved cards here.",
+    "turnOn": "Open billing settings"
   },
   "BillingAdmin": {
     "eyebrow": "Money",
