@@ -530,6 +530,8 @@ test.describe('server lifecycle (simulator, Turkish customer)', () => {
     await expect(page.getByText(/3 tane saklar/)).toBeVisible();
     // The next scheduled action and when it comes.
     await expect(page.getByText(/^Sıradaki: /)).toBeVisible();
+    // The tab is named after the server.
+    await expect(page).toHaveTitle(/(^|\) )web-1 · /);
     // The overview copies a plain summary of the server.
     await page.getByRole('button', { name: 'Özeti kopyala' }).click();
     await expect(page.getByText('Sunucu özeti panoya kopyalandı.')).toBeVisible();
@@ -1370,7 +1372,7 @@ test.describe('people, settings and smart features (English browser)', () => {
     const page = await (await browser.newContext({ locale: 'en-US', colorScheme: 'dark', viewport: { width: 1280, height: 900 } })).newPage();
     await signInAdmin(page);
     for (const [path, name, heading] of [['/admin/stats', 'dark-stats', 'Statistics'], ['/admin/system', 'dark-system', 'System'], ['/admin/support', 'dark-support', 'Support queue'],
-      ['/account', 'dark-account', 'My account']] as const) {
+      ['/account', 'dark-account', 'My account'], ['/', 'dark-home', 'Your servers'], ['/billing', 'dark-billing', 'Billing'], ['/support', 'dark-tickets', 'Support'], ['/admin', 'dark-dashboard', 'Overview']] as const) {
       await page.goto(path);
       await expect(page.getByRole('heading', { name: heading, level: 1 })).toBeVisible();
       expect(await page.evaluate(() => document.documentElement.classList.contains('dark') || document.documentElement.dataset.theme === 'dark')).toBe(true);

@@ -13,6 +13,7 @@ import { apiFetch, useErrorText, type ApiError } from '../../../lib/api';
 import { fillCanned, type CannedVars } from '../../../lib/canned';
 import { useMe } from '../../../lib/me';
 import { useApiQuery } from '../../../lib/query';
+import { useDocTitle } from '../../../lib/title';
 
 export type Ticket = { id: string; number: number; subject: string; status: Status; priority: Priority; dueAt: string | null; firstResponseAt: string | null; createdAt: string; updatedAt: string;
   closedAt: string | null; rating: number | null; ratingComment: string | null; departmentId: string | null; departmentTr: string | null; departmentEn: string | null; serverId: string | null;
@@ -181,6 +182,7 @@ export function TicketPage({ id, staff }: { id: string; staff: boolean }) {
   const others = usePresence(staff ? id : null, writing);
   const q = useApiQuery<{ ticket: Ticket; messages: Message[]; staff: boolean }>(['support', 'ticket', id], `/support/tickets/${id}`, { refetchInterval: 15_000 });
   const refresh = () => { void client.invalidateQueries({ queryKey: ['support'] }); void client.invalidateQueries({ queryKey: ['admin', 'support'] }); };
+  useDocTitle(q.data && `#${q.data.ticket.number} ${q.data.ticket.subject}`);
   if (q.isError) return <p className="text-sm text-muted">{t('notFound')}</p>;
   if (!q.data) return <div className="h-64 animate-pulse rounded-3xl bg-default/50"/>;
   const { ticket: tk, messages } = q.data;

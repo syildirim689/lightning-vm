@@ -13,6 +13,7 @@ import { CheckboxInput, Mono, Notice } from '../../../../../components/ui';
 import { apiFetch, useErrorText } from '../../../../../lib/api';
 import type { InvoiceDetail, Summary } from '../../../../../lib/billing';
 import { useApiQuery } from '../../../../../lib/query';
+import { useDocTitle } from '../../../../../lib/title';
 import { InvoiceDisputes } from '../../disputes';
 
 export default function InvoicePage({ id }: { id: string }) {
@@ -21,6 +22,7 @@ export default function InvoicePage({ id }: { id: string }) {
   const paymentId = params.get('payment');
   const q = useApiQuery<InvoiceDetail>(['billing', 'invoice', id], `/billing/invoices/${id}`, { refetchInterval: (d) => (d?.invoice.status === 'unpaid' && paymentId ? 3000 : false) });
   const d = q.data;
+  useDocTitle(d && (d.invoice.number ?? `#${d.invoice.id.slice(0, 8).toUpperCase()}`));
   // Back from a provider: the result of that payment, once.
   const result = paymentId ? d?.payments.find((p) => p.id === paymentId) : undefined;
   useEffect(() => {

@@ -16,6 +16,7 @@ import { ServerIso } from './server-iso';
 import { ServerHealth } from '../../components/smart';
 import { CloneServer, Copy, OrderSimilar, QuickConnect, RenameServer, ServerLabels } from './server-extras';
 import { remember } from '../../lib/recent';
+import { useDocTitle } from '../../lib/title';
 import { PowerSchedules } from './server-schedules';
 import { ServerSnapshots } from './server-snapshots';
 import { ServerReinstall, ServerResize } from './server-change';
@@ -377,6 +378,7 @@ export function ServerDetail({ id }: { id: string }) {
   const mine = useApiQuery<{ servers: Server[] }>(['servers'], '/servers').data?.servers;
   const name = q.data?.server.name;
   useEffect(() => { if (name) remember({ href: `/servers/${id}`, label: name }); }, [name, id]);
+  useDocTitle(name);
   useEffect(() => { if (gone) router.replace('/'); }, [gone, router]);
   if (!q.data) return <p role="status" className="text-sm text-muted">{q.error && !gone ? error(q.error) : t('loading')}</p>;
   const { server: s, operations } = q.data;
