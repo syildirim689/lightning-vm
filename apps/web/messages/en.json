@@ -4486,7 +4486,11 @@
       "error": "Error",
       "deleting": "Deleting",
       "pending": "Pending"
-    }
+    },
+    "emptyHelp": "Once you create your first server it shows here with its location, network and traffic.",
+    "emptyAdmin": "Once a VMware connection is added, its hosts, pools and servers show here.",
+    "newServer": "New server",
+    "addConnection": "Add a VMware connection"
   },
   "Energy": {
     "eyebrow": "Infrastructure",
@@ -7185,5 +7189,10 @@
     "unpaid": "{n, plural, one {# unpaid invoice} other {# unpaid invoices}} · {amount}",
     "overdue": "{n, plural, one {# invoice overdue} other {# invoices overdue}} · {amount}",
     "answered": "{n, plural, one {Support answered your ticket} other {Support answered # tickets}}"
+  },
+  "Connection": {
+    "lost": "Connection lost",
+    "lostHelp": "The panel refreshes itself once the internet is back; actions cannot be sent until then.",
+    "back": "Back online; the page is up to date."
   }
 }

@@ -6,7 +6,7 @@ import { useTranslations } from 'next-intl';
 import { useState } from 'react';
 import { I } from '../../components/icon';
 import { rate, Topology, type TopoNode } from '../../components/topology';
-import { DataTable, Notice, PageHeader, Stat, StatusChip } from '../../components/ui';
+import { ButtonLink, DataTable, Empty, Notice, PageHeader, Stat, StatusChip } from '../../components/ui';
 import { flag } from '../../lib/flag';
 import { useApiQuery } from '../../lib/query';
 
@@ -120,7 +120,10 @@ export function TopologyPage({ admin }: { admin: boolean }) {
           <Tabs.Tab id="map" className="gap-2"><I name="network" size={16}/>{t('map')}<Tabs.Indicator/></Tabs.Tab>
           <Tabs.Tab id="table" className="gap-2"><I name="table" size={16}/>{t('table')}<Tabs.Indicator/></Tabs.Tab>
         </Tabs.List></Tabs.ListContainer>
-        <Tabs.Panel id="map" className="pt-4">{root && (root.children?.length ? <Topology root={root} label={t('title')}/> : <p className="text-sm text-muted">{t('empty')}</p>)}</Tabs.Panel>
+        <Tabs.Panel id="map" className="pt-4">{root && (root.children?.length ? <Topology root={root} label={t('title')}/>
+          : <Empty icon={<I name="network" size={28}/>} title={t('empty')}>{admin ? t('emptyAdmin') : t('emptyHelp')}
+            <span className="mt-3 flex justify-center">{admin ? <ButtonLink href="/admin/vmware" variant="secondary"><I name="plug" size={16}/>{t('addConnection')}</ButtonLink>
+              : <ButtonLink href="/order"><I name="plus" size={16}/>{t('newServer')}</ButtonLink>}</span></Empty>)}</Tabs.Panel>
         <Tabs.Panel id="table" className="pt-4"><Table servers={servers}/></Tabs.Panel>
       </Tabs>
       <p className="text-xs text-muted">{t('refresh')}</p>

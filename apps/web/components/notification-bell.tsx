@@ -35,6 +35,16 @@ export default function NotificationBell() {
   const kinds = [...new Set(items.map(kindOf))];
   const shown = items.filter((n) => (!onlyUnread || !n.readAt) && (!kind || kindOf(n) === kind));
 
+  // The unread count leads the tab's title ("(3) Servers"), so a panel left in another tab shows news. Pages set their
+  // own title on navigation, so it is put back whenever the title changes.
+  useEffect(() => {
+    const apply = () => { const bare = document.title.replace(/^\(\d+\+?\) /, ''); const next = unread ? `(${unread > 99 ? '99+' : unread}) ${bare}` : bare; if (document.title !== next) document.title = next; };
+    apply();
+    const o = new MutationObserver(apply); // the head, not the title node: navigation may replace the node
+    o.observe(document.head, { childList: true, characterData: true, subtree: true });
+    return () => { o.disconnect(); document.title = document.title.replace(/^\(\d+\+?\) /, ''); };
+  }, [unread]);
+
   // Toast only for notifications that arrive after the panel loaded.
   const newest = useRef<string | null>(null);
   useEffect(() => {

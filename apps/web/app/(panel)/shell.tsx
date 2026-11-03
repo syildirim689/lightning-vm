@@ -1,4 +1,5 @@
 "use client";
+import ConnectionBanner from '../../components/connection-banner';
 import { Avatar, Button, Chip, Drawer, Dropdown, Kbd, Label, Separator } from '@heroui/react';
 import { motion } from 'motion/react';
 import NextLink from 'next/link';
@@ -189,6 +190,7 @@ export default function Shell({ user, branding, version, children }: { user: Use
         </main>
       </div>
     </div>
+    <ConnectionBanner/>
     <TaskManager permissions={user.permissions}/>
     <CommandPalette permissions={user.permissions} isOpen={palette} onOpenChange={setPalette}/>
     <Shortcuts permissions={user.permissions}/>

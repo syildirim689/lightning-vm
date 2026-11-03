@@ -4486,7 +4486,11 @@
       "error": "Hata",
       "deleting": "Siliniyor",
       "pending": "Bekliyor"
-    }
+    },
+    "emptyHelp": "İlk sunucunuzu oluşturduğunuzda burada konumu, ağı ve trafiğiyle görünür.",
+    "emptyAdmin": "Bir VMware bağlantısı eklendiğinde ana makineler, havuzlar ve sunucular burada görünür.",
+    "newServer": "Yeni sunucu",
+    "addConnection": "VMware bağlantısı ekle"
   },
   "Energy": {
     "eyebrow": "Altyapı",
@@ -7185,5 +7189,10 @@
     "unpaid": "{n} ödenmemiş fatura · {amount}",
     "overdue": "{n} fatura gecikmiş · {amount}",
     "answered": "{n, plural, one {Talebinize yanıt geldi} other {# talebinize yanıt geldi}}"
+  },
+  "Connection": {
+    "lost": "Bağlantı kesildi",
+    "lostHelp": "İnternet geri gelince panel kendini güncelleyecek; bu arada yapılan işlemler gönderilemez.",
+    "back": "Bağlantı geri geldi; sayfa güncellendi."
   }
 }

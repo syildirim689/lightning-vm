@@ -1406,6 +1406,9 @@ test.describe('people, settings and smart features (English browser)', () => {
     await page.goto('/admin/energy');
     await page.getByRole('button', { name: 'Measure now' }).click();
     await page.waitForTimeout(6000);
+    // An empty topology map says what to do next.
+    await page.goto('/topology');
+    await expect(page.locator('main').getByRole('link', { name: 'New server' })).toHaveAttribute('href', '/order');
     // An empty virtual datacenter page shows staff where to create one.
     await page.goto('/vdc');
     await expect(page.getByRole('link', { name: 'Create a virtual datacenter' })).toHaveAttribute('href', '/admin/catalog?tab=vdcs');
@@ -1654,6 +1657,14 @@ test.describe('people, settings and smart features (English browser)', () => {
     await page.screenshot({ path: 'test-results/tour/bell-filters.png' });
     await inbox.getByRole('group', { name: 'Show' }).getByRole('button', { name: 'All', exact: true }).click();
     await page.keyboard.press('Escape');
+    // Unread notifications lead the tab title; losing the connection says so, and coming back refreshes.
+    await expect(page).toHaveTitle(/^\(\d+\+?\) /);
+    await page.context().setOffline(true);
+    await expect(page.getByRole('status').filter({ hasText: 'Connection lost' })).toBeVisible();
+    await page.screenshot({ path: 'test-results/tour/offline.png' });
+    await page.context().setOffline(false);
+    await expect(page.getByText('Back online; the page is up to date.')).toBeVisible();
+    await expect(page.getByRole('status').filter({ hasText: 'Connection lost' })).toBeHidden();
     // The menu counts tickets waiting for support; the list and the queue on a phone.
     await expect(page.locator('nav a[href="/admin/support"]')).toContainText(/\d/);
     // A second ticket, so the list offers search and status filters; a reply left unsent shows as a draft.
