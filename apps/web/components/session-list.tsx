@@ -41,7 +41,8 @@ export default function SessionList({ sessions, onEnd, canEnd }: { sessions: Ses
   const exact = (at: string) => format.dateTime(new Date(at), { dateStyle: 'medium', timeStyle: 'short' });
   if (!sessions.length) return <p className="text-sm text-muted">{t('noSessions')}</p>;
   return <ul ref={list} className="flex flex-col divide-y divide-separator rounded-xl border border-border">
-    {sessions.map((s) => <li key={s.id} className={`flex flex-col gap-2 px-3 py-3 text-sm sm:flex-row sm:items-center sm:gap-3 ${s.current ? 'bg-accent/5' : ''}`}>
+    {/* This device first, then the ones open now; the API's order (latest activity) within each. */}
+    {[...sessions].sort((a, b) => Number(b.current) - Number(a.current) || Number(b.online) - Number(a.online)).map((s) => <li key={s.id} className={`flex flex-col gap-2 px-3 py-3 text-sm sm:flex-row sm:items-center sm:gap-3 ${s.current ? 'bg-accent/5' : ''}`}>
       <span className="relative grid size-9 shrink-0 place-items-center rounded-lg bg-default text-muted">
         <I name={s.mobile ? 'smartphone' : 'monitor'} size={16}/>
         <PresenceDot presence={s.online ? 'online' : 'offline'} className="absolute -right-0.5 -top-0.5"/>
