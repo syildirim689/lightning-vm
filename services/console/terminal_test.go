@@ -95,3 +95,13 @@ func (m *memStore) eventNames() string {
 	}
 	return strings.Join(names, ",")
 }
+
+// An interactive bash writes its prompt, line editing and errors to stderr: the host shell must not silence it.
+func TestHostShellKeepsStderr(t *testing.T) {
+	t.Setenv("TERMINAL_SHELL", "")
+	argv := hostShell()
+	script := argv[len(argv)-1]
+	if !strings.Contains(script, "exec bash -l") || strings.Contains(script, "bash -l 2>") {
+		t.Fatalf("host shell script %q hides bash's stderr", script)
+	}
+}

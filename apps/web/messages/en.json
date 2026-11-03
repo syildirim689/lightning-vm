@@ -5061,7 +5061,18 @@
       "TERMINAL_LIMIT": "You already have a terminal open (one at a time).",
       "TERMINAL_START_FAILED": "The shell could not be started on the server.",
       "TERMINAL_CLOSED": "The terminal is closed."
-    }
+    },
+    "copy": "Copy (all output when nothing is selected)",
+    "copied": "Selection copied.",
+    "copiedAll": "All terminal output copied.",
+    "clipboardBlocked": "The browser did not allow clipboard access.",
+    "paste": "Paste from clipboard",
+    "clear": "Clear screen and history",
+    "fontSmaller": "Smaller text",
+    "fontLarger": "Larger text",
+    "fullscreen": "Full screen",
+    "exitFullscreen": "Exit full screen",
+    "shortcuts": "Ctrl+Shift+C copies, Ctrl+Shift+V pastes. With text selected Ctrl+C copies too; without a selection it interrupts the command."
   },
   "Chat": {
     "title": "Messaging apps",
@@ -7059,6 +7070,7 @@
       "windows": "Windows (PowerShell)"
     },
     "filter": "Search saved commands",
-    "noMatch": "No saved command matches the search."
+    "noMatch": "No saved command matches the search.",
+    "textHelpShell": "Send text from here, or paste it straight into the terminal (Ctrl+Shift+V). Several lines are fine."
   }
 }

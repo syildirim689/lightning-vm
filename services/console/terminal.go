@@ -24,12 +24,14 @@ const terminalCookie = "lvm_terminal"
 
 var errIdle = errors.New("TERMINAL_IDLE")
 
-// hostShell: bash when the host has it, sh otherwise. Overridable (TERMINAL_SHELL) for tests.
+// hostShell: bash when the host has it, sh otherwise. Overridable (TERMINAL_SHELL) for tests. The shell's stderr
+// must stay on the terminal: an interactive bash writes its prompt, line editing and error messages there.
 func hostShell() []string {
 	if s := os.Getenv("TERMINAL_SHELL"); s != "" {
 		return []string{"/bin/sh", "-c", s}
 	}
-	return []string{"nsenter", "-t", "1", "-m", "-u", "-i", "-n", "-p", "--", "/bin/sh", "-c", "cd /root 2>/dev/null; exec bash -l 2>/dev/null || exec sh -l"}
+	return []string{"nsenter", "-t", "1", "-m", "-u", "-i", "-n", "-p", "--", "/bin/sh", "-c",
+		"cd /root 2>/dev/null; command -v bash >/dev/null 2>&1 && exec bash -l; exec sh -l"}
 }
 
 type resize struct {

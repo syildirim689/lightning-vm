@@ -499,7 +499,7 @@ test.describe('server lifecycle (simulator, Turkish customer)', () => {
     await expect(page.getByText(/Hazır · açık/).first()).toBeVisible({ timeout: 60_000 });
     await expect(page.getByText('10.30.0.20').first()).toBeVisible(); // overview and the IP addresses section
     // Live metrics from the simulator's performance manager (20-second samples).
-    await expect(page.getByText('Canlı performans')).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Canlı performans' })).toBeVisible();
     await expect(page.getByText(/\d+ örnek, 20 saniye aralıkla/)).toBeVisible({ timeout: 30_000 });
     // Health score with its reasons; a new server has no week of CPU data, so no sizing advice yet.
     await expect(page.getByRole('img', { name: /Sağlık puanı 100 üzerinden \d+/ })).toBeVisible();

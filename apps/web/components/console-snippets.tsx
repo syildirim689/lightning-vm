@@ -37,18 +37,20 @@ const windows: [typeof linux[number][0], string][] = [
 ];
 const osKey = 'lvm.snippetOs';
 
-export function ConsoleSnippets({ send, ready }: { send: (text: string) => void; ready: boolean }) {
+// linuxOnly: the host terminal (a Linux shell that takes pasted text itself): no Windows commands, no paste note.
+export function ConsoleSnippets({ send, ready, linuxOnly }: { send: (text: string) => void; ready: boolean; linuxOnly?: boolean }) {
   const t = useTranslations('Snippets');
   const [text, setText] = useState('');
   const [name, setName] = useState('');
   const [enter, setEnter] = useState(false);
   const [share, setShare] = useState(false);
   const [editing, setEditing] = useState<Snippet>();
-  const [os, setOs] = useState<'linux' | 'windows'>('linux');
+  const [chosen, setOs] = useState<'linux' | 'windows'>('linux');
+  const os = linuxOnly ? 'linux' : chosen;
   const [filter, setFilter] = useState('');
   // The last chosen system is a per-browser convenience.
   useEffect(() => { try { if (localStorage.getItem(osKey) === 'windows') setOs('windows'); } catch { /* storage blocked */ } }, []);
-  const pick = (v: typeof os) => { setOs(v); try { localStorage.setItem(osKey, v); } catch { /* storage blocked */ } };
+  const pick = (v: typeof chosen) => { setOs(v); try { localStorage.setItem(osKey, v); } catch { /* storage blocked */ } };
   const mayShare = can(useMe()?.permissions, 'settings.manage');
   const all = useApiQuery<{ snippets: Snippet[] }>(['console-snippets'], '/console-snippets').data?.snippets ?? [];
   const f = filter.trim().toLowerCase();
@@ -67,10 +69,10 @@ export function ConsoleSnippets({ send, ready }: { send: (text: string) => void;
   return <Section title={t('title')} description={ready ? t('help') : t('notReady')}>
     <div className="flex flex-col gap-4">
       <CheckboxInput label={t('enter')} isSelected={enter} onChange={setEnter} help={t('enterHelp')}/>
-      <div role="group" aria-label={t('os')} className="flex w-fit gap-1 rounded-full border border-border p-1">
+      {!linuxOnly && <div role="group" aria-label={t('os')} className="flex w-fit gap-1 rounded-full border border-border p-1">
         {([['linux', 'square-terminal'], ['windows', 'monitor']] as const).map(([v, icon]) => <Button key={v} size="sm" variant={os === v ? 'primary' : 'ghost'} aria-pressed={os === v} onPress={() => pick(v)}>
           <I name={icon} size={14}/>{t(`osName.${v}`)}</Button>)}
-      </div>
+      </div>}
       <div role="group" aria-label={t('builtIn')} className="flex flex-wrap gap-2">
         {(os === 'linux' ? linux : windows).map(([key, command]) => <Button key={key} size="sm" variant="secondary" className={chip} isDisabled={!ready}
           aria-label={t('typeOne', { name: t(`b.${key}`), command })} onPress={() => type(command, t(`b.${key}`))}>
@@ -95,7 +97,7 @@ export function ConsoleSnippets({ send, ready }: { send: (text: string) => void;
           </li>)}
         </ul>)}
       <div className="grid gap-3 md:grid-cols-[1fr_14rem]">
-        <TextInput label={t('text')} value={text} onChange={setText} multiline spellCheck={false} maxLength={2000} help={t('textHelp')}/>
+        <TextInput label={t('text')} value={text} onChange={setText} multiline spellCheck={false} maxLength={2000} help={linuxOnly ? t('textHelpShell') : t('textHelp')}/>
         <TextInput label={t('name')} value={name} onChange={setName} maxLength={60} help={t('nameHelp')}/>
       </div>
       {mayShare && <CheckboxInput label={t('share')} isSelected={share} onChange={setShare} help={t('shareHelp')}/>}

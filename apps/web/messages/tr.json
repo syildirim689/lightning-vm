@@ -5061,7 +5061,18 @@
       "TERMINAL_LIMIT": "Zaten açık bir terminaliniz var (aynı anda bir tane).",
       "TERMINAL_START_FAILED": "Kabuk sunucuda başlatılamadı.",
       "TERMINAL_CLOSED": "Terminal kapandı."
-    }
+    },
+    "copy": "Kopyala (seçim yoksa tüm çıktı)",
+    "copied": "Seçim kopyalandı.",
+    "copiedAll": "Terminalin tüm çıktısı kopyalandı.",
+    "clipboardBlocked": "Tarayıcı panoya erişime izin vermedi.",
+    "paste": "Panodan yapıştır",
+    "clear": "Ekranı ve geçmişi temizle",
+    "fontSmaller": "Yazıyı küçült",
+    "fontLarger": "Yazıyı büyüt",
+    "fullscreen": "Tam ekran",
+    "exitFullscreen": "Tam ekrandan çık",
+    "shortcuts": "Ctrl+Shift+C kopyalar, Ctrl+Shift+V yapıştırır. Metin seçiliyken Ctrl+C de kopyalar; seçim yokken komutu durdurur."
   },
   "Chat": {
     "title": "Mesajlaşma uygulamaları",
@@ -7059,6 +7070,7 @@
       "windows": "Windows (PowerShell)"
     },
     "filter": "Kayıtlı komutlarda ara",
-    "noMatch": "Aramaya uyan kayıtlı komut yok."
+    "noMatch": "Aramaya uyan kayıtlı komut yok.",
+    "textHelpShell": "Metni buradan veya doğrudan terminale yapıştırarak (Ctrl+Shift+V) gönderebilirsiniz. Birden fazla satır olabilir."
   }
 }
