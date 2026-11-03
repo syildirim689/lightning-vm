@@ -1850,6 +1850,20 @@
         "applied": "{n, plural, one {Firewall} other {# firewalls}}",
         "pending": "Firewall applying",
         "failed": "Firewall error"
+      },
+      "clearFilters": "Clear filters",
+      "view": {
+        "label": "View",
+        "cards": "Cards",
+        "rows": "List"
+      },
+      "totals": {
+        "label": "Totals of the servers shown",
+        "servers": "{n, plural, one {# server} other {# servers}}",
+        "vcpu": "{n} vCPU",
+        "memory": "{n} GB RAM",
+        "disk": "{n} GB disk",
+        "monthly": "Monthly ≈ {price}"
       }
     },
     "col": {
@@ -7072,5 +7086,28 @@
     "filter": "Search saved commands",
     "noMatch": "No saved command matches the search.",
     "textHelpShell": "Send text from here, or paste it straight into the terminal (Ctrl+Shift+V). Several lines are fine."
+  },
+  "Welcome": {
+    "label": "Welcome",
+    "hello": {
+      "morning": "Good morning, {name}",
+      "day": "Good afternoon, {name}",
+      "evening": "Good evening, {name}",
+      "night": "Good night, {name}"
+    },
+    "plain": {
+      "morning": "Good morning",
+      "day": "Good afternoon",
+      "evening": "Good evening",
+      "night": "Good night"
+    },
+    "status": {
+      "problem": "{n, plural, one {# server has a problem} other {# servers have a problem}}",
+      "busy": "{n, plural, one {# server is busy} other {# servers are busy}}",
+      "stopped": "{n, plural, one {# server is off} other {# servers are off}}",
+      "running": "{n, plural, one {Your server is running} other {All # servers are running}}"
+    },
+    "show": "Show",
+    "recent": "Recently opened"
   }
 }

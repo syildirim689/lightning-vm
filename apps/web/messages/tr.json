@@ -1850,6 +1850,20 @@
         "applied": "{n, plural, one {Firewall} other {# firewall}}",
         "pending": "Firewall uygulanıyor",
         "failed": "Firewall hatası"
+      },
+      "clearFilters": "Süzgeçleri temizle",
+      "view": {
+        "label": "Görünüm",
+        "cards": "Kart",
+        "rows": "Liste"
+      },
+      "totals": {
+        "label": "Gösterilen sunucuların toplamı",
+        "servers": "{n} sunucu",
+        "vcpu": "{n} vCPU",
+        "memory": "{n} GB RAM",
+        "disk": "{n} GB disk",
+        "monthly": "Aylık ≈ {price}"
       }
     },
     "col": {
@@ -7072,5 +7086,28 @@
     "filter": "Kayıtlı komutlarda ara",
     "noMatch": "Aramaya uyan kayıtlı komut yok.",
     "textHelpShell": "Metni buradan veya doğrudan terminale yapıştırarak (Ctrl+Shift+V) gönderebilirsiniz. Birden fazla satır olabilir."
+  },
+  "Welcome": {
+    "label": "Karşılama",
+    "hello": {
+      "morning": "Günaydın, {name}",
+      "day": "İyi günler, {name}",
+      "evening": "İyi akşamlar, {name}",
+      "night": "İyi geceler, {name}"
+    },
+    "plain": {
+      "morning": "Günaydın",
+      "day": "İyi günler",
+      "evening": "İyi akşamlar",
+      "night": "İyi geceler"
+    },
+    "status": {
+      "problem": "{n, plural, one {# sunucunuzda sorun var} other {# sunucunuzda sorun var}}",
+      "busy": "{n, plural, one {# sunucunuzda işlem sürüyor} other {# sunucunuzda işlem sürüyor}}",
+      "stopped": "{n, plural, one {# sunucunuz kapalı} other {# sunucunuz kapalı}}",
+      "running": "{n, plural, one {Sunucunuz çalışıyor} other {# sunucunuzun hepsi çalışıyor}}"
+    },
+    "show": "Göster",
+    "recent": "Son açtıklarınız"
   }
 }

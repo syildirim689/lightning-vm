@@ -12,7 +12,7 @@ import { apiFetch, useErrorText } from '../../../../lib/api';
 import { downloadCsv } from '../../../../lib/csv';
 import { useApiAction, useApiQuery } from '../../../../lib/query';
 import { FavoriteStar, StateBadge, type Server } from '../../servers-ui';
-import { ServerFilters, stateGroup, useServerFilters } from '../../server-filters';
+import { ServerFilters, ServerTotals, stateGroup, useServerFilters } from '../../server-filters';
 import { ImportVms } from './import-vms';
 import { Copy } from '../../server-extras';
 import { useBytes } from '../../server-traffic';
@@ -87,6 +87,7 @@ export default function AdminServers() {
                 s.address ? <span key="ip" className="flex items-center gap-1"><Mono>{s.address}</Mono><Copy text={s.address} label={`${s.name} IP`}/></span> : '–', <span key="z" className="flex flex-col"><span>{t('size', { vcpu: s.vcpu, memory: s.memoryMb / 1024, disk: s.diskGb })}</span>
                   <span className={`text-xs ${s.trafficGb && (s.trafficBytes ?? 0) >= s.trafficGb * 1024 ** 3 ? 'text-danger' : 'text-muted'}`}>{bytes(s.trafficBytes ?? 0)}{s.trafficGb ? ` / ${s.trafficGb} GB` : ''}</span></span>, s.poolName,
                 s.tags?.length ? <span key="t" className="flex flex-wrap gap-1">{s.tags.map((x) => <span key={x} className="rounded-full bg-default px-2 py-0.5 text-xs">{x}</span>)}</span> : '–']}/>
+            <ServerTotals servers={shown}/>
           </Tabs.Panel>
 
           <Tabs.Panel id="operations" className="pt-4">

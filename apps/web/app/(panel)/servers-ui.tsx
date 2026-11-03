@@ -28,7 +28,7 @@ import { TransferServer } from './server-transfer';
 import { useMe } from '../../lib/me';
 import { can } from '../../lib/permissions';
 import { noteLine } from '../../lib/note-line';
-import { ServerFilters, useServerFilters } from './server-filters';
+import { ServerFilters, ServerTotals, useServerFilters } from './server-filters';
 import { flag } from '../../lib/flag';
 import { ButtonLink, CheckboxInput, ConfirmButton, DataTable, Empty, Mono, Notice, PageHeader, Section, StatusChip, TextInput, type Tone } from '../../components/ui';
 import { SectionNav } from '../../components/section-nav';
@@ -107,6 +107,11 @@ export function ServerList() {
   const [picking, setPicking] = useState(false);
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const anchor = useRef<string>(undefined);
+  // Cards, or one compact row per server for long lists; remembered in this browser.
+  const [view, setView] = useState<'cards' | 'rows'>('cards');
+  useEffect(() => { try { if (localStorage.getItem('lvm-server-view') === 'rows') setView('rows'); } catch { /* storage blocked */ } }, []);
+  const pickView = (v: 'cards' | 'rows') => { setView(v); try { localStorage.setItem('lvm-server-view', v); } catch { /* storage blocked */ } };
+  const rows = view === 'rows';
   const stopPicking = () => { setPicking(false); setPicked(new Set()); };
   useEffect(() => {
     if (!picking) return;
@@ -140,11 +145,26 @@ export function ServerList() {
         {picking && <Button size="sm" variant="ghost" onPress={() => setPicked(chosen.length === shown.length ? new Set() : new Set(shown.map((x) => x.id)))}>
           {chosen.length === shown.length ? t('list.select.none') : t('list.select.all')}</Button>}
         {picking && shown.length > 2 && <span className="hidden text-xs text-muted md:inline">{t('list.select.rangeHint')}</span>}
+        <div role="group" aria-label={t('list.view.label')} className="ml-auto flex rounded-lg border border-border p-0.5">
+          {(['cards', 'rows'] as const).map((v) => <button key={v} type="button" aria-pressed={view === v} title={t(`list.view.${v}`)} onClick={() => pickView(v)}
+            className={`flex min-h-9 items-center gap-1.5 rounded-md px-2.5 text-sm transition-colors focus-visible:outline-2 focus-visible:outline-accent ${view === v ? 'bg-accent-soft text-accent-soft-foreground' : 'text-muted hover:text-foreground'}`}>
+            {v === 'cards' ? <I name="layout-grid" size={15}/> : <I name="rows-3" size={15}/>}<span className="hidden sm:inline">{t(`list.view.${v}`)}</span></button>)}
+        </div>
       </div>}
     </div>}
-    {!shown.length ? <p role="status" className="rounded-xl border border-dashed border-border px-4 py-8 text-center text-sm text-muted">{t('list.noMatch')}</p>
-    : <ul ref={gridRef} className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4" aria-label={t('list.title')}>
-    {shown.map((s, i) => { const on = picked.has(s.id); const card = <Card className={`h-full transition-shadow ${on ? 'ring-2 ring-accent' : ''}`}>
+    {!shown.length ? <div role="status" className="flex flex-col items-center gap-3 rounded-xl border border-dashed border-border px-4 py-8 text-center text-sm text-muted">{t('list.noMatch')}
+      {f.filtered && <Button size="sm" variant="secondary" onPress={f.clear}><I name="funnel-x" size={15}/>{t('list.clearFilters')}</Button>}</div>
+    : <ul ref={gridRef} className={rows ? 'flex flex-col gap-2' : 'grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4'} aria-label={t('list.title')}>
+    {shown.map((s, i) => { const on = picked.has(s.id); const card = rows ? <div data-row className={`flex h-full flex-wrap items-center gap-x-4 gap-y-1.5 rounded-xl border border-border bg-surface py-3 pl-4 pr-24 text-sm transition-shadow ${on ? 'ring-2 ring-accent' : ''}`}>
+          <span className="flex min-w-0 items-center gap-1.5 font-semibold sm:w-44"><span className="truncate">{s.name}</span>{s.locked && <I name="lock" size={13} className="shrink-0 text-warning"/>}</span>
+          <StateBadge server={s}/>
+          <span className="min-w-0 sm:w-32">{s.address ? <Mono>{s.address}</Mono> : <span className="text-muted">–</span>}</span>
+          <span className="flex items-center gap-1.5 text-muted"><I name="cpu" size={14}/>{size(t, s)}</span>
+          <span className="flex items-center gap-1 text-xs text-muted"><I name="map-pin" size={12}/>{s.location || s.poolName}</span>
+          {!!s.tags?.length && <span className="flex flex-wrap gap-1">{s.tags.map((x) => <span key={x} className="rounded-full bg-default px-2 py-0.5 text-xs">{x}</span>)}</span>}
+          {firewallFailed(s) && <StatusChip tone="danger">{t('list.firewall.failed', { n: s.firewallCount ?? 0 })}</StatusChip>}
+          {s.deleteAt && <StatusChip tone="danger">{t('trash.badge', { when: format.relativeTime(new Date(s.deleteAt), new Date()) })}</StatusChip>}
+        </div> : <Card className={`h-full transition-shadow ${on ? 'ring-2 ring-accent' : ''}`}>
           <Card.Header className="flex flex-row items-start justify-between gap-2">
             <div className="min-w-0"><Card.Title className="flex items-center gap-1.5 truncate text-base font-semibold">{s.name}{s.locked && <I name="lock" size={13} className="shrink-0 text-warning"/>}</Card.Title>
               <Card.Description className="flex items-center gap-1 text-xs text-muted"><I name="map-pin" size={12}/>{s.location || s.poolName}</Card.Description></div>
@@ -166,13 +186,14 @@ export function ServerList() {
       {picking ? <button type="button" role="checkbox" aria-checked={on} aria-label={t('list.select.toggle', { name: s.name })} onClick={(e) => flip(s.id, e.shiftKey)}
           className="block h-full w-full rounded-xl text-left outline-offset-2 focus-visible:outline-2">
           {card}
-          <span aria-hidden className={`absolute bottom-3 right-3 grid size-6 place-items-center rounded-md border-2 transition-colors ${on ? 'border-accent bg-accent text-accent-foreground' : 'border-border bg-surface'}`}>{on && <I name="check" size={14}/>}</span>
+          <span aria-hidden className={`absolute ${rows ? 'right-3 top-1/2 -translate-y-1/2' : 'bottom-3 right-3'} grid size-6 place-items-center rounded-md border-2 transition-colors ${on ? 'border-accent bg-accent text-accent-foreground' : 'border-border bg-surface'}`}>{on && <I name="check" size={14}/>}</span>
         </button>
-      : <><NextLink href={`/servers/${s.id}`} className="block h-full rounded-xl outline-offset-2 transition-all duration-200 hover:-translate-y-1 hover:shadow-lg focus-visible:outline-2">{card}</NextLink>
-        {s.address && <Copy text={s.address} label={`${s.name} IP`} className="absolute bottom-3 right-12"/>}
-        <FavoriteStar id={s.id} on={!!s.favorite} name={s.name}/></>}
+      : <><NextLink href={`/servers/${s.id}`} className={`block h-full rounded-xl outline-offset-2 transition-all duration-200 hover:shadow-lg focus-visible:outline-2 ${rows ? 'hover:border-accent' : 'hover:-translate-y-1'}`}>{card}</NextLink>
+        {s.address && <Copy text={s.address} label={`${s.name} IP`} className={`absolute ${rows ? 'right-12 top-1/2 -translate-y-1/2' : 'bottom-3 right-12'}`}/>}
+        <FavoriteStar id={s.id} on={!!s.favorite} name={s.name} className={rows ? 'absolute right-3 top-1/2 -translate-y-1/2' : undefined}/></>}
     </motion.li>; })}
   </ul>}
+  <ServerTotals servers={shown}/>
   {picking && chosen.length > 0 && <BulkBar servers={chosen} known={[...new Set(servers.flatMap((x) => x.tags ?? []))]} onDone={stopPicking}/>}
   </div>;
 }

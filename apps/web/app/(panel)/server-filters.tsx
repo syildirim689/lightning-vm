@@ -2,7 +2,7 @@
 // Search, state, tag and sort for a server list (the customer's cards and the admin table). The choices live in
 // the URL, so a filtered view can be bookmarked and the back button keeps it.
 import { Button, Popover, SearchField } from '@heroui/react';
-import { useTranslations } from 'next-intl';
+import { useFormatter, useTranslations } from 'next-intl';
 import { parseAsString, parseAsStringLiteral, useQueryState } from 'nuqs';
 import { useState } from 'react';
 import { I } from '../../components/icon';
@@ -33,7 +33,9 @@ export function useServerFilters(all: Server[]) {
     .sort((a, b) => sort === 'name' ? a.name.localeCompare(b.name, undefined, { numeric: true })
       : sort === 'size' ? b.memoryMb - a.memoryMb || b.vcpu - a.vcpu
       : (sort === 'state' ? attention.indexOf(stateGroup(a)) - attention.indexOf(stateGroup(b)) : 0) || Date.parse(b.createdAt) - Date.parse(a.createdAt));
-  return { shown, servers, q, setQ, state, setState, tag, setTag, owner, setOwner, sort, setSort };
+  const filtered = !!q || state !== 'all' || !!tag;
+  const clear = () => { void setQ(null); void setState(null); void setTag(null); };
+  return { shown, servers, q, setQ, state, setState, tag, setTag, owner, setOwner, sort, setSort, filtered, clear };
 }
 
 // manageTags: the chosen tag can be renamed or removed on all of the caller's own servers (the customer's list).
@@ -61,9 +63,28 @@ export function ServerFilters({ f, placeholder, manageTags }: { f: ReturnType<ty
     </div>
     : tags.length > 12 && <SelectInput className="w-full md:w-48" label={t('list.tag')} value={f.tag} onChange={(v) => f.setTag(v || null)} options={[{ id: '', label: t('list.allTags') }, ...tags.map((x) => ({ id: x, label: x }))]}/>}
     {manageTags && f.tag && tags.includes(f.tag) && <TagTools tag={f.tag} onDone={(next) => f.setTag(next)}/>}
+    {f.filtered && <Button variant="ghost" className="min-h-11 self-start md:self-auto" onPress={f.clear}><I name="funnel-x" size={15}/>{t('list.clearFilters')}</Button>}
     <SelectInput className="w-full md:ml-auto md:w-60" label={t('list.sort')} value={f.sort} onChange={(v) => f.setSort(v === 'name' || v === 'size' || v === 'state' ? v : null)}
       options={[{ id: 'newest', label: t('list.newest') }, { id: 'name', label: t('list.byName') }, { id: 'size', label: t('list.bySize') }, { id: 'state', label: t('list.byState') }]}/>
   </div>;
+}
+
+// What the shown servers add up to (they follow the filters): size, and the monthly price per currency.
+export function ServerTotals({ servers }: { servers: Server[] }) {
+  const t = useTranslations('Servers.list.totals');
+  const format = useFormatter();
+  if (servers.length < 2) return null;
+  const sum = (k: 'vcpu' | 'memoryMb' | 'diskGb') => servers.reduce((n, s) => n + s[k], 0);
+  const money = Object.entries(servers.reduce<Record<string, number>>((acc, s) => { acc[s.currency] = (acc[s.currency] ?? 0) + Number(s.priceMonthly || 0); return acc; }, {}))
+    .filter(([, v]) => v > 0).map(([c, v]) => format.number(v, { style: 'currency', currency: c }));
+  const item = (icon: string, text: string) => <span className="flex items-center gap-1.5"><I name={icon} size={14} className="text-muted"/>{text}</span>;
+  return <p role="status" aria-label={t('label')} className="flex flex-wrap items-center gap-x-4 gap-y-1.5 rounded-xl border border-dashed border-border px-4 py-2.5 text-sm tabular-nums">
+    <span className="font-medium">{t('servers', { n: servers.length })}</span>
+    {item('cpu', t('vcpu', { n: sum('vcpu') }))}
+    {item('memory-stick', t('memory', { n: Math.round(sum('memoryMb') / 102.4) / 10 }))}
+    {item('hard-drive', t('disk', { n: sum('diskGb') }))}
+    {money.length > 0 && <span className="flex items-center gap-1.5 sm:ml-auto"><I name="wallet" size={14} className="text-muted"/>{t('monthly', { price: money.join(' + ') })}</span>}
+  </p>;
 }
 
 // Rename the chosen tag (merged into an existing one of the same name) or take it off every server.

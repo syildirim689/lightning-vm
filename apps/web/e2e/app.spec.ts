@@ -588,7 +588,11 @@ test.describe('server lifecycle (simulator, Turkish customer)', () => {
     await choose(page, page, /Sırala/, 'Duruma göre (önce sorunlar)');
     await expect(page).toHaveURL(/sort=state/);
     await page.goto('/?q=yok-boyle');
-    await expect(page.getByText('Bu süzgeçlere uyan sunucu yok.').or(page.getByText('web-1', { exact: true }))).toBeVisible();
+    await expect(page.getByText('Bu süzgeçlere uyan sunucu yok.')).toBeVisible();
+    // Nothing matches: one tap clears the filters and the list comes back.
+    await page.getByRole('status').getByRole('button', { name: 'Süzgeçleri temizle' }).click();
+    await expect(page).not.toHaveURL(/q=/);
+    await expect(page.getByRole('list', { name: 'Sunucularınız' }).getByRole('link', { name: /^web-1/ })).toBeVisible();
     // Ctrl+K lists the server just opened under "recent".
     await page.keyboard.press('Control+k');
     await expect(page.getByRole('listbox').getByText('Son açılanlar')).toBeVisible();
@@ -664,7 +668,33 @@ test.describe('server lifecycle (simulator, Turkish customer)', () => {
     await page.getByRole('button', { name: 'Sunucuyu oluştur' }).click();
     await expect(page).toHaveURL(/\/servers\/[0-9a-f-]{36}$/, { timeout: 30_000 });
     await page.goto('/');
-    await expect(page.getByRole('link', { name: /^web-2/ })).toBeVisible();
+    const serverList = page.getByRole('list', { name: 'Sunucularınız' });
+    await expect(serverList.getByRole('link', { name: /^web-2/ })).toBeVisible();
+    // The greeting says what most needs a look and offers the servers opened last.
+    const welcome = page.getByRole('region', { name: 'Karşılama' });
+    await expect(welcome.getByText(/^(Günaydın|İyi günler|İyi akşamlar|İyi geceler)/)).toBeVisible();
+    await expect(welcome.getByText(/sunucunuz|sunucunuzda|Sunucunuz/)).toBeVisible();
+    await expect(welcome.getByRole('navigation', { name: 'Son açtıklarınız' }).getByRole('link', { name: 'web-2' })).toBeVisible();
+    // What the shown servers add up to.
+    const totals = page.getByRole('status', { name: 'Gösterilen sunucuların toplamı' });
+    await expect(totals).toContainText('2 sunucu');
+    await expect(totals).toContainText('vCPU');
+    // Compact rows for long lists, remembered after a reload; the card view comes back with one tap.
+    await page.getByRole('button', { name: 'Liste', exact: true }).click();
+    await expect(page.locator('[data-row]')).toHaveCount(2);
+    await page.reload();
+    await expect(page.locator('[data-row]')).toHaveCount(2);
+    await expect(page.getByRole('button', { name: 'Liste', exact: true })).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.locator('#boot-loader')).toHaveCSS('opacity', '0');
+    await page.screenshot({ path: 'test-results/tour/servers-rows.png', fullPage: true });
+    for (const width of [390, 768]) {
+      await page.setViewportSize({ width, height: 900 });
+      await expectNoOverflow(page, `server rows at ${width} px`);
+      await page.screenshot({ path: `test-results/tour/servers-rows-${width}.png`, fullPage: true });
+    }
+    await page.setViewportSize({ width: 1280, height: 720 });
+    await page.getByRole('button', { name: 'Kart', exact: true }).click();
+    await expect(page.locator('[data-row]')).toHaveCount(0);
     await page.getByRole('button', { name: 'Seç', exact: true }).click();
     await page.getByRole('checkbox', { name: 'web-1 sunucusunu seç' }).click();
     await expect(page.getByRole('region', { name: 'Seçili sunucular için işlemler' })).toContainText('1 sunucu seçili');
@@ -725,7 +755,7 @@ test.describe('server lifecycle (simulator, Turkish customer)', () => {
     await fwDialog.getByRole('button', { name: 'Firewall oluştur' }).click();
     await expect(page).toHaveURL(/\/firewalls\/[0-9a-f-]{36}$/);
     await page.goto('/');
-    const web1Card = page.getByRole('link', { name: /^web-1/ });
+    const web1Card = page.getByRole('list', { name: 'Sunucularınız' }).getByRole('link', { name: /^web-1/ });
     await expect(web1Card.getByText(/^Firewall( uygulanıyor)?$/)).toBeVisible();
     await expect(web1Card.getByText('Firewall', { exact: true })).toBeVisible({ timeout: 60_000 });
     await expect(page.getByRole('link', { name: /^web-2/ }).getByText(/^Firewall/)).toHaveCount(0);
