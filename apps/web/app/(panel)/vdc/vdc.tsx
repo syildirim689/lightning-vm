@@ -9,6 +9,8 @@ import { I } from '../../../components/icon';
 import { ButtonLink, CheckboxList, ConfirmButton, Empty, Mono, NumberInput, PageHeader, SelectInput, StatusChip, TextInput } from '../../../components/ui';
 import { apiFetch, useErrorText, type ApiError } from '../../../lib/api';
 import { useApiQuery } from '../../../lib/query';
+import { useMe } from '../../../lib/me';
+import { can } from '../../../lib/permissions';
 import { UsageBar, type Vdc } from '../admin/catalog/vdc-ui';
 import { useIntentKey } from '../servers-ui';
 
@@ -49,6 +51,7 @@ function NewServer({ vdc, onDone }: { vdc: Mine; onDone: () => void }) {
 }
 
 export default function VdcPage() {
+  const me = useMe();
   const t = useTranslations('Vdc');
   const format = useFormatter();
   const { error } = useErrorText();
@@ -64,7 +67,11 @@ export default function VdcPage() {
   return <>
     <PageHeader title={t('myTitle')} description={t('myIntro')}/>
     {!q.data ? <p role="status" className="text-sm text-muted">{t('loading')}</p>
-      : !q.data.vdcs.length ? <Empty icon={<I name="building-2" size={28}/>} title={t('none')}>{t('noneHelp')}</Empty>
+      : !q.data.vdcs.length ? <Empty icon={<I name="building-2" size={28}/>} title={t('none')}>{t('noneHelp')}
+        {/* The way to one: staff set it up in the catalog, a customer asks support. */}
+        <span className="mt-3 flex justify-center">{can(me?.permissions, 'catalog.manage')
+          ? <ButtonLink href="/admin/catalog?tab=vdcs" variant="secondary"><I name="plus" size={16}/>{t('createOne')}</ButtonLink>
+          : <ButtonLink href="/support?new=1" variant="secondary"><I name="life-buoy" size={16}/>{t('askOne')}</ButtonLink>}</span></Empty>
       : <div className="flex flex-col gap-6">{q.data.vdcs.map((v) => <Card key={v.id}><Card.Content className="flex flex-col gap-4 p-5">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>

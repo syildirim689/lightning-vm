@@ -1406,6 +1406,12 @@ test.describe('people, settings and smart features (English browser)', () => {
     await page.goto('/admin/energy');
     await page.getByRole('button', { name: 'Measure now' }).click();
     await page.waitForTimeout(6000);
+    // An empty virtual datacenter page shows staff where to create one.
+    await page.goto('/vdc');
+    await expect(page.getByRole('link', { name: 'Create a virtual datacenter' })).toHaveAttribute('href', '/admin/catalog?tab=vdcs');
+    // The panel address follows the domain the proxy serves, not a loopback address from the wizard.
+    await page.goto('/admin/settings');
+    await expect(page.getByRole('link', { name: new URL(process.env.E2E_BASE_URL ?? 'https://localhost').host })).toBeVisible();
     // The getting-started list folds its done steps away and marks the next one.
     await page.goto('/admin');
     const setup = page.getByRole('button', { name: /^Show the \d+ done steps$/ });

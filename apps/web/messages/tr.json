@@ -4646,7 +4646,9 @@
     "image": "İşletim sistemi",
     "sshKeys": "SSH anahtarları",
     "create": "Oluştur",
-    "creating": "Sunucu oluşturuluyor."
+    "creating": "Sunucu oluşturuluyor.",
+    "createOne": "Sanal veri merkezi oluştur",
+    "askOne": "Destekten isteyin"
   },
   "Smart": {
     "health": "Sağlık",

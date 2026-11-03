@@ -11,7 +11,7 @@ import { emailPattern, getSettings, imagePattern, mailErrorCode, mailReady, mail
 import { mailProviders } from './mail-providers';
 import { brandFor } from './mail';
 import { mailHtml, mailText, type MailContent } from './mail-layout';
-import { usableApps } from './chat-delivery';
+import { panelBase, usableApps } from './chat-delivery';
 import { pool } from './db';
 import { summary } from './maintenance';
 import { policies } from './notify';
@@ -244,14 +244,13 @@ export class SettingsOverviewController {
     // Ways in besides the password and passkeys: social providers, the e-mail link, user names, single sign-on.
     const methods = (await import('./social-providers')).enabledSocial(signIn).length + Number(signIn.magicLink) + Number(signIn.username) + Number(dir.oidc.enabled);
     const one = async (sql: string) => (await pool.query(sql)).rows[0];
-    const [reg, url, pay, counts] = await Promise.all([
-      one("SELECT value FROM settings WHERE key = 'registration_open'"), one("SELECT value FROM settings WHERE key = 'public_url'"),
+    const [reg, address, pay, counts] = await Promise.all([
+      one("SELECT value FROM settings WHERE key = 'registration_open'"), panelBase(),
       one('SELECT count(*) FILTER (WHERE enabled)::int AS on, count(*)::int AS saved FROM payment_gateways'),
       one(`SELECT (SELECT count(*)::int FROM users WHERE NOT coalesce(banned, false)) AS users,
         (SELECT count(*)::int FROM users WHERE 'admin' = ANY(string_to_array(coalesce(role, ''), ',')) AND NOT two_factor_enabled AND NOT coalesce(banned, false)) AS "adminsNo2fa",
         (SELECT count(*)::int FROM servers WHERE state <> 'deleted') AS servers`)]);
     const registrationOpen = reg?.value === true;
-    const address = typeof url?.value === 'string' ? url.value : null;
     const https = config.PANEL_TLS === '1' && (!address || address.startsWith('https://'));
     const now = Date.now();
     const backup = summary().lastSuccessfulBackup;

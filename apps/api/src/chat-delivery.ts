@@ -5,6 +5,7 @@ import { pool } from './db';
 import { logEvent } from './log';
 import { decryptSecret } from './secrets';
 import { getSettings, type ChatSettings } from './settings-store';
+import { settings as hostSettings } from './maintenance';
 
 export const ctx = 'settings:chat';
 const dec = (v: string | null) => (v ? decryptSecret(v, ctx) : '');
@@ -22,10 +23,18 @@ export function usableApps(s: ChatSettings) {
 export async function chatReady() { return usableApps(await getSettings('chat')).length > 0; }
 
 // A panel path (/servers/…) as a full URL on the address set in setup; null when none is set.
+// The panel's address for links in mail, chat and push: the domain the host agent serves (it follows a domain
+// change made in the panel), else the address given in the setup wizard.
+export async function panelBase() {
+  const s = hostSettings();
+  if (s.site && !s.site.startsWith(':')) return `${s.tlsMode === 'none' ? 'http' : 'https'}://${s.site}`;
+  const { rows: [r] } = await pool.query("SELECT value FROM settings WHERE key = 'public_url'");
+  return typeof r?.value === 'string' && r.value ? r.value : null;
+}
 export async function absolute(link: string | null) {
   if (!link || /^https?:\/\//.test(link)) return link;
-  const { rows: [r] } = await pool.query("SELECT value FROM settings WHERE key = 'public_url'");
-  return typeof r?.value === 'string' && r.value ? new URL(link, r.value).toString() : null;
+  const base = await panelBase();
+  return base ? new URL(link, base).toString() : null;
 }
 export async function sendOne(app: string, target: Record<string, string>, m: Message, a: AdminAccounts): Promise<SendResult> {
   try { return await chatApps[app].send(target, m, a); }

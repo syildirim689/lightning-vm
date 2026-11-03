@@ -190,8 +190,9 @@ Demo sunucusunda denendi. Sistemd ajanı üzerinden şu akışlar sırayla doğr
   Çerezin `Secure` bayrağı bu değere göre API başlarken belirlenir.
 - **Origin kontrolü:** API ve Next.js, isteğin `Origin` başlığını `Host` ile karşılaştırır. Bu yüzden
   ek bir izin listesi gerekmez; ancak önünüzdeki proxy `Host` başlığını korumalıdır.
-- **Panel adresi:** sihirbazdaki "erişim adresi" (`settings.public_url`) ayarını yeni adla
-  güncelleyin. Bunun için gerekirse sihirbazı `sh scripts/install.sh recover-setup` ile yeniden açın.
+- **Panel adresi:** e-posta, sohbet ve bildirim bağlantıları sunulan alan adını (`https://<ad>`) kendiliğinden
+  kullanır; alan adı değişince bağlantılar da yeni ada geçer. Alan adı yoksa sihirbazdaki "erişim adresi"
+  (`settings.public_url`) kullanılır.
 - **Konsol:** tarayıcı konsolu (7. aşama) aynı ad ve aynı TLS üzerinden WebSocket ile çalışacak.
   Ayrı bir alan adı veya sertifika gerekmeyecek.
 

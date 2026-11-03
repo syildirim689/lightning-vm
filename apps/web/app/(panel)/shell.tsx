@@ -109,7 +109,7 @@ function UserMenu({ user }: { user: User }) {
   return <Dropdown>
     <Button variant="ghost" size="sm" aria-label={t('userMenu')} className="gap-2">
       <Avatar size="sm" color="accent"><Avatar.Fallback>{initials}</Avatar.Fallback></Avatar>
-      <span className="hidden max-w-48 truncate text-sm md:inline">{user.name || user.email}</span>
+      <span className="hidden max-w-48 truncate text-sm lg:inline">{user.name || user.email}</span>
     </Button>
     <Dropdown.Popover placement="bottom end">
       <Dropdown.Menu aria-label={t('userMenu')} onAction={(k) => { if (k === 'logout') void out(); else router.push(String(k)); }}>

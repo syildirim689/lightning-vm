@@ -4646,7 +4646,9 @@
     "image": "Operating system",
     "sshKeys": "SSH keys",
     "create": "Create",
-    "creating": "Creating the server."
+    "creating": "Creating the server.",
+    "createOne": "Create a virtual datacenter",
+    "askOne": "Ask support for one"
   },
   "Smart": {
     "health": "Health",
