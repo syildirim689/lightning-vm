@@ -64,8 +64,10 @@ export async function staffInsights(): Promise<Insight[]> {
   const { rows: [rec] } = await pool.query('SELECT count(*)::int AS n FROM reconciliation_findings WHERE resolved_at IS NULL');
   if (rec.n) add('RECONCILE_FINDINGS', 'warning', { count: rec.n }, '/admin/servers?tab=reconcile');
 
-  const { rows: [w] } = await pool.query("SELECT count(*) FILTER (WHERE last_seen > now() - interval '90 seconds')::int AS healthy FROM worker_heartbeats");
-  if (!w.healthy) add('WORKER_DOWN', 'danger', {}, '/admin/system');
+  // minutes: since the last heartbeat of any copy (none ever: a large number), so alerts can wait out a restart.
+  const { rows: [w] } = await pool.query(`SELECT count(*) FILTER (WHERE last_seen > now() - interval '90 seconds')::int AS healthy,
+    coalesce(floor(extract(epoch FROM now() - max(last_seen)) / 60), 9999)::int AS minutes FROM worker_heartbeats`);
+  if (!w.healthy) add('WORKER_DOWN', 'danger', { minutes: w.minutes }, '/admin/system');
 
   const m = maintenance();
   if (m.lastBackup?.status === 'failed') add('BACKUP_FAILED', 'danger', { code: m.lastBackup.code ?? '' }, '/admin/system');
@@ -153,7 +155,8 @@ const texts: Record<string, { tr: (p: Insight['params']) => [string, string]; en
   IP_POOL_EMPTY: { tr: (p) => [`${p.pool}: boş IP kalmadı`, 'Yeni sunucu oluşturulamaz.'], en: (p) => [`${p.pool}: no free IP address`, 'New servers cannot be created.'] },
   CONNECTION_DOWN: { tr: (p) => [`${p.connection} erişilemiyor`, `Hata: ${p.code}`], en: (p) => [`${p.connection} is unreachable`, `Error: ${p.code}`] },
   OPERATIONS_STUCK: { tr: (p) => ['Takılmış işlemler', `${p.count} işlem süresini aştı.`], en: (p) => ['Stuck operations', `${p.count} operations passed their deadline.`] },
-  WORKER_DOWN: { tr: () => ['Arka plan çalışanı yanıt vermiyor', 'Sunucu işlemleri ilerlemiyor.'], en: () => ['Background worker not responding', 'Server operations are not progressing.'] },
+  WORKER_DOWN: { tr: (p) => ['Arka plan çalışanı yanıt vermiyor', `Son sinyal ${p.minutes} dakika önce geldi; sunucu işlemleri bu sürede ilerlemiyor. Durumu Sistem sayfasında görebilirsiniz.`],
+    en: (p) => ['Background worker not responding', `Its last heartbeat was ${p.minutes} minutes ago; server operations are not progressing. The System page shows its state.`] },
   BACKUP_FAILED: { tr: (p) => ['Son yedek başarısız', `Kod: ${p.code}`], en: (p) => ['The last backup failed', `Code: ${p.code}`] },
 };
 
@@ -162,7 +165,10 @@ export function startInsightAlerts() {
   const run = async () => {
     if (!(await redis.set('lock:insights', '1', 'EX', 540, 'NX').catch(() => null))) return;
     try {
-      for (const i of (await staffInsights()).filter((x) => x.severity === 'danger' && texts[x.code])) {
+      // A stopped worker is only reported once it stayed silent for 5 minutes, and not in the API's first 5 minutes:
+      // an update or a restart stops it for a while, and that is not an outage.
+      const outage = (x: Insight) => x.code !== 'WORKER_DOWN' || (Number(x.params.minutes) >= 5 && process.uptime() > 300);
+      for (const i of (await staffInsights()).filter((x) => x.severity === 'danger' && texts[x.code] && outage(x))) {
         if (!(await redis.set(`insight:sent:${i.key}`, '1', 'EX', 86_400, 'NX'))) continue;
         const [titleTr, bodyTr] = texts[i.code].tr(i.params);
         const [titleEn, bodyEn] = texts[i.code].en(i.params);

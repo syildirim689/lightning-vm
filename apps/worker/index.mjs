@@ -93,7 +93,7 @@ async function heartbeat() {
     await pool.query('INSERT INTO worker_heartbeats(name) VALUES ($1) ON CONFLICT(name) DO UPDATE SET last_seen=now()', [instance]);
     await pool.query("DELETE FROM worker_heartbeats WHERE last_seen < now() - interval '1 day'");
     await writeFile('/tmp/lightning-worker-heartbeat', String(Date.now()));
-  } catch { log('error', 'heartbeat_failed'); }
+  } catch (e) { log('error', 'heartbeat_failed', { error: String(e?.message ?? e).slice(0, 200) }); }
 }
 await heartbeat();
 const timer = setInterval(heartbeat, 30000);
@@ -123,8 +123,8 @@ async function copyConsoleEvents() {
           [uuid.test(userId ?? '') ? userId : null, `${kind}.${name}`, outcomes[name] ?? 'failure', vm || null, metadata, at ?? new Date().toISOString()]);
         await events.xack('console:events', 'audit', id);
       }
-    } catch {
-      log('error', 'console_events_failed');
+    } catch (e) {
+      log('error', 'console_events_failed', { error: String(e?.message ?? e).slice(0, 200) });
       cursor = '0'; // unacked entries stay pending; read them again rather than only new ones
       await new Promise((r) => setTimeout(r, 2000));
     }

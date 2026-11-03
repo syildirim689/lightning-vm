@@ -13,7 +13,7 @@ import { getSettings, mailReady, saveSettings, sendMail, type Channel, type Noti
 import { sendSms, smsReady } from './sms';
 import { absolute, deliverChat } from './chat-delivery';
 import { brandFor } from './mail';
-import { mailHtml, mailText, type MailContent } from './mail-layout';
+import { mailHtml, mailText, type MailContent, type Tone } from './mail-layout';
 import { publishLive } from './live-bus';
 import { alwaysSent, inQuietHours, loudChannels } from './quiet-hours';
 
@@ -214,8 +214,8 @@ export async function notify(event: EventKey, to: string[] | `staff:${Permission
 
 async function recipients(to: string[] | string) {
   const { rows } = Array.isArray(to)
-    ? await pool.query('SELECT id, email, locale, role, phone_number, phone_number_verified, quiet_hours FROM users WHERE id = ANY($1::uuid[]) AND NOT coalesce(banned, false)', [to])
-    : await pool.query('SELECT id, email, locale, role, phone_number, phone_number_verified, quiet_hours FROM users WHERE NOT coalesce(banned, false) AND disabled_at IS NULL');
+    ? await pool.query('SELECT id, email, locale, role, phone_number, phone_number_verified, quiet_hours, time_zone FROM users WHERE id = ANY($1::uuid[]) AND NOT coalesce(banned, false)', [to])
+    : await pool.query('SELECT id, email, locale, role, phone_number, phone_number_verified, quiet_hours, time_zone FROM users WHERE NOT coalesce(banned, false) AND disabled_at IS NULL');
   if (Array.isArray(to)) return rows;
   const perm = to.replace('staff:', '') as Permission;
   const out = [];
@@ -255,7 +255,19 @@ async function sendPush(userId: string, payload: object) {
     })));
 }
 
-type Recipient = { id: string; email: string; locale: string; phone_number: string | null; phone_number_verified: boolean };
+// The e-mail's tag and colour: what area the event is from, and whether it is good news, a warning or a failure.
+const mailLabels: Record<string, { tr: string; en: string }> = {
+  server: { tr: 'Sunucu', en: 'Server' }, billing: { tr: 'Fatura', en: 'Billing' }, support: { tr: 'Destek', en: 'Support' },
+  auth: { tr: 'Hesap güvenliği', en: 'Account security' }, account: { tr: 'Hesap', en: 'Account' }, admin: { tr: 'Yönetici uyarısı', en: 'Admin alert' },
+};
+export function mailTone(event: string): Tone {
+  if (/failed|overdue|suspended|terminated|abuse|exceeded|hold|disabled|port_open|einvoice_return/.test(event)) return 'danger';
+  if (/^admin\.|low|reminder|delete_scheduled|new_device|sign_in|dispute|changed|budget/.test(event)) return 'warning';
+  if (/ready|paid|payment_received|installed|refunded|snapshot|backup|reply/.test(event)) return 'success';
+  return 'info';
+}
+
+type Recipient = { id: string; email: string; locale: string; phone_number: string | null; phone_number_verified: boolean; time_zone?: string | null };
 // texts: both languages, so the inbox can follow the panel's language; the other channels use the account's.
 export async function deliver(u: Recipient, channel: Channel, t: Text, link: string | null, event: string, texts?: { tr: Text; en: Text }) {
   const brand = (await getSettings('branding')).name;
@@ -267,7 +279,11 @@ export async function deliver(u: Recipient, channel: Channel, t: Text, link: str
   if (channel === 'email' && (await mailReady())) {
     const b = await brandFor(u.locale);
     const url = await absolute(link);
-    const c: MailContent = { preheader: t.body, heading: t.title, intro: [t.body], button: url ? { label: b.locale === 'tr' ? 'Panelde aç' : 'Open in the panel', url } : undefined,
+    const label = mailLabels[event.split('.')[0]]?.[b.locale];
+    // When it happened, in the account's time zone (Turkey's when none is set; an unknown zone falls back to UTC).
+    const when = (tz: string) => new Intl.DateTimeFormat(b.locale === 'tr' ? 'tr-TR' : 'en-GB', { dateStyle: 'long', timeStyle: 'short', timeZone: tz, timeZoneName: 'short' }).format(new Date());
+    let at: string; try { at = when(u.time_zone || 'Europe/Istanbul'); } catch { at = when('UTC'); }
+    const c: MailContent = { preheader: t.body, label, tone: mailTone(event), heading: t.title, intro: [t.body], details: [[b.locale === 'tr' ? 'Zaman' : 'Time', at]], button: url ? { label: b.locale === 'tr' ? 'Panelde aç' : 'Open in the panel', url } : undefined,
       note: b.locale === 'tr' ? 'Hangi bildirimleri e-postayla alacağınızı Hesap sayfasındaki Bildirimler bölümünden değiştirebilirsiniz.'
         : 'Choose which notifications reach you by e-mail in the Notifications section of the Account page.' };
     await sendMail(u.email, `${brand}: ${t.title}`, mailText(c, b), mailHtml(c, b));

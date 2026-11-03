@@ -26,3 +26,14 @@ test('the plain-text twin carries the same content', () => {
   const text = mailText(content, brand('#f59e0b'));
   for (const s of ['Kod "x"', '123456', 'Aç: https://panel.example/a?b=1&c=2', 'IP: 192.0.2.1', 'Acme <Cloud>']) assert.ok(text.includes(s), s);
 });
+
+test('the tag and tone colour the card, and the header and footer link to the panel', () => {
+  const b = { ...brand('#f59e0b'), panelUrl: 'https://panel.example/', settingsUrl: 'https://panel.example/account?tab=notifications' };
+  const html = mailHtml({ ...content, label: 'Yönetici <uyarısı>', tone: 'danger' }, b);
+  assert.ok(html.includes('Yönetici &lt;uyarısı&gt;'));
+  assert.ok(html.includes('background:#dc2626'), 'danger edge');
+  assert.ok(html.includes('href="https://panel.example/account?tab=notifications"'));
+  assert.ok(html.includes('Panele git'));
+  assert.ok(!mailHtml(content, brand('#f59e0b')).includes('Panele git'), 'no panel link without a public address');
+  assert.ok(mailText({ ...content, label: 'Sunucu' }, b).startsWith('[Sunucu]'));
+});
