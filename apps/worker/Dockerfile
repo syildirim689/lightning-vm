@@ -1,4 +1,4 @@
-FROM node:22-alpine
+FROM node:26-alpine
 WORKDIR /app
 # rclone reads the ISO storages (FTP/FTPS, SFTP, WebDAV, S3, SMB, HTTP).
 RUN apk add --no-cache rclone
