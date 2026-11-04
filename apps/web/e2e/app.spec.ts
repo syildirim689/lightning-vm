@@ -489,7 +489,7 @@ test.describe('server lifecycle (simulator, Turkish customer)', () => {
     await tick(page.getByRole('radio', { name: /E2E Tiny/ }));
     await expect(page.locator('.quote')).toContainText('Aylık: €3,00', { timeout: 15_000 });
     await expect(page.locator('.quote')).toContainText('Yıllık yaklaşık €36,00');
-    await expect(page.getByRole('radio', { name: /E2E Tiny/ })).toContainText('vCPU başına');
+    await expect(page.getByText(/vCPU başına €3,00/).first()).toBeVisible();
     // The summary lists what is still missing, each a jump to its section; the button waits for them.
     const missing = page.getByRole('list', { name: 'Sipariş için eksik' });
     await expect(missing).toContainText('En az bir SSH anahtarı seçin');
