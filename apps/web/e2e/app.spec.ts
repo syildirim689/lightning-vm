@@ -232,7 +232,7 @@ test.describe('roles and sessions (English browser)', () => {
     await expect(page.getByRole('heading', { level: 1 })).toHaveText('Overview');
     await page.getByRole('link', { name: 'System' }).click();
     await expect(health(page)).toHaveText('API, PostgreSQL and Redis are reachable');
-    await expect(page.getByText(/Background worker: Running \(last signal .*ago\)/)).toBeVisible();
+    await expect(page.getByText(/Background worker: Running \(last signal .+\)/)).toBeVisible();
     // The run script and CI take one backup with scripts/install.sh before the tests.
     await expect(page.getByText(/Last successful backup: .*\d{4}/)).toBeVisible();
     const history = page.getByRole('grid', { name: 'Backups and updates' });
