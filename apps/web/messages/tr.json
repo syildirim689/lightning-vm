@@ -1158,6 +1158,17 @@
       "applied": "{code} kuponu uygulandı",
       "always": "her faturada",
       "periods": "{n, plural, one {ilk fatura} other {ilk # fatura}}, sonra {after}"
+    },
+    "perVcpu": "vCPU başına {price}",
+    "generate": "Üret",
+    "passwordGenerated": "Güçlü bir parola üretildi ve panoya kopyalandı.",
+    "yearly": "Yıllık yaklaşık {price}",
+    "missing": {
+      "title": "Sipariş için eksik",
+      "image": "Bir işletim sistemi seçin",
+      "plan": "Bir paket ya da özel kaynak seçin",
+      "name": "Geçerli ve kullanılmayan bir sunucu adı girin",
+      "keys": "En az bir SSH anahtarı seçin"
     }
   },
   "Catalog": {
@@ -1273,7 +1284,8 @@
       "traffic": "Trafik (GB / ay)",
       "trafficHelp": "Gelen ve giden toplamı; boş: sınırsız.",
       "trafficShort": "{gb} GB trafik",
-      "unlimited": "Sınırsız trafik"
+      "unlimited": "Sınırsız trafik",
+      "perVcpu": "vCPU başına {price}"
     },
     "ip": {
       "title": "IP havuzları",
@@ -1659,7 +1671,8 @@
       "vlanMax": "VLAN bitiş",
       "save": "Kaydet",
       "saved": "Özel ağ ayarları kaydedildi"
-    }
+    },
+    "export": "CSV indir"
   },
   "Servers": {
     "loading": "Yükleniyor…",

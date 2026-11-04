@@ -316,6 +316,9 @@ test.describe('catalog and order preview (simulator)', () => {
     await dialog.getByLabel('Monthly price').fill('12.10');
     await dialog.getByRole('button', { name: 'Create package' }).click();
     await expect(adminPage.getByRole('row', { name: /E2E Small/ })).toContainText('€12.10');
+    await expect(adminPage.getByRole('row', { name: /E2E Small/ })).toContainText('per vCPU');
+    await expect(adminPage.getByRole('tab', { name: /Packages\s*[1-9]/ })).toBeVisible();
+    await expect(adminPage.getByRole('button', { name: 'Download CSV' })).toBeVisible();
 
     const customer = await (await browser.newContext({ locale: 'tr-TR' })).newPage();
     await signIn(customer, user);
@@ -485,11 +488,19 @@ test.describe('server lifecycle (simulator, Turkish customer)', () => {
     await choose(page, page, /İşletim sistemi/, /Sim Linux/);
     await tick(page.getByRole('radio', { name: /E2E Tiny/ }));
     await expect(page.locator('.quote')).toContainText('Aylık: €3,00', { timeout: 15_000 });
+    await expect(page.locator('.quote')).toContainText('Yıllık yaklaşık €36,00');
+    await expect(page.getByRole('radio', { name: /E2E Tiny/ })).toContainText('vCPU başına');
+    // The summary lists what is still missing, each a jump to its section; the button waits for them.
+    const missing = page.getByRole('list', { name: 'Sipariş için eksik' });
+    await expect(missing).toContainText('En az bir SSH anahtarı seçin');
+    await expect(page.getByRole('button', { name: 'Sunucuyu oluştur' })).toBeDisabled();
     await page.getByLabel('Sunucu adı').fill('Web_1');
-    await tick(page.getByRole('checkbox', { name: 'dizüstü' }));
-    await page.getByRole('button', { name: 'Sunucuyu oluştur' }).click();
     await expect(page.getByText('Küçük harf, rakam ve tire kullanın', { exact: false })).toBeVisible();
+    await tick(page.getByRole('checkbox', { name: 'dizüstü' }));
     await page.getByLabel('Sunucu adı').fill('web-1');
+    await expect(missing).toBeHidden();
+    await page.locator('#order-summary').scrollIntoViewIfNeeded();
+    await page.screenshot({ path: 'test-results/tour/order-summary.png', fullPage: true });
     await page.getByRole('button', { name: 'Sunucuyu oluştur' }).click();
 
     await expect(page).toHaveURL(/\/servers\/[0-9a-f-]{36}$/);

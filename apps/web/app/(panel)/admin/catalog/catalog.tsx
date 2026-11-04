@@ -8,6 +8,7 @@ import { I } from '../../../../components/icon';
 import { CheckboxList, ConfirmButton, DataTable, Empty, FieldGroup, Mono, Notice, NumberInput, PageHeader, SelectInput, TextInput } from '../../../../components/ui';
 import { apiFetch, useErrorText } from '../../../../lib/api';
 import { useApiForm } from '../../../../lib/form';
+import { downloadCsv } from '../../../../lib/csv';
 import { useApiAction, useApiQuery } from '../../../../lib/query';
 import { sellable } from '../../../../lib/sizing';
 import { Applications } from './apps-ui';
@@ -69,7 +70,10 @@ export default function Catalog() {
     <Tabs selectedKey={tab} onSelectionChange={(k) => setTab(String(k))}>
       <Tabs.ListContainer className="overflow-x-auto">
         <Tabs.List aria-label={t('title')}>
-          {(['locations', 'pools', 'packages', 'images', 'isos', 'ip', 'apps', 'vdcs', 'quotas'] as const).map((k) => <Tabs.Tab key={k} id={k} className="whitespace-nowrap">{t(`${k}.title`)}<Tabs.Indicator/></Tabs.Tab>)}
+          {(['locations', 'pools', 'packages', 'images', 'isos', 'ip', 'apps', 'vdcs', 'quotas'] as const).map((k) => {
+            const n = ({ pools: pools.length, packages: packages.length, images: images.length, ip: ipPools.length, quotas: quotas.length } as Record<string, number>)[k];
+            return <Tabs.Tab key={k} id={k} className="whitespace-nowrap">{t(`${k}.title`)}{n !== undefined && <span className="ml-1.5 rounded-full bg-default px-1.5 text-xs tabular-nums text-muted">{n}</span>}<Tabs.Indicator/></Tabs.Tab>;
+          })}
         </Tabs.List>
       </Tabs.ListContainer>
 
@@ -86,11 +90,15 @@ export default function Catalog() {
       </Tabs.Panel>
 
       <Tabs.Panel id="packages" className="flex flex-col gap-4 pt-5">
-        <div className="flex justify-end">{pools.length ? <FormModal title={t('packages.new')} label={t('packages.new')}>{(close) => <PackageForm pools={pools} images={images} onSaved={close}/>}</FormModal>
+        <div className="flex flex-wrap justify-end gap-2">{packages.length > 0 && <Button variant="secondary" onPress={() => downloadCsv('packages', ['name', 'vcpu', 'memory_gb', 'disk_gb', 'price_monthly', 'currency', 'traffic_gb', 'locations'],
+          packages.map((p) => [p.name, p.vcpu, p.memoryMb / 1024, p.diskGb, p.priceMonthly, p.currency, p.trafficGb ?? '', p.poolIds.map((id) => pools.find((x) => x.id === id)?.name ?? id).join(' / ')]))}>
+          <I name="download" size={15}/>{t('export')}</Button>}
+          {pools.length ? <FormModal title={t('packages.new')} label={t('packages.new')}>{(close) => <PackageForm pools={pools} images={images} onSaved={close}/>}</FormModal>
           : <p className="text-sm text-muted">{t('packages.needPool')}</p>}</div>
         <DataTable label={t('packages.title')} rows={packages} rowKey={(p) => p.id} empty={t('packages.empty')}
           columns={[{ id: 'name', label: t('col.name') }, { id: 'cpu', label: 'vCPU' }, { id: 'ram', label: 'RAM' }, { id: 'disk', label: t('col.disk') }, { id: 'price', label: t('col.price') }, { id: 'sell', label: t('packages.sellable') }, { id: 'act', label: <span className="sr-only">{t('remove')}</span> }]}
-          cells={(p) => [<span key="n" className="flex flex-col"><span className="font-medium">{p.name}</span><span className="text-xs text-muted">{p.trafficGb ? t('packages.trafficShort', { gb: p.trafficGb }) : t('packages.unlimited')}</span></span>, p.vcpu, `${p.memoryMb / 1024} GB`, `${p.diskGb} GB`, money(p.priceMonthly, p.currency), <Sellable key="s" pkg={p} pools={pools}/>, removeButton(`/admin/packages/${p.id}`, p.name)]}/>
+          cells={(p) => [<span key="n" className="flex flex-col"><span className="font-medium">{p.name}</span><span className="text-xs text-muted">{p.trafficGb ? t('packages.trafficShort', { gb: p.trafficGb }) : t('packages.unlimited')}</span></span>, p.vcpu, `${p.memoryMb / 1024} GB`, `${p.diskGb} GB`,
+            <span key="p" className="flex flex-col"><span className="tabular-nums">{money(p.priceMonthly, p.currency)}</span><span className="text-xs tabular-nums text-muted">{t('packages.perVcpu', { price: money(String(Number(p.priceMonthly) / p.vcpu), p.currency) })}</span></span>, <Sellable key="s" pkg={p} pools={pools}/>, removeButton(`/admin/packages/${p.id}`, p.name)]}/>
       </Tabs.Panel>
 
       <Tabs.Panel id="images" className="flex flex-col gap-4 pt-5">

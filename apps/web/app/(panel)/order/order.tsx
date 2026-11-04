@@ -16,6 +16,8 @@ import { needs, pick, snap, type Traffic, type Workload } from '../../../lib/siz
 import { useApiQuery } from '../../../lib/query';
 import type { Summary } from '../../../lib/billing';
 import { useIntentKey, useSshKeys } from '../servers-ui';
+import { Copy } from '../server-extras';
+import { strongPassword } from '../../../lib/password';
 
 type Custom = { cpuMin: number; cpuMax: number; cpuStep: number; memoryMinMb: number; memoryMaxMb: number; memoryStepMb: number; diskMinGb: number; diskMaxGb: number; diskStepGb: number; currency: string };
 type Catalog = { packages: { id: string; name: string; vcpu: number; memoryMb: number; diskGb: number; priceMonthly: string; currency: string; poolIds: string[]; imageIds: string[] }[];
@@ -95,14 +97,25 @@ export default function Order() {
   const suggest = () => { const base = slug(image?.name.split(/\s/)[0] ?? 'server'); let n = 1; while (taken.has(`${base}-${n}`)) n++; return `${base}-${n}`; };
   const couponOk = quote.data?.coupon && 'code' in quote.data.coupon ? quote.data.coupon : null;
   const couponError = quote.data?.coupon && 'error' in quote.data.coupon ? quote.data.coupon.error : undefined;
-  const canCreate = ready && quote.data && !quote.data.quota.exceeded.length && quote.data.capacityAvailable && !couponError;
   const nameTaken = !!d.name && taken.has(d.name);
+  const nameOk = hostnameSchema.safeParse(d.name).success && !nameTaken;
+  // What still stands between the user and the order, each with the section that fixes it (the API requires all of them).
+  const missing = [
+    !d.imageId && { key: 'image', at: t('location') },
+    !ready && { key: 'plan', at: t('kind') },
+    !nameOk && { key: 'name', at: t('access') },
+    !d.sshKeyIds.length && { key: 'keys', at: t('access') },
+  ].filter((m): m is { key: 'image' | 'plan' | 'name' | 'keys'; at: string } => !!m);
+  const canCreate = ready && !missing.length && quote.data && !quote.data.quota.exceeded.length && quote.data.capacityAvailable && !couponError;
+  const jump = (title: string) => document.querySelector(`[data-section="${CSS.escape(title)}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   const steps = [
-    { label: t('steps.location'), done: !!d.poolId && !!d.imageId },
-    { label: t('steps.plan'), done: ready },
-    { label: t('steps.access'), done: hostnameSchema.safeParse(d.name).success && !taken.has(d.name) && d.sshKeyIds.length > 0 },
-    { label: t('steps.review'), done: !!canCreate },
+    { label: t('steps.location'), done: !!d.poolId && !!d.imageId, at: t('location') },
+    { label: t('steps.plan'), done: ready, at: t('kind') },
+    { label: t('steps.access'), done: nameOk && d.sshKeyIds.length > 0, at: t('access') },
+    { label: t('steps.review'), done: !!canCreate, at: '' },
   ];
+  const pkg = catalog.packages.find((p) => p.id === d.packageId);
+  const application = catalog.applications.find((a) => a.id === d.applicationId);
   const custom = pool?.custom;
   const money = (v: string | number, currency: string) => format.number(Number(v), { style: 'currency', currency });
   const gb = (mb: number) => format.number(mb / 1024, { maximumFractionDigits: 1 });
@@ -128,10 +141,12 @@ export default function Order() {
     <PageHeader title={t('title')} description={t('customNote')}/>
     <ol className="mb-6 flex flex-wrap items-center gap-2" aria-label={t('steps.label')}>
       {steps.map((st, i) => <li key={st.label} className="flex items-center gap-2">
+        <button type="button" onClick={() => st.at ? jump(st.at) : document.getElementById('order-summary')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+          className="flex items-center gap-2 rounded-full pr-2 hover:bg-default focus-visible:outline-2 focus-visible:outline-accent">
         <motion.span animate={{ scale: st.done ? [1, 1.15, 1] : 1 }} transition={{ duration: 0.3 }}
           className={`grid size-7 place-items-center rounded-full text-xs font-semibold ${st.done ? 'bg-success text-success-foreground' : 'bg-default text-muted'}`}>
           {st.done ? <I name="check" size={14}/> : i + 1}</motion.span>
-        <span className={`text-sm ${st.done ? 'text-foreground' : 'text-muted'}`}>{st.label}</span>
+        <span className={`text-sm ${st.done ? 'text-foreground' : 'text-muted'}`}>{st.label}</span></button>
         {i < steps.length - 1 && <span aria-hidden className="mx-1 hidden h-px w-8 bg-separator sm:block"/>}
       </li>)}
     </ol>
@@ -171,6 +186,7 @@ export default function Order() {
                   <span className="font-semibold">{p.name}</span>
                   <span className="text-xs text-muted">{t('shape', { vcpu: p.vcpu, memory: gb(p.memoryMb), disk: p.diskGb })}</span>
                   <span className="text-lg font-semibold tabular-nums">{money(p.priceMonthly, p.currency)}<span className="text-xs font-normal text-muted"> / {t('perMonth')}</span></span>
+                  <span className="text-[11px] tabular-nums text-muted">{t('perVcpu', { price: money(Number(p.priceMonthly) / p.vcpu, p.currency) })}</span>
                   {blocked(p) && <span className="flex items-center gap-1 text-xs text-warning"><I name="triangle-alert" size={12}/>{blocked(p)}</span>}
                 </span>
               </Radio.Content>
@@ -190,15 +206,20 @@ export default function Order() {
           <div className="flex flex-col gap-4">
             <div className="flex items-start gap-2">
               <TextInput className="flex-1" label={t('name')} value={d.name} onChange={(v) => { d.set({ name: v.toLowerCase() }); setNameError(undefined); }} help={t('nameHelp')}
-                error={nameError ?? (nameTaken ? field('NAME_TAKEN') : undefined) ?? quoteField('name')} autoComplete="off" spellCheck={false}/>
+                error={nameError ?? (nameTaken ? field('NAME_TAKEN') : d.name && !nameOk ? field('INVALID_HOSTNAME') : undefined) ?? quoteField('name')} autoComplete="off" spellCheck={false}/>
               <Button className="mt-6" variant="secondary" onPress={() => { d.set({ name: suggest() }); setNameError(undefined); }}><I name="sparkles" size={16}/>{t('suggest')}</Button>
             </div>
             {keys.length === 0 ? <Notice tone="warning">{t('noKeys')} <ButtonLink href="/account" size="sm" variant="secondary" className="ml-2">{t('manageKeys')}</ButtonLink></Notice>
               : <CheckboxList label={t('sshKeys')} value={d.sshKeyIds} onChange={(v) => d.set({ sshKeyIds: v })} error={quoteField('sshKeyIds')}
                   options={keys.map((k) => ({ id: k.id, label: k.name }))}/>}
             {image?.family === 'esxi' && <Notice tone="default">{t('esxiNote')}</Notice>}
-            <TextInput label={t('rootPassword')} type="password" value={rootPassword} onChange={setRootPassword} autoComplete="new-password" maxLength={128}
-              help={t('rootPasswordHelp')} error={quoteField('rootPassword')}/>
+            <div className="flex items-start gap-2">
+              <TextInput className="flex-1" label={t('rootPassword')} type="password" value={rootPassword} onChange={setRootPassword} autoComplete="new-password" maxLength={128}
+                help={t('rootPasswordHelp')} error={quoteField('rootPassword')}/>
+              <Button className="mt-6" variant="secondary" onPress={() => { const p = strongPassword(); setRootPassword(p); void navigator.clipboard?.writeText(p).catch(() => undefined); toast.success(t('passwordGenerated')); }}>
+                <I name="wand-sparkles" size={16}/>{t('generate')}</Button>
+              {rootPassword && <Copy className="mt-6" text={rootPassword} label={t('rootPassword')}/>}
+            </div>
             {pool && pool.extraIpv4Max > 0 && <NumberInput label={t('extraIpv4')} value={Math.min(d.extraIpv4 ?? 0, pool.extraIpv4Max)} onChange={(v) => d.set({ extraIpv4: v ?? 0 })} minValue={0} maxValue={pool.extraIpv4Max}
               error={quoteField('extraIpv4')} help={t('extraIpv4Help', { max: pool.extraIpv4Max, price: money(pool.extraIpv4Price, quote.data?.price.currency ?? 'EUR') })}/>}
             {pool?.ipv6 && <p className="flex items-center gap-2 text-sm text-muted"><I name="globe" size={14}/>{t('ipv6Included')}</p>}
@@ -216,7 +237,7 @@ export default function Order() {
         </Section>
       </div>
 
-      <aside className="lg:sticky lg:top-20 lg:self-start">
+      <aside id="order-summary" className="scroll-mt-28 lg:sticky lg:top-20 lg:self-start">
         <Card>
           <Card.Header><Card.Title className="text-base font-semibold">{t('summary')}</Card.Title></Card.Header>
           <Card.Content className="flex flex-col gap-3 text-sm">
@@ -225,6 +246,13 @@ export default function Order() {
               : quote.error ? <p role="alert" className="text-danger">{error(quote.error)}</p>
               : quote.data && <motion.div key={quote.data.price.monthly} initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.18 }} className="quote flex flex-col gap-2">
                   <p>{t('shape', { vcpu: quote.data.shape.vcpu, memory: gb(quote.data.shape.memoryMb), disk: quote.data.shape.diskGb })}</p>
+                  <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1 text-xs">
+                    {([[t('location'), pool ? [pool.name, pool.location].filter(Boolean).join(' · ') : '–'], [t('image'), image?.name ?? '–'],
+                      [t('steps.plan'), d.type === 'custom' ? t('custom') : pkg?.name ?? '–'], [t('name'), d.name || '–'],
+                      ...((d.extraIpv4 ?? 0) > 0 ? [[t('extraIpv4'), String(d.extraIpv4)]] : []), ...(application ? [[t('application'), application.name]] : []),
+                      ...(firewallIds.length ? [[tf('title'), String(firewallIds.length)]] : [])] as [string, string][]).map(([k, v]) =>
+                      <div key={k} className="contents"><dt className="text-muted">{k}</dt><dd className="truncate text-right font-medium" title={v}>{v}</dd></div>)}
+                  </dl>
                   <Separator/>
                   {hourly && <RadioGroup aria-label={t('cycle.label')} value={d.billingCycle} onChange={(v) => d.set({ billingCycle: v as 'monthly' | 'hourly' })} orientation="horizontal">
                     <Radio value="monthly"><Radio.Content><Radio.Control><Radio.Indicator/></Radio.Control>{t('cycle.monthly')}</Radio.Content></Radio>
@@ -243,7 +271,8 @@ export default function Order() {
                     <p className="text-2xl font-semibold tabular-nums">{t('monthly', { price: money(couponOk.monthly, quote.data.price.currency) })}</p>
                     <p className="text-xs text-muted"><s className="tabular-nums">{money(quote.data.price.monthly, quote.data.price.currency)}</s>{' · '}
                       {couponOk.periods === null ? t('coupon.always') : t('coupon.periods', { n: couponOk.periods, after: money(quote.data.price.monthly, quote.data.price.currency) })}</p>
-                  </div> : <p className="text-2xl font-semibold tabular-nums">{t('monthly', { price: money(quote.data.price.monthly, quote.data.price.currency) })}</p>}
+                  </div> : <div><p className="text-2xl font-semibold tabular-nums">{t('monthly', { price: money(quote.data.price.monthly, quote.data.price.currency) })}</p>
+                    <p className="text-xs text-muted">{t('yearly', { price: money(Number(quote.data.price.monthly) * 12, quote.data.price.currency) })}</p></div>}
                   {billing?.enabled && d.billingCycle !== 'hourly' && (couponOk
                     ? <p className="flex items-center gap-2 text-success"><I name="ticket" size={15}/><span className="font-medium">{t('coupon.applied', { code: couponOk.code })}</span>
                       <Button size="sm" variant="ghost" onPress={() => { setCoupon(''); setCouponInput(''); }}>{t('coupon.remove')}</Button></p>
@@ -259,7 +288,12 @@ export default function Order() {
                 </motion.div>}
             {failure && <p role="alert" className="text-danger">{failure.text}</p>}
           </Card.Content>
-          <Card.Footer>
+          <Card.Footer className="flex flex-col items-stretch gap-3">
+            {missing.length > 0 && <ul aria-label={t('missing.title')} className="flex flex-col gap-1 text-sm">
+              <li className="text-xs font-medium uppercase tracking-wider text-muted">{t('missing.title')}</li>
+              {missing.map((m) => <li key={m.key}><button type="button" onClick={() => jump(m.at)} className="flex w-full items-center gap-2 rounded-lg px-1 py-0.5 text-left text-warning hover:bg-default focus-visible:outline-2 focus-visible:outline-accent">
+                <I name="circle-alert" size={14} className="shrink-0"/>{t(`missing.${m.key}`)}<I name="arrow-right" size={13} className="ml-auto shrink-0"/></button></li>)}
+            </ul>}
             <Button fullWidth size="lg" isDisabled={!canCreate} isPending={busy} onPress={create}><I name="rocket" size={18}/>{t('create')}</Button>
           </Card.Footer>
         </Card>

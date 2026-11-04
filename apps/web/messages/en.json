@@ -1158,6 +1158,17 @@
       "applied": "Coupon {code} applied",
       "always": "on every invoice",
       "periods": "{n, plural, one {first invoice} other {first # invoices}}, then {after}"
+    },
+    "perVcpu": "{price} per vCPU",
+    "generate": "Generate",
+    "passwordGenerated": "A strong password was generated and copied to the clipboard.",
+    "yearly": "About {price} a year",
+    "missing": {
+      "title": "Still needed",
+      "image": "Choose an operating system",
+      "plan": "Choose a package or custom resources",
+      "name": "Enter a valid server name that is not in use",
+      "keys": "Choose at least one SSH key"
     }
   },
   "Catalog": {
@@ -1273,7 +1284,8 @@
       "traffic": "Traffic (GB / month)",
       "trafficHelp": "In and out together; empty: unlimited.",
       "trafficShort": "{gb} GB traffic",
-      "unlimited": "Unlimited traffic"
+      "unlimited": "Unlimited traffic",
+      "perVcpu": "{price} per vCPU"
     },
     "ip": {
       "title": "IP pools",
@@ -1659,7 +1671,8 @@
       "vlanMax": "VLAN to",
       "save": "Save",
       "saved": "Private network settings saved"
-    }
+    },
+    "export": "Download CSV"
   },
   "Servers": {
     "loading": "Loading…",
