@@ -1500,15 +1500,18 @@ test.describe('people, settings and smart features (English browser)', () => {
     // With one: ready-made sizes fill the new-server form from what is left.
     {
       const me = await (await page.request.get('/api/auth/me')).json();
-      const pools = (await (await page.request.get('/api/admin/pools')).json()).pools as { id: string }[];
-      const made = await page.request.post('/api/admin/vdcs', { headers: { 'x-lightning-csrf': '1' }, data: { name: 'E2E VDC', ownerId: me.id, poolId: pools[0].id, vcpu: 4, memoryMb: 4096, diskGb: 100, maxServers: 5, priceMonthly: '0', currency: 'EUR' } });
+      // Sized to what the simulator pool still has (earlier tests use some of it).
+      const pools = (await (await page.request.get('/api/admin/pools')).json()).pools as { id: string; capacity: { available: { vcpu: number; memoryMb: number; storageGb: number } } }[];
+      const p = pools.toSorted((x, y) => y.capacity.available.memoryMb - x.capacity.available.memoryMb)[0];
+      const size = { vcpu: Math.min(2, p.capacity.available.vcpu), memoryMb: Math.min(2048, Math.floor(p.capacity.available.memoryMb / 1024) * 1024), diskGb: Math.min(40, Math.floor(p.capacity.available.storageGb / 10) * 10) };
+      const made = await page.request.post('/api/admin/vdcs', { headers: { 'x-lightning-csrf': '1' }, data: { name: 'E2E VDC', ownerId: me.id, poolId: p.id, ...size, maxServers: 5, priceMonthly: '0', currency: 'EUR' } });
       expect(made.status(), await made.text()).toBe(201);
       await page.goto('/vdc');
       await page.getByRole('button', { name: 'Create server' }).click();
       const dialog = page.getByRole('dialog');
       await dialog.getByRole('radio', { name: /^All that is left/ }).click();
       await expect(dialog.getByRole('radio', { name: /^All that is left/ })).toHaveAttribute('aria-checked', 'true');
-      await expect(dialog.getByText('4 vCPU · 4 GB · 100 GB')).toBeVisible();
+      await expect(dialog.getByText(`${size.vcpu} vCPU · ${size.memoryMb / 1024} GB · ${size.diskGb} GB`).first()).toBeVisible();
       await dialog.getByRole('radio', { name: /^Small/ }).click();
       await expect(dialog.getByRole('radio', { name: /^All that is left/ })).toHaveAttribute('aria-checked', 'false');
       await page.waitForTimeout(400);
