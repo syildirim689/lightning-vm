@@ -1030,8 +1030,8 @@ test.describe('people, settings and smart features (English browser)', () => {
     await dialog.getByLabel('Name').fill('E2E Viewer');
     await tick(dialog.getByRole('checkbox', { name: /See the catalog/ }));
     await dialog.getByRole('button', { name: 'Save' }).click();
-    await expect(page.getByText('Role saved.')).toBeVisible();
-    await expect(page.getByText('E2E Viewer')).toBeVisible();
+    // The saved role in the list is the proof; the toast may already be gone on a slow run.
+    await expect(page.getByRole('heading', { name: 'E2E Viewer' })).toBeVisible();
     // Duplicating a role opens a new one with its name and permissions.
     await page.getByRole('button', { name: /^Duplicate the Support/ }).click();
     await expect(page.getByRole('dialog').getByLabel('Name')).toHaveValue(/copy$/);
