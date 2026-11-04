@@ -1,7 +1,7 @@
 "use client";
 // The customer's billing: balance and what is open at a glance, then invoices, subscriptions, balance movements,
 // saved cards and the invoice details (TCKN / VKN) every invoice is issued to.
-import { Button, Card, Modal, Tabs, toast } from '@heroui/react';
+import { Button, Card, Modal, SearchField, Tabs, toast } from '@heroui/react';
 import { useQueryClient } from '@tanstack/react-query';
 import { motion } from 'motion/react';
 import NextLink from 'next/link';
@@ -17,6 +17,7 @@ import type { Card as SavedCard, Invoice, Subscription, Summary } from '../../..
 import { MyDisputes } from './disputes';
 import { invoiceState, invoiceTone, subscriptionTone, type Hourly } from '../../../lib/billing';
 import { useApiQuery } from '../../../lib/query';
+import { fold } from '../../../lib/note-line';
 import { useMe } from '../../../lib/me';
 import { can } from '../../../lib/permissions';
 
@@ -27,6 +28,7 @@ export default function Billing() {
   const format = useFormatter();
   const [tab, setTab] = useQueryState('tab', parseAsString.withDefault('invoices'));
   const [topup, setTopup] = useState(false);
+  const [show, setShow] = useQueryState('show', parseAsString.withDefault('all'));
   const s = useApiQuery<Summary>(['notifications', 'billing-summary'], '/billing/summary').data;
   const me = useMe();
   if (!s) return <div className="h-48 animate-pulse rounded-3xl bg-default/50"/>;
@@ -52,6 +54,8 @@ export default function Billing() {
         <p className="flex items-center gap-2 text-xs text-muted"><I name="receipt" size={14}/>{t('kpi.open')}</p>
         <p className="mt-1 text-2xl font-semibold tabular-nums">{s.open.n ? money(s.open.amount, s.open.currency ?? 'TRY') : t('kpi.nothingOpen')}</p>
         <p className="text-xs text-muted">{s.open.n ? t('kpi.openCount', { n: s.open.n, overdue: s.open.overdue }) : t('kpi.allPaid')}</p>
+        {s.open.n > 0 && <button type="button" onClick={() => { void setTab(null); void setShow('open'); document.getElementById('billing-tabs')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }}
+          className="mt-1 text-xs font-medium text-accent hover:underline">{t('kpi.showOpen')}</button>}
       </motion.li>
       <motion.li initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="rounded-2xl border border-border bg-surface p-4">
         <p className="flex items-center gap-2 text-xs text-muted"><I name="calendar-clock" size={14}/>{t('kpi.next')}</p>
@@ -60,11 +64,12 @@ export default function Billing() {
         <p className="mt-1 flex items-center gap-1 text-xs text-muted"><I name={s.autoCharge ? 'repeat' : 'hand'} size={12}/>{s.autoCharge ? t('kpi.autoCharge') : t('kpi.manualCharge')}</p>
       </motion.li>
     </ul>
-    <Tabs selectedKey={tabs.includes(tab as 'invoices') ? tab : 'invoices'} onSelectionChange={(k) => void setTab(String(k))}>
+    <Tabs id="billing-tabs" className="scroll-mt-28" selectedKey={tabs.includes(tab as 'invoices') ? tab : 'invoices'} onSelectionChange={(k) => void setTab(String(k))}>
       <Tabs.ListContainer className="overflow-x-auto">
-        <Tabs.List aria-label={t('title')}>{tabs.map((k) => <Tabs.Tab key={k} id={k} className="whitespace-nowrap">{t(`tabs.${k}`)}<Tabs.Indicator/></Tabs.Tab>)}</Tabs.List>
+        <Tabs.List aria-label={t('title')}>{tabs.map((k) => { const n = ({ invoices: s.open.n, subscriptions: s.subscriptions.length, cards: s.cards.length } as Record<string, number>)[k];
+          return <Tabs.Tab key={k} id={k} className="whitespace-nowrap">{t(`tabs.${k}`)}{!!n && <span className={`ml-1.5 rounded-full px-1.5 text-xs tabular-nums ${k === 'invoices' ? 'bg-warning/15 text-warning' : 'bg-default text-muted'}`}>{n}</span>}<Tabs.Indicator/></Tabs.Tab>; })}</Tabs.List>
       </Tabs.ListContainer>
-      <Tabs.Panel id="invoices" className="pt-5"><Invoices/></Tabs.Panel>
+      <Tabs.Panel id="invoices" className="pt-5"><Invoices filter={show} setFilter={(k) => void setShow(k === 'all' ? null : k)}/></Tabs.Panel>
       <Tabs.Panel id="subscriptions" className="pt-5"><Subscriptions list={s.subscriptions}/></Tabs.Panel>
       <Tabs.Panel id="balance" className="flex flex-col gap-5 pt-5">{s.hourly?.servers.length ? <HourlyUsage h={s.hourly}/> : null}<Balance/></Tabs.Panel>
       <Tabs.Panel id="cards" className="pt-5"><Cards cards={s.cards}/></Tabs.Panel>
@@ -75,13 +80,15 @@ export default function Billing() {
   </>;
 }
 
-function Invoices() {
+function Invoices({ filter, setFilter }: { filter: string; setFilter: (k: string) => void }) {
   const t = useTranslations('Billing');
   const format = useFormatter();
   const now = useNow({ updateInterval: 60_000 });
-  const [filter, setFilter] = useState('all');
+  const [q, setQ] = useState('');
   const list = useApiQuery<{ invoices: Invoice[] }>(['billing', 'invoices'], '/billing/invoices').data?.invoices;
-  const of = (k: string) => (list ?? []).filter((i) => k === 'all' || (k === 'open' ? i.status === 'unpaid' : i.status !== 'unpaid'));
+  const needle = fold(q.trim().replace(/^#/, ''));
+  const of = (k: string) => (list ?? []).filter((i) => (k === 'all' || (k === 'open' ? i.status === 'unpaid' : i.status !== 'unpaid'))
+    && (!needle || [i.number ?? '', i.id, i.total, t(`kind.${i.kind}`)].some((v) => fold(v).includes(needle))));
   const rows = of(filter);
   const overdue = (list ?? []).filter((i) => i.status === 'unpaid' && i.overdue).length;
   const csv = () => downloadCsv('invoices', [t('col.number'), t('col.kind'), t('col.date'), t('csv.due'), t('col.total'), t('csv.currency'), t('col.status')],
@@ -94,6 +101,9 @@ function Invoices() {
           {t(`filters.${k}`)}{list && <span className="tabular-nums opacity-70">{of(k).length}</span>}</Button>)}
       </div>
       {overdue > 0 && <StatusChip tone="danger">{t('overdueCount', { n: overdue })}</StatusChip>}
+      {(list?.length ?? 0) > 5 && <SearchField aria-label={t('findInvoice')} value={q} onChange={setQ} className="w-full sm:w-56">
+        <SearchField.Group><SearchField.SearchIcon/><SearchField.Input placeholder={t('findInvoice')}/><SearchField.ClearButton/></SearchField.Group>
+      </SearchField>}
       <Button size="sm" variant="secondary" className="ml-auto" isDisabled={!rows.length} onPress={csv}><I name="download" size={14}/>{t('csv.export')}</Button>
     </div>
     <DataTable label={t('tabs.invoices')} rows={rows} rowKey={(i) => i.id} empty={list ? t('noInvoices') : '…'} minWidth={720}
@@ -155,7 +165,13 @@ function Subscriptions({ list }: { list: Subscription[] }) {
     catch (e) { toast.danger(error(e)); }
   }
   if (!list.length) return <Empty icon={<I name="repeat" size={28}/>} title={t('noSubscriptions')}/>;
-  return <ul className="flex flex-col gap-3">{list.map((s) => <li key={s.id} className="flex flex-col gap-3 rounded-2xl border border-border bg-surface p-4 sm:flex-row sm:items-center">
+  // What renews each month, per currency (subscriptions that end at their period's end left out).
+  const monthly = Object.entries(list.filter((s) => !s.cancelAtPeriodEnd && s.status !== 'cancelled').reduce<Record<string, number>>((a, s) => ({ ...a, [s.currency]: (a[s.currency] ?? 0) + Number(s.amount) }), {}));
+  return <div className="flex flex-col gap-3">
+    {monthly.length > 0 && <p className="flex flex-wrap items-center gap-2 rounded-2xl border border-border bg-surface px-4 py-3 text-sm">
+      <I name="repeat" size={15} className="text-accent"/>{t('monthlyTotal')}
+      <span className="font-semibold tabular-nums">{monthly.map(([c, v]) => format.number(v, { style: 'currency', currency: c })).join(' · ')}</span></p>}
+    <ul className="flex flex-col gap-3">{list.map((s) => <li key={s.id} className="flex flex-col gap-3 rounded-2xl border border-border bg-surface p-4 sm:flex-row sm:items-center">
     <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-default text-muted">{s.kind === 'server' ? <I name="server" size={18}/> : <I name="building-2" size={18}/>}</span>
     <span className="min-w-0 flex-1">
       <span className="flex flex-wrap items-center gap-2"><span className="font-medium">{s.description}</span><StatusChip tone={subscriptionTone(s.status)}>{t(`sub.${s.status}`)}</StatusChip>
@@ -172,7 +188,7 @@ function Subscriptions({ list }: { list: Subscription[] }) {
             body={t('cancelBody', { name: s.description, date: s.periodEnd ? format.dateTime(new Date(s.periodEnd), { dateStyle: 'long' }) : '–' })}
             confirmLabel={t('cancelConfirm')} cancelLabel={t('cancelKeep')} onConfirm={() => change(s, { cancelAtPeriodEnd: true }, t('cancelled'))}/>}
     </span>
-  </li>)}</ul>;
+  </li>)}</ul></div>;
 }
 
 // Pay as you go: what is left, how long it lasts, and each hourly server's hours and cost this month.
@@ -199,12 +215,17 @@ function Balance() {
   const t = useTranslations('Billing');
   const format = useFormatter();
   const q = useApiQuery<{ entries: { id: string; amount: string; currency: string; reason: string; note: string | null; invoiceId: string | null; createdAt: string }[] }>(['billing', 'balance'], '/billing/balance').data;
-  return <DataTable label={t('tabs.balance')} rows={q?.entries ?? []} rowKey={(e) => e.id} empty={q ? t('noMovements') : '…'}
+  return <div className="flex flex-col gap-3">
+    {!!q?.entries.length && <Button size="sm" variant="secondary" className="self-end" onPress={() => downloadCsv('balance', [t('col.date'), t('col.what'), t('col.amount'), t('csv.currency')],
+      q.entries.map((e) => [e.createdAt, [t(`reason.${e.reason as 'topup'}`), e.note].filter(Boolean).join(' – '), e.amount, e.currency]))}>
+      <I name="download" size={14}/>{t('balanceCsv')}</Button>}
+    <DataTable label={t('tabs.balance')} rows={q?.entries ?? []} rowKey={(e) => e.id} empty={q ? t('noMovements') : '…'}
     columns={[{ id: 'date', label: t('col.date') }, { id: 'what', label: t('col.what') }, { id: 'amount', label: t('col.amount') }]}
     cells={(e) => [format.dateTime(new Date(e.createdAt), { dateStyle: 'medium', timeStyle: 'short' }),
       <span key="w">{t(`reason.${e.reason as 'topup'}`)}{e.note && <span className="block text-xs text-muted">{e.note}</span>}
         {e.invoiceId && <NextLink href={`/billing/invoices/${e.invoiceId}`} className="block text-xs text-accent hover:underline">{t('view')}</NextLink>}</span>,
-      <span key="a" className={`tabular-nums font-medium ${Number(e.amount) > 0 ? 'text-success' : ''}`}>{Number(e.amount) > 0 && '+'}{format.number(Number(e.amount), { style: 'currency', currency: e.currency })}</span>]}/>;
+      <span key="a" className={`tabular-nums font-medium ${Number(e.amount) > 0 ? 'text-success' : ''}`}>{Number(e.amount) > 0 && '+'}{format.number(Number(e.amount), { style: 'currency', currency: e.currency })}</span>]}/>
+  </div>;
 }
 
 function Cards({ cards }: { cards: SavedCard[] }) {
@@ -215,6 +236,9 @@ function Cards({ cards }: { cards: SavedCard[] }) {
   async function act(path: string, method: string, done: string) {
     try { await apiFetch(path, { method }); toast.success(done); void reload(); } catch (e) { toast.danger(error(e)); }
   }
+  // Months left on a card: under 0 it has expired, under 2 it is about to.
+  const now = new Date();
+  const left = (c: SavedCard) => c.expMonth && c.expYear ? (c.expYear - now.getFullYear()) * 12 + c.expMonth - (now.getMonth() + 1) : null;
   return <div className="flex flex-col gap-3">
     <p className="text-sm text-muted">{t('cardsHelp')}</p>
     {!cards.length ? <Empty icon={<I name="credit-card" size={28}/>} title={t('noCards')}/> : <ul className="grid gap-3 sm:grid-cols-2">{cards.map((c) =>
@@ -223,10 +247,14 @@ function Cards({ cards }: { cards: SavedCard[] }) {
         <span className="min-w-0 flex-1">
           <span className="block font-mono font-medium">•••• {c.last4 ?? '????'}</span>
           <span className="block text-xs text-muted">{c.expMonth && c.expYear ? `${String(c.expMonth).padStart(2, '0')}/${c.expYear}` : ''} · {c.provider}{c.mode === 'test' && ` · ${t('testMode')}`}</span>
+          {(() => { const m = left(c); return m === null || m > 1 ? null : <span className={`mt-1 inline-flex items-center gap-1 text-xs ${m < 0 ? 'text-danger' : 'text-warning'}`}>
+            <I name="triangle-alert" size={12}/>{m < 0 ? t('cardExpired') : t('cardExpiring')}</span>; })()}
         </span>
         {c.isDefault ? <StatusChip tone="accent">{t('defaultCard')}</StatusChip>
           : <Button size="sm" variant="ghost" onPress={() => void act(`/billing/cards/${c.id}/default`, 'PUT', t('defaultSet'))}>{t('makeDefault')}</Button>}
-        <Button size="sm" variant="ghost" isIconOnly aria-label={t('removeCard', { last4: c.last4 ?? '' })} onPress={() => void act(`/billing/cards/${c.id}`, 'DELETE', t('cardRemoved'))}><I name="trash-2" size={14}/></Button>
+        <ConfirmButton size="sm" variant="ghost" icon={<I name="trash-2" size={14}/>} label={<span className="sr-only">{t('removeCard', { last4: c.last4 ?? '' })}</span>}
+          title={t('removeCard', { last4: c.last4 ?? '' })} body={c.isDefault ? t('removeDefaultBody') : t('removeCardBody')} confirmLabel={t('removeConfirm')} cancelLabel={t('cancelKeep')}
+          onConfirm={() => act(`/billing/cards/${c.id}`, 'DELETE', t('cardRemoved'))}/>
       </li>)}</ul>}
   </div>;
 }

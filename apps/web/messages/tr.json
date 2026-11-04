@@ -6273,7 +6273,8 @@
       "nextOn": "{date} · {name}",
       "noSubscriptions": "Henüz abonelik yok",
       "autoCharge": "Bakiyeden ya da kayıtlı karttan otomatik ödenir",
-      "manualCharge": "Her faturayı kendiniz ödersiniz"
+      "manualCharge": "Her faturayı kendiniz ödersiniz",
+      "showOpen": "Ödenmemişleri göster"
     },
     "topup": {
       "open": "Bakiye yükle",
@@ -6516,7 +6517,15 @@
       "totals": "Bu yıl {year} · 12 ayda {all}"
     },
     "offStaff": "Faturalandırmayı açınca müşteriler faturalarını, bakiyelerini ve kayıtlı kartlarını burada görür.",
-    "turnOn": "Faturalandırma ayarlarını aç"
+    "turnOn": "Faturalandırma ayarlarını aç",
+    "findInvoice": "Fatura ara",
+    "monthlyTotal": "Her ay yenilenen toplam:",
+    "balanceCsv": "Hareketleri CSV indir",
+    "cardExpired": "Süresi dolmuş",
+    "cardExpiring": "Süresi dolmak üzere",
+    "removeCardBody": "Kart bu hesaptan kaldırılır; tekrar kullanmak için yeniden eklemeniz gerekir.",
+    "removeDefaultBody": "Bu varsayılan kartınız. Kaldırırsanız otomatik ödemeler başka bir varsayılan kart seçene kadar yapılamaz.",
+    "removeConfirm": "Kartı kaldır"
   },
   "BillingAdmin": {
     "eyebrow": "Gelir",

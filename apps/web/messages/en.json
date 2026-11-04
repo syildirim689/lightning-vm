@@ -6273,7 +6273,8 @@
       "nextOn": "{date} · {name}",
       "noSubscriptions": "No subscription yet",
       "autoCharge": "Paid automatically from balance or saved card",
-      "manualCharge": "You pay each invoice yourself"
+      "manualCharge": "You pay each invoice yourself",
+      "showOpen": "Show unpaid"
     },
     "topup": {
       "open": "Top up",
@@ -6516,7 +6517,15 @@
       "totals": "This year {year} · 12 months {all}"
     },
     "offStaff": "Once billing is on, customers see their invoices, balance and saved cards here.",
-    "turnOn": "Open billing settings"
+    "turnOn": "Open billing settings",
+    "findInvoice": "Find an invoice",
+    "monthlyTotal": "Renews every month:",
+    "balanceCsv": "Download movements (CSV)",
+    "cardExpired": "Expired",
+    "cardExpiring": "Expires soon",
+    "removeCardBody": "The card is removed from this account; to use it again you add it again.",
+    "removeDefaultBody": "This is your default card. Without it, automatic payments wait until you choose another default card.",
+    "removeConfirm": "Remove the card"
   },
   "BillingAdmin": {
     "eyebrow": "Money",
