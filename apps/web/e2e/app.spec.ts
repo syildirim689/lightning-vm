@@ -1410,6 +1410,7 @@ test.describe('people, settings and smart features (English browser)', () => {
     await guest.goto('/status');
     await expect(guest.getByRole('heading', { level: 1 })).toHaveText('Sistem durumu');
     await expect(guest.getByRole('status').first()).toBeVisible();
+    await expect(guest.getByRole('list', { name: 'Renklerin anlamı' })).toContainText('Kesinti');
     await guest.waitForTimeout(800);
     await shot(guest, 'status-page');
     for (const path of ['/login', '/register']) {
@@ -1434,6 +1435,7 @@ test.describe('people, settings and smart features (English browser)', () => {
     const page = await (await browser.newContext({ locale: 'en-US', viewport: { width: 1440, height: 900 } })).newPage();
     await signInAdmin(page);
     await page.goto('/admin/energy');
+    await expect(page.getByText('Month-end forecast')).toBeVisible();
     await page.getByRole('button', { name: 'Measure now' }).click();
     await page.waitForTimeout(6000);
     // An empty topology map says what to do next.

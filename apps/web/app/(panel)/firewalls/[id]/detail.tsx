@@ -138,7 +138,7 @@ function RulesEditor({ firewall, onSaved }: { firewall: Detail; onSaved: () => v
                   <button type="button" className="text-xs text-accent hover:underline" onClick={() => setIpText((x) => x.map((y, j) => (j === i ? ipsText(anywhere) : y)))}>{t('anywhere')}</button>
                   {direction === 'in' && myIp && <button type="button" className="text-xs text-accent hover:underline" onClick={() => setIpText((x) => x.map((y, j) => (j === i ? `${myIp}/${myIp.includes(':') ? 128 : 32}` : y)))}>· {t('myIp', { ip: myIp })}</button>}
                   <span className="text-xs text-muted">· {t('ipsHelp')}</span>
-                  {direction === 'in' && <Chip size="sm" variant="soft" color={parseIps(ipText[i] ?? '').some((x) => anywhere.includes(x)) ? 'warning' : 'success'} className="ml-auto">
+                  {direction === 'in' && <Chip size="sm" variant="soft" color={parseIps(ipText[i] ?? '').some((x) => anywhere.includes(x)) ? 'warning' : 'success'}>
                     {parseIps(ipText[i] ?? '').some((x) => anywhere.includes(x)) ? t('scopeAll') : t('scopeSome', { n: parseIps(ipText[i] ?? '').length })}</Chip>}
                 </div>
               </div>

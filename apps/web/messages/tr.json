@@ -4572,7 +4572,11 @@
     "pueHelp": "Tesisin toplam gücü / IT gücü (tipik 1.2–1.8).",
     "co2": "CO₂ (g/kWh)",
     "co2Help": "Şebekenin karbon yoğunluğu (Türkiye için yaklaşık 420).",
-    "settingsSaved": "Enerji ayarları kaydedildi."
+    "settingsSaved": "Enerji ayarları kaydedildi.",
+    "forecast": "Ay sonu tahmini",
+    "forecastHint": "{days} günlük ay için yaklaşık {cost}",
+    "share": "Toplam gücün %{pct} kadarı",
+    "export": "CSV indir"
   },
   "Abuse": {
     "eyebrow": "Güvenlik",
@@ -5905,7 +5909,11 @@
     "noData": "Veri yok",
     "daysAgo": "{n} gün önce",
     "today": "Bugün",
-    "uptime": "%{pct} çalışma süresi"
+    "uptime": "%{pct} çalışma süresi",
+    "legend": "Renklerin anlamı",
+    "legendOk": "Sorunsuz",
+    "legendPartial": "Kısmi sorun",
+    "legendDown": "Kesinti"
   },
   "Support": {
     "title": "Destek",

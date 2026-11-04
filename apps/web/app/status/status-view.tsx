@@ -86,6 +86,10 @@ export default function StatusView() {
       </ul>
     </section>}
 
+    <ul className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted" aria-label={t('legend')}>
+      {([['bg-success', 'legendOk'], ['bg-warning', 'legendPartial'], ['bg-danger', 'legendDown'], ['bg-default', 'noData']] as const).map(([c, k]) =>
+        <li key={k} className="flex items-center gap-1.5"><span aria-hidden className={`size-2.5 rounded-[2px] ${c}`}/>{t(k)}</li>)}
+    </ul>
     <p className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted">
       <span>{t('refresh')}</span>
       <NextLink href="/" className="inline-flex items-center gap-1 text-accent hover:underline">{t('toPanel')}<I name="arrow-right" size={13}/></NextLink>

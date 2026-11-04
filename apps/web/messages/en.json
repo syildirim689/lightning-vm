@@ -4572,7 +4572,11 @@
     "pueHelp": "Total facility power / IT power (typically 1.2–1.8).",
     "co2": "CO₂ (g/kWh)",
     "co2Help": "Carbon intensity of the grid (about 420 for Turkey).",
-    "settingsSaved": "Energy settings saved."
+    "settingsSaved": "Energy settings saved.",
+    "forecast": "Month-end forecast",
+    "forecastHint": "about {cost} for the {days}-day month",
+    "share": "{pct}% of the total power",
+    "export": "Download CSV"
   },
   "Abuse": {
     "eyebrow": "Security",
@@ -5905,7 +5909,11 @@
     "noData": "No data",
     "daysAgo": "{n} days ago",
     "today": "Today",
-    "uptime": "{pct}% uptime"
+    "uptime": "{pct}% uptime",
+    "legend": "What the colours mean",
+    "legendOk": "No issues",
+    "legendPartial": "Partly affected",
+    "legendDown": "Outage"
   },
   "Support": {
     "title": "Support",

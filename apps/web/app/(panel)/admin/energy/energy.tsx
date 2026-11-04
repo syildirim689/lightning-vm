@@ -9,6 +9,7 @@ import { Area, Bar, ComposedChart, ResponsiveContainer, Tooltip, XAxis, YAxis } 
 import { I } from '../../../../components/icon';
 import { DataTable, NumberInput, PageHeader, Section, Stat, StatusChip, TextInput } from '../../../../components/ui';
 import { apiFetch, useErrorText, type ApiError } from '../../../../lib/api';
+import { downloadCsv } from '../../../../lib/csv';
 import { flag } from '../../../../lib/flag';
 import { useMe } from '../../../../lib/me';
 import { can } from '../../../../lib/permissions';
@@ -77,6 +78,7 @@ export default function Energy() {
   const format = useFormatter();
   const me = useMe();
   const client = useQueryClient();
+  const { error } = useErrorText();
   const [range, setRange] = useState('1d');
   const [editing, setEditing] = useState<Host | null>(null);
   const q = useApiQuery<Report>(['power', range], `/admin/power?range=${range}`, { refetchInterval: 60_000 });
@@ -85,18 +87,26 @@ export default function Energy() {
   const n = (x: number, digits = 1) => format.number(x, { maximumFractionDigits: digits });
   const money = (x: string) => d ? format.number(Number(x), { style: 'currency', currency: d.settings.currency }) : '–';
   async function measure() {
-    try { await apiFetch('/admin/power/sample', { method: 'POST' }); toast.success(t('measuring')); setTimeout(refresh, 8000); } catch { /* shown by the next refresh */ }
+    try { await apiFetch('/admin/power/sample', { method: 'POST' }); toast.success(t('measuring')); setTimeout(refresh, 8000); } catch (e) { toast.danger(error(e)); }
   }
+  // Month-end forecast: this month's energy so far, spread over the whole month.
+  const today = new Date(), days = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
+  const elapsed = Math.max((today.getDate() - 1) + today.getHours() / 24, 0.25);
+  const forecastKwh = d ? d.energy.monthKwh / elapsed * days : 0;
+  const forecastCost = d && d.energy.monthKwh > 0 ? String(Number(d.energy.costMonth) / d.energy.monthKwh * forecastKwh) : '0';
+  const kwhCost = (kwh: number) => d ? money(String(kwh * d.settings.pue * Number(d.settings.pricePerKwh))) : '–';
+  const totalWatts = d ? d.hosts.reduce((a, h) => a + h.watts, 0) : 0;
   const chart = (d?.series ?? []).map((p) => ({ ...p, label: format.dateTime(new Date(p.t), range === '30d' ? { dateStyle: 'short' } : { timeStyle: 'short', ...(range === '7d' && { dateStyle: 'short' }) }) }));
   return <>
     <PageHeader eyebrow={t('eyebrow')} title={t('title')} description={t('intro')}
       actions={<Button variant="secondary" onPress={measure}><I name="zap" size={16}/>{t('measureNow')}</Button>}/>
     {!d ? <p role="status" className="text-sm text-muted">{t('loading')}</p> : <div className="flex flex-col gap-6">
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
         <Stat label={t('now')} value={`${n(d.now.watts / 1000, 2)} kW`} hint={t('facility', { kw: n(d.now.facilityWatts / 1000, 2), pue: d.settings.pue })} icon={<I name="zap" size={18}/>} tone="accent"/>
         <Stat label={t('today')} value={`${n(d.energy.todayKwh, 2)} kWh`} hint={money(d.energy.costToday)} icon={<I name="calendar-clock" size={18}/>}/>
         <Stat label={t('month')} value={`${n(d.energy.monthKwh, 2)} kWh`} hint={t('monthHint', { cost: money(d.energy.costMonth), facility: n(d.energy.facilityMonthKwh) })} icon={<I name="calendar" size={18}/>}/>
         <Stat label={t('co2Month')} value={`${n(d.energy.co2MonthKg, 2)} kg`} hint={t('co2Hint', { g: d.settings.co2GramsPerKwh })} icon={<I name="leaf" size={18}/>} tone="success"/>
+        <Stat label={t('forecast')} value={`${n(forecastKwh, 1)} kWh`} hint={t('forecastHint', { cost: money(forecastCost), days })} icon={<I name="trending-up" size={18}/>} tone="warning"/>
       </div>
       <p className="text-xs text-muted">{t('measuredOf', { measured: d.now.measured, hosts: d.now.hosts })}</p>
 
@@ -126,7 +136,9 @@ export default function Energy() {
           columns={[{ id: 'n', label: t('host') }, { id: 'w', label: t('nowShort') }, { id: 'src', label: t('source') }, { id: 'cpu', label: 'CPU' }, { id: 'k', label: t('energy') },
             { id: 'p', label: t('profile') }]}
           cells={(h) => [<span key="n" className="flex flex-col"><span className="font-medium">{h.name || h.moref}</span><span className="text-xs text-muted">{h.connection}</span></span>,
-            `${n(h.watts, 0)} W`, <StatusChip key="s" tone={h.source === 'measured' ? 'success' : 'warning'}>{t(`sources.${h.source}`)}</StatusChip>,
+            <span key="w" className="flex min-w-24 flex-col gap-1"><span className="tabular-nums">{n(h.watts, 0)} W</span>
+              {totalWatts > 0 && <span className="h-1.5 overflow-hidden rounded-full bg-default" title={t('share', { pct: Math.round(h.watts / totalWatts * 100) })}>
+                <span className="block h-full rounded-full bg-accent" style={{ width: `${Math.round(h.watts / totalWatts * 100)}%` }}/></span>}</span>, <StatusChip key="s" tone={h.source === 'measured' ? 'success' : 'warning'}>{t(`sources.${h.source}`)}</StatusChip>,
             h.cpuUtil === null ? '–' : `%${n(h.cpuUtil * 100, 0)}`, `${n(h.kwh, 2)} kWh`,
             <span key="p" className="flex items-center gap-2 text-xs text-muted">{h.idleWatts !== null ? `${h.idleWatts}–${h.maxWatts} W` : t('defaultShort')}
               {can(me?.permissions, 'settings.manage') && <Button size="sm" variant="ghost" onPress={() => setEditing(h)}><I name="pencil" size={13}/>{t('edit')}</Button>}</span>]}/>
@@ -136,13 +148,15 @@ export default function Energy() {
         <Section title={t('locations')}>
           <DataTable label={t('locations')} rows={d.locations} rowKey={(l) => l.id} empty={t('noLocations')} minWidth={360}
             columns={[{ id: 'n', label: t('location') }, { id: 'k', label: t('energy') }, { id: 'c', label: t('cost') }]}
-            cells={(l) => [`${flag(l.countryCode)} ${l.name}`.trim(), `${n(l.kwh, 2)} kWh`, money(String(l.kwh * d.settings.pue * Number(d.settings.pricePerKwh)))]}/>
+            cells={(l) => [`${flag(l.countryCode)} ${l.name}`.trim(), `${n(l.kwh, 2)} kWh`, kwhCost(l.kwh)]}/>
         </Section>
-        <Section title={t('servers')} description={t('serversHelp')}>
-          <DataTable label={t('servers')} rows={d.servers} rowKey={(s) => s.id} empty={t('noData')} minWidth={480}
-            columns={[{ id: 'n', label: t('server') }, { id: 'w', label: t('avgPower') }, { id: 'k', label: t('energy') }]}
+        <Section title={t('servers')} description={t('serversHelp')} actions={d.servers.length > 0 && <Button size="sm" variant="ghost"
+          onPress={() => downloadCsv('energy-servers', ['server', 'owner', 'location', 'avg_watts', 'kwh', 'cost'], d.servers.map((s) => [s.name, s.owner, s.location, Math.round(s.watts), s.kwh, kwhCost(s.kwh)]))}>
+          <I name="download" size={14}/>{t('export')}</Button>}>
+          <DataTable label={t('servers')} rows={d.servers} rowKey={(s) => s.id} empty={t('noData')} minWidth={560}
+            columns={[{ id: 'n', label: t('server') }, { id: 'w', label: t('avgPower') }, { id: 'k', label: t('energy') }, { id: 'c', label: t('cost') }]}
             cells={(s) => [<span key="n" className="flex flex-col"><span className="font-medium">{s.name}</span><span className="text-xs text-muted">{s.owner}{s.location && ` · ${s.location}`}</span></span>,
-              `${n(s.watts, 0)} W`, `${n(s.kwh, 3)} kWh`]}/>
+              `${n(s.watts, 0)} W`, `${n(s.kwh, 3)} kWh`, kwhCost(s.kwh)]}/>
         </Section>
       </div>
 
