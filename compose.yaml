@@ -272,7 +272,7 @@ services:
   # Ships every service's container log (JSON) to Loki. Reads Docker's log files read-only; runs as
   # root only because those files are root's.
   otel:
-    image: otel/opentelemetry-collector-contrib:0.123.0
+    image: otel/opentelemetry-collector-contrib:0.164.0
     profiles: [observability]
     restart: unless-stopped
     user: "0"
