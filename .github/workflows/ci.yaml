@@ -18,7 +18,7 @@ jobs:
         working-directory: apps/${{ matrix.app }}
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
       - run: npm ci
@@ -41,7 +41,7 @@ jobs:
         working-directory: apps/api
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
       - run: npm ci
@@ -136,7 +136,7 @@ jobs:
           done
           curl -s http://127.0.0.1:9090/api/v1/targets | jq -c '.data.activeTargets[] | {job: .labels.job, health, lastError}'
           curl -s http://127.0.0.1:9090/api/v1/targets | jq -e '[.data.activeTargets[] | select(.health != "up")] | length == 0'
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
       - name: End-to-end tests against the Compose stack
