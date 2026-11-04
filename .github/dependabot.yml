@@ -1,20 +1,26 @@
 version: 2
+# The repository keeps only main: no update pull requests. Alerts stay on and are fixed in commits on main.
 updates:
   - package-ecosystem: npm
     directories: [/apps/api, /apps/web, /apps/worker]
     schedule: {interval: weekly}
+    open-pull-requests-limit: 0
     groups:
       npm-minor-patch:
         update-types: [minor, patch]
   - package-ecosystem: gomod
     directories: [/services/vmware, /services/console]
     schedule: {interval: weekly}
+    open-pull-requests-limit: 0
   - package-ecosystem: docker
     directories: [/apps/api, /apps/web, /apps/worker, /services/vmware, /services/console, /deploy/simulator]
     schedule: {interval: weekly}
+    open-pull-requests-limit: 0
   - package-ecosystem: docker-compose
     directory: /
     schedule: {interval: weekly}
+    open-pull-requests-limit: 0
   - package-ecosystem: github-actions
     directory: /
     schedule: {interval: weekly}
+    open-pull-requests-limit: 0
