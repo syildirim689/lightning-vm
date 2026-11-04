@@ -395,7 +395,7 @@ test.describe('VMware connections (simulator, English browser)', () => {
     await expect(page.getByRole('status').filter({ hasText: /^Showing \d+ of \d+ virtual machines$/ })).toBeVisible();
     await page.getByRole('radio', { name: /^All\s*\d+$/ }).click();
     await page.getByRole('searchbox', { name: 'Search name or operating system' }).fill('no-such-vm-zz');
-    await expect(page.getByText('No virtual machine matches.').first()).toBeVisible();
+    await expect(page.getByText('No virtual machine matches.').filter({ visible: true })).toBeVisible();
     await page.getByRole('searchbox', { name: 'Search name or operating system' }).fill('');
     await page.setViewportSize({ width: 390, height: 900 });
     await expectNoOverflow(page, 'vmware connection at 390 px');
