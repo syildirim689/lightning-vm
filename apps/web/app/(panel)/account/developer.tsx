@@ -14,14 +14,27 @@ type Token = { id: string; name: string; hint: string; scope: 'read' | 'write'; 
 type Webhook = { id: string; url: string; description: string; events: string[]; active: boolean; failures: number; createdAt: string; lastDelivery: { status: string; responseCode: number | null; at: string } | null };
 type Delivery = { id: string; event: string; status: 'pending' | 'succeeded' | 'failed'; attempts: number; responseCode: number | null; error: string | null; durationMs: number | null; createdAt: string };
 
-function Secret({ value, help }: { value: string; help: string }) {
+function Secret({ value, help, onDone }: { value: string; help: string; onDone: () => void }) {
   const t = useTranslations('Developer');
   return <Notice tone="success" title={t('copyNow')}>
     <div className="mt-2 flex flex-wrap items-center gap-2"><span className="break-all"><Mono>{value}</Mono></span>
-      <Button size="sm" variant="secondary" onPress={() => { void navigator.clipboard?.writeText(value); toast.success(t('copied')); }}><I name="copy" size={14}/>{t('copy')}</Button></div>
+      <Button size="sm" variant="secondary" onPress={() => { void navigator.clipboard?.writeText(value); toast.success(t('copied')); }}><I name="copy" size={14}/>{t('copy')}</Button>
+      <Button size="sm" variant="ghost" onPress={onDone}><I name="check" size={14}/>{t('saved')}</Button></div>
     <p className="mt-2 text-xs">{help}</p>
   </Notice>;
 }
+
+// A block of example code with a copy button.
+function Snippet({ code }: { code: string }) {
+  const t = useTranslations('Developer');
+  return <div className="relative">
+    <pre className="overflow-x-auto rounded-lg bg-default p-3 pr-24 text-xs">{code}</pre>
+    <Button size="sm" variant="secondary" className="absolute right-2 top-2" onPress={() => { void navigator.clipboard?.writeText(code); toast.success(t('copied')); }}>
+      <I name="copy" size={14}/>{t('copy')}</Button>
+  </div>;
+}
+
+const DAY = 86_400_000;
 
 function Tokens() {
   const t = useTranslations('Developer');
@@ -36,6 +49,7 @@ function Tokens() {
   const [made, setMade] = useState<string>();
   const [busy, setBusy] = useState(false);
   const when = (d: string | null) => (d ? format.dateTime(new Date(d), { dateStyle: 'medium' }) : '–');
+  const ago = (d: string) => format.relativeTime(new Date(Math.min(Date.parse(d), Date.now())), new Date());
   async function create(e: React.FormEvent) {
     e.preventDefault(); setBusy(true); setFields({});
     try {
@@ -48,24 +62,33 @@ function Tokens() {
     catch (err) { toast.danger(error(err)); }
   }
   const list = q.data?.tokens ?? [];
-  return <Section title={t('tokens.title')} description={t('tokens.help')}>
+  const full = !!q.data && list.length >= q.data.max;
+  const now = Date.now();
+  // Tokens nobody used for 90 days (or ever, after 30) are likely forgotten: worth removing.
+  const idle = list.filter((x) => now - Date.parse(x.lastUsedAt ?? x.createdAt) > (x.lastUsedAt ? 90 : 30) * DAY).length;
+  return <Section title={t('tokens.title')} description={t('tokens.help')}
+    actions={q.data && <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium tabular-nums ${full ? 'bg-warning/15 text-warning' : 'bg-default text-muted'}`} aria-label={t('tokens.countLabel', { n: list.length, max: q.data.max })}>{list.length}/{q.data.max}</span>}>
     <div className="flex flex-col gap-5">
-      {made && <Secret value={made} help={t('tokens.usage')}/>}
+      {made && <Secret value={made} help={t('tokens.usage')} onDone={() => setMade(undefined)}/>}
+      {full && <Notice tone="warning">{t('tokens.full', { max: q.data!.max })}</Notice>}
+      {idle > 0 && <Notice tone="default">{t('tokens.idle', { n: idle })}</Notice>}
       <form onSubmit={create} noValidate className="grid gap-3 sm:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)_auto] sm:items-end">
         <TextInput label={t('tokens.name')} value={name} onChange={setName} maxLength={60} error={field(fields.name)} placeholder={t('tokens.namePlaceholder')}/>
         <SelectInput label={t('tokens.scope')} value={scope} onChange={(v) => setScope(v as 'read' | 'write')}
           options={[{ id: 'read', label: t('tokens.read') }, { id: 'write', label: t('tokens.write') }]}/>
         <SelectInput label={t('tokens.expires')} value={expires} onChange={setExpires}
           options={[{ id: '30', label: t('tokens.days', { n: 30 }) }, { id: '90', label: t('tokens.days', { n: 90 }) }, { id: '365', label: t('tokens.days', { n: 365 }) }, { id: 'never', label: t('tokens.never') }]}/>
-        <Button type="submit" isPending={busy} isDisabled={!name.trim()}><I name="plus" size={16}/>{t('tokens.create')}</Button>
+        <Button type="submit" isPending={busy} isDisabled={!name.trim() || full}><I name="plus" size={16}/>{t('tokens.create')}</Button>
       </form>
       {list.length === 0 ? <Empty icon={<I name="key-round" size={20}/>} title={t('tokens.empty')}/>
         : <DataTable label={t('tokens.title')} rows={list} rowKey={(x) => x.id} minWidth={560}
           columns={[{ id: 'name', label: t('tokens.name') }, { id: 'scope', label: t('tokens.scope') }, { id: 'used', label: t('tokens.lastUsed') }, { id: 'expires', label: t('tokens.expires') }, { id: 'x', label: '' }]}
           cells={(x) => [<span key="n" className="flex flex-col"><span className="font-medium">{x.name}</span><span className="text-xs text-muted">lvm_…{x.hint}</span></span>,
             <StatusChip key="s" tone={x.scope === 'write' ? 'warning' : 'default'}>{t(`tokens.${x.scope}`)}</StatusChip>,
-            x.lastUsedAt ? <span key="u" className="flex flex-col"><span>{when(x.lastUsedAt)}</span>{x.lastUsedIp && <span className="text-xs text-muted">{x.lastUsedIp}</span>}</span> : t('tokens.neverUsed'),
-            x.expiresAt ? (new Date(x.expiresAt) < new Date() ? <StatusChip key="e" tone="danger">{t('tokens.expired')}</StatusChip> : when(x.expiresAt)) : t('tokens.never'),
+            x.lastUsedAt ? <span key="u" className="flex flex-col"><span title={when(x.lastUsedAt)}>{ago(x.lastUsedAt)}</span>{x.lastUsedIp && <span className="text-xs text-muted">{x.lastUsedIp}</span>}</span> : t('tokens.neverUsed'),
+            x.expiresAt ? (Date.parse(x.expiresAt) < now ? <StatusChip key="e" tone="danger">{t('tokens.expired')}</StatusChip>
+              : Date.parse(x.expiresAt) - now < 14 * DAY ? <span key="e" className="flex flex-col items-start gap-0.5"><StatusChip tone="warning">{t('tokens.expiresSoon', { when: ago(x.expiresAt) })}</StatusChip><span className="text-xs text-muted">{when(x.expiresAt)}</span></span>
+              : when(x.expiresAt)) : t('tokens.never'),
             <ConfirmButton key="d" size="sm" variant="danger-soft" icon={<I name="trash-2" size={14}/>} label={<span className="sr-only sm:not-sr-only">{t('remove')}</span>}
               title={t('tokens.removeTitle', { name: x.name })} body={t('tokens.removeBody')} confirmLabel={t('remove')} cancelLabel={t('cancel')} onConfirm={() => remove(x.id)}/>]}/>}
     </div>
@@ -143,7 +166,7 @@ function Webhooks() {
   return <Section title={t('webhooks.title')} description={t('webhooks.help')}
     actions={!adding && list.length < (q.data?.max ?? 10) ? <Button size="sm" variant="secondary" onPress={() => setAdding(true)}><I name="plus" size={14}/>{t('webhooks.add')}</Button> : undefined}>
     <div className="flex flex-col gap-4">
-      {secret && <Secret value={secret} help={t('webhooks.secretHelp')}/>}
+      {secret && <Secret value={secret} help={t('webhooks.secretHelp')} onDone={() => setSecret(undefined)}/>}
       {adding && q.data && <WebhookForm events={q.data.events} onDone={(s) => { setAdding(false); if (s) setSecret(s); refresh(); }}/>}
       {list.length === 0 && !adding ? <Empty icon={<I name="webhook" size={20}/>} title={t('webhooks.empty')}/>
         : <ul className="flex flex-col gap-3">{list.map((w) => <li key={w.id} className="rounded-xl border border-border p-3">
@@ -171,9 +194,9 @@ function Webhooks() {
       <details className="rounded-xl border border-border p-3 text-sm">
         <summary className="cursor-pointer font-medium">{t('webhooks.verifyTitle')}</summary>
         <p className="mt-2 text-muted">{t('webhooks.verifyHelp')}</p>
-        <pre className="mt-2 overflow-x-auto rounded-lg bg-default p-3 text-xs">{`const [t, v1] = header.split(',').map((p) => p.split('=')[1]);
+        <div className="mt-2"><Snippet code={`const [t, v1] = header.split(',').map((p) => p.split('=')[1]);
 const expected = crypto.createHmac('sha256', secret).update(\`\${t}.\${rawBody}\`).digest('hex');
-const ok = crypto.timingSafeEqual(Buffer.from(v1), Buffer.from(expected)) && Date.now() / 1000 - Number(t) < 300;`}</pre>
+const ok = crypto.timingSafeEqual(Buffer.from(v1), Buffer.from(expected)) && Date.now() / 1000 - Number(t) < 300;`}/></div>
       </details>
     </div>
   </Section>;
@@ -185,11 +208,11 @@ export default function Developer() {
     <Tokens/>
     <Webhooks/>
     <Section title={t('usage.title')} description={t('usage.help')}>
-      <pre className="overflow-x-auto rounded-lg bg-default p-3 text-xs">{`curl -H "Authorization: Bearer lvm_…" ${typeof window === 'undefined' ? '' : window.location.origin}/api/servers
+      <Snippet code={`curl -H "Authorization: Bearer lvm_…" ${typeof window === 'undefined' ? '' : window.location.origin}/api/servers
 
 curl -X POST -H "Authorization: Bearer lvm_…" -H "Idempotency-Key: $(uuidgen)" \\
   -H "content-type: application/json" -d '{"action":"reset"}' \\
-  ${typeof window === 'undefined' ? '' : window.location.origin}/api/servers/<id>/actions`}</pre>
+  ${typeof window === 'undefined' ? '' : window.location.origin}/api/servers/<id>/actions`}/>
       <p className="mt-2 text-xs text-muted">{t('usage.docs')}</p>
     </Section>
   </div>;

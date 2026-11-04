@@ -2,11 +2,11 @@
 import { Button, Modal, toast } from '@heroui/react';
 import { useQueryClient } from '@tanstack/react-query';
 import { I } from '../../../../components/icon';
-import { useTranslations } from 'next-intl';
+import { useFormatter, useTranslations } from 'next-intl';
 import { useState } from 'react';
-import { useErrorText } from '../../../../lib/api';
-import { useApiQuery } from '../../../../lib/query';
-import { ButtonLink, DataTable, Empty, Mono, PageHeader, StatusChip } from '../../../../components/ui';
+import { apiFetch, useErrorText } from '../../../../lib/api';
+import { useApiAction, useApiQuery } from '../../../../lib/query';
+import { ButtonLink, DataTable, Empty, Mono, PageHeader, Stat, StatusChip } from '../../../../components/ui';
 import ConnectionForm from './connection-form';
 
 export type Connection = { id: string; name: string; kind: string; host: string; port: number; tlsMode: string; writeApi: string; status: string;
@@ -24,19 +24,41 @@ export default function Connections({ eyebrow, title, intro }: { eyebrow: string
   const { error } = useErrorText();
   const client = useQueryClient();
   const [adding, setAdding] = useState(false);
+  const format = useFormatter();
   const list = useApiQuery<{ connections: Connection[] }>(['vmware', 'connections'], '/admin/vmware/connections').data?.connections;
+  const discover = useApiAction((id: string) => apiFetch(`/admin/vmware/connections/${id}/discover`, { method: 'POST' }), { invalidate: [['vmware']], success: t('refreshed') });
+  const busy = discover.isPending ? discover.variables : null;
+  const failing = list?.filter((c) => c.status !== 'ok').length ?? 0;
+  // Inventory older than a day is probably stale (discovery normally runs on its own).
+  const stale = (c: Connection) => !c.lastDiscoveredAt || Date.now() - Date.parse(c.lastDiscoveredAt) > 86_400_000;
 
   return <>
     <PageHeader eyebrow={eyebrow} title={title} description={intro}
       actions={<Button onPress={() => setAdding(true)}><I name="plus" size={16}/>{t('add')}</Button>}/>
     {!list ? <p role="status" className="text-sm text-muted">{t('loading')}</p>
       : list.length === 0 ? <Empty icon={<I name="cable" size={28}/>} title={t('empty')}/>
-      : <DataTable label={t('title')} rows={list} rowKey={(c) => c.id}
+      : <div className="flex flex-col gap-4">
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <Stat label={t('sum.connections')} value={list.length} icon={<I name="cable" size={18}/>}/>
+          <Stat label={t('sum.hosts')} value={list.reduce((a, c) => a + c.hosts, 0)} icon={<I name="server" size={18}/>}/>
+          <Stat label={t('sum.vms')} value={list.reduce((a, c) => a + c.vms, 0)} icon={<I name="monitor" size={18}/>}/>
+          <Stat label={t('sum.failing')} value={failing} tone={failing ? 'danger' : 'success'} icon={<I name={failing ? 'triangle-alert' : 'circle-check'} size={18}/>}
+            hint={failing ? t('sum.failingHint') : t('sum.allOk')}/>
+        </div>
+        <DataTable label={t('title')} rows={list} rowKey={(c) => c.id} minWidth={900}
           columns={[{ id: 'name', label: t('col.name') }, { id: 'kind', label: t('col.kind') }, { id: 'endpoint', label: t('col.endpoint') }, { id: 'status', label: t('col.status') },
-            { id: 'hosts', label: t('col.hosts') }, { id: 'vms', label: t('col.vms') }, { id: 'write', label: t('col.writeApi') }, { id: 'open', label: <span className="sr-only">{t('details')}</span> }]}
-          cells={(c) => [<span key="n" className="font-medium">{c.name}</span>, t(`kind.${c.kind as 'esxi'}`), <Mono key="e">{c.host}:{c.port}</Mono>,
+            { id: 'hosts', label: t('col.hosts') }, { id: 'vms', label: t('col.vms') }, { id: 'seen', label: t('col.discovered') }, { id: 'act', label: <span className="sr-only">{t('details')}</span> }]}
+          cells={(c) => [<span key="n" className="flex flex-col"><span className="font-medium">{c.name}</span>{c.writeApi !== 'available' && <span className="text-xs text-warning">{t('col.writeApi')}: {t(`writeApi.${c.writeApi as 'available'}`)}</span>}</span>,
+            t(`kind.${c.kind as 'esxi'}`), <Mono key="e">{c.host}:{c.port}</Mono>,
             c.status === 'ok' ? <StatusChip key="s" tone="success">{t('status.ok')}</StatusChip> : <StatusChip key="s" tone="danger">{error({ code: c.lastErrorCode })}</StatusChip>,
-            c.hosts, c.vms, t(`writeApi.${c.writeApi as 'available'}`), <ButtonLink key="d" href={`/admin/vmware/${c.id}`} variant="secondary" size="sm">{t('details')}</ButtonLink>]}/>}
+            c.hosts, c.vms,
+            <span key="w" className={stale(c) ? 'text-warning' : 'text-muted'} title={c.lastDiscoveredAt ? format.dateTime(new Date(c.lastDiscoveredAt), { dateStyle: 'medium', timeStyle: 'short' }) : undefined}>
+              {c.lastDiscoveredAt ? format.relativeTime(new Date(Math.min(Date.parse(c.lastDiscoveredAt), Date.now())), new Date()) : t('never')}</span>,
+            <span key="d" className="flex gap-1">
+              <Button size="sm" variant="ghost" isIconOnly aria-label={t('refreshOne', { name: c.name })} isPending={busy === c.id} isDisabled={!!busy} onPress={() => discover.mutate(c.id)}><I name="refresh-cw" size={14}/></Button>
+              <ButtonLink href={`/admin/vmware/${c.id}`} variant="secondary" size="sm">{t('details')}</ButtonLink>
+            </span>]}/>
+      </div>}
 
     <Modal.Backdrop isOpen={adding} onOpenChange={setAdding}>
       <Modal.Container size="lg" scroll="inside">

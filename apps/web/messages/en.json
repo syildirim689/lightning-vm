@@ -865,7 +865,8 @@
       "type": "Type",
       "switch": "Switch",
       "power": "Power",
-      "guest": "Operating system"
+      "guest": "Operating system",
+      "discovered": "Last discovery"
     },
     "kind": {
       "esxi": "Standalone ESXi",
@@ -981,7 +982,35 @@
     "evacuateTitle": "Move every server off {name}?",
     "evacuateBody": "Each panel server on this host moves to the least loaded other host of its cluster while it keeps running. Put the host into maintenance afterwards.",
     "evacuated": "{started} moving, {skipped} left",
-    "cancel": "Cancel"
+    "cancel": "Cancel",
+    "sum": {
+      "connections": "Connections",
+      "hosts": "Hosts",
+      "vms": "Virtual machines",
+      "failing": "Failing",
+      "failingHint": "an endpoint cannot be reached",
+      "allOk": "all connected"
+    },
+    "never": "never",
+    "refreshOne": "Refresh the inventory of {name}",
+    "export": "Download CSV",
+    "findVm": "Search name or operating system",
+    "vmFilter": {
+      "all": "All",
+      "on": "On",
+      "off": "Off",
+      "template": "Templates"
+    },
+    "vmShown": "Showing {n} of {total} virtual machines",
+    "noVmMatch": "No virtual machine matches.",
+    "powerState": {
+      "poweredOn": "On",
+      "poweredOff": "Off",
+      "suspended": "Suspended",
+      "other": "Unknown"
+    },
+    "used": "{pct}% used",
+    "usedOf": "{name}: {pct}% used"
   },
   "Console": {
     "title": "Console: {name}",
@@ -6598,7 +6627,7 @@
     "lineQuantity": "Qty",
     "removeLine": "Remove line",
     "addLine": "Add a line",
-    "netTotal": "Before tax: {amount} {currency}",
+    "netTotal": "Before tax: {amount}",
     "note": "Note on the invoice",
     "noteHelp": "Printed under the lines.",
     "adjusted": "Balance corrected.",
@@ -6636,7 +6665,20 @@
     "refunded": "Refunded.",
     "record": "Record",
     "resend": "Send e-invoice again",
-    "resent": "Sent to the integrator again."
+    "resent": "Sent to the integrator again.",
+    "runTitle": "Run collection now?",
+    "runBody": "Due subscriptions renew, saved cards are charged and servers with overdue payments may be suspended. This normally runs on its own every day.",
+    "export": "Download CSV",
+    "shown": "{n} {n, plural, one {record} other {records}}",
+    "clear": "Clear filters",
+    "noMatch": "Nothing matches the filter.",
+    "findSubscription": "Search service or e-mail",
+    "activeMonthly": "active per period {amount}",
+    "succeededSum": "succeeded {amount}",
+    "suspendTitle": "Suspend “{name}”?",
+    "suspendBody": "The server is shut down and locked; {email} cannot use it until it is resumed. Resume undoes this.",
+    "cancelNowTitle": "Cancel “{name}” now?",
+    "cancelNowBody": "The subscription ends now instead of at the period end and does not renew. This cannot be undone."
   },
   "ServerChange": {
     "started": "Resize started; the server restarts with its new size.",
@@ -6702,7 +6744,11 @@
       "usage": "Send it as \"Authorization: Bearer <token>\" to /api/… on this panel.",
       "removed": "Token removed",
       "removeTitle": "Remove {name}?",
-      "removeBody": "Scripts that use it stop working at once."
+      "removeBody": "Scripts that use it stop working at once.",
+      "full": "You can have at most {max} tokens. Remove one you no longer use to create another.",
+      "idle": "{n, plural, one {# token has} other {# tokens have}} not been used for a long time. Removing forgotten tokens keeps your account safe.",
+      "expiresSoon": "Expires {when}",
+      "countLabel": "{n} of {max} tokens in use"
     },
     "webhooks": {
       "title": "Webhooks",
@@ -6750,7 +6796,8 @@
       "title": "Using the API",
       "help": "Every action of the panel is an API call. State changes on servers need an Idempotency-Key header, so a retry never runs twice.",
       "docs": "The full reference is in docs/api.md of the installation."
-    }
+    },
+    "saved": "Saved it, hide"
   },
   "Traffic": {
     "title": "Traffic",

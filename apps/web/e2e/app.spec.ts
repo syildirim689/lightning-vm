@@ -390,6 +390,17 @@ test.describe('VMware connections (simulator, English browser)', () => {
     await expect(page.getByRole('listitem').filter({ hasText: 'vCenter Automation REST API' })).toContainText('yes');
     await page.getByRole('button', { name: 'Discover again' }).click();
     await expect(page.getByText('Inventory updated.')).toBeVisible();
+    // VMs can be found by name and narrowed by power state.
+    await page.getByRole('radio', { name: /^On\s*\d+$/ }).click();
+    await expect(page.getByRole('status').filter({ hasText: /^Showing \d+ of \d+ virtual machines$/ })).toBeVisible();
+    await page.getByRole('radio', { name: /^All\s*\d+$/ }).click();
+    await page.getByRole('searchbox', { name: 'Search name or operating system' }).fill('no-such-vm-zz');
+    await expect(page.getByText('No virtual machine matches.').first()).toBeVisible();
+    await page.getByRole('searchbox', { name: 'Search name or operating system' }).fill('');
+    await page.setViewportSize({ width: 390, height: 900 });
+    await expectNoOverflow(page, 'vmware connection at 390 px');
+    await page.screenshot({ path: 'test-results/tour/vmware-detail-390.png', fullPage: true });
+    await page.setViewportSize({ width: 1280, height: 720 });
 
     // Console: browser -> Caddy (wss) -> console gateway -> the simulator's fake WebMKS endpoint.
     // Without the operator-installed VMware SDK the page says so; the gateway test still runs end to end.
@@ -1324,6 +1335,16 @@ test.describe('people, settings and smart features (English browser)', () => {
     await expect(page.getByRole('grid', { name: 'Invoices' })).toContainText('Admin Example');
     await page.waitForTimeout(900);
     await shot('billing-admin');
+    // Each number tile opens the list behind it; running collection by hand asks first.
+    await page.getByRole('link', { name: /Overdue/ }).click();
+    await expect(page).toHaveURL(/status=overdue/);
+    await expect(page.getByRole('button', { name: 'Clear filters' }).first()).toBeVisible();
+    await page.goto('/admin/billing');
+    await page.getByRole('button', { name: 'Run collection now' }).click();
+    await expect(page.getByRole('alertdialog').filter({ hasText: 'Run collection now?' })).toBeVisible();
+    await page.getByRole('alertdialog').getByRole('button', { name: 'Cancel' }).click();
+    const [invCsv] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'Download CSV' }).click()]);
+    expect(invCsv.suggestedFilename()).toMatch(/^invoices-/);
     await page.getByRole('tab', { name: 'Payments' }).click();
     await expect(page.getByRole('grid', { name: 'Payments' }).getByText('Failed', { exact: true }).first()).toBeVisible();
     await page.waitForTimeout(400);
@@ -1497,8 +1518,11 @@ test.describe('people, settings and smart features (English browser)', () => {
     await page.getByRole('button', { name: 'Create token' }).click();
     await expect(page.getByText('Copy it now: it is shown only once')).toBeVisible();
     await expect(page.getByText(/^lvm_/).first()).toBeVisible();
+    await expect(page.getByLabel(/^\d+ of \d+ tokens in use$/)).toBeVisible();
     await page.waitForTimeout(600);
     await shot(page, 'account-api');
+    await page.getByRole('button', { name: 'Saved it, hide' }).click();
+    await expect(page.getByText('Copy it now: it is shown only once')).toBeHidden();
     // Coupons: one made in the billing admin, then listed with its discount. Transfers: the account's tab.
     const code = `E2E${Date.now().toString(36).toUpperCase()}`;
     await page.goto('/admin/billing?tab=coupons');

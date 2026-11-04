@@ -865,7 +865,8 @@
       "type": "Tür",
       "switch": "Switch",
       "power": "Güç",
-      "guest": "İşletim sistemi"
+      "guest": "İşletim sistemi",
+      "discovered": "Son keşif"
     },
     "kind": {
       "esxi": "Standalone ESXi",
@@ -981,7 +982,35 @@
     "evacuateTitle": "{name} üzerindeki tüm sunucular taşınsın mı?",
     "evacuateBody": "Bu host'taki her panel sunucusu, çalışmaya devam ederek kümesindeki en az yüklü başka host'a taşınır. Ardından host'u bakıma alın.",
     "evacuated": "{started} taşınıyor, {skipped} kaldı",
-    "cancel": "Vazgeç"
+    "cancel": "Vazgeç",
+    "sum": {
+      "connections": "Bağlantı",
+      "hosts": "Host",
+      "vms": "Sanal makine",
+      "failing": "Sorunlu",
+      "failingHint": "bağlanamayan uç nokta var",
+      "allOk": "hepsi bağlı"
+    },
+    "never": "hiç",
+    "refreshOne": "{name} envanterini yenile",
+    "export": "CSV indir",
+    "findVm": "Ad ya da işletim sistemi ara",
+    "vmFilter": {
+      "all": "Tümü",
+      "on": "Açık",
+      "off": "Kapalı",
+      "template": "Şablon"
+    },
+    "vmShown": "{total} sanal makineden {n} tanesi gösteriliyor",
+    "noVmMatch": "Aramaya uyan sanal makine yok.",
+    "powerState": {
+      "poweredOn": "Açık",
+      "poweredOff": "Kapalı",
+      "suspended": "Askıda",
+      "other": "Bilinmiyor"
+    },
+    "used": "%{pct} dolu",
+    "usedOf": "{name}: %{pct} dolu"
   },
   "Console": {
     "title": "Konsol: {name}",
@@ -6598,7 +6627,7 @@
     "lineQuantity": "Adet",
     "removeLine": "Kalemi sil",
     "addLine": "Kalem ekle",
-    "netTotal": "KDV hariç: {amount} {currency}",
+    "netTotal": "KDV hariç: {amount}",
     "note": "Fatura notu",
     "noteHelp": "Kalemlerin altında yazar.",
     "adjusted": "Bakiye düzeltildi.",
@@ -6636,7 +6665,20 @@
     "refunded": "İade edildi.",
     "record": "Kaydet",
     "resend": "e-Faturayı yeniden gönder",
-    "resent": "Entegratöre yeniden gönderildi."
+    "resent": "Entegratöre yeniden gönderildi.",
+    "runTitle": "Tahsilat şimdi çalıştırılsın mı?",
+    "runBody": "Vadesi gelen abonelikler yenilenir, kayıtlı kartlardan çekim yapılır ve ödemesi geciken sunucular askıya alınabilir. Bu işlem normalde her gün kendiliğinden çalışır.",
+    "export": "CSV indir",
+    "shown": "{n} kayıt",
+    "clear": "Filtreleri temizle",
+    "noMatch": "Filtreye uyan kayıt yok.",
+    "findSubscription": "Hizmet ya da e-posta ara",
+    "activeMonthly": "aktiflerin dönem tutarı {amount}",
+    "succeededSum": "başarılı {amount}",
+    "suspendTitle": "“{name}” askıya alınsın mı?",
+    "suspendBody": "Sunucu kapatılır ve kilitlenir; {email} kullanıcısı yeniden açana kadar erişemez. Devam ettir ile geri alabilirsiniz.",
+    "cancelNowTitle": "“{name}” hemen iptal edilsin mi?",
+    "cancelNowBody": "Abonelik dönem sonu beklenmeden biter ve yenilenmez. Bu işlem geri alınamaz."
   },
   "ServerChange": {
     "started": "Kaynak değişikliği başladı; sunucu yeni boyutuyla yeniden başlayacak.",
@@ -6702,7 +6744,11 @@
       "usage": "Bu paneldeki /api/… adreslerine \"Authorization: Bearer <anahtar>\" başlığıyla gönderin.",
       "removed": "Anahtar kaldırıldı",
       "removeTitle": "{name} kaldırılsın mı?",
-      "removeBody": "Onu kullanan betikler hemen çalışmaz olur."
+      "removeBody": "Onu kullanan betikler hemen çalışmaz olur.",
+      "full": "En fazla {max} anahtar oluşturabilirsiniz. Yenisi için kullanmadığınız bir anahtarı silin.",
+      "idle": "{n} anahtar uzun süredir kullanılmıyor. Unutulmuş anahtarları silmek hesabınızı korur.",
+      "expiresSoon": "Bitiyor: {when}",
+      "countLabel": "{max} anahtardan {n} tanesi kullanılıyor"
     },
     "webhooks": {
       "title": "Webhook'lar",
@@ -6750,7 +6796,8 @@
       "title": "API'yi kullanma",
       "help": "Paneldeki her işlem bir API çağrısıdır. Sunucuları değiştiren isteklerde Idempotency-Key başlığı gerekir; böylece yeniden deneme işlemi iki kez yapmaz.",
       "docs": "Tam başvuru kurulumdaki docs/api.md dosyasındadır."
-    }
+    },
+    "saved": "Kaydettim, gizle"
   },
   "Traffic": {
     "title": "Trafik",

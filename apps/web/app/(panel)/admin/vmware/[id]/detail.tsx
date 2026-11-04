@@ -1,5 +1,5 @@
 "use client";
-import { Breadcrumbs, Button, Card, Tabs } from '@heroui/react';
+import { Breadcrumbs, Button, Card, ProgressBar, SearchField, Tabs } from '@heroui/react';
 import { I } from '../../../../../components/icon';
 import { useRouter } from 'next/navigation';
 import { useFormatter, useTranslations } from 'next-intl';
@@ -9,6 +9,11 @@ import { useApiAction, useApiQuery } from '../../../../../lib/query';
 import { ButtonLink, ConfirmButton, DataTable, Notice, PageHeader, Section, Stat, StatusChip, TextInput } from '../../../../../components/ui';
 import { apiVersions, versionLabel, type Connection } from '../connections';
 import { SelectInput } from '../../../../../components/ui';
+import { downloadCsv } from '../../../../../lib/csv';
+import { fold } from '../../../../../lib/note-line';
+
+// Tab label with its count beside it.
+const Count = ({ n }: { n: number }) => <span className="ml-1.5 rounded-full bg-default px-1.5 text-xs tabular-nums">{n}</span>;
 
 type Row = Record<string, string | number | boolean | null | string[]>;
 type Detail = { connection: Connection; capacity: Record<string, number>; hosts: Row[]; datastores: Row[]; networks: Row[]; compute: Row[]; vms: Row[] };
@@ -43,7 +48,8 @@ export default function ConnectionDetail({ id }: { id: string }) {
       <Breadcrumbs.Item href="/admin/vmware">{tn('connections')}</Breadcrumbs.Item>
       <Breadcrumbs.Item>{c.name}</Breadcrumbs.Item>
     </Breadcrumbs>
-    <PageHeader title={c.name} description={<>{c.product.fullName}{c.lastDiscoveredAt && <> · {t('lastDiscovered', { time: format.dateTime(new Date(c.lastDiscoveredAt), { dateStyle: 'medium', timeStyle: 'short' }) })}</>}</>}
+    <PageHeader title={c.name} description={<>{c.product.fullName}{c.lastDiscoveredAt && <> · <span title={format.dateTime(new Date(c.lastDiscoveredAt), { dateStyle: 'medium', timeStyle: 'short' })}>
+      {t('lastDiscovered', { time: format.relativeTime(new Date(Math.min(Date.parse(c.lastDiscoveredAt), Date.now())), new Date()) })}</span></>}</>}
       actions={<Button variant="secondary" isPending={discover.isPending} onPress={() => discover.mutate()}><I name="refresh-cw" size={16}/>{t('refresh')}</Button>}/>
 
     {c.warnings.map((w) => <Notice key={w} tone="warning">{t(`warning.${w as 'HOST_MANAGED_BY_VCENTER'}`)}</Notice>)}
@@ -57,7 +63,9 @@ export default function ConnectionDetail({ id }: { id: string }) {
         <Stat label={t('cap.cpu')} icon={<I name="cpu" size={18}/>} value={t('cap.cpuValue', { cores: d.capacity.cpuCores, threads: d.capacity.cpuThreads, ghz: format.number(d.capacity.cpuMhz / 1000, { maximumFractionDigits: 1 }) })}/>
         <Stat label={t('cap.memory')} icon={<I name="memory-stick" size={18}/>} value={gb(d.capacity.memoryBytes)}/>
         <Stat label={t('cap.storage')} icon={<I name="database" size={18}/>} value={gb(d.capacity.storageCapacityBytes)}
-          hint={t('cap.storageValue', { capacity: gb(d.capacity.storageCapacityBytes), free: gb(d.capacity.storageFreeBytes), provisioned: gb(d.capacity.storageProvisionedBytes) })}/>
+          tone={freeTone(d.capacity.storageFreeBytes, d.capacity.storageCapacityBytes) === 'danger' ? 'danger' : 'default'}
+          hint={<>{t('cap.storageValue', { capacity: gb(d.capacity.storageCapacityBytes), free: gb(d.capacity.storageFreeBytes), provisioned: gb(d.capacity.storageProvisionedBytes) })}
+            {d.capacity.storageCapacityBytes > 0 && <> · {t('used', { pct: Math.round((1 - d.capacity.storageFreeBytes / d.capacity.storageCapacityBytes) * 100) })}</>}</>}/>
       </div>
     </section>
 
@@ -75,21 +83,16 @@ export default function ConnectionDetail({ id }: { id: string }) {
           <Tabs.ListContainer>
             <Tabs.List aria-label={t('title')}>
               <Tabs.Tab id="vms">{t('vmsTitle', { count: d.vms.length })}<Tabs.Indicator/></Tabs.Tab>
-              <Tabs.Tab id="hosts">{t('hostsTitle')}<Tabs.Indicator/></Tabs.Tab>
-              <Tabs.Tab id="datastores">{t('datastoresTitle')}<Tabs.Indicator/></Tabs.Tab>
-              <Tabs.Tab id="networks">{t('networksTitle')}<Tabs.Indicator/></Tabs.Tab>
-              <Tabs.Tab id="compute">{t('computeTitle')}<Tabs.Indicator/></Tabs.Tab>
+              <Tabs.Tab id="hosts">{t('hostsTitle')}<Count n={d.hosts.length}/><Tabs.Indicator/></Tabs.Tab>
+              <Tabs.Tab id="datastores">{t('datastoresTitle')}<Count n={d.datastores.length}/>
+                {d.datastores.some((x) => freeTone(Number(x.free_bytes), Number(x.capacity_bytes)) === 'danger' || !x.accessible) && <I name="triangle-alert" size={14} className="ml-1 text-danger"/>}<Tabs.Indicator/></Tabs.Tab>
+              <Tabs.Tab id="networks">{t('networksTitle')}<Count n={d.networks.length}/><Tabs.Indicator/></Tabs.Tab>
+              <Tabs.Tab id="compute">{t('computeTitle')}<Count n={d.compute.length}/><Tabs.Indicator/></Tabs.Tab>
             </Tabs.List>
           </Tabs.ListContainer>
           <Tabs.Panel id="vms" className="pt-4">
             <h2 className="sr-only">{t('vmsTitle', { count: d.vms.length })}</h2>
-            <DataTable label={t('vmsTitle', { count: d.vms.length })} rows={d.vms} rowKey={(v) => String(v.moref)}
-              columns={[{ id: 'name', label: t('col.name') }, { id: 'power', label: t('col.power') }, { id: 'cpu', label: 'vCPU' }, { id: 'ram', label: 'RAM' }, { id: 'guest', label: t('col.guest') }, { id: 'act', label: <span className="sr-only">{t('console')}</span> }]}
-              cells={(v) => [<span key="n">{String(v.name)}{v.template ? <> <StatusChip tone="accent">{t('template')}</StatusChip></> : null}</span>,
-                <StatusChip key="p" tone={v.power_state === 'poweredOn' ? 'success' : 'default'}>{String(v.power_state)}</StatusChip>, String(v.cpu),
-                `${format.number(Number(v.memory_mb) / 1024, { maximumFractionDigits: 1 })} GiB`, String(v.guest ?? '–'),
-                v.power_state === 'poweredOn' && !v.template && c.operations.console
-                  ? <ButtonLink key="c" size="sm" variant="secondary" href={`/admin/vmware/console?c=${c.id}&vm=${encodeURIComponent(String(v.moref))}`}><I name="square-terminal" size={14}/>{t('console')}</ButtonLink> : null]}/>
+            <VmList c={c} vms={d.vms}/>
           </Tabs.Panel>
           <Tabs.Panel id="hosts" className="pt-4">
             <DataTable label={t('hostsTitle')} rows={d.hosts} rowKey={(h) => String(h.moref)}
@@ -100,7 +103,10 @@ export default function ConnectionDetail({ id }: { id: string }) {
           <Tabs.Panel id="datastores" className="pt-4">
             <DataTable label={t('datastoresTitle')} rows={d.datastores} rowKey={(x) => String(x.moref)}
               columns={[{ id: 'name', label: t('col.name') }, { id: 'type', label: t('col.type') }, { id: 'cap', label: t('cap.capacity') }, { id: 'free', label: t('cap.free') }, { id: 'unc', label: t('cap.uncommitted') }, { id: 'state', label: t('col.state') }]}
-              cells={(x) => [String(x.name), String(x.type), gb(x.capacity_bytes), gb(x.free_bytes), gb(x.uncommitted_bytes),
+              cells={(x) => [String(x.name), String(x.type), gb(x.capacity_bytes),
+                <span key="f" className="flex min-w-32 flex-col gap-1"><span className={freeTone(Number(x.free_bytes), Number(x.capacity_bytes)) === 'danger' ? 'font-medium text-danger' : ''}>{gb(x.free_bytes)}</span>
+                  {Number(x.capacity_bytes) > 0 && <UsedBar label={String(x.name)} used={Number(x.capacity_bytes) - Number(x.free_bytes)} total={Number(x.capacity_bytes)}/>}</span>,
+                gb(x.uncommitted_bytes),
                 x.accessible ? <StatusChip key="s" tone="success">{t('status.ok')}</StatusChip> : <StatusChip key="s" tone="danger">{t('inaccessible')}</StatusChip>]}/>
           </Tabs.Panel>
           <Tabs.Panel id="networks" className="pt-4">
@@ -124,6 +130,54 @@ export default function ConnectionDetail({ id }: { id: string }) {
         <Button variant="danger" isDisabled={confirmName !== c.name} isPending={removeConn.isPending} onPress={() => removeConn.mutate()}>{t('remove.button')}</Button>
       </div>
     </Section>
+  </div>;
+}
+
+// Under 10% free is critical, under 20% a warning.
+const freeTone = (free: number, total: number) => (!total ? 'default' : free / total < 0.1 ? 'danger' : free / total < 0.2 ? 'warning' : 'success');
+
+function UsedBar({ label, used, total }: { label: string; used: number; total: number }) {
+  const t = useTranslations('Vmware');
+  const pct = Math.round((used / total) * 100);
+  const tone = freeTone(total - used, total);
+  return <span className="mt-1 flex items-center gap-2">
+    <ProgressBar aria-label={t('usedOf', { name: label, pct })} value={Math.min(100, pct)} size="sm" className="flex-1" color={tone === 'default' ? 'success' : tone}>
+      <ProgressBar.Track><ProgressBar.Fill/></ProgressBar.Track></ProgressBar>
+    <span className="shrink-0 text-xs tabular-nums text-muted">{t('used', { pct })}</span>
+  </span>;
+}
+
+// The VMs of this endpoint: find by name or OS, narrow by power state, export what is shown.
+function VmList({ c, vms }: { c: Connection; vms: Row[] }) {
+  const t = useTranslations('Vmware');
+  const format = useFormatter();
+  const [find, setFind] = useState('');
+  const [power, setPower] = useState<'all' | 'on' | 'off' | 'template'>('all');
+  const q = fold(find.trim());
+  const shown = vms.filter((v) => (!q || fold(`${v.name} ${v.guest ?? ''}`).includes(q))
+    && (power === 'all' || (power === 'template' ? !!v.template : !v.template && (power === 'on') === (v.power_state === 'poweredOn'))));
+  const count = { all: vms.length, on: vms.filter((v) => !v.template && v.power_state === 'poweredOn').length, off: vms.filter((v) => !v.template && v.power_state !== 'poweredOn').length, template: vms.filter((v) => v.template).length };
+  return <div className="flex flex-col gap-3">
+    <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+      <SearchField aria-label={t('findVm')} value={find} onChange={setFind} className="w-full sm:w-72">
+        <SearchField.Group><SearchField.SearchIcon/><SearchField.Input placeholder={t('findVm')}/><SearchField.ClearButton/></SearchField.Group>
+      </SearchField>
+      <div role="radiogroup" aria-label={t('col.power')} className="flex flex-wrap gap-1">
+        {(['all', 'on', 'off', 'template'] as const).map((k) => <button key={k} type="button" role="radio" aria-checked={power === k} onClick={() => setPower(k)}
+          className={`inline-flex min-h-9 items-center gap-1.5 rounded-full px-3 text-sm font-medium transition-colors focus-visible:outline-2 focus-visible:outline-accent ${power === k ? 'bg-accent text-accent-foreground' : 'bg-default text-muted hover:text-foreground'}`}>
+          {t(`vmFilter.${k}`)}<span className="tabular-nums opacity-70">{count[k]}</span></button>)}
+      </div>
+      {shown.length > 0 && <Button size="sm" variant="ghost" className="sm:ml-auto" onPress={() => downloadCsv(`vms-${c.name}`, ['name', 'power', 'vcpu', 'memory_gb', 'guest', 'template', 'moref'],
+        shown.map((v) => [v.name, v.power_state, v.cpu, Number(v.memory_mb) / 1024, v.guest ?? '', v.template ? 'yes' : '', v.moref]))}><I name="download" size={14}/>{t('export')}</Button>}
+    </div>
+    {(q || power !== 'all') && <p role="status" className="text-sm text-muted">{t('vmShown', { n: shown.length, total: vms.length })}</p>}
+    <DataTable label={t('vmsTitle', { count: vms.length })} rows={shown} rowKey={(v) => String(v.moref)} empty={q || power !== 'all' ? t('noVmMatch') : '–'}
+      columns={[{ id: 'name', label: t('col.name') }, { id: 'power', label: t('col.power') }, { id: 'cpu', label: 'vCPU' }, { id: 'ram', label: 'RAM' }, { id: 'guest', label: t('col.guest') }, { id: 'act', label: <span className="sr-only">{t('console')}</span> }]}
+      cells={(v) => [<span key="n">{String(v.name)}{v.template ? <> <StatusChip tone="accent">{t('template')}</StatusChip></> : null}</span>,
+        <StatusChip key="p" tone={v.power_state === 'poweredOn' ? 'success' : 'default'}>{t(`powerState.${(['poweredOn', 'poweredOff', 'suspended'].includes(String(v.power_state)) ? v.power_state : 'other') as 'other'}`)}</StatusChip>, String(v.cpu),
+        `${format.number(Number(v.memory_mb) / 1024, { maximumFractionDigits: 1 })} GiB`, String(v.guest ?? '–'),
+        v.power_state === 'poweredOn' && !v.template && c.operations.console
+          ? <ButtonLink key="c" size="sm" variant="secondary" href={`/admin/vmware/console?c=${c.id}&vm=${encodeURIComponent(String(v.moref))}`}><I name="square-terminal" size={14}/>{t('console')}</ButtonLink> : null]}/>
   </div>;
 }
 
