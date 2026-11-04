@@ -1084,7 +1084,13 @@
       "name": "Project name",
       "create": "Create project",
       "remove": "Delete",
-      "created": "Project created."
+      "created": "Project created.",
+      "servers": "{n, plural, =0 {No servers} one {# server} other {# servers}}",
+      "show": "Show servers",
+      "removed": "Project deleted.",
+      "removeTitle": "Delete the project “{name}”?",
+      "removeBody": "{n, plural, =0 {The project has no servers.} one {Its server is not deleted; it is just left without a project.} other {Its # servers are not deleted; they are just left without a project.}}",
+      "cancel": "Cancel"
     },
     "name": "Server name",
     "nameHelp": "Also used as the host name, for example web-1.",
@@ -1441,7 +1447,11 @@
       "inQuarantine": "{n} in quarantine",
       "quarantineFor": "quarantine {h} h",
       "traffic": "Traffic (GB / month)",
-      "trafficHelp": "For custom sizes ordered here; empty: unlimited."
+      "trafficHelp": "For custom sizes ordered here; empty: unlimited.",
+      "export": "Download CSV",
+      "shown": "Showing {n} of {total} addresses",
+      "releaseTitle": "Release {address} from quarantine?",
+      "releaseBody": "The address can go to a new server right away. The previous owner's DNS records or block lists may still point at it."
     },
     "apps": {
       "title": "Applications",
@@ -1521,7 +1531,9 @@
         "uptime-kuma": "Site and service monitoring dashboard (3001).",
         "mariadb": "MariaDB with secure settings; a root password is generated.",
         "postgresql": "PostgreSQL; a postgres password is generated."
-      }
+      },
+      "keyRemoveTitle": "Delete the license key ending in …{hint}?",
+      "keyRemoveBody": "The key leaves the pool for good and is not given to new servers. Without a copy of it you cannot get it back."
     },
     "isos": {
       "title": "ISO library",
@@ -1920,7 +1932,10 @@
         "ssh": "Copy the SSH command",
         "sshCopied": "SSH command copied.",
         "ticket": "Ask support about this server"
-      }
+      },
+      "project": "Project",
+      "allProjects": "All projects",
+      "noProject": "No project"
     },
     "col": {
       "name": "Name",

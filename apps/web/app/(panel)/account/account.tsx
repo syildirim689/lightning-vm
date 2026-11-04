@@ -4,12 +4,12 @@ import { useAutoAnimate } from '@formkit/auto-animate/react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useTranslations } from 'next-intl';
 import { I } from '../../../components/icon';
-import { Section, TextInput } from '../../../components/ui';
+import { ButtonLink, ConfirmButton, Section, TextInput } from '../../../components/ui';
 import { apiFetch } from '../../../lib/api';
 import { useApiForm } from '../../../lib/form';
 import { useApiAction, useApiQuery } from '../../../lib/query';
 
-type Project = { id: string; name: string };
+type Project = { id: string; name: string; servers: number };
 
 export function Projects() {
   const t = useTranslations('Order');
@@ -17,14 +17,18 @@ export function Projects() {
   const projects = useApiQuery<{ projects: Project[] }>(['projects'], '/projects').data?.projects;
   const [listRef] = useAutoAnimate<HTMLUListElement>();
   const f = useApiForm({ name: '' });
-  const remove = useApiAction((id: string) => apiFetch(`/projects/${id}`, { method: 'DELETE' }), { invalidate: [['projects']] });
+  const remove = useApiAction((id: string) => apiFetch(`/projects/${id}`, { method: 'DELETE' }), { invalidate: [['projects'], ['servers']], success: t('projects.removed') });
   return <Section title={t('projects.title')}>
     <div className="flex flex-col gap-4">
       {projects?.length === 0 && <p className="text-sm text-muted">{t('projects.empty')}</p>}
       {!!projects?.length && <ul ref={listRef} className="flex flex-col divide-y divide-separator rounded-lg border border-border">
         {projects.map((p) => <li key={p.id} className="flex items-center gap-3 px-3 py-2.5">
-          <I name="folder" size={16} className="text-muted"/><span className="flex-1 font-medium">{p.name}</span>
-          <Button size="sm" variant="ghost" aria-label={`${t('projects.remove')}: ${p.name}`} onPress={() => remove.mutate(p.id)}><I name="trash-2" size={15}/>{t('projects.remove')}</Button>
+          <I name="folder" size={16} className="text-muted"/>
+          <span className="min-w-0 flex-1"><span className="block truncate font-medium">{p.name}</span><span className="block text-xs text-muted">{t('projects.servers', { n: p.servers })}</span></span>
+          {p.servers > 0 && <ButtonLink size="sm" variant="ghost" href={`/?project=${p.id}`}><I name="server" size={15}/><span className="sr-only sm:not-sr-only">{t('projects.show')}</span></ButtonLink>}
+          <ConfirmButton size="sm" variant="ghost" icon={<I name="trash-2" size={15}/>} label={<span className="sr-only sm:not-sr-only">{t('projects.remove')}</span>}
+            title={t('projects.removeTitle', { name: p.name })} body={t('projects.removeBody', { n: p.servers })} confirmLabel={t('projects.remove')} cancelLabel={t('projects.cancel')}
+            onConfirm={() => remove.mutateAsync(p.id).then(() => undefined)}/>
         </li>)}
       </ul>}
       <form className="flex flex-wrap items-start gap-3" noValidate

@@ -1390,6 +1390,19 @@ test.describe('people, settings and smart features (English browser)', () => {
     await expect(page.getByText('quarantine 12 h').filter({ visible: true }).first()).toBeVisible();
     await expect(page.getByText('2001:db8:30::/64').filter({ visible: true }).first()).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Addresses' })).toBeVisible();
+    // The state filter counts each state; what is shown downloads as CSV; releasing from quarantine asks first.
+    await expect(page.getByRole('button', { name: /All \(\d+\)/ })).toBeVisible();
+    if (await page.getByRole('button', { name: 'Download CSV' }).isVisible()) {
+      const csv = page.waitForEvent('download');
+      await page.getByRole('button', { name: 'Download CSV' }).click();
+      expect((await csv).suggestedFilename()).toMatch(/^ip-addresses.*\.csv$/);
+    }
+    const release = page.getByRole('button', { name: 'Release' }).filter({ visible: true }).first();
+    if (await release.isVisible()) {
+      await release.click();
+      await expect(page.getByRole('alertdialog')).toContainText('from quarantine?');
+      await page.getByRole('alertdialog').getByRole('button', { name: 'Cancel' }).click();
+    }
 
     await page.goto('/admin/settings?tab=rdns');
     await page.getByRole('button', { name: 'Provider' }).click();
@@ -1521,6 +1534,17 @@ test.describe('people, settings and smart features (English browser)', () => {
       await expectNoOverflow(page, 'vdc at 390 px');
       await page.setViewportSize({ width: 1280, height: 720 });
     }
+    // Projects show how many servers they hold, and deleting one says what happens to them.
+    await page.goto('/account?tab=projects');
+    await page.getByLabel('Project name').fill('E2E Project');
+    await page.getByRole('button', { name: 'Create project' }).click();
+    const project = page.getByRole('listitem').filter({ hasText: 'E2E Project' });
+    await expect(project).toContainText('No servers');
+    await project.getByRole('button', { name: 'Delete' }).click();
+    await expect(page.getByRole('alertdialog')).toContainText('The project has no servers.');
+    await page.getByRole('alertdialog').getByRole('button', { name: 'Delete' }).click();
+    await expect(page.getByText('Project deleted.')).toBeVisible();
+    await expect(project).toHaveCount(0);
     // The panel address follows the domain the proxy serves, not a loopback address from the wizard.
     await page.goto('/admin/settings');
     await expect(page.getByRole('link', { name: new URL(process.env.E2E_BASE_URL ?? 'https://localhost').host })).toBeVisible();

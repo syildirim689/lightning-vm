@@ -9,7 +9,7 @@ import { I } from '../../components/icon';
 import { ConfirmButton, SelectInput, TextInput } from '../../components/ui';
 import { apiFetch } from '../../lib/api';
 import { fold } from '../../lib/note-line';
-import { useApiAction } from '../../lib/query';
+import { useApiAction, useApiQuery } from '../../lib/query';
 import type { Server } from './servers-ui';
 
 const groups = ['all', 'running', 'stopped', 'problem', 'busy', 'trash'] as const;
@@ -22,11 +22,13 @@ export function useServerFilters(all: Server[]) {
   const [q, setQ] = useQueryState('q', parseAsString.withDefault(''));
   const [state, setState] = useQueryState('state', parseAsStringLiteral(groups).withDefault('all'));
   const [tag, setTag] = useQueryState('tag', parseAsString.withDefault(''));
+  const [project, setProject] = useQueryState('project', parseAsString.withDefault('')); // the customer's own projects; "none" = in no project
   const [owner, setOwner] = useQueryState('owner', parseAsString.withDefault('')); // staff: one customer's servers, by exact e-mail
   const [sort, setSort] = useQueryState('sort', parseAsStringLiteral(['newest', 'name', 'size', 'price', 'state'] as const).withDefault('newest'));
   const servers = owner ? all.filter((s) => s.ownerEmail === owner) : all; // the counts and tags follow the chosen owner too
   const needle = fold(q.trim());
   const shown = servers.filter((s) => (state === 'all' || stateGroup(s) === state) && (!tag || !!s.tags?.includes(tag))
+    && (!project || (project === 'none' ? !s.projectId : s.projectId === project))
     && (!needle || [s.name, s.address, s.location, s.poolName, s.imageName, s.ownerEmail, s.notes, ...(s.tags ?? [])].some((x) => x && fold(x).includes(needle))))
     // Names sort numerically (web-2 before web-10); size puts the biggest machines (RAM, then vCPU) first;
     // state puts what needs a look first (problems, then busy, stopped, running, trash), newest first within each.
@@ -34,9 +36,9 @@ export function useServerFilters(all: Server[]) {
       : sort === 'size' ? b.memoryMb - a.memoryMb || b.vcpu - a.vcpu
       : sort === 'price' ? Number(b.priceMonthly) - Number(a.priceMonthly) || a.name.localeCompare(b.name, undefined, { numeric: true })
       : (sort === 'state' ? attention.indexOf(stateGroup(a)) - attention.indexOf(stateGroup(b)) : 0) || Date.parse(b.createdAt) - Date.parse(a.createdAt));
-  const filtered = !!q || state !== 'all' || !!tag;
-  const clear = () => { void setQ(null); void setState(null); void setTag(null); };
-  return { shown, servers, q, setQ, state, setState, tag, setTag, owner, setOwner, sort, setSort, filtered, clear };
+  const filtered = !!q || state !== 'all' || !!tag || !!project;
+  const clear = () => { void setQ(null); void setState(null); void setTag(null); void setProject(null); };
+  return { shown, servers, q, setQ, state, setState, tag, setTag, project, setProject, owner, setOwner, sort, setSort, filtered, clear };
 }
 
 // manageTags: the chosen tag can be renamed or removed on all of the caller's own servers (the customer's list).
@@ -64,10 +66,21 @@ export function ServerFilters({ f, placeholder, manageTags }: { f: ReturnType<ty
     </div>
     : tags.length > 12 && <SelectInput className="w-full md:w-48" label={t('list.tag')} value={f.tag} onChange={(v) => f.setTag(v || null)} options={[{ id: '', label: t('list.allTags') }, ...tags.map((x) => ({ id: x, label: x }))]}/>}
     {manageTags && f.tag && tags.includes(f.tag) && <TagTools tag={f.tag} onDone={(next) => f.setTag(next)}/>}
+    {manageTags && <ProjectFilter f={f}/>}
     {f.filtered && <Button variant="ghost" className="min-h-11 self-start md:self-auto" onPress={f.clear}><I name="funnel-x" size={15}/>{t('list.clearFilters')}</Button>}
     <SelectInput className="w-full md:ml-auto md:w-60" label={t('list.sort')} value={f.sort} onChange={(v) => f.setSort(v === 'name' || v === 'size' || v === 'price' || v === 'state' ? v : null)}
       options={[{ id: 'newest', label: t('list.newest') }, { id: 'name', label: t('list.byName') }, { id: 'size', label: t('list.bySize') }, { id: 'price', label: t('list.byPrice') }, { id: 'state', label: t('list.byState') }]}/>
   </div>;
+}
+
+// Only when the customer has projects: each with how many servers it holds, and the servers in none.
+function ProjectFilter({ f }: { f: ReturnType<typeof useServerFilters> }) {
+  const t = useTranslations('Servers.list');
+  const projects = useApiQuery<{ projects: { id: string; name: string }[] }>(['projects'], '/projects').data?.projects ?? [];
+  if (!projects.length && !f.project) return null;
+  const n = (id: string | null) => f.servers.filter((s) => (s.projectId ?? null) === id).length;
+  return <SelectInput className="w-full md:w-52" label={t('project')} value={f.project} onChange={(v) => f.setProject(v || null)}
+    options={[{ id: '', label: t('allProjects') }, ...projects.map((p) => ({ id: p.id, label: `${p.name} (${n(p.id)})` })), { id: 'none', label: `${t('noProject')} (${n(null)})` }]}/>;
 }
 
 // What the shown servers add up to (they follow the filters): size, and the monthly price per currency.

@@ -1084,7 +1084,13 @@
       "name": "Proje adı",
       "create": "Proje oluştur",
       "remove": "Sil",
-      "created": "Proje oluşturuldu."
+      "created": "Proje oluşturuldu.",
+      "servers": "{n, plural, =0 {Sunucu yok} one {# sunucu} other {# sunucu}}",
+      "show": "Sunucuları göster",
+      "removed": "Proje silindi.",
+      "removeTitle": "“{name}” projesi silinsin mi?",
+      "removeBody": "{n, plural, =0 {Projede sunucu yok.} one {İçindeki sunucu silinmez, yalnızca projesiz kalır.} other {İçindeki # sunucu silinmez, yalnızca projesiz kalır.}}",
+      "cancel": "Vazgeç"
     },
     "name": "Sunucu adı",
     "nameHelp": "Ana bilgisayar adı olarak da kullanılır, örnek: web-1.",
@@ -1441,7 +1447,11 @@
       "inQuarantine": "{n} adres karantinada",
       "quarantineFor": "karantina {h} saat",
       "traffic": "Trafik (GB / ay)",
-      "trafficHelp": "Burada sipariş edilen özel boyutlar için; boş: sınırsız."
+      "trafficHelp": "Burada sipariş edilen özel boyutlar için; boş: sınırsız.",
+      "export": "CSV indir",
+      "shown": "{total} adresten {n} tanesi gösteriliyor",
+      "releaseTitle": "{address} karantinadan çıkarılsın mı?",
+      "releaseBody": "Adres hemen yeni bir sunucuya verilebilir. Eski sahibinin DNS kayıtları ya da kara listeler hâlâ bu adresi gösteriyor olabilir."
     },
     "apps": {
       "title": "Uygulamalar",
@@ -1521,7 +1531,9 @@
         "uptime-kuma": "Site ve servis izleme paneli (3001).",
         "mariadb": "Güvenli ayarlarla MariaDB; root parolası üretilir.",
         "postgresql": "PostgreSQL; postgres parolası üretilir."
-      }
+      },
+      "keyRemoveTitle": "…{hint} ile biten lisans anahtarı silinsin mi?",
+      "keyRemoveBody": "Anahtar havuzdan kalıcı olarak çıkar ve yeni sunuculara verilmez. Elinizde kopyası yoksa geri getirilemez."
     },
     "isos": {
       "title": "ISO kütüphanesi",
@@ -1920,7 +1932,10 @@
         "ssh": "SSH komutunu kopyala",
         "sshCopied": "SSH komutu panoya kopyalandı.",
         "ticket": "Bu sunucu için destek iste"
-      }
+      },
+      "project": "Proje",
+      "allProjects": "Tüm projeler",
+      "noProject": "Projesiz"
     },
     "col": {
       "name": "Ad",

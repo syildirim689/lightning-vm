@@ -512,7 +512,8 @@ export async function limitsFor(userId: string, projectId?: string, db: Db = poo
 export class CatalogController {
   @Get('projects')
   async projects(@Req() req: AuthedRequest) {
-    const { rows } = await pool.query('SELECT id, name, created_at AS "createdAt" FROM projects WHERE owner_id = $1 ORDER BY name', [req.user.id]);
+    const { rows } = await pool.query(`SELECT p.id, p.name, p.created_at AS "createdAt",
+      (SELECT count(*)::int FROM servers s WHERE s.project_id = p.id AND s.state <> 'deleted') AS servers FROM projects p WHERE p.owner_id = $1 ORDER BY p.name`, [req.user.id]);
     return { projects: rows };
   }
 

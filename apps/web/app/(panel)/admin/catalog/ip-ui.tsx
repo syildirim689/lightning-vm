@@ -6,7 +6,9 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useFormatter, useTranslations } from 'next-intl';
 import { useState } from 'react';
 import { I } from '../../../../components/icon';
-import { DataTable, FieldGroup, FormActions, Mono, NumberInput, SelectInput, StatusChip, TextInput } from '../../../../components/ui';
+import { ConfirmButton, DataTable, FieldGroup, FormActions, Mono, NumberInput, SelectInput, StatusChip, TextInput } from '../../../../components/ui';
+import { downloadCsv } from '../../../../lib/csv';
+import { fold } from '../../../../lib/note-line';
 import { apiFetch, useErrorText } from '../../../../lib/api';
 import { useApiQuery } from '../../../../lib/query';
 
@@ -92,8 +94,10 @@ export function IpAddresses({ ipPools }: { ipPools: IpPoolRow[] }) {
   const [state, setState] = useState('');
   const [search, setSearch] = useState('');
   const q = useApiQuery<{ addresses: Address[] }>(['catalog', 'addresses', poolId], `/admin/ip-addresses${poolId ? `?ipPoolId=${poolId}` : ''}`);
-  const rows = (q.data?.addresses ?? []).filter((a) => (!state || a.state === state)
-    && (!search || `${a.address} ${a.serverName ?? ''} ${a.owner ?? ''} ${a.ptr ?? ''}`.toLowerCase().includes(search.toLowerCase())));
+  const all = q.data?.addresses ?? [];
+  const needle = fold(search.trim());
+  const rows = all.filter((a) => (!state || a.state === state) && (!needle || fold(`${a.address} ${a.serverName ?? ''} ${a.owner ?? ''} ${a.ptr ?? ''}`).includes(needle)));
+  const count = (s: string) => all.filter((a) => a.state === s).length;
   async function release(address: string) {
     try { await apiFetch(`/admin/ip-quarantine/${encodeURIComponent(address)}`, { method: 'DELETE' }); toast.success(t('released')); client.invalidateQueries({ queryKey: ['catalog'] }); }
     catch (e) { toast.danger(error(e)); }
@@ -104,8 +108,11 @@ export function IpAddresses({ ipPools }: { ipPools: IpPoolRow[] }) {
     <div className="flex flex-wrap items-end gap-3">
       <TextInput className="min-w-52 flex-1" label={t('search')} value={search} onChange={setSearch} placeholder="203.0.113.10, web-1, mail.example.com"/>
       <SelectInput className="w-52" label={t('pool')} value={poolId} onChange={setPoolId} options={[{ id: '', label: t('all') }, ...ipPools.map((p) => ({ id: p.id, label: p.name }))]}/>
-      <SelectInput className="w-44" label={t('state')} value={state} onChange={setState} options={[{ id: '', label: t('all') }, ...(['used', 'quarantine', 'excluded'] as const).map((s) => ({ id: s, label: t(`states.${s}`) }))]}/>
+      <SelectInput className="w-44" label={t('state')} value={state} onChange={setState} options={[{ id: '', label: `${t('all')} (${all.length})` }, ...(['used', 'quarantine', 'excluded'] as const).map((s) => ({ id: s, label: `${t(`states.${s}`)} (${count(s)})` }))]}/>
+      {rows.length > 0 && <Button variant="ghost" className="min-h-10" onPress={() => downloadCsv('ip-addresses', ['address', 'state', 'kind', 'server', 'owner', 'ptr', 'since', 'until'],
+        rows.map((a) => [a.address, a.state, a.kind ?? '', a.serverName ?? '', a.owner ?? '', a.ptr ?? '', a.since ?? '', a.until ?? '']))}><I name="download" size={15}/>{t('export')}</Button>}
     </div>
+    {(!!needle || !!state) && <p role="status" className="text-sm text-muted">{t('shown', { n: rows.length, total: all.length })}</p>}
     <DataTable label={t('addresses')} rows={rows} rowKey={(a) => `${a.state}-${a.address}`} empty={t('none')} minWidth={820}
       columns={[{ id: 'ip', label: 'IP' }, { id: 'state', label: t('state') }, { id: 'server', label: t('server') }, { id: 'ptr', label: 'PTR' }, { id: 'when', label: t('when') }, { id: 'act', label: '' }]}
       cells={(a) => [<Mono key="ip">{a.address}</Mono>,
@@ -114,6 +121,7 @@ export function IpAddresses({ ipPools }: { ipPools: IpPoolRow[] }) {
         a.ptr ? <Mono key="p">{a.ptr}</Mono> : '–',
         a.state === 'quarantine' && a.until ? t('until', { time: format.dateTime(new Date(a.until), { dateStyle: 'medium', timeStyle: 'short' }) })
           : a.since ? format.dateTime(new Date(a.since), { dateStyle: 'medium' }) : '–',
-        a.state === 'quarantine' ? <Button key="r" size="sm" variant="ghost" onPress={() => release(a.address)}><I name="unlock" size={14}/>{t('release')}</Button> : null]}/>
+        a.state === 'quarantine' ? <ConfirmButton key="r" size="sm" variant="secondary" icon={<I name="unlock" size={14}/>} label={t('release')} title={t('releaseTitle', { address: a.address })}
+          body={t('releaseBody')} confirmLabel={t('release')} cancelLabel={t('cancel')} onConfirm={() => release(a.address)}/> : null]}/>
   </section>;
 }

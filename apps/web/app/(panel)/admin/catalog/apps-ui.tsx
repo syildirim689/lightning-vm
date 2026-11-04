@@ -157,6 +157,7 @@ function Licenses({ app }: { app: App }) {
     <DataTable label={t('keys')} rows={rows} rowKey={(l) => l.id} empty={t('keysEmpty')} minWidth={480}
       columns={[{ id: 'k', label: t('key') }, { id: 's', label: t('assignedTo') }, { id: 'a', label: <span className="sr-only">{t('remove')}</span> }]}
       cells={(l) => [<Mono key="k">…{l.hint}</Mono>, l.serverName ?? <span key="f" className="text-success">{t('keyFree')}</span>,
-        l.serverId ? '' : <Button key="r" size="sm" variant="ghost" onPress={() => remove(l.id)}><I name="trash-2" size={14}/>{t('remove')}</Button>]}/>
+        l.serverId ? '' : <ConfirmButton key="r" size="sm" variant="ghost" icon={<I name="trash-2" size={14}/>} label={t('remove')} title={t('keyRemoveTitle', { hint: l.hint })}
+          body={t('keyRemoveBody')} confirmLabel={t('remove')} cancelLabel={t('cancel')} onConfirm={() => remove(l.id)}/>]}/>
   </div>;
 }
