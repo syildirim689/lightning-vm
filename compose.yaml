@@ -261,7 +261,7 @@ services:
       - ./deploy/observability/dashboards:/etc/grafana/dashboards:ro
     logging: *logging
   loki:
-    image: grafana/loki:3.4.2
+    image: grafana/loki:3.7.9
     profiles: [observability]
     restart: unless-stopped
     command: [-config.file=/etc/loki/loki.yaml]
