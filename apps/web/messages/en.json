@@ -52,7 +52,8 @@
     "workerRunning": "Running (last signal {time})",
     "workerNoHeartbeat": "Waiting for heartbeat",
     "workerUnknown": "Unknown",
-    "disclaimer": "This check does not measure VMware or customer VM health."
+    "disclaimer": "This check does not measure VMware or customer VM health.",
+    "workerStale": "May be stuck (last signal {time})"
   },
   "errors": {
     "NETWORK": "The server could not be reached. Check your network connection or reverse proxy.",
@@ -2076,7 +2077,9 @@
     "versionLabel": "Version",
     "lastBackupLabel": "Last backup",
     "lastUpdateLabel": "Last update",
-    "settingsLabel": "Schedule"
+    "settingsLabel": "Schedule",
+    "backupOld": "The last good backup is {days} days old. Check that scheduled backups run.",
+    "export": "Download CSV"
   },
   "Nav": {
     "label": "Main navigation",
@@ -6073,7 +6076,9 @@
         "subject": "I have a suggestion",
         "body": "What I want to do:\nHow it would help me:"
       }
-    }
+    },
+    "shownCount": "{n, plural, one {# ticket} other {# tickets}} shown",
+    "export": "Download CSV"
   },
   "Stats": {
     "eyebrow": "Administration",

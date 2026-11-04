@@ -52,7 +52,8 @@
     "workerRunning": "Çalışıyor (son sinyal {time})",
     "workerNoHeartbeat": "Heartbeat bekleniyor",
     "workerUnknown": "Bilinmiyor",
-    "disclaimer": "Bu kontrol VMware veya müşteri VM sağlığını ölçmez."
+    "disclaimer": "Bu kontrol VMware veya müşteri VM sağlığını ölçmez.",
+    "workerStale": "Yanıt vermiyor olabilir (son sinyal {time})"
   },
   "errors": {
     "NETWORK": "Sunucuya ulaşılamadı. Ağ bağlantınızı veya ters proxy'yi kontrol edin.",
@@ -2076,7 +2077,9 @@
     "versionLabel": "Sürüm",
     "lastBackupLabel": "Son yedek",
     "lastUpdateLabel": "Son güncelleme",
-    "settingsLabel": "Zamanlama"
+    "settingsLabel": "Zamanlama",
+    "backupOld": "Son başarılı yedek {days} gün önce alındı. Zamanlanmış yedeklemenin çalıştığını kontrol edin.",
+    "export": "CSV indir"
   },
   "Nav": {
     "label": "Ana menü",
@@ -6073,7 +6076,9 @@
         "subject": "Bir önerim var",
         "body": "Ne yapmak istiyorum:\nBu bana nasıl yardımcı olur:"
       }
-    }
+    },
+    "shownCount": "{n} talep gösteriliyor",
+    "export": "CSV indir"
   },
   "Stats": {
     "eyebrow": "Yönetim",

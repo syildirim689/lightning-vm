@@ -190,6 +190,8 @@ export class SupportAdminController {
     const where = ['true'], args: unknown[] = [];
     const add = (sql: string, v: unknown) => { args.push(v); where.push(sql.replace('?', `$${args.length}`)); };
     if (status === 'active') where.push("t.status <> 'closed'");
+    else if (status === 'waiting') where.push("t.status IN ('open', 'customer_reply')");
+    else if (status === 'overdue') where.push("t.status <> 'closed' AND t.due_at < now()");
     else if (statuses.includes(status as Status)) add('t.status = ?', status);
     if (priorities.includes(priority as Priority)) add('t.priority = ?', priority);
     if (department && /^[0-9a-f-]{36}$/.test(department)) add('t.department_id = ?', department);

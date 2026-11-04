@@ -232,7 +232,7 @@ test.describe('roles and sessions (English browser)', () => {
     await expect(page.getByRole('heading', { level: 1 })).toHaveText('Overview');
     await page.getByRole('link', { name: 'System' }).click();
     await expect(health(page)).toHaveText('API, PostgreSQL and Redis are reachable');
-    await expect(page.getByText(/Background worker: Running \(last signal .*\d{4}/)).toBeVisible();
+    await expect(page.getByText(/Background worker: Running \(last signal .*ago\)/)).toBeVisible();
     // The run script and CI take one backup with scripts/install.sh before the tests.
     await expect(page.getByText(/Last successful backup: .*\d{4}/)).toBeVisible();
     const history = page.getByRole('grid', { name: 'Backups and updates' });
@@ -1604,6 +1604,14 @@ test.describe('people, settings and smart features (English browser)', () => {
     await expect(page.getByText('ssh-debug.log')).toHaveCount(0);
     await page.goto('/admin/support');
     await expect(page.getByText('Cannot reach my server over SSH')).toBeVisible();
+    // A number tile filters the queue to its tickets; the count, CSV and clear-filters follow.
+    await page.getByRole('button', { name: /Awaiting answer/ }).click();
+    await expect(page).toHaveURL(/status=waiting/);
+    await expect(page.getByText('Cannot reach my server over SSH')).toBeVisible();
+    await expect(page.getByRole('status').filter({ hasText: /tickets? shown/ })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Download CSV' })).toBeVisible();
+    await page.getByRole('button', { name: 'Clear filters' }).click();
+    await expect(page).not.toHaveURL(/status=/);
     await page.waitForTimeout(400);
     await shot(page, 'support-queue');
     // Canned replies are kept from the queue, with placeholders filled in when picked.
