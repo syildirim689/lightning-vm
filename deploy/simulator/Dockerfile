@@ -8,7 +8,7 @@ COPY cmd/simulator ./cmd/simulator
 COPY simfw ./simfw
 RUN CGO_ENABLED=0 go build -trimpath -o /simulator ./cmd/simulator
 
-FROM alpine:3.22
+FROM alpine:3.24
 COPY --from=build /simulator /simulator
 USER 1000:1000
 ENTRYPOINT ["/simulator"]
