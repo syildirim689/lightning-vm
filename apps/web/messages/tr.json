@@ -2247,7 +2247,13 @@
       "mobile": "Mobil",
       "desktop": "Bilgisayar",
       "endOthers": "{n, plural, one {Diğer cihazdan çık} other {Diğer # cihazdan çık}}",
-      "othersEnded": "{n, plural, =0 {Başka cihazda açık oturum yoktu} other {# cihazdan çıkış yapıldı}}"
+      "othersEnded": "{n, plural, =0 {Başka cihazda açık oturum yoktu} other {# cihazdan çıkış yapıldı}}",
+      "cancel": "Vazgeç",
+      "samePassword": "Yeni parola şimdikiyle aynı olamaz.",
+      "removePasskeyTitle": "“{name}” geçiş anahtarı kaldırılsın mı?",
+      "removePasskeyBody": "Bu cihazla geçiş anahtarıyla giriş yapamazsınız. Diğer geçiş anahtarlarınız ve parolanız çalışmaya devam eder.",
+      "removeLastPasskey": "Bu son geçiş anahtarınız. Kaldırınca yalnızca parolanızla (ve açıksa iki adımlı doğrulamayla) giriş yaparsınız.",
+      "endOthersBody": "{n, plural, one {Diğer cihazdaki oturum hemen kapanır.} other {Diğer # cihazdaki oturumlar hemen kapanır.}} Bu cihazda oturumunuz açık kalır."
     },
     "tabs": {
       "profile": "Profil",
@@ -2349,7 +2355,9 @@
       "notLinked": "Bağlı değil",
       "link": "Bağla",
       "remove": "Kaldır",
-      "removed": "{name} kaldırıldı"
+      "removed": "{name} kaldırıldı",
+      "removeTitle": "{name} bağlantısı kaldırılsın mı?",
+      "removeBody": "Artık {name} ile giriş yapamazsınız. İstediğiniz zaman yeniden bağlayabilirsiniz."
     },
     "score": {
       "title": "Hesap güvenliği",
@@ -4725,7 +4733,20 @@
     "create": "Oluştur",
     "creating": "Sunucu oluşturuluyor.",
     "createOne": "Sanal veri merkezi oluştur",
-    "askOne": "Destekten isteyin"
+    "askOne": "Destekten isteyin",
+    "allShutdownConfirm": "{n, plural, one {Sunucu işletim sisteminden kapatılır.} other {# sunucunun tümü işletim sisteminden kapatılır.}} Bu sırada üzerlerindeki hizmetler durur.",
+    "shape": "Hazır boyut",
+    "shapes": {
+      "small": "Küçük",
+      "half": "Kalanın yarısı",
+      "all": "Kalanın tümü"
+    },
+    "shapeValue": "{vcpu} vCPU · {memory} GB · {disk} GB",
+    "diskMin": "Bu imaj en az {min} GB disk ister.",
+    "diskTooSmall": "Bu imaj en az {min} GB disk ister ama yalnızca {left} GB kaldı. Başka bir imaj seçin ya da bir sunucuyu silin.",
+    "serverSummary": "{n, plural, one {# sunucu} other {# sunucu}} · {ready} hazır{failed, plural, =0 {} other { · # sorunlu}}",
+    "findServer": "Sunucu ara",
+    "findServerHint": "Ad ya da IP"
   },
   "Smart": {
     "health": "Sağlık",

@@ -6,7 +6,8 @@ import { useFormatter, useTranslations } from 'next-intl';
 import { useState } from 'react';
 import { z } from 'zod';
 import { I } from '../../../components/icon';
-import { CheckboxInput, Notice, Section, TextInput } from '../../../components/ui';
+import { CheckboxInput, ConfirmButton, Notice, Section, TextInput } from '../../../components/ui';
+import { PasswordField, Strength } from '../../(auth)/credentials-form';
 import { apiFetch, useErrorText } from '../../../lib/api';
 import { useApiQuery } from '../../../lib/query';
 import SessionList, { type SessionRow } from '../../../components/session-list';
@@ -91,6 +92,7 @@ export default function Security() {
 // another way in remains. Linking happens only here, signed in: never because a provider reports this address.
 function ConnectedAccounts() {
   const t = useTranslations('Account.connected');
+  const tc = useTranslations('Account.security');
   const { error } = useErrorText();
   const cfg = useApiQuery<PublicConfig>(['public-config'], '/public/config').data;
   const list = useQuery({ queryKey: ['accounts'], queryFn: async () => (await authClient.listAccounts()).data ?? [] });
@@ -114,7 +116,8 @@ function ConnectedAccounts() {
       <span className="grid size-9 place-items-center rounded-lg border border-border bg-surface"><ProviderMark id={p} size={18}/></span>
       <span className="min-w-0 flex-1"><span className="block text-sm font-medium">{providerNames[p] ?? p}</span>
         <span className={`text-xs ${linked.has(p) ? 'text-success' : 'text-muted'}`}>{linked.has(p) ? t('linked') : t('notLinked')}</span></span>
-      {linked.has(p) ? <Button size="sm" variant="ghost" onPress={() => void unlink(p)}>{t('remove')}</Button> : <Button size="sm" variant="secondary" onPress={() => void link(p)}>{t('link')}</Button>}
+      {linked.has(p) ? <ConfirmButton size="sm" variant="ghost" label={t('remove')} title={t('removeTitle', { name: providerNames[p] ?? p })} body={t('removeBody', { name: providerNames[p] ?? p })}
+        confirmLabel={t('remove')} cancelLabel={tc('cancel')} onConfirm={() => unlink(p)}/> : <Button size="sm" variant="secondary" onPress={() => void link(p)}>{t('link')}</Button>}
     </li>)}</ul>
   </div>;
 }
@@ -129,6 +132,7 @@ function ChangePassword() {
   async function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (!z.string().min(12).max(256).safeParse(v.next).success) { setFieldError(field(v.next.length > 256 ? 'PASSWORD_TOO_LONG' : 'PASSWORD_TOO_SHORT')); return; }
+    if (v.next === v.current) { setFieldError(t('security.samePassword')); return; }
     setBusy(true);
     const { error: err } = await authClient.changePassword({ currentPassword: v.current, newPassword: v.next, revokeOtherSessions: v.others });
     setBusy(false);
@@ -137,10 +141,11 @@ function ChangePassword() {
   }
   return <form onSubmit={submit} noValidate className="flex flex-col gap-4">
     <h3 className="font-semibold">{t('security.password')}</h3>
-    <TextInput label={t('security.currentPassword')} type="password" value={v.current} onChange={(x) => setV((s) => ({ ...s, current: x }))} autoComplete="current-password" isRequired/>
-    <TextInput label={ta('newPassword')} type="password" value={v.next} onChange={(x) => { setV((s) => ({ ...s, next: x })); setFieldError(undefined); }} error={fieldError} help={ta('passwordHelp')} autoComplete="new-password" isRequired/>
+    <PasswordField label={t('security.currentPassword')} value={v.current} onChange={(x) => setV((s) => ({ ...s, current: x }))} autoComplete="current-password"/>
+    <PasswordField label={ta('newPassword')} value={v.next} onChange={(x) => { setV((s) => ({ ...s, next: x })); setFieldError(undefined); }} error={fieldError} help={ta('passwordHelp')} autoComplete="new-password" generate/>
+    <Strength password={v.next}/>
     <CheckboxInput label={t('security.signOutOthers')} isSelected={v.others} onChange={(x) => setV((s) => ({ ...s, others: x }))}/>
-    <div><Button type="submit" variant="secondary" isPending={busy}>{t('security.changePassword')}</Button></div>
+    <div><Button type="submit" variant="secondary" isPending={busy} isDisabled={!v.current || !v.next}>{t('security.changePassword')}</Button></div>
   </form>;
 }
 
@@ -175,7 +180,9 @@ function Passkeys() {
         <I name="fingerprint" size={16} className="text-muted"/>
         <span className="flex-1"><span className="font-medium">{p.name || t('security.passkeyUnnamed')}</span>
           {p.createdAt && <span className="block text-xs text-muted">{format.dateTime(new Date(p.createdAt), { dateStyle: 'medium' })}</span>}</span>
-        <Button size="sm" variant="ghost" aria-label={`${t('security.remove')}: ${p.name || t('security.passkeyUnnamed')}`} onPress={() => remove(p.id)}><I name="trash-2" size={15}/></Button>
+        <ConfirmButton size="sm" variant="ghost" label={<><I name="trash-2" size={15}/><span className="sr-only">{`${t('security.remove')}: ${p.name || t('security.passkeyUnnamed')}`}</span></>}
+          title={t('security.removePasskeyTitle', { name: p.name || t('security.passkeyUnnamed') })} body={t(list.data!.length === 1 ? 'security.removeLastPasskey' : 'security.removePasskeyBody')}
+          confirmLabel={t('security.remove')} cancelLabel={t('security.cancel')} onConfirm={() => remove(p.id)}/>
       </li>)}
     </ul>}
     <div className="flex flex-wrap items-start gap-2">
@@ -205,7 +212,8 @@ function Sessions() {
   return <div id="sessions" className="flex scroll-mt-24 flex-col gap-4 rounded-xl transition-shadow">
     <div className="flex flex-wrap items-center justify-between gap-2">
       <h3 className="font-semibold">{t('security.sessions')}</h3>
-      {others > 0 && <Button size="sm" variant="danger-soft" onPress={() => void endOthers()}><I name="log-out" size={14}/>{t('security.endOthers', { n: others })}</Button>}
+      {others > 0 && <ConfirmButton size="sm" variant="danger-soft" icon={<I name="log-out" size={14}/>} label={t('security.endOthers', { n: others })} title={t('security.endOthers', { n: others })}
+        body={t('security.endOthersBody', { n: others })} confirmLabel={t('security.revoke')} cancelLabel={t('security.cancel')} onConfirm={endOthers}/>}
     </div>
     {list.data ? <SessionList sessions={list.data.sessions} onEnd={(s) => void end(s)}/> : <div className="h-24 animate-pulse rounded-xl bg-default/50"/>}
   </div>;

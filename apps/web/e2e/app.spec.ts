@@ -1058,6 +1058,16 @@ test.describe('people, settings and smart features (English browser)', () => {
     await page.getByRole('button', { name: 'Fix: Two-factor is off' }).click();
     await expect(page.locator('#two-factor')).toHaveClass(/ring-2/);
     await expect(page.locator('#two-factor')).toBeInViewport();
+    // Changing the password: a strength meter, and the same password again is refused before it is sent.
+    await page.getByLabel('Current password', { exact: true }).fill('same-password-123');
+    await page.getByLabel('New password', { exact: true }).fill('same-password-123');
+    await expect(page.getByText(/^Password strength:/)).toBeVisible();
+    await page.getByRole('button', { name: 'Change password' }).click();
+    await expect(page.getByText('The new password cannot be the same as the current one.')).toBeVisible();
+    await page.getByLabel('Current password', { exact: true }).fill('');
+    await page.getByLabel('New password', { exact: true }).fill('same-password-123');
+    await page.screenshot({ path: 'test-results/tour/change-password.png' });
+    await page.getByLabel('New password', { exact: true }).fill('');
     await page.setViewportSize({ width: 390, height: 900 });
     await page.evaluate(() => window.scrollTo(0, 0));
     await expectNoOverflow(page, 'security score at 390 px');
@@ -1487,6 +1497,27 @@ test.describe('people, settings and smart features (English browser)', () => {
     // An empty virtual datacenter page shows staff where to create one.
     await page.goto('/vdc');
     await expect(page.getByRole('link', { name: 'Create a virtual datacenter' })).toHaveAttribute('href', '/admin/catalog?tab=vdcs');
+    // With one: ready-made sizes fill the new-server form from what is left.
+    {
+      const me = await (await page.request.get('/api/auth/me')).json();
+      const pools = (await (await page.request.get('/api/admin/pools')).json()).pools as { id: string }[];
+      const made = await page.request.post('/api/admin/vdcs', { headers: { 'x-lightning-csrf': '1' }, data: { name: 'E2E VDC', ownerId: me.id, poolId: pools[0].id, vcpu: 4, memoryMb: 4096, diskGb: 100, maxServers: 5, priceMonthly: '0', currency: 'EUR' } });
+      expect(made.status(), await made.text()).toBe(201);
+      await page.goto('/vdc');
+      await page.getByRole('button', { name: 'Create server' }).click();
+      const dialog = page.getByRole('dialog');
+      await dialog.getByRole('radio', { name: /^All that is left/ }).click();
+      await expect(dialog.getByRole('radio', { name: /^All that is left/ })).toHaveAttribute('aria-checked', 'true');
+      await expect(dialog.getByText('4 vCPU · 4 GB · 100 GB')).toBeVisible();
+      await dialog.getByRole('radio', { name: /^Small/ }).click();
+      await expect(dialog.getByRole('radio', { name: /^All that is left/ })).toHaveAttribute('aria-checked', 'false');
+      await page.waitForTimeout(400);
+      await shot(page, 'vdc-new-server');
+      await dialog.getByRole('button', { name: 'Cancel' }).click();
+      await page.setViewportSize({ width: 390, height: 900 });
+      await expectNoOverflow(page, 'vdc at 390 px');
+      await page.setViewportSize({ width: 1280, height: 720 });
+    }
     // The panel address follows the domain the proxy serves, not a loopback address from the wizard.
     await page.goto('/admin/settings');
     await expect(page.getByRole('link', { name: new URL(process.env.E2E_BASE_URL ?? 'https://localhost').host })).toBeVisible();

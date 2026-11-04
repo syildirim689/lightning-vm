@@ -2247,7 +2247,13 @@
       "mobile": "Mobile",
       "desktop": "Computer",
       "endOthers": "{n, plural, one {Sign out the other device} other {Sign out # other devices}}",
-      "othersEnded": "{n, plural, =0 {No other device was signed in} one {Signed out # device} other {Signed out # devices}}"
+      "othersEnded": "{n, plural, =0 {No other device was signed in} one {Signed out # device} other {Signed out # devices}}",
+      "cancel": "Cancel",
+      "samePassword": "The new password cannot be the same as the current one.",
+      "removePasskeyTitle": "Remove the passkey “{name}”?",
+      "removePasskeyBody": "You will not be able to sign in with this passkey. Your other passkeys and your password keep working.",
+      "removeLastPasskey": "This is your last passkey. After removing it you sign in with your password only (and two-factor, if it is on).",
+      "endOthersBody": "{n, plural, one {The other device is signed out at once.} other {The # other devices are signed out at once.}} You stay signed in here."
     },
     "tabs": {
       "profile": "Profile",
@@ -2349,7 +2355,9 @@
       "notLinked": "Not connected",
       "link": "Connect",
       "remove": "Remove",
-      "removed": "{name} removed"
+      "removed": "{name} removed",
+      "removeTitle": "Remove {name}?",
+      "removeBody": "You will no longer be able to sign in with {name}. You can connect it again any time."
     },
     "score": {
       "title": "Account security",
@@ -4725,7 +4733,20 @@
     "create": "Create",
     "creating": "Creating the server.",
     "createOne": "Create a virtual datacenter",
-    "askOne": "Ask support for one"
+    "askOne": "Ask support for one",
+    "allShutdownConfirm": "{n, plural, one {The server is shut down from its operating system.} other {All # servers are shut down from their operating systems.}} Their services stop meanwhile.",
+    "shape": "Ready-made size",
+    "shapes": {
+      "small": "Small",
+      "half": "Half of what is left",
+      "all": "All that is left"
+    },
+    "shapeValue": "{vcpu} vCPU · {memory} GB · {disk} GB",
+    "diskMin": "This image needs at least {min} GB of disk.",
+    "diskTooSmall": "This image needs at least {min} GB of disk but only {left} GB is left. Choose another image or delete a server.",
+    "serverSummary": "{n, plural, one {# server} other {# servers}} · {ready} ready{failed, plural, =0 {} other { · # failing}}",
+    "findServer": "Find a server",
+    "findServerHint": "Name or IP"
   },
   "Smart": {
     "health": "Health",

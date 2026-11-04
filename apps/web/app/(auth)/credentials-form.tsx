@@ -53,7 +53,7 @@ export function emailSuggestion(email: string) {
 
 // Password field with show/hide and a Caps Lock warning.
 // generate: offers a strong random password, shown and copied so it can go into a password manager.
-function PasswordField({ label, value, onChange, error, help, autoComplete, autofill, generate }: { label: string; value: string; onChange: (v: string) => void; error?: string; help?: string; autoComplete: string; autofill?: boolean; generate?: boolean }) {
+export function PasswordField({ label, value, onChange, error, help, autoComplete, autofill, generate }: { label: string; value: string; onChange: (v: string) => void; error?: string; help?: string; autoComplete: string; autofill?: boolean; generate?: boolean }) {
   const t = useTranslations('Auth');
   const [shown, setShown] = useState(false);
   const [made, setMade] = useState<'copied' | 'shown'>();
@@ -78,7 +78,7 @@ function PasswordField({ label, value, onChange, error, help, autoComplete, auto
   </div>;
 }
 
-function Strength({ password }: { password: string }) {
+export function Strength({ password }: { password: string }) {
   const t = useTranslations('Auth');
   const score = passwordScore(password);
   const rules = [{ ok: password.length >= 12, text: t('rules.length') }, { ok: /[a-z]/.test(password) && /[A-Z]/.test(password), text: t('rules.case') },
