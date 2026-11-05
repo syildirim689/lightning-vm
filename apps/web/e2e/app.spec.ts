@@ -1400,8 +1400,9 @@ test.describe('people, settings and smart features (English browser)', () => {
     const release = page.getByRole('button', { name: 'Release' }).filter({ visible: true }).first();
     if (await release.isVisible()) {
       await release.click();
-      await expect(page.getByRole('alertdialog')).toContainText('from quarantine?');
-      await page.getByRole('alertdialog').getByRole('button', { name: 'Cancel' }).click();
+      const ask = page.getByRole('alertdialog', { name: /from quarantine\?/ });
+      await expect(ask).toContainText('DNS records');
+      await ask.getByRole('button', { name: 'Cancel' }).click();
     }
 
     await page.goto('/admin/settings?tab=rdns');
@@ -1541,8 +1542,9 @@ test.describe('people, settings and smart features (English browser)', () => {
     const project = page.getByRole('listitem').filter({ hasText: 'E2E Project' });
     await expect(project).toContainText('No servers');
     await project.getByRole('button', { name: 'Delete' }).click();
-    await expect(page.getByRole('alertdialog')).toContainText('The project has no servers.');
-    await page.getByRole('alertdialog').getByRole('button', { name: 'Delete' }).click();
+    const ask = page.getByRole('alertdialog', { name: /Delete the project/ });
+    await expect(ask).toContainText('The project has no servers.');
+    await ask.getByRole('button', { name: 'Delete' }).click();
     await expect(page.getByText('Project deleted.')).toBeVisible();
     await expect(project).toHaveCount(0);
     // The panel address follows the domain the proxy serves, not a loopback address from the wizard.
