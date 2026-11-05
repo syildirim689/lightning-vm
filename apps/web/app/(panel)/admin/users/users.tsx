@@ -11,7 +11,7 @@ import { useRouter } from 'next/navigation';
 import { I } from '../../../../components/icon';
 import { UserSummary } from './user-summary';
 import SessionList, { LastSeen, PresenceDot, type Presence, type SessionRow } from '../../../../components/session-list';
-import { CheckboxList, DataTable, Notice, PageHeader, SelectInput, StatusChip, TextInput } from '../../../../components/ui';
+import { CheckboxList, ConfirmButton, DataTable, Notice, PageHeader, SelectInput, StatusChip, TextInput } from '../../../../components/ui';
 import { apiFetch, useErrorText } from '../../../../lib/api';
 import { authClient } from '../../../../lib/auth-client';
 import { useMe } from '../../../../lib/me';
@@ -333,7 +333,7 @@ function UserSessions({ user, canRevoke, onClose }: { user: Row; canRevoke: bool
   }
   const d = q.data;
   return <Dialog title={t('sessionsTitle', { email: user.email })} onClose={onClose}
-    footer={<>{canRevoke && !!d?.sessions.length && <Button variant="danger-soft" onPress={() => end()}>{t('revokeAll')}</Button>}<Button variant="tertiary" onPress={onClose}>{t('close')}</Button></>}>
+    footer={<>{canRevoke && !!d?.sessions.length && <ConfirmButton variant="danger-soft" label={t('revokeAll')} title={t('revokeAll')} body={t('revokeAllBody', { email: user.email, n: d.sessions.length })} confirmLabel={t('revokeAll')} cancelLabel={t('cancel')} onConfirm={() => end()}/>}<Button variant="tertiary" onPress={onClose}>{t('close')}</Button></>}>
     {!d ? <p role="status" className="text-sm text-muted">…</p> : <div className="flex flex-col gap-3">
       <p className="flex items-center gap-2 text-sm"><PresenceDot presence={d.presence}/><LastSeen presence={d.presence} at={d.lastSeen}/></p>
       <SessionList sessions={d.sessions} onEnd={canRevoke ? (s) => void end(s) : undefined}/>

@@ -6,14 +6,16 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useFormatter, useTranslations } from 'next-intl';
 import { useState } from 'react';
 import { I } from '../../components/icon';
-import { Section, SelectInput, StatusChip, SwitchInput, TextInput } from '../../components/ui';
+import { ConfirmButton, Notice, Section, SelectInput, StatusChip, SwitchInput, TextInput } from '../../components/ui';
 import { apiFetch, useErrorText } from '../../lib/api';
 import { useApiForm } from '../../lib/form';
 import { useApiAction, useApiQuery } from '../../lib/query';
-import { nextRun } from '../../lib/schedule';
+import { clashes, nextRun, sameJob } from '../../lib/schedule';
 
 type Schedule = { id: string; action: 'power_on' | 'shutdown' | 'snapshot' | 'backup'; keep: number | null; days: number[]; time: string; timezone: string; enabled: boolean; lastRunAt: string | null; lastResult: string | null };
 const week = [1, 2, 3, 4, 5, 6, 7];
+const icon = (a: Schedule['action']) => a === 'power_on' ? <I name="sunrise" size={14} className="text-success"/> : a === 'snapshot' ? <I name="camera" size={14} className="text-warning"/>
+  : a === 'backup' ? <I name="archive" size={14} className="text-success"/> : <I name="moon" size={14} className="text-accent"/>;
 
 
 export function PowerSchedules({ serverId, power = true, snapshots = false, backups = false }: { serverId: string; power?: boolean; snapshots?: boolean; backups?: boolean }) {
@@ -33,14 +35,18 @@ export function PowerSchedules({ serverId, power = true, snapshots = false, back
   const daysText = (days: number[]) => days.length === 7 ? t('everyDay') : days.join() === '1,2,3,4,5' ? t('weekdays') : days.join() === '6,7' ? t('weekend') : days.map((d) => dayName(d, 'short')).join(', ');
   const reload = () => client.invalidateQueries({ queryKey: key });
 
-  async function preset(items: Record<string, unknown>[]) {
+  async function preset(items: { action: string; days: number[]; time: string; keep?: number }[]) {
+    const missing = items.filter((x) => !(list ?? []).some((s) => sameJob(s, { ...x, timezone: zone })));
+    if (!missing.length) { toast.info(t('alreadyThere')); return; }
     setBusy(true);
     try {
-      for (const body of items) await apiFetch(`/servers/${serverId}/schedules`, { method: 'POST', body: { timezone: zone, ...body } });
+      for (const body of missing) await apiFetch(`/servers/${serverId}/schedules`, { method: 'POST', body: { timezone: zone, ...body } });
       toast.success(t('added'));
     } catch (e) { toast.danger(error(e)); }
     finally { setBusy(false); await reload(); }
   }
+  const clash = clashes(list ?? []);
+  const duplicate = (list ?? []).some((s) => sameJob(s, { action: f.values.action, time: f.values.time, timezone: zone, days: f.values.days }));
 
   return <Section title={t('title')} description={t('help', { zone })}
     actions={<span className="flex flex-wrap gap-2">
@@ -53,6 +59,16 @@ export function PowerSchedules({ serverId, power = true, snapshots = false, back
         <I name="alarm-clock" size={15} className="text-accent"/><span className="font-medium">{t('next', { action: t(`action.${n.s.action}`) })}</span>
         <span className="tabular-nums">{format.dateTime(n.at, { weekday: 'long', hour: '2-digit', minute: '2-digit' })}</span>
         <span className="text-muted">({format.relativeTime(n.at)})</span></p>; })()}
+      {clash.map((c) => <Notice key={`${c.time}-${c.days.join()}`} tone="warning">{t('clash', { time: c.time, days: daysText(c.days) })}</Notice>)}
+      {/* The week at a glance: what runs on each day, in time order. */}
+      {list && list.filter((s) => s.enabled).length > 1 && <ol aria-label={t('weekView')} className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-7">
+        {week.map((d) => { const today = ((new Date().getDay() + 6) % 7) + 1 === d; const jobs = list.filter((s) => s.enabled && s.days.includes(d)).sort((a, b) => a.time.localeCompare(b.time));
+          return <li key={d} className={`flex min-h-20 flex-col gap-1 rounded-xl border p-2 ${today ? 'border-accent bg-accent-soft/30' : 'border-border'}`}>
+            <span className={`text-xs font-semibold uppercase tracking-wide ${today ? 'text-accent' : 'text-muted'}`}>{dayName(d, 'short')}{today && <span className="sr-only"> ({t('today')})</span>}</span>
+            {jobs.length ? jobs.map((s) => <span key={s.id} className="flex items-center gap-1.5 text-xs tabular-nums">{icon(s.action)}{s.time}<span className="sr-only"> {t(`action.${s.action}`)}</span></span>)
+              : <span className="text-xs text-muted">–</span>}
+          </li>; })}
+      </ol>}
       {list && list.length > 0 && <ul className="flex flex-col divide-y divide-separator rounded-lg border border-border">
         {list.map((s) => <li key={s.id} className="flex flex-wrap items-center gap-x-4 gap-y-2 px-3 py-2.5">
           <span className={`flex items-center gap-2 font-medium ${s.enabled ? '' : 'text-muted'}`}>
@@ -63,7 +79,9 @@ export function PowerSchedules({ serverId, power = true, snapshots = false, back
             {t(`result.${s.lastResult as 'started'}`)}{s.lastRunAt && ` · ${format.relativeTime(new Date(s.lastRunAt))}`}</StatusChip>}
           <span className="ml-auto flex items-center gap-1">
             <SwitchInput isSelected={s.enabled} onChange={() => toggle.mutate(s)} label={<span className="sr-only">{t('enabledFor', { action: t(`action.${s.action}`), time: s.time })}</span>}/>
-            <Button size="sm" variant="ghost" isIconOnly aria-label={t('remove', { action: t(`action.${s.action}`), time: s.time })} className="min-h-9 min-w-9" onPress={() => remove.mutate(s.id)}><I name="trash-2" size={15}/></Button>
+            <ConfirmButton size="sm" variant="ghost" label={<><I name="trash-2" size={15}/><span className="sr-only">{t('remove', { action: t(`action.${s.action}`), time: s.time })}</span></>}
+              title={t('remove', { action: t(`action.${s.action}`), time: s.time })} body={t('removeBody', { days: daysText(s.days) })} confirmLabel={t('removeYes')} cancelLabel={t('cancel')}
+              onConfirm={() => remove.mutateAsync(s.id).then(() => undefined)}/>
           </span>
         </li>)}
       </ul>}
@@ -92,7 +110,8 @@ export function PowerSchedules({ serverId, power = true, snapshots = false, back
           {f.fieldError('days') && <p className="text-sm text-danger">{f.fieldError('days')}</p>}
         </fieldset>
         {f.failure && !f.failure.fields && <p role="alert" className="text-sm text-danger">{f.failure.text}</p>}
-        <div><Button type="submit" isPending={f.busy}><I name="calendar-clock" size={15}/>{t('add')}</Button></div>
+        {duplicate && <p role="status" className="text-sm text-warning">{t('duplicate')}</p>}
+        <div><Button type="submit" isPending={f.busy} isDisabled={duplicate || !f.values.days.length}><I name="calendar-clock" size={15}/>{t('add')}</Button></div>
       </form>
     </div>
   </Section>;

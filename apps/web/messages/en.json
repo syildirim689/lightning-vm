@@ -3073,7 +3073,9 @@
       "unpin": "Unpin",
       "remove": "Remove note",
       "removed": "Note removed",
-      "removedAuthor": "Removed account"
+      "removedAuthor": "Removed account",
+      "removeTitle": "Delete this note?",
+      "cancel": "Cancel"
     },
     "exportCsv": "Export CSV",
     "bulk": {
@@ -3098,7 +3100,8 @@
     },
     "serversOf": "Show the {n} servers of {email}",
     "inactiveFilter": "Not seen for 30 days",
-    "newFilter": "Joined in the last 7 days"
+    "newFilter": "Joined in the last 7 days",
+    "revokeAllBody": "{email} is signed out of {n, plural, one {their session} other {all # sessions}} and has to sign in again."
   },
   "Roles": {
     "eyebrow": "People",
@@ -4925,7 +4928,15 @@
     "keepHelp": "Automatic snapshots kept; the oldest one goes first. Your own snapshots are never removed.",
     "keeps": "keeps {n}",
     "nightlyBackup": "Nightly backup",
-    "next": "Next: {action}"
+    "next": "Next: {action}",
+    "alreadyThere": "These schedules are already there.",
+    "clash": "On {days} at {time} both a start and a shutdown run; which goes first is not certain. Move one of them.",
+    "weekView": "Week at a glance",
+    "today": "today",
+    "removeBody": "This schedule stops running ({days}). The server and earlier runs are not affected.",
+    "removeYes": "Delete",
+    "cancel": "Cancel",
+    "duplicate": "This action is already scheduled at the same time and days."
   },
   "Activity": {
     "actions": {
@@ -7105,7 +7116,10 @@
       "paused": "Paused",
       "active": "Active",
       "stop": "No longer a reseller",
-      "stopped": "No longer a reseller; their customers are ordinary accounts now"
+      "stopped": "No longer a reseller; their customers are ordinary accounts now",
+      "stopTitle": "Stop this reseller?",
+      "stopBody": "The user can no longer use the reseller panel; their customers become the panel's own customers. Servers are not deleted, but the reseller settings (discount, limits) are.",
+      "cancel": "Cancel"
     },
     "notReseller": "This account is not a reseller. Ask us if you would like to resell servers.",
     "brand": "Your brand",
@@ -7368,7 +7382,10 @@
     },
     "filter": "Search saved commands",
     "noMatch": "No saved command matches the search.",
-    "textHelpShell": "Send text from here, or paste it straight into the terminal (Ctrl+Shift+V). Several lines are fine."
+    "textHelpShell": "Send text from here, or paste it straight into the terminal (Ctrl+Shift+V). Several lines are fine.",
+    "removeBody": "The saved command is deleted for good.",
+    "removeSharedBody": "This command is shared with the team: it leaves everyone's list for good.",
+    "removeYes": "Delete"
   },
   "Welcome": {
     "label": "Welcome",

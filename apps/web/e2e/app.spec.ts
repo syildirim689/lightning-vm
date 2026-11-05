@@ -445,6 +445,7 @@ test.describe('VMware connections (simulator, English browser)', () => {
     await expect(edited).toBeVisible();
     await expect(mine).toBeHidden();
     await page.getByRole('button', { name: 'Delete saved command: Uptime check' }).click();
+    await page.getByRole('alertdialog', { name: 'Delete saved command: Uptime check' }).getByRole('button', { name: 'Delete' }).click();
     await expect(edited).toBeHidden();
     // An administrator can share a command with every user; it is listed apart and they may remove it.
     await page.getByLabel('Command or text', { exact: true }).fill('free -h');
@@ -453,6 +454,9 @@ test.describe('VMware connections (simulator, English browser)', () => {
     const shared = page.getByRole('list', { name: 'Shared commands' }).getByRole('button', { name: 'Type into the console: free -h (free -h)' });
     await expect(shared).toBeVisible();
     await page.getByRole('button', { name: 'Delete saved command: free -h' }).click();
+    // A shared command leaves everyone's list, and the question says so.
+    await expect(page.getByRole('alertdialog', { name: 'Delete saved command: free -h' })).toContainText("leaves everyone's list");
+    await page.getByRole('alertdialog', { name: 'Delete saved command: free -h' }).getByRole('button', { name: 'Delete' }).click();
     await expect(shared).toBeHidden();
 
     // The vCenter now backs a resource pool, so a separate simulated ESXi is added and removed.
@@ -544,7 +548,12 @@ test.describe('server lifecycle (simulator, Turkish customer)', () => {
     await page.getByRole('button', { name: 'Mesai saatleri' }).click();
     await expect(page.getByText('08:00', { exact: true })).toBeVisible();
     await expect(page.getByText('19:00', { exact: true })).toBeVisible();
+    // The week view shows both; pressing the preset again adds no copies; deleting asks first.
+    await expect(page.getByRole('list', { name: 'Haftalık görünüm' })).toBeVisible();
+    await page.getByRole('button', { name: 'Mesai saatleri' }).click();
+    await expect(page.getByText('Bu zamanlamalar zaten var.')).toBeVisible();
     await page.getByRole('button', { name: /19:00 Kapat zamanlamasını kaldır/ }).click();
+    await page.getByRole('alertdialog', { name: /19:00 Kapat zamanlamasını kaldır/ }).getByRole('button', { name: 'Sil' }).click();
     await expect(page.getByText('19:00', { exact: true })).toBeHidden();
     // Automatic snapshots: "nightly snapshot" adds a daily 02:00 one that keeps the newest three.
     await page.getByRole('button', { name: 'Gece anlık görüntüsü' }).click();

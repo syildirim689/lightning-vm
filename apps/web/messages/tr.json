@@ -3073,7 +3073,9 @@
       "unpin": "Sabitlemeyi kaldır",
       "remove": "Notu sil",
       "removed": "Not silindi",
-      "removedAuthor": "Silinmiş hesap"
+      "removedAuthor": "Silinmiş hesap",
+      "removeTitle": "Not silinsin mi?",
+      "cancel": "Vazgeç"
     },
     "exportCsv": "CSV indir",
     "bulk": {
@@ -3098,7 +3100,8 @@
     },
     "serversOf": "{email} kişisinin {n} sunucusunu göster",
     "inactiveFilter": "30 gündür görülmeyen",
-    "newFilter": "Son 7 günde katılan"
+    "newFilter": "Son 7 günde katılan",
+    "revokeAllBody": "{email} {n, plural, one {oturumundan} other {# oturumunun hepsinden}} çıkarılır ve yeniden giriş yapması gerekir."
   },
   "Roles": {
     "eyebrow": "Kişiler",
@@ -4925,7 +4928,15 @@
     "keepHelp": "Saklanan otomatik görüntü sayısı; önce en eskisi silinir. Kendi aldığınız görüntülere hiç dokunulmaz.",
     "keeps": "{n} tane saklar",
     "nightlyBackup": "Gece yedeği",
-    "next": "Sıradaki: {action}"
+    "next": "Sıradaki: {action}",
+    "alreadyThere": "Bu zamanlamalar zaten var.",
+    "clash": "{days} günlerinde saat {time} için hem açma hem kapatma var; hangisinin önce çalışacağı belli değil. Birinin saatini değiştirin.",
+    "weekView": "Haftalık görünüm",
+    "today": "bugün",
+    "removeBody": "Bu zamanlama artık çalışmaz ({days}). Sunucu ve önceki işlemler etkilenmez.",
+    "removeYes": "Sil",
+    "cancel": "Vazgeç",
+    "duplicate": "Aynı saat ve günlerde bu işlem zaten zamanlanmış."
   },
   "Activity": {
     "actions": {
@@ -7105,7 +7116,10 @@
       "paused": "Duraklatıldı",
       "active": "Etkin",
       "stop": "Bayilikten çıkar",
-      "stopped": "Bayilikten çıkarıldı; müşterileri artık normal hesap"
+      "stopped": "Bayilikten çıkarıldı; müşterileri artık normal hesap",
+      "stopTitle": "Bayilik kaldırılsın mı?",
+      "stopBody": "Kullanıcı bayi panelini kullanamaz; müşterileri doğrudan panelin müşterisi olur. Sunucuları silinmez, ama bayi ayarları (indirim, sınırlar) silinir.",
+      "cancel": "Vazgeç"
     },
     "notReseller": "Bu hesap bayi değil. Sunucu satmak isterseniz bize yazın.",
     "brand": "Markanız",
@@ -7368,7 +7382,10 @@
     },
     "filter": "Kayıtlı komutlarda ara",
     "noMatch": "Aramaya uyan kayıtlı komut yok.",
-    "textHelpShell": "Metni buradan veya doğrudan terminale yapıştırarak (Ctrl+Shift+V) gönderebilirsiniz. Birden fazla satır olabilir."
+    "textHelpShell": "Metni buradan veya doğrudan terminale yapıştırarak (Ctrl+Shift+V) gönderebilirsiniz. Birden fazla satır olabilir.",
+    "removeBody": "Kayıtlı komut silinir; geri getirilemez.",
+    "removeSharedBody": "Bu komut ekiple paylaşılıyor: herkesin listesinden kalkar ve geri getirilemez.",
+    "removeYes": "Sil"
   },
   "Welcome": {
     "label": "Karşılama",

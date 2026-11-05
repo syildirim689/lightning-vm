@@ -9,7 +9,7 @@ import { useMe } from '../lib/me';
 import { can } from '../lib/permissions';
 import { useApiAction, useApiQuery } from '../lib/query';
 import { I } from './icon';
-import { CheckboxInput, Section, TextInput } from './ui';
+import { CheckboxInput, ConfirmButton, Section, TextInput } from './ui';
 
 type Snippet = { id: string; name: string; command: string; shared: boolean; mine: boolean };
 // Read-only: they show the state, never change it. Windows ones are PowerShell.
@@ -91,8 +91,9 @@ export function ConsoleSnippets({ send, ready, linuxOnly }: { send: (text: strin
             {(s.mine || (s.shared && mayShare)) && <>
               <Button size="sm" variant="ghost" isIconOnly className="min-h-9 min-w-9 shrink-0" aria-label={t('edit', { name: s.name })}
                 onPress={() => reset(s)}><I name="pencil" size={14}/></Button>
-              <Button size="sm" variant="ghost" isIconOnly className="min-h-9 min-w-9 shrink-0" aria-label={t('remove', { name: s.name })}
-                onPress={() => { remove.mutate(s); if (editing?.id === s.id) reset(); }}><I name="x" size={14}/></Button>
+              <ConfirmButton size="sm" variant="ghost" label={<><I name="x" size={14}/><span className="sr-only">{t('remove', { name: s.name })}</span></>}
+                title={t('remove', { name: s.name })} body={s.shared ? t('removeSharedBody') : t('removeBody')} confirmLabel={t('removeYes')} cancelLabel={t('cancelEdit')}
+                onConfirm={() => remove.mutateAsync(s).then(() => { if (editing?.id === s.id) reset(); })}/>
             </>}
           </li>)}
         </ul>)}

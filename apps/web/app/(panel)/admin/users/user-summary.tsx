@@ -6,7 +6,7 @@ import { useState } from 'react';
 import NextLink from 'next/link';
 import { useFormatter, useNow, useTranslations } from 'next-intl';
 import { I } from '../../../../components/icon';
-import { Stat, StatusChip } from '../../../../components/ui';
+import { ConfirmButton, Stat, StatusChip } from '../../../../components/ui';
 import { useApiQuery } from '../../../../lib/query';
 import { apiFetch, useErrorText } from '../../../../lib/api';
 import { useMe } from '../../../../lib/me';
@@ -135,7 +135,7 @@ function ResellerAccess({ id }: { id: string }) {
     <div className="mt-3 flex flex-wrap gap-2">
       <Button size="sm" isPending={busy} onPress={() => void save(true)}><I name="store" size={14}/>{r ? t('save') : t('make')}</Button>
       {r?.active && <Button size="sm" variant="ghost" isDisabled={busy} onPress={() => void save(false)}>{t('pause')}</Button>}
-      {r && <Button size="sm" variant="danger-soft" isDisabled={busy} onPress={() => void stop()}>{t('stop')}</Button>}
+      {r && <ConfirmButton size="sm" variant="danger-soft" isDisabled={busy} label={t('stop')} title={t('stopTitle')} body={t('stopBody')} confirmLabel={t('stop')} cancelLabel={t('cancel')} onConfirm={stop}/>}
     </div>
   </section>;
 }
@@ -178,8 +178,9 @@ function StaffNotes({ id }: { id: string }) {
           {write && <span className="ml-auto flex gap-1">
             <Button size="sm" variant="ghost" isIconOnly aria-label={n.pinned ? t('unpin') : t('pin')} isDisabled={busy}
               onPress={() => void call(`/admin/users/${id}/notes/${n.id}`, { method: 'PATCH', body: { pinned: !n.pinned } })}><I name={n.pinned ? 'pin-off' : 'pin'} size={13}/></Button>
-            <Button size="sm" variant="ghost" isIconOnly aria-label={t('remove')} isDisabled={busy}
-              onPress={() => void call(`/admin/users/${id}/notes/${n.id}`, { method: 'DELETE' }, t('removed'))}><I name="trash-2" size={13}/></Button>
+            <ConfirmButton size="sm" variant="ghost" isDisabled={busy} label={<><I name="trash-2" size={13}/><span className="sr-only">{t('remove')}</span></>}
+              title={t('removeTitle')} body={<span className="line-clamp-3 whitespace-pre-line">{n.body}</span>} confirmLabel={t('remove')} cancelLabel={t('cancel')}
+              onConfirm={() => call(`/admin/users/${id}/notes/${n.id}`, { method: 'DELETE' }, t('removed')).then(() => undefined)}/>
           </span>}
         </div>
       </li>)}
