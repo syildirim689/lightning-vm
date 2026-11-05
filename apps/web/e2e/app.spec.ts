@@ -1510,8 +1510,6 @@ test.describe('people, settings and smart features (English browser)', () => {
     await expect(page.getByText('Server ready', { exact: true })).toBeVisible();
     // A channel's header box sets it for every notification shown, then back.
     const column = page.getByRole('checkbox', { name: /for every notification shown$/ }).first();
-    await page.waitForTimeout(500);
-    await page.screenshot({ path: 'test-results/tour/notification-columns.png', fullPage: true });
     await expect(column).toBeAttached();
     const was = await column.isChecked();
     await column.click();

@@ -50,8 +50,8 @@ export default function NotificationPolicy({ readOnly }: { readOnly: boolean }) 
               <td className="px-2 py-3"><Switch aria-label={t('on')} isSelected={e.enabled} isDisabled={readOnly} onChange={(on) => save(e, { enabled: on })}><Switch.Control><Switch.Thumb/></Switch.Control></Switch></td>
               {channels.map((c) => <td key={c} className="px-2 py-3 text-center">
                 {e.channels.includes(c) ? <div className="flex flex-col items-center gap-1">
-                  <Checkbox aria-label={`${t('allow')}: ${t(`channel.${c}`)}`} isSelected={e.allowed.includes(c)} isDisabled={readOnly || !e.enabled} onChange={(on) => save(e, { allowed: flip(e.allowed, c, on) })}>
-                    <Checkbox.Control><Checkbox.Indicator/></Checkbox.Control></Checkbox>
+                  <Checkbox isSelected={e.allowed.includes(c)} isDisabled={readOnly || !e.enabled} onChange={(on) => save(e, { allowed: flip(e.allowed, c, on) })}>
+                    <Checkbox.Content><Checkbox.Control><Checkbox.Indicator/></Checkbox.Control><span className="sr-only">{`${t('allow')}: ${t(`channel.${c}`)} · ${e.event}`}</span></Checkbox.Content></Checkbox>
                   <button type="button" disabled={readOnly || !e.enabled || !e.allowed.includes(c)} onClick={() => save(e, { defaults: flip(e.defaults, c, !e.defaults.includes(c)) })}
                     className={`rounded-full px-2 text-[10px] font-semibold uppercase ${e.defaults.includes(c) ? 'bg-accent-soft text-accent-soft-foreground' : 'text-muted'} disabled:opacity-40`}
                     aria-pressed={e.defaults.includes(c)}>{t('default')}</button>

@@ -105,8 +105,9 @@ export default function NotificationPrefs() {
             {channels.map((c) => { const col = shown.filter((e) => e.allowed.includes(c) && !e.locked); const n = col.filter((e) => e.channels.includes(c)).length;
               return <th key={c} scope="col" className="px-2 py-2 text-center font-semibold">
                 <span className="inline-flex items-center gap-1">{channelIcon[c]}<span className="hidden sm:inline">{t(`channel.${c}`)}</span></span>
-                {col.length > 1 && <Checkbox aria-label={t('column', { channel: t(`channel.${c}`) })} isSelected={n === col.length} isIndeterminate={n > 0 && n < col.length}
-                  onChange={() => void column(c)} className="mt-1 flex justify-center"><Checkbox.Control><Checkbox.Indicator/></Checkbox.Control></Checkbox>}
+                {col.length > 1 && <Checkbox isSelected={n === col.length} isIndeterminate={n > 0 && n < col.length}
+                  onChange={() => void column(c)} className="mt-1 flex justify-center"><Checkbox.Content><Checkbox.Control><Checkbox.Indicator/></Checkbox.Control>
+                  <span className="sr-only">{t('column', { channel: t(`channel.${c}`) })}</span></Checkbox.Content></Checkbox>}
               </th>; })}
           </tr></thead>
           <tbody className="divide-y divide-separator">
@@ -118,8 +119,9 @@ export default function NotificationPrefs() {
                 <span className="text-xs text-muted">{e.locked ? t('lockedHelp') : t(`events.${e.event.replace('.', '_')}.help` as 'events.server_ready.help')}</span>
               </th>
               {channels.map((c) => <td key={c} className="px-2 py-3 text-center">
-                {e.allowed.includes(c) ? <Checkbox aria-label={`${t(`channel.${c}`)}: ${e.event}`} isSelected={e.channels.includes(c)} isDisabled={e.locked}
-                  onChange={(on) => toggle(e.event, e.channels, c, on)} className="inline-flex justify-center"><Checkbox.Control><Checkbox.Indicator/></Checkbox.Control></Checkbox>
+                {e.allowed.includes(c) ? <Checkbox isSelected={e.channels.includes(c)} isDisabled={e.locked}
+                  onChange={(on) => toggle(e.event, e.channels, c, on)} className="inline-flex justify-center"><Checkbox.Content><Checkbox.Control><Checkbox.Indicator/></Checkbox.Control>
+                  <span className="sr-only">{`${t(`channel.${c}`)}: ${title(e.event)}`}</span></Checkbox.Content></Checkbox>
                   : <span className="text-muted" aria-label={t('notOffered')}>–</span>}
               </td>)}
             </motion.tr>)] : []; })}
