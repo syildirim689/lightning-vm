@@ -2926,10 +2926,15 @@
       "save": "Kaydet",
       "saved": "Sessiz saatler: {start} – {end}",
       "off": "Sessiz saatler kapatıldı.",
-      "help": "Saatler {tz} saat dilimine göre. Panel içi ve e-posta bildirimleri yine gelir; giriş ve parola gibi güvenlik bildirimleri her zaman gönderilir."
+      "help": "Saatler {tz} saat dilimine göre. Panel içi ve e-posta bildirimleri yine gelir; giriş ve parola gibi güvenlik bildirimleri her zaman gönderilir.",
+      "now": "Şu an sessiz · bitiş {end}",
+      "notNow": "Sessiz saatler başlangıcı: {start}"
     },
     "find": "Bildirim ara (ör. fatura, yedek, giriş)",
-    "noMatch": "Aramaya uyan bildirim yok."
+    "noMatch": "Aramaya uyan bildirim yok.",
+    "column": "Gösterilen tüm bildirimler için {channel}",
+    "columnOn": "{channel}, {n, plural, one {# bildirim} other {# bildirim}} için açıldı",
+    "columnOff": "{channel}, {n, plural, one {# bildirim} other {# bildirim}} için kapatıldı"
   },
   "Users": {
     "eyebrow": "Kişiler",
@@ -6143,7 +6148,20 @@
       }
     },
     "shownCount": "{n} talep gösteriliyor",
-    "export": "CSV indir"
+    "export": "CSV indir",
+    "cannedFind": "Başlıkta ya da metinde ara",
+    "cannedNoMatch": "Aramaya uyan kalıp yanıt yok.",
+    "cannedEdit": "“{title}” yanıtını düzenle",
+    "cannedEditing": "Düzenleniyor: {title}",
+    "cannedUpdate": "Değişiklikleri kaydet",
+    "cannedRemoved": "Kalıp yanıt silindi",
+    "cannedRemoveBody": "Ekip bu yanıtı artık destek taleplerinde seçemez. Daha önce gönderilmiş yanıtlar değişmez.",
+    "cannedRemoveYes": "Sil",
+    "cannedInsert": "Ekle",
+    "cannedPreview": "Örnek değerlerle önizleme",
+    "cannedSample": {
+      "name": "Ayşe Yılmaz"
+    }
   },
   "Stats": {
     "eyebrow": "Yönetim",

@@ -1508,6 +1508,14 @@ test.describe('people, settings and smart features (English browser)', () => {
     await expect(page.getByText('Server ready', { exact: true })).toBeHidden();
     await page.getByRole('searchbox', { name: /Find a notification/ }).fill('');
     await expect(page.getByText('Server ready', { exact: true })).toBeVisible();
+    // A channel's header box sets it for every notification shown, then back.
+    const column = page.getByRole('checkbox', { name: /for every notification shown$/ }).first();
+    const was = await column.isChecked();
+    await column.click();
+    await expect(page.getByText(/turned (on|off) for \d+ notifications?/).first()).toBeVisible();
+    await expect(column).toBeChecked({ checked: !was });
+    await column.click();
+    await expect(column).toBeChecked({ checked: was });
     // An empty virtual datacenter page shows staff where to create one.
     await page.goto('/vdc');
     await expect(page.getByRole('link', { name: 'Create a virtual datacenter' })).toHaveAttribute('href', '/admin/catalog?tab=vdcs');
@@ -1701,11 +1709,24 @@ test.describe('people, settings and smart features (English browser)', () => {
     // Canned replies are kept from the queue, with placeholders filled in when picked.
     await page.getByRole('button', { name: 'Canned replies' }).click();
     await page.getByLabel('Title').fill('Firewall check');
-    await page.getByLabel('Reply', { exact: true }).fill('Hi {name}, about {ticket}: please check the firewall of {server}.');
+    await page.getByLabel('Reply', { exact: true }).fill('Hi {name}, about {ticket}: please check the firewall of');
+    // Placeholders go in with a click and are previewed with sample values.
+    await page.getByRole('group', { name: 'Insert' }).getByRole('button', { name: '{server}' }).click();
+    await expect(page.getByLabel('Reply', { exact: true })).toHaveValue('Hi {name}, about {ticket}: please check the firewall of {server}');
+    await expect(page.getByRole('dialog').getByText('Hi Jane Doe, about #1042: please check the firewall of web-1')).toBeVisible();
     await page.getByRole('button', { name: 'Add canned reply' }).click();
     await expect(page.getByRole('dialog').getByText('Firewall check')).toBeVisible();
     await page.waitForTimeout(500);
     await shot(page, 'support-canned');
+    // A saved reply is edited in place; deleting one asks first.
+    await page.getByRole('button', { name: 'Edit “Firewall check”' }).click();
+    await expect(page.getByText('Editing: Firewall check')).toBeVisible();
+    await page.getByLabel('Title').fill('Firewall check-up');
+    await page.getByRole('button', { name: 'Save changes' }).click();
+    await expect(page.getByRole('dialog').getByText('Firewall check-up', { exact: true })).toBeVisible();
+    await page.getByRole('dialog').getByRole('button', { name: 'Remove “Firewall check-up”' }).click();
+    await expect(page.getByRole('alertdialog', { name: 'Remove “Firewall check-up”' })).toContainText('Replies already sent stay');
+    await page.getByRole('alertdialog', { name: 'Remove “Firewall check-up”' }).getByRole('button', { name: 'Cancel' }).click();
     await page.getByRole('dialog').getByRole('button', { name: 'Close' }).last().click();
     await expect(page.getByRole('dialog')).toHaveCount(0);
     await page.getByText('Cannot reach my server over SSH').click();

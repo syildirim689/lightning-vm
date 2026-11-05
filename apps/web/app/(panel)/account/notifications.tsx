@@ -7,7 +7,8 @@ import { motion } from 'motion/react';
 import { useTranslations } from 'next-intl';
 import { useEffect, useState } from 'react';
 import { I } from '../../../components/icon';
-import { Notice, Section, SwitchInput, TextInput } from '../../../components/ui';
+import { Notice, Section, StatusChip, SwitchInput, TextInput } from '../../../components/ui';
+import { clockIn, inQuietHours } from '../../../lib/quiet';
 import { apiFetch, useErrorText } from '../../../lib/api';
 import { currentSubscription, disablePush, enablePush, pushSupported } from '../../../lib/push';
 import { useApiQuery } from '../../../lib/query';
@@ -46,6 +47,19 @@ export default function NotificationPrefs() {
     const next = on ? [...current, c] : current.filter((x) => x !== c);
     client.setQueryData<Prefs>(['notification-prefs'], (p) => p && { ...p, events: p.events.map((e) => e.event === event ? { ...e, channels: next } : e) });
     await apiFetch('/notifications/preferences', { method: 'PUT', body: { event, channels: next } }).catch((e) => { toast.danger(error(e)); void q.refetch(); });
+  }
+  // One channel for every event shown (the search narrows it): on when any is off, else off for all.
+  async function column(c: Channel) {
+    const targets = shown.filter((e) => e.allowed.includes(c) && !e.locked);
+    const on = targets.some((e) => !e.channels.includes(c));
+    const changed = targets.filter((e) => e.channels.includes(c) !== on).map((e) => ({ event: e.event, channels: on ? [...e.channels, c] : e.channels.filter((x) => x !== c) }));
+    if (!changed.length) return;
+    const next = new Map(changed.map((x) => [x.event, x.channels]));
+    client.setQueryData<Prefs>(['notification-prefs'], (p) => p && { ...p, events: p.events.map((e) => next.has(e.event) ? { ...e, channels: next.get(e.event)! } : e) });
+    const results = await Promise.allSettled(changed.map((x) => apiFetch('/notifications/preferences', { method: 'PUT', body: x })));
+    const failed = results.find((x) => x.status === 'rejected');
+    if (failed) { toast.danger(error((failed as PromiseRejectedResult).reason)); void q.refetch(); }
+    else toast.success(t(on ? 'columnOn' : 'columnOff', { channel: t(`channel.${c}`), n: changed.length }));
   }
   async function push(on: boolean) {
     setBusy('push');
@@ -88,7 +102,12 @@ export default function NotificationPrefs() {
         <table className="w-full min-w-[34rem] text-sm">
           <thead><tr className="text-left text-xs uppercase tracking-wider text-muted">
             <th scope="col" className="py-2 pr-4 font-semibold">{t('event')}</th>
-            {channels.map((c) => <th key={c} scope="col" className="px-2 py-2 text-center font-semibold"><span className="inline-flex items-center gap-1">{channelIcon[c]}<span className="hidden sm:inline">{t(`channel.${c}`)}</span></span></th>)}
+            {channels.map((c) => { const col = shown.filter((e) => e.allowed.includes(c) && !e.locked); const n = col.filter((e) => e.channels.includes(c)).length;
+              return <th key={c} scope="col" className="px-2 py-2 text-center font-semibold">
+                <span className="inline-flex items-center gap-1">{channelIcon[c]}<span className="hidden sm:inline">{t(`channel.${c}`)}</span></span>
+                {col.length > 1 && <Checkbox aria-label={t('column', { channel: t(`channel.${c}`) })} isSelected={n === col.length} isIndeterminate={n > 0 && n < col.length}
+                  onChange={() => void column(c)} className="mt-1 flex justify-center"><Checkbox.Control><Checkbox.Indicator/></Checkbox.Control></Checkbox>}
+              </th>; })}
           </tr></thead>
           <tbody className="divide-y divide-separator">
             {groups.flatMap((g) => { const rows = shown.filter((e) => groupOf(e.event) === g); return rows.length ? [<tr key={g}><th colSpan={channels.length + 1} scope="colgroup"
@@ -131,7 +150,10 @@ function QuietHours({ value }: { value: Prefs['quietHours'] }) {
       void client.invalidateQueries({ queryKey: ['notification-prefs'] });
     } catch (e) { toast.danger(error(e)); } finally { setBusy(false); }
   }
-  return <Section title={t('title')} description={t('intro')}>
+  const zone = value?.tz ?? tz;
+  const quietNow = !!value && inQuietHours(clockIn(zone), value.start, value.end);
+  return <Section title={t('title')} description={t('intro')} actions={value && <StatusChip tone={quietNow ? 'accent' : 'default'}>
+    <span className="inline-flex items-center gap-1"><I name={quietNow ? 'moon' : 'sun'} size={13}/>{quietNow ? t('now', { end: value.end }) : t('notNow', { start: value.start })}</span></StatusChip>}>
     <div className="flex flex-col gap-4">
       <SwitchInput label={t('enable')} isSelected={on} onChange={(x) => void save(x)} isDisabled={busy}/>
       {on && <div className="flex flex-wrap items-end gap-3">

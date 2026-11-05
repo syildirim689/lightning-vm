@@ -2926,10 +2926,15 @@
       "save": "Save",
       "saved": "Quiet hours: {start} – {end}",
       "off": "Quiet hours turned off.",
-      "help": "Times are in the {tz} time zone. In-panel and e-mail notices still arrive; security notices such as sign-ins and password changes always go out."
+      "help": "Times are in the {tz} time zone. In-panel and e-mail notices still arrive; security notices such as sign-ins and password changes always go out.",
+      "now": "Quiet now · until {end}",
+      "notNow": "Quiet hours start at {start}"
     },
     "find": "Find a notification (e.g. invoice, backup, sign-in)",
-    "noMatch": "No notification matches."
+    "noMatch": "No notification matches.",
+    "column": "{channel} for every notification shown",
+    "columnOn": "{channel} turned on for {n, plural, one {# notification} other {# notifications}}",
+    "columnOff": "{channel} turned off for {n, plural, one {# notification} other {# notifications}}"
   },
   "Users": {
     "eyebrow": "People",
@@ -6143,7 +6148,20 @@
       }
     },
     "shownCount": "{n, plural, one {# ticket} other {# tickets}} shown",
-    "export": "Download CSV"
+    "export": "Download CSV",
+    "cannedFind": "Search title or text",
+    "cannedNoMatch": "No canned reply matches.",
+    "cannedEdit": "Edit “{title}”",
+    "cannedEditing": "Editing: {title}",
+    "cannedUpdate": "Save changes",
+    "cannedRemoved": "Canned reply deleted",
+    "cannedRemoveBody": "The team can no longer pick this reply on tickets. Replies already sent stay as they are.",
+    "cannedRemoveYes": "Delete",
+    "cannedInsert": "Insert",
+    "cannedPreview": "Preview with sample values",
+    "cannedSample": {
+      "name": "Jane Doe"
+    }
   },
   "Stats": {
     "eyebrow": "Administration",

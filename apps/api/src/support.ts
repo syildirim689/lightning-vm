@@ -63,6 +63,12 @@ async function messagesOf(ticketId: string, withInternal: boolean) {
   return withInternal ? rows : rows.map((r) => (r.staff ? { ...r, author: null } : r));
 }
 
+function readCanned(body: Input) {
+  const title = typeof body?.title === 'string' ? body.title.trim() : '', text = typeof body?.body === 'string' ? body.body.trim() : '';
+  if (!title || title.length > 80 || !text || text.length > 5000) throw apiError(400, 'VALIDATION_FAILED', 'Invalid input', { ...((!title || title.length > 80) && { title: 'INVALID_VALUE' }), ...((!text || text.length > 5000) && { body: 'INVALID_VALUE' }) });
+  return { title, text };
+}
+
 @Controller('support') @UseGuards(SessionGuard)
 export class SupportController {
   @Get('departments')
@@ -288,10 +294,17 @@ export class SupportAdminController {
 
   @Post('canned') @HttpCode(201) @Can('support.manage')
   async addCanned(@Req() req: AuthedRequest, @Body() body: Input) {
-    const title = typeof body?.title === 'string' ? body.title.trim() : '', text = typeof body?.body === 'string' ? body.body.trim() : '';
-    if (!title || title.length > 80 || !text || text.length > 5000) throw apiError(400, 'VALIDATION_FAILED', 'Invalid input', { ...((!title || title.length > 80) && { title: 'INVALID_VALUE' }), ...((!text || text.length > 5000) && { body: 'INVALID_VALUE' }) });
+    const { title, text } = readCanned(body);
     const { rows: [c] } = await pool.query('INSERT INTO canned_responses (title, body, created_by) VALUES ($1, $2, $3) RETURNING id', [title, text, req.user.id]);
     return { id: c.id };
+  }
+
+  @Put('canned/:id') @Can('support.manage')
+  async updateCanned(@Param('id', ParseUUIDPipe) id: string, @Body() body: Input) {
+    const { title, text } = readCanned(body);
+    const { rowCount } = await pool.query('UPDATE canned_responses SET title = $2, body = $3 WHERE id = $1', [id, title, text]);
+    if (!rowCount) throw apiError(404, 'NOT_FOUND', 'Unknown canned reply');
+    return { id };
   }
 
   @Delete('canned/:id') @HttpCode(204) @Can('support.manage')
