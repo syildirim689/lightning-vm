@@ -4578,12 +4578,28 @@
       "provisioning": "Kuruluyor",
       "error": "Hata",
       "deleting": "Siliniyor",
-      "pending": "Bekliyor"
+      "pending": "Bekliyor",
+      "missing": "Bulunamadı",
+      "deleted": "Silindi"
     },
     "emptyHelp": "İlk sunucunuzu oluşturduğunuzda burada konumu, ağı ve trafiğiyle görünür.",
     "emptyAdmin": "Bir VMware bağlantısı eklendiğinde ana makineler, havuzlar ve sunucular burada görünür.",
     "newServer": "Yeni sunucu",
-    "addConnection": "VMware bağlantısı ekle"
+    "addConnection": "VMware bağlantısı ekle",
+    "powerState": {
+      "poweredOn": "Açık",
+      "poweredOff": "Kapalı",
+      "suspended": "Askıda",
+      "unknown": "Bilinmiyor"
+    },
+    "find": "Ad, IP, sahip ya da güvenlik duvarı ara",
+    "sort": "Sırala",
+    "sortTraffic": "En çok trafik",
+    "sortState": "Önce sorunlular",
+    "sortName": "Ada göre",
+    "export": "CSV indir",
+    "shown": "{total} sunucudan {n} tanesi gösteriliyor",
+    "noMatch": "Aramaya uyan sunucu yok."
   },
   "Energy": {
     "eyebrow": "Altyapı",

@@ -47,17 +47,17 @@ export default function NotificationPolicy({ readOnly }: { readOnly: boolean }) 
             <tbody className="divide-y divide-separator">{events.filter((e) => e.audience === aud).map((e) => <tr key={e.event} className={e.enabled ? '' : 'opacity-60'}>
               <th scope="row" className="py-3 pr-3 text-left font-normal"><span className="block font-medium">{t(`events.${e.event.replace('.', '_')}.title` as 'events.server_ready.title')}</span>
                 <span className="text-xs text-muted">{t(`events.${e.event.replace('.', '_')}.help` as 'events.server_ready.help')}</span></th>
-              <td className="px-2 py-3"><Switch aria-label={t('on')} isSelected={e.enabled} isDisabled={readOnly} onChange={(on) => save(e, { enabled: on })}><Switch.Control><Switch.Thumb/></Switch.Control></Switch></td>
+              <td className="px-2 py-3"><Switch isSelected={e.enabled} isDisabled={readOnly} onChange={(on) => save(e, { enabled: on })}><Switch.Content><Switch.Control><Switch.Thumb/></Switch.Control><span className="sr-only">{`${t('on')}: ${t(`events.${e.event.replace('.', '_')}.title` as 'events.server_ready.title')}`}</span></Switch.Content></Switch></td>
               {channels.map((c) => <td key={c} className="px-2 py-3 text-center">
                 {e.channels.includes(c) ? <div className="flex flex-col items-center gap-1">
                   <Checkbox isSelected={e.allowed.includes(c)} isDisabled={readOnly || !e.enabled} onChange={(on) => save(e, { allowed: flip(e.allowed, c, on) })}>
-                    <Checkbox.Content><Checkbox.Control><Checkbox.Indicator/></Checkbox.Control><span className="sr-only">{`${t('allow')}: ${t(`channel.${c}`)} · ${e.event}`}</span></Checkbox.Content></Checkbox>
+                    <Checkbox.Content><Checkbox.Control><Checkbox.Indicator/></Checkbox.Control><span className="sr-only">{`${t('allow')}: ${t(`channel.${c}`)} · ${t(`events.${e.event.replace('.', '_')}.title` as 'events.server_ready.title')}`}</span></Checkbox.Content></Checkbox>
                   <button type="button" disabled={readOnly || !e.enabled || !e.allowed.includes(c)} onClick={() => save(e, { defaults: flip(e.defaults, c, !e.defaults.includes(c)) })}
                     className={`rounded-full px-2 text-[10px] font-semibold uppercase ${e.defaults.includes(c) ? 'bg-accent-soft text-accent-soft-foreground' : 'text-muted'} disabled:opacity-40`}
                     aria-pressed={e.defaults.includes(c)}>{t('default')}</button>
                 </div> : <span className="text-muted">–</span>}
               </td>)}
-              <td className="px-2 py-3"><Switch aria-label={t('userCanChange')} isSelected={e.userCanChange} isDisabled={readOnly || !e.enabled} onChange={(on) => save(e, { userCanChange: on })}><Switch.Control><Switch.Thumb/></Switch.Control></Switch></td>
+              <td className="px-2 py-3"><Switch isSelected={e.userCanChange} isDisabled={readOnly || !e.enabled} onChange={(on) => save(e, { userCanChange: on })}><Switch.Content><Switch.Control><Switch.Thumb/></Switch.Control><span className="sr-only">{`${t('userCanChange')}: ${t(`events.${e.event.replace('.', '_')}.title` as 'events.server_ready.title')}`}</span></Switch.Content></Switch></td>
             </tr>)}</tbody>
           </table>
         </Card.Content>

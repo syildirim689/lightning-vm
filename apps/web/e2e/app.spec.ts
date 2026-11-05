@@ -1497,6 +1497,15 @@ test.describe('people, settings and smart features (English browser)', () => {
     // An empty topology map says what to do next.
     await page.goto('/topology');
     await expect(page.locator('main').getByRole('link', { name: 'New server' })).toHaveAttribute('href', '/order');
+    // The admin list view stays in the address, finds servers and sorts the busiest first.
+    await page.goto('/admin/topology?view=table');
+    await expect(page.getByRole('tab', { name: 'Table' })).toHaveAttribute('aria-selected', 'true');
+    await page.getByRole('searchbox', { name: 'Search name, IP, owner or firewall' }).fill('no-such-server-zz');
+    await expect(page.getByText('No server matches.').filter({ visible: true })).toBeVisible();
+    await page.getByRole('searchbox', { name: 'Search name, IP, owner or firewall' }).fill('');
+    await page.setViewportSize({ width: 390, height: 900 });
+    await expectNoOverflow(page, 'topology table at 390 px');
+    await page.setViewportSize({ width: 1280, height: 720 });
     // "g" then "b" goes to billing.
     await page.locator('main h1').click();
     await page.keyboard.press('g'); await page.keyboard.press('b');
@@ -1716,7 +1725,7 @@ test.describe('people, settings and smart features (English browser)', () => {
     await expect(page.getByLabel('Reply', { exact: true })).toHaveValue('Hi {name}, about {ticket}: please check the firewall of {server}');
     await expect(page.getByRole('dialog').getByText('Hi Jane Doe, about #1042: please check the firewall of web-1')).toBeVisible();
     await page.getByRole('button', { name: 'Add canned reply' }).click();
-    await expect(page.getByRole('dialog').getByText('Firewall check')).toBeVisible();
+    await expect(page.getByRole('dialog').getByText('Firewall check', { exact: true })).toBeVisible();
     await page.waitForTimeout(500);
     await shot(page, 'support-canned');
     // A saved reply is edited in place; deleting one asks first.

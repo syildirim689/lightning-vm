@@ -50,9 +50,9 @@ export default function ChatConnections() {
                 <p className="truncate font-medium">{c.label}</p>
                 <p className="truncate text-xs text-muted">{name(c.app)}{c.hint && ` · ${c.hint}`}</p>
               </div>
-              <Switch size="sm" isSelected={c.enabled} aria-label={t('enabled', { name: c.label })}
+              <Switch size="sm" isSelected={c.enabled}
                 onChange={(on) => act(c.id, () => apiFetch(`/chat/connections/${c.id}`, { method: 'PATCH', body: { enabled: on } }))}>
-                <Switch.Control><Switch.Thumb/></Switch.Control>
+                <Switch.Content><Switch.Control><Switch.Thumb/></Switch.Control><span className="sr-only">{t('enabled', { name: c.label })}</span></Switch.Content>
               </Switch>
             </div>
             {c.lastError ? <p className="flex items-center gap-1 text-xs text-danger"><I name="triangle-alert" size={13}/>{error({ code: c.lastError } as ApiError)}</p>

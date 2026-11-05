@@ -1,12 +1,16 @@
 "use client";
 // Topology pages. Admin: Internet -> location -> cluster -> host -> servers (live load and traffic from VMware,
 // refreshed every 15 s). Customer: Internet -> location -> own servers, with the firewalls on each link.
-import { Tabs } from '@heroui/react';
-import { useTranslations } from 'next-intl';
+import { Button, SearchField, Tabs } from '@heroui/react';
+import NextLink from 'next/link';
+import { useFormatter, useTranslations } from 'next-intl';
+import { parseAsStringLiteral, useQueryState } from 'nuqs';
 import { useState } from 'react';
 import { I } from '../../components/icon';
 import { rate, Topology, type TopoNode } from '../../components/topology';
-import { ButtonLink, DataTable, Empty, Notice, PageHeader, Stat, StatusChip } from '../../components/ui';
+import { ButtonLink, DataTable, Empty, Notice, PageHeader, SelectInput, Stat, StatusChip } from '../../components/ui';
+import { downloadCsv } from '../../lib/csv';
+import { fold } from '../../lib/note-line';
 import { flag } from '../../lib/flag';
 import { useApiQuery } from '../../lib/query';
 
@@ -23,10 +27,13 @@ const MAX_PER_HOST = 6;
 type Tr = (key: string, values?: Record<string, string | number>) => string;
 const serverTone = (s: Server) => (s.state === 'error' ? 'danger' : s.state !== 'ready' ? 'warning' : s.power === 'poweredOn' ? 'success' : 'muted');
 
+const powerOf = (s: Server, t: Tr) => (s.power ? t(`powerState.${['poweredOn', 'poweredOff', 'suspended'].includes(s.power) ? s.power : 'unknown'}`) : '–');
+const gb = (mb: number) => Math.round(mb / 102.4) / 10;
+
 function serverNode(s: Server, t: Tr): TopoNode {
   return { id: `s-${s.id}`, kind: 'server', label: s.name, tone: serverTone(s), rx: s.rxKBps, tx: s.txKBps, badges: s.firewalls.length ? s.firewalls : undefined,
     sub: s.address ?? t(`states.${s.state}`),
-    details: [[t('address'), s.address ?? '–'], [t('size'), `${s.vcpu} vCPU · ${s.memoryMb / 1024} GB`], [t('power'), s.power ?? '–'],
+    details: [[t('address'), s.address ?? '–'], [t('size'), `${s.vcpu} vCPU · ${gb(s.memoryMb)} GB`], [t('power'), powerOf(s, t)],
       ...(s.owner ? [[t('owner'), s.owner] as [string, string]] : []), ...(s.firewalls.length ? [[t('firewalls'), s.firewalls.join(', ')] as [string, string]] : [])] };
 }
 
@@ -93,17 +100,48 @@ function Totals({ servers, hosts }: { servers: Server[]; hosts?: { cpuUsedMhz: n
   </div>;
 }
 
-function Table({ servers }: { servers: Server[] }) {
+// The list view: find a server by name, address, owner or firewall; sort by traffic to see the busiest first.
+function Table({ servers, admin }: { servers: Server[]; admin: boolean }) {
   const t = useTranslations('Topology');
-  return <DataTable label={t('table')} rows={servers} rowKey={(s) => s.id} empty={t('empty')} minWidth={720}
-    columns={[{ id: 'n', label: t('server') }, { id: 'st', label: t('state') }, { id: 'ip', label: t('address') }, { id: 'rx', label: t('inbound') }, { id: 'tx', label: t('outbound') }, { id: 'fw', label: t('firewalls') }]}
-    cells={(s) => [<span key="n" className="font-medium">{s.name}</span>, <StatusChip key="s" tone={serverTone(s) === 'muted' ? 'default' : serverTone(s) as 'success'}>{s.power ?? s.state}</StatusChip>,
-      s.address ?? '–', rate(s.rxKBps), rate(s.txKBps), s.firewalls.join(', ') || '–']}/>;
+  const tr = t as unknown as Tr;
+  const format = useFormatter();
+  const [find, setFind] = useState('');
+  const [sort, setSort] = useState<'name' | 'traffic' | 'state'>('traffic');
+  const needle = fold(find.trim());
+  const traffic = (s: Server) => (s.rxKBps ?? 0) + (s.txKBps ?? 0);
+  const order = ['danger', 'warning', 'muted', 'success'];
+  const shown = servers.filter((s) => !needle || fold([s.name, s.address, s.owner, ...s.firewalls].filter(Boolean).join(' ')).includes(needle))
+    .sort((a, b) => sort === 'traffic' ? traffic(b) - traffic(a) || a.name.localeCompare(b.name, undefined, { numeric: true })
+      : sort === 'state' ? order.indexOf(serverTone(a)) - order.indexOf(serverTone(b)) || a.name.localeCompare(b.name, undefined, { numeric: true })
+      : a.name.localeCompare(b.name, undefined, { numeric: true }));
+  const busiest = Math.max(1, ...servers.map(traffic));
+  return <div className="flex flex-col gap-3">
+    <div className="flex flex-col gap-2 md:flex-row md:flex-wrap md:items-end">
+      <SearchField aria-label={t('find')} value={find} onChange={setFind} className="w-full md:w-72">
+        <SearchField.Group><SearchField.SearchIcon/><SearchField.Input placeholder={t('find')}/><SearchField.ClearButton/></SearchField.Group>
+      </SearchField>
+      <SelectInput className="w-full md:w-56" label={t('sort')} value={sort} onChange={(v) => setSort(v === 'name' || v === 'state' ? v : 'traffic')}
+        options={[{ id: 'traffic', label: t('sortTraffic') }, { id: 'state', label: t('sortState') }, { id: 'name', label: t('sortName') }]}/>
+      {shown.length > 0 && <Button variant="ghost" className="md:ml-auto" onPress={() => downloadCsv('topology', ['name', 'state', 'power', 'address', 'rx_kbps', 'tx_kbps', 'firewalls', ...(admin ? ['owner'] : [])],
+        shown.map((s) => [s.name, s.state, s.power ?? '', s.address ?? '', s.rxKBps ?? '', s.txKBps ?? '', s.firewalls.join(' '), ...(admin ? [s.owner ?? ''] : [])]))}><I name="download" size={15}/>{t('export')}</Button>}
+    </div>
+    {needle && <p role="status" className="text-sm text-muted">{t('shown', { n: shown.length, total: servers.length })}</p>}
+    <DataTable label={t('table')} rows={shown} rowKey={(s) => s.id} empty={needle ? t('noMatch') : t('empty')} minWidth={admin ? 860 : 720}
+      columns={[{ id: 'n', label: t('server') }, { id: 'st', label: t('state') }, { id: 'ip', label: t('address') }, { id: 'rx', label: t('inbound') }, { id: 'tx', label: t('outbound') }, { id: 'fw', label: t('firewalls') },
+        ...(admin ? [{ id: 'o', label: t('owner') }] : [])]}
+      cells={(s) => [<span key="n" className="flex flex-col"><NextLink href={`/servers/${s.id}`} className="font-medium hover:underline">{s.name}</NextLink>
+          <span className="text-xs text-muted">{s.vcpu} vCPU · {format.number(gb(s.memoryMb))} GB</span></span>,
+        <StatusChip key="s" tone={serverTone(s) === 'muted' ? 'default' : serverTone(s) as 'success'}>{s.state === 'ready' ? powerOf(s, tr) : tr(`states.${s.state}`)}</StatusChip>,
+        s.address ?? '–',
+        <span key="rx" className="flex min-w-24 flex-col gap-1 tabular-nums">{rate(s.rxKBps)}<span aria-hidden className="h-1 rounded-full bg-accent/70" style={{ width: `${Math.round(((s.rxKBps ?? 0) / busiest) * 100)}%` }}/></span>,
+        <span key="tx" className="flex min-w-24 flex-col gap-1 tabular-nums">{rate(s.txKBps)}<span aria-hidden className="h-1 rounded-full bg-success/70" style={{ width: `${Math.round(((s.txKBps ?? 0) / busiest) * 100)}%` }}/></span>,
+        s.firewalls.join(', ') || '–', ...(admin ? [s.owner ?? '–'] : [])]}/>
+  </div>;
 }
 
 export function TopologyPage({ admin }: { admin: boolean }) {
   const t = useTranslations('Topology');
-  const [view, setView] = useState('map');
+  const [view, setView] = useQueryState('view', parseAsStringLiteral(['map', 'table'] as const).withDefault('map'));
   const a = useApiQuery<AdminData>(['topology', 'admin'], admin ? '/admin/topology' : null, { refetchInterval: 15_000 });
   const c = useApiQuery<{ locations: Loc[]; servers: Server[] }>(['topology', 'mine'], admin ? null : '/topology', { refetchInterval: 15_000 });
   const servers = admin ? (a.data?.connections.flatMap((x) => x.servers) ?? []) : (c.data?.servers ?? []);
@@ -115,7 +153,7 @@ export function TopologyPage({ admin }: { admin: boolean }) {
     {!ready ? <p role="status" className="text-sm text-muted">{t('loading')}</p> : <div className="flex flex-col gap-5">
       <Totals servers={servers} hosts={admin ? a.data!.connections.flatMap((x) => x.hosts ?? []) : undefined}/>
       {admin && a.data!.connections.filter((x) => x.error).map((x) => <Notice key={x.id} tone="danger">{t('connectionError', { name: x.name, code: x.error! })}</Notice>)}
-      <Tabs selectedKey={view} onSelectionChange={(k) => setView(String(k))}>
+      <Tabs selectedKey={view} onSelectionChange={(k) => void setView(k === 'table' ? 'table' : null)}>
         <Tabs.ListContainer><Tabs.List aria-label={t('title')}>
           <Tabs.Tab id="map" className="gap-2"><I name="network" size={16}/>{t('map')}<Tabs.Indicator/></Tabs.Tab>
           <Tabs.Tab id="table" className="gap-2"><I name="table" size={16}/>{t('table')}<Tabs.Indicator/></Tabs.Tab>
@@ -124,7 +162,7 @@ export function TopologyPage({ admin }: { admin: boolean }) {
           : <Empty icon={<I name="network" size={28}/>} title={t('empty')}>{admin ? t('emptyAdmin') : t('emptyHelp')}
             <span className="mt-3 flex justify-center">{admin ? <ButtonLink href="/admin/vmware" variant="secondary"><I name="plug" size={16}/>{t('addConnection')}</ButtonLink>
               : <ButtonLink href="/order"><I name="plus" size={16}/>{t('newServer')}</ButtonLink>}</span></Empty>)}</Tabs.Panel>
-        <Tabs.Panel id="table" className="pt-4"><Table servers={servers}/></Tabs.Panel>
+        <Tabs.Panel id="table" className="pt-4"><Table servers={servers} admin={admin}/></Tabs.Panel>
       </Tabs>
       <p className="text-xs text-muted">{t('refresh')}</p>
     </div>}

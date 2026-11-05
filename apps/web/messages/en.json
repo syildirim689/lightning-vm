@@ -4578,12 +4578,28 @@
       "provisioning": "Provisioning",
       "error": "Error",
       "deleting": "Deleting",
-      "pending": "Pending"
+      "pending": "Pending",
+      "missing": "Missing",
+      "deleted": "Deleted"
     },
     "emptyHelp": "Once you create your first server it shows here with its location, network and traffic.",
     "emptyAdmin": "Once a VMware connection is added, its hosts, pools and servers show here.",
     "newServer": "New server",
-    "addConnection": "Add a VMware connection"
+    "addConnection": "Add a VMware connection",
+    "powerState": {
+      "poweredOn": "On",
+      "poweredOff": "Off",
+      "suspended": "Suspended",
+      "unknown": "Unknown"
+    },
+    "find": "Search name, IP, owner or firewall",
+    "sort": "Sort",
+    "sortTraffic": "Most traffic first",
+    "sortState": "Problems first",
+    "sortName": "By name",
+    "export": "Download CSV",
+    "shown": "Showing {n} of {total} servers",
+    "noMatch": "No server matches."
   },
   "Energy": {
     "eyebrow": "Infrastructure",
