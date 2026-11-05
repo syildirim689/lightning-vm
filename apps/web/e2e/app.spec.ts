@@ -1512,10 +1512,10 @@ test.describe('people, settings and smart features (English browser)', () => {
     const column = page.getByRole('checkbox', { name: /for every notification shown$/ }).first();
     await expect(column).toBeAttached();
     const was = await column.isChecked();
-    await column.click();
+    await tick(column);
     await expect(page.getByText(/turned (on|off) for \d+ notifications?/).first()).toBeVisible();
     await expect(column).toBeChecked({ checked: !was });
-    await column.click();
+    await tick(column);
     await expect(column).toBeChecked({ checked: was });
     // An empty virtual datacenter page shows staff where to create one.
     await page.goto('/vdc');
