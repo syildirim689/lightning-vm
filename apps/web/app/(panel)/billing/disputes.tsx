@@ -170,8 +170,11 @@ function Decide({ d, onDone }: { d: Dispute; onDone: () => void }) {
     {decision !== 'reject' && <SelectInput label={t('remedyLabel')} value={effective} onChange={setRemedy} error={field(fields.remedy)}
       options={remedies.map((r) => ({ id: r, label: t(`remedy.${r as 'balance'}`), description: t(`remedyHelp.${r as 'balance'}`) }))}/>}
     <div className="sm:col-span-2"><TextInput label={t('note')} value={note} onChange={setNote} multiline error={field(fields.note)} help={t('noteHelp')}/></div>
-    <div className="sm:col-span-2"><Button isPending={busy} isDisabled={!note.trim() || (decision === 'partial' && !amount)} variant={decision === 'reject' ? 'danger' : 'primary'} onPress={save}>
-      <I name="gavel" size={15}/>{t('saveDecision')}</Button></div>
+    {/* The decision is final (money may move), so it is read back before it is saved. */}
+    <div className="sm:col-span-2"><ConfirmButton isDisabled={busy || !note.trim() || (decision === 'partial' && !amount)} variant={decision === 'reject' ? 'danger' : 'primary'}
+      icon={<I name="gavel" size={15}/>} label={t('saveDecision')} title={t('confirmTitle', { number: d.number })} confirmLabel={t('saveDecision')} cancelLabel={t('cancel')}
+      body={decision === 'reject' ? t('confirmReject') : t('confirmAccept', { amount: format.number(Number(decision === 'partial' ? amount.replace(',', '.') : d.amount) || 0, { style: 'currency', currency: d.currency }),
+        remedy: t(`remedy.${effective as 'balance'}`) })} onConfirm={save}/></div>
   </div>;
 }
 

@@ -1619,9 +1619,18 @@ test.describe('people, settings and smart features (English browser)', () => {
       await page.getByRole('textbox', { name: 'Percent off' }).fill('10');
       await expect(page.getByRole('textbox', { name: 'Code', exact: true })).toHaveValue(code, { timeout: 1000 });
     }).toPass({ timeout: 20_000 });
+    // While it is written, a worked example shows what the customer pays.
+    await expect(page.getByRole('status').filter({ hasText: /the customer pays .*90/ })).toBeVisible();
     await page.getByRole('button', { name: 'Create coupon' }).click();
     await expect(page.getByText(`Coupon ${code} created.`)).toBeVisible();
     await expect(page.getByRole('grid', { name: 'Coupons' }).getByText(code, { exact: true })).toBeVisible();
+    // The list finds a code, narrows to working coupons and copies a code.
+    await page.getByRole('searchbox', { name: 'Search code or note' }).fill(code.toLowerCase());
+    await page.getByRole('button', { name: /^Working \d+$/ }).click();
+    await expect(page.getByRole('grid', { name: 'Coupons' }).getByText(code, { exact: true })).toBeVisible();
+    await page.getByRole('button', { name: `Copy ${code}` }).filter({ visible: true }).click();
+    await expect(page.getByText(`${code} copied.`)).toBeVisible();
+    await page.getByRole('searchbox', { name: 'Search code or note' }).fill('');
     await shot(page, 'coupons');
     await page.goto('/account?tab=transfers');
     await expect(page.getByText('Offered to you', { exact: true })).toBeVisible();

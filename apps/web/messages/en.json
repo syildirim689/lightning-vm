@@ -7026,7 +7026,10 @@
     "note": "Decision for the customer",
     "noteHelp": "Sent in the conversation and shown on the invoice.",
     "saveDecision": "Save the decision",
-    "decided": "Decision saved; the customer was told"
+    "decided": "Decision saved; the customer was told",
+    "confirmTitle": "Save the decision on dispute #{number}?",
+    "confirmAccept": "{amount} is accepted: {remedy}. The customer is told, and the decision cannot be undone.",
+    "confirmReject": "The dispute is rejected. The customer is told with your note, and the decision cannot be undone."
   },
   "Backups": {
     "title": "Backups",
@@ -7285,7 +7288,22 @@
     "deleteTitle": "Delete {code}?",
     "deleteBody": "Nobody has used it yet; it goes away for good.",
     "deleted": "Coupon {code} deleted.",
-    "cancel": "Cancel"
+    "cancel": "Cancel",
+    "example": "Example: on an invoice of {base} the customer pays {pay}{periods, plural, =0 {, on every invoice} one {, on the first invoice only} other {, on the first # invoices}}.",
+    "over100": "It cannot be more than 100 percent.",
+    "usedUp": "Used up",
+    "find": "Search code or note",
+    "show": {
+      "all": "All",
+      "active": "Working",
+      "ended": "Ended or off"
+    },
+    "export": "Download CSV",
+    "noMatch": "No coupon matches.",
+    "copy": "Copy {code}",
+    "copied": "{code} copied.",
+    "usesOf": "Share of {code} used",
+    "activeFor": "{code} on"
   },
   "Transfers": {
     "title": "Hand over to another account",

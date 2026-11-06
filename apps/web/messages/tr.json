@@ -7026,7 +7026,10 @@
     "note": "Müşteriye karar açıklaması",
     "noteHelp": "Konuşmaya gönderilir ve faturada görünür.",
     "saveDecision": "Kararı kaydet",
-    "decided": "Karar kaydedildi; müşteriye bildirildi"
+    "decided": "Karar kaydedildi; müşteriye bildirildi",
+    "confirmTitle": "#{number} itirazı için karar kaydedilsin mi?",
+    "confirmAccept": "{amount} kabul edilir: {remedy}. Müşteriye bildirilir ve karar geri alınamaz.",
+    "confirmReject": "İtiraz reddedilir. Müşteriye notunuzla bildirilir ve karar geri alınamaz."
   },
   "Backups": {
     "title": "Yedekler",
@@ -7285,7 +7288,22 @@
     "deleteTitle": "{code} silinsin mi?",
     "deleteBody": "Henüz kullanılmadı; kalıcı olarak silinir.",
     "deleted": "{code} kuponu silindi.",
-    "cancel": "Vazgeç"
+    "cancel": "Vazgeç",
+    "example": "Örnek: {base} tutarında bir faturada müşteri {pay} öder{periods, plural, =0 {, her faturada} one {, yalnızca ilk faturada} other {, ilk # faturada}}.",
+    "over100": "Yüzde 100'den fazla olamaz.",
+    "usedUp": "Hakkı bitti",
+    "find": "Kod ya da not ara",
+    "show": {
+      "all": "Tümü",
+      "active": "Geçerli",
+      "ended": "Bitmiş ya da kapalı"
+    },
+    "export": "CSV indir",
+    "noMatch": "Aramaya uyan kupon yok.",
+    "copy": "{code} kodunu kopyala",
+    "copied": "{code} kopyalandı.",
+    "usesOf": "{code} kullanım oranı",
+    "activeFor": "{code} açık"
   },
   "Transfers": {
     "title": "Başka bir hesaba devret",
