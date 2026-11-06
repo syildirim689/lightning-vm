@@ -4364,7 +4364,7 @@
     },
     "saveShortcut": "Ctrl+S saves",
     "duplicate": "Duplicate",
-    "copyName": "{name} copy",
+    "copyName": "{name} (copy)",
     "copyNameN": "{name} (copy {n})",
     "copied": "\"{name}\" created. Remember to attach it to servers.",
     "riskShort": "Open to everyone: {ports}",

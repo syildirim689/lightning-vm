@@ -4364,7 +4364,7 @@
     },
     "saveShortcut": "Ctrl+S ile kaydedebilirsiniz",
     "duplicate": "Kopyala",
-    "copyName": "{name} kopyası",
+    "copyName": "{name} (kopya)",
     "copyNameN": "{name} (kopya {n})",
     "copied": "\"{name}\" oluşturuldu. Sunuculara bağlamayı unutmayın.",
     "riskShort": "Herkese açık: {ports}",
