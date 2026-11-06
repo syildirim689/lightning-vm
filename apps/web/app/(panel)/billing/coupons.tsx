@@ -39,9 +39,9 @@ function NewCoupon({ onDone }: { onDone: () => void }) {
   return <Section title={t('new')} description={t('newHelp')}>
     <form onSubmit={save} className="flex flex-col gap-4" noValidate>
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <div className="flex items-end gap-2">
+        <div className="flex items-start gap-2">
           <TextInput className="min-w-0 flex-1" label={t('code')} value={v.code} onChange={(x) => set({ code: x.toUpperCase() })} maxLength={32} spellCheck={false} error={field(fields.code)}/>
-          <Button variant="ghost" isIconOnly aria-label={t('generate')} onPress={() => set({ code: randomCode() })}><I name="dices" size={16}/></Button>
+          <Button variant="ghost" isIconOnly className="mt-6" aria-label={t('generate')} onPress={() => set({ code: randomCode() })}><I name="dices" size={16}/></Button>
         </div>
         <SelectInput label={t('kind')} value={v.kind} onChange={(x) => set({ kind: x })} options={[{ id: 'percent', label: t('percent') }, { id: 'fixed', label: t('fixed') }]}/>
         <TextInput label={v.kind === 'percent' ? t('valuePercent') : t('valueFixed')} value={v.value} onChange={(x) => set({ value: x })} maxLength={12} error={field(fields.value)}/>
