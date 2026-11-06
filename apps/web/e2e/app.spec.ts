@@ -567,6 +567,9 @@ test.describe('server lifecycle (simulator, Turkish customer)', () => {
     await page.getByRole('button', { name: 'Özeti kopyala' }).click();
     await expect(page.getByText('Sunucu özeti panoya kopyalandı.')).toBeVisible();
     // Snapshot: taken as an operation, then listed as the current state.
+    // A ready name fills the field and is marked as chosen.
+    await page.getByRole('button', { name: 'Güncelleme öncesi', exact: true }).click();
+    await expect(page.getByLabel('Ad', { exact: true })).toHaveValue('Güncelleme öncesi');
     await page.getByLabel('Ad', { exact: true }).fill('guncelleme-oncesi');
     await page.getByRole('button', { name: 'Anlık görüntü al', exact: true }).click();
     // The page, not the toast that the live notification shows at the same moment.
@@ -1139,6 +1142,15 @@ test.describe('people, settings and smart features (English browser)', () => {
     await expect(page.getByRole('button', { name: 'Download CSV' })).toBeVisible();
     await page.goto('/admin/abuse');
     await expect(page.getByRole('searchbox', { name: 'Search findings' })).toBeVisible();
+    // A number tile filters to its findings and can be cleared.
+    await page.getByRole('button', { name: /Risky ports open/ }).click();
+    await page.getByRole('button', { name: 'Clear filter: Risky ports open' }).click();
+    await expect(page.getByRole('button', { name: /Clear filter/ })).toHaveCount(0);
+    // Operations filter by state and search.
+    await page.goto('/admin/servers?tab=operations');
+    await expect(page.getByRole('searchbox', { name: /Search server, owner/ })).toBeVisible();
+    await page.getByRole('group', { name: 'State' }).getByRole('button', { name: /^Failed/ }).click();
+    await expect(page.getByRole('group', { name: 'State' }).getByRole('button', { name: /^Failed/ })).toHaveAttribute('aria-pressed', 'true');
     await page.goto('/admin/settings?tab=announcement');
     await page.getByText('Show the announcement').click();
     await page.getByRole('button', { name: 'Save' }).click();
@@ -1672,6 +1684,10 @@ test.describe('people, settings and smart features (English browser)', () => {
     await page.getByLabel('First update').fill('We are moving the uplinks; short interruptions are possible.');
     await page.getByRole('button', { name: 'Open the incident' }).click();
     await expect(page.getByText('Incident opened.')).toBeVisible();
+    // The card says how long it has been open; the ready wording fills the update for its status.
+    await expect(page.getByText(/Open for \d+m/)).toBeVisible();
+    await page.getByRole('button', { name: 'Use ready wording' }).last().click();
+    await expect(page.getByRole('textbox', { name: 'Update' })).toHaveValue(/^A problem has been reported/);
     await shot(page, 'incidents-admin');
     await page.goto('/');
     await expect(page.getByText('Planned network work').first()).toBeVisible();

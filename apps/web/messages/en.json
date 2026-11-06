@@ -1986,7 +1986,14 @@
       "bulkHelp": "Filter first (state, tag, search); at most 200 at a time.",
       "onlyStarred": "Starred only",
       "import": "Import",
-      "bulkDeleteNote": "The servers are shut down and deleted when the grace period ends; their owners are told. With a grace period of 0, bulk delete is off."
+      "bulkDeleteNote": "The servers are shut down and deleted when the grace period ends; their owners are told. With a grace period of 0, bulk delete is off.",
+      "opFind": "Search server, owner, action or error code",
+      "opShow": {
+        "all": "All",
+        "failed": "Failed",
+        "active": "Running"
+      },
+      "opNone": "No operation matches."
     },
     "finding": {
       "vm_missing": "VM missing in VMware",
@@ -4089,7 +4096,17 @@
       "remove": "Delete",
       "removeTitle": "Delete the incident?",
       "removeBody": "The incident and all its updates are removed from the status page.",
-      "cancel": "Cancel"
+      "cancel": "Cancel",
+      "useTemplate": "Use ready wording",
+      "template": {
+        "investigating": "A problem has been reported and we are looking into the cause. We will post progress here.",
+        "identified": "The cause has been found and we are working on a fix.",
+        "monitoring": "A fix is in place and we are watching that everything is back to normal.",
+        "resolved": "The problem is fixed and services are running normally. Thank you for your patience."
+      },
+      "statusPage": "Open the public status page",
+      "openFor": "Open for {d, plural, =0 {} other {#d }}{h, plural, =0 {} other {#h }}{m}m",
+      "lasted": "Lasted {d, plural, =0 {} other {#d }}{h, plural, =0 {} other {#h }}{m}m"
     },
     "support": {
       "departments": "Departments",
@@ -4719,7 +4736,8 @@
     "find": "Search findings",
     "findPlaceholder": "Server, customer, address or port",
     "export": "Download CSV",
-    "noMatch": "No finding matches the search."
+    "noMatch": "No finding matches the search.",
+    "clearFilter": "Clear filter: {what}"
   },
   "Vdc": {
     "title": "Virtual datacenters",
@@ -5208,7 +5226,15 @@
     "optional": "Optional.",
     "auto": "Snapshot",
     "take": "Take snapshot",
-    "full": "At most {max} snapshots per server: remove one first."
+    "full": "At most {max} snapshots per server: remove one first.",
+    "old": "{days} days old",
+    "oldNotice": "{n, plural, one {A snapshot is} other {# snapshots are}} older than 3 days. The disk slows while a snapshot is kept; remove it when you are done, and take a backup to keep a copy for long.",
+    "presets": "Ready names",
+    "preset": {
+      "update": "Before update",
+      "config": "Before config change",
+      "install": "Before install"
+    }
   },
   "Terminal": {
     "eyebrow": "SYSTEM",
@@ -7061,7 +7087,13 @@
     "started": "Backup started; it is ready in a few minutes.",
     "removing": "Removing the backup",
     "restoring": "Restore started",
-    "full": "The limit is reached: remove an older backup first."
+    "full": "The limit is reached: remove an older backup first.",
+    "lastGood": "Last good backup",
+    "never": "None yet",
+    "totalSize": "Total size",
+    "failedCount": "Failed",
+    "stale": "No good backup in the last 7 days. Add “{preset}” under Schedules and one is taken every night.",
+    "took": "took {min} min"
   },
   "Reseller": {
     "title": "Reseller",

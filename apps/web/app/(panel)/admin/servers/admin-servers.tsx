@@ -1,5 +1,5 @@
 "use client";
-import { Button, Card, Tabs } from '@heroui/react';
+import { Button, Card, SearchField, Tabs } from '@heroui/react';
 import NextLink from 'next/link';
 import { useFormatter, useTranslations } from 'next-intl';
 import { parseAsString, useQueryState } from 'nuqs';
@@ -10,6 +10,7 @@ import { can } from '../../../../lib/permissions';
 import { useMe } from '../../../../lib/me';
 import { apiFetch, useErrorText } from '../../../../lib/api';
 import { downloadCsv } from '../../../../lib/csv';
+import { fold } from '../../../../lib/note-line';
 import { useApiAction, useApiQuery } from '../../../../lib/query';
 import { FavoriteStar, StateBadge, type Server } from '../../servers-ui';
 import { ServerFilters, ServerTotals, stateGroup, useServerFilters } from '../../server-filters';
@@ -41,6 +42,11 @@ export default function AdminServers() {
   const bulk = useApiAction((ids: string[]) => apiFetch<{ started: number; skipped: number }>('/admin/servers/actions', { method: 'POST', body: { action: bulkAction, serverIds: ids, ...(tagging && { tag: bulkTag.trim() }) }, headers: { 'idempotency-key': crypto.randomUUID() } }),
     { invalidate: [['admin']], success: (r) => (tagging ? t('list.select.tagDone', { n: r.started }) : t('admin.bulkDone', { started: r.started, skipped: r.skipped })) });
   const [onlyStarred, setOnlyStarred] = useState(false);
+  const [opShow, setOpShow] = useState<'all' | 'failed' | 'active'>('all');
+  const [opFind, setOpFind] = useState('');
+  const opNeedle = fold(opFind.trim());
+  const opGroup = (o: Operation) => (o.status === 'failed' ? 'failed' : o.status === 'pending' || o.status === 'running' ? 'active' : 'done');
+  const shownOps = ops.filter((o) => (opShow === 'all' || opGroup(o) === opShow) && (!opNeedle || fold(`${o.serverName ?? ''} ${o.ownerEmail ?? ''} ${t(`kind.${o.kind as 'create'}`)} ${o.errorCode ?? ''}`).includes(opNeedle)));
   // Starred first; optionally only them.
   const shown = filters.shown.filter((x) => !onlyStarred || x.favorite).sort((x, y) => Number(!!y.favorite) - Number(!!x.favorite));
   const failed = ops.filter((o) => o.status === 'failed').length;
@@ -93,11 +99,25 @@ export default function AdminServers() {
 
           <Tabs.Panel id="operations" className="pt-4">
             <h2 className="sr-only">{t('admin.operations')}</h2>
-            <DataTable label={t('admin.operations')} rows={ops} rowKey={(o) => o.id} minWidth={760}
+            <div className="mb-3 flex flex-col gap-2 md:flex-row md:items-center">
+              <SearchField aria-label={t('admin.opFind')} value={opFind} onChange={setOpFind} className="w-full md:w-72">
+                <SearchField.Group><SearchField.SearchIcon/><SearchField.Input placeholder={t('admin.opFind')}/><SearchField.ClearButton/></SearchField.Group>
+              </SearchField>
+              <div role="group" aria-label={t('col.state')} className="flex flex-wrap gap-1.5">
+                {(['all', 'failed', 'active'] as const).map((k) => <button key={k} type="button" aria-pressed={opShow === k} onClick={() => setOpShow(k)}
+                  className={`min-h-10 rounded-lg border px-3 text-sm transition-colors ${opShow === k ? 'border-accent bg-accent-soft text-accent-soft-foreground' : 'border-border hover:border-accent'}`}>
+                  {t(`admin.opShow.${k}`)} <span className="tabular-nums text-muted">{k === 'all' ? ops.length : ops.filter((o) => opGroup(o) === k).length}</span></button>)}
+              </div>
+            </div>
+            <DataTable label={t('admin.operations')} rows={shownOps} rowKey={(o) => o.id} minWidth={760} empty={ops.length ? t('admin.opNone') : '…'}
               columns={[{ id: 'when', label: t('col.when') }, { id: 'op', label: t('col.operation') }, { id: 'name', label: t('col.name') }, { id: 'state', label: t('col.state') }, { id: 'detail', label: t('col.detail') }, { id: 'act', label: <span className="sr-only">{t('admin.retry')}</span> }]}
-              cells={(o) => [format.dateTime(new Date(o.createdAt), { dateStyle: 'short', timeStyle: 'medium' }), t(`kind.${o.kind as 'create'}`), o.serverName ?? '–',
+              cells={(o) => [<span key="w" className="flex flex-col"><span>{format.dateTime(new Date(o.createdAt), { dateStyle: 'short', timeStyle: 'medium' })}</span><span className="text-xs text-muted">{format.relativeTime(new Date(o.createdAt))}</span></span>,
+                t(`kind.${o.kind as 'create'}`),
+                <span key="n" className="flex flex-col">{o.serverId ? <NextLink href={`/servers/${o.serverId}`} className="font-medium text-accent hover:underline">{o.serverName ?? '–'}</NextLink> : o.serverName ?? '–'}
+                  {o.ownerEmail && <span className="text-xs text-muted">{o.ownerEmail}</span>}</span>,
                 <StatusChip key="s" tone={opTone(o.status)}>{t(`opStatus.${o.status as 'pending'}`)}{o.attempts > 1 ? ` · ${t('attempt', { n: o.attempts })}` : ''}</StatusChip>,
-                o.errorCode ? t('errorCode', { message: error({ code: o.errorCode }), code: o.errorCode }) : o.step ? t(`step.${o.step as 'queued'}`) : '',
+                o.errorCode ? <span key="d" className="flex max-w-md flex-col"><span>{t('errorCode', { message: error({ code: o.errorCode }), code: o.errorCode })}</span>
+                  {o.errorDetail && <span className="line-clamp-2 break-all font-mono text-xs text-muted" title={o.errorDetail}>{o.errorDetail}</span>}</span> : o.step ? t(`step.${o.step as 'queued'}`) : '',
                 o.status === 'failed' ? <Button key="r" size="sm" variant="secondary" onPress={() => retry.mutate(o.id)}><I name="rotate-cw" size={14}/>{t('admin.retry')}</Button> : null]}/>
           </Tabs.Panel>
 
@@ -111,7 +131,7 @@ export default function AdminServers() {
               : <DataTable label={t('admin.reconciliation')} rows={findings} rowKey={(f) => String(f.id)}
                   columns={[{ id: 'when', label: t('col.when') }, { id: 'kind', label: t('admin.finding') }, { id: 'name', label: t('col.name') }, { id: 'detail', label: t('col.detail') }]}
                   cells={(f) => [format.dateTime(new Date(f.lastSeen), { dateStyle: 'short', timeStyle: 'short' }), <StatusChip key="k" tone="warning">{t(`finding.${f.kind as 'vm_missing'}`)}</StatusChip>,
-                    f.serverName ?? f.detail.name ?? f.vmMoref ?? '–', `${f.connectionName}${f.detail.actual ? ` · ${f.detail.recorded} → ${f.detail.actual}` : ''}`]}/>}
+                    f.serverId ? <NextLink key="n" href={`/servers/${f.serverId}`} className="font-medium text-accent hover:underline">{f.serverName ?? f.serverId}</NextLink> : f.serverName ?? f.detail.name ?? f.vmMoref ?? '–', `${f.connectionName}${f.detail.actual ? ` · ${f.detail.recorded} → ${f.detail.actual}` : ''}`]}/>}
           </Tabs.Panel>
           {can(me?.permissions, 'servers.manage_all') && <Tabs.Panel id="import" className="pt-4"><h2 className="sr-only">{t('admin.import')}</h2><ImportVms/></Tabs.Panel>}
         </Tabs>

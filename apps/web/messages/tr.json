@@ -1986,7 +1986,14 @@
       "bulkHelp": "Önce süzün (durum, etiket, arama); bir seferde en fazla 200.",
       "onlyStarred": "Yalnızca favoriler",
       "import": "İçe aktar",
-      "bulkDeleteNote": "Sunucular kapatılır ve geri alma süresi bitince silinir; sahiplerine bildirim gider. Bekleme süresi 0 ise toplu silme yapılmaz."
+      "bulkDeleteNote": "Sunucular kapatılır ve geri alma süresi bitince silinir; sahiplerine bildirim gider. Bekleme süresi 0 ise toplu silme yapılmaz.",
+      "opFind": "Sunucu, sahip, işlem veya hata kodu ara",
+      "opShow": {
+        "all": "Tümü",
+        "failed": "Başarısız",
+        "active": "Süren"
+      },
+      "opNone": "Süzgece uyan işlem yok."
     },
     "finding": {
       "vm_missing": "VM VMware'de yok",
@@ -4089,7 +4096,17 @@
       "remove": "Sil",
       "removeTitle": "Olay silinsin mi?",
       "removeBody": "Olay ve tüm güncellemeleri durum sayfasından kaldırılır.",
-      "cancel": "Vazgeç"
+      "cancel": "Vazgeç",
+      "useTemplate": "Hazır metni kullan",
+      "template": {
+        "investigating": "Bir sorun bildirildi; nedenini araştırıyoruz. Gelişmeleri buradan paylaşacağız.",
+        "identified": "Sorunun nedeni bulundu; düzeltme üzerinde çalışıyoruz.",
+        "monitoring": "Düzeltme uygulandı; her şeyin normale döndüğünü izliyoruz.",
+        "resolved": "Sorun giderildi, hizmetler normal çalışıyor. Anlayışınız için teşekkür ederiz."
+      },
+      "statusPage": "Herkese açık durum sayfasını aç",
+      "openFor": "{d, plural, =0 {} other {# gün }}{h, plural, =0 {} other {# sa }}{m} dk'dır açık",
+      "lasted": "Süre: {d, plural, =0 {} other {# gün }}{h, plural, =0 {} other {# sa }}{m} dk"
     },
     "support": {
       "departments": "Departmanlar",
@@ -4719,7 +4736,8 @@
     "find": "Bulgularda ara",
     "findPlaceholder": "Sunucu, müşteri, adres veya port",
     "export": "CSV indir",
-    "noMatch": "Aramaya uyan bulgu yok."
+    "noMatch": "Aramaya uyan bulgu yok.",
+    "clearFilter": "Süzgeci kaldır: {what}"
   },
   "Vdc": {
     "title": "Sanal veri merkezleri",
@@ -5208,7 +5226,15 @@
     "optional": "İsteğe bağlı.",
     "auto": "Anlık görüntü",
     "take": "Anlık görüntü al",
-    "full": "Sunucu başına en fazla {max} anlık görüntü: önce birini kaldırın."
+    "full": "Sunucu başına en fazla {max} anlık görüntü: önce birini kaldırın.",
+    "old": "{days} günlük",
+    "oldNotice": "{n, plural, one {Bir anlık görüntü} other {# anlık görüntü}} 3 günden eski. Anlık görüntü durdukça disk yavaşlar; işiniz bittiyse kaldırın, uzun süre saklamak için yedek alın.",
+    "presets": "Hazır adlar",
+    "preset": {
+      "update": "Güncelleme öncesi",
+      "config": "Ayar değişikliği öncesi",
+      "install": "Kurulum öncesi"
+    }
   },
   "Terminal": {
     "eyebrow": "SİSTEM",
@@ -7061,7 +7087,13 @@
     "started": "Yedekleme başladı; birkaç dakika içinde hazır olur.",
     "removing": "Yedek siliniyor",
     "restoring": "Geri yükleme başladı",
-    "full": "Sınıra ulaşıldı: önce eski bir yedeği silin."
+    "full": "Sınıra ulaşıldı: önce eski bir yedeği silin.",
+    "lastGood": "Son başarılı yedek",
+    "never": "Hiç yok",
+    "totalSize": "Toplam boyut",
+    "failedCount": "Başarısız",
+    "stale": "Son 7 günde başarılı yedek yok. Zamanlamalar bölümüne “{preset}” ekleyin; her gece kendiliğinden alınır.",
+    "took": "{min} dk sürdü"
   },
   "Reseller": {
     "title": "Bayilik",

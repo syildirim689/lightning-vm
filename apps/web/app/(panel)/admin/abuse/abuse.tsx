@@ -63,10 +63,14 @@ export default function Abuse() {
   const [ack, setAck] = useState<Finding | null>(null);
   const [note, setNote] = useState('');
   const [find, setFind] = useState('');
+  const [only, setOnly] = useState<'' | 'port' | 'cpu' | 'unack'>('');
+  const [acking, setAcking] = useState(false);
   const { error } = useErrorText();
   const d = q.data;
   const hit = (f: Finding) => !find || fold([f.serverName, f.owner, f.location, f.address, f.port, f.detail.label].join(' ')).includes(fold(find));
-  const list = (d?.findings ?? []).filter((f) => (tab === 'open' ? !f.resolvedAt : !!f.resolvedAt) && hit(f));
+  const kindOk = (f: Finding) => !only || (only === 'unack' ? !f.acknowledgedAt : f.kind === only);
+  const list = (d?.findings ?? []).filter((f) => (tab === 'open' ? !f.resolvedAt : !!f.resolvedAt) && hit(f) && kindOk(f));
+  const pick = (k: 'port' | 'cpu' | 'unack') => { setOnly(only === k ? '' : k); setTab('open'); };
   const when = (x: string) => format.relativeTime(new Date(x));
   async function scan() {
     try { await apiFetch('/admin/abuse/scan', { method: 'POST' }); toast.success(t('scanning')); setTimeout(() => client.invalidateQueries({ queryKey: key }), 15000); }
@@ -74,17 +78,18 @@ export default function Abuse() {
   }
   async function acknowledge() {
     if (!ack) return;
+    setAcking(true);
     await apiFetch(`/admin/abuse/${ack.id}/acknowledge`, { method: 'PUT', body: { note } }).then(() => { toast.success(t('acknowledged')); client.invalidateQueries({ queryKey: key }); }, (e) => toast.danger(error(e)));
-    setAck(null); setNote('');
+    setAck(null); setNote(''); setAcking(false);
   }
   const open = (d?.findings ?? []).filter((f) => !f.resolvedAt);
   return <>
     <PageHeader eyebrow={t('eyebrow')} title={t('title')} description={t('intro')} actions={<Button variant="secondary" onPress={scan}><I name="radar" size={16}/>{t('scanNow')}</Button>}/>
     {!d ? <p role="status" className="text-sm text-muted">{t('loading')}</p> : <div className="flex flex-col gap-6">
       <div className="grid gap-3 sm:grid-cols-3">
-        <Stat label={t('openPorts')} value={open.filter((f) => f.kind === 'port').length} icon={<I name="door-open" size={18}/>} tone={open.some((f) => f.kind === 'port') ? 'warning' : 'default'}/>
-        <Stat label={t('mining')} value={open.filter((f) => f.kind === 'cpu').length} icon={<I name="pickaxe" size={18}/>} tone={open.some((f) => f.kind === 'cpu') ? 'danger' : 'default'}/>
-        <Stat label={t('unacknowledged')} value={open.filter((f) => !f.acknowledgedAt).length} icon={<I name="bell-ring" size={18}/>}/>
+        <Stat label={t('openPorts')} value={open.filter((f) => f.kind === 'port').length} icon={<I name="door-open" size={18}/>} tone={open.some((f) => f.kind === 'port') ? 'warning' : 'default'} pressed={only === 'port'} onPress={() => pick('port')}/>
+        <Stat label={t('mining')} value={open.filter((f) => f.kind === 'cpu').length} icon={<I name="pickaxe" size={18}/>} tone={open.some((f) => f.kind === 'cpu') ? 'danger' : 'default'} pressed={only === 'cpu'} onPress={() => pick('cpu')}/>
+        <Stat label={t('unacknowledged')} value={open.filter((f) => !f.acknowledgedAt).length} icon={<I name="bell-ring" size={18}/>} pressed={only === 'unack'} onPress={() => pick('unack')}/>
       </div>
       <Tabs selectedKey={tab} onSelectionChange={(k) => setTab(String(k))}>
         <Tabs.ListContainer><Tabs.List aria-label={t('title')}>
@@ -95,12 +100,13 @@ export default function Abuse() {
           <SearchField aria-label={t('find')} value={find} onChange={setFind} className="w-full sm:w-80">
             <SearchField.Group><SearchField.SearchIcon/><SearchField.Input placeholder={t('findPlaceholder')}/><SearchField.ClearButton/></SearchField.Group>
           </SearchField>
+          {only && <Button size="sm" variant="secondary" onPress={() => setOnly('')}><I name="x" size={14}/>{t('clearFilter', { what: t(only === 'port' ? 'openPorts' : only === 'cpu' ? 'mining' : 'unacknowledged') })}</Button>}
           {list.length > 0 && <Button size="sm" variant="ghost" className="sm:ml-auto" onPress={() => downloadCsv('abuse', ['kind', 'finding', 'address', 'server', 'owner', 'location', 'first_seen', 'last_seen', 'resolved', 'acknowledged_by', 'note'],
             list.map((f) => [f.kind, f.kind === 'port' ? f.detail.label ?? '' : `${f.detail.avg ?? 0}% / ${f.detail.hours ?? 0}h`, f.address ? `${f.address}:${f.port ?? ''}` : '', f.serverName, f.owner, f.location, f.firstSeen, f.lastSeen, f.resolvedAt ?? '', f.acknowledgedBy ?? '', f.note]))}>
             <I name="download" size={14}/>{t('export')}</Button>}
         </div>
         <Tabs.Panel id={tab} className="pt-4">
-          <DataTable label={t('title')} rows={list} rowKey={(f) => f.id} empty={find ? t('noMatch') : tab === 'open' ? t('none') : t('noneResolved')} minWidth={880}
+          <DataTable label={t('title')} rows={list} rowKey={(f) => f.id} empty={find || only ? t('noMatch') : tab === 'open' ? t('none') : t('noneResolved')} minWidth={880}
             columns={[{ id: 'k', label: t('finding') }, { id: 's', label: t('server') }, { id: 'f', label: t('firstSeen') }, { id: 'l', label: t('lastSeen') }, { id: 'a', label: t('status') }, { id: 'x', label: <span className="sr-only">{t('actions')}</span> }]}
             cells={(f) => [
               f.kind === 'port' ? <span key="k" className="flex flex-col"><span className="flex items-center gap-1.5 font-medium"><I name="door-open" size={14} className="text-warning"/>{f.detail.label || t('port')}</span><Mono>{f.address}:{f.port}</Mono></span>
@@ -125,7 +131,7 @@ export default function Abuse() {
         <Modal.Body className="flex flex-col gap-3">
           <p className="text-sm text-muted">{t('ackHelp')}</p>
           <TextInput label={t('note')} value={note} onChange={setNote} multiline/>
-          <div className="flex justify-end"><Button onPress={acknowledge}><I name="check" size={16}/>{t('acknowledge')}</Button></div>
+          <div className="flex justify-end"><Button isPending={acking} onPress={acknowledge}><I name="check" size={16}/>{t('acknowledge')}</Button></div>
         </Modal.Body>
       </Modal.Dialog></Modal.Container>
     </Modal.Backdrop>
