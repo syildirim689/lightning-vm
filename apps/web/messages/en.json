@@ -3193,7 +3193,10 @@
     "duplicate": "Duplicate",
     "duplicateOne": "Duplicate the {name} role",
     "copyName": "{name} copy",
-    "permCount": "{n}/{total} permissions"
+    "permCount": "{n}/{total} permissions",
+    "more": "+{n} more",
+    "findPermission": "Search permissions",
+    "noPermission": "No permission matches."
   },
   "Permissions": {
     "group": {
@@ -4361,7 +4364,7 @@
     },
     "saveShortcut": "Ctrl+S saves",
     "duplicate": "Duplicate",
-    "copyName": "{name} (copy)",
+    "copyName": "{name} copy",
     "copyNameN": "{name} (copy {n})",
     "copied": "\"{name}\" created. Remember to attach it to servers.",
     "riskShort": "Open to everyone: {ports}",
@@ -4380,7 +4383,9 @@
     "quickHas": "The {name} rule is already there",
     "scopeAll": "Open to everyone",
     "scopeSome": "Open to {n, plural, one {# address} other {# addresses}}",
-    "ruleLimit": "rule limit reached"
+    "ruleLimit": "rule limit reached",
+    "find": "Search name, server or rule",
+    "copyOf": "Copy: {name}"
   },
   "Updates": {
     "title": "Updates",
@@ -6806,7 +6811,13 @@
       "restart": "The server restarts once.",
       "offline": "The server is off and stays off.",
       "shrinkNote": "Less memory or fewer CPUs: check that what runs on it still fits.",
-      "apply": "Change size"
+      "apply": "Change size",
+      "diff": "{sign}{amount} a month",
+      "unchanged": "The values match the current size; change at least one.",
+      "confirmTitle": "Change the resources of {name}?",
+      "confirmCharge": "{amount} is charged now",
+      "perMonth": "/mo",
+      "cancel": "Cancel"
     },
     "reinstall": {
       "title": "Reinstall",
@@ -7382,7 +7393,13 @@
       "accept": "{name} is yours now.",
       "decline": "Offer for {name} declined.",
       "cancel": "Offer for {name} withdrawn."
-    }
+    },
+    "waiting": "This server is offered to {email}; they can accept until {date}.",
+    "withdrawTitle": "Withdraw the offer for {name}?",
+    "withdrawBody": "{email} can no longer accept it. You can offer it again later.",
+    "daysLeft": "{n, plural, =0 {ends today} one {# day left} other {# days left}}",
+    "declineTitle": "Decline the offer for {name}?",
+    "declineBody": "{who} is told; the offer cannot be reopened and has to be sent again."
   },
   "Snippets": {
     "title": "Ready-made commands",

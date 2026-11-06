@@ -1051,7 +1051,12 @@ test.describe('people, settings and smart features (English browser)', () => {
     await page.getByRole('button', { name: 'New role' }).click();
     const dialog = page.getByRole('dialog');
     await dialog.getByLabel('Name').fill('E2E Viewer');
+    // The permission search narrows the list; a miss says so.
+    await dialog.getByRole('searchbox', { name: 'Search permissions' }).fill('zzzz');
+    await expect(dialog.getByText('No permission matches.')).toBeVisible();
+    await dialog.getByRole('searchbox', { name: 'Search permissions' }).fill('catalog');
     await tick(dialog.getByRole('checkbox', { name: /See the catalog/ }));
+    await dialog.getByRole('searchbox', { name: 'Search permissions' }).fill('');
     await dialog.getByRole('button', { name: 'Save' }).click();
     // The saved role in the list is the proof; the toast may already be gone on a slow run.
     await expect(page.getByRole('heading', { name: 'E2E Viewer' })).toBeVisible();

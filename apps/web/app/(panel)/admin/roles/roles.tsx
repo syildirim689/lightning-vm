@@ -1,7 +1,7 @@
 "use client";
 // Roles: named permission sets. Built-in ones can be edited (except Administrator, which always has
 // everything); custom ones can be added and removed. Users get roles on the Users page.
-import { Button, Card, Checkbox, Chip, Modal, toast } from '@heroui/react';
+import { Button, Card, Checkbox, Chip, Modal, SearchField, toast } from '@heroui/react';
 import { useQueryClient } from '@tanstack/react-query';
 import { motion } from 'motion/react';
 import NextLink from 'next/link';
@@ -13,6 +13,7 @@ import { apiFetch, useErrorText } from '../../../../lib/api';
 import { useMe } from '../../../../lib/me';
 import { can } from '../../../../lib/permissions';
 import { useApiQuery } from '../../../../lib/query';
+import { fold } from '../../../../lib/note-line';
 
 type Limits = { maxServers?: number; maxVcpu?: number; maxMemoryMb?: number; maxDiskGb?: number; maxSnapshots?: number; maxFirewalls?: number; maxSshKeys?: number;
   operationsPerHour?: number; sessionHours?: number; require2fa?: boolean; allowedLocations?: string[]; allowedIps?: string[] };
@@ -57,7 +58,8 @@ export default function Roles() {
             <div className="flex flex-wrap gap-1">
               {r.permissions.includes('*') ? <Chip size="sm" color="accent" variant="soft">{t('everything')}</Chip>
                 : r.permissions.length === 0 ? <span className="text-xs text-muted">{t('nothing')}</span>
-                : r.permissions.map((p) => <Chip key={p} size="sm" variant="secondary">{tp(`p.${p.replace('.', '_')}` as 'p.servers_create')}</Chip>)}
+                : <>{r.permissions.slice(0, 8).map((p) => <Chip key={p} size="sm" variant="secondary">{tp(`p.${p.replace('.', '_')}` as 'p.servers_create')}</Chip>)}
+                  {r.permissions.length > 8 && <Chip size="sm" variant="soft" title={r.permissions.slice(8).map((p) => tp(`p.${p.replace('.', '_')}` as 'p.servers_create')).join(', ')}>{t('more', { n: r.permissions.length - 8 })}</Chip>}</>}
             </div>
             {Object.keys(r.limits ?? {}).length > 0 && <div className="flex flex-wrap gap-1 border-t border-separator pt-3">
               <span className="mr-1 inline-flex items-center gap-1 text-xs font-medium text-muted"><I name="gauge" size={13}/>{t('limits.title')}:</span>
@@ -104,6 +106,9 @@ function RoleEditor({ role, from, groups, mine, onClose }: { role: Role | null; 
     require2fa, allowedLocations: locs, allowedIps: ips.split(/[\s,]+/).filter(Boolean) });
   const [fields, setFields] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
+  const [find, setFind] = useState('');
+  const needle = fold(find.trim());
+  const label = (p: string) => `${tp(`p.${p.replace('.', '_')}` as 'p.servers_create')} ${tp(`help.${p.replace('.', '_')}` as 'help.servers_create')} ${p}`;
   const toggle = (p: string, on: boolean) => setV((x) => ({ ...x, permissions: on ? [...x.permissions, p] : x.permissions.filter((y) => y !== p) }));
   async function save() {
     setBusy(true); setFields({});
@@ -126,16 +131,21 @@ function RoleEditor({ role, from, groups, mine, onClose }: { role: Role | null; 
           </fieldset>
           <fieldset className="flex flex-col gap-3">
             <legend className="mb-1 text-sm font-semibold">{t('permissions')} <span className="font-normal text-muted">· {t('selected', { n: v.permissions.length })}</span></legend>
+            <SearchField aria-label={t('findPermission')} value={find} onChange={setFind} className="w-full sm:w-80">
+              <SearchField.Group><SearchField.SearchIcon/><SearchField.Input placeholder={t('findPermission')}/><SearchField.ClearButton/></SearchField.Group>
+            </SearchField>
+            {needle && !Object.values(groups).flat().some((p) => fold(label(p)).includes(needle)) && <p className="text-sm text-muted">{t('noPermission')}</p>}
             <div className="grid gap-3 md:grid-cols-2">
-              {Object.entries(groups).map(([g, list]) => <div key={g} className="rounded-xl border border-border p-3">
+              {Object.entries(groups).filter(([, list]) => !needle || list.some((p) => fold(label(p)).includes(needle))).map(([g, list]) => <div key={g} className="rounded-xl border border-border p-3">
                 <div className="mb-2 flex items-center justify-between">
-                  <p className="text-xs font-semibold uppercase tracking-wider text-muted">{tp(`group.${g}` as 'group.servers')}</p>
+                  <p className="text-xs font-semibold uppercase tracking-wider text-muted">{tp(`group.${g}` as 'group.servers')}
+                    <span className="ml-1.5 font-normal normal-case tabular-nums">{list.filter((p) => v.permissions.includes(p)).length}/{list.length}</span></p>
                   <button type="button" className="text-xs text-accent hover:underline" onClick={() => {
                     const all = list.filter(grantable).every((p) => v.permissions.includes(p));
                     setV((x) => ({ ...x, permissions: all ? x.permissions.filter((p) => !list.includes(p)) : [...new Set([...x.permissions, ...list.filter(grantable)])] }));
                   }}>{t('toggleGroup')}</button>
                 </div>
-                <ul className="flex flex-col gap-2">{list.map((p) => <li key={p}>
+                <ul className="flex flex-col gap-2">{list.filter((p) => !needle || fold(label(p)).includes(needle)).map((p) => <li key={p}>
                   <Checkbox isSelected={v.permissions.includes(p)} onChange={(on) => toggle(p, on)} isDisabled={!grantable(p)}>
                     <Checkbox.Content><Checkbox.Control><Checkbox.Indicator/></Checkbox.Control>
                       <span className="flex flex-col"><span className="text-sm">{tp(`p.${p.replace('.', '_')}` as 'p.servers_create')}</span>

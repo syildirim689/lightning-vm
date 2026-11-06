@@ -24,6 +24,14 @@ export function TransferServer({ serverId, serverName, staff, busy }: { serverId
   const [note, setNote] = useState('');
   const [fields, setFields] = useState<Record<string, string>>({});
   const [sending, setSending] = useState(false);
+  const format = useFormatter();
+  // An offer already waiting for this server: shown instead of a second one.
+  const offers = useApiQuery<{ incoming: Transfer[]; outgoing: Transfer[] }>(['transfers'], '/transfers', { enabled: !staff }).data;
+  const waiting = offers?.outgoing.find((x) => x.serverId === serverId && x.status === 'pending' && Date.parse(x.expiresAt) > Date.now());
+  async function withdraw(id: string) {
+    try { await apiFetch(`/transfers/${id}/cancel`, { method: 'POST' }); toast.success(t('done.cancel', { name: serverName })); client.invalidateQueries({ queryKey: ['transfers'] }); }
+    catch (e) { toast.danger(error(e)); }
+  }
   async function send() {
     setSending(true); setFields({});
     try {
@@ -41,7 +49,12 @@ export function TransferServer({ serverId, serverName, staff, busy }: { serverId
   }
   const reason = fields.server ? field(fields.server) : undefined;
   return <Section title={t(staff ? 'staffTitle' : 'title')} description={t(staff ? 'staffHelp' : 'help')}>
-    <form className="flex flex-col gap-3" onSubmit={(e) => { e.preventDefault(); }} noValidate>
+    {waiting ? <div className="flex flex-col gap-3 rounded-xl border border-accent/40 bg-accent-soft/40 p-3 sm:flex-row sm:items-center">
+      <I name="send" size={18} className="shrink-0 text-accent"/>
+      <p className="flex-1 text-sm">{t('waiting', { email: waiting.toName || waiting.toEmail, date: format.dateTime(new Date(waiting.expiresAt), { dateStyle: 'medium' }) })}</p>
+      <ConfirmButton size="sm" variant="secondary" label={t('withdraw')} title={t('withdrawTitle', { name: serverName })} body={t('withdrawBody', { email: waiting.toEmail })}
+        confirmLabel={t('withdraw')} cancelLabel={t('cancel')} onConfirm={() => withdraw(waiting.id)}/>
+    </div> : <form className="flex flex-col gap-3" onSubmit={(e) => { e.preventDefault(); }} noValidate>
       <div className="grid gap-3 sm:grid-cols-2">
         <TextInput label={t('email')} type="email" value={email} onChange={setEmail} maxLength={254} spellCheck={false} error={field(fields.email)}/>
         {!staff && <TextInput label={t('note')} value={note} onChange={setNote} maxLength={300} help={t('noteHelp')}/>}
@@ -53,7 +66,7 @@ export function TransferServer({ serverId, serverName, staff, busy }: { serverId
           title={t(staff ? 'moveTitle' : 'offerTitle', { name: serverName })} body={t(staff ? 'moveBody' : 'offerBody', { email })}
           confirmLabel={t(staff ? 'move' : 'offer')} cancelLabel={t('cancel')} onConfirm={send}/>
       </div>
-    </form>
+    </form>}
   </Section>;
 }
 
@@ -73,6 +86,7 @@ function Row({ x, incoming }: { x: Transfer; incoming: boolean }) {
   }
   const other = incoming ? x.fromName || x.fromEmail : x.toName || x.toEmail;
   const pending = x.status === 'pending';
+  const daysLeft = Math.max(0, Math.ceil((Date.parse(x.expiresAt) - Date.now()) / 86_400_000));
   return <li className="flex flex-col gap-2 px-3 py-3 sm:flex-row sm:items-center">
     <span className="grid size-8 shrink-0 place-items-center rounded-full bg-default text-muted" aria-hidden>{incoming ? <I name="inbox" size={15}/> : <I name="send" size={15}/>}</span>
     <span className="flex min-w-0 flex-1 flex-col">
@@ -84,10 +98,12 @@ function Row({ x, incoming }: { x: Transfer; incoming: boolean }) {
     </span>
     <div className="flex flex-wrap items-center gap-2">
       <StatusChip tone={tone[x.status]}>{t(`status.${x.status}`)}</StatusChip>
+      {pending && <StatusChip tone={daysLeft <= 2 ? 'warning' : 'default'}>{t('daysLeft', { n: daysLeft })}</StatusChip>}
       {pending && incoming && <>
         <ConfirmButton size="sm" variant="primary" icon={<I name="check" size={14}/>} label={t('accept')} title={t('acceptTitle', { name: x.serverName })} body={t('acceptBody', { price: format.number(Number(x.priceMonthly), { style: 'currency', currency: x.currency }) })}
           confirmLabel={t('accept')} cancelLabel={t('cancel')} isDisabled={busy} onConfirm={() => act('accept')}/>
-        <Button size="sm" variant="ghost" isDisabled={busy} onPress={() => act('decline')}>{t('decline')}</Button>
+        <ConfirmButton size="sm" variant="ghost" label={t('decline')} title={t('declineTitle', { name: x.serverName })} body={t('declineBody', { who: other })}
+          confirmLabel={t('decline')} cancelLabel={t('cancel')} isDisabled={busy} onConfirm={() => act('decline')}/>
       </>}
       {pending && !incoming && <Button size="sm" variant="ghost" isDisabled={busy} onPress={() => act('cancel')}>{t('withdraw')}</Button>}
     </div>

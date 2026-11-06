@@ -3193,7 +3193,10 @@
     "duplicate": "Çoğalt",
     "duplicateOne": "{name} rolünü çoğalt",
     "copyName": "{name} kopya",
-    "permCount": "{n}/{total} izin"
+    "permCount": "{n}/{total} izin",
+    "more": "+{n} izin",
+    "findPermission": "İzin ara",
+    "noPermission": "Aramaya uyan izin yok."
   },
   "Permissions": {
     "group": {
@@ -4361,7 +4364,7 @@
     },
     "saveShortcut": "Ctrl+S ile kaydedebilirsiniz",
     "duplicate": "Kopyala",
-    "copyName": "{name} (kopya)",
+    "copyName": "{name} kopyası",
     "copyNameN": "{name} (kopya {n})",
     "copied": "\"{name}\" oluşturuldu. Sunuculara bağlamayı unutmayın.",
     "riskShort": "Herkese açık: {ports}",
@@ -4380,7 +4383,9 @@
     "quickHas": "{name} kuralı zaten var",
     "scopeAll": "Herkese açık",
     "scopeSome": "{n} adrese açık",
-    "ruleLimit": "kural sınırı doldu"
+    "ruleLimit": "kural sınırı doldu",
+    "find": "Ad, sunucu veya kural ara",
+    "copyOf": "Kopyala: {name}"
   },
   "Updates": {
     "title": "Güncellemeler",
@@ -6806,7 +6811,13 @@
       "restart": "Sunucu bir kez yeniden başlar.",
       "offline": "Sunucu kapalı ve kapalı kalır.",
       "shrinkNote": "Daha az bellek ya da işlemci: üzerinde çalışanların sığdığından emin olun.",
-      "apply": "Kaynakları değiştir"
+      "apply": "Kaynakları değiştir",
+      "diff": "Ayda {sign}{amount}",
+      "unchanged": "Değerler şu anki ile aynı; değiştirmek için en az birini değiştirin.",
+      "confirmTitle": "{name} kaynakları değiştirilsin mi?",
+      "confirmCharge": "Şimdi {amount} tahsil edilir",
+      "perMonth": "/ay",
+      "cancel": "Vazgeç"
     },
     "reinstall": {
       "title": "Yeniden kur",
@@ -7382,7 +7393,13 @@
       "accept": "{name} artık sizin.",
       "decline": "{name} teklifi reddedildi.",
       "cancel": "{name} teklifi geri çekildi."
-    }
+    },
+    "waiting": "Bu sunucu {email} hesabına teklif edildi; {date} tarihine kadar kabul edilebilir.",
+    "withdrawTitle": "{name} teklifi geri çekilsin mi?",
+    "withdrawBody": "{email} artık kabul edemez. İsterseniz sonra yeniden teklif edebilirsiniz.",
+    "daysLeft": "{n, plural, =0 {bugün bitiyor} other {# gün kaldı}}",
+    "declineTitle": "{name} teklifi reddedilsin mi?",
+    "declineBody": "{who} bilgilendirilir; teklif yeniden açılamaz, yeniden göndermesi gerekir."
   },
   "Snippets": {
     "title": "Hazır komutlar",

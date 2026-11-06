@@ -6,7 +6,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useFormatter, useTranslations } from 'next-intl';
 import { useState } from 'react';
 import { I } from '../../components/icon';
-import { CheckboxInput, NumberInput, Notice, Section, SelectInput, TextInput } from '../../components/ui';
+import { CheckboxInput, ConfirmButton, NumberInput, Notice, Section, SelectInput, TextInput } from '../../components/ui';
 import { apiFetch, type ApiError, useErrorText } from '../../lib/api';
 import { useApiQuery } from '../../lib/query';
 import type { Server } from './servers-ui';
@@ -33,7 +33,8 @@ export function ServerResize({ server, busy }: { server: Server; busy: boolean }
   const [shape, setShape] = useState({ vcpu: server.vcpu, memoryMb: server.memoryMb, diskGb: server.diskGb });
   const [sending, setSending] = useState(false);
   const body = type === 'package' ? { type, packageId } : { type, ...shape };
-  const ready = type === 'package' ? !!packageId : true;
+  const unchanged = type === 'custom' && shape.vcpu === server.vcpu && shape.memoryMb === server.memoryMb && shape.diskGb === server.diskGb;
+  const ready = type === 'package' ? !!packageId : !unchanged;
   const quote = useQuery<Quote, ApiError>({ queryKey: ['resize-quote', server.id, body], enabled: ready, retry: false,
     queryFn: () => apiFetch<Quote>(`/servers/${server.id}/resize/quote`, { method: 'POST', body }) });
   const money = (v: string) => format.number(Number(v), { style: 'currency', currency: quote.data?.currency ?? server.currency });
@@ -66,12 +67,18 @@ export function ServerResize({ server, busy }: { server: Server; busy: boolean }
       {ready && quote.error && <Notice tone="warning">{error(quote.error)}</Notice>}
       {q && <dl className="grid gap-3 rounded-xl border border-border p-3 text-sm sm:grid-cols-3">
         <div><dt className="text-muted">{t('resize.now')}</dt><dd className="mt-0.5">{server.vcpu} vCPU · {server.memoryMb / 1024} GB · {server.diskGb} GB · {money(server.priceMonthly)}</dd></div>
-        <div><dt className="text-muted">{t('resize.after')}</dt><dd className="mt-0.5 font-medium">{q.shape.vcpu} vCPU · {q.shape.memoryMb / 1024} GB · {q.shape.diskGb} GB · {money(q.priceMonthly)}</dd></div>
+        <div><dt className="text-muted">{t('resize.after')}</dt><dd className="mt-0.5 font-medium">{q.shape.vcpu} vCPU · {q.shape.memoryMb / 1024} GB · {q.shape.diskGb} GB · {money(q.priceMonthly)}</dd>
+          {Number(q.priceMonthly) !== Number(server.priceMonthly) && <dd className={`text-xs font-medium ${Number(q.priceMonthly) > Number(server.priceMonthly) ? 'text-warning' : 'text-success'}`}>
+            {t('resize.diff', { sign: Number(q.priceMonthly) > Number(server.priceMonthly) ? '+' : '−', amount: money(String(Math.abs(Number(q.priceMonthly) - Number(server.priceMonthly)))) })}</dd>}</div>
         <div><dt className="text-muted">{t('resize.chargeNow')}</dt><dd className="mt-0.5 font-medium">{Number(q.chargeNow) > 0 ? money(q.chargeNow) : t('resize.nothingNow')}</dd>
           {Number(q.chargeNow) > 0 && q.periodEnd && <dd className="text-xs text-muted">{t('resize.until', { date: format.dateTime(new Date(q.periodEnd), { dateStyle: 'medium' }) })}</dd>}</div>
       </dl>}
       {q && <p className="text-xs text-muted">{server.powerState === 'poweredOn' ? t('resize.restart') : t('resize.offline')}{shrinks ? ` ${t('resize.shrinkNote')}` : ''}</p>}
-      <div><Button isDisabled={!q || busy || sending || server.state !== 'ready'} isPending={sending} onPress={apply}><I name="gauge" size={16}/>{t('resize.apply')}</Button></div>
+      {unchanged && <p className="text-xs text-muted">{t('resize.unchanged')}</p>}
+      <div><ConfirmButton icon={<I name="gauge" size={16}/>} label={t('resize.apply')} isDisabled={!q || !ready || busy || sending || server.state !== 'ready'}
+        title={t('resize.confirmTitle', { name: server.name })}
+        body={q ? `${q.shape.vcpu} vCPU · ${q.shape.memoryMb / 1024} GB · ${q.shape.diskGb} GB · ${money(q.priceMonthly)}${t('resize.perMonth')}. ${Number(q.chargeNow) > 0 ? t('resize.confirmCharge', { amount: money(q.chargeNow) }) : t('resize.nothingNow')}. ${server.powerState === 'poweredOn' ? t('resize.restart') : t('resize.offline')}` : ''}
+        confirmLabel={t('resize.apply')} cancelLabel={t('resize.cancel')} onConfirm={apply}/></div>
     </div>
   </Section>;
 }
