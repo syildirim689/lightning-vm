@@ -1686,9 +1686,9 @@ test.describe('people, settings and smart features (English browser)', () => {
     await expect(page.getByText('Incident opened.')).toBeVisible();
     // The card says how long it has been open; the ready wording fills the update for its status.
     await expect(page.getByText(/Open for \d+m/)).toBeVisible();
-    // The newest incident is the first card (the form's own button comes before it); older demo incidents may follow.
+    // The newest incident is the first card (the form's own button comes before it); 'First update' must not match.
     await page.getByRole('button', { name: 'Use ready wording' }).nth(1).click();
-    await expect(page.getByRole('textbox', { name: 'Update' }).first()).toHaveValue(/^A problem has been reported/);
+    await expect(page.getByRole('textbox', { name: 'Update', exact: true }).first()).toHaveValue(/^A problem has been reported/);
     await shot(page, 'incidents-admin');
     await page.goto('/');
     await expect(page.getByText('Planned network work').first()).toBeVisible();
