@@ -39,7 +39,7 @@ kurulur, yeniden başlatma gerekmez.
 | sentinel (infrastructure) | Better Auth'un ücretli bulut servisine ve API anahtarına bağlı; giriş trafiği dışarı gider. Karşılığı: captcha, Redis hız sınırları, 2FA kilidi, rol IP sınırı, yeni cihaz bildirimi. |
 | audit-logs / email / sms (infrastructure) | Ücretli ve barındırılan servis; panel verisi dışarı çıkar. Kendi karşılıkları var (yukarıda). |
 | organization | Büyük bir model değişikliği; mevcut rol ve sınır sistemiyle çakışır. Çok kullanıcılı müşteri hesapları planlanırsa ayrı bir iş olarak ele alınmalı. |
-| api-key | Panelin müşterilere açık bir REST API'si henüz yok. Anahtar desteği oturum korumasının (CSRF, rol sınırları) yeniden tasarlanmasını gerektirir; ayrı bir iş. |
+| api-key | Panelin kendi kişisel API anahtarları var (Geliştirici sayfası, `Authorization: Bearer lvm_…`; `apps/api/src/developer.ts`). Eklentiye gerek yok. |
 | oauth-provider, cimd, jwt | Panel başka uygulamalar için kimlik sağlayıcı değil; oturumlarımızı dışarıda doğrulayan bir servis yok. |
 | scim | Kurumsal dizin eşitlemesi; LDAP girişi ve grup → rol eşlemesi bunu karşılıyor. |
 | bearer | Çerez + CSRF başlığı kullanılıyor; bearer token, tarayıcıda saklandığında çalınma riski ekler. |

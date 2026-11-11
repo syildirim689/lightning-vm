@@ -288,8 +288,8 @@ CI bilerek elle tetiklenir (GitHub Actions → *Run workflow*). Katkı kurallar�
   görülebilir. Sunucu oluşturma vCenter ister (standalone ESXi'de yalnızca okuma ve güç işlemleri).
 - **Konsol:** VMware HTML Console SDK lisansı gereği depoda yok; kurulumu yapan kişi ekler
   ([docs/console.md](docs/console.md)).
-- **Faturalama yok:** ödeme altyapıları ayarlanıp doğrulanabilir ama otomatik tahsilat, fatura ve bakiye henüz
-  yok. Bayi (reseller) yapısı ve e-posta adresi doğrulama da yok.
+- **E-posta adresi doğrulama yok:** kayıtla açılan hesabın e-posta adresi doğrulanmaz. (SSO, dizin ve bayi
+  üzerinden gelen hesaplar doğrulanmış sayılır.)
 - **WhatsApp:** Meta Cloud API ve onaylı bir mesaj şablonu gerekir. **Telegram:** botta webhook tanımlı olmamalı.
 - Sürümlü, imzalı kurulum paketi (GHCR imajlarıyla) henüz yok; kurulum ve güncelleme kaynak koddan derler.
 

@@ -16,7 +16,7 @@ Bu öğelerin hepsi bağlantının keşfedilmiş envanterinde bulunmalıdır (`N
 | Fiziksel toplam | hostların fiziksel çekirdekleri (hyper-thread sayılmaz) | hostların RAM toplamı | seçilen datastore'ların kapasitesi |
 | Yönetim ve güvenlik payı | fiziksel × `reserve_cpu_pct` | fiziksel × `reserve_memory_pct` | fiziksel × `reserve_storage_pct` |
 | Satışa açılan | (fiziksel − pay) × **CPU oranı** | (fiziksel − pay) × **RAM oranı** | (fiziksel − pay) × **depolama oranı** |
-| Rezerve | platformun oluşturduğu sunucular (9. aşamaya kadar 0) | aynı | aynı |
+| Rezerve | platformun oluşturduğu, silinmemiş sunucular | aynı | aynı |
 | Gerçek kullanım | o hostlardaki mevcut VM'lerin vCPU toplamı (şablonlar hariç) | VM'lerin RAM toplamı | yazılmış ve thin olarak tahsis edilmiş alan ayrı ayrı |
 | Kalan satılabilir | satışa açılan − kullanım − rezerve (0'ın altına inmez) | aynı | satışa açılan − tahsis edilen − rezerve |
 
@@ -61,7 +61,7 @@ fiziksel çekirdeklerde çalışır. Arayüz bunu sipariş ekranında açıkça 
 - Özel kaynak fiyatı SQL içinde `numeric` ile hesaplanır; ikilik kayan nokta (float) kullanılmaz.
   Örnek: 3 vCPU × 5,00 + 6 GB × 2,00 + 70 GB × 0,10 = **34,00**; bu değer test edildi.
 - Arayüz tutarı seçilen dile göre biçimlendirir. Örnek: Türkçe `€12,10`, İngilizce `€12.10`.
-- Faturalama, vergi ve ödeme henüz yoktur.
+- Faturalama, vergi ve ödeme: [billing.md](billing.md), [payments.md](payments.md).
 
 ## IP havuzları
 - **Tanım:** her IP havuzu bir kaynak havuzuna bağlıdır ve şunları içerir: IPv4 alt ağı (CIDR),
@@ -70,14 +70,14 @@ fiziksel çekirdeklerde çalışır. Arayüz bunu sipariş ekranında açıkça 
   olamaz ve ağ geçidi aralığın içinde olamaz (`IP_OUTSIDE_SUBNET`).
 - **Çakışma:** aynı kaynak havuzundaki aralıklar çakışamaz (`RANGE_OVERLAPS`). Bu kontrol bir kilit
   altında yapılır; aynı anda gelen üç istekten yalnızca biri kaydedilir (test edildi).
-- **Henüz yok:** IPv6 ve adres ataması. Atama, sunucu oluşturmayla birlikte atomik rezervasyon olarak
-  9. aşamada gelecek.
+- **Atama:** adres, sunucu oluşturulurken aynı işlemde ayrılır. Havuzda IPv6 öneki varsa sunucuya `::10`'dan
+  başlayarak ilk boş IPv6 adresi de verilir. Ayrıntılar: [ip-management.md](ip-management.md).
 
 ## Kotalar ve projeler
 - **Kota sırası:** proje kotası, yoksa kullanıcı kotası, yoksa varsayılan kota uygulanır. Boş bırakılan
   bir sınır sınırsızdır. Sınırlar: sunucu sayısı, vCPU, RAM ve disk.
-- **Fiyat teklifi:** teklif ekranı yeni bir sunucunun hangi sınırları aşacağını gösterir. Kullanım
-  9. aşamaya kadar 0'dır.
+- **Fiyat teklifi:** teklif ekranı yeni bir sunucunun hangi sınırları aşacağını gösterir. Kullanım, silinmemiş
+  sunuculardan hesaplanır.
 - **Projeler:** projeler sahibine aittir. Sorgular sahipliği kendisi kontrol eder; başka bir kullanıcının
   proje kimliğini bilmek ona erişim sağlamaz (`404`).
 
@@ -87,4 +87,4 @@ fiziksel çekirdeklerde çalışır. Arayüz bunu sipariş ekranında açıkça 
   müşteriye gösterilmez.
 - **`POST /api/catalog/quote`:** paketi veya özel yapılandırmayı sunucuda doğrular ve fiyatlar; kotayı
   ve kapasiteyi kontrol eder.
-- **Sunucu oluşturma:** **henüz yok** (9. aşama). Ekran bunu açıkça söyler.
+- **Sunucu oluşturma:** [provisioning.md](provisioning.md).

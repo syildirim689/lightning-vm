@@ -11,8 +11,8 @@ Tarayıcı ─▶ Caddy ─▶ API (NestJS) ──token──▶ vmware (Go + go
   - İstek gövdelerini loglamaz; logda kimlik bilgisi bulunmadığı test edildi.
   - Kökü olmayan (`scratch`) imajda uid 1000 ile ve salt okunur dosya sistemiyle çalışır.
 - **Tarayıcı:** ESXi/vCenter yönetim ağına hiçbir zaman doğrudan erişmez.
-- **Okuma ve yazma:** bu aşamada yalnızca okunur. Platform ESXi/vCenter üzerinde hiçbir şeyi
-  değiştirmez. Sanal makine oluşturma 9. aşamada gelecek.
+- **Okuma ve yazma:** keşif yalnızca okur. Sanal makine oluşturma, güç ve diğer yazma işlemleri
+  [provisioning.md](provisioning.md) içinde anlatılır; sunucu oluşturma vCenter ister.
 
 ## Kullanılan API
 - **vSphere Web Services API (SOAP, `/sdk`):** govmomi ile kullanılır. Hem ESXi'de hem vCenter'da
@@ -194,7 +194,7 @@ Simülatör gerçek donanım doğrulamasının yerine geçmez. Gerçek bir test 
 4. vCenter VMCA kök sertifikasıyla `ca` modu ve ad doğrulaması çalışıyor mu?
 5. Sertifika yenilendikten sonra `TLS_PIN_MISMATCH` geliyor mu?
 6. Ücretsiz lisanslı ESXi'de `writeApi = restricted` görünüyor mu? Gerçek bir yazma denemesi
-   `RestrictedVersion` hatası veriyor mu? (9. aşamada)
+   `RestrictedVersion` hatası veriyor mu?
 7. vCenter'a bağlı bir hostu ayrıca standalone eklemek reddediliyor mu (`HOSTS_ALREADY_MANAGED`)?
 8. Yalnızca okuma yetkili bir hesapla yazma işlemleri "desteklenmiyor" görünüyor mu?
 9. Yanlış parola `INVALID_LOGIN` veriyor mu, ve hesap kilitleme politikası tetiklenmeden mi?

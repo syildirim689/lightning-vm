@@ -28,9 +28,10 @@ Tarayıcı ──wss://<panel>/console/ws (aynı alan adı ve TLS)──▶ Cadd
 ## Yetki
 - **Yönetici:** yetkili olduğu bağlantılardaki açık VM'lerin konsolunu açabilir. Bağlantının servis
   hesabında `VirtualMachine.Interact.ConsoleInteract` yetkisi yoksa `CONSOLE_NOT_PERMITTED` döner.
-- **Müşteri:** **henüz yok.** Müşterinin "kendi sunucusu" kavramı (sunucu kayıtları ve sahiplik)
-  9. aşamada (provisioning) gelecek. O zaman müşteri yalnızca kendi sunucusunun konsolunu açabilecek;
-  sahiplik backend'de kontrol edilecek, nesne kimliğini bilmek yetmeyecek.
+- **Müşteri:** yalnızca kendi sunucusunun konsolunu açar (`POST /api/servers/:id/console`). Sahiplik
+  backend'de kontrol edilir; sunucu kimliğini bilmek yetmez. Sunucu `ready` durumunda olmalıdır,
+  ayarlarda müşteri konsolu kapatılabilir ve ödenmemiş fatura yüzünden bekletilen sunucuda `BILLING_HOLD`
+  döner.
 - **Normal kullanıcı:** yönetici konsol uç noktalarından `403` alır (test edildi).
 
 ## Hatalar birbirinden ayrılır
@@ -54,8 +55,8 @@ arayüz bunları çevirerek gösterir.
   (Redis `console:revoke` kanalı üzerinden).
 - **Yönetici:** Yönetim → VMware sayfasındaki "Açık konsollar" listesinden herhangi bir konsolu
   kapatabilir.
-- **Kullanıcı devre dışı bırakılınca:** API'de bu işlem için `revokeConsoles({ userId })` hazır.
-  Kullanıcı yönetimi ekranı geldiğinde buna bağlanacak.
+- **Hesap değişince:** yönetici bir kullanıcıyı yasaklar, siler, oturumlarını kapatır veya parolasını
+  değiştirirse o kullanıcının açık konsolları da kapanır.
 - **En uzun süre:** varsayılan 60 dakika (`CONSOLE_MAX_MINUTES`). Süre dolunca konsol yeniden
   açılabilir ve yeni bir bilet alınır.
 - **Eşzamanlı konsol sınırı:** kullanıcı başına 3 (`CONSOLE_MAX_PER_USER`), toplamda 100.
