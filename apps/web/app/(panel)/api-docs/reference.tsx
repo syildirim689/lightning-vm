@@ -224,8 +224,8 @@ export default function Reference() {
                   className="min-w-0 scroll-mt-4 rounded-xl border border-border bg-surface">
                   <summary className="flex cursor-pointer list-none flex-wrap items-center gap-x-3 gap-y-1 p-3">
                     <MethodBadge method={e.method}/>
-                    <code className="min-w-0 font-mono text-sm [overflow-wrap:anywhere]">{e.path}</code>
-                    <span className="min-w-0 flex-1 text-sm text-muted">{e.summary[lang]}</span>
+                    <code className="min-w-0 flex-1 font-mono text-sm [overflow-wrap:anywhere] sm:flex-none">{e.path}</code>
+                    <span className="min-w-0 basis-full text-sm text-muted sm:flex-1 sm:basis-0">{e.summary[lang]}</span>
                     {!e.allowed && <span className="flex items-center gap-1 text-xs text-warning"><I name="lock" size={12}/>{t('notYours')}</span>}
                     {e.internal && <span className="text-xs text-muted">{t('internalBadge')}</span>}
                   </summary>
