@@ -508,7 +508,7 @@ test.describe('VMware connections (simulator, English browser)', () => {
     await expect(vc).toContainText('Simülatör vCenter');
     // An ESXi that is not connected: ignore it, then undo; then add it with the form filled in.
     const esxi = page.getByRole('row').filter({ hasText: /ESXi \d/ }).filter({ hasText: 'New' }).first();
-    const address = (await esxi.getByRole('cell').first().locator('code, .font-mono').first().textContent())!.trim();
+    const address = (await esxi.locator('code').first().textContent())!.trim(); // the address cell is the row header
     await page.getByRole('button', { name: `Ignore ${address}` }).click();
     await expect(page.getByText('Ignored; the automatic scan will not count it as new.')).toBeVisible();
     await page.getByRole('button', { name: /^Ignored\s*1$/ }).click();
