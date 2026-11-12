@@ -1466,7 +1466,20 @@
       "maxServers": "Maximum servers",
       "maxVcpu": "Maximum vCPU",
       "maxMemoryMb": "Max memory",
-      "maxDiskGb": "Maximum disk (GB)"
+      "maxDiskGb": "Maximum disk (GB)",
+      "empty": "No quotas yet.",
+      "actions": "Actions",
+      "edit": "Edit",
+      "editOf": "Edit the quota of {name}",
+      "editTitle": "Edit quota",
+      "remove": "Remove quota",
+      "removeOf": "Remove the quota of {email}",
+      "removeTitle": "Remove the quota of {email}?",
+      "removeBody": "They go back to the default quota and their role’s limits. Their running servers are not touched.",
+      "removed": "Quota removed: {email}",
+      "searchUser": "Type an e-mail to search",
+      "hasOwn": "This user already has a quota of their own; saving replaces it.",
+      "fromDefault": "This user has no quota of their own yet; the fields start from the default."
     },
     "removeConfirm": "Remove “{name}”? This cannot be undone.",
     "cancel": "Cancel",
@@ -3227,7 +3240,9 @@
     "serversOf": "Show the {n} servers of {email}",
     "inactiveFilter": "Not seen for 30 days",
     "newFilter": "Joined in the last 7 days",
-    "revokeAllBody": "{email} is signed out of {n, plural, one {their session} other {all # sessions}} and has to sign in again."
+    "revokeAllBody": "{email} is signed out of {n, plural, one {their session} other {all # sessions}} and has to sign in again.",
+    "impersonateTitle": "Sign in as {email}?",
+    "impersonateBody": "This tab shows the panel as they see it until you stop. What you do there is done as them, and it is recorded in the audit log."
   },
   "Roles": {
     "eyebrow": "People",
@@ -5228,6 +5243,7 @@
       "catalog_pool_ip_options": "Extra IPv4 offer changed",
       "catalog_pool_location": "Pool location changed",
       "catalog_quota_set": "Quota changed",
+      "catalog_quota_removed": "Quota removed",
       "console_revoked": "Console sessions ended",
       "console_session_issued": "Console session started",
       "console_opened": "Console opened",

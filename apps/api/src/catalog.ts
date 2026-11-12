@@ -430,6 +430,14 @@ export class CatalogAdminController {
     await audit(req, 'catalog.quota_set', 'success', req.user.id, { scope: 'user', subjectId: id, ...l });
     return l;
   }
+
+  // The user goes back to the default quota (and their role's limits).
+  @Delete('quotas/users/:id') @HttpCode(204) @Can('catalog.manage')
+  async removeUserQuota(@Req() req: AuthedRequest, @Param('id', ParseUUIDPipe) id: string) {
+    const { rowCount } = await pool.query("DELETE FROM quotas WHERE scope = 'user' AND subject_id = $1", [id]);
+    if (!rowCount) throw apiError(404, 'NOT_FOUND', 'This user has no quota of their own');
+    await audit(req, 'catalog.quota_removed', 'success', req.user.id, { scope: 'user', subjectId: id });
+  }
 }
 
 

@@ -1466,7 +1466,20 @@
       "maxServers": "En çok sunucu",
       "maxVcpu": "En çok vCPU",
       "maxMemoryMb": "En çok RAM",
-      "maxDiskGb": "En çok disk (GB)"
+      "maxDiskGb": "En çok disk (GB)",
+      "empty": "Henüz kota yok.",
+      "actions": "İşlemler",
+      "edit": "Düzenle",
+      "editOf": "{name} kotasını düzenle",
+      "editTitle": "Kotayı düzenle",
+      "remove": "Kotayı kaldır",
+      "removeOf": "{email} kotasını kaldır",
+      "removeTitle": "{email} kotası kaldırılsın mı?",
+      "removeBody": "Kullanıcı yeniden varsayılan kotaya ve rolünün sınırlarına tabi olur. Çalışan sunucularına dokunulmaz.",
+      "removed": "Kota kaldırıldı: {email}",
+      "searchUser": "Aramak için e-posta yazın",
+      "hasOwn": "Bu kullanıcının zaten kendi kotası var; kaydetmek onu değiştirir.",
+      "fromDefault": "Bu kullanıcının henüz kendi kotası yok; alanlar varsayılan kotadan başlar."
     },
     "removeConfirm": "“{name}” kaldırılsın mı? Bu işlem geri alınamaz.",
     "cancel": "Vazgeç",
@@ -3227,7 +3240,9 @@
     "serversOf": "{email} kişisinin {n} sunucusunu göster",
     "inactiveFilter": "30 gündür görülmeyen",
     "newFilter": "Son 7 günde katılan",
-    "revokeAllBody": "{email} {n, plural, one {oturumundan} other {# oturumunun hepsinden}} çıkarılır ve yeniden giriş yapması gerekir."
+    "revokeAllBody": "{email} {n, plural, one {oturumundan} other {# oturumunun hepsinden}} çıkarılır ve yeniden giriş yapması gerekir.",
+    "impersonateTitle": "{email} olarak girilsin mi?",
+    "impersonateBody": "Siz durdurana kadar bu sekme paneli onun gördüğü gibi gösterir. Orada yaptıklarınız onun adına yapılır ve denetim kaydına yazılır."
   },
   "Roles": {
     "eyebrow": "Kişiler",
@@ -5228,6 +5243,7 @@
       "catalog_pool_ip_options": "Ek IPv4 teklifi değişti",
       "catalog_pool_location": "Havuzun lokasyonu değişti",
       "catalog_quota_set": "Kota değişti",
+      "catalog_quota_removed": "Kota kaldırıldı",
       "console_revoked": "Konsol oturumları sonlandırıldı",
       "console_session_issued": "Konsol oturumu başlatıldı",
       "console_opened": "Konsol açıldı",

@@ -11,7 +11,7 @@ import { useRouter } from 'next/navigation';
 import { I } from '../../../../components/icon';
 import { UserSummary } from './user-summary';
 import SessionList, { LastSeen, PresenceDot, type Presence, type SessionRow } from '../../../../components/session-list';
-import { CheckboxList, ConfirmButton, DataTable, Notice, PageHeader, SelectInput, StatusChip, TextInput } from '../../../../components/ui';
+import { CheckboxList, ConfirmButton, ConfirmDialog, DataTable, Notice, PageHeader, SelectInput, StatusChip, TextInput } from '../../../../components/ui';
 import { apiFetch, useErrorText } from '../../../../lib/api';
 import { authClient } from '../../../../lib/auth-client';
 import { useMe } from '../../../../lib/me';
@@ -142,12 +142,15 @@ function RowActions({ user, self, perms, open }: { user: Row; self: boolean; per
   const { error } = useErrorText();
   const router = useRouter();
   const client = useQueryClient();
+  const [asking, setAsking] = useState(false);
+  // Signing in as someone is recorded and changes whose panel this tab shows, so it is asked first.
+  async function impersonate() {
+    const r = await authClient.admin.impersonateUser({ userId: user.id });
+    if (r.error) { toast.danger(error(codeOf(r.error))); return; }
+    setAsking(false); router.replace('/'); router.refresh();
+  }
   async function act(k: string) {
-    if (k === 'impersonate') {
-      const r = await authClient.admin.impersonateUser({ userId: user.id });
-      if (r.error) { toast.danger(error(codeOf(r.error))); return; }
-      router.replace('/'); router.refresh(); return;
-    }
+    if (k === 'impersonate') { setAsking(true); return; }
     if (k === 'unban') {
       const r = await authClient.admin.unbanUser({ userId: user.id });
       if (r.error) { toast.danger(error(codeOf(r.error))); return; }
@@ -165,14 +168,16 @@ function RowActions({ user, self, perms, open }: { user: Row; self: boolean; per
   ];
   const visible = items.filter((i) => i[3]);
   if (!visible.length) return null;
-  return <Dropdown>
+  return <><ConfirmDialog isOpen={asking} onClose={() => setAsking(false)} status="warning" title={t('impersonateTitle', { email: user.email })}
+    body={t('impersonateBody')} confirmLabel={t('action.impersonate')} cancelLabel={t('cancel')} onConfirm={impersonate}/>
+  <Dropdown>
     <Button isIconOnly size="sm" variant="ghost" aria-label={t('actionsFor', { email: user.email })}><I name="ellipsis" size={18}/></Button>
     <Dropdown.Popover placement="bottom end">
       <Dropdown.Menu aria-label={t('actionsFor', { email: user.email })} onAction={(k) => void act(String(k))}>
         {visible.map(([id, label, icon]) => <Dropdown.Item key={id} id={id} textValue={label} variant={id === 'remove' || id === 'ban' ? 'danger' : 'default'}>{icon}<Label>{label}</Label></Dropdown.Item>)}
       </Dropdown.Menu>
     </Dropdown.Popover>
-  </Dropdown>;
+  </Dropdown></>;
 }
 
 // One dialog shell for every user action: title, body, footer with the action.

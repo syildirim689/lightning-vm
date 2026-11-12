@@ -1,5 +1,5 @@
 "use client";
-import { Button, Card, Disclosure, Label, Meter, Modal, Tabs, toast } from '@heroui/react';
+import { Button, Card, ComboBox, Disclosure, Input, Label, ListBox, Meter, Modal, Tabs, toast } from '@heroui/react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useFormatter, useTranslations } from 'next-intl';
 import { parseAsString, useQueryState } from 'nuqs';
@@ -26,7 +26,7 @@ type Pool = { id: string; name: string; location: string; locationId: string | n
 type Pkg = { id: string; name: string; vcpu: number; memoryMb: number; diskGb: number; priceMonthly: string; currency: string; poolIds: string[]; trafficGb: number | null };
 type Image = { id: string; name: string; family: string; templateName: string | null; minDiskGb: number };
 type IpPool = IpPoolRow;
-type Quota = { scope: string; email: string | null; maxServers: number | null; maxVcpu: number | null; maxMemoryMb: number | null; maxDiskGb: number | null };
+type Quota = { scope: string; subjectId: string | null; email: string | null; maxServers: number | null; maxVcpu: number | null; maxMemoryMb: number | null; maxDiskGb: number | null };
 
 const keys = { pools: ['catalog', 'pools'], packages: ['catalog', 'packages'], images: ['catalog', 'images'], ip: ['catalog', 'ip'], quotas: ['catalog', 'quotas'] };
 
@@ -137,13 +137,7 @@ export default function Catalog() {
       <Tabs.Panel id="vdcs" className="flex flex-col gap-4 pt-5"><VdcAdmin pools={pools.map((p) => ({ id: p.id, name: p.location ? `${p.name} · ${p.location}` : p.name }))}/></Tabs.Panel>
 
       <Tabs.Panel id="quotas" className="flex flex-col gap-4 pt-5">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <p className="max-w-3xl text-sm text-muted">{t('quotas.explain')}</p>
-          <FormModal title={t('quotas.set')} label={t('quotas.set')}>{(close) => <QuotaForm users={users} onSaved={close}/>}</FormModal>
-        </div>
-        <DataTable label={t('quotas.title')} rows={quotas} rowKey={(q) => `${q.scope}-${q.email}`}
-          columns={[{ id: 'scope', label: t('quotas.scope') }, { id: 'servers', label: t('quotas.servers') }, { id: 'cpu', label: 'vCPU' }, { id: 'ram', label: 'RAM (MB)' }, { id: 'disk', label: `${t('col.disk')} (GB)` }]}
-          cells={(q) => [q.scope === 'default' ? t('quotas.default') : q.email, ...[q.maxServers, q.maxVcpu, q.maxMemoryMb, q.maxDiskGb].map((v) => v ?? t('quotas.unlimited'))]}/>
+        <Quotas quotas={quotas} users={users}/>
       </Tabs.Panel>
     </Tabs>
   </>;
@@ -447,19 +441,84 @@ function IpPoolForm({ pools, onSaved }: { pools: Pool[]; onSaved: () => void }) 
   </form>;
 }
 
-function QuotaForm({ users, onSaved }: { users: { id: string; email: string }[]; onSaved: () => void }) {
+// Quotas: the default row and one per user. Each can be edited in place; a user's own quota can be removed, which
+// puts them back on the default.
+function Quotas({ quotas, users }: { quotas: Quota[]; users: { id: string; email: string }[] }) {
+  const t = useTranslations('Catalog');
+  const format = useFormatter();
+  const client = useQueryClient();
+  const { error } = useErrorText();
+  const [editing, setEditing] = useState<string | null>(null); // 'default', a user id, or '' for a new one
+  const unlimited = <span className="text-muted">{t('quotas.unlimited')}</span>;
+  const limit = (v: number | null) => (v == null ? unlimited : format.number(v));
+  const gb = (v: number | null) => (v == null ? unlimited : `${format.number(v, { maximumFractionDigits: 1 })} GB`);
+  async function remove(q: Quota) {
+    try {
+      await apiFetch(`/admin/quotas/users/${q.subjectId}`, { method: 'DELETE' });
+      toast.success(t('quotas.removed', { email: q.email ?? '–' }));
+      await client.invalidateQueries({ queryKey: ['catalog', 'quotas'] });
+    } catch (e) { toast.danger(error(e)); }
+  }
+  return <>
+    <div className="flex flex-wrap items-start justify-between gap-3">
+      <p className="max-w-3xl text-sm text-muted">{t('quotas.explain')}</p>
+      <Button onPress={() => setEditing('')}><I name="plus" size={16}/>{t('quotas.set')}</Button>
+    </div>
+    <DataTable label={t('quotas.title')} rows={quotas} rowKey={(q) => `${q.scope}-${q.subjectId ?? ''}`} empty={t('quotas.empty')}
+      sortBy={{ scope: (q) => (q.scope === 'default' ? '' : q.email), servers: (q) => q.maxServers, cpu: (q) => q.maxVcpu, ram: (q) => q.maxMemoryMb, disk: (q) => q.maxDiskGb }}
+      columns={[{ id: 'scope', label: t('quotas.scope') }, { id: 'servers', label: t('quotas.servers') }, { id: 'cpu', label: 'vCPU' }, { id: 'ram', label: 'RAM' }, { id: 'disk', label: t('col.disk') },
+        { id: 'act', label: <span className="sr-only">{t('quotas.actions')}</span> }]}
+      cells={(q) => [q.scope === 'default' ? <span key="s" className="font-medium">{t('quotas.default')}</span> : <span key="s" className="break-all">{q.email ?? '–'}</span>,
+        limit(q.maxServers), limit(q.maxVcpu), gb(q.maxMemoryMb == null ? null : q.maxMemoryMb / 1024), gb(q.maxDiskGb),
+        <span key="a" className="flex justify-end gap-1">
+          <Button size="sm" variant="ghost" aria-label={t('quotas.editOf', { name: q.scope === 'default' ? t('quotas.default') : q.email ?? '' })}
+            onPress={() => setEditing(q.scope === 'default' ? 'default' : q.subjectId ?? '')}><I name="pencil" size={14}/>{t('quotas.edit')}</Button>
+          {q.scope !== 'default' && <ConfirmButton size="sm" variant="ghost" icon={<I name="trash-2" size={14}/>} label={<span className="sr-only">{t('quotas.removeOf', { email: q.email ?? '' })}</span>}
+            title={t('quotas.removeTitle', { email: q.email ?? '–' })} body={t('quotas.removeBody')} confirmLabel={t('quotas.remove')} cancelLabel={t('cancel')} onConfirm={() => remove(q)}/>}
+        </span>]}/>
+    <Modal.Backdrop isOpen={editing !== null} onOpenChange={(o) => { if (!o) setEditing(null); }}>
+      <Modal.Container size="lg" scroll="inside">
+        <Modal.Dialog className="sm:max-w-3xl">
+          <Modal.CloseTrigger/>
+          <Modal.Header><Modal.Heading>{editing ? t('quotas.editTitle') : t('quotas.set')}</Modal.Heading></Modal.Header>
+          <Modal.Body>{editing !== null && <QuotaForm key={editing} users={users} quotas={quotas} subject={editing || 'default'} fixed={!!editing} onSaved={() => setEditing(null)}/>}</Modal.Body>
+        </Modal.Dialog>
+      </Modal.Container>
+    </Modal.Backdrop>
+  </>;
+}
+
+// The fields start from the chosen subject's current limits: their own quota, or the default when they have none.
+function QuotaForm({ users, quotas, subject, fixed, onSaved }: { users: { id: string; email: string }[]; quotas: Quota[]; subject: string; fixed: boolean; onSaved: () => void }) {
   const t = useTranslations('Catalog');
   const saved = useSaved(onSaved);
-  const f = useApiForm({ subject: 'default', maxServers: '', maxVcpu: '', maxMemoryMb: '', maxDiskGb: '' });
+  const own = (id: string) => quotas.find((q) => (id === 'default' ? q.scope === 'default' : q.scope === 'user' && q.subjectId === id));
+  const fill = (id: string) => {
+    const q = own(id) ?? own('default');
+    const v = (n: number | null | undefined) => (n == null ? '' : String(n));
+    return { subject: id, maxServers: v(q?.maxServers), maxVcpu: v(q?.maxVcpu), maxMemoryMb: v(q?.maxMemoryMb), maxDiskGb: v(q?.maxDiskGb) };
+  };
+  const f = useApiForm(fill(subject));
   const value = (s: string) => (s === '' ? null : Number(s));
   const limit = (k: 'maxServers' | 'maxVcpu' | 'maxMemoryMb' | 'maxDiskGb', gb = false) => <NumberInput key={k} label={gb ? `${t(`quotas.${k}`)} (GB)` : t(`quotas.${k}`)} minValue={0}
     value={num(f.values[k]) !== undefined ? (gb ? num(f.values[k])! / 1024 : num(f.values[k])) : undefined}
     onChange={(v) => f.set(k)(str(v === undefined ? undefined : gb ? Math.round(v * 1024) : v))} error={f.fieldError(k)} help={t('quotas.emptyUnlimited')}/>;
+  const choices = [{ id: 'default', label: t('quotas.default') }, ...users.map((u) => ({ id: u.id, label: u.email }))];
+  const isUser = f.values.subject !== 'default';
   return <form className="flex flex-col gap-4" noValidate onSubmit={async (e) => { e.preventDefault();
     const body = { maxServers: value(f.values.maxServers), maxVcpu: value(f.values.maxVcpu), maxMemoryMb: value(f.values.maxMemoryMb), maxDiskGb: value(f.values.maxDiskGb) };
     saved(await f.submit('PUT', f.values.subject === 'default' ? '/admin/quotas/default' : `/admin/quotas/users/${f.values.subject}`, body)); }}>
     <FieldGroup title={t('quotas.scope')} description={t('form.scopeHelp')} cols={1}>
-      <SelectInput label={t('quotas.scope')} value={f.values.subject} onChange={f.set('subject')} options={[{ id: 'default', label: t('quotas.default') }, ...users.map((u) => ({ id: u.id, label: u.email }))]}/>
+      {fixed ? <p className="text-sm font-medium">{choices.find((c) => c.id === f.values.subject)?.label ?? '–'}</p>
+        : <ComboBox className="w-full" selectedKey={f.values.subject} defaultItems={choices} menuTrigger="focus"
+            onSelectionChange={(k) => { if (k != null) f.setValues(fill(String(k))); }}>
+            <Label>{t('quotas.scope')}</Label>
+            <ComboBox.InputGroup><Input placeholder={t('quotas.searchUser')}/><ComboBox.Trigger/></ComboBox.InputGroup>
+            <ComboBox.Popover>
+              <ListBox>{(c: { id: string; label: string }) => <ListBox.Item id={c.id} textValue={c.label}>{c.label}<ListBox.ItemIndicator/></ListBox.Item>}</ListBox>
+            </ComboBox.Popover>
+          </ComboBox>}
+      {isUser && <p className="text-xs text-muted" role="status">{own(f.values.subject) ? t('quotas.hasOwn') : t('quotas.fromDefault')}</p>}
     </FieldGroup>
     <FieldGroup title={t('form.limits')}>{limit('maxServers')}{limit('maxVcpu')}{limit('maxMemoryMb', true)}{limit('maxDiskGb')}</FieldGroup>
     <FormFooter failure={f.failure?.text} busy={f.busy} label={t('quotas.save')} onCancel={onSaved}/>

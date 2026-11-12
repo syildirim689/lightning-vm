@@ -1555,6 +1555,31 @@ test.describe('people, settings and smart features (English browser)', () => {
     expect((await page.request.put('/api/admin/settings/billing', { headers: csrf, data: { enabled: false, sandbox: false } })).ok()).toBe(true);
   });
 
+  test('Quotas: a user is found by typing, the form starts from the default, the row is edited and removed', async ({ page }) => {
+    await signInAdmin(page);
+    await page.goto('/admin/catalog?tab=quotas');
+    await page.getByRole('button', { name: 'Set quota' }).click();
+    const dialog = page.getByRole('dialog');
+    await dialog.getByRole('combobox', { name: 'Scope' }).fill('admin@');
+    await page.getByRole('option', { name: 'admin@example.test' }).click();
+    await expect(dialog.getByText('no quota of their own yet')).toBeVisible();
+    await dialog.getByRole('textbox', { name: 'Maximum servers' }).fill('7');
+    await dialog.getByRole('button', { name: 'Save quota' }).click();
+    await expect(dialog).toBeHidden();
+    const row = page.getByRole('row', { name: /admin@example\.test/ });
+    await expect(row).toContainText('7');
+    // Editing opens on that user, with their own values.
+    await row.getByRole('button', { name: 'Edit the quota of admin@example.test' }).click();
+    await expect(dialog.getByText('already has a quota of their own')).toBeVisible();
+    await expect(dialog.getByRole('textbox', { name: 'Maximum servers' })).toHaveValue('7');
+    await dialog.getByRole('button', { name: 'Cancel' }).click();
+    await expect(dialog).toBeHidden();
+    // Removing asks first and puts them back on the default.
+    await row.getByRole('button', { name: 'Remove the quota of admin@example.test' }).click();
+    await page.getByRole('alertdialog').getByRole('button', { name: 'Remove quota' }).click();
+    await expect(page.getByRole('row', { name: /admin@example\.test/ })).toHaveCount(0);
+  });
+
   test('IP pools: quarantine and IPv6 are edited, addresses are listed; reverse DNS settings validate', async ({ page }) => {
     await signInAdmin(page);
     await page.goto('/admin/catalog?tab=ip');

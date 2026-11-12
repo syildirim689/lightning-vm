@@ -180,6 +180,27 @@ export function ConfirmButton({ label, title, body, confirmLabel, cancelLabel, o
   </AlertDialog>;
 }
 
+// The same confirmation opened from elsewhere (a menu item): the caller holds whether it is open.
+export function ConfirmDialog({ isOpen, onClose, title, body, confirmLabel, cancelLabel, onConfirm, status = 'danger' }: {
+  isOpen: boolean; onClose: () => void; title: string; body: React.ReactNode; confirmLabel: string; cancelLabel: string; onConfirm: () => void | Promise<void>;
+  status?: 'danger' | 'warning';
+}) {
+  const [busy, setBusy] = useState(false);
+  return <AlertDialog.Backdrop isOpen={isOpen} onOpenChange={(o) => { if (!o) onClose(); }}>
+    <AlertDialog.Container>
+      <AlertDialog.Dialog className="sm:max-w-[440px]">
+        <AlertDialog.Header><AlertDialog.Icon status={status}/><AlertDialog.Heading>{title}</AlertDialog.Heading></AlertDialog.Header>
+        <AlertDialog.Body><div className="text-sm text-muted">{body}</div></AlertDialog.Body>
+        <AlertDialog.Footer>
+          <Button variant="tertiary" onPress={onClose}>{cancelLabel}</Button>
+          <Button variant={status === 'danger' ? 'danger' : 'primary'} isPending={busy}
+            onPress={async () => { setBusy(true); try { await onConfirm(); } finally { setBusy(false); } }}>{confirmLabel}</Button>
+        </AlertDialog.Footer>
+      </AlertDialog.Dialog>
+    </AlertDialog.Container>
+  </AlertDialog.Backdrop>;
+}
+
 // Monospace value (IPs, fingerprints, ids).
 export function Mono({ children }: { children: React.ReactNode }) {
   return <code className="rounded bg-default px-1.5 py-0.5 font-mono text-[0.85em]">{children}</code>;

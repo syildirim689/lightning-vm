@@ -331,6 +331,14 @@ export default {
     returns: { tr: 'Kaydedilen sınırlar (max_servers, max_vcpu, max_memory_mb, max_disk_gb).', en: 'The saved limits (max_servers, max_vcpu, max_memory_mb, max_disk_gb).' },
     errors: ['VALIDATION_FAILED', 'IN_USE'],
   },
+  'DELETE /admin/quotas/users/:id': {
+    tag: 'admin-catalog',
+    summary: { tr: 'Kullanıcıya özel kotayı kaldırır.', en: 'Removes a user\'s own quota.' },
+    details: { tr: 'Kullanıcı yeniden varsayılan kotaya ve rolünün sınırlarına tabi olur. Çalışan sunuculara dokunulmaz.', en: 'The user falls back to the default quota and their role\'s limits. Running servers are not touched.' },
+    params: [id('Kullanıcı.', 'User.')],
+    returns: { tr: '204, gövde yok.', en: '204, no body.' },
+    errors: ['NOT_FOUND'],
+  },
 
   // ---- customer: projects, catalog, quote ----
   'GET /projects': {
