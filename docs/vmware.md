@@ -114,6 +114,19 @@ Yönetim → VMware sayfasındaki **Ağda ESXi / vCenter ara** bölümü IP blok
   çalışır.
 - **Yetki:** taramayı `vmware.manage` başlatır ve ayarlar; `vmware.view` sonuçları görür.
 
+## Sanal makine ayrıntıları
+
+Sunucu sayfasındaki **Sanal makine ayrıntıları** bölümü adaptörün `POST /v1/vm/details` çağrısından gelir (API: `GET /servers/:id/details`, 20 sn önbellek). Tek okumada:
+
+- Kimlik: instance ve BIOS UUID, donanım sürümü, BIOS/UEFI, Güvenli Önyükleme, son açılış, çalışma süresi, anlık görüntü sayısı, depolama (kullanılan / ayrılan).
+- İşlemci ve bellek: soket × çekirdek, sıcak ekleme, rezervasyon / sınır / pay, anlık kullanım, balon ve takas.
+- Ağ kartları: bağdaştırıcı (vmxnet3, e1000e…), MAC ve kimin verdiği, bağlı mı, açılışta bağlanır mı, dağıtık port numarası, port grubu, anahtar, VLAN (standart anahtarda hostun port grubundan), konuğun o MAC üzerinde bildirdiği adresler.
+- Diskler: boyut, ince / kalın, mod, denetleyici yuvası (örn. `SCSI 0:1`, pvscsi), veri deposu ve dosya.
+- CD sürücüleri, VMware Tools (durum, sürüm), konuğun ağ görünümü (ana makine adı, adresler, ağ geçidi, DNS, alan adı).
+- Yerleşim: host, küme, kaynak havuzu, klasör, veri depoları, .vmx yolu.
+
+Müşteri altyapı adlarını (host, küme, veri deposu, port grubu, anahtar, VLAN, dosya yolları) görmez; bunlar `servers.view_all` yetkili personele gelir. Ekran ayrıca dikkat gerektirenleri listeler (Tools çalışmıyor/eski, geri alınan bellek, disk birleştirme, bağlı olmayan kart, çok anlık görüntü, takılı ISO) ve tüm sayfayı metin olarak kopyalar. Hiçbir şey değiştirilmez.
+
 ## Aynı hostun iki kez sayılmaması
 - Her host, donanım UUID'si (`summary.hardware.uuid`) ile tanınır. Bu değer veritabanında tekildir
   (`vmware_hosts_hardware_uuid_key`).
