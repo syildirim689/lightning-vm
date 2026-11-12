@@ -1842,7 +1842,9 @@
       "saved": "Private network settings saved"
     },
     "export": "Download CSV",
-    "undo": "Undo"
+    "undo": "Undo",
+    "find": "Search this list",
+    "noMatch": "Nothing matches the search."
   },
   "Servers": {
     "loading": "Loading…",
@@ -5033,7 +5035,9 @@
     "diskTooSmall": "This image needs at least {min} GB of disk but only {left} GB is left. Choose another image or delete a server.",
     "serverSummary": "{n, plural, one {# server} other {# servers}} · {ready} ready{failed, plural, =0 {} other { · # failing}}",
     "findServer": "Find a server",
-    "findServerHint": "Name or IP"
+    "findServerHint": "Name or IP",
+    "noKeysHelp": "You have no saved SSH keys yet; you can add one under Account → SSH keys.",
+    "nameTaken": "A server in this data centre already has this name."
   },
   "Smart": {
     "health": "Health",

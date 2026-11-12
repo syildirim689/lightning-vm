@@ -26,8 +26,15 @@ function NewServer({ vdc, onDone }: { vdc: Mine; onDone: () => void }) {
   const client = useQueryClient();
   const keys = useApiQuery<{ keys: { id: string; name: string }[] }>(['ssh-keys'], '/ssh-keys').data?.keys ?? [];
   const left = { vcpu: vdc.vcpu - vdc.used.vcpu, memoryGb: (vdc.memoryMb - vdc.used.memoryMb) / 1024, diskGb: vdc.diskGb - vdc.used.diskGb };
-  const [v, setV] = useState({ name: '', imageId: vdc.images[0]?.id ?? '', vcpu: Math.min(1, left.vcpu), memoryGb: Math.min(1, left.memoryGb), diskGb: Math.min(20, left.diskGb), sshKeyIds: [] as string[] });
+  // A free name from the data centre's own ("lab-3"), so the form can be sent as it opens; it is just a suggestion.
+  const suggest = (base: string) => { const taken = new Set(vdc.servers.map((x) => x.name)); let n = vdc.servers.length + 1; while (taken.has(`${base}-${n}`)) n++; return `${base}-${n}`; };
+  const base = vdc.name.toLocaleLowerCase('en').normalize('NFD').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'server';
+  const [v, setV] = useState({ name: suggest(base), imageId: vdc.images[0]?.id ?? '', vcpu: Math.min(1, left.vcpu), memoryGb: Math.min(1, left.memoryGb), diskGb: Math.min(20, left.diskGb), sshKeyIds: [] as string[] });
+  // With a single saved key it is ticked for you, until you change the selection yourself.
+  const [keysTouched, setKeysTouched] = useState(false);
+  const sshKeyIds = keysTouched ? v.sshKeyIds : keys.length === 1 ? [keys[0]!.id] : v.sshKeyIds;
   const minDisk = Math.max(10, vdc.images.find((i) => i.id === v.imageId)?.minDiskGb ?? 10);
+  const family = (f: string) => (f === 'linux' ? 'Linux' : f === 'windows' ? 'Windows' : f === 'esxi' ? 'VMware ESXi' : f);
   // One click to a common shape: the smallest that boots this image, half of what is left, or all of it.
   const quarter = (gb: number) => Math.max(0.5, Math.floor(gb * 4) / 4);
   const shapes = {
@@ -43,7 +50,7 @@ function NewServer({ vdc, onDone }: { vdc: Mine; onDone: () => void }) {
     e.preventDefault(); setBusy(true); setFields({});
     try {
       await apiFetch('/servers', { method: 'POST', headers: { 'idempotency-key': intent.key() },
-        body: { vdcId: vdc.id, name: v.name, imageId: v.imageId, vcpu: v.vcpu, memoryMb: Math.round(v.memoryGb * 1024), diskGb: v.diskGb, sshKeyIds: v.sshKeyIds } });
+        body: { vdcId: vdc.id, name: v.name, imageId: v.imageId, vcpu: v.vcpu, memoryMb: Math.round(v.memoryGb * 1024), diskGb: v.diskGb, sshKeyIds } });
       intent.reset(); toast.success(t('creating')); client.invalidateQueries({ queryKey: key }); client.invalidateQueries({ queryKey: ['tasks'] }); onDone();
     } catch (err) { setFields((err as ApiError).fields ?? {}); toast.danger(error(err)); if ((err as ApiError).code !== 'NETWORK') intent.reset(); } finally { setBusy(false); }
   }
@@ -58,13 +65,16 @@ function NewServer({ vdc, onDone }: { vdc: Mine; onDone: () => void }) {
       </button>)}
     </div>
     <div className="grid gap-3 sm:grid-cols-2">
-      <TextInput label={t('serverName')} value={v.name} onChange={(x) => setV({ ...v, name: x.toLowerCase() })} error={field(fields.name)} isRequired spellCheck={false} placeholder="web-1"/>
-      <SelectInput label={t('image')} value={v.imageId} onChange={(x) => setV({ ...v, imageId: x })} error={field(fields.imageId)} options={vdc.images.map((i) => ({ id: i.id, label: i.name, description: i.family }))}/>
+      <TextInput label={t('serverName')} value={v.name} onChange={(x) => setV({ ...v, name: x.toLowerCase() })} error={field(fields.name)} isRequired spellCheck={false} placeholder="web-1"
+        help={vdc.servers.some((x) => x.name === v.name.trim()) ? t('nameTaken') : undefined}/>
+      <SelectInput label={t('image')} value={v.imageId} onChange={(x) => { const min = Math.max(10, vdc.images.find((i) => i.id === x)?.minDiskGb ?? 10); setV({ ...v, imageId: x, diskGb: v.diskGb < min ? Math.min(min, Math.max(min, left.diskGb)) : v.diskGb }); }}
+        error={field(fields.imageId)} options={vdc.images.map((i) => ({ id: i.id, label: i.name, description: `${family(i.family)} · ≥ ${Math.max(10, i.minDiskGb)} GB` }))}/>
       <NumberInput label="vCPU" value={v.vcpu} onChange={(x) => setV({ ...v, vcpu: x ?? 1 })} minValue={1} maxValue={Math.max(1, left.vcpu)} error={field(fields.vcpu)}/>
       <NumberInput label="RAM (GB)" value={v.memoryGb} onChange={(x) => setV({ ...v, memoryGb: x ?? 1 })} minValue={0.5} maxValue={Math.max(0.5, left.memoryGb)} step={0.25} error={field(fields.memoryMb)}/>
       <NumberInput label={`${t('disk')} (GB)`} value={v.diskGb} onChange={(x) => setV({ ...v, diskGb: x ?? 10 })} minValue={minDisk} maxValue={Math.max(minDisk, left.diskGb)} step={10} error={field(fields.diskGb)} help={t('diskMin', { min: minDisk })}/>
     </div>
-    <CheckboxList label={t('sshKeys')} value={v.sshKeyIds} onChange={(x) => setV({ ...v, sshKeyIds: x })} error={field(fields.sshKeyIds)} options={keys.map((k) => ({ id: k.id, label: k.name }))}/>
+    <CheckboxList label={t('sshKeys')} value={sshKeyIds} onChange={(x) => { setKeysTouched(true); setV({ ...v, sshKeyIds: x }); }} error={field(fields.sshKeyIds)} options={keys.map((k) => ({ id: k.id, label: k.name }))}
+      help={keys.length ? undefined : t('noKeysHelp')}/>
     <div className="flex justify-end gap-2"><Button variant="tertiary" onPress={onDone}>{t('cancel')}</Button><Button type="submit" isPending={busy} isDisabled={!v.name.trim() || left.diskGb < minDisk}><I name="rocket" size={16}/>{t('create')}</Button></div>
   </form>;
 }

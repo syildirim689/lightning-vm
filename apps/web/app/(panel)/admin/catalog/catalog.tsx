@@ -1,5 +1,6 @@
 "use client";
-import { Button, Card, ComboBox, Disclosure, Input, Label, ListBox, Meter, Modal, Tabs, toast } from '@heroui/react';
+import { Button, Card, ComboBox, Disclosure, Input, Label, ListBox, Meter, Modal, SearchField, Tabs, toast } from '@heroui/react';
+import { fold } from '../../../../lib/note-line';
 import { useQueryClient } from '@tanstack/react-query';
 import { useFormatter, useTranslations } from 'next-intl';
 import { parseAsString, useQueryState } from 'nuqs';
@@ -52,6 +53,7 @@ export default function Catalog() {
   const t = useTranslations('Catalog');
   const format = useFormatter();
   const [tab, setTab] = useQueryState('tab', parseAsString.withDefault('pools'));
+  const [find, setFind] = useQueryState('q', parseAsString.withDefault('').withOptions({ history: 'replace', throttleMs: 300 }));
   const pools = useApiQuery<{ pools: Pool[] }>(keys.pools, '/admin/pools').data?.pools;
   const packages = useApiQuery<{ packages: Pkg[] }>(keys.packages, '/admin/packages').data?.packages ?? [];
   const images = useApiQuery<{ images: Image[] }>(keys.images, '/admin/images').data?.images ?? [];
@@ -64,7 +66,16 @@ export default function Catalog() {
     title={`${t('remove')}: ${name}`} body={t('removeConfirm', { name })} confirmLabel={t('remove')} cancelLabel={t('cancel')} onConfirm={() => remove.mutateAsync(path).then(() => undefined)}/>;
   const money = (amount: string, currency: string) => format.number(Number(amount), { style: 'currency', currency });
 
-  if (!pools) return <><PageHeader eyebrow={t('eyebrow')} title={t('title')} description={t('intro')}/><p role="status" className="text-sm text-muted">{t('loading')}</p></>;
+  if (!pools) return <><PageHeader eyebrow={t('eyebrow')} title={t('title')} description={t('intro')}/>
+    <div role="status" aria-label={t('loading')} className="flex flex-col gap-3"><div className="h-10 w-full max-w-2xl animate-pulse rounded-xl bg-default/50"/>
+      {[0, 1, 2].map((i) => <div key={i} className="h-28 animate-pulse rounded-2xl bg-default/50"/>)}</div></>;
+  // Search across a tab's rows once there are more than a handful (kept in the address).
+  const match = (...parts: (string | number | null | undefined)[]) => !find.trim() || fold(parts.join(' ')).includes(fold(find.trim()));
+  const shownPackages = packages.filter((p) => match(p.name, p.currency, p.poolIds.map((id) => pools.find((x) => x.id === id)?.name).join(' ')));
+  const shownImages = images.filter((i) => match(i.name, i.family, i.templateName));
+  const search = (n: number) => n > 6 && <SearchField aria-label={t('find')} value={find} onChange={setFind} className="w-full sm:w-72">
+    <SearchField.Group><SearchField.SearchIcon/><SearchField.Input placeholder={t('find')}/><SearchField.ClearButton/></SearchField.Group>
+  </SearchField>;
   return <>
     <PageHeader eyebrow={t('eyebrow')} title={t('title')} description={t('intro')}/>
     <Tabs selectedKey={tab} onSelectionChange={(k) => setTab(String(k))}>
@@ -90,14 +101,15 @@ export default function Catalog() {
       </Tabs.Panel>
 
       <Tabs.Panel id="packages" className="flex flex-col gap-4 pt-5">
-        <div className="flex flex-wrap justify-end gap-2">{packages.length > 0 && <Button variant="secondary" onPress={() => downloadCsv('packages', ['name', 'vcpu', 'memory_gb', 'disk_gb', 'price_monthly', 'currency', 'traffic_gb', 'locations'],
+        <div className="flex flex-wrap items-center justify-end gap-2">{search(packages.length)}<span className="flex-1"/>{packages.length > 0 && <Button variant="secondary" onPress={() => downloadCsv('packages', ['name', 'vcpu', 'memory_gb', 'disk_gb', 'price_monthly', 'currency', 'traffic_gb', 'locations'],
           packages.map((p) => [p.name, p.vcpu, p.memoryMb / 1024, p.diskGb, p.priceMonthly, p.currency, p.trafficGb ?? '', p.poolIds.map((id) => pools.find((x) => x.id === id)?.name ?? id).join(' / ')]))}>
           <I name="download" size={15}/>{t('export')}</Button>}
           {pools.length ? <FormModal title={t('packages.new')} label={t('packages.new')}>{(close) => <PackageForm pools={pools} images={images} onSaved={close}/>}</FormModal>
           : <p className="text-sm text-muted">{t('packages.needPool')}</p>}</div>
-        <DataTable label={t('packages.title')} rows={packages} rowKey={(p) => p.id} empty={t('packages.empty')}
+        <DataTable label={t('packages.title')} rows={shownPackages} rowKey={(p) => p.id} empty={find ? t('noMatch') : t('packages.empty')}
+          sortBy={{ name: (p) => p.name, cpu: (p) => p.vcpu, ram: (p) => p.memoryMb, disk: (p) => p.diskGb, price: (p) => Number(p.priceMonthly) }}
           columns={[{ id: 'name', label: t('col.name') }, { id: 'cpu', label: 'vCPU' }, { id: 'ram', label: 'RAM' }, { id: 'disk', label: t('col.disk') }, { id: 'price', label: t('col.price') }, { id: 'sell', label: t('packages.sellable') }, { id: 'act', label: <span className="sr-only">{t('remove')}</span> }]}
-          cells={(p) => [<span key="n" className="flex flex-col"><span className="font-medium">{p.name}</span><span className="text-xs text-muted">{p.trafficGb ? t('packages.trafficShort', { gb: p.trafficGb }) : t('packages.unlimited')}</span></span>, p.vcpu, `${p.memoryMb / 1024} GB`, `${p.diskGb} GB`,
+          cells={(p) => [<span key="n" className="flex flex-col"><span className="font-medium">{p.name}</span><span className="text-xs text-muted">{p.trafficGb ? t('packages.trafficShort', { gb: p.trafficGb }) : t('packages.unlimited')}</span></span>, p.vcpu, `${format.number(p.memoryMb / 1024, { maximumFractionDigits: 1 })} GB`, `${p.diskGb} GB`,
             <span key="p" className="flex flex-col"><span className="tabular-nums">{money(p.priceMonthly, p.currency)}</span><span className="text-xs tabular-nums text-muted">{t('packages.perVcpu', { price: money(String(Number(p.priceMonthly) / p.vcpu), p.currency) })}</span></span>, <Sellable key="s" pkg={p} pools={pools}/>, removeButton(`/admin/packages/${p.id}`, p.name)]}/>
       </Tabs.Panel>
 
@@ -106,7 +118,9 @@ export default function Catalog() {
           <p className="max-w-3xl text-sm text-muted">{t('images.explain')}</p>
           {connections.length > 0 && <FormModal title={t('images.new')} label={t('images.new')}>{(close) => <ImageForm connections={connections} onSaved={close}/>}</FormModal>}
         </div>
-        <DataTable label={t('images.title')} rows={images} rowKey={(i) => i.id} empty={t('images.empty')}
+        {search(images.length)}
+        <DataTable label={t('images.title')} rows={shownImages} rowKey={(i) => i.id} empty={find ? t('noMatch') : t('images.empty')}
+          sortBy={{ name: (i) => i.name, family: (i) => i.family, disk: (i) => i.minDiskGb }}
           columns={[{ id: 'name', label: t('col.name') }, { id: 'family', label: t('images.family') }, { id: 'tpl', label: t('images.template') }, { id: 'disk', label: t('images.minDisk') }, { id: 'act', label: <span className="sr-only">{t('remove')}</span> }]}
           cells={(i) => [<span key="n" className="font-medium">{i.name}</span>, i.family === 'linux' ? 'Linux' : i.family === 'windows' ? 'Windows' : i.family === 'esxi' ? t('images.esxi') : i.family, i.templateName ?? '–', `${i.minDiskGb} GB`, removeButton(`/admin/images/${i.id}`, i.name)]}/>
       </Tabs.Panel>

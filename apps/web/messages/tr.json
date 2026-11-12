@@ -1842,7 +1842,9 @@
       "saved": "Özel ağ ayarları kaydedildi"
     },
     "export": "CSV indir",
-    "undo": "Geri al"
+    "undo": "Geri al",
+    "find": "Bu listede ara",
+    "noMatch": "Aramayla eşleşen kayıt yok."
   },
   "Servers": {
     "loading": "Yükleniyor…",
@@ -5033,7 +5035,9 @@
     "diskTooSmall": "Bu imaj en az {min} GB disk ister ama yalnızca {left} GB kaldı. Başka bir imaj seçin ya da bir sunucuyu silin.",
     "serverSummary": "{n, plural, one {# sunucu} other {# sunucu}} · {ready} hazır{failed, plural, =0 {} other { · # sorunlu}}",
     "findServer": "Sunucu ara",
-    "findServerHint": "Ad ya da IP"
+    "findServerHint": "Ad ya da IP",
+    "noKeysHelp": "Henüz kayıtlı SSH anahtarınız yok; Hesap → SSH anahtarları bölümünden ekleyebilirsiniz.",
+    "nameTaken": "Bu veri merkezinde bu adda bir sunucu zaten var."
   },
   "Smart": {
     "health": "Sağlık",

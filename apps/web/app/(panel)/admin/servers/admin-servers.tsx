@@ -2,7 +2,7 @@
 import { Button, Card, SearchField, Tabs } from '@heroui/react';
 import NextLink from 'next/link';
 import { useFormatter, useTranslations } from 'next-intl';
-import { parseAsString, parseAsStringLiteral, useQueryState } from 'nuqs';
+import { parseAsBoolean, parseAsString, parseAsStringLiteral, useQueryState } from 'nuqs';
 import { I } from '../../../../components/icon';
 import { ConfirmButton, DataTable, Mono, Notice, PageHeader, SelectInput, StatusChip, TextInput } from '../../../../components/ui';
 import { useState } from 'react';
@@ -41,7 +41,7 @@ export default function AdminServers() {
   const tagging = bulkAction === 'tag' || bulkAction === 'untag';
   const bulk = useApiAction((ids: string[]) => apiFetch<{ started: number; skipped: number }>('/admin/servers/actions', { method: 'POST', body: { action: bulkAction, serverIds: ids, ...(tagging && { tag: bulkTag.trim() }) }, headers: { 'idempotency-key': crypto.randomUUID() } }),
     { invalidate: [['admin']], success: (r) => (tagging ? t('list.select.tagDone', { n: r.started }) : t('admin.bulkDone', { started: r.started, skipped: r.skipped })) });
-  const [onlyStarred, setOnlyStarred] = useState(false);
+  const [onlyStarred, setOnlyStarred] = useQueryState('starred', parseAsBoolean.withDefault(false).withOptions({ history: 'replace' }));
   // Kept in the address, so a link to "failed operations" works and the view survives a reload.
   const [opShow, setOpShow] = useQueryState('ops', parseAsStringLiteral(['all', 'failed', 'active'] as const).withDefault('all').withOptions({ history: 'replace' }));
   const [opFind, setOpFind] = useQueryState('opq', parseAsString.withDefault('').withOptions({ history: 'replace', throttleMs: 300 }));
@@ -73,7 +73,7 @@ export default function AdminServers() {
             <ServerFilters f={filters} placeholder={t('admin.search')}/>
             <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-muted">
               <span role="status">{t('admin.shown', { shown: shown.length, total: filters.servers.length })}</span>
-              <Button size="sm" variant={onlyStarred ? 'primary' : 'ghost'} aria-pressed={onlyStarred} onPress={() => setOnlyStarred((x) => !x)}><I name="star" size={15}/>{t('admin.onlyStarred')}</Button>
+              <Button size="sm" variant={onlyStarred ? 'primary' : 'ghost'} aria-pressed={onlyStarred} onPress={() => setOnlyStarred(!onlyStarred)}><I name="star" size={15}/>{t('admin.onlyStarred')}</Button>
               <Button size="sm" variant="secondary" isDisabled={!shown.length} onPress={() => exportCsv(shown)}><I name="download" size={15}/>{t('admin.exportCsv')}</Button>
             </div>
             {me && can(me.permissions, 'servers.manage_all') && shown.length > 0 && <div className="flex flex-col gap-3 rounded-lg border border-border p-3 sm:flex-row sm:items-end">

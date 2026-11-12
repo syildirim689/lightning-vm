@@ -1746,6 +1746,8 @@ test.describe('people, settings and smart features (English browser)', () => {
       await page.goto('/vdc');
       await page.getByRole('button', { name: 'Create server' }).click();
       const dialog = page.getByRole('dialog');
+      // A free name from the data centre's own comes filled in.
+      await expect(dialog.getByRole('textbox', { name: 'Server name' })).toHaveValue('e2e-vdc-1');
       await dialog.getByRole('radio', { name: /^All that is left/ }).click();
       await expect(dialog.getByRole('radio', { name: /^All that is left/ })).toHaveAttribute('aria-checked', 'true');
       await expect(dialog.getByText(`${size.vcpu} vCPU · ${size.memoryMb / 1024} GB · ${size.diskGb} GB`).first()).toBeVisible();

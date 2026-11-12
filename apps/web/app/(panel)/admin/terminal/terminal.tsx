@@ -8,7 +8,7 @@ import { Button, Card, Tooltip, toast } from '@heroui/react';
 import { useQueryClient } from '@tanstack/react-query';
 import { motion } from 'motion/react';
 import NextLink from 'next/link';
-import { useFormatter, useTranslations } from 'next-intl';
+import { useFormatter, useNow, useTranslations } from 'next-intl';
 import { useEffect, useRef, useState } from 'react';
 import { I } from '../../../../components/icon';
 import { ConfirmButton, Notice, PageHeader, Section, StatusChip } from '../../../../components/ui';
@@ -24,6 +24,7 @@ const reasons = ['TERMINAL_SESSION_INVALID', 'TERMINAL_REVOKED', 'TERMINAL_EXPIR
 export default function Terminal() {
   const t = useTranslations('Terminal');
   const format = useFormatter();
+  const now = useNow({ updateInterval: 30_000 });
   const { error } = useErrorText();
   const client = useQueryClient();
   const [waiting, setWaiting] = useState(false);
@@ -178,7 +179,7 @@ export default function Terminal() {
         {s.sessions.length === 0 ? <p className="text-sm text-muted">{t('noSessions')}</p>
         : <ul className="flex flex-col divide-y divide-separator">{s.sessions.map((x) => <li key={x.key} className="flex flex-wrap items-center gap-3 py-2 text-sm">
             <I name="user" size={14} className="text-muted"/><span className="font-medium">{x.email ?? '–'}</span>
-            <span className="text-xs text-muted">{format.relativeTime(new Date(x.startedAt))}</span>
+            <span className="text-xs text-muted">{format.relativeTime(new Date(x.startedAt), now)}</span>
             <span className="ml-auto"><ConfirmButton size="sm" variant="ghost" icon={<I name="x" size={14}/>} label={t('end')} title={t('endTitle', { email: x.email ?? '–' })} body={t('endBody')}
               confirmLabel={t('end')} cancelLabel={t('cancel')} onConfirm={async () => {
                 try { await apiFetch(`/admin/terminal/sessions/${x.key}/revoke`, { method: 'POST' }); await client.invalidateQueries({ queryKey: ['admin', 'terminal'] }); }
