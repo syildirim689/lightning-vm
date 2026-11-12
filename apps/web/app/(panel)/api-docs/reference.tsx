@@ -111,6 +111,7 @@ export default function Reference() {
   useEffect(() => {
     if (!ref || !location.hash) return;
     const id = location.hash.slice(1);
+    if (id.startsWith('guide-')) { requestAnimationFrame(() => openGuide(id.slice(6))); return; }
     const e = ref.endpoints.find((x) => anchor(x) === id);
     if (!e) return;
     setOpen((s) => new Set(s).add(e.key)); setMine(false); setInternal(!!e.internal);
@@ -164,7 +165,7 @@ export default function Reference() {
           <div className="flex flex-col gap-4 rounded-xl border border-border p-3 text-sm">
             <div className="flex flex-col gap-1">
               <p className="px-2 text-xs font-semibold uppercase tracking-wider text-muted">{t('guideTitle')}</p>
-              {guide.map((g) => <a key={g.id} href={`#guide-${g.id}`} className="rounded-md px-2 py-1 hover:bg-default">{tt(`guide.${g.id}.title`)}</a>)}
+              {guide.map((g) => <a key={g.id} href={`#guide-${g.id}`} onClick={() => openGuide(g.id)} className="rounded-md px-2 py-1 hover:bg-default">{tt(`guide.${g.id}.title`)}</a>)}
             </div>
             <div className="flex flex-col gap-1">
               <p className="px-2 text-xs font-semibold uppercase tracking-wider text-muted">{t('referenceTitle')}</p>
@@ -239,6 +240,14 @@ export default function Reference() {
       </div>
     </>}
   </div>;
+}
+
+// A guide chapter reached from the contents or a link opens (a closed <details> would hide what was asked for).
+function openGuide(id: string) {
+  const d = document.getElementById(`guide-${id}`) as HTMLDetailsElement | null;
+  if (!d) return;
+  d.open = true;
+  d.scrollIntoView({ block: 'start' });
 }
 
 // Loaded on demand: pdfmake and its fonts are large.
