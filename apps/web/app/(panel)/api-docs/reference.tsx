@@ -160,7 +160,7 @@ export default function Reference() {
       </div>
       {ref.limits.who === 'off' && <Notice tone="warning" title={t('tokensOff')}/>}
 
-      <div className="grid gap-6 lg:grid-cols-[15rem_minmax(0,1fr)]">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[15rem_minmax(0,1fr)]">
         <nav aria-label={t('contents')} className="lg:sticky lg:top-4 lg:self-start">
           <div className="flex flex-col gap-4 rounded-xl border border-border p-3 text-sm">
             <div className="flex flex-col gap-1">
