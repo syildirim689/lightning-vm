@@ -26,6 +26,9 @@ const tick = (box: Locator) => box.click({ force: true });
 async function expectNoOverflow(page: Page, label: string) {
   await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth), { timeout: 3_000 }).toBeLessThanOrEqual(1).catch(() => undefined);
   const [overflow, culprits] = await page.evaluate(() => {
+    // Measured from the left edge of the page: a page already scrolled sideways would hide what sticks out.
+    window.scrollTo(0, window.scrollY);
+    for (const el of document.querySelectorAll('*')) if (el.scrollLeft) el.scrollLeft = 0;
     const w = window.innerWidth;
     // Content inside its own scroll box (a wide table that scrolls sideways) does not widen the page: left out.
     const scrolled = (e: Element) => {
