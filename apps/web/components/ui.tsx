@@ -2,7 +2,7 @@
 // Shared building blocks on top of HeroUI v3, used by every page so forms, headers and confirmations
 // look and behave the same everywhere.
 import { Alert, AlertDialog, Button, Card, Checkbox, CheckboxGroup, Chip, Description, FieldError, Input, Label, ListBox, NumberField, Select,
-  Switch, Table, TextArea, TextField, buttonVariants } from '@heroui/react';
+  Switch, Table, TextArea, TextField, buttonVariants, toast } from '@heroui/react';
 import NextLink from 'next/link';
 import { useLocale, useTranslations } from 'next-intl';
 import { useEffect, useMemo, useState } from 'react';
@@ -329,4 +329,9 @@ export function FormActions({ children, status }: { children: React.ReactNode; s
     {status && <div className="mr-auto min-w-0 text-sm" role="status">{status}</div>}
     {children}
   </div>;
+}
+
+// A success toast that, when `from` is given, offers to go back to it (for settings saved as soon as they change).
+export function undoToast(text: string, from: string | undefined, undoLabel: string, undo: (from: string) => void) {
+  toast.success(text, from === undefined ? undefined : { actionProps: { children: undoLabel, size: 'sm', variant: 'secondary', onPress: () => undo(from) } });
 }

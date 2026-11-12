@@ -28,6 +28,8 @@ export function UserSummary({ id, onClose }: { id: string; onClose: () => void }
   const format = useFormatter();
   const now = useNow({ updateInterval: 60_000 });
   const q = useApiQuery<Summary>(['admin', 'user-summary', id], `/admin/users/${id}/summary`);
+  // Role names as the roles page shows them (the same cached list the users table loads).
+  const roleNames = new Map((useApiQuery<{ roles: { key: string; name: string }[] }>(['admin', 'roles'], '/admin/roles').data?.roles ?? []).map((r) => [r.key, r.name]));
   const me = useMe();
   const d = q.data;
   const money = (n: number, c: string) => format.number(n, { style: 'currency', currency: c });
@@ -43,7 +45,7 @@ export function UserSummary({ id, onClose }: { id: string; onClose: () => void }
         <Modal.Body className="flex flex-col gap-5">
           {!d ? <div className="h-40 animate-pulse rounded-2xl bg-default/50"/> : <>
             <div className="flex flex-wrap gap-2">
-              {d.user.role.split(',').map((r) => <Chip key={r} size="sm" variant="soft">{r}</Chip>)}
+              {d.user.role.split(',').map((r) => <Chip key={r} size="sm" variant="soft">{roleNames.get(r.trim()) ?? r}</Chip>)}
               <StatusChip tone={d.user.twoFactorEnabled ? 'success' : 'warning'}>{d.user.twoFactorEnabled ? '2FA' : t('no2fa')}</StatusChip>
               {d.user.authSource === 'ldap' && <StatusChip tone="accent">{t('directory')}</StatusChip>}
               {d.user.banned && <StatusChip tone="danger">{t('banned')}</StatusChip>}

@@ -34,7 +34,8 @@ export default function NotificationPrefs() {
   const [thisDevice, setThisDevice] = useState<boolean | null>(null);
   const [busy, setBusy] = useState<string>();
   useEffect(() => { void currentSubscription().then((s) => setThisDevice(!!s)); }, []);
-  if (!q.data) return <Section title={t('title')}><p role="status" className="text-sm text-muted">…</p></Section>;
+  if (!q.data) return <Section title={t('title')}><div role="status" aria-label={t('title')} className="flex flex-col gap-2">
+    {[0, 1, 2, 3].map((i) => <div key={i} className="h-12 animate-pulse rounded-xl bg-default/50"/>)}</div></Section>;
   const { events, available, phoneVerified } = q.data;
   const title = (e: string) => t(`events.${e.replace('.', '_')}.title` as 'events.server_ready.title');
   const needle = fold(find.trim());

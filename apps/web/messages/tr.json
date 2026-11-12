@@ -1841,7 +1841,8 @@
       "save": "Kaydet",
       "saved": "Özel ağ ayarları kaydedildi"
     },
-    "export": "CSV indir"
+    "export": "CSV indir",
+    "undo": "Geri al"
   },
   "Servers": {
     "loading": "Yükleniyor…",
@@ -7437,7 +7438,10 @@
       "monthly": "Aylık tutara göre",
       "servers": "Sunucu sayısına göre"
     },
-    "noMatch": "Aramaya uyan müşteri yok."
+    "noMatch": "Aramaya uyan müşteri yok.",
+    "sshKeyPick": "SSH anahtarı",
+    "sshKeyPickHelp": "Kayıtlı anahtarlarınızdan biri müşteriye kopyalanır; ya da müşterinin anahtarını yapıştırın.",
+    "sshKeyPaste": "Anahtar yapıştır…"
   },
   "Placement": {
     "title": "Yerleşim",

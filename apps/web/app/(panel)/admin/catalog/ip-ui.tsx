@@ -1,6 +1,7 @@
 "use client";
 // IP management in the catalog: extra IPv4 for sale per location, IP pool settings (quarantine, IPv6, DNS,
 // excluded addresses) and every address that is not simply free (in use with its PTR, in quarantine, excluded).
+import { parseAsString, useQueryState } from 'nuqs';
 import { Button, Modal, toast } from '@heroui/react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useFormatter, useTranslations } from 'next-intl';
@@ -90,9 +91,10 @@ export function IpAddresses({ ipPools }: { ipPools: IpPoolRow[] }) {
   const format = useFormatter();
   const { error } = useErrorText();
   const client = useQueryClient();
-  const [poolId, setPoolId] = useState('');
-  const [state, setState] = useState('');
-  const [search, setSearch] = useState('');
+  // Kept in the address next to the catalog tab, so a filtered list survives a reload and can be shared.
+  const [poolId, setPoolId] = useQueryState('ipPool', parseAsString.withDefault('').withOptions({ history: 'replace' }));
+  const [state, setState] = useQueryState('ipState', parseAsString.withDefault('').withOptions({ history: 'replace' }));
+  const [search, setSearch] = useQueryState('ipq', parseAsString.withDefault('').withOptions({ history: 'replace', throttleMs: 300 }));
   const q = useApiQuery<{ addresses: Address[] }>(['catalog', 'addresses', poolId], `/admin/ip-addresses${poolId ? `?ipPoolId=${poolId}` : ''}`);
   const all = q.data?.addresses ?? [];
   const needle = fold(search.trim());

@@ -131,7 +131,13 @@ export class ResellerController {
     const { rows: [u] } = await pool.query('SELECT id, email, name, role, locale FROM users WHERE id = $1 AND reseller_id = $2', [id, r.id]);
     if (!u) throw apiError(404, 'NOT_FOUND', 'Unknown customer');
     let sshKeyIds: string[] = [];
-    const key = typeof body?.sshKey === 'string' ? body.sshKey.trim() : '';
+    // sshKeyId: one of the reseller's own saved keys, copied to the customer; otherwise sshKey, a pasted public key.
+    let key = typeof body?.sshKey === 'string' ? body.sshKey.trim() : '';
+    if (!key && typeof body?.sshKeyId === 'string' && body.sshKeyId) {
+      const { rows: [mine] } = await pool.query('SELECT public_key FROM ssh_keys WHERE id::text = $1 AND owner_id = $2', [body.sshKeyId, req.user.id]);
+      if (!mine) throw apiError(400, 'VALIDATION_FAILED', 'Unknown key', { sshKeyId: 'INVALID_SSH_KEY' });
+      key = String(mine.public_key).trim();
+    }
     if (!sshKeyPattern.test(key)) throw apiError(400, 'VALIDATION_FAILED', 'Invalid key', { sshKey: 'INVALID_SSH_KEY' });
     const { rows: [k] } = await pool.query(`INSERT INTO ssh_keys (owner_id, name, public_key, fingerprint) VALUES ($1, $2, $3, $4)
       ON CONFLICT (owner_id, fingerprint) DO UPDATE SET name = ssh_keys.name RETURNING id`, [id, 'reseller', key, fingerprint(key)]);

@@ -148,7 +148,11 @@ function SourceForm({ source, protocols, onDone }: { source: Source | null; prot
   return <form className="flex flex-col gap-4" noValidate onSubmit={(e) => { e.preventDefault(); void call('save'); }}>
     <FieldGroup title={t('identity')}>
       <TextInput label={t('name')} value={name} onChange={setName} error={field(fields.name)} isRequired placeholder="NAS ISO"/>
-      <SelectInput label={t('protocol')} value={protocol} onChange={(v) => { setProtocol(v); setConfig({}); setTested(undefined); }}
+      <SelectInput label={t('protocol')} value={protocol} onChange={(v) => {
+          // Fields the new protocol also has (host, user, password…) keep what was typed; the rest are dropped.
+          const keep = new Set((protocols[v] ?? []).map((x) => x.key));
+          setProtocol(v); setConfig((c) => Object.fromEntries(Object.entries(c).filter(([k]) => keep.has(k)))); setTested(undefined);
+        }}
         options={Object.keys(protocols).map((p) => ({ id: p, label: t(`protocols.${p}` as 'protocols.ftp'), description: t(`protocolHelp.${p}` as 'protocolHelp.ftp') }))}/>
     </FieldGroup>
     <FieldGroup title={t('connection')} description={t(`protocolHelp.${protocol}` as 'protocolHelp.ftp')}>

@@ -50,7 +50,7 @@ export default function ChatConnections() {
                 <p className="truncate font-medium">{c.label}</p>
                 <p className="truncate text-xs text-muted">{name(c.app)}{c.hint && ` · ${c.hint}`}</p>
               </div>
-              <Switch size="sm" isSelected={c.enabled}
+              <Switch size="sm" isSelected={c.enabled} isDisabled={busy === c.id}
                 onChange={(on) => act(c.id, () => apiFetch(`/chat/connections/${c.id}`, { method: 'PATCH', body: { enabled: on } }))}>
                 <Switch.Content><Switch.Control><Switch.Thumb/></Switch.Control><span className="sr-only">{t('enabled', { name: c.label })}</span></Switch.Content>
               </Switch>

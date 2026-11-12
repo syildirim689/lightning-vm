@@ -2,7 +2,7 @@
 import { Button, Card, SearchField, Tabs } from '@heroui/react';
 import NextLink from 'next/link';
 import { useFormatter, useTranslations } from 'next-intl';
-import { parseAsString, useQueryState } from 'nuqs';
+import { parseAsString, parseAsStringLiteral, useQueryState } from 'nuqs';
 import { I } from '../../../../components/icon';
 import { ConfirmButton, DataTable, Mono, Notice, PageHeader, SelectInput, StatusChip, TextInput } from '../../../../components/ui';
 import { useState } from 'react';
@@ -42,8 +42,9 @@ export default function AdminServers() {
   const bulk = useApiAction((ids: string[]) => apiFetch<{ started: number; skipped: number }>('/admin/servers/actions', { method: 'POST', body: { action: bulkAction, serverIds: ids, ...(tagging && { tag: bulkTag.trim() }) }, headers: { 'idempotency-key': crypto.randomUUID() } }),
     { invalidate: [['admin']], success: (r) => (tagging ? t('list.select.tagDone', { n: r.started }) : t('admin.bulkDone', { started: r.started, skipped: r.skipped })) });
   const [onlyStarred, setOnlyStarred] = useState(false);
-  const [opShow, setOpShow] = useState<'all' | 'failed' | 'active'>('all');
-  const [opFind, setOpFind] = useState('');
+  // Kept in the address, so a link to "failed operations" works and the view survives a reload.
+  const [opShow, setOpShow] = useQueryState('ops', parseAsStringLiteral(['all', 'failed', 'active'] as const).withDefault('all').withOptions({ history: 'replace' }));
+  const [opFind, setOpFind] = useQueryState('opq', parseAsString.withDefault('').withOptions({ history: 'replace', throttleMs: 300 }));
   const opNeedle = fold(opFind.trim());
   const opGroup = (o: Operation) => (o.status === 'failed' ? 'failed' : o.status === 'pending' || o.status === 'running' ? 'active' : 'done');
   const shownOps = ops.filter((o) => (opShow === 'all' || opGroup(o) === opShow) && (!opNeedle || fold(`${o.serverName ?? ''} ${o.ownerEmail ?? ''} ${t(`kind.${o.kind as 'create'}`)} ${o.errorCode ?? ''}`).includes(opNeedle)));

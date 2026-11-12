@@ -6,7 +6,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useTranslations } from 'next-intl';
 import { useState } from 'react';
 import { I } from '../../../../components/icon';
-import { ConfirmButton, DataTable, FieldGroup, NumberInput, SelectInput, StatusChip, TextInput } from '../../../../components/ui';
+import { ConfirmButton, DataTable, FieldGroup, NumberInput, SelectInput, StatusChip, TextInput, undoToast } from '../../../../components/ui';
 import { apiFetch, useErrorText, type ApiError } from '../../../../lib/api';
 import { flag } from '../../../../lib/flag';
 import { useApiAction, useApiQuery } from '../../../../lib/query';
@@ -108,7 +108,10 @@ function LocationForm({ location, onDone }: { location: Location | null; onDone:
 export function PoolLocation({ poolId, locationId }: { poolId: string; locationId: string | null }) {
   const t = useTranslations('Catalog.locations');
   const locations = useLocations();
-  const assign = useApiAction((id: string) => apiFetch(`/admin/pools/${poolId}/location`, { method: 'PUT', body: { locationId: id || null } }), { invalidate: [['catalog']], success: t('assigned') });
-  return <SelectInput className="w-56" label={t('poolLocation')} value={locationId ?? ''} onChange={(id) => assign.mutate(id)} isDisabled={assign.isPending}
+  const tc = useTranslations('Catalog');
+  // Saved on change; the toast offers to put the previous location back.
+  const assign = useApiAction((v: { to: string; from?: string }) => apiFetch(`/admin/pools/${poolId}/location`, { method: 'PUT', body: { locationId: v.to || null } }),
+    { invalidate: [['catalog']], onSuccess: (_r, v) => undoToast(t('assigned'), v.from, tc('undo'), (from) => assign.mutate({ to: from })) });
+  return <SelectInput className="w-56" label={t('poolLocation')} value={locationId ?? ''} onChange={(id) => assign.mutate({ to: id, from: locationId ?? '' })} isDisabled={assign.isPending}
     options={[{ id: '', label: t('noLocation') }, ...locations.map((l) => ({ id: l.id, label: `${flag(l.countryCode)} ${l.name}`.trim() }))]}/>;
 }

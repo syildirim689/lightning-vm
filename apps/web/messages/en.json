@@ -1841,7 +1841,8 @@
       "save": "Save",
       "saved": "Private network settings saved"
     },
-    "export": "Download CSV"
+    "export": "Download CSV",
+    "undo": "Undo"
   },
   "Servers": {
     "loading": "Loading…",
@@ -7437,7 +7438,10 @@
       "monthly": "By monthly amount",
       "servers": "By server count"
     },
-    "noMatch": "No customer matches the search."
+    "noMatch": "No customer matches the search.",
+    "sshKeyPick": "SSH key",
+    "sshKeyPickHelp": "One of your saved keys is copied to the customer; or paste theirs.",
+    "sshKeyPaste": "Paste a key…"
   },
   "Placement": {
     "title": "Placement",

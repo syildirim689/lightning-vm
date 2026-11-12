@@ -2,6 +2,7 @@
 // automatic charges, reminders, overdue notices, suspension and termination). Rules without I/O are in billing-rules.ts,
 // payment providers in billing-gateways.ts. An invoice awaits payment (a pro forma without a legal number) until it is
 // paid; then it gets its number in the year's series and is issued (e-Fatura / e-Arşiv in einvoice.ts).
+import { providers } from './payment-providers';
 import { All, Body, Controller, Delete, Get, HttpCode, Param, ParseUUIDPipe, Post, Put, Query, Req, Res, UseGuards } from '@nestjs/common';
 import type { FastifyReply } from 'fastify';
 import type { Pool, PoolClient } from 'pg';
@@ -594,7 +595,8 @@ export class BillingController {
     const currencies = [...new Set(hourly.map((h) => h.currency))];
     const left = await Promise.all(currencies.map(async (c) => ({ currency: c, amount: (await available(pool, id, c)).toFixed(2),
       perHour: hourly.filter((h) => h.currency === c).reduce((a, h) => a + Number(h.priceHourly), 0).toFixed(4) })));
-    return { enabled: true, balance, open: open.rows[0], subscriptions: subs.rows, cards: cards.rows, profileComplete: !!profile.rowCount, methods: await methods(),
+    return { enabled: true, balance, open: open.rows[0], subscriptions: subs.rows,
+      cards: cards.rows.map((c) => ({ ...c, providerName: c.provider === 'sandbox' ? 'Sandbox' : providers[c.provider]?.name ?? c.provider })), profileComplete: !!profile.rowCount, methods: await methods(),
       autoCharge: s.autoCharge, requirePayment: s.requirePayment, hourly: { enabled: s.hourly && s.balance, minHours: s.hourlyMinHours, servers: hourly, available: left } };
   }
 

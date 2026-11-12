@@ -5,7 +5,7 @@ import { useFormatter, useTranslations } from 'next-intl';
 import { parseAsString, useQueryState } from 'nuqs';
 import { useState } from 'react';
 import { I } from '../../../../components/icon';
-import { CheckboxList, ConfirmButton, DataTable, Empty, FieldGroup, Mono, Notice, NumberInput, PageHeader, SelectInput, TextInput } from '../../../../components/ui';
+import { CheckboxList, ConfirmButton, DataTable, undoToast, Empty, FieldGroup, Mono, Notice, NumberInput, PageHeader, SelectInput, TextInput } from '../../../../components/ui';
 import { apiFetch, useErrorText } from '../../../../lib/api';
 import { useApiForm } from '../../../../lib/form';
 import { downloadCsv } from '../../../../lib/csv';
@@ -108,7 +108,7 @@ export default function Catalog() {
         </div>
         <DataTable label={t('images.title')} rows={images} rowKey={(i) => i.id} empty={t('images.empty')}
           columns={[{ id: 'name', label: t('col.name') }, { id: 'family', label: t('images.family') }, { id: 'tpl', label: t('images.template') }, { id: 'disk', label: t('images.minDisk') }, { id: 'act', label: <span className="sr-only">{t('remove')}</span> }]}
-          cells={(i) => [<span key="n" className="font-medium">{i.name}</span>, i.family, i.templateName ?? '–', `${i.minDiskGb} GB`, removeButton(`/admin/images/${i.id}`, i.name)]}/>
+          cells={(i) => [<span key="n" className="font-medium">{i.name}</span>, i.family === 'linux' ? 'Linux' : i.family === 'windows' ? 'Windows' : i.family === 'esxi' ? t('images.esxi') : i.family, i.templateName ?? '–', `${i.minDiskGb} GB`, removeButton(`/admin/images/${i.id}`, i.name)]}/>
       </Tabs.Panel>
 
       <Tabs.Panel id="ip" className="flex flex-col gap-4 pt-5">
@@ -234,12 +234,13 @@ function PoolBackupTarget({ pool }: { pool: Pool }) {
   const t = useTranslations('Catalog');
   const client = useQueryClient();
   const inv = useApiQuery<Inventory>(['vmware', 'connection', pool.connectionId], `/admin/vmware/connections/${pool.connectionId}`).data;
-  const save = useApiAction((v: string) => apiFetch(`/admin/pools/${pool.id}/backup`, { method: 'PUT', body: { datastoreMoref: v || null } }),
-    { invalidate: [keys.pools], success: t('backup.saved') });
+  // Saved on change; the toast offers to put the previous target back.
+  const save = useApiAction((v: { to: string; from?: string }) => apiFetch(`/admin/pools/${pool.id}/backup`, { method: 'PUT', body: { datastoreMoref: v.to || null } }),
+    { invalidate: [keys.pools], onSuccess: (_r, v) => undoToast(t('backup.saved'), v.from, t('undo'), (from) => save.mutate({ to: from })) });
   void client;
   return <div className="flex flex-wrap items-end gap-3 rounded-xl border border-border p-3">
     <SelectInput className="min-w-64 flex-1" label={t('backup.target')} help={t('backup.help')} value={pool.backupDatastore ?? ''} isDisabled={save.isPending}
-      onChange={(v) => save.mutate(v)} options={[{ id: '', label: t('backup.none') }, ...(inv?.datastores ?? []).map((d) => ({ id: d.moref, label: d.name }))]}/>
+      onChange={(v) => save.mutate({ to: v, from: pool.backupDatastore ?? '' })} options={[{ id: '', label: t('backup.none') }, ...(inv?.datastores ?? []).map((d) => ({ id: d.moref, label: d.name }))]}/>
   </div>;
 }
 
@@ -265,6 +266,7 @@ const str = (v: number | undefined) => (v === undefined ? '' : String(v));
 
 function PoolForm({ connections, onSaved }: { connections: Connection[]; onSaved: () => void }) {
   const t = useTranslations('Catalog');
+  const tv = useTranslations('Vmware');
   const saved = useSaved(onSaved);
   const locations = useLocations();
   const f = useApiForm({ name: '', locationId: '', connectionId: connections[0].id, computeMoref: '', networkMoref: '', cpuOvercommit: '4', memoryOvercommit: '1', storageOvercommit: '1',
@@ -286,7 +288,7 @@ function PoolForm({ connections, onSaved }: { connections: Connection[]; onSaved
     <FieldGroup title={t('form.vmware')} description={t('form.vmwareHelp')}>
       <SelectInput label={t('pools.connection')} value={f.values.connectionId} onChange={f.set('connectionId')} options={connections.map((c) => ({ id: c.id, label: c.name }))}/>
       <SelectInput label={t('pools.compute')} value={f.values.computeMoref} onChange={f.set('computeMoref')} error={f.fieldError('computeMoref')}
-        options={inv?.compute.map((c) => ({ id: c.moref, label: c.name, description: c.kind })) ?? []}/>
+        options={inv?.compute.map((c) => ({ id: c.moref, label: c.name, description: tv.has(`computeKind.${c.kind}` as 'computeKind.cluster') ? tv(`computeKind.${c.kind}` as 'computeKind.cluster') : c.kind })) ?? []}/>
       <SelectInput className="sm:col-span-2" label={t('pools.network')} value={f.values.networkMoref} onChange={f.set('networkMoref')} error={f.fieldError('networkMoref')}
         options={inv?.networks.map((n) => ({ id: n.moref, label: n.name, description: n.vlan !== null ? `VLAN ${n.vlan}` : undefined })) ?? []}/>
       <div className="sm:col-span-2"><CheckboxList label={t('pools.datastores')} value={stores} onChange={setStores} error={f.fieldError('datastoreMorefs')} help={t('form.datastoresHelp')}

@@ -614,7 +614,8 @@ export default {
     details: { tr: 'Sunucu müşterinindir; bayiye bayi indirimiyle, aylık olarak faturalanır ve tahsise sayılır. Verilen SSH anahtarı müşterinin anahtarlarına eklenir. Kupon ve saatlik ödeme yoktur.', en: 'The server is the customer\'s; it is billed monthly to the reseller at the discount and counts against the allocation. The SSH key is added to the customer\'s keys. No coupons or hourly billing.' },
     params: [uuid('Müşterinin kimliği.', 'The customer id.')],
     body: [
-      { name: 'sshKey', type: 'string', required: true, text: { tr: 'Müşteri için açık SSH anahtarı.', en: 'A public SSH key for the customer.' } },
+      { name: 'sshKey', type: 'string', text: { tr: 'Müşteri için açık SSH anahtarı. sshKeyId verilmezse zorunlu.', en: 'A public SSH key for the customer. Required unless sshKeyId is given.' } },
+      { name: 'sshKeyId', type: 'uuid', text: { tr: 'Bayinin kendi kayıtlı anahtarlarından biri; müşteriye kopyalanır. sshKey yerine.', en: 'One of the reseller\'s own saved keys, copied to the customer. Instead of sshKey.' } },
       { name: 'name', type: 'string', required: true, text: { tr: 'Sunucu adı (küçük harf, rakam, tire).', en: 'Server name (lowercase, digits, hyphens).' } },
       { name: 'poolId', type: 'uuid', required: true, text: { tr: 'Konum.', en: 'Location.' } },
       { name: 'imageId', type: 'uuid', required: true, text: { tr: 'İşletim sistemi imajı.', en: 'Operating system image.' } },

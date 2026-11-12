@@ -16,16 +16,16 @@ export function useApiQuery<T>(key: QueryKey, path: string | null, opts: { refet
 
 // A state-changing call: shows the translated error as a toast, an optional success toast, and refreshes
 // the given cache keys so every view of that data updates.
-export function useApiAction<V = void, R = unknown>(run: (vars: V) => Promise<R>, opts: { invalidate?: QueryKey[]; success?: string | ((r: R) => string); onSuccess?: (r: R) => void } = {}) {
+export function useApiAction<V = void, R = unknown>(run: (vars: V) => Promise<R>, opts: { invalidate?: QueryKey[]; success?: string | ((r: R) => string); onSuccess?: (r: R, vars: V) => void } = {}) {
   const client = useQueryClient();
   const { error } = useErrorText();
   return useMutation<R, unknown, V>({
     mutationFn: run,
-    onSuccess: (r) => {
+    onSuccess: (r, vars) => {
       opts.invalidate?.forEach((key) => client.invalidateQueries({ queryKey: key }));
       const text = typeof opts.success === 'function' ? opts.success(r) : opts.success;
       if (text) toast.success(text);
-      opts.onSuccess?.(r);
+      opts.onSuccess?.(r, vars);
     },
     onError: (e) => { toast.danger(error(e)); },
   });

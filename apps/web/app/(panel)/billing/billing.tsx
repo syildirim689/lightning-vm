@@ -84,7 +84,7 @@ function Invoices({ filter, setFilter }: { filter: string; setFilter: (k: string
   const t = useTranslations('Billing');
   const format = useFormatter();
   const now = useNow({ updateInterval: 60_000 });
-  const [q, setQ] = useState('');
+  const [q, setQ] = useQueryState('q', parseAsString.withDefault('').withOptions({ history: 'replace', throttleMs: 300 }));
   const list = useApiQuery<{ invoices: Invoice[] }>(['billing', 'invoices'], '/billing/invoices').data?.invoices;
   const needle = fold(q.trim().replace(/^#/, ''));
   const of = (k: string) => (list ?? []).filter((i) => (k === 'all' || (k === 'open' ? i.status === 'unpaid' : i.status !== 'unpaid'))
@@ -252,7 +252,7 @@ function Cards({ cards }: { cards: SavedCard[] }) {
         <span className="grid h-10 w-14 shrink-0 place-items-center rounded-lg bg-gradient-to-br from-default to-default/40 text-xs font-bold">{c.brand ?? '••'}</span>
         <span className="min-w-0 flex-1">
           <span className="block font-mono font-medium">•••• {c.last4 ?? '????'}</span>
-          <span className="block text-xs text-muted">{c.expMonth && c.expYear ? `${String(c.expMonth).padStart(2, '0')}/${c.expYear}` : ''} · {c.provider}{c.mode === 'test' && ` · ${t('testMode')}`}</span>
+          <span className="block text-xs text-muted">{c.expMonth && c.expYear ? `${String(c.expMonth).padStart(2, '0')}/${c.expYear}` : ''} · {c.providerName ?? c.provider}{c.mode === 'test' && ` · ${t('testMode')}`}</span>
           {(() => { const m = left(c); return m === null || m > 1 ? null : <span className={`mt-1 inline-flex items-center gap-1 text-xs ${m < 0 ? 'text-danger' : 'text-warning'}`}>
             <I name="triangle-alert" size={12}/>{m < 0 ? t('cardExpired') : t('cardExpiring')}</span>; })()}
         </span>

@@ -34,18 +34,29 @@ function OrderForCustomer({ customer, discount, onDone }: { customer: Customer; 
   const format = useFormatter();
   const { error, field } = useErrorText();
   const catalog = useApiQuery<Catalog>(['catalog'], '/catalog').data;
-  const [v, setV] = useState({ poolId: '', packageId: '', imageId: '', name: '', sshKey: '' });
+  const keys = useApiQuery<{ keys: { id: string; name: string; fingerprint: string }[] }>(['ssh-keys'], '/ssh-keys').data?.keys;
+  const [picked, setPicked] = useState({ poolId: '', packageId: '', imageId: '', name: '', sshKey: '', sshKeyId: '' });
   const [fields, setFields] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
   if (!catalog) return null;
-  const packages = catalog.packages.filter((p) => !v.poolId || p.poolIds.includes(v.poolId));
-  const pkg = catalog.packages.find((p) => p.id === v.packageId);
+  // Smart defaults: a list with one choice is chosen for you, and your newest saved key is offered first.
+  const only = <T extends { id: string }>(list: T[], id: string) => (id || list.length !== 1 ? id : list[0]!.id);
+  const poolId = only(catalog.pools, picked.poolId);
+  const packages = catalog.packages.filter((p) => !poolId || p.poolIds.includes(poolId));
+  const packageId = only(packages, picked.packageId);
+  const pkg = catalog.packages.find((p) => p.id === packageId);
   const images = catalog.images.filter((i) => !pkg?.imageIds.length || pkg.imageIds.includes(i.id));
+  const imageId = only(images, picked.imageId);
+  const sshKeyId = picked.sshKeyId === '' && keys?.length ? keys[0]!.id : picked.sshKeyId === 'paste' ? '' : picked.sshKeyId;
+  const v = { ...picked, poolId, packageId, imageId, sshKeyId };
+  // The key choice is kept as picked ('' = newest saved key, 'paste' = typed), not as resolved.
+  const setV = (n: typeof v) => setPicked({ ...n, sshKeyId: picked.sshKeyId });
   const set = (k: keyof typeof v) => (x: string) => setV({ ...v, [k]: x });
   async function submit(e: React.FormEvent) {
     e.preventDefault(); setBusy(true); setFields({});
     try {
-      await apiFetch(`/reseller/customers/${customer.id}/servers`, { method: 'POST', body: { ...v, type: 'package' } });
+      const { sshKey, sshKeyId: keyId, ...rest } = v;
+      await apiFetch(`/reseller/customers/${customer.id}/servers`, { method: 'POST', body: { ...rest, type: 'package', ...(keyId ? { sshKeyId: keyId } : { sshKey }) } });
       toast.success(t('ordered', { name: v.name })); onDone();
     } catch (err) { setFields((err as ApiError).fields ?? {}); toast.danger(error(err)); } finally { setBusy(false); }
   }
@@ -55,13 +66,15 @@ function OrderForCustomer({ customer, discount, onDone }: { customer: Customer; 
       options={packages.map((p) => ({ id: p.id, label: p.name, description: `${p.vcpu} vCPU · ${p.memoryMb / 1024} GB · ${p.diskGb} GB` }))}/>
     <SelectInput label={t('image')} value={v.imageId} onChange={set('imageId')} error={field(fields.imageId)} options={images.map((i) => ({ id: i.id, label: i.name }))}/>
     <TextInput label={t('hostname')} value={v.name} onChange={(x) => setV({ ...v, name: x.toLowerCase() })} error={field(fields.name)} placeholder="web-1"/>
-    <div className="sm:col-span-2"><TextInput label={t('sshKey')} value={v.sshKey} onChange={set('sshKey')} multiline error={field(fields.sshKey) ?? field(fields.sshKeyIds)} help={t('sshKeyHelp')}/></div>
+    {!!keys?.length && <div className="sm:col-span-2"><SelectInput label={t('sshKeyPick')} value={v.sshKeyId || 'paste'} onChange={(x) => setPicked({ ...v, sshKeyId: x })} error={field(fields.sshKeyId)}
+      help={t('sshKeyPickHelp')} options={[...keys.map((k) => ({ id: k.id, label: k.name, description: k.fingerprint })), { id: 'paste', label: t('sshKeyPaste') }]}/></div>}
+    {!v.sshKeyId && <div className="sm:col-span-2"><TextInput label={t('sshKey')} value={v.sshKey} onChange={set('sshKey')} multiline error={field(fields.sshKey) ?? field(fields.sshKeyIds)} help={t('sshKeyHelp')}/></div>}
     {pkg && <p className="flex flex-wrap items-baseline gap-2 text-sm sm:col-span-2"><I name="receipt" size={14} className="self-center text-muted"/>{t('priceYou')}
       <strong className="tabular-nums">{format.number(Number(pkg.priceMonthly) * (1 - discount / 100), { style: 'currency', currency: pkg.currency })}</strong>
       {discount > 0 && <span className="text-xs text-muted line-through tabular-nums">{format.number(Number(pkg.priceMonthly), { style: 'currency', currency: pkg.currency })}</span>}
       <span className="text-xs text-muted">{t('perMonth')}</span></p>}
     <div className="flex flex-wrap gap-2 sm:col-span-2">
-      <Button type="submit" isPending={busy} isDisabled={!v.poolId || !v.packageId || !v.imageId || !v.name || !v.sshKey.trim()}><I name="rocket" size={15}/>{t('order')}</Button>
+      <Button type="submit" isPending={busy} isDisabled={!v.poolId || !v.packageId || !v.imageId || !v.name || (!v.sshKeyId && !v.sshKey.trim())}><I name="rocket" size={15}/>{t('order')}</Button>
       <Button variant="ghost" onPress={onDone}>{t('cancel')}</Button>
     </div>
   </form>;

@@ -1,6 +1,7 @@
 "use client";
 // Account → API: personal API tokens (shown once) and webhooks (signed POSTs of the person's notifications), with each
 // webhook's recent deliveries and a test button.
+import { Copy } from '../server-extras';
 import { Button, toast } from '@heroui/react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useFormatter, useTranslations } from 'next-intl';
@@ -209,7 +210,7 @@ function Webhooks() {
           {editing === w.id && q.data ? <WebhookForm events={q.data.events} initial={w} onDone={() => { setEditing(undefined); refresh(); }}/> : <>
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div className="min-w-0">
-                <p className="break-all font-mono text-sm">{w.url}</p>
+                <p className="flex items-start gap-1"><span className="min-w-0 break-all font-mono text-sm">{w.url}</span><Copy text={w.url} label={t('webhooks.url')} className="-my-1 shrink-0"/></p>
                 <p className="text-xs text-muted">{w.description || (w.events.includes('*') ? t('webhooks.allShort') : t('webhooks.count', { n: w.events.length }))}</p>
               </div>
               <div className="flex flex-wrap items-center gap-2">

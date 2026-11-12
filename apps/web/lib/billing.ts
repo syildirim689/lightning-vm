@@ -14,7 +14,7 @@ export type InvoiceDetail = { invoice: Invoice & { buyer: Party; seller: Party; 
 export type Subscription = { id: string; kind: 'server' | 'vdc'; serverId: string | null; vdcId: string | null; description: string; amount: string; currency: string; periodMonths: number;
   status: 'pending' | 'active' | 'past_due' | 'suspended' | 'cancelled' | 'ended'; periodStart: string | null; periodEnd: string | null; autoRenew: boolean; cancelAtPeriodEnd: boolean;
   suspendedAt: string | null; createdAt: string; email?: string };
-export type Card = { id: string; provider: string; mode: string; brand: string | null; last4: string | null; expMonth: number | null; expYear: number | null; isDefault: boolean };
+export type Card = { id: string; provider: string; providerName?: string; mode: string; brand: string | null; last4: string | null; expMonth: number | null; expYear: number | null; isDefault: boolean };
 export type Methods = { cards: { id: string; name: string; mode: string; saved: boolean }[]; balance: boolean; bankTransfer: { bank: string; holder: string; iban: string } | null; topup: { min: number; max: number } };
 export type Summary = { enabled: false } | { enabled: true; balance: { currency: string; amount: string }[]; open: { n: number; overdue: number; amount: string; currency: string | null };
   subscriptions: Subscription[]; cards: Card[]; profileComplete: boolean; methods: Methods; autoCharge: boolean; requirePayment: boolean; hourly?: Hourly };
