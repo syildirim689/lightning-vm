@@ -37,7 +37,12 @@ async function expectNoOverflow(page: Page, label: string) {
     // The element where the overflow starts: it sticks out, its parent does not.
     const out = [...document.querySelectorAll('body *')].filter((e) => e.getBoundingClientRect().right > w + 1 && !scrolled(e)
       && (e.parentElement?.getBoundingClientRect().right ?? 0) <= w + 1);
-    return [document.documentElement.scrollWidth - w, out.slice(0, 5).map((e) => `${e.tagName.toLowerCase()}.${String(e.className).slice(0, 60)} "${(e.textContent ?? '').trim().slice(0, 30)}"`).join(' | ')];
+    const name = (e: Element) => `${e.tagName.toLowerCase()}.${String(e.className).slice(0, 60)} "${(e.textContent ?? '').trim().slice(0, 30)}"`;
+    // Nothing found that way (the overflow comes from a positioned or transformed element): the ones reaching furthest right.
+    const widest = out.length ? [] : [...document.querySelectorAll('body *')].map((e) => [e, e.getBoundingClientRect().right] as const)
+      .filter(([, r]) => r > w + 1).sort((a, b) => b[1] - a[1]).slice(0, 5)
+      .map(([e, r]) => `${name(e)} right=${Math.round(r)} pos=${getComputedStyle(e).position} parentOverflow=${e.parentElement ? getComputedStyle(e.parentElement).overflowX : ''}`);
+    return [document.documentElement.scrollWidth - w, [...out.slice(0, 5).map(name), ...widest].join(' | ')];
   });
   expect(overflow, `${label}: ${culprits}`).toBeLessThanOrEqual(1);
 }
