@@ -5510,7 +5510,9 @@
     "fontLarger": "Larger text",
     "fullscreen": "Full screen",
     "exitFullscreen": "Exit full screen",
-    "shortcuts": "Ctrl+Shift+C copies, Ctrl+Shift+V pastes. With text selected Ctrl+C copies too; without a selection it interrupts the command."
+    "shortcuts": "Ctrl+Shift+C copies, Ctrl+Shift+V pastes. With text selected Ctrl+C copies too; without a selection it interrupts the command.",
+    "endTitle": "End {email}’s terminal session?",
+    "endBody": "Their terminal closes at once; anything running in it stops."
   },
   "Chat": {
     "title": "Messaging apps",
@@ -6435,7 +6437,10 @@
     "cannedPreview": "Preview with sample values",
     "cannedSample": {
       "name": "Jane Doe"
-    }
+    },
+    "closeTitle": "Close this ticket?",
+    "closeBody": "The team stops working on it. Writing a new message reopens it.",
+    "rateThanks": "Thank you for your rating."
   },
   "Stats": {
     "eyebrow": "Administration",
@@ -6882,7 +6887,8 @@
     "cardExpiring": "Expires soon",
     "removeCardBody": "The card is removed from this account; to use it again you add it again.",
     "removeDefaultBody": "This is your default card. Without it, automatic payments wait until you choose another default card.",
-    "removeConfirm": "Remove the card"
+    "removeConfirm": "Remove the card",
+    "transferAmount": "Amount"
   },
   "BillingAdmin": {
     "eyebrow": "Money",
@@ -7858,5 +7864,14 @@
       }
     },
     "pdfButton": "Download PDF"
+  },
+  "Table": {
+    "sortBy": "Sort by",
+    "defaultOrder": "Default order",
+    "pages": "Pages of {label}",
+    "range": "{from}–{to} of {total}",
+    "page": "Page {page} of {pages}",
+    "previous": "Previous",
+    "next": "Next"
   }
 }

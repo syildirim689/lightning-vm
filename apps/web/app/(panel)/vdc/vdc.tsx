@@ -14,6 +14,7 @@ import { can } from '../../../lib/permissions';
 import { UsageBar, type Vdc } from '../admin/catalog/vdc-ui';
 import { useIntentKey } from '../servers-ui';
 import { fold } from '../../../lib/note-line';
+import { Copy } from '../server-extras';
 
 type Mine = Vdc & { servers: { id: string; name: string; state: string; vcpu: number; memoryMb: number; diskGb: number; address: string | null }[];
   images: { id: string; name: string; family: string; minDiskGb: number }[] };
@@ -78,15 +79,18 @@ export default function VdcPage() {
   const client = useQueryClient();
   const q = useApiQuery<{ vdcs: Mine[] }>(key, '/vdcs', { refetchInterval: 10_000 });
   const [adding, setAdding] = useState<Mine | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
   async function bulk(v: Mine, action: string) {
+    if (busy) return;
+    setBusy(`${v.id}:${action}`);
     try {
       const r = await apiFetch<{ started: unknown[] }>(`/vdcs/${v.id}/actions`, { method: 'POST', body: { action }, headers: { 'idempotency-key': crypto.randomUUID() } });
       toast.success(t('bulkStarted', { n: r.started.length })); client.invalidateQueries({ queryKey: ['tasks'] }); client.invalidateQueries({ queryKey: key });
-    } catch (e) { toast.danger(error(e)); }
+    } catch (e) { toast.danger(error(e)); } finally { setBusy(null); }
   }
   return <>
     <PageHeader title={t('myTitle')} description={t('myIntro')}/>
-    {!q.data ? <p role="status" className="text-sm text-muted">{t('loading')}</p>
+    {!q.data ? <div role="status" aria-label={t('loading')} className="h-48 animate-pulse rounded-3xl bg-default/50"/>
       : !q.data.vdcs.length ? <Empty icon={<I name="building-2" size={28}/>} title={t('none')}>{t('noneHelp')}
         {/* The way to one: staff set it up in the catalog, a customer asks support. */}
         <span className="mt-3 flex justify-center">{can(me?.permissions, 'catalog.manage')
@@ -100,7 +104,7 @@ export default function VdcPage() {
           </div>
           <div className="flex flex-wrap gap-2">
             <Button size="sm" isDisabled={!v.active || v.used.servers >= v.maxServers} onPress={() => setAdding(v)}><I name="plus" size={14}/>{t('newServer')}</Button>
-            <Button size="sm" variant="secondary" isDisabled={!v.servers.length} onPress={() => bulk(v, 'power_on')}><I name="play" size={14}/>{t('allOn')}</Button>
+            <Button size="sm" variant="secondary" isDisabled={!v.servers.length} isPending={busy === `${v.id}:power_on`} onPress={() => bulk(v, 'power_on')}><I name="play" size={14}/>{t('allOn')}</Button>
             <ConfirmButton size="sm" variant="secondary" icon={<I name="power" size={14}/>} label={t('allShutdown')} title={t('allShutdown')} body={t('allShutdownConfirm', { n: v.servers.length })}
               confirmLabel={t('allShutdown')} cancelLabel={t('cancel')} isDisabled={!v.servers.length} onConfirm={() => bulk(v, 'shutdown')}/>
             <ConfirmButton size="sm" variant="danger-soft" icon={<I name="rotate-ccw" size={14}/>} label={t('allReset')} title={t('allReset')} body={t('allResetConfirm', { n: v.servers.length })}
@@ -123,7 +127,7 @@ export default function VdcPage() {
             <span className="font-medium">{s.name}</span>
             <StatusChip tone={s.state === 'ready' ? 'success' : s.state === 'error' || s.state === 'missing' ? 'danger' : 'accent'}>{ts(`state.${s.state as 'ready'}`)}</StatusChip>
             <span className="text-xs text-muted">{s.vcpu} vCPU · {format.number(s.memoryMb / 1024, { maximumFractionDigits: 2 })} GB · {s.diskGb} GB</span>
-            {s.address && <Mono>{s.address}</Mono>}
+            {s.address && <span className="flex items-center gap-1"><Mono>{s.address}</Mono><Copy text={s.address} label={`${s.name} IP`}/></span>}
             <ButtonLink size="sm" variant="ghost" className="ml-auto" href={`/servers/${s.id}`}>{t('open')}</ButtonLink>
           </li>)}
         </ul></div>}

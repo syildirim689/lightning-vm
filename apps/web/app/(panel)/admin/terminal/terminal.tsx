@@ -179,8 +179,11 @@ export default function Terminal() {
         : <ul className="flex flex-col divide-y divide-separator">{s.sessions.map((x) => <li key={x.key} className="flex flex-wrap items-center gap-3 py-2 text-sm">
             <I name="user" size={14} className="text-muted"/><span className="font-medium">{x.email ?? '–'}</span>
             <span className="text-xs text-muted">{format.relativeTime(new Date(x.startedAt))}</span>
-            <Button size="sm" variant="ghost" className="ml-auto" onPress={async () => { await apiFetch(`/admin/terminal/sessions/${x.key}/revoke`, { method: 'POST' }); client.invalidateQueries({ queryKey: ['admin', 'terminal'] }); }}>
-              <I name="x" size={14}/>{t('end')}</Button>
+            <span className="ml-auto"><ConfirmButton size="sm" variant="ghost" icon={<I name="x" size={14}/>} label={t('end')} title={t('endTitle', { email: x.email ?? '–' })} body={t('endBody')}
+              confirmLabel={t('end')} cancelLabel={t('cancel')} onConfirm={async () => {
+                try { await apiFetch(`/admin/terminal/sessions/${x.key}/revoke`, { method: 'POST' }); await client.invalidateQueries({ queryKey: ['admin', 'terminal'] }); }
+                catch (e) { toast.danger(error(e)); }
+              }}/></span>
           </li>)}</ul>}
       </Section>
     </>}

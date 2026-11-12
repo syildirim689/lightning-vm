@@ -186,14 +186,17 @@ function Webhooks() {
   const [open, setOpen] = useState<string>();
   const [secret, setSecret] = useState<string>();
   const refresh = () => client.invalidateQueries({ queryKey: ['webhooks'] });
+  const [running, setRunning] = useState<string>();
   async function run(path: string, method: string, ok: string) {
+    if (running) return;
+    setRunning(path);
     try {
       const out = await apiFetch<{ ok?: boolean; responseCode?: number | null; error?: string | null; secret?: string }>(path, { method });
       if (out?.secret) setSecret(out.secret);
       if (out?.ok === false) toast.danger(t('webhooks.testFailed', { detail: out.responseCode ? `HTTP ${out.responseCode}` : out.error ?? '' }));
       else toast.success(ok);
       refresh(); client.invalidateQueries({ queryKey: ['webhook-deliveries'] });
-    } catch (err) { toast.danger(error(err)); }
+    } catch (err) { toast.danger(error(err)); } finally { setRunning(undefined); }
   }
   const list = q.data?.webhooks ?? [];
   return <Section title={t('webhooks.title')} description={t('webhooks.help')}
@@ -211,7 +214,7 @@ function Webhooks() {
               </div>
               <div className="flex flex-wrap items-center gap-2">
                 <StatusChip tone={w.active ? (w.failures ? 'warning' : 'success') : 'danger'}>{w.active ? (w.failures ? t('webhooks.failing', { n: w.failures }) : t('webhooks.on')) : t('webhooks.off')}</StatusChip>
-                <Button size="sm" variant="secondary" onPress={() => run(`/account/webhooks/${w.id}/test`, 'POST', t('webhooks.testOk'))}><I name="send" size={14}/>{t('webhooks.test')}</Button>
+                <Button size="sm" variant="secondary" isPending={running === `/account/webhooks/${w.id}/test`} onPress={() => run(`/account/webhooks/${w.id}/test`, 'POST', t('webhooks.testOk'))}><I name="send" size={14}/>{t('webhooks.test')}</Button>
                 <Button size="sm" variant="ghost" onPress={() => setEditing(w.id)}><I name="pencil" size={14}/>{t('edit')}</Button>
                 <Button size="sm" variant="ghost" onPress={() => setOpen(open === w.id ? undefined : w.id)} aria-expanded={open === w.id}><I name="history" size={14}/>{t('webhooks.deliveries')}</Button>
                 <ConfirmButton size="sm" variant="ghost" icon={<I name="rotate-ccw" size={14}/>} label={t('webhooks.rotate')} title={t('webhooks.rotate')} body={t('webhooks.rotateBody')}

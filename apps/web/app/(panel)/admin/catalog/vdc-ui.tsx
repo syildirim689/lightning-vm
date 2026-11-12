@@ -15,9 +15,11 @@ export type Vdc = { id: string; name: string; ownerId: string; owner: string; po
 const key = ['catalog', 'vdcs'];
 
 export function UsageBar({ label, used, total, unit = '' }: { label: string; used: number; total: number; unit?: string }) {
+  const format = useFormatter();
   const pct = total > 0 ? Math.min(100, (used / total) * 100) : 0;
+  const n = (v: number) => format.number(v, { maximumFractionDigits: 1 });
   return <div className="flex flex-col gap-1">
-    <div className="flex justify-between text-xs"><span className="text-muted">{label}</span><span className="tabular-nums">{used} / {total}{unit && ` ${unit}`}</span></div>
+    <div className="flex justify-between text-xs"><span className="text-muted">{label}</span><span className="tabular-nums">{n(used)} / {n(total)}{unit && ` ${unit}`}</span></div>
     <Meter aria-label={label} value={pct} size="sm" color={pct > 90 ? 'danger' : pct > 75 ? 'warning' : 'success'}><Meter.Track><Meter.Fill/></Meter.Track></Meter>
   </div>;
 }

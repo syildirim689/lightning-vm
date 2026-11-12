@@ -96,7 +96,7 @@ export function IsoLibrary({ pools }: { pools: { id: string; name: string }[] })
         </span>,
         i.servers,
         <span key="a" className="flex gap-1">
-          {i.state === 'failed' && i.sourceName && <Button size="sm" variant="ghost" onPress={() => retry.mutate(i.id)}><I name="rotate-ccw" size={14}/>{t('retry')}</Button>}
+          {i.state === 'failed' && i.sourceName && <Button size="sm" variant="ghost" isPending={retry.isPending && retry.variables === i.id} onPress={() => retry.mutate(i.id)}><I name="rotate-ccw" size={14}/>{t('retry')}</Button>}
           {i.state !== 'deleting' && <ConfirmButton size="sm" variant="ghost" icon={<I name="trash-2" size={14}/>} label={t('remove')} title={`${t('remove')}: ${i.name}`}
             body={t('removeIsoConfirm')} confirmLabel={t('remove')} cancelLabel={t('cancel')} isDisabled={i.servers > 0} onConfirm={() => removeIso.mutateAsync(i.id).then(() => undefined)}/>}
         </span>]}/>

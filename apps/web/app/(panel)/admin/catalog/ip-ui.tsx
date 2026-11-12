@@ -114,6 +114,7 @@ export function IpAddresses({ ipPools }: { ipPools: IpPoolRow[] }) {
     </div>
     {(!!needle || !!state) && <p role="status" className="text-sm text-muted">{t('shown', { n: rows.length, total: all.length })}</p>}
     <DataTable label={t('addresses')} rows={rows} rowKey={(a) => `${a.state}-${a.address}`} empty={t('none')} minWidth={820}
+      sortBy={{ ip: (a) => a.address, state: (a) => a.state, server: (a) => a.serverName, ptr: (a) => a.ptr, when: (a) => (a.until ?? a.since ? Date.parse((a.until ?? a.since)!) : null) }}
       columns={[{ id: 'ip', label: 'IP' }, { id: 'state', label: t('state') }, { id: 'server', label: t('server') }, { id: 'ptr', label: 'PTR' }, { id: 'when', label: t('when') }, { id: 'act', label: '' }]}
       cells={(a) => [<Mono key="ip">{a.address}</Mono>,
         <span key="s" className="flex flex-wrap gap-1"><StatusChip tone={tone[a.state]}>{t(`states.${a.state}`)}</StatusChip>{a.kind && a.kind !== 'primary' && <StatusChip tone="default">{t(`kinds.${a.kind}`)}</StatusChip>}</span>,

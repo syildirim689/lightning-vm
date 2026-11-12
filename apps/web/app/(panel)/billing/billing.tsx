@@ -160,9 +160,12 @@ function Subscriptions({ list }: { list: Subscription[] }) {
   const format = useFormatter();
   const { error } = useErrorText();
   const client = useQueryClient();
+  const [saving, setSaving] = useState<string>();
   async function change(s: Subscription, body: Record<string, boolean>, done: string) {
-    try { await apiFetch(`/billing/subscriptions/${s.id}`, { method: 'PUT', body }); toast.success(done); void client.invalidateQueries({ queryKey: ['notifications', 'billing-summary'] }); }
-    catch (e) { toast.danger(error(e)); }
+    if (saving) return;
+    setSaving(s.id);
+    try { await apiFetch(`/billing/subscriptions/${s.id}`, { method: 'PUT', body }); toast.success(done); await client.invalidateQueries({ queryKey: ['notifications', 'billing-summary'] }); }
+    catch (e) { toast.danger(error(e)); } finally { setSaving(undefined); }
   }
   if (!list.length) return <Empty icon={<I name="repeat" size={28}/>} title={t('noSubscriptions')}/>;
   // What renews each month, per currency (subscriptions that end at their period's end left out).
@@ -180,10 +183,10 @@ function Subscriptions({ list }: { list: Subscription[] }) {
         {s.periodEnd && ` · ${s.cancelAtPeriodEnd ? t('endsOn', { date: format.dateTime(new Date(s.periodEnd), { dateStyle: 'medium' }) }) : t('renewsOn', { date: format.dateTime(new Date(s.periodEnd), { dateStyle: 'medium' }) })}`}</span>
     </span>
     <span className="flex flex-wrap items-center gap-3">
-      <SwitchInput label={<span className="text-sm">{t('autoRenew')}</span>} isSelected={s.autoRenew && !s.cancelAtPeriodEnd} isDisabled={s.cancelAtPeriodEnd}
+      <SwitchInput label={<span className="text-sm">{t('autoRenew')}</span>} isSelected={s.autoRenew && !s.cancelAtPeriodEnd} isDisabled={s.cancelAtPeriodEnd || saving === s.id}
         onChange={(v) => void change(s, { autoRenew: v }, v ? t('autoRenewOn') : t('autoRenewOff'))}/>
       {s.cancelAtPeriodEnd
-        ? <Button size="sm" variant="secondary" onPress={() => void change(s, { cancelAtPeriodEnd: false }, t('kept'))}><I name="rotate-ccw" size={14}/>{t('keep')}</Button>
+        ? <Button size="sm" variant="secondary" isPending={saving === s.id} onPress={() => void change(s, { cancelAtPeriodEnd: false }, t('kept'))}><I name="rotate-ccw" size={14}/>{t('keep')}</Button>
         : <ConfirmButton size="sm" variant="danger-soft" icon={<I name="calendar-x" size={14}/>} label={t('cancelAtEnd')} title={t('cancelTitle')}
             body={t('cancelBody', { name: s.description, date: s.periodEnd ? format.dateTime(new Date(s.periodEnd), { dateStyle: 'long' }) : '–' })}
             confirmLabel={t('cancelConfirm')} cancelLabel={t('cancelKeep')} onConfirm={() => change(s, { cancelAtPeriodEnd: true }, t('cancelled'))}/>}
@@ -233,8 +236,11 @@ function Cards({ cards }: { cards: SavedCard[] }) {
   const { error } = useErrorText();
   const client = useQueryClient();
   const reload = () => client.invalidateQueries({ queryKey: ['notifications', 'billing-summary'] });
+  const [acting, setActing] = useState<string>();
   async function act(path: string, method: string, done: string) {
-    try { await apiFetch(path, { method }); toast.success(done); void reload(); } catch (e) { toast.danger(error(e)); }
+    if (acting) return;
+    setActing(path);
+    try { await apiFetch(path, { method }); toast.success(done); await reload(); } catch (e) { toast.danger(error(e)); } finally { setActing(undefined); }
   }
   // Months left on a card: under 0 it has expired, under 2 it is about to.
   const now = new Date();
@@ -251,7 +257,7 @@ function Cards({ cards }: { cards: SavedCard[] }) {
             <I name="triangle-alert" size={12}/>{m < 0 ? t('cardExpired') : t('cardExpiring')}</span>; })()}
         </span>
         {c.isDefault ? <StatusChip tone="accent">{t('defaultCard')}</StatusChip>
-          : <Button size="sm" variant="ghost" onPress={() => void act(`/billing/cards/${c.id}/default`, 'PUT', t('defaultSet'))}>{t('makeDefault')}</Button>}
+          : <Button size="sm" variant="ghost" isPending={acting === `/billing/cards/${c.id}/default`} onPress={() => void act(`/billing/cards/${c.id}/default`, 'PUT', t('defaultSet'))}>{t('makeDefault')}</Button>}
         <ConfirmButton size="sm" variant="ghost" icon={<I name="trash-2" size={14}/>} label={<span className="sr-only">{t('removeCard', { last4: c.last4 ?? '' })}</span>}
           title={t('removeCard', { last4: c.last4 ?? '' })} body={c.isDefault ? t('removeDefaultBody') : t('removeCardBody')} confirmLabel={t('removeConfirm')} cancelLabel={t('cancelKeep')}
           onConfirm={() => act(`/billing/cards/${c.id}`, 'DELETE', t('cardRemoved'))}/>

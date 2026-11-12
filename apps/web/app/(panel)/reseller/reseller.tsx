@@ -4,17 +4,18 @@
 import { Button, ProgressBar, toast } from '@heroui/react';
 import { useQueryClient } from '@tanstack/react-query';
 import NextLink from 'next/link';
-import { useFormatter, useTranslations } from 'next-intl';
+import { useFormatter, useLocale, useTranslations } from 'next-intl';
 import { useState } from 'react';
 import { I } from '../../../components/icon';
 import { DataTable, Empty, Mono, Notice, PageHeader, Section, SelectInput, StatusChip, TextInput } from '../../../components/ui';
 import { apiFetch, type ApiError, useErrorText } from '../../../lib/api';
 import { fold } from '../../../lib/note-line';
 import { useApiQuery } from '../../../lib/query';
+import { Copy } from '../server-extras';
 
 type Allocation = { discountPct: number; maxCustomers: number | null; maxServers: number | null; maxVcpu: number | null; maxMemoryMb: number | null; maxDiskGb: number | null };
-type Usage = { servers: number; vcpu: number; memoryMb: number; diskGb: number; monthly: string; customers: number };
-type Customer = { id: string; email: string; name: string; createdAt: string; lastSeenAt: string | null; servers: number; monthly: string };
+type Usage = { servers: number; vcpu: number; memoryMb: number; diskGb: number; monthly: string; currency: string | null; customers: number };
+type Customer = { id: string; email: string; name: string; createdAt: string; lastSeenAt: string | null; servers: number; monthly: string; currency: string | null };
 type Catalog = { packages: { id: string; name: string; vcpu: number; memoryMb: number; diskGb: number; priceMonthly: string; currency: string; poolIds: string[]; imageIds: string[] }[];
   pools: { id: string; name: string; location: string }[]; images: { id: string; name: string; minDiskGb: number }[] };
 
@@ -79,15 +80,15 @@ function CustomerRow({ c, discount }: { c: Customer; discount: number }) {
       <span className="grid size-9 shrink-0 place-items-center rounded-full bg-default text-sm font-semibold" aria-hidden>{(c.name || c.email)[0]!.toUpperCase()}</span>
       <span className="flex min-w-0 flex-1 flex-col"><span className="truncate font-medium">{c.name || c.email}</span><span className="truncate text-xs text-muted">{c.email}{' · '}{c.lastSeenAt ? t('lastSeen', { when: format.relativeTime(new Date(c.lastSeenAt)) }) : t('neverSeen')}</span></span>
       <StatusChip tone="default">{t('serverCount', { n: c.servers })}</StatusChip>
-      <span className="text-sm tabular-nums">{format.number(Number(c.monthly), { style: 'currency', currency: 'EUR' })}</span>
+      <span className="text-sm tabular-nums">{c.currency ? format.number(Number(c.monthly), { style: 'currency', currency: c.currency }) : '–'}</span>
       <Button size="sm" variant="ghost" aria-expanded={open} onPress={() => setOpen(!open)}><I name={open ? 'chevron-up' : 'chevron-down'} size={14}/>{t('details')}</Button>
     </div>
     {open && <div className="mt-3 flex flex-col gap-3">
       {!q.data ? <div className="h-16 animate-pulse rounded-xl bg-default/50"/> : q.data.servers.length === 0 ? <p className="text-sm text-muted">{t('noServers')}</p>
         : <DataTable label={t('servers')} rows={q.data.servers} rowKey={(s) => s.id} minWidth={520}
           columns={[{ id: 'n', label: t('server') }, { id: 'ip', label: 'IP' }, { id: 'size', label: t('size') }, { id: 'state', label: t('state') }]}
-          cells={(s) => [<NextLink key="n" href={`/servers/${s.id}`} className="font-medium text-accent hover:underline">{s.name}</NextLink>, s.address ? <Mono key="ip">{s.address}</Mono> : '–',
-            `${s.vcpu} vCPU · ${s.memoryMb / 1024} GB · ${s.diskGb} GB`, <StatusChip key="s" tone={s.state === 'ready' ? (s.powerState === 'poweredOn' ? 'success' : 'default') : 'warning'}>{t(`states.${s.state === 'ready' ? (s.powerState === 'poweredOn' ? 'on' : 'off') : 'busy'}`)}</StatusChip>]}/>}
+          cells={(s) => [<NextLink key="n" href={`/servers/${s.id}`} className="font-medium text-accent hover:underline">{s.name}</NextLink>, s.address ? <span key="ip" className="flex items-center gap-1"><Mono>{s.address}</Mono><Copy text={s.address} label={`${s.name} IP`}/></span> : '–',
+            `${s.vcpu} vCPU · ${format.number(s.memoryMb / 1024, { maximumFractionDigits: 1 })} GB · ${s.diskGb} GB`, <StatusChip key="s" tone={s.state === 'ready' ? (s.powerState === 'poweredOn' ? 'success' : 'default') : 'warning'}>{t(`states.${s.state === 'ready' ? (s.powerState === 'poweredOn' ? 'on' : 'off') : 'busy'}`)}</StatusChip>]}/>}
       {ordering ? <OrderForCustomer customer={c} discount={discount} onDone={() => { setOrdering(false); void client.invalidateQueries({ queryKey: ['reseller'] }); }}/>
         : <div><Button size="sm" variant="secondary" onPress={() => setOrdering(true)}><I name="plus" size={14}/>{t('orderFor')}</Button></div>}
     </div>}
@@ -132,6 +133,7 @@ function BrandForm() {
 export default function Reseller() {
   const t = useTranslations('Reseller');
   const format = useFormatter();
+  const locale = useLocale();
   const { error, field } = useErrorText();
   const client = useQueryClient();
   const s = useApiQuery<{ allocation: Allocation | null; usage?: Usage }>(['reseller', 'summary'], '/reseller/summary');
@@ -152,11 +154,11 @@ export default function Reseller() {
     catch (err) { setFields((err as ApiError).fields ?? {}); toast.danger(error(err)); } finally { setBusy(false); }
   }
   const list = (c.data?.customers ?? []).filter((x) => !search || fold(`${x.email} ${x.name}`).includes(fold(search)))
-    .sort((x, y) => sort === 'monthly' ? Number(y.monthly) - Number(x.monthly) : sort === 'servers' ? y.servers - x.servers : (x.name || x.email).localeCompare(y.name || y.email, 'tr'));
+    .sort((x, y) => sort === 'monthly' ? Number(y.monthly) - Number(x.monthly) : sort === 'servers' ? y.servers - x.servers : (x.name || x.email).localeCompare(y.name || y.email, locale));
   return <>
     <PageHeader title={t('title')} description={t('intro', { discount: a.discountPct })}/>
     <div className="flex flex-col gap-6">
-      <Section title={t('allocation')} description={t('monthly', { amount: format.number(Number(u.monthly), { style: 'currency', currency: 'EUR' }) })}>
+      <Section title={t('allocation')} description={t('monthly', { amount: u.currency ? format.number(Number(u.monthly), { style: 'currency', currency: u.currency }) : '–' })}>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
           <Meter label={t('customers')} used={u.customers} max={a.maxCustomers}/>
           <Meter label={t('servers')} used={u.servers} max={a.maxServers}/>

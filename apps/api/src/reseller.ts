@@ -33,8 +33,10 @@ const activeReseller = async (userId: string) => {
 // What the reseller and all their customers run now (servers not deleted).
 export async function resellerUsage(id: string, db: Db = pool) {
   const { rows: [u] } = await db.query(`SELECT count(*)::int AS servers, coalesce(sum(s.vcpu), 0)::int AS vcpu, coalesce(sum(s.memory_mb), 0)::int AS "memoryMb", coalesce(sum(s.disk_gb), 0)::int AS "diskGb",
-      coalesce(sum(s.price_monthly), 0)::text AS monthly FROM servers s JOIN users o ON o.id = s.owner_id WHERE s.state <> 'deleted' AND (o.id = $1 OR o.reseller_id = $1)`, [id]);
-  return u as { servers: number; vcpu: number; memoryMb: number; diskGb: number; monthly: string };
+      coalesce(sum(s.price_monthly), 0)::text AS monthly, mode() WITHIN GROUP (ORDER BY s.currency) AS currency
+      FROM servers s JOIN users o ON o.id = s.owner_id WHERE s.state <> 'deleted' AND (o.id = $1 OR o.reseller_id = $1)`, [id]);
+  // `currency`: the one most of these servers are priced in (null with no servers), for showing `monthly`.
+  return u as { servers: number; vcpu: number; memoryMb: number; diskGb: number; monthly: string; currency: string | null };
 }
 
 // Whether `more` (a new server, or a resize's increase) still fits the reseller's allocation; throws the limits it passes.
@@ -54,7 +56,8 @@ export const discounted = (monthly: string, pct: number) => (Math.round(Number(m
 
 const customerColumns = `u.id, u.email, u.name, u.created_at AS "createdAt", u.last_seen_at AS "lastSeenAt",
   (SELECT count(*)::int FROM servers s WHERE s.owner_id = u.id AND s.state <> 'deleted') AS servers,
-  (SELECT coalesce(sum(s.price_monthly), 0)::text FROM servers s WHERE s.owner_id = u.id AND s.state <> 'deleted') AS monthly`;
+  (SELECT coalesce(sum(s.price_monthly), 0)::text FROM servers s WHERE s.owner_id = u.id AND s.state <> 'deleted') AS monthly,
+  (SELECT mode() WITHIN GROUP (ORDER BY s.currency) FROM servers s WHERE s.owner_id = u.id AND s.state <> 'deleted') AS currency`;
 
 @Controller('reseller') @UseGuards(SessionGuard)
 export class ResellerController {

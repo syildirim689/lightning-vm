@@ -6,6 +6,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { motion } from 'motion/react';
 import NextLink from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { parseAsString, parseAsStringLiteral, useQueryState } from 'nuqs';
 import { useFormatter, useLocale, useNow, useTranslations } from 'next-intl';
 import { useEffect, useRef, useState } from 'react';
 import { I } from '../../../components/icon';
@@ -27,8 +28,9 @@ export default function SupportList() {
   const tickets = useApiQuery<{ tickets: Ticket[] }>(['support', 'mine'], '/support/tickets', { refetchInterval: 30_000 }).data?.tickets;
   const drafts = useDrafts();
   // Answered (waiting for the customer), still open with support, or closed; and a search over subject, number and server.
-  const [show, setShow] = useState<'all' | 'answered' | 'open' | 'closed'>('all');
-  const [q, setQ] = useState('');
+  // Kept in the address so a filtered list survives going into a ticket and back, and can be shared.
+  const [show, setShow] = useQueryState('show', parseAsStringLiteral(['all', 'answered', 'open', 'closed'] as const).withDefault('all').withOptions({ history: 'replace' }));
+  const [q, setQ] = useQueryState('q', parseAsString.withDefault('').withOptions({ history: 'replace', throttleMs: 300 }));
   const group = (x: Ticket) => x.status === 'answered' ? 'answered' : x.status === 'closed' ? 'closed' : 'open';
   const needle = fold(q.trim().replace(/^#/, ''));
   const shown = (tickets ?? []).filter((x) => (show === 'all' || group(x) === show) && (!needle || [x.subject, String(x.number), x.serverName].some((v) => v && fold(v).includes(needle))));

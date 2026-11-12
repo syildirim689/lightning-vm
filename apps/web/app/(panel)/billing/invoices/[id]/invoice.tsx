@@ -15,6 +15,7 @@ import type { InvoiceDetail, Summary } from '../../../../../lib/billing';
 import { useApiQuery } from '../../../../../lib/query';
 import { useDocTitle } from '../../../../../lib/title';
 import { InvoiceDisputes } from '../../disputes';
+import { Copy } from '../../../server-extras';
 
 export default function InvoicePage({ id }: { id: string }) {
   const t = useTranslations('Billing');
@@ -97,8 +98,9 @@ function PayPanel({ d }: { d: InvoiceDetail }) {
         <p className="flex items-center gap-2 font-medium"><I name="landmark" size={16}/>{t('withTransfer')}</p>
         <p className="text-muted">{t('transferHelp')}</p>
         <p>{s.methods.bankTransfer.bank} · {s.methods.bankTransfer.holder}</p>
-        <p>IBAN: <Mono>{s.methods.bankTransfer.iban}</Mono></p>
-        <p>{t('transferNote')}: <Mono>{inv.id.slice(0, 8).toUpperCase()}</Mono></p>
+        <p className="flex flex-wrap items-center gap-1">IBAN: <Mono>{s.methods.bankTransfer.iban}</Mono><Copy text={s.methods.bankTransfer.iban.replace(/\s+/g, '')} label="IBAN"/></p>
+        <p className="flex flex-wrap items-center gap-1">{t('transferNote')}: <Mono>{inv.id.slice(0, 8).toUpperCase()}</Mono><Copy text={inv.id.slice(0, 8).toUpperCase()} label={t('transferNote')}/></p>
+        <p className="flex flex-wrap items-center gap-1">{t('transferAmount')}: <Mono>{money(due)}</Mono><Copy text={due.toFixed(2)} label={t('transferAmount')}/></p>
       </div>}
       {!s.methods.cards.length && !s.methods.bankTransfer && !(s.methods.balance && balance >= due) && !card && <Notice tone="warning">{t('noMethod')}</Notice>}
     </div>

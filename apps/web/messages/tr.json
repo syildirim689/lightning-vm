@@ -5510,7 +5510,9 @@
     "fontLarger": "Yazıyı büyüt",
     "fullscreen": "Tam ekran",
     "exitFullscreen": "Tam ekrandan çık",
-    "shortcuts": "Ctrl+Shift+C kopyalar, Ctrl+Shift+V yapıştırır. Metin seçiliyken Ctrl+C de kopyalar; seçim yokken komutu durdurur."
+    "shortcuts": "Ctrl+Shift+C kopyalar, Ctrl+Shift+V yapıştırır. Metin seçiliyken Ctrl+C de kopyalar; seçim yokken komutu durdurur.",
+    "endTitle": "{email} kullanıcısının terminal oturumu sonlandırılsın mı?",
+    "endBody": "Terminali hemen kapanır; içinde çalışan komutlar durur."
   },
   "Chat": {
     "title": "Mesajlaşma uygulamaları",
@@ -6435,7 +6437,10 @@
     "cannedPreview": "Örnek değerlerle önizleme",
     "cannedSample": {
       "name": "Ayşe Yılmaz"
-    }
+    },
+    "closeTitle": "Talep kapatılsın mı?",
+    "closeBody": "Ekip bu talep üzerinde çalışmayı bırakır. Yeni bir mesaj yazarsanız talep yeniden açılır.",
+    "rateThanks": "Değerlendirmeniz için teşekkürler."
   },
   "Stats": {
     "eyebrow": "Yönetim",
@@ -6882,7 +6887,8 @@
     "cardExpiring": "Süresi dolmak üzere",
     "removeCardBody": "Kart bu hesaptan kaldırılır; tekrar kullanmak için yeniden eklemeniz gerekir.",
     "removeDefaultBody": "Bu varsayılan kartınız. Kaldırırsanız otomatik ödemeler başka bir varsayılan kart seçene kadar yapılamaz.",
-    "removeConfirm": "Kartı kaldır"
+    "removeConfirm": "Kartı kaldır",
+    "transferAmount": "Tutar"
   },
   "BillingAdmin": {
     "eyebrow": "Gelir",
@@ -7858,5 +7864,14 @@
       }
     },
     "pdfButton": "PDF indir"
+  },
+  "Table": {
+    "sortBy": "Sırala",
+    "defaultOrder": "Varsayılan sıra",
+    "pages": "{label} sayfaları",
+    "range": "{total} kayıttan {from}–{to}",
+    "page": "Sayfa {page} / {pages}",
+    "previous": "Önceki",
+    "next": "Sonraki"
   }
 }

@@ -8,7 +8,7 @@ import { AnimatePresence, motion } from 'motion/react';
 import { useFormatter, useLocale, useNow, useTranslations } from 'next-intl';
 import { useRef, useState, useEffect } from 'react';
 import { I } from '../../../components/icon';
-import { SelectInput, TextInput } from '../../../components/ui';
+import { ConfirmButton, SelectInput, TextInput } from '../../../components/ui';
 import { apiFetch, useErrorText, type ApiError } from '../../../lib/api';
 import { fillCanned, type CannedVars } from '../../../lib/canned';
 import { useMe } from '../../../lib/me';
@@ -205,7 +205,8 @@ export function TicketPage({ id, staff }: { id: string; staff: boolean }) {
         {closed && !staff && <Rating ticket={tk} onDone={refresh}/>}
         {staff && <PresenceBar others={others}/>}
         <Composer onWriting={setWriting} ticketId={id} staff={asStaff} closed={closed} onSent={refresh} vars={{ name: tk.ownerName ?? '', ticket: `#${tk.number}`, server: tk.serverName ?? '' }}/>
-        {!closed && <div><Button size="sm" variant="ghost" onPress={close}><I name="circle-check" size={14}/>{t('close')}</Button></div>}
+        {!closed && <div><ConfirmButton size="sm" variant="ghost" icon={<I name="circle-check" size={14}/>} label={t('close')} title={t('closeTitle')} body={t('closeBody')}
+          confirmLabel={t('close')} cancelLabel={t('cancel')} onConfirm={close}/></div>}
       </div>
       {staff && <StaffPanel ticket={tk} onChange={refresh}/>}
     </div>
@@ -217,6 +218,7 @@ function Rating({ ticket, onDone }: { ticket: Ticket; onDone: () => void }) {
   const [stars, setStars] = useState(ticket.rating ?? 0);
   const [comment, setComment] = useState('');
   const [busy, setBusy] = useState(false);
+  const { error } = useErrorText();
   if (ticket.rating) return <p className="flex items-center gap-1 text-sm text-muted">{t('rated')} {[1, 2, 3, 4, 5].map((n) => <I key={n} name="star" size={14} className={n <= ticket.rating! ? 'fill-current text-warning' : ''}/>)}</p>;
   return <div className="flex flex-col gap-3 rounded-2xl border border-border bg-surface p-4">
     <p className="text-sm font-medium">{t('rateQuestion')}</p>
@@ -224,7 +226,11 @@ function Rating({ ticket, onDone }: { ticket: Ticket; onDone: () => void }) {
       onClick={() => setStars(n)} className="grid size-10 place-items-center rounded-lg hover:bg-default focus-visible:outline-2 focus-visible:outline-accent">
       <I name="star" size={22} className={n <= stars ? 'fill-current text-warning' : 'text-muted'}/></button>)}</div>
     {stars > 0 && <TextInput label={t('rateComment')} value={comment} onChange={setComment} maxLength={1000}/>}
-    <div><Button size="sm" isDisabled={!stars} isPending={busy} onPress={async () => { setBusy(true); await apiFetch(`/support/tickets/${ticket.id}/rating`, { method: 'POST', body: { rating: stars, comment } }).catch(() => undefined); setBusy(false); onDone(); }}>{t('rateSend')}</Button></div>
+    <div><Button size="sm" isDisabled={!stars} isPending={busy} onPress={async () => {
+      setBusy(true);
+      try { await apiFetch(`/support/tickets/${ticket.id}/rating`, { method: 'POST', body: { rating: stars, comment } }); toast.success(t('rateThanks')); onDone(); }
+      catch (e) { toast.danger(error(e)); } finally { setBusy(false); }
+    }}>{t('rateSend')}</Button></div>
   </div>;
 }
 

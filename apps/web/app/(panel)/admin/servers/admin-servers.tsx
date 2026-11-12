@@ -110,6 +110,7 @@ export default function AdminServers() {
               </div>
             </div>
             <DataTable label={t('admin.operations')} rows={shownOps} rowKey={(o) => o.id} minWidth={760} empty={ops.length ? t('admin.opNone') : '…'}
+              sortBy={{ when: (o) => Date.parse(o.createdAt), op: (o) => o.kind, name: (o) => o.serverName, state: (o) => o.status }}
               columns={[{ id: 'when', label: t('col.when') }, { id: 'op', label: t('col.operation') }, { id: 'name', label: t('col.name') }, { id: 'state', label: t('col.state') }, { id: 'detail', label: t('col.detail') }, { id: 'act', label: <span className="sr-only">{t('admin.retry')}</span> }]}
               cells={(o) => [<span key="w" className="flex flex-col"><span>{format.dateTime(new Date(o.createdAt), { dateStyle: 'short', timeStyle: 'medium' })}</span><span className="text-xs text-muted">{format.relativeTime(new Date(o.createdAt))}</span></span>,
                 t(`kind.${o.kind as 'create'}`),
@@ -118,7 +119,7 @@ export default function AdminServers() {
                 <StatusChip key="s" tone={opTone(o.status)}>{t(`opStatus.${o.status as 'pending'}`)}{o.attempts > 1 ? ` · ${t('attempt', { n: o.attempts })}` : ''}</StatusChip>,
                 o.errorCode ? <span key="d" className="flex max-w-md flex-col"><span>{t('errorCode', { message: error({ code: o.errorCode }), code: o.errorCode })}</span>
                   {o.errorDetail && <span className="line-clamp-2 break-all font-mono text-xs text-muted" title={o.errorDetail}>{o.errorDetail}</span>}</span> : o.step ? t(`step.${o.step as 'queued'}`) : '',
-                o.status === 'failed' ? <Button key="r" size="sm" variant="secondary" onPress={() => retry.mutate(o.id)}><I name="rotate-cw" size={14}/>{t('admin.retry')}</Button> : null]}/>
+                o.status === 'failed' ? <Button key="r" size="sm" variant="secondary" isPending={retry.isPending && retry.variables === o.id} onPress={() => retry.mutate(o.id)}><I name="rotate-cw" size={14}/>{t('admin.retry')}</Button> : null]}/>
           </Tabs.Panel>
 
           <Tabs.Panel id="reconciliation" className="flex flex-col gap-4 pt-4">

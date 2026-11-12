@@ -4,7 +4,8 @@
 import { Alert, AlertDialog, Button, Card, Checkbox, CheckboxGroup, Chip, Description, FieldError, Input, Label, ListBox, NumberField, Select,
   Switch, Table, TextArea, TextField, buttonVariants } from '@heroui/react';
 import NextLink from 'next/link';
-import { useEffect, useState } from 'react';
+import { useLocale, useTranslations } from 'next-intl';
+import { useEffect, useMemo, useState } from 'react';
 
 export function PageHeader({ eyebrow, title, description, actions }: { eyebrow?: string; title: React.ReactNode; description?: React.ReactNode; actions?: React.ReactNode }) {
   return <header className="mb-6 flex flex-wrap items-end justify-between gap-4">
@@ -185,36 +186,88 @@ export function Mono({ children }: { children: React.ReactNode }) {
 }
 
 // One table look everywhere: rows are arrays of cells in column order; the first column is the row header.
+// Columns named in `sortBy` can be sorted by clicking their header (or the select on phones); long lists are split
+// into pages of `pageSize` rows. The page goes back to the first one when the rows or the order change.
 export type Column = { id: string; label: React.ReactNode; className?: string };
-export function DataTable<T>({ label, columns, rows, rowKey, cells, empty, minWidth = 640 }: {
+type SortValue = string | number | null | undefined;
+export function DataTable<T>({ label, columns, rows, rowKey, cells, empty, minWidth = 640, sortBy, pageSize = 50 }: {
   label: string; columns: Column[]; rows: T[]; rowKey: (row: T) => string; cells: (row: T) => React.ReactNode[]; empty?: React.ReactNode; minWidth?: number;
+  sortBy?: Record<string, (row: T) => SortValue>; pageSize?: number;
 }) {
+  const t = useTranslations('Table');
+  const locale = useLocale();
+  const [sort, setSort] = useState<{ column: string; direction: 'ascending' | 'descending' } | null>(null);
+  const [page, setPage] = useState(0);
+  const sorted = useMemo(() => {
+    const get = sort && sortBy?.[sort.column];
+    if (!sort || !get) return rows;
+    const collator = new Intl.Collator(locale, { numeric: true, sensitivity: 'base' });
+    const sign = sort.direction === 'ascending' ? 1 : -1;
+    return [...rows].sort((a, b) => {
+      const x = get(a), y = get(b);
+      // Empty values always go last, whichever way the column is sorted.
+      if (x == null || x === '') return y == null || y === '' ? 0 : 1;
+      if (y == null || y === '') return -1;
+      return sign * (typeof x === 'number' && typeof y === 'number' ? x - y : collator.compare(String(x), String(y)));
+    });
+  }, [rows, sort, sortBy, locale]);
+  const pages = Math.max(1, Math.ceil(sorted.length / pageSize));
+  useEffect(() => { setPage(0); }, [rows.length, sort]);
+  const current = Math.min(page, pages - 1);
+  const shown = pages > 1 ? sorted.slice(current * pageSize, (current + 1) * pageSize) : sorted;
+  const sortable = columns.filter((c) => sortBy?.[c.id]);
+  const lastIsAction = columns.at(-1)?.id === 'act';
+
   // Phones get one card per row (label: value); wider screens the table.
-  const cards = <ul className="flex flex-col gap-2 sm:hidden" aria-label={label}>
-    {rows.length === 0 && <li className="rounded-xl border border-dashed border-border py-6 text-center text-sm text-muted">{empty ?? '–'}</li>}
-    {rows.map((r) => { const c = cells(r); return <li key={rowKey(r)} className="rounded-xl border border-border bg-surface p-3">
-      <div className="mb-2 flex items-start justify-between gap-2 font-medium">{c[0]}{columns.at(-1)?.id === 'act' && <span className="shrink-0">{c.at(-1)}</span>}</div>
-      <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1.5 text-sm">
-        {c.slice(1, columns.at(-1)?.id === 'act' ? -1 : undefined).map((cell, i) => <div key={columns[i + 1]?.id ?? i} className="contents">
-          <dt className="text-xs text-muted">{columns[i + 1]?.label}</dt><dd className="min-w-0 break-words">{cell}</dd>
-        </div>)}
-      </dl>
-    </li>; })}
-  </ul>;
+  const cards = <div className="flex flex-col gap-2 sm:hidden">
+    {sortable.length > 0 && rows.length > 1 && <label className="flex items-center justify-end gap-2 text-xs text-muted">
+      {t('sortBy')}
+      <select className="rounded-lg border border-border bg-surface px-2 py-1.5 text-sm text-foreground" value={sort ? `${sort.column}:${sort.direction}` : ''}
+        onChange={(e) => { const [column, direction] = e.target.value.split(':'); setSort(column ? { column, direction: direction as 'ascending' | 'descending' } : null); }}>
+        <option value="">{t('defaultOrder')}</option>
+        {sortable.flatMap((c) => (['ascending', 'descending'] as const).map((d) => <option key={`${c.id}:${d}`} value={`${c.id}:${d}`}>
+          {typeof c.label === 'string' ? c.label : c.id} {d === 'ascending' ? '↑' : '↓'}</option>))}
+      </select>
+    </label>}
+    <ul className="flex flex-col gap-2" aria-label={label}>
+      {rows.length === 0 && <li className="rounded-xl border border-dashed border-border py-6 text-center text-sm text-muted">{empty ?? '–'}</li>}
+      {shown.map((r) => { const c = cells(r); return <li key={rowKey(r)} className="rounded-xl border border-border bg-surface p-3">
+        <div className="mb-2 flex items-start justify-between gap-2 font-medium">{c[0]}{lastIsAction && <span className="shrink-0">{c.at(-1)}</span>}</div>
+        <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1.5 text-sm">
+          {c.slice(1, lastIsAction ? -1 : undefined).map((cell, i) => <div key={columns[i + 1]?.id ?? i} className="contents">
+            <dt className="text-xs text-muted">{columns[i + 1]?.label}</dt><dd className="min-w-0 break-words">{cell}</dd>
+          </div>)}
+        </dl>
+      </li>; })}
+    </ul>
+  </div>;
+  const pager = pages > 1 && <nav className="mt-3 flex flex-wrap items-center justify-between gap-2 text-sm" aria-label={t('pages', { label })}>
+    <span className="text-muted" aria-live="polite">{t('range', { from: current * pageSize + 1, to: Math.min((current + 1) * pageSize, sorted.length), total: sorted.length })}</span>
+    <div className="flex items-center gap-1">
+      <Button size="sm" variant="tertiary" isDisabled={current === 0} onPress={() => setPage(current - 1)}>{t('previous')}</Button>
+      <span className="px-2 tabular-nums text-muted">{t('page', { page: current + 1, pages })}</span>
+      <Button size="sm" variant="tertiary" isDisabled={current >= pages - 1} onPress={() => setPage(current + 1)}>{t('next')}</Button>
+    </div>
+  </nav>;
   return <>{cards}<Table className="hidden sm:block">
     <Table.ScrollContainer>
-      <Table.Content aria-label={label} style={{ minWidth }}>
+      <Table.Content aria-label={label} style={{ minWidth }} sortDescriptor={sort ?? undefined}
+        onSortChange={(d) => setSort({ column: String(d.column), direction: d.direction })}>
         <Table.Header>
-          {columns.map((c, i) => <Table.Column key={c.id} id={c.id} isRowHeader={i === 0} className={c.className}>{c.label}</Table.Column>)}
+          {columns.map((c, i) => sortBy?.[c.id]
+            ? <Table.Column key={c.id} id={c.id} isRowHeader={i === 0} className={c.className} allowsSorting>
+                {({ sortDirection }) => <Table.SortableColumnHeader sortDirection={sortDirection}>{c.label}</Table.SortableColumnHeader>}
+              </Table.Column>
+            : <Table.Column key={c.id} id={c.id} isRowHeader={i === 0} className={c.className}>{c.label}</Table.Column>)}
         </Table.Header>
         <Table.Body renderEmptyState={() => <div className="py-6 text-center text-sm text-muted">{empty ?? '–'}</div>}>
-          {rows.map((r) => <Table.Row key={rowKey(r)} id={rowKey(r)}>
+          {shown.map((r) => <Table.Row key={rowKey(r)} id={rowKey(r)}>
             {cells(r).map((cell, i) => <Table.Cell key={columns[i]?.id ?? i}>{cell}</Table.Cell>)}
           </Table.Row>)}
         </Table.Body>
       </Table.Content>
     </Table.ScrollContainer>
-  </Table></>;
+  </Table>{pager}</>;
 }
 
 export function Notice({ tone = 'default', title, children }: { tone?: Tone; title?: React.ReactNode; children?: React.ReactNode }) {

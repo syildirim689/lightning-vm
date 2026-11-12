@@ -2135,6 +2135,12 @@ test.describe('people, settings and smart features (English browser)', () => {
     const download = page.waitForEvent('download');
     await page.getByRole('button', { name: 'Export CSV' }).click();
     expect((await download).suggestedFilename()).toMatch(/^users-\d{4}-\d{2}-\d{2}\.csv$/);
+    // Columns sort from their header: first click ascending, second descending.
+    const serversHeader = page.getByRole('columnheader', { name: 'Servers' });
+    await serversHeader.click();
+    await expect(serversHeader).toHaveAttribute('aria-sort', 'ascending');
+    await serversHeader.click();
+    await expect(serversHeader).toHaveAttribute('aria-sort', 'descending');
     await page.setViewportSize({ width: 390, height: 844 });
     await page.waitForTimeout(400);
     await shot(page, 'users-390');
