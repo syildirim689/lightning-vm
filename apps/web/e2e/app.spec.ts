@@ -488,6 +488,7 @@ test.describe('VMware connections (simulator, English browser)', () => {
   test('a network scan finds the simulators, knows the connected vCenter and fills in the form for a new ESXi', async ({ page }) => {
     test.skip(!process.env.E2E_VCSIM_HOST, 'needs compose.simulator.yaml and E2E_VCSIM_HOST');
     await signIn(page, admin);
+    await expect(page).toHaveURL(/\/admin$/);
     await page.goto('/admin/vmware');
     await page.getByRole('link', { name: 'Find on network' }).click();
     const targets = page.getByLabel('Addresses to scan', { exact: true });
