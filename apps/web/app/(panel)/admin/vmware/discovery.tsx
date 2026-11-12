@@ -166,7 +166,7 @@ export default function Discovery({ onAdd }: { onAdd: (p: Prefill) => void }) {
           columns={[{ id: 'a', label: t('col.address') }, { id: 'p', label: t('col.product') }, { id: 'c', label: t('col.certificate') }, { id: 's', label: t('col.status') },
             { id: 'x', label: <span className="sr-only">{t('col.actions')}</span> }]}
           cells={(h) => [
-            <span key="a" className="flex min-w-0 flex-col"><Mono>{h.address}</Mono>{h.hostname && <span className="break-all text-xs text-muted">{h.hostname}</span>}</span>,
+            <span key="a" className="flex min-w-0 flex-col items-start"><Mono>{h.address}</Mono>{h.hostname && <span className="break-all text-xs text-muted">{h.hostname}</span>}</span>,
             h.product ? <span key="p" className="flex flex-col"><span className="font-medium">{h.product.kind === 'vcenter' ? 'vCenter' : 'ESXi'} {h.product.version}</span>
               <span className="text-xs text-muted">{t('build', { build: h.product.build })}</span></span>
               : <span key="p" className="text-muted">{t('notVsphere')}</span>,

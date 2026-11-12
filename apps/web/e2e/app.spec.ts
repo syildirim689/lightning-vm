@@ -1357,8 +1357,8 @@ test.describe('people, settings and smart features (English browser)', () => {
     expect(doc.openapi).toBe('3.1.0');
     expect(doc.paths['/servers/{id}/actions'].post.parameters.some((x: { name: string }) => x.name === 'Idempotency-Key')).toBe(true);
     await page.setViewportSize({ width: 390, height: 900 });
+    await page.screenshot({ path: 'test-results/tour/api-docs-390.png', fullPage: true });
     await expectNoOverflow(page, 'api reference at 390 px');
-    await page.screenshot({ path: 'test-results/tour/api-docs-390.png' });
     await page.setViewportSize({ width: 1280, height: 900 });
     await page.screenshot({ path: 'test-results/tour/api-docs.png' });
 
