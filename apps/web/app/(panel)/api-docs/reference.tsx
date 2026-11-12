@@ -7,7 +7,7 @@ import { useLocale, useTranslations } from 'next-intl';
 import { parseAsString, useQueryState } from 'nuqs';
 import { useEffect, useMemo, useState } from 'react';
 import { I } from '../../../components/icon';
-import { ButtonLink, Empty, Mono, Notice, PageHeader, Stat, StatusChip, SwitchInput } from '../../../components/ui';
+import { ButtonLink, Empty, Notice, PageHeader, Stat, StatusChip, SwitchInput } from '../../../components/ui';
 import { apiFetch, useErrorText } from '../../../lib/api';
 import { anchor, curl, exampleBody, guide, javascript, python, type Endpoint, type Field, type Lang, type Reference as Ref } from '../../../lib/api-reference';
 import { useApiQuery } from '../../../lib/query';
@@ -38,19 +38,20 @@ function CodeBlock({ code, label }: { code: string; label: string }) {
 function Fields({ title, fields, lang }: { title: string; fields: Field[]; lang: Lang }) {
   const t = useTranslations('ApiDocs');
   if (!fields.length) return null;
+  // A list, not a table: on a phone each field stacks (name and type, then the text); from sm up, three columns.
   return <div className="flex min-w-0 flex-col gap-1.5">
     <h4 className="text-xs font-semibold uppercase tracking-wider text-muted">{title}</h4>
-    <div className="overflow-x-auto rounded-lg border border-border">
-      <table className="w-full min-w-[520px] text-sm">
-        <thead className="bg-default text-left text-xs text-muted"><tr><th className="px-3 py-2 font-medium">{t('field')}</th><th className="px-3 py-2 font-medium">{t('type')}</th><th className="px-3 py-2 font-medium">{t('meaning')}</th></tr></thead>
-        <tbody>{fields.map((f) => <tr key={f.name} className="border-t border-border align-top">
-          <td className="px-3 py-2"><span className="flex flex-wrap items-center gap-1.5"><code className="font-mono text-xs [overflow-wrap:anywhere]">{f.name}</code>
-            {f.required && <span className="rounded bg-danger/10 px-1 text-[10px] font-semibold uppercase text-danger">{t('required')}</span>}</span></td>
-          <td className="whitespace-nowrap px-3 py-2 font-mono text-xs text-muted">{f.type}</td>
-          <td className="px-3 py-2">{f.text[lang]}{f.values?.length ? <span className="mt-1 flex flex-wrap gap-1">{f.values.map((v) => <code key={v} className="rounded bg-default px-1 font-mono text-[11px]">{v}</code>)}</span> : null}</td>
-        </tr>)}</tbody>
-      </table>
-    </div>
+    <dl className="divide-y divide-border rounded-lg border border-border text-sm">
+      <div aria-hidden className="hidden bg-default px-3 py-2 text-xs text-muted sm:grid sm:grid-cols-[minmax(9rem,14rem)_7rem_minmax(0,1fr)] sm:gap-3">
+        <span>{t('field')}</span><span>{t('type')}</span><span>{t('meaning')}</span></div>
+      {fields.map((f) => <div key={f.name} className="flex min-w-0 flex-col gap-1 px-3 py-2 sm:grid sm:grid-cols-[minmax(9rem,14rem)_7rem_minmax(0,1fr)] sm:gap-3">
+        <dt className="flex min-w-0 flex-wrap items-center gap-1.5"><code className="min-w-0 font-mono text-xs [overflow-wrap:anywhere]">{f.name}</code>
+          {f.required && <span className="rounded bg-danger/10 px-1 text-[10px] font-semibold uppercase text-danger">{t('required')}</span>}
+          <span className="font-mono text-xs text-muted sm:hidden">{f.type}</span></dt>
+        <dd className="hidden font-mono text-xs text-muted sm:block [overflow-wrap:anywhere]">{f.type}</dd>
+        <dd className="min-w-0">{f.text[lang]}{f.values?.length ? <span className="mt-1 flex flex-wrap gap-1">{f.values.map((v) => <code key={v} className="rounded bg-default px-1 font-mono text-[11px]">{v}</code>)}</span> : null}</dd>
+      </div>)}
+    </dl>
   </div>;
 }
 
@@ -187,10 +188,12 @@ export default function Reference() {
               <div className="flex flex-col gap-3 border-t border-border p-4 text-sm leading-relaxed">
                 {Array.from({ length: g.paras }, (_, n) => <p key={n}>{tt(`guide.${g.id}.p${n + 1}`, { rate: ref.limits.rateLimit, days: ref.limits.maxDays })}</p>)}
                 {g.code && <CodeBlock code={g.code(ref.baseUrl)} label={t('copyCode', { lang: tt(`guide.${g.id}.title`) })}/>}
-                {g.errors && <div className="overflow-x-auto rounded-lg border border-border"><table className="w-full min-w-[480px] text-sm">
-                  <thead className="bg-default text-left text-xs text-muted"><tr><th className="px-3 py-2">HTTP</th><th className="px-3 py-2">{t('codeColumn')}</th><th className="px-3 py-2">{t('meaning')}</th></tr></thead>
-                  <tbody>{ref.commonErrors.map((x) => <tr key={x.code} className="border-t border-border"><td className="px-3 py-2 tabular-nums">{x.status}</td>
-                    <td className="px-3 py-2"><Mono>{x.code}</Mono></td><td className="px-3 py-2">{x.text[lang]}</td></tr>)}</tbody></table></div>}
+                {g.errors && <dl className="divide-y divide-border rounded-lg border border-border">
+                  {ref.commonErrors.map((x) => <div key={x.code} className="flex min-w-0 flex-col gap-1 px-3 py-2 sm:grid sm:grid-cols-[3rem_minmax(12rem,16rem)_minmax(0,1fr)] sm:gap-3">
+                    <dt className="flex flex-wrap items-center gap-2 sm:contents"><span className="tabular-nums text-muted">{x.status}</span>
+                      <code className="font-mono text-xs [overflow-wrap:anywhere]">{x.code}</code></dt>
+                    <dd className="min-w-0">{x.text[lang]}</dd></div>)}
+                </dl>}
               </div>
             </details>)}
           </section>

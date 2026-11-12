@@ -28,7 +28,12 @@ async function expectNoOverflow(page: Page, label: string) {
   const [overflow, culprits] = await page.evaluate(() => {
     const w = window.innerWidth;
     // Content inside its own scroll box (a wide table that scrolls sideways) does not widen the page: left out.
-    const scrolled = (e: Element) => { for (let p = e.parentElement; p; p = p.parentElement) if (getComputedStyle(p).overflowX !== 'visible') return p !== document.documentElement && p !== document.body; return false; };
+    const scrolled = (e: Element) => {
+      for (let p = e.parentElement; p && p !== document.body; p = p.parentElement) {
+        if (getComputedStyle(p).overflowX !== 'visible' && p.getBoundingClientRect().right <= w + 1) return true;
+      }
+      return false;
+    };
     // The element where the overflow starts: it sticks out, its parent does not.
     const out = [...document.querySelectorAll('body *')].filter((e) => e.getBoundingClientRect().right > w + 1 && !scrolled(e)
       && (e.parentElement?.getBoundingClientRect().right ?? 0) <= w + 1);
