@@ -8,9 +8,11 @@ import { useState } from 'react';
 import { I } from '../../../components/icon';
 import { CheckboxInput, ConfirmButton, DataTable, Empty, Mono, Notice, Section, SelectInput, StatusChip, TextInput } from '../../../components/ui';
 import { apiFetch, type ApiError, useErrorText } from '../../../lib/api';
+import { useMe } from '../../../lib/me';
+import { permissionGroups } from '../../../lib/permissions';
 import { useApiQuery } from '../../../lib/query';
 
-type Token = { id: string; name: string; hint: string; scope: 'read' | 'write'; expiresAt: string | null; lastUsedAt: string | null; lastUsedIp: string | null; createdAt: string };
+type Token = { id: string; name: string; hint: string; scope: 'read' | 'write'; permissions: string[] | null; allowedIps: string[]; expiresAt: string | null; lastUsedAt: string | null; lastUsedIp: string | null; createdAt: string };
 type Webhook = { id: string; url: string; description: string; events: string[]; active: boolean; failures: number; createdAt: string; lastDelivery: { status: string; responseCode: number | null; at: string } | null };
 type Delivery = { id: string; event: string; status: 'pending' | 'succeeded' | 'failed'; attempts: number; responseCode: number | null; error: string | null; durationMs: number | null; createdAt: string };
 
@@ -41,7 +43,16 @@ function Tokens() {
   const format = useFormatter();
   const { error, field } = useErrorText();
   const client = useQueryClient();
-  const q = useApiQuery<{ tokens: Token[]; max: number }>(['api-tokens'], '/account/api-tokens');
+  const tp = useTranslations('Permissions');
+  const me = useMe();
+  const q = useApiQuery<{ tokens: Token[]; max: number; rules?: { maxDays: number; expiryRequired: boolean; rateLimit: number } }>(['api-tokens'], '/account/api-tokens');
+  const rules = q.data?.rules;
+  // Narrowing: only some of my permissions, and only from some addresses.
+  const [narrow, setNarrow] = useState(false);
+  const [picked, setPicked] = useState<string[]>([]);
+  const [ips, setIps] = useState('');
+  const mine = me?.permissions ?? [];
+  const groups = Object.entries(permissionGroups).map(([g, ps]) => [g, ps.filter((p) => mine.includes('*') || mine.includes(p))] as const).filter(([, ps]) => ps.length);
   const [name, setName] = useState('');
   const [scope, setScope] = useState<'read' | 'write'>('read');
   const [expires, setExpires] = useState('90');
@@ -53,8 +64,9 @@ function Tokens() {
   async function create(e: React.FormEvent) {
     e.preventDefault(); setBusy(true); setFields({});
     try {
-      const out = await apiFetch<{ token: string }>('/account/api-tokens', { method: 'POST', body: { name, scope, expiresInDays: expires === 'never' ? null : Number(expires) } });
-      setMade(out.token); setName(''); client.invalidateQueries({ queryKey: ['api-tokens'] });
+      const out = await apiFetch<{ token: string }>('/account/api-tokens', { method: 'POST', body: { name, scope, expiresInDays: expires === 'never' ? null : Number(expires),
+        ...(narrow && { permissions: picked }), allowedIps: ips.split(/[\s,]+/).filter(Boolean) } });
+      setMade(out.token); setName(''); setPicked([]); setIps(''); setNarrow(false); client.invalidateQueries({ queryKey: ['api-tokens'] });
     } catch (err) { setFields((err as ApiError).fields ?? {}); toast.danger(error(err)); } finally { setBusy(false); }
   }
   async function remove(id: string) {
@@ -77,14 +89,35 @@ function Tokens() {
         <SelectInput label={t('tokens.scope')} value={scope} onChange={(v) => setScope(v as 'read' | 'write')}
           options={[{ id: 'read', label: t('tokens.read') }, { id: 'write', label: t('tokens.write') }]}/>
         <SelectInput label={t('tokens.expires')} value={expires} onChange={setExpires}
-          options={[{ id: '30', label: t('tokens.days', { n: 30 }) }, { id: '90', label: t('tokens.days', { n: 90 }) }, { id: '365', label: t('tokens.days', { n: 365 }) }, { id: 'never', label: t('tokens.never') }]}/>
-        <Button type="submit" isPending={busy} isDisabled={!name.trim() || full}><I name="plus" size={16}/>{t('tokens.create')}</Button>
+          error={field(fields.expiresInDays)}
+          options={[...[30, 90, 365].filter((n) => !rules?.maxDays || n <= rules.maxDays), ...(rules?.maxDays && ![30, 90, 365].includes(rules.maxDays) ? [rules.maxDays] : [])]
+            .map((n) => ({ id: String(n), label: t('tokens.days', { n }) })).concat(rules?.expiryRequired ? [] : [{ id: 'never', label: t('tokens.never') }])}/>
+        <Button type="submit" isPending={busy} isDisabled={!name.trim() || full || (narrow && !picked.length)}><I name="plus" size={16}/>{t('tokens.create')}</Button>
+        <details className="rounded-xl border border-border sm:col-span-4">
+          <summary className="cursor-pointer list-none p-3 text-sm font-medium"><span className="flex items-center gap-2"><I name="sliders-horizontal" size={16}/>{t('tokens.limitTitle')}
+            {(narrow || ips.trim()) && <StatusChip tone="accent">{t('tokens.limited')}</StatusChip>}</span></summary>
+          <div className="flex flex-col gap-4 border-t border-border p-3">
+            <CheckboxInput label={t('tokens.narrow')} isSelected={narrow} onChange={setNarrow} help={t('tokens.narrowHelp')}/>
+            {narrow && <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {groups.map(([g, ps]) => <fieldset key={g} className="flex flex-col gap-1 rounded-lg border border-border p-2">
+                <legend className="px-1 text-xs font-semibold uppercase tracking-wider text-muted">{tp(`group.${g}` as 'group.servers')}</legend>
+                {ps.map((p) => <CheckboxInput key={p} label={tp(`p.${p.replace('.', '_')}` as 'p.servers_create')} isSelected={picked.includes(p)}
+                  onChange={(on) => setPicked((x) => on ? [...x, p] : x.filter((y) => y !== p))}/>)}
+              </fieldset>)}
+              {fields.permissions && <p className="text-sm text-danger">{field(fields.permissions)}</p>}
+            </div>}
+            <TextInput multiline label={t('tokens.ips')} value={ips} onChange={setIps} placeholder={'203.0.113.10\n198.51.100.0/24'} spellCheck={false} error={field(fields.allowedIps)} help={t('tokens.ipsHelp')}/>
+          </div>
+        </details>
       </form>
+      {rules && <p className="text-xs text-muted">{[rules.rateLimit ? t('tokens.ruleRate', { n: rules.rateLimit }) : '', rules.maxDays ? t('tokens.ruleDays', { n: rules.maxDays }) : '',
+        rules.expiryRequired ? t('tokens.ruleExpiry') : ''].filter(Boolean).join(' · ')} <a className="text-accent hover:underline" href="/api-docs">{t('tokens.docs')}</a></p>}
       {list.length === 0 ? <Empty icon={<I name="key-round" size={20}/>} title={t('tokens.empty')}/>
         : <DataTable label={t('tokens.title')} rows={list} rowKey={(x) => x.id} minWidth={560}
           columns={[{ id: 'name', label: t('tokens.name') }, { id: 'scope', label: t('tokens.scope') }, { id: 'used', label: t('tokens.lastUsed') }, { id: 'expires', label: t('tokens.expires') }, { id: 'x', label: '' }]}
           cells={(x) => [<span key="n" className="flex flex-col"><span className="font-medium">{x.name}</span><span className="text-xs text-muted">lvm_…{x.hint}</span></span>,
-            <StatusChip key="s" tone={x.scope === 'write' ? 'warning' : 'default'}>{t(`tokens.${x.scope}`)}</StatusChip>,
+            <span key="s" className="flex flex-col items-start gap-1"><StatusChip tone={x.scope === 'write' ? 'warning' : 'default'}>{t(`tokens.${x.scope}`)}</StatusChip>
+              {(x.permissions || x.allowedIps?.length > 0) && <span className="text-xs text-muted">{[x.permissions ? t('tokens.narrowed', { n: x.permissions.length }) : '', x.allowedIps?.length ? t('tokens.addresses', { n: x.allowedIps.length }) : ''].filter(Boolean).join(' · ')}</span>}</span>,
             x.lastUsedAt ? <span key="u" className="flex flex-col"><span title={when(x.lastUsedAt)}>{ago(x.lastUsedAt)}</span>{x.lastUsedIp && <span className="text-xs text-muted">{x.lastUsedIp}</span>}</span> : t('tokens.neverUsed'),
             x.expiresAt ? (Date.parse(x.expiresAt) < now ? <StatusChip key="e" tone="danger">{t('tokens.expired')}</StatusChip>
               : Date.parse(x.expiresAt) - now < 14 * DAY ? <span key="e" className="flex flex-col items-start gap-0.5"><StatusChip tone="warning">{t('tokens.expiresSoon', { when: ago(x.expiresAt) })}</StatusChip><span className="text-xs text-muted">{when(x.expiresAt)}</span></span>

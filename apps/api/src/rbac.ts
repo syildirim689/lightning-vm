@@ -17,7 +17,7 @@ export async function assertCovers(req: AuthedRequest, targetId: string) {
   if (!covers(req.user.permissions, target)) throw apiError(403, 'FORBIDDEN_TARGET', 'This account has permissions you do not have');
 }
 
-const PERMISSION = 'lvm:permission';
+export const PERMISSION = 'lvm:permission';
 // @Can('catalog.manage') on a handler: signed in and holding that permission (any of several, if given more).
 export const Can = (...perms: Permission[]) => SetMetadata(PERMISSION, perms);
 

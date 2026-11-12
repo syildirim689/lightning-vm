@@ -2,6 +2,7 @@ import { CanActivate, Controller, ExecutionContext, Get, Injectable, Req, UseGua
 import { fromNodeHeaders } from 'better-auth/node';
 import { createHash } from 'node:crypto';
 import type { FastifyRequest } from 'fastify';
+import { countRequest } from './api-rate';
 import { getAuth } from './better-auth';
 import { pool } from './db';
 import { apiError } from './errors';
@@ -40,12 +41,20 @@ export function readCredentials(body: unknown) {
 async function tokenSession(req: FastifyRequest, token: string): Promise<{ user: User; token: string; id: string } | null> {
   const { rows: [t] } = await pool.query(`UPDATE api_tokens a SET last_used_at = now(), last_used_ip = $2::inet FROM users u
       WHERE a.token_hash = $1 AND u.id = a.user_id AND (a.expires_at IS NULL OR a.expires_at > now()) AND NOT coalesce(u.banned, false) AND u.disabled_at IS NULL
-      RETURNING a.id, a.scope, u.id AS user_id, u.email, u.name, u.role, u.locale, u.time_zone, u.username, u.two_factor_enabled, u.phone_number, u.phone_number_verified`,
+      RETURNING a.id, a.name AS token_name, a.scope, a.permissions AS token_permissions, a.allowed_ips, u.id AS user_id, u.email, u.name, u.role, u.locale, u.time_zone, u.username, u.two_factor_enabled, u.phone_number, u.phone_number_verified`,
   [createHash('sha256').update(token).digest('hex'), req.ip]).catch(() => ({ rows: [] }));
   if (!t) return null;
   if (!ipAllowed(limitsOf(t.role ?? null).allowedIps, req.ip)) return null;
+  // The administrator's addresses for all tokens (Settings → API) and the token's own.
+  const api = await getSettings('api');
+  if (!ipAllowed(api.networks, req.ip) || !ipAllowed(t.allowed_ips, req.ip)) throw apiError(403, 'TOKEN_ADDRESS_NOT_ALLOWED', 'This API token may not be used from this address');
+  (req as FastifyRequest & { apiToken?: { id: string; name: string } }).apiToken = { id: t.id, name: t.token_name };
+  await countRequest(req, t.id, api.rateLimit);
   if (t.scope === 'read' && !['GET', 'HEAD'].includes(req.method)) throw apiError(403, 'TOKEN_READ_ONLY', 'This API token can only read');
-  return { user: { id: t.user_id, email: t.email, name: t.name ?? '', roles: splitRoles(t.role), permissions: await permissionsOf(t.user_id, t.role ?? null),
+  // A narrowed token has only those of its owner's permissions it was given.
+  const own = await permissionsOf(t.user_id, t.role ?? null);
+  const permissions = t.token_permissions ? (own.includes('*') ? t.token_permissions : own.filter((p: string) => t.token_permissions.includes(p))) : own;
+  return { user: { id: t.user_id, email: t.email, name: t.name ?? '', roles: splitRoles(t.role), permissions,
     locale: t.locale === 'tr' ? 'tr' : 'en', timeZone: t.time_zone ?? null, username: t.username ?? null, impersonatedBy: null, twoFactorEnabled: !!t.two_factor_enabled,
     twoFactorRequired: false, phoneNumber: t.phone_number ?? null, phoneNumberVerified: !!t.phone_number_verified }, token: '', id: `token:${t.id}` };
 }

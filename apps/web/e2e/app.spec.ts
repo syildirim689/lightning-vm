@@ -503,7 +503,7 @@ test.describe('VMware connections (simulator, English browser)', () => {
     await expect(page.getByRole('progressbar', { name: 'Scan progress' }).or(page.getByText(/addresses scanned:/))).toBeVisible();
     await expect(page.getByText(/^254 addresses scanned: [1-9]\d* ESXi \/ vCenter/)).toBeVisible({ timeout: 90_000 });
     // The vCenter that is already a connection is recognised by its instance UUID.
-    const vc = page.getByRole('row', { name: /vCenter \d/ }).first();
+    const vc = page.getByRole('row').filter({ hasText: /vCenter \d/ }).first();
     await expect(vc).toContainText('Connected');
     await expect(vc).toContainText('Simülatör vCenter');
     // An ESXi that is not connected: ignore it, then undo; then add it with the form filled in.
@@ -1302,6 +1302,81 @@ test.describe('people, settings and smart features (English browser)', () => {
     await expect(page.getByRole('link', { name: new RegExp(name) })).toHaveCount(0);
   });
 
+  test('API: rules in Settings, the reference with its PDF and OpenAPI, a narrowed token, rate headers, the request log and a revoke', async ({ page }) => {
+    test.setTimeout(180_000);
+    const csrf = { 'x-lightning-csrf': '1' };
+    await signInAdmin(page);
+    // Settings → API: a rate limit and the log kept 30 days.
+    await page.goto('/admin/settings?tab=api');
+    await page.getByLabel('Requests per minute').fill('120');
+    await page.getByLabel('Keep for (days)').fill('30');
+    await page.getByRole('button', { name: 'Save', exact: true }).click();
+    await expect(page.getByText('API settings saved.')).toBeVisible();
+    await expect(page.getByText('120 requests per token and minute (2 a second on average).')).toBeVisible();
+
+    // The reference: built from the running API, searchable, with example code.
+    await page.getByRole('link', { name: 'Open the reference' }).click();
+    await expect(page.getByRole('heading', { level: 1, name: 'API reference' })).toBeVisible();
+    await expect(page.getByText('120 requests/min')).toBeVisible();
+    await page.getByRole('searchbox', { name: 'Search endpoints' }).fill('vmware/scans');
+    await expect(page.getByRole('status').filter({ hasText: /^Showing [1-9]\d* of \d+ endpoints$/ })).toBeVisible();
+    const scan = page.locator('details#post-admin-vmware-scans');
+    await scan.locator('summary').click();
+    await expect(scan.getByText('Addresses to scan', { exact: false }).or(scan.getByText('targets', { exact: true })).first()).toBeVisible();
+    await expect(scan.getByText(/curl -X POST "\$LVM_URL\/admin\/vmware\/scans"/)).toBeVisible();
+    await scan.getByRole('tab', { name: 'Python' }).click();
+    await expect(scan.getByText('requests.post(', { exact: false })).toBeVisible();
+    // The guide states the rule in force.
+    await page.getByRole('link', { name: 'Rate limit' }).click();
+    await expect(page.getByText('Each token may make 120 requests per minute', { exact: false })).toBeVisible();
+    // PDF and OpenAPI downloads.
+    await page.getByRole('searchbox', { name: 'Search endpoints' }).fill('');
+    const [pdf] = await Promise.all([page.waitForEvent('download', { timeout: 90_000 }), page.getByRole('button', { name: 'Download PDF' }).click()]);
+    expect(pdf.suggestedFilename()).toMatch(/-api-en\.pdf$/);
+    const pdfBytes = await (await import('node:fs/promises')).readFile((await pdf.path())!);
+    expect(pdfBytes.subarray(0, 5).toString()).toBe('%PDF-');
+    expect(pdfBytes.length).toBeGreaterThan(100_000);
+    const [spec] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'OpenAPI (JSON)' }).click()]);
+    const doc = JSON.parse(await (await import('node:fs/promises')).readFile((await spec.path())!, 'utf8'));
+    expect(doc.openapi).toBe('3.1.0');
+    expect(doc.paths['/servers/{id}/actions'].post.parameters.some((x: { name: string }) => x.name === 'Idempotency-Key')).toBe(true);
+    await page.setViewportSize({ width: 390, height: 900 });
+    await expectNoOverflow(page, 'api reference at 390 px');
+    await page.screenshot({ path: 'test-results/tour/api-docs-390.png' });
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.screenshot({ path: 'test-results/tour/api-docs.png' });
+
+    // A token narrowed to viewing VMware: it may read connections, not users; every answer carries the rate headers.
+    const made = await page.request.post('/api/account/api-tokens', { headers: csrf, data: { name: 'e2e narrowed', scope: 'read', expiresInDays: 30, permissions: ['vmware.view'] } });
+    expect(made.status()).toBe(201);
+    const { token, id } = await made.json();
+    const ctx = await (await import('@playwright/test')).request.newContext({ baseURL: process.env.E2E_BASE_URL ?? 'https://localhost', ignoreHTTPSErrors: true });
+    const bearer = { authorization: `Bearer ${token}` };
+    const ok = await ctx.get('/api/admin/vmware/connections', { headers: bearer });
+    expect(ok.status()).toBe(200);
+    expect(ok.headers()['x-ratelimit-limit']).toBe('120');
+    expect(Number(ok.headers()['x-ratelimit-remaining'])).toBeLessThan(120);
+    const denied = await ctx.get('/api/admin/users', { headers: bearer });
+    expect(denied.status()).toBe(403);
+    expect((await ctx.post('/api/admin/vmware/scans', { headers: bearer, data: { targets: '10.0.0.1' } })).status()).toBe(403); // read-only
+    await ctx.dispose();
+    // The administrator sees it in the log and revokes the token.
+    await page.goto('/admin/settings?tab=api');
+    const log = page.locator('#api-log');
+    await log.getByRole('searchbox', { name: 'Search path or route' }).fill('admin/users');
+    await expect(log.getByRole('row').filter({ hasText: '403' }).first()).toBeVisible();
+    const row = page.locator('#api-tokens').getByRole('row').filter({ hasText: 'e2e narrowed' });
+    await expect(row).toContainText('narrowed to 1 permissions');
+    await row.getByRole('button', { name: 'Revoke' }).click();
+    await page.getByRole('alertdialog').getByRole('button', { name: 'Revoke' }).click();
+    await expect(page.getByText('Token revoked.')).toBeVisible();
+    const after = await page.request.get('/api/account/api-tokens');
+    expect((await after.json()).tokens.some((x: { id: string }) => x.id === id)).toBe(false);
+    await page.setViewportSize({ width: 390, height: 900 });
+    await expectNoOverflow(page, 'api settings at 390 px');
+    await page.setViewportSize({ width: 1280, height: 720 });
+  });
+
   test('payments: live credentials saved apart from test ones, checked, activated and removed', async ({ page }) => {
     await signInAdmin(page);
     await expect(page).toHaveURL(/\/admin$/);
@@ -1513,7 +1588,7 @@ test.describe('people, settings and smart features (English browser)', () => {
     await expect(page).toHaveURL(/\/admin$/);
     for (const path of ['/admin', '/admin/servers', '/admin/vmware', '/admin/catalog', '/admin/users', '/admin/roles', '/admin/settings?tab=mail', '/admin/system', '/', '/order', '/firewalls', '/admin/settings?tab=rdns', '/admin/catalog?tab=ip', '/account?tab=security',
       '/admin/topology', '/admin/energy', '/admin/abuse', '/admin/catalog?tab=locations', '/admin/catalog?tab=isos', '/admin/catalog?tab=vdcs', '/admin/settings?tab=domain', '/admin/settings?tab=servers', '/topology', '/vdc', '/account?tab=accessibility',
-      '/admin/catalog?tab=packages', '/admin/catalog?tab=apps', '/admin/settings?tab=security', '/admin/settings?tab=notifications', '/account?tab=keys', '/account?tab=notifications', '/admin/audit', '/account?tab=activity', '/admin/settings?tab=announcement', '/admin/terminal', '/admin/settings?tab=chat', '/admin/settings?tab=directory', '/admin/roles', '/admin/settings?tab=status', '/status', '/support', '/admin/support', '/admin/settings?tab=support', '/admin/stats', '/account?tab=api', '/reseller', '/networks']) {
+      '/admin/catalog?tab=packages', '/admin/catalog?tab=apps', '/admin/settings?tab=security', '/admin/settings?tab=notifications', '/account?tab=keys', '/account?tab=notifications', '/admin/audit', '/account?tab=activity', '/admin/settings?tab=announcement', '/admin/terminal', '/admin/settings?tab=chat', '/admin/settings?tab=directory', '/admin/roles', '/admin/settings?tab=status', '/status', '/support', '/admin/support', '/admin/settings?tab=support', '/admin/stats', '/account?tab=api', '/reseller', '/networks', '/api-docs', '/admin/settings?tab=api']) {
       await page.goto(path);
       await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
       await expectNoOverflow(page, `${path} at ${viewport.width} px`);

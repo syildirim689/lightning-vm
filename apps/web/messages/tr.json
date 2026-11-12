@@ -352,7 +352,8 @@
     "COUPON_CODE_TAKEN": "Bu kod başka bir kuponda kullanılıyor.",
     "SCAN_RUNNING": "Başka bir tarama sürüyor; bitmesini bekleyin veya durdurun.",
     "SCAN_NOT_RUNNING": "Bu tarama zaten bitmiş.",
-    "SCAN_INTERRUPTED": "Panel yeniden başlatıldığı için tarama yarıda kaldı."
+    "SCAN_INTERRUPTED": "Panel yeniden başlatıldığı için tarama yarıda kaldı.",
+    "TOKEN_ADDRESS_NOT_ALLOWED": "Bu API anahtarı bu IP adresinden kullanılamaz."
   },
   "Auth": {
     "required": "zorunlu",
@@ -620,7 +621,9 @@
     "INVALID_TARGET": "Adres, CIDR blok veya aralık olarak okunamadı.",
     "RANGE_TOO_LARGE": "Blok çok büyük: en fazla /20 (4096 adres).",
     "IPV6_RANGE": "IPv6 blokları taranamaz; tek IPv6 adresi yazın.",
-    "TOO_MANY_ADDRESSES": "Toplam 4096 adresi aşıyor; blokları bölün."
+    "TOO_MANY_ADDRESSES": "Toplam 4096 adresi aşıyor; blokları bölün.",
+    "EXPIRY_REQUIRED": "Yönetici bitiş tarihi koymayı zorunlu kıldı.",
+    "EXPIRY_TOO_LONG": "Yöneticinin izin verdiği en uzun süreyi aşıyor."
   },
   "Setup": {
     "title": "Kurulum sihirbazı",
@@ -2289,7 +2292,8 @@
     "myBilling": "Faturalar",
     "unpaidInvoices": "{n} fatura ödeme bekliyor",
     "reseller": "Bayilik",
-    "networks": "Özel ağlar"
+    "networks": "Özel ağlar",
+    "apiDocs": "API belgeleri"
   },
   "Dashboard": {
     "eyebrow": "YÖNETİM",
@@ -3432,7 +3436,8 @@
       "support": "Destek",
       "signin": "Giriş yöntemleri",
       "billing": "Faturalandırma",
-      "einvoice": "e-Fatura"
+      "einvoice": "e-Fatura",
+      "api": "API"
     },
     "saved": "Kaydedildi.",
     "save": "Kaydet",
@@ -3854,7 +3859,9 @@
         "everyone": "Herkes",
         "staff": "Yalnızca ekip",
         "off": "Hiç kimse"
-      }
+      },
+      "apiTokensMoved": "Anahtar kuralları, istek sınırı, adres kısıtları ve istek günlüğü artık API sekmesinde.",
+      "apiTokensOpen": "API ayarlarını aç"
     },
     "domain": {
       "current": "Şu anki adres",
@@ -4391,6 +4398,93 @@
       "rule3": "e-Arşiv faturalar internet satışı bilgilerini taşır (web adresi, ödeme şekli ve tarihi, ödeme aracısı).",
       "rule4": "8 gün içindeki iade e-Arşiv faturasını iptal eder; daha geç ya da e-Fatura için iade faturası gerektiği bildirilir.",
       "save": "Kaydet"
+    },
+    "api": {
+      "docsTitle": "API belgeleri",
+      "docsHelp": "Tüm uç noktalar, alanlar, örnek kod ve kullanım rehberi; PDF olarak da indirilebilir.",
+      "openDocs": "Belgeleri aç",
+      "myTokens": "Anahtarlarım",
+      "who": "Kimler anahtar oluşturabilir",
+      "whoHelp": "Anahtar, sahibinin yetkileriyle çalışır. Kapatmak var olan anahtarları silmez; yalnızca yenilerini engeller.",
+      "whoLevel": {
+        "everyone": "Herkes",
+        "staff": "Yalnızca personel",
+        "off": "Kimse"
+      },
+      "whoHelpLevel": {
+        "everyone": "Müşteriler de kendi sunucularını otomatikleştirebilir.",
+        "staff": "Yalnızca müşteri dışı rolü olanlar.",
+        "off": "Yeni anahtar oluşturulamaz."
+      },
+      "offWarning": "Var olan anahtarlar çalışmaya devam eder; durdurmak için aşağıdan iptal edin.",
+      "lifetime": "Anahtar ömrü",
+      "lifetimeHelp": "Süresiz anahtarlar unutulup açıkta kalabilir. Bir üst sınır koymak veya personele bitiş tarihini zorunlu kılmak önerilir.",
+      "maxDays": "En uzun ömür (gün)",
+      "maxDaysOn": "Anahtarlar en fazla {n} gün geçerli olur; süresiz anahtar oluşturulamaz.",
+      "maxDaysOff": "0: üst sınır yok.",
+      "staffExpiry": "Personel anahtarlarına bitiş tarihi zorunlu",
+      "rate": "Hız sınırı",
+      "rateHelp": "Bir anahtarın dakikada yapabileceği istek sayısı. Aşılınca 429 döner; yanıt başlıkları kalan hakkı söyler.",
+      "rateLimit": "Dakikalık istek sınırı",
+      "rateOn": "Anahtar başına dakikada {n} istek (saniyede ortalama {perSecond}).",
+      "rateOff": "0: sınır yok. Önerilmez.",
+      "networks": "İzin verilen adresler",
+      "networksHelp": "Doldurulursa tüm anahtarlar yalnızca bu adreslerden kullanılabilir. Her anahtar ayrıca kendi adreslerini, roller de kendi kurallarını ekleyebilir.",
+      "networksLabel": "IP veya CIDR blokları (satır başına bir)",
+      "networksOn": "{n} adres veya blok.",
+      "networksOff": "Boş: her adresten.",
+      "logTitle": "İstek günlüğü",
+      "logHelp": "Anahtarla yapılan her istek yöntem, rota, durum, süre ve adresiyle kaydedilir. Gövdeler saklanmaz.",
+      "logOn": "İstekleri kaydet",
+      "logDays": "Saklama süresi (gün)",
+      "save": "Kaydet",
+      "saved": "API ayarları kaydedildi.",
+      "tokensTitle": "Tüm API anahtarları",
+      "tokensHelp": "Her hesabın anahtarları. Anahtarın kendisi hiçbir zaman gösterilmez; şüpheli olanı iptal edin.",
+      "noTokens": "Henüz anahtar yok.",
+      "searchTokens": "Ad veya sahip ara",
+      "revoke": "İptal et",
+      "revoked": "Anahtar iptal edildi.",
+      "cancel": "Vazgeç",
+      "revokeTitle": "\"{name}\" anahtarı ({owner}) iptal edilsin mi?",
+      "revokeBody": "Anahtar hemen çalışmaz olur ve geri alınamaz. Sahibi yeni bir anahtar oluşturmalıdır.",
+      "col": {
+        "token": "Anahtar",
+        "owner": "Sahibi",
+        "access": "Erişim",
+        "used": "Son kullanım",
+        "today": "Son 24 saat",
+        "expires": "Bitiş",
+        "when": "Zaman",
+        "request": "İstek",
+        "status": "Durum",
+        "duration": "Süre",
+        "ip": "Adres"
+      },
+      "scope": {
+        "read": "Salt okunur",
+        "write": "Tam yetkili"
+      },
+      "narrowed": "{n} yetkiyle sınırlı",
+      "allPermissions": "Sahibinin tüm yetkileri",
+      "addresses": "{n} adres",
+      "never": "Hiç kullanılmadı",
+      "errorsShort": "{n} hata",
+      "expired": "Süresi doldu",
+      "noExpiry": "Süresiz",
+      "logIntro": "Son 24 saatin özeti ve en yeni 200 istek; 30 saniyede bir yenilenir.",
+      "top": "En çok çağrılanlar (24 saat)",
+      "searchLog": "Yol veya rota ara",
+      "errorsOnly": "Yalnızca hatalar",
+      "logEmpty": "Kayıtlı istek yok.",
+      "sum": {
+        "requests": "İstek (24 saat)",
+        "tokens": "{n} anahtardan",
+        "errors": "Hatalı yanıt",
+        "rate": "Oran %{pct}",
+        "limited": "Sınıra takılan (429)",
+        "avg": "Ortalama süre"
+      }
     }
   },
   "Firewalls": {
@@ -5287,7 +5381,9 @@
       "vmware_scan_cancelled": "Ağ taraması durduruldu",
       "vmware_scan_settings": "Otomatik tarama ayarı değişti",
       "vmware_scan_ignored": "Taramada bir adres yoksayıldı",
-      "vmware_scan_unignored": "Yoksayılan adres geri alındı"
+      "vmware_scan_unignored": "Yoksayılan adres geri alındı",
+      "settings_api_changed": "API ayarları değişti",
+      "admin_api_token_revoked": "Bir API anahtarı yönetici tarafından iptal edildi"
     },
     "outcome": {
       "success": "Tamamlandı",
@@ -6986,7 +7082,19 @@
       "full": "En fazla {max} anahtar oluşturabilirsiniz. Yenisi için kullanmadığınız bir anahtarı silin.",
       "idle": "{n} anahtar uzun süredir kullanılmıyor. Unutulmuş anahtarları silmek hesabınızı korur.",
       "expiresSoon": "Bitiyor: {when}",
-      "countLabel": "{max} anahtardan {n} tanesi kullanılıyor"
+      "countLabel": "{max} anahtardan {n} tanesi kullanılıyor",
+      "limitTitle": "Yetki ve adres kısıtı (isteğe bağlı)",
+      "limited": "Kısıtlı",
+      "narrow": "Yalnızca seçtiğim yetkiler",
+      "narrowHelp": "İşaretlenmezse anahtar tüm yetkilerinizle çalışır. Seçilirse yalnızca işaretlediklerinizle; yetkiniz daha sonra azalırsa anahtarınki de azalır.",
+      "ips": "Yalnızca bu adreslerden (isteğe bağlı)",
+      "ipsHelp": "Satır başına bir IP veya CIDR blok. Boş: her adresten (rolünüzün ve yöneticinin kuralları yine geçerli).",
+      "ruleRate": "Dakikada en fazla {n} istek",
+      "ruleDays": "En fazla {n} gün geçerli",
+      "ruleExpiry": "Bitiş tarihi zorunlu",
+      "docs": "API belgeleri →",
+      "narrowed": "{n} yetki",
+      "addresses": "{n} adres"
     },
     "webhooks": {
       "title": "Webhook'lar",
@@ -7606,5 +7714,149 @@
     "back": "Bağlantı geri geldi; sayfa güncellendi.",
     "server": "Panel sunucusuna ulaşılamıyor",
     "serverHelp": "İnternetiniz çalışıyor ama panel yanıt vermiyor (bakım veya güncelleme olabilir). Yanıt gelince sayfa kendini günceller."
+  },
+  "ApiDocs": {
+    "eyebrow": "Geliştirici",
+    "title": "API belgeleri",
+    "intro": "Panelde yapılabilen her şey HTTP API ile de yapılır: sunucular, katalog, faturalar, kullanıcılar, ayarlar. Bu sayfa çalışan sürümden üretilir; her zaman günceldir.",
+    "loading": "Belgeler yükleniyor…",
+    "pdf": {
+      "title": "API başvuru belgesi",
+      "subtitle": "Uç noktalar, alanlar, örnekler ve kullanım rehberi",
+      "baseUrl": "Temel adres",
+      "version": "Sürüm",
+      "date": "Tarih",
+      "count": "Kapsam",
+      "countValue": "{n} uç nokta",
+      "scope": "Bu belge panelin çalışan sürümünden, indirildiği andaki süzgeçlere göre üretildi. Yetkileriniz değişirse veya panel güncellenirse yeniden indirin.",
+      "contents": "İçindekiler",
+      "field": "Alan",
+      "type": "Tür",
+      "required": "Zorunlu",
+      "meaning": "Açıklama",
+      "code": "Kod",
+      "params": "Yol parametreleri",
+      "query": "Sorgu parametreleri",
+      "body": "Gövde (JSON)",
+      "example": "Örnek gövde",
+      "returns": "Yanıt",
+      "errors": "Hata kodları",
+      "public": "Oturum gerekmez",
+      "signedIn": "Her oturum veya anahtar",
+      "permission": "Yetki: {list}",
+      "writeToken": "tam yetkili anahtar",
+      "panelOnly": "yalnızca panelden",
+      "idempotency": "Idempotency-Key gerekir",
+      "status": "Yanıt {status}"
+    },
+    "pdfWorking": "PDF hazırlanıyor…",
+    "pdfReady": "PDF indirildi.",
+    "pdfFailed": "PDF hazırlanamadı. Sayfayı yenileyip tekrar deneyin.",
+    "openapi": "OpenAPI (JSON)",
+    "createToken": "API anahtarı oluştur",
+    "copy": "Kopyala",
+    "copied": "Panoya kopyalandı.",
+    "baseUrl": "Temel adres",
+    "reach": "Kullanabildiğiniz",
+    "reachHint": "Yetkinizin yettiği uç noktalar / tümü",
+    "rate": "Hız sınırı",
+    "rateValue": "{n} istek/dk",
+    "rateOff": "Sınır yok",
+    "rateHint": "Anahtar başına",
+    "version": "Sürüm",
+    "versionHint": "Belge bu sürümden üretildi",
+    "tokensOff": "Yönetici API anahtarlarını kapattı; anahtar oluşturulamaz.",
+    "contents": "İçindekiler",
+    "guideTitle": "Rehber",
+    "referenceTitle": "Uç noktalar",
+    "allGroups": "Tüm gruplar",
+    "search": "Uç noktalarda ara",
+    "searchPlaceholder": "Yol, açıklama veya yetki… (ör. /servers, fatura, vmware.manage)",
+    "methodFilter": "Yönteme göre süz",
+    "allMethods": "Tümü",
+    "onlyMine": "Yalnızca kullanabildiklerim",
+    "showInternal": "Panelin iç rotalarını da göster",
+    "shown": "{n} / {total} uç nokta gösteriliyor",
+    "noMatch": "Bu süzgeçlere uyan uç nokta yok.",
+    "clear": "Süzgeçleri temizle",
+    "notYours": "Yetkiniz yok",
+    "internalBadge": "iç kullanım",
+    "copyLink": "Bağlantıyı kopyala",
+    "linkCopied": "Bağlantı kopyalandı.",
+    "field": "Alan",
+    "type": "Tür",
+    "meaning": "Açıklama",
+    "required": "zorunlu",
+    "params": "Yol parametreleri",
+    "query": "Sorgu parametreleri",
+    "body": "Gövde (JSON)",
+    "example": "Örnek gövde",
+    "code": "Örnek kod",
+    "copyExample": "Örnek gövdeyi kopyala",
+    "copyCode": "{lang} örneğini kopyala",
+    "returns": "Yanıt",
+    "errors": "Bu uca özgü hata kodları",
+    "codeColumn": "Kod",
+    "public": "Oturum gerekmez",
+    "signedIn": "Herhangi bir oturum veya anahtar",
+    "writeToken": "Tam yetkili anahtar gerekir",
+    "panelOnly": "Yalnızca panelden; API anahtarıyla olmaz",
+    "statusCode": "Başarılı yanıt: {status}",
+    "guide": {
+      "start": {
+        "title": "Başlarken",
+        "p1": "API'nin temel adresi panelin adresinin sonuna /api eklenerek bulunur; yukarıda yazıyor. Tüm istekler ve yanıtlar JSON'dur, karakter kodlaması UTF-8'dir ve yalnızca HTTPS kullanılır.",
+        "p2": "Hesap → API sayfasından bir anahtar oluşturun. Anahtar yalnızca bir kez gösterilir; parola gibi saklayın. Salt okunur anahtar yalnızca okur; tam yetkili anahtar değişiklik de yapabilir.",
+        "p3": "Aşağıdaki komut, anahtarın kime ait olduğunu ve yetkilerini döndürür; çalışıyorsa her şey hazırdır."
+      },
+      "auth": {
+        "title": "Kimlik doğrulama ve yetki",
+        "p1": "Her isteğe Authorization: Bearer lvm_… başlığını ekleyin. Anahtarla gelen isteklerde CSRF başlığı gerekmez; istekte panel çerezi bulunmamalıdır.",
+        "p2": "Anahtar sahibinin adına çalışır: sahibinin rolündeki yetkiler ve rolün IP kuralları geçerlidir. Anahtar oluşturulurken yetkileri daraltılabilir ve yalnızca belirli IP adreslerinden kullanılacak şekilde sınırlanabilir. Her uç noktada gereken yetki yazar; \"Yalnızca kullanabildiklerim\" süzgeci bunları sizin yetkinize göre gösterir.",
+        "p3": "Anahtar oluşturma, silme, webhook yönetimi ve konsol açma yalnızca panelden yapılır. Oturum açma, iki adımlı doğrulama ve kullanıcı adına giriş gibi /auth/* akışları API anahtarıyla kullanılamaz.",
+        "p4": "Yönetici anahtarın en uzun ömrünü, dakikalık istek sınırını ve anahtarların kullanılabileceği adresleri Ayarlar → API'den belirler. Süresi dolan, silinen veya sahibi devre dışı bırakılan anahtar hemen çalışmaz olur."
+      },
+      "format": {
+        "title": "İstek ve yanıt biçimi",
+        "p1": "Gövdesi olan isteklerde Content-Type: application/json gönderin. Tarih ve saatler ISO 8601 (UTC), para tutarları yuvarlama hatası olmasın diye ondalık metin olarak (\"34.00\") taşınır. Kimlikler UUID'dir.",
+        "p2": "Başarılı yanıtlar 200, 201 veya 202 ile JSON döner; içerik yoksa 204 gelir. Hatalar her zaman aynı biçimdedir: code (sabit, makinenin okuyacağı kod), message (İngilizce açıklama) ve doğrulama hatalarında fields (alan → hata kodu).",
+        "p3": "Kodunuzu message metnine değil code alanına göre yazın; metinler değişebilir, kodlar değişmez."
+      },
+      "errors": {
+        "title": "Hata kodları",
+        "p1": "Her uç noktanın verebileceği ortak yanıtlar aşağıda. Uca özgü kodlar her uç noktanın kendi bölümünde yazar."
+      },
+      "idempotency": {
+        "title": "Tekrarlanabilir istekler (Idempotency-Key)",
+        "p1": "İşlem başlatan isteklerde (sipariş, güç, yeniden kurulum, boyut değiştirme, anlık görüntü, silme) Idempotency-Key başlığı gerekir: 8–100 karakterlik, her yeni işlem için yeni bir değer (ör. UUID).",
+        "p2": "Ağ hatası veya zaman aşımında aynı isteği aynı anahtarla tekrar gönderin: işlem ikinci kez çalışmaz, ilk sonucun aynısı döner. Böylece bir sipariş iki kez verilmez."
+      },
+      "limits": {
+        "title": "Hız sınırı",
+        "p1": "Her anahtar dakikada en fazla {rate} istek yapabilir (0 ise sınır yoktur). Her yanıtta X-RateLimit-Limit, X-RateLimit-Remaining ve X-RateLimit-Reset başlıkları kalan hakkı söyler.",
+        "p2": "Sınır aşılınca 429 RATE_LIMITED döner ve Retry-After başlığı kaç saniye bekleneceğini söyler. Döngülerde bekleme koyun; yoğun işler için birden fazla anahtar yerine istekleri yayın.",
+        "p3": "Anahtarla yapılan istekler (yöntem, rota, durum, süre, adres) yöneticinin seçtiği gün sayısı kadar saklanır ve Ayarlar → API'de görülür. İstek ve yanıt gövdeleri hiçbir zaman saklanmaz."
+      },
+      "operations": {
+        "title": "Uzun süren işlemler",
+        "p1": "Sunucu oluşturma, güç, yeniden kurulum, boyut değiştirme, yedek ve anlık görüntü gibi işlemler arka planda yürür. İstek hemen yanıt döner; işlem kuyrukta sürer.",
+        "p2": "Durumu GET /servers/:id ile birkaç saniyede bir sorgulayın ya da daha iyisi bir webhook ile bildirim alın. Bir sunucuda aynı anda tek işlem çalışır; ikincisi 409 OPERATION_IN_PROGRESS alır.",
+        "p3": "Başarısız işlemler hata koduyla kaydedilir; yönetici işlemleri yeniden deneyebilir veya uzlaştırma çalıştırabilir."
+      },
+      "webhooks": {
+        "title": "Webhook'lar",
+        "p1": "Hesap → API → Webhook'lar bölümünden bir HTTPS adresi ve olaylar seçin. Bildirim aldığınız her olay (ör. server.ready, invoice.paid) imzalı bir POST olarak gelir.",
+        "p2": "X-Lightning-Signature başlığındaki v1 değeri, gövdenin olduğu gibi alınmış haliyle \"<t>.<gövde>\" metninin webhook gizli anahtarıyla HMAC-SHA256 özetidir. Sabit sürede karşılaştırın, birkaç dakikadan eski zaman damgalarını ve daha önce işlediğiniz teslimat kimliklerini reddedin.",
+        "p3": "2xx yanıt teslim edildi sayılır. Diğer yanıtlar ve zaman aşımları üstel beklemeyle 8 kez yeniden denenir; art arda 20 başarısızlıkta webhook kapanır ve sahibine bildirilir."
+      },
+      "security": {
+        "title": "Güvenli kullanım",
+        "p1": "Anahtarı kaynak koduna yazmayın; ortam değişkeni veya bir gizli kasası kullanın. Her entegrasyon için ayrı anahtar oluşturun; böylece biri sızarsa yalnızca onu silersiniz.",
+        "p2": "İhtiyaç kadar yetki verin: yalnızca okuyan araçlar için salt okunur anahtar, otomasyonlar için yetkileri daraltılmış anahtar. Sunucudan çalışan entegrasyonları kendi IP adresleriyle sınırlayın.",
+        "p3": "Bitiş tarihi koyun ve süresi yaklaşan anahtarları yenileyin. Kullanılmayan anahtarları silin; panel uzun süredir kullanılmayanları ayrıca hatırlatır.",
+        "p4": "Bir anahtarın sızdığından şüphelenirseniz hemen silin. Yönetici Ayarlar → API'den her hesabın anahtarını görebilir, iptal edebilir ve istek günlüğünden ne yapıldığını izleyebilir."
+      }
+    },
+    "pdfButton": "PDF indir"
   }
 }

@@ -50,6 +50,9 @@ import { getAuth, reloadAuth } from './better-auth';
 import { SetupController } from './setup';
 import { AdminController, UserSummaryController } from './admin';
 import { VmwareController } from './vmware';
+import { ApiAdminController } from './api-access';
+import { registerApiHooks, startApiLogJanitor } from './api-rate';
+import { ApiDocsController, reference } from './api-reference';
 import { startVmwareAutoScan, VmwareScanController } from './vmware-scan';
 import { ConsoleController } from './console';
 import { CatalogAdminController, CatalogController } from './catalog';
@@ -82,10 +85,13 @@ class HealthController {
   }
 }
 
-@Module({ controllers: [HealthController, AuthController, PublicController, SetupController, AdminController, VmwareController, VmwareScanController, ConsoleController, CatalogAdminController, CatalogController, ServersController, ServersAdminController, FirewallsController, PaymentsController, RdnsSettingsController, ServerIpsController,
+// Every controller; the API reference (api-reference.ts) reads its routes from this list.
+export const controllers = [HealthController, ApiAdminController, ApiDocsController, AuthController, PublicController, SetupController, AdminController, VmwareController, VmwareScanController, ConsoleController, CatalogAdminController, CatalogController, ServersController, ServersAdminController, FirewallsController, PaymentsController, RdnsSettingsController, ServerIpsController,
   SettingsController, SettingsOverviewController, SmsSettingsController, RolesController, NotificationsController, NotificationPolicyController,
   InsightsController, StaffInsightsController, ApplicationsController, ApplicationCallbackController, IsoAdminController, ServerIsoController, DomainController, LocationsController, TopologyAdminController, TopologyController, PowerController, AbuseController, VdcAdminController, VdcController, SmartController, OnboardingController, DigestController, AccountExportController, TimeZoneController, MySessionsController, SchedulesController, AuditController, ActivityController, AnnouncementController, AnnouncementAdminController, SnapshotsController, AlertsController, TerminalController, ChatController, ChatSettingsController, LiveController, DirectorySettingsController, StatusController, StatusPageSettingsController, UserSummaryController, IncidentsController, SupportController, SupportAdminController, StatsController, SignInMethodsController,
-  BillingController, BillingCallbackController, BillingAdminController, BillingSettingsController, EinvoiceSettingsController, EinvoiceDocumentController, DeveloperController, ImportController, DisputesController, DisputesAdminController, ExternalController, BackupsController, BackupsAdminController, ResellerController, ResellersAdminController, PlacementController, DisksController, DiskPriceController, PrivateNetworksController, PrivateNetworkSettingsController, ImagesController, CouponsAdminController, TransfersController, TransfersAdminController] })
+  BillingController, BillingCallbackController, BillingAdminController, BillingSettingsController, EinvoiceSettingsController, EinvoiceDocumentController, DeveloperController, ImportController, DisputesController, DisputesAdminController, ExternalController, BackupsController, BackupsAdminController, ResellerController, ResellersAdminController, PlacementController, DisksController, DiskPriceController, PrivateNetworksController, PrivateNetworkSettingsController, ImagesController, CouponsAdminController, TransfersController, TransfersAdminController];
+reference.controllers = controllers;
+@Module({ controllers })
 class AppModule {}
 
 // Only Caddy on the Compose network talks to the API; its X-Forwarded-* headers are trusted.
@@ -98,6 +104,7 @@ export async function createApp() {
     forceCloseConnections: true });
   const app = await NestFactory.create<NestFastifyApplication>(AppModule, adapter);
   await app.register(fastifyCookie);
+  registerApiHooks(app.getHttpAdapter().getInstance());
   app.getHttpAdapter().getInstance().addHook('onRequest', async (req, reply) => {
     if (csrfRejected(req)) return reply.status(403).send({ code: 'CSRF_REJECTED', message: 'Cross-site request rejected' });
   });
@@ -148,6 +155,7 @@ async function main() {
   startRdnsWorker();
   watchRoles();
   startInsightAlerts();
+  startApiLogJanitor();
   startVmwareAutoScan();
   startScheduler();
   startBilling();

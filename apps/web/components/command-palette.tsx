@@ -83,6 +83,7 @@ export default function CommandPalette({ permissions, isOpen, onOpenChange }: { 
       ['/admin/support', tn('support'), <I key="i" name="life-buoy" size={16}/>, support],
       ['/support', tn('mySupport'), <I key="i" name="life-buoy" size={16}/>, true],
       ['/account', tn('account'), <I key="i" name="key-round" size={16}/>, true],
+      ['/api-docs', tn('apiDocs'), <I key="i" name="book-open" size={16}/>, true],
       ['/account?tab=notifications', t('notificationSettings'), <I key="i" name="bell" size={16}/>, true],
     ];
     return [

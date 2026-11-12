@@ -9,6 +9,7 @@ import { apiError } from './errors';
 import { catalog, notify } from './notify';
 import { customerLevel } from './permissions';
 import { decryptSecret, encryptSecret } from './secrets';
+import { validCidr } from './role-limits';
 import { getSettings } from './settings-store';
 import { post } from './webhooks';
 
@@ -34,9 +35,11 @@ const eventsFor = (req: AuthedRequest) => Object.entries(catalog).filter(([, d])
 export class DeveloperController {
   @Get('api-tokens')
   async tokens(@Req() req: AuthedRequest) {
-    const { rows } = await pool.query(`SELECT id, name, hint, scope, expires_at AS "expiresAt", last_used_at AS "lastUsedAt", host(last_used_ip) AS "lastUsedIp", created_at AS "createdAt"
-      FROM api_tokens WHERE user_id = $1 ORDER BY created_at DESC`, [req.user.id]);
-    return { tokens: rows, max: maxTokens };
+    const { rows } = await pool.query(`SELECT id, name, hint, scope, permissions, allowed_ips AS "allowedIps", expires_at AS "expiresAt", last_used_at AS "lastUsedAt",
+        host(last_used_ip) AS "lastUsedIp", created_at AS "createdAt" FROM api_tokens WHERE user_id = $1 ORDER BY created_at DESC`, [req.user.id]);
+    const api = await getSettings('api');
+    // The rules the form has to follow: the longest life (0: none) and whether this person must set one.
+    return { tokens: rows, max: maxTokens, rules: { maxDays: api.maxDays, expiryRequired: api.maxDays > 0 || (api.staffExpiry && staff(req)), rateLimit: api.rateLimit } };
   }
 
   // The token is returned once; only its hash is stored.
@@ -49,13 +52,27 @@ export class DeveloperController {
     if (!name || name.length > 60) fields.name = 'REQUIRED';
     if (!['read', 'write'].includes(String(body?.scope))) fields.scope = 'INVALID_VALUE';
     const days = body?.expiresInDays === null || body?.expiresInDays === undefined ? null : Number(body.expiresInDays);
+    const api = await getSettings('api');
     if (days !== null && !(Number.isInteger(days) && days >= 1 && days <= 3650)) fields.expiresInDays = 'INVALID_VALUE';
+    else if (days === null && (api.maxDays > 0 || (api.staffExpiry && staff(req)))) fields.expiresInDays = 'EXPIRY_REQUIRED';
+    else if (days !== null && api.maxDays > 0 && days > api.maxDays) fields.expiresInDays = 'EXPIRY_TOO_LONG';
+    // Narrowed to some of the owner's permissions (none given: all of them).
+    let permissions: string[] | null = null;
+    if (Array.isArray(body?.permissions)) {
+      permissions = [...new Set(body.permissions.map(String))];
+      const own = req.user.permissions;
+      if (!permissions.length || permissions.length > 100 || permissions.some((p) => !own.includes('*') && !own.includes(p))) fields.permissions = 'INVALID_VALUE';
+    }
+    const allowedIps = Array.isArray(body?.allowedIps) ? body.allowedIps.map((x) => String(x).trim()).filter(Boolean) : [];
+    if (allowedIps.length > 20 || allowedIps.some((c) => !validCidr(c))) fields.allowedIps = 'INVALID_ADDRESS';
     if (Object.keys(fields).length) throw apiError(400, 'VALIDATION_FAILED', 'Invalid input', fields);
     if ((await pool.query('SELECT 1 FROM api_tokens WHERE user_id = $1', [req.user.id])).rowCount! >= maxTokens) throw apiError(409, 'LIMIT_REACHED', 'Too many tokens');
     const token = `lvm_${randomBytes(30).toString('base64url')}`;
-    const { rows: [t] } = await pool.query(`INSERT INTO api_tokens (user_id, name, token_hash, hint, scope, expires_at) VALUES ($1, $2, $3, $4, $5, now() + make_interval(days => $6))
-      RETURNING id, name, hint, scope, expires_at AS "expiresAt", created_at AS "createdAt"`, [req.user.id, name, tokenHash(token), token.slice(-4), body.scope, days]);
-    await audit(req, 'account.api_token_created', 'success', req.user.id, { tokenId: t.id, scope: body.scope });
+    const { rows: [t] } = await pool.query(`INSERT INTO api_tokens (user_id, name, token_hash, hint, scope, expires_at, permissions, allowed_ips)
+      VALUES ($1, $2, $3, $4, $5, now() + make_interval(days => $6), $7, $8)
+      RETURNING id, name, hint, scope, permissions, allowed_ips AS "allowedIps", expires_at AS "expiresAt", created_at AS "createdAt"`,
+      [req.user.id, name, tokenHash(token), token.slice(-4), body.scope, days, permissions, allowedIps]);
+    await audit(req, 'account.api_token_created', 'success', req.user.id, { tokenId: t.id, scope: body.scope, permissions: permissions?.length ?? 'all', addresses: allowedIps.length });
     await notify('account.api_token_created', [req.user.id], { name, scope: String(body.scope) });
     return { ...t, token };
   }

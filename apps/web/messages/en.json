@@ -352,7 +352,8 @@
     "COUPON_CODE_TAKEN": "Another coupon has this code.",
     "SCAN_RUNNING": "Another scan is running; wait for it or stop it.",
     "SCAN_NOT_RUNNING": "This scan has already ended.",
-    "SCAN_INTERRUPTED": "The scan stopped because the panel restarted."
+    "SCAN_INTERRUPTED": "The scan stopped because the panel restarted.",
+    "TOKEN_ADDRESS_NOT_ALLOWED": "This API token may not be used from this address."
   },
   "Auth": {
     "required": "required",
@@ -620,7 +621,9 @@
     "INVALID_TARGET": "Not readable as an address, CIDR block or range.",
     "RANGE_TOO_LARGE": "Block too large: /20 (4096 addresses) at most.",
     "IPV6_RANGE": "IPv6 blocks cannot be scanned; enter single IPv6 addresses.",
-    "TOO_MANY_ADDRESSES": "More than 4096 addresses in all; split the blocks."
+    "TOO_MANY_ADDRESSES": "More than 4096 addresses in all; split the blocks.",
+    "EXPIRY_REQUIRED": "The administrator requires an expiry.",
+    "EXPIRY_TOO_LONG": "Longer than the administrator allows."
   },
   "Setup": {
     "title": "Setup wizard",
@@ -2289,7 +2292,8 @@
     "myBilling": "Billing",
     "unpaidInvoices": "{n, plural, one {# invoice awaits payment} other {# invoices await payment}}",
     "reseller": "Reseller",
-    "networks": "Private networks"
+    "networks": "Private networks",
+    "apiDocs": "API reference"
   },
   "Dashboard": {
     "eyebrow": "ADMINISTRATION",
@@ -3432,7 +3436,8 @@
       "support": "Support",
       "signin": "Sign-in methods",
       "billing": "Billing",
-      "einvoice": "e-Invoice"
+      "einvoice": "e-Invoice",
+      "api": "API"
     },
     "saved": "Saved.",
     "save": "Save",
@@ -3854,7 +3859,9 @@
         "everyone": "Everyone",
         "staff": "Staff only",
         "off": "Nobody"
-      }
+      },
+      "apiTokensMoved": "Token rules, the rate limit, address limits and the request log are now on the API tab.",
+      "apiTokensOpen": "Open API settings"
     },
     "domain": {
       "current": "Current address",
@@ -4391,6 +4398,93 @@
       "rule3": "e-Arşiv invoices carry the internet-sale details (web address, payment method and date, payment intermediary).",
       "rule4": "A refund within 8 days cancels an e-Arşiv invoice; later, or for e-Fatura, you are told a return invoice is due.",
       "save": "Save"
+    },
+    "api": {
+      "docsTitle": "API reference",
+      "docsHelp": "Every endpoint, its fields, example code and a usage guide; also as a PDF.",
+      "openDocs": "Open the reference",
+      "myTokens": "My tokens",
+      "who": "Who may create tokens",
+      "whoHelp": "A token works with its owner's permissions. Switching off removes no token; it only stops new ones.",
+      "whoLevel": {
+        "everyone": "Everyone",
+        "staff": "Staff only",
+        "off": "Nobody"
+      },
+      "whoHelpLevel": {
+        "everyone": "Customers can automate their own servers too.",
+        "staff": "Only people with a role beyond customer.",
+        "off": "No new token can be created."
+      },
+      "offWarning": "Existing tokens keep working; revoke them below to stop them.",
+      "lifetime": "Token life",
+      "lifetimeHelp": "Tokens that never expire get forgotten and stay open. An upper limit, or an expiry required for staff, is recommended.",
+      "maxDays": "Longest life (days)",
+      "maxDaysOn": "Tokens are valid for {n} days at most; none can be created without expiry.",
+      "maxDaysOff": "0: no limit.",
+      "staffExpiry": "Staff tokens must have an expiry",
+      "rate": "Rate limit",
+      "rateHelp": "How many requests a token may make per minute. Over it the answer is 429; answer headers tell what is left.",
+      "rateLimit": "Requests per minute",
+      "rateOn": "{n} requests per token and minute ({perSecond} a second on average).",
+      "rateOff": "0: no limit. Not recommended.",
+      "networks": "Allowed addresses",
+      "networksHelp": "When filled, every token may only be used from these addresses. A token can add its own addresses, and roles their own rules.",
+      "networksLabel": "IP addresses or CIDR blocks (one per line)",
+      "networksOn": "{n} addresses or blocks.",
+      "networksOff": "Empty: from anywhere.",
+      "logTitle": "Request log",
+      "logHelp": "Every request made with a token is kept with its method, route, status, duration and address. Bodies are never stored.",
+      "logOn": "Log requests",
+      "logDays": "Keep for (days)",
+      "save": "Save",
+      "saved": "API settings saved.",
+      "tokensTitle": "All API tokens",
+      "tokensHelp": "Every account's tokens. The token itself is never shown; revoke any you do not trust.",
+      "noTokens": "No tokens yet.",
+      "searchTokens": "Search name or owner",
+      "revoke": "Revoke",
+      "revoked": "Token revoked.",
+      "cancel": "Cancel",
+      "revokeTitle": "Revoke \"{name}\" ({owner})?",
+      "revokeBody": "The token stops working at once; this cannot be undone. Its owner has to create a new one.",
+      "col": {
+        "token": "Token",
+        "owner": "Owner",
+        "access": "Access",
+        "used": "Last used",
+        "today": "Last 24 hours",
+        "expires": "Expires",
+        "when": "When",
+        "request": "Request",
+        "status": "Status",
+        "duration": "Duration",
+        "ip": "Address"
+      },
+      "scope": {
+        "read": "Read-only",
+        "write": "Full access"
+      },
+      "narrowed": "narrowed to {n} permissions",
+      "allPermissions": "All of the owner's permissions",
+      "addresses": "{n} addresses",
+      "never": "Never used",
+      "errorsShort": "{n} errors",
+      "expired": "Expired",
+      "noExpiry": "No expiry",
+      "logIntro": "A summary of the last 24 hours and the newest 200 requests; refreshed every 30 seconds.",
+      "top": "Most called (24 hours)",
+      "searchLog": "Search path or route",
+      "errorsOnly": "Errors only",
+      "logEmpty": "No request logged.",
+      "sum": {
+        "requests": "Requests (24 hours)",
+        "tokens": "from {n} tokens",
+        "errors": "Error answers",
+        "rate": "{pct}% of them",
+        "limited": "Rate limited (429)",
+        "avg": "Average time"
+      }
     }
   },
   "Firewalls": {
@@ -5287,7 +5381,9 @@
       "vmware_scan_cancelled": "Network scan stopped",
       "vmware_scan_settings": "Automatic scan changed",
       "vmware_scan_ignored": "Address ignored in scans",
-      "vmware_scan_unignored": "Ignored address restored"
+      "vmware_scan_unignored": "Ignored address restored",
+      "settings_api_changed": "API settings changed",
+      "admin_api_token_revoked": "An API token was revoked by an administrator"
     },
     "outcome": {
       "success": "Done",
@@ -6986,7 +7082,19 @@
       "full": "You can have at most {max} tokens. Remove one you no longer use to create another.",
       "idle": "{n, plural, one {# token has} other {# tokens have}} not been used for a long time. Removing forgotten tokens keeps your account safe.",
       "expiresSoon": "Expires {when}",
-      "countLabel": "{n} of {max} tokens in use"
+      "countLabel": "{n} of {max} tokens in use",
+      "limitTitle": "Permission and address limits (optional)",
+      "limited": "Limited",
+      "narrow": "Only the permissions I pick",
+      "narrowHelp": "Unticked, the token works with all your permissions. Ticked, only with those you pick; if your permissions shrink later, the token's do too.",
+      "ips": "Only from these addresses (optional)",
+      "ipsHelp": "One IP or CIDR block per line. Empty: from anywhere (your role's and the administrator's rules still apply).",
+      "ruleRate": "At most {n} requests a minute",
+      "ruleDays": "Valid for {n} days at most",
+      "ruleExpiry": "An expiry is required",
+      "docs": "API reference →",
+      "narrowed": "{n} permissions",
+      "addresses": "{n} addresses"
     },
     "webhooks": {
       "title": "Webhooks",
@@ -7606,5 +7714,149 @@
     "back": "Back online; the page is up to date.",
     "server": "The panel server is not answering",
     "serverHelp": "Your internet works but the panel does not answer (maintenance or an update, perhaps). The page refreshes itself once it answers."
+  },
+  "ApiDocs": {
+    "eyebrow": "Developers",
+    "title": "API reference",
+    "intro": "Everything the panel does can be done through its HTTP API: servers, catalog, invoices, users, settings. This page is built from the running version, so it is always current.",
+    "loading": "Loading the reference…",
+    "pdf": {
+      "title": "API reference",
+      "subtitle": "Endpoints, fields, examples and a usage guide",
+      "baseUrl": "Base URL",
+      "version": "Version",
+      "date": "Date",
+      "count": "Covers",
+      "countValue": "{n} endpoints",
+      "scope": "Built from the running panel with the filters in place when it was downloaded. Download it again when your permissions change or the panel is updated.",
+      "contents": "Contents",
+      "field": "Field",
+      "type": "Type",
+      "required": "Required",
+      "meaning": "Description",
+      "code": "Code",
+      "params": "Path parameters",
+      "query": "Query parameters",
+      "body": "Body (JSON)",
+      "example": "Example body",
+      "returns": "Returns",
+      "errors": "Error codes",
+      "public": "No session needed",
+      "signedIn": "Any session or token",
+      "permission": "Permission: {list}",
+      "writeToken": "full-access token",
+      "panelOnly": "panel only",
+      "idempotency": "needs Idempotency-Key",
+      "status": "Answers {status}"
+    },
+    "pdfWorking": "Preparing the PDF…",
+    "pdfReady": "PDF downloaded.",
+    "pdfFailed": "The PDF could not be made. Reload the page and try again.",
+    "openapi": "OpenAPI (JSON)",
+    "createToken": "Create an API token",
+    "copy": "Copy",
+    "copied": "Copied to the clipboard.",
+    "baseUrl": "Base URL",
+    "reach": "You can use",
+    "reachHint": "Endpoints your permissions reach / all",
+    "rate": "Rate limit",
+    "rateValue": "{n} requests/min",
+    "rateOff": "No limit",
+    "rateHint": "Per token",
+    "version": "Version",
+    "versionHint": "This reference was built from it",
+    "tokensOff": "The administrator turned API tokens off; none can be created.",
+    "contents": "Contents",
+    "guideTitle": "Guide",
+    "referenceTitle": "Endpoints",
+    "allGroups": "All groups",
+    "search": "Search endpoints",
+    "searchPlaceholder": "Path, description or permission… (e.g. /servers, invoice, vmware.manage)",
+    "methodFilter": "Filter by method",
+    "allMethods": "All",
+    "onlyMine": "Only those I can use",
+    "showInternal": "Show the panel's internal routes too",
+    "shown": "Showing {n} of {total} endpoints",
+    "noMatch": "No endpoint matches these filters.",
+    "clear": "Clear filters",
+    "notYours": "No permission",
+    "internalBadge": "internal",
+    "copyLink": "Copy link",
+    "linkCopied": "Link copied.",
+    "field": "Field",
+    "type": "Type",
+    "meaning": "Description",
+    "required": "required",
+    "params": "Path parameters",
+    "query": "Query parameters",
+    "body": "Body (JSON)",
+    "example": "Example body",
+    "code": "Example code",
+    "copyExample": "Copy the example body",
+    "copyCode": "Copy the {lang} example",
+    "returns": "Returns",
+    "errors": "Error codes of this endpoint",
+    "codeColumn": "Code",
+    "public": "No session needed",
+    "signedIn": "Any session or token",
+    "writeToken": "Needs a full-access token",
+    "panelOnly": "Panel only; not with an API token",
+    "statusCode": "Success: {status}",
+    "guide": {
+      "start": {
+        "title": "Getting started",
+        "p1": "The API lives at the panel's address followed by /api, shown above. Requests and answers are JSON in UTF-8, over HTTPS only.",
+        "p2": "Create a token in Account → API. It is shown once; keep it like a password. A read-only token can only read; a full-access token can also change things.",
+        "p3": "The command below returns who the token belongs to and their permissions; if it works, you are ready."
+      },
+      "auth": {
+        "title": "Authentication and permissions",
+        "p1": "Send Authorization: Bearer lvm_… with every request. Requests with a token need no CSRF header and must not carry a panel cookie.",
+        "p2": "A token acts as its owner: the permissions of their role and the role's address rules apply. When it is created, a token can be narrowed to some permissions and to some IP addresses. Every endpoint states the permission it needs; the \"Only those I can use\" filter shows them for your permissions.",
+        "p3": "Creating or removing tokens, managing webhooks and opening consoles are done in the panel only. The /auth/* flows (sign-in, two-factor, impersonation) cannot be used with a token.",
+        "p4": "The administrator sets the longest token life, the requests per minute and the addresses tokens may come from in Settings → API. A token that expires, is removed or whose owner is disabled stops working at once."
+      },
+      "format": {
+        "title": "Requests and answers",
+        "p1": "Send Content-Type: application/json with a body. Dates are ISO 8601 (UTC); money is decimal text (\"34.00\") so nothing is lost to rounding. Ids are UUIDs.",
+        "p2": "Success answers 200, 201 or 202 with JSON, or 204 without content. Errors always look the same: code (stable, for programs), message (English text) and, for invalid input, fields (field → error code).",
+        "p3": "Write your code against code, not message: texts may change, codes do not."
+      },
+      "errors": {
+        "title": "Error codes",
+        "p1": "The answers any endpoint may give are below. Codes specific to an endpoint are listed in its own section."
+      },
+      "idempotency": {
+        "title": "Safe retries (Idempotency-Key)",
+        "p1": "Requests that start an operation (order, power, reinstall, resize, snapshot, delete) need an Idempotency-Key header: 8–100 characters, a new value for each new operation (a UUID, say).",
+        "p2": "After a network error or a timeout, send the same request again with the same key: the operation does not run twice, and the first result comes back. An order is never placed twice."
+      },
+      "limits": {
+        "title": "Rate limit",
+        "p1": "Each token may make {rate} requests per minute (0 means no limit). Every answer carries X-RateLimit-Limit, X-RateLimit-Remaining and X-RateLimit-Reset.",
+        "p2": "Over the limit, the answer is 429 RATE_LIMITED with Retry-After in seconds. Wait in loops; spread heavy work over time rather than over more tokens.",
+        "p3": "Requests made with tokens (method, route, status, duration, address) are kept for the days the administrator chose and shown in Settings → API. Request and answer bodies are never stored."
+      },
+      "operations": {
+        "title": "Long-running operations",
+        "p1": "Creating a server, power, reinstall, resize, backups and snapshots run in the background. The request answers at once; the operation goes on in the queue.",
+        "p2": "Poll GET /servers/:id every few seconds, or better, get a webhook. One operation runs on a server at a time; a second one gets 409 OPERATION_IN_PROGRESS.",
+        "p3": "A failed operation is kept with its error code; staff can retry it or run a reconciliation."
+      },
+      "webhooks": {
+        "title": "Webhooks",
+        "p1": "In Account → API → Webhooks, add an HTTPS address and pick events. Every event you are notified about (server.ready, invoice.paid …) arrives as a signed POST.",
+        "p2": "The v1 value in X-Lightning-Signature is the HMAC-SHA256 of \"<t>.<body>\" (the body exactly as received) with the webhook's secret. Compare in constant time; refuse old timestamps and delivery ids you have already handled.",
+        "p3": "Any 2xx answer counts as delivered. Other answers and timeouts are retried 8 times with exponential backoff; after 20 failures in a row the webhook is switched off and its owner is told."
+      },
+      "security": {
+        "title": "Using the API safely",
+        "p1": "Never put a token in source code; use an environment variable or a secret store. Give each integration its own token, so a leak means removing only that one.",
+        "p2": "Grant only what is needed: read-only tokens for tools that only look, narrowed tokens for automation. Limit integrations that run on a server to that server's addresses.",
+        "p3": "Set an expiry and renew tokens before it. Remove tokens nobody uses; the panel also reminds you of long-unused ones.",
+        "p4": "If a token may have leaked, remove it at once. An administrator can see and revoke every account's tokens in Settings → API and follow what they did in the request log."
+      }
+    },
+    "pdfButton": "Download PDF"
   }
 }

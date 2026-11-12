@@ -140,9 +140,8 @@ export default function Discovery({ onAdd }: { onAdd: (p: Prefill) => void }) {
             : scan.status === 'cancelled' ? t('cancelledSummary', { scanned: scan.scanned, total: scan.total, found: scan.found })
             : t('failedSummary', { reason: error({ code: scan.errorCode }) })}</p>
           <p className="text-muted">
-            {format.relativeTime(new Date(Math.min(Date.parse(scan.startedAt), Date.now())), new Date())}
-            {' · '}{scan.auto ? t('auto.byAuto') : scan.startedBy ?? ''}
-            {scan.finishedAt && ` · ${t('took', { seconds: Math.max(1, Math.round((Date.parse(scan.finishedAt) - Date.parse(scan.startedAt)) / 1000)) })}`}
+            {[format.relativeTime(new Date(Math.min(Date.parse(scan.startedAt), Date.now())), new Date()), scan.auto ? t('auto.byAuto') : scan.startedBy,
+              scan.finishedAt && t('took', { seconds: Math.max(1, Math.round((Date.parse(scan.finishedAt) - Date.parse(scan.startedAt)) / 1000)) })].filter(Boolean).join(' · ')}
             {' · '}<span className="break-all font-mono">{scan.targets}</span>
           </p>
           {scan.blocked > 0 && <p className="text-warning">{t('blocked', { count: scan.blocked })}</p>}

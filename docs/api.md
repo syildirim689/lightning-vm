@@ -2,6 +2,32 @@
 
 Everything the panel does goes through its HTTP API under `https://<panel>/api`. Scripts use a personal API token.
 
+## The full reference
+
+The panel builds its reference from the running code: **API reference** (`/api-docs`, also linked from
+Settings → API and Account → API) lists every route with its method, path, the permission it needs, path, query
+and body fields, an example body, example code (cURL, JavaScript, Python), what it returns and its own error codes,
+in Turkish and English. It can be searched, filtered to the routes the reader may use, and downloaded as a PDF.
+
+- `GET /docs/reference`: the same as JSON (any session or token).
+- `GET /docs/openapi.json?lang=tr|en&mine=1`: an OpenAPI 3.1 document for client generators (Postman, Insomnia,
+  openapi-generator). Internal routes (setup wizard, provider callbacks, health) are left out.
+- How it stays right: `apps/api/src/api-reference.ts` reads the routes, guards and `@Can` permissions from the
+  controllers; `apps/api/src/api-docs/*.ts` hold the words. `test/api-reference.test.mjs` fails when a route has no
+  entry, an entry has no route, a text is missing in one language or a path parameter is not described.
+
+## Settings → API (administrators)
+
+- **Who may create tokens:** everyone, staff only or nobody (the same switch Security used to hold).
+- **Token life:** the longest life in days (0: none; above 0, no token without expiry), and an expiry required for staff.
+- **Rate limit:** requests per token and minute (600 by default, 0: none). Every token answer carries
+  `X-RateLimit-Limit`, `X-RateLimit-Remaining` and `X-RateLimit-Reset`; over the limit, `429 RATE_LIMITED` with `Retry-After`.
+- **Allowed addresses:** CIDR blocks every token must come from (`403 TOKEN_ADDRESS_NOT_ALLOWED` otherwise).
+- **Request log:** method, route pattern, path, status, duration, address and token of every request made with a
+  token, kept 1–365 days (14 by default). Bodies are never stored. The tab shows the last 24 hours, the most called
+  routes, errors and 429s.
+- **All tokens:** every account's tokens with owner, access, last use and 24-hour counts; revoke one (audited).
+
 ## Tokens
 
 Create one in **Account → API**. Choose read-only (GET only) or full access, and an expiry. Send it as a header:
@@ -14,7 +40,9 @@ Authorization: Bearer lvm_…
 - A token cannot create or remove tokens, manage webhooks, open a console, or use better-auth's `/auth/*` routes (signing in, two-factor, impersonation).
 - Requests with a token need no CSRF header. They must not carry a panel cookie.
 - Only a SHA-256 of the token is stored. The panel records its last use (time and address) and tells the owner by notification when a token is created.
-- **Settings → Security → API tokens** decides who may create tokens: everyone, staff only, or nobody.
+- A token can be **narrowed** when it is made: to some of its owner's permissions (`permissions: [...]`; if the
+  owner later loses one, the token loses it too) and to some addresses (`allowedIps: [...]`, IP or CIDR).
+- **Settings → API** decides who may create tokens and the rules above.
 
 Errors are JSON: `{ "code": "…", "message": "…", "fields"?: { "<field>": "<CODE>" } }`.
 
