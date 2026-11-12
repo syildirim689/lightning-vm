@@ -606,6 +606,13 @@ test.describe('server lifecycle (simulator, Turkish customer)', () => {
     // Live metrics from the simulator's performance manager (20-second samples).
     await expect(page.getByRole('heading', { name: 'Canlı performans' })).toBeVisible();
     await expect(page.getByText(/\d+ örnek, 20 saniye aralıkla/)).toBeVisible({ timeout: 30_000 });
+    // Every VMware detail of the VM (cards with MAC and port, disks, tools); a customer gets no infrastructure names.
+    const vmd = page.locator('[data-section="Sanal makine ayrıntıları"]');
+    await expect(vmd.getByText(/Ağ kartları \(\d+\)/)).toBeVisible({ timeout: 30_000 });
+    await expect(vmd.getByText('MAC', { exact: true }).first()).toBeVisible();
+    await expect(vmd.getByText(/Diskler \(\d+\)/)).toBeVisible();
+    await expect(vmd.getByText('Çalıştığı yer')).toHaveCount(0);
+    await expect(vmd.getByText('Veri deposu')).toHaveCount(0);
     // Health score with its reasons; a new server has no week of CPU data, so no sizing advice yet.
     await expect(page.getByRole('img', { name: /Sağlık puanı 100 üzerinden \d+/ })).toBeVisible();
     await expect(page.getByText('Henüz yeterli veri yok', { exact: false })).toBeVisible();

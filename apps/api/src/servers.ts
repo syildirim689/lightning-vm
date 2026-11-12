@@ -195,6 +195,8 @@ const serverColumns = `s.id, s.name, s.state, s.power_state AS "powerState", s.g
     WHERE server_id = s.id ORDER BY created_at DESC LIMIT 1) o) AS "lastOperation"`;
 const serverJoins = "FROM servers s JOIN resource_pools p ON p.id = s.pool_id LEFT JOIN locations l ON l.id = p.location_id JOIN os_images i ON i.id = s.image_id LEFT JOIN ip_allocations a ON a.server_id = s.id AND a.kind = 'primary'";
 
+type VmDetails = { nics: Record<string, unknown>[]; disks: Record<string, unknown>[]; cdroms: { iso: string }[]; placement: unknown; annotation: string } & Record<string, unknown>;
+
 @Controller() @UseGuards(SessionGuard)
 export class ServersController {
   @Get('ssh-keys')
@@ -322,6 +324,33 @@ export class ServersController {
     const body = { ...out, vcpu: s.vcpu, memoryMb: s.memory_mb, fetchedAt: new Date().toISOString() };
     await redis.set(`metrics:${id}`, JSON.stringify(body), 'EX', 15).catch(() => undefined);
     return body;
+  }
+
+  // Every detail VMware has on the VM: hardware and allocation, NICs (MAC, adapter, distributed port, guest
+  // addresses), disks (size, provisioning, controller slot), CD drives, VMware Tools, the guest's own network
+  // view and, for staff, where it runs. Customers do not see infrastructure names (host, cluster, datastores,
+  // switches, port groups, VLANs, file paths). Cached 20 seconds.
+  @Get('servers/:id/details')
+  async details(@Req() req: AuthedRequest, @Param('id', ParseUUIDPipe) id: string) {
+    const s = await findServer(req, id);
+    if (!s.vm_moref) throw apiError(409, 'INVALID_SERVER_STATE', 'The server has no VM yet');
+    const staff = can(req.user.permissions, 'servers.view_all');
+    let raw = await redis.get(`vm-details:${id}`).catch(() => null);
+    if (!raw) {
+      const { rows: [c] } = await pool.query('SELECT c.* FROM vmware_connections c JOIN resource_pools p ON p.connection_id = c.id WHERE p.id = $1', [s.pool_id]);
+      if (!c) throw apiError(409, 'INVALID_SERVER_STATE', 'The server has no VMware connection');
+      const out = await callAdapter<Record<string, unknown>>('/v1/vm/details', { ...storedTarget(c), vm: s.vm_moref }, 30_000);
+      raw = JSON.stringify({ ...out, fetchedAt: new Date().toISOString() });
+      await redis.set(`vm-details:${id}`, raw, 'EX', 20).catch(() => undefined);
+    }
+    const d = JSON.parse(raw) as VmDetails;
+    if (staff) return { ...d, staff: true };
+    return {
+      ...d, staff: false, placement: null, annotation: '',
+      nics: d.nics.map((n) => ({ ...n, network: '', switch: '', portgroupKey: '', vlan: null })),
+      disks: d.disks.map((x) => ({ ...x, datastore: '', file: '' })),
+      cdroms: d.cdroms.map((x) => ({ ...x, iso: x.iso ? x.iso.replace(/^\[[^\]]*\]\s*/, '').split('/').pop() ?? '' : '' })),
+    };
   }
 
   // Network traffic: the last 31 days (bytes in and out per day), this month's total and the monthly allowance.

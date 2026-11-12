@@ -12,6 +12,7 @@ import { apiFetch, useErrorText } from '../../lib/api';
 import { useApiForm } from '../../lib/form';
 import { useApiAction, useApiQuery } from '../../lib/query';
 import ServerMetrics from './metrics';
+import { VmDetails } from './vm-details';
 import { ServerIso } from './server-iso';
 import { ServerHealth } from '../../components/smart';
 import { CloneServer, Copy, OrderSimilar, QuickConnect, RenameServer, ServerLabels } from './server-extras';
@@ -506,6 +507,7 @@ export function ServerDetail({ id }: { id: string }) {
     <ServerFirewalls server={s}/>
 
     <ServerMetrics id={id} live={s.state === 'ready' && s.powerState === 'poweredOn'}/>
+    <VmDetails id={id} hasVm={s.state === 'ready' || s.state === 'error'}/>
     {can(me?.permissions, 'servers.manage_all') && s.state === 'ready' && <ServerPlacement id={s.id} busy={!!open}/>}
     {s.state !== 'provisioning' && <ServerTraffic id={s.id} throttled={s.trafficThrottled}/>}
     {allowed.resize && s.state === 'ready' && !s.vdcId && <ServerResize server={s} busy={!!open}/>}

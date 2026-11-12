@@ -181,6 +181,11 @@ func handler(token string, guard *netGuard) http.Handler {
 		q := r.(*RenameRequest)
 		return withClient(ctx, guard, q.Request, func(c *vim25.Client) (any, error) { return renameVM(ctx, c, *q) })
 	})
+	// Every detail of one VM: hardware, NICs and ports, disks, tools, guest network, placement (details.go).
+	handle("/v1/vm/details", 30*time.Second, newVM, func(ctx context.Context, r any) (any, error) {
+		q := r.(*VMRequest)
+		return withClient(ctx, guard, q.Request, func(c *vim25.Client) (any, error) { return vmDetails(ctx, c, q.VM) })
+	})
 	handle("/v1/vm/metrics", 30*time.Second, newVM, func(ctx context.Context, r any) (any, error) {
 		q := r.(*VMRequest)
 		return withClient(ctx, guard, q.Request, func(c *vim25.Client) (any, error) { return vmMetrics(ctx, c, q.VM, 45) })

@@ -129,6 +129,20 @@ export default {
     returns: { tr: '`interval`, `samples` (`t`, `cpu`, `mem`, `net`, `disk`), `quick`, `vcpu`, `memoryMb`, `fetchedAt`.', en: '`interval`, `samples` (`t`, `cpu`, `mem`, `net`, `disk`), `quick`, `vcpu`, `memoryMb`, `fetchedAt`.' },
     errors: ['NOT_FOUND', 'INVALID_SERVER_STATE'],
   },
+  'GET /servers/:id/details': {
+    tag: 'servers',
+    summary: { tr: 'Sanal makinenin VMware\'deki tüm ayrıntılarını verir.', en: 'Returns every detail VMware has on the virtual machine.' },
+    details: {
+      tr: 'Kimlik (instance/BIOS UUID, donanım sürümü, BIOS/EFI, güvenli önyükleme), CPU ve bellek (soket başına çekirdek, sıcak ekleme, rezervasyon, sınır, pay, anlık kullanım), ağ kartları (MAC, bağdaştırıcı, bağlı mı, dağıtık port numarası, konuğun bildirdiği adresler), diskler (boyut, ince/kalın, mod, denetleyici yuvası), CD sürücüleri, VMware Tools, konuğun kendi ağ görünümü (ana makine adı, adresler, ağ geçidi, DNS), çalışma süresi, anlık görüntü sayısı. Personel (servers.view_all) ayrıca host, küme, kaynak havuzu, klasör, veri depoları, port grubu, anahtar, VLAN ve dosya yollarını görür; müşteriye bu alanlar boş gelir. Yanıt 20 saniye önbellekte tutulur.',
+      en: 'Identity (instance/BIOS UUID, hardware version, BIOS/EFI, secure boot), CPU and memory (cores per socket, hot add, reservation, limit, shares, live usage), NICs (MAC, adapter, connected, distributed port number, the addresses the guest reports), disks (size, thin/thick, mode, controller slot), CD drives, VMware Tools, the guest\'s own network view (host name, addresses, gateway, DNS), uptime and snapshot count. Staff (servers.view_all) also get host, cluster, resource pool, folder, datastores, port group, switch, VLAN and file paths; for customers those fields are empty. Cached for 20 seconds.',
+    },
+    params: [serverId],
+    returns: {
+      tr: '`moref`, `name`, `instanceUuid`, `biosUuid`, `guestId`, `configuredOs`, `hardwareVersion`, `firmware`, `secureBoot`, `powerState`, `bootTime`, `uptimeSeconds`, `snapshots`, `committedGb`, `uncommittedGb`, `cpu`, `memory`, `nics[]`, `disks[]`, `cdroms[]`, `tools`, `guest`, `placement` (personel), `staff`, `fetchedAt`.',
+      en: '`moref`, `name`, `instanceUuid`, `biosUuid`, `guestId`, `configuredOs`, `hardwareVersion`, `firmware`, `secureBoot`, `powerState`, `bootTime`, `uptimeSeconds`, `snapshots`, `committedGb`, `uncommittedGb`, `cpu`, `memory`, `nics[]`, `disks[]`, `cdroms[]`, `tools`, `guest`, `placement` (staff), `staff`, `fetchedAt`.',
+    },
+    errors: ['NOT_FOUND', 'INVALID_SERVER_STATE', 'VM_NOT_FOUND'],
+  },
   'GET /servers/:id/traffic': {
     tag: 'servers',
     summary: { tr: 'Sunucunun ağ trafiğini verir.', en: 'Returns the server\'s network traffic.' },
