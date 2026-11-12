@@ -1308,8 +1308,8 @@ test.describe('people, settings and smart features (English browser)', () => {
     await signInAdmin(page);
     // Settings → API: a rate limit and the log kept 30 days.
     await page.goto('/admin/settings?tab=api');
-    await page.getByLabel('Requests per minute').fill('120');
-    await page.getByLabel('Keep for (days)').fill('30');
+    await page.getByRole('textbox', { name: 'Requests per minute' }).fill('120');
+    await page.getByRole('textbox', { name: 'Keep for (days)' }).fill('30');
     await page.getByRole('button', { name: 'Save', exact: true }).click();
     await expect(page.getByText('API settings saved.')).toBeVisible();
     await expect(page.getByText('120 requests per token and minute (2 a second on average).')).toBeVisible();
