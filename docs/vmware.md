@@ -104,7 +104,7 @@ Yönetim → VMware sayfasındaki **Ağda ESXi / vCenter ara** bölümü IP blok
   ayrıca eklemek `HOSTS_ALREADY_MANAGED` verir), **Yeni** veya **Yoksayıldı**. vSphere olmayan HTTPS
   servisleri ayrı sayılır. Sertifika sistemin güvendiği bir CA ile doğrulanıyor mu, kendinden imzalı mı,
   30 gün içinde mi bitiyor gösterilir.
-- **Bağlantı ekle:** form taramadan dolar: ad (PTR'den), adres, port, ürüne göre kullanıcı adı (`root` /
+- **Bağlantı ekle:** form taramadan dolar: ad (PTR'den), adres (sertifikanın güvenildiği ad, yoksa taramanın ulaştığı IP), port, ürüne göre kullanıcı adı (`root` /
   `administrator@vsphere.local`). Sertifika güvenilirse sistem CA'ları, değilse taramada görülen parmak izi
   sabitlemeye hazır gelir; form, parmak izini sunucunun kendisinde okuma komutunu (ESXi: `rui.crt`,
   vCenter: `vecs-cli`) gösterir ve test edilmeden kaydetmez.

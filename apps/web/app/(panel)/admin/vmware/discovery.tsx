@@ -33,11 +33,13 @@ const soon = (iso: string) => Date.parse(iso) - Date.now() < 30 * 86_400_000;
 
 // The connection form, filled in from what the scan saw: a name from the PTR record, the usual
 // account for the product, and the certificate's trust (system CAs, or the fingerprint to compare).
+// The address is the name the certificate is trusted for, else the IP the scan reached: a PTR name may not
+// resolve forwards, or may not be a valid host name at all (Docker's "name.net_work").
 export function prefillFrom(h: Hit, port: number): Prefill {
   const kind = h.product?.kind ?? 'esxi';
   const trusted = h.certificate?.trustedName ?? '';
   return { name: (h.hostname?.split('.')[0] || `${kind === 'vcenter' ? 'vcenter' : 'esxi'}-${h.address.replaceAll(':', '-')}`).slice(0, 100),
-    host: trusted || h.hostname || h.address, port: String(port), username: kind === 'vcenter' ? 'administrator@vsphere.local' : 'root',
+    host: trusted || h.address, port: String(port), username: kind === 'vcenter' ? 'administrator@vsphere.local' : 'root',
     mode: trusted ? 'system' : 'pinned', sha256: trusted ? '' : h.certificate?.sha256 ?? '', kind };
 }
 
