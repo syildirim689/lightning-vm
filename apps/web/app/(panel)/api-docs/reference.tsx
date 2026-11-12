@@ -76,7 +76,7 @@ function EndpointBody({ e, lang }: { e: Endpoint; lang: Lang }) {
       <CodeBlock code={JSON.stringify(body, null, 2)} label={t('copyExample')}/></div>}
     <div className="flex min-w-0 flex-col gap-1.5">
       <h4 className="text-xs font-semibold uppercase tracking-wider text-muted">{t('code')}</h4>
-      <Tabs aria-label={t('code')}>
+      <Tabs aria-label={t('code')} className="w-full min-w-0">
         <Tabs.ListContainer><Tabs.List aria-label={t('code')}>
           {['cURL', 'JavaScript', 'Python'].map((k) => <Tabs.Tab key={k} id={k}>{k}<Tabs.Indicator/></Tabs.Tab>)}
         </Tabs.List></Tabs.ListContainer>
@@ -181,7 +181,7 @@ export default function Reference() {
         <div className="flex min-w-0 flex-col gap-6">
           <section aria-labelledby="guide" className="flex flex-col gap-3">
             <h2 id="guide" className="text-lg font-semibold">{t('guideTitle')}</h2>
-            {guide.map((g, i) => <details key={g.id} id={`guide-${g.id}`} open={i === 0} className="group scroll-mt-4 rounded-xl border border-border">
+            {guide.map((g, i) => <details key={g.id} id={`guide-${g.id}`} open={i === 0} className="group min-w-0 scroll-mt-4 rounded-xl border border-border">
               <summary className="flex cursor-pointer list-none items-center justify-between gap-2 p-4 font-medium">
                 {tt(`guide.${g.id}.title`)}<I name="chevron-down" size={16} className="transition-transform group-open:rotate-180"/></summary>
               <div className="flex flex-col gap-3 border-t border-border p-4 text-sm leading-relaxed">
@@ -218,7 +218,7 @@ export default function Reference() {
               : groups.map((g) => <div key={g.key} className="flex flex-col gap-2">
                 <div><h3 className="text-base font-semibold">{g.name[lang]}</h3><p className="text-sm text-muted">{g.text[lang]}</p></div>
                 {g.items.map((e) => <details key={e.key} id={anchor(e)} open={open.has(e.key)} onToggle={(ev) => toggle(e.key, (ev.target as HTMLDetailsElement).open)}
-                  className="scroll-mt-4 rounded-xl border border-border bg-surface">
+                  className="min-w-0 scroll-mt-4 rounded-xl border border-border bg-surface">
                   <summary className="flex cursor-pointer list-none flex-wrap items-center gap-x-3 gap-y-1 p-3">
                     <MethodBadge method={e.method}/>
                     <code className="min-w-0 font-mono text-sm [overflow-wrap:anywhere]">{e.path}</code>
