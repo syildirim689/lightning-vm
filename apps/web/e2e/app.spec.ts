@@ -484,6 +484,68 @@ test.describe('VMware connections (simulator, English browser)', () => {
     await expect(page).toHaveURL(/\/admin\/vmware$/);
     await expect(page.getByRole('row', { name: /Sim ESXi/ })).toHaveCount(0);
   });
+
+  test('a network scan finds the simulators, knows the connected vCenter and fills in the form for a new ESXi', async ({ page }) => {
+    test.skip(!process.env.E2E_VCSIM_HOST, 'needs compose.simulator.yaml and E2E_VCSIM_HOST');
+    await signIn(page, admin);
+    await page.goto('/admin/vmware');
+    await page.getByRole('link', { name: 'Find on network' }).click();
+    const targets = page.getByLabel('Addresses to scan', { exact: true });
+    // Mistakes are caught while typing, item by item.
+    await targets.fill('172.29.0.0/16');
+    await expect(page.getByText('“172.29.0.0/16”: Block too large', { exact: false })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Start scan' })).toBeDisabled();
+    await targets.fill(process.env.E2E_SCAN_BLOCK ?? '172.29.250.0/24');
+    await expect(page.getByText('254 addresses to scan')).toBeVisible();
+    await page.getByLabel('Port', { exact: true }).fill('8989');
+    await page.getByRole('button', { name: 'Start scan' }).click();
+    await expect(page.getByRole('progressbar', { name: 'Scan progress' }).or(page.getByText(/addresses scanned:/))).toBeVisible();
+    await expect(page.getByText(/^254 addresses scanned: [1-9]\d* ESXi \/ vCenter/)).toBeVisible({ timeout: 90_000 });
+    // The vCenter that is already a connection is recognised by its instance UUID.
+    const vc = page.getByRole('row', { name: /vCenter \d/ }).first();
+    await expect(vc).toContainText('Connected');
+    await expect(vc).toContainText('Simülatör vCenter');
+    // An ESXi that is not connected: ignore it, then undo; then add it with the form filled in.
+    const esxi = page.getByRole('row').filter({ hasText: /ESXi \d/ }).filter({ hasText: 'New' }).first();
+    const address = (await esxi.getByRole('cell').first().locator('code, .font-mono').first().textContent())!.trim();
+    await page.getByRole('button', { name: `Ignore ${address}` }).click();
+    await expect(page.getByText('Ignored; the automatic scan will not count it as new.')).toBeVisible();
+    await page.getByRole('button', { name: /^Ignored\s*1$/ }).click();
+    const row = () => page.getByRole('row').filter({ has: page.getByText(address, { exact: true }) });
+    await row().getByRole('button', { name: 'Undo' }).click();
+    await page.getByRole('button', { name: /^Ignored\s*0$/ }).click();
+    await row().getByRole('button', { name: 'Add connection' }).click();
+    const dialog = page.getByRole('dialog');
+    await expect(dialog.getByText('Filled in from the scan. The certificate is self-signed', { exact: false })).toBeVisible();
+    await expect(dialog.getByLabel('Port')).toHaveValue('8989');
+    await expect(dialog.getByLabel('Service account')).toHaveValue('root');
+    await dialog.getByLabel('Display name').fill('Scanned ESXi');
+    await dialog.getByLabel('Service account').fill('sim-root');
+    await dialog.getByLabel('Password').fill('sim-password-2');
+    await dialog.getByRole('button', { name: 'Test connection' }).click();
+    await dialog.getByRole('button', { name: 'Save', exact: true }).click();
+    await expect(page.getByRole('row', { name: /Scanned ESXi/ })).toBeVisible();
+    // The automatic scan: weekly over the blocks above, then off again.
+    await page.getByText('Automatic scan', { exact: true }).click();
+    await page.getByRole('button', { name: 'Use the blocks above' }).click();
+    await choose(page, page, /How often/, 'Weekly');
+    await page.getByRole('button', { name: 'Save', exact: true }).click();
+    await expect(page.getByText('Automatic scan saved.')).toBeVisible();
+    await expect(page.getByText(/Weekly, next/)).toBeVisible();
+    await page.setViewportSize({ width: 390, height: 900 });
+    await expectNoOverflow(page, 'vmware discovery at 390 px');
+    await page.locator('#discovery').screenshot({ path: 'test-results/tour/vmware-discovery-390.png' });
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.locator('#discovery').screenshot({ path: 'test-results/tour/vmware-discovery.png' });
+    await choose(page, page, /How often/, 'Off');
+    await page.getByRole('button', { name: 'Save', exact: true }).click();
+    await expect(page.getByText('Automatic scan saved.').first()).toBeVisible();
+    // Leave the panel as it was: the scanned ESXi goes again.
+    await page.getByRole('row', { name: /Scanned ESXi/ }).getByRole('link', { name: 'Details' }).click();
+    await page.getByLabel('Type “Scanned ESXi” to confirm').fill('Scanned ESXi');
+    await page.getByRole('button', { name: 'Remove connection' }).click();
+    await expect(page.getByText('Connection removed.')).toBeVisible();
+  });
 });
 
 test.describe('server lifecycle (simulator, Turkish customer)', () => {

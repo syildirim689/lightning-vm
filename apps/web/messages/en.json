@@ -349,7 +349,10 @@
     "IMAGE_NOT_FOUND": "The new image was not found.",
     "TRANSFER_NOT_POSSIBLE": "This server cannot be handed over now.",
     "COUPON_IN_USE": "This coupon has been used; it keeps its code and amount and can only be turned off.",
-    "COUPON_CODE_TAKEN": "Another coupon has this code."
+    "COUPON_CODE_TAKEN": "Another coupon has this code.",
+    "SCAN_RUNNING": "Another scan is running; wait for it or stop it.",
+    "SCAN_NOT_RUNNING": "This scan has already ended.",
+    "SCAN_INTERRUPTED": "The scan stopped because the panel restarted."
   },
   "Auth": {
     "required": "required",
@@ -613,7 +616,11 @@
     "HAS_PRIVATE_NETWORKS": "Take the server out of your private networks first.",
     "RECIPIENT_QUOTA": "The other account has no room for this server in its limits.",
     "ALREADY_OFFERED": "This server has an open offer; withdraw it first.",
-    "NO_SUCH_ACCOUNT": "No account uses this e-mail."
+    "NO_SUCH_ACCOUNT": "No account uses this e-mail.",
+    "INVALID_TARGET": "Not readable as an address, CIDR block or range.",
+    "RANGE_TOO_LARGE": "Block too large: /20 (4096 addresses) at most.",
+    "IPV6_RANGE": "IPv6 blocks cannot be scanned; enter single IPv6 addresses.",
+    "TOO_MANY_ADDRESSES": "More than 4096 addresses in all; split the blocks."
   },
   "Setup": {
     "title": "Setup wizard",
@@ -1010,7 +1017,111 @@
       "other": "Unknown"
     },
     "used": "{pct}% used",
-    "usedOf": "{name}: {pct}% used"
+    "usedOf": "{name}: {pct}% used",
+    "scan": {
+      "find": "Find on network",
+      "emptyHint": {
+        "port": "Is port {port} open on the hosts?",
+        "firewall": "Is there a firewall between the panel server and the management network?",
+        "ranges": "Is it the right block? The management network is usually apart from the server network."
+      },
+      "title": "Find ESXi / vCenter on the network",
+      "intro": "Scan one or more IP blocks. Each address is asked only for public product information; no user name or password is sent.",
+      "targets": "Addresses to scan",
+      "targetsHelp": "Separate with lines, commas or spaces: 192.168.10.0/24, 10.0.0.20-60, 10.0.1.* or one address. 4096 addresses at most.",
+      "count": "{count, plural, one {# address to scan} other {# addresses to scan}}",
+      "itemError": "“{item}”: {reason}",
+      "port": "Port",
+      "portHelp": "Usually 443 for vSphere.",
+      "suggested": "Suggested:",
+      "addSuggestion": "Add {target} ({why})",
+      "source": {
+        "connection": "network of {name}",
+        "hosts": "network of the hosts of {name}",
+        "recent": "from recent scans"
+      },
+      "start": "Start scan",
+      "oneAtATime": "One scan runs at a time.",
+      "progress": "{scanned} of {total} addresses scanned, {found} vSphere found",
+      "progressLabel": "Scan progress",
+      "cancel": "Stop",
+      "cancelled": "Scan stopped.",
+      "doneSummary": "{total} addresses scanned: {found} ESXi / vCenter, {other} other HTTPS services.",
+      "cancelledSummary": "Stopped: {scanned} of {total} addresses scanned, {found} vSphere found.",
+      "failedSummary": "The scan did not finish: {reason}",
+      "took": "took {seconds} s",
+      "blocked": "{count, plural, one {# address was} other {# addresses were}} not scanned for safety (the panel’s own network, loopback or link-local). Allow them with VMWARE_ALLOW_NETWORKS.",
+      "tile": {
+        "new": "New",
+        "known": "Already in the panel",
+        "ignored": "Ignored",
+        "other": "Other HTTPS",
+        "otherHint": "not vSphere"
+      },
+      "empty": "No ESXi or vCenter in this range.",
+      "emptyFilter": "Nothing matches this filter.",
+      "clearFilter": "Clear filter",
+      "results": "Addresses found",
+      "col": {
+        "address": "Address",
+        "product": "Product",
+        "certificate": "Certificate",
+        "status": "Status",
+        "actions": "Actions"
+      },
+      "build": "Build {build}",
+      "notVsphere": "HTTPS (not vSphere)",
+      "cert": {
+        "trusted": "Trusted",
+        "selfSigned": "Self-signed",
+        "untrusted": "Not verified",
+        "expires": "Expires {date}"
+      },
+      "status": {
+        "new": "New",
+        "connected": "Connected",
+        "managed": "Through vCenter",
+        "ignored": "Ignored"
+      },
+      "add": "Add connection",
+      "ignore": "Ignore {address}",
+      "ignoredToast": "Ignored; the automatic scan will not count it as new.",
+      "unignore": "Undo",
+      "ignoredCount": "{count, plural, one {# address is} other {# addresses are}} ignored.",
+      "none": "No scan yet.",
+      "adapterDown": "The VMware adapter is unreachable. Check the vmware service on the System page.",
+      "history": "Recent scans ({count})",
+      "found": "{count} found",
+      "state": {
+        "running": "Running",
+        "done": "Done",
+        "failed": "Did not finish",
+        "cancelled": "Stopped"
+      },
+      "prefillTrusted": "Filled in from the scan. The certificate is verified by a CA the system trusts; type the password and test.",
+      "prefillPinned": "Filled in from the scan. The certificate is self-signed; its fingerprint will be pinned.",
+      "prefillPinnedHelp": "The fingerprint seen by the scan is below. Before saving, read it on the server itself and compare; if it differs, something may be in between.",
+      "auto": {
+        "title": "Automatic scan",
+        "offShort": "Off",
+        "next": "{every}, next {when}",
+        "help": "The same blocks are scanned regularly. When an ESXi or vCenter that was never seen before turns up, you get a notification.",
+        "every": "How often",
+        "off": "Off",
+        "daily": "Daily",
+        "weekly": "Weekly",
+        "notify": "Report new ones",
+        "notifyHelp": "The “New ESXi / vCenter on the network” event in notification preferences.",
+        "covers": "Blocks scanned:",
+        "noTargets": "No blocks yet: type them above and press “Use the blocks above”.",
+        "useAbove": "Use the blocks above",
+        "save": "Save",
+        "saved": "Automatic scan saved.",
+        "byAuto": "automatic",
+        "badge": "Automatic"
+      },
+      "emptyConnections": "If you do not know the address, scan your network below; ESXi and vCenter servers it finds are added in one click."
+    }
   },
   "Console": {
     "title": "Console: {name}",
@@ -2904,6 +3015,10 @@
       "server_delete_scheduled": {
         "title": "Server about to be deleted",
         "help": "When a server was deleted, before its grace period ends."
+      },
+      "admin_vmware_found": {
+        "title": "New ESXi / vCenter on the network",
+        "help": "When the automatic scan finds an ESXi or vCenter never seen before."
       }
     },
     "policyTitle": "The admin first, then each user",
@@ -5167,7 +5282,12 @@
       "server_renamed": "Server renamed",
       "server_delete_scheduled": "Server shut down for deletion",
       "server_delete_cancelled": "Server deletion taken back",
-      "console_snippet_shared": "Console command shared with everyone"
+      "console_snippet_shared": "Console command shared with everyone",
+      "vmware_scan_started": "Network scan started",
+      "vmware_scan_cancelled": "Network scan stopped",
+      "vmware_scan_settings": "Automatic scan changed",
+      "vmware_scan_ignored": "Address ignored in scans",
+      "vmware_scan_unignored": "Ignored address restored"
     },
     "outcome": {
       "success": "Done",

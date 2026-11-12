@@ -81,6 +81,39 @@ veya adında "Hypervisor" geçiyorsa `writeApi = restricted` olur ve yazma gerek
 Bu tespit lisans bilgisine dayalı bir **çıkarımdır**. Kesin doğrulama gerçek bir yazma işlemiyle,
 gerçek donanımda yapılmalıdır (aşağıdaki kabul testlerine bakın). Lisans okunamazsa sonuç `unknown` olur.
 
+## Ağda arama (keşif)
+Yönetim → VMware sayfasındaki **Ağda ESXi / vCenter ara** bölümü IP bloklarını tarar.
+- **Ne yazılır:** tek adres (`10.0.0.5`), CIDR blok (`10.0.0.0/24`, en fazla `/20`), aralık
+  (`10.0.0.10-10.0.0.60` veya kısaca `10.0.0.10-60`), joker (`10.0.1.*`) ya da tek IPv6 adresi. Satır,
+  virgül veya boşlukla ayrılır; toplam 4096 adres. Alanın altında taranacak adres sayısı anında görünür,
+  okunamayan parça adıyla gösterilir. IPv6 blokları taranmaz.
+- **Öneriler:** var olan bağlantıların ve vCenter hostlarının bulunduğu /24 bloklar ile son taramalar tek
+  tıkla eklenir.
+- **Ne sorulur:** adaptör her adrese TCP ile bağlanır, TLS sertifikasını yalnızca okur ve `/sdk` üzerinden
+  herkese açık `RetrieveServiceContent` çağrısını yapar (ürün, sürüm, derleme, instance UUID). **Kullanıcı
+  adı veya parola gönderilmez.** PTR kaydı varsa ad olarak gösterilir.
+- **Adres güvenliği:** tarama da bağlantılarla aynı `netGuard` kontrolünden geçer. Loopback, bağlantı-yerel
+  (metadata) ve panelin kendi ağları taranmaz; sonuçta "güvenlik nedeniyle taranmadı" sayısı görünür.
+  `VMWARE_ALLOW_NETWORKS` ile izin verilebilir.
+- **Akış:** API adresleri 64'lük parçalar halinde adaptöre gönderir (parça içinde 32 paralel, adres başına
+  1,5 sn); ilerleme her parçada kaydedilir, tarama durdurulabilir. Aynı anda tek tarama çalışır
+  (`SCAN_RUNNING`); yeniden başlatmada yarım kalan tarama `SCAN_INTERRUPTED` olarak kapanır. Son 20 tarama
+  saklanır.
+- **Sonuçlar:** her vSphere adresi için durum: **Bağlı** (bağlantının adresi, PTR adı, sertifika adı veya
+  instance UUID'si eşleşir), **vCenter üzerinden** (ESXi, bağlı bir vCenter'ın envanterinde aynı adla var;
+  ayrıca eklemek `HOSTS_ALREADY_MANAGED` verir), **Yeni** veya **Yoksayıldı**. vSphere olmayan HTTPS
+  servisleri ayrı sayılır. Sertifika sistemin güvendiği bir CA ile doğrulanıyor mu, kendinden imzalı mı,
+  30 gün içinde mi bitiyor gösterilir.
+- **Bağlantı ekle:** form taramadan dolar: ad (PTR'den), adres, port, ürüne göre kullanıcı adı (`root` /
+  `administrator@vsphere.local`). Sertifika güvenilirse sistem CA'ları, değilse taramada görülen parmak izi
+  sabitlemeye hazır gelir; form, parmak izini sunucunun kendisinde okuma komutunu (ESXi: `rui.crt`,
+  vCenter: `vecs-cli`) gösterir ve test edilmeden kaydetmez.
+- **Otomatik tarama:** aynı bloklar günlük veya haftalık taranabilir. Daha önceki hiçbir taramada görülmemiş,
+  bağlı olmayan ve yoksayılmamış bir ESXi/vCenter çıkarsa `admin.vmware_found` bildirimi gider
+  (`vmware.manage` yetkisi olanlara). Zamanlayıcı 15 dakikada bir bakar, Redis kilidiyle tek API örneğinde
+  çalışır.
+- **Yetki:** taramayı `vmware.manage` başlatır ve ayarlar; `vmware.view` sonuçları görür.
+
 ## Aynı hostun iki kez sayılmaması
 - Her host, donanım UUID'si (`summary.hardware.uuid`) ile tanınır. Bu değer veritabanında tekildir
   (`vmware_hosts_hardware_uuid_key`).

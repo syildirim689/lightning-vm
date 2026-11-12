@@ -349,7 +349,10 @@
     "IMAGE_NOT_FOUND": "Yeni imaj bulunamadı.",
     "TRANSFER_NOT_POSSIBLE": "Bu sunucu şu an devredilemez.",
     "COUPON_IN_USE": "Bu kupon kullanıldı; kodu ve tutarı değişmez, yalnızca kapatılabilir.",
-    "COUPON_CODE_TAKEN": "Bu kod başka bir kuponda kullanılıyor."
+    "COUPON_CODE_TAKEN": "Bu kod başka bir kuponda kullanılıyor.",
+    "SCAN_RUNNING": "Başka bir tarama sürüyor; bitmesini bekleyin veya durdurun.",
+    "SCAN_NOT_RUNNING": "Bu tarama zaten bitmiş.",
+    "SCAN_INTERRUPTED": "Panel yeniden başlatıldığı için tarama yarıda kaldı."
   },
   "Auth": {
     "required": "zorunlu",
@@ -613,7 +616,11 @@
     "HAS_PRIVATE_NETWORKS": "Önce sunucuyu özel ağlarınızdan çıkarın.",
     "RECIPIENT_QUOTA": "Diğer hesabın kotasında bu sunucuya yer yok.",
     "ALREADY_OFFERED": "Bu sunucu için açık bir teklif var; önce onu geri çekin.",
-    "NO_SUCH_ACCOUNT": "Bu e-posta ile kayıtlı hesap yok."
+    "NO_SUCH_ACCOUNT": "Bu e-posta ile kayıtlı hesap yok.",
+    "INVALID_TARGET": "Adres, CIDR blok veya aralık olarak okunamadı.",
+    "RANGE_TOO_LARGE": "Blok çok büyük: en fazla /20 (4096 adres).",
+    "IPV6_RANGE": "IPv6 blokları taranamaz; tek IPv6 adresi yazın.",
+    "TOO_MANY_ADDRESSES": "Toplam 4096 adresi aşıyor; blokları bölün."
   },
   "Setup": {
     "title": "Kurulum sihirbazı",
@@ -1010,7 +1017,111 @@
       "other": "Bilinmiyor"
     },
     "used": "%{pct} dolu",
-    "usedOf": "{name}: %{pct} dolu"
+    "usedOf": "{name}: %{pct} dolu",
+    "scan": {
+      "find": "Ağda ara",
+      "emptyHint": {
+        "port": "Hostlarda {port} portu açık mı?",
+        "firewall": "Panel sunucusu ile yönetim ağı arasında güvenlik duvarı var mı?",
+        "ranges": "Doğru blok mu? Yönetim ağı genellikle sunucu ağından ayrıdır."
+      },
+      "title": "Ağda ESXi / vCenter ara",
+      "intro": "Bir veya birkaç IP bloğunu tarayın. Her adrese yalnızca herkese açık ürün bilgisi sorulur; kullanıcı adı veya parola gönderilmez.",
+      "targets": "Taranacak adresler",
+      "targetsHelp": "Satır, virgül veya boşlukla ayırın: 192.168.10.0/24, 10.0.0.20-60, 10.0.1.* ya da tek adres. En fazla 4096 adres.",
+      "count": "{count, plural, one {# adres taranacak} other {# adres taranacak}}",
+      "itemError": "“{item}”: {reason}",
+      "port": "Port",
+      "portHelp": "vSphere için genellikle 443.",
+      "suggested": "Önerilen:",
+      "addSuggestion": "Ekle: {target} ({why})",
+      "source": {
+        "connection": "{name} bağlantısının ağı",
+        "hosts": "{name} hostlarının ağı",
+        "recent": "son taramalardan"
+      },
+      "start": "Taramayı başlat",
+      "oneAtATime": "Aynı anda bir tarama çalışır.",
+      "progress": "{scanned} / {total} adres tarandı, {found} vSphere bulundu",
+      "progressLabel": "Tarama ilerlemesi",
+      "cancel": "Durdur",
+      "cancelled": "Tarama durduruldu.",
+      "doneSummary": "{total} adres tarandı: {found} ESXi / vCenter, {other} başka HTTPS servisi.",
+      "cancelledSummary": "Durduruldu: {scanned} / {total} adres tarandı, {found} vSphere bulundu.",
+      "failedSummary": "Tarama yarıda kaldı: {reason}",
+      "took": "{seconds} sn sürdü",
+      "blocked": "{count} adres güvenlik nedeniyle taranmadı (panelin kendi ağı, loopback veya bağlantı-yerel adres). İzin vermek için VMWARE_ALLOW_NETWORKS kullanın.",
+      "tile": {
+        "new": "Yeni",
+        "known": "Panelde kayıtlı",
+        "ignored": "Yoksayılan",
+        "other": "Başka HTTPS",
+        "otherHint": "vSphere değil"
+      },
+      "empty": "Bu aralıkta ESXi veya vCenter bulunamadı.",
+      "emptyFilter": "Bu süzgeçte sonuç yok.",
+      "clearFilter": "Süzgeci temizle",
+      "results": "Bulunan adresler",
+      "col": {
+        "address": "Adres",
+        "product": "Ürün",
+        "certificate": "Sertifika",
+        "status": "Durum",
+        "actions": "İşlemler"
+      },
+      "build": "Derleme {build}",
+      "notVsphere": "HTTPS (vSphere değil)",
+      "cert": {
+        "trusted": "Güvenilir",
+        "selfSigned": "Kendinden imzalı",
+        "untrusted": "Doğrulanmamış",
+        "expires": "{date} tarihinde bitiyor"
+      },
+      "status": {
+        "new": "Yeni",
+        "connected": "Bağlı",
+        "managed": "vCenter üzerinden",
+        "ignored": "Yoksayıldı"
+      },
+      "add": "Bağlantı ekle",
+      "ignore": "{address} adresini yoksay",
+      "ignoredToast": "Yoksayıldı; otomatik tarama bunu yeni saymaz.",
+      "unignore": "Geri al",
+      "ignoredCount": "{count} adres yoksayılıyor.",
+      "none": "Henüz tarama yapılmadı.",
+      "adapterDown": "VMware adaptörüne ulaşılamadı. Sistem sayfasından vmware servisinin durumuna bakın.",
+      "history": "Son taramalar ({count})",
+      "found": "{count} bulundu",
+      "state": {
+        "running": "Sürüyor",
+        "done": "Bitti",
+        "failed": "Yarıda kaldı",
+        "cancelled": "Durduruldu"
+      },
+      "prefillTrusted": "Tarama sonucundan dolduruldu. Sertifika sistemin güvendiği bir CA ile doğrulandı; parolayı yazıp test edin.",
+      "prefillPinned": "Tarama sonucundan dolduruldu. Sertifika kendinden imzalı; parmak izi sabitlenecek.",
+      "prefillPinnedHelp": "Taramada görülen parmak izi aşağıda. Kaydetmeden önce sunucunun kendisinde okuyup karşılaştırın; aynı değilse araya giren bir cihaz olabilir.",
+      "auto": {
+        "title": "Otomatik tarama",
+        "offShort": "Kapalı",
+        "next": "{every}, sıradaki {when}",
+        "help": "Aynı bloklar düzenli taranır. Daha önce görülmemiş bir ESXi veya vCenter çıkarsa bildirim gelir.",
+        "every": "Sıklık",
+        "off": "Kapalı",
+        "daily": "Günlük",
+        "weekly": "Haftalık",
+        "notify": "Yeni bulunanları bildir",
+        "notifyHelp": "Bildirim tercihlerindeki “Ağda yeni ESXi / vCenter” olayı.",
+        "covers": "Taranan bloklar:",
+        "noTargets": "Henüz blok yok: yukarıya yazıp “Yukarıdaki blokları kullan”a basın.",
+        "useAbove": "Yukarıdaki blokları kullan",
+        "save": "Kaydet",
+        "saved": "Otomatik tarama ayarı kaydedildi.",
+        "byAuto": "otomatik",
+        "badge": "Otomatik"
+      },
+      "emptyConnections": "Adresini bilmiyorsanız aşağıdan ağınızı tarayın; bulunan ESXi ve vCenter sunucuları tek tıkla eklenir."
+    }
   },
   "Console": {
     "title": "Konsol: {name}",
@@ -2904,6 +3015,10 @@
       "server_delete_scheduled": {
         "title": "Sunucu silinmek üzere",
         "help": "Bir sunucu silindiğinde, geri alma süresi bitmeden önce."
+      },
+      "admin_vmware_found": {
+        "title": "Ağda yeni ESXi / vCenter",
+        "help": "Otomatik tarama daha önce görülmemiş bir ESXi veya vCenter bulduğunda."
       }
     },
     "policyTitle": "Önce yönetici, sonra kullanıcı",
@@ -5167,7 +5282,12 @@
       "server_renamed": "Sunucu yeniden adlandırıldı",
       "server_delete_scheduled": "Sunucu silinmek üzere kapatıldı",
       "server_delete_cancelled": "Sunucu silme işlemi geri alındı",
-      "console_snippet_shared": "Konsol komutu herkesle paylaşıldı"
+      "console_snippet_shared": "Konsol komutu herkesle paylaşıldı",
+      "vmware_scan_started": "Ağ taraması başlatıldı",
+      "vmware_scan_cancelled": "Ağ taraması durduruldu",
+      "vmware_scan_settings": "Otomatik tarama ayarı değişti",
+      "vmware_scan_ignored": "Taramada bir adres yoksayıldı",
+      "vmware_scan_unignored": "Yoksayılan adres geri alındı"
     },
     "outcome": {
       "success": "Tamamlandı",

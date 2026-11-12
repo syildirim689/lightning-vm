@@ -12,14 +12,21 @@ type Certificate = { subject: string; issuer: string; notAfter: string; sha256: 
 type Failure = ApiError & { text: string; certificate?: Certificate; conflicts?: { host: string; connection: string }[] };
 export type Summary = { id?: string; product: { kind: string; fullName: string }; writeApi: string; operations: Record<string, boolean>; warnings: string[]; counts: Record<string, number> };
 
-const fingerprintPairs = (hex: string) => hex.match(/../g)?.join(':').toUpperCase() ?? hex;
+export const fingerprintPairs = (hex: string) => hex.match(/../g)?.join(':').toUpperCase() ?? hex;
+// Filled in from a network scan (discovery.tsx). A fingerprint seen there is pinned only after the admin compares it.
+export type Prefill = { name: string; host: string; port: string; username: string; mode: 'system' | 'pinned'; sha256: string; kind: 'esxi' | 'vcenter' };
+// Where an admin reads the certificate fingerprint on the endpoint itself.
+export const fingerprintCommand = (kind: string) => kind === 'vcenter'
+  ? '/usr/lib/vmware-vmafd/bin/vecs-cli entry getcert --store MACHINE_SSL_CERT --alias __MACHINE_CERT | openssl x509 -noout -fingerprint -sha256'
+  : 'openssl x509 -in /etc/vmware/ssl/rui.crt -noout -fingerprint -sha256';
 
 // Shared by the admin page and the setup wizard. Certificate trust is an explicit admin decision:
 // an untrusted certificate is shown with its fingerprint and can be pinned, never ignored.
-export default function ConnectionForm({ onSaved }: { onSaved: (s: Summary) => void }) {
+export default function ConnectionForm({ onSaved, initial }: { onSaved: (s: Summary) => void; initial?: Prefill }) {
   const t = useTranslations('Vmware');
   const { error, field } = useErrorText();
-  const [form, setForm] = useState({ name: '', host: '', port: '443', username: '', password: '', mode: 'system', caPem: '', sha256: '', apiVersion: '', customization: 'auto' });
+  const [form, setForm] = useState({ name: '', host: '', port: '443', username: '', password: '', mode: 'system', caPem: '', sha256: '', apiVersion: '', customization: 'auto',
+    ...(initial && { name: initial.name, host: initial.host, port: initial.port, username: initial.username, mode: initial.mode, sha256: initial.sha256 }) });
   const [failure, setFailure] = useState<Failure>();
   const [tested, setTested] = useState<Summary>();
   const [testedFor, setTestedFor] = useState('');
@@ -39,6 +46,13 @@ export default function ConnectionForm({ onSaved }: { onSaved: (s: Summary) => v
 
   return <form className="flex flex-col gap-4" onSubmit={(e) => { e.preventDefault(); if (tested && testedFor === JSON.stringify(body())) void run('save', '/admin/vmware/connections', onSaved); }} noValidate>
     <GuideButton id="vmware"/>
+    {initial && <Notice tone={initial.mode === 'pinned' ? 'warning' : 'success'} title={t(initial.mode === 'pinned' ? 'scan.prefillPinned' : 'scan.prefillTrusted')}>
+      {initial.mode === 'pinned' && <div className="flex flex-col gap-2">
+        <p>{t('scan.prefillPinnedHelp')}</p>
+        <Mono>{fingerprintPairs(initial.sha256)}</Mono>
+        <pre className="overflow-x-auto whitespace-pre-wrap break-all rounded-lg bg-default p-3 font-mono text-xs">{fingerprintCommand(initial.kind)}</pre>
+      </div>}
+    </Notice>}
     <FieldGroup title={t('form.groupEndpoint')} description={t('form.groupEndpointHelp')}>
       <TextInput label={t('form.name')} value={form.name} onChange={set('name')} error={err('name')} help={help('name')} isRequired/>
       <TextInput label={t('form.host')} value={form.host} onChange={set('host')} error={err('host')} help={help('host')} isRequired autoComplete="off" spellCheck={false}/>
@@ -77,7 +91,7 @@ export default function ConnectionForm({ onSaved }: { onSaved: (s: Summary) => v
           <dt className="text-muted">SHA-256</dt><dd className="break-all"><Mono>{fingerprintPairs(failure.certificate.sha256)}</Mono></dd>
         </dl>
         <p className="text-muted">{t('cert.verify')}</p>
-        <pre className="overflow-x-auto rounded-lg bg-default p-3 font-mono text-xs">openssl x509 -in /etc/vmware/ssl/rui.crt -noout -fingerprint -sha256</pre>
+        <pre className="overflow-x-auto rounded-lg bg-default p-3 font-mono text-xs">{fingerprintCommand(initial?.kind ?? 'esxi')}</pre>
         <div><Button variant="secondary" onPress={() => { setForm((f) => ({ ...f, mode: 'pinned', sha256: failure.certificate!.sha256 })); setFailure(undefined); }}>{t('cert.pin')}</Button></div>
       </Card.Content>
     </Card>}

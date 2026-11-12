@@ -7,7 +7,8 @@ import { useState } from 'react';
 import { apiFetch, useErrorText } from '../../../../lib/api';
 import { useApiAction, useApiQuery } from '../../../../lib/query';
 import { ButtonLink, DataTable, Empty, Mono, PageHeader, Stat, StatusChip } from '../../../../components/ui';
-import ConnectionForm from './connection-form';
+import ConnectionForm, { type Prefill } from './connection-form';
+import Discovery from './discovery';
 
 export type Connection = { id: string; name: string; kind: string; host: string; port: number; tlsMode: string; writeApi: string; status: string;
   lastErrorCode: string | null; lastDiscoveredAt: string | null; hosts: number; vms: number; product: { fullName: string }; operations: Record<string, boolean>; warnings: string[];
@@ -24,6 +25,8 @@ export default function Connections({ eyebrow, title, intro }: { eyebrow: string
   const { error } = useErrorText();
   const client = useQueryClient();
   const [adding, setAdding] = useState(false);
+  // Set when the form opens from a scan result; the form starts filled in from it.
+  const [prefill, setPrefill] = useState<Prefill>();
   const format = useFormatter();
   const list = useApiQuery<{ connections: Connection[] }>(['vmware', 'connections'], '/admin/vmware/connections').data?.connections;
   const discover = useApiAction((id: string) => apiFetch(`/admin/vmware/connections/${id}/discover`, { method: 'POST' }), { invalidate: [['vmware']], success: t('refreshed') });
@@ -34,9 +37,12 @@ export default function Connections({ eyebrow, title, intro }: { eyebrow: string
 
   return <>
     <PageHeader eyebrow={eyebrow} title={title} description={intro}
-      actions={<Button onPress={() => setAdding(true)}><I name="plus" size={16}/>{t('add')}</Button>}/>
+      actions={<div className="flex flex-wrap gap-2">
+        <ButtonLink href="#discovery" variant="secondary"><I name="radar" size={16}/>{t('scan.find')}</ButtonLink>
+        <Button onPress={() => { setPrefill(undefined); setAdding(true); }}><I name="plus" size={16}/>{t('add')}</Button>
+      </div>}/>
     {!list ? <p role="status" className="text-sm text-muted">{t('loading')}</p>
-      : list.length === 0 ? <Empty icon={<I name="cable" size={28}/>} title={t('empty')}/>
+      : list.length === 0 ? <Empty icon={<I name="cable" size={28}/>} title={t('empty')}><p className="text-sm text-muted">{t('scan.emptyConnections')}</p></Empty>
       : <div className="flex flex-col gap-4">
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
           <Stat label={t('sum.connections')} value={list.length} icon={<I name="cable" size={18}/>}/>
@@ -60,12 +66,14 @@ export default function Connections({ eyebrow, title, intro }: { eyebrow: string
             </span>]}/>
       </div>}
 
+    {list && <div className="mt-6"><Discovery onAdd={(p) => { setPrefill(p); setAdding(true); }}/></div>}
+
     <Modal.Backdrop isOpen={adding} onOpenChange={setAdding}>
       <Modal.Container size="lg" scroll="inside">
         <Modal.Dialog>
           <Modal.CloseTrigger/>
           <Modal.Header><Modal.Heading>{t('addTitle')}</Modal.Heading></Modal.Header>
-          <Modal.Body><ConnectionForm onSaved={() => { setAdding(false); toast.success(t('saved')); client.invalidateQueries({ queryKey: ['vmware'] }); }}/></Modal.Body>
+          <Modal.Body><ConnectionForm key={prefill ? `${prefill.host}:${prefill.port}` : 'new'} initial={prefill} onSaved={() => { setAdding(false); toast.success(t('saved')); setPrefill(undefined); client.invalidateQueries({ queryKey: ['vmware'] }); }}/></Modal.Body>
         </Modal.Dialog>
       </Modal.Container>
     </Modal.Backdrop>

@@ -102,6 +102,8 @@ func handler(token string, guard *netGuard) http.Handler {
 		})
 	}
 	newVM := func() any { return &VMRequest{} }
+	// Network discovery: anonymous ServiceContent per address, no credentials (scan.go).
+	handle("/v1/scan", 120*time.Second, func() any { return &ScanRequest{} }, func(ctx context.Context, r any) (any, error) { return scan(ctx, guard, *r.(*ScanRequest)) })
 	handle("/v1/vm/clone", 60*time.Second, func() any { return &CloneRequest{} }, func(ctx context.Context, r any) (any, error) { return cloneVM(ctx, guard, *r.(*CloneRequest)) })
 	handle("/v1/vm/find", 30*time.Second, newVM, func(ctx context.Context, r any) (any, error) {
 		q := r.(*VMRequest)

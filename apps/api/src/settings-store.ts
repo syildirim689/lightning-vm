@@ -106,6 +106,8 @@ const defaults = {
   signIn: { magicLink: false, username: false, oneTap: false, socialSignUp: false, pwnedPasswords: false, blockDisposable: false, providers: {} } as SignInSettings,
   // The public status page (/status): on unless the admin turns it off.
   statusPage: { enabled: true } as { enabled: boolean },
+  // Network discovery of ESXi / vCenter (vmware-scan.ts): the blocks the automatic scan covers.
+  vmwareScan: { targets: '', port: 443, auto: 'off', notify: true } as { targets: string; port: number; auto: 'off' | 'daily' | 'weekly'; notify: boolean },
   // Web Push (VAPID) keys, generated on first use.
   vapid: { publicKey: '', privateKeyEnc: null } as { publicKey: string; privateKeyEnc: string | null },
 };
