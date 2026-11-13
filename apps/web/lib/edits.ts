@@ -33,9 +33,11 @@ export const formDirty = (on: boolean) => { dirtyForms = Math.max(0, dirtyForms 
 export function watchEdits() {
   if (watching || typeof document === 'undefined') return;
   watching = true;
-  document.addEventListener('focusin', (e) => {
-    const el = e.target as Element | null;
-    if (el && textual(el) && !ignored(el) && !first.has(el)) first.set(el, el.value);
-  }, true);
+  // The value before the first change: on focus, or just before typing for a field that took the focus before this
+  // started watching (autofocus) or that is changed without being focused.
+  const note = (el: Element | null) => { if (el && textual(el) && !ignored(el) && !first.has(el)) first.set(el, el.value); };
+  document.addEventListener('focusin', (e) => note(e.target as Element | null), true);
+  document.addEventListener('beforeinput', (e) => note(e.target as Element | null), true);
+  note(document.activeElement);
   window.addEventListener('beforeunload', (e) => { if (hasPendingEdits()) e.preventDefault(); });
 }
