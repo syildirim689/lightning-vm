@@ -1,6 +1,7 @@
 "use client";
 // A person at a glance (staff): servers and their monthly cost, sessions, recent activity, budget and role limits.
 import { Button, Chip, Modal, TextArea, toast } from '@heroui/react';
+import { useUnits } from '../../../../lib/units';
 import { useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import NextLink from 'next/link';
@@ -22,6 +23,7 @@ type Summary = {
 };
 
 export function UserSummary({ id, onClose }: { id: string; onClose: () => void }) {
+  const { memory } = useUnits();
   const t = useTranslations('Users.summary');
   const ta = useTranslations('Activity');
   const tr = useTranslations('Roles.limits');
@@ -64,7 +66,7 @@ export function UserSummary({ id, onClose }: { id: string; onClose: () => void }
                 {d.servers.map((s) => <li key={s.id}><NextLink href={`/servers/${s.id}`} className="flex items-center gap-3 px-3 py-2 text-sm hover:bg-default/50">
                   <span aria-hidden className={`size-2 shrink-0 rounded-full ${s.state !== 'ready' ? 'bg-warning' : s.powerState === 'poweredOn' ? 'bg-success' : 'bg-default-foreground/30'}`}/>
                   <span className="min-w-0 flex-1 truncate font-medium">{s.name}{s.locked && <I name="lock" size={12} className="ml-1 inline text-warning"/>}</span>
-                  <span className="hidden text-xs text-muted sm:inline">{s.vcpu} vCPU · {s.memoryMb / 1024} GB</span>
+                  <span className="hidden text-xs text-muted sm:inline">{s.vcpu} vCPU · {memory(s.memoryMb)}</span>
                   <span className="text-xs tabular-nums">{money(s.price, s.currency)}</span>
                 </NextLink></li>)}
               </ul>}

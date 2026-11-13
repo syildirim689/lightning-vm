@@ -13,7 +13,7 @@ import { useState } from 'react';
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { I } from '../../../../components/icon';
 import { ConfirmButton, DataTable, Notice, PageHeader, SelectInput, StatusChip, TextInput } from '../../../../components/ui';
-import { downloadCsv } from '../../../../lib/csv';
+import { downloadCsv, localDay } from '../../../../lib/csv';
 import { fold } from '../../../../lib/note-line';
 import { apiFetch, useErrorText } from '../../../../lib/api';
 import type { Invoice, Payment, Subscription } from '../../../../lib/billing';
@@ -140,7 +140,7 @@ function Invoices() {
       <SelectInput className="w-48" label={t('status')} value={status} onChange={(v) => void setStatus(v || null)}
         options={[{ id: '', label: t('all') }, ...(['unpaid', 'overdue', 'paid', 'partially_refunded', 'refunded', 'cancelled'] as const).map((s) => ({ id: s, label: tb(`status.${s}`) }))]}/>
       {list && list.length > 0 && <Button variant="secondary" onPress={() => downloadCsv('invoices', ['number', 'customer', 'email', 'kind', 'date', 'total', 'currency', 'status', 'einvoice'],
-        list.map((i) => [i.number ?? i.id, i.buyerName, i.buyerEmail, i.kind, (i.issuedAt ?? i.createdAt).slice(0, 10), i.total, i.currency, invoiceState(i), i.einvoiceStatus]))}>
+        list.map((i) => [i.number ?? i.id, i.buyerName, i.buyerEmail, i.kind, localDay(i.issuedAt ?? i.createdAt), i.total, i.currency, invoiceState(i), i.einvoiceStatus]))}>
         <I name="download" size={16}/>{t('export')}</Button>}
     </div>
     {list && list.length > 0 && <p className="text-sm text-muted" role="status">{t('shown', { n: list.length })} · {totals(list, format)}
@@ -184,7 +184,7 @@ function Subscriptions({ manage }: { manage: boolean }) {
       <SelectInput className="w-48" label={t('status')} value={status} onChange={setStatus}
         options={[{ id: '', label: t('all') }, ...(['active', 'past_due', 'suspended', 'pending', 'cancelled', 'ended'] as const).map((s) => ({ id: s, label: t(`sub.${s}`) }))]}/>
       {list && list.length > 0 && <Button variant="secondary" onPress={() => downloadCsv('subscriptions', ['description', 'email', 'amount', 'currency', 'period_months', 'period_end', 'status', 'cancel_at_period_end'],
-        list.map((s) => [s.description, s.email, s.amount, s.currency, s.periodMonths, s.periodEnd?.slice(0, 10) ?? '', s.status, s.cancelAtPeriodEnd ? 'yes' : '']))}>
+        list.map((s) => [s.description, s.email, s.amount, s.currency, s.periodMonths, (s.periodEnd ? localDay(s.periodEnd) : ''), s.status, s.cancelAtPeriodEnd ? 'yes' : '']))}>
         <I name="download" size={16}/>{t('export')}</Button>}
     </div>
     {list && list.length > 0 && <p className="text-sm text-muted" role="status">{t('shown', { n: list.length })} · {t('activeMonthly', { amount: totals(list.filter((s) => s.status === 'active').map((s) => ({ total: s.amount, currency: s.currency })), format) })}</p>}
@@ -225,7 +225,7 @@ function Payments() {
     <DataTable label={t('tabs.payments')} rows={list ?? []} rowKey={(p) => p.id} empty={list ? t('noPayments') : '…'} minWidth={860}
       columns={[{ id: 'date', label: tb('col.date') }, { id: 'who', label: t('customer') }, { id: 'inv', label: tb('col.number') }, { id: 'how', label: t('method') }, { id: 'amount', label: tb('col.amount') }, { id: 'status', label: tb('col.status') }]}
       cells={(p) => [
-        format.dateTime(new Date(p.createdAt), { dateStyle: 'short', timeStyle: 'short' }),
+        format.dateTime(new Date(p.createdAt), { dateStyle: 'medium', timeStyle: 'short' }),
         <span key="u" className="text-sm">{p.email}</span>,
         <NextLink key="i" href={`/admin/billing/invoices/${p.invoiceId}`} className="font-mono text-sm text-accent hover:underline">{p.number ?? `#${p.invoiceId?.slice(0, 8).toUpperCase()}`}</NextLink>,
         <span key="m" className="text-sm">{tb(`method.${p.method as 'card'}`)} · {p.provider}{p.mode === 'test' && ` (${tb('testMode')})`}{p.automatic && <span className="block text-xs text-muted">{tb('automatic')}</span>}</span>,

@@ -2,6 +2,7 @@
 // Admin → Servers → Import: VMs found in vCenter but made outside the panel become servers of a customer. The VM keeps
 // running; it is renamed to the panel's name for it. Refresh the inventory (VMware page) to see new VMs here.
 import { Button, ComboBox, Description, Input, Label, ListBox, toast } from '@heroui/react';
+import { useUnits } from '../../../../lib/units';
 import { useQueryClient } from '@tanstack/react-query';
 import { useTranslations } from 'next-intl';
 import { useState } from 'react';
@@ -73,6 +74,7 @@ function ImportForm({ vm, data, connectionId, onDone }: { vm: Vm; data: Candidat
 }
 
 export function ImportVms() {
+  const { memory } = useUnits();
   const t = useTranslations('Import');
   const conns = useApiQuery<{ connections: { id: string; name: string; kind: string }[] }>(['admin', 'vmware'], '/admin/vmware/connections').data?.connections ?? [];
   const [connectionId, setConnectionId] = useState('');
@@ -91,7 +93,7 @@ export function ImportVms() {
               <span className="font-medium">{v.name}</span><span className="text-xs text-muted">{v.guest ?? v.moref}</span>
               {open === v.moref && q.data && <ImportForm vm={v} data={q.data} connectionId={id} onDone={() => setOpen(undefined)}/>}</div>,
             <StatusChip key="p" tone={v.powerState === 'poweredOn' ? 'success' : 'default'}>{v.powerState === 'poweredOn' ? t('on') : t('off')}</StatusChip>,
-            `${v.vcpu ?? '?'} vCPU · ${v.memoryMb ? v.memoryMb / 1024 : '?'} GB · ${Math.ceil(v.storageGb)} GB`,
+            `${v.vcpu ?? '?'} vCPU · ${v.memoryMb ? memory(v.memoryMb) : '? GB'} · ${Math.ceil(v.storageGb)} GB`,
             open === v.moref ? null : <Button key="i" size="sm" variant="secondary" isDisabled={!q.data?.pools.length} onPress={() => setOpen(v.moref)}><I name="download" size={14}/>{t('submit')}</Button>]}/>}
   </div>;
 }

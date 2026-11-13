@@ -28,8 +28,8 @@ export default function Audit() {
   const extra = more?.params === params ? more : null;
   const events = [...(first?.events ?? []), ...(extra?.events ?? [])];
   const cursor = extra ? extra.next : first?.nextBefore;
-  const dayOf = (at: string) => new Date(at).toDateString();
-  const today = new Date().toDateString(), yesterday = new Date(Date.now() - 864e5).toDateString();
+  const dayOf = (at: string | number) => format.dateTime(new Date(at), { year: 'numeric', month: '2-digit', day: '2-digit' });
+  const today = dayOf(Date.now()), yesterday = dayOf(Date.now() - 864e5);
   const dayLabel = (at: string) => dayOf(at) === today ? t('today') : dayOf(at) === yesterday ? t('yesterday') : format.dateTime(new Date(at), { dateStyle: 'full' });
   // A person or address in a row narrows the log to it with one click.
   const pick = (v: string) => <button type="button" className="hover:text-accent hover:underline" title={t('filterBy', { v })} onClick={() => setQ(v)}>{v}</button>;

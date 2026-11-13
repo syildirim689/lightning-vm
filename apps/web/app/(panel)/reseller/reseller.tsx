@@ -2,6 +2,7 @@
 // The reseller's page: the allocation and how much of it is used, the customers, a new customer, and per customer
 // their servers and an order made for them (billed to the reseller at the reseller's discount).
 import { Button, ProgressBar, toast } from '@heroui/react';
+import { useUnits } from '../../../lib/units';
 import { useQueryClient } from '@tanstack/react-query';
 import NextLink from 'next/link';
 import { useFormatter, useLocale, useTranslations } from 'next-intl';
@@ -30,6 +31,7 @@ function Meter({ label, used, max, unit = '' }: { label: string; used: number; m
 }
 
 function OrderForCustomer({ customer, discount, onDone }: { customer: Customer; discount: number; onDone: () => void }) {
+  const { memory } = useUnits();
   const t = useTranslations('Reseller');
   const format = useFormatter();
   const { error, field } = useErrorText();
@@ -63,7 +65,7 @@ function OrderForCustomer({ customer, discount, onDone }: { customer: Customer; 
   return <form onSubmit={submit} noValidate className="grid gap-3 rounded-xl border border-accent/40 bg-accent-soft/40 p-3 sm:grid-cols-2">
     <SelectInput label={t('location')} value={v.poolId} onChange={(x) => setV({ ...v, poolId: x, packageId: '' })} error={field(fields.poolId)} options={catalog.pools.map((p) => ({ id: p.id, label: p.location ? `${p.name} · ${p.location}` : p.name }))}/>
     <SelectInput label={t('package')} value={v.packageId} onChange={set('packageId')} error={field(fields.packageId)}
-      options={packages.map((p) => ({ id: p.id, label: p.name, description: `${p.vcpu} vCPU · ${p.memoryMb / 1024} GB · ${p.diskGb} GB` }))}/>
+      options={packages.map((p) => ({ id: p.id, label: p.name, description: `${p.vcpu} vCPU · ${memory(p.memoryMb)} · ${p.diskGb} GB` }))}/>
     <SelectInput label={t('image')} value={v.imageId} onChange={set('imageId')} error={field(fields.imageId)} options={images.map((i) => ({ id: i.id, label: i.name }))}/>
     <TextInput format="serverName" label={t('hostname')} value={v.name} onChange={(x) => setV({ ...v, name: x.toLowerCase() })} error={field(fields.name)} placeholder="web-1"/>
     {!!keys?.length && <div className="sm:col-span-2"><SelectInput label={t('sshKeyPick')} value={v.sshKeyId || 'paste'} onChange={(x) => setPicked({ ...v, sshKeyId: x })} error={field(fields.sshKeyId)}

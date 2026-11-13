@@ -172,7 +172,7 @@ function Deliveries({ id }: { id: string }) {
   if (!list.length) return <p className="text-sm text-muted">{t('webhooks.noDeliveries')}</p>;
   return <DataTable label={t('webhooks.deliveries')} rows={list} rowKey={(d) => d.id} minWidth={520}
     columns={[{ id: 'when', label: t('webhooks.when') }, { id: 'event', label: t('webhooks.event') }, { id: 'status', label: t('webhooks.status') }, { id: 'detail', label: t('webhooks.detail') }]}
-    cells={(d) => [format.dateTime(new Date(d.createdAt), { dateStyle: 'short', timeStyle: 'medium' }), <span key="e" className="font-mono text-xs">{d.event}</span>,
+    cells={(d) => [format.dateTime(new Date(d.createdAt), { dateStyle: 'medium', timeStyle: 'medium' }), <span key="e" className="font-mono text-xs">{d.event}</span>,
       <StatusChip key="s" tone={d.status === 'succeeded' ? 'success' : d.status === 'failed' ? 'danger' : 'accent'}>{t(`webhooks.st.${d.status}`)}</StatusChip>,
       [d.responseCode ? `HTTP ${d.responseCode}` : d.error, d.durationMs != null ? `${d.durationMs} ms` : null, d.attempts > 1 ? t('webhooks.attempts', { n: d.attempts }) : null].filter(Boolean).join(' · ')]}/>;
 }

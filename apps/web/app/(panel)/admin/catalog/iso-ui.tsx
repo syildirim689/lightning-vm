@@ -2,6 +2,7 @@
 // ISO library in the catalog: storages (FTP/FTPS, SFTP, WebDAV, S3, SMB, HTTP), browsing them, copying an ISO
 // into one or more locations, and the library with live copy progress.
 import { Button, Modal, ProgressBar, toast } from '@heroui/react';
+import { useUnits } from '../../../../lib/units';
 import { useQueryClient } from '@tanstack/react-query';
 import { useFormatter, useTranslations } from 'next-intl';
 import { useEffect, useState } from 'react';
@@ -29,16 +30,8 @@ function Dialog({ open, setOpen, title, children }: { open: boolean; setOpen: (v
   </Modal.Backdrop>;
 }
 
-export function useBytes() {
-  const format = useFormatter();
-  return (n: number | null) => {
-    if (n === null || n === undefined) return '–';
-    const units = ['B', 'KB', 'MB', 'GB', 'TB'];
-    let i = 0; let v = n;
-    while (v >= 1024 && i < units.length - 1) { v /= 1024; i++; }
-    return `${format.number(v, { maximumFractionDigits: i ? 1 : 0 })} ${units[i]}`;
-  };
-}
+// One size format for the whole panel (lib/units).
+export function useBytes() { return useUnits().bytes; }
 
 export function IsoLibrary({ pools }: { pools: { id: string; name: string }[] }) {
   const t = useTranslations('Catalog.isos');

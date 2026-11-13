@@ -520,7 +520,7 @@ export function ServerDetail({ id }: { id: string }) {
     <Section title={t('detail.history')}>
       <DataTable label={t('detail.history')} rows={operations} rowKey={(o) => o.id}
         columns={[{ id: 'when', label: t('col.when') }, { id: 'op', label: t('col.operation') }, { id: 'state', label: t('col.state') }, { id: 'detail', label: t('col.detail') }]}
-        cells={(o) => [format.dateTime(new Date(o.createdAt), { dateStyle: 'short', timeStyle: 'medium' }), t(`kind.${o.kind as 'create'}`),
+        cells={(o) => [format.dateTime(new Date(o.createdAt), { dateStyle: 'medium', timeStyle: 'medium' }), t(`kind.${o.kind as 'create'}`),
           <StatusChip key="s" tone={o.status === 'succeeded' ? 'success' : o.status === 'failed' ? 'danger' : o.status === 'cancelled' ? 'default' : 'accent'}>{t(`opStatus.${o.status as 'pending'}`)}</StatusChip>,
           o.errorCode ? t('errorCode', { message: error({ code: o.errorCode }), code: o.errorCode }) : o.step ? t(`step.${o.step as 'queued'}`) : '']}/>
     </Section>

@@ -12,7 +12,7 @@ import { useEffect, useState } from 'react';
 import { I } from '../../../components/icon';
 import { ButtonLink, ConfirmButton, DataTable, Empty, FormActions, FormSection, Notice, PageHeader, SelectInput, StatusChip, SwitchInput, TextInput } from '../../../components/ui';
 import { apiFetch, useErrorText } from '../../../lib/api';
-import { downloadCsv } from '../../../lib/csv';
+import { downloadCsv, localDay } from '../../../lib/csv';
 import type { Card as SavedCard, Invoice, Subscription, Summary } from '../../../lib/billing';
 import { MyDisputes } from './disputes';
 import { invoiceState, invoiceTone, subscriptionTone, type Hourly } from '../../../lib/billing';
@@ -92,7 +92,7 @@ function Invoices({ filter, setFilter }: { filter: string; setFilter: (k: string
   const rows = of(filter);
   const overdue = (list ?? []).filter((i) => i.status === 'unpaid' && i.overdue).length;
   const csv = () => downloadCsv('invoices', [t('col.number'), t('col.kind'), t('col.date'), t('csv.due'), t('col.total'), t('csv.currency'), t('col.status')],
-    rows.map((i) => [i.number ?? i.id, t(`kind.${i.kind}`), (i.issuedAt ?? i.createdAt).slice(0, 10), i.dueAt.slice(0, 10), i.total, i.currency, t(`status.${invoiceState(i)}`)]));
+    rows.map((i) => [i.number ?? i.id, t(`kind.${i.kind}`), localDay(i.issuedAt ?? i.createdAt), localDay(i.dueAt), i.total, i.currency, t(`status.${invoiceState(i)}`)]));
   return <div className="flex flex-col gap-4">
     {list && <SpendChart invoices={list}/>}
     <div className="flex flex-wrap items-center gap-2">

@@ -2,6 +2,7 @@
 // Roles: named permission sets. Built-in ones can be edited (except Administrator, which always has
 // everything); custom ones can be added and removed. Users get roles on the Users page.
 import { Button, Card, Checkbox, Chip, Modal, SearchField, toast } from '@heroui/react';
+import { useUnits } from '../../../../lib/units';
 import { useQueryClient } from '@tanstack/react-query';
 import { motion } from 'motion/react';
 import NextLink from 'next/link';
@@ -28,6 +29,7 @@ type NumberLimit = (typeof numberLimits)[number][1][number];
 
 export default function Roles() {
   const t = useTranslations('Roles');
+  const { memory } = useUnits();
   const tp = useTranslations('Permissions');
   const { error } = useErrorText();
   const client = useQueryClient();
@@ -65,7 +67,7 @@ export default function Roles() {
               <span className="mr-1 inline-flex items-center gap-1 text-xs font-medium text-muted"><I name="gauge" size={13}/>{t('limits.title')}:</span>
               {Object.entries(r.limits).map(([k, v]) => <Chip key={k} size="sm" variant="soft" color="warning">
                 {k === 'require2fa' ? t('limits.require2faShort') : Array.isArray(v) ? t('limits.listShort', { name: t(`limits.${k}` as 'limits.allowedIps'), n: v.length })
-                  : `${t(`limits.${k}` as 'limits.maxServers')}: ${k === 'maxMemoryMb' ? `${Number(v) / 1024} GB` : v}`}</Chip>)}
+                  : `${t(`limits.${k}` as 'limits.maxServers')}: ${k === 'maxMemoryMb' ? memory(Number(v)) : v}`}</Chip>)}
             </div>}
           </Card.Content>
           {manage && <Card.Footer className="flex justify-end gap-2">

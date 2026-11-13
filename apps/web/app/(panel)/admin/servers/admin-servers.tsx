@@ -113,7 +113,7 @@ export default function AdminServers() {
             <DataTable label={t('admin.operations')} rows={shownOps} rowKey={(o) => o.id} minWidth={760} empty={ops.length ? t('admin.opNone') : '…'}
               sortBy={{ when: (o) => Date.parse(o.createdAt), op: (o) => o.kind, name: (o) => o.serverName, state: (o) => o.status }}
               columns={[{ id: 'when', label: t('col.when') }, { id: 'op', label: t('col.operation') }, { id: 'name', label: t('col.name') }, { id: 'state', label: t('col.state') }, { id: 'detail', label: t('col.detail') }, { id: 'act', label: <span className="sr-only">{t('admin.retry')}</span> }]}
-              cells={(o) => [<span key="w" className="flex flex-col"><span>{format.dateTime(new Date(o.createdAt), { dateStyle: 'short', timeStyle: 'medium' })}</span><span className="text-xs text-muted">{format.relativeTime(new Date(o.createdAt))}</span></span>,
+              cells={(o) => [<span key="w" className="flex flex-col"><span>{format.dateTime(new Date(o.createdAt), { dateStyle: 'medium', timeStyle: 'medium' })}</span><span className="text-xs text-muted">{format.relativeTime(new Date(o.createdAt))}</span></span>,
                 t(`kind.${o.kind as 'create'}`),
                 <span key="n" className="flex flex-col">{o.serverId ? <NextLink href={`/servers/${o.serverId}`} className="font-medium text-accent hover:underline">{o.serverName ?? '–'}</NextLink> : o.serverName ?? '–'}
                   {o.ownerEmail && <span className="text-xs text-muted">{o.ownerEmail}</span>}</span>,
@@ -132,7 +132,7 @@ export default function AdminServers() {
             {findings.length === 0 ? <Notice tone="success">{t('admin.noFindings')}</Notice>
               : <DataTable label={t('admin.reconciliation')} rows={findings} rowKey={(f) => String(f.id)}
                   columns={[{ id: 'when', label: t('col.when') }, { id: 'kind', label: t('admin.finding') }, { id: 'name', label: t('col.name') }, { id: 'detail', label: t('col.detail') }]}
-                  cells={(f) => [format.dateTime(new Date(f.lastSeen), { dateStyle: 'short', timeStyle: 'short' }), <StatusChip key="k" tone="warning">{t(`finding.${f.kind as 'vm_missing'}`)}</StatusChip>,
+                  cells={(f) => [format.dateTime(new Date(f.lastSeen), { dateStyle: 'medium', timeStyle: 'short' }), <StatusChip key="k" tone="warning">{t(`finding.${f.kind as 'vm_missing'}`)}</StatusChip>,
                     f.serverId ? <NextLink key="n" href={`/servers/${f.serverId}`} className="font-medium text-accent hover:underline">{f.serverName ?? f.serverId}</NextLink> : f.serverName ?? f.detail.name ?? f.vmMoref ?? '–', `${f.connectionName}${f.detail.actual ? ` · ${f.detail.recorded} → ${f.detail.actual}` : ''}`]}/>}
           </Tabs.Panel>
           {can(me?.permissions, 'servers.manage_all') && <Tabs.Panel id="import" className="pt-4"><h2 className="sr-only">{t('admin.import')}</h2><ImportVms/></Tabs.Panel>}
