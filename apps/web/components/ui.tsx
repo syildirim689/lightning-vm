@@ -109,11 +109,11 @@ export function TextInput({ label, value, onChange, error, help, type = 'text', 
   // Dates and times read back in full ("Thursday, 20 November 2026 · in 7 days"), so a typo in the day shows at once.
   const when = readableDate(type, value, fd, tf);
   const presets = datePresets && type === 'date' && !isDisabled ? datePresetValues() : null;
-  return <TextField className={className} name={autofill ? name : undefined} type={masked ? 'text' : type} value={value} onChange={onChange} isInvalid={!!shown} isRequired={isRequired} isDisabled={isDisabled} validationBehavior="aria"
+  return <TextField className={`min-w-0 ${className ?? ''}`} name={autofill ? name : undefined} type={masked ? 'text' : type} value={value} onChange={onChange} isInvalid={!!shown} isRequired={isRequired} isDisabled={isDisabled} validationBehavior="aria"
     onBlur={tidy}>
     <Label>{label}</Label>
     {multiline ? <TextArea rows={4} placeholder={ph} spellCheck={spellCheck} {...fill} {...extra} className={fmt?.mono ? 'font-mono text-sm' : undefined}/>
-      : <Input placeholder={ph} maxLength={maxLength} spellCheck={masked ? false : spellCheck} {...fill} {...extra} className={fmt?.mono ? 'font-mono' : undefined} style={masked ? { WebkitTextSecurity: 'disc' } as React.CSSProperties : undefined}/>}
+      : <Input placeholder={ph} maxLength={maxLength} spellCheck={masked ? false : spellCheck} {...fill} {...extra} className={fmt?.mono ? 'min-w-0 font-mono' : 'min-w-0'} style={masked ? { WebkitTextSecurity: 'disc' } as React.CSSProperties : undefined}/>}
     {shown ? <FieldError>{shown}</FieldError> : when || help ? <Description>{when && <span className="block font-medium text-foreground/80">{when}</span>}{help}</Description> : null}
     {presets && <div role="group" aria-label={tf('quick')} className="mt-1 flex flex-wrap gap-1.5">{presets.map(([k, d]) =>
       <button key={k} type="button" aria-pressed={value === d} onClick={() => onChange(d)}
