@@ -164,7 +164,7 @@ function RoleEditor({ role, from, groups, mine, onClose }: { role: Role | null; 
             {numberLimits.map(([group, keys]) => <div key={group} className="rounded-xl border border-border p-3">
               <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted">{t(`limits.group.${group}`)}</p>
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                {keys.map((k) => <TextInput key={k} type="number" label={t(`limits.${k}`)} value={lim[k]} onChange={(x) => setLim((s) => ({ ...s, [k]: x }))}
+                {keys.map((k) => <TextInput key={k} format="integer" label={t(`limits.${k}`)} value={lim[k]} onChange={(x) => setLim((s) => ({ ...s, [k]: x }))}
                   placeholder={t('limits.unlimited')} help={t(`limits.help.${k}`)} error={field(fields[`limits.${k}`])}/>)}
               </div>
             </div>)}

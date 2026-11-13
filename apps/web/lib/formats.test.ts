@@ -83,6 +83,10 @@ test('rules shared with the API: private LANs, IPv6 pools, tags, SSH keys, amoun
   assert.equal(isMoney('9.99999'), false);
   assert.equal(normalize('money', '9,90'), '9.90');
   assert.equal(normalize('fqdn', 'Mail.Example.com.'), 'mail.example.com');
+  assert.equal(isValid('integer', '30'), true);
+  assert.equal(isValid('integer', '3.5'), false);
+  assert.equal(normalize('integer', '1.000'), '1000');
+  assert.equal(normalize('decimal', '20,5'), '20.5');
 });
 
 test('Turkish numbers, IBAN and phone', () => {

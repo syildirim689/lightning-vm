@@ -264,6 +264,7 @@ function UserPicker({ value, onChange, error }: { value: string; onChange: (v: s
 
 function NewInvoice({ onClose }: { onClose: () => void }) {
   const t = useTranslations('BillingAdmin');
+  const tf = useTranslations('Formats');
   const { error, field } = useErrorText();
   const client = useQueryClient();
   const [v, setV] = useState({ userId: '', currency: 'TRY', dueDays: '7', note: '' });
@@ -284,14 +285,14 @@ function NewInvoice({ onClose }: { onClose: () => void }) {
     <div className="grid gap-3 sm:grid-cols-[1fr_auto_auto]">
       <UserPicker value={v.userId} onChange={(x) => setV({ ...v, userId: x })} error={errors.userId}/>
       <SelectInput label={t('currency')} value={v.currency} onChange={(x) => setV({ ...v, currency: x })} options={['TRY', 'EUR', 'USD'].map((c) => ({ id: c, label: c }))}/>
-      <TextInput label={t('dueDays')} value={v.dueDays} onChange={(x) => setV({ ...v, dueDays: x })} error={errors.dueDays} autoComplete="off"/>
+      <TextInput format="integer" unit={tf('unit.days')} label={t('dueDays')} value={v.dueDays} onChange={(x) => setV({ ...v, dueDays: x })} error={errors.dueDays} autoComplete="off"/>
     </div>
     <fieldset className="flex flex-col gap-2">
       <legend className="mb-1 text-sm font-medium">{t('lines')}</legend>
       {lines.map((l, i) => <div key={i} className="grid grid-cols-[1fr_6rem_5rem_auto] items-start gap-2">
         <TextInput label={t('lineDescription')} value={l.description} onChange={(x) => setLines(lines.map((y, j) => j === i ? { ...y, description: x } : y))} error={errors[`lines.${i}.description`]} autoComplete="off"/>
         <TextInput label={t('linePrice')} value={l.unitPrice} onChange={(x) => setLines(lines.map((y, j) => j === i ? { ...y, unitPrice: x } : y))} error={errors[`lines.${i}.unitPrice`]} autoComplete="off"/>
-        <TextInput label={t('lineQuantity')} value={l.quantity} onChange={(x) => setLines(lines.map((y, j) => j === i ? { ...y, quantity: x } : y))} error={errors[`lines.${i}.quantity`]} autoComplete="off"/>
+        <TextInput format="integer" label={t('lineQuantity')} value={l.quantity} onChange={(x) => setLines(lines.map((y, j) => j === i ? { ...y, quantity: x } : y))} error={errors[`lines.${i}.quantity`]} autoComplete="off"/>
         <Button className="mt-6" size="sm" variant="ghost" isIconOnly aria-label={t('removeLine')} isDisabled={lines.length === 1} onPress={() => setLines(lines.filter((_, j) => j !== i))}><I name="x" size={14}/></Button>
       </div>)}
       <div className="flex items-center justify-between">
@@ -346,7 +347,7 @@ function EditSubscription({ s, onClose }: { s: Subscription; onClose: () => void
       confirmLabel={t('cancelNow')} cancelLabel={t('cancel')} onConfirm={() => save('cancel')}/><span className="flex-1"/>
       <Button variant="tertiary" onPress={onClose}>{t('cancel')}</Button><Button isPending={busy} onPress={() => void save()}><I name="check" size={16}/>{t('save')}</Button></>}>
     <div className="grid gap-3 sm:grid-cols-3">
-      <TextInput label={t('monthlyAmount', { currency: s.currency })} value={v.amount} onChange={(x) => setV({ ...v, amount: x })} error={errors.amount} autoComplete="off"/>
+      <TextInput format="money" label={t('monthlyAmount', { currency: s.currency })} value={v.amount} onChange={(x) => setV({ ...v, amount: x })} error={errors.amount} autoComplete="off"/>
       <SelectInput label={t('period')} value={v.periodMonths} onChange={(x) => setV({ ...v, periodMonths: x })} options={['1', '3', '6', '12'].map((m) => ({ id: m, label: t('months', { n: Number(m) }) }))}/>
       <TextInput label={t('periodEnd')} type="date" value={v.periodEnd} onChange={(x) => setV({ ...v, periodEnd: x })} error={errors.periodEnd}/>
     </div>

@@ -95,7 +95,7 @@ export function PowerSchedules({ serverId, power = true, snapshots = false, back
           <SelectInput label={t('what')} value={f.values.action} onChange={f.set('action')} error={f.fieldError('action')}
             options={[...(power ? [{ id: 'shutdown', label: t('action.shutdown') }, { id: 'power_on', label: t('action.power_on') }] : []), ...(snapshots ? [{ id: 'snapshot', label: t('action.snapshot') }] : []), ...(backups ? [{ id: 'backup', label: t('action.backup') }] : [])]}/>
           <TextInput label={t('at')} type="time" value={f.values.time} onChange={f.set('time')} error={f.fieldError('time')}/>
-          {(f.values.action === 'snapshot' || f.values.action === 'backup') && <TextInput label={t('keep')} type="number" value={f.values.keep} onChange={f.set('keep')} error={f.fieldError('keep')} help={t('keepHelp')} autoComplete="off"/>}
+          {(f.values.action === 'snapshot' || f.values.action === 'backup') && <TextInput format="integer" label={t('keep')} value={f.values.keep} onChange={f.set('keep')} error={f.fieldError('keep')} help={t('keepHelp')} autoComplete="off"/>}
         </div>
         <fieldset className="flex flex-col gap-2">
           <legend className="mb-1 text-sm font-medium">{t('days')}</legend>

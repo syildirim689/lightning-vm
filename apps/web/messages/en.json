@@ -4685,8 +4685,8 @@
     "autoOn": "Automatic updates on",
     "autoOff": "Automatic updates off",
     "window": "Maintenance window",
-    "windowHelp": "HH:MM-HH:MM, may pass midnight (23:00-02:00).",
-    "windowInvalid": "Use HH:MM-HH:MM, for example 03:00-05:00.",
+    "windowHelp": "Updates start only inside this window; it may cross midnight (for example 23:00 to 02:00).",
+    "windowInvalid": "Choose both a start and an end time.",
     "saveAuto": "Save",
     "noTimer": "The hourly maintenance timer is off, so nothing runs automatically. Turn it on with:",
     "actionDone": {
@@ -4697,7 +4697,9 @@
       "domain": "Domain change",
       "monitoring": "Monitoring change",
       "terminal": "Terminal change"
-    }
+    },
+    "windowFrom": "From",
+    "windowTo": "To"
   },
   "A11y": {
     "title": "Accessibility",
@@ -8138,6 +8140,15 @@
       "month": "In 30 days",
       "monthEnd": "End of month",
       "year": "In a year"
+    },
+    "unit": {
+      "days": "days",
+      "hours": "hours",
+      "minutes": "min",
+      "percent": "%",
+      "times": "times",
+      "items": "pcs",
+      "months": "months"
     }
   }
 }

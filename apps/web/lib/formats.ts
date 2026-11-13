@@ -4,7 +4,7 @@
 // Pure functions (run with: node --test lib/*.test.ts).
 
 export type Format = 'ipv4' | 'ip' | 'cidr' | 'ipOrCidr' | 'privateCidr' | 'ipv6Prefix' | 'mac' | 'hostname' | 'fqdn' | 'domain' | 'serverName' | 'email' | 'port' | 'portRange' | 'url' | 'vlan'
-  | 'tag' | 'sshKey' | 'money' | 'hostOrIp' | 'tckn' | 'vkn' | 'iban' | 'phone';
+  | 'tag' | 'sshKey' | 'money' | 'hostOrIp' | 'tckn' | 'vkn' | 'iban' | 'phone' | 'integer' | 'decimal';
 
 const ipv4Re = /^(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}$/;
 export const isIPv4 = (s: string) => ipv4Re.test(s);
@@ -123,6 +123,8 @@ export function normalize(format: Format, raw: string): string {
     case 'tckn': case 'vkn': return s.replace(/\s/g, '');
     case 'iban': return isIban(s) ? groupIban(s) : s;
     case 'phone': return normalizePhone(s);
+    case 'integer': return s.replace(/[\s.]/g, '');
+    case 'decimal': return s.replace(/\s/g, '').replace(/^(\d+),(\d+)$/, '$1.$2');
     case 'money': return s.replace(/\s/g, '').replace(/^(\d+),(\d{1,4})$/, '$1.$2');
     case 'url': return s && !/^[a-z]+:\/\//i.test(s) && /^[\w.-]+\.[a-z]{2,}/i.test(s) ? `https://${s}` : s;
     default: return s;
@@ -151,6 +153,8 @@ export function isValid(format: Format, s: string): boolean {
     case 'tag': return isTag(s);
     case 'sshKey': return isSshKey(s);
     case 'money': return isMoney(s);
+    case 'integer': return /^\d{1,9}$/.test(s);
+    case 'decimal': return /^\d{1,9}([.,]\d{1,4})?$/.test(s);
     case 'tckn': return isTckn(s);
     case 'vkn': return isVkn(s);
     case 'iban': return isIban(s);
@@ -180,6 +184,8 @@ export const inputProps: Record<Format, { inputMode?: 'text' | 'numeric' | 'deci
   tag: { mono: false, example: 'production' },
   sshKey: { mono: true, example: 'ssh-ed25519 AAAAC3Nza… user@laptop' },
   money: { inputMode: 'decimal', mono: false, example: '9.90' },
+  integer: { inputMode: 'numeric', mono: false, example: '7' },
+  decimal: { inputMode: 'decimal', mono: false, example: '20' },
   tckn: { inputMode: 'numeric', mono: true, example: '10000000146' },
   vkn: { inputMode: 'numeric', mono: true, example: '1234567890' },
   iban: { mono: true, example: 'TR33 0006 1005 1978 6457 8413 26' },

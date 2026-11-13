@@ -79,10 +79,10 @@ const masksText = () => typeof CSS !== 'undefined' && CSS.supports('-webkit-text
 // Text field with a visible label, help text, and a translated server-side error under it.
 // `format` gives a typed value its keyboard, an example, tidying when the field is left (MAC spellings, spaces,
 // upper case) and a message as soon as it is wrong; `list` accepts several values separated by commas or lines.
-export function TextInput({ label, value, onChange, error, help, type = 'text', name, isRequired, autoComplete, autofill, placeholder, multiline, isDisabled, maxLength, className, spellCheck, format, list, datePresets }: {
+export function TextInput({ label, value, onChange, error, help, type = 'text', name, isRequired, autoComplete, autofill, placeholder, multiline, isDisabled, maxLength, className, spellCheck, format, list, datePresets, unit }: {
   label: string; value: string; onChange: (v: string) => void; error?: string; help?: React.ReactNode; type?: string; name?: string; isRequired?: boolean;
   autoComplete?: string; autofill?: boolean; placeholder?: string; multiline?: boolean; isDisabled?: boolean; maxLength?: number; className?: string; spellCheck?: boolean;
-  format?: Format; list?: boolean; datePresets?: boolean;
+  format?: Format; list?: boolean; datePresets?: boolean; unit?: string;
 }) {
   const tf = useTranslations('Formats');
   const fd = useFormatter();
@@ -111,8 +111,10 @@ export function TextInput({ label, value, onChange, error, help, type = 'text', 
   const presets = datePresets && type === 'date' && !isDisabled ? datePresetValues() : null;
   return <TextField className={`min-w-0 ${className ?? ''}`} name={autofill ? name : undefined} type={masked ? 'text' : type} value={value} onChange={onChange} isInvalid={!!shown} isRequired={isRequired} isDisabled={isDisabled} validationBehavior="aria"
     onBlur={tidy}>
-    <Label>{label}</Label>
+    <Label>{label}{unit && <span className="sr-only"> ({unit})</span>}</Label>
     {multiline ? <TextArea rows={4} placeholder={ph} spellCheck={spellCheck} {...fill} {...extra} className={fmt?.mono ? 'font-mono text-sm' : undefined}/>
+      : unit ? <div className="relative"><Input placeholder={ph} maxLength={maxLength} spellCheck={false} {...fill} {...extra} className={`w-full min-w-0 pr-14 tabular-nums ${fmt?.mono ? 'font-mono' : ''}`}/>
+        <span aria-hidden className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-sm text-muted">{unit}</span></div>
       : <Input placeholder={ph} maxLength={maxLength} spellCheck={masked ? false : spellCheck} {...fill} {...extra} className={fmt?.mono ? 'min-w-0 font-mono' : 'min-w-0'} style={masked ? { WebkitTextSecurity: 'disc' } as React.CSSProperties : undefined}/>}
     {shown ? <FieldError>{shown}</FieldError> : when || help ? <Description>{when && <span className="block font-medium text-foreground/80">{when}</span>}{help}</Description> : null}
     {presets && <div role="group" aria-label={tf('quick')} className="mt-1 flex flex-wrap gap-1.5">{presets.map(([k, d]) =>
@@ -175,6 +177,14 @@ export function SelectInput({ label, value, onChange, options, error, help, plac
       </ListBox>
     </Select.Popover>
   </Select>;
+}
+
+// Currencies by code and name in the person's language; a stored code not in the list stays selectable.
+export function CurrencyInput({ label, value, onChange, error, codes = ['TRY', 'EUR', 'USD', 'GBP'] }: { label: string; value: string; onChange: (v: string) => void; error?: string; codes?: string[] }) {
+  const locale = useLocale();
+  const names = useMemo(() => { try { return new Intl.DisplayNames([locale], { type: 'currency' }); } catch { return null; } }, [locale]);
+  const all = value && !codes.includes(value) ? [...codes, value] : codes;
+  return <SelectInput label={label} value={value} onChange={onChange} error={error} options={all.map((c) => ({ id: c, label: `${c} · ${names?.of(c) ?? c}` }))}/>;
 }
 
 export function CheckboxInput({ label, isSelected, onChange, help, isDisabled }: { label: React.ReactNode; isSelected: boolean; onChange: (v: boolean) => void; help?: React.ReactNode; isDisabled?: boolean }) {

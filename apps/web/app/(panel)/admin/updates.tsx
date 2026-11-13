@@ -148,7 +148,16 @@ function AutoUpdate({ settings: s, disabled, onSave }: { settings: Record<string
       <SwitchInput label={enabled ? t('autoOn') : t('autoOff')} isSelected={enabled} onChange={setEnabled}/>
       <SelectInput label={t('channel')} value={channel} onChange={(v) => setChannel(v || 'stable')}
         options={(['stable', 'beta', 'edge'] as const).map((c) => ({ id: c, label: t(`channels.${c}`), description: t(`channelHelp.${c}`) }))}/>
-      <TextInput label={t('window')} value={window} onChange={setWindow} error={valid ? undefined : t('windowInvalid')} help={t('windowHelp')} spellCheck={false}/>
+      {/* The window as two clock fields ("03:00" to "05:00"); stored as "03:00-05:00". */}
+      <fieldset className="flex min-w-0 flex-col gap-1">
+        <legend className="mb-1 text-sm font-medium">{t('window')}</legend>
+        <div className="flex items-center gap-2">
+          <TextInput className="flex-1" type="time" label={t('windowFrom')} value={window.split('-')[0] ?? ''} onChange={(x) => setWindow(`${x}-${window.split('-')[1] ?? ''}`)}/>
+          <span aria-hidden className="mt-6 text-muted">–</span>
+          <TextInput className="flex-1" type="time" label={t('windowTo')} value={window.split('-')[1] ?? ''} onChange={(x) => setWindow(`${window.split('-')[0] ?? ''}-${x}`)}/>
+        </div>
+        <p className={`text-xs ${valid ? 'text-muted' : 'text-danger'}`}>{valid ? t('windowHelp') : t('windowInvalid')}</p>
+      </fieldset>
     </div>
     {s.schedule !== 'on' && enabled && <Notice tone="warning">{t('noTimer')} <Mono>sudo sh scripts/install.sh schedule on</Mono></Notice>}
     <div><Button size="sm" isDisabled={disabled || !valid || !changed} onPress={() => onSave({ enabled, channel, window })}><I name="check" size={14}/>{t('saveAuto')}</Button></div>

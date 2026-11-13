@@ -7,7 +7,7 @@ import { useFormatter, useTranslations } from 'next-intl';
 import { useState } from 'react';
 import { Area, Bar, ComposedChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { I } from '../../../../components/icon';
-import { DataTable, NumberInput, PageHeader, Section, Stat, StatusChip, TextInput } from '../../../../components/ui';
+import { CurrencyInput, DataTable, NumberInput, PageHeader, Section, Stat, StatusChip, TextInput } from '../../../../components/ui';
 import { apiFetch, useErrorText, type ApiError } from '../../../../lib/api';
 import { downloadCsv } from '../../../../lib/csv';
 import { flag } from '../../../../lib/flag';
@@ -64,7 +64,7 @@ function EnergySettings({ s, onSaved }: { s: Settings; onSaved: () => void }) {
   return <Section title={t('settings')} description={t('settingsHelp')}>
     <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
       <TextInput label={t('price')} value={v.pricePerKwh} onChange={(x) => setV({ ...v, pricePerKwh: x })} error={field(fields.pricePerKwh)} help={t('priceHelp')}/>
-      <TextInput label={t('currency')} value={v.currency} onChange={(x) => setV({ ...v, currency: x.toUpperCase().slice(0, 3) })} error={field(fields.currency)} placeholder="TRY"/>
+      <CurrencyInput label={t('currency')} value={v.currency} onChange={(x: string) => setV({ ...v, currency: x })} error={field(fields.currency)}/>
       <NumberInput label="PUE" value={v.pue} onChange={(x) => setV({ ...v, pue: x ?? 1.5 })} minValue={1} maxValue={3} step={0.05} error={field(fields.pue)} help={t('pueHelp')}
         formatOptions={{ maximumFractionDigits: 2 }}/>
       <NumberInput label={t('co2')} value={v.co2GramsPerKwh} onChange={(x) => setV({ ...v, co2GramsPerKwh: x ?? 0 })} minValue={0} maxValue={2000} error={field(fields.co2GramsPerKwh)} help={t('co2Help')}/>

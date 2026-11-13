@@ -20,6 +20,7 @@ const randomCode = () => Array.from(crypto.getRandomValues(new Uint8Array(8)), (
 
 function NewCoupon({ onDone }: { onDone: () => void }) {
   const t = useTranslations('Coupons');
+  const tf = useTranslations('Formats');
   const format = useFormatter();
   const { error, field } = useErrorText();
   const packages = useApiQuery<{ packages: { id: string; name: string }[] }>(['admin', 'packages'], '/admin/packages').data?.packages ?? [];
@@ -44,11 +45,11 @@ function NewCoupon({ onDone }: { onDone: () => void }) {
           <Button variant="ghost" isIconOnly className="mt-6" aria-label={t('generate')} onPress={() => set({ code: randomCode() })}><I name="dices" size={16}/></Button>
         </div>
         <SelectInput label={t('kind')} value={v.kind} onChange={(x) => set({ kind: x })} options={[{ id: 'percent', label: t('percent') }, { id: 'fixed', label: t('fixed') }]}/>
-        <TextInput label={v.kind === 'percent' ? t('valuePercent') : t('valueFixed')} value={v.value} onChange={(x) => set({ value: x })} maxLength={12} error={field(fields.value)}/>
+        <TextInput format={v.kind === 'percent' ? 'decimal' : 'money'} unit={v.kind === 'percent' ? '%' : v.currency} label={v.kind === 'percent' ? t('valuePercent') : t('valueFixed')} value={v.value} onChange={(x) => set({ value: x })} maxLength={12} error={field(fields.value)}/>
         {v.kind === 'fixed' && <SelectInput label={t('currency')} value={v.currency} onChange={(x) => set({ currency: x })} error={field(fields.currency)}
           options={['TRY', 'EUR', 'USD'].map((c) => ({ id: c, label: c }))}/>}
-        <TextInput label={t('periods')} value={v.periods} onChange={(x) => set({ periods: x.replace(/\D/g, '') })} maxLength={3} help={t('periodsHelp')} error={field(fields.periods)}/>
-        <TextInput label={t('maxUses')} value={v.maxUses} onChange={(x) => set({ maxUses: x.replace(/\D/g, '') })} maxLength={7} help={t('maxUsesHelp')} error={field(fields.maxUses)}/>
+        <TextInput format="integer" unit={tf('unit.months')} label={t('periods')} value={v.periods} onChange={(x) => set({ periods: x.replace(/\D/g, '') })} maxLength={3} help={t('periodsHelp')} error={field(fields.periods)}/>
+        <TextInput format="integer" unit={tf('unit.times')} label={t('maxUses')} value={v.maxUses} onChange={(x) => set({ maxUses: x.replace(/\D/g, '') })} maxLength={7} help={t('maxUsesHelp')} error={field(fields.maxUses)}/>
         <TextInput datePresets label={t('expires')} type="date" value={v.expiresAt} onChange={(x) => set({ expiresAt: x })} help={t('expiresHelp')} error={field(fields.expiresAt)}/>
         <TextInput label={t('note')} value={v.note} onChange={(x) => set({ note: x })} maxLength={200} help={t('noteHelp')}/>
       </div>

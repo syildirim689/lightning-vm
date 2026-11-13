@@ -24,6 +24,7 @@ export default function BillingSettings({ readOnly }: { readOnly: boolean }) {
   const [busy, setBusy] = useState(false);
   useEffect(() => { if (q && !v) setV(q.billing); }, [q]); // eslint-disable-line react-hooks/exhaustive-deps
   if (!v) return <p role="status" className="text-sm text-muted">…</p>;
+  const tf = useTranslations('Formats');
   const num = (k: keyof Doc) => (x: string) => setV({ ...v, [k]: Number(x.replace(/\D/g, '')) || 0 });
   const co = (k: keyof Company) => (x: string) => setV({ ...v, company: { ...v.company, [k]: x } });
   const toggle = (k: keyof Doc, label: string, help: string) => <div className="flex items-start justify-between gap-3 rounded-xl border border-border p-3">
@@ -44,30 +45,30 @@ export default function BillingSettings({ readOnly }: { readOnly: boolean }) {
         {toggle('autoCharge', t('autoCharge'), t('autoChargeHelp'))}
         {toggle('balance', t('balance'), t('balanceHelp'))}
         {toggle('hourly', t('hourly'), t('hourlyHelp'))}
-        <TextInput label={t('disputeWindowDays')} value={String(v.disputeWindowDays ?? 60)} onChange={num('disputeWindowDays')} error={errors.disputeWindowDays} isDisabled={readOnly} help={t('disputeWindowHelp')}/>
-        <TextInput label={t('disputeAnswerDays')} value={String(v.disputeAnswerDays ?? 7)} onChange={num('disputeAnswerDays')} error={errors.disputeAnswerDays} isDisabled={readOnly} help={t('disputeAnswerHelp')}/>
-        {v.hourly && <TextInput label={t('hourlyMinHours')} value={String(v.hourlyMinHours ?? 24)} onChange={num('hourlyMinHours')} error={errors.hourlyMinHours} isDisabled={readOnly} help={t('hourlyMinHoursHelp')}/>}
+        <TextInput format="integer" unit={tf('unit.days')} label={t('disputeWindowDays')} value={String(v.disputeWindowDays ?? 60)} onChange={num('disputeWindowDays')} error={errors.disputeWindowDays} isDisabled={readOnly} help={t('disputeWindowHelp')}/>
+        <TextInput format="integer" unit={tf('unit.days')} label={t('disputeAnswerDays')} value={String(v.disputeAnswerDays ?? 7)} onChange={num('disputeAnswerDays')} error={errors.disputeAnswerDays} isDisabled={readOnly} help={t('disputeAnswerHelp')}/>
+        {v.hourly && <TextInput format="integer" unit={tf('unit.hours')} label={t('hourlyMinHours')} value={String(v.hourlyMinHours ?? 24)} onChange={num('hourlyMinHours')} error={errors.hourlyMinHours} isDisabled={readOnly} help={t('hourlyMinHoursHelp')}/>}
       </div>
       <Notice tone="default">{t('providers')} <NextLink href="/admin/settings?tab=payments" className="font-medium text-accent hover:underline">{t('providersLink')}</NextLink></Notice>
     </FormSection>
     <FormSection title={t('company')} description={t('companyHelp')} icon={<I name="building" size={16}/>}>
       <div className="grid gap-3 sm:grid-cols-2">
         <TextInput label={t('companyName')} value={v.company.name} onChange={co('name')} error={errors['company.name']} isDisabled={readOnly} isRequired autoComplete="off"/>
-        <TextInput label="VKN" value={v.company.taxId} onChange={co('taxId')} isDisabled={readOnly} isRequired autoComplete="off"/>
+        <TextInput format="vkn" label="VKN" value={v.company.taxId} onChange={co('taxId')} isDisabled={readOnly} isRequired autoComplete="off"/>
         <TextInput label={t('taxOffice')} value={v.company.taxOffice} onChange={co('taxOffice')} isDisabled={readOnly} autoComplete="off"/>
         <TextInput label="MERSİS" value={v.company.mersis} onChange={co('mersis')} isDisabled={readOnly} autoComplete="off"/>
         <div className="sm:col-span-2"><TextInput label={t('address')} value={v.company.address} onChange={co('address')} isDisabled={readOnly} isRequired autoComplete="off"/></div>
         <TextInput label={t('district')} value={v.company.district} onChange={co('district')} isDisabled={readOnly} autoComplete="off"/>
         <TextInput label={t('city')} value={v.company.city} onChange={co('city')} isDisabled={readOnly} autoComplete="off"/>
-        <TextInput label={t('phone')} value={v.company.phone} onChange={co('phone')} isDisabled={readOnly} autoComplete="off"/>
-        <TextInput label={t('email')} value={v.company.email} onChange={co('email')} isDisabled={readOnly} autoComplete="off"/>
-        <TextInput label={t('website')} value={v.company.website} onChange={co('website')} isDisabled={readOnly} help={t('websiteHelp')} autoComplete="off"/>
+        <TextInput format="phone" label={t('phone')} value={v.company.phone} onChange={co('phone')} isDisabled={readOnly} autoComplete="off"/>
+        <TextInput format="email" label={t('email')} value={v.company.email} onChange={co('email')} isDisabled={readOnly} autoComplete="off"/>
+        <TextInput format="url" label={t('website')} value={v.company.website} onChange={co('website')} isDisabled={readOnly} help={t('websiteHelp')} autoComplete="off"/>
         <TextInput label={t('tradeRegistry')} value={v.company.tradeRegistry} onChange={co('tradeRegistry')} isDisabled={readOnly} autoComplete="off"/>
       </div>
     </FormSection>
     <FormSection title={t('tax')} description={t('taxHelp')} icon={<I name="percent" size={16}/>}>
       <div className="grid gap-3 sm:grid-cols-3">
-        <TextInput label={t('taxRate')} value={String(v.taxRate)} onChange={num('taxRate')} error={errors.taxRate} isDisabled={readOnly} autoComplete="off"/>
+        <TextInput format="decimal" unit="%" label={t('taxRate')} value={String(v.taxRate)} onChange={num('taxRate')} error={errors.taxRate} isDisabled={readOnly} autoComplete="off"/>
         <TextInput label={t('prefix')} value={v.invoicePrefix} onChange={(x) => setV({ ...v, invoicePrefix: x.toUpperCase().slice(0, 3) })} error={errors.invoicePrefix} help={t('prefixHelp', { example: `${v.invoicePrefix}${new Date().getFullYear()}000000001` })} isDisabled={readOnly} autoComplete="off"/>
       </div>
       <div className="grid gap-3 sm:grid-cols-2">
@@ -77,12 +78,12 @@ export default function BillingSettings({ readOnly }: { readOnly: boolean }) {
     </FormSection>
     <FormSection title={t('collection')} description={t('collectionHelp')} icon={<I name="calendar-clock" size={16}/>}>
       <div className="grid gap-3 sm:grid-cols-3">
-        <TextInput label={t('invoiceDaysBefore')} value={String(v.invoiceDaysBefore)} onChange={num('invoiceDaysBefore')} error={errors.invoiceDaysBefore} isDisabled={readOnly} autoComplete="off"/>
-        <TextInput label={t('reminderDays')} value={v.reminderDays.join(', ')} onChange={(x) => setV({ ...v, reminderDays: x.split(/[,\s]+/).filter(Boolean).map(Number).filter((n) => Number.isInteger(n)) })} help={t('reminderDaysHelp')} isDisabled={readOnly} autoComplete="off"/>
-        <TextInput label={t('chargeRetries')} value={String(v.chargeRetries)} onChange={num('chargeRetries')} error={errors.chargeRetries} isDisabled={readOnly} autoComplete="off"/>
-        <TextInput label={t('suspendAfterDays')} value={String(v.suspendAfterDays)} onChange={num('suspendAfterDays')} error={errors.suspendAfterDays} isDisabled={readOnly} autoComplete="off"/>
-        <TextInput label={t('terminateAfterDays')} value={String(v.terminateAfterDays)} onChange={num('terminateAfterDays')} error={errors.terminateAfterDays} help={t('terminateHelp')} isDisabled={readOnly} autoComplete="off"/>
-        <TextInput label={t('orderExpiryHours')} value={String(v.orderExpiryHours)} onChange={num('orderExpiryHours')} error={errors.orderExpiryHours} isDisabled={readOnly} autoComplete="off"/>
+        <TextInput format="integer" unit={tf('unit.days')} label={t('invoiceDaysBefore')} value={String(v.invoiceDaysBefore)} onChange={num('invoiceDaysBefore')} error={errors.invoiceDaysBefore} isDisabled={readOnly} autoComplete="off"/>
+        <TextInput unit={tf('unit.days')} label={t('reminderDays')} value={v.reminderDays.join(', ')} onChange={(x) => setV({ ...v, reminderDays: x.split(/[,\s]+/).filter(Boolean).map(Number).filter((n) => Number.isInteger(n)) })} help={t('reminderDaysHelp')} isDisabled={readOnly} autoComplete="off"/>
+        <TextInput format="integer" unit={tf('unit.times')} label={t('chargeRetries')} value={String(v.chargeRetries)} onChange={num('chargeRetries')} error={errors.chargeRetries} isDisabled={readOnly} autoComplete="off"/>
+        <TextInput format="integer" unit={tf('unit.days')} label={t('suspendAfterDays')} value={String(v.suspendAfterDays)} onChange={num('suspendAfterDays')} error={errors.suspendAfterDays} isDisabled={readOnly} autoComplete="off"/>
+        <TextInput format="integer" unit={tf('unit.days')} label={t('terminateAfterDays')} value={String(v.terminateAfterDays)} onChange={num('terminateAfterDays')} error={errors.terminateAfterDays} help={t('terminateHelp')} isDisabled={readOnly} autoComplete="off"/>
+        <TextInput format="integer" unit={tf('unit.hours')} label={t('orderExpiryHours')} value={String(v.orderExpiryHours)} onChange={num('orderExpiryHours')} error={errors.orderExpiryHours} isDisabled={readOnly} autoComplete="off"/>
       </div>
       <ol className="flex flex-wrap items-center gap-2 text-xs text-muted" aria-label={t('timeline')}>
         {[t('step.invoice', { n: v.invoiceDaysBefore }), t('step.due'), t('step.overdue'), t('step.suspend', { n: v.suspendAfterDays }), v.terminateAfterDays ? t('step.terminate', { n: v.terminateAfterDays }) : t('step.never')].map((s, i, all) =>
@@ -91,8 +92,8 @@ export default function BillingSettings({ readOnly }: { readOnly: boolean }) {
     </FormSection>
     <FormSection title={t('balanceAndTransfer')} description={t('balanceAndTransferHelp')} icon={<I name="landmark" size={16}/>}>
       <div className="grid gap-3 sm:grid-cols-2">
-        <TextInput label={t('topupMin')} value={String(v.topupMin)} onChange={num('topupMin')} error={errors.topupMin} isDisabled={readOnly} autoComplete="off"/>
-        <TextInput label={t('topupMax')} value={String(v.topupMax)} onChange={num('topupMax')} error={errors.topupMax} isDisabled={readOnly} autoComplete="off"/>
+        <TextInput format="money" label={t('topupMin')} value={String(v.topupMin)} onChange={num('topupMin')} error={errors.topupMin} isDisabled={readOnly} autoComplete="off"/>
+        <TextInput format="money" label={t('topupMax')} value={String(v.topupMax)} onChange={num('topupMax')} error={errors.topupMax} isDisabled={readOnly} autoComplete="off"/>
       </div>
       <div className="flex items-start justify-between gap-3 rounded-xl border border-border p-3">
         <div><p className="text-sm font-medium">{t('bankTransfer')}</p><p className="text-xs text-muted">{t('bankTransferHelp')}</p></div>

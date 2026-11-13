@@ -6,7 +6,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useFormatter, useTranslations } from 'next-intl';
 import { useState } from 'react';
 import { I } from '../../../../components/icon';
-import { ConfirmButton, DataTable, FieldGroup, NumberInput, SelectInput, StatusChip, SwitchInput, TextInput } from '../../../../components/ui';
+import { ConfirmButton, CurrencyInput, DataTable, FieldGroup, NumberInput, SelectInput, StatusChip, SwitchInput, TextInput } from '../../../../components/ui';
 import { apiFetch, useErrorText, type ApiError } from '../../../../lib/api';
 import { useApiAction, useApiQuery } from '../../../../lib/query';
 
@@ -95,7 +95,7 @@ function VdcForm({ vdc, pools, users, onDone }: { vdc: Vdc | null; pools: { id: 
     </FieldGroup>
     <FieldGroup title={t('billing')} description={t('billingHelp')}>
       <TextInput format="money" label={t('price')} value={v.priceMonthly} onChange={set('priceMonthly')} error={field(fields.priceMonthly)} placeholder="199.00"/>
-      <TextInput label={t('currency')} value={v.currency} onChange={(x) => set('currency')(x.toUpperCase().slice(0, 3))} error={field(fields.currency)}/>
+      <CurrencyInput label={t('currency')} value={v.currency} onChange={set('currency')} error={field(fields.currency)}/>
     </FieldGroup>
     <div className="sticky bottom-0 -mx-1 flex justify-end gap-2 border-t border-separator bg-overlay px-1 py-3">
       <Button variant="tertiary" onPress={onDone}>{t('cancel')}</Button>

@@ -4685,8 +4685,8 @@
     "autoOn": "Otomatik güncelleme açık",
     "autoOff": "Otomatik güncelleme kapalı",
     "window": "Bakım penceresi",
-    "windowHelp": "SS:DD-SS:DD, gece yarısını geçebilir (23:00-02:00).",
-    "windowInvalid": "SS:DD-SS:DD biçiminde girin, örnek 03:00-05:00.",
+    "windowHelp": "Güncellemeler yalnızca bu aralıkta başlar; aralık gece yarısını geçebilir (örneğin 23:00 ile 02:00).",
+    "windowInvalid": "Başlangıç ve bitiş saatini seçin.",
     "saveAuto": "Kaydet",
     "noTimer": "Saatlik bakım zamanlayıcısı kapalı; otomatik hiçbir şey çalışmaz. Açmak için:",
     "actionDone": {
@@ -4697,7 +4697,9 @@
       "domain": "Alan adı değişikliği",
       "monitoring": "İzleme değişikliği",
       "terminal": "Terminal değişikliği"
-    }
+    },
+    "windowFrom": "Başlangıç",
+    "windowTo": "Bitiş"
   },
   "A11y": {
     "title": "Erişilebilirlik",
@@ -8138,6 +8140,15 @@
       "month": "30 gün sonra",
       "monthEnd": "Ay sonu",
       "year": "1 yıl sonra"
+    },
+    "unit": {
+      "days": "gün",
+      "hours": "saat",
+      "minutes": "dk",
+      "percent": "%",
+      "times": "kez",
+      "items": "adet",
+      "months": "ay"
     }
   }
 }
