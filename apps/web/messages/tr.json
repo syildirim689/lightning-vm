@@ -8150,5 +8150,13 @@
       "items": "adet",
       "months": "ay"
     }
+  },
+  "SessionExpired": {
+    "title": "Oturumunuz sona erdi",
+    "body": "Yazdıklarınız bu sayfada duruyor. Yeni bir sekmede yeniden giriş yapın, sonra buraya dönüp kaydedin; sayfa bunu kendisi fark eder.",
+    "signIn": "Yeni sekmede giriş yap",
+    "stay": "Bu sayfada kal",
+    "leave": "Şimdi çıkış yap (kaydedilmemiş değişiklikler kaybolur)",
+    "back": "Yeniden giriş yaptınız. Şimdi kaydedebilirsiniz."
   }
 }

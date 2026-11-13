@@ -1667,6 +1667,28 @@ test.describe('people, settings and smart features (English browser)', () => {
 
   // New screens render and carry their heading; full-page screenshots go to test-results/tour for review.
   // Dark mode: the newer screens keep their contrast and surfaces (charts, heatmap, cards, dialogs).
+  test('a session that ends while something is typed keeps the page and asks to sign in again', async ({ browser }) => {
+    const context = await browser.newContext({ locale: 'en-US' });
+    const page = await context.newPage();
+    await signIn(page, admin);
+    await expect(page).toHaveURL(/\/admin$/);
+    await page.goto('/account?tab=projects');
+    await page.getByLabel('Project name').fill('kept after expiry');
+    // The session cookie disappears (as if it expired); saving is refused, the text stays and a dialog explains.
+    const cookies = await context.cookies();
+    await context.clearCookies();
+    await page.getByRole('button', { name: 'Create project' }).click();
+    const dialog = page.getByRole('alertdialog', { name: 'Your session has ended' });
+    await expect(dialog).toBeVisible();
+    await expect(page).toHaveURL(/\/account/);
+    await expect(page.getByLabel('Project name')).toHaveValue('kept after expiry');
+    // Signed in again (here: the cookie comes back): the page notices and says so.
+    await context.addCookies(cookies);
+    await expect(page.getByText('You are signed in again. You can save now.')).toBeVisible({ timeout: 15_000 });
+    await expect(dialog).toBeHidden();
+    await context.close();
+  });
+
   test('dark mode on the newer screens', async ({ browser }) => {
     test.setTimeout(120_000);
     const page = await (await browser.newContext({ locale: 'en-US', colorScheme: 'dark', viewport: { width: 1280, height: 900 } })).newPage();

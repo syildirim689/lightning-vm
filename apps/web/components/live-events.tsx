@@ -4,11 +4,15 @@
 // refresh what the panel shows and allows; a new notification rings the bell immediately. EventSource reconnects
 // by itself; if the stream cannot open, "who am I" is asked, and a session that is gone leads to the sign-in page.
 import { useQueryClient } from '@tanstack/react-query';
+import { hasPendingEdits, watchEdits } from '../lib/edits';
 import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
 import { apiFetch } from '../lib/api';
 
+// An expired session with unsaved typing keeps the page and asks to sign in again (SessionExpired); anything else
+// (signed out elsewhere, removed, blocked) goes to the sign-in page at once.
 export function signOutTo(reason: string) {
+  if (reason === 'expired' && hasPendingEdits()) { window.dispatchEvent(new Event('lvm:expired')); return; }
   window.location.replace(`/login?reason=${encodeURIComponent(reason)}`);
 }
 
@@ -39,7 +43,11 @@ export default function LiveEvents() {
       };
     };
     open();
-    return () => { source?.close(); clearTimeout(retry); };
+    watchEdits();
+    // Signed in again in another tab: live updates start over.
+    const back = () => { source?.close(); clearTimeout(retry); open(); void client.invalidateQueries(); };
+    window.addEventListener('lvm:session-back', back);
+    return () => { source?.close(); clearTimeout(retry); window.removeEventListener('lvm:session-back', back); };
   }, [client, router]);
   return null;
 }

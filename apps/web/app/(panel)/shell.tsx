@@ -14,6 +14,7 @@ import Shortcuts from '../../components/shortcuts';
 import { AnnouncementBar } from '../../components/activity';
 import { I } from '../../components/icon';
 import LiveEvents from '../../components/live-events';
+import SessionExpired from '../../components/session-expired';
 import TimeZoneSync from '../../components/time-zone-sync';
 import NotificationBell from '../../components/notification-bell';
 import TaskManager from '../../components/task-manager';
@@ -148,6 +149,7 @@ export default function Shell({ user, branding, version, children }: { user: Use
   const home = can(user.permissions, 'dashboard.view') ? '/admin' : '/';
   return <div className="flex min-h-dvh flex-col">
     <LiveEvents/>
+    <SessionExpired/>
     <TimeZoneSync/>
     <ImpersonationBanner user={user}/>
     <AnnouncementBar/>
