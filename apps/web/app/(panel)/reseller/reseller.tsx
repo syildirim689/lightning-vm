@@ -65,10 +65,10 @@ function OrderForCustomer({ customer, discount, onDone }: { customer: Customer; 
     <SelectInput label={t('package')} value={v.packageId} onChange={set('packageId')} error={field(fields.packageId)}
       options={packages.map((p) => ({ id: p.id, label: p.name, description: `${p.vcpu} vCPU · ${p.memoryMb / 1024} GB · ${p.diskGb} GB` }))}/>
     <SelectInput label={t('image')} value={v.imageId} onChange={set('imageId')} error={field(fields.imageId)} options={images.map((i) => ({ id: i.id, label: i.name }))}/>
-    <TextInput label={t('hostname')} value={v.name} onChange={(x) => setV({ ...v, name: x.toLowerCase() })} error={field(fields.name)} placeholder="web-1"/>
+    <TextInput format="serverName" label={t('hostname')} value={v.name} onChange={(x) => setV({ ...v, name: x.toLowerCase() })} error={field(fields.name)} placeholder="web-1"/>
     {!!keys?.length && <div className="sm:col-span-2"><SelectInput label={t('sshKeyPick')} value={v.sshKeyId || 'paste'} onChange={(x) => setPicked({ ...v, sshKeyId: x })} error={field(fields.sshKeyId)}
       help={t('sshKeyPickHelp')} options={[...keys.map((k) => ({ id: k.id, label: k.name, description: k.fingerprint })), { id: 'paste', label: t('sshKeyPaste') }]}/></div>}
-    {!v.sshKeyId && <div className="sm:col-span-2"><TextInput label={t('sshKey')} value={v.sshKey} onChange={set('sshKey')} multiline error={field(fields.sshKey) ?? field(fields.sshKeyIds)} help={t('sshKeyHelp')}/></div>}
+    {!v.sshKeyId && <div className="sm:col-span-2"><TextInput format="sshKey" label={t('sshKey')} value={v.sshKey} onChange={set('sshKey')} multiline error={field(fields.sshKey) ?? field(fields.sshKeyIds)} help={t('sshKeyHelp')}/></div>}
     {pkg && <p className="flex flex-wrap items-baseline gap-2 text-sm sm:col-span-2"><I name="receipt" size={14} className="self-center text-muted"/>{t('priceYou')}
       <strong className="tabular-nums">{format.number(Number(pkg.priceMonthly) * (1 - discount / 100), { style: 'currency', currency: pkg.currency })}</strong>
       {discount > 0 && <span className="text-xs text-muted line-through tabular-nums">{format.number(Number(pkg.priceMonthly), { style: 'currency', currency: pkg.currency })}</span>}

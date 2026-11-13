@@ -242,10 +242,10 @@ export default function Wizard() {
             {l === locale && <I name="circle-check" size={18} className="text-accent"/>}
           </button>)}
         </div>}
-        {current === 'access' && <TextInput label={t('access.label')} value={publicUrl} onChange={setPublicUrl} error={field(failure?.fields?.publicUrl)} help={t('access.help')} isRequired/>}
+        {current === 'access' && <TextInput format="url" label={t('access.label')} value={publicUrl} onChange={setPublicUrl} error={field(failure?.fields?.publicUrl)} help={t('access.help')} isRequired/>}
         {current === 'admin' && (progress.adminCreated ? <Notice tone="success">{t('admin.done')}</Notice> : <CredentialsForm mode="setup" noToken onDone={() => load(true)}/>)}
         {current === 'domain' && <div className="flex flex-col gap-4">
-          <TextInput label={t('domain.label')} value={domain} onChange={setDomain} placeholder="panel.example.com" error={field(failure?.fields?.domain)} help={t('domain.help')}/>
+          <TextInput format="domain" label={t('domain.label')} value={domain} onChange={setDomain} placeholder="panel.example.com" error={field(failure?.fields?.domain)} help={t('domain.help')}/>
           <Notice tone="default" title={t('domain.autoTitle')}>{t('domain.auto')}</Notice>
         </div>}
         {current === 'vmware' && <>{status('vmware') === 'completed' ? <Notice tone="success">{t('vmware.done')}</Notice> : <p className="text-sm text-muted">{t('vmware.note')}</p>}

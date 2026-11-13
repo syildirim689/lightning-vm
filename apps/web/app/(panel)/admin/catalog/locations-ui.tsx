@@ -93,9 +93,9 @@ function LocationForm({ location, onDone }: { location: Location | null; onDone:
       <NumberInput label={t('sort')} value={v.sort} onChange={(x) => set('sort')(x ?? 0)} minValue={-1000} maxValue={1000} help={t('sortHelp')}/>
     </FieldGroup>
     <FieldGroup title={t('testing')} description={t('testingHelp')}>
-      <TextInput label={t('pingUrl')} value={v.pingUrl} onChange={set('pingUrl')} error={field(fields.pingUrl)} help={t('pingUrlHelp')} placeholder="https://speedtest.example.com/ping" spellCheck={false}/>
-      <TextInput label={t('lookingGlass')} value={v.lookingGlassUrl} onChange={set('lookingGlassUrl')} error={field(fields.lookingGlassUrl)} placeholder="https://lg.example.com" spellCheck={false}/>
-      <TextInput label={t('testIp')} value={v.testIp ?? ''} onChange={set('testIp')} error={field(fields.testIp)} help={t('testIpHelp')} placeholder="203.0.113.10" spellCheck={false}/>
+      <TextInput format="url" label={t('pingUrl')} value={v.pingUrl} onChange={set('pingUrl')} error={field(fields.pingUrl)} help={t('pingUrlHelp')} placeholder="https://speedtest.example.com/ping" spellCheck={false}/>
+      <TextInput format="url" label={t('lookingGlass')} value={v.lookingGlassUrl} onChange={set('lookingGlassUrl')} error={field(fields.lookingGlassUrl)} placeholder="https://lg.example.com" spellCheck={false}/>
+      <TextInput format="ip" label={t('testIp')} value={v.testIp ?? ''} onChange={set('testIp')} error={field(fields.testIp)} help={t('testIpHelp')} placeholder="203.0.113.10" spellCheck={false}/>
     </FieldGroup>
     <div className="sticky bottom-0 -mx-1 flex justify-end gap-2 border-t border-separator bg-overlay px-1 py-3">
       <Button variant="tertiary" onPress={onDone}>{t('cancel')}</Button>

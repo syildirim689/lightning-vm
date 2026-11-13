@@ -205,7 +205,7 @@ export default function Order() {
         <Section title={t('access')}>
           <div className="flex flex-col gap-4">
             <div className="flex items-start gap-2">
-              <TextInput className="flex-1" label={t('name')} value={d.name} onChange={(v) => { d.set({ name: v.toLowerCase() }); setNameError(undefined); }} help={t('nameHelp')}
+              <TextInput format="serverName" className="flex-1" label={t('name')} value={d.name} onChange={(v) => { d.set({ name: v.toLowerCase() }); setNameError(undefined); }} help={t('nameHelp')}
                 error={nameError ?? (nameTaken ? field('NAME_TAKEN') : d.name && !nameOk ? field('INVALID_HOSTNAME') : undefined) ?? quoteField('name')} autoComplete="off" spellCheck={false}/>
               <Button className="mt-6" variant="secondary" onPress={() => { d.set({ name: suggest() }); setNameError(undefined); }}><I name="sparkles" size={16}/>{t('suggest')}</Button>
             </div>

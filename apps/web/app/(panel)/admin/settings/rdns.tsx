@@ -46,7 +46,7 @@ export default function ReverseDns({ readOnly }: { readOnly: boolean }) {
       <SelectInput label={t('provider')} value={v.provider} onChange={(x) => set({ provider: (x || 'none') as Rdns['provider'] })} isDisabled={readOnly}
         options={[{ id: 'none', label: t('providers.none') }, { id: 'powerdns', label: 'PowerDNS (HTTP API)', description: t('providers.powerdns') }]}/>
       {on && <div className="grid gap-4 sm:grid-cols-2">
-        <TextInput label={t('apiUrl')} value={v.apiUrl} onChange={(x) => set({ apiUrl: x })} placeholder="http://10.0.0.53:8081" help={t('apiUrlHelp')} error={field(fields.apiUrl)} isDisabled={readOnly} spellCheck={false}/>
+        <TextInput format="url" label={t('apiUrl')} value={v.apiUrl} onChange={(x) => set({ apiUrl: x })} placeholder="http://10.0.0.53:8081" help={t('apiUrlHelp')} error={field(fields.apiUrl)} isDisabled={readOnly} spellCheck={false}/>
         <TextInput label={t('apiKey')} type="password" value={v.apiKey} onChange={(x) => set({ apiKey: x })} placeholder={v.apiKeySet ? t('secretSet') : ''} error={field(fields.apiKey)} isDisabled={readOnly} autoComplete="off"/>
         <TextInput label={t('serverId')} value={v.serverId} onChange={(x) => set({ serverId: x })} help={t('serverIdHelp')} isDisabled={readOnly} spellCheck={false}/>
         <NumberInput label="TTL" value={v.ttl} onChange={(x) => set({ ttl: x ?? 3600 })} minValue={60} maxValue={86400} help={t('ttlHelp')} error={field(fields.ttl)} isDisabled={readOnly}/>

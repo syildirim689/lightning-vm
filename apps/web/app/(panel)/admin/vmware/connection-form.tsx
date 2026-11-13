@@ -55,8 +55,8 @@ export default function ConnectionForm({ onSaved, initial }: { onSaved: (s: Summ
     </Notice>}
     <FieldGroup title={t('form.groupEndpoint')} description={t('form.groupEndpointHelp')}>
       <TextInput label={t('form.name')} value={form.name} onChange={set('name')} error={err('name')} help={help('name')} isRequired/>
-      <TextInput label={t('form.host')} value={form.host} onChange={set('host')} error={err('host')} help={help('host')} isRequired autoComplete="off" spellCheck={false}/>
-      <TextInput label={t('form.port')} value={form.port} onChange={set('port')} error={err('port')} help={help('port')} autoComplete="off"/>
+      <TextInput format="hostOrIp" label={t('form.host')} value={form.host} onChange={set('host')} error={err('host')} help={help('host')} isRequired autoComplete="off" spellCheck={false}/>
+      <TextInput format="port" label={t('form.port')} value={form.port} onChange={set('port')} error={err('port')} help={help('port')} autoComplete="off"/>
     </FieldGroup>
     <FieldGroup title={t('form.groupAccount')} description={t('form.groupAccountHelp')}>
       <TextInput label={t('form.username')} value={form.username} onChange={set('username')} error={err('username')} help={help('username')} isRequired autoComplete="off"/>

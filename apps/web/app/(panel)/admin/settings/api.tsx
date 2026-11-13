@@ -53,7 +53,7 @@ function RulesForm({ readOnly }: { readOnly: boolean }) {
         isDisabled={dis} error={field(fields.rateLimit)} help={v.rateLimit ? t('rateOn', { n: v.rateLimit, perSecond: Math.round((v.rateLimit / 60) * 10) / 10 }) : t('rateOff')}/>
     </FormSection>
     <FormSection title={t('networks')} description={t('networksHelp')} icon={<I name="network" size={16}/>}>
-      <TextInput multiline label={t('networksLabel')} value={nets} onChange={setNets} isDisabled={dis} placeholder={'203.0.113.0/24\n2001:db8::/48'} spellCheck={false}
+      <TextInput format="ipOrCidr" list multiline label={t('networksLabel')} value={nets} onChange={setNets} isDisabled={dis} placeholder={'203.0.113.0/24\n2001:db8::/48'} spellCheck={false}
         error={field(fields.networks)} help={nets.trim() ? t('networksOn', { n: nets.split(/[\s,]+/).filter(Boolean).length }) : t('networksOff')}/>
     </FormSection>
     <FormSection title={t('logTitle')} description={t('logHelp')} icon={<I name="scroll-text" size={16}/>}>

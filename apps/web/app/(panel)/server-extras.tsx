@@ -63,7 +63,7 @@ export function ServerLabels({ server }: { server: Server }) {
           </li>)}
         </ul>}
         <div className="flex items-end gap-2" onKeyDown={(e) => { if (e.key === 'Enter' && (e.target as HTMLElement).tagName === 'INPUT') { e.preventDefault(); add(); } }}>
-          <TextInput className="flex-1" label={t('addTag')} value={draft} onChange={setDraft} maxLength={24} placeholder={t('tagPlaceholder')} error={f.fieldError('tags')} help={t('tagHelp')}/>
+          <TextInput format="tag" className="flex-1" label={t('addTag')} value={draft} onChange={setDraft} maxLength={24} placeholder={t('tagPlaceholder')} error={f.fieldError('tags')} help={t('tagHelp')}/>
           <Button type="button" variant="secondary" className="mb-6" onPress={add} isDisabled={!draft.trim() || f.values.tags.length >= 10}><I name="plus" size={15}/>{t('add')}</Button>
         </div>
       </div>
@@ -104,7 +104,7 @@ export function RenameServer({ server }: { server: Server }) {
   }
   if (!open) return <Button variant="ghost" onPress={() => { setName(server.name); setOpen(true); }}><I name="pencil" size={16}/>{t('rename')}</Button>;
   return <form className="flex w-full flex-wrap items-end gap-2 sm:w-auto" onSubmit={(e) => { e.preventDefault(); void save(); }}>
-    <TextInput className="min-w-48 flex-1" label={t('newName')} value={name} onChange={(x) => setName(x.toLowerCase())} maxLength={63} error={err} help={t('renameHelp')}/>
+    <TextInput format="serverName" className="min-w-48 flex-1" label={t('newName')} value={name} onChange={(x) => setName(x.toLowerCase())} maxLength={63} error={err} help={t('renameHelp')}/>
     <Button type="submit" isPending={busy} isDisabled={!name || name === server.name}><I name="check" size={15}/>{t('save')}</Button>
     <Button variant="ghost" onPress={() => setOpen(false)}>{t('cancel')}</Button>
   </form>;

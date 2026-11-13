@@ -4,8 +4,9 @@
 import { Alert, AlertDialog, Button, Card, Checkbox, CheckboxGroup, Chip, Description, FieldError, Input, Label, ListBox, NumberField, Select,
   Switch, Table, TextArea, TextField, buttonVariants, toast } from '@heroui/react';
 import NextLink from 'next/link';
-import { useLocale, useTranslations } from 'next-intl';
+import { useFormatter, useLocale, useTranslations } from 'next-intl';
 import { useEffect, useMemo, useState } from 'react';
+import { type Format, inputProps, isValid, normalize, splitList } from '../lib/formats';
 
 export function PageHeader({ eyebrow, title, description, actions }: { eyebrow?: string; title: React.ReactNode; description?: React.ReactNode; actions?: React.ReactNode }) {
   return <header className="mb-6 flex flex-wrap items-end justify-between gap-4">
@@ -76,21 +77,67 @@ export const noAutofill = { autoComplete: 'off', 'data-1p-ignore': 'true', 'data
 const masksText = () => typeof CSS !== 'undefined' && CSS.supports('-webkit-text-security', 'disc');
 
 // Text field with a visible label, help text, and a translated server-side error under it.
-export function TextInput({ label, value, onChange, error, help, type = 'text', name, isRequired, autoComplete, autofill, placeholder, multiline, isDisabled, maxLength, className, spellCheck }: {
+// `format` gives a typed value its keyboard, an example, tidying when the field is left (MAC spellings, spaces,
+// upper case) and a message as soon as it is wrong; `list` accepts several values separated by commas or lines.
+export function TextInput({ label, value, onChange, error, help, type = 'text', name, isRequired, autoComplete, autofill, placeholder, multiline, isDisabled, maxLength, className, spellCheck, format, list, datePresets }: {
   label: string; value: string; onChange: (v: string) => void; error?: string; help?: React.ReactNode; type?: string; name?: string; isRequired?: boolean;
   autoComplete?: string; autofill?: boolean; placeholder?: string; multiline?: boolean; isDisabled?: boolean; maxLength?: number; className?: string; spellCheck?: boolean;
+  format?: Format; list?: boolean; datePresets?: boolean;
 }) {
+  const tf = useTranslations('Formats');
+  const fd = useFormatter();
   // Masked text from the first paint: a password field that exists even for a moment is filled by the browser
   // (and the field before it taken for a user name). Only a browser that cannot mask text gets a password field.
   const [masked, setMasked] = useState(!autofill && type === 'password');
+  const [left, setLeft] = useState(false);
   useEffect(() => { setMasked(!autofill && type === 'password' && masksText()); }, [autofill, type]);
   const fill = autofill ? { autoComplete, 'data-autofill': 'true' } : noAutofill;
-  return <TextField className={className} name={autofill ? name : undefined} type={masked ? 'text' : type} value={value} onChange={onChange} isInvalid={!!error} isRequired={isRequired} isDisabled={isDisabled} validationBehavior="aria">
+  const fmt = format ? inputProps[format] : undefined;
+  const items = format ? (list ? splitList(value) : value.trim() ? [value.trim()] : []) : [];
+  const bad = format ? items.find((x) => !isValid(format, normalize(format, x))) : undefined;
+  // Wrong values are named once the field has been left (or at once when fixing one), never while first typing.
+  const own = bad !== undefined && (left || !!error) ? tf(list ? 'invalidItem' : 'invalid', { kind: tf(`kind.${format}` as 'kind.ip'), value: bad, example: fmt!.example }) : undefined;
+  const shown = error ?? own;
+  const tidy = () => {
+    setLeft(true);
+    if (!format) return;
+    const next = list ? splitList(value).map((x) => normalize(format, x)).join(multiline ? '\n' : ', ') : normalize(format, value);
+    if (next !== value) onChange(next);
+  };
+  const extra = fmt ? { inputMode: fmt.inputMode, autoCapitalize: 'none', autoCorrect: 'off', spellCheck: false } : {};
+  const ph = placeholder ?? (fmt ? tf('example', { example: fmt.example }) : undefined);
+  // Dates and times read back in full ("Thursday, 20 November 2026 · in 7 days"), so a typo in the day shows at once.
+  const when = readableDate(type, value, fd, tf);
+  const presets = datePresets && type === 'date' && !isDisabled ? datePresetValues() : null;
+  return <TextField className={className} name={autofill ? name : undefined} type={masked ? 'text' : type} value={value} onChange={onChange} isInvalid={!!shown} isRequired={isRequired} isDisabled={isDisabled} validationBehavior="aria"
+    onBlur={tidy}>
     <Label>{label}</Label>
-    {multiline ? <TextArea rows={4} placeholder={placeholder} spellCheck={spellCheck} {...fill}/>
-      : <Input placeholder={placeholder} maxLength={maxLength} spellCheck={masked ? false : spellCheck} {...fill} style={masked ? { WebkitTextSecurity: 'disc' } as React.CSSProperties : undefined}/>}
-    {error ? <FieldError>{error}</FieldError> : help ? <Description>{help}</Description> : null}
+    {multiline ? <TextArea rows={4} placeholder={ph} spellCheck={spellCheck} {...fill} {...extra} className={fmt?.mono ? 'font-mono text-sm' : undefined}/>
+      : <Input placeholder={ph} maxLength={maxLength} spellCheck={masked ? false : spellCheck} {...fill} {...extra} className={fmt?.mono ? 'font-mono' : undefined} style={masked ? { WebkitTextSecurity: 'disc' } as React.CSSProperties : undefined}/>}
+    {shown ? <FieldError>{shown}</FieldError> : when || help ? <Description>{when && <span className="block font-medium text-foreground/80">{when}</span>}{help}</Description> : null}
+    {presets && <div role="group" aria-label={tf('quick')} className="mt-1 flex flex-wrap gap-1.5">{presets.map(([k, d]) =>
+      <button key={k} type="button" aria-pressed={value === d} onClick={() => onChange(d)}
+        className={`min-h-8 rounded-full border px-2.5 text-xs transition-colors ${value === d ? 'border-accent bg-accent-soft text-accent-soft-foreground' : 'border-border hover:border-accent'}`}>{tf(`preset.${k}` as 'preset.today')}</button>)}</div>}
   </TextField>;
+}
+
+// "YYYY-MM-DD" for a local date.
+const ymd = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+function datePresetValues(): [string, string][] {
+  const now = new Date(), add = (n: number) => { const d = new Date(now); d.setDate(d.getDate() + n); return ymd(d); };
+  return [['today', ymd(now)], ['week', add(7)], ['month', add(30)], ['monthEnd', ymd(new Date(now.getFullYear(), now.getMonth() + 1, 0))], ['year', add(365)]];
+}
+function readableDate(type: string, value: string, f: ReturnType<typeof useFormatter>, t: ReturnType<typeof useTranslations<'Formats'>>): string | null {
+  if (!value) return null;
+  if (type !== 'date' && type !== 'datetime-local') return null;
+  const d = type === 'date' ? new Date(`${value}T00:00:00`) : new Date(value);
+  if (Number.isNaN(d.getTime())) return null;
+  const full = type === 'date' ? f.dateTime(d, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+    : f.dateTime(d, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', hour: 'numeric', minute: '2-digit' });
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const days = Math.round((new Date(d).setHours(0, 0, 0, 0) - today.getTime()) / 86_400_000);
+  const rel = days === 0 ? t('today') : type === 'date' ? f.relativeTime(new Date(`${value}T12:00:00`), { now: new Date(new Date().setHours(12, 0, 0, 0)), unit: 'day' }) : f.relativeTime(d);
+  return `${full} · ${rel}`;
 }
 
 export function NumberInput({ label, value, onChange, error, help, minValue, maxValue, step, className, formatOptions, isDisabled }: {

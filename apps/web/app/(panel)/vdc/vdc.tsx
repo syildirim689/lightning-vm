@@ -65,7 +65,7 @@ function NewServer({ vdc, onDone }: { vdc: Mine; onDone: () => void }) {
       </button>)}
     </div>
     <div className="grid gap-3 sm:grid-cols-2">
-      <TextInput label={t('serverName')} value={v.name} onChange={(x) => setV({ ...v, name: x.toLowerCase() })} error={field(fields.name)} isRequired spellCheck={false} placeholder="web-1"
+      <TextInput format="serverName" label={t('serverName')} value={v.name} onChange={(x) => setV({ ...v, name: x.toLowerCase() })} error={field(fields.name)} isRequired spellCheck={false} placeholder="web-1"
         help={vdc.servers.some((x) => x.name === v.name.trim()) ? t('nameTaken') : undefined}/>
       <SelectInput label={t('image')} value={v.imageId} onChange={(x) => { const min = Math.max(10, vdc.images.find((i) => i.id === x)?.minDiskGb ?? 10); setV({ ...v, imageId: x, diskGb: v.diskGb < min ? Math.min(min, Math.max(min, left.diskGb)) : v.diskGb }); }}
         error={field(fields.imageId)} options={vdc.images.map((i) => ({ id: i.id, label: i.name, description: `${family(i.family)} · ≥ ${Math.max(10, i.minDiskGb)} GB` }))}/>

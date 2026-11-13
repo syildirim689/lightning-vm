@@ -8099,5 +8099,41 @@
       "failed": "Güvenlik duvarı kuralları uygulanamadı; eski kurallar hâlâ geçerli olabilir.",
       "open": "Güvenlik duvarları"
     }
+  },
+  "Formats": {
+    "example": "örn. {example}",
+    "invalid": "Geçerli bir {kind} değil. Örnek: {example}",
+    "invalidItem": "\"{value}\" geçerli bir {kind} değil. Örnek: {example}",
+    "kind": {
+      "ipv4": "IPv4 adresi",
+      "ip": "IP adresi",
+      "cidr": "ağ (adres/önek)",
+      "ipOrCidr": "IP adresi ya da ağ",
+      "mac": "MAC adresi",
+      "hostname": "ana makine adı",
+      "domain": "alan adı",
+      "serverName": "sunucu adı (küçük harf, rakam ve tire)",
+      "email": "e-posta adresi",
+      "port": "port (1–65535)",
+      "portRange": "port ya da aralık (1–65535)",
+      "url": "web adresi (http ya da https)",
+      "vlan": "VLAN numarası (0–4094)",
+      "privateCidr": "özel ağ (10.x, 172.16–31.x ya da 192.168.x, /16 ile /28 arası)",
+      "ipv6Prefix": "IPv6 öneki (/48 ile /64 arası)",
+      "fqdn": "tam ana makine adı (mail.example.com gibi)",
+      "hostOrIp": "ana makine adı ya da IP adresi",
+      "tag": "etiket (harf, rakam, boşluk . _ -, en çok 24)",
+      "sshKey": "açık SSH anahtarı (ssh-ed25519, ssh-rsa ya da ecdsa)",
+      "money": "tutar (en çok 4 ondalık)"
+    },
+    "today": "bugün",
+    "quick": "Hızlı seçim",
+    "preset": {
+      "today": "Bugün",
+      "week": "7 gün sonra",
+      "month": "30 gün sonra",
+      "monthEnd": "Ay sonu",
+      "year": "1 yıl sonra"
+    }
   }
 }

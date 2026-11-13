@@ -97,7 +97,7 @@ export default function Networks() {
           <form onSubmit={create} noValidate className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_auto] sm:items-end">
             <TextInput label={t('name')} value={v.name} onChange={(x) => setV({ ...v, name: x })} maxLength={60} error={field(fields.name)} placeholder="backend"/>
             <SelectInput label={t('location')} value={v.poolId} onChange={(x) => setV({ ...v, poolId: x })} error={field(fields.poolId)} options={d.pools.map((p) => ({ id: p.id, label: p.location ? `${p.name} · ${p.location}` : p.name }))}/>
-            <TextInput label={t('subnet')} value={v.cidr} onChange={(x) => setV({ ...v, cidr: x })} error={field(fields.cidr)} placeholder="10.10.0.0/24" help={t('subnetHelp')}/>
+            <TextInput format="privateCidr" label={t('subnet')} value={v.cidr} onChange={(x) => setV({ ...v, cidr: x })} error={field(fields.cidr)} placeholder="10.10.0.0/24" help={t('subnetHelp')}/>
             <Button type="submit" isPending={busy} isDisabled={!v.name.trim() || !v.poolId || full}><I name="plus" size={15}/>{t('add')}</Button>
           </form>
           {full && <p className="mt-3 flex items-center gap-2 text-xs text-warning"><I name="triangle-alert" size={13}/>{t('limit', { max: d.max })}</p>}

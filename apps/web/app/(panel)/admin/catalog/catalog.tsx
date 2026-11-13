@@ -238,7 +238,7 @@ function PoolDiskPrice({ pool }: { pool: Pool }) {
   const [price, setPrice] = useState(pool.extraDiskPriceGb ?? '');
   const save = useApiAction(() => apiFetch(`/admin/pools/${pool.id}/extra-disks`, { method: 'PUT', body: { pricePerGb: price || null } }), { invalidate: [keys.pools], success: t('disks.saved') });
   return <div className="flex flex-wrap items-end gap-3 rounded-xl border border-border p-3">
-    <TextInput className="w-56" label={t('disks.price')} value={price} onChange={setPrice} placeholder={t('disks.notSold')} help={t('disks.help')}/>
+    <TextInput format="money" className="w-56" label={t('disks.price')} value={price} onChange={setPrice} placeholder={t('disks.notSold')} help={t('disks.help')}/>
     <Button size="sm" variant="secondary" isPending={save.isPending} isDisabled={(pool.extraDiskPriceGb ?? '') === price} onPress={() => save.mutate()}><I name="check" size={14}/>{t('disks.save')}</Button>
   </div>;
 }
@@ -330,7 +330,7 @@ function RuleForm({ poolId, rule }: { poolId: string; rule: Record<string, unkno
   const field = (k: (typeof ruleKeys)[number], gb = false) => <NumberInput key={k} label={t(`rule.${k}`)} error={f.fieldError(k)} minValue={0}
     value={num(f.values[k]) !== undefined ? (gb ? num(f.values[k])! / 1024 : num(f.values[k])) : undefined} step={gb ? 0.5 : 1}
     onChange={(v) => f.set(k)(str(v === undefined ? undefined : gb ? Math.round(v * 1024) : v))}/>;
-  const money = (k: 'priceVcpu' | 'priceMemoryGb' | 'priceDiskGb') => <TextInput key={k} label={t(`rule.${k}`)} value={f.values[k]} onChange={f.set(k)} error={f.fieldError(k)} placeholder="0.00"/>;
+  const money = (k: 'priceVcpu' | 'priceMemoryGb' | 'priceDiskGb') => <TextInput format="money" key={k} label={t(`rule.${k}`)} value={f.values[k]} onChange={f.set(k)} error={f.fieldError(k)} placeholder="0.00"/>;
   return <form className="flex flex-col gap-4" noValidate onSubmit={async (e) => { e.preventDefault(); saved(await f.submit('PUT', `/admin/pools/${poolId}/custom-rule`)); }}>
     <p className="text-sm text-muted">{t('rule.explain')}</p>
     <FieldGroup title={t('form.cpuRange')} cols={3}>{field('cpuMin')}{field('cpuMax')}{field('cpuStep')}</FieldGroup>
@@ -391,8 +391,8 @@ function PackageForm({ pools, images, onSaved }: { pools: Pool[]; images: Image[
       <NumberInput label={t('packages.traffic')} value={num(f.values.trafficGb)} onChange={(v) => f.set('trafficGb')(str(v))} minValue={1} step={100} error={f.fieldError('trafficGb')} help={t('packages.trafficHelp')}/>
     </FieldGroup>
     <FieldGroup title={t('form.pricing')} cols={3}>
-      <TextInput label={t('packages.priceMonthly')} value={f.values.priceMonthly} onChange={f.set('priceMonthly')} error={f.fieldError('priceMonthly')} placeholder="9.90"/>
-      <TextInput label={t('packages.priceHourly')} value={f.values.priceHourly} onChange={f.set('priceHourly')} error={f.fieldError('priceHourly')} placeholder={hourly || '0.0136'} help={t('form.hourlyHelp')}/>
+      <TextInput format="money" label={t('packages.priceMonthly')} value={f.values.priceMonthly} onChange={f.set('priceMonthly')} error={f.fieldError('priceMonthly')} placeholder="9.90"/>
+      <TextInput format="money" label={t('packages.priceHourly')} value={f.values.priceHourly} onChange={f.set('priceHourly')} error={f.fieldError('priceHourly')} placeholder={hourly || '0.0136'} help={t('form.hourlyHelp')}/>
       <SelectInput label={t('packages.currency')} value={f.values.currency} onChange={f.set('currency')} options={currencies.map((c) => ({ id: c, label: c }))} error={f.fieldError('currency')}/>
     </FieldGroup>
     <FieldGroup title={t('form.where')} description={t('form.whereHelp')} cols={1}>
@@ -434,24 +434,24 @@ function IpPoolForm({ pools, onSaved }: { pools: Pool[]; onSaved: () => void }) 
       <SelectInput label={t('ip.pool')} value={f.values.poolId} onChange={f.set('poolId')} options={pools.map((p) => ({ id: p.id, label: p.name }))}/>
     </FieldGroup>
     <FieldGroup title={t('form.network')} description={t('form.networkHelp')}>
-      <TextInput label={t('ip.subnet')} help="203.0.113.0/24" value={f.values.cidr} onChange={(v) => { f.set('cidr')(v); const h = cidrSuggest(v); if (h && !f.values.gateway && !f.values.rangeStart) f.setValues((x) => ({ ...x, cidr: v, gateway: h.gateway, rangeStart: h.start, rangeEnd: h.end })); }}
+      <TextInput format="cidr" label={t('ip.subnet')} help="203.0.113.0/24" value={f.values.cidr} onChange={(v) => { f.set('cidr')(v); const h = cidrSuggest(v); if (h && !f.values.gateway && !f.values.rangeStart) f.setValues((x) => ({ ...x, cidr: v, gateway: h.gateway, rangeStart: h.start, rangeEnd: h.end })); }}
         error={f.fieldError('cidr')} spellCheck={false}/>
-      <TextInput label={t('ip.gateway')} value={f.values.gateway} onChange={f.set('gateway')} error={f.fieldError('gateway')} spellCheck={false}/>
+      <TextInput format="ip" label={t('ip.gateway')} value={f.values.gateway} onChange={f.set('gateway')} error={f.fieldError('gateway')} spellCheck={false}/>
       {hint && <div className="flex flex-wrap items-center gap-2 text-xs text-muted sm:col-span-2"><I name="sparkles" size={14} className="text-accent"/>{t('form.cidrHint', { gateway: hint.gateway, start: hint.start, end: hint.end, n: hint.usable })}
         <Button size="sm" variant="ghost" onPress={fill}>{t('form.apply')}</Button></div>}
     </FieldGroup>
     <FieldGroup title={t('form.range')} description={t('form.rangeHelp')}>
-      <TextInput label={t('ip.start')} value={f.values.rangeStart} onChange={f.set('rangeStart')} error={f.fieldError('range')} spellCheck={false}/>
-      <TextInput label={t('ip.end')} value={f.values.rangeEnd} onChange={f.set('rangeEnd')} spellCheck={false}/>
+      <TextInput format="ip" label={t('ip.start')} value={f.values.rangeStart} onChange={f.set('rangeStart')} error={f.fieldError('range')} spellCheck={false}/>
+      <TextInput format="ip" label={t('ip.end')} value={f.values.rangeEnd} onChange={f.set('rangeEnd')} spellCheck={false}/>
       <TextInput className="sm:col-span-2" label={t('ip.excluded')} help={t('ip.listHelp')} value={f.values.excluded} onChange={f.set('excluded')} spellCheck={false}/>
     </FieldGroup>
-    <FieldGroup title="DNS" cols={1}><TextInput label={t('form.dnsServers')} help={t('ip.listHelp')} value={f.values.dns} onChange={f.set('dns')} spellCheck={false}/></FieldGroup>
+    <FieldGroup title="DNS" cols={1}><TextInput format="ip" list label={t('form.dnsServers')} help={t('ip.listHelp')} value={f.values.dns} onChange={f.set('dns')} spellCheck={false}/></FieldGroup>
     <FieldGroup title={t('ipm.quarantine')} description={t('ipm.quarantineHelp')} cols={1}>
       <NumberInput label={t('ipm.quarantineHours')} value={num(f.values.quarantineHours)} onChange={(v) => f.set('quarantineHours')(str(v))} minValue={0} maxValue={8760} error={f.fieldError('quarantineHours')}/>
     </FieldGroup>
     <FieldGroup title="IPv6" description={t('ipm.ipv6Help')}>
-      <TextInput label={t('ipm.ipv6Prefix')} value={f.values.ipv6Prefix} onChange={f.set('ipv6Prefix')} placeholder="2001:db8:40::/64" error={f.fieldError('ipv6Prefix')} spellCheck={false}/>
-      <TextInput label={t('ipm.ipv6Gateway')} value={f.values.ipv6Gateway} onChange={f.set('ipv6Gateway')} placeholder="2001:db8:40::1" error={f.fieldError('ipv6Gateway')} spellCheck={false}/>
+      <TextInput format="ipv6Prefix" label={t('ipm.ipv6Prefix')} value={f.values.ipv6Prefix} onChange={f.set('ipv6Prefix')} placeholder="2001:db8:40::/64" error={f.fieldError('ipv6Prefix')} spellCheck={false}/>
+      <TextInput format="ip" label={t('ipm.ipv6Gateway')} value={f.values.ipv6Gateway} onChange={f.set('ipv6Gateway')} placeholder="2001:db8:40::1" error={f.fieldError('ipv6Gateway')} spellCheck={false}/>
     </FieldGroup>
     <FormFooter failure={f.failure?.text} busy={f.busy} label={t('ip.create')} onCancel={onSaved}/>
   </form>;

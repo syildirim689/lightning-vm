@@ -84,7 +84,7 @@ export function SshKeys() {
       <form className="grid gap-4 md:grid-cols-[minmax(0,14rem)_minmax(0,1fr)_auto] md:items-start" noValidate
         onSubmit={async (e) => { e.preventDefault(); if (await f.submit('POST', '/ssh-keys')) { f.reset(); client.invalidateQueries({ queryKey: ['ssh-keys'] }); toast.success(t('keys.added')); } }}>
         <TextInput label={t('keys.name')} value={f.values.name} onChange={f.set('name')} error={f.fieldError('name')}/>
-        <TextInput label={t('keys.publicKey')} value={f.values.publicKey} onChange={f.set('publicKey')} error={f.fieldError('publicKey')} help={t('keys.publicKeyHelp')}
+        <TextInput format="sshKey" label={t('keys.publicKey')} value={f.values.publicKey} onChange={f.set('publicKey')} error={f.fieldError('publicKey')} help={t('keys.publicKeyHelp')}
           placeholder="ssh-ed25519 AAAA… user@host" spellCheck={false}/>
         <Button type="submit" className="md:mt-6" isPending={f.busy}><I name="plus" size={16}/>{t('keys.add')}</Button>
       </form>
@@ -281,7 +281,7 @@ function BulkTags({ servers, known, busy, onTag }: { servers: Server[]; known: s
       <Popover.Dialog className="flex flex-col gap-3">
         <Popover.Heading className="text-sm font-semibold">{t('list.select.tagsTitle', { n: servers.length })}</Popover.Heading>
         <form ref={form} className="flex items-end gap-2" onSubmit={(e) => { e.preventDefault(); add(draft); }}>
-          <TextInput className="flex-1" label={tx('addTag')} value={draft} onChange={setDraft} maxLength={24} placeholder={tx('tagPlaceholder')}/>
+          <TextInput format="tag" className="flex-1" label={tx('addTag')} value={draft} onChange={setDraft} maxLength={24} placeholder={tx('tagPlaceholder')}/>
           <Button type="submit" size="sm" isPending={busy} isDisabled={!draft.trim()}><I name="plus" size={15}/>{tx('add')}</Button>
         </form>
         {offer.length > 0 && <div className="flex flex-col gap-1.5"><p className="text-xs text-muted">{t('list.select.tagsKnown')}</p>
@@ -594,7 +594,7 @@ function ServerIps({ server }: { server: Server }) {
         </div>
         {editing === a.address
           ? <div className="flex flex-wrap items-start gap-2">
-              <TextInput className="min-w-64" label={t('ptr')} value={value} onChange={setValue} error={field(fieldError)} placeholder="mail.example.com" spellCheck={false}/>
+              <TextInput format="fqdn" className="min-w-64" label={t('ptr')} value={value} onChange={setValue} error={field(fieldError)} placeholder="mail.example.com" spellCheck={false}/>
               <Button className="mt-6" size="sm" isPending={busy} onPress={() => save(a.address, value)}>{t('save')}</Button>
               <Button className="mt-6" size="sm" variant="ghost" isDisabled={busy} onPress={() => save(a.address, '')}>{t('reset')}</Button>
               <Button className="mt-6" size="sm" variant="tertiary" onPress={() => setEditing(null)}>{t('cancel')}</Button>

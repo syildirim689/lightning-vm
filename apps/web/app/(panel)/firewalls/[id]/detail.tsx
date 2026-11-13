@@ -129,10 +129,10 @@ function RulesEditor({ firewall, onSaved }: { firewall: Detail; onSaved: () => v
               className="grid gap-3 rounded-xl border border-border bg-surface p-3 sm:grid-cols-2 lg:grid-cols-[8rem_9rem_minmax(0,1fr)_minmax(0,12rem)_auto] lg:items-start">
               <SelectInput label={t('protocol')} value={r.protocol} onChange={(v) => update(i, { protocol: (v || 'tcp') as Rule['protocol'], port: hasPort((v || 'tcp') as Rule['protocol']) ? (r.port ?? '') : null })}
                 options={protocols.map((p) => ({ id: p, label: p.toUpperCase() }))} error={field(fields[`rules.${i}.protocol`])}/>
-              <TextInput label={t('port')} value={r.port ?? ''} onChange={(v) => update(i, { port: v })} isDisabled={!hasPort(r.protocol)}
+              <TextInput format="portRange" label={t('port')} value={r.port ?? ''} onChange={(v) => update(i, { port: v })} isDisabled={!hasPort(r.protocol)}
                 placeholder={hasPort(r.protocol) ? '443 / 8000-8100' : t('allPorts')} error={field(fields[`rules.${i}.port`])}/>
               <div className="flex flex-col gap-1">
-                <TextInput label={t(direction === 'in' ? 'sources' : 'destinations')} value={ipText[i] ?? ''} onChange={(v) => setIpText((x) => x.map((y, j) => (j === i ? v : y)))}
+                <TextInput format="ipOrCidr" list label={t(direction === 'in' ? 'sources' : 'destinations')} value={ipText[i] ?? ''} onChange={(v) => setIpText((x) => x.map((y, j) => (j === i ? v : y)))}
                   error={field(fields[`rules.${i}.ips`])} spellCheck={false} placeholder="0.0.0.0/0, ::/0"/>
                 <div className="flex flex-wrap gap-1">
                   <button type="button" className="text-xs text-accent hover:underline" onClick={() => setIpText((x) => x.map((y, j) => (j === i ? ipsText(anywhere) : y)))}>{t('anywhere')}</button>

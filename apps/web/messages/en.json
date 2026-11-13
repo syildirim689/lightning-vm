@@ -8099,5 +8099,41 @@
       "failed": "The firewall rules could not be applied; the previous rules may still be in effect.",
       "open": "Firewalls"
     }
+  },
+  "Formats": {
+    "example": "e.g. {example}",
+    "invalid": "This is not a valid {kind}. Example: {example}",
+    "invalidItem": "\"{value}\" is not a valid {kind}. Example: {example}",
+    "kind": {
+      "ipv4": "IPv4 address",
+      "ip": "IP address",
+      "cidr": "network (address/prefix)",
+      "ipOrCidr": "IP address or network",
+      "mac": "MAC address",
+      "hostname": "host name",
+      "domain": "domain name",
+      "serverName": "server name (lowercase letters, digits and hyphens)",
+      "email": "e-mail address",
+      "port": "port (1–65535)",
+      "portRange": "port or range (1–65535)",
+      "url": "web address (http or https)",
+      "vlan": "VLAN ID (0–4094)",
+      "privateCidr": "private network (10.x, 172.16–31.x or 192.168.x, /16 to /28)",
+      "ipv6Prefix": "IPv6 prefix (/48 to /64)",
+      "fqdn": "full host name (like mail.example.com)",
+      "hostOrIp": "host name or IP address",
+      "tag": "tag (letters, digits, space . _ -, up to 24)",
+      "sshKey": "public SSH key (ssh-ed25519, ssh-rsa or ecdsa)",
+      "money": "amount (up to 4 decimals)"
+    },
+    "today": "today",
+    "quick": "Quick choices",
+    "preset": {
+      "today": "Today",
+      "week": "In 7 days",
+      "month": "In 30 days",
+      "monthEnd": "End of month",
+      "year": "In a year"
+    }
   }
 }

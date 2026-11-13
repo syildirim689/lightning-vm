@@ -57,12 +57,12 @@ function ImportForm({ vm, data, connectionId, onDone }: { vm: Vm; data: Candidat
           <span className="flex min-w-0 flex-col"><span className="truncate">{u.email}</span>{u.name && <span className="truncate text-xs text-muted">{u.name}</span>}</span><ListBox.ItemIndicator/></ListBox.Item>}</ListBox>
       </ComboBox.Popover>
     </ComboBox>
-    <TextInput label={t('name')} value={v.name} onChange={set('name')} error={field(fields.name)}/>
+    <TextInput format="serverName" label={t('name')} value={v.name} onChange={set('name')} error={field(fields.name)}/>
     <SelectInput label={t('pool')} value={v.poolId} onChange={set('poolId')} error={field(fields.poolId)} options={data.pools.map((p) => ({ id: p.id, label: p.name }))}/>
     <SelectInput label={t('image')} value={imageId} onChange={set('imageId')} error={field(fields.imageId)} help={t('imageHelp')} options={images.map((i) => ({ id: i.id, label: i.name }))}/>
-    <TextInput label={t('address')} value={v.address} onChange={set('address')} error={field(fields.address)} help={t('addressHelp')} placeholder="203.0.113.10"/>
+    <TextInput format="ip" label={t('address')} value={v.address} onChange={set('address')} error={field(fields.address)} help={t('addressHelp')} placeholder="203.0.113.10"/>
     <div className="grid grid-cols-[minmax(0,1fr)_6rem] gap-2">
-      <TextInput label={t('price')} value={v.priceMonthly} onChange={set('priceMonthly')} error={field(fields.priceMonthly)} placeholder="0.00"/>
+      <TextInput format="money" label={t('price')} value={v.priceMonthly} onChange={set('priceMonthly')} error={field(fields.priceMonthly)} placeholder="0.00"/>
       <SelectInput label={t('currency')} value={currency} onChange={set('currency')} options={currencies.map((c) => ({ id: c, label: c }))}/>
     </div>
     <div className="flex flex-wrap gap-2 sm:col-span-2 lg:col-span-3">

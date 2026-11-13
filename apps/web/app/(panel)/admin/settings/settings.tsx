@@ -231,7 +231,7 @@ function Mail({ readOnly, myEmail }: { readOnly: boolean; myEmail: string }) {
       <SelectInput label={t('mail.preset')} value="" onChange={(k) => { if (mailPresets[k]) f.setV({ ...v, ...mailPresets[k] }); }} isDisabled={dis} help={t('mail.presetHelp')}
         options={Object.keys(mailPresets).map((k) => ({ id: k, label: t(`mail.presets.${k}` as 'mail.presets.gmail') }))}/>
       <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_8rem_12rem]">
-        <TextInput label={t('mail.host')} value={v.host} onChange={f.set('host')} error={f.err('host')} isDisabled={dis} spellCheck={false} placeholder="smtp.example.com"/>
+        <TextInput format="hostOrIp" label={t('mail.host')} value={v.host} onChange={f.set('host')} error={f.err('host')} isDisabled={dis} spellCheck={false} placeholder="smtp.example.com"/>
         <NumberInput label={t('mail.port')} value={v.port} onChange={(x) => f.set('port')(x ?? 587)} minValue={1} maxValue={65535} isDisabled={dis}/>
         <SelectInput label={t('mail.security')} value={v.security} isDisabled={dis} onChange={(x) => f.setV({ ...v, security: x as MailDoc['security'], port: x === 'tls' ? 465 : x === 'starttls' ? 587 : 25 })}
           options={(['starttls', 'tls', 'none'] as const).map((s) => ({ id: s, label: t(`mail.sec.${s}`) }))}/>

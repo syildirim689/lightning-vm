@@ -78,7 +78,7 @@ export default function Domain({ readOnly }: { readOnly: boolean }) {
       <FormSection title={t('change')} description={t('changeHelp')} icon={<I name="arrow-right-left" size={16}/>}>
         {!cur.agent && <Notice tone="warning" title={t('agentMissingTitle')}>{t('agentMissing')} <Mono>sudo sh scripts/install.sh agent on</Mono></Notice>}
         <div className="flex flex-wrap items-start gap-2">
-          <TextInput className="min-w-60 flex-1" label={t('newDomain')} value={domain} placeholder="panel.example.com" spellCheck={false} autoComplete="off"
+          <TextInput format="domain" className="min-w-60 flex-1" label={t('newDomain')} value={domain} placeholder="panel.example.com" spellCheck={false} autoComplete="off"
             onChange={(v) => { setDomain(v.trim().toLowerCase()); setChecked(null); setCertInfo(null); }} error={field(fields.domain)} help={t('newDomainHelp')}/>
           <Button className="mt-6" variant="secondary" isPending={busy === 'check'} isDisabled={!domain}
             onPress={async () => setChecked(await run<Check>('check', '/admin/domain/check', { domain }))}><I name="search-check" size={16}/>{t('checkDns')}</Button>

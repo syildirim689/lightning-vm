@@ -94,7 +94,7 @@ function VdcForm({ vdc, pools, users, onDone }: { vdc: Vdc | null; pools: { id: 
       <NumberInput label={t('maxServers')} value={v.maxServers} onChange={(x) => set('maxServers')(x ?? 1)} minValue={1} error={field(fields.maxServers)}/>
     </FieldGroup>
     <FieldGroup title={t('billing')} description={t('billingHelp')}>
-      <TextInput label={t('price')} value={v.priceMonthly} onChange={set('priceMonthly')} error={field(fields.priceMonthly)} placeholder="199.00"/>
+      <TextInput format="money" label={t('price')} value={v.priceMonthly} onChange={set('priceMonthly')} error={field(fields.priceMonthly)} placeholder="199.00"/>
       <TextInput label={t('currency')} value={v.currency} onChange={(x) => set('currency')(x.toUpperCase().slice(0, 3))} error={field(fields.currency)}/>
     </FieldGroup>
     <div className="sticky bottom-0 -mx-1 flex justify-end gap-2 border-t border-separator bg-overlay px-1 py-3">

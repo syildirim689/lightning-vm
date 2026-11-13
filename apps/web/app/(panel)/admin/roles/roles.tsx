@@ -178,7 +178,7 @@ function RoleEditor({ role, from, groups, mine, onClose }: { role: Role | null; 
                     className={`rounded-full border px-3 py-1 text-sm transition-colors focus-visible:outline-2 focus-visible:outline-accent ${locs.includes(x.id) ? 'border-accent bg-accent/10 text-accent' : 'border-border hover:border-accent/50'}`}>{x.name}</button>)}</div>
                   {fields['limits.allowedLocations'] && <p className="text-xs text-danger">{field(fields['limits.allowedLocations'])}</p>}
                 </div>}
-                <TextInput multiline label={t('limits.allowedIps')} value={ips} onChange={setIps} placeholder={'203.0.113.0/24\n2001:db8::/32'} help={t('limits.help.allowedIps')}
+                <TextInput format="ipOrCidr" list multiline label={t('limits.allowedIps')} value={ips} onChange={setIps} placeholder={'203.0.113.0/24\n2001:db8::/32'} help={t('limits.help.allowedIps')}
                   error={field(fields['limits.allowedIps'])} spellCheck={false}/>
               </div>
             </div>

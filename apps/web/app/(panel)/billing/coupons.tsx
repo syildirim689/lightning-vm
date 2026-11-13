@@ -49,7 +49,7 @@ function NewCoupon({ onDone }: { onDone: () => void }) {
           options={['TRY', 'EUR', 'USD'].map((c) => ({ id: c, label: c }))}/>}
         <TextInput label={t('periods')} value={v.periods} onChange={(x) => set({ periods: x.replace(/\D/g, '') })} maxLength={3} help={t('periodsHelp')} error={field(fields.periods)}/>
         <TextInput label={t('maxUses')} value={v.maxUses} onChange={(x) => set({ maxUses: x.replace(/\D/g, '') })} maxLength={7} help={t('maxUsesHelp')} error={field(fields.maxUses)}/>
-        <TextInput label={t('expires')} type="date" value={v.expiresAt} onChange={(x) => set({ expiresAt: x })} help={t('expiresHelp')} error={field(fields.expiresAt)}/>
+        <TextInput datePresets label={t('expires')} type="date" value={v.expiresAt} onChange={(x) => set({ expiresAt: x })} help={t('expiresHelp')} error={field(fields.expiresAt)}/>
         <TextInput label={t('note')} value={v.note} onChange={(x) => set({ note: x })} maxLength={200} help={t('noteHelp')}/>
       </div>
       {(() => {

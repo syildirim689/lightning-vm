@@ -107,7 +107,7 @@ function Tokens() {
               </fieldset>)}
               {fields.permissions && <p className="text-sm text-danger">{field(fields.permissions)}</p>}
             </div>}
-            <TextInput multiline label={t('tokens.ips')} value={ips} onChange={setIps} placeholder={'203.0.113.10\n198.51.100.0/24'} spellCheck={false} error={field(fields.allowedIps)} help={t('tokens.ipsHelp')}/>
+            <TextInput format="ipOrCidr" list multiline label={t('tokens.ips')} value={ips} onChange={setIps} placeholder={'203.0.113.10\n198.51.100.0/24'} spellCheck={false} error={field(fields.allowedIps)} help={t('tokens.ipsHelp')}/>
           </div>
         </details>
       </form>
@@ -148,7 +148,7 @@ function WebhookForm({ events, initial, onDone }: { events: string[]; initial?: 
   }
   return <form onSubmit={save} noValidate className="flex flex-col gap-4 rounded-xl border border-border p-4">
     <div className="grid gap-3 sm:grid-cols-2">
-      <TextInput label={t('webhooks.url')} value={url} onChange={setUrl} placeholder="https://example.com/hooks/lightning" type="url" error={field(fields.url)} help={t('webhooks.urlHelp')}/>
+      <TextInput format="url" label={t('webhooks.url')} value={url} onChange={setUrl} placeholder="https://example.com/hooks/lightning" type="url" error={field(fields.url)} help={t('webhooks.urlHelp')}/>
       <TextInput label={t('webhooks.description')} value={description} onChange={setDescription} maxLength={200}/>
     </div>
     <CheckboxInput label={t('webhooks.all')} isSelected={all} onChange={setAll} help={t('webhooks.allHelp')}/>

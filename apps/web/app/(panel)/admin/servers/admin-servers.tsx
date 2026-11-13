@@ -79,7 +79,7 @@ export default function AdminServers() {
             {me && can(me.permissions, 'servers.manage_all') && shown.length > 0 && <div className="flex flex-col gap-3 rounded-lg border border-border p-3 sm:flex-row sm:items-end">
               <SelectInput className="sm:w-56" label={t('admin.bulkAction')} value={bulkAction} onChange={setBulkAction}
                 options={(['shutdown', 'power_on', 'power_off', 'reset', 'tag', 'untag', 'delete', 'restore'] as const).map((a) => ({ id: a, label: t(`action.${a}`) }))}/>
-              {tagging && <TextInput className="sm:w-48" label={t('list.select.tags')} value={bulkTag} onChange={setBulkTag} maxLength={24}/>}
+              {tagging && <TextInput format="tag" className="sm:w-48" label={t('list.select.tags')} value={bulkTag} onChange={setBulkTag} maxLength={24}/>}
               <ConfirmButton variant={['power_off', 'reset', 'delete'].includes(bulkAction) ? 'danger' : 'primary'} icon={<I name="zap" size={15}/>} isDisabled={bulk.isPending || (tagging && !bulkTag.trim())}
                 label={t('admin.bulkApply', { n: Math.min(shown.length, 200) })} title={t('admin.bulkApply', { n: Math.min(shown.length, 200) })}
                 body={`${t('admin.bulkConfirm', { action: t(`action.${bulkAction as 'shutdown'}`), n: Math.min(shown.length, 200) })}${bulkAction === 'delete' ? ` ${t('admin.bulkDeleteNote')}` : ''}`}

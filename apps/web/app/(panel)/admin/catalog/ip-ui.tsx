@@ -35,7 +35,7 @@ export function PoolIpOptions({ pool }: { pool: { id: string; extraIpv4Max: numb
   }
   return <div className="flex flex-wrap items-end gap-3 rounded-xl border border-border p-3">
     <NumberInput className="w-40" label={t('extraMax')} value={max} onChange={setMax} minValue={0} maxValue={32} help={t('extraMaxHelp')}/>
-    <TextInput className="w-40" label={t('extraPrice')} value={price} onChange={setPrice} help={t('extraPriceHelp')}/>
+    <TextInput format="money" className="w-40" label={t('extraPrice')} value={price} onChange={setPrice} help={t('extraPriceHelp')}/>
     <NumberInput className="w-48" label={t('traffic')} value={traffic} onChange={setTraffic} minValue={1} step={100} help={t('trafficHelp')}/>
     <Button size="sm" variant="secondary" isPending={busy} isDisabled={!changed} onPress={save}><I name="check" size={14}/>{t('save')}</Button>
   </div>;
@@ -70,11 +70,11 @@ export function IpPoolEdit({ ipPool }: { ipPool: IpPoolRow }) {
               <NumberInput label={t('quarantineHours')} value={v.quarantineHours} onChange={(x) => setV({ ...v, quarantineHours: x ?? 0 })} minValue={0} maxValue={8760} error={field(fields.quarantineHours)}/>
             </FieldGroup>
             <FieldGroup title="IPv6" description={t('ipv6Help')}>
-              <TextInput label={t('ipv6Prefix')} value={v.ipv6Prefix} onChange={(x) => setV({ ...v, ipv6Prefix: x })} placeholder="2001:db8:40::/64" error={field(fields.ipv6Prefix)} spellCheck={false}/>
-              <TextInput label={t('ipv6Gateway')} value={v.ipv6Gateway} onChange={(x) => setV({ ...v, ipv6Gateway: x })} placeholder="2001:db8:40::1" error={field(fields.ipv6Gateway)} spellCheck={false}/>
+              <TextInput format="ipv6Prefix" label={t('ipv6Prefix')} value={v.ipv6Prefix} onChange={(x) => setV({ ...v, ipv6Prefix: x })} placeholder="2001:db8:40::/64" error={field(fields.ipv6Prefix)} spellCheck={false}/>
+              <TextInput format="ip" label={t('ipv6Gateway')} value={v.ipv6Gateway} onChange={(x) => setV({ ...v, ipv6Gateway: x })} placeholder="2001:db8:40::1" error={field(fields.ipv6Gateway)} spellCheck={false}/>
             </FieldGroup>
             <FieldGroup title={t('other')}>
-              <TextInput label={t('dns')} value={v.dns} onChange={(x) => setV({ ...v, dns: x })} help={t('listHelp')} spellCheck={false}/>
+              <TextInput format="ip" list label={t('dns')} value={v.dns} onChange={(x) => setV({ ...v, dns: x })} help={t('listHelp')} spellCheck={false}/>
               <TextInput label={t('excluded')} value={v.excluded} onChange={(x) => setV({ ...v, excluded: x })} help={t('excludedHelp')} spellCheck={false}/>
             </FieldGroup>
             <FormActions><Button variant="tertiary" onPress={() => setOpen(false)}>{t('cancel')}</Button><Button isPending={busy} onPress={save}>{t('save')}</Button></FormActions>
