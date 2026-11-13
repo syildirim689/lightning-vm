@@ -34,6 +34,7 @@ import { ServerFilters, ServerTotals, useServerFilters } from './server-filters'
 import { flag } from '../../lib/flag';
 import { ButtonLink, CheckboxInput, ConfirmButton, DataTable, Empty, Mono, Notice, PageHeader, Section, StatusChip, TextInput, type Tone } from '../../components/ui';
 import { SectionNav } from '../../components/section-nav';
+import { ConnectCheck } from './connect-check';
 
 export type Server = { id: string; name: string; state: string; powerState: string; guestReady: boolean; vcpu: number; memoryMb: number; diskGb: number;
   priceMonthly: string; currency: string; trafficGb?: number | null; trafficBytes?: number; billingMode?: 'monthly' | 'hourly'; priceHourly?: string | null; trafficThrottled?: boolean; errorCode: string | null; poolName: string; location: string; locationCity?: string | null; locationCountry?: string | null; locationDatacenter?: string | null; imageName: string; address: string | null;
@@ -504,6 +505,7 @@ export function ServerDetail({ id }: { id: string }) {
     <ServerIps server={s}/>
     {allowed.iso && <ServerIso id={s.id} ready={s.state === 'ready' || s.state === 'error'}/>}
     {s.hasRootPassword && allowed.rootPassword && <RootPassword id={s.id}/>}
+    <ConnectCheck server={s}/>
     <ServerFirewalls server={s}/>
 
     <ServerMetrics id={id} live={s.state === 'ready' && s.powerState === 'poweredOn'}/>

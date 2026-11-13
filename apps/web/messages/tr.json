@@ -8044,5 +8044,57 @@
       "poweredOff": "Kapalı",
       "suspended": "Askıda"
     }
+  },
+  "ConnectCheck": {
+    "title": "Bağlantı denetimi",
+    "help": "Sunucunun {service} (port {port}) üzerinden neden yanıt vermeyebileceği, panelin bildikleriyle denetlenir.",
+    "copy": "Sonuçları kopyala",
+    "copied": "Denetim sonuçları kopyalandı.",
+    "state": {
+      "ok": "Tamam",
+      "warn": "Bakın",
+      "fail": "Sorun",
+      "unknown": "Bilinmiyor"
+    },
+    "summary": {
+      "ok": "Engel yok: {service} ile bağlanabilmelisiniz.",
+      "problems": "{n} şey bağlantıyı engelleyebilir.",
+      "checking": "Denetleniyor…"
+    },
+    "power": {
+      "ok": "Sunucu açık.",
+      "fail": "Sunucu kapalı; önce açın."
+    },
+    "vm": {
+      "loading": "VM'in ağ ayrıntıları okunuyor…"
+    },
+    "nic": {
+      "ok": "{n, plural, one {Ağ kartı} other {# ağ kartının hepsi}} bağlı.",
+      "none": "VM'in ağ kartı yok.",
+      "fail": "Ağa bağlı değil: {nics}. Sunucuyu kapatıp açmak genellikle yeniden bağlar; olmazsa desteğe yazın."
+    },
+    "guest": {
+      "ok": "Konuk kendi adresini kullanıyor: {address}.",
+      "noTools": "VMware Tools (open-vm-tools) çalışmadığı için konuk adres bildirmiyor; diğer denetimler yine geçerli.",
+      "noIp": "Konuğun henüz IP adresi yok; hâlâ açılıyor olabilir.",
+      "mismatch": "Konuk, {expected} yerine {actual} adresini kullanıyor. Sunucunun içindeki ağ ayarını düzeltin (konsol ağ olmadan da çalışır)."
+    },
+    "gateway": {
+      "ok": "Ağ geçidi tanımlı: {gateway}.",
+      "none": "Konuğun varsayılan ağ geçidi yok; kendi ağının dışından yanıt veremez."
+    },
+    "address": {
+      "none": "Sunucunun genel IP adresi yok."
+    },
+    "firewall": {
+      "loading": "Güvenlik duvarları okunuyor…",
+      "none": "Güvenlik duvarı yok: tüm portlar açık.",
+      "ok": "{service} (port {port}) \"{name}\" tarafından izinli.",
+      "pending": "{service} (port {port}) \"{name}\" tarafından izinli; yeni kurallar hâlâ uygulanıyor.",
+      "closed": "{service} (port {port}) için gelen bağlantıya izin veren kural yok.",
+      "fix": "{name} içine ekle",
+      "failed": "Güvenlik duvarı kuralları uygulanamadı; eski kurallar hâlâ geçerli olabilir.",
+      "open": "Güvenlik duvarları"
+    }
   }
 }

@@ -8044,5 +8044,57 @@
       "poweredOff": "Off",
       "suspended": "Suspended"
     }
+  },
+  "ConnectCheck": {
+    "title": "Connection check",
+    "help": "Why the server might not answer on {service} (port {port}), checked from what the panel knows.",
+    "copy": "Copy results",
+    "copied": "Check results copied.",
+    "state": {
+      "ok": "OK",
+      "warn": "Check",
+      "fail": "Problem",
+      "unknown": "Unknown"
+    },
+    "summary": {
+      "ok": "Nothing in the way: {service} should be reachable.",
+      "problems": "{n, plural, one {# thing} other {# things}} may stop connections.",
+      "checking": "Checking…"
+    },
+    "power": {
+      "ok": "The server is on.",
+      "fail": "The server is off; start it first."
+    },
+    "vm": {
+      "loading": "Reading the VM's network details…"
+    },
+    "nic": {
+      "ok": "{n, plural, one {The network card is} other {All # network cards are}} connected.",
+      "none": "The VM has no network card.",
+      "fail": "Not connected to the network: {nics}. Turning the server off and on again usually reconnects it; otherwise contact support."
+    },
+    "guest": {
+      "ok": "The guest uses its address {address}.",
+      "noTools": "The guest reports no address because VMware Tools (open-vm-tools) is not running; the other checks still apply.",
+      "noIp": "The guest has no IP address yet; it may still be starting.",
+      "mismatch": "The guest uses {actual} instead of its address {expected}. Fix the network settings inside the server (the console works without a network)."
+    },
+    "gateway": {
+      "ok": "Gateway set: {gateway}.",
+      "none": "The guest has no default gateway, so it cannot answer from outside its network."
+    },
+    "address": {
+      "none": "The server has no public IP address."
+    },
+    "firewall": {
+      "loading": "Reading the firewalls…",
+      "none": "No firewall: every port is open.",
+      "ok": "{service} (port {port}) is allowed by \"{name}\".",
+      "pending": "{service} (port {port}) is allowed by \"{name}\"; the new rules are still being applied.",
+      "closed": "No firewall rule lets {service} (port {port}) in.",
+      "fix": "Add it to {name}",
+      "failed": "The firewall rules could not be applied; the previous rules may still be in effect.",
+      "open": "Firewalls"
+    }
   }
 }

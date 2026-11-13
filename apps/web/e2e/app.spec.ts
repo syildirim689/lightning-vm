@@ -613,6 +613,11 @@ test.describe('server lifecycle (simulator, Turkish customer)', () => {
     await expect(vmd.getByText(/Diskler \(\d+\)/)).toBeVisible();
     await expect(vmd.getByText('Çalıştığı yer')).toHaveCount(0);
     await expect(vmd.getByText('Veri deposu')).toHaveCount(0);
+    // The connection check: power, network cards and the firewall, each with its own line.
+    const check = page.getByRole('list', { name: 'Bağlantı denetimi' });
+    await expect(check).toContainText('Sunucu açık.');
+    await expect(check).toContainText(/ağ kartı|Ağ kartı/);
+    await expect(check).toContainText('Güvenlik duvarı yok: tüm portlar açık.');
     // Health score with its reasons; a new server has no week of CPU data, so no sizing advice yet.
     await expect(page.getByRole('img', { name: /Sağlık puanı 100 üzerinden \d+/ })).toBeVisible();
     await expect(page.getByText('Henüz yeterli veri yok', { exact: false })).toBeVisible();
