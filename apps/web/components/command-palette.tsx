@@ -141,7 +141,7 @@ export default function CommandPalette({ permissions, isOpen, onOpenChange }: { 
       <Modal.Dialog aria-label={t('title')} className="w-[40rem] max-w-[calc(100vw-1.5rem)] overflow-hidden p-0">
         <div className="flex items-center gap-3 border-b border-separator px-4">
           <I name="search" size={18} className="text-muted"/>
-          <input autoFocus value={query} onChange={(e) => setQuery(e.target.value)} onKeyDown={onKey} placeholder={t('placeholder')}
+          <input data-palette autoFocus value={query} onChange={(e) => setQuery(e.target.value)} onKeyDown={onKey} placeholder={t('placeholder')}
             role="combobox" aria-expanded aria-controls={listId} aria-activedescendant={results[active] ? `${listId}-${results[active].id}` : undefined} aria-label={t('title')}
             className="h-14 flex-1 bg-transparent text-base outline-none placeholder:text-muted"/>
           <Kbd>Esc</Kbd>
