@@ -76,7 +76,7 @@ export default function SignInMethods({ readOnly }: { readOnly: boolean }) {
             {p.enabled && <>
               <div className="grid gap-3 sm:grid-cols-2">
                 <TextInput label={t('clientId')} value={p.clientId} onChange={(x) => setP(id, { clientId: x })} error={err(`providers.${id}.clientId`)} isDisabled={readOnly} spellCheck={false}/>
-                <TextInput label={t('clientSecret')} type="password" value={secrets[id] ?? ''} onChange={(x) => setSecrets({ ...secrets, [id]: x })} placeholder={p.clientSecretSet ? ts('secretKept') : ''} isDisabled={readOnly}/>
+                <TextInput revealable label={t('clientSecret')} type="password" value={secrets[id] ?? ''} onChange={(x) => setSecrets({ ...secrets, [id]: x })} placeholder={p.clientSecretSet ? ts('secretKept') : ''} isDisabled={readOnly}/>
                 {id === 'microsoft' && <TextInput label={t('tenantId')} value={p.tenantId ?? ''} onChange={(x) => setP(id, { tenantId: x })} placeholder="common" help={t('tenantHelp')} error={err('providers.microsoft.tenantId')} isDisabled={readOnly} spellCheck={false}/>}
                 {id === 'google' && <TextInput label={t('hostedDomain')} value={p.hostedDomain ?? ''} onChange={(x) => setP(id, { hostedDomain: x })} placeholder="example.com" help={t('hostedDomainHelp')} error={err('providers.google.hostedDomain')} isDisabled={readOnly} spellCheck={false}/>}
               </div>

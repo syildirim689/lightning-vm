@@ -222,7 +222,7 @@ function Mail({ readOnly, myEmail }: { readOnly: boolean; myEmail: string }) {
         {api.fields.map((x) => x.options
           ? <SelectInput key={x.key} label={t(`mail.fields.${x.key}` as 'mail.fields.apiKey')} value={v.api[x.key] ?? ''} onChange={(val) => f.setV({ ...v, api: { ...v.api, [x.key]: val } })} isDisabled={dis}
               error={f.err(`api.${x.key}`)} options={[...(x.optional ? [{ id: '', label: t('mail.default') }] : []), ...x.options.map((o) => ({ id: o, label: o }))]}/>
-          : <TextInput key={x.key} label={t(`mail.fields.${x.key}` as 'mail.fields.apiKey')} type={x.secret ? 'password' : 'text'} value={v.api[x.key] ?? ''} isDisabled={dis} spellCheck={false}
+          : <TextInput revealable key={x.key} label={t(`mail.fields.${x.key}` as 'mail.fields.apiKey')} type={x.secret ? 'password' : 'text'} value={v.api[x.key] ?? ''} isDisabled={dis} spellCheck={false}
               autoComplete={x.secret ? 'new-password' : 'off'} onChange={(val) => f.setV({ ...v, api: { ...v.api, [x.key]: val } })} error={f.err(`api.${x.key}`)}
               placeholder={x.secret && v.secretsSet.includes(x.key) ? t('secretKept') : ''} help={x.secret && v.secretsSet.includes(x.key) ? t('secretHelp') : x.optional ? t('mail.optional') : undefined}/>)}
       </div>
@@ -241,7 +241,7 @@ function Mail({ readOnly, myEmail }: { readOnly: boolean; myEmail: string }) {
     <FormSection title={t('mail.auth')} description={t('mail.authHelp')} icon={<I name="key-round" size={16}/>}>
       <div className="grid gap-4 sm:grid-cols-2">
         <TextInput maxLength={200} label={t('mail.username')} value={v.username} onChange={f.set('username')} isDisabled={dis} autoComplete="off" spellCheck={false}/>
-        <TextInput label={t('mail.password')} type="password" value={v.password ?? ''} onChange={(x) => f.setV({ ...v, password: x })} isDisabled={dis} autoComplete="new-password"
+        <TextInput revealable label={t('mail.password')} type="password" value={v.password ?? ''} onChange={(x) => f.setV({ ...v, password: x })} isDisabled={dis} autoComplete="new-password"
           placeholder={v.passwordSet ? t('secretKept') : ''} help={v.passwordSet ? t('secretHelp') : undefined}/>
       </div>
     </FormSection></>}
@@ -309,7 +309,7 @@ function Captcha({ readOnly }: { readOnly: boolean }) {
       aside={<a href={captchaLinks[v.provider]} target="_blank" rel="noreferrer noopener" className="mt-2 inline-flex items-center gap-1 text-sm text-accent hover:underline">{t('captcha.getKeys')}<I name="external-link" size={13}/></a>}>
       <div className="grid gap-4 sm:grid-cols-2">
         <TextInput label={t('captcha.siteKey')} value={v.siteKey} onChange={f.set('siteKey')} error={f.err('siteKey')} isDisabled={readOnly} spellCheck={false}/>
-        <TextInput label={t('captcha.secret')} type="password" value={v.secret ?? ''} onChange={(x) => f.setV({ ...v, secret: x })} error={f.err('secret')} isDisabled={readOnly}
+        <TextInput revealable label={t('captcha.secret')} type="password" value={v.secret ?? ''} onChange={(x) => f.setV({ ...v, secret: x })} error={f.err('secret')} isDisabled={readOnly}
           placeholder={v.secretSet ? t('secretKept') : ''} help={v.secretSet ? t('secretHelp') : undefined} autoComplete="new-password"/>
       </div>
       {v.provider === 'recaptcha-v3' && <NumberInput label={t('captcha.minScore')} value={v.minScore} onChange={(x) => f.set('minScore')(x ?? 0.5)} minValue={0} maxValue={1} step={0.1}
@@ -372,7 +372,7 @@ function Sms({ readOnly, myPhone }: { readOnly: boolean; myPhone: string }) {
         {p.fields.map((fd) => fd.options
           ? <SelectInput key={fd.key} label={label(fd.key)} value={v.credentials[fd.key] ?? ''} onChange={setCred(fd.key)} isDisabled={readOnly} error={f.err(`credentials.${fd.key}`)}
               options={[...(fd.optional ? [{ id: '', label: '–' }] : []), ...fd.options.map((o) => ({ id: o, label: t.has(`sms.option.${o}` as 'sms.option.BIREYSEL') ? t(`sms.option.${o}` as 'sms.option.BIREYSEL') : o }))]}/>
-          : <TextInput key={fd.key} label={`${label(fd.key)}${fd.optional ? ` (${t('optional')})` : ''}`} type={fd.secret ? 'password' : 'text'} value={v.credentials[fd.key] ?? ''} onChange={setCred(fd.key)}
+          : <TextInput revealable key={fd.key} label={`${label(fd.key)}${fd.optional ? ` (${t('optional')})` : ''}`} type={fd.secret ? 'password' : 'text'} value={v.credentials[fd.key] ?? ''} onChange={setCred(fd.key)}
               isDisabled={readOnly} error={f.err(`credentials.${fd.key}`)} spellCheck={false} autoComplete="off" multiline={fd.key === 'body' || fd.key === 'headers'}
               placeholder={fd.secret && v.secretsSet[fd.key] ? t('secretKept') : ''} help={t.has(`sms.fieldHelp.${fd.key}` as 'sms.fieldHelp.url') ? t(`sms.fieldHelp.${fd.key}` as 'sms.fieldHelp.url', { to: '{to}', text: '{text}', sender: '{sender}' }) : undefined}/>)}
       </div>

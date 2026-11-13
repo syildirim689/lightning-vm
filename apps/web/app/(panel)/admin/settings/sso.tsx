@@ -61,7 +61,7 @@ export default function SsoSettings({ readOnly }: { readOnly: boolean }) {
         <TextInput label={t('issuer')} value={v.issuer} onChange={set('issuer')} placeholder="https://id.example.com/realms/main" error={err('issuer')} isDisabled={readOnly} spellCheck={false}
           help={t('issuerHelp', { issuer: v.issuer || 'https://…' })}/>
         <TextInput maxLength={300} label={t('clientId')} value={v.clientId} onChange={set('clientId')} error={err('clientId')} isDisabled={readOnly} spellCheck={false}/>
-        <TextInput label={t('clientSecret')} type="password" value={secret} onChange={setSecret} placeholder={v.clientSecretSet ? ts('secretKept') : ''} error={err('clientSecret')} isDisabled={readOnly}/>
+        <TextInput revealable label={t('clientSecret')} type="password" value={secret} onChange={setSecret} placeholder={v.clientSecretSet ? ts('secretKept') : ''} error={err('clientSecret')} isDisabled={readOnly}/>
       </div>
       <div className="flex flex-col gap-1">
         <span className="text-sm font-medium">{t('redirect')}</span>

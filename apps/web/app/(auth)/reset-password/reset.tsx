@@ -4,7 +4,8 @@ import NextLink from 'next/link';
 import { useTranslations } from 'next-intl';
 import { useState } from 'react';
 import { z } from 'zod';
-import { Notice, TextInput } from '../../../components/ui';
+import { Notice } from '../../../components/ui';
+import { PasswordField, Strength } from '../credentials-form';
 import { useErrorText } from '../../../lib/api';
 import { authClient } from '../../../lib/auth-client';
 
@@ -34,7 +35,8 @@ export default function ResetPassword({ token, linkError }: { token: string; lin
     {invalid ? <Notice tone="danger">{error({ code: 'INVALID_TOKEN' })}</Notice>
       : state === 'done' ? <div role="status"><Notice tone="success" title={t('resetDone')}/></div>
       : <form onSubmit={submit} noValidate className="flex flex-col gap-4">
-          <TextInput label={t('newPassword')} type="password" value={password} onChange={(v) => { setPassword(v); setFieldError(undefined); }} error={fieldError} help={t('passwordHelp')} autoComplete="new-password" isRequired/>
+          <PasswordField label={t('newPassword')} value={password} onChange={(v) => { setPassword(v); setFieldError(undefined); }} error={fieldError} help={t('passwordHelp')} autoComplete="new-password" generate/>
+          <Strength password={password}/>
           {failure && <div role="alert"><Notice tone="danger">{failure}</Notice></div>}
           <Button type="submit" size="lg" fullWidth isPending={state === 'busy'}>{t('resetSubmit')}</Button>
         </form>}

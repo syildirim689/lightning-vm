@@ -65,7 +65,7 @@ export default function DirectorySettings({ readOnly }: { readOnly: boolean }) {
       <TextInput multiline label={`${t('caPem')} (${ts('optional')})`} value={v.caPem} onChange={set('caPem')} placeholder="-----BEGIN CERTIFICATE-----" error={err('caPem')} isDisabled={readOnly} spellCheck={false} help={t('caPemHelp')}/>
       <div className="grid gap-4 sm:grid-cols-2">
         <TextInput label={t('bindDn')} value={v.bindDn} onChange={set('bindDn')} placeholder="CN=svc-lightning,OU=Service,DC=example,DC=com" isDisabled={readOnly} spellCheck={false} help={t('bindDnHelp')}/>
-        <TextInput label={t('bindPassword')} type="password" value={pw} onChange={setPw} placeholder={v.bindPasswordSet ? ts('secretKept') : ''} error={err('bindPassword')} isDisabled={readOnly}/>
+        <TextInput revealable label={t('bindPassword')} type="password" value={pw} onChange={setPw} placeholder={v.bindPasswordSet ? ts('secretKept') : ''} error={err('bindPassword')} isDisabled={readOnly}/>
       </div>
     </FormSection>
     <FormSection title={t('people')} description={t('peopleHelp')} icon={<I name="users" size={16}/>}>
@@ -86,7 +86,7 @@ export default function DirectorySettings({ readOnly }: { readOnly: boolean }) {
     {!readOnly && <FormSection title={t('test')} description={t('testHelp')} icon={<I name="flask-conical" size={16}/>}>
       <div className="grid gap-4 sm:grid-cols-2">
         <TextInput label={`${t('testEmail')} (${ts('optional')})`} type="email" value={probe.email} onChange={(x) => setProbe({ ...probe, email: x })}/>
-        <TextInput label={`${t('testPassword')} (${ts('optional')})`} type="password" value={probe.password} onChange={(x) => setProbe({ ...probe, password: x })}/>
+        <TextInput revealable label={`${t('testPassword')} (${ts('optional')})`} type="password" value={probe.password} onChange={(x) => setProbe({ ...probe, password: x })}/>
       </div>
       <div><Button variant="secondary" isPending={testing} isDisabled={!v.url} onPress={test}><I name="flask-conical" size={16}/>{t('runTest')}</Button></div>
       {result && <Notice tone={result.ok ? 'success' : 'danger'} title={result.text}>

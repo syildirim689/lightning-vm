@@ -162,7 +162,7 @@ function Editor({ provider: p, gateway: g, readOnly, onClose }: { provider: Prov
       </div>}
       <div className="grid gap-4 sm:grid-cols-2">
         {p.fields.map((f) => <div key={f.key} className="flex flex-col gap-1">
-          <TextInput label={`${labelOf(f)}${f.optional ? ` (${t('optional')})` : ''}`} type={f.secret ? 'password' : 'text'} value={values[m][f.key] ?? ''} isDisabled={readOnly}
+          <TextInput revealable label={`${labelOf(f)}${f.optional ? ` (${t('optional')})` : ''}`} type={f.secret ? 'password' : 'text'} value={values[m][f.key] ?? ''} isDisabled={readOnly}
             onChange={(v) => setValues((x) => ({ ...x, [m]: { ...x[m], [f.key]: v } }))} autoComplete="off" spellCheck={false}
             placeholder={f.secret && saved?.secretsSet[f.key] ? t('secretSet') : undefined} error={field(fields[`${m}.${f.key}`])}/>
           <span className="flex flex-wrap items-center gap-1 text-xs text-muted"><Mono>{f.key}</Mono>{f.unverifiable && <span className="text-warning">· {t('only3d')}</span>}</span>

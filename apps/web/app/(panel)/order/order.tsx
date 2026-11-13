@@ -18,6 +18,7 @@ import type { Summary } from '../../../lib/billing';
 import { useIntentKey, useSshKeys } from '../servers-ui';
 import { Copy } from '../server-extras';
 import { strongPassword } from '../../../lib/password';
+import { Strength } from '../../(auth)/credentials-form';
 
 type Custom = { cpuMin: number; cpuMax: number; cpuStep: number; memoryMinMb: number; memoryMaxMb: number; memoryStepMb: number; diskMinGb: number; diskMaxGb: number; diskStepGb: number; currency: string };
 type Catalog = { packages: { id: string; name: string; vcpu: number; memoryMb: number; diskGb: number; priceMonthly: string; currency: string; poolIds: string[]; imageIds: string[] }[];
@@ -220,6 +221,7 @@ export default function Order() {
                 <I name="wand-sparkles" size={16}/>{t('generate')}</Button>
               {rootPassword && <Copy className="mt-6" text={rootPassword} label={t('rootPassword')}/>}
             </div>
+            {rootPassword && <div className="pt-2"><Strength password={rootPassword}/></div>}
             {pool && pool.extraIpv4Max > 0 && <NumberInput label={t('extraIpv4')} value={Math.min(d.extraIpv4 ?? 0, pool.extraIpv4Max)} onChange={(v) => d.set({ extraIpv4: v ?? 0 })} minValue={0} maxValue={pool.extraIpv4Max}
               error={quoteField('extraIpv4')} help={t('extraIpv4Help', { max: pool.extraIpv4Max, price: money(pool.extraIpv4Price, quote.data?.price.currency ?? 'EUR') })}/>}
             {pool?.ipv6 && <p className="flex items-center gap-2 text-sm text-muted"><I name="globe" size={14}/>{t('ipv6Included')}</p>}

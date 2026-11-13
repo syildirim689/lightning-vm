@@ -60,7 +60,7 @@ export default function ConnectionForm({ onSaved, initial }: { onSaved: (s: Summ
     </FieldGroup>
     <FieldGroup title={t('form.groupAccount')} description={t('form.groupAccountHelp')}>
       <TextInput maxLength={200} label={t('form.username')} value={form.username} onChange={set('username')} error={err('username')} help={help('username')} isRequired autoComplete="off"/>
-      <TextInput label={t('form.password')} type="password" value={form.password} onChange={set('password')} error={err('password')} help={help('password')} isRequired autoComplete="new-password"/>
+      <TextInput revealable label={t('form.password')} type="password" value={form.password} onChange={set('password')} error={err('password')} help={help('password')} isRequired autoComplete="new-password"/>
     </FieldGroup>
     <FieldGroup title={t('form.groupTls')} description={t('form.tlsHelp')} cols={1}>
       <SelectInput label={t('form.tls')} value={form.mode} onChange={set('mode')} options={(['system', 'ca', 'pinned'] as const).map((m) => ({ id: m, label: t(`tlsMode.${m}`) }))}/>

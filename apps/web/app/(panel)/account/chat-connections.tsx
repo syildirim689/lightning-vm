@@ -121,7 +121,7 @@ function ConnectDialog({ open, onOpenChange, doc, onDone }: { open: boolean; onO
               : app.id === 'whatsapp' ? (doc.phone ? <Notice tone="default" title={t('whatsappTo', { phone: doc.phone })}>{t('whatsappHelp')}</Notice>
                   : <Notice tone="warning" title={t('needPhone')}>{t('needPhoneHelp')}</Notice>)
               : <div className="grid gap-3">
-                  {app.fields.map((f) => <TextInput key={f.key} label={`${fieldLabel(f.key)}${f.optional ? ` (${t('optional')})` : ''}`} type={f.secret ? 'password' : 'text'}
+                  {app.fields.map((f) => <TextInput revealable key={f.key} label={`${fieldLabel(f.key)}${f.optional ? ` (${t('optional')})` : ''}`} type={f.secret ? 'password' : 'text'}
                     value={values[f.key] ?? ''} onChange={(v) => setValues({ ...values, [f.key]: v })} placeholder={f.placeholder} spellCheck={false} autoComplete="off"
                     error={field(fields[`fields.${f.key}`])} help={t.has(`fieldHelp.${f.key}` as 'fieldHelp.secret') ? t(`fieldHelp.${f.key}` as 'fieldHelp.secret') : undefined}/>)}
                 </div>}

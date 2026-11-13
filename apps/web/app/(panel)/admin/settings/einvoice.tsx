@@ -59,7 +59,7 @@ export default function EinvoiceSettings({ readOnly }: { readOnly: boolean }) {
       {v.provider === 'none' && <Notice tone="default">{t('noneHelp')}</Notice>}
       {p && p.fields.length > 0 && <div className="grid gap-3 sm:grid-cols-2">
         {p.fields.map((f) => f.secret
-          ? <TextInput key={f.key} label={label(f)} type="password" value={secrets[f.key] ?? ''} onChange={(x) => setSecrets({ ...secrets, [f.key]: x })} isDisabled={readOnly} error={errors[`values.${f.key}`]}
+          ? <TextInput revealable key={f.key} label={label(f)} type="password" value={secrets[f.key] ?? ''} onChange={(x) => setSecrets({ ...secrets, [f.key]: x })} isDisabled={readOnly} error={errors[`values.${f.key}`]}
               placeholder={v.secretsSet[f.key] ? t('secretKept') : ''} isRequired={!f.optional} autoComplete="off"/>
           : <TextInput key={f.key} label={label(f)} value={v.values[f.key] ?? ''} onChange={(x) => setV({ ...v, values: { ...v.values, [f.key]: x } })} isDisabled={readOnly} error={errors[`values.${f.key}`]} isRequired={!f.optional} autoComplete="off"/>)}
         <div className="sm:col-span-2"><TextInput label={t('endpoint')} value={v.values.endpoint ?? ''} onChange={(x) => setV({ ...v, values: { ...v.values, endpoint: x } })} isDisabled={readOnly}

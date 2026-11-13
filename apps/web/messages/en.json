@@ -8151,7 +8151,11 @@
       "months": "months"
     },
     "count": "{n, number} / {max, number}",
-    "atLimit": "Limit reached: at most {max, number} characters"
+    "atLimit": "Limit reached: at most {max, number} characters",
+    "reveal": "Show {label}",
+    "conceal": "Hide {label}",
+    "show": "Show",
+    "hide": "Hide"
   },
   "SessionExpired": {
     "title": "Your session has ended",

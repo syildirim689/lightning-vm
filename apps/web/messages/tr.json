@@ -8151,7 +8151,11 @@
       "months": "ay"
     },
     "count": "{n, number} / {max, number}",
-    "atLimit": "Sınıra ulaşıldı: en çok {max, number} karakter"
+    "atLimit": "Sınıra ulaşıldı: en çok {max, number} karakter",
+    "reveal": "{label} göster",
+    "conceal": "{label} gizle",
+    "show": "Göster",
+    "hide": "Gizle"
   },
   "SessionExpired": {
     "title": "Oturumunuz sona erdi",

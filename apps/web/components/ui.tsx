@@ -7,6 +7,7 @@ import NextLink from 'next/link';
 import { useFormatter, useLocale, useTranslations } from 'next-intl';
 import { useEffect, useMemo, useState } from 'react';
 import { type Format, inputProps, isValid, normalize, splitList } from '../lib/formats';
+import { I } from './icon';
 
 export function PageHeader({ eyebrow, title, description, actions }: { eyebrow?: string; title: React.ReactNode; description?: React.ReactNode; actions?: React.ReactNode }) {
   return <header className="mb-6 flex flex-wrap items-end justify-between gap-4">
@@ -79,11 +80,12 @@ const masksText = () => typeof CSS !== 'undefined' && CSS.supports('-webkit-text
 // Text field with a visible label, help text, and a translated server-side error under it.
 // `format` gives a typed value its keyboard, an example, tidying when the field is left (MAC spellings, spaces,
 // upper case) and a message as soon as it is wrong; `list` accepts several values separated by commas or lines.
-export function TextInput({ label, value, onChange, error, help, type = 'text', name, isRequired, autoComplete, autofill, placeholder, multiline, isDisabled, maxLength, className, spellCheck, format, list, datePresets, unit, transient }: {
+export function TextInput({ label, value, onChange, error, help, type = 'text', name, isRequired, autoComplete, autofill, placeholder, multiline, isDisabled, maxLength, className, spellCheck, format, list, datePresets, unit, transient, revealable }: {
   label: string; value: string; onChange: (v: string) => void; error?: string; help?: React.ReactNode; type?: string; name?: string; isRequired?: boolean;
   autoComplete?: string; autofill?: boolean; placeholder?: string; multiline?: boolean; isDisabled?: boolean; maxLength?: number; className?: string; spellCheck?: boolean;
   format?: Format; list?: boolean; datePresets?: boolean; unit?: string;
   transient?: boolean; // a filter or a typed confirmation: leaving it is not losing work
+  revealable?: boolean; // a secret with a Show button
 }) {
   const tf = useTranslations('Formats');
   const fd = useFormatter();
@@ -91,7 +93,9 @@ export function TextInput({ label, value, onChange, error, help, type = 'text', 
   // (and the field before it taken for a user name). Only a browser that cannot mask text gets a password field.
   const [masked, setMasked] = useState(!autofill && type === 'password');
   const [left, setLeft] = useState(false);
+  const [revealed, setRevealed] = useState(false);
   useEffect(() => { setMasked(!autofill && type === 'password' && masksText()); }, [autofill, type]);
+  const hidden = masked && !revealed;
   const fill = autofill ? { autoComplete, 'data-autofill': 'true' } : noAutofill;
   const fmt = format ? inputProps[format] : undefined;
   const items = format ? (list ? splitList(value) : value.trim() ? [value.trim()] : []) : [];
@@ -111,14 +115,18 @@ export function TextInput({ label, value, onChange, error, help, type = 'text', 
   const when = readableDate(type, value, fd, tf);
   const presets = datePresets && type === 'date' && !isDisabled ? datePresetValues() : null;
   // Room left, shown as the limit nears (long texts from half way), so text is never cut off unseen; the API takes no more.
-  const count = !!maxLength && !isDisabled && !masked && value.length >= maxLength * (multiline ? 0.5 : 0.8);
+  const count = !!maxLength && !isDisabled && !hidden && type !== 'password' && value.length >= maxLength * (multiline ? 0.5 : 0.8);
   const full = !!maxLength && value.length >= maxLength;
-  return <TextField className={`min-w-0 ${className ?? ''}`} name={autofill ? name : undefined} type={masked ? 'text' : type} value={value} onChange={onChange} isInvalid={!!shown} isRequired={isRequired} isDisabled={isDisabled} validationBehavior="aria"
+  return <TextField className={`min-w-0 ${className ?? ''}`} name={autofill ? name : undefined} type={masked || revealed ? 'text' : type} value={value} onChange={onChange} isInvalid={!!shown} isRequired={isRequired} isDisabled={isDisabled} validationBehavior="aria"
     onBlur={tidy} data-transient={transient || undefined}>
     <Label>{label}{unit && <span className="sr-only"> ({unit})</span>}</Label>
     {multiline ? <TextArea rows={4} placeholder={ph} maxLength={maxLength} spellCheck={spellCheck} {...fill} {...extra} className={fmt?.mono ? 'font-mono text-sm' : undefined}/>
       : unit ? <div className="relative"><Input placeholder={ph} maxLength={maxLength} spellCheck={false} {...fill} {...extra} className={`w-full min-w-0 pr-14 tabular-nums ${fmt?.mono ? 'font-mono' : ''}`}/>
         <span aria-hidden className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-sm text-muted">{unit}</span></div>
+      : revealable && type === 'password' ? <div className="relative"><Input placeholder={ph} maxLength={maxLength} spellCheck={false} {...fill} {...extra} className="w-full min-w-0 pr-20 font-mono" style={hidden ? { WebkitTextSecurity: 'disc' } as React.CSSProperties : undefined}/>
+        <button type="button" onClick={() => setRevealed((v) => !v)} aria-pressed={revealed} disabled={isDisabled} aria-label={tf(revealed ? 'conceal' : 'reveal', { label })}
+          className="absolute inset-y-0 right-1 my-auto grid h-8 min-w-8 place-items-center rounded-lg px-2 text-xs font-medium text-muted hover:bg-default hover:text-foreground focus-visible:outline-2 focus-visible:outline-accent disabled:opacity-50">
+          <span aria-hidden className="flex items-center gap-1"><I name={revealed ? 'eye-off' : 'eye'} size={16}/><span className="hidden sm:inline">{tf(revealed ? 'hide' : 'show')}</span></span></button></div>
       : <Input placeholder={ph} maxLength={maxLength} spellCheck={masked ? false : spellCheck} {...fill} {...extra} className={fmt?.mono ? 'min-w-0 font-mono' : 'min-w-0'} style={masked ? { WebkitTextSecurity: 'disc' } as React.CSSProperties : undefined}/>}
     {shown ? <FieldError>{shown}</FieldError> : when || help ? <Description>{when && <span className="block font-medium text-foreground/80">{when}</span>}{help}</Description> : null}
     {count && <p className={`mt-0.5 text-right text-xs tabular-nums ${full ? 'font-medium text-warning' : 'text-muted'}`} aria-live={full ? 'polite' : 'off'}>
