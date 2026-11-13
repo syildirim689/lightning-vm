@@ -8152,8 +8152,6 @@
     },
     "count": "{n, number} / {max, number}",
     "atLimit": "Sınıra ulaşıldı: en çok {max, number} karakter",
-    "reveal": "{label} göster",
-    "conceal": "{label} gizle",
     "show": "Göster",
     "hide": "Gizle"
   },

@@ -124,7 +124,7 @@ export function TextInput({ label, value, onChange, error, help, type = 'text', 
       : unit ? <div className="relative"><Input placeholder={ph} maxLength={maxLength} spellCheck={false} {...fill} {...extra} className={`w-full min-w-0 pr-14 tabular-nums ${fmt?.mono ? 'font-mono' : ''}`}/>
         <span aria-hidden className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-sm text-muted">{unit}</span></div>
       : revealable && type === 'password' ? <div className="relative"><Input placeholder={ph} maxLength={maxLength} spellCheck={false} {...fill} {...extra} className="w-full min-w-0 pr-20 font-mono" style={hidden ? { WebkitTextSecurity: 'disc' } as React.CSSProperties : undefined}/>
-        <button type="button" onClick={() => setRevealed((v) => !v)} aria-pressed={revealed} disabled={isDisabled} aria-label={tf(revealed ? 'conceal' : 'reveal', { label })}
+        <button type="button" onClick={() => setRevealed((v) => !v)} aria-pressed={revealed} disabled={isDisabled} aria-label={tf(revealed ? 'hide' : 'show')}
           className="absolute inset-y-0 right-1 my-auto grid h-8 min-w-8 place-items-center rounded-lg px-2 text-xs font-medium text-muted hover:bg-default hover:text-foreground focus-visible:outline-2 focus-visible:outline-accent disabled:opacity-50">
           <span aria-hidden className="flex items-center gap-1"><I name={revealed ? 'eye-off' : 'eye'} size={16}/><span className="hidden sm:inline">{tf(revealed ? 'hide' : 'show')}</span></span></button></div>
       : <Input placeholder={ph} maxLength={maxLength} spellCheck={masked ? false : spellCheck} {...fill} {...extra} className={fmt?.mono ? 'min-w-0 font-mono' : 'min-w-0'} style={masked ? { WebkitTextSecurity: 'disc' } as React.CSSProperties : undefined}/>}
