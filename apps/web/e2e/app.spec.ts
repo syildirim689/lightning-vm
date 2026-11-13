@@ -1674,10 +1674,11 @@ test.describe('people, settings and smart features (English browser)', () => {
     await expect(page).toHaveURL(/\/admin$/);
     await page.goto('/account?tab=projects');
     await page.getByLabel('Project name').fill('kept after expiry');
-    // The session cookie disappears (as if it expired); saving is refused, the text stays and a dialog explains.
+    // The session cookie disappears (as if it expired). Saving is refused, or live updates notice first: either
+    // way the text stays and a dialog explains.
     const cookies = await context.cookies();
     await context.clearCookies();
-    await page.getByRole('button', { name: 'Create project' }).click();
+    await page.getByLabel('Project name').press('Enter');
     const dialog = page.getByRole('alertdialog', { name: 'Your session has ended' });
     await expect(dialog).toBeVisible();
     await expect(page).toHaveURL(/\/account/);
