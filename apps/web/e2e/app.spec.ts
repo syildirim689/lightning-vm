@@ -1677,9 +1677,10 @@ test.describe('people, settings and smart features (English browser)', () => {
     // The session cookie disappears (as if it expired). Saving is refused, or live updates notice first: either
     // way the text stays and a dialog explains.
     const cookies = await context.cookies();
-    page.on('framenavigated', (f) => { if (f === page.mainFrame()) console.log('DIAG nav', f.url()); });
-    page.on('response', (r) => { if (r.status() >= 300 && r.status() !== 304) console.log('DIAG', r.status(), r.request().method(), r.url(), r.headers()['location'] ?? ''); });
-    await context.clearCookies();
+    // Only the sign-in cookies go, as when a session expires; language and time-zone cookies stay.
+    const session = cookies.filter((c) => /session|auth/i.test(c.name));
+    expect(session.length).toBeGreaterThan(0);
+    for (const c of session) await context.clearCookies({ name: c.name });
     await page.getByLabel('Project name').press('Enter');
     const dialog = page.getByRole('alertdialog', { name: 'Your session has ended' });
     await expect(dialog).toBeVisible();
@@ -1687,7 +1688,7 @@ test.describe('people, settings and smart features (English browser)', () => {
     // Behind the open dialog the page is hidden from assistive tech, so look for the field including hidden ones.
     await expect(page.getByRole('textbox', { name: 'Project name', includeHidden: true })).toHaveValue('kept after expiry');
     // Signed in again (here: the cookie comes back): the page notices and says so.
-    await context.addCookies(cookies);
+    await context.addCookies(session);
     await expect(page.getByText('You are signed in again. You can save now.')).toBeVisible({ timeout: 15_000 });
     await expect(dialog).toBeHidden();
     await context.close();

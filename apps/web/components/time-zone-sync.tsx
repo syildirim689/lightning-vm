@@ -3,6 +3,7 @@
 // choice, or to their browser's zone when they chose none. A change re-renders the page once.
 import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
+import { hasPendingEdits } from '../lib/edits';
 import { useMe } from '../lib/me';
 import { browserTimeZone } from './time-zone-picker';
 
@@ -17,7 +18,9 @@ export default function TimeZoneSync() {
     const has = document.cookie.split('; ').find((c) => c.startsWith(`${tzCookie}=`))?.slice(tzCookie.length + 1);
     if (has && decodeURIComponent(has) === want) return;
     document.cookie = `${tzCookie}=${encodeURIComponent(want)}; path=/; max-age=31536000; samesite=lax`;
-    router.refresh();
+    // Re-rendering from the server would throw away unsaved typing (and, with the session gone, leave the page);
+    // the new zone then applies from the next page instead.
+    if (!hasPendingEdits()) router.refresh();
   }, [me?.timeZone, me, router]);
   return null;
 }
