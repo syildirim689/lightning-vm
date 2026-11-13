@@ -1667,7 +1667,7 @@ test.describe('people, settings and smart features (English browser)', () => {
 
   // New screens render and carry their heading; full-page screenshots go to test-results/tour for review.
   // Dark mode: the newer screens keep their contrast and surfaces (charts, heatmap, cards, dialogs).
-  test('a session that ends while something is typed keeps the page and asks to sign in again', async ({ browser }) => {
+  test('a session that ends while something is typed keeps the page; links ask before throwing typed text away', async ({ browser }) => {
     const context = await browser.newContext({ locale: 'en-US' });
     const page = await context.newPage();
     await signIn(page, admin);
@@ -1691,15 +1691,9 @@ test.describe('people, settings and smart features (English browser)', () => {
     await context.addCookies(session);
     await expect(page.getByText('You are signed in again. You can save now.')).toBeVisible({ timeout: 15_000 });
     await expect(dialog).toBeHidden();
-    await context.close();
-  });
 
-  test('a link asks before throwing away typed text; long text shows the room left', async ({ browser }) => {
-    const context = await browser.newContext({ locale: 'en-US' });
-    const page = await context.newPage();
-    await signIn(page, admin);
-    await expect(page).toHaveURL(/\/admin$/);
-    await page.goto('/account?tab=projects');
+    // Same page, still signed in (another sign-in here would hit the sign-in rate limit):
+    // a link asks before throwing away typed text, and long text shows the room left.
     const name = page.getByLabel('Project name');
     // The field takes no more than the API keeps (100) and says so at the limit.
     await name.fill('x'.repeat(120));
@@ -1708,19 +1702,19 @@ test.describe('people, settings and smart features (English browser)', () => {
     await name.fill('unsaved project');
     const away = page.getByRole('link', { name: 'Servers', exact: true }).first();
     await away.click();
-    const dialog = page.getByRole('alertdialog', { name: 'Leave without saving?' });
-    await expect(dialog).toBeVisible();
+    const leave = page.getByRole('alertdialog', { name: 'Leave without saving?' });
+    await expect(leave).toBeVisible();
     // Stay: back on the field, text intact.
-    await dialog.getByRole('button', { name: 'Stay and save' }).click();
-    await expect(dialog).toBeHidden();
+    await leave.getByRole('button', { name: 'Stay and save' }).click();
+    await expect(leave).toBeHidden();
     await expect(page).toHaveURL(/\/account/);
     await expect(name).toHaveValue('unsaved project');
     await expect(name).toBeFocused();
     // Leave: goes, and the next page does not ask again.
     await away.click();
-    await dialog.getByRole('button', { name: 'Leave without saving' }).click();
+    await leave.getByRole('button', { name: 'Leave without saving' }).click();
     await expect(page).toHaveURL(/\/servers/);
-    await expect(dialog).toBeHidden();
+    await expect(leave).toBeHidden();
     // Nothing typed: links just go.
     await page.getByRole('link', { name: 'My account', exact: true }).first().click();
     await expect(page).toHaveURL(/\/account/);
