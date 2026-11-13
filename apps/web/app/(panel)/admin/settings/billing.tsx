@@ -17,6 +17,7 @@ type Doc = { enabled: boolean; requirePayment: boolean; orderExpiryHours: number
 
 export default function BillingSettings({ readOnly }: { readOnly: boolean }) {
   const t = useTranslations('Settings.billing');
+  const tf = useTranslations('Formats');
   const { error, field } = useErrorText();
   const q = useApiQuery<{ billing: Doc }>(['settings', 'billing'], '/admin/settings/billing').data;
   const [v, setV] = useState<Doc | null>(null);
@@ -24,7 +25,6 @@ export default function BillingSettings({ readOnly }: { readOnly: boolean }) {
   const [busy, setBusy] = useState(false);
   useEffect(() => { if (q && !v) setV(q.billing); }, [q]); // eslint-disable-line react-hooks/exhaustive-deps
   if (!v) return <p role="status" className="text-sm text-muted">…</p>;
-  const tf = useTranslations('Formats');
   const num = (k: keyof Doc) => (x: string) => setV({ ...v, [k]: Number(x.replace(/\D/g, '')) || 0 });
   const co = (k: keyof Company) => (x: string) => setV({ ...v, company: { ...v.company, [k]: x } });
   const toggle = (k: keyof Doc, label: string, help: string) => <div className="flex items-start justify-between gap-3 rounded-xl border border-border p-3">
