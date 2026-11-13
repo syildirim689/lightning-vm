@@ -1682,7 +1682,8 @@ test.describe('people, settings and smart features (English browser)', () => {
     const dialog = page.getByRole('alertdialog', { name: 'Your session has ended' });
     await expect(dialog).toBeVisible();
     await expect(page).toHaveURL(/\/account/);
-    await expect(page.getByLabel('Project name')).toHaveValue('kept after expiry');
+    // Behind the open dialog the page is hidden from assistive tech, so look for the field including hidden ones.
+    await expect(page.getByRole('textbox', { name: 'Project name', includeHidden: true })).toHaveValue('kept after expiry');
     // Signed in again (here: the cookie comes back): the page notices and says so.
     await context.addCookies(cookies);
     await expect(page.getByText('You are signed in again. You can save now.')).toBeVisible({ timeout: 15_000 });
