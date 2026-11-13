@@ -143,7 +143,7 @@ function NewTicket({ initialServer, mine, onClose }: { initialServer: string; mi
             {troubled && (v.priority === 'low' || v.priority === 'normal') && <button type="button" onClick={() => setV({ ...v, priority: 'high' })}
               className="flex items-center gap-2 self-start rounded-lg bg-warning/10 px-3 py-2 text-xs text-warning hover:bg-warning/20"><I name="lightbulb" size={14}/>{t('suggestHigh', { name: server!.name })}</button>}
           </div>
-          <TextInput multiline label={t('message')} value={v.body} onChange={(x) => setV({ ...v, body: x })} help={`${t('messageHelp')} ${t('pasteHint')}`}/>
+          <TextInput maxLength={5000} multiline label={t('message')} value={v.body} onChange={(x) => setV({ ...v, body: x })} help={`${t('messageHelp')} ${t('pasteHint')}`}/>
           <div className="flex flex-wrap items-center gap-2">
             <input ref={pick} type="file" multiple accept="image/png,image/jpeg,image/gif,image/webp,application/pdf,text/plain,.log,.txt" className="sr-only"
               onChange={(e) => { addFiles(Array.from(e.target.files ?? [])); e.target.value = ''; }}/>

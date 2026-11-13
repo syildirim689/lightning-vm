@@ -295,7 +295,7 @@ function PoolForm({ connections, onSaved }: { connections: Connection[]; onSaved
       minValue={0} maxValue={0.9} step={0.05} error={f.fieldError(k)} formatOptions={{ style: 'percent' }}/>;
   return <form className="flex flex-col gap-4" noValidate onSubmit={async (e) => { e.preventDefault(); saved(await f.submit('POST', '/admin/pools', { ...f.values, datastoreMorefs: stores })); }}>
     <FieldGroup title={t('form.identity')} description={t('form.poolIdentityHelp')}>
-      <TextInput label={t('col.name')} value={f.values.name} onChange={f.set('name')} error={f.fieldError('name')} isRequired placeholder="Istanbul-1"/>
+      <TextInput maxLength={100} label={t('col.name')} value={f.values.name} onChange={f.set('name')} error={f.fieldError('name')} isRequired placeholder="Istanbul-1"/>
       <SelectInput label={t('pools.location')} help={t('pools.locationHelp')} value={f.values.locationId} onChange={f.set('locationId')} error={f.fieldError('locationId')}
         options={[{ id: '', label: '–' }, ...locations.map((l) => ({ id: l.id, label: `${flag(l.countryCode)} ${l.name}`.trim(), description: [l.city, l.datacenter].filter(Boolean).join(' · ') || undefined }))]}/>
     </FieldGroup>
@@ -352,7 +352,7 @@ function ImageForm({ connections, onSaved }: { connections: Connection[]; onSave
   const vms = useApiQuery<Inventory>(['vmware', 'connection', f.values.connectionId], f.values.connectionId ? `/admin/vmware/connections/${f.values.connectionId}` : null).data?.vms.filter((v) => v.template) ?? [];
   return <form className="flex flex-col gap-4" noValidate onSubmit={async (e) => { e.preventDefault(); saved(await f.submit('POST', '/admin/images')); }}>
     <FieldGroup title={t('form.identity')} description={t('form.imageIdentityHelp')}>
-      <TextInput label={t('col.name')} value={f.values.name} onChange={f.set('name')} error={f.fieldError('name')} isRequired placeholder="Ubuntu 24.04 LTS"/>
+      <TextInput maxLength={100} label={t('col.name')} value={f.values.name} onChange={f.set('name')} error={f.fieldError('name')} isRequired placeholder="Ubuntu 24.04 LTS"/>
       <SelectInput label={t('images.family')} value={f.values.family} onChange={f.set('family')} options={[{ id: 'linux', label: 'Linux' }, { id: 'windows', label: 'Windows' }, { id: 'esxi', label: t('images.esxi'), description: t('images.esxiHelp') }]}/>
     </FieldGroup>
     <FieldGroup title={t('form.template')} description={t('form.templateHelp')}>
@@ -381,7 +381,7 @@ function PackageForm({ pools, images, onSaved }: { pools: Pool[]; images: Image[
   return <form className="flex flex-col gap-4" noValidate
     onSubmit={async (e) => { e.preventDefault(); saved(await f.submit('POST', '/admin/packages', { ...f.values, priceMonthly: f.values.priceMonthly.replace(',', '.'), priceHourly: (f.values.priceHourly || hourly).replace(',', '.'), poolIds, imageIds })); }}>
     <FieldGroup title={t('form.identity')} cols={1}>
-      <TextInput label={t('col.name')} value={f.values.name} onChange={f.set('name')} error={f.fieldError('name')} isRequired placeholder="Standard 2"/>
+      <TextInput maxLength={100} label={t('col.name')} value={f.values.name} onChange={f.set('name')} error={f.fieldError('name')} isRequired placeholder="Standard 2"/>
     </FieldGroup>
     <FieldGroup title={t('form.resources')} description={t('form.resourcesHelp')} cols={3}>
       <NumberInput label="vCPU" value={num(f.values.vcpu)} onChange={(v) => f.set('vcpu')(str(v))} minValue={1} maxValue={256} error={f.fieldError('vcpu')}/>
@@ -430,7 +430,7 @@ function IpPoolForm({ pools, onSaved }: { pools: Pool[]; onSaved: () => void }) 
   const fill = () => hint && f.setValues((v) => ({ ...v, gateway: hint.gateway, rangeStart: hint.start, rangeEnd: hint.end }));
   return <form className="flex flex-col gap-4" noValidate onSubmit={async (e) => { e.preventDefault(); saved(await f.submit('POST', '/admin/ip-pools', { ...f.values, dns: list(f.values.dns), excluded: list(f.values.excluded) })); }}>
     <FieldGroup title={t('form.identity')}>
-      <TextInput label={t('col.name')} value={f.values.name} onChange={f.set('name')} error={f.fieldError('name')} isRequired placeholder="Public v4"/>
+      <TextInput maxLength={100} label={t('col.name')} value={f.values.name} onChange={f.set('name')} error={f.fieldError('name')} isRequired placeholder="Public v4"/>
       <SelectInput label={t('ip.pool')} value={f.values.poolId} onChange={f.set('poolId')} options={pools.map((p) => ({ id: p.id, label: p.name }))}/>
     </FieldGroup>
     <FieldGroup title={t('form.network')} description={t('form.networkHelp')}>

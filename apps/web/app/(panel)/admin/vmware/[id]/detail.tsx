@@ -126,7 +126,7 @@ export default function ConnectionDetail({ id }: { id: string }) {
     {/* Removing only forgets the connection here; the ESXi/vCenter and its VMs are not touched. */}
     <Section title={t('remove.title')} description={t('remove.explain')} className="border border-danger/30">
       <div className="flex flex-wrap items-end gap-3">
-        <TextInput className="min-w-64 flex-1" label={t('remove.confirm', { name: c.name })} value={confirmName} onChange={setConfirmName} autoComplete="off"/>
+        <TextInput transient className="min-w-64 flex-1" label={t('remove.confirm', { name: c.name })} value={confirmName} onChange={setConfirmName} autoComplete="off"/>
         <Button variant="danger" isDisabled={confirmName !== c.name} isPending={removeConn.isPending} onPress={() => removeConn.mutate()}>{t('remove.button')}</Button>
       </div>
     </Section>

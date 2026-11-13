@@ -15,6 +15,7 @@ import { AnnouncementBar } from '../../components/activity';
 import { I } from '../../components/icon';
 import LiveEvents from '../../components/live-events';
 import SessionExpired from '../../components/session-expired';
+import LeaveGuard from '../../components/leave-guard';
 import TimeZoneSync from '../../components/time-zone-sync';
 import NotificationBell from '../../components/notification-bell';
 import TaskManager from '../../components/task-manager';
@@ -150,6 +151,7 @@ export default function Shell({ user, branding, version, children }: { user: Use
   return <div className="flex min-h-dvh flex-col">
     <LiveEvents/>
     <SessionExpired/>
+    <LeaveGuard/>
     <TimeZoneSync/>
     <ImpersonationBanner user={user}/>
     <AnnouncementBar/>

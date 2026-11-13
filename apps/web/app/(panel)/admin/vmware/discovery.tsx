@@ -109,7 +109,7 @@ export default function Discovery({ onAdd }: { onAdd: (p: Prefill) => void }) {
     <Card.Content className="flex flex-col gap-5">
       {manage && <form className="flex flex-col gap-3" noValidate onSubmit={(e) => { e.preventDefault(); if (!localError && parsed.addresses.length && !running) start.mutate(); }}>
         <div className="grid gap-3 md:grid-cols-[1fr_8rem]">
-          <TextInput multiline label={t('targets')} value={text} onChange={(v) => { setTargets(v); setFieldErrors({}); }} spellCheck={false}
+          <TextInput maxLength={4000} multiline label={t('targets')} value={text} onChange={(v) => { setTargets(v); setFieldErrors({}); }} spellCheck={false}
             placeholder={'192.168.10.0/24\n10.0.0.20-10.0.0.60'} error={text ? localError ?? field(fieldErrors.targets) : field(fieldErrors.targets)}
             help={parsed.addresses.length ? t('count', { count: parsed.addresses.length }) : t('targetsHelp')}/>
           <TextInput format="port" label={t('port')} value={portText} onChange={setPort} error={field(fieldErrors.port)} help={t('portHelp')}/>

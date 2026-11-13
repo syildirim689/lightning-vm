@@ -70,7 +70,7 @@ export default function DirectorySettings({ readOnly }: { readOnly: boolean }) {
     </FormSection>
     <FormSection title={t('people')} description={t('peopleHelp')} icon={<I name="users" size={16}/>}>
       <TextInput label={t('baseDn')} value={v.baseDn} onChange={set('baseDn')} placeholder="DC=example,DC=com" error={err('baseDn')} isDisabled={readOnly} spellCheck={false}/>
-      <TextInput label={t('userFilter')} value={v.userFilter} onChange={set('userFilter')} error={err('userFilter')} isDisabled={readOnly} spellCheck={false} help={t('userFilterHelp')}/>
+      <TextInput maxLength={1000} label={t('userFilter')} value={v.userFilter} onChange={set('userFilter')} error={err('userFilter')} isDisabled={readOnly} spellCheck={false} help={t('userFilterHelp')}/>
       <div className="grid gap-4 sm:grid-cols-3">
         <TextInput label={t('emailAttribute')} value={v.emailAttribute} onChange={set('emailAttribute')} error={err('emailAttribute')} isDisabled={readOnly} spellCheck={false}/>
         <TextInput label={t('nameAttribute')} value={v.nameAttribute} onChange={set('nameAttribute')} error={err('nameAttribute')} isDisabled={readOnly} spellCheck={false}/>

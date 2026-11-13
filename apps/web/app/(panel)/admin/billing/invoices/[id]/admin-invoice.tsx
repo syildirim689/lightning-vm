@@ -58,7 +58,7 @@ export default function AdminInvoice({ id }: { id: string }) {
           {dialog === 'paid' ? <>
             <p className="text-sm text-muted">{t('markPaidHelp', { amount: format.number(Number(inv.total) - Number(inv.paidTotal), { style: 'currency', currency: inv.currency }) })}</p>
             <SelectInput label={t('method')} value={v.method} onChange={(x) => setV({ ...v, method: x })} options={(['bank_transfer', 'cash', 'other'] as const).map((m) => ({ id: m, label: t(`methods.${m}`) }))}/>
-            <TextInput label={t('reference')} value={v.reference} onChange={(x) => setV({ ...v, reference: x })} help={t('referenceHelp')} autoComplete="off"/>
+            <TextInput maxLength={200} label={t('reference')} value={v.reference} onChange={(x) => setV({ ...v, reference: x })} help={t('referenceHelp')} autoComplete="off"/>
           </> : <>
             <p className="text-sm text-muted">{t('refundHelp', { amount: format.number(left, { style: 'currency', currency: inv.currency }) })}</p>
             <TextInput label={t('amount')} value={v.amount} onChange={(x) => setV({ ...v, amount: x })} error={errors.amount} autoComplete="off"/>

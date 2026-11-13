@@ -130,7 +130,7 @@ export default function Abuse() {
         <Modal.Header><Modal.Heading>{t('acknowledge')}</Modal.Heading></Modal.Header>
         <Modal.Body className="flex flex-col gap-3">
           <p className="text-sm text-muted">{t('ackHelp')}</p>
-          <TextInput label={t('note')} value={note} onChange={setNote} multiline/>
+          <TextInput maxLength={500} label={t('note')} value={note} onChange={setNote} multiline/>
           <div className="flex justify-end"><Button isPending={acking} onPress={acknowledge}><I name="check" size={16}/>{t('acknowledge')}</Button></div>
         </Modal.Body>
       </Modal.Dialog></Modal.Container>

@@ -1,21 +1,41 @@
 "use client";
-// Whether the person has typed something that has not been saved yet: any change in a form field (search boxes
-// aside) since the last successful save. Used when the session runs out, so the page is not thrown away with it.
-let pending = false;
+// Whether the person has typed something that has not been saved yet: a text field whose value differs from what it
+// held when it was first focused (since the last successful save), or a form that says so through useUnsaved.
+// Filters, search boxes, "type the name to confirm" fields and the terminal do not count; neither do fields that are
+// gone (a dialog closed with Cancel). Used to keep the page when the session runs out and to ask before leaving it.
+const first = new Map<HTMLInputElement | HTMLTextAreaElement, string>();
+let dirtyForms = 0;
 let watching = false;
 
-export const hasPendingEdits = () => pending;
-export const editsSaved = () => { pending = false; };
+const textual = (el: Element): el is HTMLInputElement | HTMLTextAreaElement =>
+  el instanceof HTMLTextAreaElement || (el instanceof HTMLInputElement && !/^(checkbox|radio|range|file|hidden|button|submit|reset|color|search)$/.test(el.type));
+const ignored = (el: Element) =>
+  el.matches('[role="searchbox"], [role="combobox"][aria-autocomplete], [readonly]') || !!el.closest('[data-transient], [role="search"], [cmdk-root], [data-palette], .xterm');
+
+const changed = () => {
+  const out: (HTMLInputElement | HTMLTextAreaElement)[] = [];
+  for (const [el, was] of first) {
+    if (!el.isConnected) first.delete(el);
+    else if (el.value !== was) out.push(el);
+  }
+  return out;
+};
+
+export const hasPendingEdits = () => dirtyForms > 0 || changed().length > 0;
+// The first field with unsaved text, to take the person back to it.
+export const firstEdited = () => changed()[0] ?? null;
+// After a save: what is on screen now is the saved state.
+export const editsSaved = () => { for (const el of first.keys()) first.set(el, el.value); };
+// The person chose to leave without saving.
+export const forgetEdits = () => { first.clear(); };
+export const formDirty = (on: boolean) => { dirtyForms = Math.max(0, dirtyForms + (on ? 1 : -1)); };
 
 export function watchEdits() {
   if (watching || typeof document === 'undefined') return;
   watching = true;
-  const mark = (e: Event) => {
-    const el = e.target as HTMLElement | null;
-    if (!el || !el.matches('input, textarea, select, [contenteditable="true"]')) return;
-    if (el.matches('[type="search"], [role="searchbox"], [role="combobox"][aria-autocomplete]') || el.closest('[role="search"], [cmdk-root], [data-palette]')) return;
-    pending = true;
-  };
-  document.addEventListener('input', mark, true);
-  document.addEventListener('change', mark, true);
+  document.addEventListener('focusin', (e) => {
+    const el = e.target as Element | null;
+    if (el && textual(el) && !ignored(el) && !first.has(el)) first.set(el, el.value);
+  }, true);
+  window.addEventListener('beforeunload', (e) => { if (hasPendingEdits()) e.preventDefault(); });
 }

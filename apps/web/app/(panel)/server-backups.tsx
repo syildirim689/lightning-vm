@@ -75,7 +75,7 @@ export function ServerBackups({ serverId, serverName, busy }: { serverId: string
             {restoring === b.id && <div className="flex flex-col gap-3 rounded-xl border border-danger/40 bg-danger/5 p-3">
               <p className="text-sm">{t('restoreWarning')}</p>
               <div className="flex flex-wrap items-end gap-3">
-                <TextInput className="min-w-64 flex-1" label={t('confirm', { name: serverName })} value={confirm} onChange={setConfirm} autoComplete="off" error={field(fields.confirm)}/>
+                <TextInput transient className="min-w-64 flex-1" label={t('confirm', { name: serverName })} value={confirm} onChange={setConfirm} autoComplete="off" error={field(fields.confirm)}/>
                 <Button variant="danger" isPending={sending} isDisabled={confirm !== serverName} onPress={() => run(`/servers/${serverId}/backups/${b.id}/restore`, 'POST', { confirm }, t('restoring'))}>
                   <I name="history" size={15}/>{t('restoreNow')}</Button>
                 <Button variant="ghost" onPress={() => { setRestoring(undefined); setConfirm(''); }}>{t('cancel')}</Button>

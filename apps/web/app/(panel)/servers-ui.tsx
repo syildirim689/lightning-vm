@@ -83,7 +83,7 @@ export function SshKeys() {
       </ul>}
       <form className="grid gap-4 md:grid-cols-[minmax(0,14rem)_minmax(0,1fr)_auto] md:items-start" noValidate
         onSubmit={async (e) => { e.preventDefault(); if (await f.submit('POST', '/ssh-keys')) { f.reset(); client.invalidateQueries({ queryKey: ['ssh-keys'] }); toast.success(t('keys.added')); } }}>
-        <TextInput label={t('keys.name')} value={f.values.name} onChange={f.set('name')} error={f.fieldError('name')}/>
+        <TextInput maxLength={100} label={t('keys.name')} value={f.values.name} onChange={f.set('name')} error={f.fieldError('name')}/>
         <TextInput format="sshKey" label={t('keys.publicKey')} value={f.values.publicKey} onChange={f.set('publicKey')} error={f.fieldError('publicKey')} help={t('keys.publicKeyHelp')}
           placeholder="ssh-ed25519 AAAA… user@host" spellCheck={false}/>
         <Button type="submit" className="md:mt-6" isPending={f.busy}><I name="plus" size={16}/>{t('keys.add')}</Button>
@@ -529,7 +529,7 @@ export function ServerDetail({ id }: { id: string }) {
     {allowed.delete && !s.deleteAt && <Section title={t('delete.title')} description={t('delete.explain')} className="border border-danger/30">
       {soft && <p className="mb-3 flex items-start gap-2 text-sm text-muted"><I name="history" size={16} className="mt-0.5 shrink-0 text-accent"/>{t('delete.graceHelp', { hours: grace })}</p>}
       <div className="flex flex-wrap items-end gap-3">
-        <TextInput className="min-w-0 flex-1 sm:min-w-64" label={t('delete.confirm', { name: s.name })} value={deleteName} onChange={setDeleteName} autoComplete="off"/>
+        <TextInput transient className="min-w-0 flex-1 sm:min-w-64" label={t('delete.confirm', { name: s.name })} value={deleteName} onChange={setDeleteName} autoComplete="off"/>
         <Button variant="danger" isDisabled={deleteName !== s.name || s.state === 'deleting' || locked} onPress={() => act(`/servers/${id}`, 'DELETE', { confirm: deleteName, now: !soft || deleteNow })}>
           <I name="trash-2" size={16}/>{soft && !deleteNow ? t('delete.soft') : t('delete.button')}</Button>
       </div>

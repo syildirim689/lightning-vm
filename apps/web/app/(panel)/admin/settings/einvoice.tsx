@@ -79,7 +79,7 @@ export default function EinvoiceSettings({ readOnly }: { readOnly: boolean }) {
           help={`${v.earsivSeries}${new Date().getFullYear()}000000001`} autoComplete="off"/>
         <SelectInput label={t('profile')} value={v.profile} isDisabled={readOnly} onChange={(x) => setV({ ...v, profile: x as Doc['profile'] })} help={t('profileHelp')}
           options={[{ id: 'TEMELFATURA', label: t('temel') }, { id: 'TICARIFATURA', label: t('ticari') }]}/>
-        <div className="sm:col-span-3"><TextInput label={t('senderAlias')} value={v.senderAlias} onChange={(x) => setV({ ...v, senderAlias: x })} isDisabled={readOnly} help={t('senderAliasHelp')} placeholder="urn:mail:defaultgb@…" autoComplete="off"/></div>
+        <div className="sm:col-span-3"><TextInput maxLength={200} label={t('senderAlias')} value={v.senderAlias} onChange={(x) => setV({ ...v, senderAlias: x })} isDisabled={readOnly} help={t('senderAliasHelp')} placeholder="urn:mail:defaultgb@…" autoComplete="off"/></div>
       </div>
       <ul className="flex flex-col gap-1 text-xs text-muted">{(['rule1', 'rule2', 'rule3', 'rule4'] as const).map((k) => <li key={k} className="flex gap-1.5"><I name="check" size={12} className="mt-0.5 shrink-0 text-success"/>{t(k)}</li>)}</ul>
     </FormSection>

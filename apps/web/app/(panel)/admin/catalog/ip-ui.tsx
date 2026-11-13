@@ -108,7 +108,7 @@ export function IpAddresses({ ipPools }: { ipPools: IpPoolRow[] }) {
     <h3 className="font-semibold">{t('addresses')}</h3>
     <p className="text-sm text-muted">{t('addressesHelp')}</p>
     <div className="flex flex-wrap items-end gap-3">
-      <TextInput className="min-w-52 flex-1" label={t('search')} value={search} onChange={setSearch} placeholder="203.0.113.10, web-1, mail.example.com"/>
+      <TextInput transient className="min-w-52 flex-1" label={t('search')} value={search} onChange={setSearch} placeholder="203.0.113.10, web-1, mail.example.com"/>
       <SelectInput className="w-52" label={t('pool')} value={poolId} onChange={setPoolId} options={[{ id: '', label: t('all') }, ...ipPools.map((p) => ({ id: p.id, label: p.name }))]}/>
       <SelectInput className="w-44" label={t('state')} value={state} onChange={setState} options={[{ id: '', label: `${t('all')} (${all.length})` }, ...(['used', 'quarantine', 'excluded'] as const).map((s) => ({ id: s, label: `${t(`states.${s}`)} (${count(s)})` }))]}/>
       {rows.length > 0 && <Button variant="ghost" className="min-h-10" onPress={() => downloadCsv('ip-addresses', ['address', 'state', 'kind', 'server', 'owner', 'ptr', 'since', 'until'],

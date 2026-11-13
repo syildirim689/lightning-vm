@@ -65,7 +65,7 @@ export default function Payments({ readOnly }: { readOnly: boolean }) {
 
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-end gap-3">
-        <TextInput className="min-w-56 flex-1" label={t('search')} value={search} onChange={setSearch} placeholder="iyzico, Garanti, Nestpay…"/>
+        <TextInput transient className="min-w-56 flex-1" label={t('search')} value={search} onChange={setSearch} placeholder="iyzico, Garanti, Nestpay…"/>
         <SelectInput className="w-56" label={t('kindLabel')} value={kind} onChange={setKind}
           options={[{ id: '', label: t('kind.all') }, ...(['gateway', 'bank', 'wallet', 'international'] as const).map((k) => ({ id: k, label: t(`kind.${k}`) }))]}/>
       </div>

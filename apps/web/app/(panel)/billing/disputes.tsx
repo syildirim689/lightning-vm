@@ -169,7 +169,7 @@ function Decide({ d, onDone }: { d: Dispute; onDone: () => void }) {
     {decision === 'partial' && <TextInput label={t('amountLabel')} value={amount} onChange={setAmount} error={field(fields.amount)} help={t('partialHelp', { max: format.number(Number(d.amount), { style: 'currency', currency: d.currency }) })}/>}
     {decision !== 'reject' && <SelectInput label={t('remedyLabel')} value={effective} onChange={setRemedy} error={field(fields.remedy)}
       options={remedies.map((r) => ({ id: r, label: t(`remedy.${r as 'balance'}`), description: t(`remedyHelp.${r as 'balance'}`) }))}/>}
-    <div className="sm:col-span-2"><TextInput label={t('note')} value={note} onChange={setNote} multiline error={field(fields.note)} help={t('noteHelp')}/></div>
+    <div className="sm:col-span-2"><TextInput maxLength={2000} label={t('note')} value={note} onChange={setNote} multiline error={field(fields.note)} help={t('noteHelp')}/></div>
     {/* The decision is final (money may move), so it is read back before it is saved. */}
     <div className="sm:col-span-2"><ConfirmButton isDisabled={busy || !note.trim() || (decision === 'partial' && !amount)} variant={decision === 'reject' ? 'danger' : 'primary'}
       icon={<I name="gavel" size={15}/>} label={t('saveDecision')} title={t('confirmTitle', { number: d.number })} confirmLabel={t('saveDecision')} cancelLabel={t('cancel')}

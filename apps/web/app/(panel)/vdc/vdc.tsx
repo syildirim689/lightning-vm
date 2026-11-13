@@ -130,7 +130,7 @@ export default function VdcPage() {
         {v.servers.length > 0 && <div className="flex flex-col gap-2">
           <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-muted">
             <span>{t('serverSummary', { n: v.servers.length, ready: v.servers.filter((s) => s.state === 'ready').length, failed: v.servers.filter((s) => s.state === 'error' || s.state === 'missing').length })}</span>
-            {v.servers.length > 5 && <TextInput className="w-full sm:w-64" label={t('findServer')} value={find} onChange={setFind} placeholder={t('findServerHint')} spellCheck={false}/>}
+            {v.servers.length > 5 && <TextInput transient className="w-full sm:w-64" label={t('findServer')} value={find} onChange={setFind} placeholder={t('findServerHint')} spellCheck={false}/>}
           </div>
           <ul className="divide-y divide-separator rounded-xl border border-border">
           {v.servers.filter((s) => !find.trim() || fold(`${s.name} ${s.address ?? ''}`).includes(fold(find.trim()))).map((s) => <li key={s.id} className="flex flex-wrap items-center gap-3 px-3 py-2 text-sm">

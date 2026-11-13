@@ -127,7 +127,7 @@ function RoleEditor({ role, from, groups, mine, onClose }: { role: Role | null; 
         <Modal.Body className="flex flex-col gap-5">
           <fieldset className="grid gap-4 sm:grid-cols-2">
             <legend className="mb-2 text-sm font-semibold">{t('identity')}</legend>
-            <TextInput label={t('name')} value={v.name} onChange={(name) => setV((x) => ({ ...x, name, key: role ? x.key : name.toLocaleLowerCase('en').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 32) }))} error={field(fields.name)} isRequired/>
+            <TextInput maxLength={60} label={t('name')} value={v.name} onChange={(name) => setV((x) => ({ ...x, name, key: role ? x.key : name.toLocaleLowerCase('en').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 32) }))} error={field(fields.name)} isRequired/>
             <TextInput label={t('key')} value={v.key} onChange={(key) => setV((x) => ({ ...x, key }))} isDisabled={!!role} error={field(fields.key)} help={t('keyHelp')} spellCheck={false}/>
             <TextInput className="sm:col-span-2" label={t('description')} value={v.description} onChange={(description) => setV((x) => ({ ...x, description }))} maxLength={300}/>
           </fieldset>

@@ -120,7 +120,7 @@ export function ServerReinstall({ server, busy, own }: { server: Server; busy: b
         options={keys.map((k) => ({ id: k.id, label: k.name }))}/>}
       <Notice tone="danger">{t('reinstall.warning')}</Notice>
       <div className="flex flex-wrap items-end gap-3">
-        <TextInput className="min-w-64 flex-1" label={t('reinstall.confirm', { name: server.name })} value={confirm} onChange={setConfirm} autoComplete="off" error={field(fields.confirm)}/>
+        <TextInput transient className="min-w-64 flex-1" label={t('reinstall.confirm', { name: server.name })} value={confirm} onChange={setConfirm} autoComplete="off" error={field(fields.confirm)}/>
         <Button variant="danger" isDisabled={confirm !== server.name || !imageId || busy || sending || server.locked || (newKeys && !keyId)} isPending={sending} onPress={run}>
           <I name="refresh-cw" size={16}/>{t('reinstall.button')}</Button>
       </div>

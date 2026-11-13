@@ -78,7 +78,7 @@ export function ConsoleSnippets({ send, ready, linuxOnly }: { send: (text: strin
           aria-label={t('typeOne', { name: t(`b.${key}`), command })} onPress={() => type(command, t(`b.${key}`))}>
           <I name="square-terminal" size={14}/>{t(`b.${key}`)}</Button>)}
       </div>
-      {all.length > 5 && <TextInput label={t('filter')} value={filter} onChange={setFilter} className="max-w-sm"/>}
+      {all.length > 5 && <TextInput transient label={t('filter')} value={filter} onChange={setFilter} className="max-w-sm"/>}
       {f && !saved.length && <p className="text-sm text-muted">{t('noMatch')}</p>}
       {/* Shared (from the administrators) first, then the person's own. */}
       {([['shared', saved.filter((s) => s.shared)], ['mine', saved.filter((s) => !s.shared)]] as const).map(([group, list]) => list.length > 0 &&

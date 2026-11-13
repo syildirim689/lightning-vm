@@ -74,8 +74,8 @@ export default function ChatSettings({ readOnly }: { readOnly: boolean }) {
       <div className="grid gap-4 sm:grid-cols-2">
         <TextInput label={t('chat.whatsappToken')} type="password" value={wa.token} onChange={(x) => setWa({ ...wa, token: x })} isDisabled={readOnly} error={err('whatsapp.token')}
           autoComplete="off" spellCheck={false} placeholder={d.whatsapp.tokenSet ? t('secretKept') : 'EAAG…'} help={t('chat.whatsappTokenHelp')}/>
-        <TextInput label={t('chat.whatsappPhoneId')} value={wa.phoneNumberId} onChange={(x) => setWa({ ...wa, phoneNumberId: x })} isDisabled={readOnly} error={err('whatsapp.phoneNumberId')} spellCheck={false}/>
-        <TextInput label={t('chat.whatsappTemplate')} value={wa.template} onChange={(x) => setWa({ ...wa, template: x })} isDisabled={readOnly} error={err('whatsapp.template')} spellCheck={false}
+        <TextInput maxLength={40} label={t('chat.whatsappPhoneId')} value={wa.phoneNumberId} onChange={(x) => setWa({ ...wa, phoneNumberId: x })} isDisabled={readOnly} error={err('whatsapp.phoneNumberId')} spellCheck={false}/>
+        <TextInput maxLength={512} label={t('chat.whatsappTemplate')} value={wa.template} onChange={(x) => setWa({ ...wa, template: x })} isDisabled={readOnly} error={err('whatsapp.template')} spellCheck={false}
           placeholder="panel_bildirimi" help={t('chat.whatsappTemplateHelp')}/>
         <TextInput label={t('chat.whatsappLanguage')} value={wa.language} onChange={(x) => setWa({ ...wa, language: x })} isDisabled={readOnly} error={err('whatsapp.language')} maxLength={10} placeholder="tr"/>
       </div>

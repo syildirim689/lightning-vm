@@ -57,10 +57,10 @@ export default function SsoSettings({ readOnly }: { readOnly: boolean }) {
       {q.data.ssoUsers > 0 && <p className="text-sm text-muted">{t('ssoUsers', { n: q.data.ssoUsers })}</p>}
       <Notice tone="default">{t('ssoHow')}</Notice>
       <div className="grid gap-4 sm:grid-cols-2">
-        <TextInput label={t('ssoName')} value={v.name} onChange={set('name')} help={t('ssoNameHelp')} isDisabled={readOnly}/>
+        <TextInput maxLength={40} label={t('ssoName')} value={v.name} onChange={set('name')} help={t('ssoNameHelp')} isDisabled={readOnly}/>
         <TextInput label={t('issuer')} value={v.issuer} onChange={set('issuer')} placeholder="https://id.example.com/realms/main" error={err('issuer')} isDisabled={readOnly} spellCheck={false}
           help={t('issuerHelp', { issuer: v.issuer || 'https://…' })}/>
-        <TextInput label={t('clientId')} value={v.clientId} onChange={set('clientId')} error={err('clientId')} isDisabled={readOnly} spellCheck={false}/>
+        <TextInput maxLength={300} label={t('clientId')} value={v.clientId} onChange={set('clientId')} error={err('clientId')} isDisabled={readOnly} spellCheck={false}/>
         <TextInput label={t('clientSecret')} type="password" value={secret} onChange={setSecret} placeholder={v.clientSecretSet ? ts('secretKept') : ''} error={err('clientSecret')} isDisabled={readOnly}/>
       </div>
       <div className="flex flex-col gap-1">
@@ -68,8 +68,8 @@ export default function SsoSettings({ readOnly }: { readOnly: boolean }) {
         <code className="break-all rounded-lg bg-default px-3 py-2 font-mono text-xs">{origin}/api/auth/callback/oidc</code>
       </div>
       <div className="grid gap-4 sm:grid-cols-2">
-        <TextInput label={t('scopes')} value={v.scopes} onChange={set('scopes')} error={err('scopes')} help={t('scopesHelp')} isDisabled={readOnly} spellCheck={false}/>
-        <TextInput label={t('groupsClaim')} value={v.groupsClaim} onChange={set('groupsClaim')} error={err('groupsClaim')} help={t('groupsClaimHelp')} isDisabled={readOnly} spellCheck={false}/>
+        <TextInput maxLength={300} label={t('scopes')} value={v.scopes} onChange={set('scopes')} error={err('scopes')} help={t('scopesHelp')} isDisabled={readOnly} spellCheck={false}/>
+        <TextInput maxLength={100} label={t('groupsClaim')} value={v.groupsClaim} onChange={set('groupsClaim')} error={err('groupsClaim')} help={t('groupsClaimHelp')} isDisabled={readOnly} spellCheck={false}/>
       </div>
       <CheckboxInput label={t('ssoAutoCreate')} help={t('ssoAutoCreateHelp')} isSelected={v.autoCreate} onChange={set('autoCreate')} isDisabled={readOnly}/>
     </FormSection>

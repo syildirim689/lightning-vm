@@ -140,7 +140,7 @@ function SourceForm({ source, protocols, onDone }: { source: Source | null; prot
   };
   return <form className="flex flex-col gap-4" noValidate onSubmit={(e) => { e.preventDefault(); void call('save'); }}>
     <FieldGroup title={t('identity')}>
-      <TextInput label={t('name')} value={name} onChange={setName} error={field(fields.name)} isRequired placeholder="NAS ISO"/>
+      <TextInput maxLength={60} label={t('name')} value={name} onChange={setName} error={field(fields.name)} isRequired placeholder="NAS ISO"/>
       <SelectInput label={t('protocol')} value={protocol} onChange={(v) => {
           // Fields the new protocol also has (host, user, password…) keep what was typed; the rest are dropped.
           const keep = new Set((protocols[v] ?? []).map((x) => x.key));
@@ -211,7 +211,7 @@ function Browser({ source, pools, onDone }: { source: Source; pools: { id: strin
       </ul>}
     {picked && <div className="flex flex-col gap-3 rounded-xl border border-accent/40 bg-accent-soft p-4">
       <p className="text-sm font-semibold">{t('copyTitle', { file: picked.name, size: bytes(picked.size) })}</p>
-      <TextInput label={t('displayName')} value={name} onChange={setName} help={t('displayNameHelp')}/>
+      <TextInput maxLength={100} label={t('displayName')} value={name} onChange={setName} help={t('displayNameHelp')}/>
       <CheckboxList label={t('locations')} value={targets} onChange={setTargets} options={pools.map((p) => ({ id: p.id, label: p.name }))} help={t('locationsHelp')}/>
       <CheckboxInput label={t('public')} isSelected={isPublic} onChange={setPublic} help={t('publicHelp')}/>
       <div className="flex justify-end"><Button isPending={busy} isDisabled={!targets.length} onPress={copy}><I name="copy" size={16}/>{t('copy')}</Button></div>

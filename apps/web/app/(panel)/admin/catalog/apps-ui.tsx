@@ -105,7 +105,7 @@ function AppForm({ app, preset, defaults, onDone }: { app: App | null; preset?: 
   }
   return <form className="flex flex-col gap-4" noValidate onSubmit={submit}>
     <FieldGroup title={t('identity')}>
-      <TextInput label={t('name')} value={f.values.name} onChange={f.set('name')} error={f.fieldError('name')} isRequired placeholder="Plesk Web Pro"/>
+      <TextInput maxLength={60} label={t('name')} value={f.values.name} onChange={f.set('name')} error={f.fieldError('name')} isRequired placeholder="Plesk Web Pro"/>
       <SelectInput label={t('kind')} value={f.values.kind} onChange={kind} options={(['cpanel', 'plesk', 'custom'] as const).map((k) => ({ id: k, label: t(`kinds.${k}`) }))}/>
       <div className="sm:col-span-2"><TextInput label={t('description')} value={f.values.description} onChange={f.set('description')} maxLength={300} help={t('descriptionHelp')}/></div>
     </FieldGroup>
@@ -120,7 +120,7 @@ function AppForm({ app, preset, defaults, onDone }: { app: App | null; preset?: 
         options={[{ id: 'none', label: t('modes.none') }, { id: 'pool', label: t('modes.pool') }]}/>
     </FieldGroup>
     <FieldGroup title={t('script')} description={t('scriptHelp', { license: '{LICENSE}', hostname: '{HOSTNAME}', ip: '{IP}' })} cols={1}>
-      <TextInput label={t('script')} multiline value={f.values.script} onChange={f.set('script')} error={f.fieldError('script')} spellCheck={false}/>
+      <TextInput maxLength={20000} label={t('script')} multiline value={f.values.script} onChange={f.set('script')} error={f.fieldError('script')} spellCheck={false}/>
       <Button size="sm" variant="ghost" onPress={() => f.set('script')(defaults[f.values.kind as Kind])}><I name="rotate-ccw" size={14}/>{t('resetScript')}</Button>
     </FieldGroup>
     <SwitchInput label={t('active')} isSelected={active} onChange={setActive}/>

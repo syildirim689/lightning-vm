@@ -8149,7 +8149,9 @@
       "times": "times",
       "items": "pcs",
       "months": "months"
-    }
+    },
+    "count": "{n, number} / {max, number}",
+    "atLimit": "Limit reached: at most {max, number} characters"
   },
   "SessionExpired": {
     "title": "Your session has ended",
@@ -8158,5 +8160,11 @@
     "stay": "Stay on this page",
     "leave": "Sign out now (unsaved changes are lost)",
     "back": "You are signed in again. You can save now."
+  },
+  "LeaveGuard": {
+    "title": "Leave without saving?",
+    "body": "What you typed on this page has not been saved and will be lost.",
+    "leave": "Leave without saving",
+    "stay": "Stay and save"
   }
 }

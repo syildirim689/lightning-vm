@@ -82,7 +82,7 @@ function VdcForm({ vdc, pools, users, onDone }: { vdc: Vdc | null; pools: { id: 
   }
   return <form className="flex flex-col gap-4" noValidate onSubmit={save}>
     <FieldGroup title={t('identity')}>
-      <TextInput label={t('name')} value={v.name} onChange={set('name')} error={field(fields.name)} isRequired placeholder="Acme Production"/>
+      <TextInput maxLength={60} label={t('name')} value={v.name} onChange={set('name')} error={field(fields.name)} isRequired placeholder="Acme Production"/>
       <SelectInput label={t('owner')} value={v.ownerId} onChange={set('ownerId')} error={field(fields.ownerId)} isDisabled={!!vdc} options={users.map((u) => ({ id: u.id, label: u.email }))}/>
       <SelectInput label={t('pool')} value={v.poolId} onChange={set('poolId')} error={field(fields.poolId)} isDisabled={!!vdc} options={pools.map((p) => ({ id: p.id, label: p.name }))}/>
       <SwitchInput label={t('active')} isSelected={v.active} onChange={set('active')}/>

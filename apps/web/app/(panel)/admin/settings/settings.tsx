@@ -240,14 +240,14 @@ function Mail({ readOnly, myEmail }: { readOnly: boolean; myEmail: string }) {
     </FormSection>
     <FormSection title={t('mail.auth')} description={t('mail.authHelp')} icon={<I name="key-round" size={16}/>}>
       <div className="grid gap-4 sm:grid-cols-2">
-        <TextInput label={t('mail.username')} value={v.username} onChange={f.set('username')} isDisabled={dis} autoComplete="off" spellCheck={false}/>
+        <TextInput maxLength={200} label={t('mail.username')} value={v.username} onChange={f.set('username')} isDisabled={dis} autoComplete="off" spellCheck={false}/>
         <TextInput label={t('mail.password')} type="password" value={v.password ?? ''} onChange={(x) => f.setV({ ...v, password: x })} isDisabled={dis} autoComplete="new-password"
           placeholder={v.passwordSet ? t('secretKept') : ''} help={v.passwordSet ? t('secretHelp') : undefined}/>
       </div>
     </FormSection></>}
     <FormSection title={t('mail.sender')} description={t('mail.senderHelp')} icon={<I name="send" size={16}/>}>
       <div className="grid gap-4 sm:grid-cols-2">
-        <TextInput label={t('mail.fromName')} value={v.fromName} onChange={f.set('fromName')} isDisabled={dis}/>
+        <TextInput maxLength={80} label={t('mail.fromName')} value={v.fromName} onChange={f.set('fromName')} isDisabled={dis}/>
         <TextInput label={t('mail.fromAddress')} type="email" value={v.fromAddress} onChange={f.set('fromAddress')} error={f.err('fromAddress')} isDisabled={dis}/>
       </div>
     </FormSection>

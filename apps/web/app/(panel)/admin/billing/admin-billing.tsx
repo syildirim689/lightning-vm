@@ -290,7 +290,7 @@ function NewInvoice({ onClose }: { onClose: () => void }) {
     <fieldset className="flex flex-col gap-2">
       <legend className="mb-1 text-sm font-medium">{t('lines')}</legend>
       {lines.map((l, i) => <div key={i} className="grid grid-cols-[1fr_6rem_5rem_auto] items-start gap-2">
-        <TextInput label={t('lineDescription')} value={l.description} onChange={(x) => setLines(lines.map((y, j) => j === i ? { ...y, description: x } : y))} error={errors[`lines.${i}.description`]} autoComplete="off"/>
+        <TextInput maxLength={300} label={t('lineDescription')} value={l.description} onChange={(x) => setLines(lines.map((y, j) => j === i ? { ...y, description: x } : y))} error={errors[`lines.${i}.description`]} autoComplete="off"/>
         <TextInput label={t('linePrice')} value={l.unitPrice} onChange={(x) => setLines(lines.map((y, j) => j === i ? { ...y, unitPrice: x } : y))} error={errors[`lines.${i}.unitPrice`]} autoComplete="off"/>
         <TextInput format="integer" label={t('lineQuantity')} value={l.quantity} onChange={(x) => setLines(lines.map((y, j) => j === i ? { ...y, quantity: x } : y))} error={errors[`lines.${i}.quantity`]} autoComplete="off"/>
         <Button className="mt-6" size="sm" variant="ghost" isIconOnly aria-label={t('removeLine')} isDisabled={lines.length === 1} onPress={() => setLines(lines.filter((_, j) => j !== i))}><I name="x" size={14}/></Button>
@@ -300,7 +300,7 @@ function NewInvoice({ onClose }: { onClose: () => void }) {
         <span className="text-sm text-muted">{t('netTotal', { amount: format.number(net, { style: 'currency', currency: v.currency }) })}</span>
       </div>
     </fieldset>
-    <TextInput label={t('note')} value={v.note} onChange={(x) => setV({ ...v, note: x })} multiline autoComplete="off" help={t('noteHelp')}/>
+    <TextInput maxLength={1000} label={t('note')} value={v.note} onChange={(x) => setV({ ...v, note: x })} multiline autoComplete="off" help={t('noteHelp')}/>
   </Dialog>;
 }
 
@@ -324,7 +324,7 @@ function AdjustBalance({ onClose }: { onClose: () => void }) {
       <TextInput label={t('amount')} value={v.amount} onChange={(x) => setV({ ...v, amount: x })} error={errors.amount} help={t('amountHelp')} autoComplete="off"/>
       <SelectInput label={t('currency')} value={v.currency} onChange={(x) => setV({ ...v, currency: x })} options={['TRY', 'EUR', 'USD'].map((c) => ({ id: c, label: c }))}/>
     </div>
-    <TextInput label={t('reason')} value={v.note} onChange={(x) => setV({ ...v, note: x })} error={errors.note} isRequired autoComplete="off"/>
+    <TextInput maxLength={300} label={t('reason')} value={v.note} onChange={(x) => setV({ ...v, note: x })} error={errors.note} isRequired autoComplete="off"/>
   </Dialog>;
 }
 

@@ -79,10 +79,11 @@ const masksText = () => typeof CSS !== 'undefined' && CSS.supports('-webkit-text
 // Text field with a visible label, help text, and a translated server-side error under it.
 // `format` gives a typed value its keyboard, an example, tidying when the field is left (MAC spellings, spaces,
 // upper case) and a message as soon as it is wrong; `list` accepts several values separated by commas or lines.
-export function TextInput({ label, value, onChange, error, help, type = 'text', name, isRequired, autoComplete, autofill, placeholder, multiline, isDisabled, maxLength, className, spellCheck, format, list, datePresets, unit }: {
+export function TextInput({ label, value, onChange, error, help, type = 'text', name, isRequired, autoComplete, autofill, placeholder, multiline, isDisabled, maxLength, className, spellCheck, format, list, datePresets, unit, transient }: {
   label: string; value: string; onChange: (v: string) => void; error?: string; help?: React.ReactNode; type?: string; name?: string; isRequired?: boolean;
   autoComplete?: string; autofill?: boolean; placeholder?: string; multiline?: boolean; isDisabled?: boolean; maxLength?: number; className?: string; spellCheck?: boolean;
   format?: Format; list?: boolean; datePresets?: boolean; unit?: string;
+  transient?: boolean; // a filter or a typed confirmation: leaving it is not losing work
 }) {
   const tf = useTranslations('Formats');
   const fd = useFormatter();
@@ -109,14 +110,19 @@ export function TextInput({ label, value, onChange, error, help, type = 'text', 
   // Dates and times read back in full ("Thursday, 20 November 2026 · in 7 days"), so a typo in the day shows at once.
   const when = readableDate(type, value, fd, tf);
   const presets = datePresets && type === 'date' && !isDisabled ? datePresetValues() : null;
+  // Room left, shown as the limit nears (long texts from half way), so text is never cut off unseen; the API takes no more.
+  const count = !!maxLength && !isDisabled && !masked && value.length >= maxLength * (multiline ? 0.5 : 0.8);
+  const full = !!maxLength && value.length >= maxLength;
   return <TextField className={`min-w-0 ${className ?? ''}`} name={autofill ? name : undefined} type={masked ? 'text' : type} value={value} onChange={onChange} isInvalid={!!shown} isRequired={isRequired} isDisabled={isDisabled} validationBehavior="aria"
-    onBlur={tidy}>
+    onBlur={tidy} data-transient={transient || undefined}>
     <Label>{label}{unit && <span className="sr-only"> ({unit})</span>}</Label>
-    {multiline ? <TextArea rows={4} placeholder={ph} spellCheck={spellCheck} {...fill} {...extra} className={fmt?.mono ? 'font-mono text-sm' : undefined}/>
+    {multiline ? <TextArea rows={4} placeholder={ph} maxLength={maxLength} spellCheck={spellCheck} {...fill} {...extra} className={fmt?.mono ? 'font-mono text-sm' : undefined}/>
       : unit ? <div className="relative"><Input placeholder={ph} maxLength={maxLength} spellCheck={false} {...fill} {...extra} className={`w-full min-w-0 pr-14 tabular-nums ${fmt?.mono ? 'font-mono' : ''}`}/>
         <span aria-hidden className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-sm text-muted">{unit}</span></div>
       : <Input placeholder={ph} maxLength={maxLength} spellCheck={masked ? false : spellCheck} {...fill} {...extra} className={fmt?.mono ? 'min-w-0 font-mono' : 'min-w-0'} style={masked ? { WebkitTextSecurity: 'disc' } as React.CSSProperties : undefined}/>}
     {shown ? <FieldError>{shown}</FieldError> : when || help ? <Description>{when && <span className="block font-medium text-foreground/80">{when}</span>}{help}</Description> : null}
+    {count && <p className={`mt-0.5 text-right text-xs tabular-nums ${full ? 'font-medium text-warning' : 'text-muted'}`} aria-live={full ? 'polite' : 'off'}>
+      {full ? tf('atLimit', { max: maxLength! }) : tf('count', { n: value.length, max: maxLength! })}</p>}
     {presets && <div role="group" aria-label={tf('quick')} className="mt-1 flex flex-wrap gap-1.5">{presets.map(([k, d]) =>
       <button key={k} type="button" aria-pressed={value === d} onClick={() => onChange(d)}
         className={`min-h-8 rounded-full border px-2.5 text-xs transition-colors ${value === d ? 'border-accent bg-accent-soft text-accent-soft-foreground' : 'border-border hover:border-accent'}`}>{tf(`preset.${k}` as 'preset.today')}</button>)}</div>}

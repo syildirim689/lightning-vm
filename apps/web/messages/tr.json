@@ -8149,7 +8149,9 @@
       "times": "kez",
       "items": "adet",
       "months": "ay"
-    }
+    },
+    "count": "{n, number} / {max, number}",
+    "atLimit": "Sınıra ulaşıldı: en çok {max, number} karakter"
   },
   "SessionExpired": {
     "title": "Oturumunuz sona erdi",
@@ -8158,5 +8160,11 @@
     "stay": "Bu sayfada kal",
     "leave": "Şimdi çıkış yap (kaydedilmemiş değişiklikler kaybolur)",
     "back": "Yeniden giriş yaptınız. Şimdi kaydedebilirsiniz."
+  },
+  "LeaveGuard": {
+    "title": "Kaydetmeden çıkılsın mı?",
+    "body": "Bu sayfada yazdıklarınız kaydedilmedi ve kaybolacak.",
+    "leave": "Kaydetmeden çık",
+    "stay": "Kal ve kaydet"
   }
 }

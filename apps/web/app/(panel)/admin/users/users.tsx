@@ -363,7 +363,7 @@ function RemoveUser({ user, onClose }: { user: Row; onClose: () => void }) {
   return <Dialog title={t('removeTitle', { email: user.email })} onClose={onClose}
     footer={<><Button variant="tertiary" onPress={onClose}>{t('cancel')}</Button><Button variant="danger" isPending={busy} isDisabled={confirm !== user.email || user.servers > 0} onPress={remove}><I name="trash-2" size={16}/>{t('action.remove')}</Button></>}>
     {user.servers > 0 ? <Notice tone="warning">{t('hasServers', { n: user.servers })}</Notice> : <p className="text-sm text-muted">{t('removeExplain')}</p>}
-    <TextInput label={t('typeEmail', { email: user.email })} value={confirm} onChange={setConfirm} autoComplete="off" spellCheck={false}/>
+    <TextInput transient label={t('typeEmail', { email: user.email })} value={confirm} onChange={setConfirm} autoComplete="off" spellCheck={false}/>
   </Dialog>;
 }
 

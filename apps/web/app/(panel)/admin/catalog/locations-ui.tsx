@@ -78,16 +78,16 @@ function LocationForm({ location, onDone }: { location: Location | null; onDone:
   }
   return <form className="flex flex-col gap-4" noValidate onSubmit={save}>
     <FieldGroup title={t('identity')}>
-      <TextInput label={t('name')} value={v.name} onChange={set('name')} error={field(fields.name)} isRequired placeholder="Istanbul-1"/>
+      <TextInput maxLength={100} label={t('name')} value={v.name} onChange={set('name')} error={field(fields.name)} isRequired placeholder="Istanbul-1"/>
       <SelectInput label={t('status')} value={v.status} onChange={(x) => set('status')(x as Location['status'])} help={t(`statusHelp.${v.status}`)}
         options={(['active', 'maintenance', 'hidden'] as const).map((s) => ({ id: s, label: t(`statuses.${s}`) }))}/>
-      <div className="sm:col-span-2"><TextInput label={t('description')} value={v.description} onChange={set('description')} error={field(fields.description)} help={t('descriptionHelp')}/></div>
+      <div className="sm:col-span-2"><TextInput maxLength={500} label={t('description')} value={v.description} onChange={set('description')} error={field(fields.description)} help={t('descriptionHelp')}/></div>
     </FieldGroup>
     <FieldGroup title={t('where')} description={t('whereHelp')} cols={3}>
-      <TextInput label={t('city')} value={v.city} onChange={set('city')} error={field(fields.city)} placeholder="İstanbul"/>
+      <TextInput maxLength={100} label={t('city')} value={v.city} onChange={set('city')} error={field(fields.city)} placeholder="İstanbul"/>
       <TextInput label={t('country')} value={v.countryCode} onChange={(x) => set('countryCode')(x.toUpperCase().slice(0, 2))} error={field(fields.countryCode)}
         help={v.countryCode.length === 2 ? `${flag(v.countryCode)} ${v.countryCode}` : t('countryHelp')} placeholder="TR" maxLength={2}/>
-      <TextInput label={t('datacenter')} value={v.datacenter} onChange={set('datacenter')} error={field(fields.datacenter)} placeholder="Equinix IL2"/>
+      <TextInput maxLength={100} label={t('datacenter')} value={v.datacenter} onChange={set('datacenter')} error={field(fields.datacenter)} placeholder="Equinix IL2"/>
       <NumberInput label={t('latitude')} value={v.latitude} onChange={set('latitude')} minValue={-90} maxValue={90} step={0.0001} error={field(fields.latitude)} formatOptions={{ maximumFractionDigits: 5 }}/>
       <NumberInput label={t('longitude')} value={v.longitude} onChange={set('longitude')} minValue={-180} maxValue={180} step={0.0001} error={field(fields.longitude)} formatOptions={{ maximumFractionDigits: 5 }}/>
       <NumberInput label={t('sort')} value={v.sort} onChange={(x) => set('sort')(x ?? 0)} minValue={-1000} maxValue={1000} help={t('sortHelp')}/>

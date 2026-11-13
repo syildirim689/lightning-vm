@@ -33,7 +33,7 @@ export function Projects() {
       </ul>}
       <form className="flex flex-wrap items-start gap-3" noValidate
         onSubmit={async (e) => { e.preventDefault(); if (await f.submit('POST', '/projects')) { f.reset(); client.invalidateQueries({ queryKey: ['projects'] }); toast.success(t('projects.created')); } }}>
-        <TextInput className="min-w-60 flex-1" label={t('projects.name')} value={f.values.name} onChange={f.set('name')} error={f.fieldError('name')}/>
+        <TextInput maxLength={100} className="min-w-60 flex-1" label={t('projects.name')} value={f.values.name} onChange={f.set('name')} error={f.fieldError('name')}/>
         <Button type="submit" variant="secondary" className="mt-6" isPending={f.busy}><I name="plus" size={16}/>{t('projects.create')}</Button>
       </form>
     </div>

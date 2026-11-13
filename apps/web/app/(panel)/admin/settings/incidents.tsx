@@ -49,7 +49,7 @@ export default function Incidents({ readOnly }: { readOnly: boolean }) {
             className={`rounded-full border px-3 py-1 text-sm transition-colors focus-visible:outline-2 focus-visible:outline-accent ${form.components.includes(c) ? 'border-accent bg-accent/10 text-accent' : 'border-border hover:border-accent/50'}`}>
             {ts(`service.${c}.name` as 'service.panel.name')}</button>)}</div>
         </div>
-        <TextInput multiline label={t('message')} value={form.body} onChange={(x) => setForm({ ...form, body: x })} error={field(fields.body)} help={t('messageHelp')}/>
+        <TextInput maxLength={2000} multiline label={t('message')} value={form.body} onChange={(x) => setForm({ ...form, body: x })} error={field(fields.body)} help={t('messageHelp')}/>
         <div><Button size="sm" variant="ghost" onPress={() => setForm({ ...form, body: t(`template.${form.status as 'resolved'}`) })}><I name="wand-sparkles" size={14}/>{t('useTemplate')}</Button></div>
         <div><Button isPending={busy} isDisabled={!form.title.trim() || !form.body.trim()} onPress={open}><I name="siren" size={16}/>{t('open')}</Button></div>
       </FormSection>
@@ -90,7 +90,7 @@ function IncidentCard({ i, readOnly, onChange, when, now }: { i: Incident; readO
     {!readOnly && <div className="flex flex-col gap-3 border-t border-separator pt-3">
       <div className="grid gap-3 sm:grid-cols-[12rem_minmax(0,1fr)]">
         <SelectInput label={t('status')} value={status} onChange={setStatus} options={statuses.map((x) => ({ id: x, label: ts(`incident.${x}`) }))}/>
-        <TextInput multiline label={t('update')} value={body} onChange={setBody}/>
+        <TextInput maxLength={2000} multiline label={t('update')} value={body} onChange={setBody}/>
       </div>
       <div className="flex flex-wrap justify-between gap-2">
         <span className="flex flex-wrap gap-2">

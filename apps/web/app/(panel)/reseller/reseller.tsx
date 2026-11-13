@@ -187,11 +187,11 @@ export default function Reseller() {
         <div className="flex flex-col gap-4">
           <form onSubmit={add} noValidate className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] sm:items-end">
             <TextInput label={t('email')} type="email" value={email} onChange={setEmail} error={field(fields.email)}/>
-            <TextInput label={t('name')} value={name} onChange={setName}/>
+            <TextInput maxLength={80} label={t('name')} value={name} onChange={setName}/>
             <Button type="submit" isPending={busy} isDisabled={!email}><I name="user-plus" size={15}/>{t('add')}</Button>
           </form>
           {(c.data?.customers.length ?? 0) > 1 && <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_12rem] sm:items-end">
-            <TextInput label={t('search')} value={search} onChange={setSearch}/>
+            <TextInput transient label={t('search')} value={search} onChange={setSearch}/>
             <SelectInput label={t('sort')} value={sort} onChange={(x) => setSort(x || 'name')} options={(['name', 'monthly', 'servers'] as const).map((k) => ({ id: k, label: t(`sortBy.${k}`) }))}/>
           </div>}
           {!list.length ? (search ? <p className="py-6 text-center text-sm text-muted">{t('noMatch')}</p> : <Empty icon={<I name="users" size={28}/>} title={t('none')}>{t('noneHelp')}</Empty>)

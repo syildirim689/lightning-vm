@@ -54,17 +54,17 @@ export default function ConnectionForm({ onSaved, initial }: { onSaved: (s: Summ
       </div>}
     </Notice>}
     <FieldGroup title={t('form.groupEndpoint')} description={t('form.groupEndpointHelp')}>
-      <TextInput label={t('form.name')} value={form.name} onChange={set('name')} error={err('name')} help={help('name')} isRequired/>
+      <TextInput maxLength={100} label={t('form.name')} value={form.name} onChange={set('name')} error={err('name')} help={help('name')} isRequired/>
       <TextInput format="hostOrIp" label={t('form.host')} value={form.host} onChange={set('host')} error={err('host')} help={help('host')} isRequired autoComplete="off" spellCheck={false}/>
       <TextInput format="port" label={t('form.port')} value={form.port} onChange={set('port')} error={err('port')} help={help('port')} autoComplete="off"/>
     </FieldGroup>
     <FieldGroup title={t('form.groupAccount')} description={t('form.groupAccountHelp')}>
-      <TextInput label={t('form.username')} value={form.username} onChange={set('username')} error={err('username')} help={help('username')} isRequired autoComplete="off"/>
+      <TextInput maxLength={200} label={t('form.username')} value={form.username} onChange={set('username')} error={err('username')} help={help('username')} isRequired autoComplete="off"/>
       <TextInput label={t('form.password')} type="password" value={form.password} onChange={set('password')} error={err('password')} help={help('password')} isRequired autoComplete="new-password"/>
     </FieldGroup>
     <FieldGroup title={t('form.groupTls')} description={t('form.tlsHelp')} cols={1}>
       <SelectInput label={t('form.tls')} value={form.mode} onChange={set('mode')} options={(['system', 'ca', 'pinned'] as const).map((m) => ({ id: m, label: t(`tlsMode.${m}`) }))}/>
-      {form.mode === 'ca' && <TextInput multiline label={t('form.caPem')} value={form.caPem} onChange={set('caPem')} error={err('caPem')} help={t('form.caPemHelp')} spellCheck={false}/>}
+      {form.mode === 'ca' && <TextInput maxLength={20000} multiline label={t('form.caPem')} value={form.caPem} onChange={set('caPem')} error={err('caPem')} help={t('form.caPemHelp')} spellCheck={false}/>}
       {form.mode === 'pinned' && <TextInput label={t('form.sha256')} value={form.sha256} onChange={set('sha256')} error={err('sha256')} help={t('form.sha256Help')} spellCheck={false}/>}
     </FieldGroup>
     <FieldGroup title={t('compat.title')} description={t('compat.formHelp')}>
