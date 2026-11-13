@@ -1677,6 +1677,8 @@ test.describe('people, settings and smart features (English browser)', () => {
     // The session cookie disappears (as if it expired). Saving is refused, or live updates notice first: either
     // way the text stays and a dialog explains.
     const cookies = await context.cookies();
+    page.on('framenavigated', (f) => { if (f === page.mainFrame()) console.log('DIAG nav', f.url()); });
+    page.on('response', (r) => { if (r.status() >= 300 && r.status() !== 304) console.log('DIAG', r.status(), r.request().method(), r.url(), r.headers()['location'] ?? ''); });
     await context.clearCookies();
     await page.getByLabel('Project name').press('Enter');
     const dialog = page.getByRole('alertdialog', { name: 'Your session has ended' });
