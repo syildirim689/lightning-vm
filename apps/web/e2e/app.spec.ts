@@ -957,6 +957,15 @@ test.describe('server lifecycle (simulator, Turkish customer)', () => {
     // The table copies an IP in one tap, and the owner's e-mail opens that customer in the user list.
     await staff.getByRole('button', { name: 'Kopyala: web-1 IP' }).click();
     await expect(staff.getByText('web-1 IP kopyalandı.')).toBeVisible();
+    // Staff open the customer's server and see the infrastructure the customer does not: where it runs, datastores, switch.
+    await staff.getByRole('link', { name: 'web-1', exact: true }).first().click();
+    await expect(staff).toHaveURL(/\/servers\/[0-9a-f-]{36}$/);
+    const staffVmd = staff.locator('[data-section="Sanal makine ayrıntıları"]');
+    await expect(staffVmd.getByText('Çalıştığı yer')).toBeVisible({ timeout: 30_000 });
+    await expect(staffVmd.getByText('Veri deposu', { exact: true }).first()).toBeVisible();
+    await expect(staffVmd.getByText('Yapılandırma dosyası')).toBeVisible();
+    await expect(staffVmd.getByText(/\.vmx/).first()).toBeVisible();
+    await staff.goto('/admin/servers');
     // The owner's e-mail opens that customer in the user list, and their server count leads back, filtered to them.
     await staff.getByRole('link', { name: user.email }).first().click();
     await expect(staff).toHaveURL(/\/admin\/users\?q=/);
