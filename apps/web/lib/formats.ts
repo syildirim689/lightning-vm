@@ -4,7 +4,7 @@
 // Pure functions (run with: node --test lib/*.test.ts).
 
 export type Format = 'ipv4' | 'ip' | 'cidr' | 'ipOrCidr' | 'privateCidr' | 'ipv6Prefix' | 'mac' | 'hostname' | 'fqdn' | 'domain' | 'serverName' | 'email' | 'port' | 'portRange' | 'url' | 'vlan'
-  | 'tag' | 'sshKey' | 'money' | 'hostOrIp';
+  | 'tag' | 'sshKey' | 'money' | 'hostOrIp' | 'tckn' | 'vkn' | 'iban' | 'phone';
 
 const ipv4Re = /^(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}$/;
 export const isIPv4 = (s: string) => ipv4Re.test(s);
@@ -74,6 +74,40 @@ export const isSshKey = (s: string) => /^(ssh-ed25519|ssh-rsa|ecdsa-sha2-nistp(2
 // Amounts: digits with a dot or comma and up to four decimals ("9,90" and "9.90" mean the same).
 export const isMoney = (s: string) => /^\d{1,10}([.,]\d{1,4})?$/.test(s);
 
+// Turkish identity (TCKN, 11 digits) and tax (VKN, 10 digits) numbers with their check digits, as the API checks them.
+export function isTckn(v: string): boolean {
+  if (!/^[1-9]\d{10}$/.test(v)) return false;
+  const d = [...v].map(Number);
+  const odd = d[0] + d[2] + d[4] + d[6] + d[8], even = d[1] + d[3] + d[5] + d[7];
+  return ((odd * 7 - even) % 10 + 10) % 10 === d[9] && d.slice(0, 10).reduce((a, b) => a + b, 0) % 10 === d[10];
+}
+export function isVkn(v: string): boolean {
+  if (!/^\d{10}$/.test(v)) return false;
+  const d = [...v].map(Number);
+  let sum = 0;
+  for (let i = 0; i < 9; i++) { const t = (d[i] + 9 - i) % 10; let r = (t * 2 ** (9 - i)) % 9; if (t !== 0 && r === 0) r = 9; sum += r; }
+  return (10 - (sum % 10)) % 10 === d[9];
+}
+// IBAN: country, check digits and account, verified with the mod-97 rule; shown in groups of four.
+export function isIban(v: string): boolean {
+  const x = v.replace(/\s/g, '').toUpperCase();
+  if (!/^[A-Z]{2}\d{2}[A-Z0-9]{10,30}$/.test(x)) return false;
+  const n = (x.slice(4) + x.slice(0, 4)).replace(/[A-Z]/g, (c) => String(c.charCodeAt(0) - 55));
+  let r = 0;
+  for (const ch of n) r = (r * 10 + Number(ch)) % 97;
+  return r === 1;
+}
+export const groupIban = (v: string) => v.replace(/\s/g, '').toUpperCase().replace(/(.{4})(?=.)/g, '$1 ');
+// Phone numbers in international form (+905321234567); a Turkish 0532… number gets its +90.
+export function normalizePhone(v: string): string {
+  const d = v.replace(/[\s().-]/g, '');
+  if (/^0\d{10}$/.test(d)) return `+90${d.slice(1)}`;
+  if (/^00[1-9]\d{7,14}$/.test(d)) return `+${d.slice(2)}`;
+  if (/^5\d{9}$/.test(d)) return `+90${d}`;
+  return d || v.trim();
+}
+export const isPhone = (v: string) => /^\+[1-9]\d{7,14}$/.test(normalizePhone(v));
+
 // Tidying when the field is left. Never changes the meaning; returns the input unchanged when it is not understood.
 export function normalize(format: Format, raw: string): string {
   const s = raw.trim();
@@ -86,6 +120,9 @@ export function normalize(format: Format, raw: string): string {
     case 'sshKey': return s.replace(/\s+/g, ' ');
     case 'privateCidr': return s.replace(/\s+/g, '');
     case 'ipv6Prefix': return s.toLowerCase();
+    case 'tckn': case 'vkn': return s.replace(/\s/g, '');
+    case 'iban': return isIban(s) ? groupIban(s) : s;
+    case 'phone': return normalizePhone(s);
     case 'money': return s.replace(/\s/g, '').replace(/^(\d+),(\d{1,4})$/, '$1.$2');
     case 'url': return s && !/^[a-z]+:\/\//i.test(s) && /^[\w.-]+\.[a-z]{2,}/i.test(s) ? `https://${s}` : s;
     default: return s;
@@ -114,11 +151,15 @@ export function isValid(format: Format, s: string): boolean {
     case 'tag': return isTag(s);
     case 'sshKey': return isSshKey(s);
     case 'money': return isMoney(s);
+    case 'tckn': return isTckn(s);
+    case 'vkn': return isVkn(s);
+    case 'iban': return isIban(s);
+    case 'phone': return isPhone(s);
   }
 }
 
 // How each field should behave on a phone keyboard and in the browser.
-export const inputProps: Record<Format, { inputMode?: 'text' | 'numeric' | 'decimal' | 'email' | 'url'; mono: boolean; example: string }> = {
+export const inputProps: Record<Format, { inputMode?: 'text' | 'numeric' | 'decimal' | 'email' | 'url' | 'tel'; mono: boolean; example: string }> = {
   ipv4: { mono: true, example: '203.0.113.10' },
   ip: { mono: true, example: '203.0.113.10' },
   cidr: { mono: true, example: '203.0.113.0/24' },
@@ -139,6 +180,10 @@ export const inputProps: Record<Format, { inputMode?: 'text' | 'numeric' | 'deci
   tag: { mono: false, example: 'production' },
   sshKey: { mono: true, example: 'ssh-ed25519 AAAAC3Nza… user@laptop' },
   money: { inputMode: 'decimal', mono: false, example: '9.90' },
+  tckn: { inputMode: 'numeric', mono: true, example: '10000000146' },
+  vkn: { inputMode: 'numeric', mono: true, example: '1234567890' },
+  iban: { mono: true, example: 'TR33 0006 1005 1978 6457 8413 26' },
+  phone: { inputMode: 'tel', mono: false, example: '+90 532 123 45 67' },
 };
 
 // Several values in one box (pasted lists): split on commas, spaces, semicolons or new lines.

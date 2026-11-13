@@ -1,7 +1,7 @@
 // Formats of typed values (run with: node --test lib/*.test.ts).
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { isCIDR, isDomain, isFqdn, isIPv6Prefix, isMoney, isPrivateCidr, isSshKey, isTag, isHostname, isIPv4, isIPv6, isMac, isPortRange, isServerName, isUrl, isValid, normalize, normalizeMac, splitList, suggestServerName } from './formats.ts';
+import { groupIban, isIban, isPhone, isTckn, isVkn, normalizePhone, isCIDR, isDomain, isFqdn, isIPv6Prefix, isMoney, isPrivateCidr, isSshKey, isTag, isHostname, isIPv4, isIPv6, isMac, isPortRange, isServerName, isUrl, isValid, normalize, normalizeMac, splitList, suggestServerName } from './formats.ts';
 
 test('IPv4', () => {
   for (const ok of ['0.0.0.0', '10.0.0.1', '255.255.255.255', '203.0.113.10']) assert.equal(isIPv4(ok), true, ok);
@@ -83,4 +83,22 @@ test('rules shared with the API: private LANs, IPv6 pools, tags, SSH keys, amoun
   assert.equal(isMoney('9.99999'), false);
   assert.equal(normalize('money', '9,90'), '9.90');
   assert.equal(normalize('fqdn', 'Mail.Example.com.'), 'mail.example.com');
+});
+
+test('Turkish numbers, IBAN and phone', () => {
+  assert.equal(isTckn('10000000146'), true);
+  assert.equal(isTckn('10000000147'), false);
+  assert.equal(isTckn('01234567890'), false);
+  assert.equal(isVkn('1234567890'), true);
+  assert.equal(isVkn('1234567891'), false);
+  assert.equal(isVkn('123456789'), false);
+  assert.equal(isIban('TR33 0006 1005 1978 6457 8413 26'), true);
+  assert.equal(isIban('tr330006100519786457841326'), true);
+  assert.equal(isIban('TR34 0006 1005 1978 6457 8413 26'), false);
+  assert.equal(groupIban('tr330006100519786457841326'), 'TR33 0006 1005 1978 6457 8413 26');
+  assert.equal(normalizePhone('0532 123 45 67'), '+905321234567');
+  assert.equal(normalizePhone('(532) 123-45-67'), '+905321234567');
+  assert.equal(normalizePhone('0049 30 1234567'), '+49301234567');
+  assert.equal(isPhone('+44 20 7946 0958'), true);
+  assert.equal(isPhone('12345'), false);
 });

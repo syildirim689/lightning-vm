@@ -292,7 +292,7 @@ function Profile() {
         <SelectInput label={t('kind')} value={v.kind} onChange={(x) => setV({ ...v, kind: x as Profile['kind'] })} options={[{ id: 'individual', label: t('individual') }, { id: 'company', label: t('company') }]}/>
         <TextInput label={t('country')} value={v.country} onChange={(x) => setV({ ...v, country: x.toUpperCase().slice(0, 2) })} error={errors.country} help={t('countryHelp')} autoComplete="off"/>
         <TextInput label={v.kind === 'company' ? t('companyName') : t('fullName')} value={v.name} onChange={set('name')} error={errors.name} isRequired autoComplete="off"/>
-        <TextInput label={tr ? (v.kind === 'company' ? 'VKN' : 'TCKN') : t('foreignTaxId')} value={v.taxId} onChange={set('taxId')} error={errors.taxId} isRequired autoComplete="off"
+        <TextInput format={tr ? (v.kind === 'company' ? 'vkn' : 'tckn') : undefined} label={tr ? (v.kind === 'company' ? 'VKN' : 'TCKN') : t('foreignTaxId')} value={v.taxId} onChange={set('taxId')} error={errors.taxId} isRequired autoComplete="off"
           help={tr ? (v.kind === 'company' ? t('vknHelp') : t('tcknHelp')) : undefined}/>
         {v.kind === 'company' && <TextInput label={t('taxOffice')} value={v.taxOffice} onChange={set('taxOffice')} error={errors.taxOffice} isRequired={tr} autoComplete="off"/>}
       </div>
@@ -304,8 +304,8 @@ function Profile() {
         <TextInput label={t('district')} value={v.district} onChange={set('district')} error={errors.district} isRequired={tr} autoComplete="off"/>
         <div className="sm:col-span-2"><TextInput label={t('street')} value={v.address} onChange={set('address')} error={errors.address} isRequired multiline autoComplete="off"/></div>
         <TextInput label={t('postalCode')} value={v.postalCode} onChange={set('postalCode')} autoComplete="off"/>
-        <TextInput label={t('phone')} value={v.phone} onChange={set('phone')} autoComplete="off"/>
-        <div className="sm:col-span-2"><TextInput label={t('email')} value={v.email} onChange={set('email')} error={errors.email} help={t('emailHelp')} autoComplete="off"/></div>
+        <TextInput format="phone" label={t('phone')} value={v.phone} onChange={set('phone')} autoComplete="off"/>
+        <div className="sm:col-span-2"><TextInput format="email" label={t('email')} value={v.email} onChange={set('email')} error={errors.email} help={t('emailHelp')} autoComplete="off"/></div>
       </div>
     </FormSection>
     <FormActions status={<span className="text-xs text-muted">{t('appliesTo')}</span>}><Button isPending={busy} onPress={() => void save()}><I name="check" size={16}/>{t('save')}</Button></FormActions>

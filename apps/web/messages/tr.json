@@ -8124,7 +8124,11 @@
       "hostOrIp": "ana makine adı ya da IP adresi",
       "tag": "etiket (harf, rakam, boşluk . _ -, en çok 24)",
       "sshKey": "açık SSH anahtarı (ssh-ed25519, ssh-rsa ya da ecdsa)",
-      "money": "tutar (en çok 4 ondalık)"
+      "money": "tutar (en çok 4 ondalık)",
+      "tckn": "T.C. kimlik numarası (11 hane)",
+      "vkn": "vergi kimlik numarası (10 hane)",
+      "iban": "IBAN",
+      "phone": "telefon numarası"
     },
     "today": "bugün",
     "quick": "Hızlı seçim",

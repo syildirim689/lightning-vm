@@ -8124,7 +8124,11 @@
       "hostOrIp": "host name or IP address",
       "tag": "tag (letters, digits, space . _ -, up to 24)",
       "sshKey": "public SSH key (ssh-ed25519, ssh-rsa or ecdsa)",
-      "money": "amount (up to 4 decimals)"
+      "money": "amount (up to 4 decimals)",
+      "tckn": "Turkish ID number (11 digits)",
+      "vkn": "tax number (10 digits)",
+      "iban": "IBAN",
+      "phone": "phone number"
     },
     "today": "today",
     "quick": "Quick choices",

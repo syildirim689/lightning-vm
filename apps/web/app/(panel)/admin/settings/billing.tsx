@@ -101,7 +101,7 @@ export default function BillingSettings({ readOnly }: { readOnly: boolean }) {
       {v.bankTransfer.enabled && <div className="grid gap-3 sm:grid-cols-3">
         <TextInput label={t('bank')} value={v.bankTransfer.bank} onChange={(x) => setV({ ...v, bankTransfer: { ...v.bankTransfer, bank: x } })} isDisabled={readOnly} autoComplete="off"/>
         <TextInput label={t('holder')} value={v.bankTransfer.holder} onChange={(x) => setV({ ...v, bankTransfer: { ...v.bankTransfer, holder: x } })} isDisabled={readOnly} autoComplete="off"/>
-        <TextInput label="IBAN" value={v.bankTransfer.iban} onChange={(x) => setV({ ...v, bankTransfer: { ...v.bankTransfer, iban: x } })} error={errors['bankTransfer.iban']} isDisabled={readOnly} autoComplete="off"/>
+        <TextInput format="iban" label="IBAN" value={v.bankTransfer.iban} onChange={(x) => setV({ ...v, bankTransfer: { ...v.bankTransfer, iban: x } })} error={errors['bankTransfer.iban']} isDisabled={readOnly} autoComplete="off"/>
       </div>}
     </FormSection>
     <FormSection title={t('testing')} description={t('testingHelp')} icon={<I name="flask-conical" size={16}/>}>
