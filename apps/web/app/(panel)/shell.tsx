@@ -23,6 +23,7 @@ import { authClient, signOut } from '../../lib/auth-client';
 import { can, type Permission } from '../../lib/permissions';
 import { useApiQuery } from '../../lib/query';
 import type { Branding, User } from '../../lib/session';
+import { mayLeave } from '../../lib/edits';
 
 type Key = 'dashboard' | 'stats' | 'servers' | 'abuse' | 'energy' | 'topology' | 'myTopology' | 'myVdc' | 'connections' | 'catalog' | 'users' | 'roles' | 'settings' | 'system' | 'myServers' | 'newServer' | 'firewalls' | 'account' | 'audit' | 'terminal' | 'support' | 'mySupport' | 'billing' | 'myBilling' | 'reseller' | 'networks';
 // count: a number beside the entry from GET /support/summary (tickets waiting for the customer, or for support).
@@ -115,7 +116,7 @@ function UserMenu({ user }: { user: User }) {
       <span className="hidden max-w-48 truncate text-sm lg:inline">{user.name || user.email}</span>
     </Button>
     <Dropdown.Popover placement="bottom end">
-      <Dropdown.Menu aria-label={t('userMenu')} onAction={(k) => { if (k === 'logout') void out(); else router.push(String(k)); }}>
+      <Dropdown.Menu aria-label={t('userMenu')} onAction={(k) => { if (k === 'logout') void out(); else if (mayLeave(String(k))) router.push(String(k)); }}>
         <Dropdown.Item id="/account" textValue={t('account')}><I name="key-round" size={16}/><Label>{t('account')}</Label></Dropdown.Item>
         <Dropdown.Item id="/account?tab=notifications" textValue={t('notifications')}><I name="bell" size={16}/><Label>{t('notifications')}</Label></Dropdown.Item>
         <Dropdown.Item id="logout" textValue={t('logout')} variant="danger"><I name="log-out" size={16}/><Label>{t('logout')}</Label></Dropdown.Item>

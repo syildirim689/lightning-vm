@@ -14,6 +14,7 @@ import { apiFetch, useErrorText } from '../lib/api';
 import { I } from './icon';
 import { openShortcuts } from './shortcuts';
 import { recent } from '../lib/recent';
+import { mayLeave } from '../lib/edits';
 
 type Cmd = { id: string; group: 'recent' | 'pages' | 'servers' | 'tickets' | 'users' | 'actions'; label: string; hint?: string; icon: React.ReactNode; run: () => void };
 type TicketRow = { id: string; number: number; subject: string; status: 'open' | 'answered' | 'customer_reply' | 'on_hold' | 'closed'; ownerEmail?: string };
@@ -47,7 +48,7 @@ export default function CommandPalette({ permissions, isOpen, onOpenChange }: { 
   const support = can(permissions, 'support.view');
   const tickets = useApiQuery<{ tickets: TicketRow[] }>(support ? ['admin', 'support', 'queue', 'palette'] : ['support', 'mine'], isOpen ? (support ? '/admin/support/tickets?status=' : '/support/tickets') : null).data?.tickets ?? [];
   const ts = useTranslations('Support');
-  const go = (href: string) => () => { onOpenChange(false); router.push(href); };
+  const go = (href: string) => () => { onOpenChange(false); if (mayLeave(href)) router.push(href); };
   const tsv = useTranslations('Servers');
   const tx = useTranslations('Extras');
   const { error } = useErrorText();

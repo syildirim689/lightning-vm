@@ -1,7 +1,7 @@
 "use client";
 // A link inside the app would throw away text that was typed and not saved: ask first. "Stay" takes the person back
 // to the first changed field; "Leave" drops the changes and goes. Closing or reloading the tab is asked by the browser
-// itself (lib/edits.ts). Links that open a new tab, downloads and modified clicks (new tab/window) are left alone.
+// itself (lib/edits.ts); the palette, shortcuts and menus ask through mayLeave. Links that open a new tab, downloads and modified clicks (new tab/window) are left alone.
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { useEffect, useState } from 'react';
@@ -23,8 +23,10 @@ export default function LeaveGuard() {
       e.preventDefault(); e.stopPropagation();
       setTo(url.pathname + url.search + url.hash);
     };
+    const asked = (e: Event) => setTo((e as CustomEvent<string>).detail);
     document.addEventListener('click', click, true);
-    return () => document.removeEventListener('click', click, true);
+    window.addEventListener('lvm:leave', asked);
+    return () => { document.removeEventListener('click', click, true); window.removeEventListener('lvm:leave', asked); };
   }, []);
   const stay = () => {
     setTo(null);

@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { useEffect, useState } from 'react';
 import { can } from '../lib/permissions';
+import { mayLeave } from '../lib/edits';
 
 // The palette's "Keyboard shortcuts" action opens the dialog through this event.
 export const openShortcuts = () => window.dispatchEvent(new Event('lvm:shortcuts'));
@@ -36,7 +37,7 @@ export default function Shortcuts({ permissions }: { permissions: string[] }) {
       if (e.key === 'g') { leader = Date.now(); return; }
       const r = Date.now() - leader < 1200 && allowed.find(([k]) => k === e.key.toLowerCase());
       leader = 0;
-      if (r) { e.preventDefault(); router.push(r[1]); }
+      if (r) { e.preventDefault(); if (mayLeave(r[1])) router.push(r[1]); }
     };
     const onOpen = () => setOpen(true);
     window.addEventListener('keydown', onKey);

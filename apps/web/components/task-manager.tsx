@@ -10,6 +10,7 @@ import { useEffect, useRef, useState } from 'react';
 import { can } from '../lib/permissions';
 import { useApiQuery } from '../lib/query';
 import { I } from './icon';
+import { mayLeave } from '../lib/edits';
 
 type Op = { id: string; kind: string; status: string; step: string | null; attempts: number; errorCode: string | null; createdAt: string; finishedAt: string | null; serverId: string; serverName: string };
 const steps: Record<string, string[]> = {
@@ -64,7 +65,7 @@ export default function TaskManager({ permissions }: { permissions: string[] }) 
         <ul className="max-h-[50vh] divide-y divide-separator overflow-y-auto">
           {ops.length === 0 && <li className="px-4 py-6 text-center text-sm text-muted">{t('empty')}</li>}
           {ops.map((o) => <motion.li key={o.id} layout initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-            <button type="button" onClick={() => { setOpen(false); router.push(`/servers/${o.serverId}`); }}
+            <button type="button" onClick={() => { setOpen(false); if (mayLeave(`/servers/${o.serverId}`)) router.push(`/servers/${o.serverId}`); }}
               className="flex w-full flex-col gap-1.5 px-4 py-3 text-left transition-colors hover:bg-default focus-visible:bg-default focus-visible:outline-none">
               <span className="flex items-center gap-2 text-sm">
                 <span className={tone(o)}>{icon(o)}</span>

@@ -28,6 +28,15 @@ export const firstEdited = () => changed()[0] ?? null;
 export const editsSaved = () => { for (const el of first.keys()) first.set(el, el.value); };
 // The person chose to leave without saving.
 export const forgetEdits = () => { first.clear(); };
+// Before going elsewhere from code (palette, shortcuts, menus): true when it may go now; otherwise the leave dialog
+// (components/leave-guard.tsx) asks and goes itself if the person chooses to leave.
+export const mayLeave = (href: string) => {
+  if (typeof window === 'undefined' || !hasPendingEdits()) return true;
+  const url = new URL(href, window.location.href);
+  if (url.origin !== window.location.origin || (url.pathname === window.location.pathname && url.search === window.location.search)) return true;
+  window.dispatchEvent(new CustomEvent('lvm:leave', { detail: url.pathname + url.search + url.hash }));
+  return false;
+};
 export const formDirty = (on: boolean) => { dirtyForms = Math.max(0, dirtyForms + (on ? 1 : -1)); };
 
 export function watchEdits() {

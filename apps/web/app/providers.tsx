@@ -10,6 +10,7 @@ import { AccessibilityRuntime } from '../components/accessibility';
 import { useA11y } from '../lib/a11y';
 import AutofillGuard from '../components/autofill-guard';
 import PageLoader, { announceNavigation } from '../components/page-loader';
+import { mayLeave } from '../lib/edits';
 
 // Theme (class on <html>), server-state cache, URL state, React Aria locale for dates and numbers,
 // client-side routing for every HeroUI href, motion that honours "reduce motion", toasts.
@@ -22,7 +23,7 @@ export default function Providers({ locale, loadingLabel, children }: { locale: 
     <QueryClientProvider client={client}>
       <NuqsAdapter>
         <I18nProvider locale={locale === 'tr' ? 'tr-TR' : 'en-US'}>
-          <RouterProvider navigate={(href, opts) => { announceNavigation(String(href)); router.push(href, opts); }}>
+          <RouterProvider navigate={(href, opts) => { if (!mayLeave(String(href))) return; announceNavigation(String(href)); router.push(href, opts); }}>
             <MotionConfig reducedMotion={motion === 'reduce' ? 'always' : motion === 'allow' ? 'never' : 'user'}>
               {children}
               <AccessibilityRuntime/>

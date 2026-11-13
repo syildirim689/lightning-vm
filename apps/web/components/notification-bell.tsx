@@ -11,6 +11,7 @@ import { useEffect, useRef, useState } from 'react';
 import { apiFetch } from '../lib/api';
 import { useApiQuery } from '../lib/query';
 import { I } from './icon';
+import { mayLeave } from '../lib/edits';
 
 type Text = { title: string; body: string };
 // texts: both languages (newer notifications), so the inbox follows the panel's language.
@@ -52,7 +53,7 @@ export default function NotificationBell() {
     const top = items[0];
     // A new one with a link offers to open it from the toast.
     if (newest.current !== null && top && top.id !== newest.current && !top.readAt) toast(top.title, { description: top.body,
-      ...(top.link && { actionProps: { children: t('open'), size: 'sm' as const, variant: 'secondary' as const, onPress: () => { void markRead([top.id]); router.push(top.link!); } } }) });
+      ...(top.link && { actionProps: { children: t('open'), size: 'sm' as const, variant: 'secondary' as const, onPress: () => { void markRead([top.id]); if (mayLeave(top.link!)) router.push(top.link!); } } }) });
     newest.current = top?.id ?? '';
   }, [q.data]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -95,7 +96,7 @@ export default function NotificationBell() {
           {shown.map((n, i) => <li key={n.id}>
             {/* Today, yesterday, earlier: a heading where the day changes. */}
             {(i === 0 || dayOf(shown[i - 1].createdAt) !== dayOf(n.createdAt)) && <p className="bg-default/40 px-4 py-1 text-[11px] font-semibold uppercase tracking-wider text-muted">{t(`day.${dayOf(n.createdAt)}`)}</p>}
-            <button type="button" onClick={() => { void markRead([n.id]); if (n.link) router.push(n.link); }}
+            <button type="button" onClick={() => { void markRead([n.id]); if (n.link && mayLeave(n.link)) router.push(n.link); }}
               className="flex w-full gap-3 px-4 py-3 text-left transition-colors hover:bg-default focus-visible:bg-default focus-visible:outline-none">
               <span aria-hidden className={`relative mt-0.5 grid size-8 shrink-0 place-items-center rounded-full ${n.readAt ? 'bg-default text-muted' : 'bg-accent/15 text-accent'}`}>
                 <I name={kindIcons[kindOf(n)] ?? 'bell'} size={15}/>
