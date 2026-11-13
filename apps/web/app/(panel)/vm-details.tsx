@@ -7,6 +7,7 @@ import { useFormatter, useNow, useTranslations } from 'next-intl';
 import { I } from '../../components/icon';
 import { Mono, Notice, Section, StatusChip } from '../../components/ui';
 import { useErrorText } from '../../lib/api';
+import { toolsCommand } from '../../lib/connect';
 import { useApiQuery } from '../../lib/query';
 import { Copy } from './server-extras';
 
@@ -50,6 +51,17 @@ function Group({ title, icon, children, open = true }: { title: string; icon: Re
 }
 
 const List = ({ children }: { children: React.ReactNode }) => <dl className="grid grid-cols-[minmax(7rem,auto)_minmax(0,1fr)] gap-x-4 gap-y-2 sm:grid-cols-[minmax(10rem,auto)_minmax(0,1fr)]">{children}</dl>;
+
+// How to get VMware Tools running in this guest: the install command for its distribution, or the Windows route.
+export function ToolsHint({ os }: { os: string }) {
+  const t = useTranslations('VmDetails');
+  const cmd = toolsCommand(os);
+  if (!cmd) return <p className="text-xs text-muted">{/windows/i.test(os) ? t('toolsWindows') : t('toolsOther')}</p>;
+  return <div className="flex flex-col gap-1">
+    <p className="text-xs text-muted">{t('toolsInstall')}</p>
+    <div className="flex items-start gap-1 rounded-lg bg-default/50 px-3 py-2"><code className="min-w-0 flex-1 break-all font-mono text-xs">{cmd}</code><Copy text={cmd} label={t('toolsInstall')} className="-my-1.5 shrink-0"/></div>
+  </div>;
+}
 
 export function VmDetails({ id, hasVm }: { id: string; hasVm: boolean }) {
   const t = useTranslations('VmDetails');
@@ -193,6 +205,7 @@ export function VmDetails({ id, hasVm }: { id: string; hasVm: boolean }) {
             <Row label={t('toolsRunning')} value={label('running', d.tools.runningStatus)}/>
             <Row label={t('toolsVersion')} value={`${v(d.tools.version)}${d.tools.versionStatus ? ` · ${label('versions', d.tools.versionStatus)}` : ''}`}/>
           </List>
+          {d.powerState === 'poweredOn' && d.tools.runningStatus !== 'guestToolsRunning' && <div className="mt-3"><ToolsHint os={`${d.guest.os || d.configuredOs} ${d.guestId}`}/></div>}
         </Group>
 
         {d.placement && <Group title={t('placement')} icon={<I name="server" size={16}/>}>

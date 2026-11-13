@@ -1,7 +1,7 @@
 // The connection check's rules (run with: node --test lib/*.test.ts).
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { allows, bare, loginPort, usesAddress } from './connect.ts';
+import { allows, bare, loginPort, toolsCommand, usesAddress } from './connect.ts';
 
 test('the login port follows the guest OS', () => {
   assert.equal(loginPort('Microsoft Windows Server 2022 (64-bit)'), 3389);
@@ -26,4 +26,15 @@ test('the guest address is compared without its prefix length', () => {
   assert.equal(usesAddress(['192.168.1.9/24'], '10.0.0.5'), false);
   assert.equal(usesAddress([], '10.0.0.5'), true); // nothing reported: not a mismatch
   assert.equal(usesAddress(['10.0.0.5'], null), true);
+});
+
+test('the open-vm-tools command follows the distribution', () => {
+  assert.match(toolsCommand('Ubuntu Linux (64-bit)')!, /^sudo apt-get/);
+  assert.match(toolsCommand('Debian GNU/Linux 12 (64-bit)')!, /apt-get/);
+  assert.match(toolsCommand('Rocky Linux (64-bit)')!, /dnf .* vmtoolsd$/);
+  assert.match(toolsCommand('Red Hat Enterprise Linux 9 (64-bit)')!, /dnf/);
+  assert.match(toolsCommand('SUSE Linux Enterprise 15 (64-bit)')!, /zypper/);
+  assert.match(toolsCommand('Alpine 3.20')!, /^apk/);
+  assert.equal(toolsCommand('Microsoft Windows Server 2022 (64-bit)'), null);
+  assert.equal(toolsCommand('Other 5.x Linux (64-bit)'), null);
 });

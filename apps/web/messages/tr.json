@@ -8043,7 +8043,10 @@
       "poweredOn": "Açık",
       "poweredOff": "Kapalı",
       "suspended": "Askıda"
-    }
+    },
+    "toolsInstall": "Konukta kurmak için çalıştırın:",
+    "toolsWindows": "Windows'ta VMware Tools'u kurulum dosyasıyla kurun (destek ekibi VMware Tools ISO'sunu CD sürücüsüne takabilir).",
+    "toolsOther": "open-vm-tools paketini konuğun paket yöneticisiyle kurun ve hizmetini başlatın."
   },
   "ConnectCheck": {
     "title": "Bağlantı denetimi",

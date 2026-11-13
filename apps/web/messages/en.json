@@ -8043,7 +8043,10 @@
       "poweredOn": "On",
       "poweredOff": "Off",
       "suspended": "Suspended"
-    }
+    },
+    "toolsInstall": "To install it in the guest, run:",
+    "toolsWindows": "On Windows, install VMware Tools from its installer (support can attach the VMware Tools ISO to the CD drive).",
+    "toolsOther": "Install open-vm-tools with the guest's package manager and start its service."
   },
   "ConnectCheck": {
     "title": "Connection check",

@@ -10,10 +10,10 @@ import { Section } from '../../components/ui';
 import { useApiQuery } from '../../lib/query';
 import { allows, bare, loginPort, usesAddress } from '../../lib/connect';
 import type { Rule } from './firewalls/model';
-import type { VmDetailsData } from './vm-details';
+import { ToolsHint, type VmDetailsData } from './vm-details';
 
 export type CheckState = 'ok' | 'warn' | 'fail' | 'unknown';
-export type Check = { key: string; state: CheckState; text: string; href?: string; link?: string };
+export type Check = { key: string; state: CheckState; text: string; href?: string; link?: string; extra?: React.ReactNode };
 type Target = { id: string; state: string; powerState: string; address: string | null; imageName: string; firewallStatus?: 'applied' | 'pending' | 'failed' };
 
 const icon = { ok: <I name="circle-check" size={18} className="text-success"/>, warn: <I name="triangle-alert" size={18} className="text-warning"/>,
@@ -41,7 +41,8 @@ export function ConnectCheck({ server: s }: { server: Target }) {
       : { key: 'nic', state: 'ok', text: t('nic.ok', { n: d.nics.length }) });
     const guestIps = bare(d.guest.ips);
     if (!on) { /* nothing to read from a stopped guest */ }
-    else if (!guestIps.length) checks.push({ key: 'guest', state: 'unknown', text: d.tools.runningStatus === 'guestToolsRunning' ? t('guest.noIp') : t('guest.noTools') });
+    else if (!guestIps.length) checks.push({ key: 'guest', state: 'unknown', text: d.tools.runningStatus === 'guestToolsRunning' ? t('guest.noIp') : t('guest.noTools'),
+      extra: d.tools.runningStatus === 'guestToolsRunning' ? undefined : <ToolsHint os={`${d.guest.os || d.configuredOs} ${d.guestId} ${s.imageName}`}/> });
     else if (!usesAddress(guestIps, s.address)) checks.push({ key: 'guest', state: 'fail', text: t('guest.mismatch', { expected: s.address ?? '', actual: guestIps.join(', ') }) });
     else checks.push({ key: 'guest', state: 'ok', text: t('guest.ok', { address: s.address ?? guestIps[0] }) });
     if (on && guestIps.length) checks.push(d.guest.gateways.length ? { key: 'gateway', state: 'ok', text: t('gateway.ok', { gateway: d.guest.gateways.join(', ') }) }
@@ -70,7 +71,7 @@ export function ConnectCheck({ server: s }: { server: Target }) {
       <ul aria-label={t('title')} className="flex flex-col divide-y divide-separator rounded-xl border border-border">
         {checks.map((c) => <li key={c.key} className="flex items-start gap-3 px-3 py-2.5 text-sm">
           <span aria-hidden className="mt-0.5 shrink-0">{icon[c.state]}</span>
-          <span className="min-w-0 flex-1 break-words"><span className="sr-only">{t(`state.${c.state}`)}: </span>{c.text}</span>
+          <span className="flex min-w-0 flex-1 flex-col gap-2 break-words"><span><span className="sr-only">{t(`state.${c.state}`)}: </span>{c.text}</span>{c.extra}</span>
           {c.href && <NextLink href={c.href} className="shrink-0 font-medium text-accent hover:underline">{c.link}</NextLink>}
         </li>)}
       </ul>
