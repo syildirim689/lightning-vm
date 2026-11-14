@@ -183,7 +183,7 @@ test.describe('first run (Turkish browser)', () => {
       await expect(page.getByRole('heading', { name: 'Sunulan sertifika' })).toBeVisible();
       await page.getByRole('button', { name: 'Parmak izini doğruladım, bu sertifikayı sabitle' }).click();
       await expect(page.getByRole('button', { name: /Sertifika doğrulama/ })).toContainText('Sertifikayı parmak iziyle sabitle');
-      await page.getByRole('button', { name: 'Bağlantıyı test et' }).click();
+      // Pinning tests the connection again by itself.
       await expect(page.getByText('Bağlantı başarılı', { exact: false })).toBeVisible();
       await page.getByRole('button', { name: 'Kaydet', exact: true }).click();
       await expect(heading).toHaveText('Datastore ve ağ keşfi');
@@ -486,9 +486,7 @@ test.describe('VMware connections (simulator, English browser)', () => {
     await dialog.getByLabel('Password').fill('sim-password-2');
     await dialog.getByRole('button', { name: 'Test connection' }).click();
     await dialog.getByRole('button', { name: 'I verified the fingerprint, pin this certificate' }).click();
-    // Pinning changed the form: it is tested again before "Save" is offered.
-    await expect(dialog.getByRole('button', { name: 'Save', exact: true })).toHaveCount(0);
-    await dialog.getByRole('button', { name: 'Test connection' }).click();
+    // Pinning changed the form: it is tested again by itself, then "Save" is offered.
     await dialog.getByRole('button', { name: 'Save', exact: true }).click();
     await page.getByRole('row', { name: /Sim ESXi/ }).getByRole('link', { name: 'Details' }).click();
     await expect(page.getByRole('listitem').filter({ hasText: 'vCenter Automation REST API' })).toContainText('no');
