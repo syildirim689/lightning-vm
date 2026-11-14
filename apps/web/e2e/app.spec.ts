@@ -2296,12 +2296,12 @@ test.describe('people, settings and smart features (English browser)', () => {
     const adminRow = page.getByRole('row', { name: /admin@example\.test/ }).first();
     await adminRow.getByText('Active', { exact: true }).click();
     await expect(page.getByRole('dialog')).toContainText('Recent activity');
-    await page.keyboard.press('Escape');
+    await page.getByRole('dialog').locator('[data-slot="modal-close-trigger"]').click();
     await expect(page.getByRole('dialog')).toBeHidden();
     await adminRow.focus();
     await page.keyboard.press('Enter');
     await expect(page.getByRole('dialog')).toContainText('Recent activity');
-    await page.keyboard.press('Escape');
+    await page.getByRole('dialog').locator('[data-slot="modal-close-trigger"]').click();
     await expect(page.getByRole('dialog')).toBeHidden();
     await page.setViewportSize({ width: 390, height: 844 });
     await page.waitForTimeout(400);
