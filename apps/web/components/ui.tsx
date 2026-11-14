@@ -98,7 +98,8 @@ export function TextInput({ label, value, onChange, error, help, type = 'text', 
   const [revealed, setRevealed] = useState(false);
   // A draft comes back when the field is shown empty again; every change is kept, and an empty value forgets it.
   const [restored, setRestored] = useState(false);
-  // A long text in a form with a send button: Ctrl/⌘+Enter sends it (components/shortcuts.tsx), said while typing.
+  // A long text in a form with a send button: Ctrl/⌘+Enter sends it (components/shortcuts.tsx), said once it has been
+  // focused. It stays when the field is left: a line that vanished on blur would move the send button under the pointer.
   const [sendable, setSendable] = useState(false);
   const loaded = useRef(false);
   useEffect(() => { if (!draft) return; const kept = readDraft(draft); if (kept && !value) { onChange(kept); setRestored(true); } }, [draft]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -128,7 +129,7 @@ export function TextInput({ label, value, onChange, error, help, type = 'text', 
   const full = !!maxLength && value.length >= maxLength;
   return <TextField className={`min-w-0 ${className ?? ''}`} name={autofill ? name : undefined} type={masked || revealed ? 'text' : type} value={value} onChange={onChange} isInvalid={!!shown} isRequired={isRequired} isDisabled={isDisabled} validationBehavior="aria"
     onFocus={(e) => setSendable(!!multiline && !!(e.target as Element as HTMLTextAreaElement).form?.querySelector('button[type="submit"]'))}
-    onBlur={() => { setSendable(false); tidy(); }} data-transient={transient || !!draft || undefined}>
+    onBlur={tidy} data-transient={transient || !!draft || undefined}>
     <Label>{label}{unit && <span className="sr-only"> ({unit})</span>}</Label>
     {multiline ? <TextArea rows={4} placeholder={ph} maxLength={maxLength} spellCheck={spellCheck} {...fill} {...extra} className={fmt?.mono ? 'font-mono text-sm' : undefined}/>
       : unit ? <div className="relative"><Input placeholder={ph} maxLength={maxLength} spellCheck={false} {...fill} {...extra} className={`w-full min-w-0 pr-14 tabular-nums ${fmt?.mono ? 'font-mono' : ''}`}/>
