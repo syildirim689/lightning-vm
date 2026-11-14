@@ -2,7 +2,9 @@ import { Pool } from 'pg';
 import Redis from 'ioredis';
 import { logEvent } from './log';
 
-export const pool = new Pool({ connectionString: process.env.DATABASE_URL, connectionTimeoutMillis: 3000, max: 5 });
+// DB_POOL_MAX: connections per API process (default 20); keep the sum over all processes below Postgres max_connections.
+const poolMax = Number.parseInt(process.env.DB_POOL_MAX ?? '', 10);
+export const pool = new Pool({ connectionString: process.env.DATABASE_URL, connectionTimeoutMillis: 3000, max: poolMax > 0 ? poolMax : 20 });
 export const redis = new Redis({
   host: process.env.REDIS_HOST || 'redis',
   port: Number(process.env.REDIS_PORT) || 6379,

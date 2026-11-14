@@ -7,6 +7,8 @@ import NextLink from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useFormatter, useLocale, useTranslations } from 'next-intl';
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { useQueryClient, type QueryKey } from '@tanstack/react-query';
+import { useErrorText } from '../lib/api';
 import { readDraft, writeDraft } from '../lib/drafts';
 import { type Format, inputProps, isValid, normalize, splitList } from '../lib/formats';
 import { I } from './icon';
@@ -175,6 +177,26 @@ export function Ago({ at, future }: { at: string | number | Date; future?: boole
     {f.relativeTime(future ? d : new Date(Math.min(d.getTime(), now)), now)}</time>;
 }
 
+// What a page shows when its data could not be loaded: why, and a way to try again (instead of waiting forever).
+export function LoadFailed({ error: e, retry }: { error: unknown; retry?: () => void }) {
+  const t = useTranslations('Formats');
+  const { error } = useErrorText();
+  return <div role="alert" className="flex flex-wrap items-center gap-3 rounded-2xl border border-danger/30 bg-danger/5 px-4 py-3 text-sm">
+    <I name="cloud-off" size={18} className="shrink-0 text-danger"/>
+    <span className="min-w-0 flex-1"><span className="font-medium">{t('loadFailed')}</span> <span className="text-muted">{error(e)}</span></span>
+    {retry && <Button size="sm" variant="secondary" onPress={retry}><I name="refresh-cw" size={14}/>{t('retry')}</Button>}
+  </div>;
+}
+
+// The placeholder while the query under `of` loads; when that load failed (and nothing was loaded before) it says
+// so and offers to try again.
+export function Loading({ of, children }: { of: QueryKey; children?: React.ReactNode }) {
+  const client = useQueryClient();
+  const state = useSyncExternalStore((fn) => client.getQueryCache().subscribe(fn), () => client.getQueryState(of), () => undefined);
+  if (state?.status === 'error' && state.data === undefined) return <LoadFailed error={state.error} retry={() => void client.refetchQueries({ queryKey: of, exact: true })}/>;
+  return children ?? <p role="status" className="text-sm text-muted">…</p>;
+}
+
 // "YYYY-MM-DD" for a local date.
 const ymd = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 function datePresetValues(): [string, string][] {
@@ -280,7 +302,7 @@ export function ConfirmButton({ label, title, body, confirmLabel, cancelLabel, o
             <AlertDialog.Body><div className="text-sm text-muted">{body}</div></AlertDialog.Body>
             <AlertDialog.Footer>
               <Button slot="close" variant="tertiary">{cancelLabel}</Button>
-              <Button variant="danger" isPending={busy} onPress={async () => { setBusy(true); try { await onConfirm(); close(); } finally { setBusy(false); } }}>{confirmLabel}</Button>
+              <Button variant="danger" isPending={busy} onPress={async () => { setBusy(true); try { await onConfirm(); close(); } catch { /* the caller showed why */ } finally { setBusy(false); } }}>{confirmLabel}</Button>
             </AlertDialog.Footer>
           </>}
         </AlertDialog.Dialog>
@@ -303,7 +325,7 @@ export function ConfirmDialog({ isOpen, onClose, title, body, confirmLabel, canc
         <AlertDialog.Footer>
           <Button variant="tertiary" onPress={onClose}>{cancelLabel}</Button>
           <Button variant={status === 'danger' ? 'danger' : 'primary'} isPending={busy}
-            onPress={async () => { setBusy(true); try { await onConfirm(); } finally { setBusy(false); } }}>{confirmLabel}</Button>
+            onPress={async () => { setBusy(true); try { await onConfirm(); } catch { /* the caller showed why */ } finally { setBusy(false); } }}>{confirmLabel}</Button>
         </AlertDialog.Footer>
       </AlertDialog.Dialog>
     </AlertDialog.Container>

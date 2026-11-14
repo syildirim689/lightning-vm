@@ -41,7 +41,8 @@ export default function Terminal() {
   const [fontSize, setFontSize] = useState(14);
   const [full, setFull] = useState(false);
   useEffect(() => { if (s?.enabled && waiting) setWaiting(false); }, [s?.enabled, waiting]);
-  useEffect(() => () => cleanup.current?.(), []);
+  const alive = useRef(true);
+  useEffect(() => { alive.current = true; return () => { alive.current = false; cleanup.current?.(); }; }, []);
   // The font size is a per-browser convenience.
   useEffect(() => { try { const v = Number(localStorage.getItem(fontKey)); if (v >= minFont && v <= maxFont) setFontSize(v); } catch { /* storage blocked */ } }, []);
   useEffect(() => { if (xterm.current) { xterm.current.options.fontSize = fontSize; refit.current?.(); } try { localStorage.setItem(fontKey, String(fontSize)); } catch { /* storage blocked */ } }, [fontSize]);
@@ -88,8 +89,10 @@ export default function Terminal() {
     cleanup.current?.();
     setState('connecting'); setReason(undefined);
     try { await apiFetch('/admin/terminal/session', { method: 'POST' }); }
-    catch (e) { setState('closed'); setReason(error(e)); return; }
+    catch (e) { if (alive.current) { setState('closed'); setReason(error(e)); } return; }
     const [{ Terminal: XTerm }, { FitAddon }] = await Promise.all([import('@xterm/xterm'), import('@xterm/addon-fit')]);
+    // The page was left while this connected.
+    if (!alive.current || !box.current) return;
     const term = new XTerm({ cursorBlink: true, fontSize, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace', scrollback: 10000,
       rightClickSelectsWord: true, macOptionIsMeta: true,
       theme: { background: '#0b0f17', foreground: '#e5e7eb', cursor: '#f59e0b', cursorAccent: '#0b0f17', selectionBackground: '#475569',

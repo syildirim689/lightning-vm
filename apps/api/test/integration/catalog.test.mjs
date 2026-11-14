@@ -93,6 +93,27 @@ test('packages keep money as decimals and need at least one pool', { skip }, asy
   assert.equal((await send('POST', '/admin/packages', { name: 'Small', vcpu: 1, memoryMb: 1024, diskGb: 20, priceMonthly: '1', currency: 'EUR', poolIds: [poolId] })).json().fields.name, 'NAME_TAKEN');
 });
 
+test('packages and images are edited with the same checks as on create', { skip }, async () => {
+  const pkg = { name: 'Small', vcpu: 2, memoryMb: 4096, diskGb: 40, priceMonthly: '12.10', priceHourly: '0.0168', currency: 'EUR', poolIds: [poolId], imageIds: [imageId] };
+  const bad = await send('PUT', `/admin/packages/${packageId}`, { ...pkg, vcpu: 0, poolIds: [] });
+  assert.deepEqual(bad.json().fields, { vcpu: 'OUT_OF_RANGE', poolIds: 'REQUIRED' });
+  const ok = await send('PUT', `/admin/packages/${packageId}`, { ...pkg, name: 'Small 2', diskGb: 50, priceMonthly: '13.00', imageIds: [] });
+  assert.equal(ok.statusCode, 200, ok.body);
+  const [p] = (await send('GET', '/admin/packages')).json().packages;
+  assert.deepEqual([p.name, p.diskGb, p.priceMonthly, p.poolIds, p.imageIds], ['Small 2', 50, '13.00', [poolId], []]);
+  await send('PUT', `/admin/packages/${packageId}`, pkg);
+  assert.equal((await send('PUT', '/admin/packages/00000000-0000-4000-8000-000000000000', pkg)).json().code, 'NOT_FOUND');
+
+  const { rows: [img] } = await pool.query('SELECT connection_id, template_moref FROM os_images WHERE id = $1', [imageId]);
+  const image = { name: 'Ubuntu 24.04', family: 'linux', connectionId: img.connection_id, templateMoref: img.template_moref, minDiskGb: 30 };
+  assert.deepEqual((await send('PUT', `/admin/images/${imageId}`, { ...image, templateMoref: 'vm-999999' })).json().fields, { templateMoref: 'NOT_IN_INVENTORY' });
+  const renamed = await send('PUT', `/admin/images/${imageId}`, { ...image, name: 'Ubuntu 24.04 LTS', minDiskGb: 25 });
+  assert.equal(renamed.statusCode, 200, renamed.body);
+  const [i] = (await send('GET', '/admin/images')).json().images;
+  assert.deepEqual([i.name, i.minDiskGb], ['Ubuntu 24.04 LTS', 25]);
+  await send('PUT', `/admin/images/${imageId}`, image);
+});
+
 test('IP pools stay inside their subnet and never overlap, even when created concurrently', { skip }, async () => {
   const base = { poolId, cidr: '10.20.0.0/24', gateway: '10.20.0.1', dns: ['10.20.0.53'] };
   const outside = await send('POST', '/admin/ip-pools', { ...base, name: 'bad', rangeStart: '10.20.0.10', rangeEnd: '10.20.1.20' });

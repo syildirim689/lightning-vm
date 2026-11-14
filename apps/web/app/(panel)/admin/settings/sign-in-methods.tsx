@@ -9,7 +9,7 @@ import { useEffect, useState } from 'react';
 import { I } from '../../../../components/icon';
 import ProviderMark, { providerNames } from '../../../../components/provider-mark';
 import { GuideButton } from '../../../../components/setup-guide';
-import { FormActions, FormSection, Notice, SwitchInput, TextInput } from '../../../../components/ui';
+import { FormActions, FormSection, Notice, SwitchInput, TextInput, Loading } from '../../../../components/ui';
 import { apiFetch, useErrorText, type ApiError } from '../../../../lib/api';
 import { useApiQuery } from '../../../../lib/query';
 
@@ -33,7 +33,7 @@ export default function SignInMethods({ readOnly }: { readOnly: boolean }) {
   const [origin, setOrigin] = useState('');
   useEffect(() => { setOrigin(window.location.origin); }, []);
   useEffect(() => { if (q.data && !v) setV(q.data); }, [q.data]); // eslint-disable-line react-hooks/exhaustive-deps
-  if (!v) return <p role="status" className="text-sm text-muted">…</p>;
+  if (!v) return <Loading of={['settings', 'sign-in']}/>;
   const set = <K extends keyof Doc>(k: K) => (x: Doc[K]) => { setV({ ...v, [k]: x }); setFields((f) => ({ ...f, [k]: '' })); };
   const setP = (id: Id, patch: Partial<Provider>) => { setV({ ...v, providers: { ...v.providers, [id]: { ...v.providers[id], ...patch } } }); setFields((f) => ({ ...f, [`providers.${id}.clientId`]: '' })); };
   const err = (k: string) => field(fields[k]);

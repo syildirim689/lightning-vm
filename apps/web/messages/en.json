@@ -353,7 +353,8 @@
     "SCAN_RUNNING": "Another scan is running; wait for it or stop it.",
     "SCAN_NOT_RUNNING": "This scan has already ended.",
     "SCAN_INTERRUPTED": "The scan stopped because the panel restarted.",
-    "TOKEN_ADDRESS_NOT_ALLOWED": "This API token may not be used from this address."
+    "TOKEN_ADDRESS_NOT_ALLOWED": "This API token may not be used from this address.",
+    "ENDPOINT_CHANGED": "This address answers as another ESXi/vCenter. Resource pools and images use this connection’s inventory, so it must stay the same server; add the other one as a new connection."
   },
   "Auth": {
     "required": "required",
@@ -623,7 +624,8 @@
     "IPV6_RANGE": "IPv6 blocks cannot be scanned; enter single IPv6 addresses.",
     "TOO_MANY_ADDRESSES": "More than 4096 addresses in all; split the blocks.",
     "EXPIRY_REQUIRED": "The administrator requires an expiry.",
-    "EXPIRY_TOO_LONG": "Longer than the administrator allows."
+    "EXPIRY_TOO_LONG": "Longer than the administrator allows.",
+    "PASSWORD_REQUIRED_FOR_NEW_ADDRESS": "Type the password again when the address or port changes."
   },
   "Setup": {
     "title": "Setup wizard",
@@ -805,7 +807,8 @@
     "unverifiedHelp": "If this address really is the one users will open (behind NAT, for example), you can save it without verifying.",
     "locked": "Finish the required steps before this one first.",
     "finishBlocked": "Required steps are not finished yet: {steps}.",
-    "doneOf": "{n}/{total} done"
+    "doneOf": "{n}/{total} done",
+    "finishBlockedShort": "These steps are still needed before setup can finish:"
   },
   "Vmware": {
     "eyebrow": "ADMIN · VMWARE",
@@ -845,7 +848,9 @@
       "groupEndpointHelp": "The name or IP address of vCenter or ESXi, as the panel reaches it.",
       "groupAccount": "Credentials",
       "groupAccountHelp": "The account the panel uses. A separate account with only the needed privileges is recommended.",
-      "groupTls": "Certificate check"
+      "groupTls": "Certificate check",
+      "passwordKeep": "Leave empty to keep the stored password. Type a new one if it was changed on ESXi/vCenter, or when you change the address.",
+      "passwordKeepPlaceholder": "Unchanged"
     },
     "tlsMode": {
       "system": "System CAs (default)",
@@ -860,7 +865,8 @@
       "notAfter": "Expires",
       "names": "Names",
       "verify": "To verify on the ESXi (SSH):",
-      "pin": "I verified the fingerprint, pin this certificate"
+      "pin": "I verified the fingerprint, pin this certificate",
+      "verifyVcenter": "To verify on the vCenter (SSH):"
     },
     "col": {
       "name": "Name",
@@ -1124,7 +1130,12 @@
         "badge": "Automatic"
       },
       "emptyConnections": "If you do not know the address, scan your network below; ESXi and vCenter servers it finds are added in one click."
-    }
+    },
+    "fix": "Update credentials",
+    "editOne": "Edit {name}",
+    "editTitle": "Edit connection: {name}",
+    "updated": "Connection updated.",
+    "fixHelp": "If the password was changed, type the new one. If the certificate was renewed, test the connection: the certificate it presents now is shown so you can verify and pin it. Then save."
   },
   "Console": {
     "title": "Console: {name}",
@@ -1210,7 +1221,7 @@
     "nameHelp": "Also used as the host name, for example web-1.",
     "sshKeys": "SSH keys",
     "access": "Name and access",
-    "noKeys": "Add an SSH key below first.",
+    "noKeys": "You have no SSH key yet. Add one here (paste it or import it from GitHub); it is ticked for this server at once.",
     "create": "Create server",
     "perMonth": "month",
     "summary": "Summary",
@@ -1375,7 +1386,10 @@
       "reserveMemoryPct": "RAM headroom (%)",
       "reserveMemoryPctHelp": "Management and safety headroom that is never offered.",
       "reserveStoragePct": "Storage headroom (%)",
-      "reserveStoragePctHelp": "Never offered; you are warned when real free space falls below it."
+      "reserveStoragePctHelp": "Never offered; you are warned when real free space falls below it.",
+      "editTitle": "Edit resource pool: {name}",
+      "addConnection": "Add a connection",
+      "connectionFixed": "The connection of an existing pool does not change; its servers live there."
     },
     "rule": {
       "add": "Add custom resource rule",
@@ -1409,7 +1423,8 @@
       "noTemplates": "No templates found in this connection.",
       "empty": "No images yet.",
       "esxi": "VMware ESXi (nested)",
-      "esxiHelp": "Network and password come through vApp (OVF) properties; nested virtualization is turned on."
+      "esxiHelp": "Network and password come through vApp (OVF) properties; nested virtualization is turned on.",
+      "editTitle": "Edit image: {name}"
     },
     "packages": {
       "title": "Packages",
@@ -1435,7 +1450,9 @@
       "trafficHelp": "In and out together; empty: unlimited.",
       "trafficShort": "{gb} GB traffic",
       "unlimited": "Unlimited traffic",
-      "perVcpu": "{price} per vCPU"
+      "perVcpu": "{price} per vCPU",
+      "editTitle": "Edit package: {name}",
+      "toPools": "Go to resource pools"
     },
     "ip": {
       "title": "IP pools",
@@ -1844,7 +1861,10 @@
     "export": "Download CSV",
     "undo": "Undo",
     "find": "Search this list",
-    "noMatch": "Nothing matches the search."
+    "noMatch": "Nothing matches the search.",
+    "edit": "Edit",
+    "editOf": "Edit {name}",
+    "saveChanges": "Save changes"
   },
   "Servers": {
     "loading": "Loading…",
@@ -2309,7 +2329,9 @@
     "unpaidInvoices": "{n, plural, one {# invoice awaits payment} other {# invoices await payment}}",
     "reseller": "Reseller",
     "networks": "Private networks",
-    "apiDocs": "API reference"
+    "apiDocs": "API reference",
+    "stopImpersonatingFailed": "Could not return to your own account. Try again, or sign out.",
+    "moreTools": "More tools ({n})"
   },
   "Dashboard": {
     "eyebrow": "ADMINISTRATION",
@@ -5408,7 +5430,10 @@
       "vmware_scan_ignored": "Address ignored in scans",
       "vmware_scan_unignored": "Ignored address restored",
       "settings_api_changed": "API settings changed",
-      "admin_api_token_revoked": "An API token was revoked by an administrator"
+      "admin_api_token_revoked": "An API token was revoked by an administrator",
+      "vmware_connection_updated": "vCenter connection changed",
+      "catalog_package_updated": "Package changed",
+      "catalog_image_updated": "OS template changed"
     },
     "outcome": {
       "success": "Done",
@@ -6913,7 +6938,8 @@
     "removeCardBody": "The card is removed from this account; to use it again you add it again.",
     "removeDefaultBody": "This is your default card. Without it, automatic payments wait until you choose another default card.",
     "removeConfirm": "Remove the card",
-    "transferAmount": "Amount"
+    "transferAmount": "Amount",
+    "topUpShort": "Top up the missing {amount}"
   },
   "BillingAdmin": {
     "eyebrow": "Money",
@@ -8159,7 +8185,9 @@
     "draftKept": "Draft kept in this browser until you send it",
     "draftRestored": "Your unsent draft is back",
     "draftDiscard": "Discard draft",
-    "sendHint": "{keys} sends"
+    "sendHint": "{keys} sends",
+    "loadFailed": "This could not be loaded.",
+    "retry": "Try again"
   },
   "SessionExpired": {
     "title": "Your session has ended",
@@ -8175,5 +8203,14 @@
     "leave": "Leave without saving",
     "stay": "Stay and save",
     "fields": "Not saved:"
+  },
+  "ErrorPage": {
+    "title": "This page could not be shown",
+    "body": "Something went wrong while drawing it. Your data is safe; try again, or go to the start page.",
+    "code": "Error code: {code}",
+    "retry": "Try again",
+    "home": "Start page",
+    "notFound": "Page not found",
+    "notFoundBody": "This address leads nowhere. The link may be old, or the page may have moved."
   }
 }

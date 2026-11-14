@@ -161,6 +161,39 @@ function readLimits(body: Input): Limits {
   return l;
 }
 
+// An image is a template in a connection's discovered inventory.
+async function readImage(body: Input) {
+  const f = new Fields(body);
+  const v = { name: f.text('name'), family: ['linux', 'windows', 'esxi'].includes(String(body.family)) ? String(body.family) : (f.errors.family = 'INVALID_VALUE', ''),
+    connectionId: f.text('connectionId', 36), templateMoref: f.text('templateMoref', 80), minDiskGb: f.int('minDiskGb', 1, 65536, 10), cloudInit: body.cloudInit !== false };
+  f.done();
+  const { rows: [t] } = await pool.query('SELECT template FROM vmware_vms WHERE connection_id = $1 AND moref = $2', [v.connectionId, v.templateMoref]).catch(() => ({ rows: [] }));
+  if (!t) throw apiError(400, 'VALIDATION_FAILED', 'Not in inventory', { templateMoref: 'NOT_IN_INVENTORY' });
+  if (!t.template) throw apiError(400, 'VALIDATION_FAILED', 'Not a template', { templateMoref: 'NOT_A_TEMPLATE' });
+  return v;
+}
+
+function readPackage(body: Input) {
+  const f = new Fields(body);
+  const v = { name: f.text('name'), vcpu: f.int('vcpu', 1, 256), memoryMb: f.int('memoryMb', 512, 4194304), diskGb: f.int('diskGb', 1, 65536),
+    priceMonthly: f.decimal('priceMonthly', 1000000), priceHourly: f.decimal('priceHourly', 10000, false), currency: f.currency('currency'),
+    poolIds: f.ids('poolIds'), imageIds: f.ids('imageIds'), sort: f.int('sort', 0, 10000, 0), active: body.active !== false,
+    trafficGb: body.trafficGb === undefined || body.trafficGb === null || body.trafficGb === '' ? null : f.int('trafficGb', 1, 10_000_000), };
+  if (!f.errors.poolIds && !v.poolIds.length) f.errors.poolIds = 'REQUIRED';
+  f.done();
+  return v;
+}
+
+async function inTransaction<T>(work: (client: PoolClient) => Promise<T>) {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const result = await work(client);
+    await client.query('COMMIT');
+    return result;
+  } catch (err) { await client.query('ROLLBACK'); throw err; } finally { client.release(); }
+}
+
 const poolColumns = `p.id, p.name, p.location, p.location_id AS "locationId", p.connection_id AS "connectionId", c.name AS "connectionName", p.compute_moref AS "computeMoref",
   p.datastore_morefs AS "datastoreMorefs", p.network_moref AS "networkMoref", p.cpu_overcommit::float AS "cpuOvercommit",
   p.memory_overcommit::float AS "memoryOvercommit", p.storage_overcommit::float AS "storageOvercommit", p.reserve_cpu_pct AS "reserveCpuPct",
@@ -255,17 +288,22 @@ export class CatalogAdminController {
 
   @Post('images') @HttpCode(201) @Can('catalog.manage')
   async createImage(@Req() req: AuthedRequest, @Body() body: Input) {
-    const f = new Fields(body);
-    const v = { name: f.text('name'), family: ['linux', 'windows', 'esxi'].includes(String(body.family)) ? String(body.family) : (f.errors.family = 'INVALID_VALUE', ''),
-      connectionId: f.text('connectionId', 36), templateMoref: f.text('templateMoref', 80), minDiskGb: f.int('minDiskGb', 1, 65536, 10), cloudInit: body.cloudInit !== false };
-    f.done();
-    const { rows: [t] } = await pool.query('SELECT template FROM vmware_vms WHERE connection_id = $1 AND moref = $2', [v.connectionId, v.templateMoref]).catch(() => ({ rows: [] }));
-    if (!t) throw apiError(400, 'VALIDATION_FAILED', 'Not in inventory', { templateMoref: 'NOT_IN_INVENTORY' });
-    if (!t.template) throw apiError(400, 'VALIDATION_FAILED', 'Not a template', { templateMoref: 'NOT_A_TEMPLATE' });
+    const v = await readImage(body);
     const { rows: [i] } = await guarded(() => pool.query(`INSERT INTO os_images (name, family, connection_id, template_moref, min_disk_gb, cloud_init)
       VALUES ($1,$2,$3,$4,$5,$6) RETURNING id`, [v.name, v.family, v.connectionId, v.templateMoref, v.minDiskGb, v.cloudInit]));
     await audit(req, 'catalog.image_created', 'success', req.user.id, { id: i.id, name: v.name });
     return { id: i.id };
+  }
+
+  // Same fields and checks as a new image; servers already built from it keep what they have.
+  @Put('images/:id') @Can('catalog.manage')
+  async updateImage(@Req() req: AuthedRequest, @Param('id', ParseUUIDPipe) id: string, @Body() body: Input) {
+    const v = await readImage(body);
+    const { rowCount } = await guarded(() => pool.query(`UPDATE os_images SET name = $2, family = $3, connection_id = $4, template_moref = $5, min_disk_gb = $6, cloud_init = $7
+      WHERE id = $1`, [id, v.name, v.family, v.connectionId, v.templateMoref, v.minDiskGb, v.cloudInit]));
+    if (!rowCount) throw apiError(404, 'NOT_FOUND', 'Unknown image');
+    await audit(req, 'catalog.image_updated', 'success', req.user.id, { id, name: v.name });
+    return { id };
   }
 
   @Delete('images/:id') @HttpCode(204) @Can('catalog.manage')
@@ -287,26 +325,34 @@ export class CatalogAdminController {
 
   @Post('packages') @HttpCode(201) @Can('catalog.manage')
   async createPackage(@Req() req: AuthedRequest, @Body() body: Input) {
-    const f = new Fields(body);
-    const v = { name: f.text('name'), vcpu: f.int('vcpu', 1, 256), memoryMb: f.int('memoryMb', 512, 4194304), diskGb: f.int('diskGb', 1, 65536),
-      priceMonthly: f.decimal('priceMonthly', 1000000), priceHourly: f.decimal('priceHourly', 10000, false), currency: f.currency('currency'),
-      poolIds: f.ids('poolIds'), imageIds: f.ids('imageIds'), sort: f.int('sort', 0, 10000, 0), active: body.active !== false,
-      trafficGb: body.trafficGb === undefined || body.trafficGb === null || body.trafficGb === '' ? null : f.int('trafficGb', 1, 10_000_000), };
-    if (!f.errors.poolIds && !v.poolIds.length) f.errors.poolIds = 'REQUIRED';
-    f.done();
-    const id = await guarded(async () => {
-      const client = await pool.connect();
-      try {
-        await client.query('BEGIN');
-        const { rows: [p] } = await client.query(`INSERT INTO packages (name, vcpu, memory_mb, disk_gb, price_monthly, price_hourly, currency, sort, active, traffic_gb)
-          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id`, [v.name, v.vcpu, v.memoryMb, v.diskGb, v.priceMonthly, v.priceHourly, v.currency, v.sort, v.active, v.trafficGb]);
-        await client.query('INSERT INTO package_pools SELECT $1, unnest($2::uuid[])', [p.id, v.poolIds]);
-        await client.query('INSERT INTO package_images SELECT $1, unnest($2::uuid[])', [p.id, v.imageIds]);
-        await client.query('COMMIT');
-        return p.id;
-      } catch (err) { await client.query('ROLLBACK'); throw err; } finally { client.release(); }
-    });
+    const v = readPackage(body);
+    const id = await guarded(() => inTransaction(async (client) => {
+      const { rows: [p] } = await client.query(`INSERT INTO packages (name, vcpu, memory_mb, disk_gb, price_monthly, price_hourly, currency, sort, active, traffic_gb)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id`, [v.name, v.vcpu, v.memoryMb, v.diskGb, v.priceMonthly, v.priceHourly, v.currency, v.sort, v.active, v.trafficGb]);
+      await client.query('INSERT INTO package_pools SELECT $1, unnest($2::uuid[])', [p.id, v.poolIds]);
+      await client.query('INSERT INTO package_images SELECT $1, unnest($2::uuid[])', [p.id, v.imageIds]);
+      return p.id as string;
+    }));
     await audit(req, 'catalog.package_created', 'success', req.user.id, { id, name: v.name });
+    return { id };
+  }
+
+  // Same fields and checks as a new package. Servers keep the shape and price they were ordered with.
+  @Put('packages/:id') @Can('catalog.manage')
+  async updatePackage(@Req() req: AuthedRequest, @Param('id', ParseUUIDPipe) id: string, @Body() body: Input) {
+    const v = readPackage(body);
+    const found = await guarded(() => inTransaction(async (client) => {
+      const { rowCount } = await client.query(`UPDATE packages SET name=$2, vcpu=$3, memory_mb=$4, disk_gb=$5, price_monthly=$6, price_hourly=$7, currency=$8, sort=$9,
+        active=$10, traffic_gb=$11 WHERE id=$1`, [id, v.name, v.vcpu, v.memoryMb, v.diskGb, v.priceMonthly, v.priceHourly, v.currency, v.sort, v.active, v.trafficGb]);
+      if (!rowCount) return false;
+      await client.query('DELETE FROM package_pools WHERE package_id = $1', [id]);
+      await client.query('DELETE FROM package_images WHERE package_id = $1', [id]);
+      await client.query('INSERT INTO package_pools SELECT $1, unnest($2::uuid[])', [id, v.poolIds]);
+      await client.query('INSERT INTO package_images SELECT $1, unnest($2::uuid[])', [id, v.imageIds]);
+      return true;
+    }));
+    if (!found) throw apiError(404, 'NOT_FOUND', 'Unknown package');
+    await audit(req, 'catalog.package_updated', 'success', req.user.id, { id, name: v.name });
     return { id };
   }
 

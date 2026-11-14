@@ -18,14 +18,21 @@ const gatewayUrl = () => `${location.protocol === 'https:' ? 'wss' : 'ws'}://${l
 const knownReasons = ['CONSOLE_SESSION_INVALID', 'CONSOLE_REVOKED', 'CONSOLE_EXPIRED', 'CONSOLE_LIMIT', 'CONSOLE_UNREACHABLE',
   'CONSOLE_TLS_MISMATCH', 'CONSOLE_TICKET_REJECTED', 'CONSOLE_ENDPOINT_BLOCKED', 'CONSOLE_CLOSED'];
 
+// Each file is added once per page life: coming back to the console reuses what is loaded (WMKS must not register twice).
+const loading = new Map<string, Promise<void>>();
 function load(tag: 'script' | 'link', src: string) {
-  return new Promise<void>((resolve, reject) => {
-    const el = document.createElement(tag);
-    if (tag === 'script') (el as HTMLScriptElement).src = src;
-    else Object.assign(el as HTMLLinkElement, { rel: 'stylesheet', href: src });
-    el.onload = () => resolve(); el.onerror = () => reject(new Error(src));
-    document.head.appendChild(el);
-  });
+  let p = loading.get(src);
+  if (!p) {
+    p = new Promise<void>((resolve, reject) => {
+      const el = document.createElement(tag);
+      if (tag === 'script') (el as HTMLScriptElement).src = src;
+      else Object.assign(el as HTMLLinkElement, { rel: 'stylesheet', href: src });
+      el.onload = () => resolve(); el.onerror = () => { loading.delete(src); el.remove(); reject(new Error(src)); };
+      document.head.appendChild(el);
+    });
+    loading.set(src, p);
+  }
+  return p;
 }
 
 // Each request issues a fresh one-time console session (HttpOnly cookie, 60 s) for this VM.
@@ -46,6 +53,7 @@ export default function ConsoleView({ sessionPath, title }: { sessionPath: strin
     (async () => {
       try {
         const sdk = await fetch('/console-sdk/wmks.min.js', { method: 'HEAD' });
+        if (cancelled) return;
         if (!sdk.ok) { setState('sdkMissing'); return; }
         const session = await requestSession(sessionPath);
         if (cancelled) return;
@@ -55,6 +63,7 @@ export default function ConsoleView({ sessionPath, title }: { sessionPath: strin
         await load('script', '/console-sdk/jquery.min.js');
         await load('script', '/console-sdk/jquery-ui.min.js');
         await load('script', '/console-sdk/wmks.min.js');
+        if (cancelled) return;
         const W = window.WMKS;
         if (!W || cancelled) { setState('sdkMissing'); return; }
         setState('connecting');

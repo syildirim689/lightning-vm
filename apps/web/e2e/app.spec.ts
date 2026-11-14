@@ -1271,7 +1271,9 @@ test.describe('people, settings and smart features (English browser)', () => {
   test('firewalls: created from a template, rules edited and checked, deleted', async ({ page }) => {
     await signInAdmin(page);
     await expect(page).toHaveURL(/\/admin$/);
-    await page.getByRole('link', { name: 'Firewalls' }).click();
+    // Staff see their own workspace folded away under its heading.
+    await page.getByRole('button', { name: 'My workspace' }).first().click();
+    await page.getByRole('link', { name: 'Firewalls' }).first().click();
     await page.getByRole('button', { name: 'Create firewall' }).first().click();
     const dialog = page.getByRole('dialog');
     const name = 'e2e-web-' + Date.now().toString(36);

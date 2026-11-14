@@ -10,6 +10,20 @@ const columns = `e.id::text, e.created_at AS "at", e.action, e.outcome, host(e.i
 const before = (v?: string) => (v && /^\d{1,19}$/.test(v) ? v : null);
 const more = (rows: { id: string }[]) => ({ events: rows.slice(0, page), nextBefore: rows.length > page ? rows[page - 1].id : null });
 
+// The category filter's choices scan the whole table, so they are read at most every 10 minutes per process
+// (a new kind of event shows up in the filter within that time). One read is shared by concurrent callers.
+const categoriesTtl = 10 * 60_000;
+let categoryCache: { at: number; list: Promise<string[]> } | null = null;
+function categories() {
+  if (!categoryCache || Date.now() - categoryCache.at > categoriesTtl) {
+    const list = pool.query("SELECT DISTINCT split_part(action, '.', 1) AS c FROM audit_events ORDER BY 1").then(({ rows }) => rows.map((r) => r.c as string));
+    const entry = { at: Date.now(), list };
+    categoryCache = entry;
+    list.catch(() => { if (categoryCache === entry) categoryCache = null; }); // a failed read is not kept
+  }
+  return categoryCache.list;
+}
+
 @Controller('admin') @UseGuards(PermissionGuard)
 export class AuditController {
   @Get('audit') @Can('audit.view')
@@ -20,9 +34,7 @@ export class AuditController {
         AND ($3 = '' OR e.outcome = $3) AND ($4 = '' OR split_part(e.action, '.', 1) = $4)
       ORDER BY e.id DESC LIMIT ${page + 1}`,
       [before(b), needle, ['success', 'failure', 'denied'].includes(outcome ?? '') ? outcome : '', /^[a-z_]{1,40}$/.test(category ?? '') ? category : '']);
-    // shortcut: the category list scans the table; an index or a fixed list would be needed for millions of rows.
-    const { rows: cats } = await pool.query("SELECT DISTINCT split_part(action, '.', 1) AS c FROM audit_events ORDER BY 1");
-    return { ...more(rows), categories: cats.map((r) => r.c) };
+    return { ...more(rows), categories: await categories() };
   }
 }
 

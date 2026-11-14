@@ -2,7 +2,7 @@
 // A server's network traffic: this month against its allowance, and the last 31 days (in and out per day).
 // Counted every few minutes from VMware's counters, so the figures lag a little behind.
 import { ProgressBar } from '@heroui/react';
-import { useUnits } from '../../lib/units';
+// (sizes come from lib/units)
 import { useFormatter, useTranslations } from 'next-intl';
 import { Bar, BarChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { Notice, Section } from '../../components/ui';
@@ -11,8 +11,7 @@ import { useApiQuery } from '../../lib/query';
 type Traffic = { days: { day: string; rx: number; tx: number }[]; month: { rx: number; tx: number }; allowanceGb: number | null; countedAt: string | null };
 const tooltip = { background: 'var(--overlay)', border: '1px solid var(--border)', borderRadius: 8, color: 'var(--overlay-foreground)', fontSize: 12 };
 
-// One size format for the whole panel (lib/units).
-export function useBytes() { return useUnits().bytes; }
+import { useBytes } from '../../lib/units';
 
 export function ServerTraffic({ id, throttled }: { id: string; throttled?: boolean }) {
   const t = useTranslations('Traffic');

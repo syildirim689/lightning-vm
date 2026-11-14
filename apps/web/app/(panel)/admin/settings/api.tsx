@@ -5,7 +5,7 @@ import { Button, Card, toast } from '@heroui/react';
 import { useFormatter, useTranslations } from 'next-intl';
 import { useEffect, useState } from 'react';
 import { I } from '../../../../components/icon';
-import { ButtonLink, ConfirmButton, DataTable, Empty, FormActions, FormSection, Mono, NumberInput, Notice, Stat, StatusChip, SwitchInput, TextInput } from '../../../../components/ui';
+import { ButtonLink, ConfirmButton, DataTable, Empty, FormActions, FormSection, Mono, NumberInput, Notice, Stat, StatusChip, SwitchInput, TextInput, Loading } from '../../../../components/ui';
 import { apiFetch, useErrorText, type ApiError } from '../../../../lib/api';
 import { useApiAction, useApiQuery } from '../../../../lib/query';
 import { MethodBadge } from '../../api-docs/reference';
@@ -25,7 +25,7 @@ function RulesForm({ readOnly }: { readOnly: boolean }) {
   const [fields, setFields] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
   useEffect(() => { if (q && !v) { setV(q); setNets(q.networks.join('\n')); } }, [q]); // eslint-disable-line react-hooks/exhaustive-deps
-  if (!v) return <p role="status" className="text-sm text-muted">…</p>;
+  if (!v) return <Loading of={['settings', 'api']}/>;
   async function save() {
     setBusy(true); setFields({});
     try { const out = await apiFetch<Rules>('/admin/api/settings', { method: 'PUT', body: { ...v, networks: nets.split(/[\s,]+/).filter(Boolean) } }); setV(out); setNets(out.networks.join('\n')); toast.success(t('saved')); }
@@ -79,7 +79,7 @@ function Tokens({ readOnly }: { readOnly: boolean }) {
     <Card.Title className="flex items-center gap-2"><I name="key-round" size={18}/>{t('tokensTitle')}{list && <span className="text-sm font-normal text-muted">({list.length})</span>}</Card.Title>
     <Card.Description>{t('tokensHelp')}</Card.Description>
   </Card.Header><Card.Content className="flex flex-col gap-3">
-    {!list ? <p role="status" className="text-sm text-muted">…</p> : list.length === 0 ? <Empty icon={<I name="key-round" size={24}/>} title={t('noTokens')}/> : <>
+    {!list ? <Loading of={['admin', 'api-tokens']}/> : list.length === 0 ? <Empty icon={<I name="key-round" size={24}/>} title={t('noTokens')}/> : <>
       {list.length > 5 && <input type="search" role="searchbox" aria-label={t('searchTokens')} placeholder={t('searchTokens')} value={needle} onChange={(e) => setNeedle(e.target.value)}
         className="w-full max-w-sm rounded-lg border border-border bg-transparent px-3 py-2 text-sm outline-none focus:border-accent"/>}
       <DataTable label={t('tokensTitle')} rows={rows} rowKey={(x) => x.id} minWidth={900}
@@ -131,7 +131,7 @@ function RequestLog() {
         className="w-full max-w-sm rounded-lg border border-border bg-transparent px-3 py-2 text-sm outline-none focus:border-accent"/>
       <SwitchInput label={t('errorsOnly')} isSelected={errorsOnly} onChange={setErrorsOnly}/>
     </div>
-    {!d ? <p role="status" className="text-sm text-muted">…</p> : d.requests.length === 0 ? <Empty icon={<I name="scroll-text" size={24}/>} title={t('logEmpty')}/>
+    {!d ? <Loading of={['admin', 'api-log', errorsOnly, needle.trim()]}/> : d.requests.length === 0 ? <Empty icon={<I name="scroll-text" size={24}/>} title={t('logEmpty')}/>
       : <DataTable label={t('logTitle')} rows={d.requests} rowKey={(r) => r.id} minWidth={820}
         columns={[{ id: 'w', label: t('col.when') }, { id: 'r', label: t('col.request') }, { id: 's', label: t('col.status') }, { id: 'd', label: t('col.duration') }, { id: 'k', label: t('col.token') }, { id: 'i', label: t('col.ip') }]}
         cells={(r) => [

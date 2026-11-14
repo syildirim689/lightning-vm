@@ -10,7 +10,7 @@ import { useFormatter, useNow, useTranslations } from 'next-intl';
 import { parseAsString, useQueryState } from 'nuqs';
 import { useEffect, useState } from 'react';
 import { I } from '../../../components/icon';
-import { ButtonLink, ConfirmButton, DataTable, Empty, FormActions, FormSection, Notice, PageHeader, SelectInput, StatusChip, SwitchInput, TextInput } from '../../../components/ui';
+import { ButtonLink, ConfirmButton, DataTable, Empty, FormActions, FormSection, Notice, PageHeader, SelectInput, StatusChip, SwitchInput, TextInput, Loading } from '../../../components/ui';
 import { apiFetch, useErrorText } from '../../../lib/api';
 import { downloadCsv, localDay } from '../../../lib/csv';
 import type { Card as SavedCard, Invoice, Subscription, Summary } from '../../../lib/billing';
@@ -27,11 +27,13 @@ export default function Billing() {
   const t = useTranslations('Billing');
   const format = useFormatter();
   const [tab, setTab] = useQueryState('tab', parseAsString.withDefault('invoices'));
-  const [topup, setTopup] = useState(false);
+  // ?topup=<amount>: opened from an invoice the balance does not cover, with the difference filled in.
+  const [topupAt, setTopupAt] = useQueryState('topup', parseAsString);
+  const [topup, setTopup] = useState(!!topupAt);
   const [show, setShow] = useQueryState('show', parseAsString.withDefault('all'));
   const s = useApiQuery<Summary>(['notifications', 'billing-summary'], '/billing/summary').data;
   const me = useMe();
-  if (!s) return <div className="h-48 animate-pulse rounded-3xl bg-default/50"/>;
+  if (!s) return <Loading of={['notifications', 'billing-summary']}><div className="h-48 animate-pulse rounded-3xl bg-default/50"/></Loading>;
   // Staff who can turn it on get the way there.
   if (!s.enabled) return <><PageHeader title={t('title')}/><Empty icon={<I name="receipt" size={28}/>} title={t('off')}>
     {can(me?.permissions, 'settings.manage') && <><span className="block">{t('offStaff')}</span>
@@ -76,7 +78,7 @@ export default function Billing() {
       <Tabs.Panel id="disputes" className="pt-5"><MyDisputes/></Tabs.Panel>
       <Tabs.Panel id="profile" className="pt-5"><Profile/></Tabs.Panel>
     </Tabs>
-    {topup && <Topup min={s.methods.topup.min} max={s.methods.topup.max} currency={s.balance[0]?.currency ?? s.subscriptions[0]?.currency ?? 'TRY'} onClose={() => setTopup(false)}/>}
+    {topup && <Topup min={s.methods.topup.min} max={s.methods.topup.max} currency={s.balance[0]?.currency ?? s.subscriptions[0]?.currency ?? 'TRY'} initial={topupAt ?? undefined} onClose={() => { setTopup(false); void setTopupAt(null); }}/>}
   </>;
 }
 
@@ -313,11 +315,12 @@ function Profile() {
 }
 
 // Top-up: creates the top-up invoice and goes to it to pay.
-function Topup({ min, max, currency, onClose }: { min: number; max: number; currency: string; onClose: () => void }) {
+function Topup({ min, max, currency, initial, onClose }: { min: number; max: number; currency: string; initial?: string; onClose: () => void }) {
   const t = useTranslations('Billing.topup');
   const router = useRouter();
   const { error, field } = useErrorText();
-  const [amount, setAmount] = useState(String(Math.max(min, 100)));
+  const asked = Number(initial);
+  const [amount, setAmount] = useState(String(Math.min(max, Math.max(min, Number.isFinite(asked) && asked > 0 ? Math.ceil(asked) : 100))));
   const [cur, setCur] = useState(currency);
   const [err, setErr] = useState<string>();
   const [busy, setBusy] = useState(false);

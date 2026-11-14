@@ -8,7 +8,7 @@ import { useEffect, useState } from 'react';
 import { AppBadge } from '../../../../components/chat-app-badge';
 import { I } from '../../../../components/icon';
 import { GuideButton } from '../../../../components/setup-guide';
-import { FormActions, FormSection, Notice, TextInput } from '../../../../components/ui';
+import { FormActions, FormSection, Notice, TextInput, Loading } from '../../../../components/ui';
 import { apiFetch, useErrorText, type ApiError } from '../../../../lib/api';
 import { useApiQuery } from '../../../../lib/query';
 
@@ -31,7 +31,7 @@ export default function ChatSettings({ readOnly }: { readOnly: boolean }) {
     setApps(q.data.apps);
     setWa({ token: '', phoneNumberId: q.data.whatsapp.phoneNumberId, template: q.data.whatsapp.template, language: q.data.whatsapp.language });
   }, [q.data]);
-  if (!q.data) return <p role="status" className="text-sm text-muted">…</p>;
+  if (!q.data) return <Loading of={['settings', 'chat']}/>;
   const d = q.data;
   const on = (id: string) => apps.includes(id);
   const err = (k: string) => field(fields[k]);

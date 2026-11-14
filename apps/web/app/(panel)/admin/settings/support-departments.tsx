@@ -6,7 +6,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useTranslations } from 'next-intl';
 import { useEffect, useState } from 'react';
 import { I } from '../../../../components/icon';
-import { FormActions, FormSection, SwitchInput, TextInput } from '../../../../components/ui';
+import { FormActions, FormSection, SwitchInput, TextInput, Loading } from '../../../../components/ui';
 import { apiFetch, useErrorText } from '../../../../lib/api';
 import { useApiQuery } from '../../../../lib/query';
 
@@ -21,7 +21,7 @@ export default function SupportDepartments({ readOnly }: { readOnly: boolean }) 
   const [list, setList] = useState<Dep[] | null>(null);
   const [busy, setBusy] = useState(false);
   useEffect(() => { if (q.data && !list) setList(q.data.departments); }, [q.data]); // eslint-disable-line react-hooks/exhaustive-deps
-  if (!list) return <p role="status" className="text-sm text-muted">…</p>;
+  if (!list) return <Loading of={['admin', 'support', 'departments']}/>;
   const set = (i: number, patch: Partial<Dep>) => setList(list.map((d, j) => (j === i ? { ...d, ...patch } : d)));
   const move = (i: number, by: number) => { const next = [...list]; const [d] = next.splice(i, 1); next.splice(i + by, 0, d); setList(next); };
   async function save() {

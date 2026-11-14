@@ -6,7 +6,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useFormatter, useTranslations } from 'next-intl';
 import { useState } from 'react';
 import { I } from '../../../components/icon';
-import { ButtonLink, CheckboxList, ConfirmButton, Empty, Mono, Notice, NumberInput, PageHeader, SelectInput, StatusChip, TextInput } from '../../../components/ui';
+import { ButtonLink, CheckboxList, ConfirmButton, Empty, Mono, Notice, NumberInput, PageHeader, SelectInput, StatusChip, TextInput, Loading } from '../../../components/ui';
 import { apiFetch, useErrorText, type ApiError } from '../../../lib/api';
 import { useApiQuery } from '../../../lib/query';
 import { useMe } from '../../../lib/me';
@@ -100,7 +100,7 @@ export default function VdcPage() {
   }
   return <>
     <PageHeader title={t('myTitle')} description={t('myIntro')}/>
-    {!q.data ? <div role="status" aria-label={t('loading')} className="h-48 animate-pulse rounded-3xl bg-default/50"/>
+    {!q.data ? <Loading of={key}><div role="status" aria-label={t('loading')} className="h-48 animate-pulse rounded-3xl bg-default/50"/></Loading>
       : !q.data.vdcs.length ? <Empty icon={<I name="building-2" size={28}/>} title={t('none')}>{t('noneHelp')}
         {/* The way to one: staff set it up in the catalog, a customer asks support. */}
         <span className="mt-3 flex justify-center">{can(me?.permissions, 'catalog.manage')

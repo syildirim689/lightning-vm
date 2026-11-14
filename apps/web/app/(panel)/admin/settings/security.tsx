@@ -5,7 +5,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useTranslations } from 'next-intl';
 import { useEffect, useState } from 'react';
 import { I } from '../../../../components/icon';
-import { ButtonLink, FormActions, FormSection, Notice, SwitchInput } from '../../../../components/ui';
+import { ButtonLink, FormActions, FormSection, Notice, SwitchInput, Loading } from '../../../../components/ui';
 import { apiFetch, useErrorText } from '../../../../lib/api';
 import { useMe } from '../../../../lib/me';
 import { useApiQuery } from '../../../../lib/query';
@@ -23,7 +23,7 @@ export default function Security({ readOnly }: { readOnly: boolean }) {
   const [v, setV] = useState<Doc | null>(null);
   const [busy, setBusy] = useState(false);
   useEffect(() => { if (q && !v) setV(q); }, [q]); // eslint-disable-line react-hooks/exhaustive-deps
-  if (!v) return <p role="status" className="text-sm text-muted">…</p>;
+  if (!v) return <Loading of={['settings', 'security']}/>;
   async function save() {
     setBusy(true);
     try { setV(await apiFetch<Doc>('/admin/settings/security', { method: 'PUT', body: v })); toast.success(t('saved')); client.invalidateQueries({ queryKey: ['public-config'] }); }

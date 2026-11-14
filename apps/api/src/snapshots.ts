@@ -3,7 +3,7 @@
 // off; it is powered on again when it was running before.
 import { Body, Controller, Delete, Get, Headers, HttpCode, Param, ParseUUIDPipe, Post, Req, UseGuards } from '@nestjs/common';
 import { SessionGuard, type AuthedRequest } from './auth';
-import { pool } from './db';
+import { pool, redis } from './db';
 import { apiError } from './errors';
 import { customerMay, findServer, hashOf, idempotencyKey, replay, startOperation, type Kind } from './servers';
 import { limitsOf } from './permissions';
@@ -29,7 +29,15 @@ export class SnapshotsController {
   async list(@Req() req: AuthedRequest, @Param('id', ParseUUIDPipe) id: string) {
     const s = await findServer(req, id);
     if (!s.vm_moref || s.state === 'provisioning') return { snapshots: [], max: maxFor(req) };
+    // Cached 30 seconds per server. The key carries the server's latest operation and its status, so taking, reverting
+    // or removing a snapshot (from here, a schedule or a retry) changes it when the operation starts and again when the
+    // worker finishes it: the list never waits out the cache after a change made through the panel.
+    const { rows: [op] } = await pool.query('SELECT id, status FROM operations WHERE server_id = $1 ORDER BY created_at DESC LIMIT 1', [id]);
+    const key = `snapshots:${id}:${s.vm_moref}:${op ? `${op.id}:${op.status}` : '-'}`;
+    const cached = await redis.get(key).catch(() => null);
+    if (cached) return { snapshots: JSON.parse(cached) as Snapshot[], max: maxFor(req) };
     const out = await callAdapter<{ snapshots: Snapshot[] }>('/v1/vm/snapshots', { ...(await target(s.pool_id)), vm: s.vm_moref }, 30_000);
+    await redis.set(key, JSON.stringify(out.snapshots), 'EX', 30).catch(() => undefined);
     return { snapshots: out.snapshots, max: maxFor(req) };
   }
 

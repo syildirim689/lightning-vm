@@ -9,7 +9,7 @@ import { useFormatter, useTranslations } from 'next-intl';
 import { useEffect, useState } from 'react';
 import { I } from '../../../../../components/icon';
 import { InvoiceSheet } from '../../../../../components/invoice-sheet';
-import { CheckboxInput, Mono, Notice } from '../../../../../components/ui';
+import { CheckboxInput, Mono, Notice, Loading, ButtonLink } from '../../../../../components/ui';
 import { apiFetch, useErrorText } from '../../../../../lib/api';
 import type { InvoiceDetail, Summary } from '../../../../../lib/billing';
 import { useApiQuery } from '../../../../../lib/query';
@@ -30,7 +30,7 @@ export default function InvoicePage({ id }: { id: string }) {
     if (result?.status === 'succeeded') toast.success(t('paidToast'));
     else if (result?.status === 'failed') toast.danger(t('failedToast'));
   }, [result?.status]); // eslint-disable-line react-hooks/exhaustive-deps
-  if (!d) return <div className="h-96 animate-pulse rounded-3xl bg-default/50"/>;
+  if (!d) return <Loading of={['billing', 'invoice', id]}><div className="h-96 animate-pulse rounded-3xl bg-default/50"/></Loading>;
   return <div className="flex flex-col gap-5">
     <div className="flex flex-wrap items-center justify-between gap-2 print:hidden">
       <NextLink href="/billing" className="inline-flex items-center gap-1 text-sm text-muted hover:text-foreground"><I name="arrow-left" size={14}/>{t('back')}</NextLink>
@@ -80,7 +80,9 @@ function PayPanel({ d }: { d: InvoiceDetail }) {
       {s.methods.balance && inv.kind !== 'topup' && <div className="flex flex-col gap-2 rounded-2xl border border-border bg-surface p-4">
         <p className="flex items-center gap-2 font-medium"><I name="wallet" size={16}/>{t('withBalance')}</p>
         <p className="text-sm text-muted">{t('balanceHas', { amount: money(balance) })}</p>
-        <Button className="mt-auto" isDisabled={balance < due} isPending={busy === 'balance'} onPress={() => void pay({ method: 'balance' }, 'balance')}>{balance < due ? t('balanceShort') : t('payAmount', { amount: money(due) })}</Button>
+        {balance < due
+          ? <ButtonLink className="mt-auto" variant="secondary" href={`/billing?topup=${Math.ceil((due - balance) * 100) / 100}`}><I name="plus" size={16}/>{t('topUpShort', { amount: money(due - balance) })}</ButtonLink>
+          : <Button className="mt-auto" isPending={busy === 'balance'} onPress={() => void pay({ method: 'balance' }, 'balance')}>{t('payAmount', { amount: money(due) })}</Button>}
       </div>}
       {card && <div className="flex flex-col gap-2 rounded-2xl border border-border bg-surface p-4">
         <p className="flex items-center gap-2 font-medium"><I name="credit-card" size={16}/>{t('withSaved')}</p>

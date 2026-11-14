@@ -1,11 +1,11 @@
 "use client";
 import ConnectionBanner from '../../components/connection-banner';
-import { Avatar, Button, Chip, Drawer, Dropdown, Kbd, Label, Separator } from '@heroui/react';
+import { Avatar, Button, Chip, Drawer, Dropdown, Kbd, Label, Separator, toast } from '@heroui/react';
 import { motion } from 'motion/react';
 import NextLink from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Brand } from '../../components/brand';
 import { AccessibilityButton } from '../../components/accessibility';
 import { LanguageMenu, ThemeToggle } from '../../components/chrome';
@@ -20,31 +20,32 @@ import TimeZoneSync from '../../components/time-zone-sync';
 import NotificationBell from '../../components/notification-bell';
 import TaskManager from '../../components/task-manager';
 import { authClient, signOut } from '../../lib/auth-client';
-import { can, type Permission } from '../../lib/permissions';
+import { can, isStaff, type Permission } from '../../lib/permissions';
 import { useApiQuery } from '../../lib/query';
 import type { Branding, User } from '../../lib/session';
 import { mayLeave } from '../../lib/edits';
 
 type Key = 'dashboard' | 'stats' | 'servers' | 'abuse' | 'energy' | 'topology' | 'myTopology' | 'myVdc' | 'connections' | 'catalog' | 'users' | 'roles' | 'settings' | 'system' | 'myServers' | 'newServer' | 'firewalls' | 'account' | 'audit' | 'terminal' | 'support' | 'mySupport' | 'billing' | 'myBilling' | 'reseller' | 'networks';
 // count: a number beside the entry from GET /support/summary (tickets waiting for the customer, or for support).
-type Item = { href: string; key: Key; icon: React.ReactNode; exact?: boolean; need?: Permission[]; count?: 'waiting' | 'queue' | 'unpaid'; billing?: boolean; reseller?: boolean };
+// more: a page used now and then, listed under "More tools" (open while one of them is the page on screen).
+type Item = { href: string; key: Key; icon: React.ReactNode; exact?: boolean; need?: Permission[]; count?: 'waiting' | 'queue' | 'unpaid'; billing?: boolean; reseller?: boolean; more?: boolean };
 
 // Staff entries appear only with a permission that opens them; the API checks every call anyway.
 const sections: { title: 'adminSection' | 'peopleSection' | 'customerSection'; items: Item[] }[] = [
   { title: 'adminSection', items: [
     { href: '/admin', key: 'dashboard', icon: <I name="layout-dashboard" size={18}/>, exact: true, need: ['dashboard.view'] },
-    { href: '/admin/stats', key: 'stats', icon: <I name="chart-line" size={18}/>, need: ['dashboard.view'] },
+    { href: '/admin/stats', key: 'stats', icon: <I name="chart-line" size={18}/>, need: ['dashboard.view'], more: true },
     { href: '/admin/servers', key: 'servers', icon: <I name="server" size={18}/>, need: ['servers.view_all'] },
     { href: '/admin/support', key: 'support', icon: <I name="life-buoy" size={18}/>, need: ['support.view'], count: 'queue' },
     { href: '/admin/billing', key: 'billing', icon: <I name="receipt" size={18}/>, need: ['billing.view'] },
-    { href: '/admin/topology', key: 'topology', icon: <I name="network" size={18}/>, need: ['dashboard.view', 'servers.view_all'] },
+    { href: '/admin/topology', key: 'topology', icon: <I name="network" size={18}/>, need: ['dashboard.view', 'servers.view_all'], more: true },
     { href: '/admin/vmware', key: 'connections', icon: <I name="cable" size={18}/>, need: ['vmware.view', 'vmware.manage'] },
     { href: '/admin/catalog', key: 'catalog', icon: <I name="boxes" size={18}/>, need: ['catalog.view', 'catalog.manage'] },
-    { href: '/admin/abuse', key: 'abuse', icon: <I name="shield-alert" size={18}/>, need: ['servers.view_all'] },
-    { href: '/admin/energy', key: 'energy', icon: <I name="zap" size={18}/>, need: ['dashboard.view', 'system.view'] },
+    { href: '/admin/abuse', key: 'abuse', icon: <I name="shield-alert" size={18}/>, need: ['servers.view_all'], more: true },
+    { href: '/admin/energy', key: 'energy', icon: <I name="zap" size={18}/>, need: ['dashboard.view', 'system.view'], more: true },
     { href: '/admin/system', key: 'system', icon: <I name="activity" size={18}/>, need: ['system.view'] },
-    { href: '/admin/audit', key: 'audit', icon: <I name="scroll-text" size={18}/>, need: ['audit.view'] },
-    { href: '/admin/terminal', key: 'terminal', icon: <I name="square-terminal" size={18}/>, need: ['system.terminal'] },
+    { href: '/admin/audit', key: 'audit', icon: <I name="scroll-text" size={18}/>, need: ['audit.view'], more: true },
+    { href: '/admin/terminal', key: 'terminal', icon: <I name="square-terminal" size={18}/>, need: ['system.terminal'], more: true },
   ] },
   { title: 'peopleSection', items: [
     { href: '/admin/users', key: 'users', icon: <I name="users" size={18}/>, need: ['users.view'] },
@@ -87,19 +88,44 @@ function NavList({ user, onNavigate }: { user: User; onNavigate?: () => void }) 
   const reseller = useApiQuery<{ allocation: object | null }>(['reseller', 'summary'], '/reseller/summary').data?.allocation;
   const path = usePathname();
   const active = (i: Item) => (i.exact ? path === i.href : path === i.href || path.startsWith(`${i.href}/`));
+  // Groups folded away: "More tools" for staff, and a staff member's own workspace (their customer side). Each opens
+  // by itself while one of its pages is on screen; the person's choice is kept in this browser.
+  const [opened, setOpened] = useState<Record<string, boolean>>({});
+  useEffect(() => { try { setOpened(JSON.parse(localStorage.getItem('lvm-nav-open') ?? '{}') as Record<string, boolean>); } catch { /* storage blocked */ } }, []);
+  const staff = isStaff(user.permissions);
+  const isOpen = (k: string, items: Item[]) => items.some(active) || (opened[k] ?? false);
+  const toggle = (k: string, items: Item[]) => setOpened((o) => {
+    const next = { ...o, [k]: !isOpen(k, items) };
+    try { localStorage.setItem('lvm-nav-open', JSON.stringify(next)); } catch { /* storage blocked */ }
+    return next;
+  });
+  const fold = (k: string, label: string, items: Item[], icon: string) => <button type="button" aria-expanded={isOpen(k, items)} onClick={() => toggle(k, items)}
+    className="flex min-h-9 items-center gap-3 rounded-lg px-3 text-left text-sm font-medium text-muted transition-colors hover:bg-default hover:text-foreground">
+    <I name={icon} size={18}/><span className="flex-1">{label}</span>
+    <I name="chevron-down" size={15} className={`transition-transform duration-150 ${isOpen(k, items) ? 'rotate-180' : ''}`}/>
+  </button>;
   return <nav aria-label={t('label')} className="flex flex-col gap-3">
     {sections.map((s) => {
-      const items = s.items.filter((i) => (!i.need || can(user.permissions, ...i.need)) && (!i.billing || billing?.enabled) && (!i.reseller || !!reseller));
-      if (!items.length) return null;
-      return <div key={s.title} className="flex flex-col gap-0.5">
-        <p className="px-3 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-wider text-muted">{t(s.title)}</p>
-        {items.map((i) => <NextLink key={i.href} href={i.href} onClick={onNavigate} aria-current={active(i) ? 'page' : undefined}
+      const all = s.items.filter((i) => (!i.need || can(user.permissions, ...i.need)) && (!i.billing || billing?.enabled) && (!i.reseller || !!reseller));
+      if (!all.length) return null;
+      const more = all.filter((i) => i.more);
+      const folded = staff && s.title === 'customerSection';
+      const items = folded && !isOpen(s.title, all) ? [] : all.filter((i) => !i.more || isOpen('more', more));
+      const link = (i: Item) => <NextLink key={i.href} href={i.href} onClick={onNavigate} aria-current={active(i) ? 'page' : undefined}
           className={`relative flex min-h-10 items-center gap-3 rounded-lg px-3 text-sm font-medium transition-colors duration-150 ${active(i) ? 'text-accent-soft-foreground' : 'text-muted hover:bg-default hover:text-foreground'}`}>
           {/* The highlight slides between entries instead of jumping. */}
           {active(i) && <motion.span layoutId={onNavigate ? 'nav-active-drawer' : 'nav-active'} className="absolute inset-0 rounded-lg bg-accent-soft" transition={{ type: 'spring', stiffness: 500, damping: 38 }}/>}
           <span aria-hidden className="relative">{i.icon}</span><span className="relative">{t(i.key)}</span>
           {i.count && <NavCount kind={i.count}/>}
-        </NextLink>)}
+        </NextLink>;
+      return <div key={s.title} className="flex flex-col gap-0.5">
+        {folded
+          ? <button type="button" aria-expanded={isOpen(s.title, all)} onClick={() => toggle(s.title, all)}
+              className="flex items-center gap-1 px-3 pb-1 pt-2 text-left text-[11px] font-semibold uppercase tracking-wider text-muted hover:text-foreground">
+              <span className="flex-1">{t(s.title)}</span><I name="chevron-down" size={13} className={`transition-transform duration-150 ${isOpen(s.title, all) ? 'rotate-180' : ''}`}/></button>
+          : <p className="px-3 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-wider text-muted">{t(s.title)}</p>}
+        {items.filter((i) => !i.more).map(link)}
+        {more.length > 0 && <>{fold('more', t('moreTools', { n: more.length }), more, 'ellipsis')}{items.filter((i) => i.more).map(link)}</>}
       </div>;
     })}
   </nav>;
@@ -133,7 +159,12 @@ function ImpersonationBanner({ user }: { user: User }) {
   if (!user.impersonatedBy) return null;
   return <div role="status" className="flex flex-wrap items-center justify-center gap-3 bg-warning px-4 py-2 text-sm font-medium text-warning-foreground">
     <I name="user-round-cog" size={16}/>{t('impersonating', { email: user.email })}
-    <Button size="sm" variant="tertiary" isPending={busy} onPress={async () => { setBusy(true); await authClient.admin.stopImpersonating(); router.replace('/admin/users'); router.refresh(); }}>{t('stopImpersonating')}</Button>
+    <Button size="sm" variant="tertiary" isPending={busy} onPress={async () => {
+      setBusy(true);
+      const r = await authClient.admin.stopImpersonating().catch((e: unknown) => ({ error: e }));
+      if (r?.error) { setBusy(false); toast.danger(t('stopImpersonatingFailed')); return; }
+      router.replace('/admin/users'); router.refresh();
+    }}>{t('stopImpersonating')}</Button>
   </div>;
 }
 

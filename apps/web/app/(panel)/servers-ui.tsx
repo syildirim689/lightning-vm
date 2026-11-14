@@ -1,4 +1,5 @@
 "use client";
+import dynamic from 'next/dynamic';
 import { Button, Card, Dropdown, Label, Popover, ProgressBar, toast } from '@heroui/react';
 import { I } from '../../components/icon';
 import NextLink from 'next/link';
@@ -11,7 +12,6 @@ import { useEffect, useRef, useState } from 'react';
 import { apiFetch, useErrorText } from '../../lib/api';
 import { useApiForm } from '../../lib/form';
 import { useApiAction, useApiQuery } from '../../lib/query';
-import ServerMetrics from './metrics';
 import { VmDetails } from './vm-details';
 import { ServerIso } from './server-iso';
 import { ServerHealth } from '../../components/smart';
@@ -21,7 +21,10 @@ import { useDocTitle } from '../../lib/title';
 import { PowerSchedules } from './server-schedules';
 import { ServerSnapshots } from './server-snapshots';
 import { ServerReinstall, ServerResize } from './server-change';
-import { ServerTraffic, useBytes } from './server-traffic';
+import { useBytes } from '../../lib/units';
+// The charts (and their library) load with the server page's lower part, not with the server list.
+const ServerMetrics = dynamic(() => import('./metrics'), { ssr: false });
+const ServerTraffic = dynamic(() => import('./server-traffic').then((m) => m.ServerTraffic), { ssr: false });
 import { ServerBackups } from './server-backups';
 import { ServerPlacement } from './server-placement';
 import { ServerDisks } from './server-disks';
@@ -32,7 +35,7 @@ import { can } from '../../lib/permissions';
 import { noteLine } from '../../lib/note-line';
 import { ServerFilters, ServerTotals, useServerFilters } from './server-filters';
 import { flag } from '../../lib/flag';
-import { Ago, ButtonLink, CheckboxInput, ConfirmButton, DataTable, Empty, Mono, Notice, PageHeader, Section, StatusChip, TextInput, type Tone } from '../../components/ui';
+import { Ago, ButtonLink, CheckboxInput, ConfirmButton, DataTable, Empty, Mono, Notice, PageHeader, Section, StatusChip, TextInput, type Tone, Loading } from '../../components/ui';
 import { SectionNav } from '../../components/section-nav';
 import { ConnectCheck } from './connect-check';
 
@@ -40,6 +43,8 @@ export type Server = { id: string; name: string; state: string; powerState: stri
   priceMonthly: string; currency: string; trafficGb?: number | null; trafficBytes?: number; billingMode?: 'monthly' | 'hourly'; priceHourly?: string | null; trafficThrottled?: boolean; errorCode: string | null; poolName: string; location: string; locationCity?: string | null; locationCountry?: string | null; locationDatacenter?: string | null; imageName: string; address: string | null;
   createdAt: string; favorite?: boolean; locked?: boolean; billingHold?: boolean; deleteAt?: string | null; tags?: string[]; notes?: string; poolId: string; imageId: string; packageId: string | null; vdcId?: string | null; projectId?: string | null; ownerEmail?: string; hasRootPassword?: boolean; applicationName?: string | null; appState?: 'pending' | 'installing' | 'installed' | 'failed' | null; appMessage?: string | null; firewallStatus?: 'applied' | 'pending' | 'failed'; firewallError?: string | null; firewallCount?: number; lastOperation: { id: string; kind: string; status: string; step: string | null; errorCode: string | null } | null };
 const firewallFailed = (s: Server) => s.firewallStatus === 'failed';
+// Something on this server is still changing (a task, an application install, firewall rules being applied).
+const moving = (s: Server) => ['pending', 'running'].includes(s.lastOperation?.status ?? '') || s.appState === 'pending' || s.appState === 'installing' || s.firewallStatus === 'pending';
 type Operation = { id: string; kind: string; status: string; step: string | null; attempts: number; errorCode: string | null; createdAt: string; finishedAt: string | null };
 
 // One Idempotency-Key per user intention: a double click or a retry after a timeout reuses it,
@@ -102,7 +107,7 @@ export function SshKeys() {
 export function ServerList() {
   const t = useTranslations('Servers');
   const tn = useTranslations('Nav');
-  const servers = useApiQuery<{ servers: Server[] }>(['servers'], '/servers', { refetchInterval: 5_000 }).data?.servers;
+  const servers = useApiQuery<{ servers: Server[] }>(['servers'], '/servers', { refetchInterval: (d) => (d?.servers.some(moving) ? 5_000 : 20_000) }).data?.servers;
   const [gridRef] = useAutoAnimate<HTMLUListElement>();
   const f = useServerFilters(servers ?? []);
   const format = useFormatter();
@@ -135,7 +140,7 @@ export function ServerList() {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [picking]);
-  if (!servers) return <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4" aria-busy>{[0, 1, 2].map((i) => <Card key={i} className="h-36 animate-pulse"><span className="sr-only">…</span></Card>)}</div>;
+  if (!servers) return <Loading of={['servers']}><div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4" aria-busy>{[0, 1, 2].map((i) => <Card key={i} className="h-36 animate-pulse"><span className="sr-only">…</span></Card>)}</div></Loading>;
   if (!servers.length) return <Empty icon={<I name="server" size={28}/>} title={t('list.empty')}><ButtonLink href="/order" className="mt-3"><I name="plus" size={16}/>{tn('newServer')}</ButtonLink></Empty>;
   // Starred servers first, the rest in their order.
   const shown = [...f.shown].sort((a, b) => Number(!!b.favorite) - Number(!!a.favorite));
@@ -401,7 +406,7 @@ export function ServerDetail({ id }: { id: string }) {
   const [deleteName, setDeleteName] = useState('');
   const [deleteNow, setDeleteNow] = useState(false);
   const page = useRef<HTMLDivElement>(null);
-  const q = useApiQuery<{ server: Server; operations: Operation[]; own?: boolean; allowed?: Record<'power' | 'console' | 'iso' | 'rootPassword' | 'delete' | 'snapshots' | 'resize' | 'reinstall' | 'backups', boolean>; deleteGraceHours?: number }>(['servers', id], `/servers/${id}`, { refetchInterval: 3_000 });
+  const q = useApiQuery<{ server: Server; operations: Operation[]; own?: boolean; allowed?: Record<'power' | 'console' | 'iso' | 'rootPassword' | 'delete' | 'snapshots' | 'resize' | 'reinstall' | 'backups', boolean>; deleteGraceHours?: number }>(['servers', id], `/servers/${id}`, { refetchInterval: (d) => (!d || d.operations.some((o) => !o.finishedAt) || moving(d.server) ? 3_000 : 15_000) });
   const gone = (q.error as { code?: string } | null)?.code === 'NOT_FOUND';
   const me = useMe();
   // The viewer's own server names, for the next free name in "order similar".
@@ -444,8 +449,8 @@ export function ServerDetail({ id }: { id: string }) {
     <SectionNav root={page} label={t('detail.sections')} top={t('detail.toTop')}
       lead={<span data-lead className="flex min-w-0 items-center gap-2 border-r border-separator pr-3"><span className="truncate text-sm font-semibold">{s.name}</span><span className="hidden shrink-0 md:inline-flex"><StateBadge server={s}/></span></span>}/>
     {message && <div role="alert"><Notice tone="danger">{message}</Notice></div>}
-    {s.billingHold && <Notice tone="danger" title={t('billingHold')}>{t('billingHoldHelp')} <NextLink href="/billing?tab=invoices" className="font-medium text-accent hover:underline">{t('payNow')}</NextLink></Notice>}
-    {s.lastOperation?.step === 'awaiting_payment' && <Notice tone="warning" title={t('awaitingPayment')}>{t('awaitingPaymentHelp')} <NextLink href="/billing?tab=invoices" className="font-medium text-accent hover:underline">{t('payNow')}</NextLink></Notice>}
+    {s.billingHold && <Notice tone="danger" title={t('billingHold')}>{t('billingHoldHelp')} <NextLink href="/billing?show=open" className="font-medium text-accent hover:underline">{t('payNow')}</NextLink></Notice>}
+    {s.lastOperation?.step === 'awaiting_payment' && <Notice tone="warning" title={t('awaitingPayment')}>{t('awaitingPaymentHelp')} <NextLink href="/billing?show=open" className="font-medium text-accent hover:underline">{t('payNow')}</NextLink></Notice>}
     {s.deleteAt && <TrashBar server={s} canChange={allowed.delete}/>}
     <LockBar id={id} locked={locked} canChange={own || allowed.delete}/>
     {s.errorCode && <Notice tone="danger">{t('errorCode', { message: error({ code: s.errorCode }), code: s.errorCode })}</Notice>}
@@ -528,6 +533,8 @@ export function ServerDetail({ id }: { id: string }) {
     {(own || can(me?.permissions, 'servers.manage_all')) && s.state === 'ready' && !s.vdcId && <TransferServer serverId={s.id} serverName={s.name} staff={!own} busy={!!open}/>}
     {allowed.delete && !s.deleteAt && <Section title={t('delete.title')} description={t('delete.explain')} className="border border-danger/30">
       {soft && <p className="mb-3 flex items-start gap-2 text-sm text-muted"><I name="history" size={16} className="mt-0.5 shrink-0 text-accent"/>{t('delete.graceHelp', { hours: grace })}</p>}
+      {/* Locked: why the button stays grey, with the unlock right here. */}
+      {locked && <div className="mb-3"><LockBar id={id} locked canChange={own || allowed.delete}/></div>}
       <div className="flex flex-wrap items-end gap-3">
         <TextInput transient className="min-w-0 flex-1 sm:min-w-64" label={t('delete.confirm', { name: s.name })} value={deleteName} onChange={setDeleteName} autoComplete="off"/>
         <Button variant="danger" isDisabled={deleteName !== s.name || s.state === 'deleting' || locked} onPress={() => act(`/servers/${id}`, 'DELETE', { confirm: deleteName, now: !soft || deleteNow })}>

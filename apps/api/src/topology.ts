@@ -1,6 +1,6 @@
 // Topology screens: the live structure of the infrastructure (admin) and of a customer's own servers. Each
-// VMware endpoint is read through the adapter at most every 15 seconds (Redis cache); everything else comes
-// from the database (servers, pools, locations, firewalls).
+// VMware endpoint is read through the adapter at most every 15 seconds (Redis cache, kept 60 seconds and refreshed
+// by one caller at a time); everything else comes from the database (servers, pools, locations, firewalls).
 import { Controller, Get, Req, UseGuards } from '@nestjs/common';
 import { pool, redis } from './db';
 import { SessionGuard, type AuthedRequest } from './auth';
@@ -12,19 +12,58 @@ type Live = { time: string; compute: { moref: string; name: string; kind: string
   hosts: { moref: string; name: string; compute: string; state: string; power: string; cpuUsedMhz: number; cpuTotalMhz: number; memUsedMb: number; memTotalMb: number }[];
   datastores: { moref: string; name: string; capacityGb: number; freeGb: number; hosts: string[] }[]; vms: Vm[]; otherVms: number };
 
-async function live(c: Record<string, string | number>): Promise<Live | { error: string }> {
-  const key = `topology:${c.id}`;
-  const hit = await redis.get(key).catch(() => null);
-  if (hit) return JSON.parse(hit);
+type Reading = Live | { error: string };
+const fresh = 15_000; // older than this, the next caller refreshes it (the screens poll every 15 seconds)
+const keep = 60; // seconds a reading is served at most, while one caller refreshes it
+const adapterTimeout = 60_000;
+
+async function read(c: Record<string, string | number>): Promise<Reading> {
   try {
-    const out = await callAdapter<Live>('/v1/topology', storedTarget(c), 60_000);
-    await redis.set(key, JSON.stringify(out), 'EX', 15).catch(() => undefined);
-    return out;
+    return await callAdapter<Live>('/v1/topology', storedTarget(c), adapterTimeout);
   } catch (e) {
-    const error = (e as { getResponse?: () => { code?: string } }).getResponse?.().code ?? 'VMWARE_ERROR';
-    await redis.set(key, JSON.stringify({ error }), 'EX', 15).catch(() => undefined);
-    return { error };
+    return { error: (e as { getResponse?: () => { code?: string } }).getResponse?.().code ?? 'VMWARE_ERROR' };
   }
+}
+
+// Reads the endpoint and stores the result (an error too, so a dead endpoint is not asked on every poll).
+async function refresh(c: Record<string, string | number>, key: string, lock: string): Promise<Reading> {
+  try {
+    const data = await read(c);
+    await redis.set(key, JSON.stringify({ at: Date.now(), data }), 'EX', keep).catch(() => undefined);
+    return data;
+  } finally {
+    await redis.del(lock).catch(() => undefined);
+  }
+}
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+// Stale-while-refresh: a reading younger than 15 seconds is served as is; an older one is still served while the
+// caller that wins the lock (SET NX) refreshes it in the background. With nothing cached, the winner reads VMware
+// and the others wait for its result instead of each asking the endpoint themselves.
+async function live(c: Record<string, string | number>): Promise<Reading> {
+  const key = `topology:v2:${c.id}`;
+  const lock = `lock:topology:${c.id}`;
+  const cached = async () => {
+    const hit = await redis.get(key).catch(() => null);
+    return hit ? (JSON.parse(hit) as { at: number; data: Reading }) : null;
+  };
+  // Redis down: the lock cannot be taken, so read VMware directly as before.
+  const claim = () => redis.set(lock, '1', 'PX', adapterTimeout + 5_000, 'NX').then((r) => r === 'OK', () => null);
+  const hit = await cached();
+  if (hit) {
+    if (Date.now() - hit.at >= fresh && (await claim())) refresh(c, key, lock).catch(() => undefined);
+    return hit.data;
+  }
+  const won = await claim();
+  if (won !== false) return won ? refresh(c, key, lock) : read(c);
+  for (const end = Date.now() + adapterTimeout + 5_000; Date.now() < end;) {
+    await sleep(250);
+    const later = await cached();
+    if (later) return later.data;
+    if (!(await redis.exists(lock).catch(() => 0))) break; // the other caller gave up without storing anything
+  }
+  return (await claim()) ? refresh(c, key, lock) : read(c);
 }
 
 const serverRows = (where: string, params: unknown[]) => pool.query(`SELECT s.id, s.name, s.state, s.vm_moref AS "vmMoref", s.vcpu, s.memory_mb AS "memoryMb",
@@ -70,7 +109,7 @@ export class TopologyController {
     const ids = [...new Set(servers.map((s) => s.connectionId as string))];
     const { rows: conns } = ids.length ? await pool.query('SELECT * FROM vmware_connections WHERE id = ANY($1::uuid[])', [ids]) : { rows: [] };
     const vms = new Map<string, Vm>();
-    for (const c of conns) { const d = await live(c); if ('vms' in d) for (const v of d.vms) vms.set(v.name, v); }
+    for (const d of await Promise.all(conns.map((c) => live(c)))) if ('vms' in d) for (const v of d.vms) vms.set(v.name, v);
     const used = new Set(servers.map((s) => s.locationId));
     return { time: new Date().toISOString(), locations: locs.filter((l) => used.has(l.id)),
       servers: servers.map((s) => { const { owner: _o, connectionId: _c, computeMoref: _m, vmMoref: _v, ...rest } = withLive(s, vms) as Record<string, unknown>; return rest; }) };

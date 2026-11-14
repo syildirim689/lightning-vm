@@ -270,7 +270,9 @@ export default function Wizard() {
         {current === 'access' && fresh && !passed && <p className="text-sm text-muted">{t(`access.hint.${result!.checks[0].code}` as 'access.hint.DNS_FAILED')} {t('unverifiedHelp')}</p>}
         {current === 'domain' && fresh && result!.checks.filter((c) => !c.ok).map((c) => <p key={c.id} className="text-sm text-muted">{t(`domain.hint.${c.code}` as 'domain.hint.DNS_FAILED')}</p>)}
         {current === 'domain' && fresh && result!.checks.some((c) => c.id === 'dns' && c.detail?.aaaa) && <p className="text-sm text-muted">{t('domain.aaaaWarning')}</p>}
-        {current === 'summary' && missing.length > 0 && <Notice tone="warning">{t('finishBlocked', { steps: missing.map((s) => t(`steps.${s}.title`)).join(', ') })}</Notice>}
+        {current === 'summary' && missing.length > 0 && <Notice tone="warning">{t('finishBlockedShort')}
+          {/* Each missing step is one press away. */}
+          <span className="mt-2 flex flex-wrap gap-2">{missing.map((m) => <Button key={m} size="sm" variant="secondary" onPress={() => go(m)}><I name="arrow-right" size={14}/>{t(`steps.${m}.title`)}</Button>)}</span></Notice>}
         {failure && !failure.fields && <div role="alert"><Notice tone="danger">{failure.text}</Notice></div>}
 
         </motion.div>

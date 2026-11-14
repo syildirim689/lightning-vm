@@ -6,7 +6,7 @@ import NextLink from 'next/link';
 import { useTranslations } from 'next-intl';
 import { useEffect, useState } from 'react';
 import { I } from '../../../../components/icon';
-import { FormActions, FormSection, Notice, SwitchInput, TextInput } from '../../../../components/ui';
+import { FormActions, FormSection, Notice, SwitchInput, TextInput, Loading } from '../../../../components/ui';
 import { apiFetch, useErrorText } from '../../../../lib/api';
 import { useApiQuery } from '../../../../lib/query';
 
@@ -24,7 +24,7 @@ export default function BillingSettings({ readOnly }: { readOnly: boolean }) {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
   useEffect(() => { if (q && !v) setV(q.billing); }, [q]); // eslint-disable-line react-hooks/exhaustive-deps
-  if (!v) return <p role="status" className="text-sm text-muted">…</p>;
+  if (!v) return <Loading of={['settings', 'billing']}/>;
   const num = (k: keyof Doc) => (x: string) => setV({ ...v, [k]: Number(x.replace(/\D/g, '')) || 0 });
   const co = (k: keyof Company) => (x: string) => setV({ ...v, company: { ...v.company, [k]: x } });
   const toggle = (k: keyof Doc, label: string, help: string) => <div className="flex items-start justify-between gap-3 rounded-xl border border-border p-3">

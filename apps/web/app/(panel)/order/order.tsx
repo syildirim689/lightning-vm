@@ -5,9 +5,9 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { motion } from 'motion/react';
 import { useRouter } from 'next/navigation';
 import { useFormatter, useTranslations } from 'next-intl';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { I } from '../../../components/icon';
-import { ButtonLink, CheckboxList, Empty, Notice, NumberInput, PageHeader, Section, SelectInput, TextInput } from '../../../components/ui';
+import { ButtonLink, CheckboxList, Empty, Notice, NumberInput, PageHeader, Section, SelectInput, TextInput, Loading } from '../../../components/ui';
 import { apiFetch, useErrorText, type ApiError } from '../../../lib/api';
 import { hostnameSchema, orderBody, useOrder } from '../../../lib/order-store';
 import { LocationPicker, type OrderLocation } from './locations';
@@ -15,7 +15,7 @@ import { WorkloadAdvisor } from './advisor';
 import { needs, pick, snap, type Traffic, type Workload } from '../../../lib/sizing';
 import { useApiQuery } from '../../../lib/query';
 import type { Summary } from '../../../lib/billing';
-import { useIntentKey, useSshKeys } from '../servers-ui';
+import { SshKeys, useIntentKey, useSshKeys } from '../servers-ui';
 import { Copy } from '../server-extras';
 import { strongPassword } from '../../../lib/password';
 import { Strength } from '../../(auth)/credentials-form';
@@ -51,7 +51,9 @@ export default function Order() {
   const [rootPassword, setRootPassword] = useState('');
   const catalog = useApiQuery<Catalog>(['catalog'], '/catalog').data;
   const projects = useApiQuery<{ projects: Project[] }>(['projects'], '/projects').data?.projects ?? [];
-  const mine = useApiQuery<{ servers: { name: string }[] }>(['servers'], '/servers').data?.servers ?? [];
+  const mineQ = useApiQuery<{ servers: { name: string }[] }>(['servers'], '/servers');
+  const mine = mineQ.data?.servers ?? [];
+  const keysQ = useApiQuery<{ keys: { id: string }[] }>(['ssh-keys'], '/ssh-keys');
   const availability = useApiQuery<Availability>(['availability', d.poolId], d.poolId ? `/catalog/availability?poolId=${d.poolId}` : null).data;
   const [failure, setFailure] = useState<ApiError & { text: string }>();
   const [busy, setBusy] = useState(false);
@@ -69,6 +71,36 @@ export default function Order() {
     if (d.applicationId && !catalog.applications.some((a) => a.id === d.applicationId)) d.set({ applicationId: '' });
   }, [catalog]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Choices with only one answer are made for the person: the only image, the only package here, and a free name
+  // once the image is known (the person can change all of them).
+  useEffect(() => {
+    if (!catalog) return;
+    const patch: Partial<typeof d> = {};
+    if (!d.imageId && catalog.images.length === 1) patch.imageId = catalog.images[0].id;
+    const here = catalog.packages.filter((p) => p.poolIds.includes(d.poolId));
+    if (d.type === 'package' && !d.packageId && here.length === 1) patch.packageId = here[0].id;
+    const img = catalog.images.find((i) => i.id === (patch.imageId ?? d.imageId));
+    if (!d.name && img && mineQ.data) {
+      const used = new Set(mineQ.data.servers.map((m) => m.name));
+      const base = slug(img.name.split(/\s/)[0] ?? 'server');
+      let n = 1; while (used.has(`${base}-${n}`)) n++;
+      patch.name = `${base}-${n}`;
+    }
+    if (Object.keys(patch).length) d.set(patch);
+  }, [catalog, d.poolId, d.imageId, d.type, mineQ.data]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // SSH keys: the only one is ticked; a key added while ordering (in the form below) is ticked too; removed ones drop out.
+  const seenKeys = useRef<string[] | null>(null);
+  const keyIds = (keysQ.data?.keys ?? []).map((k) => k.id);
+  useEffect(() => {
+    if (!keysQ.data) return;
+    const valid = d.sshKeyIds.filter((id) => keyIds.includes(id));
+    const added = seenKeys.current ? keyIds.filter((id) => !seenKeys.current!.includes(id)) : [];
+    const next = added.length ? [...new Set([...valid, ...added])] : !valid.length && keyIds.length === 1 ? keyIds : valid;
+    if (next.join() !== d.sshKeyIds.join()) d.set({ sshKeyIds: next });
+    seenKeys.current = keyIds;
+  }, [keyIds.join(), !!keysQ.data]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const body = { ...orderBody(d), ...(coupon && d.billingCycle !== 'hourly' && { coupon }) };
   const pool = catalog?.pools.find((p) => p.id === d.poolId);
   // Another location may sell fewer extra addresses (or none).
@@ -79,7 +111,7 @@ export default function Order() {
     queryFn: () => apiFetch<Quote>('/catalog/quote', { method: 'POST', body }),
   });
 
-  if (!catalog) return <p role="status" className="text-sm text-muted">…</p>;
+  if (!catalog) return <Loading of={['catalog']}/>;
   if (!catalog.pools.length) return <><PageHeader title={t('title')}/><Empty icon={<I name="map-pin" size={28}/>} title={t('nothingOffered')}/></>;
   const packages = catalog.packages.filter((p) => p.poolIds.includes(d.poolId));
   const image = catalog.images.find((i) => i.id === d.imageId);
@@ -210,7 +242,7 @@ export default function Order() {
                 error={nameError ?? (nameTaken ? field('NAME_TAKEN') : d.name && !nameOk ? field('INVALID_HOSTNAME') : undefined) ?? quoteField('name')} autoComplete="off" spellCheck={false}/>
               <Button className="mt-6" variant="secondary" onPress={() => { d.set({ name: suggest() }); setNameError(undefined); }}><I name="sparkles" size={16}/>{t('suggest')}</Button>
             </div>
-            {keys.length === 0 ? <Notice tone="warning">{t('noKeys')} <ButtonLink href="/account" size="sm" variant="secondary" className="ml-2">{t('manageKeys')}</ButtonLink></Notice>
+            {keys.length === 0 ? <><Notice tone="warning">{t('noKeys')}</Notice><SshKeys/></>
               : <CheckboxList label={t('sshKeys')} value={d.sshKeyIds} onChange={(v) => d.set({ sshKeyIds: v })} error={quoteField('sshKeyIds')}
                   options={keys.map((k) => ({ id: k.id, label: k.name }))}/>}
             {image?.family === 'esxi' && <Notice tone="default">{t('esxiNote')}</Notice>}

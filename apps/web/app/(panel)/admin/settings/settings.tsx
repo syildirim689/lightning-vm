@@ -10,7 +10,7 @@ import { useEffect, useState } from 'react';
 import { useCaptcha } from '../../../../components/captcha';
 import { I } from '../../../../components/icon';
 import { GuideButton } from '../../../../components/setup-guide';
-import { CheckboxInput, FormActions, FormSection, Notice, NumberInput, PageHeader, SelectInput, StatusChip, SwitchInput, TextInput } from '../../../../components/ui';
+import { CheckboxInput, FormActions, FormSection, Notice, NumberInput, PageHeader, SelectInput, StatusChip, SwitchInput, TextInput, Loading } from '../../../../components/ui';
 import { apiFetch, useErrorText, type ApiError } from '../../../../lib/api';
 import { useMe } from '../../../../lib/me';
 import { can } from '../../../../lib/permissions';
@@ -115,7 +115,7 @@ function readImage(file: File, max: number): Promise<string> {
 function Branding({ readOnly }: { readOnly: boolean }) {
   const t = useTranslations('Settings');
   const f = useSettingsForm<BrandingDoc>('/admin/settings/branding', 'branding');
-  if (!f.v) return <p role="status" className="text-sm text-muted">…</p>;
+  if (!f.v) return <Loading of={['settings', 'branding']}/>;
   const v = f.v;
   const hex = v.accent ?? '#f5a524';
   const light = contrast(hex, [255, 255, 255]), dark = contrast(hex, [24, 28, 38]);
@@ -194,7 +194,7 @@ function Mail({ readOnly, myEmail }: { readOnly: boolean; myEmail: string }) {
   const [test, setTest] = useState<{ ok: boolean; text: string; detail?: string }>();
   const [testing, setTesting] = useState(false);
   useEffect(() => { if (myEmail && !to) setTo(myEmail); }, [myEmail]); // eslint-disable-line react-hooks/exhaustive-deps
-  if (!f.v) return <p role="status" className="text-sm text-muted">…</p>;
+  if (!f.v) return <Loading of={['settings', 'mail']}/>;
   const v = f.v;
   const body = { ...v, password: v.password ?? '' };
   const api = v.providers.find((p) => p.id === v.provider);
@@ -283,7 +283,7 @@ function Captcha({ readOnly }: { readOnly: boolean }) {
   const [testing, setTesting] = useState(false);
   const v = f.v;
   const widget = useCaptcha(v && v.provider !== 'none' && v.siteKey.length >= 8 ? { provider: v.provider, siteKey: v.siteKey } : null, 'settings_test');
-  if (!v) return <p role="status" className="text-sm text-muted">…</p>;
+  if (!v) return <Loading of={['settings', 'captcha']}/>;
   const body = { ...v, secret: v.secret ?? '' };
   async function runTest() {
     setTesting(true); setResult(undefined);
@@ -345,7 +345,7 @@ function Sms({ readOnly, myPhone }: { readOnly: boolean; myPhone: string }) {
   const [test, setTest] = useState<{ ok: boolean; text: string; detail?: string }>();
   const [testing, setTesting] = useState(false);
   useEffect(() => { if (myPhone && !to) setTo(myPhone); }, [myPhone]); // eslint-disable-line react-hooks/exhaustive-deps
-  if (!f.v) return <p role="status" className="text-sm text-muted">…</p>;
+  if (!f.v) return <Loading of={['settings', 'sms']}/>;
   const v = f.v;
   const p = v.providers.find((x) => x.id === v.provider);
   const setCred = (k: string) => (x: string) => f.setV({ ...v, credentials: { ...v.credentials, [k]: x } });

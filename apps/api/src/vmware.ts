@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, HttpCode, Param, ParseUUIDPipe, Post, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, Param, ParseUUIDPipe, Post, Put, Req, UseGuards } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { isIP } from 'node:net';
@@ -33,7 +33,9 @@ function readTarget(body: unknown, requirePassword = true): Target & { name: str
   if (typeof b.host !== 'string' || !(isIP(b.host) || hostnamePattern.test(b.host))) fields.host = 'INVALID_HOST';
   if (!Number.isInteger(port) || port < 1 || port > 65535) fields.port = 'INVALID_PORT';
   if (typeof b.username !== 'string' || !b.username || b.username.length > 200) fields.username = 'INVALID_VALUE';
-  if (requirePassword && (typeof b.password !== 'string' || !b.password || b.password.length > 500)) fields.password = 'INVALID_VALUE';
+  // Editing may leave the password empty (keep the stored one); anything sent is checked the same way.
+  const passwordGiven = requirePassword || (b.password !== undefined && b.password !== null && b.password !== '');
+  if (passwordGiven && (typeof b.password !== 'string' || !b.password || b.password.length > 500)) fields.password = 'INVALID_VALUE';
   if (!['system', 'ca', 'pinned'].includes(tls.mode as string)) fields.tlsMode = 'INVALID_VALUE';
   if (tls.mode === 'ca' && (typeof tls.caPem !== 'string' || !tls.caPem.includes('BEGIN CERTIFICATE') || tls.caPem.length > 20000)) fields.caPem = 'INVALID_CERTIFICATE';
   if (tls.mode === 'pinned' && (typeof tls.sha256 !== 'string' || !/^[0-9a-f]{64}$/.test(tls.sha256))) fields.sha256 = 'INVALID_FINGERPRINT';
@@ -41,7 +43,7 @@ function readTarget(body: unknown, requirePassword = true): Target & { name: str
   if (Object.keys(fields).length) throw apiError(400, 'VALIDATION_FAILED', 'Invalid input', fields);
   return {
     ...(b.apiVersion ? { apiVersion: b.apiVersion as string } : {}),
-    name: (b.name as string).trim(), host: (b.host as string).toLowerCase(), port, username: b.username as string, password: (b.password as string) ?? '',
+    name: (b.name as string).trim(), host: (b.host as string).toLowerCase(), port, username: b.username as string, password: typeof b.password === 'string' ? b.password : '',
     tls: { mode: tls.mode as TlsSettings['mode'], ...(tls.mode === 'ca' && { caPem: tls.caPem as string }), ...(tls.mode === 'pinned' && { sha256: tls.sha256 as string }) },
   };
 }
@@ -131,15 +133,29 @@ async function inTransaction<T>(work: (client: PoolClient) => Promise<T>) {
   }
 }
 
-const connectionColumns = `id, name, kind, host, port, username, tls_mode AS "tlsMode", tls_sha256 AS "tlsSha256", product, licenses,
+// An edit may leave the password empty to keep the stored one, but only for the same address and port:
+// the stored password is never sent to an endpoint it was not given for.
+function withStoredPassword<T extends Target>(target: T, c: Record<string, string | number>): T {
+  if (target.password) return target;
+  if (target.host !== String(c.host) || target.port !== Number(c.port)) throw apiError(400, 'VALIDATION_FAILED', 'Invalid input', { password: 'PASSWORD_REQUIRED_FOR_NEW_ADDRESS' });
+  return { ...target, password: decryptSecret(String(c.password_enc), String(c.id)) };
+}
+
+const connectionColumns = `id, name, kind, host, port, username, tls_mode AS "tlsMode", tls_sha256 AS "tlsSha256", tls_ca_pem AS "tlsCaPem", product, licenses,
   write_api AS "writeApi", privileges, operations, warnings, api_version AS "apiVersion", customization, compat, status, last_error_code AS "lastErrorCode", last_discovered_at AS "lastDiscoveredAt", created_at AS "createdAt"`;
 
 @Controller('admin/vmware') @UseGuards(PermissionGuard)
 export class VmwareController {
   // Connects and discovers without saving anything: the wizard's and the form's "Test connection".
+  // With connectionId (editing a connection) an empty password means that connection's stored one.
   @Post('test') @HttpCode(200) @Can('vmware.manage')
   async test(@Body() body: unknown) {
-    return summary(await discover(readTarget(body)));
+    const connectionId = ((body ?? {}) as Record<string, unknown>).connectionId;
+    if (connectionId === undefined || connectionId === null || connectionId === '') return summary(await discover(readTarget(body)));
+    if (typeof connectionId !== 'string' || !/^[0-9a-f-]{36}$/.test(connectionId)) throw apiError(400, 'VALIDATION_FAILED', 'Invalid input', { connectionId: 'INVALID_VALUE' });
+    const { rows: [c] } = await pool.query('SELECT * FROM vmware_connections WHERE id = $1', [connectionId]);
+    if (!c) throw apiError(404, 'NOT_FOUND', 'Unknown connection');
+    return summary(await discover(withStoredPassword(readTarget(body, false), c)));
   }
 
   @Get('connections') @Can('vmware.view', 'vmware.manage', 'catalog.manage', 'dashboard.view')
@@ -168,6 +184,33 @@ export class VmwareController {
       await storeInventory(client, id, d);
     });
     await audit(req, 'vmware.connection_created', 'success', req.user.id, { id, name: target.name, host: target.host, kind: d.product.kind });
+    return { id, ...summary(d) };
+  }
+
+  // New credentials, address or certificate trust for an existing connection (a changed password, a renewed
+  // certificate). An empty password keeps the stored one. Tested like a new connection before anything is saved;
+  // it must still be the same ESXi/vCenter, because pools and images refer to its inventory.
+  @Put('connections/:id') @Can('vmware.manage')
+  async update(@Req() req: AuthedRequest, @Param('id', ParseUUIDPipe) id: string, @Body() body: unknown) {
+    const { rows: [c] } = await pool.query('SELECT * FROM vmware_connections WHERE id = $1', [id]);
+    if (!c) throw apiError(404, 'NOT_FOUND', 'Unknown connection');
+    const target = withStoredPassword(readTarget(body, false), c);
+    const d = await discover(target);
+    if ((c.instance_uuid && d.product.instanceUuid && c.instance_uuid !== d.product.instanceUuid) || c.kind !== d.product.kind)
+      throw apiError(409, 'ENDPOINT_CHANGED', 'This address answers as another ESXi/vCenter');
+    const customization = readCustomization(body, d.compat);
+    await inTransaction(async (client) => {
+      await client.query(
+        `UPDATE vmware_connections SET name = $2, host = $3, port = $4, username = $5, password_enc = $6, tls_mode = $7, tls_ca_pem = $8, tls_sha256 = $9,
+           instance_uuid = COALESCE($10, instance_uuid), product = $11, licenses = $12, write_api = $13, privileges = $14, operations = $15, warnings = $16,
+           api_version = $17, customization = $18, compat = $19, status = 'ok', last_error_code = NULL, last_discovered_at = now(), updated_at = now() WHERE id = $1`,
+        [id, target.name, target.host, target.port, target.username, encryptSecret(target.password, id), target.tls.mode, target.tls.caPem ?? null,
+          target.tls.sha256 ?? null, d.product.instanceUuid || null, d.product, JSON.stringify(d.licenses ?? []), d.writeApi, d.privileges, d.operations,
+          JSON.stringify(d.warnings), target.apiVersion ?? null, customization, d.compat ?? null]);
+      await storeInventory(client, id, d);
+    });
+    await audit(req, 'vmware.connection_updated', 'success', req.user.id, { id, name: target.name, host: target.host,
+      passwordChanged: !!(body as Record<string, unknown>)?.password, tlsMode: target.tls.mode });
     return { id, ...summary(d) };
   }
 

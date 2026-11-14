@@ -7,7 +7,7 @@ import { useTranslations } from 'next-intl';
 import { useEffect, useState } from 'react';
 import { I } from '../../../../components/icon';
 import { GuideButton } from '../../../../components/setup-guide';
-import { CheckboxInput, FormActions, FormSection, Mono, Notice, SelectInput, SwitchInput, TextInput } from '../../../../components/ui';
+import { CheckboxInput, FormActions, FormSection, Mono, Notice, SelectInput, SwitchInput, TextInput, Loading } from '../../../../components/ui';
 import { apiFetch, useErrorText, type ApiError } from '../../../../lib/api';
 import { useApiQuery } from '../../../../lib/query';
 
@@ -31,7 +31,7 @@ export default function DirectorySettings({ readOnly }: { readOnly: boolean }) {
   const [result, setResult] = useState<{ ok: boolean; text: string; detail?: string; user?: Found }>();
   const [testing, setTesting] = useState(false);
   useEffect(() => { if (q.data && !v) setV(q.data.ldap); }, [q.data]); // eslint-disable-line react-hooks/exhaustive-deps
-  if (!v || !q.data) return <p role="status" className="text-sm text-muted">…</p>;
+  if (!v || !q.data) return <Loading of={['settings', 'directory']}/>;
   const set = <K extends keyof Ldap>(k: K) => (x: Ldap[K]) => { setV({ ...v, [k]: x }); setFields((f) => ({ ...f, [k]: '' })); };
   const err = (k: string) => field(fields[k]);
   const body = () => ({ ldap: { ...v, bindPassword: pw } });

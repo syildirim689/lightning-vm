@@ -4,7 +4,7 @@
 import { Card, Checkbox, Chip, Switch, toast } from '@heroui/react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useTranslations } from 'next-intl';
-import { Notice } from '../../../../components/ui';
+import { Notice, Loading } from '../../../../components/ui';
 import { apiFetch, useErrorText } from '../../../../lib/api';
 import { useApiQuery } from '../../../../lib/query';
 import { channelIcon, channels, type Channel } from '../../account/notifications';
@@ -17,7 +17,7 @@ export default function NotificationPolicy({ readOnly }: { readOnly: boolean }) 
   const { error } = useErrorText();
   const client = useQueryClient();
   const q = useApiQuery<{ events: Row[]; available: Record<Channel, boolean> }>(['settings', 'notifications'], '/admin/settings/notifications');
-  if (!q.data) return <p role="status" className="text-sm text-muted">…</p>;
+  if (!q.data) return <Loading of={['settings', 'notifications']}/>;
   const { events, available } = q.data;
 
   async function save(row: Row, patch: Partial<Row>) {

@@ -16,7 +16,7 @@ import { FavoriteStar, StateBadge, type Server } from '../../servers-ui';
 import { ServerFilters, ServerTotals, stateGroup, useServerFilters } from '../../server-filters';
 import { ImportVms } from './import-vms';
 import { Copy } from '../../server-extras';
-import { useBytes } from '../../server-traffic';
+import { useBytes } from '../../../../lib/units';
 
 type Operation = { id: string; kind: string; status: string; step: string | null; attempts: number; errorCode: string | null; errorDetail: string | null;
   createdAt: string; serverName: string | null; serverId: string | null; ownerEmail: string | null };

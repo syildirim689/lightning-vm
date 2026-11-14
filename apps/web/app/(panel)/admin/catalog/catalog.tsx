@@ -6,7 +6,7 @@ import { useFormatter, useTranslations } from 'next-intl';
 import { parseAsString, useQueryState } from 'nuqs';
 import { useState } from 'react';
 import { I } from '../../../../components/icon';
-import { CheckboxList, ConfirmButton, DataTable, undoToast, Empty, FieldGroup, Mono, Notice, NumberInput, PageHeader, SelectInput, TextInput } from '../../../../components/ui';
+import { ButtonLink, CheckboxList, ConfirmButton, DataTable, undoToast, Empty, FieldGroup, Mono, Notice, NumberInput, PageHeader, SelectInput, TextInput } from '../../../../components/ui';
 import { apiFetch, useErrorText } from '../../../../lib/api';
 import { useApiForm } from '../../../../lib/form';
 import { downloadCsv } from '../../../../lib/csv';
@@ -23,19 +23,23 @@ type Connection = { id: string; name: string };
 type Layer = Record<string, number>;
 type Capacity = { physical: Layer; headroom: Layer; offered: Layer; used: Layer; reserved: Layer; available: Layer; realFreeGb: number; warnings: string[] };
 type Pool = { id: string; name: string; location: string; locationId: string | null; connectionName: string; cpuOvercommit: number; memoryOvercommit: number; storageOvercommit: number; capacity: Capacity; customRule: Record<string, unknown> | null;
-  extraIpv4Max: number; extraIpv4Price: string; trafficGb: number | null; connectionId: string; backupDatastore: string | null; extraDiskPriceGb: string | null; privatePortgroup: string | null; privateVlanMin: number | null; privateVlanMax: number | null };
-type Pkg = { id: string; name: string; vcpu: number; memoryMb: number; diskGb: number; priceMonthly: string; currency: string; poolIds: string[]; trafficGb: number | null };
-type Image = { id: string; name: string; family: string; templateName: string | null; minDiskGb: number };
+  extraIpv4Max: number; extraIpv4Price: string; trafficGb: number | null; connectionId: string; computeMoref: string; networkMoref: string; datastoreMorefs: string[];
+  reserveCpuPct: number; reserveMemoryPct: number; reserveStoragePct: number; active: boolean; backupDatastore: string | null; extraDiskPriceGb: string | null; privatePortgroup: string | null; privateVlanMin: number | null; privateVlanMax: number | null };
+type Pkg = { id: string; name: string; vcpu: number; memoryMb: number; diskGb: number; priceMonthly: string; priceHourly: string | null; currency: string; poolIds: string[]; imageIds: string[];
+  trafficGb: number | null; sort: number; active: boolean };
+type Image = { id: string; name: string; family: string; connectionId: string; templateMoref: string; templateName: string | null; minDiskGb: number; cloudInit: boolean };
 type IpPool = IpPoolRow;
 type Quota = { scope: string; subjectId: string | null; email: string | null; maxServers: number | null; maxVcpu: number | null; maxMemoryMb: number | null; maxDiskGb: number | null };
 
 const keys = { pools: ['catalog', 'pools'], packages: ['catalog', 'packages'], images: ['catalog', 'images'], ip: ['catalog', 'ip'], quotas: ['catalog', 'quotas'] };
 
-// A "New ..." form in a modal; the form closes itself after a successful save.
-function FormModal({ title, label, children }: { title: string; label: string; children: (close: () => void) => React.ReactNode }) {
+// A "New ..." form in a modal; the form closes itself after a successful save. With edit, the trigger is the
+// small "Edit" button that sits next to Remove (ariaLabel names the record).
+function FormModal({ title, label, edit, ariaLabel, children }: { title: string; label: string; edit?: boolean; ariaLabel?: string; children: (close: () => void) => React.ReactNode }) {
   const [open, setOpen] = useState(false);
   return <>
-    <Button onPress={() => setOpen(true)}><I name="plus" size={16}/>{label}</Button>
+    {edit ? <Button size="sm" variant="ghost" aria-label={ariaLabel} onPress={() => setOpen(true)}><I name="pencil" size={14}/>{label}</Button>
+      : <Button onPress={() => setOpen(true)}><I name="plus" size={16}/>{label}</Button>}
     <Modal.Backdrop isOpen={open} onOpenChange={setOpen}>
       <Modal.Container size="lg" scroll="inside">
         <Modal.Dialog className="sm:max-w-3xl">
@@ -65,6 +69,9 @@ export default function Catalog() {
   const removeButton = (path: string, name: string) => <ConfirmButton size="sm" variant="ghost" icon={<I name="trash-2" size={15}/>} label={t('remove')}
     title={`${t('remove')}: ${name}`} body={t('removeConfirm', { name })} confirmLabel={t('remove')} cancelLabel={t('cancel')} onConfirm={() => remove.mutateAsync(path).then(() => undefined)}/>;
   const money = (amount: string, currency: string) => format.number(Number(amount), { style: 'currency', currency });
+  // Pools and images are built on a connection's inventory: say where to add one instead of hiding the button.
+  const needConnection = <Notice tone="warning"><span className="flex flex-wrap items-center gap-3">{t('pools.needConnection')}
+    <ButtonLink href="/admin/vmware" variant="secondary" size="sm">{t('pools.addConnection')}<I name="arrow-right" size={14}/></ButtonLink></span></Notice>;
 
   if (!pools) return <><PageHeader eyebrow={t('eyebrow')} title={t('title')} description={t('intro')}/>
     <div role="status" aria-label={t('loading')} className="flex flex-col gap-3"><div className="h-10 w-full max-w-2xl animate-pulse rounded-xl bg-default/50"/>
@@ -95,22 +102,28 @@ export default function Catalog() {
           <p className="max-w-3xl text-sm text-muted">{t('poolsExplain')}</p>
           {connections.length > 0 && <FormModal title={t('pools.new')} label={t('pools.new')}>{(close) => <PoolForm connections={connections} onSaved={close}/>}</FormModal>}
         </div>
-        {!connections.length && <Notice tone="warning">{t('pools.needConnection')}</Notice>}
+        {!connections.length && needConnection}
         {pools.length === 0 ? <Empty icon={<I name="layers" size={28}/>} title={t('pools.empty')}/>
-          : <div className="grid gap-4 2xl:grid-cols-2">{pools.map((p) => <PoolCard key={p.id} pool={p} removeButton={removeButton(`/admin/pools/${p.id}`, p.name)}/>)}</div>}
+          : <div className="grid gap-4 2xl:grid-cols-2">{pools.map((p) => <PoolCard key={p.id} pool={p} actions={<span className="flex shrink-0 gap-1">
+            {connections.some((c) => c.id === p.connectionId) && <FormModal edit title={t('pools.editTitle', { name: p.name })} label={t('edit')} ariaLabel={t('editOf', { name: p.name })}>
+              {(close) => <PoolForm connections={connections} pool={p} onSaved={close}/>}</FormModal>}
+            {removeButton(`/admin/pools/${p.id}`, p.name)}</span>}/>)}</div>}
       </Tabs.Panel>
 
       <Tabs.Panel id="packages" className="flex flex-col gap-4 pt-5">
         <div className="flex flex-wrap items-center justify-end gap-2">{search(packages.length)}<span className="flex-1"/>{packages.length > 0 && <Button variant="secondary" onPress={() => downloadCsv('packages', ['name', 'vcpu', 'memory_gb', 'disk_gb', 'price_monthly', 'currency', 'traffic_gb', 'locations'],
           packages.map((p) => [p.name, p.vcpu, p.memoryMb / 1024, p.diskGb, p.priceMonthly, p.currency, p.trafficGb ?? '', p.poolIds.map((id) => pools.find((x) => x.id === id)?.name ?? id).join(' / ')]))}>
           <I name="download" size={15}/>{t('export')}</Button>}
-          {pools.length ? <FormModal title={t('packages.new')} label={t('packages.new')}>{(close) => <PackageForm pools={pools} images={images} onSaved={close}/>}</FormModal>
-          : <p className="text-sm text-muted">{t('packages.needPool')}</p>}</div>
+          {pools.length > 0 && <FormModal title={t('packages.new')} label={t('packages.new')}>{(close) => <PackageForm pools={pools} images={images} onSaved={close}/>}</FormModal>}</div>
+        {!pools.length && <Notice tone="warning"><span className="flex flex-wrap items-center gap-3">{t('packages.needPool')}
+          <Button size="sm" variant="secondary" onPress={() => setTab('pools')}>{t('packages.toPools')}<I name="arrow-right" size={14}/></Button></span></Notice>}
         <DataTable label={t('packages.title')} rows={shownPackages} rowKey={(p) => p.id} empty={find ? t('noMatch') : t('packages.empty')}
           sortBy={{ name: (p) => p.name, cpu: (p) => p.vcpu, ram: (p) => p.memoryMb, disk: (p) => p.diskGb, price: (p) => Number(p.priceMonthly) }}
           columns={[{ id: 'name', label: t('col.name') }, { id: 'cpu', label: 'vCPU' }, { id: 'ram', label: 'RAM' }, { id: 'disk', label: t('col.disk') }, { id: 'price', label: t('col.price') }, { id: 'sell', label: t('packages.sellable') }, { id: 'act', label: <span className="sr-only">{t('remove')}</span> }]}
           cells={(p) => [<span key="n" className="flex flex-col"><span className="font-medium">{p.name}</span><span className="text-xs text-muted">{p.trafficGb ? t('packages.trafficShort', { gb: p.trafficGb }) : t('packages.unlimited')}</span></span>, p.vcpu, `${format.number(p.memoryMb / 1024, { maximumFractionDigits: 1 })} GB`, `${p.diskGb} GB`,
-            <span key="p" className="flex flex-col"><span className="tabular-nums">{money(p.priceMonthly, p.currency)}</span><span className="text-xs tabular-nums text-muted">{t('packages.perVcpu', { price: money(String(Number(p.priceMonthly) / p.vcpu), p.currency) })}</span></span>, <Sellable key="s" pkg={p} pools={pools}/>, removeButton(`/admin/packages/${p.id}`, p.name)]}/>
+            <span key="p" className="flex flex-col"><span className="tabular-nums">{money(p.priceMonthly, p.currency)}</span><span className="text-xs tabular-nums text-muted">{t('packages.perVcpu', { price: money(String(Number(p.priceMonthly) / p.vcpu), p.currency) })}</span></span>, <Sellable key="s" pkg={p} pools={pools}/>,
+            <span key="a" className="flex justify-end gap-1"><FormModal edit title={t('packages.editTitle', { name: p.name })} label={t('edit')} ariaLabel={t('editOf', { name: p.name })}>
+              {(close) => <PackageForm pools={pools} images={images} pkg={p} onSaved={close}/>}</FormModal>{removeButton(`/admin/packages/${p.id}`, p.name)}</span>]}/>
       </Tabs.Panel>
 
       <Tabs.Panel id="images" className="flex flex-col gap-4 pt-5">
@@ -118,11 +131,14 @@ export default function Catalog() {
           <p className="max-w-3xl text-sm text-muted">{t('images.explain')}</p>
           {connections.length > 0 && <FormModal title={t('images.new')} label={t('images.new')}>{(close) => <ImageForm connections={connections} onSaved={close}/>}</FormModal>}
         </div>
+        {!connections.length && needConnection}
         {search(images.length)}
         <DataTable label={t('images.title')} rows={shownImages} rowKey={(i) => i.id} empty={find ? t('noMatch') : t('images.empty')}
           sortBy={{ name: (i) => i.name, family: (i) => i.family, disk: (i) => i.minDiskGb }}
           columns={[{ id: 'name', label: t('col.name') }, { id: 'family', label: t('images.family') }, { id: 'tpl', label: t('images.template') }, { id: 'disk', label: t('images.minDisk') }, { id: 'act', label: <span className="sr-only">{t('remove')}</span> }]}
-          cells={(i) => [<span key="n" className="font-medium">{i.name}</span>, i.family === 'linux' ? 'Linux' : i.family === 'windows' ? 'Windows' : i.family === 'esxi' ? t('images.esxi') : i.family, i.templateName ?? '–', `${i.minDiskGb} GB`, removeButton(`/admin/images/${i.id}`, i.name)]}/>
+          cells={(i) => [<span key="n" className="font-medium">{i.name}</span>, i.family === 'linux' ? 'Linux' : i.family === 'windows' ? 'Windows' : i.family === 'esxi' ? t('images.esxi') : i.family, i.templateName ?? '–', `${i.minDiskGb} GB`,
+            <span key="a" className="flex justify-end gap-1">{connections.some((c) => c.id === i.connectionId) && <FormModal edit title={t('images.editTitle', { name: i.name })} label={t('edit')}
+              ariaLabel={t('editOf', { name: i.name })}>{(close) => <ImageForm connections={connections} image={i} onSaved={close}/>}</FormModal>}{removeButton(`/admin/images/${i.id}`, i.name)}</span>]}/>
       </Tabs.Panel>
 
       <Tabs.Panel id="ip" className="flex flex-col gap-4 pt-5">
@@ -157,7 +173,7 @@ export default function Catalog() {
   </>;
 }
 
-function PoolCard({ pool, removeButton }: { pool: Pool; removeButton: React.ReactNode }) {
+function PoolCard({ pool, actions }: { pool: Pool; actions: React.ReactNode }) {
   const t = useTranslations('Catalog');
   const format = useFormatter();
   const c = pool.capacity;
@@ -178,7 +194,7 @@ function PoolCard({ pool, removeButton }: { pool: Pool; removeButton: React.Reac
         <Card.Title className="text-base font-semibold">{pool.name} <span className="text-sm font-normal text-muted">· {pool.location || '–'} · {pool.connectionName}</span></Card.Title>
         <Card.Description className="text-xs text-muted">{t('pools.ratios', { cpu: pool.cpuOvercommit, memory: pool.memoryOvercommit, storage: pool.storageOvercommit })}</Card.Description>
       </div>
-      {removeButton}
+      {actions}
     </Card.Header>
     <Card.Content className="flex flex-col gap-4">
       <PoolLocation poolId={pool.id} locationId={pool.locationId}/>
@@ -278,29 +294,40 @@ function FormFooter({ failure, busy, label, onCancel }: { failure?: string; busy
 const num = (v: string) => (v === '' ? undefined : Number(v));
 const str = (v: number | undefined) => (v === undefined ? '' : String(v));
 
-function PoolForm({ connections, onSaved }: { connections: Connection[]; onSaved: () => void }) {
+// New pool, or the core settings of an existing one (pool given). Its connection stays: servers and inventory
+// references belong to it. The location, extra IPv4 and traffic have their own controls on the card and are kept.
+function PoolForm({ connections, pool, onSaved }: { connections: Connection[]; pool?: Pool; onSaved: () => void }) {
   const t = useTranslations('Catalog');
   const tv = useTranslations('Vmware');
   const saved = useSaved(onSaved);
   const locations = useLocations();
-  const f = useApiForm({ name: '', locationId: '', connectionId: connections[0].id, computeMoref: '', networkMoref: '', cpuOvercommit: '4', memoryOvercommit: '1', storageOvercommit: '1',
-    reserveCpuPct: '10', reserveMemoryPct: '10', reserveStoragePct: '15' });
+  const f = useApiForm(pool
+    ? { name: pool.name, locationId: pool.locationId ?? '', connectionId: pool.connectionId, computeMoref: pool.computeMoref, networkMoref: pool.networkMoref,
+      cpuOvercommit: String(pool.cpuOvercommit), memoryOvercommit: String(pool.memoryOvercommit), storageOvercommit: String(pool.storageOvercommit),
+      reserveCpuPct: String(pool.reserveCpuPct), reserveMemoryPct: String(pool.reserveMemoryPct), reserveStoragePct: String(pool.reserveStoragePct) }
+    : { name: '', locationId: '', connectionId: connections[0].id, computeMoref: '', networkMoref: '', cpuOvercommit: '4', memoryOvercommit: '1', storageOvercommit: '1',
+      reserveCpuPct: '10', reserveMemoryPct: '10', reserveStoragePct: '15' });
   const inv = useApiQuery<Inventory>(['vmware', 'connection', f.values.connectionId], `/admin/vmware/connections/${f.values.connectionId}`).data;
-  const [stores, setStores] = useState<string[]>([]);
+  const [stores, setStores] = useState<string[]>(pool?.datastoreMorefs ?? []);
+  const submit = () => pool
+    ? f.submit('PUT', `/admin/pools/${pool.id}`, { ...f.values, datastoreMorefs: stores, location: pool.location || undefined, active: pool.active,
+      extraIpv4Max: pool.extraIpv4Max, extraIpv4Price: pool.extraIpv4Price, trafficGb: pool.trafficGb })
+    : f.submit('POST', '/admin/pools', { ...f.values, datastoreMorefs: stores });
   const ratio = (k: 'cpuOvercommit' | 'memoryOvercommit' | 'storageOvercommit', max: number) =>
     <NumberInput label={t(`pools.${k}`)} help={t(`pools.${k}Help`)} value={num(f.values[k])} onChange={(v) => f.set(k)(str(v))} minValue={1} maxValue={max} step={0.5} error={f.fieldError(k)}
       formatOptions={{ maximumFractionDigits: 2, style: 'decimal' }}/>;
   const pct = (k: 'reserveCpuPct' | 'reserveMemoryPct' | 'reserveStoragePct') =>
     <NumberInput label={t(`pools.${k}`)} value={num(f.values[k]) !== undefined ? num(f.values[k])! / 100 : undefined} onChange={(v) => f.set(k)(str(v === undefined ? undefined : Math.round(v * 100)))}
       minValue={0} maxValue={0.9} step={0.05} error={f.fieldError(k)} formatOptions={{ style: 'percent' }}/>;
-  return <form className="flex flex-col gap-4" noValidate onSubmit={async (e) => { e.preventDefault(); saved(await f.submit('POST', '/admin/pools', { ...f.values, datastoreMorefs: stores })); }}>
+  return <form className="flex flex-col gap-4" noValidate onSubmit={async (e) => { e.preventDefault(); saved(await submit()); }}>
     <FieldGroup title={t('form.identity')} description={t('form.poolIdentityHelp')}>
       <TextInput maxLength={100} label={t('col.name')} value={f.values.name} onChange={f.set('name')} error={f.fieldError('name')} isRequired placeholder="Istanbul-1"/>
-      <SelectInput label={t('pools.location')} help={t('pools.locationHelp')} value={f.values.locationId} onChange={f.set('locationId')} error={f.fieldError('locationId')}
-        options={[{ id: '', label: '–' }, ...locations.map((l) => ({ id: l.id, label: `${flag(l.countryCode)} ${l.name}`.trim(), description: [l.city, l.datacenter].filter(Boolean).join(' · ') || undefined }))]}/>
+      {!pool && <SelectInput label={t('pools.location')} help={t('pools.locationHelp')} value={f.values.locationId} onChange={f.set('locationId')} error={f.fieldError('locationId')}
+        options={[{ id: '', label: '–' }, ...locations.map((l) => ({ id: l.id, label: `${flag(l.countryCode)} ${l.name}`.trim(), description: [l.city, l.datacenter].filter(Boolean).join(' · ') || undefined }))]}/>}
     </FieldGroup>
     <FieldGroup title={t('form.vmware')} description={t('form.vmwareHelp')}>
-      <SelectInput label={t('pools.connection')} value={f.values.connectionId} onChange={f.set('connectionId')} options={connections.map((c) => ({ id: c.id, label: c.name }))}/>
+      <SelectInput label={t('pools.connection')} value={f.values.connectionId} onChange={f.set('connectionId')} options={connections.map((c) => ({ id: c.id, label: c.name }))}
+        isDisabled={!!pool} help={pool ? t('pools.connectionFixed') : undefined}/>
       <SelectInput label={t('pools.compute')} value={f.values.computeMoref} onChange={f.set('computeMoref')} error={f.fieldError('computeMoref')}
         options={inv?.compute.map((c) => ({ id: c.moref, label: c.name, description: tv.has(`computeKind.${c.kind}` as 'computeKind.cluster') ? tv(`computeKind.${c.kind}` as 'computeKind.cluster') : c.kind })) ?? []}/>
       <SelectInput className="sm:col-span-2" label={t('pools.network')} value={f.values.networkMoref} onChange={f.set('networkMoref')} error={f.fieldError('networkMoref')}
@@ -310,7 +337,7 @@ function PoolForm({ connections, onSaved }: { connections: Connection[]; onSaved
     </FieldGroup>
     <FieldGroup title={t('form.overcommit')} description={t('form.overcommitHelp')} cols={3}>{ratio('cpuOvercommit', 32)}{ratio('memoryOvercommit', 4)}{ratio('storageOvercommit', 10)}</FieldGroup>
     <FieldGroup title={t('form.reserve')} description={t('form.reserveHelp')} cols={3}>{pct('reserveCpuPct')}{pct('reserveMemoryPct')}{pct('reserveStoragePct')}</FieldGroup>
-    <FormFooter failure={f.failure?.text} busy={f.busy} label={t('pools.create')} onCancel={onSaved}/>
+    <FormFooter failure={f.failure?.text} busy={f.busy} label={pool ? t('saveChanges') : t('pools.create')} onCancel={onSaved}/>
   </form>;
 }
 
@@ -345,12 +372,14 @@ function RuleForm({ poolId, rule }: { poolId: string; rule: Record<string, unkno
   </form>;
 }
 
-function ImageForm({ connections, onSaved }: { connections: Connection[]; onSaved: () => void }) {
+function ImageForm({ connections, image, onSaved }: { connections: Connection[]; image?: Image; onSaved: () => void }) {
   const t = useTranslations('Catalog');
   const saved = useSaved(onSaved);
-  const f = useApiForm({ name: '', family: 'linux', connectionId: connections[0]?.id ?? '', templateMoref: '', minDiskGb: '20' });
+  const f = useApiForm(image ? { name: image.name, family: image.family, connectionId: image.connectionId, templateMoref: image.templateMoref, minDiskGb: String(image.minDiskGb) }
+    : { name: '', family: 'linux', connectionId: connections[0]?.id ?? '', templateMoref: '', minDiskGb: '20' });
   const vms = useApiQuery<Inventory>(['vmware', 'connection', f.values.connectionId], f.values.connectionId ? `/admin/vmware/connections/${f.values.connectionId}` : null).data?.vms.filter((v) => v.template) ?? [];
-  return <form className="flex flex-col gap-4" noValidate onSubmit={async (e) => { e.preventDefault(); saved(await f.submit('POST', '/admin/images')); }}>
+  return <form className="flex flex-col gap-4" noValidate onSubmit={async (e) => { e.preventDefault();
+    saved(await (image ? f.submit('PUT', `/admin/images/${image.id}`, { ...f.values, cloudInit: image.cloudInit }) : f.submit('POST', '/admin/images'))); }}>
     <FieldGroup title={t('form.identity')} description={t('form.imageIdentityHelp')}>
       <TextInput maxLength={100} label={t('col.name')} value={f.values.name} onChange={f.set('name')} error={f.fieldError('name')} isRequired placeholder="Ubuntu 24.04 LTS"/>
       <SelectInput label={t('images.family')} value={f.values.family} onChange={f.set('family')} options={[{ id: 'linux', label: 'Linux' }, { id: 'windows', label: 'Windows' }, { id: 'esxi', label: t('images.esxi'), description: t('images.esxiHelp') }]}/>
@@ -363,23 +392,28 @@ function ImageForm({ connections, onSaved }: { connections: Connection[]; onSave
     <FieldGroup title={t('form.requirements')} cols={1}>
       <NumberInput label={t('images.minDisk')} value={num(f.values.minDiskGb)} onChange={(v) => f.set('minDiskGb')(str(v))} minValue={1} maxValue={65536} error={f.fieldError('minDiskGb')} help={t('form.minDiskHelp')}/>
     </FieldGroup>
-    <FormFooter failure={f.failure?.text} busy={f.busy} label={t('images.create')} onCancel={onSaved}/>
+    <FormFooter failure={f.failure?.text} busy={f.busy} label={image ? t('saveChanges') : t('images.create')} onCancel={onSaved}/>
   </form>;
 }
 
-function PackageForm({ pools, images, onSaved }: { pools: Pool[]; images: Image[]; onSaved: () => void }) {
+function PackageForm({ pools, images, pkg, onSaved }: { pools: Pool[]; images: Image[]; pkg?: Pkg; onSaved: () => void }) {
   const t = useTranslations('Catalog');
   const format = useFormatter();
   const saved = useSaved(onSaved);
-  const f = useApiForm({ name: '', vcpu: '2', memoryMb: '4096', diskGb: '40', trafficGb: '', priceMonthly: '', priceHourly: '', currency: 'EUR' });
-  const [poolIds, setPoolIds] = useState<string[]>(pools.length === 1 ? [pools[0].id] : []);
-  const [imageIds, setImageIds] = useState<string[]>([]);
+  const f = useApiForm(pkg ? { name: pkg.name, vcpu: String(pkg.vcpu), memoryMb: String(pkg.memoryMb), diskGb: String(pkg.diskGb), trafficGb: pkg.trafficGb ? String(pkg.trafficGb) : '',
+    priceMonthly: pkg.priceMonthly, priceHourly: pkg.priceHourly ?? '', currency: pkg.currency }
+    : { name: '', vcpu: '2', memoryMb: '4096', diskGb: '40', trafficGb: '', priceMonthly: '', priceHourly: '', currency: 'EUR' });
+  const [poolIds, setPoolIds] = useState<string[]>(pkg ? pkg.poolIds : pools.length === 1 ? [pools[0].id] : []);
+  const [imageIds, setImageIds] = useState<string[]>(pkg?.imageIds ?? []);
   const price = Number(f.values.priceMonthly.replace(',', '.'));
   // Hourly price suggested from the monthly one (730 hours), unless the admin typed their own.
   const hourly = Number.isFinite(price) && price > 0 ? (price / 730).toFixed(4) : '';
   const tooSmall = images.filter((i) => imageIds.includes(i.id) && i.minDiskGb > Number(f.values.diskGb));
   return <form className="flex flex-col gap-4" noValidate
-    onSubmit={async (e) => { e.preventDefault(); saved(await f.submit('POST', '/admin/packages', { ...f.values, priceMonthly: f.values.priceMonthly.replace(',', '.'), priceHourly: (f.values.priceHourly || hourly).replace(',', '.'), poolIds, imageIds })); }}>
+    onSubmit={async (e) => { e.preventDefault();
+      const body = { ...f.values, priceMonthly: f.values.priceMonthly.replace(',', '.'), priceHourly: (f.values.priceHourly || hourly).replace(',', '.'), poolIds, imageIds };
+      // Sort order and on/off are not on this form; an edit keeps them.
+      saved(await (pkg ? f.submit('PUT', `/admin/packages/${pkg.id}`, { ...body, sort: pkg.sort, active: pkg.active }) : f.submit('POST', '/admin/packages', body))); }}>
     <FieldGroup title={t('form.identity')} cols={1}>
       <TextInput maxLength={100} label={t('col.name')} value={f.values.name} onChange={f.set('name')} error={f.fieldError('name')} isRequired placeholder="Standard 2"/>
     </FieldGroup>
@@ -406,7 +440,7 @@ function PackageForm({ pools, images, onSaved }: { pools: Pool[]; images: Image[
       <span className="text-muted">{t('form.previewShape', { vcpu: f.values.vcpu || 0, memory: format.number(Number(f.values.memoryMb || 0) / 1024, { maximumFractionDigits: 1 }), disk: f.values.diskGb || 0 })}</span>
       {price > 0 && <span className="ml-auto font-semibold tabular-nums">{format.number(price, { style: 'currency', currency: f.values.currency })} / {t('form.month')}</span>}
     </div>
-    <FormFooter failure={f.failure?.text} busy={f.busy} label={t('packages.create')} onCancel={onSaved}/>
+    <FormFooter failure={f.failure?.text} busy={f.busy} label={pkg ? t('saveChanges') : t('packages.create')} onCancel={onSaved}/>
   </form>;
 }
 

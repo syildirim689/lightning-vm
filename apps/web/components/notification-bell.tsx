@@ -9,7 +9,7 @@ import NextLink from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useFormatter, useLocale, useNow, useTranslations } from 'next-intl';
 import { useEffect, useRef, useState } from 'react';
-import { apiFetch } from '../lib/api';
+import { apiFetch, useErrorText } from '../lib/api';
 import { useApiQuery } from '../lib/query';
 import { I } from './icon';
 import { mayLeave } from '../lib/edits';
@@ -27,7 +27,8 @@ export default function NotificationBell() {
   const now = useNow({ updateInterval: 30_000 });
   const router = useRouter();
   const client = useQueryClient();
-  const q = useApiQuery<{ notifications: Item[]; unread: number }>(['notifications'], '/notifications', { refetchInterval: 20_000 });
+  const { error } = useErrorText();
+  const q = useApiQuery<{ notifications: Item[]; unread: number }>(['notifications'], '/notifications', { refetchInterval: 120_000 });
   const locale = useLocale() === 'tr' ? 'tr' : 'en';
   const items = (q.data?.notifications ?? []).map((n) => ({ ...n, ...n.texts?.[locale] }));
   const unread = q.data?.unread ?? 0;
@@ -62,7 +63,10 @@ export default function NotificationBell() {
     const d = new Date(iso), start = new Date(now); start.setHours(0, 0, 0, 0);
     return d >= start ? 'today' : d.getTime() >= start.getTime() - 86_400_000 ? 'yesterday' : 'earlier';
   };
-  const markRead = async (ids?: string[]) => { await apiFetch('/notifications/read', { method: 'POST', body: ids ? { ids } : {} }); client.invalidateQueries({ queryKey: ['notifications'] }); };
+  const markRead = async (ids?: string[]) => {
+    try { await apiFetch('/notifications/read', { method: 'POST', body: ids ? { ids } : {} }); client.invalidateQueries({ queryKey: ['notifications'] }); }
+    catch (e) { toast.danger(error(e)); }
+  };
   const label = unread ? t('unreadLabel', { n: unread }) : t('title');
 
   return <Popover>

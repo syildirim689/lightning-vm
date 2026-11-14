@@ -5,6 +5,9 @@ import { useFormatter } from 'next-intl';
 
 const units = ['B', 'KB', 'MB', 'GB', 'TB', 'PB'];
 
+// One size format for the whole panel.
+export function useBytes() { return useUnits().bytes; }
+
 export function useUnits() {
   const format = useFormatter();
   const bytes = (n: number | null | undefined) => {

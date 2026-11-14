@@ -8,7 +8,7 @@ import { AnimatePresence, motion } from 'motion/react';
 import { useFormatter, useLocale, useNow, useTranslations } from 'next-intl';
 import { useRef, useState, useEffect } from 'react';
 import { I } from '../../../components/icon';
-import { Ago, ConfirmButton, SelectInput, TextInput } from '../../../components/ui';
+import { Ago, ConfirmButton, SelectInput, TextInput, Loading } from '../../../components/ui';
 import { apiFetch, useErrorText, type ApiError } from '../../../lib/api';
 import { fillCanned, type CannedVars } from '../../../lib/canned';
 import { useMe } from '../../../lib/me';
@@ -183,8 +183,8 @@ export function TicketPage({ id, staff }: { id: string; staff: boolean }) {
   const q = useApiQuery<{ ticket: Ticket; messages: Message[]; staff: boolean }>(['support', 'ticket', id], `/support/tickets/${id}`, { refetchInterval: 15_000 });
   const refresh = () => { void client.invalidateQueries({ queryKey: ['support'] }); void client.invalidateQueries({ queryKey: ['admin', 'support'] }); };
   useDocTitle(q.data && `#${q.data.ticket.number} ${q.data.ticket.subject}`);
-  if (q.isError) return <p className="text-sm text-muted">{t('notFound')}</p>;
-  if (!q.data) return <div className="h-64 animate-pulse rounded-3xl bg-default/50"/>;
+  if (!q.data && (q.error as { code?: string } | null)?.code === 'NOT_FOUND') return <p className="text-sm text-muted">{t('notFound')}</p>;
+  if (!q.data) return <Loading of={['support', 'ticket', id]}><div className="h-64 animate-pulse rounded-3xl bg-default/50"/></Loading>;
   const { ticket: tk, messages } = q.data;
   // Staff tools (internal notes, canned replies) only on other people's tickets: on your own you write as a customer.
   const asStaff = staff && tk.ownerId !== me?.id;

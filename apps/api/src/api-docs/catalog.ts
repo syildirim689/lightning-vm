@@ -103,6 +103,29 @@ const adapterErrors = ['VMWARE_SERVICE_UNAVAILABLE', 'VMWARE_ERROR'];
 const scanTargets = { name: 'targets', type: 'string', required: true, text: { tr: 'Tek adresler, CIDR (en büyük /20), aralıklar (10.0.0.10-60) veya joker (10.0.1.*); satır, virgül veya boşlukla ayrılır. En fazla 4000 karakter ve 4096 adres.', en: 'Single addresses, CIDR (/20 at most), ranges (10.0.0.10-60) or wildcards (10.0.1.*), separated by lines, commas or spaces. Up to 4000 characters and 4096 addresses.' } };
 const scanPort = { name: 'port', type: 'integer', text: { tr: '1–65535, varsayılan 443.', en: '1–65535, default 443.' } };
 
+const imageBody = [
+  { name: 'name', type: 'string', required: true, text: { tr: 'İmaj adı, en fazla 100; benzersiz.', en: 'Image name, up to 100; unique.' } },
+  { name: 'family', type: 'string', required: true, values: ['linux', 'windows', 'esxi'], text: { tr: 'İşletim sistemi ailesi.', en: 'Operating system family.' } },
+  { name: 'connectionId', type: 'uuid', required: true, text: { tr: 'Şablonun bulunduğu VMware bağlantısı.', en: 'VMware connection holding the template.' } },
+  { name: 'templateMoref', type: 'string', required: true, text: { tr: 'Şablonun moref\'i.', en: 'The template\'s moref.' } },
+  { name: 'minDiskGb', type: 'integer', text: { tr: 'En az disk (GB), 1–65536, varsayılan 10.', en: 'Minimum disk (GB), 1–65536, default 10.' } },
+  { name: 'cloudInit', type: 'boolean', text: { tr: 'Şablon cloud-init kullanıyor mu; varsayılan true.', en: 'The template uses cloud-init; default true.' } },
+];
+const packageBody = [
+  { name: 'name', type: 'string', required: true, text: { tr: 'Paket adı, en fazla 100; benzersiz.', en: 'Package name, up to 100; unique.' } },
+  { name: 'vcpu', type: 'integer', required: true, text: { tr: 'vCPU, 1–256.', en: 'vCPU, 1–256.' } },
+  { name: 'memoryMb', type: 'integer', required: true, text: { tr: 'RAM (MB), 512–4194304.', en: 'Memory (MB), 512–4194304.' } },
+  { name: 'diskGb', type: 'integer', required: true, text: { tr: 'Disk (GB), 1–65536.', en: 'Disk (GB), 1–65536.' } },
+  { name: 'priceMonthly', type: 'string', required: true, text: { tr: 'Aylık fiyat, en fazla 4 ondalık.', en: 'Monthly price, up to 4 decimals.' } },
+  { name: 'priceHourly', type: 'string', text: { tr: 'Saatlik fiyat, isteğe bağlı.', en: 'Hourly price, optional.' } },
+  { name: 'currency', type: 'string', required: true, text: { tr: 'Üç büyük harfli para birimi.', en: 'Three-letter currency in capitals.' } },
+  { name: 'poolIds[]', type: 'uuid[]', required: true, text: { tr: 'Paketin sunulduğu kaynak havuzları; en az bir tane.', en: 'Resource pools offering the package; at least one.' } },
+  { name: 'imageIds[]', type: 'uuid[]', text: { tr: 'Pakete bağlı imajlar.', en: 'Images linked to the package.' } },
+  { name: 'sort', type: 'integer', text: { tr: 'Sıralama, 0–10000, varsayılan 0.', en: 'Sort order, 0–10000, default 0.' } },
+  { name: 'active', type: 'boolean', text: { tr: 'Siparişe açık mı; varsayılan true.', en: 'Open for orders; default true.' } },
+  { name: 'trafficGb', type: 'integer', text: { tr: 'Aylık trafik (GB), 1–10.000.000; boş: sınırsız.', en: 'Monthly traffic (GB), 1–10,000,000; empty: unlimited.' } },
+];
+
 export default {
   // ---- admin: resource pools, images, packages, IP pools, quotas ----
   'GET /admin/pools': {
@@ -189,17 +212,20 @@ export default {
     tag: 'admin-catalog',
     summary: { tr: 'VMware şablonundan imaj ekler.', en: 'Adds an image from a VMware template.' },
     details: { tr: 'templateMoref bağlantının envanterinde olmalı ve şablon (template) olarak işaretli olmalı.', en: 'templateMoref must be in the connection\'s inventory and be marked as a template.' },
-    body: [
-      { name: 'name', type: 'string', required: true, text: { tr: 'İmaj adı, en fazla 100; benzersiz.', en: 'Image name, up to 100; unique.' } },
-      { name: 'family', type: 'string', required: true, values: ['linux', 'windows', 'esxi'], text: { tr: 'İşletim sistemi ailesi.', en: 'Operating system family.' } },
-      { name: 'connectionId', type: 'uuid', required: true, text: { tr: 'Şablonun bulunduğu VMware bağlantısı.', en: 'VMware connection holding the template.' } },
-      { name: 'templateMoref', type: 'string', required: true, text: { tr: 'Şablonun moref\'i.', en: 'The template\'s moref.' } },
-      { name: 'minDiskGb', type: 'integer', text: { tr: 'En az disk (GB), 1–65536, varsayılan 10.', en: 'Minimum disk (GB), 1–65536, default 10.' } },
-      { name: 'cloudInit', type: 'boolean', text: { tr: 'Şablon cloud-init kullanıyor mu; varsayılan true.', en: 'The template uses cloud-init; default true.' } },
-    ],
+    body: imageBody,
     example: { name: 'Ubuntu 24.04', family: 'linux', connectionId: '0b8e5c1a-7d2f-4e61-8a3b-5c6d7e8f9a0b', templateMoref: 'vm-1043', minDiskGb: 10, cloudInit: true },
     returns: { tr: '{ id }', en: '{ id }' },
     errors: ['VALIDATION_FAILED', 'IN_USE'],
+  },
+  'PUT /admin/images/:id': {
+    tag: 'admin-catalog',
+    summary: { tr: 'İmajı değiştirir.', en: 'Changes an image.' },
+    details: { tr: 'Tüm alanlar yeniden gönderilir ve oluştururken olduğu gibi denetlenir. Bu imajdan kurulmuş sunucular etkilenmez.', en: 'Send every field again; checked as on create. Servers already built from it are not affected.' },
+    params: [id('İmaj.', 'Image.')],
+    body: imageBody,
+    example: { name: 'Ubuntu 24.04', family: 'linux', connectionId: '0b8e5c1a-7d2f-4e61-8a3b-5c6d7e8f9a0b', templateMoref: 'vm-1043', minDiskGb: 10, cloudInit: true },
+    returns: { tr: '{ id }', en: '{ id }' },
+    errors: ['VALIDATION_FAILED', 'NOT_FOUND', 'IN_USE'],
   },
   'DELETE /admin/images/:id': {
     tag: 'admin-catalog',
@@ -217,24 +243,22 @@ export default {
   'POST /admin/packages': {
     tag: 'admin-catalog',
     summary: { tr: 'Yeni paket oluşturur.', en: 'Creates a package.' },
-    body: [
-      { name: 'name', type: 'string', required: true, text: { tr: 'Paket adı, en fazla 100; benzersiz.', en: 'Package name, up to 100; unique.' } },
-      { name: 'vcpu', type: 'integer', required: true, text: { tr: 'vCPU, 1–256.', en: 'vCPU, 1–256.' } },
-      { name: 'memoryMb', type: 'integer', required: true, text: { tr: 'RAM (MB), 512–4194304.', en: 'Memory (MB), 512–4194304.' } },
-      { name: 'diskGb', type: 'integer', required: true, text: { tr: 'Disk (GB), 1–65536.', en: 'Disk (GB), 1–65536.' } },
-      { name: 'priceMonthly', type: 'string', required: true, text: { tr: 'Aylık fiyat, en fazla 4 ondalık.', en: 'Monthly price, up to 4 decimals.' } },
-      { name: 'priceHourly', type: 'string', text: { tr: 'Saatlik fiyat, isteğe bağlı.', en: 'Hourly price, optional.' } },
-      { name: 'currency', type: 'string', required: true, text: { tr: 'Üç büyük harfli para birimi.', en: 'Three-letter currency in capitals.' } },
-      { name: 'poolIds[]', type: 'uuid[]', required: true, text: { tr: 'Paketin sunulduğu kaynak havuzları; en az bir tane.', en: 'Resource pools offering the package; at least one.' } },
-      { name: 'imageIds[]', type: 'uuid[]', text: { tr: 'Pakete bağlı imajlar.', en: 'Images linked to the package.' } },
-      { name: 'sort', type: 'integer', text: { tr: 'Sıralama, 0–10000, varsayılan 0.', en: 'Sort order, 0–10000, default 0.' } },
-      { name: 'active', type: 'boolean', text: { tr: 'Siparişe açık mı; varsayılan true.', en: 'Open for orders; default true.' } },
-      { name: 'trafficGb', type: 'integer', text: { tr: 'Aylık trafik (GB), 1–10.000.000; boş: sınırsız.', en: 'Monthly traffic (GB), 1–10,000,000; empty: unlimited.' } },
-    ],
+    body: packageBody,
     example: { name: 'CX22', vcpu: 2, memoryMb: 4096, diskGb: 40, priceMonthly: '6.90', priceHourly: '0.0110', currency: 'EUR',
       poolIds: ['3c4d5e6f-1a2b-4c3d-8e9f-0a1b2c3d4e5f'], imageIds: [], sort: 10, active: true, trafficGb: 20000 },
     returns: { tr: '{ id }', en: '{ id }' },
     errors: ['VALIDATION_FAILED', 'IN_USE'],
+  },
+  'PUT /admin/packages/:id': {
+    tag: 'admin-catalog',
+    summary: { tr: 'Paketi değiştirir.', en: 'Changes a package.' },
+    details: { tr: 'Tüm alanlar yeniden gönderilir ve oluştururken olduğu gibi denetlenir; havuz ve imaj listeleri gönderilenlerle değişir. Mevcut sunucular sipariş edildikleri boyut ve fiyatta kalır.', en: 'Send every field again; checked as on create, and the pool and image lists are replaced. Existing servers keep the shape and price they were ordered with.' },
+    params: [id('Paket.', 'Package.')],
+    body: packageBody,
+    example: { name: 'CX22', vcpu: 2, memoryMb: 4096, diskGb: 40, priceMonthly: '6.90', priceHourly: '0.0110', currency: 'EUR',
+      poolIds: ['3c4d5e6f-1a2b-4c3d-8e9f-0a1b2c3d4e5f'], imageIds: [], sort: 10, active: true, trafficGb: 20000 },
+    returns: { tr: '{ id }', en: '{ id }' },
+    errors: ['VALIDATION_FAILED', 'NOT_FOUND', 'IN_USE'],
   },
   'DELETE /admin/packages/:id': {
     tag: 'admin-catalog',
@@ -806,10 +830,10 @@ export default {
     tag: 'admin-vmware',
     summary: { tr: 'ESXi veya vCenter\'a bağlanıp keşif yapar, hiçbir şey kaydetmez.', en: 'Connects to ESXi or vCenter and discovers, saving nothing.' },
     details: { tr: 'Formdaki "Bağlantıyı test et". Sertifika güvenilmezse hata yanıtında sertifika bilgisi de döner.', en: 'The form\'s "Test connection". An untrusted certificate is returned in the error answer.' },
-    body: targetBody,
+    body: [...targetBody, { name: 'connectionId', type: 'uuid', text: { tr: 'Düzenlenen bağlantı; verilirse boş parola onun kayıtlı parolası demektir (yalnızca aynı adres ve port için).', en: 'The connection being edited; with it an empty password means its stored one (same address and port only).' } }],
     example: targetExample,
     returns: { tr: '{ product, writeApi, operations, warnings, compat, counts: { hosts, datastores, networks, compute, vms } }', en: '{ product, writeApi, operations, warnings, compat, counts: { hosts, datastores, networks, compute, vms } }' },
-    errors: ['VALIDATION_FAILED', ...adapterErrors],
+    errors: ['VALIDATION_FAILED', 'NOT_FOUND', ...adapterErrors],
   },
   'GET /admin/vmware/connections': {
     tag: 'admin-vmware',
@@ -854,6 +878,17 @@ export default {
     example: { apiVersion: '8.0.2.0', customization: 'cloudinit' },
     returns: { tr: '{ apiVersion, customization, compat }', en: '{ apiVersion, customization, compat }' },
     errors: ['NOT_FOUND', 'VALIDATION_FAILED', ...adapterErrors],
+  },
+  'PUT /admin/vmware/connections/:id': {
+    tag: 'admin-vmware',
+    summary: { tr: 'Bağlantının adresini, hesabını veya sertifika güvenini değiştirir.', en: 'Changes a connection\'s address, account or certificate trust.' },
+    details: { tr: 'Parola değiştiğinde veya sertifika yenilendiğinde. Parola boş bırakılırsa kayıtlı olan kalır (yalnızca aynı adres ve port için). Kaydetmeden önce yeni bir bağlantı gibi denenir ve envanter yeniden keşfedilir; adres başka bir ESXi/vCenter\'a çıkarsa reddedilir.', en: 'For a changed password or a renewed certificate. An empty password keeps the stored one (same address and port only). Tested like a new connection before saving and the inventory is discovered again; refused when the address answers as another ESXi/vCenter.' },
+    params: [id('VMware bağlantısı.', 'VMware connection.')],
+    body: [...targetBody.map((f) => (f.name === 'password' ? { ...f, required: false, text: { tr: 'Boş: kayıtlı parola kalır.', en: 'Empty: the stored password is kept.' } } : f)),
+      { name: 'customization', type: 'string', values: ['auto', 'cloudinit', 'guestinfo'], text: { tr: 'Misafir özelleştirme yöntemi, varsayılan auto.', en: 'Guest customization method, default auto.' } }],
+    example: { ...targetExample, password: '', tls: { mode: 'pinned', sha256: '3f6c0e2a9b8d7c1e5f4a3b2c1d0e9f8a7b6c5d4e3f2a1b0c9d8e7f6a5b4c3d2e' }, customization: 'auto' },
+    returns: { tr: '{ id, product, writeApi, operations, warnings, compat, counts }', en: '{ id, product, writeApi, operations, warnings, compat, counts }' },
+    errors: ['VALIDATION_FAILED', 'NOT_FOUND', 'ENDPOINT_CHANGED', 'HOSTS_ALREADY_MANAGED', 'CONNECTION_EXISTS', ...adapterErrors],
   },
   'DELETE /admin/vmware/connections/:id': {
     tag: 'admin-vmware',

@@ -1,4 +1,5 @@
 import { cookies } from 'next/headers';
+import { cache } from 'react';
 
 // permissions: the effective set from the API ('*' = administrator). impersonatedBy: a staff member signed in as this user.
 // timeZone: the person's chosen zone, or null for their browser's.
@@ -17,12 +18,13 @@ async function serverGet(path: string) {
   return fetch(`${apiUrl}${path}`, { headers: { cookie }, cache: 'no-store' });
 }
 
-export async function getUser(): Promise<User | null> {
+// Once per request: the panel layout, the admin layout and pages all ask, the API is asked once.
+export const getUser = cache(async (): Promise<User | null> => {
   const res = await serverGet('/auth/me');
   if (res.status === 401) return null;
   if (!res.ok) throw new Error(`auth/me failed: ${res.status}`);
   return res.json();
-}
+});
 
 export async function getSetupStatus(): Promise<{ adminCreated: boolean; completed: boolean }> {
   const res = await serverGet('/setup/status');
@@ -34,9 +36,9 @@ const fallback: PublicConfig = { branding: { name: 'Lightning VM', accent: null,
   phoneVerification: false, otpChannels: { sms: false, email: false } };
 // Branding is needed on every page; if the API is down the page still renders with the defaults.
 // A reseller's brand for the signed-in person (their customers see it instead of the operator's); empty when none.
-export async function getResellerBrand(): Promise<{ name?: string; accent?: string | null }> {
+export const getResellerBrand = cache(async (): Promise<{ name?: string; accent?: string | null }> => {
   try { const res = await serverGet('/reseller/brand'); return res.ok ? await res.json() : {}; } catch { return {}; }
-}
+});
 
 export async function getPublicConfig(): Promise<PublicConfig> {
   try {

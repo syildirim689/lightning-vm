@@ -7,10 +7,10 @@ import { useState } from 'react';
 import { apiFetch, useErrorText } from '../../../../lib/api';
 import { useApiAction, useApiQuery } from '../../../../lib/query';
 import { ButtonLink, DataTable, Empty, Mono, PageHeader, Stat, StatusChip } from '../../../../components/ui';
-import ConnectionForm, { type Prefill } from './connection-form';
+import ConnectionForm, { type Editing, type Prefill } from './connection-form';
 import Discovery from './discovery';
 
-export type Connection = { id: string; name: string; kind: string; host: string; port: number; tlsMode: string; writeApi: string; status: string;
+export type Connection = { id: string; name: string; kind: string; host: string; port: number; username: string; tlsMode: string; tlsSha256: string | null; tlsCaPem: string | null; writeApi: string; status: string;
   lastErrorCode: string | null; lastDiscoveredAt: string | null; hosts: number; vms: number; product: { fullName: string }; operations: Record<string, boolean>; warnings: string[];
   apiVersion: string | null; customization: 'auto' | 'cloudinit' | 'guestinfo'; compat: Compat | null };
 export type Compat = { apiVersion: string; customization: 'cloudinit' | 'guestinfo' | 'none'; clone: boolean; consoleUrl: boolean; support: 'supported' | 'end-of-support' | 'legacy' };
@@ -27,6 +27,8 @@ export default function Connections({ eyebrow, title, intro }: { eyebrow: string
   const [adding, setAdding] = useState(false);
   // Set when the form opens from a scan result; the form starts filled in from it.
   const [prefill, setPrefill] = useState<Prefill>();
+  // A saved connection opened for new credentials, address or certificate.
+  const [editing, setEditing] = useState<Editing>();
   const format = useFormatter();
   const list = useApiQuery<{ connections: Connection[] }>(['vmware', 'connections'], '/admin/vmware/connections').data?.connections;
   const discover = useApiAction((id: string) => apiFetch(`/admin/vmware/connections/${id}/discover`, { method: 'POST' }), { invalidate: [['vmware']], success: t('refreshed') });
@@ -61,6 +63,10 @@ export default function Connections({ eyebrow, title, intro }: { eyebrow: string
             <span key="w" className={stale(c) ? 'text-warning' : 'text-muted'} title={c.lastDiscoveredAt ? format.dateTime(new Date(c.lastDiscoveredAt), { dateStyle: 'medium', timeStyle: 'short' }) : undefined}>
               {c.lastDiscoveredAt ? format.relativeTime(new Date(Math.min(Date.parse(c.lastDiscoveredAt), Date.now())), new Date()) : t('never')}</span>,
             <span key="d" className="flex gap-1">
+              {/* A failing connection usually needs a new password or a renewed certificate pinned: offer that first. */}
+              {c.status !== 'ok'
+                ? <Button size="sm" variant="secondary" onPress={() => setEditing(c)}><I name="key-round" size={14}/>{t('fix')}</Button>
+                : <Button size="sm" variant="ghost" isIconOnly aria-label={t('editOne', { name: c.name })} onPress={() => setEditing(c)}><I name="pencil" size={14}/></Button>}
               <Button size="sm" variant="ghost" isIconOnly aria-label={t('refreshOne', { name: c.name })} isPending={busy === c.id} isDisabled={!!busy} onPress={() => discover.mutate(c.id)}><I name="refresh-cw" size={14}/></Button>
               <ButtonLink href={`/admin/vmware/${c.id}`} variant="secondary" size="sm">{t('details')}</ButtonLink>
             </span>]}/>
@@ -74,6 +80,16 @@ export default function Connections({ eyebrow, title, intro }: { eyebrow: string
           <Modal.CloseTrigger/>
           <Modal.Header><Modal.Heading>{t('addTitle')}</Modal.Heading></Modal.Header>
           <Modal.Body><ConnectionForm key={prefill ? `${prefill.host}:${prefill.port}` : 'new'} initial={prefill} onSaved={() => { setAdding(false); toast.success(t('saved')); setPrefill(undefined); client.invalidateQueries({ queryKey: ['vmware'] }); }}/></Modal.Body>
+        </Modal.Dialog>
+      </Modal.Container>
+    </Modal.Backdrop>
+
+    <Modal.Backdrop isOpen={!!editing} onOpenChange={(open) => { if (!open) setEditing(undefined); }}>
+      <Modal.Container size="lg" scroll="inside">
+        <Modal.Dialog>
+          <Modal.CloseTrigger/>
+          <Modal.Header><Modal.Heading>{t('editTitle', { name: editing?.name ?? '' })}</Modal.Heading></Modal.Header>
+          <Modal.Body>{editing && <ConnectionForm key={editing.id} editing={editing} onSaved={() => { setEditing(undefined); toast.success(t('updated')); client.invalidateQueries({ queryKey: ['vmware'] }); }}/>}</Modal.Body>
         </Modal.Dialog>
       </Modal.Container>
     </Modal.Backdrop>

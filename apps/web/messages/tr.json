@@ -353,7 +353,8 @@
     "SCAN_RUNNING": "Başka bir tarama sürüyor; bitmesini bekleyin veya durdurun.",
     "SCAN_NOT_RUNNING": "Bu tarama zaten bitmiş.",
     "SCAN_INTERRUPTED": "Panel yeniden başlatıldığı için tarama yarıda kaldı.",
-    "TOKEN_ADDRESS_NOT_ALLOWED": "Bu API anahtarı bu IP adresinden kullanılamaz."
+    "TOKEN_ADDRESS_NOT_ALLOWED": "Bu API anahtarı bu IP adresinden kullanılamaz.",
+    "ENDPOINT_CHANGED": "Bu adres başka bir ESXi/vCenter olarak yanıt veriyor. Kaynak havuzları ve imajlar bu bağlantının envanterini kullandığı için aynı sunucu kalmalı; diğerini yeni bağlantı olarak ekleyin."
   },
   "Auth": {
     "required": "zorunlu",
@@ -623,7 +624,8 @@
     "IPV6_RANGE": "IPv6 blokları taranamaz; tek IPv6 adresi yazın.",
     "TOO_MANY_ADDRESSES": "Toplam 4096 adresi aşıyor; blokları bölün.",
     "EXPIRY_REQUIRED": "Yönetici bitiş tarihi koymayı zorunlu kıldı.",
-    "EXPIRY_TOO_LONG": "Yöneticinin izin verdiği en uzun süreyi aşıyor."
+    "EXPIRY_TOO_LONG": "Yöneticinin izin verdiği en uzun süreyi aşıyor.",
+    "PASSWORD_REQUIRED_FOR_NEW_ADDRESS": "Adres veya port değişince parolayı yeniden yazın."
   },
   "Setup": {
     "title": "Kurulum sihirbazı",
@@ -805,7 +807,8 @@
     "unverifiedHelp": "Kullanıcıların açacağı adres gerçekten buysa (örneğin NAT arkasında), doğrulamadan kaydedebilirsiniz.",
     "locked": "Önce bundan önceki zorunlu adımları tamamlayın.",
     "finishBlocked": "Tamamlanmamış zorunlu adımlar var: {steps}.",
-    "doneOf": "{n}/{total} tamamlandı"
+    "doneOf": "{n}/{total} tamamlandı",
+    "finishBlockedShort": "Kurulumun bitmesi için şu adımlar hâlâ gerekli:"
   },
   "Vmware": {
     "eyebrow": "YÖNETİM · VMWARE",
@@ -845,7 +848,9 @@
       "groupEndpointHelp": "vCenter veya ESXi’nin panelden erişilebilen adı ya da IP adresi.",
       "groupAccount": "Kimlik bilgileri",
       "groupAccountHelp": "Panelin kullanacağı hesap. Yalnızca gereken yetkileri olan ayrı bir hesap önerilir.",
-      "groupTls": "Sertifika doğrulaması"
+      "groupTls": "Sertifika doğrulaması",
+      "passwordKeep": "Kayıtlı parolayı korumak için boş bırakın. ESXi/vCenter’da değiştiyse ya da adresi değiştiriyorsanız yenisini yazın.",
+      "passwordKeepPlaceholder": "Değişmedi"
     },
     "tlsMode": {
       "system": "Sistem CA'ları (varsayılan)",
@@ -860,7 +865,8 @@
       "notAfter": "Bitiş",
       "names": "Adlar",
       "verify": "ESXi üzerinde (SSH) doğrulamak için:",
-      "pin": "Parmak izini doğruladım, bu sertifikayı sabitle"
+      "pin": "Parmak izini doğruladım, bu sertifikayı sabitle",
+      "verifyVcenter": "vCenter üzerinde (SSH) doğrulamak için:"
     },
     "col": {
       "name": "Ad",
@@ -1124,7 +1130,12 @@
         "badge": "Otomatik"
       },
       "emptyConnections": "Adresini bilmiyorsanız aşağıdan ağınızı tarayın; bulunan ESXi ve vCenter sunucuları tek tıkla eklenir."
-    }
+    },
+    "fix": "Bilgileri güncelle",
+    "editOne": "{name} bağlantısını düzenle",
+    "editTitle": "Bağlantıyı düzenle: {name}",
+    "updated": "Bağlantı güncellendi.",
+    "fixHelp": "Parola değiştiyse yenisini yazın. Sertifika yenilendiyse bağlantıyı test edin: şu an sunduğu sertifika gösterilir, doğrulayıp sabitleyebilirsiniz. Sonra kaydedin."
   },
   "Console": {
     "title": "Konsol: {name}",
@@ -1210,7 +1221,7 @@
     "nameHelp": "Ana bilgisayar adı olarak da kullanılır, örnek: web-1.",
     "sshKeys": "SSH anahtarları",
     "access": "Ad ve erişim",
-    "noKeys": "Önce aşağıdan bir SSH anahtarı ekleyin.",
+    "noKeys": "Henüz SSH anahtarınız yok. Buradan ekleyin (yapıştırın ya da GitHub’dan alın); bu sunucu için hemen işaretlenir.",
     "create": "Sunucuyu oluştur",
     "perMonth": "ay",
     "summary": "Özet",
@@ -1375,7 +1386,10 @@
       "reserveMemoryPct": "RAM payı (%)",
       "reserveMemoryPctHelp": "Satışa açılmayan yönetim ve güvenlik payı.",
       "reserveStoragePct": "Depolama payı (%)",
-      "reserveStoragePctHelp": "Satışa açılmayan pay; gerçek boş alan bunun altına düşerse uyarılırsınız."
+      "reserveStoragePctHelp": "Satışa açılmayan pay; gerçek boş alan bunun altına düşerse uyarılırsınız.",
+      "editTitle": "Kaynak havuzunu düzenle: {name}",
+      "addConnection": "Bağlantı ekle",
+      "connectionFixed": "Var olan bir havuzun bağlantısı değişmez; sunucuları oradadır."
     },
     "rule": {
       "add": "Özel kaynak kuralı ekle",
@@ -1409,7 +1423,8 @@
       "noTemplates": "Bu bağlantıda şablon bulunamadı.",
       "empty": "Henüz imaj yok.",
       "esxi": "VMware ESXi (iç içe)",
-      "esxiHelp": "Ağ ve parola vApp (OVF) özellikleriyle verilir; iç içe sanallaştırma açılır."
+      "esxiHelp": "Ağ ve parola vApp (OVF) özellikleriyle verilir; iç içe sanallaştırma açılır.",
+      "editTitle": "İmajı düzenle: {name}"
     },
     "packages": {
       "title": "Paketler",
@@ -1435,7 +1450,9 @@
       "trafficHelp": "Gelen ve giden toplamı; boş: sınırsız.",
       "trafficShort": "{gb} GB trafik",
       "unlimited": "Sınırsız trafik",
-      "perVcpu": "vCPU başına {price}"
+      "perVcpu": "vCPU başına {price}",
+      "editTitle": "Paketi düzenle: {name}",
+      "toPools": "Kaynak havuzlarına git"
     },
     "ip": {
       "title": "IP havuzları",
@@ -1844,7 +1861,10 @@
     "export": "CSV indir",
     "undo": "Geri al",
     "find": "Bu listede ara",
-    "noMatch": "Aramayla eşleşen kayıt yok."
+    "noMatch": "Aramayla eşleşen kayıt yok.",
+    "edit": "Düzenle",
+    "editOf": "{name} öğesini düzenle",
+    "saveChanges": "Değişiklikleri kaydet"
   },
   "Servers": {
     "loading": "Yükleniyor…",
@@ -2309,7 +2329,9 @@
     "unpaidInvoices": "{n} fatura ödeme bekliyor",
     "reseller": "Bayilik",
     "networks": "Özel ağlar",
-    "apiDocs": "API belgeleri"
+    "apiDocs": "API belgeleri",
+    "stopImpersonatingFailed": "Kendi hesabınıza dönülemedi. Yeniden deneyin ya da çıkış yapın.",
+    "moreTools": "Diğer araçlar ({n})"
   },
   "Dashboard": {
     "eyebrow": "YÖNETİM",
@@ -5408,7 +5430,10 @@
       "vmware_scan_ignored": "Taramada bir adres yoksayıldı",
       "vmware_scan_unignored": "Yoksayılan adres geri alındı",
       "settings_api_changed": "API ayarları değişti",
-      "admin_api_token_revoked": "Bir API anahtarı yönetici tarafından iptal edildi"
+      "admin_api_token_revoked": "Bir API anahtarı yönetici tarafından iptal edildi",
+      "vmware_connection_updated": "vCenter bağlantısı değişti",
+      "catalog_package_updated": "Paket değişti",
+      "catalog_image_updated": "İşletim sistemi şablonu değişti"
     },
     "outcome": {
       "success": "Tamamlandı",
@@ -6913,7 +6938,8 @@
     "removeCardBody": "Kart bu hesaptan kaldırılır; tekrar kullanmak için yeniden eklemeniz gerekir.",
     "removeDefaultBody": "Bu varsayılan kartınız. Kaldırırsanız otomatik ödemeler başka bir varsayılan kart seçene kadar yapılamaz.",
     "removeConfirm": "Kartı kaldır",
-    "transferAmount": "Tutar"
+    "transferAmount": "Tutar",
+    "topUpShort": "Eksik {amount} tutarını yükle"
   },
   "BillingAdmin": {
     "eyebrow": "Gelir",
@@ -8159,7 +8185,9 @@
     "draftKept": "Taslak, gönderene kadar bu tarayıcıda saklanıyor",
     "draftRestored": "Gönderilmemiş taslağınız geri geldi",
     "draftDiscard": "Taslağı sil",
-    "sendHint": "{keys} ile gönderilir"
+    "sendHint": "{keys} ile gönderilir",
+    "loadFailed": "Bu bölüm yüklenemedi.",
+    "retry": "Yeniden dene"
   },
   "SessionExpired": {
     "title": "Oturumunuz sona erdi",
@@ -8175,5 +8203,14 @@
     "leave": "Kaydetmeden çık",
     "stay": "Kal ve kaydet",
     "fields": "Kaydedilmeyenler:"
+  },
+  "ErrorPage": {
+    "title": "Bu sayfa gösterilemedi",
+    "body": "Sayfa çizilirken bir sorun oldu. Verileriniz güvende; yeniden deneyin ya da başlangıç sayfasına dönün.",
+    "code": "Hata kodu: {code}",
+    "retry": "Yeniden dene",
+    "home": "Başlangıç sayfası",
+    "notFound": "Sayfa bulunamadı",
+    "notFoundBody": "Bu adres bir yere çıkmıyor. Bağlantı eski olabilir ya da sayfa taşınmış olabilir."
   }
 }

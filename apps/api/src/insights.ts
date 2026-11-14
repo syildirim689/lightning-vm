@@ -24,8 +24,10 @@ export async function staffInsights(): Promise<Insight[]> {
   const add = (code: string, severity: Insight['severity'], params: Insight['params'], link: string, key = code) => out.push({ code, severity, params, link, key });
 
   const { rows: pools } = await pool.query('SELECT * FROM resource_pools WHERE active');
+  // Each pool's capacity once, for both the fill levels and the packages below.
+  const caps = new Map(await Promise.all(pools.map(async (p) => [p.id, await capacityOf(p)] as const)));
   for (const p of pools) {
-    const cap = await capacityOf(p);
+    const cap = caps.get(p.id)!;
     for (const [res, unit] of [['vcpu', ''], ['memoryMb', 'MB'], ['storageGb', 'GB']] as const) {
       const offered = cap.offered[res] ?? 0;
       const used = pct(offered - (cap.available[res] ?? 0), offered);
@@ -76,7 +78,6 @@ export async function staffInsights(): Promise<Insight[]> {
 
   // Packages no active location can currently host.
   const { rows: pkgs } = await pool.query(`SELECT p.id, p.name, p.vcpu, p.memory_mb, p.disk_gb, ARRAY(SELECT pool_id FROM package_pools WHERE package_id = p.id) AS pools FROM packages p WHERE p.active`);
-  const caps = new Map(await Promise.all(pools.map(async (p) => [p.id, await capacityOf(p)] as const)));
   for (const k of pkgs) {
     const fits = k.pools.some((id: string) => { const c = caps.get(id); return c && k.vcpu <= c.available.vcpu && k.memory_mb <= c.available.memoryMb && k.disk_gb <= c.available.storageGb; });
     if (!fits) add('PACKAGE_UNSELLABLE', 'warning', { package: k.name }, '/admin/catalog?tab=packages', `pkg:${k.id}`);
@@ -206,11 +207,22 @@ export class InsightsController {
   async restore(@Req() req: AuthedRequest) { await pool.query('DELETE FROM insight_dismissals WHERE user_id = $1', [req.user.id]); }
 }
 
+// The staff list for the dashboard, shared by all staff for 60 seconds (it reads every pool, IP range and
+// VMware capacity). The alerts above keep computing it fresh.
+const staffKey = 'insights:staff';
+async function cachedStaffInsights(): Promise<Insight[]> {
+  const hit = await redis.get(staffKey).catch(() => null);
+  if (hit) return JSON.parse(hit);
+  const list = await staffInsights();
+  await redis.set(staffKey, JSON.stringify(list), 'EX', 60).catch(() => undefined);
+  return list;
+}
+
 @Controller('admin') @UseGuards(PermissionGuard)
 export class StaffInsightsController {
   @Get('insights') @Can('dashboard.view')
   async all(@Req() req: AuthedRequest) {
-    const insights = await staffInsights();
+    const insights = await cachedStaffInsights();
     // Links into areas the viewer cannot open are dropped.
     return visible(req.user.id, insights.filter((i) => !i.link.startsWith('/admin/settings') || can(req.user.permissions, 'settings.view') || can(req.user.permissions, 'settings.manage')));
   }

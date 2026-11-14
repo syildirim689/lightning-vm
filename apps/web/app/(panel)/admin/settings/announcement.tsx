@@ -5,7 +5,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useTranslations } from 'next-intl';
 import { useEffect, useState } from 'react';
 import { I } from '../../../../components/icon';
-import { FormActions, FormSection, Notice, SelectInput, SwitchInput, TextInput } from '../../../../components/ui';
+import { FormActions, FormSection, Notice, SelectInput, SwitchInput, TextInput, Loading } from '../../../../components/ui';
 import { apiFetch, type ApiError, useErrorText } from '../../../../lib/api';
 import { useApiQuery } from '../../../../lib/query';
 
@@ -23,7 +23,7 @@ export default function AnnouncementSettings({ readOnly }: { readOnly: boolean }
   const [fields, setFields] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
   useEffect(() => { if (q && !v) setV(q); }, [q]); // eslint-disable-line react-hooks/exhaustive-deps
-  if (!v) return <p role="status" className="text-sm text-muted">…</p>;
+  if (!v) return <Loading of={['settings', 'announcement']}/>;
   async function save() {
     setBusy(true); setFields({});
     try {

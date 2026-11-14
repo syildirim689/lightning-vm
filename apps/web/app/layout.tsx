@@ -1,10 +1,11 @@
 import './style.css';
 import { Atkinson_Hyperlegible, Fira_Code, Fira_Sans } from 'next/font/google';
 import { NextIntlClientProvider } from 'next-intl';
-import { getLocale, getTranslations } from 'next-intl/server';
+import { getLocale, getMessages, getTranslations } from 'next-intl/server';
 import { accentCss } from '../components/brand';
 import { a11yBootScript } from '../lib/a11y-prefs';
 import { getPublicConfig } from '../lib/session';
+import { pick, publicScope } from '../lib/message-scope';
 import Providers from './providers';
 import { LoaderLayer } from '../components/page-loader';
 
@@ -35,7 +36,8 @@ export default async function RootLayout({ children }: { children: React.ReactNo
     <body className="bg-background text-foreground font-sans antialiased">
       {/* First paint: the loading layer, faded out by PageLoader once the page is interactive. */}
       <LoaderLayer id="boot-loader" label={t('loading')}/>
-      <NextIntlClientProvider><Providers locale={locale} loadingLabel={t('loading')}>{children}</Providers></NextIntlClientProvider>
+      {/* Only the public pages' translations here; the panel and the setup wizard add their own (lib/message-scope). */}
+      <NextIntlClientProvider messages={pick(await getMessages(), publicScope)}><Providers locale={locale} loadingLabel={t('loading')}>{children}</Providers></NextIntlClientProvider>
     </body>
   </html>;
 }

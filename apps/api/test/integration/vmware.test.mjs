@@ -174,11 +174,28 @@ test('refresh re-discovers with the stored password; failures are recorded', { s
   assert.deepEqual([c.status, c.last_error_code], ['error', 'TLS_PIN_MISMATCH']);
 });
 
+test('a failing connection is fixed by editing it; an empty password keeps the stored one', { skip }, async () => {
+  const base = { name: 'Sim ESXi', host: esxi, port: 8989, username: esxCreds.username, password: '', tls: { mode: 'pinned', sha256: esxPin } };
+  const { rows: [before] } = await pool.query('SELECT password_enc FROM vmware_connections WHERE id = $1', [esxId]);
+  const wrongLogin = await send('PUT', `/admin/vmware/connections/${esxId}`, { ...base, password: 'nope' });
+  assert.equal(wrongLogin.json().code, 'INVALID_LOGIN');
+  const other = await send('PUT', `/admin/vmware/connections/${esxId}`, { ...base, host: vcenter, ...vcCreds, tls: { mode: 'pinned', sha256: vcPin } });
+  assert.equal(other.json().code, 'ENDPOINT_CHANGED', 'pools and images refer to this endpoint\'s inventory');
+  const { rows: [still] } = await pool.query('SELECT status, password_enc FROM vmware_connections WHERE id = $1', [esxId]);
+  assert.deepEqual([still.status, still.password_enc], ['error', before.password_enc], 'nothing saved by a failed edit');
+  const ok = await send('PUT', `/admin/vmware/connections/${esxId}`, base);
+  assert.equal(ok.statusCode, 200, ok.body);
+  const { rows: [c] } = await pool.query('SELECT status, last_error_code, tls_sha256 FROM vmware_connections WHERE id = $1', [esxId]);
+  assert.deepEqual([c.status, c.last_error_code, c.tls_sha256], ['ok', null, esxPin]);
+  assert.equal((await send('POST', `/admin/vmware/connections/${esxId}/discover`)).statusCode, 200, 'the stored password still works');
+});
+
 test('only admins can see or change VMware connections; actions are audited', { skip }, async () => {
-  for (const [method, path] of [['GET', '/admin/vmware/connections'], ['POST', '/admin/vmware/test'], ['DELETE', `/admin/vmware/connections/${esxId}`]]) {
+  for (const [method, path] of [['GET', '/admin/vmware/connections'], ['POST', '/admin/vmware/test'], ['PUT', `/admin/vmware/connections/${esxId}`], ['DELETE', `/admin/vmware/connections/${esxId}`]]) {
     assert.equal((await send(method, path, {}, user)).statusCode, 403, path);
   }
   const { rows } = await pool.query("SELECT action, outcome FROM audit_events WHERE action LIKE 'vmware.%' ORDER BY id");
   assert.deepEqual(rows.map((r) => `${r.action}:${r.outcome}`),
-    ['vmware.connection_created:success', 'vmware.connection_created:success', 'vmware.connection_deleted:success', 'vmware.discovery:success', 'vmware.discovery:failure']);
+    ['vmware.connection_created:success', 'vmware.connection_created:success', 'vmware.connection_deleted:success', 'vmware.discovery:success', 'vmware.discovery:failure',
+      'vmware.connection_updated:success', 'vmware.discovery:success']);
 });

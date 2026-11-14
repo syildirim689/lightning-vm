@@ -9,43 +9,59 @@ import { FieldGroup, Mono, Notice, SelectInput, TextInput } from '../../../../co
 import { apiVersions, versionLabel } from './connections';
 
 type Certificate = { subject: string; issuer: string; notAfter: string; sha256: string; dnsNames: string[] | null; ips: string[] | null };
-type Failure = ApiError & { text: string; certificate?: Certificate; conflicts?: { host: string; connection: string }[] };
+type Failure = ApiError & { text: string; certificate?: Certificate; kind?: string; conflicts?: { host: string; connection: string }[] };
 export type Summary = { id?: string; product: { kind: string; fullName: string }; writeApi: string; operations: Record<string, boolean>; warnings: string[]; counts: Record<string, number> };
 
 export const fingerprintPairs = (hex: string) => hex.match(/../g)?.join(':').toUpperCase() ?? hex;
 // Filled in from a network scan (discovery.tsx). A fingerprint seen there is pinned only after the admin compares it.
 export type Prefill = { name: string; host: string; port: string; username: string; mode: 'system' | 'pinned'; sha256: string; kind: 'esxi' | 'vcenter' };
 // Where an admin reads the certificate fingerprint on the endpoint itself.
-export const fingerprintCommand = (kind: string) => kind === 'vcenter'
+export const fingerprintCommand = (kind: 'esxi' | 'vcenter') => kind === 'vcenter'
   ? '/usr/lib/vmware-vmafd/bin/vecs-cli entry getcert --store MACHINE_SSL_CERT --alias __MACHINE_CERT | openssl x509 -noout -fingerprint -sha256'
   : 'openssl x509 -in /etc/vmware/ssl/rui.crt -noout -fingerprint -sha256';
 
+// A saved connection opened for editing. The password is never sent back: left empty, the stored one is kept.
+export type Editing = { id: string; name: string; kind: string; host: string; port: number; username: string; tlsMode: string; tlsSha256: string | null; tlsCaPem: string | null;
+  apiVersion: string | null; customization: string; status?: string; lastErrorCode?: string | null };
+type Form = { name: string; host: string; port: string; username: string; password: string; mode: string; caPem: string; sha256: string; apiVersion: string; customization: string };
+const knownKind = (k?: string): 'esxi' | 'vcenter' | undefined => (k === 'esxi' || k === 'vcenter' ? k : undefined);
+
 // Shared by the admin page and the setup wizard. Certificate trust is an explicit admin decision:
 // an untrusted certificate is shown with its fingerprint and can be pinned, never ignored.
-export default function ConnectionForm({ onSaved, initial }: { onSaved: (s: Summary) => void; initial?: Prefill }) {
+export default function ConnectionForm({ onSaved, initial, editing }: { onSaved: (s: Summary) => void; initial?: Prefill; editing?: Editing }) {
   const t = useTranslations('Vmware');
   const { error, field } = useErrorText();
-  const [form, setForm] = useState({ name: '', host: '', port: '443', username: '', password: '', mode: 'system', caPem: '', sha256: '', apiVersion: '', customization: 'auto',
-    ...(initial && { name: initial.name, host: initial.host, port: initial.port, username: initial.username, mode: initial.mode, sha256: initial.sha256 }) });
+  const [form, setForm] = useState<Form>({ name: '', host: '', port: '443', username: '', password: '', mode: 'system', caPem: '', sha256: '', apiVersion: '', customization: 'auto',
+    ...(initial && { name: initial.name, host: initial.host, port: initial.port, username: initial.username, mode: initial.mode, sha256: initial.sha256 }),
+    ...(editing && { name: editing.name, host: editing.host, port: String(editing.port), username: editing.username, mode: editing.tlsMode, caPem: editing.tlsCaPem ?? '',
+      sha256: editing.tlsSha256 ?? '', apiVersion: editing.apiVersion ?? '', customization: editing.customization }) });
   const [failure, setFailure] = useState<Failure>();
   const [tested, setTested] = useState<Summary>();
   const [testedFor, setTestedFor] = useState('');
   const [busy, setBusy] = useState<'test' | 'save'>();
   const set = (k: keyof typeof form) => (v: string) => setForm((f) => ({ ...f, [k]: v }));
-  const body = () => ({ name: form.name, host: form.host, port: Number(form.port), username: form.username, password: form.password, apiVersion: form.apiVersion, customization: form.customization,
-    tls: { mode: form.mode, ...(form.mode === 'ca' && { caPem: form.caPem }), ...(form.mode === 'pinned' && { sha256: form.sha256 }) } });
+  const bodyOf = (v: Form) => ({ name: v.name, host: v.host, port: Number(v.port), username: v.username, password: v.password, apiVersion: v.apiVersion, customization: v.customization,
+    tls: { mode: v.mode, ...(v.mode === 'ca' && { caPem: v.caPem }), ...(v.mode === 'pinned' && { sha256: v.sha256 }) }, ...(editing && { connectionId: editing.id }) });
+  const body = () => bodyOf(form);
+  // Which product the fingerprint command is for: from the failure, the scan or the saved connection; unknown for a new address.
+  const kind = knownKind(failure?.kind) ?? knownKind(editing?.kind) ?? knownKind(initial?.kind);
 
-  async function run(kind: 'test' | 'save', path: string, onOk: (s: Summary) => void) {
-    setBusy(kind); setFailure(undefined); setTested(undefined);
-    try { onOk(await apiFetch<Summary>(path, { method: 'POST', body: body() })); }
+  async function run(step: 'test' | 'save', path: string, onOk: (s: Summary) => void, payload = body()) {
+    setBusy(step); setFailure(undefined); setTested(undefined);
+    try { onOk(await apiFetch<Summary>(path, { method: step === 'save' && editing ? 'PUT' : 'POST', body: payload })); }
     catch (e) { setFailure({ ...(e as Failure), text: error(e) }); }
     finally { setBusy(undefined); }
   }
+  const test = (v: Form) => { const payload = bodyOf(v); const k = JSON.stringify(payload); void run('test', '/admin/vmware/test', (s) => { setTested(s); setTestedFor(k); }, payload); };
+  // Pinning is the admin's decision after comparing the fingerprint; the test then runs again on its own.
+  const pin = (sha256: string) => { const next = { ...form, mode: 'pinned', sha256 }; setForm(next); test(next); };
+  const savePath = editing ? `/admin/vmware/connections/${editing.id}` : '/admin/vmware/connections';
   const err = (k: string) => field(failure?.fields?.[k]);
   const help = (k: string) => t(`form.${k}Help` as 'form.nameHelp');
 
-  return <form className="flex flex-col gap-4" onSubmit={(e) => { e.preventDefault(); if (tested && testedFor === JSON.stringify(body())) void run('save', '/admin/vmware/connections', onSaved); }} noValidate>
-    <GuideButton id="vmware"/>
+  return <form className="flex flex-col gap-4" onSubmit={(e) => { e.preventDefault(); if (tested && testedFor === JSON.stringify(body())) void run('save', savePath, onSaved); }} noValidate>
+    {!editing && <GuideButton id="vmware"/>}
+    {editing && editing.status !== 'ok' && !failure && !tested && <Notice tone="danger" title={error({ code: editing.lastErrorCode })}>{t('fixHelp')}</Notice>}
     {initial && <Notice tone={initial.mode === 'pinned' ? 'warning' : 'success'} title={t(initial.mode === 'pinned' ? 'scan.prefillPinned' : 'scan.prefillTrusted')}>
       {initial.mode === 'pinned' && <div className="flex flex-col gap-2">
         <p>{t('scan.prefillPinnedHelp')}</p>
@@ -60,7 +76,8 @@ export default function ConnectionForm({ onSaved, initial }: { onSaved: (s: Summ
     </FieldGroup>
     <FieldGroup title={t('form.groupAccount')} description={t('form.groupAccountHelp')}>
       <TextInput maxLength={200} label={t('form.username')} value={form.username} onChange={set('username')} error={err('username')} help={help('username')} isRequired autoComplete="off"/>
-      <TextInput revealable label={t('form.password')} type="password" value={form.password} onChange={set('password')} error={err('password')} help={help('password')} isRequired autoComplete="new-password"/>
+      <TextInput revealable label={t('form.password')} type="password" value={form.password} onChange={set('password')} error={err('password')}
+        help={editing ? t('form.passwordKeep') : help('password')} placeholder={editing ? t('form.passwordKeepPlaceholder') : undefined} isRequired={!editing} autoComplete="new-password"/>
     </FieldGroup>
     <FieldGroup title={t('form.groupTls')} description={t('form.tlsHelp')} cols={1}>
       <SelectInput label={t('form.tls')} value={form.mode} onChange={set('mode')} options={(['system', 'ca', 'pinned'] as const).map((m) => ({ id: m, label: t(`tlsMode.${m}`) }))}/>
@@ -90,9 +107,11 @@ export default function ConnectionForm({ onSaved, initial }: { onSaved: (s: Summ
           <dt className="text-muted">{t('cert.names')}</dt><dd className="break-all">{[...(failure.certificate.dnsNames ?? []), ...(failure.certificate.ips ?? [])].join(', ') || '–'}</dd>
           <dt className="text-muted">SHA-256</dt><dd className="break-all"><Mono>{fingerprintPairs(failure.certificate.sha256)}</Mono></dd>
         </dl>
-        <p className="text-muted">{t('cert.verify')}</p>
-        <pre className="overflow-x-auto rounded-lg bg-default p-3 font-mono text-xs">{fingerprintCommand(initial?.kind ?? 'esxi')}</pre>
-        <div><Button variant="secondary" onPress={() => { setForm((f) => ({ ...f, mode: 'pinned', sha256: failure.certificate!.sha256 })); setFailure(undefined); }}>{t('cert.pin')}</Button></div>
+        {(kind ? [kind] : (['esxi', 'vcenter'] as const)).map((k) => <div key={k} className="flex flex-col gap-1">
+          <p className="text-muted">{t(k === 'vcenter' ? 'cert.verifyVcenter' : 'cert.verify')}</p>
+          <pre className="overflow-x-auto rounded-lg bg-default p-3 font-mono text-xs">{fingerprintCommand(k)}</pre>
+        </div>)}
+        <div><Button variant="secondary" isDisabled={!!busy} onPress={() => pin(failure.certificate!.sha256)}>{t('cert.pin')}</Button></div>
       </Card.Content>
     </Card>}
     {tested && <div role="status"><Notice tone="success" title={t('testOk', { kind: tested.product.fullName, hosts: tested.counts.hosts, vms: tested.counts.vms })}/></div>}
@@ -101,7 +120,7 @@ export default function ConnectionForm({ onSaved, initial }: { onSaved: (s: Summ
     <div className="flex flex-wrap justify-end gap-2">
       {tested && testedFor === JSON.stringify(body())
         ? <Button type="submit" isPending={busy === 'save'} isDisabled={!!busy}><I name="check" size={16}/>{t('save')}</Button>
-        : <Button type="button" isPending={busy === 'test'} isDisabled={!!busy} onPress={() => { const k = JSON.stringify(body()); void run('test', '/admin/vmware/test', (s) => { setTested(s); setTestedFor(k); }); }}>
+        : <Button type="button" isPending={busy === 'test'} isDisabled={!!busy} onPress={() => test(form)}>
           <I name="plug-zap" size={16}/>{busy === 'test' ? t('working') : t('test')}</Button>}
     </div>
   </form>;

@@ -63,6 +63,8 @@ services:
       VMWARE_SERVICE_TOKEN_FILE: /run/secrets/vmware_token
       APP_VERSION: ${APP_VERSION:-dev}
       APP_ENV: ${APP_ENV:-production}
+      # Postgres connections per API process (the worker ignores it).
+      DB_POOL_MAX: ${DB_POOL_MAX:-20}
       # Sessions (better-auth): Secure cookies when browsers use HTTPS; optional SMTP and Cloudflare Turnstile.
       PANEL_TLS: ${PANEL_TLS:-0}
       SMTP_URL: ${SMTP_URL:-}

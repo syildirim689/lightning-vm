@@ -1,14 +1,14 @@
 "use client";
 // Audit events in words (known actions are translated, others shown as their code), the user's own activity
 // timeline, and the admin's announcement bar on every signed-in page.
-import { Button } from '@heroui/react';
+import { Button, toast } from '@heroui/react';
 import NextLink from 'next/link';
 import { useFormatter, useLocale, useTranslations } from 'next-intl';
 import { useEffect, useState } from 'react';
-import { apiFetch } from '../lib/api';
+import { apiFetch, useErrorText } from '../lib/api';
 import { useApiQuery } from '../lib/query';
 import { I } from './icon';
-import { StatusChip } from './ui';
+import { StatusChip, Loading } from './ui';
 
 export type AuditEvent = { id: string; at: string; action: string; outcome: 'success' | 'failure' | 'denied'; ip: string | null; metadata: Record<string, unknown>; actorEmail: string | null; actorId: string | null };
 
@@ -39,11 +39,12 @@ export function MyActivity() {
   const t = useTranslations('Activity');
   const format = useFormatter();
   const label = useActionLabel();
+  const { error } = useErrorText();
   const first = useApiQuery<{ events: AuditEvent[]; nextBefore: string | null }>(['activity'], '/activity').data;
   const [extra, setExtra] = useState<AuditEvent[]>([]);
   const [next, setNext] = useState<string | null | undefined>(undefined);
   const [busy, setBusy] = useState(false);
-  if (!first) return <p role="status" className="text-sm text-muted">…</p>;
+  if (!first) return <Loading of={['activity']}/>;
   const events = [...first.events, ...extra];
   const cursor = next === undefined ? first.nextBefore : next;
   if (!events.length) return <p className="text-sm text-muted">{t('empty')}</p>;
@@ -64,6 +65,7 @@ export function MyActivity() {
     {cursor && <div><Button variant="secondary" size="sm" isPending={busy} onPress={async () => {
       setBusy(true);
       try { const r = await apiFetch<{ events: AuditEvent[]; nextBefore: string | null }>(`/activity?before=${cursor}`); setExtra((x) => [...x, ...r.events]); setNext(r.nextBefore); }
+      catch (e) { toast.danger(error(e)); }
       finally { setBusy(false); }
     }}><I name="chevrons-down" size={15}/>{t('more')}</Button></div>}
   </div>;

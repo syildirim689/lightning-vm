@@ -8,7 +8,7 @@ import { useFormatter, useTranslations } from 'next-intl';
 import { useState } from 'react';
 import { I } from '../../../../../../components/icon';
 import { InvoiceSheet } from '../../../../../../components/invoice-sheet';
-import { CheckboxInput, ConfirmButton, Notice, SelectInput, TextInput } from '../../../../../../components/ui';
+import { CheckboxInput, ConfirmButton, Notice, SelectInput, TextInput, Loading } from '../../../../../../components/ui';
 import { apiFetch, useErrorText } from '../../../../../../lib/api';
 import type { InvoiceDetail } from '../../../../../../lib/billing';
 import { useMe } from '../../../../../../lib/me';
@@ -26,7 +26,7 @@ export default function AdminInvoice({ id }: { id: string }) {
   const [v, setV] = useState({ method: 'bank_transfer', reference: '', amount: '', reason: '', toBalance: false });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
-  if (!d) return <div className="h-96 animate-pulse rounded-3xl bg-default/50"/>;
+  if (!d) return <Loading of={['admin', 'billing', 'invoice', id]}><div className="h-96 animate-pulse rounded-3xl bg-default/50"/></Loading>;
   const inv = d.invoice;
   const reload = () => { void client.invalidateQueries({ queryKey: ['admin', 'billing'] }); };
   async function post(path: string, body: object, done: string) {

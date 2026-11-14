@@ -5,7 +5,7 @@ import { Button, Card, toast } from '@heroui/react';
 import { useTranslations } from 'next-intl';
 import { useEffect, useState } from 'react';
 import { I } from '../../../../components/icon';
-import { FormActions, FormSection, Notice, NumberInput, SelectInput, SwitchInput } from '../../../../components/ui';
+import { FormActions, FormSection, Notice, NumberInput, SelectInput, SwitchInput, Loading } from '../../../../components/ui';
 import { apiFetch, useErrorText } from '../../../../lib/api';
 import { useApiQuery } from '../../../../lib/query';
 
@@ -20,7 +20,7 @@ export default function ServerSettings({ readOnly }: { readOnly: boolean }) {
   const [v, setV] = useState<Doc | null>(null);
   const [busy, setBusy] = useState(false);
   useEffect(() => { if (q && !v) setV(q); }, [q]); // eslint-disable-line react-hooks/exhaustive-deps
-  if (!v) return <p role="status" className="text-sm text-muted">…</p>;
+  if (!v) return <Loading of={['settings', 'servers']}/>;
   async function save() {
     setBusy(true);
     try { setV(await apiFetch<Doc>('/admin/settings/servers', { method: 'PUT', body: v })); toast.success(t('saved')); }

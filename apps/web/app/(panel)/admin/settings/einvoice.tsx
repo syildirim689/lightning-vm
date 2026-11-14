@@ -5,7 +5,7 @@ import { Button, Card, toast } from '@heroui/react';
 import { useFormatter, useLocale, useTranslations } from 'next-intl';
 import { useEffect, useState } from 'react';
 import { I } from '../../../../components/icon';
-import { Ago, FormActions, FormSection, Notice, SelectInput, StatusChip, TextInput } from '../../../../components/ui';
+import { Ago, FormActions, FormSection, Notice, SelectInput, StatusChip, TextInput, Loading } from '../../../../components/ui';
 import { apiFetch, useErrorText } from '../../../../lib/api';
 import { useApiQuery } from '../../../../lib/query';
 
@@ -25,7 +25,7 @@ export default function EinvoiceSettings({ readOnly }: { readOnly: boolean }) {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState<'save' | 'test' | null>(null);
   useEffect(() => { if (q && !v) setV(q); }, [q]); // eslint-disable-line react-hooks/exhaustive-deps
-  if (!v) return <p role="status" className="text-sm text-muted">…</p>;
+  if (!v) return <Loading of={['settings', 'einvoice']}/>;
   const p = v.integrators.find((x) => x.id === v.provider);
   const label = (f: Field) => (locale === 'tr' ? f.label[0] : f.label[1]);
   async function save() {

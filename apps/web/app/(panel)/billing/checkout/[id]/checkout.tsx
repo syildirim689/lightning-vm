@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import { useFormatter, useTranslations } from 'next-intl';
 import { useState } from 'react';
 import { I } from '../../../../../components/icon';
-import { Mono, Notice, TextInput } from '../../../../../components/ui';
+import { Mono, Notice, TextInput, Loading } from '../../../../../components/ui';
 import { apiFetch, useErrorText } from '../../../../../lib/api';
 import { useApiQuery } from '../../../../../lib/query';
 
@@ -20,7 +20,7 @@ export default function Checkout({ id }: { id: string }) {
   const p = useApiQuery<{ payment: P }>(['billing', 'payment', id], `/billing/payments/${id}`).data?.payment;
   const [card, setCard] = useState('4242 4242 4242 4242');
   const [busy, setBusy] = useState(false);
-  if (!p) return <div className="mx-auto h-80 max-w-md animate-pulse rounded-3xl bg-default/50"/>;
+  if (!p) return <Loading of={['billing', 'payment', id]}><div className="mx-auto h-80 max-w-md animate-pulse rounded-3xl bg-default/50"/></Loading>;
   async function submit(cancel = false) {
     setBusy(true);
     try {

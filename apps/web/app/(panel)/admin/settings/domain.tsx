@@ -6,7 +6,7 @@ import { useFormatter, useTranslations } from 'next-intl';
 import { useEffect, useRef, useState } from 'react';
 import { I } from '../../../../components/icon';
 import { GuideButton } from '../../../../components/setup-guide';
-import { ConfirmButton, FormSection, Mono, Notice, StatusChip, TextInput } from '../../../../components/ui';
+import { ConfirmButton, FormSection, Mono, Notice, StatusChip, TextInput, Loading } from '../../../../components/ui';
 import { apiFetch, useErrorText, type ApiError } from '../../../../lib/api';
 import { useApiQuery } from '../../../../lib/query';
 
@@ -50,7 +50,7 @@ export default function Domain({ readOnly }: { readOnly: boolean }) {
   const agent = useApiQuery<Agent>(['admin', 'maintenance'], queued ? '/admin/maintenance' : null, { refetchInterval: 3000 }).data?.agent;
   const logRef = useRef<HTMLPreElement>(null);
   useEffect(() => { logRef.current?.scrollTo({ top: logRef.current.scrollHeight }); }, [agent?.log.length]);
-  if (!cur) return <p role="status" className="text-sm text-muted">…</p>;
+  if (!cur) return <Loading of={['settings', 'domain']}/>;
 
   async function run<T>(kind: 'check' | 'cert' | 'apply', path: string, body: unknown) {
     setBusy(kind); setFields({});

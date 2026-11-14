@@ -1,14 +1,14 @@
 "use client";
 // The audit log for staff with audit.view: search (action, e-mail, IP, details), outcome and category filters
 // kept in the URL, 50 events a page, each event's details on demand.
-import { Button, Card, SearchField } from '@heroui/react';
+import { Button, Card, SearchField, toast } from '@heroui/react';
 import { useFormatter, useTranslations } from 'next-intl';
 import { parseAsString, useQueryState } from 'nuqs';
 import React, { useState } from 'react';
 import { ActivityIcon, outcomeTone, useActionLabel, type AuditEvent } from '../../../../components/activity';
 import { I } from '../../../../components/icon';
 import { Mono, PageHeader, SelectInput, StatusChip } from '../../../../components/ui';
-import { apiFetch } from '../../../../lib/api';
+import { apiFetch, useErrorText } from '../../../../lib/api';
 import { downloadCsv } from '../../../../lib/csv';
 import { useApiQuery } from '../../../../lib/query';
 
@@ -25,6 +25,7 @@ export default function Audit() {
   const first = useApiQuery<Page>(['admin', 'audit', params], `/admin/audit?${params}`).data;
   const [more, setMore] = useState<{ params: string; events: AuditEvent[]; next: string | null } | null>(null);
   const [busy, setBusy] = useState(false);
+  const { error } = useErrorText();
   const extra = more?.params === params ? more : null;
   const events = [...(first?.events ?? []), ...(extra?.events ?? [])];
   const cursor = extra ? extra.next : first?.nextBefore;
@@ -77,6 +78,7 @@ export default function Audit() {
       {cursor && <div><Button variant="secondary" size="sm" isPending={busy} onPress={async () => {
         setBusy(true);
         try { const r = await apiFetch<Page>(`/admin/audit?${params}&before=${cursor}`); setMore({ params, events: [...(extra?.events ?? []), ...r.events], next: r.nextBefore }); }
+        catch (e) { toast.danger(error(e)); }
         finally { setBusy(false); }
       }}><I name="chevrons-down" size={15}/>{t('more')}</Button></div>}
     </Card.Content></Card>
