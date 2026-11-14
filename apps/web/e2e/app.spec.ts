@@ -772,10 +772,12 @@ test.describe('server lifecycle (simulator, Turkish customer)', () => {
     await page.getByLabel('Onaylamak için “web-1” yazın').fill('web-1');
     // Locked: deleting stays off until the lock is removed.
     await page.getByRole('button', { name: 'Kilitle' }).click();
-    await expect(page.getByText('Silme koruması açık')).toBeVisible();
+    // The lock shows at the top and, with its unlock, right in the delete section.
+    const deleteSection = page.locator('#section-sunucuyu-sil');
+    await expect(page.getByText('Silme koruması açık')).toHaveCount(2);
     await expect(del).toBeDisabled();
     await page.screenshot({ path: 'test-results/tour/server-locked.png', fullPage: true });
-    await page.getByRole('button', { name: 'Kilidi aç' }).click();
+    await deleteSection.getByRole('button', { name: 'Kilidi aç' }).click();
     await expect(page.getByText('Silme koruması kapalı')).toBeVisible();
     await expect(del).toBeEnabled();
     await del.click();
