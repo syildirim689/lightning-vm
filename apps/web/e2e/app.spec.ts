@@ -575,7 +575,7 @@ test.describe('server lifecycle (simulator, Turkish customer)', () => {
     await expect(page).toHaveURL(/\/login\?next=%2Faccount%3Ftab%3Dkeys$/);
     await page.getByLabel('E-posta').fill(user.email);
     await page.getByLabel('Parola').fill(user.password);
-    await page.getByRole('button', { name: 'Giriş yap' }).click();
+    await page.getByRole('button', { name: 'Giriş yap', exact: true }).click();
     await expect(page).toHaveURL(/\/account\?tab=keys$/);
     await page.getByLabel('Anahtar adı').fill('dizüstü');
     await page.getByLabel('Açık anahtar').fill('ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMa0iBTtZu9kbSNXzg5M6pZ1rn8F1143iWq3JIcGimfn e2e');
