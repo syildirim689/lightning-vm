@@ -5096,7 +5096,7 @@
   "Shortcuts": {
     "title": "Klavye kısayolları",
     "open": "Klavye kısayolları",
-    "intro": "Kısayollar metin alanları dışında her yerde çalışır.",
+    "intro": "Kısayollar metin alanları dışında her yerde çalışır; Ctrl+Enter ve Ctrl+S alanların içinde de çalışır.",
     "palette": "Komut paletini aç",
     "help": "Bu listeyi göster",
     "goTo": "Şuraya git…",
@@ -5117,7 +5117,8 @@
       "f": "Güvenlik duvarları"
     },
     "search": "Sayfadaki aramaya git",
-    "send": "Uzun metni formundan gönder"
+    "send": "Uzun metni formundan gönder",
+    "save": "Yazdığınız formu kaydet"
   },
   "Extras": {
     "copy": "Kopyala",
@@ -8172,6 +8173,7 @@
     "title": "Kaydetmeden çıkılsın mı?",
     "body": "Bu sayfada yazdıklarınız kaydedilmedi ve kaybolacak.",
     "leave": "Kaydetmeden çık",
-    "stay": "Kal ve kaydet"
+    "stay": "Kal ve kaydet",
+    "fields": "Kaydedilmeyenler:"
   }
 }

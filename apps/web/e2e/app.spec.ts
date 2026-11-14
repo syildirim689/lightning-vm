@@ -633,7 +633,9 @@ test.describe('server lifecycle (simulator, Turkish customer)', () => {
     await page.getByLabel('Yeni etiket').fill('web');
     await page.getByRole('button', { name: 'Ekle', exact: true }).click();
     await page.getByLabel('Notlar').fill('Ana web sunucusu');
-    await page.getByRole('button', { name: 'Kaydet', exact: true }).click();
+    // Ctrl+Enter in a long text sends its form, as the field says.
+    await expect(page.getByText('Ctrl+Enter ile gönderilir')).toBeVisible();
+    await page.getByLabel('Notlar').press('Control+Enter');
     await expect(page.getByText('Etiketler ve notlar kaydedildi.')).toBeVisible();
     // Power schedule: "office hours" adds a weekday start and shutdown in one click.
     await page.getByRole('button', { name: 'Mesai saatleri' }).click();
@@ -1706,6 +1708,7 @@ test.describe('people, settings and smart features (English browser)', () => {
     await away.click();
     const leave = page.getByRole('alertdialog', { name: 'Leave without saving?' });
     await expect(leave).toBeVisible();
+    await expect(leave.getByText('Not saved: Project name')).toBeVisible();
     // Stay: back on the field, text intact.
     await leave.getByRole('button', { name: 'Stay and save' }).click();
     await expect(leave).toBeHidden();
@@ -1741,6 +1744,15 @@ test.describe('people, settings and smart features (English browser)', () => {
     await leave.getByRole('button', { name: 'Leave without saving' }).click();
     await expect(page).toHaveURL(/\/servers/);
     await expect(page.getByRole('alertdialog')).toHaveCount(0);
+    // Ctrl+S saves the form being typed in (here: creates the project), then it is removed again.
+    await page.goto('/account?tab=projects');
+    await name.fill('Saved with keys');
+    await name.press('Control+s');
+    await expect(page.getByText('Project created.')).toBeVisible();
+    const row = page.getByRole('listitem').filter({ hasText: 'Saved with keys' });
+    await row.getByRole('button', { name: 'Delete' }).click();
+    await page.getByRole('alertdialog').getByRole('button', { name: 'Delete' }).click();
+    await expect(page.getByText('Project deleted.')).toBeVisible();
     await context.close();
   });
 

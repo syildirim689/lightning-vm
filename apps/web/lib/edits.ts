@@ -33,6 +33,14 @@ export function syncTitle() {
   const next = was.replace(titled, (_, count: string | undefined) => `${count ?? ''}${hasPendingEdits() ? mark : ''}`);
   if (next !== was) document.title = next;
 }
+// The changed fields by their visible label ("Project name"), at most five, for the leave dialog.
+const labelOf = (el: HTMLInputElement | HTMLTextAreaElement) => {
+  const by = el.getAttribute('aria-labelledby')?.split(/\s+/).map((id) => document.getElementById(id)?.textContent ?? '').join(' ');
+  return (el.labels?.[0]?.textContent || by || el.getAttribute('aria-label') || '').replace(/\s*\*\s*$/, '').trim();
+};
+export const editedLabels = () => [...new Set(changed().map(labelOf).filter(Boolean))].slice(0, 5);
+// A form that tracks its own changes (useUnsaved) also handles Ctrl/⌘+S itself.
+export const formsDirty = () => dirtyForms > 0;
 // The first field with unsaved text, to take the person back to it.
 export const firstEdited = () => changed()[0] ?? null;
 // After a save: what is on screen now is the saved state.

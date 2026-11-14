@@ -5096,7 +5096,7 @@
   "Shortcuts": {
     "title": "Keyboard shortcuts",
     "open": "Keyboard shortcuts",
-    "intro": "Shortcuts work anywhere outside text fields.",
+    "intro": "Shortcuts work anywhere outside text fields; Ctrl+Enter and Ctrl+S work in them.",
     "palette": "Open the command palette",
     "help": "Show this list",
     "goTo": "Go to…",
@@ -5117,7 +5117,8 @@
       "f": "Firewalls"
     },
     "search": "Jump to the page search",
-    "send": "Send a long text from its form"
+    "send": "Send a long text from its form",
+    "save": "Save the form you are typing in"
   },
   "Extras": {
     "copy": "Copy",
@@ -8172,6 +8173,7 @@
     "title": "Leave without saving?",
     "body": "What you typed on this page has not been saved and will be lost.",
     "leave": "Leave without saving",
-    "stay": "Stay and save"
+    "stay": "Stay and save",
+    "fields": "Not saved:"
   }
 }

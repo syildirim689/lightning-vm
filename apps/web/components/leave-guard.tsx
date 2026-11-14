@@ -6,7 +6,7 @@
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { useEffect, useState } from 'react';
-import { firstEdited, forgetEdits, hasPendingEdits } from '../lib/edits';
+import { editedLabels, firstEdited, forgetEdits, hasPendingEdits } from '../lib/edits';
 import { ConfirmDialog } from './ui';
 
 // Not a path: the person pressed Back or Forward.
@@ -16,6 +16,9 @@ export default function LeaveGuard() {
   const t = useTranslations('LeaveGuard');
   const router = useRouter();
   const [to, setTo] = useState<string | null>(null);
+  // What would be lost, by field, read when the dialog opens.
+  const [fields, setFields] = useState<string[]>([]);
+  const ask = (next: string) => { setFields(editedLabels()); setTo(next); };
   useEffect(() => {
     // The page being edited, as the router left it in history (its state lets the router show it again).
     let here: { href: string; state: unknown } | null = null;
@@ -27,7 +30,7 @@ export default function LeaveGuard() {
       if (was.pathname === window.location.pathname && was.search === window.location.search) return;
       e.stopImmediatePropagation();
       window.history.pushState(here.state, '', here.href);
-      setTo(back);
+      ask(back);
     };
     document.addEventListener('input', typed, true);
     window.addEventListener('popstate', pop, true);
@@ -39,9 +42,9 @@ export default function LeaveGuard() {
       if (url.origin !== window.location.origin || (url.pathname === window.location.pathname && url.search === window.location.search)) return;
       if (!hasPendingEdits()) return;
       e.preventDefault(); e.stopPropagation();
-      setTo(url.pathname + url.search + url.hash);
+      ask(url.pathname + url.search + url.hash);
     };
-    const asked = (e: Event) => setTo((e as CustomEvent<string>).detail);
+    const asked = (e: Event) => ask((e as CustomEvent<string>).detail);
     document.addEventListener('click', click, true);
     window.addEventListener('lvm:leave', asked);
     return () => { document.removeEventListener('click', click, true); window.removeEventListener('lvm:leave', asked);
@@ -52,7 +55,8 @@ export default function LeaveGuard() {
     const el = firstEdited();
     if (el) setTimeout(() => { el.focus(); el.scrollIntoView({ block: 'center', behavior: 'smooth' }); }, 50);
   };
-  return <ConfirmDialog isOpen={to !== null} onClose={stay} status="warning" title={t('title')} body={t('body')}
+  return <ConfirmDialog isOpen={to !== null} onClose={stay} status="warning" title={t('title')} body={<>{t('body')}{fields.length > 0 && <span className="mt-2 block">{t('fields')}{' '}
+      <span className="font-medium text-foreground">{fields.join(', ')}</span></span>}</>}
     confirmLabel={t('leave')} cancelLabel={t('stay')}
     onConfirm={() => { const next = to!; forgetEdits(); setTo(null); if (next === back) window.history.back(); else router.push(next); }}/>;
 }

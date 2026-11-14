@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { useEffect, useState } from 'react';
 import { can } from '../lib/permissions';
-import { mayLeave } from '../lib/edits';
+import { firstEdited, formsDirty, mayLeave } from '../lib/edits';
 
 // The palette's "Keyboard shortcuts" action opens the dialog through this event.
 export const openShortcuts = () => window.dispatchEvent(new Event('lvm:shortcuts'));
@@ -48,11 +48,23 @@ export default function Shortcuts({ permissions }: { permissions: string[] }) {
       e.preventDefault();
       e.target.form!.requestSubmit(submit);
     };
+    // Ctrl/⌘+S saves the form with unsaved text (the focused field's, else the first changed one's) instead of the
+    // browser's "Save page". Forms that track their own changes (useUnsaved) do this themselves.
+    const onSave = (e: KeyboardEvent) => {
+      if (!(e.ctrlKey || e.metaKey) || e.altKey || e.key.toLowerCase() !== 's' || e.defaultPrevented || formsDirty()) return;
+      const active = document.activeElement;
+      const field = active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement ? active : firstEdited();
+      const submit = field?.form?.querySelector<HTMLButtonElement>('button[type="submit"]:not(:disabled)');
+      if (!submit || submit.getAttribute('aria-disabled') === 'true') return;
+      e.preventDefault();
+      field!.form!.requestSubmit(submit);
+    };
     const onOpen = () => setOpen(true);
     window.addEventListener('keydown', onKey);
     window.addEventListener('keydown', onSend);
+    window.addEventListener('keydown', onSave);
     window.addEventListener('lvm:shortcuts', onOpen);
-    return () => { window.removeEventListener('keydown', onKey); window.removeEventListener('keydown', onSend); window.removeEventListener('lvm:shortcuts', onOpen); };
+    return () => { window.removeEventListener('keydown', onKey); window.removeEventListener('keydown', onSend); window.removeEventListener('keydown', onSave); window.removeEventListener('lvm:shortcuts', onOpen); };
   }, [allowed.map((r) => r[0]).join()]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const row = (keys: React.ReactNode, label: string) => <li className="flex min-h-10 items-center justify-between gap-4 border-b border-separator py-2 text-sm last:border-0">
@@ -70,6 +82,7 @@ export default function Shortcuts({ permissions }: { permissions: string[] }) {
             {row(<Kbd>?</Kbd>, t('help'))}
             {row(<Kbd>/</Kbd>, t('search'))}
             {row(<><Kbd>Ctrl</Kbd><Kbd>Enter</Kbd></>, t('send'))}
+            {row(<><Kbd>Ctrl</Kbd><Kbd>S</Kbd></>, t('save'))}
           </ul>
           <div>
             <h3 className="mb-1 text-xs font-semibold uppercase tracking-wider text-muted">{t('goTo')}</h3>
