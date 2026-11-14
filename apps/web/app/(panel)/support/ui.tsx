@@ -8,7 +8,7 @@ import { AnimatePresence, motion } from 'motion/react';
 import { useFormatter, useLocale, useNow, useTranslations } from 'next-intl';
 import { useRef, useState, useEffect } from 'react';
 import { I } from '../../../components/icon';
-import { Ago, ConfirmButton, SelectInput, TextInput, Loading } from '../../../components/ui';
+import { Ago, SelectInput, TextInput, Loading } from '../../../components/ui';
 import { apiFetch, useErrorText, type ApiError } from '../../../lib/api';
 import { fillCanned, type CannedVars } from '../../../lib/canned';
 import { useMe } from '../../../lib/me';
@@ -189,7 +189,14 @@ export function TicketPage({ id, staff }: { id: string; staff: boolean }) {
   // Staff tools (internal notes, canned replies) only on other people's tickets: on your own you write as a customer.
   const asStaff = staff && tk.ownerId !== me?.id;
   const closed = tk.status === 'closed';
-  const close = async () => { await apiFetch(`/support/tickets/${id}/close`, { method: 'POST' }).then(() => toast.success(t('closedNow')), (e) => toast.danger(error(e))); refresh(); };
+  // Closing needs no question: the toast offers to undo it, and a closed ticket can be reopened from its page.
+  const reopen = async () => { await apiFetch(`/support/tickets/${id}/reopen`, { method: 'POST' }).then(() => toast.success(t('reopened')), (e) => toast.danger(error(e))); refresh(); };
+  const close = async () => {
+    await apiFetch(`/support/tickets/${id}/close`, { method: 'POST' })
+      .then(() => toast.success(t('closedNow'), { actionProps: { children: t('undo'), size: 'sm', variant: 'secondary', onPress: () => void reopen() } }), (e) => toast.danger(error(e)));
+    refresh();
+  };
+  const mine = tk.ownerId === me?.id;
   return <div className="flex flex-col gap-5">
     <header className="flex flex-col gap-2">
       <p className="text-sm text-muted">#{tk.number} · {departmentName(tk, locale)}{tk.serverName && <> · <I name="server" size={12} className="inline"/> {tk.serverName}</>}</p>
@@ -205,8 +212,8 @@ export function TicketPage({ id, staff }: { id: string; staff: boolean }) {
         {closed && !staff && <Rating ticket={tk} onDone={refresh}/>}
         {staff && <PresenceBar others={others}/>}
         <Composer onWriting={setWriting} ticketId={id} staff={asStaff} closed={closed} onSent={refresh} vars={{ name: tk.ownerName ?? '', ticket: `#${tk.number}`, server: tk.serverName ?? '' }}/>
-        {!closed && <div><ConfirmButton size="sm" variant="ghost" icon={<I name="circle-check" size={14}/>} label={t('close')} title={t('closeTitle')} body={t('closeBody')}
-          confirmLabel={t('close')} cancelLabel={t('cancel')} onConfirm={close}/></div>}
+        {!closed && <div><Button size="sm" variant="ghost" onPress={close}><I name="circle-check" size={14}/>{t('close')}</Button></div>}
+        {closed && (mine || staff) && <div><Button size="sm" variant="secondary" onPress={reopen}><I name="rotate-ccw" size={14}/>{t('reopen')}</Button></div>}
       </div>
       {staff && <StaffPanel ticket={tk} onChange={refresh}/>}
     </div>

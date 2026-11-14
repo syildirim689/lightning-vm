@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, HttpCode, Param, ParseUUIDPipe, Patch, Post, Put, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, Param, ParseUUIDPipe, Patch, Post, Put, Query, Req, UseGuards } from '@nestjs/common';
 import { can, ensureRoles, limitsOf } from './permissions';
 import { pool } from './db';
 import { apiError } from './errors';
@@ -79,17 +79,21 @@ export class AdminController {
   }
 
   @Get('users') @Can('users.view', 'catalog.manage')
-  async users(@Req() req: AuthedRequest) {
-    const { rows } = await pool.query(`SELECT u.id, u.email, u.name, coalesce(u.role, 'user') AS role, u.locale, u.disabled_at, u.created_at AS "createdAt",
+  async users(@Req() req: AuthedRequest, @Query('pick') pick?: string) {
+    // Owner pickers (catalog, billing, import) only need who is who.
+    if (pick) return { users: (await pool.query('SELECT id, email, name FROM users ORDER BY email')).rows };
+    const { rows } = await pool.query(`WITH
+      srv AS (SELECT owner_id, count(*)::int AS n FROM servers WHERE state <> 'deleted' GROUP BY owner_id),
+      ses AS (SELECT user_id, count(*) FILTER (WHERE expires_at > now())::int AS n, max(coalesce(last_active_at, created_at)) AS last FROM auth_sessions GROUP BY user_id),
+      ovr AS (SELECT user_id, count(*)::int AS n FROM user_permission_overrides GROUP BY user_id),
+      nts AS (SELECT user_id, count(*)::int AS n, (array_agg(body ORDER BY created_at DESC) FILTER (WHERE pinned))[1] AS pinned FROM staff_notes GROUP BY user_id)
+      SELECT u.id, u.email, u.name, coalesce(u.role, 'user') AS role, u.locale, u.disabled_at, u.created_at AS "createdAt",
       coalesce(u.banned, false) AS banned, u.ban_reason AS "banReason", u.ban_expires AS "banExpires", u.two_factor_enabled AS "twoFactorEnabled", u.auth_source AS "authSource",
       u.last_login_method AS "lastLoginMethod", u.phone_number AS "phoneNumber", u.phone_number_verified AS "phoneNumberVerified",
-      (SELECT count(*)::int FROM servers s WHERE s.owner_id = u.id AND s.state <> 'deleted') AS servers,
-      (SELECT count(*)::int FROM auth_sessions a WHERE a.user_id = u.id AND a.expires_at > now()) AS sessions,
-      coalesce(u.last_seen_at, (SELECT max(coalesce(a.last_active_at, a.created_at)) FROM auth_sessions a WHERE a.user_id = u.id)) AS "lastSeen",
-      (SELECT count(*)::int FROM user_permission_overrides o WHERE o.user_id = u.id) AS overrides,
-      (SELECT count(*)::int FROM staff_notes n WHERE n.user_id = u.id) AS notes,
-      (SELECT n.body FROM staff_notes n WHERE n.user_id = u.id AND n.pinned ORDER BY n.created_at DESC LIMIT 1) AS "pinnedNote"
-      FROM users u ORDER BY u.created_at`);
+      coalesce(srv.n, 0) AS servers, coalesce(ses.n, 0) AS sessions, coalesce(u.last_seen_at, ses.last) AS "lastSeen",
+      coalesce(ovr.n, 0) AS overrides, coalesce(nts.n, 0) AS notes, nts.pinned AS "pinnedNote"
+      FROM users u LEFT JOIN srv ON srv.owner_id = u.id LEFT JOIN ses ON ses.user_id = u.id LEFT JOIN ovr ON ovr.user_id = u.id LEFT JOIN nts ON nts.user_id = u.id
+      ORDER BY u.created_at`);
     // Notes are for people who may see users (this list is also open to catalog managers for owner pickers).
     if (!can(req.user.permissions, 'users.view')) for (const r of rows) { r.notes = 0; r.pinnedNote = null; }
     // Online now (a panel tab open), recently active or offline.

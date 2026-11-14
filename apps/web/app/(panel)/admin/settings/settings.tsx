@@ -33,43 +33,64 @@ import GeneralSettings from './general';
 import BillingSettings from './billing';
 import EinvoiceSettings from './einvoice';
 
-const tabs = ['general', 'branding', 'domain', 'security', 'api', 'signin', 'directory', 'servers', 'mail', 'captcha', 'sms', 'chat', 'payments', 'billing', 'einvoice', 'rdns', 'notifications', 'announcement', 'status', 'support'] as const;
+// Twenty sections, grouped by what they are about, so the one wanted is found by its group instead of a long row.
+const groups = [
+  ['panel', ['general', 'branding', 'domain', 'announcement', 'status']],
+  ['access', ['security', 'signin', 'directory', 'captcha', 'api']],
+  ['servers', ['servers', 'rdns']],
+  ['messages', ['mail', 'sms', 'chat', 'notifications']],
+  ['money', ['payments', 'billing', 'einvoice']],
+  ['help', ['support']],
+] as const;
+type Tab = (typeof groups)[number][1][number];
+const tabs: readonly Tab[] = groups.flatMap(([, ks]) => ks);
 
 export default function Settings() {
   const t = useTranslations('Settings');
   const [tab, setTab] = useQueryState('tab', parseAsString.withDefault('general'));
   const me = useMe();
   const readOnly = !can(me?.permissions, 'settings.manage');
+  const current: Tab = tabs.includes(tab as Tab) ? tab as Tab : 'general';
   const icon = { general: <I name="settings-2" size={16}/>, branding: <I name="palette" size={16}/>, domain: <I name="globe-lock" size={16}/>, security: <I name="shield-check" size={16}/>, api: <I name="code-xml" size={16}/>, signin: <I name="log-in" size={16}/>, directory: <I name="network" size={16}/>, servers: <I name="server-cog" size={16}/>, mail: <I name="mail" size={16}/>, captcha: <I name="bot" size={16}/>,
     sms: <I name="message-square" size={16}/>, chat: <I name="messages-square" size={16}/>, payments: <I name="credit-card" size={16}/>, billing: <I name="receipt" size={16}/>, einvoice: <I name="file-check-2" size={16}/>, rdns: <I name="globe" size={16}/>, notifications: <I name="bell" size={16}/>, announcement: <I name="megaphone" size={16}/>, status: <I name="activity" size={16}/>, support: <I name="life-buoy" size={16}/> };
   return <>
     <PageHeader eyebrow={t('eyebrow')} title={t('title')} description={t('intro')}/>
     {readOnly && <div className="mb-4"><Notice tone="default">{t('readOnly')}</Notice></div>}
-    <Tabs selectedKey={tabs.includes(tab as 'general') ? tab : 'general'} onSelectionChange={(k) => setTab(String(k))}>
-      <Tabs.ListContainer className="overflow-x-auto">
-        <Tabs.List aria-label={t('title')}>{tabs.map((k) => <Tabs.Tab key={k} id={k} className="gap-2 whitespace-nowrap">{icon[k]}{t(`tabs.${k}`)}<Tabs.Indicator/></Tabs.Tab>)}</Tabs.List>
-      </Tabs.ListContainer>
-      <Tabs.Panel id="general" className="pt-5"><GeneralSettings onOpen={(k) => setTab(k)}/></Tabs.Panel>
-      <Tabs.Panel id="branding" className="pt-5"><Branding readOnly={readOnly}/></Tabs.Panel>
-      <Tabs.Panel id="domain" className="pt-5"><Domain readOnly={readOnly || !can(me?.permissions, 'system.update')}/></Tabs.Panel>
-      <Tabs.Panel id="servers" className="pt-5"><ServerSettings readOnly={readOnly}/></Tabs.Panel>
-      <Tabs.Panel id="security" className="pt-5"><Security readOnly={readOnly}/></Tabs.Panel>
-      <Tabs.Panel id="api" className="pt-5"><ApiSettings readOnly={readOnly}/></Tabs.Panel>
-      <Tabs.Panel id="signin" className="pt-5"><SignInMethods readOnly={readOnly}/></Tabs.Panel>
-      <Tabs.Panel id="directory" className="flex flex-col gap-5 pt-5"><DirectorySettings readOnly={readOnly}/><SsoSettings readOnly={readOnly}/></Tabs.Panel>
-      <Tabs.Panel id="mail" className="pt-5"><Mail readOnly={readOnly} myEmail={me?.email ?? ''}/></Tabs.Panel>
-      <Tabs.Panel id="captcha" className="pt-5"><Captcha readOnly={readOnly}/></Tabs.Panel>
-      <Tabs.Panel id="sms" className="pt-5"><Sms readOnly={readOnly} myPhone={me?.phoneNumber ?? ''}/></Tabs.Panel>
-      <Tabs.Panel id="chat" className="pt-5"><ChatSettings readOnly={readOnly}/></Tabs.Panel>
-      <Tabs.Panel id="payments" className="pt-5"><Payments readOnly={readOnly}/></Tabs.Panel>
-      <Tabs.Panel id="billing" className="pt-5"><BillingSettings readOnly={!can(me?.permissions, 'billing.manage')}/></Tabs.Panel>
-      <Tabs.Panel id="einvoice" className="pt-5"><EinvoiceSettings readOnly={!can(me?.permissions, 'billing.manage')}/></Tabs.Panel>
-      <Tabs.Panel id="rdns" className="pt-5"><ReverseDns readOnly={readOnly}/></Tabs.Panel>
-      <Tabs.Panel id="notifications" className="pt-5"><NotificationPolicy readOnly={readOnly}/></Tabs.Panel>
-      <Tabs.Panel id="announcement" className="pt-5"><AnnouncementSettings readOnly={readOnly}/></Tabs.Panel>
-      <Tabs.Panel id="status" className="pt-5"><Incidents readOnly={readOnly}/></Tabs.Panel>
-      <Tabs.Panel id="support" className="pt-5"><SupportDepartments readOnly={readOnly}/></Tabs.Panel>
-    </Tabs>
+    <div className="grid gap-5 lg:grid-cols-[14rem_minmax(0,1fr)] lg:gap-8">
+      {/* Phones and tablets pick the section from a list; wide screens get the grouped menu beside the page. */}
+      <div className="lg:hidden"><SelectInput label={t('section')} value={current} onChange={(k) => setTab(k)}
+        options={groups.flatMap(([g, ks]) => ks.map((k) => ({ id: k, label: `${t(`groups.${g}`)} · ${t(`tabs.${k}`)}` })))}/></div>
+      <nav aria-label={t('title')} className="hidden flex-col gap-4 self-start lg:sticky lg:top-20 lg:flex">
+        {groups.map(([g, ks]) => <div key={g} className="flex flex-col gap-0.5">
+          <p className="px-3 pb-1 text-[11px] font-semibold uppercase tracking-wider text-muted">{t(`groups.${g}`)}</p>
+          {ks.map((k) => <button key={k} type="button" aria-current={k === current ? 'page' : undefined} onClick={() => setTab(k)}
+            className={`flex min-h-9 items-center gap-2.5 rounded-lg px-3 text-left text-sm transition-colors ${k === current ? 'bg-default font-medium text-foreground' : 'text-muted hover:bg-default hover:text-foreground'}`}>
+            {icon[k]}<span className="min-w-0 flex-1">{t(`tabs.${k}`)}</span></button>)}
+        </div>)}
+      </nav>
+      <section aria-label={t(`tabs.${current}`)} className="flex min-w-0 flex-col gap-5">
+        {current === 'general' && <GeneralSettings onOpen={(k) => setTab(k)}/>}
+        {current === 'branding' && <Branding readOnly={readOnly}/>}
+        {current === 'domain' && <Domain readOnly={readOnly || !can(me?.permissions, 'system.update')}/>}
+        {current === 'servers' && <ServerSettings readOnly={readOnly}/>}
+        {current === 'security' && <Security readOnly={readOnly}/>}
+        {current === 'api' && <ApiSettings readOnly={readOnly}/>}
+        {current === 'signin' && <SignInMethods readOnly={readOnly}/>}
+        {current === 'directory' && <><DirectorySettings readOnly={readOnly}/><SsoSettings readOnly={readOnly}/></>}
+        {current === 'mail' && <Mail readOnly={readOnly} myEmail={me?.email ?? ''}/>}
+        {current === 'captcha' && <Captcha readOnly={readOnly}/>}
+        {current === 'sms' && <Sms readOnly={readOnly} myPhone={me?.phoneNumber ?? ''}/>}
+        {current === 'chat' && <ChatSettings readOnly={readOnly}/>}
+        {current === 'payments' && <Payments readOnly={readOnly}/>}
+        {current === 'billing' && <BillingSettings readOnly={!can(me?.permissions, 'billing.manage')}/>}
+        {current === 'einvoice' && <EinvoiceSettings readOnly={!can(me?.permissions, 'billing.manage')}/>}
+        {current === 'rdns' && <ReverseDns readOnly={readOnly}/>}
+        {current === 'notifications' && <NotificationPolicy readOnly={readOnly}/>}
+        {current === 'announcement' && <AnnouncementSettings readOnly={readOnly}/>}
+        {current === 'status' && <Incidents readOnly={readOnly}/>}
+        {current === 'support' && <SupportDepartments readOnly={readOnly}/>}
+      </section>
+    </div>
   </>;
 }
 

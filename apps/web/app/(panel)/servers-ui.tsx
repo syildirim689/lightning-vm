@@ -44,7 +44,7 @@ export type Server = { id: string; name: string; state: string; powerState: stri
   createdAt: string; favorite?: boolean; locked?: boolean; billingHold?: boolean; deleteAt?: string | null; tags?: string[]; notes?: string; poolId: string; imageId: string; packageId: string | null; vdcId?: string | null; projectId?: string | null; ownerEmail?: string; hasRootPassword?: boolean; applicationName?: string | null; appState?: 'pending' | 'installing' | 'installed' | 'failed' | null; appMessage?: string | null; firewallStatus?: 'applied' | 'pending' | 'failed'; firewallError?: string | null; firewallCount?: number; lastOperation: { id: string; kind: string; status: string; step: string | null; errorCode: string | null } | null };
 const firewallFailed = (s: Server) => s.firewallStatus === 'failed';
 // Something on this server is still changing (a task, an application install, firewall rules being applied).
-const moving = (s: Server) => ['pending', 'running'].includes(s.lastOperation?.status ?? '') || s.appState === 'pending' || s.appState === 'installing' || s.firewallStatus === 'pending';
+export const moving = (s: Server) => ['pending', 'running'].includes(s.lastOperation?.status ?? '') || s.appState === 'pending' || s.appState === 'installing' || s.firewallStatus === 'pending';
 type Operation = { id: string; kind: string; status: string; step: string | null; attempts: number; errorCode: string | null; createdAt: string; finishedAt: string | null };
 
 // One Idempotency-Key per user intention: a double click or a retry after a timeout reuses it,

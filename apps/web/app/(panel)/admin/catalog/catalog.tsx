@@ -64,7 +64,7 @@ export default function Catalog() {
   const ipPools = useApiQuery<{ ipPools: IpPool[] }>(keys.ip, '/admin/ip-pools').data?.ipPools ?? [];
   const quotas = useApiQuery<{ quotas: Quota[] }>(keys.quotas, '/admin/quotas').data?.quotas ?? [];
   const connections = useApiQuery<{ connections: Connection[] }>(['vmware', 'connections'], '/admin/vmware/connections').data?.connections ?? [];
-  const users = useApiQuery<{ users: { id: string; email: string }[] }>(['admin', 'users'], '/admin/users').data?.users ?? [];
+  const users = useApiQuery<{ users: { id: string; email: string }[] }>(['admin', 'users', 'pick'], '/admin/users?pick=1').data?.users ?? [];
   const remove = useApiAction((path: string) => apiFetch(path, { method: 'DELETE' }), { invalidate: [['catalog']], success: t('removed') });
   const removeButton = (path: string, name: string) => <ConfirmButton size="sm" variant="ghost" icon={<I name="trash-2" size={15}/>} label={t('remove')}
     title={`${t('remove')}: ${name}`} body={t('removeConfirm', { name })} confirmLabel={t('remove')} cancelLabel={t('cancel')} onConfirm={() => remove.mutateAsync(path).then(() => undefined)}/>;

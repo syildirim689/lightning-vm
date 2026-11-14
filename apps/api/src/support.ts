@@ -158,6 +158,22 @@ export class SupportController {
     return { ok: true };
   }
 
+  // The owner takes a closed ticket back up (undoing a close, or reopening within 30 days) without having to write.
+  // It goes back to where it stood: answered when the team spoke last, else waiting for the team.
+  @Post('tickets/:id/reopen') @HttpCode(200)
+  async reopen(@Req() req: AuthedRequest, @Param('id', ParseUUIDPipe) id: string) {
+    const t = await ticketFor(req, id);
+    if (t.ownerId !== req.user.id && !manager(req)) throw apiError(403, 'FORBIDDEN', 'Permission required');
+    if (t.status !== 'closed') return { ok: true };
+    if (t.ownerId === req.user.id && !reopenable(t.closedAt ? new Date(t.closedAt) : null)) throw apiError(409, 'TICKET_CLOSED', 'This ticket is closed; open a new one');
+    await pool.query(`UPDATE tickets SET closed_at = NULL, updated_at = now(),
+        status = CASE WHEN last_staff_at IS NOT NULL AND last_staff_at >= coalesce(last_customer_at, created_at) THEN 'answered' ELSE 'open' END,
+        due_at = CASE WHEN last_staff_at IS NOT NULL AND last_staff_at >= coalesce(last_customer_at, created_at) THEN NULL ELSE $2 END
+      WHERE id = $1 AND status = 'closed'`, [id, dueFrom(new Date(), t.priority as Priority)]);
+    await audit(req, 'support.reopened', 'success', req.user.id, { ticketId: id });
+    return { ok: true };
+  }
+
   // The owner rates a closed ticket once (1–5, with an optional comment).
   @Post('tickets/:id/rating') @HttpCode(200)
   async rate(@Req() req: AuthedRequest, @Param('id', ParseUUIDPipe) id: string, @Body() body: Input) {

@@ -19,7 +19,7 @@ function ImportForm({ vm, data, connectionId, onDone }: { vm: Vm; data: Candidat
   const { error, field } = useErrorText();
   const client = useQueryClient();
   const images = (useApiQuery<{ images: { id: string; name: string; family: string; connectionId: string }[] }>(['admin', 'images'], '/admin/images').data?.images ?? []).filter((i) => i.connectionId === connectionId);
-  const users = useApiQuery<{ users: { id: string; email: string; name: string }[] }>(['admin', 'users'], '/admin/users').data?.users ?? [];
+  const users = useApiQuery<{ users: { id: string; email: string; name: string }[] }>(['admin', 'users', 'pick'], '/admin/users?pick=1').data?.users ?? [];
   const packages = useApiQuery<{ packages: { currency: string }[] }>(['catalog', 'packages'], '/admin/packages').data?.packages ?? [];
   // Currencies the catalog sells in come first; the one most packages use is the default.
   const counts = new Map<string, number>(); packages.forEach((x) => counts.set(x.currency.trim(), (counts.get(x.currency.trim()) ?? 0) + 1));

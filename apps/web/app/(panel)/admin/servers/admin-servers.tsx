@@ -12,7 +12,7 @@ import { apiFetch, useErrorText } from '../../../../lib/api';
 import { downloadCsv } from '../../../../lib/csv';
 import { fold } from '../../../../lib/note-line';
 import { useApiAction, useApiQuery } from '../../../../lib/query';
-import { FavoriteStar, StateBadge, type Server } from '../../servers-ui';
+import { FavoriteStar, moving, StateBadge, type Server } from '../../servers-ui';
 import { ServerFilters, ServerTotals, stateGroup, useServerFilters } from '../../server-filters';
 import { ImportVms } from './import-vms';
 import { Copy } from '../../server-extras';
@@ -28,7 +28,7 @@ export default function AdminServers() {
   const { error } = useErrorText();
   // Tab and search live in the URL, so a view can be bookmarked and the back button works.
   const [tab, setTab] = useQueryState('tab', parseAsString.withDefault('servers'));
-  const servers = useApiQuery<{ servers: Server[] }>(['admin', 'servers'], '/admin/servers', { refetchInterval: 5_000 }).data?.servers ?? [];
+  const servers = useApiQuery<{ servers: Server[] }>(['admin', 'servers'], '/admin/servers', { refetchInterval: (d) => (d?.servers.some(moving) ? 5_000 : 20_000) }).data?.servers ?? [];
   const ops = useApiQuery<{ operations: Operation[] }>(['admin', 'operations'], '/admin/operations', { refetchInterval: 5_000 }).data?.operations ?? [];
   const findings = useApiQuery<{ findings: Finding[] }>(['admin', 'findings'], '/admin/reconciliation', { refetchInterval: 15_000 }).data?.findings ?? [];
   const retry = useApiAction((id: string) => apiFetch(`/admin/operations/${id}/retry`, { method: 'POST' }), { invalidate: [['admin']], success: t('admin.retried') });

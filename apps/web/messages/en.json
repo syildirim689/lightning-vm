@@ -4525,6 +4525,15 @@
         "limited": "Rate limited (429)",
         "avg": "Average time"
       }
+    },
+    "section": "Section",
+    "groups": {
+      "panel": "Panel",
+      "access": "Access and sign-in",
+      "servers": "Servers",
+      "messages": "Messages",
+      "money": "Payments and billing",
+      "help": "Support"
     }
   },
   "Firewalls": {
@@ -5433,7 +5442,8 @@
       "admin_api_token_revoked": "An API token was revoked by an administrator",
       "vmware_connection_updated": "vCenter connection changed",
       "catalog_package_updated": "Package changed",
-      "catalog_image_updated": "OS template changed"
+      "catalog_image_updated": "OS template changed",
+      "support_reopened": "Support ticket reopened"
     },
     "outcome": {
       "success": "Done",
@@ -6488,9 +6498,10 @@
     "cannedSample": {
       "name": "Jane Doe"
     },
-    "closeTitle": "Close this ticket?",
-    "closeBody": "The team stops working on it. Writing a new message reopens it.",
-    "rateThanks": "Thank you for your rating."
+    "rateThanks": "Thank you for your rating.",
+    "undo": "Undo",
+    "reopen": "Reopen the ticket",
+    "reopened": "Ticket reopened."
   },
   "Stats": {
     "eyebrow": "Administration",

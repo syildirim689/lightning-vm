@@ -28,7 +28,7 @@ export function VdcAdmin({ pools }: { pools: { id: string; name: string }[] }) {
   const t = useTranslations('Vdc');
   const format = useFormatter();
   const rows = useApiQuery<{ vdcs: Vdc[] }>(key, '/admin/vdcs').data?.vdcs ?? [];
-  const users = useApiQuery<{ users: { id: string; email: string }[] }>(['admin', 'users'], '/admin/users').data?.users ?? [];
+  const users = useApiQuery<{ users: { id: string; email: string }[] }>(['admin', 'users', 'pick'], '/admin/users?pick=1').data?.users ?? [];
   const [editing, setEditing] = useState<Vdc | 'new' | null>(null);
   const remove = useApiAction((id: string) => apiFetch(`/admin/vdcs/${id}`, { method: 'DELETE' }), { invalidate: [key], success: t('removed') });
   return <>

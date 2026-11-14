@@ -258,7 +258,7 @@ const fieldsOf = (e: unknown, field: (c?: string) => string | undefined) => Obje
 
 function UserPicker({ value, onChange, error }: { value: string; onChange: (v: string) => void; error?: string }) {
   const t = useTranslations('BillingAdmin');
-  const users = useApiQuery<{ users: { id: string; email: string; name: string }[] }>(['admin', 'users'], '/admin/users').data?.users ?? [];
+  const users = useApiQuery<{ users: { id: string; email: string; name: string }[] }>(['admin', 'users', 'pick'], '/admin/users?pick=1').data?.users ?? [];
   return <SelectInput label={t('customer')} value={value} onChange={onChange} error={error} placeholder={t('pickCustomer')} options={users.map((u) => ({ id: u.id, label: u.name ? `${u.name} · ${u.email}` : u.email }))}/>;
 }
 

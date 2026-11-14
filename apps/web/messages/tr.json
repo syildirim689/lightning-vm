@@ -4525,6 +4525,15 @@
         "limited": "Sınıra takılan (429)",
         "avg": "Ortalama süre"
       }
+    },
+    "section": "Bölüm",
+    "groups": {
+      "panel": "Panel",
+      "access": "Erişim ve giriş",
+      "servers": "Sunucular",
+      "messages": "Mesajlar",
+      "money": "Ödeme ve faturalama",
+      "help": "Destek"
     }
   },
   "Firewalls": {
@@ -5433,7 +5442,8 @@
       "admin_api_token_revoked": "Bir API anahtarı yönetici tarafından iptal edildi",
       "vmware_connection_updated": "vCenter bağlantısı değişti",
       "catalog_package_updated": "Paket değişti",
-      "catalog_image_updated": "İşletim sistemi şablonu değişti"
+      "catalog_image_updated": "İşletim sistemi şablonu değişti",
+      "support_reopened": "Destek talebi yeniden açıldı"
     },
     "outcome": {
       "success": "Tamamlandı",
@@ -6488,9 +6498,10 @@
     "cannedSample": {
       "name": "Ayşe Yılmaz"
     },
-    "closeTitle": "Talep kapatılsın mı?",
-    "closeBody": "Ekip bu talep üzerinde çalışmayı bırakır. Yeni bir mesaj yazarsanız talep yeniden açılır.",
-    "rateThanks": "Değerlendirmeniz için teşekkürler."
+    "rateThanks": "Değerlendirmeniz için teşekkürler.",
+    "undo": "Geri al",
+    "reopen": "Talebi yeniden aç",
+    "reopened": "Talep yeniden açıldı."
   },
   "Stats": {
     "eyebrow": "Yönetim",
