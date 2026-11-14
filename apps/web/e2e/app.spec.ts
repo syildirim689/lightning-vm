@@ -1668,6 +1668,7 @@ test.describe('people, settings and smart features (English browser)', () => {
   // New screens render and carry their heading; full-page screenshots go to test-results/tour for review.
   // Dark mode: the newer screens keep their contrast and surfaces (charts, heatmap, cards, dialogs).
   test('a session that ends while something is typed keeps the page; links ask before throwing typed text away', async ({ browser }) => {
+    test.setTimeout(90_000); // session loss, limits, links and Back in one sign-in
     const context = await browser.newContext({ locale: 'en-US' });
     const page = await context.newPage();
     await signIn(page, admin);
