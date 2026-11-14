@@ -10,7 +10,7 @@ import { parseAsString, parseAsStringLiteral, useQueryState } from 'nuqs';
 import { useFormatter, useLocale, useNow, useTranslations } from 'next-intl';
 import { useEffect, useRef, useState } from 'react';
 import { I } from '../../../components/icon';
-import { Empty, PageHeader, SelectInput, TextInput } from '../../../components/ui';
+import { Ago, Empty, PageHeader, SelectInput, TextInput } from '../../../components/ui';
 import { apiFetch, useErrorText, type ApiError } from '../../../lib/api';
 import { fold } from '../../../lib/note-line';
 import { useApiQuery } from '../../../lib/query';
@@ -56,7 +56,7 @@ export default function SupportList() {
           <NextLink href={`/support/${x.id}`} className={`flex flex-col gap-2 rounded-2xl border p-4 transition-colors hover:border-accent/60 focus-visible:outline-2 focus-visible:outline-accent sm:flex-row sm:items-center sm:gap-4 ${x.status === 'answered' ? 'border-success/40 bg-success/5' : 'border-border bg-surface'}`}>
             <span className="min-w-0 flex-1">
               <span className="flex items-center gap-2">{x.status === 'answered' && <span aria-hidden className="size-2 shrink-0 rounded-full bg-success"/>}<span className="truncate font-medium">{x.subject}</span></span>
-              <span className="block truncate text-xs text-muted">#{x.number} · {departmentName(x, locale)}{x.serverName && ` · ${x.serverName}`} · {format.relativeTime(new Date(Math.min(Date.parse(x.updatedAt), now.getTime())), now)}</span>
+              <span className="block truncate text-xs text-muted">#{x.number} · {departmentName(x, locale)}{x.serverName && ` · ${x.serverName}`} · <Ago at={x.updatedAt}/></span>
             </span>
             <span className="flex shrink-0 flex-wrap items-center gap-2">{!!x.messages && <span className="inline-flex items-center gap-1 text-xs tabular-nums text-muted" title={t('messages', { n: x.messages })}>
               <I name="messages-square" size={13}/>{x.messages}<span className="sr-only"> {t('messages', { n: x.messages })}</span></span>}

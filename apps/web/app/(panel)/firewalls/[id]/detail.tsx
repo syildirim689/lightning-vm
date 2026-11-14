@@ -9,7 +9,7 @@ import { useRouter } from 'next/navigation';
 import { useFormatter, useTranslations } from 'next-intl';
 import { useEffect, useMemo, useState } from 'react';
 import { I } from '../../../../components/icon';
-import { CheckboxList, ConfirmButton, DataTable, FormActions, Mono, Notice, PageHeader, Section, SelectInput, StatusChip, TextInput } from '../../../../components/ui';
+import { Ago, CheckboxList, ConfirmButton, DataTable, FormActions, Mono, Notice, PageHeader, Section, SelectInput, StatusChip, TextInput } from '../../../../components/ui';
 import { apiFetch, useErrorText } from '../../../../lib/api';
 import { useMe } from '../../../../lib/me';
 import { useApiQuery } from '../../../../lib/query';
@@ -189,7 +189,7 @@ function Servers({ firewall, onChanged }: { firewall: Detail; onChanged: () => v
           <div key="s" className="flex flex-col gap-0.5">
             <StatusChip tone={statusTone[s.status]}>{t(`status.${s.status}`)}</StatusChip>
             {s.status === 'failed' && s.errorCode && <span className="text-xs text-danger">{error({ code: s.errorCode })}</span>}
-            {s.status === 'applied' && s.appliedAt && <span className="text-xs text-muted">{format.relativeTime(new Date(s.appliedAt))}</span>}
+            {s.status === 'applied' && s.appliedAt && <span className="text-xs text-muted"><Ago at={s.appliedAt}/></span>}
           </div>,
           <Button key="a" size="sm" variant="ghost" isDisabled={busy} onPress={() => call(`/firewalls/${firewall.id}/servers/${s.id}`, 'DELETE')}><I name="unlink" size={14}/>{t('detach')}</Button>,
         ]}/>

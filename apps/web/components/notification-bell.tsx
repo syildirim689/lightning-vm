@@ -1,6 +1,7 @@
 "use client";
 // The in-app inbox: unread count on the bell, the latest notifications in a popover, a toast when a new one
 // arrives while the panel is open. What arrives where is set in Account → Notifications.
+import { Ago } from './ui';
 import { Button, Popover, toast } from '@heroui/react';
 import { useQueryClient } from '@tanstack/react-query';
 import { AnimatePresence, motion } from 'motion/react';
@@ -105,7 +106,7 @@ export default function NotificationBell() {
               <span className="flex min-w-0 flex-col gap-0.5">
                 <span className={`text-sm ${n.readAt ? '' : 'font-semibold'}`}>{n.title}</span>
                 <span className="line-clamp-2 text-xs text-muted">{n.body}</span>
-                <span className="text-[11px] text-muted">{format.relativeTime(new Date(n.createdAt), now)}</span>
+                <span className="text-[11px] text-muted"><Ago at={n.createdAt}/></span>
               </span>
             </button>
           </li>)}

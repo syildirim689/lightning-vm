@@ -7,7 +7,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useFormatter, useTranslations } from 'next-intl';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { I } from '../../../../components/icon';
-import { ButtonLink, CheckboxInput, DataTable, Empty, Mono, Notice, SelectInput, Stat, StatusChip, TextInput } from '../../../../components/ui';
+import { Ago, ButtonLink, CheckboxInput, DataTable, Empty, Mono, Notice, SelectInput, Stat, StatusChip, TextInput } from '../../../../components/ui';
 import { apiFetch, useErrorText, type ApiError } from '../../../../lib/api';
 import { useMe } from '../../../../lib/me';
 import { can } from '../../../../lib/permissions';
@@ -226,7 +226,7 @@ export default function Discovery({ onAdd }: { onAdd: (p: Prefill) => void }) {
               <span className="flex items-center gap-2 text-xs text-muted">
                 {s.auto && <StatusChip tone="default">{t('auto.badge')}</StatusChip>}
                 <StatusChip tone={s.status === 'done' ? 'success' : s.status === 'running' ? 'accent' : s.status === 'failed' ? 'danger' : 'default'}>{t(`state.${s.status}`)}</StatusChip>
-                {t('found', { count: s.found })} · {format.relativeTime(new Date(Math.min(Date.parse(s.startedAt), Date.now())), new Date())}
+                {t('found', { count: s.found })} · <Ago at={s.startedAt}/>
               </span>
             </button>
           </li>)}

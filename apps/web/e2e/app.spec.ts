@@ -1998,6 +1998,8 @@ test.describe('people, settings and smart features (English browser)', () => {
     await expect(page.getByRole('heading', { name: 'Planned network work' })).toBeVisible();
     await page.waitForTimeout(600);
     await shot(page, 'status-incident');
+    // Relative times carry the exact date and time (hover, and the time element).
+    await expect(page.locator('time[title][datetime]').first()).toBeVisible();
     await page.goto('/admin/settings?tab=status');
     await page.getByRole('button', { name: 'Delete' }).first().click();
     await page.getByRole('alertdialog').getByRole('button', { name: 'Delete' }).click();
@@ -2282,6 +2284,9 @@ test.describe('people, settings and smart features (English browser)', () => {
     await serversHeader.click();
     await expect(serversHeader).toHaveAttribute('aria-sort', 'ascending');
     await serversHeader.click();
+    await expect(serversHeader).toHaveAttribute('aria-sort', 'descending');
+    // The order is kept for this tab: a reload (or coming back from a user) keeps it.
+    await page.reload();
     await expect(serversHeader).toHaveAttribute('aria-sort', 'descending');
     await page.setViewportSize({ width: 390, height: 844 });
     await page.waitForTimeout(400);

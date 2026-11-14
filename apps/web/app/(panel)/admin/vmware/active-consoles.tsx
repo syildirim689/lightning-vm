@@ -3,7 +3,7 @@ import { Button } from '@heroui/react';
 import { useFormatter, useTranslations } from 'next-intl';
 import { apiFetch } from '../../../../lib/api';
 import { useApiAction, useApiQuery } from '../../../../lib/query';
-import { DataTable, Section } from '../../../../components/ui';
+import { Ago, DataTable, Section } from '../../../../components/ui';
 
 type Session = { key: string; userId: string; email: string | null; vm: string; vmName: string; startedAt: string };
 
@@ -18,7 +18,7 @@ export default function ActiveConsoles() {
       columns={[{ id: 'user', label: t('col.user') }, { id: 'vm', label: t('col.vm') }, { id: 'since', label: t('col.since') }, { id: 'act', label: <span className="sr-only">{t('revoke')}</span> }]}
       cells={(s) => [s.email ?? s.userId, s.vmName || s.vm,
         <span key="t" title={format.dateTime(new Date(s.startedAt), { dateStyle: 'medium', timeStyle: 'short' })}>{format.dateTime(new Date(s.startedAt), { timeStyle: 'short' })}
-          <span className="ml-1 text-xs text-muted">· {format.relativeTime(new Date(Math.min(Date.parse(s.startedAt), Date.now())), new Date())}</span></span>,
+          <span className="ml-1 text-xs text-muted">· <Ago at={s.startedAt}/></span></span>,
         <Button key="r" size="sm" variant="danger-soft" isPending={revoke.isPending && revoke.variables === s.key} onPress={() => revoke.mutate(s.key)}>{t('revoke')}</Button>]}/>
   </Section>;
 }

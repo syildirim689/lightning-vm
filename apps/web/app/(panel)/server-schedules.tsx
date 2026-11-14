@@ -6,7 +6,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useFormatter, useTranslations } from 'next-intl';
 import { useState } from 'react';
 import { I } from '../../components/icon';
-import { ConfirmButton, Notice, Section, SelectInput, StatusChip, SwitchInput, TextInput } from '../../components/ui';
+import { Ago, ConfirmButton, Notice, Section, SelectInput, StatusChip, SwitchInput, TextInput } from '../../components/ui';
 import { apiFetch, useErrorText } from '../../lib/api';
 import { useApiForm } from '../../lib/form';
 import { useApiAction, useApiQuery } from '../../lib/query';
@@ -76,7 +76,7 @@ export function PowerSchedules({ serverId, power = true, snapshots = false, back
           <span className="tabular-nums">{s.time}</span>
           <span className="text-sm text-muted">{daysText(s.days)}{s.timezone !== zone && ` · ${s.timezone}`}{(s.action === 'snapshot' || s.action === 'backup') && s.keep && ` · ${t('keeps', { n: s.keep })}`}</span>
           {s.lastResult && <StatusChip tone={s.lastResult === 'started' ? 'success' : s.lastResult === 'failed' ? 'danger' : s.lastResult === 'rotating' ? 'accent' : 'default'}>
-            {t(`result.${s.lastResult as 'started'}`)}{s.lastRunAt && ` · ${format.relativeTime(new Date(s.lastRunAt))}`}</StatusChip>}
+            {t(`result.${s.lastResult as 'started'}`)}{s.lastRunAt && <> · <Ago at={s.lastRunAt}/></>}</StatusChip>}
           <span className="ml-auto flex items-center gap-1">
             <SwitchInput isSelected={s.enabled} onChange={() => toggle.mutate(s)} label={<span className="sr-only">{t('enabledFor', { action: t(`action.${s.action}`), time: s.time })}</span>}/>
             <ConfirmButton size="sm" variant="ghost" label={<><I name="trash-2" size={15}/><span className="sr-only">{t('remove', { action: t(`action.${s.action}`), time: s.time })}</span></>}

@@ -1,6 +1,7 @@
 "use client";
 // Background work at a glance, bottom right: what runs now (with its step) and what just finished.
 // Each row opens the server it belongs to. Polls quickly only while something is running.
+import { Ago } from './ui';
 import { Button, ProgressBar, Spinner } from '@heroui/react';
 import { useQueryClient } from '@tanstack/react-query';
 import { AnimatePresence, motion } from 'motion/react';
@@ -71,7 +72,7 @@ export default function TaskManager({ permissions }: { permissions: string[] }) 
                 <span className={tone(o)}>{icon(o)}</span>
                 <span className="font-medium">{o.serverName}</span>
                 <span className="text-muted">· {ts(`kind.${o.kind as 'create'}`)}</span>
-                <span className="ml-auto text-xs text-muted">{format.relativeTime(new Date(o.finishedAt ?? o.createdAt), now)}</span>
+                <span className="ml-auto text-xs text-muted"><Ago at={o.finishedAt ?? o.createdAt}/></span>
               </span>
               <span className="text-xs text-muted">{o.status === 'failed' ? `${ts(`opStatus.failed`)} · ${o.errorCode ?? ''}`
                 : o.status === 'succeeded' || o.status === 'cancelled' ? ts(`opStatus.${o.status}`) : ts(`step.${(o.step ?? 'queued') as 'queued'}`)}{o.attempts > 1 && ` · ${ts('attempt', { n: o.attempts })}`}</span>

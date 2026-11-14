@@ -5,7 +5,7 @@ import { Button, Card, toast } from '@heroui/react';
 import { useFormatter, useLocale, useTranslations } from 'next-intl';
 import { useEffect, useState } from 'react';
 import { I } from '../../../../components/icon';
-import { FormActions, FormSection, Notice, SelectInput, StatusChip, TextInput } from '../../../../components/ui';
+import { Ago, FormActions, FormSection, Notice, SelectInput, StatusChip, TextInput } from '../../../../components/ui';
 import { apiFetch, useErrorText } from '../../../../lib/api';
 import { useApiQuery } from '../../../../lib/query';
 
@@ -68,7 +68,7 @@ export default function EinvoiceSettings({ readOnly }: { readOnly: boolean }) {
       {v.provider !== 'none' && <div className="flex flex-wrap items-center gap-3">
         <Button variant="secondary" isPending={busy === 'test'} isDisabled={readOnly} onPress={() => void test()}><I name="plug-zap" size={15}/>{t('check')}</Button>
         {v.check && <span className={`text-sm ${v.check.ok ? 'text-success' : 'text-danger'}`}>{v.check.ok ? t('checkOk', { result: v.check.message }) : v.check.message}
-          <span className="ml-1 text-xs text-muted">· {format.relativeTime(new Date(v.check.at))}</span></span>}
+          <span className="ml-1 text-xs text-muted">· <Ago at={v.check.at}/></span></span>}
       </div>}
     </FormSection>
     <FormSection title={t('numbering')} description={t('numberingHelp')} icon={<I name="hash" size={16}/>}>

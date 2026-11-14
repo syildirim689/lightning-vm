@@ -32,7 +32,7 @@ import { can } from '../../lib/permissions';
 import { noteLine } from '../../lib/note-line';
 import { ServerFilters, ServerTotals, useServerFilters } from './server-filters';
 import { flag } from '../../lib/flag';
-import { ButtonLink, CheckboxInput, ConfirmButton, DataTable, Empty, Mono, Notice, PageHeader, Section, StatusChip, TextInput, type Tone } from '../../components/ui';
+import { Ago, ButtonLink, CheckboxInput, ConfirmButton, DataTable, Empty, Mono, Notice, PageHeader, Section, StatusChip, TextInput, type Tone } from '../../components/ui';
 import { SectionNav } from '../../components/section-nav';
 import { ConnectCheck } from './connect-check';
 
@@ -483,7 +483,7 @@ export function ServerDetail({ id }: { id: string }) {
             {s.appState && <StatusChip tone={s.appState === 'installed' ? 'success' : s.appState === 'failed' ? 'danger' : 'accent'}>{t(`appState.${s.appState}`)}</StatusChip>}
             {s.appState === 'failed' && s.appMessage && <span className="text-xs text-muted">{s.appMessage}</span>}</dd></div>}
           <div><dt className="text-muted">{t('detail.created')}</dt><dd className="mt-0.5">{format.dateTime(new Date(s.createdAt), { dateStyle: 'medium', timeStyle: 'short' })}
-            <span className="ml-1.5 text-xs text-muted">({format.relativeTime(new Date(s.createdAt))})</span></dd></div>
+            <span className="ml-1.5 text-xs text-muted">(<Ago at={s.createdAt}/>)</span></dd></div>
         </dl>
         <p className="mt-4 text-xs text-muted">{t('readinessExplain')}</p>
       </Section>

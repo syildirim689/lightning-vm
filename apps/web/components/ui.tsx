@@ -4,8 +4,9 @@
 import { Alert, AlertDialog, Button, Card, Checkbox, CheckboxGroup, Chip, Description, FieldError, Input, Label, ListBox, NumberField, Select,
   Switch, Table, TextArea, TextField, buttonVariants, toast } from '@heroui/react';
 import NextLink from 'next/link';
+import { usePathname } from 'next/navigation';
 import { useFormatter, useLocale, useTranslations } from 'next-intl';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { readDraft, writeDraft } from '../lib/drafts';
 import { type Format, inputProps, isValid, normalize, splitList } from '../lib/formats';
 import { I } from './icon';
@@ -153,6 +154,26 @@ export function TextInput({ label, value, onChange, error, help, type = 'text', 
 }
 
 const sendKeys = () => typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform) ? '\u2318 Enter' : 'Ctrl+Enter';
+
+// One clock for every relative time on the page, ticking each 30 s.
+const listeners = new Set<() => void>();
+let clock = 0;
+let ticker: ReturnType<typeof setInterval> | undefined;
+const subscribe = (fn: () => void) => {
+  listeners.add(fn);
+  if (!ticker) { clock = Date.now(); ticker = setInterval(() => { clock = Date.now(); listeners.forEach((l) => l()); }, 30_000); }
+  return () => { listeners.delete(fn); if (!listeners.size) { clearInterval(ticker); ticker = undefined; } };
+};
+// "5 minutes ago" that stays true while the page is open, with the exact date and time on hover (and in the time
+// element). A past moment never reads as "in 3 seconds" (clock skew) unless `future` says it may lie ahead.
+export function Ago({ at, future }: { at: string | number | Date; future?: boolean }) {
+  const f = useFormatter();
+  const now = useSyncExternalStore(subscribe, () => clock || Date.now(), () => 0) || Date.now();
+  const d = new Date(at);
+  if (Number.isNaN(d.getTime())) return <>–</>;
+  return <time dateTime={d.toISOString()} title={f.dateTime(d, { dateStyle: 'medium', timeStyle: 'short' })} suppressHydrationWarning>
+    {f.relativeTime(future ? d : new Date(Math.min(d.getTime(), now)), now)}</time>;
+}
 
 // "YYYY-MM-DD" for a local date.
 const ymd = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -305,8 +326,31 @@ export function DataTable<T>({ label, columns, rows, rowKey, cells, empty, minWi
 }) {
   const t = useTranslations('Table');
   const locale = useLocale();
-  const [sort, setSort] = useState<{ column: string; direction: 'ascending' | 'descending' } | null>(null);
+  type Sort = { column: string; direction: 'ascending' | 'descending' };
+  const [sort, setSortState] = useState<Sort | null>(null);
   const [page, setPage] = useState(0);
+  // Order and page are kept for this tab (per page and table), so opening a row and coming back, or reloading,
+  // lands where the person was instead of page 1 in the default order.
+  const memo = `lvm:table:${usePathname()}:${label}`;
+  useEffect(() => {
+    try {
+      const kept = JSON.parse(sessionStorage.getItem(memo) ?? 'null') as { sort?: Sort | null; page?: number } | null;
+      if (kept?.sort && sortBy?.[kept.sort.column]) setSortState(kept.sort);
+      if (typeof kept?.page === 'number' && kept.page > 0) setPage(kept.page);
+    } catch { /* storage blocked */ }
+  }, [memo]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { try { sessionStorage.setItem(memo, JSON.stringify({ sort, page })); } catch { /* storage blocked */ } }, [memo, sort, page]);
+  const setSort = (next: Sort | null) => { setSortState(next); setPage(0); };
+  // A changed list (a filter, a new row) starts again on page 1; the list arriving after loading does not.
+  const count = useRef(rows.length);
+  useEffect(() => { if (count.current && count.current !== rows.length) setPage(0); count.current = rows.length; }, [rows.length]);
+  // A new page starts at the table's top when the top has scrolled away.
+  const top = useRef<HTMLDivElement>(null);
+  const turn = (to: number) => {
+    setPage(to);
+    const el = top.current;
+    if (el && el.getBoundingClientRect().top < 0) el.scrollIntoView({ block: 'start', behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+  };
   const sorted = useMemo(() => {
     const get = sort && sortBy?.[sort.column];
     if (!sort || !get) return rows;
@@ -321,7 +365,6 @@ export function DataTable<T>({ label, columns, rows, rowKey, cells, empty, minWi
     });
   }, [rows, sort, sortBy, locale]);
   const pages = Math.max(1, Math.ceil(sorted.length / pageSize));
-  useEffect(() => { setPage(0); }, [rows.length, sort]);
   const current = Math.min(page, pages - 1);
   const shown = pages > 1 ? sorted.slice(current * pageSize, (current + 1) * pageSize) : sorted;
   const sortable = columns.filter((c) => sortBy?.[c.id]);
@@ -353,12 +396,12 @@ export function DataTable<T>({ label, columns, rows, rowKey, cells, empty, minWi
   const pager = pages > 1 && <nav className="mt-3 flex flex-wrap items-center justify-between gap-2 text-sm" aria-label={t('pages', { label })}>
     <span className="text-muted" aria-live="polite">{t('range', { from: current * pageSize + 1, to: Math.min((current + 1) * pageSize, sorted.length), total: sorted.length })}</span>
     <div className="flex items-center gap-1">
-      <Button size="sm" variant="tertiary" isDisabled={current === 0} onPress={() => setPage(current - 1)}>{t('previous')}</Button>
+      <Button size="sm" variant="tertiary" isDisabled={current === 0} onPress={() => turn(current - 1)}>{t('previous')}</Button>
       <span className="px-2 tabular-nums text-muted">{t('page', { page: current + 1, pages })}</span>
-      <Button size="sm" variant="tertiary" isDisabled={current >= pages - 1} onPress={() => setPage(current + 1)}>{t('next')}</Button>
+      <Button size="sm" variant="tertiary" isDisabled={current >= pages - 1} onPress={() => turn(current + 1)}>{t('next')}</Button>
     </div>
   </nav>;
-  return <>{cards}<Table className="hidden sm:block">
+  return <><div ref={top} aria-hidden className="scroll-mt-24"/>{cards}<Table className="hidden sm:block">
     <Table.ScrollContainer>
       <Table.Content aria-label={label} style={{ minWidth }} sortDescriptor={sort ?? undefined}
         onSortChange={(d) => setSort({ column: String(d.column), direction: d.direction })}>

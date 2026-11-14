@@ -8,7 +8,7 @@ import { AnimatePresence, motion } from 'motion/react';
 import { useFormatter, useLocale, useNow, useTranslations } from 'next-intl';
 import { useRef, useState, useEffect } from 'react';
 import { I } from '../../../components/icon';
-import { ConfirmButton, SelectInput, TextInput } from '../../../components/ui';
+import { Ago, ConfirmButton, SelectInput, TextInput } from '../../../components/ui';
 import { apiFetch, useErrorText, type ApiError } from '../../../lib/api';
 import { fillCanned, type CannedVars } from '../../../lib/canned';
 import { useMe } from '../../../lib/me';
@@ -85,7 +85,7 @@ export function Thread({ messages, staffView }: { messages: Message[]; staffView
             <a href={`/api/support/attachments/${a.id}`} download className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-surface px-2 py-1 text-xs hover:border-accent">
               <I name={a.type.startsWith('image/') ? 'image' : a.type === 'application/pdf' ? 'file-text' : 'file'} size={13}/>{a.name}<span className="text-muted">{Math.max(1, Math.round(a.size / 1024))} KB</span></a></li>)}</ul>}
         </div>
-        <span className="px-1 text-[11px] text-muted">{m.staff ? (m.author ?? t('supportTeam')) : (m.author ?? t('customer'))} · {format.relativeTime(new Date(Math.min(Date.parse(m.createdAt), now.getTime())), now)}</span>
+        <span className="px-1 text-[11px] text-muted">{m.staff ? (m.author ?? t('supportTeam')) : (m.author ?? t('customer'))} · <Ago at={m.createdAt}/></span>
       </motion.li>;
     })}
   </ol>;

@@ -8,7 +8,7 @@ import Link from 'next/link';
 import { I } from '../../../../components/icon';
 import { useApiQuery } from '../../../../lib/query';
 import RegistrationSetting from '../registration-setting';
-import { Section, SwitchInput } from '../../../../components/ui';
+import { Ago, Section, SwitchInput } from '../../../../components/ui';
 import { apiFetch } from '../../../../lib/api';
 import { useApiAction } from '../../../../lib/query';
 import { useQueryClient } from '@tanstack/react-query';
@@ -66,7 +66,7 @@ export default function GeneralSettings({ onOpen }: { onOpen: (tab: string) => v
         <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm">
           <dt className="text-muted">{t('version')}</dt><dd className="truncate text-right font-mono text-xs leading-5">{version}</dd>
           <dt className="text-muted">{t('address')}</dt><dd className="truncate text-right">{url ? <a href={url} className="text-accent hover:underline">{url.replace(/^https?:\/\//, '')}</a> : '–'}</dd>
-          <dt className="text-muted">{t('running')}</dt><dd className="text-right">{format.relativeTime(new Date(startedAt), now)}</dd>
+          <dt className="text-muted">{t('running')}</dt><dd className="text-right"><Ago at={startedAt}/></dd>
           <dt className="text-muted">{t('users')}</dt><dd className="text-right tabular-nums"><Link href="/admin/users" className="hover:underline">{users}</Link></dd>
           <dt className="text-muted">{t('servers')}</dt><dd className="text-right tabular-nums"><Link href="/admin/servers" className="hover:underline">{servers}</Link></dd>
         </dl>

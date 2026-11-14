@@ -1,6 +1,7 @@
 "use client";
 // The public status page: one line on the whole, then each part of the panel and each location, refreshed every
 // 30 seconds. Colour always comes with an icon and words.
+import { Ago } from '../../components/ui';
 import { motion } from 'motion/react';
 import NextLink from 'next/link';
 import { useFormatter, useLocale, useNow, useTranslations } from 'next-intl';
@@ -53,7 +54,7 @@ export default function StatusView() {
         <ol className="mt-3 flex flex-col gap-2 border-l-2 border-border pl-4">
           {i.updates.map((u, n) => <li key={n} className="relative text-sm">
             <span aria-hidden className={`absolute -left-[1.4rem] top-1.5 size-2.5 rounded-full border-2 border-surface ${u.status === 'resolved' ? 'bg-success' : n === 0 ? 'bg-accent' : 'bg-default-foreground/30'}`}/>
-            <span className="font-medium">{t(`incident.${u.status as 'resolved'}`)}</span> <span className="text-xs text-muted">· {format.relativeTime(new Date(Math.min(Date.parse(u.at), now.getTime())), now)}</span>
+            <span className="font-medium">{t(`incident.${u.status as 'resolved'}`)}</span> <span className="text-xs text-muted">· <Ago at={u.at}/></span>
             <p className="whitespace-pre-line text-muted">{u.body}</p>
           </li>)}
         </ol>

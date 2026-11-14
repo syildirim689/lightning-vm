@@ -7,7 +7,7 @@ import NextLink from 'next/link';
 import { useFormatter, useLocale, useNow, useTranslations } from 'next-intl';
 import { parseAsString, useQueryState } from 'nuqs';
 import { I } from '../../../../components/icon';
-import { Empty, PageHeader, SelectInput, Stat } from '../../../../components/ui';
+import { Ago, Empty, PageHeader, SelectInput, Stat } from '../../../../components/ui';
 import { useMe } from '../../../../lib/me';
 import { can } from '../../../../lib/permissions';
 import { useApiQuery } from '../../../../lib/query';
@@ -80,7 +80,7 @@ export default function SupportQueue() {
             <span className="w-16 shrink-0 text-sm tabular-nums text-muted">#{x.number}</span>
             <span className="min-w-0 flex-1">
               <span className="block truncate font-medium">{x.subject}</span>
-              <span className="block truncate text-xs text-muted">{x.ownerEmail} · {departmentName(x, locale)}{x.serverName && ` · ${x.serverName}`} · {format.relativeTime(new Date(Math.min(Date.parse(x.updatedAt), now.getTime())), now)}</span>
+              <span className="block truncate text-xs text-muted">{x.ownerEmail} · {departmentName(x, locale)}{x.serverName && ` · ${x.serverName}`} · <Ago at={x.updatedAt}/></span>
             </span>
             <span className="flex shrink-0 flex-wrap items-center gap-2">
               {x.assigneeEmail ? <span className="inline-flex items-center gap-1 text-xs text-muted"><I name="user" size={12}/>{x.assigneeEmail.split('@')[0]}</span>

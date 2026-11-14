@@ -4,7 +4,7 @@ import NextLink from 'next/link';
 import { useFormatter, useTranslations } from 'next-intl';
 import { parseAsBoolean, parseAsString, parseAsStringLiteral, useQueryState } from 'nuqs';
 import { I } from '../../../../components/icon';
-import { ConfirmButton, DataTable, Mono, Notice, PageHeader, SelectInput, StatusChip, TextInput } from '../../../../components/ui';
+import { Ago, ConfirmButton, DataTable, Mono, Notice, PageHeader, SelectInput, StatusChip, TextInput } from '../../../../components/ui';
 import { useState } from 'react';
 import { can } from '../../../../lib/permissions';
 import { useMe } from '../../../../lib/me';
@@ -113,7 +113,7 @@ export default function AdminServers() {
             <DataTable label={t('admin.operations')} rows={shownOps} rowKey={(o) => o.id} minWidth={760} empty={ops.length ? t('admin.opNone') : '…'}
               sortBy={{ when: (o) => Date.parse(o.createdAt), op: (o) => o.kind, name: (o) => o.serverName, state: (o) => o.status }}
               columns={[{ id: 'when', label: t('col.when') }, { id: 'op', label: t('col.operation') }, { id: 'name', label: t('col.name') }, { id: 'state', label: t('col.state') }, { id: 'detail', label: t('col.detail') }, { id: 'act', label: <span className="sr-only">{t('admin.retry')}</span> }]}
-              cells={(o) => [<span key="w" className="flex flex-col"><span>{format.dateTime(new Date(o.createdAt), { dateStyle: 'medium', timeStyle: 'medium' })}</span><span className="text-xs text-muted">{format.relativeTime(new Date(o.createdAt))}</span></span>,
+              cells={(o) => [<span key="w" className="flex flex-col"><span>{format.dateTime(new Date(o.createdAt), { dateStyle: 'medium', timeStyle: 'medium' })}</span><span className="text-xs text-muted"><Ago at={o.createdAt}/></span></span>,
                 t(`kind.${o.kind as 'create'}`),
                 <span key="n" className="flex flex-col">{o.serverId ? <NextLink href={`/servers/${o.serverId}`} className="font-medium text-accent hover:underline">{o.serverName ?? '–'}</NextLink> : o.serverName ?? '–'}
                   {o.ownerEmail && <span className="text-xs text-muted">{o.ownerEmail}</span>}</span>,
