@@ -1721,15 +1721,16 @@ test.describe('people, settings and smart features (English browser)', () => {
     await expect(page).toHaveURL(/\/account/);
     await expect(page.getByRole('alertdialog')).toHaveCount(0);
     // The browser's Back button asks too; staying keeps page, address and text.
+    await page.goto('/account?tab=projects');
     await name.fill('typed again');
     await page.goBack();
     await expect(leave).toBeVisible();
     await leave.getByRole('button', { name: 'Stay and save' }).click();
-    await expect(page).toHaveURL(/\/account/);
+    await expect(page).toHaveURL(/tab=projects/);
     await expect(name).toHaveValue('typed again');
     await page.goBack();
     await leave.getByRole('button', { name: 'Leave without saving' }).click();
-    await expect(page).toHaveURL(/\/servers/);
+    await expect(page).toHaveURL(/\/account$/);
     await expect(page.getByRole('alertdialog')).toHaveCount(0);
     await context.close();
   });
