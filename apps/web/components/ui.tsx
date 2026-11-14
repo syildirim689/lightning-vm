@@ -5,7 +5,8 @@ import { Alert, AlertDialog, Button, Card, Checkbox, CheckboxGroup, Chip, Descri
   Switch, Table, TextArea, TextField, buttonVariants, toast } from '@heroui/react';
 import NextLink from 'next/link';
 import { useFormatter, useLocale, useTranslations } from 'next-intl';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { readDraft, writeDraft } from '../lib/drafts';
 import { type Format, inputProps, isValid, normalize, splitList } from '../lib/formats';
 import { I } from './icon';
 
@@ -80,12 +81,13 @@ const masksText = () => typeof CSS !== 'undefined' && CSS.supports('-webkit-text
 // Text field with a visible label, help text, and a translated server-side error under it.
 // `format` gives a typed value its keyboard, an example, tidying when the field is left (MAC spellings, spaces,
 // upper case) and a message as soon as it is wrong; `list` accepts several values separated by commas or lines.
-export function TextInput({ label, value, onChange, error, help, type = 'text', name, isRequired, autoComplete, autofill, placeholder, multiline, isDisabled, maxLength, className, spellCheck, format, list, datePresets, unit, transient, revealable }: {
+export function TextInput({ label, value, onChange, error, help, type = 'text', name, isRequired, autoComplete, autofill, placeholder, multiline, isDisabled, maxLength, className, spellCheck, format, list, datePresets, unit, transient, revealable, draft }: {
   label: string; value: string; onChange: (v: string) => void; error?: string; help?: React.ReactNode; type?: string; name?: string; isRequired?: boolean;
   autoComplete?: string; autofill?: boolean; placeholder?: string; multiline?: boolean; isDisabled?: boolean; maxLength?: number; className?: string; spellCheck?: boolean;
   format?: Format; list?: boolean; datePresets?: boolean; unit?: string;
   transient?: boolean; // a filter or a typed confirmation: leaving it is not losing work
   revealable?: boolean; // a secret with a Show button
+  draft?: string; // kept in this browser under this key until it is sent (the parent empties the value then)
 }) {
   const tf = useTranslations('Formats');
   const fd = useFormatter();
@@ -94,6 +96,11 @@ export function TextInput({ label, value, onChange, error, help, type = 'text', 
   const [masked, setMasked] = useState(!autofill && type === 'password');
   const [left, setLeft] = useState(false);
   const [revealed, setRevealed] = useState(false);
+  // A draft comes back when the field is shown empty again; every change is kept, and an empty value forgets it.
+  const [restored, setRestored] = useState(false);
+  const loaded = useRef(false);
+  useEffect(() => { if (!draft) return; const kept = readDraft(draft); if (kept && !value) { onChange(kept); setRestored(true); } }, [draft]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (!draft) return; if (!loaded.current) { loaded.current = true; return; } writeDraft(draft, value); if (!value) setRestored(false); }, [draft, value]);
   useEffect(() => { setMasked(!autofill && type === 'password' && masksText()); }, [autofill, type]);
   const hidden = masked && !revealed;
   const fill = autofill ? { autoComplete, 'data-autofill': 'true' } : noAutofill;
@@ -118,7 +125,7 @@ export function TextInput({ label, value, onChange, error, help, type = 'text', 
   const count = !!maxLength && !isDisabled && !hidden && type !== 'password' && value.length >= maxLength * (multiline ? 0.5 : 0.8);
   const full = !!maxLength && value.length >= maxLength;
   return <TextField className={`min-w-0 ${className ?? ''}`} name={autofill ? name : undefined} type={masked || revealed ? 'text' : type} value={value} onChange={onChange} isInvalid={!!shown} isRequired={isRequired} isDisabled={isDisabled} validationBehavior="aria"
-    onBlur={tidy} data-transient={transient || undefined}>
+    onBlur={tidy} data-transient={transient || !!draft || undefined}>
     <Label>{label}{unit && <span className="sr-only"> ({unit})</span>}</Label>
     {multiline ? <TextArea rows={4} placeholder={ph} maxLength={maxLength} spellCheck={spellCheck} {...fill} {...extra} className={fmt?.mono ? 'font-mono text-sm' : undefined}/>
       : unit ? <div className="relative"><Input placeholder={ph} maxLength={maxLength} spellCheck={false} {...fill} {...extra} className={`w-full min-w-0 pr-14 tabular-nums ${fmt?.mono ? 'font-mono' : ''}`}/>
@@ -131,6 +138,9 @@ export function TextInput({ label, value, onChange, error, help, type = 'text', 
     {shown ? <FieldError>{shown}</FieldError> : when || help ? <Description>{when && <span className="block font-medium text-foreground/80">{when}</span>}{help}</Description> : null}
     {count && <p className={`mt-0.5 text-right text-xs tabular-nums ${full ? 'font-medium text-warning' : 'text-muted'}`} aria-live={full ? 'polite' : 'off'}>
       {full ? tf('atLimit', { max: maxLength! }) : tf('count', { n: value.length, max: maxLength! })}</p>}
+    {draft && value.trim() && !isDisabled && <p className="mt-0.5 flex flex-wrap items-center gap-x-2 text-xs text-muted">
+      <span className="inline-flex items-center gap-1"><I name="save" size={12}/>{tf(restored ? 'draftRestored' : 'draftKept')}</span>
+      <button type="button" onClick={() => { onChange(''); setRestored(false); }} className="rounded px-1 font-medium text-accent hover:underline focus-visible:outline-2 focus-visible:outline-accent">{tf('draftDiscard')}</button></p>}
     {presets && <div role="group" aria-label={tf('quick')} className="mt-1 flex flex-wrap gap-1.5">{presets.map(([k, d]) =>
       <button key={k} type="button" aria-pressed={value === d} onClick={() => onChange(d)}
         className={`min-h-8 rounded-full border px-2.5 text-xs transition-colors ${value === d ? 'border-accent bg-accent-soft text-accent-soft-foreground' : 'border-border hover:border-accent'}`}>{tf(`preset.${k}` as 'preset.today')}</button>)}</div>}

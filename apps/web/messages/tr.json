@@ -8153,7 +8153,10 @@
     "count": "{n, number} / {max, number}",
     "atLimit": "Sınıra ulaşıldı: en çok {max, number} karakter",
     "show": "Göster",
-    "hide": "Gizle"
+    "hide": "Gizle",
+    "draftKept": "Taslak, gönderene kadar bu tarayıcıda saklanıyor",
+    "draftRestored": "Gönderilmemiş taslağınız geri geldi",
+    "draftDiscard": "Taslağı sil"
   },
   "SessionExpired": {
     "title": "Oturumunuz sona erdi",

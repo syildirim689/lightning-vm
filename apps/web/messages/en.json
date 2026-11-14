@@ -8153,7 +8153,10 @@
     "count": "{n, number} / {max, number}",
     "atLimit": "Limit reached: at most {max, number} characters",
     "show": "Show",
-    "hide": "Hide"
+    "hide": "Hide",
+    "draftKept": "Draft kept in this browser until you send it",
+    "draftRestored": "Your unsent draft is back",
+    "draftDiscard": "Discard draft"
   },
   "SessionExpired": {
     "title": "Your session has ended",

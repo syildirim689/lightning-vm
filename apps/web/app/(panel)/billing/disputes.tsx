@@ -2,6 +2,7 @@
 // Invoice disputes: the customer opens one from an invoice (reason, lines, amount, message, files) and follows it; staff
 // take it into review and decide. The conversation itself is the dispute's support ticket.
 import { Button, toast } from '@heroui/react';
+import { writeDraft } from '../../../lib/drafts';
 import { useQueryClient } from '@tanstack/react-query';
 import NextLink from 'next/link';
 import { useFormatter, useTranslations } from 'next-intl';
@@ -93,7 +94,7 @@ export function InvoiceDisputes({ d }: { d: InvoiceDetail }) {
       const attachments = await Promise.all(files.map(readFile));
       const r = await apiFetch<{ number: number }>(`/billing/invoices/${inv.id}/disputes`, { method: 'POST',
         body: { reason, lineIds, ...(amount && { amount: amount.replace(',', '.') }), message, attachments } });
-      toast.success(t('opened', { number: r.number })); setOpen(false); setMessage(''); setFiles([]); refresh();
+      toast.success(t('opened', { number: r.number })); writeDraft(`dispute:${inv.id}`, ''); setOpen(false); setMessage(''); setFiles([]); refresh();
     } catch (err) { setFields((err as ApiError).fields ?? {}); toast.danger(error(err)); } finally { setBusy(false); }
   }
   if (!q.data || (!list.length && !allowed)) return null;
@@ -112,7 +113,7 @@ export function InvoiceDisputes({ d }: { d: InvoiceDetail }) {
         {fields.lineIds && <p className="text-xs text-danger">{field(fields.lineIds)}</p>}</fieldset>}
       <TextInput className="max-w-xs" label={t('amountLabel')} value={amount} onChange={setAmount} error={field(fields.amount)}
         placeholder={(chosen || Number(inv.total) - Number(inv.refundedTotal)).toFixed(2)} help={t('amountHelp', { max: money(Number(inv.total) - Number(inv.refundedTotal)) })}/>
-      <TextInput label={t('message')} value={message} onChange={setMessage} multiline maxLength={20000} error={field(fields.message)} help={t('messageHelp')}/>
+      <TextInput draft={`dispute:${inv.id}`} label={t('message')} value={message} onChange={setMessage} multiline maxLength={20000} error={field(fields.message)} help={t('messageHelp')}/>
       <div className="flex flex-wrap items-center gap-2">
         <input ref={pick} type="file" multiple accept={accept} className="sr-only" onChange={(e) => { setFiles([...files, ...Array.from(e.target.files ?? [])].slice(0, 3)); e.target.value = ''; }}/>
         <Button size="sm" variant="ghost" isDisabled={files.length >= 3} onPress={() => pick.current?.click()}><I name="paperclip" size={14}/>{t('attach')}</Button>

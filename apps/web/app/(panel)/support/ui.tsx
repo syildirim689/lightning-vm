@@ -132,7 +132,7 @@ export function Composer({ ticketId, staff, closed, onSent, vars, onWriting }: {
       options={canned.map((c) => ({ id: c.id, label: c.title }))} placeholder={t('cannedPick')}/>}
     {/* Ctrl/⌘ + Enter sends, from anywhere in the box. */}
     <div onKeyDown={(e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); void send(); } }}>
-      <TextInput maxLength={20000} multiline label={internal ? t('noteLabel') : t('replyLabel')} value={body} onChange={setBody} help={`${t('sendShortcut')} ${t('dropHint')}`}/>
+      <TextInput transient maxLength={20000} multiline label={internal ? t('noteLabel') : t('replyLabel')} value={body} onChange={setBody} help={`${t('sendShortcut')} ${t('dropHint')}`}/>
     </div>
     <AnimatePresence>{files.length > 0 && <motion.ul initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex flex-wrap gap-2">
       {files.map((f, i) => <li key={i} className="inline-flex max-w-full items-center gap-1 rounded-lg bg-default px-2 py-1 text-xs"><span className="truncate">{f.name}</span>

@@ -2,6 +2,7 @@
 // User management: better-auth's admin API (create, ban, password, sessions, impersonation, removal) and
 // the panel's access API (roles + per-user permission overrides). Buttons appear only with the permission.
 import { Avatar, Button, Chip, Dropdown, Label, Modal, SearchField, toast } from '@heroui/react';
+import { writeDraft } from '../../../../lib/drafts';
 import { useQueryClient } from '@tanstack/react-query';
 import { useFormatter, useNow, useTranslations } from 'next-intl';
 import { parseAsString, useQueryState } from 'nuqs';
@@ -390,7 +391,9 @@ function BulkAction({ people, perms, onClose }: { people: Row[]; perms?: string[
     setBusy(true); setErrors({});
     try {
       const r = await apiFetch<{ done: number; skipped: number }>('/admin/users/actions', { method: 'POST', body: { action, userIds: people.map((u) => u.id), subject, message } });
-      toast.success(t(action === 'message' ? 'sent' : 'ended', { n: r.done, skipped: r.skipped })); done();
+      toast.success(t(action === 'message' ? 'sent' : 'ended', { n: r.done, skipped: r.skipped }));
+      if (action === 'message') { writeDraft('bulk-message:subject', ''); writeDraft('bulk-message:body', ''); }
+      done();
     } catch (e) { const f = (e as { fields?: Record<string, string> })?.fields ?? {}; setErrors(Object.fromEntries(Object.entries(f).map(([k, v]) => [k, field(v) ?? v]))); if (!Object.keys(f).length) toast.danger(error(e)); } finally { setBusy(false); }
   }
   const names = people.slice(0, 4).map((u) => u.name || u.email);
@@ -406,8 +409,8 @@ function BulkAction({ people, perms, onClose }: { people: Row[]; perms?: string[
     <p className="text-sm text-muted">{t('who', { names: names.join(', '), more: Math.max(people.length - names.length, 0) })}</p>
     <SelectInput label={t('action')} value={action} onChange={setAction} options={actions.map((a) => ({ id: a, label: t(`action_${a}`) }))}/>
     {action === 'message' ? <div className="contents" onFocusCapture={(e) => { if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) last.current = e.target; }}>
-      <TextInput label={t('subject')} value={subject} onChange={setSubject} maxLength={120} isRequired error={errors.subject} autoComplete="off"/>
-      <TextInput label={t('message')} value={message} onChange={setMessage} maxLength={2000} multiline isRequired error={errors.message} autoComplete="off"
+      <TextInput draft="bulk-message:subject" label={t('subject')} value={subject} onChange={setSubject} maxLength={120} isRequired error={errors.subject} autoComplete="off"/>
+      <TextInput draft="bulk-message:body" label={t('message')} value={message} onChange={setMessage} maxLength={2000} multiline isRequired error={errors.message} autoComplete="off"
         help={t('messageHelp', { name: '{name}', email: '{email}' })}/>
       <div className="flex flex-wrap gap-2">
         {['{name}', '{email}'].map((v) => <Button key={v} size="sm" variant="secondary" aria-label={t('insert', { field: v })} onPress={() => insert(v)}>
