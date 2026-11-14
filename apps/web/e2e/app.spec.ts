@@ -1730,7 +1730,8 @@ test.describe('people, settings and smart features (English browser)', () => {
     await leave.getByRole('button', { name: 'Leave without saving' }).click();
     await expect(page).toHaveURL(/\/servers/);
     await expect(leave).toBeHidden();
-    // Nothing typed: links just go.
+    // Nothing typed: links just go (a staff member's own workspace is folded under its heading).
+    await page.getByRole('button', { name: 'My workspace' }).first().click();
     await page.getByRole('link', { name: 'My account', exact: true }).first().click();
     await expect(page).toHaveURL(/\/account/);
     await expect(page.getByRole('alertdialog')).toHaveCount(0);
