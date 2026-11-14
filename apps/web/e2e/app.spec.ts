@@ -1734,7 +1734,9 @@ test.describe('people, settings and smart features (English browser)', () => {
     await leave.getByRole('button', { name: 'Stay and save' }).click();
     await expect(page).toHaveURL(/tab=projects/);
     await expect(name).toHaveValue('typed again');
-    await page.goForward();
+    // Staying put the page back as the newest step, so the page asked for is now one step back.
+    await page.goBack();
+    await expect(leave).toBeVisible();
     await leave.getByRole('button', { name: 'Leave without saving' }).click();
     await expect(page).toHaveURL(/\/servers/);
     await expect(page.getByRole('alertdialog')).toHaveCount(0);
