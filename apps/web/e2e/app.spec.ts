@@ -1720,20 +1720,21 @@ test.describe('people, settings and smart features (English browser)', () => {
     await page.getByRole('link', { name: 'My account', exact: true }).first().click();
     await expect(page).toHaveURL(/\/account/);
     await expect(page.getByRole('alertdialog')).toHaveCount(0);
-    // The browser's Back button asks too; staying keeps page, address and text.
+    // The browser's Back and Forward buttons ask too; staying keeps page, address and text.
     // Back within the app (a page loaded afresh is the browser's own business): Servers, then back to the projects tab.
     await page.goto('/account?tab=projects');
     await away.click();
     await expect(page).toHaveURL(/\/servers/);
     await page.goBack();
     await expect(page).toHaveURL(/tab=projects/);
+    // The step before it is the page loaded afresh, so Forward (the same guard) is the step within the app here.
     await name.fill('typed again');
-    await page.goBack();
+    await page.goForward();
     await expect(leave).toBeVisible();
     await leave.getByRole('button', { name: 'Stay and save' }).click();
     await expect(page).toHaveURL(/tab=projects/);
     await expect(name).toHaveValue('typed again');
-    await page.goBack();
+    await page.goForward();
     await leave.getByRole('button', { name: 'Leave without saving' }).click();
     await expect(page).toHaveURL(/\/servers/);
     await expect(page.getByRole('alertdialog')).toHaveCount(0);
