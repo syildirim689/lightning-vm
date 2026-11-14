@@ -587,12 +587,16 @@ test.describe('server lifecycle (simulator, Turkish customer)', () => {
     await expect(page.locator('.quote')).toContainText('Yıllık yaklaşık €36,00');
     await expect(page.getByText(/vCPU başına €3,00/).first()).toBeVisible();
     // The summary lists what is still missing, each a jump to its section; the button waits for them.
+    // The only SSH key is ticked by itself; without it the order waits.
+    const key = page.getByRole('checkbox', { name: 'dizüstü' });
+    await expect(key).toBeChecked();
+    await tick(key);
     const missing = page.getByRole('list', { name: 'Sipariş için eksik' });
     await expect(missing).toContainText('En az bir SSH anahtarı seçin');
     await expect(page.getByRole('button', { name: 'Sunucuyu oluştur' })).toBeDisabled();
     await page.getByLabel('Sunucu adı').fill('Web_1');
     await expect(page.getByText('Küçük harf, rakam ve tire kullanın', { exact: false })).toBeVisible();
-    await tick(page.getByRole('checkbox', { name: 'dizüstü' }));
+    await tick(key);
     await page.getByLabel('Sunucu adı').fill('web-1');
     await expect(missing).toBeHidden();
     await page.locator('#order-summary').scrollIntoViewIfNeeded();
