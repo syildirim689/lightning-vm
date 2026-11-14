@@ -1,4 +1,6 @@
+import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
+import { loginFrom } from '../../lib/back-to';
 import { getPublicConfig, getResellerBrand, getSetupStatus, getUser } from '../../lib/session';
 import { accentCss } from '../../components/brand';
 import pkg from '../../package.json';
@@ -7,7 +9,7 @@ import TwoFactorGate from './two-factor-gate';
 
 export default async function PanelLayout({ children }: { children: React.ReactNode }) {
   const user = await getUser();
-  if (!user) redirect((await getSetupStatus()).adminCreated ? '/login' : '/setup');
+  if (!user) redirect((await getSetupStatus()).adminCreated ? loginFrom((await headers()).get('x-lvm-path') ?? '/') : '/setup');
   if (user.twoFactorRequired) return <TwoFactorGate/>;
   const { branding: operator } = await getPublicConfig();
   // A reseller's customers see the reseller's name and colour (no logo: the operator's would be wrong).

@@ -1,5 +1,6 @@
 "use client";
 import { useTranslations } from 'next-intl';
+import { loginFrom } from './back-to';
 import { editsSaved, hasPendingEdits } from './edits';
 
 export type ApiError = { code: string; fields?: Record<string, string> };
@@ -36,7 +37,7 @@ export async function apiFetch<T = unknown>(path: string, init: { method?: strin
     reach(!(body === null && res.status >= 502 && res.status <= 504));
     // The session ran out during a save: the same path as a live-update sign-out (keeps unsaved typing on screen).
     if (body?.code === 'UNAUTHENTICATED' && (init.method ?? 'GET') !== 'GET' && !/^\/(auth|setup)\//.test(path) && !/^\/(login|setup|register)/.test(window.location.pathname)) {
-      if (hasPendingEdits()) window.dispatchEvent(new Event('lvm:expired')); else window.location.replace('/login?reason=expired');
+      if (hasPendingEdits()) window.dispatchEvent(new Event('lvm:expired')); else window.location.replace(loginFrom(window.location.pathname + window.location.search, 'expired'));
     }
     // A form the server sent back with field errors: once they are shown, the first wrong field takes the focus.
     if (body?.fields && Object.keys(body.fields).length && (init.method ?? 'GET') !== 'GET') focusFirstInvalid();

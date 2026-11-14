@@ -1,4 +1,5 @@
 "use client";
+import { backTo } from '../../lib/back-to';
 import { Button, InputOTP, Meter, Separator } from '@heroui/react';
 import { AnimatePresence, motion, useAnimationControls, useReducedMotion } from 'motion/react';
 import NextLink from 'next/link';
@@ -99,9 +100,13 @@ export function Strength({ password }: { password: string }) {
 // better-auth's client returns { error: { code, status } }; a 429 carries no code.
 export const asApiError = (e: { code?: string; status?: number } | null | undefined): ApiError => ({ code: e?.code ?? (e?.status === 429 ? 'RATE_LIMITED' : 'UNKNOWN') });
 
+// Where a provider or a sign-in link brings the person back to.
+const here = () => backTo(new URLSearchParams(window.location.search).get('next')) ?? '/';
+
 export async function landed(router: ReturnType<typeof useRouter>) {
   const me = await apiFetch<User>('/auth/me');
-  router.replace(can(me.permissions, 'dashboard.view') ? '/admin' : '/');
+  // Back to the page the person was sent away from, else their start page.
+  router.replace(backTo(new URLSearchParams(window.location.search).get('next')) ?? (can(me.permissions, 'dashboard.view') ? '/admin' : '/'));
   router.refresh();
 }
 
@@ -202,7 +207,7 @@ export default function CredentialsForm({ mode, noToken, onDone }: { mode: Mode;
   async function sso() {
     setFailure(undefined); setBusy('sso');
     try {
-      const r = await apiFetch<{ url: string }>('/auth/sign-in/social', { method: 'POST', body: { provider: 'oidc', callbackURL: '/', errorCallbackURL: '/login?reason=sso' } });
+      const r = await apiFetch<{ url: string }>('/auth/sign-in/social', { method: 'POST', body: { provider: 'oidc', callbackURL: here(), errorCallbackURL: '/login?reason=sso' } });
       window.location.assign(r.url);
     } catch (e) { setBusy(undefined); setFailure(error(e)); shakeForm(); }
   }
@@ -210,7 +215,7 @@ export default function CredentialsForm({ mode, noToken, onDone }: { mode: Mode;
   // A social provider: the browser goes to the provider and comes back signed in (or with the reason it failed).
   async function social(provider: string) {
     setFailure(undefined); setBusy(provider);
-    const { error: err } = await authClient.signIn.social({ provider, callbackURL: '/', errorCallbackURL: '/login?reason=sso' });
+    const { error: err } = await authClient.signIn.social({ provider, callbackURL: here(), errorCallbackURL: '/login?reason=sso' });
     if (err) { setBusy(undefined); setFailure(error(asApiError(err))); shakeForm(); }
   }
 
@@ -451,7 +456,7 @@ function MagicLink({ initialEmail, onBack }: { initialEmail: string; onBack: () 
     setBusy(true);
     try {
       const token = captcha.active ? await captcha.getToken() : undefined;
-      const { error: err } = await authClient.signIn.magicLink({ email: email.trim().toLowerCase(), callbackURL: '/', errorCallbackURL: '/login?reason=link', fetchOptions: token ? { headers: { 'x-captcha-response': token } } : undefined });
+      const { error: err } = await authClient.signIn.magicLink({ email: email.trim().toLowerCase(), callbackURL: here(), errorCallbackURL: '/login?reason=link', fetchOptions: token ? { headers: { 'x-captcha-response': token } } : undefined });
       if (err) { setFailure(error(asApiError(err))); captcha.reset(); return; }
       setSent(true);
     } finally { setBusy(false); }
