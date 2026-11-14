@@ -5116,7 +5116,8 @@
       "b": "Billing",
       "f": "Firewalls"
     },
-    "search": "Jump to the page search"
+    "search": "Jump to the page search",
+    "send": "Send a long text from its form"
   },
   "Extras": {
     "copy": "Copy",
@@ -8156,7 +8157,8 @@
     "hide": "Hide",
     "draftKept": "Draft kept in this browser until you send it",
     "draftRestored": "Your unsent draft is back",
-    "draftDiscard": "Discard draft"
+    "draftDiscard": "Discard draft",
+    "sendHint": "{keys} sends"
   },
   "SessionExpired": {
     "title": "Your session has ended",

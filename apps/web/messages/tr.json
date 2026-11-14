@@ -5116,7 +5116,8 @@
       "b": "Faturalar",
       "f": "Güvenlik duvarları"
     },
-    "search": "Sayfadaki aramaya git"
+    "search": "Sayfadaki aramaya git",
+    "send": "Uzun metni formundan gönder"
   },
   "Extras": {
     "copy": "Kopyala",
@@ -8156,7 +8157,8 @@
     "hide": "Gizle",
     "draftKept": "Taslak, gönderene kadar bu tarayıcıda saklanıyor",
     "draftRestored": "Gönderilmemiş taslağınız geri geldi",
-    "draftDiscard": "Taslağı sil"
+    "draftDiscard": "Taslağı sil",
+    "sendHint": "{keys} ile gönderilir"
   },
   "SessionExpired": {
     "title": "Oturumunuz sona erdi",

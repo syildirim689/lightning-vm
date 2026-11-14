@@ -1701,6 +1701,7 @@ test.describe('people, settings and smart features (English browser)', () => {
     await expect(name).toHaveValue('x'.repeat(100));
     await expect(page.getByText('Limit reached: at most 100 characters')).toBeVisible();
     await name.fill('unsaved project');
+    await expect(page).toHaveTitle(/^(\(\d+\+?\) )?\u270E /);
     const away = page.getByRole('link', { name: 'Servers', exact: true }).first();
     await away.click();
     const leave = page.getByRole('alertdialog', { name: 'Leave without saving?' });
@@ -1965,6 +1966,11 @@ test.describe('people, settings and smart features (English browser)', () => {
     await page.goto('/admin/settings?tab=status');
     await page.getByLabel('Title').fill('Planned network work');
     await page.getByLabel('First update').fill('We are moving the uplinks; short interruptions are possible.');
+    // Kept in the browser until sent: a reload brings the text back.
+    await page.reload();
+    await expect(page.getByLabel('First update')).toHaveValue('We are moving the uplinks; short interruptions are possible.');
+    await expect(page.getByLabel('Title')).toHaveValue('Planned network work');
+    await expect(page.getByText('Your unsent draft is back').first()).toBeVisible();
     await page.getByRole('button', { name: 'Open the incident' }).click();
     await expect(page.getByText('Incident opened.')).toBeVisible();
     // The card says how long it has been open; the ready wording fills the update for its status.

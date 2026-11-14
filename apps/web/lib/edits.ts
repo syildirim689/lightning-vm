@@ -22,12 +22,23 @@ const changed = () => {
 };
 
 export const hasPendingEdits = () => dirtyForms > 0 || changed().length > 0;
+
+// The tab says so while text is unsaved ("✎ Account"), after the unread count the notification bell puts in front,
+// so a panel left in another tab is not closed by mistake. Pages set their own title on navigation; it is put back.
+const mark = '\u270E ';
+const titled = /^(\(\d+\+?\) )?(\u270E )?/;
+export function syncTitle() {
+  if (typeof document === 'undefined') return;
+  const was = document.title;
+  const next = was.replace(titled, (_, count: string | undefined) => `${count ?? ''}${hasPendingEdits() ? mark : ''}`);
+  if (next !== was) document.title = next;
+}
 // The first field with unsaved text, to take the person back to it.
 export const firstEdited = () => changed()[0] ?? null;
 // After a save: what is on screen now is the saved state.
-export const editsSaved = () => { for (const el of first.keys()) first.set(el, el.value); };
+export const editsSaved = () => { for (const el of first.keys()) first.set(el, el.value); syncTitle(); };
 // The person chose to leave without saving.
-export const forgetEdits = () => { first.clear(); };
+export const forgetEdits = () => { first.clear(); syncTitle(); };
 // Before going elsewhere from code (palette, shortcuts, menus): true when it may go now; otherwise the leave dialog
 // (components/leave-guard.tsx) asks and goes itself if the person chooses to leave.
 export const mayLeave = (href: string) => {
@@ -37,7 +48,7 @@ export const mayLeave = (href: string) => {
   window.dispatchEvent(new CustomEvent('lvm:leave', { detail: url.pathname + url.search + url.hash }));
   return false;
 };
-export const formDirty = (on: boolean) => { dirtyForms = Math.max(0, dirtyForms + (on ? 1 : -1)); };
+export const formDirty = (on: boolean) => { dirtyForms = Math.max(0, dirtyForms + (on ? 1 : -1)); syncTitle(); };
 
 export function watchEdits() {
   if (watching || typeof document === 'undefined') return;
@@ -48,5 +59,8 @@ export function watchEdits() {
   document.addEventListener('focusin', (e) => note(e.target as Element | null), true);
   document.addEventListener('beforeinput', (e) => note(e.target as Element | null), true);
   note(document.activeElement);
+  document.addEventListener('input', syncTitle, true);
+  document.addEventListener('focusout', () => setTimeout(syncTitle), true); // a dialog closed with its text
+  new MutationObserver(syncTitle).observe(document.head, { childList: true, characterData: true, subtree: true });
   window.addEventListener('beforeunload', (e) => { if (hasPendingEdits()) e.preventDefault(); });
 }

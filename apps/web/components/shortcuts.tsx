@@ -39,10 +39,20 @@ export default function Shortcuts({ permissions }: { permissions: string[] }) {
       leader = 0;
       if (r) { e.preventDefault(); if (mayLeave(r[1])) router.push(r[1]); }
     };
+    // Ctrl/⌘+Enter in a long text sends its form, as in mail and chat. Last in line (window, bubbling): a page that
+    // handles the keys itself (support replies) has already done so and prevented the default.
+    const onSend = (e: KeyboardEvent) => {
+      if (e.key !== 'Enter' || !(e.ctrlKey || e.metaKey) || e.defaultPrevented || !(e.target instanceof HTMLTextAreaElement)) return;
+      const submit = e.target.form?.querySelector<HTMLButtonElement>('button[type="submit"]:not(:disabled)');
+      if (!submit || submit.getAttribute('aria-disabled') === 'true') return;
+      e.preventDefault();
+      e.target.form!.requestSubmit(submit);
+    };
     const onOpen = () => setOpen(true);
     window.addEventListener('keydown', onKey);
+    window.addEventListener('keydown', onSend);
     window.addEventListener('lvm:shortcuts', onOpen);
-    return () => { window.removeEventListener('keydown', onKey); window.removeEventListener('lvm:shortcuts', onOpen); };
+    return () => { window.removeEventListener('keydown', onKey); window.removeEventListener('keydown', onSend); window.removeEventListener('lvm:shortcuts', onOpen); };
   }, [allowed.map((r) => r[0]).join()]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const row = (keys: React.ReactNode, label: string) => <li className="flex min-h-10 items-center justify-between gap-4 border-b border-separator py-2 text-sm last:border-0">
@@ -59,6 +69,7 @@ export default function Shortcuts({ permissions }: { permissions: string[] }) {
             {row(<><Kbd>Ctrl</Kbd><Kbd>K</Kbd></>, t('palette'))}
             {row(<Kbd>?</Kbd>, t('help'))}
             {row(<Kbd>/</Kbd>, t('search'))}
+            {row(<><Kbd>Ctrl</Kbd><Kbd>Enter</Kbd></>, t('send'))}
           </ul>
           <div>
             <h3 className="mb-1 text-xs font-semibold uppercase tracking-wider text-muted">{t('goTo')}</h3>
