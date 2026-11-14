@@ -369,6 +369,34 @@ export function DataTable<T>({ label, columns, rows, rowKey, cells, empty, minWi
   const shown = pages > 1 ? sorted.slice(current * pageSize, (current + 1) * pageSize) : sorted;
   const sortable = columns.filter((c) => sortBy?.[c.id]);
   const lastIsAction = columns.at(-1)?.id === 'act';
+  // The whole row opens what its name opens: a click anywhere outside the row's own controls, or Enter on a row
+  // the arrow keys reached. Ctrl/⌘ or the middle button opens a link in a new tab; selecting text opens nothing.
+  const box = useRef<HTMLDivElement>(null);
+  const mainOf = (from: EventTarget) => {
+    const el = from as Element;
+    if (!box.current?.contains(el)) return null;
+    const row = el.closest('[role="row"], li[data-row]');
+    const main = row?.matches('li') ? row.querySelector('[data-row-main]') : row?.firstElementChild;
+    return main?.querySelector<HTMLElement>('a[href], button[data-row-open]:not(:disabled)') ?? null;
+  };
+  const control = 'a, button, input, select, textarea, label, summary, [role="button"], [role="checkbox"], [role="switch"], [role="menuitem"], [role="dialog"], [contenteditable="true"]';
+  const follow = (to: HTMLElement, newTab: boolean) => {
+    if (newTab && to instanceof HTMLAnchorElement) window.open(to.href, '_blank', 'noopener');
+    else to.click();
+  };
+  const onRowClick = (e: React.MouseEvent) => {
+    if ((e.button !== 0 && e.button !== 1) || (e.target as Element).closest(control) || window.getSelection()?.toString()) return;
+    const to = mainOf(e.target);
+    if (to) follow(to, e.button === 1 || e.ctrlKey || e.metaKey);
+  };
+  const onRowKey = (e: React.KeyboardEvent) => {
+    const el = e.target as Element;
+    if (e.key !== 'Enter' || e.altKey || e.shiftKey || !el.matches('[role="row"], [role="gridcell"], [role="rowheader"]')) return;
+    const to = mainOf(el);
+    if (!to) return;
+    e.preventDefault(); e.stopPropagation();
+    follow(to, e.ctrlKey || e.metaKey);
+  };
 
   // Phones get one card per row (label: value); wider screens the table.
   const cards = <div className="flex flex-col gap-2 sm:hidden">
@@ -383,8 +411,8 @@ export function DataTable<T>({ label, columns, rows, rowKey, cells, empty, minWi
     </label>}
     <ul className="flex flex-col gap-2" aria-label={label}>
       {rows.length === 0 && <li className="rounded-xl border border-dashed border-border py-6 text-center text-sm text-muted">{empty ?? '–'}</li>}
-      {shown.map((r) => { const c = cells(r); return <li key={rowKey(r)} className="rounded-xl border border-border bg-surface p-3">
-        <div className="mb-2 flex items-start justify-between gap-2 font-medium">{c[0]}{lastIsAction && <span className="shrink-0">{c.at(-1)}</span>}</div>
+      {shown.map((r) => { const c = cells(r); return <li key={rowKey(r)} data-row className="rounded-xl border border-border bg-surface p-3 has-[[data-row-main]_:is(a[href],button[data-row-open])]:cursor-pointer">
+        <div className="mb-2 flex items-start justify-between gap-2 font-medium"><div data-row-main className="min-w-0">{c[0]}</div>{lastIsAction && <span className="shrink-0">{c.at(-1)}</span>}</div>
         <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1.5 text-sm">
           {c.slice(1, lastIsAction ? -1 : undefined).map((cell, i) => <div key={columns[i + 1]?.id ?? i} className="contents">
             <dt className="text-xs text-muted">{columns[i + 1]?.label}</dt><dd className="min-w-0 break-words">{cell}</dd>
@@ -401,7 +429,8 @@ export function DataTable<T>({ label, columns, rows, rowKey, cells, empty, minWi
       <Button size="sm" variant="tertiary" isDisabled={current >= pages - 1} onPress={() => turn(current + 1)}>{t('next')}</Button>
     </div>
   </nav>;
-  return <><div ref={top} aria-hidden className="scroll-mt-24"/>{cards}<Table className="hidden sm:block">
+  return <><div ref={top} aria-hidden className="scroll-mt-24"/><div ref={box} onClick={onRowClick} onAuxClick={onRowClick} onKeyDownCapture={onRowKey}
+    className="[&_[role=row]:has(>:first-child_:is(a[href],button[data-row-open]))]:cursor-pointer">{cards}<Table className="hidden sm:block">
     <Table.ScrollContainer>
       <Table.Content aria-label={label} style={{ minWidth }} sortDescriptor={sort ?? undefined}
         onSortChange={(d) => setSort({ column: String(d.column), direction: d.direction })}>
@@ -419,7 +448,7 @@ export function DataTable<T>({ label, columns, rows, rowKey, cells, empty, minWi
         </Table.Body>
       </Table.Content>
     </Table.ScrollContainer>
-  </Table>{pager}</>;
+  </Table></div>{pager}</>;
 }
 
 export function Notice({ tone = 'default', title, children }: { tone?: Tone; title?: React.ReactNode; children?: React.ReactNode }) {

@@ -107,7 +107,7 @@ export default function Users() {
         <span key="u" className="flex min-w-0 items-center gap-3">
           <span className="relative shrink-0"><Avatar size="sm"><Avatar.Fallback>{(u.name || u.email).slice(0, 2).toUpperCase()}</Avatar.Fallback></Avatar>
             <PresenceDot presence={u.presence} className="absolute -bottom-0.5 -right-0.5 rounded-full ring-2 ring-surface"/></span>
-          <button type="button" onClick={() => setSummaryOf(u.id)} className="min-w-0 rounded text-left hover:underline focus-visible:outline-2 focus-visible:outline-accent"><span className="block truncate font-medium">{u.name || u.email}</span>{u.name && <span className="block truncate text-xs text-muted">{u.email}</span>}
+          <button type="button" data-row-open onClick={() => setSummaryOf(u.id)} className="min-w-0 rounded text-left hover:underline focus-visible:outline-2 focus-visible:outline-accent"><span className="block truncate font-medium">{u.name || u.email}</span>{u.name && <span className="block truncate text-xs text-muted">{u.email}</span>}
             {u.pinnedNote && <span className="mt-0.5 flex max-w-64 items-center gap-1 truncate text-xs text-warning" title={u.pinnedNote}><I name="pin" size={11} className="shrink-0"/><span className="truncate">{u.pinnedNote}</span></span>}</button>
           {u.notes > 0 && !u.pinnedNote && <span className="shrink-0 text-muted" title={t('notesCount', { n: u.notes })}><I name="sticky-note" size={13}/></span>}
         </span>,

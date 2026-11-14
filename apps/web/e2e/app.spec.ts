@@ -2292,6 +2292,17 @@ test.describe('people, settings and smart features (English browser)', () => {
     // The order is kept for this tab: a reload (or coming back from a user) keeps it.
     await page.reload();
     await expect(serversHeader).toHaveAttribute('aria-sort', 'descending');
+    // The whole row opens the person: a click outside its controls, or Enter on a row reached with the keys.
+    const adminRow = page.getByRole('row', { name: /admin@example\.test/ }).first();
+    await adminRow.getByText('Active', { exact: true }).click();
+    await expect(page.getByRole('dialog')).toContainText('Recent activity');
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('dialog')).toBeHidden();
+    await adminRow.focus();
+    await page.keyboard.press('Enter');
+    await expect(page.getByRole('dialog')).toContainText('Recent activity');
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('dialog')).toBeHidden();
     await page.setViewportSize({ width: 390, height: 844 });
     await page.waitForTimeout(400);
     await shot(page, 'users-390');
