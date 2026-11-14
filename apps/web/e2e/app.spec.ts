@@ -1721,7 +1721,12 @@ test.describe('people, settings and smart features (English browser)', () => {
     await expect(page).toHaveURL(/\/account/);
     await expect(page.getByRole('alertdialog')).toHaveCount(0);
     // The browser's Back button asks too; staying keeps page, address and text.
+    // Back within the app (a page loaded afresh is the browser's own business): Servers, then back to the projects tab.
     await page.goto('/account?tab=projects');
+    await away.click();
+    await expect(page).toHaveURL(/\/servers/);
+    await page.goBack();
+    await expect(page).toHaveURL(/tab=projects/);
     await name.fill('typed again');
     await page.goBack();
     await expect(leave).toBeVisible();
@@ -1730,7 +1735,7 @@ test.describe('people, settings and smart features (English browser)', () => {
     await expect(name).toHaveValue('typed again');
     await page.goBack();
     await leave.getByRole('button', { name: 'Leave without saving' }).click();
-    await expect(page).toHaveURL(/\/account$/);
+    await expect(page).toHaveURL(/\/servers/);
     await expect(page.getByRole('alertdialog')).toHaveCount(0);
     await context.close();
   });
