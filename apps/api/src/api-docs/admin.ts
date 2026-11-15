@@ -52,6 +52,23 @@ export default {
     returns: { tr: '`id`: kuyruğa alınan isteğin kimliği (202).', en: '`id`: the queued request\'s id (202).' },
     errors: ['VALIDATION_FAILED', 'MAINTENANCE_AGENT_MISSING', 'MAINTENANCE_BUSY'],
   },
+  'GET /admin/os': {
+    tag: 'admin-system',
+    summary: { tr: 'Panelin çalıştığı sunucunun işletim sistemi güncellemelerini verir.', en: 'Returns the panel host\'s operating system updates.' },
+    details: { tr: 'system.view yetkisi gerekir. Değerler ajanın son kaydettiği durumdur; kayıttan sonra sunucu yeniden başladıysa `rebootRequired` false, `rebooted` true döner.', en: 'Needs system.view. The values are what the agent last recorded; when the server has restarted since, `rebootRequired` is false and `rebooted` is true.' },
+    returns: { tr: '`os` (bekleyen ve güvenlik güncellemesi sayıları, paketler, yeniden başlatma gereği, otomatik güvenlik güncellemeleri), `uptime` (saniye) ve `agent`.', en: '`os` (waiting and security update counts, packages, whether a restart is needed, automatic security updates), `uptime` (seconds) and `agent`.' },
+  },
+  'POST /admin/os': {
+    tag: 'admin-system',
+    summary: { tr: 'Sunucunun güncellemelerini denetler, kurar, sunucuyu yeniden başlatır ya da otomatik güvenlik güncellemelerini değiştirir.', en: 'Checks or installs the host\'s updates, restarts the server, or switches automatic security updates.' },
+    details: { tr: 'system.update yetkisi gerekir. Aynı anda tek istek çalışır; ajan isteği yeniden denetler. `reboot` sunucuyu bir dakika sonra yeniden başlatır; panel birkaç dakika yanıt vermez.', en: 'Needs system.update. One request runs at a time; the agent checks it again. `reboot` restarts the server a minute later; the panel does not answer for a few minutes.' },
+    body: [
+      { name: 'act', type: 'string', required: true, values: ['check', 'upgrade', 'security', 'reboot', 'auto-on', 'auto-off'], text: { tr: 'Yapılacak iş: listeleri yenile, tüm güncellemeleri kur, yalnız güvenlik güncellemelerini kur, yeniden başlat, otomatik güvenlik güncellemelerini aç ya da kapat.', en: 'What to do: refresh the lists, install all updates, install security updates only, restart, turn automatic security updates on or off.' } },
+    ],
+    example: { act: 'security' },
+    returns: { tr: '`id`: kuyruğa alınan isteğin kimliği (202).', en: '`id`: the queued request\'s id (202).' },
+    errors: ['VALIDATION_FAILED', 'MAINTENANCE_AGENT_MISSING', 'MAINTENANCE_BUSY'],
+  },
 
   // ---- admin.ts: users ----
   'GET /admin/users': {

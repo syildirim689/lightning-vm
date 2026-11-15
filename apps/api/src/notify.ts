@@ -190,6 +190,12 @@ export const catalog: Record<string, EventDef> = {
   // From Alertmanager (alerts.ts): the monitoring stack's alert rules, firing and resolved.
   'admin.alert': { audience: 'staff', permission: 'system.view', channels: all, defaults: ['inApp', 'email', 'push'], link: () => '/admin/system',
     text: { tr: (d) => ({ title: d.titleTr, body: d.bodyTr }), en: (d) => ({ title: d.titleEn, body: d.bodyEn }) } },
+  // From os-alerts.ts: the panel's own server has security updates waiting or needs a restart.
+  'admin.os_updates': { audience: 'staff', permission: 'system.view', channels: all, defaults: ['inApp', 'email'], link: () => '/admin/system',
+    text: { tr: (d) => d.kind === 'restart' ? { title: 'Panel sunucusu yeniden başlatılmalı', body: 'Kurulan güncellemeler (çekirdek ya da temel kitaplıklar) ancak yeniden başlatınca etkin olur. Sistem sayfasından uygun bir zamanda yeniden başlatın.' }
+        : { title: `Panel sunucusunda ${d.count} güvenlik güncellemesi bekliyor`, body: `Toplam ${d.total} güncelleme var. Sistem sayfasından kurabilir ya da otomatik güvenlik güncellemelerini açabilirsiniz.` },
+      en: (d) => d.kind === 'restart' ? { title: 'The panel server needs a restart', body: 'Installed updates (the kernel or core libraries) only take effect after a restart. Restart it from the System page at a convenient time.' }
+        : { title: `${d.count} security updates wait on the panel server`, body: `${d.total} updates in total. Install them from the System page, or turn automatic security updates on.` } } },
   'admin.insight': { audience: 'staff', permission: 'dashboard.view', channels: all, defaults: ['inApp', 'email'], link: () => '/admin',
     text: { tr: (d) => ({ title: d.titleTr, body: d.bodyTr }), en: (d) => ({ title: d.titleEn, body: d.bodyEn }) } },
 };

@@ -36,6 +36,7 @@ import { PrivateNetworksController, PrivateNetworkSettingsController } from './p
 import { ImagesController } from './images';
 import { ensureRoles, watchRoles } from './permissions';
 import { InsightsController, startInsightAlerts, StaffInsightsController } from './insights';
+import { startOsAlerts } from './os-alerts';
 import { OnboardingController, DigestController, AccountExportController, SmartController, TimeZoneController, MySessionsController } from './smart';
 import { SchedulesController, startScheduler } from './schedules';
 import { BillingAdminController, BillingCallbackController, BillingController, BillingSettingsController, startBilling } from './billing';
@@ -155,6 +156,7 @@ async function main() {
   startRdnsWorker();
   watchRoles();
   startInsightAlerts();
+  startOsAlerts();
   startApiLogJanitor();
   startVmwareAutoScan();
   startScheduler();

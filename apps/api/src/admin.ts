@@ -7,7 +7,8 @@ import { assertCovers, Can, PermissionGuard } from './rbac';
 import { endSession, onlineUsers, sessionsOf, statusOf } from './presence';
 import { publishLive } from './live-bus';
 import { notify } from './notify';
-import { agentStatus, hostInfo, pendingRequests, queueRequest, releases, runLog, settings as maintenanceSettings, summary } from './maintenance';
+import { uptime } from 'node:os';
+import { agentStatus, bootId, hostInfo, osInfo, pendingRequests, queueRequest, releases, runLog, settings as maintenanceSettings, summary } from './maintenance';
 import { readHostChange } from './host-rules';
 import { reloadAuth } from './better-auth';
 
@@ -75,6 +76,33 @@ export class AdminController {
     if (pendingRequests() > 0 || running) throw apiError(409, 'MAINTENANCE_BUSY', 'Another maintenance task is queued or running');
     const id = queueRequest({ action: 'host', ...change, by: req.user.id });
     await audit(req, 'system.host', 'success', req.user.id, { id, ...change });
+    return { id };
+  }
+
+  // This server's operating system updates: what waits (and what of it is a security update), whether a restart
+  // is needed, and automatic security updates. Recorded by the agent; a restart since then clears "restart needed".
+  @Get('os') @Can('system.view')
+  os() {
+    const status = agentStatus();
+    const info = osInfo();
+    const boot = bootId();
+    const rebooted = !!info && !!boot && !!info.bootId && info.bootId !== boot;
+    return { os: info && { ...info, rebootRequired: info.rebootRequired && !rebooted, rebooted }, uptime: Math.round(uptime()),
+      agent: { installed: maintenanceSettings().agent === 'on', pending: Math.max(0, pendingRequests()), status: status?.action === 'os' ? status : null, log: status?.action === 'os' ? runLog(status.id) : [] } };
+  }
+
+  // Refreshes the package lists, installs all or only security updates, restarts the server, or switches
+  // automatic security updates, through the host agent (it checks the request again).
+  @Post('os') @HttpCode(202) @Can('system.update')
+  async changeOs(@Req() req: AuthedRequest, @Body() body: Record<string, unknown>) {
+    const act = String(body?.act ?? '');
+    if (!['check', 'upgrade', 'security', 'reboot', 'auto-on', 'auto-off'].includes(act)) throw apiError(400, 'VALIDATION_FAILED', 'Invalid input', { act: 'INVALID_VALUE' });
+    if (maintenanceSettings().agent !== 'on' || pendingRequests() < 0) throw apiError(409, 'MAINTENANCE_AGENT_MISSING', 'The host agent is not installed (sudo sh scripts/install.sh agent on)');
+    const status = agentStatus();
+    const running = status?.state === 'running' && Date.now() - Date.parse(status.startedAt) < 3 * 3600_000;
+    if (pendingRequests() > 0 || running) throw apiError(409, 'MAINTENANCE_BUSY', 'Another maintenance task is queued or running');
+    const id = queueRequest({ action: 'os', act, by: req.user.id });
+    await audit(req, 'system.os', 'success', req.user.id, { id, act });
     return { id };
   }
 

@@ -31,7 +31,7 @@ export function summary() {
 // The panel writes one small key=value file; the agent validates it again and runs install.sh. Results come
 // back through the read-only mount: status.json (the current or last request), runs/<id>.log, releases.json.
 const requests = process.env.MAINTENANCE_REQUESTS_DIR ?? '/maintenance-requests';
-export type Action = 'check' | 'update' | 'backup' | 'auto-update' | 'domain' | 'monitoring' | 'terminal' | 'host';
+export type Action = 'check' | 'update' | 'backup' | 'auto-update' | 'domain' | 'monitoring' | 'terminal' | 'host' | 'os';
 export type AgentStatus = { id: string; action: Action; by: string; state: 'running' | 'succeeded' | 'failed' | 'rejected'; startedAt: string; finishedAt: string; exitCode: number | null; code: string };
 
 const readJson = <T>(file: string): T | null => { try { return JSON.parse(readFileSync(join(dir, file), 'utf8')) as T; } catch { return null; } };
@@ -42,6 +42,13 @@ export const agentStatus = () => readJson<AgentStatus>('status.json');
 export type HostInfo = { checkedAt: string; time: number; hostname: string; fqdn: string; timezone: string; ntp: string; ntpSynced: string; ntpServers: string; dnsServers: string;
   resolvers: string; timesyncd: boolean; resolved: boolean; os: string; kernel: string; uptime: number };
 export const hostInfo = () => readJson<HostInfo>('host.json');
+
+// This server's operating system updates as the agent last recorded them (scripts/install.sh os).
+export type OsInfo = { checkedAt: string; manager: 'apt' | 'none'; total: number; security: number; held: number; packages: { name: string; to: string; from: string; security: boolean }[];
+  rebootRequired: boolean; rebootPackages: string; autoSecurity: boolean; listsAt: string; changedAt: string; bootId: string; kernel: string };
+export const osInfo = () => readJson<OsInfo>('os.json');
+// The running kernel's boot id (containers share the host's kernel): it changes with every restart of the server.
+export const bootId = () => { try { return readFileSync('/proc/sys/kernel/random/boot_id', 'utf8').trim(); } catch { return ''; } };
 
 // The last lines of a run's log (the installer's own TR/EN progress lines; no secrets are printed there).
 export function runLog(id: string, lines = 80) {

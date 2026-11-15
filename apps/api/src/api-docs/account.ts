@@ -135,6 +135,14 @@ export default {
     returns: { tr: '{ ok: true }', en: '{ ok: true }' },
     errors: ['FORBIDDEN'],
   },
+  'POST /support/tickets/:id/reopen': {
+    tag: 'support',
+    summary: { tr: 'Kapatılmış destek talebini yeniden açar.', en: 'Reopens a closed ticket.' },
+    details: { tr: 'Talebi açan kişi kapatıldıktan sonraki 30 gün içinde, support.manage yetkili personel her zaman yeniden açabilir. Son mesaj personeldense talep "yanıtlandı", değilse "açık" durumuna döner.', en: 'Its owner can reopen it within 30 days of closing; staff with support.manage always can. It returns to "answered" when staff wrote last, otherwise to "open".' },
+    params: [ticketId],
+    returns: { tr: '{ ok: true }', en: '{ ok: true }' },
+    errors: ['FORBIDDEN', 'TICKET_CLOSED'],
+  },
   'POST /support/tickets/:id/rating': {
     tag: 'support',
     summary: { tr: 'Kapanmış destek talebini puanlar.', en: 'Rates a closed ticket.' },

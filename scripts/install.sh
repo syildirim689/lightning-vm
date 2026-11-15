@@ -33,6 +33,10 @@
 #                                        this server's name, time zone, time servers (systemd-timesyncd) and DNS
 #                                        servers (systemd-resolved); without options it only records the current
 #                                        values in data/maintenance/host.json for the panel
+#   sh scripts/install.sh os check|upgrade|security|reboot|auto-on|auto-off|info
+#                                        this server's operating system updates (apt): refresh the package lists,
+#                                        install all or only security updates, restart the server, turn automatic
+#                                        security updates on or off; the state is recorded in data/maintenance/os.json
 # Options: --lang tr|en  --install-docker  --allow-unsupported-os
 # It never changes firewall, SSH or other web server settings, and never prints secrets.
 # shellcheck disable=SC1091 # /etc/os-release exists only on the target host
@@ -47,7 +51,7 @@ esac; fi
 
 MODE=install INSTALL_DOCKER=0 ALLOW_OS=0 DOMAIN="" ACME_STAGING=0 PROXY_PORT=8080 TRUSTED_CIDR="" TLS_MODE="" CERT_FILE="" KEY_FILE=""
 RESTORE_FILE="" YES=0 TO="" AUTO=0 SWITCH="" CHANNEL="" WINDOW="" BRANCH=""
-HOST_NAME="" HOST_TZ="" HOST_NTP="" HOST_DNS=""
+HOST_NAME="" HOST_TZ="" HOST_NTP="" HOST_DNS="" OS_ACT=""
 LOCAL=0 WIZARD=0 MONITORING=1 SCHEDULE=1 ADMIN_EMAIL="" RESET_EMAIL="" DISABLE_2FA=""
 case "${LANG:-}" in tr*) UI="tr" ;; *) UI="en" ;; esac
 while [ $# -gt 0 ]; do
@@ -67,6 +71,8 @@ while [ $# -gt 0 ]; do
     --window) shift; WINDOW=${1:-} ;;
     domain) MODE=domain; if [ $# -gt 1 ]; then shift; DOMAIN=$1; fi ;;
     host) MODE=host ;;
+    os) MODE=os; if [ $# -gt 1 ]; then shift; OS_ACT=$1; fi
+      case "$OS_ACT" in check|upgrade|security|reboot|auto-on|auto-off|info) ;; *) echo "os: check, upgrade, security, reboot, auto-on, auto-off or info" >&2; exit 2 ;; esac ;;
     --hostname) shift; HOST_NAME=${1:-} ;;
     --timezone) shift; HOST_TZ=${1:-} ;;
     --ntp) shift; HOST_NTP=${1:-} ;;
@@ -505,6 +511,7 @@ do_maintenance() {
     age=$(( $(date +%s) - $(date -d "${last:-1970-01-01T00:00:00Z}" +%s) ))
     if [ "$age" -gt 82800 ]; then (do_backup scheduled) || true; fi
   fi
+  (os_info) >/dev/null 2>&1 || true
   AUTO=1; do_update
 }
 
@@ -617,7 +624,7 @@ run_requests() {
     [ "$(wc -c < "$f")" -le 1024 ] || ok=0
     val() { sed -n "s/^$1=//p" "$f" | head -n 1; }
     action=$(val action); to=$(val to); channel=$(val channel); window=$(val window); switch=$(val switch); by=$(val by); domain=$(val domain); tls=$(val tls)
-    hname=$(val hostname); htz=$(val timezone); hntp=$(val ntp); hdns=$(val dns)
+    hname=$(val hostname); htz=$(val timezone); hntp=$(val ntp); hdns=$(val dns); act=$(val act)
     rm -f "$f"
     echo "$by" | grep -Eq '^[0-9a-f-]{36}$' || by=""
     set -- --lang "$UI"
@@ -645,6 +652,7 @@ run_requests() {
         if [ -n "$hntp" ]; then valid_list "$hntp" name && set -- "$@" --ntp "$hntp" || ok=0; fi
         if [ -n "$hdns" ]; then valid_list "$hdns" ip && set -- "$@" --dns "$hdns" || ok=0; fi ;;
       monitoring|terminal) case "$switch" in on|off) set -- "$action" "$switch" "$@" ;; *) ok=0 ;; esac ;;
+      os) case "$act" in check|upgrade|security|reboot|auto-on|auto-off) set -- os "$act" "$@" ;; *) ok=0 ;; esac ;;
       auto-update) case "$switch" in on|off) set -- auto-update "$switch" "$@" ;; *) ok=0 ;; esac
         case "$channel" in '') ;; stable|beta|edge) set -- "$@" --channel "$channel" ;; *) ok=0 ;; esac
         if [ -n "$window" ]; then echo "$window" | grep -Eq '^([01][0-9]|2[0-3]):[0-5][0-9]-([01][0-9]|2[0-3]):[0-5][0-9]$' && set -- "$@" --window "$window" || ok=0; fi ;;
@@ -741,6 +749,74 @@ do_host() {
   fi
   host_info
   msg OK HOST_INFO "Sunucu bilgileri güncellendi" "Server details recorded"
+}
+
+# ---- This server's operating system updates (apt: Debian and Ubuntu) -------------------------------
+# What waits, what of it is a security update, whether a restart is needed, and whether security updates
+# install themselves. The panel only reads data/maintenance/os.json; it never talks to apt.
+os_info() {
+  (umask 022; mkdir -p data/maintenance)
+  mgr=none; total=0; sec=0; pk=""; auto=false; held=0; lists=""; changed=""
+  stamp() { [ -e "$1" ] && date -u -d "@$(stat -c %Y "$1")" +%Y-%m-%dT%H:%M:%SZ || true; }
+  if command -v apt-get >/dev/null 2>&1; then
+    mgr=apt
+    list=$(LC_ALL=C apt list --upgradable 2>/dev/null | grep -F '[upgradable from:' || true)
+    total=$(printf '%s\n' "$list" | awk 'NF { n++ } END { print n + 0 }')
+    sec=$(printf '%s\n' "$list" | awk 'NF { split($1, a, "/"); if (a[2] ~ /-security/) n++ } END { print n + 0 }')
+    # Security updates first; at most 150 rows (the counts above are complete).
+    pk=$(printf '%s\n' "$list" | awk 'NF { split($1, a, "/"); s = (a[2] ~ /-security/) ? "true" : "false"; from = $NF; sub(/\]$/, "", from)
+      gsub(/[^A-Za-z0-9.+:~_-]/, "", a[1]); to = $2; gsub(/[^A-Za-z0-9.+:~_-]/, "", to); gsub(/[^A-Za-z0-9.+:~_-]/, "", from)
+      printf "%s {\"name\":\"%s\",\"to\":\"%s\",\"from\":\"%s\",\"security\":%s}\n", (s == "true" ? 0 : 1), a[1], to, from, s }' | sort -s -k1,1n | head -n 150 | cut -d' ' -f2- | paste -sd, -)
+    if dpkg -s unattended-upgrades >/dev/null 2>&1 && [ "$(apt-config dump APT::Periodic::Unattended-Upgrade 2>/dev/null | sed -n 's/.*"\(.*\)";/\1/p')" = 1 ]; then auto=true; fi
+    held=$(apt-mark showhold 2>/dev/null | awk 'NF { n++ } END { print n + 0 }')
+    lists=$(stamp /var/lib/apt/periodic/update-success-stamp); [ -n "$lists" ] || lists=$(stamp /var/lib/apt/lists)
+    changed=$(stamp /var/log/dpkg.log)
+  fi
+  if [ -f /var/run/reboot-required ]; then reboot=true; else reboot=false; fi
+  rpk=$( (sort -u /var/run/reboot-required.pkgs 2>/dev/null || true) | head -n 20 | tr -cd 'A-Za-z0-9.+:~_\n-' | paste -sd, -)
+  printf '{"checkedAt":"%s","manager":"%s","total":%s,"security":%s,"held":%s,"packages":[%s],"rebootRequired":%s,"rebootPackages":"%s","autoSecurity":%s,"listsAt":"%s","changedAt":"%s","bootId":"%s","kernel":"%s"}\n' \
+    "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$mgr" "$total" "$sec" "$held" "$pk" "$reboot" "$rpk" "$auto" "$lists" "$changed" \
+    "$(tr -cd 'a-f0-9-' < /proc/sys/kernel/random/boot_id 2>/dev/null || true)" "$(uname -r | json_str)" > data/maintenance/os.tmp
+  chmod 644 data/maintenance/os.tmp; mv data/maintenance/os.tmp data/maintenance/os.json
+}
+
+do_os() {
+  if [ "$OS_ACT" != info ]; then [ "$(id -u)" = 0 ] || die 13 E_NEEDS_ROOT "İşletim sistemi güncellemeleri için root gerekir (sudo)" "Operating system updates need root (sudo)"; fi
+  case "$OS_ACT" in info|reboot) ;; *)
+    command -v apt-get >/dev/null 2>&1 || die 18 E_OS_UNSUPPORTED "Bu sunucuda apt yok; güncellemeler yalnız Debian ve Ubuntu'da panelden yönetilir" "No apt on this server; updates are managed from the panel on Debian and Ubuntu only" ;;
+  esac
+  # Never asks a question: configuration files that were changed by hand are kept; another apt run is waited for.
+  aptg() { DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=a timeout 3600 apt-get -o DPkg::Lock::Timeout=300 -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold "$@"; }
+  refresh() { aptg update -q || die 21 E_OS_LISTS "Paket listeleri yenilenemedi (ağ ya da depo sorunu)" "Could not refresh the package lists (network or repository problem)"; }
+  case "$OS_ACT" in
+    check) refresh
+      msg OK OS_LISTS "Paket listeleri yenilendi" "Package lists refreshed" ;;
+    upgrade) refresh
+      aptg -y --with-new-pkgs upgrade || die 21 E_OS_UPGRADE "Güncellemeler kurulamadı; ayrıntı yukarıdaki satırlarda" "The updates could not be installed; see the lines above"
+      msg OK OS_UPGRADED "Tüm güncellemeler kuruldu" "All updates installed" ;;
+    security) refresh
+      names=$(LC_ALL=C apt list --upgradable 2>/dev/null | awk -F/ '/\[upgradable from:/ { split($2, b, " "); if (b[1] ~ /-security/) print $1 }' | tr -cd 'A-Za-z0-9.+:~_\n-')
+      if [ -z "$names" ]; then msg OK OS_NO_SECURITY "Bekleyen güvenlik güncellemesi yok" "No security updates are waiting"
+      else
+        # shellcheck disable=SC2086 # one argument per package name
+        aptg -y install --only-upgrade $names || die 21 E_OS_UPGRADE "Güvenlik güncellemeleri kurulamadı; ayrıntı yukarıdaki satırlarda" "The security updates could not be installed; see the lines above"
+        msg OK OS_SECURITY "Güvenlik güncellemeleri kuruldu" "Security updates installed"
+      fi ;;
+    auto-on)
+      dpkg -s unattended-upgrades >/dev/null 2>&1 || { refresh; aptg -y install unattended-upgrades || die 21 E_OS_AUTO "unattended-upgrades kurulamadı" "Could not install unattended-upgrades"; }
+      printf '// Written by Lightning VM (Admin → System)\nAPT::Periodic::Update-Package-Lists "1";\nAPT::Periodic::Unattended-Upgrade "1";\n' > /etc/apt/apt.conf.d/52lightning-vm-auto
+      msg OK OS_AUTO "Otomatik güvenlik güncellemeleri açık" "Automatic security updates on" ;;
+    auto-off)
+      printf '// Written by Lightning VM (Admin → System)\nAPT::Periodic::Unattended-Upgrade "0";\n' > /etc/apt/apt.conf.d/52lightning-vm-auto
+      msg OK OS_AUTO "Otomatik güvenlik güncellemeleri kapalı" "Automatic security updates off" ;;
+    reboot)
+      # One minute from now, so this request's result is written before the server goes down.
+      shutdown -r +1 "Lightning VM: restart requested from the panel" >/dev/null 2>&1 || die 21 E_OS_REBOOT "Yeniden başlatma zamanlanamadı" "Could not schedule the restart"
+      msg OK OS_REBOOT "Sunucu bir dakika içinde yeniden başlayacak" "The server restarts in one minute" ;;
+    info) ;;
+  esac
+  os_info
+  [ "$OS_ACT" = reboot ] || msg OK OS_INFO "Güncelleme durumu kaydedildi" "Update state recorded"
 }
 
 # The host's own public IPv4 (no outside service is asked); empty behind NAT or on a private network.
@@ -881,6 +957,7 @@ case "$MODE" in
   releases) do_releases; exit 0 ;;
   run-requests) run_requests; exit 0 ;;
   host) do_host; exit 0 ;;
+  os) do_os; exit 0 ;;
   agent) set_agent; exit 0 ;;
   schedule) set_schedule; exit 0 ;;
   auto-update) [ -f .env ] || die 17 E_NOT_INSTALLED "Önce kurulum yapın: sh scripts/install.sh" "Install first: sh scripts/install.sh"

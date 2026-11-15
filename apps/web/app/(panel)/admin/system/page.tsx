@@ -1,6 +1,7 @@
 import { getTranslations } from 'next-intl/server';
 import { PageHeader } from '../../../../components/ui';
 import HostSettings from '../host-settings';
+import OsUpdates from '../os-updates';
 import Maintenance from '../maintenance';
 import Status from '../status';
 import Updates from '../updates';
@@ -11,6 +12,7 @@ export default async function SystemPage() {
     <PageHeader eyebrow={t('eyebrow')} title={t('title')} description={t('intro')}/>
     <Status/>
     <HostSettings/>
+    <OsUpdates/>
     <Updates/>
     <Maintenance/>
   </div>;
