@@ -5534,7 +5534,8 @@
       "update": "Before update",
       "config": "Before config change",
       "install": "Before install"
-    }
+    },
+    "removeOldest": "Remove the oldest ({name})"
   },
   "Terminal": {
     "eyebrow": "SYSTEM",
@@ -7419,7 +7420,8 @@
     "totalSize": "Total size",
     "failedCount": "Failed",
     "stale": "No good backup in the last 7 days. Add “{preset}” under Schedules and one is taken every night.",
-    "took": "took {min} min"
+    "took": "took {min} min",
+    "removeOldest": "Remove the oldest ({when})"
   },
   "Reseller": {
     "title": "Reseller",

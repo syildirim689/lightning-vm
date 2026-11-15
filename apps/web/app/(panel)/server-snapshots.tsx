@@ -30,6 +30,7 @@ export function ServerSnapshots({ serverId, busy }: { serverId: string; busy: bo
   // VMware advises keeping a snapshot no longer than about three days: the delta disk grows and slows every write.
   const ageDays = (s: Snapshot) => Math.floor((Date.now() - Date.parse(s.created)) / 86_400_000);
   const old = list.filter((s) => ageDays(s) >= 3).length;
+  const oldest = list.reduce<Snapshot | undefined>((a, s) => (!a || s.created < a.created ? s : a), undefined);
 
   async function run(path: string, method: string, body?: object) {
     setSending(true); setFields({});
@@ -82,7 +83,10 @@ export function ServerSnapshots({ serverId, busy }: { serverId: string; busy: bo
           {(['update', 'config', 'install'] as const).map((k) => <button key={k} type="button" aria-pressed={name === t(`preset.${k}`)} onClick={() => setName(t(`preset.${k}`))}
             className={`min-h-9 rounded-full border px-3 text-xs transition-colors ${name === t(`preset.${k}`) ? 'border-accent bg-accent-soft text-accent-soft-foreground' : 'border-border hover:border-accent'}`}>{t(`preset.${k}`)}</button>)}
         </div>
-        {full && <p className="text-sm text-warning">{t('full', { max })}</p>}
+        {full && <div className="flex flex-wrap items-center gap-2"><p className="text-sm text-warning">{t('full', { max })}</p>
+          {oldest && <ConfirmButton size="sm" variant="ghost" icon={<I name="trash-2" size={14}/>} isDisabled={busy || sending} label={t('removeOldest', { name: oldest.name })}
+            title={t('removeTitle', { name: oldest.name })} body={t('removeBody')} confirmLabel={t('removeYes')} cancelLabel={t('cancel')}
+            onConfirm={() => run(`/servers/${serverId}/snapshots/${oldest.id}`, 'DELETE').then(() => undefined)}/>}</div>}
         <div><Button type="submit" isPending={sending} isDisabled={busy || full}><I name="camera" size={15}/>{t('take')}</Button></div>
       </form>
     </div>

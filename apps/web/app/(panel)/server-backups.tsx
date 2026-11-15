@@ -45,6 +45,7 @@ export function ServerBackups({ serverId, serverName, busy }: { serverId: string
   const totalGb = ready.reduce((n, b) => n + (b.sizeGb ?? 0), 0);
   const failed = list.filter((b) => b.status === 'failed').length;
   const stale = !last || Date.now() - Date.parse(last.createdAt) > 7 * 86_400_000;
+  const oldest = list.filter((b) => b.status === 'ready' || b.status === 'failed').reduce<Backup | undefined>((a, b) => (!a || b.createdAt < a.createdAt ? b : a), undefined);
   const took = (b: Backup) => (b.finishedAt ? Math.max(1, Math.round((Date.parse(b.finishedAt) - Date.parse(b.createdAt)) / 60_000)) : null);
 
   return <Section title={t('title')} description={t('help')} actions={<StatusChip tone={full ? 'warning' : 'default'}>{t('count', { n: list.filter((b) => b.status !== 'failed').length, max: q.data.max })}</StatusChip>}>
@@ -72,22 +73,28 @@ export function ServerBackups({ serverId, serverName, busy }: { serverId: string
                   onConfirm={() => run(`/servers/${serverId}/backups/${b.id}`, 'DELETE', undefined, t('removing')).then(() => undefined)}/>}
               </span>
             </div>
-            {restoring === b.id && <div className="flex flex-col gap-3 rounded-xl border border-danger/40 bg-danger/5 p-3">
+            {restoring === b.id && <form noValidate className="flex flex-col gap-3 rounded-xl border border-danger/40 bg-danger/5 p-3"
+              onSubmit={(e) => { e.preventDefault(); if (confirm.trim() === serverName && !sending) void run(`/servers/${serverId}/backups/${b.id}/restore`, 'POST', { confirm: serverName }, t('restoring')); }}
+              onKeyDown={(e) => { if (e.key === 'Escape') { e.preventDefault(); setRestoring(undefined); setConfirm(''); } }}>
               <p className="text-sm">{t('restoreWarning')}</p>
               <div className="flex flex-wrap items-end gap-3">
                 <TextInput transient className="min-w-64 flex-1" label={t('confirm', { name: serverName })} value={confirm} onChange={setConfirm} autoComplete="off" error={field(fields.confirm)}/>
-                <Button variant="danger" isPending={sending} isDisabled={confirm !== serverName} onPress={() => run(`/servers/${serverId}/backups/${b.id}/restore`, 'POST', { confirm }, t('restoring'))}>
+                <Button type="submit" variant="danger" isPending={sending} isDisabled={confirm.trim() !== serverName}>
                   <I name="history" size={15}/>{t('restoreNow')}</Button>
                 <Button variant="ghost" onPress={() => { setRestoring(undefined); setConfirm(''); }}>{t('cancel')}</Button>
               </div>
-            </div>}
+            </form>}
           </li>)}
         </ol>}
       <div className="flex flex-wrap items-end gap-3">
         <TextInput className="min-w-56 flex-1" label={t('note')} value={note} onChange={setNote} maxLength={120} placeholder={t('notePlaceholder')}/>
         <Button isPending={sending} isDisabled={busy || full} onPress={() => void run(`/servers/${serverId}/backups`, 'POST', { note }, t('started')).then((ok) => ok && setNote(''))}><I name="archive" size={16}/>{t('take')}</Button>
       </div>
-      {full && <p className="text-xs text-muted">{t('full')}</p>}
+      {full && <div className="flex flex-wrap items-center gap-2"><p className="text-xs text-muted">{t('full')}</p>
+        {oldest && <ConfirmButton size="sm" variant="ghost" icon={<I name="trash-2" size={14}/>} isDisabled={busy || sending}
+          label={t('removeOldest', { when: format.dateTime(new Date(oldest.createdAt), { dateStyle: 'medium' }) })}
+          title={t('removeTitle')} body={t('removeBody')} confirmLabel={t('remove')} cancelLabel={t('cancel')}
+          onConfirm={() => run(`/servers/${serverId}/backups/${oldest.id}`, 'DELETE', undefined, t('removing')).then(() => undefined)}/>}</div>}
     </div>
   </Section>;
 }

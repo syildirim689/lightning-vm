@@ -104,7 +104,7 @@ export function ServerReinstall({ server, busy, own }: { server: Server; busy: b
   async function run() {
     setSending(true); setFields({});
     try {
-      await send(`/servers/${server.id}/reinstall`, { imageId, confirm, ...(newKeys && keyId && { sshKeyIds: [keyId] }) });
+      await send(`/servers/${server.id}/reinstall`, { imageId, confirm: confirm.trim(), ...(newKeys && keyId && { sshKeyIds: [keyId] }) });
       toast.success(t('reinstall.started'));
       setConfirm('');
       client.invalidateQueries({ queryKey: ['servers'] }); client.invalidateQueries({ queryKey: ['tasks'] });
@@ -121,7 +121,7 @@ export function ServerReinstall({ server, busy, own }: { server: Server; busy: b
       <Notice tone="danger">{t('reinstall.warning')}</Notice>
       <div className="flex flex-wrap items-end gap-3">
         <TextInput transient className="min-w-64 flex-1" label={t('reinstall.confirm', { name: server.name })} value={confirm} onChange={setConfirm} autoComplete="off" error={field(fields.confirm)}/>
-        <Button variant="danger" isDisabled={confirm !== server.name || !imageId || busy || sending || server.locked || (newKeys && !keyId)} isPending={sending} onPress={run}>
+        <Button variant="danger" isDisabled={confirm.trim() !== server.name || !imageId || busy || sending || server.locked || (newKeys && !keyId)} isPending={sending} onPress={run}>
           <I name="refresh-cw" size={16}/>{t('reinstall.button')}</Button>
       </div>
       {server.locked && <p className="text-xs text-muted">{t('reinstall.locked')}</p>}

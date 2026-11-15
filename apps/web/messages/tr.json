@@ -5534,7 +5534,8 @@
       "update": "Güncelleme öncesi",
       "config": "Ayar değişikliği öncesi",
       "install": "Kurulum öncesi"
-    }
+    },
+    "removeOldest": "En eskisini sil ({name})"
   },
   "Terminal": {
     "eyebrow": "SİSTEM",
@@ -7419,7 +7420,8 @@
     "totalSize": "Toplam boyut",
     "failedCount": "Başarısız",
     "stale": "Son 7 günde başarılı yedek yok. Zamanlamalar bölümüne “{preset}” ekleyin; her gece kendiliğinden alınır.",
-    "took": "{min} dk sürdü"
+    "took": "{min} dk sürdü",
+    "removeOldest": "En eskisini sil ({when})"
   },
   "Reseller": {
     "title": "Bayilik",
