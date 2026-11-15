@@ -7542,7 +7542,13 @@
       "removing": "Removing",
       "failed": "Failed"
     },
-    "full": "At most {max} extra disks."
+    "full": "At most {max} extra disks.",
+    "presets": "Common sizes",
+    "addTitle": "Add a {size} GB disk?",
+    "addBody": "{price} a month is added to this server's bill. The disk arrives empty; it is attached while the server runs.",
+    "howTo": "How to start using a new disk",
+    "howToLinux": "Check its name with lsblk first (often /dev/sdb, then /dev/sdc). Formatting erases the disk, so only run it on the new, empty one.",
+    "howToWindows": "Open Disk Management (diskmgmt.msc), bring the new disk online, initialise it (GPT), then create a simple volume and give it a letter."
   },
   "Networks": {
     "title": "Private networks",

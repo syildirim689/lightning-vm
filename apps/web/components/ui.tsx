@@ -292,17 +292,19 @@ export function ConfirmButton({ label, title, body, confirmLabel, cancelLabel, o
   variant?: Variant | 'danger-soft'; size?: 'sm' | 'md'; isDisabled?: boolean; icon?: React.ReactNode;
 }) {
   const [busy, setBusy] = useState(false);
+  // A primary button confirms something wanted (it costs, it starts), not something lost: a calm dialog.
+  const calm = variant === 'primary';
   return <AlertDialog>
     <Button variant={variant} size={size} isDisabled={isDisabled}>{icon}{label}</Button>
     <AlertDialog.Backdrop>
       <AlertDialog.Container>
         <AlertDialog.Dialog className="sm:max-w-[440px]">
           {({ close }) => <>
-            <AlertDialog.Header><AlertDialog.Icon status="danger"/><AlertDialog.Heading>{title}</AlertDialog.Heading></AlertDialog.Header>
+            <AlertDialog.Header><AlertDialog.Icon status={calm ? 'accent' : 'danger'}/><AlertDialog.Heading>{title}</AlertDialog.Heading></AlertDialog.Header>
             <AlertDialog.Body><div className="text-sm text-muted">{body}</div></AlertDialog.Body>
             <AlertDialog.Footer>
               <Button slot="close" variant="tertiary">{cancelLabel}</Button>
-              <Button variant="danger" isPending={busy} onPress={async () => { setBusy(true); try { await onConfirm(); close(); } catch { /* the caller showed why */ } finally { setBusy(false); } }}>{confirmLabel}</Button>
+              <Button variant={calm ? 'primary' : 'danger'} isPending={busy} onPress={async () => { setBusy(true); try { await onConfirm(); close(); } catch { /* the caller showed why */ } finally { setBusy(false); } }}>{confirmLabel}</Button>
             </AlertDialog.Footer>
           </>}
         </AlertDialog.Dialog>

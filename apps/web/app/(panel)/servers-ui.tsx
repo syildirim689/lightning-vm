@@ -524,7 +524,7 @@ export function ServerDetail({ id }: { id: string }) {
     {can(me?.permissions, 'servers.manage_all') && s.state === 'ready' && <ServerPlacement id={s.id} busy={!!open}/>}
     {s.state !== 'provisioning' && <ServerTraffic id={s.id} throttled={s.trafficThrottled}/>}
     {allowed.resize && s.state === 'ready' && !s.vdcId && <ServerResize server={s} busy={!!open}/>}
-    {allowed.resize && s.state === 'ready' && !s.vdcId && <ServerDisks serverId={s.id} busy={!!open}/>}
+    {allowed.resize && s.state === 'ready' && !s.vdcId && <ServerDisks serverId={s.id} busy={!!open} windows={/windows/i.test(s.imageName)}/>}
     {own && ['ready', 'error'].includes(s.state) && <SaveAsImage serverId={s.id} serverName={s.name} busy={!!open}/>}
     {allowed.reinstall && ['ready', 'error'].includes(s.state) && <ServerReinstall server={s} busy={!!open} own={own}/>}
 

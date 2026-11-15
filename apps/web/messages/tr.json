@@ -7542,7 +7542,13 @@
       "removing": "Kaldırılıyor",
       "failed": "Başarısız"
     },
-    "full": "En çok {max} ek disk."
+    "full": "En çok {max} ek disk.",
+    "presets": "Sık kullanılan boyutlar",
+    "addTitle": "{size} GB disk eklensin mi?",
+    "addBody": "Bu sunucunun faturasına ayda {price} eklenir. Disk boş gelir; sunucu çalışırken takılır.",
+    "howTo": "Yeni disk nasıl kullanılır",
+    "howToLinux": "Önce lsblk ile adını kontrol edin (çoğunlukla /dev/sdb, sonra /dev/sdc). Biçimlendirme diski siler; yalnızca yeni ve boş diskte çalıştırın.",
+    "howToWindows": "Disk Yönetimi'ni (diskmgmt.msc) açın, yeni diski çevrimiçi yapın, başlatın (GPT), sonra basit birim oluşturup bir harf verin."
   },
   "Networks": {
     "title": "Özel ağlar",
