@@ -83,7 +83,8 @@ export function SshKeys() {
           <I name="key-round" size={16} className="text-muted"/>
           <span className="font-medium">{k.name}</span>
           <span className="min-w-0 flex-1 truncate font-mono text-xs text-muted">{k.fingerprint}</span>
-          <Button size="sm" variant="ghost" aria-label={`${t('keys.remove')}: ${k.name}`} onPress={() => remove.mutate(k.id)}><I name="trash-2" size={15}/>{t('keys.remove')}</Button>
+          <ConfirmButton size="sm" variant="ghost" icon={<I name="trash-2" size={15}/>} label={t('keys.remove')} title={t('keys.removeTitle', { name: k.name })} body={t('keys.removeBody')}
+            confirmLabel={t('keys.remove')} cancelLabel={t('confirm.no')} onConfirm={() => remove.mutateAsync(k.id).then(() => { toast.success(t('keys.removed', { name: k.name })); })}/>
         </li>)}
       </ul>}
       <form className="grid gap-4 md:grid-cols-[minmax(0,14rem)_minmax(0,1fr)_auto] md:items-start" noValidate
@@ -525,7 +526,7 @@ export function ServerDetail({ id }: { id: string }) {
     <Section title={t('detail.history')}>
       <DataTable label={t('detail.history')} rows={operations} rowKey={(o) => o.id}
         columns={[{ id: 'when', label: t('col.when') }, { id: 'op', label: t('col.operation') }, { id: 'state', label: t('col.state') }, { id: 'detail', label: t('col.detail') }]}
-        cells={(o) => [format.dateTime(new Date(o.createdAt), { dateStyle: 'medium', timeStyle: 'medium' }), t(`kind.${o.kind as 'create'}`),
+        cells={(o) => [<span key="w" className="flex flex-col">{format.dateTime(new Date(o.createdAt), { dateStyle: 'medium', timeStyle: 'medium' })}<span className="text-xs text-muted"><Ago at={o.createdAt}/></span></span>, t(`kind.${o.kind as 'create'}`),
           <StatusChip key="s" tone={o.status === 'succeeded' ? 'success' : o.status === 'failed' ? 'danger' : o.status === 'cancelled' ? 'default' : 'accent'}>{t(`opStatus.${o.status as 'pending'}`)}</StatusChip>,
           o.errorCode ? t('errorCode', { message: error({ code: o.errorCode }), code: o.errorCode }) : o.step ? t(`step.${o.step as 'queued'}`) : '']}/>
     </Section>
@@ -600,12 +601,13 @@ function ServerIps({ server }: { server: Server }) {
           {editing !== a.address && <span className="min-w-0 truncate text-sm text-muted">PTR: {a.ptr ? <Mono>{a.ptr.replace(/\.$/, '')}</Mono> : '–'}</span>}
         </div>
         {editing === a.address
-          ? <div className="flex flex-wrap items-start gap-2">
+          ? <form className="flex flex-wrap items-start gap-2" noValidate onSubmit={(e) => { e.preventDefault(); void save(a.address, value); }}
+              onKeyDown={(e) => { if (e.key === 'Escape') { e.preventDefault(); setEditing(null); } }}>
               <TextInput format="fqdn" className="min-w-64" label={t('ptr')} value={value} onChange={setValue} error={field(fieldError)} placeholder="mail.example.com" spellCheck={false}/>
-              <Button className="mt-6" size="sm" isPending={busy} onPress={() => save(a.address, value)}>{t('save')}</Button>
+              <Button type="submit" className="mt-6" size="sm" isPending={busy}>{t('save')}</Button>
               <Button className="mt-6" size="sm" variant="ghost" isDisabled={busy} onPress={() => save(a.address, '')}>{t('reset')}</Button>
               <Button className="mt-6" size="sm" variant="tertiary" onPress={() => setEditing(null)}>{t('cancel')}</Button>
-            </div>
+            </form>
           : canEdit && <Button size="sm" variant="ghost" onPress={() => { setEditing(a.address); setValue(a.ptr?.replace(/\.$/, '') ?? ''); setFieldError(undefined); }}><I name="pencil" size={14}/>{t('edit')}</Button>}
       </li>)}
     </ul>

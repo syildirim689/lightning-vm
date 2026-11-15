@@ -2108,7 +2108,10 @@
       "github": "GitHub user name",
       "githubHelp": "Imports the public keys published at github.com/<user>.keys.",
       "githubImport": "Import from GitHub",
-      "githubDone": "{added} added, {skipped} already here."
+      "githubDone": "{added} added, {skipped} already here.",
+      "removeTitle": "Remove the key \"{name}\"?",
+      "removeBody": "Servers that already have it keep it. New servers and reinstalls will no longer get it.",
+      "removed": "Key \"{name}\" removed."
     },
     "admin": {
       "eyebrow": "ADMIN · SERVERS",
@@ -5078,7 +5081,9 @@
     "findServer": "Find a server",
     "findServerHint": "Name or IP",
     "noKeysHelp": "You have no saved SSH keys yet; you can add one under Account → SSH keys.",
-    "nameTaken": "A server in this data centre already has this name."
+    "nameTaken": "A server in this data centre already has this name.",
+    "noServerMatch": "No server matches.",
+    "clearSearch": "Clear the search"
   },
   "Smart": {
     "health": "Health",
@@ -7573,7 +7578,8 @@
     "noCandidates": "No ready server in {location} to add to this network.",
     "orderOne": "Create a server",
     "count": "{n} / {max} networks",
-    "limit": "You have reached the network limit ({max}). Delete an empty network to add another."
+    "limit": "You have reached the network limit ({max}). Delete an empty network to add another.",
+    "removeBlocked": "{n, plural, one {# server is} other {# servers are}} on this network. Take them off (Leave) before removing it."
   },
   "Images": {
     "title": "Save as an image",

@@ -2108,7 +2108,10 @@
       "github": "GitHub kullanıcı adı",
       "githubHelp": "github.com/<kullanıcı>.keys adresinde yayınlanan açık anahtarları içe aktarır.",
       "githubImport": "GitHub’dan içe aktar",
-      "githubDone": "{added} eklendi, {skipped} zaten vardı."
+      "githubDone": "{added} eklendi, {skipped} zaten vardı.",
+      "removeTitle": "\"{name}\" anahtarı silinsin mi?",
+      "removeBody": "Anahtarı zaten almış sunucularda kalır. Yeni sunuculara ve yeniden kurulumlara artık eklenmez.",
+      "removed": "\"{name}\" anahtarı silindi."
     },
     "admin": {
       "eyebrow": "YÖNETİM · SUNUCULAR",
@@ -5078,7 +5081,9 @@
     "findServer": "Sunucu ara",
     "findServerHint": "Ad ya da IP",
     "noKeysHelp": "Henüz kayıtlı SSH anahtarınız yok; Hesap → SSH anahtarları bölümünden ekleyebilirsiniz.",
-    "nameTaken": "Bu veri merkezinde bu adda bir sunucu zaten var."
+    "nameTaken": "Bu veri merkezinde bu adda bir sunucu zaten var.",
+    "noServerMatch": "Eşleşen sunucu yok.",
+    "clearSearch": "Aramayı temizle"
   },
   "Smart": {
     "health": "Sağlık",
@@ -7573,7 +7578,8 @@
     "noCandidates": "{location} konumunda bu ağa eklenebilecek hazır sunucu yok.",
     "orderOne": "Sunucu oluştur",
     "count": "{n} / {max} ağ",
-    "limit": "Ağ sınırına ulaştınız ({max}). Yeni ağ için boş bir ağı silin."
+    "limit": "Ağ sınırına ulaştınız ({max}). Yeni ağ için boş bir ağı silin.",
+    "removeBlocked": "Bu ağda {n} sunucu var. Ağı silmeden önce onları ağdan çıkarın (Ayrıl)."
   },
   "Images": {
     "title": "İmaj olarak kaydet",

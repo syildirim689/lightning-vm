@@ -40,6 +40,7 @@ function NetworkCard({ n, servers, onChange }: { n: Network; servers: ServerLite
     actions={<ConfirmButton size="sm" variant="ghost" icon={<I name="trash-2" size={14}/>} label={t('remove')} title={t('removeTitle')} body={t('removeBody')}
       confirmLabel={t('remove')} cancelLabel={t('cancel')} isDisabled={n.members.length > 0} onConfirm={() => run(`/networks/${n.id}`, 'DELETE', undefined, t('removed'))}/>}>
     <div className="flex flex-col gap-4">
+      {n.members.length > 0 && <p className="text-xs text-muted">{t('removeBlocked', { n: n.members.length })}</p>}
       <div className="flex items-center gap-3 text-xs text-muted">
         <span className="h-1.5 flex-1 overflow-hidden rounded-full bg-default" role="meter" aria-label={t('usage')} aria-valuenow={n.members.length} aria-valuemin={0} aria-valuemax={total}>
           <span className="block h-full rounded-full bg-accent" style={{ width: `${Math.max(pct, n.members.length ? 2 : 0)}%` }}/></span>

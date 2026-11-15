@@ -179,7 +179,8 @@ function Subscriptions({ list }: { list: Subscription[] }) {
     <ul className="flex flex-col gap-3">{list.map((s) => <li key={s.id} className="flex flex-col gap-3 rounded-2xl border border-border bg-surface p-4 sm:flex-row sm:items-center">
     <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-default text-muted">{s.kind === 'server' ? <I name="server" size={18}/> : <I name="building-2" size={18}/>}</span>
     <span className="min-w-0 flex-1">
-      <span className="flex flex-wrap items-center gap-2"><span className="font-medium">{s.description}</span><StatusChip tone={subscriptionTone(s.status)}>{t(`sub.${s.status}`)}</StatusChip>
+      <span className="flex flex-wrap items-center gap-2">{s.serverId ? <NextLink href={`/servers/${s.serverId}`} className="font-medium hover:text-accent hover:underline">{s.description}</NextLink>
+          : s.vdcId ? <NextLink href="/vdc" className="font-medium hover:text-accent hover:underline">{s.description}</NextLink> : <span className="font-medium">{s.description}</span>}<StatusChip tone={subscriptionTone(s.status)}>{t(`sub.${s.status}`)}</StatusChip>
         {s.cancelAtPeriodEnd && <StatusChip tone="warning">{t('sub.ending')}</StatusChip>}</span>
       <span className="block text-sm text-muted">{format.number(Number(s.amount), { style: 'currency', currency: s.currency })} / {t('perMonth')}
         {s.periodEnd && ` · ${s.cancelAtPeriodEnd ? t('endsOn', { date: format.dateTime(new Date(s.periodEnd), { dateStyle: 'medium' }) }) : t('renewsOn', { date: format.dateTime(new Date(s.periodEnd), { dateStyle: 'medium' }) })}`}</span>

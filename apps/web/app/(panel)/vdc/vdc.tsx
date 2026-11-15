@@ -3,6 +3,7 @@
 // that still fits.
 import { Button, Card, Modal, toast } from '@heroui/react';
 import { useQueryClient } from '@tanstack/react-query';
+import NextLink from 'next/link';
 import { useFormatter, useTranslations } from 'next-intl';
 import { useState } from 'react';
 import { I } from '../../../components/icon';
@@ -85,7 +86,8 @@ export default function VdcPage() {
   const ts = useTranslations('Servers');
   const format = useFormatter();
   const { error } = useErrorText();
-  const [find, setFind] = useState('');
+  // Server search per VDC: typing in one does not empty the others.
+  const [finds, setFinds] = useState<Record<string, string>>({});
   const client = useQueryClient();
   const q = useApiQuery<{ vdcs: Mine[] }>(key, '/vdcs', { refetchInterval: 10_000 });
   const [adding, setAdding] = useState<Mine | null>(null);
@@ -130,17 +132,20 @@ export default function VdcPage() {
         {v.servers.length > 0 && <div className="flex flex-col gap-2">
           <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-muted">
             <span>{t('serverSummary', { n: v.servers.length, ready: v.servers.filter((s) => s.state === 'ready').length, failed: v.servers.filter((s) => s.state === 'error' || s.state === 'missing').length })}</span>
-            {v.servers.length > 5 && <TextInput transient className="w-full sm:w-64" label={t('findServer')} value={find} onChange={setFind} placeholder={t('findServerHint')} spellCheck={false}/>}
+            {v.servers.length > 5 && <TextInput transient className="w-full sm:w-64" label={t('findServer')} value={finds[v.id] ?? ''} onChange={(x) => setFinds((m) => ({ ...m, [v.id]: x }))} placeholder={t('findServerHint')} spellCheck={false}/>}
           </div>
-          <ul className="divide-y divide-separator rounded-xl border border-border">
-          {v.servers.filter((s) => !find.trim() || fold(`${s.name} ${s.address ?? ''}`).includes(fold(find.trim()))).map((s) => <li key={s.id} className="flex flex-wrap items-center gap-3 px-3 py-2 text-sm">
-            <span className="font-medium">{s.name}</span>
+          {(() => { const find = (finds[v.id] ?? '').trim(); const shown = v.servers.filter((s) => !find || fold(`${s.name} ${s.address ?? ''}`).includes(fold(find)));
+            return shown.length === 0 ? <p className="rounded-xl border border-dashed border-border py-4 text-center text-sm text-muted">{t('noServerMatch')}{' '}
+              <button type="button" className="text-accent hover:underline" onClick={() => setFinds((m) => ({ ...m, [v.id]: '' }))}>{t('clearSearch')}</button></p>
+            : <ul className="divide-y divide-separator rounded-xl border border-border">
+          {shown.map((s) => <li key={s.id} className="flex flex-wrap items-center gap-3 px-3 py-2 text-sm">
+            <NextLink href={`/servers/${s.id}`} className="font-medium hover:text-accent hover:underline">{s.name}</NextLink>
             <StatusChip tone={s.state === 'ready' ? 'success' : s.state === 'error' || s.state === 'missing' ? 'danger' : 'accent'}>{ts(`state.${s.state as 'ready'}`)}</StatusChip>
             <span className="text-xs text-muted">{s.vcpu} vCPU · {format.number(s.memoryMb / 1024, { maximumFractionDigits: 2 })} GB · {s.diskGb} GB</span>
             {s.address && <span className="flex items-center gap-1"><Mono>{s.address}</Mono><Copy text={s.address} label={`${s.name} IP`}/></span>}
             <ButtonLink size="sm" variant="ghost" className="ml-auto" href={`/servers/${s.id}`}>{t('open')}</ButtonLink>
           </li>)}
-        </ul></div>}
+        </ul>; })()}</div>}
       </Card.Content></Card>)}</div>}
     <Modal.Backdrop isOpen={!!adding} onOpenChange={(o) => !o && setAdding(null)}>
       <Modal.Container size="lg" scroll="inside"><Modal.Dialog className="sm:max-w-2xl">

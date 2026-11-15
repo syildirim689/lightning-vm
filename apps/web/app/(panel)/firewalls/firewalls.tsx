@@ -57,7 +57,8 @@ export default function Firewalls() {
     {list && list.length > 6 && <SearchField aria-label={t('find')} value={find} onChange={setFind} className="w-full md:w-80">
       <SearchField.Group><SearchField.SearchIcon/><SearchField.Input placeholder={t('find')}/><SearchField.ClearButton/></SearchField.Group>
     </SearchField>}
-    {list && list.length === 0 && <Card><Card.Content><Empty icon={<I name="shield-check" size={28}/>} title={t('emptyTitle')}>{t('emptyBody')}</Empty></Card.Content></Card>}
+    {list && list.length === 0 && <Card><Card.Content><Empty icon={<I name="shield-check" size={28}/>} title={t('emptyTitle')}>{t('emptyBody')}
+      {manage && <div className="mt-3"><Button size="sm" onPress={() => setCreating(unprotected.map((s) => s.id))}><I name="plus" size={14}/>{t('create')}</Button></div>}</Empty></Card.Content></Card>}
     <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
       {(show || needle) && shown.length === 0 && <p className="col-span-full rounded-xl border border-dashed border-border py-6 text-center text-sm text-muted">{t('noneMatch')}
         {' '}<button type="button" className="text-accent hover:underline" onClick={() => { setShow(null); setFind(''); }}>{t('showAll')}</button></p>}
