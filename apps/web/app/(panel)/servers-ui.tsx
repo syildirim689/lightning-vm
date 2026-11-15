@@ -19,6 +19,7 @@ import { CloneServer, Copy, OrderSimilar, QuickConnect, RenameServer, ServerLabe
 import { remember } from '../../lib/recent';
 import { useDocTitle } from '../../lib/title';
 import { PowerSchedules } from './server-schedules';
+import { ServerUpdates } from './server-updates';
 import { ServerSnapshots } from './server-snapshots';
 import { ServerReinstall, ServerResize } from './server-change';
 import { useBytes } from '../../lib/units';
@@ -513,6 +514,7 @@ export function ServerDetail({ id }: { id: string }) {
     {own && (allowed.power || allowed.snapshots || allowed.backups) && s.state !== 'provisioning' && <PowerSchedules serverId={s.id} power={allowed.power} snapshots={allowed.snapshots} backups={allowed.backups}/>}
     {allowed.snapshots && ['ready', 'error'].includes(s.state) && <ServerSnapshots serverId={s.id} busy={!!open}/>}
     {allowed.backups && ['ready', 'error'].includes(s.state) && <ServerBackups serverId={s.id} serverName={s.name} busy={!!open}/>}
+    {['ready', 'error'].includes(s.state) && <ServerUpdates serverId={s.id} windows={/windows/i.test(s.imageName)} canChange={own || can(me?.permissions, 'servers.manage_all')} powered={s.powerState === 'poweredOn'}/>}
     <ServerIps server={s}/>
     {allowed.iso && <ServerIso id={s.id} ready={s.state === 'ready' || s.state === 'error'}/>}
     {s.hasRootPassword && allowed.rootPassword && <RootPassword id={s.id}/>}

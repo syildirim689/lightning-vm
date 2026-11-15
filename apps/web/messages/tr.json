@@ -3081,6 +3081,10 @@
       "admin_os_updates": {
         "title": "Panel sunucusu güncellemeleri",
         "help": "Panelin kendi sunucusunda güvenlik güncellemesi beklediğinde ya da yeniden başlatma gerektiğinde."
+      },
+      "server_updates": {
+        "title": "Sunucu güncellemeleri",
+        "help": "Bir sunucuda güvenlik güncellemesi beklediğinde, yeniden başlatma gerektiğinde ya da otomatik güncelleme bittiğinde veya başarısız olduğunda."
       }
     },
     "policyTitle": "Önce yönetici, sonra kullanıcı",
@@ -4716,7 +4720,9 @@
       "auto-update": "Otomatik güncelleme ayarları",
       "domain": "Alan adı değiştiriliyor",
       "monitoring": "İzleme başlatılıyor veya durduruluyor",
-      "terminal": "Terminal açılıyor veya kapatılıyor"
+      "terminal": "Terminal açılıyor veya kapatılıyor",
+      "host": "Sunucu ayarları değiştiriliyor",
+      "os": "İşletim sistemi güncellemeleri"
     },
     "stateOf": {
       "running": "Sürüyor",
@@ -4748,7 +4754,9 @@
       "backup": "Yedekleme",
       "domain": "Alan adı değişikliği",
       "monitoring": "İzleme değişikliği",
-      "terminal": "Terminal değişikliği"
+      "terminal": "Terminal değişikliği",
+      "host": "Sunucu ayarları",
+      "os": "İşletim sistemi güncellemeleri"
     },
     "windowFrom": "Başlangıç",
     "windowTo": "Bitiş"
@@ -5467,7 +5475,11 @@
       "catalog_package_updated": "Paket değişti",
       "catalog_image_updated": "İşletim sistemi şablonu değişti",
       "support_reopened": "Destek talebi yeniden açıldı",
-      "system_os": "İşletim sistemi güncelleme isteği ajana gönderildi"
+      "system_os": "İşletim sistemi güncelleme isteği ajana gönderildi",
+      "server_updates_enabled": "Güncelleme takibi açıldı",
+      "server_updates_policy": "Güncelleme politikası değişti",
+      "server_updates_action": "Sunucuda güncelleme ya da yeniden başlatma istendi",
+      "server_updates_disabled": "Güncelleme takibi kapatıldı"
     },
     "outcome": {
       "success": "Tamamlandı",
@@ -8334,5 +8346,81 @@
       "failed": "Başarısız",
       "rejected": "Reddedildi"
     }
+  },
+  "GuestUpdates": {
+    "title": "İşletim sistemi güncellemeleri",
+    "intro": "Bu sunucunun içinde bekleyen güncellemeler ve onlara ne olacağı. Durumu sunucudaki küçük bir bildirici panele iletir; panel sunucunuza hiçbir zaman giriş yapmaz.",
+    "windows": "Güncelleme takibi Linux sunucularda çalışır (Debian, Ubuntu, AlmaLinux, Rocky Linux, CentOS). Windows'ta Windows Update'i kullanın.",
+    "offer": {
+      "see": "Hangi güncellemelerin beklediğini ve hangilerinin güvenlik açığı kapattığını görün.",
+      "auto": "Güvenlik güncellemeleri ya da hepsi kendiliğinden kurulsun.",
+      "tell": "Güncelleme beklediğinde ya da yeniden başlatma gerektiğinde haber alın."
+    },
+    "turnOn": "Güncelleme takibini aç",
+    "supported": "apt, dnf ya da yum kullanan Linux. Sunucuda tek bir komut çalıştırırsınız; takibi kapatınca bildirici de kaldırılır.",
+    "runThis": "Bu komutu sunucuda (SSH ya da konsol), sudo kullanabilen bir kullanıcıyla çalıştırın:",
+    "command": "Kurulum komutu",
+    "commandOnce": "Yalnız şimdi gösterilir ve bu sunucuya özel anahtarı içerir. Yeni komut isterseniz eskisi çalışmaz olur.",
+    "waitingTitle": "İlk rapor bekleniyor",
+    "waiting": "Bildirici henüz yanıt vermedi. Komutu çalıştırmadıysanız ya da kaybettiyseniz:",
+    "newCommand": "yeni komut alın",
+    "waitingReport": "Sunucudan ilk rapor bekleniyor…",
+    "staleTitle": "Bildirici sessiz",
+    "stale": "Son rapor {when} geldi. Bildirici kaldırılmış ya da sunucu panele ulaşamıyor olabilir.",
+    "staleOff": "Son rapor {when} geldi. Sunucu kapalı; açılınca raporlar devam eder.",
+    "noManager": "Bu sunucuda desteklenen bir paket yöneticisi (apt, dnf, yum) bulunamadı.",
+    "waitingCount": "Bekleyen güncelleme",
+    "ready": "kurulmaya hazır",
+    "upToDate": "her şey güncel",
+    "securityCount": "Güvenlik güncellemesi",
+    "securityFirst": "önce bunları kurun",
+    "noSecurity": "bekleyen yok",
+    "restart": "Yeniden başlatma",
+    "restartNeeded": "Gerekli",
+    "restartNotNeeded": "Gerekmiyor",
+    "reported": "rapor: {when}",
+    "action": {
+      "security": "Güvenlik güncellemeleri",
+      "upgrade": "Tüm güncellemeler",
+      "reboot": "Yeniden başlatma"
+    },
+    "queuedHint": "{action}: istendi. Sunucu yaklaşık on dakika içinde başlatır.",
+    "runningHint": "{action}: sunucuda çalışıyor…",
+    "runDone": "{action}: tamamlandı ({when})",
+    "runFailed": "{action}: başarısız oldu ({when})",
+    "byPolicy": "politika gereği",
+    "installSecurity": "Güvenlik güncellemelerini kur ({n})",
+    "installAll": "Hepsini kur ({n})",
+    "install": "Kur",
+    "cancel": "Vazgeç",
+    "asked": "İstendi; sunucu yaklaşık on dakika içinde başlar",
+    "installSecurityTitle": "Güvenlik güncellemeleri kurulsun mu?",
+    "installAllTitle": "Tüm güncellemeler kurulsun mu?",
+    "installBody": "Sunucu bunları bir sonraki denetiminde, yaklaşık on dakika içinde kurar. Güncellenen servisler yeniden başlar; değiştirdiğiniz yapılandırma dosyaları korunur. Geri dönüş yolu isterseniz önce anlık görüntü alın.",
+    "restartNow": "İçeriden yeniden başlat",
+    "restartTitle": "Bu sunucu yeniden başlatılsın mı?",
+    "restartBody": "İşletim sistemi, sunucu isteği aldıktan (yaklaşık on dakika içinde) bir dakika kadar sonra düzgünce yeniden başlar. Hemen yeniden başlatmak için yukarıdaki güç düğmelerini kullanın.",
+    "policyTitle": "Kendiliğinden ne olsun",
+    "policy": {
+      "notify": "Yalnız haber ver",
+      "security": "Güvenlik güncellemelerini kur",
+      "all": "Hepsini kur"
+    },
+    "policyHelp": {
+      "notify": "Hiçbir şey kurulmaz; güvenlik güncellemesi beklediğinde haber alırsınız.",
+      "security": "Güvenlik güncellemeleri çıktıkça kurulur; gerisi sizi bekler.",
+      "all": "Her güncelleme çıktıkça kurulur."
+    },
+    "autoReboot": "Güncellemeler gerektirdiğinde kendiliğinden yeniden başlasın",
+    "autoRebootHelp": "Yalnız seçtiğiniz saatte (sunucunun kendi saatiyle). Kapalıyken: haber alırsınız ve kendiniz yeniden başlatırsınız.",
+    "rebootHour": "Yeniden başlatma saati",
+    "saved": "Kaydedildi; sunucu bir sonraki denetiminden itibaren uyar",
+    "packages": "Bekleyen paketler ({n})",
+    "securityChip": "Güvenlik",
+    "more": "ve {n} paket daha",
+    "turnOff": "Takibi kapat",
+    "turnOffTitle": "Güncelleme takibi kapatılsın mı?",
+    "turnOffBody": "Panel bu sunucunun güncelleme durumunu ve politikasını unutur. Bildirici bir sonraki çalışmasında kendini sunucudan kaldırır; sunucuda başka hiçbir şey değişmez.",
+    "turnedOff": "Güncelleme takibi kapatıldı"
   }
 }

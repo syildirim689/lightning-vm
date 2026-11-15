@@ -3081,6 +3081,10 @@
       "admin_os_updates": {
         "title": "Panel server updates",
         "help": "When security updates wait on the panel's own server, or it needs a restart."
+      },
+      "server_updates": {
+        "title": "Server updates",
+        "help": "When security updates wait in a server, a restart is needed, or an automatic update finished or failed."
       }
     },
     "policyTitle": "The admin first, then each user",
@@ -4716,7 +4720,9 @@
       "auto-update": "Automatic update settings",
       "domain": "Changing the domain",
       "monitoring": "Starting or stopping monitoring",
-      "terminal": "Turning the terminal on or off"
+      "terminal": "Turning the terminal on or off",
+      "host": "Changing server settings",
+      "os": "Operating system updates"
     },
     "stateOf": {
       "running": "Running",
@@ -4748,7 +4754,9 @@
       "backup": "Backup",
       "domain": "Domain change",
       "monitoring": "Monitoring change",
-      "terminal": "Terminal change"
+      "terminal": "Terminal change",
+      "host": "Server settings",
+      "os": "Operating system updates"
     },
     "windowFrom": "From",
     "windowTo": "To"
@@ -5467,7 +5475,11 @@
       "catalog_package_updated": "Package changed",
       "catalog_image_updated": "OS template changed",
       "support_reopened": "Support ticket reopened",
-      "system_os": "Operating system update request sent to the agent"
+      "system_os": "Operating system update request sent to the agent",
+      "server_updates_enabled": "Update tracking turned on",
+      "server_updates_policy": "Update policy changed",
+      "server_updates_action": "Update or restart asked for in the server",
+      "server_updates_disabled": "Update tracking turned off"
     },
     "outcome": {
       "success": "Done",
@@ -8334,5 +8346,81 @@
       "failed": "Failed",
       "rejected": "Rejected"
     }
+  },
+  "GuestUpdates": {
+    "title": "Operating system updates",
+    "intro": "The updates waiting inside this server, and what should happen to them. A small reporter in the server tells the panel; the panel never logs in to your server.",
+    "windows": "Update tracking works on Linux servers (Debian, Ubuntu, AlmaLinux, Rocky Linux, CentOS). On Windows, use Windows Update.",
+    "offer": {
+      "see": "See which updates wait and which of them fix security problems.",
+      "auto": "Have security updates, or all of them, installed by themselves.",
+      "tell": "Be told when updates wait or a restart is needed."
+    },
+    "turnOn": "Turn update tracking on",
+    "supported": "Linux with apt, dnf or yum. You run one command in the server; turning tracking off removes the reporter again.",
+    "runThis": "Run this command in the server (SSH or the console), as a user who can use sudo:",
+    "command": "Install command",
+    "commandOnce": "It is shown only now and holds this server's own token. Asking for a new command makes the old one stop working.",
+    "waitingTitle": "Waiting for the first report",
+    "waiting": "The reporter has not answered yet. If you did not run the command, or lost it:",
+    "newCommand": "get a new command",
+    "waitingReport": "Waiting for the first report from the server…",
+    "staleTitle": "The reporter is silent",
+    "stale": "The last report came {when}. The reporter may have been removed, or the server cannot reach the panel.",
+    "staleOff": "The last report came {when}. The server is off; reports continue when it runs again.",
+    "noManager": "No supported package manager (apt, dnf, yum) was found in this server.",
+    "waitingCount": "Waiting updates",
+    "ready": "ready to install",
+    "upToDate": "everything is up to date",
+    "securityCount": "Security updates",
+    "securityFirst": "install these first",
+    "noSecurity": "none waiting",
+    "restart": "Restart",
+    "restartNeeded": "Needed",
+    "restartNotNeeded": "Not needed",
+    "reported": "reported {when}",
+    "action": {
+      "security": "Security updates",
+      "upgrade": "All updates",
+      "reboot": "Restart"
+    },
+    "queuedHint": "{action}: asked for. The server starts it within about ten minutes.",
+    "runningHint": "{action}: running in the server…",
+    "runDone": "{action}: finished {when}",
+    "runFailed": "{action}: failed {when}",
+    "byPolicy": "by the policy",
+    "installSecurity": "Install security updates ({n})",
+    "installAll": "Install all ({n})",
+    "install": "Install",
+    "cancel": "Cancel",
+    "asked": "Asked for; the server starts within about ten minutes",
+    "installSecurityTitle": "Install the security updates?",
+    "installAllTitle": "Install all updates?",
+    "installBody": "The server installs them on its next check, within about ten minutes. Services that are updated restart; configuration files you changed are kept. Take a snapshot first if you want a way back.",
+    "restartNow": "Restart from inside",
+    "restartTitle": "Restart this server?",
+    "restartBody": "The operating system restarts cleanly about a minute after the server picks the request up (within about ten minutes). For an immediate restart use the power buttons above.",
+    "policyTitle": "What happens by itself",
+    "policy": {
+      "notify": "Only tell me",
+      "security": "Install security updates",
+      "all": "Install everything"
+    },
+    "policyHelp": {
+      "notify": "Nothing is installed; you are told when security updates wait.",
+      "security": "Security updates are installed as they appear; the rest waits for you.",
+      "all": "Every update is installed as it appears."
+    },
+    "autoReboot": "Restart by itself when updates need it",
+    "autoRebootHelp": "Only in the hour you choose (the server's own time). Off: you are told and restart it yourself.",
+    "rebootHour": "Restart hour",
+    "saved": "Saved; the server follows it from its next check",
+    "packages": "Waiting packages ({n})",
+    "securityChip": "Security",
+    "more": "and {n} more",
+    "turnOff": "Turn tracking off",
+    "turnOffTitle": "Turn update tracking off?",
+    "turnOffBody": "The panel forgets this server's update state and policy. The reporter removes itself from the server on its next run; nothing else in the server changes.",
+    "turnedOff": "Update tracking is off"
   }
 }

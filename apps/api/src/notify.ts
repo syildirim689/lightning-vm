@@ -69,6 +69,16 @@ export const catalog: Record<string, EventDef> = {
   'server.app_failed': { audience: 'user', channels: all, defaults: ['inApp', 'push', 'email'], link: (d) => '/servers/' + d.serverId,
     text: { tr: (d) => ({ title: d.name + ': uygulama kurulamadı', body: 'Kurulum başarısız oldu (' + (d.message || '-') + '). Ayrıntı sunucuda /var/log/lightning-app.log dosyasında.' }),
       en: (d) => ({ title: d.name + ': application not installed', body: 'The installation failed (' + (d.message || '-') + '). Details on the server in /var/log/lightning-app.log.' }) } },
+  // From guest-updates.ts: what the update reporter inside a server found or did.
+  'server.updates': { audience: 'user', channels: all, defaults: ['inApp', 'email'], link: (d) => '/servers/' + d.serverId,
+    text: { tr: (d) => d.kind === 'security' ? { title: d.name + ': ' + d.count + ' güvenlik güncellemesi bekliyor', body: 'Sunucu sayfasından kurabilir ya da güvenlik güncellemelerinin kendiliğinden kurulmasını seçebilirsiniz.' }
+        : d.kind === 'restart' ? { title: d.name + ': yeniden başlatma gerekli', body: 'Kurulan güncellemeler ancak yeniden başlatınca etkin olur. Sunucu sayfasından uygun bir zamanda yeniden başlatın.' }
+        : d.kind === 'installed' ? { title: d.name + ': güncellemeler kuruldu', body: d.restart === 'true' ? 'Otomatik güncelleme tamamlandı. Etkin olması için sunucunun yeniden başlatılması gerekiyor.' : 'Otomatik güncelleme tamamlandı; yeniden başlatma gerekmiyor.' }
+        : { title: d.name + ': güncellemeler kurulamadı', body: 'Güncelleme başarısız oldu (' + (d.message || '-') + '). Sunucuya bağlanıp paket yöneticisinin çıktısına bakın.' },
+      en: (d) => d.kind === 'security' ? { title: d.name + ': ' + d.count + ' security updates waiting', body: 'Install them from the server\'s page, or choose to have security updates installed by themselves.' }
+        : d.kind === 'restart' ? { title: d.name + ': restart needed', body: 'Installed updates only take effect after a restart. Restart the server from its page at a convenient time.' }
+        : d.kind === 'installed' ? { title: d.name + ': updates installed', body: d.restart === 'true' ? 'The automatic update finished. The server must restart for it to take effect.' : 'The automatic update finished; no restart is needed.' }
+        : { title: d.name + ': updates not installed', body: 'The update failed (' + (d.message || '-') + '). Connect to the server and look at the package manager\'s output.' } } },
   'billing.budget_exceeded': { audience: 'user', channels: all, defaults: ['inApp', 'email'], link: () => '/',
     text: { tr: (d) => ({ title: 'Aylık bütçeniz aşıldı', body: `Sunucularınızın aylık tutarı ${d.monthly} ${d.currency}; belirlediğiniz bütçe ${d.amount} ${d.currency}.` }),
       en: (d) => ({ title: 'Your monthly budget is exceeded', body: `Your servers cost ${d.monthly} ${d.currency} a month; your budget is ${d.amount} ${d.currency}.` }) } },
