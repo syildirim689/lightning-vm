@@ -5,7 +5,7 @@ import { Button, toast } from '@heroui/react';
 import { useQueryClient } from '@tanstack/react-query';
 import NextLink from 'next/link';
 import { useTranslations } from 'next-intl';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { I } from '../../../components/icon';
 import { ConfirmButton, Empty, Mono, Notice, PageHeader, Section, SelectInput, StatusChip, TextInput } from '../../../components/ui';
 import { apiFetch, type ApiError, useErrorText } from '../../../lib/api';
@@ -33,6 +33,18 @@ function NetworkCard({ n, servers, onChange }: { n: Network; servers: ServerLite
     try { await apiFetch(path, { method, body }); toast.success(done); setServerId(''); onChange(); } catch (e) { toast.danger(error(e)); } finally { setBusy(false); }
   }
   const candidates = servers.filter((s) => s.poolId === n.poolId && s.state === 'ready' && !n.members.some((m) => m.serverId === s.id));
+  const only = candidates.length === 1 ? candidates[0].id : '';
+  useEffect(() => { if (only) setServerId(only); }, [only]);
+  async function joinAll() {
+    setBusy(true);
+    let done = 0;
+    try { for (const s of candidates) { await apiFetch(`/networks/${n.id}/servers`, { method: 'POST', body: { serverId: s.id } }); done += 1; } }
+    catch (e) { toast.danger(error(e)); }
+    finally { if (done) toast.success(t('joinedAll', { n: done })); setServerId(''); setBusy(false); onChange(); }
+  }
+  // Lines for /etc/hosts: every connected server by name, so they find each other without remembering addresses.
+  const joined = n.members.filter((m) => m.status === 'joined');
+  const hosts = joined.map((m) => `${m.address} ${m.name}`).join('\n');
   // Usable addresses: the subnet minus its network and broadcast address.
   const total = Math.max(2 ** (32 - Number(n.cidr.split('/')[1] ?? 24)) - 2, 1);
   const pct = Math.min(100, Math.round((n.members.length / total) * 100));
@@ -67,7 +79,10 @@ function NetworkCard({ n, servers, onChange }: { n: Network; servers: ServerLite
       {candidates.length > 0 && <div className="flex flex-wrap items-end gap-3">
         <SelectInput className="min-w-56 flex-1" label={t('choose')} value={serverId} onChange={setServerId} options={candidates.map((s) => ({ id: s.id, label: s.name }))}/>
         <Button variant="secondary" isPending={busy} isDisabled={!serverId} onPress={() => run(`/networks/${n.id}/servers`, 'POST', { serverId }, t('joining'))}><I name="plug" size={15}/>{t('join')}</Button>
+        {candidates.length > 1 && candidates.length <= total - n.members.length && <Button variant="ghost" isDisabled={busy} onPress={joinAll}><I name="plus" size={15}/>{t('joinAll', { n: candidates.length })}</Button>}
       </div>}
+      {joined.length > 1 && <div className="flex flex-wrap items-center gap-2 text-xs text-muted"><I name="info" size={13}/>{t('hostsHelp')}
+        <Button size="sm" variant="ghost" onPress={async () => { await navigator.clipboard?.writeText(hosts).catch(() => undefined); toast.success(t('hostsCopied', { n: joined.length })); }}><I name="copy" size={13}/>{t('hostsCopy')}</Button></div>}
     </div>
   </Section>;
 }
@@ -88,6 +103,8 @@ export default function Networks() {
     catch (err) { setFields((err as ApiError).fields ?? {}); toast.danger(error(err)); } finally { setBusy(false); }
   }
   const d = q.data;
+  const onlyPool = d?.pools.length === 1 ? d.pools[0].id : '';
+  useEffect(() => { if (onlyPool) setV((x) => (x.poolId ? x : { ...x, poolId: onlyPool })); }, [onlyPool]);
   const full = !!d && d.networks.length >= d.max;
   return <>
     <PageHeader title={t('title')} description={t('intro')} actions={d && <span className={`rounded-full border px-3 py-1 text-xs font-medium tabular-nums ${full ? 'border-warning/40 bg-warning/10 text-warning' : 'border-border text-muted'}`}>

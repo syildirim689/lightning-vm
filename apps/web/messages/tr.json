@@ -7593,7 +7593,12 @@
     "orderOne": "Sunucu oluştur",
     "count": "{n} / {max} ağ",
     "limit": "Ağ sınırına ulaştınız ({max}). Yeni ağ için boş bir ağı silin.",
-    "removeBlocked": "Bu ağda {n} sunucu var. Ağı silmeden önce onları ağdan çıkarın (Ayrıl)."
+    "removeBlocked": "Bu ağda {n} sunucu var. Ağı silmeden önce onları ağdan çıkarın (Ayrıl).",
+    "joinAll": "{n} sunucunun hepsini ekle",
+    "joinedAll": "{n} sunucu bağlanıyor",
+    "hostsHelp": "Sunucular birbirini adıyla bulsun:",
+    "hostsCopy": "/etc/hosts satırlarını kopyala",
+    "hostsCopied": "{n} satır kopyalandı. Her sunucuda /etc/hosts dosyasının sonuna ekleyin."
   },
   "Images": {
     "title": "İmaj olarak kaydet",

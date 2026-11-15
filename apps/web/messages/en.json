@@ -7593,7 +7593,12 @@
     "orderOne": "Create a server",
     "count": "{n} / {max} networks",
     "limit": "You have reached the network limit ({max}). Delete an empty network to add another.",
-    "removeBlocked": "{n, plural, one {# server is} other {# servers are}} on this network. Take them off (Leave) before removing it."
+    "removeBlocked": "{n, plural, one {# server is} other {# servers are}} on this network. Take them off (Leave) before removing it.",
+    "joinAll": "Add all {n}",
+    "joinedAll": "{n, plural, one {# server is} other {# servers are}} joining",
+    "hostsHelp": "Let the servers find each other by name:",
+    "hostsCopy": "Copy lines for /etc/hosts",
+    "hostsCopied": "{n} lines copied. Append them to /etc/hosts on each server."
   },
   "Images": {
     "title": "Save as an image",
