@@ -2230,6 +2230,12 @@
       "now": "Şimdi kalıcı olarak sil",
       "nowConfirm": "Sunucu, diskleri ve yedeklenmemiş tüm verisi beklemeden silinir. Bu işlem geri alınamaz.",
       "badge": "Silinecek · {when}"
+    },
+    "shutdownNoTools": "VMware Tools yanıt vermiyor; düzgün kapatma isteği işletim sistemine ulaşmaz. Hemen durması gerekiyorsa Zorla kapat'ı kullanın.",
+    "failedTicket": {
+      "link": "Bunu destekle paylaş",
+      "subject": "{name}: {kind} başarısız oldu",
+      "body": "{when} tarihinde başlayan {kind} işlemi başarısız oldu.\nHata: {error}\nİşlem: {op}\n\nYapmaya çalıştığım:\n"
     }
   },
   "Maintenance": {

@@ -64,13 +64,13 @@ export default function SupportList() {
           </NextLink>
         </motion.li>)}</ul>}
       </div>}
-    {open && <NewTicket initialServer={params.get('server') ?? ''} mine={tickets ?? []} onClose={() => setOpen(false)}/>}
+    {open && <NewTicket initialServer={params.get('server') ?? ''} initialSubject={params.get('subject') ?? ''} initialBody={params.get('body') ?? ''} mine={tickets ?? []} onClose={() => setOpen(false)}/>}
   </>;
 }
 
 type Srv = { id: string; name: string; state: string; powerState: string; guestReady: boolean };
 
-function NewTicket({ initialServer, mine, onClose }: { initialServer: string; mine: Ticket[]; onClose: () => void }) {
+function NewTicket({ initialServer, initialSubject, initialBody, mine, onClose }: { initialServer: string; initialSubject: string; initialBody: string; mine: Ticket[]; onClose: () => void }) {
   const t = useTranslations('Support');
   const locale = useLocale();
   const router = useRouter();
@@ -78,7 +78,7 @@ function NewTicket({ initialServer, mine, onClose }: { initialServer: string; mi
   const { error, field } = useErrorText();
   const deps = useDepartments();
   const servers = useApiQuery<{ servers: Srv[] }>(['servers'], '/servers').data?.servers ?? [];
-  const [v, setV] = useState({ subject: '', departmentId: '', priority: 'normal', serverId: initialServer, body: '' });
+  const [v, setV] = useState({ subject: initialSubject.slice(0, 160), departmentId: '', priority: initialSubject ? 'high' : 'normal', serverId: initialServer, body: initialBody.slice(0, 5000) });
   const [files, setFiles] = useState<File[]>([]);
   const [fields, setFields] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
@@ -86,7 +86,7 @@ function NewTicket({ initialServer, mine, onClose }: { initialServer: string; mi
   useEffect(() => { if (!v.departmentId && deps[0]) setV((x) => ({ ...x, departmentId: deps[0].id })); }, [deps]); // eslint-disable-line react-hooks/exhaustive-deps
   // Subject and message survive closing the dialog or the tab, until the ticket is sent.
   const draftKey = 'lvm:support-new-draft';
-  useEffect(() => { try { const d = JSON.parse(localStorage.getItem(draftKey) ?? 'null') as { subject?: string; body?: string } | null; if (d) setV((x) => ({ ...x, subject: d.subject ?? '', body: d.body ?? '' })); } catch { /* storage blocked */ } }, []);
+  useEffect(() => { if (initialSubject) return; try { const d = JSON.parse(localStorage.getItem(draftKey) ?? 'null') as { subject?: string; body?: string } | null; if (d) setV((x) => ({ ...x, subject: d.subject ?? '', body: d.body ?? '' })); } catch { /* storage blocked */ } }, []);
   useEffect(() => { try { if (v.subject.trim() || v.body.trim()) localStorage.setItem(draftKey, JSON.stringify({ subject: v.subject, body: v.body })); else localStorage.removeItem(draftKey); } catch { /* storage blocked */ } }, [v.subject, v.body]);
   const addFiles = (more: File[]) => setFiles((now) => [...now, ...more].slice(0, 3));
   const ready = v.subject.trim().length >= 3 && !!v.body.trim() && !!v.departmentId;

@@ -435,8 +435,11 @@ export function ServerDetail({ id }: { id: string }) {
   // Locked: what would end the server or lose its state waits until it is unlocked (the API refuses it too).
   const locked = !!s.locked;
   const actionLabel = (a: string) => t(`action.${a as 'power_on'}`);
-  const power = (action: string, icon: React.ReactNode) => <Button variant="secondary" isDisabled={!canAct} onPress={() => act(`/servers/${id}/actions`, 'POST', { action })}>{icon}{actionLabel(action)}</Button>;
-  const risky = (action: 'power_off' | 'reset', icon: React.ReactNode) => <ConfirmButton variant="danger-soft" isDisabled={!canAct || locked} icon={icon} label={actionLabel(action)}
+  // A ready server's power state decides which buttons make sense; in an error state the power state may be stale, so all stay open.
+  const on = s.state !== 'ready' || s.powerState !== 'poweredOff';
+  const off = s.state !== 'ready' || s.powerState !== 'poweredOn';
+  const power = (action: string, icon: React.ReactNode, needs = true) => <Button variant="secondary" isDisabled={!canAct || !needs} onPress={() => act(`/servers/${id}/actions`, 'POST', { action })}>{icon}{actionLabel(action)}</Button>;
+  const risky = (action: 'power_off' | 'reset', icon: React.ReactNode) => <ConfirmButton variant="danger-soft" isDisabled={!canAct || locked || !on} icon={icon} label={actionLabel(action)}
     title={actionLabel(action)} body={t(`confirm.${action}`)} confirmLabel={t('confirm.yes', { action: actionLabel(action) })} cancelLabel={t('confirm.no')}
     onConfirm={() => act(`/servers/${id}/actions`, 'POST', { action })}/>;
 
@@ -495,11 +498,13 @@ export function ServerDetail({ id }: { id: string }) {
       </Section>
       {allowed.power && <Section title={t('detail.power')} description={t('powerExplain')}>
         <div className="flex flex-wrap gap-2">
-          {power('power_on', <I name="play" size={16}/>)}
-          {power('shutdown', <I name="power" size={16}/>)}
+          {power('power_on', <I name="play" size={16}/>, off)}
+          {power('shutdown', <I name="power" size={16}/>, on)}
           {risky('power_off', <I name="square" size={16}/>)}
           {risky('reset', <I name="rotate-ccw" size={16}/>)}
         </div>
+        {/* Running but VMware Tools does not answer: a clean shutdown will not get through. */}
+        {s.state === 'ready' && s.powerState === 'poweredOn' && !s.guestReady && <p className="mt-3 flex items-start gap-2 text-xs text-warning"><I name="info" size={14} className="mt-0.5 shrink-0"/>{t('shutdownNoTools')}</p>}
       </Section>}
     </div>
 
@@ -528,7 +533,12 @@ export function ServerDetail({ id }: { id: string }) {
         columns={[{ id: 'when', label: t('col.when') }, { id: 'op', label: t('col.operation') }, { id: 'state', label: t('col.state') }, { id: 'detail', label: t('col.detail') }]}
         cells={(o) => [<span key="w" className="flex flex-col">{format.dateTime(new Date(o.createdAt), { dateStyle: 'medium', timeStyle: 'medium' })}<span className="text-xs text-muted"><Ago at={o.createdAt}/></span></span>, t(`kind.${o.kind as 'create'}`),
           <StatusChip key="s" tone={o.status === 'succeeded' ? 'success' : o.status === 'failed' ? 'danger' : o.status === 'cancelled' ? 'default' : 'accent'}>{t(`opStatus.${o.status as 'pending'}`)}</StatusChip>,
-          o.errorCode ? t('errorCode', { message: error({ code: o.errorCode }), code: o.errorCode }) : o.step ? t(`step.${o.step as 'queued'}`) : '']}/>
+          o.errorCode ? <span key="d" className="flex flex-col items-start gap-1">{t('errorCode', { message: error({ code: o.errorCode }), code: o.errorCode })}
+            {own && o.status === 'failed' && <NextLink className="inline-flex items-center gap-1 text-xs font-medium text-accent hover:underline" href={`/support?${new URLSearchParams({ new: '1', server: id,
+              subject: t('failedTicket.subject', { kind: t(`kind.${o.kind as 'create'}`), name: s.name }),
+              body: t('failedTicket.body', { kind: t(`kind.${o.kind as 'create'}`), when: format.dateTime(new Date(o.createdAt), { dateStyle: 'medium', timeStyle: 'medium' }), error: `${error({ code: o.errorCode })} (${o.errorCode})`, op: o.id }) })}`}>
+              <I name="life-buoy" size={13}/>{t('failedTicket.link')}</NextLink>}</span>
+          : o.step ? t(`step.${o.step as 'queued'}`) : '']}/>
     </Section>
 
     {(own || can(me?.permissions, 'servers.manage_all')) && s.state === 'ready' && !s.vdcId && <TransferServer serverId={s.id} serverName={s.name} staff={!own} busy={!!open}/>}
@@ -538,7 +548,7 @@ export function ServerDetail({ id }: { id: string }) {
       {locked && <div className="mb-3"><LockBar id={id} locked canChange={own || allowed.delete}/></div>}
       <div className="flex flex-wrap items-end gap-3">
         <TextInput transient className="min-w-0 flex-1 sm:min-w-64" label={t('delete.confirm', { name: s.name })} value={deleteName} onChange={setDeleteName} autoComplete="off"/>
-        <Button variant="danger" isDisabled={deleteName !== s.name || s.state === 'deleting' || locked} onPress={() => act(`/servers/${id}`, 'DELETE', { confirm: deleteName, now: !soft || deleteNow })}>
+        <Button variant="danger" isDisabled={deleteName.trim() !== s.name || s.state === 'deleting' || locked} onPress={() => act(`/servers/${id}`, 'DELETE', { confirm: s.name, now: !soft || deleteNow })}>
           <I name="trash-2" size={16}/>{soft && !deleteNow ? t('delete.soft') : t('delete.button')}</Button>
       </div>
       {soft && <div className="mt-3"><CheckboxInput label={t('delete.now')} isSelected={deleteNow} onChange={setDeleteNow}/></div>}

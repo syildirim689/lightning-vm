@@ -2230,6 +2230,12 @@
       "now": "Delete for good now",
       "nowConfirm": "The server, its disks and any data not backed up are deleted without waiting. This cannot be undone.",
       "badge": "Deleting · {when}"
+    },
+    "shutdownNoTools": "VMware Tools is not answering, so a clean shutdown will not reach the system. Use Force off if it must stop now.",
+    "failedTicket": {
+      "link": "Ask support about this",
+      "subject": "{kind} failed on {name}",
+      "body": "The {kind} operation started at {when} failed.\nError: {error}\nOperation: {op}\n\nWhat I was trying to do:\n"
     }
   },
   "Maintenance": {
