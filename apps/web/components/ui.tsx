@@ -514,6 +514,30 @@ export function FormActions({ children, status }: { children: React.ReactNode; s
 }
 
 // A success toast that, when `from` is given, offers to go back to it (for settings saved as soon as they change).
+// A page with many sections, grouped by what they are about: a menu beside the page on wide screens, a section picker
+// on small ones. Only the open section is drawn (children).
+// attention: a section with something to look at (shown as a dot, and said in words to screen readers and the picker).
+export type MenuGroup<K extends string> = { title: string; items: { id: K; label: string; icon?: React.ReactNode; attention?: string }[] };
+export function SectionMenu<K extends string>({ label, pickLabel, groups, current, onSelect, children }: {
+  label: string; pickLabel: string; groups: MenuGroup<K>[]; current: K; onSelect: (k: K) => void; children: React.ReactNode;
+}) {
+  const here = groups.flatMap((g) => g.items).find((i) => i.id === current);
+  return <div className="grid gap-5 lg:grid-cols-[14rem_minmax(0,1fr)] lg:gap-8">
+    <div className="lg:hidden"><SelectInput label={pickLabel} value={current} onChange={(k) => onSelect(k as K)}
+      options={groups.flatMap((g) => g.items.map((i) => ({ id: i.id, label: `${groups.length > 1 ? `${g.title} · ` : ''}${i.label}${i.attention ? ` (${i.attention})` : ''}` })))}/></div>
+    <nav aria-label={label} className="hidden flex-col gap-4 self-start lg:sticky lg:top-20 lg:flex">
+      {groups.map((g) => <div key={g.title} className="flex flex-col gap-0.5">
+        <p className="px-3 pb-1 text-[11px] font-semibold uppercase tracking-wider text-muted">{g.title}</p>
+        {g.items.map((i) => <button key={i.id} type="button" aria-current={i.id === current ? 'page' : undefined} onClick={() => onSelect(i.id)}
+          className={`flex min-h-9 items-center gap-2.5 rounded-lg px-3 text-left text-sm transition-colors focus-visible:outline-2 focus-visible:outline-accent ${i.id === current ? 'bg-default font-medium text-foreground' : 'text-muted hover:bg-default hover:text-foreground'}`}>
+          {i.icon}<span className="min-w-0 flex-1">{i.label}</span>
+          {i.attention && <span title={i.attention} className="size-2 shrink-0 rounded-full bg-warning"><span className="sr-only">{i.attention}</span></span>}</button>)}
+      </div>)}
+    </nav>
+    <section aria-label={here?.label} className="flex min-w-0 flex-col gap-5">{children}</section>
+  </div>;
+}
+
 export function undoToast(text: string, from: string | undefined, undoLabel: string, undo: (from: string) => void) {
   toast.success(text, from === undefined ? undefined : { actionProps: { children: undoLabel, size: 'sm', variant: 'secondary', onPress: () => undo(from) } });
 }

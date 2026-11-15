@@ -2567,7 +2567,14 @@
           "help": "End devices unused for more than 30 days."
         }
       }
-    }
+    },
+    "section": "Section",
+    "groups": {
+      "you": "You",
+      "servers": "Servers",
+      "developer": "Developer"
+    },
+    "twoFactorOff": "Two-step sign-in is off"
   },
   "AuthLayout": {
     "headline": "VMware servers, ready in minutes.",
@@ -4534,7 +4541,8 @@
       "messages": "Messages",
       "money": "Payments and billing",
       "help": "Support"
-    }
+    },
+    "attention": "Needs attention"
   },
   "Firewalls": {
     "title": "Firewalls",

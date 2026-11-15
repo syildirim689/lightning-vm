@@ -1,12 +1,12 @@
 "use client";
-import { Button, Tabs, toast } from '@heroui/react';
+import { Button, toast } from '@heroui/react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useFormatter, useNow, useTranslations } from 'next-intl';
 import { parseAsString, useQueryState } from 'nuqs';
 import { useEffect, useState } from 'react';
 import { AccessibilitySettings } from '../../../components/accessibility';
 import { I } from '../../../components/icon';
-import { Section, TextInput } from '../../../components/ui';
+import { Section, SectionMenu, TextInput } from '../../../components/ui';
 import { apiFetch, useErrorText } from '../../../lib/api';
 import { useApiQuery } from '../../../lib/query';
 import type { PublicConfig } from '../../../lib/session';
@@ -82,31 +82,41 @@ function Regional() {
   </Section>;
 }
 
-const tabs = ['profile', 'security', 'activity', 'notifications', 'accessibility', 'keys', 'projects', 'images', 'transfers', 'api'] as const;
+const groups = [
+  ['you', ['profile', 'security', 'notifications', 'accessibility', 'activity']],
+  ['servers', ['keys', 'projects', 'images', 'transfers']],
+  ['developer', ['api']],
+] as const;
+type Tab = (typeof groups)[number][1][number];
+const tabs: readonly Tab[] = groups.flatMap(([, ks]) => ks);
+const tabIcons: Record<Tab, string> = { profile: 'user-round', security: 'shield-check', notifications: 'bell', accessibility: 'accessibility', activity: 'history',
+  keys: 'key-round', projects: 'folder-kanban', images: 'disc-3', transfers: 'arrow-right-left', api: 'code-xml' };
 export default function AccountTabs() {
   const t = useTranslations('Account');
   const [tab, setTab] = useQueryState('tab', parseAsString.withDefault('profile'));
-  return <Tabs selectedKey={tabs.includes(tab as 'profile') ? tab : 'profile'} onSelectionChange={(k) => setTab(String(k))}>
-    <Tabs.ListContainer className="overflow-x-auto">
-      <Tabs.List aria-label={t('title')}>{tabs.map((k) => <Tabs.Tab key={k} id={k} className="whitespace-nowrap">{t(`tabs.${k}`)}<Tabs.Indicator/></Tabs.Tab>)}</Tabs.List>
-    </Tabs.ListContainer>
-    <Tabs.Panel id="profile" className="flex flex-col gap-6 pt-5"><Profile/><Regional/><ExportData/></Tabs.Panel>
-    <Tabs.Panel id="security" className="flex flex-col gap-6 pt-5">
+  const current: Tab = tabs.includes(tab as Tab) ? tab as Tab : 'profile';
+  const me = useMe();
+  // Two-step sign-in off: the Security section is marked until it is on.
+  const attention: Partial<Record<Tab, string>> = me && !me.twoFactorEnabled ? { security: t('twoFactorOff') } : {};
+  return <SectionMenu label={t('title')} pickLabel={t('section')} current={current} onSelect={(k) => setTab(k)}
+    groups={groups.map(([g, ks]) => ({ title: t(`groups.${g}`), items: ks.map((k) => ({ id: k, label: t(`tabs.${k}`), icon: <I name={tabIcons[k]} size={16}/>, attention: attention[k] })) }))}>
+    {current === 'profile' && <><Profile/><Regional/><ExportData/></>}
+    {current === 'security' && <>
       <SecurityScore/>
       <Section title={t('twoFactor.sectionTitle')} description={t('twoFactor.sectionIntro')}>
         <div className="grid gap-8 lg:grid-cols-2"><TwoFactor/><PhoneNumber/></div>
       </Section>
       <Security/>
-    </Tabs.Panel>
-    <Tabs.Panel id="notifications" className="pt-5"><NotificationPrefs/></Tabs.Panel>
-    <Tabs.Panel id="accessibility" className="pt-5"><Section><AccessibilitySettings/></Section></Tabs.Panel>
-    <Tabs.Panel id="keys" className="pt-5"><SshKeys/></Tabs.Panel>
-    <Tabs.Panel id="activity" className="pt-5"><Section title={t('activity.title')} description={t('activity.intro')}><MyActivity/></Section></Tabs.Panel>
-    <Tabs.Panel id="projects" className="pt-5"><Projects/></Tabs.Panel>
-    <Tabs.Panel id="images" className="pt-5"><MyImages/></Tabs.Panel>
-    <Tabs.Panel id="transfers" className="pt-5"><MyTransfers/></Tabs.Panel>
-    <Tabs.Panel id="api" className="pt-5"><Developer/></Tabs.Panel>
-  </Tabs>;
+    </>}
+    {current === 'notifications' && <NotificationPrefs/>}
+    {current === 'accessibility' && <Section><AccessibilitySettings/></Section>}
+    {current === 'keys' && <SshKeys/>}
+    {current === 'activity' && <Section title={t('activity.title')} description={t('activity.intro')}><MyActivity/></Section>}
+    {current === 'projects' && <Projects/>}
+    {current === 'images' && <MyImages/>}
+    {current === 'transfers' && <MyTransfers/>}
+    {current === 'api' && <Developer/>}
+  </SectionMenu>;
 }
 
 // Everything the panel keeps about this person, as one JSON file (the API leaves secrets out).

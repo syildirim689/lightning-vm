@@ -2567,7 +2567,14 @@
           "help": "30 günden uzun süredir kullanılmayan cihazları kapatın."
         }
       }
-    }
+    },
+    "section": "Bölüm",
+    "groups": {
+      "you": "Siz",
+      "servers": "Sunucular",
+      "developer": "Geliştirici"
+    },
+    "twoFactorOff": "İki adımlı giriş kapalı"
   },
   "AuthLayout": {
     "headline": "VMware sunucuları dakikalar içinde hazır.",
@@ -4534,7 +4541,8 @@
       "messages": "Mesajlar",
       "money": "Ödeme ve faturalama",
       "help": "Destek"
-    }
+    },
+    "attention": "İlgilenmeniz gerekiyor"
   },
   "Firewalls": {
     "title": "Firewall'lar",

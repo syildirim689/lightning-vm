@@ -10,7 +10,7 @@ import { useEffect, useState } from 'react';
 import { useCaptcha } from '../../../../components/captcha';
 import { I } from '../../../../components/icon';
 import { GuideButton } from '../../../../components/setup-guide';
-import { CheckboxInput, FormActions, FormSection, Notice, NumberInput, PageHeader, SelectInput, StatusChip, SwitchInput, TextInput, Loading } from '../../../../components/ui';
+import { CheckboxInput, FormActions, FormSection, Notice, NumberInput, PageHeader, SectionMenu, SelectInput, StatusChip, SwitchInput, TextInput, Loading } from '../../../../components/ui';
 import { apiFetch, useErrorText, type ApiError } from '../../../../lib/api';
 import { useMe } from '../../../../lib/me';
 import { can } from '../../../../lib/permissions';
@@ -51,24 +51,16 @@ export default function Settings() {
   const me = useMe();
   const readOnly = !can(me?.permissions, 'settings.manage');
   const current: Tab = tabs.includes(tab as Tab) ? tab as Tab : 'general';
+  // Sections the overview flags (the same list the General section shows) get a dot in the menu.
+  const overview = useApiQuery<{ items: { tab: string | null; state: string }[] }>(['settings', 'overview'], '/admin/settings/overview').data;
+  const warn = new Set((overview?.items ?? []).filter((i) => i.state === 'warn' && i.tab).map((i) => i.tab));
   const icon = { general: <I name="settings-2" size={16}/>, branding: <I name="palette" size={16}/>, domain: <I name="globe-lock" size={16}/>, security: <I name="shield-check" size={16}/>, api: <I name="code-xml" size={16}/>, signin: <I name="log-in" size={16}/>, directory: <I name="network" size={16}/>, servers: <I name="server-cog" size={16}/>, mail: <I name="mail" size={16}/>, captcha: <I name="bot" size={16}/>,
     sms: <I name="message-square" size={16}/>, chat: <I name="messages-square" size={16}/>, payments: <I name="credit-card" size={16}/>, billing: <I name="receipt" size={16}/>, einvoice: <I name="file-check-2" size={16}/>, rdns: <I name="globe" size={16}/>, notifications: <I name="bell" size={16}/>, announcement: <I name="megaphone" size={16}/>, status: <I name="activity" size={16}/>, support: <I name="life-buoy" size={16}/> };
   return <>
     <PageHeader eyebrow={t('eyebrow')} title={t('title')} description={t('intro')}/>
     {readOnly && <div className="mb-4"><Notice tone="default">{t('readOnly')}</Notice></div>}
-    <div className="grid gap-5 lg:grid-cols-[14rem_minmax(0,1fr)] lg:gap-8">
-      {/* Phones and tablets pick the section from a list; wide screens get the grouped menu beside the page. */}
-      <div className="lg:hidden"><SelectInput label={t('section')} value={current} onChange={(k) => setTab(k)}
-        options={groups.flatMap(([g, ks]) => ks.map((k) => ({ id: k, label: `${t(`groups.${g}`)} · ${t(`tabs.${k}`)}` })))}/></div>
-      <nav aria-label={t('title')} className="hidden flex-col gap-4 self-start lg:sticky lg:top-20 lg:flex">
-        {groups.map(([g, ks]) => <div key={g} className="flex flex-col gap-0.5">
-          <p className="px-3 pb-1 text-[11px] font-semibold uppercase tracking-wider text-muted">{t(`groups.${g}`)}</p>
-          {ks.map((k) => <button key={k} type="button" aria-current={k === current ? 'page' : undefined} onClick={() => setTab(k)}
-            className={`flex min-h-9 items-center gap-2.5 rounded-lg px-3 text-left text-sm transition-colors ${k === current ? 'bg-default font-medium text-foreground' : 'text-muted hover:bg-default hover:text-foreground'}`}>
-            {icon[k]}<span className="min-w-0 flex-1">{t(`tabs.${k}`)}</span></button>)}
-        </div>)}
-      </nav>
-      <section aria-label={t(`tabs.${current}`)} className="flex min-w-0 flex-col gap-5">
+    <SectionMenu label={t('title')} pickLabel={t('section')} current={current} onSelect={(k) => setTab(k)}
+      groups={groups.map(([g, ks]) => ({ title: t(`groups.${g}`), items: ks.map((k) => ({ id: k, label: t(`tabs.${k}`), icon: icon[k], attention: warn.has(k) ? t('attention') : undefined })) }))}>
         {current === 'general' && <GeneralSettings onOpen={(k) => setTab(k)}/>}
         {current === 'branding' && <Branding readOnly={readOnly}/>}
         {current === 'domain' && <Domain readOnly={readOnly || !can(me?.permissions, 'system.update')}/>}
@@ -89,8 +81,7 @@ export default function Settings() {
         {current === 'announcement' && <AnnouncementSettings readOnly={readOnly}/>}
         {current === 'status' && <Incidents readOnly={readOnly}/>}
         {current === 'support' && <SupportDepartments readOnly={readOnly}/>}
-      </section>
-    </div>
+    </SectionMenu>
   </>;
 }
 
