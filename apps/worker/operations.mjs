@@ -60,7 +60,8 @@ async function loadServer(db, serverId) {
       host(a.address) AS address, masklen(ip.cidr) AS prefix, host(ip.gateway) AS gateway, ARRAY(SELECT host(x) FROM unnest(ip.dns) x) AS dns,
       ARRAY(SELECT host(e.address) FROM ip_allocations e WHERE e.server_id = s.id AND e.kind = 'extra' ORDER BY e.address) AS extra,
       (SELECT host(v.address) FROM ip_allocations v WHERE v.server_id = s.id AND v.kind = 'ipv6') AS ipv6,
-      masklen(ip.ipv6_prefix) AS ipv6_prefix_len, host(ip.ipv6_gateway) AS ipv6_gateway
+      masklen(ip.ipv6_prefix) AS ipv6_prefix_len, host(ip.ipv6_gateway) AS ipv6_gateway,
+      (SELECT u.install_enc FROM server_updates u WHERE u.server_id = s.id) AS updates_install_enc
     FROM servers s JOIN resource_pools p ON p.id = s.pool_id JOIN os_images i ON i.id = s.image_id
     LEFT JOIN ip_allocations a ON a.server_id = s.id AND a.kind = 'primary' LEFT JOIN ip_pools ip ON ip.id = a.ip_pool_id WHERE s.id = $1`, [serverId]);
   if (!s) return null;
@@ -112,6 +113,21 @@ export function esxiProperties(s) {
   };
 }
 
+// Installs the update reporter (api: guest-updates-script.ts) on the first boot. The panel may not be reachable
+// the moment the network comes up, so it tries for about ten minutes; then the owner can still install it by hand.
+export function updatesInstaller(url, id, token) {
+  return `#!/bin/sh
+# Lightning VM update reporter: tells the panel which updates wait. Turn it off on the server's page in the panel.
+command -v curl >/dev/null 2>&1 || apt-get install -y curl >/dev/null 2>&1 || dnf install -y curl >/dev/null 2>&1 || yum install -y curl >/dev/null 2>&1
+n=0
+while [ "$n" -lt 30 ]; do
+  if curl -fsSL -m 30 '${url}/api/guest/updates.sh' -o /root/lightning-updates.sh && sh /root/lightning-updates.sh '${url}' '${id}' '${token}'; then break; fi
+  n=$((n + 1)); sleep 20
+done
+rm -f /root/lightning-updates.sh /root/lightning-updates-install.sh
+`;
+}
+
 // cloud-init (JSON is valid YAML): every allocated address (primary and extra IPv4 on one subnet, the IPv6
 // one if the pool has a prefix) and the customer's SSH keys.
 export function cloudInit(s) {
@@ -121,13 +137,21 @@ export function cloudInit(s) {
   const metadata = JSON.stringify({ 'instance-id': s.id, 'local-hostname': s.name, network: { version: 2, ethernets: { nic0: {
     match: { name: 'e*' }, addresses, routes, nameservers: { addresses: s.dns } } } } });
   // The root password, when one was chosen, arrives only as a SHA-512 crypt hash (console and RDP; SSH stays key-only).
+  const files = [], commands = [];
+  // An application (cPanel, Plesk, ...): its script runs in the background so the server becomes ready meanwhile.
+  if (s.app_script_enc) {
+    files.push({ path: '/root/lightning-app.sh', permissions: '0700', content: decrypt(s.app_script_enc, 'server-app-script') });
+    commands.push(['sh', '-c', 'nohup sh /root/lightning-app.sh > /var/log/lightning-app.log 2>&1 &']);
+  }
+  // The update reporter (Linux), also in the background. A copy without one must not report as the server it was copied from.
+  const [url, token] = s.updates_install_enc && s.image_family === 'linux' ? decrypt(s.updates_install_enc, 'server-updates-install').split(' ') : [];
+  if (url && token) {
+    files.push({ path: '/root/lightning-updates-install.sh', permissions: '0700', content: updatesInstaller(url, s.id, token) });
+    commands.push(['sh', '-c', 'nohup sh /root/lightning-updates-install.sh > /var/log/lightning-updates-install.log 2>&1 &']);
+  } else if (s.clone_from_moref) commands.push(['sh', '-c', 'rm -f /etc/lightning-updates.conf']);
   const userdata = '#cloud-config\n' + JSON.stringify({ hostname: s.name, ssh_authorized_keys: s.ssh_public_keys, ssh_pwauth: false,
     ...(s.root_password_hash && { chpasswd: { expire: false, list: `root:${s.root_password_hash}` } }),
-    // An application (cPanel, Plesk, ...): its script runs in the background so the server becomes ready meanwhile.
-    ...(s.app_script_enc && {
-      write_files: [{ path: '/root/lightning-app.sh', permissions: '0700', content: decrypt(s.app_script_enc, 'server-app-script') }],
-      runcmd: [['sh', '-c', 'nohup sh /root/lightning-app.sh > /var/log/lightning-app.log 2>&1 &']],
-    }) });
+    ...(files.length && { write_files: files }), ...(commands.length && { runcmd: commands }) });
   return { metadata, userdata };
 }
 

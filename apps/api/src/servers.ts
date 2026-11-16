@@ -19,6 +19,7 @@ import { decryptSecret, encryptSecret } from './secrets';
 import { getSettings, type ServerSettings } from './settings-store';
 import { notify } from './notify';
 import { prepareApplication } from './applications';
+import { prepareGuestUpdates, reporterOrigin } from './guest-updates';
 import { checkVdcRoom, resolveVdcOrder } from './vdc';
 import { renderPtr } from './rdns-names';
 import { cleanLabels, fingerprint, parseKeyList, sshKeyPattern } from './smart-rules';
@@ -400,7 +401,7 @@ export class ServersController {
     // Optional root password (console/RDP): a weak one is replaced by a strong one that starts with the brand.
     if (body.rootPassword !== undefined && (typeof body.rootPassword !== 'string' || body.rootPassword.length > 128)) throw apiError(400, 'VALIDATION_FAILED', 'Invalid input', { rootPassword: 'INVALID_VALUE' });
     const branding = await getSettings('branding');
-    const { rows: [img] } = await pool.query('SELECT family FROM os_images WHERE id = $1', [order.imageId]).catch(() => ({ rows: [] }));
+    const { rows: [img] } = await pool.query('SELECT family, cloud_init FROM os_images WHERE id = $1', [order.imageId]).catch(() => ({ rows: [] }));
     // Nested ESXi: at least 2 vCPU and 4 GB, and always a root password (it is the host's login; generated when none is given).
     if (img?.family === 'esxi' && (order.shape.vcpu < 2 || order.shape.memoryMb < 4096)) throw apiError(400, 'VALIDATION_FAILED', 'ESXi needs 2 vCPU and 4 GB', { imageId: 'ESXI_NEEDS_MORE' });
     const prefix = branding.passwordPrefix || branding.name;
@@ -509,6 +510,9 @@ export class ServersController {
         const origin = typeof req.headers.origin === 'string' && /^https?:\/\//.test(req.headers.origin) ? req.headers.origin : `${req.protocol}://${req.headers.host}`;
         await prepareApplication(client, order.application, s.id, { hostname, ip: ips[0].address }, `${origin}/api/servers/${s.id}/app-callback`);
       }
+      // A Linux server installs the update reporter on its first boot (Settings → Servers); it only tells its owner
+      // about waiting updates until they choose otherwise, and can be turned off on the server's page.
+      if (img?.family === 'linux' && img.cloud_init && (await getSettings('servers')).guestUpdates !== false) await prepareGuestUpdates(client, s.id, await reporterOrigin(req));
       if (cloneFrom) await client.query('UPDATE servers SET clone_from_moref = $2 WHERE id = $1', [s.id, cloneFrom]);
       if (vdc) await client.query('UPDATE servers SET vdc_id = $2 WHERE id = $1', [s.id, vdc.vdcId]);
       else if (order.trafficGb) await client.query('UPDATE servers SET traffic_gb = $2 WHERE id = $1', [s.id, order.trafficGb]);
@@ -664,7 +668,7 @@ export class ServersController {
     // A new VM is built from the image: extra disks would be left behind, so they go first (by the customer).
     if ((await pool.query('SELECT 1 FROM server_disks WHERE server_id = $1', [id])).rowCount) throw apiError(409, 'REMOVE_EXTRA_DISKS', 'Remove the extra disks before reinstalling');
     if ((await pool.query('SELECT 1 FROM private_network_members WHERE server_id = $1', [id])).rowCount) throw apiError(409, 'LEAVE_PRIVATE_NETWORKS', 'Take the server off its private networks before reinstalling');
-    const { rows: [img] } = await pool.query(`SELECT i.family, i.min_disk_gb FROM os_images i JOIN resource_pools p ON p.connection_id = i.connection_id
+    const { rows: [img] } = await pool.query(`SELECT i.family, i.cloud_init, i.min_disk_gb FROM os_images i JOIN resource_pools p ON p.connection_id = i.connection_id
       WHERE i.id = $1 AND i.active AND p.id = $2 AND (i.owner_id IS NULL OR i.owner_id = $4) AND (NOT EXISTS (SELECT 1 FROM package_images pi WHERE pi.package_id = $3)
         OR EXISTS (SELECT 1 FROM package_images pi WHERE pi.package_id = $3 AND pi.image_id = i.id))`, [String(body.imageId ?? ''), server.pool_id, server.package_id, server.owner_id]).catch(() => ({ rows: [] }));
     if (!img) throw apiError(400, 'VALIDATION_FAILED', 'Unknown image', { imageId: 'NOT_AVAILABLE' });
@@ -688,6 +692,11 @@ export class ServersController {
     await pool.query(`UPDATE servers SET ssh_public_keys = $2, root_password_hash = COALESCE($3, root_password_hash), root_password_enc = COALESCE($4, root_password_enc), updated_at = now() WHERE id = $1`,
       [id, keys, root ? sha512Crypt(root.password) : null, root ? encryptSecret(root.password, 'server-root-password') : null]);
     const operation = await startOperation(req, server, 'reinstall', key, requestHash, { imageId: String(body.imageId), fromImageId: server.image_id });
+    // Update tracking follows the server onto its new disk: the reporter is installed again on a Linux image; on another, tracking ends.
+    if ((await pool.query('SELECT 1 FROM server_updates WHERE server_id = $1', [id])).rowCount) {
+      if (img.family === 'linux' && img.cloud_init) await prepareGuestUpdates(pool, id, await reporterOrigin(req));
+      else await pool.query('DELETE FROM server_updates WHERE server_id = $1', [id]);
+    }
     await pool.query("UPDATE servers SET state = 'provisioning', error_code = NULL, updated_at = now() WHERE id = $1 AND state <> 'deleted'", [id]);
     return { serverId: id, operation, ...(root && { passwordReplaced: root.replaced }) };
   }

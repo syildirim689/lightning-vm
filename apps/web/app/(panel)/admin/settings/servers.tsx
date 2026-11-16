@@ -11,7 +11,7 @@ import { useApiQuery } from '../../../../lib/query';
 
 type Doc = { customer: { power: boolean; console: boolean; iso: boolean; rootPassword: boolean; delete: boolean; snapshots: boolean; resize: boolean; reinstall: boolean; backups: boolean };
   backups?: { maxPerServer: number }; hardware: { cpuHotAdd: boolean; memoryHotAdd: boolean; nestedHv: boolean };
-  traffic?: { overLimit: 'notify' | 'throttle'; throttleMbps: number }; deleteGraceHours?: number };
+  traffic?: { overLimit: 'notify' | 'throttle'; throttleMbps: number }; deleteGraceHours?: number; guestUpdates?: boolean };
 
 export default function ServerSettings({ readOnly }: { readOnly: boolean }) {
   const t = useTranslations('Settings.servers');
@@ -53,6 +53,12 @@ export default function ServerSettings({ readOnly }: { readOnly: boolean }) {
           options={[{ id: 'throttle', label: t('overLimitThrottle') }, { id: 'notify', label: t('overLimitNotify') }]}/>
         {(v.traffic?.overLimit ?? 'throttle') === 'throttle' && <NumberInput label={t('throttleMbps')} value={v.traffic?.throttleMbps ?? 10} minValue={1} maxValue={10000} isDisabled={readOnly}
           onChange={(x) => setV({ ...v, traffic: { overLimit: 'throttle', ...v.traffic, throttleMbps: x ?? 10 } })} help={t('throttleHelp')}/>}
+      </div>
+    </FormSection>
+    <FormSection title={t('updatesTitle')} description={t('updatesHelp')} icon={<I name="shield-check" size={16}/>}>
+      <div className="flex items-start justify-between gap-3 rounded-xl border border-border p-3">
+        <div><p className="text-sm font-medium">{t('guestUpdates')}</p><p className="text-xs text-muted">{t('guestUpdatesHelp')}</p></div>
+        <SwitchInput label={<span className="sr-only">{t('guestUpdates')}</span>} isSelected={v.guestUpdates !== false} isDisabled={readOnly} onChange={(x) => setV({ ...v, guestUpdates: x })}/>
       </div>
     </FormSection>
     <FormSection title={t('hardware')} description={t('hardwareHelp')} icon={<I name="cpu" size={16}/>}>

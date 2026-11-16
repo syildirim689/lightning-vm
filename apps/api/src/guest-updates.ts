@@ -4,10 +4,13 @@
 import { Body, Controller, Delete, Get, Header, HttpCode, Param, ParseUUIDPipe, Post, Put, Req, UseGuards } from '@nestjs/common';
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import { audit, SessionGuard, type AuthedRequest } from './auth';
+import { panelBase } from './chat-delivery';
 import { pool } from './db';
 import { apiError } from './errors';
 import { guestScript } from './guest-updates-script';
 import { notify } from './notify';
+import { Can, PermissionGuard } from './rbac';
+import { encryptSecret } from './secrets';
 import { findServer } from './servers';
 
 const hash = (t: string) => createHash('sha256').update(t).digest('hex');
@@ -16,11 +19,31 @@ const actions = ['security', 'upgrade', 'reboot'];
 // Silent for this long: the reporter was removed, or the server is off or cannot reach the panel.
 const STALE_MS = 45 * 60_000;
 type Row = { server_id: string; policy: string; auto_reboot: boolean; reboot_hour: number; pending_action: string | null; action_at: Date | null; reported_at: Date | null; os: string | null;
-  manager: string | null; total: number; security: number; reboot_required: boolean; packages: unknown; last_run: unknown; token_hash: string; notified_security_at: Date | null; notified_reboot_at: Date | null };
+  manager: string | null; total: number; security: number; reboot_required: boolean; packages: unknown; last_run: unknown; token_hash: string; install_enc: string | null; notified_security_at: Date | null; notified_reboot_at: Date | null };
 const row = async (id: string) => (await pool.query<Row>('SELECT * FROM server_updates WHERE server_id = $1', [id])).rows[0];
-const view = (u: Row | undefined) => (!u ? { enabled: false } : { enabled: true, reported: !!u.reported_at, reportedAt: u.reported_at, stale: !!u.reported_at && Date.now() - u.reported_at.getTime() > STALE_MS,
+const view = (u: Row | undefined) => (!u ? { enabled: false } : { enabled: true, auto: !!u.install_enc, reported: !!u.reported_at, reportedAt: u.reported_at, stale: !!u.reported_at && Date.now() - u.reported_at.getTime() > STALE_MS,
   policy: u.policy, autoReboot: u.auto_reboot, rebootHour: u.reboot_hour, pendingAction: u.pending_action, actionAt: u.action_at, os: u.os, manager: u.manager, total: u.total, security: u.security,
   rebootRequired: u.reboot_required, packages: u.packages, lastRun: u.last_run });
+
+const safeOrigin = /^https?:\/\/[A-Za-z0-9.:[\]-]+$/;
+// The address the reporter answers to: the panel's public address, else the one this request came through.
+export async function reporterOrigin(req: AuthedRequest) {
+  const base = (await panelBase())?.replace(/\/+$/, '');
+  if (base && safeOrigin.test(base)) return base;
+  return typeof req.headers.origin === 'string' && safeOrigin.test(req.headers.origin) ? req.headers.origin : `${req.protocol}://${req.headers.host}`;
+}
+
+// A new or reinstalled Linux server installs the reporter by itself on first boot: a fresh token, kept encrypted
+// for the worker (it goes into the server's cloud-init) until the first report arrives. An earlier report is
+// forgotten (it described the old disk); the owner's policy stays.
+export async function prepareGuestUpdates(db: { query: (text: string, values?: unknown[]) => Promise<unknown> }, serverId: string, origin: string) {
+  if (!safeOrigin.test(origin)) return false;
+  const token = randomBytes(24).toString('base64url');
+  await db.query(`INSERT INTO server_updates (server_id, token_hash, install_enc) VALUES ($1, $2, $3) ON CONFLICT (server_id) DO UPDATE SET token_hash = $2, install_enc = $3,
+    reported_at = NULL, os = NULL, manager = NULL, total = 0, security = 0, reboot_required = false, packages = '[]', last_run = NULL, pending_action = NULL, action_at = NULL,
+    notified_security_at = NULL, notified_reboot_at = NULL`, [serverId, hash(token), encryptSecret(`${origin} ${token}`, 'server-updates-install')]);
+  return true;
+}
 
 @Controller('servers/:id/updates') @UseGuards(SessionGuard)
 export class ServerUpdatesController {
@@ -35,10 +58,9 @@ export class ServerUpdatesController {
   async enable(@Req() req: AuthedRequest, @Param('id', ParseUUIDPipe) id: string) {
     await findServer(req, id, true);
     const token = randomBytes(24).toString('base64url');
-    await pool.query(`INSERT INTO server_updates (server_id, token_hash) VALUES ($1, $2) ON CONFLICT (server_id) DO UPDATE SET token_hash = $2`, [id, hash(token)]);
+    await pool.query(`INSERT INTO server_updates (server_id, token_hash) VALUES ($1, $2) ON CONFLICT (server_id) DO UPDATE SET token_hash = $2, install_enc = NULL`, [id, hash(token)]);
     await audit(req, 'server.updates_enabled', 'success', req.user.id, { serverId: id });
-    // The reporter answers to the address the panel is reached at.
-    const origin = typeof req.headers.origin === 'string' && /^https?:\/\/[A-Za-z0-9.:[\]-]+$/.test(req.headers.origin) ? req.headers.origin : `${req.protocol}://${req.headers.host}`;
+    const origin = await reporterOrigin(req);
     return { command: `curl -fsSL ${origin}/api/guest/updates.sh | sudo sh -s -- ${origin} ${id} ${token}`, ...view(await row(id)) };
   }
 
@@ -106,7 +128,7 @@ export class GuestUpdatesController {
     const done = run && actions.includes(String(run.action)) ? { action: String(run.action), state: run.ok === true ? 'succeeded' : 'failed', auto: run.auto === true, message: word(run.message, 300), at: new Date().toISOString() } : null;
     // A waiting action is handed over once; until its result arrives it shows as running.
     const handed = !done && u.pending_action ? { action: u.pending_action, state: 'running', auto: false, message: '', at: new Date().toISOString() } : null;
-    await pool.query(`UPDATE server_updates SET reported_at = now(), os = $2, manager = $3, total = $4, security = $5, reboot_required = $6, packages = $7,
+    await pool.query(`UPDATE server_updates SET reported_at = now(), install_enc = NULL, os = $2, manager = $3, total = $4, security = $5, reboot_required = $6, packages = $7,
       last_run = coalesce($8, last_run), pending_action = CASE WHEN $9 THEN NULL ELSE pending_action END WHERE server_id = $1`,
       [id, word(body.os, 80), manager, total, security, reboot, JSON.stringify(packages), done || handed ? JSON.stringify(done ?? handed) : null, !!handed]);
 
@@ -124,5 +146,36 @@ export class GuestUpdatesController {
       await notify('server.updates', [u.owner_id], { ...base, kind: 'restart' });
     }
     return { policy: u.policy, autoReboot: u.auto_reboot, rebootHour: u.reboot_hour, action: handed ? handed.action : '' };
+  }
+}
+
+// Staff: the update state of every Linux server in one list, and security or full updates started on many at once.
+@Controller('admin/server-updates') @UseGuards(PermissionGuard)
+export class AdminServerUpdatesController {
+  @Get() @Can('servers.view_all', 'servers.manage_all')
+  async list() {
+    const { rows } = await pool.query(`SELECT s.id, s.name, s.state, o.email AS "ownerEmail", i.name AS image, u.server_id IS NOT NULL AS tracked, u.install_enc IS NOT NULL AS auto,
+        u.reported_at AS "reportedAt", u.policy, u.auto_reboot AS "autoReboot", u.os, u.manager, coalesce(u.total, 0) AS total, coalesce(u.security, 0) AS security,
+        coalesce(u.reboot_required, false) AS "rebootRequired", u.pending_action AS "pendingAction", u.last_run AS "lastRun"
+      FROM servers s JOIN users o ON o.id = s.owner_id JOIN os_images i ON i.id = s.image_id LEFT JOIN server_updates u ON u.server_id = s.id
+      WHERE s.state NOT IN ('deleted', 'deleting') AND i.family = 'linux' ORDER BY coalesce(u.security, 0) DESC, coalesce(u.total, 0) DESC, s.name LIMIT 5000`);
+    return { servers: rows.map((r) => ({ ...r, reported: !!r.reportedAt, stale: !!r.reportedAt && Date.now() - new Date(r.reportedAt).getTime() > STALE_MS })) };
+  }
+
+  // Restarts are left to each server's page (and its policy): a restart on many servers at once is rarely meant.
+  @Post('actions') @HttpCode(200) @Can('servers.manage_all')
+  async act(@Req() req: AuthedRequest, @Body() body: Record<string, unknown>) {
+    const action = String(body?.action ?? '');
+    const ids = Array.isArray(body?.serverIds) ? [...new Set(body.serverIds.map(String))] : [];
+    const fields: Record<string, string> = {};
+    if (!['security', 'upgrade'].includes(action)) fields.action = 'INVALID_VALUE';
+    if (!ids.length || ids.length > 500 || ids.some((i) => !/^[0-9a-f-]{36}$/.test(i))) fields.serverIds = 'INVALID_VALUE';
+    if (Object.keys(fields).length) throw apiError(400, 'VALIDATION_FAILED', 'Invalid input', fields);
+    // Only servers whose reporter answers, with nothing waiting or running, and with something to install.
+    const { rows } = await pool.query(`UPDATE server_updates u SET pending_action = $2, action_at = now() FROM servers s WHERE s.id = u.server_id AND s.state = 'ready' AND u.server_id = ANY($1::uuid[])
+        AND u.reported_at > now() - make_interval(secs => $3) AND u.pending_action IS NULL AND coalesce(u.last_run->>'state', '') <> 'running'
+        AND CASE WHEN $2 = 'security' THEN u.security > 0 ELSE u.total > 0 END RETURNING u.server_id`, [ids, action, STALE_MS / 1000]);
+    await audit(req, 'server.updates_bulk', 'success', req.user.id, { action, started: rows.length, asked: ids.length });
+    return { started: rows.length, skipped: ids.length - rows.length };
   }
 }

@@ -119,7 +119,8 @@ export class SettingsController {
     if (!Number.isInteger(maxBackups) || maxBackups < 1 || maxBackups > 50) throw apiError(400, 'VALIDATION_FAILED', 'Invalid input', { 'backups.maxPerServer': 'OUT_OF_RANGE' });
     const grace = body?.deleteGraceHours === undefined ? current.deleteGraceHours ?? 24 : Number(body.deleteGraceHours);
     if (!Number.isInteger(grace) || grace < 0 || grace > 168) throw apiError(400, 'VALIDATION_FAILED', 'Invalid input', { deleteGraceHours: 'OUT_OF_RANGE' });
-    const value = { customer: pick(body?.customer, current.customer), hardware: pick(body?.hardware, current.hardware), traffic, backups: { maxPerServer: maxBackups }, deleteGraceHours: grace };
+    const value = { customer: pick(body?.customer, current.customer), hardware: pick(body?.hardware, current.hardware), traffic, backups: { maxPerServer: maxBackups }, deleteGraceHours: grace,
+      guestUpdates: typeof body?.guestUpdates === 'boolean' ? body.guestUpdates : current.guestUpdates !== false };
     await saveSettings('servers', value);
     await audit(req, 'settings.servers', 'success', req.user.id, value);
     return value;

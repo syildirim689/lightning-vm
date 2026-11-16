@@ -2146,7 +2146,8 @@
         "failed": "Başarısız",
         "active": "Süren"
       },
-      "opNone": "Süzgece uyan işlem yok."
+      "opNone": "Süzgece uyan işlem yok.",
+      "updates": "Güncellemeler"
     },
     "finding": {
       "vm_missing": "VM VMware'de yok",
@@ -4049,7 +4050,11 @@
       "maxBackups": "Sunucu başına yedek",
       "deleteTitle": "Silme bekleme süresi",
       "deleteHelp": "Silinen sunucu kapatılır ve bu süre boyunca geri alınabilir; süre dolunca kalıcı olarak silinir. 0: hemen silinir.",
-      "deleteGraceHours": "Bekleme süresi (saat)"
+      "deleteGraceHours": "Bekleme süresi (saat)",
+      "updatesTitle": "İşletim sistemi güncellemeleri",
+      "updatesHelp": "Sunucuların içindeki güncellemeleri panel, sunucuda çalışan küçük bir bildirici üzerinden izler.",
+      "guestUpdates": "Yeni Linux sunuculara bildiriciyi kendiliğinden kur",
+      "guestUpdatesHelp": "Bildirici ilk açılışta kurulur ve yalnızca bekleyen güncellemeleri haber verir; neyin kendiliğinden kurulacağını sunucunun sahibi seçer, isterse takibi kapatır. Kapalıyken müşteri sunucu sayfasındaki komutla kendisi kurabilir."
     },
     "announcement": {
       "title": "Duyuru",
@@ -5479,6 +5484,7 @@
       "server_updates_enabled": "Güncelleme takibi açıldı",
       "server_updates_policy": "Güncelleme politikası değişti",
       "server_updates_action": "Sunucuda güncelleme ya da yeniden başlatma istendi",
+      "server_updates_bulk": "Birden çok sunucuda güncelleme kurulumu istendi",
       "server_updates_disabled": "Güncelleme takibi kapatıldı"
     },
     "outcome": {
@@ -8421,6 +8427,44 @@
     "turnOff": "Takibi kapat",
     "turnOffTitle": "Güncelleme takibi kapatılsın mı?",
     "turnOffBody": "Panel bu sunucunun güncelleme durumunu ve politikasını unutur. Bildirici bir sonraki çalışmasında kendini sunucudan kaldırır; sunucuda başka hiçbir şey değişmez.",
-    "turnedOff": "Güncelleme takibi kapatıldı"
+    "turnedOff": "Güncelleme takibi kapatıldı",
+    "autoTitle": "Bildirici kendiliğinden kuruluyor",
+    "autoWaiting": "Sunucu ilk açıldığında bildirici kendiliğinden kurulur; ilk rapor birkaç dakika içinde gelir. Gelmezse:",
+    "autoWaitingOff": "Sunucu açıldığında bildirici kendiliğinden kurulur ve ilk raporunu gönderir. Elle kurmak isterseniz:",
+    "admin": {
+      "title": "Sunucuların güncelleme durumu",
+      "intro": "Linux sunucuların içindeki bildiricilerin gönderdiği durum. Güvenlik güncellemelerini yanıt veren tüm sunucularda buradan başlatabilirsiniz; yeniden başlatma ve politika her sunucunun kendi sayfasındadır.",
+      "loading": "Güncelleme durumu yükleniyor…",
+      "none": "Henüz Linux sunucu yok.",
+      "noMatch": "Süzgece uyan sunucu yok.",
+      "find": "Sunucu, sahip ya da işletim sistemi ara",
+      "show": "Göster",
+      "group": {
+        "all": "Hepsi",
+        "security": "Güvenlik güncellemesi bekleyen",
+        "restart": "Yeniden başlatma gereken",
+        "silent": "Yanıt vermeyen",
+        "untracked": "Takip edilmeyen"
+      },
+      "col": {
+        "server": "Sunucu",
+        "os": "İşletim sistemi",
+        "updates": "Güncellemeler",
+        "policy": "Politika",
+        "report": "Son rapor"
+      },
+      "untracked": "Takip kapalı",
+      "installing": "Bildirici kuruluyor",
+      "upToDate": "Güncel",
+      "count": "{n} bekliyor",
+      "securityCount": "{n} güvenlik",
+      "working": "Kurulum sürüyor",
+      "silent": "Yanıt yok",
+      "autoReboot": "kendiliğinden yeniden başlar",
+      "installSecurity": "Güvenlik güncellemelerini kur ({n} sunucu)",
+      "installTitle": "{n} sunucuda güvenlik güncellemeleri kurulsun mu?",
+      "installBody": "Yalnızca bildiricisi yanıt veren ve bekleyen güvenlik güncellemesi olan sunucular alınır. Her sunucu isteği yaklaşık on dakika içinde alır ve kurulumu kendi içinde yapar; hiçbir sunucu yeniden başlatılmaz.",
+      "asked": "{started} sunucuya istek gönderildi, {skipped} atlandı"
+    }
   }
 }

@@ -331,6 +331,24 @@ export default {
     summary: { tr: 'Son 200 işlemi listeler.', en: 'Lists the latest 200 operations.' },
     returns: { tr: '`operations`: tür, durum, adım, deneme, hata kodu ve ayrıntısı, sunucu ve sahibin e-postası.', en: '`operations`: kind, status, step, attempts, error code and detail, server and owner e-mail.' },
   },
+  'GET /admin/server-updates': {
+    tag: 'admin-servers',
+    summary: { tr: 'Tüm Linux sunucuların işletim sistemi güncelleme durumunu listeler.', en: 'Lists the operating system update state of every Linux server.' },
+    details: { tr: 'servers.view_all veya servers.manage_all yetkisi gerekir. Durumu sunucuların içindeki bildiriciler gönderir; takip edilmeyen sunucular `tracked: false` ile gelir. En çok güvenlik güncellemesi bekleyen başta.', en: 'Needs servers.view_all or servers.manage_all. The state is sent by the reporters inside the servers; servers that are not tracked come with `tracked: false`. Most security updates first.' },
+    returns: { tr: '`servers`: `id`, `name`, `state`, `ownerEmail`, `image`, `tracked`, `auto`, `reported`, `reportedAt`, `stale`, `policy`, `autoReboot`, `os`, `manager`, `total`, `security`, `rebootRequired`, `pendingAction` ve `lastRun`.', en: '`servers`: `id`, `name`, `state`, `ownerEmail`, `image`, `tracked`, `auto`, `reported`, `reportedAt`, `stale`, `policy`, `autoReboot`, `os`, `manager`, `total`, `security`, `rebootRequired`, `pendingAction` and `lastRun`.' },
+  },
+  'POST /admin/server-updates/actions': {
+    tag: 'admin-servers',
+    summary: { tr: 'Birden çok sunucuda güncellemeleri kurdurur.', en: 'Has updates installed on several servers.' },
+    details: { tr: 'servers.manage_all yetkisi gerekir. Yalnız bildiricisi yanıt veren, bekleyen ya da süren işi olmayan ve kurulacak güncellemesi olan sunucular alınır; diğerleri atlanır. Yeniden başlatma toplu olarak yapılmaz.', en: 'Needs servers.manage_all. Only servers whose reporter answers, with nothing waiting or running and with updates to install, are taken; the others are skipped. Restarts are not done in bulk.' },
+    body: [
+      { name: 'action', type: 'string', required: true, values: ['security', 'upgrade'], text: { tr: 'Yalnız güvenlik güncellemeleri ya da tüm güncellemeler.', en: 'Security updates only, or all updates.' } },
+      { name: 'serverIds', type: 'array', required: true, text: { tr: 'Sunucu kimlikleri (en çok 500).', en: 'Server ids (500 at most).' } },
+    ],
+    example: { action: 'security', serverIds: ['8f0c0d2e-5b7a-4c1e-9d3f-2a6b7c8d9e0f'] },
+    returns: { tr: '`started` ve `skipped` sayıları.', en: 'The `started` and `skipped` counts.' },
+    errors: ['VALIDATION_FAILED'],
+  },
   'POST /admin/servers/actions': {
     tag: 'admin-servers',
     summary: { tr: 'Herhangi bir sunucu grubuna aynı işlemi uygular.', en: 'Applies one action to any set of servers.' },
@@ -370,7 +388,7 @@ export default {
     summary: { tr: 'Sunucunun içindeki işletim sistemi güncellemelerinin durumunu verir.', en: 'Returns the state of the operating system updates inside the server.' },
     details: { tr: 'Durumu sunucunun içinde çalışan güncelleme bildiricisi gönderir. Takip kapalıysa yalnız `enabled: false` döner.', en: 'The state is sent by the update reporter that runs inside the server. With tracking off, only `enabled: false` comes back.' },
     params: [serverId],
-    returns: { tr: '`enabled`, `reported`, `reportedAt`, `stale` (45 dakikadır rapor yok), `policy`, `autoReboot`, `rebootHour`, `pendingAction`, `os`, `manager`, `total`, `security`, `rebootRequired`, `packages` ve `lastRun`.', en: '`enabled`, `reported`, `reportedAt`, `stale` (no report for 45 minutes), `policy`, `autoReboot`, `rebootHour`, `pendingAction`, `os`, `manager`, `total`, `security`, `rebootRequired`, `packages` and `lastRun`.' },
+    returns: { tr: '`enabled`, `auto` (bildirici ilk açılışta kendiliğinden kuruluyor), `reported`, `reportedAt`, `stale` (45 dakikadır rapor yok), `policy`, `autoReboot`, `rebootHour`, `pendingAction`, `os`, `manager`, `total`, `security`, `rebootRequired`, `packages` ve `lastRun`.', en: '`enabled`, `auto` (the reporter is installing itself on first boot), `reported`, `reportedAt`, `stale` (no report for 45 minutes), `policy`, `autoReboot`, `rebootHour`, `pendingAction`, `os`, `manager`, `total`, `security`, `rebootRequired`, `packages` and `lastRun`.' },
     errors: ['NOT_FOUND'],
   },
   'POST /servers/:id/updates/enable': {

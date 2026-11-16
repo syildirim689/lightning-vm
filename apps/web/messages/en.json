@@ -2146,7 +2146,8 @@
         "failed": "Failed",
         "active": "Running"
       },
-      "opNone": "No operation matches."
+      "opNone": "No operation matches.",
+      "updates": "Updates"
     },
     "finding": {
       "vm_missing": "VM missing in VMware",
@@ -4049,7 +4050,11 @@
       "maxBackups": "Backups per server",
       "deleteTitle": "Deletion grace period",
       "deleteHelp": "A deleted server is shut down and can be taken back during this time; then it is deleted for good. 0: deleted at once.",
-      "deleteGraceHours": "Grace period (hours)"
+      "deleteGraceHours": "Grace period (hours)",
+      "updatesTitle": "Operating system updates",
+      "updatesHelp": "The panel follows the updates inside servers through a small reporter that runs in the server.",
+      "guestUpdates": "Install the reporter on new Linux servers by itself",
+      "guestUpdatesHelp": "The reporter is installed on first boot and only tells about waiting updates; the server’s owner chooses what is installed by itself, or turns tracking off. When this is off, customers can still install it with the command on the server’s page."
     },
     "announcement": {
       "title": "Announcement",
@@ -5479,6 +5484,7 @@
       "server_updates_enabled": "Update tracking turned on",
       "server_updates_policy": "Update policy changed",
       "server_updates_action": "Update or restart asked for in the server",
+      "server_updates_bulk": "Update install asked for on several servers",
       "server_updates_disabled": "Update tracking turned off"
     },
     "outcome": {
@@ -8421,6 +8427,44 @@
     "turnOff": "Turn tracking off",
     "turnOffTitle": "Turn update tracking off?",
     "turnOffBody": "The panel forgets this server's update state and policy. The reporter removes itself from the server on its next run; nothing else in the server changes.",
-    "turnedOff": "Update tracking is off"
+    "turnedOff": "Update tracking is off",
+    "autoTitle": "The reporter installs itself",
+    "autoWaiting": "The reporter is installed when the server first boots; the first report arrives within a few minutes. If it does not:",
+    "autoWaitingOff": "When the server is powered on, the reporter installs itself and sends its first report. To install it by hand:",
+    "admin": {
+      "title": "Update state of servers",
+      "intro": "What the reporters inside Linux servers sent. Security updates can be started here on every server that answers; restarts and the policy are on each server’s own page.",
+      "loading": "Loading the update state…",
+      "none": "No Linux servers yet.",
+      "noMatch": "No server matches.",
+      "find": "Find a server, owner or operating system",
+      "show": "Show",
+      "group": {
+        "all": "All",
+        "security": "Security updates waiting",
+        "restart": "Restart needed",
+        "silent": "Not answering",
+        "untracked": "Not tracked"
+      },
+      "col": {
+        "server": "Server",
+        "os": "Operating system",
+        "updates": "Updates",
+        "policy": "Policy",
+        "report": "Last report"
+      },
+      "untracked": "Tracking off",
+      "installing": "Reporter installing",
+      "upToDate": "Up to date",
+      "count": "{n} waiting",
+      "securityCount": "{n} security",
+      "working": "Installing",
+      "silent": "No answer",
+      "autoReboot": "restarts by itself",
+      "installSecurity": "Install security updates ({n} servers)",
+      "installTitle": "Install security updates on {n} servers?",
+      "installBody": "Only servers whose reporter answers and that have security updates waiting are included. Each server picks the request up within about ten minutes and installs inside itself; no server is restarted.",
+      "asked": "Asked {started} servers, skipped {skipped}"
+    }
   }
 }

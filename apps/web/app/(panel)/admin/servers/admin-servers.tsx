@@ -15,6 +15,7 @@ import { useApiAction, useApiQuery } from '../../../../lib/query';
 import { FavoriteStar, moving, StateBadge, type Server } from '../../servers-ui';
 import { ServerFilters, ServerTotals, stateGroup, useServerFilters } from '../../server-filters';
 import { ImportVms } from './import-vms';
+import { UpdatesOverview, useUpdatesOverview } from './updates-overview';
 import { Copy } from '../../server-extras';
 import { useBytes } from '../../../../lib/units';
 
@@ -35,6 +36,7 @@ export default function AdminServers() {
   const reconcile = useApiAction(() => apiFetch('/admin/reconcile', { method: 'POST' }), { invalidate: [['admin', 'findings']], success: t('admin.reconcileQueued') });
 
   const filters = useServerFilters(servers);
+  const waitingSecurity = (useUpdatesOverview().data?.servers ?? []).filter((x) => x.reported && x.security > 0).length;
   const me = useMe();
   const [bulkAction, setBulkAction] = useState('shutdown');
   const [bulkTag, setBulkTag] = useState('');
@@ -64,6 +66,7 @@ export default function AdminServers() {
               <Tabs.Tab id="servers">{t('admin.servers')} <span className="ml-1 text-xs text-muted">{servers.length}</span><Tabs.Indicator/></Tabs.Tab>
               <Tabs.Tab id="operations">{t('admin.operations')}{failed > 0 && <StatusChip tone="danger">{failed}</StatusChip>}<Tabs.Indicator/></Tabs.Tab>
               <Tabs.Tab id="reconciliation">{t('admin.reconciliation')}{findings.length > 0 && <StatusChip tone="warning">{findings.length}</StatusChip>}<Tabs.Indicator/></Tabs.Tab>
+              <Tabs.Tab id="updates">{t('admin.updates')}{waitingSecurity > 0 && <StatusChip tone="danger">{waitingSecurity}</StatusChip>}<Tabs.Indicator/></Tabs.Tab>
               {can(me?.permissions, 'servers.manage_all') && <Tabs.Tab id="import">{t('admin.import')}<Tabs.Indicator/></Tabs.Tab>}
             </Tabs.List>
           </Tabs.ListContainer>
@@ -135,6 +138,7 @@ export default function AdminServers() {
                   cells={(f) => [format.dateTime(new Date(f.lastSeen), { dateStyle: 'medium', timeStyle: 'short' }), <StatusChip key="k" tone="warning">{t(`finding.${f.kind as 'vm_missing'}`)}</StatusChip>,
                     f.serverId ? <NextLink key="n" href={`/servers/${f.serverId}`} className="font-medium text-accent hover:underline">{f.serverName ?? f.serverId}</NextLink> : f.serverName ?? f.detail.name ?? f.vmMoref ?? '–', `${f.connectionName}${f.detail.actual ? ` · ${f.detail.recorded} → ${f.detail.actual}` : ''}`]}/>}
           </Tabs.Panel>
+          <Tabs.Panel id="updates" className="pt-4"><h2 className="sr-only">{t('admin.updates')}</h2><UpdatesOverview canManage={can(me?.permissions, 'servers.manage_all')}/></Tabs.Panel>
           {can(me?.permissions, 'servers.manage_all') && <Tabs.Panel id="import" className="pt-4"><h2 className="sr-only">{t('admin.import')}</h2><ImportVms/></Tabs.Panel>}
         </Tabs>
       </Card.Content>

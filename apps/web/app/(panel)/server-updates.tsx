@@ -14,7 +14,7 @@ import { Copy } from './server-extras';
 
 type Pkg = { name: string; to: string; security: boolean };
 type Run = { action: 'security' | 'upgrade' | 'reboot'; state: 'running' | 'succeeded' | 'failed'; auto: boolean; message: string; at: string };
-type Data = { enabled: boolean; reported?: boolean; reportedAt?: string | null; stale?: boolean; policy?: 'notify' | 'security' | 'all'; autoReboot?: boolean; rebootHour?: number;
+type Data = { enabled: boolean; auto?: boolean; reported?: boolean; reportedAt?: string | null; stale?: boolean; policy?: 'notify' | 'security' | 'all'; autoReboot?: boolean; rebootHour?: number;
   pendingAction?: Run['action'] | null; os?: string | null; manager?: string | null; total?: number; security?: number; rebootRequired?: boolean; packages?: Pkg[]; lastRun?: Run | null; command?: string };
 
 export function ServerUpdates({ serverId, windows, canChange, powered }: { serverId: string; windows: boolean; canChange: boolean; powered: boolean }) {
@@ -69,7 +69,7 @@ export function ServerUpdates({ serverId, windows, canChange, powered }: { serve
   return <Section title={t('title')} description={t('intro')} actions={d.os && <StatusChip tone="default">{d.os}</StatusChip>}>
     <div className="flex flex-col gap-5">
       {install}
-      {waitingFirst && !command && <Notice tone="default" title={t('waitingTitle')}>{t('waiting')}
+      {waitingFirst && !command && <Notice tone="default" title={t(d.auto ? 'autoTitle' : 'waitingTitle')}>{t(d.auto ? (powered ? 'autoWaiting' : 'autoWaitingOff') : 'waiting')}
         {canChange && <> <button type="button" className="font-medium text-accent hover:underline" onClick={() => quiet(send('/enable', 'POST', undefined))}>{t('newCommand')}</button></>}</Notice>}
       {waitingFirst && command && <p role="status" className="flex items-center gap-2 text-sm text-muted"><I name="loader" size={14} className="animate-spin"/>{t('waitingReport')}</p>}
       {d.stale && <Notice tone="warning" title={t('staleTitle')}>{powered ? t('stale', { when: ago(d.reportedAt) }) : t('staleOff', { when: ago(d.reportedAt) })}
