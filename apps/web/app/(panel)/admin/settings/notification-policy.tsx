@@ -33,8 +33,8 @@ export default function NotificationPolicy({ readOnly }: { readOnly: boolean }) 
     <Notice tone="default" title={t('policyTitle')}>{t('policyIntro')}</Notice>
     <ul className="flex flex-wrap gap-2">{channels.map((c) => <li key={c}><Chip size="sm" variant="soft" color={available[c] ? 'success' : 'default'}>
       <span className="flex items-center gap-1">{channelIcon[c]}{t(`channel.${c}`)} · {available[c] ? t('ready') : t('notConfigured')}</span></Chip></li>)}</ul>
-    <div className="grid gap-3">
-      {(['user', 'staff'] as const).map((aud) => <Card key={aud}>
+    <div className="grid grid-cols-1 gap-3">
+      {(['user', 'staff'] as const).map((aud) => <Card key={aud} className="min-w-0">
         <Card.Header><Card.Title className="text-base font-semibold">{t(`audience.${aud}`)}</Card.Title><Card.Description className="text-xs text-muted">{t(`audienceHelp.${aud}`)}</Card.Description></Card.Header>
         <Card.Content className="overflow-x-auto">
           <table className="w-full min-w-[46rem] text-sm">
