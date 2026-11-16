@@ -167,6 +167,8 @@
     "FORBIDDEN_TARGET": "Sizde olmayan izinleri veremez, sizden yetkili birini değiştiremezsiniz.",
     "ROLE_LOCKED": "Bu hazır rol değiştirilemez veya silinemez.",
     "LAST_ADMIN": "En az bir yönetici kalmalı.",
+    "NOT_OVIRT": "Bu adreste oVirt Engine API’si yanıt vermedi. Adresi ve portu (varsayılan 443) denetleyin.",
+    "OVIRT_ERROR": "oVirt Engine isteği reddetti. Ayrıntı için Engine’deki olay günlüğüne bakın.",
     "NOT_XAPI": "Bu adreste XCP-ng / XenServer API’si (XAPI) yanıt vermedi. Adresi ve portu (varsayılan 443) denetleyin.",
     "XAPI_ERROR": "XCP-ng isteği reddetti. Ayrıntı için havuzun görev günlüğüne bakın.",
     "HOST_IS_SLAVE": "Bu host havuzun yöneticisi değil. Bağlantıda havuz yöneticisinin (master) adresini kullanın.",
@@ -819,6 +821,11 @@
   },
   "Vmware": {
     "platform": {
+      "ovirt": "oVirt / RHV",
+      "ovirtHelp": "oVirt Engine, RHV, Oracle OLVM 4.4+",
+      "ovirtEndpointHelp": "oVirt Engine’in adresi (yönetim arayüzünün açıldığı ad). Varsayılan port 443.",
+      "ovirtUsernameHelp": "Alanıyla birlikte kullanıcı; genellikle admin@internal.",
+      "ovirtVerify": "Parmak izini Engine sunucusunda şu komutla karşılaştırın:",
       "xcpng": "XCP-ng / XenServer",
       "xcpngHelp": "Havuz ya da tek host, 8.x",
       "xcpngEndpointHelp": "Havuz yöneticisinin (master) adresi. Varsayılan port 443.",
@@ -908,6 +915,7 @@
       "discovered": "Son keşif"
     },
     "kind": {
+      "ovirt": "oVirt",
       "xcpng": "XCP-ng",
       "proxmox": "Proxmox VE",
       "esxi": "Standalone ESXi",

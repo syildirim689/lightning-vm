@@ -12,7 +12,8 @@ import { decryptSecret, encryptSecret } from './secrets';
 type TlsSettings = { mode: 'system' | 'ca' | 'pinned'; caPem?: string; sha256?: string };
 // platform picks the adapter: VMware (services/vmware) unless it names another one (services/proxmox,
 // services/xcpng). All speak the same contract (docs/adapter-contract.md), so everything above the adapter is the same.
-export const platforms = { proxmox: { port: 8006, url: () => process.env.PROXMOX_SERVICE_URL ?? 'http://proxmox:8080' }, xcpng: { port: 443, url: () => process.env.XCPNG_SERVICE_URL ?? 'http://xcpng:8080' } } as const;
+export const platforms = { proxmox: { port: 8006, url: () => process.env.PROXMOX_SERVICE_URL ?? 'http://proxmox:8080' }, xcpng: { port: 443, url: () => process.env.XCPNG_SERVICE_URL ?? 'http://xcpng:8080' },
+  ovirt: { port: 443, url: () => process.env.OVIRT_SERVICE_URL ?? 'http://ovirt:8080' } } as const;
 type Platform = keyof typeof platforms;
 const platformOf = (kind: unknown): Platform | undefined => (typeof kind === 'string' && kind in platforms ? (kind as Platform) : undefined);
 type Target = { host: string; port: number; username: string; password: string; tls: TlsSettings; apiVersion?: string; platform?: Platform };

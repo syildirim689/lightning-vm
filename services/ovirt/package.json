@@ -1,0 +1,12 @@
+{
+  "name": "@lightning-vm/ovirt",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "oVirt adapter: the hypervisor adapter contract (docs/adapter-contract.md) on the oVirt Engine REST API",
+  "scripts": {
+    "start": "node server.mjs",
+    "test": "node --check server.mjs && node --check engine.mjs && node --check handlers.mjs && node --test test/*.test.mjs"
+  },
+  "engines": { "node": ">=22" }
+}

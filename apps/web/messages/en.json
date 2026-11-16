@@ -167,6 +167,8 @@
     "FORBIDDEN_TARGET": "You cannot grant permissions you lack or change someone with more access than you.",
     "ROLE_LOCKED": "This built-in role cannot be changed or removed.",
     "LAST_ADMIN": "At least one administrator must remain.",
+    "NOT_OVIRT": "No oVirt Engine API answered at this address. Check the address and the port (443 by default).",
+    "OVIRT_ERROR": "The oVirt Engine refused the request. See the events in the Engine for the details.",
     "NOT_XAPI": "No XCP-ng / XenServer API (XAPI) answered at this address. Check the address and the port (443 by default).",
     "XAPI_ERROR": "XCP-ng refused the request. See the pool’s task log for the details.",
     "HOST_IS_SLAVE": "This host is not the pool master. Use the address of the pool master for the connection.",
@@ -819,6 +821,11 @@
   },
   "Vmware": {
     "platform": {
+      "ovirt": "oVirt / RHV",
+      "ovirtHelp": "oVirt Engine, RHV, Oracle OLVM 4.4+",
+      "ovirtEndpointHelp": "The address of the oVirt Engine (the name its administration portal opens at). The default port is 443.",
+      "ovirtUsernameHelp": "A user with its domain; usually admin@internal.",
+      "ovirtVerify": "Compare the fingerprint on the Engine server with this command:",
       "xcpng": "XCP-ng / XenServer",
       "xcpngHelp": "A pool or a single host, 8.x",
       "xcpngEndpointHelp": "The address of the pool master. The default port is 443.",
@@ -908,6 +915,7 @@
       "discovered": "Last discovery"
     },
     "kind": {
+      "ovirt": "oVirt",
       "xcpng": "XCP-ng",
       "proxmox": "Proxmox VE",
       "esxi": "Standalone ESXi",

@@ -62,6 +62,7 @@ services:
       VMWARE_SERVICE_URL: http://vmware:8080
       PROXMOX_SERVICE_URL: http://proxmox:8080
       XCPNG_SERVICE_URL: http://xcpng:8080
+      OVIRT_SERVICE_URL: http://ovirt:8080
       VMWARE_SERVICE_TOKEN_FILE: /run/secrets/vmware_token
       APP_VERSION: ${APP_VERSION:-dev}
       APP_ENV: ${APP_ENV:-production}
@@ -132,6 +133,23 @@ services:
     environment:
       XCPNG_SERVICE_TOKEN_FILE: /run/secrets/vmware_token
       XCPNG_ALLOW_NETWORKS: ${XCPNG_ALLOW_NETWORKS:-}
+    secrets: [vmware_token]
+    healthcheck:
+      test: [CMD, node, server.mjs, healthcheck]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    logging: *logging
+  # oVirt adapter (oVirt Engine REST API), for connections of kind "ovirt". Same contract, same service token, no state.
+  ovirt:
+    build: ./services/ovirt
+    restart: unless-stopped
+    read_only: true
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+    environment:
+      OVIRT_SERVICE_TOKEN_FILE: /run/secrets/vmware_token
+      OVIRT_ALLOW_NETWORKS: ${OVIRT_ALLOW_NETWORKS:-}
     secrets: [vmware_token]
     healthcheck:
       test: [CMD, node, server.mjs, healthcheck]

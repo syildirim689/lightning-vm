@@ -4,7 +4,7 @@
 
 # Lightning VM
 
-**VMware (ESXi / vCenter), Proxmox VE ve XCP-ng için açık kaynak sunucu satış ve yönetim paneli**
+**VMware (ESXi / vCenter), Proxmox VE, XCP-ng ve oVirt için açık kaynak sunucu satış ve yönetim paneli**
 
 Müşteriler sunucu sipariş eder, açar, kapatır, konsoluna bağlanır; yönetici kapasiteyi, IP'leri, fiyatları,
 bildirimleri ve sistemin kendisini tek panelden yönetir. Kurulumdan sonra sunucuya SSH ile girmeniz gerekmez.
@@ -55,6 +55,7 @@ bildirimleri ve sistemin kendisini tek panelden yönetir. Kurulumdan sonra sunuc
 </td><td valign="top" width="50%">
 
 ### Yönetici paneli
+- **oVirt / RHV bağlantıları (ilk sürüm):** Engine'in kendi cloud-init desteğiyle ([docs/ovirt.md](docs/ovirt.md))
 - **XCP-ng / XenServer bağlantıları (ilk sürüm):** havuz ya da tek host; cloud-init'in tamamı yapılandırma diskiyle ([docs/xcpng.md](docs/xcpng.md))
 - **Proxmox VE bağlantıları (ilk sürüm):** düğüm ya da küme; keşif, şablondan sunucu oluşturma, güç, boyut, anlık görüntü, ek disk ([docs/proxmox.md](docs/proxmox.md))
 - **ESXi / vCenter bağlantıları:** envanter keşfi, kapasite, lisans ve yetki kontrolü; IP bloğu tarayarak ağdaki ESXi/vCenter'ları bulma, tek tıkla ekleme ve günlük/haftalık otomatik tarama
@@ -125,6 +126,7 @@ bildirimleri ve sistemin kendisini tek panelden yönetir. Kurulumdan sonra sunuc
 
 | Ne | Nerede |
 |---|---|
+| **oVirt / RHV desteği (ilk sürüm):** aynı panelden oVirt Engine | Yönetim → Bağlantılar → oVirt · [docs/ovirt.md](docs/ovirt.md) |
 | **XCP-ng / XenServer desteği (ilk sürüm):** aynı panelden XAPI havuzları | Yönetim → Bağlantılar → XCP-ng · [docs/xcpng.md](docs/xcpng.md) |
 | **Proxmox VE desteği (ilk sürüm):** VMware ile aynı panelden Proxmox düğümleri ve kümeleri | Yönetim → Bağlantılar → Proxmox VE · [docs/proxmox.md](docs/proxmox.md) |
 | Panel sunucusunun canlı durumu: işlemci, bellek, yük, disk, servisler, süreçler, günlükler | Yönetim → Sistem → Sunucu durumu |
@@ -154,7 +156,7 @@ bildirimleri ve sistemin kendisini tek panelden yönetir. Kurulumdan sonra sunuc
 | İşletim sistemi | Ubuntu 22.04 / 24.04 / 26.04 (amd64 veya arm64) | Ubuntu 24.04 LTS |
 | Bellek / disk | 2 GB RAM, 10 GB boş disk | 4 GB RAM, 40 GB disk (izleme açıkken) |
 | Ağ | 80 ve 443 portları dışarıya açık (HTTPS için) | Bir alan adı (A kaydı sunucuyu göstermeli) |
-| Sanallaştırma | ESXi / vCenter 6.0 – 9.x, Proxmox VE 7.x – 9.x ya da XCP-ng 8.x | Sunucu oluşturmak için **vCenter**, **Proxmox VE** ya da **XCP-ng** |
+| Sanallaştırma | ESXi / vCenter 6.0 – 9.x, Proxmox VE 7.x – 9.x, XCP-ng 8.x ya da oVirt 4.4+ | Sunucu oluşturmak için **vCenter**, **Proxmox VE**, **XCP-ng** ya da **oVirt** |
 
 Docker kurulu değilse betik resmî deposundan kurar. Paneli VMware host'unun kendisine değil, ayrı bir Linux
 sunucuya (sanal da olabilir) kurun.
@@ -315,6 +317,7 @@ flowchart LR
 | `services/vmware` | Go, govmomi | vCenter/ESXi ile konuşan adaptör |
 | `services/proxmox` | Node.js (bağımlılıksız) | Aynı sözleşmeyle Proxmox VE ile konuşan adaptör ([sözleşme](docs/adapter-contract.md)) |
 | `services/xcpng` | Node.js (bağımlılıksız) | Aynı sözleşmeyle XCP-ng / XenServer (XAPI) ile konuşan adaptör |
+| `services/ovirt` | Node.js (bağımlılıksız) | Aynı sözleşmeyle oVirt Engine (REST) ile konuşan adaptör |
 | `services/console` | Go | Tarayıcı konsolu ve sunucu terminali için WebSocket geçidi |
 | `scripts/install.sh` | POSIX sh, Docker Compose | Kurulum, güncelleme, yedek, host ajanı |
 
@@ -333,7 +336,7 @@ Simülatör (govmomi `vcsim`) gerçek bir vCenter olmadan tüm akışı çalış
 | API birim testleri | `cd apps/api && npm test` |
 | API entegrasyon testleri (PostgreSQL + Redis) | `cd apps/api && npm run test:integration` |
 | Go servisleri | `cd services/vmware && go test ./...` |
-| Proxmox ve XCP-ng adaptörleri | `cd services/proxmox && npm test` · `cd services/xcpng && npm test` |
+| Proxmox, XCP-ng ve oVirt adaptörleri | `cd services/proxmox && npm test` (aynısı `services/xcpng` ve `services/ovirt` için) |
 | Uçtan uca (Playwright; 390 / 768 / 1920 px) | `cd apps/web && npx playwright test` |
 
 CI bilerek elle tetiklenir (GitHub Actions → *Run workflow*). Katkı kuralları: [CONTRIBUTING.md](CONTRIBUTING.md).
@@ -348,6 +351,8 @@ CI bilerek elle tetiklenir (GitHub Actions → *Run workflow*). Katkı kurallar�
 - **E-posta adresi doğrulama yok:** kayıtla açılan hesabın e-posta adresi doğrulanmaz. (SSO, dizin ve bayi
   üzerinden gelen hesaplar doğrulanmış sayılır.)
 - **WhatsApp:** Meta Cloud API ve onaylı bir mesaj şablonu gerekir. **Telegram:** botta webhook tanımlı olmamalı.
+- **oVirt / RHV:** ilk sürüm; gerçek bir Engine'de henüz denenmedi. Grafikler, konsol, firewall, yedek, ISO, özel ağ ve taşıma
+  oVirt'te henüz yok; misafirdeki ilk arayüzün adı `eth0` olmalı ([docs/ovirt.md](docs/ovirt.md)).
 - **XCP-ng / XenServer:** ilk sürüm; gerçek bir havuzda henüz denenmedi. Grafikler, konsol, firewall, yedek, ISO, özel ağ ve
   taşıma XCP-ng'de henüz yok ([docs/xcpng.md](docs/xcpng.md)).
 - **Proxmox VE:** ilk sürüm; gerçek bir Proxmox sunucusunda henüz denenmedi. Konsol, firewall, yedek, ISO, özel ağ ve
@@ -385,7 +390,7 @@ projeyi güvenilir kılacak olan şeydir.
 
 ## 🌍 English summary
 
-**Lightning VM** is an open-source hosting panel for VMware (ESXi / vCenter 6.0–9.x) and, as first releases, Proxmox VE and XCP-ng / XenServer. Customers order, manage
+**Lightning VM** is an open-source hosting panel for VMware (ESXi / vCenter 6.0–9.x) and, as first releases, Proxmox VE, XCP-ng / XenServer and oVirt / RHV. Customers order, manage
 and console into virtual servers. Administrators manage capacity, IP pools, pricing, notifications and the panel
 itself from the browser, including updates, backups and monitoring. It ships with a one-command installer and
 automatic HTTPS. The UI is in Turkish and English.
