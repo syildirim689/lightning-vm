@@ -1,5 +1,8 @@
 # Kurulum ve güncelleme
 
+> Kurulu bir sunucuyu yükseltmeden önce [upgrade-notes.md](upgrade-notes.md) sayfasını okuyun: değişen davranışlar,
+> mevcut veriye etkileri ve kimlerin etkileneceğini gösteren sorgular oradadır.
+
 ## Yeni bir sunucuya kurulum (tek komut)
 `scripts/get.sh`:
 - kaynağı git ile indirir;
@@ -27,7 +30,16 @@ sudo sh get.sh -- --domain panel.example.com --lang tr         # "--" sonrası i
   yazılmaz; sonraki güncellemeler bu dosyayı kullanır.
 - **SSH deploy key:** root'un SSH anahtarı depoya salt-okunur deploy key olarak eklenir.
 - **Varsayılan dizin:** `/opt/lightning-vm`.
-- **Tekrar çalıştırma:** aynı komut güvenlidir. Kaynak güncellenir ve kurulum kaldığı yerden sürer.
+- **Tekrar çalıştırma:** aynı komut kurulu bir sunucuda yeniden kurulum yapmaz, ne yaptığı duruma bağlıdır:
+  - **Kurulum tamamlanmışsa** (`.env` ve `data/maintenance/history.jsonl` var): sürümleri çeker ve
+    `install.sh update` çalıştırır. Yani önce yedek alınır, uyumluluk denetlenir, yeni sürüm hazır olmazsa
+    önceki sürüme dönülür. `--version vX.Y.Z` verilirse `update --to vX.Y.Z` çalışır. Sunucunun güncelleme
+    kanalı (`UPDATE_CHANNEL`, `UPDATE_BRANCH`) **değiştirilmez**; `--branch` bu durumda uygulanmaz (kanalı
+    değiştirmek için: `install.sh auto-update on|off --channel … --branch …`). `--` sonrasındaki
+    seçeneklerden yalnızca `--lang` kullanılır.
+  - **Kurulum yarıda kalmışsa** (`.env` var, geçmiş yok) ve sürüm ya da dal verilmediyse: başlanan sürümle
+    kaldığı yerden sürer.
+  - **Kurulum yoksa:** yukarıdaki gibi sıfırdan kurar.
 
 ## Panelden güncelleme
 Konum: Yönetim → Sistem → **Güncellemeler** (`system.update` izni).
@@ -52,16 +64,31 @@ Panel sunucuda doğrudan hiçbir şey çalıştıramaz; Docker soketi de verilme
    API kullanıcısı (uid 1000) ve root tarafından yazılabilir.
 2. Kurulumun eklediği systemd path birimi `lightning-vm-requests.path` dosyayı görür ve
    `install.sh run-requests` komutunu çalıştırır.
-3. `run-requests` isteği **yeniden doğrular**:
-   - yalnızca `check`, `update`, `backup` ve `auto-update` işlemleri kabul edilir;
-   - sürüm, kanal ve pencere değerleri sıkı kalıplarla kontrol edilir.
-   Sonra `install.sh` komutunu çalıştırır.
+3. `run-requests` isteği **yeniden doğrular**. Yalnızca aşağıdaki işlemler kabul edilir; listede olmayan
+   her istek reddedilir (`E_REQUEST_INVALID`):
+
+   | İstek | Çalışan komut | Denetlenen değerler |
+   |---|---|---|
+   | `check` | `releases` | — |
+   | `update` | `update [--to …]` | sürüm: `vX.Y.Z[-ek]` ya da commit kimliği |
+   | `backup` | `backup` | — |
+   | `auto-update` | `auto-update on\|off [--channel …] [--window …]` | kanal: `stable`/`beta`/`edge`; pencere: `SS:DD-SS:DD` |
+   | `domain` | `domain ALAN_ADI [--tls staging\|custom …]` | alan adı kalıbı; `custom` için sertifika ve anahtar dosyaları (boyut sınırlı, yalnızca normal dosya) |
+   | `host` | `host [--hostname] [--timezone] [--ntp] [--dns]` | sunucu adı, saat dilimi, en çok 4 NTP/DNS sunucusu |
+   | `monitoring`, `terminal` | `monitoring on\|off`, `terminal on\|off` | yalnızca `on`/`off` |
+   | `os` | `os check\|upgrade\|security\|reboot\|auto-on\|auto-off` | yalnızca bu altı eylem |
+   | `state` | `state` | — |
+
+   Yani panel, ajan üzerinden bu sunucunun alan adını ve sertifikasını, adını, saatini, DNS'ini
+   değiştirebilir, işletim sistemi güncellemelerini kurabilir, sunucuyu yeniden başlatabilir ve yönetici
+   terminalini açabilir. Ajanı kapatmak (`agent off`) bunların hepsini panelden kullanılamaz kılar.
 4. Sonuçlar `data/maintenance` dizinine yazılır. Panel bu dizini yalnızca okuyabilir.
    - `status.json`: işin durumu;
    - `runs/<id>.log`: ilerleme satırları;
    - `releases.json`: sürüm listesi;
    - `history.jsonl`: geçmiş.
-5. Zamanlanmış bakım ile panel istekleri aynı kilidi kullanır; ikisi aynı anda çalışmaz.
+5. Zamanlanmış bakım, panel istekleri ve elle başlatılan `backup`/`update`/`restore` aynı kilidi kullanır;
+   aynı anda yalnızca biri çalışır.
 
 Eski kurulumlarda ajanı bir kez açın: `sudo sh scripts/install.sh agent on`.
 

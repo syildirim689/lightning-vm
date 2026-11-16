@@ -6,8 +6,10 @@
 
 **VMware, Proxmox VE, XCP-ng, oVirt, Hyper-V, KVM (libvirt) ve Incus / LXD için açık kaynak sunucu satış ve yönetim paneli**
 
-Müşteriler sunucu sipariş eder, açar, kapatır, konsoluna bağlanır; yönetici kapasiteyi, IP'leri, fiyatları,
-bildirimleri ve sistemin kendisini tek panelden yönetir. Kurulumdan sonra sunucuya SSH ile girmeniz gerekmez.
+Müşteriler sunucu sipariş eder, açar, kapatır, yeniden kurar; yönetici kapasiteyi, IP'leri, fiyatları,
+bildirimleri ve sistemin kendisini tek panelden yönetir. Kurulumdan sonraki günlük işlerin çoğu için sunucuya SSH ile
+girmeniz gerekmez. Özelliklerin tamamı yalnızca VMware'de vardır; diğer altı platformun neyi yapıp neyi yapmadığı
+[Platform kapsamı](#-platform-kapsamı) tablosundadır.
 
 ![Durum](https://img.shields.io/badge/durum-geli%C5%9Ftirme%20s%C3%BCr%C3%BCm%C3%BC-orange)
 ![Lisans](https://img.shields.io/badge/lisans-Apache--2.0-blue)
@@ -17,7 +19,7 @@ bildirimleri ve sistemin kendisini tek panelden yönetir. Kurulumdan sonra sunuc
 ![vSphere](https://img.shields.io/badge/vSphere-6.0%E2%80%939.x-607078)
 ![Yapay zekâ ile yazıldı](https://img.shields.io/badge/yaz%C4%B1ld%C4%B1-Claude%20Code%20ile-d97757)
 
-[Özellikler](#-özellikler) · [Son eklenenler](#-son-eklenenler) · [Ekran görüntüleri](#-ekran-görüntüleri) · [Kurulum](#-kurulum) · [Kullanım](#-ilk-adımlar) ·
+[Özellikler](#-özellikler) · [Platform kapsamı](#-platform-kapsamı) · [Son eklenenler](#-son-eklenenler) · [Ekran görüntüleri](#-ekran-görüntüleri) · [Kurulum](#-kurulum) · [Kullanım](#-ilk-adımlar) ·
 [Mimari](#-mimari) · [Geliştirme](#-geliştirme-ve-testler) · [Bilinen sınırlar](#-bilinen-sınırlar) · [English](#-english-summary)
 
 </div>
@@ -42,13 +44,28 @@ bildirimleri ve sistemin kendisini tek panelden yönetir. Kurulumdan sonra sunuc
 ### Müşteri paneli
 - **Akıllı sipariş:** paket veya özel kaynak, uygun olmayan paketler gerekçesiyle, en uygun paket, ad önerisi,
   canlı fiyat ve kota kontrolü
-- **Sunucu yönetimi:** aç / kapat / yeniden başlat, silme onayı, işlem geçmişi, canlı CPU-RAM-disk-ağ grafikleri
-- **Tarayıcı konsolu**, ISO bağlama, root parolası, uygulama kurulumu (cPanel, Plesk…)
-- **Anlık görüntüler** (snapshot), **yedekler** ve geri yükleme, **ek diskler**, **güç zamanlaması**, etiketler ve notlar
+- **Sunucu yönetimi:** aç / kapat / yeniden başlat, silme onayı, işlem geçmişi, CPU-RAM-disk-ağ grafikleri
+  (grafikler yalnız VMware ve Proxmox'ta dolar)
+- **Yeniden kurulum, boyut değiştirme, kopyalama:** aynı adresler ve anahtarlarla başka imaj; paket ya da özel boyut
+  (disk yalnızca büyür, fark gün hesabıyla faturalanır); bir sunucunun diskiyle birlikte kopyası
+- **Tarayıcı konsolu** ve **ISO bağlama** (ikisi de yalnız VMware'de), root parolası, uygulama kurulumu (cPanel, Plesk…)
+- **Anlık görüntüler** (snapshot), **ek diskler**, **güç zamanlaması**, etiketler ve notlar; **yedekler** ve geri
+  yükleme ile **kişisel imajlar** (sunucuyu imaj olarak kaydedip ondan sipariş verme) yalnız VMware'de
+- **Silmede bekleme süresi:** silinen sunucu önce kapatılır ve ayarlanan süre (varsayılan 24 saat) sonunda silinir;
+  o zamana kadar geri alınabilir. **Sunucu kilidi** silmeyi, zorla kapatmayı, yeniden kurmayı, boyut değiştirmeyi ve
+  geri yüklemeleri engeller. **Favoriler** sık kullanılan sunucuları işaretler
+- **Sunucuyu başka hesaba devretme:** e-postayla teklif edilir, karşı taraf 7 gün içinde kabul ederse aboneliğiyle geçer
+- **Trafik kotası:** günlük giriş-çıkış sayımı, %80 ve %100'de uyarı (sayım VMware ve Proxmox'ta); kota dolunca hız
+  sınırlama yalnız VMware'de (dağıtık anahtar)
 - **İşletim sistemi güncellemeleri:** sunucunun içindeki bekleyen ve güvenlik güncellemeleri, "yalnız haber ver / güvenliği kur /
   hepsini kur" politikası, seçilen saatte otomatik yeniden başlatma (Linux: apt, dnf, yum)
-- **Özel ağlar**, faturalar ve ödeme, destek talepleri, API anahtarları ve etkileşimli API belgeleri
-- **Firewall** şablonları, ters DNS (PTR), SSH anahtarları (GitHub'dan içe aktarma)
+- Faturalar ve ödeme, **saatlik kullanım** (bakiyeden; bakiye bitince bekletme, ay sonunda kullanım faturası),
+  **aylık bütçe uyarısı** (aylık gidiş bütçeyi aşınca ayda bir bildirim; siparişte önceden uyarı), destek talepleri
+- **API anahtarları ve API belgeleri:** arama, süzgeçler, örnek istekler, OpenAPI ve PDF indirme (istekler tarayıcıdan
+  çalıştırılamaz). **Webhook'lar:** imzalı, yeniden denenen, teslimat kaydı ve sınama düğmesiyle
+- **Verilerimi indir:** hesabın panelde tutulan verileri tek JSON dosyası olarak (parola, oturum ve gizli anahtarlar hariç)
+- **Özel ağlar** ve **firewall** şablonları (ikisi de yalnız VMware'de, dağıtık anahtarla), ters DNS (PTR), SSH
+  anahtarları (GitHub'dan içe aktarma)
 - **Sanal veri merkezi (VDC)** ve ağ topolojisi görünümü
 - Sunucu sağlık puanı, aylık maliyet tahmini, hızlı bağlantı bilgileri
 
@@ -62,11 +79,26 @@ bildirimleri ve sistemin kendisini tek panelden yönetir. Kurulumdan sonra sunuc
 - **XCP-ng / XenServer bağlantıları (ilk sürüm):** havuz ya da tek host; cloud-init'in tamamı yapılandırma diskiyle ([docs/xcpng.md](docs/xcpng.md))
 - **Proxmox VE bağlantıları (ilk sürüm):** düğüm ya da küme; keşif, şablondan sunucu oluşturma, güç, boyut, anlık görüntü, ek disk ([docs/proxmox.md](docs/proxmox.md))
 - **ESXi / vCenter bağlantıları:** envanter keşfi, kapasite, lisans ve yetki kontrolü; IP bloğu tarayarak ağdaki ESXi/vCenter'ları bulma, tek tıkla ekleme ve günlük/haftalık otomatik tarama
-- **Katalog:** kaynak havuzları, fazla tahsis oranları, paketler, imajlar, konumlar, IPv4/IPv6 havuzları
-- **İçgörüler:** dolan havuz tahmini, azalan IP, boşta / büyük / küçük sunucular, takılan işler
-- **Kullanıcılar ve roller:** izin tabanlı roller, kişiye özel izinler, kullanıcı adına giriş, yasaklama
-- **Kötüye kullanım:** açık riskli port taraması, madencilik şüphesi (uzun süreli tam CPU)
-- **Enerji raporu:** kWh, maliyet ve karbon tahmini
+- **Katalog:** kaynak havuzları, fazla tahsis oranları, paketler, imajlar, konumlar (bakım modundaki konum yeni
+  sunucu almaz), IPv4 havuzları. IPv6 ayrı bir havuz değildir: IPv4 havuzuna isteğe bağlı bir önek eklenir ve her
+  sunucu o önekten **tek** adres alır
+- **Mevcut VM'leri devralma:** panel dışında oluşturulmuş bir VM, bir müşterinin sunucusu olur (çalışmaya devam eder)
+- **Taşıma ve host boşaltma** (yalnız VMware): sunucuyu çalışırken başka hosta ya da veri deposuna taşıma, bakım
+  öncesi bir hosttaki tüm sunucuları taşıma
+- **İçgörüler:** dolan havuz tahmini, azalan IP, boşta / büyük / küçük sunucular, takılan işler (boşta / büyük /
+  küçük sunucu ve sağlık puanı işlemci ölçümüne dayanır; XCP-ng, oVirt, KVM ve Incus'ta işlemci ölçülmediği için
+  oralarda anlamlı değildir)
+- **Kullanıcılar ve roller:** izin tabanlı roller, kişiye özel izinler, kullanıcı adına giriş, yasaklama. **Rol
+  sınırları:** kota, snapshot / firewall / SSH anahtarı sayısı, saatlik işlem sayısı, oturum süresi, iki adım
+  zorunluluğu, izinli konumlar ve izinli IP adresleri. Kullanıcıya **ekip notları** (müşteri görmez, sabitlenebilir)
+- **Kötüye kullanım:** açık riskli port taraması, madencilik şüphesi (uzun süreli tam CPU; işlemcinin ölçüldüğü
+  platformlarda)
+- **Enerji raporu:** kWh, maliyet ve karbon tahmini (işlemci kullanımından hesaplanır; XCP-ng, oVirt, KVM ve
+  Incus'ta anlamlı değildir)
+- **Genel bakışta özet:** son bakışınızdan beri yeni kullanıcı, sunucu, başarısız işlem, kötüye kullanım bulgusu,
+  alarm ve reddedilen / başarısız giriş sayıları
+- **Herkese açık durum sayfası** (`/status`): panelin parçalarının ve konumların durumu; yönetici olay (incident)
+  açar ve güncelleme yazar
 - **İstatistikler:** önceki döneme göre eğilimli KPI’lar, zaman serileri, konum/işletim sistemi/paket kırılımı, en büyük müşteriler ve gün × saat işlem haritası (animasyonlu)
 - **Denetim kaydı**, duyuru bandı, toplu sunucu işlemleri
 - **Destek sistemi:** öncelik ve SLA, departmanlar, iç notlar, değişkenli hazır yanıtlar, puanlama ve kapanışta memnuniyet isteği
@@ -77,7 +109,10 @@ bildirimleri ve sistemin kendisini tek panelden yönetir. Kurulumdan sonra sunuc
   güncellemeleri, yeniden başlatma; adım adım ilerleme penceresi. Tüm müşteri sunucularının güncelleme durumu tek listede
 - **Kullanıcı ayrıntısı:** doğrulamalar, parola, iki adımlı doğrulama sıfırlama, geçiş anahtarları, bağlı hesaplar,
   oturumlar ve giriş geçmişi
-- **Bayiler**, faturalama, kuponlar, e-fatura ve itiraz yönetimi
+- **Bayiler**, faturalama, kuponlar, itiraz yönetimi ve e-Fatura / e-Arşiv (yedi entegratörden yalnızca İzibiz ve
+  Uyumsoft'a, kendi test ortamlarında gerçek e-Arşiv faturası gönderildi; diğer beşi belgelere göre yazıldı, denenmedi)
+- **WHMCS / WISECP modülleri** (`integrations/`): satışı o sistem yapar, panel bu sunuculara fatura kesmez. WISECP
+  modülü bir WISECP kurulumunda denenmedi
 
 </td></tr>
 <tr><td valign="top">
@@ -96,8 +131,10 @@ bildirimleri ve sistemin kendisini tek panelden yönetir. Kurulumdan sonra sunuc
   SparkPost, MailerSend, SMTP2GO, Elastic Email, ZeptoMail)
 - **SMS:** Türkiye'deki 18 sağlayıcı + Twilio, Vonage, Infobip, Plivo, Sinch, Telnyx, Clickatell, MessageBird
   ve özel HTTP API
-- **Ödeme altyapıları:** Türkiye'deki ödeme kuruluşları, banka sanal POS'ları ve Stripe, PayPal, Mollie, Adyen,
-  Checkout.com, Razorpay, Square, Paddle (bilgiler para hareketi olmadan doğrulanır)
+- **Ödeme:** kartla tahsilat yalnızca **iyzico, PayTR, Craftgate, Param ve Stripe** ile (ve panelin kendi test
+  sağlayıcısıyla) yapılır. Listedeki diğer 41 sağlayıcının (Türkiye'deki ödeme kuruluşları, banka sanal POS'ları,
+  Papara, PayPal, Mollie, Adyen, Checkout.com, Razorpay, Square, Paddle) yalnızca hesap bilgileri kaydedilir ve çoğu
+  para hareketi olmayan bir sorguyla sınanır; **bunlarla ödeme alınamaz** ([docs/payments.md](docs/payments.md))
 - **CAPTCHA:** Cloudflare Turnstile, reCAPTCHA v2/v3, hCaptcha · **Ters DNS:** PowerDNS
 
 </td></tr>
@@ -115,8 +152,10 @@ bildirimleri ve sistemin kendisini tek panelden yönetir. Kurulumdan sonra sunuc
 ### İşletim
 - **Tek komutla kurulum**, otomatik HTTPS (alan adı veya `<ip>.sslip.io`)
 - Şifreli yedek ve kontrollü geri yükleme, zamanlanmış yedek
-- **Güvenli güncelleme:** yalnızca daha yeni sürümler, önce yedek, migration uyumluluğu, başarısızlıkta geri dönüş
-- İsteğe bağlı Prometheus, Grafana, Loki, Alertmanager; panelden açılıp kapatılır
+- **Güncelleme:** önce yedek, migration uyumluluğu denetimi, başarısızlıkta container'ların geri dönüşü. Kendiliğinden
+  yalnızca daha yeni sürüme geçer; açıkça bir sürüm verildiğinde eski bir sürüme dönüşü yalnızca migration denetimi durdurur
+- İsteğe bağlı Prometheus, Grafana, Loki, Alertmanager. Kurulumda açılır; sonradan yalnızca komut satırından açılıp
+  kapatılır (`install.sh monitoring on|off`). Panelde bunun düğmesi yalnız kurulum sihirbazında vardır
 - Türkçe / İngilizce arayüz, koyu / açık tema, telefondan geniş ekrana tam uyumlu
 - **Pencere mantığı:** tüm iletişim kutuları başlık çubuğundan taşınır, kenara alınır, büyütülür; sola / sağa / üste / alta yaslanır, köşelere yerleşir, ortalanır, kenarından ve köşesinden boyutlandırılır. Kenara sürüklerken yerleşeceği alan önizlenir; düzen menüsü (başlıkta sağ tık ya da düzen düğmesi) ve Ctrl+Alt+← → ↑ ↓ / C kısayolları (telefonda alttan açılan sayfa)
 - **Erişilebilirlik:** %75–%200 yazı boyutu ve metin aralığı kaydırıcıları, yüksek kontrast, okunaklı yazı tipi, azaltılmış hareket
@@ -125,10 +164,56 @@ bildirimleri ve sistemin kendisini tek panelden yönetir. Kurulumdan sonra sunuc
 </td></tr>
 </table>
 
+## 🧩 Platform kapsamı
+
+Yedi platform aynı sözleşmeyi konuşur, ama hepsi her şeyi yapmaz. Aşağıdaki tablo adaptörlerin kendi yol
+tablolarından çıkarıldı: "yok" yazan işlemde adaptör `PLATFORM_NOT_SUPPORTED` yanıtı verir ve işlem "bu platformda
+desteklenmiyor" hatasıyla biter. ✓ işareti kodun var olduğunu söyler, gerçek donanımda denendiğini değil; son satıra
+bakın.
+
+| | VMware (vCenter) | Proxmox VE | XCP-ng | oVirt | Hyper-V | KVM (libvirt) | Incus / LXD |
+|---|---|---|---|---|---|---|---|
+| Keşif, kapasite, topoloji | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| Şablondan / imajdan sunucu oluşturma, yeniden kurulum | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ ¹ | ✓ |
+| Aç, kapat, yeniden başlat, sil | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| Boyut değiştirme | ✓ | ✓ | ✓ ² | ✓ | ✓ ² | ✓ ² | ✓ ² |
+| Anlık görüntü (al, geri dön, sil) | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| Ek disk (ekle, kaldır) | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| Mevcut VM'i devralma, tutarlılık denetimi | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| Root parolası, uygulama kurulumu, güncelleme bildiricisi (cloud-init) | ✓ | guest agent ile ³ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| Kullanım grafikleri (geçmiş) | ✓ | ✓ (dakikada bir) | yok (boş) | yok (boş) | yok (boş) | yok (boş) | yok (boş) |
+| Trafik sayımı ve kota uyarısı | ✓ | ✓ | yok | yok | yok | yok | yok |
+| Sunucu başına işlemci ölçümü ⁴ | ✓ | ✓ | yok | yok | ✓ | yok | yok |
+| Tarayıcı konsolu | ✓ ⁵ | yok | yok | yok | yok | yok | yok |
+| Firewall | ✓ ⁶ | yok | yok | yok | yok | yok | yok |
+| Kota dolunca hız sınırlama | ✓ ⁶ | yok | yok | yok | yok | yok | yok |
+| Özel ağlar | ✓ ⁶ | yok | yok | yok | yok | yok | yok |
+| Yedek ve geri yükleme | ✓ | yok | yok | yok | yok | yok | yok |
+| Kişisel imaj | ✓ | yok | yok | yok | yok | yok | yok |
+| ISO kitaplığı, CD takma, kurtarma | ✓ | yok | yok | yok | yok | yok | yok |
+| Taşıma ve host boşaltma | ✓ | yok | yok | yok | yok | yok | yok |
+| Ağı tarayarak host bulma | ✓ | yok | yok | yok | yok | yok | yok |
+| Gerçek sunucuda denendi mi | çoğunlukla simülatör | hayır | hayır | hayır | hayır | hayır | evet: Incus 6.0, yalnız konteyner |
+
+¹ Hostta `virt-clone` ve `virt-xml` varsa; yoksa bağlantı yalnızca envanter ve güç işlemleri içindir.
+² Sunucu kapalıyken; panel kapatıp açmayı kendisi yapar.
+³ Proxmox'un kendi cloud-init'i yalnızca ağı ve SSH anahtarlarını taşır; kalanı sunucu açıldıktan sonra QEMU guest
+agent ile uygulanır. Şablonda agent yoksa bunlar uygulanmaz.
+⁴ Boşta / büyük / küçük sunucu, madencilik şüphesi, sağlık puanı ve enerji raporu bu ölçüme dayanır; "yok" yazan
+platformlarda anlamlı sonuç vermezler. oVirt'te yalnızca host kullanımı okunur.
+⁵ VMware HTML Console SDK depoda yoktur ve gerçek SDK ile denenmedi ([docs/console.md](docs/console.md)).
+⁶ Dağıtık sanal anahtar (vSphere Distributed Switch) gerekir.
+
+VMware'de sunucu oluşturmak vCenter ister; tek başına ESXi'de yalnızca okuma ve güç işlemleri vardır. oVirt'te bir
+sunucunun kopyası çıkarılamaz (kopya yalnızca şablondan). Her platformun ayrıntısı kendi belgesindedir:
+[vmware](docs/vmware.md), [proxmox](docs/proxmox.md), [xcpng](docs/xcpng.md), [ovirt](docs/ovirt.md),
+[hyperv](docs/hyperv.md), [libvirt](docs/libvirt.md), [incus](docs/incus.md).
+
 ## 🆕 Son eklenenler
 
 | Ne | Nerede |
 |---|---|
+| **Baştan sona denetim:** API, worker, web arayüzü, yedi adaptör ve kurulum betiği gözden geçirildi. İşletmeciyi etkileyen 49 davranış değişikliği var; en önemlileri faturalamada (otomatik yenilemesi kapalı aboneliklere artık fatura kesilir, ödenmeyen sipariş ve veri merkezi faturaları tahsilat adımlarına girer). **Yükseltmeden önce okuyun** | [docs/upgrade-notes.md](docs/upgrade-notes.md) |
 | **Pencere düzenleri:** iletişim kutuları sola / sağa yaslanır, köşelere ve yarımlara yerleşir, ortalanır, kenarından boyutlandırılır; sürüklerken önizleme, düzen menüsü ve Ctrl+Alt+ok tuşları | Panelin tamamı |
 | **Incus / LXD desteği (ilk sürüm):** aynı panelden sanal makine ve konteyner; istemci sertifikasıyla, küme desteğiyle. Gerçek bir Incus 6.0 sunucusunda konteynerlerle denendi | Yönetim → Bağlantılar → Incus / LXD · [docs/incus.md](docs/incus.md) |
 | **KVM (libvirt) desteği (ilk sürüm):** vCenter ya da Proxmox olmadan, düz bir Linux KVM hostu; SSH ile, parola ya da anahtarla | Yönetim → Bağlantılar → KVM (libvirt) · [docs/libvirt.md](docs/libvirt.md) |
@@ -273,8 +358,14 @@ Mevcut bir Nginx / Caddy / Traefik arkasında çalıştırma: [docs/domain-https
 5. **Bildirim kurallarını** belirleyin; kullanıcılar kendi kanallarını Hesap → Bildirimler'den seçer.
 6. Müşteri hesabıyla **bir sunucu sipariş edip** uçtan uca deneyin.
 
-Güncellemeler, yedekler, izleme ve terminal **panelden** yönetilir (Yönetim → Sistem). Ayrıntılı kılavuz:
-[docs/setup.md](docs/setup.md).
+Güncellemeler, yedekler ve terminal **panelden** yönetilir (Yönetim → Sistem). İzleme (Prometheus, Grafana, Loki,
+Alertmanager) panelden yalnızca kurulum sihirbazında açılıp kapatılabilir; sonrasında komut satırından:
+
+```bash
+sudo sh scripts/install.sh monitoring on
+```
+
+Ayrıntılı kılavuz: [docs/setup.md](docs/setup.md).
 
 ## 🔄 Güncelleme ve yedek
 
@@ -292,10 +383,16 @@ sudo sh scripts/install.sh backup
 sudo sh scripts/install.sh restore backups/DOSYA.tar.enc --yes-replace-data
 ```
 
-- Güncelleme yalnızca çalışan sürümden **daha yeni** bir sürüme geçer, önce yedek alır, migration uyumluluğunu
-  denetler ve başarısız olursa container'ları geri alır (veritabanı otomatik geri alınmaz; yedek oradadır).
+- Sürüm verilmeden çalışan güncelleme yalnızca çalışan sürümden **daha yeni** bir sürüme geçer. Açıkça bir sürüm
+  verildiğinde (`update --to v1.2.0`, ya da panelin gönderdiği "bu sürüme geç" isteği) betik herhangi bir sürüm
+  etiketini ya da commit'i kabul eder; eski bir sürüme dönüşü yalnızca migration denetimi durdurur (veritabanında
+  uygulanmış bir migration o sürümde yoksa reddeder).
+- Her güncelleme önce yedek alır ve başarısız olursa container'ları geri alır (veritabanı otomatik geri alınmaz;
+  yedek oradadır).
 - Yedekler `secrets/backup.key` ile şifrelenir. **Bu anahtarı sunucu dışında saklayın**; o olmadan yedek açılmaz.
 - Parolasını unutan yönetici için: `sudo sh scripts/install.sh reset-password eposta@ornek.com`.
+- **Yükseltmeden önce** [docs/upgrade-notes.md](docs/upgrade-notes.md) sayfasını okuyun: sürümler arasında değişen
+  davranışları, mevcut veriye etkisini ve kimlerin etkileneceğini gösteren sorguları içerir.
 
 Ayrıntılar: [docs/operations.md](docs/operations.md), [docs/updates.md](docs/updates.md).
 
@@ -343,42 +440,81 @@ Simülatör (govmomi `vcsim`) gerçek bir vCenter olmadan tüm akışı çalış
 
 | Test | Komut |
 |---|---|
-| API birim testleri | `cd apps/api && npm test` |
+| API birim testleri (122 test) | `cd apps/api && npm test` |
 | API entegrasyon testleri (PostgreSQL + Redis) | `cd apps/api && npm run test:integration` |
+| API entegrasyon testlerinin tamamı (PostgreSQL, Redis, vcsim, VMware adaptörü ve worker'ı Docker'da kendisi kurar; Docker'lı bir Linux sunucusunda çalıştırıldı: 130 testten 126'sı geçti, 4'ü PowerDNS, ISO deposu ya da konsol ağ geçidi istediği için atlandı) | `cd apps/api && npm run test:integration:full` |
 | Go servisleri | `cd services/vmware && go test ./...` |
-| Proxmox, XCP-ng, oVirt, Hyper-V, libvirt ve Incus adaptörleri | `cd services/proxmox && npm test` (aynısı `services/xcpng`, `services/ovirt`, `services/hyperv`, `services/libvirt` ve `services/incus` için; libvirt'in betik testi Linux'ta çalışır) |
-| Web birim testleri (çeviriler, simgeler, pencere düzenleri ve diğer hesaplar) | `cd apps/web && npm test` |
-| Uçtan uca (Playwright; 390 / 768 / 1920 px) | `cd apps/web && npx playwright test` |
+| Proxmox (23), XCP-ng (19), oVirt (15), Hyper-V (18), libvirt (19) ve Incus (11 test) adaptörleri | `cd services/proxmox && npm test` (aynısı `services/xcpng`, `services/ovirt`, `services/hyperv`, `services/libvirt` ve `services/incus` için; libvirt'in dört betik testi yalnızca Linux'ta çalışır, başka yerde atlanır) |
+| Web birim testleri (44 test: çeviriler, simgeler, pencere düzenleri ve diğer hesaplar) | `cd apps/web && npm test` |
+| Worker (sözdizimi denetimi ve 34 birim testi) | `cd apps/worker && npm run check` |
+| Uçtan uca (Playwright, çalışan bir Compose kurulumuna karşı) | `cd apps/web && npx playwright test` |
 
-CI bilerek elle tetiklenir (GitHub Actions → *Run workflow*). Katkı kuralları: [CONTRIBUTING.md](CONTRIBUTING.md).
+Uçtan uca yolculuklar tek bir masaüstü boyutunda (1280 px) koşar; aralarında birkaç ekran ayrıca 390 ve 768 px'te
+taşma için denetlenir. Ayrı bir döngü sayfaları 390 / 768 / 1920 px'te açar ve yalnızca sayfa başlığının göründüğüne
+ve yana taşma olmadığına bakar; bu genişliklerde işlev sınanmaz.
+
+CI (`.github/workflows/ci.yaml`): birim işleri (API, web, worker, altı Node adaptörü, Go servisleri) `main`'e her
+gönderimde, pull request'lerde ve elle çalışır. Servis ya da bütün bir Compose kurulumu isteyen işler (API
+entegrasyon testleri, imaj derlemeleri, kurulum + uçtan uca) yalnızca elle tetiklenir (GitHub Actions → *Run workflow*).
+Adaptör testleri gerçek bir hipervizöre değil, platformu taklit eden sahte sunuculara karşı çalışır. Katkı kuralları:
+[CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## ⚠️ Bilinen sınırlar
 
 - **Yapay zekâ ile yazıldı:** yukarıdaki uyarıya bakın. Hatalar olabilir; üretim öncesi inceleyin.
 - **VMware:** testlerin çoğu govmomi simülatörüyle yapıldı. Gerçek vCenter/ESXi'de farklı davranışlar
   görülebilir. Sunucu oluşturma vCenter ister (standalone ESXi'de yalnızca okuma ve güç işlemleri).
-- **Konsol:** VMware HTML Console SDK lisansı gereği depoda yok; kurulumu yapan kişi ekler
-  ([docs/console.md](docs/console.md)).
+- **Konsol:** tarayıcı konsolu **yalnız VMware'de** vardır. VMware HTML Console SDK (wmks) lisansı gereği depoda
+  yok; kurulumu yapan kişi ekler. Geçit ve bilet akışı sınandı, ancak **bütün, gerçek SDK ile hiç denenmedi**: ekranın
+  göründüğü, klavye ve farenin çalıştığı doğrulanmadı ([docs/console.md](docs/console.md)).
+- **Ödeme:** kartla tahsilat yalnız iyzico, PayTR, Craftgate, Param ve Stripe ile; diğer 41 sağlayıcı yalnızca bilgi
+  kaydıdır. Beşinden **hiçbiri gerçek bir üye işyeri hesabıyla denenmedi**. **Stripe:** webhook yok; müşteri ödedikten sonra
+  sekmeyi kapatırsa ödeme, tahsilat çalıştırması Stripe'a yeniden sorduğunda işlenir (beş dakika sonra başlar, bir
+  gün sürer; iyzico ve Craftgate'te de böyledir, PayTR ve Param'da yoktur). **Param:** dönüş, Param'a ayrıca sorularak
+  doğrulanmaz ve bu akış **sağlayıcıyla teyit edilmedi**; sonuç yalnızca dönüşteki özet (hash), üye işyeri GUID'i ve
+  işlem numarasına dayanır ([docs/payments.md](docs/payments.md)).
+- **Gerçek hipervizör:** altı yeni adaptörden yalnızca Incus gerçek bir sunucuda çalıştırıldı, o da yalnızca
+  konteynerlerle. Proxmox VE, XCP-ng, oVirt, Hyper-V ve KVM (libvirt) adaptörleri **gerçek bir hipervizörde hiç
+  çalıştırılmadı**; testleri platformu taklit eden sahte sunuculara karşıdır.
+- **Entegrasyon testleri:** bütün entegrasyon paketini Docker'da kendi kuran çalıştırıcı
+  (`apps/api/test/integration/run.sh`) Docker'lı bir Linux sunucusunda çalıştırıldı (126 geçti, 4 atlandı). Bu turda
+  değişen faturalama davranışlarının (otomatik yenileme, vadesi geçen faturalar, sanal veri merkezleri) çoğu için yeni
+  entegrasyon testi **yazılmadı**: mevcut testler yalnız eski davranışın bozulmadığını gösterir.
+- **e-Fatura / e-Arşiv:** yalnızca İzibiz ve Uyumsoft'a, yayımladıkları test kullanıcılarıyla e-Arşiv faturası
+  gönderildi. Nilvera, EDM, QNB eFinans, BirFatura ve Paraşüt belgelere göre yazıldı ve denenmedi; e-Fatura (mükellef
+  alıcı) gönderimi hiçbir gerçek entegratörde denenmedi ([docs/billing.md](docs/billing.md)).
+- **IPv6:** ayrı IPv6 havuzu yoktur; IPv4 havuzuna eklenen önekten sunucu başına tek adres verilir.
+- **İzleme:** kurulumdan sonra panelden açılıp kapatılamaz (`install.sh monitoring on|off`).
+- **Küme (cluster):** birden çok sunucuda çalışma bir tasarımdır, yazılmadı ([docs/cluster.md](docs/cluster.md)).
 - **E-posta adresi doğrulama yok:** kayıtla açılan hesabın e-posta adresi doğrulanmaz. (SSO, dizin ve bayi
   üzerinden gelen hesaplar doğrulanmış sayılır.)
 - **WhatsApp:** Meta Cloud API ve onaylı bir mesaj şablonu gerekir. **Telegram:** botta webhook tanımlı olmamalı.
 - **Incus / LXD:** ilk sürüm; **gerçek bir Incus 6.0 sunucusunda konteynerlerle uçtan uca denendi** (oluşturma, cloud-init, güç, snapshot, disk, boyut, devralma, silme). Sanal makineler, LXD ve kümeler denenmedi.
-  Konsol, firewall, yedek, ISO, özel ağ, taşıma ve grafikler yok ([docs/incus.md](docs/incus.md)).
+  Konsol, firewall, hız sınırlama, yedek, kişisel imaj, ISO, özel ağ, taşıma, grafikler, trafik sayımı ve işlemci
+  ölçümü yok ([docs/incus.md](docs/incus.md)).
 - **KVM (libvirt):** ilk sürüm; betikler sahte bir `virsh` ile ve gerçek bir SSH sunucusu üzerinden sınandı, **gerçek bir libvirt/KVM hostunda henüz denenmedi**.
-  Bağlantı başına tek host, depolama yalnız klasör tipi havuz (qcow2), grafikler ve konsol yok ([docs/libvirt.md](docs/libvirt.md)).
+  Bağlantı başına tek host, depolama yalnız klasör tipi havuz (qcow2), Windows misafir özelleştirmesi yok. Konsol,
+  firewall, hız sınırlama, yedek, kişisel imaj, ISO, özel ağ, taşıma, grafikler, trafik sayımı ve işlemci ölçümü yok
+  ([docs/libvirt.md](docs/libvirt.md)).
 - **Microsoft Hyper-V:** ilk sürüm ve en az denenmiş adaptör; PowerShell betikleri gerçek bir Hyper-V hostunda hiç çalıştırılmadı. Yalnız
-  HTTPS üzerinden WinRM, bağlantı başına tek host, Windows misafir özelleştirmesi yok ([docs/hyperv.md](docs/hyperv.md)).
-- **oVirt / RHV:** ilk sürüm; gerçek bir Engine'de henüz denenmedi. Grafikler, konsol, firewall, yedek, ISO, özel ağ ve taşıma
-  oVirt'te henüz yok; misafirdeki ilk arayüzün adı `eth0` olmalı ([docs/ovirt.md](docs/ovirt.md)).
-- **XCP-ng / XenServer:** ilk sürüm; gerçek bir havuzda henüz denenmedi. Grafikler, konsol, firewall, yedek, ISO, özel ağ ve
-  taşıma XCP-ng'de henüz yok ([docs/xcpng.md](docs/xcpng.md)).
-- **Proxmox VE:** ilk sürüm; gerçek bir Proxmox sunucusunda henüz denenmedi. Konsol, firewall, yedek, ISO, özel ağ ve
-  taşıma Proxmox'ta henüz yok; root parolası ve uygulama kurulumu için şablonda guest agent gerekir ([docs/proxmox.md](docs/proxmox.md)).
+  HTTPS üzerinden WinRM, bağlantı başına tek host (Failover Cluster yok), Windows misafir özelleştirmesi yok. Konsol,
+  firewall, hız sınırlama, yedek, kişisel imaj, ISO, özel ağ, taşıma, grafikler ve trafik sayımı yok
+  ([docs/hyperv.md](docs/hyperv.md)).
+- **oVirt / RHV:** ilk sürüm; gerçek bir Engine'de henüz denenmedi. Konsol, firewall, hız sınırlama, yedek, kişisel
+  imaj, ISO, özel ağ, taşıma, grafikler, trafik sayımı ve sunucu başına işlemci ölçümü yok; sunucudan sunucu
+  kopyalanmaz. **Misafirdeki ilk arayüzün adı `eth0` olmalı:** Engine ağ ayarlarını bu adla yazar, arayüzü başka adla
+  gelen imaj adres alamaz (bağlantıda uyarı olarak görünür) ([docs/ovirt.md](docs/ovirt.md)).
+- **XCP-ng / XenServer:** ilk sürüm; gerçek bir havuzda henüz denenmedi. Konsol, firewall, hız sınırlama, yedek,
+  kişisel imaj, ISO, özel ağ, taşıma, grafikler, trafik sayımı ve işlemci ölçümü yok ([docs/xcpng.md](docs/xcpng.md)).
+- **Proxmox VE:** ilk sürüm; gerçek bir Proxmox sunucusunda henüz denenmedi. Konsol, firewall, hız sınırlama, yedek,
+  kişisel imaj, ISO, özel ağ ve taşıma yok; root parolası, sunucu adı ve uygulama kurulumu için şablonda guest agent
+  gerekir. **Ek adresler:** sunucunun içinde yalnızca ilk IPv4 ve ilk IPv6 adresi yapılandırılır; fazlası için işlem
+  uyarı taşır, adresleri elle eklemek gerekir ([docs/proxmox.md](docs/proxmox.md)).
 - **İşletim sistemi güncellemeleri:** panel sunucusunda yalnızca Debian / Ubuntu (apt); müşteri sunucularında Linux
   (apt, dnf, yum), Windows yok. Otomatik kurulum cloud-init kullanan imajlarda çalışır.
 - Sürümlü, imzalı kurulum paketi (GHCR imajlarıyla) henüz yok; kurulum ve güncelleme kaynak koddan derler.
 
-Yol haritası: [docs/roadmap.md](docs/roadmap.md).
+Olmayanların listesi: [docs/roadmap.md](docs/roadmap.md).
 
 ## 🔒 Güvenlik
 
@@ -401,22 +537,51 @@ projeyi güvenilir kılacak olan şeydir.
 
 ## 📄 Lisans
 
-[Apache License 2.0](LICENSE)
+[Apache License 2.0](LICENSE). Depoda ve derlenen imajlarda yer alan üçüncü taraf içerik (Lucide simgeleri, yazı
+tipleri): [NOTICE](NOTICE).
 
 ---
 
 ## 🌍 English summary
 
-**Lightning VM** is an open-source hosting panel for VMware (ESXi / vCenter 6.0–9.x) and, as first releases, Proxmox VE, XCP-ng / XenServer, oVirt / RHV, Microsoft Hyper-V, plain KVM hosts (libvirt over SSH) and Incus / LXD. Customers order, manage
-and console into virtual servers. Administrators manage capacity, IP pools, pricing, notifications and the panel
-itself from the browser, including updates, backups and monitoring. It ships with a one-command installer and
+**Lightning VM** is an open-source hosting panel for VMware (ESXi / vCenter 6.0–9.x) and, as first releases, Proxmox VE, XCP-ng / XenServer, oVirt / RHV, Microsoft Hyper-V, plain KVM hosts (libvirt over SSH) and Incus / LXD. Customers order and manage
+virtual servers. Administrators manage capacity, IP pools, pricing, notifications and the panel
+itself from the browser, including updates and backups. It ships with a one-command installer and
 automatic HTTPS. The UI is in Turkish and English.
 
-Highlights: smart ordering, snapshots, backups, extra disks, private networks, firewalls, browser console, billing and
-invoices, resellers, support desk, 20+ notification channels, LDAP / OIDC sign-in, passkeys and two-factor, live state
-of the panel host (CPU, memory, disk, services, logs), operating system updates for the host and for customers'
-servers, window-style dialogs (move, put aside, snap to halves and quarters, centre, resize, keyboard shortcuts), and
-accessibility controls.
+Highlights: smart ordering, reinstall, resize and clone, snapshots, extra disks, billing and invoices (monthly and
+hourly), resellers, support desk, 17 notification channels (in-app, browser push, e-mail, SMS and 13 messaging
+apps and webhooks), customer webhooks, LDAP / OIDC sign-in, passkeys and two-factor, live state of the panel host
+(CPU, memory, disk, services, logs), operating system updates for the host and for customers' servers, window-style
+dialogs (move, put aside, snap to halves and quarters, centre, resize, keyboard shortcuts), and accessibility controls.
+
+What is not the same everywhere (the table under "Platform kapsamı" above has every platform):
+
+- **Only on VMware:** browser console, firewalls, private networks, backups and restore, personal images, ISO
+  library, live migration and host evacuation, throttling a server that used up its traffic allowance. The six newer
+  adapters answer these with "not supported on this platform".
+- **Usage graphs and traffic counting:** VMware and Proxmox VE only. **CPU usage per server** is not measured on
+  XCP-ng, oVirt, KVM (libvirt) and Incus, so idle / oversized / mining findings, the health score and the energy
+  report mean nothing there.
+- **Browser console:** needs VMware's HTML Console SDK, which is not in this repository, and was never tried with
+  the real SDK.
+- **Payments:** only iyzico, PayTR, Craftgate, Param and Stripe (plus the built-in sandbox) can take a payment. The
+  other 41 listed providers are credential forms, most with a check that moves no money. None was tried with a real
+  merchant account. Stripe has no webhook: a payment whose customer never returns to the panel is settled when the
+  billing run asks Stripe again (as for iyzico and Craftgate; not for PayTR and Param). Param's return is not
+  confirmed with Param, and that flow was not confirmed with the provider.
+- **e-Invoice (Turkey):** of seven integrators only İzibiz and Uyumsoft were sent a real e-Arşiv invoice, in their
+  test systems.
+- **IPv6:** an optional prefix on an IPv4 pool, one address per server; there are no separate IPv6 pools.
+- **Monitoring** (Prometheus, Grafana, Loki, Alertmanager) can be switched from the panel only in the setup wizard;
+  afterwards with `install.sh monitoring on|off`.
+- **Real hardware:** only the Incus adapter (containers, Incus 6.0) ran against a real server. VMware was tested
+  mostly against the govmomi simulator; Proxmox VE, XCP-ng, oVirt, Hyper-V and libvirt against imitations only.
+- **Upgrading:** the last round was a full audit of the API, worker, web UI, adapters and installer. It changed 49
+  behaviours an operator can notice, most of them in billing; read [docs/upgrade-notes.md](docs/upgrade-notes.md)
+  (Turkish) before you update. The full integration test runner (`npm run test:integration:full`) was run on a Linux
+  host with Docker: 126 of 130 tests pass, 4 are skipped (they need PowerDNS, an ISO storage or the console gateway).
+  Most of the billing behaviour changed in this round has no integration test of its own yet.
 
 > [!WARNING]
 > This project was **vibe-coded**: almost all of the code was written by Anthropic's Claude Code, steered and

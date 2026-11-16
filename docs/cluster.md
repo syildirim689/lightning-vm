@@ -1,5 +1,10 @@
 # Birden fazla sunucuda çalışma (cluster)
 
+> [!WARNING]
+> **Bu sayfa bir tasarımdır; cluster modu yazılmadı.** `scripts/install.sh` içinde `cluster init` ya da
+> `cluster join` komutu **yoktur**, Patroni / Sentinel / Swarm kurulumu da yoktur. Panel bugün tek sunucuda çalışır.
+> Yalnızca 1. bölüm (uygulamanın birden çok kopyayla çalışabilmesi) koddadır; 2. bölümdeki her şey plandır.
+
 Amaç: panel bir sunucu çökse de çalışmaya devam etsin ve yük arttıkça sunucu ekleyerek büyüsün.
 
 ## 1. Uygulamanın çoklu kopyaya hazırlığı (tamamlandı)
@@ -22,13 +27,13 @@ PostgreSQL ve Redis'tedir:
 **Doğrulama:** API entegrasyon testleri iki worker kopyasıyla 70/70 geçti; buna firewall, sunucu yaşam döngüsü
 ve kurtarma testleri dahil. Rol değişikliğinin başka bir süreçteki kopyaya hemen ulaştığı ayrıca test edildi.
 
-## 2. Cluster modu (ertelendi, 2026-10-24)
+## 2. Cluster modu (yazılmadı; ertelendi, 2026-10-24)
 Kullanıcı kararı: en az 3 test sunucusu hazır olunca eklenecek. Sunucu kaybı denemesi yapılmadan yazılmayacak.
 Bugünkü tek sunuculu kurulum bu adıma hazırdır: uygulama çoklu kopyada test edildi (1. bölüm), veriler
 PostgreSQL ve Redis'te, yedekler ve güncelleme `install.sh` ile yapılıyor. Plan:
 - **Docker Swarm** (Docker'ın içinde gelir).
-  - `sudo sh scripts/install.sh cluster init`: ilk sunucuda cluster'ı kurar ve katılım komutunu basar.
-  - `sudo sh scripts/install.sh cluster join <adres> <anahtar>`: yeni sunucuyu ekler.
+  - Planlanan komutlar (henüz yok): `install.sh cluster init` ilk sunucuda cluster'ı kuracak ve katılım komutunu
+    basacak; `install.sh cluster join <adres> <anahtar>` yeni sunucuyu ekleyecek.
   - API, web, worker, konsol ve adaptör kopyaları sunuculara dağıtılır; bir sunucu düşerse Swarm kopyaları
     diğerlerinde yeniden başlatır.
 - **PostgreSQL:** Patroni + etcd ile birincil ve yedek kopya, otomatik devralma.

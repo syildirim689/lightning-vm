@@ -27,11 +27,16 @@ Parmak izini Engine sunucusunda şu komutla karşılaştırın:
 openssl x509 -in /etc/pki/ovirt-engine/certs/apache.cer -noout -fingerprint -sha256
 ```
 
-Engine panel sunucusuyla aynı yerel ağdaysa adaptörün o ağa erişmesine izin verin (`.env`):
+Adaptör varsayılan olarak loopback ve bağlantı-yerel adresleri, ayrıca **kendi Docker ağlarındaki** adresleri
+reddeder (panelin PostgreSQL, Redis ve API'si o ağlardadır; hata `ENDPOINT_BLOCKED`). Engine böyle bir ağdaysa o
+ağa izin verin (`.env`):
 
 ```bash
 OVIRT_ALLOW_NETWORKS=10.20.0.0/16
 ```
+
+Hiç bağlanılmaması gereken ağlar için `OVIRT_DENY_NETWORKS` vardır (virgülle ayrılmış CIDR'ler; izin listesi
+yasak listesinin önüne geçer).
 
 ## Panel Engine'i nasıl görür
 
@@ -48,7 +53,9 @@ OVIRT_ALLOW_NETWORKS=10.20.0.0/16
 
 - Bir VM kurun, içine **cloud-init** ve **qemu-guest-agent** kurun, sonra şablon yapın.
 - Misafirdeki ilk ağ arayüzünün adı **`eth0`** olmalı: panel ağ ayarlarını bu adla verir. Çoğu bulut imajında
-  öyledir; değilse çekirdek satırına `net.ifnames=0` ekleyin.
+  öyledir; değilse çekirdek satırına `net.ifnames=0` ekleyin. Engine ağ ayarlarını `eth0` için yazdığından arayüzü
+  başka adla gelen imaj adres alamaz; keşif bunu her oVirt bağlantısında uyarı olarak gösterir
+  (`GUEST_NIC_NAME_ETH0`).
 
 Panel sunucunun ayarlarını Engine'in kendi cloud-init desteğiyle verir: sunucu adı, SSH anahtarları, adresler ve
 DNS ayrı alanlar olarak; root parolası, uygulama kurulumu ve güncelleme bildiricisi "özel betik" olarak. Bunlar
@@ -73,3 +80,7 @@ Ayrıca:
 - **Sunucudan sunucu kopyalanmaz:** kopya yalnızca şablondan çıkar; bir sunucuyu çoğaltmak için önce şablonunu
   alın.
 - Yalnız ilk IPv4 ve ilk IPv6 adresi yapılandırılır.
+- **Anlık görüntüye geri dönme sunucuyu önce kapatır:** Engine yalnızca kapalı bir VM'e geri yükler. Sunucu
+  çalışıyorsa panel onu geri yüklemeden sonra yeniden başlatır.
+- **16'dan fazla vCPU** soket × çekirdek olarak bölünür (Engine en çok 16 soket kabul eder): 16'ya kadar her vCPU
+  bir sokettir; üstünde sayıyı tam bölen en büyük soket sayısı seçilir (32 vCPU = 16 × 2, 17 vCPU = 1 × 17).

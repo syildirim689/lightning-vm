@@ -31,11 +31,21 @@ openssl x509 -in /etc/pve/local/pve-ssl.pem -noout -fingerprint -sha256
 `VM.Config.Network`, `VM.Config.Cloudinit`, `VM.PowerMgmt`, `VM.Snapshot`, `VM.Audit`, `Datastore.AllocateSpace`,
 `Datastore.Audit`, `Sys.Audit`.
 
-Proxmox panel sunucusuyla aynı yerel ağdaysa adaptörün o ağa erişmesine izin verin (`.env`):
+Konuk aracına (guest agent) sormak için ayrıca: **Proxmox VE 8 ve öncesinde** `VM.Monitor`; **Proxmox VE 9'da** bu
+yetki kaldırıldı, yerine `VM.GuestAgent.*` yetkileri gelir (panel `VM.GuestAgent.Unrestricted` yetkisine bakar). Bu
+yetki yoksa bağlantı sayfasında uyarı görünür: panel sunucunun adreslerini okuyamaz, root parolasını, sunucu adını
+ve ilk açılış komutlarını uygulayamaz.
+
+Adaptör varsayılan olarak loopback ve bağlantı-yerel adresleri, ayrıca **kendi Docker ağlarındaki** adresleri
+reddeder (panelin PostgreSQL, Redis ve API'si o ağlardadır; hata `ENDPOINT_BLOCKED`). Proxmox böyle bir ağdaysa o
+ağa izin verin (`.env`):
 
 ```bash
 PROXMOX_ALLOW_NETWORKS=10.20.0.0/16
 ```
+
+Hiç bağlanılmaması gereken ağlar için `PROXMOX_DENY_NETWORKS` vardır (virgülle ayrılmış CIDR'ler; izin listesi
+yasak listesinin önüne geçer).
 
 ## Panel Proxmox'u nasıl görür
 
@@ -54,6 +64,8 @@ PROXMOX_ALLOW_NETWORKS=10.20.0.0/16
   deposuna bir tane ekler.
 - **QEMU guest agent** kurulu ve VM ayarlarında açık olsun: panel sunucunun hazır olduğunu ve IP adreslerini
   ondan öğrenir. Agent kapalıysa çalışan sunucu, cloud-init'e verilen adreslerle hazır sayılır.
+  Agent açık ama yanıt vermiyorsa (imajda kurulu değil ya da hesabın yetkisi yok) sunucu, açıldıktan **dört dakika
+  sonra** aynı adreslerle hazır sayılır.
 
 ## Bu sürümde çalışanlar
 
@@ -79,7 +91,19 @@ Proxmox'un kendi cloud-init'i yalnızca ağı ve SSH anahtarlarını taşır. Ge
 - **Sunucu adı**
 - **Uygulama kurulumu** (cPanel, Plesk…) ve **güncelleme bildiricisinin kendiliğinden kurulumu**
 
-Bu yüzden şablonda guest agent şart: agent yoksa sunucu yine kurulur ama bu üçü uygulanmaz. Birden fazla IPv4
-adresi verildiğinde yalnız ilki yapılandırılır.
+Bu yüzden şablonda guest agent şart: agent yoksa sunucu yine kurulur ama bu üçü uygulanmaz.
+
+Ayrıca:
+
+- **Ek adresler:** sunucunun içinde yalnızca ilk IPv4 ve ilk IPv6 adresi yapılandırılır (Proxmox'un `ipconfig0`
+  alanı birer adres taşır). Siparişte daha fazla adres varsa panel bunu işlemin üzerine uyarı olarak kaydeder
+  (Yönetim → Sunucular → İşlemler, `EXTRA_ADDRESSES_NOT_CONFIGURED`); diğer adresleri sunucunun içinden ekleyin.
+- **Başka düğüme kopya:** yerel depolamadaki bir şablondan başka bir düğümde sunucu oluşturulamaz (Proxmox düğümler
+  arası kopyayı yalnızca paylaşımlı depolamadan paylaşımlı depolamaya yapar). Oluşturma, nedeni söyleyen açık bir
+  iletiyle hemen başarısız olur; şablonu ve hedefi paylaşımlı depolamaya alın ya da şablonun bir kopyasını hedef
+  düğümde tutun.
+- **Çalışan sunucudan disk kaldırma** disk hotplug ister (VM ayarlarında Hotplug → Disk açık, disk SCSI ya da
+  VirtIO yuvasında). Hotplug yoksa disk takılı kalır ve işlem "sunucuyu durdurup yeniden kaldırın" iletisiyle
+  başarısız olur.
 
 Ölçümler Proxmox'ta dakikada bir tutulur (VMware'de 20 saniye); host güç tüketimi ölçülmez, tahmin edilir.

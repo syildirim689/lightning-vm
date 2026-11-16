@@ -5,7 +5,11 @@ on:
 permissions:
   contents: read
 jobs:
+  # Nothing is published from a tag whose unit tests fail (the manual-only jobs of ci.yaml do not run here).
+  unit:
+    uses: ./.github/workflows/ci.yaml
   publish:
+    needs: unit
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -18,6 +22,12 @@ jobs:
           - {app: worker, context: apps/worker}
           - {app: vmware, context: services/vmware}
           - {app: console, context: services/console}
+          - {app: proxmox, context: services/proxmox}
+          - {app: xcpng, context: services/xcpng}
+          - {app: ovirt, context: services/ovirt}
+          - {app: hyperv, context: services/hyperv}
+          - {app: libvirt, context: services/libvirt}
+          - {app: incus, context: services/incus}
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3

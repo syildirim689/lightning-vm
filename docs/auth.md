@@ -86,7 +86,9 @@ Uç noktalar `/api/auth/*` altındadır; Fastify bunları better-auth'a iletir.
 - Cookie: `lvm.session_token`, imzalı, `HttpOnly`, `SameSite=Lax`, `Path=/`. Panel HTTPS ile
   sunuluyorsa (`PANEL_TLS=1`, kurulum betiği ayarlar) `Secure` ve `__Secure-` öneki eklenir.
 - İmza anahtarı `secrets/master.key`'den türetilir (HMAC); ayrı bir sır gerekmez.
-- Süre: varsayılan 12 saat (`SESSION_TTL_HOURS`). Süresi dolan oturumlar ve devre dışı veya
+- Süre: 12 saat. `.env` dosyasındaki `SESSION_TTL_HOURS` ile değiştirilir (1-720).
+  Bir rolün "oturum süresi"
+  sınırı (aşağıda, Rol sınırları) üyelerinin oturumunu daha erken bitirir. Süresi dolan oturumlar ve devre dışı veya
   yasaklı kullanıcılar reddedilir; devre dışı kullanıcıya yeni oturum açılmaz.
 - Kullanıcı Hesap sayfasında açık oturumlarını görür ve tek tek kapatabilir. Parola
   değiştirirken diğer oturumları kapatma seçeneği vardır.
@@ -101,11 +103,20 @@ passkey'ler yeniden eklenmelidir. Tarayıcılar WebAuthn'i yalnızca HTTPS'te ve
 açar. Gerçek bir doğrulayıcıyla (Touch ID, Windows Hello, güvenlik anahtarı) henüz denenmedi.
 
 ## Parola sıfırlama (e-posta)
-`.env` içinde `SMTP_URL` (ör. `smtps://kullanici:parola@smtp.example.com:465`) ve `MAIL_FROM`
-tanımlıysa giriş sayfasında "Parolamı unuttum" bağlantısı görünür. Bağlantı e-postayla gider
-(nodemailer, kullanıcının diline göre TR/EN), tek kullanımlıktır ve sıfırlamadan sonra kullanıcının
-tüm oturumları kapatılır. SMTP tanımlı değilse özellik gizlenir; API `MAIL_NOT_CONFIGURED` döner.
-Gerçek bir SMTP sunucusuyla henüz denenmedi.
+E-posta gönderimi ayarlıysa giriş sayfasında "Parolamı unuttum" bağlantısı görünür. E-posta panelden ayarlanır
+(Yönetim → Ayarlar → E-posta: SMTP ya da 12 API sağlayıcısından biri; [settings.md](settings.md)). Panelde e-posta
+ayarı kaydedilmemişse `.env` içindeki `SMTP_URL` (ör. `smtps://kullanici:parola@smtp.example.com:465`) ve `MAIL_FROM`
+kullanılır; bu, ayar sayfasından önceki kurulumlar için bırakılmış yedek yoldur. Bağlantı e-postayla gider
+(kullanıcının diline göre TR/EN), tek kullanımlıktır ve sıfırlamadan sonra kullanıcının tüm oturumları kapatılır.
+E-posta ayarlı değilse özellik gizlenir; API `MAIL_NOT_CONFIGURED` döner.
+
+E-postası çalışmayan bir kurulumda parolasını unutan yönetici için sunucuda:
+
+```bash
+sudo sh scripts/install.sh reset-password eposta@ornek.com
+```
+
+Komut yeni parolayı bir kez gösterir; `--disable-2fa` eklenirse iki adımlı doğrulamayı da kapatır.
 
 ## İki adımlı doğrulama
 Hesabım → Güvenlik'ten açılır (better-auth `twoFactor` eklentisi):
@@ -188,9 +199,18 @@ Bu, e-postanın kayıtlı olduğunu açığa çıkarır; açık kayıtlı bir pa
   Boş kurulumda `E2E_BOOTSTRAP_TOKEN` gerekir.
 
 ## Henüz yok
-- E-posta adresi doğrulama.
-- SMTP ve SMS olmadan yönetici parolası kurtarma (CLI ile yeni yönetici oluşturulabilir).
-- Organizasyon / bayi (reseller) yapısı.
+- E-posta adresi doğrulama: kayıtla açılan hesabın adresi doğrulanmaz.
+- Organizasyon / ekip yapısı: bir projeyi ya da sunucuyu birden çok kullanıcı paylaşamaz. (Bayiler vardır: bayi kendi
+  müşteri hesaplarını açar ve onların sunucularını yönetir; `apps/api/src/reseller.ts`.)
+
+## Hesap verileri ve ekip notları
+- **Verilerimi indir** (Hesap sayfası, `GET /api/account/export`): oturum açan kişi hakkında panelin tuttuğu her şey
+  tek bir JSON dosyası olarak iner: profil, sunucular, favoriler, projeler, SSH anahtarları, konsol komutları,
+  firewall'lar, bildirim tercihleri ve son bildirimler, bağlı mesajlaşma uygulamaları, oturumlar, etkinlik kaydı ve
+  benzerleri. Parola özetleri, oturum anahtarları, root parolaları, iki adımlı doğrulama sırları ve mesajlaşma
+  uygulaması adresleri dosyada yoktur.
+- **Ekip notları** (Yönetim → Kullanıcılar → kullanıcı): personel bir kullanıcıya not düşer; notlar sabitlenebilir,
+  sabitlenen not kullanıcı listesinde görünür. Müşteri bu notları görmez; dışa aktarılan verilere de girmez.
 
 ## Rol sınırları
 Rol, izinlerin yanında sınırlar da taşır (Roller → Düzenle → Sınırlar; kod: `apps/api/src/role-limits.ts`). Boş alan sınırsızdır;

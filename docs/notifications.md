@@ -1,6 +1,7 @@
 # Bildirimler
 
-Tek bir olay kataloğu (`apps/api/src/notify.ts`) ve dört kanal:
+Tek bir olay kataloğu (`apps/api/src/notify.ts`) ve beş kanal: panel içi, tarayıcı, e-posta, SMS ve mesajlaşma
+uygulamaları (`chat`; 13 uygulama, aşağıda). Tek tek sayıldığında 17 teslimat yolu eder.
 
 - **Panel içi:** sağ üstteki zil. Okunmamış sayısı gösterilir, panel açıkken yeni bildirim kısa bir uyarı olarak çıkar.
 - **Tarayıcı (Web Push):** panel kapalıyken bile sistem bildirimi gelir. Kullanıcı bunu Hesabım →
@@ -8,6 +9,8 @@ Tek bir olay kataloğu (`apps/api/src/notify.ts`) ve dört kanal:
   saklanır. Süresi dolmuş abonelikler (404/410) otomatik silinir. Web Push için HTTPS gerekir.
 - **E-posta:** SMTP ayarlıysa çalışır (docs/settings.md).
 - **SMS:** SMS ayarlıysa ve kullanıcının telefonu doğrulanmışsa çalışır.
+- **Mesajlaşma uygulamaları:** kullanıcının bağladığı Telegram, Slack, webhook ve benzerleri
+  ([aşağıda](#mesajlaşma-uygulamaları-kanal-chat)).
 
 ## Önce yönetici, sonra kullanıcı
 Ayarlar → Bildirim kuralları'nda her olay için şunlar belirlenir:
@@ -21,6 +24,9 @@ Yönetici bir olayı sabitlerse ("kullanıcı değiştiremez"), kullanıcıları
 varsayılanlar uygulanır.
 
 ## Olaylar
+Tablo olayların yalnızca bir bölümünü gösterir (sunucu, fatura, destek, itiraz, uygulama kurulumu, trafik, bütçe ve
+diğerleri eklendi). Güncel ve tam liste koddaki katalogdur; panelde Ayarlar → Bildirim kuralları hepsini gösterir.
+
 | Olay | Kime | Varsayılan kanallar |
 |---|---|---|
 | `server.ready` (sunucu hazır) | sahibi | panel, tarayıcı, e-posta |

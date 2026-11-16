@@ -41,12 +41,40 @@ elle de tetikleyebilir.
 | Sandbox (panelin kendi test sağlayıcısı) | Test kartı sayfası | Var | Var | Gerçek müşteri varken kapalı olmalı |
 | iyzico | Checkout Form (3D) | Var (hesap 3D'siz çekime izinliyse) | `/v2/payment/refund` | Sonuç `checkoutform/auth/ecom/detail` ile doğrulanır, imza kontrol edilir |
 | PayTR | iFrame (3D) | Yok (kart saklama Direkt API ister) | `/odeme/iade` | Bildirim URL'si PayTR panelinde girilir: `https://<panel>/api/billing/callback/paytr` |
-| Stripe | Checkout (3D) | Var (off-session) | `/v1/refunds` | Türkiye'de kurulu şirketleri kabul etmiyor |
+| Stripe | Checkout (3D) | Var (off-session) | `/v1/refunds` | Türkiye'de kurulu şirketleri kabul etmiyor. Webhook yok: ödeme, müşterinin tarayıcısı panele döndüğünde ya da tahsilat çalıştırması Stripe'a yeniden sorduğunda işlenir |
 | Craftgate | Ortak Ödeme Formu (3D) | Var (3D'siz POS gerekir) | `/payment/v1/refunds` | Sonuç `checkout-payments/{token}` ile doğrulanır |
-| Param | Ortak Ödeme Sayfası (3D) | Yok | `TP_Islem_Iptal_Iade_Kismi2` | IP izni gerekir; TMSF kayyımı haberi var |
+| Param | Ortak Ödeme Sayfası (3D) | Yok | `TP_Islem_Iptal_Iade_Kismi2` | IP izni gerekir; TMSF kayyımı haberi var. Dönüş Param'a ayrıca sorulmaz: özet (hash), GUID ve işlem numarası denetlenir |
 
-Diğer 21 kuruluşun bilgileri kaydedilip kontrol edilebilir; tahsilatları henüz yazılmadı. **Gerçek bir üye işyeri hesabıyla hiçbir
-kuruluş denenmedi**: canlıya almadan önce her biriyle test modunda bir ödeme ve bir iade yapın.
+Ayarlar → Ödeme'deki diğer 41 sağlayıcının (bankalar, diğer ödeme kuruluşları, Papara, PayPal, Mollie, Adyen ve
+benzerleri) yalnızca bilgileri kaydedilip sınanabilir; tahsilatları yazılmadı ve müşteriye ödeme yöntemi olarak
+sunulmazlar ([payments.md](payments.md)). **Gerçek bir üye işyeri hesabıyla hiçbir kuruluş denenmedi**: canlıya
+almadan önce her biriyle test modunda bir ödeme ve bir iade yapın.
+
+Bilinen iki açık:
+
+- **Stripe:** Stripe'tan bildirim alan bir webhook yok. Müşteri ödemeyi yapıp panele dönmeden sekmeyi kapatırsa
+  ödeme hemen işlenmez; tahsilat çalıştırması (beş dakikada bir) açık kalan ödemeyi başladıktan beş dakika sonra
+  Stripe'a sormaya başlar ve sonucu işler, bir gün içinde ödenmeyen ödemeyi "süresi doldu" olarak kapatır. Aynı
+  yeniden sorma iyzico ve Craftgate'te de vardır; PayTR ve Param'da yoktur.
+- **Param:** dönüşün doğruluğu yalnızca özet, GUID ve işlem numarasına dayanır; bunlar aynı üye işyerinin bir dönüşünü
+  görmüş biri tarafından üretilebilir. Param'dan gelen ödemeleri hesap ekstresiyle karşılaştırın.
+
+## Saatlik kullanım, bütçe ve boyut değişikliği
+
+- **Saatlik (kullandıkça öde):** faturalandırma ayarlarında saatlik satış ve bakiye açıksa ve pakete saatlik fiyat
+  verilmişse müşteri sunucuyu saatlik sipariş edebilir. Ücret
+  bakiyeden düşülür; harcanabilir tutar bakiyeden henüz faturalanmamış kullanım ve ödenmemiş kullanım faturaları
+  çıkarılarak bulunur. Bakiye bitince sunucu bekletilir (kapatılır ve müşteriye kilitlenir), bakiye yüklenince
+  açılır. Ay sonunda kullanım faturası kesilir.
+- **Aylık bütçe:** müşteri bir tutar ve para birimi belirler. Panel, o para birimindeki sunucularının ve sanal veri
+  merkezlerinin aylık toplamını bu tutarla karşılaştırır: sipariş sayfası bütçeyi aşacak siparişte önceden uyarır,
+  toplam bütçeyi geçince takvim ayında bir kez `billing.budget_exceeded` bildirimi gider. Bütçe hiçbir şeyi
+  durdurmaz, yalnızca haber verir.
+- **Boyut büyütme (gün hesabı):** faturalandırma açıkken bir sunucu büyütüldüğünde, yeni ve eski aylık fiyat
+  arasındaki farkın dönemin kalan günlerine düşen kısmı faturalanır. Disk yalnızca büyür.
+- **WHMCS / WISECP:** satışı bu sistemlerden biri yapıyorsa `integrations/` altındaki modüller sunucuyu panelde
+  oluşturur, askıya alır, boyutunu değiştirir ve siler. Bu sunuculara panel fatura kesmez. WHMCS modülü sunucu modülü
+  yapısına göre yazıldı; WISECP modülü bir WISECP kurulumunda denenmedi ([integrations/README.md](../integrations/README.md)).
 
 ## e-Fatura / e-Arşiv
 

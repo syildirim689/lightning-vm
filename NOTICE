@@ -1,0 +1,63 @@
+Lightning VM
+Copyright The Lightning VM authors
+
+This product is licensed under the Apache License, Version 2.0 (see LICENSE).
+
+The source tree and the container images built from it include the third-party
+material listed below. Libraries installed from npm and Go modules at build time
+are not listed here; each carries its own licence in its package
+(apps/*/package-lock.json, services/*/go.sum).
+
+-------------------------------------------------------------------------------
+Lucide icons
+-------------------------------------------------------------------------------
+
+apps/web/components/icons.json holds a subset of the Lucide icon set, copied
+from the npm package @iconify-json/lucide by apps/web/scripts/icons.mjs.
+
+Source:  https://github.com/lucide-icons/lucide
+Licence: ISC (https://github.com/lucide-icons/lucide/blob/main/LICENSE)
+
+Copyright (c) Lucide Contributors. Portions of Lucide are derived from Feather
+(https://github.com/feathericons/feather), copyright (c) Cole Bemis, and are
+licensed under the MIT licence.
+
+ISC License
+
+Permission to use, copy, modify, and/or distribute this software for any
+purpose with or without fee is hereby granted, provided that the above
+copyright notice and this permission notice appear in all copies.
+
+THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH
+REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND
+FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY SPECIAL, DIRECT,
+INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS
+OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER
+TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF
+THIS SOFTWARE.
+
+-------------------------------------------------------------------------------
+Fonts
+-------------------------------------------------------------------------------
+
+The font files are not in the source tree. next/font (apps/web/app/layout.tsx)
+downloads them from Google Fonts when the web image is built and serves them
+from the panel itself, so a built image contains them:
+
+  Fira Sans              The Mozilla Foundation and Telefonica S.A.
+                         https://github.com/mozilla/Fira
+  Fira Code              The Fira Code Project Authors
+                         https://github.com/tonsky/FiraCode
+  Atkinson Hyperlegible  Braille Institute of America, Inc.
+                         https://www.brailleinstitute.org/freefont/
+
+All three are licensed under the SIL Open Font License, Version 1.1
+(https://openfontlicense.org). The fonts are used unmodified and are not sold
+by themselves.
+
+-------------------------------------------------------------------------------
+Not included
+-------------------------------------------------------------------------------
+
+The VMware HTML Console SDK (wmks) that the browser console needs is not part
+of this repository and is not redistributed; see docs/console.md.

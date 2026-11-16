@@ -1,9 +1,34 @@
 # Hypervisor adapter HTTP contract
 
 This is the exact HTTP contract of the internal adapter service `services/vmware` (Go, govmomi), written from
-the code so that a second adapter (Proxmox VE) can speak the same contract. Everything below was read from
+the code so that other adapters can speak the same contract. Everything below was read from
 `services/vmware/*.go`, `apps/api/src/*.ts`, `apps/worker/*.mjs` and `apps/api/migrations/*.sql`; nothing is
 assumed. Where the VMware adapter behaves in a surprising way it is marked **Note**.
+
+**Who implements it.** Seven adapters speak this contract today. `services/vmware` implements all of it. Six Node.js
+adapters implement a common subset:
+
+| Adapter | Platform | Connection kind | Base URL variable (default) |
+| --- | --- | --- | --- |
+| `services/vmware` | vCenter / ESXi | `vcenter`, `esxi` | `VMWARE_SERVICE_URL` (`http://vmware:8080`) |
+| `services/proxmox` | Proxmox VE | `proxmox` | `PROXMOX_SERVICE_URL` (`http://proxmox:8080`) |
+| `services/xcpng` | XCP-ng / XenServer (XAPI) | `xcpng` | `XCPNG_SERVICE_URL` (`http://xcpng:8080`) |
+| `services/ovirt` | oVirt Engine (REST) | `ovirt` | `OVIRT_SERVICE_URL` (`http://ovirt:8080`) |
+| `services/hyperv` | Hyper-V (PowerShell over WinRM) | `hyperv` | `HYPERV_SERVICE_URL` (`http://hyperv:8080`) |
+| `services/libvirt` | KVM (virsh over SSH) | `libvirt` | `LIBVIRT_SERVICE_URL` (`http://libvirt:8080`) |
+| `services/incus` | Incus / LXD (REST) | `incus` | `INCUS_SERVICE_URL` (`http://incus:8080`) |
+
+The six implement: `/v1/discover`, `/v1/task`, `/v1/vm/clone`, `/v1/vm/find`, `/v1/vms/managed`, `/v1/vm/power`,
+`/v1/vm/destroy`, `/v1/vm/resize`, `/v1/vm/rename`, `/v1/vm/details`, `/v1/vm/metrics`, `/v1/vm/snapshots`,
+`/v1/vm/snapshot`, `/v1/vm/disks`, `/v1/vm/disk-add`, `/v1/vm/disk-remove`, `/v1/topology` and `/v1/power`
+(Proxmox VE also `/v1/vm/guest-setup`, section 9). They answer `400 PLATFORM_NOT_SUPPORTED`, a permanent code, for
+the rest: `/v1/console-ticket`, `/v1/vm/disk-copy`, `/v1/backup/delete`, `/v1/image/create`, `/v1/image/delete`,
+`/v1/network/create`, `/v1/network/delete`, `/v1/vm/nic-add`, `/v1/vm/nic-remove`, `/v1/vm/nic-mac`,
+`/v1/vm/migrate`, `/v1/vm/firewall`, `/v1/vm/shaping`, `/v1/vm/cdrom`, `/v1/iso/upload`, `/v1/iso/delete` and
+`/v1/scan`. Each adapter's `server.mjs` holds both lists (`routes` and `later`); read them there, since they change as
+an adapter grows. Within the common subset the answers are not equally rich: `/v1/vm/metrics` returns history
+(`samples`) only on VMware and Proxmox VE, `/v1/power` returns traffic samples only on those two, and
+`cpuUsedMhz` of a VM is always 0 on XCP-ng, oVirt, libvirt and Incus.
 
 Contents
 
@@ -57,6 +82,14 @@ Contents
   `VMWARE_ALLOW_NETWORKS` (comma-separated CIDRs). `VMWARE_DENY_NETWORKS` adds blocked ranges. No HTTP proxy is
   ever used towards the endpoint.
 
+  **Every adapter applies this guard**, with the same rule and its own pair of variables: `PROXMOX_`, `XCPNG_`,
+  `OVIRT_`, `HYPERV_`, `LIBVIRT_` and `INCUS_ALLOW_NETWORKS` / `..._DENY_NETWORKS` (`addressGuard` in each
+  adapter's client module: `pve.mjs`, `xapi.mjs`, `engine.mjs`, `winrm.mjs`, `ssh.mjs`, `incus.mjs`). The
+  container's own interface subnets are read at start (`os.networkInterfaces()`), so an adapter refuses the Docker
+  networks it sits on (PostgreSQL, Redis and the API live there) without any configuration; an address inside an
+  `ALLOW` network is permitted even when a built-in rule, an own subnet or a `DENY` network would refuse it.
+  `compose.yaml` passes all of these variables through (empty by default).
+
 ---
 
 ## 2. Target
@@ -101,10 +134,11 @@ What the callers send (identical in the API's `storedTarget` and the worker's `c
 `vmware_connections` row with the password decrypted in memory. The API only ever stores `tls.sha256` as 64
 lower-case hex characters and `tls.mode` as one of `system`, `ca`, `pinned`.
 
-**Note**: the callers in the working tree also add `platform: "proxmox"` to the target for connections of kind
-`proxmox` and use it to choose the adapter's base URL (`PROXMOX_SERVICE_URL`, default `http://proxmox:8080`).
-The VMware adapter ignores that field. A second adapter should ignore unknown fields too (`apiVersion` in
-particular is still sent if a row has one).
+**Note**: for a connection whose kind is one of `proxmox`, `xcpng`, `ovirt`, `hyperv`, `libvirt` or `incus` the
+callers also add `platform: "<kind>"` to the target and use it to choose the adapter's base URL (the table at the top
+of this document). Connections of kind `vcenter` and `esxi` carry no `platform` and go to the VMware adapter, which
+ignores the field. Every adapter should ignore unknown fields too (`apiVersion` in particular is still sent if a row
+has one).
 
 Connecting (`connect` in `discover.go`), done once per request:
 
@@ -149,13 +183,15 @@ failures while connecting, and only if the certificate could be read. The API pa
 ```go
 func failureStatus(code string) int {
     switch code {
-    case "VM_NOT_FOUND", "DATASTORE_NOT_FOUND":
+    case "VM_NOT_FOUND", "DATASTORE_NOT_FOUND", "SNAPSHOT_NOT_FOUND":
         return http.StatusNotFound
-    case "VM_POWERED_OFF", "TOOLS_NOT_RUNNING", "NOT_MANAGED", "NO_CDROM_CONTROLLER", "NOT_IMPORTABLE", "DISK_HAS_SNAPSHOTS", "DISK_SHRINK_NOT_SUPPORTED", "INVALID_STATE", "VM_HAS_NO_DISK", "DISK_NOT_SUPPORTED", "SYSTEM_DISK", "NO_DISK_CONTROLLER":
+    case "VM_POWERED_OFF", "TOOLS_NOT_RUNNING", "NOT_MANAGED", "NO_CDROM_CONTROLLER", "NOT_IMPORTABLE", "DISK_HAS_SNAPSHOTS", "DISK_SHRINK_NOT_SUPPORTED", "INVALID_STATE", "VM_HAS_NO_DISK", "DISK_NOT_SUPPORTED", "SYSTEM_DISK", "NO_DISK_CONTROLLER",
+        "FIREWALL_NEEDS_DVS", "FIREWALL_NO_PORT", "CONSOLE_TLS_UNVERIFIABLE", "WRITE_RESTRICTED", "INSUFFICIENT_RESOURCES", "DUPLICATE_NAME":
+        // The request is fine; the VM, its network or the endpoint's licence is not in a state that allows it.
         return http.StatusConflict
     case "INVALID_LOGIN", "PERMISSION_DENIED":
         return http.StatusUnauthorized
-    case "INVALID_CA", "INVALID_PIN", "INVALID_TLS_MODE", "INVALID_REQUEST", "ENDPOINT_BLOCKED", "PROVISIONING_NOT_SUPPORTED", "TEMPLATE_NOT_FOUND", "NETWORK_NOT_FOUND", "TEMPLATE_HAS_NO_NIC", "DISK_SMALLER_THAN_TEMPLATE":
+    case "INVALID_CA", "INVALID_PIN", "INVALID_TLS_MODE", "INVALID_REQUEST", "ENDPOINT_BLOCKED", "PROVISIONING_NOT_SUPPORTED", "TEMPLATE_NOT_FOUND", "NETWORK_NOT_FOUND", "TEMPLATE_HAS_NO_NIC", "DISK_SMALLER_THAN_TEMPLATE", "FIREWALL_TOO_MANY_RULES":
         return http.StatusBadRequest
     }
     return http.StatusBadGateway
@@ -164,11 +200,14 @@ func failureStatus(code string) int {
 
 | Status | Codes |
 | --- | --- |
-| 400 | `INVALID_REQUEST`, `INVALID_CA`, `INVALID_PIN`, `INVALID_TLS_MODE`, `ENDPOINT_BLOCKED`, `PROVISIONING_NOT_SUPPORTED`, `TEMPLATE_NOT_FOUND`, `NETWORK_NOT_FOUND`, `TEMPLATE_HAS_NO_NIC`, `DISK_SMALLER_THAN_TEMPLATE` |
+| 400 | `INVALID_REQUEST`, `INVALID_CA`, `INVALID_PIN`, `INVALID_TLS_MODE`, `ENDPOINT_BLOCKED`, `PROVISIONING_NOT_SUPPORTED`, `TEMPLATE_NOT_FOUND`, `NETWORK_NOT_FOUND`, `TEMPLATE_HAS_NO_NIC`, `DISK_SMALLER_THAN_TEMPLATE`, `FIREWALL_TOO_MANY_RULES` |
 | 401 | `UNAUTHORIZED` (service token), `INVALID_LOGIN`, `PERMISSION_DENIED` |
-| 404 | `VM_NOT_FOUND`, `DATASTORE_NOT_FOUND` |
-| 409 | `VM_POWERED_OFF`, `TOOLS_NOT_RUNNING`, `NOT_MANAGED`, `NO_CDROM_CONTROLLER`, `NOT_IMPORTABLE`, `DISK_HAS_SNAPSHOTS`, `DISK_SHRINK_NOT_SUPPORTED`, `INVALID_STATE`, `VM_HAS_NO_DISK`, `DISK_NOT_SUPPORTED`, `SYSTEM_DISK`, `NO_DISK_CONTROLLER` |
-| 502 | everything else: `TLS_UNTRUSTED`, `TLS_HOSTNAME_MISMATCH`, `TLS_PIN_MISMATCH`, `DNS_FAILED`, `CONNECTION_REFUSED`, `TIMEOUT`, `NOT_VSPHERE`, `SNAPSHOT_NOT_FOUND`, `CONSOLE_TLS_UNVERIFIABLE`, `FIREWALL_NEEDS_DVS`, `FIREWALL_NO_PORT`, `FIREWALL_TOO_MANY_RULES`, `FIREWALL_APPLY_FAILED`, and the task-fault codes when a route waits for a task itself (`WRITE_RESTRICTED`, `INSUFFICIENT_RESOURCES`, `DUPLICATE_NAME`, `TASK_FAILED`) |
+| 404 | `VM_NOT_FOUND`, `DATASTORE_NOT_FOUND`, `SNAPSHOT_NOT_FOUND` |
+| 409 | `VM_POWERED_OFF`, `TOOLS_NOT_RUNNING`, `NOT_MANAGED`, `NO_CDROM_CONTROLLER`, `NOT_IMPORTABLE`, `DISK_HAS_SNAPSHOTS`, `DISK_SHRINK_NOT_SUPPORTED`, `INVALID_STATE`, `VM_HAS_NO_DISK`, `DISK_NOT_SUPPORTED`, `SYSTEM_DISK`, `NO_DISK_CONTROLLER`, `FIREWALL_NEEDS_DVS`, `FIREWALL_NO_PORT`, `CONSOLE_TLS_UNVERIFIABLE`, and the task-fault codes `WRITE_RESTRICTED`, `INSUFFICIENT_RESOURCES`, `DUPLICATE_NAME` when a route waits for a task itself |
+| 502 | everything else: `TLS_UNTRUSTED`, `TLS_HOSTNAME_MISMATCH`, `TLS_PIN_MISMATCH`, `DNS_FAILED`, `CONNECTION_REFUSED`, `TIMEOUT`, `NOT_VSPHERE`, `VMWARE_ERROR`, `FIREWALL_APPLY_FAILED`, `TASK_FAILED` |
+
+The Node.js adapters use the same table (`statusOf` in each `server.mjs`), with their own catch-all code in place of
+`VMWARE_ERROR`: `PROXMOX_ERROR`, `XAPI_ERROR`, `OVIRT_ERROR`, `HYPERV_ERROR`, `LIBVIRT_ERROR`, `INCUS_ERROR`.
 
 Neither caller looks at the exact status: both test `res.ok` and then read `code` (and `message`). The API turns
 every adapter failure into its own `422` with the adapter's `code`; the worker turns it into an
@@ -191,15 +230,20 @@ Every error returned by a handler goes through `classify`, in this order:
 | vSphere fault `InvalidLogin` | `INVALID_LOGIN` | `user name or password rejected` |
 | vSphere fault `ManagedObjectNotFound` | `VM_NOT_FOUND` | `virtual machine not found` |
 | vSphere fault `NoPermission` | `PERMISSION_DENIED` | `the account lacks a required privilege` |
-| anything else | `NOT_VSPHERE` | `no vSphere Web Services API answered at /sdk: <error>` |
+| a task the adapter waited for itself failed | the task-fault code of section 4 | the fault's text |
+| the request was cancelled | `TIMEOUT` | fixed text |
+| anything else | `VMWARE_ERROR` | the error's text |
 
 **Notes**
 
 - `VM_NOT_FOUND` is returned for *any* managed object that no longer exists (a VM, but also a port group, host
   or datastore referenced by the call), because the mapping is on the fault type.
-- `NOT_VSPHERE` is the catch-all. Any vSphere fault that is not listed above and is raised synchronously (not
-  through a task) comes back as `502 NOT_VSPHERE` with the fault text in the message. It does not only mean "this
-  is not vSphere". The worker treats it as retryable.
+- `VMWARE_ERROR` is the catch-all: vSphere answered with something the adapter has no code for (any fault not
+  listed above, raised synchronously). It comes back as `502 VMWARE_ERROR` with the fault text in the message, and
+  the worker treats it as retryable.
+- `NOT_VSPHERE` now means only what it says. It is decided in one place, while connecting: when creating the
+  client fails with something that is not a SOAP fault, nothing spoke the vSphere API at `/sdk`
+  (`no vSphere Web Services API answered at /sdk: <error>`).
 - Faults inside tasks are reported by `/v1/task` with the task-fault codes (section 4), not through `classify`.
 
 ### 3.4 Codes the worker treats as permanent
@@ -211,12 +255,16 @@ SNAPSHOT_NOT_FOUND INVALID_LOGIN PERMISSION_DENIED WRITE_RESTRICTED PROVISIONING
 NETWORK_NOT_FOUND TEMPLATE_HAS_NO_NIC DISK_SMALLER_THAN_TEMPLATE INSUFFICIENT_RESOURCES NOT_MANAGED TOOLS_NOT_RUNNING
 TLS_UNTRUSTED TLS_HOSTNAME_MISMATCH TLS_PIN_MISMATCH ENDPOINT_BLOCKED INVALID_REQUEST SECRET_KEY_UNAVAILABLE
 INVALID_STATE VM_NOT_FOUND FIREWALL_NEEDS_DVS FIREWALL_TOO_MANY_RULES DISK_SHRINK_NOT_SUPPORTED DISK_HAS_SNAPSHOTS
-VM_HAS_NO_DISK DISK_NOT_SUPPORTED DATASTORE_NOT_FOUND
+VM_HAS_NO_DISK DISK_NOT_SUPPORTED DATASTORE_NOT_FOUND PLATFORM_NOT_SUPPORTED HOST_IS_SLAVE
 ```
 
 A second adapter should use these codes with the same meaning: a permanent code ends the operation at once; any
-other code (including `TASK_FAILED`, `TIMEOUT`, `NOT_VSPHERE`, `DUPLICATE_NAME`) is retried until the job's
-attempts run out.
+other code (including `TASK_FAILED`, `TIMEOUT`, `NOT_VSPHERE`, `VMWARE_ERROR` and the other adapters' catch-all codes,
+`DUPLICATE_NAME`, `ENGINE_BUSY`) is retried until the job's attempts run out.
+
+`ENGINE_BUSY` (oVirt adapter) is the retryable code for "the platform is still working on this object": the engine
+refused a call because the VM, a disk or a snapshot is locked by an earlier action, or a server that must be down
+for a snapshot restore is still stopping. Nothing was changed; the same call succeeds once the lock is gone.
 
 ---
 
@@ -262,8 +310,8 @@ do, already in the wanted state"; the callers test `if (out.task)`.
 
   There is **no progress field**. The HTTP status is 200 for every task state, including `error` and `unknown`.
 - A task that has expired from vCenter's memory is not an error:
-  `200 {"state":"unknown","code":"TASK_NOT_FOUND"}`. The worker then stops waiting and checks the real object
-  (for a clone it looks the VM up by name).
+  `200 {"state":"unknown","code":"TASK_NOT_FOUND"}`. A task the platform no longer knows proves nothing about its
+  result, so the worker does not treat it as finished: see "How the worker polls" below.
 - Task error codes (`taskFault`):
 
   | vSphere fault | `code` |
@@ -279,10 +327,45 @@ do, already in the wanted state"; the callers test `if (out.task)`.
 
 How the worker polls (`waitTask`): every 2 seconds, forever, bounded only by the operation's own deadline and
 cancel flag. `state === "success"` ends the wait; `state === "error"` throws `code`/`error`;
-`code === "TASK_NOT_FOUND"` ends the wait without a result; anything else (`queued`, `running`, any unknown
-string) keeps polling. The task id is written to `operations.provider_task_id` before the first poll, so a
-restarted worker resumes the wait instead of starting the action again. Task ids must therefore stay valid across
-adapter restarts and be usable with a fresh login.
+`code === "TASK_NOT_FOUND"` ends the wait and is handed back to the step that waited; anything else (`queued`,
+`running`, any unknown string) keeps polling. The task id is written to `operations.provider_task_id` before the
+first poll, so a restarted worker resumes the wait instead of starting the action again. Task ids must therefore stay
+valid across adapter restarts and be usable with a fresh login.
+
+What a step does with `TASK_NOT_FOUND` (`lostTask` in `apps/worker/operations.mjs`): the stored task id is dropped,
+then
+
+- where the result can be read from the real object, it is read: the VM is looked up by name after a clone, the
+  power state is compared with the wanted one after `on` / `off`, a created or removed snapshot is looked for in
+  the snapshot list. If the result is there, the step is done;
+- otherwise the step fails with the retryable `TASK_FAILED`, and the next attempt issues the call again. This is
+  safe because every step that can come here either is safe to repeat or first checks what already exists (a
+  migration asked for again is answered "already there" by the adapter when it did finish);
+- two exceptions: a `reset` cannot be read back and a second one would cut the guest off again, so a lost reset
+  counts as done; a lost destroy task is simply not waited for, and the VM's absence is verified by `/v1/vm/find`
+  (a VM that is still listed fails the step, and the retry destroys anew).
+
+An adapter must therefore make its task routes either repeatable or answer "already done" when asked again.
+
+**Task ids of the other adapters.** A task id is opaque to the callers: they store it and hand it back to the same
+adapter's `/v1/task`. Because an adapter keeps no state, an id says by itself what to look at:
+
+| Adapter | Task id | What `/v1/task` does with it |
+| --- | --- | --- |
+| Proxmox VE | the UPID | reads the task's status on its node |
+| Proxmox VE | `<UPID>|<vmid>` (a clone) | when the copy has ended, gives the new VM its settings (CPU, memory, network, cloud-init, disk size) before answering `success` with `vm` |
+| Proxmox VE | `wait|<vmid>` | a copy whose UPID is not known (the clone's answer was lost and the call was repeated): the VM's `lock: clone` tells whether it still runs; then as above |
+| oVirt | `create:<vm>` | ready when the VM and its disks are no longer locked; the network profile and the disk size are applied on the way |
+| oVirt | `remove:<vm>` | done when the VM is gone |
+| oVirt | `disk:<disk>` | a disk being grown: done when the disk is no longer locked |
+| oVirt | `snapshot:<vm>:<snapshot>`, `unsnap:<vm>:<snapshot>`, `restore:<vm>:<snapshot>` | a snapshot being taken, removed or restored: done when the snapshot (and the VM) has settled, or is gone for `unsnap` |
+| XCP-ng | the XAPI task reference | the copy task carries the VM's name (`other_config`), so a repeated clone finds the running copy by name and hands back the same task instead of starting a second one |
+| Hyper-V, libvirt | the id of a job file on the host | reads the state the background copy wrote |
+| Incus | the operation's id | reads the operation |
+
+Requests an adapter refuses before starting anything: the libvirt adapter's clone answers `400 INVALID_REQUEST` for a
+`serverId` that is not a UUID (the MAC address and the job are derived from it) and for network settings whose
+addresses are not IP addresses (they are written into the domain's description and a shell script).
 
 ---
 
@@ -335,9 +418,9 @@ adapter restarts and be usable with a fresh login.
 Conventions used below: "Target" means the fields of section 2 at the top level of the body. "Connection
 errors" means the codes any route can return from connecting: `INVALID_CA`, `INVALID_PIN`,
 `INVALID_TLS_MODE`, `ENDPOINT_BLOCKED`, `TLS_UNTRUSTED`, `TLS_HOSTNAME_MISMATCH`, `TLS_PIN_MISMATCH`,
-`DNS_FAILED`, `CONNECTION_REFUSED`, `TIMEOUT`, `INVALID_LOGIN`, `NOT_VSPHERE`. "Common errors" means the
+`DNS_FAILED`, `CONNECTION_REFUSED`, `TIMEOUT`, `INVALID_LOGIN`, `NOT_VSPHERE` (nothing answered at `/sdk`). "Common errors" means the
 connection errors plus what `classify` can produce from the work itself: `VM_NOT_FOUND` (object gone),
-`PERMISSION_DENIED`, `TIMEOUT`, `NOT_VSPHERE` (any other fault). Every POST route can also return
+`PERMISSION_DENIED`, `TIMEOUT`, `VMWARE_ERROR` (any other fault). Every POST route can also return
 `400 INVALID_REQUEST` ("invalid JSON").
 
 Route list:
@@ -409,7 +492,7 @@ Used by `/v1/vm/find` (`name`), `/v1/task` (`task`), `/v1/vm/power` (`vm`, `acti
   `400 {"code":"INVALID_REQUEST","message":"host and username are required"}`.
 - Response: the `Result` structure; see section 8 for every field.
 - Errors: connection errors (with `certificate` on TLS trust failures), then for each inventory read
-  `VM_NOT_FOUND`, `PERMISSION_DENIED`, `TIMEOUT`, `NOT_VSPHERE`. A licence list or privilege check that cannot
+  `VM_NOT_FOUND`, `PERMISSION_DENIED`, `TIMEOUT`, `VMWARE_ERROR`. A licence list or privilege check that cannot
   be read is not an error; it becomes a warning (`LICENSE_UNREADABLE`, `PRIVILEGES_UNREADABLE`).
 - Nothing is changed on the endpoint. The whole inventory is returned in one response (no paging).
 
@@ -512,7 +595,7 @@ Used by `/v1/vm/find` (`name`), `/v1/task` (`task`), `/v1/vm/power` (`vm`, `acti
   | `endpoint` | The request's `host`, for logs. |
 
 - Errors: `VM_NOT_FOUND` (the VM's properties cannot be read, for any reason), `VM_POWERED_OFF` (409),
-  `CONSOLE_TLS_UNVERIFIABLE` (502; the ticket has neither thumbprint nor certificate, so the gateway could not
+  `CONSOLE_TLS_UNVERIFIABLE` (409; the ticket has neither thumbprint nor certificate, so the gateway could not
   verify the host), common errors.
 - The ticket is a vSphere `webmks` ticket. The console gateway (`services/console`) connects to `url` as a
   WebSocket client offering the browser's sub-protocol (one of `binary`, `base64`, `uint8utf8`) and verifies
@@ -575,6 +658,11 @@ See section 4.
   - `{"vm": "<vm id>", "existed": true}`: a VM with this name already exists; nothing was started.
   - `{"task": "<task id>", "existed": false}`: the clone task was started. When it succeeds, `/v1/task` returns
     the new VM's id in `vm`.
+
+  Either answer may carry `warnings`: an array of codes for what the platform will not do although the clone goes
+  through. Today only the Proxmox VE adapter sends one, `EXTRA_ADDRESSES_NOT_CONFIGURED` (the first interface was
+  given more than one IPv4 or IPv6 address; `ipconfig0` carries one of each). The worker keeps the codes on the
+  operation (`operations.params.warnings`, shown in the admin's operations list) and logs them.
 - Behaviour:
   1. Not vCenter: `400 PROVISIONING_NOT_SUPPORTED` ("cloning needs vCenter").
   2. Exact-name lookup over the whole inventory (idempotency).
@@ -723,8 +811,8 @@ See section 4.
   up (0 when the VM has no disk).
 - Behaviour: already has this name: success (a retry). Already managed (`lvm-` prefix) or a template:
   `NOT_IMPORTABLE` (409).
-- Errors: `INVALID_REQUEST`, `NOT_IMPORTABLE`, common errors. **Note**: a failed rename task is not mapped with
-  the task-fault table here; it goes through `classify` (usually `NOT_VSPHERE`).
+- Errors: `INVALID_REQUEST`, `NOT_IMPORTABLE`, common errors. A failed rename task goes through `classify`, which maps a task the
+  adapter waited for with the same task-fault table as `/v1/task`.
 
 ### 6.13 POST /v1/vm/details
 
@@ -948,7 +1036,7 @@ See section 4.
   - `revert`: reverts to the snapshot with power-on suppressed. Because snapshots carry no memory the VM is
     powered off afterwards; the worker powers it on again if it was running.
   - `remove`: removes that one snapshot (children are kept) and consolidates the disks.
-- Errors: `INVALID_REQUEST` (name/description length, unknown action), `SNAPSHOT_NOT_FOUND` (502; the id is not
+- Errors: `INVALID_REQUEST` (name/description length, unknown action), `SNAPSHOT_NOT_FOUND` (404; the id is not
   in this VM's tree; permanent for the worker), common errors.
 - No managed-name check.
 
@@ -989,7 +1077,12 @@ See section 4.
   and after and takes the new `key`.
 - Behaviour: a new **thin** disk on the first controller with a free slot, on the system disk's datastore, in
   the VM's folder, with its own file name (`<system disk>_extra<random>.vmdk`). Works while the VM runs.
-  **Not idempotent**: calling it twice adds two disks (the worker avoids that by storing the task id).
+  **Not idempotent**: calling it twice adds two disks. The stored task id alone does not prevent that (some
+  adapters answer only after the disk exists and without a task id, so a crash can leave a disk the worker never
+  recorded). The worker therefore lists the VM's disks before calling: a retry that cannot tell whether its earlier
+  call went through first **adopts** a disk of the asked size that is not the system disk and that no `server_disks`
+  row holds, and only calls `/v1/vm/disk-add` when there is none. An adapter must list a new disk in `/v1/vm/disks`
+  with a stable `key` and its exact `sizeGb`.
 - Errors: `INVALID_REQUEST`, `NOT_MANAGED`, `VM_HAS_NO_DISK` (409), `NO_DISK_CONTROLLER` (409), common errors.
 
 ### 6.19 POST /v1/vm/disk-remove
@@ -1109,7 +1202,7 @@ See section 4.
 - Response: `{}`. A port group that no longer exists is success.
 - Behaviour: only a port group named `lvm-net-...` is deleted, else `NOT_MANAGED`.
 - Errors: `NOT_MANAGED`, common errors (for example a port group that still has NICs attached fails with
-  `NOT_VSPHERE`).
+  `VMWARE_ERROR`).
 
 ### 6.26 POST /v1/vm/nic-add
 
@@ -1213,7 +1306,8 @@ vSphere the port group key equals the port group's id.
   or the port was not found), `FIREWALL_APPLY_FAILED` (the port or port-group reconfiguration failed for a
   reason not in the task-fault table), the task-fault codes `WRITE_RESTRICTED`, `PERMISSION_DENIED`,
   `INSUFFICIENT_RESOURCES`, `DUPLICATE_NAME`, `INVALID_STATE` when the reconfiguration task fails with one of
-  those faults, common errors. All `FIREWALL_*` codes are HTTP 502.
+  those faults, common errors. HTTP status of the `FIREWALL_*` codes: `FIREWALL_TOO_MANY_RULES` 400,
+  `FIREWALL_NEEDS_DVS` and `FIREWALL_NO_PORT` 409, `FIREWALL_APPLY_FAILED` 502.
 - No managed-name check.
 
 ### 6.31 POST /v1/vm/shaping
@@ -1434,7 +1528,7 @@ application/json` (except the ISO upload).
 | `/v1/task` | `apps/worker/operations.mjs` (`waitTask`) | Target, `task` | `state`, `code`, `error`, `vm` (after a clone) |
 | `/v1/vm/clone` | `apps/worker/operations.mjs` (`ensureVM`; kinds `create`, `reinstall`) | Target, `name: lvm-<server id>`, `serverId`, `template`, `pool`, `datastore`, `network`, `vcpu`, `memoryMb`, `diskGb`, `cpuHotAdd`, `memoryHotAdd`, `nestedHv`, and either `customization` + `metadata` + `userdata` or `customization: "appliance"` + `vappProperties` | `vm` (already exists) or `task` (stored, then polled; the new id comes from the task's `vm`, falling back to `/v1/vm/find`). `existed` is not read. |
 | `/v1/vm/find` | `apps/worker/operations.mjs` (`find`, `waitReady`, `refreshPower`, `power`, `removeVM`, `image_create`) | Target, `name` | `vm` (null check), `vm.moref`, `vm.powerState`, `vm.toolsRunning`, `vm.ips`. A server is "ready" when `powerState === 'poweredOn' && toolsRunning && ips.includes(<primary address>)`. After delete, `vm` must be null. |
-| `/v1/vms/managed` | `apps/worker/operations.mjs` (`reconcile`; only connections of kind `vcenter` that have a resource pool, plus kind `proxmox` in the working tree) | Target | `vms[].name`, `vms[].moref`, `vms[].powerState`. Compared with the `servers` table: missing VMs, power drift, orphan VMs (names not starting `lvm-img-` and not a known server). Failure sets the connection's status to `error`. |
+| `/v1/vms/managed` | `apps/worker/operations.mjs` (`reconcile`; connections that have a resource pool and whose kind is `vcenter`, `proxmox`, `xcpng`, `ovirt`, `hyperv`, `libvirt` or `incus`) | Target | `vms[].name`, `vms[].moref`, `vms[].powerState`. Compared with the `servers` table: missing VMs, power drift, orphan VMs (names not starting `lvm-img-` and not a known server). Failure sets the connection's status to `error`. |
 | `/v1/vm/power` | `apps/worker/operations.mjs` (`power`; kinds `create`, `power_on`, `power_off`, `reset`, `shutdown`, `resize`, `backup_restore`, `snapshot_revert`) | Target, `vm`, `action` | `task` (polled if non-empty). `INVALID_STATE` is success if the VM is in the wanted state. |
 | `/v1/vm/destroy` | `apps/worker/operations.mjs` (`removeVM`; kinds `delete`, `reinstall`, rollback of `create`) | Target, `vm` | `task` (polled if non-empty); then `/v1/vm/find` must return null |
 | `/v1/vm/resize` | `apps/worker/operations.mjs` (kind `resize`) | Target, `vm`, `vcpu`, `memoryMb`, `diskGb` | `task` |
@@ -1602,6 +1696,10 @@ Array of codes (always an array, possibly empty), stored as jsonb and translated
 | `VERSION_END_OF_SUPPORT` | API version 7.x. |
 | `CUSTOMIZATION_GUESTINFO` | Kind `vcenter` and API below 7.0.3 (native cloud-init customization unavailable). |
 | `FEDERATED_LOGIN_BLOCKED` | Kind `vcenter` and API 9.0 or newer. |
+| `GUEST_AGENT_NOT_PERMITTED` | Proxmox VE: the account lacks the guest agent privilege (`VM.Monitor` up to PVE 8, `VM.GuestAgent.Unrestricted` from PVE 9). |
+| `GUEST_NIC_NAME_ETH0` | oVirt, always: the engine writes network settings for an interface named `eth0`. |
+| `VIRTINST_MISSING` | libvirt: the host has no `virt-clone` / `virt-xml`, so servers cannot be created. |
+| `NO_IMAGES` | Incus: the image store is empty. |
 
 ### 8.5 compat
 
@@ -1810,8 +1908,8 @@ All VMs and templates of the endpoint are listed (not only the panel's).
 ### 8.7 Connection row
 
 For completeness, what `vmware_connections` holds from a discovery (migrations `004_vmware.sql`,
-`008_two_factor_branding.sql`, and `064_proxmox.sql` in the working tree, which widens the `kind` check to
-include `proxmox`):
+`008_two_factor_branding.sql`, and `064_proxmox.sql` to `069_incus.sql`, each of which widens the `kind` check by
+one platform: `proxmox`, `xcpng`, `ovirt`, `hyperv`, `libvirt`, `incus`):
 
 | Column | From |
 | --- | --- |

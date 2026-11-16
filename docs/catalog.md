@@ -74,8 +74,12 @@ fiziksel çekirdeklerde çalışır. Arayüz bunu sipariş ekranında açıkça 
   başlayarak ilk boş IPv6 adresi de verilir. Ayrıntılar: [ip-management.md](ip-management.md).
 
 ## Kotalar ve projeler
-- **Kota sırası:** proje kotası, yoksa kullanıcı kotası, yoksa varsayılan kota uygulanır. Boş bırakılan
-  bir sınır sınırsızdır. Sınırlar: sunucu sayısı, vCPU, RAM ve disk.
+- **Kota sırası:** kullanıcıya özel kota varsa o uygulanır; yoksa varsayılan kota, kullanıcının rolünün sınırlarıyla
+  birlikte (docs/auth.md, Rol sınırları). Boş bırakılan bir sınır sınırsızdır. Sınırlar: sunucu sayısı, vCPU, RAM
+  ve disk.
+- **Proje kotası yok:** kod bir `project` kapsamlı kota satırını okuyabilir, ama onu oluşturan bir ekran ya da API
+  ucu yoktur; pratikte hiçbir projenin kendi kotası olmaz. Bu yüzden projedeki sunucular **sahibinin** kotasından
+  sayılır: proje açmak kotayı büyütmez. (Böyle bir satır veritabanına elle eklenirse o projenin kullanımı ayrı sayılır.)
 - **Fiyat teklifi:** teklif ekranı yeni bir sunucunun hangi sınırları aşacağını gösterir. Kullanım, silinmemiş
   sunuculardan hesaplanır.
 - **Projeler:** projeler sahibine aittir. Sorgular sahipliği kendisi kontrol eder; başka bir kullanıcının
@@ -88,3 +92,21 @@ fiziksel çekirdeklerde çalışır. Arayüz bunu sipariş ekranında açıkça 
 - **`POST /api/catalog/quote`:** paketi veya özel yapılandırmayı sunucuda doğrular ve fiyatlar; kotayı
   ve kapasiteyi kontrol eder.
 - **Sunucu oluşturma:** [provisioning.md](provisioning.md).
+
+## Konum bakım modu, trafik kotası, kişisel imajlar
+- **Konum durumu:** bir konum `active`, `maintenance` ya da `hidden` olabilir. Bakımdaki (ve gizli) konum yeni
+  sunucu almaz; içindeki sunucular çalışmaya devam eder. Müşteri sipariş sayfasında durumu görür.
+- **Trafik kotası:** paket ya da havuz aylık bir trafik hakkı (GB) taşıyabilir. Worker her sunucunun giriş ve çıkış
+  trafiğini güne yazar; kotası olan sunucunun sahibi %80 ve %100'de ayda birer kez uyarılır. Kota dolunca ne olacağı
+  Ayarlar → Sunucular'dadır: yalnızca haber ver ya da hızı sınırla (varsayılan 10 Mbit/sn; kota yeniden karşılanınca
+  kalkar). **Sayım yalnızca VMware ve Proxmox VE'de** vardır; **hız sınırlama yalnızca VMware'de**, dağıtık sanal
+  anahtardaki portlarda çalışır. Diğer platformlarda sayaç sıfır kalır, kota hiçbir zaman dolmaz.
+- **Kişisel imajlar (yalnız VMware):** müşteri bir sunucusunu o anki diskiyle imaj olarak kaydeder (vCenter'da yanına
+  bir şablon çıkarılır), sonra ondan yeni sunucu sipariş eder ya da sunucusunu ondan yeniden kurar. İmajı başka kimse
+  görmez. Diğer altı platformda adaptör bu işlemi desteklemez.
+- **Herkese açık durum sayfası** (`/status`, ayarlardan kapatılabilir): oturum açmadan görülür. Panelin parçalarının
+  (panel, veritabanı, kuyruk, otomasyon, sanallaştırma) ve her konumun durumunu, geçmiş günlerin çalışma oranını ve
+  olayları gösterir; bağlantı adı, host ya da müşteri sayısı göstermez. Yanıt 15 saniye önbellekte tutulur. Yetkili
+  personel bir **olay** (incident) açar: başlık, etki (küçük, büyük ya da bakım), etkilenen parçalar ve bir ilk
+  güncelleme; çözülene kadar güncelleme yazar (inceleniyor, bulundu, izleniyor, çözüldü). Açık bir büyük olay genel
+  durumu "kesinti", diğerleri "aksama" yapar. Çözülen olaylar yedi gün daha görünür.

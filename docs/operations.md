@@ -14,6 +14,7 @@ sudo sh scripts/install.sh backup
 - `.env`;
 - `secrets/master.key` ve `secrets/vmware.token`;
 - Caddy'nin sertifikaları ve ACME hesabı;
+- kendi sertifikanız ve anahtarı (`domain --tls custom` ile yüklediyseniz: `data/tls/cert.pem`, `key.pem`);
 - `data/observability/alertmanager.yml`.
 
 Redis yedeklenmez. Redis'te yalnızca kuyruk kopyaları, oturumlar ve hız sınırı sayaçları vardır.
@@ -26,9 +27,16 @@ ayrı bir yedekleme çözümü gerekir.
 **Şifreleme:**
 - Arşiv `secrets/backup.key` ile şifrelenir: AES-256-CBC, anahtar PBKDF2 ile 200.000 turda türetilir.
 - Arşivin yanına bir `.sha256` dosyası yazılır.
-- Yedek, yazıldıktan sonra geri okunarak doğrulanır.
-- `backup.key` ilk kurulumda oluşturulur. **Bu dosyayı sunucu dışında güvenli bir yere kopyalayın.**
-  O olmadan yedekler açılamaz. Yedeklerle aynı yere koyarsanız şifrelemenin koruması kalmaz.
+- Yedek, yazıldıktan sonra geri okunarak doğrulanır: şifresi çözülür ve içindeki her dosya yedeğe giren
+  dosyayla bayt bayt karşılaştırılır. Doğrulama geçmeden yedek "başarılı" sayılmaz ve eski yedekler silinmez
+  (disk dolduğunda yarım kalan arşiv `E_BACKUP_VERIFY` veya `E_BACKUP_WRITE` ile reddedilir).
+- `backup.key` ilk kurulumda oluşturulur ve **yedeklerin tek anahtarıdır**: yedeğin içinde yoktur, başka bir
+  yerden yeniden üretilemez. **Bu dosyayı sunucu dışında güvenli bir yere (parola kasası gibi) kopyalayın.**
+  Sunucu kaybolursa o olmadan hiçbir yedek açılamaz. Yedeklerle aynı yere koyarsanız şifrelemenin koruması
+  kalmaz.
+- **Sunucu dışı kopya sizin işinizdir.** Varsayılan kurulumda yedekler yalnızca bu sunucunun diskinde
+  (`backups/`) durur; disk giderse yedekler de gider. `BACKUP_COPY_TO` ayarlayın (aşağıda) ya da `backups/`
+  klasörünü kendi yönteminizle başka bir yere kopyalayın.
 - **Sınır:** SHA-256 dosyası bozulmayı yakalar, ama kasıtlı değiştirmeye karşı imza değildir.
   Yedekleri güvendiğiniz bir depoda tutun.
 
@@ -62,17 +70,51 @@ değiştirmez (çıkış kodu 3). Kontroller:
 - yedeğin bu sürümden yeni olmaması.
 
 **Onaylı çalıştırma** (`--yes-replace-data`), sırasıyla:
-1. **Mevcut verinin yedeğini alır.** Bu yedek alınamazsa geri yükleme yapılmaz.
-2. Uygulama servislerini durdurur.
-3. Veritabanını **tamamen** yedektekiyle değiştirir.
-4. `master.key`, `vmware.token` ve sertifikaları geri koyar. VMware parolaları o anahtarla
+1. **Hiçbir şeyi durdurmadan önce denetler:** veritabanı yanıt veriyor mu (`E_RESTORE_DB_DOWN`) ve yedekteki
+   döküm `pg_restore` tarafından okunabiliyor mu (`E_RESTORE_DUMP`). Biri tutmazsa hiçbir şey değişmez.
+2. **Mevcut verinin yedeğini alır.** Bu yedek alınamazsa geri yükleme yapılmaz (`E_RESTORE_NO_SAFETY`).
+   Yedeksiz devam etmek yalnızca açıkça `--no-safety-backup` verilirse mümkündür; o durumda geri yüklemenin
+   geri dönüşü yoktur.
+3. Uygulama servislerini durdurur.
+4. Veritabanını **tamamen** yedektekiyle değiştirir. Eski şemanın silinmesi ve dökümün yüklenmesi **tek bir
+   işlemdir (transaction)**: yükleme yarıda kalırsa işlem geri alınır ve veritabanı olduğu gibi kalır.
+   Ardından Redis boşaltılır: oradaki kuyruk işleri, kilitler, önbellekler ve tek kullanımlık biletler yeni
+   duruma aittir, eski veritabanının üzerinde kalmamalıdır. Hepsi yeniden üretilir (oturumlar
+   PostgreSQL'dedir, açık işlemler oradan yeniden kuyruğa alınır).
+5. `master.key`, `vmware.token` ve Caddy'nin sertifikalarını geri koyar. VMware parolaları o anahtarla
    şifrelendiği için anahtarlar veriyle birlikte döner.
-5. Geçerli `.env` ve `alertmanager.yml` değiştirilmez. Yedekteki halleri `.env.from-backup` ve
-   `data/observability/alertmanager.yml.from-backup` olarak yazılır.
-6. Servisleri başlatır ve sağlığı kontrol eder.
+6. Geçerli `.env`, `alertmanager.yml` ve kendi sertifikanız değiştirilmez. Yedekteki halleri
+   `.env.from-backup`, `data/observability/alertmanager.yml.from-backup` ve `data/tls.from-backup/`
+   (`cert.pem`, `key.pem`) olarak yazılır.
+7. Servisleri başlatır ve sağlığı kontrol eder.
+8. Yedek başka bir adreste çalışıyorsa (veya kendi sertifikanızı içeriyorsa) çalıştırmanız gereken
+   `install.sh domain …` komutunu tam haliyle yazar. Adres ve sertifika modu `.env` içinde durur ve geri
+   yükleme `.env` dosyasına dokunmaz; bu adım atlanırsa panel eski adresinde açılmaz.
 
-**Yeni sunucuya taşıma:** önce `sh scripts/install.sh` ile kurun, `backup.key` dosyasını
-`secrets/` altına kopyalayın, sonra `restore` çalıştırın.
+Geri yükleme öncesi alınan yedek, saklama sayısına (`BACKUP_KEEP`) bakmadan tutulur ve hiçbir eski yedeği
+silmez: geri yüklediğiniz dosya en eski yedek olsa bile yerinde kalır.
+
+**Geri yükleme yarıda kalırsa** (hata, Ctrl-C, bağlantının kopması) servisler durmuş bırakılmaz: betik onları
+yeniden başlatır ve veritabanının hangi durumda olduğunu yazar (`RESTORE_STATE`):
+- veritabanı yüklenemediyse (`E_RESTORE_DB`) **değişmemiştir**, panel önceki veriyle açılır;
+- veritabanı yüklendikten sonra kesildiyse veritabanı **yedekteki veridir**, ama anahtarlar ve sertifikalar
+  geri konmamış olabilir: aynı `restore` komutunu yeniden çalıştırın.
+
+Yedeğin şifresi çözülmüş geçici kopyası her durumda silinir.
+
+**Yeni sunucuya taşıma:**
+1. Yeni sunucuda `sh scripts/install.sh` ile kurun.
+2. Sakladığınız `backup.key` dosyasını `secrets/backup.key` olarak kopyalayın (kurulumun ürettiği yeni
+   anahtarın yerine; izinler `chmod 400`). Yedek dosyasını ve `.sha256` dosyasını da sunucuya getirin.
+3. `restore … --yes-replace-data` çalıştırın.
+4. DNS kaydını yeni sunucuya çevirin ve geri yüklemenin yazdığı komutu çalıştırın, örneğin:
+   ```sh
+   sudo sh scripts/install.sh domain panel.example.com
+   ```
+   Kendi sertifikanızı kullanıyorsanız komut `--tls custom --cert data/tls.from-backup/cert.pem
+   --key data/tls.from-backup/key.pem` ile birlikte yazılır.
+5. Diğer ayarları (`BACKUP_COPY_TO`, `UPDATE_CHANNEL` gibi) `.env.from-backup` dosyasından `.env`
+   içine kendiniz taşıyın; parolalar (`POSTGRES_PASSWORD` gibi) yeni kurulumunkiler olarak kalmalıdır.
 
 ## Güncelleme
 Kaynak kurulum git etiketlerini izler. `vX.Y.Z` kararlı sürümdür, `vX.Y.Z-rc.1` gibi etiketler
@@ -91,11 +133,15 @@ sudo sh scripts/install.sh update --to v1.2.0
 3. Açık işlem varsa:
    - otomatik güncelleme bir sonraki saate ertelenir;
    - elle güncellemede uyarı verilir. İşlemler yeni sürümde kaldıkları adımdan sürer.
-4. Yedek alır. Yedek alınamazsa güncelleme yapılmaz.
+4. Yedek alır. Yedek alınamazsa güncelleme yapılmaz. Yedek sırasında veritabanı, `.env` ve anahtarlar
+   `backups/.work-<pid>` altında kısa süre şifresiz durur; bu klasör yedek nasıl biterse bitsin (hata,
+   Ctrl-C) silinir, önceki bir çökmeden kalanı da bir sonraki yedeğin başında silinir.
 5. **İşleri boşaltır:** worker'ı durdurur. Çalışan adımın bitmesi için en çok 120 sn bekler.
 6. Yeni sürüme geçer. Migration'lar `migrate` servisinde çalışır. Ardından servislerin ve
    `/api/ready`'nin sağlığını kontrol eder.
 7. **Başarısızlıkta:**
+   - yeni sürümün kaynağına geçilemezse (`E_UPDATE_CHECKOUT`, örneğin disk dolu) önceki sürüme dönülür ve
+     durdurulan worker yeniden başlatılır; veritabanı değişmemiştir;
    - container'lar önceki sürüme döner;
    - veritabanı **otomatik geri alınmaz**: yeni sürümün migration'ları uygulanmış olabilir;
    - eski sürüm uyumsuz kalırsa, mesajdaki yedekle `restore` çalıştırın.
@@ -115,6 +161,13 @@ sudo sh scripts/install.sh auto-update on --channel stable --window 03:00-05:00
   - son başarılı yedek 23 saatten eskiyse yedek alır;
   - otomatik güncelleme açık ve saat pencere içindeyse güncelleme yapar.
 - Pencere sunucunun yerel saatine göredir ve gece yarısını geçebilir (`22:00-02:00`).
+- Zamanlayıcı saat başlarında çalışır (en çok 5 dakika rastgele gecikmeyle). Bu yüzden pencere bir saat
+  başını ve ardından gelen 10 dakikayı içermelidir: `03:30-04:00` gibi hiç çalışmayacak bir pencere
+  `E_WINDOW_NEVER` ile reddedilir (`03:30-04:15` kabul edilir).
+- Otomatik güncelleme başarısız olan bir sürümü her saat yeniden denemez: aynı sürüm için bekler
+  (`UPDATE_SKIPPED`), yeni bir sürüm çıkınca ya da siz elle `update` çalıştırınca yeniden dener.
+- Aynı anda tek bakım işi çalışır. Elle başlatılan `backup`, `update` ve `restore`, zamanlayıcı ve panel
+  istekleriyle aynı kilidi (`data/maintenance/.lock`) kullanır; biri çalışırken diğeri bekler.
 - Kapatmak için:
   ```sh
   sudo sh scripts/install.sh auto-update off
@@ -129,6 +182,30 @@ sudo sh scripts/install.sh auto-update on --channel stable --window 03:00-05:00
 
 **Henüz yok:** GHCR'den hazır imajla kurulum ve imzalı kurulum paketi. Güncelleme şimdilik kaynak
 checkout'u ile çalışır ve imajları sunucuda derler.
+
+## Kaldırma
+```sh
+sudo sh scripts/install.sh uninstall
+```
+```sh
+sudo sh scripts/install.sh uninstall --purge-data
+```
+
+`uninstall`:
+- zamanlayıcıyı ve panel ajanını kapatır, systemd birimlerini siler;
+- betiğin proje klasörü dışına yazdığı dosyaları siler: `/etc/systemd/timesyncd.conf.d/lightning-vm.conf`,
+  `/etc/systemd/resolved.conf.d/lightning-vm.conf`, `/etc/apt/apt.conf.d/52lightning-vm-auto`,
+  cloud-init eklentisi (`cloud-init-hotplugd.service.d/10-lightning-vm.conf`) ve saklanan git erişim anahtarı
+  (`/root/.lightning-vm-git-credentials`);
+- container'ları durdurur ve kaldırır (izleme ve terminal dahil).
+
+**Kalanlar:** `.env`, `secrets/` (yedek anahtarı dahil), `backups/`, `data/`, kaynak kodu ve Docker veri
+birimleri (veritabanı, sertifikalar). `sh scripts/install.sh` ile kurulum aynı veriyle geri gelir.
+Docker Engine, sunucu adı, saat dilimi ve `/etc/hosts` satırına dokunulmaz.
+
+`--purge-data` Docker veri birimlerini de **geri dönüşsüz** siler (veritabanı, Caddy sertifikaları, izleme
+verisi). `.env`, `secrets/` ve `backups/` yine kalır; tamamen silmek için proje klasörünü kendiniz silin.
+Önce bir yedek alıp `backup.key` ile birlikte sunucu dışına kopyalayın.
 
 ## İzleme
 ```sh

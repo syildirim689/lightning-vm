@@ -2,7 +2,9 @@ version: 2
 # The repository keeps only main: no update pull requests. Alerts stay on and are fixed in commits on main.
 updates:
   - package-ecosystem: npm
-    directories: [/apps/api, /apps/web, /apps/worker]
+    # The six Node adapters declare no dependencies today; they are listed so one that gains a dependency is watched.
+    directories: [/apps/api, /apps/web, /apps/worker, /services/proxmox, /services/xcpng, /services/ovirt, /services/hyperv,
+      /services/libvirt, /services/incus]
     schedule: {interval: weekly}
     open-pull-requests-limit: 0
     groups:
@@ -13,7 +15,8 @@ updates:
     schedule: {interval: weekly}
     open-pull-requests-limit: 0
   - package-ecosystem: docker
-    directories: [/apps/api, /apps/web, /apps/worker, /services/vmware, /services/console, /deploy/simulator]
+    directories: [/apps/api, /apps/web, /apps/worker, /services/vmware, /services/console, /services/proxmox, /services/xcpng,
+      /services/ovirt, /services/hyperv, /services/libvirt, /services/incus, /deploy/simulator]
     schedule: {interval: weekly}
     open-pull-requests-limit: 0
   - package-ecosystem: docker-compose

@@ -7,8 +7,9 @@ VMware adaptörüyle aynı sözleşmeyi konuşur: [adapter-contract.md](adapter-
 > [!WARNING]
 > Hyper-V desteği **ilk sürümdür** ve dört yeni adaptör içinde en az denenmiş olanıdır. Kimlik doğrulama (NTLMv2)
 > Microsoft'un yayımladığı test değerleriyle, WinRM istemcisi sahte bir WinRM sunucusuyla sınandı; PowerShell
-> betikleri gerçek PowerShell ayrıştırıcısından geçirildi. **Betiklerin Hyper-V komutları gerçek bir Hyper-V
-> hostunda hiç çalıştırılmadı.** Üretimde kullanmadan önce bir test hostunda deneyin.
+> betikleri gerçek PowerShell ayrıştırıcısından geçirildi ve her Hyper-V komutunun çağrısı Microsoft'un belgelediği
+> parametre kümeleriyle karşılaştırıldı. **Betiklerin Hyper-V komutları gerçek bir Hyper-V hostunda yine de hiç
+> çalıştırılmadı.** Üretimde kullanmadan önce bir test hostunda deneyin.
 
 ## Hostu hazırlamak
 
@@ -44,11 +45,16 @@ Yönetim → Bağlantılar → Yeni bağlantı → **Microsoft Hyper-V**.
 Giriş NTLMv2 ile yapılır; host yalnızca Basic sunuyorsa (HTTPS üzerinde) o kullanılır. Her bağlantı **tek bir
 host** içindir; Failover Cluster bu sürümde tek kaynak olarak yönetilmez.
 
-Host panel sunucusuyla aynı yerel ağdaysa adaptörün o ağa erişmesine izin verin (`.env`):
+Adaptör varsayılan olarak loopback ve bağlantı-yerel adresleri, ayrıca **kendi Docker ağlarındaki** adresleri
+reddeder (panelin PostgreSQL, Redis ve API'si o ağlardadır; hata `ENDPOINT_BLOCKED`). Host böyle bir ağdaysa o
+ağa izin verin (`.env`):
 
 ```bash
 HYPERV_ALLOW_NETWORKS=10.20.0.0/16
 ```
+
+Hiç bağlanılmaması gereken ağlar için `HYPERV_DENY_NETWORKS` vardır (virgülle ayrılmış CIDR'ler; izin listesi
+yasak listesinin önüne geçer).
 
 ## Panel hostu nasıl görür
 
@@ -73,6 +79,19 @@ Hyper-V'de şablon kavramı yoktur; bu yüzden şablon olarak kullanılacak VM'i
 Panel her yeni sunucuya `cidata` etiketli küçük bir **yapılandırma diski** (DVD) takar. cloud-init ağ ayarlarını,
 sunucu adını, SSH anahtarlarını, root parolasını, uygulama kurulumunu ve güncelleme bildiricisini bu diskten
 okur. Tümleştirme hizmetleri yoksa sunucu, açıldıktan dört dakika sonra kendisine verilen adreslerle hazır sayılır.
+Aynı kural, tümleştirme hizmetleri çalışıp adres bildirmediğinde de geçerlidir (KVP hizmeti `hv_kvp_daemon`
+olmayan Linux imajları).
+
+Bilmeniz gerekenler:
+
+- **Ağ kartı:** yeni sunucunun ağ kartına sunucu kimliğinden türetilen **sabit bir MAC adresi** verilir
+  (`02:15:5d:…`); misafirdeki arayüz bu MAC ile eşlenir ve `eth0` adını alır. İmajda netplan gerekmez.
+- **Disk biçimi:** `.vhd` şablonun kopyası `.vhd` kalır; diğerleri `.vhdx` olur.
+- **Klasör izinleri:** iş dosyalarının durduğu `%ProgramData%\LightningVM\tasks` klasörü ile sunucunun klasörü
+  yalnızca Administrators, SYSTEM ve betikleri çalıştıran hesaba açıktır (sunucu klasörü ayrıca Hyper-V sanal
+  makinelerine); bu dosyalarda parola özeti ve ilk açılış betikleri bulunur.
+- **Silme:** sunucunun klasöründeki dosyalar hâlâ kullanılıyorsa silme başarısız olur ve yeniden denenir; VM o
+  sırada kaldırılmıştır, kalan klasör sonraki denemede silinir.
 
 ## Bu sürümde çalışanlar
 

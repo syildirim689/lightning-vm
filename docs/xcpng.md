@@ -26,11 +26,16 @@ Parmak izini hostta şu komutla karşılaştırın:
 openssl x509 -in /etc/xensource/xapi-ssl.pem -noout -fingerprint -sha256
 ```
 
-Havuz panel sunucusuyla aynı yerel ağdaysa adaptörün o ağa erişmesine izin verin (`.env`):
+Adaptör varsayılan olarak loopback ve bağlantı-yerel adresleri, ayrıca **kendi Docker ağlarındaki** adresleri
+reddeder (panelin PostgreSQL, Redis ve API'si o ağlardadır; hata `ENDPOINT_BLOCKED`). Havuz böyle bir ağdaysa o
+ağa izin verin (`.env`):
 
 ```bash
 XCPNG_ALLOW_NETWORKS=10.20.0.0/16
 ```
+
+Hiç bağlanılmaması gereken ağlar için `XCPNG_DENY_NETWORKS` vardır (virgülle ayrılmış CIDR'ler; izin listesi
+yasak listesinin önüne geçer).
 
 ## Panel havuzu nasıl görür
 
@@ -47,16 +52,19 @@ XCPNG_ALLOW_NETWORKS=10.20.0.0/16
 
 - Bir VM kurun, içine **cloud-init** ve **guest tools** (xe-guest-utilities) kurun, sonra şablona çevirin.
 - cloud-init'in **NoCloud** veri kaynağı açık olmalı (çoğu bulut imajında öyledir).
+- İmajda **netplan gerekmez**: adaptör ağ ayarlarında arayüzü MAC adresiyle eşler ve ona `eth0` adını verir;
+  cloud-init'in kendi ağ yazıcıları (NetworkManager, ifupdown) da bu ayarları okur.
 
 Panel her yeni sunucuya `cidata` etiketli küçük bir **yapılandırma diski** takar. cloud-init ağ ayarlarını, sunucu
 adını, SSH anahtarlarını, root parolasını, uygulama kurulumunu ve güncelleme bildiricisini bu diskten okur; yani
 VMware'deki her özelleştirme XCP-ng'de de çalışır. Guest tools kurulu değilse sunucu, açıldıktan dört dakika sonra
-kendisine verilen adreslerle hazır sayılır.
+kendisine verilen adreslerle hazır sayılır. Aynı kural, çekirdeğinde PV sürücüleri olup guest utilities kurulu
+olmayan imajlar için de geçerlidir (hazır bulut imajlarının çoğu): içeriden adres bildirilmedikçe dört dakika beklenir.
 
 ## Bu sürümde çalışanlar
 
 Keşif ve kapasite · şablondan sunucu oluşturma (CPU, bellek, disk, ağ, cloud-init'in tamamı) · açma / kapatma /
-yeniden başlatma / temiz kapatma · silme (diskleriyle) · boyut değiştirme · anlık görüntü alma, geri dönme, silme ·
+yeniden başlatma / temiz kapatma · silme (diskleri ve anlık görüntüleriyle) · boyut değiştirme · anlık görüntü alma, geri dönme, silme ·
 ek disk ekleme ve kaldırma · mevcut VM'i devralma · sunucu ayrıntıları · topoloji · tutarlılık denetimi.
 
 ## Henüz olmayanlar
@@ -70,3 +78,8 @@ Ayrıca:
   nedenle trafik sayımı ve host işlemci kullanımı yoktur.
 - Sunucu kopyası her zaman **tam kopyadır** (seçilen depolamaya); hızlı klon kullanılmaz.
 - Boyut değiştirme için sunucu kapalı olmalıdır (panel bunu kendisi yapar).
+- **Sabit parmak izi ve 8.2'den eski havuzlar:** yapılandırma diski, bir havuz üyesinin kendi (yerel) deposuna o
+  üyeye yönlendirilerek yüklenir. Sabit parmak izi yöneticinin sertifikasını tanır; üyelerin sertifikalarını panel
+  havuzdan okur ve bu yalnızca XCP-ng / XenServer 8.2 ve sonrasında vardır. Daha eski havuzlarda sabit parmak iziyle
+  bir üyenin yerel SR'sine yapılandırma diski yüklenemez (`TLS_PIN_MISMATCH`); paylaşımlı SR ya da CA ile doğrulama
+  kullanın.

@@ -79,14 +79,20 @@ kurulum anahtarı.
 
 | Kod | Anlamı |
 |---|---|
-| 0 | Başarılı |
-| 1 | Ön kontrol başarısız |
-| 2 | Geçersiz argüman |
-| 13 | Docker kurulamadı |
-| 17 | Yapılandırma hatası |
-| 18 | Servisler başlamadı veya kurtarma çalışmadı |
-| 19 | API hazır değil |
-| 20 | Henüz yok |
+| 0 | Başarılı (güncelleme için: güncel olduğu için bir şey yapılmadıysa da 0) |
+| 1 | Ön kontrol başarısız (`E_PRECHECK`); alan adı ayarlanamadı (`E_DOMAIN_FAILED`); `uninstall` bir adımı tamamlayamadı |
+| 2 | Geçersiz argüman ya da değer (bilinmeyen seçenek, geçersiz alan adı, port, saat dilimi, güncelleme penceresi, sertifika dosyaları, yedek dosyası yok) |
+| 3 | `restore` onaysız çalıştırıldı: yalnızca denetledi, hiçbir şeyi değiştirmedi (`--yes-replace-data` ekleyin) |
+| 13 | Yetki ya da Docker: root gerekli (`E_NEEDS_ROOT`), Docker yok ya da kurulamadı (`E_DOCKER_MISSING`) |
+| 17 | Yapılandırma hatası: `.env` örnek parola içeriyor, Compose dosyası geçersiz, sırların sahibi yanlış, henüz kurulmamış (`E_NOT_INSTALLED`) |
+| 18 | Servisler başlamadı; kurtarma ya da parola sıfırlama çalışmadı; host ajanı, zamanlayıcı, profil ya da host ayarı için gereken sistem parçası yok (systemd, timesyncd, resolved, desteklenmeyen işletim sistemi) |
+| 19 | API süresinde hazır olmadı (`E_NOT_READY`) |
+| 20 | Güncelleme yapılamadı: git ile alınmamış kaynak, yerel değişiklik, sürümler alınamadı, yayımlanmış sürüm yok, bilinmeyen sürüm, veritabanına ulaşılamadı, hedef sürüm uygulanmış bir migration'ı içermiyor (`E_UPDATE_INCOMPATIBLE`) |
+| 21 | Yedek alınamadı (anahtar yok, veritabanı dökümü, dış kopya) ya da bir host / işletim sistemi işlemi başarısız (ad, saat dilimi, NTP, DNS, apt) |
+| 22 | Geri yükleme yapılamadı: sağlama toplamı, şifre çözme, eksik yedek, yedek daha yeni bir sürümden, güvenlik yedeği alınamadı, veritabanı ya da başlatma hatası |
+| 23 | Güncelleme başarısız oldu ve container'lar önceki sürüme geri alındı (`E_UPDATE_FAILED`); veritabanı geri alınmaz |
+
+Kodlar `scripts/install.sh` içindeki `die` çağrılarından okunur; her hata ayrıca `E_...` koduyla ve açıklamasıyla yazılır.
 
 ## 2. Tarayıcı sihirbazı (`/setup`)
 Varsayılan kurulumda sihirbaz atlanır; ayarlar panelden yapılır. `--setup-wizard` ile kurulduysa

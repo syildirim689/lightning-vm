@@ -27,7 +27,7 @@ kurulur, yeniden başlatma gerekmez.
 | captcha | Kendi captcha'mız (Turnstile, reCAPTCHA, hCaptcha); form bazında açılıp kapatılır. Yeni yollara da eklendi. |
 | credentials-plugin (üçüncü taraf) | LDAP/Active Directory girişi `directory-signin.ts` ile. |
 | audit-logs (infrastructure) | Kendi denetim kaydımız (`audit_events`); veri dışarı gitmez. |
-| email / sms service (infrastructure) | Kendi e-posta (SMTP + 13 API sağlayıcısı) ve SMS sağlayıcılarımız. |
+| email / sms service (infrastructure) | Kendi e-posta (SMTP + 12 API sağlayıcısı) ve SMS sağlayıcılarımız. |
 | sso (eklenti paketi) | Tek OIDC sağlayıcısı için generic-oauth + `sso.ts`. |
 | i18n | Web hata kodlarını kendisi çeviriyor (Türkçe/İngilizce). |
 

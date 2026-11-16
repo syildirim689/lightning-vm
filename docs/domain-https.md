@@ -6,9 +6,12 @@ güvenlik duvarına, SSH'ye veya sunucudaki diğer web sunucularına dokunmaz.
 
 | Mod | Komut | Dinlediği adres | TLS |
 |---|---|---|---|
-| Yalnızca yerel (varsayılan) | `sh scripts/install.sh local-only` | `127.0.0.1:8080` | Yok; SSH tüneli kullanılır |
+| Yalnızca yerel | `sh scripts/install.sh local-only` (kurulumda `--local`) | `127.0.0.1:8080` | Yok; SSH tüneli kullanılır |
 | Alan adı | `sh scripts/install.sh domain panel.example.com [--acme-staging]` | `0.0.0.0:80` ve `:443` | Caddy, Let's Encrypt |
 | Mevcut proxy arkasında | `sh scripts/install.sh behind-proxy [--port 8080] [--trusted-cidr CIDR]` | `127.0.0.1:8080` | Önünüzdeki Nginx/Caddy/Traefik |
+
+İlk kurulumda mod kendiliğinden seçilir: `--domain` verildiyse o ad; verilmediyse ve sunucunun genel bir IPv4 adresi
+varsa `<ip>.sslip.io` adıyla alan adı modu; genel adres yoksa ya da `--local` verildiyse yalnızca yerel mod.
 
 ## 1. Alan adı ve DNS
 - **Ad seçimi:** ana alan adı (`example.com`) yerine bir alt alan adı kullanın, örneğin `panel.example.com`.
@@ -193,8 +196,9 @@ Demo sunucusunda denendi. Sistemd ajanı üzerinden şu akışlar sırayla doğr
 - **Panel adresi:** e-posta, sohbet ve bildirim bağlantıları sunulan alan adını (`https://<ad>`) kendiliğinden
   kullanır; alan adı değişince bağlantılar da yeni ada geçer. Alan adı yoksa sihirbazdaki "erişim adresi"
   (`settings.public_url`) kullanılır.
-- **Konsol:** tarayıcı konsolu (7. aşama) aynı ad ve aynı TLS üzerinden WebSocket ile çalışacak.
-  Ayrı bir alan adı veya sertifika gerekmeyecek.
+- **Konsol ve terminal:** tarayıcı konsolu (`/console/ws`) ve yöneticinin sunucu terminali aynı ad ve aynı TLS
+  üzerinden WebSocket ile çalışır; ayrı bir alan adı veya sertifika gerekmez. Öndeki proxy WebSocket yükseltmesini
+  geçirmelidir ([console.md](console.md)).
 
 ## 8. Güvenlik başlıkları
 Caddy her yanıta şu başlıkları ekler:

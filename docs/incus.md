@@ -67,12 +67,18 @@ Parmak izini sunucuda şu komutla karşılaştırın:
 openssl x509 -in /var/lib/incus/server.crt -noout -fingerprint -sha256
 ```
 
-Sertifika ve anahtar, diğer bağlantıların parolaları gibi şifrelenmiş saklanır. Sunucu panel sunucusuyla aynı
-yerel ağdaysa adaptörün o ağa erişmesine izin verin (`.env`):
+Sertifika ve anahtar, diğer bağlantıların parolaları gibi şifrelenmiş saklanır.
+
+Adaptör varsayılan olarak loopback ve bağlantı-yerel adresleri, ayrıca **kendi Docker ağlarındaki** adresleri
+reddeder (panelin PostgreSQL, Redis ve API'si o ağlardadır; hata `ENDPOINT_BLOCKED`). Sunucu böyle bir ağdaysa o
+ağa izin verin (`.env`):
 
 ```bash
 INCUS_ALLOW_NETWORKS=10.20.0.0/16
 ```
+
+Hiç bağlanılmaması gereken ağlar için `INCUS_DENY_NETWORKS` vardır (virgülle ayrılmış CIDR'ler; izin listesi
+yasak listesinin önüne geçer).
 
 ## Panel sunucuyu nasıl görür
 

@@ -118,6 +118,8 @@ ileti gönderir. Hatalar şu kodlarla gösterilir: `MAIL_AUTH_FAILED`, `MAIL_REJ
   Clickatell ve MessageBird (Bird) var. Numaralar E.164 biçiminde gönderilir. Twilio'da gönderen olarak bir
   Messaging Service SID'i (`MG...`) de girilebilir.
 - **Ödeme:** "Uluslararası" grubunda Stripe, PayPal, Mollie, Adyen, Checkout.com, Razorpay, Square ve Paddle var.
+  Bunlardan yalnızca **Stripe** ile ödeme alınabilir; diğer yedisinin yalnızca bilgileri saklanır ve sınanır
+  ([payments.md](payments.md)).
   - Kimlik kontrolü para hareket ettirmez: bakiye, yöntem veya konum listesi okunur, token istenir ya da olmayan
     bir ödeme sorgulanır.
   - Canlı anahtar test modunda (veya tersi) verilirse istek gönderilmeden uyarılır.

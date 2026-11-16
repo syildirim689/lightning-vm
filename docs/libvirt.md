@@ -13,7 +13,8 @@ VMware adaptörüyle aynı sözleşmeyi konuşur: [adapter-contract.md](adapter-
 
 ## Hostu hazırlamak
 
-Hostta bash ile birlikte şu araçlar olmalı: `virsh`, `qemu-img`, `virt-clone`, `virt-xml`.
+Hostta bash ile birlikte şu araçlar olmalı: `virsh`, `qemu-img`, `virt-clone`, `virt-xml` ve coreutils'in
+`timeout` komutu (her dağıtımda kurulu gelir; adaptör hosttaki her betiği onunla süre sınırına bağlar).
 
 Debian / Ubuntu:
 
@@ -34,7 +35,10 @@ Panelin bağlanacağı hesap `root` ya da **libvirt grubunda** olan ve depolama 
 hesap olmalıdır. Panel hostta yalnızca şunlara dokunur:
 
 - adı `lvm-` ile başlayan sanal makineler ve onların disk dosyaları,
-- `/var/lib/lightning-vm/tasks`: arka planda çalışan kopyalama işlerinin durum dosyaları (iki gün sonra silinir).
+- `/var/lib/lightning-vm/tasks`: arka planda çalışan kopyalama işlerinin dosyaları. Durum dosyaları ve iş
+  betiklerinin yanında, süren kopyanın işaret dosyası (`<ad>.task`) ve sunucunun notu (`<kimlik>.notes`) da burada
+  durur. Klasör yalnızca bağlanan hesaba açıktır (mod 700); dosyalar iki gün sonra, `.task` ve `.notes` dosyaları
+  kopya bitince silinir.
 
 ## Bağlantı eklemek
 
@@ -72,12 +76,16 @@ ssh-copy-id -i lightning-vm-key.pub root@KVM_HOSTU
 Sonra `lightning-vm-key` dosyasının içeriğini parola alanına yapıştırın. Parola da anahtar da diğer bağlantıların
 parolaları gibi şifrelenmiş saklanır.
 
-Host panel sunucusuyla aynı yerel ağdaysa adaptörün o ağa erişmesine izin verin
-(`.env`):
+Adaptör varsayılan olarak loopback ve bağlantı-yerel adresleri, ayrıca **kendi Docker ağlarındaki** adresleri
+reddeder (panelin PostgreSQL, Redis ve API'si o ağlardadır; hata `ENDPOINT_BLOCKED`). Host böyle bir ağdaysa o
+ağa izin verin (`.env`):
 
 ```bash
 LIBVIRT_ALLOW_NETWORKS=10.20.0.0/16
 ```
+
+Hiç bağlanılmaması gereken ağlar için `LIBVIRT_DENY_NETWORKS` vardır (virgülle ayrılmış CIDR'ler; izin listesi
+yasak listesinin önüne geçer).
 
 ## Panel hostu nasıl görür
 
@@ -110,9 +118,13 @@ virsh net-define br0-net.xml && virsh net-start public && virsh net-autostart pu
 - VM'i kapatın, adını `template-…` yapın (`virsh domrename`), snapshot'larını silin.
 - Şablonun **ilk diski** sistem diskidir ve bir ağ kartı olmalıdır.
 
-Panel her yeni sunucuya `cidata` etiketli küçük bir **yapılandırma diski** (CD) takar. cloud-init ağ ayarlarını,
+Panel her yeni sunucuya `cidata` etiketli küçük bir **yapılandırma diski** takar: q35 makinelerde SATA, eski
+i440fx (`pc`) makinelerde IDE CD sürücüsü olarak. cloud-init ağ ayarlarını,
 sunucu adını, SSH anahtarlarını, root parolasını, uygulama kurulumunu ve güncelleme bildiricisini bu diskten okur.
 Misafir ajanı yoksa sunucu, açıldıktan dört dakika sonra kendisine verilen adreslerle hazır sayılır.
+
+Yeni sunucunun ağ kartına sunucu kimliğinden türetilen bir MAC adresi verilir (`52:54:00:…`); misafirdeki arayüz
+bu MAC ile eşlenir ve `eth0` adını alır.
 
 ## Bu sürümde çalışanlar
 
@@ -135,6 +147,10 @@ Ayrıca:
 - **Grafikler boş gelir:** libvirt kullanım geçmişi tutmaz; trafik sayımı da yoktur.
 - **Snapshot:** libvirt'in dahili (qcow2) snapshot'ı kullanılır. UEFI ile açılan çalışan bir VM'de eski libvirt
   sürümleri snapshot almayı reddedebilir; sunucu kapalıyken alın. Snapshot'ı olan diskin boyutu büyütülemez.
+  Aynı ad ve açıklamayla 15 dakika içinde yeniden istenen snapshot aynı istek sayılır (yanıtı kaybolan bir çağrı
+  ikinci bir snapshot almaz).
+- **Ek disk ekleme** adaptörde hâlâ tekrarlanabilir değildir: yanıt kaybolursa ikinci çağrı ikinci bir disk ekler.
+  Panel bunu, yeniden denemeden önce sunucunun disklerine bakıp önceki çağrının eklediği diski sahiplenerek önler.
 - Boyut değiştirme ve devralma için sunucu kapalı olmalıdır (boyut değiştirmede panel bunu kendisi yapar).
 - **Windows misafirler yapılandırılmaz:** özelleştirme cloud-init ile yapılır.
 - Her işlem hosta kısa bir SSH oturumu açar; hostta `MaxStartups` / `fail2ban` çok sıkıysa panel sunucusunun

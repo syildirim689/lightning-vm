@@ -1,9 +1,19 @@
 name: CI
-# Manual only (Actions tab → CI → Run workflow): the private repo has a limited free Actions quota;
-# every change is tested on the demo server instead (unit, integration and browser tests).
-on: workflow_dispatch
+# The unit jobs (API, web, worker, the six Node adapters, the Go services) need nothing but a runner: they run on
+# every push to main, on pull requests and by hand. The jobs that need services or a whole Compose stack
+# (api-integration, build, compose) stay manual (Actions tab -> CI -> Run workflow): they are slow, and every
+# change is also tried on the demo server. The release workflow calls this file and waits for the unit jobs.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+  workflow_call:
 permissions:
   contents: read
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -24,7 +34,25 @@ jobs:
       - run: npm ci
       - run: ${{ matrix.run }}
       - run: npm audit --omit=dev --audit-level=high
+  # The six Node adapters have no dependencies (no lock file, nothing to install): their tests run against
+  # pretend platforms (a fake API, WinRM server or virsh), never a real hypervisor.
+  adapters:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        service: [proxmox, xcpng, ovirt, hyperv, libvirt, incus]
+    defaults:
+      run:
+        working-directory: services/${{ matrix.service }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm test
   api-integration:
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -75,10 +103,12 @@ jobs:
       # vmware: govmomi's simulator; console: a TLS WebSocket echo upstream. Neither is real VMware.
       - run: go test -count=1 ./...
   build:
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        context: [apps/web, apps/api, apps/worker, services/vmware, services/console]
+        context: [apps/web, apps/api, apps/worker, services/vmware, services/console, services/proxmox, services/xcpng,
+          services/ovirt, services/hyperv, services/libvirt, services/incus]
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3
@@ -87,6 +117,7 @@ jobs:
           context: ${{ matrix.context }}
           push: false
   compose:
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
