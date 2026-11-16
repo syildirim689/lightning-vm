@@ -11,7 +11,7 @@ type Run = { time: string; kind: 'backup' | 'restore' | 'update'; status: 'ok' |
   from?: string; to?: string; rolledBack?: boolean; file?: string; bytes?: number; copied?: boolean; reason?: string };
 type Summary = { version: string; settings: Record<string, string>; lastBackup: Run | null; lastSuccessfulBackup: Run | null; lastUpdate: Run | null; history: Run[] };
 const codes = ['E_BACKUP_KEY_MISSING', 'E_BACKUP_DB', 'E_BACKUP_VERIFY', 'E_BACKUP_COPY', 'E_RESTORE_DB', 'E_RESTORE_START',
-  'E_UPDATE_FETCH', 'E_UPDATE_INCOMPATIBLE', 'E_UPDATE_FAILED', 'W_UPDATE_BUSY'] as const;
+  'E_UPDATE_FETCH', 'E_UPDATE_INCOMPATIBLE', 'E_UPDATE_FAILED', 'W_UPDATE_BUSY', 'E_BACKUP_WRITE', 'E_UPDATE_CHECKOUT', 'UPDATE_SKIPPED'] as const;
 
 // Results come from scripts/install.sh on the host; the panel only shows them (it has no host access).
 export default function Maintenance() {

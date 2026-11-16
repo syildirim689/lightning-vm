@@ -21,14 +21,27 @@ export default function InvoicePage({ id }: { id: string }) {
   const t = useTranslations('Billing');
   const params = useSearchParams();
   const paymentId = params.get('payment');
-  const q = useApiQuery<InvoiceDetail>(['billing', 'invoice', id], `/billing/invoices/${id}`, { refetchInterval: (d) => (d?.invoice.status === 'unpaid' && paymentId ? 3000 : false) });
+  const router = useRouter();
+  // Back from a provider with ?payment=…: its answer is waited for while that payment is still open, for two
+  // minutes at most. A declined card ends the wait at once; it does not keep asking for ever.
+  const [waited, setWaited] = useState(false);
+  useEffect(() => {
+    if (!paymentId) return;
+    setWaited(false);
+    const timer = setTimeout(() => setWaited(true), 120_000);
+    return () => clearTimeout(timer);
+  }, [paymentId]);
+  const q = useApiQuery<InvoiceDetail>(['billing', 'invoice', id], `/billing/invoices/${id}`, { refetchInterval: (d) =>
+    (paymentId && !waited && d?.invoice.status === 'unpaid' && (d.payments.find((p) => p.id === paymentId)?.status ?? 'pending') === 'pending' ? 3000 : false) });
   const d = q.data;
   useDocTitle(d && (d.invoice.number ?? `#${d.invoice.id.slice(0, 8).toUpperCase()}`));
   // Back from a provider: the result of that payment, once.
   const result = paymentId ? d?.payments.find((p) => p.id === paymentId) : undefined;
   useEffect(() => {
-    if (result?.status === 'succeeded') toast.success(t('paidToast'));
-    else if (result?.status === 'failed') toast.danger(t('failedToast'));
+    if (result?.status !== 'succeeded' && result?.status !== 'failed') return;
+    if (result.status === 'succeeded') toast.success(t('paidToast')); else toast.danger(t('failedToast'));
+    // Shown: the parameter goes, so a reload or a later visit to this address does not say it again.
+    router.replace(`/billing/invoices/${id}`, { scroll: false });
   }, [result?.status]); // eslint-disable-line react-hooks/exhaustive-deps
   if (!d) return <Loading of={['billing', 'invoice', id]}><div className="h-96 animate-pulse rounded-3xl bg-default/50"/></Loading>;
   return <div className="flex flex-col gap-5">
@@ -37,13 +50,15 @@ export default function InvoicePage({ id }: { id: string }) {
       <Button size="sm" variant="secondary" onPress={() => window.print()}><I name="printer" size={14}/>{t('print')}</Button>
     </div>
     {result?.status === 'pending' && <Notice tone="default" title={t('checking')}>{t('checkingHelp')}</Notice>}
-    {d.invoice.status === 'unpaid' && <PayPanel d={d}/>}
+    {d.invoice.status === 'unpaid' && <PayPanel d={d} locked={result?.status === 'pending' && !waited}/>}
     <InvoiceSheet d={d}/>
     <InvoiceDisputes d={d}/>
   </div>;
 }
 
-function PayPanel({ d }: { d: InvoiceDetail }) {
+// locked: a payment for this invoice is still being confirmed. While it is, or while one was just sent from here,
+// every pay button is off: a second click must not start a second payment.
+function PayPanel({ d, locked }: { d: InvoiceDetail; locked?: boolean }) {
   const t = useTranslations('Billing');
   const format = useFormatter();
   const router = useRouter();
@@ -82,17 +97,17 @@ function PayPanel({ d }: { d: InvoiceDetail }) {
         <p className="text-sm text-muted">{t('balanceHas', { amount: money(balance) })}</p>
         {balance < due
           ? <ButtonLink className="mt-auto" variant="secondary" href={`/billing?topup=${Math.ceil((due - balance) * 100) / 100}`}><I name="plus" size={16}/>{t('topUpShort', { amount: money(due - balance) })}</ButtonLink>
-          : <Button className="mt-auto" isPending={busy === 'balance'} onPress={() => void pay({ method: 'balance' }, 'balance')}>{t('payAmount', { amount: money(due) })}</Button>}
+          : <Button className="mt-auto" isPending={busy === 'balance'} isDisabled={!!busy || locked} onPress={() => void pay({ method: 'balance' }, 'balance')}>{t('payAmount', { amount: money(due) })}</Button>}
       </div>}
       {card && <div className="flex flex-col gap-2 rounded-2xl border border-border bg-surface p-4">
         <p className="flex items-center gap-2 font-medium"><I name="credit-card" size={16}/>{t('withSaved')}</p>
         <p className="text-sm text-muted">{card.brand ?? ''} •••• {card.last4}</p>
-        <Button className="mt-auto" isPending={busy === 'saved'} onPress={() => void pay({ method: 'saved_card' }, 'saved')}>{t('payAmount', { amount: money(due) })}</Button>
+        <Button className="mt-auto" isPending={busy === 'saved'} isDisabled={!!busy || locked} onPress={() => void pay({ method: 'saved_card' }, 'saved')}>{t('payAmount', { amount: money(due) })}</Button>
       </div>}
       {s.methods.cards.length > 0 && <div className="flex flex-col gap-2 rounded-2xl border border-border bg-surface p-4 md:col-span-2">
         <p className="flex items-center gap-2 font-medium"><I name="shield-check" size={16}/>{t('withCard')}</p>
         <p className="text-sm text-muted">{t('withCardHelp')}</p>
-        <div className="flex flex-wrap gap-2">{s.methods.cards.map((m) => <Button key={m.id} variant="secondary" isPending={busy === m.id} onPress={() => void pay({ method: 'card', provider: m.id, saveCard: save && m.saved && inv.kind !== 'topup' }, m.id)}>
+        <div className="flex flex-wrap gap-2">{s.methods.cards.map((m) => <Button key={m.id} variant="secondary" isPending={busy === m.id} isDisabled={!!busy || locked} onPress={() => void pay({ method: 'card', provider: m.id, saveCard: save && m.saved && inv.kind !== 'topup' }, m.id)}>
           <I name="lock" size={14}/>{m.name}{m.mode === 'test' && <span className="text-xs text-warning">({t('testMode')})</span>}</Button>)}</div>
         {inv.kind !== 'topup' && <CheckboxInput label={t('saveCard')} isSelected={save} onChange={setSave} help={t('saveCardHelp')}/>}
       </div>}

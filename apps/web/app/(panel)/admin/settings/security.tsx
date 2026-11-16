@@ -26,7 +26,11 @@ export default function Security({ readOnly }: { readOnly: boolean }) {
   if (!v) return <Loading of={['settings', 'security']}/>;
   async function save() {
     setBusy(true);
-    try { setV(await apiFetch<Doc>('/admin/settings/security', { method: 'PUT', body: v })); toast.success(t('saved')); client.invalidateQueries({ queryKey: ['public-config'] }); }
+    // Only what this form edits is sent: who may create API tokens belongs to Settings → API and is left as it is.
+    try {
+      const r = await apiFetch<Doc>('/admin/settings/security', { method: 'PUT', body: { require2fa: v!.require2fa, emailCodeSignIn: v!.emailCodeSignIn } });
+      client.setQueryData(['settings', 'security'], r); setV(r); toast.success(t('saved')); client.invalidateQueries({ queryKey: ['public-config'] });
+    }
     catch (e) { toast.danger(error(e)); } finally { setBusy(false); }
   }
   const mailReady = !!cfg?.otpChannels.email;

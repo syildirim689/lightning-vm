@@ -13,6 +13,7 @@ import { apiFetch, useErrorText } from '../../../lib/api';
 import { useMe } from '../../../lib/me';
 import { can } from '../../../lib/permissions';
 import { fold } from '../../../lib/search';
+import { agentRunning } from '../../../lib/agent';
 import { useApiQuery } from '../../../lib/query';
 
 type Pkg = { name: string; to: string; from: string; security: boolean };
@@ -29,7 +30,7 @@ export default function OsUpdates() {
   const t = useTranslations('OsUpdates');
   const format = useFormatter();
   const now = useNow({ updateInterval: 60_000 });
-  const { error } = useErrorText();
+  const { error, code: codeText } = useErrorText();
   const me = useMe();
   const client = useQueryClient();
   const manage = can(me?.permissions, 'system.update');
@@ -41,7 +42,7 @@ export default function OsUpdates() {
   const [restarting, setRestarting] = useState(false);
   const q = useApiQuery<Data>(['admin', 'os'], '/admin/os', { refetchInterval: watching || restarting ? 3_000 : 60_000 });
   const d = q.data;
-  useEffect(() => { setWatching(!!d && (d.agent.pending > 0 || d.agent.status?.state === 'running')); }, [d]);
+  useEffect(() => { setWatching(!!d && (d.agent.pending > 0 || agentRunning(d.agent.status))); }, [d]);
   // Back after the restart: the uptime started again.
   const down = useRef(false);
   useEffect(() => {
@@ -74,7 +75,10 @@ export default function OsUpdates() {
   useEffect(() => {
     if (!stale || !manage || asked.current || busy || restarting) return;
     asked.current = true;
-    void apiFetch('/admin/os', { method: 'POST', body: { act: 'check' } }).then(() => { setWatching(true); void client.invalidateQueries({ queryKey: ['admin', 'os'] }); }).catch(() => undefined);
+    // The agent takes one request at a time: when another quiet request of this page got there first (the host
+    // state's snapshot), this one is refused. It is asked once more a little later instead of being dropped.
+    const check = () => apiFetch('/admin/os', { method: 'POST', body: { act: 'check' } }).then(() => { setWatching(true); void client.invalidateQueries({ queryKey: ['admin', 'os'] }); });
+    void check().catch(() => { setTimeout(() => void check().catch(() => undefined), 15_000); });
   }, [stale, manage, busy, restarting, client]);
 
   if (!d) return <Section title={t('title')}><p role="status" className="text-sm text-muted">{q.error && !restarting ? error(q.error) : restarting ? t('restarting') : '…'}</p></Section>;
@@ -153,7 +157,7 @@ export default function OsUpdates() {
 
       {st && <div className="flex flex-col gap-2">
         <div className="flex items-center gap-2 text-sm"><span className="font-medium">{t('lastRun')}</span><StatusChip tone={stateTone[st.state]}>{t(`state.${st.state}`)}</StatusChip>
-          {st.code && st.state !== 'running' && st.state !== 'succeeded' && <Chip size="sm" variant="soft">{st.code}</Chip>}</div>
+          {st.code && st.state !== 'running' && st.state !== 'succeeded' && <Chip size="sm" variant="soft">{codeText(st.code)}</Chip>}</div>
         {d.agent.log.length > 0 && <pre className="max-h-48 overflow-auto rounded-xl bg-default/60 p-3 font-mono text-xs leading-relaxed">{d.agent.log.join('\n')}</pre>}
       </div>}
     </div>

@@ -55,6 +55,28 @@ if (existsSync(goSrc)) {
   }
 }
 
+// So do the Node adapters' (Proxmox, XCP-ng, oVirt, Hyper-V, libvirt, Incus): new Failure('CODE') in their modules,
+// Fail 'CODE' in the PowerShell and fail / bad CODE "..." in the shell they run on a host. A warning code is shown on
+// the connection page (discovery: Vmware.warning) or with an operation (a clone's: errors).
+const services = new URL('../../../services/', import.meta.url);
+if (existsSync(services)) {
+  for (const svc of readdirSync(services, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name)) {
+    const dir = new URL(`${svc}/`, services);
+    for (const file of readdirSync(dir).filter((f) => f.endsWith('.mjs'))) {
+      const source = readFileSync(new URL(file, dir), 'utf8');
+      for (const [, a, b, c] of source.matchAll(/new Failure\('([A-Z][A-Z0-9_]+)'|\bFail '([A-Z][A-Z0-9_]+)'|\b(?:fail|bad) ([A-Z][A-Z0-9_]+) "/g)) {
+        const code = a ?? b ?? c;
+        if (!reference.has(`errors.${code}`)) problems.push(`${svc}: error code ${code} has no errors.${code} translation`);
+      }
+      for (const [, list] of source.matchAll(/warnings(?:\.push\(|: [^[\n]*\[)([^\])]*)/g)) {
+        for (const [, code] of list.matchAll(/'([A-Z][A-Z0-9_]+)'/g)) {
+          if (!reference.has(`Vmware.warning.${code}`) && !reference.has(`errors.${code}`)) problems.push(`${svc}: warning ${code} has no Vmware.warning.${code} (or errors.${code}) translation`);
+        }
+      }
+    }
+  }
+}
+
 // Worker operation error codes are shown on servers and in the admin operations list.
 const workerSrc = new URL('../../worker/operations.mjs', import.meta.url);
 if (existsSync(workerSrc)) {

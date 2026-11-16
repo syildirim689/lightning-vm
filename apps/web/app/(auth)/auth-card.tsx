@@ -6,6 +6,8 @@ import { useEffect, useState } from 'react';
 import NextLink from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useTranslations } from 'next-intl';
+import { useApiQuery } from '../../lib/query';
+import type { PublicConfig } from '../../lib/session';
 
 // Kept across the two pages: which tab was shown last, so a switch slides the right way and the card does not re-enter.
 let lastTab: string | null = null;
@@ -13,7 +15,9 @@ let lastTab: string | null = null;
 export function AuthCard({ title, intro, children }: { title: string; intro: string; children: React.ReactNode }) {
   const t = useTranslations('Auth');
   const path = usePathname();
-  const tabs = [{ href: '/login', label: t('loginTitle') }, { href: '/register', label: t('registerTitle') }];
+  // Registration closed (when the API says so in /public/config): no "Register" tab to a form that cannot work.
+  const open = useApiQuery<PublicConfig>(['public-config'], '/public/config').data?.registration !== false;
+  const tabs = [{ href: '/login', label: t('loginTitle') }, ...(open || path === '/register' ? [{ href: '/register', label: t('registerTitle') }] : [])];
   const order = (p: string | null) => tabs.findIndex((x) => x.href === p);
   const [from] = useState(() => lastTab);
   useEffect(() => { lastTab = path; }, [path]);
@@ -23,7 +27,7 @@ export function AuthCard({ title, intro, children }: { title: string; intro: str
     className="relative w-full max-w-md rounded-3xl border border-border bg-surface/80 p-6 shadow-xl shadow-black/10 backdrop-blur-xl sm:p-8">
     <div aria-hidden className="pointer-events-none absolute inset-x-10 -top-px h-px bg-gradient-to-r from-transparent via-accent/70 to-transparent"/>
     <LayoutGroup>
-      <nav aria-label={t('switchLabel')} className="mb-6 grid grid-cols-2 rounded-2xl bg-default p-1">
+      <nav aria-label={t('switchLabel')} className={`mb-6 grid rounded-2xl bg-default p-1 ${tabs.length > 1 ? 'grid-cols-2' : 'hidden'}`}>
         {tabs.map((tab) => {
           const active = path === tab.href;
           return <NextLink key={tab.href} href={tab.href} aria-current={active ? 'page' : undefined}

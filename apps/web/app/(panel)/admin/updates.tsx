@@ -12,6 +12,7 @@ import { ConfirmButton, Mono, Notice, Section, SelectInput, StatusChip, SwitchIn
 import { apiFetch, useErrorText } from '../../../lib/api';
 import { useMe } from '../../../lib/me';
 import { can } from '../../../lib/permissions';
+import { agentRunning } from '../../../lib/agent';
 import { useApiQuery } from '../../../lib/query';
 
 type Release = { version: string; date: string; notes: string; newer?: boolean };
@@ -27,13 +28,13 @@ export default function Updates() {
   const t = useTranslations('Updates');
   const format = useFormatter();
   const now = useNow({ updateInterval: 1000 });
-  const { error } = useErrorText();
+  const { error, code: codeText } = useErrorText();
   const me = useMe();
   const client = useQueryClient();
   const manage = can(me?.permissions, 'system.update');
   const [busy, setBusy] = useState(false);
   const [watching, setWatching] = useState(false);
-  const active = (d?: Data) => !!d && (d.agent.pending > 0 || d.agent.status?.state === 'running');
+  const active = (d?: Data) => !!d && (d.agent.pending > 0 || agentRunning(d.agent.status));
   const q = useApiQuery<Data>(['admin', 'maintenance'], '/admin/maintenance', { refetchInterval: watching ? 3_000 : 30_000 });
   const data = q.data;
   useEffect(() => { setWatching(active(data)); }, [data]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -61,7 +62,7 @@ export default function Updates() {
     catch (e) { toast.danger(error(e)); } finally { setBusy(false); }
   }
   const blocked = !manage || !data.agent.installed || watching || busy;
-  const elapsed = st?.state === 'running' ? Math.max(0, Math.round((now.getTime() - Date.parse(st.startedAt)) / 1000)) : 0;
+  const elapsed = agentRunning(st) && st ? Math.max(0, Math.round((now.getTime() - Date.parse(st.startedAt)) / 1000)) : 0;
 
   return <Section title={t('title')} description={t('intro')}
     actions={manage && <div className="flex flex-wrap gap-2">
@@ -103,7 +104,7 @@ export default function Updates() {
             {st && st.state !== 'running' && st.finishedAt && <span className="text-xs text-muted">{format.dateTime(new Date(st.finishedAt), { dateStyle: 'medium', timeStyle: 'short' })}</span>}
           </div>
           {restarting && <Notice tone="warning">{t('restarting')}</Notice>}
-          {st?.state === 'failed' && <Notice tone="danger">{t('failed', { code: st.code || String(st.exitCode) })}</Notice>}
+          {st?.state === 'failed' && <Notice tone="danger">{t('failed', { code: st.code ? codeText(st.code) : String(st.exitCode) })}</Notice>}
           {data.agent.log.length > 0 && <pre ref={logRef} aria-label={t('log')} className="max-h-72 overflow-auto rounded-xl bg-default/60 p-3 font-mono text-xs leading-relaxed whitespace-pre-wrap">{data.agent.log.join('\n')}</pre>}
         </motion.div>}
       </AnimatePresence>

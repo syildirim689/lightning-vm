@@ -27,7 +27,8 @@ export default function AnnouncementSettings({ readOnly }: { readOnly: boolean }
   async function save() {
     setBusy(true); setFields({});
     try {
-      setV(await apiFetch<Doc>('/admin/settings/announcement', { method: 'PUT', body: { ...v, startsAt: v!.startsAt ?? '', endsAt: v!.endsAt ?? '' } }));
+      const r = await apiFetch<Doc>('/admin/settings/announcement', { method: 'PUT', body: { ...v, startsAt: v!.startsAt ?? '', endsAt: v!.endsAt ?? '' } });
+      client.setQueryData(['settings', 'announcement'], r); setV(r);
       toast.success(t('saved')); client.invalidateQueries({ queryKey: ['announcement'] });
     } catch (e) { setFields((e as ApiError).fields ?? {}); toast.danger(error(e)); } finally { setBusy(false); }
   }

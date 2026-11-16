@@ -65,10 +65,11 @@ export default function HostState() {
   const q = useApiQuery<Live>(['admin', 'host-live'], '/admin/host/live', { refetchInterval: 5_000 });
   const d = q.data;
   const [asking, setAsking] = useState(false);
-  const refresh = async (quiet = false) => {
+  // again: a quiet request the agent refused (it was busy with another quiet request of this page) is asked once more.
+  const refresh = async (quiet = false, again = true) => {
     setAsking(true);
     try { await apiFetch('/admin/host/state', { method: 'POST' }); if (!quiet) toast.success(t('asked')); }
-    catch (e) { if (!quiet) toast.danger(error(e)); }
+    catch (e) { if (!quiet) toast.danger(error(e)); else if (again) setTimeout(() => void refresh(true, false), 15_000); }
     finally { setTimeout(() => { setAsking(false); void client.invalidateQueries({ queryKey: ['admin', 'host-logs'] }); }, 12_000); }
   };
   // Opening the page takes a fresh snapshot when the last one is older than two minutes (quietly; another task may be running).

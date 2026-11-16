@@ -10,6 +10,7 @@ import { useEffect, useState } from 'react';
 import { I } from '../../../components/icon';
 import { Notice, StatusChip, TextInput } from '../../../components/ui';
 import { useErrorText } from '../../../lib/api';
+import { useCopy } from '../../../lib/clipboard';
 import { authClient } from '../../../lib/auth-client';
 import { useMe } from '../../../lib/me';
 import { useApiQuery } from '../../../lib/query';
@@ -21,11 +22,12 @@ const codeOf = (e: ClientError) => ({ code: e?.code ?? (e?.status === 429 ? 'RAT
 function BackupCodes({ codes }: { codes: string[] }) {
   const t = useTranslations('Account');
   const text = codes.join('\n');
+  const copy = useCopy();
   return <div className="flex flex-col gap-3">
     <Notice tone="warning" title={t('twoFactor.backupTitle')}>{t('twoFactor.backupHelp')}</Notice>
     <ul className="grid grid-cols-2 gap-2 rounded-lg border border-border bg-default/40 p-3 font-mono text-sm sm:grid-cols-5">{codes.map((c) => <li key={c}>{c}</li>)}</ul>
     <div className="flex flex-wrap gap-2">
-      <Button size="sm" variant="secondary" onPress={async () => { await navigator.clipboard.writeText(text); toast.success(t('twoFactor.copied')); }}><I name="copy" size={15}/>{t('twoFactor.copy')}</Button>
+      <Button size="sm" variant="secondary" onPress={() => void copy(text, t('twoFactor.copied'))}><I name="copy" size={15}/>{t('twoFactor.copy')}</Button>
       <Button size="sm" variant="secondary" onPress={() => { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([text], { type: 'text/plain' })); a.download = 'backup-codes.txt'; a.click(); }}>
         <I name="download" size={15}/>{t('twoFactor.download')}</Button>
     </div>

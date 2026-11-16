@@ -18,7 +18,7 @@ type Allocation = { discountPct: number; maxCustomers: number | null; maxServers
 type Usage = { servers: number; vcpu: number; memoryMb: number; diskGb: number; monthly: string; currency: string | null; customers: number };
 type Customer = { id: string; email: string; name: string; createdAt: string; lastSeenAt: string | null; servers: number; monthly: string; currency: string | null };
 type Catalog = { packages: { id: string; name: string; vcpu: number; memoryMb: number; diskGb: number; priceMonthly: string; currency: string; poolIds: string[]; imageIds: string[] }[];
-  pools: { id: string; name: string; location: string }[]; images: { id: string; name: string; minDiskGb: number }[] };
+  pools: { id: string; name: string; location: string }[]; images: { id: string; name: string; minDiskGb: number; poolIds?: string[] }[] };
 
 function Meter({ label, used, max, unit = '' }: { label: string; used: number; max: number | null; unit?: string }) {
   const t = useTranslations('Reseller');
@@ -47,7 +47,7 @@ function OrderForCustomer({ customer, discount, onDone }: { customer: Customer; 
   const packages = catalog.packages.filter((p) => !poolId || p.poolIds.includes(poolId));
   const packageId = only(packages, picked.packageId);
   const pkg = catalog.packages.find((p) => p.id === packageId);
-  const images = catalog.images.filter((i) => !pkg?.imageIds.length || pkg.imageIds.includes(i.id));
+  const images = catalog.images.filter((i) => (!pkg?.imageIds.length || pkg.imageIds.includes(i.id)) && (!poolId || !i.poolIds || i.poolIds.includes(poolId)));
   const imageId = only(images, picked.imageId);
   const sshKeyId = picked.sshKeyId === '' && keys?.length ? keys[0]!.id : picked.sshKeyId === 'paste' ? '' : picked.sshKeyId;
   const v = { ...picked, poolId, packageId, imageId, sshKeyId };

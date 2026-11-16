@@ -1,7 +1,7 @@
 "use client";
 // One captcha widget for every provider the admin can pick: Cloudflare Turnstile, Google reCAPTCHA v2
 // (checkbox) and v3 (invisible, scored) and hCaptcha. Forms call getToken() right before submitting.
-import { Turnstile } from '@marsidev/react-turnstile';
+import { Turnstile, type TurnstileInstance } from '@marsidev/react-turnstile';
 import { useLocale } from 'next-intl';
 import { useTheme } from 'next-themes';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -30,6 +30,7 @@ export function useCaptcha(config: Pick<CaptchaConfig, 'provider' | 'siteKey'> |
   const [failed, setFailed] = useState(false);
   const box = useRef<HTMLDivElement>(null);
   const widget = useRef<number | string | undefined>(undefined);
+  const turnstile = useRef<TurnstileInstance | undefined>(undefined);
   const provider = config?.provider;
   const siteKey = config?.siteKey;
   const theme = resolvedTheme === 'dark' ? 'dark' : 'light';
@@ -64,12 +65,13 @@ export function useCaptcha(config: Pick<CaptchaConfig, 'provider' | 'siteKey'> |
   // After a failed submit a token is spent; the widget asks again.
   const reset = useCallback(() => {
     setToken(undefined);
-    if (provider === 'hcaptcha') window.hcaptcha?.reset(widget.current as string);
+    if (provider === 'turnstile') turnstile.current?.reset();
+    else if (provider === 'hcaptcha') window.hcaptcha?.reset(widget.current as string);
     else if (provider === 'recaptcha-v2') window.grecaptcha?.reset(widget.current as number);
   }, [provider]);
 
   const element = !provider || !siteKey || provider === 'recaptcha-v3' ? null
-    : provider === 'turnstile' ? <Turnstile key={siteKey} siteKey={siteKey} onSuccess={setToken} onExpire={() => setToken(undefined)} onError={() => setFailed(true)}
+    : provider === 'turnstile' ? <Turnstile ref={turnstile} key={siteKey} siteKey={siteKey} onSuccess={setToken} onExpire={() => setToken(undefined)} onError={() => setFailed(true)}
       options={{ language: locale, theme: 'auto', size: 'flexible' }}/>
     : <div ref={box} className="min-h-[78px]"/>;
   return { element, getToken, reset, ready: provider === 'recaptcha-v3' || !!token, failed, active: !!provider && !!siteKey };

@@ -67,11 +67,14 @@ export default function ConsoleView({ sessionPath, title }: { sessionPath: strin
         const W = window.WMKS;
         if (!W || cancelled) { setState('sdkMissing'); return; }
         setState('connecting');
+        // The gateway refuses a connection without a valid ticket before it is opened (HTTP 401): all that arrives
+        // here is a disconnect with no reason, before any connection. That is "session invalid, open it again".
+        let connected = false;
         wmks.current = W.createWMKS('wmks-container', {}).register(W.CONST.Events.CONNECTION_STATE_CHANGE, (_e, data) => {
-          if (data.state === W.CONST.ConnectionState.CONNECTED) setState('connected');
+          if (data.state === W.CONST.ConnectionState.CONNECTED) { connected = true; setState('connected'); }
           if (data.state === W.CONST.ConnectionState.DISCONNECTED) {
             setState('closed');
-            setDetail(knownReasons.includes(data.reason ?? '') ? t(`reason.${data.reason as 'CONSOLE_CLOSED'}`) : t('reason.CONSOLE_CLOSED'));
+            setDetail(knownReasons.includes(data.reason ?? '') ? t(`reason.${data.reason as 'CONSOLE_CLOSED'}`) : t(connected ? 'reason.CONSOLE_CLOSED' : 'reason.CONSOLE_SESSION_INVALID'));
           }
         });
         wmks.current.connect(gatewayUrl());
@@ -90,9 +93,10 @@ export default function ConsoleView({ sessionPath, title }: { sessionPath: strin
       setVmName((await requestSession(sessionPath)).vmName);
     } catch (e) { setProbe(error(e)); return; }
     const ws = new WebSocket(gatewayUrl(), ['binary']);
-    let received = 0;
+    let received = 0, opened = false;
+    ws.onopen = () => { opened = true; };
     ws.onmessage = (m) => { received += typeof m.data === 'string' ? m.data.length : 1; if (received) { setProbe(t('probe.ok')); ws.close(1000); } };
-    ws.onclose = (e) => { if (!received) setProbe(knownReasons.includes(e.reason) ? t(`reason.${e.reason as 'CONSOLE_CLOSED'}`) : t('probe.failed', { code: e.code })); };
+    ws.onclose = (e) => { if (!received) setProbe(knownReasons.includes(e.reason) ? t(`reason.${e.reason as 'CONSOLE_CLOSED'}`) : !opened ? t('reason.CONSOLE_SESSION_INVALID') : t('probe.failed', { code: e.code })); };
   }
 
   const tone = state === 'connected' ? 'success' : state === 'error' || state === 'closed' ? 'danger' : state === 'sdkMissing' ? 'warning' : 'default';

@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { useEffect, useState } from 'react';
 import { can } from '../lib/permissions';
+import { useBillingSummary } from '../lib/query';
 import { firstEdited, formsDirty, mayLeave } from '../lib/edits';
 
 // The palette's "Keyboard shortcuts" action opens the dialog through this event.
@@ -20,10 +21,12 @@ export default function Shortcuts({ permissions }: { permissions: string[] }) {
   const t = useTranslations('Shortcuts');
   const router = useRouter();
   const [open, setOpen] = useState(false);
+  // The same gates as the menu: billing only while it is switched on, firewalls only for who may open them.
+  const billing = !!useBillingSummary()?.enabled;
   const routes: [string, string, boolean][] = [
     ['h', '/', true], ['o', '/order', can(permissions, 'servers.create')], ['a', '/account', true], ['t', '/topology', true],
     ['d', '/admin', can(permissions, 'dashboard.view')], ['s', '/admin/servers', can(permissions, 'servers.view_all')], ['c', '/admin/catalog', can(permissions, 'catalog.view', 'catalog.manage')],
-    ['i', '/admin/stats', can(permissions, 'dashboard.view')], ['q', '/admin/support', can(permissions, 'support.view')], ['u', '/support', true], ['b', '/billing', true], ['f', '/firewalls', true], ['y', '/admin/system', can(permissions, 'system.view')],
+    ['i', '/admin/stats', can(permissions, 'dashboard.view')], ['q', '/admin/support', can(permissions, 'support.view')], ['u', '/support', true], ['b', '/billing', billing], ['f', '/firewalls', can(permissions, 'firewalls.manage', 'servers.view_all')], ['y', '/admin/system', can(permissions, 'system.view')],
   ];
   const allowed = routes.filter((r) => r[2]);
 

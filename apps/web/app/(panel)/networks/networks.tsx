@@ -45,9 +45,10 @@ function NetworkCard({ n, servers, onChange }: { n: Network; servers: ServerLite
   // Lines for /etc/hosts: every connected server by name, so they find each other without remembering addresses.
   const joined = n.members.filter((m) => m.status === 'joined');
   const hosts = joined.map((m) => `${m.address} ${m.name}`).join('\n');
-  // Usable addresses: the subnet minus its network and broadcast address.
-  const total = Math.max(2 ** (32 - Number(n.cidr.split('/')[1] ?? 24)) - 2, 1);
-  const pct = Math.min(100, Math.round((n.members.length / total) * 100));
+  // Addresses servers can get: the API hands them out from .10 up to the one before the broadcast address
+  // (the first ten are kept for a gateway and the like), so a /24 holds 245 servers, not 254.
+  const total = Math.max(2 ** (32 - Number(n.cidr.split('/')[1] ?? 24)) - 11, 0);
+  const pct = total ? Math.min(100, Math.round((n.members.length / total) * 100)) : 100;
   return <Section title={n.name} description={<span className="flex flex-wrap gap-2"><Mono>{n.cidr}</Mono><span>{n.poolName}</span><span>{t('vlan', { vlan: n.vlan })}</span></span>}
     actions={<ConfirmButton size="sm" variant="ghost" icon={<I name="trash-2" size={14}/>} label={t('remove')} title={t('removeTitle')} body={t('removeBody')}
       confirmLabel={t('remove')} cancelLabel={t('cancel')} isDisabled={n.members.length > 0} onConfirm={() => run(`/networks/${n.id}`, 'DELETE', undefined, t('removed'))}/>}>
@@ -56,7 +57,7 @@ function NetworkCard({ n, servers, onChange }: { n: Network; servers: ServerLite
       <div className="flex items-center gap-3 text-xs text-muted">
         <span className="h-1.5 flex-1 overflow-hidden rounded-full bg-default" role="meter" aria-label={t('usage')} aria-valuenow={n.members.length} aria-valuemin={0} aria-valuemax={total}>
           <span className="block h-full rounded-full bg-accent" style={{ width: `${Math.max(pct, n.members.length ? 2 : 0)}%` }}/></span>
-        <span className="shrink-0 tabular-nums">{t('used', { n: n.members.length, free: total - n.members.length })}</span>
+        <span className="shrink-0 tabular-nums">{t('used', { n: n.members.length, free: Math.max(total - n.members.length, 0) })}</span>
       </div>
       {n.members.length === 0 ? <p className="text-sm text-muted">{t('noMembers')}</p>
         : <ul className="flex flex-col divide-y divide-separator rounded-lg border border-border">{n.members.map((m) => <li key={m.serverId} className="flex flex-col gap-2 px-3 py-2.5">

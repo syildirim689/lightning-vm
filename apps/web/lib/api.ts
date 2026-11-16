@@ -24,6 +24,11 @@ export function focusFirstInvalid() {
   setTimeout(look, 60);
 }
 
+// Set while the signed-in panel is on screen (LiveEvents): only there does a refused read mean "the session ended".
+// Public pages (sign-in, status) never set it, so a 401 on one of their reads cannot send anybody in circles.
+let sessionExpected = false;
+export const expectSession = (on: boolean) => { sessionExpected = on; };
+
 // Browser calls go through Caddy at /api. The CSRF header is required by the API on every state change.
 export async function apiFetch<T = unknown>(path: string, init: { method?: string; body?: unknown; signal?: AbortSignal; headers?: Record<string, string> } = {}): Promise<T> {
   const res = await fetch(`/api${path}`, {
@@ -36,7 +41,9 @@ export async function apiFetch<T = unknown>(path: string, init: { method?: strin
     const body = await res.json().catch(() => null);
     reach(!(body === null && res.status >= 502 && res.status <= 504));
     // The session ran out during a save: the same path as a live-update sign-out (keeps unsaved typing on screen).
-    if (body?.code === 'UNAUTHENTICATED' && (init.method ?? 'GET') !== 'GET' && !/^\/(auth|setup)\//.test(path) && !/^\/(login|setup|register)/.test(window.location.pathname)) {
+    // A read that is refused inside the panel says the same (a role's session limit, the end of "sign in as"): the
+    // lists on screen would otherwise stay as they were, quietly out of date.
+    if (body?.code === 'UNAUTHENTICATED' && ((init.method ?? 'GET') !== 'GET' || sessionExpected) && !/^\/(auth|setup)\//.test(path) && !/^\/(login|setup|register)/.test(window.location.pathname)) {
       if (hasPendingEdits()) window.dispatchEvent(new Event('lvm:expired')); else window.location.replace(loginFrom(window.location.pathname + window.location.search, 'expired'));
     }
     // A form the server sent back with field errors: once they are shown, the first wrong field takes the focus.
@@ -50,10 +57,12 @@ export async function apiFetch<T = unknown>(path: string, init: { method?: strin
 }
 
 // Translates API error and field codes; unknown codes fall back to a generic translated text.
+// code: for codes written by the host's installer and agent, where an unknown one is better shown as it is.
 export function useErrorText() {
   const te = useTranslations('errors');
   const tf = useTranslations('fieldErrors');
   return {
+    code: (code: string) => (te.has(code as 'UNKNOWN') ? te(code as 'UNKNOWN') : code),
     error: (e: unknown) => { const code = (e as ApiError)?.code ?? 'UNKNOWN'; return te.has(code as 'UNKNOWN') ? te(code as 'UNKNOWN') : te('UNKNOWN'); },
     field: (code?: string) => !code ? undefined : tf.has(code as 'INVALID_VALUE') ? tf(code as 'INVALID_VALUE') : tf('INVALID_VALUE'),
   };

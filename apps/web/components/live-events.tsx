@@ -7,7 +7,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { hasPendingEdits, watchEdits } from '../lib/edits';
 import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
-import { apiFetch } from '../lib/api';
+import { apiFetch, expectSession } from '../lib/api';
 import { loginFrom } from '../lib/back-to';
 
 // An expired session with unsaved typing keeps the page and asks to sign in again (SessionExpired); anything else
@@ -44,11 +44,12 @@ export default function LiveEvents() {
       };
     };
     open();
+    expectSession(true);
     watchEdits();
     // Signed in again in another tab: live updates start over.
     const back = () => { source?.close(); clearTimeout(retry); open(); void client.invalidateQueries(); };
     window.addEventListener('lvm:session-back', back);
-    return () => { source?.close(); clearTimeout(retry); window.removeEventListener('lvm:session-back', back); };
+    return () => { expectSession(false); source?.close(); clearTimeout(retry); window.removeEventListener('lvm:session-back', back); };
   }, [client, router]);
   return null;
 }

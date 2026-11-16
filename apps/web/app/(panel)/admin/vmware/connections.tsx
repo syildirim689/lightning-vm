@@ -6,13 +6,14 @@ import { useFormatter, useTranslations } from 'next-intl';
 import { useState } from 'react';
 import { apiFetch, useErrorText } from '../../../../lib/api';
 import { useApiAction, useApiQuery } from '../../../../lib/query';
+import type { Capabilities } from '../../../../components/capabilities';
 import { ButtonLink, DataTable, Empty, Mono, PageHeader, Stat, StatusChip } from '../../../../components/ui';
 import ConnectionForm, { type Editing, type Prefill } from './connection-form';
 import Discovery from './discovery';
 
 export type Connection = { id: string; name: string; kind: string; host: string; port: number; username: string; tlsMode: string; tlsSha256: string | null; tlsCaPem: string | null; writeApi: string; status: string;
   lastErrorCode: string | null; lastDiscoveredAt: string | null; hosts: number; vms: number; product: { fullName: string }; operations: Record<string, boolean>; warnings: string[];
-  apiVersion: string | null; customization: 'auto' | 'cloudinit' | 'guestinfo'; compat: Compat | null };
+  apiVersion: string | null; customization: 'auto' | 'cloudinit' | 'guestinfo'; compat: Compat | null; capabilities?: Capabilities | null };
 export type Compat = { apiVersion: string; customization: 'cloudinit' | 'guestinfo' | 'none'; clone: boolean; consoleUrl: boolean; support: 'supported' | 'end-of-support' | 'legacy' };
 // The versions an admin may pin; the API accepts the same list.
 export const apiVersions = ['9.0.0.0', '8.0.3.0', '8.0.2.0', '8.0.1.0', '8.0.0.1', '7.0.3.0', '7.0.2.0', '7.0.1.0', '7.0.0.0', '6.7.3', '6.7.2', '6.7.1', '6.7', '6.5', '6.0'];

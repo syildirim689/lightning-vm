@@ -13,6 +13,7 @@ import { ConfirmButton, Mono, Notice, Section, StatusChip, TextInput, type Tone 
 import { apiFetch, useErrorText, type ApiError } from '../../../lib/api';
 import { useMe } from '../../../lib/me';
 import { can } from '../../../lib/permissions';
+import { agentRunning } from '../../../lib/agent';
 import { useApiQuery } from '../../../lib/query';
 
 type Host = { checkedAt: string; time: number; hostname: string; fqdn: string; timezone: string; ntp: string; ntpSynced: string; ntpServers: string; dnsServers: string; resolvers: string;
@@ -28,7 +29,7 @@ export default function HostSettings() {
   const t = useTranslations('HostSettings');
   const format = useFormatter();
   const now = useNow({ updateInterval: 1000 });
-  const { error, field } = useErrorText();
+  const { error, field, code: codeText } = useErrorText();
   const me = useMe();
   const client = useQueryClient();
   const manage = can(me?.permissions, 'system.update');
@@ -38,7 +39,7 @@ export default function HostSettings() {
   // Clock offset: the server's time when it answered against this browser's time when the answer arrived.
   const receivedAt = useRef(0);
   useEffect(() => { if (d) receivedAt.current = Date.now(); }, [d]);
-  useEffect(() => { setWatching(!!d && (d.agent.pending > 0 || d.agent.status?.state === 'running')); }, [d]);
+  useEffect(() => { setWatching(!!d && (d.agent.pending > 0 || agentRunning(d.agent.status))); }, [d]);
   const [v, setV] = useState({ hostname: '', timezone: '', ntp: '', dns: '' });
   const [fields, setFields] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
@@ -61,7 +62,7 @@ export default function HostSettings() {
 
   async function send(body: Record<string, string>, done: string) {
     setBusy(true); setFields({});
-    try { await apiFetch('/admin/host', { method: 'POST', body }); toast.success(done); setWatching(true); seeded.current = false; void client.invalidateQueries({ queryKey: ['admin', 'host'] }); }
+    try { await apiFetch('/admin/host', { method: 'POST', body }); toast.success(done); setWatching(true); void client.invalidateQueries({ queryKey: ['admin', 'host'] }); }
     catch (e) { setFields((e as ApiError).fields ?? {}); toast.danger(error(e)); } finally { setBusy(false); }
   }
   const blocked = !manage || !d.agent.installed || watching || busy;
@@ -110,7 +111,7 @@ export default function HostSettings() {
 
       <AnimatePresence>{st && <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="flex flex-col gap-2">
         <div className="flex items-center gap-2 text-sm"><span className="font-medium">{t('lastRun')}</span><StatusChip tone={stateTone[st.state]}>{t(`state.${st.state}`)}</StatusChip>
-          {st.code && st.state !== 'running' && st.state !== 'succeeded' && <Chip size="sm" variant="soft">{st.code}</Chip>}</div>
+          {st.code && st.state !== 'running' && st.state !== 'succeeded' && <Chip size="sm" variant="soft">{codeText(st.code)}</Chip>}</div>
         {d.agent.log.length > 0 && <pre className="max-h-48 overflow-auto rounded-xl bg-default/60 p-3 font-mono text-xs leading-relaxed">{d.agent.log.join('\n')}</pre>}
       </motion.div>}</AnimatePresence>
     </div>

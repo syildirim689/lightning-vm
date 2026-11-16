@@ -67,7 +67,7 @@
     "RATE_LIMITED": "Too many attempts. Please try again in a few minutes.",
     "REGISTRATION_CLOSED": "New user registration is currently closed.",
     "EMAIL_TAKEN": "This e-mail already has an account.",
-    "FORBIDDEN": "You do not have permission for this action.",
+    "FORBIDDEN": "This account or API token does not have permission for this action.",
     "CSRF_REJECTED": "The request failed a security check. Reload the page and try again.",
     "VALIDATION_FAILED": "Please correct the highlighted fields.",
     "SETUP_CLOSED": "Initial setup is already complete. Use the sign-in page.",
@@ -79,7 +79,7 @@
     "ADMIN_REQUIRED": "Create the administrator account first.",
     "STEPS_INCOMPLETE": "Setup cannot finish until the required steps are done.",
     "SECRET_KEY_UNAVAILABLE": "The encryption key file is missing (secrets/master.key). Check the installation.",
-    "VMWARE_SERVICE_UNAVAILABLE": "The VMware connection service is unreachable (vmware container).",
+    "VMWARE_SERVICE_UNAVAILABLE": "The connection service of the virtualisation platform is unreachable (its adapter container is not answering).",
     "VMWARE_ERROR": "An unexpected error occurred while talking to VMware.",
     "HOSTS_ALREADY_MANAGED": "Some hosts of this connection are already added through another connection. Not saved, so capacity is not counted twice.",
     "CONNECTION_EXISTS": "This ESXi/vCenter is already added (same address, or the same vCenter under another address).",
@@ -102,7 +102,7 @@
     "VM_POWERED_OFF": "The virtual machine is powered off. The console opens only on a running virtual machine.",
     "VM_NOT_FOUND": "Virtual machine not found. Discover the inventory again.",
     "CONSOLE_TLS_UNVERIFIABLE": "The VMware console ticket carries no certificate thumbprint; an unverifiable connection is not made.",
-    "CONSOLE_NOT_PERMITTED": "The service account lacks the console privilege (VirtualMachine.Interact.ConsoleInteract).",
+    "CONSOLE_NOT_PERMITTED": "The service account is not allowed to open the console on this platform (on VMware: the VirtualMachine.Interact.ConsoleInteract privilege).",
     "IN_USE": "This record is still used by other records; remove those first.",
     "CAPACITY_EXHAUSTED": "Not enough free capacity left at this location.",
     "IP_EXHAUSTED": "No free IP address left at this location.",
@@ -111,14 +111,14 @@
     "IDEMPOTENCY_MISMATCH": "This request key was used for a different request; reload the page.",
     "OPERATION_IN_PROGRESS": "An operation is still running on this server; wait for it to finish.",
     "INVALID_SERVER_STATE": "The server is not in a state that allows this.",
-    "PROVISIONING_NOT_SUPPORTED": "Servers cannot be created at this location: vCenter with clone rights is required (a standalone ESXi cannot clone through the API).",
+    "PROVISIONING_NOT_SUPPORTED": "Servers cannot be created at this location with this image: the platform cannot make this copy. On VMware a vCenter with clone rights is required (a standalone ESXi cannot clone through the API); on other platforms see the detail of the operation.",
     "DISK_SMALLER_THAN_TEMPLATE": "The requested disk is smaller than the template's disk.",
     "NETWORK_NOT_FOUND": "The pool's network was not found in VMware.",
     "NOT_MANAGED": "This VM was not created by the platform; it was not touched.",
     "TASK_NOT_FOUND": "The VMware task is no longer known; the result was checked on the VM itself.",
     "TEMPLATE_HAS_NO_NIC": "The template has no network adapter.",
     "TEMPLATE_NOT_FOUND": "The template was not found in VMware.",
-    "TOOLS_NOT_RUNNING": "A clean shutdown needs VMware Tools running in the guest. You can force it off instead.",
+    "TOOLS_NOT_RUNNING": "A clean shutdown needs the guest agent (VMware Tools, QEMU guest agent…) running in the server. You can force it off instead.",
     "CANCELLED": "The operation was cancelled.",
     "CLONE_RESULT_MISSING": "The clone finished but no VM was found.",
     "INVENTORY_STALE": "The inventory is out of date; discover the connection again.",
@@ -176,10 +176,12 @@
     "NOT_HYPERV": "This host has no Hyper-V PowerShell module. Install the Hyper-V role and its management tools.",
     "NOT_OVIRT": "No oVirt Engine API answered at this address. Check the address and the port (443 by default).",
     "OVIRT_ERROR": "The oVirt Engine refused the request. See the events in the Engine for the details.",
+    "ENGINE_BUSY": "The oVirt Engine is still working on this server. The operation is tried again by itself.",
+    "EXTRA_ADDRESSES_NOT_CONFIGURED": "Only the first IPv4 and the first IPv6 address were configured in the guest (Proxmox VE). Add the other addresses inside the server.",
     "NOT_XAPI": "No XCP-ng / XenServer API (XAPI) answered at this address. Check the address and the port (443 by default).",
     "XAPI_ERROR": "XCP-ng refused the request. See the pool’s task log for the details.",
     "HOST_IS_SLAVE": "This host is not the pool master. Use the address of the pool master for the connection.",
-    "PLATFORM_NOT_SUPPORTED": "This is not supported on Proxmox VE connections yet.",
+    "PLATFORM_NOT_SUPPORTED": "This is not supported on this virtualisation platform yet.",
     "NOT_PROXMOX": "No Proxmox VE API answered at this address. Check the address and the port (8006 by default).",
     "PROXMOX_ERROR": "Proxmox VE refused the request. See the task log in Proxmox for the details.",
     "LAST_SIGN_IN_METHOD": "This is the person’s only way to sign in; a password or another way in must exist first.",
@@ -218,7 +220,7 @@
     "YOU_CANNOT_REMOVE_YOURSELF": "You cannot remove yourself.",
     "YOU_CANNOT_IMPERSONATE_ADMINS": "Administrators cannot be impersonated.",
     "BANNED_USER": "Your account is banned.",
-    "FIREWALL_NOT_SUPPORTED": "This location cannot enforce firewalls (it needs vCenter with a distributed switch).",
+    "FIREWALL_NOT_SUPPORTED": "This location cannot enforce firewalls: its virtualisation platform or network setup does not support them (on VMware it needs vCenter with a distributed switch).",
     "FIREWALL_LIMIT": "A server can have at most 5 firewalls.",
     "FIREWALL_IN_USE": "Detach the firewall from its servers before deleting it.",
     "FIREWALL_NEEDS_DVS": "The server’s network card is not on a distributed switch, so the firewall cannot be enforced. Ask your provider.",
@@ -370,7 +372,20 @@
     "SCAN_NOT_RUNNING": "This scan has already ended.",
     "SCAN_INTERRUPTED": "The scan stopped because the panel restarted.",
     "TOKEN_ADDRESS_NOT_ALLOWED": "This API token may not be used from this address.",
-    "ENDPOINT_CHANGED": "This address answers as another ESXi/vCenter. Resource pools and images use this connection’s inventory, so it must stay the same server; add the other one as a new connection."
+    "ENDPOINT_CHANGED": "This address answers as another ESXi/vCenter. Resource pools and images use this connection’s inventory, so it must stay the same server; add the other one as a new connection.",
+    "NO_GUEST_AGENT": "The guest agent is not running inside the server, so this cannot be done from the panel. Install and start it in the server, then try again.",
+    "ISO_SIZE_UNKNOWN": "The size of the ISO could not be determined: the address does not report it. Use a direct download link.",
+    "ISO_INCOMPLETE": "The ISO was not downloaded completely. Try again.",
+    "SHUTDOWN_TIMEOUT": "The server did not shut down in time; its operating system ignored the request. You can force it off instead.",
+    "NOT_WHILE_IMPERSONATING": "API tokens cannot be created while you are signed in as another user. Return to your own account first.",
+    "E_WINDOW_NEVER": "The maintenance window never contains a moment the hourly timer runs. Make it at least one hour and ten minutes long.",
+    "E_BACKUP_VERIFY": "The backup file could not be read back after it was written (is the disk full?).",
+    "E_BACKUP_WRITE": "The backup file could not be written. Check the free space and the permissions of the backup folder.",
+    "E_UPDATE_CHECKOUT": "The new version could not be checked out (git checkout). Local changes in the installation folder may be in the way.",
+    "E_RESTORE_DB_DOWN": "The database is not running, so nothing could be restored. Start the services and try again.",
+    "E_RESTORE_DUMP": "The database dump in the backup could not be read. The backup may be damaged, or the backup key may be the wrong one.",
+    "E_RESTORE_NO_SAFETY": "A safety copy of the current data could not be taken, so the restore was not started. Nothing was changed.",
+    "UPDATE_SKIPPED": "The automatic update skipped this version because it already failed once. Update by hand when the cause is fixed."
   },
   "Auth": {
     "required": "required",
@@ -510,7 +525,9 @@
     },
     "generate": "Generate a strong password",
     "generatedCopied": "Password copied to the clipboard; save it in your password manager.",
-    "generatedShown": "The password is shown; save it somewhere safe."
+    "generatedShown": "The password is shown; save it somewhere safe.",
+    "registrationClosed": "Registration is closed",
+    "registrationClosedHelp": "New accounts are created by an administrator. If you already have one, sign in."
   },
   "fieldErrors": {
     "INVALID_EMAIL": "Enter a valid email address.",
@@ -641,7 +658,8 @@
     "TOO_MANY_ADDRESSES": "More than 4096 addresses in all; split the blocks.",
     "EXPIRY_REQUIRED": "The administrator requires an expiry.",
     "EXPIRY_TOO_LONG": "Longer than the administrator allows.",
-    "PASSWORD_REQUIRED_FOR_NEW_ADDRESS": "Type the password again when the address or port changes."
+    "PASSWORD_REQUIRED_FOR_NEW_ADDRESS": "Type the password again when the address or port changes.",
+    "INVALID_USERNAME": "Enter your e-mail address or a valid user name (3–30 letters, digits, dots, hyphens or underscores)."
   },
   "Setup": {
     "title": "Setup wizard",
@@ -872,7 +890,22 @@
       "endpointHelp": "The address of the Proxmox VE web interface (any node of a cluster). The default port is 8006.",
       "usernameHelp": "A user with its realm (root@pam), or an API token (user@pve!token-name).",
       "passwordHelp": "The user’s password; with an API token, the token’s secret.",
-      "verify": "Compare the fingerprint on the Proxmox node with this command:"
+      "verify": "Compare the fingerprint on the Proxmox node with this command:",
+      "hostHelp": "Name or IP of the Proxmox VE node (any node of a cluster). It must be reachable from the platform server.",
+      "portHelp": "Default 8006.",
+      "xcpngHostHelp": "Name or IP of the pool master (or of the single host). It must be reachable from the platform server.",
+      "xcpngPortHelp": "Default 443.",
+      "xcpngPasswordHelp": "The user's password. Stored encrypted; never sent back to the browser and never logged.",
+      "ovirtHostHelp": "Name of the oVirt Engine (the one its administration portal opens at). It must be reachable from the platform server.",
+      "ovirtPortHelp": "Default 443.",
+      "ovirtPasswordHelp": "The user's password. Stored encrypted; never sent back to the browser and never logged.",
+      "hypervHostHelp": "Name or IP of the Hyper-V host. It must be reachable from the platform server over WinRM (HTTPS).",
+      "hypervPortHelp": "Default 5986 (WinRM over HTTPS).",
+      "hypervPasswordHelp": "The account's password. Stored encrypted; never sent back to the browser and never logged.",
+      "libvirtHostHelp": "Name or IP of the KVM host. It must be reachable from the platform server over SSH.",
+      "libvirtPortHelp": "Default 22 (SSH).",
+      "incusHostHelp": "Name or IP of the Incus (or LXD) server, or of any member of a cluster. It must be reachable from the platform server.",
+      "incusPortHelp": "Default 8443."
     },
     "eyebrow": "ADMIN · VMWARE",
     "title": "ESXi and vCenter connections",
@@ -975,6 +1008,8 @@
       "VIRTINST_MISSING": "The host has no virt-clone and virt-xml: servers cannot be created. Install the virtinst package and refresh the connection.",
       "NO_IMAGES": "The server's image store is empty: copy an image first to create servers (incus image copy images:ubuntu/24.04/cloud local: --vm --alias ubuntu-24).",
       "PRIVILEGES_UNREADABLE": "The service account's privileges could not be read; operations show as unavailable.",
+      "GUEST_AGENT_NOT_PERMITTED": "The account lacks the guest agent privilege (VM.Monitor on Proxmox VE 8 and earlier; the VM.GuestAgent.* privileges on Proxmox VE 9). Without it the panel cannot tell when a server is ready, read its addresses or run commands in it.",
+      "GUEST_NIC_NAME_ETH0": "The oVirt Engine writes the network settings for an interface named eth0. An image whose interface has another name (ens3, enp1s0) gets no address: use images that name the interface eth0 (net.ifnames=0).",
       "VERSION_LEGACY": "This vSphere version (before 7.0) is out of vendor support and not officially supported by our library. Basic operations work; it receives no security updates.",
       "VERSION_END_OF_SUPPORT": "General support for this vSphere version has ended (6.7 and 7.0). It keeps working; upgrading to 8.0 or later is recommended.",
       "CUSTOMIZATION_GUESTINFO": "Before vCenter 7.0 U3 there is no native cloud-init customization. New servers get their cloud-init data through guestinfo; the template needs cloud-init 21.3+ with the VMware datasource.",
@@ -992,7 +1027,8 @@
       "deleteVm": "Delete",
       "snapshot": "Snapshots",
       "console": "Console",
-      "automationApi": "vCenter Automation REST API"
+      "automationApi": "vCenter Automation REST API",
+      "firewall": "Firewalls"
     },
     "capacityTitle": "Physical capacity",
     "capacityNote": "Real values of the hosts and datastores. Headroom, capacity offered for sale and reserved capacity are shown per resource pool in Admin → Catalog.",
@@ -1401,7 +1437,8 @@
       "plan": "Choose a package or custom resources",
       "name": "Enter a valid server name that is not in use",
       "keys": "Choose at least one SSH key"
-    }
+    },
+    "passwordGeneratedNotCopied": "A strong password was generated, but it could not be copied to the clipboard. Show it in the field and note it down."
   },
   "Catalog": {
     "eyebrow": "ADMIN · CATALOG",
@@ -2303,7 +2340,7 @@
       "nowConfirm": "The server, its disks and any data not backed up are deleted without waiting. This cannot be undone.",
       "badge": "Deleting · {when}"
     },
-    "shutdownNoTools": "VMware Tools is not answering, so a clean shutdown will not reach the system. Use Force off if it must stop now.",
+    "shutdownNoTools": "The guest agent is not answering, so a clean shutdown will not reach the system. Use Force off if it must stop now.",
     "failedTicket": {
       "link": "Ask support about this",
       "subject": "{kind} failed on {name}",
@@ -2354,7 +2391,10 @@
       "E_UPDATE_FETCH": "releases could not be fetched",
       "E_UPDATE_INCOMPATIBLE": "that version lacks a migration already applied (no database downgrade)",
       "E_UPDATE_FAILED": "the new version did not become ready",
-      "W_UPDATE_BUSY": "operations were running; tried again in the next hour"
+      "W_UPDATE_BUSY": "operations were running; tried again in the next hour",
+      "E_BACKUP_WRITE": "the backup file could not be written (free space, permissions?)",
+      "E_UPDATE_CHECKOUT": "the new version could not be checked out (git checkout)",
+      "UPDATE_SKIPPED": "skipped: this version already failed once"
     },
     "versionLabel": "Version",
     "lastBackupLabel": "Last backup",
@@ -2885,7 +2925,7 @@
   },
   "Metrics": {
     "title": "Live performance",
-    "intro": "20-second samples from VMware, last 15 minutes.",
+    "intro": "20-second samples from the virtualisation platform, last 15 minutes.",
     "offline": "The server is not running.",
     "offlineHelp": "Charts appear while the server is on.",
     "resume": "Resume",
@@ -2896,7 +2936,8 @@
     "disk": "Disk",
     "noSamples": "No samples yet; they appear within a few minutes.",
     "footer": "{n} samples, every {interval} seconds",
-    "uptime": "up {h} h {m} min"
+    "uptime": "up {h} h {m} min",
+    "notMeasured": "No measurements are arriving for this server. If it has been running for more than a few minutes, its virtualisation platform does not report live performance."
   },
   "Notify": {
     "title": "Notification preferences",
@@ -3420,7 +3461,8 @@
     "newFilter": "Joined in the last 7 days",
     "revokeAllBody": "{email} is signed out of {n, plural, one {their session} other {all # sessions}} and has to sign in again.",
     "impersonateTitle": "Sign in as {email}?",
-    "impersonateBody": "This tab shows the panel as they see it until you stop. What you do there is done as them, and it is recorded in the audit log."
+    "impersonateBody": "This tab shows the panel as they see it until you stop. What you do there is done as them, and it is recorded in the audit log.",
+    "passwordSetNotCopied": "Password changed, but it could not be copied to the clipboard. Copy it from the field before you close this window."
   },
   "Roles": {
     "eyebrow": "People",
@@ -5293,7 +5335,8 @@
       "ok": "Monthly {monthly} · budget {amount} ({pct}%)",
       "near": "{pct}% of the budget in use: {monthly} / {amount}",
       "over": "Budget exceeded: {monthly} a month, budget {amount}"
-    }
+    },
+    "notMeasured": "No CPU measurements arrive for this server, so there is no sizing advice: its virtualisation platform does not report them."
   },
   "Shortcuts": {
     "title": "Keyboard shortcuts",
@@ -5757,7 +5800,8 @@
     "exitFullscreen": "Exit full screen",
     "shortcuts": "Ctrl+Shift+C copies, Ctrl+Shift+V pastes. With text selected Ctrl+C copies too; without a selection it interrupts the command.",
     "endTitle": "End {email}’s terminal session?",
-    "endBody": "Their terminal closes at once; anything running in it stops."
+    "endBody": "Their terminal closes at once; anything running in it stops.",
+    "switchFailed": "The terminal could not be switched. Check the host agent on the System page and try again."
   },
   "Chat": {
     "title": "Messaging apps",
@@ -6953,9 +6997,9 @@
     "perMonth": "month",
     "endsOn": "ends {date}",
     "renewsOn": "renews {date}",
-    "autoRenew": "Renew automatically",
-    "autoRenewOn": "It renews automatically.",
-    "autoRenewOff": "It will not renew; you get no new invoice for it.",
+    "autoRenew": "Pay renewals automatically",
+    "autoRenewOn": "Renewals are taken from your balance or saved card.",
+    "autoRenewOff": "Nothing is charged automatically: you get an invoice each period and pay it yourself. If it stays unpaid, the server is suspended.",
     "keep": "Keep it",
     "kept": "The subscription continues.",
     "cancelAtEnd": "Cancel",
@@ -7065,7 +7109,8 @@
       "CARD_DECLINED": "The bank declined the card.",
       "INSUFFICIENT_FUNDS": "Insufficient funds.",
       "CANCELLED_BY_CUSTOMER": "Cancelled on the payment page.",
-      "PROVIDER_ERROR": "The payment provider did not answer."
+      "PROVIDER_ERROR": "The payment provider did not answer.",
+      "EXPIRED": "The payment was not completed in time; the payment page expired."
     },
     "invoiceTitle": "Invoice",
     "paidToast": "Payment received. Thank you!",
@@ -7412,7 +7457,8 @@
     "counted": "Last counted {at}",
     "notYet": "Not counted yet; the first figures appear a few minutes after the server runs.",
     "throttled": "Hız sınırlandı",
-    "throttledHelp": "This month's traffic is used up, so the speed is limited until the month ends. A bigger package lifts it within minutes."
+    "throttledHelp": "This month's traffic is used up, so the speed is limited until the month ends. A bigger package lifts it within minutes.",
+    "notMeasured": "Not counted. If the server has been running for a while, its virtualisation platform does not report network traffic."
   },
   "Import": {
     "title": "VMs to import",
@@ -8287,7 +8333,10 @@
     },
     "toolsInstall": "To install it in the guest, run:",
     "toolsWindows": "On Windows, install VMware Tools from its installer (support can attach the VMware Tools ISO to the CD drive).",
-    "toolsOther": "Install open-vm-tools with the guest's package manager and start its service."
+    "toolsOther": "Install open-vm-tools with the guest's package manager and start its service.",
+    "agentNeutral": "The guest agent of the virtualisation platform is not answering inside the server. Install and start it in the server; support can tell you which package this platform uses.",
+    "agentQemuWindows": "On Windows, install the QEMU guest agent from the virtio-win drivers ISO (support can attach it to the CD drive).",
+    "agentQemuOther": "Install qemu-guest-agent with the guest's package manager and start its service."
   },
   "ConnectCheck": {
     "title": "Connection check",
@@ -8319,13 +8368,14 @@
     },
     "guest": {
       "ok": "The guest uses its address {address}.",
-      "noTools": "The guest reports no address because VMware Tools (open-vm-tools) is not running; the other checks still apply.",
+      "noTools": "The guest reports no address because its guest agent is not running; the other checks still apply.",
       "noIp": "The guest has no IP address yet; it may still be starting.",
       "mismatch": "The guest uses {actual} instead of its address {expected}. Fix the network settings inside the server (the console works without a network)."
     },
     "gateway": {
       "ok": "Gateway set: {gateway}.",
-      "none": "The guest has no default gateway, so it cannot answer from outside its network."
+      "none": "The guest has no default gateway, so it cannot answer from outside its network.",
+      "unknown": "The default gateway could not be read from the guest on this platform. If the server cannot reach other networks, check it inside the server."
     },
     "address": {
       "none": "The server has no public IP address."
@@ -8772,5 +8822,11 @@
     "logNoMatch": "No line matches.",
     "logEmpty": "No lines from this source.",
     "logCount": "Showing {shown} of {total} lines"
+  },
+  "Clipboard": {
+    "failed": "Could not copy: this browser does not allow the clipboard here (the panel may not be on HTTPS). Select the text and copy it yourself."
+  },
+  "Capabilities": {
+    "unavailable": "Not available on this platform."
   }
 }

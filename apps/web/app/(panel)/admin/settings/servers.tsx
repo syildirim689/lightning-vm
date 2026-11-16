@@ -2,6 +2,7 @@
 // Server settings: what customers may do on their own servers (the API enforces it; staff always may), and the
 // hardware options every new VM gets.
 import { Button, Card, toast } from '@heroui/react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useTranslations } from 'next-intl';
 import { useEffect, useState } from 'react';
 import { I } from '../../../../components/icon';
@@ -16,6 +17,7 @@ type Doc = { customer: { power: boolean; console: boolean; iso: boolean; rootPas
 export default function ServerSettings({ readOnly }: { readOnly: boolean }) {
   const t = useTranslations('Settings.servers');
   const { error } = useErrorText();
+  const client = useQueryClient();
   const q = useApiQuery<Doc>(['settings', 'servers'], '/admin/settings/servers').data;
   const [v, setV] = useState<Doc | null>(null);
   const [busy, setBusy] = useState(false);
@@ -23,7 +25,8 @@ export default function ServerSettings({ readOnly }: { readOnly: boolean }) {
   if (!v) return <Loading of={['settings', 'servers']}/>;
   async function save() {
     setBusy(true);
-    try { setV(await apiFetch<Doc>('/admin/settings/servers', { method: 'PUT', body: v })); toast.success(t('saved')); }
+    // The saved document goes back into the cache: a later visit to this tab starts from it, not from the old one.
+    try { const r = await apiFetch<Doc>('/admin/settings/servers', { method: 'PUT', body: v }); client.setQueryData(['settings', 'servers'], r); setV(r); toast.success(t('saved')); }
     catch (e) { toast.danger(error(e)); } finally { setBusy(false); }
   }
   const icons = { power: 'power', console: 'square-terminal', iso: 'disc-3', rootPassword: 'key-round', delete: 'trash-2', snapshots: 'camera', resize: 'gauge', reinstall: 'refresh-cw', backups: 'archive' } as const;

@@ -28,10 +28,16 @@ export function Ring({ score, grade, label }: { score: number; grade: Health['gr
   </svg>;
 }
 
-export function ServerHealth({ id }: { id: string }) {
+// since: when the server was created; measured: false when the API says this platform reports no CPU figures.
+export function ServerHealth({ id, since, measured = true }: { id: string; since?: string; measured?: boolean }) {
   const t = useTranslations('Smart');
-  const h = useApiQuery<Health>(['servers', id, 'health'], `/servers/${id}/health`, { refetchInterval: 60_000 }).data;
-  if (!h) return <Section title={t('health')}><div className="h-28 animate-pulse rounded-lg bg-default" aria-busy/></Section>;
+  const raw = useApiQuery<Health>(['servers', id, 'health'], `/servers/${id}/health`, { refetchInterval: 60_000 }).data;
+  if (!raw) return <Section title={t('health')}><div className="h-28 animate-pulse rounded-lg bg-default" aria-busy/></Section>;
+  // Real CPU figures: some platforms report none, or only zeros (a running machine never averages exactly 0%).
+  // Without them nothing is called idle or oversized: "not measured" is not "not used".
+  const real = measured && !!raw.cpu && raw.cpu.samples > 0 && (raw.cpu.avg > 0 || raw.cpu.p95 > 0);
+  const h = real ? raw : { ...raw, cpu: null, advice: null, factors: raw.factors.filter((f) => !['IDLE', 'CPU_HIGH', 'CPU_SATURATED'].includes(f.code)) };
+  const unmeasured = !real && (!measured || (!!since && Date.now() - Date.parse(since) > 3 * 86_400_000));
   const adviceIcon = h.advice === 'up' ? <I name="trending-up" size={16}/> : h.advice === 'down' ? <I name="trending-down" size={16}/> : h.advice === 'idle' ? <I name="moon" size={16}/> : <I name="circle-check" size={16}/>;
   return <Section title={t('health')} description={t('healthHelp')}>
     <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
@@ -56,7 +62,7 @@ export function ServerHealth({ id }: { id: string }) {
         </div> : null}
         <p className="flex items-start gap-2 rounded-lg bg-default/60 px-3 py-2 text-sm">
           <span className="mt-0.5 shrink-0 text-accent">{adviceIcon}</span>
-          <span>{h.advice ? t(`advice.${h.advice}`, { suggested: h.suggestedVcpu, vcpu: h.vcpu }) : h.cpu && h.cpu.days >= 3 ? t('advice.none') : t('noData')}</span>
+          <span>{h.advice ? t(`advice.${h.advice}`, { suggested: h.suggestedVcpu, vcpu: h.vcpu }) : h.cpu && h.cpu.days >= 3 ? t('advice.none') : unmeasured ? t('notMeasured') : t('noData')}</span>
         </p>
       </div>
     </div>

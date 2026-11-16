@@ -41,7 +41,13 @@ export function UpdatesOverview({ canManage }: { canManage: boolean }) {
 
   async function installSecurity() {
     try {
-      const r = await apiFetch<{ started: number; skipped: number }>('/admin/server-updates/actions', { method: 'POST', body: { action: 'security', serverIds: targets.map((x) => x.id) } });
+      // The API takes at most 500 servers in one request: a larger fleet goes in several.
+      const ids = targets.map((x) => x.id);
+      const r = { started: 0, skipped: 0 };
+      for (let i = 0; i < ids.length; i += 500) {
+        const part = await apiFetch<{ started: number; skipped: number }>('/admin/server-updates/actions', { method: 'POST', body: { action: 'security', serverIds: ids.slice(i, i + 500) } });
+        r.started += part.started; r.skipped += part.skipped;
+      }
       toast.success(t('admin.asked', { started: r.started, skipped: r.skipped }));
       await client.invalidateQueries({ queryKey: ['admin', 'server-updates'] });
     } catch (e) { toast.danger(error(e)); throw e; }

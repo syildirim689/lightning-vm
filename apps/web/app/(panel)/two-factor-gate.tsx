@@ -23,7 +23,7 @@ export default function TwoFactorGate() {
       <TwoFactor/>
       <PhoneNumber/>
       <div className="flex flex-wrap justify-between gap-2 border-t border-separator pt-4">
-        <Button variant="ghost" onPress={async () => { await signOut(); router.replace('/login'); }}><I name="log-out" size={16}/>{t('signOut')}</Button>
+        <Button variant="ghost" onPress={async () => { await signOut(); window.location.assign('/login'); }}><I name="log-out" size={16}/>{t('signOut')}</Button>
         <Button isDisabled={!me?.twoFactorEnabled} onPress={() => router.refresh()}><I name="arrow-right" size={16}/>{t('continue')}</Button>
       </div>
     </motion.div>

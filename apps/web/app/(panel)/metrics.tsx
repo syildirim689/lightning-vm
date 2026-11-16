@@ -14,13 +14,18 @@ type Sample = { t: string; cpu: number | null; mem: number | null; net: number |
 type Metrics = { interval: number; samples: Sample[]; quick: Record<string, number>; vcpu: number; memoryMb: number; fetchedAt: string };
 const tooltip = { background: 'var(--overlay)', border: '1px solid var(--border)', borderRadius: 8, color: 'var(--overlay-foreground)', fontSize: 12 };
 
-export default function ServerMetrics({ id, live }: { id: string; live: boolean }) {
+// since: when the server was created; supported: false when the API says this platform reports no live figures.
+export default function ServerMetrics({ id, live, since, supported = true }: { id: string; live: boolean; since?: string; supported?: boolean }) {
   const t = useTranslations('Metrics');
   const format = useFormatter();
   const { error } = useErrorText();
   const [paused, setPaused] = useState(false);
-  const q = useApiQuery<Metrics>(['metrics', id], live ? `/servers/${id}/metrics` : null, { refetchInterval: paused ? false : 20_000 });
+  const q = useApiQuery<Metrics>(['metrics', id], live && supported ? `/servers/${id}/metrics` : null, { refetchInterval: paused ? false : 20_000 });
   const data = (q.data?.samples ?? []).map((s) => ({ ...s, time: format.dateTime(new Date(s.t), { timeStyle: 'short' }) }));
+  // Nothing measured: no samples, or samples that carry no figure at all (a running machine always uses some memory).
+  // "They appear within a few minutes" is true only for a new server; later it means the platform does not report them.
+  const empty = data.every((s) => !s.cpu && !s.mem && !s.net && !s.disk);
+  const fresh = !since || Date.now() - Date.parse(since) < 900_000;
   const last = data.at(-1);
   const kb = (v: number | null | undefined) => v == null ? '–' : v >= 1024 ? `${format.number(v / 1024, { maximumFractionDigits: 1 })} MB/s` : `${format.number(v, { maximumFractionDigits: 0 })} KB/s`;
   const pct = (v: number | null | undefined) => v == null ? '–' : `%${format.number(v, { maximumFractionDigits: 1 })}`;
@@ -34,9 +39,10 @@ export default function ServerMetrics({ id, live }: { id: string; live: boolean 
   return <Section title={t('title')} description={live ? t('intro') : t('offline')}
     actions={live && <Button size="sm" variant="ghost" onPress={() => setPaused((p) => !p)} aria-pressed={paused}>{paused ? <I name="play" size={15}/> : <I name="pause" size={15}/>}{paused ? t('resume') : t('pause')}</Button>}>
     {!live ? <p className="text-sm text-muted">{t('offlineHelp')}</p>
+      : !supported ? <p className="text-sm text-muted">{t('notMeasured')}</p>
       : q.error ? <p role="alert" className="text-sm text-danger">{error(q.error)}</p>
       : !q.data ? <div className="grid gap-3 sm:grid-cols-2" aria-busy>{[0, 1, 2, 3].map((i) => <div key={i} className="h-36 animate-pulse rounded-xl bg-default/50"/>)}</div>
-      : data.length === 0 ? <p className="text-sm text-muted">{t('noSamples')}</p>
+      : empty ? <p className="text-sm text-muted">{data.length === 0 && fresh ? t('noSamples') : t('notMeasured')}</p>
       : <div className="flex flex-col gap-3">
           <div className="grid gap-3 sm:grid-cols-2">{charts.map((c) => <Card key={c.key} variant="secondary" className="overflow-hidden">
             <Card.Content className="flex flex-col gap-1 p-3">

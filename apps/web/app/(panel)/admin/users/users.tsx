@@ -8,7 +8,6 @@ import { useFormatter, useNow, useTranslations } from 'next-intl';
 import { parseAsString, useQueryState } from 'nuqs';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import NextLink from 'next/link';
-import { useRouter } from 'next/navigation';
 import { I } from '../../../../components/icon';
 import { UserSummary } from './user-summary';
 import SessionList, { LastSeen, PresenceDot, type Presence, type SessionRow } from '../../../../components/session-list';
@@ -21,6 +20,7 @@ import { useApiQuery } from '../../../../lib/query';
 import { fold } from '../../../../lib/note-line';
 import { downloadCsv } from '../../../../lib/csv';
 import { strongPassword } from '../../../../lib/password';
+import { copyText, useCopy } from '../../../../lib/clipboard';
 
 type Row = { id: string; email: string; name: string; role: string; locale: string; createdAt: string; banned: boolean; banReason: string | null; banExpires: string | null;
   twoFactorEnabled: boolean; authSource?: string; lastLoginMethod: string | null; phoneNumber: string | null; servers: number; sessions: number; lastSeen: string | null; overrides: number; presence: Presence; notes: number; pinnedNote: string | null };
@@ -32,11 +32,12 @@ const codeOf = (e: ClientError) => ({ code: e?.code ?? (e?.status === 429 ? 'RAT
 // A generated password the admin can see, replace and copy (it goes to the user by another channel).
 function PasswordInput({ label, value, onChange, help, error }: { label: string; value: string; onChange: (v: string) => void; help: string; error?: string }) {
   const t = useTranslations('Users');
+  const copy = useCopy();
   return <div className="flex flex-col gap-2">
     <TextInput label={label} value={value} onChange={onChange} help={help} error={error} spellCheck={false}/>
     <div className="flex flex-wrap gap-2">
       <Button size="sm" variant="secondary" onPress={() => onChange(strongPassword())}><I name="wand-sparkles" size={15}/>{t('form.generate')}</Button>
-      <Button size="sm" variant="ghost" isDisabled={!value} onPress={async () => { await navigator.clipboard?.writeText(value).then(() => toast.success(t('form.passwordCopied')), () => undefined); }}>
+      <Button size="sm" variant="ghost" isDisabled={!value} onPress={() => void copy(value, t('form.passwordCopied'))}>
         <I name="copy" size={15}/>{t('form.copy')}</Button>
     </div>
   </div>;
@@ -141,14 +142,14 @@ export default function Users() {
 function RowActions({ user, self, perms, open }: { user: Row; self: boolean; perms?: string[]; open: (k: 'access' | 'ban' | 'password' | 'sessions' | 'remove') => void }) {
   const t = useTranslations('Users');
   const { error } = useErrorText();
-  const router = useRouter();
   const client = useQueryClient();
   const [asking, setAsking] = useState(false);
   // Signing in as someone is recorded and changes whose panel this tab shows, so it is asked first.
   async function impersonate() {
     const r = await authClient.admin.impersonateUser({ userId: user.id });
     if (r.error) { toast.danger(error(codeOf(r.error))); return; }
-    setAsking(false); router.replace('/'); router.refresh();
+    // A full page load: the lists, the bell and the live line all belong to the other account from here on.
+    setAsking(false); window.location.assign('/');
   }
   async function act(k: string) {
     if (k === 'impersonate') { setAsking(true); return; }
@@ -215,7 +216,7 @@ function CreateUser({ roles, onClose }: { roles: Role[]; onClose: () => void }) 
     if (v.roles.join() !== 'user') await apiFetch(`/admin/users/${r.data.user.id}/access`, { method: 'PUT', body: { roles: v.roles, overrides: [] } }).catch((e) => toast.danger(error(e)));
     setBusy(false); toast.success(t('created', { email: v.email })); done();
   }
-  return <Dialog title={t('new')} onClose={onClose} footer={<><Button variant="tertiary" onPress={onClose}>{t('cancel')}</Button><Button isPending={busy} onPress={submit}><I name="user-plus" size={16}/>{t('create')}</Button></>}>
+  return <Dialog title={t('new')} onClose={onClose} footer={<><Button variant="tertiary" onPress={onClose}>{t('cancel')}</Button><Button isPending={busy} isDisabled={!v.email.trim() || v.password.length < 12} onPress={submit}><I name="user-plus" size={16}/>{t('create')}</Button></>}>
     <fieldset className="grid gap-4 sm:grid-cols-2">
       <legend className="mb-2 text-sm font-semibold">{t('form.identity')}</legend>
       <TextInput label={t('form.email')} type="email" value={v.email} onChange={(email) => setV((x) => ({ ...x, email }))} isRequired autoComplete="off"/>
@@ -315,8 +316,8 @@ function SetPassword({ user, onClose }: { user: Row; onClose: () => void }) {
     const r = await authClient.admin.setUserPassword({ userId: user.id, newPassword: password });
     setBusy(false);
     if (r.error) { toast.danger(error(codeOf(r.error))); return; }
-    await navigator.clipboard?.writeText(password).catch(() => undefined);
-    toast.success(t('passwordSet')); done();
+    // Not copied (a panel on plain HTTP, a blocked clipboard): the dialog stays, so the password can be copied by hand.
+    if (await copyText(password)) { toast.success(t('passwordSet')); done(); } else toast.warning(t('passwordSetNotCopied'));
   }
   return <Dialog title={t('passwordTitle', { email: user.email })} onClose={onClose} footer={<><Button variant="tertiary" onPress={onClose}>{t('cancel')}</Button><Button isPending={busy} isDisabled={password.length < 12} onPress={save}>{t('save')}</Button></>}>
     <Notice tone="warning">{t('passwordExplain')}</Notice>

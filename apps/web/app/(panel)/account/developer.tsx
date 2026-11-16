@@ -9,6 +9,7 @@ import { useState } from 'react';
 import { I } from '../../../components/icon';
 import { CheckboxInput, ConfirmButton, DataTable, Empty, Mono, Notice, Section, SelectInput, StatusChip, TextInput } from '../../../components/ui';
 import { apiFetch, type ApiError, useErrorText } from '../../../lib/api';
+import { useCopy } from '../../../lib/clipboard';
 import { useMe } from '../../../lib/me';
 import { permissionGroups } from '../../../lib/permissions';
 import { useApiQuery } from '../../../lib/query';
@@ -19,9 +20,10 @@ type Delivery = { id: string; event: string; status: 'pending' | 'succeeded' | '
 
 function Secret({ value, help, onDone }: { value: string; help: string; onDone: () => void }) {
   const t = useTranslations('Developer');
+  const copy = useCopy();
   return <Notice tone="success" title={t('copyNow')}>
-    <div className="mt-2 flex flex-wrap items-center gap-2"><span className="break-all"><Mono>{value}</Mono></span>
-      <Button size="sm" variant="secondary" onPress={() => { void navigator.clipboard?.writeText(value); toast.success(t('copied')); }}><I name="copy" size={14}/>{t('copy')}</Button>
+    <div className="mt-2 flex flex-wrap items-center gap-2"><span className="select-all break-all"><Mono>{value}</Mono></span>
+      <Button size="sm" variant="secondary" onPress={() => void copy(value, t('copied'))}><I name="copy" size={14}/>{t('copy')}</Button>
       <Button size="sm" variant="ghost" onPress={onDone}><I name="check" size={14}/>{t('saved')}</Button></div>
     <p className="mt-2 text-xs">{help}</p>
   </Notice>;
@@ -30,9 +32,10 @@ function Secret({ value, help, onDone }: { value: string; help: string; onDone: 
 // A block of example code with a copy button.
 function Snippet({ code }: { code: string }) {
   const t = useTranslations('Developer');
+  const copy = useCopy();
   return <div className="relative">
     <pre className="overflow-x-auto rounded-lg bg-default p-3 pr-24 text-xs">{code}</pre>
-    <Button size="sm" variant="secondary" className="absolute right-2 top-2" onPress={() => { void navigator.clipboard?.writeText(code); toast.success(t('copied')); }}>
+    <Button size="sm" variant="secondary" className="absolute right-2 top-2" onPress={() => void copy(code, t('copied'))}>
       <I name="copy" size={14}/>{t('copy')}</Button>
   </div>;
 }
@@ -56,7 +59,11 @@ function Tokens() {
   const groups = Object.entries(permissionGroups).map(([g, ps]) => [g, ps.filter((p) => mine.includes('*') || mine.includes(p))] as const).filter(([, ps]) => ps.length);
   const [name, setName] = useState('');
   const [scope, setScope] = useState<'read' | 'write'>('read');
-  const [expires, setExpires] = useState('90');
+  // Lifetimes the admin's rules allow. Until one is picked: 90 days, or the longest allowed when the maximum is
+  // shorter than that (a default above the maximum would make every create fail).
+  const dayOptions = [...[30, 90, 365].filter((n) => !rules?.maxDays || n <= rules.maxDays), ...(rules?.maxDays && ![30, 90, 365].includes(rules.maxDays) ? [rules.maxDays] : [])];
+  const [chosen, setExpires] = useState<string>();
+  const expires = chosen ?? String(dayOptions.includes(90) ? 90 : Math.max(...dayOptions));
   const [fields, setFields] = useState<Record<string, string>>({});
   const [made, setMade] = useState<string>();
   const [busy, setBusy] = useState(false);
@@ -91,7 +98,7 @@ function Tokens() {
           options={[{ id: 'read', label: t('tokens.read') }, { id: 'write', label: t('tokens.write') }]}/>
         <SelectInput label={t('tokens.expires')} value={expires} onChange={setExpires}
           error={field(fields.expiresInDays)}
-          options={[...[30, 90, 365].filter((n) => !rules?.maxDays || n <= rules.maxDays), ...(rules?.maxDays && ![30, 90, 365].includes(rules.maxDays) ? [rules.maxDays] : [])]
+          options={dayOptions
             .map((n) => ({ id: String(n), label: t('tokens.days', { n }) })).concat(rules?.expiryRequired ? [] : [{ id: 'never', label: t('tokens.never') }])}/>
         <Button type="submit" isPending={busy} isDisabled={!name.trim() || full || (narrow && !picked.length)}><I name="plus" size={16}/>{t('tokens.create')}</Button>
         <details className="rounded-xl border border-border sm:col-span-4">

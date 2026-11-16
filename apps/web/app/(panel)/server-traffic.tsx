@@ -13,7 +13,8 @@ const tooltip = { background: 'var(--overlay)', border: '1px solid var(--border)
 
 import { useBytes } from '../../lib/units';
 
-export function ServerTraffic({ id, throttled }: { id: string; throttled?: boolean }) {
+// since: when the server was created; supported: false when the API says this platform reports no counters.
+export function ServerTraffic({ id, throttled, since, supported = true }: { id: string; throttled?: boolean; since?: string; supported?: boolean }) {
   const t = useTranslations('Traffic');
   const format = useFormatter();
   const bytes = useBytes();
@@ -51,7 +52,7 @@ export function ServerTraffic({ id, throttled }: { id: string; throttled?: boole
       <div className="flex flex-wrap items-center gap-4 text-xs text-muted">
         <span className="inline-flex items-center gap-1.5"><span className="size-2.5 rounded-sm bg-accent" aria-hidden/>{t('in')}</span>
         <span className="inline-flex items-center gap-1.5"><span className="size-2.5 rounded-sm bg-warning" aria-hidden/>{t('out')}</span>
-        <span>{q.data.countedAt ? t('counted', { at: format.dateTime(new Date(q.data.countedAt), { dateStyle: 'medium', timeStyle: 'short' }) }) : t('notYet')}</span>
+        <span>{q.data.countedAt ? t('counted', { at: format.dateTime(new Date(q.data.countedAt), { dateStyle: 'medium', timeStyle: 'short' }) }) : supported && !(since && Date.now() - Date.parse(since) > 3_600_000) ? t('notYet') : t('notMeasured')}</span>
       </div>
     </div>
   </Section>;

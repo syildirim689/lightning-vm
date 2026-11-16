@@ -14,11 +14,26 @@ export const allows = (rules: FwRule[], port: number) => rules.some((r) => r.dir
 export const bare = (ips: string[]) => ips.map((x) => x.split('/')[0]);
 export const usesAddress = (guestIps: string[], address: string | null) => !address || !guestIps.length || bare(guestIps).includes(address);
 
-// The command that installs and starts open-vm-tools on the guest's OS, when it is one we know; null otherwise
-// (Windows takes the VMware Tools installer instead). Matched on VMware's OS name, the guest id or the image name.
-export function toolsCommand(os: string): string | null {
+// Which guest agent a platform (the connection's kind) reads the guest through. Null when the platform is not
+// known or has no agent with a one-line install: the page then names no package at all rather than a wrong one.
+export type GuestAgent = 'vmware' | 'qemu';
+export const guestAgent = (platform?: string | null): GuestAgent | null =>
+  platform === 'esxi' || platform === 'vcenter' ? 'vmware' : platform === 'proxmox' || platform === 'libvirt' || platform === 'ovirt' ? 'qemu' : null;
+
+// The command that installs and starts the guest agent on the guest's OS, when it is one we know; null otherwise
+// (Windows takes an installer instead). Matched on the platform's OS name, the guest id or the image name.
+// open-vm-tools for VMware (the default), qemu-guest-agent for the KVM platforms.
+export function toolsCommand(os: string, agent: GuestAgent = 'vmware'): string | null {
   const s = os.toLowerCase();
   if (/windows/.test(s)) return null;
+  if (agent === 'qemu') {
+    if (/ubuntu|debian/.test(s)) return 'sudo apt-get update && sudo apt-get install -y qemu-guest-agent && sudo systemctl enable --now qemu-guest-agent';
+    if (/red ?hat|rhel|centos|rocky|alma|fedora|oracle linux|amazon/.test(s)) return 'sudo dnf install -y qemu-guest-agent && sudo systemctl enable --now qemu-guest-agent';
+    if (/suse|sles/.test(s)) return 'sudo zypper install -y qemu-guest-agent && sudo systemctl enable --now qemu-guest-agent';
+    if (/alpine/.test(s)) return 'apk add qemu-guest-agent && rc-update add qemu-guest-agent && rc-service qemu-guest-agent start';
+    if (/freebsd/.test(s)) return 'pkg install -y qemu-guest-agent && sysrc qemu_guest_agent_enable=YES && service qemu-guest-agent start';
+    return null;
+  }
   if (/ubuntu|debian/.test(s)) return 'sudo apt-get update && sudo apt-get install -y open-vm-tools && sudo systemctl enable --now open-vm-tools';
   if (/red ?hat|rhel|centos|rocky|alma|fedora|oracle linux|amazon/.test(s)) return 'sudo dnf install -y open-vm-tools && sudo systemctl enable --now vmtoolsd';
   if (/suse|sles/.test(s)) return 'sudo zypper install -y open-vm-tools && sudo systemctl enable --now vmtoolsd';

@@ -20,13 +20,13 @@ import { Copy } from '../../server-extras';
 import { useBytes } from '../../../../lib/units';
 
 type Operation = { id: string; kind: string; status: string; step: string | null; attempts: number; errorCode: string | null; errorDetail: string | null;
-  createdAt: string; serverName: string | null; serverId: string | null; ownerEmail: string | null };
+  warnings?: string[]; createdAt: string; serverName: string | null; serverId: string | null; ownerEmail: string | null };
 type Finding = { id: number; kind: string; serverId: string | null; serverName: string | null; vmMoref: string | null; detail: Record<string, string>; lastSeen: string; connectionName: string };
 
 export default function AdminServers() {
   const t = useTranslations('Servers');
   const format = useFormatter();
-  const { error } = useErrorText();
+  const { error, code: codeText } = useErrorText();
   // Tab and search live in the URL, so a view can be bookmarked and the back button works.
   const [tab, setTab] = useQueryState('tab', parseAsString.withDefault('servers'));
   const servers = useApiQuery<{ servers: Server[] }>(['admin', 'servers'], '/admin/servers', { refetchInterval: (d) => (d?.servers.some(moving) ? 5_000 : 20_000) }).data?.servers ?? [];
@@ -122,7 +122,11 @@ export default function AdminServers() {
                   {o.ownerEmail && <span className="text-xs text-muted">{o.ownerEmail}</span>}</span>,
                 <StatusChip key="s" tone={opTone(o.status)}>{t(`opStatus.${o.status as 'pending'}`)}{o.attempts > 1 ? ` · ${t('attempt', { n: o.attempts })}` : ''}</StatusChip>,
                 o.errorCode ? <span key="d" className="flex max-w-md flex-col"><span>{t('errorCode', { message: error({ code: o.errorCode }), code: o.errorCode })}</span>
-                  {o.errorDetail && <span className="line-clamp-2 break-all font-mono text-xs text-muted" title={o.errorDetail}>{o.errorDetail}</span>}</span> : o.step ? t(`step.${o.step as 'queued'}`) : '',
+                  {o.errorDetail && <span className="line-clamp-2 break-all font-mono text-xs text-muted" title={o.errorDetail}>{o.errorDetail}</span>}</span>
+                  // What the platform left undone although the operation went through (the worker keeps the codes on the operation).
+                  : o.warnings?.length ? <span key="d" className="flex max-w-md flex-col">{o.step ? <span>{t(`step.${o.step as 'queued'}`)}</span> : null}
+                    {o.warnings.map((w) => <span key={w} className="text-xs text-warning">{codeText(w)}</span>)}</span>
+                  : o.step ? t(`step.${o.step as 'queued'}`) : '',
                 o.status === 'failed' ? <Button key="r" size="sm" variant="secondary" isPending={retry.isPending && retry.variables === o.id} onPress={() => retry.mutate(o.id)}><I name="rotate-cw" size={14}/>{t('admin.retry')}</Button> : null]}/>
           </Tabs.Panel>
 

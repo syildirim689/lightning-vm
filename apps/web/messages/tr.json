@@ -67,7 +67,7 @@
     "RATE_LIMITED": "Çok fazla deneme yapıldı. Lütfen birkaç dakika sonra tekrar deneyin.",
     "REGISTRATION_CLOSED": "Yeni kullanıcı kaydı şu anda kapalı.",
     "EMAIL_TAKEN": "Bu e-postanın zaten bir hesabı var.",
-    "FORBIDDEN": "Bu işlem için yetkiniz yok.",
+    "FORBIDDEN": "Bu hesabın veya API anahtarının bu işlem için yetkisi yok.",
     "CSRF_REJECTED": "İstek güvenlik kontrolünden geçemedi. Sayfayı yenileyip tekrar deneyin.",
     "VALIDATION_FAILED": "Lütfen işaretli alanları düzeltin.",
     "SETUP_CLOSED": "İlk kurulum zaten tamamlandı. Giriş sayfasını kullanın.",
@@ -79,7 +79,7 @@
     "ADMIN_REQUIRED": "Önce yönetici hesabını oluşturun.",
     "STEPS_INCOMPLETE": "Zorunlu adımlar tamamlanmadan kurulum bitirilemez.",
     "SECRET_KEY_UNAVAILABLE": "Şifreleme anahtarı dosyası bulunamadı (secrets/master.key). Kurulumu kontrol edin.",
-    "VMWARE_SERVICE_UNAVAILABLE": "VMware bağlantı servisine ulaşılamıyor (vmware container'ı).",
+    "VMWARE_SERVICE_UNAVAILABLE": "Sanallaştırma platformunun bağlantı servisine ulaşılamıyor (bağdaştırıcı container'ı yanıt vermiyor).",
     "VMWARE_ERROR": "VMware ile iletişimde beklenmeyen bir hata oluştu.",
     "HOSTS_ALREADY_MANAGED": "Bu bağlantıdaki bazı hostlar başka bir bağlantı üzerinden zaten ekli. Kapasite iki kez sayılmasın diye kaydedilmedi.",
     "CONNECTION_EXISTS": "Bu ESXi/vCenter zaten ekli (aynı adres veya aynı vCenter farklı adresle).",
@@ -102,7 +102,7 @@
     "VM_POWERED_OFF": "Sanal makine kapalı. Konsol yalnızca çalışan bir sanal makinede açılabilir.",
     "VM_NOT_FOUND": "Sanal makine bulunamadı. Envanteri yeniden keşfedin.",
     "CONSOLE_TLS_UNVERIFIABLE": "VMware konsol bileti sertifika parmak izi içermiyor; doğrulanamayan bir bağlantı kurulmaz.",
-    "CONSOLE_NOT_PERMITTED": "Servis hesabının konsol yetkisi (VirtualMachine.Interact.ConsoleInteract) yok.",
+    "CONSOLE_NOT_PERMITTED": "Servis hesabının bu platformda konsol açma yetkisi yok (VMware'de: VirtualMachine.Interact.ConsoleInteract yetkisi).",
     "IN_USE": "Bu kayıt başka kayıtlarda kullanılıyor; önce onları kaldırın.",
     "CAPACITY_EXHAUSTED": "Bu konumda yeterli boş kapasite kalmadı.",
     "IP_EXHAUSTED": "Bu konumda boş IP adresi kalmadı.",
@@ -111,14 +111,14 @@
     "IDEMPOTENCY_MISMATCH": "Bu istek anahtarı farklı bir istek için kullanılmış; sayfayı yenileyin.",
     "OPERATION_IN_PROGRESS": "Bu sunucuda devam eden bir işlem var; bitmesini bekleyin.",
     "INVALID_SERVER_STATE": "Sunucu bu işlem için uygun durumda değil.",
-    "PROVISIONING_NOT_SUPPORTED": "Bu konumda sunucu oluşturulamıyor: vCenter ve şablondan kopyalama yetkisi gerekir (standalone ESXi API ile kopyalama yapamaz).",
+    "PROVISIONING_NOT_SUPPORTED": "Bu konumda bu imajla sunucu oluşturulamıyor: platform bu kopyayı yapamıyor. VMware’de vCenter ve şablondan kopyalama yetkisi gerekir (standalone ESXi API ile kopyalama yapamaz); diğer platformlarda işlemin ayrıntısına bakın.",
     "DISK_SMALLER_THAN_TEMPLATE": "İstenen disk, şablonun diskinden küçük.",
     "NETWORK_NOT_FOUND": "Havuzun ağı VMware'de bulunamadı.",
     "NOT_MANAGED": "Bu VM platform tarafından oluşturulmamış; dokunulmadı.",
     "TASK_NOT_FOUND": "VMware görevi artık bulunamıyor; sonuç VM'nin kendisinden kontrol edildi.",
     "TEMPLATE_HAS_NO_NIC": "Şablonda ağ kartı yok.",
     "TEMPLATE_NOT_FOUND": "Şablon VMware'de bulunamadı.",
-    "TOOLS_NOT_RUNNING": "Düzgün kapatma için misafir işletim sisteminde VMware Tools çalışmalı. Zorla kapatmayı kullanabilirsiniz.",
+    "TOOLS_NOT_RUNNING": "Düzgün kapatma için sunucunun içinde misafir ajanı (VMware Tools, QEMU guest agent…) çalışmalı. Zorla kapatmayı kullanabilirsiniz.",
     "CANCELLED": "İşlem iptal edildi.",
     "CLONE_RESULT_MISSING": "Kopyalama bitti ama VM bulunamadı.",
     "INVENTORY_STALE": "Envanter güncel değil; bağlantıyı yeniden keşfedin.",
@@ -176,10 +176,12 @@
     "NOT_HYPERV": "Bu hostta Hyper-V PowerShell modülü yok. Hyper-V rolünü ve yönetim araçlarını kurun.",
     "NOT_OVIRT": "Bu adreste oVirt Engine API’si yanıt vermedi. Adresi ve portu (varsayılan 443) denetleyin.",
     "OVIRT_ERROR": "oVirt Engine isteği reddetti. Ayrıntı için Engine’deki olay günlüğüne bakın.",
+    "ENGINE_BUSY": "oVirt Engine bu sunucu üzerinde hâlâ çalışıyor. İşlem kendiliğinden yeniden denenir.",
+    "EXTRA_ADDRESSES_NOT_CONFIGURED": "Sunucunun içinde yalnızca ilk IPv4 ve ilk IPv6 adresi ayarlandı (Proxmox VE). Diğer adresleri sunucunun içinden ekleyin.",
     "NOT_XAPI": "Bu adreste XCP-ng / XenServer API’si (XAPI) yanıt vermedi. Adresi ve portu (varsayılan 443) denetleyin.",
     "XAPI_ERROR": "XCP-ng isteği reddetti. Ayrıntı için havuzun görev günlüğüne bakın.",
     "HOST_IS_SLAVE": "Bu host havuzun yöneticisi değil. Bağlantıda havuz yöneticisinin (master) adresini kullanın.",
-    "PLATFORM_NOT_SUPPORTED": "Bu işlem Proxmox VE bağlantılarında henüz desteklenmiyor.",
+    "PLATFORM_NOT_SUPPORTED": "Bu işlem bu sanallaştırma platformunda henüz desteklenmiyor.",
     "NOT_PROXMOX": "Bu adreste Proxmox VE API’si yanıt vermedi. Adresi ve portu (varsayılan 8006) denetleyin.",
     "PROXMOX_ERROR": "Proxmox VE isteği reddetti. Ayrıntı için Proxmox’taki görev günlüğüne bakın.",
     "LAST_SIGN_IN_METHOD": "Bu, kullanıcının tek giriş yolu; önce bir parola ya da başka bir giriş yolu olmalı.",
@@ -218,7 +220,7 @@
     "YOU_CANNOT_REMOVE_YOURSELF": "Kendinizi silemezsiniz.",
     "YOU_CANNOT_IMPERSONATE_ADMINS": "Yöneticiler adına giriş yapılamaz.",
     "BANNED_USER": "Hesabınız yasaklandı.",
-    "FIREWALL_NOT_SUPPORTED": "Bu konum firewall uygulayamıyor (distributed switch'li vCenter gerekir).",
+    "FIREWALL_NOT_SUPPORTED": "Bu konum firewall uygulayamıyor: sanallaştırma platformu ya da ağ yapısı desteklemiyor (VMware'de distributed switch'li vCenter gerekir).",
     "FIREWALL_LIMIT": "Bir sunucuya en fazla 5 firewall bağlanabilir.",
     "FIREWALL_IN_USE": "Silmeden önce firewall'u sunuculardan ayırın.",
     "FIREWALL_NEEDS_DVS": "Sunucunun ağ kartı distributed switch üzerinde değil; firewall uygulanamıyor. Sağlayıcınıza başvurun.",
@@ -370,7 +372,20 @@
     "SCAN_NOT_RUNNING": "Bu tarama zaten bitmiş.",
     "SCAN_INTERRUPTED": "Panel yeniden başlatıldığı için tarama yarıda kaldı.",
     "TOKEN_ADDRESS_NOT_ALLOWED": "Bu API anahtarı bu IP adresinden kullanılamaz.",
-    "ENDPOINT_CHANGED": "Bu adres başka bir ESXi/vCenter olarak yanıt veriyor. Kaynak havuzları ve imajlar bu bağlantının envanterini kullandığı için aynı sunucu kalmalı; diğerini yeni bağlantı olarak ekleyin."
+    "ENDPOINT_CHANGED": "Bu adres başka bir ESXi/vCenter olarak yanıt veriyor. Kaynak havuzları ve imajlar bu bağlantının envanterini kullandığı için aynı sunucu kalmalı; diğerini yeni bağlantı olarak ekleyin.",
+    "NO_GUEST_AGENT": "Sunucunun içinde misafir ajanı çalışmıyor; bu işlem panelden yapılamıyor. Ajanı sunucuya kurup başlatın, sonra yeniden deneyin.",
+    "ISO_SIZE_UNKNOWN": "ISO'nun boyutu belirlenemedi: adres boyutu bildirmiyor. Doğrudan indirme bağlantısı kullanın.",
+    "ISO_INCOMPLETE": "ISO eksik indirildi. Yeniden deneyin.",
+    "SHUTDOWN_TIMEOUT": "Sunucu zamanında kapanmadı; işletim sistemi isteği yok saydı. Zorla kapatmayı kullanabilirsiniz.",
+    "NOT_WHILE_IMPERSONATING": "Başka bir kullanıcı olarak oturum açmışken API anahtarı oluşturulamaz. Önce kendi hesabınıza dönün.",
+    "E_WINDOW_NEVER": "Bakım penceresi saatlik zamanlayıcının çalıştığı hiçbir anı içermiyor. Pencereyi en az bir saat on dakika yapın.",
+    "E_BACKUP_VERIFY": "Yedek dosyası yazıldıktan sonra geri okunamadı (disk dolu olabilir mi?).",
+    "E_BACKUP_WRITE": "Yedek dosyası yazılamadı. Yedek klasöründeki boş alanı ve izinleri kontrol edin.",
+    "E_UPDATE_CHECKOUT": "Yeni sürüm alınamadı (git checkout). Kurulum klasöründeki yerel değişiklikler engelliyor olabilir.",
+    "E_RESTORE_DB_DOWN": "Veritabanı çalışmıyor; geri yükleme yapılamadı. Servisleri başlatıp yeniden deneyin.",
+    "E_RESTORE_DUMP": "Yedekteki veritabanı dökümü okunamadı. Yedek bozuk ya da yedek anahtarı yanlış olabilir.",
+    "E_RESTORE_NO_SAFETY": "Mevcut verinin güvenlik kopyası alınamadığı için geri yükleme başlatılmadı. Hiçbir şey değiştirilmedi.",
+    "UPDATE_SKIPPED": "Otomatik güncelleme bu sürümü atladı; çünkü daha önce bir kez başarısız oldu. Nedeni giderince elle güncelleyin."
   },
   "Auth": {
     "required": "zorunlu",
@@ -510,7 +525,9 @@
     },
     "generate": "Güçlü parola oluştur",
     "generatedCopied": "Parola panoya kopyalandı; parola yöneticinize kaydedin.",
-    "generatedShown": "Parola görünür hâlde; bir yere kaydedin."
+    "generatedShown": "Parola görünür hâlde; bir yere kaydedin.",
+    "registrationClosed": "Kayıt kapalı",
+    "registrationClosedHelp": "Yeni hesapları yönetici oluşturur. Hesabınız varsa giriş yapın."
   },
   "fieldErrors": {
     "INVALID_EMAIL": "Geçerli bir e-posta adresi girin.",
@@ -641,7 +658,8 @@
     "TOO_MANY_ADDRESSES": "Toplam 4096 adresi aşıyor; blokları bölün.",
     "EXPIRY_REQUIRED": "Yönetici bitiş tarihi koymayı zorunlu kıldı.",
     "EXPIRY_TOO_LONG": "Yöneticinin izin verdiği en uzun süreyi aşıyor.",
-    "PASSWORD_REQUIRED_FOR_NEW_ADDRESS": "Adres veya port değişince parolayı yeniden yazın."
+    "PASSWORD_REQUIRED_FOR_NEW_ADDRESS": "Adres veya port değişince parolayı yeniden yazın.",
+    "INVALID_USERNAME": "E-posta adresinizi ya da geçerli bir kullanıcı adı girin (3–30 harf, rakam, nokta, tire veya alt çizgi)."
   },
   "Setup": {
     "title": "Kurulum sihirbazı",
@@ -872,7 +890,22 @@
       "endpointHelp": "Proxmox VE web arayüzünün adresi (kümede herhangi bir düğüm). Varsayılan port 8006.",
       "usernameHelp": "Alanıyla birlikte kullanıcı (root@pam) ya da bir API anahtarı (kullanici@pve!anahtar-adi).",
       "passwordHelp": "Kullanıcının parolası; API anahtarı kullanıyorsanız anahtarın gizli değeri.",
-      "verify": "Parmak izini Proxmox düğümünde şu komutla karşılaştırın:"
+      "verify": "Parmak izini Proxmox düğümünde şu komutla karşılaştırın:",
+      "hostHelp": "Proxmox VE düğümünün adı ya da IP'si (kümede herhangi bir düğüm). Platform sunucusundan erişilebilmeli.",
+      "portHelp": "Varsayılan 8006.",
+      "xcpngHostHelp": "Havuz yöneticisinin (master) ya da tek hostun adı veya IP'si. Platform sunucusundan erişilebilmeli.",
+      "xcpngPortHelp": "Varsayılan 443.",
+      "xcpngPasswordHelp": "Kullanıcının parolası. Şifreli saklanır; tarayıcıya hiçbir zaman geri gönderilmez ve loglanmaz.",
+      "ovirtHostHelp": "oVirt Engine'in adı (yönetim arayüzünün açıldığı ad). Platform sunucusundan erişilebilmeli.",
+      "ovirtPortHelp": "Varsayılan 443.",
+      "ovirtPasswordHelp": "Kullanıcının parolası. Şifreli saklanır; tarayıcıya hiçbir zaman geri gönderilmez ve loglanmaz.",
+      "hypervHostHelp": "Hyper-V hostunun adı ya da IP'si. Platform sunucusundan WinRM (HTTPS) ile erişilebilmeli.",
+      "hypervPortHelp": "Varsayılan 5986 (HTTPS üzerinden WinRM).",
+      "hypervPasswordHelp": "Hesabın parolası. Şifreli saklanır; tarayıcıya hiçbir zaman geri gönderilmez ve loglanmaz.",
+      "libvirtHostHelp": "KVM hostunun adı ya da IP'si. Platform sunucusundan SSH ile erişilebilmeli.",
+      "libvirtPortHelp": "Varsayılan 22 (SSH).",
+      "incusHostHelp": "Incus (ya da LXD) sunucusunun veya kümenin herhangi bir üyesinin adı ya da IP'si. Platform sunucusundan erişilebilmeli.",
+      "incusPortHelp": "Varsayılan 8443."
     },
     "eyebrow": "YÖNETİM · VMWARE",
     "title": "ESXi ve vCenter bağlantıları",
@@ -975,6 +1008,8 @@
       "VIRTINST_MISSING": "Hostta virt-clone ve virt-xml yok: sunucu oluşturulamaz. virtinst paketini kurup bağlantıyı yenileyin.",
       "NO_IMAGES": "Sunucunun imaj deposu boş: sunucu oluşturmak için önce bir imaj indirin (incus image copy images:ubuntu/24.04/cloud local: --vm --alias ubuntu-24).",
       "PRIVILEGES_UNREADABLE": "Servis hesabının yetkileri okunamadı; işlemler kullanılamaz görünür.",
+      "GUEST_AGENT_NOT_PERMITTED": "Hesapta konuk aracı yetkisi yok (Proxmox VE 8 ve öncesinde VM.Monitor; Proxmox VE 9’da VM.GuestAgent.* yetkileri). Bu yetki olmadan panel sunucunun hazır olduğunu anlayamaz, adreslerini okuyamaz ve içinde komut çalıştıramaz.",
+      "GUEST_NIC_NAME_ETH0": "oVirt Engine ağ ayarlarını eth0 adlı arayüz için yazar. Arayüzü başka adla gelen imajlar (ens3, enp1s0) adres alamaz: arayüzü eth0 olarak adlandıran imajlar kullanın (net.ifnames=0).",
       "VERSION_LEGACY": "Bu vSphere sürümü (7.0 öncesi) üreticinin desteği dışında ve kullandığımız kütüphanece resmî olarak desteklenmiyor. Temel işlemler çalışır; güvenlik güncellemesi almadığını unutmayın.",
       "VERSION_END_OF_SUPPORT": "Bu vSphere sürümünün genel desteği sona erdi (6.7 ve 7.0). Çalışmaya devam eder; 8.0 veya üstüne yükseltmeniz önerilir.",
       "CUSTOMIZATION_GUESTINFO": "vCenter 7.0 U3 öncesinde yerleşik cloud-init kişiselleştirmesi yok. Yeni sunucular cloud-init verisini guestinfo üzerinden alır; şablonda cloud-init 21.3 veya üstü ve VMware veri kaynağı açık olmalı.",
@@ -992,7 +1027,8 @@
       "deleteVm": "Silme",
       "snapshot": "Snapshot",
       "console": "Konsol",
-      "automationApi": "vCenter Automation REST API"
+      "automationApi": "vCenter Automation REST API",
+      "firewall": "Firewall"
     },
     "capacityTitle": "Fiziksel kapasite",
     "capacityNote": "Hostların ve datastore'ların gerçek değerleri. Yönetim payı, satışa açılan ve rezerve kapasite Yönetim → Katalog'da kaynak havuzu başına gösterilir.",
@@ -1401,7 +1437,8 @@
       "plan": "Bir paket ya da özel kaynak seçin",
       "name": "Geçerli ve kullanılmayan bir sunucu adı girin",
       "keys": "En az bir SSH anahtarı seçin"
-    }
+    },
+    "passwordGeneratedNotCopied": "Güçlü bir parola üretildi ama panoya kopyalanamadı. Alanda gösterip not edin."
   },
   "Catalog": {
     "eyebrow": "YÖNETİM · KATALOG",
@@ -2303,7 +2340,7 @@
       "nowConfirm": "Sunucu, diskleri ve yedeklenmemiş tüm verisi beklemeden silinir. Bu işlem geri alınamaz.",
       "badge": "Silinecek · {when}"
     },
-    "shutdownNoTools": "VMware Tools yanıt vermiyor; düzgün kapatma isteği işletim sistemine ulaşmaz. Hemen durması gerekiyorsa Zorla kapat'ı kullanın.",
+    "shutdownNoTools": "Misafir ajanı yanıt vermiyor; düzgün kapatma isteği işletim sistemine ulaşmaz. Hemen durması gerekiyorsa Zorla kapat'ı kullanın.",
     "failedTicket": {
       "link": "Bunu destekle paylaş",
       "subject": "{name}: {kind} başarısız oldu",
@@ -2354,7 +2391,10 @@
       "E_UPDATE_FETCH": "sürümler alınamadı",
       "E_UPDATE_INCOMPATIBLE": "o sürüm, uygulanmış bir migration'ı içermiyor (veritabanı geri alınamaz)",
       "E_UPDATE_FAILED": "yeni sürüm hazır olmadı",
-      "W_UPDATE_BUSY": "çalışan işlemler vardı; bir sonraki saatte yeniden denenir"
+      "W_UPDATE_BUSY": "çalışan işlemler vardı; bir sonraki saatte yeniden denenir",
+      "E_BACKUP_WRITE": "yedek dosyası yazılamadı (boş alan, izinler?)",
+      "E_UPDATE_CHECKOUT": "yeni sürüm alınamadı (git checkout)",
+      "UPDATE_SKIPPED": "atlandı: bu sürüm daha önce başarısız oldu"
     },
     "versionLabel": "Sürüm",
     "lastBackupLabel": "Son yedek",
@@ -2885,7 +2925,7 @@
   },
   "Metrics": {
     "title": "Canlı performans",
-    "intro": "VMware’den 20 saniyelik örnekler, son 15 dakika.",
+    "intro": "Sanallaştırma platformundan 20 saniyelik örnekler, son 15 dakika.",
     "offline": "Sunucu çalışmıyor.",
     "offlineHelp": "Grafikler sunucu açıkken görünür.",
     "resume": "Sürdür",
@@ -2896,7 +2936,8 @@
     "disk": "Disk",
     "noSamples": "Henüz örnek yok; birkaç dakika içinde görünür.",
     "footer": "{n} örnek, {interval} saniye aralıkla",
-    "uptime": "çalışma süresi {h} sa {m} dk"
+    "uptime": "çalışma süresi {h} sa {m} dk",
+    "notMeasured": "Bu sunucu için ölçüm gelmiyor. Sunucu birkaç dakikadan uzun süredir çalışıyorsa sanallaştırma platformu canlı performans verisi sağlamıyordur."
   },
   "Notify": {
     "title": "Bildirim tercihleri",
@@ -3420,7 +3461,8 @@
     "newFilter": "Son 7 günde katılan",
     "revokeAllBody": "{email} {n, plural, one {oturumundan} other {# oturumunun hepsinden}} çıkarılır ve yeniden giriş yapması gerekir.",
     "impersonateTitle": "{email} olarak girilsin mi?",
-    "impersonateBody": "Siz durdurana kadar bu sekme paneli onun gördüğü gibi gösterir. Orada yaptıklarınız onun adına yapılır ve denetim kaydına yazılır."
+    "impersonateBody": "Siz durdurana kadar bu sekme paneli onun gördüğü gibi gösterir. Orada yaptıklarınız onun adına yapılır ve denetim kaydına yazılır.",
+    "passwordSetNotCopied": "Parola değiştirildi ama panoya kopyalanamadı. Bu pencereyi kapatmadan önce alandan kopyalayın."
   },
   "Roles": {
     "eyebrow": "Kişiler",
@@ -5293,7 +5335,8 @@
       "ok": "Aylık tutar {monthly} · bütçe {amount} (%{pct})",
       "near": "Bütçenin %{pct} kadarı kullanılıyor: {monthly} / {amount}",
       "over": "Bütçe aşıldı: aylık {monthly}, bütçe {amount}"
-    }
+    },
+    "notMeasured": "Bu sunucu için CPU ölçümü gelmiyor; bu yüzden boyut önerisi yok: sanallaştırma platformu bu veriyi sağlamıyor."
   },
   "Shortcuts": {
     "title": "Klavye kısayolları",
@@ -5757,7 +5800,8 @@
     "exitFullscreen": "Tam ekrandan çık",
     "shortcuts": "Ctrl+Shift+C kopyalar, Ctrl+Shift+V yapıştırır. Metin seçiliyken Ctrl+C de kopyalar; seçim yokken komutu durdurur.",
     "endTitle": "{email} kullanıcısının terminal oturumu sonlandırılsın mı?",
-    "endBody": "Terminali hemen kapanır; içinde çalışan komutlar durur."
+    "endBody": "Terminali hemen kapanır; içinde çalışan komutlar durur.",
+    "switchFailed": "Terminal açılıp kapatılamadı. Sistem sayfasından host ajanını kontrol edip yeniden deneyin."
   },
   "Chat": {
     "title": "Mesajlaşma uygulamaları",
@@ -6953,9 +6997,9 @@
     "perMonth": "ay",
     "endsOn": "{date} tarihinde bitiyor",
     "renewsOn": "{date} tarihinde yenilenir",
-    "autoRenew": "Otomatik yenile",
-    "autoRenewOn": "Otomatik yenilenecek.",
-    "autoRenewOff": "Yenilenmeyecek; bunun için yeni fatura kesilmez.",
+    "autoRenew": "Yenilemeleri otomatik öde",
+    "autoRenewOn": "Yenilemeler bakiyenizden ya da kayıtlı kartınızdan tahsil edilir.",
+    "autoRenewOff": "Otomatik tahsilat yapılmaz: her dönem bir fatura kesilir, kendiniz ödersiniz. Ödenmezse sunucu askıya alınır.",
     "keep": "Devam etsin",
     "kept": "Abonelik devam ediyor.",
     "cancelAtEnd": "İptal et",
@@ -7065,7 +7109,8 @@
       "CARD_DECLINED": "Banka kartı reddetti.",
       "INSUFFICIENT_FUNDS": "Yetersiz bakiye.",
       "CANCELLED_BY_CUSTOMER": "Ödeme sayfasında vazgeçildi.",
-      "PROVIDER_ERROR": "Ödeme kuruluşu yanıt vermedi."
+      "PROVIDER_ERROR": "Ödeme kuruluşu yanıt vermedi.",
+      "EXPIRED": "Ödeme süresinde tamamlanmadı; ödeme sayfasının süresi doldu."
     },
     "invoiceTitle": "Fatura",
     "paidToast": "Ödemeniz alındı. Teşekkür ederiz!",
@@ -7412,7 +7457,8 @@
     "counted": "Son hesaplama {at}",
     "notYet": "Henüz hesaplanmadı; ilk değerler sunucu çalıştıktan birkaç dakika sonra görünür.",
     "throttled": "Hız sınırlandı",
-    "throttledHelp": "Bu ayın trafiği bittiği için hız ay sonuna kadar sınırlandı. Daha büyük bir pakete geçmek birkaç dakika içinde kaldırır."
+    "throttledHelp": "Bu ayın trafiği bittiği için hız ay sonuna kadar sınırlandı. Daha büyük bir pakete geçmek birkaç dakika içinde kaldırır.",
+    "notMeasured": "Sayılmadı. Sunucu bir süredir çalışıyorsa sanallaştırma platformu ağ trafiği verisi sağlamıyordur."
   },
   "Import": {
     "title": "İçe aktarılacak VM'ler",
@@ -8287,7 +8333,10 @@
     },
     "toolsInstall": "Konukta kurmak için çalıştırın:",
     "toolsWindows": "Windows'ta VMware Tools'u kurulum dosyasıyla kurun (destek ekibi VMware Tools ISO'sunu CD sürücüsüne takabilir).",
-    "toolsOther": "open-vm-tools paketini konuğun paket yöneticisiyle kurun ve hizmetini başlatın."
+    "toolsOther": "open-vm-tools paketini konuğun paket yöneticisiyle kurun ve hizmetini başlatın.",
+    "agentNeutral": "Sanallaştırma platformunun misafir ajanı sunucunun içinde yanıt vermiyor. Ajanı sunucuya kurup başlatın; bu platformun hangi paketi kullandığını destek ekibi söyleyebilir.",
+    "agentQemuWindows": "Windows'ta QEMU guest agent'ı virtio-win sürücü ISO'sundan kurun (destek ekibi ISO'yu CD sürücüsüne takabilir).",
+    "agentQemuOther": "qemu-guest-agent paketini sunucunun paket yöneticisiyle kurun ve servisini başlatın."
   },
   "ConnectCheck": {
     "title": "Bağlantı denetimi",
@@ -8319,13 +8368,14 @@
     },
     "guest": {
       "ok": "Konuk kendi adresini kullanıyor: {address}.",
-      "noTools": "VMware Tools (open-vm-tools) çalışmadığı için konuk adres bildirmiyor; diğer denetimler yine geçerli.",
+      "noTools": "Misafir ajanı çalışmadığı için sunucu adres bildirmiyor; diğer kontroller yine geçerli.",
       "noIp": "Konuğun henüz IP adresi yok; hâlâ açılıyor olabilir.",
       "mismatch": "Konuk, {expected} yerine {actual} adresini kullanıyor. Sunucunun içindeki ağ ayarını düzeltin (konsol ağ olmadan da çalışır)."
     },
     "gateway": {
       "ok": "Ağ geçidi tanımlı: {gateway}.",
-      "none": "Konuğun varsayılan ağ geçidi yok; kendi ağının dışından yanıt veremez."
+      "none": "Konuğun varsayılan ağ geçidi yok; kendi ağının dışından yanıt veremez.",
+      "unknown": "Varsayılan ağ geçidi bu platformda sunucunun içinden okunamadı. Sunucu başka ağlara ulaşamıyorsa sunucunun içinden kontrol edin."
     },
     "address": {
       "none": "Sunucunun genel IP adresi yok."
@@ -8772,5 +8822,11 @@
     "logNoMatch": "Süzgece uyan satır yok.",
     "logEmpty": "Bu kaynakta satır yok.",
     "logCount": "{shown} / {total} satır gösteriliyor"
+  },
+  "Clipboard": {
+    "failed": "Kopyalanamadı: tarayıcı burada panoya izin vermiyor (panel HTTPS üzerinde olmayabilir). Metni seçip kendiniz kopyalayın."
+  },
+  "Capabilities": {
+    "unavailable": "Bu platformda kullanılamıyor."
   }
 }

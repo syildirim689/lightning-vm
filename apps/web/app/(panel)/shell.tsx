@@ -21,7 +21,7 @@ import NotificationBell from '../../components/notification-bell';
 import TaskManager from '../../components/task-manager';
 import { authClient, signOut } from '../../lib/auth-client';
 import { can, isStaff, type Permission } from '../../lib/permissions';
-import { useApiQuery } from '../../lib/query';
+import { useApiQuery, useBillingSummary, useResellerAllocation } from '../../lib/query';
 import type { Branding, User } from '../../lib/session';
 import { mayLeave } from '../../lib/edits';
 
@@ -78,14 +78,10 @@ function NavCount({ kind }: { kind: 'waiting' | 'queue' | 'unpaid' }) {
   </span>;
 }
 
-// Under ['notifications'] too: a payment or a new invoice refreshes the count.
-const useBillingSummary = () => useApiQuery<{ enabled: boolean; open?: { n: number } }>(['notifications', 'billing-summary'], '/billing/summary', { refetchInterval: 60_000 }).data;
-
 function NavList({ user, onNavigate }: { user: User; onNavigate?: () => void }) {
   const t = useTranslations('Nav');
   const billing = useBillingSummary();
-  // Shown only to resellers: the summary answers 403 for everyone else.
-  const reseller = useApiQuery<{ allocation: object | null }>(['reseller', 'summary'], '/reseller/summary').data?.allocation;
+  const reseller = useResellerAllocation();
   const path = usePathname();
   const active = (i: Item) => (i.exact ? path === i.href : path === i.href || path.startsWith(`${i.href}/`));
   // Groups folded away: "More tools" for staff, and a staff member's own workspace (their customer side). Each opens
@@ -134,7 +130,8 @@ function NavList({ user, onNavigate }: { user: User; onNavigate?: () => void }) 
 function UserMenu({ user }: { user: User }) {
   const t = useTranslations('Nav');
   const router = useRouter();
-  const out = async () => { await signOut(); router.replace('/login'); router.refresh(); };
+  // A full page load after signing out: nothing this account loaded stays in memory for the next person.
+  const out = async () => { await signOut(); window.location.assign('/login'); };
   const initials = (user.name || user.email.split('@')[0]).split(/[\s._-]+/).filter(Boolean).slice(0, 2).map((w) => w[0]!.toUpperCase()).join('') || '?';
   return <Dropdown>
     <Button variant="ghost" size="sm" aria-label={t('userMenu')} className="gap-2">
@@ -154,7 +151,6 @@ function UserMenu({ user }: { user: User }) {
 // Shown while a staff member is signed in as this user; one click returns to their own account.
 function ImpersonationBanner({ user }: { user: User }) {
   const t = useTranslations('Nav');
-  const router = useRouter();
   const [busy, setBusy] = useState(false);
   if (!user.impersonatedBy) return null;
   return <div role="status" className="flex flex-wrap items-center justify-center gap-3 bg-warning px-4 py-2 text-sm font-medium text-warning-foreground">
@@ -163,7 +159,7 @@ function ImpersonationBanner({ user }: { user: User }) {
       setBusy(true);
       const r = await authClient.admin.stopImpersonating().catch((e: unknown) => ({ error: e }));
       if (r?.error) { setBusy(false); toast.danger(t('stopImpersonatingFailed')); return; }
-      router.replace('/admin/users'); router.refresh();
+      window.location.assign('/admin/users');
     }}>{t('stopImpersonating')}</Button>
   </div>;
 }

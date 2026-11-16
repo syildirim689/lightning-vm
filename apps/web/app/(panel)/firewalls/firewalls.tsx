@@ -13,6 +13,7 @@ import { apiFetch, useErrorText } from '../../../lib/api';
 import { useMe } from '../../../lib/me';
 import { can } from '../../../lib/permissions';
 import { useApiQuery } from '../../../lib/query';
+import { supports, usePlatformHint, type Platformed } from '../../../components/capabilities';
 import { fold } from '../../../lib/note-line';
 import { openDbPorts, openToAll, statusTone, templates, type Firewall, type Limits } from './model';
 
@@ -23,8 +24,9 @@ export default function Firewalls() {
   const [creating, setCreating] = useState<string[] | null>(null);
   const manage = can(me?.permissions, 'firewalls.manage');
   const list = q.data?.firewalls;
-  const mine = useApiQuery<{ servers: { id: string; name: string; state: string; firewallCount?: number }[] }>(['servers'], '/servers').data?.servers;
-  const unprotected = (mine ?? []).filter((s) => !s.firewallCount && !['deleted', 'deleting'].includes(s.state));
+  const mine = useApiQuery<{ servers: ({ id: string; name: string; state: string; firewallCount?: number } & Platformed)[] }>(['servers'], '/servers').data?.servers;
+  // A server whose platform cannot enforce a firewall is not "unprotected by choice": it is left out of the warning.
+  const unprotected = (mine ?? []).filter((s) => !s.firewallCount && !['deleted', 'deleting'].includes(s.state) && supports(s, 'firewall'));
   const attachedAll = (list ?? []).flatMap((f) => f.servers);
   const failed = attachedAll.filter((s) => s.status === 'failed').length;
   const risky = (list ?? []).filter((f) => openDbPorts(f.rules).length).length;
@@ -104,7 +106,8 @@ function CreateFirewall({ limits, initialServers, existing, onClose }: { limits:
   const { error, field } = useErrorText();
   const router = useRouter();
   const client = useQueryClient();
-  const servers = useApiQuery<{ servers: { id: string; name: string; state: string }[] }>(['servers'], '/servers').data?.servers ?? [];
+  const servers = useApiQuery<{ servers: ({ id: string; name: string; state: string } & Platformed)[] }>(['servers'], '/servers').data?.servers ?? [];
+  const hint = usePlatformHint();
   const [name, setName] = useState('');
   const [template, setTemplate] = useState('web');
   const [serverIds, setServerIds] = useState<string[]>(initialServers);
@@ -137,7 +140,7 @@ function CreateFirewall({ limits, initialServers, existing, onClose }: { limits:
               ...existing.map((f) => ({ id: `copy:${f.id}`, label: t('copyOf', { name: f.name }), description: t('ruleCount', { in: f.rules.filter((r) => r.direction === 'in').length, out: f.rules.filter((r) => r.direction === 'out').length }) }))]}/>
           <div className="flex flex-wrap gap-1.5">{rules.map((r, i) => <Chip key={i} size="sm" variant="soft">{r.description || r.protocol.toUpperCase()}{r.port ? ` ${r.port}` : ''}</Chip>)}</div>
           {servers.filter((s) => s.state !== 'deleted').length > 0 && <CheckboxList label={t('applyTo')} value={serverIds} onChange={setServerIds} error={field(fields.serverIds)}
-            help={t('applyHelp', { n: limits.firewallsPerServer })} options={servers.filter((s) => s.state !== 'deleted').map((s) => ({ id: s.id, label: s.name }))}/>}
+            help={t('applyHelp', { n: limits.firewallsPerServer })} options={servers.filter((s) => s.state !== 'deleted').map((s) => ({ id: s.id, label: supports(s, 'firewall') ? s.name : `${s.name} · ${hint}`, isDisabled: !supports(s, 'firewall') }))}/>}
         </Modal.Body>
         <Modal.Footer className="flex justify-end gap-2"><Button variant="tertiary" onPress={onClose}>{t('cancel')}</Button><Button isPending={busy} isDisabled={!name.trim()} onPress={save}>{t('create')}</Button></Modal.Footer>
       </Modal.Dialog>

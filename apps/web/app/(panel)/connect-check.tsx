@@ -8,13 +8,14 @@ import { useTranslations } from 'next-intl';
 import { I } from '../../components/icon';
 import { Section } from '../../components/ui';
 import { useApiQuery } from '../../lib/query';
-import { allows, bare, loginPort, usesAddress } from '../../lib/connect';
+import { allows, bare, guestAgent, loginPort, usesAddress } from '../../lib/connect';
+import type { Platformed } from '../../components/capabilities';
 import type { Rule } from './firewalls/model';
 import { ToolsHint, type VmDetailsData } from './vm-details';
 
 export type CheckState = 'ok' | 'warn' | 'fail' | 'unknown';
 export type Check = { key: string; state: CheckState; text: string; href?: string; link?: string; extra?: React.ReactNode };
-type Target = { id: string; state: string; powerState: string; address: string | null; imageName: string; firewallStatus?: 'applied' | 'pending' | 'failed' };
+type Target = { id: string; state: string; powerState: string; address: string | null; imageName: string; firewallStatus?: 'applied' | 'pending' | 'failed' } & Platformed;
 
 const icon = { ok: <I name="circle-check" size={18} className="text-success"/>, warn: <I name="triangle-alert" size={18} className="text-warning"/>,
   fail: <I name="circle-x" size={18} className="text-danger"/>, unknown: <I name="circle-help" size={18} className="text-muted"/> };
@@ -42,11 +43,13 @@ export function ConnectCheck({ server: s }: { server: Target }) {
     const guestIps = bare(d.guest.ips);
     if (!on) { /* nothing to read from a stopped guest */ }
     else if (!guestIps.length) checks.push({ key: 'guest', state: 'unknown', text: d.tools.runningStatus === 'guestToolsRunning' ? t('guest.noIp') : t('guest.noTools'),
-      extra: d.tools.runningStatus === 'guestToolsRunning' ? undefined : <ToolsHint os={`${d.guest.os || d.configuredOs} ${d.guestId} ${s.imageName}`}/> });
+      extra: d.tools.runningStatus === 'guestToolsRunning' ? undefined : <ToolsHint os={`${d.guest.os || d.configuredOs} ${d.guestId} ${s.imageName}`} platform={s.platform}/> });
     else if (!usesAddress(guestIps, s.address)) checks.push({ key: 'guest', state: 'fail', text: t('guest.mismatch', { expected: s.address ?? '', actual: guestIps.join(', ') }) });
     else checks.push({ key: 'guest', state: 'ok', text: t('guest.ok', { address: s.address ?? guestIps[0] }) });
+    // No gateway reported: a fault only where the platform really reads it from the guest (VMware). Elsewhere, or
+    // while the platform is not known, it only means "could not be read".
     if (on && guestIps.length) checks.push(d.guest.gateways.length ? { key: 'gateway', state: 'ok', text: t('gateway.ok', { gateway: d.guest.gateways.join(', ') }) }
-      : { key: 'gateway', state: 'warn', text: t('gateway.none') });
+      : guestAgent(s.platform) === 'vmware' ? { key: 'gateway', state: 'warn', text: t('gateway.none') } : { key: 'gateway', state: 'unknown', text: t('gateway.unknown') });
   }
   if (!s.address) checks.push({ key: 'address', state: 'fail', text: t('address.none') });
   if (!fw) checks.push({ key: 'firewall', state: 'unknown', text: t('firewall.loading') });
@@ -59,7 +62,7 @@ export function ConnectCheck({ server: s }: { server: Target }) {
   }
 
   const problems = checks.filter((c) => c.state === 'fail' || c.state === 'warn').length;
-  const pending = checks.some((c) => c.state === 'unknown' && c.key !== 'guest');
+  const pending = checks.some((c) => c.state === 'unknown' && c.key !== 'guest' && c.key !== 'gateway');
   const summary = problems ? t('summary.problems', { n: problems }) : pending ? t('summary.checking') : t('summary.ok', { service });
   const asText = () => [`${t('title')}: ${summary}`, ...checks.map((c) => `[${t(`state.${c.state}`)}] ${c.text}`)].join('\n');
 

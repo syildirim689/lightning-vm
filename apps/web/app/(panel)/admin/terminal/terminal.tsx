@@ -40,7 +40,18 @@ export default function Terminal() {
   const refit = useRef<() => void>(undefined);
   const [fontSize, setFontSize] = useState(14);
   const [full, setFull] = useState(false);
-  useEffect(() => { if (s?.enabled && waiting) setWaiting(false); }, [s?.enabled, waiting]);
+  // After a switch was asked for: wait until the terminal is in the state asked for. When the agent finished (or
+  // never took the request up within a minute) without getting there, the wait ends too and says so; the button
+  // must not stay busy for ever.
+  const asked = useRef<{ enabled: boolean; at: number; seen: boolean } | null>(null);
+  useEffect(() => {
+    if (!waiting || !s) return;
+    const a = asked.current;
+    if (!a) { if (s.enabled) setWaiting(false); return; }
+    if (s.switching) { a.seen = true; return; }
+    if (s.enabled === a.enabled) { asked.current = null; setWaiting(false); }
+    else if (a.seen || Date.now() - a.at > 60_000) { asked.current = null; setWaiting(false); toast.danger(t('switchFailed')); }
+  }, [s, waiting]); // eslint-disable-line react-hooks/exhaustive-deps
   const alive = useRef(true);
   useEffect(() => { alive.current = true; return () => { alive.current = false; cleanup.current?.(); }; }, []);
   // The font size is a per-browser convenience.
@@ -80,7 +91,7 @@ export default function Terminal() {
   }
 
   async function switchTo(enabled: boolean) {
-    try { await apiFetch('/admin/terminal/switch', { method: 'POST', body: { enabled } }); setWaiting(true); toast.success(enabled ? t('starting') : t('stopping')); }
+    try { await apiFetch('/admin/terminal/switch', { method: 'POST', body: { enabled } }); asked.current = { enabled, at: Date.now(), seen: false }; setWaiting(true); toast.success(enabled ? t('starting') : t('stopping')); }
     catch (e) { toast.danger(error(e)); }
     client.invalidateQueries({ queryKey: ['admin', 'terminal'] });
   }
@@ -117,9 +128,12 @@ export default function Terminal() {
     ws.binaryType = 'arraybuffer';
     const enc = new TextEncoder();
     const size = () => { try { fit.fit(); if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'resize', cols: term.cols, rows: term.rows })); } catch { /* closed */ } };
-    ws.onopen = () => { setState('open'); size(); term.focus(); };
+    // The gateway refuses a connection without a valid ticket before it is opened (HTTP 401): the browser only
+    // reports a failed handshake, with no reason. That is the same "ticket expired, connect again".
+    let opened = false;
+    ws.onopen = () => { opened = true; setState('open'); size(); term.focus(); };
     ws.onmessage = (e) => term.write(new Uint8Array(e.data as ArrayBuffer));
-    ws.onclose = (e) => { setState('closed'); setReason(reasons.includes(e.reason) ? t(`reason.${e.reason as 'TERMINAL_CLOSED'}`) : t('reason.TERMINAL_CLOSED')); client.invalidateQueries({ queryKey: ['admin', 'terminal'] }); };
+    ws.onclose = (e) => { setState('closed'); setReason(reasons.includes(e.reason) ? t(`reason.${e.reason as 'TERMINAL_CLOSED'}`) : t(opened ? 'reason.TERMINAL_CLOSED' : 'reason.TERMINAL_SESSION_INVALID')); client.invalidateQueries({ queryKey: ['admin', 'terminal'] }); };
     const input = term.onData((d) => { if (ws.readyState === WebSocket.OPEN) ws.send(enc.encode(d)); });
     // A shell reads Enter as a carriage return, as the keyboard sends it.
     typeIn.current = (text) => { if (ws.readyState === WebSocket.OPEN) { ws.send(enc.encode(text.replace(/\n/g, '\r'))); term.focus(); } };

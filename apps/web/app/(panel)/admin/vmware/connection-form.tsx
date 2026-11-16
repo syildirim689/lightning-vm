@@ -13,6 +13,9 @@ type Failure = ApiError & { text: string; certificate?: Certificate; kind?: stri
 export type Summary = { id?: string; product: { kind: string; fullName: string }; writeApi: string; operations: Record<string, boolean>; warnings: string[]; counts: Record<string, number> };
 
 export const fingerprintPairs = (hex: string) => hex.match(/../g)?.join(':').toUpperCase() ?? hex;
+// A fingerprint as people paste it ("AA:BB:…" as shown here, openssl's "sha256 Fingerprint=AA:BB:…", sha256sum's
+// "abc…  -") becomes what the API takes: the 64 hex characters alone, in lower case.
+export const normalizeFingerprint = (text: string) => text.replace(/^.*=/, '').replace(/[^0-9a-f]/gi, '').toLowerCase();
 // Filled in from a network scan (discovery.tsx). A fingerprint seen there is pinned only after the admin compares it.
 export type Prefill = { name: string; host: string; port: string; username: string; mode: 'system' | 'pinned'; sha256: string; kind: 'esxi' | 'vcenter' };
 // Where an admin reads the certificate fingerprint on the endpoint itself.
@@ -52,9 +55,10 @@ export default function ConnectionForm({ onSaved, initial, editing }: { onSaved:
     ...(p === 'incus' && ['', 'root', 'admin@internal'].includes(x.username) && { username: 'default' }),
     // A KVM host is trusted by its SSH host key: there is no certificate authority to choose.
     ...(p === 'libvirt' && x.mode !== 'pinned' && { mode: 'pinned' }), ...((p === 'xcpng' || p === 'libvirt') && !x.username && { username: 'root' }), ...(p === 'ovirt' && !x.username && { username: 'admin@internal' }) }));
-  const bodyOf = (v: Form) => ({ platform: v.platform, name: v.name, host: v.host, port: Number(v.port), username: v.username, password: v.password, apiVersion: v.apiVersion, customization: v.customization,
+  // An emptied port is left out, so the API takes the platform's own default (0 would be refused as invalid).
+  const bodyOf = (v: Form) => ({ platform: v.platform, name: v.name, host: v.host, port: v.port.trim() ? Number(v.port) : undefined, username: v.username, password: v.password, apiVersion: v.apiVersion, customization: v.customization,
     // A KVM host with no fingerprint typed yet is asked for its host key first (the answer is the "trust this key" card).
-    tls: v.platform === 'libvirt' && !v.sha256.trim() ? { mode: 'system' } : { mode: v.mode, ...(v.mode === 'ca' && { caPem: v.caPem }), ...(v.mode === 'pinned' && { sha256: v.sha256 }) }, ...(editing && { connectionId: editing.id }) });
+    tls: v.platform === 'libvirt' && !v.sha256.trim() ? { mode: 'system' } : { mode: v.mode, ...(v.mode === 'ca' && { caPem: v.caPem }), ...(v.mode === 'pinned' && { sha256: normalizeFingerprint(v.sha256) }) }, ...(editing && { connectionId: editing.id }) });
   const body = () => bodyOf(form);
   // Which product the fingerprint command is for: from the failure, the scan or the saved connection; unknown for a new address.
   const kind = other ? form.platform as 'proxmox' | 'xcpng' | 'ovirt' | 'hyperv' | 'libvirt' | 'incus' : knownKind(failure?.kind) ?? knownKind(editing?.kind) ?? knownKind(initial?.kind);
@@ -71,6 +75,8 @@ export default function ConnectionForm({ onSaved, initial, editing }: { onSaved:
   const savePath = editing ? `/admin/vmware/connections/${editing.id}` : '/admin/vmware/connections';
   const err = (k: string) => field(failure?.fields?.[k]);
   const help = (k: string) => t(`form.${k}Help` as 'form.nameHelp');
+  // Address, port and password are explained per platform (Proxmox VE's keys carry no prefix, the others their kind).
+  const platformHelp = (k: 'host' | 'port' | 'password') => t((!other ? `form.${k}Help` : proxmox ? `platform.${k}Help` : `platform.${form.platform}${k[0].toUpperCase()}${k.slice(1)}Help`) as 'form.hostHelp');
 
   return <form className="flex flex-col gap-4" onSubmit={(e) => { e.preventDefault(); if (tested && testedFor === JSON.stringify(body())) void run('save', savePath, onSaved); }} noValidate>
     {!editing && <GuideButton id="vmware"/>}
@@ -94,13 +100,13 @@ export default function ConnectionForm({ onSaved, initial, editing }: { onSaved:
     </div>}
     <FieldGroup title={t('form.groupEndpoint')} description={t(proxmox ? 'platform.endpointHelp' : xcpng ? 'platform.xcpngEndpointHelp' : ovirt ? 'platform.ovirtEndpointHelp' : hyperv ? 'platform.hypervEndpointHelp' : libvirt ? 'platform.libvirtEndpointHelp' : incus ? 'platform.incusEndpointHelp' : 'form.groupEndpointHelp')}>
       <TextInput maxLength={100} label={t('form.name')} value={form.name} onChange={set('name')} error={err('name')} help={help('name')} isRequired/>
-      <TextInput format="hostOrIp" label={t('form.host')} value={form.host} onChange={set('host')} error={err('host')} help={help('host')} isRequired autoComplete="off" spellCheck={false}/>
-      <TextInput format="port" label={t('form.port')} value={form.port} onChange={set('port')} error={err('port')} help={help('port')} autoComplete="off"/>
+      <TextInput format="hostOrIp" label={t('form.host')} value={form.host} onChange={set('host')} error={err('host')} help={platformHelp('host')} isRequired autoComplete="off" spellCheck={false}/>
+      <TextInput format="port" label={t('form.port')} value={form.port} onChange={set('port')} error={err('port')} help={platformHelp('port')} autoComplete="off"/>
     </FieldGroup>
     <FieldGroup title={t('form.groupAccount')} description={t('form.groupAccountHelp')}>
       <TextInput maxLength={200} label={t(incus ? 'platform.incusProject' : 'form.username')} value={form.username} onChange={set('username')} error={err('username')} help={proxmox ? t('platform.usernameHelp') : xcpng ? t('platform.xcpngUsernameHelp') : ovirt ? t('platform.ovirtUsernameHelp') : hyperv ? t('platform.hypervUsernameHelp') : libvirt ? t('platform.libvirtUsernameHelp') : incus ? t('platform.incusProjectHelp') : help('username')} placeholder={incus ? 'default' : proxmox ? 'root@pam' : xcpng || libvirt ? 'root' : ovirt ? 'admin@internal' : hyperv ? 'ALAN\\Administrator' : undefined} isRequired autoComplete="off"/>
       <TextInput revealable label={t(libvirt ? 'platform.libvirtPassword' : incus ? 'platform.incusPassword' : 'form.password')} type="password" value={form.password} onChange={set('password')} error={err('password')}
-        help={editing ? t('form.passwordKeep') : proxmox ? t('platform.passwordHelp') : libvirt ? t('platform.libvirtPasswordHelp') : incus ? t('platform.incusPasswordHelp') : help('password')} placeholder={editing ? t('form.passwordKeepPlaceholder') : undefined} isRequired={!editing} autoComplete="new-password"/>
+        help={editing ? t('form.passwordKeep') : platformHelp('password')} placeholder={editing ? t('form.passwordKeepPlaceholder') : undefined} isRequired={!editing} autoComplete="new-password"/>
     </FieldGroup>
     <FieldGroup title={t(libvirt ? 'platform.libvirtTrust' : 'form.groupTls')} description={t(libvirt ? 'platform.libvirtTrustHelp' : 'form.tlsHelp')} cols={1}>
       {!libvirt && <SelectInput label={t('form.tls')} value={form.mode} onChange={set('mode')} options={(['system', 'ca', 'pinned'] as const).map((m) => ({ id: m, label: t(`tlsMode.${m}`) }))}/>}

@@ -13,6 +13,7 @@ import { Ago, CheckboxList, ConfirmButton, DataTable, FormActions, Mono, Notice,
 import { apiFetch, useErrorText } from '../../../../lib/api';
 import { useMe } from '../../../../lib/me';
 import { useApiQuery } from '../../../../lib/query';
+import { supports, usePlatformHint, type Platformed } from '../../../../components/capabilities';
 import { useUnsaved } from '../../../../lib/unsaved';
 import { anywhere, covers, hasPort, openDbPorts, protocols, quick, statusTone, type Firewall, type Limits, type Rule } from '../model';
 
@@ -168,7 +169,8 @@ function Servers({ firewall, onChanged }: { firewall: Detail; onChanged: () => v
   const t = useTranslations('Firewalls');
   const format = useFormatter();
   const { error } = useErrorText();
-  const mine = useApiQuery<{ servers: { id: string; name: string; state: string }[] }>(['servers'], '/servers').data?.servers ?? [];
+  const mine = useApiQuery<{ servers: ({ id: string; name: string; state: string } & Platformed)[] }>(['servers'], '/servers').data?.servers ?? [];
+  const hint = usePlatformHint();
   const attached = new Set(firewall.servers.map((s) => s.id));
   const candidates = mine.filter((s) => !attached.has(s.id) && !['deleted', 'deleting'].includes(s.state));
   const [pick, setPick] = useState<string[]>([]);
@@ -194,7 +196,7 @@ function Servers({ firewall, onChanged }: { firewall: Detail; onChanged: () => v
           <Button key="a" size="sm" variant="ghost" isDisabled={busy} onPress={() => call(`/firewalls/${firewall.id}/servers/${s.id}`, 'DELETE')}><I name="unlink" size={14}/>{t('detach')}</Button>,
         ]}/>
       {candidates.length > 0 && <div className="flex flex-col gap-3 rounded-xl border border-border p-3">
-        <CheckboxList label={t('applyTo')} value={pick} onChange={setPick} options={candidates.map((s) => ({ id: s.id, label: s.name }))}/>
+        <CheckboxList label={t('applyTo')} value={pick} onChange={setPick} options={candidates.map((s) => ({ id: s.id, label: supports(s, 'firewall') ? s.name : `${s.name} · ${hint}`, isDisabled: !supports(s, 'firewall') }))}/>
         <div><Button size="sm" isPending={busy} isDisabled={!pick.length} onPress={() => call(`/firewalls/${firewall.id}/servers`, 'POST', { serverIds: pick })}><I name="link" size={14}/>{t('attach')}</Button></div>
       </div>}
       <p className="flex flex-wrap items-center gap-1 text-xs text-muted"><Chip size="sm" variant="soft">{t('status.pending')}</Chip>{t('pendingHelp')}</p>

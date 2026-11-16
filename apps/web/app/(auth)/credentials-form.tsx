@@ -17,6 +17,7 @@ import { authClient } from '../../lib/auth-client';
 import { can } from '../../lib/permissions';
 import { useApiQuery } from '../../lib/query';
 import { strongPassword } from '../../lib/password';
+import { copyText } from '../../lib/clipboard';
 import type { PublicConfig, User } from '../../lib/session';
 
 type Mode = 'login' | 'register' | 'setup';
@@ -61,7 +62,7 @@ export function PasswordField({ label, value, onChange, error, help, autoComplet
   async function make() {
     const p = strongPassword();
     onChange(p); setShown(true);
-    setMade(await navigator.clipboard?.writeText(p).then(() => 'copied' as const, () => 'shown' as const) ?? 'shown');
+    setMade(await copyText(p) ? 'copied' : 'shown');
   }
   const [caps, setCaps] = useState(false);
   const capsState = (e: React.KeyboardEvent) => setCaps(e.getModifierState?.('CapsLock') ?? false);
@@ -103,11 +104,11 @@ export const asApiError = (e: { code?: string; status?: number } | null | undefi
 // Where a provider or a sign-in link brings the person back to.
 const here = () => backTo(new URLSearchParams(window.location.search).get('next')) ?? '/';
 
-export async function landed(router: ReturnType<typeof useRouter>) {
+// A full page load, not a client navigation: nothing cached for whoever used this browser before is carried over.
+export async function landed(_router?: ReturnType<typeof useRouter>) {
   const me = await apiFetch<User>('/auth/me');
   // Back to the page the person was sent away from, else their start page.
-  router.replace(backTo(new URLSearchParams(window.location.search).get('next')) ?? (can(me.permissions, 'dashboard.view') ? '/admin' : '/'));
-  router.refresh();
+  window.location.assign(backTo(new URLSearchParams(window.location.search).get('next')) ?? (can(me.permissions, 'dashboard.view') ? '/admin' : '/'));
 }
 
 // In the setup wizard the token already sits in an HttpOnly cookie (noToken) and the wizard moves on (onDone).
@@ -228,6 +229,11 @@ export default function CredentialsForm({ mode, noToken, onDone }: { mode: Mode;
     await landed(router);
   }
 
+  // Registration closed (when the API says so in /public/config): say so instead of a form that is always refused.
+  if (mode === 'register' && cfg?.registration === false) return <div className="flex flex-col gap-4">
+    <Notice tone="default" title={t('registrationClosed')}>{t('registrationClosedHelp')}</Notice>
+    <NextLink href="/login" className="text-sm font-medium text-accent hover:underline">{t('loginTitle')}</NextLink>
+  </div>;
   if (secondStep) return <SecondFactor methods={Array.isArray(secondStep) ? secondStep : undefined} onBack={() => setSecondStep(false)}/>;
   if (emailCode) return <EmailCode initialEmail={values.email} onBack={() => setEmailCode(false)}/>;
   if (linkMode) return <MagicLink initialEmail={values.email.includes('@') ? values.email : ''} onBack={() => setLinkMode(false)}/>;
@@ -396,6 +402,9 @@ function EmailCode({ initialEmail, onBack }: { initialEmail: string; onBack: () 
   const t = useTranslations('Auth');
   const { error, field } = useErrorText();
   const router = useRouter();
+  // Sending the code is protected like the sign-in form: the same captcha, asked again for every send.
+  const cfg = useApiQuery<PublicConfig>(['public-config'], '/public/config').data;
+  const captcha = useCaptcha(cfg?.captcha?.use.signIn ? cfg.captcha : null, 'login');
   const [email, setEmail] = useState(initialEmail);
   const [sent, setSent] = useState(false);
   const [code, setCode] = useState('');
@@ -407,10 +416,14 @@ function EmailCode({ initialEmail, onBack }: { initialEmail: string; onBack: () 
     e?.preventDefault();
     if (!z.string().email().safeParse(email).success) { setEmailError(field('INVALID_EMAIL')); return; }
     setFailure(undefined); setBusy(true);
-    const r = await authClient.emailOtp.sendVerificationOtp({ email, type: 'sign-in' });
-    setBusy(false);
-    if (r.error) { setFailure(error(asApiError(r.error))); return; }
-    setSent(true); cooldown.start();
+    try {
+      const token = captcha.active ? await captcha.getToken() : undefined;
+      if (captcha.active && !token) { setFailure(t('captchaRequired')); return; }
+      const r = await authClient.emailOtp.sendVerificationOtp({ email, type: 'sign-in', fetchOptions: token ? { headers: { 'x-captcha-response': token } } : undefined });
+      captcha.reset();
+      if (r.error) { setFailure(error(asApiError(r.error))); return; }
+      setSent(true); cooldown.start();
+    } finally { setBusy(false); }
   }
   async function verify() {
     if (code.length !== 6 || busy) return;
@@ -425,15 +438,18 @@ function EmailCode({ initialEmail, onBack }: { initialEmail: string; onBack: () 
       <span aria-hidden className="grid size-11 place-items-center rounded-2xl bg-accent-soft text-accent"><I name="mail-check" size={22}/></span>
       <div><p className="font-semibold">{t('emailCode.title')}</p><p className="text-sm text-muted">{sent ? t('emailCode.sent', { email }) : t('emailCode.intro')}</p></div>
     </div>
-    {!sent ? <form className="flex flex-col gap-4" noValidate onSubmit={send}>
+    {!sent ? <form id="email-code-form" className="flex flex-col gap-4" noValidate onSubmit={send}>
       <TextInput label={t('email')} type="email" value={email} onChange={(v) => { setEmail(v); setEmailError(undefined); }} autoComplete="username" error={emailError} isRequired/>
-      <Button type="submit" size="lg" fullWidth isPending={busy}><I name="send" size={16}/>{t('emailCode.send')}</Button>
     </form> : <div className="flex flex-col items-center gap-3">
       <CodeInput value={code} onChange={setCode} onComplete={() => void verify()} label={t('twoFactor.code')} invalid={!!failure}/>
       <Button size="lg" fullWidth isPending={busy} isDisabled={code.length !== 6} onPress={verify}>{t('emailCode.verify')}</Button>
       <Button size="sm" variant="ghost" isDisabled={busy || cooldown.left > 0} onPress={() => void send()}>
         <I name="rotate-ccw" size={14}/>{cooldown.left > 0 ? t('twoFactor.resendIn', { s: cooldown.left }) : t('twoFactor.resend')}</Button>
     </div>}
+    {/* One widget for the first send and for every resend: it stays where it is, so it can be asked again. */}
+    {captcha.element}
+    {captcha.failed && <Notice tone="warning">{t('captchaLoadFailed')}</Notice>}
+    {!sent && <Button type="submit" form="email-code-form" size="lg" fullWidth isPending={busy}><I name="send" size={16}/>{t('emailCode.send')}</Button>}
     <AnimatePresence>{failure && <motion.div role="alert" initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}><Notice tone="danger">{failure}</Notice></motion.div>}</AnimatePresence>
     <Button variant="ghost" onPress={onBack}><I name="arrow-left" size={16}/>{t('emailCode.back')}</Button>
   </motion.div>;

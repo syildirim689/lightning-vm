@@ -10,6 +10,8 @@ import { motion } from 'motion/react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
 import { apiFetch, useErrorText } from '../../lib/api';
+import { useCopy } from '../../lib/clipboard';
+import { supports, type Capabilities } from '../../components/capabilities';
 import { useApiForm } from '../../lib/form';
 import { useApiAction, useApiQuery } from '../../lib/query';
 import { VmDetails } from './vm-details';
@@ -42,7 +44,7 @@ import { ConnectCheck } from './connect-check';
 
 export type Server = { id: string; name: string; state: string; powerState: string; guestReady: boolean; vcpu: number; memoryMb: number; diskGb: number;
   priceMonthly: string; currency: string; trafficGb?: number | null; trafficBytes?: number; billingMode?: 'monthly' | 'hourly'; priceHourly?: string | null; trafficThrottled?: boolean; errorCode: string | null; poolName: string; location: string; locationCity?: string | null; locationCountry?: string | null; locationDatacenter?: string | null; imageName: string; address: string | null;
-  createdAt: string; favorite?: boolean; locked?: boolean; billingHold?: boolean; deleteAt?: string | null; tags?: string[]; notes?: string; poolId: string; imageId: string; packageId: string | null; vdcId?: string | null; projectId?: string | null; ownerEmail?: string; hasRootPassword?: boolean; applicationName?: string | null; appState?: 'pending' | 'installing' | 'installed' | 'failed' | null; appMessage?: string | null; firewallStatus?: 'applied' | 'pending' | 'failed'; firewallError?: string | null; firewallCount?: number; lastOperation: { id: string; kind: string; status: string; step: string | null; errorCode: string | null } | null };
+  createdAt: string; platform?: string | null; capabilities?: Capabilities | null; favorite?: boolean; locked?: boolean; billingHold?: boolean; deleteAt?: string | null; tags?: string[]; notes?: string; poolId: string; imageId: string; packageId: string | null; vdcId?: string | null; projectId?: string | null; ownerEmail?: string; hasRootPassword?: boolean; applicationName?: string | null; appState?: 'pending' | 'installing' | 'installed' | 'failed' | null; appMessage?: string | null; firewallStatus?: 'applied' | 'pending' | 'failed'; firewallError?: string | null; firewallCount?: number; lastOperation: { id: string; kind: string; status: string; step: string | null; errorCode: string | null } | null };
 const firewallFailed = (s: Server) => s.firewallStatus === 'failed';
 // Something on this server is still changing (a task, an application install, firewall rules being applied).
 export const moving = (s: Server) => ['pending', 'running'].includes(s.lastOperation?.status ?? '') || s.appState === 'pending' || s.appState === 'installing' || s.firewallStatus === 'pending';
@@ -322,7 +324,7 @@ function QuickMenu({ s, className }: { s: Server; className: string }) {
     <Button isIconOnly size="sm" variant="ghost" aria-label={t('list.quick.label', { name: s.name })} className={`min-h-9 min-w-9 ${className}`}><I name="ellipsis" size={17}/></Button>
     <Dropdown.Popover placement="bottom end">
       <Dropdown.Menu aria-label={t('list.quick.label', { name: s.name })} onAction={run}>
-        {ready ? <Dropdown.Item id="console" textValue={t('action.console')}><I name="square-terminal" size={15}/><Label>{t('action.console')}</Label></Dropdown.Item> : null}
+        {ready && supports(s, 'console') ? <Dropdown.Item id="console" textValue={t('action.console')}><I name="square-terminal" size={15}/><Label>{t('action.console')}</Label></Dropdown.Item> : null}
         {ready && s.powerState !== 'poweredOn' ? <Dropdown.Item id="power_on" textValue={t('action.power_on')}><I name="play" size={15}/><Label>{t('action.power_on')}</Label></Dropdown.Item> : null}
         {s.address ? <Dropdown.Item id="ssh" textValue={t('list.quick.ssh')}><I name="copy" size={15}/><Label>{t('list.quick.ssh')}</Label></Dropdown.Item> : null}
         <Dropdown.Item id="ticket" textValue={t('list.quick.ticket')}><I name="life-buoy" size={15}/><Label>{t('list.quick.ticket')}</Label></Dropdown.Item>
@@ -446,7 +448,7 @@ export function ServerDetail({ id }: { id: string }) {
 
   return <div ref={page} className="flex flex-col gap-6">
     <PageHeader eyebrow={s.location || s.poolName} title={s.name} description={<span className="mt-2 inline-flex"><StateBadge server={s}/></span>}
-      actions={<>{s.state === 'ready' && allowed.console && <ButtonLink variant="secondary" href={`/servers/${id}/console`}><I name="square-terminal" size={16}/>{actionLabel('console')}</ButtonLink>}
+      actions={<>{s.state === 'ready' && allowed.console && supports(s, 'console') && <ButtonLink variant="secondary" href={`/servers/${id}/console`}><I name="square-terminal" size={16}/>{actionLabel('console')}</ButtonLink>}
         {own && <ButtonLink variant="ghost" href={`/support?new=1&server=${id}`}><I name="life-buoy" size={16}/>{t('getSupport')}</ButtonLink>}
         {own && <OrderSimilar server={s} names={(mine ?? []).map((x) => x.name)}/>}
         {own && <CloneServer server={s} names={(mine ?? []).map((x) => x.name)}/>}
@@ -509,25 +511,25 @@ export function ServerDetail({ id }: { id: string }) {
       </Section>}
     </div>
 
-    <div className={`grid grid-cols-1 gap-6 ${s.address ? 'lg:grid-cols-2' : ''}`}><ServerHealth id={s.id}/><QuickConnect server={s}/></div>
+    <div className={`grid grid-cols-1 gap-6 ${s.address ? 'lg:grid-cols-2' : ''}`}><ServerHealth id={s.id} since={s.createdAt} measured={supports(s, 'metrics')}/><QuickConnect server={s}/></div>
     {own && <ServerLabels key={`${s.tags?.join()}|${s.notes}`} server={s}/>}
     {own && (allowed.power || allowed.snapshots || allowed.backups) && s.state !== 'provisioning' && <PowerSchedules serverId={s.id} power={allowed.power} snapshots={allowed.snapshots} backups={allowed.backups}/>}
     {allowed.snapshots && ['ready', 'error'].includes(s.state) && <ServerSnapshots serverId={s.id} busy={!!open}/>}
-    {allowed.backups && ['ready', 'error'].includes(s.state) && <ServerBackups serverId={s.id} serverName={s.name} busy={!!open}/>}
+    {allowed.backups && supports(s, 'backup') && ['ready', 'error'].includes(s.state) && <ServerBackups serverId={s.id} serverName={s.name} busy={!!open}/>}
     {['ready', 'error'].includes(s.state) && <ServerUpdates serverId={s.id} windows={/windows/i.test(s.imageName)} canChange={own || can(me?.permissions, 'servers.manage_all')} powered={s.powerState === 'poweredOn'}/>}
     <ServerIps server={s}/>
-    {allowed.iso && <ServerIso id={s.id} ready={s.state === 'ready' || s.state === 'error'}/>}
+    {allowed.iso && supports(s, 'iso') && <ServerIso id={s.id} ready={s.state === 'ready' || s.state === 'error'}/>}
     {s.hasRootPassword && allowed.rootPassword && <RootPassword id={s.id}/>}
     <ConnectCheck server={s}/>
     <ServerFirewalls server={s}/>
 
-    <ServerMetrics id={id} live={s.state === 'ready' && s.powerState === 'poweredOn'}/>
-    <VmDetails id={id} hasVm={s.state === 'ready' || s.state === 'error'}/>
-    {can(me?.permissions, 'servers.manage_all') && s.state === 'ready' && <ServerPlacement id={s.id} busy={!!open}/>}
-    {s.state !== 'provisioning' && <ServerTraffic id={s.id} throttled={s.trafficThrottled}/>}
+    <ServerMetrics id={id} live={s.state === 'ready' && s.powerState === 'poweredOn'} since={s.createdAt} supported={supports(s, 'metrics')}/>
+    <VmDetails id={id} hasVm={s.state === 'ready' || s.state === 'error'} platform={s.platform}/>
+    {can(me?.permissions, 'servers.manage_all') && s.state === 'ready' && supports(s, 'migrate') && <ServerPlacement id={s.id} busy={!!open}/>}
+    {s.state !== 'provisioning' && <ServerTraffic id={s.id} throttled={s.trafficThrottled} since={s.createdAt} supported={supports(s, 'metrics')}/>}
     {allowed.resize && s.state === 'ready' && !s.vdcId && <ServerResize server={s} busy={!!open}/>}
     {allowed.resize && s.state === 'ready' && !s.vdcId && <ServerDisks serverId={s.id} busy={!!open} windows={/windows/i.test(s.imageName)}/>}
-    {own && ['ready', 'error'].includes(s.state) && <SaveAsImage serverId={s.id} serverName={s.name} busy={!!open}/>}
+    {own && ['ready', 'error'].includes(s.state) && <SaveAsImage serverId={s.id} serverName={s.name} busy={!!open} supported={supports(s, 'image')}/>}
     {allowed.reinstall && ['ready', 'error'].includes(s.state) && <ServerReinstall server={s} busy={!!open} own={own}/>}
 
     <Section title={t('detail.history')}>
@@ -562,6 +564,7 @@ export function ServerDetail({ id }: { id: string }) {
 // The root password chosen (or generated) at order time: shown on request, and the panel's copy can be forgotten.
 function RootPassword({ id }: { id: string }) {
   const t = useTranslations('Servers.password');
+  const copy = useCopy();
   const { error } = useErrorText();
   const client = useQueryClient();
   const [shown, setShown] = useState<string>();
@@ -574,7 +577,7 @@ function RootPassword({ id }: { id: string }) {
   }
   return <Section title={t('title')} description={t('help')}>
     <div className="flex flex-wrap items-center gap-2">
-      {shown ? <><Mono>{shown}</Mono><Button size="sm" variant="ghost" onPress={() => { navigator.clipboard?.writeText(shown); toast.success(t('copied')); }}><I name="copy" size={14}/>{t('copy')}</Button>
+      {shown ? <><Mono>{shown}</Mono><Button size="sm" variant="ghost" onPress={() => void copy(shown, t('copied'))}><I name="copy" size={14}/>{t('copy')}</Button>
           <Button size="sm" variant="ghost" onPress={() => setShown(undefined)}><I name="eye-off" size={14}/>{t('hide')}</Button></>
         : <Button size="sm" variant="secondary" onPress={reveal}><I name="eye" size={14}/>{t('show')}</Button>}
       <ConfirmButton size="sm" variant="ghost" icon={<I name="trash-2" size={14}/>} label={t('forget')} title={t('forgetTitle')} body={t('forgetBody')}

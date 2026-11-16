@@ -14,7 +14,7 @@ import type { Server } from './servers-ui';
 
 type Custom = { cpuMin: number; cpuMax: number; cpuStep: number; memoryMinMb: number; memoryMaxMb: number; memoryStepMb: number; diskMinGb: number; diskMaxGb: number; diskStepGb: number };
 type Catalog = { packages: { id: string; name: string; vcpu: number; memoryMb: number; diskGb: number; priceMonthly: string; currency: string; poolIds: string[]; imageIds: string[] }[];
-  pools: { id: string; custom: Custom | null }[]; images: { id: string; name: string; family: string; minDiskGb: number }[] };
+  pools: { id: string; custom: Custom | null }[]; images: { id: string; name: string; family: string; minDiskGb: number; poolIds?: string[] }[] };
 type Quote = { shape: { vcpu: number; memoryMb: number; diskGb: number }; priceMonthly: string; currency: string; chargeNow: string; periodEnd: string | null };
 
 async function send(path: string, body: object) {
@@ -92,7 +92,9 @@ export function ServerReinstall({ server, busy, own }: { server: Server; busy: b
   const catalog = useApiQuery<Catalog>(['catalog'], '/catalog').data;
   const keys = useApiQuery<{ keys: { id: string; name: string }[] }>(['ssh-keys'], '/ssh-keys').data?.keys ?? [];
   const pkg = catalog?.packages.find((p) => p.id === server.packageId);
-  const images = (catalog?.images ?? []).filter((i) => i.minDiskGb <= server.diskGb && (!pkg?.imageIds.length || pkg.imageIds.includes(i.id)));
+  const images = (catalog?.images ?? []).filter((i) => i.minDiskGb <= server.diskGb && (!pkg?.imageIds.length || pkg.imageIds.includes(i.id))
+    // Only images that exist where this server runs (the current one stays listed).
+    && (!i.poolIds || i.poolIds.includes(server.poolId) || i.id === server.imageId));
   const [imageId, setImageId] = useState(server.imageId);
   const [newKeys, setNewKeys] = useState(false);
   const [keyId, setKeyId] = useState('');

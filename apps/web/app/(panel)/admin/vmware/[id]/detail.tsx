@@ -6,6 +6,7 @@ import { useFormatter, useTranslations } from 'next-intl';
 import { useState } from 'react';
 import { apiFetch, useErrorText } from '../../../../../lib/api';
 import { useApiAction, useApiQuery } from '../../../../../lib/query';
+import { supports } from '../../../../../components/capabilities';
 import { ButtonLink, ConfirmButton, DataTable, Notice, PageHeader, Section, Stat, StatusChip, TextInput } from '../../../../../components/ui';
 import { apiVersions, versionLabel, type Connection } from '../connections';
 import { SelectInput } from '../../../../../components/ui';
@@ -54,7 +55,8 @@ export default function ConnectionDetail({ id }: { id: string }) {
 
     {c.warnings.map((w) => <Notice key={w} tone="warning">{t(`warning.${w as 'HOST_MANAGED_BY_VCENTER'}`)}</Notice>)}
     {c.writeApi !== 'available' && <Notice tone="warning">{t(`writeApiNote.${c.writeApi as 'restricted'}`)}</Notice>}
-    <CompatSection connection={c}/>
+    {/* vSphere's API version and customization method: there is nothing to choose on the other platforms. */}
+    {(c.kind === 'esxi' || c.kind === 'vcenter') && <CompatSection connection={c}/>}
 
     <section aria-labelledby="cap-title" className="flex flex-col gap-3">
       <h2 id="cap-title" className="text-lg font-semibold">{t('capacityTitle')}</h2>
@@ -98,7 +100,7 @@ export default function ConnectionDetail({ id }: { id: string }) {
             <DataTable label={t('hostsTitle')} rows={d.hosts} rowKey={(h) => String(h.moref)}
               columns={[{ id: 'name', label: t('col.name') }, { id: 'state', label: t('col.state') }, { id: 'cpu', label: 'CPU' }, { id: 'mem', label: t('cap.memory') }, { id: 'ver', label: t('col.version') }, { id: 'act', label: <span className="sr-only">{t('evacuate')}</span> }]}
               cells={(h) => [String(h.name), `${h.connection_state} / ${h.power_state}${h.in_maintenance ? ` · ${t('maintenance')}` : ''}`,
-                t('cap.cpuValue', { cores: Number(h.cpu_cores), threads: Number(h.cpu_threads), ghz: format.number(Number(h.cpu_mhz) / 1000, { maximumFractionDigits: 2 }) }), gb(h.memory_bytes), String(h.version ?? '–'), <Evacuate key="e" connectionId={id} host={String(h.moref)} name={String(h.name)}/>]}/>
+                t('cap.cpuValue', { cores: Number(h.cpu_cores), threads: Number(h.cpu_threads), ghz: format.number(Number(h.cpu_mhz) / 1000, { maximumFractionDigits: 2 }) }), gb(h.memory_bytes), String(h.version ?? '–'), supports(c, 'migrate') ? <Evacuate key="e" connectionId={id} host={String(h.moref)} name={String(h.name)}/> : null]}/>
           </Tabs.Panel>
           <Tabs.Panel id="datastores" className="pt-4">
             <DataTable label={t('datastoresTitle')} rows={d.datastores} rowKey={(x) => String(x.moref)}

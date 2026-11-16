@@ -10,16 +10,17 @@ import { useEffect, useId, useMemo, useRef, useState, useTransition } from 'reac
 import { setLocale } from '../i18n/actions';
 import { signOut } from '../lib/auth-client';
 import { can } from '../lib/permissions';
-import { useApiQuery } from '../lib/query';
+import { useApiQuery, useBillingSummary, useResellerAllocation } from '../lib/query';
 import { apiFetch, useErrorText } from '../lib/api';
 import { I } from './icon';
+import { supports, type Capabilities } from './capabilities';
 import { openShortcuts } from './shortcuts';
 import { recent } from '../lib/recent';
 import { mayLeave } from '../lib/edits';
 
 type Cmd = { id: string; group: 'recent' | 'pages' | 'servers' | 'tickets' | 'users' | 'actions'; label: string; hint?: string; icon: React.ReactNode; run: () => void };
 type TicketRow = { id: string; number: number; subject: string; status: 'open' | 'answered' | 'customer_reply' | 'on_hold' | 'closed'; ownerEmail?: string };
-type ServerRow = { id: string; name: string; address: string | null; ownerEmail?: string; favorite?: boolean; state: string; powerState: string; deleteAt?: string | null; tags?: string[] | null };
+type ServerRow = { id: string; name: string; address: string | null; ownerEmail?: string; favorite?: boolean; state: string; powerState: string; deleteAt?: string | null; tags?: string[] | null; capabilities?: Capabilities | null };
 
 export function usePaletteShortcut(open: () => void) {
   useEffect(() => {
@@ -53,6 +54,9 @@ export default function CommandPalette({ permissions, isOpen, onOpenChange }: { 
   const tx = useTranslations('Extras');
   const { error } = useErrorText();
   const mayAct = !staff || can(permissions, 'servers.manage_all');
+  // The same gates as the menu: billing while it is switched on, the reseller page for resellers.
+  const billing = !!useBillingSummary()?.enabled;
+  const reseller = !!useResellerAllocation();
   // A power action straight from the palette (same request and checks as the server page's button).
   const power = (s: ServerRow, action: string) => () => {
     onOpenChange(false);
@@ -81,6 +85,10 @@ export default function CommandPalette({ permissions, isOpen, onOpenChange }: { 
       ['/firewalls', tn('firewalls'), <I key="i" name="brick-wall-fire" size={16}/>, can(permissions, 'firewalls.manage') || can(permissions, 'servers.view_all')],
       ['/topology', tn('myTopology'), <I key="i" name="waypoints" size={16}/>, true],
       ['/vdc', tn('myVdc'), <I key="i" name="building-2" size={16}/>, true],
+      ['/admin/billing', tn('billing'), <I key="i" name="receipt" size={16}/>, can(permissions, 'billing.view')],
+      ['/networks', tn('networks'), <I key="i" name="network" size={16}/>, true],
+      ['/billing', tn('myBilling'), <I key="i" name="wallet" size={16}/>, billing],
+      ['/reseller', tn('reseller'), <I key="i" name="store" size={16}/>, reseller],
       ['/admin/support', tn('support'), <I key="i" name="life-buoy" size={16}/>, support],
       ['/support', tn('mySupport'), <I key="i" name="life-buoy" size={16}/>, true],
       ['/account', tn('account'), <I key="i" name="key-round" size={16}/>, true],
@@ -96,7 +104,7 @@ export default function CommandPalette({ permissions, isOpen, onOpenChange }: { 
         icon: <I name={s.favorite ? 'star' : 'server'} size={16} className={s.favorite ? 'fill-current text-warning' : undefined}/>, run: go(`/servers/${s.id}`) })),
       // Shown only while searching: a server's console and its next power step, without opening its page.
       ...(mayAct ? servers : []).filter((s) => s.state === 'ready' && !s.deleteAt).flatMap((s) => [
-        { id: `sa:${s.id}:console`, group: 'servers' as const, label: `${s.name}: ${tsv('action.console')}`, hint: s.address ?? undefined, icon: <I name="square-terminal" size={16}/>, run: go(`/servers/${s.id}/console`) },
+        ...(!supports(s, 'console') ? [] : [{ id: `sa:${s.id}:console`, group: 'servers' as const, label: `${s.name}: ${tsv('action.console')}`, hint: s.address ?? undefined, icon: <I name="square-terminal" size={16}/>, run: go(`/servers/${s.id}/console`) }]),
         s.powerState === 'poweredOn'
           ? { id: `sa:${s.id}:shutdown`, group: 'servers' as const, label: `${s.name}: ${tsv('action.shutdown')}`, hint: s.address ?? undefined, icon: <I name="power" size={16}/>, run: power(s, 'shutdown') }
           : { id: `sa:${s.id}:on`, group: 'servers' as const, label: `${s.name}: ${tsv('action.power_on')}`, hint: s.address ?? undefined, icon: <I name="play" size={16}/>, run: power(s, 'power_on') },
@@ -119,9 +127,9 @@ export default function CommandPalette({ permissions, isOpen, onOpenChange }: { 
       { id: 'a:lang', group: 'actions', label: locale === 'tr' ? 'English' : 'Türkçe', icon: <I name="languages" size={16}/>,
         run: () => { onOpenChange(false); start(async () => { const f = new FormData(); f.set('locale', locale === 'tr' ? 'en' : 'tr'); await setLocale(f); router.refresh(); }); } },
       { id: 'a:shortcuts', group: 'actions', label: t('shortcuts'), icon: <I name="keyboard" size={16}/>, run: () => { onOpenChange(false); openShortcuts(); } },
-      { id: 'a:logout', group: 'actions', label: tn('logout'), icon: <I name="log-out" size={16}/>, run: () => { onOpenChange(false); void signOut().then(() => { router.replace('/login'); router.refresh(); }); } },
+      { id: 'a:logout', group: 'actions', label: tn('logout'), icon: <I name="log-out" size={16}/>, run: () => { onOpenChange(false); void signOut().then(() => window.location.assign('/login')); } },
     ];
-  }, [permissions, servers, users, tickets, resolvedTheme, locale, isOpen]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [permissions, servers, users, tickets, resolvedTheme, locale, isOpen, billing, reseller]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const q = fold(query.trim());
   const results = q ? commands.filter((c) => c.group !== 'recent').filter((c) => fold(`${c.label} ${c.hint ?? ''}`).includes(q)) : commands.filter((c) => c.group !== 'tickets' && !/^s[atoc]:/.test(c.id) && ((c.group !== 'servers' && c.group !== 'users') || commands.indexOf(c) < 40));

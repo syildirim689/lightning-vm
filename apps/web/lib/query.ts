@@ -14,6 +14,12 @@ export function useApiQuery<T>(key: QueryKey, path: string | null, opts: { refet
   });
 }
 
+// Whether billing is on and how many invoices are open. Under ['notifications'], so a payment or a new invoice
+// refreshes the count; the menu, the command palette and the "g b" shortcut all gate the billing page on it.
+export const useBillingSummary = () => useApiQuery<{ enabled: boolean; open?: { n: number } }>(['notifications', 'billing-summary'], '/billing/summary', { refetchInterval: 60_000 }).data;
+// Shown only to resellers: the summary answers 403 for everyone else.
+export const useResellerAllocation = () => useApiQuery<{ allocation: object | null }>(['reseller', 'summary'], '/reseller/summary').data?.allocation;
+
 // A state-changing call: shows the translated error as a toast, an optional success toast, and refreshes
 // the given cache keys so every view of that data updates.
 export function useApiAction<V = void, R = unknown>(run: (vars: V) => Promise<R>, opts: { invalidate?: QueryKey[]; success?: string | ((r: R) => string); onSuccess?: (r: R, vars: V) => void } = {}) {

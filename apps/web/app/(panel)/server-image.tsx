@@ -8,10 +8,12 @@ import { I } from '../../components/icon';
 import { ConfirmButton, Empty, Section, StatusChip, TextInput } from '../../components/ui';
 import { apiFetch, type ApiError, useErrorText } from '../../lib/api';
 import { useApiQuery } from '../../lib/query';
+import { PlatformHint } from '../../components/capabilities';
 
 type Image = { id: string; name: string; family: string; minDiskGb: number; createdAt: string; sourceName: string | null; servers: number };
 
-export function SaveAsImage({ serverId, serverName, busy }: { serverId: string; serverName: string; busy: boolean }) {
+// supported: false when the API says this server's platform cannot save a server as an image.
+export function SaveAsImage({ serverId, serverName, busy, supported = true }: { serverId: string; serverName: string; busy: boolean; supported?: boolean }) {
   const t = useTranslations('Images');
   const format = useFormatter();
   const { error, field } = useErrorText();
@@ -32,8 +34,9 @@ export function SaveAsImage({ serverId, serverName, busy }: { serverId: string; 
   return <Section title={t('title')} description={t('help')} actions={mine && <StatusChip tone={full ? 'warning' : 'default'}>{t('count', { n: mine.images.length, max: mine.max })}</StatusChip>}>
     <div className="flex flex-wrap items-end gap-3">
       <TextInput className="min-w-56 flex-1" label={t('name')} value={name} onChange={setName} maxLength={80} placeholder={serverName} error={field(fields.name)}/>
-      <Button variant="secondary" isPending={sending} isDisabled={busy || full} onPress={save}><I name="image-plus" size={15}/>{t('save')}</Button>
+      <Button variant="secondary" isPending={sending} isDisabled={busy || full || !supported} onPress={save}><I name="image-plus" size={15}/>{t('save')}</Button>
     </div>
+    {!supported && <PlatformHint className="mt-2"/>}
     {full && <p className="mt-2 text-xs text-muted">{t('full')}</p>}
   </Section>;
 }

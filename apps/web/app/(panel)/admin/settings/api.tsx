@@ -3,6 +3,7 @@
 // every token of every account with a revoke, the request log, and the way to the reference and its PDF.
 import { fold } from '../../../../lib/search';
 import { Button, Card, toast } from '@heroui/react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useFormatter, useTranslations } from 'next-intl';
 import { useEffect, useState } from 'react';
 import { I } from '../../../../components/icon';
@@ -20,6 +21,7 @@ type Log = { requests: LogRow[]; summary: { requests: number; errors: number; li
 function RulesForm({ readOnly }: { readOnly: boolean }) {
   const t = useTranslations('Settings.api');
   const { error, field } = useErrorText();
+  const client = useQueryClient();
   const q = useApiQuery<Rules>(['settings', 'api'], '/admin/api/settings').data;
   const [v, setV] = useState<Rules | null>(null);
   const [nets, setNets] = useState('');
@@ -29,7 +31,9 @@ function RulesForm({ readOnly }: { readOnly: boolean }) {
   if (!v) return <Loading of={['settings', 'api']}/>;
   async function save() {
     setBusy(true); setFields({});
-    try { const out = await apiFetch<Rules>('/admin/api/settings', { method: 'PUT', body: { ...v, networks: nets.split(/[\s,]+/).filter(Boolean) } }); setV(out); setNets(out.networks.join('\n')); toast.success(t('saved')); }
+    try { const out = await apiFetch<Rules>('/admin/api/settings', { method: 'PUT', body: { ...v, networks: nets.split(/[\s,]+/).filter(Boolean) } }); client.setQueryData(['settings', 'api'], out); setV(out); setNets(out.networks.join('\n')); toast.success(t('saved'));
+      // "Who may create tokens" is stored with the sign-in security settings: that copy is read again.
+      client.invalidateQueries({ queryKey: ['settings', 'security'] }); }
     catch (e) { setFields((e as ApiError).fields ?? {}); toast.danger(error(e)); } finally { setBusy(false); }
   }
   const dis = readOnly;

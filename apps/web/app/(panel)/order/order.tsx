@@ -18,12 +18,14 @@ import type { Summary } from '../../../lib/billing';
 import { SshKeys, useIntentKey, useSshKeys } from '../servers-ui';
 import { Copy } from '../server-extras';
 import { strongPassword } from '../../../lib/password';
+import { copyText } from '../../../lib/clipboard';
+import { PlatformHint, supports, type Platformed } from '../../../components/capabilities';
 import { Strength } from '../../(auth)/credentials-form';
 
 type Custom = { cpuMin: number; cpuMax: number; cpuStep: number; memoryMinMb: number; memoryMaxMb: number; memoryStepMb: number; diskMinGb: number; diskMaxGb: number; diskStepGb: number; currency: string };
 type Catalog = { packages: { id: string; name: string; vcpu: number; memoryMb: number; diskGb: number; priceMonthly: string; currency: string; poolIds: string[]; imageIds: string[] }[];
   locations: OrderLocation[];
-  pools: { id: string; name: string; location: string; locationId: string | null; custom: Custom | null; extraIpv4Max: number; extraIpv4Price: string; ipv6: boolean }[]; images: { id: string; name: string; family: string; minDiskGb: number }[];
+  pools: ({ id: string; name: string; location: string; locationId: string | null; custom: Custom | null; extraIpv4Max: number; extraIpv4Price: string; ipv6: boolean } & Platformed)[]; images: { id: string; name: string; family: string; minDiskGb: number; poolIds?: string[] }[];
   applications: { id: string; name: string; kind: string; description: string; minMemoryMb: number; minDiskGb: number; priceMonthly: string; available: boolean }[] };
 type Quote = { shape: { vcpu: number; memoryMb: number; diskGb: number }; price: { monthly: string; currency: string }; quota: { exceeded: string[] }; capacityAvailable: boolean;
   budget: { amount: number; currency: string; monthly: number; state: 'ok' | 'near' | 'over' } | null;
@@ -76,9 +78,11 @@ export default function Order() {
   useEffect(() => {
     if (!catalog) return;
     const patch: Partial<typeof d> = {};
-    if (!d.imageId && catalog.images.length === 1) patch.imageId = catalog.images[0].id;
-    const here = catalog.packages.filter((p) => p.poolIds.includes(d.poolId));
-    if (d.type === 'package' && !d.packageId && here.length === 1) patch.packageId = here[0].id;
+    // Only the images of the chosen location; one picked for another location is dropped when the location changes.
+    const here = catalog.images.filter((i) => !i.poolIds || !d.poolId || i.poolIds.includes(d.poolId));
+    if (d.imageId ? !here.some((i) => i.id === d.imageId) : here.length === 1) patch.imageId = here.length === 1 ? here[0].id : '';
+    const packagesHere = catalog.packages.filter((p) => p.poolIds.includes(d.poolId));
+    if (d.type === 'package' && !d.packageId && packagesHere.length === 1) patch.packageId = packagesHere[0].id;
     const img = catalog.images.find((i) => i.id === (patch.imageId ?? d.imageId));
     if (!d.name && img && mineQ.data) {
       const used = new Set(mineQ.data.servers.map((m) => m.name));
@@ -160,7 +164,7 @@ export default function Order() {
     if (taken.has(d.name)) { setNameError(field('NAME_TAKEN')); return; }
     setBusy(true);
     try {
-      const out = await apiFetch<{ serverId: string; passwordReplaced?: boolean; invoiceId?: string; awaitingPayment?: boolean }>('/servers', { method: 'POST', body: { ...body, name: d.name, sshKeyIds: d.sshKeyIds, firewallIds, ...(rootPassword && { rootPassword }) }, headers: { 'idempotency-key': intent.key() } });
+      const out = await apiFetch<{ serverId: string; passwordReplaced?: boolean; invoiceId?: string; awaitingPayment?: boolean }>('/servers', { method: 'POST', body: { ...body, name: d.name, sshKeyIds: d.sshKeyIds, firewallIds: supports(pool, 'firewall') ? firewallIds : [], ...(rootPassword && { rootPassword }) }, headers: { 'idempotency-key': intent.key() } });
       if (out.passwordReplaced) toast.info(t('passwordReplaced'));
       intent.reset(); d.clear(); setRootPassword(''); queryClient.invalidateQueries({ queryKey: ['tasks'] });
       if (out.awaitingPayment && out.invoiceId) { toast.info(t('payToStart')); router.push(`/billing/invoices/${out.invoiceId}`); } else router.push(`/servers/${out.serverId}`);
@@ -194,7 +198,7 @@ export default function Order() {
             {!catalog.locations.length && <SelectInput label={t('location')} value={d.poolId} onChange={(v) => d.set({ poolId: v, packageId: '' })}
               options={catalog.pools.map((p) => ({ id: p.id, label: p.location ? `${p.name} · ${p.location}` : p.name }))}/>}
             <SelectInput label={t('image')} value={d.imageId} onChange={(v) => d.set({ imageId: v })} error={quoteField('imageId')}
-              options={catalog.images.map((i) => ({ id: i.id, label: i.name, description: (i as { own?: boolean }).own ? t('ownImage') : i.family }))}/>
+              options={catalog.images.filter((i) => !i.poolIds || !d.poolId || i.poolIds.includes(d.poolId)).map((i) => ({ id: i.id, label: i.name, description: (i as { own?: boolean }).own ? t('ownImage') : i.family }))}/>
             <SelectInput label={t('project')} value={d.projectId} onChange={(v) => d.set({ projectId: v })}
               options={[{ id: '', label: '–' }, ...projects.map((p) => ({ id: p.id, label: p.name }))]}/>
           </div>
@@ -247,9 +251,9 @@ export default function Order() {
                   options={keys.map((k) => ({ id: k.id, label: k.name }))}/>}
             {image?.family === 'esxi' && <Notice tone="default">{t('esxiNote')}</Notice>}
             <div className="flex items-start gap-2">
-              <TextInput className="flex-1" label={t('rootPassword')} type="password" value={rootPassword} onChange={setRootPassword} autoComplete="new-password" maxLength={128}
+              <TextInput className="flex-1" label={t('rootPassword')} type="password" revealable value={rootPassword} onChange={setRootPassword} autoComplete="new-password" maxLength={128}
                 help={t('rootPasswordHelp')} error={quoteField('rootPassword')}/>
-              <Button className="mt-6" variant="secondary" onPress={() => { const p = strongPassword(); setRootPassword(p); void navigator.clipboard?.writeText(p).catch(() => undefined); toast.success(t('passwordGenerated')); }}>
+              <Button className="mt-6" variant="secondary" onPress={() => { const p = strongPassword(); setRootPassword(p); void copyText(p).then((ok) => (ok ? toast.success(t('passwordGenerated')) : toast.warning(t('passwordGeneratedNotCopied')))); }}>
                 <I name="wand-sparkles" size={16}/>{t('generate')}</Button>
               {rootPassword && <Copy className="mt-6" text={rootPassword} label={t('rootPassword')}/>}
             </div>
@@ -265,8 +269,9 @@ export default function Order() {
                   : shape && (shape.memoryMb < a.minMemoryMb || shape.diskGb < a.minDiskGb) ? t('why.appShape', { memory: gb(a.minMemoryMb), disk: a.minDiskGb }) : null;
                 return { id: a.id, label: Number(a.priceMonthly) ? `${a.name} · +${money(a.priceMonthly, quote.data?.price.currency ?? 'EUR')}` : a.name, description: why ?? (a.description || undefined), isDisabled: !!why && a.id !== d.applicationId };
               })]}/>}
-            {firewalls.length > 0 && <CheckboxList label={tf('title')} value={firewallIds} onChange={setFirewallIds} error={quoteField('firewallIds')}
-              help={tf('orderHelp')} options={firewalls.map((f) => ({ id: f.id, label: f.name }))}/>}
+            {firewalls.length > 0 && (supports(pool, 'firewall') ? <CheckboxList label={tf('title')} value={firewallIds} onChange={setFirewallIds} error={quoteField('firewallIds')}
+              help={tf('orderHelp')} options={firewalls.map((f) => ({ id: f.id, label: f.name }))}/>
+              : <div className="flex flex-col gap-1"><p className="text-sm font-medium">{tf('title')}</p><PlatformHint/></div>)}
           </div>
         </Section>
       </div>
