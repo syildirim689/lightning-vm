@@ -189,6 +189,30 @@ install_docker() {
   apt-get update -qq && apt-get install -y -qq docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin >/dev/null
 }
 
+# Cloud images (Hetzner's, and others) let cloud-init react to a new network interface. A container's interface is
+# virtual and not in the provider's metadata, yet its random address now and then matches the provider's rule
+# (Hetzner: every address that starts with 86). cloud-init then fails on it and leaves cloud-init-hotplugd.service
+# "failed", which Admin → System reports as something to look at. Virtual interfaces are skipped; real ones are
+# handled as before. Written once, and only where the unit reads its arguments the way this replacement does.
+quiet_hotplug() {
+  { [ "$(id -u)" = 0 ] && command -v systemctl >/dev/null; } || return 0
+  hp=/etc/systemd/system/cloud-init-hotplugd.service.d
+  [ ! -f "$hp/10-lightning-vm.conf" ] || return 0
+  systemctl cat cloud-init-hotplugd.service 2>/dev/null | grep -q 'read args <&3' || return 0
+  mkdir -p "$hp"
+  cat > "$hp/10-lightning-vm.conf" <<'EOF'
+# Written by Lightning VM (scripts/install.sh). Container interfaces (Docker, Incus: /devices/virtual/net/veth*)
+# are not in the cloud provider's metadata; cloud-init fails on them and this unit stays "failed".
+# They are skipped here; real hardware is still handled. Remove this file to get the original behaviour back.
+[Service]
+ExecStart=
+ExecStart=/bin/bash -c 'read args <&3; echo "args=$args"; case "$args" in *--devpath=/devices/virtual/*) exit 0;; esac; exec /usr/bin/cloud-init devel hotplug-hook $args'
+EOF
+  systemctl daemon-reload
+  systemctl reset-failed cloud-init-hotplugd.service >/dev/null 2>&1 || true
+  msg OK HOTPLUG_QUIET "cloud-init artık kapsayıcı ağ arayüzlerini atlıyor (cloud-init-hotplugd uyarısı)" "cloud-init now skips container network interfaces (the cloud-init-hotplugd warning)"
+}
+
 # Creates .env once and only appends missing keys later: existing secrets and settings are never replaced.
 write_env() {
   (umask 077; touch .env)
@@ -447,6 +471,7 @@ up_and_ready() {
 do_update() {
   git rev-parse --is-inside-work-tree >/dev/null 2>&1 || die 20 E_UPDATE_NO_GIT "Güncelleme, git ile alınmış kaynak gerektirir (git clone)" "Updating needs a source checkout made with git clone"
   [ -f .env ] || die 17 E_NOT_INSTALLED "Önce kurulum yapın: sh scripts/install.sh" "Install first: sh scripts/install.sh"
+  quiet_hotplug # servers installed before this fix get it with their next update
   [ -z "$(git status --porcelain --untracked-files=no)" ] || die 20 E_UPDATE_LOCAL_CHANGES "Kaynakta yerel değişiklikler var (git status); güncelleme yapılmadı" "The source has local changes (git status); not updating"
   channel=$(env_value UPDATE_CHANNEL); channel=${channel:-stable}
   if [ "$AUTO" = 1 ]; then
@@ -1070,6 +1095,7 @@ esac
 
 # install (also resumes an interrupted install: every step below is safe to repeat)
 if ! command -v docker >/dev/null && { [ "$INSTALL_DOCKER" = 1 ] || [ "$(id -u)" = 0 ]; }; then install_docker; fi
+quiet_hotplug
 host_checks
 [ "$FAILED" -eq 0 ] || die 1 E_PRECHECK "Ön kontroller başarısız; yukarıdaki FAIL satırlarını düzeltin" "Pre-checks failed; fix the FAIL lines above"
 write_env
