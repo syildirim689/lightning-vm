@@ -396,7 +396,7 @@ do_restore() {
     safety=${BACKUP_FILE:-}
     [ -n "$safety" ] || die 22 E_RESTORE_NO_SAFETY "Mevcut verinin yedeği alınamadı; geri yükleme yapılmadı" "The current data could not be backed up; nothing was restored"
   fi
-  docker compose stop api worker web console vmware proxmox xcpng ovirt hyperv proxy >/dev/null 2>&1 || true
+  docker compose stop api worker web console vmware proxmox xcpng ovirt hyperv libvirt proxy >/dev/null 2>&1 || true
   if ! docker compose exec -T postgres sh -c 'psql -q -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public;" && pg_restore -U "$POSTGRES_USER" -d "$POSTGRES_DB" --no-owner --exit-on-error' < "$work/db.dump" >/dev/null 2>&1; then
     rm -rf "$work"; record restore failed E_RESTORE_DB ",\"file\":\"$(basename "$file")\""
     die 22 E_RESTORE_DB "Veritabanı geri yüklenemedi; uygulama servisleri durduruldu. Önceki veri: $safety" "Database restore failed; the app services are stopped. Previous data: $safety"

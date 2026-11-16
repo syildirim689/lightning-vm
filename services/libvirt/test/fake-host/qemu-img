@@ -1,0 +1,8 @@
+#!/bin/bash
+# A pretend qemu-img: a disk is a file with its size next to it.
+set -u
+case "$1" in
+  create) shift; [ "$1" = -f ] && shift 2; : > "$1"; echo $(( ${2%G} * 1073741824 )) > "$1.size" ;;
+  resize) [ -f "$2" ] || exit 1; echo $(( ${3%G} * 1073741824 )) > "$2.size"; echo "Image resized." ;;
+  *) exit 1 ;;
+esac

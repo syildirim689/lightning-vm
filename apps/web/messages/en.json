@@ -168,6 +168,8 @@
     "ROLE_LOCKED": "This built-in role cannot be changed or removed.",
     "LAST_ADMIN": "At least one administrator must remain.",
     "NOT_WINRM": "No WinRM (HTTPS) answered at this address. Check that the host has an HTTPS listener and the port (5986 by default).",
+    "LIBVIRT_ERROR": "libvirt refused the request. See journalctl -u libvirtd on the host for the details.",
+    "NOT_LIBVIRT": "The libvirt tools (virsh, qemu-img, virt-clone, virt-xml) or bash were not found on this host. Install the libvirt-clients, qemu-utils and virtinst packages.",
     "HYPERV_ERROR": "Hyper-V refused the request. See the Hyper-V event log on the host for the details.",
     "NOT_HYPERV": "This host has no Hyper-V PowerShell module. Install the Hyper-V role and its management tools.",
     "NOT_OVIRT": "No oVirt Engine API answered at this address. Check the address and the port (443 by default).",
@@ -824,6 +826,19 @@
   },
   "Vmware": {
     "platform": {
+      "libvirt": "KVM (libvirt)",
+      "libvirtHelp": "Ubuntu, Debian, AlmaLinux, Rocky… virsh over SSH",
+      "libvirtEndpointHelp": "The SSH address of the KVM host; the default port is 22. The host needs libvirt, qemu-img and virtinst (virt-clone, virt-xml).",
+      "libvirtUsernameHelp": "root, or an account in the libvirt group that can write to the storage folder.",
+      "libvirtPassword": "Password or SSH private key",
+      "libvirtPasswordHelp": "The account's password; or, in its place, the whole private key (the text that starts with -----BEGIN …, a key without a passphrase).",
+      "libvirtTrust": "Host key",
+      "libvirtTrustHelp": "The panel knows the host by the fingerprint of its SSH host key. Leave it empty and test the connection: the host shows its key, you compare and confirm it.",
+      "libvirtSha256Help": "The SHA-256 of the SSH host key, 64 hex characters. Left empty, the first test shows the host's own key.",
+      "libvirtKeyTitle": "This host's key has not been confirmed yet",
+      "libvirtKeyExplain": "SSH hosts are known by their host key, not by a certificate. Compare the fingerprint below on the host itself; confirm it when it is the same.",
+      "libvirtPin": "I compared the fingerprint, trust this host key",
+      "libvirtVerify": "Compare the fingerprint on the host with this command (the 64 characters in its output must be the same):",
       "hyperv": "Microsoft Hyper-V",
       "hypervHelp": "Windows Server 2016 – 2025, WinRM (HTTPS)",
       "hypervEndpointHelp": "The address of the Hyper-V host. The panel connects to WinRM over HTTPS only; the default port is 5986.",
@@ -923,6 +938,7 @@
       "discovered": "Last discovery"
     },
     "kind": {
+      "libvirt": "KVM (libvirt)",
       "hyperv": "Hyper-V",
       "ovirt": "oVirt",
       "xcpng": "XCP-ng",
@@ -945,6 +961,7 @@
     "warning": {
       "HOST_MANAGED_BY_VCENTER": "This ESXi is managed by a vCenter. Add the vCenter instead of the host.",
       "LICENSE_UNREADABLE": "License information could not be read.",
+      "VIRTINST_MISSING": "The host has no virt-clone and virt-xml: servers cannot be created. Install the virtinst package and refresh the connection.",
       "PRIVILEGES_UNREADABLE": "The service account's privileges could not be read; operations show as unavailable.",
       "VERSION_LEGACY": "This vSphere version (before 7.0) is out of vendor support and not officially supported by our library. Basic operations work; it receives no security updates.",
       "VERSION_END_OF_SUPPORT": "General support for this vSphere version has ended (6.7 and 7.0). It keeps working; upgrading to 8.0 or later is recommended.",

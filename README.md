@@ -4,7 +4,7 @@
 
 # Lightning VM
 
-**VMware, Proxmox VE, XCP-ng, oVirt ve Hyper-V için açık kaynak sunucu satış ve yönetim paneli**
+**VMware, Proxmox VE, XCP-ng, oVirt, Hyper-V ve KVM (libvirt) için açık kaynak sunucu satış ve yönetim paneli**
 
 Müşteriler sunucu sipariş eder, açar, kapatır, konsoluna bağlanır; yönetici kapasiteyi, IP'leri, fiyatları,
 bildirimleri ve sistemin kendisini tek panelden yönetir. Kurulumdan sonra sunucuya SSH ile girmeniz gerekmez.
@@ -55,6 +55,7 @@ bildirimleri ve sistemin kendisini tek panelden yönetir. Kurulumdan sonra sunuc
 </td><td valign="top" width="50%">
 
 ### Yönetici paneli
+- **KVM (libvirt) bağlantıları (ilk sürüm):** düz bir Linux KVM hostu, SSH üzerinden `virsh` ile; hosta hiçbir şey kurulmaz ([docs/libvirt.md](docs/libvirt.md))
 - **Microsoft Hyper-V bağlantıları (ilk sürüm):** WinRM üzerinden PowerShell ile; cloud-init yapılandırma diskiyle ([docs/hyperv.md](docs/hyperv.md))
 - **oVirt / RHV bağlantıları (ilk sürüm):** Engine'in kendi cloud-init desteğiyle ([docs/ovirt.md](docs/ovirt.md))
 - **XCP-ng / XenServer bağlantıları (ilk sürüm):** havuz ya da tek host; cloud-init'in tamamı yapılandırma diskiyle ([docs/xcpng.md](docs/xcpng.md))
@@ -127,6 +128,7 @@ bildirimleri ve sistemin kendisini tek panelden yönetir. Kurulumdan sonra sunuc
 
 | Ne | Nerede |
 |---|---|
+| **KVM (libvirt) desteği (ilk sürüm):** vCenter ya da Proxmox olmadan, düz bir Linux KVM hostu; SSH ile, parola ya da anahtarla | Yönetim → Bağlantılar → KVM (libvirt) · [docs/libvirt.md](docs/libvirt.md) |
 | **Microsoft Hyper-V desteği (ilk sürüm):** aynı panelden Hyper-V hostları | Yönetim → Bağlantılar → Hyper-V · [docs/hyperv.md](docs/hyperv.md) |
 | **oVirt / RHV desteği (ilk sürüm):** aynı panelden oVirt Engine | Yönetim → Bağlantılar → oVirt · [docs/ovirt.md](docs/ovirt.md) |
 | **XCP-ng / XenServer desteği (ilk sürüm):** aynı panelden XAPI havuzları | Yönetim → Bağlantılar → XCP-ng · [docs/xcpng.md](docs/xcpng.md) |
@@ -158,7 +160,7 @@ bildirimleri ve sistemin kendisini tek panelden yönetir. Kurulumdan sonra sunuc
 | İşletim sistemi | Ubuntu 22.04 / 24.04 / 26.04 (amd64 veya arm64) | Ubuntu 24.04 LTS |
 | Bellek / disk | 2 GB RAM, 10 GB boş disk | 4 GB RAM, 40 GB disk (izleme açıkken) |
 | Ağ | 80 ve 443 portları dışarıya açık (HTTPS için) | Bir alan adı (A kaydı sunucuyu göstermeli) |
-| Sanallaştırma | ESXi / vCenter 6.0 – 9.x, Proxmox VE 7.x – 9.x, XCP-ng 8.x, oVirt 4.4+ ya da Hyper-V (Windows Server 2016+) | Sunucu oluşturmak için **vCenter**, **Proxmox VE**, **XCP-ng**, **oVirt** ya da **Hyper-V** |
+| Sanallaştırma | ESXi / vCenter 6.0 – 9.x, Proxmox VE 7.x – 9.x, XCP-ng 8.x, oVirt 4.4+, Hyper-V (Windows Server 2016+) ya da libvirt'li bir Linux KVM hostu | Sunucu oluşturmak için **vCenter**, **Proxmox VE**, **XCP-ng**, **oVirt**, **Hyper-V** ya da **KVM (libvirt)** |
 
 Docker kurulu değilse betik resmî deposundan kurar. Paneli VMware host'unun kendisine değil, ayrı bir Linux
 sunucuya (sanal da olabilir) kurun.
@@ -321,6 +323,7 @@ flowchart LR
 | `services/xcpng` | Node.js (bağımlılıksız) | Aynı sözleşmeyle XCP-ng / XenServer (XAPI) ile konuşan adaptör |
 | `services/ovirt` | Node.js (bağımlılıksız) | Aynı sözleşmeyle oVirt Engine (REST) ile konuşan adaptör |
 | `services/hyperv` | Node.js (bağımlılıksız) | Aynı sözleşmeyle Hyper-V'yi WinRM üzerinden PowerShell ile yöneten adaptör |
+| `services/libvirt` | Node.js (bağımlılıksız) + OpenSSH istemcisi | Aynı sözleşmeyle bir KVM hostunu SSH üzerinden `virsh` ile yöneten adaptör |
 | `services/console` | Go | Tarayıcı konsolu ve sunucu terminali için WebSocket geçidi |
 | `scripts/install.sh` | POSIX sh, Docker Compose | Kurulum, güncelleme, yedek, host ajanı |
 
@@ -339,7 +342,7 @@ Simülatör (govmomi `vcsim`) gerçek bir vCenter olmadan tüm akışı çalış
 | API birim testleri | `cd apps/api && npm test` |
 | API entegrasyon testleri (PostgreSQL + Redis) | `cd apps/api && npm run test:integration` |
 | Go servisleri | `cd services/vmware && go test ./...` |
-| Proxmox, XCP-ng, oVirt ve Hyper-V adaptörleri | `cd services/proxmox && npm test` (aynısı `services/xcpng`, `services/ovirt` ve `services/hyperv` için) |
+| Proxmox, XCP-ng, oVirt, Hyper-V ve libvirt adaptörleri | `cd services/proxmox && npm test` (aynısı `services/xcpng`, `services/ovirt`, `services/hyperv` ve `services/libvirt` için; libvirt'in betik testi Linux'ta çalışır) |
 | Uçtan uca (Playwright; 390 / 768 / 1920 px) | `cd apps/web && npx playwright test` |
 
 CI bilerek elle tetiklenir (GitHub Actions → *Run workflow*). Katkı kuralları: [CONTRIBUTING.md](CONTRIBUTING.md).
@@ -354,6 +357,8 @@ CI bilerek elle tetiklenir (GitHub Actions → *Run workflow*). Katkı kurallar�
 - **E-posta adresi doğrulama yok:** kayıtla açılan hesabın e-posta adresi doğrulanmaz. (SSO, dizin ve bayi
   üzerinden gelen hesaplar doğrulanmış sayılır.)
 - **WhatsApp:** Meta Cloud API ve onaylı bir mesaj şablonu gerekir. **Telegram:** botta webhook tanımlı olmamalı.
+- **KVM (libvirt):** ilk sürüm; betikler sahte bir `virsh` ile ve gerçek bir SSH sunucusu üzerinden sınandı, **gerçek bir libvirt/KVM hostunda henüz denenmedi**.
+  Bağlantı başına tek host, depolama yalnız klasör tipi havuz (qcow2), grafikler ve konsol yok ([docs/libvirt.md](docs/libvirt.md)).
 - **Microsoft Hyper-V:** ilk sürüm ve en az denenmiş adaptör; PowerShell betikleri gerçek bir Hyper-V hostunda hiç çalıştırılmadı. Yalnız
   HTTPS üzerinden WinRM, bağlantı başına tek host, Windows misafir özelleştirmesi yok ([docs/hyperv.md](docs/hyperv.md)).
 - **oVirt / RHV:** ilk sürüm; gerçek bir Engine'de henüz denenmedi. Grafikler, konsol, firewall, yedek, ISO, özel ağ ve taşıma
@@ -395,7 +400,7 @@ projeyi güvenilir kılacak olan şeydir.
 
 ## 🌍 English summary
 
-**Lightning VM** is an open-source hosting panel for VMware (ESXi / vCenter 6.0–9.x) and, as first releases, Proxmox VE, XCP-ng / XenServer, oVirt / RHV and Microsoft Hyper-V. Customers order, manage
+**Lightning VM** is an open-source hosting panel for VMware (ESXi / vCenter 6.0–9.x) and, as first releases, Proxmox VE, XCP-ng / XenServer, oVirt / RHV, Microsoft Hyper-V and plain KVM hosts (libvirt over SSH). Customers order, manage
 and console into virtual servers. Administrators manage capacity, IP pools, pricing, notifications and the panel
 itself from the browser, including updates, backups and monitoring. It ships with a one-command installer and
 automatic HTTPS. The UI is in Turkish and English.

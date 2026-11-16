@@ -453,7 +453,7 @@ export class ServersController {
       throw apiError(400, 'VALIDATION_FAILED', 'Unknown image', { imageId: 'NOT_AVAILABLE' });
     }
     const { rows: [conn] } = await pool.query('SELECT kind, operations FROM vmware_connections WHERE id = $1', [order.rp.connection_id]);
-    if (!['vcenter', 'proxmox', 'xcpng', 'ovirt', 'hyperv'].includes(conn.kind) || !conn.operations?.cloneFromImage) throw apiError(409, 'PROVISIONING_NOT_SUPPORTED', 'This location cannot create servers (needs vCenter with clone rights)');
+    if (!['vcenter', 'proxmox', 'xcpng', 'ovirt', 'hyperv', 'libvirt'].includes(conn.kind) || !conn.operations?.cloneFromImage) throw apiError(409, 'PROVISIONING_NOT_SUPPORTED', 'This location cannot create servers (needs vCenter with clone rights)');
     if (firewallIds.length && !conn.operations?.firewall) throw apiError(409, 'FIREWALL_NOT_SUPPORTED', 'This location cannot enforce firewalls (needs vCenter with a distributed switch)');
 
     // Short transaction, no external calls: quota, capacity and IP are checked and taken under row

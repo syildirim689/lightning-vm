@@ -1,0 +1,13 @@
+#!/bin/bash
+# A pretend virt-clone: copies the template's folder under the new name with a new uuid and its own disk file.
+set -u
+while [ $# -gt 0 ]; do case "$1" in --original) o=$2; shift ;; --name) n=$2; shift ;; --file) f=$2; shift ;; --connect) shift ;; esac; shift; done
+[ -d "$FAKE/dom/$o" ] || { echo "ERROR    Domain '$o' was not found." >&2; exit 1; }
+[ -d "$FAKE/dom/$n" ] && { echo "ERROR    Domain name '$n' already in use" >&2; exit 1; }
+cp -r "$FAKE/dom/$o" "$FAKE/dom/$n"
+cat /proc/sys/kernel/random/uuid > "$FAKE/dom/$n/uuid"
+src=$(awk '$2 == "disk" { print $3; exit }' "$FAKE/dom/$o/disks")
+cp "$src" "$f"; cp "$src.size" "$f.size"
+printf 'vda disk %s\n' "$f" > "$FAKE/dom/$n/disks"
+: > "$FAKE/dom/$n/desc"
+echo "Clone '$n' created successfully."

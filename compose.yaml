@@ -64,6 +64,7 @@ services:
       XCPNG_SERVICE_URL: http://xcpng:8080
       OVIRT_SERVICE_URL: http://ovirt:8080
       HYPERV_SERVICE_URL: http://hyperv:8080
+      LIBVIRT_SERVICE_URL: http://libvirt:8080
       VMWARE_SERVICE_TOKEN_FILE: /run/secrets/vmware_token
       APP_VERSION: ${APP_VERSION:-dev}
       APP_ENV: ${APP_ENV:-production}
@@ -168,6 +169,25 @@ services:
     environment:
       HYPERV_SERVICE_TOKEN_FILE: /run/secrets/vmware_token
       HYPERV_ALLOW_NETWORKS: ${HYPERV_ALLOW_NETWORKS:-}
+    secrets: [vmware_token]
+    healthcheck:
+      test: [CMD, node, server.mjs, healthcheck]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    logging: *logging
+  # libvirt/KVM adapter (virsh over SSH), for connections of kind "libvirt". Same contract, same token, no state.
+  # /tmp holds the pinned host key (and a private key) for the length of one request, in memory only.
+  libvirt:
+    build: ./services/libvirt
+    restart: unless-stopped
+    read_only: true
+    tmpfs: ['/tmp:size=8m,mode=1777']
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+    environment:
+      LIBVIRT_SERVICE_TOKEN_FILE: /run/secrets/vmware_token
+      LIBVIRT_ALLOW_NETWORKS: ${LIBVIRT_ALLOW_NETWORKS:-}
     secrets: [vmware_token]
     healthcheck:
       test: [CMD, node, server.mjs, healthcheck]

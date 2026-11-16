@@ -14,7 +14,8 @@ type TlsSettings = { mode: 'system' | 'ca' | 'pinned'; caPem?: string; sha256?: 
 // services/xcpng). All speak the same contract (docs/adapter-contract.md), so everything above the adapter is the same.
 export const platforms = { proxmox: { port: 8006, url: () => process.env.PROXMOX_SERVICE_URL ?? 'http://proxmox:8080' }, xcpng: { port: 443, url: () => process.env.XCPNG_SERVICE_URL ?? 'http://xcpng:8080' },
   ovirt: { port: 443, url: () => process.env.OVIRT_SERVICE_URL ?? 'http://ovirt:8080' },
-  hyperv: { port: 5986, url: () => process.env.HYPERV_SERVICE_URL ?? 'http://hyperv:8080' } } as const;
+  hyperv: { port: 5986, url: () => process.env.HYPERV_SERVICE_URL ?? 'http://hyperv:8080' },
+  libvirt: { port: 22, url: () => process.env.LIBVIRT_SERVICE_URL ?? 'http://libvirt:8080' } } as const;
 type Platform = keyof typeof platforms;
 const platformOf = (kind: unknown): Platform | undefined => (typeof kind === 'string' && kind in platforms ? (kind as Platform) : undefined);
 type Target = { host: string; port: number; username: string; password: string; tls: TlsSettings; apiVersion?: string; platform?: Platform };
@@ -44,7 +45,8 @@ function readTarget(body: unknown, requirePassword = true): Target & { name: str
   if (typeof b.username !== 'string' || !b.username || b.username.length > 200) fields.username = 'INVALID_VALUE';
   // Editing may leave the password empty (keep the stored one); anything sent is checked the same way.
   const passwordGiven = requirePassword || (b.password !== undefined && b.password !== null && b.password !== '');
-  if (passwordGiven && (typeof b.password !== 'string' || !b.password || b.password.length > 500)) fields.password = 'INVALID_VALUE';
+  // A KVM host may be given an SSH private key in place of a password (a 4096-bit RSA key is about 3400 characters).
+  if (passwordGiven && (typeof b.password !== 'string' || !b.password || b.password.length > (other === 'libvirt' ? 8000 : 500))) fields.password = 'INVALID_VALUE';
   if (!['system', 'ca', 'pinned'].includes(tls.mode as string)) fields.tlsMode = 'INVALID_VALUE';
   if (tls.mode === 'ca' && (typeof tls.caPem !== 'string' || !tls.caPem.includes('BEGIN CERTIFICATE') || tls.caPem.length > 20000)) fields.caPem = 'INVALID_CERTIFICATE';
   if (tls.mode === 'pinned' && (typeof tls.sha256 !== 'string' || !/^[0-9a-f]{64}$/.test(tls.sha256))) fields.sha256 = 'INVALID_FINGERPRINT';

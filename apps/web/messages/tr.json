@@ -168,6 +168,8 @@
     "ROLE_LOCKED": "Bu hazır rol değiştirilemez veya silinemez.",
     "LAST_ADMIN": "En az bir yönetici kalmalı.",
     "NOT_WINRM": "Bu adreste WinRM (HTTPS) yanıt vermedi. Hostta HTTPS dinleyicisinin açık olduğunu ve portu (varsayılan 5986) denetleyin.",
+    "LIBVIRT_ERROR": "libvirt isteği reddetti. Ayrıntı için hostta journalctl -u libvirtd çıktısına bakın.",
+    "NOT_LIBVIRT": "Bu hostta libvirt araçları (virsh, qemu-img, virt-clone, virt-xml) ya da bash bulunamadı. libvirt-clients, qemu-utils ve virtinst paketlerini kurun.",
     "HYPERV_ERROR": "Hyper-V isteği reddetti. Ayrıntı için hosttaki Hyper-V olay günlüğüne bakın.",
     "NOT_HYPERV": "Bu hostta Hyper-V PowerShell modülü yok. Hyper-V rolünü ve yönetim araçlarını kurun.",
     "NOT_OVIRT": "Bu adreste oVirt Engine API’si yanıt vermedi. Adresi ve portu (varsayılan 443) denetleyin.",
@@ -824,6 +826,19 @@
   },
   "Vmware": {
     "platform": {
+      "libvirt": "KVM (libvirt)",
+      "libvirtHelp": "Ubuntu, Debian, AlmaLinux, Rocky… SSH üzerinden virsh",
+      "libvirtEndpointHelp": "KVM hostunun SSH adresi; varsayılan port 22. Hostta libvirt, qemu-img ve virtinst (virt-clone, virt-xml) kurulu olmalı.",
+      "libvirtUsernameHelp": "root ya da libvirt grubunda olan, depolama klasörüne yazabilen bir hesap.",
+      "libvirtPassword": "Parola ya da SSH özel anahtarı",
+      "libvirtPasswordHelp": "Hesabın parolası; ya da parola yerine özel anahtarın tamamı (-----BEGIN … ile başlayan metin, parolasız anahtar).",
+      "libvirtTrust": "Host anahtarı",
+      "libvirtTrustHelp": "Panel hostu SSH host anahtarının parmak iziyle tanır. Boş bırakıp bağlantıyı sınayın: host anahtarını gösterir, karşılaştırıp onaylarsınız.",
+      "libvirtSha256Help": "SSH host anahtarının SHA-256 özeti, 64 onaltılık karakter. Boş bırakırsanız ilk sınamada host kendi anahtarını gösterir.",
+      "libvirtKeyTitle": "Bu hostun anahtarı henüz onaylanmadı",
+      "libvirtKeyExplain": "SSH hostları sertifika yerine host anahtarıyla tanınır. Aşağıdaki parmak izini hostun kendisinde karşılaştırın; aynıysa onaylayın.",
+      "libvirtPin": "Parmak izini doğruladım, bu host anahtarını onayla",
+      "libvirtVerify": "Parmak izini hostta şu komutla karşılaştırın (çıktıdaki 64 karakter aynı olmalı):",
       "hyperv": "Microsoft Hyper-V",
       "hypervHelp": "Windows Server 2016 – 2025, WinRM (HTTPS)",
       "hypervEndpointHelp": "Hyper-V hostunun adresi. Panel WinRM’e yalnızca HTTPS ile bağlanır; varsayılan port 5986.",
@@ -923,6 +938,7 @@
       "discovered": "Son keşif"
     },
     "kind": {
+      "libvirt": "KVM (libvirt)",
       "hyperv": "Hyper-V",
       "ovirt": "oVirt",
       "xcpng": "XCP-ng",
@@ -945,6 +961,7 @@
     "warning": {
       "HOST_MANAGED_BY_VCENTER": "Bu ESXi bir vCenter tarafından yönetiliyor. Hostu ayrıca eklemek yerine vCenter'ı ekleyin.",
       "LICENSE_UNREADABLE": "Lisans bilgisi okunamadı.",
+      "VIRTINST_MISSING": "Hostta virt-clone ve virt-xml yok: sunucu oluşturulamaz. virtinst paketini kurup bağlantıyı yenileyin.",
       "PRIVILEGES_UNREADABLE": "Servis hesabının yetkileri okunamadı; işlemler kullanılamaz görünür.",
       "VERSION_LEGACY": "Bu vSphere sürümü (7.0 öncesi) üreticinin desteği dışında ve kullandığımız kütüphanece resmî olarak desteklenmiyor. Temel işlemler çalışır; güvenlik güncellemesi almadığını unutmayın.",
       "VERSION_END_OF_SUPPORT": "Bu vSphere sürümünün genel desteği sona erdi (6.7 ve 7.0). Çalışmaya devam eder; 8.0 veya üstüne yükseltmeniz önerilir.",

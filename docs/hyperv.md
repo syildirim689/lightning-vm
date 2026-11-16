@@ -1,6 +1,6 @@
 # Microsoft Hyper-V
 
-Panel; VMware, Proxmox VE, XCP-ng ve oVirt'in yanında **Microsoft Hyper-V** hostlarını da yönetir. Hyper-V'nin bir
+Panel; VMware, Proxmox VE, XCP-ng, oVirt ve [KVM (libvirt)](libvirt.md)'in yanında **Microsoft Hyper-V** hostlarını da yönetir. Hyper-V'nin bir
 HTTP API'si olmadığı için adaptör (`services/hyperv`) hostta **WinRM üzerinden PowerShell** çalıştırır; yine de
 VMware adaptörüyle aynı sözleşmeyi konuşur: [adapter-contract.md](adapter-contract.md).
 
