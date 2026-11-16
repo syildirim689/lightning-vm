@@ -2,3 +2,4 @@
 *.sh text eol=lf
 *.yaml text eol=lf
 *.yml text eol=lf
+services/libvirt/test/fake-host/* text eol=lf
