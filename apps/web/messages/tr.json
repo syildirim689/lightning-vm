@@ -167,6 +167,9 @@
     "FORBIDDEN_TARGET": "Sizde olmayan izinleri veremez, sizden yetkili birini değiştiremezsiniz.",
     "ROLE_LOCKED": "Bu hazır rol değiştirilemez veya silinemez.",
     "LAST_ADMIN": "En az bir yönetici kalmalı.",
+    "PLATFORM_NOT_SUPPORTED": "Bu işlem Proxmox VE bağlantılarında henüz desteklenmiyor.",
+    "NOT_PROXMOX": "Bu adreste Proxmox VE API’si yanıt vermedi. Adresi ve portu (varsayılan 8006) denetleyin.",
+    "PROXMOX_ERROR": "Proxmox VE isteği reddetti. Ayrıntı için Proxmox’taki görev günlüğüne bakın.",
     "LAST_SIGN_IN_METHOD": "Bu, kullanıcının tek giriş yolu; önce bir parola ya da başka bir giriş yolu olmalı.",
     "MAIL_AUTH_FAILED": "Posta sunucusu veya sağlayıcı kimlik bilgilerini kabul etmedi (kullanıcı adı, parola veya API anahtarı).",
     "MAIL_TLS_FAILED": "SMTP sunucusuyla güvenli bağlantı kurulamadı (port ve güvenlik ayarını kontrol edin).",
@@ -812,6 +815,17 @@
     "finishBlockedShort": "Kurulumun bitmesi için şu adımlar hâlâ gerekli:"
   },
   "Vmware": {
+    "platform": {
+      "label": "Sanallaştırma platformu",
+      "vmware": "VMware vSphere",
+      "vmwareHelp": "ESXi ya da vCenter, 6.0 – 9.x",
+      "proxmox": "Proxmox VE",
+      "proxmoxHelp": "Tek düğüm ya da küme, 7.x – 9.x",
+      "endpointHelp": "Proxmox VE web arayüzünün adresi (kümede herhangi bir düğüm). Varsayılan port 8006.",
+      "usernameHelp": "Alanıyla birlikte kullanıcı (root@pam) ya da bir API anahtarı (kullanici@pve!anahtar-adi).",
+      "passwordHelp": "Kullanıcının parolası; API anahtarı kullanıyorsanız anahtarın gizli değeri.",
+      "verify": "Parmak izini Proxmox düğümünde şu komutla karşılaştırın:"
+    },
     "eyebrow": "YÖNETİM · VMWARE",
     "title": "ESXi ve vCenter bağlantıları",
     "intro": "Gerçek envanter ve fiziksel kapasite. Platform burada hiçbir şeyi değiştirmez; yalnızca okur.",
@@ -886,6 +900,7 @@
       "discovered": "Son keşif"
     },
     "kind": {
+      "proxmox": "Proxmox VE",
       "esxi": "Standalone ESXi",
       "vcenter": "vCenter"
     },

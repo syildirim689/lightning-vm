@@ -60,6 +60,7 @@ services:
       REDIS_PASSWORD: ${REDIS_PASSWORD}
       MASTER_KEY_FILE: /run/secrets/master_key
       VMWARE_SERVICE_URL: http://vmware:8080
+      PROXMOX_SERVICE_URL: http://proxmox:8080
       VMWARE_SERVICE_TOKEN_FILE: /run/secrets/vmware_token
       APP_VERSION: ${APP_VERSION:-dev}
       APP_ENV: ${APP_ENV:-production}
@@ -97,6 +98,25 @@ services:
     secrets: [vmware_token]
     healthcheck:
       test: [CMD, /vmware, healthcheck]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    logging: *logging
+  # Proxmox VE adapter: the same contract as the VMware one (docs/adapter-contract.md), for connections of kind
+  # "proxmox". Same service token; it keeps no state.
+  proxmox:
+    build: ./services/proxmox
+    restart: unless-stopped
+    read_only: true
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+    environment:
+      PROXMOX_SERVICE_TOKEN_FILE: /run/secrets/vmware_token
+      # Extra networks the adapter may reach (comma-separated CIDRs), for a Proxmox VE on a local range.
+      PROXMOX_ALLOW_NETWORKS: ${PROXMOX_ALLOW_NETWORKS:-}
+    secrets: [vmware_token]
+    healthcheck:
+      test: [CMD, node, server.mjs, healthcheck]
       interval: 15s
       timeout: 5s
       retries: 5

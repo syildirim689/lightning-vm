@@ -167,6 +167,9 @@
     "FORBIDDEN_TARGET": "You cannot grant permissions you lack or change someone with more access than you.",
     "ROLE_LOCKED": "This built-in role cannot be changed or removed.",
     "LAST_ADMIN": "At least one administrator must remain.",
+    "PLATFORM_NOT_SUPPORTED": "This is not supported on Proxmox VE connections yet.",
+    "NOT_PROXMOX": "No Proxmox VE API answered at this address. Check the address and the port (8006 by default).",
+    "PROXMOX_ERROR": "Proxmox VE refused the request. See the task log in Proxmox for the details.",
     "LAST_SIGN_IN_METHOD": "This is the person’s only way to sign in; a password or another way in must exist first.",
     "MAIL_AUTH_FAILED": "The mail server or provider did not accept the credentials (user name, password or API key).",
     "MAIL_TLS_FAILED": "No secure connection to the SMTP server (check the port and security setting).",
@@ -812,6 +815,17 @@
     "finishBlockedShort": "These steps are still needed before setup can finish:"
   },
   "Vmware": {
+    "platform": {
+      "label": "Virtualization platform",
+      "vmware": "VMware vSphere",
+      "vmwareHelp": "ESXi or vCenter, 6.0 – 9.x",
+      "proxmox": "Proxmox VE",
+      "proxmoxHelp": "A single node or a cluster, 7.x – 9.x",
+      "endpointHelp": "The address of the Proxmox VE web interface (any node of a cluster). The default port is 8006.",
+      "usernameHelp": "A user with its realm (root@pam), or an API token (user@pve!token-name).",
+      "passwordHelp": "The user’s password; with an API token, the token’s secret.",
+      "verify": "Compare the fingerprint on the Proxmox node with this command:"
+    },
     "eyebrow": "ADMIN · VMWARE",
     "title": "ESXi and vCenter connections",
     "intro": "Real inventory and physical capacity. The platform changes nothing here; it only reads.",
@@ -886,6 +900,7 @@
       "discovered": "Last discovery"
     },
     "kind": {
+      "proxmox": "Proxmox VE",
       "esxi": "Standalone ESXi",
       "vcenter": "vCenter"
     },

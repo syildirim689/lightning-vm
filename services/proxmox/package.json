@@ -1,0 +1,12 @@
+{
+  "name": "@lightning-vm/proxmox",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Proxmox VE adapter: the hypervisor adapter contract (docs/adapter-contract.md) on the Proxmox VE API",
+  "scripts": {
+    "start": "node server.mjs",
+    "test": "node --check server.mjs && node --check pve.mjs && node --check handlers.mjs && node --test test/*.test.mjs"
+  },
+  "engines": { "node": ">=22" }
+}
