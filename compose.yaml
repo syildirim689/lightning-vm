@@ -71,6 +71,18 @@ services:
       APP_ENV: ${APP_ENV:-production}
       # Postgres connections per API process (the worker ignores it).
       DB_POOL_MAX: ${DB_POOL_MAX:-20}
+      # API: sign-in session length, the peers whose X-Forwarded-* headers are believed (the code's own list
+      # when unset), and stack traces in the error log (1 = on).
+      SESSION_TTL_HOURS: ${SESSION_TTL_HOURS:-12}
+      TRUSTED_PROXIES: ${TRUSTED_PROXIES:-127.0.0.0/8,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16}
+      LOG_ERROR_DETAIL: ${LOG_ERROR_DETAIL:-0}
+      # Worker (the API ignores them): how often power is sampled and VMware is reconciled, how many operations
+      # run at once, and how often a running task or a guest shutdown is polled.
+      POWER_SAMPLE_MINUTES: ${POWER_SAMPLE_MINUTES:-5}
+      RECONCILE_MINUTES: ${RECONCILE_MINUTES:-5}
+      OPERATIONS_CONCURRENCY: ${OPERATIONS_CONCURRENCY:-8}
+      TASK_POLL_MS: ${TASK_POLL_MS:-2000}
+      SHUTDOWN_POLL_MS: ${SHUTDOWN_POLL_MS:-5000}
       # Sessions (better-auth): Secure cookies when browsers use HTTPS; optional SMTP and Cloudflare Turnstile.
       PANEL_TLS: ${PANEL_TLS:-0}
       SMTP_URL: ${SMTP_URL:-}
@@ -100,6 +112,9 @@ services:
     cap_drop: [ALL]
     environment:
       VMWARE_SERVICE_TOKEN_FILE: /run/secrets/vmware_token
+      # Comma-separated CIDRs an ESXi/vCenter address may (allow) or may not (deny) be in; empty = the built-in rules.
+      VMWARE_ALLOW_NETWORKS: ${VMWARE_ALLOW_NETWORKS:-}
+      VMWARE_DENY_NETWORKS: ${VMWARE_DENY_NETWORKS:-}
     secrets: [vmware_token]
     healthcheck:
       test: [CMD, /vmware, healthcheck]
@@ -119,6 +134,7 @@ services:
       PROXMOX_SERVICE_TOKEN_FILE: /run/secrets/vmware_token
       # Extra networks the adapter may reach (comma-separated CIDRs), for a Proxmox VE on a local range.
       PROXMOX_ALLOW_NETWORKS: ${PROXMOX_ALLOW_NETWORKS:-}
+      PROXMOX_DENY_NETWORKS: ${PROXMOX_DENY_NETWORKS:-}
     secrets: [vmware_token]
     healthcheck:
       test: [CMD, node, server.mjs, healthcheck]
@@ -136,6 +152,7 @@ services:
     environment:
       XCPNG_SERVICE_TOKEN_FILE: /run/secrets/vmware_token
       XCPNG_ALLOW_NETWORKS: ${XCPNG_ALLOW_NETWORKS:-}
+      XCPNG_DENY_NETWORKS: ${XCPNG_DENY_NETWORKS:-}
     secrets: [vmware_token]
     healthcheck:
       test: [CMD, node, server.mjs, healthcheck]
@@ -153,6 +170,7 @@ services:
     environment:
       OVIRT_SERVICE_TOKEN_FILE: /run/secrets/vmware_token
       OVIRT_ALLOW_NETWORKS: ${OVIRT_ALLOW_NETWORKS:-}
+      OVIRT_DENY_NETWORKS: ${OVIRT_DENY_NETWORKS:-}
     secrets: [vmware_token]
     healthcheck:
       test: [CMD, node, server.mjs, healthcheck]
@@ -170,6 +188,7 @@ services:
     environment:
       HYPERV_SERVICE_TOKEN_FILE: /run/secrets/vmware_token
       HYPERV_ALLOW_NETWORKS: ${HYPERV_ALLOW_NETWORKS:-}
+      HYPERV_DENY_NETWORKS: ${HYPERV_DENY_NETWORKS:-}
     secrets: [vmware_token]
     healthcheck:
       test: [CMD, node, server.mjs, healthcheck]
@@ -189,6 +208,7 @@ services:
     environment:
       LIBVIRT_SERVICE_TOKEN_FILE: /run/secrets/vmware_token
       LIBVIRT_ALLOW_NETWORKS: ${LIBVIRT_ALLOW_NETWORKS:-}
+      LIBVIRT_DENY_NETWORKS: ${LIBVIRT_DENY_NETWORKS:-}
     secrets: [vmware_token]
     healthcheck:
       test: [CMD, node, server.mjs, healthcheck]
@@ -206,6 +226,7 @@ services:
     environment:
       INCUS_SERVICE_TOKEN_FILE: /run/secrets/vmware_token
       INCUS_ALLOW_NETWORKS: ${INCUS_ALLOW_NETWORKS:-}
+      INCUS_DENY_NETWORKS: ${INCUS_DENY_NETWORKS:-}
     secrets: [vmware_token]
     healthcheck:
       test: [CMD, node, server.mjs, healthcheck]
@@ -224,7 +245,13 @@ services:
       REDIS_ADDR: redis:6379
       REDIS_PASSWORD: ${REDIS_PASSWORD}
       CONSOLE_MAX_PER_USER: ${CONSOLE_MAX_PER_USER:-3}
+      CONSOLE_MAX_TOTAL: ${CONSOLE_MAX_TOTAL:-100}
       CONSOLE_MAX_MINUTES: ${CONSOLE_MAX_MINUTES:-60}
+      # Comma-separated CIDRs a host's console address may or may not be in, and extra page origins that may
+      # open a console besides the panel's own; empty = the built-in rules.
+      CONSOLE_ALLOW_NETWORKS: ${CONSOLE_ALLOW_NETWORKS:-}
+      CONSOLE_DENY_NETWORKS: ${CONSOLE_DENY_NETWORKS:-}
+      CONSOLE_ALLOWED_ORIGINS: ${CONSOLE_ALLOWED_ORIGINS:-}
     depends_on:
       redis: {condition: service_healthy}
     healthcheck:
@@ -256,6 +283,8 @@ services:
       API_INTERNAL_URL: http://api:4000
       # The installed release (install.sh keeps it in .env), shown in the panel's sidebar.
       APP_VERSION: ${APP_VERSION:-dev}
+      # Time zone for visitors whose browser has not told the panel theirs yet.
+      APP_TIME_ZONE: ${APP_TIME_ZONE:-UTC}
     depends_on:
       api: {condition: service_healthy}
     security_opt: [no-new-privileges:true]
@@ -303,6 +332,9 @@ services:
       REDIS_PASSWORD: ${REDIS_PASSWORD}
       TERMINAL_IDLE_MINUTES: ${TERMINAL_IDLE_MINUTES:-15}
       CONSOLE_MAX_MINUTES: ${TERMINAL_MAX_MINUTES:-60}
+      TERMINAL_MAX_PER_USER: ${TERMINAL_MAX_PER_USER:-1}
+      TERMINAL_MAX_TOTAL: ${TERMINAL_MAX_TOTAL:-3}
+      CONSOLE_ALLOWED_ORIGINS: ${CONSOLE_ALLOWED_ORIGINS:-}
     depends_on:
       redis: {condition: service_healthy}
     healthcheck:
@@ -312,10 +344,13 @@ services:
       retries: 5
     logging: *logging
   # Monitoring (docker compose --profile observability up -d). Nothing here is published beyond 127.0.0.1.
+  # Each of the larger services has a memory ceiling well above what it normally uses: a runaway query or log
+  # burst then restarts that one service instead of pushing the panel and its database out of memory.
   prometheus:
     image: prom/prometheus:v3.2.1
     profiles: [observability]
     restart: unless-stopped
+    mem_limit: 1g
     ports: ["127.0.0.1:9090:9090"]
     environment:
       # Public panel URL probed from outside the stack (set by install.sh domain); the API otherwise.
@@ -333,6 +368,7 @@ services:
     image: prom/alertmanager:v0.28.1
     profiles: [observability]
     restart: unless-stopped
+    mem_limit: 256m
     ports: ["127.0.0.1:9093:9093"]
     # The operator's data/observability/alertmanager.yml is used once it defines a receiver; until then the bundled
     # one sends every alert to the panel's notifications (nothing to edit on the server).
@@ -364,6 +400,7 @@ services:
     image: grafana/grafana:11.6.0
     profiles: [observability]
     restart: unless-stopped
+    mem_limit: 512m
     ports: ["127.0.0.1:3001:3000"]
     environment:
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:?Run scripts/install.sh}
@@ -378,6 +415,7 @@ services:
     image: grafana/loki:3.4.2
     profiles: [observability]
     restart: unless-stopped
+    mem_limit: 1g
     command: [-config.file=/etc/loki/loki.yaml]
     volumes:
       - ./deploy/observability/loki.yaml:/etc/loki/loki.yaml:ro
@@ -389,6 +427,7 @@ services:
     image: otel/opentelemetry-collector-contrib:0.123.0
     profiles: [observability]
     restart: unless-stopped
+    mem_limit: 512m
     user: "0"
     read_only: true
     cap_drop: [ALL]

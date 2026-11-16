@@ -1,6 +1,8 @@
 #!/bin/sh
-# Lightning VM: install (or reinstall) on a fresh server with one command. Gets the source with git, so the
-# installation can update itself later (from the admin panel or `sh scripts/install.sh update`).
+# Lightning VM: install on a fresh server with one command. Gets the source with git, so the installation
+# can update itself later (from the admin panel or `sh scripts/install.sh update`).
+# Run again on a server that is already installed, it updates that installation the way `install.sh update`
+# does (backup first, rollback on failure) and leaves its update channel as it is.
 #
 #   curl -fsSL https://raw.githubusercontent.com/OWNER/lightning-vm/main/scripts/get.sh | sudo sh -s -- [options] [-- install options]
 #
@@ -65,6 +67,28 @@ fi
 [ -z "$TOKEN" ] || git_ -C "$DIR" config credential.helper "store --file=$cred"
 
 cd "$DIR"
+if [ -f .env ]; then
+  # Something is installed here already. Checking out another version under it and running `install` would
+  # skip the backup, the migration check and the rollback, and would put a server that follows a branch back
+  # on the stable channel, on older code than its database.
+  if [ -s data/maintenance/history.jsonl ]; then
+    # A finished installation (its first backup is in the history): `update` does this safely and follows the
+    # channel this server already has. Of the install options only the language means anything to it.
+    lang=""
+    while [ $# -gt 0 ]; do if [ "$1" = --lang ] && [ $# -gt 1 ]; then lang=$2; fi; shift; done
+    [ -z "$BRANCH" ] || say WARN "--branch is not applied to an existing installation; to follow a branch: sh scripts/install.sh auto-update on|off --channel edge --branch $BRANCH"
+    say INFO "an installation exists in $DIR: updating it (backup first, rollback on failure; its update channel is kept)"
+    set -- update
+    [ -z "$VERSION" ] || set -- "$@" --to "$VERSION"
+    [ -z "$lang" ] || set -- "$@" --lang "$lang"
+    exec sh scripts/install.sh "$@"
+  elif [ -z "$VERSION" ] && [ -z "$BRANCH" ] && git_ rev-parse -q --verify HEAD >/dev/null; then
+    # An installation that was interrupted: it continues with the version it started with and the channel
+    # already written to .env.
+    say INFO "continuing the interrupted installation in $DIR ($(git_ describe --tags --always))"
+    exec sh scripts/install.sh install "$@"
+  fi
+fi
 if [ -n "$BRANCH" ]; then
   target="origin/$BRANCH"; extra="--channel edge --branch $BRANCH"
 elif [ -n "$VERSION" ]; then

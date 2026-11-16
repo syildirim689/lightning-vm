@@ -12,8 +12,10 @@
 #   sh scripts/install.sh monitoring on|off  start or stop Prometheus, Grafana, Loki and Alertmanager
 #   sh scripts/install.sh terminal on|off    the administrators' browser terminal to this host (off by default)
 #   sh scripts/install.sh backup         encrypted backup of the database, settings, keys and certificates
-#   sh scripts/install.sh restore FILE [--yes-replace-data]
-#                                        restore a backup (without the flag it only checks and explains)
+#   sh scripts/install.sh restore FILE [--yes-replace-data] [--no-safety-backup]
+#                                        restore a backup (without the flag it only checks and explains); the
+#                                        current data is backed up first, and without that backup nothing is
+#                                        restored unless --no-safety-backup says so
 #   sh scripts/install.sh update [--to vX.Y.Z]
 #                                        update a git checkout to the latest release of UPDATE_CHANNEL
 #   sh scripts/install.sh releases       fetch and list available versions (data/maintenance/releases.json)
@@ -37,6 +39,11 @@
 #                                        this server's operating system updates (apt): refresh the package lists,
 #                                        install all or only security updates, restart the server, turn automatic
 #                                        security updates on or off; the state is recorded in data/maintenance/os.json
+#   sh scripts/install.sh uninstall [--purge-data]
+#                                        stop the services and remove what this script wrote outside this directory
+#                                        (systemd units and drop-ins, the apt setting, stored git credentials);
+#                                        .env, secrets/, backups/ and data/ stay, and so do the Docker volumes
+#                                        unless --purge-data is given
 # Options: --lang tr|en  --install-docker  --allow-unsupported-os
 # It never changes firewall, SSH or other web server settings, and never prints secrets.
 # shellcheck disable=SC1091 # /etc/os-release exists only on the target host
@@ -50,19 +57,21 @@ else case " $* " in *" update "*|*" maintenance "*|*" run-requests "*)
 esac; fi
 
 MODE=install INSTALL_DOCKER=0 ALLOW_OS=0 DOMAIN="" ACME_STAGING=0 PROXY_PORT=8080 TRUSTED_CIDR="" TLS_MODE="" CERT_FILE="" KEY_FILE=""
-RESTORE_FILE="" YES=0 TO="" AUTO=0 SWITCH="" CHANNEL="" WINDOW="" BRANCH=""
+RESTORE_FILE="" YES=0 TO="" AUTO=0 SWITCH="" CHANNEL="" WINDOW="" BRANCH="" PURGE=0 NO_SAFETY=0
 HOST_NAME="" HOST_TZ="" HOST_NTP="" HOST_DNS="" OS_ACT=""
 LOCAL=0 WIZARD=0 MONITORING=1 SCHEDULE=1 ADMIN_EMAIL="" RESET_EMAIL="" DISABLE_2FA=""
 case "${LANG:-}" in tr*) UI="tr" ;; *) UI="en" ;; esac
 while [ $# -gt 0 ]; do
   case "$1" in
-    install|check|recover-setup|update|behind-proxy|local-only|backup|maintenance|releases|run-requests|state) MODE=$1 ;;
+    install|check|recover-setup|update|behind-proxy|local-only|backup|maintenance|releases|run-requests|state|uninstall) MODE=$1 ;;
     restore) MODE=restore; if [ $# -gt 1 ]; then shift; RESTORE_FILE=$1; fi ;;
     reset-password) MODE=reset-password; if [ $# -gt 1 ]; then shift; RESET_EMAIL=$1; fi ;;
     --disable-2fa) DISABLE_2FA=--disable-2fa ;;
     schedule|auto-update|agent|monitoring|terminal) MODE=$1; if [ $# -gt 1 ]; then shift; SWITCH=$1; fi
       case "$SWITCH" in on|off) ;; *) echo "$MODE: on or off" >&2; exit 2 ;; esac ;;
     --yes-replace-data) YES=1 ;;
+    --no-safety-backup) NO_SAFETY=1 ;;
+    --purge-data) PURGE=1 ;;
     --to) shift; TO=${1:-} ;;
     --auto) AUTO=1 ;;
     --channel) shift; CHANNEL=${1:-} ;;
@@ -102,6 +111,31 @@ msg() { if [ "$UI" = tr ]; then t=$3; else t=$4; fi; printf '%-5s %-22s %s\n' "$
 FAILED=0
 fail() { msg FAIL "$1" "$2" "$3"; FAILED=$((FAILED + 1)); }
 die() { msg FAIL "$2" "$3" "$4"; exit "$1"; }
+
+# What has to be undone when the script ends in the middle of a backup or a restore (a failed step, Ctrl-C,
+# a kill): one EXIT handler for the whole script, so no function replaces another's trap. Each function sets
+# its own variable here and empties it when it is done.
+BACKUP_WORK="" RESTORE_WORK="" RESTORE_STAGE=""
+on_exit() {
+  rc=$?; trap - EXIT
+  # Plaintext copies of the database, .env and the encryption keys.
+  [ -z "$BACKUP_WORK" ] || rm -rf "$BACKUP_WORK"
+  [ -z "$RESTORE_WORK" ] || rm -rf "$RESTORE_WORK"
+  # A restore that stopped the app services does not leave them down, and says which data they now run on.
+  if [ -n "$RESTORE_STAGE" ]; then
+    if [ "$RESTORE_STAGE" = replaced ]; then
+      msg WARN RESTORE_STATE "Geri yükleme yarıda kaldı. Veritabanı artık YEDEKTEKİ veriyi içeriyor, ama anahtarlar ve sertifikalar geri konmamış olabilir: aynı restore komutunu yeniden çalıştırın" "The restore did not finish. The database now holds the BACKUP's data, but the keys and certificates may not be back yet: run the same restore command again"
+    else
+      msg WARN RESTORE_STATE "Geri yükleme yapılmadı: veritabanı DEĞİŞMEDİ, önceki veri yerinde" "Nothing was restored: the database is UNCHANGED, the previous data is in place"
+    fi
+    if docker compose up -d --wait --wait-timeout 300 >/dev/null 2>&1; then msg OK RESTARTED "Durdurulan servisler yeniden başlatıldı" "The stopped services were started again"
+    else msg FAIL E_RESTORE_START "Durdurulan servisler başlatılamadı: docker compose up -d; docker compose logs" "The stopped services could not be started: docker compose up -d; docker compose logs"; fi
+  fi
+  exit "$rc"
+}
+# A signal ends the script through the same handler. Called again inside a subshell, where traps start empty.
+arm_exit() { trap on_exit EXIT; trap 'exit 129' HUP; trap 'exit 130' INT; trap 'exit 143' TERM; }
+arm_exit
 
 env_value() { if [ -f .env ]; then sed -n "s/^$1=//p" .env | tail -n 1; fi; }
 # Replaces or appends one setting; used only when the operator asks for an access-mode change.
@@ -342,45 +376,94 @@ write_observability() {
   [ -f data/observability/alertmanager.yml ] || cp deploy/observability/alertmanager.example.yml data/observability/alertmanager.yml
 }
 
+# COMPOSE_PROFILES in .env lists every profile that is on (observability,terminal): this is the list without one.
+profiles_without() { env_value COMPOSE_PROFILES | tr ',' '\n' | grep -vx "$1" | grep -v '^$' | paste -sd, - || true; }
+
 psql_value() { docker compose exec -T postgres sh -c "psql -U \"\$POSTGRES_USER\" -d \"\$POSTGRES_DB\" -Atc \"$1\""; }
 
-# PostgreSQL (custom-format dump), .env, the encryption keys and Caddy's certificates, in one tar
-# encrypted with secrets/backup.key. Redis is not included: it holds only queue copies and
-# sessions; open operations are queued again from PostgreSQL.
+# One maintenance job at a time: a backup, update or restore started by hand waits for the hourly timer or a
+# panel request to finish (and they for it). The timer and run-requests already hold the lock when they get
+# here or start this script again (LVM_LOCKED): waiting for it then would be waiting for ourselves.
+take_lock() {
+  [ -z "${LVM_LOCKED:-}" ] || return 0
+  command -v flock >/dev/null || return 0
+  (umask 022; mkdir -p data/maintenance)
+  # Tried in a subshell first: a redirection that fails on exec ends the whole script.
+  (: >> data/maintenance/.lock) 2>/dev/null || return 0
+  exec 9>> data/maintenance/.lock
+  if ! flock -n 9; then
+    msg INFO LOCK_WAIT "Başka bir bakım işi (yedek, güncelleme veya panel isteği) çalışıyor; bitmesi bekleniyor" "Another maintenance job (backup, update or a panel request) is running; waiting for it to finish"
+    flock 9
+  fi
+  LVM_LOCKED=1; export LVM_LOCKED
+}
+
+# PostgreSQL (custom-format dump), .env, the encryption keys, Caddy's certificates and your own certificate
+# (custom TLS), in one tar encrypted with secrets/backup.key. Redis is not included: it holds only queue
+# copies and sessions; open operations are queued again from PostgreSQL.
 # Its variables are prefixed or private to it: restore calls it while holding its own.
+# Every caller runs it in a `||` list, where `set -e` does not apply: each step is checked here, and a step
+# that fails ends the backup with nothing half-written left behind and nothing older deleted.
 do_backup() { # reason
-  reason=$1
+  reason=$1; BACKUP_FILE=""
   dir=$(env_value BACKUP_DIR); dir=${dir:-backups}
   keep=$(env_value BACKUP_KEEP); keep=${keep:-7}
   [ -s secrets/backup.key ] || { record backup failed E_BACKUP_KEY_MISSING ",\"reason\":\"$reason\""; die 21 E_BACKUP_KEY_MISSING "secrets/backup.key yok; önce: sh scripts/install.sh" "secrets/backup.key missing; run first: sh scripts/install.sh"; }
-  (umask 077; mkdir -p "$dir")
-  name="lightning-$(date -u +%Y%m%dT%H%M%SZ)"; bwork="$dir/.work-$$"
-  (umask 077; mkdir "$bwork")
+  name="lightning-$(date -u +%Y%m%dT%H%M%SZ)"; bwork="$dir/.work-$$"; bout="$dir/$name.tar.enc"
+  backup_failed() { # code
+    rm -rf "$bwork"; BACKUP_WORK=""; rm -f "$bout" "$bout.sha256"; record backup failed "$1" ",\"reason\":\"$reason\""
+  }
+  # The work directory holds the database, .env and the keys unencrypted: it goes away however this ends,
+  # and what a run that was killed outright left behind (its process is gone) goes away now.
+  BACKUP_WORK=$bwork; arm_exit
+  for stale in "$dir"/.work-*; do
+    [ -d "$stale" ] || continue
+    { [ "$stale" != "$bwork" ] && kill -0 "${stale##*/.work-}" 2>/dev/null; } || rm -rf "$stale"
+  done
+  { (umask 077; mkdir -p "$dir") && (umask 077; mkdir "$bwork"); } || {
+    backup_failed E_BACKUP_WRITE; msg FAIL E_BACKUP_WRITE "Yedek klasörüne yazılamadı: $dir (disk dolu olabilir)" "Could not write to the backup directory: $dir (the disk may be full)"; return 1; }
   if ! docker compose exec -T postgres sh -c 'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Fc' > "$bwork/db.dump" 2>/dev/null || [ ! -s "$bwork/db.dump" ]; then
-    rm -rf "$bwork"; record backup failed E_BACKUP_DB ",\"reason\":\"$reason\""
-    die 21 E_BACKUP_DB "Veritabanı yedeği alınamadı; postgres çalışıyor mu?" "Database dump failed; is postgres running?"
+    backup_failed E_BACKUP_DB; msg FAIL E_BACKUP_DB "Veritabanı yedeği alınamadı; postgres çalışıyor mu?" "Database dump failed; is postgres running?"; return 1
   fi
-  psql_value 'SELECT version FROM schema_migrations ORDER BY 1' > "$bwork/migrations"
-  app_version > "$bwork/version"
-  cp .env "$bwork/env"; cp secrets/master.key secrets/vmware.token "$bwork/"
-  if [ -f data/observability/alertmanager.yml ]; then cp data/observability/alertmanager.yml "$bwork/"; fi
+  {
+    psql_value 'SELECT version FROM schema_migrations ORDER BY 1' > "$bwork/migrations" && [ -s "$bwork/migrations" ] &&
+    app_version > "$bwork/version" &&
+    cp .env "$bwork/env" && cp secrets/master.key secrets/vmware.token "$bwork/" &&
+    { [ ! -f data/observability/alertmanager.yml ] || cp data/observability/alertmanager.yml "$bwork/"; } &&
+    # Your own certificate (domain --tls custom) exists nowhere else; Caddy's own ones are in caddy_data.tgz.
+    { [ ! -f data/tls/cert.pem ] || { cp data/tls/cert.pem "$bwork/tls_cert.pem" && cp data/tls/key.pem "$bwork/tls_key.pem"; }; }
+  } || {
+    backup_failed E_BACKUP_WRITE; msg FAIL E_BACKUP_WRITE "Yedeğe girecek dosyalar toplanamadı (disk dolu olabilir)" "The files for the backup could not be collected (the disk may be full)"; return 1; }
   docker compose exec -T proxy tar -C /data -czf - . > "$bwork/caddy_data.tgz" 2>/dev/null || rm -f "$bwork/caddy_data.tgz"
-  out="$dir/$name.tar.enc"
-  tar -C "$bwork" -cf - . | (umask 077; openssl enc -aes-256-cbc -pbkdf2 -iter 200000 -salt -pass file:secrets/backup.key -out "$out")
-  rm -rf "$bwork"
-  # Read it back before calling it a backup.
-  if ! openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -pass file:secrets/backup.key -in "$out" 2>/dev/null | tar -tf - 2>/dev/null | grep -q 'db.dump'; then
-    rm -f "$out"; record backup failed E_BACKUP_VERIFY ",\"reason\":\"$reason\""
-    die 21 E_BACKUP_VERIFY "Yedek dosyası geri okunamadı (disk dolu olabilir)" "The backup file could not be read back (the disk may be full)"
+  # Named one by one: the archive then holds them in this order, which the comparison below relies on.
+  bfiles=$(cd "$bwork" && ls)
+  # shellcheck disable=SC2086 # one argument per file; the names are ours and have no spaces
+  tar -C "$bwork" -cf - $bfiles | (umask 077; openssl enc -aes-256-cbc -pbkdf2 -iter 200000 -salt -pass file:secrets/backup.key -out "$bout") || {
+    backup_failed E_BACKUP_WRITE; msg FAIL E_BACKUP_WRITE "Yedek dosyası yazılamadı (disk dolu olabilir)" "The backup file could not be written (the disk may be full)"; return 1; }
+  # Read it back before calling it a backup, and before anything older is deleted: what comes out of the
+  # encrypted file must be every byte that went in. Listing it is not enough, a cut-off archive still lists.
+  # shellcheck disable=SC2086
+  bwant=$(cd "$bwork" && cat $bfiles | sha256sum)
+  bgot=$(openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -pass file:secrets/backup.key -in "$bout" 2>/dev/null | tar -xOf - 2>/dev/null | sha256sum)
+  # e3b0c442…: the checksum of nothing at all, which two failed reads would agree on.
+  case "$bwant" in ''|e3b0c44298fc1c14*) bgot=unreadable ;; esac
+  if [ "$bwant" != "$bgot" ]; then
+    backup_failed E_BACKUP_VERIFY
+    msg FAIL E_BACKUP_VERIFY "Yedek dosyası geri okunamadı (disk dolu olabilir)" "The backup file could not be read back (the disk may be full)"; return 1
   fi
-  (cd "$dir" && sha256sum "$name.tar.enc" > "$name.tar.enc.sha256" && chmod 600 "$name.tar.enc.sha256")
-  # Retention: the newest $keep local backups stay; the external copy keeps its own policy.
-  set -- "$dir"/lightning-*.tar.enc # glob order is name order, and the names are UTC timestamps
-  while [ $# -gt "$keep" ]; do rm -f "$1" "$1.sha256"; shift; done
-  bytes=$(stat -c %s "$out"); copied=false; copy_to=$(env_value BACKUP_COPY_TO)
-  BACKUP_FILE=$out
+  rm -rf "$bwork"; BACKUP_WORK=""
+  (cd "$dir" && sha256sum "$name.tar.enc" > "$name.tar.enc.sha256" && chmod 600 "$name.tar.enc.sha256") || {
+    backup_failed E_BACKUP_WRITE; msg FAIL E_BACKUP_WRITE "Sağlama dosyası yazılamadı (disk dolu olabilir)" "The checksum file could not be written (the disk may be full)"; return 1; }
+  # Retention: the newest $keep local backups stay; the external copy keeps its own policy. Skipped before a
+  # restore: the backup being restored may be the oldest one here and must outlive its own restore.
+  if [ "$reason" != pre-restore ]; then
+    set -- "$dir"/lightning-*.tar.enc # glob order is name order, and the names are UTC timestamps
+    while [ $# -gt "$keep" ]; do rm -f "$1" "$1.sha256"; shift; done
+  fi
+  bytes=$(stat -c %s "$bout"); copied=false; copy_to=$(env_value BACKUP_COPY_TO)
+  BACKUP_FILE=$bout
   if [ -n "$copy_to" ]; then
-    if rsync -a "$out" "$out.sha256" "$copy_to/" 2>/dev/null; then copied=true
+    if rsync -a "$bout" "$bout.sha256" "$copy_to/" 2>/dev/null; then copied=true
     else
       record backup failed E_BACKUP_COPY ",\"reason\":\"$reason\",\"file\":\"$name.tar.enc\",\"bytes\":$bytes,\"copied\":false"
       msg WARN E_BACKUP_COPY "Yedek yerelde alındı ama $copy_to hedefine kopyalanamadı" "Backup written locally but not copied to $copy_to"
@@ -388,15 +471,16 @@ do_backup() { # reason
     fi
   fi
   record backup ok - ",\"reason\":\"$reason\",\"file\":\"$name.tar.enc\",\"bytes\":$bytes,\"copied\":$copied"
-  msg OK BACKUP "$out ($bytes bayt)" "$out ($bytes bytes)"
+  msg OK BACKUP "$bout ($bytes bayt)" "$bout ($bytes bytes)"
 }
 
 do_restore() {
   file=$RESTORE_FILE
+  take_lock
   [ -f "$file" ] || die 2 E_RESTORE_FILE "Yedek dosyası bulunamadı: '$file'" "Backup file not found: '$file'"
   [ -f "$file.sha256" ] || die 22 E_RESTORE_CHECKSUM "Sağlama dosyası yok: $file.sha256" "Checksum file missing: $file.sha256"
   (cd "$(dirname "$file")" && sha256sum -c --quiet "$(basename "$file").sha256" >/dev/null 2>&1) || die 22 E_RESTORE_CHECKSUM "Sağlama tutmuyor; dosya bozuk veya değiştirilmiş" "Checksum mismatch; the file is damaged or was changed"
-  work=$(mktemp -d)
+  work=$(mktemp -d); RESTORE_WORK=$work
   if ! openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -pass file:secrets/backup.key -in "$file" 2>/dev/null | tar -C "$work" -xf - 2>/dev/null; then
     rm -rf "$work"; die 22 E_RESTORE_DECRYPT "Yedek açılamadı: secrets/backup.key bu yedeğin anahtarı değil" "Backup could not be opened: secrets/backup.key is not this backup's key"
   fi
@@ -413,18 +497,38 @@ do_restore() {
     msg INFO CONFIRM "Hiçbir şey değiştirilmedi. Onaylamak için --yes-replace-data ekleyin" "Nothing was changed. Add --yes-replace-data to confirm"
     exit 3
   fi
+  # Nothing is stopped or dropped before the database answers and pg_restore itself has read the dump's
+  # table of contents.
+  docker compose exec -T postgres pg_isready -q >/dev/null 2>&1 || die 22 E_RESTORE_DB_DOWN "Veritabanı yanıt vermiyor; hiçbir şey değiştirilmedi. Önce: docker compose up -d postgres" "The database does not answer; nothing was changed. First: docker compose up -d postgres"
+  docker compose exec -T postgres pg_restore -l < "$work/db.dump" >/dev/null 2>&1 || die 22 E_RESTORE_DUMP "Yedekteki veritabanı dökümü okunamıyor (pg_restore -l); hiçbir şey değiştirilmedi" "The database dump in the backup cannot be read (pg_restore -l); nothing was changed"
   safety=""
-  if docker compose exec -T postgres pg_isready -q >/dev/null 2>&1; then
+  if [ "$NO_SAFETY" = 1 ]; then
+    msg WARN W_NO_SAFETY_BACKUP "--no-safety-backup: mevcut verinin yedeği ALINMIYOR; bu geri yükleme geri alınamaz" "--no-safety-backup: the current data is NOT backed up; this restore cannot be undone"
+  else
     msg INFO SAFETY_BACKUP "Önce mevcut verinin yedeği alınıyor" "Backing up the current data first"
     do_backup pre-restore || true
     safety=${BACKUP_FILE:-}
-    [ -n "$safety" ] || die 22 E_RESTORE_NO_SAFETY "Mevcut verinin yedeği alınamadı; geri yükleme yapılmadı" "The current data could not be backed up; nothing was restored"
+    [ -n "$safety" ] || die 22 E_RESTORE_NO_SAFETY "Mevcut verinin yedeği alınamadı; geri yükleme yapılmadı. Yedeksiz devam etmek (geri dönüşü yoktur) için: --no-safety-backup" "The current data could not be backed up; nothing was restored. To go on without that backup (no way back): --no-safety-backup"
   fi
+  # From here on the script does not end with the services down: see on_exit.
+  RESTORE_STAGE=stopped
   docker compose stop api worker web console vmware proxmox xcpng ovirt hyperv libvirt incus proxy >/dev/null 2>&1 || true
-  if ! docker compose exec -T postgres sh -c 'psql -q -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public;" && pg_restore -U "$POSTGRES_USER" -d "$POSTGRES_DB" --no-owner --exit-on-error' < "$work/db.dump" >/dev/null 2>&1; then
-    rm -rf "$work"; record restore failed E_RESTORE_DB ",\"file\":\"$(basename "$file")\""
-    die 22 E_RESTORE_DB "Veritabanı geri yüklenemedi; uygulama servisleri durduruldu. Önceki veri: $safety" "Database restore failed; the app services are stopped. Previous data: $safety"
-  fi
+  # One transaction: the old schema goes and the dump comes in, or nothing changes at all. psql ends quietly
+  # when its input stops short, so COMMIT and the marker are sent only after pg_restore wrote the whole dump.
+  restored=$(docker compose exec -T postgres sh -c '{ echo "BEGIN; DROP SCHEMA public CASCADE; CREATE SCHEMA public;"; pg_restore --no-owner -f - && printf "%s\n" "COMMIT;" "\\echo LVM_RESTORE_COMMITTED"; } | psql -q -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB"' < "$work/db.dump" 2>/dev/null || true)
+  case "$restored" in
+    *LVM_RESTORE_COMMITTED*) ;;
+    *) record restore failed E_RESTORE_DB ",\"file\":\"$(basename "$file")\""
+      msg FAIL E_RESTORE_DB "Veritabanı geri yüklenemedi; işlem geri alındı${safety:+. Mevcut verinin yedeği: $safety}" "The database could not be restored; the transaction was rolled back${safety:+. Backup of the current data: $safety}"
+      exit 22 ;;
+  esac
+  RESTORE_STAGE=replaced
+  # Redis still holds the newer state: queued jobs, locks, caches, one-time tickets. None of it belongs to the
+  # restored database and all of it is made again (sessions are in PostgreSQL; open operations are queued again
+  # from there), so the app's Redis database is emptied before anything starts.
+  redis_db=$(env_value REDIS_DB)
+  docker compose exec -T redis redis-cli -n "${redis_db:-0}" FLUSHDB >/dev/null 2>&1 ||
+    msg WARN W_RESTORE_REDIS "Redis boşaltılamadı; eski kuyruk işleri kalmış olabilir: docker compose exec redis redis-cli FLUSHDB" "Redis could not be emptied; old queue jobs may remain: docker compose exec redis redis-cli FLUSHDB"
   # The stored VMware passwords are encrypted with the backup's master key: both keys come back with the data.
   for f in master.key vmware.token; do
     rm -f "secrets/$f"; cp "$work/$f" "secrets/$f"
@@ -432,19 +536,45 @@ do_restore() {
     chmod 400 "secrets/$f"
   done
   (umask 077; cp "$work/env" .env.from-backup)
+  # Your own certificate comes back next to the current one, like .env: the domain step below puts it in place.
+  tls_note=""
+  if [ -s "$work/tls_cert.pem" ] && [ -s "$work/tls_key.pem" ]; then
+    (umask 077; mkdir -p data/tls.from-backup; cp "$work/tls_cert.pem" data/tls.from-backup/cert.pem; cp "$work/tls_key.pem" data/tls.from-backup/key.pem)
+    tls_note=" --tls custom --cert data/tls.from-backup/cert.pem --key data/tls.from-backup/key.pem"
+  fi
+  # The address the backup was served on, for the hint after the restore (the current .env is not changed).
+  old_site=$(sed -n 's/^PANEL_SITE=//p' "$work/env" | tail -n 1)
+  echo "$old_site" | grep -Eq '^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$' || old_site=""
+  if [ -z "$tls_note" ] && [ "$(sed -n 's/^PANEL_TLS_MODE=//p' "$work/env" | tail -n 1)" = staging ]; then tls_note=" --tls staging"; fi
   if [ -f "$work/alertmanager.yml" ]; then cp "$work/alertmanager.yml" data/observability/alertmanager.yml.from-backup; fi
   if [ -s "$work/caddy_data.tgz" ]; then
     docker compose run --rm --no-deps -T --entrypoint sh proxy -c 'find /data -mindepth 1 -delete && tar -xzf - -C /data' < "$work/caddy_data.tgz" >/dev/null 2>&1 \
       || msg WARN W_RESTORE_CERTS "Sertifikalar geri yüklenemedi; Caddy yenilerini alır" "Certificates not restored; Caddy will request new ones"
   fi
-  rm -rf "$work"
+  rm -rf "$work"; RESTORE_WORK=""; RESTORE_STAGE=""
   if docker compose up -d --wait --wait-timeout 300 >/dev/null 2>&1 && local_get /api/ready >/dev/null 2>&1; then
     record restore ok - ",\"file\":\"$(basename "$file")\""
-    msg OK RESTORED "Geri yüklendi. Yedekteki ayarlar: .env.from-backup ve data/observability/alertmanager.yml.from-backup (geçerli ayarlar değiştirilmedi). Önceki veri: $safety" "Restored. Settings from the backup: .env.from-backup and data/observability/alertmanager.yml.from-backup (the current settings were kept). Previous data: $safety"
+    msg OK RESTORED "Geri yüklendi. Yedekteki ayarlar: .env.from-backup ve data/observability/alertmanager.yml.from-backup (geçerli ayarlar değiştirilmedi). Önceki veri: ${safety:--}" "Restored. Settings from the backup: .env.from-backup and data/observability/alertmanager.yml.from-backup (the current settings were kept). Previous data: ${safety:--}"
+    # The address and the certificate mode live in .env, which a restore never replaces.
+    if [ -n "$old_site" ] && [ "$old_site" != "$SITE" ]; then
+      msg INFO NEXT "Yedek $old_site adresinde çalışıyordu, bu kurulum o adreste değil. Aynı adres için (DNS bu sunucuyu gösterdikten sonra): sudo sh scripts/install.sh domain $old_site$tls_note" "The backup was served on $old_site and this installation is not. For the same address (once DNS points to this server): sudo sh scripts/install.sh domain $old_site$tls_note"
+    elif [ -n "$old_site" ] && [ "$tls_note" != "${tls_note#* custom }" ]; then
+      msg INFO NEXT "Yedekteki kendi sertifikanız data/tls.from-backup altında; geçerli sertifika değiştirilmedi. Onu kullanmak için: sudo sh scripts/install.sh domain $old_site$tls_note" "Your own certificate from the backup is in data/tls.from-backup; the current certificate was kept. To use it: sudo sh scripts/install.sh domain $old_site$tls_note"
+    fi
   else
     record restore failed E_RESTORE_START ",\"file\":\"$(basename "$file")\""
     die 22 E_RESTORE_START "Veri geri yüklendi ama servisler hazır değil: docker compose logs" "Data restored but services are not ready: docker compose logs"
   fi
+}
+
+# The timer starts in the first minutes of every hour (OnCalendar=hourly plus a random delay of up to five
+# minutes), and a backup may run before the update is looked at. A window that holds no full hour followed by
+# ten minutes (03:30-04:00, say) would never update, and nothing would say so.
+window_fires() { # HH:MM-HH:MM
+  echo "$1" | awk -F'[:-]' '{ s = $1 * 60 + $2; e = $3 * 60 + $4
+    for (h = 0; h < 24; h++) { a = h * 60; b = a + 10
+      if (s < e ? (a >= s && b < e) : (s > e && (a >= s || b < e))) exit 0 }
+    exit 1 }'
 }
 
 in_window() { # HH:MM-HH:MM in local time, may wrap past midnight
@@ -469,15 +599,18 @@ up_and_ready() {
 # Source installs follow released git tags. Containers can be rolled back; the database cannot be
 # rolled back automatically, so a backup is taken first and named in every failure message.
 do_update() {
+  # The hourly service comes through here whether or not automatic updates are on: with them off, or outside
+  # the window, it ends before any check that can fail (no git checkout, a file edited by hand).
+  if [ "$AUTO" = 1 ]; then
+    [ "$(env_value AUTO_UPDATE)" = on ] || exit 0
+    in_window "$(env_value UPDATE_WINDOW)" || exit 0
+  fi
   git rev-parse --is-inside-work-tree >/dev/null 2>&1 || die 20 E_UPDATE_NO_GIT "Güncelleme, git ile alınmış kaynak gerektirir (git clone)" "Updating needs a source checkout made with git clone"
   [ -f .env ] || die 17 E_NOT_INSTALLED "Önce kurulum yapın: sh scripts/install.sh" "Install first: sh scripts/install.sh"
   quiet_hotplug # servers installed before this fix get it with their next update
   [ -z "$(git status --porcelain --untracked-files=no)" ] || die 20 E_UPDATE_LOCAL_CHANGES "Kaynakta yerel değişiklikler var (git status); güncelleme yapılmadı" "The source has local changes (git status); not updating"
   channel=$(env_value UPDATE_CHANNEL); channel=${channel:-stable}
-  if [ "$AUTO" = 1 ]; then
-    [ "$(env_value AUTO_UPDATE)" = on ] || exit 0
-    in_window "$(env_value UPDATE_WINDOW)" || exit 0
-  fi
+  take_lock
   if [ -n "$(git remote)" ]; then
     git fetch --quiet --tags --force "$(git remote | head -n 1)" 2>/dev/null || { record update failed E_UPDATE_FETCH; die 20 E_UPDATE_FETCH "Sürümler alınamadı (git fetch)" "Could not fetch releases (git fetch)"; }
   fi
@@ -490,6 +623,14 @@ do_update() {
   # and the migration check below refuses what the database cannot run).
   if [ -z "$TO" ] && ! git merge-base --is-ancestor "$current" "$target" 2>/dev/null; then
     msg OK UP_TO_DATE "Güncel: $current_name, kanalın son sürümü ($target) bundan eski" "Up to date: $current_name; the channel's newest version ($target) is older"; exit 0
+  fi
+  # A version that failed is not tried again by the timer, hour after hour and night after night (a backup, a
+  # stop, a build and a rollback each time): it waits for the next version or for an update started by hand.
+  if [ "$AUTO" = 1 ]; then
+    prev=$(grep -E '"kind":"update","status":"(ok|failed)"' data/maintenance/history.jsonl 2>/dev/null | tail -n 1 || true)
+    case "$prev" in *'"status":"failed"'*"\"to\":\"$target\""*)
+      msg INFO UPDATE_SKIPPED "$target sürümüne güncelleme daha önce başarısız oldu; otomatik olarak yeniden denenmiyor. Elle denemek için: sudo sh scripts/install.sh update" "The update to $target failed before; it is not tried again automatically. To try by hand: sudo sh scripts/install.sh update"; exit 0 ;;
+    esac
   fi
   applied=$(psql_value 'SELECT version FROM schema_migrations ORDER BY 1') || die 20 E_UPDATE_DB "Veritabanına ulaşılamadı" "Database not reachable"
   for v in $applied; do
@@ -510,7 +651,21 @@ do_update() {
   pre=$BACKUP_FILE
   msg INFO DRAINING "Worker durduruluyor (çalışan adımın bitmesi en çok 120 sn beklenir)" "Stopping the worker (waits up to 120 s for the running step)"
   docker compose stop -t 120 worker >/dev/null 2>&1 || true
-  git -c advice.detachedHead=false checkout -q --detach "$target"
+  update_rollback() { # code: back to the version that was running, services up again, the failure in the history
+    # Forced: local changes were refused above, so only what the failed step left half done is discarded.
+    git -c advice.detachedHead=false checkout -q -f --detach "$current" 2>/dev/null || true
+    set_env APP_VERSION "$current_name"
+    if up_and_ready; then rb=true; else rb=false; fi
+    record update failed "$1" ",\"from\":\"$current_name\",\"to\":\"$target\",\"rolledBack\":$rb"
+  }
+  # The worker is down from here on: a checkout that fails (full disk, damaged repository) must not end the
+  # script with it stopped.
+  if ! git -c advice.detachedHead=false checkout -q --detach "$target" 2>/dev/null; then
+    msg FAIL E_UPDATE_CHECKOUT "$target kaynağına geçilemedi (git checkout; disk dolu olabilir); $current_name sürümüne geri dönülüyor" "Could not switch the source to $target (git checkout; the disk may be full); going back to $current_name"
+    update_rollback E_UPDATE_CHECKOUT
+    msg WARN UPDATE_ROLLED_BACK "Güncelleme yapılmadı; $current_name yeniden başlatıldı (çalışıyor: $rb). Veritabanı değişmedi" "Not updated; $current_name was started again (running: $rb). The database was not changed"
+    exit 23
+  fi
   set_env APP_VERSION "$(app_version)"
   if up_and_ready; then
     record update ok - ",\"from\":\"$current_name\",\"to\":\"$target\""
@@ -520,10 +675,7 @@ do_update() {
     msg OK UPDATED "$target çalışıyor" "$target is running"; exit 0
   fi
   msg FAIL E_UPDATE_FAILED "$target hazır olmadı; $current_name sürümüne geri dönülüyor" "$target did not become ready; rolling back to $current_name"
-  git -c advice.detachedHead=false checkout -q --detach "$current"
-  set_env APP_VERSION "$current_name"
-  if up_and_ready; then rb=true; else rb=false; fi
-  record update failed E_UPDATE_FAILED ",\"from\":\"$current_name\",\"to\":\"$target\",\"rolledBack\":$rb"
+  update_rollback E_UPDATE_FAILED
   msg WARN DB_NOT_ROLLED_BACK "Container'lar geri alındı (çalışıyor: $rb). Veritabanı otomatik geri alınmaz; eski sürüm sorun çıkarırsa: sh scripts/install.sh restore $pre --yes-replace-data" "Containers rolled back (running: $rb). The database is not rolled back automatically; if the old version misbehaves: sh scripts/install.sh restore $pre --yes-replace-data"
   exit 23
 }
@@ -534,6 +686,7 @@ do_maintenance() {
   # Never alongside something the panel asked for (same lock as run_requests).
   exec 9> data/maintenance/.lock
   flock -n 9 || exit 0
+  LVM_LOCKED=1; export LVM_LOCKED
   if [ "$(env_value BACKUP_SCHEDULE)" != off ]; then
     last=$(grep '"kind":"backup","status":"ok"' data/maintenance/history.jsonl 2>/dev/null | tail -n 1 | sed 's/^{"time":"\([^"]*\)".*/\1/')
     age=$(( $(date +%s) - $(date -d "${last:-1970-01-01T00:00:00Z}" +%s) ))
@@ -565,6 +718,9 @@ set_auto_update() {
   case "$CHANNEL" in ''|stable|beta|edge) ;; *) die 2 E_CHANNEL_INVALID "Kanal stable, beta veya edge olmalı" "Channel must be stable, beta or edge" ;; esac
   if [ -n "$WINDOW" ] && ! echo "$WINDOW" | grep -Eq '^([01][0-9]|2[0-3]):[0-5][0-9]-([01][0-9]|2[0-3]):[0-5][0-9]$'; then
     die 2 E_WINDOW_INVALID "Bakım penceresi SS:DD-SS:DD olmalı (örnek 03:00-05:00)" "The maintenance window must be HH:MM-HH:MM (example 03:00-05:00)"
+  fi
+  if [ -n "$WINDOW" ] && ! window_fires "$WINDOW"; then
+    die 2 E_WINDOW_NEVER "Bakım zamanlayıcısı saat başlarında çalışır: pencere bir saat başını ve ardından gelen 10 dakikayı içermeli ($WINDOW içermiyor; örnek 03:00-05:00)" "The maintenance timer runs on the hour: the window must hold a full hour and the 10 minutes after it ($WINDOW does not; example 03:00-05:00)"
   fi
   set_env AUTO_UPDATE "$SWITCH"
   [ -z "$CHANNEL" ] || set_env UPDATE_CHANNEL "$CHANNEL"
@@ -644,6 +800,7 @@ run_requests() {
   (umask 022; mkdir -p data/maintenance/runs)
   exec 9> data/maintenance/.lock
   flock 9
+  LVM_LOCKED=1; export LVM_LOCKED
   # The API queues one request at a time, so the order of several (should it happen) does not matter.
   for f in data/maintenance-requests/*.req; do
     [ -f "$f" ] || continue
@@ -668,9 +825,15 @@ run_requests() {
         case "$tls" in
           acme) ;;
           staging) set -- "$@" --tls staging ;;
-          custom) c=data/maintenance-requests/$id.cert; k=data/maintenance-requests/$id.key
-            if [ -s "$c" ] && [ -s "$k" ] && [ "$(wc -c < "$c")" -le 65536 ] && [ "$(wc -c < "$k")" -le 16384 ]; then
-              tlsdir=$(mktemp -d); mv "$c" "$tlsdir/cert.pem"; mv "$k" "$tlsdir/key.pem"; chmod 600 "$tlsdir"/*.pem
+          custom)
+            # The request directory belongs to the API container's user, so what lies there may be a link to
+            # any file on this server. Both are first moved out of its reach (a link moves as a link, it is not
+            # followed), accepted only as regular files, and their content goes into files root creates itself.
+            tlsdir=$(mktemp -d); c=$tlsdir/in.cert; k=$tlsdir/in.key
+            if mv "data/maintenance-requests/$id.cert" "$c" 2>/dev/null && mv "data/maintenance-requests/$id.key" "$k" 2>/dev/null &&
+              [ ! -L "$c" ] && [ ! -L "$k" ] && [ -f "$c" ] && [ -f "$k" ] && [ -s "$c" ] && [ -s "$k" ] &&
+              [ "$(wc -c < "$c")" -le 65536 ] && [ "$(wc -c < "$k")" -le 16384 ] &&
+              (umask 077; cat "$c" > "$tlsdir/cert.pem" && cat "$k" > "$tlsdir/key.pem"); then
               set -- "$@" --tls custom --cert "$tlsdir/cert.pem" --key "$tlsdir/key.pem"
             else ok=0; fi ;;
           *) ok=0 ;;
@@ -700,7 +863,7 @@ run_requests() {
     status running null ""
     log=data/maintenance/runs/$id.log
     (umask 022; : > "$log")
-    if sh "$(pwd)/scripts/install.sh" "$@" > "$log" 2>&1; then rc=0; else rc=$?; fi
+    if sh "$(pwd)/scripts/install.sh" "$@" > "$log" 2>&1; then rc=0; else rc=$?; fi # LVM_LOCKED: the lock is held here
     code=$(awk 'NF >= 2 { c = $2 } END { print c }' "$log" | tr -cd 'A-Z0-9_')
     if [ "$rc" = 0 ]; then status succeeded 0 "$code"; else status failed "$rc" "$code"; fi
     if [ -n "${tlsdir:-}" ]; then rm -rf "$tlsdir"; tlsdir=""; fi
@@ -980,7 +1143,49 @@ restart_proxy() {
   docker compose up -d --wait --wait-timeout 120 proxy >/dev/null 2>&1 || die 18 E_START_FAILED "Proxy başlamadı: docker compose logs proxy" "Proxy did not start: docker compose logs proxy"
 }
 
+# Takes the installation off this server without touching what cannot be made again: the settings, the keys,
+# the backups and (unless --purge-data) the database stay, so `sh scripts/install.sh` brings it back.
+do_uninstall() {
+  [ "$(id -u)" = 0 ] || die 13 E_NEEDS_ROOT "Kaldırma için root gerekir (sudo)" "Uninstalling needs root (sudo)"
+  take_lock
+  if command -v systemctl >/dev/null; then
+    (SWITCH=off; set_schedule) || true
+    (SWITCH=off; set_agent) || true
+  fi
+  # Everything this script wrote outside the project directory.
+  restart=""
+  [ ! -f /etc/systemd/timesyncd.conf.d/lightning-vm.conf ] || restart="$restart systemd-timesyncd"
+  [ ! -f /etc/systemd/resolved.conf.d/lightning-vm.conf ] || restart="$restart systemd-resolved"
+  hp=/etc/systemd/system/cloud-init-hotplugd.service.d
+  for f in /etc/systemd/timesyncd.conf.d/lightning-vm.conf /etc/systemd/resolved.conf.d/lightning-vm.conf \
+    /etc/apt/apt.conf.d/52lightning-vm-auto "$hp/10-lightning-vm.conf" /root/.lightning-vm-git-credentials; do
+    [ -e "$f" ] || continue
+    rm -f "$f"; msg OK REMOVED "$f" "$f"
+  done
+  rmdir "$hp" /etc/systemd/timesyncd.conf.d /etc/systemd/resolved.conf.d 2>/dev/null || true # only when empty
+  if command -v systemctl >/dev/null; then
+    systemctl daemon-reload || true
+    # shellcheck disable=SC2086 # one argument per service
+    [ -z "$restart" ] || systemctl try-restart $restart || true
+  fi
+  if command -v docker >/dev/null && docker compose version >/dev/null 2>&1; then
+    # Every profile, whether it is on in .env or not.
+    if [ "$PURGE" = 1 ]; then
+      COMPOSE_PROFILES=observability,terminal docker compose down --remove-orphans --volumes >/dev/null 2>&1 || fail E_UNINSTALL_DOWN "Container'lar ve veri birimleri kaldırılamadı: docker compose down --volumes" "The containers and data volumes could not be removed: docker compose down --volumes"
+      [ "$FAILED" -ne 0 ] || msg WARN PURGED "Container'lar ve Docker veri birimleri (veritabanı, sertifikalar, izleme verisi) SİLİNDİ" "The containers and the Docker data volumes (database, certificates, monitoring data) were DELETED"
+    else
+      COMPOSE_PROFILES=observability,terminal docker compose down --remove-orphans >/dev/null 2>&1 || fail E_UNINSTALL_DOWN "Container'lar durdurulamadı: docker compose down" "The containers could not be stopped: docker compose down"
+      [ "$FAILED" -ne 0 ] || msg OK STOPPED "Container'lar durduruldu ve kaldırıldı" "The containers were stopped and removed"
+      msg INFO KEPT "Docker veri birimleri (veritabanı dahil) duruyor; silmek için: sudo sh scripts/install.sh uninstall --purge-data" "The Docker data volumes (the database among them) were kept; to delete them: sudo sh scripts/install.sh uninstall --purge-data"
+    fi
+  fi
+  msg INFO KEPT "$(pwd) altında duranlar: .env, secrets/ (yedek anahtarı dahil), yedekler, data/ ve kaynak. Tamamen silmek için bu klasörü kendiniz silin" "Kept in $(pwd): .env, secrets/ (the backup key among them), the backups, data/ and the source. To remove everything, delete this directory yourself"
+  msg INFO KEPT "Dokunulmayanlar: Docker Engine ve imajları, sunucu adı, saat dilimi ve /etc/hosts satırı" "Not touched: Docker Engine and its images, the host name, the time zone and the /etc/hosts line"
+  [ "$FAILED" -eq 0 ] || exit 1
+}
+
 case "$MODE" in
+  uninstall) do_uninstall; exit 0 ;;
   domain)
     [ -f .env ] || die 17 E_NOT_INSTALLED "Önce kurulum yapın: sh scripts/install.sh" "Install first: sh scripts/install.sh"
     case "$TLS_MODE" in
@@ -1032,6 +1237,7 @@ case "$MODE" in
     exit 0 ;;
   backup)
     [ -f .env ] || die 17 E_NOT_INSTALLED "Önce kurulum yapın: sh scripts/install.sh" "Install first: sh scripts/install.sh"
+    take_lock
     do_backup manual || exit 21
     exit 0 ;;
   restore) [ -f .env ] || die 17 E_NOT_INSTALLED "Önce kurulum yapın: sh scripts/install.sh" "Install first: sh scripts/install.sh"
@@ -1057,8 +1263,7 @@ case "$MODE" in
     COMPOSE_PROFILES= docker compose config --services 2>/dev/null | sort > "$base"
     extra=$(comm -23 "$all" "$base" | tr '\n' ' '); rm -f "$all" "$base"
     [ -n "$extra" ] || die 18 E_PROFILE "Compose dosyasında $profile servisi yok" "No $profile services in the compose file"
-    # COMPOSE_PROFILES in .env lists every profile that is on (observability,terminal).
-    others=$(env_value COMPOSE_PROFILES | tr ',' '\n' | grep -vx "$profile" | grep -v '^$' | paste -sd, -)
+    others=$(profiles_without "$profile")
     if [ "$SWITCH" = on ]; then
       [ "$profile" = observability ] && write_observability
       set_env COMPOSE_PROFILES "$(printf '%s\n%s\n' "$others" "$profile" | grep -v '^$' | paste -sd, -)"
@@ -1108,7 +1313,8 @@ case "$CHANNEL" in ''|stable|beta|edge) ;; *) die 2 E_CHANNEL_INVALID "Kanal sta
 [ -z "$BRANCH" ] || set_env UPDATE_BRANCH "$BRANCH"
 # Monitoring runs by default where it fits (4 GB RAM); COMPOSE_PROFILES in .env applies to every compose command.
 if [ "$MONITORING" = 1 ] && ! grep -q '^COMPOSE_PROFILES=' .env && [ "${mem_mb:-0}" -ge 3800 ]; then set_env COMPOSE_PROFILES observability; fi
-[ "$MONITORING" = 1 ] || set_env COMPOSE_PROFILES ""
+# --no-monitoring takes only the monitoring profile off the list; the terminal, if it is on, stays on.
+[ "$MONITORING" = 1 ] || set_env COMPOSE_PROFILES "$(profiles_without observability)"
 [ "$LOCAL" = 1 ] && revert_local_settings
 # Installs from before PANEL_TLS: derive it from the access mode already configured.
 if ! grep -q '^PANEL_TLS=' .env; then case "$SITE" in :*) set_env PANEL_TLS 0 ;; *) set_env PANEL_TLS 1 ;; esac; fi
