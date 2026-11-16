@@ -1,4 +1,4 @@
-import { CanActivate, Controller, ExecutionContext, Get, Injectable, Req, UseGuards } from '@nestjs/common';
+import { CanActivate, Controller, ExecutionContext, Get, Injectable, Req, SetMetadata, UseGuards } from '@nestjs/common';
 import { fromNodeHeaders } from 'better-auth/node';
 import { createHash } from 'node:crypto';
 import type { FastifyRequest } from 'fastify';
@@ -7,7 +7,7 @@ import { getAuth } from './better-auth';
 import { pool } from './db';
 import { apiError } from './errors';
 import { customerLevel, limitsOf, permissionsOf, splitRoles } from './permissions';
-import { ipAllowed } from './role-limits';
+import { ipAllowed, narrowedTokenMay } from './role-limits';
 import { getSettings } from './settings-store';
 import { touch } from './presence';
 
@@ -48,7 +48,7 @@ async function tokenSession(req: FastifyRequest, token: string): Promise<{ user:
   // The administrator's addresses for all tokens (Settings → API) and the token's own.
   const api = await getSettings('api');
   if (!ipAllowed(api.networks, req.ip) || !ipAllowed(t.allowed_ips, req.ip)) throw apiError(403, 'TOKEN_ADDRESS_NOT_ALLOWED', 'This API token may not be used from this address');
-  (req as FastifyRequest & { apiToken?: { id: string; name: string } }).apiToken = { id: t.id, name: t.token_name };
+  (req as FastifyRequest & { apiToken?: { id: string; name: string; narrowed: boolean } }).apiToken = { id: t.id, name: t.token_name, narrowed: !!t.token_permissions };
   await countRequest(req, t.id, api.rateLimit);
   if (t.scope === 'read' && !['GET', 'HEAD'].includes(req.method)) throw apiError(403, 'TOKEN_READ_ONLY', 'This API token can only read');
   // A narrowed token has only those of its owner's permissions it was given.
@@ -88,6 +88,12 @@ export async function currentSession(req: FastifyRequest): Promise<{ user: User;
 }
 export const currentUser = async (req: FastifyRequest) => (await currentSession(req))?.user ?? null;
 
+// The permission a route names (@Can, rbac.ts) and the mark for routes any API token may call (@TokenOpen): read here
+// for narrowed tokens, and by PermissionGuard for staff routes.
+export const PERMISSION = 'lvm:permission';
+export const TOKEN_OPEN = 'lvm:token-open';
+export const TokenOpen = () => SetMetadata(TOKEN_OPEN, true);
+
 @Injectable()
 export class SessionGuard implements CanActivate {
   async canActivate(ctx: ExecutionContext) {
@@ -95,6 +101,14 @@ export class SessionGuard implements CanActivate {
     const s = await currentSession(req);
     if (!s) throw apiError(401, 'UNAUTHENTICATED', 'Sign in required');
     req.user = s.user; req.sessionToken = s.token; req.sessionId = s.id;
+    // A narrowed token, on every route behind this guard (role-limits.ts has the rule).
+    if ((req as { apiToken?: { narrowed?: boolean } }).apiToken?.narrowed) {
+      const handler = ctx.getHandler();
+      const need = Reflect.getMetadata(PERMISSION, handler) as string[] | undefined;
+      if (!narrowedTokenMay(req.method, need, Reflect.getMetadata(TOKEN_OPEN, handler) === true, s.user.permissions)) {
+        throw apiError(403, 'FORBIDDEN', 'This API token was not given a permission for this', undefined, { need: need ?? [] });
+      }
+    }
     if (!s.id.startsWith('token:')) void touch(s.id, s.user.id, req.ip);
     // Two-factor required but not set up: only "who am I" answers (the panel then shows the setup; better-auth's
     // own routes for it are not behind this guard).

@@ -14,7 +14,7 @@ import { otpText, sendOtpMail, sendPasswordReset, sendSignInLink } from './mail'
 import { publishLive, type LiveKind } from './live-bus';
 import { notify } from './notify';
 import { adminEndpointPermission, betterAuthRoles, can, covers, effectivePermissions, ensureRoles, limitsOf, permissionsOf } from './permissions';
-import { ipAllowed } from './role-limits';
+import { createUserRequest, ipAllowed } from './role-limits';
 import { deviceOf } from './device';
 import { directorySignIn, refuseForDirectory } from './directory-signin';
 import { hashPassword, sha256, verifyPassword } from './security';
@@ -117,14 +117,26 @@ async function checkAdminEndpoint(path: string, headers: Headers, body: Record<s
   if (!s) throw new APIError('UNAUTHORIZED', { code: 'UNAUTHENTICATED', message: 'Sign in required' });
   const mine = await permissionsOf(s.user.id, (s.user as { role?: string }).role ?? null);
   if (!can(mine, need)) throw forbidden();
-  const target = String(body.userId ?? '');
+  let target = String(body.userId ?? '');
+  // Ending one session names it by its token, not by the account: the account is looked up, so the check below applies.
+  if (path === '/admin/revoke-user-session' && typeof body.sessionToken === 'string') {
+    const { rows: [t] } = await pool.query('SELECT user_id FROM auth_sessions WHERE token = $1', [body.sessionToken]);
+    target = t?.user_id ?? '';
+  }
   if (target && targetsAccount.has(path)) {
     // An admin cannot lock themselves out (ban, removal) or sign in as themselves.
     if (target === s.user.id && path !== '/admin/update-user' && path !== '/admin/revoke-user-session') throw new APIError('BAD_REQUEST', { code: 'CANNOT_CHANGE_OWN_ACCOUNT', message: 'Not on your own account' });
     if (target !== s.user.id && !covers(mine, await permissionsOf(target))) throw forbidden('FORBIDDEN_TARGET');
   }
   // Roles change only through PUT /admin/users/:id/access (it checks escalation); never through these calls.
-  if (path === '/admin/create-user' && !covers(mine, effectivePermissions(String(body.role ?? 'user'), []))) throw forbidden('FORBIDDEN_TARGET');
+  // The role is checked where better-auth reads it (role, else data.role); data sets nothing else but the language.
+  if (path === '/admin/create-user') {
+    const asked = createUserRequest(body);
+    if (asked.extra.length) throw forbidden();
+    // The same minimum a person signing up has to meet (better-auth applies its own only there).
+    if (typeof body.password !== 'string' || body.password.length < 12) throw new APIError('BAD_REQUEST', { code: 'PASSWORD_TOO_SHORT', message: 'Password too short' });
+    if (!covers(mine, effectivePermissions(asked.role, []))) throw forbidden('FORBIDDEN_TARGET');
+  }
   if (path === '/admin/update-user') {
     const data = (body.data ?? {}) as Record<string, unknown>;
     if (Object.keys(data).some((k) => !['name', 'email', 'locale'].includes(k))) throw forbidden();

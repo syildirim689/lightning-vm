@@ -3,12 +3,12 @@ import type { PoolClient } from 'pg';
 import { isIP } from 'node:net';
 import { pool } from './db';
 import { apiError } from './errors';
-import { audit, SessionGuard, type AuthedRequest } from './auth';
+import { audit, SessionGuard, type AuthedRequest, TokenOpen } from './auth';
 import { Can, PermissionGuard } from './rbac';
 import { ensureRoles, limitsOf } from './permissions';
 import { budgetState } from './budget';
 import { checkCoupon } from './coupons';
-import { checkCustom, exceededQuota, poolCapacity, type Limits, type Shape } from './capacity';
+import { capabilitiesOf, checkCustom, exceededQuota, poolCapacity, type Capabilities, type Limits, type Shape } from './capacity';
 import { locationColumns } from './locations';
 import type { Application } from './applications';
 
@@ -79,17 +79,27 @@ function readIpv6(body: Input, f: Fields) {
 }
 
 type Db = PoolClient | typeof pool;
-// Live (not deleted) servers are the pool's reserved capacity and the owner's quota usage.
+// Refuses at once what a location's platform cannot do (capacity.ts), instead of an operation that fails later in the worker.
+export async function platformCan(poolId: string, what: keyof Capabilities) {
+  const { rows: [c] } = await pool.query('SELECT c.kind, c.operations FROM vmware_connections c JOIN resource_pools p ON p.connection_id = c.id WHERE p.id = $1', [poolId]);
+  if (c && !capabilitiesOf(c.kind, c.operations)[what]) throw apiError(409, 'PLATFORM_NOT_SUPPORTED', 'This location’s platform does not support this yet');
+}
+// Live (not deleted) servers are the pool's reserved capacity and the owner's quota usage; a server's disk is its system
+// disk plus its extra disks (disks.ts).
+const withDisks = "disk_gb + COALESCE((SELECT sum(d.size_gb) FROM server_disks d WHERE d.server_id = servers.id AND d.status <> 'failed'), 0)";
 // Reserved in a pool: its servers outside VDCs, plus every active VDC allocation (whose servers live inside it).
 export async function reservedFor(poolId: string, db: Db = pool) {
   const { rows: [r] } = await db.query(`SELECT COALESCE(sum(vcpu), 0)::int AS vcpu, COALESCE(sum(memory_mb), 0)::int AS "memoryMb", COALESCE(sum(disk_gb), 0)::int AS "diskGb" FROM (
-      SELECT vcpu, memory_mb, disk_gb FROM servers WHERE pool_id = $1 AND state <> 'deleted' AND vdc_id IS NULL
+      SELECT vcpu, memory_mb, ${withDisks} AS disk_gb FROM servers WHERE pool_id = $1 AND state <> 'deleted' AND vdc_id IS NULL
       UNION ALL SELECT vcpu, memory_mb, disk_gb FROM vdcs WHERE pool_id = $1 AND active) x`, [poolId]);
   return r as { vcpu: number; memoryMb: number; diskGb: number };
 }
+// Counted against the limits limitsFor gives: a project's servers only when the project has a quota of its own; otherwise
+// everything the owner has (projects cost nothing to make, so they must not each start a fresh count).
 export async function usageOf(userId: string, projectId?: string, db: Db = pool) {
   const { rows: [u] } = await db.query(`SELECT count(*)::int AS servers, COALESCE(sum(vcpu), 0)::int AS vcpu, COALESCE(sum(memory_mb), 0)::int AS "memoryMb",
-    COALESCE(sum(disk_gb), 0)::int AS "diskGb" FROM servers WHERE state <> 'deleted' AND vdc_id IS NULL AND (CASE WHEN $2::uuid IS NULL THEN owner_id = $1 ELSE project_id = $2 END)`, [userId, projectId ?? null]);
+    COALESCE(sum(${withDisks}), 0)::int AS "diskGb" FROM servers WHERE state <> 'deleted' AND vdc_id IS NULL
+      AND (CASE WHEN $2::uuid IS NOT NULL AND EXISTS (SELECT 1 FROM quotas q WHERE q.scope = 'project' AND q.subject_id = $2) THEN project_id = $2 ELSE owner_id = $1 END)`, [userId, projectId ?? null]);
   return u as { servers: number; vcpu: number; memoryMb: number; diskGb: number };
 }
 
@@ -282,7 +292,7 @@ export class CatalogAdminController {
   async images() {
     const { rows } = await pool.query(`SELECT i.id, i.name, i.family, i.connection_id AS "connectionId", i.template_moref AS "templateMoref",
       v.name AS "templateName", i.min_disk_gb AS "minDiskGb", i.cloud_init AS "cloudInit", i.active FROM os_images i
-      LEFT JOIN vmware_vms v ON v.connection_id = i.connection_id AND v.moref = i.template_moref ORDER BY i.name`);
+      LEFT JOIN vmware_vms v ON v.connection_id = i.connection_id AND v.moref = i.template_moref WHERE i.owner_id IS NULL ORDER BY i.name`); // customers' own images (images.ts) are theirs, not the catalog's
     return { images: rows };
   }
 
@@ -330,7 +340,7 @@ export class CatalogAdminController {
       const { rows: [p] } = await client.query(`INSERT INTO packages (name, vcpu, memory_mb, disk_gb, price_monthly, price_hourly, currency, sort, active, traffic_gb)
         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id`, [v.name, v.vcpu, v.memoryMb, v.diskGb, v.priceMonthly, v.priceHourly, v.currency, v.sort, v.active, v.trafficGb]);
       await client.query('INSERT INTO package_pools SELECT $1, unnest($2::uuid[])', [p.id, v.poolIds]);
-      await client.query('INSERT INTO package_images SELECT $1, unnest($2::uuid[])', [p.id, v.imageIds]);
+      await client.query('INSERT INTO package_images SELECT $1, i.id FROM os_images i WHERE i.id = ANY($2::uuid[]) AND i.owner_id IS NULL', [p.id, v.imageIds]); // never a customer's own image
       return p.id as string;
     }));
     await audit(req, 'catalog.package_created', 'success', req.user.id, { id, name: v.name });
@@ -348,7 +358,7 @@ export class CatalogAdminController {
       await client.query('DELETE FROM package_pools WHERE package_id = $1', [id]);
       await client.query('DELETE FROM package_images WHERE package_id = $1', [id]);
       await client.query('INSERT INTO package_pools SELECT $1, unnest($2::uuid[])', [id, v.poolIds]);
-      await client.query('INSERT INTO package_images SELECT $1, unnest($2::uuid[])', [id, v.imageIds]);
+      await client.query('INSERT INTO package_images SELECT $1, i.id FROM os_images i WHERE i.id = ANY($2::uuid[]) AND i.owner_id IS NULL', [id, v.imageIds]);
       return true;
     }));
     if (!found) throw apiError(404, 'NOT_FOUND', 'Unknown package');
@@ -521,7 +531,9 @@ export async function resolveOrder(poolId: string, body: Input, allowedLocations
       throw apiError(400, 'VALIDATION_FAILED', 'Invalid input', { type: 'INVALID_VALUE' });
     }
     if (body.imageId !== undefined && body.imageId !== null) {
-      const { rows: [img] } = await pool.query('SELECT min_disk_gb FROM os_images WHERE id = $1 AND active', [body.imageId]).catch(() => ({ rows: [] }));
+      // A package limited to some images (package_images) is sold with those only, as a reinstall also checks.
+      const { rows: [img] } = await pool.query(`SELECT i.min_disk_gb FROM os_images i WHERE i.id = $1 AND i.active AND (NOT EXISTS (SELECT 1 FROM package_images pi WHERE pi.package_id = $2)
+        OR EXISTS (SELECT 1 FROM package_images pi WHERE pi.package_id = $2 AND pi.image_id = i.id))`, [body.imageId, body.type === 'package' ? body.packageId : null]).catch(() => ({ rows: [] }));
       if (!img) throw apiError(400, 'VALIDATION_FAILED', 'Unknown image', { imageId: 'NOT_AVAILABLE' });
       if (shape.diskGb < img.min_disk_gb) throw apiError(400, 'VALIDATION_FAILED', 'Disk too small', { diskGb: 'BELOW_IMAGE_MINIMUM' });
     }
@@ -604,18 +616,22 @@ export class CatalogController {
         'diskStepGb', c.disk_step_gb, 'minMemoryMbPerVcpu', c.min_memory_mb_per_vcpu, 'maxMemoryMbPerVcpu', c.max_memory_mb_per_vcpu,
         'priceVcpu', c.price_vcpu::text, 'priceMemoryGb', c.price_memory_gb::text, 'priceDiskGb', c.price_disk_gb::text, 'currency', c.currency) END AS custom,
         r.extra_ipv4_max AS "extraIpv4Max", r.extra_ipv4_price::text AS "extraIpv4Price", r.traffic_gb AS "trafficGb",
-        EXISTS (SELECT 1 FROM ip_pools i WHERE i.pool_id = r.id AND i.ipv6_prefix IS NOT NULL) AS ipv6
+        EXISTS (SELECT 1 FROM ip_pools i WHERE i.pool_id = r.id AND i.ipv6_prefix IS NOT NULL) AS ipv6,
+        (SELECT json_build_object('kind', x.kind, 'operations', x.operations) FROM vmware_connections x WHERE x.id = r.connection_id) AS platform
         FROM resource_pools r LEFT JOIN custom_rules c ON c.pool_id = r.id LEFT JOIN locations l ON l.id = r.location_id
         WHERE r.active AND (l.status IS NULL OR l.status <> 'hidden') ORDER BY r.name`),
       // The images everyone gets, and this person's own (personal images, images.ts).
-      pool.query('SELECT id, name, family, min_disk_gb AS "minDiskGb", owner_id IS NOT NULL AS own FROM os_images WHERE active AND (owner_id IS NULL OR owner_id = $1) ORDER BY owner_id IS NULL DESC, name', [req.user.id]),
+      // poolIds: the locations an image can be ordered in (those of its own connection), as the order itself checks.
+      pool.query(`SELECT i.id, i.name, i.family, i.min_disk_gb AS "minDiskGb", i.owner_id IS NOT NULL AS own,
+        ARRAY(SELECT r.id FROM resource_pools r WHERE r.active AND r.connection_id = i.connection_id) AS "poolIds"
+        FROM os_images i WHERE i.active AND (i.owner_id IS NULL OR i.owner_id = $1) ORDER BY i.owner_id IS NULL DESC, i.name`, [req.user.id]),
       pool.query(`SELECT id, name, kind, description, min_memory_mb AS "minMemoryMb", min_disk_gb AS "minDiskGb", price_monthly::text AS "priceMonthly",
         (license_mode = 'none' OR EXISTS (SELECT 1 FROM application_licenses l WHERE l.application_id = a.id AND l.server_id IS NULL)) AS available
         FROM applications a WHERE active ORDER BY name`),
       pool.query(`SELECT ${locationColumns} FROM locations l WHERE l.status <> 'hidden'
         AND EXISTS (SELECT 1 FROM resource_pools r WHERE r.location_id = l.id AND r.active) ORDER BY l.sort, l.name`),
     ]);
-    const pools2 = only ? pools.rows.filter((p) => only.includes(p.locationId)) : pools.rows;
+    const pools2 = (only ? pools.rows.filter((p) => only.includes(p.locationId)) : pools.rows).map(({ platform, ...p }) => ({ ...p, capabilities: capabilitiesOf(platform?.kind ?? '', platform?.operations) }));
     return { packages: packages.rows, pools: pools2, images: images.rows, applications: applications.rows, locations: only ? locations.rows.filter((l) => only.includes(l.id)) : locations.rows };
   }
 
@@ -636,7 +652,7 @@ export class CatalogController {
   }
 
   // Validates an order on the server and prices it. Creating the server comes with provisioning.
-  @Post('catalog/quote') @HttpCode(200)
+  @Post('catalog/quote') @HttpCode(200) @TokenOpen()
   async quote(@Req() req: AuthedRequest, @Body() body: Input) {
     const f = new Fields(body);
     const poolId = f.text('poolId', 36);
@@ -646,7 +662,11 @@ export class CatalogController {
       const { rowCount } = await pool.query('SELECT 1 FROM projects WHERE id = $1 AND owner_id = $2', [projectId, req.user.id]).catch(() => ({ rowCount: 0 }));
       if (!rowCount) throw apiError(404, 'NOT_FOUND', 'Unknown project');
     }
-    const { rp, shape, price, packageId } = await resolveOrder(poolId as string, body, limitsOf(req.user.roles.join(',')).allowedLocations);
+    const { rp, shape, price, packageId, imageId } = await resolveOrder(poolId as string, body, limitsOf(req.user.roles.join(',')).allowedLocations);
+    // The same rule as the order itself (servers.ts): the image is the catalog's or the person's own, on this location's connection.
+    if (imageId && !(await pool.query('SELECT 1 FROM os_images WHERE id = $1 AND (owner_id IS NULL OR owner_id = $2) AND connection_id = $3', [imageId, req.user.id, rp.connection_id])).rowCount) {
+      throw apiError(400, 'VALIDATION_FAILED', 'Unknown image', { imageId: 'NOT_AVAILABLE' });
+    }
     const limits = await limitsFor(req.user.id, projectId);
     const over = exceededQuota(limits, await usageOf(req.user.id, projectId), shape);
     const cap = await capacityOf(rp);

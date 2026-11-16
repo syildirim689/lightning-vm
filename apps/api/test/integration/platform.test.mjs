@@ -288,6 +288,7 @@ test('insights explain what needs attention; the task list starts empty', async 
   assert.ok(!staff.includes('STAFF_INACTIVE'));
   const idle = (await post('/auth/admin/create-user', { email: 'idle-staff@example.test', password, name: 'Idle', role: 'support' }, admin)).json().user.id;
   await pool.query("UPDATE users SET created_at = now() - interval '200 days', last_seen_at = now() - interval '120 days' WHERE id = $1", [idle]);
+  await redis.del('insights:staff'); // the staff list is shared for 60 seconds (insights.ts); this reads it fresh
   assert.equal((await get('/admin/insights', admin)).json().insights.find((i) => i.code === 'STAFF_INACTIVE')?.params.count, 1);
   await post('/auth/admin/remove-user', { userId: idle }, admin);
   const mine = (await get('/insights', user)).json().insights.map((i) => i.code);

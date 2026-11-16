@@ -68,3 +68,19 @@ export function readLimits(input: unknown, knownLocation: (id: string) => boolea
   if (ips.length > 100 || ips.some((x) => !validCidr(x))) fields['limits.allowedIps'] = 'INVALID_ADDRESS'; else if (ips.length) limits.allowedIps = ips;
   return { limits, fields };
 }
+
+// A create-user call as better-auth reads it: the role is `role` or, without one, `data.role`; everything else in `data`
+// goes straight onto the new account. Only the language may be set that way (extra: the keys that may not).
+export function createUserRequest(body: Record<string, unknown>) {
+  const data = (body.data && typeof body.data === 'object' ? body.data : {}) as Record<string, unknown>;
+  return { role: String(body.role ?? data.role ?? 'user'), extra: Object.keys(data).filter((k) => !['locale', 'role'].includes(k)) };
+}
+
+// A narrowed API token (one given only some of its owner's permissions) and a request that changes something: allowed
+// only where the route names a permission (@Can) the token holds, or is marked open to any token (@TokenOpen). A route
+// that names none was written for the person in their browser (paying, transferring a server, their keys, support),
+// and a token cut down to "power only" must not reach it. Reading is left to the token's scope and the routes' own checks.
+export function narrowedTokenMay(method: string, need: string[] | undefined, open: boolean, permissions: string[]) {
+  if (['GET', 'HEAD', 'OPTIONS'].includes(method.toUpperCase()) || open) return true;
+  return !!need?.length && need.some((p) => permissions.includes('*') || permissions.includes(p));
+}

@@ -42,20 +42,28 @@ const iyziParties = (b: { name: string; email: string; taxId: string; phone: str
     registrationAddress: address.address, city: address.city, country: address.country, ip: b.ip }, billingAddress: address, shippingAddress: address };
 };
 export const iyzico: Gateway = {
+  recheck: true,
   async checkout(c, creds) {
     const price = iyziPrice(c.amount);
     const r = await iyzi(creds, '/payment/iyzipos/checkoutform/initialize/auth/ecom', { locale: 'tr', conversationId: c.paymentId, price, paidPrice: price, currency: c.currency,
       basketId: c.paymentId, paymentGroup: 'SUBSCRIPTION', callbackUrl: c.callbackUrl, enabledInstallments: [1], forceThreeDS: 1, ...iyziParties(c.buyer),
       basketItems: [{ id: c.paymentId, name: c.description, category1: 'Hosting', itemType: 'VIRTUAL', price }] });
     if (r.status !== 'success' || !r.paymentPageUrl) throw new Error(`iyzico: ${r.errorCode ?? ''} ${r.errorMessage ?? r.raw ?? ''}`.trim());
-    return { redirect: r.paymentPageUrl as string };
+    // The form's token is kept with the payment: the result can be asked for later without the browser (the billing run).
+    return { redirect: r.paymentPageUrl as string, ...(typeof r.token === 'string' && r.token && { providerRef: r.token }) };
   },
   async verify({ body, payment }, creds) {
-    const token = String(body.token ?? '');
+    // iyzico posts the token back when the form is finished; without that post (the billing run asking) the stored one is used.
+    const posted = String(body.token ?? '');
+    if (posted && payment.providerRef && posted !== payment.providerRef) return fail('BAD_SIGNATURE', 'Another form’s token');
+    const token = posted || payment.providerRef || '';
     if (!token) return fail('NO_TOKEN');
     const r = await iyzi(creds, '/payment/iyzipos/checkoutform/auth/ecom/detail', { locale: 'tr', conversationId: payment.id, token });
     const sig = hmacHex(creds.secretKey, [r.paymentStatus, r.paymentId, r.currency, r.basketId, r.conversationId, r.paidPrice, r.price, r.token].join(':'));
     if (r.signature && r.signature !== sig) return fail('BAD_SIGNATURE', 'iyzico signature mismatch');
+    // Not paid: final when iyzico says so, or when iyzico itself sent the customer back (the form is finished then).
+    // Asked on our own, anything else means the customer has not finished.
+    if ((r.status !== 'success' || r.paymentStatus !== 'SUCCESS') && !posted && r.paymentStatus !== 'FAILURE') return fail('PENDING');
     if (r.status !== 'success' || r.paymentStatus !== 'SUCCESS') return fail(r.errorCode ? `IYZICO_${r.errorCode}` : 'CARD_DECLINED', r.errorMessage, r.paymentId);
     if (r.basketId !== payment.id || Math.abs(Number(r.paidPrice) - Number(payment.amount)) > 0.001 || r.currency !== payment.currency) return fail('AMOUNT_MISMATCH', 'The provider reported a different payment', r.paymentId);
     if (r.fraudStatus !== undefined && Number(r.fraudStatus) !== 1) return fail('FRAUD_REVIEW', 'iyzico holds the payment for review', r.paymentId);
@@ -100,6 +108,8 @@ export const paytr: Gateway & { paymentIdFrom(body: Record<string, unknown>): st
     // hash = base64(HMAC(merchant_key, merchant_oid + merchant_salt + status + total_amount))
     const hash = hmacB64(creds.merchant_key, `${body.merchant_oid}${creds.merchant_salt}${body.status}${body.total_amount}`);
     if (String(body.hash ?? '') !== hash) return fail('BAD_SIGNATURE', 'PayTR hash mismatch');
+    // The notification of another payment (genuine, but sent to this one's address) is not this payment's result.
+    if (String(body.merchant_oid ?? '') !== oid(payment.id)) return fail('BAD_SIGNATURE', 'Another payment’s notification');
     if (body.status !== 'success') return fail(`PAYTR_${body.failed_reason_code ?? 'FAILED'}`, String(body.failed_reason_msg ?? ''));
     if (Number(body.payment_amount ?? body.total_amount) < cents(payment.amount)) return fail('AMOUNT_MISMATCH', 'PayTR reported a smaller amount');
     return { ok: true, ref: String(body.merchant_oid) };
@@ -118,6 +128,7 @@ async function stripeApi(creds: Record<string, string>, method: string, path: st
     headers: { authorization: `Bearer ${creds.secretKey}`, ...(form && { 'content-type': 'application/x-www-form-urlencoded' }), ...(idem && { 'idempotency-key': idem }) } })).body;
 }
 export const stripe: Gateway = {
+  recheck: true,
   async checkout(c, creds) {
     const r = await stripeApi(creds, 'POST', '/v1/checkout/sessions', {
       mode: 'payment', 'line_items[0][price_data][currency]': c.currency.toLowerCase(), 'line_items[0][price_data][unit_amount]': String(cents(c.amount)),
@@ -126,14 +137,18 @@ export const stripe: Gateway = {
       ...(c.saveCard && { 'payment_intent_data[setup_future_usage]': 'off_session' }),
       success_url: `${c.callbackUrl}?session_id={CHECKOUT_SESSION_ID}`, cancel_url: c.returnUrl }, c.paymentId);
     if (!r.url) throw new Error(`Stripe: ${r.error?.message ?? 'no checkout url'}`);
-    return { redirect: r.url as string };
+    // The session id is kept with the payment: a customer who pays and closes the tab never reaches success_url, and the
+    // billing run asks Stripe with it.
+    return { redirect: r.url as string, ...(typeof r.id === 'string' && { providerRef: r.id }) };
   },
   async verify({ query, payment }, creds) {
-    const id = String(query.session_id ?? '');
+    const id = String(query.session_id ?? payment.providerRef ?? '');
     if (!/^cs_[\w]+$/.test(id)) return fail('NO_SESSION');
     const s = await stripeApi(creds, 'GET', `/v1/checkout/sessions/${id}?expand[]=payment_intent`);
-    if (s.client_reference_id !== payment.id) return fail('AMOUNT_MISMATCH', 'Another payment’s session');
-    if (s.payment_status !== 'paid') return fail('CARD_DECLINED', s.payment_intent?.last_payment_error?.message);
+    if (!s.id) return fail('PROVIDER_ERROR', s.error?.message);
+    if (s.client_reference_id !== payment.id) return fail('BAD_SIGNATURE', 'Another payment’s session');
+    // Not paid: over only when the session expired; while it is open the customer may still pay (or try another card).
+    if (s.payment_status !== 'paid') return s.status === 'expired' ? fail('EXPIRED', 'The payment page expired') : fail('PENDING', s.payment_intent?.last_payment_error?.message);
     if (s.amount_total !== cents(payment.amount) || String(s.currency).toUpperCase() !== payment.currency) return fail('AMOUNT_MISMATCH', 'Stripe reported a different amount');
     const pi = s.payment_intent;
     const pm = typeof pi?.payment_method === 'string' ? pi.payment_method : pi?.payment_method?.id;
@@ -162,6 +177,7 @@ async function craft(creds: Record<string, string>, method: string, path: string
     'x-auth-version': '1', 'x-signature': signature, ...(idem && { 'x-idempotency-key': idem }) } })).body;
 }
 export const craftgate: Gateway = {
+  recheck: true,
   async checkout(c, creds) {
     const amount = Number(c.amount);
     const r = await craft(creds, 'POST', '/payment/v1/checkout-payments/init', { price: amount, paidPrice: amount, currency: c.currency, paymentGroup: 'LISTING_OR_SUBSCRIPTION',
@@ -175,7 +191,8 @@ export const craftgate: Gateway = {
     if (!payment.providerRef) return fail('NO_TOKEN');
     const r = await craft(creds, 'GET', `/payment/v1/checkout-payments/${encodeURIComponent(payment.providerRef)}`);
     const d = r.data ?? r;
-    if (d.paymentStatus !== 'SUCCESS') return fail('CARD_DECLINED', r.errors?.errorDescription ?? d.paymentError?.errorDescription);
+    // Anyone can open the return address, also before the form is finished: only Craftgate's FAILURE is a failure.
+    if (d.paymentStatus !== 'SUCCESS') return d.paymentStatus === 'FAILURE' ? fail('CARD_DECLINED', r.errors?.errorDescription ?? d.paymentError?.errorDescription) : fail('PENDING');
     if (d.conversationId !== payment.id || Math.abs(Number(d.paidPrice) - Number(payment.amount)) > 0.001 || d.currency !== payment.currency) return fail('AMOUNT_MISMATCH', 'Craftgate reported a different payment');
     return { ok: true, ref: String(d.id), ...(d.cardUserKey && d.cardToken && { card: { token: `${d.cardUserKey}|${d.cardToken}`, brand: d.cardAssociation, last4: d.binNumber ? String(d.lastFourDigits ?? '') : undefined } }) };
   },
@@ -196,6 +213,9 @@ export const craftgate: Gateway = {
 
 // ---- Param: Ortak Ödeme Sayfası (hosted, 3DS); the browser returns with a signed result; refunds. No stored cards (only
 // through a card form on our server, which would put card numbers on it). ----
+// shortcut: the return is not confirmed with Param's query (TP_Islem_Sorgulama4): its answer's fields are not in Param's
+// published samples and could not be tried against a merchant account. Until it is, the result rests on the hash, the
+// merchant's GUID and this payment's own Islem_ID, all of which someone who has seen one return of this merchant can produce.
 const paramSoap = async (url: string, action: string, ns: string, header: string, body: string) => {
   const res = await fetch(url, { method: 'POST', signal: AbortSignal.timeout(timeout), headers: { 'content-type': 'text/xml; charset=utf-8', SOAPAction: `"${ns}${action}"` },
     body: `<?xml version="1.0" encoding="utf-8"?><soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/"><soap:Header>${header}</soap:Header><soap:Body>${body}</soap:Body></soap:Envelope>` });
@@ -220,8 +240,11 @@ export const param: Gateway = {
     const g = (k: string) => String(body[`TURKPOS_RETVAL_${k}`] ?? '');
     const hash = createHash('sha1').update(Buffer.from(creds.CLIENT_CODE + g('GUID') + g('Dekont_ID') + g('Tahsilat_Tutari') + g('Siparis_ID') + g('Islem_ID'), 'latin1')).digest('base64');
     if (g('Hash') !== hash) return fail('BAD_SIGNATURE', 'Param hash mismatch');
+    // Every input of that hash is in the posted form, so it proves little by itself: the GUID must be the merchant's own
+    // (never taken from the form), and the result must name this payment. Anything else is a foreign answer and changes nothing.
+    if (!creds.GUID || g('GUID') !== creds.GUID) return fail('BAD_SIGNATURE', 'Param GUID mismatch');
+    if (g('Islem_ID') !== oid(payment.id)) return fail('BAD_SIGNATURE', 'Another payment’s result');
     if (!(Number(g('Sonuc')) > 0)) return fail('CARD_DECLINED', g('Sonuc_Str'));
-    if (g('Islem_ID') && g('Islem_ID') !== oid(payment.id)) return fail('AMOUNT_MISMATCH', 'Another payment’s result');
     if (Number(g('Tahsilat_Tutari').replace(',', '.')) + 0.001 < Number(payment.amount)) return fail('AMOUNT_MISMATCH', 'Param reported a smaller amount');
     return { ok: true, ref: g('Siparis_ID') || g('Dekont_ID') };
   },

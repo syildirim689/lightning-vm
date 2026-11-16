@@ -5,7 +5,7 @@ import { Body, CanActivate, Controller, Delete, ExecutionContext, Get, HttpCode,
 import { Reflector } from '@nestjs/core';
 import { pool } from './db';
 import { apiError } from './errors';
-import { audit, SessionGuard, type AuthedRequest } from './auth';
+import { audit, PERMISSION, SessionGuard, type AuthedRequest } from './auth';
 import { publishLive } from './live-bus';
 import { ipAllowed, readLimits } from './role-limits';
 import { can, covers, effectivePermissions, known, permissionCatalog, rolesChanged, permissionsOf, roles, splitRoles, type Permission } from './permissions';
@@ -17,8 +17,10 @@ export async function assertCovers(req: AuthedRequest, targetId: string) {
   if (!covers(req.user.permissions, target)) throw apiError(403, 'FORBIDDEN_TARGET', 'This account has permissions you do not have');
 }
 
-export const PERMISSION = 'lvm:permission';
-// @Can('catalog.manage') on a handler: signed in and holding that permission (any of several, if given more).
+export { PERMISSION };
+// @Can('catalog.manage') on a handler: signed in and holding that permission (any of several, if given more). On a
+// customer's route (SessionGuard) it is what a narrowed API token must hold to use the route; the person themselves is
+// checked by the route (customerMay, ownership).
 export const Can = (...perms: Permission[]) => SetMetadata(PERMISSION, perms);
 
 @Injectable()
@@ -58,6 +60,13 @@ async function roleLimits(req: AuthedRequest, key: string, input: unknown) {
   return limits;
 }
 
+// A role that holds permissions the actor lacks is not theirs to rewrite or remove (roles.manage alone would otherwise
+// let them strip or delete the roles above them). Read from the table, not from the cached roles.
+async function mayChangeRole(req: AuthedRequest, key: string) {
+  const { rows: [old] } = await pool.query('SELECT permissions FROM roles WHERE key = $1', [key]);
+  if (old && !covers(req.user.permissions, old.permissions ?? [])) throw apiError(403, 'FORBIDDEN_TARGET', 'This role has permissions you do not have');
+}
+
 @Controller('admin') @UseGuards(PermissionGuard)
 export class RolesController {
   @Get('permissions') @Can('users.view', 'roles.manage', 'users.roles')
@@ -88,6 +97,7 @@ export class RolesController {
     if (key === 'admin') throw apiError(409, 'ROLE_LOCKED', 'The administrator role always has every permission');
     const r = readRole({ ...body, key }, false);
     if (!covers(req.user.permissions, r.permissions)) throw apiError(403, 'FORBIDDEN_TARGET', 'You cannot grant permissions you do not have');
+    await mayChangeRole(req, key);
     const limits = await roleLimits(req, key, body?.limits);
     const { rowCount } = await pool.query('UPDATE roles SET name = $2, description = $3, permissions = $4, limits = $5, updated_at = now() WHERE key = $1', [key, r.name, r.description, r.permissions, limits]);
     if (!rowCount) throw apiError(404, 'NOT_FOUND', 'Unknown role');
@@ -101,6 +111,7 @@ export class RolesController {
   @Delete('roles/:key') @HttpCode(204) @Can('roles.manage')
   async remove(@Req() req: AuthedRequest, @Param('key') key: string) {
     if (key === 'admin' || key === 'user') throw apiError(409, 'ROLE_LOCKED', 'Built-in base roles cannot be removed');
+    await mayChangeRole(req, key);
     const client = await pool.connect();
     try {
       await client.query('BEGIN');

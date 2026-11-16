@@ -4,6 +4,7 @@
 import { randomUUID } from 'node:crypto';
 import { Body, Controller, Delete, Get, HttpCode, Param, ParseUUIDPipe, Post, Put, Req, UseGuards } from '@nestjs/common';
 import { audit, SessionGuard, type AuthedRequest } from './auth';
+import { platformCan } from './catalog';
 import { pool } from './db';
 import { apiError } from './errors';
 import { Can, PermissionGuard } from './rbac';
@@ -43,7 +44,7 @@ export class BackupsController {
     return { backups: rows, max: (await getSettings('servers')).backups?.maxPerServer ?? 7, available: !!(await backupTarget(s.pool_id)) };
   }
 
-  @Post() @HttpCode(202)
+  @Post() @HttpCode(202) @Can('server.backups')
   async create(@Req() req: AuthedRequest, @Param('id', ParseUUIDPipe) id: string, @Body() body: Record<string, unknown>) {
     const s = await findServer(req, id, true);
     await customerMay(req, 'backups');
@@ -59,7 +60,7 @@ export class BackupsController {
 
   // Restoring replaces everything on the disk: the caller repeats the server's name. The server is stopped, its disk
   // replaced, and started again if it ran.
-  @Post(':bid/restore') @HttpCode(202)
+  @Post(':bid/restore') @HttpCode(202) @Can('server.backups')
   async restore(@Req() req: AuthedRequest, @Param('id', ParseUUIDPipe) id: string, @Param('bid', ParseUUIDPipe) bid: string, @Body() body: Record<string, unknown>) {
     const s = await findServer(req, id, true);
     await customerMay(req, 'backups');
@@ -72,7 +73,7 @@ export class BackupsController {
     return { operation };
   }
 
-  @Delete(':bid') @HttpCode(202)
+  @Delete(':bid') @HttpCode(202) @Can('server.backups')
   async remove(@Req() req: AuthedRequest, @Param('id', ParseUUIDPipe) id: string, @Param('bid', ParseUUIDPipe) bid: string) {
     const s = await findServer(req, id, true);
     await customerMay(req, 'backups');
@@ -104,6 +105,7 @@ export class BackupsAdminController {
   async setTarget(@Req() req: AuthedRequest, @Param('id', ParseUUIDPipe) id: string, @Body() body: Record<string, unknown>) {
     const moref = typeof body?.datastoreMoref === 'string' && body.datastoreMoref ? body.datastoreMoref : null;
     if (moref) {
+      await platformCan(id, 'backup');
       const { rowCount } = await pool.query('SELECT 1 FROM vmware_datastores d JOIN resource_pools p ON p.connection_id = d.connection_id WHERE p.id = $1 AND d.moref = $2', [id, moref]);
       if (!rowCount) throw apiError(400, 'VALIDATION_FAILED', 'Unknown datastore', { datastoreMoref: 'NOT_AVAILABLE' });
     }

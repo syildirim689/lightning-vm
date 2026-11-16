@@ -47,7 +47,8 @@ test('metrics come from the database and use bounded labels', async () => {
   const text = (await send('GET', '/metrics')).body;
   assert.deepEqual(metric(text, 'lightning_dependency_up{').sort(), ['lightning_dependency_up{dependency="postgres"} 1', 'lightning_dependency_up{dependency="redis"} 1']);
   const age = Number(metric(text, 'lightning_worker_heartbeat_age_seconds ')[0].split(' ')[1]);
-  assert.ok(age >= 42 && age < 60, `heartbeat age ${age}`);
+  // With a real worker beside the tests (run.sh), its own fresh heartbeat is the youngest one.
+  assert.ok((process.env.WORKER_TEST ? age >= 0 : age >= 42) && age < 60, `heartbeat age ${age}`);
   assert.ok(metric(text, 'lightning_operations_open{status="pending"} 0').length === 1);
   assert.ok(metric(text, 'lightning_queue_jobs{queue="operations",state="waiting"} 0').length === 1);
   // Two different server ids are one route template, not two series.

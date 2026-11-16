@@ -4,6 +4,8 @@
 import { Body, Controller, Get, HttpCode, Param, ParseUUIDPipe, Post, Req, UseGuards } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import { audit, type AuthedRequest } from './auth';
+import { capabilitiesOf } from './capacity';
+import { platformCan } from './catalog';
 import { pool } from './db';
 import { apiError } from './errors';
 import { Can, PermissionGuard } from './rbac';
@@ -39,6 +41,7 @@ export class PlacementController {
   async migrate(@Req() req: AuthedRequest, @Param('id', ParseUUIDPipe) id: string, @Body() body: Record<string, unknown>) {
     const s = await findServer(req, id, true);
     if (s.state !== 'ready' || !s.vm_moref) throw apiError(409, 'INVALID_SERVER_STATE', 'Not possible in this state');
+    await platformCan(s.pool_id, 'migrate');
     const host = typeof body?.hostMoref === 'string' && body.hostMoref ? body.hostMoref : null;
     const datastore = typeof body?.datastoreMoref === 'string' && body.datastoreMoref ? body.datastoreMoref : null;
     const fields: Record<string, string> = {};
@@ -57,6 +60,8 @@ export class PlacementController {
   // another operation are left (listed) for a second try.
   @Post('vmware/connections/:id/hosts/:host/evacuate') @HttpCode(202) @Can('servers.manage_all')
   async evacuate(@Req() req: AuthedRequest, @Param('id', ParseUUIDPipe) connectionId: string, @Param('host') hostMoref: string) {
+    const { rows: [c] } = await pool.query('SELECT kind, operations FROM vmware_connections WHERE id = $1', [connectionId]);
+    if (c && !capabilitiesOf(c.kind, c.operations).migrate) throw apiError(409, 'PLATFORM_NOT_SUPPORTED', 'This platform cannot move servers yet');
     const { rows: servers } = await pool.query(`SELECT s.id, s.owner_id, s.name, s.pool_id FROM servers s JOIN resource_pools p ON p.id = s.pool_id
       JOIN vmware_vms v ON v.connection_id = p.connection_id AND v.moref = s.vm_moref WHERE p.connection_id = $1 AND v.host_moref = $2 AND s.state = 'ready' ORDER BY s.name`, [connectionId, hostMoref]);
     const planned = new Map<string, number>();

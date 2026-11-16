@@ -135,10 +135,11 @@ export class AdminController {
     return { id };
   }
 
-  @Get('users') @Can('users.view', 'catalog.manage')
+  @Get('users') @Can('users.view', 'catalog.manage', 'billing.manage')
   async users(@Req() req: AuthedRequest, @Query('pick') pick?: string) {
-    // Owner pickers (catalog, billing, import) only need who is who.
+    // Owner pickers (catalog, billing, import) only need who is who; billing staff get the picker and nothing more.
     if (pick) return { users: (await pool.query('SELECT id, email, name FROM users ORDER BY email')).rows };
+    if (!can(req.user.permissions, 'users.view') && !can(req.user.permissions, 'catalog.manage')) throw apiError(403, 'FORBIDDEN', 'Permission required');
     const { rows } = await pool.query(`WITH
       srv AS (SELECT owner_id, count(*)::int AS n FROM servers WHERE state <> 'deleted' GROUP BY owner_id),
       ses AS (SELECT user_id, count(*) FILTER (WHERE expires_at > now())::int AS n, max(coalesce(last_active_at, created_at)) AS last FROM auth_sessions GROUP BY user_id),

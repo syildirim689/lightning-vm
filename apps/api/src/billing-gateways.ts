@@ -22,6 +22,9 @@ export type Gateway = {
   // exact text the provider expects back.
   paymentIdFrom?(body: Record<string, unknown>): string | null;
   reply?: string;
+  // verify can ask the provider with what the payment itself stores (providerRef), without the customer's browser coming
+  // back: the billing run asks again for payments left open (a closed tab after paying).
+  recheck?: boolean;
 };
 
 // Test cards of the sandbox: 4242 4242 4242 4242 is approved, 4000 0000 0000 0002 declined, 4000 0000 0000 9995
@@ -52,3 +55,9 @@ export const sandbox: Gateway = {
 
 // Real providers register here (billing-providers/*.ts); a provider without an entry can be configured but not charge.
 export const gateways: Record<string, Gateway> = { sandbox, iyzico, paytr, stripe, craftgate, param };
+
+// Whether a result settles the payment. It does when the provider said paid or failed. It does not when nothing was
+// learned: the provider did not answer, the answer was forged or another payment's, the customer is still on the
+// provider's page (PENDING), or the request carried nothing to ask the provider with (NO_TOKEN, NO_SESSION: anybody can
+// open a payment's return address). Such a payment stays open for the provider's real answer, or until it expires.
+export const finalResult = (r: Result) => r.ok || !['PROVIDER_ERROR', 'BAD_SIGNATURE', 'PENDING', 'NO_TOKEN', 'NO_SESSION'].includes(r.code);

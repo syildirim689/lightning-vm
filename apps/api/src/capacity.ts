@@ -90,3 +90,17 @@ export function exceededQuota(limits: Limits, usage: Usage, s: Shape): string[] 
   if (limits.max_disk_gb !== null && usage.diskGb + s.diskGb > limits.max_disk_gb) over.push('diskGb');
   return over;
 }
+
+// What a location's platform can do beyond the basics, for the panel to hide what would only fail: from the connection's
+// kind and the operations discovery stored for its service account. The console and firewalls depend on privileges
+// (firewalls also on vCenter with a distributed switch); moving a server and saving it as an image need vCenter; backups
+// and ISOs work on any VMware connection. The other adapters answer PLATFORM_NOT_SUPPORTED to all of these (their `later` lists).
+// metrics: whether the adapter returns performance samples (the charts); the others answer with none.
+export type Capabilities = { console: boolean; firewall: boolean; migrate: boolean; image: boolean; backup: boolean; iso: boolean; metrics: boolean };
+// Platforms whose adapter cannot measure a server's CPU (it reported 0): nothing is concluded about idle or oversized servers there.
+export const noCpuKinds = ['xcpng', 'ovirt', 'libvirt', 'incus'];
+export function capabilitiesOf(kind: string, operations: Record<string, boolean> | null | undefined): Capabilities {
+  const vmware = kind === 'vcenter' || kind === 'esxi';
+  return { console: vmware && !!operations?.console, firewall: vmware && !!operations?.firewall, migrate: kind === 'vcenter', image: kind === 'vcenter', backup: vmware, iso: vmware,
+    metrics: vmware || kind === 'proxmox' };
+}

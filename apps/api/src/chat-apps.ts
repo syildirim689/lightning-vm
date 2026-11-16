@@ -4,7 +4,8 @@
 // Every address the user gives is checked to be a public HTTPS host, so the panel cannot be pointed at itself.
 import { createHmac } from 'node:crypto';
 import { lookup } from 'node:dns/promises';
-import { BlockList, isIP } from 'node:net';
+import { request as httpsRequest } from 'node:https';
+import { BlockList, isIP, type LookupFunction } from 'node:net';
 
 export type Message = { title: string; body: string; link: string | null; brand: string; event: string };
 // The admin's accounts (secrets already decrypted).
@@ -23,32 +24,74 @@ const blocked = new BlockList();
 for (const [net, bits] of [['0.0.0.0', 8], ['10.0.0.0', 8], ['100.64.0.0', 10], ['127.0.0.0', 8], ['169.254.0.0', 16], ['172.16.0.0', 12], ['192.0.0.0', 24], ['192.168.0.0', 16],
   ['198.18.0.0', 15], ['224.0.0.0', 3]] as const) blocked.addSubnet(net, bits, 'ipv4');
 for (const [net, bits] of [['::', 127], ['::1', 128], ['fc00::', 7], ['fe80::', 10], ['ff00::', 8], ['64:ff9b::', 96]] as const) blocked.addSubnet(net, bits, 'ipv6');
-// IPv4-mapped IPv6 (::ffff:10.0.0.1) is checked as the IPv4 address it carries.
+// The IPv4 address an IPv4-mapped IPv6 address carries, in either spelling (::ffff:10.0.0.1, ::ffff:a00:1), else null.
+export function mappedV4(ip: string): string | null {
+  const m = /^(?:0{0,4}:){0,4}:?(?:0{0,4}:)?ffff:(?:(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})|([0-9a-f]{1,4}):([0-9a-f]{1,4}))$/i.exec(ip);
+  if (!m || isIP(ip) !== 6) return null;
+  if (m[1]) return m[1];
+  const hi = parseInt(m[2], 16), lo = parseInt(m[3], 16);
+  return `${hi >> 8}.${hi & 255}.${lo >> 8}.${lo & 255}`;
+}
+// IPv4-mapped IPv6 is checked as the IPv4 address it carries (not left to how the runtime's BlockList treats it).
 export const privateAddress = (ip: string) => {
-  const v4 = /^::ffff:(d+.d+.d+.d+)$/i.exec(ip)?.[1];
+  const v4 = mappedV4(ip);
   return v4 ? blocked.check(v4, 'ipv4') : blocked.check(ip, isIP(ip) === 6 ? 'ipv6' : 'ipv4');
 };
 
-// A user-given URL: HTTPS, no credentials in it, and every address its host resolves to is public.
-// shortcut: checked before the request, so DNS that changes between check and request is not caught; pin the address if that matters.
-export async function publicUrl(raw: string, hosts?: (h: string) => boolean): Promise<URL | null> {
+// A user-given URL: HTTPS, no credentials in it, and every address its host resolves to is public. With the first of
+// those addresses: guardedRequest connects to exactly that one.
+async function resolvePublic(raw: string, hosts?: (h: string) => boolean): Promise<{ url: URL; host: string; address: string; family: number } | null> {
   let u: URL;
   try { u = new URL(raw.trim()); } catch { return null; }
   if (u.protocol !== 'https:' || u.username || u.password || raw.length > 2000) return null;
   const host = u.hostname.replace(/^\[|\]$/g, '').toLowerCase();
   if (hosts && !hosts(host)) return null;
   try {
-    const addrs = isIP(host) ? [{ address: host }] : await lookup(host, { all: true });
+    const addrs = isIP(host) ? [{ address: host, family: isIP(host) }] : await lookup(host, { all: true });
     if (!addrs.length || addrs.some((a) => privateAddress(a.address))) return null;
+    return { url: u, host, address: addrs[0].address, family: addrs[0].family };
   } catch { return null; }
-  return u;
+}
+export async function publicUrl(raw: string, hosts?: (h: string) => boolean): Promise<URL | null> {
+  return (await resolvePublic(raw, hosts))?.url ?? null;
+}
+
+// One request to a user-given URL. The host is resolved and checked here, and the connection goes to the address that
+// was checked: a name that answers "public" to the check and "internal" a moment later (DNS rebinding) gets nowhere.
+// An address written as a number has nothing to re-resolve and goes through fetch. Redirects are never followed.
+// Throws NotPublic (not a public HTTPS address), TimeoutError, or the connection's error.
+export async function guardedRequest(raw: string, init: { method?: string; headers?: Record<string, string>; body?: string; timeoutMs: number }, hosts?: (h: string) => boolean): Promise<{ status: number; text: string }> {
+  const t = await resolvePublic(raw, hosts);
+  if (!t) throw Object.assign(new Error('not a public HTTPS address'), { name: 'NotPublic' });
+  if (isIP(t.host)) {
+    const r = await fetch(t.url, { method: init.method ?? 'POST', redirect: 'manual', signal: AbortSignal.timeout(init.timeoutMs), headers: init.headers, body: init.body });
+    return { status: r.status, text: (await r.text()).slice(0, 2000) };
+  }
+  const pinned = ((_host: string, options: { all?: boolean }, cb: (...a: unknown[]) => void) =>
+    (options?.all ? cb(null, [{ address: t.address, family: t.family }]) : cb(null, t.address, t.family))) as unknown as LookupFunction;
+  return new Promise((resolve, reject) => {
+    const req = httpsRequest({ host: t.host, servername: t.host, port: t.url.port || 443, path: t.url.pathname + t.url.search, method: init.method ?? 'POST', lookup: pinned, timeout: init.timeoutMs,
+      headers: { ...init.headers, ...(init.body !== undefined && { 'content-length': String(Buffer.byteLength(init.body)) }) } }, (res) => {
+      const chunks: Buffer[] = []; let size = 0;
+      res.on('data', (c: Buffer) => { if (size < 8192) chunks.push(c); size += c.length; });
+      res.on('end', () => resolve({ status: res.statusCode ?? 0, text: Buffer.concat(chunks).toString('utf8').slice(0, 2000) }));
+      res.on('error', reject);
+    });
+    req.on('timeout', () => req.destroy(Object.assign(new Error('timed out'), { name: 'TimeoutError' })));
+    req.on('error', reject);
+    req.end(init.body);
+  });
 }
 
 async function post(url: string, body: unknown, headers: Record<string, string> = {}, method = 'POST') {
   const form = body instanceof URLSearchParams;
-  const r = await fetch(url, { method, redirect: 'manual', signal: AbortSignal.timeout(15_000),
-    headers: { 'content-type': form ? 'application/x-www-form-urlencoded' : 'application/json', ...headers }, body: form ? body.toString() : JSON.stringify(body) });
-  return { status: r.status, text: (await r.text()).slice(0, 2000) };
+  // The services' own addresses (Telegram, WhatsApp, Pushover) are ours to name; every other URL came from a user.
+  if (['api.telegram.org', 'graph.facebook.com', 'api.pushover.net'].includes(new URL(url).hostname)) {
+    const r = await fetch(url, { method, redirect: 'manual', signal: AbortSignal.timeout(15_000),
+      headers: { 'content-type': form ? 'application/x-www-form-urlencoded' : 'application/json', ...headers }, body: form ? body.toString() : JSON.stringify(body) });
+    return { status: r.status, text: (await r.text()).slice(0, 2000) };
+  }
+  return guardedRequest(url, { method, timeoutMs: 15_000, headers: { 'content-type': form ? 'application/x-www-form-urlencoded' : 'application/json', ...headers }, body: form ? body.toString() : JSON.stringify(body) });
 }
 const judged = (r: { status: number; text: string }): SendResult => (r.status >= 200 && r.status < 300 ? { ok: true }
   : { ok: false, code: r.status === 401 || r.status === 403 ? 'CHAT_AUTH_FAILED' : r.status === 404 ? 'CHAT_TARGET_NOT_FOUND' : 'CHAT_REJECTED', detail: r.text.slice(0, 300) || `HTTP ${r.status}` });
@@ -173,8 +216,7 @@ export const chatApps: Record<string, App> = {
       const body = JSON.stringify({ event: m.event, title: m.title, body: m.body, link: m.link, brand: m.brand, sentAt: new Date().toISOString() });
       // With a secret, the receiver can check X-Lightning-Signature = sha256=HMAC(secret, raw body).
       const sig: Record<string, string> = t.secret ? { 'x-lightning-signature': `sha256=${createHmac('sha256', t.secret).update(body).digest('hex')}` } : {};
-      const r = await fetch(u, { method: 'POST', redirect: 'manual', signal: AbortSignal.timeout(15_000), headers: { 'content-type': 'application/json', 'user-agent': 'LightningVM-Webhook/1', ...sig }, body });
-      return judged({ status: r.status, text: (await r.text()).slice(0, 2000) });
+      return judged(await guardedRequest(u, { timeoutMs: 15_000, headers: { 'content-type': 'application/json', 'user-agent': 'LightningVM-Webhook/1', ...sig }, body }));
     },
   },
 };

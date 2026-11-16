@@ -4,6 +4,7 @@
 import { randomUUID } from 'node:crypto';
 import { Body, Controller, Delete, Get, HttpCode, Param, ParseUUIDPipe, Post, Put, Req, UseGuards } from '@nestjs/common';
 import { audit, SessionGuard, type AuthedRequest } from './auth';
+import { Can } from './rbac';
 import { pool, redis } from './db';
 import { apiError } from './errors';
 import { logEvent } from './log';
@@ -27,7 +28,7 @@ export class SchedulesController {
     return { schedules: rows };
   }
 
-  @Post() @HttpCode(201)
+  @Post() @HttpCode(201) @Can('server.power', 'server.snapshots', 'server.backups')
   async create(@Req() req: AuthedRequest, @Param('id', ParseUUIDPipe) id: string, @Body() body: Record<string, unknown>) {
     await findServer(req, id, true);
     const v = valid(body);
@@ -40,7 +41,7 @@ export class SchedulesController {
     return row;
   }
 
-  @Put(':sid')
+  @Put(':sid') @Can('server.power', 'server.snapshots', 'server.backups')
   async update(@Req() req: AuthedRequest, @Param('id', ParseUUIDPipe) id: string, @Param('sid', ParseUUIDPipe) sid: string, @Body() body: Record<string, unknown>) {
     await findServer(req, id, true);
     const v = valid(body);
@@ -52,7 +53,7 @@ export class SchedulesController {
     return row;
   }
 
-  @Delete(':sid') @HttpCode(204)
+  @Delete(':sid') @HttpCode(204) @Can('server.power', 'server.snapshots', 'server.backups')
   async remove(@Req() req: AuthedRequest, @Param('id', ParseUUIDPipe) id: string, @Param('sid', ParseUUIDPipe) sid: string) {
     await findServer(req, id, true);
     const { rowCount } = await pool.query('DELETE FROM power_schedules WHERE id = $2 AND server_id = $1', [id, sid]);
@@ -72,7 +73,7 @@ function valid(body: Record<string, unknown>) {
 // first stays pending (for up to an hour) and is picked up again on the next ticks until it takes the snapshot. shortcut: a tick missed for more
 // than 5 minutes (API down) skips that run; a catch-up rule would be needed for longer outages.
 export async function runSchedules() {
-  const { rows } = await pool.query(`SELECT p.id, p.action, p.keep, p.timezone, s.id AS server_id, s.owner_id, s.state, s.power_state, s.vm_moref, s.pool_id, u.role AS owner_role,
+  const { rows } = await pool.query(`SELECT p.id, p.action, p.keep, p.timezone, s.id AS server_id, s.owner_id, s.state, s.power_state, s.vm_moref, s.pool_id, s.billing_hold, u.role AS owner_role,
       EXISTS (SELECT 1 FROM operations o WHERE o.server_id = s.id AND o.status IN ('pending', 'running')) AS busy
     FROM power_schedules p JOIN servers s ON s.id = p.server_id JOIN users u ON u.id = s.owner_id
     WHERE p.enabled AND s.state <> 'deleted' AND (p.pending_since > now() - interval '1 hour' OR ((p.last_run_at IS NULL OR p.last_run_at < now() - interval '10 minutes')
@@ -81,6 +82,11 @@ export async function runSchedules() {
   const customer = (await getSettings('servers')).customer;
   const allowed = customer.power;
   for (const r of rows) {
+    // Held for an unpaid invoice: no schedule starts it (or anything else on it) until it is paid.
+    if (r.billing_hold) {
+      await pool.query("UPDATE power_schedules SET last_run_at = now(), last_result = 'skipped_state', pending_since = NULL WHERE id = $1", [r.id]);
+      continue;
+    }
     if (r.action === 'snapshot' || r.action === 'backup') {
       const { outcome, pending } = await (r.action === 'backup' ? runBackup(r, customer.backups) : runSnapshot(r, customer.snapshots)).catch((e) => {
         logEvent('error', 'schedule_snapshot_failed', { schedule: r.id, code: (e as { getResponse?: () => { code?: string } }).getResponse?.().code ?? String((e as Error)?.message ?? e).slice(0, 200) });

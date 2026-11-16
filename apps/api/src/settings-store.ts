@@ -315,6 +315,8 @@ export async function publicConfig() {
   return {
     branding: { name: b.name, accent: b.accent, logo: !!b.logo, favicon: !!b.favicon, version: brandingVersion(b) },
     passwordReset: reset,
+    // Whether anyone may open an account themselves (Admin → Users); off: the sign-in page shows no registration form.
+    registration: (await pool.query("SELECT value FROM settings WHERE key = 'registration_open'")).rows[0]?.value === true,
     // Phone numbers can be verified (SMS), and where two-factor codes can be sent besides an authenticator app.
     phoneVerification: phone,
     otpChannels: { sms: smsCodes, email: mailCodes },

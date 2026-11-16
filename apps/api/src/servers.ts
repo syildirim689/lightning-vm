@@ -8,7 +8,7 @@ import { audit, SessionGuard, type AuthedRequest } from './auth';
 import { Can, PermissionGuard } from './rbac';
 import { can, limitsOf, type Permission } from './permissions';
 import { capacityOf, limitsFor, resolveOrder, usageOf } from './catalog';
-import { exceededQuota } from './capacity';
+import { capabilitiesOf, exceededQuota } from './capacity';
 import { checkBudget } from './budget';
 import { openConsole } from './console';
 import { callAdapter, storedTarget } from './vmware';
@@ -24,7 +24,7 @@ import { checkVdcRoom, resolveVdcOrder } from './vdc';
 import { renderPtr } from './rdns-names';
 import { cleanLabels, fingerprint, parseKeyList, sshKeyPattern } from './smart-rules';
 import { available, billOrder, billResize, payFromBalance, resizeCharge, startHourly } from './billing';
-import { hourlyOf } from './billing-rules';
+import { heldRefuses, hourlyOf, sumMoney } from './billing-rules';
 import { checkCoupon } from './coupons';
 import { checkResellerRoom, discounted, resellerOf } from './reseller';
 
@@ -129,13 +129,18 @@ export async function runDueDeletions() {
 // What a lock stops: anything that ends the server or loses its running state or data.
 const lockedKinds = new Set<Kind>(['delete', 'power_off', 'reset', 'snapshot_revert', 'reinstall', 'resize', 'backup_restore']);
 
-export async function startOperation(req: AuthedRequest, server: { id: string; owner_id: string }, kind: Kind, key: string, requestHash: string, params: object = {}) {
+// prepare: what must be in place before the worker can pick the operation up (an invoice, tracking rows); it runs after
+// the operation exists and before it is queued. If it fails, the operation ends there and never runs.
+export async function startOperation(req: AuthedRequest, server: { id: string; owner_id: string }, kind: Kind, key: string, requestHash: string, params: object = {},
+  prepare?: (op: { id: string }) => Promise<void>) {
   // Read here, for every caller (the server page, bulk actions, schedules, data centers).
   if (lockedKinds.has(kind) && (await pool.query('SELECT 1 FROM servers WHERE id = $1 AND locked', [server.id])).rowCount) {
     throw apiError(409, 'SERVER_LOCKED', 'The server is locked against this; unlock it first');
   }
-  // Held for an unpaid invoice: the owner may shut it down or delete it, nothing else until it is paid (staff still may).
-  if (req.user?.id === server.owner_id && !['delete', 'shutdown', 'power_off'].includes(kind) && (await pool.query('SELECT 1 FROM servers WHERE id = $1 AND billing_hold', [server.id])).rowCount) {
+  // Held for an unpaid invoice: it may be shut down or deleted, nothing else until it is paid, whoever asks (the owner, a
+  // reseller, a schedule's pseudo-request). Staff still may; billing's own run puts the hold on and takes it off.
+  if (heldRefuses(kind, { staff: can(req.user?.permissions ?? [], 'servers.manage_all'), billing: (req as { billing?: boolean }).billing === true })
+    && (await pool.query('SELECT 1 FROM servers WHERE id = $1 AND billing_hold', [server.id])).rowCount) {
     throw apiError(409, 'BILLING_HOLD', 'The server is held until the unpaid invoice is paid');
   }
   // The role's operations per hour, for a member acting on their own servers (staff and schedules are not counted).
@@ -150,6 +155,12 @@ export async function startOperation(req: AuthedRequest, server: { id: string; o
     const { rows: [op] } = await pool.query(`INSERT INTO operations (kind, status, idempotency_key, request_hash, server_id, owner_id, step, deadline_at, params)
       VALUES ($1, 'pending', $2, $3, $4, $5, 'queued', now() + make_interval(mins => $6), $7) RETURNING id, kind, status`,
       [kind, key, requestHash, server.id, server.owner_id, deadlineMinutes[kind], params]);
+    if (prepare) {
+      await prepare(op).catch(async (err) => {
+        await pool.query("UPDATE operations SET status = 'cancelled', error_code = 'CANCELLED', finished_at = now(), updated_at = now() WHERE id = $1 AND status = 'pending'", [op.id]);
+        throw err;
+      });
+    }
     await enqueue(op.id);
     await audit(req, `server.${kind}`, 'success', req.user.id, { serverId: server.id, operationId: op.id, ...params });
     return op;
@@ -181,6 +192,9 @@ async function resizeTarget(req: AuthedRequest, server: Record<string, any>, bod
     order.price = { ...order.price, monthly: discounted(order.price.monthly, reseller.discountPct) };
     await checkResellerRoom(reseller, { servers: 0, ...more });
   }
+  // Extra disks stay through a resize: their prices (already in the server's current price) are added to the new shape's.
+  const { rows: disks } = await pool.query('SELECT price_monthly::text AS price FROM server_disks WHERE server_id = $1', [server.id]);
+  if (disks.length) order.price = { ...order.price, monthly: sumMoney(order.price.monthly, disks.map((d) => d.price)) };
   return { order, billTo: reseller?.id ?? server.owner_id, charge: await resizeCharge(server.id, server.price_monthly, order.price.monthly) };
 }
 
@@ -193,7 +207,11 @@ const serverColumns = `s.id, s.name, s.state, s.power_state AS "powerState", s.g
   s.firewall_error AS "firewallError", s.root_password_enc IS NOT NULL AS "hasRootPassword",
   (SELECT name FROM applications ap WHERE ap.id = s.application_id) AS "applicationName", s.app_state AS "appState", s.app_message AS "appMessage", (SELECT count(*)::int FROM firewall_servers fs WHERE fs.server_id = s.id) AS "firewallCount",
   (SELECT row_to_json(o) FROM (SELECT id, kind, status, step, error_code AS "errorCode", created_at AS "createdAt" FROM operations
-    WHERE server_id = s.id ORDER BY created_at DESC LIMIT 1) o) AS "lastOperation"`;
+    WHERE server_id = s.id ORDER BY created_at DESC LIMIT 1) o) AS "lastOperation",
+  (SELECT json_build_object('kind', c.kind, 'operations', c.operations) FROM vmware_connections c WHERE c.id = p.connection_id) AS platform`;
+// What the server's platform can do (capacity.ts), instead of the connection's own details.
+// platform: the connection's kind (vcenter, proxmox, ...).
+const withCapabilities = <T extends Record<string, any>>({ platform, ...row }: T) => ({ ...row, platform: (platform?.kind ?? null) as string | null, capabilities: capabilitiesOf(platform?.kind ?? '', platform?.operations) }); // eslint-disable-line @typescript-eslint/no-explicit-any
 const serverJoins = "FROM servers s JOIN resource_pools p ON p.id = s.pool_id LEFT JOIN locations l ON l.id = p.location_id JOIN os_images i ON i.id = s.image_id LEFT JOIN ip_allocations a ON a.server_id = s.id AND a.kind = 'primary'";
 
 type VmDetails = { nics: Record<string, unknown>[]; disks: Record<string, unknown>[]; cdroms: { iso: string }[]; placement: unknown; annotation: string } & Record<string, unknown>;
@@ -295,7 +313,7 @@ export class ServersController {
   async list(@Req() req: AuthedRequest) {
     const { rows } = await pool.query(`SELECT ${serverColumns}, EXISTS (SELECT 1 FROM server_favorites f WHERE f.user_id = $1 AND f.server_id = s.id) AS favorite
       ${serverJoins} WHERE s.state <> 'deleted' AND s.owner_id = $1 ORDER BY s.created_at DESC`, [req.user.id]);
-    return { servers: rows };
+    return { servers: rows.map(withCapabilities) };
   }
 
   // Background work for the task manager: what is running now and what finished in the last 15 minutes.
@@ -373,10 +391,10 @@ export class ServersController {
       pool.query(`SELECT id, kind, status, step, attempts, error_code AS "errorCode", created_at AS "createdAt", started_at AS "startedAt", finished_at AS "finishedAt"
         FROM operations WHERE server_id = $1 ORDER BY created_at DESC LIMIT 50`, [id]),
     ]);
-    return { server, operations, own, allowed: await allowedFor(req), deleteGraceHours: (await getSettings('servers')).deleteGraceHours };
+    return { server: withCapabilities(server), operations, own, allowed: await allowedFor(req), deleteGraceHours: (await getSettings('servers')).deleteGraceHours };
   }
 
-  @Post('servers') @HttpCode(202)
+  @Post('servers') @HttpCode(202) @Can('servers.create')
   async create(@Req() req: AuthedRequest, @Headers('idempotency-key') header: string | undefined, @Body() body: Input) {
     if (!can(req.user.permissions, 'servers.create')) throw apiError(403, 'FORBIDDEN', 'Permission required');
     const key = idempotencyKey(header, req.user.id);
@@ -592,14 +610,14 @@ export class ServersController {
     return { locked: body.locked };
   }
 
-  @Delete('servers/:id/root-password') @HttpCode(204)
+  @Delete('servers/:id/root-password') @HttpCode(204) @Can('server.root_password')
   async forgetRootPassword(@Req() req: AuthedRequest, @Param('id', ParseUUIDPipe) id: string) {
     await findServer(req, id, true);
     await pool.query('UPDATE servers SET root_password_enc = NULL, updated_at = now() WHERE id = $1', [id]);
     await audit(req, 'server.root_password_forgotten', 'success', req.user.id, { serverId: id });
   }
 
-  @Post('servers/:id/actions') @HttpCode(202)
+  @Post('servers/:id/actions') @HttpCode(202) @Can('server.power')
   async action(@Req() req: AuthedRequest, @Headers('idempotency-key') header: string | undefined, @Param('id', ParseUUIDPipe) id: string, @Body() body: Input) {
     const key = idempotencyKey(header, req.user.id);
     const requestHash = hashOf({ id, ...body });
@@ -615,7 +633,7 @@ export class ServersController {
   }
 
   // What a resize to this shape would cost, before anything changes (the order page's price, for the same pool and extras).
-  @Post('servers/:id/resize/quote')
+  @Post('servers/:id/resize/quote') @Can('server.resize')
   async resizeQuote(@Req() req: AuthedRequest, @Param('id', ParseUUIDPipe) id: string, @Body() body: Input) {
     const server = await findServer(req, id, true);
     await customerMay(req, 'resize');
@@ -625,7 +643,7 @@ export class ServersController {
 
   // New vCPU, memory and disk size (a package of this location, or a custom shape). The disk only grows. The new monthly price
   // applies from now: an increase is invoiced for the rest of the period, a decrease simply bills less from the next one.
-  @Post('servers/:id/resize') @HttpCode(202)
+  @Post('servers/:id/resize') @HttpCode(202) @Can('server.resize')
   async resize(@Req() req: AuthedRequest, @Headers('idempotency-key') header: string | undefined, @Param('id', ParseUUIDPipe) id: string, @Body() body: Input) {
     const key = idempotencyKey(header, req.user.id);
     const requestHash = hashOf({ id, resize: body });
@@ -641,20 +659,27 @@ export class ServersController {
       const { snapshots } = await callAdapter<{ snapshots: unknown[] }>('/v1/vm/snapshots', { ...(await snapshotTarget(server.pool_id)), vm: server.vm_moref }, 30_000);
       if (snapshots.length) throw apiError(409, 'DISK_HAS_SNAPSHOTS', 'Remove the snapshots before growing the disk');
     }
+    // The price follows the shape at once (renewals read it); a resize that finally fails puts it back (worker, from
+    // `from`; a retry applies `to` again). Everything is written before the operation is queued: a resize that fails
+    // at once must find the new price and its invoice there to undo, not have them written over its undoing.
+    const priceHourly = server.billing_mode === 'hourly' ? hourlyOf(price.monthly) : server.price_hourly;
+    const setPrice = (v: { priceMonthly: unknown; packageId: unknown; trafficGb: unknown; priceHourly: unknown }) => pool.query(
+      'UPDATE servers SET price_monthly = $2, package_id = $3, traffic_gb = $4, price_hourly = $5, updated_at = now() WHERE id = $1', [id, v.priceMonthly, v.packageId, v.trafficGb, v.priceHourly]);
+    const from = { vcpu: server.vcpu, memoryMb: server.memory_mb, diskGb: server.disk_gb, priceMonthly: server.price_monthly, packageId: server.package_id, trafficGb: server.traffic_gb, priceHourly: server.price_hourly };
+    const to = { priceMonthly: price.monthly, packageId: r.order.packageId, trafficGb: r.order.trafficGb, priceHourly, billTo: r.billTo, currency: price.currency };
+    await setPrice(to);
+    let invoiceId = null as string | null;
     const operation = await startOperation(req, server, 'resize', key, requestHash,
-      { vcpu: shape.vcpu, memoryMb: shape.memoryMb, diskGb: shape.diskGb, powerOn: server.power_state === 'poweredOn',
-        from: { vcpu: server.vcpu, memoryMb: server.memory_mb, diskGb: server.disk_gb, priceMonthly: server.price_monthly, packageId: server.package_id } });
-    // The price follows the shape at once (renewals read it); a resize that finally fails puts it back (worker).
-    await pool.query(`UPDATE servers SET price_monthly = $2, package_id = $3, traffic_gb = $4, price_hourly = CASE WHEN billing_mode = 'hourly' THEN $5::numeric ELSE price_hourly END,
-      updated_at = now() WHERE id = $1`, [id, price.monthly, r.order.packageId, r.order.trafficGb, hourlyOf(price.monthly)]);
-    const invoiceId = r.charge.chargeNow !== '0.00' ? await billResize({ ...server, owner_id: r.billTo }, r.charge.chargeNow, price.currency, shape) : null;
-    if (invoiceId) await pool.query("UPDATE operations SET params = params || jsonb_build_object('invoiceId', $2::text) WHERE id = $1", [operation.id, invoiceId]);
+      { vcpu: shape.vcpu, memoryMb: shape.memoryMb, diskGb: shape.diskGb, powerOn: server.power_state === 'poweredOn', from, to }, async (op) => {
+        invoiceId = r.charge.chargeNow !== '0.00' ? await billResize({ ...server, owner_id: r.billTo }, r.charge.chargeNow, price.currency, shape) : null;
+        if (invoiceId) await pool.query("UPDATE operations SET params = params || jsonb_build_object('invoiceId', $2::text) WHERE id = $1", [op.id, invoiceId]);
+      }).catch(async (err) => { await setPrice(from); throw err; });
     return { serverId: id, operation, ...(invoiceId && { invoiceId }) };
   }
 
   // A fresh install from another (or the same) image: the disk is wiped; addresses, firewalls and the price stay.
   // Dangerous: the caller repeats the server's name.
-  @Post('servers/:id/reinstall') @HttpCode(202)
+  @Post('servers/:id/reinstall') @HttpCode(202) @Can('server.reinstall')
   async reinstall(@Req() req: AuthedRequest, @Headers('idempotency-key') header: string | undefined, @Param('id', ParseUUIDPipe) id: string, @Body() body: Input) {
     const key = idempotencyKey(header, req.user.id);
     const requestHash = hashOf({ id, reinstall: body });
@@ -691,19 +716,26 @@ export class ServersController {
     if ((await pool.query("SELECT 1 FROM operations WHERE server_id = $1 AND status IN ('pending', 'running')", [id])).rowCount) throw apiError(409, 'OPERATION_IN_PROGRESS', 'Another operation is still running on this server');
     await pool.query(`UPDATE servers SET ssh_public_keys = $2, root_password_hash = COALESCE($3, root_password_hash), root_password_enc = COALESCE($4, root_password_enc), updated_at = now() WHERE id = $1`,
       [id, keys, root ? sha512Crypt(root.password) : null, root ? encryptSecret(root.password, 'server-root-password') : null]);
-    const operation = await startOperation(req, server, 'reinstall', key, requestHash, { imageId: String(body.imageId), fromImageId: server.image_id });
-    // Update tracking follows the server onto its new disk: the reporter is installed again on a Linux image; on another, tracking ends.
-    if ((await pool.query('SELECT 1 FROM server_updates WHERE server_id = $1', [id])).rowCount) {
-      if (img.family === 'linux' && img.cloud_init) await prepareGuestUpdates(pool, id, await reporterOrigin(req));
-      else await pool.query('DELETE FROM server_updates WHERE server_id = $1', [id]);
-    }
+    // The state too, before the operation is queued: a reinstall that fails at once sets "error", and that must not be written over.
     await pool.query("UPDATE servers SET state = 'provisioning', error_code = NULL, updated_at = now() WHERE id = $1 AND state <> 'deleted'", [id]);
+    const operation = await startOperation(req, server, 'reinstall', key, requestHash, { imageId: String(body.imageId), fromImageId: server.image_id }, async () => {
+      // Update tracking follows the server onto its new disk: the reporter is installed again on a Linux image; on another, tracking ends.
+      if ((await pool.query('SELECT 1 FROM server_updates WHERE server_id = $1', [id])).rowCount) {
+        if (img.family === 'linux' && img.cloud_init) await prepareGuestUpdates(pool, id, await reporterOrigin(req));
+        else await pool.query('DELETE FROM server_updates WHERE server_id = $1', [id]);
+      }
+    }).catch(async (err) => {
+      // Refused (a billing hold, the role's hourly limit, another operation): the server is as it was, with the keys and password it really has.
+      await pool.query(`UPDATE servers SET state = $2, error_code = $3, ssh_public_keys = $4, root_password_hash = $5, root_password_enc = $6 WHERE id = $1 AND state = 'provisioning'`,
+        [id, server.state, server.error_code, server.ssh_public_keys, server.root_password_hash, server.root_password_enc]);
+      throw err;
+    });
     return { serverId: id, operation, ...(root && { passwordReplaced: root.replaced }) };
   }
 
   // Dangerous: the caller must repeat the server's name. Resources are released only after the
   // worker has confirmed in VMware that the VM is gone.
-  @Delete('servers/:id') @HttpCode(202)
+  @Delete('servers/:id') @HttpCode(202) @Can('server.delete')
   async remove(@Req() req: AuthedRequest, @Headers('idempotency-key') header: string | undefined, @Param('id', ParseUUIDPipe) id: string, @Body() body: Input) {
     const key = idempotencyKey(header, req.user.id);
     const requestHash = hashOf({ id, delete: true });
@@ -729,7 +761,7 @@ export class ServersController {
   }
 
   // Takes back a server waiting to be deleted (it stays shut down; the owner starts it again).
-  @Delete('servers/:id/deletion')
+  @Delete('servers/:id/deletion') @Can('server.delete')
   async restore(@Req() req: AuthedRequest, @Param('id', ParseUUIDPipe) id: string) {
     await findServer(req, id, true);
     await customerMay(req, 'delete');
@@ -741,7 +773,7 @@ export class ServersController {
 
   // One power action on several of the caller's servers (the list's selection). Each goes through the same checks as
   // the server page; ones the caller may not act on, busy or unsuitable are skipped and counted.
-  @Post('servers/actions') @HttpCode(202)
+  @Post('servers/actions') @HttpCode(202) @Can('server.power', 'server.delete')
   async bulk(@Req() req: AuthedRequest, @Headers('idempotency-key') header: string | undefined, @Body() body: Input) {
     const action = String(body?.action ?? '');
     if (!['power_on', 'shutdown', 'power_off', 'reset', 'delete', 'restore', 'tag', 'untag'].includes(action)) throw apiError(400, 'VALIDATION_FAILED', 'Invalid input', { action: 'INVALID_VALUE' });
@@ -782,7 +814,7 @@ export class ServersController {
   }
 
   // The customer's own server only (admins: any). Ownership is checked here, not by knowing the id.
-  @Post('servers/:id/console') @HttpCode(201)
+  @Post('servers/:id/console') @HttpCode(201) @Can('server.console')
   async console(@Req() req: AuthedRequest, @Res({ passthrough: true }) reply: FastifyReply, @Param('id', ParseUUIDPipe) id: string) {
     const s = await findServer(req, id, true);
     await customerMay(req, 'console');
@@ -840,14 +872,14 @@ export class ServersAdminController {
   @Get('servers') @Can('servers.view_all', 'dashboard.view')
   async all(@Req() req: AuthedRequest) {
     const { rows } = await pool.query(`SELECT ${serverColumns}, u.email AS "ownerEmail", EXISTS (SELECT 1 FROM server_favorites f WHERE f.user_id = $1 AND f.server_id = s.id) AS favorite
-      ${serverJoins} JOIN users u ON u.id = s.owner_id WHERE s.state <> 'deleted' ORDER BY s.created_at DESC`, [req.user.id]);
+      ${serverJoins} JOIN users u ON u.id = s.owner_id WHERE s.state <> 'deleted' ORDER BY s.created_at DESC`, [req.user.id]).then((r) => ({ rows: r.rows.map(withCapabilities) }));
     return { servers: rows };
   }
 
   @Get('operations') @Can('servers.view_all', 'dashboard.view')
   async operations() {
     const { rows } = await pool.query(`SELECT o.id, o.kind, o.status, o.step, o.attempts, o.error_code AS "errorCode", o.error_detail AS "errorDetail",
-      o.created_at AS "createdAt", o.finished_at AS "finishedAt", s.name AS "serverName", s.id AS "serverId", u.email AS "ownerEmail"
+      COALESCE(o.params->'warnings', '[]'::jsonb) AS "warnings", o.created_at AS "createdAt", o.finished_at AS "finishedAt", s.name AS "serverName", s.id AS "serverId", u.email AS "ownerEmail"
       FROM operations o LEFT JOIN servers s ON s.id = o.server_id LEFT JOIN users u ON u.id = o.owner_id ORDER BY o.created_at DESC LIMIT 200`);
     return { operations: rows };
   }
@@ -881,11 +913,27 @@ export class ServersAdminController {
   // A failed operation resumes from its persisted step; nothing already done is repeated.
   @Post('operations/:id/retry') @HttpCode(202) @Can('operations.retry')
   async retry(@Req() req: AuthedRequest, @Param('id', ParseUUIDPipe) id: string) {
-    const { rows: [op] } = await pool.query(`UPDATE operations SET status = 'pending', error_code = NULL, error_detail = NULL, finished_at = NULL,
-      deadline_at = now() + interval '45 minutes', updated_at = now() WHERE id = $1 AND status = 'failed' RETURNING id, server_id`, [id])
+    // No stored provider task: the one that failed is over, and waiting for it again would fail the same way.
+    const { rows: [op] } = await pool.query(`UPDATE operations SET status = 'pending', error_code = NULL, error_detail = NULL, finished_at = NULL, provider_task_id = NULL,
+      deadline_at = now() + interval '45 minutes', updated_at = now() WHERE id = $1 AND status = 'failed' RETURNING id, server_id, kind, step, params`, [id])
       .catch((err) => { if (err.constraint === 'operations_one_open_per_server') throw apiError(409, 'OPERATION_IN_PROGRESS', 'Another operation is open'); throw err; });
     if (!op) throw apiError(409, 'INVALID_SERVER_STATE', 'Only failed operations can be retried');
-    await pool.query("UPDATE servers SET state = 'provisioning', error_code = NULL WHERE id = $1 AND state = 'error'", [op.server_id]);
+    // The server goes back to the state its operation works in: being deleted, or being built; any other kind leaves it as it is.
+    if (op.kind === 'delete') await pool.query("UPDATE servers SET state = 'deleting', error_code = NULL WHERE id = $1 AND state = 'error'", [op.server_id]);
+    else if (op.kind === 'create' || op.kind === 'reinstall') await pool.query("UPDATE servers SET state = 'provisioning', error_code = NULL WHERE id = $1 AND state = 'error'", [op.server_id]);
+    // A failed resize took the old price back and withdrew its unpaid invoice (worker): the retry is for the new shape at
+    // the new price again, with a new invoice for what is left of the period. ("on": only starting it failed; nothing was undone.)
+    const to = op.kind === 'resize' && op.step !== 'on' ? op.params?.to : null;
+    if (to) {
+      const { rows: [s] } = await pool.query('SELECT * FROM servers WHERE id = $1', [op.server_id]);
+      const { rows: [old] } = op.params.invoiceId ? await pool.query('SELECT status FROM invoices WHERE id = $1', [op.params.invoiceId]) : { rows: [] };
+      const charge = old?.status === 'cancelled' ? await resizeCharge(s.id, s.price_monthly, to.priceMonthly) : null;
+      await pool.query('UPDATE servers SET price_monthly = $2, package_id = $3, traffic_gb = $4, price_hourly = $5, updated_at = now() WHERE id = $1', [s.id, to.priceMonthly, to.packageId, to.trafficGb, to.priceHourly]);
+      if (charge && charge.chargeNow !== '0.00') {
+        const invoiceId = await billResize({ ...s, owner_id: to.billTo ?? s.owner_id }, charge.chargeNow, to.currency ?? s.currency.trim(), { vcpu: op.params.vcpu, memoryMb: op.params.memoryMb, diskGb: op.params.diskGb });
+        await pool.query("UPDATE operations SET params = params || jsonb_build_object('invoiceId', $2::text) WHERE id = $1", [op.id, invoiceId]);
+      }
+    }
     await enqueue(op.id);
     await audit(req, 'operation.retry', 'success', req.user.id, { operationId: id });
     return { id, status: 'pending' };

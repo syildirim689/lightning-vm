@@ -120,3 +120,37 @@ export function hoursDue(billedUntil: Date, now: Date) {
 }
 // The hourly price of a monthly one (730 hours a month), to four decimals.
 export const hourlyOf = (monthly: string) => (Math.round((Number(monthly) / 730) * 10000) / 10000).toFixed(4);
+
+// A server's monthly price: its package or shape, plus each extra disk (disks.ts). A resize prices the new shape and keeps the disks.
+export const sumMoney = (base: string, more: string[]) => fromCents(more.reduce((a, m) => a + toCents(m), toCents(base)));
+
+// A server held for an unpaid invoice may only be stopped or deleted until it is paid, whoever asks (the owner, a reseller,
+// a schedule); staff still may do anything, and billing's own run is what puts the hold on and takes it off.
+export const heldRefuses = (kind: string, by: { staff: boolean; billing: boolean }) => !by.staff && !by.billing && !['delete', 'shutdown', 'power_off'].includes(kind);
+
+// Where a payment's money goes, in cents: to the invoice as far as it still needs it, the rest to the customer's balance.
+// An invoice that is no longer awaiting payment (cancelled or paid while the customer was at the provider) takes nothing.
+export function settleSplit(unpaid: boolean, totalCents: number, paidCents: number, amountCents: number) {
+  const invoice = unpaid ? Math.min(amountCents, Math.max(0, totalCents - paidCents)) : 0;
+  return { invoice, balance: amountCents - invoice };
+}
+
+// A renewal invoice is due when the period it renews ends, but never sooner than the usual terms (the days it is normally
+// made ahead) after it is made: a subscription whose period ended long ago (invoiced late, or automatic renewal off and
+// nobody paid) gets time to pay instead of an invoice that is overdue the moment it exists.
+export function renewalDue(periodEnd: string, day: string, termDays: number) {
+  const soonest = addDays(day, termDays);
+  return periodEnd > soonest ? periodEnd : soonest;
+}
+// The day dunning counts from: the due date, or the later day collection of that invoice began (invoices.dunning_from,
+// set by migration 071 on old invoices that only then came under collection).
+export const dueDay = (due: string, from: string | null) => (from && from > due ? from : due);
+
+// A period that ended in the past, moved forward by whole periods until it ends on `day` or later, each step as a
+// renewal makes it (the next period starts where the last ended). The rule migration 073 applies at the upgrade so
+// that nobody is invoiced for periods that passed uninvoiced; kept here to be tested where the dates are easy to read.
+export function skipPeriods(start: string, end: string, months: number, day: string) {
+  let skipped = 0;
+  while (end < day) { start = end; end = addMonths(end, months); skipped++; }
+  return { start, end, skipped };
+}

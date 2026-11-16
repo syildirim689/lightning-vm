@@ -26,6 +26,8 @@ async function serviceUp(fresh = false) {
   return up;
 }
 function mayOpen(req: AuthedRequest) {
+  // A shell on the host belongs to a signed-in browser (two-factor, revoked with its session), never to an API token.
+  if (req.sessionId.startsWith('token:')) throw apiError(403, 'TOKEN_NOT_ALLOWED', 'Open the terminal from the panel');
   if (req.user.impersonatedBy) throw apiError(403, 'TERMINAL_IMPERSONATED', 'Not while acting as another user');
   if (!req.user.twoFactorEnabled) throw apiError(403, 'TERMINAL_NEEDS_2FA', 'Turn on two-factor sign-in first');
 }

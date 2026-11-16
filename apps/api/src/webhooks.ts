@@ -3,7 +3,7 @@
 // Deliveries are queued and retried with backoff; many consecutive failures switch the webhook off and tell its owner.
 import { Queue, Worker } from 'bullmq';
 import { createHmac, randomUUID } from 'node:crypto';
-import { publicUrl } from './chat-apps';
+import { guardedRequest } from './chat-apps';
 import { pool, redis } from './db';
 import { logEvent } from './log';
 import { decryptSecret } from './secrets';
@@ -32,18 +32,16 @@ export async function queueWebhooks(event: string, userIds: string[], data: Reco
 
 // One POST; the answer is judged by its status (2xx is success). Redirects are not followed.
 export async function post(url: string, secret: string, payload: { id: string; event: string }) {
-  const target = await publicUrl(url);
-  if (!target) return { ok: false, code: null, error: 'WEBHOOK_URL_NOT_PUBLIC', ms: 0 };
   const body = JSON.stringify(payload);
   const started = Date.now();
   try {
-    const r = await fetch(target, { method: 'POST', redirect: 'manual', signal: AbortSignal.timeout(10_000), body,
-      headers: { 'content-type': 'application/json', 'user-agent': 'LightningVM-Webhook/1', 'x-lightning-event': payload.event, 'x-lightning-delivery': payload.id,
-        'x-lightning-signature': sign(secret, body) } });
-    await r.body?.cancel().catch(() => undefined);
+    // Checked and connected in one step, to the address that was checked (chat-apps.ts).
+    const r = await guardedRequest(url, { timeoutMs: 10_000, body, headers: { 'content-type': 'application/json', 'user-agent': 'LightningVM-Webhook/1', 'x-lightning-event': payload.event,
+      'x-lightning-delivery': payload.id, 'x-lightning-signature': sign(secret, body) } });
     return { ok: r.status >= 200 && r.status < 300, code: r.status, error: r.status >= 200 && r.status < 300 ? null : `HTTP ${r.status}`, ms: Date.now() - started };
   } catch (e) {
-    return { ok: false, code: null, error: (e as Error).name === 'TimeoutError' ? 'TIMEOUT' : 'UNREACHABLE', ms: Date.now() - started };
+    const name = (e as Error).name;
+    return { ok: false, code: null, error: name === 'NotPublic' ? 'WEBHOOK_URL_NOT_PUBLIC' : name === 'TimeoutError' ? 'TIMEOUT' : 'UNREACHABLE', ms: name === 'NotPublic' ? 0 : Date.now() - started };
   }
 }
 

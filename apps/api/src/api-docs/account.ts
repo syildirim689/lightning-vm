@@ -411,7 +411,7 @@ export default {
     ],
     example: { name: 'yedek-betigi', scope: 'read', expiresInDays: 90 },
     returns: { tr: 'id, name, hint, scope, expiresAt, createdAt ve token (lvm_…).', en: 'id, name, hint, scope, expiresAt, createdAt and token (lvm_…).' },
-    errors: ['API_TOKENS_DISABLED', 'LIMIT_REACHED', 'TOKEN_NOT_ALLOWED'],
+    errors: ['API_TOKENS_DISABLED', 'LIMIT_REACHED', 'TOKEN_NOT_ALLOWED', 'NOT_WHILE_IMPERSONATING'],
     tokens: false,
   },
   'DELETE /account/api-tokens/:id': {

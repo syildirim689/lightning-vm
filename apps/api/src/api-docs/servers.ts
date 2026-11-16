@@ -329,7 +329,7 @@ export default {
   'GET /admin/operations': {
     tag: 'admin-servers',
     summary: { tr: 'Son 200 işlemi listeler.', en: 'Lists the latest 200 operations.' },
-    returns: { tr: '`operations`: tür, durum, adım, deneme, hata kodu ve ayrıntısı, sunucu ve sahibin e-postası.', en: '`operations`: kind, status, step, attempts, error code and detail, server and owner e-mail.' },
+    returns: { tr: '`operations`: tür, durum, adım, deneme, hata kodu ve ayrıntısı, `warnings` (platformun yapmadan bıraktıklarının kodları; örn. `EXTRA_ADDRESSES_NOT_CONFIGURED`), sunucu ve sahibin e-postası.', en: '`operations`: kind, status, step, attempts, error code and detail, `warnings` (codes of what the platform left undone, e.g. `EXTRA_ADDRESSES_NOT_CONFIGURED`), server and owner e-mail.' },
   },
   'GET /admin/server-updates': {
     tag: 'admin-servers',
@@ -566,7 +566,7 @@ export default {
     body: [{ name: 'sizeGb', type: 'integer', required: true, text: { tr: 'Disk boyutu, 1–16384 GB.', en: 'Disk size, 1–16384 GB.' } }],
     example: { sizeGb: 100 },
     returns: { tr: '`diskId`, `operation`; bir tutar kesildiyse `invoiceId`.', en: '`diskId`, `operation`; `invoiceId` when something was invoiced.' },
-    errors: ['NOT_FOUND', 'ACTION_NOT_PERMITTED', 'ACTION_DISABLED', 'INVALID_SERVER_STATE', 'VALIDATION_FAILED', 'EXTRA_DISKS_NOT_SOLD', 'DISK_LIMIT', 'QUOTA_EXCEEDED', 'CAPACITY_EXHAUSTED', 'RESELLER_ALLOCATION_EXCEEDED', 'BILLING_HOLD', 'OPERATION_RATE_LIMITED', 'OPERATION_IN_PROGRESS'],
+    errors: ['NOT_FOUND', 'ACTION_NOT_PERMITTED', 'ACTION_DISABLED', 'INVALID_SERVER_STATE', 'VDC_SERVER', 'VALIDATION_FAILED', 'EXTRA_DISKS_NOT_SOLD', 'DISK_LIMIT', 'QUOTA_EXCEEDED', 'CAPACITY_EXHAUSTED', 'RESELLER_ALLOCATION_EXCEEDED', 'BILLING_HOLD', 'OPERATION_RATE_LIMITED', 'OPERATION_IN_PROGRESS'],
   },
   'DELETE /servers/:id/disks/:diskId': {
     tag: 'server-data',
@@ -733,14 +733,14 @@ export default {
     body: [{ name: 'enabled', type: 'boolean', required: true, text: { tr: 'true açar; başka her değer kapatır.', en: 'true turns it on; anything else turns it off.' } }],
     example: { enabled: true },
     returns: { tr: 'Bakım isteğinin `id`\'si.', en: 'The maintenance request\'s `id`.' },
-    errors: ['TERMINAL_IMPERSONATED', 'TERMINAL_NEEDS_2FA', 'MAINTENANCE_AGENT_MISSING', 'MAINTENANCE_BUSY'],
+    errors: ['TOKEN_NOT_ALLOWED', 'TERMINAL_IMPERSONATED', 'TERMINAL_NEEDS_2FA', 'MAINTENANCE_AGENT_MISSING', 'MAINTENANCE_BUSY'],
   },
   'POST /admin/terminal/session': {
     tag: 'admin-system',
     summary: { tr: 'Hostun tarayıcı terminalini açar.', en: 'Opens the host\'s browser terminal.' },
     details: { tr: 'Tarayıcıya /terminal/ws için 60 saniyelik tek kullanımlık çerez verilir. İki adımlı giriş gerekir; 10 dakikada en çok 20 kez.', en: 'The browser gets a one-time cookie for /terminal/ws, valid 60 seconds. Needs two-factor sign-in; at most 20 times in 10 minutes.' },
     returns: { tr: '`path` ve `expiresInSeconds`.', en: '`path` and `expiresInSeconds`.' },
-    errors: ['TERMINAL_IMPERSONATED', 'TERMINAL_NEEDS_2FA', 'TERMINAL_OFF', 'RATE_LIMITED'],
+    errors: ['TOKEN_NOT_ALLOWED', 'TERMINAL_IMPERSONATED', 'TERMINAL_NEEDS_2FA', 'TERMINAL_OFF', 'RATE_LIMITED'],
     internal: true,
   },
   'POST /admin/terminal/sessions/:key/revoke': {

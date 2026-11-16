@@ -4,6 +4,7 @@ import { Body, Controller, Delete, Get, HttpCode, Param, ParseUUIDPipe, Put, Que
 import type { FastifyReply } from 'fastify';
 import { audit, SessionGuard, type AuthedRequest } from './auth';
 import { usageOf } from './catalog';
+import { noCpuKinds } from './capacity';
 import { pool } from './db';
 import { apiError } from './errors';
 import { summary as maintenance } from './maintenance';
@@ -21,7 +22,9 @@ export async function cpuStats(ids: string[]): Promise<Map<string, CpuStats>> {
   if (!ids.length) return new Map();
   const { rows } = await pool.query(`SELECT server_id AS id, avg(cpu_pct)::float8 AS avg, percentile_cont(0.95) WITHIN GROUP (ORDER BY cpu_pct)::float8 AS p95,
       count(*)::int AS samples, (EXTRACT(EPOCH FROM max(at) - min(at)) / 86400)::float8 AS days
-    FROM server_cpu_samples WHERE server_id = ANY($1::uuid[]) AND at > now() - interval '7 days' GROUP BY server_id`, [ids]);
+    FROM server_cpu_samples WHERE server_id = ANY($1::uuid[]) AND at > now() - interval '7 days'
+      AND server_id NOT IN (SELECT s.id FROM servers s JOIN resource_pools p ON p.id = s.pool_id JOIN vmware_connections c ON c.id = p.connection_id WHERE c.kind = ANY($2))
+    GROUP BY server_id`, [ids, noCpuKinds]); // where CPU cannot be measured, samples (zeros an older worker stored) say nothing: no idle or sizing advice, no CPU factor
   return new Map(rows.map((r) => [r.id, { avg: r.avg, p95: r.p95, samples: r.samples, days: r.days }]));
 }
 
@@ -175,7 +178,8 @@ export class MySessionsController {
   // Signs out every other device (the one in use stays); each ends as a single session would.
   @Delete()
   async endOthers(@Req() req: AuthedRequest) {
-    const { rows } = await pool.query('SELECT id FROM auth_sessions WHERE user_id = $1 AND id <> $2', [req.user.id, req.sessionId]);
+    // Compared as text: with an API token the session in use is "token:…", not a uuid (every browser session then ends).
+    const { rows } = await pool.query('SELECT id FROM auth_sessions WHERE user_id = $1 AND id::text <> $2', [req.user.id, req.sessionId]);
     for (const r of rows) await endSession(req.user.id, r.id);
     await audit(req, 'account.sessions_ended', 'success', req.user.id, { count: rows.length });
     await publishLive(req.user.id, 'sessions');

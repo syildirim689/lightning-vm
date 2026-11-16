@@ -24,7 +24,9 @@ const from = 'FROM vdcs v JOIN users u ON u.id = v.owner_id JOIN resource_pools 
 
 // A server inside a VDC: shape chosen freely within what is left (checked again under lock on create).
 export async function resolveVdcOrder(userId: string, body: Input): Promise<{ order: Order; vdcId: string }> {
-  const { rows: [v] } = await pool.query('SELECT * FROM vdcs WHERE id = $1 AND owner_id = $2 AND active', [body.vdcId, userId]).catch(() => ({ rows: [] }));
+  // Not while it is suspended for an unpaid invoice (billing.ts holds its servers): a new server would run unheld.
+  const { rows: [v] } = await pool.query(`SELECT * FROM vdcs v WHERE v.id = $1 AND v.owner_id = $2 AND v.active
+    AND NOT EXISTS (SELECT 1 FROM subscriptions b WHERE b.vdc_id = v.id AND b.status = 'suspended')`, [body.vdcId, userId]).catch(() => ({ rows: [] }));
   if (!v) throw apiError(400, 'VALIDATION_FAILED', 'Invalid input', { vdcId: 'NOT_AVAILABLE' });
   const fields: Record<string, string> = {};
   const int = (k: string, min: number, max: number) => { const n = Number(body[k]); if (!Number.isInteger(n) || n < min || n > max) fields[k] = 'OUT_OF_RANGE'; return n; };
@@ -143,7 +145,7 @@ export class VdcController {
   }
 
   // The same power action on every server of the VDC that can take it; each gets its own operation.
-  @Post('vdcs/:id/actions') @HttpCode(202)
+  @Post('vdcs/:id/actions') @HttpCode(202) @Can('server.power')
   async bulk(@Req() req: AuthedRequest, @Headers('idempotency-key') header: string | undefined, @Param('id', ParseUUIDPipe) id: string, @Body() body: Input) {
     const action = String(body?.action ?? '');
     if (!['power_on', 'shutdown', 'power_off', 'reset'].includes(action)) throw apiError(400, 'VALIDATION_FAILED', 'Invalid input', { action: 'INVALID_VALUE' });

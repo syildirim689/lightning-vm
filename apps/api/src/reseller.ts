@@ -125,7 +125,7 @@ export class ResellerController {
   }
 
   // Orders a server for the customer (theirs; billed to the reseller at the discount). sshKey: a public key for them.
-  @Post('customers/:id/servers') @HttpCode(202)
+  @Post('customers/:id/servers') @HttpCode(202) @Can('servers.create')
   async order(@Req() req: AuthedRequest, @Param('id', ParseUUIDPipe) id: string, @Body() body: Record<string, unknown>) {
     const r = await activeReseller(req.user.id);
     const { rows: [u] } = await pool.query('SELECT id, email, name, role, locale FROM users WHERE id = $1 AND reseller_id = $2', [id, r.id]);

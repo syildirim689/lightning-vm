@@ -9,6 +9,7 @@ import type { PoolClient } from 'pg';
 import { pool, redis } from './db';
 import { apiError } from './errors';
 import { audit, SessionGuard, type AuthedRequest } from './auth';
+import { Can } from './rbac';
 import { can } from './permissions';
 import { roomFor } from './servers';
 
@@ -110,17 +111,20 @@ const view = (f: Record<string, unknown>) => ({ id: f.id, name: f.name, rules: f
 export class FirewallsController {
   @Get('firewalls')
   async list(@Req() req: AuthedRequest, @Query('scope') scope?: string, @Query('serverId') serverId?: string) {
-    const all = scope === 'all' && can(req.user.permissions, 'servers.view_all');
+    // For one server: whoever may see the server (its owner, staff, the owner's reseller) sees the firewalls on it, whoever owns them.
+    const of = serverId && /^[0-9a-f-]{36}$/.test(serverId) ? serverId : null;
+    if (of) await (await import('./servers')).findServer(req, of);
+    const all = !!of || (scope === 'all' && can(req.user.permissions, 'servers.view_all'));
     const { rows } = await pool.query(`SELECT f.*, u.email AS owner_email,
         COALESCE((SELECT json_agg(json_build_object('id', s.id, 'name', s.name, 'status', ${status}) ORDER BY s.name)
           FROM firewall_servers fs JOIN servers s ON s.id = fs.server_id WHERE fs.firewall_id = f.id AND s.state <> 'deleted'), '[]') AS servers
       FROM firewalls f JOIN users u ON u.id = f.owner_id
       WHERE ($2 OR f.owner_id = $1) AND ($3::uuid IS NULL OR EXISTS (SELECT 1 FROM firewall_servers x WHERE x.firewall_id = f.id AND x.server_id = $3))
-      ORDER BY f.name`, [req.user.id, all, serverId && /^[0-9a-f-]{36}$/.test(serverId) ? serverId : null]);
+      ORDER BY f.name`, [req.user.id, all, of]);
     return { firewalls: rows.map((f) => ({ ...view(f), ownerEmail: f.owner_email, servers: f.servers })), limits };
   }
 
-  @Post('firewalls') @HttpCode(201)
+  @Post('firewalls') @HttpCode(201) @Can('firewalls.manage')
   async create(@Req() req: AuthedRequest, @Body() body: Record<string, unknown>) {
     if (!can(req.user.permissions, 'firewalls.manage')) throw apiError(403, 'FORBIDDEN', 'Permission required');
     if (!(await roomFor(req, 'maxFirewalls', 'SELECT count(*)::int AS n FROM firewalls WHERE owner_id = $1'))) throw apiError(409, 'LIMIT_REACHED', 'Your role allows no more firewalls');
@@ -157,7 +161,7 @@ export class FirewallsController {
     return { ...view(f), servers, limits };
   }
 
-  @Put('firewalls/:id')
+  @Put('firewalls/:id') @Can('firewalls.manage')
   async update(@Req() req: AuthedRequest, @Param('id', ParseUUIDPipe) id: string, @Body() body: Record<string, unknown>) {
     const f = await findFirewall(req, id, true);
     const name = body?.name === undefined ? f.name : readName(body.name);
@@ -173,7 +177,7 @@ export class FirewallsController {
   }
 
   // Like Hetzner: a firewall still applied to servers cannot be deleted; detach it first.
-  @Delete('firewalls/:id') @HttpCode(204)
+  @Delete('firewalls/:id') @HttpCode(204) @Can('firewalls.manage')
   async remove(@Req() req: AuthedRequest, @Param('id', ParseUUIDPipe) id: string) {
     await findFirewall(req, id, true);
     const { rows: [n] } = await pool.query("SELECT count(*)::int AS n FROM firewall_servers fs JOIN servers s ON s.id = fs.server_id WHERE fs.firewall_id = $1 AND s.state <> 'deleted'", [id]);
@@ -182,7 +186,7 @@ export class FirewallsController {
     await audit(req, 'firewall.delete', 'success', req.user.id, { firewallId: id });
   }
 
-  @Post('firewalls/:id/servers') @HttpCode(200)
+  @Post('firewalls/:id/servers') @HttpCode(200) @Can('firewalls.manage')
   async attach(@Req() req: AuthedRequest, @Param('id', ParseUUIDPipe) id: string, @Body() body: Record<string, unknown>) {
     const f = await findFirewall(req, id, true);
     const serverIds = Array.isArray(body?.serverIds) ? [...new Set(body.serverIds.map(String))] : [];
@@ -200,7 +204,7 @@ export class FirewallsController {
     return this.detail(req, id);
   }
 
-  @Delete('firewalls/:id/servers/:serverId')
+  @Delete('firewalls/:id/servers/:serverId') @Can('firewalls.manage')
   async detach(@Req() req: AuthedRequest, @Param('id', ParseUUIDPipe) id: string, @Param('serverId', ParseUUIDPipe) serverId: string) {
     await findFirewall(req, id, true);
     const { rowCount } = await pool.query('DELETE FROM firewall_servers WHERE firewall_id = $1 AND server_id = $2', [id, serverId]);
@@ -211,7 +215,7 @@ export class FirewallsController {
   }
 
   // Applies the rules again (for example after a failure that has since been fixed in VMware).
-  @Post('firewalls/:id/apply') @HttpCode(202)
+  @Post('firewalls/:id/apply') @HttpCode(202) @Can('firewalls.manage')
   async apply(@Req() req: AuthedRequest, @Param('id', ParseUUIDPipe) id: string) {
     await findFirewall(req, id, true);
     const { rows } = await pool.query('SELECT server_id FROM firewall_servers WHERE firewall_id = $1', [id]);

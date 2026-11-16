@@ -3,6 +3,7 @@
 import { Body, Controller, Delete, Get, HttpCode, Param, ParseUUIDPipe, Post, Req, UseGuards } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import { audit, SessionGuard, type AuthedRequest } from './auth';
+import { platformCan } from './catalog';
 import { pool } from './db';
 import { apiError } from './errors';
 import { findServer, hashOf, startOperation } from './servers';
@@ -28,6 +29,7 @@ export class ImagesController {
     const name = typeof body?.name === 'string' ? body.name.trim().slice(0, 80) : '';
     if (!name) throw apiError(400, 'VALIDATION_FAILED', 'Invalid input', { name: 'REQUIRED' });
     if (!['ready', 'error'].includes(s.state) || !s.vm_moref) throw apiError(409, 'INVALID_SERVER_STATE', 'Not possible in this state');
+    await platformCan(s.pool_id, 'image');
     if ((await pool.query('SELECT 1 FROM os_images WHERE owner_id = $1 AND active', [req.user.id])).rowCount! >= MAX_IMAGES) throw apiError(409, 'LIMIT_REACHED', 'Remove an image first');
     const imageId = randomUUID();
     const operation = await startOperation(req, s, 'image_create', `image:${imageId}`, hashOf({ id, image: imageId }), { imageId, name });

@@ -27,6 +27,8 @@ export async function openConsole(req: AuthedRequest, reply: FastifyReply, conne
   if (!/^[\w-]{1,80}$/.test(vm)) throw apiError(400, 'VALIDATION_FAILED', 'Invalid input', { vm: 'INVALID_VALUE' });
   const { rows: [c] } = await pool.query('SELECT * FROM vmware_connections WHERE id = $1', [connectionId]);
   if (!c) throw apiError(404, 'NOT_FOUND', 'Unknown connection');
+  // A platform without a console in the panel is said so; on VMware it is a matter of the service account's privilege.
+  if (!['vcenter', 'esxi'].includes(c.kind)) throw apiError(409, 'PLATFORM_NOT_SUPPORTED', 'This platform has no console in the panel yet');
   if (!c.operations?.console) throw apiError(409, 'CONSOLE_NOT_PERMITTED', 'The service account lacks the console privilege');
   // Admin route: any VM of a connection. Customer route (ownedServer): the caller already proved ownership.
   if (!ownedServer && !can(req.user.permissions, 'consoles.any')) throw apiError(403, 'FORBIDDEN', 'Permission required');

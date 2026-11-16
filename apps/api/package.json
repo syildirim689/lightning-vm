@@ -2,11 +2,13 @@
   "name": "@lightning-vm/api",
   "version": "0.1.0",
   "private": true,
+  "license": "Apache-2.0",
   "scripts": {
     "build": "tsc",
     "start": "node dist/main.js",
     "test": "tsc && node --test test/*.test.mjs",
     "test:integration": "tsc && node --test --test-concurrency=1 test/integration/*.test.mjs",
+    "test:integration:full": "sh test/integration/run.sh",
     "migrate": "node dist/cli.js migrate"
   },
   "dependencies": {

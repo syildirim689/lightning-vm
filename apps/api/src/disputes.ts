@@ -4,7 +4,7 @@
 import { Body, Controller, Get, HttpCode, Param, ParseUUIDPipe, Post, Query, Req, UseGuards } from '@nestjs/common';
 import { audit, SessionGuard, type AuthedRequest } from './auth';
 import { fromCents, toCents } from './billing-rules';
-import { refundInvoice } from './billing';
+import { refundInvoice, withdrawInvoice } from './billing';
 import { pool, redis } from './db';
 import { apiError } from './errors';
 import { notify } from './notify';
@@ -49,6 +49,8 @@ export class DisputesController {
     const days = await decisionDays();
     if (inv.kind === 'topup' || !['unpaid', 'paid', 'partially_refunded'].includes(inv.status)) throw apiError(409, 'DISPUTE_NOT_POSSIBLE', 'This invoice cannot be disputed');
     if (Date.now() - new Date(inv.issued_at ?? inv.created_at).getTime() > days.window * 86_400_000) throw apiError(409, 'DISPUTE_TOO_LATE', 'The time to dispute this invoice has passed');
+    // A dispute stops collection while it is open: after a rejection the invoice is settled, not disputed again and again.
+    if ((await pool.query("SELECT 1 FROM invoice_disputes WHERE invoice_id = $1 AND status = 'rejected'", [id])).rowCount) throw apiError(409, 'DISPUTE_NOT_POSSIBLE', 'A dispute on this invoice was already rejected');
     const fields: Record<string, string> = {};
     const reason = reasons.includes(body?.reason as (typeof reasons)[number]) ? String(body.reason) : (fields.reason = 'REQUIRED', '');
     const lineIds = Array.isArray(body?.lineIds) ? [...new Set(body.lineIds.map(String))] : [];
@@ -144,7 +146,7 @@ export class DisputesAdminController {
     if (remedy === 'refund' || (remedy === 'balance' && paid)) await refundInvoice(req, d.invoice_id, { amount: fromCents(cents), toBalance: remedy === 'balance', reason: `İtiraz / Dispute ${d.number}` });
     else if (remedy === 'balance') await pool.query("INSERT INTO balance_entries (owner_id, amount, currency, reason, invoice_id, note, created_by) VALUES ($1, $2, $3, 'adjustment', $4, $5, $6)",
       [d.owner_id, fromCents(cents), d.currency, d.invoice_id, `İtiraz / Dispute ${d.number}`, req.user.id]);
-    else if (remedy === 'cancel') await pool.query("UPDATE invoices SET status = 'cancelled', cancelled_at = now() WHERE id = $1 AND status = 'unpaid' AND paid_total = 0", [d.invoice_id]);
+    else if (remedy === 'cancel') await withdrawInvoice(d.invoice_id); // accepted in full: nothing is owed for it, and it is not invoiced again
     const status = decision === 'reject' ? 'rejected' : decision === 'partial' ? 'partially_accepted' : 'accepted';
     await pool.query(`UPDATE invoice_disputes SET status = $2, remedy = $3, resolved_amount = $4, resolution = $5, decided_by = $6, decided_at = now(), updated_at = now() WHERE id = $1`,
       [id, status, remedy, decision === 'reject' ? null : fromCents(cents), note, req.user.id]);

@@ -49,3 +49,18 @@ test('quota reports every limit one more server would cross; null is unlimited',
   assert.deepEqual(exceededQuota(limits, { servers: 1, vcpu: 4, memoryMb: 999999, diskGb: 50 }, { vcpu: 4, memoryMb: 8192, diskGb: 50 }), []);
   assert.deepEqual(exceededQuota(limits, { servers: 2, vcpu: 6, memoryMb: 0, diskGb: 80 }, { vcpu: 4, memoryMb: 8192, diskGb: 50 }), ['servers', 'vcpu', 'diskGb']);
 });
+
+test('what a platform can do: from the connection kind and the operations its service account was found to have', async () => {
+  const { capabilitiesOf } = await import('../dist/capacity.js');
+  const all = { console: true, firewall: true };
+  assert.deepEqual(capabilitiesOf('vcenter', all), { console: true, firewall: true, migrate: true, image: true, backup: true, iso: true, metrics: true });
+  assert.deepEqual(capabilitiesOf('vcenter', { console: false, firewall: false }), { console: false, firewall: false, migrate: true, image: true, backup: true, iso: true, metrics: true });
+  // A standalone ESXi host: nowhere to move to and nothing to clone an image with.
+  assert.deepEqual(capabilitiesOf('esxi', { console: true, firewall: false }), { console: true, firewall: false, migrate: false, image: false, backup: true, iso: true, metrics: true });
+  // The other adapters answer PLATFORM_NOT_SUPPORTED for all of these, whatever was stored.
+  for (const kind of ['proxmox', 'xcpng', 'ovirt', 'hyperv', 'libvirt', 'incus']) {
+    // Performance samples: only Proxmox VE among them returns any.
+    assert.deepEqual(capabilitiesOf(kind, all), { console: false, firewall: false, migrate: false, image: false, backup: false, iso: false, metrics: kind === 'proxmox' });
+  }
+  assert.deepEqual(capabilitiesOf('vcenter', null), { console: false, firewall: false, migrate: true, image: true, backup: true, iso: true, metrics: true });
+});

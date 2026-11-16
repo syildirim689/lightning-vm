@@ -46,6 +46,8 @@ export class DeveloperController {
   @Post('api-tokens') @HttpCode(201)
   async createToken(@Req() req: AuthedRequest, @Body() body: Input) {
     browserOnly(req);
+    // A token outlives the session that made it: staff acting as a customer would keep a way into the account.
+    if (req.user.impersonatedBy) throw apiError(403, 'NOT_WHILE_IMPERSONATING', 'Not while acting as another user');
     await tokensOn(req);
     const fields: Record<string, string> = {};
     const name = typeof body?.name === 'string' ? body.name.trim() : '';

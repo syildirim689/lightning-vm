@@ -30,3 +30,32 @@ test('the form: empty is unlimited, numbers within range, known locations, valid
   const bad = readLimits({ maxServers: -1, maxSnapshots: 99, operationsPerHour: 0, allowedLocations: ['nope'], allowedIps: ['10.0.0.0/33'] }, known).fields;
   assert.deepEqual(Object.keys(bad).sort(), ['limits.allowedIps', 'limits.allowedLocations', 'limits.maxServers', 'limits.maxSnapshots', 'limits.operationsPerHour']);
 });
+
+test('create-user: the role is read where better-auth reads it, and data carries nothing but the language', async () => {
+  const { createUserRequest } = await import('../dist/role-limits.js');
+  assert.deepEqual(createUserRequest({ role: 'user' }), { role: 'user', extra: [] });
+  assert.deepEqual(createUserRequest({}), { role: 'user', extra: [] });
+  // Without a top-level role better-auth takes data.role: that is the role to check.
+  assert.equal(createUserRequest({ data: { role: 'admin' } }).role, 'admin');
+  assert.equal(createUserRequest({ role: 'user', data: { role: 'admin' } }).role, 'user');
+  assert.equal(createUserRequest({ role: ['user', 'admin'] }).role, 'user,admin');
+  assert.deepEqual(createUserRequest({ role: 'user', data: { locale: 'tr', role: 'user', emailVerified: true, banned: false } }).extra, ['emailVerified', 'banned']);
+});
+
+test('a narrowed API token changes something only where the route names a permission it holds', async () => {
+  const { narrowedTokenMay } = await import('../dist/role-limits.js');
+  const has = ['server.power', 'firewalls.manage'];
+  // Reading is never the question here (the token's read scope and each route's own checks decide that).
+  assert.equal(narrowedTokenMay('GET', undefined, false, has), true);
+  assert.equal(narrowedTokenMay('HEAD', undefined, false, []), true);
+  // A route that names no permission is closed to it: paying, transferring, deleting keys, support...
+  assert.equal(narrowedTokenMay('POST', undefined, false, has), false);
+  assert.equal(narrowedTokenMay('DELETE', [], false, has), false);
+  // A named permission: one of them must be among the token's.
+  assert.equal(narrowedTokenMay('POST', ['server.power'], false, has), true);
+  assert.equal(narrowedTokenMay('POST', ['server.delete', 'server.power'], false, has), true);
+  assert.equal(narrowedTokenMay('DELETE', ['server.delete'], false, has), false);
+  assert.equal(narrowedTokenMay('POST', ['billing.manage'], false, ['*']), true);
+  // Routes marked as harmless for any token (a price quote).
+  assert.equal(narrowedTokenMay('POST', undefined, true, []), true);
+});

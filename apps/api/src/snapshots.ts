@@ -3,6 +3,7 @@
 // off; it is powered on again when it was running before.
 import { Body, Controller, Delete, Get, Headers, HttpCode, Param, ParseUUIDPipe, Post, Req, UseGuards } from '@nestjs/common';
 import { SessionGuard, type AuthedRequest } from './auth';
+import { Can } from './rbac';
 import { pool, redis } from './db';
 import { apiError } from './errors';
 import { customerMay, findServer, hashOf, idempotencyKey, replay, startOperation, type Kind } from './servers';
@@ -41,7 +42,7 @@ export class SnapshotsController {
     return { snapshots: out.snapshots, max: maxFor(req) };
   }
 
-  @Post() @HttpCode(202)
+  @Post() @HttpCode(202) @Can('server.snapshots')
   async create(@Req() req: AuthedRequest, @Headers('idempotency-key') header: string | undefined, @Param('id', ParseUUIDPipe) id: string, @Body() body: Record<string, unknown>) {
     const name = typeof body?.name === 'string' ? body.name.trim() : '';
     const description = typeof body?.description === 'string' ? body.description.trim() : '';
@@ -55,12 +56,12 @@ export class SnapshotsController {
     });
   }
 
-  @Post(':sid/revert') @HttpCode(202)
+  @Post(':sid/revert') @HttpCode(202) @Can('server.snapshots')
   revert(@Req() req: AuthedRequest, @Headers('idempotency-key') header: string | undefined, @Param('id', ParseUUIDPipe) id: string, @Param('sid') sid: string) {
     return this.start(req, header, id, 'snapshot_revert', { snapshot: snapshotId(sid) }, async (s, params) => { params.powerOn = s.power_state === 'poweredOn'; });
   }
 
-  @Delete(':sid') @HttpCode(202)
+  @Delete(':sid') @HttpCode(202) @Can('server.snapshots')
   remove(@Req() req: AuthedRequest, @Headers('idempotency-key') header: string | undefined, @Param('id', ParseUUIDPipe) id: string, @Param('sid') sid: string) {
     return this.start(req, header, id, 'snapshot_delete', { snapshot: snapshotId(sid) });
   }

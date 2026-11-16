@@ -4,7 +4,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHmac } from 'node:crypto';
 
-const { chatApps, privateAddress, publicUrl, readTarget } = await import('../dist/chat-apps.js');
+const chatAppsModule = await import('../dist/chat-apps.js');
+const { chatApps, privateAddress, publicUrl, readTarget } = chatAppsModule;
 const m = { title: 'Ready', body: 'web-1 is up', link: 'https://panel.example.com/servers/1', brand: 'Acme', event: 'server.ready' };
 const a = { telegramToken: '123:abc', whatsappToken: 'wa', whatsappPhoneId: '1055', whatsappTemplate: 'alert', whatsappLanguage: 'tr', pushoverToken: 'po' };
 let seen;
@@ -94,4 +95,17 @@ test('errors are told apart: rejected token, missing target, anything else', asy
   assert.equal((await chatApps.webhook.send({ url: 'https://203.0.113.10/h' }, m, a)).code, 'CHAT_TARGET_NOT_FOUND');
   reply(500, 'oops');
   assert.equal((await chatApps.webhook.send({ url: 'https://203.0.113.10/h' }, m, a)).code, 'CHAT_REJECTED');
+});
+
+test('IPv4-mapped IPv6 addresses are judged as the IPv4 address they carry, in both spellings', () => {
+  const { mappedV4 } = chatAppsModule;
+  assert.equal(mappedV4('::ffff:127.0.0.1'), '127.0.0.1');
+  assert.equal(mappedV4('::FFFF:10.0.0.1'), '10.0.0.1');
+  assert.equal(mappedV4('::ffff:7f00:1'), '127.0.0.1');
+  assert.equal(mappedV4('::ffff:a00:1'), '10.0.0.1');
+  assert.equal(mappedV4('0:0:0:0:0:ffff:c0a8:0101'), '192.168.1.1');
+  assert.equal(mappedV4('2606:4700::1111'), null);
+  assert.equal(mappedV4('8.8.8.8'), null);
+  for (const ip of ['::ffff:127.0.0.1', '::ffff:10.0.0.1', '::ffff:7f00:1', '::ffff:a9fe:a9fe', '0:0:0:0:0:ffff:c0a8:0101']) assert.equal(privateAddress(ip), true, ip);
+  for (const ip of ['::ffff:8.8.8.8', '::ffff:808:808']) assert.equal(privateAddress(ip), false, ip);
 });

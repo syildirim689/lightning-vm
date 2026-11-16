@@ -12,7 +12,7 @@ if (!/\/\w+_test(\?|$)/.test(url) || process.env.REDIS_DB !== '15') {
   process.exit(1);
 }
 const vcenter = process.env.VCSIM_VCENTER;
-const skip = !vcenter || !process.env.VMWARE_SERVICE_URL || !process.env.WORKER_TEST ? 'needs the simulator, the adapter and a worker on the test databases (run-it.sh)' : false;
+const skip = !vcenter || !process.env.VMWARE_SERVICE_URL || !process.env.WORKER_TEST ? 'needs VCSIM_VCENTER, VMWARE_SERVICE_URL (with VMWARE_SERVICE_TOKEN_FILE) and WORKER_TEST=1 with a worker running on the same test database and Redis DB 15: sh test/integration/run.sh starts all of it' : false;
 process.env.DATABASE_URL = url;
 
 const { createApp, closeConnections } = await import('../../dist/main.js');
@@ -573,7 +573,7 @@ test('applications: a licence from the pool per order, price added, the guest re
   assert.equal((await send('GET', `/admin/applications/${appId}/licenses`)).json().licenses.filter((l) => !l.serverId).length, 2, 'both keys are free again');
 });
 
-test('ISO library: storages over WebDAV/FTP/SFTP, copy into a location, insert/boot/eject on a server, delete', { skip: skip || (!process.env.ISO_TEST_HOST && 'needs the iso-src-test storage (run-it.sh)') }, async () => {
+test('ISO library: storages over WebDAV/FTP/SFTP, copy into a location, insert/boot/eject on a server, delete', { skip: skip || (!process.env.ISO_TEST_HOST && 'needs ISO_TEST_HOST: a storage host serving test ISOs over WebDAV, FTP and SFTP (not started by run.sh)') }, async () => {
   const host = process.env.ISO_TEST_HOST;
   const dav = { name: 'Test DAV', protocol: 'webdav', config: { url: `http://${host}:8080`, user: 'isouser', pass: 'isopass' } };
   assert.equal((await send('POST', '/admin/iso-sources/test', { ...dav, config: { ...dav.config, pass: 'wrong' } })).json().code, 'STORAGE_AUTH_FAILED');
@@ -709,7 +709,7 @@ test('energy: samples estimated from a host profile, shares per server, kWh, cos
   await send('PUT', '/admin/power/profiles', { connectionId: h.connectionId, hostMoref: h.moref, idleWatts: null, maxWatts: null });
 });
 
-test('abuse: an open risky port is found and resolved, sustained full CPU is a mining suspicion', { skip: skip || (!process.env.RDNS_TEST_URL && 'needs pdns-test (run-it.sh)') }, async () => {
+test('abuse: an open risky port is found and resolved, sustained full CPU is a mining suspicion', { skip: skip || (!process.env.RDNS_TEST_URL && 'needs RDNS_TEST_URL and RDNS_TEST_KEY: a PowerDNS API (not started by run.sh)') }, async () => {
   const { lookup } = await import('node:dns/promises');
   const target = (await lookup(new URL(process.env.RDNS_TEST_URL).hostname, { family: 4 })).address;
   assert.equal((await send('PUT', '/admin/settings/abuse', { portScan: true, scanMinutes: 30, cpu: true, cpuThreshold: 90, cpuHours: 1, ports: [{ port: 70000 }] })).json().fields.ports, 'INVALID_PORT_LIST');

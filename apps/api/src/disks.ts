@@ -5,6 +5,7 @@ import { Body, Controller, Delete, Get, HttpCode, Param, ParseUUIDPipe, Post, Pu
 import { randomUUID } from 'node:crypto';
 import { audit, SessionGuard, type AuthedRequest } from './auth';
 import { billResize, resizeCharge } from './billing';
+import { hourlyOf } from './billing-rules';
 import { exceededQuota } from './capacity';
 import { capacityOf, limitsFor, usageOf } from './catalog';
 import { pool } from './db';
@@ -28,11 +29,13 @@ export class DisksController {
     return { disks: rows, pricePerGb: price, currency: s.currency.trim(), max: MAX_EXTRA_DISKS };
   }
 
-  @Post() @HttpCode(202)
+  @Post() @HttpCode(202) @Can('server.resize')
   async add(@Req() req: AuthedRequest, @Param('id', ParseUUIDPipe) id: string, @Body() body: Record<string, unknown>) {
     const s = await findServer(req, id, true);
     await customerMay(req, 'resize');
     if (s.state !== 'ready' || !s.vm_moref) throw apiError(409, 'INVALID_SERVER_STATE', 'Not possible in this state');
+    // A data center's servers live inside its allocation and are paid with it: a disk beside that would be neither counted nor billed.
+    if (s.vdc_id) throw apiError(409, 'VDC_SERVER', 'Change the virtual data center instead');
     const size = Number(body?.sizeGb);
     if (!Number.isInteger(size) || size < 1 || size > 16384) throw apiError(400, 'VALIDATION_FAILED', 'Invalid input', { sizeGb: 'OUT_OF_RANGE' });
     const { rows: [p] } = await pool.query('SELECT * FROM resource_pools WHERE id = $1', [s.pool_id]);
@@ -52,9 +55,10 @@ export class DisksController {
     try {
       operation = await startOperation(req, s, 'disk_add', `disk:${diskId}`, hashOf({ id, disk: diskId }), { diskId, sizeGb: size });
     } catch (err) { await pool.query('DELETE FROM server_disks WHERE id = $1', [diskId]); throw err; }
-    // The server costs more from now on; the rest of the period is invoiced like a resize.
+    // The server costs more from now on (an hourly one per hour, as a resize prices it); the rest of the period is invoiced like a resize.
     const before = s.price_monthly;
-    const { rows: [n] } = await pool.query('UPDATE servers SET price_monthly = price_monthly + $2, updated_at = now() WHERE id = $1 RETURNING price_monthly::text AS p', [id, price]);
+    const { rows: [n] } = await pool.query(`UPDATE servers SET price_monthly = price_monthly + $2, price_hourly = CASE WHEN billing_mode = 'hourly' THEN price_hourly + $3::numeric ELSE price_hourly END,
+      updated_at = now() WHERE id = $1 RETURNING price_monthly::text AS p`, [id, price, hourlyOf(price)]);
     const charge = await resizeCharge(id, before, n.p);
     const invoiceId = charge.chargeNow !== '0.00' ? await billResize({ ...s, owner_id: reseller?.id ?? s.owner_id }, charge.chargeNow, s.currency.trim(), { vcpu: s.vcpu, memoryMb: s.memory_mb, diskGb: s.disk_gb + size }) : null;
     await audit(req, 'server.disk_added', 'success', req.user.id, { serverId: id, diskId, sizeGb: size });
@@ -62,7 +66,7 @@ export class DisksController {
   }
 
   // Deletes the disk and everything on it.
-  @Delete(':diskId') @HttpCode(202)
+  @Delete(':diskId') @HttpCode(202) @Can('server.resize')
   async remove(@Req() req: AuthedRequest, @Param('id', ParseUUIDPipe) id: string, @Param('diskId', ParseUUIDPipe) diskId: string) {
     const s = await findServer(req, id, true);
     await customerMay(req, 'resize');
@@ -70,11 +74,19 @@ export class DisksController {
     if (!d) throw apiError(404, 'NOT_FOUND', 'Unknown disk');
     if (d.status === 'failed' || d.device_key === null) {
       await pool.query('DELETE FROM server_disks WHERE id = $1', [diskId]);
-      await pool.query('UPDATE servers SET price_monthly = greatest(0, price_monthly - $2), updated_at = now() WHERE id = $1', [id, d.price_monthly]);
+      await pool.query(`UPDATE servers SET price_monthly = greatest(0, price_monthly - $2), price_hourly = CASE WHEN billing_mode = 'hourly' THEN greatest(0, price_hourly - $3::numeric) ELSE price_hourly END,
+        updated_at = now() WHERE id = $1`, [id, d.price_monthly, hourlyOf(String(d.price_monthly))]);
       return { removed: true };
     }
-    const operation = await startOperation(req, s, 'disk_remove', `disk-remove:${diskId}`, hashOf({ id, removeDisk: diskId }), { diskId, key: d.device_key });
+    // "removing" before the operation is queued (a removal that fails at once puts "ready" back, and that must stand);
+    // undone when the operation cannot start. hourlySubtract: what an hourly server costs less per hour once the disk is
+    // gone; the worker lowers price_hourly by it in the statement that lowers the monthly price.
     await pool.query("UPDATE server_disks SET status = 'removing' WHERE id = $1", [diskId]);
+    const operation = await startOperation(req, s, 'disk_remove', `disk-remove:${diskId}`, hashOf({ id, removeDisk: diskId }),
+      { diskId, key: d.device_key, hourlySubtract: hourlyOf(String(d.price_monthly)) }).catch(async (err) => {
+        await pool.query("UPDATE server_disks SET status = $2 WHERE id = $1 AND status = 'removing'", [diskId, d.status]);
+        throw err;
+      });
     await audit(req, 'server.disk_removed', 'success', req.user.id, { serverId: id, diskId });
     return { operation };
   }

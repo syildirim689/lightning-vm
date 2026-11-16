@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { isIP } from 'node:net';
 import type { PoolClient } from 'pg';
+import { capabilitiesOf } from './capacity';
 import { pool } from './db';
 import { apiError } from './errors';
 import { audit, type AuthedRequest } from './auth';
@@ -248,7 +249,7 @@ export class VmwareController {
       // Thin disks may still grow: provisioned = used + not yet written (uncommitted).
       storageProvisionedBytes: datastores.reduce((n, d) => n + Number(d.capacity_bytes) - Number(d.free_bytes) + Number(d.uncommitted_bytes), 0),
     };
-    return { connection, capacity, hosts, datastores, networks, compute, vms };
+    return { connection: { ...connection, capabilities: capabilitiesOf(connection.kind, connection.operations) }, capacity, hosts, datastores, networks, compute, vms };
   }
 
   @Post('connections/:id/discover') @HttpCode(200) @Can('vmware.manage')

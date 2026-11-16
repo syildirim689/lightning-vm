@@ -87,7 +87,11 @@ export class ExternalController {
     if (action === 'suspend' || action === 'unsuspend') {
       await pool.query('UPDATE servers SET billing_hold = $2, updated_at = now() WHERE id = $1', [s.id, action === 'suspend']);
       const kind = action === 'suspend' ? (s.power_state === 'poweredOn' ? 'power_off' : null) : (s.power_state !== 'poweredOn' ? 'power_on' : null);
-      const operation = kind && s.state === 'ready' ? await startOperation(req, s, kind, key, key).catch(() => null) : null;
+      // A power-off that cannot start now (another operation is open) is remembered and issued by the billing run.
+      const operation = kind && s.state === 'ready' ? await startOperation(req, s, kind, key, key).catch(async () => {
+        if (kind === 'power_off') await pool.query('UPDATE servers SET hold_power_off = true WHERE id = $1 AND billing_hold', [s.id]);
+        return null;
+      }) : null;
       await audit(req, `external.${action}`, 'success', req.user.id, { serverId: s.id, source, reference });
       return { serverId: s.id, suspended: action === 'suspend', operation };
     }
@@ -103,7 +107,8 @@ export class ExternalController {
   async remove(@Req() req: AuthedRequest, @Param('source') source: string, @Param('reference') reference: string) {
     const s = await byReference(source, reference);
     await pool.query('UPDATE servers SET locked = false WHERE id = $1', [s.id]); // the billing system decided; a lock is the customer's own guard
-    const out = await servers.remove(req, `ext-${source}-${reference}-delete`, s.id, { confirm: s.name });
+    // Now, without the deletion grace period: the customer could take the server back in it, and nobody would bill it.
+    const out = await servers.remove(req, `ext-${source}-${reference}-delete`, s.id, { confirm: s.name, now: true });
     await audit(req, 'external.server_removed', 'success', req.user.id, { serverId: s.id, source, reference });
     return out;
   }

@@ -3,6 +3,7 @@
 // boot from it). Storage access runs in the worker (rclone); this side validates, stores and waits for answers.
 import { Body, Controller, Delete, Get, HttpCode, Param, ParseUUIDPipe, Post, Put, Req, UseGuards } from '@nestjs/common';
 import { Queue, QueueEvents } from 'bullmq';
+import { platformCan } from './catalog';
 import { onClose, pool, redis } from './db';
 import { apiError } from './errors';
 import { audit, SessionGuard, type AuthedRequest } from './auth';
@@ -175,6 +176,7 @@ export class IsoAdminController {
     if (!src) throw apiError(400, 'VALIDATION_FAILED', 'Invalid input', { sourceId: 'INVALID_VALUE' });
     const { rows: pools } = await pool.query('SELECT id, datastore_morefs FROM resource_pools WHERE id = ANY($1::uuid[])', [ids]);
     if (pools.length !== ids.length) throw apiError(400, 'VALIDATION_FAILED', 'Invalid input', { poolIds: 'INVALID_VALUE' });
+    for (const p of pools) await platformCan(p.id, 'iso'); // before any copy is started
     const created: string[] = [];
     // One copy per location (each has its own datastores); the first datastore of the location holds it.
     for (const p of pools) {
@@ -232,7 +234,7 @@ export class ServerIsoController {
     return { isos: rows, inserted: s.iso_id, boot: s.iso_boot };
   }
 
-  @Put('servers/:id/iso')
+  @Put('servers/:id/iso') @Can('server.iso')
   async insert(@Req() req: AuthedRequest, @Param('id', ParseUUIDPipe) id: string, @Body() body: Input) {
     const s = await findServer(req, id, true);
     await customerMay(req, 'iso');
