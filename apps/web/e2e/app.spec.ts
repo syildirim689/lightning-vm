@@ -1915,10 +1915,13 @@ test.describe('people, settings and smart features (English browser)', () => {
     await page.setViewportSize({ width: 390, height: 900 });
     await expectNoOverflow(page, 'topology table at 390 px');
     await page.setViewportSize({ width: 1280, height: 720 });
-    // "g" then "b" goes to billing.
+    // "g" then a letter goes to a page; "g b" (billing) does nothing while billing is switched off, as in the menu.
     await page.locator('main h1').click();
     await page.keyboard.press('g'); await page.keyboard.press('b');
-    await expect(page).toHaveURL(/\/billing$/);
+    await page.waitForTimeout(400);
+    await expect(page).toHaveURL(/\/admin\/topology/);
+    await page.keyboard.press('g'); await page.keyboard.press('u');
+    await expect(page).toHaveURL(/\/support$/);
     // Notification preferences: grouped by area, and a search narrows the long list.
     await page.goto('/account?tab=notifications');
     await page.getByRole('searchbox', { name: /Find a notification/ }).fill('invoice');
