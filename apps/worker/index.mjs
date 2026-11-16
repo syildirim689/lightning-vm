@@ -7,9 +7,14 @@ import pg from 'pg';
 import { Redis } from 'ioredis';
 import { writeFile } from 'node:fs/promises';
 import { hostname } from 'node:os';
+import { withLock } from './lock.mjs';
 // Names this copy in the heartbeat table (the container's host name in Docker).
 const instance = process.env.WORKER_NAME || hostname();
-const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL, connectionTimeoutMillis: 5000 });
+// Operations mostly wait (on an adapter task, on a guest): many can be open at once, and a long one (a clone, a backup
+// copy) then does not keep a power action or a snapshot waiting. Each holds a database connection only for single short
+// queries, so the pool grows with the number rather than limiting it.
+const concurrency = Math.max(1, Number(process.env.OPERATIONS_CONCURRENCY) || 8);
+const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL, connectionTimeoutMillis: 5000, max: Math.max(10, concurrency + 6) });
 const log = (level, event, fields = {}) => console.log(JSON.stringify({ level, service: 'worker', env: process.env.APP_ENV || 'production', event, time: new Date().toISOString(), ...fields }));
 pool.on('error', () => log('error', 'postgres_unavailable'));
 // BullMQ 6 treats ioredis as optional; in ESM it must receive a constructed client.
@@ -21,7 +26,7 @@ const notify = (event, to, data) => notifications.add('notify', { event, to, dat
 // Reverse DNS records are written by the API (it holds the DNS settings); a lost job only leaves a PTR to fix by hand.
 const rdnsQueue = new Queue('rdns', { connection: redis });
 const rdns = (data) => rdnsQueue.add('rdns', data, { attempts: 5, backoff: { type: 'exponential', delay: 10_000 }, removeOnComplete: true, removeOnFail: 100 }).catch(() => log('error', 'rdns_enqueue_failed', { action: data.action }));
-const worker = new Worker('operations', (job) => processOperation(pool, job, log, notify, rdns), { connection: redis, concurrency: 4 });
+const worker = new Worker('operations', (job) => processOperation(pool, job, log, notify, rdns), { connection: redis, concurrency });
 const operations = new Queue('operations', { connection: redis });
 // Firewall changes are applied one at a time, so an older job can never overwrite newer rules.
 const firewallWorker = new Worker('firewalls', (job) => processFirewall(pool, job, log, notify), { connection: redis.duplicate(), concurrency: 1 });
@@ -29,6 +34,7 @@ const firewalls = new Queue('firewalls', { connection: redis });
 // One firewall job at a time across every worker copy, not just within this one.
 await firewalls.setGlobalConcurrency(1).catch(() => log('error', 'firewall_concurrency_unset'));
 // ISO library: browsing answers the API while it waits; copies run for minutes to hours.
+const isos = new Queue('isos', { connection: redis });
 const isoWorker = new Worker('isos', (job) => processIso(pool, job, log, notify), { connection: redis.duplicate(), concurrency: 3, lockDuration: 120_000 });
 isoWorker.on('error', (e) => log('error', 'iso_queue_error', { error: String(e?.message).slice(0, 200) }));
 const jobOptions = { attempts: 6, backoff: { type: 'exponential', delay: 5000 }, removeOnComplete: true, removeOnFail: true };
@@ -51,31 +57,39 @@ async function recover() {
     const { rows: fw } = await pool.query(`SELECT id, firewall_version FROM servers WHERE firewall_applied_version < firewall_version AND firewall_error IS NULL
       AND vm_moref IS NOT NULL AND state NOT IN ('deleted', 'deleting', 'provisioning') AND updated_at < now() - make_interval(secs => $1)`, [Number(process.env.RECOVERY_STALE_SECONDS) || 90]);
     for (const r of fw) await firewalls.add('apply', { serverId: r.id }, { attempts: 5, backoff: { type: 'exponential', delay: 5000 }, removeOnComplete: true, removeOnFail: true, jobId: `fw-${r.id}-${r.firewall_version}` });
+    // An ISO copy without a job (stalled twice, or lost with Redis) would stay "copying" for ever: it is marked failed, so
+    // the admin can retry it. A copy that runs touches its row every 3 seconds; one that waits its turn still has its job.
+    const { rows: stale } = await pool.query("SELECT id FROM isos WHERE state = 'copying' AND updated_at < now() - interval '10 minutes'");
+    if (stale.length) {
+      const live = new Set((await isos.getJobs(['waiting', 'active', 'delayed', 'prioritized', 'paused'])).filter((j) => j?.name === 'import').map((j) => j.data?.isoId));
+      for (const { id } of stale.filter((r) => !live.has(r.id))) {
+        const { rows: [i] } = await pool.query(`UPDATE isos i SET state = 'failed', error = 'ISO_INCOMPLETE: the copy stopped before it finished', updated_at = now() FROM resource_pools p
+          WHERE i.id = $1 AND i.state = 'copying' AND i.updated_at < now() - interval '10 minutes' AND p.id = i.pool_id RETURNING i.name, p.name AS pool, i.error`, [id]);
+        if (!i) continue;
+        log('warn', 'iso_import_stalled', { iso: id });
+        await notify('admin.iso_failed', 'staff:catalog.manage', { name: i.name, pool: i.pool, error: i.error });
+      }
+    }
   } catch (e) { log('error', 'recovery_failed', { code: e.code, error: String(e.message).slice(0, 200) }); }
 }
 const recoveryTimer = setInterval(recover, (Number(process.env.RECOVERY_SECONDS) || 60) * 1000);
 
 // Reconciliation every RECONCILE_MINUTES (default 5) and on admin request; a Redis lock keeps one run at a time.
-async function reconcileOnce() {
-  if (!(await redis.set('lock:reconcile', '1', 'EX', 600, 'NX'))) return;
-  try { await reconcile(pool, log); } catch (e) { log('error', 'reconcile_failed', { code: e.code }); } finally { await redis.del('lock:reconcile'); }
-}
+// The lock (lock.mjs) never throws, so a Redis error in a timer callback is logged instead of ending the process, and
+// it is released only by the run that holds it.
+const reconcileOnce = () => withLock(redis, 'lock:reconcile', 600, () => reconcile(pool, log).catch((e) => log('error', 'reconcile_failed', { code: e.code })), { log });
 const reconcileTimer = setInterval(reconcileOnce, (Number(process.env.RECONCILE_MINUTES) || 5) * 60000);
 // Energy samples (power.mjs); one copy samples at a time.
-async function powerOnce(wait = false) {
-  // A requested sample waits (up to a minute) for one already running; the timer just skips.
-  for (let i = 0; !(await redis.set('lock:power', '1', 'EX', 240, 'NX')); i++) { if (!wait || i >= 60) return; await new Promise((r) => setTimeout(r, 1000)); }
-  try { await samplePower(pool, log, notify); } catch (e) { log('error', 'power_failed', { code: e.code, error: String(e.message).slice(0, 200) }); } finally { await redis.del('lock:power'); }
-}
-const powerTimer = setInterval(powerOnce, (Number(process.env.POWER_SAMPLE_MINUTES) || 5) * 60000);
+// A requested sample waits (up to a minute) for one already running; the timer just skips.
+const powerOnce = (wait = false) => withLock(redis, 'lock:power', 240,
+  () => samplePower(pool, log, notify).catch((e) => log('error', 'power_failed', { code: e.code, error: String(e.message).slice(0, 200) })), { wait, log });
+const powerTimer = setInterval(() => powerOnce(), (Number(process.env.POWER_SAMPLE_MINUTES) || 5) * 60000);
 // "Measure now" from the energy page.
 const powerWorker = new Worker('power', () => powerOnce(true), { connection: redis.duplicate(), concurrency: 1 });
 // Port scan of every server address (abuse.mjs) at the admin's interval, and "scan now".
-async function scanOnce(wait = false) {
-  // A requested scan waits (up to a minute) for one already running; the timer just skips.
-  for (let i = 0; !(await redis.set('lock:portscan', '1', 'EX', 1800, 'NX')); i++) { if (!wait || i >= 60) return; await new Promise((r) => setTimeout(r, 1000)); }
-  try { await scanPorts(pool, log, notify); } catch (e) { log('error', 'port_scan_failed', { error: String(e.message).slice(0, 200) }); } finally { await redis.del('lock:portscan'); }
-}
+// A requested scan waits (up to a minute) for one already running; the timer just skips.
+const scanOnce = (wait = false) => withLock(redis, 'lock:portscan', 1800,
+  () => scanPorts(pool, log, notify).catch((e) => log('error', 'port_scan_failed', { error: String(e.message).slice(0, 200) })), { wait, log });
 let lastScan = 0;
 const scanTimer = setInterval(async () => {
   const { rows: [s] } = await pool.query("SELECT value FROM settings WHERE key = 'abuse'").catch(() => ({ rows: [] }));
@@ -132,6 +146,8 @@ async function copyConsoleEvents() {
 }
 copyConsoleEvents();
 
-async function close() { if (closing) return; closing = true; clearInterval(timer); clearInterval(recoveryTimer); clearInterval(reconcileTimer); clearInterval(powerTimer); clearInterval(scanTimer); await worker.close(); await firewallWorker.close(); await isoWorker.close(); await powerWorker.close(); await abuseWorker.close(); await firewalls.close(); await rdnsQueue.close(); await maintenance.close(); await operations.close(); events.disconnect(); redis.disconnect(); await pool.end(); }
+async function close() { if (closing) return; closing = true; clearInterval(timer); clearInterval(recoveryTimer); clearInterval(reconcileTimer); clearInterval(powerTimer); clearInterval(scanTimer); await worker.close(); await firewallWorker.close(); await isoWorker.close(); await powerWorker.close(); await abuseWorker.close(); await firewalls.close(); await rdnsQueue.close(); await isos.close(); await maintenance.close(); await operations.close(); events.disconnect(); redis.disconnect(); await pool.end(); }
 process.on('SIGTERM', close); process.on('SIGINT', close);
+// Last line of defence: a promise nobody awaited must not end the process in the middle of other operations.
+process.on('unhandledRejection', (e) => log('error', 'unhandled_rejection', { error: String(e?.message ?? e).slice(0, 200) }));
 log('info', 'started');

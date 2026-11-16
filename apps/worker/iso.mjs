@@ -5,7 +5,7 @@ import { spawn } from 'node:child_process';
 import { request } from 'node:http';
 import { readFileSync } from 'node:fs';
 import { Transform } from 'node:stream';
-import { adapter, connectionTarget, decrypt, OperationError } from './operations.mjs';
+import { adapter, adapterBase, connectionTarget, decrypt, OperationError } from './operations.mjs';
 
 // rclone stores these options obscured; everything else is passed as given.
 const obscured = new Set(['pass']);
@@ -45,6 +45,10 @@ async function remoteEnv(src) {
 
 const join = (...parts) => parts.map((p) => String(p ?? '').replace(/^\/+|\/+$/g, '')).filter(Boolean).join('/');
 
+// Whether a progress update shows the copy is no longer wanted: only an answer counts (the row gone, or in another
+// state). An update that failed (a database blip) says nothing, and the copy goes on.
+export const copyStopped = (res) => !!res && res.rows[0]?.state !== 'copying';
+
 async function loadSource(db, data) {
   if (data.draft) return JSON.parse(decrypt(data.draft, 'iso-draft')); // "Test" of a form not saved yet
   const { rows: [s] } = await db.query('SELECT * FROM iso_sources WHERE id = $1', [data.sourceId]);
@@ -81,7 +85,8 @@ async function importIso(db, data, log, notify) {
     if (!(stat.Size > 0)) throw new OperationError('ISO_SIZE_UNKNOWN', 'the storage does not report the file size', true);
     await db.query('UPDATE isos SET size_bytes = $2, copied_bytes = 0, updated_at = now() WHERE id = $1', [iso.id, stat.Size]);
     const { rows: [c] } = await db.query('SELECT * FROM vmware_connections WHERE id = $1', [iso.connection_id]);
-    const header = Buffer.from(JSON.stringify({ ...connectionTarget(c), datastore: iso.datastore_moref, name: iso.file_name })).toString('base64');
+    const target = connectionTarget(c);
+    const header = Buffer.from(JSON.stringify({ ...target, datastore: iso.datastore_moref, name: iso.file_name })).toString('base64');
     const token = readFileSync(process.env.VMWARE_SERVICE_TOKEN_FILE ?? '/run/secrets/vmware_token', 'utf8').trim();
 
     const cat = spawn('rclone', ['cat', ...common, path], { env: { PATH: process.env.PATH, HOME: '/tmp', ...env } });
@@ -90,12 +95,12 @@ async function importIso(db, data, log, notify) {
     const counter = new Transform({ transform(chunk, _e, cb) { copied += chunk.length; cb(null, chunk); } });
     // Progress every 3 s; an ISO deleted meanwhile stops the copy.
     const timer = setInterval(async () => {
-      const { rows: [r] } = await db.query('UPDATE isos SET copied_bytes = $2, updated_at = now() WHERE id = $1 RETURNING state', [iso.id, copied]).catch(() => ({ rows: [{}] }));
-      if (r?.state !== 'copying') { cancelled = true; cat.kill(); }
+      if (copyStopped(await db.query('UPDATE isos SET copied_bytes = $2, updated_at = now() WHERE id = $1 RETURNING state', [iso.id, copied]).catch(() => null))) { cancelled = true; cat.kill(); }
     }, 3000);
     try {
       const out = await new Promise((resolve, reject) => {
-        const u = new URL('/v1/iso/upload', process.env.VMWARE_SERVICE_URL ?? 'http://vmware:8080');
+        // The connection's own adapter, as for every other call: a platform without an ISO library says so itself.
+        const u = new URL('/v1/iso/upload', adapterBase(target.platform));
         const req = request(u, { method: 'PUT', headers: { authorization: `Bearer ${token}`, 'x-upload': header, 'content-length': stat.Size, 'content-type': 'application/octet-stream' } }, (res) => {
           let body = '';
           res.on('data', (d) => { body += d; });

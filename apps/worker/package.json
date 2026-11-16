@@ -2,10 +2,11 @@
   "name": "@lightning-vm/worker",
   "version": "0.1.0",
   "private": true,
+  "license": "Apache-2.0",
   "type": "module",
   "scripts": {
     "start": "node index.mjs",
-    "check": "node --check index.mjs && node --check operations.mjs && node --check iso.mjs && node --check power.mjs && node --check abuse.mjs && node --test test/*.test.mjs"
+    "check": "node --check index.mjs && node --check operations.mjs && node --check iso.mjs && node --check power.mjs && node --check abuse.mjs && node --check traffic.mjs && node --check lock.mjs && node --test test/*.test.mjs"
   },
   "dependencies": {
     "bullmq": "6.4.0",
