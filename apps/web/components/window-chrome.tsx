@@ -46,7 +46,10 @@ export default function WindowChrome() {
         dialog.dataset.win = '';
         const bar = document.createElement('div');
         bar.className = 'win-controls';
-        for (const act of ['min', 'max', 'close'] as const) {
+        // The dialog's own close button stays (it becomes the third button of the bar); one is added only where there is none.
+        const own = !!dialog.querySelector(':scope > .modal__close-trigger');
+        if (own) dialog.dataset.winOwnClose = '';
+        for (const act of (own ? ['min', 'max'] : ['min', 'max', 'close']) as ('min' | 'max' | 'close')[]) {
           const b = document.createElement('button');
           b.type = 'button'; b.dataset.winAct = act; b.innerHTML = icons[act]; name(b, labels.current[act]);
           b.addEventListener('click', (e) => {

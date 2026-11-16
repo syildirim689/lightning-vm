@@ -152,7 +152,13 @@ html[data-a11y-transparency="reduce"] .page-loader { background: var(--backgroun
   .modal__dialog[data-win] > .modal__header .modal__heading { font-size: 1rem; font-weight: 600; }
   .alert-dialog__header { cursor: grab; touch-action: none; user-select: none; -webkit-user-select: none; }
   .modal__header :where(button, a, input, select, textarea), .alert-dialog__header :where(button, a, input) { cursor: revert; user-select: auto; }
-  .modal__dialog[data-win] > .modal__close-trigger { display: none; }
+  /* The dialog's own close button is the third button of the bar. */
+  .modal__dialog[data-win] > .modal__close-trigger { top: 0; inset-inline-end: 0; width: 2.9rem; height: 3.25rem; border-radius: 0; border-start-end-radius: inherit; background: transparent; color: var(--muted);
+    display: flex; align-items: center; justify-content: center; transition: background-color 120ms ease, color 120ms ease; z-index: 1; }
+  .modal__dialog[data-win] > .modal__close-trigger:hover { background: var(--danger); color: var(--danger-foreground, #fff); }
+  .modal__dialog[data-win-own-close] > .win-controls { inset-inline-end: 2.9rem; border-start-end-radius: 0; }
+  .modal__dialog[data-win-min] > .modal__close-trigger { height: 100%; }
+  .modal__dialog[data-win-min][data-win-own-close] > .win-controls { display: none; }
   .win-controls { position: absolute; top: 0; inset-inline-end: 0; display: flex; height: 3.25rem; align-items: stretch; overflow: hidden; border-start-end-radius: inherit; }
   .win-controls > button { display: flex; width: 2.9rem; align-items: center; justify-content: center; color: var(--muted); cursor: pointer;
     transition: background-color 120ms ease, color 120ms ease; }
@@ -178,7 +184,7 @@ html[data-a11y-transparency="reduce"] .page-loader { background: var(--backgroun
   .modal__backdrop:has(.modal__dialog[data-win-min]) { background-color: transparent !important; backdrop-filter: none !important; -webkit-backdrop-filter: none !important; cursor: pointer; }
   .modal__dialog[data-win-min] { position: fixed; left: 1rem; bottom: 1rem; top: auto; width: 20rem; max-width: calc(100vw - 2rem); height: 3.25rem; min-height: 0; margin: 0; padding: 0; overflow: hidden;
     translate: none; cursor: pointer; border: 1px solid var(--border); animation: win-aside 220ms cubic-bezier(0.22, 1, 0.36, 1); transform-origin: bottom left; }
-  .modal__dialog[data-win-min] > :not(.modal__header):not(.win-controls) { display: none; }
+  .modal__dialog[data-win-min] > :not(.modal__header):not(.win-controls):not(.modal__close-trigger) { display: none; }
   .modal__dialog[data-win-min] > .modal__header { margin: 0; height: 100%; padding: 0 3.5rem 0 1rem; border: 0; cursor: pointer; overflow: hidden; }
   .modal__dialog[data-win-min] > .modal__header * { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .modal__dialog[data-win-min] > .modal__header > :not(:first-child), .modal__dialog[data-win-min] .modal__heading > :not(:first-child) { display: none; }
