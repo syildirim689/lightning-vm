@@ -167,6 +167,9 @@
     "FORBIDDEN_TARGET": "Sizde olmayan izinleri veremez, sizden yetkili birini değiştiremezsiniz.",
     "ROLE_LOCKED": "Bu hazır rol değiştirilemez veya silinemez.",
     "LAST_ADMIN": "En az bir yönetici kalmalı.",
+    "NOT_WINRM": "Bu adreste WinRM (HTTPS) yanıt vermedi. Hostta HTTPS dinleyicisinin açık olduğunu ve portu (varsayılan 5986) denetleyin.",
+    "HYPERV_ERROR": "Hyper-V isteği reddetti. Ayrıntı için hosttaki Hyper-V olay günlüğüne bakın.",
+    "NOT_HYPERV": "Bu hostta Hyper-V PowerShell modülü yok. Hyper-V rolünü ve yönetim araçlarını kurun.",
     "NOT_OVIRT": "Bu adreste oVirt Engine API’si yanıt vermedi. Adresi ve portu (varsayılan 443) denetleyin.",
     "OVIRT_ERROR": "oVirt Engine isteği reddetti. Ayrıntı için Engine’deki olay günlüğüne bakın.",
     "NOT_XAPI": "Bu adreste XCP-ng / XenServer API’si (XAPI) yanıt vermedi. Adresi ve portu (varsayılan 443) denetleyin.",
@@ -821,6 +824,11 @@
   },
   "Vmware": {
     "platform": {
+      "hyperv": "Microsoft Hyper-V",
+      "hypervHelp": "Windows Server 2016 – 2025, WinRM (HTTPS)",
+      "hypervEndpointHelp": "Hyper-V hostunun adresi. Panel WinRM’e yalnızca HTTPS ile bağlanır; varsayılan port 5986.",
+      "hypervUsernameHelp": "Hyper-V yöneticisi bir hesap: ALAN\\kullanici ya da yerel hesap için yalnızca kullanıcı adı.",
+      "hypervVerify": "Parmak izini hostta, yönetici PowerShell’de şu komutla karşılaştırın:",
       "ovirt": "oVirt / RHV",
       "ovirtHelp": "oVirt Engine, RHV, Oracle OLVM 4.4+",
       "ovirtEndpointHelp": "oVirt Engine’in adresi (yönetim arayüzünün açıldığı ad). Varsayılan port 443.",
@@ -915,6 +923,7 @@
       "discovered": "Son keşif"
     },
     "kind": {
+      "hyperv": "Hyper-V",
       "ovirt": "oVirt",
       "xcpng": "XCP-ng",
       "proxmox": "Proxmox VE",

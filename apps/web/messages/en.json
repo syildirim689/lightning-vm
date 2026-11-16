@@ -167,6 +167,9 @@
     "FORBIDDEN_TARGET": "You cannot grant permissions you lack or change someone with more access than you.",
     "ROLE_LOCKED": "This built-in role cannot be changed or removed.",
     "LAST_ADMIN": "At least one administrator must remain.",
+    "NOT_WINRM": "No WinRM (HTTPS) answered at this address. Check that the host has an HTTPS listener and the port (5986 by default).",
+    "HYPERV_ERROR": "Hyper-V refused the request. See the Hyper-V event log on the host for the details.",
+    "NOT_HYPERV": "This host has no Hyper-V PowerShell module. Install the Hyper-V role and its management tools.",
     "NOT_OVIRT": "No oVirt Engine API answered at this address. Check the address and the port (443 by default).",
     "OVIRT_ERROR": "The oVirt Engine refused the request. See the events in the Engine for the details.",
     "NOT_XAPI": "No XCP-ng / XenServer API (XAPI) answered at this address. Check the address and the port (443 by default).",
@@ -821,6 +824,11 @@
   },
   "Vmware": {
     "platform": {
+      "hyperv": "Microsoft Hyper-V",
+      "hypervHelp": "Windows Server 2016 – 2025, WinRM (HTTPS)",
+      "hypervEndpointHelp": "The address of the Hyper-V host. The panel connects to WinRM over HTTPS only; the default port is 5986.",
+      "hypervUsernameHelp": "An account that administers Hyper-V: DOMAIN\\user, or just the user name for a local account.",
+      "hypervVerify": "Compare the fingerprint on the host with this command, in an administrator PowerShell:",
       "ovirt": "oVirt / RHV",
       "ovirtHelp": "oVirt Engine, RHV, Oracle OLVM 4.4+",
       "ovirtEndpointHelp": "The address of the oVirt Engine (the name its administration portal opens at). The default port is 443.",
@@ -915,6 +923,7 @@
       "discovered": "Last discovery"
     },
     "kind": {
+      "hyperv": "Hyper-V",
       "ovirt": "oVirt",
       "xcpng": "XCP-ng",
       "proxmox": "Proxmox VE",

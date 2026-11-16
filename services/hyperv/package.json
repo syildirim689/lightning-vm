@@ -1,0 +1,12 @@
+{
+  "name": "@lightning-vm/hyperv",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Hyper-V adapter: the hypervisor adapter contract (docs/adapter-contract.md) with PowerShell over WinRM",
+  "scripts": {
+    "start": "node server.mjs",
+    "test": "node --check server.mjs && node --check winrm.mjs && node --check handlers.mjs && node --check scripts.mjs && node --check iso.mjs && node --test test/*.test.mjs"
+  },
+  "engines": { "node": ">=22" }
+}
