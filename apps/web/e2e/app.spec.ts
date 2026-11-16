@@ -1272,6 +1272,89 @@ test.describe('people, settings and smart features (English browser)', () => {
     await expect(page.getByText('Announcement saved.').first()).toBeVisible();
   });
 
+  test('dialogs are windows: snapped by keys and edges, pulled out, laid out from the menu, resized', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 720 });
+    await signInAdmin(page);
+    await page.getByRole('heading', { level: 1 }).click();
+    await page.keyboard.press('Shift+?');
+    const win = page.getByRole('dialog', { name: 'Keyboard shortcuts' });
+    await expect(win).toBeVisible();
+    const header = win.locator('.modal__header');
+    const box = () => win.evaluate((el) => { const r = el.getBoundingClientRect(); return { x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.width), h: Math.round(r.height) }; });
+    const near = (a: number, b: number) => Math.abs(a - b) <= 2;
+    // The layouts: 8 px from the screen's edges and from the other half (lib/windows.ts).
+    const half = { left: { x: 8, y: 8, w: 628, h: 704 }, right: { x: 644, y: 8, w: 628, h: 704 } };
+    const at = async (want: { x: number; y: number; w: number; h: number }) => {
+      await expect.poll(async () => { const b = await box(); return near(b.x, want.x) && near(b.y, want.y) && near(b.w, want.w) && near(b.h, want.h); }, { timeout: 3_000 }).toBe(true);
+    };
+    await page.waitForTimeout(400); // the entrance animation scales the window
+    const natural = await box();
+
+    // Keys on the focused window: left half (twice stays left), back to its own size and place.
+    await win.locator('.modal__heading').click();
+    await page.keyboard.press('Control+Alt+ArrowLeft');
+    await at(half.left);
+    await expect(win).toHaveAttribute('data-win-layout', 'left');
+    await page.keyboard.press('Control+Alt+ArrowLeft');
+    await expect(win).toHaveAttribute('data-win-layout', 'left');
+    await page.keyboard.press('Control+Alt+ArrowDown');
+    await at(natural);
+
+    // Dragged against the right edge: a preview of the right half, then the right half.
+    let bar = (await header.boundingBox())!;
+    await page.mouse.move(bar.x + 40, bar.y + bar.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(800, 300, { steps: 5 });
+    await page.mouse.move(1279, 300, { steps: 10 });
+    await expect(page.locator('.win-preview[data-win-layout="right"]')).toBeVisible();
+    await page.mouse.up();
+    await expect(page.locator('.win-preview')).toHaveCount(0);
+    await at(half.right);
+
+    // Dragged by its title bar out of the layout: its own size again, under the pointer.
+    bar = (await header.boundingBox())!;
+    await page.mouse.move(bar.x + 60, bar.y + 20);
+    await page.mouse.down();
+    await page.mouse.move(500, 300, { steps: 10 });
+    await page.mouse.up();
+    await expect(win).not.toHaveAttribute('data-win-layout');
+    await expect.poll(async () => { const b = await box(); return near(b.w, natural.w) && near(b.h, natural.h) && b.x < 500 && 500 < b.x + b.w; }, { timeout: 3_000 }).toBe(true);
+
+    // The layout menu, by keyboard: from the first picture down the grid to "Centre", Enter; focus goes back.
+    const menuButton = win.getByRole('button', { name: 'Window layout' });
+    await menuButton.click();
+    const menu = win.getByRole('menu', { name: 'Window layout' });
+    await expect(menu).toBeVisible();
+    await expect(menu.getByRole('menuitem', { name: 'Left half' })).toHaveAttribute('title', 'Left half (Ctrl+Alt+←)');
+    for (let i = 0; i < 3; i++) await page.keyboard.press('ArrowDown');
+    await expect(menu.getByRole('menuitem', { name: 'Centre' })).toBeFocused();
+    await page.keyboard.press('Enter');
+    await expect(menu).toHaveCount(0);
+    await expect(menuButton).toBeFocused();
+    await at(natural);
+
+    // A right click on the title bar opens it too; Escape closes the menu, not the window.
+    await header.click({ button: 'right', position: { x: 40, y: 20 } });
+    await expect(menu).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(menu).toHaveCount(0);
+    await expect(win).toBeVisible();
+
+    // The corner grip makes it smaller with its top-left corner in place; a double click on it resets the size.
+    const grip = (await win.locator('[data-win-grip="se"]').boundingBox())!;
+    await page.mouse.move(grip.x + grip.width / 2, grip.y + grip.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(grip.x + grip.width / 2 - 80, grip.y + grip.height / 2 - 60, { steps: 6 });
+    await page.mouse.up();
+    await at({ x: natural.x, y: natural.y, w: natural.w - 80, h: natural.h - 60 });
+    await win.locator('[data-win-grip="se"]').dblclick();
+    await at(natural);
+
+    await win.locator('.modal__heading').click();
+    await page.keyboard.press('Escape');
+    await expect(win).toBeHidden();
+  });
+
   test('firewalls: created from a template, rules edited and checked, deleted', async ({ page }) => {
     await signInAdmin(page);
     await expect(page).toHaveURL(/\/admin$/);

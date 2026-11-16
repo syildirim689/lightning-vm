@@ -83,6 +83,8 @@ export default function Shortcuts({ permissions }: { permissions: string[] }) {
             {row(<Kbd>/</Kbd>, t('search'))}
             {row(<><Kbd>Ctrl</Kbd><Kbd>Enter</Kbd></>, t('send'))}
             {row(<><Kbd>Ctrl</Kbd><Kbd>S</Kbd></>, t('save'))}
+            {row(<><Kbd>Ctrl</Kbd><Kbd>Alt</Kbd><Kbd>← → ↑ ↓</Kbd></>, t('windowSides'))}
+            {row(<><Kbd>Ctrl</Kbd><Kbd>Alt</Kbd><Kbd>C</Kbd></>, t('windowCentre'))}
           </ul>
           <div>
             <h3 className="mb-1 text-xs font-semibold uppercase tracking-wider text-muted">{t('goTo')}</h3>

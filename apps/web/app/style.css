@@ -128,10 +128,10 @@ html[data-a11y-motion="reduce"] .page-loader-ring { animation: page-loader-breat
 @keyframes page-loader-breathe { 50% { opacity: .35; } }
 html[data-a11y-transparency="reduce"] .page-loader { background: var(--background); }
 
-/* Dialogs are windows (components/window-chrome.tsx moves them and adds the three buttons): a real title bar, room
-   to read in, a soft entrance. On phones they stay sheets from the bottom: nothing to move there. */
+/* Dialogs are windows (components/window-chrome.tsx moves them, lays them out and adds the buttons): a real title
+   bar, room to read in, a soft entrance. On phones they stay sheets from the bottom: nothing to move there. */
 .modal__dialog, .alert-dialog__dialog { translate: var(--win-x, 0px) var(--win-y, 0px); }
-.win-controls { display: none; }
+.win-controls, .win-grip, .win-menu, .win-preview { display: none; }
 .modal__header + .modal__body { margin-top: 1.25rem; }
 @media (min-width: 640px) {
   /* Sizes with room: a form, a detail view and a wide one. Never wider than the screen. */
@@ -145,14 +145,14 @@ html[data-a11y-transparency="reduce"] .page-loader { background: var(--backgroun
   .modal__body--scroll-inside { margin-inline: -0.5rem; padding-inline: 0.5rem; }
   .modal__footer { padding-top: 1rem; border-top: 1px solid var(--separator); }
 
-  /* The title bar: full width, a shade apart from the content, the title on the left, the buttons on the right. */
-  .modal__dialog[data-win] > .modal__header { margin: -1.75rem -1.75rem 0; padding: 0.9rem 9.75rem 0.9rem 1.75rem; min-height: 3.25rem; justify-content: center;
+  /* The title bar: full width, a shade apart from the content, the title on the left, four buttons on the right. */
+  .modal__dialog[data-win] > .modal__header { margin: -1.75rem -1.75rem 0; padding: 0.9rem 12.6rem 0.9rem 1.75rem; min-height: 3.25rem; justify-content: center;
     border-bottom: 1px solid var(--separator); border-top-left-radius: inherit; border-top-right-radius: inherit;
     background: color-mix(in oklab, var(--default) 55%, transparent); cursor: grab; touch-action: none; user-select: none; -webkit-user-select: none; }
   .modal__dialog[data-win] > .modal__header .modal__heading { font-size: 1rem; font-weight: 600; }
   .alert-dialog__header { cursor: grab; touch-action: none; user-select: none; -webkit-user-select: none; }
   .modal__header :where(button, a, input, select, textarea), .alert-dialog__header :where(button, a, input) { cursor: revert; user-select: auto; }
-  /* The dialog's own close button is the third button of the bar. */
+  /* The dialog's own close button is the last button of the bar. */
   .modal__dialog[data-win] > .modal__close-trigger { top: 0; inset-inline-end: 0; width: 2.9rem; height: 3.25rem; border-radius: 0; border-start-end-radius: inherit; background: transparent; color: var(--muted);
     display: flex; align-items: center; justify-content: center; transition: background-color 120ms ease, color 120ms ease; z-index: 1; }
   .modal__dialog[data-win] > .modal__close-trigger:hover { background: var(--danger); color: var(--danger-foreground, #fff); }
@@ -162,24 +162,72 @@ html[data-a11y-transparency="reduce"] .page-loader { background: var(--backgroun
   .win-controls { position: absolute; top: 0; inset-inline-end: 0; display: flex; height: 3.25rem; align-items: stretch; overflow: hidden; border-start-end-radius: inherit; }
   .win-controls > button { display: flex; width: 2.9rem; align-items: center; justify-content: center; color: var(--muted); cursor: pointer;
     transition: background-color 120ms ease, color 120ms ease; }
-  .win-controls > button:hover { background: color-mix(in oklab, var(--foreground) 10%, transparent); color: var(--foreground); }
+  .win-controls > button:hover, .win-controls > button[aria-expanded="true"] { background: color-mix(in oklab, var(--foreground) 10%, transparent); color: var(--foreground); }
   .win-controls > button:active { background: color-mix(in oklab, var(--foreground) 16%, transparent); }
   .win-controls > button[data-win-act="close"]:hover { background: var(--danger); color: var(--danger-foreground, #fff); }
   .win-controls > button:focus-visible { outline: 2px solid var(--focus); outline-offset: -3px; }
 
-  /* Moving: see-through, lifted; against the top edge it shows that letting go makes it large. */
+  /* Moving: see-through, lifted. Moving or resizing, nothing glides after the pointer. */
   .modal__dialog, .alert-dialog__dialog { transition: opacity 140ms ease, box-shadow 140ms ease; }
   .modal__dialog[data-win-drag], .alert-dialog__dialog[data-win-drag] { opacity: 0.78; box-shadow: 0 36px 90px -24px rgb(0 0 0 / 0.5); }
   [data-win-drag] :where(.modal__header, .alert-dialog__header) { cursor: grabbing !important; }
-  .modal__dialog[data-win-snap] { outline: 2px solid var(--accent); outline-offset: 3px; }
 
-  /* Large: the whole screen but a small margin. */
-  .modal__container:has(> .modal__dialog[data-win-max]) { width: 100%; padding: 0.75rem; }
-  .modal__dialog[data-win-max] { width: 100%; max-width: none; height: 100%; max-height: none; margin: 0; translate: none; animation: win-grow 200ms cubic-bezier(0.22, 1, 0.36, 1); }
-  .modal__dialog[data-win-max] > .modal__header { cursor: default; }
-  .modal__dialog[data-win-max] .modal__body { flex: 1; }
+  /* Layouts: a fixed part of the screen, 8 px from its edges and from a neighbour (the numbers of lib/windows.ts).
+     The window's own place and size (--win-x/y/w/h) wait underneath. The preview of a drag uses the same rules. */
+  :is(.modal__dialog, .win-preview)[data-win-layout] { --wl-x: 8px; --wl-y: 8px; --wl-w: calc(100% - 16px); --wl-h: calc(100% - 16px); }
+  :is(.modal__dialog, .win-preview):is([data-win-layout="left"], [data-win-layout="tl"], [data-win-layout="bl"]) { --wl-w: calc(50% - 12px); }
+  :is(.modal__dialog, .win-preview):is([data-win-layout="right"], [data-win-layout="tr"], [data-win-layout="br"]) { --wl-x: calc(50% + 4px); --wl-w: calc(50% - 12px); }
+  :is(.modal__dialog, .win-preview):is([data-win-layout="top"], [data-win-layout="tl"], [data-win-layout="tr"]) { --wl-h: calc(50% - 12px); }
+  :is(.modal__dialog, .win-preview):is([data-win-layout="bottom"], [data-win-layout="bl"], [data-win-layout="br"]) { --wl-y: calc(50% + 4px); --wl-h: calc(50% - 12px); }
+  .modal__dialog[data-win-layout]:not([data-win-min]), .win-preview { position: fixed; left: var(--wl-x); top: var(--wl-y); width: var(--wl-w); height: var(--wl-h);
+    max-width: none; max-height: none; margin: 0; translate: none; }
+  /* A size of its own (dragged on the edges or the corner): the container centres it, the script keeps its corner. */
+  .modal__dialog[data-win-sized]:not([data-win-layout]):not([data-win-min]) { width: var(--win-w); height: var(--win-h); max-width: none; max-height: none; flex-shrink: 0; }
+  /* A given height: the content scrolls inside the window instead of running out of it. */
+  .modal__dialog:is([data-win-layout], [data-win-sized]):not([data-win-min]) { overflow: hidden; }
+  .modal__dialog:is([data-win-layout], [data-win-sized]):not([data-win-min]) > .modal__body { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
 
-  /* Put aside: only the title bar, waiting at the bottom left; the page behind can be read. */
+  /* Resizing (only in its own size): the right edge, the bottom edge and a grip in the corner. */
+  .modal__dialog[data-win] > .win-grip { display: block; position: absolute; z-index: 2; touch-action: none; }
+  .win-grip[data-win-grip="e"] { top: 3.25rem; right: 0; bottom: 1.25rem; width: 6px; cursor: ew-resize; }
+  .win-grip[data-win-grip="s"] { left: 1.25rem; right: 1.25rem; bottom: 0; height: 6px; cursor: ns-resize; }
+  .win-grip[data-win-grip="se"] { right: 0.4rem; bottom: 0.4rem; width: 0.85rem; height: 0.85rem; cursor: nwse-resize; opacity: 0.55; transition: opacity 120ms ease;
+    background: linear-gradient(135deg, transparent 0 52%, var(--muted) 52% 60%, transparent 60% 72%, var(--muted) 72% 80%, transparent 80%); }
+  .win-grip[data-win-grip="se"]:hover, [data-win-resize] > .win-grip[data-win-grip="se"] { opacity: 1; }
+  .modal__dialog:is([data-win-layout], [data-win-min]) > .win-grip { display: none; }
+
+  /* Where a dragged window will land: a see-through rectangle under it. */
+  .win-preview { display: block; pointer-events: none; border-radius: min(32px, var(--radius-3xl)); border: 2px solid color-mix(in oklab, var(--accent) 75%, transparent);
+    background: color-mix(in oklab, var(--accent) 16%, transparent); box-shadow: 0 0 0 1px color-mix(in oklab, var(--background) 40%, transparent) inset;
+    transition: left 120ms ease, top 120ms ease, width 120ms ease, height 120ms ease; animation: win-ghost 140ms ease-out; }
+
+  /* Into or out of a layout the window grows into place; from one layout to another (or to the middle) it glides. */
+  .modal__dialog[data-win-pop] { animation: win-grow 200ms cubic-bezier(0.22, 1, 0.36, 1); }
+  .modal__dialog[data-win-glide] { transition: opacity 140ms ease, box-shadow 140ms ease, translate 200ms cubic-bezier(0.22, 1, 0.36, 1), left 200ms cubic-bezier(0.22, 1, 0.36, 1),
+    top 200ms cubic-bezier(0.22, 1, 0.36, 1), width 200ms cubic-bezier(0.22, 1, 0.36, 1), height 200ms cubic-bezier(0.22, 1, 0.36, 1); }
+  .modal__dialog:is([data-win-drag], [data-win-resize]) { transition: opacity 140ms ease, box-shadow 140ms ease; animation: none; }
+
+  /* The layout menu: inside the window (which lets it stick out while it is open), a grid of pictures, then a list. */
+  .modal__dialog[data-win][data-win-menu]:not([data-win-min]) { overflow: visible; }
+  .win-menu { display: block; position: absolute; z-index: 5; width: 15.5rem; padding: 0.375rem; border: 1px solid var(--border); border-radius: calc(var(--radius) * 1.6);
+    background: var(--overlay); color: var(--foreground); font-size: 0.875rem; line-height: 1.3; cursor: default; user-select: none;
+    box-shadow: 0 20px 50px -16px rgb(0 0 0 / 0.45), 0 2px 6px -2px rgb(0 0 0 / 0.15); animation: win-menu 120ms ease-out; transform-origin: top right; }
+  .win-menu-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.25rem; padding: 0.125rem; }
+  .win-menu-grid > button { display: grid; height: 2.5rem; place-items: center; border-radius: var(--radius); color: var(--muted); cursor: pointer; }
+  .win-menu-grid > button[data-current] { color: var(--accent); box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--accent) 60%, transparent); }
+  .win-menu-grid > button:is(:hover, :focus-visible) { background: color-mix(in oklab, var(--accent) 14%, transparent); color: var(--accent); }
+  .win-menu-sep { height: 1px; margin: 0.375rem 0.25rem; background: var(--separator); }
+  .win-menu > button { display: flex; width: 100%; align-items: center; justify-content: space-between; gap: 1rem; padding: 0.45rem 0.625rem; border-radius: var(--radius);
+    text-align: start; cursor: pointer; }
+  .win-menu > button[hidden] { display: none; }
+  .win-menu > button:is(:hover, :focus-visible) { background: color-mix(in oklab, var(--foreground) 9%, transparent); }
+  .win-menu > button[data-danger]:is(:hover, :focus-visible) { background: var(--danger); color: var(--danger-foreground, #fff); }
+  .win-menu > button[data-danger]:is(:hover, :focus-visible) kbd { color: inherit; }
+  .win-menu button:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+  .win-menu kbd { font: inherit; font-size: 0.75rem; color: var(--muted); white-space: nowrap; }
+
+  /* Put aside: only the title bar, waiting at the bottom left; the page behind can be read. It keeps its layout
+     (and size) for when it comes back. */
   .modal__backdrop { transition: background-color 180ms ease, backdrop-filter 180ms ease; }
   .modal__backdrop:has(.modal__dialog[data-win-min]) { background-color: transparent !important; backdrop-filter: none !important; -webkit-backdrop-filter: none !important; pointer-events: none; }
   .modal__dialog[data-win-min] { pointer-events: auto; }
@@ -195,6 +243,8 @@ html[data-a11y-transparency="reduce"] .page-loader { background: var(--backgroun
 }
 @keyframes win-grow { from { opacity: 0.6; transform: scale(0.97); } to { opacity: 1; transform: none; } }
 @keyframes win-aside { from { opacity: 0.4; transform: scale(1.6) translateY(-30%); } to { opacity: 1; transform: none; } }
+@keyframes win-ghost { from { opacity: 0; transform: scale(0.96); } }
+@keyframes win-menu { from { opacity: 0; transform: translateY(-4px) scale(0.98); } }
 @media (max-width: 639px) {
   /* A sheet: full width, rounded only on top, never taller than the screen, with a handle to show it can be closed. */
   .modal__header { padding-inline-end: 2.75rem; padding-bottom: 0.875rem; border-bottom: 1px solid var(--separator); }

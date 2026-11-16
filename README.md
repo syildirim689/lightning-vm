@@ -118,7 +118,7 @@ bildirimleri ve sistemin kendisini tek panelden yönetir. Kurulumdan sonra sunuc
 - **Güvenli güncelleme:** yalnızca daha yeni sürümler, önce yedek, migration uyumluluğu, başarısızlıkta geri dönüş
 - İsteğe bağlı Prometheus, Grafana, Loki, Alertmanager; panelden açılıp kapatılır
 - Türkçe / İngilizce arayüz, koyu / açık tema, telefondan geniş ekrana tam uyumlu
-- **Pencere mantığı:** tüm iletişim kutuları başlık çubuğundan taşınır, kenara alınır, büyütülür (telefonda alttan açılan sayfa)
+- **Pencere mantığı:** tüm iletişim kutuları başlık çubuğundan taşınır, kenara alınır, büyütülür; sola / sağa / üste / alta yaslanır, köşelere yerleşir, ortalanır, kenarından ve köşesinden boyutlandırılır. Kenara sürüklerken yerleşeceği alan önizlenir; düzen menüsü (başlıkta sağ tık ya da düzen düğmesi) ve Ctrl+Alt+← → ↑ ↓ / C kısayolları (telefonda alttan açılan sayfa)
 - **Erişilebilirlik:** %75–%200 yazı boyutu ve metin aralığı kaydırıcıları, yüksek kontrast, okunaklı yazı tipi, azaltılmış hareket
 - **Türkçe duyarlı arama** ("sirket" → "Şirket", "istanbul" → "İstanbul") ve sağ altta arka plan görevleri paneli
 
@@ -129,6 +129,7 @@ bildirimleri ve sistemin kendisini tek panelden yönetir. Kurulumdan sonra sunuc
 
 | Ne | Nerede |
 |---|---|
+| **Pencere düzenleri:** iletişim kutuları sola / sağa yaslanır, köşelere ve yarımlara yerleşir, ortalanır, kenarından boyutlandırılır; sürüklerken önizleme, düzen menüsü ve Ctrl+Alt+ok tuşları | Panelin tamamı |
 | **Incus / LXD desteği (ilk sürüm):** aynı panelden sanal makine ve konteyner; istemci sertifikasıyla, küme desteğiyle. Gerçek bir Incus 6.0 sunucusunda konteynerlerle denendi | Yönetim → Bağlantılar → Incus / LXD · [docs/incus.md](docs/incus.md) |
 | **KVM (libvirt) desteği (ilk sürüm):** vCenter ya da Proxmox olmadan, düz bir Linux KVM hostu; SSH ile, parola ya da anahtarla | Yönetim → Bağlantılar → KVM (libvirt) · [docs/libvirt.md](docs/libvirt.md) |
 | **Microsoft Hyper-V desteği (ilk sürüm):** aynı panelden Hyper-V hostları | Yönetim → Bağlantılar → Hyper-V · [docs/hyperv.md](docs/hyperv.md) |
@@ -346,6 +347,7 @@ Simülatör (govmomi `vcsim`) gerçek bir vCenter olmadan tüm akışı çalış
 | API entegrasyon testleri (PostgreSQL + Redis) | `cd apps/api && npm run test:integration` |
 | Go servisleri | `cd services/vmware && go test ./...` |
 | Proxmox, XCP-ng, oVirt, Hyper-V, libvirt ve Incus adaptörleri | `cd services/proxmox && npm test` (aynısı `services/xcpng`, `services/ovirt`, `services/hyperv`, `services/libvirt` ve `services/incus` için; libvirt'in betik testi Linux'ta çalışır) |
+| Web birim testleri (çeviriler, simgeler, pencere düzenleri ve diğer hesaplar) | `cd apps/web && npm test` |
 | Uçtan uca (Playwright; 390 / 768 / 1920 px) | `cd apps/web && npx playwright test` |
 
 CI bilerek elle tetiklenir (GitHub Actions → *Run workflow*). Katkı kuralları: [CONTRIBUTING.md](CONTRIBUTING.md).
@@ -413,7 +415,8 @@ automatic HTTPS. The UI is in Turkish and English.
 Highlights: smart ordering, snapshots, backups, extra disks, private networks, firewalls, browser console, billing and
 invoices, resellers, support desk, 20+ notification channels, LDAP / OIDC sign-in, passkeys and two-factor, live state
 of the panel host (CPU, memory, disk, services, logs), operating system updates for the host and for customers'
-servers, window-style dialogs, and accessibility controls.
+servers, window-style dialogs (move, put aside, snap to halves and quarters, centre, resize, keyboard shortcuts), and
+accessibility controls.
 
 > [!WARNING]
 > This project was **vibe-coded**: almost all of the code was written by Anthropic's Claude Code, steered and
