@@ -17,7 +17,7 @@ bildirimleri ve sistemin kendisini tek panelden yönetir. Kurulumdan sonra sunuc
 ![vSphere](https://img.shields.io/badge/vSphere-6.0%E2%80%939.x-607078)
 ![Yapay zekâ ile yazıldı](https://img.shields.io/badge/yaz%C4%B1ld%C4%B1-Claude%20Code%20ile-d97757)
 
-[Özellikler](#-özellikler) · [Ekran görüntüleri](#-ekran-görüntüleri) · [Kurulum](#-kurulum) · [Kullanım](#-ilk-adımlar) ·
+[Özellikler](#-özellikler) · [Son eklenenler](#-son-eklenenler) · [Ekran görüntüleri](#-ekran-görüntüleri) · [Kurulum](#-kurulum) · [Kullanım](#-ilk-adımlar) ·
 [Mimari](#-mimari) · [Geliştirme](#-geliştirme-ve-testler) · [Bilinen sınırlar](#-bilinen-sınırlar) · [English](#-english-summary)
 
 </div>
@@ -44,7 +44,10 @@ bildirimleri ve sistemin kendisini tek panelden yönetir. Kurulumdan sonra sunuc
   canlı fiyat ve kota kontrolü
 - **Sunucu yönetimi:** aç / kapat / yeniden başlat, silme onayı, işlem geçmişi, canlı CPU-RAM-disk-ağ grafikleri
 - **Tarayıcı konsolu**, ISO bağlama, root parolası, uygulama kurulumu (cPanel, Plesk…)
-- **Anlık görüntüler** (snapshot), **güç zamanlaması**, etiketler ve notlar
+- **Anlık görüntüler** (snapshot), **yedekler** ve geri yükleme, **ek diskler**, **güç zamanlaması**, etiketler ve notlar
+- **İşletim sistemi güncellemeleri:** sunucunun içindeki bekleyen ve güvenlik güncellemeleri, "yalnız haber ver / güvenliği kur /
+  hepsini kur" politikası, seçilen saatte otomatik yeniden başlatma (Linux: apt, dnf, yum)
+- **Özel ağlar**, faturalar ve ödeme, destek talepleri, API anahtarları ve etkileşimli API belgeleri
 - **Firewall** şablonları, ters DNS (PTR), SSH anahtarları (GitHub'dan içe aktarma)
 - **Sanal veri merkezi (VDC)** ve ağ topolojisi görünümü
 - Sunucu sağlık puanı, aylık maliyet tahmini, hızlı bağlantı bilgileri
@@ -62,6 +65,13 @@ bildirimleri ve sistemin kendisini tek panelden yönetir. Kurulumdan sonra sunuc
 - **Denetim kaydı**, duyuru bandı, toplu sunucu işlemleri
 - **Destek sistemi:** öncelik ve SLA, departmanlar, iç notlar, değişkenli hazır yanıtlar, puanlama ve kapanışta memnuniyet isteği
 - **Sunucu terminali** (iki adımlı doğrulama zorunlu) ve **panelden güncelleme**
+- **Sunucu durumu:** panelin çalıştığı sunucunun canlı işlemci, bellek, yük ve disk grafikleri; servisler, dosya
+  sistemleri, en çok kaynak kullanan süreçler ve her servisin günlükleri (arama, yalnız sorunlar, indirme)
+- **İşletim sistemi güncellemeleri:** panel sunucusunda güvenlik / tüm güncellemeleri kurma, otomatik güvenlik
+  güncellemeleri, yeniden başlatma; adım adım ilerleme penceresi. Tüm müşteri sunucularının güncelleme durumu tek listede
+- **Kullanıcı ayrıntısı:** doğrulamalar, parola, iki adımlı doğrulama sıfırlama, geçiş anahtarları, bağlı hesaplar,
+  oturumlar ve giriş geçmişi
+- **Bayiler**, faturalama, kuponlar, e-fatura ve itiraz yönetimi
 
 </td></tr>
 <tr><td valign="top">
@@ -101,10 +111,25 @@ bildirimleri ve sistemin kendisini tek panelden yönetir. Kurulumdan sonra sunuc
 - Şifreli yedek ve kontrollü geri yükleme, zamanlanmış yedek
 - **Güvenli güncelleme:** yalnızca daha yeni sürümler, önce yedek, migration uyumluluğu, başarısızlıkta geri dönüş
 - İsteğe bağlı Prometheus, Grafana, Loki, Alertmanager; panelden açılıp kapatılır
-- Türkçe / İngilizce arayüz, koyu / açık tema, erişilebilirlik ayarları, telefondan geniş ekrana tam uyumlu
+- Türkçe / İngilizce arayüz, koyu / açık tema, telefondan geniş ekrana tam uyumlu
+- **Pencere mantığı:** tüm iletişim kutuları başlık çubuğundan taşınır, kenara alınır, büyütülür (telefonda alttan açılan sayfa)
+- **Erişilebilirlik:** %75–%200 yazı boyutu ve metin aralığı kaydırıcıları, yüksek kontrast, okunaklı yazı tipi, azaltılmış hareket
+- **Türkçe duyarlı arama** ("sirket" → "Şirket", "istanbul" → "İstanbul") ve sağ altta arka plan görevleri paneli
 
 </td></tr>
 </table>
+
+## 🆕 Son eklenenler
+
+| Ne | Nerede |
+|---|---|
+| Panel sunucusunun canlı durumu: işlemci, bellek, yük, disk, servisler, süreçler, günlükler | Yönetim → Sistem → Sunucu durumu |
+| İşletim sistemi güncellemeleri (panel sunucusu): kurulum, otomatik güvenlik güncellemeleri, yeniden başlatma, ilerleme penceresi | Yönetim → Sistem |
+| Müşteri sunucularının içindeki güncellemeler; yeni Linux sunuculara bildirici ilk açılışta kendiliğinden kurulur | Sunucu sayfası · Yönetim → Sunucular → Güncellemeler |
+| Kullanıcının hesap ve giriş ayrıntıları, iki adımlı doğrulama sıfırlama, geçiş anahtarı ve bağlı hesap yönetimi | Yönetim → Kullanıcılar |
+| Pencere gibi davranan iletişim kutuları (taşı, kenara al, büyüt, kapat) | Panelin tamamı |
+| Yazı boyutu ve metin aralığı kaydırıcıları | Erişilebilirlik |
+| Türkçe harflere duyarlı arama; zaman ve DNS sunucuları için önerilen varsayılanlar | Panelin tamamı · Yönetim → Sistem |
 
 ## 📸 Ekran görüntüleri
 
@@ -291,6 +316,8 @@ CI bilerek elle tetiklenir (GitHub Actions → *Run workflow*). Katkı kurallar�
 - **E-posta adresi doğrulama yok:** kayıtla açılan hesabın e-posta adresi doğrulanmaz. (SSO, dizin ve bayi
   üzerinden gelen hesaplar doğrulanmış sayılır.)
 - **WhatsApp:** Meta Cloud API ve onaylı bir mesaj şablonu gerekir. **Telegram:** botta webhook tanımlı olmamalı.
+- **İşletim sistemi güncellemeleri:** panel sunucusunda yalnızca Debian / Ubuntu (apt); müşteri sunucularında Linux
+  (apt, dnf, yum), Windows yok. Otomatik kurulum cloud-init kullanan imajlarda çalışır.
 - Sürümlü, imzalı kurulum paketi (GHCR imajlarıyla) henüz yok; kurulum ve güncelleme kaynak koddan derler.
 
 Yol haritası: [docs/roadmap.md](docs/roadmap.md).
@@ -326,6 +353,11 @@ projeyi güvenilir kılacak olan şeydir.
 and console into virtual servers. Administrators manage capacity, IP pools, pricing, notifications and the panel
 itself from the browser, including updates, backups and monitoring. It ships with a one-command installer and
 automatic HTTPS. The UI is in Turkish and English.
+
+Highlights: smart ordering, snapshots, backups, extra disks, private networks, firewalls, browser console, billing and
+invoices, resellers, support desk, 20+ notification channels, LDAP / OIDC sign-in, passkeys and two-factor, live state
+of the panel host (CPU, memory, disk, services, logs), operating system updates for the host and for customers'
+servers, window-style dialogs, and accessibility controls.
 
 > [!WARNING]
 > This project was **vibe-coded**: almost all of the code was written by Anthropic's Claude Code, steered and

@@ -1,0 +1,32 @@
+name: Hata bildirimi / Bug report
+description: Beklenmeyen bir davranışı bildirin / Report something that does not work as expected
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: Ne oldu? / What happened?
+      description: Ne yaptınız, ne bekliyordunuz, ne gördünüz? / What you did, what you expected, what you saw.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Yeniden üretme adımları / Steps to reproduce
+      placeholder: "1. ...\n2. ...\n3. ..."
+  - type: input
+    id: version
+    attributes:
+      label: Sürüm / Version
+      description: Yönetim → Sistem sayfasındaki sürüm ya da commit / The version or commit on Admin → System.
+  - type: dropdown
+    id: vmware
+    attributes:
+      label: VMware
+      options: [vCenter, ESXi (standalone), Simülatör / Simulator, Bilmiyorum / Not sure]
+  - type: textarea
+    id: logs
+    attributes:
+      label: Günlükler / Logs
+      description: Yönetim → Sistem → Sunucu durumu → Günlükler. Parola ve anahtarları çıkarın / Remove passwords and keys.
+      render: text

@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Güvenlik açığı / Security vulnerability
+    url: https://github.com/syildirim689/lightning-vm/security/policy
+    about: Lütfen herkese açık issue açmayın / Please do not open a public issue.
