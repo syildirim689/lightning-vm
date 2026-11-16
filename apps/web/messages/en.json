@@ -4785,7 +4785,8 @@
       "monitoring": "Starting or stopping monitoring",
       "terminal": "Turning the terminal on or off",
       "host": "Changing server settings",
-      "os": "Operating system updates"
+      "os": "Operating system updates",
+      "state": "Server state snapshot"
     },
     "stateOf": {
       "running": "Running",
@@ -4819,7 +4820,8 @@
       "monitoring": "Monitoring change",
       "terminal": "Terminal change",
       "host": "Server settings",
-      "os": "Operating system updates"
+      "os": "Operating system updates",
+      "state": "Server state snapshot"
     },
     "windowFrom": "From",
     "windowTo": "To"
@@ -8601,7 +8603,85 @@
     }
   },
   "Windows": {
+    "minimize": "Put the window aside",
     "maximize": "Make the window large",
-    "restore": "Make the window small again"
+    "restore": "Make the window small again",
+    "close": "Close the window",
+    "bringBack": "Click to bring the window back"
+  },
+  "HostState": {
+    "title": "Server state",
+    "intro": "The server the panel runs on, right now: processor, memory, load and disk refresh every five seconds; the charts show the last ten minutes.",
+    "loading": "Loading…",
+    "healthy": "All good",
+    "attention": "{n} warnings",
+    "attentionTitle": "Needs a look",
+    "refresh": "Refresh",
+    "asked": "A fresh snapshot was asked for; it arrives within a few seconds",
+    "unsupported": "Processor and memory cannot be measured here (not a Linux system).",
+    "cpu": "Processor",
+    "memory": "Memory",
+    "load": "Load",
+    "disk": "Data disk",
+    "chart": "{what}: last ten minutes",
+    "cores": "{n} cores",
+    "iowait": "waiting for disk {n}%",
+    "usedOf": "{used} of {total} in use",
+    "cached": "cache {n}",
+    "swap": "swap {used} of {total}",
+    "loadAvg": "1 min {a} · 5 min {b} · 15 min {c}",
+    "loadHelp": "With {n} cores, {n} and below is comfortable.",
+    "freeOf": "{free} free of {total}",
+    "diskHelp": "The disk that holds the panel’s data and backups.",
+    "days": "{days} d {hours} h",
+    "hours": "{hours} h {mins} min",
+    "fact": {
+      "uptime": "Uptime",
+      "kernel": "Kernel",
+      "docker": "Docker",
+      "users": "Signed-in users (SSH)",
+      "api": "API (memory · uptime)",
+      "database": "Database size",
+      "connections": "Database connections",
+      "redis": "Redis memory"
+    },
+    "agentMissingTitle": "The host agent is not installed",
+    "agentMissing": "Services, disks, processes and logs are read through the agent. To install it, on the server: sudo sh scripts/install.sh agent on",
+    "firstSnapshot": "Taking the first snapshot…",
+    "services": "Services ({n})",
+    "snapshot": "snapshot: {when}",
+    "restarts": "{n} restarts",
+    "disks": "File systems",
+    "reclaimable": "{n} reclaimable",
+    "processes": "Processes using the most processor",
+    "proc": {
+      "name": "Process"
+    },
+    "addresses": "Addresses",
+    "warn": {
+      "cpu": "Processor use is at {n}%.",
+      "memory": "Memory use is at {n}%.",
+      "load": "Load is {load}, well above the number of cores ({cores}).",
+      "swap": "{n}% of swap is in use; memory may be short.",
+      "disk": "The disk at {mount} is {n}% full.",
+      "inodes": "The root file system has used {n}% of its file count limit.",
+      "down": "The service {service} is not running.",
+      "unhealthy": "The service {service} fails its health check.",
+      "unit": "A system unit failed: {unit}"
+    },
+    "logs": "Logs",
+    "logsHelp": "The last 300 lines of every service; warnings and errors only in the system journal.",
+    "logSource": "Source",
+    "logSystem": "System journal",
+    "logFind": "Search the lines",
+    "logProblems": "Problems only ({n})",
+    "logWrap": "Wrap lines",
+    "logCopy": "Copy",
+    "logCopied": "Lines copied",
+    "logSave": "Download",
+    "logsOf": "Log of {source}",
+    "logNoMatch": "No line matches.",
+    "logEmpty": "No lines from this source.",
+    "logCount": "Showing {shown} of {total} lines"
   }
 }

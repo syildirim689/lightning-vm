@@ -38,6 +38,30 @@ export default {
     details: { tr: 'system.view yetkisi gerekir. Değerler ajanın son kaydettiği bilgilerdir.', en: 'Needs system.view. The values are what the agent last recorded.' },
     returns: { tr: '`host`, `serverTime` (sunucu saati, ms) ve `agent` (kurulu mu, bekleyen istek, son sunucu ayarı çalışması ve günlüğü).', en: '`host`, `serverTime` (the server clock, ms) and `agent` (installed, pending requests, the last host run and its log).' },
   },
+  'GET /admin/host/live': {
+    tag: 'admin-system',
+    summary: { tr: 'Panelin çalıştığı sunucunun anlık durumunu verir.', en: 'Returns the live state of the panel host.' },
+    details: { tr: 'system.view yetkisi gerekir. İşlemci, bellek ve yük beş saniyede bir örneklenir ve son on dakika tutulur; servisler, dosya sistemleri ve süreçler ajanın son anlık görüntüsünden gelir.', en: 'Needs system.view. Processor, memory and load are sampled every five seconds and ten minutes are kept; services, file systems and processes come from the agent\'s last snapshot.' },
+    returns: { tr: '`cpu`, `memory`, `disk`, `uptime`, `kernel`, `history`, `panel` (API, veritabanı, Redis), `state` (ajanın anlık görüntüsü), `logs` (günlük kaynakları) ve `agent`.', en: '`cpu`, `memory`, `disk`, `uptime`, `kernel`, `history`, `panel` (API, database, Redis), `state` (the agent\'s snapshot), `logs` (log sources) and `agent`.' },
+  },
+  'POST /admin/host/state': {
+    tag: 'admin-system',
+    summary: { tr: 'Ajandan sunucunun yeni bir anlık görüntüsünü ister.', en: 'Asks the agent for a fresh snapshot of the host.' },
+    details: { tr: 'system.view yetkisi gerekir. Sunucuda hiçbir şey değişmez; servisler, diskler, süreçler ve günlüklerin son satırları yeniden okunur.', en: 'Needs system.view. Nothing changes on the server; services, disks, processes and the last log lines are read again.' },
+    returns: { tr: 'İsteğin kimliği (202).', en: 'The request id (202).' },
+    errors: ['MAINTENANCE_AGENT_MISSING', 'MAINTENANCE_BUSY'],
+  },
+  'GET /admin/host/logs': {
+    tag: 'admin-system',
+    summary: { tr: 'Bir servisin ya da sistem günlüğünün son satırlarını verir.', en: 'Returns the last lines of a service\'s log or of the system journal.' },
+    details: { tr: 'system.update yetkisi gerekir. Satırlar ajanın son anlık görüntüsünden gelir.', en: 'Needs system.update. The lines come from the agent\'s last snapshot.' },
+    query: [
+      { name: 'source', type: 'string', required: true, text: { tr: 'Servis adı (api, web, postgres ...) ya da `system`.', en: 'A service name (api, web, postgres ...) or `system`.' } },
+      { name: 'lines', type: 'integer', text: { tr: 'Satır sayısı, 10-300. Varsayılan 200.', en: 'How many lines, 10-300. Default 200.' } },
+    ],
+    returns: { tr: '`source`, `lines` ve `sources`.', en: '`source`, `lines` and `sources`.' },
+    errors: ['NOT_FOUND'],
+  },
   'POST /admin/host': {
     tag: 'admin-system',
     summary: { tr: 'Sunucunun adını, saat dilimini, zaman veya DNS sunucularını ajan üzerinden değiştirir.', en: 'Changes the host\'s name, time zone, time servers or DNS servers through the agent.' },

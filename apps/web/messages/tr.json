@@ -4785,7 +4785,8 @@
       "monitoring": "İzleme başlatılıyor veya durduruluyor",
       "terminal": "Terminal açılıyor veya kapatılıyor",
       "host": "Sunucu ayarları değiştiriliyor",
-      "os": "İşletim sistemi güncellemeleri"
+      "os": "İşletim sistemi güncellemeleri",
+      "state": "Sunucu durumu okuması"
     },
     "stateOf": {
       "running": "Sürüyor",
@@ -4819,7 +4820,8 @@
       "monitoring": "İzleme değişikliği",
       "terminal": "Terminal değişikliği",
       "host": "Sunucu ayarları",
-      "os": "İşletim sistemi güncellemeleri"
+      "os": "İşletim sistemi güncellemeleri",
+      "state": "Sunucu durumu okuması"
     },
     "windowFrom": "Başlangıç",
     "windowTo": "Bitiş"
@@ -8601,7 +8603,85 @@
     }
   },
   "Windows": {
+    "minimize": "Pencereyi kenara al",
     "maximize": "Pencereyi büyüt",
-    "restore": "Pencereyi küçült"
+    "restore": "Pencereyi küçült",
+    "close": "Pencereyi kapat",
+    "bringBack": "Pencereyi geri getirmek için tıklayın"
+  },
+  "HostState": {
+    "title": "Sunucu durumu",
+    "intro": "Panelin çalıştığı sunucunun şu anki hâli: işlemci, bellek, yük ve disk beş saniyede bir yenilenir; grafikler son on dakikayı gösterir.",
+    "loading": "Yükleniyor…",
+    "healthy": "Her şey yolunda",
+    "attention": "{n} uyarı",
+    "attentionTitle": "Bakılması gerekenler",
+    "refresh": "Yenile",
+    "asked": "Yeni anlık görüntü istendi; birkaç saniye içinde gelir",
+    "unsupported": "Bu ortamda işlemci ve bellek ölçülemiyor (Linux dışı bir sistem).",
+    "cpu": "İşlemci",
+    "memory": "Bellek",
+    "load": "Yük",
+    "disk": "Veri diski",
+    "chart": "{what}: son on dakika",
+    "cores": "{n} çekirdek",
+    "iowait": "disk beklemesi %{n}",
+    "usedOf": "{used} / {total} kullanımda",
+    "cached": "önbellek {n}",
+    "swap": "takas {used} / {total}",
+    "loadAvg": "1 dk {a} · 5 dk {b} · 15 dk {c}",
+    "loadHelp": "{n} çekirdek için {n} ve altı rahattır.",
+    "freeOf": "{free} boş / {total}",
+    "diskHelp": "Panelin verilerinin ve yedeklerin durduğu disk.",
+    "days": "{days} gün {hours} sa",
+    "hours": "{hours} sa {mins} dk",
+    "fact": {
+      "uptime": "Çalışma süresi",
+      "kernel": "Çekirdek",
+      "docker": "Docker",
+      "users": "Oturum açmış kullanıcı (SSH)",
+      "api": "API (bellek · süre)",
+      "database": "Veritabanı boyutu",
+      "connections": "Veritabanı bağlantıları",
+      "redis": "Redis belleği"
+    },
+    "agentMissingTitle": "Sunucu ajanı kurulu değil",
+    "agentMissing": "Servisler, diskler, süreçler ve günlükler ajan üzerinden okunur. Kurmak için sunucuda: sudo sh scripts/install.sh agent on",
+    "firstSnapshot": "İlk anlık görüntü alınıyor…",
+    "services": "Servisler ({n})",
+    "snapshot": "anlık görüntü: {when}",
+    "restarts": "{n} yeniden başlama",
+    "disks": "Dosya sistemleri",
+    "reclaimable": "{n} geri kazanılabilir",
+    "processes": "En çok işlemci kullanan süreçler",
+    "proc": {
+      "name": "Süreç"
+    },
+    "addresses": "Adresler",
+    "warn": {
+      "cpu": "İşlemci kullanımı %{n}.",
+      "memory": "Bellek kullanımı %{n}.",
+      "load": "Yük {load}, çekirdek sayısının ({cores}) hayli üzerinde.",
+      "swap": "Takas alanının %{n} kadarı kullanımda; bellek yetmiyor olabilir.",
+      "disk": "{mount} diski %{n} dolu.",
+      "inodes": "Kök dosya sisteminde dosya sayısı sınırının %{n} kadarı dolu.",
+      "down": "{service} servisi çalışmıyor.",
+      "unhealthy": "{service} servisi sağlık denetimini geçemiyor.",
+      "unit": "Sistem birimi başarısız: {unit}"
+    },
+    "logs": "Günlükler",
+    "logsHelp": "Her servisin son 300 satırı; sistem günlüğünde yalnız uyarılar ve hatalar.",
+    "logSource": "Kaynak",
+    "logSystem": "Sistem günlüğü",
+    "logFind": "Satırlarda ara",
+    "logProblems": "Yalnız sorunlar ({n})",
+    "logWrap": "Satırları kır",
+    "logCopy": "Kopyala",
+    "logCopied": "Satırlar kopyalandı",
+    "logSave": "İndir",
+    "logsOf": "{source} günlüğü",
+    "logNoMatch": "Süzgece uyan satır yok.",
+    "logEmpty": "Bu kaynakta satır yok.",
+    "logCount": "{shown} / {total} satır gösteriliyor"
   }
 }

@@ -36,6 +36,7 @@ import { PrivateNetworksController, PrivateNetworkSettingsController } from './p
 import { ImagesController } from './images';
 import { ensureRoles, watchRoles } from './permissions';
 import { InsightsController, startInsightAlerts, StaffInsightsController } from './insights';
+import { startHostLive } from './host-live';
 import { startOsAlerts } from './os-alerts';
 import { AdminServerUpdatesController, GuestUpdatesController, ServerUpdatesController } from './guest-updates';
 import { OnboardingController, DigestController, AccountExportController, SmartController, TimeZoneController, MySessionsController } from './smart';
@@ -159,6 +160,7 @@ async function main() {
   watchRoles();
   startInsightAlerts();
   startOsAlerts();
+  startHostLive();
   startApiLogJanitor();
   startVmwareAutoScan();
   startScheduler();

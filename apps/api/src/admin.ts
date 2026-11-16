@@ -10,6 +10,7 @@ import { notify } from './notify';
 import { uptime } from 'node:os';
 import { agentStatus, bootId, hostInfo, osInfo, pendingRequests, queueRequest, releases, runLog, runSetUp, settings as maintenanceSettings, summary } from './maintenance';
 import { readHostChange } from './host-rules';
+import { hostLive, hostLog, logSources } from './host-live';
 import { reloadAuth } from './better-auth';
 
 @Controller('admin') @UseGuards(PermissionGuard)
@@ -62,6 +63,33 @@ export class AdminController {
     // serverTime: this machine's clock now (the API shares it), to compare with the viewer's.
     return { host: hostInfo(), serverTime: Date.now(), agent: { installed: maintenanceSettings().agent === 'on', pending: Math.max(0, pendingRequests()), status: status?.action === 'host' ? status : null,
       log: status?.action === 'host' ? runLog(status.id) : [] } };
+  }
+
+  // The server's state now: processor, memory, load and disk (sampled here every five seconds), the panel's own
+  // processes, and the agent's last snapshot of services, file systems and processes.
+  @Get('host/live') @Can('system.view')
+  async hostLive() {
+    const status = agentStatus();
+    return { ...(await hostLive()), agent: { installed: maintenanceSettings().agent === 'on', busy: pendingRequests() > 0 || status?.state === 'running' } };
+  }
+
+  // Asks the agent for a fresh snapshot (services, file systems, processes, logs). It changes nothing on the server.
+  @Post('host/state') @HttpCode(202) @Can('system.view')
+  refreshState(@Req() req: AuthedRequest) {
+    if (maintenanceSettings().agent !== 'on' || pendingRequests() < 0) throw apiError(409, 'MAINTENANCE_AGENT_MISSING', 'The host agent is not installed (sudo sh scripts/install.sh agent on)');
+    const status = agentStatus();
+    const running = status?.state === 'running' && Date.now() - Date.parse(status.startedAt) < 3 * 3600_000;
+    if (pendingRequests() > 0 || running) throw apiError(409, 'MAINTENANCE_BUSY', 'Another maintenance task is queued or running');
+    return { id: queueRequest({ action: 'state', by: req.user.id }) };
+  }
+
+  // The last lines of one service's log, or of the system journal (warnings and worse), from the agent's snapshot.
+  @Get('host/logs') @Can('system.update')
+  hostLogs(@Query('source') source?: string, @Query('lines') lines?: string) {
+    const n = Math.min(300, Math.max(10, Number(lines) || 200));
+    const found = hostLog(String(source ?? ''), n);
+    if (!found) throw apiError(404, 'NOT_FOUND', 'Unknown log');
+    return { source, lines: found, sources: logSources() };
   }
 
   // Changes the server's name, time zone, time servers or DNS servers through the host agent (it checks again).

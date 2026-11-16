@@ -56,7 +56,7 @@ LOCAL=0 WIZARD=0 MONITORING=1 SCHEDULE=1 ADMIN_EMAIL="" RESET_EMAIL="" DISABLE_2
 case "${LANG:-}" in tr*) UI="tr" ;; *) UI="en" ;; esac
 while [ $# -gt 0 ]; do
   case "$1" in
-    install|check|recover-setup|update|behind-proxy|local-only|backup|maintenance|releases|run-requests) MODE=$1 ;;
+    install|check|recover-setup|update|behind-proxy|local-only|backup|maintenance|releases|run-requests|state) MODE=$1 ;;
     restore) MODE=restore; if [ $# -gt 1 ]; then shift; RESTORE_FILE=$1; fi ;;
     reset-password) MODE=reset-password; if [ $# -gt 1 ]; then shift; RESET_EMAIL=$1; fi ;;
     --disable-2fa) DISABLE_2FA=--disable-2fa ;;
@@ -512,6 +512,7 @@ do_maintenance() {
     if [ "$age" -gt 82800 ]; then (do_backup scheduled) || true; fi
   fi
   (os_info) >/dev/null 2>&1 || true
+  (do_state) >/dev/null 2>&1 || true
   AUTO=1; do_update
 }
 
@@ -653,6 +654,7 @@ run_requests() {
         if [ -n "$hdns" ]; then valid_list "$hdns" ip && set -- "$@" --dns "$hdns" || ok=0; fi ;;
       monitoring|terminal) case "$switch" in on|off) set -- "$action" "$switch" "$@" ;; *) ok=0 ;; esac ;;
       os) case "$act" in check|upgrade|security|reboot|auto-on|auto-off) set -- os "$act" "$@" ;; *) ok=0 ;; esac ;;
+      state) set -- state "$@" ;;
       auto-update) case "$switch" in on|off) set -- auto-update "$switch" "$@" ;; *) ok=0 ;; esac
         case "$channel" in '') ;; stable|beta|edge) set -- "$@" --channel "$channel" ;; *) ok=0 ;; esac
         if [ -n "$window" ]; then echo "$window" | grep -Eq '^([01][0-9]|2[0-3]):[0-5][0-9]-([01][0-9]|2[0-3]):[0-5][0-9]$' && set -- "$@" --window "$window" || ok=0; fi ;;
@@ -749,6 +751,60 @@ do_host() {
   fi
   host_info
   msg OK HOST_INFO "Sunucu bilgileri güncellendi" "Server details recorded"
+}
+
+# ---- This server's state for the panel (Admin → System → Server state) -----------------------------
+# A snapshot the panel cannot take from inside its container: the stack's services with their CPU and memory,
+# file systems, the busiest processes, failed systemd units, Docker's disk use, and the last log lines of every
+# service and of the system journal (warnings and worse). Read-only: nothing on the server changes.
+do_state() {
+  out=${STATE_DIR:-data/maintenance}
+  (umask 022; mkdir -p "$out/logs")
+  # One JSON string per field; fields arrive separated by "|".
+  rows() { # $1: comma-separated key names (a trailing "#" makes the value a number)
+    awk -F'|' -v keys="$1" 'BEGIN { n = split(keys, k, ","); printf "[" }
+      function esc(s) { gsub(/\\/, "\\\\", s); gsub(/"/, "\\\"", s); gsub(/[[:cntrl:]]/, " ", s); return s }
+      NF { printf "%s{", (c++ ? "," : "")
+        for (i = 1; i <= n; i++) { key = k[i]; num = sub(/#$/, "", key); v = $i
+          if (num) { gsub(/[^0-9.]/, "", v); if (v == "") v = 0; printf "%s\"%s\":%s", (i > 1 ? "," : ""), key, v }
+          else printf "%s\"%s\":\"%s\"", (i > 1 ? "," : ""), key, esc(v) }
+        printf "}" }
+      END { printf "]" }'
+  }
+  services='[]'; docker_disk='[]'
+  if docker compose ps >/dev/null 2>&1; then
+    stats=$(timeout 20 docker stats --no-stream --format '{{.Name}}|{{.CPUPerc}}|{{.MemUsage}}|{{.MemPerc}}' 2>/dev/null || true)
+    services=$(docker compose ps -a --format '{{.Service}}|{{.Name}}|{{.State}}|{{.Health}}|{{.Status}}' 2>/dev/null | sort | while IFS='|' read -r svc name state health status; do
+      [ -n "$svc" ] || continue
+      line=$(printf '%s\n' "$stats" | awk -F'|' -v n="$name" '$1 == n { print $2 "|" $3 "|" $4; exit }')
+      cpu=$(printf '%s' "$line" | cut -d'|' -f1); mem=$(printf '%s' "$line" | cut -d'|' -f2 | sed 's| /.*||'); memp=$(printf '%s' "$line" | cut -d'|' -f3)
+      restarts=$(docker inspect -f '{{.RestartCount}}' "$name" 2>/dev/null || echo 0)
+      started=$(docker inspect -f '{{.State.StartedAt}}' "$name" 2>/dev/null || true)
+      printf '%s|%s|%s|%s|%s|%s|%s|%s|%s\n' "$svc" "$state" "$health" "$status" "${cpu:-0}" "$mem" "${memp:-0}" "$restarts" "$started"
+    done | rows 'service,state,health,status,cpu#,memory,memoryPercent#,restarts#,startedAt')
+    docker_disk=$(timeout 30 docker system df --format '{{.Type}}|{{.Size}}|{{.Reclaimable}}' 2>/dev/null | rows 'type,size,reclaimable' || echo '[]')
+    # The last lines of every service (the panel shows them; rotated by Docker, nothing is kept here beyond this).
+    rm -f "$out"/logs/*.log
+    for svc in $(docker compose ps -a --format '{{.Service}}' 2>/dev/null | sort -u); do
+      echo "$svc" | grep -Eq '^[a-z0-9][a-z0-9_-]{0,40}$' || continue
+      timeout 20 docker compose logs --no-color --no-log-prefix --timestamps --tail 300 "$svc" > "$out/logs/$svc.tmp" 2>&1 || true
+      chmod 644 "$out/logs/$svc.tmp"; mv "$out/logs/$svc.tmp" "$out/logs/$svc.log"
+    done
+  fi
+  if command -v journalctl >/dev/null 2>&1; then
+    timeout 20 journalctl -p warning -n 200 --no-pager -o short-iso > "$out/logs/system.tmp" 2>/dev/null || true
+    chmod 644 "$out/logs/system.tmp"; mv "$out/logs/system.tmp" "$out/logs/system.log"
+  fi
+  disks=$(df -P -B1 -x tmpfs -x devtmpfs -x overlay -x squashfs -x efivarfs 2>/dev/null | awk 'NR > 1 { print $6 "|" $1 "|" $2 "|" $3 "|" $4 }' | head -n 12 | rows 'mount,device,total#,used#,free#')
+  inodes=$(df -P -i / 2>/dev/null | awk 'NR == 2 { gsub(/%/, "", $5); print $5 + 0 }')
+  processes=$(ps -eo pid=,pcpu=,pmem=,rss=,comm= --sort=-pcpu 2>/dev/null | head -n 8 | awk '{ print $1 "|" $2 "|" $3 "|" $4 * 1024 "|" $5 }' | rows 'pid#,cpu#,memory#,rss#,name')
+  failed=$(systemctl --failed --no-legend --plain 2>/dev/null | awk '{ print $1 }' | head -n 10 | rows 'unit' || echo '[]')
+  addresses=$(ip -o -4 addr show scope global 2>/dev/null | awk '{ print $2 "|" $4 }' | head -n 8 | rows 'interface,address' || echo '[]')
+  net=$(awk -F'[: ]+' 'NR > 2 && $2 != "lo" && $2 !~ /^(veth|br-|docker)/ { print $2 "|" $3 "|" $11 }' /proc/net/dev 2>/dev/null | head -n 6 | rows 'interface,rx#,tx#')
+  printf '{"checkedAt":"%s","services":%s,"disks":%s,"inodesPercent":%s,"processes":%s,"failedUnits":%s,"addresses":%s,"network":%s,"dockerDisk":%s,"docker":"%s","users":%s}\n' \
+    "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "${services:-[]}" "${disks:-[]}" "${inodes:-0}" "${processes:-[]}" "${failed:-[]}" "${addresses:-[]}" "${net:-[]}" "${docker_disk:-[]}" \
+    "$(docker version --format '{{.Server.Version}}' 2>/dev/null | json_str || true)" "$(who 2>/dev/null | wc -l | tr -d ' ')" > "$out/state.tmp"
+  chmod 644 "$out/state.tmp"; mv "$out/state.tmp" "$out/state.json"
 }
 
 # ---- This server's operating system updates (apt: Debian and Ubuntu) -------------------------------
@@ -958,6 +1014,7 @@ case "$MODE" in
   run-requests) run_requests; exit 0 ;;
   host) do_host; exit 0 ;;
   os) do_os; exit 0 ;;
+  state) do_state; exit 0 ;;
   agent) set_agent; exit 0 ;;
   schedule) set_schedule; exit 0 ;;
   auto-update) [ -f .env ] || die 17 E_NOT_INSTALLED "Önce kurulum yapın: sh scripts/install.sh" "Install first: sh scripts/install.sh"
