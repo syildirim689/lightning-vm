@@ -48,7 +48,7 @@ func createPortgroup(ctx context.Context, c *vim25.Client, r PortgroupRequest) (
 		return map[string]any{"portgroup": moref}, err
 	}
 	spec := types.DVPortgroupConfigSpec{Name: r.Name, Type: string(types.DistributedVirtualPortgroupPortgroupTypeEarlyBinding), NumPorts: 32,
-		AutoExpand: types.NewBool(true),
+		AutoExpand:        types.NewBool(true),
 		DefaultPortConfig: &types.VMwareDVSPortSetting{Vlan: &types.VmwareDistributedVirtualSwitchVlanIdSpec{VlanId: r.VLAN}}}
 	task, err := dvs.AddPortgroup(ctx, []types.DVPortgroupConfigSpec{spec})
 	if err != nil {

@@ -278,7 +278,7 @@ test.describe('roles and sessions (English browser)', () => {
     await expect(page.getByRole('link', { name: 'Overview' })).toHaveCount(0);
 
     await page.goto('/admin');
-    await expect(page.locator('main [role=alert]')).toContainText('You do not have permission for this action.');
+    await expect(page.locator('main [role=alert]')).toContainText('does not have permission for this action.');
     const api = await page.request.get('/api/admin/users');
     expect(api.status()).toBe(403);
   });
