@@ -65,6 +65,7 @@ services:
       OVIRT_SERVICE_URL: http://ovirt:8080
       HYPERV_SERVICE_URL: http://hyperv:8080
       LIBVIRT_SERVICE_URL: http://libvirt:8080
+      INCUS_SERVICE_URL: http://incus:8080
       VMWARE_SERVICE_TOKEN_FILE: /run/secrets/vmware_token
       APP_VERSION: ${APP_VERSION:-dev}
       APP_ENV: ${APP_ENV:-production}
@@ -188,6 +189,23 @@ services:
     environment:
       LIBVIRT_SERVICE_TOKEN_FILE: /run/secrets/vmware_token
       LIBVIRT_ALLOW_NETWORKS: ${LIBVIRT_ALLOW_NETWORKS:-}
+    secrets: [vmware_token]
+    healthcheck:
+      test: [CMD, node, server.mjs, healthcheck]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    logging: *logging
+  # Incus / LXD adapter (REST API with a TLS client certificate), for connections of kind "incus". Same contract, same token, no state.
+  incus:
+    build: ./services/incus
+    restart: unless-stopped
+    read_only: true
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+    environment:
+      INCUS_SERVICE_TOKEN_FILE: /run/secrets/vmware_token
+      INCUS_ALLOW_NETWORKS: ${INCUS_ALLOW_NETWORKS:-}
     secrets: [vmware_token]
     healthcheck:
       test: [CMD, node, server.mjs, healthcheck]

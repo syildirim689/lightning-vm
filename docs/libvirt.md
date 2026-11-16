@@ -1,6 +1,6 @@
 # KVM (libvirt)
 
-Panel; VMware, Proxmox VE, XCP-ng, oVirt ve Hyper-V'nin yanında, üzerinde yalnızca **libvirt ve QEMU/KVM** kurulu
+Panel; VMware, Proxmox VE, XCP-ng, oVirt, Hyper-V ve [Incus](incus.md)'un yanında, üzerinde yalnızca **libvirt ve QEMU/KVM** kurulu
 düz bir Linux hostu da yönetir: vCenter, Proxmox ya da başka bir yönetim katmanı gerekmez. Adaptör
 (`services/libvirt`) hosta **SSH** ile bağlanıp `virsh` çalıştırır; hosta bir ajan ya da paket **kurmaz**. Yine de
 VMware adaptörüyle aynı sözleşmeyi konuşur: [adapter-contract.md](adapter-contract.md).

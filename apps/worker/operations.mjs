@@ -32,7 +32,7 @@ export function decrypt(blob, context) {
 // Adapters besides VMware's, by connection kind. All speak the same contract (docs/adapter-contract.md).
 const adapters = { proxmox: () => process.env.PROXMOX_SERVICE_URL ?? 'http://proxmox:8080', xcpng: () => process.env.XCPNG_SERVICE_URL ?? 'http://xcpng:8080',
   ovirt: () => process.env.OVIRT_SERVICE_URL ?? 'http://ovirt:8080', hyperv: () => process.env.HYPERV_SERVICE_URL ?? 'http://hyperv:8080',
-  libvirt: () => process.env.LIBVIRT_SERVICE_URL ?? 'http://libvirt:8080' };
+  libvirt: () => process.env.LIBVIRT_SERVICE_URL ?? 'http://libvirt:8080', incus: () => process.env.INCUS_SERVICE_URL ?? 'http://incus:8080' };
 // The adapter request for a stored connection (password decrypted in memory only).
 export const connectionTarget = (c) => ({ host: c.host, port: c.port, username: c.username, password: decrypt(c.password_enc, c.id), ...(c.api_version && { apiVersion: c.api_version }), ...(adapters[c.kind] && { platform: c.kind }),
   tls: { mode: c.tls_mode, ...(c.tls_ca_pem && { caPem: c.tls_ca_pem }), ...(c.tls_sha256 && { sha256: c.tls_sha256 }) } });
@@ -577,7 +577,7 @@ export async function processOperation(db, job, log, notify = async () => {}, rd
 // Compares the platform with VMware: missing VMs, unknown platform-named VMs, power state drift.
 // It reports; it never deletes anything on its own.
 export async function reconcile(db, log) {
-  const { rows: conns } = await db.query("SELECT DISTINCT c.* FROM vmware_connections c JOIN resource_pools p ON p.connection_id = c.id WHERE c.kind IN ('vcenter', 'proxmox', 'xcpng', 'ovirt', 'hyperv', 'libvirt')");
+  const { rows: conns } = await db.query("SELECT DISTINCT c.* FROM vmware_connections c JOIN resource_pools p ON p.connection_id = c.id WHERE c.kind IN ('vcenter', 'proxmox', 'xcpng', 'ovirt', 'hyperv', 'libvirt', 'incus')");
   for (const c of conns) {
     const target = connectionTarget(c);
     let vms;
