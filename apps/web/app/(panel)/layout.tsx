@@ -5,6 +5,7 @@ import { loginFrom } from '../../lib/back-to';
 import { getPublicConfig, getResellerBrand, getSetupStatus, getUser } from '../../lib/session';
 import { accentCss } from '../../components/brand';
 import pkg from '../../package.json';
+import HostTask from '../../components/host-task';
 import Shell from './shell';
 import TwoFactorGate from './two-factor-gate';
 
@@ -20,5 +21,5 @@ export default async function PanelLayout({ children }: { children: React.ReactN
   const css = brand.name ? accentCss(brand.accent ?? null) : '';
   // The installed release (vX.Y.Z or a commit); package.json's version when run outside Compose.
   const installed = process.env.APP_VERSION && process.env.APP_VERSION !== 'dev' ? process.env.APP_VERSION.replace(/^v/, '') : pkg.version;
-  return <NextIntlClientProvider>{css && <style>{css}</style>}<Shell user={user} branding={branding} version={installed}>{children}</Shell></NextIntlClientProvider>;
+  return <NextIntlClientProvider>{css && <style>{css}</style>}<Shell user={user} branding={branding} version={installed}>{children}</Shell><HostTask/></NextIntlClientProvider>;
 }

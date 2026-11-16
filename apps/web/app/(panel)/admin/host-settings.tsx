@@ -21,6 +21,9 @@ type Status = { id: string; state: 'running' | 'succeeded' | 'failed' | 'rejecte
 type Data = { host: Host | null; serverTime: number; agent: { installed: boolean; pending: number; status: Status | null; log: string[] } };
 const stateTone: Record<Status['state'], Tone> = { running: 'accent', succeeded: 'success', failed: 'danger', rejected: 'danger' };
 
+// Suggested when the server has none of its own: Cloudflare's and the NTP pool's time servers; Cloudflare's and Quad9's resolvers.
+const defaults = { ntp: 'time.cloudflare.com,pool.ntp.org', dns: '1.1.1.1,9.9.9.9' };
+
 export default function HostSettings() {
   const t = useTranslations('HostSettings');
   const format = useFormatter();
@@ -43,7 +46,8 @@ export default function HostSettings() {
   useEffect(() => {
     if (!d?.host || seeded.current) return;
     seeded.current = true;
-    setV({ hostname: d.host.fqdn || d.host.hostname, timezone: d.host.timezone, ntp: d.host.ntpServers, dns: d.host.dnsServers });
+    // Nothing chosen yet: the fields come filled with well-known public servers (applied only with "Apply").
+    setV({ hostname: d.host.fqdn || d.host.hostname, timezone: d.host.timezone, ntp: d.host.ntpServers || (d.host.timesyncd ? defaults.ntp : ''), dns: d.host.dnsServers || (d.host.resolved ? defaults.dns : '') });
   }, [d]);
 
   if (!d) return <Section title={t('title')}><p role="status" className="text-sm text-muted">{q.error ? error(q.error) : '…'}</p></Section>;
@@ -94,8 +98,8 @@ export default function HostSettings() {
       {manage && <div className="grid gap-4 rounded-2xl border border-border p-4 lg:grid-cols-2">
         <TextInput format="hostname" label={t('hostname')} value={v.hostname} onChange={(x) => setV({ ...v, hostname: x.toLowerCase() })} error={field(fields.hostname)} help={t('hostnameHelp')} spellCheck={false} isDisabled={blocked}/>
         <TimeZonePicker label={t('timezone')} value={v.timezone} onChange={(x) => setV({ ...v, timezone: x })} error={field(fields.timezone)} help={t('timezoneHelp')} isDisabled={blocked}/>
-        <TextInput format="hostOrIp" list label={t('ntp')} value={v.ntp} onChange={(x) => setV({ ...v, ntp: x })} placeholder="time.cloudflare.com, 0.tr.pool.ntp.org" error={field(fields.ntp)} help={h && !h.timesyncd ? t('noTimesyncd') : t('ntpHelp')} spellCheck={false} isDisabled={blocked}/>
-        <TextInput label={t('dns')} value={v.dns} onChange={(x) => setV({ ...v, dns: x })} placeholder="1.1.1.1, 9.9.9.9" error={field(fields.dns)} help={h && !h.resolved ? t('noResolved') : t('dnsHelp')} spellCheck={false} isDisabled={blocked}/>
+        <TextInput format="hostOrIp" list label={t('ntp')} value={v.ntp} onChange={(x) => setV({ ...v, ntp: x })} placeholder="time.cloudflare.com, 0.tr.pool.ntp.org" error={field(fields.ntp)} help={h && !h.timesyncd ? t('noTimesyncd') : h && !h.ntpServers && v.ntp === defaults.ntp ? t('ntpSuggested') : t('ntpHelp')} spellCheck={false} isDisabled={blocked}/>
+        <TextInput label={t('dns')} value={v.dns} onChange={(x) => setV({ ...v, dns: x })} placeholder="1.1.1.1, 9.9.9.9" error={field(fields.dns)} help={h && !h.resolved ? t('noResolved') : h && !h.dnsServers && v.dns === defaults.dns ? t('dnsSuggested') : t('dnsHelp')} spellCheck={false} isDisabled={blocked}/>
         <div className="flex flex-wrap items-center gap-3 lg:col-span-2">
           <ConfirmButton label={t('apply')} icon={<I name="check" size={16}/>} variant="primary" isDisabled={blocked || !Object.keys(changed).length} title={t('confirmTitle')}
             body={<ul className="list-disc pl-5 text-sm">{Object.entries(changed).map(([k, x]) => <li key={k}>{t(`change.${k as 'hostname'}`, { value: x })}</li>)}</ul>}

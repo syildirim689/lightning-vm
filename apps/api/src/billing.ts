@@ -7,7 +7,7 @@ import { All, Body, Controller, Delete, Get, HttpCode, Param, ParseUUIDPipe, Pos
 import type { FastifyReply } from 'fastify';
 import type { Pool, PoolClient } from 'pg';
 import { audit, SessionGuard, type AuthedRequest } from './auth';
-import { pool, redis } from './db';
+import { pool, redis, foldSql, foldText } from './db';
 import { apiError } from './errors';
 import { logEvent } from './log';
 import { notify } from './notify';
@@ -798,8 +798,8 @@ export class BillingAdminController {
   async invoices(@Query('status') status?: string, @Query('q') q?: string) {
     const st = ['unpaid', 'paid', 'cancelled', 'refunded', 'partially_refunded', 'overdue'].includes(status ?? '') ? status : null;
     const { rows } = await pool.query(`SELECT ${invoiceColumns} FROM invoices i WHERE ($1::text IS NULL OR ($1 = 'overdue' AND i.status = 'unpaid' AND i.due_at < now()) OR i.status = $1)
-      AND ($2::text IS NULL OR i.number ILIKE '%' || $2 || '%' OR i.buyer->>'email' ILIKE '%' || $2 || '%' OR i.buyer->>'name' ILIKE '%' || $2 || '%' OR i.buyer->>'taxId' = $2)
-      ORDER BY i.created_at DESC LIMIT 300`, [st, q?.trim() || null]);
+      AND ($2::text IS NULL OR ${foldSql('i.number')} LIKE '%' || $3 || '%' OR ${foldSql("i.buyer->>'email'")} LIKE '%' || $3 || '%' OR ${foldSql("i.buyer->>'name'")} LIKE '%' || $3 || '%' OR i.buyer->>'taxId' = $2)
+      ORDER BY i.created_at DESC LIMIT 300`, [st, q?.trim() || null, foldText(q?.trim() ?? '')]);
     return { invoices: rows };
   }
 

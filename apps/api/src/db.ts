@@ -20,3 +20,8 @@ let closing = false;
 // Extra connections (a QueueEvents subscriber, say) close with the rest.
 export const onClose: (() => Promise<unknown>)[] = [];
 export async function closeConnections() { if (closing) return; closing = true; await Promise.allSettled(onClose.map((f) => f())); redis.disconnect(); await pool.end(); }
+
+// Search as people type it: no capitals, and plain letters for Turkish ones (İ, I, ı = i; ş = s; ...), so
+// "sirket" finds "Şirket". foldSql wraps a column, foldText the words searched for.
+export const foldSql = (column: string) => `lower(translate(${column}, 'İIıŞşĞğÜüÖöÇç', 'iiissgguuoocc'))`;
+export const foldText = (s: string) => s.replace(/[İIı]/g, 'i').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');

@@ -1,5 +1,6 @@
 // Turkish lower case, with the dotless ı read as i: "Invoice" and "invoice", "IĞDIR" and "ığdır" match. One character in, one out.
-export const fold = (v: string) => v.toLocaleLowerCase('tr').replace(/ı/g, 'i');
+// Text as people type it when they search: no capitals, no accents, one "i" for Turkish İ, I, ı and i.
+export const fold = (v: string) => v.replace(/[İIı]/g, 'i').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 
 // The note line a card shows: around the search match when the note matched, else its first line.
 export function noteLine(notes: string, q: string) {

@@ -1,6 +1,7 @@
 "use client";
 // Settings → API: who may create tokens and under which rules (lifetime, rate limit, addresses, request log),
 // every token of every account with a revoke, the request log, and the way to the reference and its PDF.
+import { fold } from '../../../../lib/search';
 import { Button, Card, toast } from '@heroui/react';
 import { useFormatter, useTranslations } from 'next-intl';
 import { useEffect, useState } from 'react';
@@ -73,7 +74,7 @@ function Tokens({ readOnly }: { readOnly: boolean }) {
   const [needle, setNeedle] = useState('');
   const revoke = useApiAction((id: string) => apiFetch(`/admin/api/tokens/${id}`, { method: 'DELETE' }), { invalidate: [['admin', 'api-tokens']], success: t('revoked') });
   const ago = (d: string) => format.relativeTime(new Date(Math.min(Date.parse(d), Date.now())), new Date());
-  const rows = (list ?? []).filter((x) => !needle || `${x.name} ${x.owner.email} ${x.owner.name}`.toLocaleLowerCase('tr').includes(needle.toLocaleLowerCase('tr')));
+  const rows = (list ?? []).filter((x) => !needle || fold(`${x.name} ${x.owner.email} ${x.owner.name}`).includes(fold(needle)));
   const now = Date.now();
   return <Card id="api-tokens"><Card.Header>
     <Card.Title className="flex items-center gap-2"><I name="key-round" size={18}/>{t('tokensTitle')}{list && <span className="text-sm font-normal text-muted">({list.length})</span>}</Card.Title>

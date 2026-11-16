@@ -1,6 +1,7 @@
 "use client";
 // Ready-made and saved commands beside a console: one click types the command into it (and Enter, when chosen).
 // Also the way to paste text, which the VMware console cannot take from the clipboard. Saved commands are the person's own.
+import { fold } from '../lib/search';
 import { Button, toast } from '@heroui/react';
 import { useTranslations } from 'next-intl';
 import { useEffect, useState } from 'react';
@@ -53,8 +54,8 @@ export function ConsoleSnippets({ send, ready, linuxOnly }: { send: (text: strin
   const pick = (v: typeof chosen) => { setOs(v); try { localStorage.setItem(osKey, v); } catch { /* storage blocked */ } };
   const mayShare = can(useMe()?.permissions, 'settings.manage');
   const all = useApiQuery<{ snippets: Snippet[] }>(['console-snippets'], '/console-snippets').data?.snippets ?? [];
-  const f = filter.trim().toLowerCase();
-  const saved = f ? all.filter((s) => `${s.name}\n${s.command}`.toLowerCase().includes(f)) : all;
+  const f = fold(filter.trim());
+  const saved = f ? all.filter((s) => fold(`${s.name}\n${s.command}`).includes(f)) : all;
   const reset = (s?: Snippet) => { setEditing(s); setText(s?.command ?? ''); setName(s?.name ?? ''); setShare(!!s?.shared); };
   const save = useApiAction(() => apiFetch(editing ? `/console-snippets/${editing.id}` : '/console-snippets',
     { method: editing ? 'PUT' : 'POST', body: { name, command: text, shared: mayShare && share } }),

@@ -8,7 +8,7 @@ import { endSession, onlineUsers, sessionsOf, statusOf } from './presence';
 import { publishLive } from './live-bus';
 import { notify } from './notify';
 import { uptime } from 'node:os';
-import { agentStatus, bootId, hostInfo, osInfo, pendingRequests, queueRequest, releases, runLog, settings as maintenanceSettings, summary } from './maintenance';
+import { agentStatus, bootId, hostInfo, osInfo, pendingRequests, queueRequest, releases, runLog, runSetUp, settings as maintenanceSettings, summary } from './maintenance';
 import { readHostChange } from './host-rules';
 import { reloadAuth } from './better-auth';
 
@@ -88,7 +88,8 @@ export class AdminController {
     const boot = bootId();
     const rebooted = !!info && !!boot && !!info.bootId && info.bootId !== boot;
     return { os: info && { ...info, rebootRequired: info.rebootRequired && !rebooted, rebooted }, uptime: Math.round(uptime()),
-      agent: { installed: maintenanceSettings().agent === 'on', pending: Math.max(0, pendingRequests()), status: status?.action === 'os' ? status : null, log: status?.action === 'os' ? runLog(status.id) : [] } };
+      agent: { installed: maintenanceSettings().agent === 'on', pending: Math.max(0, pendingRequests()), status: status?.action === 'os' ? status : null, log: status?.action === 'os' ? runLog(status.id) : [],
+        setUp: status?.action === 'os' ? runSetUp(status.id) : 0 } };
   }
 
   // Refreshes the package lists, installs all or only security updates, restarts the server, or switches

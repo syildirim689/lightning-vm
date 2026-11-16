@@ -4,7 +4,7 @@
 import { Body, Controller, Delete, Get, HttpCode, Param, ParseUUIDPipe, Patch, Post, Put, Query, Req, Res, UseGuards } from '@nestjs/common';
 import type { FastifyReply } from 'fastify';
 import { audit, SessionGuard, type AuthedRequest } from './auth';
-import { pool, redis } from './db';
+import { pool, redis, foldSql, foldText } from './db';
 import { apiError } from './errors';
 import { logEvent } from './log';
 import { notify } from './notify';
@@ -220,8 +220,8 @@ export class SupportAdminController {
     if (assignee === 'me') add('t.assignee_id = ?', req.user.id);
     if (assignee === 'none') where.push('t.assignee_id IS NULL');
     if (q?.trim()) {
-      args.push(`%${q.trim()}%`, q.trim().replace(/^#/, ''));
-      where.push(`(t.subject ILIKE $${args.length - 1} OR o.email ILIKE $${args.length - 1} OR t.number::text = $${args.length})`);
+      args.push(`%${foldText(q.trim())}%`, q.trim().replace(/^#/, ''));
+      where.push(`(${foldSql('t.subject')} LIKE $${args.length - 1} OR ${foldSql('o.email')} LIKE $${args.length - 1} OR t.number::text = $${args.length})`);
     }
     const { rows } = await pool.query(`SELECT ${ticketColumns}, o.email AS "ownerEmail",
         (SELECT count(*)::int FROM ticket_messages m WHERE m.ticket_id = t.id AND NOT m.internal) AS messages

@@ -6679,6 +6679,8 @@
     "noTimesyncd": "systemd-timesyncd kurulu değil: zaman sunucuları buradan ayarlanamaz (chrony ya da ntpd kendi ayarlarını kullanır).",
     "dns": "DNS sunucuları",
     "dnsHelp": "Virgülle ayrılmış en fazla dört IP adresi; boş: ağın verdiği.",
+    "ntpSuggested": "Önerilen sunucular dolduruldu; “Uygula” ile geçerli olur. Boş bırakırsanız dağıtımın varsayılanı kullanılır.",
+    "dnsSuggested": "Önerilen sunucular dolduruldu; “Uygula” ile geçerli olur. Boş bırakırsanız ağın verdiği kullanılır.",
     "noResolved": "systemd-resolved çalışmıyor: DNS bu sunucuda başka bir yolla yönetiliyor.",
     "apply": "Sunucuya uygula",
     "cancel": "Vazgeç",
@@ -8465,6 +8467,69 @@
       "installTitle": "{n} sunucuda güvenlik güncellemeleri kurulsun mu?",
       "installBody": "Yalnızca bildiricisi yanıt veren ve bekleyen güvenlik güncellemesi olan sunucular alınır. Her sunucu isteği yaklaşık on dakika içinde alır ve kurulumu kendi içinde yapar; hiçbir sunucu yeniden başlatılmaz.",
       "asked": "{started} sunucuya istek gönderildi, {skipped} atlandı"
+    }
+  },
+  "HostTask": {
+    "passed": "Geçen süre {time}",
+    "took": "Toplam süre {time}",
+    "aside": "Arka planda sürdür",
+    "show": "İlerlemeyi göster",
+    "close": "Tamam",
+    "signinAgain": "Oturum aç",
+    "reboot": {
+      "title": "Sunucu yeniden başlatılıyor",
+      "doneTitle": "Sunucu yeniden açıldı",
+      "failedTitle": "Yeniden başlatma yapılamadı",
+      "signinTitle": "Sunucu yeniden açıldı",
+      "usual": "genellikle 2–4 dakika sürer",
+      "step": {
+        "queued": "İstek sunucuya iletiliyor",
+        "closing": "Sunucu kapanıyor",
+        "down": "Sunucu yeniden açılıyor",
+        "done": "Panel yeniden çalışıyor"
+      },
+      "help": {
+        "queued": "Sunucudaki ajan isteği birkaç saniye içinde alır.",
+        "closing": "Servisler düzgünce kapatılıyor.",
+        "down": "Sunucu şu an yanıt vermiyor; bu beklenen bir durum. Açılır açılmaz burada görünecek.",
+        "done": "Sunucu ve panel yeniden çalışıyor. Güncel durumu görmek için sayfa yenilenecek."
+      },
+      "closingIn": "Sunucu yaklaşık {seconds} saniye içinde kapanacak; o ana kadar panel çalışmaya devam eder.",
+      "closingNow": "Sunucu şimdi kapanıyor…",
+      "starting": "Sunucu açıldı; panelin servisleri başlıyor.",
+      "note": "Bu pencereyi kapatmanız ya da sekmeyi kapatmanız yeniden başlatmayı durdurmaz. Müşteri sunucuları VMware ana makinelerinde çalışmaya devam eder.",
+      "slow": "Beklenenden uzun sürüyor. Sunucu birkaç dakika daha açılmazsa sağlayıcınızın konsolundan durumuna bakın; bu pencere denemeyi sürdürür.",
+      "failed": "Sunucudaki ajan yeniden başlatmayı zamanlayamadı; sunucu çalışmaya devam ediyor.",
+      "signin": "Oturumunuz yeniden başlatma sırasında sona erdi. Devam etmek için yeniden oturum açın."
+    },
+    "install": {
+      "titleSecurity": "Güvenlik güncellemeleri kuruluyor",
+      "titleAll": "Güncellemeler kuruluyor",
+      "doneTitle": "Güncellemeler kuruldu",
+      "failedTitle": "Güncellemeler kurulamadı",
+      "usual": "paket sayısına göre birkaç dakika sürebilir",
+      "step": {
+        "queued": "İstek sunucuya iletiliyor",
+        "lists": "Paket listeleri yenileniyor",
+        "installing": "Paketler indirilip kuruluyor",
+        "done": "Güncelleme durumu kaydedildi"
+      },
+      "help": {
+        "queued": "Sunucudaki ajan isteği birkaç saniye içinde alır.",
+        "lists": "Depolardan en yeni sürümler öğreniliyor.",
+        "installing": "Paketler indiriliyor ve kuruluyor; elle değiştirdiğiniz yapılandırma dosyaları korunur.",
+        "done": "Kurulum bitti ve yeni durum kaydedildi."
+      },
+      "count": "{done} / {total} paket kuruldu",
+      "left": "Hâlâ bekleyen {n} güncelleme var.",
+      "none": "Bekleyen güncelleme kalmadı.",
+      "restartNeeded": "Etkin olmaları için sunucunun yeniden başlatılması gerekiyor.",
+      "noRestart": "Yeniden başlatma gerekmiyor.",
+      "silent": "Panel şu an yanıt vermiyor (Docker güncelleniyorsa bu beklenir). Kurulum sunucuda sürüyor; panel dönünce ilerleme burada devam eder.",
+      "slow": "Beklenenden uzun sürüyor. Kurulum sunucuda sürüyor olabilir; son satırlar aşağıda. Bir saatten uzun süren kurulum kendiliğinden durdurulur.",
+      "note": "Bu pencereyi ya da sekmeyi kapatmanız kurulumu durdurmaz; sonuç Yönetici → Sistem sayfasında görünür.",
+      "failed": "Kurulum tamamlanamadı; sunucu çalışmaya devam ediyor. Ayrıntı aşağıdaki son satırlarda ve Yönetici → Sistem sayfasındaki kayıtta.",
+      "log": "Kurulumun son satırları"
     }
   }
 }

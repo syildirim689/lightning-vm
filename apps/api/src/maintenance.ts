@@ -56,6 +56,12 @@ export function runLog(id: string, lines = 80) {
   try { return readFileSync(join(dir, 'runs', `${id}.log`), 'utf8').split('\n').filter(Boolean).slice(-lines); } catch { return []; }
 }
 
+// How many packages a run has finished setting up so far (apt prints one line each): the progress of an install.
+export function runSetUp(id: string) {
+  if (!/^[0-9a-f-]{36}$/.test(id)) return 0;
+  try { return readFileSync(join(dir, 'runs', `${id}.log`), 'utf8').split('\n').filter((l) => l.startsWith('Setting up ')).length; } catch { return 0; }
+}
+
 export function pendingRequests() {
   try { return readdirSync(requests).filter((f) => f.endsWith('.req')).length; } catch { return -1; } // -1: the drop folder is missing
 }

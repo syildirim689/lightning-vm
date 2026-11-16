@@ -1,6 +1,7 @@
 "use client";
 // Ctrl/⌘+K: jump to any page the user may open, any server by name or IP, or run a quick action.
 // A combobox with a listbox (arrow keys, Enter, Escape); results are filtered as you type.
+import { fold } from '../lib/search';
 import { Kbd, Modal, toast } from '@heroui/react';
 import { useRouter } from 'next/navigation';
 import { useLocale, useTranslations } from 'next-intl';
@@ -19,7 +20,6 @@ import { mayLeave } from '../lib/edits';
 type Cmd = { id: string; group: 'recent' | 'pages' | 'servers' | 'tickets' | 'users' | 'actions'; label: string; hint?: string; icon: React.ReactNode; run: () => void };
 type TicketRow = { id: string; number: number; subject: string; status: 'open' | 'answered' | 'customer_reply' | 'on_hold' | 'closed'; ownerEmail?: string };
 type ServerRow = { id: string; name: string; address: string | null; ownerEmail?: string; favorite?: boolean; state: string; powerState: string; deleteAt?: string | null; tags?: string[] | null };
-const fold = (s: string) => s.toLocaleLowerCase('tr').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/ı/g, 'i');
 
 export function usePaletteShortcut(open: () => void) {
   useEffect(() => {

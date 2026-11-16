@@ -6679,6 +6679,8 @@
     "noTimesyncd": "systemd-timesyncd is not installed: time servers cannot be set from here (chrony or ntpd keep their own settings).",
     "dns": "DNS servers",
     "dnsHelp": "Up to four IP addresses, comma separated; empty: what the network provides.",
+    "ntpSuggested": "Suggested servers are filled in; they take effect with “Apply”. Leave empty for the distribution’s default.",
+    "dnsSuggested": "Suggested servers are filled in; they take effect with “Apply”. Leave empty for what the network provides.",
     "noResolved": "systemd-resolved is not running: DNS is managed another way on this server.",
     "apply": "Apply to the server",
     "cancel": "Cancel",
@@ -8465,6 +8467,69 @@
       "installTitle": "Install security updates on {n} servers?",
       "installBody": "Only servers whose reporter answers and that have security updates waiting are included. Each server picks the request up within about ten minutes and installs inside itself; no server is restarted.",
       "asked": "Asked {started} servers, skipped {skipped}"
+    }
+  },
+  "HostTask": {
+    "passed": "Time passed {time}",
+    "took": "Total time {time}",
+    "aside": "Continue in the background",
+    "show": "Show progress",
+    "close": "OK",
+    "signinAgain": "Sign in",
+    "reboot": {
+      "title": "The server is restarting",
+      "doneTitle": "The server is back",
+      "failedTitle": "The restart did not happen",
+      "signinTitle": "The server is back",
+      "usual": "usually takes 2–4 minutes",
+      "step": {
+        "queued": "Passing the request to the server",
+        "closing": "The server is shutting down",
+        "down": "The server is starting again",
+        "done": "The panel is running again"
+      },
+      "help": {
+        "queued": "The agent in the server picks the request up within a few seconds.",
+        "closing": "Services are being stopped cleanly.",
+        "down": "The server does not answer right now; that is expected. It shows here as soon as it is up.",
+        "done": "The server and the panel are running again. The page reloads to show the current state."
+      },
+      "closingIn": "The server shuts down in about {seconds} seconds; the panel keeps working until then.",
+      "closingNow": "The server is shutting down now…",
+      "starting": "The server is up; the panel’s services are starting.",
+      "note": "Closing this window or the tab does not stop the restart. Customers’ servers keep running on the VMware hosts.",
+      "slow": "This is taking longer than expected. If the server is not up in a few more minutes, look at it in your provider’s console; this window keeps trying.",
+      "failed": "The agent in the server could not schedule the restart; the server keeps running.",
+      "signin": "Your session ended during the restart. Sign in again to continue."
+    },
+    "install": {
+      "titleSecurity": "Installing security updates",
+      "titleAll": "Installing updates",
+      "doneTitle": "Updates installed",
+      "failedTitle": "The updates were not installed",
+      "usual": "may take a few minutes, by the number of packages",
+      "step": {
+        "queued": "Passing the request to the server",
+        "lists": "Refreshing the package lists",
+        "installing": "Downloading and installing packages",
+        "done": "Update state recorded"
+      },
+      "help": {
+        "queued": "The agent in the server picks the request up within a few seconds.",
+        "lists": "Asking the repositories for the newest versions.",
+        "installing": "Packages are downloaded and installed; configuration files you changed by hand are kept.",
+        "done": "The install finished and the new state is recorded."
+      },
+      "count": "{done} of {total} packages installed",
+      "left": "{n} updates still wait.",
+      "none": "No updates are waiting.",
+      "restartNeeded": "The server must restart for them to take effect.",
+      "noRestart": "No restart is needed.",
+      "silent": "The panel does not answer right now (expected while Docker is updated). The install goes on in the server; progress continues here when the panel is back.",
+      "slow": "This is taking longer than expected. The install may still be running in the server; its last lines are below. An install that runs over an hour is stopped by itself.",
+      "note": "Closing this window or the tab does not stop the install; the result shows on Admin → System.",
+      "failed": "The install did not finish; the server keeps running. See the last lines below and the record on Admin → System.",
+      "log": "Last lines of the install"
     }
   }
 }

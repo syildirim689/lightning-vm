@@ -2,6 +2,7 @@
 // The API reference: a guide (sign-in with a token, answers and errors, idempotency, limits, long operations,
 // webhooks, safe use) and every route of the panel, built from the API itself (GET /docs/reference), so it is
 // always the running version's. Search, filters, example code in three languages, and the same as a PDF.
+import { fold } from '../../../lib/search';
 import { Button, Tabs, toast } from '@heroui/react';
 import { useLocale, useTranslations } from 'next-intl';
 import { parseAsString, useQueryState } from 'nuqs';
@@ -16,7 +17,6 @@ import type { PublicConfig } from '../../../lib/session';
 const methods = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'] as const;
 const methodTone: Record<string, string> = { GET: 'bg-success/15 text-success', POST: 'bg-accent-soft text-accent', PUT: 'bg-warning/15 text-warning',
   PATCH: 'bg-warning/15 text-warning', DELETE: 'bg-danger/10 text-danger', ALL: 'bg-default text-muted' };
-const fold = (s: string) => s.toLocaleLowerCase('tr').normalize('NFD').replace(/[̀-ͯ]/g, '');
 
 export function MethodBadge({ method }: { method: string }) {
   return <span className={`inline-flex w-16 shrink-0 justify-center rounded-md px-1.5 py-0.5 font-mono text-[11px] font-semibold ${methodTone[method] ?? methodTone.ALL}`}>{method}</span>;

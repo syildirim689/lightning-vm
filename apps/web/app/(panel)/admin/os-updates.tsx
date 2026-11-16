@@ -6,18 +6,20 @@ import { Button, Chip, SearchField, toast } from '@heroui/react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useFormatter, useNow, useTranslations } from 'next-intl';
 import { useEffect, useRef, useState } from 'react';
+import { startHostTask } from '../../../components/host-task';
 import { I } from '../../../components/icon';
 import { ConfirmButton, Mono, Notice, Section, StatusChip, SwitchInput, type Tone } from '../../../components/ui';
 import { apiFetch, useErrorText } from '../../../lib/api';
 import { useMe } from '../../../lib/me';
 import { can } from '../../../lib/permissions';
+import { fold } from '../../../lib/search';
 import { useApiQuery } from '../../../lib/query';
 
 type Pkg = { name: string; to: string; from: string; security: boolean };
 type Os = { checkedAt: string; manager: 'apt' | 'none'; total: number; security: number; held: number; packages: Pkg[]; rebootRequired: boolean; rebooted: boolean; rebootPackages: string;
   autoSecurity: boolean; listsAt: string; changedAt: string; kernel: string };
 type Status = { id: string; state: 'running' | 'succeeded' | 'failed' | 'rejected'; startedAt: string; code: string };
-type Data = { os: Os | null; uptime: number; agent: { installed: boolean; pending: number; status: Status | null; log: string[] } };
+type Data = { os: Os | null; uptime: number; agent: { installed: boolean; pending: number; status: Status | null; log: string[]; setUp?: number } };
 type Act = 'check' | 'upgrade' | 'security' | 'reboot' | 'auto-on' | 'auto-off';
 const stateTone: Record<Status['state'], Tone> = { running: 'accent', succeeded: 'success', failed: 'danger', rejected: 'danger' };
 // Packages whose update restarts the containers the panel runs in.
@@ -45,12 +47,25 @@ export default function OsUpdates() {
   useEffect(() => {
     if (!restarting) return;
     if (q.error) down.current = true;
-    else if (d && (down.current || d.os?.rebooted) && d.uptime < 900) { down.current = false; setRestarting(false); toast.success(t('backUp')); }
+    else if (d && (down.current || d.os?.rebooted) && d.uptime < 900) { down.current = false; setRestarting(false); }
   }, [restarting, q.error, d]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // The progress window finished: read the new state at once.
+  useEffect(() => {
+    const done = () => { setRestarting(false); void client.invalidateQueries({ queryKey: ['admin', 'os'] }); };
+    window.addEventListener('lvm:host-task-done', done);
+    return () => window.removeEventListener('lvm:host-task-done', done);
+  }, [client]);
 
   async function ask(act: Act, done: string) {
     setBusy(true);
-    try { await apiFetch('/admin/os', { method: 'POST', body: { act } }); toast.success(done); setWatching(true); if (act === 'reboot') setRestarting(true); void client.invalidateQueries({ queryKey: ['admin', 'os'] }); }
+    try {
+      await apiFetch('/admin/os', { method: 'POST', body: { act } });
+      // A restart and an install get the progress window (components/host-task.tsx); the quick ones a line.
+      if (act === 'reboot' || act === 'security' || act === 'upgrade') startHostTask(act, d?.agent.status?.id ?? null, act === 'security' ? d?.os?.security ?? 0 : act === 'upgrade' ? d?.os?.total ?? 0 : 0);
+      else toast.success(done);
+      setWatching(true); if (act === 'reboot') setRestarting(true); void client.invalidateQueries({ queryKey: ['admin', 'os'] });
+    }
     catch (e) { toast.danger(error(e)); throw e; } finally { setBusy(false); }
   }
   // The recorded state is from before the last restart, or was never taken: take it once, quietly.
@@ -69,8 +84,8 @@ export default function OsUpdates() {
   const days = Math.floor(d.uptime / 86400), hours = Math.floor((d.uptime % 86400) / 3600);
   const ago = (iso: string) => (iso ? format.relativeTime(new Date(Math.min(Date.parse(iso), now.getTime())), now) : '–');
   const listsOld = !!o?.listsAt && now.getTime() - Date.parse(o.listsAt) > 3 * 86_400_000;
-  const needle = find.trim().toLowerCase();
-  const shown = (o?.packages ?? []).filter((p) => (!only || p.security) && (!needle || p.name.toLowerCase().includes(needle)));
+  const needle = fold(find.trim());
+  const shown = (o?.packages ?? []).filter((p) => (!only || p.security) && (!needle || fold(p.name).includes(needle)));
   const panelRestarts = (o?.packages ?? []).some(restartsPanel);
   const upgradeBody = (security: boolean) => <div className="flex flex-col gap-2">
     <p>{security ? t('securityBody', { n: o?.security ?? 0 }) : t('upgradeBody', { n: o?.total ?? 0 })}</p>

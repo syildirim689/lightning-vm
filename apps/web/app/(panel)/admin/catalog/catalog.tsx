@@ -1,4 +1,5 @@
 "use client";
+import { matches } from '../../../../lib/search';
 import { Button, Card, ComboBox, Disclosure, Input, Label, ListBox, Meter, Modal, SearchField, Tabs, toast } from '@heroui/react';
 import { fold } from '../../../../lib/note-line';
 import { useQueryClient } from '@tanstack/react-query';
@@ -560,7 +561,7 @@ function QuotaForm({ users, quotas, subject, fixed, onSaved }: { users: { id: st
     saved(await f.submit('PUT', f.values.subject === 'default' ? '/admin/quotas/default' : `/admin/quotas/users/${f.values.subject}`, body)); }}>
     <FieldGroup title={t('quotas.scope')} description={t('form.scopeHelp')} cols={1}>
       {fixed ? <p className="text-sm font-medium">{choices.find((c) => c.id === f.values.subject)?.label ?? '–'}</p>
-        : <ComboBox className="w-full" selectedKey={f.values.subject} defaultItems={choices} menuTrigger="focus"
+        : <ComboBox className="w-full" selectedKey={f.values.subject} defaultItems={choices} menuTrigger="focus" defaultFilter={matches}
             onSelectionChange={(k) => { if (k != null) f.setValues(fill(String(k))); }}>
             <Label>{t('quotas.scope')}</Label>
             <ComboBox.InputGroup><Input placeholder={t('quotas.searchUser')}/><ComboBox.Trigger/></ComboBox.InputGroup>

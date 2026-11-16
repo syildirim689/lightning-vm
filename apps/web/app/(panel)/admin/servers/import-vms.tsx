@@ -1,6 +1,7 @@
 "use client";
 // Admin → Servers → Import: VMs found in vCenter but made outside the panel become servers of a customer. The VM keeps
 // running; it is renamed to the panel's name for it. Refresh the inventory (VMware page) to see new VMs here.
+import { fold } from '../../../../lib/search';
 import { Button, ComboBox, Description, Input, Label, ListBox, toast } from '@heroui/react';
 import { useUnits } from '../../../../lib/units';
 import { useQueryClient } from '@tanstack/react-query';
@@ -32,8 +33,8 @@ function ImportForm({ vm, data, connectionId, onDone }: { vm: Vm; data: Candidat
   const guess = images.length === 1 ? images[0] : images.find((i) => (windows ? i.family === 'windows' : i.family === 'linux'));
   const imageId = v.imageId || guess?.id || '';
   const currency = v.currency || catalogCurrencies[0] || 'EUR';
-  const needle = v.ownerEmail.trim().toLowerCase();
-  const people = users.filter((u) => !needle || `${u.email} ${u.name}`.toLowerCase().includes(needle)).slice(0, 50);
+  const needle = fold(v.ownerEmail.trim());
+  const people = users.filter((u) => !needle || fold(`${u.email} ${u.name}`).includes(needle)).slice(0, 50);
   const [fields, setFields] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
   const set = (k: keyof typeof v) => (x: string) => setV({ ...v, [k]: x });
