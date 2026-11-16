@@ -1,4 +1,5 @@
 "use client";
+import WindowChrome from '../components/window-chrome';
 import { I18nProvider, RouterProvider, Toast } from '@heroui/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MotionConfig } from 'motion/react';
@@ -27,6 +28,7 @@ export default function Providers({ locale, loadingLabel, children }: { locale: 
             <MotionConfig reducedMotion={motion === 'reduce' ? 'always' : motion === 'allow' ? 'never' : 'user'}>
               {children}
               <AccessibilityRuntime/>
+              <WindowChrome/>
               <PageLoader label={loadingLabel}/>
               <AutofillGuard/>
               <Toast.Provider placement="bottom end"/>

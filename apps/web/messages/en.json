@@ -167,6 +167,7 @@
     "FORBIDDEN_TARGET": "You cannot grant permissions you lack or change someone with more access than you.",
     "ROLE_LOCKED": "This built-in role cannot be changed or removed.",
     "LAST_ADMIN": "At least one administrator must remain.",
+    "LAST_SIGN_IN_METHOD": "This is the person’s only way to sign in; a password or another way in must exist first.",
     "MAIL_AUTH_FAILED": "The mail server or provider did not accept the credentials (user name, password or API key).",
     "MAIL_TLS_FAILED": "No secure connection to the SMTP server (check the port and security setting).",
     "MAIL_REJECTED": "The mail server or provider refused the message (check the sender address and the domain verification).",
@@ -2605,7 +2606,12 @@
     "empty": "Nothing running.",
     "progress": "Progress",
     "running": "{n} running",
-    "recent": "Recent ({n})"
+    "recent": "Recent ({n})",
+    "clear": "Clear finished",
+    "failedCount": "{n} failed",
+    "stepOf": "step {i} of {n}",
+    "saidDone": "{task} finished: {server}",
+    "saidFailed": "{task} failed: {server}"
   },
   "Inbox": {
     "title": "Notifications",
@@ -3228,6 +3234,58 @@
     "removeExplain": "The account, sessions, passkeys and SSH keys are removed for good. This cannot be undone.",
     "typeEmail": "Type {email} to confirm",
     "directory": "Directory",
+    "security": {
+      "title": "Account and sign-in",
+      "name": "Full name",
+      "email": "E-mail",
+      "emailHelp": "It is the sign-in name; after a change the person signs in with the new address.",
+      "edit": "Edit",
+      "save": "Save",
+      "cancel": "Cancel",
+      "profileSaved": "Profile saved",
+      "verified": "Verified",
+      "unverified": "Not verified",
+      "markVerified": "Mark verified",
+      "markUnverified": "Remove verification",
+      "markedVerified": "E-mail marked as verified",
+      "markedUnverified": "E-mail verification removed",
+      "passwordSet": "Password: changed {when}",
+      "passwordNone": "No password (linked account or passkey only)",
+      "passwordDirectory": "The password is kept in the directory (LDAP)",
+      "lastMethod": "last sign-in: {method}",
+      "twoFactor": "Two-factor verification",
+      "on": "On",
+      "off": "Off",
+      "lockedUntil": "Locked until {when}",
+      "failedCodes": "{n} wrong codes",
+      "unlock": "Unlock",
+      "unlocked": "The second step is unlocked",
+      "reset2fa": "Reset",
+      "reset2faTitle": "Reset two-factor verification?",
+      "reset2faBody": "For someone who lost their phone. Two-factor goes off, the backup codes are deleted and all their sessions end; they sign in with the password and can turn it on again. Do not do this unless you are sure who is asking.",
+      "reset2faDone": "Two-factor verification was reset",
+      "sessions": "{n, plural, =0 {No open sessions} one {# open session} other {# open sessions}}",
+      "impersonated": "{n} by staff",
+      "seeSessions": "Sessions",
+      "passkeys": "Passkeys ({n})",
+      "noPasskeys": "No passkeys.",
+      "passkeyUnnamed": "Unnamed passkey",
+      "synced": "synced",
+      "removePasskey": "Remove passkey",
+      "removePasskeyBody": "The person can no longer sign in with this passkey; the entry on their device stays on their side.",
+      "passkeyRemoved": "Passkey removed",
+      "accounts": "Linked accounts ({n})",
+      "noAccounts": "No outside account is linked.",
+      "linkedOn": "Linked on {date}",
+      "unlink": "Unlink",
+      "unlinkTitle": "Unlink the {provider} account?",
+      "unlinkBody": "The person can no longer sign in with this account. It cannot be removed when it is their only way in.",
+      "unlinked": "Account unlinked",
+      "signIns": "Recent sign-in activity",
+      "noSignIns": "No sign-in activity recorded.",
+      "memberSince": "Member since {date}",
+      "changed": "last change {when}"
+    },
     "summary": {
       "no2fa": "No 2FA",
       "directory": "Directory",
@@ -4771,6 +4829,10 @@
     "intro": "Adjust the panel to your vision, reading, motion and navigation needs. Changes apply immediately.",
     "stored": "Preferences are stored in this browser and also apply on the sign-in screen.",
     "reset": "Reset to defaults",
+    "percent": "{n}%",
+    "level": "{n} / 100",
+    "less": "{what}: less",
+    "more": "{what}: more",
     "groups": {
       "reading": "Reading and vision",
       "motion": "Motion and effects",
@@ -4782,7 +4844,7 @@
       "125": "125%",
       "150": "150%",
       "label": "Text size",
-      "help": "Enlarges all text and the interface."
+      "help": "Makes all text and the interface smaller or larger (75–200%)."
     },
     "contrast": {
       "label": "Contrast",
@@ -4798,9 +4860,10 @@
     },
     "spacing": {
       "label": "Text spacing",
-      "help": "Increases letter, word and line spacing.",
+      "help": "Opens up letter, word and line spacing as far as you like.",
       "normal": "Normal",
-      "wide": "Wide"
+      "wide": "Wide",
+      "widest": "Widest"
     },
     "motion": {
       "label": "Motion",
@@ -5402,6 +5465,11 @@
       "settings_sign_in_methods": "Sign-in methods changed",
       "account_session_ended": "Ended a session",
       "admin_user_revoke_session": "Ended a session of a user",
+      "admin_user_email_verified": "Changed the e-mail verification of a user",
+      "admin_user_two_factor_reset": "Reset the two-factor verification of a user",
+      "admin_user_two_factor_unlock": "Unlocked the second step of a user",
+      "admin_user_passkey_removed": "Removed a passkey of a user",
+      "admin_user_account_unlinked": "Unlinked an account of a user",
       "system_host": "Server settings sent to the agent",
       "account_time_zone": "Time zone changed",
       "settings_sso": "Single sign-on settings changed",
@@ -8531,5 +8599,9 @@
       "failed": "The install did not finish; the server keeps running. See the last lines below and the record on Admin → System.",
       "log": "Last lines of the install"
     }
+  },
+  "Windows": {
+    "maximize": "Make the window large",
+    "restore": "Make the window small again"
   }
 }

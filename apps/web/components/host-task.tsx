@@ -129,7 +129,7 @@ export default function HostTask() {
   const code = last?.agent.status?.code;
 
   if (small) return <button type="button" onClick={() => setSmall(false)}
-    className="fixed bottom-4 right-4 z-[90] flex min-h-11 items-center gap-2 rounded-full border border-border bg-surface px-4 text-sm shadow-lg transition-colors hover:border-accent focus-visible:outline-2 focus-visible:outline-accent">
+    className="fixed bottom-[calc(4.25rem+env(safe-area-inset-bottom))] right-2 z-[90] flex min-h-11 sm:right-4 items-center gap-2 rounded-full border border-border bg-surface px-4 text-sm shadow-lg transition-colors hover:border-accent focus-visible:outline-2 focus-visible:outline-accent">
     <I name="loader" size={15} className="animate-spin text-accent motion-reduce:animate-none"/><span>{title}</span><span className="tabular-nums text-muted">{clock(passed)}</span><span className="sr-only">{t('show')}</span>
   </button>;
 

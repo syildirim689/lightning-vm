@@ -12,6 +12,7 @@ import { useApiQuery } from '../../../../lib/query';
 import { apiFetch, useErrorText } from '../../../../lib/api';
 import { useMe } from '../../../../lib/me';
 import { can } from '../../../../lib/permissions';
+import { UserSecurity } from './user-security';
 
 type Summary = {
   user: { id: string; email: string; name: string; role: string; createdAt: string; twoFactorEnabled: boolean; banned: boolean; authSource: string; budgetMonthly: number | null; budgetCurrency: string | null };
@@ -76,6 +77,7 @@ export function UserSummary({ id, onClose }: { id: string; onClose: () => void }
               <div className="flex flex-wrap gap-1">{Object.entries(d.limits).map(([k, v]) => <Chip key={k} size="sm" variant="soft" color="warning">
                 {k === 'require2fa' ? tr('require2faShort') : Array.isArray(v) ? tr('listShort', { name: tr(k as 'allowedIps'), n: v.length }) : `${tr(k as 'maxServers')}: ${v}`}</Chip>)}</div>
             </section>}
+            <UserSecurity id={id} name={d.user.name} canManage={can(me?.permissions, 'users.manage')} self={me?.id === id}/>
             {can(me?.permissions, 'users.manage') && <ResellerAccess id={id}/>}
             <StaffNotes id={id}/>
             <section>

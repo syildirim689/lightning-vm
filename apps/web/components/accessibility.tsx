@@ -4,16 +4,17 @@
 import { Button, Modal, Tooltip } from '@heroui/react';
 import { useTranslations } from 'next-intl';
 import { useEffect, useState } from 'react';
-import { applyA11y, useA11y, type A11y } from '../lib/a11y';
+import { applyA11y, a11yDefaults, useA11y, type A11y } from '../lib/a11y';
+import { a11yNumber, a11yScales } from '../lib/a11y-prefs';
 import { I } from './icon';
 
-type Option<K extends keyof A11y> = { key: K; icon: React.ReactNode; values: A11y[K][] };
+type Option<K extends keyof A11y> = { key: K; icon: React.ReactNode; values: A11y[K][]; scale?: 'text' | 'spacing' };
 const groups: { title: 'reading' | 'motion' | 'navigation'; options: Option<keyof A11y>[] }[] = [
   { title: 'reading', options: [
-    { key: 'text', icon: <I name="a-large-small" size={18} className="mt-0.5 shrink-0 text-accent"/>, values: ['100', '112', '125', '150'] },
+    { key: 'text', icon: <I name="a-large-small" size={18} className="mt-0.5 shrink-0 text-accent"/>, values: ['75', '90', '100', '112', '125', '150', '200'], scale: 'text' },
     { key: 'contrast', icon: <I name="contrast" size={18} className="mt-0.5 shrink-0 text-accent"/>, values: ['normal', 'high'] },
     { key: 'font', icon: <I name="type" size={18} className="mt-0.5 shrink-0 text-accent"/>, values: ['default', 'legible'] },
-    { key: 'spacing', icon: <I name="text" size={18} className="mt-0.5 shrink-0 text-accent"/>, values: ['normal', 'wide'] },
+    { key: 'spacing', icon: <I name="text" size={18} className="mt-0.5 shrink-0 text-accent"/>, values: ['0', '50', '100'], scale: 'spacing' },
   ] as Option<keyof A11y>[] },
   { title: 'motion', options: [
     { key: 'motion', icon: <I name="pause" size={18} className="mt-0.5 shrink-0 text-accent"/>, values: ['system', 'reduce', 'allow'] },
@@ -31,12 +32,12 @@ const groups: { title: 'reading' | 'motion' | 'navigation'; options: Option<keyo
 export function AccessibilitySettings() {
   const t = useTranslations('A11y');
   const prefs = useA11y();
-  const changed = groups.some((g) => g.options.some((o) => prefs[o.key] !== o.values[0]));
+  const changed = groups.some((g) => g.options.some((o) => (o.scale ? a11yNumber(o.scale, prefs[o.key]) !== a11yScales[o.scale].normal : prefs[o.key] !== a11yDefaults[o.key])));
   return <div className="flex flex-col gap-6">
     <p className="text-sm text-muted">{t('intro')}</p>
     {groups.map((g) => <section key={g.title} className="flex flex-col gap-3" aria-labelledby={`a11y-${g.title}`}>
       <h3 id={`a11y-${g.title}`} className="text-sm font-semibold">{t(`groups.${g.title}`)}</h3>
-      {g.options.map((o) => <div key={o.key} className="flex flex-col gap-2 rounded-xl border border-border p-3 sm:flex-row sm:items-center sm:justify-between">
+      {g.options.map((o) => o.scale ? <Scale key={o.key} option={o} scale={o.scale}/> : <div key={o.key} className="flex flex-col gap-2 rounded-xl border border-border p-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-start gap-3">
           {o.icon}
           <div><p id={`a11y-l-${o.key}`} className="text-sm font-medium">{t(`${o.key}.label` as 'text.label')}</p><p className="text-xs text-muted">{t(`${o.key}.help` as 'text.help')}</p></div>
@@ -52,6 +53,38 @@ export function AccessibilitySettings() {
     <div className="flex flex-wrap items-center justify-between gap-2 border-t border-separator pt-4">
       <p className="text-xs text-muted">{t('stored')}</p>
       <Button variant="secondary" size="sm" isDisabled={!changed} onPress={prefs.reset}><I name="rotate-ccw" size={14}/>{t('reset')}</Button>
+    </div>
+  </div>;
+}
+
+// A preference on a scale: common values as one-tap choices, a slider for anything between, and - / + for exact steps.
+function Scale({ option: o, scale }: { option: Option<keyof A11y>; scale: 'text' | 'spacing' }) {
+  const t = useTranslations('A11y');
+  const prefs = useA11y();
+  const s = a11yScales[scale];
+  const value = a11yNumber(scale, prefs[o.key]);
+  const set = (n: number) => prefs.set({ [o.key]: String(Math.min(s.max, Math.max(s.min, n))) });
+  const show = (n: number) => (scale === 'text' ? t('percent', { n }) : n === 0 ? t('spacing.normal') : n === 50 ? t('spacing.wide') : n === 100 ? t('spacing.widest') : t('level', { n }));
+  const step = "flex size-9 shrink-0 items-center justify-center rounded-lg border border-border transition-colors hover:border-accent focus-visible:outline-2 focus-visible:outline-accent disabled:opacity-40";
+  return <div className="flex flex-col gap-3 rounded-xl border border-border p-3">
+    <div className="flex items-start justify-between gap-3">
+      <div className="flex items-start gap-3">
+        {o.icon}
+        <div><p id={`a11y-l-${o.key}`} className="text-sm font-medium">{t(`${o.key}.label` as 'text.label')}</p><p className="text-xs text-muted">{t(`${o.key}.help` as 'text.help')}</p></div>
+      </div>
+      <output htmlFor={`a11y-r-${o.key}`} className="shrink-0 rounded-lg bg-default px-2.5 py-1 text-sm font-semibold tabular-nums">{show(value)}</output>
+    </div>
+    <div className="flex items-center gap-2">
+      <button type="button" className={step} aria-label={t('less', { what: t(`${o.key}.label` as 'text.label') })} disabled={value <= s.min} onClick={() => set(value - s.step)}><I name="minus" size={16}/></button>
+      <input id={`a11y-r-${o.key}`} type="range" className="a11y-range min-w-0 flex-1" min={s.min} max={s.max} step={s.step} value={value} aria-labelledby={`a11y-l-${o.key}`} aria-valuetext={show(value)}
+        onChange={(e) => set(Number(e.target.value))}/>
+      <button type="button" className={step} aria-label={t('more', { what: t(`${o.key}.label` as 'text.label') })} disabled={value >= s.max} onClick={() => set(value + s.step)}><I name="plus" size={16}/></button>
+    </div>
+    <div role="group" aria-labelledby={`a11y-l-${o.key}`} className="flex flex-wrap gap-1 rounded-xl bg-default p-1">
+      {o.values.map((v) => <button key={v} type="button" aria-pressed={value === Number(v)} onClick={() => set(Number(v))}
+        className={`min-h-9 flex-1 rounded-lg px-2.5 text-xs font-medium tabular-nums transition-colors focus-visible:outline-2 focus-visible:outline-accent ${value === Number(v) ? 'bg-surface text-foreground shadow-sm' : 'text-muted hover:text-foreground'}`}>
+        {show(Number(v))}
+      </button>)}
     </div>
   </div>;
 }
