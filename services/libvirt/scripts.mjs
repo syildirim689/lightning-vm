@@ -3,6 +3,8 @@
 // tab-separated lines ("V<TAB>uuid<TAB>name...") and ends with the line "LVMOK". A failure the contract has a code
 // for is the line "LVMERR <CODE> <text>" and exit status 1 (ssh.mjs turns it into that code).
 // Written without ${...} so the JavaScript around it leaves the shell alone; shell variables are $name or "$name".
+// A parameter is only ever used as one quoted word, and never as the first word after a command (a value that
+// starts with "-" would be read as an option): what has a shape is held against it with is() first.
 const PRELUDE = String.raw`set -u
 export LC_ALL=C
 V="virsh -c qemu:///system"
@@ -14,14 +16,44 @@ fail() { printf 'LVMERR %s %s\n' "$1" "$2" >&3; exit 1; }
 need() { command -v "$1" >/dev/null 2>&1 || fail NOT_LIBVIRT "$1 is not installed on this host"; }
 need virsh
 $V uri >/dev/null 2>&1 || fail PERMISSION_DENIED "this account cannot reach libvirt (qemu:///system)"
+# Whether a value has a shape: all of it, not one of its lines (which is all grep would ask for).
+is() { [[ "$1" =~ $2 ]]; }
+uuid() { is "$1" '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'; }
+num() { is "$1" '^[0-9]{1,9}$'; }
+ours() { is "$1" '^lvm-[A-Za-z0-9_-]+$'; }
 # The domain a uuid names, or VM_NOT_FOUND.
-dom() { echo "$1" | grep -Eq '^[0-9a-f-]{36}$' || fail INVALID_REQUEST "vm is required"; $V domname "$1" 2>/dev/null | head -n 1 | grep . || fail VM_NOT_FOUND "the VM no longer exists"; }
+dom() { uuid "$1" || fail INVALID_REQUEST "vm is required"; $V domname "$1" 2>/dev/null | head -n 1 | grep . || fail VM_NOT_FOUND "the VM no longer exists"; }
 managed() { case "$1" in lvm-*) ;; *) fail NOT_MANAGED "this VM was not created by the panel" ;; esac; }
 power() { case "$($V domstate "$1" 2>/dev/null | head -n 1)" in running|"in shutdown"|blocked) echo poweredOn ;; paused|pmsuspended) echo suspended ;; *) echo poweredOff ;; esac; }
 is_template() { case "$1" in template-*|tpl-*|template_*|tpl_*) return 0 ;; esac; $V desc "$1" 2>/dev/null | grep -q lvm-template; }
+# The block devices of one kind ("disk", "cdrom") of a domain: target and source. The first three columns of
+# virsh's table never hold a space, so whatever follows them is the path, spaces and all.
+blk() { $V domblklist "$1" --details 2>/dev/null | awk -v want="$2" '$2 == want { t = $3; sub(/^ *[^ ]+ +[^ ]+ +[^ ]+ +/, ""); print t "\t" $0 }'; }
 # Hard disks of a domain: target, source file and size in bytes, in device order.
-disks() { $V domblklist "$1" --details 2>/dev/null | awk '$2 == "disk" && $4 != "-" { print $3 "\t" $4 }' | while IFS="$(printf '\t')" read -r t src; do
+disks() { blk "$1" disk | while IFS="$(printf '\t')" read -r t src; do [ "$src" = - ] && continue
   size=$($V domblkinfo "$1" "$t" --bytes 2>/dev/null | awk '/^Capacity:/ { print $2 }'); printf '%s\t%s\t%s\n' "$t" "$src" "$size"; done; }
+# The copy job writes the panel's note last: a domain that carries it is complete.
+finished() { $V desc "$1" 2>/dev/null | grep -q 'Managed by Lightning VM'; }
+# Whether a job still has its process (a status file not a minute old counts: the job may only just have been started).
+alive() { pgrep -f "$ROOT/tasks/$1.sh" >/dev/null 2>&1 || [ $(( $(date +%s) - $(stat -c %Y "$ROOT/tasks/$1.status" 2>/dev/null || echo 0) )) -le 60 ]; }
+# The copy job that is running for a name: its id (tasks/<name>.task holds it from the start of the copy to its
+# good end).
+job_of() { ours "$1" || return 1; j=$(head -n 1 "$ROOT/tasks/$1.task" 2>/dev/null); uuid "$j" || return 1
+  [ "$(head -n 1 "$ROOT/tasks/$j.status" 2>/dev/null)" = running ] && alive "$j" && echo "$j"; }
+# A domain whose copy has not ended well: virt-clone defines the domain first and copies the disk afterwards, so the
+# name exists long before the server does. Not there yet for find, and not one for clone to adopt.
+half_made() { ours "$1" && [ -f "$ROOT/tasks/$1.task" ] && ! finished "$1"; }
+# Removes a domain of the panel with what is its own. libvirt deletes only the volumes it manages in a pool (virsh
+# undefine: "Only volumes managed by libvirt in storage pools can be removed this way"), and a disk the adapter made
+# with qemu-img or the config drive is a file it never heard of: those are noted first and removed by their names.
+undef() { $V undefine "$@" --nvram >/dev/null 2>&1 || $V undefine "$@" >/dev/null 2>&1; }
+wipe() {
+  w=$1; [ "$(power "$w")" = poweredOff ] || $V destroy "$w" >/dev/null 2>&1
+  own=$( { blk "$w" disk; blk "$w" cdrom; } | cut -f2)
+  undef "$w" --remove-all-storage --snapshots-metadata || undef "$w" --snapshots-metadata || return 1
+  printf '%s\n' "$own" | while IFS= read -r f; do case "$f" in */"$w".qcow2|*/"$w"-vd?.qcow2|*/"$w"-cidata.iso) $V vol-delete "$f" >/dev/null 2>&1; rm -f "$f" ;; esac; done
+  rm -f "$ROOT/tasks/$w.task"
+}
 # One "S" record: uuid, name, power, guest agent answers (1/0), addresses (comma separated), the server id.
 state() {
   n=$1; guest=$2; u=$($V domuuid "$n" | head -n 1); p=$(power "$n"); tools=0; ips=""
@@ -55,14 +87,20 @@ $V pool-list --name 2>/dev/null | grep . | while read -r pool; do
   $V pool-info "$pool" --bytes 2>/dev/null | awk -F': *' -v p="$pool" '{ gsub(/^ +/, "", $2); a[$1] = $2 } END { print "D\t" p "\t" a["Capacity"] "\t" a["Available"] "\t" a["State"] }'
 done
 $V net-list --name 2>/dev/null | grep . | while read -r net; do printf 'N\t%s\t%s\n' "$net" "$($V net-info "$net" 2>/dev/null | awk '/^Bridge:/ { print $2 }')"; done
+# One virsh call for a domain (two when only its description can say it is a template): dominfo also knows whether it runs.
 $V list --all --name | grep . | while read -r n; do
+  case "$n" in -*) continue ;; esac
   t=0; is_template "$n" && t=1
-  $V dominfo "$n" | awk -F': *' -v n="$n" -v t="$t" -v p="$(power "$n")" '{ gsub(/^ +/, "", $2); a[$1] = $2 } END { split(a["Max memory"], m, " "); print "V\t" a["UUID"] "\t" n "\t" p "\t" a["CPU(s)"] "\t" m[1] "\t" t "\t" a["OS Type"] }'
+  $V dominfo "$n" | awk -F': *' -v n="$n" -v t="$t" '{ gsub(/^ +/, "", $2); a[$1] = $2 } END { s = a["State"]; p = "poweredOff"
+    if (s == "running" || s == "in shutdown" || s == "blocked") p = "poweredOn"; else if (s == "paused" || s == "pmsuspended") p = "suspended"
+    split(a["Max memory"], m, " "); print "V\t" a["UUID"] "\t" n "\t" p "\t" a["CPU(s)"] "\t" m[1] "\t" t "\t" a["OS Type"] }'
 done
 echo LVMOK`,
 
   find: String.raw`
-if $V domuuid "$P_name" >/dev/null 2>&1; then state "$P_name" 1; fi
+case "$P_name" in ""|-*) echo LVMOK; exit 0 ;; esac
+# A copy still being made, or one that failed half-way, is not there yet: the worker would start it as it is.
+if $V domuuid "$P_name" >/dev/null 2>&1 && ! half_made "$P_name"; then state "$P_name" 1; fi
 echo LVMOK`,
 
   managed: String.raw`
@@ -72,51 +110,76 @@ echo LVMOK`,
   // Starts the copy in the background and answers at once; the job writes how it went to a status file.
   clone: String.raw`
 need virt-clone; need virt-xml; need qemu-img
-if $V domuuid "$P_name" >/dev/null 2>&1; then printf 'R\texisted\t%s\n' "$($V domuuid "$P_name" | head -n 1)"; echo LVMOK; exit 0; fi
+ours "$P_name" || fail INVALID_REQUEST "the name may hold letters, digits, - and _ only"
+# Asked again while the copy runs (the first answer was lost): the same job, not a second copy.
+if j=$(job_of "$P_name"); then printf 'R\ttask\t%s\n' "$j"; echo LVMOK; exit 0; fi
+if $V domuuid "$P_name" >/dev/null 2>&1 && ! half_made "$P_name"; then printf 'R\texisted\t%s\n' "$($V domuuid "$P_name" | head -n 1)"; echo LVMOK; exit 0; fi
+uuid "$P_template" || fail TEMPLATE_NOT_FOUND "the template no longer exists"
 t=$($V domname "$P_template" 2>/dev/null | head -n 1); [ -n "$t" ] || fail TEMPLATE_NOT_FOUND "the template no longer exists"
-# These names go into the job script below: only plain ones are let through.
-plain() { printf '%s' "$1" | grep -Eq '^[A-Za-z0-9._+/ -]+$' && ! printf '%s' "$1" | grep -q '\.\.'; }
+# These go into the job script below, between double quotes: only plain ones are let through.
+plain() { is "$1" '^[A-Za-z0-9._+/ -]+$' && ! is "$1" '^-' && ! is "$1" '\.\.'; }
 plain "$t" || fail TEMPLATE_NOT_FOUND "the name of the template has characters the panel does not accept"
 plain "$P_network" || fail NETWORK_NOT_FOUND "the name of the network has characters the panel does not accept"
-echo "$P_name" | grep -Eq '^lvm-[A-Za-z0-9_-]+$' || fail INVALID_REQUEST "the name may hold letters, digits, - and _ only"
+plain "$P_datastore" || fail DATASTORE_NOT_FOUND "the name of the storage pool has characters the panel does not accept"
+num "$P_vcpu" && num "$P_memoryMb" && num "$P_diskGb" || fail INVALID_REQUEST "vcpu, memoryMb and diskGb are whole numbers"
+is "$P_mac" '^52:54:00(:[0-9a-f]{2}){3}$' || fail INVALID_REQUEST "mac is a QEMU address (52:54:00:..)"
 [ "$(power "$t")" = poweredOff ] || fail INVALID_STATE "the template must be shut down"
 src=$(disks "$t" | head -n 1); [ -n "$src" ] || fail VM_HAS_NO_DISK "the template has no disk"
-size=$(printf '%s' "$src" | cut -f3)
+size=$(printf '%s' "$src" | cut -f3); is "$size" '^[0-9]+$' || fail VM_HAS_NO_DISK "the size of the template's disk cannot be read"
 $V domiflist "$t" | awk 'NR > 2 && NF' | grep -q . || fail TEMPLATE_HAS_NO_NIC "the template has no network interface"
 [ "$P_diskGb" -gt 0 ] && [ $(( P_diskGb * 1073741824 )) -lt "$size" ] && fail DISK_SMALLER_THAN_TEMPLATE "the disk is smaller than the template"
 dir=$($V pool-dumpxml "$P_datastore" 2>/dev/null | sed -n 's:.*<path>\(.*\)</path>.*:\1:p' | head -n 1); [ -n "$dir" ] && [ -d "$dir" ] && plain "$dir" || fail DATASTORE_NOT_FOUND "the storage pool no longer exists (or is not a plain directory)"
 $V net-info "$P_network" >/dev/null 2>&1 || fail NETWORK_NOT_FOUND "the network no longer exists"
-mkdir -p "$ROOT/tasks"; find "$ROOT/tasks" -type f -mtime +2 -delete 2>/dev/null
+# The config drive is a CD: on SATA where the machine has it (q35), on IDE on the older PC type. Said outright,
+# because a target named sd* with no bus means SCSI to libvirt, with a controller a cloud image may have no driver
+# for. Other machine types are left to virt-xml's own choice.
+bus=""; case "$($V dumpxml "$t" 2>/dev/null | sed -n "s/.*machine='\([^']*\)'.*/\1/p" | head -n 1)" in *q35*) bus=",bus=sata" ;; pc|pc-*) bus=",bus=ide" ;; esac
+# What a copy that stopped half-way left behind goes first.
+if $V domuuid "$P_name" >/dev/null 2>&1; then wipe "$P_name" || fail LIBVIRT_ERROR "could not remove what an earlier, failed copy left"; fi
+mkdir -p "$ROOT/tasks"; chmod 700 "$ROOT" "$ROOT/tasks" 2>/dev/null; find "$ROOT/tasks" -type f ! -name '*.task' -mtime +2 -delete 2>/dev/null
 id=$(cat /proc/sys/kernel/random/uuid)
 printf '%s' "$P_iso" | base64 -d > "$dir/$P_name-cidata.iso" || fail LIBVIRT_ERROR "could not write the config drive"
+# The note is free text: it waits in a file of its own and never becomes part of the job script.
+( umask 077; printf '%s' "$P_notes" > "$ROOT/tasks/$id.notes" ) || fail LIBVIRT_ERROR "could not write the job"
 echo running > "$ROOT/tasks/$id.status"
+echo "$id" > "$ROOT/tasks/$P_name.task"
 cat > "$ROOT/tasks/$id.sh" <<LVMJOB
 #!/bin/bash
 export LC_ALL=C
 V="virsh -c qemu:///system"; st="$ROOT/tasks/$id.status"
-bad() { printf 'error\t%s\t%s\n' "\$1" "\$2" > "\$st"; exit 1; }
+# Nothing half-made stays behind for a retry to find: the domain, its disk, the config drive.
+undo() {
+  \$V undefine "$P_name" --remove-all-storage --snapshots-metadata --nvram >/dev/null 2>&1 || \$V undefine "$P_name" --remove-all-storage --snapshots-metadata >/dev/null 2>&1
+  for f in "$dir/$P_name.qcow2" "$dir/$P_name-cidata.iso"; do \$V vol-delete "\$f" >/dev/null 2>&1; rm -f "\$f"; done
+  rm -f "$ROOT/tasks/$P_name.task" "$ROOT/tasks/$id.notes"
+}
+bad() { undo; printf 'error\t%s\t%s\n' "\$1" "\$(printf '%s' "\$2" | tr '\n\t' '  ')" > "\$st"; exit 1; }
 out=\$(virt-clone --connect qemu:///system --original "$t" --name "$P_name" --file "$dir/$P_name.qcow2" 2>&1) || { case "\$out" in *"No space"*|*"not enough"*) bad INSUFFICIENT_RESOURCES "\$out" ;; *"already"*) bad DUPLICATE_NAME "\$out" ;; *) bad TASK_FAILED "\$out" ;; esac; }
 \$V setmaxmem "$P_name" "$P_memoryMb"M --config && \$V setmem "$P_name" "$P_memoryMb"M --config || bad TASK_FAILED "could not set the memory"
 \$V setvcpus "$P_name" "$P_vcpu" --maximum --config && \$V setvcpus "$P_name" "$P_vcpu" --config || bad TASK_FAILED "could not set the processors"
-virt-xml --connect qemu:///system "$P_name" --edit 1 --network network="$P_network" >/dev/null 2>&1 || bad TASK_FAILED "could not set the network"
+# The interface gets the address the config drive names it by.
+virt-xml --connect qemu:///system "$P_name" --edit 1 --network network="$P_network",mac="$P_mac" >/dev/null 2>&1 || bad TASK_FAILED "could not set the network"
 [ "$P_diskGb" -gt 0 ] && [ \$(( $P_diskGb * 1073741824 )) -gt "$size" ] && { qemu-img resize "$dir/$P_name.qcow2" "$P_diskGb"G >/dev/null 2>&1 || bad TASK_FAILED "could not grow the disk"; }
-\$V attach-disk "$P_name" "$dir/$P_name-cidata.iso" sdz --type cdrom --mode readonly --config >/dev/null 2>&1 || bad TASK_FAILED "could not attach the config drive"
-\$V desc "$P_name" --config --new-desc "$P_notes" >/dev/null 2>&1
+virt-xml --connect qemu:///system "$P_name" --add-device --disk path="$dir/$P_name-cidata.iso",device=cdrom,readonly=on$bus >/dev/null 2>&1 || bad TASK_FAILED "could not attach the config drive"
 \$V autostart "$P_name" >/dev/null 2>&1
+# The note comes last: a domain that carries it is complete (clone and find go by that).
+\$V desc "$P_name" --config --new-desc "\$(cat "$ROOT/tasks/$id.notes")" >/dev/null 2>&1 || bad TASK_FAILED "could not write the note"
 printf 'success\t%s\n' "\$(\$V domuuid "$P_name" | head -n 1)" > "\$st"
+rm -f "$ROOT/tasks/$P_name.task" "$ROOT/tasks/$id.notes"
 LVMJOB
 chmod 700 "$ROOT/tasks/$id.sh"
-nohup setsid bash "$ROOT/tasks/$id.sh" >/dev/null 2>&1 < /dev/null &
+# The job keeps none of this session's pipes (3 is one too): ssh would otherwise not return before the copy has ended.
+nohup setsid bash "$ROOT/tasks/$id.sh" >/dev/null 2>&1 3>&- < /dev/null &
 printf 'R\ttask\t%s\n' "$id"
 echo LVMOK`,
 
   task: String.raw`
-echo "$P_task" | grep -Eq '^[0-9a-f-]{36}$' || fail INVALID_REQUEST "task is required"
+uuid "$P_task" || fail INVALID_REQUEST "task is required"
 f="$ROOT/tasks/$P_task.status"
 if [ ! -f "$f" ]; then printf 'R\tunknown\n'; echo LVMOK; exit 0; fi
 st=$(head -n 1 "$f")
 # A job that says "running" but has no process any more (the host restarted) will never finish.
-if [ "$st" = running ] && ! pgrep -f "$ROOT/tasks/$P_task.sh" >/dev/null 2>&1 && [ $(( $(date +%s) - $(stat -c %Y "$f") )) -gt 60 ]; then printf 'R\terror\tTASK_FAILED\tthe background job stopped without a result\n'
+if [ "$st" = running ] && ! alive "$P_task"; then printf 'R\terror\tTASK_FAILED\tthe background job stopped without a result\n'
 else printf 'R\t%s\n' "$st"; fi
 echo LVMOK`,
 
@@ -124,7 +187,7 @@ echo LVMOK`,
 n=$(dom "$P_vm") || exit 1
 p=$(power "$n")
 case "$P_action" in
-  on) [ "$p" = poweredOn ] || $V start "$n" >/dev/null 2>&1 || fail LIBVIRT_ERROR "$($V start "$n" 2>&1 | head -n 1)" ;;
+  on) [ "$p" = poweredOn ] || out=$($V start "$n" 2>&1) || fail LIBVIRT_ERROR "$(printf '%s' "$out" | head -n 1)" ;;
   off) [ "$p" = poweredOff ] || $V destroy "$n" >/dev/null 2>&1 || fail LIBVIRT_ERROR "could not power off" ;;
   reset) if [ "$p" = poweredOn ]; then $V reset "$n" >/dev/null 2>&1 || fail LIBVIRT_ERROR "could not reset"; else $V start "$n" >/dev/null 2>&1 || fail LIBVIRT_ERROR "could not start"; fi ;;
   shutdown) [ "$p" = poweredOff ] || $V shutdown "$n" >/dev/null 2>&1 || fail TOOLS_NOT_RUNNING "the guest could not be asked to shut down" ;;
@@ -133,18 +196,15 @@ esac
 echo LVMOK`,
 
   destroy: String.raw`
-n=$($V domname "$P_vm" 2>/dev/null | head -n 1)
+n=""; uuid "$P_vm" && n=$($V domname "$P_vm" 2>/dev/null | head -n 1)
 if [ -z "$n" ]; then printf 'R\tgone\n'; echo LVMOK; exit 0; fi
 managed "$n"
-[ "$(power "$n")" = poweredOff ] || $V destroy "$n" >/dev/null 2>&1
-iso=$($V domblklist "$n" --details 2>/dev/null | awk '$2 == "cdrom" && $4 ~ /-cidata\.iso$/ { print $4 }' | head -n 1)
-$V undefine "$n" --remove-all-storage --snapshots-metadata --nvram >/dev/null 2>&1 || $V undefine "$n" --remove-all-storage --snapshots-metadata >/dev/null 2>&1 || fail LIBVIRT_ERROR "could not remove the VM"
-# The config drive is the panel's own file: removed only when it carries this server's name.
-case "$iso" in */"$n"-cidata.iso) rm -f "$iso" ;; esac
+wipe "$n" || fail LIBVIRT_ERROR "could not remove the VM"
 echo LVMOK`,
 
   resize: String.raw`
 need qemu-img
+num "$P_vcpu" && num "$P_memoryMb" && num "$P_diskGb" || fail INVALID_REQUEST "vcpu, memoryMb and diskGb are whole numbers"
 n=$(dom "$P_vm") || exit 1; managed "$n"
 d=$(disks "$n" | head -n 1); [ -n "$d" ] || fail VM_HAS_NO_DISK "the VM has no disk"
 path=$(printf '%s' "$d" | cut -f2); size=$(printf '%s' "$d" | cut -f3)
@@ -158,6 +218,7 @@ if [ "$P_diskGb" -gt "$now" ]; then qemu-img resize "$path" "$P_diskGb"G >/dev/n
 echo LVMOK`,
 
   rename: String.raw`
+ours "$P_name" || fail INVALID_REQUEST "the name may hold letters, digits, - and _ only"
 n=$(dom "$P_vm") || exit 1
 size=$(disks "$n" | head -n 1 | cut -f3); [ -n "$size" ] || size=0; gb=$(( (size + 1073741823) / 1073741824 ))
 if [ "$n" != "$P_name" ]; then
@@ -176,6 +237,7 @@ echo LVMOK`,
 
   diskAdd: String.raw`
 need qemu-img
+num "$P_sizeGb" || fail INVALID_REQUEST "sizeGb is a whole number"
 n=$(dom "$P_vm") || exit 1; managed "$n"
 first=$(disks "$n" | head -n 1); [ -n "$first" ] || fail VM_HAS_NO_DISK "the VM has no disk"
 dir=$(dirname "$(printf '%s' "$first" | cut -f2)")
@@ -190,7 +252,7 @@ echo LVMOK`,
 
   diskRemove: String.raw`
 n=$(dom "$P_vm") || exit 1; managed "$n"
-all=$(disks "$n"); d=$(printf '%s\n' "$all" | awk -F'\t' -v t="$P_target" '$1 == t')
+all=$(disks "$n"); d=""; is "$P_target" '^[a-z]+$' && d=$(printf '%s\n' "$all" | awk -F'\t' -v t="$P_target" '$1 == t')
 if [ -z "$d" ]; then printf 'R\tgone\n'; echo LVMOK; exit 0; fi
 [ "$(printf '%s\n' "$all" | head -n 1 | cut -f1)" = "$P_target" ] && fail SYSTEM_DISK "the system disk cannot be removed"
 flags="--config"; [ "$(power "$n")" = poweredOn ] && flags="--persistent"
@@ -214,11 +276,26 @@ echo LVMOK`,
 
   snapshot: String.raw`
 n=$(dom "$P_vm") || exit 1
+# The name is compared as it is, whole (not as a pattern), and one that would read as an option names no snapshot.
+has() { case "$P_snapname" in ""|-*) return 1 ;; esac; $V snapshot-list "$n" --name 2>/dev/null | while read -r s; do [ "$s" = "$P_snapname" ] && echo y; done | grep -q y; }
 case "$P_action" in
-  create) out=$($V snapshot-create-as "$n" "$P_snapname" "$P_description" --atomic 2>&1) || fail LIBVIRT_ERROR "$(printf '%s' "$out" | head -n 1)" ;;
-  revert) $V snapshot-list "$n" --name 2>/dev/null | grep -qx "$P_snapname" || fail SNAPSHOT_NOT_FOUND "the snapshot is not in this VM"
+  create) is "$P_snapname" '^lvm[0-9]{1,12}$' && is "$P_description" '^lvm:[A-Za-z0-9_-]+$' || fail INVALID_REQUEST "not a snapshot name and description the adapter made"
+    # Asked again after an answer that never arrived (a snapshot of a running VM with much memory outlasts the call):
+    # the snapshot of this very name and description, made in the last quarter of an hour, is the one asked for.
+    now=$(date +%s)
+    same=$($V snapshot-list "$n" --name 2>/dev/null | grep . | while read -r s; do
+      xml=$($V snapshot-dumpxml "$n" "$s" 2>/dev/null); printf '%s' "$xml" | grep -qF -e "<description>$P_description</description>" || continue
+      when=$(printf '%s' "$xml" | sed -n 's:.*<creationTime>\([0-9]*\)</creationTime>.*:\1:p' | head -n 1)
+      [ -n "$when" ] && [ $(( now - when )) -lt 900 ] && echo "$s"; done)
+    if [ -z "$same" ]; then
+      # One still being taken is not in the list yet: libvirt has a job on the domain while it writes it.
+      job=$($V domjobinfo "$n" 2>/dev/null | awk -F': *' '/^Job type/ { print $2 }' | head -n 1)
+      case "$job" in ""|None) ;; *) fail LIBVIRT_ERROR "the VM is busy (a snapshot may still be being taken); this is asked again in a moment" ;; esac
+      out=$($V snapshot-create-as "$n" "$P_snapname" "$P_description" --atomic 2>&1) || fail LIBVIRT_ERROR "$(printf '%s' "$out" | head -n 1)"
+    fi ;;
+  revert) has || fail SNAPSHOT_NOT_FOUND "the snapshot is not in this VM"
     out=$($V snapshot-revert "$n" "$P_snapname" 2>&1) || fail LIBVIRT_ERROR "$(printf '%s' "$out" | head -n 1)" ;;
-  remove) $V snapshot-list "$n" --name 2>/dev/null | grep -qx "$P_snapname" || fail SNAPSHOT_NOT_FOUND "the snapshot is not in this VM"
+  remove) has || fail SNAPSHOT_NOT_FOUND "the snapshot is not in this VM"
     out=$($V snapshot-delete "$n" "$P_snapname" 2>&1) || fail LIBVIRT_ERROR "$(printf '%s' "$out" | head -n 1)" ;;
   *) fail INVALID_REQUEST "unknown snapshot action" ;;
 esac
@@ -236,7 +313,7 @@ printf 'I\tsnapshots\t%s\n' "$($V snapshot-list "$n" --name 2>/dev/null | grep -
 printf 'I\thost\t%s\n' "$(hostname)"
 pid=/run/libvirt/qemu/$n.pid; [ -f "$pid" ] && printf 'I\tstarted\t%s\n' "$(stat -c %Y "$pid")"
 disks "$n" | awk '{ print "K\t" $0 }'
-$V domblklist "$n" --details 2>/dev/null | awk '$2 == "cdrom" { print "C\t" $4 }'
+blk "$n" cdrom | awk -F'\t' '{ print "C\t" $2 }'
 $V domiflist "$n" 2>/dev/null | awk 'NR > 2 && NF { print "F\t" $1 "\t" $2 "\t" $3 "\t" $4 "\t" $5 }'
 $V domifaddr "$n" --source agent 2>/dev/null | awk 'NR > 2 && NF >= 4 && $1 != "lo" { print "A\t" $2 "\t" $4 }'
 echo LVMOK`,

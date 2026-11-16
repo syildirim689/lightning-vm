@@ -45,12 +45,36 @@ export async function discover(ps) {
 }
 
 // ---- provisioning --------------------------------------------------------------------------------
+// The MAC address of a server's interface, made from its id so that a repeated clone gives the same one: the config
+// drive is written before the VM exists and names the interface by it. Locally administered (02:...), so it can
+// never fall into a host's pool of dynamic addresses (00:15:5D:..), which Microsoft says a static one must avoid.
+export const macOf = (seed) => `02:15:5d:${createHash('sha256').update(String(seed)).digest('hex').slice(0, 6).replace(/(..)(?=.)/g, '$1:')}`;
+// The panel's network settings as the guest's cloud-init reads them everywhere. Without netplan in the image (Debian
+// 12, cloud-init 22.4, seen on a real server) cloud-init refuses the route "to: default", turns "::/0" into "::/64",
+// and takes the entry's key for the interface's name instead of matching "e*". So: an address for the IPv4 default
+// route, gateway6 for the IPv6 one, and the first interface is found by its MAC address (which the adapter sets on
+// the VM) and called eth0, whatever name the guest's kernel gave it.
+export function guestNetwork(network, mac) {
+  const out = structuredClone(network), nics = {}, entries = Object.entries(out?.ethernets ?? {});
+  for (const [i, [key, nic]] of entries.entries()) {
+    const routes = [];
+    for (const r of Array.isArray(nic?.routes) ? nic.routes : []) {
+      const v6 = String(r?.via ?? '').includes(':');
+      if (r?.to === '::/0' || (r?.to === 'default' && v6)) nic.gateway6 = r.via;
+      else routes.push(r?.to === 'default' ? { ...r, to: '0.0.0.0/0' } : r);
+    }
+    if (nic && typeof nic === 'object') { if (routes.length) nic.routes = routes; else delete nic.routes; }
+    if (i === 0 && mac && nic && typeof nic === 'object') { nic.match = { macaddress: mac }; nic['set-name'] = 'eth0'; nics.eth0 = nic; } else nics[key] = nic;
+  }
+  if (out?.ethernets) out.ethernets = nics;
+  return out;
+}
 // The worker's two documents as the three files of a NoCloud config drive (the network goes into a file of its own).
-export function driveFiles(metadata, userdata, serverId) {
+export function driveFiles(metadata, userdata, serverId, mac) {
   let meta = {}; try { meta = JSON.parse(metadata || '{}'); } catch { /* not JSON */ }
   const { network, ...rest } = meta;
   const files = { 'meta-data': `${JSON.stringify({ 'instance-id': serverId, ...rest })}\n`, 'user-data': String(userdata || '#cloud-config\n{}\n') };
-  if (network) files['network-config'] = `${JSON.stringify(network)}\n`;
+  if (network) files['network-config'] = `${JSON.stringify(guestNetwork(network, mac))}\n`;
   return { files, ips: (Object.values(network?.ethernets ?? {})[0]?.addresses ?? []).map((a) => String(a).split('/')[0]) };
 }
 
@@ -58,10 +82,11 @@ export async function clone(ps, b) {
   if (!String(b.name ?? '').startsWith(PREFIX) || !b.template || !b.pool || !b.datastore || !b.network) throw new Failure('INVALID_REQUEST', 'name, template, pool, datastore and network are required');
   if (!/^lvm-[\w-]{1,76}$/.test(b.name)) throw new Failure('INVALID_REQUEST', 'the name may hold letters, digits, - and _ only');
   if (b.customization === 'appliance') throw new Failure('PROVISIONING_NOT_SUPPORTED', 'appliance images (nested ESXi) need VMware');
-  const { files, ips } = driveFiles(b.metadata, b.userdata, b.serverId ?? '');
+  const mac = macOf(b.serverId || b.name);
+  const { files, ips } = driveFiles(b.metadata, b.userdata, b.serverId ?? '', mac);
   // The copy runs on the host on its own (a large disk takes minutes); this call only starts it.
   const out = await run(ps, 'clone', { name: b.name, template: b.template, datastore: String(b.datastore).replace(/:$/, ''), network: b.network, vcpu: Number(b.vcpu) || 1, memoryMb: Number(b.memoryMb) || 1024,
-    diskGb: Number(b.diskGb) || 0, nestedHv: !!b.nestedHv, notes: `${note(b.serverId ?? '')}\nlvm-ips=${ips.join(',')}`, iso: configDrive(files).toString('base64'), worker: Buffer.from(CLONE_WORKER, 'utf8').toString('base64') });
+    diskGb: Number(b.diskGb) || 0, nestedHv: !!b.nestedHv, notes: `${note(b.serverId ?? '')}\nlvm-ips=${ips.join(',')}`, iso: configDrive(files).toString('base64'), mac: mac.replace(/:/g, '').toUpperCase(), worker: Buffer.from(CLONE_WORKER, 'utf8').toString('base64') });
   return out.existed ? { vm: out.vm, existed: true } : { task: out.task, existed: false };
 }
 export async function task(ps, b) {

@@ -1,11 +1,15 @@
-// The adapter against a small pretend XAPI: one pool with one host, a storage repository, a template.
+// The adapter against a small pretend XAPI: one pool with one host, a storage repository, a template. The pretend
+// XAPI behaves as the real one is written (xen-api: xapi_vm_helpers.ml, xapi_vm_lifecycle.ml, datamodel_vm.ml):
+// VM.destroy leaves disks and snapshots behind, get_by_name_label also finds snapshots, a guest without tools has
+// no clean_shutdown among its allowed operations, a copy shows up when it ends, an older server refuses a third
+// argument to VM.snapshot, and a VIF keeps the MAC address it is created with.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
 import * as h from '../handlers.mjs';
 import { configDrive } from '../iso.mjs';
 import { handler } from '../server.mjs';
-import { Failure, xapiFailure } from '../xapi.mjs';
+import { addressGuard, Failure, xapiFailure } from '../xapi.mjs';
 
 const GIB = 1024 ** 3, MIB = 1024 ** 2, NULL = 'OpaqueRef:NULL';
 const uuid = (n) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
@@ -38,16 +42,28 @@ function pool() {
     const done = (result) => { if (!asyncCall) return result; const t = ref('task'); db.task[t] = { status: 'success', result: result ? `<value>${result}</value>` : '', error_info: [], other_config: {} }; return t; };
     if (msg === 'get_all_records') return db[cls];
     if (msg === 'get_by_uuid') return byUuid(cls, a[0]);
-    if (msg === 'get_record') { const r = db[cls][a[0]]; if (!r) throw xapiFailure('HANDLE_INVALID', [cls, a[0]]); return { ...r }; }
+    if (msg === 'get_record') {
+      const r = db[cls][a[0]]; if (!r) throw xapiFailure('HANDLE_INVALID', [cls, a[0]]);
+      // Advisory, and strict: the clean operations need a guest that can be asked.
+      if (cls === 'VM') return { ...r, allowed_operations: r.power_state === 'Running' ? ['hard_shutdown', 'hard_reboot', ...(r.tools === false ? [] : ['clean_shutdown', 'clean_reboot'])] : ['start'] };
+      return { ...r };
+    }
     if (msg === 'get_by_name_label') return Object.entries(db[cls]).filter(([, x]) => x.name_label === a[0]).map(([r]) => r);
     if (method === 'task.add_to_other_config') { db.task[a[0]].other_config[a[1]] = a[2]; return null; }
     if (method === 'task.destroy') { delete db.task[a[0]]; return null; }
     if (cls === 'VM' && msg === 'copy') {
-      const src = db.VM[a[0]], vm = ref('vm');
-      const vbds = src.VBDs.map((b) => { const v = ref('vdi'), nb = ref('vbd'); db.VDI[v] = { ...db.VDI[db.VBD[b].VDI], uuid: uuid(n), SR: a[2] }; db.VBD[nb] = { ...db.VBD[b], VM: vm, VDI: v }; return nb; });
-      const vifs = src.VIFs.map((f) => { const nf = ref('vif'); db.VIF[nf] = { ...db.VIF[f], VM: vm }; return nf; });
-      db.VM[vm] = { ...src, uuid: uuid(n), name_label: a[1], VBDs: vbds, VIFs: vifs, other_config: {}, snapshots: [] };
-      return done(vm);
+      const make = () => {
+        const src = db.VM[a[0]], vm = ref('vm');
+        const vbds = src.VBDs.map((b) => { const v = ref('vdi'), nb = ref('vbd'); db.VDI[v] = { ...db.VDI[db.VBD[b].VDI], uuid: uuid(n), SR: a[2], VBDs: [nb] }; db.VBD[nb] = { ...db.VBD[b], VM: vm, VDI: v }; return nb; });
+        const vifs = src.VIFs.map((f) => { const nf = ref('vif'); db.VIF[nf] = { ...db.VIF[f], VM: vm, MAC: 'aa:bb:cc:00:00:02' }; return nf; });
+        db.VM[vm] = { ...src, uuid: uuid(n), name_label: a[1], VBDs: vbds, VIFs: vifs, other_config: {}, snapshots: [] };
+        return vm;
+      };
+      if (!db.slowCopy) return done(make());
+      // The disks are copied first; the VM is there when the task ends (the test ends it).
+      const t = ref('task'); db.task[t] = { status: 'pending', result: '', error_info: [], other_config: {} };
+      db.endCopy = (error) => Object.assign(db.task[t], error ? { status: 'failure', error_info: error } : { status: 'success', result: `<value>${make()}</value>` });
+      return t;
     }
     if (method === 'VM.provision') { db.VM[a[0]].is_a_template = false; return null; }
     if (method === 'VM.set_name_description') { db.VM[a[0]].name_description = a[1]; return null; }
@@ -61,25 +77,38 @@ function pool() {
     if (method === 'VM.get_allowed_VBD_devices') { const used = db.VM[a[0]].VBDs.map((b) => db.VBD[b].userdevice); return ['0', '1', '2', '3', '4'].filter((d) => !used.includes(d)); }
     if (cls === 'VM' && ['start', 'hard_shutdown', 'clean_shutdown', 'hard_reboot'].includes(msg)) {
       const vm = db.VM[a[0]];
-      if (msg === 'start') { vm.power_state = 'Running'; vm.resident_on = 'OpaqueRef:host'; vm.guest_metrics = 'OpaqueRef:gm'; db.VM_guest_metrics['OpaqueRef:gm'] = { live: true, networks: { '0/ip': '203.0.113.20', '0/ipv6/0': 'fe80::1' }, os_version: { name: 'Ubuntu 24.04' } }; }
+      if (msg === 'start') {
+        vm.power_state = 'Running'; vm.resident_on = 'OpaqueRef:host'; vm.guest_metrics = 'OpaqueRef:gm'; vm.metrics = 'OpaqueRef:vmm';
+        db.VM_metrics['OpaqueRef:vmm'] = { start_time: new Date(Date.now() - (db.upFor ?? 1000)).toISOString().replace(/-|\.\d+/g, '') };
+        // A stock cloud image: PV drivers in the kernel (so there is a record), no guest utilities (so nothing in it).
+        db.VM_guest_metrics['OpaqueRef:gm'] = db.noTools ? { live: false, PV_drivers_detected: true, networks: {}, os_version: {} } : { live: true, networks: { '0/ip': '203.0.113.20', '0/ipv6/0': 'fe80::1' }, os_version: { name: 'Ubuntu 24.04' } };
+        vm.tools = !db.noTools;
+      }
+      else if (msg === 'clean_shutdown' && vm.tools === false) { const t = ref('task'); db.task[t] = { status: 'failure', result: '', error_info: ['VM_LACKS_FEATURE', a[0]], other_config: {} }; return asyncCall ? t : (() => { throw xapiFailure('VM_LACKS_FEATURE', [a[0]]); })(); }
       else if (msg !== 'hard_reboot') vm.power_state = 'Halted';
       return done('');
     }
     if (method === 'VM.destroy') { const vm = db.VM[a[0]]; for (const b of vm.VBDs ?? []) delete db.VBD[b]; for (const f of vm.VIFs ?? []) delete db.VIF[f]; delete db.VM[a[0]]; for (const v of Object.values(db.VM)) v.snapshots = (v.snapshots ?? []).filter((s) => s !== a[0]); return null; }
-    if (method === 'VM.snapshot') { const s = ref('snap'); db.VM[s] = { uuid: uuid(n), name_label: a[1], is_a_snapshot: true, snapshot_time: '20240101T10:00:00Z', other_config: {}, VBDs: [], VIFs: [] }; db.VM[a[0]].snapshots.push(s); return s; }
+    if (method === 'VM.snapshot') {
+      if (db.old && a.length > 2) throw xapiFailure('MESSAGE_PARAMETER_COUNT_MISMATCH', ['VM.snapshot', '2', String(a.length)]);
+      const s = ref('snap');
+      const vbds = db.VM[a[0]].VBDs.map((b) => { const v = ref('vdi'), nb = ref('vbd'); db.VDI[v] = { ...db.VDI[db.VBD[b].VDI], uuid: uuid(n), is_a_snapshot: true, VBDs: [nb] }; db.VBD[nb] = { ...db.VBD[b], VM: s, VDI: v }; return nb; });
+      db.VM[s] = { uuid: uuid(n), name_label: a[1], is_a_snapshot: true, snapshot_time: '20240101T10:00:00Z', other_config: {}, VBDs: vbds, VIFs: [] }; db.VM[a[0]].snapshots.push(s); return s;
+    }
     if (method === 'VM.revert') { log.push(`reverted ${a[0]}`); return null; }
     if (method === 'VIF.destroy') { const f = db.VIF[a[0]]; db.VM[f.VM].VIFs = db.VM[f.VM].VIFs.filter((x) => x !== a[0]); delete db.VIF[a[0]]; return null; }
-    if (method === 'VIF.create') { const f = ref('vif'); db.VIF[f] = { ...a[0], MAC: 'aa:bb:cc:00:00:99' }; db.VM[a[0].VM].VIFs.push(f); return f; }
-    if (method === 'VDI.create') { const v = ref('vdi'); db.VDI[v] = { ...a[0], uuid: uuid(n), physical_utilisation: 0 }; return v; }
+    if (method === 'VIF.create') { const f = ref('vif'); db.VIF[f] = { ...a[0], MAC: a[0].MAC || 'aa:bb:cc:00:00:99' }; db.VM[a[0].VM].VIFs.push(f); return f; }
+    if (method === 'VDI.create') { const v = ref('vdi'); db.VDI[v] = { ...a[0], uuid: uuid(n), physical_utilisation: 0, VBDs: [] }; return v; }
+    if (method === 'VDI.set_other_config') { db.VDI[a[0]].other_config = a[1]; return null; }
     if (method === 'VDI.resize') { db.VDI[a[0]].virtual_size = a[1]; return null; }
-    if (method === 'VDI.destroy') { delete db.VDI[a[0]]; return null; }
-    if (method === 'VBD.create') { const b = ref('vbd'); db.VBD[b] = { ...a[0], currently_attached: false }; db.VM[a[0].VM].VBDs.push(b); return b; }
+    if (method === 'VDI.destroy') { if (!db.VDI[a[0]]) throw xapiFailure('HANDLE_INVALID', ['VDI', a[0]]); if (db.stuck === a[0]) throw xapiFailure('VDI_IN_USE', [a[0]]); delete db.VDI[a[0]]; return null; }
+    if (method === 'VBD.create') { const b = ref('vbd'); db.VBD[b] = { ...a[0], currently_attached: false }; db.VM[a[0].VM].VBDs.push(b); (db.VDI[a[0].VDI].VBDs ??= []).push(b); return b; }
     if (method === 'VBD.plug') { db.VBD[a[0]].currently_attached = true; return null; }
     if (method === 'VBD.unplug') { db.VBD[a[0]].currently_attached = false; return null; }
     if (method === 'VBD.destroy') { const b = db.VBD[a[0]]; db.VM[b.VM].VBDs = db.VM[b.VM].VBDs.filter((x) => x !== a[0]); delete db.VBD[a[0]]; return null; }
     throw new Error(`fake XAPI: ${method}`);
   };
-  call.put = async (path, query, body) => { uploads.push({ path, query, body }); };
+  call.put = async (path, query, body) => { uploads.push({ path, query, body }); db.VDI[query.vdi].image = body; };
   return { db, call, log, uploads };
 }
 const serverId = '8f0c0d2e-5b7a-4c1e-9d3f-2a6b7c8d9e0f';
@@ -87,6 +116,8 @@ const order = { name: `lvm-${serverId}`, serverId, template: uuid(11), pool: uui
   metadata: JSON.stringify({ 'instance-id': serverId, 'local-hostname': 'web1', network: { version: 2, ethernets: { nic0: { match: { name: 'e*' }, addresses: ['203.0.113.20/24'], routes: [{ to: 'default', via: '203.0.113.1' }], nameservers: { addresses: ['1.1.1.1'] } } } } }),
   userdata: `#cloud-config\n${JSON.stringify({ hostname: 'web1', ssh_authorized_keys: ['ssh-ed25519 AAAA test@host'], chpasswd: { expire: false, list: 'root:$6$salt$hash' }, runcmd: [['sh', '-c', 'echo hi']] })}` };
 const made = (db) => Object.entries(db.VM).find(([, v]) => v.name_label === order.name);
+// A file of the config drive, read back out of the image (each is one line of JSON here).
+const onDrive = (image, start) => { const at = image.indexOf(start); return JSON.parse(image.subarray(at, image.indexOf('\n', at)).toString()); };
 
 test('discovery describes the pool, its host, storage, networks and VMs the way the panel stores them', async () => {
   const { call } = pool();
@@ -102,10 +133,14 @@ test('discovery describes the pool, its host, storage, networks and VMs the way 
 });
 
 test('the config drive holds what cloud-init NoCloud reads: user-data, meta-data and the network on its own', () => {
-  const { files, ips } = h.driveFiles(order.metadata, order.userdata, serverId);
+  const { files, ips } = h.driveFiles(order.metadata, order.userdata, serverId, 'AA:BB:CC:00:00:99');
   assert.deepEqual(Object.keys(files).sort(), ['meta-data', 'network-config', 'user-data']);
   assert.deepEqual(JSON.parse(files['meta-data']), { 'instance-id': serverId, 'local-hostname': 'web1' });
-  assert.equal(JSON.parse(files['network-config']).ethernets.nic0.addresses[0], '203.0.113.20/24');
+  // What cloud-init's own renderers take (no netplan in the guest): no "to: default", the interface bound by MAC.
+  assert.deepEqual(JSON.parse(files['network-config']), { version: 2, ethernets: { eth0: { match: { macaddress: 'aa:bb:cc:00:00:99' }, 'set-name': 'eth0', addresses: ['203.0.113.20/24'],
+    routes: [{ to: '0.0.0.0/0', via: '203.0.113.1' }], nameservers: { addresses: ['1.1.1.1'] } } } });
+  assert.deepEqual(h.guestNetwork({ version: 2, ethernets: { nic0: { match: { name: 'e*' }, addresses: ['2001:db8::10/64'], routes: [{ to: '::/0', via: '2001:db8::1', 'on-link': true }] } } }, 'aa:bb:cc:00:00:01').ethernets.eth0,
+    { match: { macaddress: 'aa:bb:cc:00:00:01' }, 'set-name': 'eth0', addresses: ['2001:db8::10/64'], gateway6: '2001:db8::1' }, 'an IPv6 default route becomes gateway6');
   assert.ok(files['user-data'].startsWith('#cloud-config\n')); assert.deepEqual(ips, ['203.0.113.20']);
   const image = configDrive(files);
   assert.equal(image.length % 2048, 0); assert.equal(image.subarray(16 * 2048 + 1, 16 * 2048 + 6).toString(), 'CD001'); assert.equal(image.subarray(16 * 2048 + 40, 16 * 2048 + 46).toString(), 'cidata');
@@ -117,7 +152,12 @@ test('a clone is copied, then made a VM of the right size on the right network w
   const { db, call, uploads } = pool();
   const started = await h.clone(call, order);
   assert.equal(started.existed, false); assert.match(started.task, /^OpaqueRef:task-/);
-  assert.ok(db.task[started.task].other_config['lvm-pending'], 'the settings wait with the task');
+  assert.deepEqual(db.task[started.task].other_config, { 'lvm-copy': order.name }, 'the task carries the name and nothing else');
+  assert.ok(!JSON.stringify(db.task).includes('salt'), 'no user data in a task record');
+  const waiting = Object.values(db.VDI).find((v) => v.name_label === `lvm-config-drive ${order.name}`);
+  assert.ok(waiting.image.includes(Buffer.from('$6$salt$hash')), 'the drive is written before the copy');
+  const kept = JSON.parse(Buffer.from(waiting.other_config['lvm-pending'], 'base64').toString());
+  assert.deepEqual([kept.vcpu, kept.network, kept.ips, 'userdata' in kept, 'metadata' in kept], [4, uuid(6), ['203.0.113.20'], false, false], 'what the copy still needs, without the secrets');
   const done = await h.task(call, { task: started.task });
   const [ref, vm] = made(db);
   assert.deepEqual(done, { state: 'success', vm: vm.uuid });
@@ -125,12 +165,16 @@ test('a clone is copied, then made a VM of the right size on the right network w
   assert.equal(vm.name_description, `Managed by Lightning VM (server ${serverId})`);
   assert.deepEqual([vm.other_config['lightning.server-id'], vm.other_config['lightning.ips']], [serverId, '203.0.113.20']);
   assert.deepEqual(vm.VIFs.map((f) => [db.VIF[f].network, db.VIF[f].device]), [['OpaqueRef:net1', '0']], 'the first interface moved to the ordered network');
+  const mac = db.VIF[vm.VIFs[0]].MAC;
+  assert.match(mac, /^[0-9a-f]{2}(:[0-9a-f]{2}){5}$/); assert.equal(parseInt(mac.slice(0, 2), 16) & 3, 2, 'locally administered, unicast');
+  assert.deepEqual(onDrive(waiting.image, '{"version":2').ethernets.eth0.match, { macaddress: mac }, 'the network on the drive is bound to the MAC of the interface');
   const vbds = vm.VBDs.map((b) => db.VBD[b]);
   assert.equal(db.VDI[vbds.find((b) => b.userdevice === '0').VDI].virtual_size, 40 * GIB);
-  const drive = vbds.find((b) => db.VDI[b.VDI].name_label === 'lvm-config-drive');
+  const drive = vbds.find((b) => db.VDI[b.VDI].name_label.startsWith('lvm-config-drive'));
   assert.deepEqual([drive.mode, drive.type, drive.userdevice, drive.bootable], ['RO', 'Disk', '2', false]);
   assert.equal(uploads.length, 1); assert.equal(uploads[0].path, '/import_raw_vdi'); assert.deepEqual(uploads[0].query, { vdi: drive.VDI, format: 'raw' }); assert.ok(uploads[0].body.includes(Buffer.from('$6$salt$hash')));
-  assert.equal(db.task[started.task], undefined, 'the task that carried the settings is gone');
+  assert.deepEqual(await h.task(call, { task: started.task }), done, 'asked again (a worker restart): the same answer, nothing done twice');
+  assert.equal(uploads.length, 1);
   assert.deepEqual(await h.clone(call, order), { vm: vm.uuid, existed: true });
   const found = (await h.find(call, { name: order.name })).vm;
   assert.deepEqual([found.moref, found.serverId, found.powerState, found.toolsRunning], [vm.uuid, serverId, 'poweredOff', false]);
@@ -223,5 +267,106 @@ test('the service wants its token and answers unsupported routes clearly', async
     assert.equal((await post('/v1/vm/firewall', { host: 'x', username: 'root' }))[1].code, 'PLATFORM_NOT_SUPPORTED');
     const missing = await post('/v1/vm/details', { host: 'x', username: 'root', vm: uuid(999) });
     assert.deepEqual([missing[0], missing[1].code], [404, 'VM_NOT_FOUND']);
+  } finally { server.close(); }
+});
+
+// ---- what an audit of the adapter found (each test fails against the code as it was) -------------------
+test('a copy whose answer or task was lost is finished by whoever finds it, and never handed out unfinished', async () => {
+  // The answer to /v1/vm/clone is lost while the copy runs: the same task is handed back, no second copy.
+  const a = pool(); a.db.slowCopy = true;
+  const first = await h.clone(a.call, order);
+  assert.deepEqual(await h.clone(a.call, order), { task: first.task, existed: false });
+  assert.equal(a.log.filter((m) => m === 'Async.VM.copy').length, 1);
+  assert.deepEqual(await h.find(a.call, { name: order.name }), { vm: null });
+  a.db.endCopy();
+  // XAPI forgot the task (a toolstack restart) before anyone asked: the copy is there, a template, unconfigured.
+  delete a.db.task[first.task];
+  assert.deepEqual(await h.task(a.call, { task: first.task }), { state: 'unknown', code: 'TASK_NOT_FOUND' });
+  const found = (await h.find(a.call, { name: order.name })).vm; // the worker looks for the VM next
+  const [, vm] = made(a.db);
+  assert.deepEqual([found.moref, found.serverId, vm.is_a_template, vm.VCPUs_max, vm.memory_static_max], [vm.uuid, serverId, false, 4, 4096 * MIB], 'find made it the server from what waited on the drive');
+  assert.equal(vm.VBDs.filter((x) => a.db.VDI[a.db.VBD[x].VDI].name_label.startsWith('lvm-config-drive')).length, 1);
+  assert.equal(a.uploads.length, 1, 'the drive written before the copy is the one attached');
+
+  // The same, found by a repeated clone: finished from the request (the drive is written anew, with a new MAC).
+  const b = pool(); b.db.slowCopy = true;
+  const t = await h.clone(b.call, order); b.db.endCopy(); delete b.db.task[t.task];
+  const again = await h.clone(b.call, order);
+  const [, vm2] = made(b.db);
+  assert.deepEqual([again, vm2.other_config['lightning.server-id'], vm2.is_a_template], [{ vm: vm2.uuid, existed: true }, serverId, false]);
+  assert.equal(Object.values(b.db.VDI).filter((v) => v.name_label.startsWith('lvm-config-drive')).length, 1, 'one drive, written twice: no 4 MiB disk left per attempt');
+  assert.deepEqual(onDrive(Object.values(b.db.VDI).find((v) => v.name_label.startsWith('lvm-config-drive')).image, '{"version":2').ethernets.eth0.match.macaddress, b.db.VIF[vm2.VIFs[0]].MAC);
+
+  // A copy that fails takes its drive (and the user data on it) along.
+  const c = pool(); c.db.slowCopy = true;
+  const failing = await h.clone(c.call, order); c.db.endCopy(['SR_FULL', '10', '5']);
+  assert.equal((await h.task(c.call, { task: failing.task })).code, 'INSUFFICIENT_RESOURCES');
+  assert.equal(Object.values(c.db.VDI).some((v) => v.name_label.startsWith('lvm-config-drive')), false);
+});
+
+test('a snapshot that carries the server\'s name is not taken for the server', async () => {
+  const { db, call } = pool();
+  await h.task(call, { task: (await h.clone(call, order)).task });
+  const [ref, vm] = made(db);
+  // Listed before the VM itself, as XAPI may.
+  db.VM = { 'OpaqueRef:snap-early': { uuid: uuid(77), name_label: order.name, is_a_snapshot: true, snapshot_of: ref, power_state: 'Halted', other_config: {}, VBDs: [], VIFs: [] }, ...db.VM };
+  assert.equal((await h.find(call, { name: order.name })).vm.moref, vm.uuid);
+  assert.deepEqual(await h.clone(call, order), { vm: vm.uuid, existed: true });
+});
+
+test('a guest with PV drivers but no guest utilities becomes ready after four minutes; it is not asked to shut down', async () => {
+  const { db, call } = pool();
+  await h.task(call, { task: (await h.clone(call, order)).task });
+  const [, vm] = made(db);
+  db.noTools = true; db.upFor = 30_000;
+  await h.powerAction(call, { vm: vm.uuid, action: 'on' });
+  assert.deepEqual((await h.find(call, { name: order.name })).vm.toolsRunning, false, 'a guest-metrics record without addresses is not "tools running"');
+  db.VM_metrics['OpaqueRef:vmm'].start_time = new Date(Date.now() - 300_000).toISOString().replace(/-|\.\d+/g, '');
+  const up = (await h.find(call, { name: order.name })).vm;
+  assert.deepEqual([up.toolsRunning, up.ips], [true, ['203.0.113.20']], 'ready with the addresses it was given');
+  await assert.rejects(h.powerAction(call, { vm: vm.uuid, action: 'shutdown' }), { code: 'TOOLS_NOT_RUNNING' }, 'said at once: the worker powers it off instead of waiting');
+  assert.match((await h.powerAction(call, { vm: vm.uuid, action: 'off' })).task, /^OpaqueRef:task-/);
+});
+
+test('destroy takes the snapshots and their disks along and reports a disk it could not remove', async () => {
+  const { db, call } = pool();
+  await h.task(call, { task: (await h.clone(call, order)).task });
+  const [, vm] = made(db);
+  db.old = true; // XAPI before 21.4.0: VM.snapshot takes two arguments
+  await h.snapshot(call, { vm: vm.uuid, action: 'create', name: 'one' });
+  await h.snapshot(call, { vm: vm.uuid, action: 'create', name: 'two' });
+  assert.equal(Object.values(db.VDI).filter((v) => v.is_a_snapshot).length, 4);
+  assert.deepEqual(await h.destroy(call, { vm: vm.uuid }), { task: '' });
+  assert.deepEqual(Object.values(db.VM).filter((v) => v.is_a_snapshot), [], 'no snapshot is left behind');
+  assert.deepEqual(Object.keys(db.VDI), ['OpaqueRef:vdi-t'], 'only the template\'s disk is left');
+
+  const b = pool();
+  await h.task(b.call, { task: (await h.clone(b.call, order)).task });
+  const [, vm2] = made(b.db);
+  b.db.stuck = b.db.VBD[vm2.VBDs[0]].VDI;
+  await assert.rejects(h.destroy(b.call, { vm: vm2.uuid }), { code: 'XAPI_ERROR', message: /not all of its disks.*VDI_IN_USE/ });
+  assert.equal(made(b.db), undefined, 'the VM itself is gone');
+});
+
+test('the address guard refuses the adapter\'s own networks unless they are allowed', () => {
+  const docker = { lo: [{ address: '127.0.0.1', cidr: '127.0.0.1/8', family: 'IPv4', internal: true }], eth0: [{ address: '172.18.0.5', cidr: '172.18.0.5/16', family: 'IPv4', internal: false }, { address: 'fd00:18::5', cidr: 'fd00:18::5/64', family: 'IPv6', internal: false }] };
+  const guard = addressGuard({}, docker);
+  assert.deepEqual([guard('172.18.0.3', 'ipv4'), guard('fd00:18::3', 'ipv6'), guard('127.0.0.1', 'ipv4'), guard('169.254.169.254', 'ipv4'), guard('203.0.113.9', 'ipv4'), guard('2001:db8::9', 'ipv6')], [false, false, false, false, true, true]);
+  const allowed = addressGuard({ XCPNG_ALLOW_NETWORKS: '172.18.0.0/16', XCPNG_DENY_NETWORKS: '203.0.113.0/24' }, docker);
+  assert.deepEqual([allowed('172.18.0.3', 'ipv4'), allowed('203.0.113.9', 'ipv4'), allowed('198.51.100.9', 'ipv4')], [true, false, true]);
+});
+
+test('a route that outlives its time is answered as TIMEOUT and its session is closed when the work ends, not under it', async () => {
+  const token = 't'.repeat(40);
+  let closed = 0, finish;
+  const transport = Object.assign(async () => ({}), { close: () => { closed += 1; } });
+  const slow = () => new Promise((r) => { finish = r; });
+  const server = http.createServer(handler(token, { transport, routes: { '/v1/slow': [slow, 0.05] } })).listen(0);
+  try {
+    const res = await fetch(`http://127.0.0.1:${server.address().port}/v1/slow`, { method: 'POST', headers: { authorization: `Bearer ${token}` }, body: JSON.stringify({ host: 'x', username: 'root' }) });
+    assert.deepEqual([res.status, (await res.json()).code], [502, 'TIMEOUT']);
+    assert.equal(closed, 0, 'the handler still runs: its session stays open');
+    finish({}); await new Promise((r) => setTimeout(r, 10));
+    assert.equal(closed, 1);
   } finally { server.close(); }
 });

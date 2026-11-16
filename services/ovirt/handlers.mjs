@@ -2,7 +2,10 @@
 // Oracle Linux Virtualization Manager). Ids the panel stores are the engine's own ids:
 //   VM, template, host   their id            compute and its "resource pool"   the cluster's id
 //   datastore            the data storage domain's id       network            the vNIC profile's id
-//   task                 "create:<vm id>" (a new VM is ready when it and its disks are no longer locked)
+//   task                 the engine hands out no task ids over REST, so a task is what to look at until it is settled:
+//                        "create:<vm>" (a new VM is ready when it and its disks are no longer locked), "remove:<vm>",
+//                        "disk:<disk>" (a disk being grown), "snapshot:<vm>:<snapshot>", "unsnap:<vm>:<snapshot>"
+//                        (a snapshot being removed), "restore:<vm>:<snapshot>"
 //   snapshot             "snapshot-<n>": a number made from the snapshot's id
 // A new server gets its settings from the engine's own cloud-init support: they are stored with the VM when it is
 // created and applied at its first start. Each function takes the api of one opened connection (engine.mjs).
@@ -20,6 +23,11 @@ const power = (s) => (['up', 'powering_up', 'migrating', 'reboot_in_progress', '
 const note = (serverId) => `Managed by Lightning VM (server ${serverId})`;
 const serverIdOf = (d) => /Managed by Lightning VM \(server ([0-9a-f-]{36})\)/.exec(d ?? '')?.[1];
 const numberOf = (id, mod = 1e12) => Number.parseInt(createHash('sha1').update(String(id)).digest('hex').slice(0, 11), 16) % mod;
+const no = (x) => x === false || x === 'false'; // the engine's JSON carries booleans as strings
+// Sockets and cores for a number of vCPUs. One core per socket while the engine takes that many sockets (CPU hot-plug
+// adds sockets): MaxNumOfVmSockets is 16 up to cluster level 4.5. Beyond it, the largest number of sockets up to 16
+// that divides the count, so sockets x cores is always exactly what was ordered (17 is one socket of 17 cores).
+const cpuTopology = (vcpu) => { let sockets = Math.min(vcpu, 16); while (vcpu % sockets) sockets -= 1; return { sockets, cores: vcpu / sockets, threads: 1 }; };
 const cpus = (vm) => { const t = vm.cpu?.topology ?? {}; return (num(t.sockets) || 1) * (num(t.cores) || 1) * (num(t.threads) || 1); };
 
 async function locate(api, id) {
@@ -73,7 +81,9 @@ export async function discover(api) {
       instanceUuid: String(info.instance_id ?? root.instance_id ?? '') },
     licenses: [], writeApi: 'available', privileges: {},
     operations: { inventory: true, createVm: true, cloneFromImage: true, power: true, resize: true, deleteVm: true, snapshot: true, console: false, firewall: false, automationApi: true },
-    warnings: [], hosts: hostList,
+    // The engine writes a new server's network under the interface name it is given, and the adapter has only
+    // "eth0" to give (initialization below): said with every discovery, so the admin knows what the images must do.
+    warnings: ['GUEST_NIC_NAME_ETH0'], hosts: hostList,
     datastores: domains.filter((d) => d.type === 'data').map((d) => ({ moref: d.id, name: d.name, type: d.storage?.type ?? '', capacityBytes: num(d.available) + num(d.used), freeBytes: num(d.available),
       uncommittedBytes: Math.max(0, num(d.committed) - num(d.used)), accessible: d.external_status !== 'error' && d.status !== 'inactive' && d.status !== 'unattached' && d.available !== undefined, maintenanceMode: d.status === 'maintenance' ? 'inMaintenance' : 'normal',
       hosts: hostList.filter((h) => h.connectionState === 'connected').map((h) => h.moref) })),
@@ -103,6 +113,11 @@ export function initialization(metadata, userdata) {
   if (nic) {
     const v4 = (nic.addresses ?? []).find((a) => !a.includes(':')), v6 = (nic.addresses ?? []).find((a) => a.includes(':'));
     const gw4 = (nic.routes ?? []).find((r) => r.to === 'default')?.via, gw6 = (nic.routes ?? []).find((r) => r.to === '::/0')?.via;
+    // The name is written into the guest's network configuration as it stands: the engine's config drive names each
+    // link by this name only (VmInitToOpenStackMetadataAdapter: id, name, type - no MAC address), and nothing in the
+    // REST API binds it to the NIC another way. An image whose kernel calls the interface enp1s0 or ens3 therefore
+    // gets no address: images for oVirt need classic names (net.ifnames=0) or one interface cloud-init can rename.
+    // Discovery says so (GUEST_NIC_NAME_ETH0) rather than the adapter guessing a name.
     const conf = { name: 'eth0', on_boot: true, boot_protocol: v4 ? 'static' : 'none' };
     if (v4) { const [address, bits] = v4.split('/'); conf.ip = { version: 'v4', address, netmask: maskOf(Number(bits) || 24), ...(gw4 && { gateway: gw4 }) }; }
     if (v6) { const [address, bits] = v6.split('/'); conf.ipv6_boot_protocol = 'static'; conf.ipv6 = { version: 'v6', address, netmask: String(bits || 64), ...(gw6 && { gateway: gw6 }) }; }
@@ -110,7 +125,13 @@ export function initialization(metadata, userdata) {
     const dns = (nic.nameservers?.addresses ?? []).filter((a) => /^[0-9a-f.:]+$/i.test(a));
     if (dns.length) out.dns_servers = dns.join(' ');
   }
-  if (Object.keys(rest).length) out.custom_script = JSON.stringify(rest);
+  // The engine dumps its own user data as block-style YAML and appends this text as it is (CloudInitHandler:
+  // userDataStr += vmInit.getCustomScript()). A JSON object after a block mapping is not YAML, and cloud-init then
+  // drops the whole document. So: one line per key, "key: <JSON value>" (a JSON value is a YAML flow value), on lines
+  // of their own. Keys the engine wrote as well (runcmd, chpasswd, ssh_pwauth, disable_root) are repeated here, later
+  // in the document, where the YAML reader of cloud-init lets the later one count.
+  const lines = Object.entries(rest).map(([k, v]) => `${/^[\w-]+$/.test(k) ? k : JSON.stringify(k)}: ${JSON.stringify(v)}`);
+  if (lines.length) out.custom_script = `\n${lines.join('\n')}\n`;
   return out;
 }
 
@@ -133,19 +154,37 @@ export async function clone(api, b) {
   const todo = { nic: b.network, ...(system && Number(b.diskGb) * GIB > num(system.disk.provisioned_size) && { disk: Number(b.diskGb) }), ...(Object.keys(init).length && { first: 1 }) };
   // A full, independent copy on the chosen storage domain; size, CPU and cloud-init are given at creation.
   const vm = await api('POST', '/vms?clone=true', { name: b.name, description: note(b.serverId ?? ''), comment: withMarks(todo), cluster: { id: b.pool }, template: { id: b.template },
-    ...(mem && { memory: mem, memory_policy: { guaranteed: mem, max: mem } }), ...(Number(b.vcpu) && { cpu: { topology: { sockets: Number(b.vcpu), cores: 1, threads: 1 } } }),
+    ...(mem && { memory: mem, memory_policy: { guaranteed: mem, max: mem } }), ...(Number(b.vcpu) && { cpu: { topology: cpuTopology(Number(b.vcpu)) } }),
     ...(Object.keys(init).length && { initialization: init }),
     disk_attachments: { disk_attachment: all.map((d) => ({ disk: { id: d.disk.id, format: 'cow', storage_domains: { storage_domain: [{ id: b.datastore }] } } })) } });
   return { task: `create:${vm.id}`, existed: false };
 }
 
+const got = (api, path) => api('GET', path).catch((e) => { if (e.code === 'VM_NOT_FOUND') return null; throw e; });
+const failed = (error) => ({ state: 'error', code: 'TASK_FAILED', error });
+const settled = (s) => (s.snapshot_status ?? 'ok') === 'ok';
+// What the engine is still busy with after it answered: each is read off the thing itself. The engine locks what it
+// works on before it answers, so "not locked and not as asked" is a failure, and the worker asks for the step again.
+const waits = {
+  async remove(api, id) { const vm = await got(api, `/vms/${id}`); return !vm ? { state: 'success' } : vm.status === 'image_locked' ? { state: 'running' } : failed('the engine kept the VM (see its events)'); },
+  async disk(api, id) { const d = await got(api, `/disks/${id}`); return !d || d.status === 'illegal' ? failed('the engine could not change the disk (see its events)') : d.status === 'ok' ? { state: 'success' } : { state: 'running' }; },
+  async snapshot(api, id, sub) { const sn = await got(api, `/vms/${id}/snapshots/${sub}`); return !sn ? failed('the engine did not keep the snapshot (see its events)') : settled(sn) ? { state: 'success' } : { state: 'running' }; },
+  async unsnap(api, id, sub) { const sn = await got(api, `/vms/${id}/snapshots/${sub}`); return !sn ? { state: 'success' } : settled(sn) ? failed('the engine kept the snapshot (see its events)') : { state: 'running' }; },
+  async restore(api, id) {
+    const vm = await got(api, `/vms/${id}`);
+    if (!vm) return failed('the VM is gone');
+    return vm.status === 'image_locked' || !list(await api('GET', `/vms/${id}/snapshots`), 'snapshot').every(settled) ? { state: 'running' } : { state: 'success' };
+  },
+};
+
 // The copy exists: its first interface goes onto the ordered network and its disk grows. One step per look, so a
 // change the engine is still busy with is waited for instead of run into.
 export async function task(api, b) {
-  const m = /^create:([0-9a-f-]{36})$/i.exec(String(b.task ?? ''));
-  if (!m) throw new Failure('INVALID_REQUEST', 'task is required');
+  const [, kind, id, sub] = /^(create|remove|disk|snapshot|unsnap|restore):([0-9a-f-]{36})(?::([0-9a-f-]{36}))?$/i.exec(String(b.task ?? '')) ?? [];
+  if (!kind) throw new Failure('INVALID_REQUEST', 'task is required');
+  if (kind !== 'create') return waits[kind](api, id, sub);
   let vm;
-  try { vm = await api('GET', `/vms/${m[1]}`); } catch (e) { if (e.code === 'VM_NOT_FOUND') return { state: 'error', code: 'TASK_FAILED', error: 'the engine did not keep the new VM (see its events)' }; throw e; }
+  try { vm = await api('GET', `/vms/${id}`); } catch (e) { if (e.code === 'VM_NOT_FOUND') return { state: 'error', code: 'TASK_FAILED', error: 'the engine did not keep the new VM (see its events)' }; throw e; }
   if (vm.status === 'image_locked') return { state: 'running' };
   const { system } = await disksOf(api, 'vms', vm.id);
   if (system && system.disk.status && system.disk.status !== 'ok') return system.disk.status === 'illegal' ? { state: 'error', code: 'TASK_FAILED', error: 'the disk copy failed' } : { state: 'running' };
@@ -158,8 +197,15 @@ export async function task(api, b) {
   }
   if (todo.disk) {
     const want = Number(todo.disk) * GIB;
-    if (system && want > num(system.disk.provisioned_size)) { await api('PUT', `/vms/${vm.id}/diskattachments/${system.att.id}`, { disk: { provisioned_size: want } }); return { state: 'running' }; }
-    delete todo.disk;
+    if (system && want > num(system.disk.provisioned_size)) {
+      // Asked once. The disk is locked while it grows (waited for above); unlocked again and no larger, the engine
+      // gave up (a full storage domain, usually): that is the answer, not a reason to ask on every look until the deadline.
+      if (todo.grow) return { state: 'error', code: 'INSUFFICIENT_RESOURCES', error: `the engine did not grow the disk to ${todo.disk} GiB (see its events)` };
+      await api('PUT', `/vms/${vm.id}/diskattachments/${system.att.id}`, { disk: { provisioned_size: want } });
+      await api('PUT', `/vms/${vm.id}`, { comment: withMarks({ ...todo, grow: 1 }) });
+      return { state: 'running' };
+    }
+    delete todo.disk; delete todo.grow;
     await api('PUT', `/vms/${vm.id}`, { comment: withMarks(todo) });
   }
   return { state: 'success', vm: vm.id };
@@ -194,16 +240,23 @@ export async function powerAction(api, b) {
 }
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+// Powered off (not asked nicely) and seen down; false when it is still not down after the tries. Gone counts as down.
+async function stopped(api, vm, tries) {
+  await api('POST', `/vms/${vm.id}/stop`, {}).catch(() => undefined);
+  for (let i = 0; i < tries; i++) { await sleep(1500); const now = await got(api, `/vms/${vm.id}`); if (!now || now.status === 'down') return true; }
+  return false;
+}
 export async function destroy(api, b) {
   let vm;
   try { vm = await locate(api, b.vm); } catch (e) { if (e.code === 'VM_NOT_FOUND') return { task: '', gone: true }; throw e; }
   managed(vm);
-  if (vm.status !== 'down') {
-    await api('POST', `/vms/${vm.id}/stop`, {}).catch(() => undefined);
-    for (let i = 0; i < 40; i++) { await sleep(1500); if ((await api('GET', `/vms/${vm.id}`)).status === 'down') break; }
-  }
-  await api('DELETE', `/vms/${vm.id}`); // with its disks
-  return { task: '' };
+  if (vm.status !== 'down' && vm.status !== 'image_locked') await stopped(api, vm, 40);
+  // With its disks. The answer may come while the engine is still removing (the VM then shows as image_locked), and
+  // a second request meanwhile is refused as busy: either way the removal is under way and "remove:<vm>" tells when
+  // the VM is really gone - the worker releases the server's addresses only then.
+  try { await api('DELETE', `/vms/${vm.id}`); }
+  catch (e) { if (e.code === 'VM_NOT_FOUND') return { task: '', gone: true }; if (e.code !== 'ENGINE_BUSY') throw e; }
+  return { task: `remove:${vm.id}` };
 }
 
 const snapshotsOf = async (api, id) => list(await api('GET', `/vms/${id}/snapshots`), 'snapshot').filter((s) => s.snapshot_type !== 'active');
@@ -217,9 +270,11 @@ export async function resize(api, b) {
   if (diskGb < now) throw new Failure('DISK_SHRINK_NOT_SUPPORTED', 'a disk cannot be made smaller');
   if (diskGb > now && (await snapshotsOf(api, vm.id)).length) throw new Failure('DISK_HAS_SNAPSHOTS', 'remove the snapshots before growing the disk');
   const mem = memoryMb * MIB;
-  await api('PUT', `/vms/${vm.id}`, { memory: mem, memory_policy: { guaranteed: mem, max: mem }, cpu: { topology: { sockets: vcpu, cores: 1, threads: 1 } } });
+  await api('PUT', `/vms/${vm.id}`, { memory: mem, memory_policy: { guaranteed: mem, max: mem }, cpu: { topology: cpuTopology(vcpu) } });
   if (diskGb > now) await api('PUT', `/vms/${vm.id}/diskattachments/${system.att.id}`, { disk: { provisioned_size: diskGb * GIB } });
-  return { task: '' };
+  // The engine answers at once and grows the disk afterwards, the VM locked meanwhile: the worker waits for the disk
+  // before it starts the server again.
+  return { task: diskGb > now ? `disk:${system.disk.id}` : '' };
 }
 
 export async function rename(api, b) {
@@ -274,15 +329,21 @@ export async function snapshot(api, b) {
   if (b.action === 'create') {
     const name = String(b.name ?? ''), description = String(b.description ?? '');
     if (!name || Buffer.byteLength(name) > 80 || Buffer.byteLength(description) > 500) throw new Failure('INVALID_REQUEST', 'name is 1 to 80 bytes, description at most 500');
-    await api('POST', `/vms/${vm.id}/snapshots`, { description: `${name}${description ? `\n${description}` : ''}`, persist_memorystate: false });
-    return { task: '' };
+    const made = await api('POST', `/vms/${vm.id}/snapshots`, { description: `${name}${description ? `\n${description}` : ''}`, persist_memorystate: false });
+    return { task: isId(made?.id) ? `snapshot:${vm.id}:${made.id}` : '' }; // answered while the snapshot is still locked
   }
   if (b.action !== 'revert' && b.action !== 'remove') throw new Failure('INVALID_REQUEST', 'unknown snapshot action');
   const target = (await snapshotsOf(api, vm.id)).find((s) => snapId(s) === b.snapshot);
   if (!target) throw new Failure('SNAPSHOT_NOT_FOUND', 'the snapshot is not in this VM');
-  if (b.action === 'revert') await api('POST', `/vms/${vm.id}/snapshots/${target.id}/restore`, {});
-  else await api('DELETE', `/vms/${vm.id}/snapshots/${target.id}`);
-  return { task: '' };
+  if (b.action === 'remove') { await api('DELETE', `/vms/${vm.id}/snapshots/${target.id}`); return { task: `unsnap:${vm.id}:${target.id}` }; }
+  // A restore already under way (a retry after a lost answer) is waited for, not asked for again.
+  if (vm.status === 'image_locked' || !settled(target)) return { task: `restore:${vm.id}:${target.id}` };
+  // The engine restores a snapshot only into a VM that is down ("Cannot preview Snapshot. At least one of the VMs
+  // is not down."). On the other platforms a revert of a snapshot without memory leaves the server off as well, and
+  // the worker starts it again when it was running: the same here, by powering it off first.
+  if (vm.status !== 'down' && !(await stopped(api, vm, 25))) throw new Failure('ENGINE_BUSY', 'the server is still stopping; the snapshot is restored once it is down');
+  await api('POST', `/vms/${vm.id}/snapshots/${target.id}/restore`, {});
+  return { task: `restore:${vm.id}:${target.id}` };
 }
 
 // ---- reading -------------------------------------------------------------------------------------
@@ -306,7 +367,7 @@ export async function details(api, b) {
     memory: { sizeMb: Math.floor(num(vm.memory) / MIB), hotAdd: num(vm.memory_policy?.max) > num(vm.memory), reservationMb: Math.floor(num(vm.memory_policy?.guaranteed) / MIB), limitMb: -1, shares: 0,
       guestUsageMb: Math.floor(num(stats['memory.used']) / MIB), hostUsageMb: Math.floor(num(stats['memory.installed']) / MIB), balloonedMb: 0, swappedMb: 0 },
     nics: nics.map((n, i) => { const dev = devices.find((d) => String(d.mac?.address).toLowerCase() === String(n.mac?.address).toLowerCase());
-      return { label: n.name ?? `Network adapter ${i + 1}`, adapter: n.interface ?? '', mac: n.mac?.address ?? '', macType: 'assigned', connected: up && n.linked !== false && n.plugged !== false, startConnected: n.plugged !== false,
+      return { label: n.name ?? `Network adapter ${i + 1}`, adapter: n.interface ?? '', mac: n.mac?.address ?? '', macType: 'assigned', connected: up && !no(n.linked) && !no(n.plugged), startConnected: !no(n.plugged),
         network: profiles[n.id]?.name ?? '', kind: 'standard', portKey: '', portgroupKey: '', switch: '', vlan: null, ips: dev ? list(dev.ips, 'ip').map((x) => String(x.address)) : [], guestConnected: dev ? true : null }; }),
     disks: all.map((d, i) => ({ label: `Hard disk ${i + 1}`, capacityGb: round2(num(d.disk.provisioned_size) / GIB), datastore: domains[i], file: d.disk.id, provisioning: d.disk.sparse === false || d.disk.sparse === 'false' ? 'thick-lazy' : 'thin',
       mode: 'persistent', controller: d.att.interface ?? '', bus: d.att.interface ?? '' })),

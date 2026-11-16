@@ -5,26 +5,38 @@ import { createHash, createHmac, randomBytes, randomUUID, X509Certificate } from
 import { lookup } from 'node:dns/promises';
 import https from 'node:https';
 import { BlockList, isIP } from 'node:net';
+import { networkInterfaces } from 'node:os';
 import tls from 'node:tls';
 
 export class Failure extends Error {
   constructor(code, message, extra) { super(message ?? code); this.code = code; Object.assign(this, extra); }
 }
 
-// Addresses the adapter never talks to (it sits on the panel's own network): loopback, link-local, unspecified
-// and multicast, unless HYPERV_ALLOW_NETWORKS (comma-separated CIDRs) says otherwise.
-const blocked = new BlockList();
-for (const [net, bits, family] of [['127.0.0.0', 8, 'ipv4'], ['169.254.0.0', 16, 'ipv4'], ['0.0.0.0', 8, 'ipv4'], ['224.0.0.0', 4, 'ipv4'], ['::1', 128, 'ipv6'], ['fe80::', 10, 'ipv6'], ['ff00::', 8, 'ipv6'], ['::', 128, 'ipv6']]) blocked.addSubnet(net, bits, family);
-const allowed = new BlockList();
-for (const cidr of (process.env.HYPERV_ALLOW_NETWORKS ?? '').split(',').map((x) => x.trim()).filter(Boolean)) {
-  const [net, bits] = cidr.split('/');
-  if (isIP(net)) allowed.addSubnet(net, Number(bits ?? (isIP(net) === 4 ? 32 : 128)), isIP(net) === 4 ? 'ipv4' : 'ipv6');
+// Addresses the adapter never talks to: loopback, link-local, unspecified and multicast, every subnet the container
+// itself has an interface on (PostgreSQL, Redis and the API live there) and HYPERV_DENY_NETWORKS, unless
+// HYPERV_ALLOW_NETWORKS (comma-separated CIDRs) says otherwise. The same rule as the VMware adapter's netguard.go.
+const csv = (s) => String(s ?? '').split(',').map((x) => x.trim()).filter(Boolean);
+const subnets = (cidrs) => {
+  const list = new BlockList();
+  for (const cidr of cidrs) {
+    const [net, bits] = String(cidr).split('/');
+    if (isIP(net)) list.addSubnet(net, Number(bits ?? (isIP(net) === 4 ? 32 : 128)), isIP(net) === 4 ? 'ipv4' : 'ipv6');
+  }
+  return list;
+};
+// permitted(address, family) for the given environment and interfaces (os.networkInterfaces(); tests hand in their own).
+export function addressGuard(env = process.env, interfaces = networkInterfaces()) {
+  const own = Object.values(interfaces ?? {}).flat().filter((i) => i && !i.internal && i.cidr).map((i) => i.cidr);
+  const blocked = subnets(['127.0.0.0/8', '169.254.0.0/16', '0.0.0.0/8', '224.0.0.0/4', '::1/128', 'fe80::/10', 'ff00::/8', '::/128', ...own, ...csv(env.HYPERV_DENY_NETWORKS)]);
+  const allowed = subnets(csv(env.HYPERV_ALLOW_NETWORKS));
+  return (address, family) => allowed.check(address, family) || !blocked.check(address, family);
 }
+const permitted = addressGuard();
 export async function guardedAddress(host) {
   const list = isIP(host) ? [{ address: host, family: isIP(host) }] : await lookup(host, { all: true }).catch(() => { throw new Failure('DNS_FAILED', `cannot resolve ${host}`); });
   for (const a of list) {
     const family = a.family === 6 ? 'ipv6' : 'ipv4';
-    if (blocked.check(a.address, family) && !allowed.check(a.address, family)) throw new Failure('ENDPOINT_BLOCKED', 'endpoint address is not permitted');
+    if (!permitted(a.address, family)) throw new Failure('ENDPOINT_BLOCKED', 'endpoint address is not permitted');
   }
   return list[0].address;
 }
@@ -173,7 +185,8 @@ export async function connect(target, { timeoutMs = 60_000, transport } = {}) {
   const { pin, ...trust } = tlsOptions(target.tls);
   const address = await guardedAddress(target.host);
   // One connection for the whole request: NTLM signs in a connection, not a request.
-  const agent = new https.Agent({ keepAlive: true, maxSockets: 1, ...trust, servername: isIP(target.host) ? undefined : target.host, lookup: (_h, _o, cb) => cb(null, address, isIP(address)) });
+  // No TLS session is kept for a later connection: a resumed one presents no certificate to hold against the pin.
+  const agent = new https.Agent({ keepAlive: true, maxSockets: 1, maxCachedSessions: 0, ...trust, servername: isIP(target.host) ? undefined : target.host, lookup: (_h, _o, cb) => cb(null, address, isIP(address)) });
   const url = `https://${target.host}:${port}/wsman`;
   const post = (xml, authorization) => new Promise((resolve, reject) => {
     const req = https.request({ agent, host: target.host, port, method: 'POST', path: '/wsman', timeout: timeoutMs + 15_000,
@@ -194,11 +207,13 @@ export async function connect(target, { timeoutMs = 60_000, transport } = {}) {
     req.on('error', (e) => reject(e));
     req.end(xml);
   });
-  let signedIn = false, basic = '';
+  let basic = '';
   const send = async (xml) => {
     try {
       let r = await post(xml, basic || undefined);
-      if (r.status === 401 && !signedIn) {
+      // NTLM signs a connection in, not a request: a 401 later on is as a rule a new socket (the host closed the idle
+      // one), not a wrong password. So every 401 is answered with one sign-in; only a 401 after that is a refusal.
+      if (r.status === 401) {
         const offered = [].concat(r.headers['www-authenticate'] ?? []).join(', ');
         if (/Negotiate|NTLM/i.test(offered)) {
           const scheme = /Negotiate/i.test(offered) ? 'Negotiate' : 'NTLM';
@@ -211,8 +226,7 @@ export async function connect(target, { timeoutMs = 60_000, transport } = {}) {
           r = await post(xml, basic);
         } else throw new Failure('NOT_WINRM', 'the server offers no sign-in method the adapter knows (NTLM or Basic over HTTPS)');
         if (r.status === 401) throw new Failure('INVALID_LOGIN', 'user name or password rejected');
-        signedIn = true;
-      } else if (r.status === 401) throw new Failure('INVALID_LOGIN', 'user name or password rejected');
+      }
       if (r.status !== 200 && !/Envelope/.test(r.text)) throw new Failure('NOT_WINRM', `no WinRM service answered at /wsman (HTTP ${r.status})`);
       return r;
     } catch (e) {
@@ -224,8 +238,11 @@ export async function connect(target, { timeoutMs = 60_000, transport } = {}) {
   const fault = (r) => { const text = tag(r.text, 'Text') ?? tag(r.text, 'Message') ?? `HTTP ${r.status}`; return /access is denied/i.test(text) ? new Failure('PERMISSION_DENIED', text) : new Failure('HYPERV_ERROR', `WinRM: ${text}`.slice(0, 300)); };
 
   const ps = async (script, { seconds = 110 } = {}) => {
+    // A shell nobody closed (the adapter stopped, the connection broke) counts against the account's shells on the
+    // host until it times out: three minutes without a request, rather than whatever the host is set to. While a
+    // script runs the adapter asks for its output every 20 seconds, so a shell in use is never idle that long.
     const opened = await send(envelope(url, 'http://schemas.xmlsoap.org/ws/2004/09/transfer/Create', { options: { WINRS_NOPROFILE: 'TRUE', WINRS_CODEPAGE: '65001' },
-      body: '<rsp:Shell><rsp:InputStreams>stdin</rsp:InputStreams><rsp:OutputStreams>stdout stderr</rsp:OutputStreams></rsp:Shell>' }));
+      body: '<rsp:Shell><rsp:IdleTimeOut>PT180.000S</rsp:IdleTimeOut><rsp:InputStreams>stdin</rsp:InputStreams><rsp:OutputStreams>stdout stderr</rsp:OutputStreams></rsp:Shell>' }));
     const shell = tag(opened.text, 'ShellId');
     if (opened.status !== 200 || !shell) throw fault(opened);
     try {

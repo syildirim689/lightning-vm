@@ -1,13 +1,19 @@
 #!/bin/bash
 # A pretend virt-clone: copies the template's folder under the new name with a new uuid and its own disk file.
+# As the real one does (virtinst/cloner.py), it defines the domain first and copies the disk after that, and takes
+# the domain away again when the copy fails (what was written of the disk stays). The new disk is a volume of the
+# pool ($FAKE/vols). Tests steer it with files: $FAKE/clone-slow (the copy waits while it is there), $FAKE/clone-fails.
 set -u
-while [ $# -gt 0 ]; do case "$1" in --original) o=$2; shift ;; --name) n=$2; shift ;; --file) f=$2; shift ;; --connect) shift ;; esac; shift; done
+while [ $# -gt 0 ]; do case "$1" in --original) o=$2; shift ;; --name) n=$2; shift ;; --file) f=$2; shift ;; --connect) shift ;; *) echo "ERROR    unrecognized arguments: $1" >&2; exit 1 ;; esac; shift; done
 [ -d "$FAKE/dom/$o" ] || { echo "ERROR    Domain '$o' was not found." >&2; exit 1; }
 [ -d "$FAKE/dom/$n" ] && { echo "ERROR    Domain name '$n' already in use" >&2; exit 1; }
 cp -r "$FAKE/dom/$o" "$FAKE/dom/$n"
 cat /proc/sys/kernel/random/uuid > "$FAKE/dom/$n/uuid"
-src=$(awk '$2 == "disk" { print $3; exit }' "$FAKE/dom/$o/disks")
-cp "$src" "$f"; cp "$src.size" "$f.size"
 printf 'vda disk %s\n' "$f" > "$FAKE/dom/$n/disks"
 : > "$FAKE/dom/$n/desc"
+src=$(while read -r t dev s; do [ "$dev" = disk ] && { printf '%s' "$s"; break; }; done < "$FAKE/dom/$o/disks")
+echo half > "$f"; echo "$f" >> "$FAKE/vols"
+while [ -f "$FAKE/clone-slow" ]; do sleep 0.1; done
+if [ -f "$FAKE/clone-fails" ]; then rm -rf "$FAKE/dom/$n"; echo "ERROR    Couldn't create storage volume '$n.qcow2': 'No space left on device'" >&2; exit 1; fi
+cp "$src" "$f"; cp "$src.size" "$f.size"
 echo "Clone '$n' created successfully."

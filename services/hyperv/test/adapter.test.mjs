@@ -5,8 +5,8 @@ import assert from 'node:assert/strict';
 import http from 'node:http';
 import * as h from '../handlers.mjs';
 import { CLONE_WORKER, names, script } from '../scripts.mjs';
-import { handler } from '../server.mjs';
-import { account, envelope, Failure, md4, ntlmAuthenticate, ntlmNegotiate, ntlmV2Hash, scriptFailure } from '../winrm.mjs';
+import { handler, routes } from '../server.mjs';
+import { account, addressGuard, envelope, Failure, md4, ntlmAuthenticate, ntlmNegotiate, ntlmV2Hash, scriptFailure } from '../winrm.mjs';
 
 const GIB = 1024 ** 3, MIB = 1024 ** 2;
 const guid = (n) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
@@ -76,7 +76,11 @@ test('a clone starts a background task on the host with the config drive and the
   const job = e.calls.at(-1)[1];
   assert.deepEqual([job.name, job.template, job.datastore, job.network, job.vcpu, job.memoryMb, job.diskGb], [order.name, guid(11), 'D', guid(5), 4, 4096, 40]);
   assert.equal(job.notes, `Managed by Lightning VM (server ${serverId})\nlvm-ips=203.0.113.20`);
+  // The interface gets an address made from the server's id (the same on every try), and the config drive names it by that.
+  assert.equal(job.mac, '021 55D'.replace(' ', '') + h.macOf(serverId).slice(9).replace(/:/g, '').toUpperCase()); assert.match(job.mac, /^02155D[0-9A-F]{6}$/);
+  await h.clone(e.ps, { ...order, name: 'lvm-again' }); assert.equal(e.calls.at(-1)[1].mac, job.mac, 'a retry gives the same address');
   const iso = Buffer.from(job.iso, 'base64');
+  assert.ok(iso.includes(Buffer.from(`"match":{"macaddress":"${h.macOf(serverId)}"}`)) && iso.includes(Buffer.from('"set-name":"eth0"')) && iso.includes(Buffer.from('"to":"0.0.0.0/0"')) && !iso.includes(Buffer.from('"to":"default"')));
   assert.equal(iso.subarray(16 * 2048 + 40, 16 * 2048 + 46).toString(), 'cidata'); assert.ok(iso.includes(Buffer.from('ssh-ed25519 AAAA test@host')));
   assert.equal(Buffer.from(job.worker, 'base64').toString(), CLONE_WORKER);
   assert.deepEqual(await h.task(e.ps, { task: started.task }), { state: 'running' });
@@ -91,6 +95,18 @@ test('a clone starts a background task on the host with the config drive and the
   await assert.rejects(h.clone(e.ps, { ...order, name: 'lvm-x', template: guid(999) }), { code: 'TEMPLATE_NOT_FOUND' });
   await assert.rejects(h.clone(e.ps, { ...order, name: 'lvm-bad name' }), { code: 'INVALID_REQUEST' }, 'a name that could break a path is refused before it reaches the host');
   await assert.rejects(h.clone(e.ps, { ...order, name: 'web1' }), { code: 'INVALID_REQUEST' });
+});
+
+test('the network settings are rewritten for a guest without netplan, and bound to the interface by its address', () => {
+  const panel = { version: 2, ethernets: { nic0: { match: { name: 'e*' }, addresses: ['203.0.113.20/24', '2001:db8::20/64'],
+    routes: [{ to: 'default', via: '203.0.113.1' }, { to: '::/0', via: '2001:db8::1', 'on-link': true }, { to: '10.0.0.0/8', via: '203.0.113.2' }], nameservers: { addresses: ['1.1.1.1'] } } } };
+  const before = JSON.stringify(panel);
+  assert.deepEqual(h.guestNetwork(panel, '02:15:5d:00:00:01'), { version: 2, ethernets: { eth0: { match: { macaddress: '02:15:5d:00:00:01' }, 'set-name': 'eth0', addresses: ['203.0.113.20/24', '2001:db8::20/64'],
+    routes: [{ to: '0.0.0.0/0', via: '203.0.113.1' }, { to: '10.0.0.0/8', via: '203.0.113.2' }], gateway6: '2001:db8::1', nameservers: { addresses: ['1.1.1.1'] } } } });
+  assert.equal(JSON.stringify(panel), before, 'what the panel sent is left alone');
+  assert.deepEqual(h.guestNetwork({ version: 2 }, 'x'), { version: 2 });
+  assert.match(h.macOf('a'), /^02:15:5d(:[0-9a-f]{2}){3}$/); assert.equal(h.macOf('a'), h.macOf('a')); assert.notEqual(h.macOf('a'), h.macOf('b'));
+  assert.equal(h.driveFiles(JSON.stringify({ network: panel }), '', 'id', '02:15:5d:00:00:01').files['network-config'].includes('"set-name":"eth0"'), true);
 });
 
 test('disks, snapshots, resize and delete', async () => {
@@ -141,6 +157,17 @@ test('every script carries its parameters, ends in one result line, and stays cl
     assert.ok(!s.includes('__BODY__') && !s.includes('__PARAMS__')); assert.ok(s.includes("'LVMOK '")); assert.ok(!/\$\{/.test(s), `${n}: no \${ in PowerShell`);
   }
   assert.ok(CLONE_WORKER.includes('__ID__') && CLONE_WORKER.includes('Add-VMDvdDrive'));
+  // Stop-VM has no -Id (its parameter sets are -Name and -VM): the detached shutdown hands the VM over.
+  assert.ok(!/Stop-VM -Id/.test(script('power')) && script('power').includes(`"Get-VM -Id '" + [string]$v.Id + "' | Stop-VM -Force`));
+  // The note that marks a finished VM is the worker's last change, after the config drive; a failure removes what was made.
+  assert.ok(CLONE_WORKER.indexOf('Set-VM -VM $vm -Notes $j.notes') > CLONE_WORKER.indexOf('Add-VMDvdDrive') && !/Set-VM @set[^\n]*Notes/.test(CLONE_WORKER));
+  assert.match(CLONE_WORKER, /catch \{[\s\S]*Remove-VM -VM \$_ -Force[\s\S]*Remove-Item -LiteralPath \$j\.dir -Recurse/);
+  assert.match(CLONE_WORKER, /Parameters\.ContainsKey\('AutomaticCheckpointsEnabled'\)/); assert.ok(!/-AutomaticCheckpointsEnabled/.test(CLONE_WORKER), 'never passed where Set-VM may not know it');
+  assert.ok(CLONE_WORKER.includes("'disk0' + $ext") && CLONE_WORKER.includes('Set-VMNetworkAdapter -StaticMacAddress $j.mac'));
+  // Deleting: no separate checkpoint merge, and a folder that stays is a failure.
+  assert.ok(!script('destroy').includes('Remove-VMSnapshot') && /Unfolder \$dir 15\)\) \{ Fail 'HYPERV_ERROR'/.test(script('destroy')));
+  // No addresses after four minutes: the given ones, also when the heartbeat is fine.
+  assert.match(script('find'), /if \(\$ips\.Count\) \{[^\n]*\n\s*elseif \(\$v\.Uptime\.TotalSeconds -gt 240\) \{ \$s\.toolsRunning = \$true; \$s\.ips = @\(GivenIps \$v\) \}/);
   assert.throws(() => script('nope'), /no such script/);
 });
 
@@ -173,6 +200,21 @@ test('script failures become contract codes; SOAP envelopes are escaped', () => 
   assert.ok(xml.includes('<w:Selector Name="ShellId">A&amp;B&lt;1&gt;</w:Selector>')); assert.ok(xml.includes('<w:Option Name="WINRS_CODEPAGE">65001</w:Option>')); assert.ok(xml.includes('<s:Body><rsp:Shell/></s:Body>'));
 });
 
+test('a route that ran out of time leaves its connection open until the work itself has ended', async () => {
+  const token = 't'.repeat(40), seen = [];
+  let finish; const held = new Promise((r) => { finish = r; });
+  const transport = Object.assign(async () => ({}), { named: async () => { seen.push('started'); await held; seen.push('ended'); return { vm: null }; }, close: () => seen.push('closed') });
+  const server = http.createServer(handler(token, { transport })).listen(0);
+  const kept = routes['/v1/vm/find']; routes['/v1/vm/find'] = [kept[0], 0.05];
+  try {
+    const r = await fetch(`http://127.0.0.1:${server.address().port}/v1/vm/find`, { method: 'POST', headers: { authorization: `Bearer ${token}` }, body: JSON.stringify({ host: 'x', username: 'administrator', name: 'lvm-slow' }) });
+    assert.deepEqual([r.status, (await r.json()).code], [502, 'TIMEOUT']);
+    assert.deepEqual(seen, ['started'], 'not closed under the handler that is still working');
+    finish(); await new Promise((r) => setTimeout(r, 20));
+    assert.deepEqual(seen, ['started', 'ended', 'closed']);
+  } finally { routes['/v1/vm/find'] = kept; server.close(); }
+});
+
 test('the service wants its token and answers unsupported routes clearly', async () => {
   const { ps } = host();
   const token = 't'.repeat(40);
@@ -186,4 +228,12 @@ test('the service wants its token and answers unsupported routes clearly', async
     const missing = await post('/v1/vm/details', { host: 'x', username: 'administrator', vm: guid(999) });
     assert.deepEqual([missing[0], missing[1].code], [404, 'VM_NOT_FOUND']);
   } finally { server.close(); }
+});
+
+test('the address guard refuses the adapter\'s own networks unless they are allowed', () => {
+  const docker = { lo: [{ address: '127.0.0.1', cidr: '127.0.0.1/8', family: 'IPv4', internal: true }], eth0: [{ address: '172.18.0.5', cidr: '172.18.0.5/16', family: 'IPv4', internal: false }, { address: 'fd00:18::5', cidr: 'fd00:18::5/64', family: 'IPv6', internal: false }] };
+  const guard = addressGuard({}, docker);
+  assert.deepEqual([guard('172.18.0.3', 'ipv4'), guard('fd00:18::3', 'ipv6'), guard('127.0.0.1', 'ipv4'), guard('169.254.169.254', 'ipv4'), guard('203.0.113.9', 'ipv4'), guard('2001:db8::9', 'ipv6')], [false, false, false, false, true, true]);
+  const allowed = addressGuard({ HYPERV_ALLOW_NETWORKS: '172.18.0.0/16', HYPERV_DENY_NETWORKS: '203.0.113.0/24' }, docker);
+  assert.deepEqual([allowed('172.18.0.3', 'ipv4'), allowed('203.0.113.9', 'ipv4'), allowed('198.51.100.9', 'ipv4')], [true, false, true]);
 });

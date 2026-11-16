@@ -5,26 +5,38 @@ import { createHash, X509Certificate } from 'node:crypto';
 import { lookup } from 'node:dns/promises';
 import https from 'node:https';
 import { BlockList, isIP } from 'node:net';
+import { networkInterfaces } from 'node:os';
 import tls from 'node:tls';
 
 export class Failure extends Error {
   constructor(code, message, extra) { super(message ?? code); this.code = code; Object.assign(this, extra); }
 }
 
-// Addresses the adapter never talks to (it sits on the panel's own network): loopback, link-local, unspecified
-// and multicast, unless PROXMOX_ALLOW_NETWORKS (comma-separated CIDRs) says otherwise.
-const blocked = new BlockList();
-for (const [net, bits, family] of [['127.0.0.0', 8, 'ipv4'], ['169.254.0.0', 16, 'ipv4'], ['0.0.0.0', 8, 'ipv4'], ['224.0.0.0', 4, 'ipv4'], ['::1', 128, 'ipv6'], ['fe80::', 10, 'ipv6'], ['ff00::', 8, 'ipv6'], ['::', 128, 'ipv6']]) blocked.addSubnet(net, bits, family);
-const allowed = new BlockList();
-for (const cidr of (process.env.PROXMOX_ALLOW_NETWORKS ?? '').split(',').map((x) => x.trim()).filter(Boolean)) {
-  const [net, bits] = cidr.split('/');
-  if (isIP(net)) allowed.addSubnet(net, Number(bits ?? (isIP(net) === 4 ? 32 : 128)), isIP(net) === 4 ? 'ipv4' : 'ipv6');
+// Addresses the adapter never talks to: loopback, link-local, unspecified and multicast, every subnet the container
+// itself has an interface on (PostgreSQL, Redis and the API live there) and PROXMOX_DENY_NETWORKS, unless
+// PROXMOX_ALLOW_NETWORKS (comma-separated CIDRs) says otherwise. The same rule as the VMware adapter's netguard.go.
+const csv = (s) => String(s ?? '').split(',').map((x) => x.trim()).filter(Boolean);
+const subnets = (cidrs) => {
+  const list = new BlockList();
+  for (const cidr of cidrs) {
+    const [net, bits] = String(cidr).split('/');
+    if (isIP(net)) list.addSubnet(net, Number(bits ?? (isIP(net) === 4 ? 32 : 128)), isIP(net) === 4 ? 'ipv4' : 'ipv6');
+  }
+  return list;
+};
+// permitted(address, family) for the given environment and interfaces (os.networkInterfaces(); tests hand in their own).
+export function addressGuard(env = process.env, interfaces = networkInterfaces()) {
+  const own = Object.values(interfaces ?? {}).flat().filter((i) => i && !i.internal && i.cidr).map((i) => i.cidr);
+  const blocked = subnets(['127.0.0.0/8', '169.254.0.0/16', '0.0.0.0/8', '224.0.0.0/4', '::1/128', 'fe80::/10', 'ff00::/8', '::/128', ...own, ...csv(env.PROXMOX_DENY_NETWORKS)]);
+  const allowed = subnets(csv(env.PROXMOX_ALLOW_NETWORKS));
+  return (address, family) => allowed.check(address, family) || !blocked.check(address, family);
 }
+const permitted = addressGuard();
 export async function guardedAddress(host) {
   const list = isIP(host) ? [{ address: host, family: isIP(host) }] : await lookup(host, { all: true }).catch(() => { throw new Failure('DNS_FAILED', `cannot resolve ${host}`); });
   for (const a of list) {
     const family = a.family === 6 ? 'ipv6' : 'ipv4';
-    if (blocked.check(a.address, family) && !allowed.check(a.address, family)) throw new Failure('ENDPOINT_BLOCKED', 'endpoint address is not permitted');
+    if (!permitted(a.address, family)) throw new Failure('ENDPOINT_BLOCKED', 'endpoint address is not permitted');
   }
   return list[0].address;
 }
@@ -88,7 +100,9 @@ export async function connect(target, { timeoutMs = 25_000, transport } = {}) {
   const port = Number(target.port) || 8006;
   const { pin, ...trust } = tlsOptions(target.tls);
   const address = await guardedAddress(target.host);
-  const agent = new https.Agent({ keepAlive: true, maxSockets: 4, ...trust, servername: isIP(target.host) ? undefined : target.host, lookup: (_h, _o, cb) => cb(null, address, isIP(address)) });
+  // No TLS session cache: a resumed session comes without the peer's certificate, so a second socket (calls made
+  // side by side) could not be checked against the pin, and was refused as a mismatch.
+  const agent = new https.Agent({ keepAlive: true, maxSockets: 4, maxCachedSessions: 0, ...trust, servername: isIP(target.host) ? undefined : target.host, lookup: (_h, _o, cb) => cb(null, address, isIP(address)) });
   const headers = {};
   const call = (method, path, params) => new Promise((resolve, reject) => {
     const query = method === 'GET' || method === 'DELETE' ? params : undefined;

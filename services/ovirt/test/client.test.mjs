@@ -23,14 +23,25 @@ try {
 const skip = !cert && 'openssl is not available';
 const pin = cert ? createHash('sha256').update(new X509Certificate(cert).raw).digest('hex') : '';
 
+// The engine's sessions (RestApiSessionMgmtFilter): a call with a valid JSESSIONID cookie is not a login; a call with
+// "Prefer: persistent-auth" keeps (or opens) a session and names it in a cookie; a call without it logs out when it is done.
+const logins = [], sessions = new Set();
 async function fake(seen) {
   const server = https.createServer({ key, cert }, (req, res) => {
     const chunks = [];
     req.on('data', (c) => chunks.push(c));
     req.on('end', () => {
       seen.push({ method: req.method, url: req.url, version: req.headers.version, accept: req.headers.accept, type: req.headers['content-type'], body: Buffer.concat(chunks).toString() });
-      const json = (status, o) => { res.writeHead(status, { 'content-type': 'application/json' }); res.end(JSON.stringify(o)); };
-      if (req.headers.authorization !== `Basic ${Buffer.from('admin@internal:right').toString('base64')}`) return json(401, {});
+      let session = /JSESSIONID=([\w-]+)/.exec(req.headers.cookie ?? '')?.[1];
+      if (!sessions.has(session)) {
+        session = undefined;
+        if (req.headers.authorization !== `Basic ${Buffer.from('admin@internal:right').toString('base64')}`) { res.writeHead(401, { 'content-type': 'application/json' }); return res.end('{}'); }
+        logins.push(req.url);
+      }
+      const keep = /persistent-auth/.test(req.headers.prefer ?? '');
+      if (keep && !session) { session = `s-${logins.length}`; sessions.add(session); } else if (!keep) { sessions.delete(session); session = undefined; }
+      const json = (status, o) => { res.writeHead(status, { 'content-type': 'application/json', ...(keep && { 'set-cookie': [`JSESSIONID=${session}; Path=/ovirt-engine/api; Secure; HttpOnly`] }) }); res.end(JSON.stringify(o)); };
+      if (req.url === '/ovirt-engine/api/vms/down/start') return json(409, { reason: 'Operation Failed', detail: '[Cannot run VM because the VM is in Up status.]' });
       if (req.url === '/ovirt-engine/api') return json(200, { product_info: { name: 'oVirt Engine', version: { full_version: '4.5.6' } } });
       if (req.url === '/ovirt-engine/api/vms/missing') return json(404, { reason: 'Not Found', detail: 'Entity not found: VM' });
       if (req.url === '/ovirt-engine/api/vms/busy/start') return json(409, { reason: 'Operation Failed', detail: '[Cannot run VM. VM is locked.]' });
@@ -50,8 +61,20 @@ test('the account goes with every call as JSON for API version 4; faults become 
     await api('PUT', '/vms/1', { memory: 1024 });
     assert.deepEqual([seen.at(-1).version, seen.at(-1).accept, seen.at(-1).type, seen.at(-1).body], ['4', 'application/json', 'application/json', '{"memory":1024}']);
     await assert.rejects(api('GET', '/vms/missing'), { code: 'VM_NOT_FOUND' });
-    await assert.rejects(api('POST', '/vms/busy/start', {}), { code: 'INVALID_STATE' });
-    api.close();
+    await assert.rejects(api('POST', '/vms/busy/start', {}), { code: 'ENGINE_BUSY' }, 'locked passes: tried again');
+    await assert.rejects(api('POST', '/vms/down/start', {}), { code: 'INVALID_STATE' });
+    assert.deepEqual([logins.length, sessions.size], [1, 1], 'one login for all the calls of a request');
+    await api.close();
+    assert.deepEqual([logins.length, sessions.size, seen.at(-1).url], [1, 0, '/ovirt-engine/api'], 'and the session is ended, not left to time out');
+  } finally { server.close(); }
+});
+
+test('calls made side by side over a pinned connection are all accepted (each new socket shows its certificate)', { skip }, async () => {
+  const seen = []; const { server, port } = await fake(seen);
+  try {
+    const api = await connect({ host: '127.0.0.1', port, username: 'admin@internal', password: 'right', tls: { mode: 'pinned', sha256: pin } });
+    assert.equal((await Promise.all(['/clusters', '/hosts', '/storagedomains', '/vnicprofiles', '/networks', '/vms'].map((p) => api('GET', p)))).length, 6);
+    await api.close();
   } finally { server.close(); }
 });
 

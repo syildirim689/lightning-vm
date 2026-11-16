@@ -2,12 +2,16 @@
 // Ids the panel stores are XAPI uuids (stable for the life of the object):
 //   VM, template, host, datastore (storage repository), network   their uuid
 //   compute and its "resource pool"                              the pool's uuid (a pool is one compute resource)
-//   task                                                         the XAPI task reference
+//   task                                                         the XAPI task reference (a copy's task carries the new
+//                                                                VM's name, so a repeated clone finds it; nothing else)
 //   snapshot                                                     "snapshot-<n>": n is kept on the snapshot
 // A new server gets its settings from a cloud-init NoCloud config drive (iso.mjs), so everything in the worker's
-// cloud-config arrives: network, host name, SSH keys, root password, files and first-boot commands.
+// cloud-config arrives: network, host name, SSH keys, root password, files and first-boot commands. The drive is
+// written before the copy starts and also carries (in its other_config, without the secrets) what the copy still
+// needs to become that server, so the work can be finished by whoever sees the copy first: /v1/task, a repeated
+// clone, or find - also after a lost answer, a toolstack restart or a task XAPI has forgotten.
 // Each function takes the call of one opened session (xapi.mjs connect) and the request body.
-import { createHash } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import { configDrive } from './iso.mjs';
 import { Failure } from './xapi.mjs';
 
@@ -15,7 +19,7 @@ const PREFIX = 'lvm-';
 const MIB = 1024 * 1024, GIB = 1024 * MIB;
 const NULL = 'OpaqueRef:NULL';
 const DRIVE = 'lvm-config-drive';
-const PENDING = 'lvm-pending';
+const PENDING = 'lvm-pending', COPY = 'lvm-copy', OWNER = 'lightning.vm-name', MARK = 'lightning.server-id';
 const power = (s) => (s === 'Running' ? 'poweredOn' : s === 'Suspended' || s === 'Paused' ? 'suspended' : 'poweredOff');
 const round2 = (n) => Math.round(n * 100) / 100;
 const real = (v) => !v.is_control_domain && !v.is_a_snapshot && !v.is_default_template;
@@ -26,6 +30,12 @@ const date = (x) => { const t = typeof x === 'string' ? x : x?.['$date'] ?? ''; 
 async function vmRef(call, uuid) {
   if (!isUuid(uuid)) throw new Failure('INVALID_REQUEST', 'vm is required');
   try { return await call('VM.get_by_uuid', uuid); } catch (e) { if (e.code === 'VM_NOT_FOUND') throw new Failure('VM_NOT_FOUND', 'the VM no longer exists'); throw e; }
+}
+// The VMs of that name. XAPI lists snapshots (and the control domain) as VMs too: they are never the VM asked for.
+async function named(call, name) {
+  const out = [];
+  for (const ref of await call('VM.get_by_name_label', name)) { const vm = await call('VM.get_record', ref); if (!vm.is_a_snapshot && !vm.is_control_domain) out.push({ ref, vm }); }
+  return out;
 }
 async function locate(call, uuid) { const ref = await vmRef(call, uuid); return { ref, vm: await call('VM.get_record', ref) }; }
 const managed = (vm) => { if (!String(vm.name_label ?? '').startsWith(PREFIX)) throw new Failure('NOT_MANAGED', 'this VM was not created by the panel'); };
@@ -38,21 +48,24 @@ async function disksOf(call, vm) {
     const vbd = await call('VBD.get_record', ref);
     if (vbd.type !== 'Disk' || vbd.VDI === NULL) continue;
     const vdi = await call('VDI.get_record', vbd.VDI);
-    out.push({ ref, vbd, vdi, device: Number(vbd.userdevice), drive: vdi.name_label === DRIVE });
+    out.push({ ref, vbd, vdi, device: Number(vbd.userdevice), drive: String(vdi.name_label ?? '').startsWith(DRIVE) });
   }
   out.sort((a, b) => a.device - b.device);
   const all = out.filter((d) => !d.drive);
-  return { all, system: all[0], drive: out.find((d) => d.drive) };
+  return { all, system: all[0], drive: out.find((d) => d.drive), every: out };
 }
 const guestIps = (networks = {}) => [...new Set(Object.entries(networks).filter(([k]) => /\/ip(v6\/\d+)?$/.test(k)).map(([, v]) => String(v)).filter((a) => a && !/^fe80:/i.test(a)))];
 // A VM as the worker watches it. Without guest tools nothing reports from inside: a server that has been running
 // for four minutes then counts as ready with the addresses it was given, so it is not stuck "starting" for ever.
+// "Tools" means addresses reported from inside: a stock cloud image has the PV drivers in its kernel (XAPI then keeps
+// a guest-metrics record for it) but no guest utilities, so the record alone says nothing and the four minutes apply.
 async function state(call, vm, withGuest) {
   const out = { moref: vm.uuid, name: vm.name_label, powerState: power(vm.power_state), toolsRunning: false, ips: [] };
-  const id = vm.other_config?.['lightning.server-id']; if (id) out.serverId = id;
+  const id = vm.other_config?.[MARK]; if (id) out.serverId = id;
   if (!withGuest || vm.power_state !== 'Running') return out;
   const gm = vm.guest_metrics && vm.guest_metrics !== NULL ? await call('VM_guest_metrics.get_record', vm.guest_metrics).catch(() => null) : null;
-  if (gm && (gm.live || gm.PV_drivers_detected || Object.keys(gm.networks ?? {}).length)) { out.toolsRunning = true; out.ips = guestIps(gm.networks); return out; }
+  const seen = guestIps(gm?.networks);
+  if (seen.length) { out.toolsRunning = true; out.ips = seen; return out; }
   const started = vm.metrics && vm.metrics !== NULL ? await call('VM_metrics.get_record', vm.metrics).then((m) => date(m.start_time).getTime(), () => 0) : 0;
   if (started && Date.now() - started > 240_000) { out.toolsRunning = true; out.ips = String(vm.other_config?.['lightning.ips'] ?? '').split(',').filter(Boolean); }
   return out;
@@ -97,21 +110,82 @@ export async function discover(call) {
 }
 
 // ---- provisioning --------------------------------------------------------------------------------
+// The worker's network document was written for VMware's datasource (netplan in the guest). On a config drive it
+// is also read by cloud-init's own renderers (EL with NetworkManager, Debian without netplan), and cloud-init 22.4
+// there refuses "to: default", turns an IPv6 default route into a /64 one and takes the ethernets key as the
+// interface name instead of matching by name (seen on a real Debian 12; the same rewrite as services/incus). So the
+// default routes become 0.0.0.0/0 and gateway6, and the one interface is bound to the MAC address its VIF gets, under
+// the key and set-name eth0: cloud-init renames the NIC with that MAC before any renderer runs (net/__init__.py,
+// extract_physdevs) and netplan matches it itself, whatever the guest's kernel would have called it.
+export function guestNetwork(network, mac) {
+  const out = structuredClone(network), nics = {}, entries = Object.entries(out?.ethernets ?? {});
+  for (const [key, nic] of entries) {
+    const routes = [];
+    for (const r of Array.isArray(nic?.routes) ? nic.routes : []) {
+      const v6 = String(r?.via ?? '').includes(':');
+      if (r?.to === '::/0' || (r?.to === 'default' && v6)) nic.gateway6 = r.via;
+      else routes.push(r?.to === 'default' ? { ...r, to: '0.0.0.0/0' } : r);
+    }
+    if (routes.length) nic.routes = routes; else delete nic.routes;
+    if (mac && entries.length === 1) { nic.match = { macaddress: mac.toLowerCase() }; nic['set-name'] = 'eth0'; nics.eth0 = nic; } else nics[key] = nic;
+  }
+  if (out?.ethernets) out.ethernets = nics;
+  return out;
+}
 // The worker's two documents as the three files of a NoCloud config drive. Its meta-data carries the network the
 // way VMware's datasource wants it; NoCloud reads the network from a file of its own.
-export function driveFiles(metadata, userdata, serverId) {
+export function driveFiles(metadata, userdata, serverId, mac) {
   let meta = {}; try { meta = JSON.parse(metadata || '{}'); } catch { /* not JSON */ }
   const { network, ...rest } = meta;
   const files = { 'meta-data': `${JSON.stringify({ 'instance-id': serverId, ...rest })}\n`, 'user-data': String(userdata || '#cloud-config\n{}\n') };
-  if (network) files['network-config'] = `${JSON.stringify(network)}\n`;
+  if (network) files['network-config'] = `${JSON.stringify(guestNetwork(network, mac))}\n`;
   return { files, ips: (Object.values(network?.ethernets ?? {})[0]?.addresses ?? []).map((a) => String(a).split('/')[0]) };
+}
+// The MAC address is chosen here (locally administered, unicast: what XAPI generates too), because the drive that
+// names it is written before the VIF exists.
+const newMac = () => { const b = randomBytes(6); b[0] = (b[0] & 0xfe) | 0x02; return [...b].map((x) => x.toString(16).padStart(2, '0')).join(':'); };
+// What the request says the copy must become: `p` without secrets (it is kept on the drive), `files` with them.
+function plan(b) {
+  const mac = newMac(), { files, ips } = driveFiles(b.metadata, b.userdata, b.serverId ?? '', mac);
+  return { files, p: { vcpu: b.vcpu, memoryMb: b.memoryMb, diskGb: b.diskGb, network: b.network, serverId: b.serverId ?? '', nestedHv: !!b.nestedHv, mac, ips } };
+}
+
+// The config drive made for the VM of that name: found again by its label and its tag (so a retry writes the same
+// one instead of leaving a 4 MiB disk behind each time).
+async function driveOf(call, name) {
+  for (const ref of await call('VDI.get_by_name_label', `${DRIVE} ${name}`)) { const vdi = await call('VDI.get_record', ref); if (vdi.other_config?.[OWNER] === name && !vdi.is_a_snapshot) return { ref, vdi }; }
+  return null;
+}
+const pendingOf = (vdi) => { try { return JSON.parse(Buffer.from(vdi.other_config[PENDING], 'base64').toString('utf8')); } catch { return null; } };
+async function writeDrive(call, sr, name, p, files) {
+  const image = configDrive(files), other = { [OWNER]: name, [PENDING]: Buffer.from(JSON.stringify(p)).toString('base64') };
+  let d = await driveOf(call, name);
+  // Left on another storage by an earlier attempt (the worker picks the datastore anew): not attached to anything yet.
+  if (d && d.vdi.SR !== sr && !(d.vdi.VBDs ?? []).length) { await call('VDI.destroy', d.ref); d = null; }
+  if (d) await call('VDI.set_other_config', d.ref, { ...d.vdi.other_config, ...other });
+  else d = { ref: await call('VDI.create', { name_label: `${DRIVE} ${name}`, name_description: 'cloud-init settings of this server (Lightning VM)', SR: sr, virtual_size: Math.max(image.length, 4 * MIB), type: 'user',
+    sharable: false, read_only: false, other_config: other, xenstore_data: {}, sm_config: {}, tags: [] }) };
+  await call.put('/import_raw_vdi', { vdi: d.ref, format: 'raw' }, image);
+  return d.ref;
+}
+// A copy of that name that still runs. Its task is handed back instead of starting a second copy, and nobody
+// touches a VM that is still being written.
+async function copying(call, name) {
+  return Object.entries(await call('task.get_all_records')).find(([, t]) => t.status === 'pending' && t.other_config?.[COPY] === name)?.[0] ?? null;
 }
 
 export async function clone(call, b) {
   if (!String(b.name ?? '').startsWith(PREFIX) || !b.template || !b.pool || !b.datastore || !b.network) throw new Failure('INVALID_REQUEST', 'name, template, pool, datastore and network are required');
   if (b.customization === 'appliance') throw new Failure('PROVISIONING_NOT_SUPPORTED', 'appliance images (nested ESXi) need VMware');
-  const [earlier] = await call('VM.get_by_name_label', b.name);
-  if (earlier) return { vm: (await call('VM.get_record', earlier)).uuid, existed: true };
+  const running = await copying(call, b.name);
+  if (running) return { task: running, existed: false };
+  const [earlier] = await named(call, b.name);
+  if (earlier) {
+    // A copy nobody finished (the answer was lost and the task forgotten): it becomes the server now, from this
+    // request, rather than being handed out with the template's size and network and no settings.
+    if (!earlier.vm.other_config?.[MARK]) { const { p, files } = plan(b); await finishClone(call, earlier.ref, p, files); }
+    return { vm: earlier.vm.uuid, existed: true };
+  }
   const template = await byUuid(call, 'VM', b.template, 'TEMPLATE_NOT_FOUND');
   const tvm = await call('VM.get_record', template);
   if (!(tvm.VIFs ?? []).length) throw new Failure('TEMPLATE_HAS_NO_NIC', 'the template has no network interface');
@@ -119,22 +193,25 @@ export async function clone(call, b) {
   if (system && Number(b.diskGb) > 0 && Number(b.diskGb) * GIB < Number(system.vdi.virtual_size)) throw new Failure('DISK_SMALLER_THAN_TEMPLATE', 'the disk is smaller than the template');
   const sr = await byUuid(call, 'SR', b.datastore, 'DATASTORE_NOT_FOUND');
   await byUuid(call, 'network', b.network, 'NETWORK_NOT_FOUND');
-  // A full copy onto the chosen storage. What the new VM still needs travels with the task until the copy ends.
+  // The drive first: the user data (a password hash, scripts, a token) lives on it and nowhere else - not in a task
+  // record, which any pool user can read and XAPI throws away when it likes.
+  const { p, files } = plan(b);
+  await writeDrive(call, sr, b.name, p, files);
+  // A full copy onto the chosen storage.
   const task = await call('Async.VM.copy', template, b.name, sr);
-  const pending = { vcpu: b.vcpu, memoryMb: b.memoryMb, diskGb: b.diskGb, network: b.network, serverId: b.serverId ?? '', nestedHv: !!b.nestedHv, metadata: b.metadata ?? '', userdata: b.userdata ?? '' };
-  await call('task.add_to_other_config', task, PENDING, Buffer.from(JSON.stringify(pending)).toString('base64'));
+  await call('task.add_to_other_config', task, COPY, b.name);
   return { task, existed: false };
 }
 
 const blank = { other_config: {}, qos_algorithm_type: '', qos_algorithm_params: {} };
 // The copy is there: it becomes a VM of the right size on the right network, with its config drive. Every step
-// looks at what is already so, so a retry after a half-done run carries on.
-async function finishClone(call, ref, p) {
+// looks at what is already so, so a retry after a half-done run carries on. `files` (only a clone request has
+// them) writes the drive anew; without them the drive written before the copy is attached. The marker comes last:
+// a VM without it is an unfinished copy to everyone who finds it.
+async function finishClone(call, ref, p, files) {
   let vm = await call('VM.get_record', ref);
   if (vm.is_a_template) { await call('VM.provision', ref); vm = await call('VM.get_record', ref); }
   await call('VM.set_name_description', ref, note(p.serverId));
-  const { files, ips } = driveFiles(p.metadata, p.userdata, p.serverId);
-  await call('VM.set_other_config', ref, { ...vm.other_config, 'lightning.server-id': p.serverId, 'lightning.ips': ips.join(',') });
   const vcpu = Number(p.vcpu) || 0, mem = (Number(p.memoryMb) || 0) * MIB;
   if (vcpu) {
     // The maximum may never be below what the VM starts with: raise it first, or lower it last.
@@ -146,20 +223,22 @@ async function finishClone(call, ref, p) {
   const network = await byUuid(call, 'network', p.network, 'NETWORK_NOT_FOUND');
   const vifs = await Promise.all((vm.VIFs ?? []).map(async (r) => ({ ref: r, vif: await call('VIF.get_record', r) })));
   const first = vifs.sort((a, c) => Number(a.vif.device) - Number(c.vif.device))[0];
-  if (!first || first.vif.network !== network) {
+  // The first interface: on the ordered network, with the MAC address the drive's network-config is bound to.
+  if (!first || first.vif.network !== network || (p.mac && String(first.vif.MAC).toLowerCase() !== p.mac)) {
     if (first) await call('VIF.destroy', first.ref);
-    await call('VIF.create', { ...blank, device: first?.vif.device ?? '0', network, VM: ref, MAC: '', MTU: 1500, locking_mode: 'network_default', ipv4_allowed: [], ipv6_allowed: [] });
+    await call('VIF.create', { ...blank, device: first?.vif.device ?? '0', network, VM: ref, MAC: p.mac ?? '', MTU: 1500, locking_mode: 'network_default', ipv4_allowed: [], ipv6_allowed: [] });
   }
   const { system, drive } = await disksOf(call, vm);
   if (system && p.diskGb && Number(p.diskGb) * GIB > Number(system.vdi.virtual_size)) await call('VDI.resize', system.vbd.VDI, Number(p.diskGb) * GIB);
-  if (!drive && system) {
-    const image = configDrive(files);
-    const vdi = await call('VDI.create', { name_label: DRIVE, name_description: 'cloud-init settings of this server (Lightning VM)', SR: system.vdi.SR, virtual_size: Math.max(image.length, 4 * MIB), type: 'user',
-      sharable: false, read_only: false, other_config: {}, xenstore_data: {}, sm_config: {}, tags: [] });
-    await call.put('/import_raw_vdi', { vdi, format: 'raw' }, image);
-    const free = (await call('VM.get_allowed_VBD_devices', ref)).map(Number).filter((n) => n >= 2).sort((a, c) => a - c)[0] ?? 3;
-    await call('VBD.create', { ...blank, VM: ref, VDI: vdi, userdevice: String(free), bootable: false, mode: 'RO', type: 'Disk', unpluggable: true, empty: false });
+  if (system) {
+    const vdi = files ? await writeDrive(call, system.vdi.SR, vm.name_label, p, files) : drive?.vbd.VDI ?? (await driveOf(call, vm.name_label))?.ref;
+    if (!vdi) throw new Failure('XAPI_ERROR', 'the config drive of this server is missing');
+    if (!drive) {
+      const free = (await call('VM.get_allowed_VBD_devices', ref)).map(Number).filter((n) => n >= 2).sort((a, c) => a - c)[0] ?? 3;
+      await call('VBD.create', { ...blank, VM: ref, VDI: vdi, userdevice: String(free), bootable: false, mode: 'RO', type: 'Disk', unpluggable: true, empty: false });
+    }
   }
+  await call('VM.set_other_config', ref, { ...vm.other_config, [MARK]: p.serverId, 'lightning.ips': (p.ips ?? []).join(',') });
 }
 
 const fault = (code) => (code === 'VM_BAD_POWER_STATE' || code === 'OTHER_OPERATION_IN_PROGRESS' || code === 'OPERATION_NOT_ALLOWED' ? 'INVALID_STATE' : code === 'RBAC_PERMISSION_DENIED' ? 'PERMISSION_DENIED'
@@ -170,19 +249,34 @@ export async function task(call, b) {
   let t;
   try { t = await call('task.get_record', ref); } catch (e) { if (e.code === 'VM_NOT_FOUND') return { state: 'unknown', code: 'TASK_NOT_FOUND' }; throw e; }
   if (t.status === 'pending' || t.status === 'cancelling') return { state: 'running' };
-  if (t.status !== 'success') { const [code, ...rest] = t.error_info ?? []; return { state: 'error', code: fault(code), error: [code, ...rest].filter(Boolean).join(' ') || t.status }; }
+  if (t.status !== 'success') {
+    const [code, ...rest] = t.error_info ?? [];
+    // A copy that failed has no VM to carry its drive: the drive (and the settings on it) goes too.
+    const left = t.other_config?.[COPY] ? await driveOf(call, t.other_config[COPY]).catch(() => null) : null;
+    if (left && !(left.vdi.VBDs ?? []).length) await call('VDI.destroy', left.ref).catch(() => undefined);
+    return { state: 'error', code: fault(code), error: [code, ...rest].filter(Boolean).join(' ') || t.status };
+  }
   const made = /OpaqueRef:[\w-]+/.exec(String(t.result ?? ''))?.[0];
-  const pending = t.other_config?.[PENDING];
-  if (made && pending) await finishClone(call, made, JSON.parse(Buffer.from(pending, 'base64').toString('utf8')));
-  const out = { state: 'success', ...(made && { vm: (await call('VM.get_record', made).catch(() => ({}))).uuid }) };
-  await call('task.destroy', ref).catch(() => undefined); // it carried the server's settings: gone once applied
-  return out;
+  const vm = made ? await call('VM.get_record', made).catch(() => null) : null;
+  if (vm && t.other_config?.[COPY] && !vm.other_config?.[MARK]) {
+    const p = pendingOf((await driveOf(call, vm.name_label))?.vdi);
+    if (p) await finishClone(call, made, p);
+  }
+  return { state: 'success', ...(vm && { vm: vm.uuid }) };
 }
 
 export async function find(call, b) {
   if (!b.name) throw new Failure('INVALID_REQUEST', 'name is required');
-  const [ref] = await call('VM.get_by_name_label', b.name);
-  return { vm: ref ? await state(call, await call('VM.get_record', ref), true) : null };
+  const [found] = await named(call, b.name);
+  if (!found) return { vm: null };
+  let { vm } = found;
+  // No marker, but a drive with settings waiting for it: a copy nobody finished. While it is still being written it
+  // is not a server; afterwards it is made one here, before anyone starts it. (A VM taken over by rename has neither.)
+  if (!vm.other_config?.[MARK] && String(vm.name_label).startsWith(PREFIX)) {
+    const p = pendingOf((await driveOf(call, vm.name_label))?.vdi);
+    if (p) { if (await copying(call, vm.name_label)) return { vm: null }; await finishClone(call, found.ref, p); vm = await call('VM.get_record', found.ref); }
+  }
+  return { vm: await state(call, vm, true) };
 }
 export async function managedVms(call) {
   const all = Object.values(await call('VM.get_all_records')).filter((v) => real(v) && String(v.name_label ?? '').startsWith(PREFIX));
@@ -197,15 +291,27 @@ export async function powerAction(call, b) {
   if (b.action === 'on' || (b.action === 'reset' && !running)) return { task: await call('Async.VM.start', ref, false, false) };
   if (b.action === 'off') return { task: await call('Async.VM.hard_shutdown', ref) };
   if (b.action === 'reset') return { task: await call('Async.VM.hard_reboot', ref) };
-  // A clean shutdown needs the guest tools; the worker watches the power state, so no task is handed back.
+  // A clean shutdown needs the guest's cooperation (PV drivers with the shutdown feature). Without it XAPI leaves
+  // clean_shutdown out of the VM's allowed operations and the asynchronous call would fail unseen, the worker
+  // waiting five minutes for nothing: said at once, in the contract's word for it. (Judged only while the hard
+  // shutdown is allowed, so a VM that is busy with something else is not taken for one without tools.)
+  const allowed = vm.allowed_operations ?? [];
+  if (allowed.includes('hard_shutdown') && !allowed.includes('clean_shutdown')) throw new Failure('TOOLS_NOT_RUNNING', 'the guest cannot be asked to shut down (no guest tools)');
+  // The worker watches the power state, so no task is handed back.
   await call('Async.VM.clean_shutdown', ref);
   return { task: '' };
 }
 
+// XAPI's VM.destroy removes the VM record only: its disks stay, and so do its snapshots (VMs of their own, with
+// disks of their own). Snapshots go first, then the VM, then its disks. A disk that cannot be removed is reported
+// (the storage keeps filling otherwise, unseen) once everything else is gone.
 const removeVm = async (call, ref, vm) => {
-  const { all, drive } = await disksOf(call, vm);
+  const failed = [];
+  for (const { ref: s, s: snap } of await snapsOf(call, vm)) await removeVm(call, s, snap).catch((e) => failed.push(e.message));
+  const { every } = await disksOf(call, vm);
   await call('VM.destroy', ref);
-  for (const d of [...all, ...(drive ? [drive] : [])]) await call('VDI.destroy', d.vbd.VDI).catch(() => undefined);
+  for (const d of every) await call('VDI.destroy', d.vbd.VDI).catch((e) => { if (e.code !== 'VM_NOT_FOUND') failed.push(`${d.vdi.uuid}: ${e.message}`); });
+  if (failed.length) throw new Failure('XAPI_ERROR', `the VM is removed, but not all of its disks: ${failed.join('; ')}`);
 };
 export async function destroy(call, b) {
   let found;
@@ -213,6 +319,9 @@ export async function destroy(call, b) {
   managed(found.vm);
   if (found.vm.power_state !== 'Halted') await call('VM.hard_shutdown', found.ref).catch((e) => { if (e.code !== 'INVALID_STATE') throw e; });
   await removeVm(call, found.ref, found.vm); // XAPI keeps the disks of a destroyed VM: they go too
+  // An unfinished copy never had its config drive attached: that goes as well (its user data is on it).
+  const left = await driveOf(call, found.vm.name_label).catch(() => null);
+  if (left) await call('VDI.destroy', left.ref).catch(() => undefined);
   return { task: '' };
 }
 
@@ -291,7 +400,8 @@ export async function snapshot(call, b) {
     const taken = new Set((await snapsOf(call, vm)).map(({ s }) => s.other_config?.['lightning.snap-id']));
     let n = Math.floor(Date.now() / 1000); while (taken.has(String(n))) n += 1;
     // Disks only, no memory: it works without guest tools (crash-consistent), like on the other platforms.
-    const made = await call('VM.snapshot', ref, name, []);
+    // Two arguments: the third (ignore_vdis, default none) exists since XAPI 21.4.0 and an older one refuses the call.
+    const made = await call('VM.snapshot', ref, name);
     await call('VM.set_name_description', made, description);
     await call('VM.add_to_other_config', made, 'lightning.snap-id', String(n));
     return { task: '' };

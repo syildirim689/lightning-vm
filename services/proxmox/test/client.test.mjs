@@ -60,6 +60,15 @@ test('a pinned certificate is trusted, a token signs every call and failures bec
   } finally { server.close(); }
 });
 
+test('calls made side by side over a pinned connection are all accepted (each new socket shows its certificate)', { skip }, async () => {
+  const seen = []; const { server, port } = await fake(seen);
+  try {
+    const api = await connect({ host: '127.0.0.1', port, username: 'panel@pve!lvm', password: 'secret-1', tls: { mode: 'pinned', sha256: pin } });
+    assert.equal((await Promise.all([1, 2, 3, 4, 5, 6].map((i) => api('GET', `/cluster/resources`, { i })))).length, 6);
+    api.close();
+  } finally { server.close(); }
+});
+
 test('a user and password log in with a ticket; a wrong password is INVALID_LOGIN', { skip }, async () => {
   const seen = []; const { server, port } = await fake(seen);
   try {

@@ -5,26 +5,38 @@ import { createHash, X509Certificate } from 'node:crypto';
 import { lookup } from 'node:dns/promises';
 import https from 'node:https';
 import { BlockList, isIP } from 'node:net';
+import { networkInterfaces } from 'node:os';
 import tls from 'node:tls';
 
 export class Failure extends Error {
   constructor(code, message, extra) { super(message ?? code); this.code = code; Object.assign(this, extra); }
 }
 
-// Addresses the adapter never talks to (it sits on the panel's own network): loopback, link-local, unspecified
-// and multicast, unless XCPNG_ALLOW_NETWORKS (comma-separated CIDRs) says otherwise.
-const blocked = new BlockList();
-for (const [net, bits, family] of [['127.0.0.0', 8, 'ipv4'], ['169.254.0.0', 16, 'ipv4'], ['0.0.0.0', 8, 'ipv4'], ['224.0.0.0', 4, 'ipv4'], ['::1', 128, 'ipv6'], ['fe80::', 10, 'ipv6'], ['ff00::', 8, 'ipv6'], ['::', 128, 'ipv6']]) blocked.addSubnet(net, bits, family);
-const allowed = new BlockList();
-for (const cidr of (process.env.XCPNG_ALLOW_NETWORKS ?? '').split(',').map((x) => x.trim()).filter(Boolean)) {
-  const [net, bits] = cidr.split('/');
-  if (isIP(net)) allowed.addSubnet(net, Number(bits ?? (isIP(net) === 4 ? 32 : 128)), isIP(net) === 4 ? 'ipv4' : 'ipv6');
+// Addresses the adapter never talks to: loopback, link-local, unspecified and multicast, every subnet the container
+// itself has an interface on (PostgreSQL, Redis and the API live there) and XCPNG_DENY_NETWORKS, unless
+// XCPNG_ALLOW_NETWORKS (comma-separated CIDRs) says otherwise. The same rule as the VMware adapter's netguard.go.
+const csv = (s) => String(s ?? '').split(',').map((x) => x.trim()).filter(Boolean);
+const subnets = (cidrs) => {
+  const list = new BlockList();
+  for (const cidr of cidrs) {
+    const [net, bits] = String(cidr).split('/');
+    if (isIP(net)) list.addSubnet(net, Number(bits ?? (isIP(net) === 4 ? 32 : 128)), isIP(net) === 4 ? 'ipv4' : 'ipv6');
+  }
+  return list;
+};
+// permitted(address, family) for the given environment and interfaces (os.networkInterfaces(); tests hand in their own).
+export function addressGuard(env = process.env, interfaces = networkInterfaces()) {
+  const own = Object.values(interfaces ?? {}).flat().filter((i) => i && !i.internal && i.cidr).map((i) => i.cidr);
+  const blocked = subnets(['127.0.0.0/8', '169.254.0.0/16', '0.0.0.0/8', '224.0.0.0/4', '::1/128', 'fe80::/10', 'ff00::/8', '::/128', ...own, ...csv(env.XCPNG_DENY_NETWORKS)]);
+  const allowed = subnets(csv(env.XCPNG_ALLOW_NETWORKS));
+  return (address, family) => allowed.check(address, family) || !blocked.check(address, family);
 }
+const permitted = addressGuard();
 export async function guardedAddress(host) {
   const list = isIP(host) ? [{ address: host, family: isIP(host) }] : await lookup(host, { all: true }).catch(() => { throw new Failure('DNS_FAILED', `cannot resolve ${host}`); });
   for (const a of list) {
     const family = a.family === 6 ? 'ipv6' : 'ipv4';
-    if (blocked.check(a.address, family) && !allowed.check(a.address, family)) throw new Failure('ENDPOINT_BLOCKED', 'endpoint address is not permitted');
+    if (!permitted(a.address, family)) throw new Failure('ENDPOINT_BLOCKED', 'endpoint address is not permitted');
   }
   return list[0].address;
 }
@@ -88,25 +100,37 @@ export function xapiFailure(code, data = []) {
 
 // Opens a session for one adapter request. Returns call(method, ...args): the session is put in front of the
 // arguments. call.put(path, query, body) uploads raw bytes (a disk image) with the same session.
+//
+// An upload for a disk on another pool member's own storage is answered with a 302 to that host (import_raw_vdi.ml:
+// https://<the host's address><path>?<the same query>); it is followed once, through the same address guard. Trust
+// for that host: with system CAs or a given CA its certificate is verified as usual (for the address XAPI names).
+// A pinned connection pins the master's certificate, and every host has its own: the member is accepted when its
+// certificate is one the pinned master lists for the pool (class Certificate, XenServer / XCP-ng 8.2 and later).
+// On an older pool a pinned connection cannot upload to a member's local storage, and TLS_PIN_MISMATCH says so.
 export async function connect(target, { timeoutMs = 50_000, transport } = {}) {
   if (!target?.host || !target?.username) throw new Failure('INVALID_REQUEST', 'host and username are required');
   if (transport) return transport; // tests hand in a fake XAPI
   const port = Number(target.port) || 443;
   const { pin, ...trust } = tlsOptions(target.tls);
   const address = await guardedAddress(target.host);
-  const agent = new https.Agent({ keepAlive: true, maxSockets: 4, ...trust, servername: isIP(target.host) ? undefined : target.host, lookup: (_h, _o, cb) => cb(null, address, isIP(address)) });
-  const request = (method, path, headers, body) => new Promise((resolve, reject) => {
-    const req = https.request({ agent, host: target.host, port, method, path, timeout: timeoutMs, headers: { ...headers, ...(body !== undefined && { 'content-length': Buffer.byteLength(body) }) } }, (res) => {
+  // No TLS session cache: a resumed session comes without the peer's certificate, so a second socket (calls made
+  // side by side) could not be checked against the pin, and was refused as a mismatch.
+  const agent = new https.Agent({ keepAlive: true, maxSockets: 4, maxCachedSessions: 0, ...trust, servername: isIP(target.host) ? undefined : target.host, lookup: (_h, _o, cb) => cb(null, address, isIP(address)) });
+  const master = { agent, host: target.host, port, pins: pin ? [pin] : null };
+  const request = (method, path, headers, body, via = master) => new Promise((resolve, reject) => {
+    const req = https.request({ agent: via.agent, host: via.host, port: via.port, method, path, timeout: timeoutMs, headers: { ...headers, ...(body !== undefined && { 'content-length': Buffer.byteLength(body) }) } }, (res) => {
+      // A redirect comes before the body was read: the rest of the upload is not pushed at a host that will not take it.
+      if (res.statusCode >= 300 && res.statusCode < 400) { resolve({ status: res.statusCode, location: res.headers.location, text: '' }); req.destroy(); return; }
       const chunks = [];
       res.on('data', (c) => chunks.push(c));
       res.on('end', () => resolve({ status: res.statusCode, text: Buffer.concat(chunks).toString('utf8') }));
     });
     req.on('socket', (s) => {
       // A kept-alive socket was checked when it was opened.
-      if (!pin || !s.connecting) return;
+      if (!via.pins || !s.connecting) return;
       s.once('secureConnect', () => {
         const der = s.getPeerCertificate(true)?.raw;
-        if (!der || createHash('sha256').update(der).digest('hex') !== pin) req.destroy(new Failure('TLS_PIN_MISMATCH', 'the endpoint presents another certificate than the pinned one'));
+        if (!der || !via.pins.includes(createHash('sha256').update(der).digest('hex'))) req.destroy(new Failure('TLS_PIN_MISMATCH', 'the endpoint presents another certificate than the pinned one'));
       });
     });
     req.on('timeout', () => req.destroy(Object.assign(new Error('timed out'), { code: 'ETIMEDOUT' })));
@@ -133,8 +157,28 @@ export async function connect(target, { timeoutMs = 50_000, transport } = {}) {
   try { session = await rpc('session.login_with_password', [target.username, target.password ?? '', '2.0', 'lightning-vm']); }
   catch (e) { agent.destroy(); throw e; }
   const call = (method, ...args) => rpc(method, [session, ...args]);
+  // The SHA-256 fingerprints of the pool's host certificates ("AA:BB:..."; fingerprint_sha256 since XAPI 24.20, before
+  // that fingerprint, which holds the same value). Empty where the class does not exist.
+  const memberPins = async () => Object.values(await call('Certificate.get_all_records').catch(() => ({}))).filter((c) => c.type === undefined || c.type === 'host')
+    .map((c) => /[0-9a-f]{64}$/i.exec(String(c.fingerprint_sha256 || c.fingerprint || '').replace(/:/g, ''))?.[0].toLowerCase()).filter(Boolean);
+  const toMember = async (location, headers, body) => {
+    let to; try { to = new URL(location); } catch { /* below */ }
+    if (to?.protocol !== 'https:') throw new Failure('XAPI_ERROR', 'the upload was redirected to something that is not an https address');
+    const host = to.hostname.replace(/^\[|\]$/g, ''), member = await guardedAddress(host);
+    const via = { host, port: Number(to.port) || 443, pins: pin ? [pin, ...await memberPins()] : null,
+      agent: new https.Agent({ maxCachedSessions: 0, ...trust, servername: isIP(host) ? undefined : host, lookup: (_h, _o, cb) => cb(null, member, isIP(member)) }) };
+    try { return await request('PUT', `${to.pathname}${to.search}`, headers, body, via); }
+    catch (e) {
+      // The certificate shown with the failure is the member's, not the master's.
+      const f = classify(e);
+      if (['TLS_UNTRUSTED', 'TLS_HOSTNAME_MISMATCH', 'TLS_PIN_MISMATCH'].includes(f.code)) throw new Failure(f.code, `pool member ${host} (it holds the storage): ${f.message}`, { certificate: await presented(member, via.port, host) });
+      throw f;
+    } finally { via.agent.destroy(); }
+  };
   call.put = (path, query, body) => guarded(async () => {
-    const r = await request('PUT', `${path}?${new URLSearchParams({ session_id: session, ...query })}`, { 'content-type': 'application/octet-stream' }, body);
+    const headers = { 'content-type': 'application/octet-stream' };
+    let r = await request('PUT', `${path}?${new URLSearchParams({ session_id: session, ...query })}`, headers, body);
+    if (r.status >= 300 && r.status < 400 && r.location) r = await toMember(r.location, headers, body);
     if (r.status < 200 || r.status >= 300) throw new Failure('XAPI_ERROR', `upload failed (HTTP ${r.status})`);
   });
   call.close = async () => { await rpc('session.logout', [session]).catch(() => undefined); agent.destroy(); };

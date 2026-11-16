@@ -38,20 +38,22 @@ export function handler(token, options = {}) {
     const route = routes[path];
     if (!route || req.method !== 'POST') return send(404, { code: 'INVALID_REQUEST', message: 'unknown route' });
     const started = Date.now();
-    let api;
     try {
       const chunks = []; let size = 0;
       for await (const c of req) { size += c.length; if (size > 256 * 1024) throw new Failure('INVALID_REQUEST', 'request too large'); chunks.push(c); }
       let body; try { body = JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}'); } catch { throw new Failure('INVALID_REQUEST', 'the body is not JSON'); }
       const [run, seconds] = route;
-      const work = (async () => { api = await connect(body, options); return run(api, body); })();
+      // The connection is closed when the work itself ends, not when the wait for it does: after a timeout the handler
+      // is still in the middle of its calls, and a connection opened only then would never be closed.
+      const work = (async () => { const api = await connect(body, options); try { return await run(api, body); } finally { api?.close?.(); } })();
+      work.catch(() => undefined); // a failure after the timeout has nobody waiting for it
       const out = await Promise.race([work, new Promise((_, no) => setTimeout(() => no(new Failure('TIMEOUT', 'timed out')), seconds * 1000).unref())]);
       send(200, out);
     } catch (e) {
       const code = e instanceof Failure ? e.code : 'LIBVIRT_ERROR';
       log(code === 'LIBVIRT_ERROR' ? 'error' : 'warn', 'request_failed', { path, code, duration_ms: Date.now() - started, ...(!(e instanceof Failure) && { error: String(e?.message ?? e) }) });
       send(statusOf(code), { code, message: String(e?.message ?? code), ...(e?.certificate && { certificate: e.certificate }) });
-    } finally { api?.close?.(); }
+    }
   };
 }
 

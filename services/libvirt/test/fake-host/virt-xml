@@ -1,7 +1,23 @@
 #!/bin/bash
-# A pretend virt-xml: records the network a domain was moved to.
+# A pretend virt-xml, for the two things the adapter asks of it: "--edit 1 --network network=..,mac=.." (the first
+# interface's network and address) and "--add-device --disk path=..,device=cdrom,readonly=on[,bus=..]" (the config
+# drive; without a bus the machine type decides, as virtinst does). A sub-option it does not know is an error, as
+# with the real one.
 set -u
-n=""; net=""
-while [ $# -gt 0 ]; do case "$1" in --connect) shift ;; --edit) shift ;; --network) net=$2; shift ;; *) n=$1 ;; esac; shift; done
-printf ' vnet0       network   %s   virtio   52:54:00:00:00:01\n' "${net#network=}" > "$FAKE/dom/$n/nics"
+n=""; net=""; disk=""
+while [ $# -gt 0 ]; do case "$1" in --connect) shift ;; --edit) shift ;; --add-device) ;; --network) net=$2; shift ;; --disk) disk=$2; shift ;; -*) echo "ERROR    unrecognized arguments: $1" >&2; exit 1 ;; *) n=$1 ;; esac; shift; done
+[ -d "$FAKE/dom/$n" ] || { echo "ERROR    Domain '$n' was not found." >&2; exit 1; }
+opt() { printf '%s\n' "$1" | tr ',' '\n' | sed -n "s/^$2=//p" | head -n 1; }
+known() { for kv in $(printf '%s' "$1" | tr ',' ' '); do case " $2 " in *" ${kv%%=*} "*) ;; *) echo "ERROR    Unknown --$3 options: ['${kv%%=*}']" >&2; exit 1 ;; esac; done; }
+if [ -n "$net" ]; then
+  known "$net" "network mac" network
+  mac=$(opt "$net" mac); [ -n "$mac" ] || mac=$(awk 'NF { print $5; exit }' "$FAKE/dom/$n/nics")
+  printf ' vnet0       network   %s   virtio   %s\n' "$(opt "$net" network)" "$mac" > "$FAKE/dom/$n/nics"
+fi
+if [ -n "$disk" ]; then
+  known "$disk" "path device readonly bus" disk
+  bus=$(opt "$disk" bus); [ -n "$bus" ] || case "$(cat "$FAKE/dom/$n/machine" 2>/dev/null || echo pc-q35-8.2)" in *q35*) bus=sata ;; *) bus=ide ;; esac
+  case "$bus" in ide) t=hda ;; *) t=sda ;; esac
+  printf '%s %s %s\n' "$t" "$(opt "$disk" device)" "$(opt "$disk" path)" >> "$FAKE/dom/$n/disks"; echo "$bus" > "$FAKE/dom/$n/cdbus"
+fi
 echo "Domain '$n' defined successfully."

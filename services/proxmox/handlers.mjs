@@ -3,7 +3,8 @@
 //   host, compute    the node's name (every node is one compute resource; its "resource pool" is the node too)
 //   datastore        "storage" for shared storage, "storage@node" for a node's own
 //   network          the bridge's name ("vmbr0")
-//   task             the UPID; "UPID|vmid" for a clone, whose new VM still gets its settings when the copy ends
+//   task             the UPID; "UPID|vmid" for a clone, whose new VM still gets its settings when the copy ends;
+//                    "wait|vmid" for a copy whose UPID is not known (its answer was lost): the VM's lock tells
 //   snapshot         "snapshot-<n>": n is the digits of our snapshot name "lvm<n>" (or a number made from another name)
 // Each function takes the API of one opened session (pve.mjs connect) and the request body.
 import { createHash } from 'node:crypto';
@@ -55,27 +56,34 @@ const nicsOf = (config) => Object.entries(config).filter(([k]) => /^net\d+$/.tes
   return { slot, model, mac: mac ?? '', bridge: o.bridge ?? '', vlan: o.tag ? Number(o.tag) : null, down: o.link_down === '1', raw: String(v) };
 });
 
-// What the guest agent says about the guest's addresses; null when no agent answers.
+// What the guest agent says about the guest's addresses; null when no agent answers. A call the account may not
+// make is not "no agent": it is passed on, and each caller decides (the privilege is VM.Monitor up to PVE 8 and
+// VM.GuestAgent.* from PVE 9; discovery names the gap).
 async function agentAddresses(api, v) {
   try {
     const r = await api('GET', `${base(v)}/agent/network-get-interfaces`);
     const list = r?.result ?? r ?? [];
     return list.filter((i) => i.name !== 'lo').map((i) => ({ mac: String(i['hardware-address'] ?? '').toUpperCase(),
       ips: (i['ip-addresses'] ?? []).filter((a) => !/^fe80:/i.test(a['ip-address']) && a['ip-address'] !== '127.0.0.1' && a['ip-address'] !== '::1').map((a) => ({ ip: a['ip-address'], prefix: a.prefix })) }));
-  } catch { return null; }
+  } catch (e) { if (e.code === 'PERMISSION_DENIED') throw e; return null; }
 }
+const agentOn = (config) => /(^|,)(enabled=)?1/.test(String(config.agent ?? ''));
 const configured = (config) => [...String(config.ipconfig0 ?? '').matchAll(/ip6?=([0-9a-f.:]+)\//gi)].map((m) => m[1]);
+const uptime = async (api, v) => Number((await api('GET', `${base(v)}/status/current`).catch(() => ({}))).uptime) || 0;
 // A VM as the worker watches it. Without a guest agent in the template a running VM counts as ready with the
 // addresses cloud-init was given (the panel cannot look inside), so a server is not stuck "starting" for ever.
-async function state(api, v, withGuest) {
+// The same holds for an agent that is enabled but silent (not installed in the image, or the account may not ask
+// it) once the VM has run for four minutes, as on the other platforms.
+async function state(api, v, withGuest, known) {
   const out = { moref: String(v.vmid), name: v.name ?? '', powerState: power(v.status), toolsRunning: false, ips: [] };
   if (!withGuest) return out;
-  const config = await api('GET', `${base(v)}/config`).catch(() => ({}));
+  const config = known ?? await api('GET', `${base(v)}/config`).catch(() => ({}));
   const id = serverIdOf(config.description); if (id) out.serverId = id;
   if (v.status !== 'running') return out;
-  if (/(^|,)(enabled=)?1/.test(String(config.agent ?? ''))) {
-    const seen = await agentAddresses(api, v);
+  if (agentOn(config)) {
+    const seen = await agentAddresses(api, v).catch(() => null);
     if (seen) { out.toolsRunning = true; out.ips = [...new Set(seen.flatMap((i) => i.ips.map((a) => a.ip)))]; }
+    else if ((await uptime(api, v)) > 240) { out.toolsRunning = true; out.ips = configured(config); }
   } else { out.toolsRunning = true; out.ips = configured(config); }
   return out;
 }
@@ -83,6 +91,10 @@ async function state(api, v, withGuest) {
 // ---- discovery -----------------------------------------------------------------------------------
 const WANTED = ['VM.Allocate', 'VM.Clone', 'VM.Config.CPU', 'VM.Config.Memory', 'VM.Config.Disk', 'VM.Config.Network', 'VM.Config.Cloudinit', 'VM.PowerMgmt', 'VM.Snapshot', 'VM.Audit', 'VM.Console',
   'Datastore.AllocateSpace', 'Datastore.Audit', 'Sys.Audit', 'SDN.Use'];
+// Asking the guest agent (addresses, and the first-boot settings of guestSetup: exec and set-user-password) needs
+// VM.Monitor up to PVE 8. PVE 9 dropped it for VM.GuestAgent.*, of which Unrestricted covers every call made here.
+const agentPrivileges = (release) => (Number.parseInt(release, 10) >= 9 ? ['VM.GuestAgent.Unrestricted'] : ['VM.Monitor']);
+const major = (api) => Number.parseInt(String(api.version?.release ?? api.version?.version ?? ''), 10) || 0;
 export async function discover(api) {
   const version = api.version ?? await api('GET', '/version');
   const [status, all] = await Promise.all([api('GET', '/cluster/status').catch(() => []), api('GET', '/cluster/resources')]);
@@ -95,8 +107,12 @@ export async function discover(api) {
     const perms = await api('GET', '/access/permissions');
     for (const path of ['/', '/vms', '/storage', '/nodes', '/sdn']) for (const [k, on] of Object.entries(perms?.[path] ?? {})) if (on) granted[k] = true;
   } catch { granted = null; warnings.push('PRIVILEGES_UNREADABLE'); }
-  const privileges = granted ? Object.fromEntries(WANTED.map((p) => [p, !!granted[p]])) : {};
+  const agent = agentPrivileges(String(version.release ?? version.version ?? ''));
+  const privileges = granted ? Object.fromEntries([...WANTED, ...agent].map((p) => [p, !!granted[p]])) : {};
   const has = (...p) => !!granted && p.every((x) => granted[x]);
+  // Without it a template with the agent enabled is only "ready" after four minutes, and its password, host name
+  // and first-boot commands are refused (guestSetup).
+  if (granted && !has(...agent)) warnings.push('GUEST_AGENT_NOT_PERMITTED');
 
   const hosts = [], compute = [];
   for (const n of nodes) {
@@ -104,7 +120,8 @@ export async function discover(api) {
     const st = online ? await api('GET', `/nodes/${enc(n.node)}/status`).catch(() => null) : null;
     const cpu = st?.cpuinfo ?? {};
     const mhz = Math.round(Number(cpu.mhz) || 0);
-    hosts.push({ moref: n.node, name: n.node, hardwareUuid: `${instance}:${n.node}`, vendor: '', model: cpu.model ?? '', cpuMhz: mhz, cpuCores: (cpu.cores ?? 0) * (cpu.sockets ?? 1) || n.maxcpu || 0,
+    // cpuinfo.cores is already the sum over all sockets (PVE::ProcFSTools::read_cpuinfo): not multiplied by them again.
+    hosts.push({ moref: n.node, name: n.node, hardwareUuid: `${instance}:${n.node}`, vendor: '', model: cpu.model ?? '', cpuMhz: mhz, cpuCores: cpu.cores || n.maxcpu || 0,
       cpuThreads: cpu.cpus ?? n.maxcpu ?? 0, memoryBytes: st?.memory?.total ?? n.maxmem ?? 0, connectionState: online ? 'connected' : 'disconnected', powerState: online ? 'poweredOn' : 'unknown',
       inMaintenance: false, version: st?.pveversion ?? '', managementServer: '', parent: n.node });
     compute.push({ moref: n.node, name: n.node, kind: 'standalone', hosts: 1, effectiveCpuMhz: mhz * (n.maxcpu ?? 0), effectiveMemoryMb: Math.floor((n.maxmem ?? 0) / MIB), resourcePool: n.node });
@@ -142,7 +159,8 @@ export async function discover(api) {
 // The worker's cloud-init documents (written for VMware's datasource) as Proxmox's own cloud-init settings:
 // the first IPv4 and IPv6 address with their gateways, the name servers and the SSH keys. What Proxmox cannot
 // carry this way (a password hash, the host name, files and first-boot commands) is done through the guest agent
-// once the server is up: guestSetup below. Further IPv4 addresses are not configured.
+// once the server is up: guestSetup below. ipconfig0 holds one IPv4 and one IPv6 address: further addresses cannot
+// be handed over this way, and the clone's answer says so (unconfigured below) rather than leaving it unsaid.
 export function cloudInitSettings(metadata, userdata) {
   const out = {};
   let meta = {}, user = {};
@@ -162,12 +180,24 @@ export function cloudInitSettings(metadata, userdata) {
   return out;
 }
 
+// The addresses of the first interface that ipconfig0 has no room for.
+export function unconfigured(metadata) {
+  let meta = {}; try { meta = JSON.parse(metadata || '{}'); } catch { /* not JSON */ }
+  const all = (Object.values(meta.network?.ethernets ?? {})[0]?.addresses ?? []).map(String);
+  const v4 = all.find((a) => !a.includes(':')), v6 = all.find((a) => a.includes(':'));
+  return all.filter((a) => a !== v4 && a !== v6);
+}
+const DRIVE_KEY = /^(ide|sata|scsi|virtio|efidisk|tpmstate)\d+$/;
+
 export async function clone(api, b) {
   if (!String(b.name ?? '').startsWith(PREFIX) || !b.template || !b.pool || !b.datastore || !b.network) throw new Failure('INVALID_REQUEST', 'name, template, pool, datastore and network are required');
   if (b.customization === 'appliance') throw new Failure('PROVISIONING_NOT_SUPPORTED', 'appliance images (nested ESXi) need VMware');
   const all = await guests(api);
   const earlier = all.find((v) => v.name === b.name);
-  if (earlier) return { vm: String(earlier.vmid), existed: true };
+  // The earlier call's answer was lost, or this is a retry. A copy that still runs is waited for by its lock (the
+  // UPID went with the answer); one that ended without /v1/task seeing it gets its settings now. Either way the
+  // caller never starts a VM that still has the template's size and network and no cloud-init.
+  if (earlier) return (await finishClone(api, earlier.vmid)) === false ? { task: `${WAIT}|${earlier.vmid}`, existed: true } : { vm: String(earlier.vmid), existed: true };
   const template = all.find((v) => String(v.vmid) === String(b.template));
   if (!template) throw new Failure('TEMPLATE_NOT_FOUND', 'the template no longer exists');
   const config = await api('GET', `${base(template)}/config`);
@@ -176,6 +206,14 @@ export async function clone(api, b) {
   if (system && Number(b.diskGb) > 0 && Number(b.diskGb) * GIB < system.size) throw new Failure('DISK_SMALLER_THAN_TEMPLATE', 'the disk is smaller than the template');
   const node = String(b.pool);
   const storage = String(b.datastore).split('@')[0];
+  // Proxmox copies onto another node only from and to shared storage ("target: only allowed if the original VM is
+  // on shared storage"; clone_vm checks every volume of the source and the target storage). Refused here once, in
+  // words an admin can act on, instead of a task error that is retried until the attempts run out.
+  if (node !== template.node) {
+    const shared = new Set((await resources(api, 'storage')).filter((r) => r.type === 'storage' && r.shared).map((r) => r.storage));
+    const local = [...new Set([...Object.entries(config).filter(([k]) => DRIVE_KEY.test(k)).map(([, x]) => drive(x).storage), storage].filter((x) => x && !shared.has(x)))];
+    if (local.length) throw new Failure('PROVISIONING_NOT_SUPPORTED', `the template is on node ${template.node}: a server on node ${node} needs the template and the target on shared storage (not shared: ${local.join(', ')}), or a copy of the template on ${node}`);
+  }
   // What the new VM still needs once the copy exists; kept in its notes until then (the adapter keeps no state).
   const pending = Buffer.from(JSON.stringify({ vcpu: b.vcpu, memoryMb: b.memoryMb, diskGb: b.diskGb, network: b.network, nestedHv: !!b.nestedHv, ...cloudInitSettings(b.metadata, b.userdata) })).toString('base64');
   const newid = Number(await api('GET', '/cluster/nextid'));
@@ -184,7 +222,7 @@ export async function clone(api, b) {
     if (/already exists|duplicate/i.test(e.message)) throw new Failure('DUPLICATE_NAME', e.message);
     throw e;
   });
-  return { task: `${task}|${newid}`, existed: false };
+  return { task: `${task}|${newid}`, existed: false, ...(unconfigured(b.metadata).length && { warnings: ['EXTRA_ADDRESSES_NOT_CONFIGURED'] }) };
 }
 
 // Some changes are tasks even where the contract wants them done within the request (growing a disk): wait a
@@ -201,12 +239,17 @@ async function settled(api, upid, seconds = 20) {
 }
 
 // The copy is there: CPU, memory, the network, cloud-init and the disk size. Every step can be repeated.
+// Answers false while the copy still runs (Proxmox keeps "lock: clone" on the new VM until its last disk is
+// copied), null when there is no such VM, true when nothing is left to do.
+const WAIT = 'wait';
+const pendingLine = (config) => String(config.description ?? '').split('\n').find((l) => l.startsWith(PENDING));
 async function finishClone(api, vmid) {
   const v = (await guests(api)).find((x) => String(x.vmid) === String(vmid));
-  if (!v) return;
+  if (!v) return null;
   const config = await api('GET', `${base(v)}/config`);
-  const line = String(config.description ?? '').split('\n').find((l) => l.startsWith(PENDING));
-  if (!line) return; // already done
+  if (config.lock === 'clone' || v.lock === 'clone') return false;
+  const line = pendingLine(config);
+  if (!line) return true; // already done
   const p = JSON.parse(Buffer.from(line.slice(PENDING.length), 'base64').toString('utf8'));
   const nic = nicsOf(config)[0];
   const set = { description: String(config.description).split('\n').filter((l) => !l.startsWith(PENDING)).join('\n') };
@@ -220,28 +263,43 @@ async function finishClone(api, vmid) {
   if (!Object.values(config).some((x) => /cloudinit/.test(String(x))) && system?.storage) set.ide2 = `${system.storage}:cloudinit`;
   if (system && p.diskGb && Number(p.diskGb) * GIB > system.size) await settled(api, await api('PUT', `${base(v)}/resize`, { disk: system.slot, size: `${p.diskGb}G` }));
   await api('PUT', `${base(v)}/config`, set);
+  return true;
 }
 
 const taskFault = (text) => (/already running|not running|is locked|already stopped/i.test(text) ? 'INVALID_STATE' : /permission|not allowed/i.test(text) ? 'PERMISSION_DENIED'
   : /already exists|duplicate/i.test(text) ? 'DUPLICATE_NAME' : /out of space|no space|not enough|insufficient|exceeds/i.test(text) ? 'INSUFFICIENT_RESOURCES' : 'TASK_FAILED');
 export async function task(api, b) {
   const [upid, vmid] = String(b.task ?? '').split('|');
+  if (upid === WAIT && /^\d{1,10}$/.test(vmid ?? '')) {
+    // A copy without a known UPID. A failed clone removes its VM, so "no VM" is the failure; the retry clones again.
+    const done = await finishClone(api, vmid);
+    return done === null ? { state: 'error', code: 'TASK_FAILED', error: 'the copy left no VM (see the task log of the node)' } : done ? { state: 'success', vm: vmid } : { state: 'running' };
+  }
   const node = /^UPID:([^:]+):/.exec(upid)?.[1];
   if (!node) throw new Failure('INVALID_REQUEST', 'task is required');
   let st;
   try { st = await api('GET', `/nodes/${enc(node)}/tasks/${enc(upid)}/status`); }
-  catch (e) { if (e.code === 'VM_NOT_FOUND' || e.code === 'PROXMOX_ERROR') return { state: 'unknown', code: 'TASK_NOT_FOUND' }; throw e; }
+  catch (e) {
+    // Only "no such task" (HTTP 400: its log was rotated away) makes a task unknown. Anything else (a 5xx, a node that
+    // does not answer) says nothing about the task: the worker must keep waiting, not start the work a second time.
+    if (e.code === 'PROXMOX_ERROR' && /no such task/i.test(e.message)) return { state: 'unknown', code: 'TASK_NOT_FOUND' };
+    throw e;
+  }
   if (st.status !== 'stopped') return { state: 'running' };
   const exit = String(st.exitstatus ?? '');
   if (exit !== 'OK' && !/^WARNINGS/.test(exit)) return { state: 'error', code: taskFault(exit), error: exit };
-  if (vmid) { await finishClone(api, vmid); return { state: 'success', vm: vmid }; }
+  if (vmid) return (await finishClone(api, vmid)) === false ? { state: 'running' } : { state: 'success', vm: vmid };
   return { state: 'success' };
 }
 
 export async function find(api, b) {
   if (!b.name) throw new Failure('INVALID_REQUEST', 'name is required');
   const v = (await guests(api)).find((x) => x.name === b.name);
-  return { vm: v ? await state(api, v, true) : null };
+  if (!v) return { vm: null };
+  const config = await api('GET', `${base(v)}/config`).catch(() => ({}));
+  // A copy that still runs is not a server yet; one that ended unseen gets its settings before anyone starts it.
+  if (config.lock !== 'clone' && v.lock !== 'clone' && !pendingLine(config)) return { vm: await state(api, v, true, config) };
+  return { vm: (await finishClone(api, v.vmid)) ? await state(api, v, true) : null };
 }
 export async function managedVms(api) {
   return { vms: await Promise.all((await guests(api)).filter((v) => String(v.name ?? '').startsWith(PREFIX)).map((v) => state(api, v, false))) };
@@ -268,7 +326,9 @@ export async function destroy(api, b) {
     await api('POST', `${base(v)}/status/stop`).catch(() => undefined);
     for (let i = 0; i < 40; i++) { await sleep(1500); if ((await api('GET', `${base(v)}/status/current`)).status === 'stopped') break; }
   }
-  return { task: await api('DELETE', base(v), { purge: 1, 'destroy-unreferenced-disks': 1 }) };
+  // destroy-unreferenced-disks exists since qemu-server 6.3-4 and an older API refuses a parameter it does not know;
+  // it only matters from PVE 7, where leaving such disks behind became the default.
+  return { task: await api('DELETE', base(v), { purge: 1, ...(major(api) >= 7 && { 'destroy-unreferenced-disks': 1 }) }) };
 }
 
 const snapshotList = async (api, v) => (await api('GET', `${base(v)}/snapshot`)) ?? [];
@@ -319,14 +379,25 @@ export async function diskAdd(api, b) {
 }
 export async function diskRemove(api, b) {
   const v = await locate(api, b.vm); managed(v);
-  const config = await api('GET', `${base(v)}/config`);
+  // current=1: the values in force. Without it Proxmox answers with pending changes applied, and a disk whose
+  // removal only waits for the next stop would look gone while the guest still has it.
+  const inForce = () => api('GET', `${base(v)}/config`, { current: 1 });
+  const config = await inForce();
   const slot = keySlot(Number(b.key));
   const { system } = disksOf(config);
   if (!slot || config[slot] === undefined) return { task: '', gone: true };
   if (system?.slot === slot) throw new Failure('SYSTEM_DISK', 'the system disk cannot be removed');
   const volume = drive(config[slot]).volume;
-  await api('PUT', `${base(v)}/config`, { delete: slot }); // detached: it stays as "unusedN"
-  const after = await api('GET', `${base(v)}/config`);
+  // A running VM lets go of a disk only by hotplug. Without it (hotplug off for disks, an IDE or SATA slot) the
+  // call succeeds and the removal stays pending; when the guest holds on, the call fails and it stays pending too.
+  // Neither is a removed disk: the pending change is taken back and the caller hears why, so the panel keeps its row.
+  const stuck = async (why) => {
+    await api('PUT', `${base(v)}/config`, { revert: slot }).catch(() => undefined);
+    throw new Failure('INVALID_STATE', `the disk is still attached to the running server (${why}): stop the server and remove it again`);
+  };
+  await api('PUT', `${base(v)}/config`, { delete: slot }).catch((e) => (e.code === 'PROXMOX_ERROR' && /hotplug/i.test(e.message) ? stuck(e.message) : Promise.reject(e))); // detached: it stays as "unusedN"
+  const after = await inForce();
+  if (after[slot] !== undefined) await stuck('no disk hotplug');
   const unused = Object.entries(after).find(([k, val]) => /^unused\d+$/.test(k) && String(val) === volume)?.[0];
   if (unused) await api('PUT', `${base(v)}/config`, { delete: unused }); // and its volume is deleted
   return { task: '' };
@@ -359,7 +430,8 @@ export async function snapshot(api, b) {
   if (b.action !== 'revert' && b.action !== 'remove') throw new Failure('INVALID_REQUEST', 'unknown snapshot action');
   const target = (await snapshotList(api, v)).find((s) => s.name !== 'current' && snapId(s.name) === b.snapshot);
   if (!target) throw new Failure('SNAPSHOT_NOT_FOUND', 'the snapshot is not in this VM');
-  return { task: b.action === 'revert' ? await api('POST', `${base(v)}/snapshot/${enc(target.name)}/rollback`, { start: 0 }) : await api('DELETE', `${base(v)}/snapshot/${enc(target.name)}`) };
+  // No "start" for the rollback: staying off is the default, and the parameter is unknown (so refused) before PVE 7.3.
+  return { task: b.action === 'revert' ? await api('POST', `${base(v)}/snapshot/${enc(target.name)}/rollback`) : await api('DELETE', `${base(v)}/snapshot/${enc(target.name)}`) };
 }
 
 // ---- reading -------------------------------------------------------------------------------------
@@ -368,8 +440,8 @@ export async function details(api, b) {
   const [config, cur, snaps] = await Promise.all([api('GET', `${base(v)}/config`), api('GET', `${base(v)}/status/current`).catch(() => ({})), snapshotList(api, v).catch(() => [])]);
   const { all } = disksOf(config);
   const running = v.status === 'running';
-  const agentOn = /(^|,)(enabled=)?1/.test(String(config.agent ?? ''));
-  const seen = running && agentOn ? await agentAddresses(api, v) : null;
+  const withAgent = agentOn(config);
+  const seen = running && withAgent ? await agentAddresses(api, v).catch(() => null) : null;
   const osinfo = seen ? await api('GET', `${base(v)}/agent/get-osinfo`).then((r) => r?.result ?? r, () => null) : null;
   const hostname = seen ? await api('GET', `${base(v)}/agent/get-host-name`).then((r) => (r?.result ?? r)?.['host-name'] ?? '', () => '') : '';
   const guestIps = seen ? [...new Set(seen.flatMap((i) => i.ips.map((a) => a.ip)))] : running ? configured(config) : [];
@@ -388,7 +460,7 @@ export async function details(api, b) {
         switch: n.bridge, vlan: n.vlan, ips: g ? g.ips.map((a) => (a.prefix ? `${a.ip}/${a.prefix}` : a.ip)) : [], guestConnected: g ? true : null }; }),
     disks: all.map((d, i) => ({ label: `Hard disk ${i + 1}`, capacityGb: round2(d.size / GIB), datastore: d.storage, file: d.volume, provisioning: 'thin', mode: 'persistent', controller: d.slot, bus: d.slot.replace(/\d+$/, '') })),
     cdroms: cdroms.map(([, val], i) => ({ label: `CD/DVD drive ${i + 1}`, iso: drive(val).volume === 'none' ? '' : drive(val).volume, connected: drive(val).volume !== 'none' })),
-    tools: { status: seen ? 'toolsOk' : agentOn ? 'toolsNotRunning' : 'toolsNotInstalled', runningStatus: seen ? 'guestToolsRunning' : 'guestToolsNotRunning', version: '', versionStatus: '' },
+    tools: { status: seen ? 'toolsOk' : withAgent ? 'toolsNotRunning' : 'toolsNotInstalled', runningStatus: seen ? 'guestToolsRunning' : 'guestToolsNotRunning', version: '', versionStatus: '' },
     guest: { hostName: hostname, os: osinfo?.['pretty-name'] ?? '', family: /^w/.test(config.ostype ?? '') ? 'windowsGuest' : 'linuxGuest', ips: guestIps, gateways: [...String(config.ipconfig0 ?? '').matchAll(/gw6?=([0-9a-f.:]+)/gi)].map((m) => m[1]),
       dns: String(config.nameserver ?? '').split(/\s+/).filter(Boolean), domain: config.searchdomain ?? '', state: running ? 'running' : 'notRunning', heartbeat: seen ? 'green' : 'gray' },
     placement: { host: v.node, cluster: '', resourcePool: v.pool ?? '', folder: '', datastores: [...new Set(all.map((d) => d.storage))].sort(), vmxPath: `${v.node}/qemu-server/${v.vmid}.conf` },
@@ -460,8 +532,13 @@ export async function guestSetup(api, b) {
   const hostname = /^[a-zA-Z0-9]([a-zA-Z0-9.-]{0,251}[a-zA-Z0-9])?$/.test(String(user.hostname ?? '')) ? String(user.hostname) : '';
   if (!hash && !files.length && !commands.length && !hostname) return { applied: false, reason: 'NOTHING_TO_DO' };
   const config = await api('GET', `${base(v)}/config`);
-  if (v.status !== 'running' || !/(^|,)(enabled=)?1/.test(String(config.agent ?? ''))) return { applied: false, reason: 'NO_GUEST_AGENT' };
-  if ((await agentAddresses(api, v)) === null) throw new Failure('TOOLS_NOT_RUNNING', 'the guest agent does not answer yet');
+  if (v.status !== 'running' || !agentOn(config)) return { applied: false, reason: 'NO_GUEST_AGENT' };
+  // A missing privilege is passed on as PERMISSION_DENIED (agentAddresses). An agent that stays silent after four
+  // minutes is not in the image: the same answer as a template without one (the worker took that server as ready too).
+  if ((await agentAddresses(api, v)) === null) {
+    if ((await uptime(api, v)) > 240) return { applied: false, reason: 'NO_GUEST_AGENT' };
+    throw new Failure('TOOLS_NOT_RUNNING', 'the guest agent does not answer yet');
+  }
   if (hash) await api('POST', `${base(v)}/agent/set-user-password`, { username: 'root', password: hash, crypted: 1 });
   for (const f of files) {
     if (Buffer.byteLength(f.content) > 60_000) throw new Failure('INVALID_REQUEST', `the file ${f.path} is too large for the guest agent`);

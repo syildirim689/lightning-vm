@@ -9,27 +9,38 @@ import { createHash } from 'node:crypto';
 import { lookup } from 'node:dns/promises';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import net, { BlockList, isIP } from 'node:net';
-import { tmpdir } from 'node:os';
+import { networkInterfaces, tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 export class Failure extends Error {
   constructor(code, message, extra) { super(message ?? code); this.code = code; Object.assign(this, extra); }
 }
 
-// Addresses the adapter never talks to (it sits on the panel's own network): loopback, link-local, unspecified
-// and multicast, unless LIBVIRT_ALLOW_NETWORKS (comma-separated CIDRs) says otherwise.
-const blocked = new BlockList();
-for (const [addr, bits, family] of [['127.0.0.0', 8, 'ipv4'], ['169.254.0.0', 16, 'ipv4'], ['0.0.0.0', 8, 'ipv4'], ['224.0.0.0', 4, 'ipv4'], ['::1', 128, 'ipv6'], ['fe80::', 10, 'ipv6'], ['ff00::', 8, 'ipv6'], ['::', 128, 'ipv6']]) blocked.addSubnet(addr, bits, family);
-const allowed = new BlockList();
-for (const cidr of (process.env.LIBVIRT_ALLOW_NETWORKS ?? '').split(',').map((x) => x.trim()).filter(Boolean)) {
-  const [addr, bits] = cidr.split('/');
-  if (isIP(addr)) allowed.addSubnet(addr, Number(bits ?? (isIP(addr) === 4 ? 32 : 128)), isIP(addr) === 4 ? 'ipv4' : 'ipv6');
+// Addresses the adapter never talks to: loopback, link-local, unspecified and multicast, every subnet the container
+// itself has an interface on (PostgreSQL, Redis and the API live there) and LIBVIRT_DENY_NETWORKS, unless
+// LIBVIRT_ALLOW_NETWORKS (comma-separated CIDRs) says otherwise. The same rule as the VMware adapter's netguard.go.
+const csv = (s) => String(s ?? '').split(',').map((x) => x.trim()).filter(Boolean);
+const subnets = (cidrs) => {
+  const list = new BlockList();
+  for (const cidr of cidrs) {
+    const [addr, bits] = String(cidr).split('/');
+    if (isIP(addr)) list.addSubnet(addr, Number(bits ?? (isIP(addr) === 4 ? 32 : 128)), isIP(addr) === 4 ? 'ipv4' : 'ipv6');
+  }
+  return list;
+};
+// permitted(address, family) for the given environment and interfaces (os.networkInterfaces(); tests hand in their own).
+export function addressGuard(env = process.env, interfaces = networkInterfaces()) {
+  const own = Object.values(interfaces ?? {}).flat().filter((i) => i && !i.internal && i.cidr).map((i) => i.cidr);
+  const blocked = subnets(['127.0.0.0/8', '169.254.0.0/16', '0.0.0.0/8', '224.0.0.0/4', '::1/128', 'fe80::/10', 'ff00::/8', '::/128', ...own, ...csv(env.LIBVIRT_DENY_NETWORKS)]);
+  const allowed = subnets(csv(env.LIBVIRT_ALLOW_NETWORKS));
+  return (address, family) => allowed.check(address, family) || !blocked.check(address, family);
 }
+const permitted = addressGuard();
 export async function guardedAddress(host) {
   const list = isIP(host) ? [{ address: host, family: isIP(host) }] : await lookup(host, { all: true }).catch(() => { throw new Failure('DNS_FAILED', `cannot resolve ${host}`); });
   for (const a of list) {
     const family = a.family === 6 ? 'ipv6' : 'ipv4';
-    if (blocked.check(a.address, family) && !allowed.check(a.address, family)) throw new Failure('ENDPOINT_BLOCKED', 'endpoint address is not permitted');
+    if (!permitted(a.address, family)) throw new Failure('ENDPOINT_BLOCKED', 'endpoint address is not permitted');
   }
   return list[0].address;
 }
@@ -99,7 +110,8 @@ export function sshFailure(r) {
   if (r.code === 5 || /Permission denied|Too many authentication failures|Authentication failed/i.test(text)) return new Failure('INVALID_LOGIN', 'the host did not accept this user name with this password or key');
   if (r.code === 6 || /Host key verification failed|HOST IDENTIFICATION HAS CHANGED|No .* host key is known/i.test(text)) return new Failure('TLS_UNTRUSTED', 'the host key is not the pinned one');
   if (/Connection refused/i.test(text)) return new Failure('CONNECTION_REFUSED', line);
-  if (r.code === -2 || /timed out|Connection timeout/i.test(text)) return new Failure('TIMEOUT', 'timed out');
+  // 124 and 137: the host's own "timeout" ended the script (see connect).
+  if (r.code === -2 || r.code === 124 || r.code === 137 || /timed out|Connection timeout/i.test(text)) return new Failure('TIMEOUT', 'timed out');
   if (/bash: (command )?not found|bash: No such file/i.test(text)) return new Failure('NOT_LIBVIRT', 'bash is not installed on this host');
   return new Failure('LIBVIRT_ERROR', line || `the script ended without a result (ssh exit ${r.code})`);
 }
@@ -141,10 +153,14 @@ export async function connect(target, options = {}) {
   const args = ['-F', '/dev/null', '-T', '-p', String(port), '-l', user, '-o', 'StrictHostKeyChecking=yes', '-o', `UserKnownHostsFile=${known}`, '-o', 'GlobalKnownHostsFile=/dev/null',
     '-o', `HostKeyAlgorithms=${key.type === 'ssh-rsa' ? 'rsa-sha2-512,rsa-sha2-256,ssh-rsa' : key.type}`, '-o', 'ConnectTimeout=10', '-o', 'ServerAliveInterval=15', '-o', 'LogLevel=ERROR', '-o', 'IdentitiesOnly=yes',
     ...(isKey ? ['-i', identity, '-o', 'BatchMode=yes', '-o', 'PreferredAuthentications=publickey'] : ['-o', 'PubkeyAuthentication=no', '-o', 'PreferredAuthentications=password,keyboard-interactive', '-o', 'NumberOfPasswordPrompts=1']),
-    address, 'bash -s'];
+    address];
 
   const sh = async (text, { timeout = 50000 } = {}) => {
-    const r = isKey ? await t.run('ssh', args, { input: `echo LVMBEGIN\n${text}`, timeout }) : await t.run('sshpass', ['-e', 'ssh', ...args], { env: { SSHPASS: secret }, input: `echo LVMBEGIN\n${text}`, timeout });
+    // Killing the local ssh does not end the script on the host: it would go on (a snapshot, a new disk) while the
+    // caller already tries again. So the host ends it itself, five seconds before this side gives up ("timeout"
+    // is in coreutils, as the rest of what the scripts use; -k: a script that ignores the first signal is killed).
+    const remote = [...args, `timeout -k 5 ${Math.max(5, Math.floor(timeout / 1000) - 5)} bash -s`];
+    const r = isKey ? await t.run('ssh', remote, { input: `echo LVMBEGIN\n${text}`, timeout }) : await t.run('sshpass', ['-e', 'ssh', ...remote], { env: { SSHPASS: secret }, input: `echo LVMBEGIN\n${text}`, timeout });
     const rows = parse(r.stdout); // throws the script's own failure
     if (!rows) throw sshFailure(r);
     return rows;

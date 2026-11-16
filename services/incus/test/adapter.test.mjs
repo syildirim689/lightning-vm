@@ -13,7 +13,7 @@ import https from 'node:https';
 process.env.INCUS_ALLOW_NETWORKS = '127.0.0.0/8'; // the pretend server listens on loopback
 const h = await import('../handlers.mjs');
 const { handler } = await import('../server.mjs');
-const { apiFailure, connect, Failure, identity, operationFailure } = await import('../incus.mjs');
+const { addressGuard, apiFailure, connect, Failure, identity, operationFailure } = await import('../incus.mjs');
 
 const CERT = readFileSync(new URL('./fixtures/test-only.crt', import.meta.url), 'utf8'), KEY = readFileSync(new URL('./fixtures/test-only.key', import.meta.url), 'utf8');
 const GIB = 1024 ** 3;
@@ -286,6 +286,10 @@ test('the client signs in with its certificate, pins the server\'s and names wha
     assert.deepEqual(await api('POST', '/1.0/instances', { name: 'x' }), { id: 'x', status_code: 103 });
     await assert.rejects(api('GET', '/1.0/instances/missing?recursion=1'), { code: 'NOT_FOUND' });
     await assert.rejects(api('GET', '/1.0/certificates'), { code: 'PERMISSION_DENIED' });
+    const before = seen.length;
+    // Side by side over the pinned connection: each new socket shows its certificate (no resumed TLS session).
+    assert.equal((await Promise.all([1, 2, 3, 4, 5, 6].map((i) => api('GET', `/1.0/instances/missing?i=${i}`).catch((e) => e.code)))).filter((c) => c === 'NOT_FOUND').length, 6);
+    seen.length = before;
     api.close();
     assert.deepEqual(seen.slice(-4), ['GET /1.0 cert', 'POST /1.0/instances?project=customers cert', 'GET /1.0/instances/missing?recursion=1&project=customers cert', 'GET /1.0/certificates cert']);
   } finally { server.close(); }
@@ -304,5 +308,28 @@ test('the service wants its token and names what is not there yet', async () => 
     assert.deepEqual(await call('/v1/console-ticket', { host: 'incus.example' }), [400, { code: 'PLATFORM_NOT_SUPPORTED', message: 'not available on Incus yet' }]);
     assert.deepEqual(await call('/v1/vm/find', { host: 'incus.example', username: 'default', name: 'lvm-x' }), [200, { vm: null }]);
     assert.deepEqual((await call('/v1/vm/power', { host: 'incus.example', vm: uuid(404), action: 'on' })).map((x) => x.code ?? x), [404, 'VM_NOT_FOUND']);
+  } finally { server.close(); }
+});
+
+test('the address guard refuses the adapter\'s own networks unless they are allowed', () => {
+  const docker = { lo: [{ address: '127.0.0.1', cidr: '127.0.0.1/8', family: 'IPv4', internal: true }], eth0: [{ address: '172.18.0.5', cidr: '172.18.0.5/16', family: 'IPv4', internal: false }, { address: 'fd00:18::5', cidr: 'fd00:18::5/64', family: 'IPv6', internal: false }] };
+  const guard = addressGuard({}, docker);
+  assert.deepEqual([guard('172.18.0.3', 'ipv4'), guard('fd00:18::3', 'ipv6'), guard('127.0.0.1', 'ipv4'), guard('169.254.169.254', 'ipv4'), guard('203.0.113.9', 'ipv4'), guard('2001:db8::9', 'ipv6')], [false, false, false, false, true, true]);
+  const allowed = addressGuard({ INCUS_ALLOW_NETWORKS: '172.18.0.0/16', INCUS_DENY_NETWORKS: '203.0.113.0/24' }, docker);
+  assert.deepEqual([allowed('172.18.0.3', 'ipv4'), allowed('203.0.113.9', 'ipv4'), allowed('198.51.100.9', 'ipv4')], [true, false, true]);
+});
+
+test('a route that outlives its time is answered as TIMEOUT and its session is closed when the work ends, not under it', async () => {
+  const token = 't'.repeat(40);
+  let closed = 0, finish;
+  const transport = Object.assign(async () => ({}), { close: () => { closed += 1; } });
+  const slow = () => new Promise((r) => { finish = r; });
+  const server = http.createServer(handler(token, { transport, routes: { '/v1/slow': [slow, 0.05] } })).listen(0);
+  try {
+    const res = await fetch(`http://127.0.0.1:${server.address().port}/v1/slow`, { method: 'POST', headers: { authorization: `Bearer ${token}` }, body: JSON.stringify({ host: 'incus.example' }) });
+    assert.deepEqual([res.status, (await res.json()).code], [502, 'TIMEOUT']);
+    assert.equal(closed, 0, 'the handler still runs: its session stays open');
+    finish({}); await new Promise((r) => setTimeout(r, 10));
+    assert.equal(closed, 1);
   } finally { server.close(); }
 });

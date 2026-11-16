@@ -1,15 +1,19 @@
 #!/bin/bash
 # A pretend virsh for the adapter's script tests: domains are folders under $FAKE/dom/<name> holding small files
 # (uuid, state, vcpu, mem, desc, disks, nics, snaps/<name>). Output is formatted the way virsh formats it.
+# $FAKE/vols lists the files that are volumes of the pool (virt-clone makes those; a file somebody wrote into the
+# pool's folder is not one): as with the real one, only they are removed with a domain.
 set -u
 D="$FAKE/dom"
 [ "${1:-}" = -c ] && shift 2
 cmd=${1:-}; shift || true
 dom_of() { # a name or a uuid -> the name
-  if [ -d "$D/$1" ]; then echo "$1"; return 0; fi
+  if [ -n "$1" ] && [ -d "$D/$1" ]; then echo "$1"; return 0; fi
   for d in "$D"/*; do [ -f "$d/uuid" ] && [ "$(cat "$d/uuid")" = "$1" ] && { basename "$d"; return 0; }; done
   echo "error: failed to get domain '$1'" >&2; return 1
 }
+managed_vol() { grep -Fqx -e "$1" "$FAKE/vols" 2>/dev/null; }
+drop_vol() { rm -f "$1" "$1.size"; grep -Fvx -e "$1" "$FAKE/vols" > "$FAKE/vols.new"; mv "$FAKE/vols.new" "$FAKE/vols"; }
 case "$cmd" in
   uri) echo qemu:///system ;;
   version) printf 'Compiled against library: libvirt 10.0.0\nUsing library: libvirt 10.0.0\nUsing API: QEMU 10.0.0\nRunning hypervisor: QEMU 8.2.2\n' ;;
@@ -22,7 +26,7 @@ case "$cmd" in
   list) for d in "$D"/*; do [ -d "$d" ] && basename "$d"; done; echo ;;
   domname) n=$(dom_of "$1") || exit 1; echo "$n"; echo ;;
   domuuid) n=$(dom_of "$1") || exit 1; cat "$D/$n/uuid"; echo ;;
-  domstate) n=$(dom_of "$1") || exit 1; cat "$D/$n/state"; echo ;;
+  domstate) n=$(dom_of "$1") || exit 1; echo "domstate $n" >> "$FAKE/calls"; cat "$D/$n/state"; echo ;;
   desc) n=$(dom_of "$1") || exit 1; shift
     if [ "${1:-}" = --config ]; then shift; [ "$1" = --new-desc ] && shift; printf '%s' "$1" > "$D/$n/desc"; echo "Domain description updated successfully"
     else if [ -s "$D/$n/desc" ]; then cat "$D/$n/desc"; echo; else echo "No description for domain: $n"; fi; fi ;;
@@ -31,13 +35,16 @@ case "$cmd" in
   domblklist) n=$(dom_of "$1") || exit 1
     if [ "${2:-}" = --details ]; then printf ' Type   Device   Target   Source\n------------------------------------------------\n'; while read -r t dev src; do [ -n "$t" ] && printf ' file   %-8s %-8s %s\n' "$dev" "$t" "$src"; done < "$D/$n/disks"
     else printf ' Target   Source\n------------------------------------------------\n'; while read -r t dev src; do [ -n "$t" ] && printf ' %-8s %s\n' "$t" "$src"; done < "$D/$n/disks"; fi; echo ;;
-  domblkinfo) n=$(dom_of "$1") || exit 1; src=$(awk -v t="$2" '$1 == t { print $3 }' "$D/$n/disks"); printf 'Capacity:       %s\nAllocation:     1000\nPhysical:       1000\n\n' "$(cat "$src.size")" ;;
+  domblkinfo) n=$(dom_of "$1") || exit 1; src=$(while read -r t dev s; do [ "$t" = "$2" ] && printf '%s' "$s"; done < "$D/$n/disks"); printf 'Capacity:       %s\nAllocation:     1000\nPhysical:       1000\n\n' "$(cat "$src.size")" ;;
   domiflist) n=$(dom_of "$1") || exit 1; printf ' Interface   Type      Source    Model    MAC\n-----------------------------------------------------------\n'; cat "$D/$n/nics" 2>/dev/null; echo ;;
   domifaddr) n=$(dom_of "$1") || exit 1
     [ "$(cat "$D/$n/state")" = running ] && [ -f "$D/$n/agent" ] || { echo "error: Guest agent is not responding" >&2; exit 1; }
-    printf ' Name       MAC address          Protocol     Address\n-------------------------------------------------------------------------------\n lo         00:00:00:00:00:00    ipv4         127.0.0.1/8\n eth0       52:54:00:00:00:01    ipv4         203.0.113.20/24\n -          -                    ipv6         fe80::5054:ff:fe00:1/64\n\n' ;;
-  dumpxml) n=$(dom_of "$1") || exit 1; printf "<domain type='kvm'>\n  <name>%s</name>\n  <os>\n    <type arch='x86_64' machine='pc-q35-8.2'>hvm</type>\n  </os>\n</domain>\n" "$n" ;;
-  start) n=$(dom_of "$1") || exit 1; [ "$(cat "$D/$n/state")" = running ] && { echo "error: Domain is already active" >&2; exit 1; }; echo running > "$D/$n/state"; echo "Domain '$n' started" ;;
+    printf ' Name       MAC address          Protocol     Address\n-------------------------------------------------------------------------------\n lo         00:00:00:00:00:00    ipv4         127.0.0.1/8\n eth0       %s    ipv4         203.0.113.20/24\n -          -                    ipv6         fe80::5054:ff:fe00:1/64\n\n' "$(awk 'NF { print $5; exit }' "$D/$n/nics")" ;;
+  domjobinfo) n=$(dom_of "$1") || exit 1; if [ -f "$D/$n/job" ]; then printf 'Job type:         Unbounded\nOperation:        Snapshot\nTime elapsed:     1200         ms\n'; else printf 'Job type:         None\n'; fi; echo ;;
+  dumpxml) n=$(dom_of "$1") || exit 1; printf "<domain type='kvm'>\n  <name>%s</name>\n  <os>\n    <type arch='x86_64' machine='%s'>hvm</type>\n  </os>\n</domain>\n" "$n" "$(cat "$D/$n/machine" 2>/dev/null || echo pc-q35-8.2)" ;;
+  start) n=$(dom_of "$1") || exit 1; echo "start $n" >> "$FAKE/calls"
+    [ -f "$D/$n/nostart" ] && { printf "error: Failed to start domain '%s'\nerror: internal error: qemu unexpectedly closed the monitor\n" "$n" >&2; exit 1; }
+    [ "$(cat "$D/$n/state")" = running ] && { echo "error: Domain is already active" >&2; exit 1; }; echo running > "$D/$n/state"; echo "Domain '$n' started" ;;
   destroy|shutdown) n=$(dom_of "$1") || exit 1; echo "shut off" > "$D/$n/state"; echo ok ;;
   reset) n=$(dom_of "$1") || exit 1; echo ok ;;
   setmaxmem|setmem) n=$(dom_of "$1") || exit 1; echo $(( ${2%M} * 1024 )) > "$D/$n/mem" ;;
@@ -47,12 +54,17 @@ case "$cmd" in
   attach-disk) n=$(dom_of "$1") || exit 1; dev=disk; case " $* " in *" --type cdrom "*) dev=cdrom ;; esac; printf '%s %s %s\n' "$3" "$dev" "$2" >> "$D/$n/disks"; echo "Disk attached successfully" ;;
   detach-disk) n=$(dom_of "$1") || exit 1; awk -v t="$2" '$1 != t' "$D/$n/disks" > "$D/$n/disks.new"; mv "$D/$n/disks.new" "$D/$n/disks"; echo "Disk detached successfully" ;;
   undefine) n=$(dom_of "$1") || exit 1
-    case " $* " in *" --remove-all-storage "*) while read -r t dev src; do [ "$dev" = disk ] && rm -f "$src" "$src.size"; done < "$D/$n/disks" ;; esac
+    # Only volumes of a pool go with the domain; the rest is named and left, as the real virsh does.
+    case " $* " in *" --remove-all-storage "*) while read -r t dev src; do [ -n "$t" ] || continue
+      if managed_vol "$src"; then drop_vol "$src"; else echo "Storage volume '$t'($src) is not managed by libvirt. Remove it manually."; fi; done < "$D/$n/disks" ;; esac
     rm -rf "$D/$n"; echo "Domain '$n' has been undefined" ;;
+  vol-delete) managed_vol "$1" || { echo "error: failed to get vol '$1'" >&2; exit 1; }; drop_vol "$1"; echo "Vol $1 deleted" ;;
   snapshot-list) n=$(dom_of "$1") || exit 1; ls "$D/$n/snaps" 2>/dev/null; echo ;;
   snapshot-current) n=$(dom_of "$1") || exit 1; ls "$D/$n/snaps" 2>/dev/null | tail -n 1 ;;
-  snapshot-create-as) n=$(dom_of "$1") || exit 1; mkdir -p "$D/$n/snaps"; printf '%s' "$3" > "$D/$n/snaps/$2"; echo "Domain snapshot $2 created" ;;
-  snapshot-dumpxml) n=$(dom_of "$1") || exit 1; printf '<domainsnapshot>\n  <name>%s</name>\n  <description>%s</description>\n  <state>running</state>\n  <creationTime>1704103200</creationTime>\n</domainsnapshot>\n' "$2" "$(cat "$D/$n/snaps/$2")" ;;
+  snapshot-create-as) n=$(dom_of "$1") || exit 1; mkdir -p "$D/$n/snaps"
+    [ -e "$D/$n/snaps/$2" ] && { echo "error: operation failed: domain snapshot $2 already exists" >&2; exit 1; }
+    printf '%s' "$3" > "$D/$n/snaps/$2"; echo "Domain snapshot $2 created" ;;
+  snapshot-dumpxml) n=$(dom_of "$1") || exit 1; printf '<domainsnapshot>\n  <name>%s</name>\n  <description>%s</description>\n  <state>running</state>\n  <creationTime>%s</creationTime>\n</domainsnapshot>\n' "$2" "$(cat "$D/$n/snaps/$2")" "$(stat -c %Y "$D/$n/snaps/$2")" ;;
   snapshot-revert) n=$(dom_of "$1") || exit 1; echo "reverted $2" >> "$FAKE/log" ;;
   snapshot-delete) n=$(dom_of "$1") || exit 1; rm -f "$D/$n/snaps/$2"; echo "Domain snapshot $2 deleted" ;;
   *) echo "fake virsh: unknown command $cmd" >&2; exit 1 ;;

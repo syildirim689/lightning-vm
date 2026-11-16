@@ -2,6 +2,7 @@
   "name": "@lightning-vm/incus",
   "version": "0.1.0",
   "private": true,
+  "license": "Apache-2.0",
   "type": "module",
   "description": "Incus / LXD adapter: the hypervisor adapter contract (docs/adapter-contract.md) on the Incus REST API",
   "scripts": {

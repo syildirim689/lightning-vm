@@ -20,6 +20,40 @@ function IsTemplate($v) { ($v.Notes -match 'lvm-template') -or ($v.Name -match '
 function PowerOf($v) { if ($v.State -eq 'Running') { 'poweredOn' } elseif ($v.State -eq 'Paused' -or $v.State -eq 'Saved') { 'suspended' } else { 'poweredOff' } }
 function ServerIdOf($v) { if ($v.Notes -match 'Managed by Lightning VM \(server ([0-9a-f-]{36})\)') { $Matches[1] } else { '' } }
 function GivenIps($v) { if ($v.Notes -match 'lvm-ips=([0-9a-fA-F.:,]*)') { @($Matches[1].Split(',') | Where-Object { $_ }) } else { @() } }
+# The clone task writes the note last, so a VM in the panel's own folder without it is a copy that stopped half-way:
+# not a server yet (find), and not one to adopt (clone).
+function HalfMade($v) { ([string]$v.Notes -notmatch 'Managed by Lightning VM') -and ([string]$v.Path -like ('?:\LightningVM\' + $v.Name + '*')) }
+# The clone task still running for a name: its id (tasks\<name>.task holds it), or nothing. A task that has said
+# "running" for six hours has no process any more.
+function Pending($name) {
+  if ([string]$name -notmatch '^lvm-[\w-]+$') { return }
+  $f = Join-Path (Join-Path $root 'tasks') ($name + '.task')
+  if (-not (Test-Path -LiteralPath $f)) { return }
+  $id = ([string](Get-Content -LiteralPath $f -Raw)).Trim()
+  $st = Join-Path (Join-Path $root 'tasks') ($id + '.json')
+  if ($id -notmatch '^[0-9a-f-]{36}$' -or -not (Test-Path -LiteralPath $st)) { return }
+  if ((Get-Content -LiteralPath $st -Raw | ConvertFrom-Json).state -eq 'running' -and ((Get-Date) - (Get-Item -LiteralPath $st).LastWriteTime).TotalHours -le 6) { $id }
+}
+# Only administrators, the system and the account these scripts run as (and $more) may read a folder: job files and
+# the config drive hold a password hash, first-boot scripts and a token. Files made in it afterwards inherit this.
+function Guard($dir, $more) {
+  $acl = New-Object Security.AccessControl.DirectorySecurity
+  $acl.SetAccessRuleProtection($true, $false)
+  foreach ($sid in @('S-1-5-32-544', 'S-1-5-18', [Security.Principal.WindowsIdentity]::GetCurrent().User.Value) + @($more | Where-Object { $_ })) {
+    $acl.AddAccessRule((New-Object Security.AccessControl.FileSystemAccessRule((New-Object Security.Principal.SecurityIdentifier($sid)), 'FullControl', 'ContainerInherit,ObjectInherit', 'None', 'Allow')))
+  }
+  [IO.Directory]::SetAccessControl($dir, $acl)
+}
+# Removes one of the panel's folders. Hyper-V lets go of a removed VM's files a little later (it merges checkpoints
+# first), so it is tried for a while; $true when the folder is gone.
+function Unfolder($dir, $tries) {
+  for ($i = 0; $i -lt $tries; $i++) {
+    if ($i) { Start-Sleep -Seconds 3 }
+    if (Test-Path -LiteralPath $dir) { Remove-Item -LiteralPath $dir -Recurse -Force -ErrorAction SilentlyContinue }
+    if (-not (Test-Path -LiteralPath $dir)) { return $true }
+  }
+  $false
+}
 function DisksOf($v) {
   @(Get-VMHardDiskDrive -VM $v | Sort-Object ControllerType, ControllerNumber, ControllerLocation | ForEach-Object {
     $size = 0; try { $size = (Get-VHD -Path $_.Path).Size } catch { }
@@ -32,8 +66,11 @@ function StateOf($v, $guest) {
   if ($guest -and $v.State -eq 'Running') {
     $beat = Get-VMIntegrationService -VM $v | Where-Object { $_.Name -eq 'Heartbeat' -or $_.Id -like '*84EAAE65-2F2E-45F5-9BB5-0E857DC8EB47*' } | Select-Object -First 1
     $ips = @(Get-VMNetworkAdapter -VM $v | ForEach-Object { $_.IPAddresses } | Where-Object { $_ -and $_ -notlike 'fe80:*' })
-    if (($beat -and $beat.PrimaryStatusDescription -eq 'OK') -or $ips.Count) { $s.toolsRunning = $true; $s.ips = $ips }
+    # A guest that reports no addresses (a Linux one without hv_kvp_daemon, whose heartbeat is still OK) counts as
+    # ready after four minutes with the addresses it was given; before that the heartbeat says only that it runs.
+    if ($ips.Count) { $s.toolsRunning = $true; $s.ips = $ips }
     elseif ($v.Uptime.TotalSeconds -gt 240) { $s.toolsRunning = $true; $s.ips = @(GivenIps $v) }
+    elseif ($beat -and $beat.PrimaryStatusDescription -eq 'OK') { $s.toolsRunning = $true }
   }
   $s
 }
@@ -63,6 +100,8 @@ const BODIES = {
 
   find: String.raw`
   $v = Get-VM -Name $p.name -ErrorAction SilentlyContinue | Select-Object -First 1
+  # A copy still being made, or one that failed half-way, is not there yet: the worker would start it as it is.
+  if ($v -and (HalfMade $v)) { $v = $null }
   if ($v) { Done ([ordered]@{ vm = (StateOf $v $true) }) } else { Done ([ordered]@{ vm = $null }) }`,
 
   managed: String.raw`
@@ -70,8 +109,12 @@ const BODIES = {
 
   // Starts the copy as a background task and answers at once; the task writes how it went to a file.
   clone: String.raw`
+  # Asked again while the copy runs (the first answer was lost): the same task, not a second copy.
+  $running = Pending $p.name
+  if ($running) { Done ([ordered]@{ task = [string]$running; existed = $false }); return }
   $earlier = Get-VM -Name $p.name -ErrorAction SilentlyContinue | Select-Object -First 1
-  if ($earlier) { Done ([ordered]@{ vm = [string]$earlier.Id; existed = $true }); return }
+  if ($earlier -and -not (HalfMade $earlier)) { Done ([ordered]@{ vm = [string]$earlier.Id; existed = $true }); return }
+  if ($p.mac -and $p.mac -notmatch '^[0-9A-F]{12}$') { Fail 'INVALID_REQUEST' 'mac is twelve hex digits' }
   $g = [guid]::Empty
   if (-not [guid]::TryParse([string]$p.template, [ref]$g)) { Fail 'TEMPLATE_NOT_FOUND' 'the template no longer exists' }
   $t = Get-VM -Id $g -ErrorAction SilentlyContinue
@@ -85,13 +128,24 @@ const BODIES = {
   $sw = Get-VMSwitch | Where-Object { [string]$_.Id -eq $p.network } | Select-Object -First 1
   if (-not $sw) { Fail 'NETWORK_NOT_FOUND' 'the virtual switch no longer exists' }
   if ($p.datastore -notmatch '^[A-Za-z]$' -or -not (Test-Path ($p.datastore + ':\'))) { Fail 'DATASTORE_NOT_FOUND' 'the drive no longer exists' }
-  $tasks = Join-Path $root 'tasks'; New-Item -ItemType Directory -Force -Path $tasks | Out-Null
+  if ($earlier) {
+    # What an earlier copy left when it stopped half-way (its task could not clean up: the host restarted) goes first.
+    $old = [regex]::Match([string]$earlier.Path, '^[A-Za-z]:\\LightningVM\\' + [regex]::Escape($earlier.Name)).Value
+    if ($earlier.State -ne 'Off') { Stop-VM -VM $earlier -TurnOff -Force }
+    Remove-VM -VM $earlier -Force
+    if (-not (Unfolder $old 10)) { Fail 'HYPERV_ERROR' ('files of an earlier, failed copy are still in use in ' + $old) }
+  }
+  $tasks = Join-Path $root 'tasks'; New-Item -ItemType Directory -Force -Path $tasks | Out-Null; Guard $tasks
   Get-ChildItem $tasks -File | Where-Object { $_.LastWriteTime -lt (Get-Date).AddDays(-2) } | Remove-Item -Force -ErrorAction SilentlyContinue
   $id = [guid]::NewGuid().ToString()
   $dir = Join-Path ($p.datastore + ':\LightningVM') $p.name
-  $job = [ordered]@{ id = $id; name = $p.name; template = [string]$t.Id; source = $src.Path; dir = $dir; switch = $sw.Name; vcpu = $p.vcpu; memoryMb = $p.memoryMb; diskGb = $p.diskGb; nestedHv = [bool]$p.nestedHv; notes = $p.notes; iso = $p.iso }
+  # The VM's folder is closed before anything is put in it. Hyper-V's own group (NT VIRTUAL MACHINE\Virtual Machines)
+  # stays in: the VM's worker process reads its files as a member of it.
+  New-Item -ItemType Directory -Force -Path $dir | Out-Null; Guard $dir 'S-1-5-83-0'
+  $job = [ordered]@{ id = $id; name = $p.name; template = [string]$t.Id; source = $src.Path; dir = $dir; switch = $sw.Name; vcpu = $p.vcpu; memoryMb = $p.memoryMb; diskGb = $p.diskGb; nestedHv = [bool]$p.nestedHv; notes = $p.notes; iso = $p.iso; mac = [string]$p.mac }
   [IO.File]::WriteAllText((Join-Path $tasks ($id + '.job.json')), (ConvertTo-Json -InputObject $job -Depth 4 -Compress), [Text.Encoding]::UTF8)
   [IO.File]::WriteAllText((Join-Path $tasks ($id + '.json')), '{"state":"running"}', [Text.Encoding]::ASCII)
+  [IO.File]::WriteAllText((Join-Path $tasks ($p.name + '.task')), $id, [Text.Encoding]::ASCII)
   [IO.File]::WriteAllText((Join-Path $tasks ($id + '.ps1')), [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($p.worker)).Replace('__ID__', $id), [Text.Encoding]::UTF8)
   Detach (Join-Path $tasks ($id + '.ps1'))
   Done ([ordered]@{ task = $id; existed = $false })`,
@@ -118,7 +172,8 @@ const BODIES = {
     if (-not $beat -or -not $beat.Enabled) { Fail 'TOOLS_NOT_RUNNING' 'the guest cannot be asked to shut down (integration services)' }
     $tasks = Join-Path $root 'tasks'; New-Item -ItemType Directory -Force -Path $tasks | Out-Null
     $file = Join-Path $tasks ('shutdown-' + [string]$v.Id + '.ps1')
-    [IO.File]::WriteAllText($file, ("Stop-VM -Id '" + [string]$v.Id + "' -Force -ErrorAction SilentlyContinue"), [Text.Encoding]::ASCII)
+    # Stop-VM takes a name or a VM object, not an id: the VM is looked up by id and handed over.
+    [IO.File]::WriteAllText($file, ("Get-VM -Id '" + [string]$v.Id + "' | Stop-VM -Force -ErrorAction SilentlyContinue"), [Text.Encoding]::ASCII)
     Detach $file
   }
   Done ([ordered]@{ task = '' })`,
@@ -126,18 +181,26 @@ const BODIES = {
   destroy: String.raw`
   $g = [guid]::Empty
   $v = $null; if ([guid]::TryParse([string]$p.vm, [ref]$g)) { $v = Get-VM -Id $g -ErrorAction SilentlyContinue }
-  if (-not $v) { Done ([ordered]@{ task = ''; gone = $true }); return }
+  $tasks = Join-Path $root 'tasks'; $left = Join-Path $tasks ('destroy-' + [string]$g + '.txt')
+  # A folder that would not go is a failure (its files would break a later reinstall under the same name). The VM is
+  # gone by then, so which folders were its own is written down first, and a repeated call finishes the job from that.
+  $clear = {
+    foreach ($dir in @(Get-Content -LiteralPath $left -ErrorAction SilentlyContinue | Where-Object { $_ -match '^[A-Za-z]:\\LightningVM\\lvm-[\w-]+$' })) {
+      if (-not (Unfolder $dir 15)) { Fail 'HYPERV_ERROR' ('the VM is removed, but files in ' + $dir + ' are still in use; they are removed when this is asked again') }
+    }
+    Remove-Item -LiteralPath $left -Force -ErrorAction SilentlyContinue
+  }
+  if (-not $v) { if (Test-Path -LiteralPath $left) { & $clear }; Done ([ordered]@{ task = ''; gone = $true }); return }
   Managed $v
   if ($v.State -ne 'Off') { Stop-VM -VM $v -TurnOff -Force }
   $paths = @(Get-VMHardDiskDrive -VM $v | ForEach-Object { $_.Path }) + @(Get-VMDvdDrive -VM $v | ForEach-Object { $_.Path } | Where-Object { $_ })
   $name = $v.Name
-  Get-VMSnapshot -VM $v | Remove-VMSnapshot -IncludeAllChildSnapshots -Confirm:$false -ErrorAction SilentlyContinue
-  Remove-VM -VM $v -Force
   # Only the panel's own folder for this server is removed, never a path that merely looks like it.
-  foreach ($path in $paths) {
-    $dir = Split-Path $path -Parent
-    if ((Split-Path $dir -Leaf) -eq $name -and (Split-Path (Split-Path $dir -Parent) -Leaf) -eq 'LightningVM') { Remove-Item -LiteralPath $dir -Recurse -Force -ErrorAction SilentlyContinue }
-  }
+  $dirs = @($paths | ForEach-Object { Split-Path $_ -Parent } | Where-Object { (Split-Path $_ -Leaf) -eq $name -and (Split-Path (Split-Path $_ -Parent) -Leaf) -eq 'LightningVM' } | Select-Object -Unique)
+  if ($dirs.Count) { New-Item -ItemType Directory -Force -Path $tasks | Out-Null; [IO.File]::WriteAllLines($left, [string[]]$dirs) }
+  # Removing the VM removes its checkpoints with it; merging them first would only fill files that are deleted next.
+  Remove-VM -VM $v -Force
+  & $clear
   Done ([ordered]@{ task = '' })`,
 
   resize: String.raw`
@@ -222,12 +285,20 @@ try {
   $j = Get-Content (Join-Path $tasks '__ID__.job.json') -Raw | ConvertFrom-Json
   $earlier = Get-VM -Name $j.name -ErrorAction SilentlyContinue | Select-Object -First 1
   if ($earlier) { Say ([ordered]@{ state = 'success'; vm = [string]$earlier.Id }); return }
+  $mine = $true # from here on, a VM of this name and the folder are this task's own work
   New-Item -ItemType Directory -Force -Path $j.dir | Out-Null
-  $disk = Join-Path $j.dir 'disk0.vhdx'
+  # The copy keeps the kind of file the template has (a .vhd stays a .vhd).
+  $ext = [IO.Path]::GetExtension([string]$j.source).ToLower(); if ($ext -ne '.vhd') { $ext = '.vhdx' }
+  $disk = Join-Path $j.dir ('disk0' + $ext)
   Copy-Item -LiteralPath $j.source -Destination $disk -Force
   $t = Get-VM -Id ([guid]$j.template)
   $vm = New-VM -Name $j.name -Generation $t.Generation -MemoryStartupBytes ([int64]$j.memoryMb * 1MB) -VHDPath $disk -SwitchName $j.switch -Path $j.dir
-  Set-VM -VM $vm -ProcessorCount ([int]$j.vcpu) -StaticMemory -Notes $j.notes -AutomaticCheckpointsEnabled $false -AutomaticStartAction StartIfRunning -AutomaticStopAction ShutDown
+  $set = @{ VM = $vm; ProcessorCount = [int]$j.vcpu; StaticMemory = $true; AutomaticStartAction = 'StartIfRunning'; AutomaticStopAction = 'ShutDown' }
+  # Automatic checkpoints are newer than some hosts' Hyper-V module: where Set-VM does not know them, there are none to turn off.
+  if ((Get-Command Set-VM).Parameters.ContainsKey('AutomaticCheckpointsEnabled')) { $set.AutomaticCheckpointsEnabled = $false }
+  Set-VM @set
+  # The address the config drive names the interface by (the guest matches on it, whatever it calls the interface).
+  if ($j.mac) { Get-VMNetworkAdapter -VM $vm | Select-Object -First 1 | Set-VMNetworkAdapter -StaticMacAddress $j.mac }
   if ($t.Generation -eq 2) {
     # The same secure boot setting as the template (a Linux template uses the Microsoft UEFI certificate authority).
     $fw = Get-VMFirmware -VM $t
@@ -242,13 +313,21 @@ try {
     [IO.File]::WriteAllBytes($iso, [Convert]::FromBase64String($j.iso))
     Add-VMDvdDrive -VM $vm -Path $iso
   }
+  # The note comes last: a VM that carries it is complete (clone and find go by that).
+  Set-VM -VM $vm -Notes $j.notes
   Say ([ordered]@{ state = 'success'; vm = [string]$vm.Id })
+  Remove-Item -LiteralPath (Join-Path $tasks ($j.name + '.task')) -Force -ErrorAction SilentlyContinue
 } catch {
   $text = $_.Exception.Message
+  # Nothing half-made stays behind for a retry to find.
+  if ($mine) {
+    try { Get-VM -Name $j.name -ErrorAction SilentlyContinue | ForEach-Object { if ($_.State -ne 'Off') { Stop-VM -VM $_ -TurnOff -Force }; Remove-VM -VM $_ -Force } } catch { }
+    Remove-Item -LiteralPath $j.dir -Recurse -Force -ErrorAction SilentlyContinue
+  }
   $code = 'TASK_FAILED'
   if ($text -match 'not enough|insufficient|disk space') { $code = 'INSUFFICIENT_RESOURCES' } elseif ($text -match 'already exists') { $code = 'DUPLICATE_NAME' } elseif ($text -match 'denied') { $code = 'PERMISSION_DENIED' }
   Say ([ordered]@{ state = 'error'; code = $code; error = $text })
-} finally { Remove-Item (Join-Path $tasks '__ID__.job.json') -Force -ErrorAction SilentlyContinue }
+} finally { Remove-Item (Join-Path $tasks '__ID__.job.json'), (Join-Path $tasks '__ID__.ps1') -Force -ErrorAction SilentlyContinue } # the job file holds the config drive
 `;
 
 export const names = Object.keys(BODIES);

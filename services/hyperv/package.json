@@ -2,6 +2,7 @@
   "name": "@lightning-vm/hyperv",
   "version": "0.1.0",
   "private": true,
+  "license": "Apache-2.0",
   "type": "module",
   "description": "Hyper-V adapter: the hypervisor adapter contract (docs/adapter-contract.md) with PowerShell over WinRM",
   "scripts": {

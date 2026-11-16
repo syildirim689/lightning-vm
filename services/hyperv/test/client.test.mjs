@@ -6,7 +6,7 @@ import { execFileSync } from 'node:child_process';
 import { createHash, createHmac, X509Certificate } from 'node:crypto';
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import https from 'node:https';
-import { tmpdir } from 'node:os';
+import { networkInterfaces, tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 process.env.HYPERV_ALLOW_NETWORKS = '127.0.0.0/8'; // read when winrm.mjs loads
@@ -31,7 +31,8 @@ function ntlmOk(type3, user, domain, password) {
   const nt = field(1);
   return field(3).toString('utf16le') === user && nt.subarray(0, 16).equals(hmac(ntlmV2Hash(user, domain, password), SERVER_CHALLENGE, nt.subarray(16)));
 }
-async function fake({ offer = 'Negotiate', result = 'LVMOK {"hello":"dünya"}\r\n', exitCode = 0, stderr = '' } = {}) {
+// closeAfter: the host closes the connection after answering that action (as it does with an idle one), so the next request arrives on a new, unsigned socket.
+async function fake({ offer = 'Negotiate', result = 'LVMOK {"hello":"dünya"}\r\n', exitCode = 0, stderr = '', closeAfter = '' } = {}) {
   const seen = { actions: [], stdin: Buffer.alloc(0), sockets: new Set(), signedIn: new WeakSet() };
   const server = https.createServer({ key, cert }, (req, res) => {
     const chunks = [];
@@ -60,8 +61,8 @@ async function fake({ offer = 'Negotiate', result = 'LVMOK {"hello":"dünya"}\r\
       const xml = Buffer.concat(chunks).toString();
       const action = /<a:Action[^>]*>([^<]+)</.exec(xml)[1].split('/').pop();
       seen.actions.push(action);
-      const reply = (body) => { res.writeHead(200, { 'content-type': 'application/soap+xml' }); res.end(`<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope" xmlns:rsp="http://schemas.microsoft.com/wbem/wsman/1/windows/shell"><s:Body>${body}</s:Body></s:Envelope>`); };
-      if (action === 'Create') return reply('<rsp:Shell><rsp:ShellId>SHELL-1</rsp:ShellId></rsp:Shell>');
+      const reply = (body) => { res.writeHead(200, { 'content-type': 'application/soap+xml', ...(action === closeAfter && { connection: 'close' }) }); res.end(`<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope" xmlns:rsp="http://schemas.microsoft.com/wbem/wsman/1/windows/shell"><s:Body>${body}</s:Body></s:Envelope>`); };
+      if (action === 'Create') { seen.create = /<s:Body>(.*)<\/s:Body>/.exec(xml)[1]; return reply('<rsp:Shell><rsp:ShellId>SHELL-1</rsp:ShellId></rsp:Shell>'); }
       if (action === 'Command') { seen.command = [...xml.matchAll(/<rsp:Arguments>([^<]*)</g)].map((m) => m[1]); return reply('<rsp:CommandResponse><rsp:CommandId>CMD-1</rsp:CommandId></rsp:CommandResponse>'); }
       if (action === 'Send') { seen.stdin = Buffer.concat([seen.stdin, Buffer.from(/<rsp:Stream[^>]*>([^<]*)</.exec(xml)[1], 'base64')]); seen.ended = / End="true"/.test(xml); return reply('<rsp:SendResponse/>'); }
       if (action === 'Receive') {
@@ -88,8 +89,27 @@ test('NTLM signs the connection in once; the script goes in on standard input an
     assert.deepEqual(seen.command.slice(0, 5), ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-EncodedCommand']);
     assert.match(Buffer.from(seen.command[5], 'base64').toString('utf16le'), /ReadToEnd\(\);Invoke-Expression/);
     assert.equal(seen.sockets.size, 1, 'everything on the one signed-in connection');
+    // The shell is asked to end itself when nobody uses it (MS-WSMV 2.2.4.37: IdleTimeOut, a duration, before the streams).
+    assert.equal(seen.create, '<rsp:Shell><rsp:IdleTimeOut>PT180.000S</rsp:IdleTimeOut><rsp:InputStreams>stdin</rsp:InputStreams><rsp:OutputStreams>stdout stderr</rsp:OutputStreams></rsp:Shell>');
     ps.close();
   } finally { server.close(); }
+});
+
+test('a connection the host closed in between is signed in again, not reported as a wrong password', { skip }, async () => {
+  const { server, port, seen } = await fake({ closeAfter: 'Command' });
+  try {
+    const ps = await connect({ host: '127.0.0.1', port, username: 'LAB\\admin', password: 'right', tls: { mode: 'pinned', sha256: pin } });
+    assert.deepEqual(await ps('x'), { hello: 'dünya' });
+    assert.equal(seen.sockets.size, 2, 'the rest of the script went over a second connection');
+    assert.deepEqual(seen.actions.filter((a, i, l) => a !== l[i - 1]), ['Create', 'Command', 'Send', 'Receive', 'Delete']);
+    ps.close();
+  } finally { server.close(); }
+});
+
+test('an address on one of this machine\'s own networks is refused before anything is sent', { skip }, async () => {
+  const own = Object.values(networkInterfaces()).flat().find((a) => a && !a.internal && a.family === 'IPv4' && !a.address.startsWith('169.254.'));
+  if (!own) return; // a machine with no network of its own has nothing to refuse
+  await assert.rejects(connect({ host: own.address, username: 'administrator', password: 'x', tls: { mode: 'system' } }), { code: 'ENDPOINT_BLOCKED' });
 });
 
 test('a wrong password is INVALID_LOGIN; Basic is used where the host offers only that', { skip }, async () => {

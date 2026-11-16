@@ -4,11 +4,12 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
+import { networkInterfaces } from 'node:os';
 import http from 'node:http';
 import * as h from '../handlers.mjs';
 import { names, quote, script } from '../scripts.mjs';
-import { handler } from '../server.mjs';
-import { connect, Failure, hostKeys, parse, privateKey, sshFailure } from '../ssh.mjs';
+import { handler, routes } from '../server.mjs';
+import { addressGuard, connect, Failure, hostKeys, parse, privateKey, sshFailure } from '../ssh.mjs';
 
 const BLOB = Buffer.from('a pretend ed25519 host key').toString('base64'), RSA = Buffer.from('a pretend rsa host key').toString('base64');
 const PIN = createHash('sha256').update(Buffer.from(BLOB, 'base64')).digest('hex');
@@ -52,7 +53,9 @@ test('a password goes through sshpass in the environment, with only the pinned k
   assert.ok(!c.args.join(' ').includes('correct horse'), 'the password is not on the command line');
   assert.equal(c.known, `203.0.113.5 ssh-ed25519 ${BLOB}\n`);
   for (const o of ['StrictHostKeyChecking=yes', 'GlobalKnownHostsFile=/dev/null', 'HostKeyAlgorithms=ssh-ed25519', 'PubkeyAuthentication=no']) assert.ok(c.args.includes(o), o);
-  assert.deepEqual(c.args.slice(-2), ['203.0.113.5', 'bash -s']);
+  // The host ends the script itself, a little before the adapter stops waiting for it (50 s unless a route says otherwise).
+  assert.deepEqual(c.args.slice(-2), ['203.0.113.5', 'timeout -k 5 45 bash -s']);
+  await sh('x', { timeout: 110000 }); assert.equal(f.calls.at(-1).args.at(-1), 'timeout -k 5 105 bash -s');
   assert.ok(c.input.startsWith('echo LVMBEGIN\n'));
   sh.close(); await new Promise((r) => setTimeout(r, 50));
   assert.ok(!existsSync(c.folder), 'the temporary folder is gone');
@@ -85,6 +88,10 @@ test('what went wrong on the way is told apart', async () => {
   await assert.rejects(failing({ code: 255, stdout: '', stderr: 'root@203.0.113.5: Permission denied (publickey,password).' }), { code: 'INVALID_LOGIN' });
   await assert.rejects(failing({ code: 255, stdout: '', stderr: 'Host key verification failed.' }), { code: 'TLS_UNTRUSTED' });
   await assert.rejects(failing({ code: -2, stdout: '', stderr: '' }), { code: 'TIMEOUT' });
+  await assert.rejects(failing({ code: 124, stdout: 'LVMBEGIN\nS\thalf\n', stderr: '' }), { code: 'TIMEOUT' }, 'the host\'s own timeout ended the script');
+  // The networks the adapter itself sits on (the panel's database lives there) are refused like loopback is.
+  const own = Object.values(networkInterfaces()).flat().find((a) => a && !a.internal && a.family === 'IPv4' && !a.address.startsWith('169.254.'));
+  if (own) await assert.rejects(connect(target({ host: own.address }), fakeSsh()), { code: 'ENDPOINT_BLOCKED' });
   await assert.rejects(failing({ code: 1, stdout: 'LVMBEGIN\nLVMERR NOT_MANAGED this VM was not created by the panel\n', stderr: '' }), { code: 'NOT_MANAGED', message: 'this VM was not created by the panel' });
   await assert.rejects(failing({ code: 0, stdout: 'LVMBEGIN\nS\thalf\n', stderr: 'virsh: something broke' }), { code: 'LIBVIRT_ERROR', message: 'virsh: something broke' });
   assert.equal(sshFailure({ code: 127, stdout: '', stderr: 'bash: command not found' }).code, 'NOT_LIBVIRT');
@@ -133,6 +140,13 @@ test('creating a server starts a job on the host with a config drive, and the ta
   assert.equal(p.notes, `Managed by Lightning VM (server ${SERVER})\nlvm-ips=203.0.113.20`);
   const iso = Buffer.from(p.iso, 'base64');
   assert.equal(iso.subarray(32769, 32774).toString(), 'CD001'); assert.ok(iso.includes('local-hostname')); assert.ok(iso.includes('203.0.113.20/24'));
+  // The interface's address is made from the server's id (the same on every try); the config drive names the interface by it.
+  assert.match(p.mac, /^52:54:00(:[0-9a-f]{2}){3}$/); assert.equal(p.mac, h.macOf(SERVER));
+  assert.ok(iso.includes(`"match":{"macaddress":"${p.mac}"}`) && iso.includes('"set-name":"eth0"'));
+  // What becomes text on the host is held to its shape before it gets there.
+  for (const serverId of [undefined, '', 'x', `${SERVER}"; reboot; "`, `${SERVER}\n`]) await assert.rejects(h.clone(f.sh, { ...order, serverId }), { code: 'INVALID_REQUEST' });
+  for (const a of ['203.0.113.20"; reboot; "/24', '$(reboot)/24', 'web1/24']) await assert.rejects(h.clone(f.sh, { ...order, metadata: JSON.stringify({ network: { version: 2, ethernets: { nic0: { addresses: [a] } } } }) }), { code: 'INVALID_REQUEST' });
+  assert.equal(f.calls.length, 1, 'none of those reached the host');
   assert.deepEqual(await h.task(f.sh, { task: 'job-1' }), { state: 'running' });
   status = ['R', 'success', UUID]; assert.deepEqual(await h.task(f.sh, { task: 'job-1' }), { state: 'success', vm: UUID });
   status = ['R', 'error', 'INSUFFICIENT_RESOURCES', 'No space left']; assert.deepEqual(await h.task(f.sh, { task: 'job-1' }), { state: 'error', code: 'INSUFFICIENT_RESOURCES', error: 'No space left' });
@@ -141,6 +155,46 @@ test('creating a server starts a job on the host with a config drive, and the ta
   await assert.rejects(h.clone(f.sh, { ...order, name: 'web1' }), { code: 'INVALID_REQUEST' });
   await assert.rejects(h.clone(f.sh, { ...order, name: 'lvm-a;reboot' }), { code: 'INVALID_REQUEST' });
   await assert.rejects(h.clone(f.sh, { ...order, customization: 'appliance' }), { code: 'PROVISIONING_NOT_SUPPORTED' });
+});
+
+test('the network settings are rewritten for a guest without netplan, and bound to the interface by its address', () => {
+  const panel = { version: 2, ethernets: { nic0: { match: { name: 'e*' }, addresses: ['203.0.113.20/24', '2001:db8::20/64'],
+    routes: [{ to: 'default', via: '203.0.113.1' }, { to: '::/0', via: '2001:db8::1', 'on-link': true }, { to: '10.0.0.0/8', via: '203.0.113.2' }], nameservers: { addresses: ['1.1.1.1'] } } } };
+  const before = JSON.stringify(panel);
+  assert.deepEqual(h.guestNetwork(panel, '52:54:00:00:00:01'), { version: 2, ethernets: { eth0: { match: { macaddress: '52:54:00:00:00:01' }, 'set-name': 'eth0', addresses: ['203.0.113.20/24', '2001:db8::20/64'],
+    routes: [{ to: '0.0.0.0/0', via: '203.0.113.1' }, { to: '10.0.0.0/8', via: '203.0.113.2' }], gateway6: '2001:db8::1', nameservers: { addresses: ['1.1.1.1'] } } } });
+  assert.equal(JSON.stringify(panel), before, 'what the panel sent is left alone');
+  assert.deepEqual(h.guestNetwork({ version: 2 }, 'x'), { version: 2 });
+  assert.equal(h.macOf('a'), h.macOf('a')); assert.notEqual(h.macOf('a'), h.macOf('b'));
+});
+
+test('the scripts never put a caller\'s text where the shell reads it as code', () => {
+  const clone = script('clone', { name: 'lvm-x', notes: 'n' });
+  const job = clone.slice(clone.indexOf('<<LVMJOB'), clone.indexOf('\nLVMJOB\n'));
+  // Inside the job script (written through an unquoted here-document) only checked values appear; the note is read from a file.
+  assert.ok(!job.includes('$P_notes') && job.includes('--new-desc "\\$(cat "$ROOT/tasks/$id.notes")"'));
+  assert.deepEqual([...new Set(job.match(/\$P_\w+/g))].sort(), ['$P_diskGb', '$P_mac', '$P_memoryMb', '$P_name', '$P_network', '$P_vcpu']);
+  for (const v of ['ours "$P_name"', 'plain "$P_network"', 'num "$P_vcpu" && num "$P_memoryMb" && num "$P_diskGb"', 'is "$P_mac"', 'plain "$t"', 'plain "$dir"']) assert.ok(clone.indexOf(v) > 0 && clone.indexOf(v) < clone.indexOf('<<LVMJOB'), v);
+  // The note is written last, and a failure takes away what was made.
+  assert.ok(job.indexOf('--new-desc') > job.indexOf('--add-device') && job.indexOf("printf 'success") > job.indexOf('--new-desc'));
+  assert.match(job, /bad\(\) \{ undo;/);
+  // No parameter is ever the pattern of a grep (the one fixed-string search for a checked description apart).
+  for (const n of names) assert.ok(!/grep [^|\n]*"\$P_/.test(script(n).replace('grep -qF -e "<description>$P_description', '')), n);
+});
+
+test('a route that ran out of time leaves its connection open until the work itself has ended', async () => {
+  const token = 't'.repeat(40), seen = [];
+  let finish; const held = new Promise((r) => { finish = r; });
+  const kept = routes['/v1/vm/find'];
+  routes['/v1/vm/find'] = [async (sh) => { seen.push('started'); await held; seen.push('ended'); const close = sh.close; sh.close = () => { seen.push('closed'); close(); }; return { vm: null }; }, 0.05];
+  const server = http.createServer(handler(token, fakeSsh())); await new Promise((r) => server.listen(0, '127.0.0.1', r));
+  try {
+    const r = await fetch(`http://127.0.0.1:${server.address().port}/v1/vm/find`, { method: 'POST', headers: { authorization: `Bearer ${token}` }, body: JSON.stringify({ ...target(), name: 'lvm-slow' }) });
+    assert.deepEqual([r.status, (await r.json()).code], [502, 'TIMEOUT']);
+    assert.deepEqual(seen, ['started'], 'the folder with the private key is not removed under the handler that still works');
+    finish(); await new Promise((r) => setTimeout(r, 20));
+    assert.deepEqual(seen, ['started', 'ended', 'closed']);
+  } finally { routes['/v1/vm/find'] = kept; server.close(); }
 });
 
 test('state, disks and snapshots come back in the contract\'s shape', async () => {
@@ -204,4 +258,12 @@ test('the service wants its token, names what is not there yet and passes the ho
     assert.deepEqual(await call('/v1/vm/find', { ...target(), name: 'lvm-x' }), [200, { vm: null }]);
     assert.ok(new Failure('X') instanceof Error);
   } finally { server.close(); }
+});
+
+test('the address guard refuses the adapter\'s own networks unless they are allowed', () => {
+  const docker = { lo: [{ address: '127.0.0.1', cidr: '127.0.0.1/8', family: 'IPv4', internal: true }], eth0: [{ address: '172.18.0.5', cidr: '172.18.0.5/16', family: 'IPv4', internal: false }, { address: 'fd00:18::5', cidr: 'fd00:18::5/64', family: 'IPv6', internal: false }] };
+  const guard = addressGuard({}, docker);
+  assert.deepEqual([guard('172.18.0.3', 'ipv4'), guard('fd00:18::3', 'ipv6'), guard('127.0.0.1', 'ipv4'), guard('169.254.169.254', 'ipv4'), guard('203.0.113.9', 'ipv4'), guard('2001:db8::9', 'ipv6')], [false, false, false, false, true, true]);
+  const allowed = addressGuard({ LIBVIRT_ALLOW_NETWORKS: '172.18.0.0/16', LIBVIRT_DENY_NETWORKS: '203.0.113.0/24' }, docker);
+  assert.deepEqual([allowed('172.18.0.3', 'ipv4'), allowed('203.0.113.9', 'ipv4'), allowed('198.51.100.9', 'ipv4')], [true, false, true]);
 });
