@@ -167,6 +167,9 @@
     "FORBIDDEN_TARGET": "Sizde olmayan izinleri veremez, sizden yetkili birini değiştiremezsiniz.",
     "ROLE_LOCKED": "Bu hazır rol değiştirilemez veya silinemez.",
     "LAST_ADMIN": "En az bir yönetici kalmalı.",
+    "NOT_XAPI": "Bu adreste XCP-ng / XenServer API’si (XAPI) yanıt vermedi. Adresi ve portu (varsayılan 443) denetleyin.",
+    "XAPI_ERROR": "XCP-ng isteği reddetti. Ayrıntı için havuzun görev günlüğüne bakın.",
+    "HOST_IS_SLAVE": "Bu host havuzun yöneticisi değil. Bağlantıda havuz yöneticisinin (master) adresini kullanın.",
     "PLATFORM_NOT_SUPPORTED": "Bu işlem Proxmox VE bağlantılarında henüz desteklenmiyor.",
     "NOT_PROXMOX": "Bu adreste Proxmox VE API’si yanıt vermedi. Adresi ve portu (varsayılan 8006) denetleyin.",
     "PROXMOX_ERROR": "Proxmox VE isteği reddetti. Ayrıntı için Proxmox’taki görev günlüğüne bakın.",
@@ -816,6 +819,11 @@
   },
   "Vmware": {
     "platform": {
+      "xcpng": "XCP-ng / XenServer",
+      "xcpngHelp": "Havuz ya da tek host, 8.x",
+      "xcpngEndpointHelp": "Havuz yöneticisinin (master) adresi. Varsayılan port 443.",
+      "xcpngUsernameHelp": "Havuz yöneticisi yetkisi olan kullanıcı; genellikle root.",
+      "xcpngVerify": "Parmak izini XCP-ng hostunda şu komutla karşılaştırın:",
       "label": "Sanallaştırma platformu",
       "vmware": "VMware vSphere",
       "vmwareHelp": "ESXi ya da vCenter, 6.0 – 9.x",
@@ -900,6 +908,7 @@
       "discovered": "Son keşif"
     },
     "kind": {
+      "xcpng": "XCP-ng",
       "proxmox": "Proxmox VE",
       "esxi": "Standalone ESXi",
       "vcenter": "vCenter"

@@ -14,7 +14,7 @@ export class OperationError extends Error {
 const permanent = new Set(['SNAPSHOT_NOT_FOUND', 'INVALID_LOGIN', 'PERMISSION_DENIED', 'WRITE_RESTRICTED', 'PROVISIONING_NOT_SUPPORTED', 'TEMPLATE_NOT_FOUND',
   'NETWORK_NOT_FOUND', 'TEMPLATE_HAS_NO_NIC', 'DISK_SMALLER_THAN_TEMPLATE', 'INSUFFICIENT_RESOURCES', 'NOT_MANAGED', 'TOOLS_NOT_RUNNING',
   'TLS_UNTRUSTED', 'TLS_HOSTNAME_MISMATCH', 'TLS_PIN_MISMATCH', 'ENDPOINT_BLOCKED', 'INVALID_REQUEST', 'SECRET_KEY_UNAVAILABLE', 'INVALID_STATE', 'VM_NOT_FOUND',
-  'FIREWALL_NEEDS_DVS', 'FIREWALL_TOO_MANY_RULES', 'DISK_SHRINK_NOT_SUPPORTED', 'DISK_HAS_SNAPSHOTS', 'VM_HAS_NO_DISK', 'DISK_NOT_SUPPORTED', 'DATASTORE_NOT_FOUND', 'PLATFORM_NOT_SUPPORTED']);
+  'FIREWALL_NEEDS_DVS', 'FIREWALL_TOO_MANY_RULES', 'DISK_SHRINK_NOT_SUPPORTED', 'DISK_HAS_SNAPSHOTS', 'VM_HAS_NO_DISK', 'DISK_NOT_SUPPORTED', 'DATASTORE_NOT_FOUND', 'PLATFORM_NOT_SUPPORTED', 'HOST_IS_SLAVE']);
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const readinessPollMs = Number(process.env.READINESS_POLL_MS) || 5000;
@@ -29,8 +29,10 @@ export function decrypt(blob, context) {
   return Buffer.concat([d.update(raw.subarray(12, raw.length - 16)), d.final()]).toString('utf8');
 }
 
-// The adapter request for a stored VMware connection (password decrypted in memory only).
-export const connectionTarget = (c) => ({ host: c.host, port: c.port, username: c.username, password: decrypt(c.password_enc, c.id), ...(c.api_version && { apiVersion: c.api_version }), ...(c.kind === 'proxmox' && { platform: 'proxmox' }),
+// Adapters besides VMware's, by connection kind. All speak the same contract (docs/adapter-contract.md).
+const adapters = { proxmox: () => process.env.PROXMOX_SERVICE_URL ?? 'http://proxmox:8080', xcpng: () => process.env.XCPNG_SERVICE_URL ?? 'http://xcpng:8080' };
+// The adapter request for a stored connection (password decrypted in memory only).
+export const connectionTarget = (c) => ({ host: c.host, port: c.port, username: c.username, password: decrypt(c.password_enc, c.id), ...(c.api_version && { apiVersion: c.api_version }), ...(adapters[c.kind] && { platform: c.kind }),
   tls: { mode: c.tls_mode, ...(c.tls_ca_pem && { caPem: c.tls_ca_pem }), ...(c.tls_sha256 && { sha256: c.tls_sha256 }) } });
 
 export async function adapter(path, body) {
@@ -40,7 +42,7 @@ export async function adapter(path, body) {
   let res;
   try {
     // The adapter of the connection's platform: both speak the same contract (docs/adapter-contract.md).
-    const base = body?.platform === 'proxmox' ? process.env.PROXMOX_SERVICE_URL ?? 'http://proxmox:8080' : process.env.VMWARE_SERVICE_URL ?? 'http://vmware:8080';
+    const base = adapters[body?.platform]?.() ?? process.env.VMWARE_SERVICE_URL ?? 'http://vmware:8080';
     res = await fetch(`${base}${path}`, {
       method: 'POST', headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
       body: JSON.stringify(body), signal: AbortSignal.timeout(130_000) });
@@ -573,7 +575,7 @@ export async function processOperation(db, job, log, notify = async () => {}, rd
 // Compares the platform with VMware: missing VMs, unknown platform-named VMs, power state drift.
 // It reports; it never deletes anything on its own.
 export async function reconcile(db, log) {
-  const { rows: conns } = await db.query("SELECT DISTINCT c.* FROM vmware_connections c JOIN resource_pools p ON p.connection_id = c.id WHERE c.kind IN ('vcenter', 'proxmox')");
+  const { rows: conns } = await db.query("SELECT DISTINCT c.* FROM vmware_connections c JOIN resource_pools p ON p.connection_id = c.id WHERE c.kind IN ('vcenter', 'proxmox', 'xcpng')");
   for (const c of conns) {
     const target = connectionTarget(c);
     let vms;

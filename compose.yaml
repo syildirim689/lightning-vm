@@ -61,6 +61,7 @@ services:
       MASTER_KEY_FILE: /run/secrets/master_key
       VMWARE_SERVICE_URL: http://vmware:8080
       PROXMOX_SERVICE_URL: http://proxmox:8080
+      XCPNG_SERVICE_URL: http://xcpng:8080
       VMWARE_SERVICE_TOKEN_FILE: /run/secrets/vmware_token
       APP_VERSION: ${APP_VERSION:-dev}
       APP_ENV: ${APP_ENV:-production}
@@ -114,6 +115,23 @@ services:
       PROXMOX_SERVICE_TOKEN_FILE: /run/secrets/vmware_token
       # Extra networks the adapter may reach (comma-separated CIDRs), for a Proxmox VE on a local range.
       PROXMOX_ALLOW_NETWORKS: ${PROXMOX_ALLOW_NETWORKS:-}
+    secrets: [vmware_token]
+    healthcheck:
+      test: [CMD, node, server.mjs, healthcheck]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    logging: *logging
+  # XCP-ng / XenServer adapter (XAPI), for connections of kind "xcpng". Same contract, same service token, no state.
+  xcpng:
+    build: ./services/xcpng
+    restart: unless-stopped
+    read_only: true
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+    environment:
+      XCPNG_SERVICE_TOKEN_FILE: /run/secrets/vmware_token
+      XCPNG_ALLOW_NETWORKS: ${XCPNG_ALLOW_NETWORKS:-}
     secrets: [vmware_token]
     healthcheck:
       test: [CMD, node, server.mjs, healthcheck]

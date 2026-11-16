@@ -10,12 +10,15 @@ import { Can, PermissionGuard } from './rbac';
 import { decryptSecret, encryptSecret } from './secrets';
 
 type TlsSettings = { mode: 'system' | 'ca' | 'pinned'; caPem?: string; sha256?: string };
-// platform picks the adapter: VMware (services/vmware) unless it says Proxmox VE (services/proxmox). Both speak the
-// same contract (docs/adapter-contract.md), so everything above the adapter is the same for both.
-type Target = { host: string; port: number; username: string; password: string; tls: TlsSettings; apiVersion?: string; platform?: 'proxmox' };
+// platform picks the adapter: VMware (services/vmware) unless it names another one (services/proxmox,
+// services/xcpng). All speak the same contract (docs/adapter-contract.md), so everything above the adapter is the same.
+export const platforms = { proxmox: { port: 8006, url: () => process.env.PROXMOX_SERVICE_URL ?? 'http://proxmox:8080' }, xcpng: { port: 443, url: () => process.env.XCPNG_SERVICE_URL ?? 'http://xcpng:8080' } } as const;
+type Platform = keyof typeof platforms;
+const platformOf = (kind: unknown): Platform | undefined => (typeof kind === 'string' && kind in platforms ? (kind as Platform) : undefined);
+type Target = { host: string; port: number; username: string; password: string; tls: TlsSettings; apiVersion?: string; platform?: Platform };
 type Compat = { apiVersion: string; customization: 'cloudinit' | 'guestinfo' | 'none'; clone: boolean; consoleUrl: boolean; support: string };
 type Discovery = {
-  product: { kind: 'esxi' | 'vcenter' | 'proxmox'; instanceUuid: string } & Record<string, string>;
+  product: { kind: 'esxi' | 'vcenter' | Platform; instanceUuid: string } & Record<string, string>;
   licenses: unknown[]; writeApi: string; privileges: Record<string, boolean>; operations: Record<string, boolean>; warnings: string[];
   hosts: { hardwareUuid: string; name: string }[]; datastores: unknown[]; networks: unknown[]; compute: unknown[]; vms: unknown[]; compat: Compat;
 };
@@ -30,9 +33,9 @@ function readTarget(body: unknown, requirePassword = true): Target & { name: str
   const b = (body ?? {}) as Record<string, unknown>;
   const tls = (b.tls ?? { mode: 'system' }) as Record<string, unknown>;
   const fields: Record<string, string> = {};
-  const proxmox = b.platform === 'proxmox';
-  // Proxmox VE answers on 8006 unless told otherwise.
-  const port = b.port === undefined || b.port === '' ? (proxmox ? 8006 : 443) : Number(b.port);
+  const other = platformOf(b.platform);
+  // Each platform has its own usual port (Proxmox VE: 8006).
+  const port = b.port === undefined || b.port === '' ? (other ? platforms[other].port : 443) : Number(b.port);
   if (typeof b.name !== 'string' || !b.name.trim() || b.name.length > 100) fields.name = 'INVALID_VALUE';
   if (typeof b.host !== 'string' || !(isIP(b.host) || hostnamePattern.test(b.host))) fields.host = 'INVALID_HOST';
   if (!Number.isInteger(port) || port < 1 || port > 65535) fields.port = 'INVALID_PORT';
@@ -43,11 +46,11 @@ function readTarget(body: unknown, requirePassword = true): Target & { name: str
   if (!['system', 'ca', 'pinned'].includes(tls.mode as string)) fields.tlsMode = 'INVALID_VALUE';
   if (tls.mode === 'ca' && (typeof tls.caPem !== 'string' || !tls.caPem.includes('BEGIN CERTIFICATE') || tls.caPem.length > 20000)) fields.caPem = 'INVALID_CERTIFICATE';
   if (tls.mode === 'pinned' && (typeof tls.sha256 !== 'string' || !/^[0-9a-f]{64}$/.test(tls.sha256))) fields.sha256 = 'INVALID_FINGERPRINT';
-  if (b.platform !== undefined && b.platform !== '' && b.platform !== 'vmware' && b.platform !== 'proxmox') fields.platform = 'INVALID_VALUE';
-  if (!proxmox && b.apiVersion !== undefined && b.apiVersion !== '' && !apiVersions.includes(b.apiVersion as string)) fields.apiVersion = 'INVALID_VALUE';
+  if (b.platform !== undefined && b.platform !== '' && b.platform !== 'vmware' && !other) fields.platform = 'INVALID_VALUE';
+  if (!other && b.apiVersion !== undefined && b.apiVersion !== '' && !apiVersions.includes(b.apiVersion as string)) fields.apiVersion = 'INVALID_VALUE';
   if (Object.keys(fields).length) throw apiError(400, 'VALIDATION_FAILED', 'Invalid input', fields);
   return {
-    ...(b.apiVersion && !proxmox ? { apiVersion: b.apiVersion as string } : {}), ...(proxmox && { platform: 'proxmox' as const }),
+    ...(b.apiVersion && !other ? { apiVersion: b.apiVersion as string } : {}), ...(other && { platform: other }),
     name: (b.name as string).trim(), host: (b.host as string).toLowerCase(), port, username: b.username as string, password: typeof b.password === 'string' ? b.password : '',
     tls: { mode: tls.mode as TlsSettings['mode'], ...(tls.mode === 'ca' && { caPem: tls.caPem as string }), ...(tls.mode === 'pinned' && { sha256: tls.sha256 as string }) },
   };
@@ -58,7 +61,8 @@ export async function callAdapter<T>(path: string, body: unknown, timeoutMs: num
   let token: string;
   try { token = readFileSync(process.env.VMWARE_SERVICE_TOKEN_FILE ?? '/run/secrets/vmware_token', 'utf8').trim(); }
   catch { throw apiError(503, 'VMWARE_SERVICE_UNAVAILABLE', 'Service token missing'); }
-  const base = (body as { platform?: string } | null)?.platform === 'proxmox' ? process.env.PROXMOX_SERVICE_URL ?? 'http://proxmox:8080' : process.env.VMWARE_SERVICE_URL ?? 'http://vmware:8080';
+  const other = platformOf((body as { platform?: string } | null)?.platform);
+  const base = other ? platforms[other].url() : process.env.VMWARE_SERVICE_URL ?? 'http://vmware:8080';
   const res = await fetch(`${base}${path}`, {
     method: 'POST', headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
     body: JSON.stringify(body), signal: AbortSignal.timeout(timeoutMs),
@@ -71,7 +75,7 @@ export async function callAdapter<T>(path: string, body: unknown, timeoutMs: num
 // Rebuilds the adapter request from a stored connection row, decrypting the password in memory only.
 export function storedTarget(c: Record<string, string | number>): Target {
   return { host: String(c.host), port: Number(c.port), username: String(c.username), password: decryptSecret(String(c.password_enc), String(c.id)),
-    ...(c.api_version ? { apiVersion: String(c.api_version) } : {}), ...(c.kind === 'proxmox' && { platform: 'proxmox' as const }),
+    ...(c.api_version ? { apiVersion: String(c.api_version) } : {}), ...(platformOf(c.kind) && { platform: platformOf(c.kind) }),
     tls: { mode: c.tls_mode as TlsSettings['mode'], ...(c.tls_ca_pem && { caPem: String(c.tls_ca_pem) }), ...(c.tls_sha256 && { sha256: String(c.tls_sha256) }) } };
 }
 
@@ -161,7 +165,7 @@ export class VmwareController {
     if (typeof connectionId !== 'string' || !/^[0-9a-f-]{36}$/.test(connectionId)) throw apiError(400, 'VALIDATION_FAILED', 'Invalid input', { connectionId: 'INVALID_VALUE' });
     const { rows: [c] } = await pool.query('SELECT * FROM vmware_connections WHERE id = $1', [connectionId]);
     if (!c) throw apiError(404, 'NOT_FOUND', 'Unknown connection');
-    return summary(await discover(withStoredPassword(readTarget({ ...(body as object), platform: c.kind === 'proxmox' ? 'proxmox' : 'vmware' }, false), c)));
+    return summary(await discover(withStoredPassword(readTarget({ ...(body as object), platform: platformOf(c.kind) ?? 'vmware' }, false), c)));
   }
 
   @Get('connections') @Can('vmware.view', 'vmware.manage', 'catalog.manage', 'dashboard.view')
@@ -200,7 +204,7 @@ export class VmwareController {
   async update(@Req() req: AuthedRequest, @Param('id', ParseUUIDPipe) id: string, @Body() body: unknown) {
     const { rows: [c] } = await pool.query('SELECT * FROM vmware_connections WHERE id = $1', [id]);
     if (!c) throw apiError(404, 'NOT_FOUND', 'Unknown connection');
-    const target = withStoredPassword(readTarget({ ...(body as object), platform: c.kind === 'proxmox' ? 'proxmox' : 'vmware' }, false), c);
+    const target = withStoredPassword(readTarget({ ...(body as object), platform: platformOf(c.kind) ?? 'vmware' }, false), c);
     const d = await discover(target);
     if ((c.instance_uuid && d.product.instanceUuid && c.instance_uuid !== d.product.instanceUuid) || c.kind !== d.product.kind)
       throw apiError(409, 'ENDPOINT_CHANGED', 'This address answers as another ESXi/vCenter');

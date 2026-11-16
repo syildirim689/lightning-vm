@@ -87,7 +87,7 @@ const appBody = [
 ];
 
 const targetBody = [
-  { name: 'platform', type: 'string', values: ['vmware', 'proxmox'], text: { tr: 'Sanallaştırma platformu, varsayılan vmware. proxmox için varsayılan port 8006; kullanıcı root@pam ya da kullanici@pve!anahtar biçimindedir.', en: 'The virtualization platform, default vmware. With proxmox the default port is 8006 and the user is root@pam or user@pve!token.' } },
+  { name: 'platform', type: 'string', values: ['vmware', 'proxmox', 'xcpng'], text: { tr: 'Sanallaştırma platformu, varsayılan vmware. proxmox: varsayılan port 8006, kullanıcı root@pam ya da kullanici@pve!anahtar. xcpng: havuz yöneticisinin (master) adresi, port 443.', en: 'The virtualization platform, default vmware. proxmox: default port 8006, user root@pam or user@pve!token. xcpng: the address of the pool master, port 443.' } },
   { name: 'name', type: 'string', required: true, text: { tr: 'Bağlantı adı, en fazla 100 karakter; benzersiz.', en: 'Connection name, up to 100 characters; unique.' } },
   { name: 'host', type: 'string', required: true, text: { tr: 'ESXi veya vCenter adresi (IP veya host adı).', en: 'ESXi or vCenter address (IP or host name).' } },
   { name: 'port', type: 'integer', text: { tr: '1–65535, varsayılan 443.', en: '1–65535, default 443.' } },

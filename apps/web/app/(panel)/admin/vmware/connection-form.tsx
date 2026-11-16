@@ -16,22 +16,23 @@ export const fingerprintPairs = (hex: string) => hex.match(/../g)?.join(':').toU
 // Filled in from a network scan (discovery.tsx). A fingerprint seen there is pinned only after the admin compares it.
 export type Prefill = { name: string; host: string; port: string; username: string; mode: 'system' | 'pinned'; sha256: string; kind: 'esxi' | 'vcenter' };
 // Where an admin reads the certificate fingerprint on the endpoint itself.
-export const fingerprintCommand = (kind: 'esxi' | 'vcenter' | 'proxmox') => kind === 'proxmox' ? 'openssl x509 -in /etc/pve/local/pve-ssl.pem -noout -fingerprint -sha256' : kind === 'vcenter'
+export const fingerprintCommand = (kind: 'esxi' | 'vcenter' | 'proxmox' | 'xcpng') => kind === 'proxmox' ? 'openssl x509 -in /etc/pve/local/pve-ssl.pem -noout -fingerprint -sha256'
+  : kind === 'xcpng' ? 'openssl x509 -in /etc/xensource/xapi-ssl.pem -noout -fingerprint -sha256' : kind === 'vcenter'
   ? '/usr/lib/vmware-vmafd/bin/vecs-cli entry getcert --store MACHINE_SSL_CERT --alias __MACHINE_CERT | openssl x509 -noout -fingerprint -sha256'
   : 'openssl x509 -in /etc/vmware/ssl/rui.crt -noout -fingerprint -sha256';
 
 // A saved connection opened for editing. The password is never sent back: left empty, the stored one is kept.
 export type Editing = { id: string; name: string; kind: string; host: string; port: number; username: string; tlsMode: string; tlsSha256: string | null; tlsCaPem: string | null;
   apiVersion: string | null; customization: string; status?: string; lastErrorCode?: string | null };
-type Form = { platform: 'vmware' | 'proxmox'; name: string; host: string; port: string; username: string; password: string; mode: string; caPem: string; sha256: string; apiVersion: string; customization: string };
-const knownKind = (k?: string): 'esxi' | 'vcenter' | 'proxmox' | undefined => (k === 'esxi' || k === 'vcenter' || k === 'proxmox' ? k : undefined);
+type Form = { platform: 'vmware' | 'proxmox' | 'xcpng'; name: string; host: string; port: string; username: string; password: string; mode: string; caPem: string; sha256: string; apiVersion: string; customization: string };
+const knownKind = (k?: string): 'esxi' | 'vcenter' | 'proxmox' | 'xcpng' | undefined => (k === 'esxi' || k === 'vcenter' || k === 'proxmox' || k === 'xcpng' ? k : undefined);
 
 // Shared by the admin page and the setup wizard. Certificate trust is an explicit admin decision:
 // an untrusted certificate is shown with its fingerprint and can be pinned, never ignored.
 export default function ConnectionForm({ onSaved, initial, editing }: { onSaved: (s: Summary) => void; initial?: Prefill; editing?: Editing }) {
   const t = useTranslations('Vmware');
   const { error, field } = useErrorText();
-  const [form, setForm] = useState<Form>({ platform: editing?.kind === 'proxmox' ? 'proxmox' : 'vmware', name: '', host: '', port: '443', username: '', password: '', mode: 'system', caPem: '', sha256: '', apiVersion: '', customization: 'auto',
+  const [form, setForm] = useState<Form>({ platform: editing?.kind === 'proxmox' || editing?.kind === 'xcpng' ? editing.kind : 'vmware', name: '', host: '', port: '443', username: '', password: '', mode: 'system', caPem: '', sha256: '', apiVersion: '', customization: 'auto',
     ...(initial && { name: initial.name, host: initial.host, port: initial.port, username: initial.username, mode: initial.mode, sha256: initial.sha256 }),
     ...(editing && { name: editing.name, host: editing.host, port: String(editing.port), username: editing.username, mode: editing.tlsMode, caPem: editing.tlsCaPem ?? '',
       sha256: editing.tlsSha256 ?? '', apiVersion: editing.apiVersion ?? '', customization: editing.customization }) });
@@ -40,14 +41,14 @@ export default function ConnectionForm({ onSaved, initial, editing }: { onSaved:
   const [testedFor, setTestedFor] = useState('');
   const [busy, setBusy] = useState<'test' | 'save'>();
   const set = (k: keyof typeof form) => (v: string) => setForm((f) => ({ ...f, [k]: v }));
-  const proxmox = form.platform === 'proxmox';
+  const proxmox = form.platform === 'proxmox', xcpng = form.platform === 'xcpng', other = proxmox || xcpng;
   // The other platform answers on another port; a port typed by hand is kept.
-  const choose = (p: Form['platform']) => setForm((x) => ({ ...x, platform: p, port: x.port === '443' || x.port === '8006' || !x.port ? (p === 'proxmox' ? '8006' : '443') : x.port }));
+  const choose = (p: Form['platform']) => setForm((x) => ({ ...x, platform: p, port: x.port === '443' || x.port === '8006' || !x.port ? (p === 'proxmox' ? '8006' : '443') : x.port, ...(p === 'xcpng' && !x.username && { username: 'root' }) }));
   const bodyOf = (v: Form) => ({ platform: v.platform, name: v.name, host: v.host, port: Number(v.port), username: v.username, password: v.password, apiVersion: v.apiVersion, customization: v.customization,
     tls: { mode: v.mode, ...(v.mode === 'ca' && { caPem: v.caPem }), ...(v.mode === 'pinned' && { sha256: v.sha256 }) }, ...(editing && { connectionId: editing.id }) });
   const body = () => bodyOf(form);
   // Which product the fingerprint command is for: from the failure, the scan or the saved connection; unknown for a new address.
-  const kind = proxmox ? 'proxmox' as const : knownKind(failure?.kind) ?? knownKind(editing?.kind) ?? knownKind(initial?.kind);
+  const kind = other ? form.platform as 'proxmox' | 'xcpng' : knownKind(failure?.kind) ?? knownKind(editing?.kind) ?? knownKind(initial?.kind);
 
   async function run(step: 'test' | 'save', path: string, onOk: (s: Summary) => void, payload = body()) {
     setBusy(step); setFailure(undefined); setTested(undefined);
@@ -74,21 +75,21 @@ export default function ConnectionForm({ onSaved, initial, editing }: { onSaved:
     </Notice>}
     {!editing && <div className="flex flex-col gap-2">
       <p id="conn-platform" className="text-sm font-medium">{t('platform.label')}</p>
-      <div role="radiogroup" aria-labelledby="conn-platform" className="grid gap-2 sm:grid-cols-2">
-        {(['vmware', 'proxmox'] as const).map((p) => <button key={p} type="button" role="radio" aria-checked={form.platform === p} onClick={() => choose(p)}
+      <div role="radiogroup" aria-labelledby="conn-platform" className="grid gap-2 sm:grid-cols-3">
+        {(['vmware', 'proxmox', 'xcpng'] as const).map((p) => <button key={p} type="button" role="radio" aria-checked={form.platform === p} onClick={() => choose(p)}
           className={`flex min-h-14 items-start gap-3 rounded-xl border px-3 py-2.5 text-left transition-colors focus-visible:outline-2 focus-visible:outline-accent ${form.platform === p ? 'border-accent bg-accent/10' : 'border-border hover:border-accent/50'}`}>
           <span className="mt-0.5 shrink-0 text-accent">{form.platform === p ? <I name="circle-check" size={18}/> : <I name="circle" size={18}/>}</span>
           <span className="flex flex-col"><span className="text-sm font-medium">{t(`platform.${p}`)}</span><span className="text-xs text-muted">{t(`platform.${p}Help`)}</span></span>
         </button>)}
       </div>
     </div>}
-    <FieldGroup title={t('form.groupEndpoint')} description={t(proxmox ? 'platform.endpointHelp' : 'form.groupEndpointHelp')}>
+    <FieldGroup title={t('form.groupEndpoint')} description={t(proxmox ? 'platform.endpointHelp' : xcpng ? 'platform.xcpngEndpointHelp' : 'form.groupEndpointHelp')}>
       <TextInput maxLength={100} label={t('form.name')} value={form.name} onChange={set('name')} error={err('name')} help={help('name')} isRequired/>
       <TextInput format="hostOrIp" label={t('form.host')} value={form.host} onChange={set('host')} error={err('host')} help={help('host')} isRequired autoComplete="off" spellCheck={false}/>
       <TextInput format="port" label={t('form.port')} value={form.port} onChange={set('port')} error={err('port')} help={help('port')} autoComplete="off"/>
     </FieldGroup>
     <FieldGroup title={t('form.groupAccount')} description={t('form.groupAccountHelp')}>
-      <TextInput maxLength={200} label={t('form.username')} value={form.username} onChange={set('username')} error={err('username')} help={proxmox ? t('platform.usernameHelp') : help('username')} placeholder={proxmox ? 'root@pam' : undefined} isRequired autoComplete="off"/>
+      <TextInput maxLength={200} label={t('form.username')} value={form.username} onChange={set('username')} error={err('username')} help={proxmox ? t('platform.usernameHelp') : xcpng ? t('platform.xcpngUsernameHelp') : help('username')} placeholder={proxmox ? 'root@pam' : xcpng ? 'root' : undefined} isRequired autoComplete="off"/>
       <TextInput revealable label={t('form.password')} type="password" value={form.password} onChange={set('password')} error={err('password')}
         help={editing ? t('form.passwordKeep') : proxmox ? t('platform.passwordHelp') : help('password')} placeholder={editing ? t('form.passwordKeepPlaceholder') : undefined} isRequired={!editing} autoComplete="new-password"/>
     </FieldGroup>
@@ -97,7 +98,7 @@ export default function ConnectionForm({ onSaved, initial, editing }: { onSaved:
       {form.mode === 'ca' && <TextInput maxLength={20000} multiline label={t('form.caPem')} value={form.caPem} onChange={set('caPem')} error={err('caPem')} help={t('form.caPemHelp')} spellCheck={false}/>}
       {form.mode === 'pinned' && <TextInput label={t('form.sha256')} value={form.sha256} onChange={set('sha256')} error={err('sha256')} help={t('form.sha256Help')} spellCheck={false}/>}
     </FieldGroup>
-    {!proxmox && <FieldGroup title={t('compat.title')} description={t('compat.formHelp')}>
+    {!other && <FieldGroup title={t('compat.title')} description={t('compat.formHelp')}>
       <SelectInput label={t('compat.version')} value={form.apiVersion} onChange={set('apiVersion')} error={err('apiVersion')} help={t('compat.versionHelp')}
         options={[{ id: '', label: t('compat.auto') }, ...apiVersions.map((v) => ({ id: v, label: versionLabel(v), description: `API ${v}` }))]}/>
       <SelectInput label={t('compat.customization')} value={form.customization} onChange={set('customization')} error={err('customization')} help={t('compat.customizationHelp')}
@@ -121,7 +122,7 @@ export default function ConnectionForm({ onSaved, initial, editing }: { onSaved:
           <dt className="text-muted">SHA-256</dt><dd className="break-all"><Mono>{fingerprintPairs(failure.certificate.sha256)}</Mono></dd>
         </dl>
         {(kind ? [kind] : (['esxi', 'vcenter'] as const)).map((k) => <div key={k} className="flex flex-col gap-1">
-          <p className="text-muted">{t(k === 'proxmox' ? 'platform.verify' : k === 'vcenter' ? 'cert.verifyVcenter' : 'cert.verify')}</p>
+          <p className="text-muted">{t(k === 'proxmox' ? 'platform.verify' : k === 'xcpng' ? 'platform.xcpngVerify' : k === 'vcenter' ? 'cert.verifyVcenter' : 'cert.verify')}</p>
           <pre className="overflow-x-auto rounded-lg bg-default p-3 font-mono text-xs">{fingerprintCommand(k)}</pre>
         </div>)}
         <div><Button variant="secondary" isDisabled={!!busy} onPress={() => pin(failure.certificate!.sha256)}>{t('cert.pin')}</Button></div>
