@@ -489,6 +489,9 @@ do_update() {
   set_env APP_VERSION "$(app_version)"
   if up_and_ready; then
     record update ok - ",\"from\":\"$current_name\",\"to\":\"$target\""
+    # Every build leaves layers behind; on a server that updates often they fill the disk. What is older than
+    # a week is dropped (the next build only gets a little slower); images in use are never touched.
+    (docker builder prune -f --filter until=168h; docker image prune -f) >/dev/null 2>&1 || true
     msg OK UPDATED "$target çalışıyor" "$target is running"; exit 0
   fi
   msg FAIL E_UPDATE_FAILED "$target hazır olmadı; $current_name sürümüne geri dönülüyor" "$target did not become ready; rolling back to $current_name"

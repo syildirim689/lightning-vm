@@ -1835,3 +1835,22 @@ Other tables that hold adapter ids: `resource_pools` (`compute_moref`, `datastor
 `server_disks.device_key`, `power_host_profiles.host_moref`, `power_samples.host_moref`,
 `reconciliation_findings.vm_moref`. The scan tables (`059_vmware_scans.sql`) store `/v1/scan` hits:
 `vmware_scan_hits(address, state CHECK IN ('vsphere','https'), hostname, product jsonb, certificate jsonb)`.
+
+---
+
+## 9. Routes only some adapters have
+
+### POST /v1/vm/guest-setup (Proxmox VE adapter)
+
+- Synchronous, 60 s. Called by the worker (`kinds.create` in `apps/worker/operations.mjs`) once a new server is
+  ready, for connections of platform `proxmox` only.
+- Request: Target plus `vm` (string, required) and `userdata` (the same cloud-config document sent to
+  `/v1/vm/clone`).
+- What it does: Proxmox's own cloud-init carries the network and the SSH keys only, so the rest of the
+  cloud-config is applied through the QEMU guest agent: the root password (`chpasswd.list`, handed over as the
+  hash it is), the host name, `write_files` and `runcmd`. The commands run from one script that leaves a marker
+  in the guest (`/var/lib/lightning-guest-setup.done`), so a repeated call does nothing.
+- Response: `{"applied": true, "password": bool, "files": n, "commands": n}`, or `{"applied": false, "reason":
+  "NO_GUEST_AGENT" | "NOTHING_TO_DO"}`.
+- Errors: `TOOLS_NOT_RUNNING` (the agent is enabled but does not answer yet; the worker retries), `VM_NOT_FOUND`,
+  `INVALID_REQUEST` (a file larger than the agent takes), common errors.

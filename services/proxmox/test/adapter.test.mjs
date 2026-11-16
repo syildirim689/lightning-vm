@@ -47,7 +47,8 @@ function cluster() {
     }
     if (sub === '/clone') { c.nextid += 1; c.vms[params.newid] = { vmid: Number(params.newid), name: params.name, node: params.target ?? v.node, status: 'stopped', maxcpu: v.maxcpu, maxmem: v.maxmem,
       config: { ...v.config, name: params.name, description: params.description }, snapshots: [] }; return upid('qmclone', v.vmid); }
-    if (sub === '/resize') { v.config[params.disk] = v.config[params.disk].replace(/size=\w+/, `size=${params.size}`); return null; }
+    if (sub === '/resize') { v.config[params.disk] = v.config[params.disk].replace(/size=\w+/, `size=${params.size}`); return upid('resize', v.vmid); }
+    if (sub.startsWith('/agent/') && method === 'POST') { (c.agent ??= []).push([sub.slice(7), params]); return sub.endsWith('exec') ? { pid: 7 } : null; }
     if (sub === '/status/current') return { status: v.status, uptime: 120, mem: 512 * 1024 * 1024 };
     const st = /^\/status\/(start|stop|reset|shutdown)$/.exec(sub);
     if (st) { v.status = st[1] === 'start' || st[1] === 'reset' ? 'running' : 'stopped'; return upid(`qm${st[1]}`, v.vmid); }
@@ -147,7 +148,8 @@ test('disks: listed with stable keys, added on the storage of the system disk, r
 test('resize changes CPU, memory and grows the disk; shrinking is refused', async () => {
   const { c, api } = cluster();
   await h.task(api, { task: (await h.clone(api, order)).task });
-  assert.deepEqual(await h.resize(api, { vm: '105', vcpu: 8, memoryMb: 8192, diskGb: 60 }), { task: '' });
+  assert.match((await h.resize(api, { vm: '105', vcpu: 8, memoryMb: 8192, diskGb: 60 })).task, /^UPID:pve1:.*:resize:/, 'growing the disk is a task the worker waits for');
+  assert.deepEqual(await h.resize(api, { vm: '105', vcpu: 8, memoryMb: 8192, diskGb: 60 }), { task: '' }, 'nothing to grow: done at once');
   assert.deepEqual([c.vms[105].config.cores, c.vms[105].config.memory], [8, 8192]); assert.match(c.vms[105].config.scsi0, /size=60G/);
   await assert.rejects(h.resize(api, { vm: '105', vcpu: 8, memoryMb: 8192, diskGb: 10 }), { code: 'DISK_SHRINK_NOT_SUPPORTED' });
 });
@@ -183,4 +185,32 @@ test('the service wants its token, answers unsupported routes clearly and passes
     assert.deepEqual([missing[0], missing[1].code], [404, 'VM_NOT_FOUND']);
     assert.equal((await post('/v1/vm/find', { username: 'root@pam', name: 'x' }))[1].code, 'INVALID_REQUEST', 'a host is required');
   } finally { server.close(); }
+});
+
+test('after the first boot the guest agent sets what cloud-init on Proxmox cannot carry, once', async () => {
+  const { c, api } = cluster();
+  await h.task(api, { task: (await h.clone(api, order)).task });
+  const userdata = `#cloud-config\n${JSON.stringify({ hostname: 'web1', chpasswd: { expire: false, list: 'root:$6$salt$hashhashhash' },
+    write_files: [{ path: '/root/lightning-app.sh', permissions: '0700', content: "echo it's here" }], runcmd: [['sh', '-c', 'nohup sh /root/lightning-app.sh > /var/log/app.log 2>&1 &']] })}`;
+  assert.deepEqual(await h.guestSetup(api, { vm: '105', userdata }), { applied: false, reason: 'NO_GUEST_AGENT' }, 'a stopped server cannot be reached');
+  await h.powerAction(api, { vm: '105', action: 'on' });
+  assert.deepEqual(await h.guestSetup(api, { vm: '105', userdata }), { applied: true, password: true, files: 1, commands: 1 });
+  const [pw, file, script, exec] = c.agent;
+  assert.deepEqual(pw, ['set-user-password', { username: 'root', password: '$6$salt$hashhashhash', crypted: 1 }], 'the hash is handed over as a hash');
+  assert.deepEqual(file, ['file-write', { file: '/root/lightning-app.sh', content: "echo it's here" }]);
+  assert.equal(script[1].file, '/root/.lightning-guest-setup.sh');
+  assert.ok(script[1].content.startsWith('#!/bin/sh\n'));
+  assert.ok(script[1].content.includes('[ -e /var/lib/lightning-guest-setup.done ] && exit 0'), 'a second run does nothing');
+  assert.ok(script[1].content.includes("hostnamectl set-hostname 'web1'")); assert.ok(script[1].content.includes("chmod 0700 '/root/lightning-app.sh'"));
+  assert.ok(script[1].content.includes("'sh' '-c' 'nohup sh /root/lightning-app.sh > /var/log/app.log 2>&1 &'"));
+  assert.deepEqual(exec, ['exec', { command: ['sh', '/root/.lightning-guest-setup.sh'] }]);
+  assert.deepEqual(await h.guestSetup(api, { vm: '105', userdata: '#cloud-config\n{}' }), { applied: false, reason: 'NOTHING_TO_DO' });
+});
+
+test('quoting keeps a single quote in a command harmless', async () => {
+  const { c, api } = cluster();
+  await h.task(api, { task: (await h.clone(api, order)).task });
+  await h.powerAction(api, { vm: '105', action: 'on' });
+  await h.guestSetup(api, { vm: '105', userdata: `#cloud-config\n${JSON.stringify({ runcmd: [['echo', "it's; rm -rf /"]] })}` });
+  assert.ok(c.agent.find((x) => x[0] === 'file-write')[1].content.includes(`'echo' 'it'\\''s; rm -rf /'`));
 });

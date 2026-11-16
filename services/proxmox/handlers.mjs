@@ -17,6 +17,7 @@ const note = (serverId) => `Managed by Lightning VM (server ${serverId})`;
 const serverIdOf = (description) => /Managed by Lightning VM \(server ([0-9a-f-]{36})\)/.exec(description ?? '')?.[1];
 const PENDING = 'lvm-pending:';
 const round2 = (n) => Math.round(n * 100) / 100;
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 const resources = (api, type) => api('GET', '/cluster/resources', { type });
 const guests = async (api) => (await resources(api, 'vm')).filter((v) => v.type === 'qemu');
@@ -140,7 +141,8 @@ export async function discover(api) {
 // ---- provisioning --------------------------------------------------------------------------------
 // The worker's cloud-init documents (written for VMware's datasource) as Proxmox's own cloud-init settings:
 // the first IPv4 and IPv6 address with their gateways, the name servers and the SSH keys. What Proxmox cannot
-// carry this way is left out: further addresses, a password hash, files and first-boot commands.
+// carry this way (a password hash, the host name, files and first-boot commands) is done through the guest agent
+// once the server is up: guestSetup below. Further IPv4 addresses are not configured.
 export function cloudInitSettings(metadata, userdata) {
   const out = {};
   let meta = {}, user = {};
@@ -185,6 +187,19 @@ export async function clone(api, b) {
   return { task: `${task}|${newid}`, existed: false };
 }
 
+// Some changes are tasks even where the contract wants them done within the request (growing a disk): wait a
+// little for the task, and say so when it is still running (the caller comes back).
+async function settled(api, upid, seconds = 20) {
+  const node = /^UPID:([^:]+):/.exec(String(upid ?? ''))?.[1];
+  if (!node) return; // an older Proxmox answers at once, with nothing to wait for
+  for (let i = 0; i < seconds * 2; i++) {
+    const st = await api('GET', `/nodes/${enc(node)}/tasks/${enc(upid)}/status`);
+    if (st.status === 'stopped') { if (st.exitstatus !== 'OK' && !/^WARNINGS/.test(String(st.exitstatus))) throw new Failure(taskFault(String(st.exitstatus)), String(st.exitstatus)); return; }
+    await sleep(500);
+  }
+  throw new Failure('TIMEOUT', 'the disk is still being resized');
+}
+
 // The copy is there: CPU, memory, the network, cloud-init and the disk size. Every step can be repeated.
 async function finishClone(api, vmid) {
   const v = (await guests(api)).find((x) => String(x.vmid) === String(vmid));
@@ -203,7 +218,7 @@ async function finishClone(api, vmid) {
   const { system } = disksOf(config);
   // A template without a cloud-init drive gets one next to its system disk, or the settings above reach nobody.
   if (!Object.values(config).some((x) => /cloudinit/.test(String(x))) && system?.storage) set.ide2 = `${system.storage}:cloudinit`;
-  if (system && p.diskGb && Number(p.diskGb) * GIB > system.size) await api('PUT', `${base(v)}/resize`, { disk: system.slot, size: `${p.diskGb}G` });
+  if (system && p.diskGb && Number(p.diskGb) * GIB > system.size) await settled(api, await api('PUT', `${base(v)}/resize`, { disk: system.slot, size: `${p.diskGb}G` }));
   await api('PUT', `${base(v)}/config`, set);
 }
 
@@ -245,7 +260,6 @@ export async function powerAction(api, b) {
   return { task: act === 'shutdown' ? '' : upid };
 }
 
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 export async function destroy(api, b) {
   let v;
   try { v = await locate(api, b.vm); } catch (e) { if (e.code === 'VM_NOT_FOUND') return { task: '', gone: true }; throw e; }
@@ -269,8 +283,9 @@ export async function resize(api, b) {
   if (diskGb < now) throw new Failure('DISK_SHRINK_NOT_SUPPORTED', 'a disk cannot be made smaller');
   if (diskGb > now && (await snapshotList(api, v)).some((s) => s.name !== 'current')) throw new Failure('DISK_HAS_SNAPSHOTS', 'remove the snapshots before growing the disk');
   await api('PUT', `${base(v)}/config`, { cores: vcpu, sockets: 1, memory: memoryMb });
-  if (diskGb > now) await api('PUT', `${base(v)}/resize`, { disk: system.slot, size: `${diskGb}G` });
-  return { task: '' }; // done within the request
+  // Growing the disk is a task of its own on Proxmox: the worker waits for it like for any other.
+  const grow = diskGb > now ? await api('PUT', `${base(v)}/resize`, { disk: system.slot, size: `${diskGb}G` }) : '';
+  return { task: /^UPID:/.test(String(grow ?? '')) ? grow : '' };
 }
 
 export async function rename(api, b) {
@@ -427,4 +442,36 @@ export async function powerReport(api) {
     hosts: nodes.map((n) => ({ moref: n.node, name: n.node, watts: null, cpuUsedMhz: Math.round((n.cpu ?? 0) * (n.maxcpu ?? 0) * mhz[n.node]), cpuTotalMhz: (n.maxcpu ?? 0) * mhz[n.node], coreMhz: mhz[n.node], connected: n.status === 'online' })),
     vms: await Promise.all(running.map(async (v) => ({ name: v.name, host: v.node, cpuUsedMhz: Math.round((v.cpu ?? 0) * (v.maxcpu ?? 0) * (mhz[v.node] ?? 0)),
       traffic: (await rrd(api, v)).slice(-15).filter((p) => num(p.netin) !== null || num(p.netout) !== null).map((p) => ({ t: new Date(p.time * 1000).toISOString(), rx: round2(((p.netin ?? 0) / 1024) * 3), tx: round2(((p.netout ?? 0) / 1024) * 3) })) }))) };
+}
+
+// ---- first-boot work through the guest agent ---------------------------------------------------------
+const quote = (s) => `'${String(s).replace(/'/g, `'\\''`)}'`;
+// The rest of the worker's cloud-config, once the server runs: the root password (as the hash it was given),
+// the host name, the files and the first-boot commands (an application's installer, the update reporter). It
+// happens once: a marker in the guest makes a second call a no-op. Without a guest agent nothing can be done
+// from outside, and the answer says so.
+export async function guestSetup(api, b) {
+  const v = await locate(api, b.vm);
+  let user = {};
+  try { user = JSON.parse(String(b.userdata || '').replace(/^#cloud-config\s*/, '') || '{}'); } catch { /* nothing to apply */ }
+  const hash = /^root:(\$[^\s]+)$/.exec(String(user.chpasswd?.list ?? '').trim())?.[1];
+  const files = (user.write_files ?? []).filter((x) => x && typeof x.path === 'string' && /^\/[\w./-]{1,200}$/.test(x.path) && typeof x.content === 'string');
+  const commands = (user.runcmd ?? []).map((c) => (Array.isArray(c) ? c.map(quote).join(' ') : typeof c === 'string' ? c : '')).filter(Boolean);
+  const hostname = /^[a-zA-Z0-9]([a-zA-Z0-9.-]{0,251}[a-zA-Z0-9])?$/.test(String(user.hostname ?? '')) ? String(user.hostname) : '';
+  if (!hash && !files.length && !commands.length && !hostname) return { applied: false, reason: 'NOTHING_TO_DO' };
+  const config = await api('GET', `${base(v)}/config`);
+  if (v.status !== 'running' || !/(^|,)(enabled=)?1/.test(String(config.agent ?? ''))) return { applied: false, reason: 'NO_GUEST_AGENT' };
+  if ((await agentAddresses(api, v)) === null) throw new Failure('TOOLS_NOT_RUNNING', 'the guest agent does not answer yet');
+  if (hash) await api('POST', `${base(v)}/agent/set-user-password`, { username: 'root', password: hash, crypted: 1 });
+  for (const f of files) {
+    if (Buffer.byteLength(f.content) > 60_000) throw new Failure('INVALID_REQUEST', `the file ${f.path} is too large for the guest agent`);
+    await api('POST', `${base(v)}/agent/file-write`, { file: f.path, content: f.content });
+  }
+  const marker = '/var/lib/lightning-guest-setup.done';
+  const script = ['#!/bin/sh', '# Lightning VM: first-boot settings on Proxmox VE (run once).', `[ -e ${marker} ] && exit 0`, `mkdir -p /var/lib && : > ${marker}`,
+    ...(hostname ? [`(hostnamectl set-hostname ${quote(hostname)} || hostname ${quote(hostname)}) >/dev/null 2>&1`] : []),
+    ...files.filter((f) => /^[0-7]{3,4}$/.test(String(f.permissions ?? ''))).map((f) => `chmod ${f.permissions} ${quote(f.path)}`), ...commands, ''].join('\n');
+  await api('POST', `${base(v)}/agent/file-write`, { file: '/root/.lightning-guest-setup.sh', content: script });
+  await api('POST', `${base(v)}/agent/exec`, { command: ['sh', '/root/.lightning-guest-setup.sh'] });
+  return { applied: true, password: !!hash, files: files.length, commands: commands.length };
 }

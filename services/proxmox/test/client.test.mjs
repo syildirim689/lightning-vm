@@ -52,6 +52,8 @@ test('a pinned certificate is trusted, a token signs every call and failures bec
     assert.deepEqual(await api('GET', '/cluster/resources', { type: 'vm' }), { echoed: '/api2/json/cluster/resources?type=vm' });
     await api('POST', '/nodes/pve1/qemu/100/clone', { newid: 105, name: 'lvm-x', skipped: undefined });
     assert.equal(seen.at(-1).body, 'newid=105&name=lvm-x'); assert.equal(seen.at(-1).auth, 'PVEAPIToken=panel@pve!lvm=secret-1');
+    await api('POST', '/nodes/pve1/qemu/100/agent/exec', { command: ['sh', '/root/x.sh'] });
+    assert.equal(seen.at(-1).body, 'command=sh&command=%2Froot%2Fx.sh', 'a list is the same key repeated');
     await assert.rejects(api('GET', '/nodes/pve1/qemu/999/config'), { code: 'VM_NOT_FOUND' });
     await assert.rejects(api('GET', '/forbidden'), { code: 'PERMISSION_DENIED' });
     api.close();

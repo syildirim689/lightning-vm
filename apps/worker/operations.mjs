@@ -308,6 +308,12 @@ const kinds = {
     const st = await find(ctx);
     if (st?.powerState !== 'poweredOn') await power(db, ctx, 'on');
     await waitReady(db, ctx);
+    // Proxmox's own cloud-init carries the network and the SSH keys only: the root password, the host name, files
+    // and first-boot commands are applied through the guest agent now that the server answers (once; a retry is a no-op).
+    if (ctx.target.platform === 'proxmox' && ctx.s.image_family !== 'esxi') {
+      const out = await adapter('/v1/vm/guest-setup', { ...ctx.target, vm: ctx.s.vm_moref, userdata: cloudInit(ctx.s).userdata });
+      if (out?.reason === 'NO_GUEST_AGENT') console.warn(JSON.stringify({ level: 'warn', service: 'worker', msg: 'guest_setup_skipped', serverId: ctx.s.id, reason: out.reason }));
+    }
     await db.query("UPDATE servers SET state = 'ready', guest_ready = true, error_code = NULL, updated_at = now() WHERE id = $1", [ctx.s.id]);
   },
   delete: (db, ctx) => destroy(db, ctx),

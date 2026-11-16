@@ -346,7 +346,7 @@ CI bilerek elle tetiklenir (GitHub Actions → *Run workflow*). Katkı kurallar�
   üzerinden gelen hesaplar doğrulanmış sayılır.)
 - **WhatsApp:** Meta Cloud API ve onaylı bir mesaj şablonu gerekir. **Telegram:** botta webhook tanımlı olmamalı.
 - **Proxmox VE:** ilk sürüm; gerçek bir Proxmox sunucusunda henüz denenmedi. Konsol, firewall, yedek, ISO, özel ağ ve
-  taşıma Proxmox'ta henüz yok; root parolası ve uygulama kurulumu aktarılmaz ([docs/proxmox.md](docs/proxmox.md)).
+  taşıma Proxmox'ta henüz yok; root parolası ve uygulama kurulumu için şablonda guest agent gerekir ([docs/proxmox.md](docs/proxmox.md)).
 - **İşletim sistemi güncellemeleri:** panel sunucusunda yalnızca Debian / Ubuntu (apt); müşteri sunucularında Linux
   (apt, dnf, yum), Windows yok. Otomatik kurulum cloud-init kullanan imajlarda çalışır.
 - Sürümlü, imzalı kurulum paketi (GHCR imajlarıyla) henüz yok; kurulum ve güncelleme kaynak koddan derler.

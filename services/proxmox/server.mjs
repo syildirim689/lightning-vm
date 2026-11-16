@@ -20,7 +20,7 @@ export const routes = {
   '/v1/discover': [h.discover, 60], '/v1/task': [h.task, 30], '/v1/vm/clone': [h.clone, 60], '/v1/vm/find': [h.find, 30], '/v1/vms/managed': [h.managedVms, 60],
   '/v1/vm/power': [h.powerAction, 60], '/v1/vm/destroy': [h.destroy, 120], '/v1/vm/resize': [h.resize, 60], '/v1/vm/rename': [h.rename, 60], '/v1/vm/details': [h.details, 30],
   '/v1/vm/metrics': [h.metrics, 30], '/v1/vm/snapshots': [h.snapshots, 30], '/v1/vm/snapshot': [h.snapshot, 60], '/v1/vm/disks': [h.disks, 30], '/v1/vm/disk-add': [h.diskAdd, 60],
-  '/v1/vm/disk-remove': [h.diskRemove, 60], '/v1/topology': [h.topology, 60], '/v1/power': [h.powerReport, 60],
+  '/v1/vm/disk-remove': [h.diskRemove, 60], '/v1/topology': [h.topology, 60], '/v1/power': [h.powerReport, 60], '/v1/vm/guest-setup': [h.guestSetup, 60],
 };
 // In the contract, not on Proxmox VE yet: answered with one clear, permanent code rather than a timeout.
 const later = ['/v1/console-ticket', '/v1/vm/disk-copy', '/v1/backup/delete', '/v1/image/create', '/v1/image/delete', '/v1/network/create', '/v1/network/delete', '/v1/vm/nic-add', '/v1/vm/nic-remove',

@@ -2,8 +2,9 @@
 // Every dialog in the panel is a window, the way a desktop has them: a title bar to move it by (it turns slightly
 // see-through while moving), and three buttons - put aside, make large, close. Pulled against the top edge it
 // becomes large; a double click on the title bar does the same. Put aside, it waits as a small bar at the bottom
-// left while the page behind can be read; a click anywhere (or Escape) brings it back. This runs once for the whole
-// panel - no dialog has to know about it; the look is in style.css. On phones a dialog is a sheet from the bottom.
+// left and the page behind is usable again (scroll, click, type); a click on the bar (or Escape) brings it back.
+// A window belongs to its page: going to another page closes it. This runs once for the whole panel - no dialog
+// has to know about it; the look is in style.css. On phones a dialog is a sheet from the bottom.
 import { useTranslations } from 'next-intl';
 import { useEffect, useRef } from 'react';
 
@@ -31,9 +32,27 @@ export default function WindowChrome() {
       const b = dialog.querySelector<HTMLButtonElement>('.win-controls [data-win-act="max"]');
       if (b) { b.innerHTML = on ? icons.restore : icons.max; name(b, on ? labels.current.restore : labels.current.max); }
     };
+    // While a window waits, the page is given back: what the dialog hid from assistive technology is shown again,
+    // and a click on the page is not taken as "clicked outside the dialog, close it".
+    let hidden: Element[] = [], frozen: HTMLElement[] = [];
     const aside = (dialog: HTMLElement, on: boolean) => {
-      if (on) { dialog.dataset.winMin = ''; dialog.setAttribute('title', labels.current.bring); }
-      else { delete dialog.dataset.winMin; dialog.removeAttribute('title'); dialog.querySelector<HTMLElement>('.win-controls [data-win-act="min"]')?.focus({ preventScroll: true }); }
+      if (on) {
+        dialog.dataset.winMin = ''; dialog.setAttribute('title', labels.current.bring);
+        const overlay = dialog.closest('.modal__backdrop');
+        hidden = [...document.querySelectorAll('[aria-hidden="true"]')].filter((el) => !overlay?.contains(el) && !el.contains(overlay ?? null) && el.closest('svg') === null && !el.matches('svg'));
+        for (const el of hidden) el.removeAttribute('aria-hidden');
+        frozen = [...document.querySelectorAll<HTMLElement>('[inert]')].filter((el) => !overlay?.contains(el) && !el.contains(overlay ?? null));
+        for (const el of frozen) el.inert = false;
+        document.body.setAttribute('data-react-aria-top-layer', 'true');
+        (document.activeElement as HTMLElement | null)?.blur?.();
+      } else {
+        delete dialog.dataset.winMin; dialog.removeAttribute('title');
+        for (const el of hidden) if (el.isConnected) el.setAttribute('aria-hidden', 'true');
+        for (const el of frozen) if (el.isConnected) el.inert = true;
+        hidden = []; frozen = [];
+        document.body.removeAttribute('data-react-aria-top-layer');
+        dialog.querySelector<HTMLElement>('.win-controls [data-win-act="min"]')?.focus({ preventScroll: true });
+      }
     };
     const close = (dialog: HTMLElement) => {
       const own = dialog.querySelector<HTMLElement>('.modal__close-trigger');
@@ -68,15 +87,18 @@ export default function WindowChrome() {
     seen.observe(document.body, { childList: true, subtree: true });
 
     const waiting = () => document.querySelector<HTMLElement>('.modal__dialog[data-win-min]');
-    // While a window waits at the bottom, a click anywhere brings it back (and is not taken as "clicked outside,
-    // close it"); so does Escape.
+    // A click on the waiting bar brings the window back; so does Escape (which would otherwise close it unseen).
     const back = (e: Event) => {
       const w = waiting();
-      if (!w) return;
-      if (e instanceof KeyboardEvent && e.key !== 'Escape') return;
+      if (!w) { if (document.body.hasAttribute('data-react-aria-top-layer') && !document.querySelector('[data-win-min]')) document.body.removeAttribute('data-react-aria-top-layer'); return; }
+      if (e instanceof KeyboardEvent) { if (e.key !== 'Escape') return; e.stopImmediatePropagation(); e.preventDefault(); aside(w, false); return; }
+      const target = e.target as HTMLElement | null;
+      if (!target || !w.contains(target) || target.closest('.modal__close-trigger, [data-win-act="close"]')) return;
       e.stopImmediatePropagation(); e.preventDefault();
-      if (e.type === 'pointerdown' || e.type === 'keydown') aside(w, false);
+      if (e.type === 'click') aside(w, false);
     };
+    // The dialog keeps the keyboard focus inside itself; while it waits, focus may go anywhere on the page.
+    const roam = (e: Event) => { const w = waiting(); if (w && !w.contains(e.target as Node)) e.stopImmediatePropagation(); };
 
     let drag: { dialog: HTMLElement; header: HTMLElement; id: number; x: number; y: number; ox: number; oy: number; left: number; top: number; width: number; moved: boolean } | null = null;
     const down = (e: PointerEvent) => {
@@ -126,6 +148,7 @@ export default function WindowChrome() {
     const resized = () => { for (const d of document.querySelectorAll<HTMLElement>(DIALOG)) { d.style.removeProperty('--win-x'); d.style.removeProperty('--win-y'); } };
     const early = { capture: true } as const;
     for (const type of ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click', 'keydown'] as const) window.addEventListener(type, back, early);
+    document.addEventListener('focusin', roam);
     document.addEventListener('pointerdown', down);
     document.addEventListener('pointermove', move);
     document.addEventListener('pointerup', up);
@@ -135,6 +158,7 @@ export default function WindowChrome() {
     return () => {
       seen.disconnect();
       for (const type of ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click', 'keydown'] as const) window.removeEventListener(type, back, early);
+      document.removeEventListener('focusin', roam); document.body.removeAttribute('data-react-aria-top-layer');
       document.removeEventListener('pointerdown', down); document.removeEventListener('pointermove', move); document.removeEventListener('pointerup', up);
       document.removeEventListener('pointercancel', up); document.removeEventListener('dblclick', twice); window.removeEventListener('resize', resized);
     };

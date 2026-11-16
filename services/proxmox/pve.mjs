@@ -92,7 +92,8 @@ export async function connect(target, { timeoutMs = 25_000, transport } = {}) {
   const headers = {};
   const call = (method, path, params) => new Promise((resolve, reject) => {
     const query = method === 'GET' || method === 'DELETE' ? params : undefined;
-    const body = query ? undefined : params && new URLSearchParams(Object.entries(params).filter(([, v]) => v !== undefined && v !== null).map(([k, v]) => [k, String(v)])).toString();
+    // An array is sent as the same key several times (how Proxmox reads a list such as agent/exec's command).
+    const body = query ? undefined : params && new URLSearchParams(Object.entries(params).filter(([, v]) => v !== undefined && v !== null).flatMap(([k, v]) => (Array.isArray(v) ? v.map((x) => [k, String(x)]) : [[k, String(v)]]))).toString();
     const qs = query ? `?${new URLSearchParams(Object.entries(query).filter(([, v]) => v !== undefined).map(([k, v]) => [k, String(v)]))}` : '';
     const req = https.request({ agent, host: target.host, port, method, path: `/api2/json${path}${qs}`, timeout: timeoutMs,
       headers: { accept: 'application/json', ...headers, ...(body !== undefined && { 'content-type': 'application/x-www-form-urlencoded', 'content-length': Buffer.byteLength(body) }) } }, (res) => {

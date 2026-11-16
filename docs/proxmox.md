@@ -72,11 +72,14 @@ Bu işlemler Proxmox bağlantılarında "henüz desteklenmiyor" yanıtı verir:
 - ISO kitaplığı ve CD takma, özel ağlar, canlı taşıma
 - Ağ taraması ile Proxmox düğümlerini bulma
 
-Proxmox'un kendi cloud-init'i şunları taşıyamaz, bu yüzden Proxmox sunucularında uygulanmaz:
+Proxmox'un kendi cloud-init'i yalnızca ağı ve SSH anahtarlarını taşır. Geri kalanı panel, sunucu açıldıktan sonra
+**guest agent üzerinden** bir kez uygular:
 
-- Sipariş sırasında verilen **root parolası** (yalnız SSH anahtarları gider)
+- Siparişte verilen **root parolası** (özet olarak verilir, düz metin olarak hiçbir yere yazılmaz)
+- **Sunucu adı**
 - **Uygulama kurulumu** (cPanel, Plesk…) ve **güncelleme bildiricisinin kendiliğinden kurulumu**
-- Birden fazla IPv4 adresi (yalnız ilki yapılandırılır)
-- Sunucu adı: Proxmox, misafire VM adını (`lvm-…`) verir
+
+Bu yüzden şablonda guest agent şart: agent yoksa sunucu yine kurulur ama bu üçü uygulanmaz. Birden fazla IPv4
+adresi verildiğinde yalnız ilki yapılandırılır.
 
 Ölçümler Proxmox'ta dakikada bir tutulur (VMware'de 20 saniye); host güç tüketimi ölçülmez, tahmin edilir.
