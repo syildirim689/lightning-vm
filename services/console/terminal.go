@@ -46,6 +46,12 @@ func (g *Gateway) serveTerminal(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "origin not allowed", http.StatusForbidden)
 		return
 	}
+	// As for the console: without a cookie that can be a ticket there is no upgrade and no audit event.
+	cookie, err := r.Cookie(terminalCookie)
+	if err != nil || len(cookie.Value) < 32 {
+		http.Error(w, "terminal session required", http.StatusUnauthorized)
+		return
+	}
 	client, err := websocket.Accept(w, r, nil)
 	if err != nil {
 		return
@@ -54,18 +60,19 @@ func (g *Gateway) serveTerminal(w http.ResponseWriter, r *http.Request) {
 	client.SetReadLimit(64 << 10)
 	ctx := r.Context()
 
-	var s *Session
-	if cookie, err := r.Cookie(terminalCookie); err == nil && len(cookie.Value) >= 32 {
-		if s, err = g.store.Consume(ctx, sessionKey(cookie.Value)); err != nil {
-			logger.Error("terminal_store_failed", "error", err.Error())
-		}
+	s, err := g.store.Consume(ctx, sessionKey(cookie.Value))
+	if err != nil {
+		logger.Error("terminal_store_failed", "error", err.Error())
 	}
 	if s == nil {
 		g.store.Event(ctx, map[string]any{"event": "terminal_denied", "reason": "TERMINAL_SESSION_INVALID"})
 		client.Close(closeSession, "TERMINAL_SESSION_INVALID")
 		return
 	}
-	if user, total := g.countFor(s.UserID); user >= g.maxPerUser || total >= g.maxTotal {
+	// The slot is taken before the shell starts (see reserve).
+	runCtx, cancel := context.WithCancelCause(ctx)
+	c := &conn{s: s, cancel: cancel}
+	if !g.reserve(c) {
 		g.store.Event(ctx, map[string]any{"event": "terminal_denied", "reason": "TERMINAL_LIMIT", "userId": s.UserID})
 		client.Close(closeTooMany, "TERMINAL_LIMIT")
 		return
@@ -76,6 +83,7 @@ func (g *Gateway) serveTerminal(w http.ResponseWriter, r *http.Request) {
 	cmd.Env = []string{"TERM=xterm-256color", "LANG=C.UTF-8", "HOME=/root", "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"}
 	f, err := pty.StartWithSize(cmd, &pty.Winsize{Cols: 100, Rows: 30})
 	if err != nil {
+		g.release(c)
 		logger.Error("terminal_start_failed", "error", err.Error())
 		g.store.Event(ctx, map[string]any{"event": "terminal_failed", "reason": "TERMINAL_START_FAILED", "userId": s.UserID})
 		client.Close(closeUpstream, "TERMINAL_START_FAILED")
@@ -83,13 +91,8 @@ func (g *Gateway) serveTerminal(w http.ResponseWriter, r *http.Request) {
 	}
 	defer func() { _ = f.Close(); _ = cmd.Process.Kill(); _ = cmd.Wait() }()
 
-	runCtx, cancel := context.WithCancelCause(ctx)
 	runCtx, stop := context.WithTimeoutCause(runCtx, g.maxDuration, errors.New("TERMINAL_EXPIRED"))
 	defer stop()
-	c := &conn{s: s, cancel: cancel}
-	g.mu.Lock()
-	g.active[c] = struct{}{}
-	g.mu.Unlock()
 	started := time.Now()
 	_ = g.store.Active(ctx, s, started)
 	g.store.Event(ctx, map[string]any{"event": "terminal_opened", "userId": s.UserID})
@@ -161,9 +164,7 @@ wait:
 	default:
 		client.Close(websocket.StatusNormalClosure, reason)
 	}
-	g.mu.Lock()
-	delete(g.active, c)
-	g.mu.Unlock()
+	g.release(c)
 	_ = g.store.Inactive(context.WithoutCancel(ctx), s)
 	g.store.Event(context.WithoutCancel(ctx), map[string]any{"event": "terminal_closed", "reason": reason, "userId": s.UserID, "durationMs": time.Since(started).Milliseconds()})
 	logger.Info("terminal_closed", "reason", reason)

@@ -38,7 +38,11 @@ func baseDisk(ctx context.Context, c *vim25.Client, vmRef string) (string, *type
 	if !strings.HasPrefix(v.Name, managedPrefix) {
 		return "", nil, v, &Failure{Code: "NOT_MANAGED", Message: "refusing to touch a VM this platform did not create"}
 	}
-	disks := object.VirtualDeviceList(v.Config.Hardware.Device).SelectByType((*types.VirtualDisk)(nil))
+	devices, err := vmDevices(v)
+	if err != nil {
+		return "", nil, v, err
+	}
+	disks := devices.SelectByType((*types.VirtualDisk)(nil))
 	if len(disks) == 0 {
 		return "", nil, v, &Failure{Code: "VM_HAS_NO_DISK", Message: "the VM has no disk"}
 	}

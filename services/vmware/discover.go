@@ -13,11 +13,13 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/vmware/govmomi/fault"
 	"github.com/vmware/govmomi/license"
 	"github.com/vmware/govmomi/object"
 	"github.com/vmware/govmomi/session"
+	"github.com/vmware/govmomi/task"
 	"github.com/vmware/govmomi/view"
 	"github.com/vmware/govmomi/vim25"
 	"github.com/vmware/govmomi/vim25/mo"
@@ -137,6 +139,7 @@ func classify(err error) *Failure {
 	var hostErr x509.HostnameError
 	var dnsErr *net.DNSError
 	var netErr net.Error
+	var taskErr task.Error
 	switch {
 	case errors.As(err, &f):
 		return f
@@ -160,8 +163,16 @@ func classify(err error) *Failure {
 		return &Failure{Code: "VM_NOT_FOUND", Message: "virtual machine not found"}
 	case fault.Is(err, &types.NoPermission{}):
 		return &Failure{Code: "PERMISSION_DENIED", Message: "the account lacks a required privilege"}
+	case errors.As(err, &taskErr):
+		// A task that was waited for fails with the same fault a polled task reports: the same codes for both.
+		code, msg := taskFault(taskErr.LocalizedMethodFault)
+		return &Failure{Code: code, Message: msg}
+	case errors.Is(err, context.Canceled):
+		return &Failure{Code: "TIMEOUT", Message: "the request was cancelled before vSphere answered"}
 	}
-	return &Failure{Code: "NOT_VSPHERE", Message: "no vSphere Web Services API answered at /sdk: " + err.Error()}
+	// vSphere did answer, with something this adapter has no code for. NOT_VSPHERE is decided in connect,
+	// the only place where "nothing answered at /sdk" can be told apart.
+	return &Failure{Code: "VMWARE_ERROR", Message: err.Error()}
 }
 
 // Privileges checked on the root folder and the operations they unlock.
@@ -270,6 +281,54 @@ type Result struct {
 	Compat     Compat            `json:"compat"`
 }
 
+// dialTimeout bounds connecting, the TLS handshake and the version lookup (a variable so tests can shorten it).
+var dialTimeout = 15 * time.Second
+
+// guardedTLS replaces govmomi's own DialTLSContext, which is built on tls.Dial and would bypass the address
+// guard: guarded TCP dial, then a handshake with our TLS settings. A DialTLSContext of our own is outside the
+// transport's TLSHandshakeTimeout and the transport's dial context carries no deadline, so both steps get
+// one here: an endpoint that accepts the connection and then stays silent must not hold a request for good.
+func guardedTLS(g *netGuard, cfg *tls.Config) func(context.Context, string, string) (net.Conn, error) {
+	return func(ctx context.Context, network, addr string) (net.Conn, error) {
+		ctx, cancel := context.WithTimeout(ctx, dialTimeout)
+		defer cancel()
+		raw, err := g.dialContext(ctx, network, addr)
+		if err != nil {
+			return nil, err
+		}
+		conn := tls.Client(raw, cfg)
+		if err := conn.HandshakeContext(ctx); err != nil {
+			raw.Close()
+			return nil, err
+		}
+		return conn, nil
+	}
+}
+
+// remaining is the time the request behind ctx still has (two minutes when it has no deadline).
+func remaining(ctx context.Context) time.Duration {
+	if d, ok := ctx.Deadline(); ok {
+		return max(time.Until(d), time.Second)
+	}
+	return 2 * time.Minute
+}
+
+// serviceVersion asks the endpoint which API version it speaks. govmomi does that with a plain GET that
+// carries no context, so it would wait for a silent endpoint for ever; the HTTP client's own timeout bounds
+// that one call. It is lifted again afterwards: SOAP calls are bound by their contexts.
+func serviceVersion(ctx context.Context, sc *soap.Client) error {
+	sc.Client.Timeout = min(remaining(ctx), dialTimeout)
+	defer func() { sc.Client.Timeout = 0 }()
+	return sc.UseServiceVersion()
+}
+
+// logout ends the session even when the request is already cancelled, but does not wait for it for ever.
+func logout(ctx context.Context, sm *session.Manager) {
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+	defer cancel()
+	_ = sm.Logout(ctx)
+}
+
 func connect(ctx context.Context, g *netGuard, r Request) (*vim25.Client, *session.Manager, error) {
 	if r.Port == 0 {
 		r.Port = 443
@@ -283,31 +342,25 @@ func connect(ctx context.Context, g *netGuard, r Request) (*vim25.Client, *sessi
 	tr := sc.DefaultTransport()
 	tr.TLSClientConfig = cfg
 	tr.Proxy = nil // the endpoint is on the management network; never route credentials through a proxy
-	// govmomi installs its own DialTLSContext built on tls.Dial, which would bypass the address guard
-	// and the request context. Replace it: guarded TCP dial, then a handshake with our TLS settings.
 	tr.DialContext = g.dialContext
-	tr.DialTLSContext = func(ctx context.Context, network, addr string) (net.Conn, error) {
-		raw, err := g.dialContext(ctx, network, addr)
-		if err != nil {
-			return nil, err
-		}
-		conn := tls.Client(raw, cfg)
-		if err := conn.HandshakeContext(ctx); err != nil {
-			raw.Close()
-			return nil, err
-		}
-		return conn, nil
-	}
+	tr.DialTLSContext = guardedTLS(g, cfg)
+	tr.TLSHandshakeTimeout = dialTimeout
+	// No answer on this client is waited for longer than the request it serves.
+	tr.ResponseHeaderTimeout = remaining(ctx)
 	// Speak the endpoint's own API version (6.x … 9.x) instead of govmomi's newest default, unless the
 	// admin pinned one. If the endpoint does not publish it, govmomi's default is used.
 	if r.APIVersion != "" {
 		sc.Version = r.APIVersion
-	} else if err := sc.UseServiceVersion(); err != nil {
+	} else if err := serviceVersion(ctx, sc); err != nil {
 		sc.Version, sc.Namespace = "", ""
 	}
 	c, err := vim25.NewClient(ctx, sc)
 	if err != nil {
 		f := classify(err)
+		if f.Code == "VMWARE_ERROR" && !soap.IsSoapFault(err) {
+			// Something answered on this port, but not as a vSphere API.
+			f = &Failure{Code: "NOT_VSPHERE", Message: "no vSphere Web Services API answered at /sdk: " + err.Error()}
+		}
 		if f.Code == "TLS_UNTRUSTED" || f.Code == "TLS_HOSTNAME_MISMATCH" || f.Code == "TLS_PIN_MISMATCH" {
 			f.Certificate = presentedCertificate(ctx, g, addr, r.Host)
 		}
@@ -343,7 +396,7 @@ func discover(ctx context.Context, g *netGuard, r Request) (*Result, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer sm.Logout(context.WithoutCancel(ctx))
+	defer logout(ctx, sm)
 
 	about := c.ServiceContent.About
 	res := &Result{

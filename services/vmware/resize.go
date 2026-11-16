@@ -34,7 +34,11 @@ func resizeVM(ctx context.Context, c *vim25.Client, r ResizeRequest) (any, error
 		return nil, &Failure{Code: "NOT_MANAGED", Message: "refusing to change a VM this platform did not create"}
 	}
 	spec := types.VirtualMachineConfigSpec{NumCPUs: r.VCPU, MemoryMB: r.MemoryMB}
-	disks := object.VirtualDeviceList(v.Config.Hardware.Device).SelectByType((*types.VirtualDisk)(nil))
+	devices, err := vmDevices(v)
+	if err != nil {
+		return nil, err
+	}
+	disks := devices.SelectByType((*types.VirtualDisk)(nil))
 	if len(disks) > 0 {
 		d := disks[0].(*types.VirtualDisk)
 		want := r.DiskGB << 30

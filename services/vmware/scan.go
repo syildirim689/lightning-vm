@@ -153,19 +153,11 @@ func about(ctx context.Context, g *netGuard, addr string) *Product {
 	tr := sc.DefaultTransport()
 	tr.Proxy = nil
 	tr.DialContext = g.dialContext
-	tr.DialTLSContext = func(ctx context.Context, network, addr string) (net.Conn, error) {
-		raw, err := g.dialContext(ctx, network, addr)
-		if err != nil {
-			return nil, err
-		}
-		conn := tls.Client(raw, &tls.Config{InsecureSkipVerify: true}) // anonymous call, no credentials
-		if err := conn.HandshakeContext(ctx); err != nil {
-			raw.Close()
-			return nil, err
-		}
-		return conn, nil
-	}
-	if err := sc.UseServiceVersion(); err != nil {
+	tr.DialTLSContext = guardedTLS(g, &tls.Config{InsecureSkipVerify: true}) // anonymous call, no credentials
+	tr.TLSHandshakeTimeout = dialTimeout
+	// One address that accepts the connection and then stays silent must not hold the whole scan.
+	tr.ResponseHeaderTimeout = remaining(ctx)
+	if err := serviceVersion(ctx, sc); err != nil {
 		sc.Version, sc.Namespace = "", ""
 	}
 	c, err := vim25.NewClient(ctx, sc)

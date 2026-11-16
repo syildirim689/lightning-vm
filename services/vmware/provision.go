@@ -119,7 +119,7 @@ func cloneVM(ctx context.Context, g *netGuard, r CloneRequest) (map[string]any, 
 	if err != nil {
 		return nil, err
 	}
-	defer sm.Logout(context.WithoutCancel(ctx))
+	defer logout(ctx, sm)
 	if c.ServiceContent.About.ApiType != "VirtualCenter" {
 		return nil, &Failure{Code: "PROVISIONING_NOT_SUPPORTED", Message: "cloning needs vCenter"}
 	}
@@ -277,7 +277,7 @@ func withClient(ctx context.Context, g *netGuard, r Request, work func(*vim25.Cl
 	if err != nil {
 		return nil, err
 	}
-	defer sm.Logout(context.WithoutCancel(ctx))
+	defer logout(ctx, sm)
 	out, err := work(c)
 	if err != nil {
 		return nil, classify(err)

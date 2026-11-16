@@ -122,6 +122,21 @@ func TestCrossOriginIsRefusedBeforeUpgrade(t *testing.T) {
 	}
 }
 
+// Without a cookie that can be a ticket there is no upgrade and nothing is written to the audit log.
+func TestMissingCookieIsRefusedWithoutEvent(t *testing.T) {
+	_, store, front := setup(t)
+	for _, tok := range []string{"", "too-short"} {
+		if _, res, err := dial(t, front, front.URL, tok); err == nil || res == nil || res.StatusCode != http.StatusUnauthorized {
+			t.Fatalf("want 401 for cookie %q, got %v %v", tok, res, err)
+		}
+	}
+	store.mu.Lock()
+	defer store.mu.Unlock()
+	if len(store.events) != 0 {
+		t.Fatalf("anonymous requests must not be audited, got %v", store.events)
+	}
+}
+
 func TestUnknownSessionIsClosed(t *testing.T) {
 	_, _, front := setup(t)
 	c, _, err := dial(t, front, front.URL, token)
@@ -182,6 +197,80 @@ func TestBlockedUpstream(t *testing.T) {
 	c, _, _ := dial(t, front, front.URL, token)
 	if code, reason := closeCode(t, c); code != closeUpstream || reason != "CONSOLE_ENDPOINT_BLOCKED" {
 		t.Fatalf("got %d %q", code, reason)
+	}
+}
+
+// A ticket URL that is not wss:// would skip the address guard and the certificate pin.
+func TestPlainWebSocketTicketIsRefused(t *testing.T) {
+	_, store, front := setup(t)
+	up, pin := upstream(t)
+	addSession(store, token, Session{URL: strings.Replace(up.URL, "https", "ws", 1) + "/ticket/x", SHA256: []string{pin}, UserID: "u1"})
+	c, _, err := dial(t, front, front.URL, token)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if code, reason := closeCode(t, c); code != closeUpstream || reason != "CONSOLE_ENDPOINT_BLOCKED" {
+		t.Fatalf("got %d %q", code, reason)
+	}
+}
+
+// Sessions opened at the same moment are counted one by one: only as many open as the limit allows.
+func TestParallelOpensStayWithinTheLimit(t *testing.T) {
+	g, store, front := setup(t) // one console per user
+	up, pin := upstream(t)
+	url := strings.Replace(up.URL, "https", "wss", 1) + "/ticket/x"
+	type result struct {
+		c    *websocket.Conn
+		open bool
+	}
+	const n = 6
+	results := make(chan result, n)
+	for i := 0; i < n; i++ {
+		tok := token + "-" + string(rune('a'+i))
+		addSession(store, tok, Session{URL: url, SHA256: []string{pin}, UserID: "u1"})
+		go func() {
+			c, _, err := dial(t, front, front.URL, tok)
+			if err != nil {
+				results <- result{}
+				return
+			}
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			_, _, err = c.Read(ctx) // the greeting, or the close frame of a refused session
+			results <- result{c, err == nil}
+		}()
+	}
+	// Every connection stays open until all have answered: a slot freed early could be taken again fairly.
+	open := 0
+	var conns []*websocket.Conn
+	for i := 0; i < n; i++ {
+		r := <-results
+		if r.open {
+			open++
+		}
+		if r.c != nil {
+			conns = append(conns, r.c)
+		}
+	}
+	for _, c := range conns {
+		c.CloseNow()
+	}
+	if open != 1 {
+		t.Fatalf("want exactly 1 console for the user, got %d of %d", open, n)
+	}
+	// A refused or failed session leaves no slot behind.
+	deadline := time.Now().Add(3 * time.Second)
+	for {
+		g.mu.Lock()
+		left := len(g.active)
+		g.mu.Unlock()
+		if left == 0 {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("%d slots still taken after every console closed", left)
+		}
+		time.Sleep(20 * time.Millisecond)
 	}
 }
 

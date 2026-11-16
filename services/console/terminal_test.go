@@ -32,6 +32,16 @@ func dialTerminal(front *httptest.Server, tok string) (*websocket.Conn, *http.Re
 	return websocket.Dial(context.Background(), strings.Replace(front.URL, "http", "ws", 1)+"/terminal/ws", &websocket.DialOptions{HTTPHeader: h})
 }
 
+func TestTerminalWithoutCookieIsRefusedWithoutEvent(t *testing.T) {
+	store, front := terminalSetup(t, time.Minute)
+	if _, res, err := dialTerminal(front, ""); err == nil || res == nil || res.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("want 401 without a ticket, got %v %v", res, err)
+	}
+	if names := store.eventNames(); names != "" {
+		t.Fatalf("anonymous requests must not be audited, got %q", names)
+	}
+}
+
 func TestTerminalEchoesThroughTheShellOnce(t *testing.T) {
 	store, front := terminalSetup(t, time.Minute)
 	addSession(store, token, Session{UserID: "admin-1", VM: "host"})

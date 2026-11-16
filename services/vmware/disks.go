@@ -29,6 +29,15 @@ type DiskInfo struct {
 	System bool   `json:"system"`
 }
 
+// vmDevices is the VM's hardware. vCenter returns no configuration at all for a VM it cannot read
+// (inaccessible or orphaned); that is an answer for the caller, not a reason to crash the handler.
+func vmDevices(v mo.VirtualMachine) (object.VirtualDeviceList, error) {
+	if v.Config == nil {
+		return nil, &Failure{Code: "INVALID_STATE", Message: "the VM's configuration is not available (inaccessible or orphaned)"}
+	}
+	return object.VirtualDeviceList(v.Config.Hardware.Device), nil
+}
+
 func managedVM(ctx context.Context, c *vim25.Client, vmRef string) (*object.VirtualMachine, object.VirtualDeviceList, error) {
 	ref := types.ManagedObjectReference{Type: "VirtualMachine", Value: vmRef}
 	vm := object.NewVirtualMachine(c, ref)
@@ -39,7 +48,11 @@ func managedVM(ctx context.Context, c *vim25.Client, vmRef string) (*object.Virt
 	if !strings.HasPrefix(v.Name, managedPrefix) {
 		return nil, nil, &Failure{Code: "NOT_MANAGED", Message: "refusing to change a VM this platform did not create"}
 	}
-	return vm, object.VirtualDeviceList(v.Config.Hardware.Device), nil
+	devices, err := vmDevices(v)
+	if err != nil {
+		return nil, nil, err
+	}
+	return vm, devices, nil
 }
 
 func listDisks(ctx context.Context, c *vim25.Client, r DiskRequest) (any, error) {
@@ -72,7 +85,10 @@ func addDisk(ctx context.Context, c *vim25.Client, r DiskRequest) (any, error) {
 		return nil, &Failure{Code: "NO_DISK_CONTROLLER", Message: "no free disk controller slot"}
 	}
 	// On the system disk's datastore, in the VM's folder; thin.
-	sys := disks[0].(*types.VirtualDisk).Backing.(*types.VirtualDiskFlatVer2BackingInfo)
+	sys, ok := disks[0].(*types.VirtualDisk).Backing.(*types.VirtualDiskFlatVer2BackingInfo)
+	if !ok || sys.Datastore == nil {
+		return nil, &Failure{Code: "DISK_NOT_SUPPORTED", Message: "a disk can only be added next to a flat system disk"}
+	}
 	ds := sys.Datastore
 	// Its own file next to the system disk (an empty name would reuse the system disk's name on some versions).
 	name := strings.TrimSuffix(sys.FileName, ".vmdk") + "_extra" + strconv.FormatInt(time.Now().UnixNano()%1_000_000_000, 36) + ".vmdk"

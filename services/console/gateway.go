@@ -101,21 +101,43 @@ func (g *Gateway) originAllowed(r *http.Request) bool {
 	return err == nil && strings.EqualFold(u.Host, r.Host)
 }
 
-func (g *Gateway) countFor(userID string) (user, total int) {
+// reserve takes a slot for c unless its user or the gateway is at the limit. Counting and taking are one
+// step under the lock: sessions opened in parallel would otherwise all pass a check made before any of them
+// is counted. The caller releases the slot when the session ends or never starts.
+func (g *Gateway) reserve(c *conn) bool {
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	for c := range g.active {
-		if c.s.UserID == userID {
+	user := 0
+	for o := range g.active {
+		if o.s.UserID == c.s.UserID {
 			user++
 		}
 	}
-	return user, len(g.active)
+	if user >= g.maxPerUser || len(g.active) >= g.maxTotal {
+		return false
+	}
+	g.active[c] = struct{}{}
+	return true
+}
+
+func (g *Gateway) release(c *conn) {
+	g.mu.Lock()
+	delete(g.active, c)
+	g.mu.Unlock()
 }
 
 func (g *Gateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if !g.originAllowed(r) {
 		logger.Warn("console_origin_rejected")
 		http.Error(w, "origin not allowed", http.StatusForbidden)
+		return
+	}
+	// No cookie, or one that cannot be a ticket: refused before the upgrade and without an audit event, so a
+	// loop of anonymous requests cannot fill the audit table. A ticket that is presented and rejected is still
+	// recorded below.
+	cookie, err := r.Cookie(cookieName)
+	if err != nil || len(cookie.Value) < 32 {
+		http.Error(w, "console session required", http.StatusUnauthorized)
 		return
 	}
 	subprotocols := strings.Split(subprotocolSet, ",")
@@ -126,11 +148,7 @@ func (g *Gateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	defer client.CloseNow()
 	ctx := r.Context()
 
-	cookie, err := r.Cookie(cookieName)
-	var s *Session
-	if err == nil && len(cookie.Value) >= 32 {
-		s, err = g.store.Consume(ctx, sessionKey(cookie.Value))
-	}
+	s, err := g.store.Consume(ctx, sessionKey(cookie.Value))
 	if s == nil {
 		if err != nil {
 			logger.Error("console_store_failed", "error", err.Error())
@@ -139,8 +157,10 @@ func (g *Gateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		client.Close(closeSession, "CONSOLE_SESSION_INVALID")
 		return
 	}
-	user, total := g.countFor(s.UserID)
-	if user >= g.maxPerUser || total >= g.maxTotal {
+	// The slot is taken before the upstream dial, so the session is revocable from here on.
+	runCtx, cancel := context.WithCancelCause(ctx)
+	c := &conn{s: s, cancel: cancel}
+	if !g.reserve(c) {
 		g.store.Event(ctx, map[string]any{"event": "denied", "reason": "CONSOLE_LIMIT", "userId": s.UserID, "vm": s.VM, "connectionId": s.ConnectionID})
 		client.Close(closeTooMany, "CONSOLE_LIMIT")
 		return
@@ -148,6 +168,7 @@ func (g *Gateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	upstream, code, err := g.dialUpstream(ctx, s, client.Subprotocol())
 	if err != nil {
+		g.release(c)
 		logger.Warn("console_upstream_failed", "code", code, "vm", s.VM)
 		g.store.Event(ctx, map[string]any{"event": "failed", "reason": code, "userId": s.UserID, "vm": s.VM, "connectionId": s.ConnectionID})
 		status := websocket.StatusCode(closeUpstream)
@@ -159,13 +180,8 @@ func (g *Gateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	defer upstream.CloseNow()
 
-	runCtx, cancel := context.WithCancelCause(ctx)
 	runCtx, stop := context.WithTimeoutCause(runCtx, g.maxDuration, errors.New("CONSOLE_EXPIRED"))
 	defer stop()
-	c := &conn{s: s, cancel: cancel}
-	g.mu.Lock()
-	g.active[c] = struct{}{}
-	g.mu.Unlock()
 	started := time.Now()
 	_ = g.store.Active(ctx, s, started)
 	g.store.Event(ctx, map[string]any{"event": "opened", "userId": s.UserID, "vm": s.VM, "vmName": s.VMName, "connectionId": s.ConnectionID})
@@ -193,9 +209,7 @@ func (g *Gateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	upstream.Close(websocket.StatusNormalClosure, "")
 
-	g.mu.Lock()
-	delete(g.active, c)
-	g.mu.Unlock()
+	g.release(c)
 	_ = g.store.Inactive(context.WithoutCancel(ctx), s)
 	g.store.Event(context.WithoutCancel(ctx), map[string]any{"event": "closed", "reason": reason, "userId": s.UserID, "vm": s.VM,
 		"connectionId": s.ConnectionID, "durationMs": time.Since(started).Milliseconds()})
@@ -217,6 +231,10 @@ func relay(ctx context.Context, from, to *websocket.Conn) error {
 // dialUpstream connects to the host's WebMKS endpoint, accepting only the certificate whose
 // thumbprint (or PEM) came with the ticket over the verified vCenter/ESXi API channel.
 func (g *Gateway) dialUpstream(ctx context.Context, s *Session, subprotocol string) (*websocket.Conn, string, error) {
+	// The address guard and the certificate pin are part of the TLS dial: a ws:// ticket would go around both.
+	if u, err := url.Parse(s.URL); err != nil || u.Scheme != "wss" {
+		return nil, "CONSOLE_ENDPOINT_BLOCKED", errBlocked
+	}
 	var pinned []byte
 	if s.CertPEM != "" {
 		if b, _ := pem.Decode([]byte(s.CertPEM)); b != nil {
@@ -242,7 +260,8 @@ func (g *Gateway) dialUpstream(ctx context.Context, s *Session, subprotocol stri
 		return errTLSMismatch
 	}
 	tr := &http.Transport{
-		Proxy: nil,
+		Proxy:       nil,
+		DialContext: g.guard.dialContext, // no plain connection is expected; if one is made, it is guarded too
 		DialTLSContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
 			raw, err := g.guard.dialContext(ctx, network, addr)
 			if err != nil {

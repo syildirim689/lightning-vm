@@ -41,7 +41,7 @@ func consoleTicket(ctx context.Context, g *netGuard, r TicketRequest) (*ConsoleT
 	if err != nil {
 		return nil, err
 	}
-	defer sm.Logout(context.WithoutCancel(ctx))
+	defer logout(ctx, sm)
 
 	ref := types.ManagedObjectReference{Type: "VirtualMachine", Value: r.VM}
 	vm := object.NewVirtualMachine(c, ref)

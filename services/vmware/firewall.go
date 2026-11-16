@@ -202,8 +202,12 @@ func vmPorts(ctx context.Context, c *vim25.Client, moref string) ([]dvPort, erro
 			return nil, err
 		}
 	}
+	devices, err := vmDevices(vm)
+	if err != nil {
+		return nil, err
+	}
 	var ports []dvPort
-	for _, d := range object.VirtualDeviceList(vm.Config.Hardware.Device).SelectByType((*types.VirtualEthernetCard)(nil)) {
+	for _, d := range devices.SelectByType((*types.VirtualEthernetCard)(nil)) {
 		b, ok := d.GetVirtualDevice().Backing.(*types.VirtualEthernetCardDistributedVirtualPortBackingInfo)
 		if !ok {
 			return nil, &Failure{Code: "FIREWALL_NEEDS_DVS", Message: "a network card is not on a distributed switch"}
