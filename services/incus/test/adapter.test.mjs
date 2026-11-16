@@ -1,5 +1,8 @@
 // The adapter against a small pretend Incus server (an in-memory API), and its client against a real TLS server
 // that asks for a client certificate. test/fixtures holds a throwaway self-signed pair made for these tests only.
+// The pretend server copies what a real Incus 6.0 did when the adapter ran against one: a PATCH without a
+// description empties it and so does a restore, a snapshot holds the configuration and the devices, and a volume's
+// name is taken once.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash, X509Certificate } from 'node:crypto';
@@ -56,16 +59,21 @@ function incus({ clustered = false } = {}) {
     if ((m = /^\/1\.0\/instances\/([^/]+)$/.exec(p))) {
       const i = inst(m[1]);
       if (method === 'GET') return q.includes('recursion=1') ? withState(i) : plain(i);
-      if (method === 'PATCH') { Object.assign(i.config, body.config ?? {}); Object.assign(i.devices, body.devices ?? {}); return null; }
-      if (method === 'PUT') return op(() => { if (body.restore) { db.restored = body.restore; return; } if (i.status === 'Running' && i.busy) throw new Error('device is busy'); i.config = body.config; i.devices = body.devices; });
+      if (method === 'PATCH') { Object.assign(i.config, body.config ?? {}); Object.assign(i.devices, body.devices ?? {}); i.description = body.description ?? ''; return null; }
+      if (method === 'PUT') return op(() => {
+        if (body.restore) { const s = db.snaps[i.name]?.find((x) => x.name === `${i.name}/${body.restore}`); if (!s) throw new Error('Snapshot not found'); if (i.status === 'Running') db.restoredRunning = true;
+          db.restored = body.restore; i.config = structuredClone(s.config); i.devices = structuredClone(s.devices); i.description = ''; return; }
+        if (i.status === 'Running' && i.busy) throw new Error('device is busy'); i.config = body.config; i.devices = body.devices; i.description = body.description; });
       if (method === 'POST') return op(() => { i.name = body.name; });
       if (method === 'DELETE') return op(() => { if (i.status === 'Running') throw new Error('Instance is running'); db.instances = db.instances.filter((x) => x !== i); });
     }
     if ((m = /^\/1\.0\/instances\/([^/]+)\/state$/.exec(p))) { const i = inst(m[1]); return op(() => { if (body.action === 'stop') i.status = 'Stopped'; else { i.status = 'Running'; i.started = new Date().toISOString(); } }); }
     if ((m = /^\/1\.0\/instances\/([^/]+)\/snapshots$/.exec(p))) { const i = inst(m[1]), list = (db.snaps[i.name] ??= []);
-      if (method === 'GET') return list; return op(() => { list.push({ name: `${i.name}/${body.name}`, created_at: '2024-01-01T10:00:00Z', stateful: false }); }); }
+      if (method === 'GET') return list.map(({ config: _c, devices: _d, ...s }) => s); return op(() => { list.push({ name: `${i.name}/${body.name}`, created_at: '2024-01-01T10:00:00Z', stateful: false, config: structuredClone(i.config), devices: structuredClone(i.devices) }); }); }
     if ((m = /^\/1\.0\/instances\/([^/]+)\/snapshots\/([^/]+)$/.exec(p))) { const i = inst(m[1]); return op(() => { db.snaps[i.name] = db.snaps[i.name].filter((s) => s.name !== `${i.name}/${m[2]}`); }); }
-    if (p === '/1.0/storage-pools/default/volumes/custom' && method === 'POST') { if (body.config.size === '9999GiB') throw new Failure('INCUS_ERROR', 'not enough space left on the pool'); db.volumes[body.name] = body; return null; }
+    if (p === '/1.0/storage-pools/default/volumes/custom' && method === 'GET') return Object.keys(db.volumes).map((v) => `/1.0/storage-pools/default/volumes/custom/${v}`);
+    if (p === '/1.0/storage-pools/default/volumes/custom' && method === 'POST') { if (body.config.size === '9999GiB') throw new Failure('INCUS_ERROR', 'not enough space left on the pool');
+      if (db.volumes[body.name]) throw apiFailure(409, 'Volume by that name already exists'); db.volumes[body.name] = body; return null; }
     if ((m = /^\/1\.0\/storage-pools\/default\/volumes\/custom\/([^/]+)$/.exec(p)) && method === 'DELETE') { if (!db.volumes[m[1]]) nf(); delete db.volumes[m[1]]; return null; }
     if (/^\/1\.0\/(storage-pools|networks)\/[^/]+$/.test(p) && method === 'GET') nf();
     throw new Error(`fake incus: ${method} ${path}`);
@@ -85,6 +93,18 @@ async function created(f, o = order) {
 test('sizes and CPU sets are read the way Incus writes them', () => {
   assert.deepEqual(['4GiB', '4096MiB', '2GB', '1048576', '', 'lots'].map(h.bytes), [4 * GIB, 4 * GIB, 2e9, 1048576, 0, 0]);
   assert.deepEqual(['4', '0-3', '0,2,4', '0-1,8-9', ''].map(h.cpus), [4, 4, 3, 4, 0]);
+});
+
+test('network settings are rewritten for images whose cloud-init reads them itself', () => {
+  const panel = { version: 2, ethernets: { nic0: { match: { name: 'e*' }, addresses: ['203.0.113.20/24', '2001:db8::20/64'], routes: [{ to: 'default', via: '203.0.113.1' }, { to: '::/0', via: '2001:db8::1', 'on-link': true }, { to: '10.0.0.0/8', via: '203.0.113.2' }],
+    nameservers: { addresses: ['1.1.1.1'] } } } };
+  const before = JSON.stringify(panel);
+  const container = h.guestNetwork(panel, false).ethernets;
+  assert.deepEqual(container, { eth0: { addresses: ['203.0.113.20/24', '2001:db8::20/64'], routes: [{ to: '0.0.0.0/0', via: '203.0.113.1' }, { to: '10.0.0.0/8', via: '203.0.113.2' }], gateway6: '2001:db8::1', nameservers: { addresses: ['1.1.1.1'] } } });
+  // A virtual machine's interface has another name (enp5s0): the match stays.
+  assert.deepEqual(Object.entries(h.guestNetwork(panel, true).ethernets).map(([k, v]) => [k, v.match, v.gateway6, v.routes[0].to]), [['nic0', { name: 'e*' }, '2001:db8::1', '0.0.0.0/0']]);
+  assert.equal(JSON.stringify(panel), before, 'what the panel sent is left alone');
+  assert.deepEqual(h.guestNetwork({ version: 2 }, false), { version: 2 });
 });
 
 test('discovery describes the server, its pools, networks, instances and images', async () => {
@@ -142,6 +162,10 @@ test('power, readiness and deletion', async () => {
   const before = f.calls.length; await h.powerAction(f.api, { vm, action: 'on' });
   assert.ok(!f.calls.slice(before).some((c) => c.startsWith('PUT')), 'a running server is not started again');
   assert.deepEqual((await h.find(f.api, { name: NAME })).vm, { moref: vm, name: NAME, powerState: 'poweredOn', toolsRunning: true, ips: ['203.0.113.20'], serverId: SERVER });
+  // A container has an address of its own before cloud-init has set the given one: not ready yet.
+  f.inst(NAME).config['user.lvm-ips'] = '203.0.113.99';
+  assert.deepEqual((await h.find(f.api, { name: NAME })).vm, { moref: vm, name: NAME, powerState: 'poweredOn', toolsRunning: false, ips: ['203.0.113.20'], serverId: SERVER });
+  f.inst(NAME).config['user.lvm-ips'] = '203.0.113.20';
   // No agent in the guest: not ready at first, ready with the given addresses after four minutes.
   f.inst(NAME).agent = false;
   assert.equal((await h.find(f.api, { name: NAME })).vm.toolsRunning, false);
@@ -193,8 +217,26 @@ test('resize, take over, disks and snapshots', async () => {
   f.db.snaps[NAME].push({ name: `${NAME}/by-hand`, created_at: '2024-02-01T10:00:00Z', stateful: true });
   const [, foreign] = (await h.snapshots(f.api, { vm })).snapshots;
   assert.match(foreign.id, /^snapshot-\d{1,12}$/); assert.equal(foreign.name, 'by-hand');
+  // Since the snapshot: disk 2 went, a new disk came, a second snapshot was named. Going back keeps all three as they
+  // are now (a snapshot holds the configuration of its moment, and Incus would bring that back).
+  i.busy = false; await h.diskRemove(f.api, { vm, key: 2 }); await h.diskAdd(f.api, { vm, sizeGb: 5 });
+  await h.snapshot(f.api, { vm, action: 'create', name: 'second', description: '' }, 1700000100000);
+  f.db.snaps[NAME].push(f.db.snaps[NAME].splice(1, 1)[0]); // the one made by hand stays last
+  await h.powerAction(f.api, { vm, action: 'on' });
   await h.snapshot(f.api, { vm, action: 'revert', snapshot: 'snapshot-1700000000' });
   assert.equal(f.db.restored, 'lvm1700000000');
+  assert.equal(f.db.restoredRunning, undefined, 'stopped first: Incus would start it with a disk that is gone');
+  assert.equal(i.status, 'Running');
+  assert.deepEqual(Object.keys(i.devices).filter((k) => k.startsWith('lvm-disk')), ['lvm-disk1']);
+  assert.deepEqual((await h.disks(f.api, { vm })).disks.map((x) => [x.key, x.sizeGb]), [[0, 60], [1, 5]]);
+  assert.deepEqual((await h.snapshots(f.api, { vm })).snapshots.map((s) => s.name), ["before the 'big' upgrade", 'second', 'by-hand']);
+  assert.equal(i.description, `Managed by Lightning VM (server ${SERVER})`, 'no update empties the description');
+  await h.snapshot(f.api, { vm, action: 'remove', snapshot: 'snapshot-1700000100' });
+  assert.equal(i.config['user.lvm-snap.lvm1700000100'], undefined, 'a removed snapshot leaves no label behind');
+  // A volume without its device (an answer was lost): its number is not given out again.
+  f.db.volumes[`${NAME}-disk2`] = { name: `${NAME}-disk2` };
+  await h.diskAdd(f.api, { vm, sizeGb: 7 });
+  assert.deepEqual((await h.disks(f.api, { vm })).disks.map((x) => [x.key, x.sizeGb]), [[0, 60], [1, 5], [3, 7]]);
   await h.snapshot(f.api, { vm, action: 'remove', snapshot: foreign.id });
   assert.deepEqual(f.db.snaps[NAME].map((s) => s.name), [`${NAME}/lvm1700000000`]);
   await assert.rejects(h.snapshot(f.api, { vm, action: 'remove', snapshot: 'snapshot-5' }), { code: 'SNAPSHOT_NOT_FOUND' });

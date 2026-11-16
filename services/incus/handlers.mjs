@@ -62,11 +62,14 @@ function addresses(st) {
   return out;
 }
 function stateOf(i, now = Date.now()) {
-  const c = conf(i), on = power(i) === 'poweredOn';
-  let ips = on ? addresses(i.state) : [], tools = ips.length > 0;
-  // No agent in the guest: a server that has been running for four minutes counts as ready with the addresses it was given.
+  const c = conf(i), on = power(i) === 'poweredOn', given = String(c['user.lvm-ips'] ?? '').split(',').filter(Boolean);
+  let ips = on ? addresses(i.state) : [];
+  // A container has an address of its own (IPv6 autoconfiguration) seconds after it starts, before cloud-init has set
+  // the ones the panel gave it: the server is ready when one of those is up.
+  let tools = given.length ? given.some((a) => ips.includes(a)) : ips.length > 0;
+  // No agent in the guest, or cloud-init never ran: after four minutes the server counts as ready with what it was given.
   const since = Date.parse(i.state?.started_at ?? '') || Date.parse(i.last_used_at ?? '') || 0;
-  if (on && !tools && since > 0 && now - since > 240_000) { tools = true; ips = String(c['user.lvm-ips'] ?? '').split(',').filter(Boolean); }
+  if (on && !tools && since > 0 && now - since > 240_000) { tools = true; if (!ips.length) ips = given; }
   return { moref: idOf(i), name: i.name, powerState: power(i), toolsRunning: tools, ips, ...(c['user.lvm-server'] && { serverId: c['user.lvm-server'] }) };
 }
 
@@ -111,6 +114,26 @@ export async function discover(api) {
 }
 
 // ---- provisioning --------------------------------------------------------------------------------
+// The panel writes its network settings for netplan. Images without netplan (Debian's) hand them to cloud-init's own
+// reader, and the one in Debian 12 (22.4) differs in three places, seen on a real server: it knows no "to: default",
+// it turns the route "::/0" into "::/64", and it takes the entry's key for the interface's name instead of matching
+// "e*". So: an address for the IPv4 default route, gateway6 for the IPv6 one, and in a container (whose interface
+// carries the device's name) the entry is called eth0.
+export function guestNetwork(network, vm) {
+  const out = structuredClone(network), nics = {}, entries = Object.entries(out?.ethernets ?? {});
+  for (const [key, nic] of entries) {
+    const routes = [];
+    for (const r of Array.isArray(nic?.routes) ? nic.routes : []) {
+      const v6 = String(r?.via ?? '').includes(':');
+      if (r?.to === '::/0' || (r?.to === 'default' && v6)) nic.gateway6 = r.via;
+      else routes.push(r?.to === 'default' ? { ...r, to: '0.0.0.0/0' } : r);
+    }
+    if (routes.length) nic.routes = routes; else delete nic.routes;
+    if (!vm && entries.length === 1) { delete nic.match; nics.eth0 = nic; } else nics[key] = nic;
+  }
+  if (out?.ethernets) out.ethernets = nics;
+  return out;
+}
 export async function clone(api, b) {
   if (!String(b.name ?? '').startsWith(PREFIX) || !b.template || !b.pool || !b.datastore || !b.network) throw new Failure('INVALID_REQUEST', 'name, template, pool, datastore and network are required');
   if (!/^lvm-[A-Za-z0-9-]{1,59}$/.test(b.name) || b.name.endsWith('-')) throw new Failure('INVALID_REQUEST', 'the name may hold letters, digits and - only (63 characters at most)');
@@ -130,7 +153,7 @@ export async function clone(api, b) {
   const diskGb = Math.floor(Number(b.diskGb)) || 0;
   const op = await api('POST', '/1.0/instances', { name: b.name, type: vm ? 'virtual-machine' : 'container', description: note(b.serverId ?? ''), start: false, source: { type: 'image', fingerprint: image.fingerprint },
     config: { 'limits.cpu': String(Math.floor(Number(b.vcpu)) || 1), 'limits.memory': `${Math.floor(Number(b.memoryMb)) || 1024}MiB`, [`${key}.user-data`]: String(b.userdata || '#cloud-config\n{}\n'),
-      ...(meta.network && { [`${key}.network-config`]: JSON.stringify(meta.network) }), 'user.lvm-server': String(b.serverId ?? ''), 'user.lvm-ips': ips.join(','), ...(!vm && b.nestedHv && { 'security.nesting': 'true' }) },
+      ...(meta.network && { [`${key}.network-config`]: JSON.stringify(guestNetwork(meta.network, vm)) }), 'user.lvm-server': String(b.serverId ?? ''), 'user.lvm-ips': ips.join(','), ...(!vm && b.nestedHv && { 'security.nesting': 'true' }) },
     devices: { root: { type: 'disk', path: '/', pool: b.datastore, ...(diskGb > 0 && { size: `${diskGb}GiB` }) }, eth0: { type: 'nic', network: b.network, name: 'eth0' },
       // A VM image without the Incus agent reads its cloud-init data from this drive.
       ...(vm && { 'cloud-init': { type: 'disk', source: 'cloud-init:config' } }) } })
@@ -154,6 +177,9 @@ export async function find(api, b) {
 }
 export async function managedVms(api) { return { vms: (await api('GET', '/1.0/instances?recursion=2')).filter((i) => i.name.startsWith(PREFIX)).map((i) => stateOf(i)) }; }
 
+// A partial update. Incus 6.0 empties the description of an instance patched without one (seen on a real server),
+// so it is sent along.
+const patch = (api, i, body) => api('PATCH', `/1.0/instances/${enc(i.name)}`, { description: i.description ?? '', ...body });
 const setState = (api, i, action, force, timeout = 30) => api('PUT', `/1.0/instances/${enc(i.name)}/state`, { action, force, timeout });
 export async function powerAction(api, b) {
   if (!['on', 'off', 'reset', 'shutdown'].includes(b.action)) throw new Failure('INVALID_REQUEST', 'unknown power action');
@@ -188,7 +214,7 @@ export async function resize(api, b) {
   if (!root) throw new Failure('VM_HAS_NO_DISK', 'the instance has no root disk');
   if (now && diskGb < now) throw new Failure('DISK_SHRINK_NOT_SUPPORTED', 'a disk cannot be made smaller');
   if (power(i) !== 'poweredOff') throw new Failure('INVALID_STATE', 'the server must be shut down to change its size');
-  await settled(api, await api('PATCH', `/1.0/instances/${enc(i.name)}`, { config: { 'limits.cpu': String(vcpu), 'limits.memory': `${memoryMb}MiB` }, devices: { [rootName]: { ...root, size: `${diskGb}GiB` } } }));
+  await settled(api, await patch(api, i, { config: { 'limits.cpu': String(vcpu), 'limits.memory': `${memoryMb}MiB` }, devices: { [rootName]: { ...root, size: `${diskGb}GiB` } } }));
   return { task: '' };
 }
 export async function rename(api, b) {
@@ -213,14 +239,16 @@ export async function diskAdd(api, b) {
   if (!Number.isInteger(sizeGb) || sizeGb < 1 || sizeGb > 65536) throw new Failure('INVALID_REQUEST', 'sizeGb must be 1 to 65536');
   const i = managed(await byId(api, b.vm)), [, root] = rootOf(i);
   if (!root?.pool) throw new Failure('VM_HAS_NO_DISK', 'the instance has no root disk');
+  // A slot is free when no device and no volume carries its number (a volume can outlive its device: a lost answer).
   const used = new Set(extraDisks(i).map(([k]) => Number(k.slice(8))));
+  for (const url of await api('GET', `/1.0/storage-pools/${enc(root.pool)}/volumes/custom`)) { const m = new RegExp(`/${i.name}-disk(\\d+)(\\?|$)`).exec(decodeURIComponent(String(url))); if (m) used.add(Number(m[1])); }
   const n = Array.from({ length: 15 }, (_, x) => x + 1).find((x) => !used.has(x));
   if (!n) throw new Failure('NO_DISK_CONTROLLER', 'no free disk slot');
   const volume = `${i.name}-disk${n}`;
   await settled(api, await api('POST', `/1.0/storage-pools/${enc(root.pool)}/volumes/custom`, { name: volume, type: 'custom', content_type: isVm(i) ? 'block' : 'filesystem', config: { size: `${sizeGb}GiB` } })
     .catch((e) => { throw e instanceof Failure && e.code === 'INCUS_ERROR' && /space|quota|exceed/i.test(e.message) ? new Failure('INSUFFICIENT_RESOURCES', e.message) : e; }));
   try {
-    await settled(api, await api('PATCH', `/1.0/instances/${enc(i.name)}`, { config: { [`user.lvm-disk.${n}`]: String(sizeGb) }, devices: { [`lvm-disk${n}`]: { type: 'disk', pool: root.pool, source: volume, ...(!isVm(i) && { path: `/mnt/disk${n}` }) } } }));
+    await settled(api, await patch(api, i, { config: { [`user.lvm-disk.${n}`]: String(sizeGb) }, devices: { [`lvm-disk${n}`]: { type: 'disk', pool: root.pool, source: volume, ...(!isVm(i) && { path: `/mnt/disk${n}` }) } } }));
   } catch (e) { await dropVolume(api, root.pool, volume).catch(() => {}); throw e; }
   return { task: '' };
 }
@@ -241,6 +269,17 @@ export async function diskRemove(api, b) {
 // ---- snapshots -----------------------------------------------------------------------------------
 // A snapshot's own name is lvm<seconds>; the name and description the customer typed are kept in the instance's
 // configuration (user.lvm-snap.<name>, base64 of JSON), because an Incus snapshot has no description to write to.
+// A snapshot holds the instance's configuration too, so going back to one brings back the labels and the added
+// disks of that moment. Those belong to now, not to then (the disks' volumes are no part of a snapshot): after a
+// revert they are put back as they were just before it.
+const OURS = /^user\.lvm-(snap|disk)\./, DISK = /^lvm-disk\d+$/;
+const only = (o, re) => Object.fromEntries(Object.entries(o ?? {}).filter(([k]) => re.test(k)));
+async function rewrite(api, name, change) {
+  const now = await one(api, name);
+  if (!now) return;
+  const next = writable(now); change(next);
+  await settled(api, await api('PUT', `/1.0/instances/${enc(name)}`, next));
+}
 const numberOf = (name) => (/^lvm\d{1,12}$/.test(name) ? Number(name.slice(3)) : Number.parseInt(createHash('sha1').update(name).digest('hex').slice(0, 11), 16) % 1e12);
 const snapId = (name) => `snapshot-${numberOf(name)}`;
 const short = (s) => String(s.name).split('/').pop();
@@ -257,16 +296,32 @@ export async function snapshot(api, b, now = Date.now()) {
   if (b.action === 'create') {
     const name = String(b.name ?? ''), description = String(b.description ?? '');
     if (!name || Buffer.byteLength(name) > 80 || Buffer.byteLength(description) > 500) throw new Failure('INVALID_REQUEST', 'name is 1 to 80 bytes, description at most 500');
-    const snap = `lvm${Math.floor(now / 1000)}`;
-    await settled(api, await api('POST', `/1.0/instances/${enc(i.name)}/snapshots`, { name: snap, stateful: false }));
-    await settled(api, await api('PATCH', `/1.0/instances/${enc(i.name)}`, { config: { [`user.lvm-snap.${snap}`]: Buffer.from(JSON.stringify({ name, description }), 'utf8').toString('base64url') } }));
+    const snap = `lvm${Math.floor(now / 1000)}`, key = `user.lvm-snap.${snap}`;
+    // The label first: the snapshot then carries its own name, and going back to it does not lose it.
+    await settled(api, await patch(api, i, { config: { [key]: Buffer.from(JSON.stringify({ name, description }), 'utf8').toString('base64url') } }));
+    try { await settled(api, await api('POST', `/1.0/instances/${enc(i.name)}/snapshots`, { name: snap, stateful: false })); }
+    catch (e) { await rewrite(api, i.name, (next) => { delete next.config[key]; }).catch(() => {}); throw e; }
     return { task: '' };
   }
   if (b.action !== 'revert' && b.action !== 'remove') throw new Failure('INVALID_REQUEST', 'unknown snapshot action');
   const target = (await snapList(api, i)).map(short).find((s) => snapId(s) === b.snapshot);
   if (!target) throw new Failure('SNAPSHOT_NOT_FOUND', 'the snapshot is not in this instance');
-  if (b.action === 'revert') await settled(api, await api('PUT', `/1.0/instances/${enc(i.name)}`, { restore: target }));
-  else await settled(api, await api('DELETE', `/1.0/instances/${enc(i.name)}/snapshots/${enc(target)}`));
+  if (b.action === 'revert') {
+    // Stopped first: Incus would start the instance with the old configuration, which may name a disk that is gone.
+    const on = power(i) !== 'poweredOff';
+    if (on) await settled(api, await setState(api, i, 'stop', true));
+    await settled(api, await api('PUT', `/1.0/instances/${enc(i.name)}`, { restore: target }), 100);
+    await rewrite(api, i.name, (next) => {
+      for (const k of Object.keys(next.config)) if (OURS.test(k)) delete next.config[k];
+      for (const k of Object.keys(next.devices)) if (DISK.test(k)) delete next.devices[k];
+      Object.assign(next.config, only(i.config, OURS)); Object.assign(next.devices, only(i.devices, DISK));
+      next.description = i.description ?? ''; // Incus 6.0 empties it on a restore, too
+    });
+    if (on) await settled(api, await setState(api, i, 'start', false));
+  } else {
+    await settled(api, await api('DELETE', `/1.0/instances/${enc(i.name)}/snapshots/${enc(target)}`));
+    await rewrite(api, i.name, (next) => { delete next.config[`user.lvm-snap.${target}`]; }).catch(() => {});
+  }
   return { task: '' };
 }
 

@@ -9,10 +9,11 @@ Incus hem **sanal makine** hem **sistem konteyneri** çalıştırır. Panel ikis
 olacağını seçtiğiniz **imajın türü** belirler.
 
 > [!WARNING]
-> Incus desteği **ilk sürümdür**. API yolları ve alan adları Incus'un yayımladığı API tanımıyla karşılaştırıldı;
-> adaptör sahte bir Incus API'siyle, istemcisi de istemci sertifikası isteyen gerçek bir TLS sunucusuyla sınandı.
-> **Gerçek bir Incus ya da LXD sunucusunda henüz hiç çalıştırılmadı.** Üretimde kullanmadan önce bir test
-> sunucusunda deneyin.
+> Incus desteği **ilk sürümdür**. Adaptör **gerçek bir Incus 6.0 sunucusunda (Ubuntu 24.04, ARM64) konteynerlerle
+> uçtan uca çalıştırıldı**: giriş ve parmak izi, keşif, Debian 12 imajından sunucu oluşturma (cloud-init'in tamamı),
+> güç işlemleri, snapshot, ek disk, boyut değiştirme, devralma, silme. O denemede bulunan hatalar düzeltildi.
+> **Denenmeyenler:** sanal makineler (deneme sunucusunda KVM yoktu), LXD, kümeler, `dir` dışındaki depolama
+> sürücüleri. Üretimde kullanmadan önce kendi sunucunuzda deneyin.
 
 ## Sunucuyu hazırlamak
 
@@ -105,8 +106,16 @@ güncelleme bildiricisini Incus'un cloud-init ayarlarıyla (`cloud-init.user-dat
 verir. IP adresi, sanal makinelerde imajın içindeki **Incus ajanı** ile okunur (cloud imajlarında vardır); ajan
 yoksa sunucu, açıldıktan dört dakika sonra kendisine verilen adreslerle hazır sayılır.
 
+Sunucu, panelin verdiği adreslerden biri misafirde göründüğünde hazır sayılır (konteyner, cloud-init bitmeden
+kendi IPv6 adresini alır; o adres beklenmez).
+
+Panel ağ ayarlarını netplan biçiminde üretir. netplan'sız imajlarda (Debian 12 gibi) bu ayarları cloud-init kendisi
+okur ve eski sürümleri bazı yazımları tanımaz; adaptör ayarları her ikisinin de anladığı biçime çevirir. Konteynerde
+arayüzün adı bellidir (`eth0`). Sanal makinede arayüz adı imaja göre değişir: netplan'lı bir imaj (Ubuntu) kullanın.
+
 Müşterilere genel IP verecekseniz sunucuları, hostun köprüsüne bağlı bir ağa koyun (NAT'lı `incusbr0` dışarıdan
-erişilemez).
+erişilemez). Aynı hostta **Docker** da çalışıyorsa, Docker'ın güvenlik duvarı kuralları Incus köprüsünden dışarı
+çıkan trafiği keser; Incus belgelerindeki "Docker ile birlikte" adımlarını uygulayın.
 
 ## Bu sürümde çalışanlar
 
@@ -123,8 +132,11 @@ Ayrıca:
 
 - **Kümede yerleşim Incus'a bırakılır:** yeni sunucunun hangi üyede açılacağını Incus seçer.
 - **Grafikler boş gelir:** Incus anlık kullanımı verir ama geçmiş tutmaz; anlık bellek kullanımı gösterilir.
-- **Snapshot'a geri dönmek ayarları da geri alır:** sonradan alınmış snapshot'ların panelde verdiğiniz adları
-  kaybolabilir (snapshot'ların kendisi durur).
+- **Snapshot'a geri dönmek sunucuyu kısa süre kapatır:** Incus snapshot'la birlikte ayarları da geri getirir; adaptör
+  sunucuyu durdurur, geri döner, sonradan eklenen diskleri ve snapshot adlarını yerine koyar ve sunucuyu yeniden açar.
+  Ek disklerin içeriği snapshot'a dahil değildir.
+- **Disk boyutu sınırı depolama sürücüsüne bağlıdır:** `dir` havuzunda Incus disk boyutunu uygulamaz (sunucu hostun
+  tüm diskini görür). Müşteriye satılan disk boyutunun geçerli olması için `zfs`, `btrfs` ya da `lvm` havuzu kullanın.
 - **Konteynerlerde ek disk** `/mnt/disk<n>` altına bağlanır; sanal makinelerde ham disk olarak görünür.
 - Boyut değiştirme ve devralma için sunucu kapalı olmalıdır (boyut değiştirmede panel bunu kendisi yapar).
 - **Windows misafirler yapılandırılmaz:** özelleştirme cloud-init ile yapılır.

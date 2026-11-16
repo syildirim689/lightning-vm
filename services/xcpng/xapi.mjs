@@ -102,7 +102,8 @@ export async function connect(target, { timeoutMs = 50_000, transport } = {}) {
       res.on('end', () => resolve({ status: res.statusCode, text: Buffer.concat(chunks).toString('utf8') }));
     });
     req.on('socket', (s) => {
-      if (!pin) return;
+      // A kept-alive socket was checked when it was opened.
+      if (!pin || !s.connecting) return;
       s.once('secureConnect', () => {
         const der = s.getPeerCertificate(true)?.raw;
         if (!der || createHash('sha256').update(der).digest('hex') !== pin) req.destroy(new Failure('TLS_PIN_MISMATCH', 'the endpoint presents another certificate than the pinned one'));
