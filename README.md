@@ -155,7 +155,34 @@ bildirimleri ve sistemin kendisini tek panelden yönetir. Kurulumdan sonra sunuc
 Docker kurulu değilse betik resmî deposundan kurar. Paneli VMware host'unun kendisine değil, ayrı bir Linux
 sunucuya (sanal da olabilir) kurun.
 
-### 1. Kaynağı indirin
+### Tek komutla kurulum (önerilen)
+
+Yeni bir sunucuda yalnızca bu satırı çalıştırın; `git clone` gerekmez:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/syildirim689/lightning-vm/main/scripts/get.sh | sudo sh
+```
+
+Komut kaynağı `/opt/lightning-vm` dizinine indirir, en yeni kararlı sürümü seçer ve kurulumu başlatır; panel
+sonradan kendini bu dizinden günceller. Kendi alan adınızla:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/syildirim689/lightning-vm/main/scripts/get.sh | sudo sh -s -- -- --domain panel.example.com
+```
+
+| `get.sh` seçeneği | Ne yapar |
+|---|---|
+| `--version v1.2.0` | Belirli bir sürümü kurar (varsayılan: en yeni kararlı sürüm) |
+| `--branch main` | Sürüm yerine bir dalı izler (test sunucuları) |
+| `--dir /srv/lightning-vm` | Kaynağın duracağı dizin (varsayılan `/opt/lightning-vm`) |
+| `--token TOKEN` | Özel (private) depo için salt okunur erişim anahtarı |
+| `-- …` | `--` sonrasındaki her şey aşağıdaki kurulum seçenekleridir |
+
+> [!NOTE]
+> Bu adres, depo herkese açık (public) olduğunda doğrudan çalışır. Depo özelken komutu bir erişim anahtarıyla
+> çalıştırın: [docs/updates.md](docs/updates.md).
+
+### Elle kurulum
 
 ```bash
 git clone https://github.com/syildirim689/lightning-vm.git
@@ -164,8 +191,6 @@ git clone https://github.com/syildirim689/lightning-vm.git
 ```bash
 cd lightning-vm
 ```
-
-### 2. Kurun
 
 ```bash
 sudo sh scripts/install.sh
@@ -369,11 +394,10 @@ servers, window-style dialogs, and accessibility controls.
 Quick start on Ubuntu 22.04 / 24.04 / 26.04:
 
 ```bash
-git clone https://github.com/syildirim689/lightning-vm.git
+curl -fsSL https://raw.githubusercontent.com/syildirim689/lightning-vm/main/scripts/get.sh | sudo sh -s -- -- --domain panel.example.com --lang en
 ```
 
-```bash
-cd lightning-vm && sudo sh scripts/install.sh --domain panel.example.com --lang en
-```
+The command downloads the source to `/opt/lightning-vm`, picks the latest stable release and runs the installer;
+the panel later updates itself from there. Cloning the repository and running `sudo sh scripts/install.sh` works too.
 
 Docs (mostly Turkish) are in [`docs/`](docs). Issues and pull requests are welcome.
