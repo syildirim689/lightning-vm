@@ -12,12 +12,21 @@
 #   sh scripts/install.sh monitoring on|off  start or stop Prometheus, Grafana, Loki and Alertmanager
 #   sh scripts/install.sh terminal on|off    the administrators' browser terminal to this host (off by default)
 #   sh scripts/install.sh backup         encrypted backup of the database, settings, keys and certificates
-#   sh scripts/install.sh restore FILE [--yes-replace-data] [--no-safety-backup] [--allow-unsigned]
+#   sh scripts/install.sh restore FILE [--yes-replace-data] [--no-safety-backup] [--allow-unsigned] [--no-hold]
 #                                        restore a backup (without the flag it only checks and explains); the
 #                                        current data is backed up first, and without that backup nothing is
 #                                        restored unless --no-safety-backup says so. FILE.hmac must lie next to
 #                                        FILE and FILE must keep its name; a backup made by an older version
-#                                        (FILE.sha256 only) is restored only with --allow-unsigned
+#                                        (FILE.sha256 only) is restored only with --allow-unsigned.
+#                                        The archive is copied once to a root-only work directory and that copy is
+#                                        checked and used (it needs room in the temporary directory, TMPDIR or /tmp).
+#                                        Afterwards everyone is signed out and the panel is ON HOLD: it does not act
+#                                        by itself on the restored state until you release it. Check first:
+#                                        servers created or deleted since the backup (Admin → System → findings
+#                                        from reconcile), payments made since, and API tokens, bans and role
+#                                        changes made since (they are back as they were at backup time). Release:
+#                                        Admin → System, or: docker compose exec api node dist/cli.js release-restore-hold
+#                                        --no-hold: no hold (for a backup taken moments ago); sessions still end
 #   sh scripts/install.sh update [--to vX.Y.Z]
 #                                        update a git checkout to the latest release of UPDATE_CHANNEL
 #   sh scripts/install.sh releases       fetch and list available versions (data/maintenance/releases.json)
@@ -30,8 +39,11 @@
 #                                        edge follows the branch in UPDATE_BRANCH (default main), for testing
 #   sh scripts/install.sh domain panel.example.com [--acme-staging | --tls custom --cert fullchain.pem --key key.pem]
 #                                        serve the panel on that name with automatic HTTPS (ports 80/443)
-#   sh scripts/install.sh behind-proxy [--port 8080] [--trusted-cidr CIDR]
-#                                        plain HTTP on 127.0.0.1 for an existing Nginx/Caddy/Traefik in front
+#   sh scripts/install.sh behind-proxy --public-url https://panel.example.com [--port 8080] [--trusted-cidr CIDR]
+#                                        plain HTTP on 127.0.0.1 for an existing Nginx/Caddy/Traefik in front.
+#                                        --public-url is the address people open (scheme and host, no path): mailed
+#                                        links use it (PANEL_PUBLIC_URL); required unless one is already stored.
+#                                        --trusted-cidr: the proxy's address or network (several: "a b")
 #   sh scripts/install.sh local-only     plain HTTP on 127.0.0.1:8080 only (SSH tunnel)
 #   sh scripts/install.sh host [--hostname NAME] [--timezone Area/City] [--ntp a,b|default] [--dns ip,ip|default]
 #                                        this server's name, time zone, time servers (systemd-timesyncd) and DNS
@@ -50,6 +62,8 @@
 # It never changes firewall, SSH or other web server settings, and never prints secrets.
 # shellcheck disable=SC1091 # /etc/os-release exists only on the target host
 set -eu
+# Patterns mean the same on every server: [a-z] and [0-9] are ASCII whatever locale systemd or the shell passes on.
+LC_ALL=C; export LC_ALL
 cd "${LVM_ROOT:-$(dirname "$0")/..}"
 # update checks out another version of this very file: run from a copy so sh never reads a changed script.
 # Unset after use: run-requests starts this script again, and that child must not think it is the copy.
@@ -59,7 +73,8 @@ else case " $* " in *" update "*|*" maintenance "*|*" run-requests "*)
 esac; fi
 
 MODE=install INSTALL_DOCKER=0 ALLOW_OS=0 DOMAIN="" ACME_STAGING=0 PROXY_PORT=8080 TRUSTED_CIDR="" TLS_MODE="" CERT_FILE="" KEY_FILE=""
-RESTORE_FILE="" YES=0 TO="" AUTO=0 SWITCH="" CHANNEL="" WINDOW="" BRANCH="" PURGE=0 NO_SAFETY=0 ALLOW_UNSIGNED=0
+RESTORE_FILE="" YES=0 TO="" AUTO=0 SWITCH="" CHANNEL="" WINDOW="" BRANCH="" PURGE=0 NO_SAFETY=0 ALLOW_UNSIGNED=0 NO_HOLD=0
+PUBLIC_URL=""
 HOST_NAME="" HOST_TZ="" HOST_NTP="" HOST_DNS="" OS_ACT=""
 LOCAL=0 WIZARD=0 MONITORING=1 SCHEDULE=1 ADMIN_EMAIL="" RESET_EMAIL="" DISABLE_2FA=""
 case "${LANG:-}" in tr*) UI="tr" ;; *) UI="en" ;; esac
@@ -74,6 +89,7 @@ while [ $# -gt 0 ]; do
     --yes-replace-data) YES=1 ;;
     --no-safety-backup) NO_SAFETY=1 ;;
     --allow-unsigned) ALLOW_UNSIGNED=1 ;;
+    --no-hold) NO_HOLD=1 ;;
     --purge-data) PURGE=1 ;;
     --to) shift; TO=${1:-} ;;
     --auto) AUTO=1 ;;
@@ -101,6 +117,7 @@ while [ $# -gt 0 ]; do
     --no-schedule) SCHEDULE=0 ;;
     --port) shift; PROXY_PORT=${1:-} ;;
     --trusted-cidr) shift; TRUSTED_CIDR=${1:-} ;;
+    --public-url) shift; PUBLIC_URL=${1:-} ;;
     --lang) shift; UI=${1:-en} ;;
     --install-docker) INSTALL_DOCKER=1 ;;
     --allow-unsupported-os) ALLOW_OS=1 ;;
@@ -108,6 +125,8 @@ while [ $# -gt 0 ]; do
   esac
   shift
 done
+# The language also goes into the systemd units this script writes: only the two it knows.
+case "$UI" in tr|en) ;; *) UI=en ;; esac
 
 # msg LEVEL CODE "türkçe" "english"
 msg() { if [ "$UI" = tr ]; then t=$3; else t=$4; fi; printf '%-5s %-22s %s\n' "$1" "$2" "$t"; }
@@ -118,12 +137,14 @@ die() { msg FAIL "$2" "$3" "$4"; exit "$1"; }
 # What has to be undone when the script ends in the middle of a backup or a restore (a failed step, Ctrl-C,
 # a kill): one EXIT handler for the whole script, so no function replaces another's trap. Each function sets
 # its own variable here and empties it when it is done.
-BACKUP_WORK="" RESTORE_WORK="" RESTORE_STAGE=""
+BACKUP_WORK="" RESTORE_WORK="" RESTORE_STAGE="" REQUEST_WORK=""
 on_exit() {
   rc=$?; trap - EXIT
   # Plaintext copies of the database, .env and the encryption keys.
   [ -z "$BACKUP_WORK" ] || rm -rf "$BACKUP_WORK"
   [ -z "$RESTORE_WORK" ] || rm -rf "$RESTORE_WORK"
+  # A panel request and, with it, an uploaded certificate and its key.
+  [ -z "$REQUEST_WORK" ] || rm -rf "$REQUEST_WORK"
   # A restore that stopped the app services does not leave them down, and says which data they now run on.
   if [ -n "$RESTORE_STAGE" ]; then
     if [ "$RESTORE_STAGE" = replaced ]; then
@@ -141,8 +162,17 @@ arm_exit() { trap on_exit EXIT; trap 'exit 129' HUP; trap 'exit 130' INT; trap '
 arm_exit
 
 env_value() { if [ -f .env ]; then sed -n "s/^$1=//p" .env | tail -n 1; fi; }
-# Replaces or appends one setting; used only when the operator asks for an access-mode change.
-set_env() { if grep -q "^$1=" .env; then sed -i "s|^$1=.*|$1=$2|" .env; else printf '%s=%s\n' "$1" "$2" >> .env; fi; }
+# Replaces or appends one setting. The value is written exactly as given: what sed would read as an instruction
+# in it (\, & and the delimiter |) is escaped first. A value with a line break would add a second setting and is
+# refused.
+set_env() {
+  case "$2" in *"
+"*) die 2 E_ENV_VALUE ".env değeri satır sonu içeremez: $1" "A value in .env cannot contain a line break: $1" ;; esac
+  if grep -q "^$1=" .env; then
+    env_new=$(printf '%s\n' "$2" | sed 's/[\\&|]/\\&/g')
+    sed -i "s|^$1=.*|$1=$env_new|" .env
+  else printf '%s=%s\n' "$1" "$2" >> .env; fi
+}
 load_settings() {
   LISTEN=$(env_value LISTEN_ADDRESS); LISTEN=${LISTEN:-127.0.0.1}
   PORT=$(env_value HTTP_PORT); PORT=${PORT:-8080}
@@ -389,6 +419,12 @@ write_observability() {
 profiles_without() { env_value COMPOSE_PROFILES | tr ',' '\n' | grep -vx "$1" | grep -v '^$' | paste -sd, - || true; }
 
 psql_value() { docker compose exec -T postgres sh -c "psql -U \"\$POSTGRES_USER\" -d \"\$POSTGRES_DB\" -Atc \"$1\""; }
+# SQL from standard input with two values of the caller as the psql variables v1 and v2: :'v1' in the SQL is that
+# value as a literal, whatever characters it holds. The values travel as the container's environment, never as
+# part of the SQL text or of a shell command. Stops at the first statement that fails.
+psql_script() { # v1 v2
+  docker compose exec -T -e LVM_V1="$1" -e LVM_V2="$2" postgres sh -c 'psql -q -At -v ON_ERROR_STOP=1 -v v1="$LVM_V1" -v v2="$LVM_V2" -U "$POSTGRES_USER" -d "$POSTGRES_DB"'
+}
 
 # One maintenance job at a time: a backup, update or restore started by hand waits for the hourly timer or a
 # panel request to finish (and they for it). The timer and run-requests already hold the lock when they get
@@ -523,27 +559,87 @@ do_backup() { # reason
   msg OK BACKUP "$bout ($bytes bayt)" "$bout ($bytes bytes)"
 }
 
+# A restored database is older than the hypervisors, the payment providers and the people it describes. Before any
+# service starts on it, every session is ended (someone signed out since the backup is not signed in again) and,
+# unless --no-hold was given, the panel is put on hold: the API and the worker read the 'restore_hold' row and do
+# nothing by themselves until an administrator releases it. One transaction; prints what it did, and
+# LVM_HOLD_DONE only when all of it is committed. A backup from before the hold existed has no table for it yet.
+restore_hold() { # backup file name, 1 (hold) or 0 (--no-hold)
+  psql_script "$1" "$2" 2>/dev/null <<'SQL'
+BEGIN;
+SELECT to_regclass('public.maintenance_state') IS NOT NULL AS has_hold, to_regclass('public.auth_sessions') IS NOT NULL AS has_sessions \gset
+\if :has_sessions
+DELETE FROM public.auth_sessions;
+\echo LVM_SESSIONS_ENDED
+\endif
+\if :v2
+\if :has_hold
+INSERT INTO public.maintenance_state (key, value) VALUES ('restore_hold', jsonb_build_object('backup', :'v1', 'restored_at', now()))
+  ON CONFLICT (key) DO UPDATE SET value = excluded.value, at = now();
+\echo LVM_HOLD_SET
+\else
+\echo LVM_HOLD_NO_TABLE
+\endif
+\endif
+COMMIT;
+\echo LVM_HOLD_DONE
+SQL
+}
+
+# What the operator has to know after a restore; printed whether or not the services came up.
+restore_notes() { # what restore_hold printed
+  case "$1" in *LVM_SESSIONS_ENDED*)
+    msg INFO RESTORE_SESSIONS "Tüm oturumlar kapatıldı: herkes yeniden giriş yapar" "Every session was ended: everyone signs in again" ;;
+  esac
+  case "$1" in
+    *LVM_HOLD_SET*)
+      msg WARN RESTORE_HOLD "Panel BEKLEMEDE: siz serbest bırakana kadar geri yüklenen duruma göre kendiliğinden hiçbir şey yapmaz (açık işlemler, ödenmemiş siparişler, zamanlanmış silmeler ve ödeme hatırlatmaları bekler). Serbest bırakmadan önce şunlara bakın:" "The panel is ON HOLD: until you release it, it does nothing by itself from the restored state (open operations, unpaid orders, scheduled deletions and payment reminders wait). Before you release it, check:" ;;
+    *LVM_HOLD_NO_TABLE*)
+      msg WARN W_RESTORE_NO_HOLD "Bu yedek, bekletme özelliğinden önceki bir sürümden ve şeması önceden güncellenemedi: panel eski duruma göre HEMEN işlem yapar (açık işlemler yeniden çalışır, ödenmemiş siparişler iptal edilir, zamanlanmış silmeler yapılır). Şimdi şunlara bakın:" "This backup is from before the restore hold existed and its schema could not be brought up to date first: the panel acts on the old state AT ONCE (open operations run again, unpaid orders are cancelled, scheduled deletions are carried out). Check now:" ;;
+    *)
+      msg WARN W_RESTORE_NO_HOLD "--no-hold: panel bekletilmedi, geri yüklenen duruma göre hemen işlem yapar. Şunlara bakın:" "--no-hold: the panel is not on hold and acts on the restored state at once. Check:" ;;
+  esac
+  msg INFO RESTORE_CHECK "1. Yedekten sonra oluşturulan veya silinen sunucular: panel onları yedekteki haliyle bilir. Yönetim → Sistem, mutabakatın (reconcile) bulduklarını listeler" "1. Servers created or deleted since the backup: the panel knows them as they were then. Admin → System lists what reconcile found"
+  msg INFO RESTORE_CHECK "2. Yedekten sonra yapılan ödemeler geri yüklenen veride yok: ödeme sağlayıcınızla karşılaştırıp kaydedin, yoksa ödedikleri sipariş ve faturalar ödenmemiş sayılır" "2. Payments made since the backup are not in the restored data: compare with your payment provider and record them, or the orders and invoices they paid count as unpaid"
+  msg INFO RESTORE_CHECK "3. Yedekten sonra silinen API anahtarları, yasaklar, kapatılan hesaplar, rol ve parola değişiklikleri yedek anındaki haline döndü: yeniden silin, yasaklayın, değiştirin" "3. API tokens deleted, bans, disabled accounts, role and password changes made since the backup are back as they were at backup time: delete, ban and change them again"
+  case "$1" in *LVM_HOLD_SET*)
+    msg INFO RESTORE_RELEASE "Serbest bırakmak için: Yönetim → Sistem, ya da: docker compose exec api node dist/cli.js release-restore-hold" "To release: Admin → System, or: docker compose exec api node dist/cli.js release-restore-hold" ;;
+  esac
+}
+
 do_restore() {
   file=$RESTORE_FILE
   take_lock
   [ -f "$file" ] || die 2 E_RESTORE_FILE "Yedek dosyası bulunamadı: '$file'" "Backup file not found: '$file'"
   [ -s secrets/backup.key ] || die 21 E_BACKUP_KEY_MISSING "secrets/backup.key yok; yedeğin anahtarını oraya koyun" "secrets/backup.key missing; put the backup's key there"
+  # One read of the archive. It is copied, under its own name (the name is part of what is signed) and with its
+  # signature, into a work directory only root can open, and from here on only that copy is checked, decrypted
+  # and unpacked: whoever can write where the backup is kept cannot put other bytes under the name between the
+  # check and the use. The copy goes away however this ends (on_exit).
+  work=$(mktemp -d); RESTORE_WORK=$work
+  rin="$work/in/$(basename "$file")"
+  { (umask 077; mkdir "$work/in") && cp -- "$file" "$rin"; } 2>/dev/null ||
+    die 22 E_RESTORE_COPY "Yedek, çalışma klasörüne kopyalanamadı ($work; yer var mı?). Hiçbir şey değiştirilmedi" "The backup could not be copied to the work directory ($work; is there room for it?). Nothing was changed"
+  for ext in hmac sha256; do
+    [ ! -f "$file.$ext" ] || cp -- "$file.$ext" "$rin.$ext" 2>/dev/null ||
+      die 22 E_RESTORE_COPY "$file.$ext çalışma klasörüne kopyalanamadı. Hiçbir şey değiştirilmedi" "$file.$ext could not be copied to the work directory. Nothing was changed"
+  done
   # The signature comes before anything else: nothing of a file that this installation's key did not sign is
   # decrypted or unpacked. A signature that is there is always checked, whatever the flags say.
-  if [ -f "$file.hmac" ]; then
-    backup_signed "$file" || die 22 E_RESTORE_SIGNATURE "İmza tutmuyor: bu yedek bu secrets/backup.key ile yazılmamış ya da sonradan değiştirilmiş veya yeniden adlandırılmış (yedek, yazıldığı dosya adını korumalıdır). Hiçbir şey değiştirilmedi" "The signature does not match: this backup was not written with this secrets/backup.key, or it was changed or renamed afterwards (a backup must keep the file name it was written with). Nothing was changed"
+  if [ -f "$rin.hmac" ]; then
+    backup_signed "$rin" || die 22 E_RESTORE_SIGNATURE "İmza tutmuyor: bu yedek bu secrets/backup.key ile yazılmamış ya da sonradan değiştirilmiş veya yeniden adlandırılmış (yedek, yazıldığı dosya adını korumalıdır). Hiçbir şey değiştirilmedi" "The signature does not match: this backup was not written with this secrets/backup.key, or it was changed or renamed afterwards (a backup must keep the file name it was written with). Nothing was changed"
   elif [ "$ALLOW_UNSIGNED" = 1 ]; then
     # A backup of an older version: only a checksum, which anyone who can write where it was kept can recompute.
-    [ -f "$file.sha256" ] || die 22 E_RESTORE_CHECKSUM "Sağlama dosyası yok: $file.sha256" "Checksum file missing: $file.sha256"
-    (cd "$(dirname "$file")" && sha256sum -c --quiet "$(basename "$file").sha256" >/dev/null 2>&1) || die 22 E_RESTORE_CHECKSUM "Sağlama tutmuyor; dosya bozuk veya değiştirilmiş" "Checksum mismatch; the file is damaged or was changed"
+    [ -f "$rin.sha256" ] || die 22 E_RESTORE_CHECKSUM "Sağlama dosyası yok: $file.sha256" "Checksum file missing: $file.sha256"
+    (cd "$work/in" && sha256sum -c --quiet "$(basename "$file").sha256" >/dev/null 2>&1) || die 22 E_RESTORE_CHECKSUM "Sağlama tutmuyor; dosya bozuk veya değiştirilmiş" "Checksum mismatch; the file is damaged or was changed"
     msg WARN W_RESTORE_UNSIGNED "--allow-unsigned: bu yedeğin imzası yok; yalnızca sağlaması denetlendi, bu da dosyanın değiştirilmediğini kanıtlamaz" "--allow-unsigned: this backup has no signature; only its checksum was checked, which does not prove the file is unchanged"
   else
     die 22 E_RESTORE_UNSIGNED "İmza dosyası yok: $file.hmac. Eski sürümlerin aldığı yedeklerde yalnızca sağlama dosyası bulunur; onu yedek deposuna yazabilen herkes yeniden hesaplayabilir. Dosyanın saklandığı yere güveniyorsanız --allow-unsigned ekleyin. Hiçbir şey değiştirilmedi" "Signature file missing: $file.hmac. Backups made by older versions have only a checksum, which anyone who can write to the backup storage can recompute. If you trust where this file was kept, add --allow-unsigned. Nothing was changed"
   fi
-  work=$(mktemp -d); RESTORE_WORK=$work
-  if ! openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -pass file:secrets/backup.key -in "$file" 2>/dev/null | tar -C "$work" -xf - 2>/dev/null; then
+  if ! openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -pass file:secrets/backup.key -in "$rin" 2>/dev/null | tar -C "$work" -xf - 2>/dev/null; then
     rm -rf "$work"; die 22 E_RESTORE_DECRYPT "Yedek açılamadı: secrets/backup.key bu yedeğin anahtarı değil" "Backup could not be opened: secrets/backup.key is not this backup's key"
   fi
+  rm -rf "$work/in" # unpacked: the copy has done its work
   for f in db.dump master.key vmware.token migrations; do
     [ -s "$work/$f" ] || { rm -rf "$work"; die 22 E_RESTORE_INCOMPLETE "Yedekte $f yok" "$f missing from the backup"; }
   done
@@ -583,6 +679,27 @@ do_restore() {
       exit 22 ;;
   esac
   RESTORE_STAGE=replaced
+  # First of all, before anything can start on the restored rows: sessions end and the panel goes on hold.
+  rlabel=$(basename "$file" | tr -cd 'A-Za-z0-9._-' | cut -c 1-200)
+  if [ "$NO_HOLD" = 1 ]; then rhold=0; else rhold=1; fi
+  held=$(restore_hold "$rlabel" "$rhold" || true)
+  case "$held" in *LVM_HOLD_NO_TABLE*)
+    # A backup from before the hold existed: its schema is brought up to date now (the services would do the
+    # same when they start), and then there is a table to write the hold to.
+    if docker compose run --rm -T migrate </dev/null >/dev/null 2>&1; then held=$(restore_hold "$rlabel" "$rhold" || true); fi ;;
+  esac
+  case "$held" in
+    *LVM_HOLD_DONE*) ;;
+    *)
+      if [ "$NO_HOLD" = 1 ]; then
+        msg WARN W_RESTORE_SESSIONS "Oturumlar kapatılamadı: yedekteki oturumlar yeniden geçerli. Servisler açıldıktan sonra kullanıcıların oturumlarını panelden kapatın" "The sessions could not be ended: the sessions in the backup are valid again. End them from the panel once the services are up"
+      else
+        # The one case in which the services stay down: started now, they would act on the old state at once.
+        RESTORE_STAGE=""
+        record restore failed E_RESTORE_HOLD ",\"file\":\"$rlabel\""
+        die 22 E_RESTORE_HOLD "Veritabanı artık YEDEKTEKİ veriyi içeriyor ama panel beklemeye alınamadı; eski duruma göre işlem yapmasın diye servisler BAŞLATILMADI (anahtarlar ve sertifikalar da henüz geri konmadı). Aynı restore komutunu yeniden çalıştırın; yine burada kalırsa --no-hold ekleyin ve paneli kendiniz denetleyin${safety:+. Önceki veri: $safety}" "The database now holds the BACKUP's data, but the panel could not be put on hold; so that it does not act on the old state, the services were NOT started (and the keys and certificates are not back yet). Run the same restore command again; if it stops here again, add --no-hold and review the panel yourself${safety:+. Previous data: $safety}"
+      fi ;;
+  esac
   # Redis still holds the newer state: queued jobs, locks, caches, one-time tickets. None of it belongs to the
   # restored database and all of it is made again (sessions are in PostgreSQL; open operations are queued again
   # from there), so the app's Redis database is emptied before anything starts.
@@ -621,8 +738,10 @@ do_restore() {
     elif [ -n "$old_site" ] && [ "$tls_note" != "${tls_note#* custom }" ]; then
       msg INFO NEXT "Yedekteki kendi sertifikanız data/tls.from-backup altında; geçerli sertifika değiştirilmedi. Onu kullanmak için: sudo sh scripts/install.sh domain $old_site$tls_note" "Your own certificate from the backup is in data/tls.from-backup; the current certificate was kept. To use it: sudo sh scripts/install.sh domain $old_site$tls_note"
     fi
+    restore_notes "$held"
   else
     record restore failed E_RESTORE_START ",\"file\":\"$(basename "$file")\""
+    restore_notes "$held"
     die 22 E_RESTORE_START "Veri geri yüklendi ama servisler hazır değil: docker compose logs" "Data restored but services are not ready: docker compose logs"
   fi
 }
@@ -865,15 +984,24 @@ run_requests() {
   LVM_LOCKED=1; export LVM_LOCKED
   # The API queues one request at a time, so the order of several (should it happen) does not matter.
   for f in data/maintenance-requests/*.req; do
+    # The request directory belongs to the API container's user, so a name in it may be a link to any file on
+    # this server. A link is removed, never read.
+    if [ -L "$f" ]; then rm -f "$f"; continue; fi
     [ -f "$f" ] || continue
     id=$(basename "$f" .req)
+    case "$id" in *[!0-9a-f-]*) rm -f "$f"; continue ;; esac # also a name with a line break in it
     echo "$id" | grep -Eq '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' || { rm -f "$f"; continue; }
+    # The request is first moved out of that user's reach (a link moves as a link, it is not followed) and read
+    # only there, when it is a regular file of at most 1024 bytes: of anything else not one value is read.
+    rq=$(mktemp -d); REQUEST_WORK=$rq
     ok=1
-    [ "$(wc -c < "$f")" -le 1024 ] || ok=0
-    val() { sed -n "s/^$1=//p" "$f" | head -n 1; }
-    action=$(val action); to=$(val to); channel=$(val channel); window=$(val window); switch=$(val switch); by=$(val by); domain=$(val domain); tls=$(val tls)
-    hname=$(val hostname); htz=$(val timezone); hntp=$(val ntp); hdns=$(val dns); act=$(val act)
-    rm -f "$f"
+    action="" to="" channel="" window="" switch="" by="" domain="" tls="" hname="" htz="" hntp="" hdns="" act=""
+    if mv "$f" "$rq/req" 2>/dev/null && [ ! -L "$rq/req" ] && [ -f "$rq/req" ] && [ "$(wc -c < "$rq/req")" -le 1024 ]; then
+      val() { sed -n "s/^$1=//p" "$rq/req" | head -n 1; }
+      action=$(val action); to=$(val to); channel=$(val channel); window=$(val window); switch=$(val switch); by=$(val by); domain=$(val domain); tls=$(val tls)
+      hname=$(val hostname); htz=$(val timezone); hntp=$(val ntp); hdns=$(val dns); act=$(val act)
+    else ok=0; fi
+    rm -f "$f" "$rq/req"
     echo "$by" | grep -Eq '^[0-9a-f-]{36}$' || by=""
     set -- --lang "$UI"
     case "$action" in
@@ -888,15 +1016,16 @@ run_requests() {
           acme) ;;
           staging) set -- "$@" --tls staging ;;
           custom)
-            # The request directory belongs to the API container's user, so what lies there may be a link to
-            # any file on this server. Both are first moved out of its reach (a link moves as a link, it is not
-            # followed), accepted only as regular files, and their content goes into files root creates itself.
-            tlsdir=$(mktemp -d); c=$tlsdir/in.cert; k=$tlsdir/in.key
+            # Like the request itself, the certificate and its key may be links to any file on this server. Both
+            # are first moved out of the directory's reach (a link moves as a link, it is not followed), accepted
+            # only as regular files, and their content goes into files root creates itself. What is in them
+            # (a certificate in date whose key this is) is checked by the domain command they are handed to.
+            c=$rq/in.cert; k=$rq/in.key
             if mv "data/maintenance-requests/$id.cert" "$c" 2>/dev/null && mv "data/maintenance-requests/$id.key" "$k" 2>/dev/null &&
               [ ! -L "$c" ] && [ ! -L "$k" ] && [ -f "$c" ] && [ -f "$k" ] && [ -s "$c" ] && [ -s "$k" ] &&
               [ "$(wc -c < "$c")" -le 65536 ] && [ "$(wc -c < "$k")" -le 16384 ] &&
-              (umask 077; cat "$c" > "$tlsdir/cert.pem" && cat "$k" > "$tlsdir/key.pem"); then
-              set -- "$@" --tls custom --cert "$tlsdir/cert.pem" --key "$tlsdir/key.pem"
+              (umask 077; cat "$c" > "$rq/cert.pem" && cat "$k" > "$rq/key.pem"); then
+              set -- "$@" --tls custom --cert "$rq/cert.pem" --key "$rq/key.pem"
             else ok=0; fi ;;
           *) ok=0 ;;
         esac ;;
@@ -921,33 +1050,78 @@ run_requests() {
     }
     # A certificate and key travel next to their request; never left behind.
     rm -f "data/maintenance-requests/$id.cert" "data/maintenance-requests/$id.key"
-    if [ "$ok" = 0 ]; then status rejected 2 E_REQUEST_INVALID; [ -n "${tlsdir:-}" ] && rm -rf "$tlsdir"; tlsdir=""; continue; fi
+    if [ "$ok" = 0 ]; then status rejected 2 E_REQUEST_INVALID; rm -rf "$rq"; REQUEST_WORK=""; continue; fi
     status running null ""
     log=data/maintenance/runs/$id.log
     (umask 022; : > "$log"); panel_file "$log"
     if sh "$(pwd)/scripts/install.sh" "$@" > "$log" 2>&1; then rc=0; else rc=$?; fi # LVM_LOCKED: the lock is held here
     code=$(awk 'NF >= 2 { c = $2 } END { print c }' "$log" | tr -cd 'A-Z0-9_')
     if [ "$rc" = 0 ]; then status succeeded 0 "$code"; else status failed "$rc" "$code"; fi
-    if [ -n "${tlsdir:-}" ]; then rm -rf "$tlsdir"; tlsdir=""; fi
+    rm -rf "$rq"; REQUEST_WORK=""
     # After an update the version list describes the old version: refresh it (best effort, quietly).
     if [ "$action" = update ]; then sh "$(pwd)/scripts/install.sh" releases --lang "$UI" >/dev/null 2>&1 || true; fi
     find data/maintenance/runs -name '*.log' -type f -printf '%T@ %p\n' | sort -rn | tail -n +21 | cut -d' ' -f2- | xargs -r rm -f
   done
+  # What never became a request: a certificate or key whose .req did not come, a request the API did not finish
+  # writing. Five minutes old, so nothing that is still on its way is taken.
+  find data/maintenance-requests -maxdepth 1 ! -type d \( -name '*.cert' -o -name '*.key' -o -name '.*.tmp' \) -mmin +5 -exec rm -f {} + 2>/dev/null || true
 }
 
 # ---- This server's own settings (name, time, time servers, DNS) ------------------------------------
 # The same checks run in the API; here they decide, since the panel is not trusted with the host.
 valid_hostname() { [ ${#1} -le 253 ] && echo "$1" | grep -Eq '^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*$'; }
 valid_timezone() { case "$1" in *..*) return 1 ;; esac; echo "$1" | grep -Eq '^[A-Za-z_]+(/[A-Za-z0-9_+-]+){0,2}$' && [ -f "/usr/share/zoneinfo/$1" ]; }
-# A comma-separated list of up to 4 entries (ip: IP addresses only; name: host names or IP addresses), or "default".
-valid_list() {
-  [ "$1" = default ] && return 0
-  n=0; for v in $(echo "$1" | tr ',' ' '); do
-    n=$((n + 1)); [ "$n" -le 4 ] || return 1
-    if echo "$v" | grep -Eq '^([0-9]{1,3}\.){3}[0-9]{1,3}$|^[0-9a-fA-F:]{2,39}$'; then continue; fi
-    [ "$2" = name ] && valid_hostname "$v" || return 1
+valid_ipv4() { # a.b.c.d with every part 0 to 255
+  echo "$1" | grep -Eq '^([0-9]{1,3}\.){3}[0-9]{1,3}$' || return 1
+  ip_rest=$1.
+  while [ -n "$ip_rest" ]; do
+    [ "${ip_rest%%.*}" -le 255 ] || return 1
+    ip_rest=${ip_rest#*.}
   done
-  [ "$n" -ge 1 ]
+}
+valid_ipv6() { case "$1" in *:*) echo "$1" | grep -Eq '^[0-9a-fA-F:]{2,39}$' ;; *) return 1 ;; esac; }
+# A comma-separated list of up to 4 entries (ip: IP addresses only; name: host names or IP addresses), or "default".
+# The whole value is checked first (letters, digits and . : , - only: no blank, no line break, no wildcard) and
+# then split on commas with file-name expansion off. A name follows valid_hostname and is not made of digits and
+# dots alone (that is an address that did not pass, like 999.1.1.1, or a bare number). In a subshell: the split
+# changes IFS and the expansion setting for itself only.
+valid_list() (
+  [ "$1" != default ] || exit 0
+  case "$1" in ''|*[!A-Za-z0-9.:,-]*|,*|*,|*,,*) exit 1 ;; esac
+  set -f; IFS=,
+  # shellcheck disable=SC2086 # split on commas, on purpose; nothing in it can expand (set -f, and the check above)
+  vl_n=0; for vl_item in $1; do
+    vl_n=$((vl_n + 1)); [ "$vl_n" -le 4 ] || exit 1
+    if valid_ipv4 "$vl_item" || valid_ipv6 "$vl_item"; then continue; fi
+    [ "$2" = name ] || exit 1
+    case "$vl_item" in *[!0-9.]*) valid_hostname "$vl_item" || exit 1 ;; *) exit 1 ;; esac
+  done
+  [ "$vl_n" -ge 1 ]
+)
+# One or more addresses or networks (10.0.0.1, 10.0.0.0/8, 2001:db8::/32), separated by single blanks.
+valid_cidrs() (
+  case "$1" in ''|*[!0-9A-Fa-f.:/\ ]*|\ *|*\ |*\ \ *) exit 1 ;; esac
+  set -f
+  # shellcheck disable=SC2086 # split on blanks, on purpose; nothing in it can expand (set -f, and the check above)
+  for vc_item in $1; do
+    case "$vc_item" in
+      */*) vc_bits=${vc_item#*/}; case "$vc_bits" in ''|*[!0-9]*|????*) exit 1 ;; esac ;;
+      *) vc_bits=0 ;;
+    esac
+    if valid_ipv4 "${vc_item%%/*}"; then [ "$vc_bits" -le 32 ] || exit 1
+    elif valid_ipv6 "${vc_item%%/*}"; then [ "$vc_bits" -le 128 ] || exit 1
+    else exit 1; fi
+  done
+)
+# The panel's public address as people open it: scheme and host (and a port), nothing after it. Prints it in lower
+# case without a closing slash; fails on anything else.
+public_url() {
+  case "$1" in ''|*[!A-Za-z0-9.:/-]*) return 1 ;; esac
+  pu=$(printf '%s' "${1%/}" | tr '[:upper:]' '[:lower:]')
+  echo "$pu" | grep -Eq '^https?://[a-z0-9.-]+(:[0-9]{1,5})?$' || return 1
+  pu_host=${pu#*://}
+  valid_hostname "${pu_host%:*}" || return 1
+  echo "$pu"
 }
 # Writes (or with "default" removes) a systemd drop-in: $1 file, $2 section, $3 key, $4 the list.
 drop_in() {
@@ -1006,6 +1180,16 @@ do_host() {
   msg OK HOST_INFO "Sunucu bilgileri güncellendi" "Server details recorded"
 }
 
+# Log copies the panel shows hold no usable secret: what travels in a URL (the password-reset token in the path;
+# token, code, state and session_id in the query string, also where a log writes & as \u0026) and the CAPTCHA
+# answer among the proxy's request headers are replaced. The proxy and the collector mask the same
+# (deploy/caddy/Caddyfile, deploy/observability/otel.yaml); this covers every service's lines, whoever wrote them.
+mask_secrets() {
+  sed -E -e 's#(/reset-password/)[^/?&"\\[:space:]]+#\1***#g' \
+    -e 's#(([?&]|\\u0026)(token|code|state|session_id)=)[^&"\\[:space:]]+#\1***#g' \
+    -e 's#("[Xx]-[Cc]aptcha-[Rr]esponse":\[")[^"]*#\1***#g'
+}
+
 # ---- This server's state for the panel (Admin → System → Server state) -----------------------------
 # A snapshot the panel cannot take from inside its container: the stack's services with their CPU and memory,
 # file systems, the busiest processes, failed systemd units, Docker's disk use, and the last log lines of every
@@ -1040,12 +1224,12 @@ do_state() {
     rm -f "$out"/logs/*.log
     for svc in $(docker compose ps -a --format '{{.Service}}' 2>/dev/null | sort -u); do
       echo "$svc" | grep -Eq '^[a-z0-9][a-z0-9_-]{0,40}$' || continue
-      timeout 20 docker compose logs --no-color --no-log-prefix --timestamps --tail 300 "$svc" > "$out/logs/$svc.tmp" 2>&1 || true
+      { timeout 20 docker compose logs --no-color --no-log-prefix --timestamps --tail 300 "$svc" 2>&1 || true; } | mask_secrets > "$out/logs/$svc.tmp" || true
       panel_file "$out/logs/$svc.tmp"; mv "$out/logs/$svc.tmp" "$out/logs/$svc.log"
     done
   fi
   if command -v journalctl >/dev/null 2>&1; then
-    timeout 20 journalctl -p warning -n 200 --no-pager -o short-iso > "$out/logs/system.tmp" 2>/dev/null || true
+    { timeout 20 journalctl -p warning -n 200 --no-pager -o short-iso 2>/dev/null || true; } | mask_secrets > "$out/logs/system.tmp" || true
     panel_file "$out/logs/system.tmp"; mv "$out/logs/system.tmp" "$out/logs/system.log"
   fi
   disks=$(df -P -B1 -x tmpfs -x devtmpfs -x overlay -x squashfs -x efivarfs 2>/dev/null | awk 'NR > 1 { print $6 "|" $1 "|" $2 "|" $3 "|" $4 }' | head -n 12 | rows 'mount,device,total#,used#,free#')
@@ -1139,7 +1323,7 @@ public_ipv4() {
 
 revert_local_settings() {
   set_env PANEL_SITE :80; set_env LISTEN_ADDRESS 127.0.0.1; set_env HTTP_PORT 8080; set_env HTTPS_PORT 8443
-  set_env TRUSTED_PROXY_CIDRS 127.0.0.1/32; set_env PANEL_PROBE_URL ""; set_env PANEL_TLS 0
+  set_env TRUSTED_PROXY_CIDRS 127.0.0.1/32; set_env PANEL_PROBE_URL ""; set_env PANEL_TLS 0; set_env PANEL_PUBLIC_URL ""
   load_settings
 }
 
@@ -1157,6 +1341,7 @@ configure_domain() {
   set_env PANEL_SITE "$d"; set_env LISTEN_ADDRESS 0.0.0.0; set_env HTTP_PORT 80; set_env HTTPS_PORT 443; set_env ACME_CA "$ca"
   set_env TRUSTED_PROXY_CIDRS 127.0.0.1/32
   set_env PANEL_PROBE_URL "https://$d/api/health"; set_env PANEL_TLS 1
+  set_env PANEL_PUBLIC_URL "https://$d" # the address in mailed links
   if [ "$TLS_MODE" = custom ]; then write_tls custom || return 1; set_env PANEL_TLS_MODE custom
   else write_tls auto; if [ "$ACME_STAGING" = 1 ]; then set_env PANEL_TLS_MODE staging; else set_env PANEL_TLS_MODE acme; fi; fi
   load_settings
@@ -1188,6 +1373,22 @@ write_tls() { # custom | auto
     printf '# automatic HTTPS (ACME) for a domain, plain HTTP otherwise\n' > data/tls/site.caddy
   fi
   chmod 644 data/tls/site.caddy
+}
+
+# Your own certificate, before it is put in place. The API checks the same when it takes the upload; this is the
+# check that decides. The first certificate in the file parses and is inside its validity dates, and its public
+# key is the private key's. Returns 0, or 1 (one of the two cannot be read; a key with a passphrase cannot),
+# 2 (not valid yet, or expired), 3 (the key is not this certificate's).
+cert_pair() { # cert key
+  openssl x509 -in "$1" -noout >/dev/null 2>&1 || return 1
+  openssl x509 -in "$1" -noout -checkend 0 >/dev/null 2>&1 || return 2
+  # notBefore=Nov 17 10:00:00 2026 GMT; a date this server's date(1) cannot read is not held against the file.
+  cp_from=$(openssl x509 -in "$1" -noout -startdate 2>/dev/null | sed 's/^notBefore=//')
+  cp_from=$(date -u -d "$cp_from" +%s 2>/dev/null || true)
+  [ -z "$cp_from" ] || [ "$cp_from" -le "$(date -u +%s)" ] || return 2
+  cp_cert=$(openssl x509 -in "$1" -noout -pubkey 2>/dev/null) || return 1
+  cp_key=$(openssl pkey -in "$2" -pubout -passin pass: 2>/dev/null) || return 1
+  { [ -n "$cp_cert" ] && [ "$cp_cert" = "$cp_key" ]; } || return 3
 }
 
 # Your own certificate: port 80 answers and port 443 serves exactly the uploaded certificate.
@@ -1254,7 +1455,12 @@ case "$MODE" in
       ''|acme) TLS_MODE="" ;;
       staging) ACME_STAGING=1; TLS_MODE="" ;;
       custom) { [ -s "$CERT_FILE" ] && [ -s "$KEY_FILE" ] && grep -q 'BEGIN CERTIFICATE' "$CERT_FILE" && grep -q 'PRIVATE KEY' "$KEY_FILE"; } ||
-          die 2 E_CERT_FILES "Sertifika ve anahtar için PEM dosyaları gerekli: --cert FILE --key FILE" "PEM files are required for the certificate and key: --cert FILE --key FILE" ;;
+          die 2 E_CERT_FILES "Sertifika ve anahtar için PEM dosyaları gerekli: --cert FILE --key FILE" "PEM files are required for the certificate and key: --cert FILE --key FILE"
+        cert_pair "$CERT_FILE" "$KEY_FILE" || case $? in
+          2) die 2 E_CERT_DATES "Sertifika geçerlilik tarihleri içinde değil (henüz geçerli değil ya da süresi dolmuş). Hiçbir şey değiştirilmedi" "The certificate is not inside its validity dates (not valid yet, or expired). Nothing was changed" ;;
+          3) die 2 E_CERT_KEY_MISMATCH "Özel anahtar bu sertifikanın anahtarı değil. Hiçbir şey değiştirilmedi" "The private key is not this certificate's key. Nothing was changed" ;;
+          *) die 2 E_CERT_UNREADABLE "Sertifika ya da anahtar okunamadı (openssl; parolalı anahtar kullanılamaz). Hiçbir şey değiştirilmedi" "The certificate or the key cannot be read (openssl; a key with a passphrase cannot be used). Nothing was changed" ;;
+        esac ;;
       *) die 2 E_TLS_MODE "--tls: acme, staging veya custom" "--tls: acme, staging or custom" ;;
     esac
     # A failed change puts the previous address and certificate back, so the panel stays reachable.
@@ -1272,7 +1478,22 @@ case "$MODE" in
     exit 0 ;;
   behind-proxy|local-only)
     [ -f .env ] || die 17 E_NOT_INSTALLED "Önce kurulum yapın: sh scripts/install.sh" "Install first: sh scripts/install.sh"
+    case "$PROXY_PORT" in *[!0-9]*) die 2 E_PORT_INVALID "Geçersiz port" "Invalid port" ;; esac
     echo "$PROXY_PORT" | grep -Eq '^[0-9]{2,5}$' || die 2 E_PORT_INVALID "Geçersiz port: $PROXY_PORT" "Invalid port: $PROXY_PORT"
+    # Everything given on the command line is checked before the first setting is written.
+    if [ "$MODE" = behind-proxy ]; then
+      [ -z "$TRUSTED_CIDR" ] || valid_cidrs "$TRUSTED_CIDR" ||
+        die 2 E_CIDR_INVALID "Geçersiz --trusted-cidr (örnek: 172.18.0.1/32; birden çoksa aralarında birer boşluk)" "Invalid --trusted-cidr (example: 172.18.0.1/32; several are separated by single blanks)"
+      # Behind another proxy the panel cannot know its own address: the request's Host is whatever that proxy
+      # passes on. Mailed links (password reset, sign-in) are built from this address instead.
+      if [ -n "$PUBLIC_URL" ]; then
+        PUBLIC_URL=$(public_url "$PUBLIC_URL") || die 2 E_PUBLIC_URL_INVALID "Geçersiz --public-url (örnek: https://panel.example.com; yol olmadan)" "Invalid --public-url (example: https://panel.example.com; no path)"
+      else
+        PUBLIC_URL=$(env_value PANEL_PUBLIC_URL)
+        [ -n "$PUBLIC_URL" ] || die 2 E_PUBLIC_URL_MISSING "Panelin dış adresi gerekli: --public-url https://panel.example.com (e-postayla gönderilen bağlantılar bu adresi kullanır). Hiçbir şey değiştirilmedi" "The panel's public address is required: --public-url https://panel.example.com (mailed links use it). Nothing was changed"
+      fi
+    else PUBLIC_URL=""; fi
+    set_env PANEL_PUBLIC_URL "$PUBLIC_URL"
     set_env PANEL_SITE :80; set_env LISTEN_ADDRESS 127.0.0.1; set_env HTTP_PORT "$PROXY_PORT"; set_env HTTPS_PORT 8443
     set_env PANEL_PROBE_URL "" # no public address known; Prometheus probes the API from inside
     # behind-proxy: the outer proxy is expected to serve HTTPS, so session cookies are Secure (PANEL_TLS=0 in .env for plain HTTP).
@@ -1294,7 +1515,8 @@ case "$MODE" in
     msg OK READY "http://127.0.0.1:$PORT" "http://127.0.0.1:$PORT"
     if [ "$MODE" = behind-proxy ]; then
       msg INFO TRUSTED "X-Forwarded-* yalnızca $TRUSTED_CIDR kaynağından kabul edilir" "X-Forwarded-* accepted only from $TRUSTED_CIDR"
-      msg INFO NEXT "Proxy'nizde: proxy_pass http://127.0.0.1:$PORT; Host, X-Forwarded-For, X-Forwarded-Proto ve WebSocket Upgrade başlıklarını iletin (docs/domain-https.md)" "In your proxy: proxy_pass http://127.0.0.1:$PORT; forward Host, X-Forwarded-For, X-Forwarded-Proto and WebSocket Upgrade headers (docs/domain-https.md)"
+      msg INFO PUBLIC_URL "E-postayla gönderilen bağlantılar $PUBLIC_URL adresini kullanır (değiştirmek için: --public-url)" "Mailed links use $PUBLIC_URL (to change it: --public-url)"
+      msg INFO NEXT "Proxy'nizde: proxy_pass http://127.0.0.1:$PORT; Host, X-Forwarded-Host, X-Forwarded-For, X-Forwarded-Proto ve WebSocket Upgrade başlıklarını iletin (docs/domain-https.md)" "In your proxy: proxy_pass http://127.0.0.1:$PORT; forward Host, X-Forwarded-Host, X-Forwarded-For, X-Forwarded-Proto and WebSocket Upgrade headers (docs/domain-https.md)"
     fi
     exit 0 ;;
   backup)
@@ -1380,6 +1602,9 @@ if [ "$MONITORING" = 1 ] && ! grep -q '^COMPOSE_PROFILES=' .env && [ "${mem_mb:-
 [ "$LOCAL" = 1 ] && revert_local_settings
 # Installs from before PANEL_TLS: derive it from the access mode already configured.
 if ! grep -q '^PANEL_TLS=' .env; then case "$SITE" in :*) set_env PANEL_TLS 0 ;; *) set_env PANEL_TLS 1 ;; esac; fi
+# Installs from before PANEL_PUBLIC_URL: a domain this installation serves is its public address. Behind another
+# proxy it has to be told: sh scripts/install.sh behind-proxy --public-url https://panel.example.com
+if ! grep -q '^PANEL_PUBLIC_URL=' .env; then case "$SITE" in :*) ;; *) set_env PANEL_PUBLIC_URL "https://$SITE" ;; esac; fi
 write_settings
 docker compose config --quiet || die 17 E_COMPOSE_INVALID "Compose yapılandırması geçersiz" "Compose configuration is invalid"
 msg INFO STARTING "Servisler derleniyor ve başlatılıyor (birkaç dakika sürebilir)" "Building and starting services (may take a few minutes)"

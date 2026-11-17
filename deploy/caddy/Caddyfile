@@ -70,8 +70,23 @@
 			import client_address
 		}
 	}
+	# The access log holds no usable secret. Some travel in the URL: the password-reset token is a path segment
+	# (/api/auth/reset-password/<token>), and token, code, state and session_id are query values of the sign-in
+	# link, the single sign-on callback and the payment return. The same URL comes back in the Referer of the
+	# next request and in the Location of a redirect, so all three fields get the one replacement (one regexp per
+	# field: a second filter on a field would replace the first). The CAPTCHA answer is a request header and is
+	# left out. Caddy itself already leaves out Cookie, Set-Cookie and Authorization.
+	# The same masks: deploy/observability/otel.yaml (collector) and scripts/install.sh mask_secrets (panel copy).
 	log {
 		output stdout
-		format json
+		format filter {
+			wrap json
+			fields {
+				request>uri regexp "(/reset-password/)[^/?&]+|([?&](token|code|state|session_id)=)[^&]+" "$1$2***"
+				request>headers>Referer regexp "(/reset-password/)[^/?&]+|([?&](token|code|state|session_id)=)[^&]+" "$1$2***"
+				resp_headers>Location regexp "(/reset-password/)[^/?&]+|([?&](token|code|state|session_id)=)[^&]+" "$1$2***"
+				request>headers>X-Captcha-Response delete
+			}
+		}
 	}
 }

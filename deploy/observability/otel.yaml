@@ -53,6 +53,14 @@ processors:
       - context: log
         statements:
           - replace_pattern(body, "(?i)(\"?(password|passwd|secret|token|ticket|cookie|authorization)\"?\\s*[:=]\\s*\"?)[^\",\\s}]+", "$${1}***")
+          # Secrets that travel in a URL, whichever service logged it (the proxy leaves them out of its own lines,
+          # deploy/caddy/Caddyfile): the password-reset token is a path segment; code, state and session_id are
+          # query values of the single sign-on callback and the payment return (token= is covered above), also
+          # where a log writes the & between them as its JSON escape (u0026). And the CAPTCHA answer among logged
+          # request headers.
+          - replace_pattern(body, "(/reset-password/)[^/?&\"\\s\\\\]+", "$${1}***")
+          - replace_pattern(body, "((?:[?&]|\\\\u0026)(?:token|code|state|session_id)=)[^&\"\\s\\\\]+", "$${1}***")
+          - replace_pattern(body, "(?i)(\"x-captcha-response\":\\[\")[^\"]*", "$${1}***")
   batch: {}
 exporters:
   otlphttp/loki:
