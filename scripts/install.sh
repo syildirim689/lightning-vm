@@ -12,10 +12,12 @@
 #   sh scripts/install.sh monitoring on|off  start or stop Prometheus, Grafana, Loki and Alertmanager
 #   sh scripts/install.sh terminal on|off    the administrators' browser terminal to this host (off by default)
 #   sh scripts/install.sh backup         encrypted backup of the database, settings, keys and certificates
-#   sh scripts/install.sh restore FILE [--yes-replace-data] [--no-safety-backup]
+#   sh scripts/install.sh restore FILE [--yes-replace-data] [--no-safety-backup] [--allow-unsigned]
 #                                        restore a backup (without the flag it only checks and explains); the
 #                                        current data is backed up first, and without that backup nothing is
-#                                        restored unless --no-safety-backup says so
+#                                        restored unless --no-safety-backup says so. FILE.hmac must lie next to
+#                                        FILE and FILE must keep its name; a backup made by an older version
+#                                        (FILE.sha256 only) is restored only with --allow-unsigned
 #   sh scripts/install.sh update [--to vX.Y.Z]
 #                                        update a git checkout to the latest release of UPDATE_CHANNEL
 #   sh scripts/install.sh releases       fetch and list available versions (data/maintenance/releases.json)
@@ -57,7 +59,7 @@ else case " $* " in *" update "*|*" maintenance "*|*" run-requests "*)
 esac; fi
 
 MODE=install INSTALL_DOCKER=0 ALLOW_OS=0 DOMAIN="" ACME_STAGING=0 PROXY_PORT=8080 TRUSTED_CIDR="" TLS_MODE="" CERT_FILE="" KEY_FILE=""
-RESTORE_FILE="" YES=0 TO="" AUTO=0 SWITCH="" CHANNEL="" WINDOW="" BRANCH="" PURGE=0 NO_SAFETY=0
+RESTORE_FILE="" YES=0 TO="" AUTO=0 SWITCH="" CHANNEL="" WINDOW="" BRANCH="" PURGE=0 NO_SAFETY=0 ALLOW_UNSIGNED=0
 HOST_NAME="" HOST_TZ="" HOST_NTP="" HOST_DNS="" OS_ACT=""
 LOCAL=0 WIZARD=0 MONITORING=1 SCHEDULE=1 ADMIN_EMAIL="" RESET_EMAIL="" DISABLE_2FA=""
 case "${LANG:-}" in tr*) UI="tr" ;; *) UI="en" ;; esac
@@ -71,6 +73,7 @@ while [ $# -gt 0 ]; do
       case "$SWITCH" in on|off) ;; *) echo "$MODE: on or off" >&2; exit 2 ;; esac ;;
     --yes-replace-data) YES=1 ;;
     --no-safety-backup) NO_SAFETY=1 ;;
+    --allow-unsigned) ALLOW_UNSIGNED=1 ;;
     --purge-data) PURGE=1 ;;
     --to) shift; TO=${1:-} ;;
     --auto) AUTO=1 ;;
@@ -340,6 +343,12 @@ app_version() {
   git describe --tags --always 2>/dev/null || sed -n 's/^  "version": "\(.*\)",$/v\1/p' apps/api/package.json | head -n 1
 }
 
+# Snapshots of this server for the panel (service logs, processes, packages, what a request printed): for root
+# and the API container's user (gid 1000, as for the request directory), not for every local account.
+panel_file() { # file
+  if [ "$(id -u)" = 0 ] && chgrp 1000 "$1" 2>/dev/null; then chmod 640 "$1"; else chmod 644 "$1"; fi
+}
+
 record() { # kind status code [extra JSON fields, each starting with a comma]
   (umask 022; mkdir -p data/maintenance)
   printf '{"time":"%s","kind":"%s","status":"%s","code":"%s","version":"%s"%s}\n' \
@@ -384,12 +393,17 @@ psql_value() { docker compose exec -T postgres sh -c "psql -U \"\$POSTGRES_USER\
 # One maintenance job at a time: a backup, update or restore started by hand waits for the hourly timer or a
 # panel request to finish (and they for it). The timer and run-requests already hold the lock when they get
 # here or start this script again (LVM_LOCKED): waiting for it then would be waiting for ourselves.
+# The lock file is root's alone: whoever can open it, even only to read, can hold the lock and keep every
+# backup and update waiting. Made in a subshell: a redirection that fails on exec ends the whole script.
+lock_file() {
+  (umask 077; : >> data/maintenance/.lock) 2>/dev/null || return 1
+  chmod 600 data/maintenance/.lock 2>/dev/null || true
+}
 take_lock() {
   [ -z "${LVM_LOCKED:-}" ] || return 0
   command -v flock >/dev/null || return 0
   (umask 022; mkdir -p data/maintenance)
-  # Tried in a subshell first: a redirection that fails on exec ends the whole script.
-  (: >> data/maintenance/.lock) 2>/dev/null || return 0
+  lock_file || return 0
   exec 9>> data/maintenance/.lock
   if ! flock -n 9; then
     msg INFO LOCK_WAIT "Başka bir bakım işi (yedek, güncelleme veya panel isteği) çalışıyor; bitmesi bekleniyor" "Another maintenance job (backup, update or a panel request) is running; waiting for it to finish"
@@ -398,9 +412,43 @@ take_lock() {
   LVM_LOCKED=1; export LVM_LOCKED
 }
 
+# A backup is proven with the backup key, not with a checksum anybody can recompute: NAME.tar.enc.hmac holds an
+# HMAC-SHA256 (RFC 2104) over the file's own name and the encrypted archive, keyed with a key derived from
+# secrets/backup.key. The name carries the time of the backup and is part of what is signed, so an older
+# backup renamed as a newer one does not pass. openssl would compute this only with the key on its command
+# line, where every local account can read it in the process list; here the key stays in shell variables,
+# printf (a builtin of sh) and pipes into sha256sum.
+hex_bytes() { # hex digits, number: the bytes those digits stand for, each XORed with the number
+  hb=$1
+  while [ -n "$hb" ]; do
+    hb_rest=${hb#??}
+    # shellcheck disable=SC2059 # the format is the byte itself, as an octal escape
+    printf "\\$(printf '%03o' $((0x${hb%"$hb_rest"} ^ $2)))"
+    hb=$hb_rest
+  done
+}
+backup_mac() { # file: prints its HMAC under its own name; fails when the key or the file cannot be read
+  { [ -s secrets/backup.key ] && [ -r "$1" ]; } || return 1
+  # Captured with its errors: sha256sum's "<64 hex digits>  -" and nothing else, or something could not be read.
+  mac_key=$({ { printf 'lightning-vm backup mac v1\n'; cat secrets/backup.key; } | sha256sum; } 2>&1) || return 1
+  [ ${#mac_key} = 67 ] || return 1
+  # HMAC's key block is 64 bytes: the 32 of the key, then zeros. 54 and 92 are its two pads (0x36, 0x5c).
+  mac_key=${mac_key%% *}; mac_zero=0000000000000000000000000000000000000000000000000000000000000000
+  mac_in=$({ { hex_bytes "$mac_key" 54; hex_bytes "$mac_zero" 54; printf '%s\n' "${1##*/}"; cat "$1"; } | sha256sum; } 2>&1) || return 1
+  [ ${#mac_in} = 67 ] || return 1
+  mac_out=$({ hex_bytes "$mac_key" 92; hex_bytes "$mac_zero" 92; hex_bytes "${mac_in%% *}" 0; } | sha256sum) || return 1
+  mac_key=""
+  echo "${mac_out%% *}"
+}
+backup_signed() { # file: true when FILE.hmac holds this installation's HMAC for that file under that name
+  sig_want=$(backup_mac "$1") || return 1
+  sig_got=$(sed -n '1s/ .*//p' "$1.hmac" 2>/dev/null) || return 1
+  [ ${#sig_want} = 64 ] && [ "$sig_want" = "$sig_got" ]
+}
+
 # PostgreSQL (custom-format dump), .env, the encryption keys, Caddy's certificates and your own certificate
-# (custom TLS), in one tar encrypted with secrets/backup.key. Redis is not included: it holds only queue
-# copies and sessions; open operations are queued again from PostgreSQL.
+# (custom TLS), in one tar encrypted with secrets/backup.key and signed with it (NAME.tar.enc.hmac).
+# Redis is not included: it holds only queue copies and sessions; open operations are queued again from PostgreSQL.
 # Its variables are prefixed or private to it: restore calls it while holding its own.
 # Every caller runs it in a `||` list, where `set -e` does not apply: each step is checked here, and a step
 # that fails ends the backup with nothing half-written left behind and nothing older deleted.
@@ -411,7 +459,7 @@ do_backup() { # reason
   [ -s secrets/backup.key ] || { record backup failed E_BACKUP_KEY_MISSING ",\"reason\":\"$reason\""; die 21 E_BACKUP_KEY_MISSING "secrets/backup.key yok; önce: sh scripts/install.sh" "secrets/backup.key missing; run first: sh scripts/install.sh"; }
   name="lightning-$(date -u +%Y%m%dT%H%M%SZ)"; bwork="$dir/.work-$$"; bout="$dir/$name.tar.enc"
   backup_failed() { # code
-    rm -rf "$bwork"; BACKUP_WORK=""; rm -f "$bout" "$bout.sha256"; record backup failed "$1" ",\"reason\":\"$reason\""
+    rm -rf "$bwork"; BACKUP_WORK=""; rm -f "$bout" "$bout.hmac"; record backup failed "$1" ",\"reason\":\"$reason\""
   }
   # The work directory holds the database, .env and the keys unencrypted: it goes away however this ends,
   # and what a run that was killed outright left behind (its process is gone) goes away now.
@@ -452,18 +500,19 @@ do_backup() { # reason
     msg FAIL E_BACKUP_VERIFY "Yedek dosyası geri okunamadı (disk dolu olabilir)" "The backup file could not be read back (the disk may be full)"; return 1
   fi
   rm -rf "$bwork"; BACKUP_WORK=""
-  (cd "$dir" && sha256sum "$name.tar.enc" > "$name.tar.enc.sha256" && chmod 600 "$name.tar.enc.sha256") || {
-    backup_failed E_BACKUP_WRITE; msg FAIL E_BACKUP_WRITE "Sağlama dosyası yazılamadı (disk dolu olabilir)" "The checksum file could not be written (the disk may be full)"; return 1; }
+  # The signature, and proof that restore will accept it: a backup whose signature does not verify is no backup.
+  { bmac=$(backup_mac "$bout") && [ ${#bmac} = 64 ] && (umask 077; printf '%s  %s\n' "$bmac" "$name.tar.enc" > "$bout.hmac") && backup_signed "$bout"; } || {
+    backup_failed E_BACKUP_WRITE; msg FAIL E_BACKUP_WRITE "İmza dosyası yazılamadı (disk dolu olabilir)" "The signature file could not be written (the disk may be full)"; return 1; }
   # Retention: the newest $keep local backups stay; the external copy keeps its own policy. Skipped before a
   # restore: the backup being restored may be the oldest one here and must outlive its own restore.
   if [ "$reason" != pre-restore ]; then
     set -- "$dir"/lightning-*.tar.enc # glob order is name order, and the names are UTC timestamps
-    while [ $# -gt "$keep" ]; do rm -f "$1" "$1.sha256"; shift; done
+    while [ $# -gt "$keep" ]; do rm -f "$1" "$1.hmac" "$1.sha256"; shift; done # .sha256: backups of older versions
   fi
   bytes=$(stat -c %s "$bout"); copied=false; copy_to=$(env_value BACKUP_COPY_TO)
   BACKUP_FILE=$bout
   if [ -n "$copy_to" ]; then
-    if rsync -a "$bout" "$bout.sha256" "$copy_to/" 2>/dev/null; then copied=true
+    if rsync -a "$bout" "$bout.hmac" "$copy_to/" 2>/dev/null; then copied=true
     else
       record backup failed E_BACKUP_COPY ",\"reason\":\"$reason\",\"file\":\"$name.tar.enc\",\"bytes\":$bytes,\"copied\":false"
       msg WARN E_BACKUP_COPY "Yedek yerelde alındı ama $copy_to hedefine kopyalanamadı" "Backup written locally but not copied to $copy_to"
@@ -478,8 +527,19 @@ do_restore() {
   file=$RESTORE_FILE
   take_lock
   [ -f "$file" ] || die 2 E_RESTORE_FILE "Yedek dosyası bulunamadı: '$file'" "Backup file not found: '$file'"
-  [ -f "$file.sha256" ] || die 22 E_RESTORE_CHECKSUM "Sağlama dosyası yok: $file.sha256" "Checksum file missing: $file.sha256"
-  (cd "$(dirname "$file")" && sha256sum -c --quiet "$(basename "$file").sha256" >/dev/null 2>&1) || die 22 E_RESTORE_CHECKSUM "Sağlama tutmuyor; dosya bozuk veya değiştirilmiş" "Checksum mismatch; the file is damaged or was changed"
+  [ -s secrets/backup.key ] || die 21 E_BACKUP_KEY_MISSING "secrets/backup.key yok; yedeğin anahtarını oraya koyun" "secrets/backup.key missing; put the backup's key there"
+  # The signature comes before anything else: nothing of a file that this installation's key did not sign is
+  # decrypted or unpacked. A signature that is there is always checked, whatever the flags say.
+  if [ -f "$file.hmac" ]; then
+    backup_signed "$file" || die 22 E_RESTORE_SIGNATURE "İmza tutmuyor: bu yedek bu secrets/backup.key ile yazılmamış ya da sonradan değiştirilmiş veya yeniden adlandırılmış (yedek, yazıldığı dosya adını korumalıdır). Hiçbir şey değiştirilmedi" "The signature does not match: this backup was not written with this secrets/backup.key, or it was changed or renamed afterwards (a backup must keep the file name it was written with). Nothing was changed"
+  elif [ "$ALLOW_UNSIGNED" = 1 ]; then
+    # A backup of an older version: only a checksum, which anyone who can write where it was kept can recompute.
+    [ -f "$file.sha256" ] || die 22 E_RESTORE_CHECKSUM "Sağlama dosyası yok: $file.sha256" "Checksum file missing: $file.sha256"
+    (cd "$(dirname "$file")" && sha256sum -c --quiet "$(basename "$file").sha256" >/dev/null 2>&1) || die 22 E_RESTORE_CHECKSUM "Sağlama tutmuyor; dosya bozuk veya değiştirilmiş" "Checksum mismatch; the file is damaged or was changed"
+    msg WARN W_RESTORE_UNSIGNED "--allow-unsigned: bu yedeğin imzası yok; yalnızca sağlaması denetlendi, bu da dosyanın değiştirilmediğini kanıtlamaz" "--allow-unsigned: this backup has no signature; only its checksum was checked, which does not prove the file is unchanged"
+  else
+    die 22 E_RESTORE_UNSIGNED "İmza dosyası yok: $file.hmac. Eski sürümlerin aldığı yedeklerde yalnızca sağlama dosyası bulunur; onu yedek deposuna yazabilen herkes yeniden hesaplayabilir. Dosyanın saklandığı yere güveniyorsanız --allow-unsigned ekleyin. Hiçbir şey değiştirilmedi" "Signature file missing: $file.hmac. Backups made by older versions have only a checksum, which anyone who can write to the backup storage can recompute. If you trust where this file was kept, add --allow-unsigned. Nothing was changed"
+  fi
   work=$(mktemp -d); RESTORE_WORK=$work
   if ! openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -pass file:secrets/backup.key -in "$file" 2>/dev/null | tar -C "$work" -xf - 2>/dev/null; then
     rm -rf "$work"; die 22 E_RESTORE_DECRYPT "Yedek açılamadı: secrets/backup.key bu yedeğin anahtarı değil" "Backup could not be opened: secrets/backup.key is not this backup's key"
@@ -684,6 +744,7 @@ do_update() {
 # enabled, the automatic update inside the maintenance window.
 do_maintenance() {
   # Never alongside something the panel asked for (same lock as run_requests).
+  lock_file || true
   exec 9> data/maintenance/.lock
   flock -n 9 || exit 0
   LVM_LOCKED=1; export LVM_LOCKED
@@ -798,6 +859,7 @@ set_agent() {
 run_requests() {
   [ -d data/maintenance-requests ] || exit 0
   (umask 022; mkdir -p data/maintenance/runs)
+  lock_file || true
   exec 9> data/maintenance/.lock
   flock 9
   LVM_LOCKED=1; export LVM_LOCKED
@@ -862,7 +924,7 @@ run_requests() {
     if [ "$ok" = 0 ]; then status rejected 2 E_REQUEST_INVALID; [ -n "${tlsdir:-}" ] && rm -rf "$tlsdir"; tlsdir=""; continue; fi
     status running null ""
     log=data/maintenance/runs/$id.log
-    (umask 022; : > "$log")
+    (umask 022; : > "$log"); panel_file "$log"
     if sh "$(pwd)/scripts/install.sh" "$@" > "$log" 2>&1; then rc=0; else rc=$?; fi # LVM_LOCKED: the lock is held here
     code=$(awk 'NF >= 2 { c = $2 } END { print c }' "$log" | tr -cd 'A-Z0-9_')
     if [ "$rc" = 0 ]; then status succeeded 0 "$code"; else status failed "$rc" "$code"; fi
@@ -903,7 +965,7 @@ host_info() {
     "$(conf /etc/systemd/timesyncd.conf.d/lightning-vm.conf NTP | json_str)" "$(conf /etc/systemd/resolved.conf.d/lightning-vm.conf DNS | json_str)" "$(printf '%s' "$resolvers" | json_str)" \
     "$(systemctl is-active --quiet systemd-timesyncd 2>/dev/null && echo true || echo false)" "$(systemctl is-active --quiet systemd-resolved 2>/dev/null && echo true || echo false)" \
     "$(printf '%s' "$os" | json_str)" "$(uname -r | json_str)" "$(cut -d. -f1 /proc/uptime 2>/dev/null || echo 0)" > data/maintenance/host.tmp
-  chmod 644 data/maintenance/host.tmp; mv data/maintenance/host.tmp data/maintenance/host.json
+  panel_file data/maintenance/host.tmp; mv data/maintenance/host.tmp data/maintenance/host.json
 }
 
 do_host() {
@@ -979,12 +1041,12 @@ do_state() {
     for svc in $(docker compose ps -a --format '{{.Service}}' 2>/dev/null | sort -u); do
       echo "$svc" | grep -Eq '^[a-z0-9][a-z0-9_-]{0,40}$' || continue
       timeout 20 docker compose logs --no-color --no-log-prefix --timestamps --tail 300 "$svc" > "$out/logs/$svc.tmp" 2>&1 || true
-      chmod 644 "$out/logs/$svc.tmp"; mv "$out/logs/$svc.tmp" "$out/logs/$svc.log"
+      panel_file "$out/logs/$svc.tmp"; mv "$out/logs/$svc.tmp" "$out/logs/$svc.log"
     done
   fi
   if command -v journalctl >/dev/null 2>&1; then
     timeout 20 journalctl -p warning -n 200 --no-pager -o short-iso > "$out/logs/system.tmp" 2>/dev/null || true
-    chmod 644 "$out/logs/system.tmp"; mv "$out/logs/system.tmp" "$out/logs/system.log"
+    panel_file "$out/logs/system.tmp"; mv "$out/logs/system.tmp" "$out/logs/system.log"
   fi
   disks=$(df -P -B1 -x tmpfs -x devtmpfs -x overlay -x squashfs -x efivarfs 2>/dev/null | awk 'NR > 1 { print $6 "|" $1 "|" $2 "|" $3 "|" $4 }' | head -n 12 | rows 'mount,device,total#,used#,free#')
   inodes=$(df -P -i / 2>/dev/null | awk 'NR == 2 { gsub(/%/, "", $5); print $5 + 0 }')
@@ -995,7 +1057,7 @@ do_state() {
   printf '{"checkedAt":"%s","services":%s,"disks":%s,"inodesPercent":%s,"processes":%s,"failedUnits":%s,"addresses":%s,"network":%s,"dockerDisk":%s,"docker":"%s","users":%s}\n' \
     "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "${services:-[]}" "${disks:-[]}" "${inodes:-0}" "${processes:-[]}" "${failed:-[]}" "${addresses:-[]}" "${net:-[]}" "${docker_disk:-[]}" \
     "$(docker version --format '{{.Server.Version}}' 2>/dev/null | json_str || true)" "$(who 2>/dev/null | wc -l | tr -d ' ')" > "$out/state.tmp"
-  chmod 644 "$out/state.tmp"; mv "$out/state.tmp" "$out/state.json"
+  panel_file "$out/state.tmp"; mv "$out/state.tmp" "$out/state.json"
 }
 
 # ---- This server's operating system updates (apt: Debian and Ubuntu) -------------------------------
@@ -1024,7 +1086,7 @@ os_info() {
   printf '{"checkedAt":"%s","manager":"%s","total":%s,"security":%s,"held":%s,"packages":[%s],"rebootRequired":%s,"rebootPackages":"%s","autoSecurity":%s,"listsAt":"%s","changedAt":"%s","bootId":"%s","kernel":"%s"}\n' \
     "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$mgr" "$total" "$sec" "$held" "$pk" "$reboot" "$rpk" "$auto" "$lists" "$changed" \
     "$(tr -cd 'a-f0-9-' < /proc/sys/kernel/random/boot_id 2>/dev/null || true)" "$(uname -r | json_str)" > data/maintenance/os.tmp
-  chmod 644 data/maintenance/os.tmp; mv data/maintenance/os.tmp data/maintenance/os.json
+  panel_file data/maintenance/os.tmp; mv data/maintenance/os.tmp data/maintenance/os.json
 }
 
 do_os() {
@@ -1326,7 +1388,8 @@ i=0; until local_get /api/ready >/dev/null 2>&1 || [ $i -ge 12 ]; do sleep 5; i=
 local_get /api/ready >/dev/null 2>&1 || die 19 E_NOT_READY "API hazır değil: docker compose logs api" "API is not ready: docker compose logs api"
 # Grafana takes its admin password only on first start; keep it equal to .env when its volume is older.
 if grep -Eq '^COMPOSE_PROFILES=(.*,)?observability(,|$)' .env; then
-  docker compose exec -T grafana grafana cli admin reset-admin-password "$(env_value GRAFANA_PASSWORD)" >/dev/null 2>&1 || msg WARN W_GRAFANA "Grafana parolası eşitlenemedi" "Could not sync the Grafana password"
+  # On standard input: an argument would show in the process list, the container's processes included.
+  env_value GRAFANA_PASSWORD | docker compose exec -T grafana grafana cli admin reset-admin-password --password-from-stdin >/dev/null 2>&1 || msg WARN W_GRAFANA "Grafana parolası eşitlenemedi" "Could not sync the Grafana password"
 fi
 
 # Access: an explicit --domain; on a first install with a public IPv4, <ip>.sslip.io (a public DNS name that

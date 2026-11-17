@@ -11,6 +11,17 @@
 	}
 }
 
+# One client address goes upstream: the one Caddy worked out itself ({client_ip}: the peer, or what a proxy listed in
+# TRUSTED_PROXY_CIDRS reported, read from the right). Caddy's default appends to the chain such a proxy passed on, and
+# with it whatever the client wrote in front; this replaces the chain, so no client-written entry reaches the API.
+# X-Forwarded-Host and X-Forwarded-Proto need nothing here: Caddy sets them itself (the Host and scheme it was asked
+# with) and keeps incoming ones only from a proxy in TRUSTED_PROXY_CIDRS, which behind-proxy mode relies on.
+(client_address) {
+	header_up X-Forwarded-For {client_ip}
+	header_up -Forwarded
+	header_up -X-Real-IP
+}
+
 {$PANEL_SITE::80} {
 	# Your own certificate when one was uploaded (install.sh domain --tls custom, or the panel); empty otherwise.
 	import /etc/caddy/site.d/*.caddy
@@ -30,11 +41,15 @@
 	}
 	# Browser console WebSocket -> console gateway (same host and TLS as the panel).
 	handle /console/ws {
-		reverse_proxy console:8080
+		reverse_proxy console:8080 {
+			import client_address
+		}
 	}
 	# Administrators' host terminal -> terminal service (only while it is turned on; 502 otherwise).
 	handle /terminal/ws {
-		reverse_proxy terminal:8080
+		reverse_proxy terminal:8080 {
+			import client_address
+		}
 	}
 	# VMware HTML Console SDK files the operator downloads from Broadcom (not shipped; see console-sdk/README.md).
 	handle_path /console-sdk/* {
@@ -42,10 +57,18 @@
 		file_server
 	}
 	handle_path /api/* {
-		reverse_proxy api:4000
+		# Above the API's largest route limit (ticket attachments, 9 MB); the API has the real, per-route limits.
+		request_body {
+			max_size 10MB
+		}
+		reverse_proxy api:4000 {
+			import client_address
+		}
 	}
 	handle {
-		reverse_proxy web:3000
+		reverse_proxy web:3000 {
+			import client_address
+		}
 	}
 	log {
 		output stdout

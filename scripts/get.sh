@@ -11,13 +11,18 @@
 #   --dir DIR         where the source goes (default /opt/lightning-vm)
 #   --version vX.Y.Z  a released version (default: the latest stable release)
 #   --branch NAME     a branch instead of releases; updates then follow it (channel "edge", test servers)
-#   --token TOKEN     read-only access token for a private repository (or GIT_TOKEN in the environment);
+#   --token-file FILE read-only access token for a private repository, read from FILE (its first line), or
+#                     GIT_TOKEN in the environment (export GIT_TOKEN; ... | sudo --preserve-env=GIT_TOKEN sh);
 #                     kept in a root-only credential file so later updates can fetch too
+#   --token TOKEN     the same on the command line. It works, but every local account can read it in the
+#                     process list for as long as the installation runs: prefer the two ways above
 # Everything after "--" goes to scripts/install.sh, for example: -- --domain panel.example.com --lang tr
 set -eu
 
 REPO=${LVM_REPO:-https://github.com/syildirim689/lightning-vm.git}
-DIR=/opt/lightning-vm VERSION="" BRANCH="" TOKEN=${GIT_TOKEN:-}
+DIR=/opt/lightning-vm VERSION="" BRANCH="" TOKEN=${GIT_TOKEN:-} TOKEN_FILE="" cred=""
+# Not handed on in the environment of git, apt or the installer started below.
+unset GIT_TOKEN
 while [ $# -gt 0 ]; do
   case "$1" in
     --repo) shift; REPO=${1:-} ;;
@@ -25,6 +30,7 @@ while [ $# -gt 0 ]; do
     --version) shift; VERSION=${1:-} ;;
     --branch) shift; BRANCH=${1:-} ;;
     --token) shift; TOKEN=${1:-} ;;
+    --token-file) shift; TOKEN_FILE=${1:-} ;;
     --) shift; break ;;
     *) echo "unknown option: $1 (install options go after --)" >&2; exit 2 ;;
   esac
@@ -45,6 +51,11 @@ if ! command -v git >/dev/null; then
   else die "install git first"; fi
 fi
 
+if [ -n "$TOKEN_FILE" ]; then
+  [ -r "$TOKEN_FILE" ] || die "--token-file: cannot read $TOKEN_FILE"
+  IFS= read -r TOKEN < "$TOKEN_FILE" || true
+  [ -n "$TOKEN" ] || die "--token-file: $TOKEN_FILE is empty"
+fi
 git_() { git -c safe.directory="$DIR" "$@"; }
 # A private repository: the token goes to a root-only credential store, never into the remote URL.
 if [ -n "$TOKEN" ]; then
@@ -52,8 +63,10 @@ if [ -n "$TOKEN" ]; then
   host=$(echo "$REPO" | sed -n 's#^https://\([^/]*\)/.*#\1#p')
   [ -n "$host" ] || die "--token works with https repository URLs"
   (umask 077; printf 'https://x-access-token:%s@%s\n' "$TOKEN" "$host" > "$cred")
+  # From here on only the file knows it.
+  TOKEN=""
 fi
-gitc() { if [ -n "$TOKEN" ]; then git_ -c "credential.helper=store --file=$cred" "$@"; else git_ "$@"; fi; }
+gitc() { if [ -n "$cred" ]; then git_ -c "credential.helper=store --file=$cred" "$@"; else git_ "$@"; fi; }
 
 if [ -d "$DIR/.git" ]; then
   say INFO "updating the source in $DIR"
@@ -64,7 +77,7 @@ else
   # No checkout here: the version to install is checked out below.
   gitc clone --quiet --no-checkout "$REPO" "$DIR" || die "git clone failed (private repository? use --token or an SSH URL with a deploy key)"
 fi
-[ -z "$TOKEN" ] || git_ -C "$DIR" config credential.helper "store --file=$cred"
+[ -z "$cred" ] || git_ -C "$DIR" config credential.helper "store --file=$cred"
 
 cd "$DIR"
 if [ -f .env ]; then
