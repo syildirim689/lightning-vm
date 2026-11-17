@@ -6,10 +6,10 @@ import { Reflector } from '@nestjs/core';
 import { pool } from './db';
 import { apiError } from './errors';
 import { audit, PERMISSION, SessionGuard, type AuthedRequest } from './auth';
-import { closeConsoles } from './better-auth';
+import { closeConsoles, endImpersonations } from './better-auth';
 import { publishLive } from './live-bus';
 import { ipAllowed, readLimits } from './role-limits';
-import { can, covers, effectivePermissions, known, permissionCatalog, rolesChanged, permissionsOf, roles, splitRoles, type Permission } from './permissions';
+import { can, covers, effectivePermissions, known, permissionCatalog, releaseTickets, rolesChanged, permissionsOf, roles, splitRoles, type Permission } from './permissions';
 
 // Throws unless the actor may act on the target account (its permissions are within the actor's).
 export async function assertCovers(req: AuthedRequest, targetId: string) {
@@ -74,6 +74,18 @@ async function mayChangeRole(req: AuthedRequest, key: string) {
 async function closeMembersConsoles(key: string) {
   const { rows } = await pool.query(`SELECT id FROM users WHERE $1 = ANY(string_to_array(coalesce(role, 'user'), ','))`, [key]);
   if (rows.length) await closeConsoles(rows.map((r) => r.id as string));
+  // The same for sessions they started as other people, and for tickets held by members who can no longer see tickets.
+  if (rows.length) await endImpersonations(rows.map((r) => r.id as string));
+  await releaseTickets();
+}
+
+// Settings that decide where every account's reset links and sign-in codes go (the mail transport and sender, the
+// SMS provider) or that take a sign-in safeguard away: whoever changes them can come to hold any account's proofs,
+// administrators' included. settings.manage is not enough for those; the route still names it for everything else.
+export async function assertAdmin(req: AuthedRequest) {
+  if (req.user.permissions.includes('*')) return;
+  await audit(req, 'admin.access', 'denied', req.user.id, { path: req.routeOptions.url, need: ['*'] });
+  throw apiError(403, 'FORBIDDEN', 'Administrator permission required', undefined, { need: ['*'] });
 }
 
 @Controller('admin') @UseGuards(PermissionGuard)
@@ -134,6 +146,7 @@ export class RolesController {
     } catch (e) { await client.query('ROLLBACK'); throw e; } finally { client.release(); }
     await rolesChanged();
     await publishLive(null, 'access');
+    await releaseTickets(); // again, now that the role is gone
     await audit(req, 'role.deleted', 'success', req.user.id, { key });
   }
 
@@ -177,6 +190,10 @@ export class RolesController {
     await audit(req, 'user.access_changed', 'success', req.user.id, { target: id, roles: keys, overrides: clean });
     // What this person has open (a server console, the host terminal) was allowed by the access they had until now.
     await closeConsoles(id);
+    // So were the sessions they started as other people (they start one again if they still may), and the tickets
+    // they hold if they can no longer see tickets.
+    await endImpersonations(id);
+    await releaseTickets([id]);
     await publishLive(id, 'access');
     return { roles: keys, overrides: clean, effective: next };
   }

@@ -32,6 +32,7 @@ export function fakeDb({ op = {}, server = {}, conn = connection(), routes = [] 
     [/^SELECT step, params FROM operations/, () => [structuredClone(db.op)]],
     [/^SELECT provider_task_id, deadline_at/, () => [{ provider_task_id: db.op.provider_task_id, late: db.op.late }]],
     [/^SELECT cancel_requested/, () => [{ cancel_requested: db.op.cancel_requested, late: db.op.late }]],
+    [/^SELECT deadline_at \+/, () => [{ abandoned: !!db.op.abandoned }]], // waitTask: the hard limit past the deadline
     [/FROM servers s JOIN resource_pools p ON p\.id = s\.pool_id JOIN os_images/, () => [structuredClone(db.server)]],
     [/^SELECT \* FROM vmware_connections/, () => [conn]],
     [/^UPDATE operations SET step = \$2/, (p) => { db.op.step = p[1]; }],

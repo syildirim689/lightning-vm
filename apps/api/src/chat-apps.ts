@@ -6,7 +6,8 @@ import { createHmac } from 'node:crypto';
 import { lookup as lookupCb } from 'node:dns';
 import { lookup } from 'node:dns/promises';
 import { Agent, request as httpsRequest } from 'node:https';
-import { BlockList, isIP, type LookupFunction } from 'node:net';
+import { BlockList, isIP, type LookupFunction, type Socket } from 'node:net';
+import type { Duplex } from 'node:stream';
 
 export type Message = { title: string; body: string; link: string | null; brand: string; event: string };
 // The admin's accounts (secrets already decrypted).
@@ -23,8 +24,13 @@ type App = {
 
 const blocked = new BlockList();
 for (const [net, bits] of [['0.0.0.0', 8], ['10.0.0.0', 8], ['100.64.0.0', 10], ['127.0.0.0', 8], ['169.254.0.0', 16], ['172.16.0.0', 12], ['192.0.0.0', 24], ['192.168.0.0', 16],
-  ['198.18.0.0', 15], ['224.0.0.0', 3]] as const) blocked.addSubnet(net, bits, 'ipv4');
-for (const [net, bits] of [['::', 127], ['::1', 128], ['fc00::', 7], ['fe80::', 10], ['ff00::', 8], ['64:ff9b::', 96]] as const) blocked.addSubnet(net, bits, 'ipv6');
+  ['198.18.0.0', 15], ['224.0.0.0', 3],
+  // Not internal by themselves, but never a real service either: 6to4 relay anycast and the documentation ranges.
+  ['192.88.99.0', 24], ['192.0.2.0', 24], ['198.51.100.0', 24], ['203.0.113.0', 24]] as const) blocked.addSubnet(net, bits, 'ipv4');
+// IPv6 forms that carry an IPv4 address a host with such a route would deliver to (IPv4-compatible ::/96, which also
+// holds :: and ::1, IPv4-translated, both NAT64 prefixes, 6to4, Teredo), site-local, discard and documentation ranges.
+for (const [net, bits] of [['::', 96], ['::ffff:0:0:0', 96], ['fc00::', 7], ['fe80::', 10], ['fec0::', 10], ['ff00::', 8], ['64:ff9b::', 96], ['64:ff9b:1::', 48],
+  ['2002::', 16], ['2001::', 32], ['100::', 64], ['2001:db8::', 32], ['3fff::', 20]] as const) blocked.addSubnet(net, bits, 'ipv6');
 // The IPv4 address an IPv4-mapped IPv6 address carries, in either spelling (::ffff:10.0.0.1, ::ffff:a00:1), else null.
 export function mappedV4(ip: string): string | null {
   const m = /^(?:0{0,4}:){0,4}:?(?:0{0,4}:)?ffff:(?:(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})|([0-9a-f]{1,4}):([0-9a-f]{1,4}))$/i.exec(ip);
@@ -84,13 +90,42 @@ export async function guardedRequest(raw: string, init: { method?: string; heade
   });
 }
 
+// A browser push endpoint: a push service's address, so HTTPS on a plain DNS name (letters, digits, dots, hyphens; no
+// address written as a number, nothing percent-encoded or otherwise unusual in the host), public like any other
+// user-given URL. Returned as the URL that was checked, in its normal form: that text is stored and sent to, because
+// the push library reads a URL with another parser, and the two may not agree about where an unusual host ends.
+const dnsName = /^(?=.{4,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z][a-z0-9-]{0,61}[a-z0-9]$/;
+export async function pushEndpoint(raw: unknown): Promise<string | null> {
+  if (typeof raw !== 'string' || raw.length > 2000) return null;
+  const written = /^https:\/\/([^/?#\\@\s]+)\//.exec(raw)?.[1].toLowerCase();
+  let u: URL;
+  try { u = new URL(raw); } catch { return null; }
+  if (!written || u.host !== written || !dnsName.test(u.hostname)) return null;
+  return (await publicUrl(u.toString())) ? u.toString() : null;
+}
+
 // For a library that sends its own request (web-push, notify.ts): every connection of this agent goes to a public
-// address, checked as the name is resolved, so the address connected to is the address checked. An address written
-// as a number is not resolved at all: check the URL with publicUrl first.
-export const publicOnlyAgent = new Agent({ lookup: ((host: string, options: { all?: boolean }, cb: (...a: unknown[]) => void) =>
+// address. A name is checked as it is resolved, so the address connected to is the address checked; an address
+// written as a number is not resolved at all, so it is refused before a socket is made, and whatever a socket did
+// connect to is looked at once more before anything is sent on it.
+const notPublic = () => Object.assign(new Error('not a public address'), { name: 'NotPublic' });
+class PublicOnlyAgent extends Agent {
+  createConnection(options: { host?: string | null }, cb?: (err: Error | null, stream: Duplex) => void): Duplex | null | undefined {
+    const host = String(options.host ?? '').replace(/^\[|\]$/g, '');
+    if (!host || (isIP(host) && privateAddress(host))) {
+      if (!cb) throw notPublic();
+      process.nextTick(() => cb(notPublic(), undefined as never));
+      return undefined;
+    }
+    const socket = (super.createConnection as unknown as (o: object, c?: unknown) => Socket | undefined).call(this, options, cb);
+    socket?.once('connect', () => { if (!socket.remoteAddress || privateAddress(socket.remoteAddress)) socket.destroy(notPublic()); });
+    return socket;
+  }
+}
+export const publicOnlyAgent: Agent = new PublicOnlyAgent({ lookup: ((host: string, options: { all?: boolean }, cb: (...a: unknown[]) => void) =>
   lookupCb(host, { ...options, all: true }, (err, list) => {
     if (err) return cb(err);
-    if (!list.length || list.some((a) => privateAddress(a.address))) return cb(Object.assign(new Error('not a public address'), { name: 'NotPublic' }));
+    if (!list.length || list.some((a) => privateAddress(a.address))) return cb(notPublic());
     return options?.all ? cb(null, list) : cb(null, list[0].address, list[0].family);
   })) as unknown as LookupFunction });
 

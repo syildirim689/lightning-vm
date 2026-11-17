@@ -11,7 +11,7 @@ import { guestScript } from './guest-updates-script';
 import { notify } from './notify';
 import { Can, PermissionGuard } from './rbac';
 import { encryptSecret } from './secrets';
-import { findServer } from './servers';
+import { findServer, ownerWrite } from './servers';
 
 const hash = (t: string) => createHash('sha256').update(t).digest('hex');
 const policies = ['notify', 'security', 'all'];
@@ -56,9 +56,10 @@ export class ServerUpdatesController {
   // Turns update tracking on (or gives a fresh token) and answers with the command to run in the server, once.
   @Post('enable')
   async enable(@Req() req: AuthedRequest, @Param('id', ParseUUIDPipe) id: string) {
-    await findServer(req, id, true);
+    const s = await findServer(req, id, true);
     const token = randomBytes(24).toString('base64url');
-    await pool.query(`INSERT INTO server_updates (server_id, token_hash) VALUES ($1, $2) ON CONFLICT (server_id) DO UPDATE SET token_hash = $2, install_enc = NULL`, [id, hash(token)]);
+    // Only while the server is still this owner's (servers.ts ownerWrite): the token is the requester's way to report for it.
+    await ownerWrite(s, (db) => db.query(`INSERT INTO server_updates (server_id, token_hash) VALUES ($1, $2) ON CONFLICT (server_id) DO UPDATE SET token_hash = $2, install_enc = NULL`, [id, hash(token)]));
     await audit(req, 'server.updates_enabled', 'success', req.user.id, { serverId: id });
     const origin = await reporterOrigin(req);
     return { command: `curl -fsSL ${origin}/api/guest/updates.sh | sudo sh -s -- ${origin} ${id} ${token}`, ...view(await row(id)) };
@@ -66,7 +67,7 @@ export class ServerUpdatesController {
 
   @Put()
   async change(@Req() req: AuthedRequest, @Param('id', ParseUUIDPipe) id: string, @Body() body: Record<string, unknown>) {
-    await findServer(req, id, true);
+    const s = await findServer(req, id, true);
     const u = await row(id);
     if (!u) throw apiError(409, 'INVALID_SERVER_STATE', 'Update tracking is off for this server');
     const fields: Record<string, string> = {};
@@ -76,7 +77,7 @@ export class ServerUpdatesController {
     if (!policies.includes(policy)) fields.policy = 'INVALID_VALUE';
     if (!Number.isInteger(hour) || hour < 0 || hour > 23) fields.rebootHour = 'INVALID_VALUE';
     if (Object.keys(fields).length) throw apiError(400, 'VALIDATION_FAILED', 'Invalid input', fields);
-    await pool.query('UPDATE server_updates SET policy = $2, auto_reboot = $3, reboot_hour = $4 WHERE server_id = $1', [id, policy, autoReboot, hour]);
+    await ownerWrite(s, (db) => db.query('UPDATE server_updates SET policy = $2, auto_reboot = $3, reboot_hour = $4 WHERE server_id = $1', [id, policy, autoReboot, hour]));
     await audit(req, 'server.updates_policy', 'success', req.user.id, { serverId: id, policy, autoReboot, rebootHour: hour });
     return view(await row(id));
   }
@@ -84,12 +85,12 @@ export class ServerUpdatesController {
   // One action waits per server; the reporter picks it up on its next run (within about ten minutes).
   @Post('actions') @HttpCode(202)
   async act(@Req() req: AuthedRequest, @Param('id', ParseUUIDPipe) id: string, @Body() body: Record<string, unknown>) {
-    await findServer(req, id, true);
+    const s = await findServer(req, id, true);
     const action = String(body?.action ?? '');
     if (!actions.includes(action)) throw apiError(400, 'VALIDATION_FAILED', 'Invalid input', { action: 'INVALID_VALUE' });
     const u = await row(id);
     if (!u?.reported_at || Date.now() - u.reported_at.getTime() > STALE_MS) throw apiError(409, 'INVALID_SERVER_STATE', 'The update reporter in this server is not answering');
-    await pool.query('UPDATE server_updates SET pending_action = $2, action_at = now() WHERE server_id = $1', [id, action]);
+    await ownerWrite(s, (db) => db.query('UPDATE server_updates SET pending_action = $2, action_at = now() WHERE server_id = $1', [id, action]));
     await audit(req, 'server.updates_action', 'success', req.user.id, { serverId: id, action });
     return view(await row(id));
   }
@@ -97,8 +98,8 @@ export class ServerUpdatesController {
   // Turns tracking off: the record goes, and the reporter removes itself from the server on its next run.
   @Delete() @HttpCode(204)
   async disable(@Req() req: AuthedRequest, @Param('id', ParseUUIDPipe) id: string) {
-    await findServer(req, id, true);
-    await pool.query('DELETE FROM server_updates WHERE server_id = $1', [id]);
+    const s = await findServer(req, id, true);
+    await ownerWrite(s, (db) => db.query('DELETE FROM server_updates WHERE server_id = $1', [id]));
     await audit(req, 'server.updates_disabled', 'success', req.user.id, { serverId: id });
   }
 }

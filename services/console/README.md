@@ -11,6 +11,11 @@ Relays `wss://<panel>/console/ws` to a VM's WebMKS endpoint on the management ne
   are checked like in the VMware adapter.
 - Revocations arrive on Redis `console:revoke`; events go to the `console:events` stream, which
   the worker writes to `audit_events`. Tickets, cookies and upstream URLs are never logged.
+- A revocation also covers tickets that were issued but not redeemed yet. The API leaves a short-lived marker in
+  Redis with each revocation (for the user, the session or the server) and every ticket carries the time it was
+  issued; when a ticket is admitted, one issued before a matching marker is refused with `CONSOLE_REVOKED`
+  (`TERMINAL_REVOKED` on the host terminal). The marker is in Redis, so a gateway that missed the pub/sub message
+  still refuses the ticket.
 - Requests with an unknown ticket have no principal: at most 5 `denied` events per minute are written for
   them (console and terminal gateway alike), and the next event carries the number that was suppressed.
 

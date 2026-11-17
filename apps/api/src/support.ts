@@ -7,8 +7,9 @@ import { audit, SessionGuard, type AuthedRequest } from './auth';
 import { pool, redis, foldSql, foldText } from './db';
 import { apiError } from './errors';
 import { logEvent } from './log';
+import { rateLimit } from './security';
 import { notify } from './notify';
-import { can } from './permissions';
+import { can, permissionsOfMany } from './permissions';
 import { Can, PermissionGuard } from './rbac';
 import { afterMessage, dueFrom, priorities, readAttachments, reopenable, statuses, type Priority, type Status, type Upload } from './support-rules';
 
@@ -52,8 +53,19 @@ const askRating = (t: { id: string; number: number; subject: string; ownerId: st
   notify('support.rate', [t.ownerId], { ticketId: t.id, number: String(t.number), subject: t.subject });
 
 // Who on staff hears about a ticket: its assignee, or everyone who can see support.
-const tellStaff = (t: { assigneeId: string | null }, data: Record<string, unknown>) =>
-  notify('support.customer_message', t.assigneeId ? [t.assigneeId] : 'staff:support.view', data);
+// Several replies in a row on one ticket are one notice: the next one goes out after two minutes, or as soon as staff
+// have answered in between.
+const told = (ticketId: string) => `support:told:${ticketId}`;
+async function tellStaff(t: { id: string; assigneeId: string | null }, data: Record<string, unknown>) {
+  if ((await redis.set(told(t.id), '1', 'EX', 120, 'NX').catch(() => 'OK')) !== 'OK') return;
+  await notify('support.customer_message', t.assigneeId ? [t.assigneeId] : 'staff:support.view', data);
+}
+// A customer's replies and ratings, per ticket and per person in ten minutes (staff are not counted): each one is
+// stored and tells staff. Fails closed, like the other limits.
+async function customerPace(userId: string, ticketId: string) {
+  await rateLimit(`ticket-write:t:${ticketId}`, 10, 600);
+  await rateLimit(`ticket-write:u:${userId}`, 30, 600);
+}
 
 async function messagesOf(ticketId: string, withInternal: boolean) {
   const { rows } = await pool.query(`SELECT m.id, m.staff, m.internal, m.body, m.created_at AS "createdAt", coalesce(nullif(u.name, ''), u.email) AS author,
@@ -137,6 +149,7 @@ export class SupportController {
     if (t.status === 'closed' && !byStaff && !reopenable(t.closedAt ? new Date(t.closedAt) : null)) throw apiError(409, 'TICKET_CLOSED', 'This ticket is closed; open a new one');
     const text = readBody(body?.body);
     const files = readFiles(body?.attachments);
+    if (!byStaff) await customerPace(req.user.id, id);
     await addMessage(id, req.user.id, byStaff, internal, text, files);
     const next = afterMessage({ status: t.status as Status, priority: t.priority as Priority }, byStaff ? 'staff' : 'customer', internal);
     if (next) {
@@ -145,6 +158,7 @@ export class SupportController {
     } else await pool.query('UPDATE tickets SET updated_at = now() WHERE id = $1', [id]);
     if (byStaff && !internal) await notify('support.reply', [t.ownerId], { ticketId: id, number: t.number, subject: t.subject });
     if (!byStaff) await tellStaff(t, { ticketId: id, number: t.number, subject: t.subject, email: req.user.email });
+    else if (!internal) await redis.del(told(id)).catch(() => undefined);
     await audit(req, internal ? 'support.note' : 'support.reply', 'success', req.user.id, { ticketId: id });
     return { ok: true };
   }
@@ -184,9 +198,12 @@ export class SupportController {
     const rating = Number(body?.rating);
     if (!Number.isInteger(rating) || rating < 1 || rating > 5) throw apiError(400, 'VALIDATION_FAILED', 'Invalid input', { rating: 'OUT_OF_RANGE' });
     const comment = typeof body?.comment === 'string' ? body.comment.trim().slice(0, 1000) : null;
-    await pool.query('UPDATE tickets SET rating = $2, rating_comment = $3 WHERE id = $1', [id, rating, comment || null]);
-    // A poor rating (1–2) reaches whoever handled it, or the team, once.
-    if (rating <= 2 && !(t.rating && t.rating <= 2)) await notify('support.low_rating', t.assigneeId ? [t.assigneeId] : 'staff:support.view',
+    await customerPace(req.user.id, id);
+    const { rows: [was] } = await pool.query('UPDATE tickets t SET rating = $2, rating_comment = $3 FROM (SELECT rating FROM tickets WHERE id = $1 FOR UPDATE) old WHERE t.id = $1 RETURNING old.rating',
+      [id, rating, comment || null]);
+    // A poor first rating (1–2) reaches whoever handled it, or the team. A rating changed afterwards tells nobody
+    // again, whichever way it goes (alternating would otherwise notify every time).
+    if (rating <= 2 && was && was.rating === null) await notify('support.low_rating', t.assigneeId ? [t.assigneeId] : 'staff:support.view',
       { ticketId: id, number: String(t.number), subject: t.subject, rating: String(rating), comment: comment ?? '' });
     return { rating };
   }
@@ -255,8 +272,9 @@ export class SupportAdminController {
     if (body?.assigneeId !== undefined) {
       if (body.assigneeId === null) assignee = null;
       else {
-        const { rows: [u] } = await pool.query('SELECT id, role FROM users WHERE id = $1', [String(body.assigneeId)]).catch(() => ({ rows: [] }));
-        if (!u) fields.assigneeId = 'INVALID_VALUE'; else assignee = u.id;
+        // Someone who can answer tickets (the picker's list, GET agents): the ticket's notices go to them by id.
+        const [u] = typeof body.assigneeId === 'string' && /^[0-9a-f-]{36}$/i.test(body.assigneeId) ? await permissionsOfMany([body.assigneeId]) : [];
+        if (!u || !can(u.permissions, 'support.manage')) fields.assigneeId = 'INVALID_VALUE'; else assignee = u.id;
       }
     }
     const departmentId = body?.departmentId === undefined ? undefined : String(body.departmentId);

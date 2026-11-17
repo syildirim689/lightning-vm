@@ -11,7 +11,8 @@ export function readList(v: unknown, kind: 'ntp' | 'dns'): string | null {
   if (typeof v !== 'string') return null;
   if (v.trim() === 'default') return 'default';
   const items = v.split(/[\s,]+/).filter(Boolean);
-  if (!items.length || items.length > 4 || items.some((x) => !(ip(x) || (kind === 'ntp' && validHostname(x.toLowerCase()))))) return null;
+  // Digits and dots only is an address or nothing: "999.1.1.1" and "12" are not host names (the agent refuses them too).
+  if (!items.length || items.length > 4 || items.some((x) => !(ip(x) || (kind === 'ntp' && !/^[\d.]+$/.test(x) && validHostname(x.toLowerCase()))))) return null;
   return items.map((x) => (ip(x) ? x : x.toLowerCase())).join(',');
 }
 

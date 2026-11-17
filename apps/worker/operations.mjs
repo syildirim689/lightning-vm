@@ -14,12 +14,27 @@ export class OperationError extends Error {
 const permanent = new Set(['SNAPSHOT_NOT_FOUND', 'INVALID_LOGIN', 'PERMISSION_DENIED', 'WRITE_RESTRICTED', 'PROVISIONING_NOT_SUPPORTED', 'TEMPLATE_NOT_FOUND',
   'NETWORK_NOT_FOUND', 'TEMPLATE_HAS_NO_NIC', 'DISK_SMALLER_THAN_TEMPLATE', 'INSUFFICIENT_RESOURCES', 'NOT_MANAGED', 'TOOLS_NOT_RUNNING',
   'TLS_UNTRUSTED', 'TLS_HOSTNAME_MISMATCH', 'TLS_PIN_MISMATCH', 'ENDPOINT_BLOCKED', 'INVALID_REQUEST', 'SECRET_KEY_UNAVAILABLE', 'INVALID_STATE', 'VM_NOT_FOUND',
-  'FIREWALL_NEEDS_DVS', 'FIREWALL_TOO_MANY_RULES', 'DISK_SHRINK_NOT_SUPPORTED', 'DISK_HAS_SNAPSHOTS', 'VM_HAS_NO_DISK', 'DISK_NOT_SUPPORTED', 'DATASTORE_NOT_FOUND', 'PLATFORM_NOT_SUPPORTED', 'HOST_IS_SLAVE']);
+  'FIREWALL_NEEDS_DVS', 'FIREWALL_TOO_MANY_RULES', 'DISK_SHRINK_NOT_SUPPORTED', 'DISK_HAS_SNAPSHOTS', 'VM_HAS_NO_DISK', 'DISK_NOT_SUPPORTED', 'DATASTORE_NOT_FOUND', 'PLATFORM_NOT_SUPPORTED', 'HOST_IS_SLAVE',
+  'VM_MISMATCH']);
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const readinessPollMs = Number(process.env.READINESS_POLL_MS) || 5000;
 const taskPollMs = Number(process.env.TASK_POLL_MS) || 2000;
 const shutdownPollMs = Number(process.env.SHUTDOWN_POLL_MS) || 5000;
+// How long past its operation's deadline an issued task is still waited for (waitTask).
+const outcomeHours = Number(process.env.TASK_OUTCOME_HOURS) || 6;
+
+// After a restore of an older backup (scripts/install.sh leaves the row) the rows may be older than what the hypervisors
+// hold: until staff release the hold (the API: restore-hold.ts) no operation is started or recovered, and reconcile
+// only reports. Asked at most every 15 seconds; a missing table (not migrated yet) is no hold.
+let hold = { at: 0, held: false };
+export async function restoreHold(db) {
+  if (Date.now() - hold.at < 15_000) return hold.held;
+  const { rows } = await db.query("SELECT 1 FROM maintenance_state WHERE key = 'restore_hold'").catch(() => ({ rows: [] }));
+  hold = { at: Date.now(), held: rows.length > 0 };
+  return hold.held;
+}
+export function forgetRestoreHold() { hold = { at: 0, held: false }; }
 
 let key;
 export function decrypt(blob, context) {
@@ -93,29 +108,37 @@ async function saveWarnings(db, ctx, out) {
 }
 const saveTask = (db, op, task) => db.query('UPDATE operations SET provider_task_id = $2, updated_at = now() WHERE id = $1', [op.id, task || null]);
 
-// cancel false: only the deadline is checked. That is how a task already issued to the platform is waited for: the
-// worker never cancels a provider task, so stopping the wait would end the operation as "did not happen" (a resize's
-// price put back, a new disk's row marked failed) while the task still completes. A cancel request stops what would be
-// issued next; what is running is seen through to its real outcome.
-async function guard(db, op, cancel = true) {
+// Checked before a step is issued, never while a task that was issued is waited for (waitTask): the worker cannot
+// cancel a provider task, so a cancel request and the deadline stop what would be issued next; what is running is seen
+// through to its real outcome. cancel false: only the deadline (an operation resumed mid-step); deadline false: only
+// the cancel (an operation resumed with a task under way).
+async function guard(db, op, cancel = true, deadline = true) {
   const { rows: [o] } = await db.query('SELECT cancel_requested, deadline_at < now() AS late FROM operations WHERE id = $1', [op.id]);
   if (cancel && o.cancel_requested) throw new OperationError('CANCELLED', 'cancel requested', true);
-  if (o.late) throw new OperationError('TIMEOUT', 'operation deadline passed', true);
+  if (deadline && o.late) throw new OperationError('TIMEOUT', 'operation deadline passed', true);
 }
 
 // Waits for a VMware task; the task id is stored before waiting so a restart resumes the wait.
+// The operation's deadline does not end the wait. It used to: the operation then failed as TIMEOUT and its undo ran (a
+// resize's price put back and its invoice withdrawn, a new disk's row marked failed) while the task went on and changed
+// the VM after all. The task is waited for until it says what happened, up to outcomeHours past the deadline; a task
+// still running then ends the operation as OUTCOME_UNKNOWN, which undoes nothing (processOperation). ctx.waiting tells
+// processOperation that an attempt ended in here, without the task's outcome.
 async function waitTask(db, ctx, task) {
+  ctx.waiting = task;
   for (;;) {
-    await guard(db, ctx.op, false);
+    const { rows: [o] } = await db.query("SELECT deadline_at + $2::float8 * interval '1 hour' < now() AS abandoned FROM operations WHERE id = $1", [ctx.op.id, outcomeHours]);
+    if (o?.abandoned) throw new OperationError('OUTCOME_UNKNOWN', `the platform task was still running ${outcomeHours} hours after the deadline`, true);
     const t = await adapter('/v1/task', { ...ctx.target, task });
-    if (t.state === 'success') return t;
+    if (t.state === 'success') { ctx.waiting = null; return t; }
     if (t.state === 'error') {
       // A failed task stays failed: its id is forgotten, so a retry issues the step again instead of reading the same failure.
+      ctx.waiting = null;
       await saveTask(db, ctx.op, null);
       ctx.op.provider_task_id = null;
       throw new OperationError(t.code, t.error, permanent.has(t.code));
     }
-    if (t.code === 'TASK_NOT_FOUND') return t; // expired from vCenter: the caller checks the real object (or lostTask)
+    if (t.code === 'TASK_NOT_FOUND') { ctx.waiting = null; return t; } // expired from vCenter: the caller checks the real object (or lostTask)
     await sleep(taskPollMs);
   }
 }
@@ -215,6 +238,9 @@ async function ensureVM(db, ctx) {
         [s.clone_from_server_id ?? null, s.owner_id, s.pool_id, s.clone_from_moref]);
       if (!src) throw new OperationError('CLONE_SOURCE_GONE', 'the server this copy was ordered from is gone, changed or no longer its owner\'s', true);
     }
+    // The adapter is told what the source must be (expectName; without it: a template). A VM id alone can name another
+    // VM by now: Proxmox hands a freed number out again, to a template's as to a server's.
+    const source = s.clone_from_moref ? { template: s.clone_from_moref, expectName: `lvm-${s.clone_from_server_id}` } : { template: s.template_moref };
     const { datastore, pool } = await bestDatastore(db, s);
     // The adapter looks the name up first, so a retry after a lost response returns the earlier VM.
     // How the guest gets its cloud-init data: the admin's choice, else what discovery found the version supports.
@@ -223,7 +249,7 @@ async function ensureVM(db, ctx) {
     const { rows: [st] } = await db.query("SELECT value FROM settings WHERE key = 'servers'");
     const hw = { cpuHotAdd: false, memoryHotAdd: false, nestedHv: false, ...st?.value?.hardware };
     const guest = s.image_family === 'esxi' ? { customization: 'appliance', nestedHv: true, vappProperties: esxiProperties(s) } : { customization, ...cloudInit(s) };
-    const out = await adapter('/v1/vm/clone', { ...ctx.target, name: ctx.vmName, serverId: s.id, template: s.clone_from_moref ?? s.template_moref, pool, datastore,
+    const out = await adapter('/v1/vm/clone', { ...ctx.target, name: ctx.vmName, serverId: s.id, ...source, pool, datastore,
       network: s.network_moref, vcpu: s.vcpu, memoryMb: s.memory_mb, diskGb: s.disk_gb, ...hw, ...guest });
     await saveWarnings(db, ctx, out);
     if (out.vm) vm = out.vm;
@@ -262,7 +288,7 @@ async function power(db, ctx, action) {
     let t;
     if (ctx.op.provider_task_id) t = await waitTask(db, ctx, ctx.op.provider_task_id);
     else {
-      const out = await adapter('/v1/vm/power', { ...ctx.target, vm, action });
+      const out = await adapter('/v1/vm/power', { ...ctx.target, vm, expectName: ctx.vmName, action });
       if (out.task) { await saveTask(db, ctx.op, out.task); t = await waitTask(db, ctx, out.task); }
     }
     // The task expired unseen: on and off are read from the VM and issued again if it is not there yet. A reset cannot
@@ -289,7 +315,7 @@ async function removeVM(db, ctx) {
     let t;
     if (ctx.op.provider_task_id) t = await waitTask(db, ctx, ctx.op.provider_task_id);
     else {
-      const out = await adapter('/v1/vm/destroy', { ...ctx.target, vm });
+      const out = await adapter('/v1/vm/destroy', { ...ctx.target, vm, expectName: ctx.vmName });
       if (out.task) { await saveTask(db, ctx.op, out.task); t = await waitTask(db, ctx, out.task); }
     }
     // A task that expired with the VM still listed (below) is not waited for again: the retry destroys anew.
@@ -338,7 +364,7 @@ async function writeFirewall(db, ctx) {
   const { rows: [v] } = await db.query('SELECT firewall_version FROM servers WHERE id = $1', [ctx.s.id]);
   const { rows } = await db.query('SELECT f.rules FROM firewall_servers fs JOIN firewalls f ON f.id = fs.firewall_id WHERE fs.server_id = $1', [ctx.s.id]);
   const rules = rows.flatMap((r) => r.rules).map((r) => ({ direction: r.direction, protocol: r.protocol, port: r.port ?? '', ips: r.ips }));
-  await adapter('/v1/vm/firewall', { ...ctx.target, vm: ctx.s.vm_moref, enabled: rows.length > 0, rules });
+  await adapter('/v1/vm/firewall', { ...ctx.target, vm: ctx.s.vm_moref, expectName: ctx.vmName, enabled: rows.length > 0, rules });
   await db.query(`UPDATE servers SET firewall_applied_version = GREATEST(firewall_applied_version, $2), firewall_error = NULL,
     firewall_applied_at = now() WHERE id = $1`, [ctx.s.id, v.firewall_version]);
 }
@@ -381,7 +407,7 @@ const kinds = {
     // Proxmox's own cloud-init carries the network and the SSH keys only: the root password, the host name, files
     // and first-boot commands are applied through the guest agent now that the server answers (once; a retry is a no-op).
     if (ctx.target.platform === 'proxmox' && ctx.s.image_family !== 'esxi') {
-      const out = await adapter('/v1/vm/guest-setup', { ...ctx.target, vm: ctx.s.vm_moref, userdata: cloudInit(ctx.s).userdata });
+      const out = await adapter('/v1/vm/guest-setup', { ...ctx.target, vm: ctx.s.vm_moref, expectName: ctx.vmName, userdata: cloudInit(ctx.s).userdata });
       if (out?.reason === 'NO_GUEST_AGENT') console.warn(JSON.stringify({ level: 'warn', service: 'worker', msg: 'guest_setup_skipped', serverId: ctx.s.id, reason: out.reason }));
     }
     await db.query("UPDATE servers SET state = 'ready', guest_ready = true, error_code = NULL, updated_at = now() WHERE id = $1", [ctx.s.id]);
@@ -434,7 +460,7 @@ const kinds = {
   async migrate(db, ctx) {
     await setStep(db, ctx.op, 'migrate');
     if (!ctx.op.provider_task_id) {
-      const out = await adapter('/v1/vm/migrate', { ...ctx.target, vm: ctx.s.vm_moref, host: ctx.op.params.host ?? '', datastore: ctx.op.params.datastore ?? '' });
+      const out = await adapter('/v1/vm/migrate', { ...ctx.target, vm: ctx.s.vm_moref, expectName: ctx.vmName, host: ctx.op.params.host ?? '', datastore: ctx.op.params.datastore ?? '' });
       if (!out.task) return; // already there
       await saveTask(db, ctx.op, out.task);
       ctx.op.provider_task_id = out.task;
@@ -446,7 +472,7 @@ const kinds = {
   // An extra disk: added beside the system disk; its device key is the new one VMware lists.
   async disk_add(db, ctx) {
     const sizeGb = ctx.op.params.sizeGb, retry = ctx.op.step === 'disk', resumed = retry && !!ctx.op.provider_task_id;
-    const disks = async () => (await adapter('/v1/vm/disks', { ...ctx.target, vm: ctx.s.vm_moref })).disks;
+    const disks = async () => (await adapter('/v1/vm/disks', { ...ctx.target, vm: ctx.s.vm_moref, expectName: ctx.vmName })).disks;
     const taken = (await db.query('SELECT device_key FROM server_disks WHERE server_id = $1 AND device_key IS NOT NULL', [ctx.s.id])).rows.map((r) => r.device_key);
     const before = await disks();
     // disk-add is not idempotent, and some platforms answer only after the disk exists and without a task id. A retry
@@ -478,7 +504,7 @@ const kinds = {
   async nic_add(db, ctx) {
     const pg = await networkPortgroup(db, ctx.op.params.networkId);
     await vmTask(db, ctx, 'nic', '/v1/vm/nic-add', { portgroup: pg });
-    const { mac } = await adapter('/v1/vm/nic-mac', { ...ctx.target, vm: ctx.s.vm_moref, portgroup: pg });
+    const { mac } = await adapter('/v1/vm/nic-mac', { ...ctx.target, vm: ctx.s.vm_moref, expectName: ctx.vmName, portgroup: pg });
     await db.query("UPDATE private_network_members SET status = 'joined', mac = $3 WHERE network_id = $1 AND server_id = $2", [ctx.op.params.networkId, ctx.s.id, mac || null]);
   },
   async nic_remove(db, ctx) {
@@ -492,7 +518,7 @@ const kinds = {
     await setStep(db, ctx.op, 'image');
     if (ctx.op.provider_task_id) await waitTask(db, ctx, ctx.op.provider_task_id);
     else {
-      const out = await adapter('/v1/image/create', { ...ctx.target, vm: ctx.s.vm_moref, name });
+      const out = await adapter('/v1/image/create', { ...ctx.target, vm: ctx.s.vm_moref, expectName: ctx.vmName, name });
       if (out.task) { await saveTask(db, ctx.op, out.task); await waitTask(db, ctx, out.task); }
     }
     const tpl = (await adapter('/v1/vm/find', { ...ctx.target, name })).vm;
@@ -542,7 +568,7 @@ const kinds = {
   snapshot_create: (db, ctx) => snapshot(db, ctx, { action: 'create', name: ctx.op.params.name, description: ctx.op.params.description ?? '' },
     async () => !!(await snapshotNamed(ctx, ctx.op.params.name))),
   snapshot_delete: (db, ctx) => snapshot(db, ctx, { action: 'remove', snapshot: ctx.op.params.snapshot },
-    async () => !(await adapter('/v1/vm/snapshots', { ...ctx.target, vm: ctx.s.vm_moref })).snapshots.some((x) => x.id === ctx.op.params.snapshot)),
+    async () => !(await adapter('/v1/vm/snapshots', { ...ctx.target, vm: ctx.s.vm_moref, expectName: ctx.vmName })).snapshots.some((x) => x.id === ctx.op.params.snapshot)),
   // A snapshot without memory comes back powered off: start the VM again if it was running. A retry after the
   // revert finished (step "on") only powers on.
   async snapshot_revert(db, ctx) {
@@ -577,7 +603,7 @@ const backupOf = async (db, id) => {
   if (!b) throw new OperationError('BACKUP_NOT_FOUND', 'backup record missing', true);
   return b;
 };
-const snapshotNamed = async (ctx, name) => (await adapter('/v1/vm/snapshots', { ...ctx.target, vm: ctx.s.vm_moref })).snapshots.find((x) => x.name === name)?.id ?? null;
+const snapshotNamed = async (ctx, name) => (await adapter('/v1/vm/snapshots', { ...ctx.target, vm: ctx.s.vm_moref, expectName: ctx.vmName })).snapshots.find((x) => x.name === name)?.id ?? null;
 
 // One VMware task on the server's VM; a stored task id (a retry) is waited for instead of starting another.
 // A task that expired unseen is not success: `done` reads the result where asking again is not safe (lostTask).
@@ -586,7 +612,7 @@ async function vmTask(db, ctx, step, path, body, done) {
   let task = ctx.op.provider_task_id;
   if (!task) {
     await guard(db, ctx.op); // a cancel asked for meanwhile stops here, before the next task is issued
-    const out = await adapter(path, { ...ctx.target, vm: ctx.s.vm_moref, ...body });
+    const out = await adapter(path, { ...ctx.target, vm: ctx.s.vm_moref, expectName: ctx.vmName, ...body });
     if (!out.task) return; // nothing left to do (already done)
     await saveTask(db, ctx.op, task = out.task);
   }
@@ -626,12 +652,16 @@ export async function processOperation(db, job, log, notify = async () => {}, rd
   const ctx = await load(db, job.id).catch((e) => { log('error', 'operation_load_failed', { operationId: job.id, error: e.code ?? e.message }); throw e; });
   if (!ctx || ['succeeded', 'failed', 'cancelled'].includes(ctx.op.status)) return; // already settled
   if (ctx.op.step === 'awaiting_payment' && !ctx.op.cancel_requested) return; // billing.ts queues it again once paid
+  // Restored from an older backup: nothing is started. The operation stays as it is; the recovery scan queues it again
+  // once staff have released the hold (or they close it first).
+  if (await restoreHold(db)) { log('warn', 'operation_held', { kind: ctx.op.kind, operationId: ctx.op.id }); return; }
   ctx.log = log; // for the steps that have something to say besides their outcome
   await db.query("UPDATE operations SET status = 'running', started_at = COALESCE(started_at, now()), attempts = attempts + 1, updated_at = now() WHERE id = $1", [ctx.op.id]);
   try {
     // A cancel is taken here only where nothing can be under way: a build (rolled back below, after its clone ends) and an
     // operation that has not begun. One resumed mid-step goes on to wait for its task; its own steps stop before the next.
-    await guard(db, ctx.op, ctx.op.kind === 'create' || !ctx.op.step || ['queued', 'awaiting_payment'].includes(ctx.op.step));
+    // The deadline likewise: with a task id stored (a restart or a retry during the wait) the task is waited for first.
+    await guard(db, ctx.op, ctx.op.kind === 'create' || !ctx.op.step || ['queued', 'awaiting_payment'].includes(ctx.op.step), !ctx.op.provider_task_id);
     await kinds[ctx.op.kind](db, ctx);
     await db.query("UPDATE operations SET status = 'succeeded', step = 'done', finished_at = now(), error_code = NULL, updated_at = now() WHERE id = $1", [ctx.op.id]);
     log('info', 'operation_succeeded', { kind: ctx.op.kind, operationId: ctx.op.id });
@@ -642,44 +672,25 @@ export async function processOperation(db, job, log, notify = async () => {}, rd
     else if (ctx.op.kind.startsWith('snapshot_')) await notify('server.snapshot', [ctx.s.owner_id], { ...d, snapshot: ctx.op.params.name ?? '' });
     else await notify('server.power', [ctx.s.owner_id], d);
   } catch (err) {
-    const code = err.code ?? 'INTERNAL_ERROR';
     const last = err.permanent || job.attemptsMade + 1 >= (job.opts.attempts ?? 1);
+    // The last attempt ended while it waited for a task it had issued (the wait's hard limit, or the adapter could not be
+    // asked any more): what the task did, or still does, is not known. The operation ends as OUTCOME_UNKNOWN and nothing
+    // is undone: the price, the invoice and the tracking rows stay as the operation wrote them and the task id stays
+    // stored (a staff retry reads it instead of issuing the step again). Staff get the usual notice; a person decides.
+    const unknown = last && !!ctx.waiting;
+    const code = unknown ? 'OUTCOME_UNKNOWN' : err.code ?? 'INTERNAL_ERROR';
+    const detail = String((unknown && err.code !== 'OUTCOME_UNKNOWN' ? `${err.code ?? 'INTERNAL_ERROR'} while waiting for the platform task: ` : '') + (err.detail ?? '')).slice(0, 500);
     log(last ? 'error' : 'warn', 'operation_failed', { kind: ctx.op.kind, operationId: ctx.op.id, code, final: last });
     if (!last) {
-      await db.query("UPDATE operations SET status = 'pending', error_code = $2, error_detail = $3, updated_at = now() WHERE id = $1", [ctx.op.id, code, String(err.detail ?? '').slice(0, 500)]);
+      await db.query("UPDATE operations SET status = 'pending', error_code = $2, error_detail = $3, updated_at = now() WHERE id = $1", [ctx.op.id, code, detail]);
       throw err; // BullMQ retries with exponential backoff
     }
     let status = 'failed';
     if (code === 'CANCELLED' && ctx.op.kind === 'create') status = (await rollbackCreate(db, ctx)) ? 'cancelled' : 'failed';
     await db.query("UPDATE operations SET status = $2, error_code = $3, error_detail = $4, finished_at = now(), updated_at = now() WHERE id = $1",
-      [ctx.op.id, status, code, String(err.detail ?? '').slice(0, 500)]);
+      [ctx.op.id, status, code, detail]);
     if ((ctx.op.kind === 'create' || ctx.op.kind === 'reinstall') && status === 'failed') await db.query("UPDATE servers SET state = 'error', error_code = $2, updated_at = now() WHERE id = $1 AND state <> 'deleted'", [ctx.s.id, code]);
-    // A restore or resize refused after the server was stopped: it is started again as it was (only now, at the end:
-    // between retries it stays off, so the step can be issued again).
-    if (['backup_restore', 'resize'].includes(ctx.op.kind) && status === 'failed' && ctx.op.params.powerOn) await adapter('/v1/vm/power', { ...ctx.target, vm: ctx.s.vm_moref, action: 'on' }).catch(() => undefined);
-    if (ctx.op.kind === 'nic_add' && status === 'failed') await db.query("UPDATE private_network_members SET status = 'failed' WHERE network_id = $1 AND server_id = $2", [ctx.op.params.networkId, ctx.s.id]);
-    if (ctx.op.kind === 'nic_remove' && status === 'failed') await db.query("UPDATE private_network_members SET status = 'joined' WHERE network_id = $1 AND server_id = $2", [ctx.op.params.networkId, ctx.s.id]);
-    if (ctx.op.kind === 'disk_add' && status === 'failed') await db.query("UPDATE server_disks SET status = 'failed' WHERE id = $1", [ctx.op.params.diskId]);
-    if (ctx.op.kind === 'disk_remove' && status === 'failed') await db.query("UPDATE server_disks SET status = 'ready' WHERE id = $1", [ctx.op.params.diskId]);
-    if (ctx.op.kind === 'backup_create' && status === 'failed') {
-      await db.query("UPDATE backups SET status = 'failed', error_code = $2, finished_at = now() WHERE id = $1", [ctx.op.params.backupId, code]);
-      const left = await snapshotNamed(ctx, `lightning-backup ${ctx.op.params.backupId}`).catch(() => null);
-      if (left) await adapter('/v1/vm/snapshot', { ...ctx.target, vm: ctx.s.vm_moref, action: 'remove', snapshot: left }).catch(() => undefined);
-    }
-    // A resize that did not happen: the old price again, and its unpaid invoice withdrawn (a paid one is left to staff, told below).
-    // Read again: the API writes the invoice id after queueing (the copy from the job's start may lack it), and the step
-    // tells whether the VM was changed after all ("on": only starting it failed; the new price and its invoice stand).
-    if (ctx.op.kind === 'resize' && status === 'failed') {
-      const { rows: [now] } = await db.query('SELECT step, params FROM operations WHERE id = $1', [ctx.op.id]);
-      const p = now?.params ?? ctx.op.params, f = p.from ?? {};
-      if (now?.step !== 'on') {
-        // Everything the API changed with the price, as far as "from" carries it (an absent field is left alone; a null allowance is "unlimited").
-        await db.query(`UPDATE servers SET price_monthly = $2, package_id = $3, traffic_gb = CASE WHEN $4 THEN $5::int ELSE traffic_gb END,
-          price_hourly = CASE WHEN $6 THEN $7::numeric ELSE price_hourly END, updated_at = now() WHERE id = $1`,
-          [ctx.s.id, f.priceMonthly ?? ctx.s.price_monthly, f.packageId ?? null, 'trafficGb' in f, f.trafficGb ?? null, f.priceHourly != null, f.priceHourly ?? null]);
-        if (p.invoiceId) await db.query("UPDATE invoices SET status = 'cancelled', cancelled_at = now() WHERE id = $1 AND status = 'unpaid' AND paid_total = 0", [p.invoiceId]);
-      }
-    }
+    if (!unknown) await undo(db, ctx, status, code);
     if (ctx.op.kind === 'delete') await db.query("UPDATE servers SET state = 'error', error_code = $2, updated_at = now() WHERE id = $1 AND state = 'deleting'", [ctx.s.id, code]);
     if (status === 'failed') {
       const { rows: [o] } = await db.query('SELECT email FROM users WHERE id = $1', [ctx.s.owner_id]).catch(() => ({ rows: [] }));
@@ -691,9 +702,41 @@ export async function processOperation(db, job, log, notify = async () => {}, rd
   }
 }
 
+// What a finally failed operation puts back, per kind: it did not happen. Not called when the outcome is unknown.
+async function undo(db, ctx, status, code) {
+  // A restore or resize refused after the server was stopped: it is started again as it was (only now, at the end:
+  // between retries it stays off, so the step can be issued again).
+  if (['backup_restore', 'resize'].includes(ctx.op.kind) && status === 'failed' && ctx.op.params.powerOn) await adapter('/v1/vm/power', { ...ctx.target, vm: ctx.s.vm_moref, expectName: ctx.vmName, action: 'on' }).catch(() => undefined);
+  if (ctx.op.kind === 'nic_add' && status === 'failed') await db.query("UPDATE private_network_members SET status = 'failed' WHERE network_id = $1 AND server_id = $2", [ctx.op.params.networkId, ctx.s.id]);
+  if (ctx.op.kind === 'nic_remove' && status === 'failed') await db.query("UPDATE private_network_members SET status = 'joined' WHERE network_id = $1 AND server_id = $2", [ctx.op.params.networkId, ctx.s.id]);
+  if (ctx.op.kind === 'disk_add' && status === 'failed') await db.query("UPDATE server_disks SET status = 'failed' WHERE id = $1", [ctx.op.params.diskId]);
+  if (ctx.op.kind === 'disk_remove' && status === 'failed') await db.query("UPDATE server_disks SET status = 'ready' WHERE id = $1", [ctx.op.params.diskId]);
+  if (ctx.op.kind === 'backup_create' && status === 'failed') {
+    await db.query("UPDATE backups SET status = 'failed', error_code = $2, finished_at = now() WHERE id = $1", [ctx.op.params.backupId, code]);
+    const left = await snapshotNamed(ctx, `lightning-backup ${ctx.op.params.backupId}`).catch(() => null);
+    if (left) await adapter('/v1/vm/snapshot', { ...ctx.target, vm: ctx.s.vm_moref, expectName: ctx.vmName, action: 'remove', snapshot: left }).catch(() => undefined);
+  }
+  // A resize that did not happen: the old price again, and its unpaid invoice withdrawn (a paid one is left to staff, told below).
+  // Read again: the API writes the invoice id after queueing (the copy from the job's start may lack it), and the step
+  // tells whether the VM was changed after all ("on": only starting it failed; the new price and its invoice stand).
+  if (ctx.op.kind === 'resize' && status === 'failed') {
+    const { rows: [now] } = await db.query('SELECT step, params FROM operations WHERE id = $1', [ctx.op.id]);
+    const p = now?.params ?? ctx.op.params, f = p.from ?? {};
+    if (now?.step !== 'on') {
+      // Everything the API changed with the price, as far as "from" carries it (an absent field is left alone; a null allowance is "unlimited").
+      await db.query(`UPDATE servers SET price_monthly = $2, package_id = $3, traffic_gb = CASE WHEN $4 THEN $5::int ELSE traffic_gb END,
+        price_hourly = CASE WHEN $6 THEN $7::numeric ELSE price_hourly END, updated_at = now() WHERE id = $1`,
+        [ctx.s.id, f.priceMonthly ?? ctx.s.price_monthly, f.packageId ?? null, 'trafficGb' in f, f.trafficGb ?? null, f.priceHourly != null, f.priceHourly ?? null]);
+      if (p.invoiceId) await db.query("UPDATE invoices SET status = 'cancelled', cancelled_at = now() WHERE id = $1 AND status = 'unpaid' AND paid_total = 0", [p.invoiceId]);
+    }
+  }
+}
+
 // Compares the platform with VMware: missing VMs, unknown platform-named VMs, power state drift.
 // It reports; it never deletes anything on its own.
 export async function reconcile(db, log) {
+  // Restored from an older backup: the findings are what staff review; the server rows are left as they are.
+  const held = await restoreHold(db);
   const { rows: conns } = await db.query("SELECT DISTINCT c.* FROM vmware_connections c JOIN resource_pools p ON p.connection_id = c.id WHERE c.kind IN ('vcenter', 'proxmox', 'xcpng', 'ovirt', 'hyperv', 'libvirt', 'incus')");
   for (const c of conns) {
     const target = connectionTarget(c);
@@ -706,12 +749,12 @@ export async function reconcile(db, log) {
     }
     await db.query("UPDATE vmware_connections SET status = 'ok', last_error_code = NULL WHERE id = $1 AND status <> 'ok'", [c.id]);
     const byName = new Map(vms.map((v) => [v.name, v]));
-    const { rows: servers } = await db.query(`SELECT s.id, s.state, s.power_state FROM servers s JOIN resource_pools p ON p.id = s.pool_id
+    const { rows: servers } = await db.query(`SELECT s.id, s.state, s.power_state, s.vm_moref FROM servers s JOIN resource_pools p ON p.id = s.pool_id
       WHERE p.connection_id = $1 AND s.state IN ('ready', 'error', 'missing') AND s.vm_moref IS NOT NULL`, [c.id]);
     const seen = new Set();
     const finding = (kind, serverId, vm, detail) => db.query(`INSERT INTO reconciliation_findings (connection_id, kind, server_id, vm_moref, detail) VALUES ($1, $2, $3, $4, $5)
       ON CONFLICT (connection_id, kind, COALESCE(server_id::text, vm_moref)) WHERE resolved_at IS NULL DO UPDATE SET last_seen = now(), detail = reconciliation_findings.detail || EXCLUDED.detail`, [c.id, kind, serverId, vm, detail]);
-    const missing = [], drifted = [], orphans = []; // what this run still sees wrong; every other open finding of the connection is over
+    const missing = [], drifted = [], orphans = [], moved = []; // what this run still sees wrong; every other open finding of the connection is over
     for (const s of servers) {
       const vm = byName.get(`lvm-${s.id}`);
       seen.add(`lvm-${s.id}`);
@@ -719,17 +762,26 @@ export async function reconcile(db, log) {
         // The state it had is kept with the finding (later runs see "missing" and add nothing), for when the VM is back.
         missing.push(s.id);
         await finding('vm_missing', s.id, null, s.state === 'missing' ? {} : { was: s.state });
-        await db.query("UPDATE servers SET state = 'missing', power_state = 'unknown', updated_at = now() WHERE id = $1", [s.id]);
+        if (!held) await db.query("UPDATE servers SET state = 'missing', power_state = 'unknown', updated_at = now() WHERE id = $1", [s.id]);
         continue;
+      }
+      // Listed under its name with another id than the row has (removed and brought back outside the panel, or the
+      // panel's database is older than a reinstall): the row takes the id of the VM that carries the server's name,
+      // before the server counts as ready again. The old id may be another VM's by now (Proxmox hands numbers out
+      // again); every request names the expected VM (expectName), so the adapter refuses it until this is done.
+      if (vm.moref && vm.moref !== s.vm_moref) {
+        moved.push(s.id);
+        await finding('vm_id_changed', s.id, vm.moref, { recorded: s.vm_moref, actual: vm.moref });
+        if (!held) await db.query('UPDATE servers SET vm_moref = $2, updated_at = now() WHERE id = $1 AND vm_moref IS NOT DISTINCT FROM $3', [s.id, vm.moref, s.vm_moref]);
       }
       // Back again: the state from before it went missing, so a server that had failed is not promoted to ready.
       // (Findings from before "was" was recorded: an error code still on the row says it had failed.)
-      if (s.state === 'missing') await db.query(`UPDATE servers s SET state = COALESCE((SELECT f.detail->>'was' FROM reconciliation_findings f WHERE f.server_id = s.id AND f.kind = 'vm_missing'
+      if (s.state === 'missing' && !held) await db.query(`UPDATE servers s SET state = COALESCE((SELECT f.detail->>'was' FROM reconciliation_findings f WHERE f.server_id = s.id AND f.kind = 'vm_missing'
         AND f.resolved_at IS NULL AND f.detail->>'was' IN ('ready', 'error') LIMIT 1), CASE WHEN s.error_code IS NULL THEN 'ready' ELSE 'error' END), updated_at = now() WHERE s.id = $1`, [s.id]);
       if (vm.powerState !== s.power_state) {
         drifted.push(s.id);
         await finding('power_drift', s.id, vm.moref, { recorded: s.power_state, actual: vm.powerState });
-        await db.query('UPDATE servers SET power_state = $2, updated_at = now() WHERE id = $1', [s.id, vm.powerState]);
+        if (!held) await db.query('UPDATE servers SET power_state = $2, updated_at = now() WHERE id = $1', [s.id, vm.powerState]);
       }
     }
     const { rows: live } = await db.query("SELECT 'lvm-' || id AS name FROM servers WHERE state <> 'deleted'");
@@ -737,10 +789,10 @@ export async function reconcile(db, log) {
     // Personal images' templates (lvm-img-…) are the panel's too, not stray VMs.
     for (const v of vms) if (!known.has(v.name) && !v.name.startsWith('lvm-img-')) { orphans.push(v.moref); await finding('orphan_vm', null, v.moref, { name: v.name }); }
     // Findings that no longer hold are closed (the admin's count is of open ones): a VM that is back, a power state that
-    // matches again (the row above took the platform's value, so the next run closes it), a stray VM no longer listed,
-    // and those of servers that left the list (deleted).
+    // matches again (the row above took the platform's value, so the next run closes it), likewise a VM id that changed,
+    // a stray VM no longer listed, and those of servers that left the list (deleted).
     await db.query(`UPDATE reconciliation_findings SET resolved_at = now() WHERE connection_id = $1 AND resolved_at IS NULL AND ((kind = 'vm_missing' AND server_id <> ALL($2::uuid[]))
-      OR (kind = 'power_drift' AND server_id <> ALL($3::uuid[])) OR (kind = 'orphan_vm' AND vm_moref <> ALL($4::text[])))`, [c.id, missing, drifted, orphans]);
+      OR (kind = 'power_drift' AND server_id <> ALL($3::uuid[])) OR (kind = 'orphan_vm' AND vm_moref <> ALL($4::text[])) OR (kind = 'vm_id_changed' AND server_id <> ALL($5::uuid[])))`, [c.id, missing, drifted, orphans, moved]);
     log('info', 'reconcile_done', { connectionId: c.id, vms: vms.length, servers: servers.length });
   }
 }

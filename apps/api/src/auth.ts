@@ -6,10 +6,10 @@ import { countRequest } from './api-rate';
 import { getAuth } from './better-auth';
 import { pool } from './db';
 import { apiError } from './errors';
-import { customerLevel, limitsOf, permissionsOf, splitRoles } from './permissions';
+import { can, covers, customerLevel, limitsOf, permissionsOf, permissionsOfMany, splitRoles } from './permissions';
 import { ipAllowed, narrowedTokenMay } from './role-limits';
 import { getSettings } from './settings-store';
-import { touch } from './presence';
+import { endSession, touch } from './presence';
 
 // roles: the role keys; permissions: the effective set ('*' for administrators). impersonatedBy: the staff
 // member signed in as this user, if any.
@@ -69,6 +69,21 @@ async function tokenSession(req: FastifyRequest, token: string): Promise<{ user:
     twoFactorRequired: false, phoneNumber: t.phone_number ?? null, phoneNumberVerified: !!t.phone_number_verified }, token: '', id: `token:${t.id}` };
 }
 
+// Whether the staff member behind an impersonation session may still act as this person: the account exists, is not
+// banned or disabled, and holds users.impersonate over the person's permissions (what starting it requires). A yes is
+// kept for a few seconds; the session is also ended where that access is taken away (better-auth.ts endImpersonations).
+const stillMay = new Map<string, number>();
+async function impersonatorMay(by: string, userId: string, target: string[]) {
+  const key = `${by}:${userId}`;
+  if ((stillMay.get(key) ?? 0) > Date.now()) return true;
+  const [staff] = /^[0-9a-f-]{36}$/i.test(by) ? await permissionsOfMany([by]).catch(() => []) : [];
+  const ok = !!staff && can(staff.permissions, 'users.impersonate') && covers(staff.permissions, target);
+  if (!ok) { stillMay.delete(key); return false; }
+  if (stillMay.size > 5000) stillMay.clear();
+  stillMay.set(key, Date.now() + 5000);
+  return true;
+}
+
 export async function currentSession(req: FastifyRequest): Promise<{ user: User; token: string; id: string } | null> {
   const bearer = req.headers.cookie ? null : /^Bearer (lvm_[\w-]{20,100})$/.exec(req.headers.authorization ?? '')?.[1];
   if (bearer) return tokenSession(req, bearer);
@@ -79,6 +94,12 @@ export async function currentSession(req: FastifyRequest): Promise<{ user: User;
   if (u.disabledAt || u.banned) return null;
   const impersonatedBy = (s.session as { impersonatedBy?: string | null }).impersonatedBy ?? null;
   const permissions = await permissionsOf(u.id, u.role ?? null);
+  // Staff signed in as this person: for an hour from its start (whatever the browser sends; the library would let
+  // it slide to the normal length), and only while that staff member could still start it.
+  if (impersonatedBy && (Date.now() - new Date(s.session.createdAt).getTime() > 3_600_000 || !(await impersonatorMay(impersonatedBy, u.id, permissions)))) {
+    await endSession(u.id, s.session.id).catch(() => undefined);
+    return null;
+  }
   // The role's sign-in rules: only from its addresses, and a session ends after its length (it is removed).
   const limits = limitsOf(u.role ?? null);
   if (!ipAllowed(limits.allowedIps, req.ip)) return null;

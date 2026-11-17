@@ -4,6 +4,7 @@
 import { pool, redis } from './db';
 import { deviceOf } from './device';
 import { sha256 } from './security';
+import { revokeConsoles } from './console-revoke';
 
 const TTL = 70; // seconds: a little over two pings (25 s), so a closed tab drops out within about a minute
 
@@ -43,7 +44,7 @@ export async function sessionsOf(userId: string, currentId?: string) {
 export async function endSession(userId: string, sessionId: string) {
   const { rows: [s] } = await pool.query('DELETE FROM auth_sessions WHERE id = $1 AND user_id = $2 RETURNING token', [sessionId, userId]);
   if (!s) return false;
-  await redis.publish('console:revoke', JSON.stringify({ authHash: sha256(s.token).toString('hex') })).catch(() => undefined);
+  await revokeConsoles({ authHash: sha256(s.token).toString('hex') });
   await redis.del(`online:s:${sessionId}`).catch(() => undefined);
   return true;
 }

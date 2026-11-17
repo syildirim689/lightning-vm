@@ -142,6 +142,9 @@ export class DisputesAdminController {
     const remedies = paid ? ['refund', 'balance'] : decision === 'accept' && toCents(d.invoice_paid) === 0 && cents >= toCents(d.invoice_total) ? ['cancel', 'balance'] : ['balance'];
     const remedy = decision === 'reject' ? null : remedies.includes(String(body?.remedy)) ? String(body.remedy) : (fields.remedy = 'INVALID_VALUE', null);
     if (Object.keys(fields).length) throw apiError(400, 'VALIDATION_FAILED', 'Invalid input', fields);
+    // An unpaid renewal follows its server's price also while in dispute (repriceOpenRenewal), so the invoice may be for
+    // less by now than the amount contested: never more than is left of it goes back.
+    cents = Math.min(cents, toCents(d.invoice_total) - toCents(d.invoice_refunded ?? '0'));
 
     if (remedy === 'refund' || (remedy === 'balance' && paid)) await refundInvoice(req, d.invoice_id, { amount: fromCents(cents), toBalance: remedy === 'balance', reason: `İtiraz / Dispute ${d.number}` });
     else if (remedy === 'balance') await pool.query("INSERT INTO balance_entries (owner_id, amount, currency, reason, invoice_id, note, created_by) VALUES ($1, $2, $3, 'adjustment', $4, $5, $6)",

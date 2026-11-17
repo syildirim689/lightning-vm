@@ -151,3 +151,37 @@ test('a payment is failed only on the provider\'s word: unfinished, unanswered o
   for (const code of ['NEEDS_CONFIRMATION', 'AMOUNT_MISMATCH', 'FRAUD_REVIEW']) assert.deepEqual([finalResult({ ok: false, code }), needsReview({ ok: false, code })], [false, true], code);
   for (const r of [{ ok: true, ref: 'x' }, { ok: false, code: 'CARD_DECLINED' }, { ok: false, code: 'PENDING' }]) assert.equal(needsReview(r), false);
 });
+
+test('Param: the review note names the payment and keeps the instruction whatever the form says; under review is told apart', async () => {
+  const { gateways, underReview, reviewCodes } = await import('../dist/billing-gateways.js');
+  assert.equal(gateways.param.unsigned, true);
+  for (const id of ['iyzico', 'paytr', 'stripe', 'craftgate', 'sandbox']) assert.equal(gateways[id].unsigned, undefined, id);
+  assert.deepEqual([...reviewCodes], ['NEEDS_CONFIRMATION', 'AMOUNT_MISMATCH', 'FRAUD_REVIEW']);
+  assert.deepEqual(['NEEDS_CONFIRMATION', 'AMOUNT_MISMATCH', 'FRAUD_REVIEW', 'CARD_DECLINED', '', null, undefined].map(underReview), [true, true, true, false, false, false, false]);
+  const creds = { CLIENT_CODE: '10738', GUID: 'g' };
+  const big = { ...payment, amount: '1234567.89' };
+  const form = (b) => {
+    const f = { TURKPOS_RETVAL_Sonuc: '1', TURKPOS_RETVAL_GUID: 'g', TURKPOS_RETVAL_Dekont_ID: '55', TURKPOS_RETVAL_Tahsilat_Tutari: '1.234.567,89', TURKPOS_RETVAL_Siparis_ID: 'S1',
+      TURKPOS_RETVAL_Islem_ID: payment.id.replace(/-/g, ''), ...b };
+    return { ...f, TURKPOS_RETVAL_Hash: createHash('sha1').update(Buffer.from('10738' + f.TURKPOS_RETVAL_GUID + f.TURKPOS_RETVAL_Dekont_ID + f.TURKPOS_RETVAL_Tahsilat_Tutari
+      + f.TURKPOS_RETVAL_Siparis_ID + f.TURKPOS_RETVAL_Islem_ID, 'latin1')).digest('base64') };
+  };
+  const verify = (b, p = big) => param.verify({ query: {}, body: form(b), payment: p }, creds, 'live');
+  const lead = `Param Islem_ID ${payment.id.replace(/-/g, '')}, 1234567,89 TL: `;
+  const instruction = 'Confirm in the Param panel, then mark the invoice paid.';
+  // The longest fields a form can carry: each is cut, so the whole note fits what is stored (300) with the instruction in it.
+  const long = await verify({ TURKPOS_RETVAL_Siparis_ID: 'S'.repeat(500), TURKPOS_RETVAL_Dekont_ID: 'D'.repeat(500), TURKPOS_RETVAL_Tahsilat_Tutari: `${'9'.repeat(40)},00` });
+  assert.equal(long.code, 'NEEDS_CONFIRMATION');
+  assert.ok(long.message.length <= 300, String(long.message.length));
+  assert.ok(long.message.startsWith(lead) && long.message.includes(instruction) && long.message.endsWith(' TL.'), long.message);
+  assert.ok(long.message.includes(`order ${'S'.repeat(24)}, dekont ${'D'.repeat(24)}, ${'9'.repeat(16)} TL.`), long.message);
+  // Words posted in a field do not read as the panel's own: only letters, digits and . , - _ are kept.
+  const worded = await verify({ TURKPOS_RETVAL_Siparis_ID: 'OK. Paid: mark it!', TURKPOS_RETVAL_Dekont_ID: '' });
+  assert.ok(worded.message.endsWith('sipariş/order OK.Paidmarkit, dekont -, 1.234.567,89 TL.'), worded.message);
+  // A smaller amount gets the same note under its own code; a declined form's text is cut too.
+  const small = await verify({ TURKPOS_RETVAL_Tahsilat_Tutari: '1,00' });
+  assert.equal(small.code, 'AMOUNT_MISMATCH');
+  assert.ok(small.message.startsWith(lead) && small.message.includes(instruction) && small.message.endsWith(', 1,00 TL.'), small.message);
+  const declined = await verify({ TURKPOS_RETVAL_Sonuc: '-1', TURKPOS_RETVAL_Sonuc_Str: 'x'.repeat(1000) });
+  assert.deepEqual([declined.code, declined.message.length], ['CARD_DECLINED', 120]);
+});

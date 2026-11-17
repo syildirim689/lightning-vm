@@ -54,7 +54,8 @@ export default {
   'GET /admin/host/logs': {
     tag: 'admin-system',
     summary: { tr: 'Bir servisin ya da sistem günlüğünün son satırlarını verir.', en: 'Returns the last lines of a service\'s log or of the system journal.' },
-    details: { tr: 'system.update yetkisi gerekir. Satırlar ajanın son anlık görüntüsünden gelir.', en: 'Needs system.update. The lines come from the agent\'s last snapshot.' },
+    details: { tr: 'Yalnızca yöneticiler (tüm yetkiler) okuyabilir. Satırlar ajanın son anlık görüntüsünden gelir; adreslerdeki gizli değerler (sıfırlama ve giriş bağlantısı belirteçleri) maskelenir.',
+      en: 'Administrators (every permission) only. The lines come from the agent\'s last snapshot; secrets carried in URLs (reset and sign-in link tokens) are masked.' },
     query: [
       { name: 'source', type: 'string', required: true, text: { tr: 'Servis adı (api, web, postgres ...) ya da `system`.', en: 'A service name (api, web, postgres ...) or `system`.' } },
       { name: 'lines', type: 'integer', text: { tr: 'Satır sayısı, 10-300. Varsayılan 200.', en: 'How many lines, 10-300. Default 200.' } },

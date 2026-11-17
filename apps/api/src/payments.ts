@@ -8,6 +8,7 @@ import { apiError } from './errors';
 import { audit, type AuthedRequest } from './auth';
 import { Can, PermissionGuard } from './rbac';
 import { decryptSecret, encryptSecret } from './secrets';
+import { logEvent } from './log';
 import { checkCredentials, providers, type CheckResult, type Mode } from './payment-providers';
 
 type Input = Record<string, unknown>;
@@ -31,14 +32,21 @@ function provider(id: string) {
   return p;
 }
 
+// Where a mode's credentials are sent: the endpoint when one is given, else the provider's own host.
+const destination = (endpoint: unknown, fallback: string) => ((typeof endpoint === 'string' && endpoint.trim()) || fallback).replace(/\/+$/, '').toLowerCase();
+
 // Validates one mode's form: empty secrets keep the stored value; the optional endpoint overrides the host.
 function readCreds(id: string, input: unknown, saved: Creds, mode: Mode, fields: Record<string, string>): Creds {
   const p = provider(id);
   const values = (input ?? {}) as Input;
   const out: Creds = {};
+  // Stored secrets are for the address they were entered for: with another endpoint in the form they are typed again
+  // (otherwise a save, or a test, would send them to whatever host the form names). The same rule as settings.ts.
+  const moved = !!values.endpoint && destination(values.endpoint, p.hosts[mode]) !== destination(saved.endpoint, p.hosts[mode]);
   for (const f of p.fields) {
     const v = typeof values[f.key] === 'string' ? (values[f.key] as string).trim() : '';
-    out[f.key] = v || (f.secret ? saved[f.key] ?? '' : '');
+    out[f.key] = v || (f.secret && !moved ? saved[f.key] ?? '' : '');
+    if (f.secret && moved && !v && saved[f.key]) fields[`${mode}.${f.key}`] = 'REQUIRED';
     if (!out[f.key] && !f.optional) fields[`${mode}.${f.key}`] = 'REQUIRED';
     if (out[f.key].length > 2000) fields[`${mode}.${f.key}`] = 'INVALID_VALUE';
     if (f.options && out[f.key] && !f.options.includes(out[f.key])) fields[`${mode}.${f.key}`] = 'INVALID_VALUE';
@@ -53,6 +61,12 @@ function readCreds(id: string, input: unknown, saved: Creds, mode: Mode, fields:
   }
   return out;
 }
+// What the caller of a test is told: the outcome and the class of the HTTP answer, in fixed words. The remote text stays
+// in the server's log: with an endpoint in the form, the answer is that of whatever host staff named.
+const said: Record<CheckResult['status'], string> = { ok: 'The provider accepted the credentials', rejected: 'The provider rejected the credentials',
+  inconclusive: 'The provider answered, but not in a way that confirms the credentials', network: 'The provider could not be reached',
+  unverifiable: 'This provider offers nothing to check the credentials against' };
+const brief = (r: CheckResult): CheckResult => ({ status: r.status, message: `${said[r.status]}${r.httpStatus ? ` (HTTP ${Math.floor(r.httpStatus / 100)}xx)` : ''}`, unverified: r.unverified });
 const same = (a: Creds, b: Creds) => JSON.stringify(Object.entries(a).sort()) === JSON.stringify(Object.entries(b).sort());
 
 // A provider that goes live takes no more test money: test payments still open are closed (their test card would
@@ -145,7 +159,9 @@ export class PaymentsController {
     const fields: Record<string, string> = {};
     const creds = readCreds(id, body?.credentials ?? saved, saved, mode, fields);
     if (Object.keys(fields).length) throw apiError(400, 'VALIDATION_FAILED', 'Invalid input', fields);
-    const result = await checkCredentials(id, creds, mode);
+    const full = await checkCredentials(id, creds, mode);
+    if (full.message) logEvent('info', 'payment_test', { provider: id, mode, status: full.status, httpStatus: full.httpStatus, detail: full.message.slice(0, 200) });
+    const result = brief(full);
     const recorded = !!row && same(creds, saved);
     if (recorded) {
       await pool.query(`UPDATE payment_gateways SET ${mode}_check = $2, updated_at = now() WHERE id = $1`,

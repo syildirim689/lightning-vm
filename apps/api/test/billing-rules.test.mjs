@@ -73,6 +73,19 @@ test('a resize mid-period charges the increase for the days left; a decrease or 
   assert.equal(r.prorate(1000, '2026-09-20', '2026-10-01', '2026-10-31'), 1000); // before the period started: never more than the whole difference
 });
 
+test('a period of several months is that many months of the price: an increase is charged for all of them, for the days left', () => {
+  assert.deepEqual([['2026-11-16', '2026-12-16'], ['2026-01-31', '2026-02-28'], ['2026-02-28', '2026-03-28'], ['2026-11-16', '2027-02-16'], ['2026-11-30', '2027-02-28'],
+    ['2026-11-16', '2027-05-16'], ['2026-11-16', '2027-11-16'], ['2028-02-29', '2029-02-28']].map(([a, b]) => r.periodMonths(a, b)), [1, 1, 1, 3, 3, 6, 12, 12]);
+  // A period staff moved by some days is still its months; never less than one.
+  assert.deepEqual([r.periodMonths('2026-11-16', '2026-12-26'), r.periodMonths('2026-11-16', '2026-11-20'), r.periodMonths('2026-11-16', '2026-11-16'), r.periodMonths('2026-11-16', '2027-11-30')], [1, 1, 1, 12]);
+  // 100 -> 500 a month, one day into a year: 12 x 400 for 364 of 365 days (one month's difference would be 398.90).
+  const months = r.periodMonths('2026-11-16', '2027-11-16');
+  assert.equal(r.prorate(40000 * months, '2026-11-17', '2026-11-16', '2027-11-16'), 478685);
+  assert.equal(r.prorate(40000, '2026-11-17', '2026-11-16', '2027-11-16'), 39890);
+  // A monthly period is unchanged.
+  assert.equal(r.prorate(40000 * r.periodMonths('2026-11-16', '2026-12-16'), '2026-11-17', '2026-11-16', '2026-12-16'), 38667);
+});
+
 test('a coupon takes percent or a fixed amount off, never below zero', () => {
   assert.equal(r.couponPrice(10000, 'percent', 2500), 7500);
   assert.equal(r.couponPrice(999, 'percent', 5000), 499); // half of 9.99, rounded

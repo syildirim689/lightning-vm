@@ -25,11 +25,27 @@ export async function chatReady() { return usableApps(await getSettings('chat'))
 // A panel path (/servers/…) as a full URL on the address set in setup; null when none is set.
 // The panel's address for links in mail, chat and push: the domain the host agent serves (it follows a domain
 // change made in the panel), else the address given in the setup wizard.
+// Before those, the operator's own word (PANEL_PUBLIC_URL in .env: the address behind another proxy, where the panel
+// serves ":80" and knows no name); after them the installer's PANEL_SITE when the agent's record is missing.
+const originOf = (v: string | undefined) => { try { const u = new URL(v ?? ''); return /^https?:$/.test(u.protocol) ? u.origin : null; } catch { return null; } };
+const hostName = /^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/i;
 export async function panelBase() {
+  const fixed = originOf(process.env.PANEL_PUBLIC_URL);
+  if (fixed) return fixed;
   const s = hostSettings();
   if (s.site && !s.site.startsWith(':')) return `${s.tlsMode === 'none' ? 'http' : 'https'}://${s.site}`;
   const { rows: [r] } = await pool.query("SELECT value FROM settings WHERE key = 'public_url'");
-  return typeof r?.value === 'string' && r.value ? r.value : null;
+  if (typeof r?.value === 'string' && r.value) return r.value;
+  const site = process.env.PANEL_SITE ?? '';
+  return hostName.test(site) ? `${process.env.PANEL_TLS === '1' ? 'https' : 'http'}://${site}` : null;
+}
+// No address is known yet (an install closed by the installer, never by the wizard's access step): the one the first
+// administrator is seen on is kept, so later mail never has to trust the host name of an anonymous request. Only
+// while nothing is stored; a loopback name says nothing about where others reach the panel and is not kept.
+export async function rememberPanelAddress(origin: string) {
+  const o = originOf(origin);
+  if (!o || /^(localhost|.*\.localhost|127(\.\d+){3}|\[::1\])$/i.test(new URL(o).hostname)) return;
+  await pool.query("UPDATE settings SET value = $1, updated_at = now() WHERE key = 'public_url' AND value = 'null'::jsonb", [JSON.stringify(o)]).catch(() => undefined);
 }
 export async function absolute(link: string | null) {
   if (!link || /^https?:\/\//.test(link)) return link;

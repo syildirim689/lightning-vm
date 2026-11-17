@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"strconv"
 	"time"
 
 	"github.com/redis/go-redis/v9"
@@ -15,6 +16,9 @@ import (
 //	<ns>:active                      hash of live sessions, for the admin list
 //	console:events                   stream the worker copies into audit_events
 //	console:revoke                   pub/sub channel the API publishes revocations on
+//	console:revoked:user:<id>        markers the API sets with a revocation (the time in Unix milliseconds, 90 s TTL),
+//	console:revoked:auth:<hash>      for tickets issued before it and not redeemed yet; both gateways read them
+//	console:revoked:all
 type redisStore struct {
 	rdb *redis.Client
 	ns  string
@@ -34,6 +38,31 @@ func (s *redisStore) Consume(ctx context.Context, key string) (*Session, error) 
 	}
 	sess.Key = key
 	return &sess, nil
+}
+
+func (s *redisStore) Revoked(ctx context.Context, sess *Session) (bool, error) {
+	keys := []string{"console:revoked:all"}
+	if sess.UserID != "" {
+		keys = append(keys, "console:revoked:user:"+sess.UserID)
+	}
+	if sess.AuthHash != "" {
+		keys = append(keys, "console:revoked:auth:"+sess.AuthHash)
+	}
+	values, err := s.rdb.MGet(ctx, keys...).Result()
+	if err != nil {
+		return false, err
+	}
+	for _, v := range values {
+		text, ok := v.(string)
+		if !ok {
+			continue // no marker under this key
+		}
+		// A marker that cannot be read as a time counts: it is there because something was revoked.
+		if at, err := strconv.ParseInt(text, 10, 64); err != nil || at >= sess.IssuedAt {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 func (s *redisStore) Active(ctx context.Context, sess *Session, started time.Time) error {

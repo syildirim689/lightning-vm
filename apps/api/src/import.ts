@@ -63,7 +63,7 @@ export class ImportController {
     } finally { client.release(); }
     let disk: number;
     try {
-      disk = (await callAdapter<{ diskGb: number }>('/v1/vm/rename', { ...storedTarget(await connection(rp.connection_id)), vm: vm.moref, name: `lvm-${id}` }, 60_000)).diskGb;
+      disk = (await callAdapter<{ diskGb: number }>('/v1/vm/rename', { ...storedTarget(await connection(rp.connection_id)), vm: vm.moref, name: `lvm-${id}`, expectName: vm.name }, 60_000)).diskGb; // expectName: still the VM the inventory listed under this id
     } catch (err) {
       await pool.query('DELETE FROM servers WHERE id = $1', [id]);
       throw err;

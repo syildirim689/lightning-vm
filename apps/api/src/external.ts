@@ -1,17 +1,19 @@
 // For outside billing systems (the WHMCS and WISECP modules in integrations/): with a staff API token they order,
-// suspend, resize and remove servers for their own customers. A customer is found by e-mail, or created (they set a
-// password with "forgot password"). These servers are billed by that system, never by the panel's own billing: the
-// integration acts for the billing system, so the customer's role and the customer switches do not limit it, and the
-// owner cannot resize such a server or add disks to it in the panel (servers.ts refuseBilledElsewhere).
+// suspend, resize and remove servers for their own customers. A customer is the account this system created for that
+// e-mail, or is created (they set a password with "forgot password"). These servers are billed by that system, never by
+// the panel's own billing: the integration acts for the billing system, so the customer's role, the customer switches
+// and the account's quota do not limit it, and the owner cannot resize such a server or add disks to it in the panel
+// (servers.ts refuseBilledElsewhere), nor order one there while the panel's billing is off.
 // `reference` (the service id there) makes every create idempotent and finds the server again.
-import { Body, Controller, Delete, Get, HttpCode, Param, Post, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, Param, ParseUUIDPipe, Post, Req, UseGuards } from '@nestjs/common';
 import { randomBytes } from 'node:crypto';
 import { audit, type AuthedRequest } from './auth';
 import { getAuth } from './better-auth';
+import { revokeConsoles } from './console';
 import { pool } from './db';
 import { apiError } from './errors';
-import { permissionsOf, splitRoles } from './permissions';
-import { Can, PermissionGuard } from './rbac';
+import { customerLevel, permissionsOf, splitRoles } from './permissions';
+import { assertCovers, Can, PermissionGuard } from './rbac';
 import { fingerprint, sshKeyPattern } from './smart-rules';
 import { ServersController, startOperation } from './servers';
 
@@ -19,7 +21,7 @@ type Input = Record<string, unknown>;
 const servers = new ServersController();
 const refOk = (v: unknown) => typeof v === 'string' && /^[\w-]{1,60}$/.test(v);
 
-// The customer as a request of their own, so quotas, keys and ownership are theirs.
+// The customer as a request of their own, so keys and ownership are theirs (externalBilling: not their role or quota).
 async function asOwner(req: AuthedRequest, ownerId: string): Promise<AuthedRequest> {
   const { rows: [u] } = await pool.query('SELECT id, email, name, role, locale FROM users WHERE id = $1', [ownerId]);
   if (!u) throw apiError(404, 'NOT_FOUND', 'Unknown customer');
@@ -37,28 +39,74 @@ async function byReference(source: string, reference: string) {
 @Controller('admin/external/:source') @UseGuards(PermissionGuard)
 export class ExternalController {
   // The customer by e-mail; created when new (a random password they never see). An existing account gets the order's
-  // server, its console and its root password, so an e-mail match alone is not enough: with open registration or as a
-  // reseller anyone can hold an account for a buyer's address before their first order. Matched are the account this
-  // system created itself, and one whose owner proved the address (e-mail code or link, a provider's verified address, or
-  // staff) and that is neither a reseller's customer, a reseller, nor another billing system's. Anything else is for the
-  // administrator to resolve (verify, rename or remove the account in the panel), not for the order to guess.
+  // server, its console and its root password, so an e-mail match is not enough: with open registration or as a
+  // reseller anyone can hold an account for a buyer's address before their first order. A proven address is not enough
+  // either: proof (a code, a link, staff marking it) says the address was confirmed at some point, not that the sessions,
+  // password, API tokens and passkeys made before it are the buyer's. Matched is only the account this system created
+  // itself (users.external_source; migration 078 marks the ones created before the column). Any other account with the
+  // address is for staff to resolve: hand it to this system (claim below, which removes what its earlier holder could
+  // still use), or rename or remove it in the panel. The order does not guess.
   @Post('customers') @HttpCode(200) @Can('servers.manage_all', 'users.manage')
   async customer(@Req() req: AuthedRequest, @Param('source') source: string, @Body() body: Input) {
     if (!refOk(source)) throw apiError(400, 'VALIDATION_FAILED', 'Invalid input', { reference: 'INVALID_VALUE' });
     const email = typeof body?.email === 'string' ? body.email.trim().toLowerCase() : '';
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254) throw apiError(400, 'VALIDATION_FAILED', 'Invalid input', { email: 'INVALID_EMAIL' });
-    const { rows: [u] } = await pool.query(`SELECT id, external_source = $2 AS own, external_source IS NULL AND email_verified AND reseller_id IS NULL
-      AND NOT EXISTS (SELECT 1 FROM resellers r WHERE r.user_id = users.id) AS proven FROM users WHERE email = $1`, [email, source]);
-    if (u?.own || u?.proven) return { id: u.id, created: false };
+    const { rows: [u] } = await pool.query('SELECT id, external_source IS NOT DISTINCT FROM $2 AS own FROM users WHERE email = $1', [email, source]);
+    if (u?.own) return { id: u.id, created: false };
     if (u) {
       await audit(req, 'external.customer_conflict', 'failure', req.user.id, { target: u.id, source });
-      throw apiError(409, 'CUSTOMER_NEEDS_REVIEW', 'An account with this e-mail exists, but its address was never proven or it belongs to a reseller or another billing system; resolve it in the panel');
+      throw apiError(409, 'CUSTOMER_NEEDS_REVIEW', 'An account with this e-mail exists that this billing system did not create; hand it over or resolve it in the panel');
     }
     const name = typeof body?.name === 'string' ? body.name.trim().slice(0, 80) : '';
     const { user } = await getAuth().api.createUser({ body: { email, password: randomBytes(24).toString('base64url'), name, role: 'user', data: { locale: body?.locale === 'tr' ? 'tr' : 'en' } } });
     await pool.query('UPDATE users SET email_verified = true, external_source = $2 WHERE id = $1', [user.id, source]);
     await audit(req, 'external.customer_created', 'success', req.user.id, { target: user.id, source });
     return { id: user.id, created: true };
+  }
+
+  // Staff hand an existing account to this billing system: the answer to CUSTOMER_NEEDS_REVIEW once they know the
+  // account is to be the buyer's. Whoever held it until now may be somebody who registered the buyer's address, so in
+  // the same transaction everything that person could still use goes: sessions, API tokens, passkeys, linked sign-ins,
+  // the phone number (it signs in by code), webhooks, chat and push connections, saved SSH keys, the password (the buyer
+  // sets one with "forgot password") and two-factor. The account's servers, invoices and tickets stay. Not for staff
+  // accounts, resellers and their customers, or an account of another billing system.
+  @Post('customers/:id/claim') @HttpCode(200) @Can('users.manage')
+  async claim(@Req() req: AuthedRequest, @Param('source') source: string, @Param('id', ParseUUIDPipe) id: string) {
+    if (!refOk(source)) throw apiError(400, 'VALIDATION_FAILED', 'Invalid input', { reference: 'INVALID_VALUE' });
+    if (id === req.user.id) throw apiError(400, 'CANNOT_CHANGE_OWN_ACCOUNT', 'Not on your own account');
+    await assertCovers(req, id);
+    const client = await pool.connect();
+    let removed: Record<string, number>;
+    try {
+      await client.query('BEGIN');
+      const { rows: [u] } = await client.query(`SELECT id, role, external_source, reseller_id, EXISTS (SELECT 1 FROM resellers r WHERE r.user_id = users.id) AS reseller
+        FROM users WHERE id = $1 FOR UPDATE`, [id]);
+      if (!u) throw apiError(404, 'NOT_FOUND', 'Unknown customer');
+      if (u.reseller_id || u.reseller || (u.external_source && u.external_source !== source) || !(await permissionsOf(id, u.role)).every(customerLevel)) {
+        throw apiError(409, 'CUSTOMER_NEEDS_REVIEW', 'This account is staff, a reseller\'s or another billing system\'s; it cannot be handed over');
+      }
+      const gone = async (name: string, sql: string) => [name, (await client.query(sql, [id])).rowCount ?? 0] as const;
+      removed = Object.fromEntries([
+        await gone('sessions', 'DELETE FROM auth_sessions WHERE user_id = $1'),
+        await gone('apiTokens', 'DELETE FROM api_tokens WHERE user_id = $1'),
+        await gone('passkeys', 'DELETE FROM auth_passkeys WHERE user_id = $1'),
+        await gone('linkedSignIns', "DELETE FROM auth_accounts WHERE user_id = $1 AND provider_id <> 'credential'"),
+        await gone('passwords', "UPDATE auth_accounts SET password = NULL, updated_at = now() WHERE user_id = $1 AND provider_id = 'credential' AND password IS NOT NULL"),
+        await gone('twoFactor', 'DELETE FROM auth_two_factors WHERE user_id = $1'),
+        await gone('webhooks', 'DELETE FROM webhooks WHERE user_id = $1'),
+        await gone('chat', 'DELETE FROM chat_connections WHERE user_id = $1'),
+        await gone('push', 'DELETE FROM push_subscriptions WHERE user_id = $1'),
+        await gone('sshKeys', 'DELETE FROM ssh_keys WHERE owner_id = $1'),
+      ]);
+      await client.query(`UPDATE users SET external_source = $2, email_verified = true, two_factor_enabled = false, phone_number = NULL, phone_number_verified = false, updated_at = now()
+        WHERE id = $1`, [id, source]);
+      await client.query('INSERT INTO audit_events (actor_id, action, outcome, request_id, ip, metadata) VALUES ($1, $2, $3, $4, $5, $6)',
+        [req.user.id, 'external.customer_claimed', 'success', req.id, req.ip, { target: id, source, removed }]);
+      await client.query('COMMIT');
+    } catch (e) { await client.query('ROLLBACK'); throw e; } finally { client.release(); }
+    // What the earlier holder has open now, or holds a ticket for.
+    await revokeConsoles({ userId: id });
+    return { id, source, removed };
   }
 
   // Orders a server for the customer. sshKey: a public key added to their keys (or the ids of keys they have).

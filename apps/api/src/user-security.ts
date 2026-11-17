@@ -5,7 +5,7 @@ import { Body, Controller, Delete, Get, HttpCode, Param, ParseUUIDPipe, Post, Pu
 import { audit, type AuthedRequest } from './auth';
 import { pool } from './db';
 import { apiError } from './errors';
-import { closeConsoles } from './better-auth';
+import { closeConsoles, endImpersonations } from './better-auth';
 import { publishLive } from './live-bus';
 import { dropPush } from './notify';
 import { assertCovers, Can, PermissionGuard } from './rbac';
@@ -54,6 +54,7 @@ export class UserSecurityController {
     // The sessions go below without better-auth (so without its hook): what they had open is closed here, while
     // their tokens can still be read, and the browsers they were in stop receiving the account's notifications.
     await closeConsoles(id);
+    await endImpersonations(id);
     await dropPush(id);
     const client = await pool.connect();
     try {

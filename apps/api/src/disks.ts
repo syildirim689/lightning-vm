@@ -12,7 +12,7 @@ import { pool } from './db';
 import { apiError } from './errors';
 import { Can, PermissionGuard } from './rbac';
 import { checkResellerRoom, discounted, resellerOf } from './reseller';
-import { customerMay, findServer, hashOf, refuseBilledElsewhere, startOperation } from './servers';
+import { customerMay, findServer, hashOf, ownerWrite, refuseBilledElsewhere, repriced, startOperation } from './servers';
 
 export const MAX_EXTRA_DISKS = 4;
 const columns = `id, size_gb AS "sizeGb", price_monthly::text AS "priceMonthly", status, created_at AS "createdAt"`;
@@ -51,7 +51,8 @@ export class DisksController {
     const raw = (Math.round(size * Number(p.extra_disk_price_gb) * 100) / 100).toFixed(2);
     const price = reseller ? discounted(raw, reseller.discountPct) : raw;
     const diskId = randomUUID();
-    await pool.query('INSERT INTO server_disks (id, server_id, size_gb, price_monthly) VALUES ($1, $2, $3, $4)', [diskId, id, size, price]);
+    // Only while the server is still this owner's (servers.ts ownerWrite); startOperation checks the same again.
+    await ownerWrite(s, (db) => db.query('INSERT INTO server_disks (id, server_id, size_gb, price_monthly) VALUES ($1, $2, $3, $4)', [diskId, id, size, price]));
     let operation;
     try {
       operation = await startOperation(req, s, 'disk_add', `disk:${diskId}`, hashOf({ id, disk: diskId }), { diskId, sizeGb: size });
@@ -60,6 +61,7 @@ export class DisksController {
     const before = s.price_monthly;
     const { rows: [n] } = await pool.query(`UPDATE servers SET price_monthly = price_monthly + $2, price_hourly = CASE WHEN billing_mode = 'hourly' THEN price_hourly + $3::numeric ELSE price_hourly END,
       updated_at = now() WHERE id = $1 RETURNING price_monthly::text AS p`, [id, price, hourlyOf(price)]);
+    await repriced(id);
     const charge = await resizeCharge(id, before, n.p);
     const invoiceId = charge.chargeNow !== '0.00' ? await billResize({ ...s, owner_id: reseller?.id ?? s.owner_id }, charge.chargeNow, s.currency.trim(), { vcpu: s.vcpu, memoryMb: s.memory_mb, diskGb: s.disk_gb + size }) : null;
     await audit(req, 'server.disk_added', 'success', req.user.id, { serverId: id, diskId, sizeGb: size });
@@ -76,17 +78,18 @@ export class DisksController {
     if (d.status === 'failed' || d.device_key === null) {
       // One statement, as the worker does for a disk that exists: the row and its share of the price go together, once.
       // Requests sent at the same time all read the row above; only the one whose DELETE removes it lowers the price.
-      const { rowCount } = await pool.query(`WITH gone AS (DELETE FROM server_disks WHERE id = $2 AND server_id = $1 AND (status = 'failed' OR (status = 'ready' AND device_key IS NULL)) RETURNING price_monthly)
+      const { rowCount } = await ownerWrite(s, (db) => db.query(`WITH gone AS (DELETE FROM server_disks WHERE id = $2 AND server_id = $1 AND (status = 'failed' OR (status = 'ready' AND device_key IS NULL)) RETURNING price_monthly)
         UPDATE servers s SET price_monthly = greatest(0, s.price_monthly - gone.price_monthly),
           price_hourly = CASE WHEN s.billing_mode = 'hourly' AND s.price_hourly IS NOT NULL THEN greatest(0, s.price_hourly - $3::numeric) ELSE s.price_hourly END,
-          updated_at = now() FROM gone WHERE s.id = $1`, [id, diskId, hourlyOf(String(d.price_monthly))]);
+          updated_at = now() FROM gone WHERE s.id = $1`, [id, diskId, hourlyOf(String(d.price_monthly))]));
       if (!rowCount) throw apiError(404, 'NOT_FOUND', 'Unknown disk');
+      await repriced(id);
       return { removed: true };
     }
     // "removing" before the operation is queued (a removal that fails at once puts "ready" back, and that must stand);
     // undone when the operation cannot start. hourlySubtract: what an hourly server costs less per hour once the disk is
     // gone; the worker lowers price_hourly by it in the statement that lowers the monthly price.
-    await pool.query("UPDATE server_disks SET status = 'removing' WHERE id = $1", [diskId]);
+    await ownerWrite(s, (db) => db.query("UPDATE server_disks SET status = 'removing' WHERE id = $1", [diskId]));
     const operation = await startOperation(req, s, 'disk_remove', `disk-remove:${diskId}`, hashOf({ id, removeDisk: diskId }),
       { diskId, key: d.device_key, hourlySubtract: hourlyOf(String(d.price_monthly)) }).catch(async (err) => {
         await pool.query("UPDATE server_disks SET status = $2 WHERE id = $1 AND status = 'removing'", [diskId, d.status]);

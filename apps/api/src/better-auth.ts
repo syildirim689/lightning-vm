@@ -13,10 +13,13 @@ import { logEvent } from './log';
 import { otpText, sendOtpMail, sendPasswordReset, sendSignInLink } from './mail';
 import { publishLive, type LiveKind } from './live-bus';
 import { dropPush, notify } from './notify';
-import { adminEndpointPermission, betterAuthRoles, can, covers, effectivePermissions, ensureRoles, limitsOf, permissionsOf } from './permissions';
+import { adminEndpointPermission, betterAuthRoles, can, covers, effectivePermissions, ensureRoles, limitsOf, permissionsOf, releaseTickets } from './permissions';
 import { createUserRequest, ipAllowed } from './role-limits';
 import { deviceOf } from './device';
-import { panelBase } from './chat-delivery';
+import { revokeConsoles } from './console-revoke';
+import { isIP } from 'node:net';
+import { panelBase, rememberPanelAddress } from './chat-delivery';
+import { privateAddress } from './chat-apps';
 import { directoryAccepted, directorySignIn, refuseForDirectory } from './directory-signin';
 import { hashPassword, sha256, verifyPassword } from './security';
 import { activeCaptcha, getSettings, mailReady, mailUse, verifyCaptcha, type OidcSettings, type SignInSettings } from './settings-store';
@@ -25,10 +28,17 @@ import { mayLink, providerId as ssoProviderId, ssoProvider, ssoSignedIn } from '
 import { sendSms, smsUse } from './sms';
 
 // Browser consoles and host terminals opened with any of these people's sessions are closed (the gateways match
-// sha256 of the token). Also called when someone's access shrinks (rbac.ts), so an open one does not outlive it.
+// sha256 of the token; console-revoke.ts also leaves the marker that refuses a ticket not redeemed yet). Also called when someone's access shrinks (rbac.ts), so an open one does not outlive it.
 export async function closeConsoles(userIds: string | string[]) {
   const { rows } = await pool.query('SELECT token FROM auth_sessions WHERE user_id = ANY($1::uuid[])', [[userIds].flat()]).catch(() => ({ rows: [] as { token: string }[] }));
-  await Promise.all(rows.map((r) => redis.publish('console:revoke', JSON.stringify({ authHash: sha256(r.token).toString('hex') })).catch(() => undefined)));
+  await Promise.all(rows.map((r) => revokeConsoles({ authHash: sha256(r.token).toString('hex') })));
+}
+// A session started as someone else belongs to that person (user_id) and only names the staff member who started
+// it: it ends with that staff member's access (a demotion, a ban, removal, their sessions being ended), with what it
+// had open. They start it again if they still may. auth.ts checks the same on every request of such a session.
+export async function endImpersonations(staffIds: string | string[]) {
+  const { rows } = await pool.query('DELETE FROM auth_sessions WHERE impersonated_by = ANY($1::text[]) RETURNING token', [[staffIds].flat()]).catch(() => ({ rows: [] as { token: string }[] }));
+  await Promise.all(rows.map((r) => revokeConsoles({ authHash: sha256(r.token).toString('hex') })));
 }
 
 // Admin user-management calls that change an account, audited as admin.user.<action>.
@@ -63,6 +73,7 @@ const lastingPaths = new Set(['/passkey/generate-register-options', '/passkey/ve
 const redirectFields = ['callbackURL', 'errorCallbackURL', 'newUserCallbackURL', 'redirectTo'];
 const panelPath = (v: unknown) => typeof v === 'string' && v.length <= 2000 && /^\/(?![/\\])/.test(v);
 const invalid = () => new APIError('BAD_REQUEST', { code: 'VALIDATION_FAILED', message: 'Invalid input' });
+const phonePattern = /^\+[1-9]\d{7,14}$/;
 
 // Request input ends up in audit details: no single text longer than this is stored (auth.ts has the same rule).
 const short = (v: unknown) => (typeof v === 'string' && v.length > 300 ? v.slice(0, 300) : v);
@@ -70,12 +81,20 @@ const auditAuth = (actorId: string | null, action: string, outcome: 'success' | 
   pool.query('INSERT INTO audit_events (actor_id, action, outcome, ip, metadata) VALUES ($1, $2, $3, $4, $5)', [actorId, action, outcome, ip, Object.fromEntries(Object.entries(metadata).map(([k, v]) => [k, short(v)]))])
     .catch(() => logEvent('error', 'audit_failed', { action }));
 
-// Links in mail point at the panel's own address (the domain, else the address given in setup), never at the host name
-// a request arrived with. No address set yet (first run, local only): the request's, as before.
+// Links in mail point at the panel's own address (PANEL_PUBLIC_URL, the domain, else the address given in setup or
+// first seen), never at the host name a request arrived with. No address known (first run, local only): the request's,
+// when that is this machine or a private network; any other name could be the sender's own, so nothing is mailed
+// (null) and the log says what to set.
 export async function onPanelAddress(url: string) {
   const base = await panelBase().catch(() => null);
-  if (!base) return url;
-  try { const u = new URL(url); return new URL(u.pathname + u.search, base).toString(); } catch { return url; }
+  try {
+    const u = new URL(url);
+    if (base) return new URL(u.pathname + u.search, base).toString();
+    const host = u.hostname.replace(/^\[|\]$/g, '').toLowerCase();
+    if (host === 'localhost' || host.endsWith('.localhost') || (isIP(host) && privateAddress(host))) return url;
+    logEvent('error', 'auth_mail_not_sent_panel_address_unknown', { host: host.slice(0, 100), fix: 'set PANEL_PUBLIC_URL in .env (or the address in setup)' });
+  } catch { /* not a URL: nothing to mail */ }
+  return null;
 }
 
 // Same fixed-window counter as security.ts rateLimit, in better-auth's error type. Fails closed.
@@ -137,6 +156,38 @@ async function checkMethods(path: string, headers: Headers, body: Record<string,
   }
 }
 
+// A sign-in link or an e-mail code that was accepted proves the mailbox. The panel never asks new accounts to verify
+// their address, so whoever registered it first may not be its owner: the first time the owner proves it, the library
+// deletes the account's password, linked providers and sessions on these two routes and marks the address verified.
+// The panel then removes what the library does not know about and an earlier holder could still use (addressProven).
+// Once only: afterwards the address is verified and nothing is removed again. Staff marking an address verified by
+// hand (user-security.ts) is not the owner's proof and removes nothing.
+const provesMailbox = (path: string | undefined) => path === '/magic-link/verify' || path === '/sign-in/email-otp';
+// The requests in which the library is marking an address proven (seen in the user update's before-hook, which has
+// the change but not the account; the after-hook has the account).
+const proving = new WeakSet<object>();
+async function addressProven(userId: string, path: string, ip: string | null) {
+  const gone = async (sql: string) => (await pool.query(sql, [userId]).catch(() => ({ rowCount: 0 }))).rowCount ?? 0;
+  const removed = {
+    apiTokens: await gone('DELETE FROM api_tokens WHERE user_id = $1'),
+    passkeys: await gone('DELETE FROM auth_passkeys WHERE user_id = $1'),
+    webhooks: await gone('DELETE FROM webhooks WHERE user_id = $1'),
+    chatConnections: await gone('DELETE FROM chat_connections WHERE user_id = $1'),
+    pushSubscriptions: await gone('DELETE FROM push_subscriptions WHERE user_id = $1'),
+    // A two-factor secret and backup codes someone set up but never switched on. One that is on stays: a link or a
+    // code is never the way in for an account with two factors (the session is refused below), so it is not the
+    // way to take its second factor away either; staff reset that.
+    twoFactor: await gone('DELETE FROM auth_two_factors t USING users u WHERE t.user_id = $1 AND u.id = t.user_id AND NOT coalesce(u.two_factor_enabled, false)'),
+    // A phone number the earlier holder verified would keep receiving the account's codes and notices.
+    phoneNumber: await gone('UPDATE users SET phone_number = NULL, phone_number_verified = false WHERE id = $1 AND phone_number IS NOT NULL'),
+  };
+  // Consoles opened with the sessions the library just ended were closed as each one went (session.delete below);
+  // this covers what is left.
+  await closeConsoles(userId);
+  await endImpersonations(userId);
+  await auditAuth(userId, 'auth.address_proven', 'success', ip, { method: path === '/magic-link/verify' ? 'magic-link' : 'email-code', removed: { password: true, linkedAccounts: true, otherSessions: true, ...removed } });
+  await publishLive(userId, 'sessions');
+}
 // Where the passkey plugin signs in (/sign-in/passkey is only the client's name for it).
 const passkeySignIn = '/passkey/verify-authentication';
 const forbidden = (code = 'FORBIDDEN') => new APIError('FORBIDDEN', { code, message: 'Permission required' });
@@ -180,7 +231,51 @@ async function checkAdminEndpoint(path: string, headers: Headers, body: Record<s
     if (n.n > 0) throw new APIError('CONFLICT', { code: 'USER_HAS_SERVERS', message: "Delete the user's servers first" });
   }
   if (target && ['/admin/ban-user', '/admin/revoke-user-sessions', '/admin/remove-user', '/admin/set-user-password'].includes(path)) await closeConsoles(target);
+  // Sessions this person started as others end with their own (one session ended by staff: it cannot be told which
+  // of them started which, so all do).
+  if (target && ['/admin/ban-user', '/admin/revoke-user-session', '/admin/revoke-user-sessions', '/admin/remove-user', '/admin/set-user-password'].includes(path)) await endImpersonations(target);
+  // One session ended by staff: the account's push subscriptions go with it (which browser it was is not known).
+  // Here, while the session still says whose it is; the other calls name the account and are handled afterwards.
+  if (target && path === '/admin/revoke-user-session') await dropPush(target);
 }
+
+// Sign-ins and registrations: recorded and announced once the session really exists. This runs as the last plugin's
+// hook, after the two-factor plugin's: for an account with two-factor the password step ends with that plugin taking
+// the session away again (better-auth runs the configured after-hook before the plugins', where it still exists).
+const recordSignIn = createAuthMiddleware(async (ctx) => {
+  if (!ctx.request) return;
+  if (ctx.path !== '/sign-in/email' && ctx.path !== '/sign-up/email' && ctx.path !== passkeySignIn && ctx.path !== '/sign-in/email-otp' && !ctx.path.startsWith('/two-factor/verify-')
+    && !linkPaths(ctx.path) && ctx.path !== '/sign-in/username') return;
+  const ip = ctx.request.headers.get('x-lvm-client-ip');
+  const created = ctx.context.newSession;
+  const body = (ctx.body ?? {}) as { email?: unknown; username?: unknown };
+  const agent = ctx.request.headers.get('user-agent') ?? '';
+  const device = deviceOf(agent);
+  // The right password of an account with two-factor: no session yet, so neither a sign-in nor a failure. Recorded as
+  // what it is (it never counts as a known device, and nobody is told they signed in).
+  if (!created && !(ctx.context.returned instanceof Error) && (ctx.path === '/sign-in/email' || ctx.path === '/sign-in/username')) {
+    const { rows: [u] } = ctx.path === '/sign-in/email'
+      ? await pool.query('SELECT id FROM users WHERE lower(email) = $1', [String(body.email ?? '').trim().toLowerCase()]).catch(() => ({ rows: [] }))
+      : await pool.query('SELECT id FROM users WHERE username = $1', [String(body.username ?? '').trim().toLowerCase()]).catch(() => ({ rows: [] }));
+    await auditAuth(u?.id ?? null, 'auth.password_step', 'success', ip, { method: ctx.path === '/sign-in/username' ? 'username' : 'password', device });
+    return;
+  }
+  const action = ctx.path === '/sign-up/email' ? 'auth.register' : 'auth.login';
+  const provider = String((ctx.params as { id?: string } | undefined)?.id ?? '');
+  const method = ctx.path.startsWith('/callback/') ? (provider === ssoProviderId ? 'sso' : provider || 'social') : ctx.path === '/one-tap/callback' ? 'google-one-tap'
+    : ctx.path === '/magic-link/verify' ? 'magic-link' : ctx.path === '/sign-in/username' ? 'username' : ctx.path === passkeySignIn ? 'passkey' : ctx.path === '/sign-in/email-otp' ? 'email-code' : ctx.path.startsWith('/two-factor/') ? 'password+2fa' : 'password';
+  // Asked before this sign-in is recorded: has this person signed in from this device or network before?
+  const seen = created && action === 'auth.login' ? await seenBefore(created.user.id, device, ip) : null;
+  await auditAuth(created?.user.id ?? null, action, created ? 'success' : 'failure', ip,
+    created ? { method, device } : { email: String(body.email ?? '').toLowerCase().slice(0, 254) });
+  if (!created) return;
+  if (action === 'auth.register') await notify('admin.user_registered', 'staff:users.view', { email: created.user.email });
+  else await notify(seen === false ? 'auth.new_device' : 'auth.sign_in', [created.user.id], { ip: ip ?? '', agent, method, device });
+  // An administrator signed in and the panel still knows no address of its own: this one is kept (chat-delivery.ts).
+  if (action === 'auth.login' && String((created.user as { role?: string }).role ?? '').split(',').includes('admin') && !(await panelBase().catch(() => 'unknown'))) {
+    try { await rememberPanelAddress(new URL(ctx.request.url).origin); } catch { /* no usable address */ }
+  }
+});
 
 function createAuth() {
   return betterAuth({
@@ -233,7 +328,8 @@ function createAuth() {
       revokeSessionsOnPasswordReset: true,
       sendResetPassword: async ({ user, url }) => {
         if (!(await mailUse('passwordReset'))) throw new APIError('NOT_IMPLEMENTED', { code: 'MAIL_NOT_CONFIGURED', message: 'Mail is not configured' });
-        await sendPasswordReset(user.email, (user as { locale?: string }).locale, await onPanelAddress(url));
+        const link = await onPanelAddress(url);
+        if (link) await sendPasswordReset(user.email, (user as { locale?: string }).locale, link);
       },
       // Every session ended with the old password: so do the browsers that still received its notifications.
       onPasswordReset: async ({ user }) => { await dropPush(user.id); await notify('auth.password_changed', [user.id], {}); },
@@ -268,7 +364,8 @@ function createAuth() {
         const headers = ctx.request.headers;
         if (!ctx.path.startsWith('/admin/') && !panelPaths.has(ctx.path)) throw new APIError('NOT_FOUND', { code: 'NOT_FOUND', message: 'Not found' });
         // Who is being signed in: an address-sized text, before it becomes a limiter key, a query or an audit row.
-        for (const k of ['email', 'username', 'phoneNumber']) if (typeof body[k] === 'string' && (body[k] as string).length > 254) throw invalid();
+        // A text and nothing else: a list or an object would be turned into one further down, at any length.
+        for (const k of ['email', 'username', 'phoneNumber']) if (body[k] !== undefined && body[k] !== null && (typeof body[k] !== 'string' || (body[k] as string).length > 254)) throw invalid();
         const query = (ctx.query ?? {}) as Record<string, unknown>;
         for (const k of redirectFields) for (const v of [body[k], query[k]]) if (v !== undefined && v !== null && v !== '' && !panelPath(v)) throw invalid();
         // A provider's ID token posted here would sign in past the redirect flow (state, PKCE, nonce) and, for single
@@ -281,6 +378,22 @@ function createAuth() {
           const s = await getAuth().api.getSession({ headers }).catch(() => null);
           if (!s && ctx.path === '/phone-number/send-otp') throw new APIError('UNAUTHORIZED', { code: 'UNAUTHENTICATED', message: 'Sign in required' });
           if ((s?.session as { impersonatedBy?: string | null } | undefined)?.impersonatedBy) throw new APIError('FORBIDDEN', { code: 'NOT_WHILE_IMPERSONATING', message: 'Not while acting as another user' });
+          // Each code is a paid message to a number the caller names: a few a day per account and per number, whatever
+          // address the requests come from (the library's own limit counts per client address only).
+          if (s && ctx.path === '/phone-number/send-otp' && typeof body.phoneNumber === 'string' && phonePattern.test(body.phoneNumber)) {
+            await limit(`otp:phone:user:${s.user.id}`, 5, 86_400);
+            await limit(`otp:phone:to:${body.phoneNumber}`, 5, 86_400);
+          }
+        }
+        // Two-factor codes by SMS or e-mail: per account, signed in (setting it up) or between the two sign-in steps
+        // (the account is the one the pending-step cookie names).
+        if (ctx.path === '/two-factor/send-otp') {
+          let uid = (await getAuth().api.getSession({ headers }).catch(() => null))?.user.id as string | undefined;
+          if (!uid) {
+            const pending = await ctx.getSignedCookie(ctx.context.createAuthCookie('two_factor').name, ctx.context.secret).catch(() => null);
+            if (pending) uid = (await ctx.context.internalAdapter.findVerificationValue(pending).catch(() => null))?.value;
+          }
+          if (uid) await limit(`otp:2fa:${uid}`, 8, 3600);
         }
         if (ctx.path.startsWith('/admin/')) await checkAdminEndpoint(ctx.path, headers, body);
         await checkMethods(ctx.path, headers, body);
@@ -308,6 +421,8 @@ function createAuth() {
           if (s?.value !== true) throw new APIError('FORBIDDEN', { code: 'REGISTRATION_CLOSED', message: 'Registration is closed' });
         }
         if (ctx.path === '/sign-in/email' && email) await limit(`login:email:${email}`, 10, 900);
+        // Reset mail: a few an hour per mailbox, from however many addresses (counted whether or not the account exists).
+        if (ctx.path === '/request-password-reset' && email) await limit(`reset:email:${email}`, 5, 3600);
         // E-mail code sign-in: only when the admin turned it on, only for sign-in, never instead of two-factor.
         if (ctx.path.startsWith('/email-otp/') || ctx.path === '/sign-in/email-otp') {
           if (!(await getSettings('security')).emailCodeSignIn || !(await mailUse('twoFactor'))) throw new APIError('FORBIDDEN', { code: 'EMAIL_CODE_SIGN_IN_DISABLED', message: 'Sign-in with an e-mail code is off' });
@@ -341,6 +456,8 @@ function createAuth() {
           if (target && live[ctx.path]) await publishLive(target, live[ctx.path]);
           // Sessions ended by staff: the browsers that were signed in stop receiving the account's notifications too.
           if (target && ['/admin/ban-user', '/admin/revoke-user-sessions', '/admin/set-user-password'].includes(ctx.path)) await dropPush(target);
+          // A banned account handles no tickets: the ones it held go back to the team.
+          if (target && ctx.path === '/admin/ban-user') await releaseTickets([target]);
           return;
         }
         if (ctx.path === '/unlink-account' && !failed) {
@@ -362,7 +479,11 @@ function createAuth() {
         }
         if (ctx.path === '/change-password' && !failed) {
           const uid = (ctx.context.session as { user?: { id: string } } | null)?.user?.id;
-          if (uid) { await notify('auth.password_changed', [uid], {}); await publishLive(uid, 'password'); }
+          if (uid) {
+            // "Sign out other devices": the browsers signed out stop receiving the account's notifications as well.
+            if ((ctx.body as { revokeOtherSessions?: unknown } | undefined)?.revokeOtherSessions === true) await dropPush(uid);
+            await notify('auth.password_changed', [uid], {}); await publishLive(uid, 'password');
+          }
           return;
         }
         // A passkey signs in later without the password: adding or removing one is recorded, and adding one announced.
@@ -374,24 +495,6 @@ function createAuth() {
           if (added) await notify('auth.account_linked', [uid], { provider: 'Passkey' });
           return;
         }
-        if (ctx.path !== '/sign-in/email' && ctx.path !== '/sign-up/email' && ctx.path !== passkeySignIn && ctx.path !== '/sign-in/email-otp' && !ctx.path.startsWith('/two-factor/verify-')
-          && !linkPaths(ctx.path) && ctx.path !== '/sign-in/username') return;
-        const created = ctx.context.newSession;
-        // A password sign-in that still needs the second factor is neither a success nor a failure yet.
-        if (!created && (ctx.context.returned as { twoFactorRedirect?: boolean } | undefined)?.twoFactorRedirect) return;
-        const action = ctx.path === '/sign-up/email' ? 'auth.register' : 'auth.login';
-        const provider = String((ctx.params as { id?: string } | undefined)?.id ?? '');
-        const method = ctx.path.startsWith('/callback/') ? (provider === ssoProviderId ? 'sso' : provider || 'social') : ctx.path === '/one-tap/callback' ? 'google-one-tap'
-          : ctx.path === '/magic-link/verify' ? 'magic-link' : ctx.path === '/sign-in/username' ? 'username' : ctx.path === passkeySignIn ? 'passkey' : ctx.path === '/sign-in/email-otp' ? 'email-code' : ctx.path.startsWith('/two-factor/') ? 'password+2fa' : 'password';
-        const agent = ctx.request.headers.get('user-agent') ?? '';
-        const device = deviceOf(agent);
-        // Asked before this sign-in is recorded: has this person signed in from this device or network before?
-        const seen = created && action === 'auth.login' ? await seenBefore(created.user.id, device, ip) : null;
-        await auditAuth(created?.user.id ?? null, action, created ? 'success' : 'failure', ip,
-          created ? { method, device } : { email: String((ctx.body as { email?: unknown })?.email ?? '').toLowerCase().slice(0, 254) });
-        if (!created) return;
-        if (action === 'auth.register') await notify('admin.user_registered', 'staff:users.view', { email: created.user.email });
-        else await notify(seen === false ? 'auth.new_device' : 'auth.sign_in', [created.user.id], { ip: ip ?? '', agent, method, device });
       }),
     },
     databaseHooks: {
@@ -409,7 +512,13 @@ function createAuth() {
       user: { create: { before: async (user, ctx) => {
         const id = String((ctx?.params as { id?: string } | undefined)?.id ?? '');
         if ((ctx?.path.startsWith('/callback/') && (socialIds as string[]).includes(id)) || ctx?.path === '/one-tap/callback') return { data: { ...user, authSource: 'social' } };
-      } } },
+      } },
+      // The owner's first proof of the address (see provesMailbox): the library has just removed the password, the
+      // linked providers and the sessions, and marks the address verified with this update.
+      update: {
+        before: async (data, ctx) => { if (ctx && provesMailbox(ctx.path) && (data as { emailVerified?: boolean }).emailVerified === true) proving.add(ctx); },
+        after: async (user, ctx) => { if (ctx && proving.delete(ctx)) await addressProven(user.id, ctx.path, ctx.request?.headers.get('x-lvm-client-ip') ?? null); },
+      } },
       session: {
         create: {
           // A disabled or banned account gets no new session (its old ones were revoked when it was disabled).
@@ -440,7 +549,7 @@ function createAuth() {
         delete: {
           // Every way a session ends (sign-out, revoke, password reset) also closes its browser consoles.
           after: async (session) => {
-            await redis.publish('console:revoke', JSON.stringify({ authHash: sha256(session.token).toString('hex') })).catch(() => undefined);
+            await revokeConsoles({ authHash: sha256(session.token).toString('hex') });
           },
         },
       },
@@ -474,7 +583,7 @@ function createAuth() {
           const locale = (ctx?.context.session?.user as { locale?: string } | undefined)?.locale;
           await sendSms(to, otpText(locale, (await getSettings('branding')).name, code));
         },
-        phoneNumberValidator: (n) => /^\+[1-9]\d{7,14}$/.test(n),
+        phoneNumberValidator: (n) => phonePattern.test(n),
         otpLength: 6,
         expiresIn: 300,
         allowedAttempts: 5,
@@ -494,7 +603,8 @@ function createAuth() {
         disableSignUp: true, expiresIn: 600, storeToken: 'hashed',
         sendMagicLink: async ({ email, url }) => {
           const { rows: [u] } = await pool.query('SELECT locale FROM users WHERE lower(email) = lower($1)', [email]);
-          if (u) await sendSignInLink(email, u.locale, await onPanelAddress(url)); // unknown addresses get nothing, and the answer is the same
+          const link = u ? await onPanelAddress(url) : null;
+          if (link) await sendSignInLink(email, u.locale, link); // unknown addresses get nothing, and the answer is the same
         },
       }),
       // Sign-in with a user name instead of the e-mail address (when the admin allows it; set in Account → Profile).
@@ -508,6 +618,8 @@ function createAuth() {
         rpName: 'Lightning VM',
         schema: { passkey: { modelName: 'auth_passkeys', fields: { publicKey: 'public_key', userId: 'user_id', credentialID: 'credential_id', deviceType: 'device_type', backedUp: 'backed_up', createdAt: 'created_at' } } },
       }),
+      // Last, so its hook sees what the others left (see recordSignIn).
+      { id: 'sign-in-record', hooks: { after: [{ matcher: () => true, handler: recordSignIn }] } },
     ],
   });
 }

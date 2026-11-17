@@ -9,7 +9,7 @@ import { apiError } from './errors';
 import { audit, SessionGuard, type AuthedRequest } from './auth';
 import { Can, PermissionGuard } from './rbac';
 import { decryptSecret, encryptSecret } from './secrets';
-import { customerMay, findServer } from './servers';
+import { customerMay, findServer, ownerWrite, vmOf } from './servers';
 import { callAdapter, storedTarget } from './vmware';
 
 type Input = Record<string, unknown>;
@@ -50,8 +50,10 @@ async function browse(data: Record<string, unknown>) {
   }
 }
 
-// Validates a storage form; on update, empty secrets keep the stored ones.
-function readSource(body: Input, existing?: { protocol: string; secrets: Record<string, string> }) {
+// Validates a storage form; on update, empty secrets keep the stored ones, as long as the form still names the server
+// they were entered for. Another protocol, host, port, URL or endpoint is another server: a stored password must not
+// follow the form there (staff who may edit storages cannot read it), so it is typed again (as for mail, settings.ts).
+function readSource(body: Input, existing?: { protocol: string; config: Record<string, unknown>; secrets: Record<string, string> }) {
   const fields: Record<string, string> = {};
   const name = typeof body.name === 'string' && body.name.trim() && body.name.trim().length <= 60 ? body.name.trim() : (fields.name = 'INVALID_VALUE', '');
   const protocol = String(body.protocol ?? existing?.protocol ?? '');
@@ -59,13 +61,14 @@ function readSource(body: Input, existing?: { protocol: string; secrets: Record<
   const given = (body.config ?? {}) as Input;
   const config: Record<string, string | number | boolean> = {};
   const secrets: Record<string, string> = {};
+  const kept: string[] = []; // stored secrets the form left empty: decided below, once the form's server is known
   for (const f of protocols[protocol]) {
     let v = given[f.key];
     if (f.secret) {
       const s = typeof v === 'string' ? v : '';
       if (s.length > 8000) fields[f.key] = 'TOO_LONG';
       if (s) secrets[f.key] = s;
-      else if (existing?.protocol === protocol && existing.secrets[f.key]) secrets[f.key] = existing.secrets[f.key];
+      else if (existing?.protocol === protocol && existing.secrets[f.key]) kept.push(f.key);
       else if (f.required) fields[f.key] = 'REQUIRED';
       continue;
     }
@@ -81,6 +84,9 @@ function readSource(body: Input, existing?: { protocol: string; secrets: Record<
       config[f.key] = s;
     }
   }
+  const where = (c: Record<string, unknown>) => ['host', 'port', 'url', 'endpoint'].map((k) => String(c[k] ?? '').trim().replace(/\/+$/, '').toLowerCase()).join('\n');
+  const moved = !!existing && where(config) !== where(existing.config);
+  for (const k of kept) { if (moved) fields[k] = 'REQUIRED'; else secrets[k] = existing!.secrets[k]; }
   const basePath = typeof body.basePath === 'string' ? body.basePath.trim() : '';
   if (!pathPattern.test(basePath)) fields.basePath = 'INVALID_VALUE';
   if (Object.keys(fields).length) throw apiError(400, 'VALIDATION_FAILED', 'Invalid input', fields);
@@ -111,9 +117,9 @@ export class IsoAdminController {
 
   @Put('iso-sources/:id') @Can('catalog.manage')
   async update(@Req() req: AuthedRequest, @Param('id', ParseUUIDPipe) id: string, @Body() body: Input) {
-    const { rows: [old] } = await pool.query('SELECT id, protocol, secrets_enc FROM iso_sources WHERE id = $1', [id]);
+    const { rows: [old] } = await pool.query('SELECT id, protocol, config, secrets_enc FROM iso_sources WHERE id = $1', [id]);
     if (!old) throw apiError(404, 'NOT_FOUND', 'Unknown storage');
-    const v = readSource(body ?? {}, { protocol: old.protocol, secrets: sourceSecrets(old) });
+    const v = readSource(body ?? {}, { protocol: old.protocol, config: old.config ?? {}, secrets: sourceSecrets(old) });
     await pool.query(`UPDATE iso_sources SET name = $2, protocol = $3, config = $4, base_path = $5, secrets_enc = $6, updated_at = now() WHERE id = $1`,
       [id, v.name, v.protocol, v.config, v.basePath, Object.keys(v.secrets).length ? encryptSecret(JSON.stringify(v.secrets), `iso-source:${id}`) : null])
       .catch((e) => { if (e.code === '23505') throw apiError(409, 'VALIDATION_FAILED', 'Name taken', { name: 'NAME_TAKEN' }); throw e; });
@@ -134,8 +140,8 @@ export class IsoAdminController {
   async test(@Req() req: AuthedRequest, @Body() body: Input) {
     let existing;
     if (typeof body?.id === 'string' && /^[0-9a-f-]{36}$/i.test(body.id)) {
-      const { rows: [old] } = await pool.query('SELECT id, protocol, secrets_enc FROM iso_sources WHERE id = $1', [body.id]);
-      if (old) existing = { protocol: old.protocol, secrets: sourceSecrets(old) };
+      const { rows: [old] } = await pool.query('SELECT id, protocol, config, secrets_enc FROM iso_sources WHERE id = $1', [body.id]);
+      if (old) existing = { protocol: old.protocol, config: old.config ?? {}, secrets: sourceSecrets(old) };
     }
     const v = readSource({ ...(body ?? {}), name: body?.name || 'test' }, existing);
     const out = await browse({ draft: encryptSecret(JSON.stringify(v), 'iso-draft'), path: '' });
@@ -248,8 +254,14 @@ export class ServerIsoController {
       if (!iso) throw apiError(400, 'VALIDATION_FAILED', 'Invalid input', { isoId: 'NOT_AVAILABLE' });
     }
     const { rows: [c] } = await pool.query('SELECT c.* FROM vmware_connections c JOIN resource_pools p ON p.connection_id = c.id WHERE p.id = $1', [s.pool_id]);
-    await callAdapter('/v1/vm/cdrom', { ...storedTarget(c), vm: s.vm_moref, ...(iso && { datastore: iso.datastore_moref, name: iso.file_name }), boot }, 60_000);
-    await pool.query('UPDATE servers SET iso_id = $2, iso_boot = $3, updated_at = now() WHERE id = $1', [id, iso?.id ?? null, boot]);
+    // The row first, and only while the server is still this owner's (servers.ts ownerWrite); the drive follows, and a
+    // refusal there puts the row back. (The other order would change the drive of a server handed over meanwhile.)
+    await ownerWrite(s, (db) => db.query('UPDATE servers SET iso_id = $2, iso_boot = $3, updated_at = now() WHERE id = $1', [id, iso?.id ?? null, boot]));
+    try { await callAdapter('/v1/vm/cdrom', { ...storedTarget(c), ...vmOf(s), ...(iso && { datastore: iso.datastore_moref, name: iso.file_name }), boot }, 60_000); }
+    catch (err) {
+      await pool.query('UPDATE servers SET iso_id = $2, iso_boot = $3 WHERE id = $1 AND iso_id IS NOT DISTINCT FROM $4::uuid', [id, s.iso_id, s.iso_boot, iso?.id ?? null]);
+      throw err;
+    }
     await audit(req, iso ? 'server.iso_inserted' : 'server.iso_ejected', 'success', req.user.id, { serverId: id, ...(iso && { isoId: iso.id, name: iso.name, boot }) });
     return { inserted: iso?.id ?? null, boot };
   }

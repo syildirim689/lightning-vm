@@ -3,15 +3,16 @@ import { can, ensureRoles, limitsOf } from './permissions';
 import { pool } from './db';
 import { apiError } from './errors';
 import { audit, type AuthedRequest } from './auth';
-import { assertCovers, Can, PermissionGuard } from './rbac';
+import { assertAdmin, assertCovers, Can, PermissionGuard } from './rbac';
+import { maskSecrets } from './log';
 import { endSession, onlineUsers, sessionsOf, statusOf } from './presence';
 import { publishLive } from './live-bus';
-import { notify } from './notify';
+import { dropPush, notify } from './notify';
 import { uptime } from 'node:os';
 import { agentStatus, bootId, hostInfo, osInfo, pendingRequests, queueRequest, releases, runLog, runSetUp, settings as maintenanceSettings, summary } from './maintenance';
 import { readHostChange } from './host-rules';
 import { hostLive, hostLog, logSources } from './host-live';
-import { reloadAuth } from './better-auth';
+import { endImpersonations, reloadAuth } from './better-auth';
 
 @Controller('admin') @UseGuards(PermissionGuard)
 export class AdminController {
@@ -68,9 +69,11 @@ export class AdminController {
   // The server's state now: processor, memory, load and disk (sampled here every five seconds), the panel's own
   // processes, and the agent's last snapshot of services, file systems and processes.
   @Get('host/live') @Can('system.view')
-  async hostLive() {
+  async hostLive(@Req() req: AuthedRequest) {
     const status = agentStatus();
-    return { ...(await hostLive()), agent: { installed: maintenanceSettings().agent === 'on', busy: pendingRequests() > 0 || status?.state === 'running' } };
+    // logs: the list the page offers to read; only administrators read logs (below), so only they get a list.
+    return { ...(await hostLive()), ...(!req.user.permissions.includes('*') && { logs: [] }),
+      agent: { installed: maintenanceSettings().agent === 'on', busy: pendingRequests() > 0 || status?.state === 'running' } };
   }
 
   // Asks the agent for a fresh snapshot (services, file systems, processes, logs). It changes nothing on the server.
@@ -84,12 +87,15 @@ export class AdminController {
   }
 
   // The last lines of one service's log, or of the system journal (warnings and worse), from the agent's snapshot.
+  // Raw service logs (the proxy's access log among them) are for administrators: system.update alone does not read
+  // them. What a URL carried as a secret is masked as well (log.ts), for lines written before the API masked its own.
   @Get('host/logs') @Can('system.update')
-  hostLogs(@Query('source') source?: string, @Query('lines') lines?: string) {
+  async hostLogs(@Req() req: AuthedRequest, @Query('source') source?: string, @Query('lines') lines?: string) {
+    await assertAdmin(req);
     const n = Math.min(300, Math.max(10, Number(lines) || 200));
     const found = hostLog(String(source ?? ''), n);
     if (!found) throw apiError(404, 'NOT_FOUND', 'Unknown log');
-    return { source, lines: found, sources: logSources() };
+    return { source, lines: found.map(maskSecrets), sources: logSources() };
   }
 
   // Changes the server's name, time zone, time servers or DNS servers through the host agent (it checks again).
@@ -175,6 +181,10 @@ export class AdminController {
     await assertCovers(req, id);
     if (!/^[\w-]{1,64}$/.test(sid) || !(await endSession(id, sid))) throw apiError(404, 'NOT_FOUND', 'Unknown session');
     await audit(req, 'admin.user.revoke_session', 'success', req.user.id, { target: id, session: sid });
+    // Which browser the session was in is not recorded: the account's push subscriptions all go (a browser that is
+    // still signed in is asked again in Account → Notifications), and so do sessions this person started as others.
+    await dropPush(id);
+    await endImpersonations(id);
     await publishLive(id, 'sessions');
   }
 
@@ -210,6 +220,9 @@ export class AdminController {
     } else {
       const { rows } = await pool.query('SELECT id, user_id FROM auth_sessions WHERE user_id = ANY($1::uuid[])', [targets]);
       for (const s of rows) await endSession(s.user_id, s.id);
+      // With the sessions: the browsers' push subscriptions, and sessions these people started as others.
+      for (const id of targets) await dropPush(id);
+      await endImpersonations(targets);
       for (const id of targets) await publishLive(id, 'sessions');
     }
     await audit(req, `admin.users.${b.action}`, 'success', req.user.id, { count: targets.length, skipped: ids.length - targets.length, ...(b.action === 'message' && { subject }) });

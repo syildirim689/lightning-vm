@@ -4,10 +4,10 @@ import { NestFactory } from '@nestjs/core';
 import { FastifyAdapter, NestFastifyApplication } from '@nestjs/platform-fastify';
 import fastifyCookie from '@fastify/cookie';
 import { collectDefaultMetrics, register } from 'prom-client';
-import type { FastifyReply } from 'fastify';
+import type { FastifyReply, FastifyRequest } from 'fastify';
 import { closeConnections, pool, redis } from './db';
 import { apiError, ErrorCodeFilter } from './errors';
-import { logEvent } from './log';
+import { logEvent, maskSecrets } from './log';
 import { claimRequest, csrfRejected, duplicateKey, releaseRequest } from './security';
 import { AuthController } from './auth';
 import { PublicController, SettingsController, SettingsOverviewController, SmsSettingsController } from './settings';
@@ -114,7 +114,9 @@ export const largeBodies: Record<string, number> = {
 
 export async function createApp() {
   const adapter = new FastifyAdapter({ trustProxy: trustedProxies, logger: { base: { service: 'api', env: process.env.APP_ENV || 'production' }, formatters: { level: (level) => ({ level }) },
-    redact: ['req.headers.authorization', 'req.headers.cookie', 'res.headers["set-cookie"]'] }, bodyLimit,
+    // The request line: method, URL, host and client address; no headers (so no cookie or token to redact), and the
+    // URL with what it carries as a secret masked (a reset token, a sign-in link's, a provider's code and state).
+    serializers: { req: (req: FastifyRequest) => ({ method: req.method, url: maskSecrets(req.url ?? ''), host: req.host, remoteAddress: req.ip, remotePort: req.socket?.remotePort }) } }, bodyLimit,
     // Open live streams (GET /live) must not hold a restart: closing ends every connection.
     forceCloseConnections: true });
   const app = await NestFactory.create<NestFastifyApplication>(AppModule, adapter);
@@ -129,6 +131,11 @@ export async function createApp() {
   registerApiHooks(app.getHttpAdapter().getInstance());
   app.getHttpAdapter().getInstance().addHook('onRequest', async (req, reply) => {
     if (csrfRejected(req)) return reply.status(403).send({ code: 'CSRF_REJECTED', message: 'Cross-site request rejected' });
+    // The file routes take megabytes, read before any guard runs: not from a caller who shows neither a session
+    // cookie nor an API token. The guard's own answer, given here before the body is read.
+    if (largeBodies[`${req.method} ${req.routeOptions.url}`] && !/(?:^|;\s*)(?:__Secure-)?lvm\.session_token=/.test(req.headers.cookie ?? '') && !/^Bearer lvm_/.test(req.headers.authorization ?? '')) {
+      return reply.status(401).send({ code: 'UNAUTHENTICATED', message: 'Sign in required' });
+    }
   });
   app.getHttpAdapter().getInstance().addHook('preHandler', async (req, reply) => {
     const key = duplicateKey(req);

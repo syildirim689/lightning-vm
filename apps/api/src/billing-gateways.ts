@@ -28,6 +28,10 @@ export type Gateway = {
   // The currencies the provider's page can collect (all of them when left out). An invoice in another one is not offered
   // this provider: its page would take the bare number in its own currency.
   currencies?: string[];
+  // verify() rests on the posted form alone (Param: its hash has no secret, and nothing can be asked server-side), so
+  // whoever knows the merchant's public identifiers can post one. billing.ts records the first well-formed return for
+  // staff and lets no later one change a payment under review.
+  unsigned?: boolean;
 };
 
 // Test cards of the sandbox: 4242 4242 4242 4242 is approved, 4000 0000 0000 0002 declined, 4000 0000 0000 9995
@@ -66,6 +70,9 @@ export const gateways: Record<string, Gateway> = { sandbox, iyzico, paytr, strip
 // Nor when the answer needs a person (needsReview): closed as failed, the customer would be told to pay again while
 // the provider may hold their money.
 const review = ['NEEDS_CONFIRMATION', 'AMOUNT_MISMATCH', 'FRAUD_REVIEW'];
+export const reviewCodes: readonly string[] = review;
+// A pending payment that carries one of these waits for staff.
+export const underReview = (code: string | null | undefined) => !!code && review.includes(code);
 export const finalResult = (r: Result) => r.ok || !['PROVIDER_ERROR', 'BAD_SIGNATURE', 'PENDING', 'NO_TOKEN', 'NO_SESSION', ...review].includes(r.code);
 // The provider reported another amount or currency, holds the payment for review, or (Param) says paid in a way the
 // panel cannot confirm: the payment stays open with the reason on it, for staff to settle by hand.

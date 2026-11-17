@@ -191,10 +191,18 @@ export class EinvoiceSettingsController {
     const mode = body?.mode === 'live' ? 'live' : body?.mode === 'test' ? 'test' : cur.mode;
     const input = (body?.values ?? {}) as Record<string, unknown>;
     const oldSecret = cur.credentialsEnc && cur.provider === provider ? JSON.parse(decryptSecret(cur.credentialsEnc, ctx)) as Record<string, string> : {};
+    // Stored secrets are for the address they were entered for: with another endpoint in the form they are typed again
+    // (otherwise the test and every later invoice would send them to whatever host the form names). As in settings.ts.
+    const at = (u: unknown) => (typeof u === 'string' ? u.trim().replace(/\/+$/, '').toLowerCase() : '');
+    const moved = !!at(input.endpoint) && cur.provider === provider && at(input.endpoint) !== at(cur.values.endpoint || p?.hosts[cur.mode]);
     const values: Record<string, string> = {}; const secret: Record<string, string> = {};
     for (const f of p?.fields ?? []) {
       const v = typeof input[f.key] === 'string' ? (input[f.key] as string).trim().slice(0, 500) : '';
-      if (f.secret) { secret[f.key] = v || oldSecret[f.key] || ''; if (!secret[f.key] && !f.optional) fields[`values.${f.key}`] = 'REQUIRED'; }
+      if (f.secret) {
+        secret[f.key] = v || (moved ? '' : oldSecret[f.key] || '');
+        if (moved && !v && oldSecret[f.key]) fields[`values.${f.key}`] = 'REQUIRED';
+        if (!secret[f.key] && !f.optional) fields[`values.${f.key}`] = 'REQUIRED';
+      }
       else { values[f.key] = v || (cur.provider === provider ? cur.values[f.key] ?? '' : ''); if (!values[f.key] && !f.optional) fields[`values.${f.key}`] = 'REQUIRED'; }
     }
     const endpoint = typeof input.endpoint === 'string' ? input.endpoint.trim() : '';
@@ -208,7 +216,7 @@ export class EinvoiceSettingsController {
     if (provider !== 'none' && provider !== 'sandbox' && !(await getSettings('billing')).company.taxId) fields.provider = 'COMPANY_REQUIRED';
     if (Object.keys(fields).length) throw apiError(400, 'VALIDATION_FAILED', 'Invalid input', fields);
     const next: EinvoiceSettings = { provider, mode, values, credentialsEnc: Object.values(secret).some(Boolean) ? encryptSecret(JSON.stringify(secret), ctx) : null,
-      efaturaSeries, earsivSeries, profile, senderAlias, check: provider === cur.provider && mode === cur.mode ? cur.check : null };
+      efaturaSeries, earsivSeries, profile, senderAlias, check: provider === cur.provider && mode === cur.mode && !moved ? cur.check : null };
     await saveSettings('einvoice', next);
     await audit(req, 'settings.einvoice', 'success', req.user.id, { provider, mode });
     return view(next);
@@ -224,8 +232,16 @@ export class EinvoiceSettingsController {
     let check: EinvoiceSettings['check'];
     try {
       const r = await integrators[s.provider].lookup(vkn, c);
-      check = { ok: true, message: r.registered ? `e-Fatura: ${r.alias ?? ''}` : 'e-Arşiv', at: new Date().toISOString() };
-    } catch (e) { check = { ok: false, message: String((e as Error)?.message ?? e).slice(0, 300), at: new Date().toISOString() }; }
+      check = { ok: true, message: r.registered ? 'e-Fatura' : 'e-Arşiv', at: new Date().toISOString() };
+    } catch (e) {
+      // The caller is told the outcome in fixed words; the integrator's own text (with an endpoint in the settings: that
+      // of whatever host staff named) stays in the server's log.
+      const text = String((e as Error)?.message ?? e);
+      logEvent('warn', 'einvoice_test_failed', { provider: s.provider, error: text.slice(0, 200) });
+      const http = /\bHTTP ([1-5])\d\d\b/.exec(text)?.[1];
+      check = { ok: false, at: new Date().toISOString(),
+        message: text.startsWith('network:') ? 'The integrator could not be reached' : http ? `The integrator answered HTTP ${http}xx` : 'The integrator did not accept the request' };
+    }
     await saveSettings('einvoice', { ...s, check });
     await audit(req, 'settings.einvoice_test', check.ok ? 'success' : 'failure', req.user.id, { provider: s.provider });
     return { check };

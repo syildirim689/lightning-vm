@@ -9,12 +9,13 @@ import { pool } from './db';
 import { apiError } from './errors';
 import { summary as maintenance } from './maintenance';
 import { Can, PermissionGuard } from './rbac';
-import { findServer } from './servers';
+import { findServer, ownerWrite } from './servers';
 import { mailReady } from './settings-store';
 import { budgetState, checkBudget } from './budget';
 import { cleanLabels, health, monthCost, sizing, type CpuStats } from './smart-rules';
 import { publishLive } from './live-bus';
 import { endSession, sessionsOf } from './presence';
+import { dropPush } from './notify';
 import { validTimeZone } from './time-zone';
 
 // CPU of the servers given over the last 7 days (server_cpu_samples, written with each energy sample).
@@ -45,10 +46,11 @@ export class SmartController {
   // The owner's tags and notes (staff need servers.manage_all to change someone else's).
   @Put('servers/:id/labels')
   async labels(@Req() req: AuthedRequest, @Param('id', ParseUUIDPipe) id: string, @Body() body: Record<string, unknown>) {
-    await findServer(req, id, true);
+    const s = await findServer(req, id, true);
     const v = cleanLabels(body);
     if ('fields' in v) throw apiError(400, 'VALIDATION_FAILED', 'Invalid input', v.fields);
-    await pool.query('UPDATE servers SET tags = $2, notes = $3, updated_at = now() WHERE id = $1', [id, v.tags, v.notes]);
+    // Written only while the server is still the owner's findServer answered for (servers.ts ownerWrite).
+    await ownerWrite(s, (db) => db.query('UPDATE servers SET tags = $2, notes = $3, updated_at = now() WHERE id = $1', [id, v.tags, v.notes]));
     await audit(req, 'server.labels', 'success', req.user.id, { id, tags: v.tags });
     return v;
   }
@@ -67,8 +69,9 @@ export class SmartController {
       if (!s.tags.some((x) => fold(x) === old)) continue;
       const rest = s.tags.filter((x) => fold(x) !== old);
       const tags = next && !rest.some((x) => fold(x) === fold(next)) ? [...rest, next] : rest;
-      await pool.query('UPDATE servers SET tags = $2, updated_at = now() WHERE id = $1', [s.id, tags]);
-      changed++;
+      // Each one only while it is still the caller's (ownerWrite): a server handed over since the list was read is left out.
+      await ownerWrite({ id: s.id, owner_id: req.user.id }, (db) => db.query('UPDATE servers SET tags = $2, updated_at = now() WHERE id = $1', [s.id, tags]))
+        .then(() => { changed++; }, (err) => { if ((err as { getStatus?: () => number }).getStatus?.() !== 404) throw err; });
     }
     await audit(req, 'server.labels', 'success', req.user.id, { from: from.tags[0], to: next, changed });
     return { changed };
@@ -111,8 +114,8 @@ export class SmartController {
   // Starred servers (any server the person can see).
   @Put('servers/:id/favorite')
   async star(@Req() req: AuthedRequest, @Param('id', ParseUUIDPipe) id: string) {
-    await findServer(req, id);
-    await pool.query('INSERT INTO server_favorites (user_id, server_id) VALUES ($1, $2) ON CONFLICT DO NOTHING', [req.user.id, id]);
+    const s = await findServer(req, id);
+    await ownerWrite(s, (db) => db.query('INSERT INTO server_favorites (user_id, server_id) VALUES ($1, $2) ON CONFLICT DO NOTHING', [req.user.id, id]));
     return { favorite: true };
   }
 
@@ -169,6 +172,14 @@ export class DigestController {
   }
 }
 
+// The browsers signed out stop receiving the account's notifications. A push subscription is not tied to a session,
+// only to the browser's user agent: the browser in use keeps its own when none of the ended sessions had the same
+// one (otherwise they cannot be told apart, and all go; Account → Notifications turns it on again).
+async function dropEndedPush(req: AuthedRequest, endedAgents: (string | null)[]) {
+  const mine = req.sessionId.startsWith('token:') ? '' : String(req.headers['user-agent'] ?? '').slice(0, 200);
+  await dropPush(req.user.id, mine && !endedAgents.some((a) => (a ?? '').slice(0, 200) === mine) ? mine : undefined);
+}
+
 // The person's own sessions (the one in use marked), and ending one of them.
 @Controller('account/sessions') @UseGuards(SessionGuard)
 export class MySessionsController {
@@ -179,8 +190,9 @@ export class MySessionsController {
   @Delete()
   async endOthers(@Req() req: AuthedRequest) {
     // Compared as text: with an API token the session in use is "token:…", not a uuid (every browser session then ends).
-    const { rows } = await pool.query('SELECT id FROM auth_sessions WHERE user_id = $1 AND id::text <> $2', [req.user.id, req.sessionId]);
+    const { rows } = await pool.query('SELECT id, user_agent FROM auth_sessions WHERE user_id = $1 AND id::text <> $2', [req.user.id, req.sessionId]);
     for (const r of rows) await endSession(req.user.id, r.id);
+    if (rows.length) await dropEndedPush(req, rows.map((r) => r.user_agent));
     await audit(req, 'account.sessions_ended', 'success', req.user.id, { count: rows.length });
     await publishLive(req.user.id, 'sessions');
     return { ended: rows.length };
@@ -188,7 +200,9 @@ export class MySessionsController {
 
   @Delete(':sid') @HttpCode(204)
   async end(@Req() req: AuthedRequest, @Param('sid') sid: string) {
-    if (!/^[\w-]{1,64}$/.test(sid) || !(await endSession(req.user.id, sid))) throw apiError(404, 'NOT_FOUND', 'Unknown session');
+    const { rows: [ended] } = /^[\w-]{1,64}$/.test(sid) ? await pool.query('SELECT user_agent FROM auth_sessions WHERE id::text = $1 AND user_id = $2', [sid, req.user.id]) : { rows: [] };
+    if (!ended || !(await endSession(req.user.id, sid))) throw apiError(404, 'NOT_FOUND', 'Unknown session');
+    await dropEndedPush(req, [ended.user_agent]);
     await audit(req, 'account.session_ended', 'success', req.user.id, { session: sid });
     await publishLive(req.user.id, 'sessions');
   }

@@ -4,7 +4,7 @@ import type { FastifyReply } from 'fastify';
 import { audit, type AuthedRequest } from './auth';
 import { config } from './config';
 import { apiError } from './errors';
-import { Can, PermissionGuard } from './rbac';
+import { assertAdmin, Can, PermissionGuard } from './rbac';
 import { decryptSecret } from './secrets';
 import { decryptCredentials, encryptCredentials, providers, sendWith } from './sms';
 import { emailPattern, getSettings, imagePattern, mailErrorCode, mailReady, mailSecrets, publicConfig, readBranding, readCaptcha, readMail, saveSettings, sendViaProvider, transportFor, verifyCaptcha, type SmsSettings } from './settings-store';
@@ -62,6 +62,7 @@ export class SettingsController {
 
   @Put('mail') @Can('settings.manage')
   async saveMail(@Req() req: AuthedRequest, @Body() body: Input) {
+    await assertAdmin(req); // where every account's reset links and codes are sent from (rbac.ts)
     const { value } = readMail(body ?? {}, await getSettings('mail'));
     await saveSettings('mail', value);
     await audit(req, 'settings.mail', 'success', req.user.id, { enabled: value.enabled, provider: value.provider, host: value.provider === 'smtp' ? value.host : undefined, use: value.use });
@@ -139,6 +140,9 @@ export class SettingsController {
     const apiTokens = body?.apiTokens === undefined ? current.apiTokens : ['everyone', 'staff', 'off'].includes(String(body.apiTokens)) ? String(body.apiTokens) as 'everyone' | 'staff' | 'off' : null;
     if (!apiTokens) throw apiError(400, 'VALIDATION_FAILED', 'Invalid input', { apiTokens: 'INVALID_VALUE' });
     const value = { require2fa, emailCodeSignIn: body?.emailCodeSignIn === true, apiTokens };
+    // Asking fewer people for two-factor, or letting a code in a mailbox stand in for the password: administrators.
+    const rank = { none: 0, staff: 1, all: 2 };
+    if (rank[require2fa] < rank[current.require2fa] || (value.emailCodeSignIn && !current.emailCodeSignIn)) await assertAdmin(req);
     await saveSettings('security', value);
     await publishLive(null, 'policy');
     await audit(req, 'settings.security', 'success', req.user.id, value);
@@ -153,7 +157,11 @@ export class SettingsController {
 
   @Put('captcha') @Can('settings.manage')
   async saveCaptcha(@Req() req: AuthedRequest, @Body() body: Input) {
-    const { value } = readCaptcha(body ?? {}, await getSettings('captcha'));
+    const current = await getSettings('captcha');
+    const { value } = readCaptcha(body ?? {}, current);
+    // Taking the captcha away, from everything or from one form, or lowering the score it asks for: administrators.
+    const forms = Object.keys(current.use) as (keyof typeof current.use)[];
+    if (current.provider !== 'none' && (value.provider === 'none' || value.minScore < current.minScore || forms.some((k) => current.use[k] && !value.use[k]))) await assertAdmin(req);
     await saveSettings('captcha', value);
     await audit(req, 'settings.captcha', 'success', req.user.id, { provider: value.provider, use: value.use });
     return this.captcha();
@@ -188,6 +196,7 @@ export class SmsSettingsController {
 
   @Put() @Can('settings.manage')
   async save(@Req() req: AuthedRequest, @Body() body: Input) {
+    await assertAdmin(req); // where two-factor and verification codes are sent through (rbac.ts)
     const { value } = readSms(body ?? {}, await getSettings('sms'));
     await saveSettings('sms', value);
     await audit(req, 'settings.sms', 'success', req.user.id, { provider: value.provider, use: value.use });
@@ -199,11 +208,18 @@ export class SmsSettingsController {
   async test(@Req() req: AuthedRequest, @Body() body: Input) {
     const to = typeof body?.to === 'string' && /^\+[1-9]\d{7,14}$/.test(body.to) ? body.to : null;
     if (!to) throw apiError(400, 'VALIDATION_FAILED', 'Invalid input', { to: 'INVALID_PHONE' });
-    const { value, credentials } = readSms(body, await getSettings('sms'));
+    const saved = await getSettings('sms');
+    // The custom provider is a request to whatever address the form names, judged by a pattern the form supplies:
+    // with values of their own that is the administrator's to try. Other staff test what is saved, and learn only
+    // whether it worked (no status class, no kind of failure: nothing about the answer leaves).
+    const savedOnly = body?.provider === 'custom' && !req.user.permissions.includes('*');
+    if (savedOnly && saved.provider !== 'custom') throw apiError(403, 'FORBIDDEN', 'Administrator permission required', undefined, { need: ['*'] });
+    const { value, credentials } = savedOnly ? { value: saved, credentials: decryptCredentials(saved) } : readSms(body, saved);
     if (value.provider === 'none') throw apiError(400, 'VALIDATION_FAILED', 'Invalid input', { provider: 'REQUIRED' });
     const name = (await getSettings('branding')).name;
     const r = await sendWith(value, credentials, to, `${name}: SMS test / SMS testi`);
-    await audit(req, 'settings.sms_test', r.ok ? 'success' : 'failure', req.user.id, { provider: value.provider, code: r.code });
+    await audit(req, 'settings.sms_test', r.ok ? 'success' : 'failure', req.user.id, { provider: value.provider, code: r.code, ...(savedOnly && { saved: true }) });
+    if (!r.ok && savedOnly) throw apiError(422, 'SMS_REJECTED', 'SMS test failed');
     if (!r.ok) throw apiError(422, r.code ?? 'SMS_REJECTED', 'SMS test failed', undefined, { detail: r.detail });
     return { sent: true, to, ref: r.ref };
   }

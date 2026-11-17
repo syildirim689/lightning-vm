@@ -7,7 +7,7 @@ import { audit, SessionGuard, type AuthedRequest } from './auth';
 import { pool } from './db';
 import { apiError } from './errors';
 import { Can, PermissionGuard } from './rbac';
-import { customerMay, findServer, hashOf, startOperation } from './servers';
+import { customerMay, findServer, hashOf, ownerWrite, startOperation } from './servers';
 import { callAdapter, storedTarget } from './vmware';
 
 const MAX_NETWORKS = 10;
@@ -85,7 +85,8 @@ export class PrivateNetworksController {
       WHERE NOT EXISTS (SELECT 1 FROM private_network_members m WHERE m.network_id = $2 AND m.address = network($1::cidr) + g) ORDER BY g LIMIT 1`, [n.cidr, id]);
     if (!a) throw apiError(409, 'NETWORK_FULL', 'The network has no free address');
     try {
-      await pool.query('INSERT INTO private_network_members (network_id, server_id, address) VALUES ($1, $2, $3)', [id, s.id, a.address]);
+      // Only while the server is still this owner's (servers.ts ownerWrite): a hand-over refuses a server on a network.
+      await ownerWrite(s, (db) => db.query('INSERT INTO private_network_members (network_id, server_id, address) VALUES ($1, $2, $3)', [id, s.id, a.address]));
     } catch (err) {
       if ((err as { code?: string }).code === '23505') throw apiError(409, 'ALREADY_MEMBER', 'The server is on this network already');
       throw err;
@@ -102,7 +103,7 @@ export class PrivateNetworksController {
     const { rows: [m] } = await pool.query(`SELECT m.* FROM private_network_members m JOIN private_networks n ON n.id = m.network_id WHERE m.network_id = $1 AND m.server_id = $2 AND n.owner_id = $3`, [id, serverId, req.user.id]);
     if (!m) throw apiError(404, 'NOT_FOUND', 'Not on this network');
     const s = await findServer(req, serverId, true);
-    if (m.status === 'failed' || !s.vm_moref) { await pool.query('DELETE FROM private_network_members WHERE network_id = $1 AND server_id = $2', [id, serverId]); return { removed: true }; }
+    if (m.status === 'failed' || !s.vm_moref) { await ownerWrite(s, (db) => db.query('DELETE FROM private_network_members WHERE network_id = $1 AND server_id = $2', [id, serverId])); return { removed: true }; }
     const operation = await startOperation(req, s, 'nic_remove', `net-leave:${id}:${serverId}:${randomUUID()}`, hashOf({ id: serverId, leave: id }), { networkId: id });
     await pool.query("UPDATE private_network_members SET status = 'leaving' WHERE network_id = $1 AND server_id = $2", [id, serverId]);
     await audit(req, 'network.server_left', 'success', req.user.id, { networkId: id, serverId });

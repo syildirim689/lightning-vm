@@ -109,6 +109,10 @@ export function prorate(diffCents: number, day: string, periodStart: string, per
   return diffCents <= 0 || left <= 0 || total <= 0 ? 0 : Math.round((diffCents * left) / total);
 }
 
+// The months a period spans (a subscription's, or an invoiced line's), from its own dates: the setting on the subscription
+// may have changed since the period was made, and a period staff moved by some days is still that many months.
+export const periodMonths = (periodStart: string, periodEnd: string) => Math.max(1, Math.round(daysBetween(periodStart, periodEnd) / 30.4375));
+
 // A coupon's price in cents: percent (valueCents 1250 = 12.5 %) or a fixed amount off, never below zero.
 export const couponPrice = (cents: number, kind: 'percent' | 'fixed', valueCents: number) =>
   Math.max(0, cents - (kind === 'percent' ? Math.round((cents * valueCents) / 10000) : valueCents));

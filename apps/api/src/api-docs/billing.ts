@@ -161,7 +161,7 @@ export default {
   'GET /admin/billing/overview': {
     tag: 'admin-billing',
     summary: { tr: 'Faturalama göstergeleri: aylık gelir, ödenmemiş faturalar, bu ayki tahsilat.', en: 'Billing figures: monthly recurring revenue, unpaid invoices, collected this month.' },
-    returns: { tr: 'mrr, open, collectedThisMonth, series (son 12 ay tahsilat), subscriptions (duruma göre adet), recentPayments (son 10). Tutarlar para birimine göre ondalık metin.', en: 'mrr, open, collectedThisMonth, series (last 12 months collected), subscriptions (count per status), recentPayments (last 10). Amounts per currency as decimal text.' },
+    returns: { tr: 'mrr, open, collectedThisMonth, series (son 12 ay tahsilat), subscriptions (duruma göre adet), recentPayments (son 10), paymentsInReview (personel onayı bekleyen açık ödemeler: n, oldest). Tutarlar para birimine göre ondalık metin.', en: 'mrr, open, collectedThisMonth, series (last 12 months collected), subscriptions (count per status), recentPayments (last 10), paymentsInReview (open payments waiting for staff: n, oldest). Amounts per currency as decimal text.' },
   },
   'GET /admin/billing/invoices': {
     tag: 'admin-billing',
@@ -208,7 +208,7 @@ export default {
     ],
     example: { method: 'bank_transfer', reference: 'EFT 2026-11-12 Ziraat 4471' },
     returns: { tr: '{ paymentId }', en: '{ paymentId }' },
-    errors: ['INVOICE_NOT_PAYABLE'],
+    errors: ['INVOICE_NOT_PAYABLE', 'INVOICE_AMOUNT_CHANGED'],
   },
   'POST /admin/billing/invoices/:id/cancel': {
     tag: 'admin-billing',
@@ -256,8 +256,8 @@ export default {
   'GET /admin/billing/payments': {
     tag: 'admin-billing',
     summary: { tr: 'Ödemeleri listeler (en yeni 300).', en: 'Lists payments (newest 300).' },
-    query: [{ name: 'status', type: 'string', values: ['pending', 'succeeded', 'failed', 'refunded', 'partially_refunded'], text: { tr: 'Duruma göre süzer.', en: 'Filters by status.' } }],
-    returns: { tr: 'payments: fatura numarası, sağlayıcı, yöntem, durum, tutar, iade edilen, hata, otomatik mi, müşterinin e-postası.', en: 'payments: invoice number, provider, method, status, amount, refunded, error, automatic, customer e-mail.' },
+    query: [{ name: 'status', type: 'string', values: ['pending', 'succeeded', 'failed', 'refunded', 'partially_refunded', 'review'], text: { tr: 'Duruma göre süzer; review: personelin onayını bekleyen açık ödemeler, en eskisi önce.', en: 'Filters by status; review: open payments waiting for staff, oldest first.' } }],
+    returns: { tr: 'payments: fatura numarası ve durumu (invoiceStatus), sağlayıcı, yöntem, durum, tutar, iade edilen, hata, otomatik mi, müşterinin e-postası, review (personel onayı bekliyor mu).', en: 'payments: invoice number and status (invoiceStatus), provider, method, status, amount, refunded, error, automatic, customer e-mail, review (whether it waits for staff).' },
   },
   'POST /admin/billing/balance': {
     tag: 'admin-billing',

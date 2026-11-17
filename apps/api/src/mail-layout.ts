@@ -94,3 +94,11 @@ export function mailText(c: MailContent, b: Brand) {
   return [...(c.label ? [`[${c.label}]`] : []), c.heading, '', ...c.intro.flatMap((s) => [s, '']), ...(c.code ? [c.code, ''] : []), ...(c.button ? [`${c.button.label}: ${c.button.url}`, ''] : []),
     ...(c.details ?? []).map(([k, v]) => `${k}: ${v}`), ...(c.details?.length ? [''] : []), ...(c.note ? [c.note, ''] : []), '—', words[b.locale].footer(b.name), ...(b.panelUrl ? [b.panelUrl] : [])].join('\n');
 }
+
+// When something happened, in the account's time zone with the zone named (Turkey's when none is set; an unknown
+// zone falls back to UTC). Explicit parts: dateStyle/timeStyle cannot be combined with timeZoneName (it throws).
+export function eventTime(locale: 'tr' | 'en', timeZone?: string | null, now = new Date()) {
+  const when = (tz: string) => new Intl.DateTimeFormat(locale === 'tr' ? 'tr-TR' : 'en-GB', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+    timeZone: tz, timeZoneName: 'short' }).format(now);
+  try { return when(timeZone || 'Europe/Istanbul'); } catch { return when('UTC'); }
+}

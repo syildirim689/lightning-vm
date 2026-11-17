@@ -131,3 +131,41 @@ func TestHostShellKeepsStderr(t *testing.T) {
 		t.Fatalf("host shell script %q hides bash's stderr", script)
 	}
 }
+
+// A terminal ticket issued before the administrator's session was revoked (a role taken away, a sign-out) starts no
+// shell afterwards; one asked for after it does.
+func TestTerminalPendingTicketIsRefusedAfterRevocation(t *testing.T) {
+	store, front := terminalSetup(t, time.Minute)
+	store.revoke <- Revocation{AuthHash: "auth-admin"}
+	store.revoke <- Revocation{UserID: "nobody"} // taken once the first is applied
+	addSession(store, token, Session{UserID: "admin-1", AuthHash: "auth-admin", VM: "host", IssuedAt: time.Now().Add(-time.Second).UnixMilli()})
+	c, _, err := dialTerminal(front, token)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if code, reason := closeCode(t, c); code != closeRevoked || reason != "TERMINAL_REVOKED" {
+		t.Fatalf("want the ticket refused as revoked, got %d %q", code, reason)
+	}
+	if names := store.eventNames(); names != "terminal_denied" {
+		t.Fatalf("events: %q (no shell may have been opened)", names)
+	}
+
+	later := token + "-later"
+	addSession(store, later, Session{UserID: "admin-1", AuthHash: "auth-admin", VM: "host", IssuedAt: time.Now().Add(time.Minute).UnixMilli()})
+	again, _, err := dialTerminal(front, later)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	_ = again.Write(ctx, websocket.MessageBinary, []byte("after-revocation\n"))
+	var got strings.Builder
+	for !strings.Contains(got.String(), "after-revocation") {
+		_, data, err := again.Read(ctx)
+		if err != nil {
+			t.Fatalf("no echo: %v (got %q)", err, got.String())
+		}
+		got.Write(data)
+	}
+	again.Close(websocket.StatusNormalClosure, "")
+}

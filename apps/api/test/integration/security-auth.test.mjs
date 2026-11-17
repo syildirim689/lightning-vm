@@ -2,13 +2,16 @@
 // wipes the test database and Redis DB). What is checked: only the auth routes the panel uses answer; directory and
 // single sign-on accounts get a session nowhere but from their directory or provider; captcha and the per-address
 // limit come before the directory; role mappings stay within the saver's own permissions; identifiers are bounded;
-// mailed links carry the panel's address; staff acting as someone leave nothing lasting; push endpoints are public
-// and owned; settings tests hand back no remote text and stored secrets do not follow a changed address.
+// mailed links carry the panel's address; staff acting as someone leave nothing lasting, and only while that staff
+// member still may; push endpoints are public and owned; settings tests hand back no remote text and stored secrets
+// do not follow a changed address; the channels for reset links and codes are the administrator's; what sends a
+// message is counted per account and destination; ticket notices follow who may see tickets; logs carry no tokens.
 import test, { before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { createServer } from 'node:http';
 import { createServer as tcp } from 'node:net';
+import { createRequire } from 'node:module';
 
 const url = process.env.TEST_DATABASE_URL ?? '';
 if (!/\/\w+_test(\?|$)/.test(url) || process.env.REDIS_DB !== '15') {
@@ -25,6 +28,7 @@ const { createApp, closeConnections } = await import('../../dist/main.js');
 const { pool, redis } = await import('../../dist/db.js');
 const { issueBootstrapToken } = await import('../../dist/setup.js');
 const { runMigrations } = await import('../../dist/migrate.js');
+const { notificationQueue, startNotificationWorker } = await import('../../dist/notify.js');
 
 let app;
 const csrf = { 'x-lightning-csrf': '1', origin: 'http://localhost', host: 'localhost' };
@@ -190,7 +194,14 @@ test('identifiers are bounded before a limiter key or an audit row sees them; re
     const r = await post(path, body);
     assert.deepEqual([r.statusCode, r.json().code], [400, 'VALIDATION_FAILED'], path);
   }
+  // A text and nothing else: a list holding a long text is not turned into one.
+  for (const [path, body] of [['/auth/sign-in/username', { username: ['u'.repeat(2000)], password }], ['/auth/sign-in/magic-link', { email: [long], callbackURL: '/' }],
+    ['/auth/sign-in/email', { email: { a: long }, password }], ['/auth/sign-in/email', { email: 7, password }], ['/auth/phone-number/send-otp', { phoneNumber: ['+905321110000'] }]]) {
+    const r = await post(path, body, path.includes('phone') ? user : undefined);
+    assert.deepEqual([r.statusCode, r.json().code], [400, 'VALIDATION_FAILED'], `${path} ${JSON.stringify(body).slice(0, 40)}`);
+  }
   assert.equal((await redis.keys('rl:login:*')).filter((k) => k.length > 300).length, 0, 'no limiter key was made of it');
+  assert.equal((await redis.keys('rl:otp:*')).length, 0);
   assert.equal((await one("SELECT count(*)::int AS n FROM audit_events WHERE action = 'auth.login'")).n, before, 'and no audit row');
   // The longest address that is still one is recorded as it is, and nothing in the audit log is longer than its cap.
   const edge = `${'b'.repeat(240)}@example.test`;
@@ -352,6 +363,31 @@ test('mailed links carry the address the panel was given, not the host of the re
     assert.equal((await post('/auth/sign-in/magic-link', { email: 'link@example.test', callbackURL: '/' })).statusCode, 200);
     const local = await until(() => smtp.mails.find((m) => m.includes('/magic-link/verify')));
     assert.match(local, /http:\/\/localhost\/api\/auth\/magic-link\/verify\?token=/);
+    // No address known and the request names a host that is neither this machine nor a private network: nothing is
+    // mailed (the answer is the same). A private address is taken as it is.
+    smtp.mails.length = 0;
+    await freshLimits();
+    assert.equal((await post('/auth/sign-in/magic-link', { email: 'link@example.test', callbackURL: '/' }, null, evil)).statusCode, 200);
+    assert.equal((await post('/auth/request-password-reset', { email: 'ayse@example.test', redirectTo: '/reset-password' }, null, evil)).statusCode, 200);
+    const lan = { host: '10.1.2.3:8080', origin: 'http://10.1.2.3:8080' };
+    assert.equal((await post('/auth/sign-in/magic-link', { email: 'link@example.test', callbackURL: '/' }, null, lan)).statusCode, 200);
+    assert.ok(await until(() => smtp.mails.find((m) => m.includes('http://10.1.2.3:8080/api/auth/magic-link/verify'))));
+    assert.equal(smtp.mails.length, 1, 'the two requests under a foreign host name were not mailed');
+    // The operator's PANEL_PUBLIC_URL settles it, before anything else.
+    process.env.PANEL_PUBLIC_URL = 'https://fixed.example.test/';
+    assert.equal((await post('/auth/sign-in/magic-link', { email: 'link@example.test', callbackURL: '/' }, null, evil)).statusCode, 200);
+    assert.ok(await until(() => smtp.mails.find((m) => m.includes('https://fixed.example.test/api/auth/magic-link/verify'))));
+    delete process.env.PANEL_PUBLIC_URL;
+    // While no address is known, the one the first administrator signs in on is kept: not a customer's, not a later one.
+    const at = (name) => ({ host: name, origin: `http://${name}` });
+    const stored = async () => (await one("SELECT value FROM settings WHERE key = 'public_url'")).value;
+    assert.ok(cookieOf(await post('/auth/sign-in/email', { email: 'ayse@example.test', password }, null, at('customer.example'))));
+    assert.equal(await stored(), null);
+    assert.ok(cookieOf(await post('/auth/sign-in/email', { email: 'boss@example.test', password }, null, at('panel.first.example'))));
+    assert.equal(await stored(), 'http://panel.first.example');
+    assert.ok(cookieOf(await post('/auth/sign-in/email', { email: 'boss@example.test', password }, null, at('panel.second.example'))));
+    assert.equal(await stored(), 'http://panel.first.example');
+    await pool.query("UPDATE settings SET value = 'null' WHERE key = 'public_url'");
     // An account with two-factor: neither asking for a link nor an older link signs it in.
     await pool.query('UPDATE users SET two_factor_enabled = true WHERE id = $1', [linkId]);
     assert.equal((await post('/auth/sign-in/magic-link', { email: 'link@example.test', callbackURL: '/' })).json().code, 'TWO_FACTOR_USE_PASSWORD');
@@ -361,6 +397,7 @@ test('mailed links carry the address the panel was given, not the host of the re
     assert.equal(await sessionsOf('link@example.test'), 0);
     await post('/auth/admin/remove-user', { userId: linkId }, admin);
   } finally {
+    delete process.env.PANEL_PUBLIC_URL;
     await pool.query("UPDATE settings SET value = 'null' WHERE key = 'public_url'");
     await put('/admin/settings/sign-in', { magicLink: false }, admin);
     await put('/admin/settings/mail', { enabled: false, port: 587, security: 'starttls' }, admin);
@@ -395,14 +432,26 @@ test('staff acting as someone leave nothing that outlives the session', async ()
   assert.equal((await get('/auth/passkey/generate-register-options', user)).statusCode, 200);
 });
 
-test('push subscriptions: a public HTTPS endpoint, owned by who subscribed it, gone when the sessions are ended', async () => {
+test('push subscriptions: a public HTTPS endpoint under a plain host name, owned by who subscribed it, gone when the sessions are ended', async (t) => {
   await freshLimits();
+  // No network here: the push service's name answers with a public address, another name with an internal one.
+  const dns = createRequire(import.meta.url)('node:dns/promises'), realLookup = dns.lookup;
+  dns.lookup = async (host) => [{ address: host === 'inside.example.test' ? '10.0.0.5' : '93.184.216.34', family: 4 }];
+  t.after(() => { dns.lookup = realLookup; });
+  // A plain host name only: no address written as a number, nothing in the host that two URL readers split differently.
   for (const endpoint of ['https://127.0.0.1/push/abcdef123456', 'https://10.0.0.5/push/abcdef123456', 'https://169.254.169.254/latest/meta-data', 'https://[::1]/push/abcdef123456',
-    'https://[::ffff:10.0.0.1]/push/abcdef', 'https://localhost/push/abcdef123456', 'http://93.184.216.34/push/abcdef123456', 'https://user:pw@93.184.216.34/push/abcdef']) {
+    'https://[::ffff:10.0.0.1]/push/abcdef', 'https://localhost/push/abcdef123456', 'http://push.example.test/push/abcdef123456', 'https://user:pw@push.example.test/push/abcdef',
+    'https://93.184.216.34/push/abcdef123456', 'https://127.0.0.1%2Epush.example.test/push/abcdef', 'https://127.0.0.1;push.example.test/push/abcdef', 'https://2130706433/push/abcdef',
+    'https://inside.example.test/push/abcdef123456']) {
     const r = await post('/notifications/push-subscriptions', { endpoint, keys: pushKeys }, user);
     assert.deepEqual([r.statusCode, r.json().fields?.endpoint], [400, 'INVALID_VALUE'], endpoint);
   }
-  const endpoint = 'https://93.184.216.34/push/abcdef123456';
+  // Kept as the address that was checked, in its normal form; the browser's own spelling still removes it.
+  assert.equal((await post('/notifications/push-subscriptions', { endpoint: 'https://Push.Example.TEST/push/Abc?x=1', keys: pushKeys }, user)).statusCode, 201);
+  assert.equal((await one('SELECT endpoint FROM push_subscriptions WHERE user_id = $1', [userId])).endpoint, 'https://push.example.test/push/Abc?x=1');
+  assert.equal((await call('DELETE', '/notifications/push-subscriptions', user, { endpoint: 'https://Push.Example.TEST/push/Abc?x=1' })).statusCode, 204);
+  assert.equal((await one('SELECT count(*)::int AS n FROM push_subscriptions WHERE user_id = $1', [userId])).n, 0);
+  const endpoint = 'https://push.example.test/push/abcdef123456';
   assert.equal((await post('/notifications/push-subscriptions', { endpoint, keys: pushKeys }, user)).statusCode, 201);
   assert.equal((await post('/notifications/push-subscriptions', { endpoint, keys: pushKeys }, user)).statusCode, 201, 'again by its owner');
   // Someone who only knows the address does not take the row; the same browser subscription (its keys) changes hands.
@@ -422,6 +471,49 @@ test('push subscriptions: a public HTTPS endpoint, owned by who subscribed it, g
   assert.equal((await post('/notifications/push-subscriptions', { endpoint, keys: pushKeys }, other)).statusCode, 201);
   assert.equal((await post('/auth/admin/revoke-user-sessions', { userId: otherId }, admin)).statusCode, 200);
   assert.equal((await one('SELECT count(*)::int AS n FROM push_subscriptions WHERE user_id = $1', [otherId])).n, 0);
+
+  // Every other way sessions end takes the subscriptions along too. Two browsers of one person, each subscribed.
+  const signIn = async (agent) => cookieOf(await post('/auth/sign-in/email', { email: 'other@example.test', password }, null, { 'user-agent': agent }));
+  const subscribed = async () => (await pool.query('SELECT user_agent FROM push_subscriptions WHERE user_id = $1 ORDER BY user_agent', [otherId])).rows.map((r) => r.user_agent);
+  const sessionIds = async () => (await pool.query('SELECT id, user_agent FROM auth_sessions WHERE user_id = $1', [otherId])).rows;
+  const two = async (agentA = 'Browser-A', agentB = 'Browser-B') => {
+    await pool.query('DELETE FROM auth_sessions WHERE user_id = $1', [otherId]);
+    await pool.query('DELETE FROM push_subscriptions WHERE user_id = $1', [otherId]);
+    await freshLimits();
+    const a = await signIn(agentA), b = await signIn(agentB);
+    assert.equal((await post('/notifications/push-subscriptions', { endpoint: `${endpoint}-a`, keys: pushKeys }, a, { 'user-agent': agentA })).statusCode, 201);
+    assert.equal((await post('/notifications/push-subscriptions', { endpoint: `${endpoint}-b`, keys: pushKeys }, b, { 'user-agent': agentB })).statusCode, 201);
+    const rows = await sessionIds();
+    return { a, b, idA: rows.find((r) => r.user_agent === agentA)?.id, idB: rows.find((r) => r.user_agent === agentB)?.id };
+  };
+  // The person ends one other session, then all others: the browser in use keeps its own subscription, the ended do not.
+  let s = await two();
+  assert.equal((await call('DELETE', `/account/sessions/${s.idB}`, s.a, undefined, { 'user-agent': 'Browser-A' })).statusCode, 204);
+  assert.deepEqual(await subscribed(), ['Browser-A']);
+  s = await two();
+  assert.equal((await call('DELETE', '/account/sessions', s.a, undefined, { 'user-agent': 'Browser-A' })).json().ended, 1);
+  assert.deepEqual(await subscribed(), ['Browser-A']);
+  // Two browsers that cannot be told apart: all subscriptions go.
+  s = await two('Same-Browser', 'Same-Browser');
+  assert.equal((await call('DELETE', '/account/sessions', s.a, undefined, { 'user-agent': 'Same-Browser' })).json().ended, 1);
+  assert.deepEqual(await subscribed(), []);
+  // A password change that signs the other devices out.
+  s = await two();
+  assert.equal((await post('/auth/change-password', { currentPassword: password, newPassword: password, revokeOtherSessions: true }, s.a, { 'user-agent': 'Browser-A' })).statusCode, 200);
+  assert.deepEqual(await subscribed(), []);
+  s = await two();
+  assert.equal((await post('/auth/change-password', { currentPassword: password, newPassword: password }, s.a, { 'user-agent': 'Browser-A' })).statusCode, 200);
+  assert.equal((await subscribed()).length, 2, 'without signing anyone out nothing is dropped');
+  // Staff end one session of the person; staff end all sessions of several people at once.
+  assert.equal((await call('DELETE', `/admin/users/${otherId}/sessions/${s.idB}`, admin)).statusCode, 204);
+  assert.deepEqual(await subscribed(), []);
+  s = await two();
+  assert.equal((await post('/auth/admin/revoke-user-session', { sessionToken: (await one('SELECT token FROM auth_sessions WHERE id = $1', [s.idB])).token }, admin)).statusCode, 200);
+  assert.deepEqual(await subscribed(), []);
+  s = await two();
+  assert.equal((await post('/admin/users/actions', { action: 'end_sessions', userIds: [otherId] }, admin)).json().done, 1);
+  assert.deepEqual(await subscribed(), []);
+  assert.equal((await sessionIds()).length, 0);
   await post('/auth/admin/remove-user', { userId: otherId }, admin);
 });
 
@@ -448,19 +540,28 @@ test('settings tests hand back no text of the address in the form; a stored secr
 
     // The custom SMS provider: sent or refused, with the status class; never the answer's text.
     const custom = (port, extra = {}) => ({ provider: 'custom', sender: '', credentials: { url: `http://127.0.0.1:${port}/send?to={to}`, method: 'GET', phoneFormat: 'e164', successPattern: 'INTERNAL', ...extra }, use: {} });
-    const sent = await post('/admin/settings/sms/test', { ...custom(answering.port), to: '+905321234567' }, staff);
+    // With values of their own (an address and a pattern from the form) it is the administrator's to try.
+    const sent = await post('/admin/settings/sms/test', { ...custom(answering.port), to: '+905321234567' }, admin);
     assert.equal(sent.statusCode, 200, sent.body);
     assert.doesNotMatch(sent.body, new RegExp(marker));
-    const rejected = await post('/admin/settings/sms/test', { ...custom(failing.port), to: '+905321234567' }, staff);
+    const rejected = await post('/admin/settings/sms/test', { ...custom(failing.port), to: '+905321234567' }, admin);
     assert.deepEqual([rejected.statusCode, rejected.json().code, rejected.json().detail], [422, 'SMS_REJECTED', 'HTTP 5xx']);
     assert.doesNotMatch(rejected.body, new RegExp(marker));
-    const closed = await post('/admin/settings/sms/test', { ...custom(1), to: '+905321234567' }, staff);
+    const closed = await post('/admin/settings/sms/test', { ...custom(1), to: '+905321234567' }, admin);
     assert.deepEqual([closed.statusCode, closed.json().code, closed.json().detail], [422, 'SMS_PROVIDER_UNREACHABLE', undefined]);
+    // Staff with settings.manage: nothing unsaved (their pattern would tell them what an internal address answers)...
+    const unsaved = await post('/admin/settings/sms/test', { ...custom(answering.port), to: '+905321234567' }, staff);
+    assert.deepEqual([unsaved.statusCode, unsaved.json().code], [403, 'FORBIDDEN']);
     // Its secret headers are for the server they were entered for.
     assert.equal((await put('/admin/settings/sms', custom(answering.port, { headers: '{"x-api-key":"s3cret"}' }), admin)).statusCode, 200);
-    assert.equal((await put('/admin/settings/sms', custom(answering.port), staff)).statusCode, 200, 'same server: kept');
-    const elsewhere = await post('/admin/settings/sms/test', { ...custom(failing.port), to: '+905321234567' }, staff);
+    assert.equal((await put('/admin/settings/sms', custom(answering.port), admin)).statusCode, 200, 'same server: kept');
+    const elsewhere = await post('/admin/settings/sms/test', { ...custom(failing.port), to: '+905321234567' }, admin);
     assert.deepEqual([elsewhere.statusCode, elsewhere.json().fields?.['credentials.headers']], [400, 'REQUIRED']);
+    // ...only what is saved, whatever their form says, answered with sent or not and nothing else.
+    const guess = (port, successPattern) => post('/admin/settings/sms/test', { ...custom(port, { successPattern }), to: '+905321234567' }, staff);
+    for (const r of [await guess(failing.port, '^NOT-THE-TEXT'), await guess(answering.port, 'INTERNAL-ONLY-TEXT-7f3a')]) assert.deepEqual([r.statusCode, r.json().sent], [200, true], 'the saved address and pattern were used');
+    assert.equal((await put('/admin/settings/sms', custom(failing.port, { headers: '{"x-api-key":"s3cret"}' }), admin)).statusCode, 200);
+    for (const r of [await guess(answering.port, 'INTERNAL'), await guess(1, 'x')]) assert.deepEqual([r.statusCode, r.json().code, r.json().detail], [422, 'SMS_REJECTED', undefined]);
     await put('/admin/settings/sms', { provider: 'none' }, admin);
 
     // Outgoing mail: another host in the form needs the password again; the failure is a code, not the server's words.
@@ -471,6 +572,404 @@ test('settings tests hand back no text of the address in the form; a stored secr
     assert.deepEqual([mailTest.statusCode, mailTest.json().code, mailTest.json().detail], [422, 'MAIL_CONNECTION_FAILED', undefined]);
     await put('/admin/settings/mail', { enabled: false, port: 587, security: 'starttls' }, admin);
   } finally { await failing.close(); await answering.close(); }
+});
+
+// The library's own limiter counts per client address (every test calls from one): cleared where a test is about the
+// panel's counts per account and per destination, which stay.
+const clearAddressLimits = async () => { for (const k of await redis.keys('rl:ba:*')) await redis.del(k); };
+const tokenOf = (cookie) => decodeURIComponent(cookie).split('.')[0];
+
+test('the channels that carry reset links and sign-in codes, and switching a safeguard off, are the administrator\'s', async () => {
+  await freshLimits();
+  const denied = (r, what) => assert.deepEqual([r.statusCode, r.json().code, r.json().need], [403, 'FORBIDDEN', ['*']], what);
+  const before = await one("SELECT (SELECT value FROM settings WHERE key = 'mail') AS mail, (SELECT value FROM settings WHERE key = 'sms') AS sms");
+  denied(await put('/admin/settings/mail', { enabled: true, provider: 'smtp', host: '127.0.0.1', port: 1, security: 'none', fromAddress: 'takeover@example.test' }, staff), 'mail transport and sender');
+  denied(await put('/admin/settings/sms', { provider: 'none' }, staff), 'SMS provider');
+  denied(await put('/admin/settings/sign-in', { magicLink: true }, staff), 'sign-in links on');
+  denied(await put('/admin/settings/security', { require2fa: 'none', emailCodeSignIn: true }, staff), 'e-mail codes on');
+  assert.deepEqual(await one("SELECT (SELECT value FROM settings WHERE key = 'mail') AS mail, (SELECT value FROM settings WHERE key = 'sms') AS sms"), before, 'nothing was saved');
+  assert.equal((await get('/admin/settings/sign-in', staff)).json().magicLink, false);
+  assert.equal((await get('/admin/settings/security', staff)).json().emailCodeSignIn, false);
+  // What stays with settings.manage: the other settings of the same pages, and reading all of them.
+  assert.equal((await put('/admin/settings/sign-in', { magicLink: false, username: false }, staff)).statusCode, 200);
+  assert.equal((await put('/admin/settings/security', { require2fa: 'none', emailCodeSignIn: false, apiTokens: 'staff' }, staff)).statusCode, 200);
+  assert.equal((await put('/admin/settings/security', { require2fa: 'none', emailCodeSignIn: false, apiTokens: 'everyone' }, staff)).statusCode, 200);
+  for (const page of ['mail', 'security', 'captcha']) assert.equal((await get(`/admin/settings/${page}`, staff)).statusCode, 200, page);
+  assert.equal((await get('/admin/settings/sms', staff)).statusCode, 200);
+  // The captcha: staff may turn it on or keep it; taking it away (at all, from one form, by a lower score) is not theirs.
+  const captcha = { provider: 'recaptcha-v3', siteKey: 'site-key-0123456789', secret: 'secret-key-0123456789', minScore: 0.5, use: { signIn: false, signUp: true, passwordReset: true } };
+  try {
+    assert.equal((await put('/admin/settings/captcha', captcha, staff)).statusCode, 200);
+    denied(await put('/admin/settings/captcha', { provider: 'none' }, staff), 'captcha off');
+    denied(await put('/admin/settings/captcha', { ...captcha, secret: '', use: { ...captcha.use, signUp: false } }, staff), 'captcha off for one form');
+    denied(await put('/admin/settings/captcha', { ...captcha, secret: '', minScore: 0.1 }, staff), 'a lower score');
+    assert.equal((await put('/admin/settings/captcha', { ...captcha, secret: '', use: { ...captcha.use, signIn: false } }, staff)).statusCode, 200, 'unchanged');
+    assert.equal((await get('/admin/settings/captcha', staff)).json().use.signUp, true);
+  } finally { assert.equal((await put('/admin/settings/captcha', { provider: 'none' }, admin)).statusCode, 200); }
+});
+
+test('a session started as someone else ends with the access of the staff member who started it, and an hour after it began', async () => {
+  await freshLimits();
+  assert.equal((await post('/admin/roles', { key: 'helper', name: 'Helper', permissions: ['users.view', 'users.impersonate'] }, admin)).statusCode, 201);
+  const helperId = await newUser('helper@example.test', 'Helper');
+  const grant = async () => assert.equal((await put(`/admin/users/${helperId}/access`, { roles: ['helper'], overrides: [] }, admin)).statusCode, 200);
+  // The helper with their access (back), signed in, acting as the customer.
+  const start = async () => {
+    await post('/auth/admin/unban-user', { userId: helperId }, admin);
+    await pool.query('UPDATE users SET banned = false WHERE id = $1', [helperId]);
+    await grant();
+    await freshLimits();
+    const helper = cookieOf(await post('/auth/sign-in/email', { email: 'helper@example.test', password }));
+    const r = await post('/auth/admin/impersonate-user', { userId }, helper);
+    assert.equal(r.statusCode, 200, r.body);
+    return cookieOf(r);
+  };
+  const row = (cookie) => one('SELECT id, expires_at, created_at FROM auth_sessions WHERE token = $1', [tokenOf(cookie)]);
+  // atOnce: the route that took the access away removed the session itself; otherwise its next request does.
+  const gone = async (cookie, what, atOnce = true) => {
+    if (atOnce) assert.equal(await row(cookie), undefined, `${what}: the session is removed`);
+    assert.equal((await get('/auth/me', cookie)).statusCode, 401, what);
+    assert.equal(await row(cookie), undefined, what);
+  };
+
+  // One hour, whatever the browser sends: used without the cookie that asks the library not to extend it, the
+  // session's end stays where it was; and an hour after it began it is over even if its row said otherwise.
+  let as = await start();
+  assert.equal((await get('/auth/me', as)).json().impersonatedBy, helperId);
+  const began = await row(as);
+  assert.ok(began.expires_at.getTime() - began.created_at.getTime() <= 3_600_000 + 2000);
+  for (let i = 0; i < 3; i++) assert.equal((await get('/auth/get-session', as)).statusCode, 200);
+  assert.equal((await row(as)).expires_at.getTime(), began.expires_at.getTime(), 'using it does not move its end');
+  await pool.query("UPDATE auth_sessions SET expires_at = now() + interval '12 hours' WHERE id = $1", [began.id]);
+  assert.equal((await row(as)).expires_at.getTime(), began.expires_at.getTime(), 'nothing moves its end later');
+  // (An ordinary session still slides.)
+  const mine = await row(user);
+  await pool.query("UPDATE auth_sessions SET expires_at = now() + interval '12 hours' WHERE id = $1", [mine.id]);
+  assert.ok((await row(user)).expires_at.getTime() >= mine.expires_at.getTime());
+  await pool.query("UPDATE auth_sessions SET created_at = now() - interval '61 minutes' WHERE id = $1", [began.id]);
+  assert.equal((await get('/auth/me', as)).statusCode, 401, 'an hour after it began');
+  assert.equal(await row(as), undefined);
+
+  // The staff member is demoted, banned, has their sessions ended (all, or one), gets a new password, is removed.
+  as = await start();
+  assert.equal((await put(`/admin/users/${helperId}/access`, { roles: ['user'], overrides: [] }, admin)).statusCode, 200);
+  await gone(as, 'demoted');
+  for (const [path, body] of [['/auth/admin/ban-user', { userId: helperId }], ['/auth/admin/revoke-user-sessions', { userId: helperId }],
+    ['/auth/admin/set-user-password', { userId: helperId, newPassword: password }]]) {
+    as = await start();
+    assert.equal((await post(path, body, admin)).statusCode, 200, path);
+    await gone(as, path);
+  }
+  as = await start();
+  const own = await one('SELECT id, token FROM auth_sessions WHERE user_id = $1 LIMIT 1', [helperId]);
+  assert.equal((await call('DELETE', `/admin/users/${helperId}/sessions/${own.id}`, admin)).statusCode, 204);
+  await gone(as, 'one session ended by staff');
+  as = await start();
+  assert.equal((await post('/admin/users/actions', { action: 'end_sessions', userIds: [helperId] }, admin)).json().done, 1);
+  await gone(as, 'sessions ended for several people');
+  as = await start();
+  assert.equal((await put('/admin/roles/helper', { name: 'Helper', permissions: ['users.view'] }, admin)).statusCode, 200);
+  await gone(as, 'the role lost the permission');
+  assert.equal((await put('/admin/roles/helper', { name: 'Helper', permissions: ['users.view', 'users.impersonate'] }, admin)).statusCode, 200);
+
+  // However the access went (here straight in the database, past every route): the session's next request notices.
+  // A "yes" is remembered for five seconds: wait them out once, then never ask before the change.
+  await new Promise((r) => setTimeout(r, 5200));
+  as = await start();
+  await pool.query("UPDATE users SET role = 'user' WHERE id = $1", [helperId]);
+  await gone(as, 'no longer holds users.impersonate', false);
+  as = await start();
+  await pool.query('UPDATE users SET banned = true WHERE id = $1', [helperId]);
+  await gone(as, 'banned', false);
+  as = await start();
+  await pool.query("UPDATE users SET role = 'admin' WHERE id = $1", [userId]);
+  try { await gone(as, 'the person now holds more than the staff member', false); } finally { await pool.query("UPDATE users SET role = 'user' WHERE id = $1", [userId]); }
+  as = await start();
+  assert.equal((await post('/auth/admin/remove-user', { userId: helperId }, admin)).statusCode, 200);
+  await gone(as, 'removed');
+  assert.equal((await call('DELETE', '/admin/roles/helper', admin)).statusCode, 204);
+  // The customer's own session was never touched.
+  assert.equal((await get('/auth/me', user)).statusCode, 200);
+});
+
+test('the password step of an account with two-factor is not a sign-in; its codes are counted per account', async () => {
+  await freshLimits();
+  const id = await newUser('twofa@example.test', 'Two');
+  const c = cookieOf(await post('/auth/sign-in/email', { email: 'twofa@example.test', password }));
+  const enabled = await post('/auth/two-factor/enable', { password }, c);
+  assert.equal(enabled.statusCode, 200, enabled.body);
+  const [backup] = enabled.json().backupCodes;
+  await pool.query('UPDATE users SET two_factor_enabled = true WHERE id = $1', [id]);
+  const count = async (action) => (await one("SELECT count(*)::int AS n FROM audit_events WHERE actor_id = $1 AND action = $2 AND outcome = 'success'", [id, action])).n;
+  const announced = async () => (await notificationQueue.getJobs(['waiting', 'delayed', 'active', 'completed'])).filter((j) => /^auth\.(sign_in|new_device)$/.test(j.data.event) && j.data.to?.[0] === id).length;
+  const [logins, notices] = [await count('auth.login'), await announced()];
+
+  // From a browser and a network this account never signed in from.
+  const elsewhere = { 'user-agent': 'Mozilla/5.0 (X11; Linux x86_64; rv:128.0) Gecko/20100101 Firefox/128.0', 'x-forwarded-for': '198.51.100.7' };
+  const step = await post('/auth/sign-in/email', { email: 'twofa@example.test', password }, null, elsewhere);
+  assert.equal(step.json().twoFactorRedirect, true, step.body);
+  assert.equal(cookieOf(step), undefined);
+  assert.equal(await count('auth.login'), logins, 'no sign-in is recorded for the password alone');
+  assert.equal(await count('auth.password_step'), 1, 'the step is recorded as what it is');
+  assert.equal(await announced(), notices, 'and nobody is told they signed in');
+  assert.equal(await sessionsOf('twofa@example.test'), 1, 'only the session from before');
+
+  // Codes by SMS or e-mail for the pending step: a few an hour for the account, from however many addresses.
+  const jar = [step.headers['set-cookie']].flat().map((v) => v.split(';')[0]).filter((v) => !v.endsWith('=')).join('; ');
+  const second = (path, payload) => app.inject({ method: 'POST', url: path, payload, headers: { ...csrf, ...elsewhere, cookie: jar } });
+  for (let i = 0; i < 8; i++) { await clearAddressLimits(); assert.equal((await second('/auth/two-factor/send-otp', {})).statusCode, 200, `code ${i + 1}`); }
+  await clearAddressLimits();
+  const over = await second('/auth/two-factor/send-otp', {});
+  assert.deepEqual([over.statusCode, over.json().code], [429, 'RATE_LIMITED']);
+
+  // The second step makes the session: now it is a sign-in, recorded once, from a device not seen before.
+  await clearAddressLimits();
+  const done = await second('/auth/two-factor/verify-backup-code', { code: backup });
+  assert.equal(done.statusCode, 200, done.body);
+  assert.ok(cookieOf(done));
+  assert.equal(await count('auth.login'), logins + 1);
+  assert.equal((await one("SELECT metadata->>'method' AS method FROM audit_events WHERE actor_id = $1 AND action = 'auth.login' ORDER BY id DESC LIMIT 1", [id])).method, 'password+2fa');
+  const told = (await notificationQueue.getJobs(['waiting', 'delayed', 'active', 'completed'])).filter((j) => j.data.to?.[0] === id && j.data.data?.method === 'password+2fa');
+  assert.deepEqual(told.map((j) => j.data.event), ['auth.new_device'], 'the password step did not make this device a known one');
+  await post('/auth/admin/remove-user', { userId: id }, admin);
+});
+
+test('what makes the panel send a message is counted per account and per destination, not only per client address', async () => {
+  await freshLimits();
+  const answering = await fakeInternal(200);
+  const person = async (email) => { const id = await newUser(email); await freshLimits(); return { id, c: cookieOf(await post('/auth/sign-in/email', { email, password })) }; };
+  try {
+    assert.equal((await put('/admin/settings/sms', { provider: 'custom', sender: '', credentials: { url: `http://127.0.0.1:${answering.port}/send?to={to}`, method: 'GET', phoneFormat: 'e164', successPattern: 'INTERNAL' },
+      use: { phoneVerification: true, twoFactor: true } }, admin)).statusCode, 200);
+    const p1 = await person('sender1@example.test'), p2 = await person('sender2@example.test');
+    await freshLimits();
+    // Verification codes: five a day to one number whoever asks, five a day from one account wherever to.
+    const code = async (who, phoneNumber) => { await clearAddressLimits(); return post('/auth/phone-number/send-otp', { phoneNumber }, who.c); };
+    for (let i = 0; i < 3; i++) assert.equal((await code(p1, '+905550000001')).statusCode, 200, `first account ${i}`);
+    for (let i = 0; i < 2; i++) assert.equal((await code(p2, '+905550000001')).statusCode, 200, `second account ${i}`);
+    let over = await code(p2, '+905550000001');
+    assert.deepEqual([over.statusCode, over.json().code], [429, 'RATE_LIMITED'], 'the number had its five');
+    assert.equal((await code(p2, '+905550000002')).statusCode, 200);
+    assert.equal((await code(p2, '+905550000003')).statusCode, 200);
+    over = await code(p2, '+905550000004');
+    assert.deepEqual([over.statusCode, over.json().code], [429, 'RATE_LIMITED'], 'the account had its five');
+    assert.equal((await code(p2, 'not a number')).statusCode, 400, 'what is not a number is not counted, only refused');
+
+    // Notification tests: six an hour per account over all channels; for SMS also per number, across accounts.
+    await pool.query("UPDATE users SET phone_number = '+905550000009', phone_number_verified = true WHERE id = ANY($1::uuid[])", [[p1.id]]);
+    const tryIt = (who, channel) => post('/notifications/test', { channel }, who.c);
+    for (let i = 0; i < 6; i++) assert.equal((await tryIt(p1, i % 2 ? 'sms' : 'inApp')).statusCode, 200, `test ${i}`);
+    for (const channel of ['inApp', 'sms']) {
+      over = await tryIt(p1, channel);
+      assert.deepEqual([over.statusCode, over.json().code], [429, 'RATE_LIMITED'], channel);
+    }
+    // The same number on another account (it moved there): three were sent to it, three are left.
+    await pool.query('UPDATE users SET phone_number = NULL, phone_number_verified = false WHERE id = $1', [p1.id]);
+    await pool.query("UPDATE users SET phone_number = '+905550000009', phone_number_verified = true WHERE id = $1", [p2.id]);
+    for (let i = 0; i < 3; i++) assert.equal((await tryIt(p2, 'sms')).statusCode, 200, `other account ${i}`);
+    over = await tryIt(p2, 'sms');
+    assert.deepEqual([over.statusCode, over.json().code], [429, 'RATE_LIMITED']);
+    assert.equal((await tryIt(p2, 'inApp')).statusCode, 200, 'the account itself still has tests left');
+
+    // Reset mail: five an hour per mailbox, known or not, from however many addresses.
+    for (let i = 0; i < 5; i++) { await clearAddressLimits(); assert.equal((await post('/auth/request-password-reset', { email: 'Nobody@example.test', redirectTo: '/reset-password' })).statusCode, 200); }
+    await clearAddressLimits();
+    over = await post('/auth/request-password-reset', { email: 'nobody@example.test', redirectTo: '/reset-password' });
+    assert.deepEqual([over.statusCode, over.json().code], [429, 'RATE_LIMITED']);
+    for (const p of [p1, p2]) await post('/auth/admin/remove-user', { userId: p.id }, admin);
+  } finally {
+    await put('/admin/settings/sms', { provider: 'none' }, admin);
+    await answering.close();
+  }
+});
+
+test('ticket replies and ratings are paced and tell staff once; a ticket\'s notices follow who may still see tickets', async (t) => {
+  await freshLimits();
+  const adminId = (await get('/auth/me', admin)).json().id;
+  const [dep] = (await get('/support/departments', user)).json().departments;
+  const open = async (subject) => { const r = await post('/support/tickets', { subject, departmentId: dep.id, body: 'Please look' }, user); assert.equal(r.statusCode, 201, r.body); return r.json().id; };
+  const reply = (id, body, who = user) => post(`/support/tickets/${id}/messages`, { body }, who);
+  const first = await open('Disk is full');
+  const queued = async (event, id) => (await notificationQueue.getJobs(['waiting', 'delayed', 'active', 'completed'])).filter((j) => j.data.event === event && j.data.data.ticketId === id).length;
+
+  // A burst of replies is one notice; after staff answered, the next reply tells them again.
+  for (let i = 0; i < 3; i++) assert.equal((await reply(first, `More ${i}`)).statusCode, 201);
+  assert.equal(await queued('support.customer_message', first), 1);
+  assert.equal((await reply(first, 'Looking into it', admin)).statusCode, 201);
+  assert.equal((await reply(first, 'Thanks')).statusCode, 201);
+  assert.equal(await queued('support.customer_message', first), 2);
+  // Ten customer writes on one ticket in ten minutes; staff are not counted.
+  for (let i = 0; i < 6; i++) assert.equal((await reply(first, `Again ${i}`)).statusCode, 201, `reply ${i}`);
+  const over = await reply(first, 'One too many');
+  assert.deepEqual([over.statusCode, over.json().code], [429, 'RATE_LIMITED']);
+  assert.equal((await one('SELECT count(*)::int AS n FROM ticket_messages WHERE ticket_id = $1 AND NOT staff', [first])).n, 11, 'the refused one was not stored');
+  assert.equal((await reply(first, 'Still here', admin)).statusCode, 201);
+
+  // A rating tells staff the first time only, whichever way it is changed afterwards; ratings are paced with replies.
+  assert.equal((await post(`/support/tickets/${first}/close`, {}, admin)).statusCode, 200);
+  await freshLimits();
+  for (const rating of [1, 5, 2, 4, 1]) assert.equal((await post(`/support/tickets/${first}/rating`, { rating, comment: `It was a ${rating}` }, user)).statusCode, 200);
+  assert.equal(await queued('support.low_rating', first), 1);
+  for (let i = 0; i < 5; i++) assert.equal((await post(`/support/tickets/${first}/rating`, { rating: 3 + (i % 2) }, user)).statusCode, 200);
+  assert.equal((await post(`/support/tickets/${first}/rating`, { rating: 1 }, user)).statusCode, 429);
+  const good = await open('Thank you');
+  assert.equal((await post(`/support/tickets/${good}/close`, {}, admin)).statusCode, 200);
+  for (const rating of [5, 1]) assert.equal((await post(`/support/tickets/${good}/rating`, { rating }, user)).statusCode, 200);
+  assert.equal(await queued('support.low_rating', good), 0, 'a good first rating changed later tells nobody');
+
+  // Only someone who can answer tickets is assigned one; when they can no longer see tickets, theirs go back to the team.
+  await freshLimits();
+  const agentId = await newUser('agent2@example.test', 'Agent');
+  assert.equal((await put(`/admin/users/${agentId}/access`, { roles: ['support'], overrides: [] }, admin)).statusCode, 200);
+  const second = await open('Assigned one');
+  const assign = (assigneeId) => call('PATCH', `/admin/support/tickets/${second}`, admin, { assigneeId });
+  const assignee = async () => (await one('SELECT assignee_id FROM tickets WHERE id = $1', [second])).assignee_id;
+  for (const notStaff of [userId, '00000000-0000-4000-8000-000000000000', 'x']) assert.equal((await assign(notStaff)).json().fields?.assigneeId, 'INVALID_VALUE', notStaff);
+  assert.equal((await assign(agentId)).statusCode, 200);
+  assert.equal(await assignee(), agentId);
+  assert.equal((await put(`/admin/users/${agentId}/access`, { roles: ['support'], overrides: [{ permission: 'users.view', effect: 'allow' }] }, admin)).statusCode, 200);
+  assert.equal(await assignee(), agentId, 'an access change that keeps support.view keeps the ticket');
+  assert.equal((await put(`/admin/users/${agentId}/access`, { roles: ['support'], overrides: [{ permission: 'support.view', effect: 'deny' }] }, admin)).statusCode, 200);
+  assert.equal(await assignee(), null, 'support.view taken away');
+  assert.equal((await put(`/admin/users/${agentId}/access`, { roles: ['support'], overrides: [] }, admin)).statusCode, 200);
+  assert.equal((await assign(agentId)).statusCode, 200);
+  assert.equal((await post('/auth/admin/ban-user', { userId: agentId }, admin)).statusCode, 200);
+  assert.equal(await assignee(), null, 'banned');
+  await post('/auth/admin/unban-user', { userId: agentId }, admin);
+
+  // A ticket that still names someone who left support some other way: the notice goes to the team, never to them.
+  assert.equal((await put(`/admin/users/${agentId}/access`, { roles: ['user'], overrides: [] }, admin)).statusCode, 200);
+  await pool.query('UPDATE tickets SET assignee_id = $2 WHERE id = $1', [second, agentId]);
+  const worker = startNotificationWorker();
+  t.after(() => worker.close());
+  assert.equal((await reply(second, 'Any news?')).statusCode, 201);
+  const got = (id) => pool.query("SELECT 1 FROM notifications WHERE user_id = $1 AND event = 'support.customer_message' AND link = $2", [id, `/admin/support/${second}`]).then((r) => r.rowCount);
+  assert.ok(await until(() => got(adminId), 30_000), 'the team was told instead');
+  assert.equal(await got(agentId), 0, 'the former agent was not');
+  assert.equal((await get(`/support/tickets/${second}`, cookieOf(await post('/auth/sign-in/email', { email: 'agent2@example.test', password })))).statusCode, 404);
+  await post('/auth/admin/remove-user', { userId: agentId }, admin);
+});
+
+test('service logs are read by administrators only, and what a URL carried as a secret is masked in them', async () => {
+  await freshLimits();
+  const { mkdirSync, writeFileSync } = await import('node:fs');
+  const dir = process.env.MAINTENANCE_DIR;
+  mkdirSync(`${dir}/logs`, { recursive: true });
+  writeFileSync(`${dir}/logs/proxy.log`, ['{"request":{"method":"GET","uri":"/api/auth/reset-password/SECRET-RESET-TOKEN?callbackURL=%2Freset-password"},"status":302}',
+    '{"request":{"method":"GET","uri":"/api/auth/magic-link/verify?token=SECRET-LINK-TOKEN&callbackURL=%2F"},"status":302}',
+    '{"request":{"method":"GET","uri":"/api/auth/callback/google?state=SECRET-STATE&code=SECRET-CODE"},"status":302}', 'an ordinary line'].join('\n'));
+  writeFileSync(`${dir}/state.json`, JSON.stringify({ checkedAt: new Date().toISOString(), services: [{ service: 'proxy' }], disks: [] }));
+  const read = await get('/admin/host/logs?source=proxy&lines=50', admin);
+  assert.equal(read.statusCode, 200, read.body);
+  assert.doesNotMatch(read.body, /SECRET-/);
+  assert.deepEqual(read.json().lines.map((l) => (l.match(/\[masked\]/g) ?? []).length), [1, 1, 2, 0]);
+  assert.equal(read.json().lines[3], 'an ordinary line');
+  assert.deepEqual((await get('/admin/host/live', admin)).json().logs, ['proxy']);
+  // system.update without being an administrator: the page's other parts, but neither the logs nor their list.
+  assert.equal((await post('/admin/roles', { key: 'host-operator', name: 'Host operator', permissions: ['system.view', 'system.update'] }, admin)).statusCode, 201);
+  const opId = await newUser('operator@example.test', 'Operator');
+  assert.equal((await put(`/admin/users/${opId}/access`, { roles: ['host-operator'], overrides: [] }, admin)).statusCode, 200);
+  const op = cookieOf(await post('/auth/sign-in/email', { email: 'operator@example.test', password }));
+  const refused = await get('/admin/host/logs?source=proxy', op);
+  assert.deepEqual([refused.statusCode, refused.json().code], [403, 'FORBIDDEN']);
+  assert.doesNotMatch(refused.body, /SECRET-/);
+  const live = await get('/admin/host/live', op);
+  assert.equal(live.statusCode, 200);
+  assert.deepEqual(live.json().logs, []);
+  await post('/auth/admin/remove-user', { userId: opId }, admin);
+  await call('DELETE', '/admin/roles/host-operator', admin);
+});
+
+test('the first sign-in by link or e-mail code proves the address: what an earlier holder of the account had is removed, once', async () => {
+  await freshLimits();
+  const smtp = await fakeSmtp();
+  try {
+    assert.equal((await put('/admin/settings/mail', { enabled: true, provider: 'smtp', host: '127.0.0.1', port: smtp.port, security: 'none', fromAddress: 'panel@example.test',
+      use: { passwordReset: true, twoFactor: true } }, admin)).statusCode, 200);
+    assert.equal((await put('/admin/settings/sign-in', { magicLink: true }, admin)).statusCode, 200);
+    assert.equal((await put('/admin/settings/security', { require2fa: 'none', emailCodeSignIn: true }, admin)).statusCode, 200);
+    const state = async (id) => one(`SELECT email_verified AS verified, phone_number AS phone,
+      (SELECT count(*)::int FROM auth_accounts a WHERE a.user_id = u.id) AS accounts, (SELECT count(*)::int FROM auth_sessions s WHERE s.user_id = u.id) AS sessions,
+      (SELECT count(*)::int FROM api_tokens t WHERE t.user_id = u.id) AS tokens, (SELECT count(*)::int FROM push_subscriptions p WHERE p.user_id = u.id) AS push,
+      (SELECT count(*)::int FROM audit_events e WHERE e.actor_id = u.id AND e.action = 'auth.address_proven') AS proofs FROM users u WHERE id = $1`, [id]);
+    const withToken = (token) => app.inject({ method: 'GET', url: '/auth/me', headers: { authorization: `Bearer ${token}` } });
+    // Whoever registered the address first: a password, a session, an API token, a browser subscribed, a phone number.
+    const register = async (email) => {
+      const r = await post('/auth/sign-up/email', { name: 'First', email, password });
+      assert.equal(r.statusCode, 200, r.body);
+      const id = r.json().user.id, c = cookieOf(r);
+      const made = await post('/account/api-tokens', { name: 'kept by the first holder', scope: 'read' }, c);
+      assert.equal(made.statusCode, 201, made.body);
+      await pool.query('INSERT INTO push_subscriptions (user_id, endpoint, p256dh, auth, user_agent) VALUES ($1, $2, $3, $4, $5)', [id, `https://push.example.test/${id}`, pushKeys.p256dh, pushKeys.auth, 'First-Browser']);
+      await pool.query("UPDATE users SET phone_number = $2, phone_number_verified = true WHERE id = $1", [id, `+90555${String(Date.now()).slice(-7)}`]);
+      assert.equal((await withToken(made.json().token)).statusCode, 200);
+      const before = await state(id);
+      assert.deepEqual({ ...before, phone: !!before.phone }, { verified: false, phone: true, accounts: 1, sessions: 1, tokens: 1, push: 1, proofs: 0 });
+      return { id, c, token: made.json().token };
+    };
+    // After the owner's proof: the session it made is the only way in that is left.
+    const proven = async (who, email, session, how) => {
+      assert.deepEqual(await state(who.id), { verified: true, phone: null, accounts: 0, sessions: 1, tokens: 0, push: 0, proofs: 1 }, how);
+      assert.equal((await get('/auth/me', session)).statusCode, 200, `${how}: the session from the proof works`);
+      assert.equal((await get('/auth/me', who.c)).statusCode, 401, `${how}: the earlier session is over`);
+      assert.equal((await withToken(who.token)).statusCode, 401, `${how}: the earlier API token is refused`);
+      const old = await post('/auth/sign-in/email', { email, password });
+      assert.equal(old.statusCode, 401, `${how}: the earlier password no longer signs in`);
+      assert.equal(cookieOf(old), undefined);
+      const row = await one("SELECT metadata FROM audit_events WHERE actor_id = $1 AND action = 'auth.address_proven'", [who.id]);
+      assert.deepEqual([row.metadata.removed.apiTokens, row.metadata.removed.pushSubscriptions, row.metadata.removed.phoneNumber], [1, 1, 1], how);
+    };
+    // What the owner sets up afterwards stays through later sign-ins of the same kind.
+    const again = async (who, session, signInAgain, how) => {
+      const made = await post('/account/api-tokens', { name: 'the owner\'s own', scope: 'read' }, session);
+      assert.equal(made.statusCode, 201, made.body);
+      const second = await signInAgain();
+      assert.ok(second, `${how}: signs in again`);
+      assert.deepEqual(await state(who.id), { verified: true, phone: null, accounts: 0, sessions: 2, tokens: 1, push: 0, proofs: 1 }, `${how}: nothing is removed the second time`);
+      assert.equal((await get('/auth/me', session)).statusCode, 200);
+      assert.equal((await withToken(made.json().token)).statusCode, 200);
+    };
+
+    // By link.
+    const byLink = await register('first-link@example.test');
+    const useLink = async () => {
+      smtp.mails.length = 0;
+      assert.equal((await post('/auth/sign-in/magic-link', { email: 'first-link@example.test', callbackURL: '/' })).statusCode, 200);
+      const mail = await until(() => smtp.mails.find((m) => m.includes('first-link@example.test') && m.includes('/magic-link/verify')));
+      const link = new URL(/(https?:\/\/\S+magic-link\/verify[^\s"<]+)/.exec(mail)[1]);
+      return cookieOf(await app.inject({ method: 'GET', url: link.pathname.replace(/^\/api/, '') + link.search, headers: { host: 'localhost' } }));
+    };
+    const linkSession = await useLink();
+    assert.ok(linkSession, 'the link signed in');
+    await proven(byLink, 'first-link@example.test', linkSession, 'link');
+    await again(byLink, linkSession, useLink, 'link');
+
+    // By code.
+    const byCode = await register('first-code@example.test');
+    const useCode = async () => {
+      smtp.mails.length = 0;
+      assert.equal((await post('/auth/email-otp/send-verification-otp', { email: 'first-code@example.test', type: 'sign-in' })).statusCode, 200);
+      const mail = await until(() => smtp.mails.find((m) => m.includes('first-code@example.test') && /^\d{6}$/m.test(m)));
+      return cookieOf(await post('/auth/sign-in/email-otp', { email: 'first-code@example.test', otp: /^(\d{6})$/m.exec(mail)[1] }));
+    };
+    const codeSession = await useCode();
+    assert.ok(codeSession, 'the code signed in');
+    await proven(byCode, 'first-code@example.test', codeSession, 'code');
+    await again(byCode, codeSession, useCode, 'code');
+
+    // Staff marking an address verified by hand is not the owner's proof: nothing is removed, then or later.
+    const byStaff = await register('first-staff@example.test');
+    assert.equal((await put(`/admin/users/${byStaff.id}/email-verified`, { verified: true }, admin)).statusCode, 200);
+    const kept = await state(byStaff.id);
+    assert.deepEqual({ ...kept, phone: !!kept.phone }, { verified: true, phone: true, accounts: 1, sessions: 1, tokens: 1, push: 1, proofs: 0 });
+    assert.equal((await withToken(byStaff.token)).statusCode, 200);
+    for (const p of [byLink, byCode, byStaff]) await post('/auth/admin/remove-user', { userId: p.id }, admin);
+  } finally {
+    await put('/admin/settings/security', { require2fa: 'none', emailCodeSignIn: false }, admin);
+    await put('/admin/settings/sign-in', { magicLink: false }, admin);
+    await put('/admin/settings/mail', { enabled: false, port: 587, security: 'starttls' }, admin);
+    await smtp.close();
+  }
 });
 
 test('open consoles and terminals are closed when access shrinks or two-factor is reset', async () => {

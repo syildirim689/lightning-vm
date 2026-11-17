@@ -21,7 +21,9 @@ import (
 )
 
 // Session is written by the API (single use, short TTL) and consumed here. It holds the VMware
-// ticket URL, which therefore never reaches the browser, a URL or a log line.
+// ticket URL, which therefore never reaches the browser, a URL or a log line. IssuedAt is the moment
+// (Unix milliseconds, the API's clock) before the API checked that its user may open this console: a
+// revocation at or after it covers the ticket (ticketRevoked). Zero, from an older API, is before any.
 type Session struct {
 	Key          string   `json:"-"`
 	URL          string   `json:"url"`
@@ -33,6 +35,7 @@ type Session struct {
 	VM           string   `json:"vm"`
 	VMName       string   `json:"vmName"`
 	ConnectionID string   `json:"connectionId"`
+	IssuedAt     int64    `json:"issuedAt"`
 }
 
 type Revocation struct {
@@ -44,6 +47,9 @@ type Revocation struct {
 
 type Store interface {
 	Consume(ctx context.Context, key string) (*Session, error) // nil, nil when unknown, expired or already used
+	// Revoked: the API revoked the ticket's account or browser session (or everything) at or after the moment the
+	// ticket was asked for. It leaves a marker with each revocation for a little longer than a ticket lives.
+	Revoked(ctx context.Context, s *Session) (bool, error)
 	Active(ctx context.Context, s *Session, started time.Time) error
 	Inactive(ctx context.Context, s *Session) error
 	Event(ctx context.Context, fields map[string]any)
@@ -74,8 +80,18 @@ type Gateway struct {
 
 	mu     sync.Mutex
 	active map[*conn]struct{}
+	heard  []heardRevocation // the last two minutes' revocations, for tickets not redeemed yet (ticketRevoked)
 	denied deniedLimiter
 }
+
+// heardRevocation is a revocation this gateway received, with the moment it did.
+type heardRevocation struct {
+	rev Revocation
+	at  time.Time
+}
+
+// A ticket lives 60 seconds: a revocation older than this cannot meet a ticket issued before it.
+const revocationMemory = 2 * time.Minute
 
 type conn struct {
 	s      *Session
@@ -237,6 +253,16 @@ func (g *Gateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Revoked between being issued and being presented (a hand-over of the server, a sign-out, ban or role change
+	// in that minute): the ticket is spent and opens nothing. Checked with the slot held, so a revocation that
+	// arrives from here on finds this session among the live ones.
+	if g.ticketRevoked(ctx, s) {
+		g.release(c)
+		g.store.Event(ctx, map[string]any{"event": "denied", "reason": "CONSOLE_REVOKED", "userId": s.UserID, "vm": s.VM, "connectionId": s.ConnectionID})
+		client.Close(closeRevoked, "CONSOLE_REVOKED")
+		return
+	}
+
 	upstream, code, err := g.dialUpstream(ctx, s, client.Subprotocol())
 	if err != nil {
 		g.release(c)
@@ -378,13 +404,48 @@ func (g *Gateway) revocationLoop(ctx context.Context) {
 	}
 }
 
+// A revocation by account, browser session or of everything is also remembered for a while: a ticket that was issued
+// before it and is presented after it is no live session yet (ticketRevoked).
 func (g *Gateway) revoke(rev Revocation) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
+	if rev.All || rev.UserID != "" || rev.AuthHash != "" {
+		now := time.Now()
+		kept := g.heard[:0]
+		for _, h := range g.heard {
+			if now.Sub(h.at) < revocationMemory {
+				kept = append(kept, h)
+			}
+		}
+		g.heard = append(kept, heardRevocation{rev: rev, at: now})
+	}
 	for c := range g.active {
 		if rev.All || (rev.SessionKey != "" && rev.SessionKey == c.s.Key) || (rev.UserID != "" && rev.UserID == c.s.UserID) ||
 			(rev.AuthHash != "" && rev.AuthHash == c.s.AuthHash) {
 			c.cancel(errRevoked)
 		}
 	}
+}
+
+// ticketRevoked reports whether the ticket's account or browser session was revoked at or after the moment the ticket
+// was asked for: by a revocation this gateway heard, or by the marker the API leaves in Redis, which also covers a
+// gateway that was restarting or missed the message. The API and the gateways read one clock (one host). A store that
+// cannot be asked refuses the ticket; the browser asks for a new one.
+func (g *Gateway) ticketRevoked(ctx context.Context, s *Session) bool {
+	issued := time.UnixMilli(s.IssuedAt)
+	g.mu.Lock()
+	for _, h := range g.heard {
+		if time.Since(h.at) < revocationMemory && !h.at.Before(issued) &&
+			(h.rev.All || (h.rev.UserID != "" && h.rev.UserID == s.UserID) || (h.rev.AuthHash != "" && h.rev.AuthHash == s.AuthHash)) {
+			g.mu.Unlock()
+			return true
+		}
+	}
+	g.mu.Unlock()
+	revoked, err := g.store.Revoked(ctx, s)
+	if err != nil {
+		logger.Error("revocation_check_failed", "error", err.Error())
+		return true
+	}
+	return revoked
 }

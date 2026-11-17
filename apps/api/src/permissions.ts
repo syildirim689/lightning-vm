@@ -62,6 +62,28 @@ export async function permissionsOf(userId: string, roleValue?: string | null) {
   return effectivePermissions(role, overrides);
 }
 
+// The effective permissions of many accounts in one statement (notify.ts resolves a staff audience with it; the
+// per-account permissionsOf costs two queries each). ids omitted: every account. Banned and disabled ones are left out.
+export async function permissionsOfMany<T extends object = object>(ids?: string[], columns = ''): Promise<(T & { id: string; role: string | null; permissions: string[] })[]> {
+  await ensureRoles();
+  const { rows } = await pool.query(`SELECT u.id, u.role${columns ? `, ${columns}` : ''},
+      coalesce((SELECT json_agg(json_build_object('permission', o.permission, 'effect', o.effect)) FROM user_permission_overrides o WHERE o.user_id = u.id), '[]') AS overrides
+    FROM users u WHERE NOT coalesce(u.banned, false) AND u.disabled_at IS NULL AND ($1::uuid[] IS NULL OR u.id = ANY($1::uuid[]))`, [ids ?? null]);
+  return rows.map(({ overrides, ...u }) => ({ ...u, permissions: effectivePermissions(u.role, overrides) }));
+}
+
+// Open tickets held by accounts that may no longer see tickets (a role or override taken away, a ban) go back to the
+// team: their notices are addressed to the assignee. ids omitted: every assignee is looked at (a role was edited).
+export async function releaseTickets(ids?: string[]) {
+  const { rows } = await pool.query(`SELECT DISTINCT assignee_id AS id FROM tickets WHERE assignee_id IS NOT NULL AND status <> 'closed' AND ($1::uuid[] IS NULL OR assignee_id = ANY($1::uuid[]))`, [ids ?? null])
+    .catch(() => ({ rows: [] as { id: string }[] }));
+  if (!rows.length) return;
+  const held = rows.map((r) => r.id as string);
+  const may = new Set((await permissionsOfMany(held)).filter((u) => can(u.permissions, 'support.view')).map((u) => u.id));
+  const gone = held.filter((id) => !may.has(id));
+  if (gone.length) await pool.query(`UPDATE tickets SET assignee_id = NULL, updated_at = now() WHERE assignee_id = ANY($1::uuid[]) AND status <> 'closed'`, [gone]);
+}
+
 // better-auth's admin plugin checks roles by name; it gets every role from the table, each allowed through,
 // because the real check (permission, and the target being within the actor's reach) runs in our hook.
 export const betterAuthRoles = new Proxy({} as Record<string, { authorize: () => { success: true }; statements: object }>, {

@@ -12,7 +12,7 @@ import { audit, SessionGuard, type AuthedRequest } from './auth';
 import { logEvent } from './log';
 import { Can, PermissionGuard } from './rbac';
 import { decryptSecret, encryptSecret } from './secrets';
-import { findServer } from './servers';
+import { findServer, ownerWrite } from './servers';
 import { getSettings, saveSettings, type RdnsSettings } from './settings-store';
 import { hostname, renderPtr, reverseName } from './rdns-names';
 export { renderPtr, reverseName };
@@ -159,7 +159,7 @@ export class ServerIpsController {
     if (s.provider === 'none') throw apiError(409, 'RDNS_NOT_CONFIGURED', 'Reverse DNS is not set up');
     const staff = req.user.permissions.includes('*') || req.user.permissions.includes('servers.manage_all');
     if (!s.customerEdit && !staff) throw apiError(403, 'RDNS_EDIT_DISABLED', 'Changing reverse DNS is not allowed here');
-    const { rows: [a] } = await pool.query('SELECT host(address) AS address FROM ip_allocations WHERE server_id = $1 AND address = $2::inet', [id, address])
+    const { rows: [a] } = await pool.query('SELECT host(address) AS address, ptr FROM ip_allocations WHERE server_id = $1 AND address = $2::inet', [id, address])
       .catch(() => ({ rows: [] }));
     if (!a) throw apiError(404, 'NOT_FOUND', 'Not an address of this server');
     const wanted = typeof body?.ptr === 'string' ? body.ptr.trim().toLowerCase().replace(/\.$/, '') : '';
@@ -174,8 +174,14 @@ export class ServerIpsController {
       }
       ptr = `${wanted}.`;
     }
-    await setPtr(a.address, ptr, s);
-    await pool.query('UPDATE ip_allocations SET ptr = $2 WHERE address = $1::inet', [a.address, ptr]);
+    // The row first, and only while the server is still this owner's (servers.ts ownerWrite); the record follows, and a
+    // refusal by the DNS server puts the row back.
+    await ownerWrite(server, (db) => db.query('UPDATE ip_allocations SET ptr = $2 WHERE address = $1::inet', [a.address, ptr]));
+    try { await setPtr(a.address, ptr, s); }
+    catch (err) {
+      await pool.query('UPDATE ip_allocations SET ptr = $2 WHERE address = $1::inet AND ptr IS NOT DISTINCT FROM $3', [a.address, a.ptr, ptr]);
+      throw err;
+    }
     await audit(req, 'server.ptr', 'success', req.user.id, { serverId: id, address: a.address, ptr });
     return { address: a.address, ptr };
   }

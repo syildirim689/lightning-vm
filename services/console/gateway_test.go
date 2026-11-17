@@ -25,6 +25,8 @@ type memStore struct {
 	sessions map[string]*Session
 	events   []map[string]any
 	revoke   chan Revocation
+	marks    map[string]int64 // the API's revocation markers: "user:<id>", "auth:<hash>", "all" -> Unix milliseconds
+	broken   bool             // the store cannot be asked about markers
 }
 
 func (m *memStore) Consume(_ context.Context, key string) (*Session, error) {
@@ -45,6 +47,20 @@ func (m *memStore) Event(_ context.Context, f map[string]any) {
 	m.mu.Unlock()
 }
 func (m *memStore) Revocations(context.Context) <-chan Revocation { return m.revoke }
+
+func (m *memStore) Revoked(_ context.Context, s *Session) (bool, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.broken {
+		return false, errors.New("redis unavailable")
+	}
+	for _, k := range []string{"all", "user:" + s.UserID, "auth:" + s.AuthHash} {
+		if at, ok := m.marks[k]; ok && at >= s.IssuedAt {
+			return true, nil
+		}
+	}
+	return false, nil
+}
 
 func upstream(t *testing.T) (*httptest.Server, string) {
 	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -400,5 +416,113 @@ func TestPerUserLimitAndRevocation(t *testing.T) {
 			t.Fatalf("audit events missing (%d events)", events)
 		}
 		time.Sleep(20 * time.Millisecond)
+	}
+}
+
+// A ticket is issued up to a minute before it is presented. A revocation in that minute (the server was handed to
+// another account, a sign-out, a ban, a role taken away) reaches no live session, so the gateway refuses the ticket
+// itself: by the revocations it heard, and by the markers the API leaves in Redis. A ticket asked for after the
+// revocation, and one of somebody else, open as before.
+func TestPendingTicketIsRefusedAfterRevocation(t *testing.T) {
+	g, store, front := setup(t)
+	up, pin := upstream(t)
+	url := strings.Replace(up.URL, "https", "wss", 1) + "/ticket/x"
+	before := time.Now().Add(-time.Second).UnixMilli()
+	after := time.Now().Add(time.Minute).UnixMilli()
+	ticket := func(user, auth string, issuedAt int64) Session {
+		return Session{URL: url, SHA256: []string{pin}, UserID: user, AuthHash: auth, VM: "vm-9", IssuedAt: issuedAt}
+	}
+	refused := func(name string, s Session) {
+		t.Helper()
+		tok := token + "-" + name
+		addSession(store, tok, s)
+		c, _, err := dial(t, front, front.URL, tok)
+		if err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		if code, reason := closeCode(t, c); code != closeRevoked || reason != "CONSOLE_REVOKED" {
+			t.Fatalf("%s: want the ticket refused as revoked, got %d %q", name, code, reason)
+		}
+	}
+	opens := func(name string, s Session) {
+		t.Helper()
+		tok := token + "-" + name
+		addSession(store, tok, s)
+		c, _, err := dial(t, front, front.URL, tok)
+		if err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if _, msg, err := c.Read(ctx); err != nil || string(msg) != "hello from vm" {
+			t.Fatalf("%s: the console did not open: %q %v", name, msg, err)
+		}
+		c.Close(websocket.StatusNormalClosure, "")
+	}
+
+	// Heard on the channel. The loop takes one message at a time: once the third is taken, the first two are applied.
+	store.revoke <- Revocation{UserID: "prev-owner"} // a hand-over
+	store.revoke <- Revocation{AuthHash: "auth-out"} // a sign-out
+	store.revoke <- Revocation{UserID: "nobody"}
+	refused("by-user", ticket("prev-owner", "auth-prev", before))
+	refused("by-session", ticket("u2", "auth-out", before))
+	refused("no-time", ticket("prev-owner", "auth-prev", 0)) // an older API wrote no time: before any revocation
+	opens("asked-later", ticket("prev-owner", "auth-prev", after))
+	opens("someone-else", ticket("u3", "auth-3", before))
+
+	// Not heard (the gateway was restarting): the API's markers say the same.
+	now := time.Now().UnixMilli()
+	store.mu.Lock()
+	store.marks = map[string]int64{"user:banned": now, "auth:auth-gone": now}
+	store.mu.Unlock()
+	refused("marked-user", ticket("banned", "auth-4", before))
+	refused("marked-session", ticket("u5", "auth-gone", before))
+	opens("marked-but-later", ticket("banned", "auth-4", after))
+	store.mu.Lock()
+	store.marks = map[string]int64{"all": now}
+	store.mu.Unlock()
+	refused("marked-all", ticket("u6", "auth-6", before))
+
+	// Markers that cannot be read: refused rather than opened unchecked.
+	store.mu.Lock()
+	store.marks, store.broken = nil, true
+	store.mu.Unlock()
+	refused("store-down", ticket("u7", "auth-7", before))
+
+	// Each refusal is audited with its account, and none of them keeps a slot.
+	store.mu.Lock()
+	denied := 0
+	for _, e := range store.events {
+		if e["event"] == "denied" && e["reason"] == "CONSOLE_REVOKED" && e["userId"] != "" {
+			denied++
+		}
+	}
+	store.mu.Unlock()
+	if denied != 7 {
+		t.Fatalf("want 7 audited refusals, got %d", denied)
+	}
+	deadline := time.Now().Add(3 * time.Second)
+	for {
+		g.mu.Lock()
+		left := len(g.active)
+		g.mu.Unlock()
+		if left == 0 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("%d slots still taken", left)
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+}
+
+// A revocation is forgotten once no ticket issued before it can still be presented.
+func TestHeardRevocationsAreForgotten(t *testing.T) {
+	g := &Gateway{active: map[*conn]struct{}{}}
+	g.heard = []heardRevocation{{rev: Revocation{UserID: "old"}, at: time.Now().Add(-2 * revocationMemory)}}
+	g.revoke(Revocation{UserID: "new"})
+	g.revoke(Revocation{SessionKey: "one-live-session"}) // names a live session only: nothing to remember
+	if len(g.heard) != 1 || g.heard[0].rev.UserID != "new" {
+		t.Fatalf("remembered %v", g.heard)
 	}
 }

@@ -381,6 +381,32 @@ export default {
     summary: { tr: 'Uzlaştırmayı hemen kuyruğa ekler.', en: 'Queues a reconciliation run now.' },
     returns: { tr: '`queued: true`.', en: '`queued: true`.' },
   },
+  'GET /admin/system/restore-hold': {
+    tag: 'admin-servers',
+    summary: { tr: 'Panelin bir geri yüklemeden sonra beklemede olup olmadığını verir.', en: 'Tells whether the panel is held after a restore.' },
+    details: { tr: 'Eski bir yedek geri yüklendiğinde kurulum betiği beklemeyi koyar. Bekleme sürerken panel kendiliğinden hiçbir şey yapmaz (işlem, zamanlama, süresi dolan silme, faturalama çalışması) ve işlem başlatan çağrılar `409 RESTORE_HOLD` döner; uzlaştırma yalnızca bulgu yazar.',
+      en: 'The installer sets the hold when an older backup is restored. While it is set the panel does nothing by itself (operations, schedules, due deletions, the billing run) and calls that start an operation answer `409 RESTORE_HOLD`; reconciliation only records findings.' },
+    returns: { tr: '`held`, `backup` (geri yüklenen yedek), `restoredAt` ve `detail` (kurulum betiğinin yazdığı bilgi).', en: '`held`, `backup` (the backup that was restored), `restoredAt` and `detail` (what the installer recorded).' },
+  },
+  'DELETE /admin/system/restore-hold': {
+    tag: 'admin-servers',
+    summary: { tr: 'Geri yükleme beklemesini kaldırır; panel yeniden kendiliğinden çalışır.', en: 'Releases the hold after a restore; the panel acts by itself again.' },
+    details: { tr: 'Önce yedekten sonra değişenleri gözden geçirin: ödemeler, siparişler, silmeler ve o zamandan beri kurulan ya da silinen sunucular (uzlaştırma bulguları). Kaldırma denetim kaydına yazılır; açık işlemler bir dakika içinde yeniden kuyruğa alınır.',
+      en: 'Review first what changed since the backup: payments, orders, deletions and servers built or removed since (the reconciliation findings). The release is audited; open operations are queued again within a minute.' },
+    returns: { tr: '`held: false`, `released` (bekleme var mıydı).', en: '`held: false`, `released` (whether a hold was set).' },
+  },
+  'POST /admin/external/:source/customers/:id/claim': {
+    tag: 'admin-servers',
+    summary: { tr: 'Var olan bir hesabı dış faturalama sistemine devreder ve önceki sahibinin kullanabileceği her şeyi kaldırır.', en: 'Hands an existing account to an outside billing system and removes everything its earlier holder could still use.' },
+    details: { tr: 'Müşteri araması `409 CUSTOMER_NEEDS_REVIEW` döndüğünde ve hesabın alıcıya ait olacağı kesinse kullanılır. Aynı işlemde hesabın oturumları, API anahtarları, geçiş anahtarları, bağlı girişleri, telefon numarası, webhook\'ları, sohbet ve bildirim bağlantıları, kayıtlı SSH anahtarları, parolası ve iki adımlı doğrulaması silinir; müşteri "parolamı unuttum" ile yeni parola belirler. Sunucular, faturalar ve destek kayıtları kalır. Personel, bayi, bayi müşterisi ve başka bir sistemin hesabı devredilemez.',
+      en: 'For when the customer lookup answers `409 CUSTOMER_NEEDS_REVIEW` and the account is known to be the buyer\'s from now on. In the same transaction the account\'s sessions, API tokens, passkeys, linked sign-ins, phone number, webhooks, chat and push connections, saved SSH keys, password and two-factor are removed; the customer sets a new password with "forgot password". Servers, invoices and tickets stay. Staff, resellers, a reseller\'s customers and another system\'s accounts cannot be handed over.' },
+    params: [
+      { name: 'source', type: 'string', required: true, text: { tr: 'Dış sistemin adı, örneğin whmcs.', en: 'The outside system\'s name, e.g. whmcs.' } },
+      { name: 'id', type: 'uuid', required: true, text: { tr: 'Devredilecek hesap.', en: 'The account to hand over.' } },
+    ],
+    returns: { tr: '`id`, `source` ve `removed` (türüne göre kaldırılanların sayısı).', en: '`id`, `source` and `removed` (how many of each kind were removed).' },
+    errors: ['CUSTOMER_NEEDS_REVIEW', 'CANNOT_CHANGE_OWN_ACCOUNT', 'FORBIDDEN_TARGET'],
+  },
 
   // ---- Operating system updates inside the server (guest-updates.ts) ----
   'GET /servers/:id/updates': {

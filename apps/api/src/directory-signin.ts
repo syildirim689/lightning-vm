@@ -4,12 +4,12 @@
 // the account's name and roles follow the directory and better-auth's password hash is replaced with this one,
 // so better-auth then accepts it. A wrong directory password is refused even if an older hash would match.
 import { APIError } from 'better-auth/api';
-import { getAuth } from './better-auth';
+import { endImpersonations, getAuth } from './better-auth';
 import { pool } from './db';
 import { ldapAuthenticate, rolesFromGroups } from './ldap';
 import { publishLive } from './live-bus';
 import { logEvent } from './log';
-import { ensureRoles, roles } from './permissions';
+import { ensureRoles, releaseTickets, roles } from './permissions';
 import { decryptSecret } from './secrets';
 import { getSettings, type LdapSettings } from './settings-store';
 
@@ -59,7 +59,12 @@ export async function directorySignIn(ctx: unknown, body: Input) {
   await pool.query('UPDATE users SET name = coalesce(nullif($2, \'\'), name), role = $3, external_id = $4, updated_at = now() WHERE id = $1', [u.id, r.user.name, nextRole, r.user.dn]);
   if (await c.internalAdapter.findCredentialAccount(u.id)) await c.internalAdapter.updatePassword(u.id, hash);
   else await c.internalAdapter.linkAccount({ userId: u.id, providerId: 'credential', accountId: u.id, password: hash });
-  if (nextRole !== u.role) await publishLive(u.id, 'access');
+  if (nextRole !== u.role) {
+    await publishLive(u.id, 'access');
+    // The directory took roles away: what went with them goes too (rbac.ts does the same for a change made in the panel).
+    await endImpersonations(u.id);
+    await releaseTickets([u.id]);
+  }
 }
 
 // The directory (or the single sign-on provider) owns these passwords: they are not changed or reset in the panel.

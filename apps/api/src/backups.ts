@@ -8,7 +8,7 @@ import { platformCan } from './catalog';
 import { pool } from './db';
 import { apiError } from './errors';
 import { Can, PermissionGuard } from './rbac';
-import { customerMay, findServer, hashOf, startOperation } from './servers';
+import { customerMay, findServer, hashOf, ownerWrite, startOperation } from './servers';
 import { getSettings } from './settings-store';
 
 const columns = `id, kind, note, status, size_gb AS "sizeGb", error_code AS "errorCode", created_at AS "createdAt", finished_at AS "finishedAt"`;
@@ -25,8 +25,9 @@ export async function startBackup(req: AuthedRequest, server: { id: string; owne
   const target = await backupTarget(server.pool_id);
   if (!target) throw apiError(409, 'BACKUPS_NOT_CONFIGURED', 'Backups are not set up for this location');
   const id = randomUUID();
-  await pool.query(`INSERT INTO backups (id, server_id, owner_id, connection_id, datastore_moref, path, kind, note) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-    [id, server.id, server.owner_id, target.connectionId, target.datastore, `${server.id}/${id}.vmdk`, kind, note]);
+  // For the owner the caller read, and only while the server is still theirs (servers.ts ownerWrite).
+  await ownerWrite(server, (db) => db.query(`INSERT INTO backups (id, server_id, owner_id, connection_id, datastore_moref, path, kind, note) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+    [id, server.id, server.owner_id, target.connectionId, target.datastore, `${server.id}/${id}.vmdk`, kind, note]));
   try {
     return { backupId: id, operation: await startOperation(req, server, 'backup_create', key, hashOf({ id: server.id, backup: id }), { backupId: id }) };
   } catch (err) {

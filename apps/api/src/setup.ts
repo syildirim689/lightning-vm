@@ -6,6 +6,7 @@ import { pool, redis } from './db';
 import { apiError } from './errors';
 import { audit, currentUser, readCredentials, type User } from './auth';
 import { getAuth } from './better-auth';
+import { rememberPanelAddress } from './chat-delivery';
 import { can, ensureRoles } from './permissions';
 import { newToken, rateLimit, sha256 } from './security';
 import { agentStatus, pendingRequests, queueRequest, settings as hostSettings } from './maintenance';
@@ -297,6 +298,8 @@ export class SetupController {
     const cookies = signIn.headers.getSetCookie();
     if (cookies.length) reply.header('set-cookie', cookies);
     await audit(req, 'setup.admin_created', 'success', id);
+    // Until the access step names the panel's address, the one the wizard was opened on stands for it (mail links).
+    await rememberPanelAddress(`${req.protocol}://${req.host}`);
     return { id, email, role: 'admin', locale };
   }
 }

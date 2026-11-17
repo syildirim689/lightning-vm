@@ -7,16 +7,16 @@ import webpush from 'web-push';
 import { pool, redis } from './db';
 import { logEvent } from './log';
 import { queueWebhooks } from './webhooks';
-import { can, permissionsOf, type Permission } from './permissions';
+import { can, permissionsOfMany, type Permission } from './permissions';
 import { decryptSecret, encryptSecret } from './secrets';
 import { getSettings, mailReady, saveSettings, sendMail, type Channel, type NotificationPolicy } from './settings-store';
 import { sendSms, smsReady } from './sms';
 import { absolute, deliverChat } from './chat-delivery';
-import { publicOnlyAgent, publicUrl } from './chat-apps';
+import { publicOnlyAgent, pushEndpoint } from './chat-apps';
 import { brandFor } from './mail';
-import { mailHtml, mailText, type MailContent, type Tone } from './mail-layout';
+import { eventTime, mailHtml, mailText, type MailContent, type Tone } from './mail-layout';
 import { publishLive } from './live-bus';
-import { alwaysSent, inQuietHours, loudChannels } from './quiet-hours';
+import { alwaysSent, inQuietHours, loudChannels, type QuietHours } from './quiet-hours';
 
 export type Text = { title: string; body: string };
 type EventDef = {
@@ -232,15 +232,18 @@ export async function notify(event: EventKey, to: string[] | `staff:${Permission
     .catch(() => logEvent('error', 'notify_enqueue_failed', { event }));
 }
 
-async function recipients(to: string[] | string) {
-  const { rows } = Array.isArray(to)
-    ? await pool.query('SELECT id, email, locale, role, phone_number, phone_number_verified, quiet_hours, time_zone FROM users WHERE id = ANY($1::uuid[]) AND NOT coalesce(banned, false)', [to])
-    : await pool.query('SELECT id, email, locale, role, phone_number, phone_number_verified, quiet_hours, time_zone FROM users WHERE NOT coalesce(banned, false) AND disabled_at IS NULL');
-  if (Array.isArray(to)) return rows;
-  const perm = to.replace('staff:', '') as Permission;
-  const out = [];
-  for (const u of rows) if (can(await permissionsOf(u.id, u.role), perm)) out.push(u);
-  return out;
+// Who gets it. A staff event goes only to accounts that hold its permission and are active, whether it is addressed
+// to the team ('staff:<permission>') or to accounts by id (a ticket's assignee may have left support since). Their
+// permissions come from one statement, not one per account.
+type Person = Recipient & { quiet_hours: QuietHours };
+const personColumns = 'u.email, u.locale, u.phone_number, u.phone_number_verified, u.quiet_hours, u.time_zone';
+async function recipients(to: string[] | string, def: EventDef): Promise<Person[]> {
+  if (Array.isArray(to) && def.audience !== 'staff') {
+    return (await pool.query(`SELECT u.id, ${personColumns} FROM users u WHERE u.id = ANY($1::uuid[]) AND NOT coalesce(u.banned, false)`, [to])).rows;
+  }
+  const perm = Array.isArray(to) ? def.permission : to.replace('staff:', '') as Permission;
+  const people = await permissionsOfMany<Person>(Array.isArray(to) ? to : undefined, personColumns);
+  return perm ? people.filter((u) => can(u.permissions, perm)) : people;
 }
 
 // The channels one user gets for one event: the admin's policy, then the user's choice within it.
@@ -266,20 +269,23 @@ async function sendPush(userId: string, payload: object) {
   if (!rows.length) return;
   const keys = await vapid();
   const brand = (await getSettings('branding')).name;
-  // The endpoint came from a browser, so from whoever is signed in: only a public HTTPS address is ever connected to
-  // (checked again as the connection is made), and a push service that does not answer is not waited for.
-  await Promise.all(rows.map(async (s) => (await publicUrl(s.endpoint) ? webpush.sendNotification({ endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } }, JSON.stringify({ ...payload, brand }),
-    { vapidDetails: { subject: 'mailto:noreply@lightning-vm.invalid', publicKey: keys.publicKey, privateKey: keys.privateKey }, TTL: 3600, agent: publicOnlyAgent, timeout: 10_000 }) : Promise.reject(new Error('not public')))
+  // The endpoint came from a browser, so from whoever is signed in: only a public HTTPS address under a plain host
+  // name is ever connected to (checked again as the connection is made), and a push service that does not answer is
+  // not waited for. The library gets the address as it was checked, not the stored text (it reads URLs its own way).
+  await Promise.all(rows.map(async (s) => pushEndpoint(s.endpoint).then((endpoint) => (endpoint ? webpush.sendNotification({ endpoint, keys: { p256dh: s.p256dh, auth: s.auth } }, JSON.stringify({ ...payload, brand }),
+    { vapidDetails: { subject: 'mailto:noreply@lightning-vm.invalid', publicKey: keys.publicKey, privateKey: keys.privateKey }, TTL: 3600, agent: publicOnlyAgent, timeout: 10_000 }) : Promise.reject(new Error('not public'))))
     // Gone or expired subscriptions are removed; anything else is logged.
     .catch(async (err) => {
       if (err?.statusCode === 404 || err?.statusCode === 410) await pool.query('DELETE FROM push_subscriptions WHERE id = $1', [s.id]);
       else logEvent('error', 'push_failed', { status: err?.statusCode ?? 0 });
     })));
 }
-// When someone's sessions are ended for them (ban, sessions revoked, password set or reset, two-factor reset), the
-// browsers that were signed in stop receiving the account's notifications. A browser that signs out removes its own
-// (DELETE /notifications/push-subscriptions).
-export const dropPush = (userId: string) => pool.query('DELETE FROM push_subscriptions WHERE user_id = $1', [userId]).catch(() => logEvent('error', 'push_drop_failed'));
+// When someone's sessions are ended (by staff: a ban, sessions revoked, a password set, a two-factor reset; by the
+// person: a password reset or change that signs other devices out, ending other sessions), the browsers that were
+// signed in stop receiving the account's notifications. A browser that signs out removes its own
+// (DELETE /notifications/push-subscriptions). keepAgent: the browser that stays signed in (smart.ts).
+export const dropPush = (userId: string, keepAgent?: string) => pool.query('DELETE FROM push_subscriptions WHERE user_id = $1 AND ($2::text IS NULL OR user_agent IS DISTINCT FROM $2)', [userId, keepAgent ?? null])
+  .catch(() => logEvent('error', 'push_drop_failed'));
 
 // The e-mail's tag and colour: what area the event is from, and whether it is good news, a warning or a failure.
 const mailLabels: Record<string, { tr: string; en: string }> = {
@@ -306,9 +312,7 @@ export async function deliver(u: Recipient, channel: Channel, t: Text, link: str
     const b = await brandFor(u.locale);
     const url = await absolute(link);
     const label = mailLabels[event.split('.')[0]]?.[b.locale];
-    // When it happened, in the account's time zone (Turkey's when none is set; an unknown zone falls back to UTC).
-    const when = (tz: string) => new Intl.DateTimeFormat(b.locale === 'tr' ? 'tr-TR' : 'en-GB', { dateStyle: 'long', timeStyle: 'short', timeZone: tz, timeZoneName: 'short' }).format(new Date());
-    let at: string; try { at = when(u.time_zone || 'Europe/Istanbul'); } catch { at = when('UTC'); }
+    const at = eventTime(b.locale, u.time_zone);
     const c: MailContent = { preheader: t.body, label, tone: mailTone(event), heading: t.title, intro: [t.body], details: [[b.locale === 'tr' ? 'Zaman' : 'Time', at]], button: url ? { label: b.locale === 'tr' ? 'Panelde aç' : 'Open in the panel', url } : undefined,
       note: b.locale === 'tr' ? 'Hangi bildirimleri e-postayla alacağınızı Hesap sayfasındaki Bildirimler bölümünden değiştirebilirsiniz.'
         : 'Choose which notifications reach you by e-mail in the Notifications section of the Account page.' };
@@ -327,7 +331,10 @@ export function startNotificationWorker() {
     if (!def) return;
     const p = (await policies())[event];
     const texts = { tr: def.text.tr(data), en: def.text.en(data) };
-    const people = await recipients(to);
+    let people = await recipients(to, def);
+    // Addressed to someone who may no longer see it (a ticket still assigned to a former agent): the team gets it
+    // instead, so it is not lost. Not "assigned to you", which is about that one person.
+    if (!people.length && Array.isArray(to) && to.length && def.audience === 'staff' && def.permission && event !== 'support.assigned') people = await recipients(`staff:${def.permission}`, def);
     // Webhooks get the event for everyone it reached, whatever their notification channels.
     await queueWebhooks(event, people.map((u) => u.id), data).catch(() => logEvent('error', 'webhook_queue_failed', { event }));
     for (const u of people) {

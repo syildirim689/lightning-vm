@@ -7,21 +7,23 @@ import { Can, PermissionGuard } from './rbac';
 import { can } from './permissions';
 import { newToken, sha256 } from './security';
 import { callAdapter, storedTarget } from './vmware';
+import { revokeConsoles, sessionSeconds } from './console-revoke';
 
 // The browser gets only this one-time cookie, scoped to the gateway path. The VMware ticket goes
 // to Redis for the console gateway and never appears in a response, URL or log.
 const consoleCookie = 'lvm_console';
-const sessionSeconds = 60;
 type Ticket = { url: string; sha1?: string; sha256?: string[]; certPem?: string; vmName: string };
 
 const authHash = (req: AuthedRequest) => sha256(req.sessionToken).toString('hex');
 
-// Live consoles of a signed-out or disabled user are closed by the gateway.
-export async function revokeConsoles(revocation: { authHash?: string; userId?: string; sessionKey?: string; all?: boolean }) {
-  await redis.publish('console:revoke', JSON.stringify(revocation)).catch(() => undefined);
-}
+// Closing consoles (and the marker that covers tickets not redeemed yet) is in console-revoke.ts, which the session
+// code can import too.
+export { revokeConsoles };
 
-export async function openConsole(req: AuthedRequest, reply: FastifyReply, connectionId: string, vm: string, ownedServer = false) {
+// bound.asked: the moment before the caller's right to this console was read (a revocation from then on covers the
+// ticket); bound.expectName: the managed name the VM must carry (a customer's server; docs/adapter-contract.md).
+export async function openConsole(req: AuthedRequest, reply: FastifyReply, connectionId: string, vm: string, ownedServer = false, bound: { asked?: number; expectName?: string } = {}) {
+  const issuedAt = bound.asked ?? Date.now();
   // A console belongs to a signed-in browser (its revocation follows the browser session), never to an API token.
   if (req.sessionId.startsWith('token:')) throw apiError(403, 'TOKEN_NOT_ALLOWED', 'Open the console from the panel');
   if (!/^[\w-]{1,80}$/.test(vm)) throw apiError(400, 'VALIDATION_FAILED', 'Invalid input', { vm: 'INVALID_VALUE' });
@@ -33,7 +35,7 @@ export async function openConsole(req: AuthedRequest, reply: FastifyReply, conne
   // Admin route: any VM of a connection. Customer route (ownedServer): the caller already proved ownership.
   if (!ownedServer && !can(req.user.permissions, 'consoles.any')) throw apiError(403, 'FORBIDDEN', 'Permission required');
   let ticket: Ticket;
-  try { ticket = await callAdapter<Ticket>('/v1/console-ticket', { ...storedTarget(c), vm }, 30_000); }
+  try { ticket = await callAdapter<Ticket>('/v1/console-ticket', { ...storedTarget(c), vm, ...(bound.expectName && { expectName: bound.expectName }) }, 30_000); }
   catch (err) {
     const code = (err as { getResponse?: () => { code?: string } }).getResponse?.().code ?? 'VMWARE_ERROR';
     await audit(req, 'console.session_issued', 'failure', req.user.id, { connectionId, vm, code });
@@ -43,7 +45,7 @@ export async function openConsole(req: AuthedRequest, reply: FastifyReply, conne
   const key = sha256(token).toString('hex');
   await redis.set(`console:session:${key}`, JSON.stringify({
     url: ticket.url, sha1: ticket.sha1 ?? '', sha256: ticket.sha256 ?? [], certPem: ticket.certPem ?? '',
-    userId: req.user.id, authHash: authHash(req), vm, vmName: ticket.vmName, connectionId,
+    userId: req.user.id, authHash: authHash(req), vm, vmName: ticket.vmName, connectionId, issuedAt,
   }), 'EX', sessionSeconds, 'NX');
   reply.setCookie(consoleCookie, token, { path: '/console/ws', httpOnly: true, sameSite: 'strict', secure: req.protocol === 'https', maxAge: sessionSeconds });
   await audit(req, 'console.session_issued', 'success', req.user.id, { connectionId, vm, vmName: ticket.vmName });

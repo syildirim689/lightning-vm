@@ -7,7 +7,7 @@ import { Body, Controller, Get, Put, Req, UseGuards } from '@nestjs/common';
 import { audit, type AuthedRequest } from './auth';
 import { reloadAuth } from './better-auth';
 import { apiError } from './errors';
-import { Can, PermissionGuard } from './rbac';
+import { assertAdmin, Can, PermissionGuard } from './rbac';
 import { encryptSecret } from './secrets';
 import { enabledSocial, socialIds } from './social-providers';
 import { getSettings, saveSettings, type SignInSettings, type SocialId } from './settings-store';
@@ -58,7 +58,10 @@ export class SignInMethodsController {
 
   @Put() @Can('settings.manage')
   async save(@Req() req: AuthedRequest, @Body() body: Input) {
-    const value = readSignIn(body ?? {}, await getSettings('signIn'));
+    const saved = await getSettings('signIn');
+    const value = readSignIn(body ?? {}, saved);
+    // Letting a link in a mailbox stand in for the password: administrators (as for the e-mail code, settings.ts).
+    if (value.magicLink && !saved.magicLink) await assertAdmin(req);
     await saveSettings('signIn', value);
     await reloadAuth();
     await audit(req, 'settings.sign_in_methods', 'success', req.user.id, { social: enabledSocial(value), magicLink: value.magicLink, username: value.username, oneTap: value.oneTap,

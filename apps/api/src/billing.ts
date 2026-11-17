@@ -3,6 +3,7 @@
 // payment providers in billing-gateways.ts. An invoice awaits payment (a pro forma without a legal number) until it is
 // paid; then it gets its number in the year's series and is issued (e-Fatura / e-Arşiv in einvoice.ts).
 import { providers } from './payment-providers';
+import { randomBytes } from 'node:crypto';
 import { All, Body, Controller, Delete, Get, HttpCode, Param, ParseUUIDPipe, Post, Put, Query, Req, Res, UseGuards } from '@nestjs/common';
 import type { FastifyReply } from 'fastify';
 import type { Pool, PoolClient } from 'pg';
@@ -16,9 +17,10 @@ import { Can, PermissionGuard } from './rbac';
 import { decryptSecret, encryptSecret } from './secrets';
 import { getSettings, saveSettings, type BillingSettings } from './settings-store';
 import { enqueue, startOperation } from './servers';
-import { finalResult, gateways, needsReview, sandboxPay, type Result } from './billing-gateways';
+import { finalResult, gateways, needsReview, reviewCodes, sandboxPay, underReview, type Result } from './billing-gateways';
+import { restoreHold } from './restore-hold';
 import { renewalPrice, type CouponUse } from './coupons';
-import { addDays, addMonths, cleanProfile, collectionStep, daysBetween, fromCents, dueDay, hoursDue, invoiceNumber, lineAmounts, prorate, renewalDue, settleSplit, taxFor, toCents, totals, validPrefix } from './billing-rules';
+import { addDays, addMonths, cleanProfile, collectionStep, daysBetween, fromCents, dueDay, hoursDue, invoiceNumber, lineAmounts, periodMonths, prorate, renewalDue, settleSplit, taxFor, toCents, totals, validPrefix } from './billing-rules';
 
 type Db = Pick<Pool, 'query'> | PoolClient;
 type Row = Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
@@ -73,7 +75,7 @@ export async function withdrawLines(db: Db, invoiceIds: string[]) {
   if (invoiceIds.length) await db.query('UPDATE invoice_lines SET withdrawn = true WHERE invoice_id = ANY($1::uuid[]) AND NOT withdrawn', [invoiceIds]);
 }
 
-type After = { enqueue: string[]; powerOn: { id: string; owner_id: string }[]; paid: Row[] };
+export type After = { enqueue: string[]; powerOn: { id: string; owner_id: string }[]; paid: Row[] };
 // Paid in full: the number of the year's series, then what the invoice was for: the order's server is built, a renewal
 // moves the period on (and lifts a hold), a top-up becomes balance. Runs inside the payment's transaction.
 async function markPaid(db: PoolClient, invoiceId: string, after: After) {
@@ -147,11 +149,13 @@ async function einvoiceOn() {
 }
 
 // One payment's result, inside the caller's transaction: recorded once, the invoice paid when covered. `settled`: this
-// call changed it (a payment that already has its result is left as it is).
-async function settleIn(client: PoolClient, paymentId: string, r: Result, after: After): Promise<{ p?: Row; status: string; settled: boolean }> {
+// call changed it (a payment that already has its result is left as it is). `held`: the result is one nobody vouches for
+// (Param's return): as a failure it does not close a payment that an earlier answer put under review.
+async function settleIn(client: PoolClient, paymentId: string, r: Result, after: After, held = false): Promise<{ p?: Row; status: string; settled: boolean }> {
   const { rows: [p] } = await client.query('SELECT * FROM payments WHERE id = $1 FOR UPDATE', [paymentId]);
   if (!p || p.status !== 'pending') return { p, status: p?.status ?? 'missing', settled: false };
   if (!r.ok) {
+    if (held && underReview(p.error_code)) return { p, status: 'pending', settled: false };
     await client.query("UPDATE payments SET status = 'failed', error_code = $2, error_message = $3, provider_ref = coalesce($4, provider_ref), completed_at = now() WHERE id = $1",
       [paymentId, r.code.slice(0, 60), (r.message ?? '').slice(0, 300), r.ref ?? null]);
     return { p, status: 'failed', settled: true };
@@ -162,6 +166,8 @@ async function settleIn(client: PoolClient, paymentId: string, r: Result, after:
     await client.query(`INSERT INTO saved_cards (owner_id, provider, mode, token_enc, brand, last4, exp_month, exp_year, holder, is_default) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
       [p.owner_id, p.provider, p.mode, encryptSecret(r.card.token, 'billing:card'), r.card.brand ?? null, r.card.last4 ?? null, r.card.expMonth ?? null, r.card.expYear ?? null, r.card.holder ?? null, !d]);
   }
+  // A renewal is paid at its server's price of now: a payment begun for an earlier, lower total leaves the rest owed.
+  await priceRenewal(client, p.invoice_id, after);
   // The money is the customer's wherever it lands: what the invoice still needs goes to it; the rest, or all of it when the
   // invoice was cancelled or paid meanwhile (two payments open at once, an order that expired on the provider's page), becomes balance.
   const { rows: [inv] } = await client.query('SELECT status, total::text AS total, paid_total::text AS paid FROM invoices WHERE id = $1 FOR UPDATE', [p.invoice_id]);
@@ -178,13 +184,13 @@ async function settleIn(client: PoolClient, paymentId: string, r: Result, after:
 }
 
 // A payment came back from the provider (or the sandbox page).
-export async function settlePayment(paymentId: string, r: Result) {
+export async function settlePayment(paymentId: string, r: Result, held = false) {
   const client = await pool.connect();
   const after: After = { enqueue: [], powerOn: [], paid: [] };
   let out: Awaited<ReturnType<typeof settleIn>>;
   try {
     await client.query('BEGIN');
-    out = await settleIn(client, paymentId, r, after);
+    out = await settleIn(client, paymentId, r, after, held);
     await client.query('COMMIT');
   } catch (e) { await client.query('ROLLBACK'); throw e; } finally { client.release(); }
   if (out.settled && !r.ok) await notify('billing.payment_failed', [out.p!.owner_id], { invoiceId: out.p!.invoice_id, amount: out.p!.amount, currency: out.p!.currency, code: r.code });
@@ -193,56 +199,96 @@ export async function settlePayment(paymentId: string, r: Result) {
 }
 
 // An answer that settles nothing but needs a person (needsReview): the payment stays open with the reason on it, where
-// staff see it (Admin → Billing → Payments) and settle the invoice by hand. Logged once per reason.
-async function noteReview(paymentId: string, r: Result) {
+// staff see it (Admin → Billing → Payments, status "review") and settle the invoice by hand. Logged once per reason. A
+// provider's later, different explanation replaces the note; with `first` (an answer nobody vouches for: Param's return)
+// only the first one is kept, so whoever posts the form again cannot rewrite what staff confirm from.
+async function noteReview(paymentId: string, r: Result, first = false) {
   if (r.ok || !needsReview(r)) return;
-  const { rowCount } = await pool.query("UPDATE payments SET error_code = $2, error_message = $3 WHERE id = $1 AND status = 'pending' AND error_code IS DISTINCT FROM $2",
-    [paymentId, r.code, (r.message ?? '').slice(0, 300)]);
+  const { rowCount } = await pool.query(`UPDATE payments SET error_code = $2, error_message = $3 WHERE id = $1 AND status = 'pending'
+    AND CASE WHEN $4::boolean THEN error_code IS NULL ELSE (error_code, error_message) IS DISTINCT FROM ($2::text, $3::text) END`,
+    [paymentId, r.code, (r.message ?? '').slice(0, 300), first]);
   if (rowCount) logEvent('warn', 'payment_needs_review', { paymentId, code: r.code });
+}
+
+// A renewal invoice is never paid below its server's current price for the period it covers, whatever the order of
+// resize, run and payment: before a payment is taken for it (balance, staff's "mark paid", a provider's settlement), in
+// that payment's transaction, the invoice follows the server (repriceOpenRenewal). Returns how many invoices changed.
+async function priceRenewal(db: PoolClient, invoiceId: string, after: After) {
+  const { rows } = await db.query(`SELECT DISTINCT b.server_id FROM invoices i JOIN invoice_lines l ON l.invoice_id = i.id JOIN subscriptions b ON b.id = l.subscription_id
+    WHERE i.id = $1 AND i.kind = 'renewal' AND i.status = 'unpaid' AND NOT l.withdrawn AND b.server_id IS NOT NULL`, [invoiceId]);
+  let changed = 0;
+  for (const r of rows) changed += await repriceOpenRenewal(r.server_id, db, after);
+  return changed;
+}
+// The same before a payment is begun at a provider, so the amount it asks for is the one owed now.
+async function priceNow(invoiceId: string) {
+  const client = await pool.connect();
+  const after: After = { enqueue: [], powerOn: [], paid: [] };
+  try {
+    await client.query('BEGIN');
+    await priceRenewal(client, invoiceId, after);
+    await client.query('COMMIT');
+  } catch (e) { await client.query('ROLLBACK'); throw e; } finally { client.release(); }
+  await finish(after);
 }
 
 // Pays what is left of an invoice from the owner's balance in its currency, if the balance covers it.
 export async function payFromBalance(invoiceId: string, automatic = false, by: string | null = null) {
   const client = await pool.connect();
   const after: After = { enqueue: [], powerOn: [], paid: [] };
+  let paid = false;
   try {
     await client.query('BEGIN');
-    const { rows: [inv] } = await client.query("SELECT * FROM invoices WHERE id = $1 AND status = 'unpaid' AND kind <> 'topup' FOR UPDATE", [invoiceId]);
-    if (!inv) { await client.query('ROLLBACK'); return false; }
-    await client.query('SELECT 1 FROM users WHERE id = $1 FOR UPDATE', [inv.owner_id]); // one balance spend at a time
-    const due = toCents(inv.total) - toCents(inv.paid_total);
-    const { rows: [b] } = await client.query('SELECT coalesce(sum(amount), 0)::text AS amount FROM balance_entries WHERE owner_id = $1 AND currency = $2', [inv.owner_id, inv.currency]);
-    if (due <= 0 || toCents(b.amount) < due) { await client.query('ROLLBACK'); return false; }
-    const { rows: [p] } = await client.query(`INSERT INTO payments (invoice_id, owner_id, provider, method, status, amount, currency, automatic, created_by, completed_at)
-      VALUES ($1, $2, 'balance', 'balance', 'succeeded', $3, $4, $5, $6, now()) RETURNING id`, [invoiceId, inv.owner_id, fromCents(due), inv.currency, automatic, by]);
-    await client.query("INSERT INTO balance_entries (owner_id, amount, currency, reason, invoice_id, payment_id) VALUES ($1, $2, $3, 'invoice', $4, $5)",
-      [inv.owner_id, fromCents(-due), inv.currency, invoiceId, p.id]);
-    await client.query('UPDATE invoices SET paid_total = total WHERE id = $1', [invoiceId]);
-    await markPaid(client, invoiceId, after);
+    const open = "SELECT * FROM invoices WHERE id = $1 AND status = 'unpaid' AND kind <> 'topup' FOR UPDATE";
+    let { rows: [inv] } = await client.query(open, [invoiceId]);
+    // A renewal is paid at its server's price of now (priceRenewal); what that changed stays, whether or not the balance
+    // then covers the invoice.
+    if (inv && await priceRenewal(client, invoiceId, after)) ({ rows: [inv] } = await client.query(open, [invoiceId]));
+    if (inv) {
+      await client.query('SELECT 1 FROM users WHERE id = $1 FOR UPDATE', [inv.owner_id]); // one balance spend at a time
+      const due = toCents(inv.total) - toCents(inv.paid_total);
+      const { rows: [b] } = await client.query('SELECT coalesce(sum(amount), 0)::text AS amount FROM balance_entries WHERE owner_id = $1 AND currency = $2', [inv.owner_id, inv.currency]);
+      if (due > 0 && toCents(b.amount) >= due) {
+        const { rows: [p] } = await client.query(`INSERT INTO payments (invoice_id, owner_id, provider, method, status, amount, currency, automatic, created_by, completed_at)
+          VALUES ($1, $2, 'balance', 'balance', 'succeeded', $3, $4, $5, $6, now()) RETURNING id`, [invoiceId, inv.owner_id, fromCents(due), inv.currency, automatic, by]);
+        await client.query("INSERT INTO balance_entries (owner_id, amount, currency, reason, invoice_id, payment_id) VALUES ($1, $2, $3, 'invoice', $4, $5)",
+          [inv.owner_id, fromCents(-due), inv.currency, invoiceId, p.id]);
+        await client.query('UPDATE invoices SET paid_total = total WHERE id = $1', [invoiceId]);
+        await markPaid(client, invoiceId, after);
+        paid = true;
+      }
+    }
     await client.query('COMMIT');
   } catch (e) { await client.query('ROLLBACK'); throw e; } finally { client.release(); }
   await finish(after);
-  return true;
+  return paid;
 }
 
 // Staff record money that arrived outside the panel (bank transfer, cash): the invoice is paid with it.
 async function recordManual(invoiceId: string, method: string, reference: string, by: string) {
   const client = await pool.connect();
   const after: After = { enqueue: [], powerOn: [], paid: [] };
-  let id: string;
+  let id = '';
+  let repriced = false;
   try {
     await client.query('BEGIN');
     // The invoice stays locked until the payment is settled: a second "mark paid" waits here, then finds it paid.
     const { rows: [inv] } = await client.query("SELECT * FROM invoices WHERE id = $1 AND status = 'unpaid' FOR UPDATE", [invoiceId]);
     if (!inv) throw apiError(409, 'INVOICE_NOT_PAYABLE', 'Only an unpaid invoice can be paid');
-    const due = toCents(inv.total) - toCents(inv.paid_total);
-    const { rows: [p] } = await client.query(`INSERT INTO payments (invoice_id, owner_id, provider, method, status, amount, currency, reference, created_by)
-      VALUES ($1, $2, 'manual', $3, 'pending', $4, $5, $6, $7) RETURNING id`, [invoiceId, inv.owner_id, method, fromCents(due), inv.currency, reference || null, by]);
-    id = p.id;
-    await settleIn(client, id, { ok: true, ref: '' }, after);
+    // Staff confirm the amount they saw. A renewal that first has to follow its server's price (priceRenewal) keeps its
+    // new amount and staff are asked again, rather than money being recorded that did not arrive.
+    repriced = (await priceRenewal(client, invoiceId, after)) > 0;
+    if (!repriced) {
+      const due = toCents(inv.total) - toCents(inv.paid_total);
+      const { rows: [p] } = await client.query(`INSERT INTO payments (invoice_id, owner_id, provider, method, status, amount, currency, reference, created_by)
+        VALUES ($1, $2, 'manual', $3, 'pending', $4, $5, $6, $7) RETURNING id`, [invoiceId, inv.owner_id, method, fromCents(due), inv.currency, reference || null, by]);
+      id = p.id;
+      await settleIn(client, id, { ok: true, ref: '' }, after);
+    }
     await client.query('COMMIT');
   } catch (e) { await client.query('ROLLBACK'); throw e; } finally { client.release(); }
   await finish(after);
+  if (repriced) throw apiError(409, 'INVOICE_AMOUNT_CHANGED', 'The invoice now follows the server\'s current price; check the new amount and mark it paid again');
   return id;
 }
 
@@ -273,7 +319,11 @@ async function startCardPayment(req: AuthedRequest, inv: Row, provider: string, 
 }
 
 // Tries a stored card for an unpaid invoice without the customer (automatic collection).
-async function chargeSavedCard(inv: Row) {
+async function chargeSavedCard(seen: Row) {
+  // The amount is read after the invoice took its server's price of now (priceNow); the caller's row may be older.
+  await priceNow(seen.id);
+  const { rows: [inv] } = await pool.query("SELECT * FROM invoices WHERE id = $1 AND status = 'unpaid'", [seen.id]);
+  if (!inv) return false;
   const { rows: [card] } = await pool.query('SELECT * FROM saved_cards WHERE owner_id = $1 ORDER BY is_default DESC, created_at DESC LIMIT 1', [inv.owner_id]);
   const impl = card && gateways[card.provider];
   if (!card || !impl?.chargeSaved || (impl.currencies && !impl.currencies.includes(String(inv.currency).trim()))) return false;
@@ -464,6 +514,8 @@ async function recheckPayments() {
 }
 
 export async function runBilling(now = new Date()) {
+  // After a restore of an older backup nothing is invoiced, charged, suspended or deleted until staff release the panel.
+  if (await restoreHold()) return { skipped: true, restoreHold: true };
   const s = await settings();
   await retryPowerOffs(now);
   if (!s.enabled) return { skipped: true };
@@ -488,12 +540,11 @@ export async function runBilling(now = new Date()) {
 
   // A price that changed without an invoice of its own (a smaller shape, a removed disk): the unpaid renewal invoice of a
   // period not begun follows it (repriceOpenRenewal), and so does the subscription's amount. Also looked for by the
-  // invoice's own price (one left alone while in dispute follows once the dispute is closed; a coupon's line differs
-  // for good and is simply found right each time).
+  // invoice's own price, in dispute or not (a coupon's line differs for good and is simply found right each time).
   const { rows: moved } = await pool.query(`SELECT b.server_id FROM subscriptions b JOIN servers s ON s.id = b.server_id
     WHERE b.status IN ('active', 'past_due', 'suspended') AND s.billing_mode = 'monthly' AND (s.price_monthly <> b.amount
       OR EXISTS (SELECT 1 FROM invoice_lines l JOIN invoices i ON i.id = l.invoice_id WHERE l.subscription_id = b.id AND NOT l.withdrawn AND l.period_start >= $1::date
-        AND i.kind = 'renewal' AND i.status = 'unpaid' AND NOT i.disputed AND l.unit_price <> s.price_monthly))`, [day]);
+        AND i.kind = 'renewal' AND i.status = 'unpaid' AND l.unit_price <> s.price_monthly))`, [day]);
   for (const m of moved) out.repriced += await repriceOpenRenewal(m.server_id);
 
   // Renewal invoices N days before the period ends, one per subscription and period. With automatic renewal off the
@@ -778,14 +829,24 @@ async function runHourly(now: Date) {
   return out;
 }
 
-// One run at a time: the periodic one in every API process, and staff's "run now".
-const lockRun = () => redis.set('lock:billing', '1', 'EX', 240, 'NX').catch(() => null);
+// One run at a time: the periodic one in every API process, and staff's "run now". The lock is held only while a run is
+// in progress: it carries its holder's token and is given back when the run ends, by that holder only (expired meanwhile,
+// it may be another run's by now). The expiry is for a process that died mid-run.
+const lockRun = async () => {
+  const token = randomBytes(8).toString('hex');
+  return (await redis.set('lock:billing', token, 'EX', 240, 'NX').catch(() => null)) ? token : null;
+};
+const unlockRun = (token: string) => redis.eval("if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('del', KEYS[1]) end return 0", 1, 'lock:billing', token).catch(() => 0);
+export async function billingTick() {
+  if (await restoreHold()) return;
+  // Once per interval across the API processes: this key is not given back, it expires before the next interval.
+  if (!(await redis.set('lock:billing:tick', '1', 'EX', 240, 'NX').catch(() => null))) return;
+  const token = await lockRun();
+  if (!token) return;
+  await runBilling().catch((e) => logEvent('error', 'billing_run_failed', { error: String(e?.message ?? e).slice(0, 200) })).finally(() => unlockRun(token));
+}
 export function startBilling() {
-  const tick = async () => {
-    if (!(await lockRun())) return;
-    await runBilling().catch((e) => logEvent('error', 'billing_run_failed', { error: String(e?.message ?? e).slice(0, 200) }));
-  };
-  return setInterval(tick, 5 * 60_000).unref();
+  return setInterval(billingTick, 5 * 60_000).unref();
 }
 
 // ---- Views ----
@@ -858,6 +919,11 @@ export class BillingController {
     const r = cleanProfile(body ?? {});
     if ('fields' in r) throw apiError(400, 'VALIDATION_FAILED', 'Invalid input', r.fields);
     const p = r.profile;
+    // Where invoices and payment notices are sent is the person's own choice: staff acting as them change the rest only.
+    if (req.user.impersonatedBy) {
+      const { rows: [cur] } = await pool.query('SELECT email FROM billing_profiles WHERE user_id = $1', [req.user.id]);
+      if ((p.email || '') !== (cur?.email ?? '')) throw apiError(403, 'NOT_WHILE_IMPERSONATING', 'The billing e-mail cannot be changed while acting as another user');
+    }
     await pool.query(`INSERT INTO billing_profiles (user_id, kind, name, tax_id, tax_office, country, city, district, address, postal_code, email, phone)
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) ON CONFLICT (user_id) DO UPDATE SET kind = $2, name = $3, tax_id = $4, tax_office = $5, country = $6, city = $7,
       district = $8, address = $9, postal_code = $10, email = $11, phone = $12, updated_at = now(),
@@ -884,8 +950,10 @@ export class BillingController {
   // Pay an invoice: from the balance, or by card at a provider (3D Secure on its page; a saved card is offered later).
   @Post('invoices/:id/pay') @HttpCode(200)
   async pay(@Req() req: AuthedRequest, @Param('id', ParseUUIDPipe) id: string, @Body() body: Record<string, unknown>) {
-    const { rows: [inv] } = await pool.query("SELECT * FROM invoices WHERE id = $1 AND owner_id = $2", [id, req.user.id]);
+    let { rows: [inv] } = await pool.query("SELECT * FROM invoices WHERE id = $1 AND owner_id = $2", [id, req.user.id]);
     if (!inv) throw apiError(404, 'NOT_FOUND', 'Unknown invoice');
+    // A renewal takes its server's price of now before a payment is begun for the amount due.
+    if (inv.status === 'unpaid' && inv.kind === 'renewal') { await priceNow(id); ({ rows: [inv] } = await pool.query('SELECT * FROM invoices WHERE id = $1', [id])); }
     if (inv.status !== 'unpaid') throw apiError(409, 'INVOICE_NOT_PAYABLE', 'This invoice is not awaiting payment');
     const s = await settings();
     if (body?.method === 'balance') {
@@ -1002,18 +1070,21 @@ export class BillingCallbackController {
   }
 
   private async handle(reply: FastifyReply, provider: string, id: string, query: Record<string, string>, body: Record<string, unknown>) {
-    const { rows: [p] } = await pool.query('SELECT id, invoice_id, amount::text, currency, provider_ref, status, mode FROM payments WHERE id = $1 AND provider = $2', [id, provider]);
+    const { rows: [p] } = await pool.query('SELECT id, invoice_id, amount::text, currency, provider_ref, status, mode, error_code FROM payments WHERE id = $1 AND provider = $2', [id, provider]);
     const impl = gateways[provider];
     if (!p || !impl) throw apiError(404, 'NOT_FOUND', 'Unknown payment');
-    if (p.status === 'pending') {
+    // A return nobody vouches for (impl.unsigned: Param): the first well-formed one puts the payment under review, and
+    // from then on no return changes it: not the note staff confirm from, and a "declined" form does not close it
+    // (settleIn and noteReview hold the same for two returns arriving together).
+    if (p.status === 'pending' && !(impl.unsigned && underReview(p.error_code))) {
       const gw = await activeGateway(provider, p.mode);
       if (!gw || await testModeOver(provider, p.mode)) throw apiError(409, 'PAYMENT_METHOD_UNAVAILABLE', 'Provider not active');
       const r = await impl.verify({ query, body, payment: { id: p.id, amount: p.amount, currency: p.currency, providerRef: p.provider_ref } }, gw.creds, gw.mode)
         .catch((e: Error) => ({ ok: false as const, code: 'PROVIDER_ERROR', message: String(e?.message ?? e).slice(0, 200) }));
       // Settled only on the provider's word (finalResult): one that did not answer, a forged or foreign answer, a customer
       // still on the provider's page, or a visit to this address with nothing to ask the provider with, leave the payment open.
-      if (finalResult(r)) await settlePayment(id, r);
-      else await noteReview(id, r);
+      if (finalResult(r)) await settlePayment(id, r, !!impl.unsigned);
+      else await noteReview(id, r, !!impl.unsigned);
       logEvent(r.ok ? 'info' : 'warn', 'payment_callback', { provider, paymentId: id, ok: r.ok, ...(!r.ok && { code: r.code }) });
     }
     if (impl.reply) return reply.code(200).type('text/plain').send(impl.reply);
@@ -1027,7 +1098,7 @@ export class BillingCallbackController {
 export class BillingAdminController {
   @Get('overview') @Can('billing.view')
   async overview() {
-    const [mrr, open, month, series, subs, recent] = await Promise.all([
+    const [mrr, open, month, series, subs, recent, review] = await Promise.all([
       pool.query(`SELECT currency, sum(amount)::text AS amount FROM subscriptions WHERE status IN ('active', 'past_due') GROUP BY currency ORDER BY currency`),
       pool.query(`SELECT currency, count(*)::int AS n, count(*) FILTER (WHERE due_at < now())::int AS overdue, sum(total - paid_total)::text AS amount
         FROM invoices WHERE status = 'unpaid' AND kind <> 'topup' GROUP BY currency ORDER BY currency`),
@@ -1038,9 +1109,11 @@ export class BillingAdminController {
       pool.query(`SELECT status, count(*)::int AS n FROM subscriptions GROUP BY status`),
       pool.query(`SELECT p.id, p.provider, p.method, p.status, p.amount::text, p.currency, p.error_code AS "errorCode", p.created_at AS "createdAt", u.email
         FROM payments p JOIN users u ON u.id = p.owner_id ORDER BY p.created_at DESC LIMIT 10`),
+      // Open payments that wait for staff (noteReview): nothing closes them by itself.
+      pool.query("SELECT count(*)::int AS n, min(created_at) AS oldest FROM payments WHERE status = 'pending' AND error_code = ANY($1)", [reviewCodes]),
     ]);
     return { mrr: mrr.rows, open: open.rows, collectedThisMonth: month.rows, series: series.rows,
-      subscriptions: Object.fromEntries(subs.rows.map((r) => [r.status, r.n])), recentPayments: recent.rows };
+      subscriptions: Object.fromEntries(subs.rows.map((r) => [r.status, r.n])), recentPayments: recent.rows, paymentsInReview: review.rows[0] };
   }
 
   @Get('invoices') @Can('billing.view')
@@ -1144,11 +1217,16 @@ export class BillingAdminController {
     return { subscription: row };
   }
 
+  // status=review: the open payments that wait for staff (held by the provider, another amount, or Param's unconfirmed
+  // return), oldest first; every row says whether it is one (review) and what its invoice is now (invoiceStatus).
   @Get('payments') @Can('billing.view')
   async payments(@Query('status') status?: string) {
-    const { rows } = await pool.query(`SELECT p.id, p.invoice_id AS "invoiceId", i.number, p.provider, p.mode, p.method, p.status, p.amount::text, p.currency, p.refunded::text,
-      p.error_code AS "errorCode", p.error_message AS "errorMessage", p.automatic, p.reference, p.created_at AS "createdAt", p.completed_at AS "completedAt", u.email
-      FROM payments p JOIN users u ON u.id = p.owner_id JOIN invoices i ON i.id = p.invoice_id WHERE ($1::text IS NULL OR p.status = $1) ORDER BY p.created_at DESC LIMIT 300`, [status || null]);
+    const { rows } = await pool.query(`SELECT p.id, p.invoice_id AS "invoiceId", i.number, i.status AS "invoiceStatus", p.provider, p.mode, p.method, p.status, p.amount::text, p.currency, p.refunded::text,
+      p.error_code AS "errorCode", p.error_message AS "errorMessage", p.automatic, p.reference, p.created_at AS "createdAt", p.completed_at AS "completedAt", u.email,
+      (p.status = 'pending' AND p.error_code = ANY($2)) IS TRUE AS review
+      FROM payments p JOIN users u ON u.id = p.owner_id JOIN invoices i ON i.id = p.invoice_id
+      WHERE ($1::text IS NULL OR p.status = $1 OR ($1 = 'review' AND p.status = 'pending' AND p.error_code = ANY($2)))
+      ORDER BY CASE WHEN $1 = 'review' THEN p.created_at END, p.created_at DESC LIMIT 300`, [status || null, reviewCodes]);
     return { payments: rows };
   }
 
@@ -1179,10 +1257,9 @@ export class BillingAdminController {
   @Post('run') @HttpCode(200) @Can('billing.manage')
   async run(@Req() req: AuthedRequest) {
     // The periodic run's lock: two runs at once would invoice or charge the same thing twice.
-    if (!(await lockRun())) throw apiError(409, 'BILLING_RUNNING', 'A billing run is in progress; try again in a few minutes');
-    const began = Date.now();
-    // Given back when done, unless it has expired meanwhile (then it may be the periodic run's by now).
-    const r = await runBilling().finally(() => (Date.now() - began < 200_000 ? redis.del('lock:billing').catch(() => 0) : 0));
+    const token = await lockRun();
+    if (!token) throw apiError(409, 'BILLING_RUNNING', 'A billing run is in progress; try again in a few minutes');
+    const r = await runBilling().finally(() => unlockRun(token));
     await audit(req, 'billing.run', 'success', req.user.id, r);
     return r;
   }
@@ -1233,8 +1310,10 @@ export class BillingSettingsController {
   }
 }
 
-// What a resize costs now: the monthly increase for the rest of the period that runs today (nothing without billing,
-// without a running subscription, or for a decrease, which simply bills less from the next period). Periods invoiced
+// What a resize costs now: the monthly increase, for every month of the period that runs today, for the days left of it
+// (a 3, 6 or 12 month period was paid ahead as that many months: one month's difference would leave the rest of it at
+// the old price). Nothing without billing, without a running subscription, or for a decrease, which simply bills less
+// from the next period. Periods invoiced
 // ahead and not begun are not charged here: their unpaid renewal invoice takes the new price (repriceOpenRenewal).
 export async function resizeCharge(serverId: string, oldMonthly: string, newMonthly: string) {
   const s = await settings();
@@ -1247,26 +1326,33 @@ export async function resizeCharge(serverId: string, oldMonthly: string, newMont
     WHERE l.subscription_id = $1 AND NOT l.withdrawn AND i.kind = 'renewal' AND i.status = 'unpaid' AND l.period_start < $2::date AND l.period_end > $2::date
     ORDER BY l.period_start DESC LIMIT 1`, [sub.id, today()]) : { rows: [] };
   const p = run ?? sub;
-  const cents = s.enabled && p?.ps && p?.pe ? prorate(toCents(newMonthly) - toCents(oldMonthly), today(), p.ps, p.pe) : 0;
+  const cents = s.enabled && p?.ps && p?.pe ? prorate((toCents(newMonthly) - toCents(oldMonthly)) * periodMonths(p.ps, p.pe), today(), p.ps, p.pe) : 0;
   return { chargeNow: fromCents(cents), periodEnd: p?.pe ?? null };
 }
 
 // A server's price changed (a resize, a disk added or removed) while the renewal invoice of a period that has not begun
 // is still unpaid: the invoice takes the new price, so that period is billed for the shape that will run in it. Without
 // this a customer could shrink the server just before the invoice is made and enlarge it again right after, each month.
-// An unpaid invoice has no legal number yet, so its amounts may still change; its due date and reminders stay. Left
-// alone: an invoice in dispute, one already paid up to its new total, and a period that has begun (resizeCharge bills
-// the rest of that one). The subscription's amount follows the server. Called where billing hears of a price change
-// (billResize) and, for the changes it does not hear of, by every run. Returns how many invoices changed.
-export async function repriceOpenRenewal(serverId: string, db?: PoolClient): Promise<number> {
+// An unpaid invoice has no legal number yet, so its amounts may still change; its due date and reminders stay. Also one
+// in dispute: a dispute pauses collection, it does not freeze the price (the owner opens and withdraws it alone). Left
+// alone: a period that has begun (resizeCharge bills the rest of that one). An invoice already paid up to its new total
+// (a part payment, then a smaller shape) is settled at that total and the excess goes to the balance; that needs
+// `after` (what a paid invoice sets in motion once the transaction commits), so a caller inside its own transaction
+// without one leaves such an invoice to the next run. The subscription's amount follows the server. Called after every
+// price write (servers.ts, disks.ts, billResize), by every run for the changes billing does not hear of, and before a
+// renewal is paid (priceRenewal). Returns how many invoices changed.
+export async function repriceOpenRenewal(serverId: string, db?: PoolClient, after?: After): Promise<number> {
   if (!db) {
     const client = await pool.connect();
+    const done: After = { enqueue: [], powerOn: [], paid: [] };
+    let n: number;
     try {
       await client.query('BEGIN');
-      const n = await repriceOpenRenewal(serverId, client);
+      n = await repriceOpenRenewal(serverId, client, done);
       await client.query('COMMIT');
-      return n;
     } catch (e) { await client.query('ROLLBACK'); throw e; } finally { client.release(); }
+    await finish(done);
+    return n;
   }
   const s = await settings();
   if (!s.enabled) return 0;
@@ -1276,18 +1362,26 @@ export async function repriceOpenRenewal(serverId: string, db?: PoolClient): Pro
   for (const b of subs) {
     // The invoice is locked first, the subscription after it, as a payment does (markPaid, grant).
     const { rows: lines } = await db.query(`SELECT l.id, l.invoice_id, l.description, l.quantity::float8 AS quantity, l.tax_rate::float8 AS rate, l.unit_price::numeric(14,2)::text AS unit, l.gross::text AS gross,
-        i.total::text AS total, i.paid_total::text AS paid FROM invoice_lines l JOIN invoices i ON i.id = l.invoice_id
-      WHERE l.subscription_id = $1 AND NOT l.withdrawn AND l.period_start >= $2::date AND i.kind = 'renewal' AND i.status = 'unpaid' AND NOT i.disputed FOR UPDATE OF i, l`, [b.id, today()]);
+        i.total::text AS total, i.paid_total::text AS paid, i.owner_id, i.currency FROM invoice_lines l JOIN invoices i ON i.id = l.invoice_id
+      WHERE l.subscription_id = $1 AND NOT l.withdrawn AND l.period_start >= $2::date AND i.kind = 'renewal' AND i.status = 'unpaid' FOR UPDATE OF i, l`, [b.id, today()]);
     for (const l of lines) {
       // A line the coupon discounted (its description says so) keeps the coupon, whatever is left of it by now.
       const coupon = l.description.includes(' · kupon ') ? await renewalPrice(db, { coupon_id: b.coupon_id, coupon_left: null, currency: b.currency }, b.price) : null;
       const unitCents = toCents(coupon?.monthly ?? b.price);
       if (unitCents <= 0 || unitCents === toCents(l.unit)) continue;
       const a = lineAmounts(unitCents, l.quantity, l.rate, s.pricesIncludeTax);
-      if (toCents(l.total) - toCents(l.gross) + a.gross <= toCents(l.paid)) continue;
+      const excess = toCents(l.paid) - (toCents(l.total) - toCents(l.gross) + a.gross);
+      if (excess >= 0 && !after) continue;
       await db.query('UPDATE invoice_lines SET unit_price = $2, net = $3, tax = $4, gross = $5 WHERE id = $1', [l.id, fromCents(unitCents), fromCents(a.net), fromCents(a.tax), fromCents(a.gross)]);
       await db.query(`UPDATE invoices i SET subtotal = x.net, tax_total = x.tax, total = x.gross FROM (SELECT sum(net) AS net, sum(tax) AS tax, sum(gross) AS gross FROM invoice_lines WHERE invoice_id = $1) x
         WHERE i.id = $1`, [l.invoice_id]);
+      if (excess >= 0 && after) {
+        // Paid already: left unpaid at the old, higher total it would be collected (reminders, suspension) for nothing.
+        await db.query('UPDATE invoices SET paid_total = total WHERE id = $1', [l.invoice_id]);
+        if (excess > 0) await db.query("INSERT INTO balance_entries (owner_id, amount, currency, reason, invoice_id, note) VALUES ($1, $2, $3, 'adjustment', $4, $5)",
+          [l.owner_id, fromCents(excess), l.currency, l.invoice_id, 'Fiyatı düşen faturanın fazla ödemesi / Paid above the invoice\'s new total']);
+        await markPaid(db, l.invoice_id, after);
+      }
       changed++;
     }
     await db.query('UPDATE subscriptions SET amount = $2, updated_at = now() WHERE id = $1 AND amount <> $2', [b.id, b.price]);
@@ -1298,6 +1392,7 @@ export async function repriceOpenRenewal(serverId: string, db?: PoolClient): Pro
 // The invoice for a resize's increase; the balance pays it at once when it covers it, otherwise it waits like any invoice.
 export async function billResize(server: { id: string; owner_id: string; name: string }, amount: string, currency: string, shape: { vcpu: number; memoryMb: number; diskGb: number }) {
   const client = await pool.connect();
+  const after: After = { enqueue: [], powerOn: [], paid: [] };
   let id: string;
   try {
     await client.query('BEGIN');
@@ -1306,9 +1401,10 @@ export async function billResize(server: { id: string; owner_id: string; name: s
     id = await createInvoice(client, { ownerId: server.owner_id, kind: 'manual', currency, dueAt: endOfDay(addDays(today(), 7)),
       lines: [{ description: `Sunucu ${server.name}: ${shape.vcpu} vCPU, ${shape.memoryMb / 1024} GB bellek, ${shape.diskGb} GB disk (dönem sonuna kadar fark)`, unitCents: toCents(amount), subscriptionId: sub?.id }] });
     // The server already has its new price: a renewal invoiced ahead for the next period takes it too.
-    await repriceOpenRenewal(server.id, client);
+    await repriceOpenRenewal(server.id, client, after);
     await client.query('COMMIT');
   } catch (e) { await client.query('ROLLBACK'); throw e; } finally { client.release(); }
+  await finish(after);
   const paid = (await settings()).balance && await payFromBalance(id, true, server.owner_id).catch(() => false);
   if (!paid) await notify('billing.invoice', [server.owner_id], { invoiceId: id, total: amount, currency, due: addDays(today(), 7) });
   return id;

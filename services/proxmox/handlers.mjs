@@ -1,5 +1,7 @@
 // The adapter contract (docs/adapter-contract.md) on Proxmox VE. Ids the panel stores:
-//   VM, template     the VMID ("105"); its node is looked up each time, so a migrated VM is still found
+//   VM, template     the VMID ("105"); its node is looked up each time, so a migrated VM is still found. Proxmox hands a
+//                    freed VMID out again, so the number alone does not say which VM it is: a request about a server
+//                    names the VM it expects (expectName), and another VM under that number is refused (VM_MISMATCH)
 //   host, compute    the node's name (every node is one compute resource; its "resource pool" is the node too)
 //   datastore        "storage" for shared storage, "storage@node" for a node's own
 //   network          the bridge's name ("vmbr0")
@@ -22,10 +24,15 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 const resources = (api, type) => api('GET', '/cluster/resources', { type });
 const guests = async (api) => (await resources(api, 'vm')).filter((v) => v.type === 'qemu');
-async function locate(api, vm) {
+// expectName: the name the VM under this number must carry ("lvm-<server id>": the server the request is for). The
+// number may be another VM's by now, also another customer's; that VM is refused before anything is read or changed.
+// A caller that sends no expectName gets the VM by number alone, as before.
+const mismatch = () => new Failure('VM_MISMATCH', 'this VM id now belongs to another VM than the one the request is for');
+async function locate(api, vm, expectName) {
   if (!/^\d{1,10}$/.test(String(vm ?? ''))) throw new Failure('INVALID_REQUEST', 'vm is required');
   const found = (await guests(api)).find((v) => String(v.vmid) === String(vm));
   if (!found) throw new Failure('VM_NOT_FOUND', 'the VM no longer exists');
+  if (expectName !== undefined && expectName !== null && found.name !== String(expectName)) throw mismatch();
   return found;
 }
 const base = (v) => `/nodes/${enc(v.node)}/qemu/${v.vmid}`;
@@ -200,6 +207,11 @@ export async function clone(api, b) {
   if (earlier) return (await finishClone(api, earlier.vmid)) === false ? { task: `${WAIT}|${earlier.vmid}`, existed: true } : { vm: String(earlier.vmid), existed: true };
   const template = all.find((v) => String(v.vmid) === String(b.template));
   if (!template) throw new Failure('TEMPLATE_NOT_FOUND', 'the template no longer exists');
+  // The number may have been given to another VM since the image was saved or the copy was ordered. What is copied is a
+  // template, or, for a copy of a server, the VM that carries that server's name (expectName). Anything else would put
+  // somebody else's disk into the new server.
+  if (b.expectName !== undefined && b.expectName !== null) { if (template.name !== String(b.expectName)) throw mismatch(); }
+  else if (template.template !== 1) throw new Failure('TEMPLATE_NOT_FOUND', 'the id no longer names a template');
   const config = await api('GET', `${base(template)}/config`);
   if (!nicsOf(config).length) throw new Failure('TEMPLATE_HAS_NO_NIC', 'the template has no network interface');
   const { system } = disksOf(config);
@@ -308,7 +320,7 @@ export async function managedVms(api) {
 export async function powerAction(api, b) {
   const act = { on: 'start', off: 'stop', reset: 'reset', shutdown: 'shutdown' }[b.action];
   if (!act) throw new Failure('INVALID_REQUEST', 'unknown power action');
-  const v = await locate(api, b.vm);
+  const v = await locate(api, b.vm, b.expectName);
   const running = v.status === 'running';
   // Already as asked: nothing to start (VMware fails such a task with INVALID_STATE, which the worker reads the same way).
   if ((act === 'start' && running) || ((act === 'stop' || act === 'shutdown') && !running)) return { task: '' };
@@ -320,7 +332,7 @@ export async function powerAction(api, b) {
 
 export async function destroy(api, b) {
   let v;
-  try { v = await locate(api, b.vm); } catch (e) { if (e.code === 'VM_NOT_FOUND') return { task: '', gone: true }; throw e; }
+  try { v = await locate(api, b.vm, b.expectName); } catch (e) { if (e.code === 'VM_NOT_FOUND') return { task: '', gone: true }; throw e; }
   managed(v);
   if (v.status === 'running') {
     await api('POST', `${base(v)}/status/stop`).catch(() => undefined);
@@ -335,7 +347,7 @@ const snapshotList = async (api, v) => (await api('GET', `${base(v)}/snapshot`))
 export async function resize(api, b) {
   const vcpu = Number(b.vcpu), memoryMb = Number(b.memoryMb), diskGb = Number(b.diskGb);
   if (!(vcpu >= 1) || !(memoryMb >= 256) || !(diskGb >= 1)) throw new Failure('INVALID_REQUEST', 'vcpu, memoryMb and diskGb are required');
-  const v = await locate(api, b.vm); managed(v);
+  const v = await locate(api, b.vm, b.expectName); managed(v);
   const config = await api('GET', `${base(v)}/config`);
   const { system } = disksOf(config);
   if (!system) throw new Failure('VM_HAS_NO_DISK', 'the VM has no disk');
@@ -354,6 +366,8 @@ export async function rename(api, b) {
   const config = await api('GET', `${base(v)}/config`);
   const diskGb = Math.ceil((disksOf(config).system?.size ?? 0) / GIB);
   if (v.name === b.name) return { name: b.name, diskGb };
+  // An import: expectName is the name the inventory listed this number under (discover: "VM <id>" for a VM without one).
+  if (b.expectName !== undefined && b.expectName !== null && (v.name ?? `VM ${v.vmid}`) !== String(b.expectName)) throw mismatch();
   if (String(v.name ?? '').startsWith(PREFIX) || v.template === 1) throw new Failure('NOT_IMPORTABLE', 'already managed, or a template');
   await api('PUT', `${base(v)}/config`, { name: b.name });
   return { name: b.name, diskGb };
@@ -361,14 +375,14 @@ export async function rename(api, b) {
 
 // ---- disks ---------------------------------------------------------------------------------------
 export async function disks(api, b) {
-  const v = await locate(api, b.vm); managed(v);
+  const v = await locate(api, b.vm, b.expectName); managed(v);
   const { all, system } = disksOf(await api('GET', `${base(v)}/config`));
   return { disks: all.map((d) => ({ key: slotKey(d.slot), label: d.slot, sizeGb: Math.floor(d.size / GIB), system: d === system })) };
 }
 export async function diskAdd(api, b) {
   const sizeGb = Number(b.sizeGb);
   if (!Number.isInteger(sizeGb) || sizeGb < 1 || sizeGb > 65536) throw new Failure('INVALID_REQUEST', 'sizeGb must be 1 to 65536');
-  const v = await locate(api, b.vm); managed(v);
+  const v = await locate(api, b.vm, b.expectName); managed(v);
   const config = await api('GET', `${base(v)}/config`);
   const { system } = disksOf(config);
   if (!system) throw new Failure('VM_HAS_NO_DISK', 'the VM has no disk');
@@ -378,7 +392,7 @@ export async function diskAdd(api, b) {
   return { task: await api('POST', `${base(v)}/config`, { [free]: `${system.storage}:${sizeGb}` }) };
 }
 export async function diskRemove(api, b) {
-  const v = await locate(api, b.vm); managed(v);
+  const v = await locate(api, b.vm, b.expectName); managed(v);
   // current=1: the values in force. Without it Proxmox answers with pending changes applied, and a disk whose
   // removal only waits for the next stop would look gone while the guest still has it.
   const inForce = () => api('GET', `${base(v)}/config`, { current: 1 });
@@ -407,7 +421,7 @@ export async function diskRemove(api, b) {
 // Our own snapshots are named lvm<n>; another one gets a number made from its name (the panel wants snapshot-<digits>).
 const snapId = (name) => `snapshot-${/^lvm(\d{1,12})$/.exec(name)?.[1] ?? Number.parseInt(createHash('sha1').update(name).digest('hex').slice(0, 11), 16) % 1e12}`;
 export async function snapshots(api, b) {
-  const v = await locate(api, b.vm);
+  const v = await locate(api, b.vm, b.expectName);
   const list = await snapshotList(api, v);
   const current = list.find((s) => s.name === 'current')?.parent;
   return { snapshots: list.filter((s) => s.name !== 'current').sort((a, c) => (a.snaptime ?? 0) - (c.snaptime ?? 0)).map((s) => {
@@ -418,7 +432,7 @@ export async function snapshots(api, b) {
   }) };
 }
 export async function snapshot(api, b) {
-  const v = await locate(api, b.vm);
+  const v = await locate(api, b.vm, b.expectName);
   if (b.action === 'create') {
     const name = String(b.name ?? ''), description = String(b.description ?? '');
     if (!name || Buffer.byteLength(name) > 80 || Buffer.byteLength(description) > 500) throw new Failure('INVALID_REQUEST', 'name is 1 to 80 bytes, description at most 500');
@@ -436,7 +450,7 @@ export async function snapshot(api, b) {
 
 // ---- reading -------------------------------------------------------------------------------------
 export async function details(api, b) {
-  const v = await locate(api, b.vm);
+  const v = await locate(api, b.vm, b.expectName);
   const [config, cur, snaps] = await Promise.all([api('GET', `${base(v)}/config`), api('GET', `${base(v)}/status/current`).catch(() => ({})), snapshotList(api, v).catch(() => [])]);
   const { all } = disksOf(config);
   const running = v.status === 'running';
@@ -470,7 +484,7 @@ export async function details(api, b) {
 const rrd = (api, v) => api('GET', `${base(v)}/rrddata`, { timeframe: 'hour', cf: 'AVERAGE' }).then((r) => (r ?? []).filter((p) => p.time).slice(-45), () => []);
 const num = (x) => (typeof x === 'number' && Number.isFinite(x) ? x : null);
 export async function metrics(api, b) {
-  const v = await locate(api, b.vm);
+  const v = await locate(api, b.vm, b.expectName);
   const [points, cur] = await Promise.all([v.status === 'running' ? rrd(api, v) : [], api('GET', `${base(v)}/status/current`).catch(() => ({}))]);
   const kb = (a, c) => (num(a) === null && num(c) === null ? null : round2(((a ?? 0) + (c ?? 0)) / 1024));
   return { interval: 60, // Proxmox keeps one value a minute
@@ -523,7 +537,7 @@ const quote = (s) => `'${String(s).replace(/'/g, `'\\''`)}'`;
 // happens once: a marker in the guest makes a second call a no-op. Without a guest agent nothing can be done
 // from outside, and the answer says so.
 export async function guestSetup(api, b) {
-  const v = await locate(api, b.vm);
+  const v = await locate(api, b.vm, b.expectName);
   let user = {};
   try { user = JSON.parse(String(b.userdata || '').replace(/^#cloud-config\s*/, '') || '{}'); } catch { /* nothing to apply */ }
   const hash = /^root:(\$[^\s]+)$/.exec(String(user.chpasswd?.list ?? '').trim())?.[1];

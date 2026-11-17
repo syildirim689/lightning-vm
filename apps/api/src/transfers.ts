@@ -2,8 +2,8 @@
 // declines) within a week, and only then does the server, with its subscription, move. Staff may move one at once.
 // A server moves only when nothing of the old owner stays attached to it: no firewall or private network of theirs,
 // no unpaid invoice, no task running, no copy of it on order. Snapshots, backups and extra disks are the server's and go
-// with it; what let the old owner into it or act on it (stored keys and password, guest tokens, schedules, an open
-// console) ends with the move (moveServer).
+// with it; what let the old owner into it or act on it (stored keys and password, guest tokens, schedules, a booked
+// cancellation, an open console or a ticket for one) ends with the move (moveServer).
 import { Body, Controller, Get, HttpCode, Param, ParseUUIDPipe, Post, Put, Req, UseGuards } from '@nestjs/common';
 import type { PoolClient } from 'pg';
 import { audit, SessionGuard, type AuthedRequest } from './auth';
@@ -68,15 +68,25 @@ async function checkTransfer(db: Db, serverId: string, toId: string) {
 //   os_images made from this server: stay the previous owner's (their copy of what was theirs then); only the link back
 //     to the server is dropped. A server running from such an image keeps running; its new owner reinstalls from another.
 //   tickets of the previous owner about this server: keep their text, lose the link.
-//   subscriptions: the running one follows; invoices, coupon redemptions and finished operations stay as records.
+//   subscriptions: the running one follows, without what the previous owner booked on it: cancel_at_period_end is
+//     cleared (the billing run would end the subscription and delete the server at the period's end, by then the new
+//     owner's, unlocked and without a grace period) and auto_renew is back at its default (on); the new owner chooses
+//     for themselves on the billing page. servers.billing_remove (billing's own mark that the server is to go, retried
+//     by every run until it is gone) is cleared for the same reason. Invoices, coupon redemptions and finished
+//     operations stay as records.
 //   server_disks, ip_allocations (with PTR), application_licenses, traffic, usage and power samples, abuse and
 //     reconciliation findings, snapshots: the server's own, unchanged.
 //   firewall_servers, private_network_members, a VDC, a copy on order, a staff-only ISO in the drive: checkTransfer refuses.
-// The previous owner's open consoles are closed by the callers once the move is committed (ownerLeft).
+// The previous owner's open consoles are closed by the callers once the move is committed (ownerLeft), and a console
+// ticket they asked for before it is refused by the gateway (console.ts).
+// The callers hold the server's row (FOR UPDATE) from before the checks until the commit. A request of the previous
+// owner that read the server before the move and writes after it meets that lock and is refused once the move is
+// committed (servers.ts ownerWrite, startOperation), instead of leaving their key, schedule or deletion date on the
+// new owner's server after the clean-up below.
 async function moveServer(db: PoolClient, s: Server, toId: string) {
   await db.query(`UPDATE servers SET owner_id = $2, project_id = NULL, ssh_public_keys = '{}', root_password_hash = NULL, root_password_enc = NULL,
-    app_token_hash = NULL, app_script_enc = NULL, tags = '{}', notes = '', delete_at = NULL, updated_at = now() WHERE id = $1`, [s.id, toId]);
-  await db.query("UPDATE subscriptions SET owner_id = $2, updated_at = now() WHERE server_id = $1 AND status NOT IN ('cancelled', 'ended')", [s.id, toId]);
+    app_token_hash = NULL, app_script_enc = NULL, tags = '{}', notes = '', delete_at = NULL, billing_remove = NULL, updated_at = now() WHERE id = $1`, [s.id, toId]);
+  await db.query("UPDATE subscriptions SET owner_id = $2, cancel_at_period_end = false, auto_renew = true, updated_at = now() WHERE server_id = $1 AND status NOT IN ('cancelled', 'ended')", [s.id, toId]);
   await db.query('DELETE FROM server_favorites WHERE server_id = $1 AND user_id = $2', [s.id, s.owner_id]);
   await db.query('DELETE FROM server_updates WHERE server_id = $1', [s.id]);
   await db.query('DELETE FROM power_schedules WHERE server_id = $1', [s.id]);

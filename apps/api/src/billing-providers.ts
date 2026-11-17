@@ -1,7 +1,8 @@
 // Real card payments (billing-gateways.ts interface) with iyzico, PayTR, Stripe, Craftgate and Param, from
 // docs/research-payment-flows.md. Every flow sends the customer to the provider's own page (3D Secure there; the panel never
 // sees a card number) and confirms the result with a server-side query to the provider (PayTR: its keyed notification)
-// before anything is marked paid. Param's return can be confirmed neither way, so it never marks a payment paid: staff do.
+// before anything is marked paid. Param's return can be confirmed neither way, so it never marks a payment paid: staff do
+// (and once it has put a payment under review, no later return changes that payment: Gateway.unsigned).
 // Stored cards are charged without the customer only where the provider stores them from its hosted page (iyzico,
 // Stripe, Craftgate) and the merchant account allows non-3D charges; PayTR and Param store cards only through direct card
 // forms, so their invoices are paid by the customer on the hosted page. None of these was run against a real merchant
@@ -233,8 +234,16 @@ export const paramAmount = (v: string) => {
   const m = /^(\d{1,3}(?:\.\d{3})+|\d+)(?:,(\d{1,2}))?$/.exec(v) ?? /^(\d+)\.(\d{2})$/.exec(v);
   return m ? Number(m[1].replace(/\./g, '')) * 100 + Number((m[2] ?? '').padEnd(2, '0')) : null;
 };
+// A posted field as staff read it in the review note: its plain characters, cut short, so no field can push the
+// instruction or the payment's own id out of the note (300 characters) or dress itself up as part of it.
+const paramField = (v: string, max = 24) => v.replace(/[^\w.,-]/g, '').slice(0, max) || '-';
+// The note of a payment under review: the panel's own facts and the instruction first, what the form reported after.
+const paramNote = (payment: { id: string; amount: string }, g: (k: string) => string) =>
+  `Param Islem_ID ${oid(payment.id)}, ${paramMoney(payment.amount)} TL: Param panelinde doğrulayıp faturayı ödendi işaretleyin / Confirm in the Param panel, then mark the invoice paid. `
+  + `Bildirilen/Reported: sipariş/order ${paramField(g('Siparis_ID'))}, dekont ${paramField(g('Dekont_ID'))}, ${paramField(g('Tahsilat_Tutari'), 16)} TL.`;
 const paramPage = (endpoint: string) => (/testposws|test-dmz/.test(endpoint) ? 'https://testpos.param.com.tr' : 'https://pos.param.com.tr');
 export const param: Gateway = {
+  unsigned: true,
   currencies: ['TRY'], // the hosted page takes the bare number in lira (another currency needs a card form on our server)
   async checkout(c, creds) {
     if (c.currency.trim() !== 'TRY') throw new Error('Param: only TRY');
@@ -260,12 +269,13 @@ export const param: Gateway = {
     if (payment.currency.trim() !== 'TRY') return fail('AMOUNT_MISMATCH', 'Param collects TRY only');
     // The result flag and the amount are read strictly: anything that is not a number is no answer at all.
     if (!/^-?\d+$/.test(g('Sonuc'))) return fail('BAD_SIGNATURE', 'Param result unreadable');
-    if (Number(g('Sonuc')) <= 0) return fail('CARD_DECLINED', g('Sonuc_Str'));
+    // Declined closes a payment that nothing else was said about; one already under review stays open (billing.ts).
+    if (Number(g('Sonuc')) <= 0) return fail('CARD_DECLINED', g('Sonuc_Str').slice(0, 120));
     const paid = paramAmount(g('Tahsilat_Tutari'));
     if (paid === null) return fail('BAD_SIGNATURE', 'Param amount unreadable');
-    if (paid < cents(payment.amount)) return fail('AMOUNT_MISMATCH', 'Param reported a smaller amount');
-    // Says paid, on the browser's word only (above): not final. Staff confirm it in the Param panel.
-    return fail('NEEDS_CONFIRMATION', `Param: sipariş/order ${g('Siparis_ID') || '-'}, dekont ${g('Dekont_ID') || '-'}, ${g('Tahsilat_Tutari')} TL. Param panelinde doğrulayıp faturayı ödendi işaretleyin / Confirm in the Param panel, then mark the invoice paid.`);
+    // Says paid (a smaller amount, or all of it), on the browser's word only (above): not final. Staff confirm it in the
+    // Param panel, from a note that names this payment whatever the form says.
+    return fail(paid < cents(payment.amount) ? 'AMOUNT_MISMATCH' : 'NEEDS_CONFIRMATION', paramNote(payment, g));
   },
   async refund(ref, amount, _currency, creds) {
     const x = await paramSoap(creds.endpoint, 'TP_Islem_Iptal_Iade_Kismi2', 'https://turkpos.com.tr/', '',

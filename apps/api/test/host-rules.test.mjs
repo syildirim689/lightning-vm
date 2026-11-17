@@ -24,6 +24,8 @@ test('server lists: up to four, names only for time servers, "default" resets', 
   assert.equal(readList('1.1.1.1,1.0.0.1,8.8.8.8,8.8.4.4,9.9.9.9', 'dns'), null, 'at most four');
   assert.equal(readList('300.1.1.1', 'dns'), null);
   assert.equal(readList('a.b;reboot', 'ntp'), null);
+  for (const bad of ['999.1.1.1', '12', '1.2.3', '1.2.3.4.5', '256.0.0.1', 'time.example.com 300.1.1.1']) assert.equal(readList(bad, 'ntp'), null, bad);
+  assert.equal(readList('192.0.2.1, 0.pool.ntp.org, 1e100.net', 'ntp'), '192.0.2.1,0.pool.ntp.org,1e100.net');
 });
 
 test('a change keeps only what was sent; errors per field', () => {

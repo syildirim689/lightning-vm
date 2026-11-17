@@ -5,7 +5,8 @@ import { audit, SessionGuard, type AuthedRequest } from './auth';
 import { pool } from './db';
 import { apiError } from './errors';
 import { all, catalog, deliver, policies, vapid } from './notify';
-import { publicUrl } from './chat-apps';
+import { pushEndpoint } from './chat-apps';
+import { rateLimit } from './security';
 import { can } from './permissions';
 import { Can, PermissionGuard } from './rbac';
 import { getSettings, mailReady, saveSettings, type Channel, type NotificationPolicy } from './settings-store';
@@ -80,8 +81,9 @@ export class NotificationsController {
   async subscribe(@Req() req: AuthedRequest, @Body() body: { endpoint?: unknown; keys?: { p256dh?: unknown; auth?: unknown } }) {
     // A subscription keeps receiving after the session that made it: not for staff acting as someone.
     if (req.user.impersonatedBy) throw apiError(403, 'NOT_WHILE_IMPERSONATING', 'Not while acting as another user');
-    // The panel will post to this address: a push service's, so public HTTPS (checked again at every send, notify.ts).
-    const endpoint = typeof body?.endpoint === 'string' && /^https:\/\/[^\s]{10,2000}$/.test(body.endpoint) && (await publicUrl(body.endpoint)) ? body.endpoint : null;
+    // The panel will post to this address: a push service's, so public HTTPS under a plain host name (checked again
+    // at every send, notify.ts). Kept as the address that was checked, not as the text that was sent.
+    const endpoint = await pushEndpoint(body?.endpoint);
     const key = (v: unknown) => (typeof v === 'string' && /^[\w+/=-]{8,200}$/.test(v) ? v : null);
     const p256dh = key(body?.keys?.p256dh), auth = key(body?.keys?.auth);
     if (!endpoint || !p256dh || !auth) throw apiError(400, 'VALIDATION_FAILED', 'Invalid input', { endpoint: 'INVALID_VALUE' });
@@ -97,7 +99,10 @@ export class NotificationsController {
 
   @Delete('push-subscriptions') @HttpCode(204)
   async unsubscribe(@Req() req: AuthedRequest, @Body() body: { endpoint?: unknown }) {
-    await pool.query('DELETE FROM push_subscriptions WHERE user_id = $1 AND endpoint = $2', [req.user.id, String(body?.endpoint ?? '')]);
+    // The browser names its endpoint as it knows it; the row holds it in its normal form (subscribe).
+    const raw = String(body?.endpoint ?? '').slice(0, 2000);
+    let normal = raw; try { normal = new URL(raw).toString(); } catch { /* not a URL: matches nothing */ }
+    await pool.query('DELETE FROM push_subscriptions WHERE user_id = $1 AND endpoint = ANY($2::text[])', [req.user.id, [raw, normal]]);
   }
 
   // Sends a test through one channel to the caller, so they can see it arrives.
@@ -116,6 +121,10 @@ export class NotificationsController {
       const { rows: [n] } = await pool.query('SELECT count(*)::int AS n FROM push_subscriptions WHERE user_id = $1', [req.user.id]);
       if (!n.n) throw apiError(409, 'PUSH_NOT_SUBSCRIBED', 'Allow notifications in this browser first');
     }
+    // A test makes the panel send (a paid text message, a mail, a request to a push service): a few an hour per
+    // account over all channels, and per phone number for SMS (a number can be verified on several accounts).
+    await rateLimit(`notify-test:${req.user.id}`, 6, 3600);
+    if (channel === 'sms') await rateLimit(`notify-test:sms:${req.user.phoneNumber}`, 6, 3600);
     const t = req.user.locale === 'tr' ? { title: 'Test bildirimi', body: 'Bu kanal çalışıyor.' } : { title: 'Test notification', body: 'This channel works.' };
     try {
       await deliver({ id: req.user.id, email: req.user.email, locale: req.user.locale, phone_number: req.user.phoneNumber, phone_number_verified: req.user.phoneNumberVerified }, channel, t, '/account?tab=notifications', 'system.test');

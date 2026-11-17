@@ -369,3 +369,57 @@ test('a route that outlives its time is answered as TIMEOUT and its session is c
     assert.equal(closed, 1);
   } finally { server.close(); }
 });
+
+// Proxmox gives a freed VM number to the next VM. A server row that still holds such a number (its VM was removed and
+// brought back outside the panel, or the panel's database is older than a reinstall) must not reach the VM that has it now.
+test('a VM number that was handed out again is not acted on for the server that had it before', async () => {
+  const { c, api } = cluster();
+  const other = '11111111-2222-4333-8444-555555555555';
+  await h.task(api, { task: (await h.clone(api, { ...order, name: `lvm-${other}`, serverId: other })).task });
+  await h.powerAction(api, { vm: '105', action: 'on' });
+  assert.equal(c.vms[105].name, `lvm-${other}`, 'another customer\'s server holds 105 now');
+  const before = JSON.stringify(c.vms[105]);
+  c.calls.length = 0;
+  const stale = { vm: '105', expectName: order.name }; // the first server's row still says 105
+  const requests = [[h.powerAction, { action: 'off' }], [h.powerAction, { action: 'reset' }], [h.snapshots, {}], [h.snapshot, { action: 'create', name: 'mine' }],
+    [h.snapshot, { action: 'revert', snapshot: 'snapshot-1' }], [h.snapshot, { action: 'remove', snapshot: 'snapshot-1' }], [h.details, {}], [h.metrics, {}],
+    [h.guestSetup, { userdata: `#cloud-config\n${JSON.stringify({ hostname: 'mine', chpasswd: { list: 'root:$6$x$y' } })}` }], [h.disks, {}], [h.diskAdd, { sizeGb: 10 }],
+    [h.diskRemove, { key: 201 }], [h.resize, { vcpu: 8, memoryMb: 8192, diskGb: 80 }], [h.destroy, {}]];
+  for (const [run, body] of requests) await assert.rejects(run(api, { ...stale, ...body }), { code: 'VM_MISMATCH' }, run.name);
+  assert.equal(JSON.stringify(c.vms[105]), before, 'the other VM is untouched');
+  assert.deepEqual([...new Set(c.calls)], ['GET /cluster/resources'], 'and nothing of it was read: only the list of VMs');
+  // The server that holds the number is served, and a caller that names nothing gets the VM by number as before.
+  assert.equal((await h.details(api, { vm: '105', expectName: `lvm-${other}` })).name, `lvm-${other}`);
+  assert.match((await h.powerAction(api, { vm: '105', expectName: `lvm-${other}`, action: 'off' })).task, /^UPID:/);
+  assert.deepEqual((await h.snapshots(api, { vm: '105' })).snapshots, []);
+  // An import names what the inventory listed under the number; a VM that took the number since is not renamed.
+  await assert.rejects(h.rename(api, { vm: '101', name: 'lvm-import-1', expectName: 'web-old' }), { code: 'VM_MISMATCH' });
+  assert.equal((await h.rename(api, { vm: '101', name: 'lvm-import-1', expectName: 'someone-else' })).name, 'lvm-import-1');
+  assert.equal((await h.rename(api, { vm: '101', name: 'lvm-import-1', expectName: 'someone-else' })).name, 'lvm-import-1', 'a repeated import finds it done');
+});
+
+test('a clone copies a template, or the server a copy was ordered from: a number that changed hands is not copied', async () => {
+  const { c, api } = cluster();
+  // The template was removed on the cluster while its image stayed in the panel; number 100 went to a customer's server.
+  const taken = '99999999-8888-4777-8666-555555555555';
+  c.vms[100] = { vmid: 100, name: `lvm-${taken}`, node: 'pve1', status: 'running', maxcpu: 1, maxmem: GIB, config: { name: `lvm-${taken}`, scsi0: 'local-lvm:vm-100-disk-0,size=8G', net0: 'virtio=AA:AA:AA:AA:AA:01,bridge=vmbr0' }, snapshots: [] };
+  await assert.rejects(h.clone(api, order), { code: 'TEMPLATE_NOT_FOUND' });
+  // A copy of a server names its source; the VM under the number must be that server's.
+  await assert.rejects(h.clone(api, { ...order, expectName: `lvm-${serverId}` }), { code: 'VM_MISMATCH' });
+  assert.ok(!c.calls.some((x) => /\/clone$/.test(x)), 'nothing was copied');
+  assert.equal(c.vms[105], undefined);
+  const started = await h.clone(api, { ...order, expectName: `lvm-${taken}` });
+  assert.match(started.task, /^UPID:pve1:.*\|105$/);
+  assert.deepEqual(await h.task(api, { task: started.task }), { state: 'success', vm: '105' });
+});
+
+test('VM_MISMATCH is answered as a conflict with its code', async () => {
+  const { api } = cluster();
+  const token = 't'.repeat(40);
+  const server = http.createServer(handler(token, { transport: api })).listen(0);
+  try {
+    const res = await fetch(`http://127.0.0.1:${server.address().port}/v1/vm/power`, { method: 'POST', headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+      body: JSON.stringify({ host: 'pve', username: 'root@pam', vm: '101', expectName: `lvm-${serverId}`, action: 'off' }) });
+    assert.deepEqual([res.status, (await res.json()).code], [409, 'VM_MISMATCH']);
+  } finally { server.close(); }
+});

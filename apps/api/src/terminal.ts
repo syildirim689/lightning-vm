@@ -61,12 +61,13 @@ export class TerminalController {
 
   @Post('session') @HttpCode(201) @Can('system.terminal')
   async open(@Req() req: AuthedRequest, @Res({ passthrough: true }) reply: FastifyReply) {
+    const issuedAt = Date.now(); // a revocation from here on covers this ticket too (console.ts revokeConsoles)
     mayOpen(req);
     await rateLimit(`terminal:${req.user.id}`, 20, 600);
     if (!(await serviceUp(true))) throw apiError(409, 'TERMINAL_OFF', 'The terminal is turned off');
     const token = newToken();
     await redis.set(`terminal:session:${sha256(token).toString('hex')}`, JSON.stringify({
-      userId: req.user.id, authHash: sha256(req.sessionToken).toString('hex'), vm: 'host', vmName: 'host' }), 'EX', sessionSeconds, 'NX');
+      userId: req.user.id, authHash: sha256(req.sessionToken).toString('hex'), vm: 'host', vmName: 'host', issuedAt }), 'EX', sessionSeconds, 'NX');
     reply.setCookie(cookie, token, { path: '/terminal/ws', httpOnly: true, sameSite: 'strict', secure: req.protocol === 'https', maxAge: sessionSeconds });
     await audit(req, 'terminal.session_issued', 'success', req.user.id);
     return { path: '/terminal/ws', expiresInSeconds: sessionSeconds };

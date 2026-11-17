@@ -2,7 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-const { mailHtml, mailText } = await import('../dist/mail-layout.js');
+const { eventTime, mailHtml, mailText } = await import('../dist/mail-layout.js');
 const brand = (accent) => ({ name: 'Acme <Cloud>', accent, logoUrl: null, locale: 'tr' });
 const content = { preheader: 'p', heading: 'Kod "x"', intro: ['<script>alert(1)</script>'], code: '123456',
   button: { label: 'Aç', url: 'https://panel.example/a?b=1&c=2' }, details: [['IP', '192.0.2.1']], note: 'n' };
@@ -36,4 +36,13 @@ test('the tag and tone colour the card, and the header and footer link to the pa
   assert.ok(html.includes('Panele git'));
   assert.ok(!mailHtml(content, brand('#f59e0b')).includes('Panele git'), 'no panel link without a public address');
   assert.ok(mailText({ ...content, label: 'Sunucu' }, b).startsWith('[Sunucu]'));
+});
+
+test('the event time is formatted in the account zone with the zone named, in both languages; an unknown zone gives UTC', () => {
+  const at = new Date(Date.UTC(2026, 10, 17, 9, 5));
+  const tr = eventTime('tr', 'Europe/Istanbul', at), en = eventTime('en', 'America/New_York', at);
+  assert.match(tr, /17 Kasım 2026/); assert.match(tr, /12:05/); assert.match(tr, /GMT\+3/);
+  assert.match(en, /17 November 2026/); assert.match(en, /04:05/); assert.match(en, /GMT-5|EST/);
+  assert.match(eventTime('en', null, at), /12:05/, 'no zone set: Turkey');
+  for (const l of ['tr', 'en']) { const v = eventTime(l, 'Nope/Zone', at); assert.match(v, /09:05/); assert.match(v, /UTC/); }
 });

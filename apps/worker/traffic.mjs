@@ -9,7 +9,7 @@ const uuid = /^[0-9a-f-]{36}$/;
 async function shape(db, serverId, mbps) {
   const { rows: [s] } = await db.query(`SELECT s.vm_moref, c.* FROM servers s JOIN resource_pools p ON p.id = s.pool_id JOIN vmware_connections c ON c.id = p.connection_id WHERE s.id = $1`, [serverId]);
   if (!s?.vm_moref) return false;
-  await adapter('/v1/vm/shaping', { ...connectionTarget(s), vm: s.vm_moref, mbps });
+  await adapter('/v1/vm/shaping', { ...connectionTarget(s), vm: s.vm_moref, expectName: `lvm-${serverId}`, mbps });
   return true;
 }
 // Errors after which there is nothing to slow down or to lift: the platform has no shaping, or the VM is gone.

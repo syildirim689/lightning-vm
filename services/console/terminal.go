@@ -78,6 +78,14 @@ func (g *Gateway) serveTerminal(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// As for the console: a ticket whose account or session was revoked since it was issued starts no shell.
+	if g.ticketRevoked(ctx, s) {
+		g.release(c)
+		g.store.Event(ctx, map[string]any{"event": "terminal_denied", "reason": "TERMINAL_REVOKED", "userId": s.UserID})
+		client.Close(closeRevoked, "TERMINAL_REVOKED")
+		return
+	}
+
 	argv := hostShell()
 	cmd := exec.Command(argv[0], argv[1:]...)
 	cmd.Env = []string{"TERM=xterm-256color", "LANG=C.UTF-8", "HOME=/root", "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"}

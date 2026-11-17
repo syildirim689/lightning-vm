@@ -11,7 +11,7 @@ import * as h from './handlers.mjs';
 const log = (level, msg, extra = {}) => console.log(JSON.stringify({ level, time: Date.now(), service: 'proxmox', msg, ...extra }));
 // What each code answers with. The callers read the code; the status is for people reading logs.
 const statusOf = (code) => (['VM_NOT_FOUND', 'DATASTORE_NOT_FOUND'].includes(code) ? 404
-  : ['NOT_MANAGED', 'NOT_IMPORTABLE', 'DISK_HAS_SNAPSHOTS', 'DISK_SHRINK_NOT_SUPPORTED', 'INVALID_STATE', 'VM_HAS_NO_DISK', 'SYSTEM_DISK', 'NO_DISK_CONTROLLER', 'TOOLS_NOT_RUNNING'].includes(code) ? 409
+  : ['NOT_MANAGED', 'VM_MISMATCH', 'NOT_IMPORTABLE', 'DISK_HAS_SNAPSHOTS', 'DISK_SHRINK_NOT_SUPPORTED', 'INVALID_STATE', 'VM_HAS_NO_DISK', 'SYSTEM_DISK', 'NO_DISK_CONTROLLER', 'TOOLS_NOT_RUNNING'].includes(code) ? 409
   : ['INVALID_LOGIN', 'PERMISSION_DENIED', 'UNAUTHORIZED'].includes(code) ? 401
   : ['INVALID_CA', 'INVALID_PIN', 'INVALID_TLS_MODE', 'INVALID_REQUEST', 'ENDPOINT_BLOCKED', 'PROVISIONING_NOT_SUPPORTED', 'TEMPLATE_NOT_FOUND', 'NETWORK_NOT_FOUND', 'TEMPLATE_HAS_NO_NIC', 'DISK_SMALLER_THAN_TEMPLATE', 'PLATFORM_NOT_SUPPORTED'].includes(code) ? 400 : 502);
 

@@ -6,6 +6,8 @@
 //                                      unattended install: first admin with a generated password (printed once)
 //   node dist/cli.js reset-password EMAIL [--disable-2fa]
 //                                      lost password: a new generated one (printed once), every session signed out
+//   node dist/cli.js release-restore-hold
+//                                      after a restore: the panel acts by itself again (operations, schedules, billing)
 import { closeConnections, pool } from './db';
 import { logEvent } from './log';
 import { runMigrations } from './migrate';
@@ -39,7 +41,14 @@ async function main(command: string | undefined) {
     process.stdout.write(`${done.password}\n`); // stdout only: shown once to the operator
     return 0;
   }
-  process.stderr.write('usage: node dist/cli.js migrate | bootstrap-token | recover-setup | create-admin EMAIL [tr|en] | reset-password EMAIL [--disable-2fa]\n');
+  if (command === 'release-restore-hold') {
+    // The same as Settings → System for staff (servers.ts): running API and worker processes notice within 15 seconds.
+    const { rows: [h] } = await pool.query("DELETE FROM maintenance_state WHERE key = 'restore_hold' RETURNING value, at");
+    if (h) await pool.query("INSERT INTO audit_events (action, outcome, metadata) VALUES ('system.restore_hold_released', 'success', $1)", [{ via: 'cli', since: h.at, detail: h.value }]);
+    logEvent('info', h ? 'restore_hold_released' : 'restore_hold_not_set');
+    return 0;
+  }
+  process.stderr.write('usage: node dist/cli.js migrate | bootstrap-token | recover-setup | create-admin EMAIL [tr|en] | reset-password EMAIL [--disable-2fa] | release-restore-hold\n');
   return 2;
 }
 

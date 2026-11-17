@@ -3,7 +3,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { attempt, connection, fail, fakeAdapter, fakeDb, ids } from './harness.mjs';
-import { adapterBase, addedDisk, cloudInit, processOperation, reconcile, warningCodes } from '../operations.mjs';
+import { adapterBase, addedDisk, cloudInit, forgetRestoreHold, processOperation, reconcile, warningCodes } from '../operations.mjs';
 
 const vmOf = (powerState, moref = 'vm-1') => ({ vm: { moref, powerState, toolsRunning: powerState === 'poweredOn', ips: ['203.0.113.20'] } });
 const resizeParams = { vcpu: 4, memoryMb: 8192, diskGb: 80, powerOn: true, from: { vcpu: 2, memoryMb: 4096, diskGb: 40, priceMonthly: '10.00', packageId: 'pkg-old' } };
@@ -215,7 +215,7 @@ test('reconcile closes findings that no longer hold and gives a returned VM its 
   const [a, b, c] = ['aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', 'cccccccc-cccc-4ccc-8ccc-cccccccccccc'];
   const db = fakeDb({ routes: [
     [/^SELECT DISTINCT c\.\*/, () => [connection()]],
-    [/^SELECT s\.id, s\.state, s\.power_state/, () => [{ id: a, state: 'ready', power_state: 'poweredOn' }, { id: b, state: 'missing', power_state: 'unknown' }, { id: c, state: 'error', power_state: 'poweredOff' }]],
+    [/^SELECT s\.id, s\.state, s\.power_state/, () => [{ id: a, state: 'ready', power_state: 'poweredOn', vm_moref: 'vm-a' }, { id: b, state: 'missing', power_state: 'unknown', vm_moref: 'vm-b' }, { id: c, state: 'error', power_state: 'poweredOff', vm_moref: 'vm-c' }]],
     [/^SELECT 'lvm-' \|\| id/, () => [a, b, c].map((id) => ({ name: `lvm-${id}` }))]] });
   fakeAdapter(() => ({ vms: [{ name: `lvm-${a}`, moref: 'vm-a', powerState: 'poweredOn' }, { name: `lvm-${b}`, moref: 'vm-b', powerState: 'poweredOff' }, { name: 'lvm-stray', moref: 'vm-s', powerState: 'poweredOff' }] }));
   await reconcile(db, () => {});
@@ -229,7 +229,139 @@ test('reconcile closes findings that no longer hold and gives a returned VM its 
   assert.equal(db.ran(/SET state = 'ready'/).length, 0);
   // Open findings other than: c missing, b drifted, the stray VM. (a's old drift, b's missing, strays gone: closed.)
   const closed = db.ran(/^UPDATE reconciliation_findings SET resolved_at = now\(\) WHERE connection_id = \$1/);
-  assert.deepEqual(closed.map((q) => q.params), [[ids.conn, [c], [b], ['vm-s']]]);
+  assert.deepEqual(closed.map((q) => q.params), [[ids.conn, [c], [b], ['vm-s'], []]]);
+  assert.equal(db.ran(/^UPDATE servers SET vm_moref/).length, 0, 'the ids match: nothing is re-bound');
+});
+
+test('reconcile re-binds a server whose VM is listed under another id, before it counts as ready again', async () => {
+  const [a, b] = ['aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'];
+  // a went missing as VM 102 and is back under its name as 103; 102 is b's VM by now (Proxmox gave the number out again).
+  const db = fakeDb({ routes: [
+    [/^SELECT DISTINCT c\.\*/, () => [connection({ kind: 'proxmox' })]],
+    [/^SELECT s\.id, s\.state, s\.power_state/, () => [{ id: a, state: 'missing', power_state: 'unknown', vm_moref: '102' }, { id: b, state: 'ready', power_state: 'poweredOn', vm_moref: '102' }]],
+    [/^SELECT 'lvm-' \|\| id/, () => [a, b].map((id) => ({ name: `lvm-${id}` }))]] });
+  fakeAdapter(() => ({ vms: [{ name: `lvm-${a}`, moref: '103', powerState: 'poweredOff' }, { name: `lvm-${b}`, moref: '102', powerState: 'poweredOn' }] }));
+  await reconcile(db, () => {});
+  assert.deepEqual(db.ran(/^UPDATE servers SET vm_moref/).map((q) => q.params), [[a, '103', '102']]);
+  const finding = db.ran(/^INSERT INTO reconciliation_findings/).find((q) => q.params[1] === 'vm_id_changed');
+  assert.deepEqual(finding.params.slice(1), ['vm_id_changed', a, '103', { recorded: '102', actual: '103' }]);
+  const order = db.log.map((q) => q.sql);
+  assert.ok(order.findIndex((s) => /^UPDATE servers SET vm_moref/.test(s)) < order.findIndex((s) => /^UPDATE servers s SET state = COALESCE/.test(s)), 'the id first, then the state');
+  assert.deepEqual(db.ran(/^UPDATE reconciliation_findings SET resolved_at/)[0].params[4], [a], 'the finding stays open for this run');
+});
+
+test('after a restore the worker starts nothing and reconcile only reports, until the hold is released', async () => {
+  let held = true;
+  const hold = [/^SELECT 1 FROM maintenance_state/, () => (held ? [{}] : [])];
+  forgetRestoreHold();
+  try {
+    const db = fakeDb({ op: { kind: 'delete', step: 'queued' }, routes: [hold] });
+    const calls = fakeAdapter(() => ({ vm: null }));
+    const logged = [];
+    await processOperation(db, { id: db.op.id, attemptsMade: 0, opts: { attempts: 6 } }, (level, event) => logged.push(event));
+    assert.deepEqual([db.op.status, db.op.attempts, calls.length], ['pending', 0, 0], 'the operation is as the backup held it');
+    assert.deepEqual(logged, ['operation_held']);
+
+    const [a, b] = ['aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'];
+    const rec = fakeDb({ routes: [hold,
+      [/^SELECT DISTINCT c\.\*/, () => [connection()]],
+      [/^SELECT s\.id, s\.state, s\.power_state/, () => [{ id: a, state: 'ready', power_state: 'poweredOn', vm_moref: 'vm-1' }, { id: b, state: 'ready', power_state: 'poweredOn', vm_moref: 'vm-2' }]],
+      [/^SELECT 'lvm-' \|\| id/, () => [a, b].map((id) => ({ name: `lvm-${id}` }))]] });
+    fakeAdapter(() => ({ vms: [{ name: `lvm-${a}`, moref: 'vm-9', powerState: 'poweredOff' }] }));
+    await reconcile(rec, () => {});
+    assert.deepEqual(rec.ran(/^INSERT INTO reconciliation_findings/).map((q) => q.params[1]), ['vm_id_changed', 'power_drift', 'vm_missing']);
+    assert.equal(rec.ran(/^UPDATE servers/).length, 0, 'no server row is changed while the hold is on');
+
+    // Released: the same operation runs.
+    held = false;
+    forgetRestoreHold();
+    assert.equal(await attempt(processOperation, db), null);
+    assert.equal(db.op.status, 'succeeded');
+  } finally { forgetRestoreHold(); }
+});
+
+test('a deadline that passes while an issued task runs undoes nothing: the task is waited for, and its outcome decides', async () => {
+  // The deadline is over (late) when the resize task is issued and while it runs.
+  const db = fakeDb({ op: { kind: 'resize', step: 'resize', late: false, params: { ...resizeParams, invoiceId: 'inv-1' } } });
+  let state = 'poweredOff', polls = 0;
+  fakeAdapter((path, body) => {
+    if (path === '/v1/vm/find') return vmOf(state);
+    if (path === '/v1/vm/power') { state = body.action === 'on' ? 'poweredOn' : 'poweredOff'; return { task: '' }; }
+    if (path === '/v1/vm/resize') { db.op.late = true; return { task: 'task-r' }; }
+    if (path === '/v1/task') return ++polls < 4 ? { state: 'running' } : { state: 'success' };
+  });
+  assert.equal(await attempt(processOperation, db), null);
+  assert.equal(polls, 4, 'waited past the deadline');
+  assert.equal(db.op.status, 'succeeded');
+  assert.deepEqual(db.ran(/^UPDATE servers SET vcpu/).map((q) => q.params), [[ids.server, 4, 8192, 80]]);
+  assert.equal(db.ran(/^UPDATE servers SET price_monthly/).length + db.ran(/^UPDATE invoices/).length, 0);
+  assert.equal(state, 'poweredOn');
+
+  // The deadline still stops what is not issued yet: a resize picked up late is not started, and its price goes back.
+  const early = fakeDb({ op: { kind: 'resize', step: 'resize', late: true, params: resizeParams } });
+  const none = fakeAdapter((path) => (path === '/v1/vm/find' ? vmOf('poweredOff') : {}));
+  assert.equal((await attempt(processOperation, early)).message, 'TIMEOUT');
+  assert.equal(none.to('/v1/vm/resize').length, 0);
+  assert.equal(early.ran(/^UPDATE servers SET price_monthly/).length, 1);
+});
+
+test('a task whose outcome cannot be learned ends the operation as OUTCOME_UNKNOWN: price, invoice and rows stay, staff are told', async () => {
+  const told = [];
+  const notify = async (event, to, data) => { told.push([event, data.code]); };
+  // Still running at the hard limit past the deadline.
+  const db = fakeDb({ op: { kind: 'resize', step: 'resize', provider_task_id: 'task-r', late: true, abandoned: true, params: { ...resizeParams, invoiceId: 'inv-1' } } });
+  let calls = fakeAdapter((path) => (path === '/v1/task' ? { state: 'running' } : vmOf('poweredOff')));
+  assert.equal((await attempt(processOperation, db, { notify })).message, 'OUTCOME_UNKNOWN');
+  assert.deepEqual([db.op.status, db.op.error_code, db.op.provider_task_id], ['failed', 'OUTCOME_UNKNOWN', 'task-r'], 'the task id is kept for a retry to read');
+  assert.equal(db.ran(/^UPDATE servers SET price_monthly/).length + db.ran(/^UPDATE invoices/).length, 0, 'the billing state is as the operation wrote it');
+  assert.equal(calls.to('/v1/vm/power').length, 0, 'not started under a task that may still run');
+  assert.deepEqual(told, [['server.failed', 'OUTCOME_UNKNOWN'], ['admin.operation_failed', 'OUTCOME_UNKNOWN']]);
+
+  // The adapter cannot be asked about the task any more, on the last attempt: the same, for an extra disk.
+  const params = { diskId: '66666666-6666-4666-8666-666666666666', sizeGb: 20 };
+  const disk = fakeDb({ op: { kind: 'disk_add', step: 'disk', provider_task_id: 'task-d', params } });
+  calls = fakeAdapter((path) => { if (path === '/v1/task') throw new Error('connection refused'); return { disks: [{ key: 2000, system: true, sizeGb: 40 }] }; });
+  const first = await attempt(processOperation, disk);
+  assert.deepEqual([first.code, disk.op.status], ['VMWARE_SERVICE_UNAVAILABLE', 'pending'], 'retried while attempts are left');
+  assert.equal((await attempt(processOperation, disk, { last: true })).message, 'OUTCOME_UNKNOWN');
+  assert.deepEqual([disk.op.status, disk.op.error_code, disk.op.provider_task_id], ['failed', 'OUTCOME_UNKNOWN', 'task-d']);
+  assert.equal(disk.ran(/^UPDATE server_disks SET status = 'failed'/).length, 0, 'the row is not marked failed (its owner could delete it and its price while the disk exists)');
+
+  // A task that answered with an error is a known outcome: the undo runs as before.
+  const failed = fakeDb({ op: { kind: 'disk_add', step: 'disk', provider_task_id: 'task-d', late: true, params } });
+  fakeAdapter((path) => (path === '/v1/task' ? { state: 'error', code: 'INSUFFICIENT_RESOURCES', error: 'no room' } : { disks: [] }));
+  assert.equal((await attempt(processOperation, failed)).message, 'INSUFFICIENT_RESOURCES');
+  assert.equal(failed.ran(/^UPDATE server_disks SET status = 'failed'/).length, 1);
+});
+
+test('every request about a server names the VM it expects; a copy names its source, an order from an image none', async () => {
+  const name = `lvm-${ids.server}`;
+  const db = fakeDb({ op: { kind: 'snapshot_create', params: { name: 'before upgrade' } } });
+  let calls = fakeAdapter((path) => (path === '/v1/vm/snapshot' ? { task: '' } : { snapshots: [] }));
+  assert.equal(await attempt(processOperation, db), null);
+  assert.deepEqual(calls.to('/v1/vm/snapshot').map((c) => [c.body.vm, c.body.expectName]), [['vm-1', name]]);
+  const off = fakeDb({ op: { kind: 'power_off' } });
+  calls = fakeAdapter((path) => (path === '/v1/vm/find' ? vmOf('poweredOff') : { task: '' }));
+  assert.equal(await attempt(processOperation, off), null);
+  assert.deepEqual(calls.to('/v1/vm/power').map((c) => [c.body.vm, c.body.expectName]), [['vm-1', name]]);
+  // The adapter's refusal is final: the number belongs to another VM, a retry would not change that.
+  const other = fakeDb({ op: { kind: 'power_off' } });
+  fakeAdapter((path) => (path === '/v1/vm/find' ? vmOf('poweredOn') : fail('VM_MISMATCH')));
+  assert.equal((await attempt(processOperation, other)).message, 'VM_MISMATCH');
+  assert.equal(other.op.status, 'failed');
+
+  const source = '77777777-7777-4777-8777-777777777777';
+  const server = { vm_moref: null, pool_id: 'pool-1', datastore_morefs: ['ds-1'], compute_moref: 'c-1', template_moref: '100', clone_from_moref: '107', clone_from_server_id: source };
+  const inventory = [[/FROM vmware_datastores/, () => [{ moref: 'ds-1' }]], [/FROM vmware_compute/, () => [{ resource_pool: 'rp-1' }]], [/^SELECT 1 FROM servers WHERE id = \$1 AND owner_id/, () => [{}]]];
+  const answers = (path) => (path === '/v1/vm/clone' ? { vm: 'vm-9' } : vmOf('poweredOn', 'vm-9'));
+  const copy = fakeDb({ op: { kind: 'create' }, server, routes: inventory });
+  calls = fakeAdapter(answers);
+  assert.equal(await attempt(processOperation, copy), null);
+  assert.deepEqual(calls.to('/v1/vm/clone').map((c) => [c.body.template, c.body.expectName]), [['107', `lvm-${source}`]]);
+  const plain = fakeDb({ op: { kind: 'create' }, server: { ...server, clone_from_moref: null, clone_from_server_id: null }, routes: inventory });
+  calls = fakeAdapter(answers);
+  assert.equal(await attempt(processOperation, plain), null);
+  assert.deepEqual(calls.to('/v1/vm/clone').map((c) => [c.body.template, 'expectName' in c.body]), [['100', false]]);
 });
 
 test('the customer\'s SSH keys are root\'s: disable_root is off and the keys stay top-level for the adapters that read them', () => {

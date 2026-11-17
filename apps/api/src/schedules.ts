@@ -8,7 +8,8 @@ import { Can } from './rbac';
 import { pool, redis } from './db';
 import { apiError } from './errors';
 import { logEvent } from './log';
-import { customerMay, findServer, runDueDeletions, startPowerOperation } from './servers';
+import { customerMay, findServer, ownerWrite, runDueDeletions, startPowerOperation } from './servers';
+import { restoreHold } from './restore-hold';
 import { getSettings } from './settings-store';
 import { hashOf, startOperation } from './servers';
 import { limitsOf } from './permissions';
@@ -30,24 +31,27 @@ export class SchedulesController {
 
   @Post() @HttpCode(201) @Can('server.power', 'server.snapshots', 'server.backups')
   async create(@Req() req: AuthedRequest, @Param('id', ParseUUIDPipe) id: string, @Body() body: Record<string, unknown>) {
-    await findServer(req, id, true);
+    const s = await findServer(req, id, true);
     const v = valid(body);
     await customerMay(req, v.action === 'snapshot' ? 'snapshots' : v.action === 'backup' ? 'backups' : 'power');
-    const { rows: [n] } = await pool.query('SELECT count(*)::int AS n FROM power_schedules WHERE server_id = $1', [id]);
-    if (n.n >= 10) throw apiError(400, 'VALIDATION_FAILED', 'Too many schedules', { action: 'TOO_MANY' });
-    const { rows: [row] } = await pool.query(`INSERT INTO power_schedules (server_id, action, days, at_time, timezone, enabled, keep) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING ${columns}`,
-      [id, v.action, v.days, v.time, v.timezone, v.enabled, v.keep ?? null]);
+    // Written only while the server is still this owner's (servers.ts ownerWrite): a hand-over deletes the schedules.
+    const row = await ownerWrite(s, async (db) => {
+      const { rows: [n] } = await db.query('SELECT count(*)::int AS n FROM power_schedules WHERE server_id = $1', [id]);
+      if (n.n >= 10) throw apiError(400, 'VALIDATION_FAILED', 'Too many schedules', { action: 'TOO_MANY' });
+      return (await db.query(`INSERT INTO power_schedules (server_id, action, days, at_time, timezone, enabled, keep) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING ${columns}`,
+        [id, v.action, v.days, v.time, v.timezone, v.enabled, v.keep ?? null])).rows[0];
+    });
     await audit(req, 'server.schedule_created', 'success', req.user.id, { serverId: id, scheduleId: row.id, action: v.action, days: v.days, time: v.time, timezone: v.timezone });
     return row;
   }
 
   @Put(':sid') @Can('server.power', 'server.snapshots', 'server.backups')
   async update(@Req() req: AuthedRequest, @Param('id', ParseUUIDPipe) id: string, @Param('sid', ParseUUIDPipe) sid: string, @Body() body: Record<string, unknown>) {
-    await findServer(req, id, true);
+    const s = await findServer(req, id, true);
     const v = valid(body);
     await customerMay(req, v.action === 'snapshot' ? 'snapshots' : v.action === 'backup' ? 'backups' : 'power');
-    const { rows: [row] } = await pool.query(`UPDATE power_schedules SET action = $3, days = $4, at_time = $5, timezone = $6, enabled = $7, keep = $8, pending_since = NULL WHERE id = $2 AND server_id = $1 RETURNING ${columns}`,
-      [id, sid, v.action, v.days, v.time, v.timezone, v.enabled, v.keep ?? null]);
+    const { rows: [row] } = await ownerWrite(s, (db) => db.query(`UPDATE power_schedules SET action = $3, days = $4, at_time = $5, timezone = $6, enabled = $7, keep = $8, pending_since = NULL WHERE id = $2 AND server_id = $1 RETURNING ${columns}`,
+      [id, sid, v.action, v.days, v.time, v.timezone, v.enabled, v.keep ?? null]));
     if (!row) throw apiError(404, 'NOT_FOUND', 'Unknown schedule');
     await audit(req, 'server.schedule_updated', 'success', req.user.id, { serverId: id, scheduleId: sid, enabled: v.enabled });
     return row;
@@ -55,8 +59,8 @@ export class SchedulesController {
 
   @Delete(':sid') @HttpCode(204) @Can('server.power', 'server.snapshots', 'server.backups')
   async remove(@Req() req: AuthedRequest, @Param('id', ParseUUIDPipe) id: string, @Param('sid', ParseUUIDPipe) sid: string) {
-    await findServer(req, id, true);
-    const { rowCount } = await pool.query('DELETE FROM power_schedules WHERE id = $2 AND server_id = $1', [id, sid]);
+    const s = await findServer(req, id, true);
+    const { rowCount } = await ownerWrite(s, (db) => db.query('DELETE FROM power_schedules WHERE id = $2 AND server_id = $1', [id, sid]));
     if (!rowCount) throw apiError(404, 'NOT_FOUND', 'Unknown schedule');
     await audit(req, 'server.schedule_deleted', 'success', req.user.id, { serverId: id, scheduleId: sid });
   }
@@ -116,7 +120,7 @@ async function runSnapshot(r: Record<string, string | number | boolean | null>, 
   if (r.busy) return { outcome: 'skipped_busy', pending: true };
   if (r.state !== 'ready' || !r.vm_moref) return { outcome: 'skipped_state', pending: false };
   const { rows: [c] } = await pool.query('SELECT c.* FROM vmware_connections c JOIN resource_pools p ON p.connection_id = c.id WHERE p.id = $1', [r.pool_id]);
-  const { snapshots } = await callAdapter<{ snapshots: { id: string; name: string; created: string }[] }>('/v1/vm/snapshots', { ...storedTarget(c), vm: r.vm_moref }, 30_000);
+  const { snapshots } = await callAdapter<{ snapshots: { id: string; name: string; created: string }[] }>('/v1/vm/snapshots', { ...storedTarget(c), vm: r.vm_moref, expectName: `lvm-${r.server_id}` }, 30_000);
   const max = limitsOf(String(r.owner_role ?? 'user')).maxSnapshots ?? MAX_SNAPSHOTS;
   const keep = Math.min(Number(r.keep ?? 3), max);
   const autos = snapshots.filter((s) => s.name.startsWith('auto ')).sort((a, b) => Date.parse(a.created) - Date.parse(b.created));
@@ -159,6 +163,8 @@ async function runBackup(r: Record<string, string | number | boolean | null>, al
 export function startScheduler() {
   const tick = async () => {
     if (!(await redis.set('lock:schedules', '1', 'EX', 50, 'NX').catch(() => null))) return;
+    // Restored from an older backup: schedules and deletion dates are from then; nothing runs until staff release the hold.
+    if (await restoreHold()) return;
     await runSchedules().catch(() => logEvent('error', 'schedules_failed'));
     await runDueDeletions().catch(() => logEvent('error', 'due_deletions_failed'));
   };
