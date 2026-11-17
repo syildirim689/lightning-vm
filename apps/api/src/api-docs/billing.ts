@@ -256,8 +256,9 @@ export default {
   'GET /admin/billing/payments': {
     tag: 'admin-billing',
     summary: { tr: 'Ödemeleri listeler (en yeni 300).', en: 'Lists payments (newest 300).' },
-    query: [{ name: 'status', type: 'string', values: ['pending', 'succeeded', 'failed', 'refunded', 'partially_refunded', 'review'], text: { tr: 'Duruma göre süzer; review: personelin onayını bekleyen açık ödemeler, en eskisi önce.', en: 'Filters by status; review: open payments waiting for staff, oldest first.' } }],
-    returns: { tr: 'payments: fatura numarası ve durumu (invoiceStatus), sağlayıcı, yöntem, durum, tutar, iade edilen, hata, otomatik mi, müşterinin e-postası, review (personel onayı bekliyor mu).', en: 'payments: invoice number and status (invoiceStatus), provider, method, status, amount, refunded, error, automatic, customer e-mail, review (whether it waits for staff).' },
+    query: [{ name: 'status', type: 'string', values: ['pending', 'succeeded', 'failed', 'refunded', 'partially_refunded', 'review'], text: { tr: 'Duruma göre süzer; review: personelin onayını bekleyen açık ödemeler, en eskisi önce.', en: 'Filters by status; review: open payments waiting for staff, oldest first.' } },
+      { name: 'q', type: 'string', text: { tr: 'Fatura numarası, müşterinin e-postası ya da sağlayıcı referansının bir parçası (büyük/küçük harf ve Türkçe harf ayrımı yapılmaz).', en: 'Part of the invoice number, the customer\'s e-mail or the provider\'s reference (case and Turkish letters are folded).' } }],
+    returns: { tr: 'payments: fatura numarası ve durumu (invoiceStatus), sağlayıcı, yöntem, durum, tutar, iade edilen, hata (errorCode, errorMessage), otomatik mi, müşterinin e-postası, review (personel onayı bekliyor mu) ve bekliyorsa ne zamandan beri (reviewSince; nedeni errorCode).', en: 'payments: invoice number and status (invoiceStatus), provider, method, status, amount, refunded, error (errorCode, errorMessage), automatic, customer e-mail, review (whether it waits for staff) and, if so, since when (reviewSince; the reason is errorCode).' },
   },
   'POST /admin/billing/balance': {
     tag: 'admin-billing',

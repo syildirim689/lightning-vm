@@ -169,6 +169,144 @@ test('Param: a return made from the merchant code and GUID alone never pays the 
   assert.equal((await balance()), '0.00');
 });
 
+// A staff account holding exactly these permissions (its own role), signed in.
+async function staffWith(key, permissions) {
+  assert.equal((await post('/admin/roles', { key, name: key, permissions }, admin)).statusCode, 201);
+  const email = `${key}@example.test`;
+  const id = (await post('/auth/admin/create-user', { email, password, name: key, role: 'user' }, admin)).json().user.id;
+  assert.equal((await put(`/admin/users/${id}/access`, { roles: ['user', key], overrides: [] }, admin)).statusCode, 200);
+  return cookieOf(await post('/auth/sign-in/email', { email, password }));
+}
+const announcedReview = async (paymentId) => (await notificationQueue.getJobs(['waiting', 'delayed', 'active', 'completed'])).filter((j) => j.data.event === 'billing.payment_review' && j.data.data.paymentId === paymentId);
+
+test('a payment that begins to wait for staff is announced to them once; the list says since when and finds it by number, e-mail and reference', async () => {
+  // The Param gateway is the one the test above set up; its return puts a payment under review.
+  const creds = { CLIENT_CODE: '10738', GUID: '0c13d406-873b-403b-9c09-a5766840d98c' };
+  const inv = await invoiceFor();
+  const p = await pending(inv, 'param', 'live');
+  const back = (b = {}) => {
+    const f = { TURKPOS_RETVAL_Sonuc: '1', TURKPOS_RETVAL_Sonuc_Str: 'OK', TURKPOS_RETVAL_GUID: creds.GUID, TURKPOS_RETVAL_Dekont_ID: 'D9', TURKPOS_RETVAL_Tahsilat_Tutari: '120,00',
+      TURKPOS_RETVAL_Siparis_ID: 'S9', TURKPOS_RETVAL_Islem_ID: p.replace(/-/g, ''), ...b };
+    f.TURKPOS_RETVAL_Hash = createHash('sha1').update(Buffer.from(creds.CLIENT_CODE + f.TURKPOS_RETVAL_GUID + f.TURKPOS_RETVAL_Dekont_ID + f.TURKPOS_RETVAL_Tahsilat_Tutari
+      + f.TURKPOS_RETVAL_Siparis_ID + f.TURKPOS_RETVAL_Islem_ID, 'latin1')).digest('base64');
+    return app.inject({ method: 'POST', url: `/billing/callback/param/${p}`, payload: form(f), headers: urlencoded });
+  };
+  assert.equal((await announcedReview(p)).length, 0);
+  const began = Date.now();
+  await back();
+  assert.equal((await payment(p)).error_code, 'NEEDS_CONFIRMATION');
+  const [job, ...more] = await announcedReview(p);
+  assert.equal(more.length, 0);
+  assert.equal(job.data.to, 'staff:billing.manage');
+  assert.deepEqual([job.data.data.invoiceId, job.data.data.amount, job.data.data.currency, job.data.data.provider, job.data.data.code, job.data.data.email],
+    [inv, '120.00', 'TRY', 'param', 'NEEDS_CONFIRMATION', 'ayse@example.test']);
+  // The same return again, another amount, a "declined" form: the payment is already waiting, nobody is told twice.
+  await back();
+  await back({ TURKPOS_RETVAL_Tahsilat_Tutari: '1,00' });
+  await back({ TURKPOS_RETVAL_Sonuc: '0' });
+  assert.equal((await announcedReview(p)).length, 1);
+
+  // The row says it waits, why and since when (not since the payment was begun); others carry no such time.
+  await pool.query("UPDATE payments SET created_at = now() - interval '3 hours' WHERE id = $1", [p]);
+  const rows = (await get('/admin/billing/payments?status=review', admin)).json().payments;
+  const row = rows.find((x) => x.id === p);
+  assert.deepEqual([row.review, row.errorCode, row.invoiceStatus], [true, 'NEEDS_CONFIRMATION', 'unpaid']);
+  assert.ok(Date.parse(row.reviewSince) >= began - 5000, row.reviewSince);
+  assert.ok((await get('/admin/billing/payments?status=failed', admin)).json().payments.every((x) => x.review === false && x.reviewSince === null));
+  // A payment put under review before the column existed counts from when it was begun.
+  const old = rows.find((x) => x.id !== p);
+  await pool.query('UPDATE payments SET review_since = NULL WHERE id = $1', [old.id]);
+  const again = (await get('/admin/billing/payments?status=review', admin)).json().payments.find((x) => x.id === old.id);
+  assert.equal(again.reviewSince, again.createdAt);
+
+  // q: part of the provider's reference (Turkish letters and case folded), the customer's e-mail, the invoice number.
+  await pool.query("UPDATE payments SET provider_ref = 'REF-İŞ-777' WHERE id = $1", [p]);
+  const find = async (query) => (await get(`/admin/billing/payments?${query}`, admin)).json().payments;
+  assert.deepEqual((await find(`q=${encodeURIComponent('ref-is-777')}`)).map((x) => x.id), [p]);
+  assert.deepEqual((await find(`q=${encodeURIComponent(' REF-İŞ ')}&status=review`)).map((x) => x.id), [p]);
+  assert.deepEqual(await find(`q=${encodeURIComponent('ref-is-777')}&status=failed`), []);
+  assert.deepEqual(await find('q=no-such-thing-anywhere'), []);
+  const everyone = await find('');
+  assert.deepEqual((await find(`q=${encodeURIComponent('AYSE@example')}`)).map((x) => x.id), everyone.filter((x) => x.email === 'ayse@example.test').map((x) => x.id));
+  const numbered = everyone.find((x) => x.number);
+  assert.ok(numbered, 'the invoice marked paid above has a number');
+  const byNumber = await find(`q=${encodeURIComponent(numbered.number.toLowerCase())}`);
+  assert.ok(byNumber.length > 0 && byNumber.some((x) => x.id === numbered.id) && byNumber.every((x) => x.number.includes(numbered.number)), JSON.stringify(byNumber.map((x) => x.number)));
+
+  // The finding on the dashboard: how many wait and since when the oldest; only for those who may open the payments.
+  const overview = (await get('/admin/billing/overview', admin)).json().paymentsInReview;
+  await redis.del('insights:staff');
+  const finding = (await get('/admin/insights', admin)).json().insights.find((i) => i.code === 'PAYMENTS_IN_REVIEW');
+  assert.deepEqual(finding, { code: 'PAYMENTS_IN_REVIEW', severity: 'warning', params: { n: overview.n, oldest: overview.oldest }, link: '/admin/billing?tab=payments&status=review', key: 'PAYMENTS_IN_REVIEW' });
+  const watcher = await staffWith('it-watcher', ['dashboard.view']);
+  const theirs = await get('/admin/insights', watcher);
+  assert.equal(theirs.statusCode, 200);
+  const seen = theirs.json().insights.map((i) => i.code);
+  assert.ok(!seen.includes('PAYMENTS_IN_REVIEW'), seen.join());
+});
+
+test('the staff menu\'s counts: every field only for those who may open its page, nothing for customers', async () => {
+  assert.equal((await get('/admin/attention')).statusCode, 401);
+  const denied = await get('/admin/attention', user);
+  assert.deepEqual([denied.statusCode, denied.json().code], [403, 'FORBIDDEN']);
+
+  const s = await rented('it-attention', '100.00', 20);
+  const op = (extra) => pool.query(`INSERT INTO operations (kind, status, idempotency_key, request_hash, server_id, owner_id, step, deadline_at, created_at, finished_at, error_code)
+    VALUES ('power_on', $3, $1, 'x', $2, $4, 'done', now(), $5::timestamptz, $5::timestamptz, $6)`, [randomUUID(), s.srv.id, extra.status, userId, extra.at, extra.code ?? null]);
+  const ago = (hours) => new Date(Date.now() - hours * 3600_000).toISOString();
+  const count = async (sql) => (await one(sql)).n;
+  const failedBefore = await count("SELECT count(*)::int AS n FROM operations WHERE status = 'failed' AND created_at > now() - interval '24 hours'");
+  await op({ status: 'failed', at: ago(2), code: 'OUTCOME_UNKNOWN' });
+  await op({ status: 'failed', at: ago(30), code: 'VM_MISMATCH' }); // older than a day: not in the count
+  const finding = (await one("INSERT INTO abuse_findings (server_id, kind, address, port) VALUES ($1, 'port', '203.0.113.9', 22) RETURNING id", [s.srv.id])).id;
+  const review = (await get('/admin/billing/overview', admin)).json().paymentsInReview.n;
+  assert.ok(review > 0);
+
+  const all = (await get('/admin/attention', admin)).json();
+  assert.deepEqual(all, { paymentsInReview: review, failedOperations: failedBefore + 1, abuse: 1, restoreHold: null });
+  // An acknowledged finding is still open (the abuse page's "open" tab lists it); a resolved one is not.
+  await pool.query('UPDATE abuse_findings SET acknowledged_at = now() WHERE id = $1', [finding]);
+  assert.equal((await get('/admin/attention', admin)).json().abuse, 1);
+  await pool.query('UPDATE abuse_findings SET resolved_at = now() WHERE id = $1', [finding]);
+  assert.equal((await get('/admin/attention', admin)).json().abuse, 0);
+
+  // Each field follows the permission of its page; the others are absent, not zero.
+  const cashier = await staffWith('it-cashier', ['billing.view']);
+  assert.deepEqual((await get('/admin/attention', cashier)).json(), { paymentsInReview: review });
+  const operator = await staffWith('it-operator', ['servers.view_all']);
+  assert.deepEqual((await get('/admin/attention', operator)).json(), { failedOperations: failedBefore + 1, abuse: 0 });
+  const keeper = await staffWith('it-keeper', ['system.view']);
+  assert.deepEqual((await get('/admin/attention', keeper)).json(), { restoreHold: null });
+  const desk = await staffWith('it-desk', ['support.view']);
+  assert.deepEqual((await get('/admin/attention', desk)).json(), {});
+
+  // Operations that ended without a known outcome or on another VM wait for a decision until the server has a later success.
+  const decide = async () => { await redis.del('insights:staff'); return (await get('/admin/insights', admin)).json().insights.find((i) => i.code === 'OPERATIONS_NEED_DECISION'); };
+  assert.deepEqual(await decide(), { code: 'OPERATIONS_NEED_DECISION', severity: 'danger', params: { n: 2 }, link: '/admin/servers?tab=operations', key: 'OPERATIONS_NEED_DECISION' });
+  await op({ status: 'succeeded', at: ago(10) }); // after the older one only
+  assert.equal((await decide()).params.n, 1);
+  await op({ status: 'succeeded', at: ago(1) });
+  assert.equal(await decide(), undefined);
+
+  // On hold after a restore: said to those who may see the system page, with the backup and since when; first among the findings.
+  await pool.query(`INSERT INTO maintenance_state (key, value) VALUES ('restore_hold', '{"backup": "panel-2026-11-01.tar.gz"}')`);
+  forgetRestoreHold();
+  try {
+    const held = (await get('/admin/attention', keeper)).json().restoreHold;
+    assert.equal(held.backup, 'panel-2026-11-01.tar.gz');
+    assert.ok(Math.abs(Date.parse(held.since) - Date.now()) < 60_000 && held.since === new Date(held.since).toISOString(), held.since);
+    assert.deepEqual((await get('/admin/attention', cashier)).json(), { paymentsInReview: review });
+    await redis.del('insights:staff');
+    const [first] = (await get('/admin/insights', admin)).json().insights;
+    assert.deepEqual([first.code, first.severity, first.link, first.params], ['RESTORE_HOLD', 'danger', '/admin/system', { since: held.since, backup: 'panel-2026-11-01.tar.gz' }]);
+  } finally {
+    await pool.query("DELETE FROM maintenance_state WHERE key = 'restore_hold'");
+    forgetRestoreHold();
+    await redis.del('insights:staff');
+  }
+  await s.end();
+});
+
 test('Param collects lira only: it is refused for an invoice in another currency, and its return never settles one', async () => {
   // Offered with the currencies it can take, so the pay page can leave it out.
   const offered = (await get('/billing/summary', user)).json().methods.cards;

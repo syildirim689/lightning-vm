@@ -131,6 +131,10 @@ export const catalog: Record<string, EventDef> = {
   'billing.dispute_overdue': { audience: 'staff', permission: 'billing.manage', channels: all, defaults: ['inApp', 'email', 'push'], link: () => '/admin/billing?tab=disputes',
     text: { tr: (d) => ({ title: `İtiraz #${d.number} için karar süresi geçti`, body: `${d.amount} ${d.currency}; müşteri karar bekliyor.` }),
       en: (d) => ({ title: `Dispute #${d.number} is past its decision date`, body: `${d.amount} ${d.currency}; the customer is waiting for a decision.` }) } },
+  // An open payment began to wait for staff (billing.ts, noteReview): told once per payment.
+  'billing.payment_review': { audience: 'staff', permission: 'billing.manage', channels: all, defaults: ['inApp', 'email'], link: () => '/admin/billing?tab=payments&status=review',
+    text: { tr: (d) => ({ title: `Ödeme onayınızı bekliyor: ${d.amount} ${d.currency}`, body: `${d.number || 'Fatura'} · ${d.email} · ${d.provider}: ${({ NEEDS_CONFIRMATION: 'ödendiği bildirildi ama doğrulanamadı', AMOUNT_MISMATCH: 'tutar ya da para birimi farklı', FRAUD_REVIEW: 'sağlayıcı ödemeyi incelemede tutuyor' } as Record<string, string>)[String(d.code)] ?? 'personel kararı gerekiyor'} (${d.code}). Kendiliğinden kapanmaz; sağlayıcının panelinden doğrulayıp faturayı elle sonuçlandırın.` }),
+      en: (d) => ({ title: `A payment waits for your decision: ${d.amount} ${d.currency}`, body: `${d.number || 'Invoice'} · ${d.email} · ${d.provider}: ${({ NEEDS_CONFIRMATION: 'reported as paid but could not be confirmed', AMOUNT_MISMATCH: 'another amount or currency', FRAUD_REVIEW: 'held by the provider for review' } as Record<string, string>)[String(d.code)] ?? 'needs a decision by staff'} (${d.code}). Nothing closes it by itself; check it in the provider's panel and settle the invoice by hand.` }) } },
   'billing.dispute_update': { audience: 'user', channels: all, defaults: ['inApp', 'email'], link: () => '/billing?tab=disputes',
     text: { tr: (d) => ({ title: `İtiraz #${d.number}: ${({ under_review: 'incelemede', accepted: 'kabul edildi', partially_accepted: 'kısmen kabul edildi', rejected: 'reddedildi' } as Record<string, string>)[String(d.status)] ?? String(d.status)}`,
         body: d.amount ? `${d.amount} ${d.currency} ${({ balance: 'bakiyenize eklendi', refund: 'kartınıza iade edildi', cancel: 'tutarındaki fatura geri çekildi' } as Record<string, string>)[String(d.remedy)] ?? ''}.` : d.status === 'under_review' ? 'Ekibimiz itirazınızı inceliyor.' : 'Ayrıntılar destek talebinde.' }),
@@ -174,6 +178,10 @@ export const catalog: Record<string, EventDef> = {
   'auth.two_factor_changed': { audience: 'user', channels: all, defaults: ['inApp', 'email'], link: () => '/account?tab=security',
     text: { tr: (d) => ({ title: d.enabled === 'true' ? 'İki adımlı doğrulama açıldı' : 'İki adımlı doğrulama kapatıldı', body: 'Hesap güvenlik ayarınız değişti.' }),
       en: (d) => ({ title: d.enabled === 'true' ? 'Two-factor authentication on' : 'Two-factor authentication off', body: 'Your account security setting changed.' }) } },
+  // The first sign-in by link or code proved the address (better-auth.ts, addressProven) and something set up before was removed.
+  'auth.credentials_reset': { audience: 'user', channels: all, defaults: ['inApp', 'email'], link: () => '/account?tab=security',
+    text: { tr: () => ({ title: 'Hesabınızın giriş bilgileri sıfırlandı', body: 'Bağlantı ya da kodla girişiniz, bu e-posta adresinin size ait olduğunu ilk kez kanıtladı. Bu yüzden daha önce kurulmuş olanlar kaldırıldı: parola, API anahtarları, geçiş anahtarları, webhooklar, bağlı uygulamalar ve diğer oturumlar. Yeni parolanızı giriş sayfasındaki "Parolamı unuttum" ile belirleyin. Bu girişi siz yapmadıysanız destek ekibine yazın.' }),
+      en: () => ({ title: 'Your sign-in details were reset', body: 'Signing in with a link or a code proved for the first time that this e-mail address is yours. What had been set up before was therefore removed: the password, API keys, passkeys, webhooks, connected apps and other sessions. Set a new password with "Forgot password" on the sign-in page. If this was not you, contact support.' }) } },
   'admin.user_registered': { audience: 'staff', permission: 'users.view', channels: ['inApp', 'push', 'email', 'chat'], defaults: ['inApp'], link: () => '/admin/users',
     text: { tr: (d) => ({ title: 'Yeni kullanıcı kaydı', body: d.email }), en: (d) => ({ title: 'New user registered', body: d.email }) } },
   'admin.operation_failed': { audience: 'staff', permission: 'servers.view_all', channels: all, defaults: ['inApp', 'push'], link: (d) => `/servers/${d.serverId}`,
@@ -294,7 +302,7 @@ const mailLabels: Record<string, { tr: string; en: string }> = {
 };
 export function mailTone(event: string): Tone {
   if (/failed|overdue|suspended|terminated|abuse|exceeded|hold|disabled|port_open|einvoice_return/.test(event)) return 'danger';
-  if (/^admin\.|low|reminder|delete_scheduled|new_device|sign_in|dispute|changed|budget/.test(event)) return 'warning';
+  if (/^admin\.|low|reminder|delete_scheduled|new_device|sign_in|dispute|changed|budget|payment_review|credentials_reset/.test(event)) return 'warning';
   if (/ready|paid|payment_received|installed|refunded|snapshot|backup|reply/.test(event)) return 'success';
   return 'info';
 }

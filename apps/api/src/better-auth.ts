@@ -166,7 +166,16 @@ const provesMailbox = (path: string | undefined) => path === '/magic-link/verify
 // The requests in which the library is marking an address proven (seen in the user update's before-hook, which has
 // the change but not the account; the after-hook has the account).
 const proving = new WeakSet<object>();
-async function addressProven(userId: string, path: string, ip: string | null) {
+// What the library removed in such a request before it marked the address proven (counted as each row went: by the
+// time the account is known, they are gone).
+const revoked = new WeakMap<object, { accounts: number; sessions: number }>();
+const countRevoked = (ctx: { path?: string } | null | undefined, what: 'accounts' | 'sessions') => {
+  if (!ctx || !provesMailbox(ctx.path)) return;
+  const n = revoked.get(ctx) ?? { accounts: 0, sessions: 0 };
+  n[what]++;
+  revoked.set(ctx, n);
+};
+async function addressProven(userId: string, path: string, ip: string | null, library = { accounts: 0, sessions: 0 }) {
   const gone = async (sql: string) => (await pool.query(sql, [userId]).catch(() => ({ rowCount: 0 }))).rowCount ?? 0;
   const removed = {
     apiTokens: await gone('DELETE FROM api_tokens WHERE user_id = $1'),
@@ -187,6 +196,9 @@ async function addressProven(userId: string, path: string, ip: string | null) {
   await endImpersonations(userId);
   await auditAuth(userId, 'auth.address_proven', 'success', ip, { method: path === '/magic-link/verify' ? 'magic-link' : 'email-code', removed: { password: true, linkedAccounts: true, otherSessions: true, ...removed } });
   await publishLive(userId, 'sessions');
+  // The person is told what happened, when something of theirs is gone: an account nothing was set up on (one staff
+  // made, signed in to for the first time) lost nothing.
+  if (library.accounts + library.sessions + Object.values(removed).reduce((a, n) => a + n, 0) > 0) await notify('auth.credentials_reset', [userId], { method: path === '/magic-link/verify' ? 'magic-link' : 'email-code' });
 }
 // Where the passkey plugin signs in (/sign-in/passkey is only the client's name for it).
 const passkeySignIn = '/passkey/verify-authentication';
@@ -507,7 +519,8 @@ function createAuth() {
           await auditAuth(account.userId, 'auth.account_linked', 'success', ctx?.request?.headers.get('x-lvm-client-ip') ?? null, { provider: account.providerId });
           await notify('auth.account_linked', [account.userId], { provider: account.providerId });
         },
-      } },
+      // The password and linked providers the library removes when the address is first proven (addressProven).
+      }, delete: { before: async (_account, ctx) => { countRevoked(ctx, 'accounts'); } } },
       // An account made by a social provider is marked as such (two-factor is then the provider's, see auth.ts).
       user: { create: { before: async (user, ctx) => {
         const id = String((ctx?.params as { id?: string } | undefined)?.id ?? '');
@@ -517,7 +530,7 @@ function createAuth() {
       // linked providers and the sessions, and marks the address verified with this update.
       update: {
         before: async (data, ctx) => { if (ctx && provesMailbox(ctx.path) && (data as { emailVerified?: boolean }).emailVerified === true) proving.add(ctx); },
-        after: async (user, ctx) => { if (ctx && proving.delete(ctx)) await addressProven(user.id, ctx.path, ctx.request?.headers.get('x-lvm-client-ip') ?? null); },
+        after: async (user, ctx) => { if (ctx && proving.delete(ctx)) await addressProven(user.id, ctx.path, ctx.request?.headers.get('x-lvm-client-ip') ?? null, revoked.get(ctx)); },
       } },
       session: {
         create: {
@@ -547,6 +560,7 @@ function createAuth() {
           },
         },
         delete: {
+          before: async (_session, ctx) => { countRevoked(ctx, 'sessions'); },
           // Every way a session ends (sign-out, revoke, password reset) also closes its browser consoles.
           after: async (session) => {
             await revokeConsoles({ authHash: sha256(session.token).toString('hex') });

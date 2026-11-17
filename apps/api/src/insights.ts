@@ -2,26 +2,41 @@
 // and where to fix it. Staff see platform findings; customers see findings about their own servers.
 // Critical staff findings are also sent as the "admin.insight" notification, at most once a day each.
 import { Body, Controller, Delete, Get, HttpCode, Put, Req, UseGuards } from '@nestjs/common';
-import { SessionGuard, type AuthedRequest } from './auth';
+import { audit, SessionGuard, type AuthedRequest } from './auth';
+import { paymentsInReview } from './billing';
 import { capacityOf, limitsFor, usageOf } from './catalog';
 import { pool, redis } from './db';
 import { apiError } from './errors';
 import { logEvent } from './log';
 import { summary as maintenance } from './maintenance';
 import { notify } from './notify';
-import { can } from './permissions';
+import { can, customerLevel, type Permission } from './permissions';
 import { Can, PermissionGuard } from './rbac';
+import { restoreHold } from './restore-hold';
 import { activeCaptcha, mailReady } from './settings-store';
 import { cpuStats } from './smart';
 import { sizing } from './smart-rules';
+import { callAdapter, storedTarget } from './vmware';
 
 // action: a one-click fix the card offers next to its link (customer findings about one server).
 export type Insight = { code: string; severity: 'danger' | 'warning' | 'info'; params: Record<string, string | number>; link: string; key: string; action?: { kind: 'power_on' | 'restore'; serverId: string } };
 const pct = (part: number, whole: number) => (whole > 0 ? Math.round((part / whole) * 100) : 0);
 
+// Shared by the findings below and the staff menu's counts (GET /admin/attention), so both always say the same.
+const restoreHoldState = async (): Promise<{ since: Date; backup: string | null } | null> => {
+  const { rows: [h] } = await pool.query("SELECT value->>'backup' AS backup, at FROM maintenance_state WHERE key = 'restore_hold'");
+  return h ? { since: h.at, backup: h.backup ?? null } : null;
+};
+
 export async function staffInsights(): Promise<Insight[]> {
   const out: Insight[] = [];
   const add = (code: string, severity: Insight['severity'], params: Insight['params'], link: string, key = code) => out.push({ code, severity, params, link, key });
+
+  // Restored from a backup and not yet released: the panel acts on nothing by itself. First in the list.
+  if (await restoreHold()) {
+    const h = await restoreHoldState();
+    if (h) add('RESTORE_HOLD', 'danger', { since: new Date(h.since).toISOString(), backup: h.backup ?? '' }, '/admin/system');
+  }
 
   const { rows: pools } = await pool.query('SELECT * FROM resource_pools WHERE active');
   // Each pool's capacity once, for both the fill levels and the packages below.
@@ -62,6 +77,17 @@ export async function staffInsights(): Promise<Insight[]> {
     count(*) FILTER (WHERE status IN ('pending', 'running') AND deadline_at < now())::int AS stuck FROM operations`);
   if (ops.stuck) add('OPERATIONS_STUCK', 'danger', { count: ops.stuck }, '/admin/servers?tab=operations');
   if (ops.failed) add('OPERATIONS_FAILED', 'warning', { count: ops.failed }, '/admin/servers?tab=operations');
+
+  // Ended without learning what the platform did (OUTCOME_UNKNOWN) or on a VM that is not the server's (VM_MISMATCH):
+  // nothing was undone and nothing retries by itself, so someone has to look. Gone once the server has an operation
+  // that succeeded afterwards (a retry of the same operation takes it out of "failed" at once).
+  const { rows: [decide] } = await pool.query(`SELECT count(*)::int AS n FROM operations o JOIN servers s ON s.id = o.server_id
+    WHERE o.status = 'failed' AND o.error_code IN ('OUTCOME_UNKNOWN', 'VM_MISMATCH') AND coalesce(o.finished_at, o.updated_at) > now() - interval '14 days' AND s.deleted_at IS NULL
+      AND NOT EXISTS (SELECT 1 FROM operations l WHERE l.server_id = o.server_id AND l.status = 'succeeded' AND l.created_at > o.created_at)`);
+  if (decide.n) add('OPERATIONS_NEED_DECISION', 'danger', { n: decide.n }, '/admin/servers?tab=operations');
+
+  const review = await paymentsInReview();
+  if (review.n) add('PAYMENTS_IN_REVIEW', 'warning', { n: review.n, oldest: new Date(review.oldest!).toISOString() }, '/admin/billing?tab=payments&status=review');
 
   const { rows: [rec] } = await pool.query('SELECT count(*)::int AS n FROM reconciliation_findings WHERE resolved_at IS NULL');
   if (rec.n) add('RECONCILE_FINDINGS', 'warning', { count: rec.n }, '/admin/servers?tab=reconcile');
@@ -143,11 +169,45 @@ export async function customerInsights(userId: string): Promise<Insight[]> {
   const { rows: open } = await pool.query(`SELECT s.name FROM servers s JOIN resource_pools p ON p.id = s.pool_id JOIN vmware_connections c ON c.id = p.connection_id
     WHERE s.owner_id = $1 AND s.state = 'ready' AND s.delete_at IS NULL AND c.operations->>'firewall' = 'true' AND NOT EXISTS (SELECT 1 FROM firewall_servers fs WHERE fs.server_id = s.id) ORDER BY s.name`, [userId]);
   if (open.length) add('NO_FIREWALL', 'info', { n: open.length, name: open[0].name }, '/firewalls', 'firewall');
+  const withOld = (await oldSnapshots(userId)).filter((s) => s.n > 0);
+  // One server: the finding leads to it (and names it); several: to the list.
+  if (withOld.length) add('SNAPSHOTS_OLD', 'info', { n: withOld.reduce((a, s) => a + s.n, 0), servers: withOld.length, ...(withOld.length === 1 && { serverId: withOld[0].id, name: withOld[0].name }) },
+    withOld.length === 1 ? `/servers/${withOld[0].id}` : '/servers', 'snapshots-old');
   const { rows: [keys] } = await pool.query('SELECT count(*)::int AS n FROM ssh_keys WHERE owner_id = $1', [userId]);
   if (!keys.n) add('NO_SSH_KEYS', 'info', {}, '/account?tab=keys', 'keys');
   const { rows: [u] } = await pool.query('SELECT two_factor_enabled FROM users WHERE id = $1', [userId]);
   if (!u?.two_factor_enabled) add('ENABLE_2FA', 'info', {}, '/account?tab=security', '2fa');
   return out;
+}
+
+// Snapshots older than 30 days, per server. Snapshots live on the platform, not in the database, so only servers that
+// could have one are asked about: those with a snapshot taken through the panel over 30 days ago (at most 20). The
+// answer is kept for six hours under the server's latest operation, so taking or removing a snapshot asks again; a
+// platform that does not answer within a few seconds is skipped (and not asked again for five minutes).
+export const snapshotAgeDays = 30;
+// Pure: how many of a server's snapshots are older than the limit. The short snapshot a backup takes is not one.
+export function countOldSnapshots(snapshots: { name?: string; created?: string }[], now = Date.now(), days = snapshotAgeDays) {
+  return snapshots.filter((s) => !String(s.name ?? '').startsWith('lightning-backup ') && now - Date.parse(String(s.created ?? '')) > days * 86_400_000).length;
+}
+async function oldSnapshots(userId: string): Promise<{ id: string; name: string; n: number }[]> {
+  const { rows } = await pool.query(`SELECT s.id, s.name, s.vm_moref, c.id AS connection, (SELECT o.id || ':' || o.status FROM operations o WHERE o.server_id = s.id ORDER BY o.created_at DESC LIMIT 1) AS latest
+    FROM servers s JOIN resource_pools p ON p.id = s.pool_id JOIN vmware_connections c ON c.id = p.connection_id
+    WHERE s.owner_id = $1 AND s.deleted_at IS NULL AND s.state IN ('ready', 'error') AND s.vm_moref IS NOT NULL AND c.status = 'ok'
+      AND EXISTS (SELECT 1 FROM operations o WHERE o.server_id = s.id AND o.kind = 'snapshot_create' AND o.status = 'succeeded' AND o.created_at < now() - make_interval(days => $2))
+    ORDER BY s.name LIMIT 20`, [userId, snapshotAgeDays]);
+  return Promise.all(rows.map(async (s) => {
+    const key = `insight:snapshots:${s.id}:${s.vm_moref}:${s.latest}`;
+    let list: { name?: string; created?: string }[] | null = null;
+    const hit = await redis.get(key).catch(() => null);
+    if (hit) list = JSON.parse(hit);
+    else {
+      list = await pool.query('SELECT * FROM vmware_connections WHERE id = $1', [s.connection])
+        .then(({ rows: [c] }) => callAdapter<{ snapshots: { name: string; created: string }[] }>('/v1/vm/snapshots', { ...storedTarget(c), vm: s.vm_moref, expectName: `lvm-${s.id}` }, 5_000))
+        .then((r) => r.snapshots.map((x) => ({ name: x.name, created: x.created })), () => null);
+      await redis.set(key, JSON.stringify(list ?? []), 'EX', list ? 6 * 3600 : 300).catch(() => undefined);
+    }
+    return { id: s.id as string, name: s.name as string, n: countOldSnapshots(list ?? []) };
+  }));
 }
 
 // Texts for the notification channels (the panel translates insight codes itself).
@@ -218,12 +278,55 @@ async function cachedStaffInsights(): Promise<Insight[]> {
   return list;
 }
 
+// Findings about an area only those who may open it see (the list is computed once for all staff).
+const findingNeeds: Record<string, Permission[]> = { PAYMENTS_IN_REVIEW: ['billing.view'] };
+export const maySeeFinding = (permissions: string[], i: Pick<Insight, 'code' | 'link'>) =>
+  (!i.link.startsWith('/admin/settings') || can(permissions, 'settings.view') || can(permissions, 'settings.manage'))
+  && (!findingNeeds[i.code] || findingNeeds[i.code].some((p) => can(permissions, p)));
+
+// The counts the staff menu shows next to its entries. Pure: which of them this person gets, by the permission each
+// entry's own page asks for (its list route); a key they may not see is left out, not sent as zero.
+export type Attention = { paymentsInReview: number; failedOperations: number; abuse: number; restoreHold: { since: string; backup: string | null } | null };
+export const attentionNeeds: Record<keyof Attention, Permission[]> = {
+  paymentsInReview: ['billing.view'],                       // GET /admin/billing/payments
+  failedOperations: ['servers.view_all', 'dashboard.view'],  // GET /admin/operations
+  abuse: ['servers.view_all'],                              // GET /admin/abuse
+  restoreHold: ['system.view', 'dashboard.view', 'system.update'], // GET /admin/system, /admin/maintenance, /admin/system/restore-hold
+};
+export const attentionKeys = (permissions: string[]) => (Object.keys(attentionNeeds) as (keyof Attention)[]).filter((k) => attentionNeeds[k].some((p) => can(permissions, p)));
+// Staff: anyone holding more than the permissions customers have on their own servers (as auth.ts decides it).
+export const isStaff = (permissions: string[]) => permissions.some((p) => !customerLevel(p));
+
+@Controller('admin') @UseGuards(SessionGuard)
+export class AttentionController {
+  // Polled by the menu once a minute: four small statements at most, only those the caller may see.
+  @Get('attention')
+  async attention(@Req() req: AuthedRequest) {
+    if (!isStaff(req.user.permissions)) {
+      await audit(req, 'admin.access', 'denied', req.user.id, { path: req.routeOptions.url, need: [] });
+      throw apiError(403, 'FORBIDDEN', 'Permission required', undefined, { need: [] });
+    }
+    const one = async (sql: string) => (await pool.query(sql)).rows[0].n as number;
+    const read: { [K in keyof Attention]: () => Promise<Attention[K]> } = {
+      paymentsInReview: async () => (await paymentsInReview()).n,
+      // Failed in the last 24 hours, as the dashboard and the OPERATIONS_FAILED finding count them.
+      failedOperations: () => one("SELECT count(*)::int AS n FROM operations WHERE status = 'failed' AND created_at > now() - interval '24 hours'"),
+      // Open findings, as the abuse page's "open" tab lists them (acknowledged ones stay open until they are resolved).
+      abuse: () => one('SELECT count(*)::int AS n FROM abuse_findings WHERE resolved_at IS NULL'),
+      restoreHold: async () => { const h = await restoreHoldState(); return h && { since: new Date(h.since).toISOString(), backup: h.backup }; },
+    };
+    const keys = attentionKeys(req.user.permissions);
+    const values = await Promise.all(keys.map((k) => read[k]()));
+    return Object.fromEntries(keys.map((k, i) => [k, values[i]])) as Partial<Attention>;
+  }
+}
+
 @Controller('admin') @UseGuards(PermissionGuard)
 export class StaffInsightsController {
   @Get('insights') @Can('dashboard.view')
   async all(@Req() req: AuthedRequest) {
     const insights = await cachedStaffInsights();
-    // Links into areas the viewer cannot open are dropped.
-    return visible(req.user.id, insights.filter((i) => !i.link.startsWith('/admin/settings') || can(req.user.permissions, 'settings.view') || can(req.user.permissions, 'settings.manage')));
+    // Findings about areas the viewer cannot open are dropped.
+    return visible(req.user.id, insights.filter((i) => maySeeFinding(req.user.permissions, i)));
   }
 }

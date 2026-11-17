@@ -204,10 +204,28 @@ export async function settlePayment(paymentId: string, r: Result, held = false) 
 // only the first one is kept, so whoever posts the form again cannot rewrite what staff confirm from.
 async function noteReview(paymentId: string, r: Result, first = false) {
   if (r.ok || !needsReview(r)) return;
-  const { rowCount } = await pool.query(`UPDATE payments SET error_code = $2, error_message = $3 WHERE id = $1 AND status = 'pending'
-    AND CASE WHEN $4::boolean THEN error_code IS NULL ELSE (error_code, error_message) IS DISTINCT FROM ($2::text, $3::text) END`,
-    [paymentId, r.code, (r.message ?? '').slice(0, 300), first]);
-  if (rowCount) logEvent('warn', 'payment_needs_review', { paymentId, code: r.code });
+  const message = (r.message ?? '').slice(0, 300);
+  const client = await pool.connect();
+  let noted = false;
+  let entered: Record<string, unknown> | undefined;
+  try {
+    await client.query('BEGIN');
+    // The payment is locked while it is looked at, so two answers arriving together are told apart: one of them
+    // puts it under review, the other finds it there.
+    const { rows: [was] } = await client.query("SELECT error_code, error_message FROM payments WHERE id = $1 AND status = 'pending' FOR UPDATE", [paymentId]);
+    if (was && (first ? was.error_code === null : was.error_code !== r.code || was.error_message !== message)) {
+      // review_since: when it began to wait for staff; a later, different reason does not start the wait again.
+      const { rows: [p] } = await client.query(`UPDATE payments p SET error_code = $2, error_message = $3, review_since = CASE WHEN $4::boolean THEN coalesce(p.review_since, now()) ELSE now() END
+        FROM invoices i, users u WHERE p.id = $1 AND i.id = p.invoice_id AND u.id = p.owner_id
+        RETURNING p.invoice_id AS "invoiceId", coalesce(i.number, '') AS number, p.amount::text AS amount, trim(p.currency) AS currency, p.provider, u.email`, [paymentId, r.code, message, underReview(was.error_code)]);
+      noted = true;
+      if (p && !underReview(was.error_code)) entered = p;
+    }
+    await client.query('COMMIT');
+  } catch (e) { await client.query('ROLLBACK').catch(() => undefined); throw e; } finally { client.release(); }
+  if (noted) logEvent('warn', 'payment_needs_review', { paymentId, code: r.code });
+  // Staff are told once, when the payment begins to wait for them: not again for a later answer about the same payment.
+  if (entered) await notify('billing.payment_review', 'staff:billing.manage', { ...entered, paymentId, code: r.code });
 }
 
 // A renewal invoice is never paid below its server's current price for the period it covers, whatever the order of
@@ -1094,6 +1112,14 @@ export class BillingCallbackController {
 
 // ---- Staff ----
 
+// Since when a payment waits for staff (payments begun before the column existed, or put there by hand: since it began).
+const reviewSinceSql = 'coalesce(p.review_since, p.created_at)';
+// The open payments that wait for staff (noteReview): nothing closes them by itself. oldest: the longest wait's start.
+export async function paymentsInReview(): Promise<{ n: number; oldest: Date | null }> {
+  const { rows: [r] } = await pool.query(`SELECT count(*)::int AS n, min(${reviewSinceSql}) AS oldest FROM payments p WHERE p.status = 'pending' AND p.error_code = ANY($1)`, [reviewCodes]);
+  return r;
+}
+
 @Controller('admin/billing') @UseGuards(PermissionGuard)
 export class BillingAdminController {
   @Get('overview') @Can('billing.view')
@@ -1110,10 +1136,10 @@ export class BillingAdminController {
       pool.query(`SELECT p.id, p.provider, p.method, p.status, p.amount::text, p.currency, p.error_code AS "errorCode", p.created_at AS "createdAt", u.email
         FROM payments p JOIN users u ON u.id = p.owner_id ORDER BY p.created_at DESC LIMIT 10`),
       // Open payments that wait for staff (noteReview): nothing closes them by itself.
-      pool.query("SELECT count(*)::int AS n, min(created_at) AS oldest FROM payments WHERE status = 'pending' AND error_code = ANY($1)", [reviewCodes]),
+      paymentsInReview(),
     ]);
     return { mrr: mrr.rows, open: open.rows, collectedThisMonth: month.rows, series: series.rows,
-      subscriptions: Object.fromEntries(subs.rows.map((r) => [r.status, r.n])), recentPayments: recent.rows, paymentsInReview: review.rows[0] };
+      subscriptions: Object.fromEntries(subs.rows.map((r) => [r.status, r.n])), recentPayments: recent.rows, paymentsInReview: review };
   }
 
   @Get('invoices') @Can('billing.view')
@@ -1218,15 +1244,20 @@ export class BillingAdminController {
   }
 
   // status=review: the open payments that wait for staff (held by the provider, another amount, or Param's unconfirmed
-  // return), oldest first; every row says whether it is one (review) and what its invoice is now (invoiceStatus).
+  // return), oldest first; every row says whether it is one (review), why (errorCode), since when (reviewSince) and
+  // what its invoice is now (invoiceStatus). q: part of the invoice number, the customer's e-mail or the provider's
+  // reference (or the reference staff typed for a payment recorded by hand).
   @Get('payments') @Can('billing.view')
-  async payments(@Query('status') status?: string) {
+  async payments(@Query('status') status?: string, @Query('q') q?: string) {
     const { rows } = await pool.query(`SELECT p.id, p.invoice_id AS "invoiceId", i.number, i.status AS "invoiceStatus", p.provider, p.mode, p.method, p.status, p.amount::text, p.currency, p.refunded::text,
       p.error_code AS "errorCode", p.error_message AS "errorMessage", p.automatic, p.reference, p.created_at AS "createdAt", p.completed_at AS "completedAt", u.email,
-      (p.status = 'pending' AND p.error_code = ANY($2)) IS TRUE AS review
+      (p.status = 'pending' AND p.error_code = ANY($2)) IS TRUE AS review,
+      CASE WHEN p.status = 'pending' AND p.error_code = ANY($2) THEN ${reviewSinceSql} END AS "reviewSince"
       FROM payments p JOIN users u ON u.id = p.owner_id JOIN invoices i ON i.id = p.invoice_id
       WHERE ($1::text IS NULL OR p.status = $1 OR ($1 = 'review' AND p.status = 'pending' AND p.error_code = ANY($2)))
-      ORDER BY CASE WHEN $1 = 'review' THEN p.created_at END, p.created_at DESC LIMIT 300`, [status || null, reviewCodes]);
+        AND ($3::text IS NULL OR ${foldSql("coalesce(i.number, '')")} LIKE '%' || $4 || '%' OR ${foldSql('u.email')} LIKE '%' || $4 || '%'
+          OR ${foldSql("coalesce(p.provider_ref, '')")} LIKE '%' || $4 || '%' OR ${foldSql("coalesce(p.reference, '')")} LIKE '%' || $4 || '%')
+      ORDER BY CASE WHEN $1 = 'review' THEN p.created_at END, p.created_at DESC LIMIT 300`, [status || null, reviewCodes, q?.trim() || null, foldText(q?.trim() ?? '')]);
     return { payments: rows };
   }
 

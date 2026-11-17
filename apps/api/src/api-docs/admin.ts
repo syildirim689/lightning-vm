@@ -584,7 +584,7 @@ export default {
   'GET /insights': {
     tag: 'insights',
     summary: { tr: 'Kendi sunucularınız ve hesabınız için önerileri verir.', en: 'Returns suggestions about your own servers and account.' },
-    details: { tr: 'Örnekler: hatalı sunucu, silinmeyi bekleyen sunucu, uzun süre kapalı ama ücretlendirilen sunucu, boyut önerisi, kotaya yaklaşma, firewall\'suz sunucu, SSH anahtarı veya iki adımlı doğrulama eksikliği. Gizlediğiniz öneriler gelmez.', en: 'For example: a failed server, one pending deletion, one off for long but still billed, sizing advice, a quota nearly used, servers without a firewall, no SSH key or no two-factor. Findings you hid are left out.' },
+    details: { tr: 'Örnekler: hatalı sunucu, silinmeyi bekleyen sunucu, uzun süre kapalı ama ücretlendirilen sunucu, boyut önerisi, kotaya yaklaşma, firewall\'suz sunucu, 30 günden eski anlık görüntüler, SSH anahtarı veya iki adımlı doğrulama eksikliği. Gizlediğiniz öneriler gelmez.', en: 'For example: a failed server, one pending deletion, one off for long but still billed, sizing advice, a quota nearly used, servers without a firewall, snapshots older than 30 days, no SSH key or no two-factor. Findings you hid are left out.' },
     returns: { tr: '`insights` (`code`, `severity`, `params`, `link`, `key`, varsa tek tıkla `action`) ve gizlenen sayısı `hidden`.', en: '`insights` (`code`, `severity`, `params`, `link`, `key`, and a one-click `action` when offered) and the number hidden, `hidden`.' },
   },
   'PUT /insights/dismissals': {
@@ -607,8 +607,17 @@ export default {
   'GET /admin/insights': {
     tag: 'admin-system',
     summary: { tr: 'Platform genelindeki uyarı ve önerileri verir.', en: 'Returns platform-wide warnings and suggestions.' },
-    details: { tr: 'dashboard.view yetkisi gerekir. Örnekler: dolan havuzlar, biten IP\'ler, erişilemeyen bağlantılar, takılan işlemler, durmuş çalışan, yedek sorunları, iki adımlı doğrulamasız yöneticiler. Ayar yetkisi yoksa ayar sayfasına giden öneriler gelmez.', en: 'Needs dashboard.view. For example: filling pools, IP pools running out, unreachable connections, stuck operations, a stopped worker, backup problems, admins without two-factor. Findings linking to settings are left out without a settings permission.' },
+    details: { tr: 'dashboard.view yetkisi gerekir. Örnekler: dolan havuzlar, biten IP\'ler, erişilemeyen bağlantılar, takılan işlemler, karar bekleyen işlemler (OPERATIONS_NEED_DECISION), yedekten geri yükleme beklemesi (RESTORE_HOLD), personel onayı bekleyen ödemeler (PAYMENTS_IN_REVIEW; billing.view gerekir), durmuş çalışan, yedek sorunları, iki adımlı doğrulamasız yöneticiler. Ayar yetkisi yoksa ayar sayfasına giden öneriler gelmez.', en: 'Needs dashboard.view. For example: filling pools, IP pools running out, unreachable connections, stuck operations, operations that need a decision (OPERATIONS_NEED_DECISION), the hold after a restore (RESTORE_HOLD), payments waiting for staff (PAYMENTS_IN_REVIEW; needs billing.view), a stopped worker, backup problems, admins without two-factor. Findings linking to settings are left out without a settings permission.' },
     returns: { tr: '`insights` ve gizlenen sayısı `hidden`.', en: '`insights` and the number hidden, `hidden`.' },
+  },
+  'GET /admin/attention': {
+    tag: 'admin-system',
+    summary: { tr: 'Yönetim menüsündeki sayaçları verir.', en: 'Returns the counts for the staff menu.' },
+    details: { tr: 'Personel olan herkes çağırabilir (müşteri hesapları 403 alır). Her alan yalnızca ilgili sayfayı açabilenlere gelir, diğerlerinde anahtar hiç bulunmaz: `paymentsInReview` billing.view; `failedOperations` servers.view_all ya da dashboard.view; `abuse` servers.view_all; `restoreHold` system.view, system.update ya da dashboard.view. Dakikada bir sorgulanmak için hafif tutulmuştur.',
+      en: 'Any staff member may call it (customer accounts get 403). Each field is sent only to those who may open its page; otherwise the key is absent: `paymentsInReview` billing.view; `failedOperations` servers.view_all or dashboard.view; `abuse` servers.view_all; `restoreHold` system.view, system.update or dashboard.view. Light enough to be asked once a minute.' },
+    returns: { tr: '`paymentsInReview`: personel onayı bekleyen açık ödemeler; `failedOperations`: son 24 saatte başarısız işlemler; `abuse`: açık kötüye kullanım bulguları; `restoreHold`: panel yedekten geri yükleme sonrası beklemedeyse `since` ve `backup`, değilse null.',
+      en: '`paymentsInReview`: open payments waiting for staff; `failedOperations`: operations that failed in the last 24 hours; `abuse`: open abuse findings; `restoreHold`: `since` and `backup` while the panel is on hold after a restore, otherwise null.' },
+    errors: ['FORBIDDEN'],
   },
 
   // ---- smart.ts: servers, usage ----

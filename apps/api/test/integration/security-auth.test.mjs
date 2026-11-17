@@ -893,6 +893,8 @@ test('the first sign-in by link or e-mail code proves the address: what an earli
       (SELECT count(*)::int FROM api_tokens t WHERE t.user_id = u.id) AS tokens, (SELECT count(*)::int FROM push_subscriptions p WHERE p.user_id = u.id) AS push,
       (SELECT count(*)::int FROM audit_events e WHERE e.actor_id = u.id AND e.action = 'auth.address_proven') AS proofs FROM users u WHERE id = $1`, [id]);
     const withToken = (token) => app.inject({ method: 'GET', url: '/auth/me', headers: { authorization: `Bearer ${token}` } });
+    // How often the person was told that what had been set up before is gone (auth.credentials_reset).
+    const told = async (id) => (await notificationQueue.getJobs(['waiting', 'delayed', 'active', 'completed'])).filter((j) => j.data.event === 'auth.credentials_reset' && j.data.to?.[0] === id).length;
     // Whoever registered the address first: a password, a session, an API token, a browser subscribed, a phone number.
     const register = async (email) => {
       const r = await post('/auth/sign-up/email', { name: 'First', email, password });
@@ -918,6 +920,7 @@ test('the first sign-in by link or e-mail code proves the address: what an earli
       assert.equal(cookieOf(old), undefined);
       const row = await one("SELECT metadata FROM audit_events WHERE actor_id = $1 AND action = 'auth.address_proven'", [who.id]);
       assert.deepEqual([row.metadata.removed.apiTokens, row.metadata.removed.pushSubscriptions, row.metadata.removed.phoneNumber], [1, 1, 1], how);
+      assert.equal(await told(who.id), 1, `${how}: the person is told once`);
     };
     // What the owner sets up afterwards stays through later sign-ins of the same kind.
     const again = async (who, session, signInAgain, how) => {
@@ -928,6 +931,7 @@ test('the first sign-in by link or e-mail code proves the address: what an earli
       assert.deepEqual(await state(who.id), { verified: true, phone: null, accounts: 0, sessions: 2, tokens: 1, push: 0, proofs: 1 }, `${how}: nothing is removed the second time`);
       assert.equal((await get('/auth/me', session)).statusCode, 200);
       assert.equal((await withToken(made.json().token)).statusCode, 200);
+      assert.equal(await told(who.id), 1, `${how}: not told again`);
     };
 
     // By link.
@@ -963,7 +967,21 @@ test('the first sign-in by link or e-mail code proves the address: what an earli
     const kept = await state(byStaff.id);
     assert.deepEqual({ ...kept, phone: !!kept.phone }, { verified: true, phone: true, accounts: 1, sessions: 1, tokens: 1, push: 1, proofs: 0 });
     assert.equal((await withToken(byStaff.token)).statusCode, 200);
-    for (const p of [byLink, byCode, byStaff]) await post('/auth/admin/remove-user', { userId: p.id }, admin);
+    assert.equal(await told(byStaff.id), 0);
+
+    // An account nothing was set up on (no password, session, key or phone) loses nothing by the proof: nobody is told.
+    const bare = await register('first-bare@example.test');
+    for (const table of ['auth_accounts', 'auth_sessions', 'api_tokens', 'push_subscriptions']) await pool.query(`DELETE FROM ${table} WHERE user_id = $1`, [bare.id]);
+    await pool.query('UPDATE users SET phone_number = NULL, phone_number_verified = false WHERE id = $1', [bare.id]);
+    await freshLimits();
+    smtp.mails.length = 0;
+    assert.equal((await post('/auth/sign-in/magic-link', { email: 'first-bare@example.test', callbackURL: '/' })).statusCode, 200);
+    const bareMail = await until(() => smtp.mails.find((m) => m.includes('first-bare@example.test') && m.includes('/magic-link/verify')));
+    const bareLink = new URL(/(https?:\/\/\S+magic-link\/verify[^\s"<]+)/.exec(bareMail)[1]);
+    assert.ok(cookieOf(await app.inject({ method: 'GET', url: bareLink.pathname.replace(/^\/api/, '') + bareLink.search, headers: { host: 'localhost' } })), 'the link signed in');
+    assert.deepEqual(await state(bare.id), { verified: true, phone: null, accounts: 0, sessions: 1, tokens: 0, push: 0, proofs: 1 });
+    assert.equal(await told(bare.id), 0);
+    for (const p of [byLink, byCode, byStaff, bare]) await post('/auth/admin/remove-user', { userId: p.id }, admin);
   } finally {
     await put('/admin/settings/security', { require2fa: 'none', emailCodeSignIn: false }, admin);
     await put('/admin/settings/sign-in', { magicLink: false }, admin);
