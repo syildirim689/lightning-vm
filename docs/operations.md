@@ -26,7 +26,9 @@ ayrı bir yedekleme çözümü gerekir.
 
 **Şifreleme:**
 - Arşiv `secrets/backup.key` ile şifrelenir: AES-256-CBC, anahtar PBKDF2 ile 200.000 turda türetilir.
-- Arşivin yanına bir `.sha256` dosyası yazılır.
+- Arşiv, aynı anahtarla **imzalanır**: yedek `AD.tar.enc`, imzası `AD.tar.enc.hmac` olarak yazılır. İmza, şifreli
+  dosyanın ve **dosya adının** `backup.key`'den türetilen bir anahtarla alınmış HMAC-SHA256 özetidir; yedek deposuna
+  yazabilen ama anahtarı bilmeyen biri onu yeniden üretemez. `.sha256` dosyası artık yazılmaz.
 - Yedek, yazıldıktan sonra geri okunarak doğrulanır: şifresi çözülür ve içindeki her dosya yedeğe giren
   dosyayla bayt bayt karşılaştırılır. Doğrulama geçmeden yedek "başarılı" sayılmaz ve eski yedekler silinmez
   (disk dolduğunda yarım kalan arşiv `E_BACKUP_VERIFY` veya `E_BACKUP_WRITE` ile reddedilir).
@@ -37,8 +39,8 @@ ayrı bir yedekleme çözümü gerekir.
 - **Sunucu dışı kopya sizin işinizdir.** Varsayılan kurulumda yedekler yalnızca bu sunucunun diskinde
   (`backups/`) durur; disk giderse yedekler de gider. `BACKUP_COPY_TO` ayarlayın (aşağıda) ya da `backups/`
   klasörünü kendi yönteminizle başka bir yere kopyalayın.
-- **Sınır:** SHA-256 dosyası bozulmayı yakalar, ama kasıtlı değiştirmeye karşı imza değildir.
-  Yedekleri güvendiğiniz bir depoda tutun.
+- **Sınır:** imza, değiştirilmiş ya da başka adla konmuş bir yedeği yakalar; değiştirilmemiş **eski** bir yedeğin
+  kendi adıyla geri konmasını ya da yedeklerin silinmesini engellemez. Yedekleri güvendiğiniz bir depoda tutun.
 
 **Saklama ve harici hedef** (`.env`):
 
@@ -46,7 +48,7 @@ ayrı bir yedekleme çözümü gerekir.
 |---|---|---|
 | `BACKUP_DIR` | `backups` | Yerel klasör. Harici bir disk veya NFS de bağlanabilir. |
 | `BACKUP_KEEP` | `7` | Yerelde tutulan en yeni yedek sayısı. Eskiler silinir. |
-| `BACKUP_COPY_TO` | boş | `rsync` hedefi: `kullanici@yedek:/yol` (SSH) veya bağlı bir klasör. Hedefteki saklama süresini hedefin kendisi yönetir. |
+| `BACKUP_COPY_TO` | boş | `rsync` hedefi: `kullanici@yedek:/yol` (SSH) veya bağlı bir klasör. Yedekle birlikte `.hmac` dosyası da kopyalanır. Hedefteki saklama süresini hedefin kendisi yönetir. |
 | `BACKUP_SCHEDULE` | `daily` | Zamanlayıcı açıkken günlük yedek. `off`: kapalı. |
 
 SSH hedefinde kopya root'un SSH anahtarıyla yapılır (zamanlayıcı da root olarak çalışır).
@@ -62,9 +64,21 @@ sudo sh scripts/install.sh restore backups/lightning-20261024T030001Z.tar.enc
 sudo sh scripts/install.sh restore backups/lightning-20261024T030001Z.tar.enc --yes-replace-data
 ```
 
+**İmza:** geri yükleme, `DOSYA.hmac` dosyasının yedeğin yanında durmasını, yedeğin **yazıldığı adı** taşımasını ve
+`secrets/backup.key`'in yedeği yazan anahtar olmasını ister. Biri tutmazsa `E_RESTORE_SIGNATURE` verir ve hiçbir
+şey değişmez. Yedekleri yeniden adlandırmayın; başka bir yere taşırken `.hmac` dosyasını da taşıyın.
+
+**Eski sürümlerin yedekleri** yalnızca `.sha256` taşır; bunu yedek deposuna yazabilen herkes yeniden hesaplayabilir.
+Böyle bir yedek imzasız sayılır ve reddedilir (`E_RESTORE_UNSIGNED`). Dosyanın saklandığı yere güveniyorsanız
+`--allow-unsigned` ekleyin: sağlama yine denetlenir (`E_RESTORE_CHECKSUM`) ve `W_RESTORE_UNSIGNED` uyarısı yazılır.
+
+```sh
+sudo sh scripts/install.sh restore backups/ESKI-YEDEK.tar.enc --allow-unsigned --yes-replace-data
+```
+
 **Onaysız çalıştırma:** komut yalnızca kontrol eder ve neyin değişeceğini söyler, hiçbir şeyi
 değiştirmez (çıkış kodu 3). Kontroller:
-- sağlama;
+- imza (eski yedekte `--allow-unsigned` ile sağlama);
 - şifre çözme;
 - içerik;
 - yedeğin bu sürümden yeni olmaması.
@@ -105,7 +119,7 @@ Yedeğin şifresi çözülmüş geçici kopyası her durumda silinir.
 **Yeni sunucuya taşıma:**
 1. Yeni sunucuda `sh scripts/install.sh` ile kurun.
 2. Sakladığınız `backup.key` dosyasını `secrets/backup.key` olarak kopyalayın (kurulumun ürettiği yeni
-   anahtarın yerine; izinler `chmod 400`). Yedek dosyasını ve `.sha256` dosyasını da sunucuya getirin.
+   anahtarın yerine; izinler `chmod 400`). Yedek dosyasını ve `.hmac` dosyasını da (adlarını değiştirmeden) sunucuya getirin; imza bu anahtarla doğrulanır.
 3. `restore … --yes-replace-data` çalıştırın.
 4. DNS kaydını yeni sunucuya çevirin ve geri yüklemenin yazdığı komutu çalıştırın, örneğin:
    ```sh

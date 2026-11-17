@@ -15,14 +15,15 @@ yalnızca **olmayanlar** ve **denenmemiş olanlar** durur. Tarih ya da söz veri
 - **e-Fatura:** İzibiz ve Uyumsoft dışındaki entegratörler denenmedi; mükellef alıcıya e-Fatura gönderimi hiçbirinde
   denenmedi.
 - **WISECP modülü** bir WISECP kurulumunda, **IP yönetimi** gerçek bir colocation bloğunda denenmedi.
-- Bağımsız bir güvenlik denetimi yapılmadı.
+- Bağımsız (üçüncü taraf) bir güvenlik denetimi yapılmadı. Yapay zekâ destekli, kısmi bir iç denetim yapıldı ve
+  bulguları düzeltildi; kapsamı ve bakılmayan alanlar: [security-audit.md](security-audit.md).
 
 ## Yazılmamış olanlar
 - **Altı yeni platformda** konsol, firewall, hız sınırlama, yedek ve geri yükleme, kişisel imaj, ISO kitaplığı, özel
   ağ, taşıma, ağ taraması. XCP-ng, oVirt, Hyper-V, KVM ve Incus'ta kullanım grafikleri ve trafik sayımı; XCP-ng,
   oVirt, KVM ve Incus'ta sunucu başına işlemci ölçümü. Hyper-V, KVM ve Incus'ta Windows misafir özelleştirmesi.
 - **Ödeme:** listedeki 46 sağlayıcıdan 41'iyle tahsilat. Stripe için webhook (ödeme bugün müşterinin
-  tarayıcısı panele dönünce ya da tahsilat çalıştırması Stripe'a yeniden sorunca işlenir). Param dönüşünün Param'a sorularak doğrulanması. PayTR ve Param'da kayıtlı
+  tarayıcısı panele dönünce ya da tahsilat çalıştırması Stripe'a yeniden sorunca işlenir). Param dönüşünün Param'a sorularak doğrulanması (o zamana kadar Param ödemeleri personelce elle onaylanır). PayTR ve Param'da kayıtlı
   kartla otomatik yenileme.
 - **Kimlik:** kayıtla açılan hesabın e-posta adresinin doğrulanması. Bir projeyi birden çok kullanıcının paylaştığı
   ekip yapısı. Proje başına kota (okuyan kod var, tanımlayan ekran ya da API yok).

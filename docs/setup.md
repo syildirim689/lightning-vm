@@ -89,7 +89,7 @@ kurulum anahtarı.
 | 19 | API süresinde hazır olmadı (`E_NOT_READY`) |
 | 20 | Güncelleme yapılamadı: git ile alınmamış kaynak, yerel değişiklik, sürümler alınamadı, yayımlanmış sürüm yok, bilinmeyen sürüm, veritabanına ulaşılamadı, hedef sürüm uygulanmış bir migration'ı içermiyor (`E_UPDATE_INCOMPATIBLE`) |
 | 21 | Yedek alınamadı (anahtar yok, veritabanı dökümü, dış kopya) ya da bir host / işletim sistemi işlemi başarısız (ad, saat dilimi, NTP, DNS, apt) |
-| 22 | Geri yükleme yapılamadı: sağlama toplamı, şifre çözme, eksik yedek, yedek daha yeni bir sürümden, güvenlik yedeği alınamadı, veritabanı ya da başlatma hatası |
+| 22 | Geri yükleme yapılamadı: imza (ya da imzasız eski yedek), sağlama toplamı, şifre çözme, eksik yedek, yedek daha yeni bir sürümden, güvenlik yedeği alınamadı, veritabanı ya da başlatma hatası |
 | 23 | Güncelleme başarısız oldu ve container'lar önceki sürüme geri alındı (`E_UPDATE_FAILED`); veritabanı geri alınmaz |
 
 Kodlar `scripts/install.sh` içindeki `die` çağrılarından okunur; her hata ayrıca `E_...` koduyla ve açıklamasıyla yazılır.

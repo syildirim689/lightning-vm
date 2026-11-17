@@ -15,9 +15,14 @@ Kaynak git kopyası olduğu için kurulum daha sonra kendini güncelleyebilir.
 # Depo herkese açıksa
 curl -fsSL https://raw.githubusercontent.com/syildirim689/lightning-vm/main/scripts/get.sh | sudo sh
 
-# Özel depo: salt-okunur bir erişim anahtarıyla (fine-grained token, yalnızca "Contents: read")
-curl -fsSL -H "Authorization: Bearer $TOKEN" https://raw.githubusercontent.com/syildirim689/lightning-vm/main/scripts/get.sh \
-  | sudo GIT_TOKEN="$TOKEN" sh
+# Özel depo: salt-okunur bir erişim anahtarıyla (fine-grained token, yalnızca "Contents: read").
+# Anahtar komut satırına yazılmaz: ortam değişkeninden okunur ve sudo yalnızca onu geçirir.
+export GIT_TOKEN   # değeri önceden, ekrana yazdırmadan atayın: read -rs GIT_TOKEN
+curl -fsSL -H "Authorization: Bearer $GIT_TOKEN" https://raw.githubusercontent.com/syildirim689/lightning-vm/main/scripts/get.sh \
+  | sudo --preserve-env=GIT_TOKEN sh
+
+# Ya da anahtarı yalnızca root'un okuyabildiği bir dosyadan (ilk satırı okunur):
+sudo sh get.sh --token-file /root/lvm-token
 
 # Seçenekler
 sudo sh get.sh --version v1.2.0                                # belirli bir sürüm
@@ -27,7 +32,12 @@ sudo sh get.sh -- --domain panel.example.com --lang tr         # "--" sonrası i
 ```
 
 - **Erişim anahtarı:** `/root/.lightning-vm-git-credentials` dosyasında (izin 600) saklanır. Uzak depo adresine
-  yazılmaz; sonraki güncellemeler bu dosyayı kullanır.
+  yazılmaz; sonraki güncellemeler bu dosyayı kullanır. Anahtarı `--token-file DOSYA` ile ya da `GIT_TOKEN` ortam
+  değişkeniyle (`sudo --preserve-env=GIT_TOKEN sh`) verin; betik değişkeni başlattığı git, apt ve kurulum
+  süreçlerine aktarmaz. `--token ANAHTAR` hâlâ çalışır, ama anahtar kurulum boyunca süreç listesinde (`ps`)
+  sunucudaki her hesaba görünür; eski `sudo GIT_TOKEN="…" sh` biçimi de anahtarı sudo'nun komut satırına yazar.
+  İkisini de kullanmayın. `curl` satırındaki `Authorization` başlığı da indirme süresince süreç listesinde görünür;
+  sunucuda başka kabuk hesabı varsa betiği dosyaya indirip `--token-file` ile çalıştırın.
 - **SSH deploy key:** root'un SSH anahtarı depoya salt-okunur deploy key olarak eklenir.
 - **Varsayılan dizin:** `/opt/lightning-vm`.
 - **Tekrar çalıştırma:** aynı komut kurulu bir sunucuda yeniden kurulum yapmaz, ne yaptığı duruma bağlıdır:
@@ -82,7 +92,8 @@ Panel sunucuda doğrudan hiçbir şey çalıştıramaz; Docker soketi de verilme
    Yani panel, ajan üzerinden bu sunucunun alan adını ve sertifikasını, adını, saatini, DNS'ini
    değiştirebilir, işletim sistemi güncellemelerini kurabilir, sunucuyu yeniden başlatabilir ve yönetici
    terminalini açabilir. Ajanı kapatmak (`agent off`) bunların hepsini panelden kullanılamaz kılar.
-4. Sonuçlar `data/maintenance` dizinine yazılır. Panel bu dizini yalnızca okuyabilir.
+4. Sonuçlar `data/maintenance` dizinine yazılır. Panel bu dizini yalnızca okuyabilir. Host durumu dosyaları ve
+   istek kayıtları `root:1000`, izin `640`; kilit dosyası (`.lock`) `600`.
    - `status.json`: işin durumu;
    - `runs/<id>.log`: ilerleme satırları;
    - `releases.json`: sürüm listesi;

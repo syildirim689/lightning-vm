@@ -61,10 +61,14 @@ arayüz bunları çevirerek gösterir.
   açılabilir ve yeni bir bilet alınır.
 - **Eşzamanlı konsol sınırı:** kullanıcı başına 3 (`CONSOLE_MAX_PER_USER`), toplamda 100.
 - **Origin:** sayfanın origin'i, bağlanılan host ile aynı olmalıdır. Başka bir siteden açılan
-  WebSocket, bağlantı yükseltilmeden önce `403` ile reddedilir.
+  WebSocket, bağlantı yükseltilmeden önce `403` ile reddedilir. HTTPS ile sunulan panel `http://` origin'ini kabul
+  etmez. Ek origin'ler `.env` içindeki `CONSOLE_ALLOWED_ORIGINS` ile verilir (virgülle ayrılmış,
+  `https://host[:port]` biçiminde; bu biçime uymayan girdi yok sayılır ve günlüğe `allowed_origin_ignored` yazılır).
 - **Denetim kaydı:** oturum verilmesi `console.session_issued` olarak API tarafından yazılır. Geçidin
   olayları (`opened`, `closed` ve süresi, `denied`, `failed`) Redis akışı `console:events`
-  üzerinden worker tarafından `audit_events` tablosuna aktarılır.
+  üzerinden worker tarafından `audit_events` tablosuna aktarılır. Bilinmeyen bir biletle gelen (kimliği belirsiz)
+  istekler için dakikada en çok 5 `console.denied` / `terminal.denied` olayı yazılır; bastırılanların sayısı olayda
+  taşınır.
 
 Bilinen sınır: kullanıcı başına sınır ve iptal, tek bir geçit örneği için tasarlandı. Birden fazla
 geçit örneği çalıştırmak için ortak bir sayaç gerekir.

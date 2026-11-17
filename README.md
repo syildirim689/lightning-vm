@@ -20,7 +20,7 @@ girmeniz gerekmez. Özelliklerin tamamı yalnızca VMware'de vardır; diğer alt
 ![Yapay zekâ ile yazıldı](https://img.shields.io/badge/yaz%C4%B1ld%C4%B1-Claude%20Code%20ile-d97757)
 
 [Özellikler](#-özellikler) · [Platform kapsamı](#-platform-kapsamı) · [Son eklenenler](#-son-eklenenler) · [Ekran görüntüleri](#-ekran-görüntüleri) · [Kurulum](#-kurulum) · [Kullanım](#-ilk-adımlar) ·
-[Mimari](#-mimari) · [Geliştirme](#-geliştirme-ve-testler) · [Bilinen sınırlar](#-bilinen-sınırlar) · [English](#-english-summary)
+[Mimari](#-mimari) · [Geliştirme](#-geliştirme-ve-testler) · [Bilinen sınırlar](#-bilinen-sınırlar) · [Güvenlik](#-güvenlik) · [English](#-english-summary)
 
 </div>
 
@@ -30,8 +30,9 @@ girmeniz gerekmez. Özelliklerin tamamı yalnızca VMware'de vardır; diğer alt
 > **Bu proje "vibe coding" ile, yapay zekâ ile birlikte yazıldı.** Kodun neredeyse tamamı
 > [Anthropic'in Claude Code](https://claude.com/claude-code) aracıyla, proje sahibinin yönlendirmesi, istekleri ve
 > testleriyle üretildi. Her değişiklik birim, entegrasyon ve uçtan uca (Playwright) testlerden geçirilip bir
-> demo sunucuda denendi; yine de **hatalar, eksikler ve güvenlik açıkları olabilir.** Bağımsız bir güvenlik
-> denetiminden geçmedi; VMware tarafı gerçek vCenter/ESXi yerine çoğunlukla govmomi simülatörüyle test edildi.
+> demo sunucuda denendi; yine de **hatalar, eksikler ve güvenlik açıkları olabilir.** Bağımsız (üçüncü taraf) bir
+> güvenlik denetiminden geçmedi; yapay zekâ destekli, kısmi bir güvenlik denetimi yapıldı ve bulguları düzeltildi
+> ([Güvenlik](#-güvenlik)). VMware tarafı gerçek vCenter/ESXi yerine çoğunlukla govmomi simülatörüyle test edildi.
 > Üretimde, gerçek müşterilerle ve gerçek parayla kullanmadan önce kendi ortamınızda deneyin, yedek alın ve
 > kodu inceleyin. Bulduğunuz hataları [issue](https://github.com/syildirim689/lightning-vm/issues) olarak
 > bildirmeniz çok değerli.
@@ -54,7 +55,9 @@ girmeniz gerekmez. Özelliklerin tamamı yalnızca VMware'de vardır; diğer alt
 - **Silmede bekleme süresi:** silinen sunucu önce kapatılır ve ayarlanan süre (varsayılan 24 saat) sonunda silinir;
   o zamana kadar geri alınabilir. **Sunucu kilidi** silmeyi, zorla kapatmayı, yeniden kurmayı, boyut değiştirmeyi ve
   geri yüklemeleri engeller. **Favoriler** sık kullanılan sunucuları işaretler
-- **Sunucuyu başka hesaba devretme:** e-postayla teklif edilir, karşı taraf 7 gün içinde kabul ederse aboneliğiyle geçer
+- **Sunucuyu başka hesaba devretme:** e-postayla teklif edilir, karşı taraf 7 gün içinde kabul ederse aboneliğiyle
+  geçer. Devirde kayıtlı SSH anahtarları, root parolası, etiketler, notlar ve zamanlamalar temizlenir; yedekler yeni
+  sahibe geçer
 - **Trafik kotası:** günlük giriş-çıkış sayımı, %80 ve %100'de uyarı (sayım VMware ve Proxmox'ta); kota dolunca hız
   sınırlama yalnız VMware'de (dağıtık anahtar)
 - **İşletim sistemi güncellemeleri:** sunucunun içindeki bekleyen ve güvenlik güncellemeleri, "yalnız haber ver / güvenliği kur /
@@ -111,7 +114,8 @@ girmeniz gerekmez. Özelliklerin tamamı yalnızca VMware'de vardır; diğer alt
   oturumlar ve giriş geçmişi
 - **Bayiler**, faturalama, kuponlar, itiraz yönetimi ve e-Fatura / e-Arşiv (yedi entegratörden yalnızca İzibiz ve
   Uyumsoft'a, kendi test ortamlarında gerçek e-Arşiv faturası gönderildi; diğer beşi belgelere göre yazıldı, denenmedi)
-- **WHMCS / WISECP modülleri** (`integrations/`): satışı o sistem yapar, panel bu sunuculara fatura kesmez. WISECP
+- **WHMCS / WISECP modülleri** (`integrations/`): satışı o sistem yapar, panel bu sunuculara fatura kesmez; sahibi
+  bu sunucuları panelden büyütemez, disk ekleyemez ya da kopyalayamaz (paket değişikliği o sistemden yapılır). WISECP
   modülü bir WISECP kurulumunda denenmedi
 
 </td></tr>
@@ -132,7 +136,9 @@ girmeniz gerekmez. Özelliklerin tamamı yalnızca VMware'de vardır; diğer alt
 - **SMS:** Türkiye'deki 18 sağlayıcı + Twilio, Vonage, Infobip, Plivo, Sinch, Telnyx, Clickatell, MessageBird
   ve özel HTTP API
 - **Ödeme:** kartla tahsilat yalnızca **iyzico, PayTR, Craftgate, Param ve Stripe** ile (ve panelin kendi test
-  sağlayıcısıyla) yapılır. Listedeki diğer 41 sağlayıcının (Türkiye'deki ödeme kuruluşları, banka sanal POS'ları,
+  sağlayıcısıyla) yapılır. Bunlardan **Param'da ödeme kendiliğinden işlenmez:** müşteri Param'ın sayfasında öder,
+  ödeme "onay bekliyor" kalır ve personel tahsilatı Param panelinde görüp faturayı elle kapatır; Param yalnızca TRY
+  faturalar için sunulur. Listedeki diğer 41 sağlayıcının (Türkiye'deki ödeme kuruluşları, banka sanal POS'ları,
   Papara, PayPal, Mollie, Adyen, Checkout.com, Razorpay, Square, Paddle) yalnızca hesap bilgileri kaydedilir ve çoğu
   para hareketi olmayan bir sorguyla sınanır; **bunlarla ödeme alınamaz** ([docs/payments.md](docs/payments.md))
 - **CAPTCHA:** Cloudflare Turnstile, reCAPTCHA v2/v3, hCaptcha · **Ters DNS:** PowerDNS
@@ -143,15 +149,19 @@ girmeniz gerekmez. Özelliklerin tamamı yalnızca VMware'de vardır; diğer alt
 ### Güvenlik
 - better-auth: parola, passkey, iki adımlı doğrulama (uygulama, SMS, e-posta, yedek kodlar)
 - **Kurumsal giriş:** LDAP / Active Directory ve OpenID Connect ile tek oturum açma (Keycloak, Entra ID, Okta, Google, authentik); gruplardan rol
-- CSRF koruması, hız sınırları, şifreli sırlar (ana anahtar), oturum yönetimi
+- CSRF koruması, hız sınırları, istek gövdesi sınırları, şifreli sırlar (ana anahtar), oturum yönetimi
+- Kimlik rotalarında izin listesi: panelin kullanmadığı giriş yolları kapalıdır; dizin ve SSO hesapları yalnızca kendi
+  yollarından girer; iki adımlı doğrulaması olan hesap e-posta kodu ya da giriş bağlantısıyla giremez
+- Kullanıcı adına oturum açan personel hesapta kalıcı iz bırakamaz (passkey, bağlı hesap, parola, iki adım, webhook)
 - **Mükerrer işlem koruması:** Idempotency-Key, sunucu başına tek açık işlem ve çift tıklamada ikinci isteğin reddi
-- Kullanıcının verdiği webhook adresleri yalnızca herkese açık HTTPS olabilir (iç ağa istek atılamaz)
+- Kullanıcının verdiği webhook ve tarayıcı bildirimi adresleri yalnızca herkese açık HTTPS olabilir (iç ağa istek
+  atılamaz)
 
 </td><td valign="top">
 
 ### İşletim
 - **Tek komutla kurulum**, otomatik HTTPS (alan adı veya `<ip>.sslip.io`)
-- Şifreli yedek ve kontrollü geri yükleme, zamanlanmış yedek
+- Şifreli ve yedek anahtarıyla imzalı (HMAC) yedek, kontrollü geri yükleme, zamanlanmış yedek
 - **Güncelleme:** önce yedek, migration uyumluluğu denetimi, başarısızlıkta container'ların geri dönüşü. Kendiliğinden
   yalnızca daha yeni sürüme geçer; açıkça bir sürüm verildiğinde eski bir sürüme dönüşü yalnızca migration denetimi durdurur
 - İsteğe bağlı Prometheus, Grafana, Loki, Alertmanager. Kurulumda açılır; sonradan yalnızca komut satırından açılıp
@@ -213,7 +223,8 @@ sunucunun kopyası çıkarılamaz (kopya yalnızca şablondan). Her platformun a
 
 | Ne | Nerede |
 |---|---|
-| **Baştan sona denetim:** API, worker, web arayüzü, yedi adaptör ve kurulum betiği gözden geçirildi. İşletmeciyi etkileyen 49 davranış değişikliği var; en önemlileri faturalamada (otomatik yenilemesi kapalı aboneliklere artık fatura kesilir, ödenmeyen sipariş ve veri merkezi faturaları tahsilat adımlarına girer). **Yükseltmeden önce okuyun** | [docs/upgrade-notes.md](docs/upgrade-notes.md) |
+| **Güvenlik denetimi ve düzeltmeleri (2026-11-17):** 22 doğrulanmış bulgu (1 yüksek, 10 orta, 11 düşük) düzeltildi. İşletmeciyi en çok etkileyenler: Param ödemeleri artık elle onaylanır, yedekler imzalanır (eski yedekler yalnızca `--allow-unsigned` ile geri yüklenir), panelin kullanmadığı giriş rotaları kapandı, WHMCS / WISECP sunucuları panelden büyütülemez. Yükseltmeden sonra proxy yeniden başlatılmalıdır. **Yükseltmeden önce okuyun** | [docs/upgrade-notes.md](docs/upgrade-notes.md) · [docs/security-audit.md](docs/security-audit.md) |
+| **Baştan sona denetim (önceki tur):** API, worker, web arayüzü, yedi adaptör ve kurulum betiği gözden geçirildi. İşletmeciyi etkileyen 49 davranış değişikliği var; en önemlileri faturalamada (otomatik yenilemesi kapalı aboneliklere artık fatura kesilir, ödenmeyen sipariş ve veri merkezi faturaları tahsilat adımlarına girer). **Yükseltmeden önce okuyun** | [docs/upgrade-notes.md](docs/upgrade-notes.md) |
 | **Pencere düzenleri:** iletişim kutuları sola / sağa yaslanır, köşelere ve yarımlara yerleşir, ortalanır, kenarından boyutlandırılır; sürüklerken önizleme, düzen menüsü ve Ctrl+Alt+ok tuşları | Panelin tamamı |
 | **Incus / LXD desteği (ilk sürüm):** aynı panelden sanal makine ve konteyner; istemci sertifikasıyla, küme desteğiyle. Gerçek bir Incus 6.0 sunucusunda konteynerlerle denendi | Yönetim → Bağlantılar → Incus / LXD · [docs/incus.md](docs/incus.md) |
 | **KVM (libvirt) desteği (ilk sürüm):** vCenter ya da Proxmox olmadan, düz bir Linux KVM hostu; SSH ile, parola ya da anahtarla | Yönetim → Bağlantılar → KVM (libvirt) · [docs/libvirt.md](docs/libvirt.md) |
@@ -273,7 +284,8 @@ curl -fsSL https://raw.githubusercontent.com/syildirim689/lightning-vm/main/scri
 | `--version v1.2.0` | Belirli bir sürümü kurar (varsayılan: en yeni kararlı sürüm) |
 | `--branch main` | Sürüm yerine bir dalı izler (test sunucuları) |
 | `--dir /srv/lightning-vm` | Kaynağın duracağı dizin (varsayılan `/opt/lightning-vm`) |
-| `--token TOKEN` | Özel (private) depo için salt okunur erişim anahtarı |
+| `--token-file DOSYA` | Özel (private) depo için salt okunur erişim anahtarı, dosyanın ilk satırından okunur (ya da `GIT_TOKEN` ortam değişkeni: `sudo --preserve-env=GIT_TOKEN sh`) |
+| `--token TOKEN` | Aynısı, komut satırında. Çalışır, ama anahtar kurulum boyunca süreç listesinde görünür; yukarıdaki iki yolu yeğleyin |
 | `-- …` | `--` sonrasındaki her şey aşağıdaki kurulum seçenekleridir |
 
 > [!NOTE]
@@ -389,7 +401,12 @@ sudo sh scripts/install.sh restore backups/DOSYA.tar.enc --yes-replace-data
   uygulanmış bir migration o sürümde yoksa reddeder).
 - Her güncelleme önce yedek alır ve başarısız olursa container'ları geri alır (veritabanı otomatik geri alınmaz;
   yedek oradadır).
-- Yedekler `secrets/backup.key` ile şifrelenir. **Bu anahtarı sunucu dışında saklayın**; o olmadan yedek açılmaz.
+- Yedekler `secrets/backup.key` ile şifrelenir ve imzalanır: her yedek `AD.tar.enc` ile yanındaki `AD.tar.enc.hmac`
+  dosyasından oluşur (sunucu dışı kopyaya ikisi de gider). **Bu anahtarı sunucu dışında saklayın**; o olmadan yedek
+  açılmaz.
+- Geri yükleme `.hmac` dosyasını yedeğin yanında, yedeği özgün adıyla ve aynı `backup.key` ile ister; tutmazsa
+  `E_RESTORE_SIGNATURE` verir ve hiçbir şey değişmez. Eski sürümlerin aldığı yedekler (yalnızca `.sha256`) yalnızca
+  `--allow-unsigned` ile geri yüklenir.
 - Parolasını unutan yönetici için: `sudo sh scripts/install.sh reset-password eposta@ornek.com`.
 - **Yükseltmeden önce** [docs/upgrade-notes.md](docs/upgrade-notes.md) sayfasını okuyun: sürümler arasında değişen
   davranışları, mevcut veriye etkisini ve kimlerin etkileneceğini gösteren sorguları içerir.
@@ -440,13 +457,13 @@ Simülatör (govmomi `vcsim`) gerçek bir vCenter olmadan tüm akışı çalış
 
 | Test | Komut |
 |---|---|
-| API birim testleri (122 test) | `cd apps/api && npm test` |
-| API entegrasyon testleri (PostgreSQL + Redis) | `cd apps/api && npm run test:integration` |
-| API entegrasyon testlerinin tamamı (PostgreSQL, Redis, vcsim, VMware adaptörü ve worker'ı Docker'da kendisi kurar; Docker'lı bir Linux sunucusunda çalıştırıldı: 130 testten 126'sı geçti, 4'ü PowerDNS, ISO deposu ya da konsol ağ geçidi istediği için atlandı) | `cd apps/api && npm run test:integration:full` |
+| API birim testleri (130 test) | `cd apps/api && npm test` |
+| API entegrasyon testleri (PostgreSQL + Redis; güvenlik denetiminin düzeltmeleri için eklenen `security-auth`, `security-billing` ve `security-servers` testleri bunların içindedir) | `cd apps/api && npm run test:integration` |
+| API entegrasyon testlerinin tamamı (PostgreSQL, Redis, vcsim, VMware adaptörü ve worker'ı Docker'da kendisi kurar; güvenlik turundan sonra Docker'lı bir Linux sunucusunda çalıştırıldı: 154 testten 150'si geçti, 4'ü PowerDNS, ISO deposu ya da konsol ağ geçidi istediği için atlandı) | `cd apps/api && npm run test:integration:full` |
 | Go servisleri | `cd services/vmware && go test ./...` |
 | Proxmox (23), XCP-ng (19), oVirt (15), Hyper-V (18), libvirt (19) ve Incus (11 test) adaptörleri | `cd services/proxmox && npm test` (aynısı `services/xcpng`, `services/ovirt`, `services/hyperv`, `services/libvirt` ve `services/incus` için; libvirt'in dört betik testi yalnızca Linux'ta çalışır, başka yerde atlanır) |
-| Web birim testleri (44 test: çeviriler, simgeler, pencere düzenleri ve diğer hesaplar) | `cd apps/web && npm test` |
-| Worker (sözdizimi denetimi ve 34 birim testi) | `cd apps/worker && npm run check` |
+| Web birim testleri (46 test: çeviriler, simgeler, pencere düzenleri ve diğer hesaplar) | `cd apps/web && npm test` |
+| Worker (sözdizimi denetimi ve 38 birim testi) | `cd apps/worker && npm run check` |
 | Uçtan uca (Playwright, çalışan bir Compose kurulumuna karşı) | `cd apps/web && npx playwright test` |
 
 Uçtan uca yolculuklar tek bir masaüstü boyutunda (1280 px) koşar; aralarında birkaç ekran ayrıca 390 ve 768 px'te
@@ -470,24 +487,32 @@ Adaptör testleri gerçek bir hipervizöre değil, platformu taklit eden sahte s
 - **Ödeme:** kartla tahsilat yalnız iyzico, PayTR, Craftgate, Param ve Stripe ile; diğer 41 sağlayıcı yalnızca bilgi
   kaydıdır. Beşinden **hiçbiri gerçek bir üye işyeri hesabıyla denenmedi**. **Stripe:** webhook yok; müşteri ödedikten sonra
   sekmeyi kapatırsa ödeme, tahsilat çalıştırması Stripe'a yeniden sorduğunda işlenir (beş dakika sonra başlar, bir
-  gün sürer; iyzico ve Craftgate'te de böyledir, PayTR ve Param'da yoktur). **Param:** dönüş, Param'a ayrıca sorularak
-  doğrulanmaz ve bu akış **sağlayıcıyla teyit edilmedi**; sonuç yalnızca dönüşteki özet (hash), üye işyeri GUID'i ve
-  işlem numarasına dayanır ([docs/payments.md](docs/payments.md)).
+  gün sürer; iyzico ve Craftgate'te de böyledir, PayTR ve Param'da yoktur). **Param:** dönüş Param'a sorularak
+  doğrulanamadığı için ödemenin kanıtı sayılmaz: ödeme "onay bekliyor" kalır, personel Param panelinde doğrulayıp
+  faturayı elle kapatır; kendiliğinden işleyen bir Param tahsilatı yoktur. Param yalnızca TRY için sunulur ve bu
+  akış **sağlayıcıyla teyit edilmedi** ([docs/payments.md](docs/payments.md)).
 - **Gerçek hipervizör:** altı yeni adaptörden yalnızca Incus gerçek bir sunucuda çalıştırıldı, o da yalnızca
   konteynerlerle. Proxmox VE, XCP-ng, oVirt, Hyper-V ve KVM (libvirt) adaptörleri **gerçek bir hipervizörde hiç
   çalıştırılmadı**; testleri platformu taklit eden sahte sunuculara karşıdır.
 - **Entegrasyon testleri:** bütün entegrasyon paketini Docker'da kendi kuran çalıştırıcı
-  (`apps/api/test/integration/run.sh`) Docker'lı bir Linux sunucusunda çalıştırıldı (126 geçti, 4 atlandı). Bu turda
-  değişen faturalama davranışlarının (otomatik yenileme, vadesi geçen faturalar, sanal veri merkezleri) çoğu için yeni
-  entegrasyon testi **yazılmadı**: mevcut testler yalnız eski davranışın bozulmadığını gösterir.
+  (`apps/api/test/integration/run.sh`) güvenlik turundan sonra Docker'lı bir Linux sunucusunda çalıştırıldı (154 testten 150'si geçti,
+  4'ü atlandı). Güvenlik düzeltmelerinin kendi entegrasyon testleri (`security-*.test.mjs`, 24 test) bu paketin
+  içindedir ve gerçek PostgreSQL ve Redis'e karşı çalışır. Önceki turda değişen
+  faturalama davranışlarının (otomatik yenileme, vadesi geçen faturalar, sanal veri merkezleri) çoğu için entegrasyon
+  testi **yazılmadı**: mevcut testler yalnız eski davranışın bozulmadığını gösterir.
+- **Güvenlik denetimi kısmidir:** tek bir tarama turu yapıldı. Panelin kendi sunucusunu yöneten bakım isteği kanalı
+  (API ile `install.sh run-requests` arası) ve 13 alan **hiç incelenmedi**; on aday bağımsız bir doğrulamadan
+  geçmedi. Düzeltmeler gerçek hipervizörlerde ve gerçek bir Param hesabıyla doğrulanmadı. Bilinen açık bir konu:
+  destek talebi yanıtlarının personele giden bildirimlerinde hız sınırı yoktur
+  ([docs/security-audit.md](docs/security-audit.md)).
 - **e-Fatura / e-Arşiv:** yalnızca İzibiz ve Uyumsoft'a, yayımladıkları test kullanıcılarıyla e-Arşiv faturası
   gönderildi. Nilvera, EDM, QNB eFinans, BirFatura ve Paraşüt belgelere göre yazıldı ve denenmedi; e-Fatura (mükellef
   alıcı) gönderimi hiçbir gerçek entegratörde denenmedi ([docs/billing.md](docs/billing.md)).
 - **IPv6:** ayrı IPv6 havuzu yoktur; IPv4 havuzuna eklenen önekten sunucu başına tek adres verilir.
 - **İzleme:** kurulumdan sonra panelden açılıp kapatılamaz (`install.sh monitoring on|off`).
 - **Küme (cluster):** birden çok sunucuda çalışma bir tasarımdır, yazılmadı ([docs/cluster.md](docs/cluster.md)).
-- **E-posta adresi doğrulama yok:** kayıtla açılan hesabın e-posta adresi doğrulanmaz. (SSO, dizin ve bayi
-  üzerinden gelen hesaplar doğrulanmış sayılır.)
+- **E-posta adresi doğrulama yok:** kayıtla açılan hesabın e-posta adresi doğrulanmaz. (SSO, dizin ve faturalama
+  entegrasyonu üzerinden gelen hesaplar doğrulanmış sayılır; bayinin açtığı müşteri hesapları doğrulanmamış başlar.)
 - **WhatsApp:** Meta Cloud API ve onaylı bir mesaj şablonu gerekir. **Telegram:** botta webhook tanımlı olmamalı.
 - **Incus / LXD:** ilk sürüm; **gerçek bir Incus 6.0 sunucusunda konteynerlerle uçtan uca denendi** (oluşturma, cloud-init, güç, snapshot, disk, boyut, devralma, silme). Sanal makineler, LXD ve kümeler denenmedi.
   Konsol, firewall, hız sınırlama, yedek, kişisel imaj, ISO, özel ağ, taşıma, grafikler, trafik sayımı ve işlemci
@@ -518,8 +543,30 @@ Olmayanların listesi: [docs/roadmap.md](docs/roadmap.md).
 
 ## 🔒 Güvenlik
 
-Bir güvenlik açığı bulursanız lütfen herkese açık issue açmayın; [SECURITY.md](SECURITY.md) dosyasındaki yolu
-izleyin.
+Kasım 2026'da `641aa4d` commit'i üzerinde yapay zekâ destekli bir güvenlik denetimi yapıldı. Bağımsız bir üçüncü
+tarafın denetimi **değildir** ve **kısmidir**.
+
+- **Neye bakıldı:** deponun tamamı (API, worker, web arayüzü, konsol geçidi, adaptörler, kurulum betiği); kaynak
+  incelemesi ve ağ erişimi olmayan bir sandbox'ta sahte veriyle yapılan sınırlı denemeler. Çalışan hiçbir sisteme
+  istek gönderilmedi.
+- **Ne bulundu:** bir müşterinin başka bir müşterinin sunucusunu, faturasını, talebini ya da ağını okuyabildiği ya
+  da değiştirebildiği bir yol bulunmadı. 22 zayıflık doğrulandı (1 yüksek, 10 orta, 11 düşük) ve hepsi düzeltildi.
+- **Ne düzeltildi (özet):** Param dönüşü artık ödemenin kanıtı sayılmaz ve Param yalnızca TRY alır; boyut
+  değişikliği, yenileme faturası ve dışarıdan faturalanan sunucularla ilgili ücret hataları; devredilen sunucuda
+  önceki sahibin anahtarlarının ve parolasının kalması; kopya siparişinin kaynağına bağlanması; dizin / SSO
+  hesaplarının başka yollardan girebilmesi ve rol eşlemesiyle yönetici oluşturulabilmesi; istek gövdesi ve giriş
+  kimliği sınırları; yedeklerin anahtarla imzalanması; konsol geçidinde denetim kaydı taşması; giriş sonrası açık
+  yönlendirme.
+- **Ne doğrulanmadı:** bakım isteği kanalı ve denetimin sonradan önerdiği 13 alan incelenmedi; on aday bağımsız bir
+  doğrulama almadı (dokuzu yine de değiştirildi; destek yanıtı bildirimlerindeki hız sınırı eksiği duruyor).
+  Düzeltmeler birim testleriyle ve gerçek PostgreSQL / Redis üzerinde entegrasyon testleriyle doğrulandı; gerçek
+  hipervizörlerde ve gerçek bir Param üye işyeri hesabıyla **doğrulanmadı**.
+
+Tam özet: [docs/security-audit.md](docs/security-audit.md) (İngilizce). İşletmeciyi etkileyen değişiklikler:
+[docs/upgrade-notes.md](docs/upgrade-notes.md).
+
+**Açık bildirme:** bir güvenlik açığı bulursanız lütfen herkese açık issue açmayın; [SECURITY.md](SECURITY.md)
+dosyasındaki yolu izleyin (GitHub'ın özel bildirimi: Security → Report a vulnerability).
 
 ## 🤖 Bu proje nasıl yazıldı?
 
@@ -568,8 +615,10 @@ What is not the same everywhere (the table under "Platform kapsamı" above has e
 - **Payments:** only iyzico, PayTR, Craftgate, Param and Stripe (plus the built-in sandbox) can take a payment. The
   other 41 listed providers are credential forms, most with a check that moves no money. None was tried with a real
   merchant account. Stripe has no webhook: a payment whose customer never returns to the panel is settled when the
-  billing run asks Stripe again (as for iyzico and Craftgate; not for PayTR and Param). Param's return is not
-  confirmed with Param, and that flow was not confirmed with the provider.
+  billing run asks Stripe again (as for iyzico and Craftgate; not for PayTR and Param). **Param does not settle by
+  itself:** its return cannot be confirmed with Param, so the payment stays pending as "awaiting confirmation" and
+  staff mark the invoice paid after checking the Param panel. Param is offered for TRY invoices only, and the flow
+  was not confirmed with the provider.
 - **e-Invoice (Turkey):** of seven integrators only İzibiz and Uyumsoft were sent a real e-Arşiv invoice, in their
   test systems.
 - **IPv6:** an optional prefix on an IPv4 pool, one address per server; there are no separate IPv6 pools.
@@ -577,18 +626,40 @@ What is not the same everywhere (the table under "Platform kapsamı" above has e
   afterwards with `install.sh monitoring on|off`.
 - **Real hardware:** only the Incus adapter (containers, Incus 6.0) ran against a real server. VMware was tested
   mostly against the govmomi simulator; Proxmox VE, XCP-ng, oVirt, Hyper-V and libvirt against imitations only.
-- **Upgrading:** the last round was a full audit of the API, worker, web UI, adapters and installer. It changed 49
-  behaviours an operator can notice, most of them in billing; read [docs/upgrade-notes.md](docs/upgrade-notes.md)
-  (Turkish) before you update. The full integration test runner (`npm run test:integration:full`) was run on a Linux
-  host with Docker: 126 of 130 tests pass, 4 are skipped (they need PowerDNS, an ISO storage or the console gateway).
-  Most of the billing behaviour changed in this round has no integration test of its own yet.
+- **Upgrading:** the last two rounds changed behaviour an operator can notice: a full audit of the API, worker, web
+  UI, adapters and installer (49 changes, most of them in billing) and then the security audit below (Param
+  payments confirmed by hand, signed backups, closed sign-in routes, restart the proxy after upgrading). Read
+  [docs/upgrade-notes.md](docs/upgrade-notes.md) (Turkish) before you update.
+- **Tests:** unit tests: API 130, worker 38, web 46, plus the adapters'. The full integration test runner
+  (`npm run test:integration:full`) was run after the security round, on a Linux host with Docker: 150 of 154
+  tests passed, 4 were skipped (they need PowerDNS, an ISO storage or the console gateway). It includes the
+  24 security tests (`security-*.test.mjs`), which run against real PostgreSQL and Redis. Most of the billing behaviour changed in the earlier round has no integration test of its own.
+- **Private repository installs:** give `get.sh` the access token with `--token-file FILE` or `GIT_TOKEN` in the
+  environment (`sudo --preserve-env=GIT_TOKEN sh`); `--token` works but is visible in the process list.
+- **Backups** are encrypted and signed with `secrets/backup.key` (`NAME.tar.enc` plus `NAME.tar.enc.hmac`). Restore
+  refuses a backup whose signature, name or key does not match; backups made by older versions restore only with
+  `--allow-unsigned`.
 
 > [!WARNING]
 > This project was **vibe-coded**: almost all of the code was written by Anthropic's Claude Code, steered and
 > tested by the maintainer. It has unit, integration and Playwright end-to-end tests and was tried on a demo
-> server. It has **not** been independently audited, and the VMware side was mostly tested against the govmomi
+> server. It has **not** been audited by an independent third party (an AI-driven, partial security review was run
+> and its findings fixed; see Security below), and the VMware side was mostly tested against the govmomi
 > simulator. **Expect bugs.** Review it and test in your own environment before using it with real customers or
 > money.
+
+**Security.** An AI-driven security review was run on commit `641aa4d` in November 2026: source review plus bounded
+checks in a sandbox without network access, with dummy data; nothing was sent to a live system. It found no way for
+one customer to reach another customer's servers, invoices, tickets or networks, and confirmed 22 weaknesses (1
+high, 10 medium, 11 low), all fixed in this release: the Param return is no longer proof of payment, several
+under-billing paths around resize and externally billed servers, credentials that stayed on a transferred server,
+directory and single sign-on accounts signing in by other routes, a role mapping that could create an administrator,
+request size limits, backups signed with the backup key, and others. It was a **partial pass**: the maintenance
+channel through which the panel manages its own host and 13 further areas were not reviewed, ten candidates got no
+independent verdict (nine were changed anyway; ticket-reply notifications still have no rate limit), and the fixes
+were verified by unit tests and by integration tests on real PostgreSQL and Redis, not against real hypervisors or a
+real Param merchant account. Details: [docs/security-audit.md](docs/security-audit.md). To report a vulnerability,
+do not open a public issue; follow [SECURITY.md](SECURITY.md).
 
 Quick start on Ubuntu 22.04 / 24.04 / 26.04:
 

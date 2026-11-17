@@ -7,6 +7,12 @@ uygulamaları (`chat`; 13 uygulama, aşağıda). Tek tek sayıldığında 17 tes
 - **Tarayıcı (Web Push):** panel kapalıyken bile sistem bildirimi gelir. Kullanıcı bunu Hesabım →
   Bildirimler'den cihaz başına açar. VAPID anahtarları ilk kullanımda üretilir ve özel anahtar şifreli
   saklanır. Süresi dolmuş abonelikler (404/410) otomatik silinir. Web Push için HTTPS gerekir.
+  Abonelik kuralları: adres (endpoint) herkese açık bir HTTPS adresi olmalıdır (özel / iç ağ adresleri reddedilir;
+  her gönderimde yeniden denetlenir); kullanıcı başına en çok 20 abonelik (`LIMIT_REACHED`); başka bir hesabın
+  aboneliği yalnızca aynı tarayıcı anahtarlarıyla devralınır (`PUSH_ENDPOINT_IN_USE`); kullanıcı adına oturum açmış
+  personel abonelik ekleyemez (`NOT_WHILE_IMPERSONATING`). Çıkış yapmak ya da oturumun sona ermesi o tarayıcıdaki
+  aboneliği kapatır; personel kullanıcının oturumlarını kapattığında ya da parola sıfırlandığında hesabın bütün
+  abonelikleri silinir.
 - **E-posta:** SMTP ayarlıysa çalışır (docs/settings.md).
 - **SMS:** SMS ayarlıysa ve kullanıcının telefonu doğrulanmışsa çalışır.
 - **Mesajlaşma uygulamaları:** kullanıcının bağladığı Telegram, Slack, webhook ve benzerleri

@@ -54,7 +54,7 @@ HTTPS üzerinden istek ([auth.md](auth.md)).
 
 Olmayanlar: kayıtla açılan hesabın e-posta adresi doğrulanmaz; bir projeyi ya da sunucuyu birden çok kullanıcının
 paylaştığı bir ekip yapısı yoktur (proje tek sahibe aittir; bayi ve müşterileri ayrı bir yapıdır). Proje bağımsız bir
-güvenlik denetiminden geçmedi. HTTPS olmadan yalnızca loopback üzerinde kullanılmalıdır.
+güvenlik denetiminden geçmedi (yapay zekâ destekli kısmi bir iç denetimin özeti: [security-audit.md](security-audit.md)). HTTPS olmadan yalnızca loopback üzerinde kullanılmalıdır.
 
 ## İşletim
 Yedekleme, geri yükleme ve güncelleme hostta `scripts/install.sh` ile çalışır ([operations.md](operations.md),

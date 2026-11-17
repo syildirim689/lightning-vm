@@ -1,11 +1,159 @@
 # Yükseltme notları
 
-Bu sayfa, **kurulu bir Lightning VM'i yükselten işletmeci** içindir. API, worker, web arayüzü, adaptörler ve kurulum
-betiğinin baştan sona denetlendiği turda değişen davranışları anlatır: her madde neyin değiştiğini ve yükseltmeden
-sonraki **ilk tahsilat çalıştırmasının** ya da **ilk başlatmanın** mevcut veriye ne yaptığını söyler. Tahsilat
-çalıştırması API içinde beş dakikada bir çalışır; yani "ilk çalıştırma" yükseltmeden birkaç dakika sonradır.
+Bu sayfa, **kurulu bir Lightning VM'i yükselten işletmeci** içindir ve en yeni turdan eskiye doğru sıralıdır. Her
+madde neyin değiştiğini ve işletmecinin yapması gereken bir şey varsa onu söyler. Yalnızca hata düzeltmesi olup
+davranışı değiştirmeyen işler burada yoktur. Tahsilat çalıştırması API içinde beş dakikada bir çalışır; yani "ilk
+çalıştırma" yükseltmeden birkaç dakika sonradır.
 
-Yalnızca hata düzeltmesi olup davranışı değiştirmeyen işler burada yoktur. Veri değişiklikleri
+## Güvenlik denetimi turu (2026-11-17)
+
+`641aa4d` commit'i üzerinde yapılan güvenlik denetiminin ([security-audit.md](security-audit.md)) düzeltmeleri. Veri
+değişiklikleri `apps/api/migrations` altındaki `074`, `075` ve `076` numaralı dosyalardadır
+(`servers.clone_from_server_id`, `users.external_source`, `operations.started_by`); yükseltme sırasında kendiliğinden
+uygulanır.
+
+> [!IMPORTANT]
+> Yükseltmeden sonra yapılacak üç şey: **(1)** proxy'yi yeniden başlatın (`docker compose restart proxy`; Caddy 2.7
+> ya da yenisi gerekir), **(2)** Param kullanıyorsanız Param ödemelerinin artık **elle onaylandığını** ekibinize
+> söyleyin, **(3)** eski yedeklerin (`.hmac` dosyası olmayanların) yalnızca `--allow-unsigned` ile geri yüklendiğini
+> not edin ve yükseltmeden hemen sonra yeni bir yedek alın.
+
+### Faturalama
+
+- **Param ödemeleri kendiliğinden "ödendi" olmaz.** Param'dan başarılı dönen bir ödeme artık faturayı ödemez: ödeme
+  **bekliyor** durumunda kalır ve "onay bekliyor" gerekçesini taşır (`NEEDS_CONFIRMATION`; sipariş ve dekont numarası
+  ödemenin üzerinde yazar). Reddedilen bir dönüş ödemeyi eskisi gibi kapatır. *Yapılacak:* personel tahsilatı Param
+  panelinde (ya da hesap ekstresinde) görür ve faturayı Yönetim → Faturalar'dan "Ödeme kaydet" ile elle kapatır.
+  Ödemeden önce kurulum yapmayan panellerde sipariş bu onaya kadar kurulmaz.
+- **Param yalnızca TRY için sunulur.** TRY dışındaki bir fatura ya da bakiye yüklemesi Param ile ödenemez
+  (`PAYMENT_METHOD_UNAVAILABLE`). `GET /billing/summary` yanıtındaki kart yöntemleri yeni bir `currencies` alanı
+  taşır (`null`: her para birimi). *Yapılacak:* başka para biriminde satış yapıyorsanız o faturalar için başka bir
+  sağlayıcı etkin olsun.
+- **Sandbox kapatılınca bekleyen sandbox ödemeleri kapanır.** Sandbox ayarı kapatıldığında bekleyen bütün sandbox
+  ödemeleri başarısız olur (`TEST_MODE_OFF`) ve test kartı rotası sandbox kapalıyken ödeme kabul etmez. Bir
+  sağlayıcı canlı moda alındığında test modunda başlatılmış bekleyen ödemeleri de aynı kodla kapanır. Yapılacak bir
+  şey yok.
+- **Tutarı ya da para birimi tutmayan ödeme beklemede kalır.** Sağlayıcının farklı bir tutar ya da para birimiyle
+  bildirdiği veya dolandırıcılık incelemesine aldığı ödeme artık başarısız sayılmaz; gerekçesi görünerek **bekliyor**
+  kalır. *Yapılacak:* bu ödemeleri sağlayıcının panelinde inceleyip faturayı elle kapatın ya da ödemeyi iade edin.
+- **Boyut ya da disk değişince ödenmemiş yenileme faturası yeniden fiyatlanır.** Dönemi henüz başlamamış, ödenmemiş
+  bir yenileme faturası, sunucunun boyutu ya da diskleri değiştikten sonra sunucunun güncel fiyatına çekilir: ücreti
+  alınan bir büyütmede hemen, diğer durumlarda bir tahsilat çalıştırması içinde (en çok 5 dakika). İtirazlı faturalara
+  dokunulmaz. Yenileme faturası ödenmemişken ve dönemi başlamışken yapılan büyütme, o dönemin kalanı için gün
+  hesabıyla ücretlendirilir. *İlk çalıştırma:* dönemi başlamamış, ödenmemiş ve fiyatı sunucusunun bugünkü fiyatından
+  farklı olan yenileme faturaları güncel fiyata çekilir; müşteriler faturalarında tutar değişikliği görebilir.
+- **"Tahsilatı şimdi çalıştır" reddedilebilir.** Periyodik çalıştırma kilidi tutarken düğme `409 BILLING_RUNNING`
+  yanıtı verir; birkaç dakika sonra yeniden deneyin. Çalıştırma sonucunda yeni bir `repriced` sayısı vardır.
+- **Aynı faturanın iki iadesi üst üste binmez.**
+
+### Sunucular ve sahiplik
+
+- **WHMCS / WISECP ile faturalanan sunucular panelden büyütülemez.** Böyle bir sunucunun sahibi panelde boyut
+  değiştiremez, disk ekleyemez ve kopya sipariş edemez (`409 EXTERNALLY_BILLED`); personel ve entegrasyonun kendisi
+  yapabilir. Entegrasyonun boyut değişikliği artık müşteri boyut değiştirme anahtarına, role ve saatlik işlem
+  sınırına bakmaz. *Yapılacak:* müşterilerinize paket değişikliğini faturalama sisteminden yapmalarını söyleyin.
+- **Faturalama sisteminin müşteri eşlemesi daha sıkı.** `POST /admin/external/:source/customers`, aynı e-postayla
+  var olan hesap doğrulanmamışsa, bir bayinin müşterisiyse, bir bayiyse ya da başka bir sistemin hesabıysa
+  `409 CUSTOMER_NEEDS_REVIEW` yanıtı verir ve sipariş o hesaba bağlanmaz. *Yapılacak:* personel hesabın e-postasını
+  doğrular (Yönetim → Kullanıcılar) ya da hesabı yeniden adlandırır / kaldırır; sonra sipariş yeniden denenir.
+  **WHMCS ve WISECP modülleri yeni 409 kodlarını (`CUSTOMER_NEEDS_REVIEW`, `EXTERNALLY_BILLED`, `CLONE_PENDING`)
+  tanımaz ve genel bir API hatası olarak gösterir;** kodu modülün günlüğünde arayın.
+- **Bayinin açtığı müşteri hesapları doğrulanmamış e-postayla başlar.**
+- **Devir ve personel taşıması sunucuyu temizler.** Bir sunucu başka hesaba geçtiğinde (müşteri devri ya da
+  personelin taşıması) kayıtlı SSH anahtarları, root parolası, etiketler, notlar ve zamanlanmış silme temizlenir;
+  güncelleme izleme ve bütün zamanlamalar kaldırılır; yedekler yeni sahibe geçer ve önceki sahibin açık konsolları
+  kapanır. Sonrasında anahtarsız yapılan bir yeniden kurulum yeni bir root parolası üretir. *Yapılacak:* yeni sahip
+  güncelleme izlemeyi ve zamanlamaları isterse yeniden açar.
+- **Kopyası sipariş edilmiş sunucu devredilemez, taşınamaz, silinemez, yeniden kurulamaz** (`409 CLONE_PENDING`);
+  personele özel bir ISO takılıyken de devir ve taşıma reddedilir (`PRIVATE_ISO_MOUNTED`). Kaynağı kurulumdan önce
+  silinmiş, yeniden kurulmuş ya da el değiştirmiş bir kopya `CLONE_SOURCE_GONE` ile başarısız olur. *Yükseltmede:*
+  yükseltmeden önce sipariş edilmiş, henüz kurulmamış ve kaynağıyla eşleştirilemeyen kopyalar da bu kodla başarısız
+  olur; Yönetim → Sunucular → İşlemler'de bakın, müşteri yeniden sipariş verir.
+- **İşlem iptali daraldı.** Müşteri yalnızca kendi başlattığı işlemleri ve yalnızca kurulumları ya da henüz
+  işlenmeye başlanmamış işlemleri iptal edebilir. Yükseltme anında açık olan işlemleri yalnızca personel iptal
+  edebilir. İptal, hipervizörde sürmekte olan bir görevi artık yarıda kesmez.
+- **Küçük API değişiklikleri:** müşterinin talep listesi artık `assigneeEmail` içermez; `GET /vdcs` başka
+  müşterilerin kişisel imajlarını listelemez; başarısız bir diski ikinci kez kaldırmak `404` döner.
+
+### Giriş ve ayarlar
+
+- **İstek gövdesi sınırları.** JSON gövdeleri 256 KB ile sınırlıdır (`/api/auth/*` altında 64 KB); talep ve itiraz
+  ekleri 9 MB, marka dosyaları 1 MB. Caddy `/api/*` isteklerini 10 MB'ta keser. *Yapılacak:* API'ye büyük gövde
+  gönderen kendi betikleriniz varsa bölün.
+- **Panelin kullanmadığı kimlik rotaları `404` döner.** better-auth eklentilerinin getirdiği ama panelin
+  kullanmadığı rotalar kapatıldı; telefon numarasıyla giriş ve telefonla parola sıfırlama bunların içindedir. SMS
+  kodu yalnızca oturum açmış kişinin kendi numarasını doğrular. Sağlayıcının kimlik belirtecini (ID token)
+  göndererek giriş reddedilir.
+- **Dizin ve SSO hesapları yalnızca kendi yollarından girer.** Dizin (LDAP) girişi kapalıyken dizin hesapları giriş
+  yapamaz. Dizin ve SSO hesapları e-posta kodu, giriş bağlantısı, passkey, bağlı sosyal hesap ya da kullanıcı adıyla
+  giremez. *Yapılacak:* dizin girişini kapatacaksanız önce yerel bir yönetici hesabınız olduğundan emin olun.
+- **İki adımlı doğrulaması olan hesaplar giriş bağlantısı kullanamaz;** parolalarıyla girerler.
+- **Dizin ve SSO ayarlarını kaydetmek, eşlenen her rolü kapsayan izin ister.** Yalnızca yöneticiler bir grubu ya da
+  varsayılan rolü `admin`'e eşleyebilir; aksi `403 FORBIDDEN_TARGET`.
+- **Adres değişince sır yeniden girilir.** SMTP sunucusu / portu / güvenlik türü, özel SMS adresinin hostu, rDNS API
+  adresi, LDAP adresi ya da OIDC issuer değiştirildiğinde kayıtlı sır (parola, anahtar) yeniden girilmelidir.
+- **Ayar testleri uzak sunucunun metnini göstermez.** SMTP, özel SMS, rDNS, LDAP ve SSO testleri uzak sunucunun
+  yanıt metnini artık göstermez. LDAP ayrıntısı API günlüğüne `ldap_test_failed` olarak yazılır
+  (`docker compose logs api`).
+- **Bağlantılar panelin kendi adresini kullanır.** Parola sıfırlama ve giriş bağlantıları isteğin geldiği host adını
+  değil, panelin ayarlı adresini taşır; yönlendirme hedefleri yalnızca panel içi yollar olabilir. *Yapılacak:* panelin
+  adresi (Ayarlar → Alan adı ve SSL) doğru olsun.
+- **Kullanıcı adına oturum açmış personel kalıcı iz bırakamaz.** Passkey, bağlı hesap, webhook, tarayıcı bildirimi
+  ve mesajlaşma bağlantısı ekleme; parola, telefon ve iki adımlı doğrulama değişikliği `NOT_WHILE_IMPERSONATING` ile
+  reddedilir.
+- **Tarayıcı bildirimi abonelikleri.** Abonelik adresi herkese açık bir HTTPS adresi olmalıdır; kullanıcı başına en
+  çok 20 abonelik. Personel bir kullanıcının oturumlarını kapattığında ya da parola sıfırlandığında abonelikler
+  silinir; kullanıcı bildirimleri tarayıcısında yeniden açar.
+- **Yetki daralınca açık konsollar ve terminaller kapanır:** kullanıcının erişimi azaltıldığında, iki adımlı
+  doğrulama kapatıldığında ya da sıfırlandığında.
+- **Caddy API'ye tek istemci adresi gönderir** (`{client_ip}`); istemcinin yazdığı `X-Forwarded-For` zinciri API'ye
+  ulaşmaz. *Yapılacak:* yükseltmeden sonra proxy'yi yeniden başlatın (`docker compose restart proxy`); Caddy 2.7 ya
+  da yenisi gerekir (`docker compose exec proxy caddy version`; eskiyse `docker compose pull proxy`). API'nin önüne
+  Caddy yerine kendi proxy'nizi koyduysanız o da tek adres göndermelidir ([domain-https.md](domain-https.md)).
+- **Denetim kaydı:** passkey ile giriş, passkey ekleme ve kaldırma artık kaydedilir ve giriş bildirimleri gönderilir.
+  254 karakterden uzun giriş kimlikleri (e-posta, kullanıcı adı, telefon) reddedilir; denetim ayrıntılarındaki
+  metinler uzunlukça sınırlanır.
+
+### Web, konsol ve kurulum betiği
+
+- **Yedekler imzalanır.** Yedek `AD.tar.enc` ve yanında `AD.tar.enc.hmac` olarak yazılır; `.sha256` dosyası artık
+  yazılmaz ve sunucu dışı kopyaya `.hmac` gider. Geri yükleme `.hmac` dosyasının yedeğin yanında olmasını, dosyanın
+  **özgün adını** taşımasını ve aynı `secrets/backup.key` anahtarını ister; biri tutmazsa `E_RESTORE_SIGNATURE` verir
+  ve hiçbir şey değişmez. *Yapılacak:* yedekleri kendi yönteminizle kopyalıyorsanız `.hmac` dosyasını da kopyalayın
+  ve yedekleri yeniden adlandırmayın.
+- **Eski yedekler yalnızca `--allow-unsigned` ile geri yüklenir.** Önceki sürümlerin aldığı yedeklerde yalnızca
+  `.sha256` vardır: bayraksız `E_RESTORE_UNSIGNED`, bayrakla sağlama denetlenir ve `W_RESTORE_UNSIGNED` uyarısı
+  yazılır. *Yapılacak:* yükseltmeden hemen sonra yeni bir yedek alın; eski bir yedeği yalnızca saklandığı yere
+  güveniyorsanız bu bayrakla geri yükleyin.
+- **`get.sh` erişim anahtarı.** Özel depo için `--token-file DOSYA` ya da `export GIT_TOKEN` ile birlikte
+  `sudo --preserve-env=GIT_TOKEN sh` kullanın. `--token` hâlâ çalışır ama kurulum boyunca süreç listesinde görünür
+  ([updates.md](updates.md)).
+- **Bakım dosyalarının izinleri.** `data/maintenance` altındaki host durumu dosyaları ve istek kayıtları
+  `root:1000` ve `640`, `.lock` dosyası `600` izinlidir. Bu dosyaları başka bir hesapla okuyan kendi araçlarınız
+  varsa uyarlayın.
+- **Konsol geçidi.** Bilinmeyen biletler için dakikada en çok 5 `console.denied` / `terminal.denied` denetim olayı
+  yazılır; bastırılanların sayısı olayda görünür. HTTPS ile açılan panel `http://` origin'ini reddeder.
+  `CONSOLE_ALLOWED_ORIGINS` artık gerçekten uygulanır; girdiler `https://host[:port]` biçiminde olmalıdır.
+  *Yapılacak:* `.env` dosyanızda bu değişken varsa biçimine bakın (uymayan girdi yok sayılır ve geçidin günlüğüne
+  `allowed_origin_ignored` yazılır).
+- **Web arayüzü.** Çıkış yapmak ya da oturumun sona ermesi o tarayıcıdaki tarayıcı bildirimlerini kapatır, taslakları
+  ve son sunucular listesini siler. Next sunucusu artık `X-Frame-Options`, `X-Content-Type-Options`,
+  `Referrer-Policy` ve `frame-ancestors 'none'` başlıklarını kendisi gönderir. Giriş sayfasındaki `next` parametresi,
+  normalleştirildiğinde başka bir siteye giden yolları kabul etmez.
+
+### Yükseltmeden sonra (bu tur)
+
+- `docker compose restart proxy` çalıştırın; denetim kaydında yeni girişlerin IP adresi doğru görünmeli.
+- Yeni bir yedek alın (`sudo sh scripts/install.sh backup`); `backups/` altında `.hmac` dosyası oluşmalı.
+- Param kullanıyorsanız "onay bekliyor" ödemeleri kimin izleyeceğini belirleyin.
+- Dizin ya da SSO kullanıyorsanız bir dizin hesabıyla ve yerel yönetici hesabıyla giriş deneyin.
+- Yönetim → Sunucular → İşlemler'de `CLONE_SOURCE_GONE` ile başarısız olmuş kopya siparişi var mı bakın.
+
+## Önceki tur: baştan sona denetim
+
+Buradan sayfanın sonuna kadarki bölümler, API, worker, web arayüzü, adaptörler ve kurulum betiğinin baştan sona
+denetlendiği önceki tura aittir. Her madde neyin değiştiğini ve yükseltmeden sonraki **ilk tahsilat
+çalıştırmasının** ya da **ilk başlatmanın** mevcut veriye ne yaptığını söyler. O turun veri değişiklikleri
 `apps/api/migrations` altındaki `070`, `071`, `072` ve `073` numaralı dosyalardadır; yükseltme sırasında kendiliğinden
 uygulanır.
 

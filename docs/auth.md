@@ -47,7 +47,10 @@ denetim kaydına `admin.user.<işlem>` olarak yazılır:
 - süreli veya kalıcı yasaklama (gerekçeyle); yasaklanınca oturumlar ve konsollar hemen kapanır;
 - parola belirleme;
 - oturumları listeleme ve kapatma;
-- kullanıcı adına giriş: 1 saatlik oturumdur; panelde uyarı şeridi gösterilir ve tek tıkla kendi hesabına dönülür;
+- kullanıcı adına giriş: 1 saatlik oturumdur; panelde uyarı şeridi gösterilir ve tek tıkla kendi hesabına dönülür.
+  Bu oturumda hesapta kalıcı iz bırakan işlemler reddedilir (`NOT_WHILE_IMPERSONATING`): passkey ve bağlı hesap
+  ekleme, API anahtarı, webhook, tarayıcı bildirimi ve mesajlaşma bağlantısı oluşturma, parola, telefon ve iki adımlı
+  doğrulama değişikliği;
 - silme: kullanıcının sunucusu varsa reddedilir (`USER_HAS_SERVERS`).
 
 ## İlk yönetici
@@ -80,6 +83,17 @@ Kurulum betiği tekrar çalıştırıldığında yöneticiye ve sırlara dokunma
 Kayıt, giriş, çıkış, oturumlar, parola değiştirme/sıfırlama ve passkey'ler
 [better-auth](https://www.better-auth.com) ile yönetilir (`apps/api/src/better-auth.ts`).
 Uç noktalar `/api/auth/*` altındadır; Fastify bunları better-auth'a iletir.
+- **Yalnızca panelin kullandığı rotalar açıktır.** better-auth ve eklentilerinin getirdiği rotalardan panelin
+  kullandıkları bir izin listesindedir (`panelPaths`, `better-auth.ts`; `/admin/*` rotalarının kendi listesi vardır).
+  Listede olmayan her rota `404` döner: telefon numarasıyla giriş, telefonla parola sıfırlama, e-posta değiştirme,
+  hesap silme ve benzerleri. Sonradan eklenen bir eklentinin rotası listeye yazılana kadar kapalıdır. Sağlayıcının
+  kimlik belirtecini (ID token) `/sign-in/social` ya da `/link-social` rotasına göndererek giriş reddedilir.
+- **Gövde ve alan sınırları:** `/api/auth/*` istek gövdesi 64 KB, API'nin geri kalanında JSON gövdesi 256 KB ile
+  sınırlıdır (talep ve itiraz ekleri 9 MB, marka dosyaları 1 MB; Caddy `/api/*` için 10 MB üst sınır koyar). 254
+  karakterden uzun e-posta, kullanıcı adı ya da telefon reddedilir; denetim kaydına yazılan metinler kısaltılır.
+- **Bağlantılar ve yönlendirmeler:** parola sıfırlama ve giriş bağlantıları isteğin geldiği host adını değil, panelin
+  ayarlı adresini taşır (adres henüz ayarlı değilse isteğinkini). Yönlendirme hedefleri (`callbackURL` ve benzerleri)
+  yalnızca panel içi bir yol olabilir.
 - Kullanıcılar mevcut `users` tablosunda kalır. better-auth tabloları `auth_sessions`,
   `auth_accounts`, `auth_verifications` ve `auth_passkeys`'tir (migration 007).
   Eski parola özetleri `auth_accounts`'a taşınır; eski hesaplar aynı parolayla girer.
@@ -93,7 +107,10 @@ Uç noktalar `/api/auth/*` altındadır; Fastify bunları better-auth'a iletir.
 - Kullanıcı Hesap sayfasında açık oturumlarını görür ve tek tek kapatabilir. Parola
   değiştirirken diğer oturumları kapatma seçeneği vardır.
 - Bir oturum hangi yolla biterse bitsin (çıkış, iptal, parola sıfırlama), o oturumla açılmış
-  tarayıcı konsolları da kapatılır.
+  tarayıcı konsolları da kapatılır. Kullanıcının erişimi daraldığında (rol ya da izin azaltma) ve iki adımlı
+  doğrulaması kapatıldığında ya da sıfırlandığında da açık konsolları ve host terminalleri kapanır.
+- Personel bir kullanıcının oturumlarını kapattığında (yasaklama, oturum iptali, parola atama) ya da parola
+  sıfırlandığında o hesabın tarayıcı bildirimi abonelikleri de silinir.
 
 ## Passkey'ler
 Kullanıcı Hesap sayfasından passkey ekler (`@better-auth/passkey`, WebAuthn). Giriş sayfasında
@@ -101,6 +118,9 @@ Kullanıcı Hesap sayfasından passkey ekler (`@better-auth/passkey`, WebAuthn).
 panelin açıldığı alan adına bağlıdır (RP ID isteğin host'undan alınır). Alan adı değişirse
 passkey'ler yeniden eklenmelidir. Tarayıcılar WebAuthn'i yalnızca HTTPS'te veya `localhost`'ta
 açar. Gerçek bir doğrulayıcıyla (Touch ID, Windows Hello, güvenlik anahtarı) henüz denenmedi.
+Passkey ile giriş denetim kaydına yazılır ve giriş bildirimi gönderir; passkey ekleme ve kaldırma
+`auth.passkey_added` / `auth.passkey_removed` olarak kaydedilir ve ekleme hesaba bildirilir. Dizin ve SSO hesapları
+passkey ile giremez.
 
 ## Parola sıfırlama (e-posta)
 E-posta gönderimi ayarlıysa giriş sayfasında "Parolamı unuttum" bağlantısı görünür. E-posta panelden ayarlanır
@@ -128,12 +148,16 @@ Hesabım → Güvenlik'ten açılır (better-auth `twoFactor` eklentisi):
 - **Bu cihaza güven:** 30 gün boyunca bu tarayıcıda ikinci adım sorulmaz.
 - **Kilitlenme:** 10 hatalı denemeden sonra doğrulama 15 dakika kilitlenir.
 - Passkey ile giriş, iki adımlı doğrulamanın yerini tutar.
+- İki adımlı doğrulaması açık hesaplar e-posta koduyla ya da giriş bağlantısıyla giremez (`TWO_FACTOR_USE_PASSWORD`):
+  posta kutusundaki bir bağlantı tek etkendir.
 
 İçgörüler, iki adımlı doğrulaması kapalı yöneticileri gösterir.
 
 ## Telefon numarası
 Kullanıcı numarasını SMS koduyla doğrular (better-auth `phoneNumber` eklentisi; E.164 biçimi; kod 5
-dakika geçerli, en fazla 5 deneme). Doğrulanmış numaraya SMS ile iki adımlı doğrulama kodu ve SMS
+dakika geçerli, en fazla 5 deneme). Eklenti yalnızca bunun için açıktır: kod yalnızca oturum açmış kişiye gönderilir
+ve yalnızca onun numarasını doğrular; telefon numarasıyla giriş ve telefonla parola sıfırlama rotaları kapalıdır
+(`404`). Doğrulanmış numaraya SMS ile iki adımlı doğrulama kodu ve SMS
 bildirimleri gönderilebilir. SMS ayarlanmamışsa bu bölüm bilgilendirme gösterir.
 
 ## Son giriş yöntemi
@@ -238,7 +262,13 @@ Ayarlar → Dizin (kod: `ldap.ts`, `directory-signin.ts`, `directory.ts`). Giri�
 bulur, ardından kişinin kendi parolasıyla bind denenir. Başarılı girişte hesap oluşturulur ya da adı ve (grup eşlemesi varsa)
 rolleri güncellenir; ardından better-auth'un normal girişi sürer, böylece iki adımlı doğrulama, oturumlar, hız sınırları ve
 denetim kaydı herkes için aynıdır. Dizin hesaplarının parolası panelde değiştirilemez veya sıfırlanamaz; dizin hata verirse
-eski parola özetiyle de girilemez. Yerel hesaplar (ilk yönetici gibi) etkilenmez. Testler gerçek bir OpenLDAP ile çalışır
+eski parola özetiyle de girilemez. Kural oturumun oluşturulduğu yerde uygulanır: dizin hesabına yalnızca dizinin o
+girişi kabul ettiği anda oturum açılır; e-posta kodu, giriş bağlantısı, passkey, bağlı sosyal hesap ya da kullanıcı
+adıyla girilemez (`PASSWORD_MANAGED_BY_DIRECTORY`) ve dizin girişi kapalıyken dizin hesapları hiç giremez. Dizine,
+adres kuralı, CAPTCHA ve e-posta başına hız sınırından **sonra** sorulur. Dizin ayarını kaydeden kişinin
+izinleri, eşlenen her rolün (varsayılan rol ve grup eşlemeleri) izinlerini kapsamalıdır; yalnızca yöneticiler
+`admin` rolüne eşleyebilir (`403 FORBIDDEN_TARGET`). LDAP adresi değişirse bind parolası yeniden girilir; test
+sonucunda dizin sunucusunun metni gösterilmez, ayrıntı API günlüğüne `ldap_test_failed` olarak yazılır. Yerel hesaplar (ilk yönetici gibi) etkilenmez. Testler gerçek bir OpenLDAP ile çalışır
 (`LDAP_TEST_URL`).
 
 ## Tek oturum açma (OpenID Connect)
@@ -249,5 +279,8 @@ PKCE, kimlik belirtecinin imzası sağlayıcının anahtarlarıyla doğrulanır)
 kurulur, yeniden başlatma gerekmez. SSO hesapları kendine aittir (`auth_source = 'oidc'`): bir panel ya da dizin
 hesabının e-posta adresi sağlayıcı tarafından ele geçirilemez, bağlama reddedilir. Roller her girişte gruplara
 göre güncellenir (eşleme varsa), rolün adres sınırları uygulanır; parola panelde değiştirilemez/sıfırlanamaz ve
-panel bu hesaplardan kendi iki adımlı doğrulamasını istemez. Testler süreç içinde çalışan sahte bir sağlayıcıyla
+panel bu hesaplardan kendi iki adımlı doğrulamasını istemez. SSO hesabına yalnızca sağlayıcının geri dönüş
+(`/callback`) akışından oturum açılır; e-posta kodu, giriş bağlantısı, passkey ya da gönderilen bir kimlik belirteci
+ile girilemez. Ayarı kaydetmek için dizindeki aynı rol kuralı geçerlidir (`FORBIDDEN_TARGET`); issuer değişirse
+client secret yeniden girilir. Testler süreç içinde çalışan sahte bir sağlayıcıyla
 (RS256 imzalı belirteç) yapılır. Kod: `apps/api/src/sso.ts`, `directory.ts`.

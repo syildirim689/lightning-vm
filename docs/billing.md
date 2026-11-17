@@ -43,7 +43,7 @@ elle de tetikleyebilir.
 | PayTR | iFrame (3D) | Yok (kart saklama Direkt API ister) | `/odeme/iade` | Bildirim URL'si PayTR panelinde girilir: `https://<panel>/api/billing/callback/paytr` |
 | Stripe | Checkout (3D) | Var (off-session) | `/v1/refunds` | Türkiye'de kurulu şirketleri kabul etmiyor. Webhook yok: ödeme, müşterinin tarayıcısı panele döndüğünde ya da tahsilat çalıştırması Stripe'a yeniden sorduğunda işlenir |
 | Craftgate | Ortak Ödeme Formu (3D) | Var (3D'siz POS gerekir) | `/payment/v1/refunds` | Sonuç `checkout-payments/{token}` ile doğrulanır |
-| Param | Ortak Ödeme Sayfası (3D) | Yok | `TP_Islem_Iptal_Iade_Kismi2` | IP izni gerekir; TMSF kayyımı haberi var. Dönüş Param'a ayrıca sorulmaz: özet (hash), GUID ve işlem numarası denetlenir |
+| Param | Ortak Ödeme Sayfası (3D) | Yok | `TP_Islem_Iptal_Iade_Kismi2` | IP izni gerekir; TMSF kayyımı haberi var. Yalnızca TRY. Dönüş ödemeyi işlemez: ödeme "onay bekliyor" kalır, personel Param panelinde doğrulayıp faturayı elle kapatır ([payments.md](payments.md#param-elle-onay)) |
 
 Ayarlar → Ödeme'deki diğer 41 sağlayıcının (bankalar, diğer ödeme kuruluşları, Papara, PayPal, Mollie, Adyen ve
 benzerleri) yalnızca bilgileri kaydedilip sınanabilir; tahsilatları yazılmadı ve müşteriye ödeme yöntemi olarak
@@ -56,8 +56,9 @@ Bilinen iki açık:
   ödeme hemen işlenmez; tahsilat çalıştırması (beş dakikada bir) açık kalan ödemeyi başladıktan beş dakika sonra
   Stripe'a sormaya başlar ve sonucu işler, bir gün içinde ödenmeyen ödemeyi "süresi doldu" olarak kapatır. Aynı
   yeniden sorma iyzico ve Craftgate'te de vardır; PayTR ve Param'da yoktur.
-- **Param:** dönüşün doğruluğu yalnızca özet, GUID ve işlem numarasına dayanır; bunlar aynı üye işyerinin bir dönüşünü
-  görmüş biri tarafından üretilebilir. Param'dan gelen ödemeleri hesap ekstresiyle karşılaştırın.
+- **Param:** dönüş Param'a sorularak doğrulanamadığı için ödemenin kanıtı sayılmaz. Başarılı bir dönüş ödemeyi
+  "onay bekliyor" (`NEEDS_CONFIRMATION`) olarak bırakır; personel tahsilatı Param panelinde görüp faturayı elle
+  kapatır. Kendiliğinden işleyen bir Param tahsilatı yoktur ([payments.md](payments.md#param-elle-onay)).
 
 ## Saatlik kullanım, bütçe ve boyut değişikliği
 

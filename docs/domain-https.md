@@ -78,6 +78,16 @@ Panel `127.0.0.1:8080` üzerinde düz HTTP dinler; TLS'i önünüzdeki proxy son
   port yayını üzerinden bağlandığı için Caddy bağlantıyı bu adresten gelmiş görür.
 - `trusted_proxies_strict` açıktır: başlık sağdan sola okunur. Bu yüzden istemcinin kendisinin
   eklediği sahte değerler kullanılmaz.
+- **Caddy içeriye tek istemci adresi gönderir.** API'ye, web'e ve konsol geçidine giden isteklerde
+  `X-Forwarded-For` başlığı Caddy'nin kendi bulduğu adresle (`{client_ip}`) **değiştirilir**; gelen zincir ve onunla
+  birlikte istemcinin başa yazdığı değerler içeriye ulaşmaz. `Forwarded` ve `X-Real-IP` başlıkları silinir. Bunun
+  için **Caddy 2.7 ya da yenisi** gerekir (`docker compose exec proxy caddy version`; eskiyse
+  `docker compose pull proxy`). Yükseltmeden sonra proxy'yi yeniden başlatın: `docker compose restart proxy`.
+- Parola sıfırlama ve giriş bağlantıları isteğin `Host` / `X-Forwarded-Host` başlığını değil, panelin ayarlı adresini
+  taşır; önünüzdeki proxy yabancı bir host adını içeriye geçirse bile postadaki bağlantı değişmez.
+- Caddy `/api/*` isteklerinin gövdesini 10 MB ile sınırlar (API'nin kendi rota sınırları daha küçüktür). Önünüzdeki
+  proxy'de daha küçük bir sınır varsa (Nginx'in varsayılan `client_max_body_size` değeri 1 MB'tır) 9 MB'a kadar olan
+  talep ekleri orada reddedilir; gerekiyorsa yükseltin.
 
 Önemli: bu ayarla, aynı sunucuda çalışan herhangi bir süreç de güvenilen kaynak sayılır.
 
@@ -110,6 +120,10 @@ Bu ayarların doğru olması gerekir, çünkü:
   proxy'nin IP'sini görür.
 
 Traefik veya başka bir Caddy kullanıyorsanız aynı başlıkları iletin ve WebSocket desteğini açın.
+
+Panelin kendi Caddy'sini atlayıp API'nin önüne doğrudan başka bir proxy koyarsanız (desteklenen kurulum değildir), o
+proxy de API'ye **tek** istemci adresi göndermeli ve `.env` içindeki `TRUSTED_PROXIES` yalnızca o proxy'yi
+listelemelidir.
 
 ## 4. Cloudflare (isteğe bağlı)
 Cloudflare zorunlu değildir.

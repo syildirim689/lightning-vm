@@ -64,7 +64,7 @@ simulator, and of the six newer adapters only Incus (containers) ran against a r
 |---|---|---|
 | Monthly subscriptions, invoices, collection, suspension | everyone (through WHMCS etc.) | Yes, built in (no WHMCS needed) |
 | Pro-rata charge on upgrade | HostBill, WGS | **New** |
-| Balance top-up, saved cards, Turkish payment providers | — | Yes: iyzico, PayTR, Stripe, Craftgate, Param take payments (none tried with a real merchant account). The other 41 providers in Settings are credential forms only |
+| Balance top-up, saved cards, Turkish payment providers | — | Yes: iyzico, PayTR, Stripe and Craftgate take payments; Param payments are confirmed by staff by hand, TRY only (none tried with a real merchant account). The other 41 providers in Settings are credential forms only |
 | e-Fatura / e-Arşiv | — | Yes: seven integrators written; only İzibiz and Uyumsoft were sent a real e-Arşiv invoice (in their test systems), the other five were written from their documents and not tried |
 | Hourly pay-as-you-go | AutoVM, Virtualizor, VirtFusion, HostBill | **New**: paid from the balance, with a hold when it runs out and a monthly usage invoice |
 | WHMCS / WISECP module | AutoVM, everyone | **New**: `integrations/` (WHMCS server module; WISECP module not tried on a WISECP install) |
