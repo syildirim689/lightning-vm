@@ -77,8 +77,18 @@ Bilinen iki açık:
   Param tahsilatı yoktur ([payments.md](payments.md#param-elle-onay)).
 
 İncelemede bekleyen ödemeler (Param'ın onay bekleyenleri, tutarı tutmayanlar, sağlayıcının incelemeye aldıkları)
-`GET /api/admin/billing/payments?status=review` ile listelenir ve özetin `paymentsInReview` alanında sayılır. Bir ödeme
-incelemeye girdiğinde personele **bildirim gitmez** ([payments.md](payments.md#incelemedeki-ödemeler)).
+Yönetim → Faturalandırma → Ödemeler'de "İnceleme bekleyen" süzgeciyle (API: `GET /api/admin/billing/payments?status=review`)
+listelenir ve özetin `paymentsInReview` alanında sayılır. Bir ödeme incelemeye girdiğinde `billing.manage` izni olan
+personele `billing.payment_review` bildirimi gider; karar yine elle verilir
+([payments.md](payments.md#incelemedeki-ödemeler)).
+
+Müşterinin Genel bakış sayfasındaki **Yaklaşan ödemeler** bloğu yeni bir hesap yapmaz; faturalama özetinden ve fatura
+listesinden okur: vadesi geçmiş ya da 7 gün içinde dolacak ödenmemiş faturalar (bakiye yükleme faturaları hariç, en
+çok üçü "Öde" bağlantısıyla), sıradaki yenileme (dönem sonunda iptal edilecek abonelikler hariç; aynı para biriminde
+bir gün içinde yenilenenler tek satırda toplanır) ve saatlik kullanımda bakiyenin bugünkü hızla ne zaman biteceği
+(üç günden az kaldıysa uyarı rengiyle ve, bakiye yükleme açıksa, "Bakiye yükle" bağlantısıyla). Gösterecek bir şey yoksa blok hiç çizilmez.
+Sınırlar: yenileme tutarı aboneliğin **vergisiz** tutarıdır ve aynı yenileme, yenilemeden önceki günlerde vadesi
+yaklaşan fatura olarak da görünebilir.
 
 ## Saatlik kullanım, bütçe ve boyut değişikliği
 

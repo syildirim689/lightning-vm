@@ -192,8 +192,10 @@ tarafından kanıtlanmış sayılır ve hesapta o ana kadar kurulmuş olanlar **
 
 Sunucular, faturalar ve talepler kalır. Olay denetim kaydına `auth.address_proven` olarak yazılır; sonrasında adres
 doğrulanmıştır ve bir daha hiçbir şey silinmez. Parolayla kaydolup sonradan bağlantı ya da kodla giren müşteri
-"Parolamı unuttum" ile yeni bir parola belirler. **Kullanıcıya bu silme için ayrı bir bildirim gösterilmez**
-(bilinen eksik). Personelin bir adresi Yönetim → Kullanıcılar'dan elle doğrulanmış işaretlemesi sahibin kanıtı
+"Parolamı unuttum" ile yeni bir parola belirler. Hesaptan bir şey silindiyse kullanıcıya `auth.credentials_reset`
+("Giriş bilgileri sıfırlandı") bildirimi gider (varsayılan kanallar panel ve e-posta): ne olduğunu, neyin
+kaldırıldığını ve yeni parolanın nasıl belirleneceğini söyler. Silinecek hiçbir şeyi olmayan hesaba (örneğin
+personelin açtığı ve ilk kez girilen hesap) bildirim gitmez. Personelin bir adresi Yönetim → Kullanıcılar'dan elle doğrulanmış işaretlemesi sahibin kanıtı
 değildir ve hiçbir şeyi silmez.
 
 ## Yalnızca yöneticinin değiştirebildiği ayarlar

@@ -97,10 +97,48 @@ Kurallar `apps/api/src/smart-rules.ts` içindedir ve birim testleri vardır. Ver
   - Seçimler URL'de tutulur (`?q=&state=&tag=&sort=`), bu yüzden görünüm yer imine eklenebilir.
 - **CSV indir** (yönetici): süzgeçten geçen satırlar UTF-8 BOM ile indirilir. `= + - @` ile başlayan hücreler
   formül olarak çalışmasın diye başına `'` eklenir.
-- **Bağlan kartı:** IP, `ssh root@IP` ve `scp` komutları tek tıkla kopyalanır.
+- **Bağlan kartı:** IP, `ssh root@IP` ve `scp` komutları tek tıkla kopyalanır. IP adresleri bölümünde her adresin
+  ve PTR kaydının da kopyalama düğmesi vardır.
+- **Kopyalama düğmeleri:** pano API'si yalnızca HTTPS'te (ve localhost'ta) vardır; düz HTTP ile açılmış panelde
+  düğmeler metni gizli bir alanda seçip tarayıcıya kopyalatır. "Kopyalandı" yalnızca gerçekten kopyalandıysa
+  söylenir; olmadıysa metni elle kopyalamanızı isteyen bir uyarı çıkar.
+- **Sunucu kartının menüsü:** listeden çıkmadan konsol, açma, SSH komutu ve destek talebinin yanında ad değiştirme,
+  kilitleme / kilidi açma ve silme. Ad değiştirme ve silme, sunucu sayfasındaki formla bir pencerede açılır; silme
+  orada olduğu gibi sunucunun adını yazdırır, bekleme süresini ve kilidi gösterir. Kapatma ve zorla kapatma sunucu
+  sayfasında kalır.
+- **Yeniden kurulum özeti:** pencere, ad yazılmadan önce imajın neyden neye döneceğini, neyin kalacağını (IP
+  adresleri, güvenlik duvarları, plan, fiyat, sunucu adı) ve neyin silineceğini (diskteki tüm veriler ve anlık
+  görüntüler) gösterir.
 - **Benzerini sipariş et:** sipariş formu aynı lokasyon, şablon ve boyutla (paket veya özel) açılır. Ad olarak
   sıradaki boş `ad-N` önerilir. VDC sunucularında bu düğme yoktur.
-- **Son açılanlar:** komut paleti, bu tarayıcıda son açılan 5 sunucuyu gösterir (`localStorage`).
+- **Sipariş bağlantısı:** sipariş sayfasındaki "Bu yapılandırmanın bağlantısını kopyala" düğmesi seçimi bir adrese
+  çevirir: `/order?loc=…&pkg=…&image=…&period=…` (özel boyutta `pkg` yerine `cpu`, `ram`, `disk`). Bağlantıya yalnızca
+  konum, imaj, plan ve ödeme dönemi girer; ad, SSH anahtarı, parola, kupon, proje ve firewall girmez. Bağlantı
+  güvenilmeyen metin olarak okunur: her değer katalogla karşılaştırılır, katalogda olmayan ya da aralık dışındaki
+  değer yok sayılır, saatlik dönem yalnızca hesapta saatlik ödeme açıksa alınır. Okunduktan sonra adres temizlenir.
+  Hiçbir değer kullanılamıyorsa seçimler değişmez ve bir uyarı gösterilir.
+- **Son açılanlar:** komut paleti, bu tarayıcıda son açılan 8 sunucu, destek talebi ve faturayı gösterir
+  (`localStorage`; oturum kapanınca silinir).
+- **Komut paletinde faturalar ve hızlı işlemler:** fatura numarasıyla arama. Müşteri kendi faturalarında arar;
+  `billing.view` izni olan personel için arama, iki karakterden sonra yönetimdeki fatura listesinin aramasına
+  (numara, alıcı adı ya da e-posta) sorulur. Hızlı işlemler: yeni sunucu, yeni destek talebi, bakiye yükleme
+  (bakiye yükleme açıksa), SSH anahtarı ekleme. Açık ve kilitli olmayan bir sunucu paletten sıfırlanabilir; sıfırlama
+  önce onay sorar.
+- **Adreste tutulan süzgeçler (yönetim):** Kötüye kullanım sayfasında sekme, arama ve kutu süzgeci
+  (`?tab=&q=&only=`); Faturalandırma'da her listenin durumu ve araması (`?tab=&status=&q=`). Liste bağlantı olarak
+  paylaşılabilir, Geri tuşu aynı görünüme döner.
+- **Yönetim menüsündeki sayaçlar** (`GET /admin/attention`): Faturalandırma'nın yanında inceleme bekleyen ödemeler,
+  Sunucular'ın yanında son 24 saatte başarısız olan işlemler, Kötüye kullanım'ın yanında açık bulgular. Dakikada bir
+  okunur. Her alan yalnızca ilgili sayfayı açabilen personele gelir (`billing.view`; `servers.view_all` ya da
+  `dashboard.view`; `servers.view_all`); müşteri hesapları `403` alır. Aynı yanıt geri yükleme beklemesini de taşır:
+  panel beklemedeyken personel her sayfanın üstünde bir şerit görür, serbest bırakabilenler (`system.view` ve
+  `system.update`) için Sistem sayfasına bağlantıyla.
+- **Yeni içgörüler:** personelde `RESTORE_HOLD` (panel geri yüklemeden sonra beklemede), `OPERATIONS_NEED_DECISION`
+  (son 14 günde `OUTCOME_UNKNOWN` ya da `VM_MISMATCH` ile bitmiş, sunucusunda sonrasında başarılı işlem olmayan
+  işlemler; kendiliğinden yeniden denenmez) ve `PAYMENTS_IN_REVIEW` (`billing.view` izni olanlara). Müşteride
+  `SNAPSHOTS_OLD`: 30 günden eski anlık görüntüler. Yalnızca panelden 30 günden önce anlık görüntü alınmış sunuculara
+  (en çok 20) bakılır; liste platforma sorulur ve altı saat saklanır, birkaç saniyede yanıt vermeyen platform atlanır;
+  yedeğin aldığı kısa ömürlü anlık görüntü sayılmaz. Gerçek bir platformda denenmedi.
 
 ## Güç zamanlaması ve toplu işlemler
 

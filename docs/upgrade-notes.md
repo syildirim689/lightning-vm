@@ -5,6 +5,38 @@ madde neyin değiştiğini ve işletmecinin yapması gereken bir şey varsa onu 
 davranışı değiştirmeyen işler burada yoktur. Tahsilat çalıştırması API içinde beş dakikada bir çalışır; yani "ilk
 çalıştırma" yükseltmeden birkaç dakika sonradır.
 
+## Günlük işleri kısaltan eklemeler (2026-11-17)
+
+İkinci güvenlik turundan sonra eklenen arayüz ve bildirim işleri. **İşletmecinin yapacağı bir şey yoktur.** Veri
+değişikliği `apps/api/migrations/081_payment_review_since.sql` dosyasındadır (`payments.review_since`: ödemenin ne
+zamandan beri inceleme beklediği) ve yükseltme sırasında kendiliğinden uygulanır; o anda inceleme bekleyen ödemelerde
+süre ödemenin başladığı andan sayılır.
+
+- **İki yeni bildirim türü, varsayılanı panel ve e-posta.** `billing.payment_review`: bir ödeme incelemeye girdiğinde
+  `billing.manage` izni olan personele, ödeme başına bir kez. `auth.credentials_reset`: adresin ilk kanıtında hesaptan
+  bir şey silindiyse kullanıcıya. İkisi de Ayarlar → Bildirim kuralları'nda görünür; istemiyorsanız oradan kapatın.
+  Aşağıdaki ikinci tur notlarında "bildirim gitmez / gösterilmez" diye yazılanlar bu sürümle değişti.
+- **İnceleme bekleyen ödemeler panelde.** Yönetim → Faturalandırma → Ödemeler'de "İnceleme bekleyen" süzgeci ve
+  arama (adreste tutulur), her ödemede gerekçe, bekleme süresi ve faturaya bağlantı; özetin üstünde uyarı. Karar yine
+  elledir: faturanın sayfasındaki "Ödeme kaydet" ([payments.md](payments.md#incelemedeki-ödemeler)).
+- **Yönetim menüsünde sayaçlar ve bekleme şeridi.** Faturalandırma (inceleme bekleyen ödemeler), Sunucular (son 24
+  saatte başarısız işlemler) ve Kötüye kullanım (açık bulgular) girişlerinin yanında sayı görünür; geri yükleme
+  beklemesi personele her sayfanın üstünde bir şeritle söylenir. İkisi de dakikada bir `GET /api/admin/attention`
+  rotasından okunur; her alan yalnızca ilgili sayfayı açabilen personele gelir, müşteri hesapları `403` alır.
+- **Yeni içgörüler.** Personel: inceleme bekleyen ödemeler (`PAYMENTS_IN_REVIEW`, `billing.view` izni olanlara), geri
+  yükleme beklemesi (`RESTORE_HOLD`) ve son 14 günde `OUTCOME_UNKNOWN` ya da `VM_MISMATCH` ile bitip sonrasında
+  başarılı bir işlemi olmayan sunucular (`OPERATIONS_NEED_DECISION`). Müşteri: 30 günden eski anlık görüntüler
+  (`SNAPSHOTS_OLD`; yalnızca panelden 30 günden önce anlık görüntü alınmış sunuculara bakılır, liste platforma
+  sorulur ve altı saat saklanır, yanıt vermeyen platform atlanır).
+- **Müşteri tarafı.** Genel bakışta "Yaklaşan ödemeler"; komut paletinde fatura arama, son açılan talepler ve
+  faturalar, hızlı işlemler; sipariş sayfasında paylaşılabilir yapılandırma bağlantısı; sunucu kartının menüsünde ad
+  değiştirme, kilit ve silme; düz HTTP'de de çalışan ve kopyalanamadığında bunu söyleyen kopyalama düğmeleri; yeniden
+  kurulum penceresinde önce / sonra özeti ([operations-modules.md](operations-modules.md)).
+- **Sınırlar.** "Yaklaşan ödemeler"deki yenileme tutarı vergisizdir ve aynı yenileme, yenilemeden önceki günlerde
+  vadesi yaklaşan fatura olarak da görünebilir. Yeni ekranlar yazıldığı sırada tarayıcıda elle gözden geçirilmedi;
+  uçtan uca testler yalnızca sipariş bağlantısının okunmasını ve komut paletinden fatura bulunmasını kapsar. Anlık
+  görüntü önerisi gerçek bir platformda denenmedi.
+
 ## Güvenlik denetimi, ikinci tur (2026-11-17)
 
 `d9f90d3` commit'i üzerinde yapılan ikinci denetim turunun ([security-audit.md](security-audit.md)) düzeltmeleri:
@@ -45,8 +77,9 @@ oturumların sonu); yükseltme sırasında kendiliğinden uygulanır.
   kimliğiyle eşleştirin.
 - **İncelemedeki ödemelerin listesi.** Yönetici API'sinde `payments?status=review` incelemede bekleyen ödemeleri
   (onay bekleyen Param ödemeleri, tutarı tutmayanlar, sağlayıcının incelemeye aldıkları) en eskiden başlayarak
-  listeler; faturalama özeti bunların sayısını `paymentsInReview` alanında verir. Bir ödeme incelemeye girdiğinde
-  personele **bildirim gitmez**; listeye düzenli bakın.
+  listeler; faturalama özeti bunların sayısını `paymentsInReview` alanında verir. Bu turda bir ödeme incelemeye
+  girdiğinde personele bildirim gitmiyordu; sonraki sürümle `billing.payment_review` bildirimi ve paneldeki
+  "İnceleme bekleyen" süzgeci eklendi (yukarıda).
 - **Adres değişince sırlar yeniden girilir (ödeme ve e-Fatura).** Bir ödeme sağlayıcısının ya da e-Fatura
   entegratörünün API adresi değiştirildiğinde kayıtlı gizli alanlar (anahtar, parola) yeniden yazılmalıdır; boş
   bırakılırsa alan `REQUIRED` hatası verir. Test düğmesi de aynı kurala uyar.
@@ -165,7 +198,8 @@ oturumların sonu); yükseltme sırasında kendiliğinden uygulanır.
   mesajlaşma uygulaması bağlantıları, tarayıcı bildirimi abonelikleri, doğrulanmış telefon numarası ve açılmamış
   (kurulup etkinleştirilmemiş) iki adımlı doğrulama. Neden: panel kayıtta adresi doğrulamadığı için hesabı ilk açan
   kişi adresin sahibi olmayabilir. Parolayla kaydolup sonradan bağlantı ya da kodla giren müşteri "Parolamı unuttum"
-  ile yeni parola belirler. Kullanıcıya bu silme için **ayrı bir bildirim gösterilmez**. Personelin bir adresi elle
+  ile yeni parola belirler. Bu turda kullanıcıya ayrı bir bildirim gösterilmiyordu; sonraki sürümle
+  `auth.credentials_reset` bildirimi eklendi (yukarıda). Personelin bir adresi elle
   doğrulanmış işaretlemesi hiçbir şeyi silmez. *Yapılacak:* bağlantı ya da kodla girişi açtıysanız destek ekibinize
   haber verin.
 - **Giriş kimlikleri metin olmalıdır:** e-posta, kullanıcı adı ya da telefon alanında metin dışı bir değer
@@ -212,8 +246,9 @@ oturumların sonu); yükseltme sırasında kendiliğinden uygulanır.
   başlığı günlüğe yazılmaz. *Yapılacak:* yeni kuralın geçerli olması için proxy'yi ve toplayıcıyı yeniden başlatın.
   Daha önce saklanmış satırlar yeniden yazılmaz; Loki'deki günlükler saklama süresi (7 gün) dolunca silinir.
 - **Web arayüzü.** Panel geri yükleme beklemesindeyken Yönetim → Sistem sayfası "Serbest bırak" düğmeli bir şerit
-  gösterir. Yeniden kurulum penceresi ve yönetimdeki ödemeler sayfası bu turun yeni durumlarını **henüz göstermez**
-  (ödemeler sayfasında incelemedeki ödemeler için ayrı bir görünüm yoktur); bunlar şimdilik API'den okunur.
+  gösterir. Bu turda yeniden kurulum penceresi ve yönetimdeki ödemeler sayfası turun yeni durumlarını göstermiyordu;
+  sonraki sürümle ödemeler sayfasına inceleme görünümü, yeniden kurulum penceresine önce / sonra özeti eklendi
+  (yukarıda).
 
 ### Yükseltmeden sonra (ikinci tur)
 
@@ -232,7 +267,8 @@ oturumların sonu); yükseltme sırasında kendiliğinden uygulanır.
 - Hesap → Bildirimler'den bir e-posta testi gönderin.
 - WHMCS / WISECP kullanıyorsanız modülün günlüğünde `CUSTOMER_NEEDS_REVIEW` arayın ve her hesabı devralma rotasıyla
   ya da hesabı kaldırarak çözün.
-- Param kullanıyorsanız `payments?status=review` listesine kimin bakacağını belirleyin.
+- Param kullanıyorsanız inceleme bekleyen ödemelere (Yönetim → Faturalandırma → Ödemeler → "İnceleme bekleyen")
+  kimin bakacağını belirleyin; `billing.payment_review` bildirimi `billing.manage` izni olanlara gider.
 - Yönetim → Sunucular → İşlemler'de `OUTCOME_UNKNOWN` ve `VM_MISMATCH` ile bitmiş işlem var mı bakın.
 
 ## Güvenlik denetimi, ilk tur (2026-11-17)

@@ -46,6 +46,8 @@ diğerleri eklendi). Güncel ve tam liste koddaki katalogdur; panelde Ayarlar �
 | `auth.sign_in` (yeni giriş) | kullanıcı | panel, e-posta |
 | `auth.password_changed` | kullanıcı | panel, e-posta |
 | `auth.two_factor_changed` | kullanıcı | panel, e-posta |
+| `auth.credentials_reset` (adresin ilk kanıtında giriş bilgileri silindi; [auth.md](auth.md#adresin-ilk-kanıtı-giriş-bağlantısı-ve-e-posta-kodu)) | kullanıcı | panel, e-posta |
+| `billing.payment_review` (ödeme incelemeye girdi, ödeme başına bir kez; [payments.md](payments.md#incelemedeki-ödemeler)) | `billing.manage` izni olanlar | panel, e-posta |
 | `admin.user_registered` | `users.view` izni olanlar | panel |
 | `admin.operation_failed` | `servers.view_all` izni olanlar | panel, tarayıcı |
 | `admin.insight` (kritik içgörü) | `dashboard.view` izni olanlar | panel, e-posta |
@@ -57,6 +59,11 @@ Kritik içgörüler 10 dakikada bir hesaplanır ve her biri en fazla günde bir 
 - takılmış işlem;
 - worker durdu;
 - yedek başarısız.
+
+Geri yükleme beklemesi (`RESTORE_HOLD`) ve karar bekleyen işlemler (`OPERATIONS_NEED_DECISION`) içgörüleri de kritik
+olarak gösterilir ama `admin.insight` ile **gönderilmez**; yalnızca panelde görünür (Genel bakış; geri yükleme
+beklemesi ayrıca personele her sayfanın üstündeki şeritte). İnceleme bekleyen ödemeler kendi bildirimiyle
+(`billing.payment_review`) gider.
 
 Parola sıfırlama bağlantısı, iki adımlı doğrulama kodu ve telefon doğrulama kodu bildirim değildir;
 her zaman kendi kanallarından gider.

@@ -117,8 +117,23 @@ Bu akış da gerçek bir Param üye işyeri hesabıyla denenmedi.
 Personelin kararını bekleyen ödemeler **bekliyor** durumunda ve bir gerekçe koduyla durur: `NEEDS_CONFIRMATION`
 (Param), `AMOUNT_MISMATCH` (tutar ya da para birimi tutmuyor), `FRAUD_REVIEW` (sağlayıcı incelemeye aldı).
 
-- Yönetici API'si: `GET /api/admin/billing/payments?status=review` bunları en eskiden başlayarak listeler; faturalama
-  özeti sayılarını `paymentsInReview` alanında verir.
-- **Bir ödeme incelemeye girdiğinde personele bildirim gitmez** (bilinen eksik); yalnızca günlüğe yazılır. Listeye
-  düzenli bakın: müşteri gerçekten ödemişse faturası bu sırada vadesini geçebilir.
-- Yönetimdeki ödemeler sayfası bu listeyi ayrı bir görünüm olarak **henüz göstermez**.
+- **Panelde:** Yönetim → Faturalandırma → Ödemeler'de "İnceleme bekleyen" süzgeci bunları en eskiden başlayarak
+  listeler. Her satırda durum "İnceleme bekliyor" olarak, gerekçesi ve ne kadardır beklediğiyle görünür; "Faturayı
+  aç" faturanın sayfasına götürür. Arama fatura numarasında, müşterinin e-postasında ve sağlayıcı referansında yapılır.
+  Süzgeç ve arama adreste tutulur (`/admin/billing?tab=payments&status=review&q=…`), yani liste bağlantı olarak
+  paylaşılabilir. Bekleyen ödeme varken faturalandırma özetinin üstünde sayıyı ve en eskisini söyleyen bir uyarı,
+  yönetim menüsünde Faturalandırma'nın yanında bir sayaç (`GET /api/admin/attention`) ve Genel bakış'ta "ödeme
+  inceleme bekliyor" içgörüsü (`PAYMENTS_IN_REVIEW`, `billing.view` izni olanlara) durur.
+- **Karar elledir:** sağlayıcının panelinde kontrol edin. Para geldiyse faturayı açıp "Ödeme kaydet" ile kapatın;
+  gelmediyse bir şey yapmayın, fatura ödeme beklemeye devam eder. Hiçbir ödeme incelemeden kendiliğinden çıkmaz.
+- **Bildirim:** bir ödeme incelemeye girdiğinde `billing.manage` izni olan personele `billing.payment_review`
+  bildirimi gider (varsayılan kanallar panel ve e-posta; Ayarlar → Bildirim kuralları'ndan değiştirilir). Ödeme
+  başına bir kez gönderilir; aynı ödeme için sonradan gelen yanıtlar yeniden bildirmez. Olay günlüğe de yazılır
+  (`payment_needs_review`). Müşteri gerçekten ödemişse faturası bu sırada vadesini geçebilir; bekletmeyin.
+- **Bekleme süresi** `payments.review_since` alanından okunur (migration `081`). Yükseltmeden önce incelemeye girmiş
+  ödemelerde süre ödemenin başladığı andan sayılır. Gerekçe sonradan değişse de süre baştan başlamaz.
+- Yönetici API'si: `GET /api/admin/billing/payments?status=review` (isteğe bağlı `q`) aynı listeyi verir; her
+  satırda `review`, `reviewSince` ve gerekçe olarak `errorCode` bulunur. Faturalama özeti sayıyı ve en eski bekleyeni
+  `paymentsInReview` alanında verir.
+- İnceleme görünümü yazıldığı sırada tarayıcıda elle gözden geçirilmedi ve uçtan uca testi yoktu; bildirim ve liste
+  `security-billing` entegrasyon testlerindedir.

@@ -44,12 +44,15 @@ girmeniz gerekmez. Özelliklerin tamamı yalnızca VMware'de vardır; diğer alt
 
 ### Müşteri paneli
 - **Akıllı sipariş:** paket veya özel kaynak, uygun olmayan paketler gerekçesiyle, en uygun paket, ad önerisi,
-  canlı fiyat ve kota kontrolü
+  canlı fiyat ve kota kontrolü; yapılandırmanın **paylaşılabilir bağlantısı** (yalnız konum, imaj, plan ve ödeme
+  dönemi; ad, SSH anahtarı ve parola bağlantıya girmez, değerler katalogla denetlenir)
 - **Sunucu yönetimi:** aç / kapat / yeniden başlat, silme onayı, işlem geçmişi, CPU-RAM-disk-ağ grafikleri
-  (grafikler yalnız VMware ve Proxmox'ta dolar)
+  (grafikler yalnız VMware ve Proxmox'ta dolar); listedeki kartın menüsünden ad değiştirme, kilitleme / kilidi açma
+  ve silme
 - **Yeniden kurulum, boyut değiştirme, kopyalama:** aynı adresler ve anahtarlarla başka imaj; paket ya da özel boyut
   (disk yalnızca büyür, fark gün hesabıyla, çok aylı dönemlerde kalan ayların tamamı için faturalanır); bir sunucunun
-  diskiyle birlikte kopyası
+  diskiyle birlikte kopyası. Yeniden kurulum penceresi imajın neye dönüşeceğini, neyin kalacağını ve neyin
+  silineceğini önceden özetler
 - **Tarayıcı konsolu** ve **ISO bağlama** (ikisi de yalnız VMware'de), root parolası, uygulama kurulumu (cPanel, Plesk…)
 - **Anlık görüntüler** (snapshot), **ek diskler**, **güç zamanlaması**, etiketler ve notlar; **yedekler** ve geri
   yükleme ile **kişisel imajlar** (sunucuyu imaj olarak kaydedip ondan sipariş verme) yalnız VMware'de
@@ -64,14 +67,20 @@ girmeniz gerekmez. Özelliklerin tamamı yalnızca VMware'de vardır; diğer alt
 - **İşletim sistemi güncellemeleri:** sunucunun içindeki bekleyen ve güvenlik güncellemeleri, "yalnız haber ver / güvenliği kur /
   hepsini kur" politikası, seçilen saatte otomatik yeniden başlatma (Linux: apt, dnf, yum)
 - Faturalar ve ödeme, **saatlik kullanım** (bakiyeden; bakiye bitince bekletme, ay sonunda kullanım faturası),
-  **aylık bütçe uyarısı** (aylık gidiş bütçeyi aşınca ayda bir bildirim; siparişte önceden uyarı), destek talepleri
+  **aylık bütçe uyarısı** (aylık gidiş bütçeyi aşınca ayda bir bildirim; siparişte önceden uyarı), destek talepleri.
+  Genel bakışta **Yaklaşan ödemeler:** vadesi geçmiş ya da 7 gün içinde dolacak faturalar, sıradaki yenileme ve
+  saatlik kullanımda bakiyenin ne zaman biteceği
+- **Komut paleti (Ctrl+K):** sayfa, sunucu, destek talebi ve fatura arama; son açılan sunucular, talepler ve
+  faturalar; hızlı işlemler (yeni destek talebi, bakiye yükleme, yeni sunucu, SSH anahtarı ekleme, onay sorarak
+  sunucuyu sıfırlama)
 - **API anahtarları ve API belgeleri:** arama, süzgeçler, örnek istekler, OpenAPI ve PDF indirme (istekler tarayıcıdan
   çalıştırılamaz). **Webhook'lar:** imzalı, yeniden denenen, teslimat kaydı ve sınama düğmesiyle
 - **Verilerimi indir:** hesabın panelde tutulan verileri tek JSON dosyası olarak (parola, oturum ve gizli anahtarlar hariç)
 - **Özel ağlar** ve **firewall** şablonları (ikisi de yalnız VMware'de, dağıtık anahtarla), ters DNS (PTR), SSH
   anahtarları (GitHub'dan içe aktarma)
 - **Sanal veri merkezi (VDC)** ve ağ topolojisi görünümü
-- Sunucu sağlık puanı, aylık maliyet tahmini, hızlı bağlantı bilgileri
+- Sunucu sağlık puanı, aylık maliyet tahmini, hızlı bağlantı bilgileri; adres ve PTR için kopyalama düğmeleri
+  (kopyalama düz HTTP'de de çalışır, kopyalanamadıysa bunu söyler); 30 günden eski anlık görüntüler için öneri
 
 </td><td valign="top" width="50%">
 
@@ -89,14 +98,17 @@ girmeniz gerekmez. Özelliklerin tamamı yalnızca VMware'de vardır; diğer alt
 - **Mevcut VM'leri devralma:** panel dışında oluşturulmuş bir VM, bir müşterinin sunucusu olur (çalışmaya devam eder)
 - **Taşıma ve host boşaltma** (yalnız VMware): sunucuyu çalışırken başka hosta ya da veri deposuna taşıma, bakım
   öncesi bir hosttaki tüm sunucuları taşıma
-- **İçgörüler:** dolan havuz tahmini, azalan IP, boşta / büyük / küçük sunucular, takılan işler (boşta / büyük /
+- **İçgörüler:** dolan havuz tahmini, azalan IP, boşta / büyük / küçük sunucular, takılan işler, inceleme bekleyen
+  ödemeler, geri yükleme beklemesi, sonucu belirsiz kalıp karar bekleyen işlemler (boşta / büyük /
   küçük sunucu ve sağlık puanı işlemci ölçümüne dayanır; XCP-ng, oVirt, KVM ve Incus'ta işlemci ölçülmediği için
   oralarda anlamlı değildir)
 - **Kullanıcılar ve roller:** izin tabanlı roller, kişiye özel izinler, kullanıcı adına giriş, yasaklama. **Rol
   sınırları:** kota, snapshot / firewall / SSH anahtarı sayısı, saatlik işlem sayısı, oturum süresi, iki adım
   zorunluluğu, izinli konumlar ve izinli IP adresleri. Kullanıcıya **ekip notları** (müşteri görmez, sabitlenebilir)
 - **Kötüye kullanım:** açık riskli port taraması, madencilik şüphesi (uzun süreli tam CPU; işlemcinin ölçüldüğü
-  platformlarda)
+  platformlarda); sekme, arama ve süzgeç adreste tutulur
+- **Menüde sayaçlar:** Faturalandırma (inceleme bekleyen ödemeler), Sunucular (son 24 saatte başarısız işlemler) ve
+  Kötüye kullanım (açık bulgular) girişlerinin yanında; geri yükleme beklemesi personele her sayfanın üstünde görünür
 - **Enerji raporu:** kWh, maliyet ve karbon tahmini (işlemci kullanımından hesaplanır; XCP-ng, oVirt, KVM ve
   Incus'ta anlamlı değildir)
 - **Genel bakışta özet:** son bakışınızdan beri yeni kullanıcı, sunucu, başarısız işlem, kötüye kullanım bulgusu,
@@ -114,6 +126,9 @@ girmeniz gerekmez. Özelliklerin tamamı yalnızca VMware'de vardır; diğer alt
   güncellemeleri, yeniden başlatma; adım adım ilerleme penceresi. Tüm müşteri sunucularının güncelleme durumu tek listede
 - **Kullanıcı ayrıntısı:** doğrulamalar, parola, iki adımlı doğrulama sıfırlama, geçiş anahtarları, bağlı hesaplar,
   oturumlar ve giriş geçmişi
+- **İnceleme bekleyen ödemeler:** Faturalandırma → Ödemeler'de "İnceleme bekleyen" süzgeci ve arama (ikisi de
+  adreste tutulur); her ödemede gerekçe, bekleme süresi ve faturaya bağlantı; özet sayfasında uyarı; ödeme incelemeye
+  girdiğinde personele bildirim
 - **Bayiler**, faturalama, kuponlar, itiraz yönetimi ve e-Fatura / e-Arşiv (yedi entegratörden yalnızca İzibiz ve
   Uyumsoft'a, kendi test ortamlarında gerçek e-Arşiv faturası gönderildi; diğer beşi belgelere göre yazıldı, denenmedi)
 - **WHMCS / WISECP modülleri** (`integrations/`): satışı o sistem yapar, panel bu sunuculara fatura kesmez; sahibi
@@ -141,8 +156,8 @@ girmeniz gerekmez. Özelliklerin tamamı yalnızca VMware'de vardır; diğer alt
   ve özel HTTP API
 - **Ödeme:** kartla tahsilat yalnızca **iyzico, PayTR, Craftgate, Param ve Stripe** ile (ve panelin kendi test
   sağlayıcısıyla) yapılır. Bunlardan **Param'da ödeme kendiliğinden işlenmez:** müşteri Param'ın sayfasında öder,
-  ödeme "onay bekliyor" kalır ve personel tahsilatı Param panelinde görüp faturayı elle kapatır (bir ödeme incelemeye
-  girdiğinde personele bildirim gitmez; liste yönetici API'sinden okunur); Param yalnızca TRY faturalar için sunulur. Listedeki diğer 41 sağlayıcının (Türkiye'deki ödeme kuruluşları, banka sanal POS'ları,
+  ödeme "onay bekliyor" kalır ve personel tahsilatı Param panelinde görüp faturayı elle kapatır (ödeme incelemeye
+  girdiğinde personele bildirim gider; bekleyenler Yönetim → Faturalandırma → Ödemeler'de "İnceleme bekleyen" süzgecindedir); Param yalnızca TRY faturalar için sunulur. Listedeki diğer 41 sağlayıcının (Türkiye'deki ödeme kuruluşları, banka sanal POS'ları,
   Papara, PayPal, Mollie, Adyen, Checkout.com, Razorpay, Square, Paddle) yalnızca hesap bilgileri kaydedilir ve çoğu
   para hareketi olmayan bir sorguyla sınanır; **bunlarla ödeme alınamaz** ([docs/payments.md](docs/payments.md))
 - **CAPTCHA:** Cloudflare Turnstile, reCAPTCHA v2/v3, hCaptcha · **Ters DNS:** PowerDNS
@@ -237,6 +252,7 @@ sunucunun kopyası çıkarılamaz (kopya yalnızca şablondan). Her platformun a
 
 | Ne | Nerede |
 |---|---|
+| **Günlük işleri kısaltan eklemeler (2026-11-17).** *Personel:* inceleme bekleyen ödemeler için süzgeç, arama, gerekçe, bekleme süresi ve faturaya bağlantı; özet sayfasında uyarı ve `billing.payment_review` bildirimi; menüde sayaçlar; geri yükleme beklemesi her sayfada; üç yeni içgörü (inceleme bekleyen ödemeler, geri yükleme beklemesi, karar bekleyen işlemler); kötüye kullanım ve abonelik süzgeçleri adreste. *Müşteri:* "Yaklaşan ödemeler"; komut paletinde fatura arama, son açılan talepler ve faturalar, hızlı işlemler; siparişte paylaşılabilir yapılandırma bağlantısı; sunucu kartı menüsünde ad değiştirme, kilit ve silme; düz HTTP'de de çalışan kopyalama düğmeleri; yeniden kurulumda önce / sonra özeti; 30 günden eski anlık görüntüler için öneri; adresin ilk kanıtında giriş bilgileri silindiğinde `auth.credentials_reset` bildirimi. İşletmecinin yapacağı bir şey yok | Yönetim → Faturalandırma → Ödemeler · yönetim menüsü · Genel bakış (müşteri ve yönetim) · Ctrl+K · Yeni sunucu · Sunucular · sunucu sayfası · [docs/upgrade-notes.md](docs/upgrade-notes.md) |
 | **Güvenlik denetimi, ikinci tur (2026-11-17):** ilk turun incelemediği alanlar ve ilk turun düzeltmelerinin yeniden denetimi; 26 doğrulanmış bulgu (10 orta, 15 düşük, 1 bilgi amaçlı) düzeltildi. İşletmeciyi en çok etkileyenler: geri yüklemeden sonra panel beklemede açılır ve serbest bırakılması gerekir; `install.sh behind-proxy` artık `--public-url` ister; WHMCS / WISECP yalnızca kendi açtığı hesapları eşler (diğerleri için devralma rotası); bildirim e-postaları yeniden gönderiliyor (Node 22'de gönderilmiyordu); Proxmox'ta VM numarası sunucuya bağlanır; yeni hız sınırları. Yükseltmeden sonra proxy ve günlük toplayıcısı yeniden başlatılmalıdır. **Yükseltmeden önce okuyun** | [docs/upgrade-notes.md](docs/upgrade-notes.md) · [docs/security-audit.md](docs/security-audit.md) |
 | **Güvenlik denetimi, ilk tur (2026-11-17):** 22 doğrulanmış bulgu (1 yüksek, 10 orta, 11 düşük) düzeltildi. İşletmeciyi en çok etkileyenler: Param ödemeleri artık elle onaylanır, yedekler imzalanır (eski yedekler yalnızca `--allow-unsigned` ile geri yüklenir), panelin kullanmadığı giriş rotaları kapandı, WHMCS / WISECP sunucuları panelden büyütülemez. Yükseltmeden sonra proxy yeniden başlatılmalıdır. **Yükseltmeden önce okuyun** | [docs/upgrade-notes.md](docs/upgrade-notes.md) · [docs/security-audit.md](docs/security-audit.md) |
 | **Baştan sona denetim (önceki tur):** API, worker, web arayüzü, yedi adaptör ve kurulum betiği gözden geçirildi. İşletmeciyi etkileyen 49 davranış değişikliği var; en önemlileri faturalamada (otomatik yenilemesi kapalı aboneliklere artık fatura kesilir, ödenmeyen sipariş ve veri merkezi faturaları tahsilat adımlarına girer). **Yükseltmeden önce okuyun** | [docs/upgrade-notes.md](docs/upgrade-notes.md) |
@@ -486,12 +502,12 @@ Simülatör (govmomi `vcsim`) gerçek bir vCenter olmadan tüm akışı çalış
 
 | Test | Komut |
 |---|---|
-| API birim testleri (137 test) | `cd apps/api && npm test` |
+| API birim testleri (143 test) | `cd apps/api && npm test` |
 | API entegrasyon testleri (PostgreSQL + Redis; güvenlik denetiminin düzeltmeleri için eklenen `security-auth`, `security-billing` ve `security-servers` testleri bunların içindedir) | `cd apps/api && npm run test:integration` |
-| API entegrasyon testlerinin tamamı (PostgreSQL, Redis, vcsim, VMware adaptörü ve worker'ı Docker'da kendisi kurar). İkinci güvenlik turundan sonra Docker'lı bir Linux sunucusunda çalıştırıldı: 172 testten 168'i geçti, 4'ü PowerDNS, ISO deposu ya da konsol ağ geçidi istediği için atlandı. | `cd apps/api && npm run test:integration:full` |
+| API entegrasyon testlerinin tamamı (PostgreSQL, Redis, vcsim, VMware adaptörü ve worker'ı Docker'da kendisi kurar). Son olarak 2026-11-17'de Docker'lı bir Linux sunucusunda çalıştırıldı: 174 testten 170'i geçti, 4'ü PowerDNS, ISO deposu ya da konsol ağ geçidi istediği için atlandı. | `cd apps/api && npm run test:integration:full` |
 | Go servisleri | `cd services/vmware && go test ./...` |
 | Proxmox (26), XCP-ng (19), oVirt (15), Hyper-V (18), libvirt (19) ve Incus (11 test) adaptörleri | `cd services/proxmox && npm test` (aynısı `services/xcpng`, `services/ovirt`, `services/hyperv`, `services/libvirt` ve `services/incus` için; libvirt'in dört betik testi yalnızca Linux'ta çalışır, başka yerde atlanır) |
-| Web birim testleri (46 test: çeviriler, simgeler, pencere düzenleri ve diğer hesaplar) | `cd apps/web && npm test` |
+| Web birim testleri (70 test: çeviriler, simgeler, pencere düzenleri ve diğer hesaplar) | `cd apps/web && npm test` |
 | Worker (sözdizimi denetimi ve 43 birim testi) | `cd apps/worker && npm run check` |
 | Uçtan uca (Playwright, çalışan bir Compose kurulumuna karşı) | `cd apps/web && npx playwright test` |
 
@@ -503,7 +519,8 @@ CI (`.github/workflows/ci.yaml`): birim işleri (API, web, worker, altı Node ad
 gönderimde, pull request'lerde ve elle çalışır. Servis ya da bütün bir Compose kurulumu isteyen işler (API
 entegrasyon testleri, imaj derlemeleri, kurulum + uçtan uca) yalnızca elle tetiklenir (GitHub Actions → *Run workflow*).
 Adaptör testleri gerçek bir hipervizöre değil, platformu taklit eden sahte sunuculara karşı çalışır. Veritabanı şeması
-`apps/api/migrations` altındaki 80 dosyadadır (`001`–`080`; son dördü, `077`–`080`, ikinci güvenlik turuna aittir) ve
+`apps/api/migrations` altındaki 81 dosyadadır (`001`–`081`; `077`–`080` ikinci güvenlik turuna aittir, `081`
+ödemenin ne zamandan beri inceleme beklediğini tutar) ve
 `migrate` servisiyle kendiliğinden uygulanır. Katkı kuralları: [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## ⚠️ Bilinen sınırlar
@@ -520,10 +537,20 @@ Adaptör testleri gerçek bir hipervizöre değil, platformu taklit eden sahte s
   gün sürer; iyzico ve Craftgate'te de böyledir, PayTR ve Param'da yoktur). **Param:** dönüş Param'a sorularak
   doğrulanamadığı için ödemenin kanıtı sayılmaz: ödeme "onay bekliyor" kalır, personel Param panelinde doğrulayıp
   faturayı elle kapatır; kendiliğinden işleyen bir Param tahsilatı yoktur. Param yalnızca TRY için sunulur ve bu
-  akış **sağlayıcıyla teyit edilmedi**. **İncelemeye giren ödeme için personele bildirim gitmez:** Param'ın onay
-  bekleyen ödemeleri ile tutarı tutmayan ya da sağlayıcının incelemeye aldığı ödemeler yalnızca listede görünür
-  (`payments?status=review`); yönetimdeki ödemeler sayfası bu listeyi henüz ayrı göstermez
+  akış **sağlayıcıyla teyit edilmedi**. **İncelemeye giren ödemeler kendiliğinden kapanmaz:** Param'ın onay
+  bekleyen ödemeleri ile tutarı tutmayan ya da sağlayıcının incelemeye aldığı ödemeler Yönetim → Faturalandırma →
+  Ödemeler'de "İnceleme bekleyen" süzgecinde, gerekçesi ve bekleme süresiyle durur; ödeme incelemeye girdiğinde
+  `billing.manage` izni olan personele bir kez bildirim gider (varsayılan: panel ve e-posta). Karar yine elledir:
+  personel sağlayıcının panelinde doğrular ve faturayı kendi sayfasındaki "Ödeme kaydet" ile kapatır
   ([docs/payments.md](docs/payments.md)).
+- **Yaklaşan ödemeler:** sıradaki yenilemenin tutarı aboneliğin vergisiz tutarıdır; faturada vergi eklenir. Aynı
+  yenileme, yenilemeden önceki günlerde hem "yenileme" satırında hem de vadesi yaklaşan fatura olarak görünebilir.
+- **Yeni ekranlar elle gözden geçirilmedi:** 2026-11-17'de eklenenlerden ikisi (sipariş bağlantısının okunması ve
+  komut paletinden fatura bulunması) tarayıcıda elle gözden geçirilmedi; uçtan uca testler kapsar. Diğerlerinin
+  (ödemeler sayfasının inceleme görünümü, menü sayaçları, her sayfadaki geri yükleme şeridi, "Yaklaşan ödemeler",
+  sunucu kartı menüsü, yeniden kurulum özeti, kopyalama düğmeleri) yazıldığı sırada **uçtan uca testi yoktu ve
+  tarayıcıda elle gözden geçirilmediler**; arkalarındaki hesaplar birim testleriyle sınanır. 30 günden eski anlık
+  görüntü önerisi listeyi platforma sorar; yalnızca sayımı birim testiyle sınandı, gerçek bir platformda denenmedi.
 - **Gerçek hipervizör:** altı yeni adaptörden yalnızca Incus gerçek bir sunucuda çalıştırıldı, o da yalnızca
   konteynerlerle. Proxmox VE, XCP-ng, oVirt, Hyper-V ve KVM (libvirt) adaptörleri **gerçek bir hipervizörde hiç
   çalıştırılmadı**; testleri platformu taklit eden sahte sunuculara karşıdır.
@@ -539,9 +566,10 @@ Adaptör testleri gerçek bir hipervizöre değil, platformu taklit eden sahte s
   değiştirilmedi. Düzeltmeler gerçek hipervizörlerde, gerçek bir Proxmox kümesinde ve gerçek bir Param hesabıyla
   doğrulanmadı; kurulum betiğinin yolları yalnızca sahte dosyalarla denendi
   ([docs/security-audit.md](docs/security-audit.md)).
-- **İkinci güvenlik turundan açık kalanlar:** bir ödeme incelemeye girdiğinde personele bildirim gitmez; adresin ilk
-  kanıtında (aşağıda) önceki parola ve anahtarlar silinirken kullanıcıya ayrı bir bildirim gösterilmez; web
-  arayüzündeki yeniden kurulum penceresi ve yönetimdeki ödemeler sayfası bu turun yeni durumlarını henüz göstermez.
+- **İkinci güvenlik turundan açık kalanlar kapandı (biri kısmen):** ödeme incelemeye girdiğinde personele bildirim
+  gider ve yönetimdeki ödemeler sayfası bekleyenleri ayrı gösterir; adresin ilk kanıtında (aşağıda) hesaptan bir şey
+  silindiyse kullanıcıya `auth.credentials_reset` bildirimi gider (silinecek bir şeyi olmayan hesaba gitmez). Yeniden
+  kurulum penceresine yalnızca neyin kalıp neyin silineceğini gösteren özet eklendi; başka bir şey eklenmedi.
 - **e-Fatura / e-Arşiv:** yalnızca İzibiz ve Uyumsoft'a, yayımladıkları test kullanıcılarıyla e-Arşiv faturası
   gönderildi. Nilvera, EDM, QNB eFinans, BirFatura ve Paraşüt belgelere göre yazıldı ve denenmedi; e-Fatura (mükellef
   alıcı) gönderimi hiçbir gerçek entegratörde denenmedi ([docs/billing.md](docs/billing.md)).
@@ -680,7 +708,9 @@ What is not the same everywhere (the table under "Platform kapsamı" above has e
   billing run asks Stripe again (as for iyzico and Craftgate; not for PayTR and Param). **Param does not settle by
   itself:** its return cannot be confirmed with Param, so the payment stays pending as "awaiting confirmation" and
   staff mark the invoice paid after checking the Param panel. Param is offered for TRY invoices only, and the flow
-  was not confirmed with the provider.
+  was not confirmed with the provider. Payments waiting for staff (Param's unconfirmed returns, another amount,
+  held by the provider) have their own filter under Admin → Billing → Payments, with the reason, the waiting time
+  and a link to the invoice; staff with `billing.manage` are notified once when a payment enters review.
 - **e-Invoice (Turkey):** of seven integrators only İzibiz and Uyumsoft were sent a real e-Arşiv invoice, in their
   test systems.
 - **IPv6:** an optional prefix on an IPv4 pool, one address per server; there are no separate IPv6 pools.
@@ -694,11 +724,11 @@ What is not the same everywhere (the table under "Platform kapsamı" above has e
   after a restore until released, `install.sh behind-proxy` needs `--public-url`, the billing integration matches
   only accounts it created, new send limits; restart the proxy and the log collector after upgrading). Read
   [docs/upgrade-notes.md](docs/upgrade-notes.md) (Turkish) before you update.
-- **Tests:** unit tests: API 137, worker 43, web 46, Proxmox adapter 26, plus the other adapters'. The full
+- **Tests:** unit tests: API 143, worker 43, web 70, Proxmox adapter 26, plus the other adapters'. The full
   integration test runner (`npm run test:integration:full`) sets up PostgreSQL, Redis, the simulator, the VMware
-  adapter and the worker in Docker. Run after the second security round on a Linux host with Docker: 168 of 172 tests passed, 4 were skipped (they need PowerDNS, an ISO storage or the console gateway). It includes the security tests of both rounds
+  adapter and the worker in Docker. Last run on 2026-11-17 on a Linux host with Docker: 170 of 174 tests passed, 4 were skipped (they need PowerDNS, an ISO storage or the console gateway). It includes the security tests of both rounds
   (`security-*.test.mjs`), which run against real PostgreSQL and Redis. Most of the billing behaviour changed in
-  the full-audit round has no integration test of its own. The database schema is 80 migrations (`001`–`080`).
+  the full-audit round has no integration test of its own. The database schema is 81 migrations (`001`–`081`).
 - **Private repository installs:** give `get.sh` the access token with `--token-file FILE` or `GIT_TOKEN` in the
   environment (`sudo --preserve-env=GIT_TOKEN sh`); `--token` works but is visible in the process list.
 - **Backups** are encrypted and signed with `secrets/backup.key` (`NAME.tar.enc` plus `NAME.tar.enc.hmac`). Restore
@@ -709,9 +739,27 @@ What is not the same everywhere (the table under "Platform kapsamı" above has e
   `--no-hold` skips the hold only.
 - **Behind another proxy:** `install.sh behind-proxy` needs the panel's public address
   (`--public-url https://panel.example.com`); mailed links are built from it.
-- **Still open after the second security round:** staff get no notice when a payment enters review; a user gets no
-  notice when earlier credentials are removed at the first proof of an unverified address (first sign-in by e-mail
-  link or code); the web reinstall dialog and the admin payments page do not show the new states yet.
+- **Added on 2026-11-17 (no operator action; migration `081` runs by itself).** Staff: the review filter and search
+  on the payments page (kept in the address), a notice on the billing overview, the `billing.payment_review`
+  notification, counts in the menu next to Billing (payments in review), Servers (operations failed in 24 hours)
+  and Abuse (open findings) from `GET /admin/attention`, the restore-hold bar on every page, three new findings
+  (payments in review, restore hold, operations that ended as `OUTCOME_UNKNOWN` or `VM_MISMATCH` and need a
+  decision), abuse and subscription filters kept in the address. Customers: an "upcoming charges" block on the
+  first page (invoices overdue or due within 7 days, the next renewal, when the hourly balance runs out); the
+  command palette finds invoices, remembers recent tickets and invoices and has quick actions (new ticket, top up,
+  new server, add SSH key, reset a server after confirmation); a shareable order link (`/order?loc=&pkg=…`, checked
+  against the catalog, no name or key in it); rename, lock / unlock and delete in the server card's menu; copy
+  buttons that also work over plain HTTP and say so when nothing was copied; a before / after summary in the
+  reinstall dialog; a finding for snapshots older than 30 days; the `auth.credentials_reset` notification.
+- **What was open after the second security round is closed, one item in part:** staff are notified when a payment
+  enters review and the admin payments page lists such payments; a user is notified when the first proof of an
+  unverified address (first sign-in by e-mail link or code) removed something from the account. The reinstall
+  dialog gained only the summary of what stays and what is erased.
+- **Limits of the new parts:** the upcoming renewal amount is the subscription's amount before tax, and the same
+  renewal can also appear as a due invoice in the days before it. Two of the new parts have an end-to-end test
+  (reading an order link, finding an invoice in the command palette); the others had none at the time of writing.
+  None of the new screens was looked at by hand in a browser, and the snapshot finding was not tried against a
+  real platform.
 
 > [!WARNING]
 > This project was **vibe-coded**: almost all of the code was written by Anthropic's Claude Code, steered and
