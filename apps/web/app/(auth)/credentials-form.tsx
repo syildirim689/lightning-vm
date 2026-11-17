@@ -13,6 +13,7 @@ import { FailureGlow, SuccessOverlay } from './outcome';
 import ProviderMark, { providerNames } from '../../components/provider-mark';
 import { CheckboxInput, Notice, TextInput } from '../../components/ui';
 import { apiFetch, useErrorText, type ApiError } from '../../lib/api';
+import { sessionEnded } from '../../lib/session-end';
 import { authClient } from '../../lib/auth-client';
 import { can } from '../../lib/permissions';
 import { useApiQuery } from '../../lib/query';
@@ -141,6 +142,9 @@ export default function CredentialsForm({ mode, noToken, onDone }: { mode: Mode;
   const captcha = useCaptcha(mode !== 'setup' && cfg?.captcha?.use[form] ? cfg.captcha : null, mode === 'login' ? 'login' : 'signup');
 
   useEffect(() => { if (mode === 'login') setLastMethod(authClient.getLastUsedLoginMethod?.() ?? null); }, [mode]);
+  // The sign-in page with nobody signed in: whatever the last person left in this browser (drafts, recent servers,
+  // their push subscription) goes now. This also covers a session the server found gone on a page load.
+  useEffect(() => { if (mode === 'login') apiFetch('/auth/me').catch((e: ApiError) => { if (e?.code === 'UNAUTHENTICATED') void sessionEnded(); }); }, [mode]);
 
   // Passkeys offered by the browser's autofill on the e-mail field (conditional mediation), where supported.
   useEffect(() => {

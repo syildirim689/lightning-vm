@@ -8,7 +8,10 @@ self.addEventListener('push', (event) => {
 });
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
-  const url = new URL(event.notification.data?.link || '/', self.location.origin).href;
+  // Only a page of this panel is opened: a link that leads anywhere else opens the start page instead.
+  let to = new URL('/', self.location.origin);
+  try { const asked = new URL(event.notification.data?.link || '/', self.location.origin); if (asked.origin === self.location.origin) to = asked; } catch { /* not a link */ }
+  const url = to.href;
   event.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((tabs) => {
     const tab = tabs.find((c) => c.url.startsWith(self.location.origin));
     return tab ? tab.focus().then((c) => c.navigate(url)) : self.clients.openWindow(url);

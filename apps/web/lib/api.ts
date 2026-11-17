@@ -2,6 +2,7 @@
 import { useTranslations } from 'next-intl';
 import { loginFrom } from './back-to';
 import { editsSaved, hasPendingEdits } from './edits';
+import { sessionEnded } from './session-end';
 
 export type ApiError = { code: string; fields?: Record<string, string> };
 
@@ -44,7 +45,7 @@ export async function apiFetch<T = unknown>(path: string, init: { method?: strin
     // A read that is refused inside the panel says the same (a role's session limit, the end of "sign in as"): the
     // lists on screen would otherwise stay as they were, quietly out of date.
     if (body?.code === 'UNAUTHENTICATED' && ((init.method ?? 'GET') !== 'GET' || sessionExpected) && !/^\/(auth|setup)\//.test(path) && !/^\/(login|setup|register)/.test(window.location.pathname)) {
-      if (hasPendingEdits()) window.dispatchEvent(new Event('lvm:expired')); else window.location.replace(loginFrom(window.location.pathname + window.location.search, 'expired'));
+      if (hasPendingEdits()) window.dispatchEvent(new Event('lvm:expired')); else { void sessionEnded(); window.location.replace(loginFrom(window.location.pathname + window.location.search, 'expired')); }
     }
     // A form the server sent back with field errors: once they are shown, the first wrong field takes the focus.
     if (body?.fields && Object.keys(body.fields).length && (init.method ?? 'GET') !== 'GET') focusFirstInvalid();

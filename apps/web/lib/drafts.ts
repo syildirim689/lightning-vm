@@ -1,6 +1,7 @@
 "use client";
 // Long messages typed into the panel are kept in this browser until they are sent, so a closed tab, a reload or a
-// slip of the hand loses nothing. Signing out removes them (a shared computer keeps no one's half-written text).
+// slip of the hand loses nothing. The end of the session removes them, a sign-out or one that ran out alike (a shared
+// computer keeps no one's half-written text for the next account).
 const prefix = 'lvm:draft:';
 // Support tickets keep their own drafts under these keys (app/(panel)/support).
 const older = ['lvm:support-draft:', 'lvm:support-new-draft'];

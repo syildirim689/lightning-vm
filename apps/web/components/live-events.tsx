@@ -9,11 +9,13 @@ import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
 import { apiFetch, expectSession } from '../lib/api';
 import { loginFrom } from '../lib/back-to';
+import { sessionEnded } from '../lib/session-end';
 
 // An expired session with unsaved typing keeps the page and asks to sign in again (SessionExpired); anything else
 // (signed out elsewhere, removed, blocked) goes to the sign-in page at once.
 export function signOutTo(reason: string) {
   if (reason === 'expired' && hasPendingEdits()) { window.dispatchEvent(new Event('lvm:expired')); return; }
+  void sessionEnded();
   window.location.replace(loginFrom(window.location.pathname + window.location.search, reason));
 }
 
