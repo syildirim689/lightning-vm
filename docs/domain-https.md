@@ -8,7 +8,7 @@ güvenlik duvarına, SSH'ye veya sunucudaki diğer web sunucularına dokunmaz.
 |---|---|---|---|
 | Yalnızca yerel | `sh scripts/install.sh local-only` (kurulumda `--local`) | `127.0.0.1:8080` | Yok; SSH tüneli kullanılır |
 | Alan adı | `sh scripts/install.sh domain panel.example.com [--acme-staging]` | `0.0.0.0:80` ve `:443` | Caddy, Let's Encrypt |
-| Mevcut proxy arkasında | `sh scripts/install.sh behind-proxy [--port 8080] [--trusted-cidr CIDR]` | `127.0.0.1:8080` | Önünüzdeki Nginx/Caddy/Traefik |
+| Mevcut proxy arkasında | `sh scripts/install.sh behind-proxy --public-url https://panel.example.com [--port 8080] [--trusted-cidr CIDR]` | `127.0.0.1:8080` | Önünüzdeki Nginx/Caddy/Traefik |
 
 İlk kurulumda mod kendiliğinden seçilir: `--domain` verildiyse o ad; verilmediyse ve sunucunun genel bir IPv4 adresi
 varsa `<ip>.sslip.io` adıyla alan adı modu; genel adres yoksa ya da `--local` verildiyse yalnızca yerel mod.
@@ -44,7 +44,8 @@ sudo sh scripts/install.sh domain panel.example.com
 1. Betik alan adını doğrular, 80/443 port çakışmasını kontrol eder (`E_PORT_IN_USE`) ve A kaydını arar.
    A kaydı yoksa sertifika alınamayacağı için durur (`E_DNS_NO_A`).
 2. `.env` dosyasına şu değerleri yazar: `PANEL_SITE`, `LISTEN_ADDRESS=0.0.0.0`, `HTTP_PORT=80`,
-   `HTTPS_PORT=443` ve `ACME_CA`. Ardından yalnızca Caddy'yi yeniden başlatır.
+   `HTTPS_PORT=443`, `ACME_CA` ve `PANEL_PUBLIC_URL=https://<alan adı>` (postayla gönderilen bağlantıların adresi).
+   Ardından yalnızca Caddy'yi yeniden başlatır.
 3. Sertifika gelince üç sonucu **ayrı ayrı** yazar: DNS, HTTP ve sertifika.
 
 **Staging (`--acme-staging`):** denemelerde Let's Encrypt'in test ortamını kullanır. Bu sertifikalara
@@ -67,9 +68,22 @@ Gerçek sertifikayla kalıcı olarak çalıştığınızda eklenmesi önerilir; 
 ## 3. Mevcut Nginx / Caddy / Traefik arkasında
 Sunucudaki 80/443 portlarını başka bir web sunucusu kullanıyorsa:
 ```sh
-sudo sh scripts/install.sh behind-proxy
+sudo sh scripts/install.sh behind-proxy --public-url https://panel.example.com
 ```
 Panel `127.0.0.1:8080` üzerinde düz HTTP dinler; TLS'i önünüzdeki proxy sonlandırır.
+
+**Panelin dış adresi (`--public-url`, `.env` içinde `PANEL_PUBLIC_URL`):** başka bir proxy arkasında panel kendi
+adresini bilemez; isteğin `Host` başlığı, o proxy ne geçirirse odur. Parola sıfırlama ve giriş bağlantıları bu
+yüzden istekten değil, bu ayardan kurulur.
+- Değer, insanların paneli açtığı adrestir: şema ve host (gerekirse port), yol olmadan
+  (`https://panel.example.com`). Başka bir biçim `E_PUBLIC_URL_INVALID` ile reddedilir.
+- `--public-url` verilmezse ve `.env` içinde `PANEL_PUBLIC_URL` yoksa komut `E_PUBLIC_URL_MISSING` ile durur ve
+  hiçbir şeyi değiştirmez. Değer bir kez yazıldıktan sonra komut bayraksız da çalışır.
+- **Bu ayardan önce kurulmuş behind-proxy kurulumları** komutu bir kez `--public-url` ile çalıştırmalıdır. Kayıtlı
+  adresi olmayan bir kurulum, herkese açık bir host adıyla gelen isteklere bağlantı postası **göndermez** (API
+  günlüğünde `auth_mail_not_sent_panel_address_unknown`); bir yönetici bir kez giriş yaptığında ya da değişken
+  yazıldığında gönderim başlar.
+- `domain` komutu değeri kendisi yazar (`https://<alan adı>`), `local-only` boşaltır.
 
 **Güvenilen proxy sınırı:**
 - Caddy, `X-Forwarded-For` ve `X-Forwarded-Proto` başlıklarına yalnızca `TRUSTED_PROXY_CIDRS`
@@ -84,7 +98,10 @@ Panel `127.0.0.1:8080` üzerinde düz HTTP dinler; TLS'i önünüzdeki proxy son
   için **Caddy 2.7 ya da yenisi** gerekir (`docker compose exec proxy caddy version`; eskiyse
   `docker compose pull proxy`). Yükseltmeden sonra proxy'yi yeniden başlatın: `docker compose restart proxy`.
 - Parola sıfırlama ve giriş bağlantıları isteğin `Host` / `X-Forwarded-Host` başlığını değil, panelin ayarlı adresini
-  taşır; önünüzdeki proxy yabancı bir host adını içeriye geçirse bile postadaki bağlantı değişmez.
+  (`PANEL_PUBLIC_URL`) taşır; önünüzdeki proxy yabancı bir host adını içeriye geçirse bile postadaki bağlantı
+  değişmez.
+- `--trusted-cidr` değeri denetlenir: adres ya da ağ (`172.18.0.1/32`, `2001:db8::/32`), birden çoksa aralarında
+  birer boşlukla. Geçersiz bir değer `E_CIDR_INVALID` ile reddedilir ve hiçbir şey yazılmaz.
 - Caddy `/api/*` isteklerinin gövdesini 10 MB ile sınırlar (API'nin kendi rota sınırları daha küçüktür). Önünüzdeki
   proxy'de daha küçük bir sınır varsa (Nginx'in varsayılan `client_max_body_size` değeri 1 MB'tır) 9 MB'a kadar olan
   talep ekleri orada reddedilir; gerekiyorsa yükseltin.
@@ -102,6 +119,7 @@ server {
     location / {
         proxy_pass http://127.0.0.1:8080;
         proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Host $host;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
         # Tarayıcı konsolu (WebSocket) için:
@@ -115,6 +133,8 @@ server {
 
 Bu ayarların doğru olması gerekir, çünkü:
 - **`Host`:** iletilmezse Next.js Server Action'ları ve API'nin Origin kontrolü istekleri reddeder.
+- **`X-Forwarded-Host`:** tek oturum açma (OAuth) yönlendirme adresleri ve passkey'lerin bağlandığı origin bu
+  başlığı izler. `$host` ile kendiniz yazın; böylece istemcinin gönderdiği bir değer içeriye geçmez.
 - **`X-Forwarded-Proto: https`:** iletilmezse oturum çerezleri `Secure` bayrağı almaz.
 - **`X-Forwarded-For`:** iletilmezse denetim kayıtları ve hız sınırı istemcinin IP'sini değil,
   proxy'nin IP'sini görür.
@@ -167,9 +187,11 @@ Bir kontrolün başarılı olması diğerlerinin de başarılı olduğu anlamın
   - **Let's Encrypt:** otomatik alınır ve yenilenir.
   - **Let's Encrypt test:** staging ortamı.
   - **Kendi sertifikam:** PEM tam zincir ve şifresiz özel anahtar, dosyadan da yüklenebilir. Uygulanmadan
-    önce denetlenir:
-    - Anahtar sertifikaya ait olmalı.
-    - Sertifikanın süresi dolmamış ve başlamış olmalı.
+    önce hem API'de hem de sunucudaki betikte denetlenir (karar veren betiktir; komut satırından verilen sertifika
+    da aynı denetimden geçer):
+    - Anahtar sertifikaya ait olmalı (`E_CERT_KEY_MISMATCH`).
+    - Sertifikanın süresi dolmamış ve başlamış olmalı (`E_CERT_DATES`).
+    - Sertifika ve anahtar okunabilmeli; parolayla korunan anahtar kullanılamaz (`E_CERT_UNREADABLE`).
     - Alan adı sertifikanın SAN listesinde olmalı.
     - Uyarı verilir: kendinden imzalı sertifika, eksik ara sertifika, hatalı zincir sırası, 30 günden kısa
       süre.
@@ -207,9 +229,11 @@ Demo sunucusunda denendi. Sistemd ajanı üzerinden şu akışlar sırayla doğr
   Çerezin `Secure` bayrağı bu değere göre API başlarken belirlenir.
 - **Origin kontrolü:** API ve Next.js, isteğin `Origin` başlığını `Host` ile karşılaştırır. Bu yüzden
   ek bir izin listesi gerekmez; ancak önünüzdeki proxy `Host` başlığını korumalıdır.
-- **Panel adresi:** e-posta, sohbet ve bildirim bağlantıları sunulan alan adını (`https://<ad>`) kendiliğinden
-  kullanır; alan adı değişince bağlantılar da yeni ada geçer. Alan adı yoksa sihirbazdaki "erişim adresi"
-  (`settings.public_url`) kullanılır.
+- **Panel adresi:** e-posta, sohbet ve bildirim bağlantıları sırasıyla `PANEL_PUBLIC_URL` değerini, sunulan alan
+  adını (`https://<ad>`), sonra sihirbazda verilen ya da bir yöneticinin ilk girişinde kaydedilen adresi
+  (`settings.public_url`) kullanır; alan adı değişince `domain` komutu `PANEL_PUBLIC_URL` değerini de yeniler. Hiçbiri
+  yoksa yalnızca bu sunucudan ya da özel bir ağdan gelen isteğin adresi kullanılır; herkese açık bir host adıyla gelen
+  isteğe bağlantı postası gönderilmez.
 - **Konsol ve terminal:** tarayıcı konsolu (`/console/ws`) ve yöneticinin sunucu terminali aynı ad ve aynı TLS
   üzerinden WebSocket ile çalışır; ayrı bir alan adı veya sertifika gerekmez. Öndeki proxy WebSocket yükseltmesini
   geçirmelidir ([console.md](console.md)).
@@ -220,5 +244,14 @@ Caddy her yanıta şu başlıkları ekler:
 - `Referrer-Policy: same-origin`
 - `X-Frame-Options: DENY`
 
-`Server` başlığı kaldırılır. Caddy'nin erişim logları `Cookie` ve `Authorization` başlıklarını
+`Server` başlığı kaldırılır. Caddy'nin erişim logları `Cookie`, `Set-Cookie` ve `Authorization` başlıklarını
 varsayılan olarak gizler.
+
+**Erişim günlüğünde maskeleme:** bazı sırlar URL'de taşınır: parola sıfırlama belirteci yolun bir parçasıdır
+(`/api/auth/reset-password/<belirteç>`); `token`, `code`, `state` ve `session_id` ise giriş bağlantısının, tek oturum
+açma dönüşünün ve ödeme dönüşünün sorgu değerleridir. Caddy bunları erişim günlüğünde `***` ile yazar (istek adresi,
+`Referer` başlığı ve yönlendirmenin `Location` başlığı) ve CAPTCHA yanıtı başlığını hiç yazmaz. Günlük toplayıcısı
+(`deploy/observability/otel.yaml`) ve panelin sistem sayfası için aldığı günlük kopyaları aynı maskeyi uygular.
+Yükseltmeden sonra kuralın geçerli olması için proxy'yi (ve izleme açıksa toplayıcıyı) yeniden başlatın; önceden
+saklanmış satırlar yeniden yazılmaz. **Önünüzdeki kendi proxy'nizin erişim günlüğü bu maskeyi uygulamaz;** orada da
+sorgu dizgelerini ve `/api/auth/reset-password/` yolunu günlüğe yazmamayı değerlendirin.

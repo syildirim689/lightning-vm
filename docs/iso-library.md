@@ -18,7 +18,10 @@ başlatır, sonra çıkarır.
 Erişim worker kapsayıcısındaki **rclone** ile yapılır. Depo ayarları rclone seçenekleri olarak saklanır;
 parolalar ve gizli anahtarlar şifrelenir (`iso-source:<id>` bağlamı), API yanıtlarında hiç dönmez
 (yalnızca "kayıtlı" bilgisi). rclone'a yapılandırma dosyası yerine `RCLONE_CONFIG_SRC_*` ortam
-değişkenleriyle verilir; komut satırında gizli bilgi bulunmaz.
+değişkenleriyle verilir; komut satırında gizli bilgi bulunmaz. Boş bırakılan gizli alan kayıtlı değeri korur; deponun
+**adresi** (protokol, sunucu, port, URL ya da uç nokta) değiştirildiyse korumaz: sır yeniden girilmelidir
+(`REQUIRED`), kaydederken de test ederken de. Böylece kayıtlı bir parola, onu okuyamayan biri tarafından başka bir
+sunucuya gönderilemez.
 
 ## Akış
 

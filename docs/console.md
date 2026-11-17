@@ -43,7 +43,7 @@ Tarayıcı ──wss://<panel>/console/ws (aynı alan adı ve TLS)──▶ Cadd
 | Host sertifikası biletle uyuşmuyor | `CONSOLE_TLS_MISMATCH` |
 | Host bileti reddetti | `CONSOLE_TICKET_REJECTED` |
 | Oturum geçersiz, süresi dolmuş veya kullanılmış | `CONSOLE_SESSION_INVALID` |
-| Kapatıldı (çıkış, yönetici veya geçidin durması) | `CONSOLE_REVOKED` |
+| Kapatıldı (çıkış, yönetici veya geçidin durması), ya da bilet bir iptalden önce alınmış | `CONSOLE_REVOKED` (host terminalinde `TERMINAL_REVOKED`) |
 | En uzun süre doldu | `CONSOLE_EXPIRED` |
 | Eşzamanlı konsol sınırı | `CONSOLE_LIMIT` |
 
@@ -56,7 +56,14 @@ arayüz bunları çevirerek gösterir.
 - **Yönetici:** Yönetim → VMware sayfasındaki "Açık konsollar" listesinden herhangi bir konsolu
   kapatabilir.
 - **Hesap değişince:** yönetici bir kullanıcıyı yasaklar, siler, oturumlarını kapatır veya parolasını
-  değiştirirse o kullanıcının açık konsolları da kapanır.
+  değiştirirse o kullanıcının açık konsolları da kapanır. Kullanıcının erişimi daraldığında, sunucu başka hesaba
+  geçtiğinde (önceki sahibin konsolları) ve "kullanıcı adına" oturum sona erdiğinde de kapanır.
+- **İptalden önce alınmış biletler:** iptal yalnızca açık bağlantıları kapatmaz; **henüz kullanılmamış** biletleri de
+  geçersiz kılar. API, her iptalde Redis'e kısa ömürlü bir işaret bırakır (kullanıcı, oturum ya da sunucu için);
+  bilet de alındığı anı taşır. Geçit, bileti kabul ederken bu işaretlere bakar ve işaretten **önce** alınmış bir
+  bileti reddeder (`CONSOLE_REVOKED`, host terminalinde `TERMINAL_REVOKED`). Böylece devirden, çıkıştan ya da
+  yasaklamadan saniyeler önce alınmış bir bilet sonradan oturum açamaz; işaret Redis'te durduğu için geçidin o anda
+  yeniden bağlanıyor olması da bunu değiştirmez. Kişi konsolu yeniden açarak yeni bir bilet alır.
 - **En uzun süre:** varsayılan 60 dakika (`CONSOLE_MAX_MINUTES`). Süre dolunca konsol yeniden
   açılabilir ve yeni bir bilet alınır.
 - **Eşzamanlı konsol sınırı:** kullanıcı başına 3 (`CONSOLE_MAX_PER_USER`), toplamda 100.

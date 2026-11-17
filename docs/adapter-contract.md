@@ -208,6 +208,7 @@ func failureStatus(code string) int {
 
 The Node.js adapters use the same table (`statusOf` in each `server.mjs`), with their own catch-all code in place of
 `VMWARE_ERROR`: `PROXMOX_ERROR`, `XAPI_ERROR`, `OVIRT_ERROR`, `HYPERV_ERROR`, `LIBVIRT_ERROR`, `INCUS_ERROR`.
+An adapter that enforces `expectName` (section 5; Proxmox VE) answers `409 VM_MISMATCH`.
 
 Neither caller looks at the exact status: both test `res.ok` and then read `code` (and `message`). The API turns
 every adapter failure into its own `422` with the adapter's `code`; the worker turns it into an
@@ -255,7 +256,7 @@ SNAPSHOT_NOT_FOUND INVALID_LOGIN PERMISSION_DENIED WRITE_RESTRICTED PROVISIONING
 NETWORK_NOT_FOUND TEMPLATE_HAS_NO_NIC DISK_SMALLER_THAN_TEMPLATE INSUFFICIENT_RESOURCES NOT_MANAGED TOOLS_NOT_RUNNING
 TLS_UNTRUSTED TLS_HOSTNAME_MISMATCH TLS_PIN_MISMATCH ENDPOINT_BLOCKED INVALID_REQUEST SECRET_KEY_UNAVAILABLE
 INVALID_STATE VM_NOT_FOUND FIREWALL_NEEDS_DVS FIREWALL_TOO_MANY_RULES DISK_SHRINK_NOT_SUPPORTED DISK_HAS_SNAPSHOTS
-VM_HAS_NO_DISK DISK_NOT_SUPPORTED DATASTORE_NOT_FOUND PLATFORM_NOT_SUPPORTED HOST_IS_SLAVE
+VM_HAS_NO_DISK DISK_NOT_SUPPORTED DATASTORE_NOT_FOUND PLATFORM_NOT_SUPPORTED HOST_IS_SLAVE VM_MISMATCH
 ```
 
 A second adapter should use these codes with the same meaning: a permanent code ends the operation at once; any
@@ -387,6 +388,19 @@ addresses are not IP addresses (they are written into the domain's description a
   **Note**: `/v1/vm/power`, `/v1/vm/snapshot`, `/v1/vm/snapshots`, `/v1/vm/firewall`, `/v1/vm/shaping`,
   `/v1/vm/details`, `/v1/vm/metrics` and `/v1/console-ticket` do *not* check the prefix (the admin console and
   details work on any VM of a connection).
+- **Binding a VM id to its server (`expectName`)**: every request that names a VM by id (`vm`) may carry
+  `expectName`, the name that VM must have. The worker and the API send it with every request about a server:
+  `"lvm-<server uuid>"` (power, snapshot, snapshots, details, metrics, guest-setup, disks, disk-add, disk-remove,
+  disk-copy, resize, destroy, firewall, shaping, cdrom, nic-add, nic-remove, nic-mac, migrate, image/create and the
+  customer's console ticket). On `/v1/vm/clone` it binds the source (`template`): sent for a copy of a server
+  (`"lvm-<source server uuid>"`), absent for an order from an image. On `/v1/vm/rename` (an import) it is the name
+  the inventory listed under that id. An adapter whose VM ids can be given to another VM later must enforce it:
+  when the VM under `vm` has another name it answers `409 VM_MISMATCH` before reading or changing anything, and
+  without `expectName` on a clone it copies only a template (`TEMPLATE_NOT_FOUND` otherwise). Proxmox VE does (a freed
+  VMID is handed out again; a row with a stale number would otherwise act on another customer's VM). The other
+  adapters' ids are not reused; they may ignore the field. `VM_MISMATCH` is permanent for the worker. Reconciliation
+  writes the id of the VM found by name back to the server when it differs (`vm_id_changed`), so a server whose VM
+  came back under a new id works again without anyone editing the row. A request without `expectName` behaves as before.
 - **Markers written on a cloned VM**:
   - annotation (notes): `Managed by Lightning VM (server <serverId>)`
   - extra config key `lightning.server-id` = `<serverId>`; read back as `serverId` in `VMState`.
@@ -637,6 +651,7 @@ See section 4.
   | --- | --- | --- | --- |
   | `name` | string | yes | Must start with `lvm-`. The new VM's name and the idempotency key. |
   | `template` | string | yes | Id of the VM (template, or another server's VM when cloning a server) to clone from. |
+  | `expectName` | string | no | For a copy of a server: the name the source VM must carry (`lvm-<source server id>`). Absent: the source must be a template. See section 5. |
   | `pool` | string | yes | Resource pool id (from discovery: `compute[].resourcePool`). |
   | `datastore` | string | yes | Datastore id. |
   | `network` | string | yes | Network id for the first NIC. |

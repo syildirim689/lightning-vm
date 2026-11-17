@@ -17,8 +17,8 @@ sudo sh scripts/install.sh backup
 - kendi sertifikanız ve anahtarı (`domain --tls custom` ile yüklediyseniz: `data/tls/cert.pem`, `key.pem`);
 - `data/observability/alertmanager.yml`.
 
-Redis yedeklenmez. Redis'te yalnızca kuyruk kopyaları, oturumlar ve hız sınırı sayaçları vardır.
-Açık işlemler PostgreSQL'den yeniden kuyruğa alınır.
+Redis yedeklenmez. Redis'te yalnızca kuyruk kopyaları, tek kullanımlık biletler ve hız sınırı sayaçları vardır
+(oturumlar PostgreSQL'dedir). Açık işlemler PostgreSQL'den yeniden kuyruğa alınır.
 
 **Kapsam dışı:** bu yedek müşteri VM'lerini içermez. VMware snapshot'ı da bağımsız bir yedek
 değildir: aynı datastore'da durur, datastore kaybolursa snapshot da kaybolur. Müşteri VM'leri için
@@ -76,6 +76,12 @@ Böyle bir yedek imzasız sayılır ve reddedilir (`E_RESTORE_UNSIGNED`). Dosyan
 sudo sh scripts/install.sh restore backups/ESKI-YEDEK.tar.enc --allow-unsigned --yes-replace-data
 ```
 
+**Tek okuma:** arşiv, imzası denetlenmeden ve şifresi çözülmeden önce, kendi adıyla ve imza dosyasıyla birlikte
+yalnızca root'un açabildiği bir çalışma klasörüne **kopyalanır**; denetlenen, şifresi çözülen ve açılan yalnızca o
+kopyadır. Böylece yedeğin durduğu yere yazabilen biri, denetim ile kullanım arasında dosyayı değiştiremez. Kopya
+geçici klasöre (`TMPDIR`, yoksa `/tmp`) yazılır: orada **arşiv boyutunda bir kopyalık daha yer** olmalıdır; yoksa
+`E_RESTORE_COPY` verir ve hiçbir şey değişmez. Kopya, geri yükleme nasıl biterse bitsin silinir.
+
 **Onaysız çalıştırma:** komut yalnızca kontrol eder ve neyin değişeceğini söyler, hiçbir şeyi
 değiştirmez (çıkış kodu 3). Kontroller:
 - imza (eski yedekte `--allow-unsigned` ile sağlama);
@@ -93,15 +99,20 @@ değiştirmez (çıkış kodu 3). Kontroller:
 4. Veritabanını **tamamen** yedektekiyle değiştirir. Eski şemanın silinmesi ve dökümün yüklenmesi **tek bir
    işlemdir (transaction)**: yükleme yarıda kalırsa işlem geri alınır ve veritabanı olduğu gibi kalır.
    Ardından Redis boşaltılır: oradaki kuyruk işleri, kilitler, önbellekler ve tek kullanımlık biletler yeni
-   duruma aittir, eski veritabanının üzerinde kalmamalıdır. Hepsi yeniden üretilir (oturumlar
-   PostgreSQL'dedir, açık işlemler oradan yeniden kuyruğa alınır).
-5. `master.key`, `vmware.token` ve Caddy'nin sertifikalarını geri koyar. VMware parolaları o anahtarla
+   duruma aittir, eski veritabanının üzerinde kalmamalıdır. Hepsi yeniden üretilir.
+5. **Herkesin oturumunu kapatır ve paneli beklemeye alır** ([aşağıda](#geri-yüklemeden-sonra-bekletme)). Bu, geri
+   yüklenen satırlar üzerinde herhangi bir servis başlamadan önce, tek bir veritabanı işleminde yapılır. Bekletme
+   konulamazsa servisler **başlatılmaz** (`E_RESTORE_HOLD`): başlasalar eski duruma göre hemen işlem yaparlardı.
+   Aynı `restore` komutunu yeniden çalıştırın.
+6. `master.key`, `vmware.token` ve Caddy'nin sertifikalarını geri koyar. VMware parolaları o anahtarla
    şifrelendiği için anahtarlar veriyle birlikte döner.
-6. Geçerli `.env`, `alertmanager.yml` ve kendi sertifikanız değiştirilmez. Yedekteki halleri
+7. Geçerli `.env`, `alertmanager.yml` ve kendi sertifikanız değiştirilmez. Yedekteki halleri
    `.env.from-backup`, `data/observability/alertmanager.yml.from-backup` ve `data/tls.from-backup/`
    (`cert.pem`, `key.pem`) olarak yazılır.
-7. Servisleri başlatır ve sağlığı kontrol eder.
-8. Yedek başka bir adreste çalışıyorsa (veya kendi sertifikanızı içeriyorsa) çalıştırmanız gereken
+8. Servisleri başlatır ve sağlığı kontrol eder.
+9. Neye bakmanız gerektiğini ve bekletmenin nasıl kaldırılacağını yazar (`RESTORE_SESSIONS`, `RESTORE_HOLD`,
+   `RESTORE_CHECK`, `RESTORE_RELEASE`).
+10. Yedek başka bir adreste çalışıyorsa (veya kendi sertifikanızı içeriyorsa) çalıştırmanız gereken
    `install.sh domain …` komutunu tam haliyle yazar. Adres ve sertifika modu `.env` içinde durur ve geri
    yükleme `.env` dosyasına dokunmaz; bu adım atlanırsa panel eski adresinde açılmaz.
 
@@ -116,11 +127,59 @@ yeniden başlatır ve veritabanının hangi durumda olduğunu yazar (`RESTORE_ST
 
 Yedeğin şifresi çözülmüş geçici kopyası her durumda silinir.
 
+### Geri yüklemeden sonra: bekletme
+
+Geri yüklenen veritabanı; hipervizörlerden, ödeme sağlayıcılarından ve anlattığı kişilerden **eskidir**. Yedekte açık
+duran bir işlem, ödenmemiş bir sipariş ya da zamanlanmış bir silme, o günden sonra ödenmiş ve kurulmuş bir sunucuyu
+bozabilir. Bu yüzden geri yükleme iki şey yapar:
+
+- **Herkesin oturumunu kapatır.** Yedekten sonra çıkış yapmış biri yeniden girmiş olmaz; herkes yeniden giriş yapar.
+- **Paneli beklemeye alır** (`maintenance_state` tablosunda `restore_hold` satırı; yedeğin adı ve zamanıyla).
+  Bekletme sürerken panel **kendiliğinden hiçbir şey yapmaz**:
+  - worker hiçbir işlemi başlatmaz ve açık kalmış işlemleri yeniden kuyruğa almaz;
+  - güç ve snapshot zamanlamaları ve zamanlanmış silmeler çalışmaz;
+  - tahsilat çalıştırması (fatura kesme, otomatik tahsilat, hatırlatma, askı, sonlandırma) çalışmaz;
+  - tutarlılık denetimi yalnızca **bulgu yazar**, sunucu kayıtlarına dokunmaz;
+  - işlem başlatan API rotaları (sipariş, güç, boyut, silme ve benzerleri) `409 RESTORE_HOLD` döner.
+
+  Giriş, sayfaları görüntüleme ve ayarlar çalışır.
+
+**Serbest bırakmadan önce bakın:**
+
+1. **Yedekten sonra oluşturulan ya da silinen sunucular.** Panel onları yedekteki haliyle bilir. Tutarlılık
+   denetiminin bulguları (kaydı olmayan `lvm-*` VM, VM'i olmayan sunucu) yönetim panelinde listelenir.
+2. **Yedekten sonra yapılan ödemeler.** Geri yüklenen veride yoktur: ödeme sağlayıcınızın kayıtlarıyla karşılaştırıp
+   kaydedin; yoksa ödenen sipariş ve faturalar ödenmemiş sayılır ve tahsilat adımlarına girer.
+3. **Yedekten sonra silinen API anahtarları, yasaklar, kapatılan hesaplar, rol ve parola değişiklikleri.** Hepsi
+   yedek anındaki haline döner: silinen anahtar yeniden geçerlidir, kaldırılan yasak geri gelmiştir. Yeniden silin,
+   yasaklayın, değiştirin. (Oturumlar kapatılır, API anahtarları kapatılmaz.)
+
+**Serbest bırakma:** Yönetim → Sistem sayfasındaki şeritte **Serbest bırak** (`system.update` izni) ya da sunucuda:
+
+```sh
+docker compose exec api node dist/cli.js release-restore-hold
+```
+
+Serbest bırakma denetim kaydına `system.restore_hold_released` olarak yazılır. Ardından açık işlemler yeniden kuyruğa
+alınır; zamanlamalar ve tahsilat sıradaki çalıştırmada devam eder.
+
+**`--no-hold`:** yalnızca bekletmeyi atlar; oturumlar yine kapatılır. Az önce alınmış bir yedeği geri yüklerken
+kullanın. Betik `W_RESTORE_NO_HOLD` uyarısını ve aynı kontrol listesini yazar; panel geri yüklenen duruma göre
+**hemen** işlem yapar.
+
+```sh
+sudo sh scripts/install.sh restore backups/DOSYA.tar.enc --yes-replace-data --no-hold
+```
+
+**Bekletmeden önceki sürümlerin yedekleri:** yedekteki şemada bekletme tablosu yoksa betik önce şemayı günceller
+(`migrate` servisi; servisler başlarken zaten yapılacak iş) ve sonra bekletmeyi koyar. Bu da olmazsa servisler
+başlatılmaz (`E_RESTORE_HOLD`).
+
 **Yeni sunucuya taşıma:**
 1. Yeni sunucuda `sh scripts/install.sh` ile kurun.
 2. Sakladığınız `backup.key` dosyasını `secrets/backup.key` olarak kopyalayın (kurulumun ürettiği yeni
    anahtarın yerine; izinler `chmod 400`). Yedek dosyasını ve `.hmac` dosyasını da (adlarını değiştirmeden) sunucuya getirin; imza bu anahtarla doğrulanır.
-3. `restore … --yes-replace-data` çalıştırın.
+3. `restore … --yes-replace-data` çalıştırın. Panel beklemede açılır; yukarıdaki listeye bakıp serbest bırakın.
 4. DNS kaydını yeni sunucuya çevirin ve geri yüklemenin yazdığı komutu çalıştırın, örneğin:
    ```sh
    sudo sh scripts/install.sh domain panel.example.com
@@ -268,8 +327,15 @@ durumu da üçe ayrılır:
 - **Rotasyon:** Docker json-file sürücüsü, servis başına 3 × 10 MB.
 - OTel Collector Docker'ın log dosyalarını salt okunur okur ve servis adını `service_name`
   etiketiyle Loki'ye yazar.
-- **Maskeleme:** uygulamalar zaten sır yazmaz. İkinci bir önlem olarak Collector,
-  `password`/`token`/`secret`/`cookie`/`ticket`/`authorization` değerlerini `***` ile değiştirir.
+- **Maskeleme:** API'nin istek günlüğü başlık yazmaz ve URL'de taşınan sırları (parola sıfırlama belirteci, giriş
+  bağlantısının `token` değeri, SSO dönüşünün `code` ve `state` değerleri, ödeme dönüşünün `session_id` değeri)
+  `***` ile yazar. Aynı maske üç yerde daha uygulanır: proxy'nin erişim günlüğünde (`deploy/caddy/Caddyfile`;
+  istek adresi, `Referer` ve `Location`; CAPTCHA yanıtı başlığı hiç yazılmaz), Collector'da
+  (`deploy/observability/otel.yaml`; ayrıca `password`/`token`/`secret`/`cookie`/`ticket`/`authorization`
+  değerleri) ve panelin Yönetim → Sistem için aldığı günlük kopyalarında (`install.sh`). Kural değişikliği için
+  proxy ve Collector yeniden başlatılmalıdır (`docker compose restart proxy`,
+  `docker compose --profile observability restart otel`); daha önce saklanmış satırlar yeniden yazılmaz.
+- **Kim görür:** Yönetim → Sistem'deki servis günlüklerini yalnızca yöneticiler (`*`) görür.
 - Docker'ın veri klasörü `/var/lib/docker` değilse `compose.yaml` içindeki otel bağlamasını
   değiştirin.
 

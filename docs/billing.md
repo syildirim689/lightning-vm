@@ -23,7 +23,8 @@ Kod: `apps/api/src/billing.ts` (akış ve uç noktalar), `billing-rules.ts` (par
    müşteri faturaya yönlenir. Bakiye yetiyorsa hemen ödenir. Ödeme gelince kurulum başlar. Süresinde ödenmeyen sipariş geri çekilir ve
    kurulum iptal edilerek adresler serbest kalır.
 2. **Yenileme**: dönem bitiminden N gün önce fatura kesilir. Otomatik tahsilat açıksa önce bakiyeden, sonra varsayılan kayıtlı karttan
-   çekilir (günde bir, en fazla ayarlanan sayıda deneme).
+   çekilir (günde bir, en fazla ayarlanan sayıda deneme). Dönemi başlamamış, ödenmemiş yenileme faturası **sunucunun güncel fiyatını
+   izler** ([aşağıda](#yenileme-faturası-sunucunun-fiyatını-izler)).
 3. **Ödenmeyen yenileme**: son ödeme gününden önce hatırlatma; ertesi gün gecikme bildirimi (`past_due`); X gün sonra askıya alma
    (sunucu kapatılır ve müşteriye kilitlenir; kapatma ve silme dışında işlem, konsol yok); ayarlanmışsa Y gün sonra silme.
    Ödeme yapılınca askı kalkar ve sunucu yeniden açılır.
@@ -32,7 +33,21 @@ Kod: `apps/api/src/billing.ts` (akış ve uç noktalar), `billing-rules.ts` (par
    iade edilirse entegratörde iptal edilir; aksi halde ekibe iade faturası gerektiği bildirilir (e-Fatura alıcısında iadeyi alıcı keser).
 
 Tahsilat çalışması 5 dakikada bir (tek kopya), e-Fatura gönderimi 2 dakikada bir çalışır. Yönetici "Tahsilatı şimdi çalıştır" ile
-elle de tetikleyebilir.
+elle de tetikleyebilir; düğme yalnızca o anda gerçekten bir çalıştırma sürüyorsa `409 BILLING_RUNNING` döner. Panel bir geri
+yüklemeden sonra **beklemedeyken** tahsilat çalışmaz ([operations.md](operations.md#geri-yüklemeden-sonra-bekletme)).
+
+### Yenileme faturası sunucunun fiyatını izler
+
+Dönemi henüz başlamamış, ödenmemiş bir yenileme faturası sunucunun boyutu ya da diskleri değiştikçe güncel fiyata çekilir:
+
+- fiyat değiştiğinde hemen (ücreti sıfır çıkan bir değişiklikte de), olmazsa bir sonraki tahsilat çalıştırmasında;
+- fatura **itirazlıyken de**: itiraz neyin borçlu olunduğunu tartışır, fiyatı dondurmaz;
+- **ödendiği anda bir kez daha**: ödeme sayfası açılırken, bakiyeden ya da kayıtlı karttan çekilirken ve personel faturayı elle
+  kapatırken. Müşterinin gördüğü tutar ile ödediği tutar arasında fark olabilir.
+
+Personelin "Ödeme kaydet" isteği, tutar o anda değiştiyse **bir kez** `409 INVOICE_AMOUNT_CHANGED` döner: yeni tutara bakın ve
+işlemi yineleyin. Kısmen ödenmiş bir yenileme faturasının yeni tutarı ödenen tutara eşit ya da ondan azsa fatura **ödendi** olur ve
+fazlası müşterinin bakiyesine yazılır. Kabul edilen bir itiraz bakiyeye en çok faturanın o andaki **kalan** tutarını yazar.
 
 ## Ödeme kuruluşları
 
@@ -58,7 +73,12 @@ Bilinen iki açık:
   yeniden sorma iyzico ve Craftgate'te de vardır; PayTR ve Param'da yoktur.
 - **Param:** dönüş Param'a sorularak doğrulanamadığı için ödemenin kanıtı sayılmaz. Başarılı bir dönüş ödemeyi
   "onay bekliyor" (`NEEDS_CONFIRMATION`) olarak bırakır; personel tahsilatı Param panelinde görüp faturayı elle
-  kapatır. Kendiliğinden işleyen bir Param tahsilatı yoktur ([payments.md](payments.md#param-elle-onay)).
+  kapatır. Ödeme incelemeye girdikten sonraki dönüşler ("reddedildi" dahil) yok sayılır. Kendiliğinden işleyen bir
+  Param tahsilatı yoktur ([payments.md](payments.md#param-elle-onay)).
+
+İncelemede bekleyen ödemeler (Param'ın onay bekleyenleri, tutarı tutmayanlar, sağlayıcının incelemeye aldıkları)
+`GET /api/admin/billing/payments?status=review` ile listelenir ve özetin `paymentsInReview` alanında sayılır. Bir ödeme
+incelemeye girdiğinde personele **bildirim gitmez** ([payments.md](payments.md#incelemedeki-ödemeler)).
 
 ## Saatlik kullanım, bütçe ve boyut değişikliği
 
@@ -72,10 +92,17 @@ Bilinen iki açık:
   toplam bütçeyi geçince takvim ayında bir kez `billing.budget_exceeded` bildirimi gider. Bütçe hiçbir şeyi
   durdurmaz, yalnızca haber verir.
 - **Boyut büyütme (gün hesabı):** faturalandırma açıkken bir sunucu büyütüldüğünde, yeni ve eski aylık fiyat
-  arasındaki farkın dönemin kalan günlerine düşen kısmı faturalanır. Disk yalnızca büyür.
+  arasındaki farkın dönemin kalan günlerine düşen kısmı faturalanır. Disk yalnızca büyür. **3, 6 ve 12 aylık
+  dönemlerde** fark, dönemin **kalan aylarının tamamı** için hesaplanır (aylık fark × dönemin ay sayısı × kalan gün
+  oranı). Personelin başarısız bir boyut değişikliğini yeniden denemesi, sunucu o işlemden sonra değiştiyse
+  `409 SERVER_CHANGED` döner; arada eklenmiş bir diskin ücreti yeniden denemeyle silinmez.
 - **WHMCS / WISECP:** satışı bu sistemlerden biri yapıyorsa `integrations/` altındaki modüller sunucuyu panelde
   oluşturur, askıya alır, boyutunu değiştirir ve siler. Bu sunuculara panel fatura kesmez. WHMCS modülü sunucu modülü
   yapısına göre yazıldı; WISECP modülü bir WISECP kurulumunda denenmedi ([integrations/README.md](../integrations/README.md)).
+  Entegrasyonun açtığı müşteriler, panelin faturalaması kapalıyken panelden sipariş veremez (`EXTERNALLY_BILLED`);
+  faturalama açıksa panelden verdikleri sipariş panelde faturalanır.
+- **Fatura e-postası:** müşteri adına oturum açmış personel fatura profilindeki e-posta adresini değiştiremez
+  (`NOT_WHILE_IMPERSONATING`).
 
 ## e-Fatura / e-Arşiv
 
@@ -87,6 +114,8 @@ Bilinen iki açık:
 - Entegratörler: İzibiz, Uyumsoft, Nilvera, EDM, QNB eFinans, BirFatura, Paraşüt ve Sandbox.
   **İzibiz ve Uyumsoft'a, yayımladıkları test kullanıcılarıyla gerçek e-Arşiv faturası gönderildi ve kabul edildi** (2026-10-27).
   Diğerleri yayımlanmış WSDL/OpenAPI belgelerine göre yazıldı; ilk kullanımda test ortamında bir fatura deneyin.
+- **Ayarlar:** entegratörün API adresi değiştirildiğinde kayıtlı gizli alanlar (API anahtarı, parola) yeniden yazılmalıdır
+  (`REQUIRED`). Test sonucu yalnızca sabit bir ileti ve durum sınıfı gösterir; entegratörün yanıt metni API günlüğündedir.
 - Gönderilemeyen fatura artan aralıklarla (en fazla 8 kez) yeniden denenir; ilk ve beşinci hatada ekip bilgilendirilir. Yönetici fatura
   sayfasından "e-Faturayı yeniden gönder" diyebilir. Resmî PDF entegratörden alınıp gösterilir.
 

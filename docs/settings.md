@@ -3,6 +3,12 @@
 Yönetim → Ayarlar sayfasındadır. Görmek için `settings.view`, değiştirmek ve test etmek için
 `settings.manage` izni gerekir (docs/auth.md, Roller). Her değişiklik denetim kaydına yazılır.
 
+**Yalnızca yöneticiler (`*`):** e-posta ve SMS ayarlarını kaydetmek, giriş bağlantısı ya da e-posta koduyla girişi
+açmak, iki adımlı doğrulama zorunluluğunu düşürmek, CAPTCHA'yı zayıflatmak (kaldırmak, bir formdan almak, en düşük
+skoru indirmek) ve kaydedilmemiş bir özel SMS sağlayıcısını test etmek. `settings.manage` izni olan diğer personel
+bunlarda `403` alır: bu kanallar yöneticiler dahil her hesabın sıfırlama bağlantısını ve kodunu taşır
+([auth.md](auth.md#yalnızca-yöneticinin-değiştirebildiği-ayarlar)).
+
 Parolalar, gizli anahtarlar ve SMS hesap bilgileri `secrets/master.key` ile AES-256-GCM şifrelenip
 `settings` tablosunda saklanır. API bunları hiçbir zaman geri döndürmez; panel yalnızca "kayıtlı" olduğunu
 bilir. Bir gizli alanı boş bırakarak kaydetmek kayıtlı değeri korur.
@@ -61,7 +67,9 @@ anahtarlar) entegrasyon testi yapıldı. reCAPTCHA ve hCaptcha gerçek anahtarla
   - iki adımlı doğrulama kodları (telefonu doğrulanmış kullanıcılara);
   - telefon doğrulama;
   - kullanıcının SMS'i seçtiği bildirimler.
-- **Test:** formdaki değerlerle gerçek bir SMS gönderir.
+- **Test:** formdaki değerlerle gerçek bir SMS gönderir. Özel HTTP API sağlayıcısında formdaki (kaydedilmemiş)
+  değerlerle testi yalnızca yöneticiler yapabilir; diğer personel kayıtlı yapılandırmayı test eder ve yalnızca
+  testin geçip geçmediğini görür.
 
 Hiçbir sağlayıcı gerçek hesapla denenmedi. Her sağlayıcı, belgesinin güvenilirliğine göre işaretlidir:
 - **docs:** sağlayıcının resmî API belgesine göre yazıldı.

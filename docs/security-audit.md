@@ -1,38 +1,66 @@
 # Security audit (November 2026)
 
-A summary for operators and contributors of the security audit run on commit `641aa4d`, and of what this release
-changed because of it. What an operator has to do after upgrading is in [upgrade-notes.md](upgrade-notes.md)
-(Turkish); how to report a vulnerability is in [SECURITY.md](../SECURITY.md).
+A summary for operators and contributors of the two rounds of the security audit and of what was changed because of
+them. Round one ran on commit `641aa4d`, round two on commit `d9f90d3` (the code with round one's fixes). What an
+operator has to do after upgrading is in [upgrade-notes.md](upgrade-notes.md) (Turkish); how to report a
+vulnerability is in [SECURITY.md](../SECURITY.md).
 
 > [!IMPORTANT]
 > This was an automated, AI-driven review started by the maintainer, not an audit by an independent third party, and
-> it was a **partial pass**. It lowers the number of known weaknesses; it does not show that there are none. Read
-> [Limits](#limits) before relying on it.
+> both rounds were **partial passes**. It lowers the number of known weaknesses; it does not show that there are
+> none. Read [Limits](#limits) before relying on it.
+
+## Summary of both rounds
+
+| | Round one (`641aa4d`) | Round two (`d9f90d3`) |
+|---|---|---|
+| Scope | The whole repository | The areas round one left unreviewed, and a re-check of every round-one fix |
+| Confirmed findings | 22: 1 high, 10 medium, 11 low | 26: 10 medium, 15 low, 1 informational |
+| Leads that need an operator's decision or check | 4 | 3 |
+| Candidates without an independent verdict | 10 | 4 |
+| Rejected after verification | not counted | 1 |
+| Fixed | all 22 | all 26 |
+
+Together: 48 confirmed findings (1 high, 20 medium, 26 low, 1 informational), all fixed. No finding of round two is
+rated high.
 
 ## Scope and method
 
-The whole repository at commit `641aa4d` was in scope: API, worker, web UI, console gateway, adapters, installer.
-The method was source review plus bounded checks: the project's own code was run only inside a sandbox without
-network access, with dummy data (for some checks with a throw-away PostgreSQL and Redis). Nothing was sent to a
-deployed panel, a hypervisor, a payment provider or any other live system.
+The method was the same in both rounds: source review plus bounded checks. The project's own code was run only
+inside a sandbox without network access, with dummy data (for some checks with a throw-away PostgreSQL and Redis).
+Nothing was sent to a deployed panel, a hypervisor, a payment provider or any other live system. One hunting wave
+ran per round, followed by one verifier per group of candidates. A finding is listed as confirmed only when a second,
+fresh reviewer confirmed it, by reproducing it in the sandbox or by re-deriving it from the source and the first
+reviewer's recorded run.
 
-One hunting wave ran, followed by one verifier per group of candidates. A finding is listed as confirmed only when a
-second, fresh reviewer reproduced it in the sandbox.
+- **Round one** had the whole repository at commit `641aa4d` in scope: API, worker, web UI, console gateway,
+  adapters, installer.
+- **Round two** ran on commit `d9f90d3` and was scoped to two things: the review units round one had deferred
+  (including the maintenance-request channel), and a re-check, on the changed source, of every unit in which round
+  one had found something. The units round one covered without a finding were not looked at again.
 
 ## What held
 
-No way was found for one customer to read or change another customer's servers, invoices, tickets or networks
-through the customer routes: every customer route binds the ids it is given to the caller, staff routes are denied
-unless a permission is declared, adapters check the pinned TLS certificate before they send credentials, and shell
-and PowerShell parameters are quoted or passed as data. The confirmed weaknesses cluster in four places: one payment
-gateway (Param), money logic around resize and externally billed servers, state that survived a change of owner, and
-sign-in routes of the authentication library that the panel exposed without its own rules.
+No way was found in round one for one customer to read or change another customer's servers, invoices, tickets or
+networks through the customer routes: every customer route binds the ids it is given to the caller, staff routes are
+denied unless a permission is declared, adapters check the pinned TLS certificate before they send credentials, and
+shell and PowerShell parameters are quoted or passed as data. The weaknesses of round one cluster in four places:
+one payment gateway (Param), money logic around resize and externally billed servers, state that survived a change
+of owner, and sign-in routes of the authentication library that the panel exposed without its own rules.
 
-## Confirmed findings
+Round two qualifies that statement in two ways. First, it found paths that cross between two customers, each with a
+precondition the customer cannot simply choose: around the hand-over of a server (a request of the previous owner in
+flight at that moment, a cancellation booked before it), and on Proxmox VE after a VM number was reused, which only
+someone with access to the cluster or the panel host can bring about. They are in the table below and are fixed.
+Second, the areas reviewed for the first time gave the weightier results: state that crosses a change of owner or of
+role, reused Proxmox VM numbers, a reset token readable in request logs, an unlimited SMS test, and a restore that
+replays old orders.
 
-22 findings: 1 high, 10 medium, 11 low. All are fixed in this release.
+## Round one: confirmed findings
 
-| Severity | Weakness | Fix in this release |
+22 findings: 1 high, 10 medium, 11 low. All were fixed in the release that followed round one.
+
+| Severity | Weakness | Fix |
 |---|---|---|
 | High | **Param return accepted as proof of payment.** The browser's return from Param was enough to mark an invoice paid; it was not backed by a merchant secret or by asking Param. | A return never settles a payment: it stays pending as "awaiting confirmation" and staff mark the invoice paid after checking the Param panel. |
 | Medium | **Directory accounts could sign in without the directory.** Sign-in routes other than the password form (phone number, SMS code, e-mail code) gave a session to an account the directory no longer accepted. | The rule is enforced where sessions are created: a directory account gets a session only when the directory accepted that sign-in, a single sign-on account only from its provider's callback. Unused sign-in routes answer 404. |
@@ -40,7 +68,7 @@ sign-in routes of the authentication library that the panel exposed without its 
 | Medium | **Param ignored the currency.** A non-TRY invoice or top-up paid through Param was collected as the same number in lira. | Param is offered and accepted for TRY only; anything else answers `PAYMENT_METHOD_UNAVAILABLE`. |
 | Medium | **Upgrade after the renewal invoice was under-billed.** A resize made after the next period's invoice was issued left that period invoiced at the old, lower price. | An unpaid renewal invoice for a period that has not begun is re-priced to the server's current price; an increase during an unpaid period that has begun is charged pro rata. |
 | Medium | **Role mapping let settings staff create an administrator.** Staff who could only manage settings could map a directory or single sign-on group (or the default role) to the administrator role. | Saving directory or single sign-on settings needs permissions covering every mapped role; only administrators can map to `admin` (`FORBIDDEN_TARGET`). |
-| Medium | **Billing-system order bound to an unproven account.** An order from WHMCS or WISECP was attached to any existing panel account with the buyer's e-mail, including one somebody else had created. | An existing account is used only when its address was proven and it is not a reseller's or another system's; otherwise the route answers `CUSTOMER_NEEDS_REVIEW` for staff to resolve. Reseller-created customers start unverified. |
+| Medium | **Billing-system order bound to an unproven account.** An order from WHMCS or WISECP was attached to any existing panel account with the buyer's e-mail, including one somebody else had created. | An existing account was used only when its address was proven and it was not a reseller's or another system's (tightened again in round two); otherwise the route answers `CUSTOMER_NEEDS_REVIEW` for staff to resolve. Reseller-created customers start unverified. |
 | Medium | **Externally billed servers could be upgraded for free.** The owner of a server billed by WHMCS or WISECP could resize it or add disks in the panel and neither system charged for it. | Owners cannot resize, add disks to or copy such servers in the panel (`EXTERNALLY_BILLED`); staff and the integration can. |
 | Medium | **Concurrent resize kept the old price.** Two resize requests at once could leave the larger size queued while the price went back to the old one. | The price is written only by the request whose operation was accepted, and only while the row is the one it priced from; a refused request changes nothing. |
 | Medium | **A transferred server kept the previous owner's credentials.** Stored SSH keys and root password stayed on the server and a default reinstall by the new owner applied them again. | A transfer or staff move clears stored keys, root password, tags, notes, schedules and update tracking and closes the previous owner's consoles; a reinstall without keys generates a new root password. |
@@ -57,80 +85,178 @@ sign-in routes of the authentication library that the panel exposed without its 
 | Low | **Anonymous console-gateway requests wrote one audit event each.** | At most five `console.denied` / `terminal.denied` events per minute for unknown tickets, with a count of the suppressed ones. |
 | Low | **Open redirect after sign-in.** A crafted `next` path could normalise to another site. | The value that is returned is validated, not the raw input; such paths are refused. |
 
-## Leads that depend on the deployment
+### Round one: leads that depend on the deployment
 
 Four leads could not be settled in the sandbox because they depend on a fact outside the repository. They were not
 confirmed as vulnerabilities; three were hardened anyway, one was removed by construction.
 
 | Lead | What was changed | What an operator should check |
 |---|---|---|
-| Password-reset and sign-in links took their host name from the request (reachable from outside only in behind-proxy mode). | Hardened: links in mail use the panel's configured address and redirect targets must be panel paths. | That the panel's address (Settings → Domain and SSL) is the one customers use, and that a reset mail carries it. |
+| Password-reset and sign-in links took their host name from the request (reachable from outside only in behind-proxy mode). | Hardened: links in mail use the panel's configured address and redirect targets must be panel paths. Round two closed the remaining case, an installation with no configured address (below). | That the panel's address is the one customers use, and that a reset mail carries it. |
 | In behind-proxy mode a client on a private address could influence the client address the API used. | Hardened: Caddy sends the API one client address, the one it worked out itself. | Reload or restart the proxy after upgrading (Caddy 2.7 or newer). If another proxy sits directly in front of the API instead of Caddy, make it send a single address and list only that proxy in `TRUSTED_PROXIES`. In behind-proxy mode, keep `TRUSTED_PROXY_CIDRS` to your outer proxy only. |
-| Cancelling a resize or disk-add after its hypervisor task was issued might keep the change while the price was rolled back. | Made safe by construction: a cancel no longer interrupts a hypervisor task in progress, and customers can cancel only operations not yet picked up. | Nothing. It was not observed against a real hypervisor. |
+| Cancelling a resize or disk-add after its hypervisor task was issued might keep the change while the price was rolled back. | Made safe by construction: a cancel no longer interrupts a hypervisor task in progress, and customers can cancel only operations not yet picked up. Round two found and fixed the same outcome on the deadline path (below). | Nothing. It was not observed against a real hypervisor. |
 | The Grafana administrator password and the repository token (`get.sh --token`) were passed on command lines, readable by other local accounts. | Fixed: neither is passed as an argument by the scripts; `get.sh` takes `--token-file` or `GIT_TOKEN` in the environment. | Use the documented form ([updates.md](updates.md)); `--token` still works and is still visible in the process list. Avoid unprivileged shell accounts on the panel host. |
 
-## Candidates without an independent verdict
+### Round one: candidates without an independent verdict
 
 Ten candidates were raised by the hunting wave but never received a second reviewer's verdict: the verifier agents
 assigned to them were stopped by the model's safeguards. They are **not confirmed findings**. Nine were changed
-anyway; one was not.
+after round one; the tenth was confirmed and fixed in round two.
 
-| Candidate | Changed in this release |
+| Candidate | Changed |
 |---|---|
 | Staff acting as a user could leave a lasting way in on that account (a passkey or a linked sign-in). | Yes: while acting as a user, staff cannot add passkeys, linked accounts, webhooks, push or chat connections, or change password, phone or two-factor (`NOT_WHILE_IMPERSONATING`). |
 | A sign-in link by e-mail gave a full session to accounts with two-factor. | Yes: accounts with two-factor cannot use sign-in links. |
 | Passkey sign-ins left no audit record and no sign-in notice. | Yes: passkey sign-in, add and remove are in the audit log and notices are sent. |
 | Password reset by phone code was exposed although the panel never sends that code. | Yes: the route is removed (404). |
 | Phone-number sign-in routes skipped the panel's sign-in rules. | Yes: the routes are removed (404); an SMS code only verifies the signed-in person's number. |
-| The browser push endpoint was not checked against internal addresses. | Yes: a subscription needs a public HTTPS endpoint (checked again at every send), at most 20 per user. |
-| Stored integration secrets followed a changed host when the secret field was left empty. | Yes: changing the SMTP host, port or security, the custom SMS URL host, the rDNS API URL, the LDAP URL or the OIDC issuer requires re-entering the secret. |
+| The browser push endpoint was not checked against internal addresses. | Yes: a subscription needs a public HTTPS endpoint (checked again at every send), at most 20 per user. Round two found a way around the check and closed it (below). |
+| Stored integration secrets followed a changed host when the secret field was left empty. | Yes: changing the SMTP host, port or security, the custom SMS URL host, the rDNS API URL, the LDAP URL or the OIDC issuer requires re-entering the secret. Round two found the same in three more integrations and fixed them (below). |
 | The custom SMS and rDNS tests showed staff the remote server's response. | Yes: settings tests no longer show the remote server's text (SMTP, custom SMS, rDNS, LDAP, single sign-on). |
-| A Web Push subscription stayed bound to the account after sign-out. | Yes: signing out or a session ending turns browser notifications off on that browser; subscriptions are removed when staff end a user's sessions or the password is reset. |
-| Ticket replies are not rate-limited, so one customer can cause many staff notifications. | **No.** Ticket-reply notification fan-out has no rate limit yet. |
+| A Web Push subscription stayed bound to the account after sign-out. | Yes: signing out or a session ending turns browser notifications off on that browser; subscriptions are removed when staff end a user's sessions or the password is reset. Round two extended this to every way sessions are ended for someone (below). |
+| Ticket replies are not rate-limited, so one customer can cause many staff notifications. | Yes, in round two: it was confirmed there (low) and fixed with limits per ticket and per customer. |
+
+## Round two: re-check of the round-one fixes
+
+Of the 22 fixes made after round one:
+
+- **17 were re-checked on real PostgreSQL and hold.**
+- **4 could not be re-checked.** They are the fixes to directory (LDAP) and single sign-on sign-in. The reviewer
+  assigned to them was stopped by the model's safeguards. These fixes are covered by the project's own integration
+  tests (`apps/api/test/integration/security-auth.test.mjs`), but they did not get the second, independent look the
+  others got.
+- **The re-check found five places where a fix was incomplete or left an adjacent gap.** All five are now fixed and
+  are listed as findings in the table below:
+  1. renewal pricing: the invoice kept the old price while it was in dispute, and on the last day of a period;
+  2. the Param return: it no longer paid anything, but could still close a payment that awaited confirmation;
+  3. body size: three attachment routes still read a large body before the caller was known;
+  4. stored secrets: three integrations (payment gateway, e-invoice, ISO storage) still sent a stored secret to a
+     changed address;
+  5. the billing-integration account match: "proven address" was not enough to treat an existing account as the
+     buyer's.
+
+## Round two: confirmed findings
+
+26 findings: 10 medium, 15 low, 1 informational. All are fixed in this release.
+
+| Severity | Weakness | Fix in this release |
+|---|---|---|
+| Medium | **A demoted or banned staff member kept acting as the customer they were impersonating.** An impersonation session started earlier went on working after the staff account lost its rights, and could be kept alive past its one hour. | An impersonation session ends when the staff member who started it is demoted, banned, removed or has their sessions ended, and one hour after it started, whatever the browser sends. |
+| Medium | **A renewal invoice stayed payable at the earlier, lower price after the server was enlarged**, while it was in dispute and on the last day of the period. | The invoice follows the server's price also while in dispute, and it is priced again at the moment it is paid. Staff "mark paid" answers `INVOICE_AMOUNT_CHANGED` once when the amount moved. |
+| Medium | **An account somebody else registered for the buyer's address still received the billing-system order once it was marked proven**, and the registrant kept a way in. | The integration matches only accounts it created itself. Any other account answers `CUSTOMER_NEEDS_REVIEW` until staff hand it over with the claim route, which removes everything its earlier holder could still use. |
+| Medium | **The notification test sent an unlimited number of SMS at the operator's cost.** | Test sends are limited: 6 an hour per account, and 6 an hour per phone number for SMS. |
+| Medium | **A password-reset token was written to the API request log**, which staff holding `system.update` could read on the system page. | The API, the proxy and the log collector no longer write tokens that travel in URLs; the service logs on the system page are for administrators only and are masked as well. |
+| Medium | **Requests of the previous owner that overlapped the hand-over were applied to the new owner's server.** | Every write is bound to the owner the request was authorised for; a request of the previous owner that overlaps a hand-over waits for it and then answers 404 without changing anything. |
+| Medium | **Payment gateway, e-invoice integrator and ISO storage used a stored secret with a new address** when staff changed only the address and left the secret field empty. | Changing the address requires typing the stored secrets again, in saving and in testing. |
+| Medium | **A cancellation the previous owner had booked on the subscription deleted the server after it was handed to another customer.** | A hand-over clears a booked cancellation, the auto-renew choice and a pending removal mark. |
+| Medium | **The Proxmox clone accepted any VM number as the template**, so an image whose template had been removed built new servers from the VM that inherited the number. | An order from an image clones only from a template; a copy of a server names the source it expects, and the adapter refuses anything else. |
+| Medium | **On Proxmox a server row that kept a VM number its VM no longer had acted on whichever VM now held that number**, including another customer's. | Every request about a server names the VM it expects; the Proxmox adapter refuses when the VM at that number carries another name (`VM_MISMATCH`), and reconciliation writes back the number of the VM it finds by name. |
+| Low | **Verification SMS to any typed number were limited per client address only.** | Phone codes are limited to 5 a day per account and per number, two-factor codes to 8 an hour per account. |
+| Low | **The 254-character bound on sign-in identifiers was skipped for non-text values**, which still became large rate-limit keys. | A sign-in identifier must be text; anything else is refused before a key is made. |
+| Low | **Param: the unsigned return could still close a payment that awaited staff confirmation as declined, and set the note staff confirm from.** | Once a payment is under review, later returns are ignored, "declined" included. The staff note is composed by the panel and starts with the payment's own id and the instruction. |
+| Low | **An increase on a subscription with a 3, 6 or 12 month period was charged as one month's difference** spread over the whole period. | The increase is charged for all remaining months of the period. |
+| Low | **Where sales go through WHMCS or WISECP with the panel's billing off, customers could order unbilled servers in the panel**, and the role could not switch that off without stopping the integration. | Customers the integration created cannot order in the panel while the panel's billing is off (`EXTERNALLY_BILLED`); the integration's own orders no longer depend on the customer's role or quota. |
+| Low | **On the three attachment routes an anonymous caller still made the API read and parse a 9 MB body** before the session was checked. | A large body is read on those routes only from a caller that presents a session or an API token; anyone else is refused before the body is read. |
+| Low | **Browser push endpoint: the host that was checked was not always the host the request went to**, and an address written as a number was not checked at connection time. | A push endpoint must be on a DNS host name, and the connection itself refuses private addresses. |
+| Low | **A staff retry of a failed resize overwrote the server's current price with the old operation's**, dropping what was added since. | The retry writes the price only while the server is as the operation left it; otherwise it answers `SERVER_CHANGED`. |
+| Low | **Custom SMS provider test: the caller's own success pattern was matched against the answer of any address**, so the verdict revealed that answer bit by bit. | Only administrators can test an unsaved custom SMS provider; other staff test the saved one. |
+| Low | **A ticket's assignee kept receiving staff notifications with the customer's address after losing the support role.** | An assignee must hold `support.manage`; tickets are unassigned when the holder loses `support.view` or is banned, and staff notices go only to accounts that still hold the permission. |
+| Low | **Ticket replies had no limit per customer or per ticket**; each one notified every support staff member. | Customer replies and ratings are limited to 10 per ticket and 30 per customer in 10 minutes; staff are told about the first rating only, and bursts on one ticket are folded together. |
+| Low | **A console or host-terminal ticket issued before a revocation still opened a session after it.** | The gateway refuses a ticket issued before a revocation of its user, session or server (`CONSOLE_REVOKED` / `TERMINAL_REVOKED`). |
+| Low | **After restoring an older backup the panel acted again on orders, operations and deletion schedules that were open in that backup**, and could destroy a server paid for and built since. No attacker is needed for this. | After a restore the panel is on hold: no operations, schedules, deletions or billing until an administrator has reviewed the state and released it. |
+| Low | **Restore checked the backup's signature on one read of the file and decrypted a second read**, so a party able to write the backup location during the restore could swap in an older genuine archive. | Restore copies the archive once into a folder only root can open and checks, decrypts and unpacks that copy. |
+| Low | **An operation deadline that passed while its hypervisor task was running undid the price, invoice and tracking row although the change still landed.** | A task that is running is waited for (up to `TASK_OUTCOME_HOURS`, default 6, past the deadline); when its result cannot be learned the operation ends as `OUTCOME_UNKNOWN` and nothing is undone. |
+| Informational | **The password step of a two-factor account was recorded and announced as a completed sign-in.** | A sign-in is recorded once a session exists; the password step is recorded as `auth.password_step`. |
+
+### Round two: leads that need an operator's decision or check
+
+Three leads were kept without a severity: each depends on a fact the sandbox could not show, or on a product
+decision. They are not confirmed vulnerabilities. All three were changed.
+
+| Lead | What was changed | What an operator should do |
+|---|---|---|
+| Mailed reset and sign-in links still followed the request's host name on an installation with no configured panel address (typically behind another proxy). | The address is now a setting (`PANEL_PUBLIC_URL`); `install.sh behind-proxy` requires `--public-url`. With no address known, no link mail is sent to a request that arrived under a public host name. The documented outer-proxy block now forwards `X-Forwarded-Host`. | Existing behind-proxy installs: run `install.sh behind-proxy --public-url https://…` once ([domain-https.md](domain-https.md)). |
+| A restore brings back ended sessions, deleted API tokens, lifted bans, removed roles and old passwords. | Restore now ends every session and says what else is back as it was at backup time. API tokens, bans, role and password changes are not reverted automatically: that is what a full restore means. | After a restore, apply again the token deletions, bans and role or password changes made since the backup, then release the hold ([operations.md](operations.md)). |
+| Push subscriptions stayed on the account when single sessions, all other sessions or all sessions were ended. | Push subscriptions are dropped whenever sessions are ended for someone. Not observed with a real browser and push service. | Nothing. |
+
+### Round two: candidates without an independent verdict
+
+Four candidates never received a second reviewer's verdict: the verifier assigned to them was stopped by the model's
+safeguards. They are **not confirmed findings**.
+
+| Candidate | Changed in this release |
+|---|---|
+| Staff acting as a customer could set the billing e-mail address, which would keep receiving the customer's invoices. | Yes: the billing e-mail cannot be changed while acting as a customer. |
+| `settings.manage` controlled the channels that carry every account's reset links and sign-in codes, administrators included. | Yes: only administrators can save mail or SMS settings, enable link or code sign-in, lower the two-factor requirement or weaken the captcha. |
+| An account a reseller opened for an unproven address stays reseller-managed after the real person takes it over, without notice or a way out. | **No.** |
+| Removing or deactivating a reseller separates who pays for the customers' servers from who controls them. | **No.** |
+
+One further candidate was **rejected** after verification (that staff events stay readable after a demotion).
+
+### The maintenance-request channel
+
+The channel between the API and `install.sh run-requests`, through which the panel changes its own host (updates,
+domain and certificate, host and operating system settings, the terminal switch), could not be reviewed in round
+one. **It was reviewed in round two: no finding.** The review left notes on validation that was looser than it had
+to be, and these were tightened: a request file or certificate that is a link is removed and never read; the request
+is moved out of the API's reach before one value is read from it; time-server and name-server lists are validated by
+the same strict rule on both sides; a custom certificate must be readable, inside its validity dates and match its
+key; `--trusted-cidr` is validated; values written to `.env` are escaped; and patterns no longer depend on the
+host's locale.
+
+### A functional defect found on the way
+
+Notification e-mails were not being sent at all on Node 22: a date-format option error made every notification mail
+fail (sign-in notices, "password changed" and "two-factor changed" among them). Mails for password reset, sign-in
+links and codes were not affected. This is fixed; it was not a security finding, but it hid security notices.
 
 ## Not reviewed
 
-- **The maintenance-request channel** between the API and `install.sh run-requests` (updates, domain and
-  certificate, host and operating system settings, the terminal switch): access control, injection and host
-  capability exposure. Its reviewer was stopped twice by the model's safeguards. This is the path through which the
-  panel changes its own host ([updates.md](updates.md)), so it deserves a human review.
-- **Thirteen areas the coverage critic proposed after the wave**, none of which was assigned:
-  1. Phone-number code and sign-in routes reachable without a session, as a quota question (the routes were removed
-     in this release).
-  2. Request and service logs as a second reader of secrets (tokens in URLs, access logs shipped to Loki / Grafana,
-     host journal and Compose logs copied for the panel).
-  3. Per-user copies that outlive authorisation: inbox and export contents, push subscriptions, chat connections and
-     webhooks after demotion, ban, disable or sign-out.
-  4. Live console, host terminal and event streams across role or permission changes, two-factor disable and the
-     end of impersonation.
-  5. Accounts created on behalf of an e-mail address by a reseller or the billing-system route and marked verified
-     without proof.
-  6. Reseller lifecycle (deactivate, remove, detach a customer) and priced self-service actions on externally billed
-     servers.
-  7. The binding of a copy order to its source across delete, reinstall, transfer and payment.
-  8. `settings.manage` as a path to an administrator account through mail, sign-in method, social provider, security
-     and captcha settings.
-  9. Everything keyed to a server or its former owner that a transfer leaves in place.
-  10. Addresses and state reported by the guest agent and consumed by the worker and API.
-  11. Worker failure, cancel and undo paths per operation kind.
-  12. Restoring an older database dump over a live panel.
-  13. Hypervisor object identity in adapters: acting on a stored VM id without proving it is the panel-managed
-      object.
-
-  Several of these overlap with fixes above (items 1, 3, 4, 5, 6, 7 and 9 were touched by this release's changes),
-  but none was reviewed as a unit, so no claim of coverage is made for them.
+- **The directory (LDAP) and single sign-on re-check.** Three units of round two were deferred when their reviewer
+  was stopped: LDAP sign-in with user search, group-to-role mapping and auto-create; OIDC and social sign-in with
+  callbacks and role mapping from claims; and the staff routes for roles, users, access overrides and impersonation.
+  Round one reviewed these areas and its four fixes there are covered by integration tests, but the fixes were not
+  re-checked independently.
+- **Six areas the coverage critic proposed after the round-two wave**, none of which was assigned:
+  1. An account registered for an address the registrant does not control: what the first holder set up (API tokens,
+     passkeys, webhooks, chat connections, push subscriptions, phone number, two-factor) after the real owner proves
+     the address. (This release removes these at the first proof and in the claim route; the change was not
+     reviewed.)
+  2. Payments held for review (a different amount, a fraud review): later callbacks, the billing run's re-check,
+     expiry, a second payment of the same invoice and the staff settle-by-hand path.
+  3. The notification test and delivery on the push, chat and e-mail legs: repeated outbound requests to
+     customer-supplied endpoints. (The test now has a per-account limit on every channel; the legs were not
+     reviewed.)
+  4. Data kept in the browser at session end, on every way a session ends, and what the next account on the same
+     browser finds.
+  5. The shared operations queue (eight slots, one held while an operation waits) against the per-role hourly limit,
+     order payment rules and the operation deadline.
+  6. The installer's file handling for the maintenance lock and the host snapshots (service logs, journal,
+     processes) written for the panel.
+- **The areas round one left unreviewed** (its deferred units and the thirteen areas its coverage critic proposed)
+  were the starting point of round two's scope, and most of the findings above come from them. Round two deferred
+  the nine units listed here in turn, so no claim of complete coverage is made for any area.
 
 ## Limits
 
-- **Partial pass.** One hunting wave; 16 of 116 planned review units were deferred and the final coverage check
-  never ran clean. There is no claim of complete coverage.
+- **Partial passes.** One hunting wave per round. In round one 16 of 116 planned review units were deferred; in
+  round two 9 of 122 were deferred and 65 were out of scope because round one had covered them. Neither round's
+  final coverage check ran clean. There is no claim of complete coverage.
 - **Not independent.** The review and the fixes were both produced with AI tooling under the maintainer's direction.
   No external party has audited the project.
 - **How the fixes were verified.** By unit tests and by integration tests against real PostgreSQL and Redis
-  (`apps/api/test/integration/security-*.test.mjs` and additions to the existing suites). They were **not** verified
-  against real hypervisors, and the Param change was not verified against a real Param merchant account. The Caddy
-  behaviour (one client address upstream) was not observed in the audit sandbox, which could not run Caddy.
+  (`apps/api/test/integration/security-*.test.mjs` and additions to the existing suites). The fixes of round two
+  were not themselves reviewed by a further audit round.
+- **Not tried on real systems.** Nothing was verified against real hypervisors. The Proxmox findings and their fixes
+  were observed against a stand-in for the Proxmox API, not a real cluster; that Proxmox hands a freed VM number to
+  the next VM is its documented behaviour, not something observed here. The Param changes were not verified against
+  a real Param merchant account. Caddy and Nginx could not run in the audit sandbox, so the proxy behaviour (one
+  client address upstream, the host name passed on) was not observed there.
+- **Installer paths exercised with dummy files only.** Restore, the maintenance requests and the certificate checks
+  were run against dummy archives, request files and certificates; a full restore with Docker Compose and
+  `pg_restore` on an installation was not run in the audit.
 - **Sandbox observations only.** Findings were reproduced with dummy data; several end states (a guest login, a
-  hypervisor copy, a database import during restore) were reasoned from source rather than exercised.
+  hypervisor copy, the worker carrying out a queued deletion, a browser receiving a push message) were reasoned from
+  source rather than exercised.
 - The deployed demo server and operators' own infrastructure (outer proxies, backup storage, hypervisors) were outside
   this audit.

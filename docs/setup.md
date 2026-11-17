@@ -39,8 +39,8 @@ sh scripts/install.sh [install|check|recover-setup|update|...] [--lang tr|en] [-
 | `check` | Ön kontroller ve mevcut kurulumun durumu | **Hayır** |
 | `recover-setup` | Tamamlanmış sihirbazı yönetici için yeniden açar | Yalnızca kurulum durumu |
 | `reset-password E-POSTA [--disable-2fa]` | Unutulan şifre yerine yeni bir şifre üretir ve bir kez gösterir | Yalnızca o hesabın şifresi ve oturumları |
-| `backup`, `restore`, `update`, `schedule`, `auto-update` | İşletim (docs/operations.md) | Evet |
-| `domain`, `behind-proxy`, `local-only` | Erişim modunu değiştirir (docs/domain-https.md) | Yalnızca `.env` ve proxy |
+| `backup`, `restore`, `update`, `schedule`, `auto-update` | İşletim (docs/operations.md). `restore` arşivi önce root'a özel bir klasöre kopyalar, herkesin oturumunu kapatır ve paneli **beklemeye** alır; Yönetim → Sistem'den ya da `docker compose exec api node dist/cli.js release-restore-hold` ile serbest bırakılır (`--no-hold` yalnızca bekletmeyi atlar) | Evet |
+| `domain`, `behind-proxy`, `local-only` | Erişim modunu değiştirir (docs/domain-https.md). `behind-proxy` panelin dış adresini ister: `--public-url https://panel.example.com` (`.env` içinde `PANEL_PUBLIC_URL` zaten varsa gerekmez) | Yalnızca `.env` ve proxy |
 
 **Yarıda kalan kurulum:** `install` tekrar çalıştırılarak devam ettirilir. Her adım tekrarlanabilir:
 - `.env` yalnızca bir kez oluşturulur. Sonraki çalıştırmalar yalnızca eksik anahtarları ekler,
@@ -81,7 +81,7 @@ kurulum anahtarı.
 |---|---|
 | 0 | Başarılı (güncelleme için: güncel olduğu için bir şey yapılmadıysa da 0) |
 | 1 | Ön kontrol başarısız (`E_PRECHECK`); alan adı ayarlanamadı (`E_DOMAIN_FAILED`); `uninstall` bir adımı tamamlayamadı |
-| 2 | Geçersiz argüman ya da değer (bilinmeyen seçenek, geçersiz alan adı, port, saat dilimi, güncelleme penceresi, sertifika dosyaları, yedek dosyası yok) |
+| 2 | Geçersiz argüman ya da değer (bilinmeyen seçenek, geçersiz alan adı, port, saat dilimi, güncelleme penceresi, yedek dosyası yok; sertifika: `E_CERT_FILES`, `E_CERT_UNREADABLE`, `E_CERT_DATES`, `E_CERT_KEY_MISMATCH`; `behind-proxy`: `E_PUBLIC_URL_MISSING`, `E_PUBLIC_URL_INVALID`, `E_CIDR_INVALID`) |
 | 3 | `restore` onaysız çalıştırıldı: yalnızca denetledi, hiçbir şeyi değiştirmedi (`--yes-replace-data` ekleyin) |
 | 13 | Yetki ya da Docker: root gerekli (`E_NEEDS_ROOT`), Docker yok ya da kurulamadı (`E_DOCKER_MISSING`) |
 | 17 | Yapılandırma hatası: `.env` örnek parola içeriyor, Compose dosyası geçersiz, sırların sahibi yanlış, henüz kurulmamış (`E_NOT_INSTALLED`) |
@@ -89,7 +89,7 @@ kurulum anahtarı.
 | 19 | API süresinde hazır olmadı (`E_NOT_READY`) |
 | 20 | Güncelleme yapılamadı: git ile alınmamış kaynak, yerel değişiklik, sürümler alınamadı, yayımlanmış sürüm yok, bilinmeyen sürüm, veritabanına ulaşılamadı, hedef sürüm uygulanmış bir migration'ı içermiyor (`E_UPDATE_INCOMPATIBLE`) |
 | 21 | Yedek alınamadı (anahtar yok, veritabanı dökümü, dış kopya) ya da bir host / işletim sistemi işlemi başarısız (ad, saat dilimi, NTP, DNS, apt) |
-| 22 | Geri yükleme yapılamadı: imza (ya da imzasız eski yedek), sağlama toplamı, şifre çözme, eksik yedek, yedek daha yeni bir sürümden, güvenlik yedeği alınamadı, veritabanı ya da başlatma hatası |
+| 22 | Geri yükleme yapılamadı: yedek çalışma klasörüne kopyalanamadı (`E_RESTORE_COPY`), imza (ya da imzasız eski yedek), sağlama toplamı, şifre çözme, eksik yedek, yedek daha yeni bir sürümden, güvenlik yedeği alınamadı, veritabanı ya da başlatma hatası, panel beklemeye alınamadı (`E_RESTORE_HOLD`; servisler başlatılmaz) |
 | 23 | Güncelleme başarısız oldu ve container'lar önceki sürüme geri alındı (`E_UPDATE_FAILED`); veritabanı geri alınmaz |
 
 Kodlar `scripts/install.sh` içindeki `die` çağrılarından okunur; her hata ayrıca `E_...` koduyla ve açıklamasıyla yazılır.

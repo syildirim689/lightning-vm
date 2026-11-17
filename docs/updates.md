@@ -61,7 +61,9 @@ Konum: Yönetim → Sistem → **Güncellemeler** (`system.update` izni).
   3. Yeni sürüm derlenip başlatılır ve sağlık kontrolü yapılır.
   4. Yeni sürüm hazır olmazsa önceki sürüm otomatik olarak geri gelir.
   5. Veritabanı otomatik geri alınmaz. Gerekirse komut, adıyla birlikte kayıtta yazılır:
-     `restore <yedek> --yes-replace-data`.
+     `restore <yedek> --yes-replace-data`. Geri yükleme herkesin oturumunu kapatır ve paneli beklemeye alır; az önce
+     alınmış bu yedek için bekletme gerekmiyorsa `--no-hold` ekleyin
+     ([operations.md](operations.md#geri-yüklemeden-sonra-bekletme)).
 - **Bu sürüme geç:** listedeki belirli bir sürüme geçer. Veritabanı daha yeni bir sürümce değiştirildiyse
   eski sürüme dönüş reddedilir.
 - **Şimdi yedekle** ve **otomatik güncelleme** ayarları (açık/kapalı, kanal, bakım penceresi).

@@ -37,7 +37,9 @@ araştırma (alanlar, adresler, imza yöntemleri, kaynaklar): [research-payments
 - Her sağlayıcının **canlı** ve **test** bilgi seti ayrı sekmelerde girilir ve ikisi de saklanır.
   "Kullanılan mod" ödemelerde hangisinin kullanılacağını seçer.
 - Bilgiler mod başına ayrı ayrı AES-256-GCM ile şifrelenir (bağlam `payments:<sağlayıcı>:<mod>`).
-- Gizli alanlar geri okunmaz. Boş bırakılan gizli alan kayıtlı değeri korur.
+- Gizli alanlar geri okunmaz. Boş bırakılan gizli alan kayıtlı değeri korur; **API adresi değiştirildiyse korumaz**:
+  o modun kayıtlı gizli alanları yeniden yazılmalıdır (boş bırakılan alan `REQUIRED` hatası verir). Böylece yalnızca
+  ayar izni olan biri, okuyamadığı kayıtlı bir anahtarı başka bir adrese gönderemez. Test düğmesi de aynı kurala uyar.
 - Herkese açık test hesabı yayımlanmış sağlayıcılarda "test hesabını doldur" düğmesi vardır: Param,
   Esnekpos, İş Bankası, Garanti, Paycell. Test kartları Gelişmiş bölümünde görünür.
 - Sağlayıcı farklı bir adres verdiyse API adresi her mod için değiştirilebilir. Yalnızca herkese açık
@@ -55,10 +57,12 @@ araştırma (alanlar, adresler, imza yöntemleri, kaynaklar): [research-payments
 |---|---|
 | Kabul edildi | Sağlayıcı bilgileri doğruladı. |
 | Reddedildi | Kimlik veya imza hatası; ayrıca "kullanıcı/üye işyeri bulunamadı". |
-| Belirsiz | Yanıt geldi ama doğrulamıyor; sağlayıcının mesajı gösterilir. |
+| Belirsiz | Yanıt geldi ama doğrulamıyor. |
 | Ulaşılamadı | Ağ, TLS veya IP kısıtı (HTTP 403 dahil). |
 | Test edilemez | Shopier, Hepsipay, Paycell, Kuveyt Türk, Vakıf Katılım ve Ziraat PayFlex için güvenli bir sorgu yok. |
 
+- Sonuç yalnızca bu sınıfı ve sabit bir iletiyi gösterir; **sağlayıcının yanıt metni panelde gösterilmez**, API
+  günlüğüne yazılır (`docker compose logs api`).
 - 3D anahtarları (storeKey, ENCKEY, MerchantPass) hiçbir API ile doğrulanamaz ve sonuçta ayrıca belirtilir.
 - **Etkinleştirme** için seçilen modun kayıtlı bilgileriyle yapılmış bir test gerekir. Kabul edilen,
   belirsiz ve test edilemez sonuçlar etkinleştirmeye izin verir; reddedilen ve ulaşılamayan sonuçlar izin vermez.
@@ -77,12 +81,14 @@ araştırma (alanlar, adresler, imza yöntemleri, kaynaklar): [research-payments
   servisi (`TP_Islem_Sorgulama4`) bir üye işyeri hesabıyla denenemediği için kullanılmıyor.
 - **Tutarı ya da para birimi tutmayan ödeme:** sağlayıcının farklı bir tutar ya da para birimiyle bildirdiği veya
   dolandırıcılık incelemesine aldığı ödeme başarısız sayılmaz; gerekçesi görünerek bekliyor kalır ve personel karar
-  verir.
+  verir ([İncelemedeki ödemeler](#incelemedeki-ödemeler)).
+- **Fatura tutarı ödeme anında değişebilir:** dönemi başlamamış bir yenileme faturası, ödeme başlatılırken ya da
+  alınırken sunucunun güncel fiyatına göre yeniden fiyatlanır ([billing.md](billing.md)).
 - **Test ve canlı:** Sandbox kapatıldığında bekleyen sandbox ödemeleri, bir sağlayıcı canlı moda alındığında test
   modunda başlamış bekleyen ödemeleri başarısız olur (`TEST_MODE_OFF`).
 - Hiçbir sağlayıcı gerçek bir üye işyeri hesabıyla denenmedi. İmzalar ve istekler dokümanlara ve açık kaynak
   entegrasyonlara göre yazıldı; birim testleri bunları doğrular. Hata mesajlarının biçimi sağlayıcıdan
-  sağlayıcıya değişir; ilk gerçek testte mesaj olduğu gibi gösterilir.
+  sağlayıcıya değişir; ilk gerçek testte sağlayıcının yanıtını API günlüğünden okuyun.
 
 ## Param: elle onay
 Param'ın tarayıcı dönüşü, üye işyerine özgü bir sırla imzalı değildir ve panel sonucu Param'a ayrıca soramaz. Bu
@@ -94,8 +100,25 @@ yüzden dönüş **ödemenin kanıtı sayılmaz**:
 - Personel tahsilatı **Param panelinde** (ya da hesap ekstresinde) bu numaralarla bulur, tutarı karşılaştırır ve
   faturayı Yönetim → Faturalar'dan "Ödeme kaydet" ile kapatır. Sipariş kurulumu, askının kalkması ve bakiye
   yüklemesi bu adımdan sonra gerçekleşir.
-- Reddedilen bir dönüş ödemeyi kapatır; müşteri yeniden deneyebilir.
+- Henüz incelemeye girmemiş bir ödemede reddedilen dönüş ödemeyi kapatır; müşteri yeniden deneyebilir.
+- **İncelemeye giren ödemeye sonraki dönüşler işlenmez.** Ödeme bir kez "onay bekliyor" olduktan sonra gelen her
+  dönüş, **"reddedildi" dahil**, yok sayılır: dönüş imzasız olduğu için ödeme kimliğini bilen biri, gerçekten ödenmiş
+  bir ödemeyi listeden düşüremez ya da personelin onaylarken baktığı notu değiştiremez.
+- **Personel notunu panel yazar.** Not, **ödemenin panel kimliğiyle ve yapılacak işle** ("Param panelinde
+  doğrulayın") başlar; Param'ın bildirdiği sipariş ve dekont numaraları ardından, kısaltılmış olarak gelir.
+  Onaylarken Param panelindeki kaydı bu ödeme kimliği ve tutarla eşleştirin; yalnızca nottaki numaralara
+  güvenmeyin.
 - **Yalnızca TRY:** Param'ın ortak ödeme sayfası tutarı lira olarak alır. TRY dışındaki bir fatura ya da bakiye
   yüklemesi için Param sunulmaz ve seçilirse reddedilir (`PAYMENT_METHOD_UNAVAILABLE`).
 
 Bu akış da gerçek bir Param üye işyeri hesabıyla denenmedi.
+
+## İncelemedeki ödemeler
+Personelin kararını bekleyen ödemeler **bekliyor** durumunda ve bir gerekçe koduyla durur: `NEEDS_CONFIRMATION`
+(Param), `AMOUNT_MISMATCH` (tutar ya da para birimi tutmuyor), `FRAUD_REVIEW` (sağlayıcı incelemeye aldı).
+
+- Yönetici API'si: `GET /api/admin/billing/payments?status=review` bunları en eskiden başlayarak listeler; faturalama
+  özeti sayılarını `paymentsInReview` alanında verir.
+- **Bir ödeme incelemeye girdiğinde personele bildirim gitmez** (bilinen eksik); yalnızca günlüğe yazılır. Listeye
+  düzenli bakın: müşteri gerçekten ödemişse faturası bu sırada vadesini geçebilir.
+- Yönetimdeki ödemeler sayfası bu listeyi ayrı bir görünüm olarak **henüz göstermez**.

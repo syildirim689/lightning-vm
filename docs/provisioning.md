@@ -57,10 +57,20 @@ bu kontrol ileride isteğe bağlı olarak eklenebilir.
 - **Yeniden deneme:** en çok 6 deneme, üstel bekleme (5 sn'den başlayarak). Kalıcı hatalar hemen
   başarısız sayılır ve tekrar denenmez: `INVALID_LOGIN`, `PERMISSION_DENIED`, `WRITE_RESTRICTED`,
   TLS hataları, şablon veya ağ yok, `INSUFFICIENT_RESOURCES` ve benzerleri.
-- **Süre sınırı:** her işlemin bir son tarihi vardır (oluşturmada 45 dk). Süre geçince işlem
-  `TIMEOUT` ile başarısız olur.
+- **Süre sınırı:** her işlemin bir son tarihi vardır (oluşturmada 45 dk). Süre, **henüz başlatılmamış** adımı
+  durdurur: işlem `TIMEOUT` ile başarısız olur ve yaptıkları geri alınır. Platformda **sürmekte olan** bir görev ise
+  süre dolunca yarıda bırakılmaz (worker bir platform görevini iptal edemez): sonucunu söyleyene kadar, son tarihten
+  sonra en çok `TASK_OUTCOME_HOURS` saat (varsayılan 6) beklenir.
+- **Sonucu bilinmeyen işlem (`OUTCOME_UNKNOWN`):** görev o sürenin sonunda hâlâ sürüyorsa ya da sonucu artık
+  sorulamıyorsa işlem `OUTCOME_UNKNOWN` ile biter ve **hiçbir şey geri alınmaz**: fiyat, fatura ve disk kaydı işlemin
+  yazdığı gibi kalır, görev kimliği saklanır, personele olağan "işlem başarısız" bildirimi gider. Eskiden bu durumda
+  işlem `TIMEOUT` ile bitiyor, fiyat ve fatura geri alınıyor, görev ise platformda değişikliği yine de yapıyordu.
+  Personel sunucuya platformda bakar; "Yeniden dene" saklanan görevin sonucunu okur, adımı ikinci kez başlatmaz.
 - **İptal:** devam eden bir oluşturma iptal edilebilir. Worker adımlar arasında iptali kontrol eder,
   yaptıklarını geri alır (VM'yi siler, IP'yi bırakır) ve işlemi `cancelled` olarak işaretler.
+- **Geri yüklemeden sonra bekletme:** panel eski bir yedekten geri yüklendiyse, bir yönetici serbest bırakana kadar
+  hiçbir işlem başlatılmaz ve açık işlemler yeniden kuyruğa alınmaz; işlem başlatan rotalar `409 RESTORE_HOLD` döner
+  ve uzlaştırma yalnızca bulgu yazar ([operations.md](operations.md#geri-yüklemeden-sonra-bekletme)).
 - **Kurtarma:**
   - açık kalmış ama kuyrukta işi olmayan işlemler her dakika yeniden kuyruğa alınır;
   - çöken worker'ın işini BullMQ "stalled job" mekanizması geri verir;
@@ -69,7 +79,8 @@ bu kontrol ileride isteğe bağlı olarak eklenebilir.
   tekil indeks sağlar (`OPERATION_IN_PROGRESS`).
 - **Kısmi başarısızlık:** oluşturma yarıda kalırsa sunucu `error` durumuna geçer, rezervasyonu ve
   IP'si korunur. Yönetici işlemi "Yeniden dene" ile kaldığı adımdan sürdürebilir ya da sunucu
-  silinebilir.
+  silinebilir. Başarısız bir boyut değişikliğinin yeniden denenmesi, sunucu o işlemden sonra değiştiyse (başka bir
+  boyut değişikliği) `409 SERVER_CHANGED` ile reddedilir; yeni bir boyut değişikliği istenir.
 
 ## Silme ve kaynakların bırakılması
 Silme, sunucu adının aynen yazılmasını ister. Kilitli sunucu silinmez (`SERVER_LOCKED`).
@@ -106,6 +117,11 @@ bağlantıdaki (vCenter ve diğer altı platform) `lvm-*` VM'lerle karşılaşt�
   bulgu kapanır ve sunucu `ready` durumuna döner.
 - **Güç durumu farklı:** `power_drift` bulgusu açılır ve kayıt düzeltilir.
 - **Platform kaydı olmayan `lvm-*` VM:** `orphan_vm` bulgusu açılır.
+- **VM başka bir kimlik altında:** sunucunun adını taşıyan VM, kayıttakinden farklı bir kimlikle listeleniyorsa
+  (panel dışında silinip geri getirilmiş, ya da panelin veritabanı bir yeniden kurulumdan eski) kayıt o VM'in
+  kimliğine çekilir ve `vm_id_changed` bulgusu yazılır. Proxmox'ta bu önemlidir: boşalan VM numarası başka bir VM'e
+  verilebilir ([proxmox.md](proxmox.md#vm-numaraları-ve-sunucu-kimliği)).
+- **Geri yükleme beklemesinde:** uzlaştırma bulguları yazar ama sunucu kayıtlarını değiştirmez.
 
 Uzlaştırma **hiçbir şeyi kendiliğinden silmez.** Rezervasyonlar da kendiliğinden bırakılmaz;
 karar yöneticiye aittir.
@@ -143,8 +159,13 @@ tabloya bakın; burada yalnızca VMware dışında olmayanlar işaretlendi.
   boyut değiştirme ve yedekten geri yükleme reddedilir (`SERVER_LOCKED`).
 - **Başka hesaba devretme:** sahibi sunucuyu bir e-posta adresine teklif eder; karşı hesap bir hafta içinde kabul
   ederse sunucu aboneliğiyle birlikte geçer. Eski sahibin firewall'ı ya da özel ağı bağlıysa, ödenmemiş faturası ya da
-  süren bir işlemi varsa devredilmez. Snapshot'lar, yedekler, ek diskler ve güç zamanlamaları sunucuyla gider.
-  Yetkili personel bir sunucuyu beklemeden taşıyabilir.
+  süren bir işlemi varsa devredilmez. Snapshot'lar, yedekler ve ek diskler sunucuyla gider. Önceki sahibin sunucuda
+  bıraktıkları devirde temizlenir: kayıtlı SSH anahtarları ve root parolası, etiketler, notlar, güç zamanlamaları,
+  zamanlanmış silme, güncelleme izleme; abonelikte **dönem sonunda iptal** kaydı silinir, **otomatik yenileme**
+  varsayılana (açık) döner ve faturalamanın "silinecek" işareti kalkar. Önceki sahibin açık konsolları kapanır,
+  devirden önce aldığı konsol bileti reddedilir. Önceki sahibin, devir sırasında yolda olan bir isteği (zamanlama,
+  silme, yeniden kurulum, özel ağ) devrin bitmesini bekler ve `404` alır; yeni sahibin sunucusuna yazılmaz.
+  Yetkili personel bir sunucuyu beklemeden taşıyabilir; aynı temizlik uygulanır.
 - **Devralma (içe aktarma):** Yönetim → Sunucular → İçe aktar. Keşfedilen envanterdeki bir VM, bir müşterinin sunucusu
   olur: çalışmaya devam eder, yönetilen adı (`lvm-<sunucu kimliği>`) alır, boyutu platformdan okunur, adresi verilirse
   konumun IP havuzundan kaydedilir.

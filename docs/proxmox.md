@@ -57,6 +57,29 @@ yasak listesinin önüne geçer).
 | Şablon imajı | Şablona çevrilmiş VM |
 | Sunucu | `lvm-<sunucu kimliği>` adlı VM |
 
+## VM numaraları ve sunucu kimliği
+
+Proxmox bir VM'i numarasıyla (VMID) tanır ve **boşalan numarayı sonraki VM'e yeniden verir**. Panel sunucunun
+numarasını saklar; numara tek başına, zaman içinde başka bir VM'i, hatta başka bir müşterinin sunucusunu gösterebilir
+(VM düğümde silinip başka numarayla geri getirildiyse, ya da panelin veritabanı bir yeniden kurulumdan eski bir
+yedekten geri yüklendiyse). Bu yüzden:
+
+- **Her istek beklenen adı taşır.** Panel bir sunucu için yaptığı her çağrıda (güç, snapshot, ayrıntılar, ölçümler,
+  boyut, disk, silme, guest agent işlemleri) VM'in taşıması gereken adı (`lvm-<sunucu kimliği>`) gönderir. Kayıtlı
+  numaradaki VM başka bir ad taşıyorsa adaptör hiçbir şeyi okumadan ve değiştirmeden `409 VM_MISMATCH` döner; işlem
+  kalıcı hatayla biter.
+- **İmajdan sipariş yalnızca şablondan kopyalar.** İmajın gösterdiği numarada bir şablon yoksa (şablon silinmiş ve
+  numarasını sıradan bir VM almış olabilir) oluşturma `TEMPLATE_NOT_FOUND` ile başarısız olur. Bir sunucunun kopyası
+  çıkarılırken kaynak VM'in adı da aynı şekilde denetlenir.
+- **Tutarlılık denetimi numarayı yeniden bağlar.** Denetim sunucunun adını (`lvm-<sunucu kimliği>`) başka bir numara
+  altında bulursa kaydı o numaraya çeker ve `vm_id_changed` bulgusu yazar; sunucu ancak bundan sonra yeniden "hazır"
+  sayılır. Kaydı elle düzeltmek gerekmez.
+
+`VM_MISMATCH` görürseniz: tutarlılık denetimini çalıştırın (Yönetim → Sunucular; kendiliğinden beş dakikada bir
+çalışır) ve işlemi yeniden deneyin. Şablonunu sildiğiniz bir imajı katalogdan da kaldırın ya da yeni şablona
+bağlayın. **Şablonları yüksek numaralarda tutmak** (örneğin 9000 ve üzeri) numaranın yeniden kullanılma olasılığını
+azaltır. Bu davranış Proxmox API'sini taklit eden testlerle sınandı; gerçek bir kümede denenmedi.
+
 ## Şablon hazırlama
 
 - VM'i **şablona çevirin** (Convert to template).

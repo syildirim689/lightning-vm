@@ -7,13 +7,17 @@ uygulamaları (`chat`; 13 uygulama, aşağıda). Tek tek sayıldığında 17 tes
 - **Tarayıcı (Web Push):** panel kapalıyken bile sistem bildirimi gelir. Kullanıcı bunu Hesabım →
   Bildirimler'den cihaz başına açar. VAPID anahtarları ilk kullanımda üretilir ve özel anahtar şifreli
   saklanır. Süresi dolmuş abonelikler (404/410) otomatik silinir. Web Push için HTTPS gerekir.
-  Abonelik kuralları: adres (endpoint) herkese açık bir HTTPS adresi olmalıdır (özel / iç ağ adresleri reddedilir;
-  her gönderimde yeniden denetlenir); kullanıcı başına en çok 20 abonelik (`LIMIT_REACHED`); başka bir hesabın
+  Abonelik kuralları: adres (endpoint) herkese açık bir HTTPS adresi ve hostu **düz bir DNS adı** olmalıdır (harf,
+  rakam, nokta, tire; sayıyla yazılmış bir IP adresi ya da yüzde kodlu / olağan dışı bir host reddedilir; özel / iç
+  ağ adresleri reddedilir ve bağlantı kurulurken yeniden denetlenir); kullanıcı başına en çok 20 abonelik (`LIMIT_REACHED`); başka bir hesabın
   aboneliği yalnızca aynı tarayıcı anahtarlarıyla devralınır (`PUSH_ENDPOINT_IN_USE`); kullanıcı adına oturum açmış
   personel abonelik ekleyemez (`NOT_WHILE_IMPERSONATING`). Çıkış yapmak ya da oturumun sona ermesi o tarayıcıdaki
-  aboneliği kapatır; personel kullanıcının oturumlarını kapattığında ya da parola sıfırlandığında hesabın bütün
-  abonelikleri silinir.
-- **E-posta:** SMTP ayarlıysa çalışır (docs/settings.md).
+  aboneliği kapatır; birinin oturumları hangi yolla kapatılırsa kapatılsın (personelin yasaklaması, oturum iptali,
+  parola ataması; kişinin parola sıfırlaması ya da diğer oturumlarını kapatması) kapatılan tarayıcıların
+  abonelikleri de silinir.
+- **E-posta:** e-posta ayarlıysa çalışır (docs/settings.md). Bildirim e-postaları bir süre Node 22'de bir tarih
+  biçimi seçeneği hatası yüzünden **hiç gönderilmiyordu** (parola sıfırlama, giriş bağlantısı ve kod postaları
+  etkilenmiyordu); ikinci güvenlik turunda düzeltildi ([upgrade-notes.md](upgrade-notes.md)).
 - **SMS:** SMS ayarlıysa ve kullanıcının telefonu doğrulanmışsa çalışır.
 - **Mesajlaşma uygulamaları:** kullanıcının bağladığı Telegram, Slack, webhook ve benzerleri
   ([aşağıda](#mesajlaşma-uygulamaları-kanal-chat)).
@@ -65,7 +69,8 @@ API ve worker yalnızca `notifications` BullMQ kuyruğuna iş bırakır. Kuyruğ
 
 Bir kanalın hatası diğerlerini durdurmaz ve loglanır. İş, geçici hatalar için 3 kez denenir.
 
-Kullanıcı her kanalı Hesabım → Bildirimler'deki "Test gönder" düğmesiyle deneyebilir.
+Kullanıcı her kanalı Hesabım → Bildirimler'deki "Test gönder" düğmesiyle deneyebilir. Test gönderimleri sınırlıdır:
+hesap başına saatte 6 (bütün kanallar birlikte), SMS'te ayrıca numara başına saatte 6; aşılırsa `429` döner.
 
 ## Yeni bir bildirim eklemek
 1. Olayı `catalog`a ekleyin: kime gideceği, kullanılabilir ve varsayılan kanallar, bağlantı ve TR/EN metin.
@@ -85,5 +90,14 @@ anahtarı verilirse istek `X-Lightning-Signature: sha256=<HMAC>` başlığıyla 
 
 Destek: `support.reply` (yanıt geldi), `support.rate` (talebi destek ya da 7 günlük sessizlik kapattığında puan
 isteği; müşteri kendisi kapattıysa gönderilmez), personele `support.ticket_opened`, `support.customer_message`,
-`account.message` (yöneticinin kullanıcılar listesinden toplu gönderdiği mesaj), `support.assigned`, `support.overdue` (yanıt süresi geçen talep; her süre için bir kez, 5 dakikada bir kontrol) ve `support.low_rating` (1–2 puan). Uygulama içi bildirimler iki dilde saklanır (`notifications.texts`); zil, panelin o anki diline
+`account.message` (yöneticinin kullanıcılar listesinden toplu gönderdiği mesaj), `support.assigned`, `support.overdue` (yanıt süresi geçen talep; her süre için bir kez, 5 dakikada bir kontrol) ve `support.low_rating` (1–2 puan; yalnızca **ilk** puanda, sonradan değiştirilen puan kimseye bildirilmez). Uygulama içi bildirimler iki dilde saklanır (`notifications.texts`); zil, panelin o anki diline
 göre gösterir. E-posta, SMS ve sohbet kanalları hesabın dilini kullanır.
+
+Destek bildirimlerinin kuralları:
+- **Atanan kişi:** bir talep yalnızca `support.manage` izni olan birine atanabilir. Sahibi `support.view` iznini
+  kaybettiğinde ya da yasaklandığında talepleri atanmamış duruma döner. Personel olayları, ister ekibe ister tek
+  tek hesaplara gönderilsin, yalnızca o olayın iznini hâlâ taşıyan etkin hesaplara gider; atanan kişi artık göremiyorsa
+  bildirim ekibe gider.
+- **Müşteri yanıtları ve puanlar sınırlıdır:** talep başına 10, müşteri başına 30 (10 dakikada); aşılırsa `429`.
+- **Art arda yanıtlar tek bildirimdir:** aynı talepte art arda gelen müşteri yanıtları için personele bir bildirim
+  gider; sonraki bildirim iki dakika sonra ya da personel arada yanıt verdiyse gönderilir.

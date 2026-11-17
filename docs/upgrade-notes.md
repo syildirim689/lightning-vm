@@ -5,7 +5,237 @@ madde neyin değiştiğini ve işletmecinin yapması gereken bir şey varsa onu 
 davranışı değiştirmeyen işler burada yoktur. Tahsilat çalıştırması API içinde beş dakikada bir çalışır; yani "ilk
 çalıştırma" yükseltmeden birkaç dakika sonradır.
 
-## Güvenlik denetimi turu (2026-11-17)
+## Güvenlik denetimi, ikinci tur (2026-11-17)
+
+`d9f90d3` commit'i üzerinde yapılan ikinci denetim turunun ([security-audit.md](security-audit.md)) düzeltmeleri:
+ilk turun incelemediği alanlar ve ilk turun düzeltmelerinin yeniden denetimi. Veri değişiklikleri
+`apps/api/migrations` altındaki `077`, `078`, `079` ve `080` numaralı dosyalardadır (`maintenance_state` tablosu;
+`users.external_source` alanının denetim kaydından doldurulması; `vm_id_changed` bulgusu; kullanıcı adına açılan
+oturumların sonu); yükseltme sırasında kendiliğinden uygulanır.
+
+> [!IMPORTANT]
+> Yükseltmeden sonra yapılacaklar: **(1)** proxy'yi ve (izleme açıksa) günlük toplayıcısını yeniden başlatın;
+> **(2)** başka bir proxy arkasında çalışıyorsanız `install.sh behind-proxy --public-url https://…` komutunu bir kez
+> çalıştırın, yoksa bazı parola sıfırlama ve giriş bağlantısı postaları gönderilmez; **(3)** WHMCS / WISECP
+> kullanıyorsanız `CUSTOMER_NEEDS_REVIEW` yanıtı alan hesapları yeni **devralma (claim)** rotasıyla çözün;
+> **(4)** ekibinize bir geri yüklemeden sonra panelin **beklemede** açıldığını ve serbest bırakılması gerektiğini
+> söyleyin; **(5)** e-posta kodu ya da giriş bağlantısıyla girişi açtıysanız aşağıdaki "adresin ilk kanıtı" maddesini
+> okuyun.
+
+### Faturalama ve ödeme
+
+- **Yenileme faturası ödeme anında da yeniden fiyatlanır.** Dönemi başlamamış, ödenmemiş bir yenileme faturası artık
+  **itirazlıyken de** sunucunun güncel fiyatını izler ve **ödendiği anda** bir kez daha fiyatlanır (bakiyeden, kayıtlı
+  karttan, ödeme sayfasından ya da personelin elle kapatmasıyla). Müşteri faturayı görüntülediği an ile ödediği an
+  arasında tutar değişebilir. Personelin "Ödeme kaydet" isteği, tutar o anda değiştiyse **bir kez**
+  `409 INVOICE_AMOUNT_CHANGED` döner. *Yapılacak:* yeni tutara bakın ve işlemi yineleyin.
+- **Fiyatı ödenenin altına düşen yenileme faturası kapanır.** Kısmen ödenmiş bir yenileme faturasının yeni tutarı
+  ödenen tutara eşit ya da ondan azsa fatura **ödendi** olur ve fazlası müşterinin bakiyesine yazılır; eskisi gibi
+  eski, yüksek tutarla açık kalıp hatırlatma ve askıya girmez.
+- **Kabul edilen itiraz en çok kalan tutarı iade eder.** Kabul edilen bir itirazın bakiyeye yazdığı tutar, faturanın
+  o andaki kalan tutarını aşamaz.
+- **3, 6 ve 12 aylık dönemlerde büyütme, kalan ayların tamamı için ücretlendirilir.** Eskiden çok aylı bir dönemdeki
+  büyütme, tek bir ayın farkı dönemin tamamına yayılarak hesaplanıyordu. *Yapılacak:* çok aylı dönem kullanan
+  müşterilerinize büyütme ücretinin arttığını söyleyin; yükseltmeden önce yapılmış büyütmeler geriye dönük
+  faturalanmaz.
+- **Param: incelemedeki ödemeye sonraki dönüşler işlenmez.** Bir Param ödemesi "onay bekliyor" durumuna geçtikten
+  sonra gelen dönüşler, **"reddedildi" dahil**, yok sayılır: ödeme personelin bekleyenler listesinden düşmez ve notu
+  değişmez. Personel notunu panel yazar; not **ödemenin kendi kimliği ve yapılacak işle başlar**, Param'ın bildirdiği
+  sipariş ve dekont numaraları ardından gelir. *Yapılacak:* onaylarken Param panelindeki kaydı nottaki ödeme
+  kimliğiyle eşleştirin.
+- **İncelemedeki ödemelerin listesi.** Yönetici API'sinde `payments?status=review` incelemede bekleyen ödemeleri
+  (onay bekleyen Param ödemeleri, tutarı tutmayanlar, sağlayıcının incelemeye aldıkları) en eskiden başlayarak
+  listeler; faturalama özeti bunların sayısını `paymentsInReview` alanında verir. Bir ödeme incelemeye girdiğinde
+  personele **bildirim gitmez**; listeye düzenli bakın.
+- **Adres değişince sırlar yeniden girilir (ödeme ve e-Fatura).** Bir ödeme sağlayıcısının ya da e-Fatura
+  entegratörünün API adresi değiştirildiğinde kayıtlı gizli alanlar (anahtar, parola) yeniden yazılmalıdır; boş
+  bırakılırsa alan `REQUIRED` hatası verir. Test düğmesi de aynı kurala uyar.
+- **Test sonuçları sağlayıcının metnini göstermez.** Ödeme ve e-Fatura testleri yalnızca sabit bir ileti ve durum
+  sınıfı (kabul edildi, reddedildi, belirsiz, ulaşılamadı) gösterir. Sağlayıcının yanıt metni API günlüğündedir
+  (`docker compose logs api`).
+- **"Tahsilatı şimdi çalıştır" artık çoğu zaman reddedilmez.** Periyodik çalıştırma kilidini işi bitince bırakır;
+  düğme `409 BILLING_RUNNING` yanıtını yalnızca gerçekten bir çalıştırma sürerken verir.
+- **Müşteri adına oturum açmış personel fatura e-postasını değiştiremez** (`NOT_WHILE_IMPERSONATING`); fatura
+  profilinin diğer alanları değiştirilebilir.
+- **Geri yükleme beklemesindeyken tahsilat çalışmaz** (aşağıda, Kurulum betiği).
+
+### Sunucular, işlemler ve Proxmox
+
+- **Devir, önceki sahibin abonelik tercihlerini temizler.** Bir sunucu başka hesaba geçtiğinde (müşteri devri ya da
+  personelin taşıması) abonelikteki **dönem sonunda iptal** kaydı silinir, **otomatik yenileme** varsayılana (açık)
+  döner ve faturalamanın "bu sunucu silinecek" işareti kalkar. Eskiden önceki sahibin kaydettiği iptal, dönem
+  sonunda yeni sahibin sunucusunu siliyordu. *Yapılacak:* yeni sahip tercihlerini fatura sayfasından kendisi yapar.
+- **Devirle çakışan istek `404` alır.** Önceki sahibin, devir kabul edilirken yolda olan isteği (zamanlama, silme,
+  yeniden kurulum, özel ağ, anahtar) artık yeni sahibin sunucusuna yazılmaz; istek devrin bitmesini bekler ve `404`
+  döner.
+- **İptalden önce alınmış konsol ve terminal biletleri reddedilir** (`CONSOLE_REVOKED` / `TERMINAL_REVOKED`): devir,
+  çıkış, yasaklama, oturum kapatma ya da yetki daralmasından **önce** alınmış ama henüz kullanılmamış bir bilet artık
+  oturum açmaz. Kişi konsolu yeniden açar.
+- **Faturalama sisteminin müşteri eşlemesi: yalnızca kendi açtığı hesaplar.**
+  `POST /admin/external/:source/customers` artık yalnızca o sistemin **kendi oluşturduğu** hesabı eşler.
+  E-postası doğrulanmış olsa bile başka yoldan açılmış (kayıt, personel) her hesap için `409 CUSTOMER_NEEDS_REVIEW`
+  döner. Entegrasyonun daha önce oluşturduğu hesaplar eşleşmeye devam eder (migration `078` onları denetim kaydındaki
+  `external.customer_created` satırlarından işaretler). Yalnızca e-postası doğrulanmış olduğu için eşleşmiş, panelde
+  önceden var olan hesaplar bir sonraki siparişte `CUSTOMER_NEEDS_REVIEW` alır. *Yapılacak:* hesabın gerçekten o
+  alıcıya ait olması gerektiğinden emin olduktan sonra personel hesabı devralma rotasıyla o sisteme bağlar
+  (`users.manage` izni):
+
+  ```
+  POST /api/admin/external/<source>/customers/<hesap kimliği>/claim
+  ```
+
+  Bu çağrı hesabı o sisteme bağlar, e-postasını doğrulanmış sayar ve hesabı o güne kadar elinde tutan kişinin
+  kullanabileceği her şeyi **siler**: oturumlar, parola, API anahtarları, passkey'ler, bağlı girişler, webhook'lar,
+  mesajlaşma ve tarayıcı bildirimi bağlantıları, kayıtlı SSH anahtarları, telefon numarası ve iki adımlı doğrulama.
+  Sunucular, faturalar ve talepler kalır; alıcı "Parolamı unuttum" ile yeni parola belirler. Personel hesapları,
+  bayiler ve müşterileri ile başka bir sistemin hesapları devralınamaz. Sonra sipariş yeniden denenir. Hesap alıcıya
+  ait değilse hesabı yeniden adlandırın ya da kaldırın.
+- **Entegrasyon siparişleri müşterinin rolüne ve kotasına bakmaz.** WHMCS / WISECP'nin açtığı sipariş ve paket
+  değişikliği için müşterinin rolündeki `servers.create` izni ve hesabın kotası aranmaz: neyin satıldığına o sistem
+  karar verir.
+- **Entegrasyon müşterileri, panelin faturalaması kapalıyken panelden sipariş veremez** (`409 EXTERNALLY_BILLED`).
+  Eskiden böyle bir müşteri panelden sipariş verdiğinde sunucuyu kimse faturalamıyordu. Panelin faturalaması açıksa
+  sipariş herkesinki gibi panelde faturalanır. *Yapılacak:* müşterilerinize yeni sunucuyu faturalama sisteminden
+  sipariş etmelerini söyleyin.
+- **Yeniden denenen boyut değişikliği `409 SERVER_CHANGED` dönebilir.** Personel başarısız bir boyut değişikliğini
+  yeniden denediğinde, sunucu o işlemden sonra değiştiyse (başka bir boyut değişikliği) istek reddedilir; yeni bir
+  boyut değişikliği isteyin. Arada eklenen bir diskin ücreti artık yeniden denemeyle silinmez.
+- **Sonucu öğrenilemeyen işlem `OUTCOME_UNKNOWN` ile biter ve hiçbir şey geri alınmaz.** Bir işlemin süresi,
+  hipervizördeki görevi sürerken dolarsa işlem artık `TIMEOUT` ile bitip fiyatı, faturayı ve disk kaydını geri
+  almaz: görev, süre dolduktan sonra `TASK_OUTCOME_HOURS` saat (varsayılan 6) daha beklenir. Sonuç o zaman da
+  öğrenilemezse işlem `OUTCOME_UNKNOWN` olur; fiyat, fatura ve kayıtlar işlemin yazdığı gibi kalır. *Yapılacak:*
+  sunucuya platformda bakın; sonra işlemi yeniden deneyin (yeniden deneme görevin sonucunu okur, adımı ikinci kez
+  başlatmaz) ya da sunucuyu düzeltin.
+- **Proxmox: VM numarası sunucuya bağlanır** (`409 VM_MISMATCH`). Panel her istekte VM'in taşıması gereken adı
+  (`lvm-<sunucu kimliği>`) gönderir; kayıtlı numaradaki VM bu adı taşımıyorsa adaptör hiçbir şeyi okumadan ve
+  değiştirmeden reddeder. İmajdan sipariş yalnızca **şablondan** kopyalar: şablonu silinmiş bir imajın numarasını
+  başka bir VM almışsa sipariş `TEMPLATE_NOT_FOUND` ile başarısız olur. Tutarlılık denetimi, sunucunun adını başka
+  bir numara altında bulursa kaydı o numaraya çeker (`vm_id_changed` bulgusu). *Yapılacak:* `VM_MISMATCH` görürseniz
+  Yönetim → Sunucular'dan tutarlılık denetimini çalıştırın; şablonu sildiğiniz imajları katalogdan kaldırın.
+- **ISO depoları:** adres (protokol, sunucu, port, URL) değiştiğinde kayıtlı sır yeniden girilir.
+
+### Giriş, bildirimler ve ayarlar
+
+- **Bildirim e-postaları yeniden gönderiliyor.** Node 22'de bir tarih biçimi seçeneği hatası yüzünden bildirim
+  e-postalarının **hiçbiri gönderilmiyordu** (yeni giriş, parola değişti, iki adımlı doğrulama değişti dahil); parola
+  sıfırlama, giriş bağlantısı ve kod postaları etkilenmiyordu. Düzeltildi. *Yükseltmeden sonra:* kullanıcılar
+  e-posta bildirimlerini yeniden almaya başlar; Hesap → Bildirimler'den bir test gönderin.
+- **Kullanıcı adına açılan oturum, onu açan personelin yetkisiyle biter.** Oturumu başlatan personelin rolü
+  düşürüldüğünde, hesabı yasaklandığında ya da silindiğinde ve oturumları kapatıldığında, başlattığı "kullanıcı
+  adına" oturumlar da kapanır. Bu oturumlar, tarayıcı ne gönderirse göndersin, başladıktan **bir saat** sonra biter
+  (migration `080`).
+- **Panelin adresi bilinmiyorsa bağlantı postası gönderilmez.** Kayıtlı adresi, alan adı ve `PANEL_PUBLIC_URL`
+  değeri olmayan bir kurulum (tipik olarak başka bir proxy arkasındaki), herkese açık bir host adıyla gelen isteklere
+  parola sıfırlama ya da giriş bağlantısı postası **göndermez**; API günlüğüne
+  `auth_mail_not_sent_panel_address_unknown` yazılır. Bir yönetici bir kez giriş yaptığında adres kaydedilir.
+  *Yapılacak:* `install.sh behind-proxy --public-url https://panel.example.com` çalıştırın (aşağıda) ya da `.env`
+  dosyasına `PANEL_PUBLIC_URL` yazın.
+- **Bazı ayarlar yalnızca yöneticiye açık.** `settings.manage` izni olan ama yönetici (`*`) olmayan personel artık
+  şunları yapamaz: e-posta ya da SMS ayarlarını kaydetmek, giriş bağlantısı ya da e-posta koduyla girişi açmak, iki
+  adımlı doğrulama zorunluluğunu düşürmek, CAPTCHA'yı zayıflatmak ve kaydedilmemiş bir özel SMS sağlayıcısını test
+  etmek (`403`). Bu kanallar yöneticiler dahil herkesin sıfırlama bağlantısını ve kodunu taşır. *Yapılacak:* bu
+  ayarları yönetici olmayan bir hesapla yönetiyorsanız işi bir yöneticiye verin.
+- **Servis günlükleri yalnızca yöneticiye gösterilir ve maskelenir.** Yönetim → Sistem'deki servis günlüklerini
+  yalnızca yöneticiler görür; URL'de taşınan sırlar (`token`, `code`, `state`, `session_id` değerleri ve sıfırlama
+  belirteci) günlük kopyalarında `***` olur. API'nin istek günlüğü de artık URL'deki belirteçleri yazmaz.
+- **Talep atanan kişi `support.manage` iznine sahip olmalı.** Sahibi `support.view` iznini kaybettiğinde ya da
+  yasaklandığında talepler atanmamış duruma döner ve bildirimleri ekibe gider.
+- **Yeni hız sınırları (`429`):**
+
+  | Ne | Sınır |
+  |---|---|
+  | Bildirim testi | hesap başına 6 / saat; SMS'te ayrıca numara başına 6 / saat |
+  | Telefon doğrulama kodu | hesap başına ve numara başına 5 / gün |
+  | İki adımlı doğrulama kodu (SMS / e-posta) | hesap başına 8 / saat |
+  | Parola sıfırlama postası | posta kutusu başına 5 / saat |
+  | Müşterinin talep yanıtı ve puanı | talep başına 10, müşteri başına 30 / 10 dakika |
+
+  Personele yalnızca **ilk** puan bildirilir; tek bir talepte art arda gelen yanıtlar tek bildirimde toplanır.
+- **Tarayıcı bildirimi adresi bir DNS adı olmalıdır.** Sayıyla yazılmış (IP) ya da olağan dışı bir host taşıyan
+  abonelik adresi reddedilir. Birinin oturumları hangi yolla kapatılırsa kapatılsın (personel, parola değişikliği,
+  "diğer cihazlardan çık") tarayıcı bildirimi abonelikleri de silinir; kullanıcı bildirimleri tarayıcısında yeniden
+  açar.
+- **Denetim kaydı:** iki yeni eylem var: `auth.password_step` (iki adımlı doğrulaması olan hesabın doğru parolası;
+  henüz oturum yok) ve `auth.address_proven` (adresin ilk kanıtı, aşağıda). `auth.login / success` artık her zaman
+  bir oturumun gerçekten açıldığı anlamına gelir. *Yapılacak:* denetim kaydını `auth.login` sayarak izleyen
+  araçlarınız varsa uyarlayın.
+- **Adresin ilk kanıtı, önceden kurulanları siler.** E-posta adresi hiç doğrulanmamış bir hesap **ilk kez** giriş
+  bağlantısı ya da e-posta koduyla girdiğinde adres sahibince kanıtlanmış sayılır ve hesapta daha önce kurulanlar
+  **bir kez** silinir: parola, bağlı girişler, diğer oturumlar, API anahtarları, passkey'ler, webhook'lar,
+  mesajlaşma uygulaması bağlantıları, tarayıcı bildirimi abonelikleri, doğrulanmış telefon numarası ve açılmamış
+  (kurulup etkinleştirilmemiş) iki adımlı doğrulama. Neden: panel kayıtta adresi doğrulamadığı için hesabı ilk açan
+  kişi adresin sahibi olmayabilir. Parolayla kaydolup sonradan bağlantı ya da kodla giren müşteri "Parolamı unuttum"
+  ile yeni parola belirler. Kullanıcıya bu silme için **ayrı bir bildirim gösterilmez**. Personelin bir adresi elle
+  doğrulanmış işaretlemesi hiçbir şeyi silmez. *Yapılacak:* bağlantı ya da kodla girişi açtıysanız destek ekibinize
+  haber verin.
+- **Giriş kimlikleri metin olmalıdır:** e-posta, kullanıcı adı ya da telefon alanında metin dışı bir değer
+  (liste, nesne) reddedilir.
+
+### Kurulum betiği, proxy ve web
+
+- **Geri yüklemeden sonra panel beklemeye alınır.** `install.sh restore` artık (1) arşivi doğrulamadan ve şifresini
+  çözmeden önce yalnızca root'un açabildiği bir klasöre **kopyalar** ve yalnızca o kopyayı kullanır (geçici
+  klasörde, `TMPDIR` ya da `/tmp`, **bir kopyalık daha yer** gerekir; yoksa `E_RESTORE_COPY`), (2) **herkesin
+  oturumunu kapatır**, (3) paneli **beklemeye** alır: serbest bırakılana kadar işlem başlatılmaz ya da sürdürülmez,
+  zamanlamalar ve zamanlanmış silmeler çalışmaz, tahsilat çalışmaz; işlem başlatan rotalar `409 RESTORE_HOLD` döner.
+  *Yapılacak:* yedekten sonra oluşturulan ya da silinen sunuculara, yedekten sonra yapılan ödemelere ve yedekten
+  sonra silinen API anahtarlarına, yasaklara, rol ve parola değişikliklerine bakın (hepsi yedek anındaki haline
+  döner); sonra bekletmeyi **Yönetim → Sistem**'deki şeritten ("Serbest bırak") ya da komutla kaldırın:
+
+  ```sh
+  docker compose exec api node dist/cli.js release-restore-hold
+  ```
+
+  `--no-hold` yalnızca bekletmeyi atlar (az önce alınmış bir yedek için); oturumlar yine kapanır. Bekletme
+  konulamazsa servisler **başlatılmaz** (`E_RESTORE_HOLD`); aynı komutu yeniden çalıştırın. Bekletme tablosundan
+  önceki bir sürümün yedeği önce güncellenir (migration), sonra beklemeye alınır
+  ([operations.md](operations.md#geri-yükleme)).
+- **`install.sh behind-proxy` artık `--public-url` ister.** `.env` içinde `PANEL_PUBLIC_URL` yoksa komut
+  `E_PUBLIC_URL_MISSING` ile durur ve hiçbir şeyi değiştirmez. *Yapılacak:* başka bir proxy arkasındaki mevcut
+  kurulumlarda bir kez çalıştırın:
+
+  ```sh
+  sudo sh scripts/install.sh behind-proxy --public-url https://panel.example.com
+  ```
+
+  Alan adı modundaki kurulumlarda adres kendiliğinden yazılır (`https://<alan adı>`). Önünüzdeki proxy'nin
+  yapılandırmasına `X-Forwarded-Host` başlığını da ekleyin ([domain-https.md](domain-https.md)).
+- **Kendi sertifikanız uygulanmadan önce betikte de denetlenir.** Süresi dolmuş ya da henüz geçerli olmayan
+  (`E_CERT_DATES`), okunamayan ya da parolayla korunan (`E_CERT_UNREADABLE`) ve anahtarıyla eşleşmeyen
+  (`E_CERT_KEY_MISMATCH`) sertifika reddedilir; hiçbir şey değişmez.
+- **Geçersiz `--trusted-cidr` reddedilir** (`E_CIDR_INVALID`). Birden çok ağ, aralarında birer boşlukla verilir.
+- **Zaman ve ad sunucusu listeleri iki tarafta da sıkı denetlenir.** Panelin ve betiğin kuralı artık aynıdır:
+  parçası 255'i aşan bir IPv4 adresi, yalnızca rakam ve noktadan oluşan bir ad, boşluk ya da joker karakter içeren
+  bir liste reddedilir.
+- **Erişim günlükleri maskelenir.** Proxy'nin erişim günlüğü ve günlük toplayıcısı `token`, `code`, `state` ve
+  `session_id` sorgu değerlerini ve parola sıfırlama yolundaki belirteci `***` ile değiştirir; CAPTCHA yanıtı
+  başlığı günlüğe yazılmaz. *Yapılacak:* yeni kuralın geçerli olması için proxy'yi ve toplayıcıyı yeniden başlatın.
+  Daha önce saklanmış satırlar yeniden yazılmaz; Loki'deki günlükler saklama süresi (7 gün) dolunca silinir.
+- **Web arayüzü.** Panel geri yükleme beklemesindeyken Yönetim → Sistem sayfası "Serbest bırak" düğmeli bir şerit
+  gösterir. Yeniden kurulum penceresi ve yönetimdeki ödemeler sayfası bu turun yeni durumlarını **henüz göstermez**
+  (ödemeler sayfasında incelemedeki ödemeler için ayrı bir görünüm yoktur); bunlar şimdilik API'den okunur.
+
+### Yükseltmeden sonra (ikinci tur)
+
+- Proxy'yi ve (izleme açıksa) toplayıcıyı yeniden başlatın:
+
+  ```sh
+  docker compose restart proxy
+  ```
+
+  ```sh
+  docker compose --profile observability restart otel
+  ```
+
+- Başka bir proxy arkasındaysanız `behind-proxy --public-url …` komutunu çalıştırın ve bir test hesabı için parola
+  sıfırlama isteyin: posta gelmeli ve bağlantı panelin kendi adresini taşımalı.
+- Hesap → Bildirimler'den bir e-posta testi gönderin.
+- WHMCS / WISECP kullanıyorsanız modülün günlüğünde `CUSTOMER_NEEDS_REVIEW` arayın ve her hesabı devralma rotasıyla
+  ya da hesabı kaldırarak çözün.
+- Param kullanıyorsanız `payments?status=review` listesine kimin bakacağını belirleyin.
+- Yönetim → Sunucular → İşlemler'de `OUTCOME_UNKNOWN` ve `VM_MISMATCH` ile bitmiş işlem var mı bakın.
+
+## Güvenlik denetimi, ilk tur (2026-11-17)
 
 `641aa4d` commit'i üzerinde yapılan güvenlik denetiminin ([security-audit.md](security-audit.md)) düzeltmeleri. Veri
 değişiklikleri `apps/api/migrations` altındaki `074`, `075` ve `076` numaralı dosyalardadır
@@ -54,8 +284,11 @@ uygulanır.
   sınırına bakmaz. *Yapılacak:* müşterilerinize paket değişikliğini faturalama sisteminden yapmalarını söyleyin.
 - **Faturalama sisteminin müşteri eşlemesi daha sıkı.** `POST /admin/external/:source/customers`, aynı e-postayla
   var olan hesap doğrulanmamışsa, bir bayinin müşterisiyse, bir bayiyse ya da başka bir sistemin hesabıysa
-  `409 CUSTOMER_NEEDS_REVIEW` yanıtı verir ve sipariş o hesaba bağlanmaz. *Yapılacak:* personel hesabın e-postasını
-  doğrular (Yönetim → Kullanıcılar) ya da hesabı yeniden adlandırır / kaldırır; sonra sipariş yeniden denenir.
+  `409 CUSTOMER_NEEDS_REVIEW` yanıtı verir ve sipariş o hesaba bağlanmaz. *Yapılacak:* personel hesabı **devralma
+  rotasıyla** o sisteme bağlar (`POST /api/admin/external/<source>/customers/<hesap kimliği>/claim`; hesabın önceki
+  oturumlarını, parolasını ve anahtarlarını siler) ya da hesabı yeniden adlandırır / kaldırır; sonra sipariş yeniden
+  denenir. E-postayı Yönetim → Kullanıcılar'dan doğrulanmış işaretlemek **artık yetmez**: ikinci turdan beri yalnızca
+  entegrasyonun kendi açtığı hesaplar eşleşir (yukarıda, ikinci tur).
   **WHMCS ve WISECP modülleri yeni 409 kodlarını (`CUSTOMER_NEEDS_REVIEW`, `EXTERNALLY_BILLED`, `CLONE_PENDING`)
   tanımaz ve genel bir API hatası olarak gösterir;** kodu modülün günlüğünde arayın.
 - **Bayinin açtığı müşteri hesapları doğrulanmamış e-postayla başlar.**
@@ -141,7 +374,7 @@ uygulanır.
   `Referrer-Policy` ve `frame-ancestors 'none'` başlıklarını kendisi gönderir. Giriş sayfasındaki `next` parametresi,
   normalleştirildiğinde başka bir siteye giden yolları kabul etmez.
 
-### Yükseltmeden sonra (bu tur)
+### Yükseltmeden sonra (ilk tur)
 
 - `docker compose restart proxy` çalıştırın; denetim kaydında yeni girişlerin IP adresi doğru görünmeli.
 - Yeni bir yedek alın (`sudo sh scripts/install.sh backup`); `backups/` altında `.hmac` dosyası oluşmalı.

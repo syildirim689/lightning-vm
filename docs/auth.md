@@ -16,8 +16,8 @@ veya çıkarılır (`deny`).
 | `vmware.view` / `vmware.manage` | VMware bağlantıları |
 | `users.view`, `users.manage`, `users.roles`, `users.ban`, `users.sessions`, `users.impersonate` | Kullanıcı yönetimi |
 | `roles.manage` | Rolleri oluşturma ve değiştirme |
-| `settings.view` / `settings.manage` | Marka, e-posta, CAPTCHA, SMS ve bildirim ayarları |
-| `system.view`, `audit.view` | Sistem sağlığı, yedekler ve denetim kayıtları |
+| `settings.view` / `settings.manage` | Marka, e-posta, CAPTCHA, SMS ve bildirim ayarları (bazıları yalnızca yöneticiye açıktır, [aşağıda](#yalnızca-yöneticinin-değiştirebildiği-ayarlar)) |
+| `system.view`, `audit.view` | Sistem sağlığı, yedekler ve denetim kayıtları (sistem sayfasındaki servis günlüklerini yalnızca yöneticiler görür) |
 
 Hazır roller:
 - **Yönetici** (`admin`): her izin (`*`); değiştirilemez.
@@ -48,9 +48,13 @@ denetim kaydına `admin.user.<işlem>` olarak yazılır:
 - parola belirleme;
 - oturumları listeleme ve kapatma;
 - kullanıcı adına giriş: 1 saatlik oturumdur; panelde uyarı şeridi gösterilir ve tek tıkla kendi hesabına dönülür.
+  Oturum, başladıktan **bir saat sonra** biter; tarayıcının gönderdiği çerezler bunu uzatamaz. Oturumu başlatan
+  personelin yetkisi kalktığında da biter: rolü düşürüldüğünde (artık `users.impersonate` izni yoksa ya da izinleri o
+  kullanıcıyı kapsamıyorsa), yasaklandığında, hesabı silindiğinde ve oturumları kapatıldığında, başlattığı "kullanıcı
+  adına" oturumlar ve onlarla açılmış konsollar kapanır. Aynı denetim bu oturumların her isteğinde de yapılır.
   Bu oturumda hesapta kalıcı iz bırakan işlemler reddedilir (`NOT_WHILE_IMPERSONATING`): passkey ve bağlı hesap
   ekleme, API anahtarı, webhook, tarayıcı bildirimi ve mesajlaşma bağlantısı oluşturma, parola, telefon ve iki adımlı
-  doğrulama değişikliği;
+  doğrulama değişikliği, fatura e-postasını değiştirme;
 - silme: kullanıcının sunucusu varsa reddedilir (`USER_HAS_SERVERS`).
 
 ## İlk yönetici
@@ -89,11 +93,18 @@ Uç noktalar `/api/auth/*` altındadır; Fastify bunları better-auth'a iletir.
   hesap silme ve benzerleri. Sonradan eklenen bir eklentinin rotası listeye yazılana kadar kapalıdır. Sağlayıcının
   kimlik belirtecini (ID token) `/sign-in/social` ya da `/link-social` rotasına göndererek giriş reddedilir.
 - **Gövde ve alan sınırları:** `/api/auth/*` istek gövdesi 64 KB, API'nin geri kalanında JSON gövdesi 256 KB ile
-  sınırlıdır (talep ve itiraz ekleri 9 MB, marka dosyaları 1 MB; Caddy `/api/*` için 10 MB üst sınır koyar). 254
-  karakterden uzun e-posta, kullanıcı adı ya da telefon reddedilir; denetim kaydına yazılan metinler kısaltılır.
+  sınırlıdır (talep ve itiraz ekleri 9 MB, marka dosyaları 1 MB; Caddy `/api/*` için 10 MB üst sınır koyar). Ek
+  rotalarındaki büyük gövde yalnızca oturum çerezi ya da API anahtarı gösteren bir istekten okunur; diğerleri gövde
+  okunmadan reddedilir. E-posta, kullanıcı adı ve telefon alanları **metin** olmalıdır ve 254 karakteri aşamaz;
+  denetim kaydına yazılan metinler kısaltılır.
 - **Bağlantılar ve yönlendirmeler:** parola sıfırlama ve giriş bağlantıları isteğin geldiği host adını değil, panelin
-  ayarlı adresini taşır (adres henüz ayarlı değilse isteğinkini). Yönlendirme hedefleri (`callbackURL` ve benzerleri)
-  yalnızca panel içi bir yol olabilir.
+  kendi adresini taşır: `.env` içindeki `PANEL_PUBLIC_URL`, yoksa alan adı, yoksa kurulumda verilen ya da bir
+  yöneticinin ilk girişinde kaydedilen adres. Hiçbiri yoksa isteğin adresi yalnızca bu sunucudan ya da özel bir ağdan
+  geliyorsa kullanılır; herkese açık bir host adıyla gelen istek için **posta gönderilmez** ve API günlüğüne
+  `auth_mail_not_sent_panel_address_unknown` yazılır ([domain-https.md](domain-https.md)). Yönlendirme hedefleri
+  (`callbackURL` ve benzerleri) yalnızca panel içi bir yol olabilir.
+- **İstek günlüğü:** API'nin istek günlüğü başlık yazmaz ve URL'deki belirteçleri (sıfırlama belirteci, giriş
+  bağlantısı, SSO `code` / `state`) maskeler.
 - Kullanıcılar mevcut `users` tablosunda kalır. better-auth tabloları `auth_sessions`,
   `auth_accounts`, `auth_verifications` ve `auth_passkeys`'tir (migration 007).
   Eski parola özetleri `auth_accounts`'a taşınır; eski hesaplar aynı parolayla girer.
@@ -109,8 +120,11 @@ Uç noktalar `/api/auth/*` altındadır; Fastify bunları better-auth'a iletir.
 - Bir oturum hangi yolla biterse bitsin (çıkış, iptal, parola sıfırlama), o oturumla açılmış
   tarayıcı konsolları da kapatılır. Kullanıcının erişimi daraldığında (rol ya da izin azaltma) ve iki adımlı
   doğrulaması kapatıldığında ya da sıfırlandığında da açık konsolları ve host terminalleri kapanır.
-- Personel bir kullanıcının oturumlarını kapattığında (yasaklama, oturum iptali, parola atama) ya da parola
-  sıfırlandığında o hesabın tarayıcı bildirimi abonelikleri de silinir.
+- Birinin oturumları hangi yolla kapatılırsa kapatılsın (personelin yasaklaması, oturum iptali, parola ataması,
+  iki adımlı doğrulama sıfırlaması; kişinin kendi parola sıfırlaması, diğer oturumları kapatan parola değişikliği ya
+  da "diğer oturumları kapat") o tarayıcıların bildirim abonelikleri de silinir.
+- Bir iptalden **önce** alınmış ama henüz kullanılmamış konsol ya da terminal bileti de reddedilir
+  (`CONSOLE_REVOKED` / `TERMINAL_REVOKED`; [console.md](console.md)).
 
 ## Passkey'ler
 Kullanıcı Hesap sayfasından passkey ekler (`@better-auth/passkey`, WebAuthn). Giriş sayfasında
@@ -150,6 +164,9 @@ Hesabım → Güvenlik'ten açılır (better-auth `twoFactor` eklentisi):
 - Passkey ile giriş, iki adımlı doğrulamanın yerini tutar.
 - İki adımlı doğrulaması açık hesaplar e-posta koduyla ya da giriş bağlantısıyla giremez (`TWO_FACTOR_USE_PASSWORD`):
   posta kutusundaki bir bağlantı tek etkendir.
+- **Denetim kaydı:** iki adımlı doğrulaması olan bir hesabın doğru parolası henüz bir giriş değildir; ayrı bir
+  eylemle, `auth.password_step` olarak yazılır ve giriş bildirimi göndermez. `auth.login / success` her zaman bir
+  oturumun gerçekten açıldığı anlamına gelir (ikinci adımdan sonra).
 
 İçgörüler, iki adımlı doğrulaması kapalı yöneticileri gösterir.
 
@@ -159,6 +176,38 @@ dakika geçerli, en fazla 5 deneme). Eklenti yalnızca bunun için açıktır: k
 ve yalnızca onun numarasını doğrular; telefon numarasıyla giriş ve telefonla parola sıfırlama rotaları kapalıdır
 (`404`). Doğrulanmış numaraya SMS ile iki adımlı doğrulama kodu ve SMS
 bildirimleri gönderilebilir. SMS ayarlanmamışsa bu bölüm bilgilendirme gösterir.
+
+## Adresin ilk kanıtı (giriş bağlantısı ve e-posta kodu)
+Panel kayıtta e-posta adresini doğrulamaz; bu yüzden bir hesabı ilk açan kişi adresin sahibi olmayabilir (açık
+kayıtta herkes başkasının adresiyle hesap açabilir). Adresi hiç doğrulanmamış bir hesap **ilk kez** giriş
+bağlantısıyla ya da e-posta koduyla girdiğinde (ikisi de Ayarlar'dan açılır, varsayılan kapalıdır) adres, sahibi
+tarafından kanıtlanmış sayılır ve hesapta o ana kadar kurulmuş olanlar **bir kez** silinir:
+
+- parola ve bağlı girişler (sosyal hesaplar), diğer oturumlar;
+- API anahtarları, passkey'ler, webhook'lar;
+- mesajlaşma uygulaması bağlantıları ve tarayıcı bildirimi abonelikleri;
+- doğrulanmış telefon numarası;
+- kurulmuş ama **açılmamış** bir iki adımlı doğrulama. Açık olan kalır: böyle bir hesap zaten bağlantı ya da kodla
+  giremez.
+
+Sunucular, faturalar ve talepler kalır. Olay denetim kaydına `auth.address_proven` olarak yazılır; sonrasında adres
+doğrulanmıştır ve bir daha hiçbir şey silinmez. Parolayla kaydolup sonradan bağlantı ya da kodla giren müşteri
+"Parolamı unuttum" ile yeni bir parola belirler. **Kullanıcıya bu silme için ayrı bir bildirim gösterilmez**
+(bilinen eksik). Personelin bir adresi Yönetim → Kullanıcılar'dan elle doğrulanmış işaretlemesi sahibin kanıtı
+değildir ve hiçbir şeyi silmez.
+
+## Yalnızca yöneticinin değiştirebildiği ayarlar
+E-posta ve SMS kanalları, yöneticiler dahil her hesabın sıfırlama bağlantısını ve kodunu taşır. Bu yüzden
+`settings.manage` izni olan ama yönetici (`*`) olmayan personel şunları yapamaz (`403`):
+
+- e-posta ayarlarını ve SMS ayarlarını kaydetmek;
+- giriş bağlantısıyla ya da e-posta koduyla girişi **açmak** (kapatabilir);
+- iki adımlı doğrulama zorunluluğunu **düşürmek** (herkes → personel → hiç kimse yönünde);
+- CAPTCHA'yı zayıflatmak: kaldırmak, bir formdan almak ya da en düşük skoru indirmek;
+- kaydedilmemiş bir özel (HTTP) SMS sağlayıcısını test etmek. Kayıtlı olanı test edebilir ve yalnızca testin geçip
+  geçmediğini öğrenir.
+
+Dizin ve SSO ayarlarındaki rol eşleme kuralı ayrıdır (aşağıda, `FORBIDDEN_TARGET`).
 
 ## Son giriş yöntemi
 Giriş sayfası son kullanılan yöntemi (parola veya passkey) işaretler. Bu bilgi kullanıcı listesinde de görünür.
@@ -192,6 +241,11 @@ Bu koşullar sağlanmazsa API `403 CSRF_REJECTED` döner. better-auth ayrıca ç
 | Giriş, e-posta başına | 10 / 15 dk |
 | Kayıt, IP başına | 5 / saat |
 | Parola sıfırlama isteği, IP başına | 5 / saat |
+| Parola sıfırlama postası, posta kutusu başına (hesap olsun olmasın sayılır) | 5 / saat |
+| Telefon doğrulama kodu (SMS), hesap başına ve numara başına | 5 / gün |
+| İki adımlı doğrulama kodu (SMS ya da e-posta), hesap başına | 8 / saat |
+| Bildirim testi, hesap başına (SMS'te ayrıca numara başına) | 6 / saat |
+| Müşterinin talep yanıtı ve puanı | talep başına 10, müşteri başına 30 / 10 dk |
 | Diğer `/api/auth/*`, IP başına | 100 / dk |
 | Kurulum, IP başına | 10 / 15 dk |
 
@@ -223,7 +277,8 @@ Bu, e-postanın kayıtlı olduğunu açığa çıkarır; açık kayıtlı bir pa
   Boş kurulumda `E2E_BOOTSTRAP_TOKEN` gerekir.
 
 ## Henüz yok
-- E-posta adresi doğrulama: kayıtla açılan hesabın adresi doğrulanmaz.
+- E-posta adresi doğrulama: kayıtla açılan hesabın adresi doğrulanmaz. Adres, hesap ilk kez giriş bağlantısı ya da
+  e-posta koduyla girdiğinde kanıtlanmış sayılır ([yukarıda](#adresin-ilk-kanıtı-giriş-bağlantısı-ve-e-posta-kodu)).
 - Organizasyon / ekip yapısı: bir projeyi ya da sunucuyu birden çok kullanıcı paylaşamaz. (Bayiler vardır: bayi kendi
   müşteri hesaplarını açar ve onların sunucularını yönetir; `apps/api/src/reseller.ts`.)
 
