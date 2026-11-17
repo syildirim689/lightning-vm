@@ -76,6 +76,22 @@ func TestTerminalEchoesThroughTheShellOnce(t *testing.T) {
 	}
 }
 
+func TestTerminalUnknownTicketsAreAuditedAtABoundedRate(t *testing.T) {
+	store, front := terminalSetup(t, time.Minute)
+	for i := 0; i < 20; i++ {
+		c, _, err := dialTerminal(front, token+"-junk-"+string(rune('a'+i)))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if code, reason := closeCode(t, c); code != closeSession || reason != "TERMINAL_SESSION_INVALID" {
+			t.Fatalf("got %d %q", code, reason)
+		}
+	}
+	if names := store.eventNames(); strings.Count(names, "terminal_denied") != deniedPerMinute || strings.Count(names, ",") != deniedPerMinute-1 {
+		t.Fatalf("20 junk tickets wrote %q", names)
+	}
+}
+
 func TestTerminalClosesWhenIdle(t *testing.T) {
 	store, front := terminalSetup(t, time.Millisecond)
 	addSession(store, token, Session{UserID: "admin-1", VM: "host"})

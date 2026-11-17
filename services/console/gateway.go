@@ -66,6 +66,7 @@ type Gateway struct {
 	store          Store
 	guard          *netGuard
 	allowedOrigins map[string]bool
+	originHosts    []string // their hosts, for websocket.Accept, which makes its own check
 	maxPerUser     int
 	maxTotal       int
 	maxDuration    time.Duration
@@ -73,6 +74,7 @@ type Gateway struct {
 
 	mu     sync.Mutex
 	active map[*conn]struct{}
+	denied deniedLimiter
 }
 
 type conn struct {
@@ -87,18 +89,87 @@ func sessionKey(token string) string {
 	return hex.EncodeToString(sum[:])
 }
 
+// originOf normalises an Origin ("https://Panel.example/" becomes "https://panel.example") and returns its host.
+func originOf(raw string) (origin, host string, ok bool) {
+	u, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil || u.Host == "" || (u.Scheme != "https" && u.Scheme != "http") {
+		return "", "", false
+	}
+	host = strings.ToLower(u.Host)
+	return u.Scheme + "://" + host, host, true
+}
+
+// originPattern is a host as a literal pattern for websocket.AcceptOptions.OriginPatterns (path.Match syntax:
+// the brackets of an IPv6 address would otherwise start a character class).
+func originPattern(host string) string {
+	return strings.NewReplacer(`\`, `\\`, "*", `\*`, "?", `\?`, "[", `\[`).Replace(host)
+}
+
 // originAllowed: the page must come from the same host it connects to (Caddy keeps Host), or an
 // explicitly configured origin. Cross-site WebSocket hijacking is refused before the upgrade.
+// When the request arrived over TLS (here, or at the proxy in front) the page must be an https one as well:
+// an http page on the same host name is not the panel. Plain-http local mode keeps working.
 func (g *Gateway) originAllowed(r *http.Request) bool {
-	origin := r.Header.Get("Origin")
-	if origin == "" {
+	origin, host, ok := originOf(r.Header.Get("Origin"))
+	if !ok {
 		return false
 	}
 	if g.allowedOrigins[origin] {
 		return true
 	}
-	u, err := url.Parse(origin)
-	return err == nil && strings.EqualFold(u.Host, r.Host)
+	if !strings.EqualFold(host, r.Host) {
+		return false
+	}
+	secure := r.TLS != nil || strings.EqualFold(strings.TrimSpace(r.Header.Get("X-Forwarded-Proto")), "https")
+	return !secure || strings.HasPrefix(origin, "https://")
+}
+
+// A ticket nobody issued belongs to no principal, and anyone can send one: these requests are logged and
+// counted, and only a few per minute become audit events, so a loop cannot fill the audit table or push real
+// console events out of the stream. The next event written says how many were left out.
+const deniedPerMinute = 5
+
+type deniedLimiter struct {
+	mu         sync.Mutex
+	now        func() time.Time // tests move the clock
+	windowEnd  time.Time
+	written    int
+	suppressed int64
+}
+
+// allow reports whether one more event may be written, and how many were left out since the last one.
+func (l *deniedLimiter) allow() (bool, int64) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	now := time.Now()
+	if l.now != nil {
+		now = l.now()
+	}
+	if !now.Before(l.windowEnd) {
+		l.windowEnd, l.written = now.Add(time.Minute), 0
+	}
+	if l.written >= deniedPerMinute {
+		l.suppressed++
+		return false, 0
+	}
+	l.written++
+	left := l.suppressed
+	l.suppressed = 0
+	return true, left
+}
+
+// unknownTicket records a rejected ticket that names no session: always a log line, an audit event within the limit.
+func (g *Gateway) unknownTicket(ctx context.Context, event, reason string) {
+	ok, left := g.denied.allow()
+	logger.Warn("ticket_unknown", "event", event, "audited", ok)
+	if !ok {
+		return
+	}
+	fields := map[string]any{"event": event, "reason": reason}
+	if left > 0 {
+		fields["suppressed"] = left
+	}
+	g.store.Event(ctx, fields)
 }
 
 // reserve takes a slot for c unless its user or the gateway is at the limit. Counting and taking are one
@@ -134,14 +205,14 @@ func (g *Gateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	// No cookie, or one that cannot be a ticket: refused before the upgrade and without an audit event, so a
 	// loop of anonymous requests cannot fill the audit table. A ticket that is presented and rejected is still
-	// recorded below.
+	// recorded below, a few times a minute at most (unknownTicket).
 	cookie, err := r.Cookie(cookieName)
 	if err != nil || len(cookie.Value) < 32 {
 		http.Error(w, "console session required", http.StatusUnauthorized)
 		return
 	}
 	subprotocols := strings.Split(subprotocolSet, ",")
-	client, err := websocket.Accept(w, r, &websocket.AcceptOptions{Subprotocols: subprotocols})
+	client, err := websocket.Accept(w, r, &websocket.AcceptOptions{Subprotocols: subprotocols, OriginPatterns: g.originHosts})
 	if err != nil {
 		return
 	}
@@ -153,7 +224,7 @@ func (g *Gateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			logger.Error("console_store_failed", "error", err.Error())
 		}
-		g.store.Event(ctx, map[string]any{"event": "denied", "reason": "CONSOLE_SESSION_INVALID"})
+		g.unknownTicket(ctx, "denied", "CONSOLE_SESSION_INVALID")
 		client.Close(closeSession, "CONSOLE_SESSION_INVALID")
 		return
 	}

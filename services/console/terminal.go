@@ -52,7 +52,7 @@ func (g *Gateway) serveTerminal(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "terminal session required", http.StatusUnauthorized)
 		return
 	}
-	client, err := websocket.Accept(w, r, nil)
+	client, err := websocket.Accept(w, r, &websocket.AcceptOptions{OriginPatterns: g.originHosts})
 	if err != nil {
 		return
 	}
@@ -65,7 +65,7 @@ func (g *Gateway) serveTerminal(w http.ResponseWriter, r *http.Request) {
 		logger.Error("terminal_store_failed", "error", err.Error())
 	}
 	if s == nil {
-		g.store.Event(ctx, map[string]any{"event": "terminal_denied", "reason": "TERMINAL_SESSION_INVALID"})
+		g.unknownTicket(ctx, "terminal_denied", "TERMINAL_SESSION_INVALID")
 		client.Close(closeSession, "TERMINAL_SESSION_INVALID")
 		return
 	}

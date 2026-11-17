@@ -47,13 +47,20 @@ func main() {
 	// A restarted gateway has no live sessions; drop entries a previous process could not remove.
 	_ = rdb.Del(ctx, ns+":active").Err()
 
-	origins := map[string]bool{}
+	origins, originHosts := map[string]bool{}, []string{}
 	for _, o := range strings.Split(os.Getenv("CONSOLE_ALLOWED_ORIGINS"), ",") {
-		if o = strings.TrimSpace(o); o != "" {
-			origins[o] = true
+		if o = strings.TrimSpace(o); o == "" {
+			continue
 		}
+		origin, host, ok := originOf(o)
+		if !ok {
+			logger.Warn("allowed_origin_ignored", "value", o) // wants https://host[:port]
+			continue
+		}
+		origins[origin] = true
+		originHosts = append(originHosts, originPattern(host))
 	}
-	g := &Gateway{store: &redisStore{rdb: rdb, ns: ns}, guard: newNetGuard(), allowedOrigins: origins, active: map[*conn]struct{}{},
+	g := &Gateway{store: &redisStore{rdb: rdb, ns: ns}, guard: newNetGuard(), allowedOrigins: origins, originHosts: originHosts, active: map[*conn]struct{}{},
 		maxPerUser: envInt("CONSOLE_MAX_PER_USER", 3), maxTotal: envInt("CONSOLE_MAX_TOTAL", 100),
 		maxDuration: time.Duration(envInt("CONSOLE_MAX_MINUTES", 60)) * time.Minute, idle: time.Duration(envInt("TERMINAL_IDLE_MINUTES", 15)) * time.Minute}
 	if ns == "terminal" {

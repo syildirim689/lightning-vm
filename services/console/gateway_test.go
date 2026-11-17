@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/netip"
@@ -119,6 +120,88 @@ func TestCrossOriginIsRefusedBeforeUpgrade(t *testing.T) {
 	}
 	if _, res, _ := dial(t, front, "", token); res == nil || res.StatusCode != http.StatusForbidden {
 		t.Fatal("a missing Origin must be refused too")
+	}
+}
+
+// An https panel (TLS ends at the proxy, which says so) is not opened from an http page on the same host name.
+func TestHTTPSPanelRefusesAnHTTPOrigin(t *testing.T) {
+	_, _, front := setup(t)
+	ws := strings.Replace(front.URL, "http", "ws", 1) + "/console/ws"
+	try := func(origin string) (*websocket.Conn, *http.Response, error) {
+		h := http.Header{"Origin": {origin}, "Cookie": {cookieName + "=" + token}, "X-Forwarded-Proto": {"https"}}
+		return websocket.Dial(context.Background(), ws, &websocket.DialOptions{HTTPHeader: h, Subprotocols: []string{"binary"}})
+	}
+	if _, res, err := try(front.URL); err == nil || res == nil || res.StatusCode != http.StatusForbidden {
+		t.Fatalf("want 403 for an http origin on an https panel, got %v %v", res, err)
+	}
+	c, _, err := try(strings.Replace(front.URL, "http://", "https://", 1))
+	if err != nil {
+		t.Fatalf("the https origin of the same host must pass: %v", err)
+	}
+	if code, _ := closeCode(t, c); code != closeSession {
+		t.Fatalf("got %d", code)
+	}
+}
+
+// CONSOLE_ALLOWED_ORIGINS: a configured origin passes both checks (ours and the one in websocket.Accept); its
+// http twin does not.
+func TestConfiguredOriginIsAccepted(t *testing.T) {
+	g, _, front := setup(t)
+	origin, host, ok := originOf("https://Panel.Example/")
+	if !ok || origin != "https://panel.example" {
+		t.Fatalf("originOf: %q %v", origin, ok)
+	}
+	g.allowedOrigins, g.originHosts = map[string]bool{origin: true}, []string{originPattern(host)}
+	c, _, err := dial(t, front, "https://panel.example", token)
+	if err != nil {
+		t.Fatalf("configured origin refused: %v", err)
+	}
+	if code, _ := closeCode(t, c); code != closeSession {
+		t.Fatalf("got %d", code)
+	}
+	if _, res, err := dial(t, front, "http://panel.example", token); err == nil || res == nil || res.StatusCode != http.StatusForbidden {
+		t.Fatalf("want 403 for the http twin, got %v %v", res, err)
+	}
+	if p := originPattern("[::1]:3000"); p != `\[::1]:3000` {
+		t.Fatalf("pattern %q", p)
+	}
+}
+
+// Junk tickets come from anyone: many of them leave a bounded number of audit events, and the first event of
+// the next minute says how many were left out.
+func TestUnknownTicketsAreAuditedAtABoundedRate(t *testing.T) {
+	g, store, front := setup(t)
+	var mu sync.Mutex
+	now := time.Now()
+	g.denied.now = func() time.Time { mu.Lock(); defer mu.Unlock(); return now }
+	const n = 40
+	junk := func(i int) {
+		c, _, err := dial(t, front, front.URL, fmt.Sprintf("%s-junk-%04d", token, i))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if code, reason := closeCode(t, c); code != closeSession || reason != "CONSOLE_SESSION_INVALID" {
+			t.Fatalf("got %d %q", code, reason)
+		}
+	}
+	for i := 0; i < n; i++ {
+		junk(i)
+	}
+	store.mu.Lock()
+	events := len(store.events)
+	store.mu.Unlock()
+	if events != deniedPerMinute {
+		t.Fatalf("%d junk tickets wrote %d audit events, want %d", n, events, deniedPerMinute)
+	}
+	mu.Lock()
+	now = now.Add(time.Minute)
+	mu.Unlock()
+	junk(n)
+	store.mu.Lock()
+	defer store.mu.Unlock()
+	last := store.events[len(store.events)-1]
+	if len(store.events) != deniedPerMinute+1 || last["event"] != "denied" || last["suppressed"] != int64(n-deniedPerMinute) {
+		t.Fatalf("after a minute: %d events, last %v", len(store.events), last)
 	}
 }
 
