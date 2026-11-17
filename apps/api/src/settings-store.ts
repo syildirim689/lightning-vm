@@ -279,10 +279,14 @@ export function readMail(body: Input, saved: MailSettings): { value: MailSetting
   const fromName = typeof body.fromName === 'string' ? body.fromName.trim().slice(0, 80) : '';
   const password = typeof body.password === 'string' && body.password !== '' ? body.password : undefined;
   if (password && password.length > 500) fields.password = 'INVALID_VALUE';
+  // The stored password is for the server it was entered for: with another host, port or security in the form it is
+  // typed again (otherwise the panel would present it to whatever host the form names, in clear with "none").
+  const moved = smtp && (host.toLowerCase() !== (saved.host ?? '').toLowerCase() || port !== saved.port || security !== saved.security);
+  if (moved && host && username && !password && saved.passwordEnc) fields.password = 'REQUIRED';
   if (Object.keys(fields).length) throw apiError(400, 'VALIDATION_FAILED', 'Invalid input', fields);
   const use = (body.use ?? {}) as Input;
   // An empty password field keeps the stored one; clearing the username drops it.
-  const passwordEnc = !username ? null : password ? encryptSecret(password, 'settings:mail') : saved.passwordEnc;
+  const passwordEnc = !username ? null : password ? encryptSecret(password, 'settings:mail') : moved ? null : saved.passwordEnc;
   const apiSecretEnc = smtp ? saved.apiSecretEnc : Object.keys(api.secrets).length ? encryptSecret(JSON.stringify(api.secrets), 'settings:mail-api') : null;
   return { value: { enabled, provider, host, port, security, username, passwordEnc, api: smtp ? saved.api : api.plain, apiSecretEnc, fromName, fromAddress,
     use: { passwordReset: bool(use.passwordReset), twoFactor: bool(use.twoFactor) } }, password, secrets: api.secrets };

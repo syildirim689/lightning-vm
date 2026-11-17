@@ -25,6 +25,9 @@ export type Gateway = {
   // verify can ask the provider with what the payment itself stores (providerRef), without the customer's browser coming
   // back: the billing run asks again for payments left open (a closed tab after paying).
   recheck?: boolean;
+  // The currencies the provider's page can collect (all of them when left out). An invoice in another one is not offered
+  // this provider: its page would take the bare number in its own currency.
+  currencies?: string[];
 };
 
 // Test cards of the sandbox: 4242 4242 4242 4242 is approved, 4000 0000 0000 0002 declined, 4000 0000 0000 9995
@@ -60,4 +63,10 @@ export const gateways: Record<string, Gateway> = { sandbox, iyzico, paytr, strip
 // learned: the provider did not answer, the answer was forged or another payment's, the customer is still on the
 // provider's page (PENDING), or the request carried nothing to ask the provider with (NO_TOKEN, NO_SESSION: anybody can
 // open a payment's return address). Such a payment stays open for the provider's real answer, or until it expires.
-export const finalResult = (r: Result) => r.ok || !['PROVIDER_ERROR', 'BAD_SIGNATURE', 'PENDING', 'NO_TOKEN', 'NO_SESSION'].includes(r.code);
+// Nor when the answer needs a person (needsReview): closed as failed, the customer would be told to pay again while
+// the provider may hold their money.
+const review = ['NEEDS_CONFIRMATION', 'AMOUNT_MISMATCH', 'FRAUD_REVIEW'];
+export const finalResult = (r: Result) => r.ok || !['PROVIDER_ERROR', 'BAD_SIGNATURE', 'PENDING', 'NO_TOKEN', 'NO_SESSION', ...review].includes(r.code);
+// The provider reported another amount or currency, holds the payment for review, or (Param) says paid in a way the
+// panel cannot confirm: the payment stays open with the reason on it, for staff to settle by hand.
+export const needsReview = (r: Result) => !r.ok && review.includes(r.code);

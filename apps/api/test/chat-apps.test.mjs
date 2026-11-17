@@ -109,3 +109,12 @@ test('IPv4-mapped IPv6 addresses are judged as the IPv4 address they carry, in b
   for (const ip of ['::ffff:127.0.0.1', '::ffff:10.0.0.1', '::ffff:7f00:1', '::ffff:a9fe:a9fe', '0:0:0:0:0:ffff:c0a8:0101']) assert.equal(privateAddress(ip), true, ip);
   for (const ip of ['::ffff:8.8.8.8', '::ffff:808:808']) assert.equal(privateAddress(ip), false, ip);
 });
+
+test('the agent for library-made requests (web push) refuses names that resolve to a private address', async () => {
+  const { publicOnlyAgent } = chatAppsModule;
+  const lookup = publicOnlyAgent.options.lookup;
+  const err = await new Promise((resolve) => lookup('localhost', { all: true }, (e) => resolve(e)));
+  assert.equal(err?.name, 'NotPublic');
+  const one = await new Promise((resolve) => lookup('localhost', {}, (e) => resolve(e)));
+  assert.equal(one?.name, 'NotPublic');
+});

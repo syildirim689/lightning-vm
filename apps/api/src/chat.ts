@@ -107,6 +107,8 @@ export class ChatController {
     if (n.n >= MAX_CONNECTIONS) throw apiError(409, 'CHAT_LIMIT', 'Too many connections');
   }
   private async save(req: AuthedRequest, app: string, target: Record<string, string>, hint: string, label: string, s: ChatSettings) {
+    // A connection keeps receiving the account's notifications: not for staff acting as someone (as with API tokens).
+    if (req.user.impersonatedBy) throw apiError(403, 'NOT_WHILE_IMPERSONATING', 'Not while acting as another user');
     const r = await sendOne(app, target, welcome(req.user.locale, (await getSettings('branding')).name), await adminAccounts(s));
     if (!r.ok) {
       await audit(req, 'chat.connect', 'failure', req.user.id, { app, code: r.code });

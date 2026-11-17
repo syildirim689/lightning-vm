@@ -1,12 +1,15 @@
 // Handing a server to another account (migration 054). The owner offers it by e-mail; the other account accepts (or
 // declines) within a week, and only then does the server, with its subscription, move. Staff may move one at once.
 // A server moves only when nothing of the old owner stays attached to it: no firewall or private network of theirs,
-// no unpaid invoice, no task running. Snapshots, backups, extra disks and power schedules are the server's and go with it.
+// no unpaid invoice, no task running, no copy of it on order. Snapshots, backups and extra disks are the server's and go
+// with it; what let the old owner into it or act on it (stored keys and password, guest tokens, schedules, an open
+// console) ends with the move (moveServer).
 import { Body, Controller, Get, HttpCode, Param, ParseUUIDPipe, Post, Put, Req, UseGuards } from '@nestjs/common';
 import type { PoolClient } from 'pg';
 import { audit, SessionGuard, type AuthedRequest } from './auth';
 import { exceededQuota } from './capacity';
 import { limitsFor, usageOf } from './catalog';
+import { revokeConsoles } from './console';
 import { pool } from './db';
 import { apiError } from './errors';
 import { notify } from './notify';
@@ -22,6 +25,8 @@ async function checkTransfer(db: Db, serverId: string, toId: string) {
       EXISTS (SELECT 1 FROM firewall_servers f WHERE f.server_id = s.id) AS has_firewalls,
       EXISTS (SELECT 1 FROM private_network_members m WHERE m.server_id = s.id) AS has_networks,
       EXISTS (SELECT 1 FROM operations p WHERE p.server_id = s.id AND p.status IN ('pending', 'running')) AS busy,
+      EXISTS (SELECT 1 FROM servers c WHERE c.clone_from_server_id = s.id AND c.vm_moref IS NULL AND c.state = 'provisioning') AS copy_pending,
+      EXISTS (SELECT 1 FROM isos i WHERE i.id = s.iso_id AND NOT i.public) AS private_iso,
       EXISTS (SELECT 1 FROM invoices i JOIN invoice_lines l ON l.invoice_id = i.id JOIN subscriptions b ON b.id = l.subscription_id WHERE b.server_id = s.id AND i.status = 'unpaid') AS unpaid
     FROM servers s JOIN users o ON o.id = s.owner_id WHERE s.id = $1`, [serverId]);
   if (!s) throw apiError(404, 'NOT_FOUND', 'Unknown server');
@@ -35,18 +40,53 @@ async function checkTransfer(db: Db, serverId: string, toId: string) {
   if (s.billing_hold || s.unpaid) throw blocked('UNPAID_INVOICE');
   if (s.has_firewalls) throw blocked('HAS_FIREWALLS');
   if (s.has_networks) throw blocked('HAS_PRIVATE_NETWORKS');
+  // A copy ordered from it and not built yet would be built from the new owner's disk (the worker refuses that too).
+  if (s.copy_pending) throw blocked('CLONE_PENDING');
+  // An ISO staff inserted for the old owner only (not in the public library) is ejected first; the new owner could not insert it.
+  if (s.private_iso) throw blocked('PRIVATE_ISO_MOUNTED');
   if ((await db.query("SELECT 1 FROM servers WHERE owner_id = $1 AND name = $2 AND state <> 'deleted'", [toId, s.name])).rowCount) throw blocked('NAME_TAKEN');
   const over = exceededQuota(await limitsFor(toId, undefined, db), await usageOf(toId, undefined, db), { vcpu: s.vcpu, memoryMb: s.memory_mb, diskGb: s.disk_gb });
   if (over.length) throw blocked('RECIPIENT_QUOTA');
   return s as Server;
 }
 
-// The move itself, in the caller's transaction: the server and its running subscription change hands.
+// The move itself, in the caller's transaction: the server and its running subscription change hands, and nothing the
+// previous owner chose or was given stays usable on it. Everything keyed to the server, and what happens to it:
+//   servers.ssh_public_keys, root_password_hash, root_password_enc: cleared. They are the previous owner's way into the
+//     guest, and a reinstall would write them onto the new owner's fresh disk; the stored password would also be readable
+//     by the new owner. The disk as it is still has them (the new owner reinstalls or changes them inside); the next
+//     reinstall takes the new owner's keys or, without any, makes a new password (servers.ts).
+//   server_updates (update reporter token, policy, last report): deleted. The token was in the previous owner's install
+//     command; the reporter removes itself on its next run, and the new owner turns tracking on for a token of their own.
+//   servers.app_token_hash, app_script_enc (application callback token, the install script with its licence key): cleared;
+//     the application and its licence stay with the server.
+//   power_schedules: deleted (the previous owner's start, stop, snapshot and backup times).
+//   servers.tags, notes, project_id: cleared (the previous owner's own labels); delete_at: cleared (a deletion they
+//     scheduled must not run on the new owner's server). locked stays (it only protects).
+//   server_favorites: the previous owner's star removed; staff's stay.
+//   backups: owner_id follows the server (they are its disk, and are deleted with it).
+//   os_images made from this server: stay the previous owner's (their copy of what was theirs then); only the link back
+//     to the server is dropped. A server running from such an image keeps running; its new owner reinstalls from another.
+//   tickets of the previous owner about this server: keep their text, lose the link.
+//   subscriptions: the running one follows; invoices, coupon redemptions and finished operations stay as records.
+//   server_disks, ip_allocations (with PTR), application_licenses, traffic, usage and power samples, abuse and
+//     reconciliation findings, snapshots: the server's own, unchanged.
+//   firewall_servers, private_network_members, a VDC, a copy on order, a staff-only ISO in the drive: checkTransfer refuses.
+// The previous owner's open consoles are closed by the callers once the move is committed (ownerLeft).
 async function moveServer(db: PoolClient, s: Server, toId: string) {
-  await db.query('UPDATE servers SET owner_id = $2, project_id = NULL, updated_at = now() WHERE id = $1', [s.id, toId]);
+  await db.query(`UPDATE servers SET owner_id = $2, project_id = NULL, ssh_public_keys = '{}', root_password_hash = NULL, root_password_enc = NULL,
+    app_token_hash = NULL, app_script_enc = NULL, tags = '{}', notes = '', delete_at = NULL, updated_at = now() WHERE id = $1`, [s.id, toId]);
   await db.query("UPDATE subscriptions SET owner_id = $2, updated_at = now() WHERE server_id = $1 AND status NOT IN ('cancelled', 'ended')", [s.id, toId]);
   await db.query('DELETE FROM server_favorites WHERE server_id = $1 AND user_id = $2', [s.id, s.owner_id]);
+  await db.query('DELETE FROM server_updates WHERE server_id = $1', [s.id]);
+  await db.query('DELETE FROM power_schedules WHERE server_id = $1', [s.id]);
+  await db.query("UPDATE backups SET owner_id = $2 WHERE server_id = $1 AND status <> 'deleted'", [s.id, toId]);
+  await db.query('UPDATE os_images SET source_server_id = NULL WHERE source_server_id = $1', [s.id]);
+  await db.query('UPDATE tickets SET server_id = NULL WHERE server_id = $1 AND owner_id = $2', [s.id, s.owner_id]);
 }
+// After the commit: consoles the previous owner has open are closed. The gateway closes by account, so one they have
+// open on another server of theirs closes too and is simply opened again.
+const ownerLeft = (s: Server) => revokeConsoles({ userId: s.owner_id });
 
 const columns = `t.id, t.status, t.note, t.created_at AS "createdAt", t.expires_at AS "expiresAt", t.decided_at AS "decidedAt",
   s.id AS "serverId", s.name AS "serverName", s.vcpu, s.memory_mb AS "memoryMb", s.disk_gb AS "diskGb", s.price_monthly::text AS "priceMonthly", trim(s.currency) AS currency,
@@ -92,7 +132,7 @@ export class TransfersController {
   async accept(@Req() req: AuthedRequest, @Param('id', ParseUUIDPipe) id: string) {
     const client = await pool.connect();
     let t: { server_id: string; from_id: string };
-    let name: string;
+    let name: string, moved: Server;
     try {
       await client.query('BEGIN');
       ({ rows: [t] } = await client.query("SELECT * FROM server_transfers WHERE id = $1 AND to_id = $2 AND status = 'pending' AND expires_at > now() FOR UPDATE", [id, req.user.id]));
@@ -101,10 +141,12 @@ export class TransfersController {
       const s = await checkTransfer(client, t.server_id, req.user.id);
       if (s.owner_id !== t.from_id) throw blocked('SAME_OWNER');
       name = s.name;
+      moved = s;
       await moveServer(client, s, req.user.id);
       await client.query("UPDATE server_transfers SET status = 'accepted', decided_at = now() WHERE id = $1", [id]);
       await client.query('COMMIT');
     } catch (e) { await client.query('ROLLBACK'); throw e; } finally { client.release(); }
+    await ownerLeft(moved);
     await audit(req, 'server.transfer_accepted', 'success', req.user.id, { serverId: t.server_id, transferId: id, from: t.from_id });
     await notify('server.transfer', [t.from_id], { serverId: t.server_id, name, email: req.user.email, step: 'accepted' });
     return { serverId: t.server_id };
@@ -146,6 +188,7 @@ export class TransfersAdminController {
       await client.query("UPDATE server_transfers SET status = 'cancelled', decided_at = now() WHERE server_id = $1 AND status = 'pending'", [id]);
       await client.query('COMMIT');
     } catch (e) { await client.query('ROLLBACK'); throw e; } finally { client.release(); }
+    await ownerLeft(s);
     await audit(req, 'server.owner_changed', 'success', req.user.id, { serverId: id, from: s.owner_id, to: to.id });
     await notify('server.transfer', [to.id, s.owner_id], { serverId: id, name: s.name, email: email, step: 'moved' });
     return { ok: true };

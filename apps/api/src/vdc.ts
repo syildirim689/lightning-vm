@@ -33,7 +33,7 @@ export async function resolveVdcOrder(userId: string, body: Input): Promise<{ or
   const shape = { vcpu: int('vcpu', 1, v.vcpu), memoryMb: int('memoryMb', 512, v.memory_mb), diskGb: int('diskGb', 10, v.disk_gb) };
   if (!fields.memoryMb && shape.memoryMb % 256) fields.memoryMb = 'OUT_OF_RANGE';
   const { rows: [rp] } = await pool.query('SELECT * FROM resource_pools WHERE id = $1', [v.pool_id]);
-  const { rows: [img] } = await pool.query('SELECT id, min_disk_gb FROM os_images WHERE id = $1 AND active AND connection_id = $2', [body.imageId, rp.connection_id]).catch(() => ({ rows: [] }));
+  const { rows: [img] } = await pool.query('SELECT id, min_disk_gb FROM os_images WHERE id = $1 AND active AND connection_id = $2 AND (owner_id IS NULL OR owner_id = $3)', [body.imageId, rp.connection_id, userId]).catch(() => ({ rows: [] }));
   if (!img) fields.imageId = 'NOT_AVAILABLE';
   else if (shape.diskGb < img.min_disk_gb) fields.diskGb = 'DISK_TOO_SMALL';
   if (Object.keys(fields).length) throw apiError(400, 'VALIDATION_FAILED', 'Invalid input', fields);
@@ -139,8 +139,9 @@ export class VdcController {
     const { rows: servers } = rows.length ? await pool.query(`SELECT s.id, s.name, s.state, s.vdc_id AS "vdcId", s.vcpu, s.memory_mb AS "memoryMb", s.disk_gb AS "diskGb",
       host(a.address) AS address FROM servers s LEFT JOIN ip_allocations a ON a.server_id = s.id AND a.kind = 'primary'
       WHERE s.vdc_id = ANY($1::uuid[]) AND s.state <> 'deleted' ORDER BY s.name`, [rows.map((r) => r.id)]) : { rows: [] };
+    // Shared images and the caller's own personal ones, as in the catalog: another customer's image is not even named.
     const { rows: images } = rows.length ? await pool.query(`SELECT DISTINCT i.id, i.name, i.family, i.min_disk_gb AS "minDiskGb", p.id AS "poolId" FROM os_images i
-      JOIN resource_pools p ON p.connection_id = i.connection_id WHERE i.active AND p.id = ANY($1::uuid[]) ORDER BY i.name`, [rows.map((r) => r.poolId)]) : { rows: [] };
+      JOIN resource_pools p ON p.connection_id = i.connection_id WHERE i.active AND (i.owner_id IS NULL OR i.owner_id = $2) AND p.id = ANY($1::uuid[]) ORDER BY i.name`, [rows.map((r) => r.poolId), req.user.id]) : { rows: [] };
     return { vdcs: rows.map((v) => ({ ...v, servers: servers.filter((s) => s.vdcId === v.id), images: images.filter((i) => i.poolId === v.poolId) })) };
   }
 

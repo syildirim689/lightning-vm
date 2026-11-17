@@ -23,15 +23,19 @@ const key = (s: RdnsSettings) => (s.apiKeyEnc ? decryptSecret(s.apiKeyEnc, 'sett
 async function pdns(s: RdnsSettings, apiKey: string, path: string, init: RequestInit = {}) {
   const url = `${s.apiUrl.replace(/\/+$/, '')}/api/v1/servers/${encodeURIComponent(s.serverId)}${path}`;
   let res: Response;
+  // The address is whatever the settings form names, and these errors also reach customers (their PTR): what it
+  // answered is never passed on, only the kind of failure (the system's error code, the status class). A redirect is
+  // not followed: the key would go with it.
   try {
-    res = await fetch(url, { ...init, headers: { 'x-api-key': apiKey, 'content-type': 'application/json', accept: 'application/json' }, signal: AbortSignal.timeout(15_000) });
+    res = await fetch(url, { ...init, redirect: 'manual', headers: { 'x-api-key': apiKey, 'content-type': 'application/json', accept: 'application/json' }, signal: AbortSignal.timeout(15_000) });
   } catch (err) {
-    throw apiError(502, 'RDNS_UNREACHABLE', 'The DNS server did not answer', undefined, { detail: String((err as { cause?: { code?: string } }).cause?.code ?? (err as Error).message).slice(0, 200) });
+    const code = String((err as { cause?: { code?: string } }).cause?.code ?? '');
+    throw apiError(502, 'RDNS_UNREACHABLE', 'The DNS server did not answer', undefined, { detail: /^[A-Z][A-Z0-9_]{2,40}$/.test(code) ? code : 'no answer' });
   }
   const text = await res.text();
   if (res.status === 401 || res.status === 403) throw apiError(502, 'RDNS_AUTH_FAILED', 'The DNS server refused the API key');
-  if (!res.ok) throw apiError(502, 'RDNS_FAILED', 'The DNS server refused the change', undefined, { detail: text.slice(0, 300) });
-  return text ? JSON.parse(text) : null;
+  if (!res.ok) throw apiError(502, 'RDNS_FAILED', 'The DNS server refused the change', undefined, { detail: `HTTP ${Math.floor(res.status / 100)}xx` });
+  try { return text ? JSON.parse(text) : null; } catch { throw apiError(502, 'RDNS_FAILED', 'The DNS server refused the change', undefined, { detail: 'not JSON' }); }
 }
 
 // The longest zone that contains the reverse name (a /24 gives 2.0.192.in-addr.arpa., a /16 0.192...).
@@ -92,11 +96,15 @@ function readRdns(body: Input, saved: RdnsSettings) {
   const ttl = Number(body.ttl ?? 3600);
   if (!Number.isInteger(ttl) || ttl < 60 || ttl > 86400) fields.ttl = 'OUT_OF_RANGE';
   const apiKey = typeof body.apiKey === 'string' ? body.apiKey.trim() : '';
-  if (provider === 'powerdns' && !apiKey && !saved.apiKeyEnc) fields.apiKey = 'REQUIRED';
+  // The stored key is for the server it was entered for: with another address in the form it is typed again
+  // (otherwise the panel would send it to whatever host the form names).
+  const base = (u: string) => u.replace(/\/+$/, '').toLowerCase();
+  const kept = !apiUrl || base(apiUrl) === base(saved.apiUrl) ? saved.apiKeyEnc : null;
+  if (provider === 'powerdns' && !apiKey && !kept) fields.apiKey = 'REQUIRED';
   if (Object.keys(fields).length) throw apiError(400, 'VALIDATION_FAILED', 'Invalid input', fields);
   const value: RdnsSettings = { provider, apiUrl, serverId, template, ttl, customerEdit: body.customerEdit !== false, forwardCheck: body.forwardCheck !== false,
-    apiKeyEnc: apiKey ? encryptSecret(apiKey, 'settings:rdns') : saved.apiKeyEnc };
-  return { value, apiKey: apiKey || (saved.apiKeyEnc ? decryptSecret(saved.apiKeyEnc, 'settings:rdns') : '') };
+    apiKeyEnc: apiKey ? encryptSecret(apiKey, 'settings:rdns') : kept };
+  return { value, apiKey: apiKey || (kept ? decryptSecret(kept, 'settings:rdns') : '') };
 }
 
 @Controller('admin/settings/rdns') @UseGuards(PermissionGuard)
@@ -122,11 +130,12 @@ export class RdnsSettingsController {
     const { value, apiKey } = readRdns({ ...body, provider: 'powerdns' }, await getSettings('rdns'));
     const server = await pdns(value, apiKey, '');
     zoneCache = null;
-    const zones = ((await pdns(value, apiKey, '/zones')) as { name: string }[]).map((z) => z.name).filter((z) => /(in-addr|ip6)\.arpa\.$/.test(z));
+    const list = await pdns(value, apiKey, '/zones');
+    const zones = (Array.isArray(list) ? list as { name?: unknown }[] : []).map((z) => String(z?.name ?? '')).filter((z) => z.length <= 255 && /(in-addr|ip6)\.arpa\.$/.test(z));
     const { rows } = await pool.query("SELECT name, host(range_start) AS first, host(network(ipv6_prefix)::inet + 16) AS v6 FROM ip_pools ORDER BY name");
     const covers = (ip: string | null) => !!ip && zones.some((z) => reverseName(ip).endsWith(`.${z}`) || reverseName(ip) === z);
     await audit(req, 'settings.rdns_test', 'success', req.user.id, { zones: zones.length });
-    return { version: server?.version ?? '', zones, pools: rows.map((r) => ({ name: r.name, ipv4: covers(r.first), ipv6: r.v6 ? covers(r.v6) : null })) };
+    return { version: typeof server?.version === 'string' && /^[\w.+~-]{1,40}$/.test(server.version) ? server.version : '', zones, pools: rows.map((r) => ({ name: r.name, ipv4: covers(r.first), ipv6: r.v6 ? covers(r.v6) : null })) };
   }
 }
 

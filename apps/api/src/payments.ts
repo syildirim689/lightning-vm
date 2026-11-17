@@ -55,6 +55,11 @@ function readCreds(id: string, input: unknown, saved: Creds, mode: Mode, fields:
 }
 const same = (a: Creds, b: Creds) => JSON.stringify(Object.entries(a).sort()) === JSON.stringify(Object.entries(b).sort());
 
+// A provider that goes live takes no more test money: test payments still open are closed (their test card would
+// otherwise pay a real invoice later; billing.ts refuses them too).
+const closeTestPayments = (id: string) => pool.query(`UPDATE payments SET status = 'failed', error_code = 'TEST_MODE_OFF', error_message = 'The provider was switched to live', completed_at = now()
+  WHERE provider = $1 AND mode = 'test' AND status = 'pending'`, [id]);
+
 async function rowOf(id: string) {
   return (await pool.query<Row>('SELECT * FROM payment_gateways WHERE id = $1', [id])).rows[0];
 }
@@ -124,6 +129,7 @@ export class PaymentsController {
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
       ON CONFLICT (id) DO UPDATE SET enabled = $2, mode = $3, label = $4, live_enc = $5, test_enc = $6, live_version = $7, test_version = $8, updated_at = now()`,
       [id, enabled, mode, label, enc('live'), enc('test'), version('live'), version('test')]);
+    if (mode === 'live') await closeTestPayments(id);
     await audit(req, 'settings.payment_saved', 'success', req.user.id, { provider: id, mode, changed, deactivated: !!row?.enabled && !enabled });
     return view((await rowOf(id))!);
   }
@@ -162,6 +168,7 @@ export class PaymentsController {
       if (reason) throw apiError(409, reason, 'This provider cannot be activated yet');
     }
     await pool.query('UPDATE payment_gateways SET enabled = $2, mode = $3, updated_at = now() WHERE id = $1', [id, enabled, mode]);
+    if (mode === 'live') await closeTestPayments(id);
     await audit(req, enabled ? 'settings.payment_enabled' : 'settings.payment_disabled', 'success', req.user.id, { provider: id, mode });
     return view((await rowOf(id))!);
   }
@@ -194,6 +201,11 @@ export async function activeGateway(id: string, mode?: Mode) {
   const creds = decrypt(row, m);
   if (!Object.keys(creds).length) return null;
   return { mode: m, creds: { ...creds, endpoint: creds.endpoint || providers[id].hosts[m] } };
+}
+
+// A payment begun in test mode while the provider now takes real money: its test card must not pay anything any more.
+export async function testModeOver(id: string, mode: Mode) {
+  return mode === 'test' && (await rowOf(id))?.mode === 'live';
 }
 
 export async function activePaymentMethods() {

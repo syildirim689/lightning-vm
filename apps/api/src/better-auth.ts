@@ -12,20 +12,22 @@ import { pool, redis } from './db';
 import { logEvent } from './log';
 import { otpText, sendOtpMail, sendPasswordReset, sendSignInLink } from './mail';
 import { publishLive, type LiveKind } from './live-bus';
-import { notify } from './notify';
+import { dropPush, notify } from './notify';
 import { adminEndpointPermission, betterAuthRoles, can, covers, effectivePermissions, ensureRoles, limitsOf, permissionsOf } from './permissions';
 import { createUserRequest, ipAllowed } from './role-limits';
 import { deviceOf } from './device';
-import { directorySignIn, refuseForDirectory } from './directory-signin';
+import { panelBase } from './chat-delivery';
+import { directoryAccepted, directorySignIn, refuseForDirectory } from './directory-signin';
 import { hashPassword, sha256, verifyPassword } from './security';
 import { activeCaptcha, getSettings, mailReady, mailUse, verifyCaptcha, type OidcSettings, type SignInSettings } from './settings-store';
 import { socialProviders, socialIds } from './social-providers';
 import { mayLink, providerId as ssoProviderId, ssoProvider, ssoSignedIn } from './sso';
 import { sendSms, smsUse } from './sms';
 
-// Browser consoles opened with any of these sessions are closed (the gateway matches sha256 of the token).
-async function closeConsoles(userId: string) {
-  const { rows } = await pool.query('SELECT token FROM auth_sessions WHERE user_id = $1', [userId]);
+// Browser consoles and host terminals opened with any of these people's sessions are closed (the gateways match
+// sha256 of the token). Also called when someone's access shrinks (rbac.ts), so an open one does not outlive it.
+export async function closeConsoles(userIds: string | string[]) {
+  const { rows } = await pool.query('SELECT token FROM auth_sessions WHERE user_id = ANY($1::uuid[])', [[userIds].flat()]).catch(() => ({ rows: [] as { token: string }[] }));
   await Promise.all(rows.map((r) => redis.publish('console:revoke', JSON.stringify({ authHash: sha256(r.token).toString('hex') })).catch(() => undefined)));
 }
 
@@ -44,10 +46,37 @@ const passwordFields: Record<string, string> = { '/sign-up/email': 'password', '
   '/admin/create-user': 'password', '/admin/set-user-password': 'newPassword' };
 // Ways in that end in a session without a password form: the role's address limits are checked as the session is made.
 const linkPaths = (p: string) => p.startsWith('/callback/') || p === '/one-tap/callback' || p === '/magic-link/verify';
+// better-auth's routes the panel uses (the web app's calls, the links it mails, the providers' callbacks); /admin/* has
+// its own list (permissions.ts). Every other route its plugins bring answers 404: phone-number sign-in and password
+// reset, e-mail change, account deletion, provider tokens... A plugin added later is closed until its route is listed.
+const panelPaths = new Set(['/ok', '/error', '/get-session', '/list-sessions', '/sign-out', '/sign-up/email',
+  '/sign-in/email', '/sign-in/username', '/sign-in/social', '/sign-in/magic-link', '/magic-link/verify', '/sign-in/email-otp', '/email-otp/send-verification-otp',
+  '/callback/:id', '/one-tap/callback', '/request-password-reset', '/reset-password', '/reset-password/:token', '/change-password', '/update-user',
+  '/list-accounts', '/link-social', '/unlink-account',
+  '/two-factor/enable', '/two-factor/disable', '/two-factor/generate-backup-codes', '/two-factor/send-otp', '/two-factor/verify-otp', '/two-factor/verify-totp', '/two-factor/verify-backup-code',
+  '/phone-number/send-otp', '/phone-number/verify',
+  '/passkey/generate-register-options', '/passkey/verify-registration', '/passkey/generate-authenticate-options', '/passkey/verify-authentication', '/passkey/list-user-passkeys', '/passkey/delete-passkey']);
+// What stays on an account after the session that did it: not for staff acting as someone (as with API tokens, developer.ts).
+const lastingPaths = new Set(['/passkey/generate-register-options', '/passkey/verify-registration', '/link-social', '/change-password', '/phone-number/send-otp', '/phone-number/verify',
+  '/two-factor/enable', '/two-factor/disable', '/two-factor/generate-backup-codes']);
+// Where the browser is sent afterwards: a path on this panel, whatever host name the request came with.
+const redirectFields = ['callbackURL', 'errorCallbackURL', 'newUserCallbackURL', 'redirectTo'];
+const panelPath = (v: unknown) => typeof v === 'string' && v.length <= 2000 && /^\/(?![/\\])/.test(v);
+const invalid = () => new APIError('BAD_REQUEST', { code: 'VALIDATION_FAILED', message: 'Invalid input' });
 
+// Request input ends up in audit details: no single text longer than this is stored (auth.ts has the same rule).
+const short = (v: unknown) => (typeof v === 'string' && v.length > 300 ? v.slice(0, 300) : v);
 const auditAuth = (actorId: string | null, action: string, outcome: 'success' | 'failure' | 'denied', ip: string | null, metadata: object = {}) =>
-  pool.query('INSERT INTO audit_events (actor_id, action, outcome, ip, metadata) VALUES ($1, $2, $3, $4, $5)', [actorId, action, outcome, ip, metadata])
+  pool.query('INSERT INTO audit_events (actor_id, action, outcome, ip, metadata) VALUES ($1, $2, $3, $4, $5)', [actorId, action, outcome, ip, Object.fromEntries(Object.entries(metadata).map(([k, v]) => [k, short(v)]))])
     .catch(() => logEvent('error', 'audit_failed', { action }));
+
+// Links in mail point at the panel's own address (the domain, else the address given in setup), never at the host name
+// a request arrived with. No address set yet (first run, local only): the request's, as before.
+export async function onPanelAddress(url: string) {
+  const base = await panelBase().catch(() => null);
+  if (!base) return url;
+  try { const u = new URL(url); return new URL(u.pathname + u.search, base).toString(); } catch { return url; }
+}
 
 // Same fixed-window counter as security.ts rateLimit, in better-auth's error type. Fails closed.
 async function limit(key: string, max: number, windowSeconds: number) {
@@ -75,8 +104,10 @@ async function checkMethods(path: string, headers: Headers, body: Record<string,
     if (email) {
       await limit(`login:email:${email}`, 10, 900);
       // Directory and single sign-on accounts sign in where their password lives.
-      const { rows: [u] } = await pool.query('SELECT role, auth_source FROM users WHERE lower(email) = $1', [email]);
+      const { rows: [u] } = await pool.query('SELECT role, auth_source, two_factor_enabled FROM users WHERE lower(email) = $1', [email]);
       if (u && u.auth_source !== 'local' && u.auth_source !== 'social') throw new APIError('FORBIDDEN', { code: 'PASSWORD_MANAGED_BY_DIRECTORY', message: 'Sign in with your directory account' });
+      // As for the e-mail code: a link in a mailbox is never the way in for an account with two-factor.
+      if (u?.two_factor_enabled) throw new APIError('FORBIDDEN', { code: 'TWO_FACTOR_USE_PASSWORD', message: 'Accounts with two-factor sign in with their password' });
       await ensureRoles();
       if (u && !ipAllowed(limitsOf(u.role).allowedIps, ip)) throw new APIError('FORBIDDEN', { code: 'IP_NOT_ALLOWED', message: 'Not allowed from this address' });
     }
@@ -106,6 +137,8 @@ async function checkMethods(path: string, headers: Headers, body: Record<string,
   }
 }
 
+// Where the passkey plugin signs in (/sign-in/passkey is only the client's name for it).
+const passkeySignIn = '/passkey/verify-authentication';
 const forbidden = (code = 'FORBIDDEN') => new APIError('FORBIDDEN', { code, message: 'Permission required' });
 
 // The staff permission check for better-auth's /admin/* endpoints. Deny by default.
@@ -155,7 +188,9 @@ function createAuth() {
     database: pool,
     secret: authSecret(),
     // No baseURL: the browser's origin (from the request, which Fastify resolves through TRUSTED_PROXIES)
-    // is used per request, so a domain change needs no restart. Passkey rpID follows it the same way.
+    // is used per request, so a domain change needs no restart and the panel stays reachable under another name
+    // (an SSH tunnel). Passkey rpID follows it the same way. What must not follow the request does not: links in
+    // mail are put on the panel's own address (onPanelAddress) and redirect targets are paths (redirectFields).
     basePath: '/api/auth',
     user: {
       modelName: 'users',
@@ -198,9 +233,10 @@ function createAuth() {
       revokeSessionsOnPasswordReset: true,
       sendResetPassword: async ({ user, url }) => {
         if (!(await mailUse('passwordReset'))) throw new APIError('NOT_IMPLEMENTED', { code: 'MAIL_NOT_CONFIGURED', message: 'Mail is not configured' });
-        await sendPasswordReset(user.email, (user as { locale?: string }).locale, url);
+        await sendPasswordReset(user.email, (user as { locale?: string }).locale, await onPanelAddress(url));
       },
-      onPasswordReset: async ({ user }) => { await notify('auth.password_changed', [user.id], {}); },
+      // Every session ended with the old password: so do the browsers that still received its notifications.
+      onPasswordReset: async ({ user }) => { await dropPush(user.id); await notify('auth.password_changed', [user.id], {}); },
     },
     rateLimit: {
       enabled: true,
@@ -229,25 +265,41 @@ function createAuth() {
       before: createAuthMiddleware(async (ctx) => {
         if (!ctx.request) return; // server-side calls (setup, CLI) are not gated
         const body = (ctx.body ?? {}) as Record<string, unknown>;
-        if (ctx.path.startsWith('/admin/')) await checkAdminEndpoint(ctx.path, ctx.request.headers, body);
-        await checkMethods(ctx.path, ctx.request.headers, body);
-        // Directory accounts sign in against the directory (and are created or brought up to date there).
-        if (ctx.path === '/sign-in/email') await directorySignIn(ctx, body);
-        await refuseForDirectory(ctx.path, ctx.request.headers, body);
+        const headers = ctx.request.headers;
+        if (!ctx.path.startsWith('/admin/') && !panelPaths.has(ctx.path)) throw new APIError('NOT_FOUND', { code: 'NOT_FOUND', message: 'Not found' });
+        // Who is being signed in: an address-sized text, before it becomes a limiter key, a query or an audit row.
+        for (const k of ['email', 'username', 'phoneNumber']) if (typeof body[k] === 'string' && (body[k] as string).length > 254) throw invalid();
+        const query = (ctx.query ?? {}) as Record<string, unknown>;
+        for (const k of redirectFields) for (const v of [body[k], query[k]]) if (v !== undefined && v !== null && v !== '' && !panelPath(v)) throw invalid();
+        // A provider's ID token posted here would sign in past the redirect flow (state, PKCE, nonce) and, for single
+        // sign-on, past its role mapping and audit. The panel never sends one (One Tap has its own route).
+        if ((ctx.path === '/sign-in/social' || ctx.path === '/link-social') && body.idToken !== undefined) throw forbidden();
+        // The phone-number plugin is here to verify the number of the signed-in person, nothing else: a code is sent
+        // to a session only, and a correct code never signs anyone in (without updatePhoneNumber it would).
+        if (ctx.path === '/phone-number/verify' && body.updatePhoneNumber !== true) throw forbidden();
+        if (lastingPaths.has(ctx.path)) {
+          const s = await getAuth().api.getSession({ headers }).catch(() => null);
+          if (!s && ctx.path === '/phone-number/send-otp') throw new APIError('UNAUTHORIZED', { code: 'UNAUTHENTICATED', message: 'Sign in required' });
+          if ((s?.session as { impersonatedBy?: string | null } | undefined)?.impersonatedBy) throw new APIError('FORBIDDEN', { code: 'NOT_WHILE_IMPERSONATING', message: 'Not while acting as another user' });
+        }
+        if (ctx.path.startsWith('/admin/')) await checkAdminEndpoint(ctx.path, headers, body);
+        await checkMethods(ctx.path, headers, body);
+        await refuseForDirectory(ctx.path, headers, body);
+        const email = typeof body.email === 'string' ? body.email.trim().toLowerCase() : '';
         // A role may only be used from its addresses: said at sign-in, not after.
-        if ((ctx.path === '/sign-in/email' || ctx.path === '/sign-in/email-otp' || ctx.path === '/email-otp/send-verification-otp') && typeof body.email === 'string') {
-          const { rows: [u] } = await pool.query('SELECT role FROM users WHERE email = $1', [body.email.trim().toLowerCase()]);
+        if ((ctx.path === '/sign-in/email' || ctx.path === '/sign-in/email-otp' || ctx.path === '/email-otp/send-verification-otp') && email) {
+          const { rows: [u] } = await pool.query('SELECT role FROM users WHERE email = $1', [email]);
           await ensureRoles();
-          if (u && !ipAllowed(limitsOf(u.role).allowedIps, ctx.request.headers.get('x-lvm-client-ip') ?? '')) throw new APIError('FORBIDDEN', { code: 'IP_NOT_ALLOWED', message: 'Not allowed from this address' });
+          if (u && !ipAllowed(limitsOf(u.role).allowedIps, headers.get('x-lvm-client-ip') ?? '')) throw new APIError('FORBIDDEN', { code: 'IP_NOT_ALLOWED', message: 'Not allowed from this address' });
         }
         // Captcha, where the admin turned it on (Settings → Bot protection). The token comes in a header.
         const form = captchaPaths[ctx.path];
         if (form) {
           const c = await activeCaptcha();
           if (c && c.use[form]) {
-            const token = ctx.request.headers.get('x-captcha-response');
+            const token = headers.get('x-captcha-response');
             if (!token) throw new APIError('BAD_REQUEST', { code: 'CAPTCHA_REQUIRED', message: 'Captcha required' });
-            const verdict = await verifyCaptcha(c.provider, c.secret(), token, ctx.request.headers.get('x-lvm-client-ip'), c.minScore);
+            const verdict = await verifyCaptcha(c.provider, c.secret(), token, headers.get('x-lvm-client-ip'), c.minScore);
             if (!verdict.ok) throw new APIError('FORBIDDEN', { code: 'CAPTCHA_FAILED', message: 'Captcha failed' });
           }
         }
@@ -255,21 +307,21 @@ function createAuth() {
           const { rows: [s] } = await pool.query("SELECT value FROM settings WHERE key = 'registration_open'");
           if (s?.value !== true) throw new APIError('FORBIDDEN', { code: 'REGISTRATION_CLOSED', message: 'Registration is closed' });
         }
-        if (ctx.path === '/sign-in/email') {
-          const email = String(body.email ?? '').toLowerCase();
-          if (email) await limit(`login:email:${email}`, 10, 900);
-        }
+        if (ctx.path === '/sign-in/email' && email) await limit(`login:email:${email}`, 10, 900);
         // E-mail code sign-in: only when the admin turned it on, only for sign-in, never instead of two-factor.
         if (ctx.path.startsWith('/email-otp/') || ctx.path === '/sign-in/email-otp') {
-          const email = String(body.email ?? '').toLowerCase();
           if (!(await getSettings('security')).emailCodeSignIn || !(await mailUse('twoFactor'))) throw new APIError('FORBIDDEN', { code: 'EMAIL_CODE_SIGN_IN_DISABLED', message: 'Sign-in with an e-mail code is off' });
           if (ctx.path !== '/sign-in/email-otp' && (ctx.path !== '/email-otp/send-verification-otp' || body.type !== 'sign-in')) throw new APIError('FORBIDDEN', { code: 'EMAIL_CODE_SIGN_IN_DISABLED', message: 'Only sign-in codes' });
           if (email) await limit(`login:email:${email}`, 10, 900);
-          if (ctx.path === '/sign-in/email-otp') {
-            const { rows: [u] } = await pool.query('SELECT two_factor_enabled FROM users WHERE lower(email) = $1', [email]);
-            if (u?.two_factor_enabled) throw new APIError('FORBIDDEN', { code: 'TWO_FACTOR_USE_PASSWORD', message: 'Accounts with two-factor sign in with their password' });
-          }
+          const { rows: [u] } = await pool.query('SELECT two_factor_enabled, auth_source FROM users WHERE lower(email) = $1', [email]);
+          // Directory and single sign-on accounts sign in where their password lives (the rule that holds is the one
+          // where sessions are made, below; this is the answer the form can show).
+          if (u?.auth_source === 'ldap' || u?.auth_source === 'oidc') throw new APIError('FORBIDDEN', { code: 'PASSWORD_MANAGED_BY_DIRECTORY', message: 'Sign in with your directory account' });
+          if (ctx.path === '/sign-in/email-otp' && u?.two_factor_enabled) throw new APIError('FORBIDDEN', { code: 'TWO_FACTOR_USE_PASSWORD', message: 'Accounts with two-factor sign in with their password' });
         }
+        // Directory accounts sign in against the directory (and are created or brought up to date there). Last: the
+        // address rule, the captcha and the per-address limit above come before any password reaches the directory.
+        if (ctx.path === '/sign-in/email') await directorySignIn(ctx, body);
       }),
       after: createAuthMiddleware(async (ctx) => {
         if (!ctx.request) return;
@@ -287,6 +339,8 @@ function createAuth() {
           const live: Record<string, LiveKind> = { '/admin/ban-user': 'ban', '/admin/unban-user': 'unban', '/admin/set-user-password': 'password', '/admin/remove-user': 'removed',
             '/admin/revoke-user-session': 'sessions', '/admin/revoke-user-sessions': 'sessions', '/admin/update-user': 'account' };
           if (target && live[ctx.path]) await publishLive(target, live[ctx.path]);
+          // Sessions ended by staff: the browsers that were signed in stop receiving the account's notifications too.
+          if (target && ['/admin/ban-user', '/admin/revoke-user-sessions', '/admin/set-user-password'].includes(ctx.path)) await dropPush(target);
           return;
         }
         if (ctx.path === '/unlink-account' && !failed) {
@@ -299,6 +353,8 @@ function createAuth() {
           if (uid) {
             const enabled = ctx.path === '/two-factor/enable';
             await auditAuth(uid, enabled ? 'auth.two_factor_enabled' : 'auth.two_factor_disabled', 'success', ip);
+            // The host terminal needs two-factor: one that is open in another of this person's sessions ends with it.
+            if (!enabled) await closeConsoles(uid);
             await notify('auth.two_factor_changed', [uid], { enabled });
             await publishLive(uid, 'account');
           }
@@ -309,7 +365,16 @@ function createAuth() {
           if (uid) { await notify('auth.password_changed', [uid], {}); await publishLive(uid, 'password'); }
           return;
         }
-        if (ctx.path !== '/sign-in/email' && ctx.path !== '/sign-up/email' && ctx.path !== '/sign-in/passkey' && ctx.path !== '/sign-in/email-otp' && !ctx.path.startsWith('/two-factor/verify-')
+        // A passkey signs in later without the password: adding or removing one is recorded, and adding one announced.
+        if ((ctx.path === '/passkey/verify-registration' || ctx.path === '/passkey/delete-passkey') && !failed) {
+          const uid = (ctx.context.session as { user?: { id: string } } | null)?.user?.id;
+          if (!uid) return;
+          const added = ctx.path === '/passkey/verify-registration';
+          await auditAuth(uid, added ? 'auth.passkey_added' : 'auth.passkey_removed', 'success', ip);
+          if (added) await notify('auth.account_linked', [uid], { provider: 'Passkey' });
+          return;
+        }
+        if (ctx.path !== '/sign-in/email' && ctx.path !== '/sign-up/email' && ctx.path !== passkeySignIn && ctx.path !== '/sign-in/email-otp' && !ctx.path.startsWith('/two-factor/verify-')
           && !linkPaths(ctx.path) && ctx.path !== '/sign-in/username') return;
         const created = ctx.context.newSession;
         // A password sign-in that still needs the second factor is neither a success nor a failure yet.
@@ -317,13 +382,13 @@ function createAuth() {
         const action = ctx.path === '/sign-up/email' ? 'auth.register' : 'auth.login';
         const provider = String((ctx.params as { id?: string } | undefined)?.id ?? '');
         const method = ctx.path.startsWith('/callback/') ? (provider === ssoProviderId ? 'sso' : provider || 'social') : ctx.path === '/one-tap/callback' ? 'google-one-tap'
-          : ctx.path === '/magic-link/verify' ? 'magic-link' : ctx.path === '/sign-in/username' ? 'username' : ctx.path === '/sign-in/passkey' ? 'passkey' : ctx.path === '/sign-in/email-otp' ? 'email-code' : ctx.path.startsWith('/two-factor/') ? 'password+2fa' : 'password';
+          : ctx.path === '/magic-link/verify' ? 'magic-link' : ctx.path === '/sign-in/username' ? 'username' : ctx.path === passkeySignIn ? 'passkey' : ctx.path === '/sign-in/email-otp' ? 'email-code' : ctx.path.startsWith('/two-factor/') ? 'password+2fa' : 'password';
         const agent = ctx.request.headers.get('user-agent') ?? '';
         const device = deviceOf(agent);
         // Asked before this sign-in is recorded: has this person signed in from this device or network before?
         const seen = created && action === 'auth.login' ? await seenBefore(created.user.id, device, ip) : null;
         await auditAuth(created?.user.id ?? null, action, created ? 'success' : 'failure', ip,
-          created ? { method, device } : { email: String((ctx.body as { email?: unknown })?.email ?? '').toLowerCase() });
+          created ? { method, device } : { email: String((ctx.body as { email?: unknown })?.email ?? '').toLowerCase().slice(0, 254) });
         if (!created) return;
         if (action === 'auth.register') await notify('admin.user_registered', 'staff:users.view', { email: created.user.email });
         else await notify(seen === false ? 'auth.new_device' : 'auth.sign_in', [created.user.id], { ip: ip ?? '', agent, method, device });
@@ -349,9 +414,20 @@ function createAuth() {
         create: {
           // A disabled or banned account gets no new session (its old ones were revoked when it was disabled).
           before: async (session, ctx) => {
-            const user = await ctx?.context.internalAdapter.findUserById(session.userId) as { disabledAt?: Date | null; banned?: boolean } | null;
+            const user = await ctx?.context.internalAdapter.findUserById(session.userId) as { disabledAt?: Date | null; banned?: boolean; authSource?: string; twoFactorEnabled?: boolean } | null;
             if (user?.disabledAt || user?.banned) return false;
             const via = String((ctx?.params as { id?: string } | undefined)?.id ?? '');
+            // Here every way in ends, whatever route or plugin it came through (the panel's own server-side calls
+            // have no request). A directory account gets a session only when the directory accepted this very
+            // sign-in, a single sign-on account only from its provider's callback: never from a cached password
+            // hash, a code by SMS or mail, a passkey or a linked account. What may follow such a sign-in still
+            // works: its second step and two-factor changes, and staff acting as the person.
+            if (ctx?.request && ctx.path !== '/admin/impersonate-user') {
+              if (user?.authSource === 'ldap' && !ctx.path.startsWith('/two-factor/') && !(ctx.path === '/sign-in/email' && directoryAccepted.has(ctx.request))) return false;
+              if (user?.authSource === 'oidc' && !(ctx.path.startsWith('/callback/') && via === ssoProviderId)) return false;
+              // A link or a code in a mailbox is one factor: never the way in for an account that has two.
+              if (user?.twoFactorEnabled && (ctx.path === '/magic-link/verify' || ctx.path === '/sign-in/email-otp')) return false;
+            }
             if (sso && ctx?.path.startsWith('/callback/') && via === ssoProviderId && !(await ssoSignedIn(sso, session.userId, ctx.request?.headers.get('x-lvm-client-ip') ?? ''))) return false;
             // Social, One Tap and e-mail link sign-ins: the role's address limits apply as for a password.
             if (ctx && linkPaths(ctx.path) && via !== ssoProviderId) {
@@ -418,7 +494,7 @@ function createAuth() {
         disableSignUp: true, expiresIn: 600, storeToken: 'hashed',
         sendMagicLink: async ({ email, url }) => {
           const { rows: [u] } = await pool.query('SELECT locale FROM users WHERE lower(email) = lower($1)', [email]);
-          if (u) await sendSignInLink(email, u.locale, url); // unknown addresses get nothing, and the answer is the same
+          if (u) await sendSignInLink(email, u.locale, await onPanelAddress(url)); // unknown addresses get nothing, and the answer is the same
         },
       }),
       // Sign-in with a user name instead of the e-mail address (when the admin allows it; set in Account → Profile).

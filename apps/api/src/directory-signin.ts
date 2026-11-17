@@ -19,15 +19,21 @@ export const bindPassword = (s: LdapSettings) => (s.bindPasswordEnc ? decryptSec
 const refused = () => new APIError('UNAUTHORIZED', { code: 'INVALID_EMAIL_OR_PASSWORD', message: 'Invalid email or password' });
 
 // better-auth's middleware context, as far as it is used here.
-type Ctx = { context: { internalAdapter: { createUser: (u: object) => Promise<{ id: string }>; linkAccount: (a: object) => Promise<unknown>; updatePassword: (id: string, hash: string) => Promise<unknown>;
+type Ctx = { request?: object; context: { internalAdapter: { createUser: (u: object) => Promise<{ id: string }>; linkAccount: (a: object) => Promise<unknown>; updatePassword: (id: string, hash: string) => Promise<unknown>;
   findCredentialAccount: (id: string) => Promise<unknown> }; password: { hash: (p: string) => Promise<string> } } };
 
+// The requests in which the directory accepted the password: only these may end in a session for a directory account
+// (better-auth.ts checks it where sessions are made, so no other route gets one from the cached hash).
+export const directoryAccepted = new WeakSet<object>();
+
 export async function directorySignIn(ctx: unknown, body: Input) {
+  if (typeof body.email !== 'string' || typeof body.password !== 'string') return;
   const s = (await getSettings('directory')).ldap;
-  if (!s.enabled || typeof body.email !== 'string' || typeof body.password !== 'string') return;
   const email = body.email.trim().toLowerCase();
   const { rows: [u] } = await pool.query('SELECT id, role, auth_source FROM users WHERE lower(email) = $1', [email]);
   if (u && u.auth_source !== 'ldap') return;            // panel accounts keep their own password
+  // Directory sign-in was turned off: its accounts have nowhere to prove a password (the cached hash is not one).
+  if (!s.enabled) { if (u) throw refused(); return; }
   if (!u && !s.autoCreate) return;                      // better-auth answers "wrong e-mail or password"
   const r = await ldapAuthenticate(s, bindPassword(s), email, body.password);
   if (!r.ok) {
@@ -38,7 +44,8 @@ export async function directorySignIn(ctx: unknown, body: Input) {
   await ensureRoles();
   const wanted = rolesFromGroups(s, r.user.groups).filter((k) => roles.has(k));
   const role = (wanted.length ? wanted : ['user']).join(',');
-  const { context: c } = ctx as Ctx;
+  const { context: c, request } = ctx as Ctx;
+  if (request) directoryAccepted.add(request);
   const hash = await c.password.hash(body.password);
   if (!u) {
     const created = await c.internalAdapter.createUser({ email, name: r.user.name || email, emailVerified: true, role });

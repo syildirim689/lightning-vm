@@ -95,7 +95,9 @@ export class SettingsController {
     } catch (err) {
       const code = mailErrorCode(err);
       await audit(req, 'settings.mail_test', 'failure', req.user.id, { code });
-      throw apiError(422, code, 'SMTP test failed', undefined, { detail: String((err as Error)?.message ?? '').slice(0, 300) });
+      // An SMTP host is whatever the form names: what it said is not handed back, the code tells the kind of failure.
+      // The fixed API providers' own error text helps and comes from their address only.
+      throw apiError(422, code, 'SMTP test failed', undefined, value.provider === 'smtp' ? undefined : { detail: String((err as Error)?.message ?? '').slice(0, 300) });
     }
     await audit(req, 'settings.mail_test', 'success', req.user.id, { provider: value.provider, host: value.provider === 'smtp' ? value.host : undefined });
     return { sent: true, to };
@@ -215,11 +217,16 @@ function readSms(body: Input, saved: SmsSettings): { value: SmsSettings; credent
   if (p?.senderRequired && !sender) fields.sender = 'REQUIRED';
   const input = (body.credentials ?? {}) as Record<string, unknown>;
   const old = saved.provider === provider ? decryptCredentials(saved) : {};
+  // The custom provider's stored secrets are for the server they were entered for: with another one in the form they
+  // are typed again (otherwise the panel would send them to whatever host the form names).
+  const server = (u: unknown) => /^https?:\/\/[^/?#]+/i.exec(typeof u === 'string' ? u.trim() : '')?.[0].toLowerCase() ?? '';
+  const moved = provider === 'custom' && !!old.url && server(input.url) !== server(old.url);
   const credentials: Record<string, string> = {};
   for (const f of p?.fields ?? []) {
     const v = typeof input[f.key] === 'string' ? (input[f.key] as string).trim() : '';
     // An empty secret keeps the stored one.
-    credentials[f.key] = v || (f.secret ? old[f.key] ?? '' : '');
+    credentials[f.key] = v || (f.secret && !moved ? old[f.key] ?? '' : '');
+    if (f.secret && moved && !v && old[f.key]) fields[`credentials.${f.key}`] = 'REQUIRED';
     if (!credentials[f.key] && !f.optional) fields[`credentials.${f.key}`] = 'REQUIRED';
     if (f.options && credentials[f.key] && !f.options.includes(credentials[f.key])) fields[`credentials.${f.key}`] = 'INVALID_VALUE';
     if (credentials[f.key].length > 2000) fields[`credentials.${f.key}`] = 'INVALID_VALUE';

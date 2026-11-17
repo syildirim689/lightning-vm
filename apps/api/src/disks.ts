@@ -12,7 +12,7 @@ import { pool } from './db';
 import { apiError } from './errors';
 import { Can, PermissionGuard } from './rbac';
 import { checkResellerRoom, discounted, resellerOf } from './reseller';
-import { customerMay, findServer, hashOf, startOperation } from './servers';
+import { customerMay, findServer, hashOf, refuseBilledElsewhere, startOperation } from './servers';
 
 export const MAX_EXTRA_DISKS = 4;
 const columns = `id, size_gb AS "sizeGb", price_monthly::text AS "priceMonthly", status, created_at AS "createdAt"`;
@@ -32,6 +32,7 @@ export class DisksController {
   @Post() @HttpCode(202) @Can('server.resize')
   async add(@Req() req: AuthedRequest, @Param('id', ParseUUIDPipe) id: string, @Body() body: Record<string, unknown>) {
     const s = await findServer(req, id, true);
+    refuseBilledElsewhere(req, s); // nobody would bill the disk
     await customerMay(req, 'resize');
     if (s.state !== 'ready' || !s.vm_moref) throw apiError(409, 'INVALID_SERVER_STATE', 'Not possible in this state');
     // A data center's servers live inside its allocation and are paid with it: a disk beside that would be neither counted nor billed.
@@ -73,9 +74,13 @@ export class DisksController {
     const { rows: [d] } = await pool.query("SELECT * FROM server_disks WHERE id = $1 AND server_id = $2 AND status IN ('ready', 'failed')", [diskId, id]);
     if (!d) throw apiError(404, 'NOT_FOUND', 'Unknown disk');
     if (d.status === 'failed' || d.device_key === null) {
-      await pool.query('DELETE FROM server_disks WHERE id = $1', [diskId]);
-      await pool.query(`UPDATE servers SET price_monthly = greatest(0, price_monthly - $2), price_hourly = CASE WHEN billing_mode = 'hourly' THEN greatest(0, price_hourly - $3::numeric) ELSE price_hourly END,
-        updated_at = now() WHERE id = $1`, [id, d.price_monthly, hourlyOf(String(d.price_monthly))]);
+      // One statement, as the worker does for a disk that exists: the row and its share of the price go together, once.
+      // Requests sent at the same time all read the row above; only the one whose DELETE removes it lowers the price.
+      const { rowCount } = await pool.query(`WITH gone AS (DELETE FROM server_disks WHERE id = $2 AND server_id = $1 AND (status = 'failed' OR (status = 'ready' AND device_key IS NULL)) RETURNING price_monthly)
+        UPDATE servers s SET price_monthly = greatest(0, s.price_monthly - gone.price_monthly),
+          price_hourly = CASE WHEN s.billing_mode = 'hourly' AND s.price_hourly IS NOT NULL THEN greatest(0, s.price_hourly - $3::numeric) ELSE s.price_hourly END,
+          updated_at = now() FROM gone WHERE s.id = $1`, [id, diskId, hourlyOf(String(d.price_monthly))]);
+      if (!rowCount) throw apiError(404, 'NOT_FOUND', 'Unknown disk');
       return { removed: true };
     }
     // "removing" before the operation is queued (a removal that fails at once puts "ready" back, and that must stand);

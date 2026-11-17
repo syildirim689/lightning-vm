@@ -25,7 +25,8 @@ export async function sendWith(s: SmsSettings, credentials: Record<string, strin
   try {
     return await p.send({ credentials, sender: s.sender, commercial: s.commercial }, phoneForms(to), text);
   } catch (err) {
-    return { ok: false, code: 'SMS_PROVIDER_UNREACHABLE', detail: err instanceof Error ? err.message.slice(0, 200) : 'unknown' };
+    // The custom provider's address is anything the form names: nothing about what happened there is passed on.
+    return { ok: false, code: 'SMS_PROVIDER_UNREACHABLE', ...(s.provider !== 'custom' && { detail: err instanceof Error ? err.message.slice(0, 200) : 'unknown' }) };
   }
 }
 

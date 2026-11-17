@@ -93,16 +93,20 @@ async function saveWarnings(db, ctx, out) {
 }
 const saveTask = (db, op, task) => db.query('UPDATE operations SET provider_task_id = $2, updated_at = now() WHERE id = $1', [op.id, task || null]);
 
-async function guard(db, op) {
+// cancel false: only the deadline is checked. That is how a task already issued to the platform is waited for: the
+// worker never cancels a provider task, so stopping the wait would end the operation as "did not happen" (a resize's
+// price put back, a new disk's row marked failed) while the task still completes. A cancel request stops what would be
+// issued next; what is running is seen through to its real outcome.
+async function guard(db, op, cancel = true) {
   const { rows: [o] } = await db.query('SELECT cancel_requested, deadline_at < now() AS late FROM operations WHERE id = $1', [op.id]);
-  if (o.cancel_requested) throw new OperationError('CANCELLED', 'cancel requested', true);
+  if (cancel && o.cancel_requested) throw new OperationError('CANCELLED', 'cancel requested', true);
   if (o.late) throw new OperationError('TIMEOUT', 'operation deadline passed', true);
 }
 
 // Waits for a VMware task; the task id is stored before waiting so a restart resumes the wait.
 async function waitTask(db, ctx, task) {
   for (;;) {
-    await guard(db, ctx.op);
+    await guard(db, ctx.op, false);
     const t = await adapter('/v1/task', { ...ctx.target, task });
     if (t.state === 'success') return t;
     if (t.state === 'error') {
@@ -203,6 +207,14 @@ async function ensureVM(db, ctx) {
     if (!vm) await saveTask(db, op, null); // the old task left nothing behind; a new clone is safe
   }
   if (!vm) {
+    // A copy is built from its source server as that server is now, not from a VM id noted when it was ordered (the
+    // build may have waited days for payment): the source must still be there, the copy owner's, in this location and
+    // on that VM. Handed over, deleted or reinstalled since, or its id given to another VM: the copy is not made.
+    if (s.clone_from_moref) {
+      const { rows: [src] } = await db.query("SELECT 1 FROM servers WHERE id = $1 AND owner_id = $2 AND pool_id = $3 AND vm_moref = $4 AND state = 'ready'",
+        [s.clone_from_server_id ?? null, s.owner_id, s.pool_id, s.clone_from_moref]);
+      if (!src) throw new OperationError('CLONE_SOURCE_GONE', 'the server this copy was ordered from is gone, changed or no longer its owner\'s', true);
+    }
     const { datastore, pool } = await bestDatastore(db, s);
     // The adapter looks the name up first, so a retry after a lost response returns the earlier VM.
     // How the guest gets its cloud-init data: the admin's choice, else what discovery found the version supports.
@@ -381,7 +393,7 @@ const kinds = {
     if (!['clone', 'firewall', 'power_on', 'readiness'].includes(ctx.op.step)) {
       await removeVM(db, ctx);
       // The new image; an application installed on the old disk went with it, so its licence returns to the pool.
-      await db.query(`UPDATE servers SET vm_moref = NULL, image_id = $2, clone_from_moref = NULL, firewall_applied_version = 0, guest_ready = false, application_id = NULL, app_script_enc = NULL,
+      await db.query(`UPDATE servers SET vm_moref = NULL, image_id = $2, clone_from_moref = NULL, clone_from_server_id = NULL, firewall_applied_version = 0, guest_ready = false, application_id = NULL, app_script_enc = NULL,
         app_state = NULL, app_message = NULL, updated_at = now() WHERE id = $1`, [ctx.s.id, ctx.op.params.imageId]);
       await db.query('UPDATE application_licenses SET server_id = NULL, assigned_at = NULL WHERE server_id = $1', [ctx.s.id]);
     }
@@ -573,6 +585,7 @@ async function vmTask(db, ctx, step, path, body, done) {
   await setStep(db, ctx.op, step);
   let task = ctx.op.provider_task_id;
   if (!task) {
+    await guard(db, ctx.op); // a cancel asked for meanwhile stops here, before the next task is issued
     const out = await adapter(path, { ...ctx.target, vm: ctx.s.vm_moref, ...body });
     if (!out.task) return; // nothing left to do (already done)
     await saveTask(db, ctx.op, task = out.task);
@@ -616,7 +629,9 @@ export async function processOperation(db, job, log, notify = async () => {}, rd
   ctx.log = log; // for the steps that have something to say besides their outcome
   await db.query("UPDATE operations SET status = 'running', started_at = COALESCE(started_at, now()), attempts = attempts + 1, updated_at = now() WHERE id = $1", [ctx.op.id]);
   try {
-    await guard(db, ctx.op);
+    // A cancel is taken here only where nothing can be under way: a build (rolled back below, after its clone ends) and an
+    // operation that has not begun. One resumed mid-step goes on to wait for its task; its own steps stop before the next.
+    await guard(db, ctx.op, ctx.op.kind === 'create' || !ctx.op.step || ['queued', 'awaiting_payment'].includes(ctx.op.step));
     await kinds[ctx.op.kind](db, ctx);
     await db.query("UPDATE operations SET status = 'succeeded', step = 'done', finished_at = now(), error_code = NULL, updated_at = now() WHERE id = $1", [ctx.op.id]);
     log('info', 'operation_succeeded', { kind: ctx.op.kind, operationId: ctx.op.id });

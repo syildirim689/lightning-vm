@@ -98,16 +98,34 @@ reference.controllers = controllers;
 @Module({ controllers })
 class AppModule {}
 
-// Only Caddy on the Compose network talks to the API; its X-Forwarded-* headers are trusted.
+// Only Caddy (and the web container behind it) on the Compose network talks to the API; its X-Forwarded-* headers are
+// trusted. Caddy sends one client address, the one it worked out itself (deploy/caddy/Caddyfile), never the chain a
+// client wrote: so trusting every private range here cannot be used to walk into a client-written entry.
 const trustedProxies = process.env.TRUSTED_PROXIES?.split(',') ?? ['127.0.0.0/8', '10.0.0.0/8', '172.16.0.0/12', '192.168.0.0/16'];
+
+// A body is parsed before any guard runs, so every route takes a small one (JSON forms; the largest carry a
+// certificate chain or an install script). Only the routes that carry files take more, each what its own check
+// allows: ticket and dispute attachments (3 files of 2 MB, base64), the logo and favicon (256 KB each).
+const bodyLimit = 256 * 1024;
+export const largeBodies: Record<string, number> = {
+  'POST /support/tickets': 9 * 1024 * 1024, 'POST /support/tickets/:id/messages': 9 * 1024 * 1024, 'POST /billing/invoices/:id/disputes': 9 * 1024 * 1024,
+  'PUT /admin/settings/branding': 1024 * 1024,
+};
 
 export async function createApp() {
   const adapter = new FastifyAdapter({ trustProxy: trustedProxies, logger: { base: { service: 'api', env: process.env.APP_ENV || 'production' }, formatters: { level: (level) => ({ level }) },
-    redact: ['req.headers.authorization', 'req.headers.cookie', 'res.headers["set-cookie"]'] }, bodyLimit: 8 * 1024 * 1024,
+    redact: ['req.headers.authorization', 'req.headers.cookie', 'res.headers["set-cookie"]'] }, bodyLimit,
     // Open live streams (GET /live) must not hold a restart: closing ends every connection.
     forceCloseConnections: true });
   const app = await NestFactory.create<NestFastifyApplication>(AppModule, adapter);
   await app.register(fastifyCookie);
+  // Before the controllers' routes are registered (app.init): the few that carry files get their own limit.
+  app.getHttpAdapter().getInstance().addHook('onRoute', (route) => {
+    for (const method of [route.method].flat()) {
+      const limit = largeBodies[`${method} ${route.url}`];
+      if (limit) route.bodyLimit = limit;
+    }
+  });
   registerApiHooks(app.getHttpAdapter().getInstance());
   app.getHttpAdapter().getInstance().addHook('onRequest', async (req, reply) => {
     if (csrfRejected(req)) return reply.status(403).send({ code: 'CSRF_REJECTED', message: 'Cross-site request rejected' });
@@ -131,6 +149,8 @@ export async function createApp() {
   app.getHttpAdapter().getInstance().route({
     method: ['GET', 'POST'],
     url: '/auth/*',
+    // Sign-in forms, mostly from people who are not signed in: nothing here is large.
+    bodyLimit: 64 * 1024,
     async handler(req, reply) {
       const headers = fromNodeHeaders(req.headers);
       headers.set('x-lvm-client-ip', req.ip);

@@ -108,7 +108,9 @@ export class ResellerController {
     if ((await pool.query('SELECT 1 FROM users WHERE email = $1', [email])).rowCount) throw apiError(409, 'VALIDATION_FAILED', 'This e-mail has an account', { email: 'EMAIL_TAKEN' });
     const name = typeof body?.name === 'string' ? body.name.trim().slice(0, 80) : '';
     const { user } = await getAuth().api.createUser({ body: { email, password: randomBytes(24).toString('base64url'), name, role: 'user', data: { locale: req.user.locale } } });
-    await pool.query('UPDATE users SET reseller_id = $2, email_verified = true WHERE id = $1', [user.id, r.id]);
+    // Not marked verified: the reseller typed the address, nobody proved it. Signing in with the password (set through
+    // "forgot password") needs no verified address; the first sign-in by e-mail code or link proves it.
+    await pool.query('UPDATE users SET reseller_id = $2 WHERE id = $1', [user.id, r.id]);
     await audit(req, 'reseller.customer_created', 'success', req.user.id, { target: user.id });
     return { id: user.id };
   }

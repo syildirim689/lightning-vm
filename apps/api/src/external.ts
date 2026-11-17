@@ -1,6 +1,8 @@
 // For outside billing systems (the WHMCS and WISECP modules in integrations/): with a staff API token they order,
 // suspend, resize and remove servers for their own customers. A customer is found by e-mail, or created (they set a
-// password with "forgot password"). These servers are billed by that system, never by the panel's own billing.
+// password with "forgot password"). These servers are billed by that system, never by the panel's own billing: the
+// integration acts for the billing system, so the customer's role and the customer switches do not limit it, and the
+// owner cannot resize such a server or add disks to it in the panel (servers.ts refuseBilledElsewhere).
 // `reference` (the service id there) makes every create idempotent and finds the server again.
 import { Body, Controller, Delete, Get, HttpCode, Param, Post, Req, UseGuards } from '@nestjs/common';
 import { randomBytes } from 'node:crypto';
@@ -34,17 +36,28 @@ async function byReference(source: string, reference: string) {
 
 @Controller('admin/external/:source') @UseGuards(PermissionGuard)
 export class ExternalController {
-  // The customer by e-mail; created when new (a random password they never see).
+  // The customer by e-mail; created when new (a random password they never see). An existing account gets the order's
+  // server, its console and its root password, so an e-mail match alone is not enough: with open registration or as a
+  // reseller anyone can hold an account for a buyer's address before their first order. Matched are the account this
+  // system created itself, and one whose owner proved the address (e-mail code or link, a provider's verified address, or
+  // staff) and that is neither a reseller's customer, a reseller, nor another billing system's. Anything else is for the
+  // administrator to resolve (verify, rename or remove the account in the panel), not for the order to guess.
   @Post('customers') @HttpCode(200) @Can('servers.manage_all', 'users.manage')
-  async customer(@Req() req: AuthedRequest, @Body() body: Input) {
+  async customer(@Req() req: AuthedRequest, @Param('source') source: string, @Body() body: Input) {
+    if (!refOk(source)) throw apiError(400, 'VALIDATION_FAILED', 'Invalid input', { reference: 'INVALID_VALUE' });
     const email = typeof body?.email === 'string' ? body.email.trim().toLowerCase() : '';
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254) throw apiError(400, 'VALIDATION_FAILED', 'Invalid input', { email: 'INVALID_EMAIL' });
-    const { rows: [u] } = await pool.query('SELECT id FROM users WHERE email = $1', [email]);
-    if (u) return { id: u.id, created: false };
+    const { rows: [u] } = await pool.query(`SELECT id, external_source = $2 AS own, external_source IS NULL AND email_verified AND reseller_id IS NULL
+      AND NOT EXISTS (SELECT 1 FROM resellers r WHERE r.user_id = users.id) AS proven FROM users WHERE email = $1`, [email, source]);
+    if (u?.own || u?.proven) return { id: u.id, created: false };
+    if (u) {
+      await audit(req, 'external.customer_conflict', 'failure', req.user.id, { target: u.id, source });
+      throw apiError(409, 'CUSTOMER_NEEDS_REVIEW', 'An account with this e-mail exists, but its address was never proven or it belongs to a reseller or another billing system; resolve it in the panel');
+    }
     const name = typeof body?.name === 'string' ? body.name.trim().slice(0, 80) : '';
     const { user } = await getAuth().api.createUser({ body: { email, password: randomBytes(24).toString('base64url'), name, role: 'user', data: { locale: body?.locale === 'tr' ? 'tr' : 'en' } } });
-    await pool.query('UPDATE users SET email_verified = true WHERE id = $1', [user.id]);
-    await audit(req, 'external.customer_created', 'success', req.user.id, { target: user.id, source: req.params && (req.params as Record<string, string>).source });
+    await pool.query('UPDATE users SET email_verified = true, external_source = $2 WHERE id = $1', [user.id, source]);
+    await audit(req, 'external.customer_created', 'success', req.user.id, { target: user.id, source });
     return { id: user.id, created: true };
   }
 

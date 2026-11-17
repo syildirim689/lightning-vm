@@ -1,17 +1,20 @@
 // Real card payments (billing-gateways.ts interface) with iyzico, PayTR, Stripe, Craftgate and Param, from
 // docs/research-payment-flows.md. Every flow sends the customer to the provider's own page (3D Secure there; the panel never
-// sees a card number) and confirms the result with a server-side query to the provider before anything is marked paid.
+// sees a card number) and confirms the result with a server-side query to the provider (PayTR: its keyed notification)
+// before anything is marked paid. Param's return can be confirmed neither way, so it never marks a payment paid: staff do.
 // Stored cards are charged without the customer only where the provider stores them from its hosted page (iyzico,
 // Stripe, Craftgate) and the merchant account allows non-3D charges; PayTR and Param store cards only through direct card
 // forms, so their invoices are paid by the customer on the hosted page. None of these was run against a real merchant
 // account during development: try one payment in test mode first.
-import { createHash, createHmac, randomBytes } from 'node:crypto';
+import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import type { Gateway, Result } from './billing-gateways';
 
 const timeout = 30_000;
 const hmacHex = (key: string, s: string) => createHmac('sha256', key).update(s, 'utf8').digest('hex');
 const hmacB64 = (key: string, s: string) => createHmac('sha256', key).update(s, 'utf8').digest('base64');
 const cents = (amount: string) => Math.round(Number(amount) * 100);
+// Signatures are compared in constant time.
+const same = (a: string, b: string) => { const x = Buffer.from(a), y = Buffer.from(b); return x.length === y.length && timingSafeEqual(x, y); };
 const fail = (code: string, message?: string, ref?: string): Result => ({ ok: false, code, message: message?.slice(0, 300), ref });
 const esc = (s = '') => s.replace(/[<>&'"]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', "'": '&apos;', '"': '&quot;' }[c]!));
 const tag = (xml: string, n: string) => new RegExp(`<(?:\\w+:)?${n}[^>]*>([\\s\\S]*?)</(?:\\w+:)?${n}>`).exec(xml)?.[1] ?? '';
@@ -60,7 +63,7 @@ export const iyzico: Gateway = {
     if (!token) return fail('NO_TOKEN');
     const r = await iyzi(creds, '/payment/iyzipos/checkoutform/auth/ecom/detail', { locale: 'tr', conversationId: payment.id, token });
     const sig = hmacHex(creds.secretKey, [r.paymentStatus, r.paymentId, r.currency, r.basketId, r.conversationId, r.paidPrice, r.price, r.token].join(':'));
-    if (r.signature && r.signature !== sig) return fail('BAD_SIGNATURE', 'iyzico signature mismatch');
+    if (r.signature && !same(String(r.signature), sig)) return fail('BAD_SIGNATURE', 'iyzico signature mismatch');
     // Not paid: final when iyzico says so, or when iyzico itself sent the customer back (the form is finished then).
     // Asked on our own, anything else means the customer has not finished.
     if ((r.status !== 'success' || r.paymentStatus !== 'SUCCESS') && !posted && r.paymentStatus !== 'FAILURE') return fail('PENDING');
@@ -107,11 +110,12 @@ export const paytr: Gateway & { paymentIdFrom(body: Record<string, unknown>): st
   async verify({ body, payment }, creds) {
     // hash = base64(HMAC(merchant_key, merchant_oid + merchant_salt + status + total_amount))
     const hash = hmacB64(creds.merchant_key, `${body.merchant_oid}${creds.merchant_salt}${body.status}${body.total_amount}`);
-    if (String(body.hash ?? '') !== hash) return fail('BAD_SIGNATURE', 'PayTR hash mismatch');
+    if (!same(String(body.hash ?? ''), hash)) return fail('BAD_SIGNATURE', 'PayTR hash mismatch');
     // The notification of another payment (genuine, but sent to this one's address) is not this payment's result.
     if (String(body.merchant_oid ?? '') !== oid(payment.id)) return fail('BAD_SIGNATURE', 'Another payment’s notification');
     if (body.status !== 'success') return fail(`PAYTR_${body.failed_reason_code ?? 'FAILED'}`, String(body.failed_reason_msg ?? ''));
-    if (Number(body.payment_amount ?? body.total_amount) < cents(payment.amount)) return fail('AMOUNT_MISMATCH', 'PayTR reported a smaller amount');
+    const paid = Number(body.payment_amount ?? body.total_amount);
+    if (!Number.isFinite(paid) || paid < cents(payment.amount)) return fail('AMOUNT_MISMATCH', 'PayTR reported a smaller amount');
     return { ok: true, ref: String(body.merchant_oid) };
   },
   async refund(ref, amount, _currency, creds) {
@@ -211,20 +215,29 @@ export const craftgate: Gateway = {
   },
 };
 
-// ---- Param: Ortak Ödeme Sayfası (hosted, 3DS); the browser returns with a signed result; refunds. No stored cards (only
-// through a card form on our server, which would put card numbers on it). ----
-// shortcut: the return is not confirmed with Param's query (TP_Islem_Sorgulama4): its answer's fields are not in Param's
-// published samples and could not be tried against a merchant account. Until it is, the result rests on the hash, the
-// merchant's GUID and this payment's own Islem_ID, all of which someone who has seen one return of this merchant can produce.
+// ---- Param: Ortak Ödeme Sayfası (hosted, 3DS, lira only); the browser returns with a result; refunds. No stored cards
+// (only through a card form on our server, which would put card numbers on it). ----
+// The return proves nothing: its hash has no key, and the merchant's GUID and this payment's own Islem_ID are known to
+// anyone who has seen one return of this merchant. Param's query (TP_Islem_Sorgulama4) would settle it, but its answer's
+// fields (the amount above all) are not in Param's published samples and could not be tried against a merchant account.
+// shortcut: so a return that says paid never marks the payment paid; it is left open as NEEDS_CONFIRMATION for staff, who
+// look the payment up in the Param panel and mark the invoice paid. Write the query here once its answer is known.
 const paramSoap = async (url: string, action: string, ns: string, header: string, body: string) => {
   const res = await fetch(url, { method: 'POST', signal: AbortSignal.timeout(timeout), headers: { 'content-type': 'text/xml; charset=utf-8', SOAPAction: `"${ns}${action}"` },
     body: `<?xml version="1.0" encoding="utf-8"?><soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/"><soap:Header>${header}</soap:Header><soap:Body>${body}</soap:Body></soap:Envelope>` });
   return res.text();
 };
 const paramMoney = (amount: string) => Number(amount).toFixed(2).replace('.', ',');
+// "1.234,56", "1234,56" or "1234.56" in kuruş; null for anything else (never a guess: NaN compares as "not smaller").
+export const paramAmount = (v: string) => {
+  const m = /^(\d{1,3}(?:\.\d{3})+|\d+)(?:,(\d{1,2}))?$/.exec(v) ?? /^(\d+)\.(\d{2})$/.exec(v);
+  return m ? Number(m[1].replace(/\./g, '')) * 100 + Number((m[2] ?? '').padEnd(2, '0')) : null;
+};
 const paramPage = (endpoint: string) => (/testposws|test-dmz/.test(endpoint) ? 'https://testpos.param.com.tr' : 'https://pos.param.com.tr');
 export const param: Gateway = {
+  currencies: ['TRY'], // the hosted page takes the bare number in lira (another currency needs a card form on our server)
   async checkout(c, creds) {
+    if (c.currency.trim() !== 'TRY') throw new Error('Param: only TRY');
     const header = `<ServiceSecuritySoapHeader xmlns="https://turkodeme.com.tr/"><CLIENT_CODE>${esc(creds.CLIENT_CODE)}</CLIENT_CODE><CLIENT_USERNAME>${esc(creds.CLIENT_USERNAME)}</CLIENT_USERNAME>`
       + `<CLIENT_PASSWORD>${esc(creds.CLIENT_PASSWORD)}</CLIENT_PASSWORD></ServiceSecuritySoapHeader>`;
     const x = await paramSoap(`${paramPage(creds.endpoint)}/Tahsilat/to.ws/Service_Odeme.asmx`, 'TO_Pre_Encrypting_OOS', 'https://turkodeme.com.tr/', header,
@@ -239,14 +252,20 @@ export const param: Gateway = {
   async verify({ body, payment }, creds) {
     const g = (k: string) => String(body[`TURKPOS_RETVAL_${k}`] ?? '');
     const hash = createHash('sha1').update(Buffer.from(creds.CLIENT_CODE + g('GUID') + g('Dekont_ID') + g('Tahsilat_Tutari') + g('Siparis_ID') + g('Islem_ID'), 'latin1')).digest('base64');
-    if (g('Hash') !== hash) return fail('BAD_SIGNATURE', 'Param hash mismatch');
+    if (!same(g('Hash'), hash)) return fail('BAD_SIGNATURE', 'Param hash mismatch');
     // Every input of that hash is in the posted form, so it proves little by itself: the GUID must be the merchant's own
     // (never taken from the form), and the result must name this payment. Anything else is a foreign answer and changes nothing.
-    if (!creds.GUID || g('GUID') !== creds.GUID) return fail('BAD_SIGNATURE', 'Param GUID mismatch');
+    if (!creds.GUID || !same(g('GUID'), creds.GUID)) return fail('BAD_SIGNATURE', 'Param GUID mismatch');
     if (g('Islem_ID') !== oid(payment.id)) return fail('BAD_SIGNATURE', 'Another payment’s result');
-    if (!(Number(g('Sonuc')) > 0)) return fail('CARD_DECLINED', g('Sonuc_Str'));
-    if (Number(g('Tahsilat_Tutari').replace(',', '.')) + 0.001 < Number(payment.amount)) return fail('AMOUNT_MISMATCH', 'Param reported a smaller amount');
-    return { ok: true, ref: g('Siparis_ID') || g('Dekont_ID') };
+    if (payment.currency.trim() !== 'TRY') return fail('AMOUNT_MISMATCH', 'Param collects TRY only');
+    // The result flag and the amount are read strictly: anything that is not a number is no answer at all.
+    if (!/^-?\d+$/.test(g('Sonuc'))) return fail('BAD_SIGNATURE', 'Param result unreadable');
+    if (Number(g('Sonuc')) <= 0) return fail('CARD_DECLINED', g('Sonuc_Str'));
+    const paid = paramAmount(g('Tahsilat_Tutari'));
+    if (paid === null) return fail('BAD_SIGNATURE', 'Param amount unreadable');
+    if (paid < cents(payment.amount)) return fail('AMOUNT_MISMATCH', 'Param reported a smaller amount');
+    // Says paid, on the browser's word only (above): not final. Staff confirm it in the Param panel.
+    return fail('NEEDS_CONFIRMATION', `Param: sipariş/order ${g('Siparis_ID') || '-'}, dekont ${g('Dekont_ID') || '-'}, ${g('Tahsilat_Tutari')} TL. Param panelinde doğrulayıp faturayı ödendi işaretleyin / Confirm in the Param panel, then mark the invoice paid.`);
   },
   async refund(ref, amount, _currency, creds) {
     const x = await paramSoap(creds.endpoint, 'TP_Islem_Iptal_Iade_Kismi2', 'https://turkpos.com.tr/', '',

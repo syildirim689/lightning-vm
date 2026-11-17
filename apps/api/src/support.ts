@@ -89,7 +89,8 @@ export class SupportController {
   async mine(@Req() req: AuthedRequest) {
     const { rows } = await pool.query(`SELECT ${ticketColumns}, (SELECT count(*)::int FROM ticket_messages m WHERE m.ticket_id = t.id AND NOT m.internal) AS messages
       ${ticketJoins} WHERE t.owner_id = $1 ORDER BY (t.status = 'answered') DESC, t.updated_at DESC LIMIT 200`, [req.user.id]);
-    return { tickets: rows };
+    // The caller's own tickets: who in support holds one is not theirs to know by address (as on the ticket itself).
+    return { tickets: staffOf(req) ? rows : rows.map((r) => ({ ...r, assigneeEmail: null })) };
   }
 
   @Post('tickets') @HttpCode(201)

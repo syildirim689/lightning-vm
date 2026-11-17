@@ -35,7 +35,8 @@ export class AnnouncementAdminController {
     if (textTr.length > 300) fields.textTr = 'TOO_LONG';
     if (textEn.length > 300) fields.textEn = 'TOO_LONG';
     if (active && !textTr && !textEn) fields.textTr = 'REQUIRED';
-    if (link && !/^(https:\/\/[^\s]{1,300}|\/[^\s]{0,300})$/.test(link)) fields.link = 'INVALID_VALUE';
+    // A path of this panel or an https address. "//host" and "/\host" look like paths and are other sites to a browser.
+    if (link && !/^(https:\/\/[^\s]{1,300}|\/(?![\/\\])[^\s]{0,300})$/.test(link)) fields.link = 'INVALID_VALUE';
     const time = (k: string) => {
       const v = text(k);
       if (!v) return null;

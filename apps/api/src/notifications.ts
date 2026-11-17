@@ -5,6 +5,7 @@ import { audit, SessionGuard, type AuthedRequest } from './auth';
 import { pool } from './db';
 import { apiError } from './errors';
 import { all, catalog, deliver, policies, vapid } from './notify';
+import { publicUrl } from './chat-apps';
 import { can } from './permissions';
 import { Can, PermissionGuard } from './rbac';
 import { getSettings, mailReady, saveSettings, type Channel, type NotificationPolicy } from './settings-store';
@@ -12,6 +13,7 @@ import { smsReady } from './sms';
 import { validQuietHours } from './quiet-hours';
 import { chatReady } from './chat-delivery';
 
+const maxPushDevices = 20;
 const channelList = (v: unknown, from: Channel[]) => (Array.isArray(v) ? [...new Set(v.map(String))] : []).filter((c): c is Channel => from.includes(c as Channel));
 async function availability() {
   return { inApp: true, push: true, email: await mailReady(), sms: await smsReady(), chat: await chatReady() };
@@ -76,12 +78,20 @@ export class NotificationsController {
 
   @Post('push-subscriptions') @HttpCode(201)
   async subscribe(@Req() req: AuthedRequest, @Body() body: { endpoint?: unknown; keys?: { p256dh?: unknown; auth?: unknown } }) {
-    const endpoint = typeof body?.endpoint === 'string' && /^https:\/\/[^\s]{10,2000}$/.test(body.endpoint) ? body.endpoint : null;
-    const p256dh = typeof body?.keys?.p256dh === 'string' ? body.keys.p256dh : null;
-    const auth = typeof body?.keys?.auth === 'string' ? body.keys.auth : null;
+    // A subscription keeps receiving after the session that made it: not for staff acting as someone.
+    if (req.user.impersonatedBy) throw apiError(403, 'NOT_WHILE_IMPERSONATING', 'Not while acting as another user');
+    // The panel will post to this address: a push service's, so public HTTPS (checked again at every send, notify.ts).
+    const endpoint = typeof body?.endpoint === 'string' && /^https:\/\/[^\s]{10,2000}$/.test(body.endpoint) && (await publicUrl(body.endpoint)) ? body.endpoint : null;
+    const key = (v: unknown) => (typeof v === 'string' && /^[\w+/=-]{8,200}$/.test(v) ? v : null);
+    const p256dh = key(body?.keys?.p256dh), auth = key(body?.keys?.auth);
     if (!endpoint || !p256dh || !auth) throw apiError(400, 'VALIDATION_FAILED', 'Invalid input', { endpoint: 'INVALID_VALUE' });
-    await pool.query(`INSERT INTO push_subscriptions (user_id, endpoint, p256dh, auth, user_agent) VALUES ($1, $2, $3, $4, $5)
-      ON CONFLICT (endpoint) DO UPDATE SET user_id = $1, p256dh = $3, auth = $4`, [req.user.id, endpoint, p256dh, auth, String(req.headers['user-agent'] ?? '').slice(0, 200)]);
+    if ((await pool.query('SELECT 1 FROM push_subscriptions WHERE user_id = $1 AND endpoint <> $2', [req.user.id, endpoint])).rowCount! >= maxPushDevices) throw apiError(409, 'LIMIT_REACHED', 'Too many browsers');
+    // An endpoint someone else subscribed changes hands only with that subscription's own keys (the same browser,
+    // now used by this person); knowing the address alone does not take another person's row.
+    const { rowCount } = await pool.query(`INSERT INTO push_subscriptions (user_id, endpoint, p256dh, auth, user_agent) VALUES ($1, $2, $3, $4, $5)
+      ON CONFLICT (endpoint) DO UPDATE SET user_id = $1, p256dh = $3, auth = $4
+      WHERE push_subscriptions.user_id = $1 OR (push_subscriptions.p256dh = $3 AND push_subscriptions.auth = $4)`, [req.user.id, endpoint, p256dh, auth, String(req.headers['user-agent'] ?? '').slice(0, 200)]);
+    if (!rowCount) throw apiError(409, 'PUSH_ENDPOINT_IN_USE', 'This browser subscription belongs to another account');
     return { subscribed: true };
   }
 
@@ -109,8 +119,9 @@ export class NotificationsController {
     const t = req.user.locale === 'tr' ? { title: 'Test bildirimi', body: 'Bu kanal çalışıyor.' } : { title: 'Test notification', body: 'This channel works.' };
     try {
       await deliver({ id: req.user.id, email: req.user.email, locale: req.user.locale, phone_number: req.user.phoneNumber, phone_number_verified: req.user.phoneNumberVerified }, channel, t, '/account?tab=notifications', 'system.test');
-    } catch (err) {
-      throw apiError(422, 'NOTIFICATION_TEST_FAILED', 'Delivery failed', undefined, { detail: String((err as Error)?.message ?? '').slice(0, 300) });
+    } catch {
+      // No detail: the mail or SMS server's own words are the administrator's to read (in the settings tests), not every customer's.
+      throw apiError(422, 'NOTIFICATION_TEST_FAILED', 'Delivery failed');
     }
     return { sent: true, channel };
   }

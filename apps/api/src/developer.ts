@@ -20,6 +20,11 @@ export const tokenHash = (token: string) => createHash('sha256').update(token).d
 const browserOnly = (req: AuthedRequest) => {
   if (req.sessionId?.startsWith('token:')) throw apiError(403, 'TOKEN_NOT_ALLOWED', 'Manage tokens and webhooks from the panel');
 };
+// A token or a webhook outlives the session that made it: staff acting as a customer would keep a way into the account
+// (or a copy of its events).
+const notActingAs = (req: AuthedRequest) => {
+  if (req.user.impersonatedBy) throw apiError(403, 'NOT_WHILE_IMPERSONATING', 'Not while acting as another user');
+};
 const staff = (req: AuthedRequest) => req.user.permissions.some((p) => !customerLevel(p));
 async function tokensOn(req: AuthedRequest) {
   const mode = (await getSettings('security')).apiTokens ?? 'everyone';
@@ -46,8 +51,7 @@ export class DeveloperController {
   @Post('api-tokens') @HttpCode(201)
   async createToken(@Req() req: AuthedRequest, @Body() body: Input) {
     browserOnly(req);
-    // A token outlives the session that made it: staff acting as a customer would keep a way into the account.
-    if (req.user.impersonatedBy) throw apiError(403, 'NOT_WHILE_IMPERSONATING', 'Not while acting as another user');
+    notActingAs(req);
     await tokensOn(req);
     const fields: Record<string, string> = {};
     const name = typeof body?.name === 'string' ? body.name.trim() : '';
@@ -107,6 +111,7 @@ export class DeveloperController {
   @Post('webhooks') @HttpCode(201)
   async createWebhook(@Req() req: AuthedRequest, @Body() body: Input) {
     browserOnly(req);
+    notActingAs(req);
     const v = await cleanWebhook(req, body);
     if ((await pool.query('SELECT 1 FROM webhooks WHERE user_id = $1', [req.user.id])).rowCount! >= maxWebhooks) throw apiError(409, 'LIMIT_REACHED', 'Too many webhooks');
     const id = randomUUID();
@@ -121,6 +126,7 @@ export class DeveloperController {
   @Put('webhooks/:id')
   async updateWebhook(@Req() req: AuthedRequest, @Param('id', ParseUUIDPipe) id: string, @Body() body: Input) {
     browserOnly(req);
+    notActingAs(req);
     await owned(req, id);
     const v = await cleanWebhook(req, body);
     const active = body?.active === undefined ? true : body.active === true;
@@ -132,6 +138,7 @@ export class DeveloperController {
   @Post('webhooks/:id/secret')
   async rotate(@Req() req: AuthedRequest, @Param('id', ParseUUIDPipe) id: string) {
     browserOnly(req);
+    notActingAs(req);
     await owned(req, id);
     const secret = `whsec_${randomBytes(24).toString('base64url')}`;
     await pool.query('UPDATE webhooks SET secret_enc = $2 WHERE id = $1', [id, encryptSecret(secret, `webhook:${id}`)]);

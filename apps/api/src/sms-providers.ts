@@ -390,8 +390,10 @@ export const providers: Record<string, Provider> = {
         body = c.contentType === 'json' ? fill(c.body, (v) => JSON.stringify(v).slice(1, -1)) : fill(c.body, encodeURIComponent);
         headers['content-type'] = c.contentType === 'json' ? 'application/json' : 'application/x-www-form-urlencoded';
       }
-      const r = await call(url, { method: c.method === 'POST' ? 'POST' : 'GET', headers, body });
-      return new RegExp(c.successPattern).test(r.text) && r.status < 400 ? ok(r.text) : rejected(r.text);
+      // The address is whatever the form names (the test runs unsaved values), so only the verdict leaves here: never
+      // the answer's text, and a redirect is not followed (the secret headers would go with it).
+      const r = await call(url, { method: c.method === 'POST' ? 'POST' : 'GET', headers, body, redirect: 'manual' });
+      return new RegExp(c.successPattern).test(r.text) && r.status < 300 ? ok() : rejected(`HTTP ${Math.floor(r.status / 100)}xx`);
     },
   },
 };

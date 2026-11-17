@@ -256,3 +256,100 @@ test('what a clone did not do is kept on the operation and logged; a repeated at
   assert.deepEqual(db.op.params.warnings, ['EXTRA_ADDRESSES_NOT_CONFIGURED']);
   assert.deepEqual(logged.filter((l) => l[1] === 'operation_warnings')[0], ['warn', 'operation_warnings', ['EXTRA_ADDRESSES_NOT_CONFIGURED']]);
 });
+
+test('a copy is built only from its source server as it is now: gone, handed over or on another VM, nothing is cloned', async () => {
+  const source = '77777777-7777-4777-8777-777777777777';
+  const server = { vm_moref: null, pool_id: 'pool-1', datastore_morefs: ['ds-1'], compute_moref: 'c-1', template_moref: 'tpl-1', clone_from_moref: '107', clone_from_server_id: source };
+  const inventory = [[/FROM vmware_datastores/, () => [{ moref: 'ds-1' }]], [/FROM vmware_compute/, () => [{ resource_pool: 'rp-1' }]]];
+  const answers = (path) => (path === '/v1/vm/clone' ? { vm: 'vm-9' } : vmOf('poweredOn', 'vm-9'));
+  // The source row no longer matches (another owner, deleted, reinstalled onto another VM): the stand-in answers no row.
+  const gone = fakeDb({ op: { kind: 'create' }, server, routes: inventory });
+  let calls = fakeAdapter(answers);
+  assert.equal((await attempt(processOperation, gone)).message, 'CLONE_SOURCE_GONE');
+  assert.equal(gone.op.status, 'failed', 'permanent: not retried');
+  assert.equal(calls.to('/v1/vm/clone').length, 0);
+  assert.deepEqual(gone.ran(/^SELECT 1 FROM servers WHERE id = \$1 AND owner_id = \$2 AND pool_id = \$3 AND vm_moref = \$4 AND state = 'ready'/)[0].params, [source, ids.owner, 'pool-1', '107']);
+  // An order from before the source was recorded (no source id) is not built from a bare VM id either.
+  const unbound = fakeDb({ op: { kind: 'create' }, server: { ...server, clone_from_server_id: null }, routes: [...inventory, [/^SELECT 1 FROM servers WHERE id = \$1 AND owner_id/, (p) => (p[0] ? [{}] : [])]] });
+  calls = fakeAdapter(answers);
+  assert.equal((await attempt(processOperation, unbound)).message, 'CLONE_SOURCE_GONE');
+  assert.equal(calls.to('/v1/vm/clone').length, 0);
+  // Still the copy owner's ready server on that VM: cloned from it.
+  const ok = fakeDb({ op: { kind: 'create' }, server, routes: [...inventory, [/^SELECT 1 FROM servers WHERE id = \$1 AND owner_id/, () => [{}]]] });
+  calls = fakeAdapter(answers);
+  assert.equal(await attempt(processOperation, ok), null);
+  assert.deepEqual(calls.to('/v1/vm/clone').map((c) => c.body.template), ['107']);
+  // An ordinary order asks nothing about a source.
+  const plain = fakeDb({ op: { kind: 'create' }, server: { ...server, clone_from_moref: null, clone_from_server_id: null }, routes: inventory });
+  calls = fakeAdapter(answers);
+  assert.equal(await attempt(processOperation, plain), null);
+  assert.deepEqual(calls.to('/v1/vm/clone').map((c) => c.body.template), ['tpl-1']);
+  assert.equal(plain.ran(/^SELECT 1 FROM servers WHERE id = \$1 AND owner_id/).length, 0);
+});
+
+test('a cancel asked for while a resize task runs waits for its real outcome: the resize that landed keeps its price', async () => {
+  const db = fakeDb({ op: { kind: 'resize', params: { ...resizeParams, invoiceId: 'inv-1' } } });
+  let state = 'poweredOff', polls = 0;
+  const calls = fakeAdapter((path, body) => {
+    if (path === '/v1/vm/find') return vmOf(state);
+    if (path === '/v1/vm/power') { state = body.action === 'on' ? 'poweredOn' : 'poweredOff'; return { task: '' }; }
+    if (path === '/v1/vm/resize') { db.op.cancel_requested = true; return { task: 'task-r' }; } // the cancel lands once the task is issued
+    if (path === '/v1/task') return ++polls < 3 ? { state: 'running' } : { state: 'success' };
+  });
+  assert.equal(await attempt(processOperation, db), null);
+  assert.equal(polls, 3, 'the task was waited for, not abandoned');
+  assert.equal(db.op.status, 'succeeded');
+  assert.deepEqual(db.ran(/^UPDATE servers SET vcpu/).map((q) => q.params), [[ids.server, 4, 8192, 80]]);
+  assert.equal(db.ran(/^UPDATE servers SET price_monthly/).length, 0, 'the price is not put back');
+  assert.equal(db.ran(/^UPDATE invoices/).length, 0);
+  assert.equal(calls.to('/v1/vm/resize').length, 1);
+
+  // A worker restart finds the stored task and the cancel request: it still waits (the first check does not end it).
+  const resumed = fakeDb({ op: { kind: 'resize', step: 'resize', provider_task_id: 'task-r', cancel_requested: true, params: resizeParams } });
+  fakeAdapter((path) => (path === '/v1/task' ? { state: 'success' } : path === '/v1/vm/find' ? vmOf('poweredOn') : { task: '' }));
+  assert.equal(await attempt(processOperation, resumed), null);
+  assert.equal(resumed.ran(/^UPDATE servers SET vcpu/).length, 1);
+  assert.equal(resumed.ran(/^UPDATE servers SET price_monthly/).length, 0);
+
+  // The task it waited for failed: that is the real outcome, and only then is the price put back.
+  const failed = fakeDb({ op: { kind: 'resize', step: 'resize', provider_task_id: 'task-r', cancel_requested: true, params: resizeParams } });
+  fakeAdapter((path) => (path === '/v1/task' ? { state: 'error', code: 'INSUFFICIENT_RESOURCES', error: 'no room' } : path === '/v1/vm/find' ? vmOf('poweredOff') : {}));
+  assert.equal((await attempt(processOperation, failed)).message, 'INSUFFICIENT_RESOURCES');
+  assert.equal(failed.ran(/^UPDATE servers SET price_monthly/).length, 1);
+});
+
+test('a cancel asked for before the resize task is issued stops it there: nothing is changed and the old price returns', async () => {
+  const db = fakeDb({ op: { kind: 'resize', params: resizeParams } });
+  let state = 'poweredOn';
+  const calls = fakeAdapter((path, body) => {
+    if (path === '/v1/vm/find') return vmOf(state);
+    if (path === '/v1/vm/power') { state = body.action === 'on' ? 'poweredOn' : 'poweredOff'; if (body.action !== 'on') db.op.cancel_requested = true; return { task: '' }; } // cancelled while it is being stopped
+  });
+  assert.equal((await attempt(processOperation, db)).message, 'CANCELLED');
+  assert.equal(calls.to('/v1/vm/resize').length, 0);
+  assert.equal(db.op.status, 'failed');
+  assert.equal(db.ran(/^UPDATE servers SET vcpu/).length, 0);
+  assert.deepEqual(db.ran(/^UPDATE servers SET price_monthly/)[0].params.slice(0, 3), [ids.server, '10.00', 'pkg-old']);
+  assert.equal(state, 'poweredOn', 'started again as it was');
+});
+
+test('a disk_add cancelled while its task runs ends with the disk it made, not with a failed row for a disk that exists', async () => {
+  const params = { diskId: '66666666-6666-4666-8666-666666666666', sizeGb: 20 };
+  const db = fakeDb({ op: { kind: 'disk_add', params } });
+  const list = [{ key: 2000, system: true, sizeGb: 40 }];
+  const calls = fakeAdapter((path) => {
+    if (path === '/v1/vm/disks') return { disks: [...list] };
+    if (path === '/v1/vm/disk-add') { db.op.cancel_requested = true; return { task: 'task-d' }; }
+    if (path === '/v1/task') { list.push({ key: 2001, sizeGb: 20 }); return { state: 'success' }; }
+  });
+  assert.equal(await attempt(processOperation, db), null);
+  assert.deepEqual(db.ran(/^UPDATE server_disks SET device_key/)[0].params, [params.diskId, 2001]);
+  assert.equal(db.ran(/^UPDATE server_disks SET status = 'failed'/).length, 0);
+  assert.equal(calls.to('/v1/task').length, 1);
+  // Cancelled before the worker picked it up: nothing is issued and the row is marked failed (its removal credits the price once, api disks.ts).
+  const early = fakeDb({ op: { kind: 'disk_add', step: 'queued', cancel_requested: true, params } });
+  const none = fakeAdapter(() => ({}));
+  assert.equal((await attempt(processOperation, early)).message, 'CANCELLED');
+  assert.equal(none.length, 0);
+  assert.equal(early.ran(/^UPDATE server_disks SET status = 'failed'/).length, 1);
+});

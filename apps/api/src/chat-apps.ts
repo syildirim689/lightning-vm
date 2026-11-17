@@ -3,8 +3,9 @@
 // admin sets up once (Settings → Messaging); the others are webhooks or servers the user owns.
 // Every address the user gives is checked to be a public HTTPS host, so the panel cannot be pointed at itself.
 import { createHmac } from 'node:crypto';
+import { lookup as lookupCb } from 'node:dns';
 import { lookup } from 'node:dns/promises';
-import { request as httpsRequest } from 'node:https';
+import { Agent, request as httpsRequest } from 'node:https';
 import { BlockList, isIP, type LookupFunction } from 'node:net';
 
 export type Message = { title: string; body: string; link: string | null; brand: string; event: string };
@@ -82,6 +83,16 @@ export async function guardedRequest(raw: string, init: { method?: string; heade
     req.end(init.body);
   });
 }
+
+// For a library that sends its own request (web-push, notify.ts): every connection of this agent goes to a public
+// address, checked as the name is resolved, so the address connected to is the address checked. An address written
+// as a number is not resolved at all: check the URL with publicUrl first.
+export const publicOnlyAgent = new Agent({ lookup: ((host: string, options: { all?: boolean }, cb: (...a: unknown[]) => void) =>
+  lookupCb(host, { ...options, all: true }, (err, list) => {
+    if (err) return cb(err);
+    if (!list.length || list.some((a) => privateAddress(a.address))) return cb(Object.assign(new Error('not a public address'), { name: 'NotPublic' }));
+    return options?.all ? cb(null, list) : cb(null, list[0].address, list[0].family);
+  })) as unknown as LookupFunction });
 
 async function post(url: string, body: unknown, headers: Record<string, string> = {}, method = 'POST') {
   const form = body instanceof URLSearchParams;

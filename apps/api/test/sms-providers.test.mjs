@@ -91,3 +91,14 @@ test('international: Twilio (form, basic auth, Messaging Service), Vonage status
   await providers.sinch.send({ ...base, credentials: { servicePlanId: 'p1', apiToken: 't', region: 'eu' } }, to, 'hi');
   assert.equal(seen.url, 'https://eu.sms.api.sinch.com/xms/v1/p1/batches');
 });
+
+test('custom HTTP API: the answer of the address in the form is never handed back, and a redirect is not followed', async () => {
+  const c = { url: 'https://sms.example/send', method: 'GET', phoneFormat: 'e164', successPattern: '^OK' };
+  reply(200, 'OK secret-internal-text');
+  assert.deepEqual(await providers.custom.send({ credentials: c, sender: '', commercial: false }, to, 'hi'), { ok: true, ref: undefined });
+  assert.equal(seen.init.redirect, 'manual');
+  reply(500, 'stack trace with internal-text');
+  assert.deepEqual(await providers.custom.send({ credentials: c, sender: '', commercial: false }, to, 'hi'), { ok: false, code: 'SMS_REJECTED', detail: 'HTTP 5xx' });
+  reply(302, 'OK');
+  assert.equal((await providers.custom.send({ credentials: c, sender: '', commercial: false }, to, 'hi')).ok, false);
+});

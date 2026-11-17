@@ -4,8 +4,9 @@ import { audit, type AuthedRequest } from './auth';
 import { bindPassword, secretCtx } from './directory-signin';
 import { pool } from './db';
 import { apiError } from './errors';
+import { logEvent } from './log';
 import { ldapTest, rolesFromGroups } from './ldap';
-import { ensureRoles, roles } from './permissions';
+import { covers, ensureRoles, roles } from './permissions';
 import { Can, PermissionGuard } from './rbac';
 import { encryptSecret } from './secrets';
 import { getSettings, saveSettings, type LdapSettings, type OidcSettings } from './settings-store';
@@ -19,6 +20,19 @@ function readGroupRoles(v: unknown) {
     .filter((g) => g.group) : [];
 }
 const badMapping = (m: { roles: string[] }[]) => m.length > 50 || m.some((g) => !g.roles.length || g.roles.some((r) => !roles.has(r)));
+
+// Whoever signs in through the directory or the provider gets these roles, and the person saving chooses the server
+// that says who that is: so nobody maps to a role that holds more than they do themselves (the rule for roles and
+// access, rbac.ts; only an administrator covers "admin"). The whole mapping is checked at every save and test, not
+// only what changed: someone who does not cover a stored mapping cannot move the server underneath it either.
+function assertMappingCovered(req: AuthedRequest, v: { defaultRole: string; groupRoles: { roles: string[] }[] }) {
+  for (const key of new Set([v.defaultRole, ...v.groupRoles.flatMap((g) => g.roles)])) {
+    if (!covers(req.user.permissions, roles.get(key)?.permissions ?? ['*'])) throw apiError(403, 'FORBIDDEN_TARGET', 'This mapping gives roles with permissions you do not have');
+  }
+}
+// A stored secret is for the server it was entered for: with another address in the form it has to be typed again
+// (otherwise the panel would present it to whatever host the form names).
+const sameServer = (a: string, b: string) => a.replace(/\/+$/, '').toLowerCase() === b.replace(/\/+$/, '').toLowerCase();
 
 function readOidc(body: Input, saved: OidcSettings): OidcSettings {
   const fields: Record<string, string> = {};
@@ -39,8 +53,10 @@ function readOidc(body: Input, saved: OidcSettings): OidcSettings {
   if (!roles.has(defaultRole)) fields.defaultRole = 'INVALID_VALUE';
   const typed = typeof body.clientSecret === 'string' ? body.clientSecret : '';
   if (typed.length > 500) fields.clientSecret = 'INVALID_VALUE';
+  const kept = sameServer(issuer, saved.issuer) ? saved.clientSecretEnc : null;
+  if (!typed && issuer && saved.clientSecretEnc && !kept) fields.clientSecret = 'REQUIRED';
   if (Object.keys(fields).length) throw apiError(400, 'VALIDATION_FAILED', 'Invalid input', fields);
-  return { enabled, name: str('name', 40) || 'SSO', issuer, clientId, clientSecretEnc: typed ? encryptSecret(typed, ssoSecretCtx) : saved.clientSecretEnc, scopes, groupsClaim,
+  return { enabled, name: str('name', 40) || 'SSO', issuer, clientId, clientSecretEnc: typed ? encryptSecret(typed, ssoSecretCtx) : kept, scopes, groupsClaim,
     groupRoles, defaultRole, autoCreate: body.autoCreate !== false };
 }
 
@@ -63,10 +79,13 @@ function readLdap(body: Input, saved: LdapSettings): { value: LdapSettings; bind
   if (!roles.has(defaultRole)) fields.defaultRole = 'INVALID_VALUE';
   const typed = typeof body.bindPassword === 'string' ? body.bindPassword : '';
   if (typed.length > 500) fields.bindPassword = 'INVALID_VALUE';
+  const kept = sameServer(url, saved.url) ? saved.bindPasswordEnc : null;
+  if (!typed && url && bindDn && saved.bindPasswordEnc && !kept) fields.bindPassword = 'REQUIRED';
   if (Object.keys(fields).length) throw apiError(400, 'VALIDATION_FAILED', 'Invalid input', fields);
-  const bindPasswordEnc = !bindDn ? null : typed ? encryptSecret(typed, secretCtx) : saved.bindPasswordEnc;
+  const bindPasswordEnc = !bindDn ? null : typed ? encryptSecret(typed, secretCtx) : kept;
   return { value: { enabled, url, startTls: body.startTls === true, caPem, bindDn, bindPasswordEnc, baseDn, userFilter, emailAttribute: attr('emailAttribute', 'mail'),
-    nameAttribute: attr('nameAttribute', 'displayName'), groupAttribute: attr('groupAttribute', 'memberOf'), groupRoles, defaultRole, autoCreate: body.autoCreate !== false }, bindPassword: typed || bindPassword(saved) };
+    nameAttribute: attr('nameAttribute', 'displayName'), groupAttribute: attr('groupAttribute', 'memberOf'), groupRoles, defaultRole, autoCreate: body.autoCreate !== false },
+    bindPassword: typed || (kept ? bindPassword(saved) : '') };
 }
 
 @Controller('admin/settings/directory') @UseGuards(PermissionGuard)
@@ -84,6 +103,7 @@ export class DirectorySettingsController {
   async save(@Req() req: AuthedRequest, @Body() body: Input) {
     await ensureRoles();
     const { value } = readLdap((body?.ldap ?? {}) as Input, (await getSettings('directory')).ldap);
+    assertMappingCovered(req, value);
     await saveSettings('directory', { ...(await getSettings('directory')), ldap: value });
     await audit(req, 'settings.directory', 'success', req.user.id, { enabled: value.enabled, url: value.url, groups: value.groupRoles.length });
     return this.get();
@@ -95,6 +115,7 @@ export class DirectorySettingsController {
     await ensureRoles();
     const d = await getSettings('directory');
     const value = readOidc((body?.oidc ?? {}) as Input, d.oidc);
+    assertMappingCovered(req, value);
     await saveSettings('directory', { ...d, oidc: value });
     await reloadAuth();
     await audit(req, 'settings.sso', 'success', req.user.id, { enabled: value.enabled, issuer: value.issuer, groups: value.groupRoles.length });
@@ -106,12 +127,16 @@ export class DirectorySettingsController {
   async testSso(@Req() req: AuthedRequest, @Body() body: Input) {
     await ensureRoles();
     const value = readOidc({ ...((body?.oidc ?? {}) as Input), enabled: true }, (await getSettings('directory')).oidc);
-    const doc = await fetch(discoveryUrl(value.issuer), { signal: AbortSignal.timeout(10_000), redirect: 'error' }).then((r) => (r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status))))
-      .catch((err: Error) => { throw apiError(422, 'SSO_DISCOVERY_FAILED', 'Discovery failed', undefined, { detail: String(err?.message ?? '').slice(0, 200) }); }) as Record<string, unknown>;
-    const ok = String(doc.issuer ?? '').replace(/\/+$/, '') === value.issuer && typeof doc.authorization_endpoint === 'string' && typeof doc.token_endpoint === 'string' && typeof doc.jwks_uri === 'string';
+    assertMappingCovered(req, value);
+    // What the address answered is not handed back (the form names any host): the status class, or that it did not
+    // answer; and of a document that is this issuer's, only its lists of scope and claim names.
+    const doc = await fetch(discoveryUrl(value.issuer), { signal: AbortSignal.timeout(10_000), redirect: 'error' }).then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${Math.floor(r.status / 100)}xx`))))
+      .catch((err: Error) => { throw apiError(422, 'SSO_DISCOVERY_FAILED', 'Discovery failed', undefined, { detail: /^HTTP \dxx$/.test(String(err?.message)) ? err.message : 'no answer' }); }) as Record<string, unknown> | null;
+    const ok = !!doc && typeof doc === 'object' && String(doc.issuer ?? '').replace(/\/+$/, '') === value.issuer && typeof doc.authorization_endpoint === 'string' && typeof doc.token_endpoint === 'string' && typeof doc.jwks_uri === 'string';
     await audit(req, 'settings.sso_test', ok ? 'success' : 'failure', req.user.id, { issuer: value.issuer });
-    if (!ok) throw apiError(422, 'SSO_DISCOVERY_INVALID', 'Not an OpenID provider for this issuer', undefined, { detail: String(doc.issuer ?? '') });
-    return { ok: true, issuer: doc.issuer, scopes: Array.isArray(doc.scopes_supported) ? doc.scopes_supported.slice(0, 30) : [], claims: Array.isArray(doc.claims_supported) ? doc.claims_supported.slice(0, 50) : [] };
+    if (!doc || !ok) throw apiError(422, 'SSO_DISCOVERY_INVALID', 'Not an OpenID provider for this issuer');
+    const names = (v: unknown, max: number) => (Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string' && x.length <= 100).slice(0, max) : []);
+    return { ok: true, issuer: value.issuer, scopes: names(doc.scopes_supported, 30), claims: names(doc.claims_supported, 50) };
   }
 
   // With the values in the form (saved or not): the service account binds and, with an e-mail, finds that person;
@@ -120,10 +145,15 @@ export class DirectorySettingsController {
   async test(@Req() req: AuthedRequest, @Body() body: Input) {
     await ensureRoles();
     const { value, bindPassword: pw } = readLdap((body?.ldap ?? {}) as Input, (await getSettings('directory')).ldap);
-    const email = typeof body?.email === 'string' && body.email.trim() ? body.email.trim().toLowerCase() : undefined;
+    assertMappingCovered(req, value);
+    const email = typeof body?.email === 'string' && body.email.trim() ? body.email.trim().toLowerCase().slice(0, 254) : undefined;
     const r = await ldapTest(value, pw, email, typeof body?.password === 'string' ? body.password : undefined);
     await audit(req, 'settings.directory_test', r.ok ? 'success' : 'failure', req.user.id, { code: r.ok ? null : r.code });
-    if (!r.ok) throw apiError(422, r.code, 'Directory test failed', undefined, { detail: r.detail });
+    // The code says what kind of failure it was; the server's own words go to the API log, not to the caller.
+    if (!r.ok) {
+      if (r.detail) logEvent('error', 'ldap_test_failed', { code: r.code, detail: r.detail });
+      throw apiError(422, r.code, 'Directory test failed');
+    }
     return 'user' in r && r.user ? { ok: true, user: { dn: r.user.dn, email: r.user.email, name: r.user.name, groups: r.user.groups.slice(0, 50), roles: rolesFromGroups(value, r.user.groups) } } : { ok: true };
   }
 }

@@ -713,7 +713,9 @@ test('directory sign-in (LDAP): checked settings, local accounts unaffected, dir
     const bob = cookieOf(await post('/auth/sign-in/email', { email: 'bob@example.org', password: 'bob-directory-pass' }));
     assert.deepEqual((await get('/auth/me', bob)).json().roles, ['user']);
     // The directory decides: unreachable, the right password no longer works for a directory account.
-    await put('/admin/settings/directory', { ldap: { ...ldap, url: 'ldap://127.0.0.1:1', bindPassword: '' } }, admin);
+    // (Another server needs the bind password again: the stored one is not sent to a new address.)
+    assert.equal((await put('/admin/settings/directory', { ldap: { ...ldap, url: 'ldap://127.0.0.1:1', bindPassword: '' } }, admin)).json().fields?.bindPassword, 'REQUIRED');
+    await put('/admin/settings/directory', { ldap: { ...ldap, url: 'ldap://127.0.0.1:1' } }, admin);
     assert.equal((await post('/auth/sign-in/email', { email: 'ada@example.org', password: 'ada-directory-pass' })).statusCode, 401);
     for (const e of ['ada@example.org', 'bob@example.org']) {
       const { rows: [u] } = await pool.query('SELECT id FROM users WHERE email = $1', [e]);

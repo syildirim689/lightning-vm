@@ -5,7 +5,9 @@ import { Body, Controller, Delete, Get, HttpCode, Param, ParseUUIDPipe, Post, Pu
 import { audit, type AuthedRequest } from './auth';
 import { pool } from './db';
 import { apiError } from './errors';
+import { closeConsoles } from './better-auth';
 import { publishLive } from './live-bus';
+import { dropPush } from './notify';
 import { assertCovers, Can, PermissionGuard } from './rbac';
 
 const none = () => ({ rows: [] as Record<string, unknown>[] });
@@ -49,6 +51,10 @@ export class UserSecurityController {
   async resetTwoFactor(@Req() req: AuthedRequest, @Param('id', ParseUUIDPipe) id: string) {
     await assertCovers(req, id);
     if (id === req.user.id) throw apiError(400, 'CANNOT_CHANGE_OWN_ACCOUNT', 'Not on your own account');
+    // The sessions go below without better-auth (so without its hook): what they had open is closed here, while
+    // their tokens can still be read, and the browsers they were in stop receiving the account's notifications.
+    await closeConsoles(id);
+    await dropPush(id);
     const client = await pool.connect();
     try {
       await client.query('BEGIN');

@@ -12,6 +12,7 @@ import { decryptSecret, encryptSecret } from './secrets';
 import { getSettings, mailReady, saveSettings, sendMail, type Channel, type NotificationPolicy } from './settings-store';
 import { sendSms, smsReady } from './sms';
 import { absolute, deliverChat } from './chat-delivery';
+import { publicOnlyAgent, publicUrl } from './chat-apps';
 import { brandFor } from './mail';
 import { mailHtml, mailText, type MailContent, type Tone } from './mail-layout';
 import { publishLive } from './live-bus';
@@ -265,14 +266,20 @@ async function sendPush(userId: string, payload: object) {
   if (!rows.length) return;
   const keys = await vapid();
   const brand = (await getSettings('branding')).name;
-  await Promise.all(rows.map((s) => webpush.sendNotification({ endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } }, JSON.stringify({ ...payload, brand }),
-    { vapidDetails: { subject: 'mailto:noreply@lightning-vm.invalid', publicKey: keys.publicKey, privateKey: keys.privateKey }, TTL: 3600 })
+  // The endpoint came from a browser, so from whoever is signed in: only a public HTTPS address is ever connected to
+  // (checked again as the connection is made), and a push service that does not answer is not waited for.
+  await Promise.all(rows.map(async (s) => (await publicUrl(s.endpoint) ? webpush.sendNotification({ endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } }, JSON.stringify({ ...payload, brand }),
+    { vapidDetails: { subject: 'mailto:noreply@lightning-vm.invalid', publicKey: keys.publicKey, privateKey: keys.privateKey }, TTL: 3600, agent: publicOnlyAgent, timeout: 10_000 }) : Promise.reject(new Error('not public')))
     // Gone or expired subscriptions are removed; anything else is logged.
     .catch(async (err) => {
       if (err?.statusCode === 404 || err?.statusCode === 410) await pool.query('DELETE FROM push_subscriptions WHERE id = $1', [s.id]);
       else logEvent('error', 'push_failed', { status: err?.statusCode ?? 0 });
     })));
 }
+// When someone's sessions are ended for them (ban, sessions revoked, password set or reset, two-factor reset), the
+// browsers that were signed in stop receiving the account's notifications. A browser that signs out removes its own
+// (DELETE /notifications/push-subscriptions).
+export const dropPush = (userId: string) => pool.query('DELETE FROM push_subscriptions WHERE user_id = $1', [userId]).catch(() => logEvent('error', 'push_drop_failed'));
 
 // The e-mail's tag and colour: what area the event is from, and whether it is good news, a warning or a failure.
 const mailLabels: Record<string, { tr: string; en: string }> = {

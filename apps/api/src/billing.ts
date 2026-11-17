@@ -11,12 +11,12 @@ import { pool, redis, foldSql, foldText } from './db';
 import { apiError } from './errors';
 import { logEvent } from './log';
 import { notify } from './notify';
-import { activeGateway } from './payments';
+import { activeGateway, testModeOver } from './payments';
 import { Can, PermissionGuard } from './rbac';
 import { decryptSecret, encryptSecret } from './secrets';
 import { getSettings, saveSettings, type BillingSettings } from './settings-store';
 import { enqueue, startOperation } from './servers';
-import { finalResult, gateways, sandboxPay, type Result } from './billing-gateways';
+import { finalResult, gateways, needsReview, sandboxPay, type Result } from './billing-gateways';
 import { renewalPrice, type CouponUse } from './coupons';
 import { addDays, addMonths, cleanProfile, collectionStep, daysBetween, fromCents, dueDay, hoursDue, invoiceNumber, lineAmounts, prorate, renewalDue, settleSplit, taxFor, toCents, totals, validPrefix } from './billing-rules';
 
@@ -192,6 +192,15 @@ export async function settlePayment(paymentId: string, r: Result) {
   return out.status;
 }
 
+// An answer that settles nothing but needs a person (needsReview): the payment stays open with the reason on it, where
+// staff see it (Admin → Billing → Payments) and settle the invoice by hand. Logged once per reason.
+async function noteReview(paymentId: string, r: Result) {
+  if (r.ok || !needsReview(r)) return;
+  const { rowCount } = await pool.query("UPDATE payments SET error_code = $2, error_message = $3 WHERE id = $1 AND status = 'pending' AND error_code IS DISTINCT FROM $2",
+    [paymentId, r.code, (r.message ?? '').slice(0, 300)]);
+  if (rowCount) logEvent('warn', 'payment_needs_review', { paymentId, code: r.code });
+}
+
 // Pays what is left of an invoice from the owner's balance in its currency, if the balance covers it.
 export async function payFromBalance(invoiceId: string, automatic = false, by: string | null = null) {
   const client = await pool.connect();
@@ -243,6 +252,8 @@ async function startCardPayment(req: AuthedRequest, inv: Row, provider: string, 
   const gw = provider === 'sandbox' ? (s.sandbox ? { mode: 'test' as const, creds: {} } : null) : await activeGateway(provider);
   const impl = gateways[provider];
   if (!gw || !impl) throw apiError(409, 'PAYMENT_METHOD_UNAVAILABLE', 'This payment method is not available');
+  // A provider that collects only some currencies (Param: lira) would take this invoice's number in its own.
+  if (impl.currencies && !impl.currencies.includes(String(inv.currency).trim())) throw apiError(409, 'PAYMENT_METHOD_UNAVAILABLE', 'This payment method is not available');
   const due = toCents(inv.total) - toCents(inv.paid_total);
   const { rows: [p] } = await pool.query(`INSERT INTO payments (invoice_id, owner_id, provider, mode, method, status, amount, currency, save_card, created_by)
     VALUES ($1, $2, $3, $4, 'card', 'pending', $5, $6, $7, $8) RETURNING id`, [inv.id, inv.owner_id, provider, gw.mode, fromCents(due), inv.currency, saveCard, req.user.id]);
@@ -265,7 +276,7 @@ async function startCardPayment(req: AuthedRequest, inv: Row, provider: string, 
 async function chargeSavedCard(inv: Row) {
   const { rows: [card] } = await pool.query('SELECT * FROM saved_cards WHERE owner_id = $1 ORDER BY is_default DESC, created_at DESC LIMIT 1', [inv.owner_id]);
   const impl = card && gateways[card.provider];
-  if (!card || !impl?.chargeSaved) return false;
+  if (!card || !impl?.chargeSaved || (impl.currencies && !impl.currencies.includes(String(inv.currency).trim()))) return false;
   // A card saved in the sandbox is a test card: with the sandbox switched off it pays nothing.
   if (card.provider === 'sandbox' && !(await settings()).sandbox) return false;
   const gw = card.provider === 'sandbox' ? { mode: 'test' as const, creds: {} } : await activeGateway(card.provider);
@@ -442,9 +453,10 @@ async function recheckPayments() {
   let settled = 0;
   for (const p of rows) {
     const gw = await activeGateway(p.provider, p.mode);
-    if (!gw) continue;
+    if (!gw || await testModeOver(p.provider, p.mode)) continue;
     const r = await gateways[p.provider].verify({ query: {}, body: {}, payment: { id: p.id, amount: p.amount, currency: p.currency, providerRef: p.provider_ref } }, gw.creds, gw.mode)
       .catch((e: Error) => ({ ok: false as const, code: 'PROVIDER_ERROR', message: String(e?.message ?? e).slice(0, 200) }));
+    await noteReview(p.id, r);
     if (finalResult(r)) { await settlePayment(p.id, r); settled++; }
     else if (!r.ok && p.expired && r.code === 'PENDING') { await settlePayment(p.id, { ok: false, code: 'EXPIRED', message: 'Not paid within a day' }); settled++; }
   }
@@ -456,7 +468,7 @@ export async function runBilling(now = new Date()) {
   await retryPowerOffs(now);
   if (!s.enabled) return { skipped: true };
   const day = today(now);
-  const out = { adopted: await adopt(), ended: await closeEnded(), cancelled: 0, renewals: 0, charged: 0, reminded: 0, overdue: 0, suspended: 0, terminated: 0, expired: 0,
+  const out = { adopted: await adopt(), ended: await closeEnded(), cancelled: 0, renewals: 0, repriced: 0, charged: 0, reminded: 0, overdue: 0, suspended: 0, terminated: 0, expired: 0,
     hourly: await runHourly(now), disputesEscalated: await (await import('./disputes')).escalateDisputes(), paymentsRechecked: 0 };
 
   await retryRemovals();
@@ -473,6 +485,16 @@ export async function runBilling(now = new Date()) {
     if (b.vdc_id) await endVdc(b.vdc_id, 'cancel');
   }
   out.cancelled = leaving.length;
+
+  // A price that changed without an invoice of its own (a smaller shape, a removed disk): the unpaid renewal invoice of a
+  // period not begun follows it (repriceOpenRenewal), and so does the subscription's amount. Also looked for by the
+  // invoice's own price (one left alone while in dispute follows once the dispute is closed; a coupon's line differs
+  // for good and is simply found right each time).
+  const { rows: moved } = await pool.query(`SELECT b.server_id FROM subscriptions b JOIN servers s ON s.id = b.server_id
+    WHERE b.status IN ('active', 'past_due', 'suspended') AND s.billing_mode = 'monthly' AND (s.price_monthly <> b.amount
+      OR EXISTS (SELECT 1 FROM invoice_lines l JOIN invoices i ON i.id = l.invoice_id WHERE l.subscription_id = b.id AND NOT l.withdrawn AND l.period_start >= $1::date
+        AND i.kind = 'renewal' AND i.status = 'unpaid' AND NOT i.disputed AND l.unit_price <> s.price_monthly))`, [day]);
+  for (const m of moved) out.repriced += await repriceOpenRenewal(m.server_id);
 
   // Renewal invoices N days before the period ends, one per subscription and period. With automatic renewal off the
   // invoice is made all the same; it is only never taken from the balance or the card (below): the customer pays it by
@@ -582,54 +604,73 @@ export async function runBilling(now = new Date()) {
 }
 
 // Gives money back on a paid invoice (staff refund, or an accepted dispute): to the card at the provider, or to the balance.
+// In one transaction with the invoice locked: a second refund of the same invoice waits, then sees what is left of it.
 export async function refundInvoice(req: AuthedRequest, id: string, body: Record<string, unknown>) {
-  const { rows: [inv] } = await pool.query("SELECT * FROM invoices WHERE id = $1 AND status IN ('paid', 'partially_refunded')", [id]);
-  if (!inv) throw apiError(409, 'INVOICE_NOT_REFUNDABLE', 'Only a paid invoice can be refunded');
-  let cents = 0; try { cents = toCents(String(body?.amount ?? inv.total)); } catch { /* below */ }
-  const left = toCents(inv.total) - toCents(inv.refunded_total);
-  if (cents <= 0 || cents > left) throw apiError(400, 'VALIDATION_FAILED', 'Invalid amount', { amount: 'OUT_OF_RANGE' });
   const toBalance = body?.toBalance === true;
   const reason = typeof body?.reason === 'string' ? body.reason.trim().slice(0, 300) : '';
-  // A top-up refunded to the card takes the money out of the balance it became (refunding it to the balance changes nothing).
-  if (inv.kind === 'topup') {
-    if (toBalance) throw apiError(409, 'REFUND_NOT_SUPPORTED', 'A top-up is already balance');
-    const { rows: [b] } = await pool.query('SELECT coalesce(sum(amount), 0)::text AS amount FROM balance_entries WHERE owner_id = $1 AND currency = $2', [inv.owner_id, inv.currency]);
-    if (toCents(b.amount) < cents) throw apiError(409, 'INSUFFICIENT_BALANCE', 'That much of the top-up was already spent');
-  }
-  let remaining = cents;
-  if (!toBalance) {
-    // Back through the payments that brought the money in, newest first.
-    const { rows: pays } = await pool.query("SELECT * FROM payments WHERE invoice_id = $1 AND status IN ('succeeded', 'partially_refunded') ORDER BY completed_at DESC", [id]);
-    for (const p of pays) {
-      if (!remaining) break;
-      const part = Math.min(remaining, toCents(p.amount) - toCents(p.refunded));
-      if (part <= 0) continue;
-      if (p.provider === 'balance' || p.provider === 'manual') {
-        if (p.provider === 'manual') continue; // money that came outside the panel goes back outside it (or to the balance)
-        await pool.query("INSERT INTO balance_entries (owner_id, amount, currency, reason, invoice_id, payment_id, note, created_by) VALUES ($1, $2, $3, 'refund', $4, $5, $6, $7)",
-          [inv.owner_id, fromCents(part), inv.currency, id, p.id, reason || null, req.user.id]);
-      } else {
-        const impl = gateways[p.provider];
-        const gw = p.provider === 'sandbox' ? { mode: 'test' as const, creds: {} } : await activeGateway(p.provider, p.mode);
-        if (!impl?.refund || !gw) throw apiError(409, 'REFUND_NOT_SUPPORTED', 'This provider cannot refund from the panel; refund it in the provider panel or to the balance');
-        const r = await impl.refund(p.provider_ref, fromCents(part), p.currency, gw.creds, gw.mode);
-        if (!r.ok) throw apiError(502, 'REFUND_FAILED', r.message ?? r.code);
-      }
-      await pool.query("UPDATE payments SET refunded = refunded + $2, status = CASE WHEN refunded + $2 >= amount THEN 'refunded' ELSE 'partially_refunded' END WHERE id = $1", [p.id, fromCents(part)]);
-      remaining -= part;
+  const client = await pool.connect();
+  let inv: Row;
+  let done = 0; // cents given back
+  let failure: unknown = null;
+  try {
+    await client.query('BEGIN');
+    ({ rows: [inv] } = await client.query("SELECT * FROM invoices WHERE id = $1 AND status IN ('paid', 'partially_refunded') FOR UPDATE", [id]));
+    if (!inv) throw apiError(409, 'INVOICE_NOT_REFUNDABLE', 'Only a paid invoice can be refunded');
+    let cents = 0; try { cents = toCents(String(body?.amount ?? inv.total)); } catch { /* below */ }
+    const left = toCents(inv.total) - toCents(inv.refunded_total);
+    if (cents <= 0 || cents > left) throw apiError(400, 'VALIDATION_FAILED', 'Invalid amount', { amount: 'OUT_OF_RANGE' });
+    // A top-up refunded to the card takes the money out of the balance it became (refunding it to the balance changes nothing).
+    if (inv.kind === 'topup') {
+      if (toBalance) throw apiError(409, 'REFUND_NOT_SUPPORTED', 'A top-up is already balance');
+      await client.query('SELECT 1 FROM users WHERE id = $1 FOR UPDATE', [inv.owner_id]); // one balance spend at a time (payFromBalance)
+      const { rows: [b] } = await client.query('SELECT coalesce(sum(amount), 0)::text AS amount FROM balance_entries WHERE owner_id = $1 AND currency = $2', [inv.owner_id, inv.currency]);
+      if (toCents(b.amount) < cents) throw apiError(409, 'INSUFFICIENT_BALANCE', 'That much of the top-up was already spent');
     }
-    if (remaining) throw apiError(409, 'REFUND_NOT_SUPPORTED', 'Part of this was paid outside the panel; refund that part to the balance');
-    if (inv.kind === 'topup') await pool.query("INSERT INTO balance_entries (owner_id, amount, currency, reason, invoice_id, note, created_by) VALUES ($1, $2, $3, 'refund', $4, $5, $6)",
-      [inv.owner_id, fromCents(-cents), inv.currency, id, reason || null, req.user.id]);
-  } else {
-    await pool.query("INSERT INTO balance_entries (owner_id, amount, currency, reason, invoice_id, note, created_by) VALUES ($1, $2, $3, 'refund', $4, $5, $6)",
-      [inv.owner_id, fromCents(cents), inv.currency, id, reason || null, req.user.id]);
-  }
-  await pool.query(`UPDATE invoices SET refunded_total = refunded_total + $2, status = CASE WHEN refunded_total + $2 >= total THEN 'refunded' ELSE 'partially_refunded' END WHERE id = $1`,
-    [id, fromCents(cents)]);
-  await audit(req, 'billing.refunded', 'success', req.user.id, { invoiceId: id, amount: fromCents(cents), toBalance, reason });
-  void import('./einvoice').then((e) => e.creditNote(id, fromCents(cents), reason)).catch(() => undefined);
-  await notify('billing.refunded', [inv.owner_id], { invoiceId: id, amount: fromCents(cents), currency: inv.currency });
+    if (!toBalance) {
+      let remaining = cents;
+      try {
+        // Back through the payments that brought the money in, newest first.
+        const { rows: pays } = await client.query("SELECT * FROM payments WHERE invoice_id = $1 AND status IN ('succeeded', 'partially_refunded') ORDER BY completed_at DESC FOR UPDATE", [id]);
+        for (const p of pays) {
+          if (!remaining) break;
+          const part = Math.min(remaining, toCents(p.amount) - toCents(p.refunded));
+          if (part <= 0) continue;
+          if (p.provider === 'balance' || p.provider === 'manual') {
+            if (p.provider === 'manual') continue; // money that came outside the panel goes back outside it (or to the balance)
+            await client.query("INSERT INTO balance_entries (owner_id, amount, currency, reason, invoice_id, payment_id, note, created_by) VALUES ($1, $2, $3, 'refund', $4, $5, $6, $7)",
+              [inv.owner_id, fromCents(part), inv.currency, id, p.id, reason || null, req.user.id]);
+          } else {
+            const impl = gateways[p.provider];
+            const gw = p.provider === 'sandbox' ? { mode: 'test' as const, creds: {} } : await activeGateway(p.provider, p.mode);
+            if (!impl?.refund || !gw) throw apiError(409, 'REFUND_NOT_SUPPORTED', 'This provider cannot refund from the panel; refund it in the provider panel or to the balance');
+            const r = await impl.refund(p.provider_ref, fromCents(part), p.currency, gw.creds, gw.mode);
+            if (!r.ok) throw apiError(502, 'REFUND_FAILED', r.message ?? r.code);
+          }
+          await client.query("UPDATE payments SET refunded = refunded + $2, status = CASE WHEN refunded + $2 >= amount THEN 'refunded' ELSE 'partially_refunded' END WHERE id = $1", [p.id, fromCents(part)]);
+          remaining -= part;
+          done += part;
+        }
+        if (remaining) throw apiError(409, 'REFUND_NOT_SUPPORTED', 'Part of this was paid outside the panel; refund that part to the balance');
+      } catch (e) {
+        // What a provider has already given back cannot be rolled back with the transaction: that part is recorded, then the error is reported.
+        if (!done) throw e;
+        failure = e;
+      }
+      if (inv.kind === 'topup') await client.query("INSERT INTO balance_entries (owner_id, amount, currency, reason, invoice_id, note, created_by) VALUES ($1, $2, $3, 'refund', $4, $5, $6)",
+        [inv.owner_id, fromCents(-done), inv.currency, id, reason || null, req.user.id]);
+    } else {
+      await client.query("INSERT INTO balance_entries (owner_id, amount, currency, reason, invoice_id, note, created_by) VALUES ($1, $2, $3, 'refund', $4, $5, $6)",
+        [inv.owner_id, fromCents(cents), inv.currency, id, reason || null, req.user.id]);
+      done = cents;
+    }
+    await client.query(`UPDATE invoices SET refunded_total = refunded_total + $2, status = CASE WHEN refunded_total + $2 >= total THEN 'refunded' ELSE 'partially_refunded' END WHERE id = $1`,
+      [id, fromCents(done)]);
+    await client.query('COMMIT');
+  } catch (e) { await client.query('ROLLBACK'); throw e; } finally { client.release(); }
+  await audit(req, 'billing.refunded', 'success', req.user.id, { invoiceId: id, amount: fromCents(done), toBalance, reason });
+  void import('./einvoice').then((e) => e.creditNote(id, fromCents(done), reason)).catch(() => undefined);
+  await notify('billing.refunded', [inv.owner_id], { invoiceId: id, amount: fromCents(done), currency: inv.currency });
+  if (failure) throw failure;
   return { ok: true };
 }
 
@@ -737,9 +778,11 @@ async function runHourly(now: Date) {
   return out;
 }
 
+// One run at a time: the periodic one in every API process, and staff's "run now".
+const lockRun = () => redis.set('lock:billing', '1', 'EX', 240, 'NX').catch(() => null);
 export function startBilling() {
   const tick = async () => {
-    if (!(await redis.set('lock:billing', '1', 'EX', 240, 'NX').catch(() => null))) return;
+    if (!(await lockRun())) return;
     await runBilling().catch((e) => logEvent('error', 'billing_run_failed', { error: String(e?.message ?? e).slice(0, 200) }));
   };
   return setInterval(tick, 5 * 60_000).unref();
@@ -767,8 +810,9 @@ const subscriptionColumns = `b.id, b.kind, b.server_id AS "serverId", b.vdc_id A
 async function methods() {
   const s = await settings();
   const { activePaymentMethods } = await import('./payments');
-  const cards = (await activePaymentMethods()).filter((m) => gateways[m.id]).map((m) => ({ id: m.id, name: m.name, mode: m.mode, saved: !!gateways[m.id].chargeSaved }));
-  if (s.sandbox) cards.push({ id: 'sandbox', name: 'Sandbox', mode: 'test', saved: true });
+  // currencies: the only ones this provider can take (null: any); an invoice in another one is refused at payment.
+  const cards = (await activePaymentMethods()).filter((m) => gateways[m.id]).map((m) => ({ id: m.id, name: m.name, mode: m.mode, saved: !!gateways[m.id].chargeSaved, currencies: gateways[m.id].currencies ?? null }));
+  if (s.sandbox) cards.push({ id: 'sandbox', name: 'Sandbox', mode: 'test', saved: true, currencies: null });
   return { cards, balance: s.balance, bankTransfer: s.bankTransfer.enabled ? s.bankTransfer : null, topup: { min: s.topupMin, max: s.topupMax } };
 }
 
@@ -876,6 +920,8 @@ export class BillingController {
     const { rows: [p] } = await pool.query("SELECT * FROM payments WHERE id = $1 AND owner_id = $2 AND provider = 'sandbox'", [id, req.user.id]);
     if (!p) throw apiError(404, 'NOT_FOUND', 'Unknown payment');
     const cancel = body?.cancel === true;
+    // With the sandbox switched off a test card pays nothing, also not a payment begun while it was on (cancelling stays possible).
+    if (!cancel && !(await settings()).sandbox) throw apiError(409, 'PAYMENT_METHOD_UNAVAILABLE', 'This payment method is not available');
     const r = cancel ? { ok: false as const, code: 'CANCELLED_BY_CUSTOMER' } : sandboxPay(String(body?.card ?? ''), p.save_card);
     const status = await settlePayment(id, r);
     return { status, ...(!r.ok && { code: r.code }) };
@@ -961,12 +1007,13 @@ export class BillingCallbackController {
     if (!p || !impl) throw apiError(404, 'NOT_FOUND', 'Unknown payment');
     if (p.status === 'pending') {
       const gw = await activeGateway(provider, p.mode);
-      if (!gw) throw apiError(409, 'PAYMENT_METHOD_UNAVAILABLE', 'Provider not active');
+      if (!gw || await testModeOver(provider, p.mode)) throw apiError(409, 'PAYMENT_METHOD_UNAVAILABLE', 'Provider not active');
       const r = await impl.verify({ query, body, payment: { id: p.id, amount: p.amount, currency: p.currency, providerRef: p.provider_ref } }, gw.creds, gw.mode)
         .catch((e: Error) => ({ ok: false as const, code: 'PROVIDER_ERROR', message: String(e?.message ?? e).slice(0, 200) }));
       // Settled only on the provider's word (finalResult): one that did not answer, a forged or foreign answer, a customer
       // still on the provider's page, or a visit to this address with nothing to ask the provider with, leave the payment open.
       if (finalResult(r)) await settlePayment(id, r);
+      else await noteReview(id, r);
       logEvent(r.ok ? 'info' : 'warn', 'payment_callback', { provider, paymentId: id, ok: r.ok, ...(!r.ok && { code: r.code }) });
     }
     if (impl.reply) return reply.code(200).type('text/plain').send(impl.reply);
@@ -1131,7 +1178,11 @@ export class BillingAdminController {
 
   @Post('run') @HttpCode(200) @Can('billing.manage')
   async run(@Req() req: AuthedRequest) {
-    const r = await runBilling();
+    // The periodic run's lock: two runs at once would invoice or charge the same thing twice.
+    if (!(await lockRun())) throw apiError(409, 'BILLING_RUNNING', 'A billing run is in progress; try again in a few minutes');
+    const began = Date.now();
+    // Given back when done, unless it has expired meanwhile (then it may be the periodic run's by now).
+    const r = await runBilling().finally(() => (Date.now() - began < 200_000 ? redis.del('lock:billing').catch(() => 0) : 0));
     await audit(req, 'billing.run', 'success', req.user.id, r);
     return r;
   }
@@ -1174,20 +1225,74 @@ export class BillingSettingsController {
     if (next.enabled && (!company.name || !company.taxId || !company.address)) fields['company.name'] = 'COMPANY_REQUIRED';
     if (Object.keys(fields).length) throw apiError(400, 'VALIDATION_FAILED', 'Invalid input', fields);
     await saveSettings('billing', next);
+    // Switched off, the sandbox pays nothing any more: test payments still open are closed (sandboxPay refuses them too).
+    if (cur.sandbox && !next.sandbox) await pool.query(`UPDATE payments SET status = 'failed', error_code = 'TEST_MODE_OFF', error_message = 'The sandbox was switched off', completed_at = now()
+      WHERE provider = 'sandbox' AND status = 'pending'`);
     await audit(req, 'settings.billing', 'success', req.user.id, { enabled: next.enabled, requirePayment: next.requirePayment, sandbox: next.sandbox });
     return { billing: next };
   }
 }
 
-// What a resize costs now: the monthly increase for the rest of the server's paid period (nothing without billing,
-// without a running subscription, or for a decrease, which simply bills less from the next period).
+// What a resize costs now: the monthly increase for the rest of the period that runs today (nothing without billing,
+// without a running subscription, or for a decrease, which simply bills less from the next period). Periods invoiced
+// ahead and not begun are not charged here: their unpaid renewal invoice takes the new price (repriceOpenRenewal).
 export async function resizeCharge(serverId: string, oldMonthly: string, newMonthly: string) {
   const s = await settings();
   // An hourly server simply costs more per hour from now on.
-  const { rows: [sub] } = await pool.query(`SELECT period_start::text AS ps, period_end::text AS pe FROM subscriptions WHERE server_id = $1 AND status IN ('active', 'past_due')
+  const { rows: [sub] } = await pool.query(`SELECT id, period_start::text AS ps, period_end::text AS pe FROM subscriptions WHERE server_id = $1 AND status IN ('active', 'past_due')
     AND EXISTS (SELECT 1 FROM servers WHERE id = $1 AND billing_mode = 'monthly')`, [serverId]);
-  const cents = s.enabled && sub?.ps && sub?.pe ? prorate(toCents(newMonthly) - toCents(oldMonthly), today(), sub.ps, sub.pe) : 0;
-  return { chargeNow: fromCents(cents), periodEnd: sub?.pe ?? null };
+  // A renewal invoiced but still unpaid leaves the subscription on the period before: once that one is over, the period
+  // that runs is the invoiced one (at the old price), and the increase is owed for the rest of it.
+  const { rows: [run] } = sub ? await pool.query(`SELECT l.period_start::text AS ps, l.period_end::text AS pe FROM invoice_lines l JOIN invoices i ON i.id = l.invoice_id
+    WHERE l.subscription_id = $1 AND NOT l.withdrawn AND i.kind = 'renewal' AND i.status = 'unpaid' AND l.period_start < $2::date AND l.period_end > $2::date
+    ORDER BY l.period_start DESC LIMIT 1`, [sub.id, today()]) : { rows: [] };
+  const p = run ?? sub;
+  const cents = s.enabled && p?.ps && p?.pe ? prorate(toCents(newMonthly) - toCents(oldMonthly), today(), p.ps, p.pe) : 0;
+  return { chargeNow: fromCents(cents), periodEnd: p?.pe ?? null };
+}
+
+// A server's price changed (a resize, a disk added or removed) while the renewal invoice of a period that has not begun
+// is still unpaid: the invoice takes the new price, so that period is billed for the shape that will run in it. Without
+// this a customer could shrink the server just before the invoice is made and enlarge it again right after, each month.
+// An unpaid invoice has no legal number yet, so its amounts may still change; its due date and reminders stay. Left
+// alone: an invoice in dispute, one already paid up to its new total, and a period that has begun (resizeCharge bills
+// the rest of that one). The subscription's amount follows the server. Called where billing hears of a price change
+// (billResize) and, for the changes it does not hear of, by every run. Returns how many invoices changed.
+export async function repriceOpenRenewal(serverId: string, db?: PoolClient): Promise<number> {
+  if (!db) {
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const n = await repriceOpenRenewal(serverId, client);
+      await client.query('COMMIT');
+      return n;
+    } catch (e) { await client.query('ROLLBACK'); throw e; } finally { client.release(); }
+  }
+  const s = await settings();
+  if (!s.enabled) return 0;
+  const { rows: subs } = await db.query(`SELECT b.id, b.coupon_id, b.currency, s.price_monthly::text AS price FROM subscriptions b JOIN servers s ON s.id = b.server_id
+    WHERE b.server_id = $1 AND b.status IN ('active', 'past_due', 'suspended') AND s.billing_mode = 'monthly'`, [serverId]);
+  let changed = 0;
+  for (const b of subs) {
+    // The invoice is locked first, the subscription after it, as a payment does (markPaid, grant).
+    const { rows: lines } = await db.query(`SELECT l.id, l.invoice_id, l.description, l.quantity::float8 AS quantity, l.tax_rate::float8 AS rate, l.unit_price::numeric(14,2)::text AS unit, l.gross::text AS gross,
+        i.total::text AS total, i.paid_total::text AS paid FROM invoice_lines l JOIN invoices i ON i.id = l.invoice_id
+      WHERE l.subscription_id = $1 AND NOT l.withdrawn AND l.period_start >= $2::date AND i.kind = 'renewal' AND i.status = 'unpaid' AND NOT i.disputed FOR UPDATE OF i, l`, [b.id, today()]);
+    for (const l of lines) {
+      // A line the coupon discounted (its description says so) keeps the coupon, whatever is left of it by now.
+      const coupon = l.description.includes(' · kupon ') ? await renewalPrice(db, { coupon_id: b.coupon_id, coupon_left: null, currency: b.currency }, b.price) : null;
+      const unitCents = toCents(coupon?.monthly ?? b.price);
+      if (unitCents <= 0 || unitCents === toCents(l.unit)) continue;
+      const a = lineAmounts(unitCents, l.quantity, l.rate, s.pricesIncludeTax);
+      if (toCents(l.total) - toCents(l.gross) + a.gross <= toCents(l.paid)) continue;
+      await db.query('UPDATE invoice_lines SET unit_price = $2, net = $3, tax = $4, gross = $5 WHERE id = $1', [l.id, fromCents(unitCents), fromCents(a.net), fromCents(a.tax), fromCents(a.gross)]);
+      await db.query(`UPDATE invoices i SET subtotal = x.net, tax_total = x.tax, total = x.gross FROM (SELECT sum(net) AS net, sum(tax) AS tax, sum(gross) AS gross FROM invoice_lines WHERE invoice_id = $1) x
+        WHERE i.id = $1`, [l.invoice_id]);
+      changed++;
+    }
+    await db.query('UPDATE subscriptions SET amount = $2, updated_at = now() WHERE id = $1 AND amount <> $2', [b.id, b.price]);
+  }
+  return changed;
 }
 
 // The invoice for a resize's increase; the balance pays it at once when it covers it, otherwise it waits like any invoice.
@@ -1200,6 +1305,8 @@ export async function billResize(server: { id: string; owner_id: string; name: s
     const { rows: [sub] } = await client.query("SELECT id FROM subscriptions WHERE server_id = $1 AND status IN ('active', 'past_due') ORDER BY created_at DESC LIMIT 1", [server.id]);
     id = await createInvoice(client, { ownerId: server.owner_id, kind: 'manual', currency, dueAt: endOfDay(addDays(today(), 7)),
       lines: [{ description: `Sunucu ${server.name}: ${shape.vcpu} vCPU, ${shape.memoryMb / 1024} GB bellek, ${shape.diskGb} GB disk (dönem sonuna kadar fark)`, unitCents: toCents(amount), subscriptionId: sub?.id }] });
+    // The server already has its new price: a renewal invoiced ahead for the next period takes it too.
+    await repriceOpenRenewal(server.id, client);
     await client.query('COMMIT');
   } catch (e) { await client.query('ROLLBACK'); throw e; } finally { client.release(); }
   const paid = (await settings()).balance && await payFromBalance(id, true, server.owner_id).catch(() => false);

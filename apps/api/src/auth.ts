@@ -19,9 +19,19 @@ export type User = { id: string; email: string; name: string; roles: string[]; p
 // sessionToken: better-auth's stored token; the console gateway keys its revocations on its hash. sessionId: its row.
 export type AuthedRequest = FastifyRequest & { user: User; sessionToken: string; sessionId: string };
 
+// Audit details often repeat request input, and the audit log is kept: no single text in them is longer than this.
+const auditTextMax = 1000;
+export function capped(v: unknown, depth = 0): unknown {
+  if (typeof v === 'string') return v.length > auditTextMax ? v.slice(0, auditTextMax) : v;
+  if (!v || typeof v !== 'object' || depth > 6) return v;
+  if (Array.isArray(v)) return v.map((x) => capped(x, depth + 1));
+  // Plain objects only: a Date (or anything else with its own JSON form) is stored as it is.
+  return Object.getPrototypeOf(v) === Object.prototype ? Object.fromEntries(Object.entries(v).map(([k, x]) => [k, capped(x, depth + 1)])) : v;
+}
+
 export async function audit(req: FastifyRequest, action: string, outcome: 'success' | 'failure' | 'denied', actorId: string | null, metadata: object = {}) {
   await pool.query('INSERT INTO audit_events (actor_id, action, outcome, request_id, ip, metadata) VALUES ($1, $2, $3, $4, $5, $6)',
-    [actorId, action, outcome, req.id, req.ip, metadata]);
+    [actorId, action, outcome, req.id, req.ip, capped(metadata)]);
 }
 
 // Validation runs on the server whatever the browser checked. Field codes are translated by the web UI.

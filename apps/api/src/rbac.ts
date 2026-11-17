@@ -6,6 +6,7 @@ import { Reflector } from '@nestjs/core';
 import { pool } from './db';
 import { apiError } from './errors';
 import { audit, PERMISSION, SessionGuard, type AuthedRequest } from './auth';
+import { closeConsoles } from './better-auth';
 import { publishLive } from './live-bus';
 import { ipAllowed, readLimits } from './role-limits';
 import { can, covers, effectivePermissions, known, permissionCatalog, rolesChanged, permissionsOf, roles, splitRoles, type Permission } from './permissions';
@@ -65,6 +66,14 @@ async function roleLimits(req: AuthedRequest, key: string, input: unknown) {
 async function mayChangeRole(req: AuthedRequest, key: string) {
   const { rows: [old] } = await pool.query('SELECT permissions FROM roles WHERE key = $1', [key]);
   if (old && !covers(req.user.permissions, old.permissions ?? [])) throw apiError(403, 'FORBIDDEN_TARGET', 'This role has permissions you do not have');
+  return (old?.permissions ?? []) as string[];
+}
+
+// A console or host terminal that is already open was allowed by the access its owner had then: when a role loses
+// permissions (or goes), what its members have open is closed, and they open it again if they still may.
+async function closeMembersConsoles(key: string) {
+  const { rows } = await pool.query(`SELECT id FROM users WHERE $1 = ANY(string_to_array(coalesce(role, 'user'), ','))`, [key]);
+  if (rows.length) await closeConsoles(rows.map((r) => r.id as string));
 }
 
 @Controller('admin') @UseGuards(PermissionGuard)
@@ -97,12 +106,13 @@ export class RolesController {
     if (key === 'admin') throw apiError(409, 'ROLE_LOCKED', 'The administrator role always has every permission');
     const r = readRole({ ...body, key }, false);
     if (!covers(req.user.permissions, r.permissions)) throw apiError(403, 'FORBIDDEN_TARGET', 'You cannot grant permissions you do not have');
-    await mayChangeRole(req, key);
+    const before = await mayChangeRole(req, key);
     const limits = await roleLimits(req, key, body?.limits);
     const { rowCount } = await pool.query('UPDATE roles SET name = $2, description = $3, permissions = $4, limits = $5, updated_at = now() WHERE key = $1', [key, r.name, r.description, r.permissions, limits]);
     if (!rowCount) throw apiError(404, 'NOT_FOUND', 'Unknown role');
     await rolesChanged();
     await publishLive(null, 'access');
+    if (before.some((p) => !r.permissions.includes(p))) await closeMembersConsoles(key);
     await audit(req, 'role.updated', 'success', req.user.id, { key, permissions: r.permissions, limits });
     return { ...r, key, limits };
   }
@@ -112,6 +122,7 @@ export class RolesController {
   async remove(@Req() req: AuthedRequest, @Param('key') key: string) {
     if (key === 'admin' || key === 'user') throw apiError(409, 'ROLE_LOCKED', 'Built-in base roles cannot be removed');
     await mayChangeRole(req, key);
+    await closeMembersConsoles(key);
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
@@ -164,6 +175,8 @@ export class RolesController {
       await client.query('COMMIT');
     } catch (e) { await client.query('ROLLBACK'); throw e; } finally { client.release(); }
     await audit(req, 'user.access_changed', 'success', req.user.id, { target: id, roles: keys, overrides: clean });
+    // What this person has open (a server console, the host terminal) was allowed by the access they had until now.
+    await closeConsoles(id);
     await publishLive(id, 'access');
     return { roles: keys, overrides: clean, effective: next };
   }
