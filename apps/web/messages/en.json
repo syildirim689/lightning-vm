@@ -115,6 +115,7 @@
     "DISK_SMALLER_THAN_TEMPLATE": "The requested disk is smaller than the template's disk.",
     "NETWORK_NOT_FOUND": "The pool's network was not found in VMware.",
     "NOT_MANAGED": "This VM was not created by the platform; it was not touched.",
+    "VM_MISMATCH": "The VM id recorded for this server now belongs to another VM on the platform; nothing was touched. An administrator runs “Reconcile now” on the servers page, which finds the server's VM again by its name.",
     "TASK_NOT_FOUND": "The VMware task is no longer known; the result was checked on the VM itself.",
     "TEMPLATE_HAS_NO_NIC": "The template has no network adapter.",
     "TEMPLATE_NOT_FOUND": "The template was not found in VMware.",
@@ -314,6 +315,7 @@
     "USERNAME_TOO_LONG": "The user name is too long (at most 30 characters).",
     "INVALID_USERNAME": "User names use letters, digits, dots, hyphens and underscores.",
     "INVOICE_NOT_PAYABLE": "This invoice is not awaiting payment.",
+    "INVOICE_AMOUNT_CHANGED": "The invoice amount has just changed to follow the server's current price. Check the new amount, then mark it paid again.",
     "PAYMENT_METHOD_UNAVAILABLE": "This payment method is not available.",
     "INSUFFICIENT_BALANCE": "The balance does not cover this.",
     "PAYMENT_FAILED": "The payment did not go through.",
@@ -363,10 +365,13 @@
     "NETWORK_FULL": "The network has no free address.",
     "ALREADY_MEMBER": "The server is on this network already.",
     "LEAVE_PRIVATE_NETWORKS": "Take the server off its private networks before reinstalling.",
-    "EXTERNALLY_BILLED": "This server is managed by your hosting account; change its plan there.",
+    "EXTERNALLY_BILLED": "This is managed by your hosting account; order servers and change their plan there.",
+    "RESTORE_HOLD": "The panel was restored from a backup. Nothing is started until an administrator has reviewed what changed since and released the hold.",
+    "SERVER_CHANGED": "The server changed since this resize failed. Ask for a new resize instead of retrying this one.",
+    "OUTCOME_UNKNOWN": "The platform was still working on this when the panel stopped waiting, so the result is not known. Nothing was undone: check the server on the platform, then retry the operation or correct the server.",
     "CLONE_PENDING": "A copy of this server is still being built or waits for payment; wait for it or cancel it first.",
     "CLONE_SOURCE_GONE": "The server this copy was ordered from was deleted, reinstalled or handed over meanwhile; the copy was not made.",
-    "CUSTOMER_NEEDS_REVIEW": "An account with this e-mail exists, but its address was never proven, or it belongs to a reseller or another billing system. Resolve it in the panel first.",
+    "CUSTOMER_NEEDS_REVIEW": "An account with this e-mail exists that this billing system did not create (or it is staff, a reseller's or another billing system's). Hand it over to the billing system or resolve it in the panel first.",
     "INVALID_PRIVATE_SUBNET": "Use a private range (10.x, 172.16-31.x or 192.168.x) between /16 and /28.",
     "IMAGE_IN_USE": "Servers still run from this image.",
     "OWNER_ONLY": "Only the owner can do this.",
@@ -383,7 +388,7 @@
     "ISO_SIZE_UNKNOWN": "The size of the ISO could not be determined: the address does not report it. Use a direct download link.",
     "ISO_INCOMPLETE": "The ISO was not downloaded completely. Try again.",
     "SHUTDOWN_TIMEOUT": "The server did not shut down in time; its operating system ignored the request. You can force it off instead.",
-    "NOT_WHILE_IMPERSONATING": "This cannot be done while you are signed in as another user (API tokens, webhooks, passkeys, connected accounts, password, two-factor, phone, notification channels). Return to your own account first.",
+    "NOT_WHILE_IMPERSONATING": "This cannot be done while you are signed in as another user (API tokens, webhooks, passkeys, connected accounts, password, two-factor, phone, notification channels, billing e-mail). Return to your own account first.",
     "E_WINDOW_NEVER": "The maintenance window never contains a moment the hourly timer runs. Make it at least one hour and ten minutes long.",
     "E_BACKUP_VERIFY": "The backup file could not be read back after it was written (is the disk full?).",
     "E_BACKUP_WRITE": "The backup file could not be written. Check the free space and the permissions of the backup folder.",
@@ -2268,7 +2273,8 @@
     "finding": {
       "vm_missing": "VM missing in VMware",
       "orphan_vm": "Platform VM without a record",
-      "power_drift": "Power state differs"
+      "power_drift": "Power state differs",
+      "vm_id_changed": "VM found under another id"
     },
     "ips": {
       "title": "IP addresses",
@@ -2519,6 +2525,22 @@
     "recent": "Recent operations",
     "viewAll": "View all",
     "noData": "No data yet."
+  },
+  "RestoreHold": {
+    "title": "Restore hold",
+    "heldTitle": "The panel is on hold after a restore",
+    "held": "The backup {backup} was restored on {time}. Until you release the hold, the panel does nothing by itself from the restored data: open operations, unpaid orders, scheduled deletions and payment reminders wait. Everyone was signed out.",
+    "heldPlain": "A backup was restored. Until you release the hold, the panel does nothing by itself from the restored data: open operations, unpaid orders, scheduled deletions and payment reminders wait. Everyone was signed out.",
+    "checkTitle": "Check before you release",
+    "checkServers": "Servers created or deleted since the backup: the panel knows them as they were then. Look at what reconcile found on this page and settle each one.",
+    "checkPayments": "Payments made since the backup are not in the restored data. Compare with your payment provider and record them, or the orders and invoices they paid count as unpaid.",
+    "checkAccess": "API tokens deleted, bans, disabled accounts and role changes made since the backup are back as they were at backup time. Delete, ban and change them again.",
+    "release": "Release",
+    "releaseTitle": "Release the hold?",
+    "releaseBody": "The panel acts on the restored data at once: open operations run, unpaid orders past their date are cancelled and scheduled deletions are carried out. This cannot be taken back.",
+    "cancel": "Cancel",
+    "released": "The hold was released",
+    "cli": "Or on the server:"
   },
   "SystemPage": {
     "eyebrow": "ADMINISTRATION",
@@ -5451,7 +5473,9 @@
   },
   "Activity": {
     "actions": {
+      "auth_address_proven": "Address proven by its owner; earlier sign-in methods removed",
       "auth_login": "Signed in",
+      "auth_password_step": "Password accepted, second step pending",
       "auth_sign_in": "Signed in",
       "auth_register": "Account created",
       "auth_password_changed": "Password changed",

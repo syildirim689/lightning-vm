@@ -115,6 +115,7 @@
     "DISK_SMALLER_THAN_TEMPLATE": "İstenen disk, şablonun diskinden küçük.",
     "NETWORK_NOT_FOUND": "Havuzun ağı VMware'de bulunamadı.",
     "NOT_MANAGED": "Bu VM platform tarafından oluşturulmamış; dokunulmadı.",
+    "VM_MISMATCH": "Bu sunucu için kayıtlı VM kimliği artık platformda başka bir VM'ye ait; hiçbir şeye dokunulmadı. Bir yönetici sunucular sayfasında “Şimdi uzlaştır”ı çalıştırır; bu, sunucunun VM'sini adından yeniden bulur.",
     "TASK_NOT_FOUND": "VMware görevi artık bulunamıyor; sonuç VM'nin kendisinden kontrol edildi.",
     "TEMPLATE_HAS_NO_NIC": "Şablonda ağ kartı yok.",
     "TEMPLATE_NOT_FOUND": "Şablon VMware'de bulunamadı.",
@@ -314,6 +315,7 @@
     "USERNAME_TOO_LONG": "Kullanıcı adı çok uzun (en fazla 30 karakter).",
     "INVALID_USERNAME": "Kullanıcı adında harf, rakam, nokta, tire ve alt çizgi kullanılabilir.",
     "INVOICE_NOT_PAYABLE": "Bu fatura ödeme beklemiyor.",
+    "INVOICE_AMOUNT_CHANGED": "Fatura tutarı, sunucunun güncel fiyatına göre az önce değişti. Yeni tutarı kontrol edip yeniden ödendi olarak işaretleyin.",
     "PAYMENT_METHOD_UNAVAILABLE": "Bu ödeme yöntemi kullanılamıyor.",
     "INSUFFICIENT_BALANCE": "Bakiye bunu karşılamıyor.",
     "PAYMENT_FAILED": "Ödeme gerçekleşmedi.",
@@ -363,10 +365,13 @@
     "NETWORK_FULL": "Ağda boş adres kalmadı.",
     "ALREADY_MEMBER": "Sunucu zaten bu ağda.",
     "LEAVE_PRIVATE_NETWORKS": "Yeniden kurmadan önce sunucuyu özel ağlardan çıkarın.",
-    "EXTERNALLY_BILLED": "Bu sunucu hosting hesabınızdan yönetiliyor; paketini oradan değiştirin.",
+    "EXTERNALLY_BILLED": "Bu, hosting hesabınızdan yönetiliyor; sunucu siparişini ve paket değişikliğini oradan yapın.",
+    "RESTORE_HOLD": "Panel bir yedekten geri yüklendi. Bir yönetici o zamandan beri değişenleri gözden geçirip beklemeyi kaldırana kadar hiçbir işlem başlatılmaz.",
+    "SERVER_CHANGED": "Bu boyut değişikliği başarısız olduktan sonra sunucu değişti. Bunu yeniden denemek yerine yeni bir boyut değişikliği isteyin.",
+    "OUTCOME_UNKNOWN": "Panel beklemeyi bıraktığında platform bu işlem üzerinde hâlâ çalışıyordu; sonuç bilinmiyor. Hiçbir şey geri alınmadı: sunucuyu platformda kontrol edin, sonra işlemi yeniden deneyin ya da sunucuyu düzeltin.",
     "CLONE_PENDING": "Bu sunucunun bir kopyası hâlâ kuruluyor ya da ödeme bekliyor; bitmesini bekleyin ya da önce onu iptal edin.",
     "CLONE_SOURCE_GONE": "Bu kopyanın sipariş edildiği sunucu bu arada silindi, yeniden kuruldu ya da devredildi; kopya oluşturulmadı.",
-    "CUSTOMER_NEEDS_REVIEW": "Bu e-postayla bir hesap var, ancak adresi hiç doğrulanmamış ya da hesap bir bayiye veya başka bir faturalama sistemine ait. Önce panelde çözün.",
+    "CUSTOMER_NEEDS_REVIEW": "Bu e-postayla, bu faturalama sisteminin oluşturmadığı bir hesap var (ya da hesap personele, bir bayiye veya başka bir faturalama sistemine ait). Önce hesabı faturalama sistemine devredin ya da panelde çözün.",
     "INVALID_PRIVATE_SUBNET": "/16 ile /28 arasında özel bir aralık kullanın (10.x, 172.16-31.x ya da 192.168.x).",
     "IMAGE_IN_USE": "Bu imajdan çalışan sunucular var.",
     "OWNER_ONLY": "Bunu yalnızca sahibi yapabilir.",
@@ -383,7 +388,7 @@
     "ISO_SIZE_UNKNOWN": "ISO'nun boyutu belirlenemedi: adres boyutu bildirmiyor. Doğrudan indirme bağlantısı kullanın.",
     "ISO_INCOMPLETE": "ISO eksik indirildi. Yeniden deneyin.",
     "SHUTDOWN_TIMEOUT": "Sunucu zamanında kapanmadı; işletim sistemi isteği yok saydı. Zorla kapatmayı kullanabilirsiniz.",
-    "NOT_WHILE_IMPERSONATING": "Başka bir kullanıcı olarak oturum açmışken bu işlem yapılamaz (API anahtarları, webhook'lar, geçiş anahtarları, bağlı hesaplar, parola, iki adımlı doğrulama, telefon, bildirim kanalları). Önce kendi hesabınıza dönün.",
+    "NOT_WHILE_IMPERSONATING": "Başka bir kullanıcı olarak oturum açmışken bu işlem yapılamaz (API anahtarları, webhook'lar, geçiş anahtarları, bağlı hesaplar, parola, iki adımlı doğrulama, telefon, bildirim kanalları, fatura e-postası). Önce kendi hesabınıza dönün.",
     "E_WINDOW_NEVER": "Bakım penceresi saatlik zamanlayıcının çalıştığı hiçbir anı içermiyor. Pencereyi en az bir saat on dakika yapın.",
     "E_BACKUP_VERIFY": "Yedek dosyası yazıldıktan sonra geri okunamadı (disk dolu olabilir mi?).",
     "E_BACKUP_WRITE": "Yedek dosyası yazılamadı. Yedek klasöründeki boş alanı ve izinleri kontrol edin.",
@@ -2268,7 +2273,8 @@
     "finding": {
       "vm_missing": "VM VMware'de yok",
       "orphan_vm": "Kaydı olmayan platform VM'si",
-      "power_drift": "Güç durumu farklı"
+      "power_drift": "Güç durumu farklı",
+      "vm_id_changed": "VM başka bir kimlikle bulundu"
     },
     "ips": {
       "title": "IP adresleri",
@@ -2519,6 +2525,22 @@
     "recent": "Son işlemler",
     "viewAll": "Tümünü gör",
     "noData": "Henüz veri yok."
+  },
+  "RestoreHold": {
+    "title": "Geri yükleme beklemesi",
+    "heldTitle": "Panel, geri yüklemeden sonra beklemede",
+    "held": "{backup} yedeği {time} tarihinde geri yüklendi. Siz beklemeyi kaldırana kadar panel, geri yüklenen veriye göre kendiliğinden hiçbir şey yapmaz: açık işlemler, ödenmemiş siparişler, zamanlanmış silmeler ve ödeme hatırlatmaları bekler. Tüm oturumlar kapatıldı.",
+    "heldPlain": "Bir yedek geri yüklendi. Siz beklemeyi kaldırana kadar panel, geri yüklenen veriye göre kendiliğinden hiçbir şey yapmaz: açık işlemler, ödenmemiş siparişler, zamanlanmış silmeler ve ödeme hatırlatmaları bekler. Tüm oturumlar kapatıldı.",
+    "checkTitle": "Serbest bırakmadan önce bakın",
+    "checkServers": "Yedekten sonra oluşturulan veya silinen sunucular: panel onları yedekteki haliyle bilir. Bu sayfada mutabakatın bulduklarına bakın ve her birini çözün.",
+    "checkPayments": "Yedekten sonra yapılan ödemeler geri yüklenen veride yok. Ödeme sağlayıcınızla karşılaştırıp kaydedin; yoksa ödedikleri sipariş ve faturalar ödenmemiş sayılır.",
+    "checkAccess": "Yedekten sonra silinen API anahtarları, yasaklar, kapatılan hesaplar ve rol değişiklikleri yedek anındaki haline döndü. Yeniden silin, yasaklayın ve değiştirin.",
+    "release": "Serbest bırak",
+    "releaseTitle": "Bekleme kaldırılsın mı?",
+    "releaseBody": "Panel, geri yüklenen veriye göre hemen işlem yapar: açık işlemler çalışır, süresi geçmiş ödenmemiş siparişler iptal edilir ve zamanlanmış silmeler yapılır. Bu geri alınamaz.",
+    "cancel": "Vazgeç",
+    "released": "Bekleme kaldırıldı",
+    "cli": "Ya da sunucuda:"
   },
   "SystemPage": {
     "eyebrow": "YÖNETİM",
@@ -5451,7 +5473,9 @@
   },
   "Activity": {
     "actions": {
+      "auth_address_proven": "Adres sahibi tarafından doğrulandı; önceki giriş yöntemleri kaldırıldı",
       "auth_login": "Giriş yapıldı",
+      "auth_password_step": "Parola kabul edildi, ikinci adım bekleniyor",
       "auth_sign_in": "Giriş yapıldı",
       "auth_register": "Hesap oluşturuldu",
       "auth_password_changed": "Şifre değiştirildi",
