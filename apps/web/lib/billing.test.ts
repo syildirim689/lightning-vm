@@ -1,0 +1,48 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { isReview, paymentState, paymentTone, waitedFor, waitingSince } from './billing.ts';
+
+test('a payment under review is told apart from one in progress', () => {
+  assert.equal(isReview({ status: 'pending', errorCode: 'FRAUD_REVIEW', review: true }), true);
+  assert.equal(isReview({ status: 'pending', errorCode: null, review: false }), false);
+  // An older API sends no flag: the reason code decides.
+  assert.equal(isReview({ status: 'pending', errorCode: 'AMOUNT_MISMATCH' }), true);
+  assert.equal(isReview({ status: 'pending', errorCode: 'NEEDS_CONFIRMATION' }), true);
+  assert.equal(isReview({ status: 'pending', errorCode: null }), false);
+  assert.equal(isReview({ status: 'pending', errorCode: 'CARD_DECLINED' }), false);
+  // Once it is settled either way it no longer waits, whatever the code says.
+  assert.equal(isReview({ status: 'succeeded', errorCode: 'NEEDS_CONFIRMATION' }), false);
+  assert.equal(isReview({ status: 'failed', errorCode: 'FRAUD_REVIEW', review: true }), false);
+  assert.equal(paymentState({ status: 'pending', errorCode: 'FRAUD_REVIEW' }), 'review');
+  assert.equal(paymentState({ status: 'pending', errorCode: null }), 'pending');
+  assert.equal(paymentState({ status: 'refunded', errorCode: null }), 'refunded');
+});
+
+test('tones: review is a warning, not a failure', () => {
+  assert.equal(paymentTone('review'), 'warning');
+  assert.equal(paymentTone('pending'), 'warning');
+  assert.equal(paymentTone('succeeded'), 'success');
+  assert.equal(paymentTone('failed'), 'danger');
+  assert.equal(paymentTone('refunded'), 'accent');
+});
+
+test('waiting time in the largest whole unit', () => {
+  const now = Date.parse('2026-11-17T12:00:00Z');
+  assert.deepEqual(waitedFor('2026-11-17T11:59:40Z', now), { unit: 'minute', n: 0 });
+  assert.deepEqual(waitedFor('2026-11-17T11:15:00Z', now), { unit: 'minute', n: 45 });
+  assert.deepEqual(waitedFor('2026-11-17T11:00:00Z', now), { unit: 'hour', n: 1 });
+  assert.deepEqual(waitedFor('2026-11-15T12:30:00Z', now), { unit: 'hour', n: 47 });
+  assert.deepEqual(waitedFor('2026-11-15T12:00:00Z', now), { unit: 'day', n: 2 });
+  assert.deepEqual(waitedFor('2026-11-07T09:00:00Z', now), { unit: 'day', n: 10 });
+  // A clock a little ahead never gives a negative wait; an unreadable time gives none.
+  assert.deepEqual(waitedFor('2026-11-17T12:00:30Z', now), { unit: 'minute', n: 0 });
+  assert.equal(waitedFor('not a date', now), null);
+  assert.equal(waitedFor(null, now), null);
+});
+
+test('since when: the time the API gives, else the payment itself', () => {
+  assert.equal(waitingSince({ createdAt: 'a' }), 'a');
+  assert.equal(waitingSince({ createdAt: 'a', since: 'b' }), 'b');
+  assert.equal(waitingSince({ createdAt: 'a', since: 'b', reviewSince: 'c' }), 'c');
+  assert.equal(waitingSince({ createdAt: 'a', since: null }), 'a');
+});

@@ -14,6 +14,7 @@ import { apiFetch, useErrorText } from '../../../../../lib/api';
 import type { InvoiceDetail, Summary } from '../../../../../lib/billing';
 import { useApiQuery } from '../../../../../lib/query';
 import { useDocTitle } from '../../../../../lib/title';
+import { remember } from '../../../../../lib/recent';
 import { InvoiceDisputes } from '../../disputes';
 import { Copy } from '../../../server-extras';
 
@@ -35,6 +36,9 @@ export default function InvoicePage({ id }: { id: string }) {
     (paymentId && !waited && d?.invoice.status === 'unpaid' && (d.payments.find((p) => p.id === paymentId)?.status ?? 'pending') === 'pending' ? 3000 : false) });
   const d = q.data;
   useDocTitle(d && (d.invoice.number ?? `#${d.invoice.id.slice(0, 8).toUpperCase()}`));
+  // The palette's "recent" list (as a server's page does).
+  const visited = d && (d.invoice.number ?? `#${d.invoice.id.slice(0, 8).toUpperCase()}`);
+  useEffect(() => { if (visited) remember({ href: `/billing/invoices/${id}`, label: visited, kind: 'invoice' }); }, [visited, id]);
   // Back from a provider: the result of that payment, once.
   const result = paymentId ? d?.payments.find((p) => p.id === paymentId) : undefined;
   useEffect(() => {

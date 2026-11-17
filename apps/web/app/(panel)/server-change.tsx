@@ -87,6 +87,7 @@ export function ServerResize({ server, busy }: { server: Server; busy: boolean }
 
 export function ServerReinstall({ server, busy, own }: { server: Server; busy: boolean; own: boolean }) {
   const t = useTranslations('ServerChange');
+  const { memory } = useUnits();
   const { error, field } = useErrorText();
   const client = useQueryClient();
   const catalog = useApiQuery<Catalog>(['catalog'], '/catalog').data;
@@ -120,9 +121,21 @@ export function ServerReinstall({ server, busy, own }: { server: Server; busy: b
       {own && <CheckboxInput label={t('reinstall.newKey')} isSelected={newKeys} onChange={setNewKeys} help={t('reinstall.keysHelp')}/>}
       {newKeys && <SelectInput className="max-w-md" label={t('reinstall.key')} value={keyId} onChange={setKeyId} error={field(fields.sshKeyIds)}
         options={keys.map((k) => ({ id: k.id, label: k.name }))}/>}
+      {/* Before the name is typed: what the server is now and becomes, what stays and what goes. */}
+      <dl aria-label={t('reinstall.summary')} className="grid gap-3 rounded-xl border border-border p-3 text-sm sm:grid-cols-3">
+        <div><dt className="flex items-center gap-1.5 text-muted"><I name="disc-3" size={14} className="shrink-0"/>{t('reinstall.image')}</dt>
+          <dd className="mt-0.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 [overflow-wrap:anywhere]"><span>{server.imageName}</span>
+            <I name="arrow-right" size={14} className="shrink-0 text-muted"/><span className="sr-only">{t('reinstall.becomes')}</span>
+            <span className="font-medium">{images.find((i) => i.id === imageId)?.name ?? '–'}</span></dd>
+          {imageId === server.imageId && <dd className="text-xs text-muted">{t('reinstall.sameImage')}</dd>}</div>
+        <div><dt className="flex items-center gap-1.5 text-muted"><I name="circle-check" size={14} className="shrink-0 text-success"/>{t('reinstall.kept')}</dt>
+          <dd className="mt-0.5 [overflow-wrap:anywhere]">{t('reinstall.keptList', { address: server.address ?? '–', vcpu: server.vcpu, memory: memory(server.memoryMb), disk: server.diskGb })}</dd></div>
+        <div><dt className="flex items-center gap-1.5 text-muted"><I name="eraser" size={14} className="shrink-0 text-danger"/>{t('reinstall.erased')}</dt>
+          <dd className="mt-0.5 font-medium text-danger">{t('reinstall.erasedList')}</dd></div>
+      </dl>
       <Notice tone="danger">{t('reinstall.warning')}</Notice>
       <div className="flex flex-wrap items-end gap-3">
-        <TextInput transient className="min-w-64 flex-1" label={t('reinstall.confirm', { name: server.name })} value={confirm} onChange={setConfirm} autoComplete="off" error={field(fields.confirm)}/>
+        <TextInput transient className="min-w-0 flex-1 sm:min-w-64" label={t('reinstall.confirm', { name: server.name })} value={confirm} onChange={setConfirm} autoComplete="off" error={field(fields.confirm)}/>
         <Button variant="danger" isDisabled={confirm.trim() !== server.name || !imageId || busy || sending || server.locked || (newKeys && !keyId)} isPending={sending} onPress={run}>
           <I name="refresh-cw" size={16}/>{t('reinstall.button')}</Button>
       </div>

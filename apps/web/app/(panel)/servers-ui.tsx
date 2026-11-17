@@ -1,6 +1,6 @@
 "use client";
 import dynamic from 'next/dynamic';
-import { Button, Card, Dropdown, Label, Popover, ProgressBar, toast } from '@heroui/react';
+import { Button, Card, Dropdown, Label, Modal, Popover, ProgressBar, toast } from '@heroui/react';
 import { I } from '../../components/icon';
 import NextLink from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -17,7 +17,7 @@ import { useApiAction, useApiQuery } from '../../lib/query';
 import { VmDetails } from './vm-details';
 import { ServerIso } from './server-iso';
 import { ServerHealth } from '../../components/smart';
-import { CloneServer, Copy, OrderSimilar, QuickConnect, RenameServer, ServerLabels } from './server-extras';
+import { CloneServer, Copy, OrderSimilar, QuickConnect, RenameForm, RenameServer, ServerLabels } from './server-extras';
 import { remember } from '../../lib/recent';
 import { useDocTitle } from '../../lib/title';
 import { PowerSchedules } from './server-schedules';
@@ -38,7 +38,7 @@ import { can } from '../../lib/permissions';
 import { noteLine } from '../../lib/note-line';
 import { ServerFilters, ServerTotals, useServerFilters } from './server-filters';
 import { flag } from '../../lib/flag';
-import { Ago, ButtonLink, CheckboxInput, ConfirmButton, DataTable, Empty, Mono, Notice, PageHeader, Section, StatusChip, TextInput, type Tone, Loading } from '../../components/ui';
+import { Ago, ButtonLink, CheckboxInput, ConfirmButton, DataTable, Empty, LoadFailed, Mono, Notice, PageHeader, Section, StatusChip, TextInput, type Tone, Loading } from '../../components/ui';
 import { SectionNav } from '../../components/section-nav';
 import { ConnectCheck } from './connect-check';
 
@@ -238,6 +238,7 @@ function BulkBar({ servers, known, onDone }: { servers: Server[]; known: string[
     { invalidate: [['servers'], ['tasks'], ['insights']], success: (r) => (r.tag ? t('list.select.tagDone', { n: r.started }) : t('list.select.bulkDone', { started: r.started, skipped: r.skipped })) });
   const act = (action: string) => run.mutateAsync({ action }).then(onDone, () => undefined);
   const label = (a: string) => t(`action.${a as 'power_on'}`);
+  const copy = useCopy();
   const bar = useRef<HTMLDivElement>(null);
   const [height, setHeight] = useState(0);
   useEffect(() => {
@@ -255,16 +256,14 @@ function BulkBar({ servers, known, onDone }: { servers: Server[]; known: string[
     {confirm('shutdown', 'power')}
     {confirm('reset', 'rotate-ccw')}
     {/* One address per line, ready for an inventory file or a hosts list. */}
-    {servers.some((x) => x.address) && <Button size="sm" variant="secondary" onPress={async () => {
+    {servers.some((x) => x.address) && <Button size="sm" variant="secondary" onPress={() => {
       const ips = servers.flatMap((x) => x.address ? [x.address] : []);
-      await navigator.clipboard?.writeText(ips.join('\n')).catch(() => undefined);
-      toast.success(t('list.select.ipsCopied', { n: ips.length }));
+      void copy(ips.join('\n'), t('list.select.ipsCopied', { n: ips.length }));
     }}><I name="copy" size={15}/>{t('list.select.copyIps')}</Button>}
     {/* Entries for ~/.ssh/config, so "ssh <name>" works; a Host alias cannot hold spaces. */}
-    {servers.some((x) => x.address) && <Button size="sm" variant="secondary" onPress={async () => {
+    {servers.some((x) => x.address) && <Button size="sm" variant="secondary" onPress={() => {
       const hosts = servers.flatMap((x) => x.address ? [`Host ${x.name.trim().replace(/\s+/g, '-')}\n  HostName ${x.address}\n  User root`] : []);
-      await navigator.clipboard?.writeText(hosts.join('\n\n') + '\n').catch(() => undefined);
-      toast.success(t('list.select.sshCopied', { n: hosts.length }));
+      void copy(hosts.join('\n\n') + '\n', t('list.select.sshCopied', { n: hosts.length }));
     }}><I name="square-terminal" size={15}/>{t('list.select.copySsh')}</Button>}
     <BulkTags servers={servers} known={known} busy={run.isPending} onTag={(action, tag) => run.mutateAsync({ action, tag }).catch(() => undefined)}/>
     {waiting > 0 && <Button size="sm" variant="secondary" isPending={run.isPending} onPress={() => act('restore')}><I name="undo-2" size={15}/>{t('list.select.restore', { n: waiting })}</Button>}
@@ -306,21 +305,28 @@ function BulkTags({ servers, known, busy, onTag }: { servers: Server[]; known: s
   </Popover>;
 }
 
-// A card's quick menu: the steps that need no confirmation, without opening the server (console, power on when
-// off, the SSH command, a ticket about it). Shutting down and deleting stay on the server page with their confirmations.
+// A card's quick menu, without opening the server: console, power on when off, the SSH command, a ticket about it,
+// a new name, delete protection on or off, and deleting. Renaming and deleting open in a dialog with the server
+// page's own form (deleting asks for the name there as it does here). Shutting down and forcing off stay on the page.
 function QuickMenu({ s, className }: { s: Server; className: string }) {
   const t = useTranslations('Servers');
+  const tx = useTranslations('Extras');
   const router = useRouter();
+  const copy = useCopy();
+  const lock = useServerLock(s.id, !!s.locked);
+  const [dialog, setDialog] = useState<'rename' | 'delete' | null>(null);
   const ready = s.state === 'ready' && !s.deleteAt;
   const start = useApiAction(() => apiFetch(`/servers/${s.id}/actions`, { method: 'POST', body: { action: 'power_on' }, headers: { 'idempotency-key': crypto.randomUUID() } }),
     { invalidate: [['servers'], ['tasks']], success: t('list.quick.started', { name: s.name }) });
   const run = async (k: React.Key) => {
     if (k === 'console') router.push(`/servers/${s.id}/console`);
     else if (k === 'power_on') start.mutate();
-    else if (k === 'ssh' && s.address) { await navigator.clipboard?.writeText(`ssh root@${s.address}`).catch(() => undefined); toast.success(t('list.quick.sshCopied')); }
+    else if (k === 'ssh' && s.address) await copy(`ssh root@${s.address}`, t('list.quick.sshCopied'));
     else if (k === 'ticket') router.push(`/support?new=1&server=${s.id}`);
+    else if (k === 'rename' || k === 'delete') setDialog(k);
+    else if (k === 'lock') void lock.flip();
   };
-  return <Dropdown>
+  return <><Dropdown>
     <Button isIconOnly size="sm" variant="ghost" aria-label={t('list.quick.label', { name: s.name })} className={`min-h-9 min-w-9 ${className}`}><I name="ellipsis" size={17}/></Button>
     <Dropdown.Popover placement="bottom end">
       <Dropdown.Menu aria-label={t('list.quick.label', { name: s.name })} onAction={run}>
@@ -328,9 +334,98 @@ function QuickMenu({ s, className }: { s: Server; className: string }) {
         {ready && s.powerState !== 'poweredOn' ? <Dropdown.Item id="power_on" textValue={t('action.power_on')}><I name="play" size={15}/><Label>{t('action.power_on')}</Label></Dropdown.Item> : null}
         {s.address ? <Dropdown.Item id="ssh" textValue={t('list.quick.ssh')}><I name="copy" size={15}/><Label>{t('list.quick.ssh')}</Label></Dropdown.Item> : null}
         <Dropdown.Item id="ticket" textValue={t('list.quick.ticket')}><I name="life-buoy" size={15}/><Label>{t('list.quick.ticket')}</Label></Dropdown.Item>
+        {s.state !== 'deleting' ? <Dropdown.Item id="rename" textValue={tx('rename')}><I name="pencil" size={15}/><Label>{tx('rename')}</Label></Dropdown.Item> : null}
+        <Dropdown.Item id="lock" textValue={t(s.locked ? 'list.quick.unlock' : 'list.quick.lock')}><I name={s.locked ? 'lock-open' : 'lock'} size={15}/><Label>{t(s.locked ? 'list.quick.unlock' : 'list.quick.lock')}</Label></Dropdown.Item>
+        {!s.deleteAt && s.state !== 'deleting' ? <Dropdown.Item id="delete" textValue={t('list.quick.delete')} variant="danger"><I name="trash-2" size={15}/><Label>{t('list.quick.delete')}</Label></Dropdown.Item> : null}
       </Dropdown.Menu>
     </Dropdown.Popover>
-  </Dropdown>;
+  </Dropdown>
+  {dialog === 'rename' && <QuickDialog title={t('list.quick.renameTitle', { name: s.name })} onClose={() => setDialog(null)}>
+    <RenameForm server={s} autoFocus onClose={() => setDialog(null)}/>
+  </QuickDialog>}
+  {dialog === 'delete' && <QuickDialog title={t('list.quick.deleteTitle', { name: s.name })} onClose={() => setDialog(null)}><DeleteFromList id={s.id} onClose={() => setDialog(null)}/></QuickDialog>}
+  </>;
+}
+
+// A small dialog for a quick-menu step that needs a form (Escape, the close button or a click outside leave it).
+function QuickDialog({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
+  return <Modal.Backdrop isOpen onOpenChange={(o) => { if (!o) onClose(); }}>
+    <Modal.Container scroll="inside">
+      <Modal.Dialog className="bg-surface sm:max-w-[520px]">
+        <Modal.CloseTrigger/>
+        <Modal.Header><Modal.Heading className="pr-8 [overflow-wrap:anywhere]">{title}</Modal.Heading></Modal.Header>
+        <Modal.Body className="pb-1">{children}</Modal.Body>
+      </Modal.Dialog>
+    </Modal.Container>
+  </Modal.Backdrop>;
+}
+
+// Deleting from the list: the server page's own confirmation, with what that page knows (whether the admin lets
+// customers delete, the grace period, the lock) asked from the same address the page reads.
+function DeleteFromList({ id, onClose }: { id: string; onClose: () => void }) {
+  const t = useTranslations('Servers');
+  const q = useApiQuery<ServerPage>(['servers', id], `/servers/${id}`);
+  const { act, message } = useServerAct();
+  if (!q.data) return q.error ? <LoadFailed error={q.error} retry={() => void q.refetch()}/>
+    : <div role="status" aria-busy className="flex flex-col gap-3"><span className="sr-only">{t('loading')}</span>
+        <span aria-hidden className="h-4 w-3/4 animate-pulse rounded bg-default motion-reduce:animate-none"/><span aria-hidden className="h-10 animate-pulse rounded-lg bg-default motion-reduce:animate-none"/></div>;
+  const s = q.data.server;
+  const grace = q.data.deleteGraceHours ?? 0;
+  if (q.data.allowed?.delete === false) return <Notice tone="warning">{t('list.quick.deleteNotAllowed')}</Notice>;
+  if (s.deleteAt) return <Notice tone="default">{t('trash.title')}</Notice>;
+  return <div className="flex flex-col">
+    <p className="mb-3 text-sm text-muted">{t('delete.explain')}</p>
+    {message && <div role="alert" className="mb-3"><Notice tone="danger">{message}</Notice></div>}
+    <DeleteServerForm server={s} grace={grace} canUnlock onDelete={async (body) => {
+      if (!await act(`/servers/${id}`, 'DELETE', body)) return;
+      toast.success(body.now ? t('list.quick.deleteStarted', { name: s.name }) : t('list.quick.deleteSoft', { name: s.name, hours: grace }));
+      onClose();
+    }}/>
+  </div>;
+}
+
+type ServerPage = { server: Server; operations: Operation[]; own?: boolean; allowed?: Record<'power' | 'console' | 'iso' | 'rootPassword' | 'delete' | 'snapshots' | 'resize' | 'reinstall' | 'backups', boolean>; deleteGraceHours?: number };
+
+// A request that changes a server, from its page or from the list. The same Idempotency-Key is kept until the
+// server answers; only a network failure keeps it for a retry. False (with the reason shown) when it failed.
+function useServerAct() {
+  const { error } = useErrorText();
+  const intent = useIntentKey();
+  const client = useQueryClient();
+  const [message, setMessage] = useState<string>();
+  async function act(path: string, method: string, body?: object) {
+    setMessage(undefined);
+    try {
+      await apiFetch(path, { method, body, headers: { 'idempotency-key': intent.key() } }); intent.reset();
+      client.invalidateQueries({ queryKey: ['servers'] }); client.invalidateQueries({ queryKey: ['tasks'] });
+      return true;
+    } catch (e) { setMessage(error(e)); toast.danger(error(e)); if ((e as { code?: string }).code !== 'NETWORK') intent.reset(); return false; }
+  }
+  return { act, message };
+}
+
+// Deleting a server: its name typed out, the grace period (or "at once") and the lock that stands in the way.
+// On the server's page and in the list's quick menu; the caller sends the request.
+function DeleteServerForm({ server: s, grace, canUnlock, onDelete }: { server: Server; grace: number; canUnlock: boolean; onDelete: (body: { confirm: string; now: boolean }) => Promise<unknown> }) {
+  const t = useTranslations('Servers');
+  const [name, setName] = useState('');
+  const [now, setNow] = useState(false);
+  const [busy, setBusy] = useState(false);
+  // Deleting waits out the admin's grace period for a ready server, unless the person chooses to delete at once.
+  const soft = grace > 0 && s.state === 'ready';
+  const locked = !!s.locked;
+  return <>
+    {soft && <p className="mb-3 flex items-start gap-2 text-sm text-muted"><I name="history" size={16} className="mt-0.5 shrink-0 text-accent"/>{t('delete.graceHelp', { hours: grace })}</p>}
+    {/* Locked: why the button stays grey, with the unlock right here. */}
+    {locked && <div className="mb-3"><LockBar id={s.id} locked canChange={canUnlock}/></div>}
+    <div className="flex flex-wrap items-end gap-3">
+      <TextInput transient className="min-w-0 flex-1 sm:min-w-64" label={t('delete.confirm', { name: s.name })} value={name} onChange={setName} autoComplete="off"/>
+      <Button variant="danger" isPending={busy} isDisabled={name.trim() !== s.name || s.state === 'deleting' || locked}
+        onPress={async () => { setBusy(true); try { await onDelete({ confirm: s.name, now: !soft || now }); } finally { setBusy(false); } }}>
+        <I name="trash-2" size={16}/>{soft && !now ? t('delete.soft') : t('delete.button')}</Button>
+    </div>
+    {soft && <div className="mt-3"><CheckboxInput label={t('delete.now')} isSelected={now} onChange={setNow}/></div>}
+  </>;
 }
 
 // Star / unstar a server; the list updates at once and is put right if the request fails.
@@ -382,6 +477,17 @@ function TrashBar({ server: s, canChange }: { server: Server; canChange: boolean
 // Delete protection: a calm bar while unlocked, a clear warning-coloured one while locked.
 function LockBar({ id, locked, canChange }: { id: string; locked: boolean; canChange: boolean }) {
   const t = useTranslations('Servers.lock');
+  const { busy, flip } = useServerLock(id, locked);
+  return <motion.div layout className={`flex flex-wrap items-center gap-3 rounded-2xl border px-4 py-3 ${locked ? 'border-warning/40 bg-warning/10' : 'border-border bg-surface'}`}>
+    <span className={`grid size-9 shrink-0 place-items-center rounded-xl ${locked ? 'bg-warning/20 text-warning' : 'bg-default text-muted'}`}><I name={locked ? 'lock' : 'lock-open'} size={17}/></span>
+    <div className="min-w-0 flex-1"><p className="text-sm font-medium">{locked ? t('onTitle') : t('offTitle')}</p><p className="text-xs text-muted">{locked ? t('onHelp') : t('offHelp')}</p></div>
+    {canChange && <Button size="sm" variant={locked ? 'secondary' : 'ghost'} isPending={busy} onPress={flip}><I name={locked ? 'lock-open' : 'lock'} size={14}/>{locked ? t('unlock') : t('lock')}</Button>}
+  </motion.div>;
+}
+
+// Turning delete protection on or off: the bar on the server's page and the list's quick menu send the same request.
+function useServerLock(id: string, locked: boolean) {
+  const t = useTranslations('Servers.lock');
   const { error } = useErrorText();
   const client = useQueryClient();
   const [busy, setBusy] = useState(false);
@@ -390,11 +496,7 @@ function LockBar({ id, locked, canChange }: { id: string; locked: boolean; canCh
     try { await apiFetch(`/servers/${id}/lock`, { method: 'PUT', body: { locked: !locked } }); toast.success(locked ? t('unlocked') : t('lockedNow')); void client.invalidateQueries({ queryKey: ['server', id] }); void client.invalidateQueries({ queryKey: ['servers'] }); }
     catch (e) { toast.danger(error(e)); } finally { setBusy(false); }
   }
-  return <motion.div layout className={`flex flex-wrap items-center gap-3 rounded-2xl border px-4 py-3 ${locked ? 'border-warning/40 bg-warning/10' : 'border-border bg-surface'}`}>
-    <span className={`grid size-9 shrink-0 place-items-center rounded-xl ${locked ? 'bg-warning/20 text-warning' : 'bg-default text-muted'}`}><I name={locked ? 'lock' : 'lock-open'} size={17}/></span>
-    <div className="min-w-0 flex-1"><p className="text-sm font-medium">{locked ? t('onTitle') : t('offTitle')}</p><p className="text-xs text-muted">{locked ? t('onHelp') : t('offHelp')}</p></div>
-    {canChange && <Button size="sm" variant={locked ? 'secondary' : 'ghost'} isPending={busy} onPress={flip}><I name={locked ? 'lock-open' : 'lock'} size={14}/>{locked ? t('unlock') : t('lock')}</Button>}
-  </motion.div>;
+  return { busy, flip };
 }
 
 const runningStates = ['pending', 'running'];
@@ -404,19 +506,19 @@ export function ServerDetail({ id }: { id: string }) {
   const format = useFormatter();
   const { error } = useErrorText();
   const router = useRouter();
-  const intent = useIntentKey();
-  const client = useQueryClient();
-  const [message, setMessage] = useState<string>();
-  const [deleteName, setDeleteName] = useState('');
-  const [deleteNow, setDeleteNow] = useState(false);
+  const copy = useCopy();
+  // Every change goes through one sender (one Idempotency-Key per intention, the reason shown when it fails).
+  const change = useServerAct();
+  const message = change.message;
+  const act = (path: string, method: string, body?: object) => change.act(path, method, body).then(() => undefined);
   const page = useRef<HTMLDivElement>(null);
-  const q = useApiQuery<{ server: Server; operations: Operation[]; own?: boolean; allowed?: Record<'power' | 'console' | 'iso' | 'rootPassword' | 'delete' | 'snapshots' | 'resize' | 'reinstall' | 'backups', boolean>; deleteGraceHours?: number }>(['servers', id], `/servers/${id}`, { refetchInterval: (d) => (!d || d.operations.some((o) => !o.finishedAt) || moving(d.server) ? 3_000 : 15_000) });
+  const q = useApiQuery<ServerPage>(['servers', id], `/servers/${id}`, { refetchInterval: (d) => (!d || d.operations.some((o) => !o.finishedAt) || moving(d.server) ? 3_000 : 15_000) });
   const gone = (q.error as { code?: string } | null)?.code === 'NOT_FOUND';
   const me = useMe();
   // The viewer's own server names, for the next free name in "order similar".
   const mine = useApiQuery<{ servers: Server[] }>(['servers'], '/servers').data?.servers;
   const name = q.data?.server.name;
-  useEffect(() => { if (name) remember({ href: `/servers/${id}`, label: name }); }, [name, id]);
+  useEffect(() => { if (name) remember({ href: `/servers/${id}`, label: name, kind: 'server' }); }, [name, id]);
   useDocTitle(name);
   useEffect(() => { if (gone) router.replace('/'); }, [gone, router]);
   if (!q.data) return <p role="status" className="text-sm text-muted">{q.error && !gone ? error(q.error) : t('loading')}</p>;
@@ -425,16 +527,7 @@ export function ServerDetail({ id }: { id: string }) {
   const allowed = { power: true, console: true, iso: true, rootPassword: true, delete: true, snapshots: true, resize: true, reinstall: true, backups: true, ...q.data.allowed };
   const open = operations.find((o) => runningStates.includes(o.status));
   const own = !!q.data.own; // owner-only helpers: tags and notes, order similar
-  // The same Idempotency-Key is kept until the server answers; only a network failure keeps it for a retry.
-  async function act(path: string, method: string, body?: object) {
-    setMessage(undefined);
-    try { await apiFetch(path, { method, body, headers: { 'idempotency-key': intent.key() } }); intent.reset(); client.invalidateQueries({ queryKey: ['servers'] }); client.invalidateQueries({ queryKey: ['tasks'] }); }
-    catch (e) { setMessage(error(e)); toast.danger(error(e)); if ((e as { code?: string }).code !== 'NETWORK') intent.reset(); }
-  }
   const canAct = !open && ['ready', 'error'].includes(s.state);
-  // Deleting waits out the admin's grace period for a ready server, unless the person chooses to delete at once.
-  const grace = q.data.deleteGraceHours ?? 0;
-  const soft = grace > 0 && s.state === 'ready';
   // Locked: what would end the server or lose its state waits until it is unlocked (the API refuses it too).
   const locked = !!s.locked;
   const actionLabel = (a: string) => t(`action.${a as 'power_on'}`);
@@ -478,8 +571,7 @@ export function ServerDetail({ id }: { id: string }) {
           : format.number(Number(s.priceMonthly), { style: 'currency', currency: s.currency });
         const lines = [s.name, `IP: ${s.address ?? '–'}`, `${t('col.size')}: ${size(t, s)}`, `${t('detail.location')}: ${s.location || s.poolName}`, `${t('detail.image')}: ${s.imageName}`,
           `${t('col.state')}: ${state}`, `${t('detail.price')}: ${price}`, `${t('detail.created')}: ${format.dateTime(new Date(s.createdAt), { dateStyle: 'medium', timeStyle: 'short' })}`];
-        await navigator.clipboard?.writeText(lines.join('\n')).catch(() => undefined);
-        toast.success(t('detail.summaryCopied'));
+        await copy(lines.join('\n'), t('detail.summaryCopied'));
       }}><I name="clipboard-copy" size={15}/>{t('detail.copySummary')}</Button>}>
         <dl className="grid gap-x-6 gap-y-3 text-sm sm:grid-cols-2">
           <div><dt className="text-muted">IP</dt><dd className="mt-0.5">{s.address ? <Mono>{s.address}</Mono> : '–'}</dd></div>
@@ -547,15 +639,7 @@ export function ServerDetail({ id }: { id: string }) {
 
     {(own || can(me?.permissions, 'servers.manage_all')) && s.state === 'ready' && !s.vdcId && <TransferServer serverId={s.id} serverName={s.name} staff={!own} busy={!!open}/>}
     {allowed.delete && !s.deleteAt && <Section title={t('delete.title')} description={t('delete.explain')} className="border border-danger/30">
-      {soft && <p className="mb-3 flex items-start gap-2 text-sm text-muted"><I name="history" size={16} className="mt-0.5 shrink-0 text-accent"/>{t('delete.graceHelp', { hours: grace })}</p>}
-      {/* Locked: why the button stays grey, with the unlock right here. */}
-      {locked && <div className="mb-3"><LockBar id={id} locked canChange={own || allowed.delete}/></div>}
-      <div className="flex flex-wrap items-end gap-3">
-        <TextInput transient className="min-w-0 flex-1 sm:min-w-64" label={t('delete.confirm', { name: s.name })} value={deleteName} onChange={setDeleteName} autoComplete="off"/>
-        <Button variant="danger" isDisabled={deleteName.trim() !== s.name || s.state === 'deleting' || locked} onPress={() => act(`/servers/${id}`, 'DELETE', { confirm: s.name, now: !soft || deleteNow })}>
-          <I name="trash-2" size={16}/>{soft && !deleteNow ? t('delete.soft') : t('delete.button')}</Button>
-      </div>
-      {soft && <div className="mt-3"><CheckboxInput label={t('delete.now')} isSelected={deleteNow} onChange={setDeleteNow}/></div>}
+      <DeleteServerForm server={s} grace={q.data.deleteGraceHours ?? 0} canUnlock={own || allowed.delete} onDelete={(body) => act(`/servers/${id}`, 'DELETE', body)}/>
     </Section>}
   </div>;
 }
@@ -613,7 +697,9 @@ function ServerIps({ server }: { server: Server }) {
         <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
           <Mono>{a.address}</Mono>
           <StatusChip tone={a.kind === 'primary' ? 'accent' : 'default'}>{t(`kind.${a.kind}`)}</StatusChip>
-          {editing !== a.address && <span className="min-w-0 truncate text-sm text-muted">PTR: {a.ptr ? <Mono>{a.ptr.replace(/\.$/, '')}</Mono> : '–'}</span>}
+          <Copy text={a.address} label={a.address}/>
+          {editing !== a.address && <span className="flex min-w-0 items-center gap-1 text-sm text-muted"><span className="min-w-0 truncate">PTR: {a.ptr ? <Mono>{a.ptr.replace(/\.$/, '')}</Mono> : '–'}</span>
+            {a.ptr && <Copy text={a.ptr.replace(/\.$/, '')} label={t('ptrOf', { address: a.address })}/>}</span>}
         </div>
         {editing === a.address
           ? <form className="flex flex-wrap items-start gap-2" noValidate onSubmit={(e) => { e.preventDefault(); void save(a.address, value); }}

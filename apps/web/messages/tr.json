@@ -1299,6 +1299,13 @@
     }
   },
   "Order": {
+    "link": {
+      "copy": "Bu yapılandırmanın bağlantısını kopyala",
+      "copied": "Bağlantı kopyalandı.",
+      "help": "Yalnızca konum, imaj, plan ve ödeme dönemi; ad, SSH anahtarı ve parola bağlantıya girmez.",
+      "applied": "Bağlantıdaki yapılandırma yüklendi; kontrol edip siparişi tamamlayın.",
+      "invalid": "Bağlantıdaki yapılandırma artık sunulmuyor; seçimleriniz değişmedi."
+    },
     "title": "Yeni sunucu",
     "nothingOffered": "Şu anda sunulan bir konum yok.",
     "location": "Konum",
@@ -2199,6 +2206,14 @@
       "byPrice": "Önce en pahalı",
       "quick": {
         "label": "{name} için hızlı işlemler",
+        "lock": "Kilitle (silmeye karşı koru)",
+        "unlock": "Kilidi aç",
+        "delete": "Sil…",
+        "renameTitle": "{name} adını değiştir",
+        "deleteTitle": "{name} sunucusunu sil",
+        "deleteNotAllowed": "Sunucu silme müşterilere kapalı. Silinmesi için destek ekibine yazabilirsiniz.",
+        "deleteStarted": "{name} siliniyor.",
+        "deleteSoft": "{name} kapatıldı ve {hours} saat sonra silinecek; o zamana kadar geri alabilirsiniz.",
         "started": "{name} açılıyor.",
         "ssh": "SSH komutunu kopyala",
         "sshCopied": "SSH komutu panoya kopyalandı.",
@@ -2278,6 +2293,7 @@
     },
     "ips": {
       "title": "IP adresleri",
+      "ptrOf": "{address} için PTR",
       "help": "Her adres için ters DNS (PTR) ayarlanabilir.",
       "helpForward": "Her adres için ters DNS (PTR) ayarlanabilir. Ad önce adrese çözülmelidir (A veya AAAA kaydı).",
       "helpLocked": "Ters DNS sağlayıcınız tarafından yönetiliyor.",
@@ -2418,6 +2434,9 @@
     "export": "CSV indir"
   },
   "Nav": {
+    "paymentsInReview": "{n} ödeme inceleme bekliyor",
+    "failedOperations": "Son 24 saatte {n} işlem başarısız oldu",
+    "abuseFindings": "{n} açık kötüye kullanım bulgusu",
     "label": "Ana menü",
     "adminSection": "Yönetim",
     "customerSection": "Çalışma alanım",
@@ -2527,6 +2546,11 @@
     "noData": "Henüz veri yok."
   },
   "RestoreHold": {
+    "barTitle": "Panel, geri yüklemeden sonra beklemede",
+    "barSince": "{time} tarihinden beri",
+    "barHelp": "Siz serbest bırakana kadar kendiliğinden hiçbir işlem yapmaz.",
+    "barAsk": "Bir yönetici serbest bırakana kadar kendiliğinden hiçbir işlem yapmaz.",
+    "barOpen": "Sistem sayfasını aç",
     "title": "Geri yükleme beklemesi",
     "heldTitle": "Panel, geri yüklemeden sonra beklemede",
     "held": "{backup} yedeği {time} tarihinde geri yüklendi. Siz beklemeyi kaldırana kadar panel, geri yüklenen veriye göre kendiliğinden hiçbir şey yapmaz: açık işlemler, ödenmemiş siparişler, zamanlanmış silmeler ve ödeme hatırlatmaları bekler. Tüm oturumlar kapatıldı.",
@@ -2781,8 +2805,19 @@
     "noneHere": "Bu süzgece uyan bildirim yok."
   },
   "Palette": {
+    "invoices": "Faturalar",
+    "kind": {
+      "server": "Sunucu",
+      "ticket": "Destek talebi",
+      "invoice": "Fatura"
+    },
+    "newTicket": "Yeni destek talebi aç",
+    "topUp": "Bakiye yükle",
+    "addSshKey": "SSH anahtarı ekle",
+    "invoicesSearching": "Faturalar aranıyor…",
+    "invoicesFailed": "Fatura araması yapılamadı",
     "title": "Komut paleti",
-    "placeholder": "Sayfa, sunucu, talep ya da işlem ara…",
+    "placeholder": "Sayfa, sunucu, talep, fatura ya da işlem ara…",
     "empty": "“{query}” için sonuç yok. Başka bir ad, IP ya da sayfa deneyin.",
     "pages": "Sayfalar",
     "servers": "Sunucular",
@@ -2802,6 +2837,11 @@
     "sshCopied": "{name} SSH komutu"
   },
   "Insights": {
+    "aWhileAgo": "bir süre önce",
+    "unknown": {
+      "title": "Dikkat gerektiren bir durum var",
+      "body": "Ayrıntıları görmek için açın."
+    },
     "title": "Dikkat gerektirenler",
     "allGood": "Her şey yolunda; dikkat gerektiren bir durum yok.",
     "severity": {
@@ -2817,6 +2857,22 @@
       "diskGb": "Disk"
     },
     "codes": {
+      "PAYMENTS_IN_REVIEW": {
+        "title": "{n} ödeme inceleme bekliyor",
+        "body": "En eskisi {oldest} geldi. Ödeme sağlayıcınızda kontrol edin; para geldiyse faturayı ödendi olarak işaretleyin."
+      },
+      "RESTORE_HOLD": {
+        "title": "Panel, geri yüklemeden sonra beklemede",
+        "body": "Yedekten sonra nelerin değiştiğine bakın, ardından Sistem sayfasından beklemeyi kaldırın. O zamana kadar panel kendiliğinden hiçbir işlem yapmaz."
+      },
+      "OPERATIONS_NEED_DECISION": {
+        "title": "{n} işlemin sonucu belirsiz, kararınızı bekliyor",
+        "body": "Platformda ne olduğu öğrenilemedi. Hiçbir şey geri alınmadı ve kendiliğinden yeniden denenmeyecek. İşlemler sekmesinde her birine bakıp yeniden deneyin."
+      },
+      "SNAPSHOTS_OLD": {
+        "title": "{servers, plural, =1 {{name} sunucusunda {n} eski anlık görüntü var} other {# sunucuda toplam {n} eski anlık görüntü var}}",
+        "body": "Eski anlık görüntüler yer tutar ve sunucunun bugünkü halini yansıtmaz. Gerekmeyenleri silin, gerekiyorsa yenisini alın."
+      },
       "POOL_NEARLY_FULL": {
         "title": "{pool} dolmak üzere",
         "body": "{resource} kullanımı %{used}. Yeni sunucular için kapasite ekleyin ya da fazla tahsisi gözden geçirin."
@@ -3010,6 +3066,14 @@
     "notOffered": "Bu kanal bu bildirim için sunulmuyor",
     "policyNote": "Kilitli bildirimler ve sunulmayan kanallar yöneticinizin bildirim kurallarından gelir.",
     "events": {
+      "billing_payment_review": {
+        "title": "Ödeme inceleme bekliyor",
+        "help": "Bir ödeme kendiliğinden doğrulanamayıp ekibin kararına kaldığında."
+      },
+      "auth_credentials_reset": {
+        "title": "Giriş bilgileri sıfırlandı",
+        "help": "E-posta adresiniz ilk kez kanıtlandığı için önceden kurulmuş parola, anahtarlar ve oturumlar kaldırıldığında."
+      },
       "server_ready": {
         "title": "Sunucu hazır",
         "help": "Yeni sunucunuz kurulup açıldığında."
@@ -7221,6 +7285,65 @@
     "topUpShort": "Eksik {amount} tutarını yükle"
   },
   "BillingAdmin": {
+    "searchPayments": "Fatura no, e-posta ya da sağlayıcı referansı",
+    "paymentFilter": {
+      "review": "İnceleme bekleyen"
+    },
+    "paymentState": {
+      "review": "İnceleme bekliyor"
+    },
+    "reviewReason": {
+      "NEEDS_CONFIRMATION": "Ödendiği bildirildi ama doğrulanamadı.",
+      "AMOUNT_MISMATCH": "Sağlayıcı, faturadan farklı bir tutar ya da para birimi bildirdi.",
+      "FRAUD_REVIEW": "Sağlayıcı ödemeyi güvenlik incelemesinde tutuyor."
+    },
+    "waited": {
+      "minute": "{n, plural, =0 {Az önce geldi} other {# dakikadır bekliyor}}",
+      "hour": "{n} saattir bekliyor",
+      "day": "{n} gündür bekliyor"
+    },
+    "openInvoice": "Faturayı aç",
+    "invoiceSettled": "Faturanın şimdiki durumu: {status}",
+    "reviewHelpTitle": "Bu ödemeler sizin kararınızı bekliyor",
+    "reviewHelp": "Müşteriden para çekilmiş olabilir, ama panel bunu kendiliğinden doğrulayamadı. Her ödemeyi ödeme sağlayıcınızın panelinde kontrol edin. Para geldiyse faturayı açıp “{action}” ile ödendi olarak işaretleyin. Gelmediyse hiçbir şey yapmayın; fatura ödeme beklemeye devam eder.",
+    "reviewSum": "bekleyen toplam {amount}",
+    "reviewNotice": "{n} ödeme inceleme bekliyor",
+    "reviewNoticeOldest": "en eskisi {time} geldi",
+    "reviewNoticeOpen": "İncele",
+    "emptyPayments": {
+      "all": {
+        "title": "Henüz ödeme yok",
+        "body": "Müşteriler ödeme yaptıkça burada listelenir."
+      },
+      "review": {
+        "title": "İnceleme bekleyen ödeme yok",
+        "body": "Sağlayıcının tuttuğu, tutarı uyuşmayan ya da doğrulanamayan ödemeler burada görünür. Şu an sizden beklenen bir şey yok."
+      },
+      "succeeded": {
+        "title": "Başarılı ödeme yok",
+        "body": "Tahsil edilen ödemeler burada listelenir."
+      },
+      "failed": {
+        "title": "Başarısız ödeme yok",
+        "body": "Kartın reddedildiği ya da sağlayıcının hata verdiği ödemeler burada görünür."
+      },
+      "pending": {
+        "title": "Süren ödeme yok",
+        "body": "Başlatılıp henüz tamamlanmamış ödemeler burada görünür; inceleme bekleyenler de bunlara dahildir."
+      },
+      "refunded": {
+        "title": "İade edilen ödeme yok",
+        "body": "Tamamı iade edilen ödemeler burada görünür."
+      },
+      "partially_refunded": {
+        "title": "Kısmen iade edilen ödeme yok",
+        "body": "Tutarının bir bölümü iade edilen ödemeler burada görünür."
+      },
+      "search": {
+        "title": "Aramaya uyan ödeme yok",
+        "body": "Fatura numarasının, müşteri e-postasının ya da sağlayıcı referansının bir bölümünü deneyin."
+      }
+    },
     "eyebrow": "Gelir",
     "title": "Faturalandırma",
     "intro": "Tekrarlayan gelir, açık ve gecikmiş faturalar, tahsilat; tüm faturalar, abonelikler ve ödemeler.",
@@ -7373,6 +7496,13 @@
     },
     "reinstall": {
       "title": "Yeniden kur",
+      "summary": "Yeniden kurulum neyi değiştirir",
+      "becomes": "yerine",
+      "sameImage": "Aynı imaj, temiz kurulum.",
+      "kept": "Kalır",
+      "keptList": "IP adresleri ({address}), güvenlik duvarları, plan ({vcpu} vCPU · {memory} · {disk} GB), fiyat ve sunucu adı",
+      "erased": "Silinir",
+      "erasedList": "Diskteki tüm veriler ve anlık görüntüler",
       "help": "Bir imajdan temiz kurulum. IP adresleri, güvenlik duvarları, fiyat ve sunucu adı kalır; diskteki her şey silinir.",
       "image": "İmaj",
       "current": "şu an kurulu",
@@ -8060,6 +8190,23 @@
     "unpaid": "{n} ödenmemiş fatura · {amount}",
     "overdue": "{n} fatura gecikmiş · {amount}",
     "answered": "{n, plural, one {Talebinize yanıt geldi} other {# talebinize yanıt geldi}}"
+  },
+  "Upcoming": {
+    "title": "Yaklaşan ödemeler",
+    "invoiceDue": "{number} · son ödeme {when}",
+    "invoiceOverdue": "{number} · son ödeme tarihi {when} geçti",
+    "pay": "Öde",
+    "payLabel": "{number} numaralı faturayı öde",
+    "moreInvoices": "{n, plural, one {# fatura daha} other {# fatura daha}}",
+    "showInvoices": "Faturaları göster",
+    "openFallback": "{n, plural, one {# açık fatura} other {# açık fatura}}",
+    "loadingInvoices": "Faturalar yükleniyor",
+    "renewal": "Yenileme: {date} ({when})",
+    "more": "ve {n} abonelik daha",
+    "runOut": "Saatlik kullanım: bakiye bu hızla {when} biter",
+    "runOutEmpty": "Saatlik kullanım: bakiye bitti",
+    "rate": "Saatte {price}",
+    "topUp": "Bakiye yükle"
   },
   "Connection": {
     "lost": "Bağlantı kesildi",

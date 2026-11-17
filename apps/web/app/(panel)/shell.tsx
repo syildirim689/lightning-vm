@@ -4,7 +4,7 @@ import { Avatar, Button, Chip, Drawer, Dropdown, Kbd, Label, Separator, toast } 
 import { motion } from 'motion/react';
 import NextLink from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { useTranslations } from 'next-intl';
+import { useFormatter, useTranslations } from 'next-intl';
 import { useCallback, useEffect, useState } from 'react';
 import { Brand } from '../../components/brand';
 import { AccessibilityButton } from '../../components/accessibility';
@@ -21,27 +21,31 @@ import NotificationBell from '../../components/notification-bell';
 import TaskManager from '../../components/task-manager';
 import { authClient, signOut } from '../../lib/auth-client';
 import { can, isStaff, type Permission } from '../../lib/permissions';
-import { useApiQuery, useBillingSummary, useResellerAllocation } from '../../lib/query';
+import { attentionCount, badgeText, isAttentionKind, restoreHoldOf, type AttentionKind } from '../../lib/attention';
+import { useApiQuery, useAttention, useBillingSummary, useResellerAllocation } from '../../lib/query';
 import type { Branding, User } from '../../lib/session';
 import { mayLeave } from '../../lib/edits';
 
 type Key = 'dashboard' | 'stats' | 'servers' | 'abuse' | 'energy' | 'topology' | 'myTopology' | 'myVdc' | 'connections' | 'catalog' | 'users' | 'roles' | 'settings' | 'system' | 'myServers' | 'newServer' | 'firewalls' | 'account' | 'audit' | 'terminal' | 'support' | 'mySupport' | 'billing' | 'myBilling' | 'reseller' | 'networks';
-// count: a number beside the entry from GET /support/summary (tickets waiting for the customer, or for support).
+// count: a number beside the entry: tickets waiting for the customer or for support (GET /support/summary), unpaid
+// invoices, and for staff what waits for a decision (GET /admin/attention: payments to review, failed operations,
+// open abuse findings).
 // more: a page used now and then, listed under "More tools" (open while one of them is the page on screen).
-type Item = { href: string; key: Key; icon: React.ReactNode; exact?: boolean; need?: Permission[]; count?: 'waiting' | 'queue' | 'unpaid'; billing?: boolean; reseller?: boolean; more?: boolean };
+type Count = 'waiting' | 'queue' | 'unpaid' | AttentionKind;
+type Item = { href: string; key: Key; icon: React.ReactNode; exact?: boolean; need?: Permission[]; count?: Count; billing?: boolean; reseller?: boolean; more?: boolean };
 
 // Staff entries appear only with a permission that opens them; the API checks every call anyway.
 const sections: { title: 'adminSection' | 'peopleSection' | 'customerSection'; items: Item[] }[] = [
   { title: 'adminSection', items: [
     { href: '/admin', key: 'dashboard', icon: <I name="layout-dashboard" size={18}/>, exact: true, need: ['dashboard.view'] },
     { href: '/admin/stats', key: 'stats', icon: <I name="chart-line" size={18}/>, need: ['dashboard.view'], more: true },
-    { href: '/admin/servers', key: 'servers', icon: <I name="server" size={18}/>, need: ['servers.view_all'] },
+    { href: '/admin/servers', key: 'servers', icon: <I name="server" size={18}/>, need: ['servers.view_all'], count: 'failedOps' },
     { href: '/admin/support', key: 'support', icon: <I name="life-buoy" size={18}/>, need: ['support.view'], count: 'queue' },
-    { href: '/admin/billing', key: 'billing', icon: <I name="receipt" size={18}/>, need: ['billing.view'] },
+    { href: '/admin/billing', key: 'billing', icon: <I name="receipt" size={18}/>, need: ['billing.view'], count: 'review' },
     { href: '/admin/topology', key: 'topology', icon: <I name="network" size={18}/>, need: ['dashboard.view', 'servers.view_all'], more: true },
     { href: '/admin/vmware', key: 'connections', icon: <I name="cable" size={18}/>, need: ['vmware.view', 'vmware.manage'] },
     { href: '/admin/catalog', key: 'catalog', icon: <I name="boxes" size={18}/>, need: ['catalog.view', 'catalog.manage'] },
-    { href: '/admin/abuse', key: 'abuse', icon: <I name="shield-alert" size={18}/>, need: ['servers.view_all'], more: true },
+    { href: '/admin/abuse', key: 'abuse', icon: <I name="shield-alert" size={18}/>, need: ['servers.view_all'], more: true, count: 'abuse' },
     { href: '/admin/energy', key: 'energy', icon: <I name="zap" size={18}/>, need: ['dashboard.view', 'system.view'], more: true },
     { href: '/admin/system', key: 'system', icon: <I name="activity" size={18}/>, need: ['system.view'] },
     { href: '/admin/audit', key: 'audit', icon: <I name="scroll-text" size={18}/>, need: ['audit.view'], more: true },
@@ -66,15 +70,22 @@ const sections: { title: 'adminSection' | 'peopleSection' | 'customerSection'; i
   ] },
 ];
 
-// Under ['notifications'], so a new notification (a reply, a new ticket) refreshes it too.
-function NavCount({ kind }: { kind: 'waiting' | 'queue' | 'unpaid' }) {
+// Under ['notifications'], so a new notification (a reply, a new ticket, a payment held for review) refreshes it too.
+// The figure itself is hidden from screen readers; what they hear is the sentence ("3 payments awaiting review"),
+// which also shows on hover. Plain text inside the link, not a live region: nothing is announced as it changes.
+const countText = { waiting: 'waitingForYou', queue: 'waitingForSupport', unpaid: 'unpaidInvoices', review: 'paymentsInReview', failedOps: 'failedOperations', abuse: 'abuseFindings' } as const;
+const countTone = { waiting: 'bg-accent text-accent-foreground', queue: 'bg-accent text-accent-foreground', unpaid: 'bg-accent text-accent-foreground',
+  review: 'bg-warning text-warning-foreground', failedOps: 'bg-danger text-danger-foreground', abuse: 'bg-warning text-warning-foreground' } as const;
+function NavCount({ kind, staff }: { kind: Count; staff: boolean }) {
   const t = useTranslations('Nav');
   const q = useApiQuery<{ waiting: number; queue: number | null }>(['notifications', 'support-summary'], '/support/summary', { refetchInterval: 60_000 });
   const b = useBillingSummary();
-  const n = kind === 'unpaid' ? (b?.open?.n ?? 0) : q.data?.[kind] ?? 0;
+  const attention = useAttention(staff);
+  const n = isAttentionKind(kind) ? attentionCount(attention, kind) : kind === 'unpaid' ? (b?.open?.n ?? 0) : q.data?.[kind] ?? 0;
   if (!n) return null;
-  return <span className="relative ml-auto grid h-5 min-w-5 place-items-center rounded-full bg-accent px-1.5 text-[11px] font-semibold text-accent-foreground">
-    {n > 99 ? '99+' : n}<span className="sr-only"> {t(kind === 'waiting' ? 'waitingForYou' : kind === 'unpaid' ? 'unpaidInvoices' : 'waitingForSupport', { n })}</span>
+  const text = t(countText[kind], { n });
+  return <span title={text} className={`relative ml-auto grid h-5 min-w-5 shrink-0 place-items-center rounded-full px-1.5 text-[11px] font-semibold tabular-nums ${countTone[kind]}`}>
+    <span aria-hidden>{badgeText(n)}</span><span className="sr-only">, {text}</span>
   </span>;
 }
 
@@ -98,6 +109,8 @@ function NavList({ user, onNavigate }: { user: User; onNavigate?: () => void }) 
   const fold = (k: string, label: string, items: Item[], icon: string) => <button type="button" aria-expanded={isOpen(k, items)} onClick={() => toggle(k, items)}
     className="flex min-h-9 items-center gap-3 rounded-lg px-3 text-left text-sm font-medium text-muted transition-colors hover:bg-default hover:text-foreground">
     <I name={icon} size={18}/><span className="flex-1">{label}</span>
+    {/* Folded away, the group still says what waits inside it. */}
+    {!isOpen(k, items) && items.map((i) => i.count && <NavCount key={i.href} kind={i.count} staff={staff}/>)}
     <I name="chevron-down" size={15} className={`transition-transform duration-150 ${isOpen(k, items) ? 'rotate-180' : ''}`}/>
   </button>;
   return <nav aria-label={t('label')} className="flex flex-col gap-3">
@@ -112,7 +125,7 @@ function NavList({ user, onNavigate }: { user: User; onNavigate?: () => void }) 
           {/* The highlight slides between entries instead of jumping. */}
           {active(i) && <motion.span layoutId={onNavigate ? 'nav-active-drawer' : 'nav-active'} className="absolute inset-0 rounded-lg bg-accent-soft" transition={{ type: 'spring', stiffness: 500, damping: 38 }}/>}
           <span aria-hidden className="relative">{i.icon}</span><span className="relative">{t(i.key)}</span>
-          {i.count && <NavCount kind={i.count}/>}
+          {i.count && <NavCount kind={i.count} staff={staff}/>}
         </NextLink>;
       return <div key={s.title} className="flex flex-col gap-0.5">
         {folded
@@ -164,6 +177,30 @@ function ImpersonationBanner({ user }: { user: User }) {
   </div>;
 }
 
+// After a restore the panel does nothing by itself until an administrator releases it (Admin → System). Staff see
+// that on every page, not only there: a slim bar in the page's flow (it pushes the page down, never covers it), with
+// the way to the page that releases it for those who can (system.update, as the notice there asks). Not on the
+// system page itself for them, where the full notice stands. On phones only the fact, since when and the link.
+function RestoreHoldBar({ user }: { user: User }) {
+  const t = useTranslations('RestoreHold');
+  const format = useFormatter();
+  const path = usePathname();
+  const hold = restoreHoldOf(useAttention(isStaff(user.permissions)));
+  const release = can(user.permissions, 'system.view') && can(user.permissions, 'system.update');
+  if (!hold || (release && path === '/admin/system')) return null;
+  return <aside aria-label={t('title')} className="flex flex-wrap items-center gap-x-3 gap-y-1 bg-warning px-4 py-2 text-sm text-warning-foreground md:px-6">
+    <p className="flex min-w-0 flex-1 items-start gap-2">
+      <span aria-hidden className="mt-0.5 shrink-0"><I name="circle-pause" size={16}/></span>
+      <span className="min-w-0">
+        <span className="font-medium">{t('barTitle')}</span>
+        {hold.since && <span className="opacity-90"> · {t('barSince', { time: format.dateTime(hold.since, { dateStyle: 'medium', timeStyle: 'short' }) })}</span>}
+        <span className={release ? 'hidden opacity-90 sm:inline' : 'opacity-90'}> ·{t(release ? 'barHelp' : 'barAsk')}</span>
+      </span>
+    </p>
+    {release && <NextLink href="/admin/system" className="shrink-0 rounded font-semibold underline underline-offset-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-current">{t('barOpen')}</NextLink>}
+  </aside>;
+}
+
 export default function Shell({ user, branding, version, children }: { user: User; branding: Branding; version: string; children: React.ReactNode }) {
   const t = useTranslations('Nav');
   const path = usePathname();
@@ -183,6 +220,7 @@ export default function Shell({ user, branding, version, children }: { user: Use
     <TimeZoneSync/>
     <ImpersonationBanner user={user}/>
     <AnnouncementBar/>
+    <RestoreHoldBar user={user}/>
     <div className="flex min-h-0 flex-1">
       <aside className="sticky top-0 hidden h-dvh w-64 shrink-0 flex-col gap-4 overflow-y-auto border-r border-separator bg-surface px-3 py-5 lg:flex">
         <Brand branding={branding} href={home}/>

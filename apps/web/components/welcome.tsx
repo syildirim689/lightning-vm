@@ -9,7 +9,7 @@ import type { Server } from '../app/(panel)/servers-ui';
 import { stateGroup } from '../app/(panel)/server-filters';
 import { useMe } from '../lib/me';
 import { useApiQuery } from '../lib/query';
-import { recent, type Recent } from '../lib/recent';
+import { recent, recentKind, type Recent } from '../lib/recent';
 import type { Summary } from '../lib/billing';
 import { I } from './icon';
 
@@ -36,7 +36,7 @@ export default function Welcome() {
     ?? (count('running') ? { g: 'running' as const, tone: 'success' as const, n: count('running') } : null);
   const ids = new Set(servers.map((s) => s.id));
   const unpaid = billing?.enabled && billing.open.n > 0 ? billing.open : null;
-  const opened = last.filter((r) => ids.has(r.href.split('/').pop() ?? '')).slice(0, 4);
+  const opened = last.filter((r) => recentKind(r) === 'server' && ids.has(r.href.split('/').pop() ?? '')).slice(0, 4);
   return <motion.section initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} aria-label={t('label')} className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
     <div className="flex min-w-0 items-center gap-3">
       <span aria-hidden className="grid size-10 shrink-0 place-items-center rounded-2xl bg-accent-soft text-accent"><I name={{ morning: 'sunrise', day: 'sun', evening: 'sunset', night: 'moon' }[part]} size={20}/></span>

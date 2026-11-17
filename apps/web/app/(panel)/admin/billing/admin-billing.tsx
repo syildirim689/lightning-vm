@@ -7,24 +7,24 @@ import { Button, Modal, SearchField, Tabs, toast } from '@heroui/react';
 import { useQueryClient } from '@tanstack/react-query';
 import { motion } from 'motion/react';
 import NextLink from 'next/link';
-import { useFormatter, useTranslations } from 'next-intl';
+import { useFormatter, useNow, useTranslations } from 'next-intl';
 import { parseAsString, useQueryState } from 'nuqs';
 import { useState } from 'react';
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { I } from '../../../../components/icon';
-import { ConfirmButton, DataTable, Notice, PageHeader, SelectInput, StatusChip, TextInput } from '../../../../components/ui';
+import { ButtonLink, ConfirmButton, DataTable, LoadFailed, Notice, PageHeader, SelectInput, StatusChip, TextInput } from '../../../../components/ui';
 import { downloadCsv, localDay } from '../../../../lib/csv';
 import { fold } from '../../../../lib/note-line';
 import { apiFetch, useErrorText } from '../../../../lib/api';
 import type { Invoice, Payment, Subscription } from '../../../../lib/billing';
-import { invoiceState, invoiceTone, paymentTone, subscriptionTone } from '../../../../lib/billing';
+import { invoiceState, invoiceTone, isReview, isReviewCode, paymentState, paymentTone, subscriptionTone, waitedFor, waitingSince } from '../../../../lib/billing';
 import { useMe } from '../../../../lib/me';
 import { can } from '../../../../lib/permissions';
 import { useApiQuery } from '../../../../lib/query';
 
 type Money = { currency: string; amount: string };
 type Overview = { mrr: Money[]; open: (Money & { n: number; overdue: number })[]; collectedThisMonth: (Money & { n: number })[]; series: (Money & { month: string })[];
-  subscriptions: Record<string, number>; recentPayments: Payment[] };
+  subscriptions: Record<string, number>; recentPayments: Payment[]; paymentsInReview?: { n: number; oldest: string | null } };
 const tooltipStyle = { background: 'var(--overlay)', border: '1px solid var(--border)', borderRadius: 8, color: 'var(--overlay-foreground)', fontSize: 12 };
 const tabs = ['invoices', 'subscriptions', 'payments', 'disputes', 'coupons'] as const;
 
@@ -36,10 +36,16 @@ export default function AdminBilling() {
   const client = useQueryClient();
   const { error } = useErrorText();
   const [tab, setTab] = useQueryState('tab', parseAsString.withDefault('invoices'));
+  // Each list keeps its filter and search in the address under the same names; another tab starts without them.
+  const [, setStatus] = useQueryState('status', parseAsString);
+  const [, setQ] = useQueryState('q', parseAsString);
+  const now = useNow({ updateInterval: 60_000 });
+  const toLists = () => setTimeout(() => document.getElementById('billing-lists')?.scrollIntoView({ behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' }), 50);
   const [dialog, setDialog] = useState<'invoice' | 'balance' | null>(null);
   const [running, setRunning] = useState(false);
   const o = useApiQuery<Overview>(['admin', 'billing', 'overview'], '/admin/billing/overview', { refetchInterval: 60_000 }).data;
   const settings = useApiQuery<{ billing: { enabled: boolean; sandbox: boolean } }>(['admin', 'billing', 'settings'], '/admin/settings/billing').data?.billing;
+  const review = o?.paymentsInReview?.n ? o.paymentsInReview : null;
   const sum = (list: Money[] | undefined) => list?.length ? list.map((m) => format.number(Number(m.amount), { style: 'currency', currency: m.currency, maximumFractionDigits: 0 })).join(' · ') : '–';
   const currencies = [...new Set(o?.series.map((s) => s.currency) ?? [])];
   const months = [...new Set(o?.series.map((s) => s.month) ?? [])];
@@ -70,10 +76,18 @@ export default function AdminBilling() {
       </div>}/>
     {settings && !settings.enabled && <div className="mb-4"><Notice tone="warning" title={t('offTitle')}>{t('off')} <NextLink href="/admin/settings?tab=billing" className="font-medium text-accent hover:underline">{t('openSettings')}</NextLink></Notice></div>}
     {settings?.sandbox && <div className="mb-4"><Notice tone="default" title={t('sandboxTitle')}>{t('sandbox')}</Notice></div>}
+    {/* Payments a person has to settle: said first, with the way to the list. */}
+    {review && <NextLink href="/admin/billing?tab=payments&status=review" scroll={false} onClick={toLists}
+      className="group mb-4 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-2xl border border-warning/40 bg-warning/5 px-4 py-3 text-sm transition-shadow hover:shadow-md focus-visible:outline-2 focus-visible:outline-accent">
+      <I name="hourglass" size={18} className="shrink-0 text-warning"/>
+      <span className="min-w-0 flex-1"><span className="font-semibold">{t('reviewNotice', { n: review.n })}</span>
+        {review.oldest && !Number.isNaN(Date.parse(review.oldest)) && <span className="text-muted"> · {t('reviewNoticeOldest', { time: format.relativeTime(new Date(Math.min(Date.parse(review.oldest), now.getTime())), now) })}</span>}</span>
+      <span className="flex shrink-0 items-center gap-1 font-medium text-accent">{t('reviewNoticeOpen')}<I name="arrow-right" size={14} className="transition-transform group-hover:translate-x-0.5"/></span>
+    </NextLink>}
     <ul className="mb-5 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
       {/* Each tile opens the list behind its number. */}
       {kpis.map((x, i) => <motion.li key={x.k} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }}>
-        <NextLink href={x.href} scroll={false} onClick={() => setTimeout(() => document.getElementById('billing-lists')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50)}
+        <NextLink href={x.href} scroll={false} onClick={toLists}
           className="group block h-full rounded-2xl border border-border bg-surface p-4 transition-shadow hover:shadow-lg focus-visible:outline-2 focus-visible:outline-accent">
           <p className="flex items-center gap-2 text-xs text-muted"><span className={x.tone}>{x.icon}</span>{t(`kpi.${x.k}`)}
             <I name="arrow-right" size={12} className="ml-auto opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100"/></p>
@@ -110,7 +124,7 @@ export default function AdminBilling() {
       </div>
     </div>
     <div id="billing-lists" className="scroll-mt-24"/>
-    <Tabs selectedKey={tabs.includes(tab as 'invoices') ? tab : 'invoices'} onSelectionChange={(k) => void setTab(String(k))}>
+    <Tabs selectedKey={tabs.includes(tab as 'invoices') ? tab : 'invoices'} onSelectionChange={(k) => { if (String(k) === tab) return; void setTab(String(k)); void setStatus(null); void setQ(null); }}>
       <Tabs.ListContainer className="overflow-x-auto">
         <Tabs.List aria-label={t('title')}>{tabs.map((k) => <Tabs.Tab key={k} id={k} className="whitespace-nowrap">{t(`tabs.${k}`)}<Tabs.Indicator/></Tabs.Tab>)}</Tabs.List>
       </Tabs.ListContainer>
@@ -161,14 +175,18 @@ function Invoices() {
   </div>;
 }
 
+const subscriptionFilters = ['active', 'past_due', 'suspended', 'pending', 'cancelled', 'ended'] as const;
+
 function Subscriptions({ manage }: { manage: boolean }) {
   const t = useTranslations('BillingAdmin');
   const tb = useTranslations('Billing');
   const format = useFormatter();
   const { error } = useErrorText();
   const client = useQueryClient();
-  const [status, setStatus] = useState('');
-  const [find, setFind] = useState('');
+  const [rawStatus, setStatus] = useQueryState('status', parseAsString.withDefault(''));
+  const [find, setFind] = useQueryState('q', parseAsString.withDefault('').withOptions({ history: 'replace', throttleMs: 300 }));
+  const status = (subscriptionFilters as readonly string[]).includes(rawStatus) ? rawStatus : '';
+  const clear = () => { void setStatus(null); void setFind(null); };
   const all = useApiQuery<{ subscriptions: Subscription[] }>(['admin', 'billing', 'subscriptions', status], `/admin/billing/subscriptions?status=${status}`).data?.subscriptions;
   const list = all?.filter((s) => !find.trim() || fold(`${s.description} ${s.email}`).includes(fold(find.trim())));
   const [edit, setEdit] = useState<Subscription | null>(null);
@@ -178,17 +196,19 @@ function Subscriptions({ manage }: { manage: boolean }) {
   }
   return <div className="flex flex-col gap-3">
     <div className="flex flex-wrap items-end gap-3">
-      <SearchField aria-label={t('findSubscription')} value={find} onChange={setFind} className="min-w-64 flex-1">
+      <SearchField aria-label={t('findSubscription')} value={find} onChange={(v) => void setFind(v || null)} className="min-w-64 flex-1">
         <SearchField.Group><SearchField.SearchIcon/><SearchField.Input placeholder={t('findSubscription')}/><SearchField.ClearButton/></SearchField.Group>
       </SearchField>
-      <SelectInput className="w-48" label={t('status')} value={status} onChange={setStatus}
-        options={[{ id: '', label: t('all') }, ...(['active', 'past_due', 'suspended', 'pending', 'cancelled', 'ended'] as const).map((s) => ({ id: s, label: t(`sub.${s}`) }))]}/>
+      <SelectInput className="w-48" label={t('status')} value={status} onChange={(v) => void setStatus(v || null)}
+        options={[{ id: '', label: t('all') }, ...subscriptionFilters.map((s) => ({ id: s, label: t(`sub.${s}`) }))]}/>
       {list && list.length > 0 && <Button variant="secondary" onPress={() => downloadCsv('subscriptions', ['description', 'email', 'amount', 'currency', 'period_months', 'period_end', 'status', 'cancel_at_period_end'],
         list.map((s) => [s.description, s.email, s.amount, s.currency, s.periodMonths, (s.periodEnd ? localDay(s.periodEnd) : ''), s.status, s.cancelAtPeriodEnd ? 'yes' : '']))}>
         <I name="download" size={16}/>{t('export')}</Button>}
     </div>
-    {list && list.length > 0 && <p className="text-sm text-muted" role="status">{t('shown', { n: list.length })} · {t('activeMonthly', { amount: totals(list.filter((s) => s.status === 'active').map((s) => ({ total: s.amount, currency: s.currency })), format) })}</p>}
-    <DataTable label={t('tabs.subscriptions')} rows={list ?? []} rowKey={(s) => s.id} empty={!list ? '…' : find || status ? t('noMatch') : t('noSubscriptions')} minWidth={860}
+    {list && list.length > 0 && <p className="text-sm text-muted" role="status">{t('shown', { n: list.length })} · {t('activeMonthly', { amount: totals(list.filter((s) => s.status === 'active').map((s) => ({ total: s.amount, currency: s.currency })), format) })}
+      {(status || find) && <> · <button type="button" className="font-medium text-accent hover:underline" onClick={clear}>{t('clear')}</button></>}</p>}
+    <DataTable label={t('tabs.subscriptions')} rows={list ?? []} rowKey={(s) => s.id} minWidth={860}
+      empty={!list ? '…' : find || status ? <>{t('noMatch')} <button type="button" className="font-medium text-accent hover:underline" onClick={clear}>{t('clear')}</button></> : t('noSubscriptions')}
       columns={[{ id: 'what', label: t('what') }, { id: 'who', label: t('customer') }, { id: 'amount', label: tb('col.amount') }, { id: 'end', label: t('periodEnd') }, { id: 'status', label: tb('col.status') }, { id: 'act', label: <span className="sr-only">{tb('col.actions')}</span> }]}
       cells={(s) => [
         <span key="w">{s.serverId ? <NextLink href={`/servers/${s.serverId}`} className="text-accent hover:underline">{s.description}</NextLink> : s.description}</span>,
@@ -207,32 +227,76 @@ function Subscriptions({ manage }: { manage: boolean }) {
   </div>;
 }
 
+const paymentFilters = ['review', 'succeeded', 'failed', 'pending', 'refunded', 'partially_refunded'] as const;
+type PaymentFilter = (typeof paymentFilters)[number];
+
 function Payments() {
   const t = useTranslations('BillingAdmin');
   const tb = useTranslations('Billing');
   const format = useFormatter();
-  const [status, setStatus] = useState('');
-  const list = useApiQuery<{ payments: Payment[] }>(['admin', 'billing', 'payments', status], `/admin/billing/payments?status=${status}`).data?.payments;
+  const now = useNow({ updateInterval: 60_000 });
+  // The filter and the search live in the address, so a link (the menu's count, the notice above) opens the list as
+  // it should be read, and Back returns to it. A status another tab left behind counts as none.
+  const [rawStatus, setStatus] = useQueryState('status', parseAsString.withDefault(''));
+  const [q, setQ] = useQueryState('q', parseAsString.withDefault('').withOptions({ history: 'replace', throttleMs: 300 }));
+  const status = (paymentFilters as readonly string[]).includes(rawStatus) ? (rawStatus as PaymentFilter) : '';
+  const find = q.trim();
+  const query = useApiQuery<{ payments: Payment[] }>(['admin', 'billing', 'payments', status, find], `/admin/billing/payments?status=${status}&q=${encodeURIComponent(find)}`);
+  const list = query.data?.payments;
+  const clear = () => { void setStatus(null); void setQ(null); };
+  const clearLink = <button type="button" className="font-medium text-accent hover:underline" onClick={clear}>{t('clear')}</button>;
+  const sumOf = (rows: Payment[]) => totals(rows.map((p) => ({ total: p.amount, currency: p.currency })), format);
+  // Each filter says what an empty list means, so "nothing here" is never mistaken for "nothing loaded".
+  const emptyKey = find ? 'search' : status || 'all';
+  const empty = <span className="mx-auto flex max-w-md flex-col items-center gap-1 px-4">
+    <span className="font-medium text-foreground">{t(`emptyPayments.${emptyKey}.title`)}</span>
+    <span>{t(`emptyPayments.${emptyKey}.body`)}</span>
+    {(status || find) && clearLink}
+  </span>;
   return <div className="flex flex-col gap-3">
     <div className="flex flex-wrap items-end gap-3">
-      <SelectInput className="w-48" label={t('status')} value={status} onChange={setStatus}
-        options={[{ id: '', label: t('all') }, ...(['succeeded', 'failed', 'pending', 'refunded', 'partially_refunded'] as const).map((s) => ({ id: s, label: tb(`payment.${s}`) }))]}/>
-      {list && list.length > 0 && <Button variant="secondary" onPress={() => downloadCsv('payments', ['date', 'email', 'invoice', 'method', 'provider', 'mode', 'amount', 'currency', 'status', 'error'],
-        list.map((p) => [p.createdAt, p.email, p.number ?? p.invoiceId, p.method, p.provider, p.mode, p.amount, p.currency, p.status, p.errorMessage || p.errorCode || '']))}>
+      <SearchField aria-label={t('searchPayments')} value={q} onChange={(v) => void setQ(v || null)} className="w-full min-w-0 flex-1 sm:min-w-64">
+        <SearchField.Group><SearchField.SearchIcon/><SearchField.Input placeholder={t('searchPayments')}/><SearchField.ClearButton/></SearchField.Group>
+      </SearchField>
+      <SelectInput className="w-full sm:w-56" label={t('status')} value={status} onChange={(v) => void setStatus(v || null)}
+        options={[{ id: '', label: t('all') }, ...paymentFilters.map((s) => ({ id: s, label: s === 'review' ? t('paymentFilter.review') : tb(`payment.${s}`) }))]}/>
+      {list && list.length > 0 && <Button variant="secondary" onPress={() => downloadCsv('payments', ['date', 'email', 'invoice', 'method', 'provider', 'mode', 'amount', 'currency', 'status', 'error', 'reference'],
+        list.map((p) => [p.createdAt, p.email, p.number ?? p.invoiceId, p.method, p.provider, p.mode, p.amount, p.currency, paymentState(p), p.errorMessage || p.errorCode || '', p.reference ?? '']))}>
         <I name="download" size={16}/>{t('export')}</Button>}
     </div>
-    {list && list.length > 0 && <p className="text-sm text-muted" role="status">{t('shown', { n: list.length })} · {t('succeededSum', { amount: totals(list.filter((p) => p.status === 'succeeded').map((p) => ({ total: p.amount, currency: p.currency })), format) })}</p>}
-    <DataTable label={t('tabs.payments')} rows={list ?? []} rowKey={(p) => p.id} empty={list ? t('noPayments') : '…'} minWidth={860}
-      columns={[{ id: 'date', label: tb('col.date') }, { id: 'who', label: t('customer') }, { id: 'inv', label: tb('col.number') }, { id: 'how', label: t('method') }, { id: 'amount', label: tb('col.amount') }, { id: 'status', label: tb('col.status') }]}
-      cells={(p) => [
-        format.dateTime(new Date(p.createdAt), { dateStyle: 'medium', timeStyle: 'short' }),
-        <span key="u" className="text-sm">{p.email}</span>,
-        <NextLink key="i" href={`/admin/billing/invoices/${p.invoiceId}`} className="font-mono text-sm text-accent hover:underline">{p.number ?? `#${p.invoiceId?.slice(0, 8).toUpperCase()}`}</NextLink>,
-        <span key="m" className="text-sm">{tb(`method.${p.method as 'card'}`)} · {p.provider}{p.mode === 'test' && ` (${tb('testMode')})`}{p.automatic && <span className="block text-xs text-muted">{tb('automatic')}</span>}</span>,
-        <span key="a" className="tabular-nums">{format.number(Number(p.amount), { style: 'currency', currency: p.currency })}</span>,
-        <span key="s" className="flex flex-col items-start gap-0.5"><StatusChip tone={paymentTone(p.status)}>{tb(`payment.${p.status as 'succeeded'}`)}</StatusChip>
-          {p.errorCode && <span className="text-xs text-danger">{p.errorMessage || p.errorCode}</span>}</span>,
-      ]}/>
+    {status === 'review' && <Notice tone="warning" title={t('reviewHelpTitle')}>{t('reviewHelp', { action: t('markPaid') })}</Notice>}
+    {list && list.length > 0 && <p className="text-sm text-muted" role="status">{t('shown', { n: list.length })} · {status === 'review' ? t('reviewSum', { amount: sumOf(list.filter(isReview)) })
+      : t('succeededSum', { amount: sumOf(list.filter((p) => p.status === 'succeeded')) })}
+      {(status || find) && <> · {clearLink}</>}</p>}
+    {query.isError && !list ? <LoadFailed error={query.error} retry={() => void query.refetch()}/>
+    : <DataTable label={t('tabs.payments')} rows={list ?? []} rowKey={(p) => p.id} empty={list ? empty : '…'} minWidth={980}
+      columns={[{ id: 'date', label: tb('col.date') }, { id: 'who', label: t('customer') }, { id: 'inv', label: tb('col.number') }, { id: 'how', label: t('method') }, { id: 'amount', label: tb('col.amount') }, { id: 'status', label: tb('col.status') },
+        { id: 'act', label: <span className="sr-only">{tb('col.actions')}</span> }]}
+      cells={(p) => {
+        const review = isReview(p);
+        const number = p.number ?? `#${p.invoiceId?.slice(0, 8).toUpperCase()}`;
+        const waited = review ? waitedFor(waitingSince(p), now.getTime()) : null;
+        return [
+          format.dateTime(new Date(p.createdAt), { dateStyle: 'medium', timeStyle: 'short' }),
+          <span key="u" className="text-sm">{p.email}</span>,
+          <NextLink key="i" href={`/admin/billing/invoices/${p.invoiceId}`} className="font-mono text-sm text-accent hover:underline">{number}</NextLink>,
+          <span key="m" className="text-sm">{tb(`method.${p.method as 'card'}`)} · {p.provider}{p.mode === 'test' && ` (${tb('testMode')})`}{p.automatic && <span className="block text-xs text-muted">{tb('automatic')}</span>}
+            {/* What to look for at the provider. */}
+            {review && p.reference && <span className="block break-all font-mono text-xs text-muted">{p.reference}</span>}</span>,
+          <span key="a" className="tabular-nums">{format.number(Number(p.amount), { style: 'currency', currency: p.currency })}</span>,
+          <span key="s" className="flex max-w-80 flex-col items-start gap-0.5">
+            <StatusChip tone={paymentTone(paymentState(p))}>{review ? t('paymentState.review') : tb(`payment.${p.status as 'succeeded'}`)}</StatusChip>
+            {review ? <>
+              <span className="text-xs text-muted">{isReviewCode(p.errorCode) ? t(`reviewReason.${p.errorCode}`) : p.errorMessage || p.errorCode}</span>
+              {waited && <span className="text-xs font-medium text-warning">{t(`waited.${waited.unit}`, { n: waited.n })}</span>}
+              {p.invoiceStatus && p.invoiceStatus !== 'unpaid' && <span className="text-xs text-muted">{t('invoiceSettled', { status: tb(`status.${p.invoiceStatus}`) })}</span>}
+            </> : p.errorCode && <span className="text-xs text-danger">{p.errorMessage || p.errorCode}</span>}
+          </span>,
+          // Settling happens on the invoice's page ("Record a payment"), so that is where the row leads.
+          review && p.invoiceId ? <ButtonLink key="x" size="sm" variant="secondary" href={`/admin/billing/invoices/${p.invoiceId}`} className="whitespace-nowrap">
+            <I name="file-check-2" size={14}/>{t('openInvoice')}<span className="sr-only"> {number}</span></ButtonLink> : <span key="x"/>,
+        ];
+      }}/>}
   </div>;
 }
 

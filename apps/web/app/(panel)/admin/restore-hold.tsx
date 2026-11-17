@@ -8,7 +8,7 @@ import { ConfirmButton, Mono, Notice, Section } from '../../../components/ui';
 import { apiFetch } from '../../../lib/api';
 import { useMe } from '../../../lib/me';
 import { can } from '../../../lib/permissions';
-import { useApiAction, useApiQuery } from '../../../lib/query';
+import { attentionKey, useApiAction, useApiQuery } from '../../../lib/query';
 
 type Hold = { held: boolean; backup?: string; restoredAt?: string };
 
@@ -19,7 +19,7 @@ export default function RestoreHold() {
   // The API answers this to system.update only; others are not asked for something they would be refused.
   const manage = can(me?.permissions, 'system.update');
   const q = useApiQuery<Hold>(['admin', 'restore-hold'], manage ? '/admin/system/restore-hold' : null, { refetchInterval: 60_000 });
-  const release = useApiAction(() => apiFetch('/admin/system/restore-hold', { method: 'DELETE' }), { invalidate: [['admin', 'restore-hold']], success: t('released') });
+  const release = useApiAction(() => apiFetch('/admin/system/restore-hold', { method: 'DELETE' }), { invalidate: [['admin', 'restore-hold'], [...attentionKey]], success: t('released') });
   const d = q.data;
   if (!d?.held) return null;
   const at = d.restoredAt ? Date.parse(d.restoredAt) : NaN;

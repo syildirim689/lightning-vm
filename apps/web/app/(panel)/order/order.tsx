@@ -3,7 +3,7 @@ import NextLink from 'next/link';
 import { Button, Card, Radio, RadioGroup, Separator, Spinner, toast } from '@heroui/react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { motion } from 'motion/react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useFormatter, useTranslations } from 'next-intl';
 import { useEffect, useRef, useState } from 'react';
 import { I } from '../../../components/icon';
@@ -18,7 +18,8 @@ import type { Summary } from '../../../lib/billing';
 import { SshKeys, useIntentKey, useSshKeys } from '../servers-ui';
 import { Copy } from '../server-extras';
 import { strongPassword } from '../../../lib/password';
-import { copyText } from '../../../lib/clipboard';
+import { copyText, useCopy } from '../../../lib/clipboard';
+import { orderLinkKeys, orderLinkQuery, parseOrderLink } from '../../../lib/order-link';
 import { PlatformHint, supports, type Platformed } from '../../../components/capabilities';
 import { Strength } from '../../(auth)/credentials-form';
 
@@ -42,7 +43,10 @@ export default function Order() {
   const router = useRouter();
   const intent = useIntentKey();
   const d = useOrder();
-  const billing = useApiQuery<Summary>(['notifications', 'billing-summary'], '/billing/summary').data;
+  const billingQ = useApiQuery<Summary>(['notifications', 'billing-summary'], '/billing/summary');
+  const billing = billingQ.data;
+  const params = useSearchParams();
+  const copy = useCopy();
   const hourly = billing?.enabled && billing.hourly?.enabled ? billing.hourly : null;
   const queryClient = useQueryClient();
   const keys = useSshKeys();
@@ -92,6 +96,21 @@ export default function Order() {
     }
     if (Object.keys(patch).length) d.set(patch);
   }, [catalog, d.poolId, d.imageId, d.type, mineQ.data]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // A shared link (/order?loc=…&pkg=…): read once, when the catalog and what this account may pay by are known.
+  // Only what the catalog offers is taken (lib/order-link.ts); then the address is cleaned, so a reload keeps the
+  // person's later changes instead of the link's. Without these parameters ("order similar", a plain visit) the
+  // draft is left alone.
+  const linkRead = useRef(false);
+  useEffect(() => {
+    if (linkRead.current || !catalog || billingQ.isPending) return;
+    linkRead.current = true;
+    if (!orderLinkKeys.some((k) => params.has(k))) return;
+    const current = catalog.pools.some((p) => p.id === d.poolId) ? d.poolId : catalog.pools[0]?.id;
+    const patch = parseOrderLink(new URLSearchParams(params.toString()), catalog, { current, hourly: !!hourly });
+    if (patch) { d.set({ ...patch, cloneFrom: '', cloneName: '' }); toast.info(t('link.applied')); } else toast.warning(t('link.invalid'));
+    router.replace('/order', { scroll: false });
+  }, [catalog, billingQ.isPending]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // SSH keys: the only one is ticked; a key added while ordering (in the form below) is ticked too; removed ones drop out.
   const seenKeys = useRef<string[] | null>(null);
@@ -334,6 +353,11 @@ export default function Order() {
                 <I name="circle-alert" size={14} className="shrink-0"/>{t(`missing.${m.key}`)}<I name="arrow-right" size={13} className="ml-auto shrink-0"/></button></li>)}
             </ul>}
             <Button fullWidth size="lg" isDisabled={!canCreate} isPending={busy} onPress={create}><I name="rocket" size={18}/>{t('create')}</Button>
+            {/* The configuration as a link: location, image, plan and period only. */}
+            <div className="flex flex-col gap-1">
+              <Button fullWidth variant="ghost" isDisabled={!ready || !!d.cloneFrom} onPress={() => void copy(`${window.location.origin}/order?${orderLinkQuery(d)}`, t('link.copied'))}><I name="link" size={16}/>{t('link.copy')}</Button>
+              <p className="text-center text-xs text-muted">{t('link.help')}</p>
+            </div>
           </Card.Footer>
         </Card>
       </aside>

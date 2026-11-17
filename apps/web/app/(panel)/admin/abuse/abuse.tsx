@@ -1,9 +1,11 @@
 "use client";
 // Abuse monitoring: risky ports open on customer servers and mining suspicions (CPU near full for hours),
-// with acknowledgement, a scan on demand, and the settings.
+// with acknowledgement, a scan on demand, and the settings. The tab, the search and the tile filter are kept in the
+// address, so a list can be linked to and Back returns to it as it was.
 import { Button, Modal, SearchField, Tabs, toast } from '@heroui/react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useFormatter, useTranslations } from 'next-intl';
+import { parseAsString, parseAsStringLiteral, useQueryState } from 'nuqs';
 import { useEffect, useState } from 'react';
 import { I } from '../../../../components/icon';
 import { ButtonLink, DataTable, Mono, NumberInput, PageHeader, Section, Stat, StatusChip, SwitchInput, TextInput } from '../../../../components/ui';
@@ -59,18 +61,19 @@ export default function Abuse() {
   const me = useMe();
   const client = useQueryClient();
   const q = useApiQuery<{ findings: Finding[]; settings: Settings }>(key, '/admin/abuse', { refetchInterval: 30_000 });
-  const [tab, setTab] = useState('open');
+  const [tab, setTab] = useQueryState('tab', parseAsStringLiteral(['open', 'resolved'] as const).withDefault('open'));
   const [ack, setAck] = useState<Finding | null>(null);
   const [note, setNote] = useState('');
-  const [find, setFind] = useState('');
-  const [only, setOnly] = useState<'' | 'port' | 'cpu' | 'unack'>('');
+  const [find, setFind] = useQueryState('q', parseAsString.withDefault('').withOptions({ history: 'replace', throttleMs: 300 }));
+  const [only, setOnly] = useQueryState('only', parseAsStringLiteral(['port', 'cpu', 'unack'] as const));
   const [acking, setAcking] = useState(false);
   const { error } = useErrorText();
   const d = q.data;
-  const hit = (f: Finding) => !find || fold([f.serverName, f.owner, f.location, f.address, f.port, f.detail.label].join(' ')).includes(fold(find));
+  const needle = fold(find.trim());
+  const hit = (f: Finding) => !needle || fold([f.serverName, f.owner, f.location, f.address, f.port, f.detail.label].join(' ')).includes(needle);
   const kindOk = (f: Finding) => !only || (only === 'unack' ? !f.acknowledgedAt : f.kind === only);
   const list = (d?.findings ?? []).filter((f) => (tab === 'open' ? !f.resolvedAt : !!f.resolvedAt) && hit(f) && kindOk(f));
-  const pick = (k: 'port' | 'cpu' | 'unack') => { setOnly(only === k ? '' : k); setTab('open'); };
+  const pick = (k: 'port' | 'cpu' | 'unack') => { void setOnly(only === k ? null : k); void setTab(null); };
   const when = (x: string) => format.relativeTime(new Date(x));
   async function scan() {
     try { await apiFetch('/admin/abuse/scan', { method: 'POST' }); toast.success(t('scanning')); setTimeout(() => client.invalidateQueries({ queryKey: key }), 15000); }
@@ -91,22 +94,22 @@ export default function Abuse() {
         <Stat label={t('mining')} value={open.filter((f) => f.kind === 'cpu').length} icon={<I name="pickaxe" size={18}/>} tone={open.some((f) => f.kind === 'cpu') ? 'danger' : 'default'} pressed={only === 'cpu'} onPress={() => pick('cpu')}/>
         <Stat label={t('unacknowledged')} value={open.filter((f) => !f.acknowledgedAt).length} icon={<I name="bell-ring" size={18}/>} pressed={only === 'unack'} onPress={() => pick('unack')}/>
       </div>
-      <Tabs selectedKey={tab} onSelectionChange={(k) => setTab(String(k))}>
+      <Tabs selectedKey={tab} onSelectionChange={(k) => void setTab(k === 'resolved' ? 'resolved' : null)}>
         <Tabs.ListContainer><Tabs.List aria-label={t('title')}>
           <Tabs.Tab id="open">{t('open')}<span className="ml-1.5 rounded-full bg-default px-1.5 text-xs tabular-nums">{open.length}</span><Tabs.Indicator/></Tabs.Tab>
           <Tabs.Tab id="resolved">{t('resolved')}<span className="ml-1.5 rounded-full bg-default px-1.5 text-xs tabular-nums">{d.findings.length - open.length}</span><Tabs.Indicator/></Tabs.Tab>
         </Tabs.List></Tabs.ListContainer>
         <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center">
-          <SearchField aria-label={t('find')} value={find} onChange={setFind} className="w-full sm:w-80">
+          <SearchField aria-label={t('find')} value={find} onChange={(v) => void setFind(v || null)} className="w-full sm:w-80">
             <SearchField.Group><SearchField.SearchIcon/><SearchField.Input placeholder={t('findPlaceholder')}/><SearchField.ClearButton/></SearchField.Group>
           </SearchField>
-          {only && <Button size="sm" variant="secondary" onPress={() => setOnly('')}><I name="x" size={14}/>{t('clearFilter', { what: t(only === 'port' ? 'openPorts' : only === 'cpu' ? 'mining' : 'unacknowledged') })}</Button>}
+          {only && <Button size="sm" variant="secondary" onPress={() => void setOnly(null)}><I name="x" size={14}/>{t('clearFilter', { what: t(only === 'port' ? 'openPorts' : only === 'cpu' ? 'mining' : 'unacknowledged') })}</Button>}
           {list.length > 0 && <Button size="sm" variant="ghost" className="sm:ml-auto" onPress={() => downloadCsv('abuse', ['kind', 'finding', 'address', 'server', 'owner', 'location', 'first_seen', 'last_seen', 'resolved', 'acknowledged_by', 'note'],
             list.map((f) => [f.kind, f.kind === 'port' ? f.detail.label ?? '' : `${f.detail.avg ?? 0}% / ${f.detail.hours ?? 0}h`, f.address ? `${f.address}:${f.port ?? ''}` : '', f.serverName, f.owner, f.location, f.firstSeen, f.lastSeen, f.resolvedAt ?? '', f.acknowledgedBy ?? '', f.note]))}>
             <I name="download" size={14}/>{t('export')}</Button>}
         </div>
         <Tabs.Panel id={tab} className="pt-4">
-          <DataTable label={t('title')} rows={list} rowKey={(f) => f.id} empty={find || only ? t('noMatch') : tab === 'open' ? t('none') : t('noneResolved')} minWidth={880}
+          <DataTable label={t('title')} rows={list} rowKey={(f) => f.id} empty={needle || only ? t('noMatch') : tab === 'open' ? t('none') : t('noneResolved')} minWidth={880}
             columns={[{ id: 'k', label: t('finding') }, { id: 's', label: t('server') }, { id: 'f', label: t('firstSeen') }, { id: 'l', label: t('lastSeen') }, { id: 'a', label: t('status') }, { id: 'x', label: <span className="sr-only">{t('actions')}</span> }]}
             cells={(f) => [
               f.kind === 'port' ? <span key="k" className="flex flex-col"><span className="flex items-center gap-1.5 font-medium"><I name="door-open" size={14} className="text-warning"/>{f.detail.label || t('port')}</span><Mono>{f.address}:{f.port}</Mono></span>

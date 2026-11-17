@@ -2,6 +2,7 @@
 import { useMutation, useQuery, useQueryClient, type QueryKey } from '@tanstack/react-query';
 import { toast } from '@heroui/react';
 import { apiFetch, useErrorText } from './api';
+import type { Attention } from './attention';
 
 // GET through the API with React Query: shared cache per key, optional polling for live state.
 export function useApiQuery<T>(key: QueryKey, path: string | null, opts: { refetchInterval?: number | false | ((data: T | undefined) => number | false); enabled?: boolean } = {}) {
@@ -19,6 +20,20 @@ export function useApiQuery<T>(key: QueryKey, path: string | null, opts: { refet
 export const useBillingSummary = () => useApiQuery<{ enabled: boolean; open?: { n: number } }>(['notifications', 'billing-summary'], '/billing/summary', { refetchInterval: 60_000 }).data;
 // Shown only to resellers: the summary answers 403 for everyone else.
 export const useResellerAllocation = () => useApiQuery<{ allocation: object | null }>(['reseller', 'summary'], '/reseller/summary').data?.allocation;
+// What waits for staff (payments to review, failed operations, abuse findings, a restore hold): one read every minute
+// shared by the menu's counts and the hold bar, and none at all for customers. Under ['notifications'], so news
+// refreshes it. An API without the endpoint (404) or a refusal (403) simply means nothing to show: no retry, and it
+// is asked again only now and then.
+export const attentionKey = ['notifications', 'attention'] as const;
+export function useAttention(staff: boolean) {
+  return useQuery<Attention>({
+    queryKey: staff ? attentionKey : [...attentionKey, 'off'],
+    queryFn: ({ signal }) => apiFetch<Attention>('/admin/attention', { signal }),
+    enabled: staff,
+    retry: false,
+    refetchInterval: (query) => (query.state.status === 'error' ? 300_000 : 60_000),
+  }).data;
+}
 
 // A state-changing call: shows the translated error as a toast, an optional success toast, and refreshes
 // the given cache keys so every view of that data updates.

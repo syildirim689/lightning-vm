@@ -1,10 +1,10 @@
 "use client";
-// Ctrl/⌘+K: jump to any page the user may open, any server by name or IP, or run a quick action.
-// A combobox with a listbox (arrow keys, Enter, Escape); results are filtered as you type.
+// Ctrl/⌘+K: jump to any page the user may open, any server by name or IP, a ticket or an invoice by its number,
+// or run a quick action. A combobox with a listbox (arrow keys, Enter, Escape); results are filtered as you type.
 import { fold } from '../lib/search';
 import { Kbd, Modal, toast } from '@heroui/react';
 import { useRouter } from 'next/navigation';
-import { useLocale, useTranslations } from 'next-intl';
+import { useFormatter, useLocale, useTranslations } from 'next-intl';
 import { useTheme } from 'next-themes';
 import { useEffect, useId, useMemo, useRef, useState, useTransition } from 'react';
 import { setLocale } from '../i18n/actions';
@@ -15,12 +15,18 @@ import { apiFetch, useErrorText } from '../lib/api';
 import { I } from './icon';
 import { supports, type Capabilities } from './capabilities';
 import { openShortcuts } from './shortcuts';
-import { recent } from '../lib/recent';
+import { recent, recentKind } from '../lib/recent';
+import { useCopy } from '../lib/clipboard';
+import { invoiceState, type Invoice, type Summary } from '../lib/billing';
+import { ConfirmDialog } from './ui';
 import { mayLeave } from '../lib/edits';
 
-type Cmd = { id: string; group: 'recent' | 'pages' | 'servers' | 'tickets' | 'users' | 'actions'; label: string; hint?: string; icon: React.ReactNode; run: () => void };
+// `found`: the API already searched for what was typed (staff invoices), so the list does not filter it again.
+type Cmd = { id: string; group: 'recent' | 'pages' | 'servers' | 'tickets' | 'invoices' | 'users' | 'actions'; label: string; hint?: string; icon: React.ReactNode; run: () => void; found?: boolean };
 type TicketRow = { id: string; number: number; subject: string; status: 'open' | 'answered' | 'customer_reply' | 'on_hold' | 'closed'; ownerEmail?: string };
-type ServerRow = { id: string; name: string; address: string | null; ownerEmail?: string; favorite?: boolean; state: string; powerState: string; deleteAt?: string | null; tags?: string[] | null; capabilities?: Capabilities | null };
+type ServerRow = { id: string; name: string; address: string | null; ownerEmail?: string; favorite?: boolean; state: string; powerState: string; deleteAt?: string | null; locked?: boolean; tags?: string[] | null; capabilities?: Capabilities | null };
+const none: Invoice[] = [];
+const recentIcons = { server: 'server', ticket: 'life-buoy', invoice: 'receipt-text' } as const;
 
 export function usePaletteShortcut(open: () => void) {
   useEffect(() => {
@@ -49,6 +55,9 @@ export default function CommandPalette({ permissions, isOpen, onOpenChange }: { 
   const support = can(permissions, 'support.view');
   const tickets = useApiQuery<{ tickets: TicketRow[] }>(support ? ['admin', 'support', 'queue', 'palette'] : ['support', 'mine'], isOpen ? (support ? '/admin/support/tickets?status=' : '/support/tickets') : null).data?.tickets ?? [];
   const ts = useTranslations('Support');
+  const tb = useTranslations('Billing');
+  const format = useFormatter();
+  const copy = useCopy();
   const go = (href: string) => () => { onOpenChange(false); if (mayLeave(href)) router.push(href); };
   const tsv = useTranslations('Servers');
   const tx = useTranslations('Extras');
@@ -57,12 +66,27 @@ export default function CommandPalette({ permissions, isOpen, onOpenChange }: { 
   // The same gates as the menu: billing while it is switched on, the reseller page for resellers.
   const billing = !!useBillingSummary()?.enabled;
   const reseller = !!useResellerAllocation();
+  // Whether the balance can be topped up (the same answer the billing page reads).
+  const summary = useApiQuery<Summary>(['notifications', 'billing-summary'], isOpen ? '/billing/summary' : null).data;
+  const canTopUp = !!summary?.enabled && summary.methods.balance;
+  // Invoices by number: customers search their own list here; staff who see billing ask the admin list's search
+  // (number, buyer name or e-mail) a moment after typing stops, from two characters on.
+  const allInvoices = can(permissions, 'billing.view');
+  const mine = useApiQuery<{ invoices: Invoice[] }>(['billing', 'invoices'], isOpen && billing && !allInvoices ? '/billing/invoices' : null);
+  const [term, setTerm] = useState('');
+  useEffect(() => { const timer = setTimeout(() => setTerm(query.trim().replace(/^#/, '')), 250); return () => clearTimeout(timer); }, [query]);
+  const asked = isOpen && allInvoices && term.length >= 2;
+  const all = useApiQuery<{ invoices: Invoice[] }>(['admin', 'billing', 'invoices', 'palette', term], asked ? `/admin/billing/invoices?status=&q=${encodeURIComponent(term)}` : null);
+  // Results for an older text are not shown under a newer one.
+  const found = useMemo(() => all.data?.invoices.slice(0, 8) ?? [], [all.data]);
+  const invoices = allInvoices ? (asked && term === query.trim().replace(/^#/, '') ? found : none) : mine.data?.invoices ?? none;
+  const invoiceSearch = allInvoices ? (asked && all.isError ? 'failed' : asked && all.isPending ? 'busy' : null) : query.trim() && mine.isError ? 'failed' : query.trim() && isOpen && billing && mine.isPending ? 'busy' : null;
+  // A restart cuts the power without asking the operating system: it is confirmed first, as on the list and the page.
+  const [restart, setRestart] = useState<ServerRow | null>(null);
   // A power action straight from the palette (same request and checks as the server page's button).
-  const power = (s: ServerRow, action: string) => () => {
-    onOpenChange(false);
-    apiFetch(`/servers/${s.id}/actions`, { method: 'POST', body: { action }, headers: { 'idempotency-key': crypto.randomUUID() } })
-      .then(() => toast.success(t('actionStarted', { name: s.name, action: tsv(`action.${action as 'power_on'}`) })), (e) => toast.danger(error(e)));
-  };
+  const send = (s: ServerRow, action: string) => apiFetch(`/servers/${s.id}/actions`, { method: 'POST', body: { action }, headers: { 'idempotency-key': crypto.randomUUID() } })
+    .then(() => { toast.success(t('actionStarted', { name: s.name, action: tsv(`action.${action as 'power_on'}`) })); }, (e) => { toast.danger(error(e)); });
+  const power = (s: ServerRow, action: string) => () => { onOpenChange(false); void send(s, action); };
   const commands = useMemo<Cmd[]>(() => {
     const pages: [string, string, React.ReactNode, boolean][] = [
       ['/admin', tn('dashboard'), <I key="i" name="layout-dashboard" size={16}/>, can(permissions, 'dashboard.view')],
@@ -81,7 +105,6 @@ export default function CommandPalette({ permissions, isOpen, onOpenChange }: { 
       ['/admin/abuse', tn('abuse'), <I key="i" name="shield-alert" size={16}/>, can(permissions, 'servers.view_all')],
       ['/admin/energy', tn('energy'), <I key="i" name="zap" size={16}/>, can(permissions, 'dashboard.view', 'system.view')],
       ['/', tn('myServers'), <I key="i" name="gauge" size={16}/>, true],
-      ['/order', tn('newServer'), <I key="i" name="plus" size={16}/>, can(permissions, 'servers.create')],
       ['/firewalls', tn('firewalls'), <I key="i" name="brick-wall-fire" size={16}/>, can(permissions, 'firewalls.manage') || can(permissions, 'servers.view_all')],
       ['/topology', tn('myTopology'), <I key="i" name="waypoints" size={16}/>, true],
       ['/vdc', tn('myVdc'), <I key="i" name="building-2" size={16}/>, true],
@@ -96,7 +119,8 @@ export default function CommandPalette({ permissions, isOpen, onOpenChange }: { 
       ['/account?tab=notifications', t('notificationSettings'), <I key="i" name="bell" size={16}/>, true],
     ];
     return [
-      ...(isOpen ? recent() : []).map((r) => ({ id: `r:${r.href}`, group: 'recent' as const, label: r.label, icon: <I name="history" size={16}/>, run: go(r.href) })),
+      // What was opened last in this browser: servers, tickets and invoices, each with its own icon.
+      ...(isOpen ? recent() : []).map((r) => ({ id: `r:${r.href}`, group: 'recent' as const, label: r.label, hint: t(`kind.${recentKind(r)}`), icon: <I name={recentIcons[recentKind(r)]} size={16}/>, run: go(r.href) })),
       ...pages.filter((p) => p[3]).map(([href, label, icon]) => ({ id: `p:${href}`, group: 'pages' as const, label, icon, run: go(href) })),
       ...users.map((u) => ({ id: `u:${u.id}`, group: 'users' as const, label: u.email, hint: u.name, icon: <I name="user" size={16}/>, run: go(`/admin/users?q=${encodeURIComponent(u.email)}`) })),
       // Starred servers first, with their star.
@@ -108,11 +132,13 @@ export default function CommandPalette({ permissions, isOpen, onOpenChange }: { 
         s.powerState === 'poweredOn'
           ? { id: `sa:${s.id}:shutdown`, group: 'servers' as const, label: `${s.name}: ${tsv('action.shutdown')}`, hint: s.address ?? undefined, icon: <I name="power" size={16}/>, run: power(s, 'shutdown') }
           : { id: `sa:${s.id}:on`, group: 'servers' as const, label: `${s.name}: ${tsv('action.power_on')}`, hint: s.address ?? undefined, icon: <I name="play" size={16}/>, run: power(s, 'power_on') },
+        ...(s.powerState === 'poweredOn' && !s.locked ? [{ id: `sa:${s.id}:reset`, group: 'servers' as const, label: `${s.name}: ${tsv('action.reset')}`, hint: s.address ?? undefined, icon: <I name="rotate-ccw" size={16}/>,
+          run: () => { onOpenChange(false); setRestart(s); } }] : []),
       ]),
       // A tag opens the server list filtered to it (found by searching only).
       // Search-only too: the server's SSH command to the clipboard, as on its page.
       ...servers.filter((s) => s.address).map((s) => ({ id: `sc:${s.id}`, group: 'servers' as const, label: t('copySsh', { name: s.name }), hint: `ssh root@${s.address}`,
-        icon: <I name="copy" size={16}/>, run: () => { onOpenChange(false); void navigator.clipboard?.writeText(`ssh root@${s.address}`).catch(() => undefined); toast.success(tx('copied', { what: t('sshCopied', { name: s.name }) })); } })),
+        icon: <I name="copy" size={16}/>, run: () => { onOpenChange(false); void copy(`ssh root@${s.address}`, tx('copied', { what: t('sshCopied', { name: s.name }) })); } })),
       ...[...new Set(servers.flatMap((s) => s.tags ?? []))].map((tag) => ({ id: `st:${tag}`, group: 'servers' as const, label: tsv('list.tags.palette', { tag }),
         hint: tsv('list.tags.count', { n: servers.filter((s) => s.tags?.includes(tag)).length }), icon: <I name="tag" size={16}/>, run: go(`${staff ? '/admin/servers' : '/'}?tag=${encodeURIComponent(tag)}`) })),
       // Staff: a customer's e-mail opens the server list filtered to exactly them (found by searching only).
@@ -122,6 +148,15 @@ export default function CommandPalette({ permissions, isOpen, onOpenChange }: { 
         run: go(`/admin/servers?owner=${encodeURIComponent(email)}`) })),
       ...tickets.map((x) => ({ id: `t:${x.id}`, group: 'tickets' as const, label: `#${x.number} ${x.subject}`, hint: [ts(`status.${x.status}`), x.ownerEmail].filter(Boolean).join(' · '),
         icon: <I name="life-buoy" size={16}/>, run: go(support ? `/admin/support/${x.id}` : `/support/${x.id}`) })),
+      // Found by searching only: the invoice's number, with its total, its state and (for staff) who it is for.
+      ...invoices.map((x) => ({ id: `i:${x.id}`, group: 'invoices' as const, label: x.number ?? `#${x.id.slice(0, 8).toUpperCase()}`, found: allInvoices,
+        hint: [format.number(Number(x.total), { style: 'currency', currency: x.currency }), tb(`status.${invoiceState(x)}`), allInvoices ? x.buyerEmail || x.buyerName : ''].filter(Boolean).join(' · '),
+        icon: <I name="receipt-text" size={16}/>, run: go(allInvoices ? `/admin/billing/invoices/${x.id}` : `/billing/invoices/${x.id}`) })),
+      // Quick actions: the things people come to the panel to start.
+      ...(can(permissions, 'servers.create') ? [{ id: 'a:order', group: 'actions' as const, label: tn('newServer'), icon: <I name="plus" size={16}/>, run: go('/order') }] : []),
+      { id: 'a:ticket', group: 'actions' as const, label: t('newTicket'), icon: <I name="message-square-plus" size={16}/>, run: go('/support?new=1') },
+      ...(canTopUp ? [{ id: 'a:topup', group: 'actions' as const, label: t('topUp'), icon: <I name="wallet" size={16}/>, run: go('/billing?tab=balance&topup=100') }] : []),
+      { id: 'a:key', group: 'actions' as const, label: t('addSshKey'), icon: <I name="key-round" size={16}/>, run: go('/account?tab=keys') },
       { id: 'a:theme', group: 'actions', label: resolvedTheme === 'dark' ? t('lightTheme') : t('darkTheme'), icon: resolvedTheme === 'dark' ? <I name="sun" size={16}/> : <I name="moon" size={16}/>,
         run: () => { setTheme(resolvedTheme === 'dark' ? 'light' : 'dark'); onOpenChange(false); } },
       { id: 'a:lang', group: 'actions', label: locale === 'tr' ? 'English' : 'Türkçe', icon: <I name="languages" size={16}/>,
@@ -129,10 +164,11 @@ export default function CommandPalette({ permissions, isOpen, onOpenChange }: { 
       { id: 'a:shortcuts', group: 'actions', label: t('shortcuts'), icon: <I name="keyboard" size={16}/>, run: () => { onOpenChange(false); openShortcuts(); } },
       { id: 'a:logout', group: 'actions', label: tn('logout'), icon: <I name="log-out" size={16}/>, run: () => { onOpenChange(false); void signOut().then(() => window.location.assign('/login')); } },
     ];
-  }, [permissions, servers, users, tickets, resolvedTheme, locale, isOpen, billing, reseller]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [permissions, servers, users, tickets, invoices, canTopUp, resolvedTheme, locale, isOpen, billing, reseller]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const q = fold(query.trim());
-  const results = q ? commands.filter((c) => c.group !== 'recent').filter((c) => fold(`${c.label} ${c.hint ?? ''}`).includes(q)) : commands.filter((c) => c.group !== 'tickets' && !/^s[atoc]:/.test(c.id) && ((c.group !== 'servers' && c.group !== 'users') || commands.indexOf(c) < 40));
+  const results = q ? commands.filter((c) => c.group !== 'recent').filter((c) => c.found || fold(`${c.label} ${c.hint ?? ''}`).includes(q) || (c.group === 'invoices' && fold(c.label).includes(q.replace(/^#/, ''))))
+    : commands.filter((c) => c.group !== 'tickets' && c.group !== 'invoices' && !/^s[atoc]:/.test(c.id) && ((c.group !== 'servers' && c.group !== 'users') || commands.indexOf(c) < 40));
   useEffect(() => setActive(0), [query, isOpen]);
   useEffect(() => { if (!isOpen) setQuery(''); }, [isOpen]);
   useEffect(() => { listRef.current?.querySelector(`[data-index="${active}"]`)?.scrollIntoView({ block: 'nearest' }); }, [active]);
@@ -142,9 +178,9 @@ export default function CommandPalette({ permissions, isOpen, onOpenChange }: { 
     if (e.key === 'ArrowUp') { e.preventDefault(); setActive((i) => Math.max(0, i - 1)); }
     if (e.key === 'Enter') { e.preventDefault(); results[active]?.run(); }
   };
-  const groups = (['recent', 'pages', 'servers', 'tickets', 'users', 'actions'] as const).map((g) => ({ g, items: results.filter((c) => c.group === g) })).filter((x) => x.items.length);
+  const groups = (['recent', 'pages', 'servers', 'tickets', 'invoices', 'users', 'actions'] as const).map((g) => ({ g, items: results.filter((c) => c.group === g) })).filter((x) => x.items.length);
 
-  return <Modal.Backdrop isOpen={isOpen} onOpenChange={onOpenChange}>
+  return <><Modal.Backdrop isOpen={isOpen} onOpenChange={onOpenChange}>
     <Modal.Container placement="top" className="pt-[12vh]">
       <Modal.Dialog aria-label={t('title')} className="w-[40rem] max-w-[calc(100vw-1.5rem)] overflow-hidden p-0">
         <div className="flex items-center gap-3 border-b border-separator px-4">
@@ -173,8 +209,15 @@ export default function CommandPalette({ permissions, isOpen, onOpenChange }: { 
         <div className="flex items-center gap-4 border-t border-separator px-4 py-2 text-xs text-muted">
           <span className="flex items-center gap-1"><Kbd>↑</Kbd><Kbd>↓</Kbd>{t('navigate')}</span>
           <span className="flex items-center gap-1"><Kbd>↵</Kbd>{t('open')}</span>
+          {invoiceSearch === 'busy' && <span role="status" className="ml-auto flex min-w-0 items-center gap-1.5">
+            <I name="loader" size={13} className="shrink-0 animate-spin motion-reduce:animate-none"/><span className="truncate">{t('invoicesSearching')}</span></span>}
+          {invoiceSearch === 'failed' && <span role="status" className="ml-auto flex min-w-0 items-center gap-1.5 text-danger">
+            <I name="cloud-off" size={13} className="shrink-0"/><span className="truncate">{t('invoicesFailed')}</span></span>}
         </div>
       </Modal.Dialog>
     </Modal.Container>
-  </Modal.Backdrop>;
+  </Modal.Backdrop>
+  {restart && <ConfirmDialog isOpen onClose={() => setRestart(null)} title={`${restart.name}: ${tsv('action.reset')}`} body={tsv('confirm.reset')}
+    confirmLabel={tsv('confirm.yes', { action: tsv('action.reset') })} cancelLabel={tsv('confirm.no')} onConfirm={async () => { await send(restart, 'reset'); setRestart(null); }}/>}
+  </>;
 }

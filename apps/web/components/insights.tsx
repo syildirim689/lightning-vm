@@ -5,15 +5,17 @@
 import { Button, Dropdown, Label } from '@heroui/react';
 import { AnimatePresence, motion } from 'motion/react';
 import NextLink from 'next/link';
-import { useTranslations } from 'next-intl';
+import { useFormatter, useNow, useTranslations } from 'next-intl';
 import { apiFetch } from '../lib/api';
 import { useApiAction, useApiQuery } from '../lib/query';
 import { I } from './icon';
 
-type Insight = { code: string; severity: 'danger' | 'warning' | 'info'; params: Record<string, string | number>; link: string; key: string; action?: { kind: 'power_on' | 'restore'; serverId: string } };
+type Insight = { code: string; severity: 'danger' | 'warning' | 'info'; params: Record<string, string | number | null>; link: string; key: string; action?: { kind: 'power_on' | 'restore'; serverId: string } };
 
 export default function Insights({ scope }: { scope: 'staff' | 'mine' }) {
   const t = useTranslations('Insights');
+  const format = useFormatter();
+  const now = useNow({ updateInterval: 60_000 });
   const q = useApiQuery<{ insights: Insight[]; hidden: number }>(['insights', scope], scope === 'staff' ? '/admin/insights' : '/insights', { refetchInterval: 60_000 });
   const dismiss = useApiAction((v: { key: string; days: number | null }) => apiFetch('/insights/dismissals', { method: 'PUT', body: v }), { invalidate: [['insights']], success: t('hide.done') });
   // One-click fixes; the finding disappears on the next refresh once the server changed.
@@ -27,7 +29,12 @@ export default function Insights({ scope }: { scope: 'staff' | 'mine' }) {
   if (!list) return null;
   const style = { danger: 'border-danger/40 bg-danger/5 text-danger', warning: 'border-warning/40 bg-warning/5 text-warning', info: 'border-border bg-surface text-accent' };
   const icon = (s: Insight['severity']) => s === 'danger' ? <I name="octagon-alert" size={18}/> : s === 'warning' ? <I name="triangle-alert" size={18}/> : <I name="lightbulb" size={18}/>;
-  const p = (i: Insight) => Object.fromEntries(Object.entries(i.params).map(([k, v]) => [k, k === 'resource' ? t(`resource.${v}` as 'resource.vcpu') : v]));
+  // A moment ("oldest") is said as "2 days ago"; one that cannot be read as "a while ago", so the sentence stays whole.
+  const ago = (v: unknown) => { const at = typeof v === 'string' || typeof v === 'number' ? new Date(v).getTime() : NaN; return Number.isNaN(at) ? t('aWhileAgo') : format.relativeTime(new Date(Math.min(at, now.getTime())), now); };
+  // A finding the panel has no text for yet (a newer API) is still said in words, never as its code.
+  const text = (i: Insight, part: 'title' | 'body') => t.has(`codes.${i.code}.${part}` as 'codes.POOL_NEARLY_FULL.title') ? t(`codes.${i.code}.${part}` as 'codes.POOL_NEARLY_FULL.title', p(i)) : t(`unknown.${part}`);
+  const p = (i: Insight): Record<string, string | number> => ({ oldest: ago(null), ...Object.fromEntries(Object.entries(i.params ?? {})
+    .map(([k, v]) => [k, k === 'resource' ? t(`resource.${v}` as 'resource.vcpu') : k === 'oldest' ? ago(v) : v ?? ''])) });
   return <section aria-labelledby={`insights-${scope}`} className="flex flex-col gap-3">
     <div className="flex items-center gap-2">
       <h2 id={`insights-${scope}`} className="text-base font-semibold">{t('title')}</h2>
@@ -41,8 +48,8 @@ export default function Insights({ scope }: { scope: 'staff' | 'mine' }) {
             <span className="mt-0.5 shrink-0">{icon(i.severity)}</span>
             <span className="min-w-0 flex-1 text-foreground">
               <span className="sr-only">{t(`severity.${i.severity}`)}: </span>
-              <span className="block text-sm font-semibold">{t(`codes.${i.code}.title` as 'codes.POOL_NEARLY_FULL.title', p(i))}</span>
-              <span className="block text-xs text-muted">{t(`codes.${i.code}.body` as 'codes.POOL_NEARLY_FULL.body', p(i))}</span>
+              <span className="block text-sm font-semibold">{text(i, 'title')}</span>
+              <span className="block text-xs text-muted">{text(i, 'body')}</span>
             </span>
             <span aria-hidden className="mt-0.5 shrink-0 self-end text-muted transition-transform group-hover:translate-x-0.5 group-hover:text-accent"><I name="arrow-right" size={14}/></span>
           </NextLink>
@@ -51,7 +58,7 @@ export default function Insights({ scope }: { scope: 'staff' | 'mine' }) {
             {i.action.kind === 'restore' ? <I name="undo-2" size={16}/> : <I name="power" size={16}/>}{t(`fix.${i.action.kind}`, { name: String(i.params.name ?? '') })}
           </Button>}
           <Dropdown>
-            <Button isIconOnly variant="ghost" size="sm" aria-label={t('hide.menu', { title: t(`codes.${i.code}.title` as 'codes.POOL_NEARLY_FULL.title', p(i)) })} className="absolute right-1.5 top-1.5 text-muted">
+            <Button isIconOnly variant="ghost" size="sm" aria-label={t('hide.menu', { title: text(i, 'title') })} className="absolute right-1.5 top-1.5 text-muted">
               <I name="eye-off" size={16}/>
             </Button>
             <Dropdown.Popover placement="bottom end">

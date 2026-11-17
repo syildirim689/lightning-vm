@@ -28,7 +28,8 @@ export default function AdminInvoice({ id }: { id: string }) {
   const [busy, setBusy] = useState(false);
   if (!d) return <Loading of={['admin', 'billing', 'invoice', id]}><div className="h-96 animate-pulse rounded-3xl bg-default/50"/></Loading>;
   const inv = d.invoice;
-  const reload = () => { void client.invalidateQueries({ queryKey: ['admin', 'billing'] }); };
+  // The menu's count of payments awaiting review follows too (a recorded payment settles them).
+  const reload = () => { void client.invalidateQueries({ queryKey: ['admin', 'billing'] }); void client.invalidateQueries({ queryKey: ['notifications', 'attention'] }); };
   async function post(path: string, body: object, done: string) {
     setBusy(true); setErrors({});
     try { await apiFetch(path, { method: 'POST', body }); toast.success(done); setDialog(null); reload(); }

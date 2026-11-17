@@ -4,19 +4,22 @@ import { Button, toast } from '@heroui/react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { I } from '../../components/icon';
 import { Mono, Section, TextInput } from '../../components/ui';
 import { useApiForm } from '../../lib/form';
 import { apiFetch, type ApiError, useErrorText } from '../../lib/api';
 import { useOrder } from '../../lib/order-store';
 import { useUnsaved } from '../../lib/unsaved';
+import { useCopy } from '../../lib/clipboard';
 import type { Server } from './servers-ui';
 
+// Copies through lib/clipboard: the fallback for a panel opened over plain HTTP, and "copied" only when it really was.
 export function Copy({ text, label, className = '' }: { text: string; label: string; className?: string }) {
   const t = useTranslations('Extras');
+  const copy = useCopy();
   return <Button size="sm" variant="ghost" isIconOnly aria-label={`${t('copy')}: ${label}`} className={`min-h-9 min-w-9 ${className}`}
-    onPress={async () => { await navigator.clipboard?.writeText(text).catch(() => undefined); toast.success(t('copied', { what: label })); }}><I name="copy" size={15}/></Button>;
+    onPress={() => void copy(text, t('copied', { what: label }))}><I name="copy" size={15}/></Button>;
 }
 
 export function QuickConnect({ server }: { server: Server }) {
@@ -91,22 +94,32 @@ export function OrderSimilar({ server, names }: { server: Server; names: string[
 // A new name in the panel (the default reverse DNS follows); the hostname inside the server stays the customer's.
 export function RenameServer({ server }: { server: Server }) {
   const t = useTranslations('Extras');
+  const [open, setOpen] = useState(false);
+  if (!open) return <Button variant="ghost" onPress={() => setOpen(true)}><I name="pencil" size={16}/>{t('rename')}</Button>;
+  return <RenameForm server={server} onClose={() => setOpen(false)}/>;
+}
+
+// The rename form itself: on the server's page beside its button, and in a dialog from the list's quick menu.
+export function RenameForm({ server, onClose, autoFocus }: { server: Pick<Server, 'id' | 'name'>; onClose: () => void; autoFocus?: boolean }) {
+  const t = useTranslations('Extras');
   const { error, field } = useErrorText();
   const client = useQueryClient();
-  const [open, setOpen] = useState(false);
   const [name, setName] = useState(server.name);
+  const form = useRef<HTMLFormElement>(null);
+  // In a dialog the field is what the person came for: it takes the focus once, not the close button.
+  useEffect(() => { if (autoFocus) form.current?.querySelector('input')?.focus(); }, [autoFocus]);
   const [err, setErr] = useState<string>();
   const [busy, setBusy] = useState(false);
   async function save() {
     setBusy(true); setErr(undefined);
-    try { await apiFetch(`/servers/${server.id}/name`, { method: 'PUT', body: { name } }); toast.success(t('renamed')); setOpen(false); client.invalidateQueries({ queryKey: ['servers'] }); }
+    try { await apiFetch(`/servers/${server.id}/name`, { method: 'PUT', body: { name } }); toast.success(t('renamed')); onClose(); client.invalidateQueries({ queryKey: ['servers'] }); }
     catch (e) { setErr(field((e as ApiError).fields?.name) ?? error(e)); } finally { setBusy(false); }
   }
-  if (!open) return <Button variant="ghost" onPress={() => { setName(server.name); setOpen(true); }}><I name="pencil" size={16}/>{t('rename')}</Button>;
-  return <form className="flex w-full flex-wrap items-end gap-2 sm:w-auto" onSubmit={(e) => { e.preventDefault(); void save(); }}>
+  return <form className="flex w-full flex-wrap items-end gap-2 sm:w-auto" onSubmit={(e) => { e.preventDefault(); void save(); }}
+    ref={form}>
     <TextInput format="serverName" className="min-w-48 flex-1" label={t('newName')} value={name} onChange={(x) => setName(x.toLowerCase())} maxLength={63} error={err} help={t('renameHelp')}/>
     <Button type="submit" isPending={busy} isDisabled={!name || name === server.name}><I name="check" size={15}/>{t('save')}</Button>
-    <Button variant="ghost" onPress={() => setOpen(false)}>{t('cancel')}</Button>
+    <Button variant="ghost" onPress={onClose}>{t('cancel')}</Button>
   </form>;
 }
 

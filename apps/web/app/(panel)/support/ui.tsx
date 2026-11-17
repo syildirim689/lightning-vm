@@ -14,6 +14,7 @@ import { fillCanned, type CannedVars } from '../../../lib/canned';
 import { useMe } from '../../../lib/me';
 import { useApiQuery } from '../../../lib/query';
 import { useDocTitle } from '../../../lib/title';
+import { remember } from '../../../lib/recent';
 
 export type Ticket = { id: string; number: number; subject: string; status: Status; priority: Priority; dueAt: string | null; firstResponseAt: string | null; createdAt: string; updatedAt: string;
   closedAt: string | null; rating: number | null; ratingComment: string | null; departmentId: string | null; departmentTr: string | null; departmentEn: string | null; serverId: string | null;
@@ -183,6 +184,9 @@ export function TicketPage({ id, staff }: { id: string; staff: boolean }) {
   const q = useApiQuery<{ ticket: Ticket; messages: Message[]; staff: boolean }>(['support', 'ticket', id], `/support/tickets/${id}`, { refetchInterval: 15_000 });
   const refresh = () => { void client.invalidateQueries({ queryKey: ['support'] }); void client.invalidateQueries({ queryKey: ['admin', 'support'] }); };
   useDocTitle(q.data && `#${q.data.ticket.number} ${q.data.ticket.subject}`);
+  // The palette's "recent" list (as a server's page does): this ticket, under the address it was opened at.
+  const visited = q.data && `#${q.data.ticket.number} ${q.data.ticket.subject}`;
+  useEffect(() => { if (visited) remember({ href: `${staff ? '/admin/support' : '/support'}/${id}`, label: visited, kind: 'ticket' }); }, [visited, id, staff]);
   if (!q.data && (q.error as { code?: string } | null)?.code === 'NOT_FOUND') return <p className="text-sm text-muted">{t('notFound')}</p>;
   if (!q.data) return <Loading of={['support', 'ticket', id]}><div className="h-64 animate-pulse rounded-3xl bg-default/50"/></Loading>;
   const { ticket: tk, messages } = q.data;

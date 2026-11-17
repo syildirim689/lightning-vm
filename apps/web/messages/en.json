@@ -1299,6 +1299,13 @@
     }
   },
   "Order": {
+    "link": {
+      "copy": "Copy link to this configuration",
+      "copied": "Link copied.",
+      "help": "Only the location, image, plan and billing period; no name, SSH key or password goes into the link.",
+      "applied": "Configuration loaded from the link; check it and complete the order.",
+      "invalid": "The configuration in the link is no longer offered; your choices were left as they were."
+    },
     "title": "New server",
     "nothingOffered": "No location is offered right now.",
     "location": "Location",
@@ -2199,6 +2206,14 @@
       "byPrice": "Most expensive first",
       "quick": {
         "label": "Quick actions for {name}",
+        "lock": "Lock (protect from deletion)",
+        "unlock": "Unlock",
+        "delete": "Delete…",
+        "renameTitle": "Rename {name}",
+        "deleteTitle": "Delete {name}",
+        "deleteNotAllowed": "Deleting servers is switched off for customers. Ask support to delete it.",
+        "deleteStarted": "{name} is being deleted.",
+        "deleteSoft": "{name} was shut down and will be deleted in {hours} hours; you can take it back until then.",
         "started": "{name} is starting.",
         "ssh": "Copy the SSH command",
         "sshCopied": "SSH command copied.",
@@ -2278,6 +2293,7 @@
     },
     "ips": {
       "title": "IP addresses",
+      "ptrOf": "PTR of {address}",
       "help": "Reverse DNS (PTR) can be set for each address.",
       "helpForward": "Reverse DNS (PTR) can be set for each address. The name must resolve to the address first (A or AAAA record).",
       "helpLocked": "Reverse DNS is managed by your provider.",
@@ -2418,6 +2434,9 @@
     "export": "Download CSV"
   },
   "Nav": {
+    "paymentsInReview": "{n, plural, one {# payment awaiting review} other {# payments awaiting review}}",
+    "failedOperations": "{n, plural, one {# operation failed} other {# operations failed}} in the last 24 hours",
+    "abuseFindings": "{n, plural, one {# open abuse finding} other {# open abuse findings}}",
     "label": "Main navigation",
     "adminSection": "Administration",
     "customerSection": "My workspace",
@@ -2527,6 +2546,11 @@
     "noData": "No data yet."
   },
   "RestoreHold": {
+    "barTitle": "The panel is on hold after a restore",
+    "barSince": "since {time}",
+    "barHelp": "It does nothing by itself until you release it.",
+    "barAsk": "It does nothing by itself until an administrator releases it.",
+    "barOpen": "Open the System page",
     "title": "Restore hold",
     "heldTitle": "The panel is on hold after a restore",
     "held": "The backup {backup} was restored on {time}. Until you release the hold, the panel does nothing by itself from the restored data: open operations, unpaid orders, scheduled deletions and payment reminders wait. Everyone was signed out.",
@@ -2781,8 +2805,19 @@
     "noneHere": "No notification matches this filter."
   },
   "Palette": {
+    "invoices": "Invoices",
+    "kind": {
+      "server": "Server",
+      "ticket": "Support ticket",
+      "invoice": "Invoice"
+    },
+    "newTicket": "Open a new support ticket",
+    "topUp": "Top up balance",
+    "addSshKey": "Add an SSH key",
+    "invoicesSearching": "Searching invoices…",
+    "invoicesFailed": "Invoices could not be searched",
     "title": "Command palette",
-    "placeholder": "Search pages, servers, tickets or actions…",
+    "placeholder": "Search pages, servers, tickets, invoices or actions…",
     "empty": "Nothing for “{query}”. Try another name, IP or page.",
     "pages": "Pages",
     "servers": "Servers",
@@ -2802,6 +2837,11 @@
     "sshCopied": "{name} SSH command"
   },
   "Insights": {
+    "aWhileAgo": "a while ago",
+    "unknown": {
+      "title": "Something needs your attention",
+      "body": "Open it to see the details."
+    },
     "title": "Needs attention",
     "allGood": "All good; nothing needs attention.",
     "severity": {
@@ -2817,6 +2857,22 @@
       "diskGb": "disk"
     },
     "codes": {
+      "PAYMENTS_IN_REVIEW": {
+        "title": "{n, plural, one {# payment is awaiting review} other {# payments are awaiting review}}",
+        "body": "The oldest came in {oldest}. Check them at your payment provider and mark the invoice paid if the money arrived."
+      },
+      "RESTORE_HOLD": {
+        "title": "The panel is on hold after a restore",
+        "body": "Look at what changed since the backup, then release the hold on the System page. Until then the panel does nothing by itself."
+      },
+      "OPERATIONS_NEED_DECISION": {
+        "title": "{n, plural, one {# operation with an unknown outcome waits} other {# operations with an unknown outcome wait}} for your decision",
+        "body": "The panel could not learn what happened on the platform. Nothing was undone and nothing will be retried by itself. Look at each one on the Operations tab and retry it."
+      },
+      "SNAPSHOTS_OLD": {
+        "title": "{servers, plural, =1 {{name} has {n, plural, one {# old snapshot} other {# old snapshots}}} other {# servers have {n} old snapshots in total}}",
+        "body": "Old snapshots take up space and no longer show the server as it is today. Delete the ones you do not need and take a fresh one if you do."
+      },
       "POOL_NEARLY_FULL": {
         "title": "{pool} is nearly full",
         "body": "{resource} usage is {used}%. Add capacity or review overcommit."
@@ -3010,6 +3066,14 @@
     "notOffered": "This channel is not offered for this notification",
     "policyNote": "Locked notifications and channels not offered come from your administrator's notification rules.",
     "events": {
+      "billing_payment_review": {
+        "title": "Payment awaiting review",
+        "help": "When a payment cannot be confirmed by itself and waits for the team to decide."
+      },
+      "auth_credentials_reset": {
+        "title": "Sign-in details reset",
+        "help": "When your e-mail address is proven for the first time and the password, keys and sessions set up before are removed."
+      },
       "server_ready": {
         "title": "Server ready",
         "help": "When your new server is set up and running."
@@ -7221,6 +7285,65 @@
     "topUpShort": "Top up the missing {amount}"
   },
   "BillingAdmin": {
+    "searchPayments": "Invoice number, e-mail or provider reference",
+    "paymentFilter": {
+      "review": "Awaiting review"
+    },
+    "paymentState": {
+      "review": "Awaiting review"
+    },
+    "reviewReason": {
+      "NEEDS_CONFIRMATION": "Reported as paid, but it could not be confirmed.",
+      "AMOUNT_MISMATCH": "The provider reported an amount or currency that differs from the invoice.",
+      "FRAUD_REVIEW": "The provider is holding the payment for a fraud review."
+    },
+    "waited": {
+      "minute": "{n, plural, =0 {Came in just now} one {Waiting for # minute} other {Waiting for # minutes}}",
+      "hour": "{n, plural, one {Waiting for # hour} other {Waiting for # hours}}",
+      "day": "{n, plural, one {Waiting for # day} other {Waiting for # days}}"
+    },
+    "openInvoice": "Open invoice",
+    "invoiceSettled": "The invoice is now: {status}",
+    "reviewHelpTitle": "These payments wait for your decision",
+    "reviewHelp": "The customer may have been charged, but the panel could not confirm it by itself. Check each payment in your payment provider’s dashboard. If the money arrived, open the invoice and mark it paid with “{action}”. If it did not, do nothing; the invoice keeps waiting for payment.",
+    "reviewSum": "{amount} waiting",
+    "reviewNotice": "{n, plural, one {# payment is awaiting review} other {# payments are awaiting review}}",
+    "reviewNoticeOldest": "the oldest came in {time}",
+    "reviewNoticeOpen": "Review",
+    "emptyPayments": {
+      "all": {
+        "title": "No payments yet",
+        "body": "Payments are listed here as customers make them."
+      },
+      "review": {
+        "title": "No payments are awaiting review",
+        "body": "Payments the provider holds, with another amount, or that could not be confirmed appear here. Nothing is waiting for you right now."
+      },
+      "succeeded": {
+        "title": "No successful payments",
+        "body": "Payments that were collected are listed here."
+      },
+      "failed": {
+        "title": "No failed payments",
+        "body": "Payments where the card was declined or the provider reported an error appear here."
+      },
+      "pending": {
+        "title": "No payments in progress",
+        "body": "Payments that were started and are not finished yet appear here, including the ones awaiting review."
+      },
+      "refunded": {
+        "title": "No refunded payments",
+        "body": "Payments refunded in full appear here."
+      },
+      "partially_refunded": {
+        "title": "No partly refunded payments",
+        "body": "Payments refunded in part appear here."
+      },
+      "search": {
+        "title": "No payments match the search",
+        "body": "Try part of the invoice number, the customer’s e-mail or the provider reference."
+      }
+    },
     "eyebrow": "Money",
     "title": "Billing",
     "intro": "Recurring revenue, open and overdue invoices, collected money, every invoice, subscription and payment.",
@@ -7373,6 +7496,13 @@
     },
     "reinstall": {
       "title": "Reinstall",
+      "summary": "What the reinstall changes",
+      "becomes": "becomes",
+      "sameImage": "Same image, clean install.",
+      "kept": "Kept",
+      "keptList": "IP addresses ({address}), firewalls, the plan ({vcpu} vCPU · {memory} · {disk} GB), the price and the server name",
+      "erased": "Erased",
+      "erasedList": "All data on the disk, and the snapshots",
       "help": "A fresh install from an image. Addresses, firewalls, the price and the server name stay; everything on the disk is erased.",
       "image": "Image",
       "current": "installed now",
@@ -8060,6 +8190,23 @@
     "unpaid": "{n, plural, one {# unpaid invoice} other {# unpaid invoices}} · {amount}",
     "overdue": "{n, plural, one {# invoice overdue} other {# invoices overdue}} · {amount}",
     "answered": "{n, plural, one {Support answered your ticket} other {Support answered # tickets}}"
+  },
+  "Upcoming": {
+    "title": "Upcoming charges",
+    "invoiceDue": "{number} · due {when}",
+    "invoiceOverdue": "{number} · was due {when}",
+    "pay": "Pay",
+    "payLabel": "Pay invoice {number}",
+    "moreInvoices": "{n, plural, one {# more invoice} other {# more invoices}}",
+    "showInvoices": "Show invoices",
+    "openFallback": "{n, plural, one {# open invoice} other {# open invoices}}",
+    "loadingInvoices": "Loading invoices",
+    "renewal": "Renews on {date} ({when})",
+    "more": "and {n} more",
+    "runOut": "Hourly usage: at this rate the balance runs out {when}",
+    "runOutEmpty": "Hourly usage: the balance has run out",
+    "rate": "{price} per hour",
+    "topUp": "Top up"
   },
   "Connection": {
     "lost": "Connection lost",

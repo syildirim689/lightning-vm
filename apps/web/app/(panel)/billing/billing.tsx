@@ -30,6 +30,8 @@ export default function Billing() {
   // ?topup=<amount>: opened from an invoice the balance does not cover, with the difference filled in.
   const [topupAt, setTopupAt] = useQueryState('topup', parseAsString);
   const [topup, setTopup] = useState(!!topupAt);
+  // Reached with ?topup=… while this page is already open (the command palette, the first page's block).
+  useEffect(() => { if (topupAt) setTopup(true); }, [topupAt]);
   const [show, setShow] = useQueryState('show', parseAsString.withDefault('all'));
   const s = useApiQuery<Summary>(['notifications', 'billing-summary'], '/billing/summary').data;
   const me = useMe();

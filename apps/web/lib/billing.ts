@@ -9,7 +9,9 @@ export type Party = { kind?: string; name: string; taxId: string; taxOffice: str
   email?: string; phone?: string; website?: string; mersis?: string; tradeRegistry?: string };
 export type Line = { id?: string; description: string; quantity: string; unit: string; unitPrice: string; taxRate: string; net: string; tax: string; gross: string; periodStart: string | null; periodEnd: string | null };
 export type Payment = { id: string; provider: string; mode: string; method: string; status: string; amount: string; currency: string; refunded: string; errorCode: string | null;
-  errorMessage: string | null; reference: string | null; automatic: boolean; createdAt: string; completedAt: string | null; email?: string; invoiceId?: string; number?: string | null };
+  errorMessage: string | null; reference: string | null; automatic: boolean; createdAt: string; completedAt: string | null; email?: string; invoiceId?: string; number?: string | null;
+  // Staff lists only: whether the payment waits for a person (review), since when, and what its invoice is now.
+  review?: boolean; reviewSince?: string | null; since?: string | null; invoiceStatus?: InvoiceStatus };
 export type InvoiceDetail = { invoice: Invoice & { buyer: Party; seller: Party; note: string | null }; lines: Line[]; payments: Payment[] };
 export type Subscription = { id: string; kind: 'server' | 'vdc'; serverId: string | null; vdcId: string | null; description: string; amount: string; currency: string; periodMonths: number;
   status: 'pending' | 'active' | 'past_due' | 'suspended' | 'cancelled' | 'ended'; periodStart: string | null; periodEnd: string | null; autoRenew: boolean; cancelAtPeriodEnd: boolean;
@@ -28,4 +30,26 @@ export const invoiceTone = (i: Pick<Invoice, 'status' | 'overdue'>): Tone =>
 export const invoiceState = (i: Pick<Invoice, 'status' | 'overdue'>) => (i.status === 'unpaid' && i.overdue ? 'overdue' : i.status);
 export const subscriptionTone = (s: Subscription['status']): Tone =>
   ({ active: 'success', pending: 'warning', past_due: 'danger', suspended: 'danger', cancelled: 'default', ended: 'default' } as const)[s];
-export const paymentTone = (s: string): Tone => (s === 'succeeded' ? 'success' : s === 'failed' ? 'danger' : s === 'pending' ? 'warning' : 'accent');
+
+// A payment that waits for staff: the provider holds it, reported another amount, or its return is unconfirmed. It is
+// still "pending" in the data; the API marks it (review), and an older API is read from the reason code.
+export const reviewCodes = ['NEEDS_CONFIRMATION', 'AMOUNT_MISMATCH', 'FRAUD_REVIEW'] as const;
+export type ReviewCode = (typeof reviewCodes)[number];
+export const isReviewCode = (c: string | null | undefined): c is ReviewCode => (reviewCodes as readonly string[]).includes(c ?? '');
+export const isReview = (p: Pick<Payment, 'status' | 'errorCode' | 'review'>) => p.status === 'pending' && (p.review ?? isReviewCode(p.errorCode));
+// What the status chip says: "review" instead of "pending" for those.
+export const paymentState = (p: Pick<Payment, 'status' | 'errorCode' | 'review'>) => (isReview(p) ? 'review' : p.status);
+// 'review' and 'pending' are both amber (the label tells them apart); a refund reads as neutral news.
+export const paymentTone = (s: string): Tone => (s === 'succeeded' ? 'success' : s === 'failed' ? 'danger' : s === 'pending' || s === 'review' ? 'warning' : 'accent');
+// Since when a payment waits: the time the API gives, else when the payment was made.
+export const waitingSince = (p: Pick<Payment, 'createdAt' | 'reviewSince' | 'since'>) => p.reviewSince ?? p.since ?? p.createdAt;
+// How long something has waited, in the largest whole unit ("45 minutes", "3 hours", "2 days"); null when the time
+// cannot be read. A moment ahead of this clock (skew) counts as just now.
+export function waitedFor(since: string | number | Date | null | undefined, now: number = Date.now()): { unit: 'minute' | 'hour' | 'day'; n: number } | null {
+  const at = since == null ? NaN : new Date(since).getTime();
+  if (Number.isNaN(at)) return null;
+  const minutes = Math.max(0, Math.floor((now - at) / 60_000));
+  if (minutes < 60) return { unit: 'minute', n: minutes };
+  if (minutes < 48 * 60) return { unit: 'hour', n: Math.floor(minutes / 60) };
+  return { unit: 'day', n: Math.floor(minutes / 1440) };
+}

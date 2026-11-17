@@ -580,6 +580,17 @@ test.describe('server lifecycle (simulator, Turkish customer)', () => {
     await page.getByRole('button', { name: 'Anahtar ekle' }).click();
     await expect(page.getByText('SHA256:', { exact: false })).toBeVisible();
 
+    // A shared configuration link: what the catalog offers is taken (the package), what it does not is ignored (an
+    // unknown image, a size out of range, a name), and the address is cleaned afterwards.
+    const offered = await (await page.request.get('/api/catalog')).json() as { packages: { id: string; name: string }[] };
+    const tiny = offered.packages.find((p) => p.name.includes('E2E Tiny'));
+    expect(tiny).toBeTruthy();
+    await page.goto(`/order?pkg=${tiny!.id}&image=no-such-image&cpu=9999&name=not-taken`);
+    await expect(page).toHaveURL(/\/order$/);
+    await expect(page.getByRole('radio', { name: /E2E Tiny/ })).toBeChecked();
+    await expect(page.getByLabel('Sunucu adı')).not.toHaveValue('not-taken');
+    await expect(page.getByRole('button', { name: 'Bu yapılandırmanın bağlantısını kopyala' })).toBeVisible();
+
     await page.goto('/order');
     await choose(page, page, /İşletim sistemi/, /Sim Linux/);
     await tick(page.getByRole('radio', { name: /E2E Tiny/ }));
@@ -1580,6 +1591,14 @@ test.describe('people, settings and smart features (English browser)', () => {
     await expect(page.getByRole('link', { name: 'Billing', exact: true }).first()).toBeVisible();
     await page.waitForTimeout(600);
     await shot('billing-customer');
+    // The command palette finds the invoice (staff: through the admin list's search, here by the buyer's e-mail) and opens it.
+    await page.keyboard.press('Control+k');
+    await page.getByRole('combobox', { name: 'Command palette' }).fill(me.email);
+    const foundInvoice = page.getByRole('option', { name: new RegExp(`#${invoiceId.slice(0, 8).toUpperCase()}`) });
+    await expect(foundInvoice).toBeVisible();
+    await foundInvoice.click();
+    await expect(page).toHaveURL(new RegExp(`/admin/billing/invoices/${invoiceId}$`));
+    await page.goto('/billing');
     // Invoice details: a wrong TCKN is refused, a right one saved.
     await page.getByRole('tab', { name: 'Invoice details' }).click();
     await page.getByLabel('Full name').fill('Admin Example');
