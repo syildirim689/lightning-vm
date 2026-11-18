@@ -48,7 +48,7 @@ export default function Checkout({ id }: { id: string }) {
     <div className="rounded-2xl border border-dashed border-border p-4 text-sm">
       <p className="mb-2 font-medium">{t('cards')}</p>
       <ul className="flex flex-col gap-1">
-        {([['4242 4242 4242 4242', 'ok'], ['4000 0000 0000 0002', 'declined'], ['4000 0000 0000 9995', 'funds']] as const).map(([n, k]) =>
+        {([['4242 4242 4242 4242', 'ok'], ['4000 0000 0000 0002', 'declined'], ['4000 0000 0000 9995', 'funds'], ['4000 0000 0000 4954', 'review']] as const).map(([n, k]) =>
           <li key={n}><button type="button" className="hover:underline" onClick={() => setCard(n)}><Mono>{n}</Mono></button> · {t(`card_${k}`)}</li>)}
       </ul>
     </div>

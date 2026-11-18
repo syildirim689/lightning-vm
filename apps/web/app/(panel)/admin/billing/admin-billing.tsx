@@ -21,7 +21,7 @@ import type { Invoice, Payment, Subscription } from '../../../../lib/billing';
 import { invoiceState, invoiceTone, isReview, isReviewCode, paymentState, paymentTone, subscriptionTone, waitedFor, waitingSince } from '../../../../lib/billing';
 import { useMe } from '../../../../lib/me';
 import { can } from '../../../../lib/permissions';
-import { useApiQuery } from '../../../../lib/query';
+import { attentionKey, useApiQuery } from '../../../../lib/query';
 
 type Money = { currency: string; amount: string };
 type Overview = { mrr: Money[]; open: (Money & { n: number; overdue: number })[]; collectedThisMonth: (Money & { n: number })[]; series: (Money & { month: string })[];
@@ -133,7 +133,7 @@ export default function AdminBilling() {
       </Tabs.ListContainer>
       <Tabs.Panel id="invoices" className="pt-5"><Invoices/></Tabs.Panel>
       <Tabs.Panel id="subscriptions" className="pt-5"><Subscriptions manage={manage}/></Tabs.Panel>
-      <Tabs.Panel id="payments" className="pt-5"><Payments/></Tabs.Panel>
+      <Tabs.Panel id="payments" className="pt-5"><Payments manage={manage}/></Tabs.Panel>
       <Tabs.Panel id="disputes" className="pt-5"><AdminDisputes manage={manage}/></Tabs.Panel>
       <Tabs.Panel id="coupons" className="pt-5"><AdminCoupons manage={manage}/></Tabs.Panel>
     </Tabs>
@@ -231,10 +231,38 @@ function Subscriptions({ manage }: { manage: boolean }) {
   </div>;
 }
 
-const paymentFilters = ['review', 'succeeded', 'failed', 'pending', 'refunded', 'partially_refunded'] as const;
+const paymentFilters = ['review', 'succeeded', 'failed', 'pending', 'cancelled', 'refunded', 'partially_refunded'] as const;
 type PaymentFilter = (typeof paymentFilters)[number];
 
-function Payments() {
+// Ends a held payment's wait without settling anything: for a payment the provider says was never collected. Asked
+// first, with what it does and does not do; the note is kept with the payment.
+function CloseReview({ p, number, amount }: { p: Payment; number: string; amount: string }) {
+  const t = useTranslations('BillingAdmin');
+  const { error } = useErrorText();
+  const client = useQueryClient();
+  const [note, setNote] = useState('');
+  // The list, the overview's notice and the menu's count all follow.
+  const reload = () => { void client.invalidateQueries({ queryKey: ['admin', 'billing'] }); void client.invalidateQueries({ queryKey: attentionKey }); };
+  async function close() {
+    try {
+      await apiFetch(`/admin/billing/payments/${p.id}/close-review`, { method: 'POST', body: note.trim() ? { note: note.trim() } : {} });
+      toast.success(t('reviewClosed')); setNote(''); reload();
+    } catch (e) {
+      toast.danger(error(e));
+      // Settled or closed meanwhile by somebody else: the list is read again and the question goes; otherwise it stays open.
+      if ((e as { code?: string })?.code !== 'PAYMENT_NOT_IN_REVIEW') throw e;
+      reload();
+    }
+  }
+  return <ConfirmButton size="sm" variant="ghost" icon={<I name="circle-x" size={14}/>} label={<span className="whitespace-nowrap">{t('closeReview')}<span className="sr-only"> {number}</span></span>}
+    title={t('closeReviewTitle')} confirmLabel={t('closeReview')} cancelLabel={t('cancel')} onConfirm={close}
+    body={<span className="flex flex-col gap-3">
+      <span>{t('closeReviewBody', { amount, number })}</span>
+      <TextInput maxLength={150} label={t('closeReviewNote')} value={note} onChange={setNote} help={t('closeReviewNoteHelp')} autoComplete="off"/>
+    </span>}/>;
+}
+
+function Payments({ manage }: { manage: boolean }) {
   const t = useTranslations('BillingAdmin');
   const tb = useTranslations('Billing');
   const format = useFormatter();
@@ -269,7 +297,7 @@ function Payments() {
         list.map((p) => [p.createdAt, p.email, p.number ?? p.invoiceId, p.method, p.provider, p.mode, p.amount, p.currency, paymentState(p), p.errorMessage || p.errorCode || '', p.reference ?? '']))}>
         <I name="download" size={16}/>{t('export')}</Button>}
     </div>
-    {status === 'review' && <Notice tone="warning" title={t('reviewHelpTitle')}>{t('reviewHelp', { action: t('markPaid') })}</Notice>}
+    {status === 'review' && <Notice tone="warning" title={t('reviewHelpTitle')}>{t('reviewHelp', { action: t('markPaid'), close: t('closeReview') })}</Notice>}
     {list && list.length > 0 && <p className="text-sm text-muted" role="status">{t('shown', { n: list.length })} · {status === 'review' ? t('reviewSum', { amount: sumOf(list.filter(isReview)) })
       : t('succeededSum', { amount: sumOf(list.filter((p) => p.status === 'succeeded')) })}
       {(status || find) && <> · {clearLink}</>}</p>}
@@ -287,7 +315,8 @@ function Payments() {
           <NextLink key="i" href={`/admin/billing/invoices/${p.invoiceId}`} className="font-mono text-sm text-accent hover:underline">{number}</NextLink>,
           <span key="m" className="text-sm">{tb(`method.${p.method as 'card'}`)} · {p.provider}{p.mode === 'test' && ` (${tb('testMode')})`}{p.automatic && <span className="block text-xs text-muted">{tb('automatic')}</span>}
             {/* What to look for at the provider. */}
-            {review && p.reference && <span className="block break-all font-mono text-xs text-muted">{p.reference}</span>}</span>,
+            {/* And, for a review staff closed, how it was decided. */}
+            {(review || p.status === 'cancelled') && p.reference && <span className="block break-all font-mono text-xs text-muted">{p.reference}</span>}</span>,
           <span key="a" className="tabular-nums">{format.number(Number(p.amount), { style: 'currency', currency: p.currency })}</span>,
           <span key="s" className="flex max-w-80 flex-col items-start gap-0.5">
             <StatusChip tone={paymentTone(paymentState(p))}>{review ? t('paymentState.review') : tb(`payment.${p.status as 'succeeded'}`)}</StatusChip>
@@ -295,11 +324,16 @@ function Payments() {
               <span className="text-xs text-muted">{isReviewCode(p.errorCode) ? t(`reviewReason.${p.errorCode}`) : p.errorMessage || p.errorCode}</span>
               {waited && <span className="text-xs font-medium text-warning">{t(`waited.${waited.unit}`, { n: waited.n })}</span>}
               {p.invoiceStatus && p.invoiceStatus !== 'unpaid' && <span className="text-xs text-muted">{t('invoiceSettled', { status: tb(`status.${p.invoiceStatus}`) })}</span>}
-            </> : p.errorCode && <span className="text-xs text-danger">{p.errorMessage || p.errorCode}</span>}
+            </> : p.status === 'cancelled' && isReviewCode(p.errorCode) ? <span className="text-xs text-muted">{t(`reviewReason.${p.errorCode}`)}</span>
+              : p.errorCode && <span className="text-xs text-danger">{p.errorMessage || p.errorCode}</span>}
           </span>,
-          // Settling happens on the invoice's page ("Record a payment"), so that is where the row leads.
-          review && p.invoiceId ? <ButtonLink key="x" size="sm" variant="secondary" href={`/admin/billing/invoices/${p.invoiceId}`} className="whitespace-nowrap">
-            <I name="file-check-2" size={14}/>{t('openInvoice')}<span className="sr-only"> {number}</span></ButtonLink> : <span key="x"/>,
+          // Settling happens on the invoice's page ("Record a payment"), so that is where the row leads; a payment
+          // that was never collected is closed here, without settling anything.
+          review ? <span key="x" className="flex flex-wrap items-center gap-1">
+            {p.invoiceId && <ButtonLink size="sm" variant="secondary" href={`/admin/billing/invoices/${p.invoiceId}`} className="whitespace-nowrap">
+              <I name="file-check-2" size={14}/>{t('openInvoice')}<span className="sr-only"> {number}</span></ButtonLink>}
+            {manage && <CloseReview p={p} number={number} amount={format.number(Number(p.amount), { style: 'currency', currency: p.currency })}/>}
+          </span> : <span key="x"/>,
         ];
       }}/>}
   </div>;

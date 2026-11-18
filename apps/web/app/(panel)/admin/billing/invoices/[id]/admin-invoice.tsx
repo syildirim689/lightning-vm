@@ -34,9 +34,9 @@ export default function AdminInvoice({ id }: { id: string }) {
   const inv = d.invoice;
   // The menu's count of payments awaiting review follows too (a recorded payment settles them).
   const reload = () => { void client.invalidateQueries({ queryKey: ['admin', 'billing'] }); void client.invalidateQueries({ queryKey: ['notifications', 'attention'] }); };
-  async function post(path: string, body: object, done: string) {
+  async function post<R = unknown>(path: string, body: object, done: string | ((r: R) => string)) {
     setBusy(true); setErrors({});
-    try { await apiFetch(path, { method: 'POST', body }); toast.success(done); setDialog(null); reload(); }
+    try { const r = await apiFetch<R>(path, { method: 'POST', body }); toast.success(typeof done === 'string' ? done : done(r)); setDialog(null); reload(); }
     catch (e) { const f = (e as { fields?: Record<string, string> }).fields ?? {}; setErrors(Object.fromEntries(Object.entries(f).map(([k, c]) => [k, field(c) ?? c]))); if (!Object.keys(f).length) toast.danger(error(e)); }
     finally { setBusy(false); }
   }
@@ -73,7 +73,9 @@ export default function AdminInvoice({ id }: { id: string }) {
         </Modal.Body>
         <Modal.Footer><Button variant="tertiary" onPress={() => setDialog(null)}>{t('cancel')}</Button>
           <Button isPending={busy} onPress={() => void (dialog === 'paid'
-            ? post(`/admin/billing/invoices/${id}/mark-paid`, { method: v.method, reference: v.reference }, t('recorded'))
+            // closedReviews: the invoice's payments that waited for review and ended with this record.
+            ? post<{ closedReviews?: string[] }>(`/admin/billing/invoices/${id}/mark-paid`, { method: v.method, reference: v.reference },
+              (r) => (r?.closedReviews?.length ? t('recordedClosed', { n: r.closedReviews.length }) : t('recorded')))
             : post(`/admin/billing/invoices/${id}/refund`, { amount: v.amount.replace(',', '.'), reason: v.reason, toBalance: v.toBalance }, t('refunded')))}>
             <I name="check" size={16}/>{dialog === 'paid' ? t('record') : t('refund')}</Button></Modal.Footer>
       </Modal.Dialog></Modal.Container>

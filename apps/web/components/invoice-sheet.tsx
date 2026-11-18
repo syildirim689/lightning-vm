@@ -80,8 +80,8 @@ export function InvoiceSheet({ d }: { d: InvoiceDetail }) {
         <StatusChip tone={paymentTone(p.status)}>{t(`payment.${p.status as 'succeeded'}`)}</StatusChip>
         <span className="tabular-nums">{format.number(Number(p.amount), { style: 'currency', currency: p.currency })}</span>
         <span className="text-muted">{t(`method.${p.method as 'card'}`)}{p.provider !== 'balance' && p.provider !== 'manual' && ` · ${p.provider}`}{p.mode === 'test' && ` · ${t('testMode')}`}{p.automatic && ` · ${t('automatic')}`}</span>
-        {p.reference && <span className="font-mono text-xs text-muted">{p.reference}</span>}
-        {p.errorCode && <span className="text-xs text-danger">{t.has(`decline.${p.errorCode}` as 'decline.CARD_DECLINED') ? t(`decline.${p.errorCode}` as 'decline.CARD_DECLINED') : p.errorMessage || p.errorCode}</span>}
+        {p.reference && p.status !== 'cancelled' && <span className="font-mono text-xs text-muted">{p.reference}</span>}
+        {p.errorCode && p.status !== 'cancelled' && <span className="text-xs text-danger">{t.has(`decline.${p.errorCode}` as 'decline.CARD_DECLINED') ? t(`decline.${p.errorCode}` as 'decline.CARD_DECLINED') : p.errorMessage || p.errorCode}</span>}
         <time className="ml-auto text-xs text-muted" dateTime={p.createdAt}>{format.dateTime(new Date(p.createdAt), { dateStyle: 'medium', timeStyle: 'short' })}</time>
       </li>)}</ul>
     </section>}

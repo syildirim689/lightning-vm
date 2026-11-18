@@ -13,7 +13,7 @@ import type { PublicConfig } from '../../../lib/session';
 import { authClient } from '../../../lib/auth-client';
 import { useMe } from '../../../lib/me';
 import { SshKeys } from '../servers-ui';
-import { Projects } from './account';
+import { ManagedAccount, Projects } from './account';
 import NotificationPrefs from './notifications';
 import Security, { SecurityScore } from './security';
 import Developer from './developer';
@@ -100,7 +100,7 @@ export default function AccountTabs() {
   const attention: Partial<Record<Tab, string>> = me && !me.twoFactorEnabled ? { security: t('twoFactorOff') } : {};
   return <SectionMenu label={t('title')} pickLabel={t('section')} current={current} onSelect={(k) => setTab(k)}
     groups={groups.map(([g, ks]) => ({ title: t(`groups.${g}`), items: ks.map((k) => ({ id: k, label: t(`tabs.${k}`), icon: <I name={tabIcons[k]} size={16}/>, attention: attention[k] })) }))}>
-    {current === 'profile' && <><Profile/><Regional/><ExportData/></>}
+    {current === 'profile' && <><ManagedAccount/><Profile/><Regional/><ExportData/></>}
     {current === 'security' && <>
       <SecurityScore/>
       <Section title={t('twoFactor.sectionTitle')} description={t('twoFactor.sectionIntro')}>

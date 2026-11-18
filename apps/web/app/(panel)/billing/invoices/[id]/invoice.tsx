@@ -12,6 +12,7 @@ import { InvoiceSheet } from '../../../../../components/invoice-sheet';
 import { CheckboxInput, Mono, Notice, Loading, ButtonLink } from '../../../../../components/ui';
 import { apiFetch, useErrorText } from '../../../../../lib/api';
 import type { InvoiceDetail, Summary } from '../../../../../lib/billing';
+import { isReview } from '../../../../../lib/billing';
 import { useApiQuery } from '../../../../../lib/query';
 import { useDocTitle } from '../../../../../lib/title';
 import { remember } from '../../../../../lib/recent';
@@ -24,7 +25,8 @@ export default function InvoicePage({ id }: { id: string }) {
   const paymentId = params.get('payment');
   const router = useRouter();
   // Back from a provider with ?payment=…: its answer is waited for while that payment is still open, for two
-  // minutes at most. A declined card ends the wait at once; it does not keep asking for ever.
+  // minutes at most. A declined card ends the wait at once; it does not keep asking for ever. Nor does a payment
+  // that waits for staff (under review): nothing more comes by itself, and the page says so instead.
   const [waited, setWaited] = useState(false);
   useEffect(() => {
     if (!paymentId) return;
@@ -33,7 +35,7 @@ export default function InvoicePage({ id }: { id: string }) {
     return () => clearTimeout(timer);
   }, [paymentId]);
   const q = useApiQuery<InvoiceDetail>(['billing', 'invoice', id], `/billing/invoices/${id}`, { refetchInterval: (d) =>
-    (paymentId && !waited && d?.invoice.status === 'unpaid' && (d.payments.find((p) => p.id === paymentId)?.status ?? 'pending') === 'pending' ? 3000 : false) });
+    (paymentId && !waited && d?.invoice.status === 'unpaid' && stillOpen(d.payments.find((p) => p.id === paymentId)) ? 3000 : false) });
   const d = q.data;
   useDocTitle(d && (d.invoice.number ?? `#${d.invoice.id.slice(0, 8).toUpperCase()}`));
   // The palette's "recent" list (as a server's page does).
@@ -48,17 +50,22 @@ export default function InvoicePage({ id }: { id: string }) {
     router.replace(`/billing/invoices/${id}`, { scroll: false });
   }, [result?.status]); // eslint-disable-line react-hooks/exhaustive-deps
   if (!d) return <Loading of={['billing', 'invoice', id]}><div className="h-96 animate-pulse rounded-3xl bg-default/50"/></Loading>;
+  const checking = result?.status === 'pending' && !isReview(result);
   return <div className="flex flex-col gap-5">
     <div className="flex flex-wrap items-center justify-between gap-2 print:hidden">
       <NextLink href="/billing" className="inline-flex items-center gap-1 text-sm text-muted hover:text-foreground"><I name="arrow-left" size={14}/>{t('back')}</NextLink>
       <Button size="sm" variant="secondary" onPress={() => window.print()}><I name="printer" size={14}/>{t('print')}</Button>
     </div>
-    {result?.status === 'pending' && <Notice tone="default" title={t('checking')}>{t('checkingHelp')}</Notice>}
-    {d.invoice.status === 'unpaid' && <PayPanel d={d} locked={result?.status === 'pending' && !waited}/>}
+    {checking && <Notice tone="default" title={t('checking')}>{t('checkingHelp')}</Notice>}
+    {d.invoice.status === 'unpaid' && d.payments.some(isReview) && <Notice tone="warning" title={t('reviewTitle')}>{t('reviewHelp')}</Notice>}
+    {d.invoice.status === 'unpaid' && <PayPanel d={d} locked={checking && !waited}/>}
     <InvoiceSheet d={d}/>
     <InvoiceDisputes d={d}/>
   </div>;
 }
+
+// A payment whose answer may still come by itself: open, and not waiting for staff.
+const stillOpen = (p: InvoiceDetail['payments'][number] | undefined) => !p || (p.status === 'pending' && !isReview(p));
 
 // locked: a payment for this invoice is still being confirmed. While it is, or while one was just sent from here,
 // every pay button is off: a second click must not start a second payment.

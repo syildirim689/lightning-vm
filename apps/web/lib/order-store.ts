@@ -2,6 +2,7 @@
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 import { z } from 'zod';
+import { forgetEvent } from './session-end';
 
 // The order being composed. Kept per browser tab, so leaving the page (to add an SSH key, say) does not lose it.
 export type OrderDraft = { poolId: string; imageId: string; projectId: string; type: 'package' | 'custom'; packageId: string;
@@ -17,6 +18,10 @@ export const useOrder = create<OrderDraft & { set: (patch: Partial<OrderDraft>) 
   (set) => ({ ...initial, set: (patch) => set(patch), clear: () => set(initial) }),
   { name: 'lvm-order', storage: createJSONStorage(() => sessionStorage), partialize: ({ set: _s, clear: _c, ...draft }) => draft },
 ));
+
+// The draft names the person's project, SSH keys and the server it copies. It goes with their session, also from
+// this store's memory: a tab that stays open would otherwise write it back (lib/session-end.ts removes the key).
+if (typeof window !== 'undefined') window.addEventListener(forgetEvent, () => { useOrder.getState().clear(); useOrder.persist.clearStorage(); });
 
 // Same rule as the API (RFC 1123 label); the API stays the authority, this only answers early.
 export const hostnameSchema = z.string().regex(/^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/);

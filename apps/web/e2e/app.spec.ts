@@ -1024,10 +1024,48 @@ test.describe('server lifecycle (simulator, Turkish customer)', () => {
     await expect(page.getByText('Etiket 2 sunucudan kaldırıldı.')).toBeVisible();
     await expect(page.getByRole('button', { name: 'Etiketi kaldır' })).toBeHidden();
 
+    // A ticket about web-1, opened by the customer: the panel keeps what it knew about the server at that moment,
+    // for staff alone.
+    const csrf = { 'x-lightning-csrf': '1' };
+    const web1Id = serverUrl.split('/').pop()!;
+    const departments = await (await page.request.get('/api/support/departments')).json() as { departments: { id: string }[] };
+    const opened = await page.request.post('/api/support/tickets', { headers: csrf, data: { subject: 'web-1 yanıt vermiyor', departmentId: departments.departments[0].id, priority: 'normal',
+      serverId: web1Id, body: 'Sabahtan beri ping yanıtı yok.', attachments: [] } });
+    expect(opened.status()).toBe(201);
+    const ticket = await opened.json() as { id: string; number: number | string };
+    const diagTitle = 'Sunucunun talep açıldığındaki durumu';
+
     // The admin's bulk delete on the same two servers: asked first, with what happens to them (cancelled here).
     const staff = await (await page.context().browser()!.newContext({ locale: 'tr-TR' })).newPage();
     await signIn(staff, admin);
     await expect(staff).toHaveURL(/\/admin$/);
+    // Staff open the ticket: the server's snapshot sits above the thread, closed; opened, it names the server, its
+    // state at that moment, its address and its last operations, and leads to the server.
+    await staff.goto(`/admin/support/${ticket.id}`);
+    await expect(staff.locator('main').getByText('Sabahtan beri ping yanıtı yok.')).toBeVisible();
+    const diag = staff.locator('details').filter({ hasText: diagTitle });
+    await expect(diag).toHaveJSProperty('open', false);
+    await expect(diag.locator('summary')).toContainText('web-1');
+    await expect(diag.getByText('IP adresleri', { exact: true })).toBeHidden();
+    await diag.locator('summary').click();
+    await expect(diag).toHaveJSProperty('open', true);
+    await expect(diag.getByText('Hazır · açık').first()).toBeVisible();
+    await expect(diag.getByText('IP adresleri', { exact: true })).toBeVisible();
+    await expect(diag.getByText('10.30.0.20', { exact: true })).toBeVisible();
+    await expect(diag.getByText('Son işlemler', { exact: true })).toBeVisible();
+    await expect(diag.getByRole('link', { name: /web-1 sunucusunu aç/ })).toHaveAttribute('href', `/servers/${web1Id}`);
+    await staff.screenshot({ path: 'test-results/tour/support-diagnostics.png', fullPage: true });
+    await staff.setViewportSize({ width: 390, height: 900 });
+    await expectNoOverflow(staff, 'ticket diagnostics at 390 px');
+    await staff.screenshot({ path: 'test-results/tour/support-diagnostics-390.png', fullPage: true });
+    await staff.setViewportSize({ width: 1280, height: 720 });
+    const staffTicket = await (await staff.request.get(`/api/support/tickets/${ticket.id}`)).json() as { staff: boolean; diagnostics?: { server?: { name?: string; addresses?: string[] } } | null };
+    expect(staffTicket.staff).toBe(true);
+    expect(staffTicket.diagnostics?.server?.name).toBe('web-1');
+    expect(staffTicket.diagnostics?.server?.addresses).toContain('10.30.0.20');
+    // Two answers in a row: two notifications about the same ticket for the customer (read from their inbox below).
+    for (const body of ['Güvenlik duvarını denetliyoruz.', 'Kural düzeltildi, yeniden dener misiniz?'])
+      expect((await staff.request.post(`/api/support/tickets/${ticket.id}/messages`, { headers: csrf, data: { body, attachments: [] } })).status()).toBe(201);
     await staff.goto('/admin/servers');
     // The table copies an IP in one tap, and the owner's e-mail opens that customer in the user list.
     await staff.getByRole('button', { name: 'Kopyala: web-1 IP' }).click();
@@ -1054,6 +1092,15 @@ test.describe('server lifecycle (simulator, Turkish customer)', () => {
     await expect(staff.getByRole('dialog').getByRole('link', { name: 'Sunucu listesinde aç' })).toHaveAttribute('href', `/admin/servers?owner=${encodeURIComponent(user.email)}`);
     await staff.keyboard.press('Escape');
     await expect(staff.getByRole('dialog')).toBeHidden();
+    // The person just looked up is in the palette's "recent" list, under the address that finds them in the user list.
+    await staff.keyboard.press('Control+k');
+    await expect(staff.getByRole('listbox').getByText('Son açılanlar')).toBeVisible();
+    const recentUser = staff.locator(`[role="option"][id$="r:/admin/users?q=${encodeURIComponent(user.email)}"]`);
+    await expect(recentUser).toContainText(user.email);
+    await expect(recentUser).toContainText('Kullanıcı');
+    await staff.screenshot({ path: 'test-results/tour/palette-recent-user.png' });
+    await staff.keyboard.press('Escape');
+    await expect(staff.getByRole('dialog', { name: 'Komut paleti' })).toBeHidden();
     await staff.getByRole('link', { name: `${user.email} kişisinin 2 sunucusunu göster` }).click();
     // Exactly that owner's servers (not every e-mail containing theirs), with a chip that clears it.
     await expect(staff).toHaveURL(/\/admin\/servers\?owner=/);
@@ -1126,6 +1173,50 @@ test.describe('server lifecycle (simulator, Turkish customer)', () => {
     await expect(staff.getByRole('dialog').getByText(/Henüz kayıtlı görünüm yok/)).toBeVisible();
     await staff.keyboard.press('Escape');
     await staff.context().close();
+
+    // The customer's inbox: the two replies are the same news about the same ticket, so they are one row with a
+    // count. The row opens to show each; pressing it marks both read (the unread count drops) and opens the ticket.
+    type Note = { event: string; link: string | null; readAt: string | null };
+    const replyNotes = async () => ((await (await page.request.get('/api/notifications')).json()) as { notifications: Note[] }).notifications
+      .filter((n) => n.event === 'support.reply' && n.link === `/support/${ticket.id}`);
+    await expect.poll(async () => (await replyNotes()).length, { timeout: 30_000 }).toBe(2);
+    expect((await replyNotes()).every((n) => !n.readAt)).toBe(true);
+    await page.goto('/');
+    const bell = page.getByRole('button', { name: /^(\d+ okunmamış bildirim|Bildirimler)$/ }).first();
+    const unreadShown = async () => Number(/^\d+/.exec((await bell.getAttribute('aria-label')) ?? '')?.[0] ?? 0);
+    await expect(bell).toHaveAccessibleName(/^\d+ okunmamış bildirim$/);
+    const unreadBefore = await unreadShown();
+    expect(unreadBefore).toBeGreaterThanOrEqual(2);
+    await bell.click();
+    const inbox = page.getByRole('dialog');
+    const grouped = inbox.getByRole('listitem').filter({ hasText: 'Destek talebinize yanıt geldi' });
+    const groupRow = grouped.getByRole('button', { name: /^2 bildirim: Destek talebinize yanıt geldi/ });
+    await expect(groupRow).toHaveCount(1);
+    await expect(groupRow).toContainText(`#${ticket.number} · web-1 yanıt vermiyor`);
+    const showEach = grouped.getByRole('button', { name: '2 bildirimi tek tek göster', exact: true });
+    await expect(showEach).toHaveAttribute('aria-expanded', 'false');
+    await showEach.click();
+    const each = grouped.getByRole('list', { name: 'Bu satırdaki 2 bildirim' });
+    await expect(each.getByRole('listitem')).toHaveCount(2);
+    await expect(each.getByRole('button').first()).toContainText('(Okunmamış)');
+    await expect(grouped.getByRole('button', { name: 'Tek tek bildirimleri gizle', exact: true })).toHaveAttribute('aria-expanded', 'true');
+    await page.waitForTimeout(300);
+    await page.screenshot({ path: 'test-results/tour/bell-group.png' });
+    await groupRow.click();
+    await expect(page).toHaveURL(new RegExp(`/support/${ticket.id}$`));
+    await expect.poll(async () => (await replyNotes()).every((n) => !!n.readAt)).toBe(true);
+    await page.keyboard.press('Escape');
+    await expect.poll(unreadShown).toBeLessThan(unreadBefore);
+    // The customer's page of the same ticket shows the thread and no snapshot of the server; their answer from the
+    // API has no such key either.
+    await expect(page.locator('main').getByText('Sabahtan beri ping yanıtı yok.')).toBeVisible();
+    await expect(page.locator('main').getByText('Kural düzeltildi, yeniden dener misiniz?')).toBeVisible();
+    await expect(page.locator('details').filter({ hasText: diagTitle })).toHaveCount(0);
+    await expect(page.getByText(diagTitle)).toHaveCount(0);
+    const ownTicket = await (await page.request.get(`/api/support/tickets/${ticket.id}`)).json() as Record<string, unknown>;
+    expect(ownTicket.staff).toBe(false);
+    expect('diagnostics' in ownTicket).toBe(false);
+    await page.goto('/');
 
     // Both go: web-1 from the grace period (bulk delete while two are listed) with "delete for good now", then web-2 at once.
     for (const name of ['web-1', 'web-2']) {
@@ -1641,7 +1732,7 @@ test.describe('people, settings and smart features (English browser)', () => {
   });
 
   test('billing: an invoice awaits payment, a declined card keeps it awaiting, a good one pays it; staff see it all', async ({ page }) => {
-    test.setTimeout(180_000);
+    test.setTimeout(240_000);
     const shot = async (name: string) => page.screenshot({ path: `test-results/tour/${name}.png`, fullPage: true });
     const csrf = { 'x-lightning-csrf': '1' };
     await signInAdmin(page);
@@ -1667,12 +1758,25 @@ test.describe('people, settings and smart features (English browser)', () => {
     await shot('einvoice-settings');
     // An invoice for the admin's own account (a service), then the customer's side of it.
     const me = await (await page.request.get('/api/auth/me')).json();
-    const made = await page.request.post('/api/admin/billing/invoices', { headers: csrf, data: { userId: me.id, currency: 'TRY', lines: [{ description: 'Kurulum hizmeti', unitPrice: '250', quantity: 1 }], dueDays: 7 } });
+    const made = await page.request.post('/api/admin/billing/invoices', { headers: csrf, data: { userId: me.id, currency: 'TRY', lines: [{ description: 'Kurulum hizmeti', unitPrice: '250', quantity: 1 }], dueDays: 3 } });
     expect(made.ok()).toBe(true);
     const { invoiceId } = await made.json();
     // My servers greets with the unpaid invoice, which links to billing.
     await page.goto('/');
     await expect(page.getByRole('region', { name: 'Welcome' }).getByRole('link', { name: /1 unpaid invoice/ })).toBeVisible();
+    // "Upcoming charges" on the same page: the invoice falls due this week (the end of the third day from now), so
+    // it is listed with what is owed and its own way to pay.
+    const upcoming = page.getByRole('region', { name: 'Upcoming charges' });
+    const invoiceRef = `#${invoiceId.slice(0, 8).toUpperCase()}`;
+    await expect(upcoming.getByText(new RegExp(`^${invoiceRef} · due in \\d+ days$`))).toBeVisible();
+    await expect(upcoming).toContainText('300');
+    await expect(upcoming.getByRole('link', { name: `Pay invoice ${invoiceRef}`, exact: true })).toHaveAttribute('href', `/billing/invoices/${invoiceId}`);
+    await page.waitForTimeout(400);
+    await shot('upcoming-charges');
+    await page.setViewportSize({ width: 390, height: 844 });
+    await expectNoOverflow(page, 'upcoming charges at 390 px');
+    await shot('upcoming-charges-390');
+    await page.setViewportSize({ width: 1280, height: 720 });
     await page.goto('/billing');
     await expect(page.getByRole('heading', { level: 1 })).toHaveText('Billing');
     await expect(page.getByText('Your invoice details are missing')).toBeVisible();
@@ -1743,6 +1847,14 @@ test.describe('people, settings and smart features (English browser)', () => {
     await page.waitForTimeout(900);
     await shot('billing-customer-390');
     await page.setViewportSize({ width: 1280, height: 720 });
+    // Paid, nothing else is coming up: with billing still on, the first page has no "Upcoming charges" block at all.
+    const summaryRead = page.waitForResponse((r) => new URL(r.url()).pathname === '/api/billing/summary' && r.ok());
+    await page.goto('/');
+    expect((await (await summaryRead).json() as { enabled: boolean; open: { n: number } }).open.n).toBe(0);
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Your servers');
+    await expect(page.getByRole('region', { name: 'Upcoming charges' })).toHaveCount(0);
+    await expect(page.getByText('Upcoming charges')).toHaveCount(0);
+    await page.goto('/billing');
     // The paid invoice shows in this month's bar; the list counts per filter and downloads as CSV.
     await page.reload();
     const spend = page.getByRole('list', { name: 'Paid in the last 12 months' });
@@ -1791,6 +1903,79 @@ test.describe('people, settings and smart features (English browser)', () => {
     await paymentSearch.fill('');
     await expect(page).not.toHaveURL(/q=/);
     await expect(page.getByRole('grid', { name: 'Payments' }).getByText('No payments are awaiting review')).toBeVisible();
+    // A payment the provider holds, for real: a second invoice (the first one stays as it is for the refund below),
+    // paid on the sandbox page with the test card that is held for review. The customer's invoice keeps awaiting
+    // payment and says the payment is under review, without "checking" for an answer that will not come by itself.
+    const heldMade = await page.request.post('/api/admin/billing/invoices', { headers: csrf, data: { userId: me.id, currency: 'TRY', lines: [{ description: 'Yedekleme hizmeti', unitPrice: '100', quantity: 1 }], dueDays: 7 } });
+    expect(heldMade.ok()).toBe(true);
+    const heldId = (await heldMade.json() as { invoiceId: string }).invoiceId;
+    const heldRef = `#${heldId.slice(0, 8).toUpperCase()}`;
+    await page.goto(`/billing/invoices/${heldId}`);
+    await expect(page.getByText('Pro forma · awaiting payment')).toBeVisible();
+    await page.getByRole('button', { name: /Sandbox/ }).click();
+    await expect(page).toHaveURL(/\/billing\/checkout\//);
+    await expect(page.getByText('held for review (waits for staff)')).toBeVisible();
+    await page.getByLabel('Card number').fill('4000 0000 0000 4954');
+    await page.getByRole('button', { name: 'Pay', exact: true }).click();
+    await expect(page).toHaveURL(new RegExp(`/billing/invoices/${heldId}`));
+    await expect(page.getByText('Your payment is under review')).toBeVisible();
+    await expect(page.getByText('The payment provider is reviewing the payment.')).toBeVisible();
+    await expect(page.getByText('Pro forma · awaiting payment')).toBeVisible();
+    await expect(page.getByText('Awaiting payment', { exact: true }).first()).toBeVisible();
+    await expect(page.getByText('Checking the payment…')).toHaveCount(0);
+    await page.waitForTimeout(400);
+    await shot('billing-invoice-review');
+    // Staff: the menu's Billing entry says that one payment awaits review, and the overview's notice leads to the
+    // list filtered to those.
+    await page.goto('/admin/billing');
+    const billingEntry = page.getByRole('navigation', { name: 'Main navigation' }).locator('a[href="/admin/billing"]');
+    await expect(billingEntry).toHaveAccessibleName(/^Billing\s*,\s*1 payment awaiting review$/);
+    const reviewNotice = page.getByRole('link', { name: /1 payment is awaiting review/ });
+    await expect(reviewNotice).toHaveAttribute('href', '/admin/billing?tab=payments&status=review');
+    await reviewNotice.click();
+    await expect(page).toHaveURL(/tab=payments/);
+    await expect(page).toHaveURL(/status=review/);
+    // The row (in the table: the list for narrow screens carries the same text) has the review label, why it is
+    // held, the way to the invoice and the way to close the review without settling anything.
+    const paymentGrid = page.getByRole('grid', { name: 'Payments' });
+    const heldRow = paymentGrid.getByRole('row').filter({ hasText: heldRef });
+    await expect(heldRow).toHaveCount(1);
+    await expect(heldRow.getByText('Awaiting review', { exact: true })).toBeVisible();
+    await expect(heldRow.getByText('The provider is holding the payment for a fraud review.')).toBeVisible();
+    await expect(heldRow.getByRole('link', { name: /Open invoice/ })).toHaveAttribute('href', `/admin/billing/invoices/${heldId}`);
+    const closeReview = heldRow.getByRole('button', { name: /Close review/ });
+    await expect(closeReview).toBeVisible();
+    await page.waitForTimeout(400);
+    await shot('billing-admin-review');
+    // Closing asks first and says what it does not do; the reason typed is kept with the payment.
+    await closeReview.click();
+    const closing = page.getByRole('alertdialog');
+    await expect(closing).toContainText('Close the review of this payment?');
+    await expect(closing).toContainText('is closed without marking the invoice paid');
+    await closing.getByLabel('Why it is closed (optional)').fill('No collection at the provider');
+    await page.waitForTimeout(300);
+    await shot('billing-admin-close-review');
+    await closing.getByRole('button', { name: 'Close review', exact: true }).click();
+    await expect(page.getByText('Review closed; the invoice was not marked paid.')).toBeVisible();
+    // The row leaves the review list, and the menu's badge goes with it.
+    await expect(paymentGrid.getByText('No payments are awaiting review')).toBeVisible();
+    await expect(paymentGrid.getByRole('row').filter({ hasText: heldRef })).toHaveCount(0);
+    await expect(billingEntry).toHaveAccessibleName(/^Billing$/);
+    await expect(page.getByRole('navigation', { name: 'Main navigation' }).getByText(/awaiting review/)).toHaveCount(0);
+    await expect(page.getByRole('link', { name: /awaiting review/ })).toHaveCount(0);
+    // It is found again under "Cancelled", with the reason it was held and how staff decided.
+    await choose(page, page, /Status/, 'Cancelled');
+    await expect(page).toHaveURL(/status=cancelled/);
+    const closedRow = paymentGrid.getByRole('row').filter({ hasText: heldRef });
+    await expect(closedRow).toContainText('Cancelled');
+    await expect(closedRow).toContainText('Closed by staff without settling: No collection at the provider');
+    await expect(closedRow.getByRole('button', { name: /Close review/ })).toHaveCount(0);
+    // Nothing was settled: the invoice still awaits payment. It is withdrawn so the rest of the suite finds no open invoice.
+    const heldInvoice = await (await page.request.get(`/api/admin/billing/invoices/${heldId}`)).json() as { invoice: { status: string; paidTotal: string }; payments: { status: string; errorCode: string | null }[] };
+    expect(heldInvoice.invoice.status).toBe('unpaid');
+    expect(Number(heldInvoice.invoice.paidTotal)).toBe(0);
+    expect(heldInvoice.payments.map((p) => [p.status, p.errorCode])).toEqual([['cancelled', 'FRAUD_REVIEW']]);
+    expect((await page.request.post(`/api/admin/billing/invoices/${heldId}/cancel`, { headers: csrf, data: {} })).ok()).toBe(true);
     await page.goto(`/admin/billing/invoices/${invoiceId}`);
     await page.getByRole('button', { name: 'Refund', exact: true }).click();
     await page.getByLabel('Amount', { exact: true }).fill('50');
@@ -2375,11 +2560,15 @@ test.describe('people, settings and smart features (English browser)', () => {
     await visitor.screenshot({ path: 'test-results/tour/login-methods.png', fullPage: true });
     await visitor.close();
     expect((await page.request.put('/api/admin/settings/sign-in', { headers: { 'x-lightning-csrf': '1' }, data: { username: false, providers: { github: { enabled: false } } } })).ok()).toBe(true);
-    // The command palette finds a ticket by its number.
+    // The command palette finds a ticket by its number (read from the API: the server lifecycle test opens a ticket
+    // of its own before this one when the simulator is there).
+    const sshTicket = ((await (await page.request.get('/api/support/tickets')).json()) as { tickets: { number: number | string; subject: string }[] }).tickets
+      .find((x) => x.subject === 'Cannot reach my server over SSH');
+    expect(sshTicket).toBeTruthy();
     await page.goto('/admin');
     await page.keyboard.press('Control+k');
-    await page.getByRole('combobox').fill('1001');
-    await expect(page.getByRole('option', { name: /#1001 Cannot reach my server over SSH/ })).toBeVisible();
+    await page.getByRole('combobox').fill(String(sshTicket!.number));
+    await expect(page.getByRole('option', { name: new RegExp(`#${sshTicket!.number} Cannot reach my server over SSH`) })).toBeVisible();
     await page.waitForTimeout(300);
     await page.screenshot({ path: 'test-results/tour/palette-ticket.png' });
     await page.keyboard.press('Enter');

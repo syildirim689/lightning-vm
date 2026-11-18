@@ -25,6 +25,7 @@ import { attentionCount, badgeText, isAttentionKind, restoreHoldOf, type Attenti
 import { useApiQuery, useAttention, useBillingSummary, useResellerAllocation } from '../../lib/query';
 import type { Branding, User } from '../../lib/session';
 import { mayLeave } from '../../lib/edits';
+import { claimLocal } from '../../lib/session-end';
 
 type Key = 'dashboard' | 'stats' | 'servers' | 'abuse' | 'energy' | 'topology' | 'myTopology' | 'myVdc' | 'connections' | 'catalog' | 'users' | 'roles' | 'settings' | 'system' | 'myServers' | 'newServer' | 'firewalls' | 'account' | 'audit' | 'terminal' | 'support' | 'mySupport' | 'billing' | 'myBilling' | 'reseller' | 'networks';
 // count: a number beside the entry: tickets waiting for the customer or for support (GET /support/summary), unpaid
@@ -204,6 +205,11 @@ function RestoreHoldBar({ user }: { user: User }) {
 export default function Shell({ user, branding, version, children }: { user: User; branding: Branding; version: string; children: React.ReactNode }) {
   const t = useTranslations('Nav');
   const path = usePathname();
+  // Whose content this browser holds is settled here, while the shell renders and before anything below reads the
+  // storage: what another account (or the other end of "sign in as") left behind is removed first (lib/session-end.ts).
+  const owner = `${user.id}|${user.impersonatedBy ?? ''}`;
+  const [claimed, setClaimed] = useState(() => { if (typeof window !== 'undefined') claimLocal(user.id, user.impersonatedBy); return owner; });
+  if (claimed !== owner) { claimLocal(user.id, user.impersonatedBy); setClaimed(owner); }
   const [open, setOpen] = useState(false);
   const [palette, setPalette] = useState(false);
   usePaletteShortcut(useCallback(() => setPalette(true), []));

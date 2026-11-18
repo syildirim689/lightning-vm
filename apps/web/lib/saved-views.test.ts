@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { activeView, cleanName, defaultFor, deleteView, parseViews, renameView, saveView, setDefaultView, viewQuery, viewsKey, viewValues, VIEW_LIMIT, VIEW_NAME_MAX, type SavedView } from './saved-views.ts';
+import { activeView, changeView, cleanName, createView, defaultFor, deleteView, fetchViews, forgetLocalViews, fromApi, moveLocalViews, parseViews, removeView, renameView, routeMissing, saveView,
+  setDefaultView, viewParams, viewQuery, viewsKey, viewValues, VIEW_LIMIT, VIEW_NAME_MAX, type SavedView, type ViewCall } from './saved-views.ts';
 
 const keys = { q: '', state: 'all', sort: 'newest' };
 
@@ -86,7 +87,7 @@ test('the active view is the one applied last, and it says when the list has mov
   assert.deepEqual(activeView(views, 'q=1', keys, 'gone'), { view: views[0], changed: false });
 });
 
-test('broken or foreign storage content is dropped', () => {
+test('broken or foreign content is dropped', () => {
   assert.deepEqual(parseViews('not json'), []);
   assert.deepEqual(parseViews('{"id":"a"}'), []);
   assert.deepEqual(parseViews(null), []);
@@ -108,4 +109,147 @@ test('names are tidied and each user and list has its own storage key', () => {
   assert.equal(cleanName('  a \n b\t c  '), 'a b c');
   assert.notEqual(viewsKey('u1', 'admin-users'), viewsKey('u2', 'admin-users'));
   assert.notEqual(viewsKey('u1', 'admin-audit'), viewsKey('u1', 'admin-users'));
+});
+
+// A stand-in for the API: keeps the views of one list, answers as /saved-views does, and notes every request.
+type Row = { id: string; name: string; params: Record<string, string>; isDefault: boolean };
+function fakeApi(start: Row[] = [], fail?: (method: string, body: Record<string, unknown>) => string | undefined) {
+  let rows = [...start], n = 0;
+  const calls: { method: string; path: string; body?: unknown }[] = [];
+  const call = (async (path: string, init: { method?: string; body?: unknown } = {}) => {
+    const method = init.method ?? 'GET', body = (init.body ?? {}) as Record<string, unknown>;
+    calls.push({ method, path, ...(init.body !== undefined && { body: init.body }) });
+    const code = fail?.(method, body);
+    if (code) throw { code };
+    if (method === 'GET') return { views: rows };
+    if (method === 'POST') {
+      if (rows.some((r) => r.name.toLowerCase() === String(body.name).toLowerCase())) throw { code: 'VALIDATION_FAILED', fields: { name: 'NAME_TAKEN' } };
+      if (rows.length >= VIEW_LIMIT) throw { code: 'LIMIT_REACHED' };
+      const row: Row = { id: `s${++n}`, name: String(body.name), params: body.params as Record<string, string>, isDefault: body.isDefault === true };
+      if (row.isDefault) rows = rows.map((r) => ({ ...r, isDefault: false }));
+      rows.push(row);
+      return row;
+    }
+    const id = path.split('/').pop();
+    const at = rows.findIndex((r) => r.id === id);
+    if (at < 0) throw { code: 'NOT_FOUND' };
+    if (method === 'DELETE') { rows.splice(at, 1); return undefined; }
+    if (body.isDefault === true) rows = rows.map((r) => ({ ...r, isDefault: false }));
+    rows[at] = { ...rows[at]!, ...(body as Partial<Row>) };
+    return rows[at];
+  }) as ViewCall;
+  return { call, calls };
+}
+// A stand-in for localStorage that notes whether anything was written.
+function fakeStore(start: Record<string, string> = {}) {
+  const data = new Map(Object.entries(start));
+  let writes = 0;
+  return { data, writes: () => writes, getItem: (k: string) => data.get(k) ?? null, removeItem: (k: string) => { data.delete(k); }, key: (i: number) => [...data.keys()][i] ?? null,
+    get length() { return data.size; }, setItem: (k: string, v: string) => { writes++; data.set(k, v); } };
+}
+
+test('a view goes to the API as the parameters of its list and comes back as one query text', async () => {
+  assert.deepEqual(viewParams('q=web&state=running&evil=1', keys), { q: 'web', state: 'running' });
+  assert.deepEqual(viewParams('status=', { status: 'active' }), { status: '' });
+  assert.deepEqual(viewParams('', keys), {});
+  const api = fakeApi();
+  const made = await createView(api.call, 'servers', { name: 'Web', query: 'q=web&state=running&page=2', isDefault: true }, keys);
+  assert.deepEqual(made, { id: 's1', name: 'Web', query: 'q=web&state=running', isDefault: true });
+  assert.deepEqual(api.calls[0], { method: 'POST', path: '/saved-views', body: { list: 'servers', name: 'Web', params: { q: 'web', state: 'running' }, isDefault: true } });
+  assert.deepEqual(await fetchViews(api.call, 'servers', keys), [made]);
+  assert.equal(api.calls[1]!.path, '/saved-views?list=servers');
+  assert.deepEqual(await changeView(api.call, 's1', { query: 'sort=name' }, keys), { id: 's1', name: 'Web', query: 'sort=name', isDefault: true });
+  assert.deepEqual(api.calls[2], { method: 'PATCH', path: '/saved-views/s1', body: { params: { sort: 'name' } } });
+  await changeView(api.call, 's1', { name: 'Renamed', isDefault: false }, keys);
+  assert.deepEqual(api.calls[3]!.body, { name: 'Renamed', isDefault: false });
+  await removeView(api.call, 's1');
+  assert.deepEqual([api.calls[4]!.method, api.calls[4]!.path], ['DELETE', '/saved-views/s1']);
+  assert.deepEqual(await fetchViews(api.call, 'servers', keys), []);
+});
+
+test('what the API answers is data: malformed views are dropped and foreign parameters ignored', () => {
+  assert.deepEqual(fromApi(null, keys), []);
+  assert.deepEqual(fromApi({ views: [] }, keys), []);
+  const views = fromApi([null, 'x', { id: 'a', name: 'Ok', params: { q: 'web', evil: '1', state: 7 }, isDefault: true }, { id: 'b', name: 'No params' }, { id: 'c', name: 'List', params: ['q'] },
+    { id: 'd', name: 'ok', params: {} }, { id: 'e', name: 'Second default', params: { state: 'all' }, isDefault: true }], keys);
+  assert.deepEqual(views, [{ id: 'a', name: 'Ok', query: 'q=web', isDefault: true }, { id: 'e', name: 'Second default', query: '' }]);
+});
+
+test('only a missing route hides the control', () => {
+  assert.equal(routeMissing({ code: 'NOT_FOUND' }), true);
+  for (const e of [{ code: 'NETWORK' }, { code: 'UNKNOWN' }, { code: 'UNAUTHENTICATED' }, { code: 'RATE_LIMITED' }, null, undefined, 'NOT_FOUND']) assert.equal(routeMissing(e), false);
+});
+
+test('views left in the browser move to the account once, name clashes skipped, and the local copy goes', async () => {
+  const local = [{ id: 'l1', name: 'Web', query: 'q=web' }, { id: 'l2', name: 'Stopped', query: 'state=stopped&page=4', isDefault: true }, { id: 'l3', name: 'Nothing here', query: 'other=1' }];
+  const store = fakeStore({ [viewsKey('u1', 'servers')]: JSON.stringify(local), [viewsKey('u2', 'servers')]: JSON.stringify(local), unrelated: 'x' });
+  const api = fakeApi([{ id: 'x', name: 'WEB', params: { q: 'kept' }, isDefault: false }]);
+  const server = await fetchViews(api.call, 'servers', keys);
+  const after = await moveLocalViews(api.call, 'u1', 'servers', keys, server, store);
+  // "Web" is already a name of the account (any case): the account's stays. The one holding nothing for this list is not sent.
+  assert.deepEqual(after, [{ id: 'x', name: 'WEB', query: 'q=kept' }, { id: 's1', name: 'Stopped', query: 'state=stopped', isDefault: true }]);
+  assert.deepEqual(api.calls.filter((c) => c.method === 'POST').map((c) => c.body), [{ list: 'servers', name: 'Stopped', params: { state: 'stopped' }, isDefault: true }]);
+  assert.equal(store.getItem(viewsKey('u1', 'servers')), null);
+  assert.notEqual(store.getItem(viewsKey('u2', 'servers')), null, 'the copy of another person is not touched by this move');
+  assert.equal(store.writes(), 0);
+  // A second visit finds nothing to move and asks nothing.
+  const before = api.calls.length;
+  assert.equal(await moveLocalViews(api.call, 'u1', 'servers', keys, after, store), after);
+  assert.equal(api.calls.length, before);
+});
+
+test('the move keeps the default the account already has and stops at the limit', async () => {
+  const local = Array.from({ length: VIEW_LIMIT }, (_, i) => ({ id: `l${i}`, name: `local ${i}`, query: `q=${i}`, ...(i === 0 && { isDefault: true }) }));
+  const store = fakeStore({ [viewsKey('u1', 'servers')]: JSON.stringify(local) });
+  const api = fakeApi(Array.from({ length: 10 }, (_, i) => ({ id: `x${i}`, name: `account ${i}`, params: { q: `a${i}` }, isDefault: i === 3 })));
+  const after = await moveLocalViews(api.call, 'u1', 'servers', keys, await fetchViews(api.call, 'servers', keys), store);
+  assert.equal(after.length, VIEW_LIMIT);
+  assert.deepEqual(after.filter((v) => v.isDefault).map((v) => v.name), ['account 3']);
+  assert.deepEqual(after.slice(10).map((v) => v.name), ['local 0', 'local 1']);
+  assert.equal(api.calls.filter((c) => c.method === 'POST').length, 2);
+  assert.equal(store.data.size, 0);
+});
+
+test('a view the API refuses is left out; when the API cannot be reached the local copy waits for the next visit', async () => {
+  const local = [{ id: 'l1', name: 'One', query: 'q=1' }, { id: 'l2', name: 'Two', query: 'q=2' }, { id: 'l3', name: 'Three', query: 'q=3' }];
+  const key = viewsKey('u1', 'servers');
+  let store = fakeStore({ [key]: JSON.stringify(local) });
+  let api = fakeApi([], (method, body) => (method === 'POST' && body.name === 'Two' ? 'VALIDATION_FAILED' : undefined));
+  assert.deepEqual((await moveLocalViews(api.call, 'u1', 'servers', keys, [], store)).map((v) => v.name), ['One', 'Three']);
+  assert.equal(store.getItem(key), null);
+
+  for (const code of ['NETWORK', 'RATE_LIMITED', 'UNAUTHENTICATED', 'NOT_WHILE_IMPERSONATING', 'INTERNAL_ERROR']) {
+    store = fakeStore({ [key]: JSON.stringify(local) });
+    let down = true;
+    api = fakeApi([], (method, body) => (down && method === 'POST' && body.name !== 'One' ? code : undefined));
+    const first = await moveLocalViews(api.call, 'u1', 'servers', keys, [], store);
+    assert.deepEqual(first.map((v) => v.name), ['One'], code);
+    assert.notEqual(store.getItem(key), null, code);
+    // Next visit: what was sent is found by its name, the rest follows, and then the copy goes.
+    down = false;
+    assert.deepEqual((await moveLocalViews(api.call, 'u1', 'servers', keys, first, store)).map((v) => v.name), ['One', 'Two', 'Three'], code);
+    assert.equal(store.getItem(key), null, code);
+    assert.equal(store.writes(), 0);
+  }
+});
+
+test('the move survives no storage, blocked storage and broken content', async () => {
+  const api = fakeApi();
+  assert.deepEqual(await moveLocalViews(api.call, 'u1', 'servers', keys, [], null), []);
+  const blocked = { getItem: () => { throw new Error('blocked'); }, removeItem: () => { throw new Error('blocked'); }, key: () => null, length: 0 };
+  assert.deepEqual(await moveLocalViews(api.call, 'u1', 'servers', keys, [], blocked), []);
+  const store = fakeStore({ [viewsKey('u1', 'servers')]: 'not json' });
+  assert.deepEqual(await moveLocalViews(api.call, 'u1', 'servers', keys, [], store), []);
+  assert.equal(store.data.size, 0, 'broken content is removed, not kept forever');
+  assert.equal(api.calls.length, 0);
+});
+
+test('forgetting removes the leftover views of every person from the browser and nothing else, and never throws', () => {
+  const store = fakeStore({ [viewsKey('u1', 'servers')]: '[]', [viewsKey('u2', 'admin-users')]: '[{"id":"a"}]', 'lvm:drafts:u1': 'keep', other: 'keep' });
+  forgetLocalViews(store);
+  assert.deepEqual([...store.data.keys()].sort(), ['lvm:drafts:u1', 'other']);
+  forgetLocalViews(store);
+  forgetLocalViews(null);
+  forgetLocalViews({ getItem: () => null, removeItem: () => { throw new Error('blocked'); }, key: () => { throw new Error('blocked'); }, length: 3 });
+  forgetLocalViews(); // no localStorage here at all
 });

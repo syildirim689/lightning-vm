@@ -377,6 +377,7 @@
     "OWNER_ONLY": "Only the owner can do this.",
     "IMAGE_NOT_FOUND": "The new image was not found.",
     "TRANSFER_NOT_POSSIBLE": "This server cannot be handed over now.",
+    "ADDRESS_NOT_PROVEN": "The e-mail address of this account has not been proven yet, so it cannot receive a server. Prove it once: sign in with a link or a code sent to your e-mail (where the sign-in page offers it), or set a new password with “Forgot password”. The first proof removes what was set up on the account before it: API keys, passkeys, linked sign-ins, webhooks, connected apps, the phone number, saved SSH keys, saved cards and the billing e-mail and phone (with a link or a code, the password too). Then accept the offer again.",
     "COUPON_IN_USE": "This coupon has been used; it keeps its code and amount and can only be turned off.",
     "COUPON_CODE_TAKEN": "Another coupon has this code.",
     "SCAN_RUNNING": "Another scan is running; wait for it or stop it.",
@@ -396,7 +397,8 @@
     "E_RESTORE_DB_DOWN": "The database is not running, so nothing could be restored. Start the services and try again.",
     "E_RESTORE_DUMP": "The database dump in the backup could not be read. The backup may be damaged, or the backup key may be the wrong one.",
     "E_RESTORE_NO_SAFETY": "A safety copy of the current data could not be taken, so the restore was not started. Nothing was changed.",
-    "UPDATE_SKIPPED": "The automatic update skipped this version because it already failed once. Update by hand when the cause is fixed."
+    "UPDATE_SKIPPED": "The automatic update skipped this version because it already failed once. Update by hand when the cause is fixed.",
+    "PAYMENT_NOT_IN_REVIEW": "This payment no longer waits for review; it was settled or closed in the meantime."
   },
   "Auth": {
     "required": "required",
@@ -541,6 +543,7 @@
     "registrationClosedHelp": "New accounts are created by an administrator. If you already have one, sign in."
   },
   "fieldErrors": {
+    "ACCOUNTS_NOT_COVERED": "Accounts that sign in through this server hold permissions you do not have. An administrator has to save this.",
     "INVALID_EMAIL": "Enter a valid email address.",
     "PASSWORD_TOO_SHORT": "Password must be at least 12 characters.",
     "PASSWORD_TOO_LONG": "Password can be at most 256 characters.",
@@ -2770,7 +2773,29 @@
       "servers": "Servers",
       "developer": "Developer"
     },
-    "twoFactorOff": "Two-step sign-in is off"
+    "twoFactorOff": "Two-step sign-in is off",
+    "managed": {
+      "title": "{name} manages your account",
+      "intro": "A reseller opened this account for you and pays for your servers.",
+      "canTitle": "The reseller can",
+      "can1": "see your servers and manage them: start, stop, reinstall, delete, open the console",
+      "can2": "order new servers for you",
+      "cannotTitle": "The reseller cannot",
+      "cannot1": "read your support tickets",
+      "cannot2": "sign in as you",
+      "cannot3": "see or reset your password",
+      "contact": "Contact",
+      "inactive": "The reseller is switched off right now and cannot act on your servers.",
+      "activity": "What the reseller does on your account is listed under Activity.",
+      "activityOpen": "Open activity",
+      "leave": "Leave the reseller",
+      "leaveTitle": "Leave {name}?",
+      "leaveBody1": "Your servers stay yours and keep running. Their subscriptions become yours and are billed to you starting with the first period nobody has paid; prices do not change.",
+      "leaveBody2": "{name} can no longer see or manage your servers: its open consoles are closed and the SSH key it added to your account is removed.",
+      "leaveBody3": "This cannot be undone from the panel.",
+      "left": "Your account is no longer managed by a reseller. Servers billed to you from now on: {servers}.",
+      "gone": "This account is no longer managed by a reseller."
+    }
   },
   "AuthLayout": {
     "headline": "VMware servers, ready in minutes.",
@@ -3327,6 +3352,10 @@
       "server_updates": {
         "title": "Server updates",
         "help": "When security updates wait in a server, a restart is needed, or an automatic update finished or failed."
+      },
+      "account_reseller": {
+        "title": "Reseller and your account",
+        "help": "When a reseller starts or stops managing your account, or one of your customers leaves you."
       }
     },
     "policyTitle": "The admin first, then each user",
@@ -5796,7 +5825,10 @@
       "server_updates_policy": "Update policy changed",
       "server_updates_action": "Update or restart asked for in the server",
       "server_updates_bulk": "Update install asked for on several servers",
-      "server_updates_disabled": "Update tracking turned off"
+      "server_updates_disabled": "Update tracking turned off",
+      "reseller_customer_released": "Account separated from its reseller",
+      "reseller_customer_told": "Told that a reseller manages the account",
+      "billing_review_closed": "Payment review closed"
     },
     "outcome": {
       "success": "Done",
@@ -5835,7 +5867,9 @@
     "dayCount": "{n, plural, one {# event} other {# events}}",
     "filterBy": "Show only events of {v}",
     "export": "Download CSV",
-    "shown": "Showing {n, plural, one {# event} other {# events}}"
+    "shown": "Showing {n, plural, one {# event} other {# events}}",
+    "byReseller": "By your reseller",
+    "bySupport": "By support"
   },
   "Snapshots": {
     "title": "Snapshots",
@@ -7303,7 +7337,8 @@
       "card_ok": "approved",
       "card_declined": "declined",
       "card_funds": "insufficient funds",
-      "declined": "The card was declined."
+      "declined": "The card was declined.",
+      "card_review": "held for review (waits for staff)"
     },
     "hourly": {
       "title": "Pay as you go",
@@ -7338,7 +7373,9 @@
     "removeDefaultBody": "This is your default card. Without it, automatic payments wait until you choose another default card.",
     "removeConfirm": "Remove the card",
     "transferAmount": "Amount",
-    "topUpShort": "Top up the missing {amount}"
+    "topUpShort": "Top up the missing {amount}",
+    "reviewTitle": "Your payment is under review",
+    "reviewHelp": "The payment provider is holding this payment for a check, or it could not be confirmed by itself. Our team is looking at it; the invoice is marked paid once it is confirmed. You do not need to pay again in the meantime."
   },
   "BillingAdmin": {
     "searchPayments": "Invoice number, e-mail or provider reference",
@@ -7361,7 +7398,7 @@
     "openInvoice": "Open invoice",
     "invoiceSettled": "The invoice is now: {status}",
     "reviewHelpTitle": "These payments wait for your decision",
-    "reviewHelp": "The customer may have been charged, but the panel could not confirm it by itself. Check each payment in your payment provider’s dashboard. If the money arrived, open the invoice and mark it paid with “{action}”. If it did not, do nothing; the invoice keeps waiting for payment.",
+    "reviewHelp": "The customer may have been charged, but the panel could not confirm it by itself. Check each payment in your payment provider’s dashboard. If the money arrived, open the invoice and mark it paid with “{action}”. If it did not, close the review with “{close}”; the invoice keeps waiting for payment.",
     "reviewSum": "{amount} waiting",
     "reviewNotice": "{n, plural, one {# payment is awaiting review} other {# payments are awaiting review}}",
     "reviewNoticeOldest": "the oldest came in {time}",
@@ -7398,6 +7435,10 @@
       "search": {
         "title": "No payments match the search",
         "body": "Try part of the invoice number, the customer’s e-mail or the provider reference."
+      },
+      "cancelled": {
+        "title": "No cancelled payments",
+        "body": "Payments whose review staff closed appear here, whether the invoice was marked paid or not."
       }
     },
     "eyebrow": "Money",
@@ -7521,7 +7562,14 @@
     "suspendTitle": "Suspend “{name}”?",
     "suspendBody": "The server is shut down and locked; {email} cannot use it until it is resumed. Resume undoes this.",
     "cancelNowTitle": "Cancel “{name}” now?",
-    "cancelNowBody": "The subscription ends now instead of at the period end and does not renew. This cannot be undone."
+    "cancelNowBody": "The subscription ends now instead of at the period end and does not renew. This cannot be undone.",
+    "closeReview": "Close review",
+    "closeReviewTitle": "Close the review of this payment?",
+    "closeReviewBody": "The held payment of {amount} for invoice {number} is closed without marking the invoice paid: nothing is settled or credited, and the invoice keeps waiting for payment. Use this when the provider says the money was not collected. If the money did arrive, record a payment on the invoice instead; that ends the review too.",
+    "closeReviewNote": "Why it is closed (optional)",
+    "closeReviewNoteHelp": "Kept with the payment, for example “no collection in the provider’s panel”.",
+    "reviewClosed": "Review closed; the invoice was not marked paid.",
+    "recordedClosed": "Payment recorded; the invoice is issued. {n, plural, one {# payment awaiting review was closed.} other {# payments awaiting review were closed.}}"
   },
   "ServerChange": {
     "started": "Resize started; the server restarts with its new size.",
@@ -7916,8 +7964,15 @@
       "stop": "No longer a reseller",
       "stopped": "No longer a reseller; their customers are ordinary accounts now",
       "stopTitle": "Stop this reseller?",
-      "stopBody": "The user can no longer use the reseller panel; their customers become the panel's own customers. Servers are not deleted, but the reseller settings (discount, limits) are.",
-      "cancel": "Cancel"
+      "stopBody": "The user can no longer use the reseller panel; their customers become the panel’s own customers and pay for their servers themselves from the first period nobody has paid. Servers are not deleted, but the reseller settings (discount, limits) are.",
+      "cancel": "Cancel",
+      "customersTitle": "Customers of this reseller ({n})",
+      "noCustomers": "No customers yet.",
+      "customerServers": "{n, plural, one {# server} other {# servers}}",
+      "release": "Remove from reseller",
+      "releaseTitle": "Remove {email} from this reseller?",
+      "releaseBody": "The reseller can no longer see or manage this customer’s servers. The servers’ subscriptions become the customer’s and are billed to them from the first period nobody has paid; the reseller’s unpaid renewal invoices for them are withdrawn. Both are notified.",
+      "released": "{email} was removed from the reseller. Servers: {servers} · subscriptions moved: {subscriptions} · invoices withdrawn: {withdrawn} · left with the reseller: {left}."
     },
     "notReseller": "This account is not a reseller. Ask us if you would like to resell servers.",
     "brand": "Your brand",
@@ -9095,9 +9150,12 @@
     "overwrite": "A view named “{name}” exists; saving updates it with the current filters.",
     "nothing": "Choose a filter or an order first to save a view.",
     "limit": "Up to {max} views are kept. Delete one to add another.",
-    "storedHere": "Views are kept in this browser only, and only for your account.",
+    "storedAccount": "Views are kept with your account: you find them on every device, and only you see them.",
     "reset": "Reset filters",
-    "failed": "The view could not be stored in this browser (storage is off or full)."
+    "failed": "The change to your views was not saved. {reason}",
+    "loadFailed": "Your saved views could not be loaded.",
+    "retry": "Try again",
+    "readOnly": "You are signed in as this user: their views can be applied but not changed."
   },
   "Clipboard": {
     "failed": "Could not copy: this browser does not allow the clipboard here (the panel may not be on HTTPS). Select the text and copy it yourself."

@@ -6,6 +6,7 @@ import NextLink from 'next/link';
 import { useFormatter, useLocale, useTranslations } from 'next-intl';
 import { useEffect, useState } from 'react';
 import { apiFetch, useErrorText } from '../lib/api';
+import { useMe } from '../lib/me';
 import { useApiQuery } from '../lib/query';
 import { I } from './icon';
 import { StatusChip, Loading } from './ui';
@@ -40,6 +41,7 @@ export function MyActivity() {
   const format = useFormatter();
   const label = useActionLabel();
   const { error } = useErrorText();
+  const me = useMe();
   const first = useApiQuery<{ events: AuditEvent[]; nextBefore: string | null }>(['activity'], '/activity').data;
   const [extra, setExtra] = useState<AuditEvent[]>([]);
   const [next, setNext] = useState<string | null | undefined>(undefined);
@@ -48,6 +50,11 @@ export function MyActivity() {
   const events = [...first.events, ...extra];
   const cursor = next === undefined ? first.nextBefore : next;
   if (!events.length) return <p className="text-sm text-muted">{t('empty')}</p>;
+  // Events somebody else recorded for this account (the API marks them: metadata.forOwner). Their reseller is named
+  // (actingAs, with the address the API gives for it alone); staff taking the account out of a reseller's hands is
+  // said as support, without a name.
+  const doneBy = (e: AuditEvent) => (!me || !e.actorId || e.actorId === me.id ? null : e.metadata?.actingAs === 'reseller' ? 'byReseller' as const
+    : e.metadata?.by === 'staff' ? 'bySupport' as const : null);
   return <div className="flex flex-col gap-3">
     <ol className="flex flex-col">
       {events.map((e) => <li key={e.id} className="flex gap-3 border-b border-separator py-2.5 last:border-0">
@@ -55,10 +62,11 @@ export function MyActivity() {
         <div className="flex min-w-0 flex-1 flex-col gap-0.5">
           <span className="flex flex-wrap items-center gap-2 text-sm font-medium">{label(e.action)}
             {e.outcome !== 'success' && <StatusChip tone={outcomeTone[e.outcome]}>{t(`outcome.${e.outcome}`)}</StatusChip>}
-            {!e.actorId && <StatusChip tone="accent">{t('bySchedule')}</StatusChip>}</span>
+            {!e.actorId && <StatusChip tone="accent">{t('bySchedule')}</StatusChip>}
+            {doneBy(e) && <StatusChip tone="warning">{t(doneBy(e)!)}</StatusChip>}</span>
           <span className="text-xs text-muted">
             <time dateTime={e.at} title={format.dateTime(new Date(e.at), { dateStyle: 'medium', timeStyle: 'medium' })}>{format.relativeTime(new Date(e.at))}</time>
-            {e.ip && <> · {e.ip}</>}</span>
+            {e.ip && <> · {e.ip}</>}{doneBy(e) === 'byReseller' && e.actorEmail && <> · {e.actorEmail}</>}</span>
         </div>
       </li>)}
     </ol>

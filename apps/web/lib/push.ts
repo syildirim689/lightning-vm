@@ -1,5 +1,6 @@
 "use client";
 import { apiFetch } from './api';
+import { closeNotifications } from './session-end';
 
 // Web Push: register the service worker, ask the browser's permission, send the subscription to the API.
 export const pushSupported = () => typeof window !== 'undefined' && 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
@@ -26,7 +27,9 @@ export async function enablePush(): Promise<'granted' | 'denied' | 'unsupported'
   return 'granted';
 }
 
+// Also when signing out (lib/auth-client.ts): what is still on screen from this account is closed with it.
 export async function disablePush() {
+  await closeNotifications();
   const sub = await currentSubscription();
   if (!sub) return;
   await apiFetch('/notifications/push-subscriptions', { method: 'DELETE', body: { endpoint: sub.endpoint } }).catch(() => undefined);

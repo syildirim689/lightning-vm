@@ -104,13 +104,14 @@ export function UserSummary({ id, onClose }: { id: string; onClose: () => void }
 }
 
 type ResellerDoc = { maxCustomers: number | null; maxServers: number | null; maxVcpu: number | null; maxMemoryMb: number | null; maxDiskGb: number | null; discountPct: number; active?: boolean };
+type ResellerCustomer = { id: string; email: string; name: string | null; servers: number };
 
 // Makes this account a reseller with an allocation and a discount (empty: no limit), or stops it.
 function ResellerAccess({ id }: { id: string }) {
   const t = useTranslations('Reseller.admin');
   const { error, field } = useErrorText();
   const client = useQueryClient();
-  const q = useApiQuery<{ reseller: ResellerDoc | null; usage?: { servers: number; vcpu: number; memoryMb: number; diskGb: number } }>(['admin', 'reseller', id], `/admin/resellers/${id}`);
+  const q = useApiQuery<{ reseller: ResellerDoc | null; usage?: { servers: number; vcpu: number; memoryMb: number; diskGb: number }; customers?: ResellerCustomer[] }>(['admin', 'reseller', id], `/admin/resellers/${id}`);
   const [v, setV] = useState<Record<string, string> | null>(null);
   const [fields, setFields] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
@@ -130,6 +131,18 @@ function ResellerAccess({ id }: { id: string }) {
     try { await apiFetch(`/admin/resellers/${id}`, { method: 'DELETE' }); toast.success(t('stopped')); setV(null); void client.invalidateQueries({ queryKey: ['admin', 'reseller', id] }); }
     catch (e) { toast.danger(error(e)); } finally { setBusy(false); }
   }
+  // One customer out of the reseller's hands (the same as the customer leaving): the result says what moved.
+  async function release(c: ResellerCustomer) {
+    try {
+      const out = await apiFetch<{ servers: number; subscriptions: number; withdrawnInvoices?: string[]; leftInvoices?: string[] }>(`/admin/resellers/${id}/customers/${c.id}`, { method: 'DELETE' });
+      toast.success(t('released', { email: c.email, servers: out.servers ?? 0, subscriptions: out.subscriptions ?? 0, withdrawn: out.withdrawnInvoices?.length ?? 0, left: out.leftInvoices?.length ?? 0 }));
+    } catch (e) {
+      toast.danger(error(e));
+      // No longer this reseller's customer (they left meanwhile): the list is read again; otherwise the question stays.
+      if ((e as { code?: string })?.code !== 'NOT_FOUND') throw e;
+    }
+    for (const queryKey of [['admin', 'reseller', id], ['admin', 'users'], ['admin', 'billing']]) void client.invalidateQueries({ queryKey });
+  }
   const input = (k: string, label: string) => <label className="flex flex-col gap-1 text-xs"><span className="text-muted">{label}</span>
     <input inputMode="decimal" value={doc[k]} onChange={set(k)} placeholder={t('noLimit')} className="min-h-10 rounded-lg border border-border bg-surface px-2 text-sm"/>
     {fields[k] && <span className="text-danger">{field(fields[k])}</span>}</label>;
@@ -148,6 +161,17 @@ function ResellerAccess({ id }: { id: string }) {
       {r?.active && <Button size="sm" variant="ghost" isDisabled={busy} onPress={() => void save(false)}>{t('pause')}</Button>}
       {r && <ConfirmButton size="sm" variant="danger-soft" isDisabled={busy} label={t('stop')} title={t('stopTitle')} body={t('stopBody')} confirmLabel={t('stop')} cancelLabel={t('cancel')} onConfirm={stop}/>}
     </div>
+    {r && q.data.customers && <div className="mt-3 border-t border-separator pt-3">
+      <h4 className="mb-2 text-xs font-semibold">{t('customersTitle', { n: q.data.customers.length })}</h4>
+      {q.data.customers.length === 0 ? <p className="text-xs text-muted">{t('noCustomers')}</p> : <ul className="divide-y divide-separator rounded-lg border border-border">
+        {q.data.customers.map((c) => <li key={c.id} className="flex flex-wrap items-center gap-2 px-3 py-1.5 text-sm">
+          <span className="min-w-0 flex-1"><span className="block truncate">{c.email}</span>
+            <span className="block truncate text-xs text-muted">{[c.name, t('customerServers', { n: c.servers })].filter(Boolean).join(' · ')}</span></span>
+          <ConfirmButton size="sm" variant="ghost" isDisabled={busy} icon={<I name="user-minus" size={14}/>} label={<span className="whitespace-nowrap">{t('release')}<span className="sr-only"> {c.email}</span></span>}
+            title={t('releaseTitle', { email: c.email })} body={t('releaseBody')} confirmLabel={t('release')} cancelLabel={t('cancel')} onConfirm={() => release(c)}/>
+        </li>)}
+      </ul>}
+    </div>}
   </section>;
 }
 

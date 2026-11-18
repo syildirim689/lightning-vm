@@ -377,6 +377,7 @@
     "OWNER_ONLY": "Bunu yalnızca sahibi yapabilir.",
     "IMAGE_NOT_FOUND": "Yeni imaj bulunamadı.",
     "TRANSFER_NOT_POSSIBLE": "Bu sunucu şu an devredilemez.",
+    "ADDRESS_NOT_PROVEN": "Bu hesabın e-posta adresi henüz kanıtlanmadı; bu yüzden sunucu devralamaz. Adresi bir kez kanıtlayın: e-postanıza gelen bağlantı ya da kodla giriş yapın (giriş sayfası sunuyorsa) veya “Parolamı unuttum” ile yeni parola belirleyin. İlk kanıt, hesapta daha önce kurulmuş olanları kaldırır: API anahtarları, geçiş anahtarları, bağlı giriş hesapları, webhooklar, bağlı uygulamalar, telefon numarası, kayıtlı SSH anahtarları, kayıtlı kartlar, fatura e-postası ve telefonu (bağlantı ya da kodla girişte parola da). Ardından teklifi yeniden kabul edin.",
     "COUPON_IN_USE": "Bu kupon kullanıldı; kodu ve tutarı değişmez, yalnızca kapatılabilir.",
     "COUPON_CODE_TAKEN": "Bu kod başka bir kuponda kullanılıyor.",
     "SCAN_RUNNING": "Başka bir tarama sürüyor; bitmesini bekleyin veya durdurun.",
@@ -396,7 +397,8 @@
     "E_RESTORE_DB_DOWN": "Veritabanı çalışmıyor; geri yükleme yapılamadı. Servisleri başlatıp yeniden deneyin.",
     "E_RESTORE_DUMP": "Yedekteki veritabanı dökümü okunamadı. Yedek bozuk ya da yedek anahtarı yanlış olabilir.",
     "E_RESTORE_NO_SAFETY": "Mevcut verinin güvenlik kopyası alınamadığı için geri yükleme başlatılmadı. Hiçbir şey değiştirilmedi.",
-    "UPDATE_SKIPPED": "Otomatik güncelleme bu sürümü atladı; çünkü daha önce bir kez başarısız oldu. Nedeni giderince elle güncelleyin."
+    "UPDATE_SKIPPED": "Otomatik güncelleme bu sürümü atladı; çünkü daha önce bir kez başarısız oldu. Nedeni giderince elle güncelleyin.",
+    "PAYMENT_NOT_IN_REVIEW": "Bu ödeme artık inceleme beklemiyor; bu arada sonuçlandırılmış ya da kapatılmış."
   },
   "Auth": {
     "required": "zorunlu",
@@ -541,6 +543,7 @@
     "registrationClosedHelp": "Yeni hesapları yönetici oluşturur. Hesabınız varsa giriş yapın."
   },
   "fieldErrors": {
+    "ACCOUNTS_NOT_COVERED": "Bu sunucu üzerinden giriş yapan hesaplarda sizde olmayan yetkiler var. Bunu bir yönetici kaydetmeli.",
     "INVALID_EMAIL": "Geçerli bir e-posta adresi girin.",
     "PASSWORD_TOO_SHORT": "Parola en az 12 karakter olmalı.",
     "PASSWORD_TOO_LONG": "Parola en fazla 256 karakter olabilir.",
@@ -2770,7 +2773,29 @@
       "servers": "Sunucular",
       "developer": "Geliştirici"
     },
-    "twoFactorOff": "İki adımlı giriş kapalı"
+    "twoFactorOff": "İki adımlı giriş kapalı",
+    "managed": {
+      "title": "Hesabınızı {name} yönetiyor",
+      "intro": "Bu hesabı sizin için bir bayi açtı; sunucularınızın ücretini bayi ödüyor.",
+      "canTitle": "Bayi şunları yapabilir",
+      "can1": "sunucularınızı görür ve yönetir: açma, kapatma, yeniden kurma, silme, konsol",
+      "can2": "sizin adınıza yeni sunucu sipariş eder",
+      "cannotTitle": "Bayi şunları yapamaz",
+      "cannot1": "destek taleplerinizi okuyamaz",
+      "cannot2": "sizin yerinize oturum açamaz",
+      "cannot3": "parolanızı göremez ve sıfırlayamaz",
+      "contact": "İletişim",
+      "inactive": "Bayi şu anda kapalı; sunucularınızda işlem yapamaz.",
+      "activity": "Bayinin hesabınızda yaptıkları Etkinlik bölümünde listelenir.",
+      "activityOpen": "Etkinliği aç",
+      "leave": "Bayiden ayrıl",
+      "leaveTitle": "{name} bayisinden ayrılmak istiyor musunuz?",
+      "leaveBody1": "Sunucularınız sizde kalır ve çalışmaya devam eder. Abonelikleri size geçer ve henüz ödenmemiş ilk dönemden başlayarak size faturalanır; fiyatlar değişmez.",
+      "leaveBody2": "{name} artık sunucularınızı göremez ve yönetemez: açık konsolları kapatılır, hesabınıza eklediği SSH anahtarı kaldırılır.",
+      "leaveBody3": "Bu işlem panelden geri alınamaz.",
+      "left": "Hesabınız artık bir bayiye bağlı değil. Bundan sonra size faturalanacak sunucu sayısı: {servers}.",
+      "gone": "Bu hesap artık bir bayiye bağlı değil."
+    }
   },
   "AuthLayout": {
     "headline": "VMware sunucuları dakikalar içinde hazır.",
@@ -3327,6 +3352,10 @@
       "server_updates": {
         "title": "Sunucu güncellemeleri",
         "help": "Bir sunucuda güvenlik güncellemesi beklediğinde, yeniden başlatma gerektiğinde ya da otomatik güncelleme bittiğinde veya başarısız olduğunda."
+      },
+      "account_reseller": {
+        "title": "Bayi ve hesabınız",
+        "help": "Bir bayi hesabınızı yönetmeye başladığında ya da bıraktığında, veya bir müşteriniz sizden ayrıldığında."
       }
     },
     "policyTitle": "Önce yönetici, sonra kullanıcı",
@@ -5796,7 +5825,10 @@
       "server_updates_policy": "Güncelleme politikası değişti",
       "server_updates_action": "Sunucuda güncelleme ya da yeniden başlatma istendi",
       "server_updates_bulk": "Birden çok sunucuda güncelleme kurulumu istendi",
-      "server_updates_disabled": "Güncelleme takibi kapatıldı"
+      "server_updates_disabled": "Güncelleme takibi kapatıldı",
+      "reseller_customer_released": "Hesap bayiden ayrıldı",
+      "reseller_customer_told": "Hesabı bir bayinin yönettiği bildirildi",
+      "billing_review_closed": "Ödeme incelemesi kapatıldı"
     },
     "outcome": {
       "success": "Tamamlandı",
@@ -5835,7 +5867,9 @@
     "dayCount": "{n} kayıt",
     "filterBy": "Yalnızca {v} kayıtlarını göster",
     "export": "CSV indir",
-    "shown": "{n} kayıt gösteriliyor"
+    "shown": "{n} kayıt gösteriliyor",
+    "byReseller": "Bayiniz yaptı",
+    "bySupport": "Destek ekibi yaptı"
   },
   "Snapshots": {
     "title": "Anlık görüntüler",
@@ -7303,7 +7337,8 @@
       "card_ok": "onaylanır",
       "card_declined": "reddedilir",
       "card_funds": "yetersiz bakiye",
-      "declined": "Kart reddedildi."
+      "declined": "Kart reddedildi.",
+      "card_review": "incelemeye alınır (personeli bekler)"
     },
     "hourly": {
       "title": "Kullandıkça öde",
@@ -7338,7 +7373,9 @@
     "removeDefaultBody": "Bu varsayılan kartınız. Kaldırırsanız otomatik ödemeler başka bir varsayılan kart seçene kadar yapılamaz.",
     "removeConfirm": "Kartı kaldır",
     "transferAmount": "Tutar",
-    "topUpShort": "Eksik {amount} tutarını yükle"
+    "topUpShort": "Eksik {amount} tutarını yükle",
+    "reviewTitle": "Ödemeniz inceleniyor",
+    "reviewHelp": "Ödeme kuruluşu bu ödemeyi denetim için bekletiyor ya da ödeme kendiliğinden doğrulanamadı. Ekibimiz inceliyor; doğrulandığında fatura ödendi olarak işaretlenir. Bu sırada yeniden ödeme yapmanız gerekmez."
   },
   "BillingAdmin": {
     "searchPayments": "Fatura no, e-posta ya da sağlayıcı referansı",
@@ -7361,7 +7398,7 @@
     "openInvoice": "Faturayı aç",
     "invoiceSettled": "Faturanın şimdiki durumu: {status}",
     "reviewHelpTitle": "Bu ödemeler sizin kararınızı bekliyor",
-    "reviewHelp": "Müşteriden para çekilmiş olabilir, ama panel bunu kendiliğinden doğrulayamadı. Her ödemeyi ödeme sağlayıcınızın panelinde kontrol edin. Para geldiyse faturayı açıp “{action}” ile ödendi olarak işaretleyin. Gelmediyse hiçbir şey yapmayın; fatura ödeme beklemeye devam eder.",
+    "reviewHelp": "Müşteriden para çekilmiş olabilir, ama panel bunu kendiliğinden doğrulayamadı. Her ödemeyi ödeme sağlayıcınızın panelinde kontrol edin. Para geldiyse faturayı açıp “{action}” ile ödendi olarak işaretleyin. Gelmediyse “{close}” ile incelemeyi kapatın; fatura ödeme beklemeye devam eder.",
     "reviewSum": "bekleyen toplam {amount}",
     "reviewNotice": "{n} ödeme inceleme bekliyor",
     "reviewNoticeOldest": "en eskisi {time} geldi",
@@ -7398,6 +7435,10 @@
       "search": {
         "title": "Aramaya uyan ödeme yok",
         "body": "Fatura numarasının, müşteri e-postasının ya da sağlayıcı referansının bir bölümünü deneyin."
+      },
+      "cancelled": {
+        "title": "İptal edilmiş ödeme yok",
+        "body": "İncelemesi personel tarafından kapatılan ödemeler burada görünür; fatura ödendi olarak işaretlenmiş olsa da olmasa da."
       }
     },
     "eyebrow": "Gelir",
@@ -7521,7 +7562,14 @@
     "suspendTitle": "“{name}” askıya alınsın mı?",
     "suspendBody": "Sunucu kapatılır ve kilitlenir; {email} kullanıcısı yeniden açana kadar erişemez. Devam ettir ile geri alabilirsiniz.",
     "cancelNowTitle": "“{name}” hemen iptal edilsin mi?",
-    "cancelNowBody": "Abonelik dönem sonu beklenmeden biter ve yenilenmez. Bu işlem geri alınamaz."
+    "cancelNowBody": "Abonelik dönem sonu beklenmeden biter ve yenilenmez. Bu işlem geri alınamaz.",
+    "closeReview": "İncelemeyi kapat",
+    "closeReviewTitle": "Bu ödemenin incelemesi kapatılsın mı?",
+    "closeReviewBody": "{number} numaralı faturanın bekletilen {amount} tutarındaki ödemesi, fatura ödendi olarak işaretlenmeden kapatılır: hiçbir şey ödenmiş sayılmaz, bakiyeye bir şey eklenmez ve fatura ödeme beklemeye devam eder. Sağlayıcı paranın tahsil edilmediğini söylüyorsa bunu kullanın. Para geldiyse bunun yerine faturada ödeme kaydedin; o da incelemeyi bitirir.",
+    "closeReviewNote": "Neden kapatıldığı (isteğe bağlı)",
+    "closeReviewNoteHelp": "Ödemeyle birlikte saklanır; örneğin “sağlayıcı panelinde tahsilat yok”.",
+    "reviewClosed": "İnceleme kapatıldı; fatura ödendi olarak işaretlenmedi.",
+    "recordedClosed": "Ödeme kaydedildi; fatura düzenlendi. İnceleme bekleyen {n} ödeme kapatıldı."
   },
   "ServerChange": {
     "started": "Kaynak değişikliği başladı; sunucu yeni boyutuyla yeniden başlayacak.",
@@ -7916,8 +7964,15 @@
       "stop": "Bayilikten çıkar",
       "stopped": "Bayilikten çıkarıldı; müşterileri artık normal hesap",
       "stopTitle": "Bayilik kaldırılsın mı?",
-      "stopBody": "Kullanıcı bayi panelini kullanamaz; müşterileri doğrudan panelin müşterisi olur. Sunucuları silinmez, ama bayi ayarları (indirim, sınırlar) silinir.",
-      "cancel": "Vazgeç"
+      "stopBody": "Kullanıcı bayi panelini kullanamaz; müşterileri doğrudan panelin müşterisi olur ve sunucularının ücretini ödenmemiş ilk dönemden başlayarak kendileri öder. Sunucuları silinmez, ama bayi ayarları (indirim, sınırlar) silinir.",
+      "cancel": "Vazgeç",
+      "customersTitle": "Bu bayinin müşterileri ({n})",
+      "noCustomers": "Henüz müşterisi yok.",
+      "customerServers": "{n} sunucu",
+      "release": "Bayiden çıkar",
+      "releaseTitle": "{email} bu bayiden çıkarılsın mı?",
+      "releaseBody": "Bayi bu müşterinin sunucularını artık göremez ve yönetemez. Sunucuların abonelikleri müşteriye geçer ve ödenmemiş ilk dönemden başlayarak ona faturalanır; bayinin bu sunucular için ödenmemiş yenileme faturaları geri çekilir. İki tarafa da bildirim gider.",
+      "released": "{email} bayiden çıkarıldı. Sunucu: {servers} · devredilen abonelik: {subscriptions} · geri çekilen fatura: {withdrawn} · bayide kalan fatura: {left}."
     },
     "notReseller": "Bu hesap bayi değil. Sunucu satmak isterseniz bize yazın.",
     "brand": "Markanız",
@@ -9095,9 +9150,12 @@
     "overwrite": "“{name}” adlı görünüm var; kaydederseniz geçerli süzgeçlerle güncellenir.",
     "nothing": "Kaydetmek için önce bir süzgeç ya da sıralama seçin.",
     "limit": "En fazla {max} görünüm saklanır. Yenisi için birini silin.",
-    "storedHere": "Görünümler yalnızca bu tarayıcıda ve yalnızca sizin hesabınız için saklanır.",
+    "storedAccount": "Görünümler hesabınızla saklanır: her cihazda bulursunuz ve yalnızca siz görürsünüz.",
     "reset": "Süzgeçleri sıfırla",
-    "failed": "Görünüm bu tarayıcıda saklanamadı (depolama kapalı ya da dolu)."
+    "failed": "Görünümlerinizdeki değişiklik kaydedilmedi. {reason}",
+    "loadFailed": "Kayıtlı görünümleriniz yüklenemedi.",
+    "retry": "Yeniden dene",
+    "readOnly": "Bu kullanıcı olarak oturum açtınız: görünümleri uygulanabilir ama değiştirilemez."
   },
   "Clipboard": {
     "failed": "Kopyalanamadı: tarayıcı burada panoya izin vermiyor (panel HTTPS üzerinde olmayabilir). Metni seçip kendiniz kopyalayın."
