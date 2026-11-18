@@ -7,11 +7,13 @@ import { parseAsString, useQueryState } from 'nuqs';
 import React, { useState } from 'react';
 import { ActivityIcon, outcomeTone, useActionLabel, type AuditEvent } from '../../../../components/activity';
 import { I } from '../../../../components/icon';
+import { SavedViews } from '../../../../components/saved-views';
 import { Mono, PageHeader, SelectInput, StatusChip } from '../../../../components/ui';
 import { apiFetch, useErrorText } from '../../../../lib/api';
 import { downloadCsv } from '../../../../lib/csv';
 import { useApiQuery } from '../../../../lib/query';
 
+const viewKeys = { q: '', outcome: '', category: '' };
 type Page = { events: AuditEvent[]; nextBefore: string | null; categories: string[] };
 
 export default function Audit() {
@@ -48,6 +50,7 @@ export default function Audit() {
           options={[{ id: '', label: t('all') }, ...(['success', 'failure', 'denied'] as const).map((o) => ({ id: o, label: t(`outcome.${o}`) }))]}/>
         <SelectInput className="w-full md:w-48" label={t('category')} value={category} onChange={(v) => setCategory(v || null)}
           options={[{ id: '', label: t('all') }, ...(first?.categories ?? []).map((c) => ({ id: c, label: c }))]}/>
+        <SavedViews list="admin-audit" keys={viewKeys} className="self-start md:self-auto"/>
       </div>
       {!first ? <p role="status" className="text-sm text-muted">…</p> : !events.length ? <p className="py-8 text-center text-sm text-muted">{t('noMatch')}</p>
       : <ol className="flex flex-col">

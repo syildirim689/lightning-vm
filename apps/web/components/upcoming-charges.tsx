@@ -7,13 +7,13 @@ import NextLink from 'next/link';
 import { useFormatter, useNow, useTranslations } from 'next-intl';
 import type { Invoice, Summary } from '../lib/billing';
 import { useApiQuery } from '../lib/query';
-import { dueInvoices, nextRenewal, runOut } from '../lib/upcoming';
+import { dueInvoices, renewalLine, runOut } from '../lib/upcoming';
 import { I } from './icon';
 
 const SHOWN = 3;
 const action = 'inline-flex min-h-9 shrink-0 items-center gap-1 rounded-full px-3 text-sm font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent';
 
-function Row({ icon, tone = 'default', title, detail, amount, children }: { icon: React.ReactNode; tone?: 'default' | 'warning' | 'danger'; title: React.ReactNode; detail?: React.ReactNode; amount?: string; children?: React.ReactNode }) {
+function Row({ icon, tone = 'default', title, detail, amount, note, children }: { icon: React.ReactNode; tone?: 'default' | 'warning' | 'danger'; title: React.ReactNode; detail?: React.ReactNode; amount?: string; note?: string; children?: React.ReactNode }) {
   const mark = { default: 'bg-default text-muted', warning: 'bg-warning/15 text-warning', danger: 'bg-danger/15 text-danger' }[tone];
   return <li className="flex flex-wrap items-center gap-x-3 gap-y-1.5 py-2.5 first:pt-0 last:pb-0">
     <span aria-hidden className={`grid size-8 shrink-0 place-items-center rounded-xl ${mark}`}>{icon}</span>
@@ -21,7 +21,8 @@ function Row({ icon, tone = 'default', title, detail, amount, children }: { icon
       <p className={`text-sm font-medium [overflow-wrap:anywhere] ${tone === 'danger' ? 'text-danger' : ''}`}>{title}</p>
       {detail && <p className="text-xs text-muted [overflow-wrap:anywhere]">{detail}</p>}
     </div>
-    {amount && <span className="shrink-0 text-sm font-semibold tabular-nums">{amount}</span>}
+    {amount && <span className="flex shrink-0 flex-col items-end"><span className="text-sm font-semibold tabular-nums">{amount}</span>
+      {note && <span className="text-[11px] leading-4 text-muted">{note}</span>}</span>}
     {children}
   </li>;
 }
@@ -39,7 +40,9 @@ export default function UpcomingCharges() {
 
   const money = (v: number, currency: string, digits = 2) => format.number(v, { style: 'currency', currency, maximumFractionDigits: digits });
   const day = (at: string | number) => format.dateTime(new Date(at), { dateStyle: 'medium' });
-  const renewal = nextRenewal(s.subscriptions, now.getTime());
+  // The API's own figure when it gives one (tax included, and nothing once the renewal has its invoice: that
+  // invoice is in the list above); the calculation from the subscriptions on an older API.
+  const renewal = renewalLine(s.nextRenewal, s.subscriptions, now.getTime());
   const due = list.data ? dueInvoices(list.data.invoices, now.getTime()) : [];
   const spending = runOut(s.hourly, now.getTime());
   // Open invoices whose list has not arrived (or could not be read): one line from the summary's own count.
@@ -66,11 +69,12 @@ export default function UpcomingCharges() {
             <span aria-hidden className="h-4 w-40 max-w-full animate-pulse rounded bg-default motion-reduce:animate-none"/>
             <span className="sr-only">{t('loadingInvoices')}</span>
           </li>)}
-      {renewal && <Row icon={<I name="repeat" size={15}/>} amount={money(renewal.amount, renewal.currency)}
+      {renewal && <Row icon={<I name="repeat" size={15}/>} amount={money(renewal.amount, renewal.currency)} note={renewal.gross ? t('gross') : undefined}
         title={t('renewal', { date: day(renewal.at), when: format.relativeTime(new Date(renewal.at), now) })}
         detail={<>{renewal.items.slice(0, 2).map((x, k) => <span key={x.id}>{k > 0 && ', '}
           {x.serverId ? <NextLink href={`/servers/${x.serverId}`} className="rounded hover:text-foreground hover:underline focus-visible:outline-2 focus-visible:outline-accent">{x.description}</NextLink> : x.description}</span>)}
-          {renewal.items.length > 2 && <> {t('more', { n: renewal.items.length - 2 })}</>}</>}/>}
+          {renewal.items.length > 2 && <> {t('more', { n: renewal.items.length - 2 })}</>}
+          {renewal.items.length === 0 && renewal.servers > 0 && t('servers', { n: renewal.servers })}</>}/>}
       {spending.map((r) => <Row key={r.currency} icon={<I name="hourglass" size={15}/>} tone={r.empty ? 'danger' : r.soon ? 'warning' : 'default'} amount={money(r.amount, r.currency)}
         title={r.empty ? t('runOutEmpty') : t('runOut', { when: format.relativeTime(new Date(r.at), now) })}
         detail={<>{t('rate', { price: money(r.perHour, r.currency, 4) })}{!r.empty && <> · {format.dateTime(new Date(r.at), { dateStyle: 'medium', timeStyle: 'short' })}</>}</>}>

@@ -10,6 +10,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import NextLink from 'next/link';
 import { I } from '../../../../components/icon';
 import { UserSummary } from './user-summary';
+import { SavedViews } from '../../../../components/saved-views';
 import SessionList, { LastSeen, PresenceDot, type Presence, type SessionRow } from '../../../../components/session-list';
 import { CheckboxList, ConfirmButton, ConfirmDialog, DataTable, Notice, PageHeader, SelectInput, StatusChip, TextInput } from '../../../../components/ui';
 import { apiFetch, useErrorText } from '../../../../lib/api';
@@ -27,6 +28,7 @@ type Row = { id: string; email: string; name: string; role: string; locale: stri
 type Role = { key: string; name: string; description: string; permissions: string[]; builtin: boolean; members: number };
 type Override = { permission: string; effect: 'allow' | 'deny' };
 type ClientError = { code?: string; status?: number } | null;
+const viewKeys = { q: '', role: '', status: '' };
 const codeOf = (e: ClientError) => ({ code: e?.code ?? (e?.status === 429 ? 'RATE_LIMITED' : 'UNKNOWN') });
 
 // A generated password the admin can see, replace and copy (it goes to the user by another channel).
@@ -94,6 +96,7 @@ export default function Users() {
       <SelectInput className="w-52" label={t('filterStatus')} value={status} onChange={(v) => void setStatus(v || null)}
         options={[{ id: '', label: t('all') }, { id: 'active', label: t('active') }, { id: 'banned', label: t('banned') }, { id: 'no2fa', label: t('no2fa') }, { id: 'online', label: t('onlineFilter') },
           { id: 'inactive', label: t('inactiveFilter') }, { id: 'new', label: t('newFilter') }]}/>
+      <SavedViews list="admin-users" keys={viewKeys}/>
       <span className="flex gap-2">
         {(can(perms, 'users.manage') || can(perms, 'users.sessions')) && <Button variant="secondary" isDisabled={!rows.some((u) => u.id !== me?.id)} onPress={() => setDialog({ kind: 'bulk' })}><I name="users" size={16}/>{t('bulk.open', { n: Math.min(rows.filter((u) => u.id !== me?.id).length, 200) })}</Button>}
         <Button variant="ghost" isDisabled={!rows.length} onPress={() => downloadCsv('users', ['email', 'name', 'roles', 'status', 'two_factor', 'sign_in', 'servers', 'sessions', 'last_seen', 'created_at', 'pinned_note'],

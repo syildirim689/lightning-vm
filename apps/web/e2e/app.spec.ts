@@ -248,6 +248,16 @@ test.describe('roles and sessions (English browser)', () => {
     await expect(page.getByRole('heading', { level: 1 })).toHaveText('Overview');
     await page.getByRole('link', { name: 'System' }).click();
     await expect(health(page)).toHaveText('API, PostgreSQL and Redis are reachable');
+    // What waits for staff (the menu's counts) is one small read the admin may make; a count that is zero puts no
+    // badge on its menu link.
+    const attention = await page.request.get('/api/admin/attention');
+    expect(attention.status()).toBe(200);
+    const waiting = await attention.json() as { paymentsInReview?: number; failedOperations?: number; abuse?: number };
+    expect(waiting.paymentsInReview).toBe(0);
+    const menu = page.getByRole('navigation', { name: 'Main navigation' });
+    await expect(menu.getByRole('link', { name: 'System' })).toBeVisible();
+    for (const [key, text] of [['paymentsInReview', /awaiting review/], ['failedOperations', /failed in the last 24 hours/], ['abuse', /open abuse finding/]] as const)
+      if (!waiting[key]) await expect(menu.getByText(text)).toHaveCount(0);
     await expect(page.getByText(/Background worker: Running \(last signal .+\)/)).toBeVisible();
     // The run script and CI take one backup with scripts/install.sh before the tests.
     await expect(page.getByText(/Last successful backup: .*\d{4}/)).toBeVisible();
@@ -281,6 +291,8 @@ test.describe('roles and sessions (English browser)', () => {
     await expect(page.locator('main [role=alert]')).toContainText('does not have permission for this action.');
     const api = await page.request.get('/api/admin/users');
     expect(api.status()).toBe(403);
+    // The staff menu's counts are not for customers either.
+    expect((await page.request.get('/api/admin/attention')).status()).toBe(403);
   });
 
   test('sign-out ends the session on the server', async ({ page }) => {
@@ -676,6 +688,17 @@ test.describe('server lifecycle (simulator, Turkish customer)', () => {
     // The overview copies a plain summary of the server.
     await page.getByRole('button', { name: 'Özeti kopyala' }).click();
     await expect(page.getByText('Sunucu özeti panoya kopyalandı.')).toBeVisible();
+    // An address in the IP list copies in one tap and says so.
+    await page.getByRole('button', { name: 'Kopyala: 10.30.0.20', exact: true }).click();
+    await expect(page.getByText('10.30.0.20 kopyalandı.')).toBeVisible();
+    // Reinstall: once an image is chosen, the summary says what is kept and what is erased, before the name is typed.
+    const reinstall = page.locator('[data-section="Yeniden kur"]');
+    await choose(page, reinstall, /İmaj/, /Sim Linux/);
+    await expect(reinstall.getByText('Kalır', { exact: true })).toBeVisible();
+    await expect(reinstall).toContainText('IP adresleri (10.30.0.20)');
+    await expect(reinstall.getByText('Silinir', { exact: true })).toBeVisible();
+    await expect(reinstall).toContainText('Diskteki tüm veriler ve anlık görüntüler');
+    await expect(reinstall.getByRole('button', { name: 'Yeniden kur', exact: true })).toBeDisabled();
     // Snapshot: taken as an operation, then listed as the current state.
     // A ready name fills the field and is marked as chosen.
     await page.getByRole('button', { name: 'Güncelleme öncesi', exact: true }).click();
@@ -743,6 +766,32 @@ test.describe('server lifecycle (simulator, Turkish customer)', () => {
     await expect(page).toHaveURL(/\/\?q=/);
     await page.screenshot({ path: 'test-results/tour/servers-note-search-390.png' });
     await page.setViewportSize({ width: 1280, height: 720 });
+    // The same menu offers a new name, the delete lock and deleting. Renamed from the list, the card shows the new
+    // name (and back again, for the rest of this tour); locked and unlocked without opening the server.
+    const cards = page.getByRole('list', { name: 'Sunucularınız' });
+    await page.getByRole('button', { name: 'web-1 için hızlı işlemler' }).click();
+    await expect(page.getByRole('menuitem', { name: 'Kilitle (silmeye karşı koru)' })).toBeVisible();
+    await expect(page.getByRole('menuitem', { name: 'Sil…' })).toBeVisible();
+    await page.getByRole('menuitem', { name: 'Yeniden adlandır' }).click();
+    const renameServer = page.getByRole('dialog').filter({ hasText: 'web-1 adını değiştir' });
+    await renameServer.getByRole('textbox', { name: 'Yeni ad' }).fill('web-1-yeni');
+    await renameServer.getByRole('button', { name: 'Kaydet' }).click();
+    await expect(page.getByText('Sunucu yeniden adlandırıldı').first()).toBeVisible();
+    await expect(renameServer).toBeHidden();
+    await expect(cards.getByRole('link', { name: /^web-1-yeni/ })).toBeVisible();
+    await page.getByRole('button', { name: 'web-1-yeni için hızlı işlemler' }).click();
+    await page.getByRole('menuitem', { name: 'Yeniden adlandır' }).click();
+    const renameBack = page.getByRole('dialog').filter({ hasText: 'web-1-yeni adını değiştir' });
+    await renameBack.getByRole('textbox', { name: 'Yeni ad' }).fill('web-1');
+    await renameBack.getByRole('button', { name: 'Kaydet' }).click();
+    await expect(renameBack).toBeHidden();
+    await expect(cards.getByRole('link', { name: /^web-1-yeni/ })).toHaveCount(0);
+    await page.getByRole('button', { name: 'web-1 için hızlı işlemler' }).click();
+    await page.getByRole('menuitem', { name: 'Kilitle (silmeye karşı koru)' }).click();
+    await expect(page.getByText('Sunucu kilitlendi.')).toBeVisible();
+    await page.getByRole('button', { name: 'web-1 için hızlı işlemler' }).click();
+    await page.getByRole('menuitem', { name: 'Kilidi aç' }).click();
+    await expect(page.getByText('Kilit açıldı.')).toBeVisible();
     await choose(page, page, /Sırala/, 'En büyük önce');
     await expect(page).toHaveURL(/sort=size/);
     // State order puts problems and busy servers before the running ones.
@@ -1598,6 +1647,16 @@ test.describe('people, settings and smart features (English browser)', () => {
     await expect(foundInvoice).toBeVisible();
     await foundInvoice.click();
     await expect(page).toHaveURL(new RegExp(`/admin/billing/invoices/${invoiceId}$`));
+    // The palette also starts things: its quick actions offer a balance top-up and a new ticket, and open them.
+    await page.keyboard.press('Control+k');
+    await page.getByRole('combobox', { name: 'Command palette' }).fill('top up');
+    await expect(page.getByRole('option', { name: 'Top up balance' })).toBeVisible();
+    await page.getByRole('combobox', { name: 'Command palette' }).fill('new support ticket');
+    const newTicket = page.getByRole('option', { name: 'Open a new support ticket' });
+    await expect(newTicket).toBeVisible();
+    await newTicket.click();
+    await expect(page).toHaveURL(/\/support\?new=1$/);
+    await expect(page.getByLabel('Subject')).toBeVisible();
     await page.goto('/billing');
     // Invoice details: a wrong TCKN is refused, a right one saved.
     await page.getByRole('tab', { name: 'Invoice details' }).click();
@@ -1674,6 +1733,25 @@ test.describe('people, settings and smart features (English browser)', () => {
     await expect(page.getByRole('grid', { name: 'Payments' }).getByText('Failed', { exact: true }).first()).toBeVisible();
     await page.waitForTimeout(400);
     await shot('billing-admin-payments');
+    // Payments awaiting review: the filter is offered, and with nothing waiting the list says what would appear
+    // here. The filter and the search land in the address and are still there after a reload.
+    await choose(page, page, /Status/, 'Awaiting review');
+    await expect(page).toHaveURL(/status=review/);
+    await expect(page.getByText('No payments are awaiting review')).toBeVisible();
+    const paymentSearch = page.getByRole('searchbox', { name: 'Invoice number, e-mail or provider reference' });
+    await paymentSearch.fill('no-such-reference');
+    await expect(page).toHaveURL(/q=no-such-reference/);
+    await expect(page.getByText('No payments match the search')).toBeVisible();
+    await page.reload();
+    await expect(page).toHaveURL(/tab=payments/);
+    await expect(page).toHaveURL(/status=review/);
+    await expect(page).toHaveURL(/q=no-such-reference/);
+    await expect(paymentSearch).toHaveValue('no-such-reference');
+    await expect(page.getByRole('button', { name: /Status/ })).toContainText('Awaiting review');
+    await expect(page.getByText('No payments match the search')).toBeVisible();
+    await paymentSearch.fill('');
+    await expect(page).not.toHaveURL(/q=/);
+    await expect(page.getByText('No payments are awaiting review')).toBeVisible();
     await page.goto(`/admin/billing/invoices/${invoiceId}`);
     await page.getByRole('button', { name: 'Refund', exact: true }).click();
     await page.getByLabel('Amount', { exact: true }).fill('50');

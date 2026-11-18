@@ -4,7 +4,7 @@ import { Button, Card, Dropdown, Label, Modal, Popover, ProgressBar, toast } fro
 import { I } from '../../components/icon';
 import NextLink from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useFormatter, useTranslations } from 'next-intl';
+import { useFormatter, useNow, useTranslations } from 'next-intl';
 import { useAutoAnimate } from '@formkit/auto-animate/react';
 import { motion } from 'motion/react';
 import { useQueryClient } from '@tanstack/react-query';
@@ -25,6 +25,7 @@ import { ServerUpdates } from './server-updates';
 import { ServerSnapshots } from './server-snapshots';
 import { ServerReinstall, ServerResize } from './server-change';
 import { useBytes } from '../../lib/units';
+import { latestFailure, nextStep } from '../../lib/next-step';
 // The charts (and their library) load with the server page's lower part, not with the server list.
 const ServerMetrics = dynamic(() => import('./metrics'), { ssr: false });
 const ServerTraffic = dynamic(() => import('./server-traffic').then((m) => m.ServerTraffic), { ssr: false });
@@ -501,9 +502,36 @@ function useServerLock(id: string, locked: boolean) {
 
 const runningStates = ['pending', 'running'];
 
+// After a failed operation: what went wrong, what to do next and one button for it (lib/next-step). "Try again" is
+// handed in by the page (its own button for that action, so the lock, the state and the permissions hold as they do
+// there). The owner gets the links: the invoices, what the quota allows, or a ticket with the details filled in.
+// Staff looking at a customer's server get the reason and, where it applies, the retry.
+function FailedNotice({ op, own, retry, ticket }: { op: Operation; own: boolean; retry: React.ReactNode; ticket: string }) {
+  const t = useTranslations('Servers');
+  const { error } = useErrorText();
+  const next = nextStep(op.kind, op.errorCode);
+  // Retry where the page does not offer the action (switched off for customers): support instead.
+  const step = next.step === 'retry' && !retry ? 'support' : next.step;
+  const staff = next.step === 'support' && next.staff;
+  const link = (href: string, icon: string, label: string) => <ButtonLink size="sm" href={href}><I name={icon} size={14}/>{label}</ButtonLink>;
+  const button = step === 'retry' ? retry : !own ? null
+    : step === 'billing' ? link('/billing?show=open', 'wallet', t('nextStep.billingButton'))
+    : step === 'quota' ? link('/order', 'gauge', t('nextStep.quotaButton'))
+    : link(ticket, 'life-buoy', t('nextStep.supportButton'));
+  return <Notice tone="danger" title={t('nextStep.title', { kind: t(`kind.${op.kind as 'create'}`) })}>
+    <span className="flex flex-col items-start gap-2">
+      <span>{t('errorCode', { message: error({ code: op.errorCode ?? '' }), code: op.errorCode ?? '' })} · <Ago at={op.finishedAt ?? op.createdAt}/></span>
+      {(own || step === 'retry') && <span>{t(staff ? 'nextStep.staff' : `nextStep.${step}`)}</span>}
+      {button}
+    </span>
+  </Notice>;
+}
+
 export function ServerDetail({ id }: { id: string }) {
   const t = useTranslations('Servers');
+  const ts = useTranslations('Snapshots');
   const format = useFormatter();
+  const now = useNow({ updateInterval: 60_000 });
   const { error } = useErrorText();
   const router = useRouter();
   const copy = useCopy();
@@ -534,10 +562,27 @@ export function ServerDetail({ id }: { id: string }) {
   // A ready server's power state decides which buttons make sense; in an error state the power state may be stale, so all stay open.
   const on = s.state !== 'ready' || s.powerState !== 'poweredOff';
   const off = s.state !== 'ready' || s.powerState !== 'poweredOn';
-  const power = (action: string, icon: React.ReactNode, needs = true) => <Button variant="secondary" isDisabled={!canAct || !needs} onPress={() => act(`/servers/${id}/actions`, 'POST', { action })}>{icon}{actionLabel(action)}</Button>;
-  const risky = (action: 'power_off' | 'reset', icon: React.ReactNode) => <ConfirmButton variant="danger-soft" isDisabled={!canAct || locked || !on} icon={icon} label={actionLabel(action)}
+  // `again`: the same button as "try again" in the failed-operation notice (same request, same conditions).
+  const power = (action: string, icon: React.ReactNode, needs = true, again?: string) => <Button variant={again ? 'primary' : 'secondary'} size={again ? 'sm' : 'md'} isDisabled={!canAct || !needs}
+    onPress={() => act(`/servers/${id}/actions`, 'POST', { action })}>{icon}{again ?? actionLabel(action)}</Button>;
+  const risky = (action: 'power_off' | 'reset', icon: React.ReactNode, again?: string) => <ConfirmButton variant={again ? 'primary' : 'danger-soft'} size={again ? 'sm' : 'md'} isDisabled={!canAct || locked || !on} icon={icon} label={again ?? actionLabel(action)}
     title={actionLabel(action)} body={t(`confirm.${action}`)} confirmLabel={t('confirm.yes', { action: actionLabel(action) })} cancelLabel={t('confirm.no')}
     onConfirm={() => act(`/servers/${id}/actions`, 'POST', { action })}/>;
+  // The newest operation, when it failed and still matters: what went wrong and the one thing to do next.
+  const failure = open ? null : latestFailure(operations, s.state, now.getTime());
+  // "Try again" is the page's own button for that action, or nothing where the page does not offer the action.
+  const retry = (o: Operation) => {
+    const label = t('nextStep.retryButton'), icon = <I name="rotate-cw" size={14}/>;
+    if (o.kind === 'snapshot_create') return allowed.snapshots && ['ready', 'error'].includes(s.state)
+      ? <Button size="sm" isDisabled={!canAct} onPress={() => act(`/servers/${id}/snapshots`, 'POST', { description: '',
+          name: `${ts('auto')} ${format.dateTime(new Date(), { dateStyle: 'short', timeStyle: 'short' }).replace(/[/,]/g, '.').replace(/\s+/g, ' ')}` })}>{icon}{label}</Button> : null;
+    if (!allowed.power) return null;
+    return o.kind === 'power_on' ? power('power_on', icon, off, label) : o.kind === 'shutdown' ? power('shutdown', icon, on, label) : o.kind === 'reset' ? risky('reset', icon, label) : null;
+  };
+  // A ticket about a failed operation, with what support will ask for already written.
+  const ticketHref = (o: Operation) => `/support?${new URLSearchParams({ new: '1', server: id,
+    subject: t('failedTicket.subject', { kind: t(`kind.${o.kind as 'create'}`), name: s.name }),
+    body: t('failedTicket.body', { kind: t(`kind.${o.kind as 'create'}`), when: format.dateTime(new Date(o.createdAt), { dateStyle: 'medium', timeStyle: 'medium' }), error: `${error({ code: o.errorCode ?? '' })} (${o.errorCode})`, op: o.id }) })}`;
 
   return <div ref={page} className="flex flex-col gap-6">
     <PageHeader eyebrow={s.location || s.poolName} title={s.name} description={<span className="mt-2 inline-flex"><StateBadge server={s}/></span>}
@@ -553,7 +598,8 @@ export function ServerDetail({ id }: { id: string }) {
     {s.lastOperation?.step === 'awaiting_payment' && <Notice tone="warning" title={t('awaitingPayment')}>{t('awaitingPaymentHelp')} <NextLink href="/billing?show=open" className="font-medium text-accent hover:underline">{t('payNow')}</NextLink></Notice>}
     {s.deleteAt && <TrashBar server={s} canChange={allowed.delete}/>}
     <LockBar id={id} locked={locked} canChange={own || allowed.delete}/>
-    {s.errorCode && <Notice tone="danger">{t('errorCode', { message: error({ code: s.errorCode }), code: s.errorCode })}</Notice>}
+    {s.errorCode && s.errorCode !== failure?.errorCode && <Notice tone="danger">{t('errorCode', { message: error({ code: s.errorCode }), code: s.errorCode })}</Notice>}
+    {failure && <FailedNotice op={failure} own={own} retry={retry(failure)} ticket={ticketHref(failure)}/>}
 
     {open && <Section title={t('detail.progress')}>
       <div className="flex flex-col gap-3">
@@ -630,10 +676,13 @@ export function ServerDetail({ id }: { id: string }) {
         cells={(o) => [<span key="w" className="flex flex-col">{format.dateTime(new Date(o.createdAt), { dateStyle: 'medium', timeStyle: 'medium' })}<span className="text-xs text-muted"><Ago at={o.createdAt}/></span></span>, t(`kind.${o.kind as 'create'}`),
           <StatusChip key="s" tone={o.status === 'succeeded' ? 'success' : o.status === 'failed' ? 'danger' : o.status === 'cancelled' ? 'default' : 'accent'}>{t(`opStatus.${o.status as 'pending'}`)}</StatusChip>,
           o.errorCode ? <span key="d" className="flex flex-col items-start gap-1">{t('errorCode', { message: error({ code: o.errorCode }), code: o.errorCode })}
-            {own && o.status === 'failed' && <NextLink className="inline-flex items-center gap-1 text-xs font-medium text-accent hover:underline" href={`/support?${new URLSearchParams({ new: '1', server: id,
-              subject: t('failedTicket.subject', { kind: t(`kind.${o.kind as 'create'}`), name: s.name }),
-              body: t('failedTicket.body', { kind: t(`kind.${o.kind as 'create'}`), when: format.dateTime(new Date(o.createdAt), { dateStyle: 'medium', timeStyle: 'medium' }), error: `${error({ code: o.errorCode })} (${o.errorCode})`, op: o.id }) })}`}>
-              <I name="life-buoy" size={13}/>{t('failedTicket.link')}</NextLink>}</span>
+            {own && o.status === 'failed' && (() => {
+              // The row's link follows the same next step as the notice: the invoices, the quota, or a ticket.
+              const step = nextStep(o.kind, o.errorCode).step;
+              const [href, icon, label] = step === 'billing' ? ['/billing?show=open', 'wallet', t('nextStep.billingButton')] : step === 'quota' ? ['/order', 'gauge', t('nextStep.quotaButton')]
+                : [ticketHref(o), 'life-buoy', t('failedTicket.link')];
+              return <NextLink className="inline-flex min-h-6 items-center gap-1 rounded text-xs font-medium text-accent hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent" href={href}><I name={icon} size={13}/>{label}</NextLink>;
+            })()}</span>
           : o.step ? t(`step.${o.step as 'queued'}`) : '']}/>
     </Section>
 

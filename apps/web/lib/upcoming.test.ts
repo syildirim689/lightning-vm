@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { dueInvoices, nextRenewal, runOut, type UpcomingInvoice, type UpcomingSubscription } from './upcoming.ts';
+import { dueInvoices, nextRenewal, renewalLine, runOut, type ApiRenewal, type UpcomingInvoice, type UpcomingSubscription } from './upcoming.ts';
 
 const now = Date.parse('2026-11-17T10:00:00Z');
 const sub = (over: Partial<UpcomingSubscription>): UpcomingSubscription => ({ id: 'a', serverId: 's1', description: 'web-1', amount: '100.00', currency: 'TRY', periodMonths: 1, status: 'active',
@@ -53,4 +53,31 @@ test('pay as you go: when the balance runs out, and when a top-up is worth offer
   assert.deepEqual(runOut({ servers: [], available: [{ currency: 'TRY', amount: '5', perHour: '1' }] }, now), []);
   assert.deepEqual(runOut({ servers, available: [{ currency: 'TRY', amount: '5', perHour: '0.0000' }] }, now), []);
   assert.deepEqual(runOut(undefined, now), []);
+});
+
+const api = (over: Partial<ApiRenewal>): ApiRenewal => ({ at: '2026-12-01T00:00:00.000Z', amount: 120, currency: 'TRY', gross: true, servers: 1, invoiced: false, ...over });
+
+test('the next renewal as the API gives it wins: its amount (tax included), its date, the names from the subscriptions', () => {
+  const r = renewalLine(api({}), [sub({})], now);
+  assert.deepEqual(r, { at: '2026-12-01T00:00:00.000Z', amount: 120, currency: 'TRY', gross: true, servers: 1, items: [{ id: 'a', serverId: 's1', description: 'web-1' }] });
+  // A text amount is read as a number; net amounts are not called gross.
+  const net = renewalLine(api({ amount: '100.00', gross: false, servers: 2 }), [sub({}), sub({ id: 'b', description: 'db-1' })], now);
+  assert.deepEqual([net?.amount, net?.gross, net?.servers, net?.items.length], [100, false, 2, 2]);
+  // Subscriptions that are about something else (another day or currency) lend no names; the count still shows.
+  const other = renewalLine(api({ servers: 3 }), [sub({ periodEnd: '2026-12-15' })], now);
+  assert.deepEqual([other?.items, other?.servers], [[], 3]);
+  assert.deepEqual(renewalLine(api({ currency: 'EUR' }), [sub({})], now)?.items, []);
+});
+
+test('an invoiced renewal has no line (its invoice is listed instead); null means nothing renews', () => {
+  assert.equal(renewalLine(api({ invoiced: true }), [sub({})], now), null);
+  assert.equal(renewalLine(null, [sub({})], now), null);
+});
+
+test('without the field (an older API), or with one that cannot be read, the calculation stays', () => {
+  const calculated = { at: '2026-12-01', amount: 100, currency: 'TRY', gross: false, servers: 1, items: [{ id: 'a', serverId: 's1', description: 'web-1' }] };
+  assert.deepEqual(renewalLine(undefined, [sub({})], now), calculated);
+  assert.deepEqual(renewalLine(api({ amount: 'n/a' }), [sub({})], now), calculated);
+  assert.deepEqual(renewalLine(api({ at: 'soon' }), [sub({})], now), calculated);
+  assert.equal(renewalLine(undefined, [], now), null);
 });

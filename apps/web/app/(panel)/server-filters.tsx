@@ -6,6 +6,7 @@ import { useFormatter, useTranslations } from 'next-intl';
 import { parseAsString, parseAsStringLiteral, useQueryState } from 'nuqs';
 import { useState } from 'react';
 import { I } from '../../components/icon';
+import { SavedViews } from '../../components/saved-views';
 import { ConfirmButton, SelectInput, TextInput } from '../../components/ui';
 import { apiFetch } from '../../lib/api';
 import { fold } from '../../lib/note-line';
@@ -17,6 +18,9 @@ const groups = ['all', 'running', 'stopped', 'problem', 'busy', 'trash'] as cons
 export const stateGroup = (s: Pick<Server, 'state' | 'powerState' | 'deleteAt'>) => s.deleteAt ? 'trash' : s.state === 'ready' ? (s.powerState === 'poweredOn' ? 'running' : 'stopped') : s.state === 'error' || s.state === 'missing' ? 'problem' : 'busy';
 
 const attention = ['problem', 'busy', 'stopped', 'running', 'trash'];
+// What a saved view of each list holds: its address parameters and the value each has when absent.
+const ownViews = { q: '', state: 'all', tag: '', project: '', sort: 'newest' };
+const staffViews = { q: '', state: 'all', tag: '', owner: '', sort: 'newest', starred: 'false' };
 
 export function useServerFilters(all: Server[]) {
   const [q, setQ] = useQueryState('q', parseAsString.withDefault(''));
@@ -68,6 +72,8 @@ export function ServerFilters({ f, placeholder, manageTags }: { f: ReturnType<ty
     {manageTags && f.tag && tags.includes(f.tag) && <TagTools tag={f.tag} onDone={(next) => f.setTag(next)}/>}
     {manageTags && <ProjectFilter f={f}/>}
     {f.filtered && <Button variant="ghost" className="min-h-11 self-start md:self-auto" onPress={f.clear}><I name="funnel-x" size={15}/>{t('list.clearFilters')}</Button>}
+    {/* The customer's list and the staff table keep their views apart (the staff one also holds the owner and the favourites switch). */}
+    <SavedViews list={manageTags ? 'servers' : 'admin-servers'} keys={manageTags ? ownViews : staffViews} className="self-start md:self-auto"/>
     <SelectInput className="w-full md:ml-auto md:w-60" label={t('list.sort')} value={f.sort} onChange={(v) => f.setSort(v === 'name' || v === 'size' || v === 'price' || v === 'state' ? v : null)}
       options={[{ id: 'newest', label: t('list.newest') }, { id: 'name', label: t('list.byName') }, { id: 'size', label: t('list.bySize') }, { id: 'price', label: t('list.byPrice') }, { id: 'state', label: t('list.byState') }]}/>
   </div>;

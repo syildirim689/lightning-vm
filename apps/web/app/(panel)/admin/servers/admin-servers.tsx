@@ -5,7 +5,7 @@ import { useFormatter, useTranslations } from 'next-intl';
 import { parseAsBoolean, parseAsString, parseAsStringLiteral, useQueryState } from 'nuqs';
 import { I } from '../../../../components/icon';
 import { Ago, ConfirmButton, DataTable, Mono, Notice, PageHeader, SelectInput, StatusChip, TextInput } from '../../../../components/ui';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { can } from '../../../../lib/permissions';
 import { useMe } from '../../../../lib/me';
 import { apiFetch, useErrorText } from '../../../../lib/api';
@@ -41,8 +41,15 @@ export default function AdminServers() {
   const [bulkAction, setBulkAction] = useState('shutdown');
   const [bulkTag, setBulkTag] = useState('');
   const tagging = bulkAction === 'tag' || bulkAction === 'untag';
+  // Rows ticked for the bulk action. Shift+click gives every row from the last ticked one to this one the state this
+  // one takes (as on the customer's list); a row the filters hide no longer counts.
+  const [picked, setPicked] = useState<Set<string>>(new Set());
+  const anchor = useRef<string | null>(null);
+  // What the action applies to: the ticked rows, or (said explicitly) everything the filters show.
+  const [scope, setScope] = useState<'selected' | 'shown'>('selected');
   const bulk = useApiAction((ids: string[]) => apiFetch<{ started: number; skipped: number }>('/admin/servers/actions', { method: 'POST', body: { action: bulkAction, serverIds: ids, ...(tagging && { tag: bulkTag.trim() }) }, headers: { 'idempotency-key': crypto.randomUUID() } }),
-    { invalidate: [['admin']], success: (r) => (tagging ? t('list.select.tagDone', { n: r.started }) : t('admin.bulkDone', { started: r.started, skipped: r.skipped })) });
+    { invalidate: [['admin']], success: (r) => (tagging ? t('list.select.tagDone', { n: r.started }) : t('admin.bulkDone', { started: r.started, skipped: r.skipped })),
+      onSuccess: () => { setPicked(new Set()); anchor.current = null; setScope('selected'); } });
   const [onlyStarred, setOnlyStarred] = useQueryState('starred', parseAsBoolean.withDefault(false).withOptions({ history: 'replace' }));
   // Kept in the address, so a link to "failed operations" works and the view survives a reload.
   const [opShow, setOpShow] = useQueryState('ops', parseAsStringLiteral(['all', 'failed', 'active'] as const).withDefault('all').withOptions({ history: 'replace' }));
@@ -52,6 +59,22 @@ export default function AdminServers() {
   const shownOps = ops.filter((o) => (opShow === 'all' || opGroup(o) === opShow) && (!opNeedle || fold(`${o.serverName ?? ''} ${o.ownerEmail ?? ''} ${t(`kind.${o.kind as 'create'}`)} ${o.errorCode ?? ''}`).includes(opNeedle)));
   // Starred first; optionally only them.
   const shown = filters.shown.filter((x) => !onlyStarred || x.favorite).sort((x, y) => Number(!!y.favorite) - Number(!!x.favorite));
+  const chosen = shown.filter((x) => picked.has(x.id));
+  const flip = (id: string, range: boolean) => {
+    const from = shown.findIndex((x) => x.id === anchor.current), to = shown.findIndex((x) => x.id === id);
+    setPicked((p) => {
+      const n = new Set(p), on = !p.has(id);
+      const ids = range && from >= 0 && to >= 0 ? shown.slice(Math.min(from, to), Math.max(from, to) + 1).map((x) => x.id) : [id];
+      ids.forEach((x) => (on ? n.add(x) : n.delete(x)));
+      return n;
+    });
+    anchor.current = id;
+  };
+  const mayBulk = !!me && can(me.permissions, 'servers.manage_all');
+  // One request takes at most 200 servers: the first 200 in the order shown.
+  const pool = scope === 'shown' ? shown : chosen;
+  const targets = pool.slice(0, 200);
+  const actionName = t(`action.${bulkAction as 'shutdown'}`);
   const failed = ops.filter((o) => o.status === 'failed').length;
   const bytes = useBytes();
   const opTone = (s: string) => (s === 'succeeded' ? 'success' : s === 'failed' ? 'danger' : s === 'cancelled' ? 'default' : 'accent') as 'success';
@@ -79,20 +102,37 @@ export default function AdminServers() {
               <Button size="sm" variant={onlyStarred ? 'primary' : 'ghost'} aria-pressed={onlyStarred} onPress={() => setOnlyStarred(!onlyStarred)}><I name="star" size={15}/>{t('admin.onlyStarred')}</Button>
               <Button size="sm" variant="secondary" isDisabled={!shown.length} onPress={() => exportCsv(shown)}><I name="download" size={15}/>{t('admin.exportCsv')}</Button>
             </div>
-            {me && can(me.permissions, 'servers.manage_all') && shown.length > 0 && <div className="flex flex-col gap-3 rounded-lg border border-border p-3 sm:flex-row sm:items-end">
-              <SelectInput className="sm:w-56" label={t('admin.bulkAction')} value={bulkAction} onChange={setBulkAction}
-                options={(['shutdown', 'power_on', 'power_off', 'reset', 'tag', 'untag', 'delete', 'restore'] as const).map((a) => ({ id: a, label: t(`action.${a}`) }))}/>
-              {tagging && <TextInput format="tag" className="sm:w-48" label={t('list.select.tags')} value={bulkTag} onChange={setBulkTag} maxLength={24}/>}
-              <ConfirmButton variant={['power_off', 'reset', 'delete'].includes(bulkAction) ? 'danger' : 'primary'} icon={<I name="zap" size={15}/>} isDisabled={bulk.isPending || (tagging && !bulkTag.trim())}
-                label={t('admin.bulkApply', { n: Math.min(shown.length, 200) })} title={t('admin.bulkApply', { n: Math.min(shown.length, 200) })}
-                body={`${t('admin.bulkConfirm', { action: t(`action.${bulkAction as 'shutdown'}`), n: Math.min(shown.length, 200) })}${bulkAction === 'delete' ? ` ${t('admin.bulkDeleteNote')}` : ''}`}
-                confirmLabel={t('confirm.yes', { action: t(`action.${bulkAction as 'shutdown'}`) })} cancelLabel={t('confirm.no')}
-                onConfirm={() => bulk.mutate(shown.slice(0, 200).map((x) => x.id))}/>
-              <p className="text-xs text-muted sm:ml-2 sm:self-center">{t('admin.bulkHelp')}</p>
+            {mayBulk && shown.length > 0 && <div role="region" aria-label={t('admin.bulkBar')} className="flex flex-col gap-3 rounded-lg border border-border p-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <span role="status" className="mr-auto text-sm font-medium tabular-nums">{t('list.select.count', { n: chosen.length })}</span>
+                <Button size="sm" variant="ghost" onPress={() => { setPicked(chosen.length === shown.length ? new Set() : new Set(shown.map((x) => x.id))); anchor.current = null; }}>
+                  <I name="list-checks" size={15}/>{chosen.length === shown.length ? t('list.select.none') : t('admin.bulkSelectShown', { n: shown.length })}</Button>
+                {chosen.length > 0 && chosen.length < shown.length && <Button size="sm" variant="ghost" onPress={() => { setPicked(new Set()); anchor.current = null; }}><I name="x" size={15}/>{t('list.select.none')}</Button>}
+              </div>
+              <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
+                <div role="group" aria-label={t('admin.bulkScope')} className="flex flex-col gap-1">
+                  <span aria-hidden className="text-sm font-medium">{t('admin.bulkScope')}</span>
+                  <div className="flex flex-wrap gap-1.5">{(['selected', 'shown'] as const).map((k) => <button key={k} type="button" aria-pressed={scope === k} onClick={() => setScope(k)}
+                    className={`min-h-11 rounded-lg border px-3 text-sm tabular-nums transition-colors duration-150 focus-visible:outline-2 focus-visible:outline-accent motion-reduce:transition-none ${scope === k ? 'border-accent bg-accent-soft text-accent-soft-foreground' : 'border-border hover:border-accent'}`}>
+                    {k === 'selected' ? t('admin.bulkScopeSelected', { n: chosen.length }) : t('admin.bulkScopeShown', { n: shown.length })}</button>)}</div>
+                </div>
+                <SelectInput className="sm:w-56" label={t('admin.bulkWhat')} value={bulkAction} onChange={setBulkAction}
+                  options={(['shutdown', 'power_on', 'power_off', 'reset', 'tag', 'untag', 'delete', 'restore'] as const).map((a) => ({ id: a, label: t(`action.${a}`) }))}/>
+                {tagging && <TextInput format="tag" className="sm:w-48" label={t('list.select.tags')} value={bulkTag} onChange={setBulkTag} maxLength={24}/>}
+                <ConfirmButton variant={['power_off', 'reset', 'delete'].includes(bulkAction) ? 'danger' : 'primary'} icon={<I name="zap" size={15}/>} isDisabled={bulk.isPending || !targets.length || (tagging && !bulkTag.trim())}
+                  label={t('admin.bulkApply', { n: targets.length })} title={`${actionName}: ${t('admin.bulkApply', { n: targets.length })}`}
+                  body={`${t(scope === 'shown' ? 'admin.bulkConfirm' : 'admin.bulkConfirmSelected', { action: actionName, n: targets.length })}${pool.length > targets.length ? ` ${t('admin.bulkLimit', { n: pool.length, max: targets.length })}` : ''}${bulkAction === 'delete' ? ` ${t('admin.bulkDeleteNote')}` : ''}`}
+                  confirmLabel={t('admin.bulkYes', { action: actionName, n: targets.length })} cancelLabel={t('confirm.no')}
+                  onConfirm={() => bulk.mutateAsync(targets.map((x) => x.id)).then(() => undefined)}/>
+              </div>
+              <p className="text-xs text-muted" aria-live="polite">{scope === 'shown' ? t('admin.bulkHelp') : chosen.length ? (pool.length > targets.length ? t('admin.bulkLimit', { n: pool.length, max: targets.length }) : t('list.select.rangeHint')) : t('admin.bulkPick')}</p>
             </div>}
             <DataTable label={t('admin.servers')} rows={shown} rowKey={(s) => s.id} empty={t('list.empty')}
               columns={[{ id: 'name', label: t('col.name') }, { id: 'owner', label: t('admin.owner') }, { id: 'state', label: t('col.state') }, { id: 'ip', label: 'IP' }, { id: 'size', label: t('col.size') }, { id: 'loc', label: t('col.location') }, { id: 'tags', label: t('admin.tags') }]}
-              cells={(s) => [<span key="n" className="flex items-center gap-1"><FavoriteStar id={s.id} on={!!s.favorite} name={s.name} listKey={['admin', 'servers']} className="relative -ml-2 shrink-0"/><NextLink href={`/servers/${s.id}`} className="font-medium text-accent hover:underline">{s.name}</NextLink>{s.locked && <I name="lock" size={13} className="text-warning"/>}</span>,
+              cells={(s) => [<span key="n" className="flex items-center gap-1">{mayBulk && <button type="button" role="checkbox" aria-checked={picked.has(s.id)} aria-label={t('list.select.toggle', { name: s.name })} onClick={(e) => flip(s.id, e.shiftKey)}
+                  onMouseDown={(e) => { if (e.shiftKey) e.preventDefault(); /* a range click must not select the text between */ }}
+                  className="-ml-1 grid size-9 shrink-0 place-items-center rounded-lg outline-offset-2 hover:bg-default focus-visible:outline-2 focus-visible:outline-accent">
+                  <span aria-hidden className={`grid size-5 place-items-center rounded-md border-2 transition-colors motion-reduce:transition-none ${picked.has(s.id) ? 'border-accent bg-accent text-accent-foreground' : 'border-border bg-surface'}`}>{picked.has(s.id) && <I name="check" size={13}/>}</span></button>}<FavoriteStar id={s.id} on={!!s.favorite} name={s.name} listKey={['admin', 'servers']} className="relative -ml-2 shrink-0"/><NextLink href={`/servers/${s.id}`} className="font-medium text-accent hover:underline">{s.name}</NextLink>{s.locked && <I name="lock" size={13} className="text-warning"/>}</span>,
                 s.ownerEmail && can(me?.permissions, 'users.view') ? <NextLink key="o" href={`/admin/users?q=${encodeURIComponent(s.ownerEmail)}`} className="text-accent hover:underline">{s.ownerEmail}</NextLink> : s.ownerEmail ?? '–', <span key="b" className="flex flex-wrap gap-1"><StateBadge server={s}/>{s.deleteAt && <StatusChip tone="danger">{t('trash.badge', { when: format.relativeTime(new Date(s.deleteAt), new Date()) })}</StatusChip>}</span>,
                 s.address ? <span key="ip" className="flex items-center gap-1"><Mono>{s.address}</Mono><Copy text={s.address} label={`${s.name} IP`}/></span> : '–', <span key="z" className="flex flex-col"><span>{t('size', { vcpu: s.vcpu, memory: s.memoryMb / 1024, disk: s.diskGb })}</span>
                   <span className={`text-xs ${s.trafficGb && (s.trafficBytes ?? 0) >= s.trafficGb * 1024 ** 3 ? 'text-danger' : 'text-muted'}`}>{bytes(s.trafficBytes ?? 0)}{s.trafficGb ? ` / ${s.trafficGb} GB` : ''}</span>

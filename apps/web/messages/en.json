@@ -2268,7 +2268,16 @@
       "shown": "Showing {shown} of {total}",
       "exportCsv": "Export CSV",
       "tags": "Tags",
-      "bulkAction": "Action for the servers shown",
+      "bulkBar": "Bulk action",
+      "bulkWhat": "Action",
+      "bulkScope": "Apply to",
+      "bulkScopeSelected": "Selected ({n})",
+      "bulkScopeShown": "Everything shown ({n})",
+      "bulkSelectShown": "Select the {n} shown",
+      "bulkConfirmSelected": "{action} on the {n, plural, one {# server} other {# servers}} you selected? Busy servers are skipped.",
+      "bulkYes": "Yes, {action} on {n, plural, one {# server} other {# servers}}",
+      "bulkLimit": "At most {max} servers go in one run: the first {max} of {n} in the order shown.",
+      "bulkPick": "Select servers with the box at the start of each row, or choose everything shown as the target.",
       "bulkApply": "Apply to {n, plural, one {# server} other {# servers}}",
       "bulkConfirm": "{action} on {n, plural, one {# server} other {# servers}} shown by the current filter? Busy servers are skipped.",
       "bulkDone": "{started} started, {skipped} skipped.",
@@ -2371,6 +2380,18 @@
       "badge": "Deleting · {when}"
     },
     "shutdownNoTools": "The guest agent is not answering, so a clean shutdown will not reach the system. Use Force off if it must stop now.",
+    "nextStep": {
+      "title": "{kind} failed",
+      "retry": "This is usually temporary. You can try again now.",
+      "retryButton": "Try again",
+      "billing": "A payment stands in the way. Pay the open invoice or top up your balance, then start it again.",
+      "billingButton": "Go to billing",
+      "quota": "Your quota does not allow this. See what it still allows, or ask support to raise it.",
+      "quotaButton": "See quota",
+      "support": "Trying again will not fix this by itself. Write to support; the details are already filled in for you.",
+      "staff": "Our team needs to look at this server before anything else is done. Please do not start it again. Write to support; the details are already filled in for you.",
+      "supportButton": "Contact support"
+    },
     "failedTicket": {
       "link": "Ask support about this",
       "subject": "{kind} failed on {name}",
@@ -2778,6 +2799,10 @@
     "saidFailed": "{task} failed: {server}"
   },
   "Inbox": {
+    "groupCount": "{n} notifications:",
+    "groupShow": "Show all {n} one by one",
+    "groupHide": "Hide the single notifications",
+    "groupList": "The {n} notifications in this row",
     "title": "Notifications",
     "unreadLabel": "{n} unread notifications",
     "markAll": "Mark all read",
@@ -2809,7 +2834,8 @@
     "kind": {
       "server": "Server",
       "ticket": "Support ticket",
-      "invoice": "Invoice"
+      "invoice": "Invoice",
+      "user": "User"
     },
     "newTicket": "Open a new support ticket",
     "topUp": "Top up balance",
@@ -3066,6 +3092,10 @@
     "notOffered": "This channel is not offered for this notification",
     "policyNote": "Locked notifications and channels not offered come from your administrator's notification rules.",
     "events": {
+      "admin_restore_hold": {
+        "title": "Restore hold",
+        "help": "When a backup is restored and the panel is put on hold; it does nothing by itself until someone releases it."
+      },
       "billing_payment_review": {
         "title": "Payment awaiting review",
         "help": "When a payment cannot be confirmed by itself and waits for the team to decide."
@@ -6663,6 +6693,32 @@
     "legendDown": "Outage"
   },
   "Support": {
+    "diag": {
+      "title": "The server when the ticket was opened",
+      "captured": "captured {when}",
+      "note": "This is what was known at the moment the ticket was opened; the server may look different now.",
+      "state": "State",
+      "plan": "Plan",
+      "size": "Size",
+      "image": "Image",
+      "location": "Location",
+      "platform": "Platform",
+      "created": "Created",
+      "traffic": "Traffic this month",
+      "trafficValue": "{used} / {allowance} GB",
+      "throttled": "throttled",
+      "locked": "Locked",
+      "pendingDeletion": "Awaiting deletion",
+      "addresses": "IP addresses",
+      "noAddresses": "No address on record.",
+      "operations": "Last operations",
+      "noOperations": "No operations on record up to then.",
+      "invoices": "Invoices",
+      "unpaid": "The customer had {n, plural, one {# unpaid invoice} other {# unpaid invoices}} at that moment.",
+      "unpaidNone": "The customer had no unpaid invoices at that moment.",
+      "unpaidLink": "Open their unpaid invoices",
+      "openServer": "Open {name}"
+    },
     "title": "Support",
     "intro": "Support tickets for your questions and problems. You are notified when there is an answer.",
     "new": "New ticket",
@@ -8192,6 +8248,8 @@
     "answered": "{n, plural, one {Support answered your ticket} other {Support answered # tickets}}"
   },
   "Upcoming": {
+    "gross": "incl. tax",
+    "servers": "{n, plural, one {# server} other {# servers}}",
     "title": "Upcoming charges",
     "invoiceDue": "{number} · due {when}",
     "invoiceOverdue": "{number} · was due {when}",
@@ -9005,6 +9063,41 @@
     "logNoMatch": "No line matches.",
     "logEmpty": "No lines from this source.",
     "logCount": "Showing {shown} of {total} lines"
+  },
+  "Views": {
+    "button": "Views",
+    "title": "Saved views",
+    "triggerActive": "Saved views. Active view: {name}",
+    "triggerChanged": "Saved views. Active view: {name}; the filters differ from what was saved",
+    "statusActive": "The view “{name}” is active.",
+    "statusChanged": "The view “{name}” is active, but the filters differ from what was saved.",
+    "changed": "changed",
+    "default": "default",
+    "empty": "No saved views yet. Choose filters and an order, give them a name and save.",
+    "apply": "Apply the view {name}",
+    "makeDefault": "Make {name} the default view",
+    "clearDefault": "Stop using {name} as the default",
+    "defaultHelp": "The default view is applied when the list is opened without filters; it never replaces a filter that is in the address.",
+    "rename": "Rename the view {name}",
+    "delete": "Delete the view {name}",
+    "deleted": "The view “{name}” was deleted.",
+    "undo": "Undo",
+    "nameLabel": "View name",
+    "nameNeeded": "Type a name.",
+    "nameTaken": "Another view already has this name.",
+    "saveCurrent": "Save the current filters",
+    "namePlaceholder": "e.g. Servers with problems",
+    "save": "Save",
+    "update": "Update",
+    "cancel": "Cancel",
+    "saved": "The view “{name}” was saved.",
+    "updated": "The view “{name}” was updated.",
+    "overwrite": "A view named “{name}” exists; saving updates it with the current filters.",
+    "nothing": "Choose a filter or an order first to save a view.",
+    "limit": "Up to {max} views are kept. Delete one to add another.",
+    "storedHere": "Views are kept in this browser only, and only for your account.",
+    "reset": "Reset filters",
+    "failed": "The view could not be stored in this browser (storage is off or full)."
   },
   "Clipboard": {
     "failed": "Could not copy: this browser does not allow the clipboard here (the panel may not be on HTTPS). Select the text and copy it yourself."

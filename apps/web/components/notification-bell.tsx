@@ -1,6 +1,8 @@
 "use client";
 // The in-app inbox: unread count on the bell, the latest notifications in a popover, a toast when a new one
 // arrives while the panel is open. What arrives where is set in Account → Notifications.
+// A run of the same news about the same thing (five replies on one ticket) is one row with a count; the row opens
+// to show each, and pressing it marks all of them read. The unread badge keeps counting real notifications.
 import { Ago } from './ui';
 import { Button, Popover, toast } from '@heroui/react';
 import { useQueryClient } from '@tanstack/react-query';
@@ -13,6 +15,7 @@ import { apiFetch, useErrorText } from '../lib/api';
 import { useApiQuery } from '../lib/query';
 import { I } from './icon';
 import { mayLeave } from '../lib/edits';
+import { groupRuns } from '../lib/notification-groups';
 
 type Text = { title: string; body: string };
 // texts: both languages (newer notifications), so the inbox follows the panel's language.
@@ -37,6 +40,8 @@ export default function NotificationBell() {
   const [kind, setKind] = useState<string | null>(null);
   const kinds = [...new Set(items.map(kindOf))];
   const shown = items.filter((n) => (!onlyUnread || !n.readAt) && (!kind || kindOf(n) === kind));
+  // The row whose single notifications are listed under it (one at a time).
+  const [opened, setOpened] = useState<string | null>(null);
 
   // The unread count leads the tab's title ("(3) Servers"), so a panel left in another tab shows news. Pages set their
   // own title on navigation, so it is put back whenever the title changes.
@@ -68,6 +73,10 @@ export default function NotificationBell() {
     catch (e) { toast.danger(error(e)); }
   };
   const label = unread ? t('unreadLabel', { n: unread }) : t('title');
+  // Runs stay inside their day heading.
+  const groups = groupRuns(shown, (n) => dayOf(n.createdAt));
+  const go = (ids: string[], link: string | null) => { if (ids.length) void markRead(ids); if (link && mayLeave(link)) router.push(link); };
+  const focus = 'focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent';
 
   return <Popover>
     <Button isIconOnly variant="ghost" size="sm" aria-label={label} className="relative">
@@ -98,22 +107,43 @@ export default function NotificationBell() {
         <ul className="max-h-[60vh] divide-y divide-separator overflow-y-auto">
           {items.length === 0 && <li className="flex flex-col items-center gap-2 px-4 py-10 text-center text-sm text-muted"><I name="bell" size={22}/>{t('empty')}</li>}
           {items.length > 0 && shown.length === 0 && <li className="flex flex-col items-center gap-2 px-4 py-8 text-center text-sm text-muted"><I name="check-check" size={22}/>{onlyUnread && !kind ? t('allRead') : t('noneHere')}</li>}
-          {shown.map((n, i) => <li key={n.id}>
-            {/* Today, yesterday, earlier: a heading where the day changes. */}
-            {(i === 0 || dayOf(shown[i - 1].createdAt) !== dayOf(n.createdAt)) && <p className="bg-default/40 px-4 py-1 text-[11px] font-semibold uppercase tracking-wider text-muted">{t(`day.${dayOf(n.createdAt)}`)}</p>}
-            <button type="button" onClick={() => { void markRead([n.id]); if (n.link && mayLeave(n.link)) router.push(n.link); }}
-              className="flex w-full gap-3 px-4 py-3 text-left transition-colors hover:bg-default focus-visible:bg-default focus-visible:outline-none">
-              <span aria-hidden className={`relative mt-0.5 grid size-8 shrink-0 place-items-center rounded-full ${n.readAt ? 'bg-default text-muted' : 'bg-accent/15 text-accent'}`}>
-                <I name={kindIcons[kindOf(n)] ?? 'bell'} size={15}/>
-                {!n.readAt && <span className="absolute -right-0.5 -top-0.5 size-2.5 rounded-full border-2 border-surface bg-accent"/>}
-              </span>
-              <span className="flex min-w-0 flex-col gap-0.5">
-                <span className={`text-sm ${n.readAt ? '' : 'font-semibold'}`}>{n.title}</span>
-                <span className="line-clamp-2 text-xs text-muted">{n.body}</span>
-                <span className="text-[11px] text-muted"><Ago at={n.createdAt}/></span>
-              </span>
-            </button>
-          </li>)}
+          {groups.map((g, i) => {
+            const n = g.latest, many = g.items.length > 1, isOpen = many && opened === g.key, fresh = g.unread.length > 0;
+            return <li key={g.key}>
+              {/* Today, yesterday, earlier: a heading where the day changes. */}
+              {(i === 0 || dayOf(groups[i - 1].latest.createdAt) !== dayOf(n.createdAt)) && <p className="bg-default/40 px-4 py-1 text-[11px] font-semibold uppercase tracking-wider text-muted">{t(`day.${dayOf(n.createdAt)}`)}</p>}
+              <div className="flex items-stretch">
+                {/* One notification: read and opened. A run: every unread one in it is marked read, then its subject opens. */}
+                <button type="button" onClick={() => go(many ? g.unread : [n.id], n.link)}
+                  className={`flex min-w-0 flex-1 gap-3 px-4 py-3 text-left transition-colors hover:bg-default focus-visible:bg-default ${focus}`}>
+                  <span aria-hidden className={`relative mt-0.5 grid size-8 shrink-0 place-items-center rounded-full ${fresh ? 'bg-accent/15 text-accent' : 'bg-default text-muted'}`}>
+                    <I name={kindIcons[kindOf(n)] ?? 'bell'} size={15}/>
+                    {fresh && <span className="absolute -right-0.5 -top-0.5 size-2.5 rounded-full border-2 border-surface bg-accent"/>}
+                  </span>
+                  <span className="flex min-w-0 flex-col gap-0.5">
+                    <span className={`text-sm ${fresh ? 'font-semibold' : ''}`}>
+                      {many && <span className="sr-only">{t('groupCount', { n: g.items.length })} </span>}{n.title}
+                      {many && <span aria-hidden className="ml-1.5 inline-grid h-4 min-w-4 place-items-center rounded-full bg-accent/15 px-1 align-[1px] text-[10px] font-semibold leading-none tabular-nums text-accent">{g.items.length}</span>}
+                    </span>
+                    <span className="line-clamp-2 text-xs text-muted">{n.body}</span>
+                    <span className="text-[11px] text-muted"><Ago at={n.createdAt}/></span>
+                  </span>
+                </button>
+                {many && <button type="button" aria-expanded={isOpen} aria-label={t(isOpen ? 'groupHide' : 'groupShow', { n: g.items.length })} onClick={() => setOpened(isOpen ? null : g.key)}
+                  className={`grid w-11 shrink-0 place-items-center text-muted transition-colors hover:bg-default hover:text-foreground ${focus}`}>
+                  <I name="chevron-down" size={16} className={`transition-transform motion-reduce:transition-none ${isOpen ? 'rotate-180' : ''}`}/></button>}
+              </div>
+              {isOpen && <ul aria-label={t('groupList', { n: g.items.length })} className="border-t border-separator bg-default/30">
+                {g.items.map((x) => <li key={x.id}>
+                  <button type="button" onClick={() => go([x.id], x.link)} className={`flex min-h-10 w-full items-baseline gap-2 py-2 pl-[3.75rem] pr-4 text-left text-xs transition-colors hover:bg-default focus-visible:bg-default ${focus}`}>
+                    <span aria-hidden className={`size-1.5 shrink-0 -translate-y-px rounded-full ${x.readAt ? 'bg-transparent' : 'bg-accent'}`}/>
+                    <span className={`line-clamp-2 min-w-0 flex-1 ${x.readAt ? 'text-muted' : 'font-medium'}`}>{x.body || x.title}{!x.readAt && <span className="sr-only"> ({t('unread')})</span>}</span>
+                    <span className="shrink-0 text-[11px] text-muted"><Ago at={x.createdAt}/></span>
+                  </button>
+                </li>)}
+              </ul>}
+            </li>;
+          })}
         </ul>
       </Popover.Dialog>
     </Popover.Content>

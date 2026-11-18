@@ -2268,7 +2268,16 @@
       "shown": "{total} sunucudan {shown} gösteriliyor",
       "exportCsv": "CSV indir",
       "tags": "Etiketler",
-      "bulkAction": "Görünen sunucular için işlem",
+      "bulkBar": "Toplu işlem",
+      "bulkWhat": "İşlem",
+      "bulkScope": "Uygulanacak sunucular",
+      "bulkScopeSelected": "Seçilenler ({n})",
+      "bulkScopeShown": "Gösterilenlerin tümü ({n})",
+      "bulkSelectShown": "Gösterilen {n} sunucuyu seç",
+      "bulkConfirmSelected": "Seçtiğiniz {n} sunucuda “{action}” yapılsın mı? İşlemi süren sunucular atlanır.",
+      "bulkYes": "Evet, {n} sunucuda: {action}",
+      "bulkLimit": "Bir seferde en fazla {max} sunucu işlenir: {n} sunucudan sıradaki ilk {max} tanesi.",
+      "bulkPick": "Satır başındaki kutularla sunucu seçin ya da hedef olarak gösterilenlerin tümünü seçin.",
       "bulkApply": "{n} sunucuya uygula",
       "bulkConfirm": "Süzgecin gösterdiği {n} sunucuda “{action}” yapılsın mı? İşlemi süren sunucular atlanır.",
       "bulkDone": "{started} başlatıldı, {skipped} atlandı.",
@@ -2371,6 +2380,18 @@
       "badge": "Silinecek · {when}"
     },
     "shutdownNoTools": "Misafir ajanı yanıt vermiyor; düzgün kapatma isteği işletim sistemine ulaşmaz. Hemen durması gerekiyorsa Zorla kapat'ı kullanın.",
+    "nextStep": {
+      "title": "{kind} başarısız oldu",
+      "retry": "Bu çoğunlukla geçici bir durumdur. Şimdi yeniden deneyebilirsiniz.",
+      "retryButton": "Yeniden dene",
+      "billing": "İşlemin önünde bir ödeme var. Açık faturayı ödeyin ya da bakiye yükleyin, sonra işlemi yeniden başlatın.",
+      "billingButton": "Faturalara git",
+      "quota": "Kotanız buna izin vermiyor. Kotanızın neye yettiğine bakın ya da artırılması için destek ekibine yazın.",
+      "quotaButton": "Kotayı gör",
+      "support": "Yeniden denemek bunu kendiliğinden düzeltmez. Destek ekibine yazın; ayrıntılar sizin için dolduruldu.",
+      "staff": "Başka bir işlem yapılmadan önce ekibimizin bu sunucuya bakması gerekiyor. Lütfen işlemi yeniden başlatmayın. Destek ekibine yazın; ayrıntılar sizin için dolduruldu.",
+      "supportButton": "Destek ekibine yaz"
+    },
     "failedTicket": {
       "link": "Bunu destekle paylaş",
       "subject": "{name}: {kind} başarısız oldu",
@@ -2778,6 +2799,10 @@
     "saidFailed": "{task} başarısız oldu: {server}"
   },
   "Inbox": {
+    "groupCount": "{n} bildirim:",
+    "groupShow": "{n} bildirimi tek tek göster",
+    "groupHide": "Tek tek bildirimleri gizle",
+    "groupList": "Bu satırdaki {n} bildirim",
     "title": "Bildirimler",
     "unreadLabel": "{n} okunmamış bildirim",
     "markAll": "Tümünü okundu say",
@@ -2809,7 +2834,8 @@
     "kind": {
       "server": "Sunucu",
       "ticket": "Destek talebi",
-      "invoice": "Fatura"
+      "invoice": "Fatura",
+      "user": "Kullanıcı"
     },
     "newTicket": "Yeni destek talebi aç",
     "topUp": "Bakiye yükle",
@@ -3066,6 +3092,10 @@
     "notOffered": "Bu kanal bu bildirim için sunulmuyor",
     "policyNote": "Kilitli bildirimler ve sunulmayan kanallar yöneticinizin bildirim kurallarından gelir.",
     "events": {
+      "admin_restore_hold": {
+        "title": "Geri yükleme beklemesi",
+        "help": "Bir yedek geri yüklenip panel beklemeye alındığında; biri serbest bırakana kadar kendiliğinden hiçbir işlem yapmaz."
+      },
       "billing_payment_review": {
         "title": "Ödeme inceleme bekliyor",
         "help": "Bir ödeme kendiliğinden doğrulanamayıp ekibin kararına kaldığında."
@@ -6663,6 +6693,32 @@
     "legendDown": "Kesinti"
   },
   "Support": {
+    "diag": {
+      "title": "Sunucunun talep açıldığındaki durumu",
+      "captured": "{when} tarihinde kaydedildi",
+      "note": "Bu bilgiler talebin açıldığı ana aittir; sunucunun şimdiki durumu farklı olabilir.",
+      "state": "Durum",
+      "plan": "Paket",
+      "size": "Boyut",
+      "image": "İmaj",
+      "location": "Konum",
+      "platform": "Platform",
+      "created": "Oluşturulma",
+      "traffic": "Bu ayki trafik",
+      "trafficValue": "{used} / {allowance} GB",
+      "throttled": "hız sınırlı",
+      "locked": "Kilitli",
+      "pendingDeletion": "Silinmeyi bekliyor",
+      "addresses": "IP adresleri",
+      "noAddresses": "Kayıtlı adres yok.",
+      "operations": "Son işlemler",
+      "noOperations": "O ana kadar kayıtlı işlem yok.",
+      "invoices": "Faturalar",
+      "unpaid": "Müşterinin o anda {n} ödenmemiş faturası vardı.",
+      "unpaidNone": "Müşterinin o anda ödenmemiş faturası yoktu.",
+      "unpaidLink": "Ödenmemiş faturalarını aç",
+      "openServer": "{name} sunucusunu aç"
+    },
     "title": "Destek",
     "intro": "Sorularınız ve sorunlarınız için destek talepleri. Yanıt geldiğinde bildirim alırsınız.",
     "new": "Yeni talep",
@@ -8192,6 +8248,8 @@
     "answered": "{n, plural, one {Talebinize yanıt geldi} other {# talebinize yanıt geldi}}"
   },
   "Upcoming": {
+    "gross": "vergi dahil",
+    "servers": "{n} sunucu",
     "title": "Yaklaşan ödemeler",
     "invoiceDue": "{number} · son ödeme {when}",
     "invoiceOverdue": "{number} · son ödeme tarihi {when} geçti",
@@ -9005,6 +9063,41 @@
     "logNoMatch": "Süzgece uyan satır yok.",
     "logEmpty": "Bu kaynakta satır yok.",
     "logCount": "{shown} / {total} satır gösteriliyor"
+  },
+  "Views": {
+    "button": "Görünümler",
+    "title": "Kayıtlı görünümler",
+    "triggerActive": "Kayıtlı görünümler. Etkin görünüm: {name}",
+    "triggerChanged": "Kayıtlı görünümler. Etkin görünüm: {name}; süzgeçler kayıttan farklı",
+    "statusActive": "“{name}” görünümü etkin.",
+    "statusChanged": "“{name}” görünümü etkin, ancak süzgeçler kaydedilenden farklı.",
+    "changed": "değişti",
+    "default": "varsayılan",
+    "empty": "Henüz kayıtlı görünüm yok. Süzgeçleri ve sıralamayı seçin, bir ad verin ve kaydedin.",
+    "apply": "{name} görünümünü uygula",
+    "makeDefault": "{name} görünümünü varsayılan yap",
+    "clearDefault": "{name} artık varsayılan olmasın",
+    "defaultHelp": "Varsayılan görünüm, liste süzgeçsiz açıldığında kendiliğinden uygulanır; adresteki bir süzgecin yerine geçmez.",
+    "rename": "{name} görünümünü yeniden adlandır",
+    "delete": "{name} görünümünü sil",
+    "deleted": "“{name}” görünümü silindi.",
+    "undo": "Geri al",
+    "nameLabel": "Görünüm adı",
+    "nameNeeded": "Bir ad yazın.",
+    "nameTaken": "Bu adla başka bir görünüm var.",
+    "saveCurrent": "Geçerli süzgeçleri kaydet",
+    "namePlaceholder": "Örn. Sorunlu sunucular",
+    "save": "Kaydet",
+    "update": "Güncelle",
+    "cancel": "Vazgeç",
+    "saved": "“{name}” görünümü kaydedildi.",
+    "updated": "“{name}” görünümü güncellendi.",
+    "overwrite": "“{name}” adlı görünüm var; kaydederseniz geçerli süzgeçlerle güncellenir.",
+    "nothing": "Kaydetmek için önce bir süzgeç ya da sıralama seçin.",
+    "limit": "En fazla {max} görünüm saklanır. Yenisi için birini silin.",
+    "storedHere": "Görünümler yalnızca bu tarayıcıda ve yalnızca sizin hesabınız için saklanır.",
+    "reset": "Süzgeçleri sıfırla",
+    "failed": "Görünüm bu tarayıcıda saklanamadı (depolama kapalı ya da dolu)."
   },
   "Clipboard": {
     "failed": "Kopyalanamadı: tarayıcı burada panoya izin vermiyor (panel HTTPS üzerinde olmayabilir). Metni seçip kendiniz kopyalayın."

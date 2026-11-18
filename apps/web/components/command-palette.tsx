@@ -15,7 +15,7 @@ import { apiFetch, useErrorText } from '../lib/api';
 import { I } from './icon';
 import { supports, type Capabilities } from './capabilities';
 import { openShortcuts } from './shortcuts';
-import { recent, recentKind } from '../lib/recent';
+import { recent, recentKind, recentPermission } from '../lib/recent';
 import { useCopy } from '../lib/clipboard';
 import { invoiceState, type Invoice, type Summary } from '../lib/billing';
 import { ConfirmDialog } from './ui';
@@ -26,7 +26,7 @@ type Cmd = { id: string; group: 'recent' | 'pages' | 'servers' | 'tickets' | 'in
 type TicketRow = { id: string; number: number; subject: string; status: 'open' | 'answered' | 'customer_reply' | 'on_hold' | 'closed'; ownerEmail?: string };
 type ServerRow = { id: string; name: string; address: string | null; ownerEmail?: string; favorite?: boolean; state: string; powerState: string; deleteAt?: string | null; locked?: boolean; tags?: string[] | null; capabilities?: Capabilities | null };
 const none: Invoice[] = [];
-const recentIcons = { server: 'server', ticket: 'life-buoy', invoice: 'receipt-text' } as const;
+const recentIcons = { server: 'server', ticket: 'life-buoy', invoice: 'receipt-text', user: 'user' } as const;
 
 export function usePaletteShortcut(open: () => void) {
   useEffect(() => {
@@ -119,8 +119,9 @@ export default function CommandPalette({ permissions, isOpen, onOpenChange }: { 
       ['/account?tab=notifications', t('notificationSettings'), <I key="i" name="bell" size={16}/>, true],
     ];
     return [
-      // What was opened last in this browser: servers, tickets and invoices, each with its own icon.
-      ...(isOpen ? recent() : []).map((r) => ({ id: `r:${r.href}`, group: 'recent' as const, label: r.label, hint: t(`kind.${recentKind(r)}`), icon: <I name={recentIcons[recentKind(r)]} size={16}/>, run: go(r.href) })),
+      // What was opened last in this browser: servers, tickets, invoices and (staff) the people looked up, each with its
+      // own icon. A staff page is listed only for someone who may open it now.
+      ...(isOpen ? recent() : []).filter((r) => { const need = recentPermission(r); return !need || can(permissions, need); }).map((r) => ({ id: `r:${r.href}`, group: 'recent' as const, label: r.label, hint: t(`kind.${recentKind(r)}`), icon: <I name={recentIcons[recentKind(r)]} size={16}/>, run: go(r.href) })),
       ...pages.filter((p) => p[3]).map(([href, label, icon]) => ({ id: `p:${href}`, group: 'pages' as const, label, icon, run: go(href) })),
       ...users.map((u) => ({ id: `u:${u.id}`, group: 'users' as const, label: u.email, hint: u.name, icon: <I name="user" size={16}/>, run: go(`/admin/users?q=${encodeURIComponent(u.email)}`) })),
       // Starred servers first, with their star.

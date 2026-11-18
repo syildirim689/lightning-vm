@@ -5,7 +5,7 @@ import { Button, Modal, toast } from '@heroui/react';
 import { useQueryClient } from '@tanstack/react-query';
 import NextLink from 'next/link';
 import { useFormatter, useTranslations } from 'next-intl';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { I } from '../../../../../../components/icon';
 import { InvoiceSheet } from '../../../../../../components/invoice-sheet';
 import { CheckboxInput, ConfirmButton, Notice, SelectInput, TextInput, Loading } from '../../../../../../components/ui';
@@ -13,6 +13,7 @@ import { apiFetch, useErrorText } from '../../../../../../lib/api';
 import type { InvoiceDetail } from '../../../../../../lib/billing';
 import { useMe } from '../../../../../../lib/me';
 import { can } from '../../../../../../lib/permissions';
+import { remember } from '../../../../../../lib/recent';
 import { useApiQuery } from '../../../../../../lib/query';
 
 export default function AdminInvoice({ id }: { id: string }) {
@@ -26,6 +27,9 @@ export default function AdminInvoice({ id }: { id: string }) {
   const [v, setV] = useState({ method: 'bank_transfer', reference: '', amount: '', reason: '', toBalance: false });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
+  // The palette's "recent" list: the invoice by its number and who it is for, under its staff address.
+  const visited = d && [d.invoice.number ?? `#${d.invoice.id.slice(0, 8).toUpperCase()}`, d.invoice.buyerEmail || d.invoice.buyerName].filter(Boolean).join(' · ');
+  useEffect(() => { if (visited) remember({ href: `/admin/billing/invoices/${id}`, label: visited, kind: 'invoice' }); }, [visited, id]);
   if (!d) return <Loading of={['admin', 'billing', 'invoice', id]}><div className="h-96 animate-pulse rounded-3xl bg-default/50"/></Loading>;
   const inv = d.invoice;
   // The menu's count of payments awaiting review follows too (a recorded payment settles them).

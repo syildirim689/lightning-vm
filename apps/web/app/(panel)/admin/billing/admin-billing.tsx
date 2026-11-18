@@ -12,6 +12,7 @@ import { parseAsString, useQueryState } from 'nuqs';
 import { useState } from 'react';
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { I } from '../../../../components/icon';
+import { SavedViews } from '../../../../components/saved-views';
 import { ButtonLink, ConfirmButton, DataTable, LoadFailed, Notice, PageHeader, SelectInput, StatusChip, TextInput } from '../../../../components/ui';
 import { downloadCsv, localDay } from '../../../../lib/csv';
 import { fold } from '../../../../lib/note-line';
@@ -27,6 +28,8 @@ type Overview = { mrr: Money[]; open: (Money & { n: number; overdue: number })[]
   subscriptions: Record<string, number>; recentPayments: Payment[]; paymentsInReview?: { n: number; oldest: string | null } };
 const tooltipStyle = { background: 'var(--overlay)', border: '1px solid var(--border)', borderRadius: 8, color: 'var(--overlay-foreground)', fontSize: 12 };
 const tabs = ['invoices', 'subscriptions', 'payments', 'disputes', 'coupons'] as const;
+// The invoice and payment lists share these address parameters; each keeps its own saved views.
+const viewKeys = { status: '', q: '' };
 
 export default function AdminBilling() {
   const t = useTranslations('BillingAdmin');
@@ -153,6 +156,7 @@ function Invoices() {
       </SearchField>
       <SelectInput className="w-48" label={t('status')} value={status} onChange={(v) => void setStatus(v || null)}
         options={[{ id: '', label: t('all') }, ...(['unpaid', 'overdue', 'paid', 'partially_refunded', 'refunded', 'cancelled'] as const).map((s) => ({ id: s, label: tb(`status.${s}`) }))]}/>
+      <SavedViews list="admin-invoices" keys={viewKeys}/>
       {list && list.length > 0 && <Button variant="secondary" onPress={() => downloadCsv('invoices', ['number', 'customer', 'email', 'kind', 'date', 'total', 'currency', 'status', 'einvoice'],
         list.map((i) => [i.number ?? i.id, i.buyerName, i.buyerEmail, i.kind, localDay(i.issuedAt ?? i.createdAt), i.total, i.currency, invoiceState(i), i.einvoiceStatus]))}>
         <I name="download" size={16}/>{t('export')}</Button>}
@@ -260,6 +264,7 @@ function Payments() {
       </SearchField>
       <SelectInput className="w-full sm:w-56" label={t('status')} value={status} onChange={(v) => void setStatus(v || null)}
         options={[{ id: '', label: t('all') }, ...paymentFilters.map((s) => ({ id: s, label: s === 'review' ? t('paymentFilter.review') : tb(`payment.${s}`) }))]}/>
+      <SavedViews list="admin-payments" keys={viewKeys}/>
       {list && list.length > 0 && <Button variant="secondary" onPress={() => downloadCsv('payments', ['date', 'email', 'invoice', 'method', 'provider', 'mode', 'amount', 'currency', 'status', 'error', 'reference'],
         list.map((p) => [p.createdAt, p.email, p.number ?? p.invoiceId, p.method, p.provider, p.mode, p.amount, p.currency, paymentState(p), p.errorMessage || p.errorCode || '', p.reference ?? '']))}>
         <I name="download" size={16}/>{t('export')}</Button>}

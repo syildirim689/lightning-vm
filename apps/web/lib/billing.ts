@@ -19,7 +19,9 @@ export type Subscription = { id: string; kind: 'server' | 'vdc'; serverId: strin
 export type Card = { id: string; provider: string; providerName?: string; mode: string; brand: string | null; last4: string | null; expMonth: number | null; expYear: number | null; isDefault: boolean };
 export type Methods = { cards: { id: string; name: string; mode: string; saved: boolean }[]; balance: boolean; bankTransfer: { bank: string; holder: string; iban: string } | null; topup: { min: number; max: number } };
 export type Summary = { enabled: false } | { enabled: true; balance: { currency: string; amount: string }[]; open: { n: number; overdue: number; amount: string; currency: string | null };
-  subscriptions: Subscription[]; cards: Card[]; profileComplete: boolean; methods: Methods; autoCharge: boolean; requirePayment: boolean; hourly?: Hourly };
+  subscriptions: Subscription[]; cards: Card[]; profileComplete: boolean; methods: Methods; autoCharge: boolean; requirePayment: boolean; hourly?: Hourly;
+  // The next renewal as the API will invoice it (newer APIs; absent on an older one, null when nothing renews).
+  nextRenewal?: { at: string; amount: number | string; currency: string; gross: boolean; servers: number; invoiced: boolean } | null };
 // Pay as you go: hourly servers with this month's hours and cost, and what is left to spend per currency.
 export type Hourly = { enabled: boolean; minHours: number; servers: { id: string; name: string; priceHourly: string; currency: string; billingHold: boolean; hours: number; amount: string }[];
   available: { currency: string; amount: string; perHour: string }[] };

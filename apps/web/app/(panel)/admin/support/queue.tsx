@@ -7,6 +7,7 @@ import NextLink from 'next/link';
 import { useFormatter, useLocale, useNow, useTranslations } from 'next-intl';
 import { parseAsString, useQueryState } from 'nuqs';
 import { I } from '../../../../components/icon';
+import { SavedViews } from '../../../../components/saved-views';
 import { Ago, Empty, PageHeader, SelectInput, Stat } from '../../../../components/ui';
 import { useMe } from '../../../../lib/me';
 import { can } from '../../../../lib/permissions';
@@ -15,6 +16,8 @@ import { downloadCsv } from '../../../../lib/csv';
 import CannedReplies from './canned';
 import { Deadline, departmentName, DraftBadge, PriorityBadge, StatusBadge, useDepartments, useDrafts, type Ticket } from '../../support/ui';
 
+// The status is 'active' when the address does not name one; an empty status means every ticket.
+const viewKeys = { status: 'active', priority: '', department: '', assignee: '', q: '' };
 type Stats = { active: number; waiting: number; overdue: number; unassigned: number; firstResponseHours: number | null; rating: number | null };
 
 export default function SupportQueue() {
@@ -52,7 +55,7 @@ export default function SupportQueue() {
       <SearchField aria-label={t('search')} value={q} onChange={(v) => setQ(v || null)} className="sm:col-span-2 xl:col-span-1">
         <SearchField.Group><SearchField.SearchIcon/><SearchField.Input placeholder={t('search')}/><SearchField.ClearButton/></SearchField.Group>
       </SearchField>
-      <SelectInput label={t('statusLabel')} value={status} onChange={(v) => setStatus(v || null)}
+      <SelectInput label={t('statusLabel')} value={status} onChange={(v) => setStatus(v === 'active' ? null : v)}
         options={[{ id: 'active', label: t('filter.active') }, { id: 'waiting', label: t('stat.waiting') }, { id: 'overdue', label: t('stat.overdue') }, { id: '', label: t('filter.all') }, ...(['open', 'customer_reply', 'answered', 'on_hold', 'closed'] as const).map((s) => ({ id: s, label: t(`status.${s}`) }))]}/>
       <SelectInput label={t('priorityLabel')} value={priority} onChange={(v) => setPriority(v || null)}
         options={[{ id: '', label: t('filter.all') }, ...(['urgent', 'high', 'normal', 'low'] as const).map((p) => ({ id: p, label: t(`priority.${p}`) }))]}/>
@@ -61,15 +64,16 @@ export default function SupportQueue() {
       <SelectInput label={t('assignee')} value={assignee} onChange={(v) => setAssignee(v || null)}
         options={[{ id: '', label: t('filter.anyone') }, { id: 'me', label: t('filter.me') }, { id: 'none', label: t('unassigned') }]}/>
     </div>
-    {tickets && <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-      <p role="status" className="text-sm text-muted">{t('shownCount', { n: tickets.length })}</p>
-      <div className="flex flex-wrap gap-2">
+    <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+      <p role="status" className="text-sm text-muted">{tickets ? t('shownCount', { n: tickets.length }) : '…'}</p>
+      <div className="flex flex-wrap items-center gap-2">
         {filtered && <Button size="sm" variant="ghost" onPress={clear}><I name="funnel-x" size={15}/>{t('clearFilters')}</Button>}
-        {tickets.length > 0 && <Button size="sm" variant="secondary" onPress={() => downloadCsv('support-queue', ['number', 'subject', 'customer', 'department', 'server', 'priority', 'status', 'assignee', 'due', 'updated'],
+        <SavedViews list="admin-support" keys={viewKeys}/>
+        {tickets && tickets.length > 0 && <Button size="sm" variant="secondary" onPress={() => downloadCsv('support-queue', ['number', 'subject', 'customer', 'department', 'server', 'priority', 'status', 'assignee', 'due', 'updated'],
           tickets.map((x) => [x.number, x.subject, x.ownerEmail, departmentName(x, locale), x.serverName ?? '', t(`priority.${x.priority}`), t(`status.${x.status}`), x.assigneeEmail ?? '', x.dueAt ?? '', x.updatedAt]))}>
           <I name="download" size={15}/>{t('export')}</Button>}
       </div>
-    </div>}
+    </div>
     {!tickets ? <div className="h-40 animate-pulse rounded-3xl bg-default/50"/>
       : tickets.length === 0 ? (filtered
         ? <div role="status" className="flex flex-col items-center gap-3 rounded-xl border border-dashed border-border px-4 py-8 text-center text-sm text-muted">{t('noMatch')}

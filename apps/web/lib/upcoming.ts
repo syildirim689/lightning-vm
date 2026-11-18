@@ -25,6 +25,25 @@ export function nextRenewal(subscriptions: UpcomingSubscription[], now: number):
     items: group.map((x) => ({ id: x.s.id, serverId: x.s.serverId, description: x.s.description })) };
 }
 
+// What the API itself says the next renewal will charge (billing summary, newer APIs): the amount as it will be
+// invoiced (`gross`: tax included), how many servers it covers, and whether its invoice already exists.
+export type ApiRenewal = { at: string; amount: number | string; currency: string; gross: boolean; servers: number; invoiced: boolean };
+export type RenewalLine = Renewal & { gross: boolean; servers: number };
+// The renewal line of "upcoming charges". With the API's own answer: that amount and date, and no line at all once
+// the renewal is invoiced (the due invoice is listed instead) or when the API says nothing renews (null). Without
+// it (an older API, or an answer that cannot be read): the calculation from the subscriptions, as before.
+export function renewalLine(api: ApiRenewal | null | undefined, subscriptions: UpcomingSubscription[], now: number): RenewalLine | null {
+  const own = nextRenewal(subscriptions, now);
+  const amount = api ? Number(api.amount) : NaN;
+  if (api === undefined || (api && (!Number.isFinite(amount) || !Number.isFinite(Date.parse(api.at)) || !api.currency)))
+    return own && { ...own, gross: false, servers: own.items.length };
+  if (!api || api.invoiced) return null;
+  // The names come from the subscriptions when they are about the same charge (same currency, within a day).
+  const same = !!own && own.currency === api.currency && Math.abs(Date.parse(own.at) - Date.parse(api.at)) < DAY;
+  const items = same ? own.items : [];
+  return { at: api.at, amount, currency: api.currency, items, gross: !!api.gross, servers: Number(api.servers) > 0 ? Number(api.servers) : items.length };
+}
+
 export type DueInvoice = { id: string; number: string | null; amount: number; currency: string; dueAt: string; overdue: boolean };
 // Invoices waiting for payment that are overdue or fall due within `days`, the most pressing first. A balance
 // top-up is not a debt and stays out (as in the summary's count).

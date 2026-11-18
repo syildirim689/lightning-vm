@@ -172,7 +172,8 @@ function PresenceBar({ others }: { others: Present[] }) {
 }
 
 // The whole ticket page, for the customer or for staff (with the side panel).
-export function TicketPage({ id, staff }: { id: string; staff: boolean }) {
+// before: shown above the thread (the staff page puts the server's snapshot there; the customer's page passes nothing).
+export function TicketPage({ id, staff, before }: { id: string; staff: boolean; before?: React.ReactNode }) {
   const t = useTranslations('Support');
   const locale = useLocale();
   const format = useFormatter();
@@ -212,6 +213,7 @@ export function TicketPage({ id, staff }: { id: string; staff: boolean }) {
     </header>
     <div className={`grid gap-5 ${staff ? 'xl:grid-cols-[minmax(0,1fr)_20rem]' : ''}`}>
       <div className="flex min-w-0 flex-col gap-5">
+        {staff && before}
         <Thread messages={messages} staffView={staff}/>
         {closed && !staff && <Rating ticket={tk} onDone={refresh}/>}
         {staff && <PresenceBar others={others}/>}

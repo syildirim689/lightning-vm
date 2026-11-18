@@ -3,7 +3,7 @@
 import { Button, Chip, Modal, TextArea, toast } from '@heroui/react';
 import { useUnits } from '../../../../lib/units';
 import { useQueryClient } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import NextLink from 'next/link';
 import { useFormatter, useNow, useTranslations } from 'next-intl';
 import { I } from '../../../../components/icon';
@@ -12,6 +12,7 @@ import { useApiQuery } from '../../../../lib/query';
 import { apiFetch, useErrorText } from '../../../../lib/api';
 import { useMe } from '../../../../lib/me';
 import { can } from '../../../../lib/permissions';
+import { remember } from '../../../../lib/recent';
 import { UserSecurity } from './user-security';
 
 type Summary = {
@@ -35,6 +36,10 @@ export function UserSummary({ id, onClose }: { id: string; onClose: () => void }
   const roleNames = new Map((useApiQuery<{ roles: { key: string; name: string }[] }>(['admin', 'roles'], '/admin/roles').data?.roles ?? []).map((r) => [r.key, r.name]));
   const me = useMe();
   const d = q.data;
+  // The palette's "recent" list: this person, under the address that finds them in the user list.
+  const visited = d && (d.user.name ? `${d.user.name} (${d.user.email})` : d.user.email);
+  const email = d?.user.email;
+  useEffect(() => { if (visited && email) remember({ href: `/admin/users?q=${encodeURIComponent(email)}`, label: visited, kind: 'user' }); }, [visited, email]);
   const money = (n: number, c: string) => format.number(n, { style: 'currency', currency: c });
   const action = (a: string) => (ta.has(`actions.${a.replace(/\./g, '_')}` as 'actions.settings_sms') ? ta(`actions.${a.replace(/\./g, '_')}` as 'actions.settings_sms') : a);
   return <Modal.Backdrop isOpen onOpenChange={(o) => { if (!o) onClose(); }}>
