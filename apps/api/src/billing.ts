@@ -282,14 +282,22 @@ export async function payFromBalance(invoiceId: string, automatic = false, by: s
   return paid;
 }
 
-// Staff record money that arrived outside the panel (bank transfer, cash): the invoice is paid with it.
+// Staff record money that arrived outside the panel (bank transfer, cash): the invoice is paid with it. It is also how
+// staff settle a payment under review (noteReview): they found the money at the provider and mark the invoice paid. The
+// invoice's payments that wait for staff end there, in the same transaction (status cancelled, their reason kept, the
+// manual payment named in `reference`): the money is counted once, by the manual payment. Left open, such a payment
+// stayed on the staff's list for good, and a provider's later "paid" for it (a fraud review that ended, asked again by
+// the run or by anyone opening its return address) settled it a second time, as balance on top of the paid invoice.
 async function recordManual(invoiceId: string, method: string, reference: string, by: string) {
   const client = await pool.connect();
   const after: After = { enqueue: [], powerOn: [], paid: [] };
   let id = '';
   let repriced = false;
+  let closed: string[] = [];
   try {
     await client.query('BEGIN');
+    // Locked before the invoice, the order a provider's answer takes them in (settleIn: the payment, then its invoice).
+    const { rows: waiting } = await client.query("SELECT id FROM payments WHERE invoice_id = $1 AND status = 'pending' AND error_code = ANY($2) ORDER BY created_at FOR UPDATE", [invoiceId, reviewCodes]);
     // The invoice stays locked until the payment is settled: a second "mark paid" waits here, then finds it paid.
     const { rows: [inv] } = await client.query("SELECT * FROM invoices WHERE id = $1 AND status = 'unpaid' FOR UPDATE", [invoiceId]);
     if (!inv) throw apiError(409, 'INVOICE_NOT_PAYABLE', 'Only an unpaid invoice can be paid');
@@ -302,12 +310,23 @@ async function recordManual(invoiceId: string, method: string, reference: string
         VALUES ($1, $2, 'manual', $3, 'pending', $4, $5, $6, $7) RETURNING id`, [invoiceId, inv.owner_id, method, fromCents(due), inv.currency, reference || null, by]);
       id = p.id;
       await settleIn(client, id, { ok: true, ref: '' }, after);
+      closed = await closeReviews(client, waiting.map((w) => w.id as string), `Closed by staff: invoice marked paid (payment ${id})`);
     }
     await client.query('COMMIT');
   } catch (e) { await client.query('ROLLBACK'); throw e; } finally { client.release(); }
   await finish(after);
   if (repriced) throw apiError(409, 'INVOICE_AMOUNT_CHANGED', 'The invoice now follows the server\'s current price; check the new amount and mark it paid again');
-  return id;
+  return { id, closed };
+}
+
+// Ends the wait of payments under review without settling them: cancelled, with the reason they were held kept on the
+// row and `note` saying how staff decided. From then on no return, notification or re-check changes them (each acts on
+// a pending payment only). Returns the ids it closed.
+async function closeReviews(db: Db, ids: string[], note: string) {
+  if (!ids.length) return [];
+  const { rows } = await db.query("UPDATE payments SET status = 'cancelled', completed_at = now(), reference = $3 WHERE id = ANY($1::uuid[]) AND status = 'pending' AND error_code = ANY($2) RETURNING id",
+    [ids, reviewCodes, note.slice(0, 200)]);
+  return rows.map((r) => r.id as string);
 }
 
 // Starts a card payment at the chosen provider; returns where the customer goes to finish it (3D Secure).
@@ -489,6 +508,47 @@ async function dropOrder(db: Db, invoiceId: string) {
   return ops;
 }
 
+// A customer stops being a reseller's (reseller.ts: the reseller is removed, staff take the customer out, or the customer
+// leaves): from then on the reseller cannot act on the customer's servers, so who pays follows who controls, as it does
+// when a server changes hands (transfers.ts, moveServer). In the caller's transaction, which holds the customer's row:
+//   - the running subscriptions of the customer's servers that the reseller pays become the customer's, without what
+//     the reseller booked on them (a cancellation at the period's end, the auto-renew choice), and a removal billing
+//     had marked for one of those servers is taken back;
+//   - the reseller's unpaid renewal invoices for them, with nothing paid, are cancelled and give their periods back
+//     (withdrawLines), so the next run invoices the customer for the first period nobody paid: direct billing starts
+//     there, at the server's price. The subscription starts it with a clean slate (active, the hold lifted): the
+//     reseller's arrears are not the customer's, and the new invoice has its own due date and reminders;
+//   - an order of the reseller's that still waits for payment (nothing built) is dropped with its invoice, like an
+//     order that expired (dropOrder);
+//   - any other unpaid invoice of the reseller that names these servers (a built server's first invoice, a resize or
+//     disk charge, one partly paid or shared with other servers) stays the reseller's debt and is returned as `left`
+//     for staff: it is collected from the reseller, and while it is open it still counts against the subscription.
+// Prices are not changed: a server keeps the price it has (the reseller's discount included) until it is resized or
+// staff change it. Returns what changed; `enqueue`: operations to queue once the transaction is committed.
+export async function directBilling(db: PoolClient, customerId: string, resellerId: string) {
+  const theirs = `SELECT 1 FROM invoice_lines l JOIN subscriptions b ON b.id = l.subscription_id JOIN servers s ON s.id = b.server_id
+    WHERE l.invoice_id = i.id AND NOT l.withdrawn AND s.owner_id = $1 AND b.owner_id = $2`;
+  // Invoices first, subscriptions after them: the order a payment locks them in (markPaid, grant).
+  const { rows: invoices } = await db.query(`SELECT i.id, i.kind, i.paid_total::text AS paid, EXISTS (${theirs} AND b.status = 'pending') AS waiting,
+      NOT EXISTS (SELECT 1 FROM invoice_lines x WHERE x.invoice_id = i.id AND NOT x.withdrawn AND NOT EXISTS (SELECT 1 FROM subscriptions xb JOIN servers xs ON xs.id = xb.server_id
+        WHERE xb.id = x.subscription_id AND xs.owner_id = $1 AND xb.owner_id = $2)) AS only_theirs
+    FROM invoices i WHERE i.owner_id = $2 AND i.status = 'unpaid' AND EXISTS (${theirs}) ORDER BY i.created_at FOR UPDATE OF i`, [customerId, resellerId]);
+  const withdrawn: string[] = [], left: string[] = [], queue: string[] = [];
+  for (const i of invoices) {
+    if (toCents(i.paid) === 0 && i.only_theirs && (i.kind === 'renewal' || (i.kind === 'order' && i.waiting))) {
+      await db.query("UPDATE invoices SET status = 'cancelled', cancelled_at = now() WHERE id = $1", [i.id]);
+      await withdrawLines(db, [i.id]);
+      if (i.kind === 'order') queue.push(...await dropOrder(db, i.id));
+      withdrawn.push(i.id);
+    } else left.push(i.id);
+  }
+  const { rows: subs } = await db.query(`UPDATE subscriptions b SET owner_id = $1, status = 'active', suspended_at = NULL, cancel_at_period_end = false, auto_renew = true, updated_at = now()
+    FROM servers s WHERE s.id = b.server_id AND s.owner_id = $1 AND b.owner_id = $2 AND b.status IN ('active', 'past_due', 'suspended') RETURNING b.id, b.server_id`, [customerId, resellerId]);
+  await db.query(`UPDATE servers SET billing_hold = false, updated_at = now() WHERE owner_id = $1 AND id = ANY($2::uuid[]) AND billing_hold`, [customerId, subs.map((b) => b.server_id)]);
+  await db.query("UPDATE servers SET billing_remove = NULL, updated_at = now() WHERE owner_id = $1 AND billing_remove IS NOT NULL AND state IN ('ready', 'error')", [customerId]);
+  return { subscriptions: subs.map((b) => b.id as string), servers: subs.map((b) => b.server_id as string), withdrawn, left, enqueue: queue };
+}
+
 // Staff withdraw an unpaid invoice (or accept a dispute against it in full): what it asked for is waived. A renewal's
 // period is free (the subscription moves on as if it were paid, so the run does not invoice that period again); an order
 // still waiting for it is dropped with its build. The run's own cancellations (a server gone, a termination, an expired
@@ -601,8 +661,11 @@ export async function runBilling(now = new Date()) {
   // Automatic collection: the balance first, then the saved card; a few tries a day apart.
   if (s.autoCharge) {
     // Not for a subscription whose owner turned automatic renewal off: nothing is taken without them.
+    // Nor for an invoice with a payment under review: a provider may hold the customer's money for it, and taking the
+    // balance or the card as well would collect it twice without them. It is collected again once staff have decided.
     const { rows: open } = await pool.query(`SELECT * FROM invoices i WHERE i.status = 'unpaid' AND i.kind IN ('renewal', 'manual') AND NOT i.disputed AND i.next_charge_at <= now() AND i.charge_attempts < $1
-      AND NOT EXISTS (SELECT 1 FROM invoice_lines l JOIN subscriptions b ON b.id = l.subscription_id WHERE l.invoice_id = i.id AND NOT b.auto_renew)`, [s.chargeRetries]);
+      AND NOT EXISTS (SELECT 1 FROM invoice_lines l JOIN subscriptions b ON b.id = l.subscription_id WHERE l.invoice_id = i.id AND NOT b.auto_renew)
+      AND NOT EXISTS (SELECT 1 FROM payments p WHERE p.invoice_id = i.id AND p.status = 'pending' AND p.error_code = ANY($2))`, [s.chargeRetries, reviewCodes]);
     for (const inv of open) {
       await pool.query("UPDATE invoices SET charge_attempts = charge_attempts + 1, next_charge_at = now() + interval '1 day' WHERE id = $1", [inv.id]);
       if ((s.balance && await payFromBalance(inv.id, true)) || await chargeSavedCard(inv)) out.charged++;
@@ -1040,6 +1103,13 @@ export class BillingController {
     // With the sandbox switched off a test card pays nothing, also not a payment begun while it was on (cancelling stays possible).
     if (!cancel && !(await settings()).sandbox) throw apiError(409, 'PAYMENT_METHOD_UNAVAILABLE', 'This payment method is not available');
     const r = cancel ? { ok: false as const, code: 'CANCELLED_BY_CUSTOMER' } : sandboxPay(String(body?.card ?? ''), p.save_card);
+    // The test card that is held for review takes the way a real provider's held payment does (the callback below):
+    // nothing is settled, the payment stays open with its reason and staff are told (noteReview).
+    if (!finalResult(r)) {
+      await noteReview(id, r);
+      const { rows: [now] } = await pool.query('SELECT status FROM payments WHERE id = $1', [id]);
+      return { status: now.status as string, ...(!r.ok && { code: r.code }) };
+    }
     const status = await settlePayment(id, r);
     return { status, ...(!r.ok && { code: r.code }) };
   }
@@ -1218,9 +1288,23 @@ export class BillingAdminController {
   async markPaid(@Req() req: AuthedRequest, @Param('id', ParseUUIDPipe) id: string, @Body() body: Record<string, unknown>) {
     const method = ['bank_transfer', 'cash', 'other'].includes(String(body?.method)) ? String(body.method) : 'bank_transfer';
     const reference = typeof body?.reference === 'string' ? body.reference.trim().slice(0, 200) : '';
-    const paymentId = await recordManual(id, method, reference, req.user.id);
-    await audit(req, 'billing.marked_paid', 'success', req.user.id, { invoiceId: id, method, reference });
-    return { paymentId };
+    const { id: paymentId, closed } = await recordManual(id, method, reference, req.user.id);
+    await audit(req, 'billing.marked_paid', 'success', req.user.id, { invoiceId: id, method, reference, ...(closed.length && { closedReviews: closed }) });
+    // closedReviews: the invoice's payments that waited for staff and ended with this (recordManual).
+    return { paymentId, closedReviews: closed };
+  }
+
+  // A payment under review that "mark paid" does not reach: its invoice was paid another way or cancelled meanwhile, or
+  // the money never arrived (a return anybody could post). Staff end its wait here; nothing is settled or credited (money
+  // a provider did collect for it is refunded in the provider's panel, or credited with a balance correction).
+  @Post('payments/:id/close-review') @HttpCode(200) @Can('billing.manage')
+  async closeReview(@Req() req: AuthedRequest, @Param('id', ParseUUIDPipe) id: string, @Body() body: Record<string, unknown>) {
+    const note = typeof body?.note === 'string' ? body.note.trim().slice(0, 150) : '';
+    const [closed] = await closeReviews(pool, [id], `Closed by staff without settling${note ? `: ${note}` : ''}`);
+    if (!closed) throw apiError(409, 'PAYMENT_NOT_IN_REVIEW', 'Only a payment that waits for review can be closed');
+    const { rows: [p] } = await pool.query('SELECT invoice_id, owner_id, provider, amount::text, error_code FROM payments WHERE id = $1', [id]);
+    await audit(req, 'billing.review_closed', 'success', req.user.id, { paymentId: id, invoiceId: p.invoice_id, target: p.owner_id, provider: p.provider, amount: p.amount, code: p.error_code, note });
+    return { ok: true };
   }
 
   @Post('invoices/:id/cancel') @HttpCode(200) @Can('billing.manage')

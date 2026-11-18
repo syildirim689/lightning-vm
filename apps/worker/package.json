@@ -6,6 +6,7 @@
   "type": "module",
   "scripts": {
     "start": "node index.mjs",
+    "test": "node --test test/*.test.mjs",
     "check": "node --check index.mjs && node --check operations.mjs && node --check iso.mjs && node --check power.mjs && node --check abuse.mjs && node --check traffic.mjs && node --check lock.mjs && node --test test/*.test.mjs"
   },
   "dependencies": {

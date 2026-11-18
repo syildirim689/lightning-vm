@@ -86,3 +86,22 @@ export function rolesFromGroups(s: Pick<LdapSettings, 'groupRoles' | 'defaultRol
   const roles = s.groupRoles.filter((m) => mine.has(m.group.toLowerCase().replace(/\s*,\s*/g, ','))).flatMap((m) => m.roles);
   return roles.length ? [...new Set(roles)] : [s.defaultRole];
 }
+
+// A mapping without one role (the role was removed): a group left with no role goes, a default that named it is
+// "user" again. Otherwise a role made later under the same key would be handed out by the old mapping.
+export function withoutRole<T extends Pick<LdapSettings, 'groupRoles' | 'defaultRole'>>(s: T, key: string): T {
+  return { ...s, groupRoles: s.groupRoles.map((g) => ({ ...g, roles: g.roles.filter((r) => r !== key) })).filter((g) => g.roles.length), defaultRole: s.defaultRole === key ? 'user' : s.defaultRole };
+}
+
+// Whether an address nobody has an account for may be put to the directory. A directory compares loosely (RFC 4518:
+// soft hyphens, zero-width and variation characters count for nothing, every kind of space is one space, compatibility
+// forms are folded), so one mailbox could be typed in any number of ways, each with a sign-in limit of its own. Only
+// the one plain spelling is asked: no spaces, no control or invisible characters, already in its composed form.
+export const spelledOnce = (email: string) => email.length > 2 && email.includes('@') && email === email.normalize('NFKC')
+  && !/[\p{C}\p{Z}\s͏᠆᠋-᠍︀-️￼]/u.test(email);
+
+// A directory or single sign-on account is signed in by its directory or provider, and the panel is not told when the
+// account is closed there. Its session therefore ends a fixed time after it was made, however much it is used (the
+// library would keep extending it), so the directory is asked again at least that often.
+export const directorySessionOver = (authSource: string | null | undefined, createdAt: Date | string, ttlHours: number, now = Date.now()) =>
+  (authSource === 'ldap' || authSource === 'oidc') && now - new Date(createdAt).getTime() > ttlHours * 3_600_000;

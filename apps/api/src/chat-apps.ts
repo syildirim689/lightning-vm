@@ -2,7 +2,7 @@
 // fields the user fills in and how one message is sent. Telegram, WhatsApp and Pushover also need an account the
 // admin sets up once (Settings → Messaging); the others are webhooks or servers the user owns.
 // Every address the user gives is checked to be a public HTTPS host, so the panel cannot be pointed at itself.
-import { createHmac } from 'node:crypto';
+import { createHash, createHmac } from 'node:crypto';
 import { lookup as lookupCb } from 'node:dns';
 import { lookup } from 'node:dns/promises';
 import { Agent, request as httpsRequest } from 'node:https';
@@ -266,6 +266,16 @@ export const chatApps: Record<string, App> = {
     },
   },
 };
+
+// What the person who asked is told about a send that failed. For an app whose address the user names freely
+// (Mattermost, Rocket.Chat, Matrix, ntfy, Gotify, a plain webhook: no `hosts`, no admin account) only the code: the
+// answer's text, or the connection's error, is whatever stands at that address as the panel sees it, and passing it on
+// would let any customer read answers the panel gets from hosts that trust its address. A named service's own words
+// (Slack's "no_service", Telegram's "chat not found") stay: they tell the user what to fix.
+export const told = (app: string, r: SendResult): SendResult => (r.ok || chatApps[app]?.hosts || chatApps[app]?.needs ? r : { ok: false, code: r.code });
+// One destination, the same on whichever account it is connected: for the budget of test sends (notifications.ts).
+export const destinationKey = (app: string, target: Record<string, string>) =>
+  createHash('sha256').update(`${app}\n${target.url ?? target.homeserver ?? ''}\n${target.roomId ?? target.chatId ?? target.phone ?? target.userKey ?? ''}`).digest('hex').slice(0, 32);
 
 // The user's fields for one app: required ones present, URLs public HTTPS (and on the service's own hosts).
 export async function readTarget(app: string, input: Record<string, unknown>): Promise<{ target: Record<string, string>; fields: Record<string, string>; hint: string }> {

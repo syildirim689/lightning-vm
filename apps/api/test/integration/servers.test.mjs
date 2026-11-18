@@ -1534,6 +1534,7 @@ test('coupons: staff make codes; the quote and the order take them off the first
 test('transfers: the owner offers a server by e-mail, the other account accepts and it moves with its subscription; checks, decline and withdraw; staff move one at once', { skip }, async () => {
   const otherId = (await send('GET', '/auth/me', undefined, other)).json().id;
   const userId = (await send('GET', '/auth/me', undefined, user)).json().id;
+  await pool.query('UPDATE users SET email_verified = true WHERE id = $1', [otherId]); // a server goes to a proven address only (security-servers.test.mjs)
   await send('PUT', '/admin/settings/billing', { enabled: false }); // an unpaid order invoice would rightly block the handover
   const made = await create(order('handover-1'));
   const id = made.json().serverId;

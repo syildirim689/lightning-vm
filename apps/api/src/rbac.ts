@@ -6,8 +6,10 @@ import { Reflector } from '@nestjs/core';
 import { pool } from './db';
 import { apiError } from './errors';
 import { audit, PERMISSION, SessionGuard, type AuthedRequest } from './auth';
-import { closeConsoles, endImpersonations } from './better-auth';
+import { closeConsoles, endImpersonations, reloadAuth } from './better-auth';
+import { withoutRole } from './ldap';
 import { publishLive } from './live-bus';
+import { getSettings, saveSettings } from './settings-store';
 import { ipAllowed, readLimits } from './role-limits';
 import { can, covers, effectivePermissions, known, permissionCatalog, releaseTickets, rolesChanged, permissionsOf, roles, splitRoles, type Permission } from './permissions';
 
@@ -145,6 +147,11 @@ export class RolesController {
       await client.query('COMMIT');
     } catch (e) { await client.query('ROLLBACK'); throw e; } finally { client.release(); }
     await rolesChanged();
+    // The directory and single sign-on mappings no longer name it: a role made later under the same key (by anyone
+    // with roles.manage) would otherwise go to everyone the old mapping gave this one to, at their next sign-in.
+    const d = await getSettings('directory');
+    const next = { ...d, ldap: withoutRole(d.ldap, key), oidc: withoutRole(d.oidc, key) };
+    if (JSON.stringify(next) !== JSON.stringify(d)) { await saveSettings('directory', next); await reloadAuth(); }
     await publishLive(null, 'access');
     await releaseTickets(); // again, now that the role is gone
     await audit(req, 'role.deleted', 'success', req.user.id, { key });

@@ -147,6 +147,11 @@ export class TransfersController {
       await client.query('BEGIN');
       ({ rows: [t] } = await client.query("SELECT * FROM server_transfers WHERE id = $1 AND to_id = $2 AND status = 'pending' AND expires_at > now() FOR UPDATE", [id, req.user.id]));
       if (!t) throw apiError(404, 'NOT_FOUND', 'No open offer');
+      // The offer was made to an address: the server (its disk, its console) goes to whoever proved the address is
+      // theirs, not to whoever registered it first (better-auth.ts, addressProven). Refused before anything moves; the
+      // offer stays open for the week it has.
+      const { rows: [me] } = await client.query('SELECT email_verified FROM users WHERE id = $1', [req.user.id]);
+      if (!me?.email_verified) throw apiError(403, 'ADDRESS_NOT_PROVEN', 'Prove the e-mail address of this account before accepting a server');
       await client.query('SELECT 1 FROM servers WHERE id = $1 FOR UPDATE', [t.server_id]);
       const s = await checkTransfer(client, t.server_id, req.user.id);
       if (s.owner_id !== t.from_id) throw blocked('SAME_OWNER');

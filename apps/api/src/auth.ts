@@ -4,7 +4,9 @@ import { createHash } from 'node:crypto';
 import type { FastifyRequest } from 'fastify';
 import { countRequest } from './api-rate';
 import { getAuth } from './better-auth';
+import { config } from './config';
 import { pool } from './db';
+import { directorySessionOver } from './ldap';
 import { apiError } from './errors';
 import { can, covers, customerLevel, limitsOf, permissionsOf, permissionsOfMany, splitRoles } from './permissions';
 import { ipAllowed, narrowedTokenMay } from './role-limits';
@@ -97,6 +99,12 @@ export async function currentSession(req: FastifyRequest): Promise<{ user: User;
   // Staff signed in as this person: for an hour from its start (whatever the browser sends; the library would let
   // it slide to the normal length), and only while that staff member could still start it.
   if (impersonatedBy && (Date.now() - new Date(s.session.createdAt).getTime() > 3_600_000 || !(await impersonatorMay(impersonatedBy, u.id, permissions)))) {
+    await endSession(u.id, s.session.id).catch(() => undefined);
+    return null;
+  }
+  // A directory or single sign-on account: the session ends SESSION_TTL_HOURS after it was made, used or not, so the
+  // directory or provider is asked again at least that often (ldap.ts; a session started by staff has its own hour).
+  if (!impersonatedBy && directorySessionOver((u as { authSource?: string }).authSource, s.session.createdAt, config.SESSION_TTL_HOURS)) {
     await endSession(u.id, s.session.id).catch(() => undefined);
     return null;
   }

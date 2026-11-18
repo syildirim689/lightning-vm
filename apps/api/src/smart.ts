@@ -243,6 +243,7 @@ export class AccountExportController {
       consoleSnippets: await q('SELECT name, command, created_at AS "createdAt" FROM console_snippets WHERE owner_id = $1 ORDER BY name'),
       firewalls: await q(`SELECT f.name, f.rules, f.created_at AS "createdAt", ARRAY(SELECT s.name FROM firewall_servers fs JOIN servers s ON s.id = fs.server_id WHERE fs.firewall_id = f.id) AS servers
         FROM firewalls f WHERE f.owner_id = $1 ORDER BY f.name`),
+      savedViews: await q('SELECT list, name, params, is_default AS "isDefault", created_at AS "createdAt" FROM saved_views WHERE user_id = $1 ORDER BY list, created_at'),
       notificationPreferences: await q('SELECT event, channels FROM notification_preferences WHERE user_id = $1 ORDER BY event'),
       notifications: await q('SELECT event, title, body, link, created_at AS "createdAt", read_at AS "readAt" FROM notifications WHERE user_id = $1 ORDER BY created_at DESC LIMIT 500'),
       messagingApps: await q('SELECT app, label, hint, enabled, created_at AS "createdAt" FROM chat_connections WHERE user_id = $1 ORDER BY created_at'),

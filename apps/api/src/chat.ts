@@ -9,11 +9,15 @@ import { adminAccounts, ctx, sendOne, usableApps } from './chat-delivery';
 import { pool, redis } from './db';
 import { apiError } from './errors';
 import { Can, PermissionGuard } from './rbac';
+import { rateLimit } from './security';
 import { decryptSecret, encryptSecret } from './secrets';
 import { getSettings, saveSettings, type ChatSettings } from './settings-store';
 
 type Input = Record<string, unknown>;
 const MAX_CONNECTIONS = 10;
+// Connecting and testing make the panel send a request to an address the user chose: so many an hour per account,
+// counted when a request is about to be made (input that is refused before that is not counted).
+const sendBudget = (userId: string) => rateLimit(`chat-send:${userId}`, 20, 3600);
 const welcome = (locale: string, brand: string): Message => (locale === 'tr'
   ? { title: 'Bildirimler bağlandı', body: `${brand} bildirimleri artık buraya da gelecek.`, link: null, brand, event: 'system.test' }
   : { title: 'Notifications connected', body: `${brand} notifications will arrive here too.`, link: null, brand, event: 'system.test' });
@@ -93,6 +97,7 @@ export class ChatController {
     if (!c) throw apiError(404, 'NOT_FOUND', 'Not found');
     const s = await getSettings('chat');
     if (!usableApps(s).includes(c.app)) throw apiError(409, 'CHAT_APP_UNAVAILABLE', 'This app is switched off');
+    await sendBudget(req.user.id);
     const brand = (await getSettings('branding')).name;
     const m: Message = req.user.locale === 'tr' ? { title: 'Test bildirimi', body: 'Bu kanal çalışıyor.', link: null, brand, event: 'system.test' }
       : { title: 'Test notification', body: 'This channel works.', link: null, brand, event: 'system.test' };
@@ -109,6 +114,7 @@ export class ChatController {
   private async save(req: AuthedRequest, app: string, target: Record<string, string>, hint: string, label: string, s: ChatSettings) {
     // A connection keeps receiving the account's notifications: not for staff acting as someone (as with API tokens).
     if (req.user.impersonatedBy) throw apiError(403, 'NOT_WHILE_IMPERSONATING', 'Not while acting as another user');
+    await sendBudget(req.user.id);
     const r = await sendOne(app, target, welcome(req.user.locale, (await getSettings('branding')).name), await adminAccounts(s));
     if (!r.ok) {
       await audit(req, 'chat.connect', 'failure', req.user.id, { app, code: r.code });

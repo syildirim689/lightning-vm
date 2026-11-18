@@ -115,7 +115,9 @@ export const paytr: Gateway & { paymentIdFrom(body: Record<string, unknown>): st
     // The notification of another payment (genuine, but sent to this one's address) is not this payment's result.
     if (String(body.merchant_oid ?? '') !== oid(payment.id)) return fail('BAD_SIGNATURE', 'Another payment’s notification');
     if (body.status !== 'success') return fail(`PAYTR_${body.failed_reason_code ?? 'FAILED'}`, String(body.failed_reason_msg ?? ''));
-    const paid = Number(body.payment_amount ?? body.total_amount);
+    // total_amount (what was collected) is the figure the hash covers; payment_amount (the order's) is not signed, so it
+    // can only lower the verdict, never stand in for the signed one.
+    const paid = Math.min(Number(body.total_amount), Number(body.payment_amount ?? body.total_amount));
     if (!Number.isFinite(paid) || paid < cents(payment.amount)) return fail('AMOUNT_MISMATCH', 'PayTR reported a smaller amount');
     return { ok: true, ref: String(body.merchant_oid) };
   },

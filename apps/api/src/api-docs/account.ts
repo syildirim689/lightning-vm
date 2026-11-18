@@ -394,6 +394,60 @@ export default {
     returns: { tr: 'Kaydedilen event ve kural.', en: 'The saved event and policy.' },
   },
 
+  // ── Saved views of the panel's lists ─────────────────────────────────────
+  'GET /saved-views': {
+    tag: 'account',
+    summary: { tr: 'Bir listenin kayıtlı görünümlerinizi listeler.', en: 'Lists your saved views of a list.' },
+    details: {
+      tr: 'Görünüm, panelde bir listenin filtrelerine ve sıralamasına verilen addır; hesabınızla saklanır ve yalnızca siz görürsünüz. Bir kullanıcı olarak oturum açan personel o kişinin görünümlerini görür ama değiştiremez.',
+      en: 'A view is a name for a list\'s filters and order in the panel; it is kept with your account and only you see it. Staff signed in as a user see that person\'s views but cannot change them.',
+    },
+    query: [{ name: 'list', type: 'string', required: true, values: ['servers', 'admin-servers', 'admin-users', 'admin-audit', 'admin-invoices', 'admin-payments', 'admin-support'], text: { tr: 'Listenin anahtarı.', en: 'The list\'s key.' } }],
+    returns: { tr: '`views`: oluşturulma sırasıyla `id`, `name`, `params` (parametre adı → metin) ve `isDefault`.', en: '`views`: `id`, `name`, `params` (parameter name → text) and `isDefault`, oldest first.' },
+    errors: ['VALIDATION_FAILED'],
+  },
+  'POST /saved-views': {
+    tag: 'account',
+    summary: { tr: 'Bir liste için görünüm kaydeder.', en: 'Saves a view of a list.' },
+    details: {
+      tr: 'Liste başına en çok 12 görünüm. Ad, aynı listede büyük/küçük harf ve Türkçe harf ayrımı olmadan benzersizdir. Liste başına tek varsayılan vardır: `isDefault` true ise öncekinin işareti kalkar.',
+      en: 'At most 12 views per list. A name is unique within the list, ignoring case and Turkish letter forms. A list has one default: `isDefault` true takes the mark from the previous one.',
+    },
+    body: [
+      { name: 'list', type: 'string', required: true, values: ['servers', 'admin-servers', 'admin-users', 'admin-audit', 'admin-invoices', 'admin-payments', 'admin-support'], text: { tr: 'Listenin anahtarı.', en: 'The list\'s key.' } },
+      { name: 'name', type: 'string', required: true, text: { tr: 'Ad, 1-60 karakter; boşluklar sadeleştirilir.', en: 'Name, 1 to 60 characters; spaces are tidied.' } },
+      { name: 'params', type: 'object', required: true, text: {
+        tr: 'Listenin adres parametreleri (ad → metin, her değer en çok 200 karakter, en çok 12 tane). İzin verilen adlar: servers: q, state, tag, project, sort; admin-servers: q, state, tag, owner, sort, starred; admin-users: q, role, status; admin-audit: q, outcome, category; admin-invoices ve admin-payments: status, q; admin-support: status, priority, department, assignee, q.',
+        en: 'The list\'s address parameters (name → text, each value at most 200 characters, at most 12 of them). Allowed names: servers: q, state, tag, project, sort; admin-servers: q, state, tag, owner, sort, starred; admin-users: q, role, status; admin-audit: q, outcome, category; admin-invoices and admin-payments: status, q; admin-support: status, priority, department, assignee, q.',
+      } },
+      { name: 'isDefault', type: 'boolean', text: { tr: 'Liste filtresiz açıldığında uygulanacak görünüm. Varsayılan false.', en: 'The view applied when the list is opened without filters. Default false.' } },
+    ],
+    example: { list: 'servers', name: 'Running web servers', params: { q: 'web', state: 'running' }, isDefault: false },
+    returns: { tr: 'Kaydedilen görünüm: `id`, `name`, `params`, `isDefault` (201).', en: 'The saved view: `id`, `name`, `params`, `isDefault` (201).' },
+    errors: ['VALIDATION_FAILED', 'LIMIT_REACHED', 'NOT_WHILE_IMPERSONATING', 'RATE_LIMITED'],
+  },
+  'PATCH /saved-views/:id': {
+    tag: 'account',
+    summary: { tr: 'Kayıtlı bir görünümü değiştirir.', en: 'Changes a saved view.' },
+    details: { tr: 'Yalnızca gönderilen alanlar değişir; en az biri gerekir. `isDefault` true ise listenin önceki varsayılanının işareti aynı işlemde kalkar.', en: 'Only the fields sent change; at least one is needed. `isDefault` true takes the mark from the list\'s previous default in the same transaction.' },
+    params: [{ name: 'id', type: 'uuid', required: true, text: { tr: 'Görünümün kimliği.', en: 'The view\'s id.' } }],
+    body: [
+      { name: 'name', type: 'string', text: { tr: 'Ad, 1-60 karakter.', en: 'Name, 1 to 60 characters.' } },
+      { name: 'params', type: 'object', text: { tr: 'Görünümün listesine ait parametreler (POST /saved-views ile aynı kurallar).', en: 'Parameters of the view\'s list (same rules as POST /saved-views).' } },
+      { name: 'isDefault', type: 'boolean', text: { tr: 'Varsayılan işareti.', en: 'The default mark.' } },
+    ],
+    example: { name: 'Stopped servers', params: { state: 'stopped' }, isDefault: true },
+    returns: { tr: 'Güncel görünüm: `id`, `name`, `params`, `isDefault`.', en: 'The updated view: `id`, `name`, `params`, `isDefault`.' },
+    errors: ['VALIDATION_FAILED', 'NOT_FOUND', 'NOT_WHILE_IMPERSONATING', 'RATE_LIMITED'],
+  },
+  'DELETE /saved-views/:id': {
+    tag: 'account',
+    summary: { tr: 'Kayıtlı bir görünümü siler.', en: 'Removes a saved view.' },
+    params: [{ name: 'id', type: 'uuid', required: true, text: { tr: 'Görünümün kimliği.', en: 'The view\'s id.' } }],
+    returns: { tr: 'İçerik yok (204).', en: 'No content (204).' },
+    errors: ['NOT_FOUND', 'NOT_WHILE_IMPERSONATING', 'RATE_LIMITED'],
+  },
+
   // ── API tokens and webhooks ──────────────────────────────────────────────
   'GET /account/api-tokens': {
     tag: 'account',

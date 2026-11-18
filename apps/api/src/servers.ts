@@ -179,6 +179,15 @@ const lockedKinds = new Set<Kind>(['delete', 'power_off', 'reset', 'snapshot_rev
 // Who an operation is recorded as started by (migration 076): the signed-in account; nobody for the billing run, a
 // schedule, the deletion grace period and the billing integration, whose operations a customer may not cancel.
 const startedBy = (req: AuthedRequest) => ((req as { billing?: boolean }).billing || forBilling(req) ? null : req.user?.id ?? null);
+// Whose share of the worker's slots the operation counts against (operations.capped_for; the worker lets one account
+// run only so many at once): whoever started it (the owner, a reseller for a customer), the server's owner for a
+// schedule. Staff, the billing run and the billing integration are not capped (null), so they never wait behind a customer.
+// capFor: a reseller ordering for a customer (reseller.ts), where the request carries the customer as its user.
+export const cappedFor = (req: AuthedRequest, ownerId: string) => ((req as { billing?: boolean }).billing || forBilling(req) || can(req.user?.permissions ?? [], 'servers.manage_all') ? null
+  : (req as { capFor?: string }).capFor ?? req.user?.id ?? ownerId);
+// An operation somebody other than the owner or staff started on the server (the owner's reseller, findServer): the
+// audit event says for whom, so it is also in the owner's own activity (audit-log.ts).
+const actedFor = (req: AuthedRequest, ownerId: string) => (req.user?.id && req.user.id !== ownerId && !can(req.user.permissions ?? [], 'servers.manage_all') && !forBilling(req) ? { forOwner: ownerId, actingAs: 'reseller' } : {});
 
 // prepare: what must be in place before the worker can pick the operation up (an invoice, tracking rows); it runs after
 // the operation exists and before it is queued. If it fails, the operation ends there and never runs.
@@ -206,9 +215,9 @@ export async function startOperation(req: AuthedRequest, server: { id: string; o
   try {
     // Only while the server is still the owner's the caller read (ownerWrite says why): the locking read waits for a
     // hand-over in progress and then sees the new owner, and an operation accepted first keeps the hand-over out (busy).
-    const { rows: [op] } = await pool.query(`INSERT INTO operations (kind, status, idempotency_key, request_hash, server_id, owner_id, step, deadline_at, params, started_by)
-      SELECT $1, 'pending', $2, $3, s.id, s.owner_id, 'queued', now() + make_interval(mins => $6), $7, $8 FROM servers s WHERE s.id = $4 AND s.owner_id = $5 FOR SHARE OF s
-      RETURNING id, kind, status`, [kind, key, requestHash, server.id, server.owner_id, deadlineMinutes[kind], params, startedBy(req)]);
+    const { rows: [op] } = await pool.query(`INSERT INTO operations (kind, status, idempotency_key, request_hash, server_id, owner_id, step, deadline_at, params, started_by, capped_for)
+      SELECT $1, 'pending', $2, $3, s.id, s.owner_id, 'queued', now() + make_interval(mins => $6), $7, $8, $9 FROM servers s WHERE s.id = $4 AND s.owner_id = $5 FOR SHARE OF s
+      RETURNING id, kind, status`, [kind, key, requestHash, server.id, server.owner_id, deadlineMinutes[kind], params, startedBy(req), cappedFor(req, server.owner_id)]);
     if (!op) throw apiError(404, 'NOT_FOUND', 'Unknown server');
     if (prepare) {
       await prepare(op).catch(async (err) => {
@@ -217,7 +226,7 @@ export async function startOperation(req: AuthedRequest, server: { id: string; o
       });
     }
     await enqueue(op.id);
-    await audit(req, `server.${kind}`, 'success', req.user.id, { serverId: server.id, operationId: op.id, ...params });
+    await audit(req, `server.${kind}`, 'success', req.user.id, { serverId: server.id, operationId: op.id, ...params, ...actedFor(req, server.owner_id) });
     return op;
   } catch (err) {
     if ((err as { constraint?: string }).constraint === 'operations_one_open_per_server') throw apiError(409, 'OPERATION_IN_PROGRESS', 'Another operation is still running on this server');
@@ -611,9 +620,9 @@ export class ServersController {
       if (hourly) await startHourly(client, { serverId: s.id, ownerId: req.user.id, hourly, currency: order.price.currency });
       if (coupon) await client.query('INSERT INTO coupon_redemptions (coupon_id, user_id, server_id, once) VALUES ($1, $2, $3, $4)', [coupon.id, req.user.id, s.id, coupon.once]);
       const bill = vdc || hourly || external ? null : await billOrder(client, { ownerId: reseller?.id ?? req.user.id, serverId: s.id, name, monthly: order.price.monthly, currency: order.price.currency, coupon });
-      const { rows: [op] } = await client.query(`INSERT INTO operations (kind, status, idempotency_key, request_hash, server_id, owner_id, step, deadline_at, started_by)
-        VALUES ('create', 'pending', $1, $2, $3, $4, $6, now() + make_interval(mins => $5), $7) RETURNING id, kind, status`,
-        [key, requestHash, s.id, req.user.id, deadlineMinutes.create, bill?.awaitingPayment ? 'awaiting_payment' : 'queued', startedBy(req)]);
+      const { rows: [op] } = await client.query(`INSERT INTO operations (kind, status, idempotency_key, request_hash, server_id, owner_id, step, deadline_at, started_by, capped_for)
+        VALUES ('create', 'pending', $1, $2, $3, $4, $6, now() + make_interval(mins => $5), $7, $8) RETURNING id, kind, status`,
+        [key, requestHash, s.id, req.user.id, deadlineMinutes.create, bill?.awaitingPayment ? 'awaiting_payment' : 'queued', startedBy(req), cappedFor(req, req.user.id)]);
       await client.query('COMMIT');
       result = { serverId: s.id, operation: op, ...(root && { passwordReplaced: root.replaced }), ...(bill && { invoiceId: bill.invoiceId, awaitingPayment: bill.awaitingPayment }) };
     } catch (err) {

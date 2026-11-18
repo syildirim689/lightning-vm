@@ -26,7 +26,8 @@ const notify = (event, to, data) => notifications.add('notify', { event, to, dat
 // Reverse DNS records are written by the API (it holds the DNS settings); a lost job only leaves a PTR to fix by hand.
 const rdnsQueue = new Queue('rdns', { connection: redis });
 const rdns = (data) => rdnsQueue.add('rdns', data, { attempts: 5, backoff: { type: 'exponential', delay: 10_000 }, removeOnComplete: true, removeOnFail: 100 }).catch(() => log('error', 'rdns_enqueue_failed', { action: data.action }));
-const worker = new Worker('operations', (job) => processOperation(pool, job, log, notify, rdns), { connection: redis, concurrency });
+// The token lets a held operation (one account's share of the slots: operations.mjs, admit) go back with a delay.
+const worker = new Worker('operations', (job, token) => processOperation(pool, job, log, notify, rdns, token), { connection: redis, concurrency });
 const operations = new Queue('operations', { connection: redis });
 // Firewall changes are applied one at a time, so an older job can never overwrite newer rules.
 const firewallWorker = new Worker('firewalls', (job) => processFirewall(pool, job, log, notify), { connection: redis.duplicate(), concurrency: 1 });

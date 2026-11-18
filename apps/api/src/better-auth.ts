@@ -162,7 +162,11 @@ async function checkMethods(path: string, headers: Headers, body: Record<string,
 // The panel then removes what the library does not know about and an earlier holder could still use (addressProven).
 // Once only: afterwards the address is verified and nothing is removed again. Staff marking an address verified by
 // hand (user-security.ts) is not the owner's proof and removes nothing.
+// A password set through a mailed reset link is the same proof (it is how most people get into an account that
+// "already exists" under their address), but the library only replaces the password and ends the sessions there:
+// provenByReset does the rest.
 const provesMailbox = (path: string | undefined) => path === '/magic-link/verify' || path === '/sign-in/email-otp';
+const provenBy = (path: string) => (path === '/magic-link/verify' ? 'magic-link' : path === '/reset-password' ? 'password-reset' : 'email-code');
 // The requests in which the library is marking an address proven (seen in the user update's before-hook, which has
 // the change but not the account; the after-hook has the account).
 const proving = new WeakSet<object>();
@@ -189,16 +193,49 @@ async function addressProven(userId: string, path: string, ip: string | null, li
     twoFactor: await gone('DELETE FROM auth_two_factors t USING users u WHERE t.user_id = $1 AND u.id = t.user_id AND NOT coalesce(u.two_factor_enabled, false)'),
     // A phone number the earlier holder verified would keep receiving the account's codes and notices.
     phoneNumber: await gone('UPDATE users SET phone_number = NULL, phone_number_verified = false WHERE id = $1 AND phone_number IS NOT NULL'),
+    // Saved SSH keys are what a new server or a reinstall is given: one of the earlier holder's would let them into it.
+    sshKeys: await gone('DELETE FROM ssh_keys WHERE owner_id = $1'),
+    // A password step answered before the proof and still waiting for its code would end in a session after it (the
+    // account's two-factor may be the earlier holder's); a browser they marked as trusted would skip the code.
+    pendingSignIns: await gone("DELETE FROM auth_verifications WHERE value = $1::text AND (identifier LIKE '2fa-%' OR identifier LIKE 'trust-device-%')"),
+    // A card the earlier holder stored would be charged for what the owner orders, and by the automatic collection.
+    savedCards: await gone('DELETE FROM saved_cards WHERE owner_id = $1'),
+    // Where invoices and payment notices go besides the account's own address.
+    billingContact: await gone('UPDATE billing_profiles SET email = NULL, phone = NULL, updated_at = now() WHERE user_id = $1 AND (email IS NOT NULL OR phone IS NOT NULL)'),
+    // A server the earlier holder offered to another account, not accepted yet: the owner decides that again.
+    transferOffers: await gone("UPDATE server_transfers SET status = 'cancelled', decided_at = now() WHERE from_id = $1 AND status = 'pending'"),
   };
+  // What stays, because it is the account's and removing it cannot be undone: servers, images, balance, tickets, the
+  // invoice details. The owner sees all of it in the panel. It may still have been set up by someone else (who can
+  // know a root password or have a key inside a server), so it is written down for staff: in the audit event and, when
+  // there are servers, images or a balance, as a note on the person.
+  const { rows: [kept = {}] } = await pool.query(`SELECT (SELECT count(*)::int FROM servers WHERE owner_id = $1 AND state <> 'deleted') AS servers,
+      (SELECT count(*)::int FROM os_images WHERE owner_id = $1) AS images, (SELECT count(*)::int FROM balance_entries WHERE owner_id = $1) AS "balanceEntries",
+      (SELECT count(*)::int FROM tickets WHERE owner_id = $1) AS tickets, (SELECT count(*)::int FROM billing_profiles WHERE user_id = $1) AS "billingProfile",
+      (SELECT count(*)::int FROM users WHERE id = $1 AND reseller_id IS NOT NULL) AS "resellerManaged"`, [userId]).catch(() => ({ rows: [] as Record<string, number>[] }));
+  if (kept.servers || kept.images || kept.balanceEntries) {
+    await pool.query('INSERT INTO staff_notes (user_id, body) VALUES ($1, $2)', [userId, `The e-mail address of this account was proven for the first time (${provenBy(path)}). `
+      + `It already had ${kept.servers ?? 0} server(s), ${kept.images ?? 0} image(s) and ${kept.balanceEntries ?? 0} balance entries, which stay with it. Whoever set them up may not be the person `
+      + 'who now holds the mailbox and may still know a password or have a key inside a server. Sign-in details, API tokens, SSH keys and saved cards from before were removed.']).catch(() => undefined);
+  }
   // Consoles opened with the sessions the library just ended were closed as each one went (session.delete below);
   // this covers what is left.
   await closeConsoles(userId);
   await endImpersonations(userId);
-  await auditAuth(userId, 'auth.address_proven', 'success', ip, { method: path === '/magic-link/verify' ? 'magic-link' : 'email-code', removed: { password: true, linkedAccounts: true, otherSessions: true, ...removed } });
+  await auditAuth(userId, 'auth.address_proven', 'success', ip, { method: provenBy(path), removed: { password: true, linkedAccounts: true, otherSessions: true, ...removed }, kept });
   await publishLive(userId, 'sessions');
   // The person is told what happened, when something of theirs is gone: an account nothing was set up on (one staff
   // made, signed in to for the first time) lost nothing.
-  if (library.accounts + library.sessions + Object.values(removed).reduce((a, n) => a + n, 0) > 0) await notify('auth.credentials_reset', [userId], { method: path === '/magic-link/verify' ? 'magic-link' : 'email-code' });
+  if (library.accounts + library.sessions + Object.values(removed).reduce((a, n) => a + n, 0) > 0) await notify('auth.credentials_reset', [userId], { method: provenBy(path) });
+}
+// The first proof by a reset link. The library has replaced the password and ended the sessions; the linked providers
+// go here, as they do on the other two routes, and then everything addressProven removes. Only the request that
+// turns the mark on goes further (two resets at once, or a link used at the same moment, do it once).
+async function provenByReset(userId: string, ip: string | null) {
+  const { rowCount } = await pool.query('UPDATE users SET email_verified = true, updated_at = now() WHERE id = $1 AND NOT email_verified', [userId]);
+  if (!rowCount) return;
+  const { rowCount: accounts } = await pool.query("DELETE FROM auth_accounts WHERE user_id = $1 AND provider_id <> 'credential'", [userId]).catch(() => ({ rowCount: 0 }));
+  await addressProven(userId, '/reset-password', ip, { accounts: accounts ?? 0, sessions: 0 });
 }
 // Where the passkey plugin signs in (/sign-in/passkey is only the client's name for it).
 const passkeySignIn = '/passkey/verify-authentication';
@@ -344,7 +381,11 @@ function createAuth() {
         if (link) await sendPasswordReset(user.email, (user as { locale?: string }).locale, link);
       },
       // Every session ended with the old password: so do the browsers that still received its notifications.
-      onPasswordReset: async ({ user }) => { await dropPush(user.id); await notify('auth.password_changed', [user.id], {}); },
+      onPasswordReset: async ({ user }, request) => {
+        await dropPush(user.id); await notify('auth.password_changed', [user.id], {});
+        // The link was mailed to the address: for an account whose address nobody had proven, this is the proof.
+        if (!user.emailVerified) await provenByReset(user.id, request?.headers.get('x-lvm-client-ip') ?? null);
+      },
     },
     rateLimit: {
       enabled: true,
@@ -463,6 +504,11 @@ function createAuth() {
           // A password set by an administrator ends every session of that account.
           if (ctx.path === '/admin/set-user-password' && target) await ctx.context.internalAdapter.deleteUserSessions(target);
           await auditAuth(actor, `admin.user.${adminActions[ctx.path]}`, 'success', ip, { target, ...extra });
+          // An account staff make in Admin → Users cannot have been registered by a stranger first: there is no earlier
+          // holder whose things the first proof would have to remove, so its address counts as proven from the start
+          // (as the setup administrator's does, setup.ts). Not the accounts a reseller or a billing system opens:
+          // those are made without a request and never come through here.
+          if (ctx.path === '/admin/create-user' && target) await pool.query('UPDATE users SET email_verified = true WHERE id = $1', [target]).catch(() => undefined);
           const live: Record<string, LiveKind> = { '/admin/ban-user': 'ban', '/admin/unban-user': 'unban', '/admin/set-user-password': 'password', '/admin/remove-user': 'removed',
             '/admin/revoke-user-session': 'sessions', '/admin/revoke-user-sessions': 'sessions', '/admin/update-user': 'account' };
           if (target && live[ctx.path]) await publishLive(target, live[ctx.path]);
@@ -539,6 +585,10 @@ function createAuth() {
             const user = await ctx?.context.internalAdapter.findUserById(session.userId) as { disabledAt?: Date | null; banned?: boolean; authSource?: string; twoFactorEnabled?: boolean } | null;
             if (user?.disabledAt || user?.banned) return false;
             const via = String((ctx?.params as { id?: string } | undefined)?.id ?? '');
+            // A two-factor change swaps the caller's session for a new one, checked against the cached hash only.
+            // For a directory account the new one keeps the age of the one it replaces, so the swap is not a way
+            // round asking the directory again (auth.ts ends such a session SESSION_TTL_HOURS after it was made).
+            const swapped = (ctx?.context.session as { session?: { createdAt?: Date | string } } | null | undefined)?.session?.createdAt;
             // Here every way in ends, whatever route or plugin it came through (the panel's own server-side calls
             // have no request). A directory account gets a session only when the directory accepted this very
             // sign-in, a single sign-on account only from its provider's callback: never from a cached password
@@ -557,6 +607,7 @@ function createAuth() {
               await ensureRoles();
               if (u && !ipAllowed(limitsOf(u.role).allowedIps, ctx.request?.headers.get('x-lvm-client-ip') ?? '')) return false;
             }
+            if (user?.authSource === 'ldap' && ctx?.request && ctx.path.startsWith('/two-factor/') && swapped) return { data: { createdAt: new Date(swapped) } };
           },
         },
         delete: {

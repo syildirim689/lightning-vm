@@ -21,6 +21,12 @@ test('PayTR: the notification finds our payment, its hash is checked, failures a
   const signed = (b) => ({ ...b, hash: createHmac('sha256', 'key').update(`${b.merchant_oid}salt${b.status}${b.total_amount}`).digest('base64') });
   const ok = await paytr.verify({ query: {}, body: signed({ merchant_oid: oid, status: 'success', total_amount: '12000', payment_amount: '12000' }), payment }, creds, 'test');
   assert.deepEqual(ok, { ok: true, ref: oid });
+  // The hash covers total_amount only: a payment_amount beside a small signed total does not make it enough, and a small
+  // payment_amount beside a full total is still a different payment.
+  assert.equal((await paytr.verify({ query: {}, body: signed({ merchant_oid: oid, status: 'success', total_amount: '100', payment_amount: '12000' }), payment }, creds, 'test')).code, 'AMOUNT_MISMATCH');
+  assert.equal((await paytr.verify({ query: {}, body: signed({ merchant_oid: oid, status: 'success', total_amount: '12000', payment_amount: '100' }), payment }, creds, 'test')).code, 'AMOUNT_MISMATCH');
+  assert.equal((await paytr.verify({ query: {}, body: signed({ merchant_oid: oid, status: 'success', total_amount: '12600', payment_amount: '12000' }), payment }, creds, 'test')).ok, true, 'an instalment surcharge on top is paid');
+  assert.equal((await paytr.verify({ query: {}, body: signed({ merchant_oid: oid, status: 'success', total_amount: '12000' }), payment }, creds, 'test')).ok, true);
   assert.equal((await paytr.verify({ query: {}, body: { ...signed({ merchant_oid: oid, status: 'success', total_amount: '12000' }), hash: 'forged' }, payment }, creds, 'test')).code, 'BAD_SIGNATURE');
   assert.equal((await paytr.verify({ query: {}, body: signed({ merchant_oid: oid, status: 'failed', total_amount: '12000', failed_reason_code: '6' }), payment }, creds, 'test')).code, 'PAYTR_6');
   assert.equal((await paytr.verify({ query: {}, body: signed({ merchant_oid: oid, status: 'success', total_amount: '100', payment_amount: '100' }), payment }, creds, 'test')).code, 'AMOUNT_MISMATCH');
@@ -150,6 +156,27 @@ test('a payment is failed only on the provider\'s word: unfinished, unanswered o
   const { needsReview } = await import('../dist/billing-gateways.js');
   for (const code of ['NEEDS_CONFIRMATION', 'AMOUNT_MISMATCH', 'FRAUD_REVIEW']) assert.deepEqual([finalResult({ ok: false, code }), needsReview({ ok: false, code })], [false, true], code);
   for (const r of [{ ok: true, ref: 'x' }, { ok: false, code: 'CARD_DECLINED' }, { ok: false, code: 'PENDING' }]) assert.equal(needsReview(r), false);
+});
+
+test('sandbox: the review test card is held, not settled, and is never saved; the other cards answer as before', async () => {
+  const { sandboxCards, sandboxPay, gateways, finalResult, needsReview, underReview } = await import('../dist/billing-gateways.js');
+  assert.deepEqual(Object.keys(sandboxCards), ['4242424242424242', '4000000000000002', '4000000000009995', '4000000000004954']);
+  for (const card of ['4000 0000 0000 4954', '4000000000004954']) {
+    const r = sandboxPay(card, true);
+    assert.deepEqual([r.ok, r.code, 'card' in r], [false, 'FRAUD_REVIEW', false], card);
+    // The way a real provider's held payment takes: nothing settles it, it waits for staff with this code on it.
+    assert.deepEqual([finalResult(r), needsReview(r), underReview(r.code)], [false, true, true], card);
+  }
+  const ok = sandboxPay('4242 4242 4242 4242', true);
+  assert.deepEqual([ok.ok, ok.card.token, finalResult(ok), needsReview(ok)], [true, 'sandbox:4242', true, false]);
+  for (const [card, code] of [['4000 0000 0000 0002', 'CARD_DECLINED'], ['4000 0000 0000 9995', 'INSUFFICIENT_FUNDS'], ['1234', 'CARD_DECLINED']]) {
+    const r = sandboxPay(card, true);
+    assert.deepEqual([r.ok, r.code, finalResult(r), needsReview(r)], [false, code, true, false], card);
+  }
+  // Each test card has its own last four digits (a saved one is found again by them).
+  assert.equal(new Set(Object.keys(sandboxCards).map((n) => n.slice(-4))).size, Object.keys(sandboxCards).length);
+  // The cards are the sandbox provider's alone: no other gateway knows them, and the sandbox is never a live provider.
+  assert.deepEqual((await gateways.sandbox.checkout({ paymentId: 'p1' }, {}, 'test')), { redirect: '/billing/checkout/p1' });
 });
 
 test('Param: the review note names the payment and keeps the instruction whatever the form says; under review is told apart', async () => {

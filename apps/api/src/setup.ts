@@ -51,6 +51,9 @@ async function createFirstAdmin(email: string, password: string, locale: 'tr' | 
   }
   try {
     const { user } = await getAuth().api.createUser({ body: { email, password, name: '', role: 'admin', data: { locale } } });
+    // Made by whoever holds the bootstrap token (or the installer): nobody registered this address before, so there is
+    // nothing of an earlier holder for the first proof to remove (better-auth.ts, addressProven).
+    await pool.query('UPDATE users SET email_verified = true WHERE id = $1', [user.id]).catch(() => undefined);
     return user.id;
   } catch (err) {
     await pool.query('UPDATE setup_state SET admin_created_at = NULL, completed_at = NULL');

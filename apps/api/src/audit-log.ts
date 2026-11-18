@@ -42,9 +42,13 @@ export class AuditController {
 export class ActivityController {
   @Get('activity')
   async mine(@Req() req: AuthedRequest, @Query('before') b?: string) {
-    const { rows } = await pool.query(`SELECT ${columns} FROM audit_events e LEFT JOIN users u ON u.id = e.actor_id
+    // Also what somebody else did for this account and recorded as such (metadata.forOwner): a reseller acting on the
+    // customer's servers or ordering for them, the account leaving a reseller. Of those the customer sees what and
+    // when, and who only when it was their reseller (actingAs); never another person's address.
+    const { rows } = await pool.query(`SELECT ${columns.replace('host(e.ip) AS ip', () => 'CASE WHEN e.actor_id = $1 OR e.actor_id IS NULL THEN host(e.ip) END AS ip')
+        .replace('u.email AS "actorEmail"', () => `CASE WHEN e.actor_id = $1 OR e.metadata->>'actingAs' = 'reseller' THEN u.email END AS "actorEmail"`)} FROM audit_events e LEFT JOIN users u ON u.id = e.actor_id
       WHERE ($2::bigint IS NULL OR e.id < $2) AND (e.actor_id = $1 OR (e.actor_id IS NULL AND e.request_id LIKE 'schedule:%'
-        AND e.metadata->>'serverId' IN (SELECT id::text FROM servers WHERE owner_id = $1)))
+        AND e.metadata->>'serverId' IN (SELECT id::text FROM servers WHERE owner_id = $1)) OR e.metadata->>'forOwner' = ($1::uuid)::text)
       ORDER BY e.id DESC LIMIT ${page + 1}`, [req.user.id, before(b)]);
     return more(rows);
   }

@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { createHmac } from 'node:crypto';
 
 const chatAppsModule = await import('../dist/chat-apps.js');
-const { chatApps, privateAddress, publicOnlyAgent, publicUrl, pushEndpoint, readTarget } = chatAppsModule;
+const { chatApps, destinationKey, privateAddress, publicOnlyAgent, publicUrl, pushEndpoint, readTarget, told } = chatAppsModule;
 const m = { title: 'Ready', body: 'web-1 is up', link: 'https://panel.example.com/servers/1', brand: 'Acme', event: 'server.ready' };
 const a = { telegramToken: '123:abc', whatsappToken: 'wa', whatsappPhoneId: '1055', whatsappTemplate: 'alert', whatsappLanguage: 'tr', pushoverToken: 'po' };
 let seen;
@@ -95,6 +95,29 @@ test('errors are told apart: rejected token, missing target, anything else', asy
   assert.equal((await chatApps.webhook.send({ url: 'https://93.184.216.34/h' }, m, a)).code, 'CHAT_TARGET_NOT_FOUND');
   reply(500, 'oops');
   assert.equal((await chatApps.webhook.send({ url: 'https://93.184.216.34/h' }, m, a)).code, 'CHAT_REJECTED');
+});
+
+test('a failed send to a server the user named is told as a code only; a named service\'s own words stay', async () => {
+  const failed = { ok: false, code: 'CHAT_REJECTED', detail: '{"internal":"what stands at that address"}' };
+  for (const app of ['webhook', 'mattermost', 'rocketchat', 'matrix', 'ntfy', 'gotify']) assert.deepEqual(told(app, failed), { ok: false, code: 'CHAT_REJECTED' }, app);
+  assert.deepEqual(told('webhook', { ok: false, code: 'CHAT_UNREACHABLE', detail: 'connect ECONNREFUSED 198.51.100.7:8443' }), { ok: false, code: 'CHAT_UNREACHABLE' });
+  for (const app of ['slack', 'discord', 'teams', 'googlechat', 'telegram', 'whatsapp', 'pushover']) assert.deepEqual(told(app, failed), failed, app);
+  assert.deepEqual(told('webhook', { ok: true }), { ok: true });
+  // Through the app itself: the webhook's answer is in the result the app returns, and not in what the user is told.
+  reply(500, 'stack trace of an internal service');
+  const r = await chatApps.webhook.send({ url: 'https://93.184.216.34/h' }, m, a);
+  assert.equal(r.detail, 'stack trace of an internal service');
+  assert.equal(told('webhook', r).detail, undefined);
+});
+
+test('a destination has one key on whichever account it is connected, and another app or address another key', () => {
+  const k = destinationKey('webhook', { url: 'https://hooks.example.com/a', secret: 's1' });
+  assert.match(k, /^[0-9a-f]{32}$/);
+  assert.equal(destinationKey('webhook', { url: 'https://hooks.example.com/a', secret: 'another account, another secret' }), k);
+  assert.notEqual(destinationKey('webhook', { url: 'https://hooks.example.com/b' }), k);
+  assert.notEqual(destinationKey('mattermost', { url: 'https://hooks.example.com/a' }), k);
+  assert.notEqual(destinationKey('matrix', { homeserver: 'https://m.example.com', roomId: '!a:m.example.com' }), destinationKey('matrix', { homeserver: 'https://m.example.com', roomId: '!b:m.example.com' }));
+  assert.notEqual(destinationKey('telegram', { chatId: '1' }), destinationKey('telegram', { chatId: '2' }));
 });
 
 test('IPv4-mapped IPv6 addresses are judged as the IPv4 address they carry, in both spellings', () => {

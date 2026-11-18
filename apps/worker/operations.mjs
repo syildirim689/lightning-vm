@@ -4,7 +4,7 @@
 // VMware is called.
 import { createDecipheriv } from 'node:crypto';
 import { readFileSync } from 'node:fs';
-import { UnrecoverableError } from 'bullmq';
+import { DelayedError, UnrecoverableError } from 'bullmq';
 
 export class OperationError extends Error {
   constructor(code, detail, permanent = false) { super(code); this.code = code; this.detail = detail; this.permanent = permanent; }
@@ -645,9 +645,47 @@ async function rollbackCreate(db, ctx) {
   } catch { return false; }
 }
 
+// One account's share of the slots. The queue is first come, first served over every customer, and an operation holds its
+// slot until it ends (a clone, a backup copy: minutes to hours), so an account with many servers (bulk actions,
+// schedules at the same minute, an API loop) could hold all of them while everybody else's operations wait. An
+// operation counts against operations.capped_for (the API: servers.ts cappedFor; the account that started it, the
+// owner for a schedule; NULL for staff, the billing run and the billing integration, which are never held back). At most
+// `cap` of one account's operations are under way at once (begun and not finished, a retry's pause included);
+// further ones are put back with a delay and leave the slot to the next job in the queue. Only the first start is
+// gated: an operation that has begun is always resumed (its task may be running on the platform), and so is one that
+// is to be cancelled. Checked and taken under one lock per account, so jobs picked at the same moment cannot all pass.
+// OPERATIONS_PER_OWNER: the cap (default half of OPERATIONS_CONCURRENCY, at least 1; 0 switches it off).
+export function ownerCap(env = process.env) {
+  const set = env.OPERATIONS_PER_OWNER;
+  if (set !== undefined && set !== '' && Number.isInteger(Number(set)) && Number(set) >= 0) return Number(set);
+  return Math.max(1, Math.floor(Math.max(1, Number(env.OPERATIONS_CONCURRENCY) || 8) / 2));
+}
+// How long a held operation waits before it asks again: longer the more of the account's own operations are ahead of
+// it (so they start roughly in the order they were asked for, and a long line does not poll every few seconds).
+export const holdDelayMs = (ahead, cap) => Math.min(60_000, 3000 * (1 + Math.floor(Math.max(0, ahead) / Math.max(1, cap))));
+const begin = "UPDATE operations SET status = 'running', started_at = COALESCE(started_at, now()), attempts = attempts + 1, updated_at = now() WHERE id = $1";
+// Marks the operation running; { held: ms } instead when its account already has `cap` under way. A database from
+// before the column (the API migrates on its start) has no caps yet.
+export async function admit(db, op, cap = ownerCap()) {
+  if (!cap || !op.capped_for || op.started_at || op.cancel_requested) { await db.query(begin, [op.id]); return {}; }
+  const c = await db.connect();
+  try {
+    await c.query('BEGIN');
+    await c.query("SELECT pg_advisory_xact_lock(hashtextextended('operations-owner:' || $1::text, 0))", [op.capped_for]);
+    const { rows: [n] } = await c.query(`SELECT count(*) FILTER (WHERE started_at IS NOT NULL)::int AS busy,
+        count(*) FILTER (WHERE started_at IS NULL AND step IS DISTINCT FROM 'awaiting_payment' AND created_at < $3)::int AS ahead
+      FROM operations WHERE capped_for = $1 AND id <> $2 AND status IN ('pending', 'running')`, [op.capped_for, op.id, op.created_at ?? new Date()]);
+    if ((n?.busy ?? 0) >= cap) { await c.query('ROLLBACK'); return { held: holdDelayMs(n.ahead ?? 0, cap) }; }
+    await c.query(begin, [op.id]);
+    await c.query('COMMIT');
+    return {};
+  } catch (e) { await c.query('ROLLBACK').catch(() => undefined); throw e; } finally { c.release(); }
+}
+
 // notify(event, to, data): enqueues on the API's notification queue (apps/api/src/notify.ts decides the channels).
 // rdns(job): enqueues on the API's reverse-DNS queue (apps/api/src/rdns.ts writes the PTR records).
-export async function processOperation(db, job, log, notify = async () => {}, rdns = async () => {}) {
+// token: the job's lock token (BullMQ hands it to the processor), needed to put a held operation back with a delay.
+export async function processOperation(db, job, log, notify = async () => {}, rdns = async () => {}, token) {
   // Loading can fail too (database, key file); log it instead of failing silently.
   const ctx = await load(db, job.id).catch((e) => { log('error', 'operation_load_failed', { operationId: job.id, error: e.code ?? e.message }); throw e; });
   if (!ctx || ['succeeded', 'failed', 'cancelled'].includes(ctx.op.status)) return; // already settled
@@ -656,7 +694,14 @@ export async function processOperation(db, job, log, notify = async () => {}, rd
   // once staff have released the hold (or they close it first).
   if (await restoreHold(db)) { log('warn', 'operation_held', { kind: ctx.op.kind, operationId: ctx.op.id }); return; }
   ctx.log = log; // for the steps that have something to say besides their outcome
-  await db.query("UPDATE operations SET status = 'running', started_at = COALESCE(started_at, now()), attempts = attempts + 1, updated_at = now() WHERE id = $1", [ctx.op.id]);
+  // The account's share of the slots (admit): a held operation goes back to the queue with a delay, untouched and
+  // without using up one of its attempts. A job that cannot be put back (no moveToDelayed: not a queue's job) is run.
+  const { held } = await admit(db, ctx.op, typeof job.moveToDelayed === 'function' ? ownerCap() : 0);
+  if (held) {
+    log('info', 'operation_held_for_owner', { kind: ctx.op.kind, operationId: ctx.op.id, cappedFor: ctx.op.capped_for, delayMs: held });
+    await job.moveToDelayed(Date.now() + held, token);
+    throw new DelayedError();
+  }
   try {
     // A cancel is taken here only where nothing can be under way: a build (rolled back below, after its clone ends) and an
     // operation that has not begun. One resumed mid-step goes on to wait for its task; its own steps stop before the next.

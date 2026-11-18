@@ -78,8 +78,9 @@ test('sign-in details reset by the first proof of the address: a security notice
   assert.ok(e.defaults.includes('inApp') && e.defaults.includes('email'));
   assert.equal(alwaysSent('auth.credentials_reset'), true, 'not held back by quiet hours');
   assert.equal(mailTone('auth.credentials_reset'), 'warning');
-  assert.match(e.text.en({}).body, /password, API keys, passkeys, webhooks, connected apps and other sessions.*Forgot password.*not you, contact support/);
-  assert.match(e.text.tr({}).body, /parola, API anahtarları, geçiş anahtarları, webhooklar, bağlı uygulamalar ve diğer oturumlar.*Parolamı unuttum.*destek/);
+  // Both ways the proof happens, everything that goes with it, and what the person has to do afterwards.
+  assert.match(e.text.en({}).body, /link or a code, or by resetting the password.*API keys, passkeys.*webhooks, connected apps.*saved SSH keys, saved cards, the billing e-mail and phone, and other sessions.*Forgot password.*renewal needs a card again.*not you, contact support/);
+  assert.match(e.text.tr({}).body, /bağlantı ya da kodla girişle veya e-postayla parola sıfırlamayla.*API anahtarları, geçiş anahtarları.*webhooklar, bağlı uygulamalar.*kayıtlı SSH anahtarları, kayıtlı kartlar, fatura e-postası ve telefonu ile diğer oturumlar.*Parolamı unuttum.*yeniden kart.*destek/);
 });
 
 test('a hold after a restore: told to those who can release it, in the inbox and by e-mail, linking to the system page', () => {

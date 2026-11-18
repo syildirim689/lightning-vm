@@ -184,6 +184,15 @@ test('a handed-over server keeps nothing of its previous owner: keys, password, 
     if (how === 'accept') {
       const offer = await post(`/servers/${id}/transfer`, { email: 'b@example.test' }, a);
       assert.equal(offer.statusCode, 201, offer.body);
+      // The offer was made to an address. An account whose address nobody proved (anyone may have registered it) does
+      // not receive the server: refused, nothing moves, the offer stays open. Proven, it does.
+      await pool.query('UPDATE users SET email_verified = false WHERE id = $1', [bId]);
+      const unproven = await post(`/transfers/${offer.json().id}/accept`, undefined, b);
+      assert.deepEqual([unproven.statusCode, unproven.json().code], [403, 'ADDRESS_NOT_PROVEN'], unproven.body);
+      assert.equal((await one('SELECT owner_id FROM servers WHERE id = $1', [id])).owner_id, aId);
+      assert.equal((await one('SELECT status FROM server_transfers WHERE id = $1', [offer.json().id])).status, 'pending');
+      assert.equal((await get(`/servers/${id}/root-password`, a)).json().password, 'PrevOwner-Secret-Pass-1', 'still the owner\'s, as it was');
+      await pool.query('UPDATE users SET email_verified = true WHERE id = $1', [bId]);
       assert.equal((await post(`/transfers/${offer.json().id}/accept`, undefined, b)).statusCode, 200);
     } else assert.equal((await put(`/admin/servers/${id}/owner`, { email: 'b@example.test' }, admin)).statusCode, 200);
 
@@ -367,6 +376,7 @@ test('a request of the previous owner that overlaps the hand-over is refused: no
 
   const offer = await post(`/servers/${id}/transfer`, { email: 'b@example.test' }, a);
   assert.equal(offer.statusCode, 201, offer.body);
+  await pool.query('UPDATE users SET email_verified = true WHERE id = $1', [bId]); // the recipient's address is proven
   // The transfer is held open inside its transaction: it has locked the server, run its checks and moved the row, and
   // now waits for the previous owner's star on the server, which another connection holds. The lock only widens the
   // window; it changes no decision.

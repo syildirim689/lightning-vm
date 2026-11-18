@@ -6,6 +6,10 @@
 // member still may; push endpoints are public and owned; settings tests hand back no remote text and stored secrets
 // do not follow a changed address; the channels for reset links and codes are the administrator's; what sends a
 // message is counted per account and destination; ticket notices follow who may see tickets; logs carry no tokens.
+// The re-check of the directory and single sign-on fixes (the last four tests): whoever names the directory server or
+// the provider covers the accounts behind it; a removed role leaves the mappings; the settings test counts as a guess;
+// an unknown address is asked in one spelling; a directory session has a fixed length; and a password reset by mail is
+// the first proof of an address too, with what else an earlier holder could have left.
 import test, { before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
@@ -20,7 +24,7 @@ if (!/\/\w+_test(\?|$)/.test(url) || process.env.REDIS_DB !== '15') {
 }
 process.env.DATABASE_URL = url;
 // No host agent here: the panel's address then comes from the setup wizard's setting (public_url).
-const { mkdtempSync } = await import('node:fs');
+const { mkdtempSync, readFileSync } = await import('node:fs');
 const { tmpdir } = await import('node:os');
 process.env.MAINTENANCE_DIR = mkdtempSync(tmpdir() + '/lvm-maint-');
 
@@ -1018,4 +1022,352 @@ test('open consoles and terminals are closed when access shrinks or two-factor i
     assert.ok(await until(() => told() >= 4));
     assert.equal(await sessionsOf('settings@example.test'), 0);
   } finally { await sub.quit(); }
+});
+
+// ---- the re-check of the directory and single sign-on fixes, and what an unproven account leaves behind ----
+const dirReader = { dn: 'cn=reader,dc=corp,dc=test', password: 'reader-secret' };
+
+test('naming the directory server needs cover for the accounts behind it; a removed role leaves the mappings; the settings test counts as a guess', async () => {
+  await freshLimits();
+  const kimDn = 'uid=kim,ou=people,dc=corp,dc=test';
+  const dir = await fakeLdap(dirReader, { 'kim@corp.test': { dn: kimDn, name: 'Kim', password: 'kim-directory-pass-1' } });
+  // A directory of the settings manager's own: it accepts the password they chose for anybody.
+  const rogue = await fakeLdap(dirReader, { 'kim@corp.test': { dn: 'uid=kim,ou=people,dc=evil,dc=test', name: 'Kim', password: 'chosen-by-somebody-else-1' } });
+  const ldap = { enabled: true, url: dir.url, bindDn: dirReader.dn, bindPassword: dirReader.password, baseDn: 'dc=corp,dc=test', userFilter: '(&(objectClass=person)(mail={email}))',
+    groupRoles: [], defaultRole: 'user', autoCreate: true };
+  const oidc = { enabled: false, name: 'SSO', issuer: 'https://idp.example.test', clientId: 'panel', clientSecret: 'secret-1', groupRoles: [], defaultRole: 'user', autoCreate: true };
+  const created = [];
+  try {
+    // Staff who hold the settings permissions and nothing else.
+    assert.equal((await post('/admin/roles', { key: 'dir-settings', name: 'Directory settings', permissions: ['settings.view', 'settings.manage'] }, admin)).statusCode, 201);
+    const managerId = await newUser('dir-settings@example.test', 'Manager');
+    created.push(managerId);
+    assert.equal((await put(`/admin/users/${managerId}/access`, { roles: ['dir-settings'], overrides: [] }, admin)).statusCode, 200);
+    const manager = cookieOf(await post('/auth/sign-in/email', { email: 'dir-settings@example.test', password }));
+    assert.ok(manager);
+    assert.equal((await put('/admin/settings/directory', { ldap }, admin)).statusCode, 200);
+    // Kim comes from the directory and is made an administrator in the panel. No group is mapped, so the role stays
+    // at every later sign-in: the mapping itself (everybody a customer) is one the manager covers.
+    assert.equal((await post('/auth/sign-in/email', { email: 'kim@corp.test', password: 'kim-directory-pass-1' })).statusCode, 200);
+    const kim = await one("SELECT id, auth_source FROM users WHERE email = 'kim@corp.test'");
+    assert.equal(kim.auth_source, 'ldap');
+    created.push(kim.id);
+    assert.equal((await put(`/admin/users/${kim.id}/access`, { roles: ['admin'], overrides: [] }, admin)).statusCode, 200);
+    // Moving the server underneath that account would be a way into it: refused, also for a save that changes nothing.
+    const moved = await put('/admin/settings/directory', { ldap: { ...ldap, url: rogue.url } }, manager);
+    assert.deepEqual([moved.statusCode, moved.json().code], [403, 'FORBIDDEN_TARGET'], moved.body);
+    assert.equal((await put('/admin/settings/directory', { ldap: { ...ldap, bindPassword: '' } }, manager)).json().code, 'FORBIDDEN_TARGET');
+    assert.equal((await get('/admin/settings/directory', admin)).json().ldap.url, dir.url, 'the server was not moved');
+    await freshLimits();
+    const asKim = await post('/auth/sign-in/email', { email: 'kim@corp.test', password: 'chosen-by-somebody-else-1' });
+    assert.equal(asKim.statusCode, 401);
+    assert.equal(cookieOf(asKim), undefined);
+    assert.equal(Object.keys(rogue.attempts).length, 0, 'the other directory was never asked');
+    // A single permission given to the account on top of the customer role counts the same.
+    assert.equal((await put(`/admin/users/${kim.id}/access`, { roles: ['user'], overrides: [{ permission: 'users.manage', effect: 'allow' }] }, admin)).statusCode, 200);
+    assert.equal((await put('/admin/settings/directory', { ldap: { ...ldap, url: rogue.url } }, manager)).json().code, 'FORBIDDEN_TARGET');
+    // Only customers behind the server: it is the manager's to save, as before.
+    assert.equal((await put(`/admin/users/${kim.id}/access`, { roles: ['user'], overrides: [] }, admin)).statusCode, 200);
+    assert.equal((await put('/admin/settings/directory', { ldap: { ...ldap, bindPassword: '' } }, manager)).statusCode, 200);
+
+    // The same for the single sign-on provider and its accounts.
+    const ssoId = await newUser('sso-staff@corp.test', 'Sso');
+    created.push(ssoId);
+    await pool.query("UPDATE users SET auth_source = 'oidc' WHERE id = $1", [ssoId]);
+    assert.equal((await put(`/admin/users/${ssoId}/access`, { roles: ['user'], overrides: [{ permission: 'users.view', effect: 'allow' }] }, admin)).statusCode, 200);
+    assert.equal((await put('/admin/settings/directory/sso', { oidc }, admin)).statusCode, 200);
+    const other = await put('/admin/settings/directory/sso', { oidc: { ...oidc, issuer: 'https://rogue.example.test', clientSecret: 'secret-2' } }, manager);
+    assert.deepEqual([other.statusCode, other.json().code], [403, 'FORBIDDEN_TARGET'], other.body);
+    assert.equal((await get('/admin/settings/directory', admin)).json().oidc.issuer, 'https://idp.example.test');
+    assert.equal((await put(`/admin/users/${ssoId}/access`, { roles: ['user'], overrides: [] }, admin)).statusCode, 200);
+    assert.equal((await put('/admin/settings/directory/sso', { oidc: { ...oidc, clientSecret: '' } }, manager)).statusCode, 200);
+
+    // The settings test with somebody's password is a guess at it: the tenth is the last in fifteen minutes, and the
+    // sign-in form counts on the same address.
+    await freshLimits();
+    const binds = () => dir.attempts[kimDn] ?? 0;
+    const start = binds();
+    const answers = [];
+    for (let i = 0; i < 12; i++) answers.push((await post('/admin/settings/directory/test', { ldap: { ...ldap, bindPassword: '' }, email: 'kim@corp.test', password: `wrong-guess-${i}` }, manager)).json().code);
+    assert.deepEqual(answers, [...Array(10).fill('LDAP_AUTH_FAILED'), 'RATE_LIMITED', 'RATE_LIMITED']);
+    assert.equal(binds() - start, 10, 'two guesses never reached the directory');
+    assert.equal((await post('/auth/sign-in/email', { email: 'kim@corp.test', password: 'kim-directory-pass-1' })).json().code, 'RATE_LIMITED');
+    // Without a password it is a look-up, not a guess.
+    assert.equal((await post('/admin/settings/directory/test', { ldap: { ...ldap, bindPassword: '' }, email: 'kim@corp.test' }, manager)).statusCode, 200);
+
+    // A role that is removed leaves both mappings, so a role made later under its key is not handed out by them.
+    assert.equal((await post('/admin/roles', { key: 'tmp-ops', name: 'Ops', permissions: ['support.view'] }, admin)).statusCode, 201);
+    assert.equal((await put('/admin/settings/directory', { ldap: { ...ldap, bindPassword: '', groupRoles: [{ group: 'cn=ops', roles: ['tmp-ops'] }, { group: 'cn=mixed', roles: ['tmp-ops', 'user'] }] } }, admin)).statusCode, 200);
+    assert.equal((await put('/admin/settings/directory/sso', { oidc: { ...oidc, clientSecret: '', defaultRole: 'tmp-ops' } }, admin)).statusCode, 200);
+    assert.equal((await call('DELETE', '/admin/roles/tmp-ops', admin)).statusCode, 204);
+    const after = (await get('/admin/settings/directory', admin)).json();
+    assert.deepEqual([after.ldap.groupRoles, after.ldap.defaultRole, after.oidc.defaultRole], [[{ group: 'cn=mixed', roles: ['user'] }], 'user', 'user']);
+  } finally {
+    await put('/admin/settings/directory', { ldap: { enabled: false } }, admin);
+    await put('/admin/settings/directory/sso', { oidc: { enabled: false } }, admin);
+    for (const id of created) await post('/auth/admin/remove-user', { userId: id }, admin);
+    await call('DELETE', '/admin/roles/dir-settings', admin);
+    await dir.close(); await rogue.close();
+  }
+});
+
+test('directory sign-in: an unknown address is asked in one spelling; the session has a fixed length that a two-factor change does not renew', async () => {
+  await freshLimits();
+  const dir = await fakeLdap(dirReader, {
+    'lee@corp.test': { dn: 'uid=lee,ou=people,dc=corp,dc=test', name: 'Lee', password: 'lee-directory-pass-1' },
+    'fresh@corp.test': { dn: 'uid=fresh,ou=people,dc=corp,dc=test', name: 'Fresh', password: 'fresh-directory-pass-1' },
+  });
+  const ldap = { enabled: true, url: dir.url, bindDn: dirReader.dn, bindPassword: dirReader.password, baseDn: 'dc=corp,dc=test', userFilter: '(&(objectClass=person)(mail={email}))',
+    groupRoles: [], defaultRole: 'user', autoCreate: true };
+  const row = (cookie) => one('SELECT id, created_at, expires_at FROM auth_sessions WHERE token = $1', [tokenOf(cookie)]);
+  const age = (cookie, interval) => pool.query(`UPDATE auth_sessions SET created_at = now() - interval '${interval}' WHERE token = $1`, [tokenOf(cookie)]);
+  const created = [];
+  try {
+    assert.equal((await put('/admin/settings/directory', { ldap }, admin)).statusCode, 200);
+    // Spellings a directory takes for the same mailbox (an invisible character, a space) would each have a limit of
+    // their own: for an address without an account the directory is not asked at all, right password or not.
+    const asked = () => Object.values(dir.attempts).reduce((a, b) => a + b, 0);
+    const quiet = asked();
+    for (const email of ['fresh@corp.test​', 'fresh@corp.test️', '­fresh@corp.test', 'fresh@corp.test ​']) {
+      const r = await post('/auth/sign-in/email', { email, password: 'fresh-directory-pass-1' });
+      assert.ok(r.statusCode >= 400, `${JSON.stringify(email)} ${r.statusCode}`);
+      assert.equal(cookieOf(r), undefined);
+    }
+    assert.equal(asked(), quiet, 'no search and no bind');
+    assert.equal((await one("SELECT count(*)::int AS n FROM users WHERE email LIKE '%fresh@corp.test%'")).n, 0, 'and no account was made');
+    // The plain spelling is asked and signs in.
+    const fresh = await post('/auth/sign-in/email', { email: 'fresh@corp.test', password: 'fresh-directory-pass-1' });
+    assert.equal(fresh.statusCode, 200, fresh.body);
+    created.push(fresh.json().user.id);
+
+    // A two-factor change swaps the session for a new one, checked against the cached hash only: the new one is as old
+    // as the one it replaces.
+    const lee = await post('/auth/sign-in/email', { email: 'lee@corp.test', password: 'lee-directory-pass-1' });
+    assert.equal(lee.statusCode, 200, lee.body);
+    created.push(lee.json().user.id);
+    let c = cookieOf(lee);
+    await age(c, '30 minutes');
+    const was = await row(c);
+    const on = await post('/auth/two-factor/enable', { password: 'lee-directory-pass-1', method: 'otp' }, c);
+    assert.equal(on.statusCode, 200, on.body);
+    const next = cookieOf(on);
+    assert.ok(next && next !== c, 'the change gave a new session');
+    assert.equal(await row(c), undefined, 'and ended the old one');
+    const now = await row(next);
+    assert.ok(Math.abs(now.created_at.getTime() - was.created_at.getTime()) < 1000, `made ${now.created_at.toISOString()}, the one before ${was.created_at.toISOString()}`);
+    assert.ok(now.expires_at.getTime() > Date.now());
+    c = next;
+    assert.equal((await get('/auth/me', c)).statusCode, 200);
+    // Longer ago than any session length that can be set: over, although its row has not expired, and removed.
+    await age(c, '31 days');
+    assert.equal((await get('/auth/me', c)).statusCode, 401);
+    assert.equal(await row(c), undefined);
+    // A panel account's session of the same age is left to its expiry, as before.
+    const plainId = await newUser('plain-age@example.test', 'Plain');
+    created.push(plainId);
+    const plain = cookieOf(await post('/auth/sign-in/email', { email: 'plain-age@example.test', password }));
+    await age(plain, '31 days');
+    assert.equal((await get('/auth/me', plain)).statusCode, 200);
+    // The directory account signs in again where its password lives.
+    await freshLimits();
+    assert.equal((await post('/auth/sign-in/email', { email: 'lee@corp.test', password: 'wrong-guess-1' })).statusCode, 401);
+  } finally {
+    await put('/admin/settings/directory', { ldap: { enabled: false } }, admin);
+    for (const id of created) await post('/auth/admin/remove-user', { userId: id }, admin);
+    await dir.close();
+  }
+});
+
+test('a password set through a mailed reset link is the first proof as well: keys, cards, the billing address and a pending second step do not outlive it', async () => {
+  await freshLimits();
+  const smtp = await fakeSmtp();
+  const created = [];
+  try {
+    assert.equal((await put('/admin/settings/mail', { enabled: true, provider: 'smtp', host: '127.0.0.1', port: smtp.port, security: 'none', fromAddress: 'panel@example.test',
+      use: { passwordReset: true, twoFactor: true } }, admin)).statusCode, 200);
+    const state = async (id) => one(`SELECT email_verified AS verified, phone_number AS phone, coalesce(two_factor_enabled, false) AS "twoFactor",
+      (SELECT count(*)::int FROM auth_accounts a WHERE a.user_id = u.id AND a.provider_id <> 'credential') AS linked, (SELECT count(*)::int FROM auth_sessions s WHERE s.user_id = u.id) AS sessions,
+      (SELECT count(*)::int FROM api_tokens t WHERE t.user_id = u.id) AS tokens, (SELECT count(*)::int FROM ssh_keys k WHERE k.owner_id = u.id) AS keys,
+      (SELECT count(*)::int FROM saved_cards c WHERE c.owner_id = u.id) AS cards, (SELECT b.email FROM billing_profiles b WHERE b.user_id = u.id) AS "billingEmail",
+      (SELECT count(*)::int FROM audit_events e WHERE e.actor_id = u.id AND e.action = 'auth.address_proven') AS proofs FROM users u WHERE id = $1`, [id]);
+    const withToken = (token) => app.inject({ method: 'GET', url: '/auth/me', headers: { authorization: `Bearer ${token}` } });
+    const told = async (id) => (await notificationQueue.getJobs(['waiting', 'delayed', 'active', 'completed'])).filter((j) => j.data.event === 'auth.credentials_reset' && j.data.to?.[0] === id).length;
+    // Whoever registered the address first: a password, a session, an API token, a linked sign-in, a phone number, a
+    // saved SSH key, a stored card and their own address for the invoices.
+    let n = 0;
+    const register = async (email) => {
+      const r = await post('/auth/sign-up/email', { name: 'First', email, password });
+      assert.equal(r.statusCode, 200, r.body);
+      const id = r.json().user.id, c = cookieOf(r);
+      created.push(id);
+      const made = await post('/account/api-tokens', { name: 'kept by the first holder', scope: 'read' }, c);
+      assert.equal(made.statusCode, 201, made.body);
+      await pool.query("INSERT INTO ssh_keys (owner_id, name, public_key, fingerprint) VALUES ($1, 'first', 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFirstHolderKeyFirstHolderKeyFirstHolderKey00 first@holder', $2)", [id, `SHA256:first-${id}`]);
+      await pool.query("INSERT INTO saved_cards (owner_id, provider, token_enc, brand, last4, is_default) VALUES ($1, 'sandbox', 'not-a-real-token', 'visa', '4242', true)", [id]);
+      await pool.query("INSERT INTO billing_profiles (user_id, kind, name, tax_id, email, phone) VALUES ($1, 'individual', 'First Holder', '11111111111', 'first-holder@elsewhere.test', '+905550000000')", [id]);
+      await pool.query("INSERT INTO auth_accounts (account_id, provider_id, user_id, updated_at) VALUES ($1, 'github', $2, now())", [`gh-${id}`, id]);
+      await pool.query('UPDATE users SET phone_number = $2, phone_number_verified = true WHERE id = $1', [id, `+9054400000${String(10 + n++)}`]);
+      assert.equal((await withToken(made.json().token)).statusCode, 200);
+      const before = await state(id);
+      assert.deepEqual({ ...before, phone: !!before.phone }, { verified: false, phone: true, twoFactor: false, linked: 1, sessions: 1, tokens: 1, keys: 1, cards: 1, billingEmail: 'first-holder@elsewhere.test', proofs: 0 });
+      return { id, c, token: made.json().token };
+    };
+    // The owner of the mailbox: "forgot password", the link from the mail, a new password.
+    const resetWith = async (email, newPassword) => {
+      await freshLimits();
+      smtp.mails.length = 0;
+      assert.equal((await post('/auth/request-password-reset', { email, redirectTo: '/reset-password' })).statusCode, 200);
+      const mail = await until(() => smtp.mails.find((m) => m.includes(email) && m.includes('/reset-password/')));
+      assert.ok(mail, 'the reset link was mailed');
+      return post('/auth/reset-password', { token: /\/reset-password\/([\w-]+)/.exec(mail)[1], newPassword });
+    };
+
+    const first = await register('first-reset@example.test');
+    const done = await resetWith('first-reset@example.test', 'the owner chose this one 1');
+    assert.equal(done.statusCode, 200, done.body);
+    assert.deepEqual(await state(first.id), { verified: true, phone: null, twoFactor: false, linked: 0, sessions: 0, tokens: 0, keys: 0, cards: 0, billingEmail: null, proofs: 1 });
+    assert.equal((await get('/auth/me', first.c)).statusCode, 401, 'the earlier session is over');
+    assert.equal((await withToken(first.token)).statusCode, 401, 'the earlier API token is refused');
+    await freshLimits();
+    assert.equal((await post('/auth/sign-in/email', { email: 'first-reset@example.test', password })).statusCode, 401, 'the earlier password no longer signs in');
+    const proof = (await one("SELECT metadata FROM audit_events WHERE actor_id = $1 AND action = 'auth.address_proven'", [first.id])).metadata;
+    assert.equal(proof.method, 'password-reset');
+    assert.deepEqual([proof.removed.apiTokens, proof.removed.sshKeys, proof.removed.savedCards, proof.removed.billingContact, proof.removed.phoneNumber], [1, 1, 1, 1, 1]);
+    assert.equal(proof.kept.servers, 0, 'what stays with the account is written down');
+    assert.equal(await told(first.id), 1, 'the person is told once');
+    // What the owner sets up afterwards stays through a later reset.
+    const owner = cookieOf(await post('/auth/sign-in/email', { email: 'first-reset@example.test', password: 'the owner chose this one 1' }));
+    assert.ok(owner, 'the new password signs in');
+    const own = await post('/account/api-tokens', { name: 'the owner\'s own', scope: 'read' }, owner);
+    assert.equal(own.statusCode, 201, own.body);
+    assert.equal((await resetWith('first-reset@example.test', 'and later this one 22')).statusCode, 200);
+    assert.equal((await withToken(own.json().token)).statusCode, 200, 'nothing is removed the second time');
+    const later = await state(first.id);
+    assert.deepEqual([later.tokens, later.proofs], [1, 1]);
+    assert.equal(await told(first.id), 1, 'not told again');
+
+    // Staff marking the address verified by hand is not the owner's proof, here either: a reset then replaces the
+    // password and ends the sessions, and nothing else.
+    const marked = await register('marked-reset@example.test');
+    assert.equal((await put(`/admin/users/${marked.id}/email-verified`, { verified: true }, admin)).statusCode, 200);
+    assert.equal((await resetWith('marked-reset@example.test', 'the owner chose this one 3')).statusCode, 200);
+    const kept = await state(marked.id);
+    assert.deepEqual([kept.tokens, kept.keys, kept.cards, kept.linked, kept.proofs], [1, 1, 1, 1, 0]);
+    assert.equal((await withToken(marked.token)).statusCode, 200);
+
+    // An earlier holder with two-factor on, between the password and the code when the owner proves the address: the
+    // step they had open does not end in a session afterwards. The two-factor itself stays for staff to reset.
+    const held = await register('held-reset@example.test');
+    const enabled = await post('/auth/two-factor/enable', { password }, held.c);
+    assert.equal(enabled.statusCode, 200, enabled.body);
+    const [backup] = enabled.json().backupCodes;
+    await pool.query('UPDATE users SET two_factor_enabled = true WHERE id = $1', [held.id]);
+    await freshLimits();
+    const step = await post('/auth/sign-in/email', { email: 'held-reset@example.test', password });
+    assert.equal(step.json().twoFactorRedirect, true, step.body);
+    const jar = [step.headers['set-cookie']].flat().map((v) => v.split(';')[0]).filter((v) => !v.endsWith('=')).join('; ');
+    assert.equal((await resetWith('held-reset@example.test', 'the owner chose this one 4')).statusCode, 200);
+    await freshLimits();
+    const late = await app.inject({ method: 'POST', url: '/auth/two-factor/verify-backup-code', payload: { code: backup }, headers: { ...csrf, cookie: jar } });
+    assert.ok(late.statusCode >= 400, `${late.statusCode} ${late.body}`);
+    assert.equal(cookieOf(late), undefined);
+    assert.equal(await sessionsOf('held-reset@example.test'), 0);
+    const after = await state(held.id);
+    assert.deepEqual([after.verified, after.twoFactor, after.tokens, after.proofs], [true, true, 0, 1]);
+    assert.ok((await one("SELECT metadata FROM audit_events WHERE actor_id = $1 AND action = 'auth.address_proven'", [held.id])).metadata.removed.pendingSignIns >= 1);
+  } finally {
+    for (const id of created) await post('/auth/admin/remove-user', { userId: id }, admin);
+    await put('/admin/settings/mail', { enabled: false, port: 587, security: 'starttls' }, admin);
+    await smtp.close();
+  }
+});
+
+test('accounts nobody could have registered first are proven from the start: the setup administrator and those staff create; a reseller\'s customer is not', async () => {
+  await freshLimits();
+  const smtp = await fakeSmtp();
+  const created = [];
+  const verified = async (email) => (await one('SELECT email_verified FROM users WHERE email = $1', [email])).email_verified;
+  try {
+    assert.equal((await put('/admin/settings/mail', { enabled: true, provider: 'smtp', host: '127.0.0.1', port: smtp.port, security: 'none', fromAddress: 'panel@example.test',
+      use: { passwordReset: true, twoFactor: true } }, admin)).statusCode, 200);
+    // The administrator made with the bootstrap token, and an account made in Admin → Users.
+    assert.equal(await verified('boss@example.test'), true);
+    const madeId = await newUser('made-by-staff@example.test', 'Made');
+    created.push(madeId);
+    assert.equal(await verified('made-by-staff@example.test'), true);
+    // What such a person sets up is theirs: the first password reset by mail removes none of it.
+    const c = cookieOf(await post('/auth/sign-in/email', { email: 'made-by-staff@example.test', password }));
+    const token = await post('/account/api-tokens', { name: 'their own', scope: 'read' }, c);
+    assert.equal(token.statusCode, 201, token.body);
+    await pool.query("INSERT INTO ssh_keys (owner_id, name, public_key, fingerprint) VALUES ($1, 'own', 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOwnKeyOwnKeyOwnKeyOwnKeyOwnKeyOwnKeyOwnKey000 own@key', 'SHA256:own-key')", [madeId]);
+    await freshLimits();
+    assert.equal((await post('/auth/request-password-reset', { email: 'made-by-staff@example.test', redirectTo: '/reset-password' })).statusCode, 200);
+    const mail = await until(() => smtp.mails.find((m) => m.includes('made-by-staff@example.test') && m.includes('/reset-password/')));
+    assert.ok(mail, 'the reset link was mailed');
+    assert.equal((await post('/auth/reset-password', { token: /\/reset-password\/([\w-]+)/.exec(mail)[1], newPassword: 'a new one of their own 1' })).statusCode, 200);
+    assert.equal((await app.inject({ method: 'GET', url: '/auth/me', headers: { authorization: `Bearer ${token.json().token}` } })).statusCode, 200, 'the API token is still theirs');
+    const left = await one(`SELECT (SELECT count(*)::int FROM ssh_keys WHERE owner_id = $1) AS keys,
+      (SELECT count(*)::int FROM audit_events WHERE actor_id = $1 AND action = 'auth.address_proven') AS proofs`, [madeId]);
+    assert.deepEqual(left, { keys: 1, proofs: 0 });
+    assert.equal((await notificationQueue.getJobs(['waiting', 'delayed', 'active', 'completed'])).filter((j) => j.data.event === 'auth.credentials_reset' && j.data.to?.[0] === madeId).length, 0);
+
+    // A reseller types a customer's address; that is not the customer proving it. Nor is registering it oneself.
+    const resellerId = await newUser('reseller-proof@example.test', 'Reseller');
+    created.push(resellerId);
+    assert.equal((await put(`/admin/resellers/${resellerId}`, {}, admin)).statusCode, 200);
+    await freshLimits();
+    const reseller = cookieOf(await post('/auth/sign-in/email', { email: 'reseller-proof@example.test', password }));
+    const customer = await post('/reseller/customers', { email: 'resold@example.test', name: 'Resold' }, reseller);
+    assert.equal(customer.statusCode, 201, customer.body);
+    created.unshift(customer.json().id);
+    assert.equal(await verified('resold@example.test'), false);
+    const self = await post('/auth/sign-up/email', { name: 'Self', email: 'self-proof@example.test', password });
+    assert.equal(self.statusCode, 200, self.body);
+    created.push(self.json().user.id);
+    assert.equal(await verified('self-proof@example.test'), false);
+  } finally {
+    for (const id of created) await post('/auth/admin/remove-user', { userId: id }, admin);
+    await put('/admin/settings/mail', { enabled: false, port: 587, security: 'starttls' }, admin);
+    await smtp.close();
+  }
+});
+
+test('migration 085 marks the accounts staff vouched for before the upgrade as proven, and no other', async () => {
+  await freshLimits();
+  const created = [];
+  const signUp = async (email) => { const r = await post('/auth/sign-up/email', { name: 'Old', email, password }); assert.equal(r.statusCode, 200, r.body); created.push(r.json().user.id); return r.json().user.id; };
+  const bossId = (await get('/auth/me', admin)).json().id;
+  try {
+    const madeId = await newUser('old-made-by-staff@example.test', 'Old'); // a customer staff made in Admin → Users: the audit row says so
+    created.push(madeId);
+    const supportId = await signUp('old-support@example.test'); // registered, then given a role next to the customer one
+    assert.equal((await put(`/admin/users/${supportId}/access`, { roles: ['user', 'support'], overrides: [] }, admin)).statusCode, 200);
+    const selfId = await signUp('old-self@example.test');
+    const billedId = await signUp('old-billed@example.test'); // stands for one the billing integration made: its audit row is another action
+    await pool.query("UPDATE users SET external_source = 'whmcs' WHERE id = $1", [billedId]);
+    await pool.query("INSERT INTO audit_events (actor_id, action, outcome, metadata) VALUES ($1, 'external.customer_created', 'success', $2)", [bossId, { target: billedId, source: 'whmcs' }]);
+    const resellerId = await newUser('old-reseller@example.test', 'Reseller');
+    created.push(resellerId);
+    assert.equal((await put(`/admin/resellers/${resellerId}`, {}, admin)).statusCode, 200);
+    await freshLimits();
+    const reseller = cookieOf(await post('/auth/sign-in/email', { email: 'old-reseller@example.test', password }));
+    const resold = await post('/reseller/customers', { email: 'old-resold@example.test', name: 'Resold' }, reseller);
+    assert.equal(resold.statusCode, 201, resold.body);
+    created.unshift(resold.json().id);
+    // A row that names an account as its own maker, and one of a refused attempt, vouch for nothing.
+    const forgedId = await signUp('old-forged@example.test');
+    await pool.query("INSERT INTO audit_events (actor_id, action, outcome, metadata) VALUES ($1, 'admin.user.create', 'success', $2), ($3, 'admin.user.create', 'denied', $2)", [forgedId, { target: forgedId }, bossId]);
+
+    const ids = [bossId, staffId, madeId, supportId, selfId, billedId, resold.json().id, forgedId];
+    const sql = readFileSync(new URL('../../migrations/085_staff_addresses_proven.sql', import.meta.url), 'utf8');
+    const proven = async () => { const { rows } = await pool.query('SELECT id, email_verified FROM users WHERE id = ANY($1::uuid[])', [ids]); return ids.map((id) => rows.find((r) => r.id === id).email_verified); };
+    await pool.query('UPDATE users SET email_verified = false WHERE id = ANY($1::uuid[])', [ids]); // as they all were before the upgrade
+    await pool.query(sql);
+    assert.deepEqual(await proven(), [true, true, true, true, false, false, false, false], 'administrator, custom staff role, made by staff, role next to customer; not: self-registered, billing system, customer of a reseller, self-named row');
+    await pool.query(sql);
+    assert.deepEqual(await proven(), [true, true, true, true, false, false, false, false], 'a second run changes nothing');
+  } finally {
+    await pool.query('UPDATE users SET email_verified = true WHERE id = ANY($1::uuid[])', [[bossId, staffId]]);
+    for (const id of created) await post('/auth/admin/remove-user', { userId: id }, admin);
+  }
 });

@@ -6,9 +6,10 @@ import { pool } from './db';
 import { apiError } from './errors';
 import { logEvent } from './log';
 import { ldapTest, rolesFromGroups } from './ldap';
-import { covers, ensureRoles, roles } from './permissions';
+import { covers, effectivePermissions, ensureRoles, roles } from './permissions';
 import { Can, PermissionGuard } from './rbac';
 import { encryptSecret } from './secrets';
+import { rateLimit } from './security';
 import { getSettings, saveSettings, type LdapSettings, type OidcSettings } from './settings-store';
 import { reloadAuth } from './better-auth';
 import { discoveryUrl, ssoSecretCtx } from './sso';
@@ -28,6 +29,19 @@ const badMapping = (m: { roles: string[] }[]) => m.length > 50 || m.some((g) => 
 function assertMappingCovered(req: AuthedRequest, v: { defaultRole: string; groupRoles: { roles: string[] }[] }) {
   for (const key of new Set([v.defaultRole, ...v.groupRoles.flatMap((g) => g.roles)])) {
     if (!covers(req.user.permissions, roles.get(key)?.permissions ?? ['*'])) throw apiError(403, 'FORBIDDEN_TARGET', 'This mapping gives roles with permissions you do not have');
+  }
+}
+// The server saved here also says who each account it already has is. Such an account signs in with what it holds in
+// the panel: its overrides always, its roles whenever no group is mapped (directory-signin.ts, sso.ts). Whoever may
+// name the server could put their own there and sign in as any of them, so they must cover every one of those
+// accounts as well as the mapping; an administrator covers all. Checked at every save, like the mapping.
+async function assertAccountsCovered(req: AuthedRequest, source: 'ldap' | 'oidc') {
+  if (req.user.permissions.includes('*')) return;
+  const { rows } = await pool.query(`SELECT u.role, coalesce((SELECT json_agg(json_build_object('permission', o.permission, 'effect', o.effect)) FROM user_permission_overrides o WHERE o.user_id = u.id), '[]') AS overrides
+    FROM users u WHERE u.auth_source = $1`, [source]);
+  if (rows.some((u) => !covers(req.user.permissions, effectivePermissions(u.role, u.overrides)))) {
+    await audit(req, source === 'ldap' ? 'settings.directory' : 'settings.sso', 'denied', req.user.id, { reason: 'ACCOUNTS_NOT_COVERED' });
+    throw apiError(403, 'FORBIDDEN_TARGET', 'Accounts that sign in through this server have permissions you do not have', source === 'ldap' ? { url: 'ACCOUNTS_NOT_COVERED' } : { issuer: 'ACCOUNTS_NOT_COVERED' });
   }
 }
 // A stored secret is for the server it was entered for: with another address in the form it has to be typed again
@@ -104,6 +118,7 @@ export class DirectorySettingsController {
     await ensureRoles();
     const { value } = readLdap((body?.ldap ?? {}) as Input, (await getSettings('directory')).ldap);
     assertMappingCovered(req, value);
+    await assertAccountsCovered(req, 'ldap');
     await saveSettings('directory', { ...(await getSettings('directory')), ldap: value });
     await audit(req, 'settings.directory', 'success', req.user.id, { enabled: value.enabled, url: value.url, groups: value.groupRoles.length });
     return this.get();
@@ -116,6 +131,7 @@ export class DirectorySettingsController {
     const d = await getSettings('directory');
     const value = readOidc((body?.oidc ?? {}) as Input, d.oidc);
     assertMappingCovered(req, value);
+    await assertAccountsCovered(req, 'oidc');
     await saveSettings('directory', { ...d, oidc: value });
     await reloadAuth();
     await audit(req, 'settings.sso', 'success', req.user.id, { enabled: value.enabled, issuer: value.issuer, groups: value.groupRoles.length });
@@ -147,6 +163,9 @@ export class DirectorySettingsController {
     const { value, bindPassword: pw } = readLdap((body?.ldap ?? {}) as Input, (await getSettings('directory')).ldap);
     assertMappingCovered(req, value);
     const email = typeof body?.email === 'string' && body.email.trim() ? body.email.trim().toLowerCase().slice(0, 254) : undefined;
+    // With a password this is a guess at that person's directory password: it counts against the address like a
+    // sign-in does (the same ten in fifteen minutes, shared with the sign-in form).
+    if (email && typeof body?.password === 'string' && body.password) await rateLimit(`login:email:${email}`, 10, 900);
     const r = await ldapTest(value, pw, email, typeof body?.password === 'string' ? body.password : undefined);
     await audit(req, 'settings.directory_test', r.ok ? 'success' : 'failure', req.user.id, { code: r.ok ? null : r.code });
     // The code says what kind of failure it was; the server's own words go to the API log, not to the caller.

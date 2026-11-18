@@ -22,7 +22,7 @@ const { issueBootstrapToken } = await import('../../dist/setup.js');
 const { runMigrations } = await import('../../dist/migrate.js');
 const { notificationQueue } = await import('../../dist/notify.js');
 const { encryptSecret } = await import('../../dist/secrets.js');
-const { runBilling, resizeCharge, billResize, repriceOpenRenewal, billingTick } = await import('../../dist/billing.js');
+const { runBilling, resizeCharge, billResize, repriceOpenRenewal, billingTick, settlePayment } = await import('../../dist/billing.js');
 const { forgetRestoreHold } = await import('../../dist/restore-hold.js');
 const { announceRestoreHold } = await import('../../dist/insights.js');
 
@@ -162,11 +162,18 @@ test('Param: a return made from the merchant code and GUID alone never pays the 
   assert.deepEqual([mine.status, mine.errorCode], ['pending', 'NEEDS_CONFIRMATION']);
   assert.ok((await get('/admin/billing/payments?status=pending', admin)).json().payments.some((x) => x.id === p1 && x.errorCode === 'NEEDS_CONFIRMATION'));
   assert.equal((await balance()), '0.00');
-  assert.equal((await post(`/admin/billing/invoices/${inv}/mark-paid`, { method: 'other', reference: 'Param S1' }, admin)).statusCode, 200);
+  const marked = await post(`/admin/billing/invoices/${inv}/mark-paid`, { method: 'other', reference: 'Param S1' }, admin);
+  assert.equal(marked.statusCode, 200);
   assert.equal((await invoice(inv)).status, 'paid');
+  // The invoice's payments that waited for staff end with it, reason kept (the money is counted once, by the manual
+  // payment); the ones nothing was said about stay open. Nothing waits for staff any more.
+  assert.deepEqual(marked.json().closedReviews, [p1, p3, p4]);
+  assert.deepEqual(await payment(p1), { status: 'cancelled', error_code: 'NEEDS_CONFIRMATION', error_message: note, provider_ref: null });
+  assert.deepEqual([(await payment(p3)).status, (await payment(p4)).status, (await payment(p0)).status], ['cancelled', 'cancelled', 'pending']);
+  assert.equal((await get('/admin/billing/overview', admin)).json().paymentsInReview.n, 0);
   // After that the same return still settles nothing (no second payment, no balance).
   await back(p1, {});
-  assert.equal((await payment(p1)).status, 'pending');
+  assert.equal((await payment(p1)).status, 'cancelled');
   assert.equal((await balance()), '0.00');
 });
 
@@ -215,8 +222,8 @@ test('a payment that begins to wait for staff is announced to them once; the lis
   assert.ok(Date.parse(row.reviewSince) >= began - 5000, row.reviewSince);
   assert.ok((await get('/admin/billing/payments?status=failed', admin)).json().payments.every((x) => x.review === false && x.reviewSince === null));
   // A payment put under review before the column existed counts from when it was begun.
-  const old = rows.find((x) => x.id !== p);
-  await pool.query('UPDATE payments SET review_since = NULL WHERE id = $1', [old.id]);
+  const old = { id: await pending(await invoiceFor(), 'param', 'live') };
+  await pool.query("UPDATE payments SET error_code = 'NEEDS_CONFIRMATION', error_message = 'from before the column', review_since = NULL WHERE id = $1", [old.id]);
   const again = (await get('/admin/billing/payments?status=review', admin)).json().payments.find((x) => x.id === old.id);
   assert.equal(again.reviewSince, again.createdAt);
 
@@ -947,4 +954,78 @@ test('the summary tells the next renewal as it will be invoiced: the price of no
   assert.deepEqual({ ...n, at: null }, { at: null, amount: '1080.00', currency: 'TRY', gross: true, servers: 1, invoiced: false });
   for (const s of [a, b, later]) await s.end();
   assert.equal(await next(), null);
+});
+
+test('a payment under review ends with the staff\'s decision: "mark paid" closes it and a later "paid" from the provider credits nothing; one that mark paid cannot reach is closed by hand; collection waits for the decision', async () => {
+  // Held as a provider's answer leaves it (noteReview): open, with the reason and the provider's reference on it.
+  const held = async (invoiceId, code = 'FRAUD_REVIEW') => {
+    const id = await pending(invoiceId, 'iyzico', 'live');
+    await pool.query("UPDATE payments SET error_code = $2, error_message = 'held by the provider', provider_ref = $3, review_since = now() WHERE id = $1", [id, code, `tok-${id}`]);
+    return id;
+  };
+  const row = (id) => one('SELECT status, error_code, reference, completed_at IS NOT NULL AS done FROM payments WHERE id = $1', [id]);
+  const waiting = async () => (await get('/admin/billing/payments?status=review', admin)).json().payments.map((x) => x.id);
+  const before = await balance();
+
+  // Staff found the money at the provider and mark the invoice paid: both held payments end, the open one is left alone.
+  const inv = await invoiceFor();
+  const a = await held(inv), b = await held(inv, 'AMOUNT_MISMATCH'), open = await pending(inv, 'iyzico', 'live');
+  const marked = await post(`/admin/billing/invoices/${inv}/mark-paid`, { method: 'other', reference: 'iyzico panel 4471' }, admin);
+  assert.equal(marked.statusCode, 200, marked.body);
+  assert.deepEqual(marked.json().closedReviews, [a, b]);
+  for (const [id, code] of [[a, 'FRAUD_REVIEW'], [b, 'AMOUNT_MISMATCH']]) {
+    assert.deepEqual(await row(id), { status: 'cancelled', error_code: code, reference: `Closed by staff: invoice marked paid (payment ${marked.json().paymentId})`, done: true });
+  }
+  assert.equal((await payment(open)).status, 'pending');
+  assert.ok(!(await waiting()).some((id) => id === a || id === b));
+  const event = await one("SELECT metadata FROM audit_events WHERE action = 'billing.marked_paid' ORDER BY created_at DESC LIMIT 1");
+  assert.deepEqual(event.metadata.closedReviews, [a, b]);
+  // The provider's review ends in "paid" afterwards (the run asking again, or the return address opened once more): the
+  // payment has its outcome already; the money staff recorded is not credited a second time.
+  assert.equal(await settlePayment(a, { ok: true, ref: 'iyz-1' }), 'cancelled');
+  assert.equal((await row(a)).status, 'cancelled');
+  assert.deepEqual([await balance(), (await invoice(inv)).paid_total], [before, '120.00']);
+  await pool.query("UPDATE payments SET status = 'failed', error_code = 'EXPIRED', completed_at = now() WHERE id = $1", [open]);
+
+  // Held on an invoice that is paid already: "mark paid" does not reach it; staff close it by hand, nothing is credited.
+  const c = await held(inv);
+  const again = await post(`/admin/billing/invoices/${inv}/mark-paid`, { method: 'other' }, admin);
+  assert.deepEqual([again.statusCode, again.json().code], [409, 'INVOICE_NOT_PAYABLE']);
+  assert.equal((await row(c)).status, 'pending');
+  assert.equal((await post(`/admin/billing/payments/${c}/close-review`, { note: 'x' }, user)).statusCode, 403);
+  assert.equal((await post(`/admin/billing/payments/${c}/close-review`, { note: 'no collection at the provider' })).statusCode, 401);
+  const closed = await post(`/admin/billing/payments/${c}/close-review`, { note: 'no collection at the provider' }, admin);
+  assert.equal(closed.statusCode, 200, closed.body);
+  assert.deepEqual(await row(c), { status: 'cancelled', error_code: 'FRAUD_REVIEW', reference: 'Closed by staff without settling: no collection at the provider', done: true });
+  assert.ok(!(await waiting()).includes(c));
+  const closing = await one("SELECT metadata FROM audit_events WHERE action = 'billing.review_closed' ORDER BY created_at DESC LIMIT 1");
+  assert.deepEqual([closing.metadata.paymentId, closing.metadata.invoiceId, closing.metadata.target, closing.metadata.code], [c, inv, userId, 'FRAUD_REVIEW']);
+  // Only a payment that waits for staff: not one closed already, an open one nothing was said about, or a settled one.
+  const plain = await pending(inv, 'iyzico', 'live');
+  for (const id of [c, plain, marked.json().paymentId, randomUUID()]) {
+    const r = await post(`/admin/billing/payments/${id}/close-review`, {}, admin);
+    assert.deepEqual([r.statusCode, r.json().code], [409, 'PAYMENT_NOT_IN_REVIEW'], id);
+  }
+  assert.equal((await payment(plain)).status, 'pending');
+  await pool.query("UPDATE payments SET status = 'failed', error_code = 'EXPIRED', completed_at = now() WHERE id = $1", [plain]);
+  assert.deepEqual([await balance(), (await invoice(inv)).status], [before, 'paid']);
+
+  // Automatic collection: an invoice with a payment under review is not taken from the balance (or the card) as well;
+  // once staff have decided, the run collects it.
+  const due = await invoiceFor();
+  const h = await held(due);
+  assert.equal((await post('/admin/billing/balance', { userId, currency: 'TRY', amount: '120.00', note: 'it: collection' }, admin)).statusCode, 201);
+  await pool.query("UPDATE invoices SET next_charge_at = now() + interval '1 day' WHERE status = 'unpaid' AND id <> $1", [due]); // the run below is about this one
+  const settings = { enabled: true, company, invoiceDaysBefore: 7, balance: true, sandbox: true };
+  assert.equal((await put('/admin/settings/billing', { ...settings, autoCharge: true }, admin)).statusCode, 200);
+  try {
+    await runBilling();
+    assert.deepEqual(await one('SELECT status, charge_attempts::int AS tries FROM invoices WHERE id = $1', [due]), { status: 'unpaid', tries: 0 });
+    assert.equal((await post(`/admin/billing/payments/${h}/close-review`, {}, admin)).statusCode, 200);
+    await runBilling();
+    assert.deepEqual(await one('SELECT status, charge_attempts::int AS tries FROM invoices WHERE id = $1', [due]), { status: 'paid', tries: 1 });
+    assert.equal(await balance(), before);
+  } finally {
+    await put('/admin/settings/billing', { ...settings, autoCharge: false }, admin);
+  }
 });

@@ -1,6 +1,6 @@
 // Delivery side of the "chat" channel, kept apart from the controllers in chat.ts so notify.ts can use it
 // without importing the HTTP guards (which import notify.ts back).
-import { chatApps, type AdminAccounts, type Message, type SendResult } from './chat-apps';
+import { chatApps, destinationKey, told, type AdminAccounts, type Message, type SendResult } from './chat-apps';
 import { pool } from './db';
 import { logEvent } from './log';
 import { decryptSecret } from './secrets';
@@ -52,9 +52,17 @@ export async function absolute(link: string | null) {
   const base = await panelBase();
   return base ? new URL(link, base).toString() : null;
 }
+// The result as the user may see it (told): a server they named themselves answers with a code only.
 export async function sendOne(app: string, target: Record<string, string>, m: Message, a: AdminAccounts): Promise<SendResult> {
-  try { return await chatApps[app].send(target, m, a); }
-  catch (err) { return { ok: false, code: 'CHAT_UNREACHABLE', detail: err instanceof Error ? err.message.slice(0, 200) : 'unknown' }; }
+  try { return told(app, await chatApps[app].send(target, m, a)); }
+  catch (err) { return told(app, { ok: false, code: 'CHAT_UNREACHABLE', detail: err instanceof Error ? err.message.slice(0, 200) : 'unknown' }); }
+}
+// The destinations a chat notification to this user goes to (deliverChat), as keys that are the same for the same
+// address on another account.
+export async function chatDestinations(userId: string) {
+  const usable = usableApps(await getSettings('chat'));
+  const { rows } = await pool.query('SELECT app, target_enc FROM chat_connections WHERE user_id = $1 AND enabled', [userId]);
+  return [...new Set(rows.filter((r) => usable.includes(r.app)).map((r) => destinationKey(r.app, JSON.parse(decryptSecret(r.target_enc, ctx)))))];
 }
 
 // notify.ts: one notification to every app this user switched on. Throws only when none got it.

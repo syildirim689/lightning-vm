@@ -6,7 +6,7 @@
 import { APIError } from 'better-auth/api';
 import { endImpersonations, getAuth } from './better-auth';
 import { pool } from './db';
-import { ldapAuthenticate, rolesFromGroups } from './ldap';
+import { ldapAuthenticate, rolesFromGroups, spelledOnce } from './ldap';
 import { publishLive } from './live-bus';
 import { logEvent } from './log';
 import { ensureRoles, releaseTickets, roles } from './permissions';
@@ -35,6 +35,10 @@ export async function directorySignIn(ctx: unknown, body: Input) {
   // Directory sign-in was turned off: its accounts have nowhere to prove a password (the cached hash is not one).
   if (!s.enabled) { if (u) throw refused(); return; }
   if (!u && !s.autoCreate) return;                      // better-auth answers "wrong e-mail or password"
+  // An account is found by its exact address, so its guesses are counted under one key. An address without an account
+  // is put to the directory only in its one plain spelling: the per-address limit is counted on what was typed, and a
+  // directory takes many spellings for the same mailbox (ldap.ts).
+  if (!u && !spelledOnce(email)) return;
   const r = await ldapAuthenticate(s, bindPassword(s), email, body.password);
   if (!r.ok) {
     if (r.code !== 'LDAP_AUTH_FAILED' && r.code !== 'LDAP_USER_NOT_FOUND') logEvent('error', 'ldap_failed', { code: r.code, detail: r.detail });

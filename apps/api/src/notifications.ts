@@ -12,7 +12,7 @@ import { Can, PermissionGuard } from './rbac';
 import { getSettings, mailReady, saveSettings, type Channel, type NotificationPolicy } from './settings-store';
 import { smsReady } from './sms';
 import { validQuietHours } from './quiet-hours';
-import { chatReady } from './chat-delivery';
+import { chatDestinations, chatReady } from './chat-delivery';
 
 const maxPushDevices = 20;
 const channelList = (v: unknown, from: Channel[]) => (Array.isArray(v) ? [...new Set(v.map(String))] : []).filter((c): c is Channel => from.includes(c as Channel));
@@ -125,6 +125,10 @@ export class NotificationsController {
     // account over all channels, and per phone number for SMS (a number can be verified on several accounts).
     await rateLimit(`notify-test:${req.user.id}`, 6, 3600);
     if (channel === 'sms') await rateLimit(`notify-test:sms:${req.user.phoneNumber}`, 6, 3600);
+    // A messaging address is not tied to one account (the same webhook can be connected on many): each destination has
+    // its own budget across accounts, like a phone number. A browser's push address belongs to one account at a time
+    // (push-subscriptions), and the mail goes to the account's own address: the account's budget is theirs.
+    if (channel === 'chat') for (const d of await chatDestinations(req.user.id)) await rateLimit(`notify-test:chat:${d}`, 6, 3600);
     const t = req.user.locale === 'tr' ? { title: 'Test bildirimi', body: 'Bu kanal çalışıyor.' } : { title: 'Test notification', body: 'This channel works.' };
     try {
       await deliver({ id: req.user.id, email: req.user.email, locale: req.user.locale, phone_number: req.user.phoneNumber, phone_number_verified: req.user.phoneNumberVerified }, channel, t, '/account?tab=notifications', 'system.test');

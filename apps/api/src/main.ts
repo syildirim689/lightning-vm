@@ -72,6 +72,7 @@ import { PowerController } from './power';
 import { AbuseController } from './abuse';
 import { VdcAdminController, VdcController } from './vdc';
 import { RdnsSettingsController, ServerIpsController, startRdnsWorker } from './rdns';
+import { SavedViewsController } from './saved-views';
 import { httpDuration } from './metrics';
 
 export { closeConnections };
@@ -90,7 +91,7 @@ class HealthController {
 }
 
 // Every controller; the API reference (api-reference.ts) reads its routes from this list.
-export const controllers = [HealthController, ApiAdminController, ApiDocsController, AuthController, PublicController, SetupController, AdminController, VmwareController, VmwareScanController, ConsoleController, CatalogAdminController, CatalogController, ServersController, ServersAdminController, FirewallsController, PaymentsController, RdnsSettingsController, ServerIpsController,
+export const controllers = [HealthController, SavedViewsController, ApiAdminController, ApiDocsController, AuthController, PublicController, SetupController, AdminController, VmwareController, VmwareScanController, ConsoleController, CatalogAdminController, CatalogController, ServersController, ServersAdminController, FirewallsController, PaymentsController, RdnsSettingsController, ServerIpsController,
   SettingsController, SettingsOverviewController, SmsSettingsController, RolesController, NotificationsController, NotificationPolicyController,
   InsightsController, StaffInsightsController, AttentionController, ApplicationsController, ApplicationCallbackController, UserSecurityController, ServerUpdatesController, GuestUpdatesController, AdminServerUpdatesController, IsoAdminController, ServerIsoController, DomainController, LocationsController, TopologyAdminController, TopologyController, PowerController, AbuseController, VdcAdminController, VdcController, SmartController, OnboardingController, DigestController, AccountExportController, TimeZoneController, MySessionsController, SchedulesController, AuditController, ActivityController, AnnouncementController, AnnouncementAdminController, SnapshotsController, AlertsController, TerminalController, ChatController, ChatSettingsController, LiveController, DirectorySettingsController, StatusController, StatusPageSettingsController, UserSummaryController, IncidentsController, SupportController, SupportAdminController, StatsController, SignInMethodsController,
   BillingController, BillingCallbackController, BillingAdminController, BillingSettingsController, EinvoiceSettingsController, EinvoiceDocumentController, DeveloperController, ImportController, DisputesController, DisputesAdminController, ExternalController, BackupsController, BackupsAdminController, ResellerController, ResellersAdminController, PlacementController, DisksController, DiskPriceController, PrivateNetworksController, PrivateNetworkSettingsController, ImagesController, CouponsAdminController, TransfersController, TransfersAdminController];

@@ -35,11 +35,15 @@ export type Gateway = {
 };
 
 // Test cards of the sandbox: 4242 4242 4242 4242 is approved, 4000 0000 0000 0002 declined, 4000 0000 0000 9995
-// declined for insufficient funds. A saved sandbox card keeps its last four digits, so it behaves the same later.
+// declined for insufficient funds, and 4000 0000 0000 4954 is held for a fraud review: the payment stays open and
+// waits for staff (billing.ts noteReview), as a real provider's held payment does. A saved sandbox card keeps its
+// last four digits, so it behaves the same later; the held card is never saved (only an approved payment saves one).
+// They exist for the sandbox provider alone, which pays nothing unless staff switched it on (settings: sandbox).
 export const sandboxCards: Record<string, Result> = {
   '4242424242424242': { ok: true, ref: '' },
   '4000000000000002': { ok: false, code: 'CARD_DECLINED', message: 'The card was declined' },
   '4000000000009995': { ok: false, code: 'INSUFFICIENT_FUNDS', message: 'Insufficient funds' },
+  '4000000000004954': { ok: false, code: 'FRAUD_REVIEW', message: 'The sandbox holds the payment for review' },
 };
 export function sandboxPay(card: string, save: boolean): Result {
   const number = card.replace(/\s/g, '');
