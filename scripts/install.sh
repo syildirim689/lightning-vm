@@ -137,9 +137,12 @@ die() { msg FAIL "$2" "$3" "$4"; exit "$1"; }
 # What has to be undone when the script ends in the middle of a backup or a restore (a failed step, Ctrl-C,
 # a kill): one EXIT handler for the whole script, so no function replaces another's trap. Each function sets
 # its own variable here and empties it when it is done.
-BACKUP_WORK="" RESTORE_WORK="" RESTORE_STAGE="" REQUEST_WORK=""
+BACKUP_WORK="" RESTORE_WORK="" RESTORE_STAGE="" REQUEST_WORK="" PANEL_TMP="" LOCK_MINE=""
 on_exit() {
   rc=$?; trap - EXIT
+  # A snapshot for the panel that was not finished.
+  [ -z "$PANEL_TMP" ] || rm -f "$PANEL_TMP"
+  [ -z "$LOCK_MINE" ] || drop_lock
   # Plaintext copies of the database, .env and the encryption keys.
   [ -z "$BACKUP_WORK" ] || rm -rf "$BACKUP_WORK"
   [ -z "$RESTORE_WORK" ] || rm -rf "$RESTORE_WORK"
@@ -378,9 +381,44 @@ app_version() {
 panel_file() { # file
   if [ "$(id -u)" = 0 ] && chgrp 1000 "$1" 2>/dev/null; then chmod 640 "$1"; else chmod 644 "$1"; fi
 }
+# A snapshot is never readable by more than that, not for a moment, and never written through a name that is
+# already there (a link under that name would send root's write, and the chgrp and chmod above, to another
+# file). panel_new makes an empty file next to the final name that only its maker can open (mktemp: created
+# exclusively, mode 600, a name nobody can prepare); the caller fills it; panel_put gives it its group and
+# mode and renames it onto the final name, which replaces whatever is there without opening it. A directory
+# under the final name is refused: mv would put the file inside it.
+panel_new() { # final name
+  # What a run that was killed left behind (an hour old: no snapshot takes that long).
+  find "${1%/*}" -maxdepth 1 -type f -name "${1##*/}.??????" -mmin +60 -exec rm -f {} + 2>/dev/null || true
+  PANEL_TMP=$(mktemp "$1.XXXXXX")
+}
+panel_put() { # final name
+  if [ -d "$1" ]; then rm -f "$PANEL_TMP"; PANEL_TMP=""; return 1; fi
+  panel_file "$PANEL_TMP"; mv -f "$PANEL_TMP" "$1"; PANEL_TMP=""
+}
+
+# data/maintenance is where root writes for the panel, by name. Root does that only in a directory that is
+# its own: a real directory (not a link), root's, that group and others cannot write. Otherwise whoever can
+# write there puts a link, a FIFO or a directory under a name root is about to write, and root's write lands
+# in any file on this server, waits forever, or the lock below is not a lock. A directory that a run without
+# root made earlier (or anybody else) is taken over first: every directory in it from the top down, then
+# everything that is neither a plain file nor a directory goes, and so does a file with a second name.
+maint_dir() { # [directory]
+  md=${1:-data/maintenance}
+  if [ "$(id -u)" != 0 ]; then (umask 022; mkdir -p "$md"); return 0; fi
+  [ ! -L "$md" ] || die 21 E_MAINT_DIR "$md bir bağlantı; gerçek bir dizin olmalı (kaldırın ve yeniden deneyin)" "$md is a link; it must be a real directory (remove it and try again)"
+  (umask 022; mkdir -p "$md")
+  [ -n "$(find "$md" -maxdepth 0 \( ! -user 0 -o -perm /022 \) 2>/dev/null)" ] || return 0
+  msg WARN W_MAINT_DIR "$md root'a ait değildi ya da başkaları yazabiliyordu: sahipliği alındı, içindeki bağlantılar ve özel dosyalar silindi" "$md was not root's or others could write it: taken over, links and special files in it removed"
+  find "$md" -xdev -type d -exec chown -h 0 {} \; -exec chmod go-w {} \;
+  find "$md" -xdev \( ! -type f ! -type d -o -type f -links +1 \) -exec rm -f {} +
+  find "$md" -xdev -type f -exec chown -h 0 {} +
+  [ -z "$(find "$md" -maxdepth 0 \( ! -user 0 -o -perm /022 \) 2>/dev/null)" ] ||
+    die 21 E_MAINT_DIR "$md root'a ait yapılamadı" "$md could not be made root's"
+}
 
 record() { # kind status code [extra JSON fields, each starting with a comma]
-  (umask 022; mkdir -p data/maintenance)
+  maint_dir
   printf '{"time":"%s","kind":"%s","status":"%s","code":"%s","version":"%s"%s}\n' \
     "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$1" "$2" "$3" "$(app_version)" "${4:-}" >> data/maintenance/history.jsonl
   tail -n 500 data/maintenance/history.jsonl > data/maintenance/history.tmp && mv data/maintenance/history.tmp data/maintenance/history.jsonl
@@ -392,7 +430,7 @@ write_settings() {
   if [ -f /etc/systemd/system/lightning-vm-maintenance.timer ]; then timer=on; else timer=off; fi
   if [ -f /etc/systemd/system/lightning-vm-requests.path ]; then agent=on; else agent=off; fi
   b=$(env_value BACKUP_SCHEDULE); k=$(env_value BACKUP_KEEP); a=$(env_value AUTO_UPDATE); c=$(env_value UPDATE_CHANNEL); w=$(env_value UPDATE_WINDOW); br=$(env_value UPDATE_BRANCH)
-  (umask 022; mkdir -p data/maintenance)
+  maint_dir
   site=$(env_value PANEL_SITE); tlsm=$(env_value PANEL_TLS_MODE)
   printf '{"schedule":"%s","backupSchedule":"%s","backupKeep":"%s","backupCopy":"%s","autoUpdate":"%s","updateChannel":"%s","updateWindow":"%s","updateBranch":"%s","agent":"%s","site":"%s","tlsMode":"%s"}\n' \
     "$timer" "${b:-daily}" "${k:-7}" "$copy" "${a:-off}" "${c:-stable}" "${w:-03:00-05:00}" "${br:-main}" "$agent" "${site:-:80}" "${tlsm:-}" > data/maintenance/settings.json
@@ -429,23 +467,58 @@ psql_script() { # v1 v2
 # One maintenance job at a time: a backup, update or restore started by hand waits for the hourly timer or a
 # panel request to finish (and they for it). The timer and run-requests already hold the lock when they get
 # here or start this script again (LVM_LOCKED): waiting for it then would be waiting for ourselves.
-# The lock file is root's alone: whoever can open it, even only to read, can hold the lock and keep every
-# backup and update waiting. Made in a subshell: a redirection that fails on exec ends the whole script.
+# The lock file is its maker's alone, from the moment it exists (mode 600, made under umask 077): whoever can
+# open it, even only to read, can hold the lock and keep every backup and update waiting. So only a plain file
+# with one name, the caller's own and closed to everyone else is a lock; anything else under that name (a link,
+# a FIFO that would block the open, a directory, a file an older version left readable) is removed and made
+# anew. Made in a subshell: a redirection that fails on exec ends the whole script.
+LOCK=data/maintenance/.lock
 lock_file() {
-  (umask 077; : >> data/maintenance/.lock) 2>/dev/null || return 1
-  chmod 600 data/maintenance/.lock 2>/dev/null || true
+  if [ -L "$LOCK" ] || { [ -e "$LOCK" ] && [ ! -f "$LOCK" ]; }; then rm -rf "$LOCK" 2>/dev/null || return 1; fi
+  if [ -f "$LOCK" ] && [ -z "$(find "$LOCK" -maxdepth 0 -user "$(id -u)" -perm 600 -links 1 2>/dev/null)" ]; then
+    rm -f "$LOCK" 2>/dev/null || return 1
+  fi
+  (umask 077; : >> "$LOCK") 2>/dev/null || return 1
+}
+lock_id() { stat -Lc %d:%i "$1" 2>/dev/null || true; }
+# Process id of this very shell ($$ is the main script's also inside a subshell).
+self_pid() { exec sh -c 'echo "$PPID"'; }
+# Opens the lock as descriptor 9 and takes it: "wait" waits for the job that holds it, "try" returns 1 then.
+# 2: the lock file could not be made. The lock is the file the name stands for at the moment it is held: a job
+# removes the file when it ends (drop_lock), so after waiting the name is compared with what was locked and,
+# when it moved on, the new file is taken instead.
+hold_lock() { # wait|try
+  while :; do
+    lock_file || return 2
+    lock_umask=$(umask); umask 077; exec 9>> "$LOCK"; umask "$lock_umask"
+    if ! flock -n 9; then
+      if [ "$1" = try ]; then exec 9>&-; return 1; fi
+      msg INFO LOCK_WAIT "Başka bir bakım işi (yedek, güncelleme veya panel isteği) çalışıyor; bitmesi bekleniyor" "Another maintenance job (backup, update or a panel request) is running; waiting for it to finish"
+      flock 9
+    fi
+    lock_held=$(lock_id "/proc/$$/fd/9")
+    if [ -z "$lock_held" ] || [ "$lock_held" = "$(lock_id "$LOCK")" ]; then break; fi
+    exec 9>&-
+  done
+  LOCK_MINE=$(self_pid)
+  LVM_LOCKED=1; export LVM_LOCKED
+}
+# The lock file goes with the job that held it (only that shell removes it, not a subshell of it and not a
+# script it started, and only while the name still stands for the file it locked). The next job makes its own
+# file, so a descriptor somebody opened on an earlier one, when it was readable, holds nothing any more.
+drop_lock() {
+  [ -n "$LOCK_MINE" ] && [ "$LOCK_MINE" = "$(self_pid)" ] || return 0
+  lock_held=$(lock_id "/proc/$$/fd/9")
+  if [ -n "$lock_held" ] && [ "$lock_held" = "$(lock_id "$LOCK")" ]; then rm -f "$LOCK"; fi
+  LOCK_MINE=""
 }
 take_lock() {
   [ -z "${LVM_LOCKED:-}" ] || return 0
   command -v flock >/dev/null || return 0
-  (umask 022; mkdir -p data/maintenance)
-  lock_file || return 0
-  exec 9>> data/maintenance/.lock
-  if ! flock -n 9; then
-    msg INFO LOCK_WAIT "Başka bir bakım işi (yedek, güncelleme veya panel isteği) çalışıyor; bitmesi bekleniyor" "Another maintenance job (backup, update or a panel request) is running; waiting for it to finish"
-    flock 9
-  fi
-  LVM_LOCKED=1; export LVM_LOCKED
+  maint_dir
+  # Without root the lock may be root's and closed to this user: the job runs unlocked, as before. Root's own
+  # jobs never run without it.
+  hold_lock wait || { [ "$(id -u)" != 0 ] || die 21 E_LOCK "Bakım kilidi alınamadı ($LOCK)" "Could not take the maintenance lock ($LOCK)"; }
 }
 
 # A backup is proven with the backup key, not with a checksum anybody can recompute: NAME.tar.enc.hmac holds an
@@ -863,10 +936,7 @@ do_update() {
 # enabled, the automatic update inside the maintenance window.
 do_maintenance() {
   # Never alongside something the panel asked for (same lock as run_requests).
-  lock_file || true
-  exec 9> data/maintenance/.lock
-  flock -n 9 || exit 0
-  LVM_LOCKED=1; export LVM_LOCKED
+  hold_lock try || { [ $? = 1 ] && exit 0; die 21 E_LOCK "Bakım kilidi alınamadı ($LOCK)" "Could not take the maintenance lock ($LOCK)"; }
   if [ "$(env_value BACKUP_SCHEDULE)" != off ]; then
     last=$(grep '"kind":"backup","status":"ok"' data/maintenance/history.jsonl 2>/dev/null | tail -n 1 | sed 's/^{"time":"\([^"]*\)".*/\1/')
     age=$(( $(date +%s) - $(date -d "${last:-1970-01-01T00:00:00Z}" +%s) ))
@@ -920,7 +990,7 @@ set_auto_update() {
 
 # Available versions for the configured channel: data/maintenance/releases.json.
 do_releases() {
-  (umask 022; mkdir -p data/maintenance)
+  maint_dir
   out=data/maintenance/releases.json
   now=$(date -u +%Y-%m-%dT%H:%M:%SZ)
   channel=$(env_value UPDATE_CHANNEL); channel=${channel:-stable}
@@ -977,17 +1047,16 @@ set_agent() {
 # Each request is a few key=value lines. Everything is validated here: the panel is not trusted with the host.
 run_requests() {
   [ -d data/maintenance-requests ] || exit 0
-  (umask 022; mkdir -p data/maintenance/runs)
-  lock_file || true
-  exec 9> data/maintenance/.lock
-  flock 9
-  LVM_LOCKED=1; export LVM_LOCKED
+  maint_dir; maint_dir data/maintenance/runs
+  hold_lock wait || die 21 E_LOCK "Bakım kilidi alınamadı ($LOCK)" "Could not take the maintenance lock ($LOCK)"
   # The API queues one request at a time, so the order of several (should it happen) does not matter.
   for f in data/maintenance-requests/*.req; do
     # The request directory belongs to the API container's user, so a name in it may be a link to any file on
     # this server. A link is removed, never read.
     if [ -L "$f" ]; then rm -f "$f"; continue; fi
-    [ -f "$f" ] || continue
+    # Neither is anything else that is not a plain file (a directory, a FIFO): left there, it would start this
+    # run again and again through the path unit.
+    if [ ! -f "$f" ]; then rm -rf "$f"; continue; fi
     id=$(basename "$f" .req)
     case "$id" in *[!0-9a-f-]*) rm -f "$f"; continue ;; esac # also a name with a line break in it
     echo "$id" | grep -Eq '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' || { rm -f "$f"; continue; }
@@ -1053,7 +1122,11 @@ run_requests() {
     if [ "$ok" = 0 ]; then status rejected 2 E_REQUEST_INVALID; rm -rf "$rq"; REQUEST_WORK=""; continue; fi
     status running null ""
     log=data/maintenance/runs/$id.log
-    (umask 022; : > "$log"); panel_file "$log"
+    # Made anew and closed to others from its first moment (the panel follows it while the request runs).
+    rm -rf "$log"
+    if ! { (umask 027; set -C; : > "$log") 2>/dev/null && panel_file "$log"; }; then
+      status failed 1 E_REQUEST_LOG; rm -rf "$rq"; REQUEST_WORK=""; continue
+    fi
     if sh "$(pwd)/scripts/install.sh" "$@" > "$log" 2>&1; then rc=0; else rc=$?; fi # LVM_LOCKED: the lock is held here
     code=$(awk 'NF >= 2 { c = $2 } END { print c }' "$log" | tr -cd 'A-Z0-9_')
     if [ "$rc" = 0 ]; then status succeeded 0 "$code"; else status failed "$rc" "$code"; fi
@@ -1129,17 +1202,18 @@ drop_in() {
 }
 
 host_info() {
-  (umask 022; mkdir -p data/maintenance)
+  maint_dir
   td() { timedatectl show -p "$1" --value 2>/dev/null || true; }
   conf() { [ -f "$1" ] && sed -n "s/^$2=//p" "$1" | tr ' ' ',' || true; }
   os=$( (. /etc/os-release 2>/dev/null && printf '%s' "${PRETTY_NAME:-}") || true)
   resolvers=$(grep -E '^nameserver ' /etc/resolv.conf 2>/dev/null | awk '{ print $2 }' | paste -sd, - || true)
+  panel_new data/maintenance/host.json
   printf '{"checkedAt":"%s","time":%s,"hostname":"%s","fqdn":"%s","timezone":"%s","ntp":"%s","ntpSynced":"%s","ntpServers":"%s","dnsServers":"%s","resolvers":"%s","timesyncd":%s,"resolved":%s,"os":"%s","kernel":"%s","uptime":%s}\n' \
     "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$(date +%s)" "$(hostname | json_str)" "$( (hostname -f 2>/dev/null || hostname) | json_str)" "$(td Timezone | json_str)" "$(td NTP)" "$(td NTPSynchronized)" \
     "$(conf /etc/systemd/timesyncd.conf.d/lightning-vm.conf NTP | json_str)" "$(conf /etc/systemd/resolved.conf.d/lightning-vm.conf DNS | json_str)" "$(printf '%s' "$resolvers" | json_str)" \
     "$(systemctl is-active --quiet systemd-timesyncd 2>/dev/null && echo true || echo false)" "$(systemctl is-active --quiet systemd-resolved 2>/dev/null && echo true || echo false)" \
-    "$(printf '%s' "$os" | json_str)" "$(uname -r | json_str)" "$(cut -d. -f1 /proc/uptime 2>/dev/null || echo 0)" > data/maintenance/host.tmp
-  panel_file data/maintenance/host.tmp; mv data/maintenance/host.tmp data/maintenance/host.json
+    "$(printf '%s' "$os" | json_str)" "$(uname -r | json_str)" "$(cut -d. -f1 /proc/uptime 2>/dev/null || echo 0)" > "$PANEL_TMP"
+  panel_put data/maintenance/host.json
 }
 
 do_host() {
@@ -1196,7 +1270,7 @@ mask_secrets() {
 # service and of the system journal (warnings and worse). Read-only: nothing on the server changes.
 do_state() {
   out=${STATE_DIR:-data/maintenance}
-  (umask 022; mkdir -p "$out/logs")
+  maint_dir "$out"; maint_dir "$out/logs"
   # One JSON string per field; fields arrive separated by "|".
   rows() { # $1: comma-separated key names (a trailing "#" makes the value a number)
     awk -F'|' -v keys="$1" 'BEGIN { n = split(keys, k, ","); printf "[" }
@@ -1224,13 +1298,15 @@ do_state() {
     rm -f "$out"/logs/*.log
     for svc in $(docker compose ps -a --format '{{.Service}}' 2>/dev/null | sort -u); do
       echo "$svc" | grep -Eq '^[a-z0-9][a-z0-9_-]{0,40}$' || continue
-      { timeout 20 docker compose logs --no-color --no-log-prefix --timestamps --tail 300 "$svc" 2>&1 || true; } | mask_secrets > "$out/logs/$svc.tmp" || true
-      panel_file "$out/logs/$svc.tmp"; mv "$out/logs/$svc.tmp" "$out/logs/$svc.log"
+      panel_new "$out/logs/$svc.log"
+      { timeout 20 docker compose logs --no-color --no-log-prefix --timestamps --tail 300 "$svc" 2>&1 || true; } | mask_secrets > "$PANEL_TMP" || true
+      panel_put "$out/logs/$svc.log"
     done
   fi
   if command -v journalctl >/dev/null 2>&1; then
-    { timeout 20 journalctl -p warning -n 200 --no-pager -o short-iso 2>/dev/null || true; } | mask_secrets > "$out/logs/system.tmp" || true
-    panel_file "$out/logs/system.tmp"; mv "$out/logs/system.tmp" "$out/logs/system.log"
+    panel_new "$out/logs/system.log"
+    { timeout 20 journalctl -p warning -n 200 --no-pager -o short-iso 2>/dev/null || true; } | mask_secrets > "$PANEL_TMP" || true
+    panel_put "$out/logs/system.log"
   fi
   disks=$(df -P -B1 -x tmpfs -x devtmpfs -x overlay -x squashfs -x efivarfs 2>/dev/null | awk 'NR > 1 { print $6 "|" $1 "|" $2 "|" $3 "|" $4 }' | head -n 12 | rows 'mount,device,total#,used#,free#')
   inodes=$(df -P -i / 2>/dev/null | awk 'NR == 2 { gsub(/%/, "", $5); print $5 + 0 }')
@@ -1238,17 +1314,18 @@ do_state() {
   failed=$(systemctl --failed --no-legend --plain 2>/dev/null | awk '{ print $1 }' | head -n 10 | rows 'unit' || echo '[]')
   addresses=$(ip -o -4 addr show scope global 2>/dev/null | awk '{ print $2 "|" $4 }' | head -n 8 | rows 'interface,address' || echo '[]')
   net=$(awk -F'[: ]+' 'NR > 2 && $2 != "lo" && $2 !~ /^(veth|br-|docker)/ { print $2 "|" $3 "|" $11 }' /proc/net/dev 2>/dev/null | head -n 6 | rows 'interface,rx#,tx#')
+  panel_new "$out/state.json"
   printf '{"checkedAt":"%s","services":%s,"disks":%s,"inodesPercent":%s,"processes":%s,"failedUnits":%s,"addresses":%s,"network":%s,"dockerDisk":%s,"docker":"%s","users":%s}\n' \
     "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "${services:-[]}" "${disks:-[]}" "${inodes:-0}" "${processes:-[]}" "${failed:-[]}" "${addresses:-[]}" "${net:-[]}" "${docker_disk:-[]}" \
-    "$(docker version --format '{{.Server.Version}}' 2>/dev/null | json_str || true)" "$(who 2>/dev/null | wc -l | tr -d ' ')" > "$out/state.tmp"
-  panel_file "$out/state.tmp"; mv "$out/state.tmp" "$out/state.json"
+    "$(docker version --format '{{.Server.Version}}' 2>/dev/null | json_str || true)" "$(who 2>/dev/null | wc -l | tr -d ' ')" > "$PANEL_TMP"
+  panel_put "$out/state.json"
 }
 
 # ---- This server's operating system updates (apt: Debian and Ubuntu) -------------------------------
 # What waits, what of it is a security update, whether a restart is needed, and whether security updates
 # install themselves. The panel only reads data/maintenance/os.json; it never talks to apt.
 os_info() {
-  (umask 022; mkdir -p data/maintenance)
+  maint_dir
   mgr=none; total=0; sec=0; pk=""; auto=false; held=0; lists=""; changed=""
   stamp() { [ -e "$1" ] && date -u -d "@$(stat -c %Y "$1")" +%Y-%m-%dT%H:%M:%SZ || true; }
   if command -v apt-get >/dev/null 2>&1; then
@@ -1267,10 +1344,11 @@ os_info() {
   fi
   if [ -f /var/run/reboot-required ]; then reboot=true; else reboot=false; fi
   rpk=$( (sort -u /var/run/reboot-required.pkgs 2>/dev/null || true) | head -n 20 | tr -cd 'A-Za-z0-9.+:~_\n-' | paste -sd, -)
+  panel_new data/maintenance/os.json
   printf '{"checkedAt":"%s","manager":"%s","total":%s,"security":%s,"held":%s,"packages":[%s],"rebootRequired":%s,"rebootPackages":"%s","autoSecurity":%s,"listsAt":"%s","changedAt":"%s","bootId":"%s","kernel":"%s"}\n' \
     "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$mgr" "$total" "$sec" "$held" "$pk" "$reboot" "$rpk" "$auto" "$lists" "$changed" \
-    "$(tr -cd 'a-f0-9-' < /proc/sys/kernel/random/boot_id 2>/dev/null || true)" "$(uname -r | json_str)" > data/maintenance/os.tmp
-  panel_file data/maintenance/os.tmp; mv data/maintenance/os.tmp data/maintenance/os.json
+    "$(tr -cd 'a-f0-9-' < /proc/sys/kernel/random/boot_id 2>/dev/null || true)" "$(uname -r | json_str)" > "$PANEL_TMP"
+  panel_put data/maintenance/os.json
 }
 
 do_os() {
@@ -1527,7 +1605,7 @@ case "$MODE" in
   restore) [ -f .env ] || die 17 E_NOT_INSTALLED "Önce kurulum yapın: sh scripts/install.sh" "Install first: sh scripts/install.sh"
     do_restore; exit 0 ;;
   update) do_update ;;
-  maintenance) (umask 022; mkdir -p data/maintenance); do_maintenance ;;
+  maintenance) maint_dir; do_maintenance ;;
   releases) do_releases; exit 0 ;;
   run-requests) run_requests; exit 0 ;;
   host) do_host; exit 0 ;;
