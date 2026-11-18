@@ -11,7 +11,7 @@ import { rateLimit } from './security';
 import { notify } from './notify';
 import { can, permissionsOfMany } from './permissions';
 import { Can, PermissionGuard } from './rbac';
-import { afterMessage, dueFrom, priorities, readAttachments, reopenable, statuses, type Priority, type Status, type Upload } from './support-rules';
+import { afterMessage, dueFrom, priorities, readAttachments, reopenable, statuses, ticketDiagnostics, type Priority, type Status, type TicketDiagnostics, type Upload } from './support-rules';
 
 type Input = Record<string, unknown>;
 const staffOf = (req: AuthedRequest) => can(req.user.permissions, 'support.view');
@@ -28,6 +28,25 @@ async function ticketFor(req: AuthedRequest, id: string) {
   const { rows: [t] } = await pool.query(`SELECT ${ticketColumns}, o.email AS "ownerEmail", o.name AS "ownerName" ${ticketJoins} JOIN users o ON o.id = t.owner_id WHERE t.id = $1`, [id]);
   if (!t || (t.ownerId !== req.user.id && !staffOf(req))) throw apiError(404, 'NOT_FOUND', 'Unknown ticket');
   return t;
+}
+
+// The server a new ticket is about, as the database has it at that moment (no call to the hypervisor): kept with the
+// ticket for staff. It never holds a ticket up: anything that goes wrong, or more than two seconds, stores nothing.
+export async function captureDiagnostics(serverId: string): Promise<TicketDiagnostics | null> {
+  let timer: NodeJS.Timeout | undefined;
+  try {
+    const read = pool.query(`SELECT s.id, s.name, s.state, s.power_state AS power, c.kind AS platform, coalesce(nullif(l.name, ''), nullif(p.location, ''), p.name) AS location,
+        k.name AS plan, s.vcpu, s.memory_mb, s.disk_gb, i.name AS image, s.locked, s.delete_at IS NOT NULL AS pending_deletion, s.created_at, s.traffic_gb, s.traffic_throttled,
+        ARRAY(SELECT host(a.address) FROM ip_allocations a WHERE a.server_id = s.id AND a.kind IN ('primary', 'ipv6') ORDER BY (a.kind = 'primary') DESC) AS addresses,
+        (SELECT coalesce(sum(t.rx_bytes + t.tx_bytes), 0)::float8 FROM server_traffic t WHERE t.server_id = s.id AND t.day >= date_trunc('month', current_date)) AS traffic_bytes,
+        coalesce((SELECT json_agg(o) FROM (SELECT kind, status, error_code, created_at, finished_at FROM operations WHERE server_id = s.id ORDER BY created_at DESC LIMIT 5) o), '[]') AS operations,
+        (SELECT count(*)::int FROM invoices v WHERE v.owner_id = s.owner_id AND v.status = 'unpaid' AND v.kind <> 'topup') AS unpaid
+      FROM servers s JOIN resource_pools p ON p.id = s.pool_id JOIN vmware_connections c ON c.id = p.connection_id LEFT JOIN locations l ON l.id = p.location_id
+        LEFT JOIN os_images i ON i.id = s.image_id LEFT JOIN packages k ON k.id = s.package_id WHERE s.id = $1`, [serverId]);
+    read.catch(() => undefined); // a failure after the two seconds is nobody's to handle
+    const res = await Promise.race([read, new Promise<null>((done) => { timer = setTimeout(() => done(null), 2000); })]);
+    return res?.rows[0] ? ticketDiagnostics(res.rows[0]) : null;
+  } catch { return null; } finally { clearTimeout(timer); }
 }
 
 export const readBody = (v: unknown) => {
@@ -125,8 +144,9 @@ export class SupportController {
     // At most 10 new tickets an hour per person.
     const n = await redis.incr(`rl:tickets:${req.user.id}`); if (n === 1) await redis.expire(`rl:tickets:${req.user.id}`, 3600);
     if (n > 10) throw apiError(429, 'RATE_LIMITED', 'Too many tickets');
-    const { rows: [t] } = await pool.query(`INSERT INTO tickets (owner_id, department_id, server_id, subject, priority, due_at) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, number`,
-      [req.user.id, departmentId, serverId, subject, priority, dueFrom(new Date(), priority)]);
+    const diagnostics = serverId ? await captureDiagnostics(serverId) : null;
+    const { rows: [t] } = await pool.query(`INSERT INTO tickets (owner_id, department_id, server_id, subject, priority, due_at, diagnostics) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id, number`,
+      [req.user.id, departmentId, serverId, subject, priority, dueFrom(new Date(), priority), diagnostics && JSON.stringify(diagnostics)]);
     await addMessage(t.id, req.user.id, false, false, text, files);
     await audit(req, 'support.ticket_opened', 'success', req.user.id, { ticketId: t.id, number: t.number, priority });
     await notify('support.ticket_opened', 'staff:support.view', { ticketId: t.id, number: t.number, subject, priority, email: req.user.email });
@@ -137,7 +157,11 @@ export class SupportController {
   async get(@Req() req: AuthedRequest, @Param('id', ParseUUIDPipe) id: string) {
     const t = await ticketFor(req, id);
     const staff = staffOf(req);
-    return { ticket: staff ? t : { ...t, assigneeEmail: null, ownerEmail: undefined }, messages: await messagesOf(id, staff), staff };
+    const view = { ticket: staff ? t : { ...t, assigneeEmail: null, ownerEmail: undefined }, messages: await messagesOf(id, staff), staff };
+    // What was known about the ticket's server when it was opened: for staff only, the customer's answer has no such key.
+    if (!staff) return view;
+    const { rows: [d] } = await pool.query('SELECT diagnostics FROM tickets WHERE id = $1', [id]);
+    return { ...view, diagnostics: (d?.diagnostics ?? null) as TicketDiagnostics | null };
   }
 
   @Post('tickets/:id/messages') @HttpCode(201)

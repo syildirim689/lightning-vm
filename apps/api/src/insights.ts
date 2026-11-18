@@ -12,7 +12,7 @@ import { summary as maintenance } from './maintenance';
 import { notify } from './notify';
 import { can, customerLevel, type Permission } from './permissions';
 import { Can, PermissionGuard } from './rbac';
-import { restoreHold } from './restore-hold';
+import { clearRestoreHoldNotice, restoreHold } from './restore-hold';
 import { activeCaptcha, mailReady } from './settings-store';
 import { cpuStats } from './smart';
 import { sizing } from './smart-rules';
@@ -222,8 +222,29 @@ const texts: Record<string, { tr: (p: Insight['params']) => [string, string]; en
 };
 
 // Every 10 minutes: new critical findings go out once per finding per day.
+// A hold after a restore is set by SQL while the API is down (scripts/install.sh), so nobody was told when it began:
+// the API tells those who can release it (system.update, as DELETE /admin/system/restore-hold asks) when it first
+// sees the hold, at its start or while running. Once per hold: the sibling row 'restore_hold_notified' remembers
+// which hold (by the time it was set) was announced, so neither a restart nor a second API process repeats it; a
+// hold set anew is announced again, and a released one takes the row with it. Returns whether a notice went out.
+export async function announceRestoreHold(): Promise<boolean> {
+  const { rows: [h] } = await pool.query(`INSERT INTO maintenance_state (key, value)
+      SELECT 'restore_hold_notified', jsonb_build_object('hold_at', h.at, 'backup', h.value->>'backup', 'restored_at', coalesce(h.value->>'restored_at', '')) FROM maintenance_state h WHERE h.key = 'restore_hold'
+    ON CONFLICT (key) DO UPDATE SET value = excluded.value, at = now() WHERE maintenance_state.value->>'hold_at' IS DISTINCT FROM excluded.value->>'hold_at'
+    RETURNING value->>'backup' AS backup, value->>'restored_at' AS restored, value->>'hold_at' AS since`);
+  if (!h) {
+    await clearRestoreHoldNotice();
+    return false;
+  }
+  const at = Date.parse(h.restored || h.since);
+  await notify('admin.restore_hold', 'staff:system.update', { backup: h.backup ?? '', since: Number.isFinite(at) ? new Date(at).toISOString() : '' });
+  return true;
+}
+
 export function startInsightAlerts() {
+  const held = () => announceRestoreHold().catch(() => logEvent('error', 'restore_hold_notice_failed'));
   const run = async () => {
+    await held();
     if (!(await redis.set('lock:insights', '1', 'EX', 540, 'NX').catch(() => null))) return;
     try {
       // A stopped worker is only reported once it stayed silent for 5 minutes, and not in the API's first 5 minutes:
@@ -237,6 +258,7 @@ export function startInsightAlerts() {
       }
     } catch { logEvent('error', 'insights_failed'); }
   };
+  void held(); // at the start: a restore ends with the API coming up
   setTimeout(run, 30_000).unref();
   return setInterval(run, 10 * 60_000).unref();
 }
@@ -311,8 +333,9 @@ export class AttentionController {
       paymentsInReview: async () => (await paymentsInReview()).n,
       // Failed in the last 24 hours, as the dashboard and the OPERATIONS_FAILED finding count them.
       failedOperations: () => one("SELECT count(*)::int AS n FROM operations WHERE status = 'failed' AND created_at > now() - interval '24 hours'"),
-      // Open findings, as the abuse page's "open" tab lists them (acknowledged ones stay open until they are resolved).
-      abuse: () => one('SELECT count(*)::int AS n FROM abuse_findings WHERE resolved_at IS NULL'),
+      // Open findings nobody has looked at yet: an acknowledged one stays on the abuse page's "open" tab until it is
+      // resolved, but it no longer counts here.
+      abuse: () => one('SELECT count(*)::int AS n FROM abuse_findings WHERE resolved_at IS NULL AND acknowledged_at IS NULL'),
       restoreHold: async () => { const h = await restoreHoldState(); return h && { since: new Date(h.since).toISOString(), backup: h.backup }; },
     };
     const keys = attentionKeys(req.user.permissions);

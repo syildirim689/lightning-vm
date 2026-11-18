@@ -24,6 +24,7 @@ const { notificationQueue } = await import('../../dist/notify.js');
 const { encryptSecret } = await import('../../dist/secrets.js');
 const { runBilling, resizeCharge, billResize, repriceOpenRenewal, billingTick } = await import('../../dist/billing.js');
 const { forgetRestoreHold } = await import('../../dist/restore-hold.js');
+const { announceRestoreHold } = await import('../../dist/insights.js');
 
 let app, admin, user, userId;
 const csrf = { 'x-lightning-csrf': '1', origin: 'http://localhost', host: 'localhost' };
@@ -264,9 +265,15 @@ test('the staff menu\'s counts: every field only for those who may open its page
 
   const all = (await get('/admin/attention', admin)).json();
   assert.deepEqual(all, { paymentsInReview: review, failedOperations: failedBefore + 1, abuse: 1, restoreHold: null });
-  // An acknowledged finding is still open (the abuse page's "open" tab lists it); a resolved one is not.
+  // The count is of findings nobody has looked at: an acknowledged one leaves it (the abuse page's "open" tab still
+  // lists it until it is resolved), and so does one that resolved by itself before anyone looked.
+  const unseen = (await one("INSERT INTO abuse_findings (server_id, kind, address, port) VALUES ($1, 'port', '203.0.113.9', 3306) RETURNING id", [s.srv.id])).id;
+  assert.equal((await get('/admin/attention', admin)).json().abuse, 2);
   await pool.query('UPDATE abuse_findings SET acknowledged_at = now() WHERE id = $1', [finding]);
   assert.equal((await get('/admin/attention', admin)).json().abuse, 1);
+  assert.equal((await get('/admin/abuse', admin)).json().findings.filter((f) => f.serverId === s.srv.id && !f.resolvedAt).length, 2, 'both are still open on the page');
+  await pool.query('UPDATE abuse_findings SET resolved_at = now() WHERE id = $1', [unseen]);
+  assert.equal((await get('/admin/attention', admin)).json().abuse, 0);
   await pool.query('UPDATE abuse_findings SET resolved_at = now() WHERE id = $1', [finding]);
   assert.equal((await get('/admin/attention', admin)).json().abuse, 0);
 
@@ -795,4 +802,149 @@ test('a stored gateway or integrator secret does not follow a new address, and t
     globalThis.fetch = real;
     await put('/admin/settings/einvoice', { provider: 'none' }, admin);
   }
+});
+
+// ---- Added with the ticket diagnostics, the summary's next renewal and the notice of a hold ----
+
+test('a ticket about a server keeps what the panel knew of it at that moment; staff see it, the customer never does', async () => {
+  const s = await rented('it-diag', '100.00', 20);
+  await pool.query("UPDATE servers SET locked = true, notes = 'root password is on the sticky note', root_password_enc = 'secret-enc', traffic_gb = 500 WHERE id = $1", [s.srv.id]);
+  const op = (n, status, code = null) => pool.query(`INSERT INTO operations (kind, status, idempotency_key, request_hash, server_id, owner_id, step, deadline_at, created_at, finished_at, error_code)
+    VALUES ($2, $3, $1, 'x', $4, $5, 'done', now(), now() - make_interval(mins => $6::int), now() - make_interval(mins => $6::int) + interval '5 seconds', $7)`,
+    [randomUUID(), n === 1 ? 'reset' : 'power_on', status, s.srv.id, userId, n, code]);
+  for (const n of [6, 5, 4, 3, 2]) await op(n, 'succeeded');
+  await op(1, 'failed', 'TASK_FAILED');
+  const unpaid = (await one("SELECT count(*)::int AS n FROM invoices WHERE owner_id = $1 AND status = 'unpaid' AND kind <> 'topup'", [userId])).n;
+  const dep = (await get('/support/departments', user)).json().departments[0].id;
+  const before = Date.now();
+  const opened = await post('/support/tickets', { subject: 'Server does not answer', departmentId: dep, serverId: s.srv.id, body: 'It stopped an hour ago.' }, user);
+  assert.equal(opened.statusCode, 201, opened.body);
+  const id = opened.json().id;
+
+  const agent = await staffWith('it-agent', ['support.view']);
+  const seen = (await get(`/support/tickets/${id}`, agent)).json();
+  assert.equal(seen.staff, true);
+  const d = seen.diagnostics;
+  assert.ok(Date.parse(d.capturedAt) >= before - 1000 && Date.parse(d.capturedAt) <= Date.now() + 1000 && d.capturedAt === new Date(d.capturedAt).toISOString(), d.capturedAt);
+  const { createdAt, ...server } = d.server;
+  assert.deepEqual(server, { id: s.srv.id, name: 'it-diag', state: 'ready', power: 'poweredOn', platform: 'esxi', location: 'it-billing-2', plan: null, vcpu: 2, memoryMb: 2048, diskGb: 20,
+    image: 'it-billing-2', addresses: [], locked: true, pendingDeletion: false, traffic: { allowanceGb: 500, usedGb: 0, throttled: false } });
+  assert.equal(createdAt, new Date(createdAt).toISOString());
+  // The last five, newest first: the sixth is left out.
+  assert.deepEqual(d.operations.map((o) => [o.kind, o.status, o.errorCode]), [['reset', 'failed', 'TASK_FAILED'], ...[2, 3, 4, 5].map(() => ['power_on', 'succeeded', null])]);
+  for (const o of d.operations) assert.ok(o.createdAt === new Date(o.createdAt).toISOString() && Date.parse(o.finishedAt) - Date.parse(o.createdAt) === 5000, JSON.stringify(o));
+  assert.equal(d.unpaidInvoices, unpaid);
+  assert.ok(!/sticky|secret-enc|password|token|notes/i.test(JSON.stringify(d)), 'nothing secret is kept');
+
+  // It is the state of that moment: what happens to the server afterwards does not change it.
+  await pool.query("UPDATE servers SET state = 'error', power_state = 'poweredOff', locked = false, delete_at = now() + interval '1 day' WHERE id = $1", [s.srv.id]);
+  assert.deepEqual((await get(`/support/tickets/${id}`, agent)).json().diagnostics, d);
+
+  // The customer's own view, their list and the staff queue carry none of it.
+  const own = await get(`/support/tickets/${id}`, user);
+  assert.equal(own.statusCode, 200);
+  assert.equal(own.json().staff, false);
+  assert.ok(!('diagnostics' in own.json()) && !('diagnostics' in own.json().ticket) && !/diagnostics|capturedAt|unpaidInvoices/.test(own.body), own.body);
+  assert.ok(!/diagnostics|capturedAt/.test((await get('/support/tickets', user)).body));
+  assert.ok(!/capturedAt/.test((await get('/admin/support/tickets', agent)).body));
+
+  // No server named: staff are told there is none (null); a server of someone else is refused as before.
+  const plain = (await post('/support/tickets', { subject: 'A question about invoices', departmentId: dep, body: 'When is the next one?' }, user)).json().id;
+  const bare = (await get(`/support/tickets/${plain}`, agent)).json();
+  assert.ok('diagnostics' in bare && bare.diagnostics === null);
+  await post('/auth/admin/create-user', { email: 'mehmet-diag@example.test', password, name: 'Mehmet', role: 'user' }, admin);
+  const other = cookieOf(await post('/auth/sign-in/email', { email: 'mehmet-diag@example.test', password }));
+  const theirs = await post('/support/tickets', { subject: 'Not my server', departmentId: dep, serverId: s.srv.id, body: 'Tell me about it.' }, other);
+  assert.deepEqual([theirs.statusCode, theirs.json().fields], [400, { serverId: 'INVALID_VALUE' }]);
+  await pool.query('UPDATE servers SET delete_at = NULL WHERE id = $1', [s.srv.id]);
+  await s.end();
+});
+
+test('a hold after a restore is announced once to those who can release it; a restart does not repeat it, a new hold is told again', async () => {
+  const told = async () => (await notificationQueue.getJobs(['waiting', 'delayed', 'active', 'completed'])).filter((j) => j.data.event === 'admin.restore_hold').sort((x, y) => x.timestamp - y.timestamp || Number(x.id) - Number(y.id));
+  const memory = async () => (await pool.query("SELECT 1 FROM maintenance_state WHERE key = 'restore_hold_notified'")).rowCount;
+  const start = (await told()).length;
+  assert.equal(await announceRestoreHold(), false, 'no hold, nothing to tell');
+  assert.equal(await memory(), 0);
+  // As install.sh writes it, while the API is down.
+  await pool.query("INSERT INTO maintenance_state (key, value) VALUES ('restore_hold', $1)", [{ backup: 'panel-2026-11-01.tar.gz', restored_at: '2026-11-17T09:00:00.000Z' }]);
+  forgetRestoreHold();
+  try {
+    assert.equal(await announceRestoreHold(), true);
+    const [job] = (await told()).slice(start);
+    assert.deepEqual([job.data.to, job.data.data], ['staff:system.update', { backup: 'panel-2026-11-01.tar.gz', since: '2026-11-17T09:00:00.000Z' }]);
+    // The periodic look, a restart, another API process: the row remembers.
+    assert.deepEqual([await announceRestoreHold(), await announceRestoreHold()], [false, false]);
+    assert.deepEqual(await Promise.all([announceRestoreHold(), announceRestoreHold(), announceRestoreHold()]), [false, false, false]);
+    assert.equal((await told()).length, start + 1);
+    // The hold itself is as it was: the memory is a row of its own.
+    assert.deepEqual((await get('/admin/system/restore-hold', admin)).json().detail, { backup: 'panel-2026-11-01.tar.gz', restored_at: '2026-11-17T09:00:00.000Z' });
+
+    // Released by staff: the memory goes with it, and a later hold is announced again.
+    assert.deepEqual((await call('DELETE', '/admin/system/restore-hold', admin)).json(), { held: false, released: true });
+    assert.equal(await memory(), 0);
+    assert.equal(await announceRestoreHold(), false);
+    await pool.query("INSERT INTO maintenance_state (key, value) VALUES ('restore_hold', $1)", [{ backup: 'panel-2026-11-10.tar.gz' }]);
+    assert.equal(await announceRestoreHold(), true);
+    const second = (await told()).filter((j) => j.data.data.backup === 'panel-2026-11-10.tar.gz');
+    assert.equal(second.length, 1);
+    assert.ok(Math.abs(Date.parse(second[0].data.data.since) - Date.now()) < 60_000, 'no time from the installer: since the row was set');
+    // A second restore over a hold nobody released (the installer's upsert): a new hold, told again, once.
+    await pool.query(`INSERT INTO maintenance_state (key, value) VALUES ('restore_hold', '{"backup": "panel-2026-11-12.tar.gz"}')
+      ON CONFLICT (key) DO UPDATE SET value = excluded.value, at = now() + interval '1 second'`);
+    assert.deepEqual([await announceRestoreHold(), await announceRestoreHold()], [true, false]);
+    assert.equal((await told()).length, start + 3);
+    // Released from the command line (the row is simply deleted): the next look forgets it.
+    await pool.query("DELETE FROM maintenance_state WHERE key = 'restore_hold'");
+    assert.equal(await announceRestoreHold(), false);
+    assert.equal(await memory(), 0);
+    assert.equal((await told()).length, start + 3);
+  } finally {
+    await pool.query("DELETE FROM maintenance_state WHERE key IN ('restore_hold', 'restore_hold_notified')");
+    forgetRestoreHold();
+  }
+});
+
+test('the summary tells the next renewal as it will be invoiced: the price of now with tax, how many, and whether its invoice already exists', async () => {
+  // Only this test's subscriptions count (it is the last one to use the customer's).
+  await pool.query("UPDATE subscriptions SET status = 'cancelled', staff_cancelled = true WHERE owner_id = $1 AND status NOT IN ('cancelled', 'ended')", [userId]);
+  const summary = async () => (await get('/billing/summary', user)).json();
+  const next = async () => (await summary()).nextRenewal;
+  const whole = await summary();
+  assert.ok('nextRenewal' in whole && whole.nextRenewal === null, 'nothing renews: null');
+  for (const k of ['enabled', 'balance', 'open', 'subscriptions', 'cards', 'profileComplete', 'methods', 'autoCharge', 'requirePayment', 'hourly']) assert.ok(k in whole, k);
+
+  const a = await rented('it-next-a', '100.00', 20), b = await rented('it-next-b', '50.00', 20), later = await rented('it-next-c', '900.00', 25);
+  // Two renew on the same day: 150 before tax, 180.00 with the default 20 % (the buyer is Turkish).
+  let n = await next();
+  const { at, ...rest } = n;
+  assert.deepEqual(rest, { amount: '180.00', currency: 'TRY', gross: true, servers: 2, invoiced: false });
+  assert.equal(at, (await summary()).subscriptions.find((x) => x.serverId === a.srv.id).periodEnd, 'the day the subscriptions themselves give');
+  // The server's price of now, not the subscription's older amount; several months are charged at once.
+  await a.price('200.00');
+  assert.equal((await next()).amount, '300.00');
+  await pool.query('UPDATE subscriptions SET period_months = 3 WHERE id = $1', [b.sub]);
+  assert.equal((await next()).amount, '420.00');
+  // One that ends with its period does not renew; nor does a server waiting to be deleted.
+  await pool.query('UPDATE subscriptions SET cancel_at_period_end = true WHERE id = $1', [b.sub]);
+  assert.deepEqual([(await next()).amount, (await next()).servers], ['240.00', 1]);
+  await pool.query("UPDATE servers SET delete_at = now() + interval '1 day' WHERE id = $1", [a.srv.id]);
+  n = await next();
+  assert.deepEqual([n.amount, n.servers, n.at], ['1080.00', 1, (await summary()).subscriptions.find((x) => x.serverId === later.srv.id).periodEnd]);
+  await pool.query('UPDATE servers SET delete_at = NULL WHERE id = $1', [a.srv.id]);
+
+  // Its renewal invoice is made (the period ends within the 7 days): the same amount, now marked as invoiced.
+  await pool.query(`UPDATE subscriptions SET period_start = (${day(3)} - interval '1 month')::date, period_end = ${day(3)} WHERE id = $1`, [a.sub]);
+  assert.deepEqual([(await next()).amount, (await next()).invoiced], ['240.00', false]);
+  await runBilling();
+  const inv = await a.renewal();
+  assert.deepEqual([inv.status, inv.total], ['unpaid', '240.00']);
+  n = await next();
+  assert.deepEqual({ ...n, at: null }, { at: null, amount: '240.00', currency: 'TRY', gross: true, servers: 1, invoiced: true });
+  // Paid: that period is settled, and the next renewal is the one after it.
+  assert.equal((await post(`/admin/billing/invoices/${inv.id}/mark-paid`, { method: 'cash' }, admin)).statusCode, 200);
+  n = await next();
+  assert.deepEqual({ ...n, at: null }, { at: null, amount: '1080.00', currency: 'TRY', gross: true, servers: 1, invoiced: false });
+  for (const s of [a, b, later]) await s.end();
+  assert.equal(await next(), null);
 });

@@ -163,3 +163,19 @@ test('at the upgrade a period that ended in the past moves on by whole periods t
   // A month-end day steps as renewals step it (each from the last end, clamped to the month's last day).
   assert.deepEqual(r.skipPeriods('2025-12-31', '2026-01-31', 1, '2026-04-10'), { start: '2026-03-28', end: '2026-04-28', skipped: 3 });
 });
+
+test('the next renewal: the earliest day, one currency, summed; invoiced only once every renewal of that day has its invoice', () => {
+  const part = (day, cents, over = {}) => ({ day, currency: 'TRY', cents, invoiced: false, ...over });
+  assert.equal(r.nextRenewalOf([]), null);
+  assert.deepEqual(r.nextRenewalOf([part('2026-12-05', 12000), part('2026-12-01', 6000), part('2026-12-01', 24000)]),
+    { day: '2026-12-01', currency: 'TRY', cents: 30000, servers: 2, invoiced: false, mixedCurrencies: false });
+  // All of that day's renewals have their unpaid invoice: said so, with their sum.
+  assert.deepEqual(r.nextRenewalOf([part('2026-12-01', 6000, { invoiced: true }), part('2026-12-01', 24000, { invoiced: true }), part('2026-12-09', 100)]),
+    { day: '2026-12-01', currency: 'TRY', cents: 30000, servers: 2, invoiced: true, mixedCurrencies: false });
+  // Only some of them: what is not yet invoiced (the rest is among the open invoices already).
+  assert.deepEqual(r.nextRenewalOf([part('2026-12-01', 6000, { invoiced: true }), part('2026-12-01', 24000)]),
+    { day: '2026-12-01', currency: 'TRY', cents: 24000, servers: 1, invoiced: false, mixedCurrencies: false });
+  // Two currencies on one day: the first by its code, and it is said that there is more.
+  assert.deepEqual(r.nextRenewalOf([part('2026-12-01', 6000), part('2026-12-01', 900, { currency: 'EUR' }), part('2026-12-01', 1100, { currency: 'EUR' })]),
+    { day: '2026-12-01', currency: 'EUR', cents: 2000, servers: 2, invoiced: false, mixedCurrencies: true });
+});

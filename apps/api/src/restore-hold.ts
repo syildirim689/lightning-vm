@@ -8,3 +8,6 @@ export async function restoreHold(): Promise<boolean> {
   return seen.held;
 }
 export function forgetRestoreHold() { seen = { at: 0, held: false }; }
+// What remembers that staff were told about a hold (insights.ts, announceRestoreHold) goes when the hold is gone.
+export const clearRestoreHoldNotice = () =>
+  pool.query("DELETE FROM maintenance_state WHERE key = 'restore_hold_notified' AND NOT EXISTS (SELECT 1 FROM maintenance_state WHERE key = 'restore_hold')").then(() => undefined);

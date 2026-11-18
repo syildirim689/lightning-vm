@@ -52,3 +52,36 @@ export function readAttachments(input: unknown): { files: Upload[]; error: strin
   }
   return { files, error: null };
 }
+
+// What the panel knew about a ticket's server when the ticket was opened: shaped here from one database row (support.ts
+// reads it), so staff see the state of that moment and not of the day they answer. Nothing secret is in it: no
+// passwords, tokens or the owner's notes. traffic is there only for a server with a monthly allowance.
+export type TicketDiagnostics = {
+  capturedAt: string;
+  server: { id: string; name: string; state: string; power: string; platform: string; location: string; plan: string | null; vcpu: number; memoryMb: number; diskGb: number;
+    image: string | null; addresses: string[]; locked: boolean; pendingDeletion: boolean; createdAt: string | null; traffic?: { allowanceGb: number; usedGb: number; throttled: boolean } };
+  operations: { kind: string; status: string; errorCode: string | null; createdAt: string | null; finishedAt: string | null }[];
+  unpaidInvoices: number;
+};
+const isoOf = (v: unknown) => {
+  const t = v instanceof Date ? v.getTime() : typeof v === 'string' && v ? Date.parse(v) : NaN;
+  return Number.isFinite(t) ? new Date(t).toISOString() : null;
+};
+const textOf = (v: unknown) => (typeof v === 'string' ? v : v == null ? '' : String(v));
+export function ticketDiagnostics(r: Record<string, unknown>, capturedAt = new Date()): TicketDiagnostics {
+  const operations = (Array.isArray(r.operations) ? r.operations as Record<string, unknown>[] : []).slice(0, 5);
+  const allowance = Number(r.traffic_gb);
+  return {
+    capturedAt: capturedAt.toISOString(),
+    server: {
+      id: textOf(r.id), name: textOf(r.name), state: textOf(r.state), power: textOf(r.power) || 'unknown', platform: textOf(r.platform), location: textOf(r.location),
+      plan: typeof r.plan === 'string' && r.plan ? r.plan : null, vcpu: Number(r.vcpu) || 0, memoryMb: Number(r.memory_mb) || 0, diskGb: Number(r.disk_gb) || 0,
+      image: typeof r.image === 'string' && r.image ? r.image : null, addresses: (Array.isArray(r.addresses) ? r.addresses : []).filter((a): a is string => typeof a === 'string' && !!a),
+      locked: r.locked === true, pendingDeletion: r.pending_deletion === true, createdAt: isoOf(r.created_at),
+      ...(r.traffic_gb != null && allowance > 0 && { traffic: { allowanceGb: allowance, usedGb: Math.round(((Number(r.traffic_bytes) || 0) / 1e9) * 10) / 10, throttled: r.traffic_throttled === true } }),
+    },
+    operations: operations.map((o) => ({ kind: textOf(o.kind), status: textOf(o.status), errorCode: typeof o.error_code === 'string' && o.error_code ? o.error_code : null,
+      createdAt: isoOf(o.created_at), finishedAt: isoOf(o.finished_at) })),
+    unpaidInvoices: Number(r.unpaid) || 0,
+  };
+}

@@ -20,7 +20,7 @@ import { enqueue, startOperation } from './servers';
 import { finalResult, gateways, needsReview, reviewCodes, sandboxPay, underReview, type Result } from './billing-gateways';
 import { restoreHold } from './restore-hold';
 import { renewalPrice, type CouponUse } from './coupons';
-import { addDays, addMonths, cleanProfile, collectionStep, daysBetween, fromCents, dueDay, hoursDue, invoiceNumber, lineAmounts, periodMonths, prorate, renewalDue, settleSplit, taxFor, toCents, totals, validPrefix } from './billing-rules';
+import { addDays, addMonths, cleanProfile, collectionStep, daysBetween, fromCents, dueDay, hoursDue, invoiceNumber, lineAmounts, nextRenewalOf, periodMonths, prorate, renewalDue, settleSplit, taxFor, toCents, totals, validPrefix } from './billing-rules';
 
 type Db = Pick<Pool, 'query'> | PoolClient;
 type Row = Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
@@ -895,6 +895,35 @@ async function methods() {
   return { cards, balance: s.balance, bankTransfer: s.bankTransfer.enabled ? s.bankTransfer : null, topup: { min: s.topupMin, max: s.topupMax } };
 }
 
+// The next renewal as the run will invoice it (runBilling): the server's price of now (or the subscription's own
+// amount), the coupon if one still applies, for the whole period, with the buyer's tax. A renewal that already has its
+// unpaid invoice counts with that invoice's line. Not counted: a subscription that ends with its period, one whose
+// server is being deleted, and a period already paid for.
+async function nextRenewal(ownerId: string, s: Awaited<ReturnType<typeof settings>>) {
+  const { rows } = await pool.query(`SELECT b.period_end AS at, b.period_end::text AS day, b.amount::text AS amount, trim(b.currency) AS currency, b.period_months, b.coupon_id, b.coupon_left,
+      (SELECT v.price_monthly::text FROM servers v WHERE v.id = b.server_id) AS price,
+      (SELECT sum(l.gross)::numeric(14,2)::text FROM invoice_lines l JOIN invoices i ON i.id = l.invoice_id
+        WHERE l.subscription_id = b.id AND l.period_start = b.period_end AND NOT l.withdrawn AND i.kind = 'renewal' AND i.status = 'unpaid') AS invoiced
+    FROM subscriptions b WHERE b.owner_id = $1 AND b.status IN ('active', 'past_due', 'suspended') AND NOT b.cancel_at_period_end AND b.period_end IS NOT NULL
+      AND NOT EXISTS (SELECT 1 FROM servers v WHERE v.id = b.server_id AND v.delete_at IS NOT NULL)
+      AND NOT EXISTS (SELECT 1 FROM invoice_lines l JOIN invoices i ON i.id = l.invoice_id WHERE l.subscription_id = b.id AND l.period_start = b.period_end AND NOT l.withdrawn AND i.status = 'paid')
+    ORDER BY b.period_end, b.created_at`, [ownerId]);
+  if (!rows.length) return null;
+  // The tax rule of the invoices (createInvoice). If the buyer cannot be read the amount is given before tax, and said so.
+  const tax = await buyerOf(pool, ownerId).then((b) => taxFor(b.country, s)).catch(() => null);
+  const parts = await Promise.all(rows.map(async (b) => {
+    if (b.invoiced !== null) return { day: b.day as string, currency: b.currency as string, cents: toCents(b.invoiced), invoiced: true, gross: true };
+    const monthly = b.price ?? b.amount;
+    const coupon = await renewalPrice(pool, b, monthly).catch(() => null);
+    const unit = toCents(coupon?.monthly ?? monthly);
+    return { day: b.day as string, currency: b.currency as string, invoiced: false, gross: !!tax,
+      cents: tax ? lineAmounts(unit, b.period_months, tax.rate, s.pricesIncludeTax).gross : Math.round(unit * b.period_months) };
+  }));
+  const next = nextRenewalOf(parts)!;
+  const counted = parts.filter((p) => p.day === next.day && p.currency === next.currency && p.invoiced === next.invoiced);
+  return { at: rows.find((b) => b.day === next.day)!.at as Date, amount: fromCents(next.cents), currency: next.currency, gross: counted.every((p) => p.gross), servers: next.servers, invoiced: next.invoiced };
+}
+
 // ---- Customer ----
 
 @Controller('billing') @UseGuards(SessionGuard)
@@ -904,13 +933,15 @@ export class BillingController {
     const s = await settings();
     if (!s.enabled) return { enabled: false };
     const id = req.user.id;
-    const [balance, open, subs, cards, profile] = await Promise.all([
+    const [balance, open, subs, cards, profile, renewal] = await Promise.all([
       balanceOf(pool, id),
       pool.query(`SELECT count(*)::int AS n, count(*) FILTER (WHERE due_at < now())::int AS overdue, coalesce(sum(total - paid_total), 0)::text AS amount, min(currency) AS currency
         FROM invoices WHERE owner_id = $1 AND status = 'unpaid' AND kind <> 'topup'`, [id]),
       pool.query(`SELECT ${subscriptionColumns} FROM subscriptions b WHERE b.owner_id = $1 AND b.status IN ('active', 'past_due', 'suspended') ORDER BY b.period_end`, [id]),
       pool.query('SELECT id, provider, mode, brand, last4, exp_month AS "expMonth", exp_year AS "expYear", is_default AS "isDefault" FROM saved_cards WHERE owner_id = $1 ORDER BY is_default DESC, created_at DESC', [id]),
       pool.query('SELECT 1 FROM billing_profiles WHERE user_id = $1', [id]),
+      // The one line of the dashboard; a figure that cannot be worked out is left out (null), the rest of the summary stays.
+      nextRenewal(id, s).catch(() => { logEvent('error', 'billing_next_renewal_failed'); return null; }),
     ]);
     // Pay as you go: hourly servers, this month's usage so far, and what is left to spend.
     const { rows: hourly } = await pool.query(`SELECT s.id, s.name, s.price_hourly::text AS "priceHourly", trim(s.currency) AS currency, s.billing_hold AS "billingHold",
@@ -922,7 +953,7 @@ export class BillingController {
       perHour: hourly.filter((h) => h.currency === c).reduce((a, h) => a + Number(h.priceHourly), 0).toFixed(4) })));
     return { enabled: true, balance, open: open.rows[0], subscriptions: subs.rows,
       cards: cards.rows.map((c) => ({ ...c, providerName: c.provider === 'sandbox' ? 'Sandbox' : providers[c.provider]?.name ?? c.provider })), profileComplete: !!profile.rowCount, methods: await methods(),
-      autoCharge: s.autoCharge, requirePayment: s.requirePayment, hourly: { enabled: s.hourly && s.balance, minHours: s.hourlyMinHours, servers: hourly, available: left } };
+      autoCharge: s.autoCharge, requirePayment: s.requirePayment, hourly: { enabled: s.hourly && s.balance, minHours: s.hourlyMinHours, servers: hourly, available: left }, nextRenewal: renewal };
   }
 
   @Get('profile')

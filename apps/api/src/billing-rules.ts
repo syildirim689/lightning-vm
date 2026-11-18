@@ -158,3 +158,20 @@ export function skipPeriods(start: string, end: string, months: number, day: str
   while (end < day) { start = end; end = addMonths(end, months); skipped++; }
   return { start, end, skipped };
 }
+
+// The next renewal for the dashboard's one line. Each part is one subscription that will renew: the day its period
+// ends, what the renewal costs, and whether its renewal invoice already exists unpaid. The earliest day wins; on a day
+// with several currencies only one is told (the first by its code), which `mixedCurrencies` says. While some of that
+// day's renewals have no invoice yet, only those are summed (the invoiced ones are already among the open invoices);
+// once all of them are invoiced the whole day is returned with `invoiced`, so it is shown in one place only.
+export type RenewalPart = { day: string; currency: string; cents: number; invoiced: boolean };
+export function nextRenewalOf(parts: RenewalPart[]) {
+  if (!parts.length) return null;
+  const day = parts.reduce((a, p) => (p.day < a ? p.day : a), parts[0].day);
+  const onDay = parts.filter((p) => p.day === day);
+  const currencies = [...new Set(onDay.map((p) => p.currency))].sort();
+  const group = onDay.filter((p) => p.currency === currencies[0]);
+  const open = group.filter((p) => !p.invoiced);
+  const counted = open.length ? open : group;
+  return { day, currency: currencies[0], cents: counted.reduce((a, p) => a + p.cents, 0), servers: counted.length, invoiced: !open.length, mixedCurrencies: currencies.length > 1 };
+}

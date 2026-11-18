@@ -81,3 +81,16 @@ test('sign-in details reset by the first proof of the address: a security notice
   assert.match(e.text.en({}).body, /password, API keys, passkeys, webhooks, connected apps and other sessions.*Forgot password.*not you, contact support/);
   assert.match(e.text.tr({}).body, /parola, API anahtarları, geçiş anahtarları, webhooklar, bağlı uygulamalar ve diğer oturumlar.*Parolamı unuttum.*destek/);
 });
+
+test('a hold after a restore: told to those who can release it, in the inbox and by e-mail, linking to the system page', () => {
+  const e = catalog['admin.restore_hold'];
+  assert.deepEqual([e.audience, e.permission, e.defaults, e.link({})], ['staff', 'system.update', ['inApp', 'email'], '/admin/system']);
+  assert.ok(known.has(e.permission));
+  assert.equal(mailTone('admin.restore_hold'), 'danger');
+  const d = { backup: 'panel-2026-11-01.tar.gz', since: '2026-11-17T09:00:00.000Z' };
+  for (const t of [e.text.tr(d), e.text.en(d)]) assert.ok(t.body.includes(d.backup) && /2026/.test(t.body) && !/undefined|Invalid/.test(t.title + t.body), t.body);
+  assert.match(e.text.en(d).body, /17 November 2026.*release the hold on the System page/);
+  assert.match(e.text.tr(d).body, /17 Kasım 2026.*Sistem sayfasından beklemeyi kaldırın/);
+  // Set by hand, with no backup named and no time: still whole sentences.
+  for (const t of [e.text.tr({ backup: '', since: '' }), e.text.en({ backup: '', since: '' })]) assert.ok(!/undefined|Invalid|\(\)|""/.test(t.body), t.body);
+});

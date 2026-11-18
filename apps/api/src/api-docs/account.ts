@@ -85,8 +85,8 @@ export default {
     tag: 'support',
     summary: { tr: 'Yeni bir destek talebi açar.', en: 'Opens a new support ticket.' },
     details: {
-      tr: 'Kişi başına saatte en fazla 10 talep. Yanıt süresi önceliğe göre başlar (acil 1, yüksek 4, normal 12, düşük 24 saat) ve destek ekibine bildirim gider.',
-      en: 'At most 10 tickets an hour per person. The response deadline starts by priority (urgent 1, high 4, normal 12, low 24 hours) and support staff are notified.',
+      tr: 'Kişi başına saatte en fazla 10 talep. Yanıt süresi önceliğe göre başlar (acil 1, yüksek 4, normal 12, düşük 24 saat) ve destek ekibine bildirim gider. `serverId` verilirse sunucunun o andaki durumu (veritabanındaki haliyle) talebe eklenir; bunu yalnızca personel görür.',
+      en: 'At most 10 tickets an hour per person. The response deadline starts by priority (urgent 1, high 4, normal 12, low 24 hours) and support staff are notified. With `serverId` the server\'s state at that moment (as the database has it) is kept with the ticket; only staff see it.',
     },
     body: [
       { name: 'subject', type: 'string', required: true, text: { tr: 'Konu, 3–160 karakter.', en: 'Subject, 3–160 characters.' } },
@@ -108,7 +108,10 @@ export default {
       en: 'Visible to its owner and to staff with support.view. Only staff see internal notes and staff names; customers get staff messages with no author.',
     },
     params: [ticketId],
-    returns: { tr: 'ticket, messages (ekleriyle) ve çağıranın personel olup olmadığını gösteren staff.', en: 'ticket, messages (with attachments) and staff, whether the caller is staff.' },
+    returns: {
+      tr: 'ticket, messages (ekleriyle) ve çağıranın personel olup olmadığını gösteren staff. Personele ayrıca diagnostics gelir (müşterinin yanıtında bu anahtar hiç yoktur): talep bir sunucuyla açıldıysa o andaki durum, yoksa null: `capturedAt`; `server` (id, name, state, power, platform, location, plan, vcpu, memoryMb, diskGb, image, addresses, locked, pendingDeletion, createdAt ve aylık kotası olan sunucuda traffic: allowanceGb, usedGb, throttled); `operations` (son 5 işlem: kind, status, errorCode, createdAt, finishedAt); `unpaidInvoices` (sunucu sahibinin ödenmemiş fatura sayısı).',
+      en: 'ticket, messages (with attachments) and staff, whether the caller is staff. Staff also get diagnostics (a customer\'s answer has no such key): what was known about the server when the ticket was opened with one, otherwise null: `capturedAt`; `server` (id, name, state, power, platform, location, plan, vcpu, memoryMb, diskGb, image, addresses, locked, pendingDeletion, createdAt and, for a server with a monthly allowance, traffic: allowanceGb, usedGb, throttled); `operations` (the last 5: kind, status, errorCode, createdAt, finishedAt); `unpaidInvoices` (the owner\'s unpaid invoices).',
+    },
   },
   'POST /support/tickets/:id/messages': {
     tag: 'support',

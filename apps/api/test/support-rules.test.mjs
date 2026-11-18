@@ -35,3 +35,30 @@ test('attachments: allowed types whose first bytes match, at most 3, at most 2 M
   assert.equal(readAttachments([1, 2, 3, 4]).error, 'TOO_MANY_FILES');
   assert.deepEqual(readAttachments(undefined), { files: [], error: null });
 });
+
+test('a ticket\'s diagnostics: the server as the database had it, its last five operations, nothing secret', async () => {
+  const { ticketDiagnostics } = await import('../dist/support-rules.js');
+  const op = (n, extra = {}) => ({ kind: 'power_on', status: 'succeeded', error_code: null, created_at: `2026-11-1${n}T08:00:00.123456+00:00`, finished_at: `2026-11-1${n}T08:00:09+00:00`, ...extra });
+  const row = { id: 's1', name: 'web-1', state: 'ready', power: 'poweredOn', platform: 'proxmox', location: 'İstanbul', plan: 'S2', vcpu: 2, memory_mb: 4096, disk_gb: 80, image: 'Ubuntu 24.04',
+    addresses: ['203.0.113.10', '2001:db8::10'], locked: true, pending_deletion: false, created_at: new Date('2026-10-01T09:30:00Z'), traffic_gb: null, traffic_throttled: false, traffic_bytes: 12e9,
+    operations: [op(7, { kind: 'reset', status: 'failed', error_code: 'TASK_FAILED' }), op(6, { status: 'running', finished_at: null }), op(5), op(4), op(3), op(2)], unpaid: 2,
+    // What the row must never carry over, even if a later query selected it.
+    notes: 'root pw on the sticky note', root_password_enc: 'x', app_token_hash: 'y', owner_id: 'u1' };
+  const d = ticketDiagnostics(row, now);
+  assert.deepEqual(d, { capturedAt: '2026-10-26T10:00:00.000Z',
+    server: { id: 's1', name: 'web-1', state: 'ready', power: 'poweredOn', platform: 'proxmox', location: 'İstanbul', plan: 'S2', vcpu: 2, memoryMb: 4096, diskGb: 80, image: 'Ubuntu 24.04',
+      addresses: ['203.0.113.10', '2001:db8::10'], locked: true, pendingDeletion: false, createdAt: '2026-10-01T09:30:00.000Z' },
+    operations: [
+      { kind: 'reset', status: 'failed', errorCode: 'TASK_FAILED', createdAt: '2026-11-17T08:00:00.123Z', finishedAt: '2026-11-17T08:00:09.000Z' },
+      { kind: 'power_on', status: 'running', errorCode: null, createdAt: '2026-11-16T08:00:00.123Z', finishedAt: null },
+      ...[5, 4, 3].map((n) => ({ kind: 'power_on', status: 'succeeded', errorCode: null, createdAt: `2026-11-1${n}T08:00:00.123Z`, finishedAt: `2026-11-1${n}T08:00:09.000Z` })),
+    ],
+    unpaidInvoices: 2 });
+  assert.ok(!/sticky|root_password|token|notes|owner/.test(JSON.stringify(d)));
+  // A custom shape with a monthly allowance, about to be deleted, with no address or operation yet.
+  const bare = ticketDiagnostics({ ...row, plan: null, image: null, addresses: [], operations: null, unpaid: null, power: null, pending_deletion: true, locked: false,
+    traffic_gb: 500, traffic_throttled: true, traffic_bytes: 512.34e9 }, now);
+  assert.deepEqual([bare.server.plan, bare.server.image, bare.server.addresses, bare.server.power, bare.server.pendingDeletion, bare.server.locked, bare.operations, bare.unpaidInvoices],
+    [null, null, [], 'unknown', true, false, [], 0]);
+  assert.deepEqual(bare.server.traffic, { allowanceGb: 500, usedGb: 512.3, throttled: true });
+});

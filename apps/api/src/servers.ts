@@ -28,7 +28,7 @@ import { available, billOrder, billResize, payFromBalance, repriceOpenRenewal, r
 import { heldRefuses, hourlyOf, sumMoney } from './billing-rules';
 import { checkCoupon } from './coupons';
 import { checkResellerRoom, discounted, resellerOf } from './reseller';
-import { forgetRestoreHold, restoreHold } from './restore-hold';
+import { clearRestoreHoldNotice, forgetRestoreHold, restoreHold } from './restore-hold';
 
 type Input = Record<string, unknown>;
 // BullMQ carries only the operation id (also the job id, so re-adding is harmless);
@@ -1087,6 +1087,7 @@ export class ServersAdminController {
   async releaseRestoreHold(@Req() req: AuthedRequest) {
     const { rows: [h] } = await pool.query("DELETE FROM maintenance_state WHERE key = 'restore_hold' RETURNING value, at");
     forgetRestoreHold();
+    await clearRestoreHoldNotice().catch(() => undefined); // a later hold is announced again
     if (h) await audit(req, 'system.restore_hold_released', 'success', req.user.id, { since: h.at, detail: h.value });
     return { held: false, released: !!h };
   }
