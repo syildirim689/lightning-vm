@@ -1075,17 +1075,56 @@ test.describe('server lifecycle (simulator, Turkish customer)', () => {
     await staff.setViewportSize({ width: 1280, height: 720 });
     await ownerOption.click();
     await expect(staff).toHaveURL(/\/admin\/servers\?owner=/);
-    await choose(staff, staff, /Görünen sunucular için işlem/, 'Sil (geri alma süresiyle)');
-    await staff.getByRole('button', { name: /sunucuya uygula/ }).click();
-    // The copy toast is an alertdialog too; the confirmation is the one that explains the delete.
+    // Bulk action: rows are ticked one at a time or all those shown at once, the bar says exactly how many, and the
+    // action applies to the ticked rows ("everything shown" stays a choice of its own).
+    const bulkBar = staff.getByRole('region', { name: 'Toplu işlem' });
+    await expect(bulkBar).toContainText('0 sunucu seçili');
+    await expect(bulkBar.getByRole('button', { name: '0 sunucuya uygula' })).toBeDisabled();
+    await staff.getByRole('checkbox', { name: 'web-1 sunucusunu seç' }).click();
+    await expect(bulkBar).toContainText('1 sunucu seçili');
+    await expect(staff.getByRole('checkbox', { name: 'web-1 sunucusunu seç' })).toHaveAttribute('aria-checked', 'true');
+    await bulkBar.getByRole('button', { name: 'Gösterilen 2 sunucuyu seç' }).click();
+    await expect(bulkBar).toContainText('2 sunucu seçili');
+    await expect(staff.getByRole('checkbox', { name: 'web-2 sunucusunu seç' })).toHaveAttribute('aria-checked', 'true');
+    await expect(bulkBar.getByRole('button', { name: 'Seçilenler (2)' })).toHaveAttribute('aria-pressed', 'true');
+    await expect(bulkBar.getByRole('button', { name: 'Gösterilenlerin tümü (2)' })).toHaveAttribute('aria-pressed', 'false');
+    await choose(staff, bulkBar, /İşlem/, 'Sil (geri alma süresiyle)');
+    await bulkBar.getByRole('button', { name: '2 sunucuya uygula' }).click();
+    // The copy toast is an alertdialog too; the confirmation is the one that explains the delete. It states the count
+    // in its title, its question and on the button that confirms.
     const ask = staff.getByRole('alertdialog').filter({ hasText: 'sahiplerine bildirim gider' });
     await expect(ask).toBeVisible();
+    await expect(ask.getByRole('heading')).toHaveText('Sil (geri alma süresiyle): 2 sunucuya uygula');
+    await expect(ask).toContainText('Seçtiğiniz 2 sunucuda “Sil (geri alma süresiyle)” yapılsın mı?');
+    await expect(ask.getByRole('button', { name: 'Evet, 2 sunucuda: Sil (geri alma süresiyle)' })).toBeVisible();
     for (const width of [390, 1280]) {
       await staff.setViewportSize({ width, height: 900 });
       await staff.waitForTimeout(400);
       await staff.screenshot({ path: `test-results/tour/admin-bulk-delete-${width}.png` });
     }
     await ask.getByRole('button', { name: 'Vazgeç' }).click();
+    await expect(ask).toBeHidden();
+    // Saved views: the owner filter gets a name, is found again after the list is loaded afresh without filters,
+    // brings its address parameters back when applied, and can be deleted.
+    await staff.getByRole('button', { name: 'Kayıtlı görünümler', exact: true }).click();
+    await staff.getByRole('dialog').getByLabel('Geçerli süzgeçleri kaydet').fill('Müşterinin sunucuları');
+    await staff.getByRole('dialog').getByRole('button', { name: 'Kaydet', exact: true }).click();
+    await expect(staff.getByText('“Müşterinin sunucuları” görünümü kaydedildi.').first()).toBeVisible();
+    await expect(staff.getByRole('dialog').getByRole('status')).toHaveText('“Müşterinin sunucuları” görünümü etkin.');
+    await staff.keyboard.press('Escape');
+    await expect(staff.getByRole('button', { name: 'Kayıtlı görünümler. Etkin görünüm: Müşterinin sunucuları', exact: true })).toBeVisible();
+    await staff.goto('/admin/servers');
+    await expect(staff).not.toHaveURL(/owner=/);
+    await staff.getByRole('button', { name: 'Kayıtlı görünümler', exact: true }).click();
+    await staff.getByRole('button', { name: 'Müşterinin sunucuları görünümünü uygula', exact: true }).click();
+    await expect(staff).toHaveURL(/\/admin\/servers\?owner=/);
+    await expect(staff.getByRole('button', { name: `Sahip süzgecini kaldır: ${user.email}` })).toBeVisible();
+    await expect(staff.getByText('2 sunucudan 2 gösteriliyor')).toBeVisible();
+    await staff.getByRole('button', { name: 'Kayıtlı görünümler. Etkin görünüm: Müşterinin sunucuları', exact: true }).click();
+    await staff.getByRole('button', { name: 'Müşterinin sunucuları görünümünü sil', exact: true }).click();
+    await expect(staff.getByText('“Müşterinin sunucuları” görünümü silindi.').first()).toBeVisible();
+    await expect(staff.getByRole('dialog').getByText(/Henüz kayıtlı görünüm yok/)).toBeVisible();
+    await staff.keyboard.press('Escape');
     await staff.context().close();
 
     // Both go: web-1 from the grace period (bulk delete while two are listed) with "delete for good now", then web-2 at once.
