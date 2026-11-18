@@ -1776,21 +1776,21 @@ test.describe('people, settings and smart features (English browser)', () => {
     // here. The filter and the search land in the address and are still there after a reload.
     await choose(page, page, /Status/, 'Awaiting review');
     await expect(page).toHaveURL(/status=review/);
-    await expect(page.getByText('No payments are awaiting review')).toBeVisible();
+    await expect(page.getByRole('grid', { name: 'Payments' }).getByText('No payments are awaiting review')).toBeVisible();
     const paymentSearch = page.getByRole('searchbox', { name: 'Invoice number, e-mail or provider reference' });
     await paymentSearch.fill('no-such-reference');
     await expect(page).toHaveURL(/q=no-such-reference/);
-    await expect(page.getByText('No payments match the search')).toBeVisible();
+    await expect(page.getByRole('grid', { name: 'Payments' }).getByText('No payments match the search')).toBeVisible();
     await page.reload();
     await expect(page).toHaveURL(/tab=payments/);
     await expect(page).toHaveURL(/status=review/);
     await expect(page).toHaveURL(/q=no-such-reference/);
     await expect(paymentSearch).toHaveValue('no-such-reference');
     await expect(page.getByRole('button', { name: /Status/ })).toContainText('Awaiting review');
-    await expect(page.getByText('No payments match the search')).toBeVisible();
+    await expect(page.getByRole('grid', { name: 'Payments' }).getByText('No payments match the search')).toBeVisible();
     await paymentSearch.fill('');
     await expect(page).not.toHaveURL(/q=/);
-    await expect(page.getByText('No payments are awaiting review')).toBeVisible();
+    await expect(page.getByRole('grid', { name: 'Payments' }).getByText('No payments are awaiting review')).toBeVisible();
     await page.goto(`/admin/billing/invoices/${invoiceId}`);
     await page.getByRole('button', { name: 'Refund', exact: true }).click();
     await page.getByLabel('Amount', { exact: true }).fill('50');
