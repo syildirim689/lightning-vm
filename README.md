@@ -80,7 +80,7 @@ girmeniz gerekmez. Özelliklerin tamamı yalnızca VMware'de vardır; diğer alt
   faturalar; hızlı işlemler (yeni destek talebi, bakiye yükleme, yeni sunucu, SSH anahtarı ekleme, onay sorarak
   sunucuyu sıfırlama)
 - **Kayıtlı görünümler:** sunucu listesindeki süzgeç ve sıralama adla kaydedilir, tek tıkla geri çağrılır; biri
-  varsayılan yapılabilir. Yalnızca o tarayıcıda saklanır ve çıkışta silinmez
+  varsayılan yapılabilir. Hesapla birlikte saklanır: her cihazda görünür, yalnızca sahibi görür
 - **API anahtarları ve API belgeleri:** arama, süzgeçler, örnek istekler, OpenAPI ve PDF indirme (istekler tarayıcıdan
   çalıştırılamaz). **Webhook'lar:** imzalı, yeniden denenen, teslimat kaydı ve sınama düğmesiyle
 - **Verilerimi indir:** hesabın panelde tutulan verileri tek JSON dosyası olarak (parola, oturum ve gizli anahtarlar hariç)
@@ -120,8 +120,8 @@ girmeniz gerekmez. Özelliklerin tamamı yalnızca VMware'de vardır; diğer alt
   her sayfanın üstünde görünür ve panel beklemede bulunduğunda `system.update` izni olanlara bir kez bildirilir
 - **Kayıtlı görünümler ("Görünümler"):** Sunucular, Kullanıcılar, Destek kuyruğu, Denetim kaydı ile
   Faturalandırma'daki fatura ve ödeme listelerinde süzgeç ve sıralamayı adla kaydetme, uygulama, yeniden adlandırma,
-  silme ve varsayılan yapma (liste başına en çok 12). Sunucuda değil, **o tarayıcıda** kullanıcı ve liste başına
-  saklanır ve **çıkışta silinmez:** görünümdeki arama terimi ya da sahip e-postası o tarayıcının deposunda kalır
+  silme ve varsayılan yapma (liste başına en çok 12). **Hesapta** saklanır (her cihazda görünür, yalnızca sahibi
+  görür); kullanıcı adına oturum açan personel o kişinin görünümlerini uygular ama değiştiremez
 - **Komut paletinde son açılanlar** personel için bakılan kullanıcıları ve yönetimdeki faturaları da tutar
 - **Enerji raporu:** kWh, maliyet ve karbon tahmini (işlemci kullanımından hesaplanır; XCP-ng, oVirt, KVM ve
   Incus'ta anlamlı değildir)
@@ -143,8 +143,12 @@ girmeniz gerekmez. Özelliklerin tamamı yalnızca VMware'de vardır; diğer alt
   oturumlar ve giriş geçmişi
 - **İnceleme bekleyen ödemeler:** Faturalandırma → Ödemeler'de "İnceleme bekleyen" süzgeci ve arama (ikisi de
   adreste tutulur); her ödemede gerekçe, bekleme süresi ve faturaya bağlantı; özet sayfasında uyarı; ödeme incelemeye
-  girdiğinde personele bildirim
-- **Bayiler**, faturalama, kuponlar, itiraz yönetimi ve e-Fatura / e-Arşiv (yedi entegratörden yalnızca İzibiz ve
+  girdiğinde personele bildirim. Faturayı "Ödeme kaydet" ile kapatmak bekleyen ödemeyi de kapatır; parası gelmeyen
+  ödemenin incelemesi "İncelemeyi kapat" ile, hiçbir şey ödenmiş sayılmadan kapatılır
+- **Bayiler:** bayi müşteri hesabı açar, müşterisi adına sunucu sipariş eder ve ücretini öder. Müşteri hesabını kimin
+  yönettiğini görür, bir kez bilgilendirilir, bayinin yaptıklarını etkinlik listesinde izler ve ayrılabilir; ayrılan
+  müşterinin abonelikleri, fiyatı değişmeden, kendisine geçer
+- Faturalama, kuponlar, itiraz yönetimi ve e-Fatura / e-Arşiv (yedi entegratörden yalnızca İzibiz ve
   Uyumsoft'a, kendi test ortamlarında gerçek e-Arşiv faturası gönderildi; diğer beşi belgelere göre yazıldı, denenmedi)
 - **WHMCS / WISECP modülleri** (`integrations/`): satışı o sistem yapar, panel bu sunuculara fatura kesmez; sahibi
   bu sunucuları panelden büyütemez, disk ekleyemez ya da kopyalayamaz (paket değişikliği o sistemden yapılır) ve
@@ -159,7 +163,8 @@ girmeniz gerekmez. Özelliklerin tamamı yalnızca VMware'de vardır; diğer alt
 - Panel içi, tarayıcı (Web Push), e-posta, SMS ve **mesajlaşma uygulamaları:**
   Telegram, WhatsApp, Slack, Discord, Microsoft Teams, Google Chat, Mattermost, Rocket.Chat, Matrix, ntfy,
   Gotify, Pushover ve imzalı JSON webhook
-- Önce yöneticinin kuralı, sonra kullanıcının seçimi; her kanal test edilebilir (hesap başına saatte 6 test)
+- Önce yöneticinin kuralı, sonra kullanıcının seçimi; her kanal test edilebilir (hesap başına saatte 6 test,
+  mesajlaşma adresi başına da saatte 6)
 - Prometheus/Alertmanager alarmları panel bildirimi olarak gelir
 
 </td><td valign="top">
@@ -171,8 +176,8 @@ girmeniz gerekmez. Özelliklerin tamamı yalnızca VMware'de vardır; diğer alt
   ve özel HTTP API
 - **Ödeme:** kartla tahsilat yalnızca **iyzico, PayTR, Craftgate, Param ve Stripe** ile (ve panelin kendi test
   sağlayıcısıyla) yapılır. Bunlardan **Param'da ödeme kendiliğinden işlenmez:** müşteri Param'ın sayfasında öder,
-  ödeme "onay bekliyor" kalır ve personel tahsilatı Param panelinde görüp faturayı elle kapatır (ödeme incelemeye
-  girdiğinde personele bildirim gider; bekleyenler Yönetim → Faturalandırma → Ödemeler'de "İnceleme bekleyen" süzgecindedir); Param yalnızca TRY faturalar için sunulur. Listedeki diğer 41 sağlayıcının (Türkiye'deki ödeme kuruluşları, banka sanal POS'ları,
+  ödeme "onay bekliyor" kalır ve personel tahsilatı Param panelinde görüp faturayı elle kapatır (Yönetici
+  paneli, "İnceleme bekleyen ödemeler"); Param yalnızca TRY faturalar için sunulur. Listedeki diğer 41 sağlayıcının (Türkiye'deki ödeme kuruluşları, banka sanal POS'ları,
   Papara, PayPal, Mollie, Adyen, Checkout.com, Razorpay, Square, Paddle) yalnızca hesap bilgileri kaydedilir ve çoğu
   para hareketi olmayan bir sorguyla sınanır; **bunlarla ödeme alınamaz** ([docs/payments.md](docs/payments.md))
 - **CAPTCHA:** Cloudflare Turnstile, reCAPTCHA v2/v3, hCaptcha · **Ters DNS:** PowerDNS
@@ -186,14 +191,19 @@ girmeniz gerekmez. Özelliklerin tamamı yalnızca VMware'de vardır; diğer alt
 - CSRF koruması, hız sınırları, istek gövdesi sınırları, şifreli sırlar (ana anahtar), oturum yönetimi
 - Kimlik rotalarında izin listesi: panelin kullanmadığı giriş yolları kapalıdır; dizin ve SSO hesapları yalnızca kendi
   yollarından girer; iki adımlı doğrulaması olan hesap e-posta kodu ya da giriş bağlantısıyla giremez
+- Dizin ve SSO oturumu, kullanılsa da, açıldıktan `SESSION_TTL_HOURS` saat sonra biter; dizin ya da SSO ayarını
+  kaydeden kişinin izinleri o kaynaktan giren her hesabın izinlerini kapsamalıdır
 - Kullanıcı adına oturum açan personel hesapta kalıcı iz bırakamaz (passkey, bağlı hesap, parola, iki adım, webhook,
   fatura e-postası); bu oturum bir saat sonra ve onu açan personelin yetkisi kalktığında (rol düşürme, yasak) biter
 - E-posta ve SMS ayarları, giriş bağlantısı / kod ile girişi açma, iki adım zorunluluğunu düşürme ve CAPTCHA'yı
   zayıflatma yalnızca yöneticiye açıktır
 - SMS ve e-posta gönderen her yol hesap ve hedef başına sınırlıdır (doğrulama kodları, sıfırlama postası, bildirim
   testi, talep yanıtları)
-- Adresi doğrulanmamış bir hesap ilk kez giriş bağlantısı ya da e-posta koduyla girdiğinde, hesapta önceden kurulmuş
-  parola, anahtar ve bağlantılar silinir (hesabı adresin sahibi açmamış olabilir)
+- Adresi kanıtlanmamış bir hesap adresini ilk kez kanıtladığında (giriş bağlantısı, e-posta kodu ya da postayla
+  parola sıfırlama) hesapta önceden kurulmuş parola, anahtarlar, kayıtlı kartlar ve bağlantılar silinir (hesabı
+  adresin sahibi açmamış olabilir); sunucu devralmak kanıtlanmış adres ister
+- Oturum bittiğinde ve aynı tarayıcıda panel başkası için açıldığında tarayıcıdaki taslaklar, son açılanlar ve yarım
+  sipariş silinir
 - Proxmox'ta her istek VM'in beklenen adını taşır: yeniden kullanılan bir VM numarası başka bir sunucuya işlem yaptırmaz
 - İptalden (çıkış, yasak, devir) önce alınmış konsol ve terminal biletleri de reddedilir
 - **Mükerrer işlem koruması:** Idempotency-Key, sunucu başına tek açık işlem ve çift tıklamada ikinci isteğin reddi
@@ -208,6 +218,8 @@ girmeniz gerekmez. Özelliklerin tamamı yalnızca VMware'de vardır; diğer alt
   kapanır ve panel, yönetici serbest bırakana kadar **beklemede** kalır (işlem, zamanlama, silme ve tahsilat yapmaz)
 - **Güncelleme:** önce yedek, migration uyumluluğu denetimi, başarısızlıkta container'ların geri dönüşü. Kendiliğinden
   yalnızca daha yeni sürüme geçer; açıkça bir sürüm verildiğinde eski bir sürüme dönüşü yalnızca migration denetimi durdurur
+- **Kuyrukta hesap payı:** tek bir hesap worker'ın bütün işlem yerlerini dolduramaz (`OPERATIONS_PER_OWNER`,
+  varsayılan yerlerin yarısı); personelin ve tahsilatın işlemleri bekletilmez
 - İsteğe bağlı Prometheus, Grafana, Loki, Alertmanager. Kurulumda açılır; sonradan yalnızca komut satırından açılıp
   kapatılır (`install.sh monitoring on|off`). Panelde bunun düğmesi yalnız kurulum sihirbazında vardır
 - Türkçe / İngilizce arayüz, koyu / açık tema, telefondan geniş ekrana tam uyumlu
@@ -267,7 +279,8 @@ sunucunun kopyası çıkarılamaz (kopya yalnızca şablondan). Her platformun a
 
 | Ne | Nerede |
 |---|---|
-| **Kayıtlı görünümler, sıradaki adım ve talepte sunucu durumu (2026-11-18).** *Personel:* Sunucular, Kullanıcılar, Destek kuyruğu, Denetim kaydı, fatura ve ödeme listelerinde kayıtlı görünümler (tarayıcıda saklanır, çıkışta silinmez); Yönetim → Sunucular'da toplu işlem için satır satır seçim; destek talebinde sunucunun talep açıldığı andaki durumu (yalnızca personel, migration `082`); komut paletinin son açılanlarında kullanıcılar ve yönetimdeki faturalar; panel geri yüklemeden sonra beklemede bulunduğunda `admin.restore_hold` bildirimi; Kötüye kullanım sayacı artık yalnızca kimsenin onaylamadığı bulguları sayar. *Müşteri:* başarısız işlemden sonra önerilen sıradaki adım; bildirim zilinde yinelenen bildirimlerin tek satırda toplanması; "Yaklaşan ödemeler"de yenileme tutarı artık API'nin hesabıdır (hesaplanabildiyse vergi dahil, faturası kesildiyse iki kez gösterilmez); sunucu listesinde kayıtlı görünümler. İşletmecinin yapacağı bir şey yok | Yönetim → Sunucular · Kullanıcılar · Destek · Denetim kaydı · Faturalandırma · Ctrl+K · sunucu sayfası · bildirim zili · Genel bakış · [docs/upgrade-notes.md](docs/upgrade-notes.md) |
+| **Güvenlik turundan kalanların kapatılması ve hesapta saklanan görünümler (2026-11-18).** İkinci güvenlik turunun incelemeden ya da değiştirmeden bıraktığı konular kaynak incelemesi ve testlerle ele alındı (bağımsız doğrulanmış bulgular değildir). İşletmeciyi en çok etkileyenler: dizin ve SSO kullanıcıları her `SESSION_TTL_HOURS` saatte bir yeniden giriş yapar; adresi kanıtlanmamış hesapta ilk "Parolamı unuttum" sıfırlaması API anahtarlarını, SSH anahtarlarını ve **kayıtlı kartları** siler (otomatik yenileme için yeniden kart gerekir; personelin kefil olduğu mevcut hesapları migration `085` kanıtlanmış işaretler, kayıtla ya da bayi eliyle açılmış hesaplar kanıtlanmamış kalır); sunucu devralmak kanıtlanmış adres ister; tek bir hesap işlem kuyruğunu dolduramaz (`OPERATIONS_PER_OWNER`); ayar personeli dizin ayarını kaydederken reddedilebilir; faturayı "Ödeme kaydet" ile kapatmak inceleme bekleyen ödemeyi de kapatır ve yeni "İncelemeyi kapat" işlemi vardır; bayiden ayrılan müşterinin abonelikleri kendisine geçer ve bayi müşterileri bilgilendirilir; yükseltmeden sonraki ilk açılışta tarayıcıdaki taslaklar bir kez silinir. *Ayrıca:* kayıtlı görünümler artık hesapta saklanır (migration `083`), CI'da bağımlılık denetimi gerekçeli ve süreli istisna listesiyle çalışır. Entegrasyon paketi (196 testten 192'si geçti, 4'ü atlandı) ve uçtan uca paket (31 / 31) `eaa0a4e` commit'inde çalıştırıldı. **Yükseltmeden önce okuyun** | Hesabım → Profil · Etkinlik · Yönetim → Faturalandırma → Ödemeler · Kullanıcılar · Ayarlar → Dizin · `.env` · [docs/upgrade-notes.md](docs/upgrade-notes.md) · [docs/security-audit.md](docs/security-audit.md) |
+| **Kayıtlı görünümler, sıradaki adım ve talepte sunucu durumu (2026-11-18).** *Personel:* Sunucular, Kullanıcılar, Destek kuyruğu, Denetim kaydı, fatura ve ödeme listelerinde kayıtlı görünümler (o sürümde tarayıcıda saklanıyordu; artık hesapta, üst satıra bakın); Yönetim → Sunucular'da toplu işlem için satır satır seçim; destek talebinde sunucunun talep açıldığı andaki durumu (yalnızca personel, migration `082`); komut paletinin son açılanlarında kullanıcılar ve yönetimdeki faturalar; panel geri yüklemeden sonra beklemede bulunduğunda `admin.restore_hold` bildirimi; Kötüye kullanım sayacı artık yalnızca kimsenin onaylamadığı bulguları sayar. *Müşteri:* başarısız işlemden sonra önerilen sıradaki adım; bildirim zilinde yinelenen bildirimlerin tek satırda toplanması; "Yaklaşan ödemeler"de yenileme tutarı artık API'nin hesabıdır (hesaplanabildiyse vergi dahil, faturası kesildiyse iki kez gösterilmez); sunucu listesinde kayıtlı görünümler. İşletmecinin yapacağı bir şey yok | Yönetim → Sunucular · Kullanıcılar · Destek · Denetim kaydı · Faturalandırma · Ctrl+K · sunucu sayfası · bildirim zili · Genel bakış · [docs/upgrade-notes.md](docs/upgrade-notes.md) |
 | **Günlük işleri kısaltan eklemeler (2026-11-17).** *Personel:* inceleme bekleyen ödemeler için süzgeç, arama, gerekçe, bekleme süresi ve faturaya bağlantı; özet sayfasında uyarı ve `billing.payment_review` bildirimi; menüde sayaçlar; geri yükleme beklemesi her sayfada; üç yeni içgörü (inceleme bekleyen ödemeler, geri yükleme beklemesi, karar bekleyen işlemler); kötüye kullanım ve abonelik süzgeçleri adreste. *Müşteri:* "Yaklaşan ödemeler"; komut paletinde fatura arama, son açılan talepler ve faturalar, hızlı işlemler; siparişte paylaşılabilir yapılandırma bağlantısı; sunucu kartı menüsünde ad değiştirme, kilit ve silme; düz HTTP'de de çalışan kopyalama düğmeleri; yeniden kurulumda önce / sonra özeti; 30 günden eski anlık görüntüler için öneri; adresin ilk kanıtında giriş bilgileri silindiğinde `auth.credentials_reset` bildirimi. İşletmecinin yapacağı bir şey yok | Yönetim → Faturalandırma → Ödemeler · yönetim menüsü · Genel bakış (müşteri ve yönetim) · Ctrl+K · Yeni sunucu · Sunucular · sunucu sayfası · [docs/upgrade-notes.md](docs/upgrade-notes.md) |
 | **Güvenlik denetimi, ikinci tur (2026-11-17):** ilk turun incelemediği alanlar ve ilk turun düzeltmelerinin yeniden denetimi; 26 doğrulanmış bulgu (10 orta, 15 düşük, 1 bilgi amaçlı) düzeltildi. İşletmeciyi en çok etkileyenler: geri yüklemeden sonra panel beklemede açılır ve serbest bırakılması gerekir; `install.sh behind-proxy` artık `--public-url` ister; WHMCS / WISECP yalnızca kendi açtığı hesapları eşler (diğerleri için devralma rotası); bildirim e-postaları yeniden gönderiliyor (Node 22'de gönderilmiyordu); Proxmox'ta VM numarası sunucuya bağlanır; yeni hız sınırları. Yükseltmeden sonra proxy ve günlük toplayıcısı yeniden başlatılmalıdır. **Yükseltmeden önce okuyun** | [docs/upgrade-notes.md](docs/upgrade-notes.md) · [docs/security-audit.md](docs/security-audit.md) |
 | **Güvenlik denetimi, ilk tur (2026-11-17):** 22 doğrulanmış bulgu (1 yüksek, 10 orta, 11 düşük) düzeltildi. İşletmeciyi en çok etkileyenler: Param ödemeleri artık elle onaylanır, yedekler imzalanır (eski yedekler yalnızca `--allow-unsigned` ile geri yüklenir), panelin kullanmadığı giriş rotaları kapandı, WHMCS / WISECP sunucuları panelden büyütülemez. Yükseltmeden sonra proxy yeniden başlatılmalıdır. **Yükseltmeden önce okuyun** | [docs/upgrade-notes.md](docs/upgrade-notes.md) · [docs/security-audit.md](docs/security-audit.md) |
@@ -518,14 +531,16 @@ Simülatör (govmomi `vcsim`) gerçek bir vCenter olmadan tüm akışı çalış
 
 | Test | Komut |
 |---|---|
-| API birim testleri (146 test) | `cd apps/api && npm test` |
-| API entegrasyon testleri (PostgreSQL + Redis; güvenlik denetiminin düzeltmeleri için eklenen `security-auth`, `security-billing` ve `security-servers` testleri bunların içindedir) | `cd apps/api && npm run test:integration` |
-| API entegrasyon testlerinin tamamı (PostgreSQL, Redis, vcsim, VMware adaptörü ve worker'ı Docker'da kendisi kurar). Son olarak 2026-11-18'de Docker'lı bir Linux sunucusunda çalıştırıldı: 177 testten 173'ü geçti, 4'ü PowerDNS, ISO deposu ya da konsol ağ geçidi istediği için atlandı. | `cd apps/api && npm run test:integration:full` |
+| API birim testleri (157 test) | `cd apps/api && npm test` |
+| API entegrasyon testleri (PostgreSQL + Redis; güvenlik denetiminin düzeltmeleri için eklenen `security-auth`, `security-billing`, `security-servers` ve `security-leftovers` testleri ile `saved-views` testleri bunların içindedir) | `cd apps/api && npm run test:integration` |
+| API entegrasyon testlerinin tamamı (PostgreSQL, Redis, vcsim, VMware adaptörü ve worker'ı Docker'da kendisi kurar). Son olarak 2026-11-18'de, `eaa0a4e` commit'inde, Docker'lı bir Linux sunucusunda çalıştırıldı: 196 testten 192'si geçti, 4'ü PowerDNS, ISO deposu ya da konsol ağ geçidi istediği için atlandı, başarısız olan yok. | `cd apps/api && npm run test:integration:full` |
 | Go servisleri | `cd services/vmware && go test ./...` |
 | Proxmox (26), XCP-ng (19), oVirt (15), Hyper-V (18), libvirt (19) ve Incus (11 test) adaptörleri | `cd services/proxmox && npm test` (aynısı `services/xcpng`, `services/ovirt`, `services/hyperv`, `services/libvirt` ve `services/incus` için; libvirt'in dört betik testi yalnızca Linux'ta çalışır, başka yerde atlanır) |
-| Web birim testleri (96 test: çeviriler, simgeler, pencere düzenleri ve diğer hesaplar) | `cd apps/web && npm test` |
-| Worker (sözdizimi denetimi ve 43 birim testi) | `cd apps/worker && npm run check` |
-| Uçtan uca (Playwright, çalışan bir Compose kurulumuna karşı) | `cd apps/web && npx playwright test` |
+| Web birim testleri (117 test: çeviriler, simgeler, pencere düzenleri, tarayıcıda tutulanlar ve diğer hesaplar) | `cd apps/web && npm test` |
+| Worker (sözdizimi denetimi ve 50 birim testi) | `cd apps/worker && npm run check` |
+| Uçtan uca (Playwright, çalışan bir Compose kurulumuna karşı). Son olarak `eaa0a4e` commit'inde, demo kurulumunda, boş bir veritabanı ve VMware simülatörüyle çalıştırıldı: 31 testin 31'i geçti. | `cd apps/web && npx playwright test` |
+
+2026-11-18 takibinde entegrasyon paketine 19 test eklendi: `saved-views` (9), `security-leftovers` (4), `security-auth` (5; biri migration `085` için) ve `security-billing` (1). Hepsi yukarıdaki 196 testin içindedir ve geçti; aynı turun uçtan uca adımları da 31 testin içindedir.
 
 Uçtan uca yolculuklar tek bir masaüstü boyutunda (1280 px) koşar; aralarında birkaç ekran ayrıca 390 ve 768 px'te
 taşma için denetlenir. Ayrı bir döngü sayfaları 390 / 768 / 1920 px'te açar ve yalnızca sayfa başlığının göründüğüne
@@ -534,10 +549,17 @@ ve yana taşma olmadığına bakar; bu genişliklerde işlev sınanmaz.
 CI (`.github/workflows/ci.yaml`): birim işleri (API, web, worker, altı Node adaptörü, Go servisleri) `main`'e her
 gönderimde, pull request'lerde ve elle çalışır. Servis ya da bütün bir Compose kurulumu isteyen işler (API
 entegrasyon testleri, imaj derlemeleri, kurulum + uçtan uca) yalnızca elle tetiklenir (GitHub Actions → *Run workflow*).
-Adaptör testleri gerçek bir hipervizöre değil, platformu taklit eden sahte sunuculara karşı çalışır. Veritabanı şeması
-`apps/api/migrations` altındaki 82 dosyadadır (`001`–`082`; `077`–`080` ikinci güvenlik turuna aittir, `081`
-ödemenin ne zamandan beri inceleme beklediğini, `082` destek talebi açıldığında sunucunun durumunu tutar) ve
-`migrate` servisiyle kendiliğinden uygulanır. Katkı kuralları: [CONTRIBUTING.md](CONTRIBUTING.md).
+Adaptör testleri gerçek bir hipervizöre değil, platformu taklit eden sahte sunuculara karşı çalışır. API, web ve
+worker işleri testlerden sonra bağımlılık denetimini de çalıştırır (`scripts/audit.mjs`, `npm audit --omit=dev`
+çıktısını okur): yüksek ya da kritik her açık işi düşürür. Yalnızca `scripts/audit-allowlist.json` dosyasındaki
+istisnalar geçer; her istisna tek bir uygulama, paketin ulaşıldığı yol, bir gerekçe ve bir son gün taşır ve açıktan
+etkilenmeyen bir sürüm yayımlandığında ya da açık artık bildirilmediğinde kendisi işi düşürür. Şu an tek istisna
+vardır: `apps/web` içinde `picomatch` (GHSA-fc5q-39xc-vjpf; yalnızca next-intl'in ileti çıkarıcısı üzerinden
+ulaşılır, etkilenmeyen bir sürümü yoktur), 2026-12-18'e kadar. Veritabanı şeması
+`apps/api/migrations` altındaki 85 dosyadadır (`001`–`085`; `077`–`080` ikinci güvenlik turuna aittir, `081`
+ödemenin ne zamandan beri inceleme beklediğini, `082` destek talebi açıldığında sunucunun durumunu, `083` kayıtlı
+görünümleri, `084` bir işlemin kimin kuyruk payından sayıldığını ve bayi müşterisinin ne zaman bilgilendirildiğini
+tutar, `085` personelin kefil olduğu mevcut hesapları kanıtlanmış işaretler) ve `migrate` servisiyle kendiliğinden uygulanır. Katkı kuralları: [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## ⚠️ Bilinen sınırlar
 
@@ -554,38 +576,49 @@ Adaptör testleri gerçek bir hipervizöre değil, platformu taklit eden sahte s
   doğrulanamadığı için ödemenin kanıtı sayılmaz: ödeme "onay bekliyor" kalır, personel Param panelinde doğrulayıp
   faturayı elle kapatır; kendiliğinden işleyen bir Param tahsilatı yoktur. Param yalnızca TRY için sunulur ve bu
   akış **sağlayıcıyla teyit edilmedi**. **İncelemeye giren ödemeler kendiliğinden kapanmaz:** Param'ın onay
-  bekleyen ödemeleri ile tutarı tutmayan ya da sağlayıcının incelemeye aldığı ödemeler Yönetim → Faturalandırma →
-  Ödemeler'de "İnceleme bekleyen" süzgecinde, gerekçesi ve bekleme süresiyle durur; ödeme incelemeye girdiğinde
-  `billing.manage` izni olan personele bir kez bildirim gider (varsayılan: panel ve e-posta). Karar yine elledir:
-  personel sağlayıcının panelinde doğrular ve faturayı kendi sayfasındaki "Ödeme kaydet" ile kapatır
-  ([docs/payments.md](docs/payments.md)).
-- **Yaklaşan ödemeler:** sıradaki yenilemenin tutarını artık API hesaplar (faturalama özetinin `nextRenewal` alanı):
-  sunucunun şimdiki fiyatı, varsa kupon, tüm dönem ve alıcının vergisi; tutarın yanında "vergi dahil" yazar. Yenilemenin
-  faturası kesildiyse yenileme satırı kalkar, yani aynı ödeme iki kez gösterilmez. Kalan sınırlar: alıcının vergi
+  bekleyen ödemeleri ile tutarı tutmayan ya da sağlayıcının incelemeye aldığı ödemelerde karar elledir. Personel
+  sağlayıcının panelinde doğrular ve faturayı "Ödeme kaydet" ile kapatır ya da parası gelmeyen ödemenin incelemesini
+  "İncelemeyi kapat" ile kapatır (ekran ve bildirim: Özellikler, Yönetici paneli). Bekleyen ödemesi olan faturadan
+  otomatik tahsilat çekmez, ama **hatırlatma, gecikme ve askıya alma adımları sürer:** karar gecikirse müşterinin
+  sunucusu askıya alınabilir. Bu bilerek olduğu gibi bırakıldı. Akış, panelin test sağlayıcısında (Sandbox)
+  `4000 0000 0000 4954` numaralı kartla denenebilir ([docs/payments.md](docs/payments.md)).
+- **Yaklaşan ödemeler:** yenileme tutarı API'nin hesabıdır (`nextRenewal`) ve faturası kesilen yenileme iki kez
+  gösterilmez. Kalan sınırlar: alıcının vergi
   kuralı okunamazsa tutar vergisizdir ve "vergi dahil" notu çıkmaz; aynı gün birden çok para biriminde yenileme varsa
   yalnızca biri (kodu alfabetik olarak ilk olan) gösterilir; o günün yenilemelerinin bir kısmı faturalanmışsa satır
   yalnızca henüz faturalanmamış olanları toplar; `nextRenewal`, faturası kesilmiş bir yenilemede fatura satırının
   tamamını verir, kısmen ödenmiş faturada kalan tutarı değil (blok o durumda bu satırı göstermez; kalan tutar fatura
   satırındadır); faturaların dönem sonundan 7 günden daha önce kesildiği bir kurulumda (varsayılan 7 gün) faturası
   kesilmiş yenileme, vadesine 7 gün kalana kadar blokta görünmez ([docs/billing.md](docs/billing.md)).
-- **Kayıtlı görünümler tarayıcıda kalır:** görünümler sunucuya gönderilmez; o tarayıcının deposunda kullanıcı ve
-  liste başına tutulur, başka tarayıcıda ya da cihazda görünmez. Son açılanlar ve taslakların tersine **çıkışta
-  silinmez:** bir görünüme kaydedilmiş arama terimi ya da sahip e-postası, o tarayıcının deposunda durmaya devam
-  eder (başka bir hesap bunları panelde görmez, ama tarayıcının deposuna erişebilen biri okuyabilir). Ortak
-  bilgisayarda görünümleri "Görünümler" menüsünden silin ya da site verilerini temizleyin.
-- **Yeni ekranlar elle gözden geçirilmedi:** 2026-11-17 ve 2026-11-18'de eklenen ekranların hiçbiri tarayıcıda elle
-  gözden geçirilmedi. Uçtan uca testlerin kapsadıkları: sipariş bağlantısının okunması; komut paletinden fatura
-  bulunması ve hızlı işlemler (bakiye yükleme, yeni destek talebi); ödemeler sayfasında "İnceleme bekleyen" süzgeci
-  ve aramanın adreste kalması (yalnızca bekleyen ödeme yokken, boş listeyle); `/admin/attention` yanıtı (personele
-  `200`, müşteriye `403`; sayısı sıfır olan girişte rozet olmaması); sunucu kartı menüsünde ad değiştirme ve kilit
-  (silme yalnızca menüde görünmesiyle); yeniden kurulum özeti; IP adresinin kopyalanması. **Ne uçtan uca testi olan
-  ne de elle bakılanlar:** kayıtlı görünümler, toplu işlemde satır seçimi, destek talebindeki sunucu durumu paneli,
-  başarısız işlemden sonraki "sıradaki adım" bildirimi, bildirim zilindeki gruplama, "Yaklaşan ödemeler", her
-  sayfadaki geri yükleme şeridi ve sayısı sıfırdan büyük menü rozetleri. Bunların arkasındaki hesaplar birim
-  testleriyle sınanır; talepteki sunucu durumu, `admin.restore_hold` bildirimi ve `nextRenewal` için
-  `security-billing` entegrasyon testlerine üç test eklendi (üçü de 2026-11-18 tarihli tam çalıştırmada
-  geçti). 30 günden eski anlık görüntü önerisi listeyi platforma sorar; yalnızca sayımı birim testiyle
-  sınandı, gerçek bir platformda denenmedi.
+- **Kayıtlı görünümlerin eski kopyaları tarayıcıda bir süre kalabilir:** önceki sürümün o tarayıcıda bıraktığı
+  görünümler, sahibi listeyi açtığında hesaba bir kez gönderilir ve tarayıcıdan silinir; gönderilmemiş olanlar o
+  tarayıcıda bir oturum bittiğinde silinir. Yükseltmeden sonra panelin hiç açılmadığı bir tarayıcıda eski kopya
+  (içindeki arama terimi ya da sahip e-postasıyla) o zamana kadar durur
+  ([docs/operations-modules.md](docs/operations-modules.md)).
+- **Tarayıcıdaki veriler:** taslaklar, son açılanlar, yarım sipariş ve tablo sıralamaları oturum bittiğinde ve panel
+  aynı tarayıcıda başkası için açıldığında ("kullanıcı adına giriş" dahil) silinir; tercihler (tema, yazı boyutu, dil)
+  kalır. Silme, panelin o tarayıcıda yeniden açılmasına ya da oturumun orada bitmesine bağlıdır: kapatılıp bir daha
+  açılmayan tarayıcıda içerik durur. Kural birim testlidir; gerçek bir tarayıcıda ortak bilgisayar senaryosuyla
+  denenmedi.
+- **Yeni ekranlar elle gözden geçirilmedi:** 2026-11-17 ve 2026-11-18'de eklenen ekranların hiçbirine tarayıcıda
+  elle bakılmadı; bu ekranlar yalnızca uçtan uca paketin baktığı kadar görüldü (31 / 31,
+  [Geliştirme ve testler](#-geliştirme-ve-testler)). Paketin bu ekranlarda kapsadıkları: sipariş bağlantısının
+  okunması; komut paletinden fatura bulunması, hızlı işlemler (bakiye yükleme, yeni destek talebi) ve personelin son
+  açılanlarında bakılan kullanıcı; `/admin/attention` yanıtı (personele `200`, müşteriye `403`; sayısı sıfır olan
+  girişte rozet olmaması); sunucu kartı menüsünde ad değiştirme ve kilit (silme yalnızca menüde görünmesiyle);
+  yeniden kurulum özeti; IP adresinin kopyalanması; yönetimde toplu işlem için satır seçimi; kayıtlı bir görünümün
+  hesaptaki kopyaya karşı kaydedilmesi, uygulanması ve silinmesi (yalnızca yönetimdeki sunucu listesinde); destek
+  talebindeki sunucu durumu bölümü (personelde var, müşteride yok); bildirim zilindeki gruplama; "Yaklaşan
+  ödemeler"de vadesi yaklaşan fatura; ödemeler sayfasında "İnceleme bekleyen" süzgeci ve aramanın adreste kalması;
+  inceleme bekleyen bir ödemenin yolu (Sandbox'ın inceleme kartıyla ödeme, müşterinin "Ödemeniz inceleniyor" notu,
+  Faturalandırma girişinde sayısı 1 olan rozet, özetteki uyarı, listedeki satır, personelin "İncelemeyi kapat" ile
+  kapatması ve rozetin kalkması).
+  **Uçtan uca testi hiç olmayanlar:** her sayfadaki geri yükleme şeridi, başarısız işlemden sonraki "sıradaki adım"
+  bildirimi, Sunucular ve Kötüye kullanım girişlerinde sayısı sıfırdan büyük rozet, "Yaklaşan ödemeler"deki yenileme
+  ve saatlik bakiye satırları, "Ödeme kaydet"in bekleyen ödemeyi kapatması, Hesap sayfasındaki bayi kartı ve
+  "Bayiden ayrıl", personelin kullanıcı özetinden "Bayiden çıkar" ile müşteri ayırması ve tarayıcıdaki içeriğin hesap
+  değişiminde silinmesi. Bunların arkasındaki kurallar birim ya da entegrasyon testlerindedir. 30 günden eski anlık
+  görüntü önerisi listeyi platforma sorar; yalnızca sayımı birim testiyle sınandı, gerçek bir platformda denenmedi.
 - **Gerçek hipervizör:** altı yeni adaptörden yalnızca Incus gerçek bir sunucuda çalıştırıldı, o da yalnızca
   konteynerlerle. Proxmox VE, XCP-ng, oVirt, Hyper-V ve KVM (libvirt) adaptörleri **gerçek bir hipervizörde hiç
   çalıştırılmadı**; testleri platformu taklit eden sahte sunuculara karşıdır.
@@ -595,12 +628,24 @@ Adaptör testleri gerçek bir hipervizöre değil, platformu taklit eden sahte s
   çalışır. Baştan sona denetim turunda değişen
   faturalama davranışlarının (otomatik yenileme, vadesi geçen faturalar, sanal veri merkezleri) çoğu için entegrasyon
   testi **yazılmadı**: mevcut testler yalnız eski davranışın bozulmadığını gösterir.
-- **Güvenlik denetimi kısmidir:** iki tur yapıldı, ikisi de tek tarama dalgasıyla. İkinci turda dizin (LDAP) ve SSO
-  girişindeki dört düzeltme **yeniden denetlenemedi** (projenin entegrasyon testleri kapsar), denetimin sonradan
-  önerdiği altı alan **incelenmedi** ve dört aday bağımsız bir doğrulamadan geçmedi; bunlardan bayilerle ilgili ikisi
-  değiştirilmedi. Düzeltmeler gerçek hipervizörlerde, gerçek bir Proxmox kümesinde ve gerçek bir Param hesabıyla
-  doğrulanmadı; kurulum betiğinin yolları yalnızca sahte dosyalarla denendi
+  2026-11-18 takibinin 19 testi de bu paketin içindedir; son tam çalıştırmanın sonucu
+  [Geliştirme ve testler](#-geliştirme-ve-testler) tablosundadır.
+- **Güvenlik denetimi kısmidir:** iki tur yapıldı, ikisi de tek tarama dalgasıyla. İlk turun bulgu çıkarmadan
+  kapattığı **65 inceleme birimi hiç yeniden incelenmedi.** İkinci turun yeniden denetleyemediği dizin (LDAP) ve SSO
+  düzeltmeleri, sonradan önerilen altı alan ve bayilerle ilgili iki aday 2026-11-18'de ele alındı, ama **bağımsız bir
+  denetim turuyla değil, kaynak incelemesi ve testlerle:** tarama dalgası, ikinci bir denetleyici ve sandbox'ta
+  yeniden üretme yoktur; orada yapılanlar doğrulanmış bulgu sayılmaz ve kendileri de ayrıca denetlenmedi. Hiçbir
+  düzeltme gerçek hipervizörlerde, gerçek bir Proxmox kümesinde, gerçek bir Param üye işyeri hesabıyla ya da gerçek
+  bir dizin sunucusu ve SSO sağlayıcısıyla doğrulanmadı; kurulum betiğinin yolları (kilit ve panel için yazılan durum
+  dosyaları dahil) yalnızca sahte dosyalarla, `dash` ve `bash` altında denendi
   ([docs/security-audit.md](docs/security-audit.md)).
+- **Güvenlik takibinde bilerek olduğu gibi bırakılanlar:** dizinde kapatılan bir hesabın kişisel API anahtarları,
+  hesap panelde yasaklanana ya da devre dışı bırakılana kadar çalışır. İnceleme bekleyen ödemesi olan faturada
+  hatırlatma ve askı adımları sürer. Kuyruktaki hesap payı beklerken işlemin süresi işlemeye devam eder ve pay,
+  birlikte hareket eden birden çok hesabı sınırlamaz. Bayinin müşterisi adına yaptıklarından yalnızca sunucu
+  işlemleri, siparişler ve hesabın açılması müşterinin etkinlik listesindedir; bayiden ayrılma, bayinin tam o anda
+  verdiği bir siparişle çakışabilir; yalnızca kapatılan (kaldırılmayan) bayi abonelikleri ödemeye devam eder. Adresin
+  ilk kanıtında sunucular ve içlerindekiler hesapta kalır; panel bunu yalnızca personele not düşer.
 - **İkinci güvenlik turundan açık kalanlar kapandı (biri kısmen):** ödeme incelemeye girdiğinde personele bildirim
   gider ve yönetimdeki ödemeler sayfası bekleyenleri ayrı gösterir; adresin ilk kanıtında (aşağıda) hesaptan bir şey
   silindiyse kullanıcıya `auth.credentials_reset` bildirimi gider (silinecek bir şeyi olmayan hesaba gitmez). Yeniden
@@ -612,11 +657,17 @@ Adaptör testleri gerçek bir hipervizöre değil, platformu taklit eden sahte s
 - **İzleme:** kurulumdan sonra panelden açılıp kapatılamaz (`install.sh monitoring on|off`).
 - **Küme (cluster):** birden çok sunucuda çalışma bir tasarımdır, yazılmadı ([docs/cluster.md](docs/cluster.md)).
 - **E-posta adresi doğrulama yok:** kayıtla açılan hesabın e-posta adresi doğrulanmaz. (SSO, dizin ve faturalama
-  entegrasyonu üzerinden gelen hesaplar doğrulanmış sayılır; bayinin açtığı müşteri hesapları doğrulanmamış başlar.)
-  Adresi doğrulanmamış bir hesap ilk kez giriş bağlantısı ya da e-posta koduyla girdiğinde (ikisi de varsayılan
-  kapalıdır) adres kanıtlanmış sayılır ve hesapta önceden kurulanlar bir kez silinir: parola, bağlı girişler, diğer
-  oturumlar, API anahtarları, passkey'ler, webhook'lar, mesajlaşma ve tarayıcı bildirimi bağlantıları, doğrulanmış
-  telefon. Parolayla kaydolmuş müşteri "Parolamı unuttum" ile yeni parola belirler ([docs/auth.md](docs/auth.md)).
+  entegrasyonu üzerinden gelen hesaplar, kurulum yöneticisi ve personelin açtığı hesaplar kanıtlanmış sayılır; bayinin
+  açtığı müşteri hesapları kanıtlanmamış başlar. Yükseltmede migration `085`, personelin kefil olduğu mevcut hesapları
+  da kanıtlanmış işaretler: `user` dışında bir rolü olanları ve denetim kaydına göre Yönetim → Kullanıcılar'dan
+  açılmış olanları. Kayıtla açılmış ve bayinin açtığı mevcut hesaplar kanıtlanmamış kalır.) Adresi
+  kanıtlanmamış bir hesap ilk kez giriş bağlantısı ya da e-posta koduyla girdiğinde (ikisi de varsayılan kapalıdır)
+  **ya da ilk kez postayla parola sıfırladığında** adres kanıtlanmış sayılır ve hesapta önceden kurulanlar bir kez
+  silinir: bağlı girişler, diğer oturumlar, API anahtarları, passkey'ler, webhook'lar, mesajlaşma ve tarayıcı
+  bildirimi bağlantıları, telefon, kayıtlı SSH anahtarları, **kayıtlı kartlar** (otomatik yenileme için yeniden kart
+  gerekir), fatura e-postası ve telefonu, açık devir teklifleri; bağlantı ya da kodla girişte parola da. Sunucular,
+  imajlar, bakiye ve talepler kalır. Kayıtla açılmış her müşteri hesabı kanıtlanmamış olduğundan bu, ilk "Parolamı
+  unuttum" kullanan her müşteriyi etkiler. Sunucu devralmak kanıtlanmış adres ister ([docs/auth.md](docs/auth.md)).
 - **WhatsApp:** Meta Cloud API ve onaylı bir mesaj şablonu gerekir. **Telegram:** botta webhook tanımlı olmamalı.
 - **Incus / LXD:** ilk sürüm; **gerçek bir Incus 6.0 sunucusunda konteynerlerle uçtan uca denendi** (oluşturma, cloud-init, güç, snapshot, disk, boyut, devralma, silme). Sanal makineler, LXD ve kümeler denenmedi.
   Konsol, firewall, hız sınırlama, yedek, kişisel imaj, ISO, özel ağ, taşıma, grafikler, trafik sayımı ve işlemci
@@ -661,8 +712,9 @@ Kasım 2026'da yapay zekâ destekli bir güvenlik denetimi iki tur hâlinde yap�
   (önceki sahibin o anda yolda olan isteği, devirden önce kaydettiği iptal) ve Proxmox'ta bir VM numarası yeniden
   kullanıldıktan sonra.
 - **İlk turun düzeltmeleri tuttu mu:** 22 düzeltmenin 17'si gerçek PostgreSQL üzerinde yeniden denetlendi ve
-  tutuyor. 4'ü (dizin ve SSO girişi) yeniden **denetlenemedi**: denetleyici, modelin güvenlik önlemlerince durduruldu;
-  bunları projenin entegrasyon testleri kapsar. Yeniden denetim, bir düzeltmenin eksik kaldığı beş yer buldu
+  tutuyor. 4'ü (dizin ve SSO girişi) ikinci turda yeniden **denetlenemedi**: denetleyici, modelin güvenlik
+  önlemlerince durduruldu (bunlara sonradan kaynak incelemesiyle bakıldı; aşağıdaki "Takip" maddesi). Yeniden denetim,
+  bir düzeltmenin eksik kaldığı beş yer buldu
   (yenileme faturasının fiyatı, Param dönüşü, üç ek rotasında gövde boyutu, üç entegrasyonda kayıtlı sırlar,
   faturalama sisteminin hesap eşlemesi); beşi de düzeltildi.
 - **Ne düzeltildi (ilk tur, özet):** Param dönüşü artık ödemenin kanıtı sayılmaz ve Param yalnızca TRY alır; boyut
@@ -680,12 +732,26 @@ Kasım 2026'da yapay zekâ destekli bir güvenlik denetimi iki tur hâlinde yap�
   süren işlemin geri alınması; iptalden önce alınmış konsol biletleri; destek yanıtlarında hız sınırı.
 - **Yol üstünde bulunan işlev hatası:** bildirim e-postaları Node 22'de bir tarih biçimi seçeneği hatası yüzünden
   gönderilmiyordu; düzeltildi.
-- **Ne doğrulanmadı:** ikinci turda dizin ve SSO girişinin yeniden denetimi yapılamadı, denetimin sonradan önerdiği
-  altı alan incelenmedi, üç konu işletmecinin kararına ya da denetimine bırakıldı (üçü de değiştirildi), bir aday
-  reddedildi ve dört aday bağımsız bir doğrulama almadı (ikisi değiştirildi; bayilerle ilgili ikisi değiştirilmedi).
-  Düzeltmeler birim testleriyle ve gerçek PostgreSQL / Redis üzerinde entegrasyon testleriyle doğrulandı; gerçek
-  hipervizörlerde, gerçek bir Proxmox kümesinde ve gerçek bir Param üye işyeri hesabıyla **doğrulanmadı**; kurulum
-  betiğinin yolları yalnızca sahte dosyalarla denendi.
+- **Takip (2026-11-18), denetim turu değil:** ikinci turun açık bıraktıkları kaynak incelemesi ve testlerle ele
+  alındı. Bunlar bağımsız doğrulanmış bulgular **değildir** ve 48'e sayılmaz. Dizin ve SSO'da kimlik belirteciyle
+  girişin reddi tutuyor; üç düzeltme eksikti ve tamamlandı (oturumun sabit süresi; dizine tek yazımla sorma ve ayar
+  testinin giriş sınırından düşmesi; ayarı kaydedenin o kaynaktaki her hesabı kapsaması ve silinen rolün
+  eşlemelerden çıkması). Önerilen altı alanın hepsine bakıldı: adresi kanıtlanmamış hesaplar (parola sıfırlama da
+  kanıt sayılır; SSH anahtarları, kayıtlı kartlar ve fatura iletişimi de silinir; devralma kanıt ister), inceleme
+  bekleyen ödemeler ("Ödeme kaydet" bekleyen ödemeyi kapatır, yeni "İncelemeyi kapat", otomatik tahsilat bekler),
+  mesajlaşma bağlantılarında bütçe ve kendi sunucusunu yazan kullanıcıya karşı sunucunun metnini göstermeme, oturum
+  sonunda tarayıcıda kalanlar, işlem kuyruğunda hesap payı ve kurulum betiğinin kilit ve durum dosyaları. Bayilerle
+  ilgili iki aday değiştirildi (müşteri bilgilendirilir ve ayrılabilir; ayrılınca ödeme de müşteriye geçer).
+- **Ne doğrulanmadı:** ikinci turda dizin ve SSO girişinin yeniden denetimi yapılamadı ve denetimin sonradan önerdiği
+  altı alan denetim sürecinde incelenmedi (ikisi de sonradan yalnızca kaynak incelemesiyle ele alındı), üç konu
+  işletmecinin kararına ya da denetimine bırakıldı (üçü de değiştirildi), bir aday reddedildi ve dört aday bağımsız
+  bir doğrulama almadı (dördü de değiştirildi; bayilerle ilgili ikisi takipte). İlk turun bulgu çıkarmadığı 65
+  inceleme birimi hiç yeniden incelenmedi. Düzeltmeler birim testleriyle ve gerçek PostgreSQL / Redis üzerinde
+  entegrasyon testleriyle doğrulandı; gerçek hipervizörlerde, gerçek bir Proxmox kümesinde, gerçek bir Param üye
+  işyeri hesabıyla ve gerçek bir dizin sunucusuyla **doğrulanmadı**; kurulum betiğinin yolları yalnızca sahte
+  dosyalarla denendi.
+  Takibin birim ve entegrasyon testleri geçiyor; son çalıştırmanın sonucu
+  [Geliştirme ve testler](#-geliştirme-ve-testler) bölümündedir.
 
 Tam özet: [docs/security-audit.md](docs/security-audit.md) (İngilizce). İşletmeciyi etkileyen değişiklikler:
 [docs/upgrade-notes.md](docs/upgrade-notes.md).
@@ -700,7 +766,8 @@ görüntüleriyle geri bildirim verdi; kodu, testleri, belgeleri ve kurulum beti
 [Claude Code](https://claude.com/claude-code) (Anthropic) yazdı. Her adımda şu kurallara uyuldu:
 
 - Her özellik için birim / entegrasyon / uçtan uca test; her arayüz değişikliği telefon, tablet ve geniş ekranda
-  ekran görüntüsüyle kontrol edildi.
+  ekran görüntüsüyle kontrol edildi. 2026-11-17 ve 2026-11-18'in ekranları bunun dışındadır: uçtan uca paket
+  görüntülerini aldı, ama hiçbirine tarayıcıda elle bakılmadı ([Bilinen sınırlar](#-bilinen-sınırlar)).
 - Her commit öncesi bağımlılık açıkları (npm audit, govulncheck, Dependabot) kontrol edildi.
 - Kullanıcının sunucuya girmesi gerekmeyecek şekilde her işlem panelden yapılabilir tasarlandı.
 
@@ -757,13 +824,25 @@ What is not the same everywhere (the table under "Platform kapsamı" above has e
   web UI, adapters and installer (49 changes, most of them in billing), then round one of the security audit below
   (Param payments confirmed by hand, signed backups, closed sign-in routes) and round two (the panel is on hold
   after a restore until released, `install.sh behind-proxy` needs `--public-url`, the billing integration matches
-  only accounts it created, new send limits; restart the proxy and the log collector after upgrading). Read
+  only accounts it created, new send limits; restart the proxy and the log collector after upgrading), and the
+  security follow-up of 2026-11-18 below (directory and single sign-on users sign in again every
+  `SESSION_TTL_HOURS`, the first password reset by mail on an unproven account removes credentials and saved cards once;
+  migration `085` marks the existing accounts staff vouched for as proven, self-registered and reseller-created
+  ones stay unproven). Read
   [docs/upgrade-notes.md](docs/upgrade-notes.md) (Turkish) before you update.
-- **Tests:** unit tests: API 146, worker 43, web 96, Proxmox adapter 26, plus the other adapters'. The full
+- **Tests:** unit tests: API 157, worker 50, web 117, Proxmox adapter 26, plus the other adapters'. The full
   integration test runner (`npm run test:integration:full`) sets up PostgreSQL, Redis, the simulator, the VMware
-  adapter and the worker in Docker. Last run on 2026-11-18 on a Linux host with Docker: 173 of 177 tests passed, 4 were skipped (they need PowerDNS, an ISO storage or the console gateway). It includes the security tests of both rounds
-  (`security-*.test.mjs`), which run against real PostgreSQL and Redis. Most of the billing behaviour changed in
-  the full-audit round has no integration test of its own. The database schema is 82 migrations (`001`–`082`).
+  adapter and the worker in Docker. Last run on 2026-11-18 at commit `eaa0a4e` on a Linux host with Docker: 196
+  tests, 192 passed, 4 were skipped (they need PowerDNS, an ISO storage or the console gateway), none failed. The
+  count includes the security tests of both rounds (`security-*.test.mjs`) and the 19 tests of the follow-up of
+  2026-11-18; they run against real PostgreSQL and Redis. Most of the billing behaviour changed in the full-audit
+  round has no integration test of its own. The end-to-end suite (Playwright) ran at the same commit on the demo
+  deployment, with a fresh database and the VMware simulator: 31 of 31 passed. The database schema is 85
+  migrations (`001`–`085`).
+  CI runs a dependency audit after the unit tests (`scripts/audit.mjs`): any high or critical advisory fails,
+  except entries in `scripts/audit-allowlist.json`, each with a scope, a reason and an expiry date (one today:
+  `picomatch` in `apps/web`, GHSA-fc5q-39xc-vjpf, until 2026-12-18); an entry stops excusing as soon as an
+  unaffected release exists.
 - **Private repository installs:** give `get.sh` the access token with `--token-file FILE` or `GIT_TOKEN` in the
   environment (`sudo --preserve-env=GIT_TOKEN sh`); `--token` works but is visible in the process list.
 - **Backups** are encrypted and signed with `secrets/backup.key` (`NAME.tar.enc` plus `NAME.tar.enc.hmac`). Restore
@@ -788,7 +867,8 @@ What is not the same everywhere (the table under "Platform kapsamı" above has e
   reinstall dialog; a finding for snapshots older than 30 days; the `auth.credentials_reset` notification.
 - **What was open after the second security round is closed, one item in part:** staff are notified when a payment
   enters review and the admin payments page lists such payments; a user is notified when the first proof of an
-  unverified address (first sign-in by e-mail link or code) removed something from the account. The reinstall
+  unverified address (first sign-in by e-mail link or code or, since 2026-11-18, the first password reset by mail) removed something
+  from the account. The reinstall
   dialog gained only the summary of what stays and what is erased.
 - **Added on 2026-11-18 (no operator action; migration `082` runs by itself).** Staff: saved views ("Görünümler")
   on the server list, users, the support queue, the audit log and the invoice and payment lists: save, apply,
@@ -803,10 +883,45 @@ What is not the same everywhere (the table under "Platform kapsamı" above has e
   staff must look first); the notification bell joins repeated notifications about the same thing into one row
   with a count; saved views on their own server list; the renewal in "upcoming charges" is now the API's own figure
   (`nextRenewal` in the billing summary).
-- **Saved views stay in the browser.** They are not sent to the server: they are kept in that browser's storage per
-  user and per list, and unlike the recent list and drafts they are **not removed at sign-out**. A search term or
-  an owner's e-mail saved in a view stays in that browser's storage until the view is deleted or the site data is
-  cleared.
+- **Saved views are kept with the account** (since the follow-up of 2026-11-18; migration `083`, API
+  `/saved-views`): every device shows them and only their owner sees them; staff signed in as a user can apply that
+  person's views but not change them. Views an earlier version left in a browser are uploaded once when their owner
+  opens the list and then removed there; those not uploaded are removed when a session ends in that browser. In a
+  browser where the panel is never opened again, the old copy stays until then.
+- **Security follow-up on 2026-11-18 (read the upgrade notes; migrations `083` to `085` run by themselves).** What
+  round two had left unreviewed or unchanged was worked through **by source review with tests, not by an audit
+  round**; these are not independently validated findings. Directory and single sign-on: the ID-token refusal
+  holds; three fixes were incomplete and are finished (such sessions end `SESSION_TTL_HOURS` after sign-in; an
+  address without an account is put to the directory in one plain spelling and the settings test counts against the
+  per-address limit; saving directory or single sign-on settings needs permissions covering every account behind
+  that source, and a deleted role leaves the mappings). Unproven addresses: the first password reset by mail now
+  counts as the first proof, which also removes saved SSH keys, saved cards (automatic renewal needs a card again),
+  the billing e-mail and phone, a pending second step, trusted browsers and open server offers; accepting a
+  transferred server needs a proven address; the setup administrator and staff-created accounts are proven from the
+  start, reseller-created ones are not. Migration `085` marks the accounts staff had already vouched for as proven
+  (any role other than `user`, or created under Admin → Users according to the audit log); self-registered and
+  reseller-created accounts stay unproven, and for those the first password reset by mail removes saved cards, SSH
+  keys, API tokens and the rest once. Payments under review: "mark paid" closes the invoice's held payments, a
+  new staff action closes a review without settling anything, automatic charging skips such an invoice, PayTR's
+  amount check uses the signed total; the sandbox card `4000 0000 0000 4954` yields a payment held for review
+  (`FRAUD_REVIEW`, in sandbox mode only). Operations
+  queue: one account can run only `OPERATIONS_PER_OWNER` operations at once (default half of
+  `OPERATIONS_CONCURRENCY`, 0 off); staff and billing operations are never held. Messaging connections: budgets for
+  creating and testing, and no remote text from self-hosted connectors. Resellers: a customer sees who manages the
+  account, is notified once and can leave; when a customer leaves or is taken out, or the reseller is removed, the
+  subscriptions move to the customer, the reseller's untouched renewal invoices are cancelled, other open invoices
+  stay with the reseller and prices do not change; `GET /admin/resellers/:id` lists a reseller's customers and
+  staff release one from the user summary dialog. Installer: private creation and rename into place for the files
+  written for the panel, stricter lock file rules, takeover of a maintenance directory that is not root's
+  (`W_MAINT_DIR`). Browser storage: drafts, recent items and the order being composed are removed at every end of a
+  session, when another account opens the panel in the same browser and at both ends of "sign in as"; once at the
+  first load after upgrading.
+- **Left as it is after the follow-up:** personal API tokens of a directory account keep working until staff ban or
+  disable the account; reminders and suspension still run while a payment is held for review; an operation's
+  deadline keeps running while it waits for its account's share, and accounts acting together are not limited; of a
+  reseller's actions only server operations, orders and the creation of the account appear in the customer's
+  activity, and leaving can race with an order placed at that moment; 65 review units of round one were never
+  reviewed again.
 - **Limits of the new parts:** the upcoming renewal amount now includes tax and is no longer shown twice once the
   renewal has its invoice. What remains: when the buyer's tax rule cannot be read the amount is before tax (and is
   not labelled as including tax); when one day has renewals in several currencies only one is shown (the first by
@@ -814,15 +929,23 @@ What is not the same everywhere (the table under "Platform kapsamı" above has e
   invoiced renewal `nextRenewal` gives the invoice line in full, not what is left on a partly paid invoice (the
   block shows the invoice then, not this line); where invoices are made more than 7 days before the period ends
   (the default is 7), an invoiced renewal is not in the block until its invoice is due within 7 days. None of the
-  screens added on 2026-11-17 and 2026-11-18 was looked at by hand in a browser. The end-to-end suite covers:
-  reading an order link; finding an invoice and the quick actions (top up, new ticket) in the command palette; the
-  review filter and search on the payments page staying in the address (with an empty list only); the answer of
-  `/admin/attention` (200 for staff, 403 for customers, no badge for a count of zero); rename and lock in the
-  server card's menu; the reinstall summary; copying an IP address. Neither an end-to-end test nor a look by hand:
-  saved views, ticking rows for the bulk action, the ticket's server-state panel, the next-step notice, grouping
-  in the bell, "upcoming charges", the restore-hold bar and menu badges with a count above zero. Three integration
-  tests were added for the ticket's server state, the restore-hold notification and `nextRenewal`; they are not
-  in the count of the full run above. The snapshot finding was not tried against a real platform.
+  screens added on 2026-11-17 and 2026-11-18 was looked at by hand in a browser; they were seen only as far as the
+  end-to-end suite looks (31 of 31, under Tests above). On these screens it covers: reading an order link; finding
+  an invoice, the quick actions (top up, new ticket) and a looked-up user in the recent list of the command
+  palette; the answer of `/admin/attention` (200 for staff, 403 for customers, no badge for a count of zero);
+  rename and lock in the server card's menu; the reinstall summary; copying an IP address; ticking rows for the
+  admin bulk action; saving, applying and deleting a saved view against the account's copy (on the admin server
+  list only); the ticket's server-state panel (there for staff, absent for the customer); grouping in the bell; an
+  invoice in "upcoming charges"; the review filter and search on the payments page staying in the address; and the
+  path of a payment held for review (paid with the sandbox review card, the customer's "under review" notice, the
+  Billing entry in the menu with a count of one, the notice on the overview, the row in the list, staff closing
+  the review and the count going away).
+  No end-to-end test at all: the restore-hold bar, the next-step notice after a failed operation, a badge above
+  zero on the Servers and Abuse entries, the renewal and hourly lines of "upcoming charges", "mark paid" closing a
+  held payment, the reseller card and leaving, staff releasing a customer from a reseller, and the removal of
+  browser content when the account changes. The rules behind them are in unit or integration tests; the three
+  integration tests for the ticket's server state, the restore-hold notification and `nextRenewal` are in the
+  count of the full run and passed. The snapshot finding was not tried against a real platform.
 
 > [!WARNING]
 > This project was **vibe-coded**: almost all of the code was written by Anthropic's Claude Code, steered and
@@ -849,10 +972,16 @@ acted on old orders. All 48 are fixed. Round one found no way for one customer t
 through the customer routes; round two found such paths behind preconditions a customer cannot choose (a hand-over
 in progress, a reused Proxmox VM number), and they are fixed. Both rounds were **partial passes**: in round two the
 directory and single sign-on re-check and six further areas were not reviewed, three leads were left to the
-operator (all three changed), and four candidates got no independent verdict (two were changed; two about resellers
-were not). The fixes were verified by unit tests and by integration tests on real PostgreSQL and Redis, not against
-real hypervisors, a real Proxmox cluster or a real Param merchant account, and the installer paths were exercised
-with dummy files only. Details: [docs/security-audit.md](docs/security-audit.md). To report a vulnerability, do not
+operator (all three changed), and four candidates got no independent verdict (two were changed then, the two about
+resellers in the follow-up). The fixes were verified by unit tests and by integration tests on real PostgreSQL and
+Redis, not against real hypervisors, a real Proxmox cluster, a real Param merchant account or a real directory
+server, and the installer paths were exercised with dummy files only. On 2026-11-18 the items round two had left
+open (the directory and single sign-on re-check, the six further areas, the two reseller candidates) were worked
+through by source review with tests. That follow-up is **not an audit round**: no hunting wave, no independent
+verifier, nothing reproduced in the audit sandbox; its items are not validated findings and are not among the 48.
+The 65 review units round one closed without a finding were never reviewed again.
+Its unit tests and its integration tests pass (the run under Tests above).
+Details: [docs/security-audit.md](docs/security-audit.md). To report a vulnerability, do not
 open a public issue; follow [SECURITY.md](SECURITY.md).
 
 Quick start on Ubuntu 22.04 / 24.04 / 26.04:

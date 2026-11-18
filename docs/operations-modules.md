@@ -118,7 +118,7 @@ Kurallar `apps/api/src/smart-rules.ts` içindedir ve birim testleri vardır. Ver
   değer yok sayılır, saatlik dönem yalnızca hesapta saatlik ödeme açıksa alınır. Okunduktan sonra adres temizlenir.
   Hiçbir değer kullanılamıyorsa seçimler değişmez ve bir uyarı gösterilir.
 - **Son açılanlar:** komut paleti, bu tarayıcıda son açılan 8 sunucu, destek talebi ve faturayı gösterir
-  (`localStorage`; oturum kapanınca silinir). Personel için aynı liste bakılan kullanıcıları (kullanıcı özeti
+  (`localStorage`; oturum kapanınca silinir, [aşağıda](#tarayıcıda-tutulanlar-ve-oturum-sonu)). Personel için aynı liste bakılan kullanıcıları (kullanıcı özeti
   açıldığında, kullanıcı listesinde onu bulan adresle) ve yönetimdeki fatura sayfalarını da tutar. Yönetim sayfasına
   giden bir kayıt yalnızca o sayfayı şu anda açabilen hesaba gösterilir (`users.view`, `billing.view`, `support.view`,
   `servers.view_all`).
@@ -147,20 +147,31 @@ Kurallar `apps/api/src/smart-rules.ts` içindedir ve birim testleri vardır. Ver
   adla kaydedilir, tek tıkla geri çağrılır, yeniden adlandırılır, güncellenir ve silinir (silme, bildirimdeki "Geri
   al" ile dönülebilir). Listeler: müşterinin sunucu listesi; yönetimde Sunucular, Kullanıcılar, Destek kuyruğu,
   Denetim kaydı, Faturalandırma'da faturalar ve ödemeler (her birinin görünümleri ayrıdır).
-  - Liste başına en çok 12 görünüm, ad en çok 40 karakter. Aynı adla kaydetmek var olanı günceller.
+  - Liste başına en çok 12 görünüm, ad en çok 60 karakter. Aynı adla kaydetmek var olanı günceller; ad aynı listede
+    büyük/küçük harf ve Türkçe harf ayrımı olmadan benzersizdir.
   - Bir görünüm **varsayılan** yapılabilir: liste süzgeçsiz açıldığında kendiliğinden uygulanır. Adreste listenin
     bir süzgeci varsa (bağlantı, yer imi, Geri tuşu) varsayılan onun yerine geçmez.
-  - Görünüme yalnızca listenin kendi adres parametreleri girer ve uygulanırken yalnızca onlar adrese yazılır;
-    depodan okunan her şey veri olarak ele alınır, biçimi bozuk kayıt atılır.
-  - **Nerede durur:** sunucuda değil, o tarayıcının `localStorage` deposunda, `lvm:views:<kullanıcı>:<liste>`
-    anahtarıyla. Başka tarayıcıya ya da cihaza taşınmaz; aynı tarayıcıdaki başka hesap görmez. Depo kapalı ya da
-    doluysa kaydedilemediği söylenir.
-  - **Çıkışta silinmez.** Son açılanlar ve taslaklar oturum bitince silinir, kayıtlı görünümler silinmez. Bir
-    görünümde arama terimi ya da (yönetim sunucu listesinde) sahip e-postası olabilir; bunlar o tarayıcının deposunda
-    kalır ve depoya erişebilen biri okuyabilir. Ortak bilgisayarda görünümleri menüden silin ya da site verilerini
-    temizleyin.
-  - Kurallar `apps/web/lib/saved-views.ts` içindedir ve birim testleri vardır; menünün uçtan uca testi yoktur ve
-    tarayıcıda elle gözden geçirilmedi.
+  - Görünüme yalnızca listenin kendi adres parametreleri girer ve uygulanırken yalnızca onlar adrese yazılır. API de
+    aynı kuralı uygular: her liste için izinli parametre adları bellidir, bir görünümde en çok 12 parametre ve değer
+    başına 200 karakter saklanır; başka her şey `VALIDATION_FAILED` ile reddedilir. API'den okunan her şey veri olarak
+    ele alınır, biçimi bozuk kayıt atılır.
+  - **Nerede durur:** hesapta. Görünümler `saved_views` tablosundadır (migration `083`; API: `GET` / `POST
+    /api/saved-views`, `PATCH` / `DELETE /api/saved-views/:id`, `apps/api/src/saved-views.ts`). Her cihazda ve
+    tarayıcıda görünür, yalnızca sahibi görür ve değiştirir, hesap silinince onunla silinir ve "Verilerimi indir"
+    dosyasında yer alır. Tarayıcıya hiçbir şey yazılmaz; değişiklik ekranda hemen görünür ve API reddederse nedeni
+    söylenerek geri alınır. Yazma istekleri kişi başına 10 dakikada 120 ile sınırlıdır.
+  - **Kullanıcı adına oturum açan personel** o kişinin görünümlerini görür ve uygular ama kaydedemez, değiştiremez,
+    silemez (`NOT_WHILE_IMPERSONATING`).
+  - **Önceki sürümün tarayıcıda bıraktığı görünümler** (`localStorage`, `lvm:views:<kullanıcı>:<liste>`): sahibi o
+    listeyi bu sürümle ilk açtığında hesaba **bir kez** gönderilir ve tarayıcıdan silinir. Hesapta aynı adla görünüm
+    varsa ya da liste dolduysa (12) o kayıt gönderilmez. API'ye ulaşılamazsa kopya bir sonraki ziyarete kalır.
+    Taşınmamış kopyalar, o tarayıcıda bir oturum bittiğinde (çıkış ya da başka bir yolla) kimin olduğuna bakılmadan
+    silinir; yani ortak bir bilgisayarda başka birinin çıkışı sizin henüz taşınmamış eski görünümlerinizi de siler.
+    Yükseltmeden sonra hiç açılmamış bir tarayıcıda eski kopya o zamana kadar durur.
+  - Kurallar `apps/web/lib/saved-views.ts` ve `apps/api/src/saved-views.ts` içindedir ve birim testleri vardır. API
+    için dokuz entegrasyon testi (`saved-views.test.mjs`) ve yönetimdeki sunucu listesinde kaydetme, uygulama ve
+    silmeyi izleyen bir uçtan uca adım vardır; ikisi de `eaa0a4e` commit'indeki çalıştırmalarda geçti. Diğer
+    listelerdeki menünün uçtan uca adımı yoktur ve menü tarayıcıda elle gözden geçirilmedi.
 - **Destek talebinde sunucunun o andaki durumu (yalnızca personel):** müşteri talebi bir sunucu seçerek açtığında
   API sunucunun **veritabanındaki** halini talebe yazar (`tickets.diagnostics`, migration `082`): durum ve güç, paket,
   boyut, imaj, konum, platform, adresler, kilit, silinme beklemesi, oluşturulma zamanı, aylık kotası varsa bu ayki
@@ -173,8 +184,10 @@ Kurallar `apps/api/src/smart-rules.ts` içindedir ve birim testleri vardır. Ver
     müşterinin yanıtında anahtar hiç yoktur ve talep listelerinde de yer almaz.
   - Okuma iki saniyeyi geçerse ya da başarısız olursa talep yine açılır, alan boş kalır. Sunucu seçilmeden açılan ve
     yükseltmeden önce açılmış taleplerde alan boştur; bölüm çizilmez. Kayıt sonradan güncellenmez.
-  - API tarafı `security-billing` entegrasyon testiyle ve bir birim testiyle sınanır; paneldeki bölümün uçtan uca
-    testi yoktur ve tarayıcıda elle gözden geçirilmedi.
+  - API tarafı `security-billing` entegrasyon testiyle ve bir birim testiyle sınanır. Paneldeki bölüm için bir uçtan
+    uca adım vardır (personelde kapalı gelir, açılınca sunucuyu, adresini ve son işlemleri gösterir; müşterinin
+    sayfasında ve yanıtında yoktur); adım `eaa0a4e` commit'indeki çalıştırmada geçti.
+    Bölüm tarayıcıda elle gözden geçirilmedi.
 - **Başarısız işlemden sonra sıradaki adım:** sunucu sayfasının üstünde, en yeni işlem başarısız olduysa ve hâlâ
   önemliyse (sunucu hata durumunda ya da işlem son 24 saat içinde bitti; süren bir işlem yokken) neyin ters gittiği,
   ne yapılacağı ve tek bir düğme gösterilir. Öneri işlemin türünden ve hata kodundan çıkar (`apps/web/lib/next-step.ts`):
@@ -192,6 +205,42 @@ Kurallar `apps/api/src/smart-rules.ts` içindedir ve birim testleri vardır. Ver
   - Kurallar birim testlidir; bildirimin uçtan uca testi yoktur ve tarayıcıda elle gözden geçirilmedi.
 - **Bildirim zilinde gruplama:** aynı konudaki art arda bildirimler sayısıyla tek satırda toplanır
   ([notifications.md](notifications.md)).
+
+### Tarayıcıda tutulanlar ve oturum sonu
+Panel tarayıcıda iki tür şey tutar: oturum açan kişinin **içeriği** ve o tarayıcının **tercihleri**. İçerik, sıradaki
+hesabın ortak bir bilgisayarda bulmaması gereken şeydir. Liste `apps/web/lib/session-end.ts` içindedir; birim testi,
+panelin yazdığı her anahtarın bu listelerden birinde olduğunu denetler.
+
+| Ne | Nerede | Ne zaman silinir |
+|---|---|---|
+| Yazılıp gönderilmemiş metinler: itiraz, olay ve toplu mesaj taslakları (`lvm:draft:*`), talep yanıtı (`lvm:support-draft:*`), yeni talep (`lvm:support-new-draft`) | `localStorage` | Oturum sonu; panel başkası için açıldığında |
+| Son açılan sunucular, talepler, faturalar, kullanıcılar (`lvm-recent`) | `localStorage` | Oturum sonu; panel başkası için açıldığında |
+| Personel özetindeki "son bakışınızdan beri" işareti (`lvm-dashboard-seen`) | `localStorage` | Oturum sonu; panel başkası için açıldığında |
+| Yarım kalmış sipariş (`lvm-order`; projeyi, SSH anahtarlarını ve kopyalanan sunucuyu taşır) | `sessionStorage` (sekme) | Oturum sonu; panel başkası için açıldığında. Açık sekmenin belleğindeki kopya da bırakılır |
+| Kenara alınan görevler (`lvm:tasks-cleared`), izlenen sunucu yeniden başlatması ya da güncellemesi (`lvm:host-task`), tabloların sıralaması ve sayfası (`lvm:table:*`; adreste sunucu, talep ya da kişi kimliği olabilir) | `sessionStorage` (sekme) | Oturum sonu; panel başkası için açıldığında |
+| Önceki sürümden kalan kayıtlı görünümler (`lvm:views:*`) | `localStorage` | Sahibi listeyi açtığında hesaba taşınıp silinir; taşınmamış olanlar oturum sonunda silinir. Panel başkası için açıldığında **durur** (sahibi taşıyabilsin diye) |
+| Ekranda duran tarayıcı bildirimleri ve o tarayıcının bildirim aboneliği | tarayıcı | Çıkışta bildirimler kapatılır, abonelik API'den ve tarayıcıdan silinir. Oturum başka yolla bittiğinde tarayıcı tarafı silinir (API satırını bir sonraki gönderimde siler). Klavyedeki kişi değiştiğinde de silinir |
+| Tercihler: tema, erişilebilirlik (`lvm-a11y`), açık menü, sunucu listesi görünümü, terminal yazı tipi, komut parçası işletim sistemi, gizlenen ilk adımlar, kapatılan duyuru, son kullanılan ikinci adım yöntemi; dil ve saat dilimi çerezleri | `localStorage`, çerez | Silinmez: kimsenin verisini taşımaz |
+
+- **Oturum sonu:** kullanıcının çıkışı ve oturumun başka bir yolla bitmesi (süresi doldu, başka yerden kapatıldı, hesap
+  yasaklandı, parola değişti). İkisi de aynı listeyi siler. Tek istisna: oturumu, sayfada kaydedilmemiş yazı varken
+  dolan kullanıcıda sayfa yerinde kalır ve yeniden giriş istenir; içerik o anda silinmez.
+- **Panel başkası için açıldığında:** panel her açılışta, içeriğin kimin için yazıldığını (`lvm-owner`: hesap ve varsa
+  onun adına oturum açan personel) şimdiki oturumla karşılaştırır ve farklıysa içeriği **okumadan önce** siler. Bu
+  şunları kapsar: çıkış yapılmadan aynı tarayıcıda başka bir hesapla giriş; tarayıcı kapalıyken biten oturum; geri
+  yüklenen sekme (yalnızca o sekmenin `sessionStorage` içeriği); "kullanıcı adına giriş"in başlaması ve bitmesi
+  (personelin taslakları müşterinin paneline, müşterininkiler personele geçmez). Tarayıcı bildirimleri kişiyi izler:
+  "kullanıcı adına giriş" başlarken ve biterken personelin aboneliği durur, klavyeye başka biri geçtiğinde silinir.
+- **Yükseltmeden sonraki ilk açılış:** önceki sürüm içeriğin sahibini kaydetmiyordu. Bu sürüm, sahibi yazılmamış
+  içeriği kimseye ait saymadığı için her tarayıcıda **bir kez** siler: taslaklar, son açılanlar, yarım sipariş. Eski
+  kayıtlı görünümler bu silmenin dışındadır.
+- Panel IndexedDB ve Cache Storage kullanmaz; servis çalışanı (service worker) hiçbir isteği yanıtlamaz, yalnızca
+  bildirim gösterir. Birim testi bunu da kaynak üzerinden denetler.
+- **Sınırlar:** depolamayı engelleyen bir tarayıcıda hiçbir şey yazılmaz ve silinecek bir şey de olmaz. Silme, panelin
+  o tarayıcıda yeniden açılmasına ya da oturumun orada bitmesine bağlıdır: tarayıcı kapatılıp panel bir daha
+  açılmazsa içerik diskte durur. Tarayıcının kendi geçmişi, form otomatik doldurması ve indirilen dosyalar panelin
+  elinde değildir. Kurallar birim testlidir (`session-end.test.ts`); gerçek bir tarayıcıda, ortak bilgisayar
+  senaryosuyla uçtan uca denenmedi.
 
 ## Güç zamanlaması ve toplu işlemler
 
@@ -212,8 +261,8 @@ Kurallar `apps/api/src/smart-rules.ts` içindedir ve birim testleri vardır. Ver
   - **Satır seçimi (Yönetim → Sunucular):** her satırın başında bir kutu vardır; Shift ile tıklamak son seçilenle
     arasındaki satırları da seçer, "Gösterilen N sunucuyu seç" hepsini işaretler. Hedef açıkça seçilir: "Seçilenler"
     (varsayılan) ya da "Gösterilenlerin tümü"; onay penceresi kaç sunucuya uygulanacağını söyler. Süzgecin gizlediği
-    satır seçili sayılmaz; işlem başarıyla gönderilince seçim temizlenir. Seçimin uçtan uca testi yoktur ve tarayıcıda
-    elle gözden geçirilmedi.
+    satır seçili sayılmaz; işlem başarıyla gönderilince seçim temizlenir. Seçim uçtan uca testin bir adımıdır (tek tek
+    ve "gösterilenleri seç" ile seçme, sayının doğruluğu, toplu silme); tarayıcıda elle gözden geçirilmedi.
   - Uygulamadan önce onay istenir. Her sunucuya ayrı işlem açılır. İşlemi süren veya uygun olmayan sunucular
     atlanır ve sayılır.
   - Aynı Idempotency-Key ile tekrarlanan istek yeni işlem başlatmaz.
@@ -227,6 +276,13 @@ Kurallar `apps/api/src/smart-rules.ts` içindedir ve birim testleri vardır. Ver
   - Her kaydın ayrıntısı açılabilir. Bilinen işlemler Türkçe/İngilizce adla gösterilir.
 - **Hesap etkinliği** (Hesabım → Etkinlik, `GET /activity`): kullanıcının kendi girişleri ve değişiklikleri,
   sunucularında güç zamanlamalarının yaptıkları da dahil ("Zamanlama" etiketiyle).
+  - **Başkasının bu hesap için yaptıkları da listededir** (denetim kaydında `forOwner` ile işaretlenenler): bayinin
+    müşterisinin sunucusunda başlattığı işlemler (açma, kapatma, yeniden kurma, silme ve diğerleri), müşteri adına
+    verdiği sipariş ve hesabı açması "Bayiniz yaptı" etiketiyle ve bayinin e-postasıyla; hesabın bayiden ayrılması,
+    personel yaptıysa "Destek ekibi yaptı" etiketiyle ve ad verilmeden. Başkasının yaptığı kayıtta IP adresi
+    gösterilmez; bayi dışındaki kişilerin e-postası müşteriye gönderilmez.
+  - Kapsamadıkları: bayinin işlem başlatmayan eylemleri (örneğin müşterinin sunucularını görüntülemesi) müşterinin
+    listesinde yoktur. Bu sürümden önceki bayi işlemleri işaretli olmadığı için geriye dönük görünmez.
 - **Duyuru** (Ayarlar → Duyuru, `PUT /admin/settings/announcement`; okuma: `GET /announcement`): oturum açılmış
   her sayfanın üstünde görünen nottur.
   - Metin Türkçe ve İngilizce girilir. Ton (bilgi, uyarı, kritik, iyi haber), isteğe bağlı bağlantı (panel yolu

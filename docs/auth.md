@@ -54,7 +54,10 @@ denetim kaydına `admin.user.<işlem>` olarak yazılır:
   adına" oturumlar ve onlarla açılmış konsollar kapanır. Aynı denetim bu oturumların her isteğinde de yapılır.
   Bu oturumda hesapta kalıcı iz bırakan işlemler reddedilir (`NOT_WHILE_IMPERSONATING`): passkey ve bağlı hesap
   ekleme, API anahtarı, webhook, tarayıcı bildirimi ve mesajlaşma bağlantısı oluşturma, parola, telefon ve iki adımlı
-  doğrulama değişikliği, fatura e-postasını değiştirme;
+  doğrulama değişikliği, fatura e-postasını değiştirme, kayıtlı görünüm kaydetme, değiştirme ve silme (kullanıcının
+  görünümleri uygulanabilir). Bu oturum başlarken ve biterken tarayıcıdaki içerik (taslaklar, son açılanlar, yarım
+  sipariş) silinir: personelinki müşterinin paneline, müşterininki personele geçmez
+  ([operations-modules.md](operations-modules.md#tarayıcıda-tutulanlar-ve-oturum-sonu));
 - silme: kullanıcının sunucusu varsa reddedilir (`USER_HAS_SERVERS`).
 
 ## İlk yönetici
@@ -115,6 +118,12 @@ Uç noktalar `/api/auth/*` altındadır; Fastify bunları better-auth'a iletir.
   Bir rolün "oturum süresi"
   sınırı (aşağıda, Rol sınırları) üyelerinin oturumunu daha erken bitirir. Süresi dolan oturumlar ve devre dışı veya
   yasaklı kullanıcılar reddedilir; devre dışı kullanıcıya yeni oturum açılmaz.
+- **Dizin ve SSO hesaplarında süre sabittir:** yerel bir hesabın oturumu kullanıldıkça uzar; dizin (`ldap`) ya da SSO
+  (`oidc`) hesabının oturumu ise, kullanılsa da kullanılmasa da, açıldıktan `SESSION_TTL_HOURS` saat sonra biter ve
+  silinir. Panel, hesabın dizinde ya da sağlayıcıda kapatıldığını öğrenemez; böylece dizine ya da sağlayıcıya en geç bu
+  aralıkla yeniden sorulur. Dizin hesabında iki adımlı doğrulama değişikliği oturumu yenisiyle değiştirir; yeni oturum
+  yerine geçtiği oturumun yaşını taşır, yani bu yolla süre uzatılamaz. "Kullanıcı adına" oturumların kendi bir saati
+  vardır.
 - Kullanıcı Hesap sayfasında açık oturumlarını görür ve tek tek kapatabilir. Parola
   değiştirirken diğer oturumları kapatma seçeneği vardır.
 - Bir oturum hangi yolla biterse bitsin (çıkış, iptal, parola sıfırlama), o oturumla açılmış
@@ -142,7 +151,9 @@ E-posta gönderimi ayarlıysa giriş sayfasında "Parolamı unuttum" bağlantıs
 ayarı kaydedilmemişse `.env` içindeki `SMTP_URL` (ör. `smtps://kullanici:parola@smtp.example.com:465`) ve `MAIL_FROM`
 kullanılır; bu, ayar sayfasından önceki kurulumlar için bırakılmış yedek yoldur. Bağlantı e-postayla gider
 (kullanıcının diline göre TR/EN), tek kullanımlıktır ve sıfırlamadan sonra kullanıcının tüm oturumları kapatılır.
-E-posta ayarlı değilse özellik gizlenir; API `MAIL_NOT_CONFIGURED` döner.
+E-posta ayarlı değilse özellik gizlenir; API `MAIL_NOT_CONFIGURED` döner. Adresi henüz kanıtlanmamış bir hesapta
+postayla gelen bağlantıyla yapılan **ilk** sıfırlama adresin kanıtı sayılır ve hesapta önceden kurulanları siler
+([aşağıda](#adresin-ilk-kanıtı)).
 
 E-postası çalışmayan bir kurulumda parolasını unutan yönetici için sunucuda:
 
@@ -177,26 +188,77 @@ ve yalnızca onun numarasını doğrular; telefon numarasıyla giriş ve telefon
 (`404`). Doğrulanmış numaraya SMS ile iki adımlı doğrulama kodu ve SMS
 bildirimleri gönderilebilir. SMS ayarlanmamışsa bu bölüm bilgilendirme gösterir.
 
-## Adresin ilk kanıtı (giriş bağlantısı ve e-posta kodu)
+## Adresin ilk kanıtı
 Panel kayıtta e-posta adresini doğrulamaz; bu yüzden bir hesabı ilk açan kişi adresin sahibi olmayabilir (açık
-kayıtta herkes başkasının adresiyle hesap açabilir). Adresi hiç doğrulanmamış bir hesap **ilk kez** giriş
-bağlantısıyla ya da e-posta koduyla girdiğinde (ikisi de Ayarlar'dan açılır, varsayılan kapalıdır) adres, sahibi
-tarafından kanıtlanmış sayılır ve hesapta o ana kadar kurulmuş olanlar **bir kez** silinir:
+kayıtta herkes başkasının adresiyle hesap açabilir; bayi müşterisinin adresini kendisi yazar). Adresi hiç
+doğrulanmamış bir hesapta, posta kutusuna ulaşabildiğini gösteren **ilk** işlem adresi sahibi tarafından kanıtlanmış
+sayar. Kanıt sayılan üç yol:
 
-- parola ve bağlı girişler (sosyal hesaplar), diğer oturumlar;
+- giriş bağlantısıyla giriş (Ayarlar'dan açılır, varsayılan kapalıdır);
+- e-posta koduyla giriş (Ayarlar'dan açılır, varsayılan kapalıdır);
+- postayla gelen bağlantıyla **parola sıfırlama** ("Parolamı unuttum"). Adresi başkasının kaydettiği bir hesaba gerçek
+  sahibinin girmesinin en yaygın yolu budur. Aynı anda gelen iki sıfırlama ya da bir sıfırlamayla bir bağlantı kanıtı
+  yalnızca bir kez işler.
+
+O anda, hesapta o zamana kadar kurulmuş olanlar **bir kez** silinir:
+
+- parola (sıfırlamada az önce belirlenen yeni parola kalır) ve bağlı girişler (sosyal hesaplar), diğer oturumlar;
 - API anahtarları, passkey'ler, webhook'lar;
 - mesajlaşma uygulaması bağlantıları ve tarayıcı bildirimi abonelikleri;
-- doğrulanmış telefon numarası;
+- telefon numarası;
 - kurulmuş ama **açılmamış** bir iki adımlı doğrulama. Açık olan kalır: böyle bir hesap zaten bağlantı ya da kodla
-  giremez.
+  giremez, ikinci etkenini de bu yolla yitirmez (onu personel sıfırlar);
+- **kayıtlı SSH anahtarları:** yeni sunucuya ve yeniden kuruluma verilen anahtarlar bunlardır; önceki kişinin anahtarı
+  onu sunucunun içine sokardı;
+- **kayıtlı kartlar:** önceki kişinin kartı, sahibin siparişleri ve otomatik tahsilat için çekilirdi. Otomatik
+  yenileme için müşterinin yeniden kart eklemesi gerekir; o zamana kadar yenileme yalnızca bakiyeden denenir;
+- **fatura e-postası ve telefonu** (faturaların ve ödeme bildirimlerinin hesabın adresi dışında gittiği yer). Fatura
+  bilgilerinin geri kalanı durur;
+- yarıda kalmış **ikinci adım** (parolası girilmiş, kodu bekleyen giriş) ve "bu cihaza güven" kayıtları;
+- hesabın başka hesaplara yaptığı, **henüz kabul edilmemiş sunucu devri teklifleri** (iptal edilir; sahibi yeniden
+  karar verir).
 
-Sunucular, faturalar ve talepler kalır. Olay denetim kaydına `auth.address_proven` olarak yazılır; sonrasında adres
-doğrulanmıştır ve bir daha hiçbir şey silinmez. Parolayla kaydolup sonradan bağlantı ya da kodla giren müşteri
-"Parolamı unuttum" ile yeni bir parola belirler. Hesaptan bir şey silindiyse kullanıcıya `auth.credentials_reset`
-("Giriş bilgileri sıfırlandı") bildirimi gider (varsayılan kanallar panel ve e-posta): ne olduğunu, neyin
-kaldırıldığını ve yeni parolanın nasıl belirleneceğini söyler. Silinecek hiçbir şeyi olmayan hesaba (örneğin
-personelin açtığı ve ilk kez girilen hesap) bildirim gitmez. Personelin bir adresi Yönetim → Kullanıcılar'dan elle doğrulanmış işaretlemesi sahibin kanıtı
-değildir ve hiçbir şeyi silmez.
+**Kalanlar ve personele not.** Sunucular, kişisel imajlar, bakiye, talepler, faturalar ve fatura bilgileri hesabındır
+ve geri alınamayacağı için silinmez; sahibi hepsini panelde görür. Ama bunları başka biri kurmuş olabilir (bir root
+parolasını biliyor ya da sunucunun içinde anahtarı duruyor olabilir). Bu yüzden kalanların sayıları denetim olayına
+(`auth.address_proven`, `kept`) yazılır ve hesapta sunucu, imaj ya da bakiye hareketi varsa kullanıcıya bir **ekip
+notu** düşülür (Yönetim → Kullanıcılar → kullanıcı). Böyle bir hesapta sunucuların parolalarını ve anahtarlarını
+değiştirmek ya da sunucuyu yeniden kurmak sahibine kalır; panel bunu kendiliğinden yapmaz.
+
+Olay denetim kaydına `auth.address_proven` olarak, hangi yolla kanıtlandığıyla (`magic-link`, `email-code`,
+`password-reset`) yazılır; sonrasında adres doğrulanmıştır ve bir daha hiçbir şey silinmez. Parolayla kaydolup
+sonradan bağlantı ya da kodla giren müşteri "Parolamı unuttum" ile yeni bir parola belirler. Hesaptan bir şey
+silindiyse kullanıcıya `auth.credentials_reset` ("Giriş bilgileri sıfırlandı") bildirimi gider (varsayılan kanallar
+panel ve e-posta): ne olduğunu, neyin kaldırıldığını, yeni parolanın nasıl belirleneceğini ve otomatik yenileme için
+yeniden kart eklenmesi gerektiğini söyler. Silinecek hiçbir şeyi olmayan hesaba bildirim gitmez.
+
+**Baştan kanıtlanmış sayılan hesaplar.** Bir yabancının önceden kaydedemeyeceği hesaplarda silinecek "önceki kişi"
+yoktur; bunlar açılırken kanıtlanmış işaretlenir:
+
+- kurulum yöneticisi (kurulum anahtarını ya da betiği elinde tutan kişi açar);
+- personelin Yönetim → Kullanıcılar'dan açtığı hesaplar;
+- SSO, dizin ve faturalama entegrasyonu üzerinden gelen hesaplar (önceden de böyleydi).
+
+Bayinin açtığı müşteri hesapları kanıtlanmamış başlar: adresi bayi yazmıştır, kimse kanıtlamamıştır.
+
+**Yükseltmeden önce açılmış hesaplar.** Migration `085`, personelin zaten kefil olduğu hesapları yükseltme sırasında
+kanıtlanmış işaretler: müşteri rolü (`user`) dışında bir rolü olan her hesabı (rolü personel, kurulum sihirbazı ya da
+dizin eşlemesi verir; kayıt vermez) ve denetim kaydında `admin.user.create` satırı bulunan, yani Yönetim →
+Kullanıcılar'dan açılmış hesapları. Böylece bir yöneticinin ilk "Parolamı unuttum" sıfırlaması passkey'lerini ve API
+anahtarlarını silmez. Diğerlerinin işareti değişmez: kayıtla açılmış müşteri hesapları ve bayinin açtığı müşteri
+hesapları kanıtlanmamış kalır ve yukarıdaki silme, adreslerini ilk kanıtladıklarında bir kez uygulanır. Faturalama
+entegrasyonunun hesaplarına migration dokunmaz; entegrasyon onları açarken işaretler. Personelin bir adresi Yönetim →
+Kullanıcılar'dan elle doğrulanmış işaretlemesi sahibin kanıtı değildir ve hiçbir şeyi silmez; işaretlenen hesapta
+sonraki sıfırlama da bir şey silmez.
+
+**Sunucu devralma kanıt ister.** Devir teklifi bir adrese yapılır; sunucu (diski ve konsoluyla) o adresi ilk
+kaydedene değil, adresin kendisine ait olduğunu kanıtlayana gider. Adresi kanıtlanmamış bir hesap teklifi kabul
+edemez: `403 ADDRESS_NOT_PROVEN`. Hiçbir şey taşınmadan reddedilir ve teklif bir haftalık süresi boyunca açık kalır;
+kullanıcı adresini yukarıdaki yollardan biriyle kanıtlayıp yeniden kabul eder.
+
+Parola sıfırlamanın kanıt sayılması, silinenler, baştan kanıtlanmış hesaplar ve migration `085` üç `security-auth`
+entegrasyon testindedir; devir kuralı `security-servers` testlerine eklendi. Hepsi 2026-11-18 tarihli tam çalıştırmada
+geçti (`eaa0a4e`; 196 testten 192'si geçti, 4'ü atlandı).
 
 ## Yalnızca yöneticinin değiştirebildiği ayarlar
 E-posta ve SMS kanalları, yöneticiler dahil her hesabın sıfırlama bağlantısını ve kodunu taşır. Bu yüzden
@@ -246,7 +308,10 @@ Bu koşullar sağlanmazsa API `403 CSRF_REJECTED` döner. better-auth ayrıca ç
 | Parola sıfırlama postası, posta kutusu başına (hesap olsun olmasın sayılır) | 5 / saat |
 | Telefon doğrulama kodu (SMS), hesap başına ve numara başına | 5 / gün |
 | İki adımlı doğrulama kodu (SMS ya da e-posta), hesap başına | 8 / saat |
-| Bildirim testi, hesap başına (SMS'te ayrıca numara başına) | 6 / saat |
+| Bildirim testi, hesap başına (SMS'te ayrıca numara başına, mesajlaşmada ayrıca adres başına) | 6 / saat |
+| Mesajlaşma bağlantısı kurma ve bağlantı testi, hesap başına | 20 / saat |
+| Dizin ayarı testi (e-posta ve parolayla), e-posta başına | girişin e-posta sınırından düşer (10 / 15 dk, ortak) |
+| Kayıtlı görünüm kaydetme, değiştirme, silme, kişi başına | 120 / 10 dk |
 | Müşterinin talep yanıtı ve puanı | talep başına 10, müşteri başına 30 / 10 dk |
 | Diğer `/api/auth/*`, IP başına | 100 / dk |
 | Kurulum, IP başına | 10 / 15 dk |
@@ -279,16 +344,21 @@ Bu, e-postanın kayıtlı olduğunu açığa çıkarır; açık kayıtlı bir pa
   Boş kurulumda `E2E_BOOTSTRAP_TOKEN` gerekir.
 
 ## Henüz yok
-- E-posta adresi doğrulama: kayıtla açılan hesabın adresi doğrulanmaz. Adres, hesap ilk kez giriş bağlantısı ya da
-  e-posta koduyla girdiğinde kanıtlanmış sayılır ([yukarıda](#adresin-ilk-kanıtı-giriş-bağlantısı-ve-e-posta-kodu)).
+- E-posta adresi doğrulama: kayıtla açılan hesabın adresi doğrulanmaz. Adres, hesap ilk kez giriş bağlantısıyla ya da
+  e-posta koduyla girdiğinde veya ilk kez postayla parola sıfırladığında kanıtlanmış sayılır
+  ([yukarıda](#adresin-ilk-kanıtı)).
 - Organizasyon / ekip yapısı: bir projeyi ya da sunucuyu birden çok kullanıcı paylaşamaz. (Bayiler vardır: bayi kendi
-  müşteri hesaplarını açar ve onların sunucularını yönetir; `apps/api/src/reseller.ts`.)
+  müşteri hesaplarını açar ve onların sunucularını yönetir; `apps/api/src/reseller.ts`. Müşteri hesabını kimin
+  yönettiğini Hesabım → Profil'de görür, bir kez bildirim alır ve bayiden ayrılabilir;
+  [billing.md](billing.md#bayiler-kim-öder).)
+- Dizinde kapatılan bir hesabın **kişisel API anahtarları** panelde çalışmaya devam eder
+  ([aşağıda](#dizin-ldap--active-directory-ile-giriş)).
 
 ## Hesap verileri ve ekip notları
 - **Verilerimi indir** (Hesap sayfası, `GET /api/account/export`): oturum açan kişi hakkında panelin tuttuğu her şey
   tek bir JSON dosyası olarak iner: profil, sunucular, favoriler, projeler, SSH anahtarları, konsol komutları,
-  firewall'lar, bildirim tercihleri ve son bildirimler, bağlı mesajlaşma uygulamaları, oturumlar, etkinlik kaydı ve
-  benzerleri. Parola özetleri, oturum anahtarları, root parolaları, iki adımlı doğrulama sırları ve mesajlaşma
+  firewall'lar, kayıtlı görünümler, bildirim tercihleri ve son bildirimler, bağlı mesajlaşma uygulamaları, oturumlar,
+  etkinlik kaydı ve benzerleri. Parola özetleri, oturum anahtarları, root parolaları, iki adımlı doğrulama sırları ve mesajlaşma
   uygulaması adresleri dosyada yoktur.
 - **Ekip notları** (Yönetim → Kullanıcılar → kullanıcı): personel bir kullanıcıya not düşer; notlar sabitlenebilir,
   sabitlenen not kullanıcı listesinde görünür. Müşteri bu notları görmez; dışa aktarılan verilere de girmez.
@@ -328,6 +398,40 @@ izinleri, eşlenen her rolün (varsayılan rol ve grup eşlemeleri) izinlerini k
 sonucunda dizin sunucusunun metni gösterilmez, ayrıntı API günlüğüne `ldap_test_failed` olarak yazılır. Yerel hesaplar (ilk yönetici gibi) etkilenmez. Testler gerçek bir OpenLDAP ile çalışır
 (`LDAP_TEST_URL`).
 
+Dizin ve SSO için ortak, sonradan eklenen kurallar:
+
+- **Oturum süresi sabittir:** dizin ve SSO hesabının oturumu açıldıktan `SESSION_TTL_HOURS` saat sonra biter
+  ([yukarıda](#oturumlar-better-auth)). Dizinde kapatılan bir hesabın paneldeki oturumu en geç o kadar sürer.
+- **Sunucuyu adlandıran kişi, arkasındaki her hesabı kapsamalıdır.** Burada kaydedilen sunucu, panelde zaten hesabı
+  olan herkesin kim olduğunu da söyler; böyle bir hesap paneldeki rolleriyle ve kişiye özel istisnalarıyla girer.
+  Sunucuyu adlandırabilen biri oraya kendi sunucusunu yazıp o hesaplardan biri olarak girebilirdi. Bu yüzden dizin
+  ya da SSO ayarını kaydeden kişinin izinleri, eşlemenin yanında, o kaynaktan giren (`auth_source` `ldap` ya da
+  `oidc`) **her hesabın** etkin izinlerini kapsamalıdır; aksi halde `403 FORBIDDEN_TARGET` döner (alan hatası
+  `ACCOUNTS_NOT_COVERED`) ve ret `settings.directory` / `settings.sso` olarak denetim kaydına yazılır. Her kayıtta
+  denetlenir; yöneticiler her hesabı kapsar. Dizinden giren bir yönetici varsa ayarı yalnızca yöneticiler
+  kaydedebilir.
+- **Silinen rol eşlemelerden çıkar.** Bir rol silindiğinde dizin ve SSO eşlemeleri de güncellenir: o rolü veren grup
+  satırları rolü kaybeder, hiç rolü kalmayan satır kalkar, varsayılan rol o rolse `user` olur. Böylece sonradan aynı
+  anahtarla açılan bir rol, eski eşlemenin verdiği herkese kendiliğinden geçmez.
+- **Hesabı olmayan adres dizine tek yazımla sorulur.** Hesabı olan kişi tam adresiyle bulunur ve denemeleri tek
+  anahtarda sayılır. Dizin ise adresleri gevşek karşılaştırır (görünmez karakterler yok sayılır, her tür boşluk tek
+  boşluktur, uyumluluk biçimleri katlanır); aynı posta kutusu, her biri kendi giriş sınırına sahip sayısız biçimde
+  yazılabilirdi. "İlk girişte oluştur" açıkken hesabı olmayan bir adres dizine yalnızca düz yazımıyla sorulur: boşluk,
+  denetim ya da görünmez karakter içermeyen ve birleşik (NFKC) biçimindeki adres. Başka yazımlar dizine sorulmadan
+  "hatalı e-posta ya da parola" yanıtı alır.
+- **Ayar testi giriş denemesi sayılır.** Ayarlar → Dizin'deki test bir e-posta ve parolayla yapıldığında o kişinin
+  dizin parolasına bir tahmindir; adresin giriş sınırından düşer (15 dakikada 10, giriş formuyla ortak sayaç).
+  Parolasız test (yalnızca bağlantı ve arama) sayılmaz.
+- **Kimlik belirteciyle giriş reddi sürüyor:** sağlayıcının kimlik belirtecini doğrudan göndererek giriş ya da bağlama
+  yeniden denetlendi ve reddediliyor.
+- **Açık bırakılan:** dizin ya da SSO hesabının oluşturduğu **kişisel API anahtarları** oturum değildir; hesap dizinde
+  kapatılsa da panelde yasaklanana ya da devre dışı bırakılana kadar çalışmaya devam eder. Dizinden çıkardığınız
+  kişiyi panelde de yasaklayın ya da API anahtarlarını silin.
+
+Bu kurallar `ldap` birim testlerinde ve iki `security-auth` entegrasyon testindedir; ikisi de 2026-11-18 tarihli tam
+çalıştırmada geçti.
+Gerçek bir dizin sunucusunda (Active Directory, OpenLDAP) ve gerçek bir SSO sağlayıcısında denenmedi.
+
 ## Tek oturum açma (OpenID Connect)
 Ayarlar → Dizin → Tek oturum açma: issuer adresi (panel `/.well-known/openid-configuration` belgesini okur), client ID
 ve secret (şifreli saklanır), kapsamlar, grup alanı ve grup → rol eşlemesi. Sağlayıcıya kaydedilecek yönlendirme
@@ -338,6 +442,7 @@ hesabının e-posta adresi sağlayıcı tarafından ele geçirilemez, bağlama r
 göre güncellenir (eşleme varsa), rolün adres sınırları uygulanır; parola panelde değiştirilemez/sıfırlanamaz ve
 panel bu hesaplardan kendi iki adımlı doğrulamasını istemez. SSO hesabına yalnızca sağlayıcının geri dönüş
 (`/callback`) akışından oturum açılır; e-posta kodu, giriş bağlantısı, passkey ya da gönderilen bir kimlik belirteci
-ile girilemez. Ayarı kaydetmek için dizindeki aynı rol kuralı geçerlidir (`FORBIDDEN_TARGET`); issuer değişirse
-client secret yeniden girilir. Testler süreç içinde çalışan sahte bir sağlayıcıyla
+ile girilemez. Ayarı kaydetmek için dizindeki aynı rol kuralı ve hesapları kapsama kuralı geçerlidir
+(`FORBIDDEN_TARGET`; [yukarıda](#dizin-ldap--active-directory-ile-giriş)); issuer değişirse
+client secret yeniden girilir. SSO hesabının oturumu da açıldıktan `SESSION_TTL_HOURS` saat sonra biter. Testler süreç içinde çalışan sahte bir sağlayıcıyla
 (RS256 imzalı belirteç) yapılır. Kod: `apps/api/src/sso.ts`, `directory.ts`.

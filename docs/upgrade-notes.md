@@ -5,6 +5,156 @@ madde neyin değiştiğini ve işletmecinin yapması gereken bir şey varsa onu 
 davranışı değiştirmeyen işler burada yoktur. Tahsilat çalıştırması API içinde beş dakikada bir çalışır; yani "ilk
 çalıştırma" yükseltmeden birkaç dakika sonradır.
 
+## Güvenlik turundan kalanların kapatılması ve hesapta saklanan görünümler (2026-11-18)
+
+İkinci güvenlik turunun "incelenmedi" ya da "değiştirilmedi" diye bıraktığı konular bu turda ele alındı. Bu, kaynak
+incelemesi ve testlerle yapılmış bir takiptir; bağımsız doğrulamadan geçmiş bir denetim turu **değildir**
+([security-audit.md](security-audit.md)). Veri değişiklikleri üç dosyadadır ve yükseltme sırasında kendiliğinden
+uygulanır: `apps/api/migrations/083_saved_views.sql` (`saved_views` tablosu),
+`084_owner_share_reseller_notice.sql` (`operations.capped_for`, `users.reseller_notice_at`) ve
+`085_staff_addresses_proven.sql` (personelin kefil olduğu mevcut hesapları kanıtlanmış işaretler; ikinci maddeye
+bakın). Elle çalıştırılacak bir şey yoktur.
+
+Bu turun birim testleri geçiyor. Entegrasyon paketinin tamamı 2026-11-18'de, `eaa0a4e` commit'inde, Docker'lı bir
+Linux sunucusunda çalıştırıldı: 196 testten 192'si geçti, 4'ü atlandı (PowerDNS, ISO deposu ya da konsol ağ geçidi
+isteyenler), başarısız olan yok. Bu turda eklenen 19 test (`saved-views`, `security-leftovers` ve `security-auth` ile
+`security-billing` dosyalarına eklenenler) bu sayının içindedir ve geçti. Uçtan uca paket (Playwright) aynı commit'te,
+demo kurulumunda, boş bir veritabanı ve VMware simülatörüyle çalıştırıldı: 31 testin 31'i geçti. Hiçbir ekrana
+tarayıcıda elle bakılmadı; uçtan uca adımı olmayanların listesi README'nin
+[Bilinen sınırlar](../README.md#-bilinen-sınırlar) bölümündedir.
+
+Aşağıdaki maddeler işletmecinin fark edeceği her değişikliği sayar; ilk beşi yükseltmeden önce okunmalıdır.
+
+- **Dizin (LDAP) ve SSO kullanıcıları her `SESSION_TTL_HOURS` saatte bir yeniden giriş yapar.** Dizin ya da SSO
+  hesabının oturumu, kullanılsa da kullanılmasa da, açıldıktan `SESSION_TTL_HOURS` saat sonra biter (varsayılan 12).
+  Önceden oturum kullanıldıkça uzuyordu ve dizinde kapatılan bir hesap panelde oturumunu sürdürebiliyordu. İki adımlı
+  doğrulama değişikliği sırasında yenilenen oturum, yerine geçtiği oturumun yaşını taşır. Kullanıcılarınız gün içinde
+  bir kez daha giriş yapmak zorunda kalıyorsa `.env` içindeki `SESSION_TTL_HOURS` değerini büyütün (1-720; bu değer
+  herkesin oturum süresidir). Yerel hesapların oturumu eskisi gibi kullanıldıkça uzar.
+- **Adresi kanıtlanmamış bir hesapta ilk "Parolamı unuttum" sıfırlaması, hesapta önceden kurulanları siler.** Panel
+  kayıtta e-posta adresini doğrulamadığı için kayıtla açılmış her hesap, sahibi adresi bir kez kanıtlayana kadar
+  "kanıtlanmamış" sayılır. Önceden yalnızca giriş bağlantısı ve e-posta koduyla ilk giriş kanıt sayılıyordu; artık
+  postayla gelen sıfırlama bağlantısıyla belirlenen ilk parola da kanıttır. O anda bir kez silinenler: API anahtarları,
+  passkey'ler, bağlı giriş hesapları, webhook'lar, mesajlaşma ve tarayıcı bildirimi bağlantıları, telefon numarası,
+  açılmamış iki adımlı doğrulama, **kayıtlı SSH anahtarları, kayıtlı kartlar, fatura e-postası ve telefonu**, yarıda
+  kalmış ikinci adım ve "bu cihaza güven" kayıtları ile hesabın başka hesaplara yaptığı, henüz kabul edilmemiş sunucu
+  devri teklifleri. Sunucular, kişisel imajlar, bakiye, talepler ve fatura bilgilerinin geri kalanı durur. Hesapta
+  sunucu, imaj ya da bakiye hareketi varsa personel için kullanıcıya bir ekip notu düşülür (bunları kuran kişi posta
+  kutusunun şimdiki sahibi olmayabilir). Kullanıcıya `auth.credentials_reset` bildirimi gider.
+  - **Kayıtlı kart silindiği için otomatik yenileme o hesapta karttan çekemez;** müşteri Faturalama'dan yeniden kart
+    ekleyene kadar yenilemeler yalnızca bakiyeden denenir. Destek ekibinize bunu söyleyin.
+  - **Personelin kefil olduğu mevcut hesaplar yükseltmede kanıtlanmış işaretlenir** (migration `085`): müşteri rolü
+    (`user`) dışında bir rolü olan her hesap (yöneticiler ve personel) ve denetim kaydına göre Yönetim →
+    Kullanıcılar'dan açılmış hesaplar. Bunları elle işaretlemeniz gerekmez; bir yöneticinin ilk "Parolamı unuttum"
+    sıfırlaması passkey'lerini ve API anahtarlarını silmez.
+  - **Geri kalan mevcut hesaplar kanıtlanmamış kalır:** kayıtla açılmış müşteri hesapları ve bayilerin açtığı müşteri
+    hesapları. Faturalama entegrasyonunun (WHMCS / WISECP) hesaplarına migration dokunmaz; entegrasyon onları açarken
+    işaretler, işareti olmayan bir entegrasyon hesabı kanıtlanmamış kalır. **Bu hesapların her birinde postayla
+    yapılan ilk parola sıfırlaması kayıtlı kartları, SSH anahtarlarını, API anahtarlarını ve yukarıda sayılan
+    diğerlerini bir kez siler;** sonraki sıfırlamalar bir şey silmez. Müşterileriniz bunu ilk "Parolamı unuttum"da
+    görür. Yükseltmeden sonra kaç hesabın bu durumda olduğunu şu sorgu verir:
+    `SELECT count(*) FROM users WHERE NOT coalesce(email_verified, false);`
+  - Adresinden emin olduğunuz tek bir hesabı Yönetim → Kullanıcılar'dan "doğrulanmış" işaretleyebilirsiniz; bu işaret
+    sahibin kanıtı değildir, hiçbir şeyi silmez ve işaretlenen hesapta sonraki sıfırlama da bir şey silmez.
+  - Yükseltmeden **sonra** kurulum yöneticisi ve personelin Yönetim → Kullanıcılar'dan açtığı hesaplar baştan
+    kanıtlanmış sayılır. Bayinin açtığı müşteri hesapları kanıtlanmamış başlar.
+- **Sunucu devralmak için kanıtlanmış adres gerekir.** Adresi kanıtlanmamış bir hesap devir teklifini kabul edemez
+  (`403 ADDRESS_NOT_PROVEN`); teklif bir haftalık süresi boyunca açık kalır. Kullanıcı adresini bir kez kanıtlar
+  (giriş bağlantısı, e-posta kodu ya da "Parolamı unuttum") ve teklifi yeniden kabul eder. Yukarıdaki silme o anda
+  uygulanır; hata metni bunu söyler.
+- **İşlem kuyruğunda hesap payı: `OPERATIONS_PER_OWNER`.** Bir hesap aynı anda en çok bu kadar işlem yürütebilir;
+  fazlası beklerken sıradaki başka müşterilerin işlemleri çalışır. Varsayılan, `OPERATIONS_CONCURRENCY` değerinin
+  yarısıdır (en az 1; varsayılan kurulumda 4); `0` payı kapatır. Personelin, tahsilat çalıştırmasının ve faturalama
+  entegrasyonunun işlemleri hiç bekletilmez. Çok sunuculu bir müşterinin toplu işlemleri ve aynı dakikaya kurulmuş
+  zamanlamaları artık dörder dörder ilerler; işlemin süresi bekleme sırasında da işler
+  ([operations.md](operations.md#kuyrukta-hesap-payı)). Değeri değiştirmek için `.env` dosyasına yazın ve
+  worker'ı yeniden oluşturun (`docker compose up -d worker`).
+- **Ayar personeli dizin ya da SSO ayarını kaydederken reddedilebilir.** Kaydeden kişinin izinleri artık yalnızca
+  eşlenen rolleri değil, o kaynaktan giriş yapan **her hesabın** izinlerini (rolleri ve kişiye özel istisnaları)
+  kapsamalıdır; aksi halde `403 FORBIDDEN_TARGET` döner ve formda "Bu sunucu üzerinden giriş yapan hesaplarda sizde
+  olmayan yetkiler var" yazar. Yöneticiler etkilenmez. Dizinden giren bir yöneticiniz varsa dizin ayarını bundan sonra
+  yalnızca yöneticiler kaydedebilir.
+- **Dizin ayarı testi artık giriş denemesi sayılır.** Ayarlar → Dizin'deki test bir e-posta ve parolayla
+  yapıldığında o adresin giriş sınırından düşer (15 dakikada 10, giriş formuyla ortak). Aynı kişiyle art arda test
+  yapmak o kişinin girişini 15 dakika kilitleyebilir.
+- **Hesabı olmayan bir adres dizine yalnızca düz yazımıyla sorulur.** "İlk girişte oluştur" açıkken, içinde boşluk,
+  görünmez karakter ya da birleşik biçimde olmayan harf bulunan bir adresle yapılan ilk giriş dizine sorulmadan "hatalı
+  e-posta ya da parola" yanıtı alır. Hesabı olan kullanıcılar etkilenmez.
+- **Silinen rol dizin ve SSO eşlemelerinden çıkar.** Bir rol silindiğinde onu veren grup eşlemeleri o rolü kaybeder,
+  hiç rolü kalmayan grup satırı kalkar, varsayılan rol o rolse `user` olur. Rol sildikten sonra Ayarlar → Dizin'deki
+  eşlemeleri gözden geçirin.
+- **İnceleme bekleyen ödemeler.** Personel faturayı "Ödeme kaydet" ile kapattığında o faturanın inceleme bekleyen
+  ödemeleri de aynı işlemde kapanır (durumları `cancelled` olur, gerekçeleri kalır); sağlayıcıdan sonradan gelen
+  "ödendi" yanıtı artık ikinci kez bakiye yazmaz. Faturası başka yolla ödenmiş ya da iptal edilmiş, ya da parası hiç
+  gelmemiş bir inceleme ödemesi için yeni bir personel işlemi vardır: `POST
+  /api/admin/billing/payments/:id/close-review` (`billing.manage`; hiçbir şeyi ödenmiş saymaz), panelde Yönetim →
+  Faturalandırma → Ödemeler'de "İncelemeyi kapat" düğmesi. Kapatılan ödemeler aynı listede yeni `cancelled` durum
+  süzgeciyle bulunur. Müşteri, inceleme bekleyen ödemesi olan faturasının sayfasında "Ödemeniz inceleniyor" notunu görür.
+  Otomatik tahsilat, inceleme bekleyen ödemesi olan faturayı **atlar** (bakiyeden ya da karttan ikinci kez çekmemek
+  için); hatırlatma, gecikme ve askıya alma adımları ise **işlemeye devam eder**. Yani inceleme bekleyen bir ödemeyi
+  bekletirseniz müşterinin sunucusu askıya alınabilir. PayTR bildiriminde tutar artık imzanın kapsadığı toplamla
+  (`total_amount`) denetlenir ([payments.md](payments.md#incelemedeki-ödemeler)).
+- **Bayiler: müşteri bayiden ayrıldığında ödeme de müşteriye geçer.** Bir bayilik kaldırıldığında, personel bir
+  müşteriyi bayiden ayırdığında (`DELETE /api/admin/resellers/:id/customers/:customerId`) ya da müşteri kendisi
+  ayrıldığında (`POST /api/reseller/leave`): sunucuların çalışan abonelikleri müşteriye geçer, bayinin o sunucular
+  için kesilmiş ve hiç ödenmemiş yenileme faturaları iptal edilir ve bir sonraki tahsilat çalıştırması ödenmemiş ilk
+  dönemi müşteriye faturalar. Bayinin diğer açık faturaları (kurulmuş sunucunun ilk faturası, boyut ya da disk farkı,
+  kısmen ödenmiş ya da başka sunucularla ortak olanlar) bayide kalır ve denetim kaydına `leftInvoices` olarak yazılır.
+  **Fiyat değişmez:** sunucu, bayi indirimi dahil, o andaki fiyatıyla müşteriye faturalanır. Önceden bayilik
+  kaldırıldığında abonelikler bayide kalıyordu. Bayiyi yalnızca kapatmak (`active: false`) bunu yapmaz: bayi işlem
+  yapamaz ama abonelikler ona faturalanmaya devam eder; yanıt kaç abonelik olduğunu söyler (`billedSubscriptions`).
+- **Bayi müşterileri bilgilendirilir.** Bir bayinin müşterisi paneli ilk kullandığında "Hesabınızı bir bayi
+  yönetiyor" bildirimini bir kez alır (`account.reseller`; varsayılan panel ve e-posta). **Yükseltmeden önceki bayi
+  müşterileri de bir sonraki ziyaretlerinde bu bildirimi alır.** Bayinin müşterinin sunucularında yaptığı işlemler ve
+  onun adına verdiği siparişler müşterinin Hesabım → Etkinlik listesinde "Bayiniz yaptı" etiketiyle görünür. Müşteri
+  Hesabım → Profil'deki "Hesabınızı … yönetiyor" kartında bayinin neleri yapıp neleri yapamadığını görür ve
+  "Bayiden ayrıl" ile ayrılabilir (kullanıcı adına oturum açmış personele bu düğme gösterilmez). Personel tek bir
+  müşteriyi Yönetim → Kullanıcılar'da bayinin kullanıcı özeti penceresindeki müşteri listesinden "Bayiden çıkar" ile
+  ayırır (`users.manage`); listeyi `GET /api/admin/resellers/:id` yanıtındaki `customers` alanı verir.
+- **Mesajlaşma uygulamaları.** Bağlantı kurma ve bağlantı testi hesap başına saatte 20 ile sınırlıdır; bildirim
+  testinde her mesajlaşma adresinin, hangi hesaba bağlı olursa olsun, saatte 6 testlik kendi sınırı vardır. Adresini
+  kullanıcının serbestçe yazdığı uygulamalarda (Mattermost, Rocket.Chat, Matrix, ntfy, Gotify, JSON webhook) başarısız
+  bir gönderimde kullanıcıya yalnızca hata kodu gösterilir; karşı sunucunun metni gösterilmez
+  ([notifications.md](notifications.md)).
+- **Kayıtlı görünümler artık hesapta saklanır.** Bir önceki turda tarayıcıda duran görünümler `saved_views`
+  tablosuna taşındı (API: `/api/saved-views`); her cihazda görünür ve yalnızca sahibi görür. Kullanıcı bir listeyi bu
+  sürümle ilk açtığında o tarayıcıdaki eski görünümleri hesaba **bir kez** gönderilir ve tarayıcıdan silinir. Ad sınırı
+  40'tan 60 karaktere çıktı. Bir kullanıcı adına oturum açan personel o kişinin görünümlerini uygular ama
+  değiştiremez. Aşağıdaki notta "çıkışta silinmezler" diye yazılan sınır bu sürümle kalktı: tarayıcıda kalmış eski
+  kopyalar, sahibi listeyi açtığında hesaba taşınır; taşınmamış olanlar o tarayıcıda bir oturum bittiğinde silinir
+  (hesaba gönderilmeden). Yükseltmeden sonra hiç açılmamış bir tarayıcıda eski kopya o zamana kadar durur.
+- **Tarayıcıda tutulanlar.** Çıkışta ve oturumun başka bir yolla bitmesinde silinenler genişledi: taslaklar ve son
+  açılanların yanında yarım kalmış sipariş, tablo sıralamaları, kenara alınan görevler ve personel özetindeki "son
+  bakışınızdan beri" işareti de silinir; ekrandaki tarayıcı bildirimleri kapatılır. Tema, yazı boyutu ve dil gibi
+  tercihler kalır. Aynı temizlik artık panel başka biri için açıldığında da yapılır: çıkış yapılmadan başka bir
+  hesapla girildiğinde ve "kullanıcı adına giriş" başlarken ve biterken (personelin taslakları müşterinin paneline,
+  müşterininkiler personele geçmez). **Yükseltmeden sonraki ilk açılışta her tarayıcıda bir kez** taslaklar, son
+  açılanlar ve yarım sipariş silinir: eski sürüm bu içeriğin kime ait olduğunu kaydetmediği için panel onu sahipsiz
+  sayar. Yazılmış ama gönderilmemiş uzun bir talep yanıtı olan personelinizi uyarın. Tam liste:
+  [operations-modules.md](operations-modules.md#tarayıcıda-tutulanlar-ve-oturum-sonu).
+- **Kurulum betiği: bakım dizini ve kilit.** `data/maintenance` root'a ait değilse ya da başkaları yazabiliyorsa
+  betik dizini devralır ve `W_MAINT_DIR` uyarısını yazar: sahiplik root'a geçer, içindeki bağlantılar, özel dosyalar
+  ve birden çok adı olan dosyalar silinir. Uyarıyı bir kez görmeniz olağandır (dizini root olmadan çalıştırılmış bir
+  komut açmış olabilir); yineleniyorsa dizine kimin yazdığına bakın. Dizin bir bağlantıysa betik durur
+  (`E_MAINT_DIR`, çıkış kodu 21): bağlantıyı kaldırıp yeniden deneyin. Kilit dosyası (`data/maintenance/.lock`) artık
+  her işin sonunda silinir ve bir sonraki iş kendi dosyasını açar; root kilidi alamazsa iş çalışmaz (`E_LOCK`, çıkış
+  kodu 21). Panelin okuduğu durum dosyaları ve günlük kopyaları geçici bir adla, yalnızca sahibine açık oluşturulup
+  yerine taşınır ([operations.md](operations.md#bakım-dizini-ve-kilit)). Bu yollar yalnızca `dash` ve `bash` altında
+  sahte dosyalarla denendi; gerçek bir kurulumda çalıştırılmadı.
+- **Sandbox'ta inceleme kartı.** Panelin test sağlayıcısında `4000 0000 0000 4954` numaralı kart ödemeyi "sağlayıcı
+  incelemeye aldı" (`FRAUD_REVIEW`) durumunda bırakır; inceleme akışını gerçek bir sağlayıcı olmadan denemek içindir.
+  Yalnızca Sandbox sağlayıcısı açıkken çalışır.
+- **CI.** `npm audit` adımının yerini `scripts/audit.mjs` aldı: yüksek ve kritik açıklar işi düşürür; yalnızca
+  `scripts/audit-allowlist.json` dosyasında gerekçesi ve son günü yazılı olanlar geçer (şu an tek kayıt: `apps/web`
+  içinde `picomatch`, GHSA-fc5q-39xc-vjpf, 2026-12-18'e kadar; açıktan etkilenmeyen bir sürüm yayımlandığında
+  kendiliğinden geçersiz olur). Web arayüzü Next.js 16.4.6 ile derlenir.
+- **Olduğu gibi bırakılanlar.** Dizin hesabının kişisel API anahtarları, dizinde kapatılan hesap panelde
+  yasaklanana ya da devre dışı bırakılana kadar çalışmaya devam eder. İnceleme bekleyen ödemesi olan faturada
+  hatırlatma ve askı adımları sürer. Hesap payı, birlikte hareket eden birden çok hesabı sınırlamaz. Bayinin
+  müşterisi adına yaptığı işlemlerden yalnızca sunucu işlemleri, siparişler ve hesabın açılması müşterinin etkinlik
+  listesindedir. Bayiden ayrılma, bayinin tam o anda verdiği bir siparişle çakışırsa o sipariş ayrılmanın dışında
+  kalabilir (bayiye faturalanmış ya da bayinin anahtarını taşıyor olabilir); bu yarış kapatılmadı.
+
 ## Kayıtlı görünümler, sıradaki adım ve talepte sunucu durumu (2026-11-18)
 
 Bir önceki turun üstüne eklenen arayüz ve bildirim işleri. **İşletmecinin yapacağı bir şey yoktur.** Veri değişikliği

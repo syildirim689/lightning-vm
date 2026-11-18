@@ -1,7 +1,9 @@
 # Security audit (November 2026)
 
 A summary for operators and contributors of the two rounds of the security audit and of what was changed because of
-them. Round one ran on commit `641aa4d`, round two on commit `d9f90d3` (the code with round one's fixes). What an
+them. Round one ran on commit `641aa4d`, round two on commit `d9f90d3` (the code with round one's fixes). What round
+two left open was worked through afterwards by source review; that is described in
+[Follow-up after round two](#follow-up-after-round-two-2026-11-18) and is **not** a third audit round. What an
 operator has to do after upgrading is in [upgrade-notes.md](upgrade-notes.md) (Turkish); how to report a
 vulnerability is in [SECURITY.md](../SECURITY.md).
 
@@ -188,8 +190,8 @@ safeguards. They are **not confirmed findings**.
 |---|---|
 | Staff acting as a customer could set the billing e-mail address, which would keep receiving the customer's invoices. | Yes: the billing e-mail cannot be changed while acting as a customer. |
 | `settings.manage` controlled the channels that carry every account's reset links and sign-in codes, administrators included. | Yes: only administrators can save mail or SMS settings, enable link or code sign-in, lower the two-factor requirement or weaken the captcha. |
-| An account a reseller opened for an unproven address stays reseller-managed after the real person takes it over, without notice or a way out. | **No.** |
-| Removing or deactivating a reseller separates who pays for the customers' servers from who controls them. | **No.** |
+| An account a reseller opened for an unproven address stays reseller-managed after the real person takes it over, without notice or a way out. | **Not in that release.** Changed in the follow-up of 2026-11-18 (below): the customer is told once, sees who manages the account and can leave. |
+| Removing or deactivating a reseller separates who pays for the customers' servers from who controls them. | **Not in that release.** Changed in the follow-up of 2026-11-18 (below) for removal and for a customer leaving; a reseller that is only switched off keeps being billed, and staff are told how many subscriptions that is. |
 
 One further candidate was **rejected** after verification (that staff events stay readable after a demotion).
 
@@ -210,32 +212,96 @@ Notification e-mails were not being sent at all on Node 22: a date-format option
 fail (sign-in notices, "password changed" and "two-factor changed" among them). Mails for password reset, sign-in
 links and codes were not affected. This is fixed; it was not a security finding, but it hid security notices.
 
+## Follow-up after round two (2026-11-18)
+
+Round two ended with a list of things it had not reviewed and two candidates it had left unchanged. They were worked
+through afterwards, by the maintainer with the same AI tooling.
+
+> [!IMPORTANT]
+> **This follow-up was a source review with tests, not an audit round.** There was no hunting wave and no second,
+> fresh reviewer per item, and nothing was reproduced by an independent verifier in the audit sandbox. What is listed
+> below are therefore **not independently validated findings**: they are gaps that reading the source showed, and the
+> changes made for them. They carry no severity and are not counted in the 48 confirmed findings above.
+
+How the changes were checked: by unit tests, which pass (API 157, worker 50, web 117, counted as `test(` at the start
+of a line in the test files), and by integration tests written for them against PostgreSQL and Redis
+(`security-leftovers.test.mjs`, `saved-views.test.mjs` and additions to `security-auth.test.mjs` and
+`security-billing.test.mjs`: 19 tests). The full integration suite was run on 2026-11-18 at commit `eaa0a4e` on a
+Linux host with Docker: 196 tests, 192 passed, 4 skipped (they need PowerDNS, an ISO storage or the console
+gateway), none failed; the 19 are in that count and passed. The end-to-end suite (Playwright) ran at the same commit
+on the demo deployment with a fresh database and the VMware simulator: 31 of 31 passed, the new steps among them
+(saved views against the account's copy; a payment held for review, made with the sandbox card and closed by staff).
+It has no step for the reseller card, leaving a reseller, staff releasing a customer, or the removal of browser
+content when the account changes, and nothing was looked at in a browser by hand.
+
+### The directory and single sign-on re-check
+
+Round one made four fixes to directory (LDAP) and single sign-on sign-in; round two could not re-check them. Read
+again on the current source:
+
+| Round-one fix | Result of the re-read | What was changed |
+|---|---|---|
+| Posting a provider ID token to sign in or link is refused. | **Holds.** | Nothing. |
+| A directory account gets a session only when the directory accepted that sign-in. | **Incomplete.** A session, once made, was extended for as long as it was used, so an account closed in the directory (or at the provider) kept its panel session indefinitely. | A session of a directory or single sign-on account ends `SESSION_TTL_HOURS` after sign-in, used or not. The session a two-factor change swaps in keeps the age of the one it replaces. |
+| The directory is asked last, after the captcha and the per-e-mail limit. | **Incomplete.** The per-e-mail limit counts what was typed, while a directory matches many spellings of one mailbox, each with a limit of its own; and the settings test let staff try a person's directory password without counting. | An address that has no account is put to the directory only in its one plain spelling. The settings test, when it is given a password, counts against the same per-address limit as a sign-in. |
+| Saving directory or single sign-on settings needs permissions covering every mapped role. | **Incomplete.** Whoever names the server also decides who the accounts already behind it are, and those sign in with the roles and overrides they hold in the panel; and a deleted role stayed in the mappings, so a role created later under the same key was handed out by the old mapping. | Saving needs permissions covering every account that signs in through that source as well (`FORBIDDEN_TARGET`, `ACCOUNTS_NOT_COVERED`). Deleting a role removes it from both mappings. |
+
+**Left open:** personal API tokens of a directory or single sign-on account are not sessions and keep working after
+the account is closed in the directory, until staff ban or disable the account in the panel or delete the tokens. Of
+the three units round two deferred here, the staff routes for roles, users, access overrides and impersonation were
+looked at only where a deleted role meets the mappings; they have had no re-check of their own.
+
+### The six areas proposed after the round-two wave
+
+| Area | What was changed | Left as is |
+|---|---|---|
+| 1. An account registered for an address the registrant does not control | The first password reset through a mailed link now counts as the first proof, like the first sign-in by link or code. The proof also removes saved SSH keys, saved cards (automatic renewal needs a card again), the billing e-mail and phone, a pending second step, trusted browsers and the earlier holder's open server offers. Servers, images, balance and tickets stay and are written down for staff (audit event, and a staff note when there are servers, images or balance entries). Accepting a transferred server needs a proven address (`ADDRESS_NOT_PROVEN`). The setup administrator and accounts staff create are proven from the start; accounts a reseller opens are not. | What stays on the account (servers and what is inside them) may have been set up by the earlier holder; the panel notes it for staff and changes nothing in the guests. Migration `085` marks the existing accounts staff had vouched for as proven (any role other than `user`, or created under Admin → Users according to the audit log). Other accounts made before this change (self-registered, opened by a reseller) keep the mark they have, so their first password reset by mail removes the above once. |
+| 2. Payments held for review (iyzico, PayTR, Craftgate, Stripe; Param's unconfirmed returns) | Staff "mark paid" closes the invoice's held payments in the same transaction, so a provider's later "paid" settles nothing a second time. A new staff action (`close-review`) ends a held payment without settling anything. The automatic charge skips an invoice that has a held payment. PayTR: the amount check uses the total the signature covers. The sandbox has a test card that yields a held payment (`4000 0000 0000 4954`, `FRAUD_REVIEW`; in sandbox mode only). | Reminders, past-due and suspension still run while a payment is held. A customer can still start a second payment for the same invoice. |
+| 3. Notification test and delivery to customer-supplied endpoints | Creating and testing a messaging connection has a budget per account (20 an hour); the notification test has a budget per messaging destination across accounts (6 an hour). For connectors whose address the user names freely (Mattermost, Rocket.Chat, Matrix, ntfy, Gotify, plain webhook) a failed send answers with a code only, never the remote text or the connection error. | The push and e-mail legs were read and not changed: a push endpoint belongs to one account at a time and mail goes to the account's own address, so the per-account limit covers them. Ordinary notification delivery (not the test) has no budget of its own. |
+| 4. Data kept in the browser at session end | Every key the panel writes is listed as content or preference, and a unit test fails for an unlisted one. Content (drafts, recent items, the order being composed, table state, the staff digest mark) is removed on sign-out, on any other end of the session, when another account opens the panel in the same browser, and at both ends of "sign in as"; notifications on screen are closed. Saved views moved from the browser to the account (`/saved-views`); copies an earlier version left are uploaded once by their owner and removed, or removed at the next session end. | Removal needs the panel to open again in that browser or the session to end there; a browser that is closed and never returns keeps what it had. Not observed in a real browser. |
+| 5. The shared operations queue | One account can have only `OPERATIONS_PER_OWNER` operations under way at once (default: half of `OPERATIONS_CONCURRENCY`; 0 switches it off); further ones go back to the queue with a delay. Operations started by staff, the billing run and the billing integration are never held. A reseller's operations for its customers count against the reseller. | The operation deadline keeps running while an operation waits for its share. Accounts acting together each have a share of their own. |
+| 6. The installer's maintenance lock and host snapshots | Snapshot files for the panel are created privately under an unpredictable name and renamed into place; the lock file is its maker's alone, is checked before use and removed with the job; root takes over a maintenance directory that is not its own (`W_MAINT_DIR`) and refuses one that is a link; a request log is created anew and closed to others. | Exercised with dummy files under `dash` and `bash` only, not on an installation with the systemd timer and the panel agent. |
+
+### The two reseller candidates
+
+- **A customer of a reseller did not know and could not leave.** The customer now sees who manages the account
+  (account page, `managedBy` in `GET /reseller/summary`), is notified once the first time they use the panel
+  (`account.reseller`), finds what the reseller did to their servers in their own activity list, and can leave
+  (`POST /reseller/leave`). Staff can take one customer out of a reseller's hands: the user summary dialog lists
+  the reseller's customers (`GET /admin/resellers/:id`) with a release action for each.
+- **Who pays and who controls came apart.** When a customer stops being a reseller's (the reseller is removed, staff
+  take the customer out, the customer leaves), the running subscriptions move to the customer, the reseller's
+  untouched renewal invoices for those servers are cancelled and the customer is invoiced from the first unpaid
+  period. Other open invoices stay with the reseller. Prices are not changed.
+- **Gaps that remain:** of a reseller's actions only operations on servers, orders and the creation of the account
+  appear in the customer's activity; an order the reseller places at the very moment the customer leaves can end up
+  outside the release; a reseller that is only switched off keeps paying for servers it can no longer act on (staff
+  are shown how many).
+
+Details for operators are in [upgrade-notes.md](upgrade-notes.md), [auth.md](auth.md), [payments.md](payments.md),
+[billing.md](billing.md), [operations.md](operations.md) and [notifications.md](notifications.md) (Turkish).
+
 ## Not reviewed
 
-- **The directory (LDAP) and single sign-on re-check.** Three units of round two were deferred when their reviewer
-  was stopped: LDAP sign-in with user search, group-to-role mapping and auto-create; OIDC and social sign-in with
-  callbacks and role mapping from claims; and the staff routes for roles, users, access overrides and impersonation.
-  Round one reviewed these areas and its four fixes there are covered by integration tests, but the fixes were not
-  re-checked independently.
-- **Six areas the coverage critic proposed after the round-two wave**, none of which was assigned:
-  1. An account registered for an address the registrant does not control: what the first holder set up (API tokens,
-     passkeys, webhooks, chat connections, push subscriptions, phone number, two-factor) after the real owner proves
-     the address. (This release removes these at the first proof and in the claim route; the change was not
-     reviewed.)
-  2. Payments held for review (a different amount, a fraud review): later callbacks, the billing run's re-check,
-     expiry, a second payment of the same invoice and the staff settle-by-hand path.
-  3. The notification test and delivery on the push, chat and e-mail legs: repeated outbound requests to
-     customer-supplied endpoints. (The test now has a per-account limit on every channel; the legs were not
-     reviewed.)
-  4. Data kept in the browser at session end, on every way a session ends, and what the next account on the same
-     browser finds.
-  5. The shared operations queue (eight slots, one held while an operation waits) against the per-role hourly limit,
-     order payment rules and the operation deadline.
-  6. The installer's file handling for the maintenance lock and the host snapshots (service logs, journal,
-     processes) written for the panel.
+- **The directory (LDAP) and single sign-on re-check was never done by an independent reviewer.** Three units of
+  round two were deferred when their reviewer was stopped: LDAP sign-in with user search, group-to-role mapping and
+  auto-create; OIDC and social sign-in with callbacks and role mapping from claims; and the staff routes for roles,
+  users, access overrides and impersonation. The follow-up above re-read round one's four fixes there on the source
+  and finished three of them; that is a source review by the same tooling that wrote the fixes, not the second,
+  independent look the other fixes got. The staff routes were not re-checked beyond the one place named above.
+- **Six areas the coverage critic proposed after the round-two wave** were never assigned to the audit workflow:
+  the unproven-address account, payments held for review, notification test and delivery, browser data at session
+  end, the shared operations queue, and the installer's lock and snapshot files. All six were worked through in the
+  follow-up above, again by source review with tests and without independent verification. What was deliberately
+  left as it is in each is in the table's last column.
+- **65 review units of round one were never looked at again.** Round two re-checked only the units in which round
+  one had found something; the units round one covered without a finding were out of its scope, and the follow-up
+  did not touch them either.
 - **The areas round one left unreviewed** (its deferred units and the thirteen areas its coverage critic proposed)
   were the starting point of round two's scope, and most of the findings above come from them. Round two deferred
-  the nine units listed here in turn, so no claim of complete coverage is made for any area.
+  nine units in turn (the three directory and single sign-on units and the six areas above), so no claim of complete
+  coverage is made for any area.
+- **The changes of the follow-up were not themselves reviewed** by anyone but their author's tooling.
 
 ## Limits
 
@@ -247,14 +313,19 @@ links and codes were not affected. This is fixed; it was not a security finding,
 - **How the fixes were verified.** By unit tests and by integration tests against real PostgreSQL and Redis
   (`apps/api/test/integration/security-*.test.mjs` and additions to the existing suites). The fixes of round two
   were not themselves reviewed by a further audit round.
+- **The follow-up is not a round.** It was a source review with tests by the same tooling, without a hunting wave,
+  independent verifiers or sandbox reproduction. Its items are not validated findings.
 - **Not tried on real systems.** Nothing was verified against real hypervisors. The Proxmox findings and their fixes
   were observed against a stand-in for the Proxmox API, not a real cluster; that Proxmox hands a freed VM number to
   the next VM is its documented behaviour, not something observed here. The Param changes were not verified against
   a real Param merchant account. Caddy and Nginx could not run in the audit sandbox, so the proxy behaviour (one
-  client address upstream, the host name passed on) was not observed there.
+  client address upstream, the host name passed on) was not observed there. The follow-up's directory changes were
+  not tried against a real directory server or identity provider, its payment changes not against a real provider
+  account, and its queue change not under load on a real hypervisor.
 - **Installer paths exercised with dummy files only.** Restore, the maintenance requests and the certificate checks
   were run against dummy archives, request files and certificates; a full restore with Docker Compose and
-  `pg_restore` on an installation was not run in the audit.
+  `pg_restore` on an installation was not run in the audit. The follow-up's lock and snapshot-file handling was
+  exercised with dummy files under `dash` and `bash` only.
 - **Sandbox observations only.** Findings were reproduced with dummy data; several end states (a guest login, a
   hypervisor copy, the worker carrying out a queued deletion, a browser receiving a push message) were reasoned from
   source rather than exercised.

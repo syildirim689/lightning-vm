@@ -46,7 +46,8 @@ diğerleri eklendi). Güncel ve tam liste koddaki katalogdur; panelde Ayarlar �
 | `auth.sign_in` (yeni giriş) | kullanıcı | panel, e-posta |
 | `auth.password_changed` | kullanıcı | panel, e-posta |
 | `auth.two_factor_changed` | kullanıcı | panel, e-posta |
-| `auth.credentials_reset` (adresin ilk kanıtında giriş bilgileri silindi; [auth.md](auth.md#adresin-ilk-kanıtı-giriş-bağlantısı-ve-e-posta-kodu)) | kullanıcı | panel, e-posta |
+| `auth.credentials_reset` (adresin ilk kanıtında giriş bilgileri silindi; [auth.md](auth.md#adresin-ilk-kanıtı)) | kullanıcı | panel, e-posta |
+| `account.reseller` (bayi ve müşterisi; üç durumu [aşağıda](#bayi-bildirimi-accountreseller)) | müşteri ya da bayi | panel, e-posta |
 | `billing.payment_review` (ödeme incelemeye girdi, ödeme başına bir kez; [payments.md](payments.md#incelemedeki-ödemeler)) | `billing.manage` izni olanlar | panel, e-posta |
 | `admin.user_registered` | `users.view` izni olanlar | panel |
 | `admin.operation_failed` | `servers.view_all` izni olanlar | panel, tarayıcı |
@@ -78,6 +79,24 @@ yalnızca gösterimdedir: gönderilen e-posta ve diğer kanallar değişmez.
 Parola sıfırlama bağlantısı, iki adımlı doğrulama kodu ve telefon doğrulama kodu bildirim değildir;
 her zaman kendi kanallarından gider.
 
+### Bayi bildirimi (`account.reseller`)
+Tek olay, üç durum (`apps/api/src/reseller.ts`). Kullanılabilir kanallar panel, tarayıcı, e-posta ve mesajlaşma
+uygulamalarıdır (SMS yok); varsayılanı panel ve e-postadır.
+
+- **"Hesabınızı bir bayi yönetiyor"** (müşteriye, bir kez): bayinin açtığı hesabın sahibi paneli ilk kullandığında
+  gider. Hesabı kimin açtığını, bayinin neler yapabildiğini (sunucuları görme, müşteri adına sipariş, açma, kapatma,
+  yeniden kurma, silme, konsol; ücreti bayi öder) ve neleri yapamadığını (müşteri olarak oturum açma, parolayı ve
+  destek taleplerini görme) söyler. Personel o kullanıcı adına oturum açmışken gönderilmez. Bu sürümden önce açılmış
+  bayi müşterileri de bir sonraki ziyaretlerinde alır (`users.reseller_notice_at`, migration `084`).
+- **"Hesabınız artık bir bayiye bağlı değil"** (müşteriye): hesap bayiden ayrıldığında (müşteri kendisi ayrıldı,
+  personel ayırdı ya da bayilik kaldırıldı). Kaç sunucunun bundan sonra müşteriye faturalanacağını ve, bayinin hesaba
+  eklediği SSH anahtarı kaldırıldıysa, anahtarın çalışan sunucuların içinde hâlâ durabileceğini söyler.
+- **"… artık müşteriniz değil"** (bayiye): müşteri kendisi ayrıldığında ya da personel tek bir müşteriyi ayırdığında.
+  Bayilik kaldırılırken bayiye gönderilmez. Bayide kalan ödenmemiş fatura varsa sayısını söyler.
+
+Ayarlar → Bildirim kuralları'nda "Bayi ve hesabınız" adıyla görünür. Ödemenin kime geçtiği:
+[billing.md](billing.md#bayiler-kim-öder).
+
 ## Teslimat
 API ve worker yalnızca `notifications` BullMQ kuyruğuna iş bırakır. Kuyruğu API süreci tüketir:
 1. alıcıları bulur;
@@ -87,7 +106,10 @@ API ve worker yalnızca `notifications` BullMQ kuyruğuna iş bırakır. Kuyruğ
 Bir kanalın hatası diğerlerini durdurmaz ve loglanır. İş, geçici hatalar için 3 kez denenir.
 
 Kullanıcı her kanalı Hesabım → Bildirimler'deki "Test gönder" düğmesiyle deneyebilir. Test gönderimleri sınırlıdır:
-hesap başına saatte 6 (bütün kanallar birlikte), SMS'te ayrıca numara başına saatte 6; aşılırsa `429` döner.
+hesap başına saatte 6 (bütün kanallar birlikte), SMS'te ayrıca numara başına saatte 6, mesajlaşma kanalında ayrıca
+**adres başına** saatte 6; aşılırsa `429` döner. Mesajlaşma adresi tek bir hesaba bağlı değildir (aynı webhook birçok
+hesaba bağlanabilir); bu yüzden sınır, adres hangi hesapta bağlı olursa olsun ortaktır. Tarayıcı bildirimi adresi aynı
+anda tek hesaba aittir ve e-posta hesabın kendi adresine gider; onlarda hesabın sınırı yeterlidir.
 
 ## Yeni bir bildirim eklemek
 1. Olayı `catalog`a ekleyin: kime gideceği, kullanılabilir ve varsayılan kanallar, bağlantı ve TR/EN metin.
@@ -104,6 +126,20 @@ Yönetici Ayarlar → Mesajlaşma'dan sunulan uygulamaları seçer ve hesap gere
 numarası kimliği, gövdesi `{{1}}` başlık `{{2}}` metin olan onaylı şablon) ve Pushover uygulama anahtarı.
 Kullanıcının verdiği adresler herkese açık HTTPS olmalıdır; özel/iç ağ adresleri reddedilir. Webhook'a imza
 anahtarı verilirse istek `X-Lightning-Signature: sha256=<HMAC>` başlığıyla gelir. Kod: `apps/api/src/chat*.ts`.
+
+Bağlantı kurmak ve bir bağlantıyı test etmek, paneli kullanıcının seçtiği bir adrese istek göndermeye zorlar; bunun
+için iki kural vardır:
+
+- **Bütçe:** bağlantı kurma ve bağlantı testi birlikte hesap başına saatte 20 ile sınırlıdır (`429`). İstek
+  gönderilmeden önce reddedilen girdi (geçersiz adres gibi) sayılmaz. Bildirim testinin kendi sınırları yukarıdadır.
+- **Karşı sunucunun metni gösterilmez:** adresini kullanıcının serbestçe yazdığı uygulamalarda (Mattermost,
+  Rocket.Chat, Matrix, ntfy, Gotify, JSON webhook) başarısız bir gönderimde kullanıcıya yalnızca hata kodu döner
+  (`CHAT_UNREACHABLE`, `CHAT_REJECTED` ve benzerleri). Yanıtın metni ya da bağlantı hatası, o adreste panelin gördüğü
+  şeydir; iletilseydi bir müşteri, panelin adresine güvenen sunucuların yanıtlarını okuyabilirdi. Adresi belli bir
+  hizmetin hostlarıyla sınırlı olanlarda (Slack, Discord, Teams, Google Chat) ve yöneticinin hesabıyla çalışanlarda
+  (Telegram, WhatsApp, Pushover) hizmetin kendi hata metni gösterilmeye devam eder.
+
+İkisi de birim testlidir (`chat-apps`) ve `security-leftovers` entegrasyon testindedir; test 2026-11-18 tarihli tam çalıştırmada geçti.
 
 Destek: `support.reply` (yanıt geldi), `support.rate` (talebi destek ya da 7 günlük sessizlik kapattığında puan
 isteği; müşteri kendisi kapattıysa gönderilmez), personele `support.ticket_opened`, `support.customer_message`,

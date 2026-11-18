@@ -81,7 +81,9 @@ araştırma (alanlar, adresler, imza yöntemleri, kaynaklar): [research-payments
   servisi (`TP_Islem_Sorgulama4`) bir üye işyeri hesabıyla denenemediği için kullanılmıyor.
 - **Tutarı ya da para birimi tutmayan ödeme:** sağlayıcının farklı bir tutar ya da para birimiyle bildirdiği veya
   dolandırıcılık incelemesine aldığı ödeme başarısız sayılmaz; gerekçesi görünerek bekliyor kalır ve personel karar
-  verir ([İncelemedeki ödemeler](#incelemedeki-ödemeler)).
+  verir ([İncelemedeki ödemeler](#incelemedeki-ödemeler)). PayTR bildiriminde karşılaştırılan tutar, bildirimin
+  imzasının kapsadığı toplamdır (`total_amount`); imzasız gelen `payment_amount` yalnızca daha küçükse dikkate alınır,
+  imzalı tutarın yerine geçemez.
 - **Fatura tutarı ödeme anında değişebilir:** dönemi başlamamış bir yenileme faturası, ödeme başlatılırken ya da
   alınırken sunucunun güncel fiyatına göre yeniden fiyatlanır ([billing.md](billing.md)).
 - **Test ve canlı:** Sandbox kapatıldığında bekleyen sandbox ödemeleri, bir sağlayıcı canlı moda alındığında test
@@ -99,7 +101,8 @@ yüzden dönüş **ödemenin kanıtı sayılmaz**:
   kalır; müşteriye ödemenin onay beklediği söylenir.
 - Personel tahsilatı **Param panelinde** (ya da hesap ekstresinde) bu numaralarla bulur, tutarı karşılaştırır ve
   faturayı Yönetim → Faturalar'dan "Ödeme kaydet" ile kapatır. Sipariş kurulumu, askının kalkması ve bakiye
-  yüklemesi bu adımdan sonra gerçekleşir.
+  yüklemesi bu adımdan sonra gerçekleşir; faturanın onay bekleyen ödemesi de aynı işlemde kapanır. Param panelinde
+  tahsilat yoksa ödemenin incelemesi "İncelemeyi kapat" ile kapatılır ([aşağıda](#incelemedeki-ödemeler)).
 - Henüz incelemeye girmemiş bir ödemede reddedilen dönüş ödemeyi kapatır; müşteri yeniden deneyebilir.
 - **İncelemeye giren ödemeye sonraki dönüşler işlenmez.** Ödeme bir kez "onay bekliyor" olduktan sonra gelen her
   dönüş, **"reddedildi" dahil**, yok sayılır: dönüş imzasız olduğu için ödeme kimliğini bilen biri, gerçekten ödenmiş
@@ -124,8 +127,37 @@ Personelin kararını bekleyen ödemeler **bekliyor** durumunda ve bir gerekçe 
   paylaşılabilir. Bekleyen ödeme varken faturalandırma özetinin üstünde sayıyı ve en eskisini söyleyen bir uyarı,
   yönetim menüsünde Faturalandırma'nın yanında bir sayaç (`GET /api/admin/attention`) ve Genel bakış'ta "ödeme
   inceleme bekliyor" içgörüsü (`PAYMENTS_IN_REVIEW`, `billing.view` izni olanlara) durur.
-- **Karar elledir:** sağlayıcının panelinde kontrol edin. Para geldiyse faturayı açıp "Ödeme kaydet" ile kapatın;
-  gelmediyse bir şey yapmayın, fatura ödeme beklemeye devam eder. Hiçbir ödeme incelemeden kendiliğinden çıkmaz.
+- **Karar elledir:** sağlayıcının panelinde kontrol edin. Hiçbir ödeme incelemeden kendiliğinden çıkmaz; iki yolu
+  vardır:
+  - **Para geldiyse** faturayı açıp "Ödeme kaydet" ile kapatın. Aynı işlemde o faturanın inceleme bekleyen bütün
+    ödemeleri kapanır: durumları `cancelled` olur, gerekçeleri üzerlerinde kalır ve referanslarına hangi elle ödeme
+    kaydıyla kapandıkları yazılır. Para **bir kez**, elle kaydedilen ödemeyle sayılır. Yanıt ve denetim kaydı kapanan
+    ödemeleri verir (`closedReviews`); panel kaç ödemenin kapandığını söyler. Önceden böyle bir ödeme listede süresiz
+    kalıyor ve sağlayıcının sonradan gelen "ödendi" yanıtı (biten bir dolandırıcılık incelemesi, tahsilat
+    çalıştırmasının yeniden sorması ya da dönüş adresinin açılması) ödenmiş faturanın üstüne ikinci kez bakiye
+    yazabiliyordu.
+  - **Para gelmediyse** ya da fatura bu arada başka yolla ödendi ya da iptal edildiyse ödemenin satırındaki
+    "İncelemeyi kapat" düğmesini kullanın (`billing.manage`; API: `POST
+    /api/admin/billing/payments/:id/close-review`, isteğe bağlı `note`, en çok 150 karakter). Hiçbir şey ödenmiş
+    sayılmaz, bakiyeye bir şey yazılmaz, fatura olduğu gibi kalır; ödeme `cancelled` olur, gerekçesi ve notunuz
+    üzerinde kalır, olay `billing.review_closed` olarak denetim kaydına yazılır. İnceleme beklemeyen bir ödemede
+    `409 PAYMENT_NOT_IN_REVIEW` döner. Sağlayıcı parayı gerçekten tahsil ettiyse iade sağlayıcının panelinden yapılır
+    ya da tutar bakiye düzeltmesiyle verilir; panel bunu kendiliğinden yapmaz.
+  - Kapatılan bir ödemeyi sonradan gelen hiçbir dönüş, bildirim ya da yeniden sorma değiştirmez (bunlar yalnızca
+    bekleyen ödemeye işler). Kapatılan ödemeler listede `cancelled` durum süzgeciyle bulunur.
+- **Otomatik tahsilat bekler, hatırlatmalar beklemez.** İnceleme bekleyen ödemesi olan bir faturadan otomatik tahsilat
+  (bakiye ve kayıtlı kart) **çekmez**: sağlayıcı müşterinin parasını o fatura için tutuyor olabilir. Personel karar
+  verdikten sonra fatura yeniden tahsilata girer. Hatırlatma, gecikme (`past_due`), askıya alma ve ayarlıysa silme
+  adımları ise **sürer**; bu bilerek olduğu gibi bırakıldı. İnceleme bekleyen bir ödeme vadesini geçerse müşterinin
+  sunucusu askıya alınabilir: kararı geciktirmeyin.
+- **Müşteri ne görür:** inceleme bekleyen ödemesi olan ödenmemiş faturanın sayfasında "Ödemeniz inceleniyor" notu
+  durur ve sayfa sonucu beklemeyi bırakır; müşteriden yeniden ödeme yapması istenmez (ödeme düğmeleri yine de
+  durur).
+- **Sandbox'ta denemek:** panelin test sağlayıcısında `4000 0000 0000 4954` numaralı kart ödemeyi `FRAUD_REVIEW`
+  gerekçesiyle incelemede bırakır; gerçek bir sağlayıcının bekletilen ödemesiyle aynı yolu izler ve kart
+  kaydedilmez. Diğer test kartları: `4242 4242 4242 4242` onaylanır, `4000 0000 0000 0002` reddedilir,
+  `4000 0000 0000 9995` yetersiz bakiye yanıtı verir. Dördü de yalnızca Sandbox sağlayıcısı açıkken çalışır; gerçek
+  bir sağlayıcıda bu numaraların özel bir anlamı yoktur.
 - **Bildirim:** bir ödeme incelemeye girdiğinde `billing.manage` izni olan personele `billing.payment_review`
   bildirimi gider (varsayılan kanallar panel ve e-posta; Ayarlar → Bildirim kuralları'ndan değiştirilir). Ödeme
   başına bir kez gönderilir; aynı ödeme için sonradan gelen yanıtlar yeniden bildirmez. Olay günlüğe de yazılır
@@ -136,8 +168,11 @@ Personelin kararını bekleyen ödemeler **bekliyor** durumunda ve bir gerekçe 
   satırda `review`, `reviewSince` ve gerekçe olarak `errorCode` bulunur. Faturalama özeti sayıyı ve en eski bekleyeni
   `paymentsInReview` alanında verir.
 - İnceleme görünümü tarayıcıda elle gözden geçirilmedi. Uçtan uca testler süzgecin sunulduğunu, bekleyen ödeme
-  yokken boş liste metnini ve süzgeç ile aramanın adreste kalıp yenilemeden sonra geri geldiğini kapsar; bekleyen bir
-  ödemenin satırı (gerekçe, bekleme süresi, "Faturayı aç"), özetteki uyarı ve menüdeki sıfırdan büyük sayaç uçtan uca
-  sınanmaz. Bildirim ve liste `security-billing` entegrasyon testlerindedir.
-- Ödeme listesinde "Görünümler" düğmesiyle süzgeç ve arama kayıtlı görünüm olarak saklanabilir; görünümler
-  tarayıcıda durur ve çıkışta silinmez ([operations-modules.md](operations-modules.md)).
+  yokken boş liste metnini ve süzgeç ile aramanın adreste kalıp yenilemeden sonra geri geldiğini kapsar. Bildirim ve
+  liste `security-billing` entegrasyon testlerindedir.
+- Bekleyen bir ödemeyle ilgili ekranlar için bir uçtan uca adım vardır ve `eaa0a4e` commit'indeki çalıştırmada geçti: Sandbox'taki inceleme kartıyla ödeme, müşterinin faturasındaki "Ödemeniz inceleniyor" notu, menüdeki sayaç (1) ve özetteki uyarı, listedeki satır (durum, gerekçe, "Faturayı aç"), "İncelemeyi kapat" ile kapatma, sayacın kalkması ve kapatılan ödemenin `cancelled` süzgecinde bulunması.
+  "Ödeme kaydet"in bekleyen ödemeyi kapatması ve satırdaki bekleme süresi uçtan uca sınanmaz.
+- "Ödeme kaydet"in incelemeyi kapatması, sonradan gelen "ödendi" yanıtının bir şey yazmaması, elle kapatma ve otomatik tahsilatın beklemesi bir `security-billing` entegrasyon testindedir; test 2026-11-18 tarihli tam çalıştırmada geçti.
+  İnceleme kartı ve PayTR tutar denetimi birim testlidir (`billing-providers`).
+- Ödeme listesinde "Görünümler" düğmesiyle süzgeç ve arama kayıtlı görünüm olarak saklanabilir; görünümler hesapla
+  birlikte saklanır ([operations-modules.md](operations-modules.md)).

@@ -24,10 +24,12 @@ Kod: `apps/api/src/billing.ts` (akış ve uç noktalar), `billing-rules.ts` (par
    kurulum iptal edilerek adresler serbest kalır.
 2. **Yenileme**: dönem bitiminden N gün önce fatura kesilir. Otomatik tahsilat açıksa önce bakiyeden, sonra varsayılan kayıtlı karttan
    çekilir (günde bir, en fazla ayarlanan sayıda deneme). Dönemi başlamamış, ödenmemiş yenileme faturası **sunucunun güncel fiyatını
-   izler** ([aşağıda](#yenileme-faturası-sunucunun-fiyatını-izler)).
+   izler** ([aşağıda](#yenileme-faturası-sunucunun-fiyatını-izler)). İnceleme bekleyen bir ödemesi olan fatura otomatik tahsilata
+   **girmez**: sağlayıcı o fatura için müşterinin parasını tutuyor olabilir; personel karar verdikten sonra yeniden girer
+   ([payments.md](payments.md#incelemedeki-ödemeler)).
 3. **Ödenmeyen yenileme**: son ödeme gününden önce hatırlatma; ertesi gün gecikme bildirimi (`past_due`); X gün sonra askıya alma
    (sunucu kapatılır ve müşteriye kilitlenir; kapatma ve silme dışında işlem, konsol yok); ayarlanmışsa Y gün sonra silme.
-   Ödeme yapılınca askı kalkar ve sunucu yeniden açılır.
+   Ödeme yapılınca askı kalkar ve sunucu yeniden açılır. Bu adımlar, faturanın inceleme bekleyen bir ödemesi olsa da **sürer**.
 4. **İptal**: müşteri "dönem sonunda iptal" seçer; sunucu dönem sonuna kadar çalışır, sonra silinir.
 5. **İade**: karta (sağlayıcı üzerinden) ya da bakiyeye; kısmi olabilir. e-Arşiv faturası teslimden itibaren 8 gün içinde tamamen
    iade edilirse entegratörde iptal edilir; aksi halde ekibe iade faturası gerektiği bildirilir (e-Fatura alıcısında iadeyi alıcı keser).
@@ -53,9 +55,9 @@ fazlası müşterinin bakiyesine yazılır. Kabul edilen bir itiraz bakiyeye en 
 
 | Kuruluş | Ödeme | Kayıtlı kartla yenileme | İade | Not |
 |---|---|---|---|---|
-| Sandbox (panelin kendi test sağlayıcısı) | Test kartı sayfası | Var | Var | Gerçek müşteri varken kapalı olmalı |
+| Sandbox (panelin kendi test sağlayıcısı) | Test kartı sayfası | Var | Var | Gerçek müşteri varken kapalı olmalı. Test kartları: `4242 4242 4242 4242` onay, `4000 0000 0000 0002` ret, `4000 0000 0000 9995` yetersiz bakiye, `4000 0000 0000 4954` incelemede bekler (`FRAUD_REVIEW`; kaydedilmez) |
 | iyzico | Checkout Form (3D) | Var (hesap 3D'siz çekime izinliyse) | `/v2/payment/refund` | Sonuç `checkoutform/auth/ecom/detail` ile doğrulanır, imza kontrol edilir |
-| PayTR | iFrame (3D) | Yok (kart saklama Direkt API ister) | `/odeme/iade` | Bildirim URL'si PayTR panelinde girilir: `https://<panel>/api/billing/callback/paytr` |
+| PayTR | iFrame (3D) | Yok (kart saklama Direkt API ister) | `/odeme/iade` | Bildirim URL'si PayTR panelinde girilir: `https://<panel>/api/billing/callback/paytr`. Tutar, bildirimin imzasının kapsadığı `total_amount` ile denetlenir |
 | Stripe | Checkout (3D) | Var (off-session) | `/v1/refunds` | Türkiye'de kurulu şirketleri kabul etmiyor. Webhook yok: ödeme, müşterinin tarayıcısı panele döndüğünde ya da tahsilat çalıştırması Stripe'a yeniden sorduğunda işlenir |
 | Craftgate | Ortak Ödeme Formu (3D) | Var (3D'siz POS gerekir) | `/payment/v1/refunds` | Sonuç `checkout-payments/{token}` ile doğrulanır |
 | Param | Ortak Ödeme Sayfası (3D) | Yok | `TP_Islem_Iptal_Iade_Kismi2` | IP izni gerekir; TMSF kayyımı haberi var. Yalnızca TRY. Dönüş ödemeyi işlemez: ödeme "onay bekliyor" kalır, personel Param panelinde doğrulayıp faturayı elle kapatır ([payments.md](payments.md#param-elle-onay)) |
@@ -79,7 +81,10 @@ Bilinen iki açık:
 İncelemede bekleyen ödemeler (Param'ın onay bekleyenleri, tutarı tutmayanlar, sağlayıcının incelemeye aldıkları)
 Yönetim → Faturalandırma → Ödemeler'de "İnceleme bekleyen" süzgeciyle (API: `GET /api/admin/billing/payments?status=review`)
 listelenir ve özetin `paymentsInReview` alanında sayılır. Bir ödeme incelemeye girdiğinde `billing.manage` izni olan
-personele `billing.payment_review` bildirimi gider; karar yine elle verilir
+personele `billing.payment_review` bildirimi gider; karar yine elle verilir. Para geldiyse personel faturayı "Ödeme
+kaydet" ile kapatır ve faturanın inceleme bekleyen ödemeleri aynı işlemde kapanır (`cancelled`; para bir kez, elle
+kaydedilen ödemeyle sayılır). Para gelmediyse ödemenin incelemesi hiçbir şey ödenmiş sayılmadan kapatılır (`POST
+/api/admin/billing/payments/:id/close-review`, panelde "İncelemeyi kapat")
 ([payments.md](payments.md#incelemedeki-ödemeler)).
 
 Müşterinin Genel bakış sayfasındaki **Yaklaşan ödemeler** bloğu faturalama özetinden ve fatura listesinden okur:
@@ -115,8 +120,67 @@ Kalan sınırlar:
   çizilmez; özetin geri kalanı etkilenmez. Alanı hiç göndermeyen eski bir API'ye karşı arayüz önceki hesabına
   (aboneliklerin vergisiz tutarı) döner.
 
-Hesap `billing-rules` birim testleri ve bir `security-billing` entegrasyon testiyle sınanır; bloğun kendisinin uçtan
-uca testi yoktur ve tarayıcıda elle gözden geçirilmedi.
+Hesap `billing-rules` birim testleri ve bir `security-billing` entegrasyon testiyle sınanır. Blok için bir uçtan uca
+adım vardır (üç gün içinde vadesi dolan fatura tutarı ve "Öde" bağlantısıyla listelenir; ödendikten sonra blok hiç
+çizilmez); adım `eaa0a4e` commit'indeki çalıştırmada geçti.
+Yenileme satırı ve saatlik bakiye satırı uçtan uca sınanmaz; blok tarayıcıda elle gözden geçirilmedi.
+
+## Bayiler: kim öder
+Bayi, müşterisi için sunucu sipariş eder: sunucu müşterinindir, aboneliği ise bayinindir ve bayi indirimiyle bayiye
+faturalanır (`apps/api/src/reseller.ts`). Kural şudur: **sunucuyu kim yönetebiliyorsa ücretini o öder.** Bir müşteri
+bayinin olmaktan çıktığında bayi artık o sunucularda işlem yapamaz; ödeme de aynı anda müşteriye geçer
+(`directBilling`, `billing.ts`).
+
+Bir müşteri üç yolla bayiden ayrılır:
+
+| Yol | Kim | Nereden |
+|---|---|---|
+| Müşteri kendisi ayrılır | müşteri | Hesabım → Profil → "Bayiden ayrıl" (`POST /api/reseller/leave`; bayisi olmayan hesapta `409 NOT_MANAGED`) |
+| Personel tek bir müşteriyi ayırır | `users.manage` | Yönetim → Kullanıcılar → bayinin kullanıcı özeti penceresi → müşteri listesinde "Bayiden çıkar" (`DELETE /api/admin/resellers/:id/customers/:customerId`). Listeyi `GET /api/admin/resellers/:id` yanıtındaki `customers` alanı verir (e-posta, ad, sunucu sayısı; en çok 500 müşteri) |
+| Bayilik kaldırılır | `users.manage` | `DELETE /api/admin/resellers/:id`; bütün müşterileri birlikte ayrılır |
+
+Üçünde de aynı şeyler, tek bir veritabanı işleminde olur:
+
+- **Çalışan abonelikler müşteriye geçer** (`active`, `past_due`, `suspended` olanlar). Temiz başlar: durum `active`
+  olur, ödeme askısı kalkar, bayinin kaydettiği dönem sonu iptali silinir, otomatik yenileme açılır, tahsilatın o
+  sunucular için koyduğu silme işareti geri alınır. Bayinin gecikmesi müşterinin borcu değildir.
+- **Bayinin o sunucular için kesilmiş yenileme faturaları iptal edilir**, ama yalnızca hiç ödenmemiş ve yalnızca bu
+  sunucuların satırlarını taşıyanlar. Dönemleri serbest kalır; bir sonraki tahsilat çalıştırması **ödenmemiş ilk
+  dönemi** müşteriye, kendi vadesi ve hatırlatmalarıyla faturalar.
+- **Bayinin henüz ödenmemiş, kurulumu başlamamış siparişi** faturasıyla birlikte geri çekilir (süresi dolan bir
+  sipariş gibi: kurulum iptal olur).
+- **Bayinin diğer açık faturaları bayide kalır:** kurulmuş bir sunucunun ilk faturası, boyut ya da disk farkı,
+  kısmen ödenmiş olanlar ve başka sunucularla ortak olanlar. Bunlar bayiden tahsil edilir, denetim kaydına
+  `leftInvoices` olarak yazılır ve açık kaldıkları sürece ilgili aboneliğe bağlı ödenmemiş fatura olarak sayılmaya
+  devam eder. Personelin bu faturalara bakması gerekir (tahsil etmek ya da iptal etmek).
+- **Fiyat değişmez.** Sunucu, bayi indirimi dahil, o andaki fiyatını korur; boyutu değiştirilene ya da personel
+  fiyatı değiştirene kadar müşteri o fiyattan faturalanır.
+- **Erişim kapanır:** bayinin açık konsolları kapatılır; bayinin sipariş verirken hesaba eklediği SSH anahtarı
+  (`reseller` adlı) hesaptan ve sunucuların kayıtlı anahtar listesinden silinir, yani yeni sunucuya ve yeniden
+  kuruluma verilmez. Çalışan sunucuların **içindeki** anahtara dokunulmaz; müşteriye giden bildirim bunu söyler.
+- İki tarafa `account.reseller` bildirimi gider ([notifications.md](notifications.md#bayi-bildirimi-accountreseller));
+  bayilik kaldırılırken bayiye gönderilmez. Olay `reseller.customer_released` olarak, kimin yaptığı (`by`), geçen
+  abonelik sayısı, iptal edilen ve bayide kalan faturalarla denetim kaydına yazılır ve müşterinin Hesabım → Etkinlik
+  listesinde görünür.
+
+**Bayiyi kapatmak ayırmak değildir.** `PUT /api/admin/resellers/:id` ile `active: false` yapılan bayi müşterilerinin
+sunucularında işlem yapamaz, ama müşteriler onun müşterisi ve abonelikler onun aboneliği olarak kalır (yeniden
+açılabilsin diye). Yanıt ve denetim kaydı bayinin kaç çalışan abonelik ödediğini söyler (`billedSubscriptions`). Bunu
+bitirmek için bayiliği kaldırın ya da müşterileri tek tek ayırın.
+
+**Müşteri ne görür:** `GET /api/reseller/summary` yanıtındaki `managedBy` alanı (bayinin adı, e-postası, markası,
+açık olup olmadığı) Hesabım → Profil'de bir kart olarak gösterilir: bayinin neleri yapabildiği, neleri yapamadığı,
+iletişim adresi ve ayrılma düğmesi. Müşteri paneli ilk kullandığında bir kez bildirim alır.
+
+Bilinen boşluklar:
+
+- Ayrılma, bayinin tam o anda verdiği bir siparişle çakışırsa o sipariş ayrılmanın dışında kalabilir (bayiye
+  faturalanmış ya da bayinin anahtarını taşıyor olabilir). Bu yarış kapatılmadı.
+- Müşterinin etkinlik listesinde bayinin yalnızca sunucu işlemleri, siparişleri ve hesabı açması vardır; işlem
+  başlatmayan eylemleri yoktur.
+- Müşteri, bayinin indirimli fiyatını ayrıldıktan sonra da öder; fiyatı liste fiyatına çekmek personelin işidir.
+- Bu akış iki `security-leftovers` entegrasyon testindedir (ayrılma; bayiliğin kaldırılması ve personelin tek müşteriyi ayırması); ikisi de 2026-11-18 tarihli tam çalıştırmada geçti.
+  Hesap sayfasındaki kartın ve yönetimdeki "Bayiden çıkar" düğmesinin uçtan uca testi yoktur.
 
 ## Saatlik kullanım, bütçe ve boyut değişikliği
 

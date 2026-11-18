@@ -95,13 +95,16 @@ Panel sunucuda doğrudan hiçbir şey çalıştıramaz; Docker soketi de verilme
    değiştirebilir, işletim sistemi güncellemelerini kurabilir, sunucuyu yeniden başlatabilir ve yönetici
    terminalini açabilir. Ajanı kapatmak (`agent off`) bunların hepsini panelden kullanılamaz kılar.
 4. Sonuçlar `data/maintenance` dizinine yazılır. Panel bu dizini yalnızca okuyabilir. Host durumu dosyaları ve
-   istek kayıtları `root:1000`, izin `640`; kilit dosyası (`.lock`) `600`.
+   istek kayıtları `root:1000`, izin `640`; kilit dosyası (`.lock`) `600`. Dizin root'un olmalıdır; değilse betik onu
+   devralır (`W_MAINT_DIR`). Durum dosyaları geçici bir adla oluşturulup yerine taşınır; isteğin günlüğü her istekte
+   yeniden ve başkasına kapalı açılır, açılamazsa istek `E_REQUEST_LOG` ile başarısız olur
+   ([operations.md](operations.md#bakım-dizini-ve-kilit)).
    - `status.json`: işin durumu;
    - `runs/<id>.log`: ilerleme satırları;
    - `releases.json`: sürüm listesi;
    - `history.jsonl`: geçmiş.
 5. Zamanlanmış bakım, panel istekleri ve elle başlatılan `backup`/`update`/`restore` aynı kilidi kullanır;
-   aynı anda yalnızca biri çalışır.
+   aynı anda yalnızca biri çalışır. Kilit alınamazsa panel istekleri çalıştırılmaz (`E_LOCK`).
 
 Eski kurulumlarda ajanı bir kez açın: `sudo sh scripts/install.sh agent on`.
 

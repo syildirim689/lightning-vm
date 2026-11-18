@@ -249,7 +249,8 @@ sudo sh scripts/install.sh auto-update on --channel stable --window 03:00-05:00
 - Otomatik güncelleme başarısız olan bir sürümü her saat yeniden denemez: aynı sürüm için bekler
   (`UPDATE_SKIPPED`), yeni bir sürüm çıkınca ya da siz elle `update` çalıştırınca yeniden dener.
 - Aynı anda tek bakım işi çalışır. Elle başlatılan `backup`, `update` ve `restore`, zamanlayıcı ve panel
-  istekleriyle aynı kilidi (`data/maintenance/.lock`) kullanır; biri çalışırken diğeri bekler.
+  istekleriyle aynı kilidi (`data/maintenance/.lock`) kullanır; biri çalışırken diğeri bekler
+  ([aşağıda](#bakım-dizini-ve-kilit)).
 - Kapatmak için:
   ```sh
   sudo sh scripts/install.sh auto-update off
@@ -264,6 +265,40 @@ sudo sh scripts/install.sh auto-update on --channel stable --window 03:00-05:00
 
 **Henüz yok:** GHCR'den hazır imajla kurulum ve imzalı kurulum paketi. Güncelleme şimdilik kaynak
 checkout'u ile çalışır ve imajları sunucuda derler.
+
+### Bakım dizini ve kilit
+`data/maintenance`, root'un panel için ada göre dosya yazdığı dizindir (durum dosyaları, günlük kopyaları, geçmiş,
+kilit). Dizine başka biri yazabiliyorsa root'un yazacağı adın altına bir bağlantı, FIFO ya da dizin koyabilir; bu
+yüzden betik (`scripts/install.sh`) root olarak çalışırken şunları yapar:
+
+- **Dizin root'un olmalıdır.** Gerçek bir dizin (bağlantı değil), sahibi root, grup ve diğerleri yazamaz. Dizin bir
+  bağlantıysa betik durur: `E_MAINT_DIR`, çıkış kodu 21. Dizin root'a ait değilse ya da başkaları yazabiliyorsa
+  (örneğin daha önce root olmadan çalıştırılmış bir komut açtıysa) betik onu **devralır** ve `W_MAINT_DIR` uyarısını
+  yazar: içindeki dizinlerin sahipliği root'a geçer ve yazma izinleri kapanır; düz dosya ya da dizin olmayan her şey
+  (bağlantılar, FIFO'lar, aygıt dosyaları) ve birden çok adı olan dosyalar silinir; kalan dosyalar root'a geçer.
+  Devralma başarısız olursa betik yine `E_MAINT_DIR` ile durur. Aynı denetim `data/maintenance/runs` ve
+  `data/maintenance/logs` için de yapılır. Root olmadan çalıştırılan komutlarda dizin yalnızca oluşturulur.
+- **Kilit dosyası sahibine özeldir ve işle birlikte gider.** `.lock`, `umask 077` altında `600` izniyle açılır.
+  Kilit sayılabilmesi için düz bir dosya, tek adlı, çağıranın kendisine ait ve başkasına kapalı olmalıdır; o adın
+  altındaki başka her şey (bağlantı, FIFO, dizin, eski bir sürümün okunabilir bıraktığı dosya) silinir ve dosya
+  yeniden açılır. İş bittiğinde kilidi tutan kabuk dosyayı siler; sıradaki iş kendi dosyasını açar. Böylece eski
+  dosya okunabilirken açılmış bir tanıtıcı artık hiçbir şeyi kilitlemez. Bekleyen iş, kilidi aldıktan sonra adın hâlâ
+  kilitlediği dosyayı gösterdiğine bakar; göstermiyorsa yeni dosyayı alır.
+- **Root kilitsiz çalışmaz.** Kilit alınamazsa `backup`, `update`, `restore`, zamanlanmış bakım ve panel istekleri
+  `E_LOCK` (çıkış kodu 21) ile durur. Zamanlanmış bakım, kilidi başka bir iş tutuyorsa sessizce çıkar ve bir sonraki
+  saatte yeniden dener. Root olmadan çalıştırılan bir komut, kilit root'un olduğu için açamıyorsa önceki sürümlerde
+  olduğu gibi kilitsiz çalışır. `flock` komutu olmayan bir sunucuda elle başlatılan işler kilit almaz.
+- **Panelin okuduğu dosyalar yerine taşınarak yazılır.** `host.json`, `os.json`, `state.json` ve `logs/*.log` önce
+  aynı dizinde `mktemp` ile, yalnızca sahibine açık (`600`) ve tahmin edilemeyen bir adla oluşturulur, doldurulur,
+  grubu ve izni verilir (`root:1000`, `640`) ve son adın üstüne taşınır. Son adın altında ne varsa açılmadan
+  değiştirilir; orada bir dizin varsa dosya yazılmaz. Yarıda kalan geçici dosya betik çıkarken, öldürülen bir
+  çalıştırmadan kalanı ise bir saat sonra silinir.
+- **Panel isteğinin günlüğü** (`runs/<id>.log`) her istek için yeniden ve başkasına kapalı oluşturulur; oluşturulamazsa
+  istek `E_REQUEST_LOG` ile başarısız sayılır. İstek dizinindeki düz dosya olmayan her şey (bağlantı, dizin, FIFO)
+  okunmadan silinir.
+
+Bu yollar yalnızca `dash` ve `bash` altında, sahte dosya ve dizinlerle denendi. Gerçek bir kurulumda, systemd
+zamanlayıcısı ve panel ajanıyla birlikte çalıştırılmadı.
 
 ## Kaldırma
 ```sh
@@ -288,6 +323,38 @@ Docker Engine, sunucu adı, saat dilimi ve `/etc/hosts` satırına dokunulmaz.
 `--purge-data` Docker veri birimlerini de **geri dönüşsüz** siler (veritabanı, Caddy sertifikaları, izleme
 verisi). `.env`, `secrets/` ve `backups/` yine kalır; tamamen silmek için proje klasörünü kendiniz silin.
 Önce bir yedek alıp `backup.key` ile birlikte sunucu dışına kopyalayın.
+
+## Kuyrukta hesap payı
+Worker aynı anda `OPERATIONS_CONCURRENCY` işlem yürütür (varsayılan 8). Kuyruk bütün müşteriler için ilk gelen ilk
+çalışır düzenindedir ve bir işlem bitene kadar yerini tutar (bir kopyalama ya da yedek dakikalar, saatler sürebilir).
+Çok sunucusu olan tek bir hesap (toplu işlemler, aynı dakikaya kurulmuş zamanlamalar, bir API döngüsü) bütün yerleri
+doldurup herkesi bekletebiliyordu. Bunun için hesap başına bir pay vardır:
+
+- **`OPERATIONS_PER_OWNER`** (`.env`): bir hesabın aynı anda yürüyebilen işlem sayısı. Varsayılan,
+  `OPERATIONS_CONCURRENCY` değerinin yarısıdır (en az 1; varsayılan kurulumda 4). `0` payı kapatır. Değişiklik için
+  worker yeniden oluşturulur: `docker compose up -d worker`.
+- **Kimin payından sayılır:** işlemi başlatan hesabın (`operations.capped_for`, migration `084`). Müşterinin kendi
+  işlemleri müşterinin; bayinin müşterisinin sunucusunda başlattığı işlem ve müşterisi için verdiği sipariş bayinin;
+  güç zamanlamasının başlattığı işlem sunucunun sahibinin payındandır.
+- **Hiç bekletilmeyenler:** personelin (`servers.manage_all`) başlattığı işlemler, tahsilat çalıştırmasının ve
+  faturalama entegrasyonunun (WHMCS / WISECP) işlemleri. Yükseltmeden önce kuyruğa girmiş işlemler de sayılmaz.
+- **Nasıl bekler:** payı dolu hesabın sıradaki işlemi kuyruğa gecikmeyle geri konur ve yerini kuyruktaki bir sonraki
+  işe bırakır. Bekleme, hesabın önündeki kendi işlemlerinin sayısına göre 3 saniyeden 60 saniyeye kadar uzar. İşleme
+  dokunulmaz: adımı ve deneme sayısı değişmez. Worker günlüğüne `operation_held_for_owner` yazılır.
+- **Yalnızca ilk başlangıç denetlenir.** Başlamış bir işlem (platformda görevi sürüyor olabilir) ve iptali istenmiş
+  bir işlem her zaman sürdürülür. Ödeme bekleyen sipariş paydan sayılmaz.
+- Sayım veritabanında, hesap başına bir kilit altında yapılır; aynı anda seçilen işler payı birlikte aşamaz. Sayım
+  bütün worker'lar için ortaktır: birden çok worker çalıştırılırsa pay kopya başına değil, toplamdır.
+
+Sınırları:
+
+- **İşlemin süresi beklerken de işler.** Son tarih (`deadline_at`) işlem kabul edildiğinde yazılır; payı beklerken
+  geçen süre bundan düşer. Çok uzun bir sıranın sonundaki işlem, başlamadan süresini doldurabilir.
+- **Birlikte hareket eden hesaplar sınırlanmaz.** Pay hesap başınadır; birkaç hesap açan biri her birinin payını ayrı
+  ayrı kullanır. Rolün saatlik işlem sınırı ([auth.md](auth.md#rol-sınırları)) ve kota bunun yanında geçerlidir.
+- Pay, platformun yükünü değil worker'ın yerlerini paylaştırır; personelin toplu işlemleri sınırsızdır.
+- Kural birim testlidir (`apps/worker/test/fairness.test.mjs`) ve kimin payından sayıldığı bir entegrasyon testindedir (`security-leftovers`); test 2026-11-18 tarihli tam çalıştırmada geçti.
+  Gerçek bir hipervizörde, yük altında denenmedi.
 
 ## İzleme
 ```sh
