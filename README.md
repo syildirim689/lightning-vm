@@ -68,11 +68,19 @@ girmeniz gerekmez. Özelliklerin tamamı yalnızca VMware'de vardır; diğer alt
   hepsini kur" politikası, seçilen saatte otomatik yeniden başlatma (Linux: apt, dnf, yum)
 - Faturalar ve ödeme, **saatlik kullanım** (bakiyeden; bakiye bitince bekletme, ay sonunda kullanım faturası),
   **aylık bütçe uyarısı** (aylık gidiş bütçeyi aşınca ayda bir bildirim; siparişte önceden uyarı), destek talepleri.
-  Genel bakışta **Yaklaşan ödemeler:** vadesi geçmiş ya da 7 gün içinde dolacak faturalar, sıradaki yenileme ve
-  saatlik kullanımda bakiyenin ne zaman biteceği
+  Genel bakışta **Yaklaşan ödemeler:** vadesi geçmiş ya da 7 gün içinde dolacak faturalar, sıradaki yenileme
+  (faturada alınacak tutarla; vergi hesaplanabildiyse "vergi dahil" notuyla) ve saatlik kullanımda bakiyenin ne
+  zaman biteceği
+- **Başarısız işlemden sonra sıradaki adım:** sunucu sayfasının üstünde neyin ters gittiği ve tek bir öneri. Geçici
+  hatalarda "Yeniden dene" (yalnızca açma, düzgün kapatma, reset ve anlık görüntü alma için), ödeme engelinde
+  faturalar, kota engelinde kota, diğerlerinde ayrıntıları doldurulmuş destek talebi; ekibin bakması gereken
+  durumlarda yeniden deneme hiç önerilmez
+- **Bildirim zili** aynı konudaki art arda bildirimleri sayısıyla tek satırda toplar; satır açılıp tek tek okunabilir
 - **Komut paleti (Ctrl+K):** sayfa, sunucu, destek talebi ve fatura arama; son açılan sunucular, talepler ve
   faturalar; hızlı işlemler (yeni destek talebi, bakiye yükleme, yeni sunucu, SSH anahtarı ekleme, onay sorarak
   sunucuyu sıfırlama)
+- **Kayıtlı görünümler:** sunucu listesindeki süzgeç ve sıralama adla kaydedilir, tek tıkla geri çağrılır; biri
+  varsayılan yapılabilir. Yalnızca o tarayıcıda saklanır ve çıkışta silinmez
 - **API anahtarları ve API belgeleri:** arama, süzgeçler, örnek istekler, OpenAPI ve PDF indirme (istekler tarayıcıdan
   çalıştırılamaz). **Webhook'lar:** imzalı, yeniden denenen, teslimat kaydı ve sınama düğmesiyle
 - **Verilerimi indir:** hesabın panelde tutulan verileri tek JSON dosyası olarak (parola, oturum ve gizli anahtarlar hariç)
@@ -108,7 +116,13 @@ girmeniz gerekmez. Özelliklerin tamamı yalnızca VMware'de vardır; diğer alt
 - **Kötüye kullanım:** açık riskli port taraması, madencilik şüphesi (uzun süreli tam CPU; işlemcinin ölçüldüğü
   platformlarda); sekme, arama ve süzgeç adreste tutulur
 - **Menüde sayaçlar:** Faturalandırma (inceleme bekleyen ödemeler), Sunucular (son 24 saatte başarısız işlemler) ve
-  Kötüye kullanım (açık bulgular) girişlerinin yanında; geri yükleme beklemesi personele her sayfanın üstünde görünür
+  Kötüye kullanım (henüz kimsenin onaylamadığı açık bulgular) girişlerinin yanında; geri yükleme beklemesi personele
+  her sayfanın üstünde görünür ve panel beklemede bulunduğunda `system.update` izni olanlara bir kez bildirilir
+- **Kayıtlı görünümler ("Görünümler"):** Sunucular, Kullanıcılar, Destek kuyruğu, Denetim kaydı ile
+  Faturalandırma'daki fatura ve ödeme listelerinde süzgeç ve sıralamayı adla kaydetme, uygulama, yeniden adlandırma,
+  silme ve varsayılan yapma (liste başına en çok 12). Sunucuda değil, **o tarayıcıda** kullanıcı ve liste başına
+  saklanır ve **çıkışta silinmez:** görünümdeki arama terimi ya da sahip e-postası o tarayıcının deposunda kalır
+- **Komut paletinde son açılanlar** personel için bakılan kullanıcıları ve yönetimdeki faturaları da tutar
 - **Enerji raporu:** kWh, maliyet ve karbon tahmini (işlemci kullanımından hesaplanır; XCP-ng, oVirt, KVM ve
   Incus'ta anlamlı değildir)
 - **Genel bakışta özet:** son bakışınızdan beri yeni kullanıcı, sunucu, başarısız işlem, kötüye kullanım bulgusu,
@@ -116,8 +130,9 @@ girmeniz gerekmez. Özelliklerin tamamı yalnızca VMware'de vardır; diğer alt
 - **Herkese açık durum sayfası** (`/status`): panelin parçalarının ve konumların durumu; yönetici olay (incident)
   açar ve güncelleme yazar
 - **İstatistikler:** önceki döneme göre eğilimli KPI’lar, zaman serileri, konum/işletim sistemi/paket kırılımı, en büyük müşteriler ve gün × saat işlem haritası (animasyonlu)
-- **Denetim kaydı**, duyuru bandı, toplu sunucu işlemleri
-- **Destek sistemi:** öncelik ve SLA, departmanlar, iç notlar, değişkenli hazır yanıtlar, puanlama ve kapanışta memnuniyet isteği; müşteri yanıtlarında hız sınırı, art arda yanıtlar için tek bildirim
+- **Denetim kaydı**, duyuru bandı, toplu sunucu işlemleri (satır başındaki kutularla seçilen sunuculara ya da,
+  açıkça seçilirse, süzgecin gösterdiklerinin tümüne; bir seferde en çok 200)
+- **Destek sistemi:** öncelik ve SLA, departmanlar, iç notlar, değişkenli hazır yanıtlar, puanlama ve kapanışta memnuniyet isteği; müşteri yanıtlarında hız sınırı, art arda yanıtlar için tek bildirim; bir sunucuyla açılan talepte sunucunun **talep açıldığı andaki durumu** (veritabanındaki haliyle; yalnızca personel görür)
 - **Sunucu terminali** (iki adımlı doğrulama zorunlu) ve **panelden güncelleme**
 - **Sunucu durumu:** panelin çalıştığı sunucunun canlı işlemci, bellek, yük ve disk grafikleri; servisler, dosya
   sistemleri, en çok kaynak kullanan süreçler ve her servisin günlükleri (arama, yalnız sorunlar, indirme; günlükleri
@@ -252,6 +267,7 @@ sunucunun kopyası çıkarılamaz (kopya yalnızca şablondan). Her platformun a
 
 | Ne | Nerede |
 |---|---|
+| **Kayıtlı görünümler, sıradaki adım ve talepte sunucu durumu (2026-11-18).** *Personel:* Sunucular, Kullanıcılar, Destek kuyruğu, Denetim kaydı, fatura ve ödeme listelerinde kayıtlı görünümler (tarayıcıda saklanır, çıkışta silinmez); Yönetim → Sunucular'da toplu işlem için satır satır seçim; destek talebinde sunucunun talep açıldığı andaki durumu (yalnızca personel, migration `082`); komut paletinin son açılanlarında kullanıcılar ve yönetimdeki faturalar; panel geri yüklemeden sonra beklemede bulunduğunda `admin.restore_hold` bildirimi; Kötüye kullanım sayacı artık yalnızca kimsenin onaylamadığı bulguları sayar. *Müşteri:* başarısız işlemden sonra önerilen sıradaki adım; bildirim zilinde yinelenen bildirimlerin tek satırda toplanması; "Yaklaşan ödemeler"de yenileme tutarı artık API'nin hesabıdır (hesaplanabildiyse vergi dahil, faturası kesildiyse iki kez gösterilmez); sunucu listesinde kayıtlı görünümler. İşletmecinin yapacağı bir şey yok | Yönetim → Sunucular · Kullanıcılar · Destek · Denetim kaydı · Faturalandırma · Ctrl+K · sunucu sayfası · bildirim zili · Genel bakış · [docs/upgrade-notes.md](docs/upgrade-notes.md) |
 | **Günlük işleri kısaltan eklemeler (2026-11-17).** *Personel:* inceleme bekleyen ödemeler için süzgeç, arama, gerekçe, bekleme süresi ve faturaya bağlantı; özet sayfasında uyarı ve `billing.payment_review` bildirimi; menüde sayaçlar; geri yükleme beklemesi her sayfada; üç yeni içgörü (inceleme bekleyen ödemeler, geri yükleme beklemesi, karar bekleyen işlemler); kötüye kullanım ve abonelik süzgeçleri adreste. *Müşteri:* "Yaklaşan ödemeler"; komut paletinde fatura arama, son açılan talepler ve faturalar, hızlı işlemler; siparişte paylaşılabilir yapılandırma bağlantısı; sunucu kartı menüsünde ad değiştirme, kilit ve silme; düz HTTP'de de çalışan kopyalama düğmeleri; yeniden kurulumda önce / sonra özeti; 30 günden eski anlık görüntüler için öneri; adresin ilk kanıtında giriş bilgileri silindiğinde `auth.credentials_reset` bildirimi. İşletmecinin yapacağı bir şey yok | Yönetim → Faturalandırma → Ödemeler · yönetim menüsü · Genel bakış (müşteri ve yönetim) · Ctrl+K · Yeni sunucu · Sunucular · sunucu sayfası · [docs/upgrade-notes.md](docs/upgrade-notes.md) |
 | **Güvenlik denetimi, ikinci tur (2026-11-17):** ilk turun incelemediği alanlar ve ilk turun düzeltmelerinin yeniden denetimi; 26 doğrulanmış bulgu (10 orta, 15 düşük, 1 bilgi amaçlı) düzeltildi. İşletmeciyi en çok etkileyenler: geri yüklemeden sonra panel beklemede açılır ve serbest bırakılması gerekir; `install.sh behind-proxy` artık `--public-url` ister; WHMCS / WISECP yalnızca kendi açtığı hesapları eşler (diğerleri için devralma rotası); bildirim e-postaları yeniden gönderiliyor (Node 22'de gönderilmiyordu); Proxmox'ta VM numarası sunucuya bağlanır; yeni hız sınırları. Yükseltmeden sonra proxy ve günlük toplayıcısı yeniden başlatılmalıdır. **Yükseltmeden önce okuyun** | [docs/upgrade-notes.md](docs/upgrade-notes.md) · [docs/security-audit.md](docs/security-audit.md) |
 | **Güvenlik denetimi, ilk tur (2026-11-17):** 22 doğrulanmış bulgu (1 yüksek, 10 orta, 11 düşük) düzeltildi. İşletmeciyi en çok etkileyenler: Param ödemeleri artık elle onaylanır, yedekler imzalanır (eski yedekler yalnızca `--allow-unsigned` ile geri yüklenir), panelin kullanmadığı giriş rotaları kapandı, WHMCS / WISECP sunucuları panelden büyütülemez. Yükseltmeden sonra proxy yeniden başlatılmalıdır. **Yükseltmeden önce okuyun** | [docs/upgrade-notes.md](docs/upgrade-notes.md) · [docs/security-audit.md](docs/security-audit.md) |
@@ -502,12 +518,12 @@ Simülatör (govmomi `vcsim`) gerçek bir vCenter olmadan tüm akışı çalış
 
 | Test | Komut |
 |---|---|
-| API birim testleri (143 test) | `cd apps/api && npm test` |
+| API birim testleri (146 test) | `cd apps/api && npm test` |
 | API entegrasyon testleri (PostgreSQL + Redis; güvenlik denetiminin düzeltmeleri için eklenen `security-auth`, `security-billing` ve `security-servers` testleri bunların içindedir) | `cd apps/api && npm run test:integration` |
-| API entegrasyon testlerinin tamamı (PostgreSQL, Redis, vcsim, VMware adaptörü ve worker'ı Docker'da kendisi kurar). Son olarak 2026-11-17'de Docker'lı bir Linux sunucusunda çalıştırıldı: 174 testten 170'i geçti, 4'ü PowerDNS, ISO deposu ya da konsol ağ geçidi istediği için atlandı. | `cd apps/api && npm run test:integration:full` |
+| API entegrasyon testlerinin tamamı (PostgreSQL, Redis, vcsim, VMware adaptörü ve worker'ı Docker'da kendisi kurar). Son olarak 2026-11-18'de Docker'lı bir Linux sunucusunda çalıştırıldı: 177 testten 173'ü geçti, 4'ü PowerDNS, ISO deposu ya da konsol ağ geçidi istediği için atlandı. | `cd apps/api && npm run test:integration:full` |
 | Go servisleri | `cd services/vmware && go test ./...` |
 | Proxmox (26), XCP-ng (19), oVirt (15), Hyper-V (18), libvirt (19) ve Incus (11 test) adaptörleri | `cd services/proxmox && npm test` (aynısı `services/xcpng`, `services/ovirt`, `services/hyperv`, `services/libvirt` ve `services/incus` için; libvirt'in dört betik testi yalnızca Linux'ta çalışır, başka yerde atlanır) |
-| Web birim testleri (70 test: çeviriler, simgeler, pencere düzenleri ve diğer hesaplar) | `cd apps/web && npm test` |
+| Web birim testleri (96 test: çeviriler, simgeler, pencere düzenleri ve diğer hesaplar) | `cd apps/web && npm test` |
 | Worker (sözdizimi denetimi ve 43 birim testi) | `cd apps/worker && npm run check` |
 | Uçtan uca (Playwright, çalışan bir Compose kurulumuna karşı) | `cd apps/web && npx playwright test` |
 
@@ -519,8 +535,8 @@ CI (`.github/workflows/ci.yaml`): birim işleri (API, web, worker, altı Node ad
 gönderimde, pull request'lerde ve elle çalışır. Servis ya da bütün bir Compose kurulumu isteyen işler (API
 entegrasyon testleri, imaj derlemeleri, kurulum + uçtan uca) yalnızca elle tetiklenir (GitHub Actions → *Run workflow*).
 Adaptör testleri gerçek bir hipervizöre değil, platformu taklit eden sahte sunuculara karşı çalışır. Veritabanı şeması
-`apps/api/migrations` altındaki 81 dosyadadır (`001`–`081`; `077`–`080` ikinci güvenlik turuna aittir, `081`
-ödemenin ne zamandan beri inceleme beklediğini tutar) ve
+`apps/api/migrations` altındaki 82 dosyadadır (`001`–`082`; `077`–`080` ikinci güvenlik turuna aittir, `081`
+ödemenin ne zamandan beri inceleme beklediğini, `082` destek talebi açıldığında sunucunun durumunu tutar) ve
 `migrate` servisiyle kendiliğinden uygulanır. Katkı kuralları: [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## ⚠️ Bilinen sınırlar
@@ -543,14 +559,33 @@ Adaptör testleri gerçek bir hipervizöre değil, platformu taklit eden sahte s
   `billing.manage` izni olan personele bir kez bildirim gider (varsayılan: panel ve e-posta). Karar yine elledir:
   personel sağlayıcının panelinde doğrular ve faturayı kendi sayfasındaki "Ödeme kaydet" ile kapatır
   ([docs/payments.md](docs/payments.md)).
-- **Yaklaşan ödemeler:** sıradaki yenilemenin tutarı aboneliğin vergisiz tutarıdır; faturada vergi eklenir. Aynı
-  yenileme, yenilemeden önceki günlerde hem "yenileme" satırında hem de vadesi yaklaşan fatura olarak görünebilir.
-- **Yeni ekranlar elle gözden geçirilmedi:** 2026-11-17'de eklenenlerden ikisi (sipariş bağlantısının okunması ve
-  komut paletinden fatura bulunması) tarayıcıda elle gözden geçirilmedi; uçtan uca testler kapsar. Diğerlerinin
-  (ödemeler sayfasının inceleme görünümü, menü sayaçları, her sayfadaki geri yükleme şeridi, "Yaklaşan ödemeler",
-  sunucu kartı menüsü, yeniden kurulum özeti, kopyalama düğmeleri) yazıldığı sırada **uçtan uca testi yoktu ve
-  tarayıcıda elle gözden geçirilmediler**; arkalarındaki hesaplar birim testleriyle sınanır. 30 günden eski anlık
-  görüntü önerisi listeyi platforma sorar; yalnızca sayımı birim testiyle sınandı, gerçek bir platformda denenmedi.
+- **Yaklaşan ödemeler:** sıradaki yenilemenin tutarını artık API hesaplar (faturalama özetinin `nextRenewal` alanı):
+  sunucunun şimdiki fiyatı, varsa kupon, tüm dönem ve alıcının vergisi; tutarın yanında "vergi dahil" yazar. Yenilemenin
+  faturası kesildiyse yenileme satırı kalkar, yani aynı ödeme iki kez gösterilmez. Kalan sınırlar: alıcının vergi
+  kuralı okunamazsa tutar vergisizdir ve "vergi dahil" notu çıkmaz; aynı gün birden çok para biriminde yenileme varsa
+  yalnızca biri (kodu alfabetik olarak ilk olan) gösterilir; o günün yenilemelerinin bir kısmı faturalanmışsa satır
+  yalnızca henüz faturalanmamış olanları toplar; `nextRenewal`, faturası kesilmiş bir yenilemede fatura satırının
+  tamamını verir, kısmen ödenmiş faturada kalan tutarı değil (blok o durumda bu satırı göstermez; kalan tutar fatura
+  satırındadır); faturaların dönem sonundan 7 günden daha önce kesildiği bir kurulumda (varsayılan 7 gün) faturası
+  kesilmiş yenileme, vadesine 7 gün kalana kadar blokta görünmez ([docs/billing.md](docs/billing.md)).
+- **Kayıtlı görünümler tarayıcıda kalır:** görünümler sunucuya gönderilmez; o tarayıcının deposunda kullanıcı ve
+  liste başına tutulur, başka tarayıcıda ya da cihazda görünmez. Son açılanlar ve taslakların tersine **çıkışta
+  silinmez:** bir görünüme kaydedilmiş arama terimi ya da sahip e-postası, o tarayıcının deposunda durmaya devam
+  eder (başka bir hesap bunları panelde görmez, ama tarayıcının deposuna erişebilen biri okuyabilir). Ortak
+  bilgisayarda görünümleri "Görünümler" menüsünden silin ya da site verilerini temizleyin.
+- **Yeni ekranlar elle gözden geçirilmedi:** 2026-11-17 ve 2026-11-18'de eklenen ekranların hiçbiri tarayıcıda elle
+  gözden geçirilmedi. Uçtan uca testlerin kapsadıkları: sipariş bağlantısının okunması; komut paletinden fatura
+  bulunması ve hızlı işlemler (bakiye yükleme, yeni destek talebi); ödemeler sayfasında "İnceleme bekleyen" süzgeci
+  ve aramanın adreste kalması (yalnızca bekleyen ödeme yokken, boş listeyle); `/admin/attention` yanıtı (personele
+  `200`, müşteriye `403`; sayısı sıfır olan girişte rozet olmaması); sunucu kartı menüsünde ad değiştirme ve kilit
+  (silme yalnızca menüde görünmesiyle); yeniden kurulum özeti; IP adresinin kopyalanması. **Ne uçtan uca testi olan
+  ne de elle bakılanlar:** kayıtlı görünümler, toplu işlemde satır seçimi, destek talebindeki sunucu durumu paneli,
+  başarısız işlemden sonraki "sıradaki adım" bildirimi, bildirim zilindeki gruplama, "Yaklaşan ödemeler", her
+  sayfadaki geri yükleme şeridi ve sayısı sıfırdan büyük menü rozetleri. Bunların arkasındaki hesaplar birim
+  testleriyle sınanır; talepteki sunucu durumu, `admin.restore_hold` bildirimi ve `nextRenewal` için
+  `security-billing` entegrasyon testlerine üç test eklendi (üçü de 2026-11-18 tarihli tam çalıştırmada
+  geçti). 30 günden eski anlık görüntü önerisi listeyi platforma sorar; yalnızca sayımı birim testiyle
+  sınandı, gerçek bir platformda denenmedi.
 - **Gerçek hipervizör:** altı yeni adaptörden yalnızca Incus gerçek bir sunucuda çalıştırıldı, o da yalnızca
   konteynerlerle. Proxmox VE, XCP-ng, oVirt, Hyper-V ve KVM (libvirt) adaptörleri **gerçek bir hipervizörde hiç
   çalıştırılmadı**; testleri platformu taklit eden sahte sunuculara karşıdır.
@@ -724,11 +759,11 @@ What is not the same everywhere (the table under "Platform kapsamı" above has e
   after a restore until released, `install.sh behind-proxy` needs `--public-url`, the billing integration matches
   only accounts it created, new send limits; restart the proxy and the log collector after upgrading). Read
   [docs/upgrade-notes.md](docs/upgrade-notes.md) (Turkish) before you update.
-- **Tests:** unit tests: API 143, worker 43, web 70, Proxmox adapter 26, plus the other adapters'. The full
+- **Tests:** unit tests: API 146, worker 43, web 96, Proxmox adapter 26, plus the other adapters'. The full
   integration test runner (`npm run test:integration:full`) sets up PostgreSQL, Redis, the simulator, the VMware
-  adapter and the worker in Docker. Last run on 2026-11-17 on a Linux host with Docker: 170 of 174 tests passed, 4 were skipped (they need PowerDNS, an ISO storage or the console gateway). It includes the security tests of both rounds
+  adapter and the worker in Docker. Last run on 2026-11-18 on a Linux host with Docker: 173 of 177 tests passed, 4 were skipped (they need PowerDNS, an ISO storage or the console gateway). It includes the security tests of both rounds
   (`security-*.test.mjs`), which run against real PostgreSQL and Redis. Most of the billing behaviour changed in
-  the full-audit round has no integration test of its own. The database schema is 81 migrations (`001`–`081`).
+  the full-audit round has no integration test of its own. The database schema is 82 migrations (`001`–`082`).
 - **Private repository installs:** give `get.sh` the access token with `--token-file FILE` or `GIT_TOKEN` in the
   environment (`sudo --preserve-env=GIT_TOKEN sh`); `--token` works but is visible in the process list.
 - **Backups** are encrypted and signed with `secrets/backup.key` (`NAME.tar.enc` plus `NAME.tar.enc.hmac`). Restore
@@ -742,7 +777,7 @@ What is not the same everywhere (the table under "Platform kapsamı" above has e
 - **Added on 2026-11-17 (no operator action; migration `081` runs by itself).** Staff: the review filter and search
   on the payments page (kept in the address), a notice on the billing overview, the `billing.payment_review`
   notification, counts in the menu next to Billing (payments in review), Servers (operations failed in 24 hours)
-  and Abuse (open findings) from `GET /admin/attention`, the restore-hold bar on every page, three new findings
+  and Abuse (open findings; since 2026-11-18 only unacknowledged ones) from `GET /admin/attention`, the restore-hold bar on every page, three new findings
   (payments in review, restore hold, operations that ended as `OUTCOME_UNKNOWN` or `VM_MISMATCH` and need a
   decision), abuse and subscription filters kept in the address. Customers: an "upcoming charges" block on the
   first page (invoices overdue or due within 7 days, the next renewal, when the hourly balance runs out); the
@@ -755,11 +790,39 @@ What is not the same everywhere (the table under "Platform kapsamı" above has e
   enters review and the admin payments page lists such payments; a user is notified when the first proof of an
   unverified address (first sign-in by e-mail link or code) removed something from the account. The reinstall
   dialog gained only the summary of what stays and what is erased.
-- **Limits of the new parts:** the upcoming renewal amount is the subscription's amount before tax, and the same
-  renewal can also appear as a due invoice in the days before it. Two of the new parts have an end-to-end test
-  (reading an order link, finding an invoice in the command palette); the others had none at the time of writing.
-  None of the new screens was looked at by hand in a browser, and the snapshot finding was not tried against a
-  real platform.
+- **Added on 2026-11-18 (no operator action; migration `082` runs by itself).** Staff: saved views ("Görünümler")
+  on the server list, users, the support queue, the audit log and the invoice and payment lists: save, apply,
+  rename, delete, make one the default (at most 12 per list); rows can be ticked for the bulk action under Admin →
+  Servers (or, said explicitly, everything the filters show; 200 at a time); a ticket opened with a server keeps
+  the server's state of that moment, read from the database and shown to staff only; the command palette's recent
+  list also holds the users staff looked up and admin invoices; holders of `system.update` get the
+  `admin.restore_hold` notification once when the panel is found on hold after a restore; the Abuse count in the
+  menu now counts only findings nobody has acknowledged. Customers: after a failed operation the server page
+  suggests one next step (try again only for power on, shutdown, reset and taking a snapshot, and only for
+  transient errors; the invoices; the quota; otherwise a ticket with the details filled in; never a retry when
+  staff must look first); the notification bell joins repeated notifications about the same thing into one row
+  with a count; saved views on their own server list; the renewal in "upcoming charges" is now the API's own figure
+  (`nextRenewal` in the billing summary).
+- **Saved views stay in the browser.** They are not sent to the server: they are kept in that browser's storage per
+  user and per list, and unlike the recent list and drafts they are **not removed at sign-out**. A search term or
+  an owner's e-mail saved in a view stays in that browser's storage until the view is deleted or the site data is
+  cleared.
+- **Limits of the new parts:** the upcoming renewal amount now includes tax and is no longer shown twice once the
+  renewal has its invoice. What remains: when the buyer's tax rule cannot be read the amount is before tax (and is
+  not labelled as including tax); when one day has renewals in several currencies only one is shown (the first by
+  its code); while only some of that day's renewals are invoiced, the line sums those not yet invoiced; for an
+  invoiced renewal `nextRenewal` gives the invoice line in full, not what is left on a partly paid invoice (the
+  block shows the invoice then, not this line); where invoices are made more than 7 days before the period ends
+  (the default is 7), an invoiced renewal is not in the block until its invoice is due within 7 days. None of the
+  screens added on 2026-11-17 and 2026-11-18 was looked at by hand in a browser. The end-to-end suite covers:
+  reading an order link; finding an invoice and the quick actions (top up, new ticket) in the command palette; the
+  review filter and search on the payments page staying in the address (with an empty list only); the answer of
+  `/admin/attention` (200 for staff, 403 for customers, no badge for a count of zero); rename and lock in the
+  server card's menu; the reinstall summary; copying an IP address. Neither an end-to-end test nor a look by hand:
+  saved views, ticking rows for the bulk action, the ticket's server-state panel, the next-step notice, grouping
+  in the bell, "upcoming charges", the restore-hold bar and menu badges with a count above zero. Three integration
+  tests were added for the ticket's server state, the restore-hold notification and `nextRenewal`; they are not
+  in the count of the full run above. The snapshot finding was not tried against a real platform.
 
 > [!WARNING]
 > This project was **vibe-coded**: almost all of the code was written by Anthropic's Claude Code, steered and

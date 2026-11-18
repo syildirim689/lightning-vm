@@ -50,6 +50,7 @@ diğerleri eklendi). Güncel ve tam liste koddaki katalogdur; panelde Ayarlar �
 | `billing.payment_review` (ödeme incelemeye girdi, ödeme başına bir kez; [payments.md](payments.md#incelemedeki-ödemeler)) | `billing.manage` izni olanlar | panel, e-posta |
 | `admin.user_registered` | `users.view` izni olanlar | panel |
 | `admin.operation_failed` | `servers.view_all` izni olanlar | panel, tarayıcı |
+| `admin.restore_hold` (panel yedekten geri yüklendi ve beklemede, bekleme başına bir kez; [operations.md](operations.md#geri-yüklemeden-sonra-bekletme)) | `system.update` izni olanlar | panel, e-posta |
 | `admin.insight` (kritik içgörü) | `dashboard.view` izni olanlar | panel, e-posta |
 
 Kritik içgörüler 10 dakikada bir hesaplanır ve her biri en fazla günde bir kez gönderilir. Bunlar:
@@ -61,9 +62,18 @@ Kritik içgörüler 10 dakikada bir hesaplanır ve her biri en fazla günde bir 
 - yedek başarısız.
 
 Geri yükleme beklemesi (`RESTORE_HOLD`) ve karar bekleyen işlemler (`OPERATIONS_NEED_DECISION`) içgörüleri de kritik
-olarak gösterilir ama `admin.insight` ile **gönderilmez**; yalnızca panelde görünür (Genel bakış; geri yükleme
-beklemesi ayrıca personele her sayfanın üstündeki şeritte). İnceleme bekleyen ödemeler kendi bildirimiyle
+olarak gösterilir ama `admin.insight` ile **gönderilmez**. Karar bekleyen işlemler yalnızca panelde görünür (Genel
+bakış). Geri yükleme beklemesi panelde (Genel bakış ve personele her sayfanın üstündeki şerit) görünür ve kendi
+bildirimiyle (`admin.restore_hold`) gider: bekleme API kapalıyken konduğu için API onu ilk gördüğünde, açılışta ya da
+10 dakikalık denetimde, serbest bırakabilenlere (`system.update`) bekleme başına bir kez bildirir; yeniden başlatma
+bildirimi yinelemez, yeni bir geri yükleme yeniden bildirilir. İnceleme bekleyen ödemeler kendi bildirimiyle
 (`billing.payment_review`) gider.
+
+Paneldeki bildirim zili, aynı olayın aynı bağlantıya ait art arda gelen bildirimlerini (örneğin bir talepteki beş
+yanıt) sayısıyla tek satırda gösterir. Yalnızca listede yan yana duranlar birleşir, gün başlığı değişince satır
+bölünür, bağlantısı olmayan bildirim tek kalır. Satıra basmak içindeki okunmamışların hepsini okundu işaretler ve
+konuyu açar; yandaki ok bildirimleri tek tek listeler. Zildeki okunmamış sayısı gerçek bildirim sayısıdır. Gruplama
+yalnızca gösterimdedir: gönderilen e-posta ve diğer kanallar değişmez.
 
 Parola sıfırlama bağlantısı, iki adımlı doğrulama kodu ve telefon doğrulama kodu bildirim değildir;
 her zaman kendi kanallarından gider.

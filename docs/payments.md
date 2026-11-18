@@ -135,5 +135,9 @@ Personelin kararını bekleyen ödemeler **bekliyor** durumunda ve bir gerekçe 
 - Yönetici API'si: `GET /api/admin/billing/payments?status=review` (isteğe bağlı `q`) aynı listeyi verir; her
   satırda `review`, `reviewSince` ve gerekçe olarak `errorCode` bulunur. Faturalama özeti sayıyı ve en eski bekleyeni
   `paymentsInReview` alanında verir.
-- İnceleme görünümü yazıldığı sırada tarayıcıda elle gözden geçirilmedi ve uçtan uca testi yoktu; bildirim ve liste
-  `security-billing` entegrasyon testlerindedir.
+- İnceleme görünümü tarayıcıda elle gözden geçirilmedi. Uçtan uca testler süzgecin sunulduğunu, bekleyen ödeme
+  yokken boş liste metnini ve süzgeç ile aramanın adreste kalıp yenilemeden sonra geri geldiğini kapsar; bekleyen bir
+  ödemenin satırı (gerekçe, bekleme süresi, "Faturayı aç"), özetteki uyarı ve menüdeki sıfırdan büyük sayaç uçtan uca
+  sınanmaz. Bildirim ve liste `security-billing` entegrasyon testlerindedir.
+- Ödeme listesinde "Görünümler" düğmesiyle süzgeç ve arama kayıtlı görünüm olarak saklanabilir; görünümler
+  tarayıcıda durur ve çıkışta silinmez ([operations-modules.md](operations-modules.md)).

@@ -5,6 +5,52 @@ madde neyin değiştiğini ve işletmecinin yapması gereken bir şey varsa onu 
 davranışı değiştirmeyen işler burada yoktur. Tahsilat çalıştırması API içinde beş dakikada bir çalışır; yani "ilk
 çalıştırma" yükseltmeden birkaç dakika sonradır.
 
+## Kayıtlı görünümler, sıradaki adım ve talepte sunucu durumu (2026-11-18)
+
+Bir önceki turun üstüne eklenen arayüz ve bildirim işleri. **İşletmecinin yapacağı bir şey yoktur.** Veri değişikliği
+`apps/api/migrations/082_ticket_diagnostics.sql` dosyasındadır (`tickets.diagnostics`: talep açıldığında sunucunun
+durumu) ve yükseltme sırasında kendiliğinden uygulanır. Yükseltmeden önce açılmış taleplerde bu alan boştur; onlarda
+panel çizilmez.
+
+- **Kötüye kullanım sayacının anlamı değişti.** Yönetim menüsünde Kötüye kullanım'ın yanındaki sayı (`GET
+  /api/admin/attention`, `abuse` alanı) artık yalnızca **henüz kimsenin onaylamadığı** açık bulguları sayar. Onaylanan
+  bulgu çözülene kadar sayfanın "açık" sekmesinde durmaya devam eder ama sayaçta yer almaz. Yükseltmeden sonra sayı
+  düşebilir; bulgular kapanmış değildir. Bu alanı kendi izlemenizde okuyorsanız eşiğinizi buna göre gözden geçirin.
+- **Yeni bildirim türü: `admin.restore_hold`,** varsayılanı panel ve e-posta, `system.update` izni olanlara. Geri
+  yükleme beklemesi API kapalıyken konduğu için o anda kimseye haber verilemiyordu; API artık beklemeyi ilk gördüğünde
+  (açılışta ya da 10 dakikalık denetimde) bekleme başına bir kez bildirir. Yeniden başlatma ya da ikinci bir API
+  süreci bildirimi yinelemez; yeni bir geri yükleme yeniden bildirilir. Ayarlar → Bildirim kuralları'nda görünür
+  ([operations.md](operations.md#geri-yüklemeden-sonra-bekletme)).
+- **Destek talebinde sunucunun o andaki durumu.** Müşteri bir sunucuyu seçerek talep açtığında panel sunucunun
+  veritabanındaki halini (durum, paket, boyut, imaj, konum, platform, adresler, kilit, silinme beklemesi, varsa aylık
+  trafik, son 5 işlem ve sahibin ödenmemiş fatura sayısı) talebe ekler. Hipervizöre sorulmaz; parola, belirteç ya da
+  müşterinin notları eklenmez. Yalnızca `support.view` izni olan personel görür; müşterinin yanıtında bu alan hiç
+  yoktur. Okuma iki saniyeden uzun sürerse ya da başarısız olursa talep yine açılır, alan boş kalır
+  ([operations-modules.md](operations-modules.md)).
+- **Kayıtlı görünümler ("Görünümler").** Müşterinin sunucu listesinde ve yönetimde Sunucular, Kullanıcılar, Destek
+  kuyruğu, Denetim kaydı ile Faturalandırma'daki fatura ve ödeme listelerinde. Sunucuya hiçbir şey yazılmaz:
+  görünümler o tarayıcının deposunda (`localStorage`) kullanıcı ve liste başına tutulur. **Çıkışta silinmezler:** bir
+  görünüme kaydedilmiş arama terimi ya da sahip e-postası o tarayıcıda kalır. Ortak kullanılan bilgisayarlarda
+  personelinize görünümleri silmesini ya da site verilerini temizlemesini söyleyin.
+- **Toplu işlemde satır seçimi.** Yönetim → Sunucular'da toplu işlem artık varsayılan olarak satır başındaki kutularla
+  **seçilen** sunuculara uygulanır; "Gösterilenlerin tümü" ayrıca seçilmelidir. Önceki sürümde düğme doğrudan süzgecin
+  gösterdiği tüm sunuculara uygulanıyordu. API (`POST /admin/servers/actions`) değişmedi.
+- **Müşteri tarafı.** Başarısız bir işlemden sonra sunucu sayfasında önerilen sıradaki adım; bildirim zilinde aynı
+  konudaki art arda bildirimlerin tek satırda toplanması; "Yaklaşan ödemeler"de yenileme tutarının faturalama özetinin
+  yeni `nextRenewal` alanından okunması ([billing.md](billing.md)). Komut paletinin son açılanları personel için
+  bakılan kullanıcıları ve yönetimdeki faturaları da tutar; bunlar öncekiler gibi çıkışta silinir.
+- **Sınırlar.** "Yaklaşan ödemeler"deki yenileme artık vergi dahildir ve faturası kesildiğinde iki kez gösterilmez;
+  kalan durumlar (vergi kuralı okunamazsa vergisiz tutar, aynı gün birden çok para birimi, kısmen faturalanmış gün,
+  kısmen ödenmiş fatura, 7 günden önce kesilen faturalar) [billing.md](billing.md) içindedir. Bu sürümün ve bir
+  öncekinin ekranları tarayıcıda elle gözden geçirilmedi. Uçtan uca testler şunları kapsar: sipariş bağlantısının
+  okunması; komut paletinden fatura bulunması ve hızlı işlemler; ödemeler sayfasında "İnceleme bekleyen" süzgeci ve
+  aramanın adreste kalması (boş listeyle); `/admin/attention` yanıtı (personele `200`, müşteriye `403`, sayısı sıfır
+  olan girişte rozet olmaması); sunucu kartı menüsünde ad değiştirme ve kilit; yeniden kurulum özeti; IP adresinin
+  kopyalanması. Ne uçtan uca testi olan ne de elle bakılanlar: kayıtlı görünümler, toplu işlemde satır seçimi,
+  talepteki sunucu durumu paneli, "sıradaki adım" bildirimi, zildeki gruplama, "Yaklaşan ödemeler", her sayfadaki geri
+  yükleme şeridi ve sayısı sıfırdan büyük menü rozetleri. Talepteki sunucu durumu, `admin.restore_hold` ve
+  `nextRenewal` için `security-billing` entegrasyon testlerine üç test eklendi.
+
 ## Günlük işleri kısaltan eklemeler (2026-11-17)
 
 İkinci güvenlik turundan sonra eklenen arayüz ve bildirim işleri. **İşletmecinin yapacağı bir şey yoktur.** Veri
@@ -32,10 +78,14 @@ süre ödemenin başladığı andan sayılır.
   faturalar, hızlı işlemler; sipariş sayfasında paylaşılabilir yapılandırma bağlantısı; sunucu kartının menüsünde ad
   değiştirme, kilit ve silme; düz HTTP'de de çalışan ve kopyalanamadığında bunu söyleyen kopyalama düğmeleri; yeniden
   kurulum penceresinde önce / sonra özeti ([operations-modules.md](operations-modules.md)).
-- **Sınırlar.** "Yaklaşan ödemeler"deki yenileme tutarı vergisizdir ve aynı yenileme, yenilemeden önceki günlerde
-  vadesi yaklaşan fatura olarak da görünebilir. Yeni ekranlar yazıldığı sırada tarayıcıda elle gözden geçirilmedi;
-  uçtan uca testler yalnızca sipariş bağlantısının okunmasını ve komut paletinden fatura bulunmasını kapsar. Anlık
-  görüntü önerisi gerçek bir platformda denenmedi.
+- **Sınırlar.** Bu sürümde "Yaklaşan ödemeler"deki yenileme tutarı vergisizdi ve aynı yenileme, yenilemeden önceki
+  günlerde vadesi yaklaşan fatura olarak da görünebiliyordu; sonraki sürümle tutar API'den okunur (yukarıda). Yeni
+  ekranlar tarayıcıda elle gözden geçirilmedi. Yazıldıkları sırada uçtan uca testler yalnızca sipariş bağlantısının
+  okunmasını ve komut paletinden fatura bulunmasını kapsıyordu; sonraki sürümle ödemelerin inceleme süzgeci,
+  `/admin/attention`, kart menüsü, yeniden kurulum özeti, paletin hızlı işlemleri ve adres kopyalama için adımlar
+  eklendi, "Yaklaşan ödemeler", geri yükleme şeridi ve sayısı sıfırdan büyük menü rozetleri hâlâ kapsanmaz (yukarıda).
+  Menüdeki Kötüye kullanım sayacı sonraki sürümle yalnızca onaylanmamış bulguları sayar. Anlık görüntü önerisi gerçek
+  bir platformda denenmedi.
 
 ## Güvenlik denetimi, ikinci tur (2026-11-17)
 

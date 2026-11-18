@@ -118,7 +118,10 @@ Kurallar `apps/api/src/smart-rules.ts` içindedir ve birim testleri vardır. Ver
   değer yok sayılır, saatlik dönem yalnızca hesapta saatlik ödeme açıksa alınır. Okunduktan sonra adres temizlenir.
   Hiçbir değer kullanılamıyorsa seçimler değişmez ve bir uyarı gösterilir.
 - **Son açılanlar:** komut paleti, bu tarayıcıda son açılan 8 sunucu, destek talebi ve faturayı gösterir
-  (`localStorage`; oturum kapanınca silinir).
+  (`localStorage`; oturum kapanınca silinir). Personel için aynı liste bakılan kullanıcıları (kullanıcı özeti
+  açıldığında, kullanıcı listesinde onu bulan adresle) ve yönetimdeki fatura sayfalarını da tutar. Yönetim sayfasına
+  giden bir kayıt yalnızca o sayfayı şu anda açabilen hesaba gösterilir (`users.view`, `billing.view`, `support.view`,
+  `servers.view_all`).
 - **Komut paletinde faturalar ve hızlı işlemler:** fatura numarasıyla arama. Müşteri kendi faturalarında arar;
   `billing.view` izni olan personel için arama, iki karakterden sonra yönetimdeki fatura listesinin aramasına
   (numara, alıcı adı ya da e-posta) sorulur. Hızlı işlemler: yeni sunucu, yeni destek talebi, bakiye yükleme
@@ -128,7 +131,8 @@ Kurallar `apps/api/src/smart-rules.ts` içindedir ve birim testleri vardır. Ver
   (`?tab=&q=&only=`); Faturalandırma'da her listenin durumu ve araması (`?tab=&status=&q=`). Liste bağlantı olarak
   paylaşılabilir, Geri tuşu aynı görünüme döner.
 - **Yönetim menüsündeki sayaçlar** (`GET /admin/attention`): Faturalandırma'nın yanında inceleme bekleyen ödemeler,
-  Sunucular'ın yanında son 24 saatte başarısız olan işlemler, Kötüye kullanım'ın yanında açık bulgular. Dakikada bir
+  Sunucular'ın yanında son 24 saatte başarısız olan işlemler, Kötüye kullanım'ın yanında henüz kimsenin onaylamadığı
+  açık bulgular (onaylanan bulgu çözülene kadar sayfanın "açık" sekmesinde kalır ama sayaçta sayılmaz). Dakikada bir
   okunur. Her alan yalnızca ilgili sayfayı açabilen personele gelir (`billing.view`; `servers.view_all` ya da
   `dashboard.view`; `servers.view_all`); müşteri hesapları `403` alır. Aynı yanıt geri yükleme beklemesini de taşır:
   panel beklemedeyken personel her sayfanın üstünde bir şerit görür, serbest bırakabilenler (`system.view` ve
@@ -139,6 +143,55 @@ Kurallar `apps/api/src/smart-rules.ts` içindedir ve birim testleri vardır. Ver
   `SNAPSHOTS_OLD`: 30 günden eski anlık görüntüler. Yalnızca panelden 30 günden önce anlık görüntü alınmış sunuculara
   (en çok 20) bakılır; liste platforma sorulur ve altı saat saklanır, birkaç saniyede yanıt vermeyen platform atlanır;
   yedeğin aldığı kısa ömürlü anlık görüntü sayılmaz. Gerçek bir platformda denenmedi.
+- **Kayıtlı görünümler ("Görünümler" düğmesi):** süzgeçleri adreste tutulan listelerde o anki süzgeç ve sıralama bir
+  adla kaydedilir, tek tıkla geri çağrılır, yeniden adlandırılır, güncellenir ve silinir (silme, bildirimdeki "Geri
+  al" ile dönülebilir). Listeler: müşterinin sunucu listesi; yönetimde Sunucular, Kullanıcılar, Destek kuyruğu,
+  Denetim kaydı, Faturalandırma'da faturalar ve ödemeler (her birinin görünümleri ayrıdır).
+  - Liste başına en çok 12 görünüm, ad en çok 40 karakter. Aynı adla kaydetmek var olanı günceller.
+  - Bir görünüm **varsayılan** yapılabilir: liste süzgeçsiz açıldığında kendiliğinden uygulanır. Adreste listenin
+    bir süzgeci varsa (bağlantı, yer imi, Geri tuşu) varsayılan onun yerine geçmez.
+  - Görünüme yalnızca listenin kendi adres parametreleri girer ve uygulanırken yalnızca onlar adrese yazılır;
+    depodan okunan her şey veri olarak ele alınır, biçimi bozuk kayıt atılır.
+  - **Nerede durur:** sunucuda değil, o tarayıcının `localStorage` deposunda, `lvm:views:<kullanıcı>:<liste>`
+    anahtarıyla. Başka tarayıcıya ya da cihaza taşınmaz; aynı tarayıcıdaki başka hesap görmez. Depo kapalı ya da
+    doluysa kaydedilemediği söylenir.
+  - **Çıkışta silinmez.** Son açılanlar ve taslaklar oturum bitince silinir, kayıtlı görünümler silinmez. Bir
+    görünümde arama terimi ya da (yönetim sunucu listesinde) sahip e-postası olabilir; bunlar o tarayıcının deposunda
+    kalır ve depoya erişebilen biri okuyabilir. Ortak bilgisayarda görünümleri menüden silin ya da site verilerini
+    temizleyin.
+  - Kurallar `apps/web/lib/saved-views.ts` içindedir ve birim testleri vardır; menünün uçtan uca testi yoktur ve
+    tarayıcıda elle gözden geçirilmedi.
+- **Destek talebinde sunucunun o andaki durumu (yalnızca personel):** müşteri talebi bir sunucu seçerek açtığında
+  API sunucunun **veritabanındaki** halini talebe yazar (`tickets.diagnostics`, migration `082`): durum ve güç, paket,
+  boyut, imaj, konum, platform, adresler, kilit, silinme beklemesi, oluşturulma zamanı, aylık kotası varsa bu ayki
+  trafik ve hız sınırı, son 5 işlem (tür, sonuç, hata kodu) ve sahibin o andaki ödenmemiş fatura sayısı.
+  - Hipervizöre sorulmaz; parola, belirteç ve müşterinin notları yazılmaz.
+  - Yönetimdeki talep sayfasında, yazışmanın üstünde kapalı bir bölüm olarak durur ("Sunucunun talep açıldığındaki
+    durumu"); bilgilerin o ana ait olduğunu söyler, sunucuya ve (`billing.view` izni varsa) sahibin ödenmemiş
+    faturalarına bağlantı verir.
+  - `GET /support/tickets/:id` bu alanı (`diagnostics`) yalnızca `support.view` izni olan personele gönderir;
+    müşterinin yanıtında anahtar hiç yoktur ve talep listelerinde de yer almaz.
+  - Okuma iki saniyeyi geçerse ya da başarısız olursa talep yine açılır, alan boş kalır. Sunucu seçilmeden açılan ve
+    yükseltmeden önce açılmış taleplerde alan boştur; bölüm çizilmez. Kayıt sonradan güncellenmez.
+  - API tarafı `security-billing` entegrasyon testiyle ve bir birim testiyle sınanır; paneldeki bölümün uçtan uca
+    testi yoktur ve tarayıcıda elle gözden geçirilmedi.
+- **Başarısız işlemden sonra sıradaki adım:** sunucu sayfasının üstünde, en yeni işlem başarısız olduysa ve hâlâ
+  önemliyse (sunucu hata durumunda ya da işlem son 24 saat içinde bitti; süren bir işlem yokken) neyin ters gittiği,
+  ne yapılacağı ve tek bir düğme gösterilir. Öneri işlemin türünden ve hata kodundan çıkar (`apps/web/lib/next-step.ts`):
+  - `OUTCOME_UNKNOWN`, `VM_MISMATCH`, `SERVER_CHANGED`: önce ekibin bakması gerekir; destek talebi önerilir ve
+    **yeniden deneme hiçbir zaman önerilmez**.
+  - Ödeme engeli (yetersiz bakiye, ödenmemiş fatura, faturalama beklemesi ve benzerleri): faturalar sayfası.
+  - Kota ya da sınır engeli: kotanın neye yettiğini gösteren sipariş sayfası.
+  - Geçici hata (zaman aşımı, meşgul, bağlantı yok): "Yeniden dene", ama **yalnızca** açma, düzgün kapatma, reset ve
+    anlık görüntü alma için. Oluşturma, silme, yeniden kurulum, boyut değiştirme, geri yükleme ve ücretli işlemler
+    buradan yeniden denenmez. Düğme sayfanın o işlem için kendi düğmesidir (kilit, durum ve izin aynen geçerlidir);
+    müşteriye o işlem kapalıysa destek önerilir.
+  - Listede olmayan her kod: ayrıntıları doldurulmuş destek talebi.
+  - Bağlantılar (faturalar, kota, destek) yalnızca sunucunun sahibine gösterilir; başkasının sunucusuna bakan
+    personel gerekçeyi ve, uygunsa, yeniden denemeyi görür. İşlem geçmişindeki satır bağlantısı da aynı öneriyi izler.
+  - Kurallar birim testlidir; bildirimin uçtan uca testi yoktur ve tarayıcıda elle gözden geçirilmedi.
+- **Bildirim zilinde gruplama:** aynı konudaki art arda bildirimler sayısıyla tek satırda toplanır
+  ([notifications.md](notifications.md)).
 
 ## Güç zamanlaması ve toplu işlemler
 
@@ -153,8 +206,14 @@ Kurallar `apps/api/src/smart-rules.ts` içindedir ve birim testleri vardır. Ver
     veya başka bir işlem sürüyorsa atlar. Son sonuç ve zamanı listede görünür.
   - 5 dakikadan uzun süren bir API kesintisinde o çalıştırma kaçırılır; telafi edilmez.
   - Migration: `021_power_schedules`.
-- **Toplu güç işlemi** (yönetici, `POST /admin/servers/actions`, `servers.manage_all`): süzgecin gösterdiği
-  sunuculara (en fazla 200) aç, kapat, zorla kapat veya sıfırla uygulanır.
+- **Toplu güç işlemi** (yönetici, `POST /admin/servers/actions`, `servers.manage_all`): seçilen sunuculara ya da
+  süzgecin gösterdiği sunucuların tümüne (bir seferde en fazla 200; fazlaysa sıradaki ilk 200) aç, kapat, zorla
+  kapat veya sıfırla uygulanır.
+  - **Satır seçimi (Yönetim → Sunucular):** her satırın başında bir kutu vardır; Shift ile tıklamak son seçilenle
+    arasındaki satırları da seçer, "Gösterilen N sunucuyu seç" hepsini işaretler. Hedef açıkça seçilir: "Seçilenler"
+    (varsayılan) ya da "Gösterilenlerin tümü"; onay penceresi kaç sunucuya uygulanacağını söyler. Süzgecin gizlediği
+    satır seçili sayılmaz; işlem başarıyla gönderilince seçim temizlenir. Seçimin uçtan uca testi yoktur ve tarayıcıda
+    elle gözden geçirilmedi.
   - Uygulamadan önce onay istenir. Her sunucuya ayrı işlem açılır. İşlemi süren veya uygun olmayan sunucular
     atlanır ve sayılır.
   - Aynı Idempotency-Key ile tekrarlanan istek yeni işlem başlatmaz.

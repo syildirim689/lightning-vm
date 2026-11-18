@@ -144,6 +144,15 @@ bozabilir. Bu yüzden geri yükleme iki şey yapar:
 
   Giriş, sayfaları görüntüleme ve ayarlar çalışır.
 
+**Kim haberdar olur:** bekleme, API kapalıyken betik tarafından konur. API açıldığında (ve çalışırken 10 dakikada bir)
+beklemeyi görürse `system.update` izni olan personele `admin.restore_hold` bildirimi gönderir (varsayılan kanallar
+panel ve e-posta; hangi yedeğin ne zaman geri yüklendiğini ve Sistem sayfasına bağlantıyı taşır). Bildirim bekleme
+başına bir kez gider: hangi beklemenin bildirildiği `maintenance_state` tablosunda `restore_hold_notified` satırında
+tutulur, bu yüzden yeniden başlatma ya da ikinci bir API süreci yinelemez; bekleme kaldırılınca satır silinir ve
+sonraki geri yükleme yeniden bildirilir. Ayrıca personel her sayfanın üstünde bir şerit, Genel bakış'ta `RESTORE_HOLD`
+içgörüsünü görür. Bildirimin bir kez gittiği, yeniden başlatmada yinelenmediği ve yeni beklemede yeniden gittiği bir
+entegrasyon testiyle sınanır; gerçek bir geri yüklemeden sonra e-postanın ulaştığı denenmedi.
+
 **Serbest bırakmadan önce bakın:**
 
 1. **Yedekten sonra oluşturulan ya da silinen sunucular.** Panel onları yedekteki haliyle bilir. Tutarlılık

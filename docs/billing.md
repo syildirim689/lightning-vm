@@ -82,13 +82,41 @@ listelenir ve özetin `paymentsInReview` alanında sayılır. Bir ödeme incelem
 personele `billing.payment_review` bildirimi gider; karar yine elle verilir
 ([payments.md](payments.md#incelemedeki-ödemeler)).
 
-Müşterinin Genel bakış sayfasındaki **Yaklaşan ödemeler** bloğu yeni bir hesap yapmaz; faturalama özetinden ve fatura
-listesinden okur: vadesi geçmiş ya da 7 gün içinde dolacak ödenmemiş faturalar (bakiye yükleme faturaları hariç, en
-çok üçü "Öde" bağlantısıyla), sıradaki yenileme (dönem sonunda iptal edilecek abonelikler hariç; aynı para biriminde
-bir gün içinde yenilenenler tek satırda toplanır) ve saatlik kullanımda bakiyenin bugünkü hızla ne zaman biteceği
-(üç günden az kaldıysa uyarı rengiyle ve, bakiye yükleme açıksa, "Bakiye yükle" bağlantısıyla). Gösterecek bir şey yoksa blok hiç çizilmez.
-Sınırlar: yenileme tutarı aboneliğin **vergisiz** tutarıdır ve aynı yenileme, yenilemeden önceki günlerde vadesi
-yaklaşan fatura olarak da görünebilir.
+Müşterinin Genel bakış sayfasındaki **Yaklaşan ödemeler** bloğu faturalama özetinden ve fatura listesinden okur:
+vadesi geçmiş ya da 7 gün içinde dolacak ödenmemiş faturalar (bakiye yükleme faturaları hariç, en çok üçü "Öde"
+bağlantısıyla), sıradaki yenileme ve saatlik kullanımda bakiyenin bugünkü hızla ne zaman biteceği (üç günden az
+kaldıysa uyarı rengiyle ve, bakiye yükleme açıksa, "Bakiye yükle" bağlantısıyla). Gösterecek bir şey yoksa blok hiç çizilmez.
+
+Sıradaki yenilemeyi API hesaplar: faturalama özeti (`GET /api/billing/summary`) `nextRenewal` alanında en yakın
+yenilemeyi `{ at, amount, currency, gross, servers, invoiced }` olarak, yenilenecek abonelik yoksa `null` verir.
+
+- **Tutar** tahsilat çalıştırmasının keseceği faturanın tutarıdır: sunucunun şimdiki fiyatı (yoksa aboneliğin kendi
+  tutarı), hâlâ geçerliyse kupon, dönemin tamamı ve alıcının vergisi. `gross: true` vergi dahil demektir; blok tutarın
+  altına "vergi dahil" yazar.
+- **Sayılmayanlar:** dönem sonunda iptal edilecek abonelik, sunucusu silinmek üzere olan abonelik ve dönemi zaten
+  ödenmiş olan.
+- **İki kez gösterilmez:** yenilemenin faturası kesilmiş ve ödenmemişse `invoiced: true` gelir ve blok yenileme
+  satırını çizmez; o ödeme fatura olarak listelenir.
+- `servers` o gün yenilenen abonelik sayısıdır; blok adları abonelik listesinden alır, eşleştiremezse sayıyı yazar.
+
+Kalan sınırlar:
+
+- Alıcının vergi kuralı okunamazsa tutar **vergisizdir** (`gross: false`) ve "vergi dahil" notu çıkmaz.
+- Aynı gün birden çok para biriminde yenileme varsa yalnızca biri (kodu alfabetik olarak ilk olan) gösterilir;
+  diğerleri o satırda yoktur.
+- O günün yenilemelerinin bir kısmı faturalanmışsa satır yalnızca henüz faturalanmamış olanları toplar;
+  faturalananlar fatura olarak görünür.
+- Faturası kesilmiş yenilemede `amount` fatura satırının tamamıdır; fatura kısmen ödenmişse kalan tutar değildir.
+  Blok bu durumda yenileme satırını göstermez, kalan tutar fatura satırında yazar.
+- Fatura listesi yalnızca vadesi geçmiş ya da 7 gün içinde dolacak faturaları gösterir. Faturalar dönem sonundan 7
+  günden daha önce kesiliyorsa (ayar; varsayılan 7 gün) faturası kesilmiş bir yenileme, vadesine 7 gün kalana kadar
+  blokta görünmez.
+- Yenileme hesaplanamazsa (hata günlüğe `billing_next_renewal_failed` olarak yazılır) alan `null` gelir ve satır
+  çizilmez; özetin geri kalanı etkilenmez. Alanı hiç göndermeyen eski bir API'ye karşı arayüz önceki hesabına
+  (aboneliklerin vergisiz tutarı) döner.
+
+Hesap `billing-rules` birim testleri ve bir `security-billing` entegrasyon testiyle sınanır; bloğun kendisinin uçtan
+uca testi yoktur ve tarayıcıda elle gözden geçirilmedi.
 
 ## Saatlik kullanım, bütçe ve boyut değişikliği
 
