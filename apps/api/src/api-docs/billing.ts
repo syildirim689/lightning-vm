@@ -49,7 +49,7 @@ export default {
     tag: 'billing',
     summary: { tr: 'Bir faturayı satırları ve ödemeleriyle getirir.', en: 'One invoice with its lines and payments.' },
     params: [invoiceId],
-    returns: { tr: 'invoice (alıcı ve satıcı bilgisiyle), lines, payments.', en: 'invoice (with buyer and seller), lines, payments.' },
+    returns: { tr: 'invoice (alıcı ve satıcı bilgisiyle; payBlockedUntil: incelemedeki bir ödeme yüzünden faturanın yeniden ödenemeyeceği zamanın sonu, ISO tarih; engel yoksa null), lines, payments.', en: 'invoice (with buyer and seller; payBlockedUntil: until when a payment under review keeps the invoice from being paid again, an ISO date; null when nothing does), lines, payments.' },
     errors: ['NOT_FOUND'],
   },
   'POST /billing/invoices/:id/pay': {
@@ -76,7 +76,7 @@ export default {
   'POST /billing/payments/:id/sandbox': {
     tag: 'internal',
     summary: { tr: 'Test (sandbox) ödemesini test kartıyla sonuçlandırır.', en: 'Settles a sandbox payment with a test card.' },
-    details: { tr: '4242 4242 4242 4242 onaylanır, 4000 0000 0000 0002 reddedilir, 4000 0000 0000 9995 yetersiz bakiye verir. Yalnızca sandbox sağlayıcısının ödemeleri için.', en: '4242 4242 4242 4242 is approved, 4000 0000 0000 0002 declined, 4000 0000 0000 9995 insufficient funds. Sandbox payments only.' },
+    details: { tr: '4242 4242 4242 4242 onaylanır, 4000 0000 0000 0002 reddedilir, 4000 0000 0000 9995 yetersiz bakiye verir, 4000 0000 0000 4954 incelemeye alınır (ödeme açık kalır, personelin kararını bekler). Yalnızca sandbox sağlayıcısının ödemeleri için.', en: '4242 4242 4242 4242 is approved, 4000 0000 0000 0002 declined, 4000 0000 0000 9995 insufficient funds, 4000 0000 0000 4954 held for review (the payment stays open and waits for staff). Sandbox payments only.' },
     params: [uuid('Ödemenin kimliği.', 'The payment id.')],
     body: [
       { name: 'card', type: 'string', text: { tr: 'Test kartı numarası; boşluklar yok sayılır.', en: 'Test card number; spaces ignored.' } },

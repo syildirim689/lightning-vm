@@ -258,7 +258,22 @@ export default function WindowChrome() {
       }
     };
     dress(document);
+    // The keyboard stays with the window in front. What had the focus can leave the page with what it did (a button
+    // that confirms "stop" and is gone once that is done, its question still closing): the focus is then nowhere, and
+    // Escape, which a dialog hears only from inside itself, would close nothing. One frame later (whoever closes gives
+    // the focus back within that frame, where there is something to give it back to) it is put on the window in front.
+    let stray = 0;
+    const keep = () => {
+      if (stray || document.activeElement !== document.body) return;
+      stray = requestAnimationFrame(() => {
+        stray = 0;
+        if (document.activeElement !== document.body || waiting()) return;
+        const front = [...document.querySelectorAll<HTMLElement>(DIALOG)].filter((d) => !d.closest('[data-exiting]')).at(-1);
+        front?.focus({ preventScroll: true });
+      });
+    };
     const seen = new MutationObserver((list) => {
+      if (list.some((m) => m.removedNodes.length)) keep();
       for (const m of list) for (const n of m.addedNodes) if (n instanceof HTMLElement && (n.matches('.modal__dialog') || n.querySelector('.modal__dialog'))) { dress(n.parentNode ?? document); return; }
     });
     seen.observe(document.body, { childList: true, subtree: true });
@@ -424,7 +439,7 @@ export default function WindowChrome() {
     document.addEventListener('contextmenu', context);
     window.addEventListener('resize', resized);
     return () => {
-      seen.disconnect(); shut(false); preview(null, null);
+      seen.disconnect(); cancelAnimationFrame(stray); shut(false); preview(null, null);
       for (const type of ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click', 'keydown'] as const) window.removeEventListener(type, back, early);
       window.removeEventListener('keydown', keys, early);
       document.removeEventListener('focusin', roam); document.body.removeAttribute('data-react-aria-top-layer');

@@ -12,7 +12,7 @@ import { InvoiceSheet } from '../../../../../components/invoice-sheet';
 import { CheckboxInput, Mono, Notice, Loading, ButtonLink } from '../../../../../components/ui';
 import { apiFetch, useErrorText } from '../../../../../lib/api';
 import type { InvoiceDetail, Summary } from '../../../../../lib/billing';
-import { isReview } from '../../../../../lib/billing';
+import { isReview, payBlocked } from '../../../../../lib/billing';
 import { useApiQuery } from '../../../../../lib/query';
 import { useDocTitle } from '../../../../../lib/title';
 import { remember } from '../../../../../lib/recent';
@@ -58,7 +58,7 @@ export default function InvoicePage({ id }: { id: string }) {
     </div>
     {checking && <Notice tone="default" title={t('checking')}>{t('checkingHelp')}</Notice>}
     {d.invoice.status === 'unpaid' && d.payments.some(isReview) && <Notice tone="warning" title={t('reviewTitle')}>{t('reviewHelp')}</Notice>}
-    {d.invoice.status === 'unpaid' && <PayPanel d={d} locked={checking && !waited} held={d.payments.some(reviewHolds)}/>}
+    {d.invoice.status === 'unpaid' && <PayPanel d={d} locked={checking && !waited} held={payBlocked(d.invoice)}/>}
     <InvoiceSheet d={d}/>
     <InvoiceDisputes d={d}/>
   </div>;
@@ -67,14 +67,8 @@ export default function InvoicePage({ id }: { id: string }) {
 // A payment whose answer may still come by itself: open, and not waiting for staff.
 const stillOpen = (p: InvoiceDetail['payments'][number] | undefined) => !p || (p.status === 'pending' && !isReview(p));
 
-// A payment under review keeps the invoice from being paid a second time (the API answers PAYMENT_IN_REVIEW) for the
-// days set in Settings → Billing, counted from when the review began. The customer's answer carries neither, so the
-// page goes by the default (7 days) from when the payment was made, which is never later than the review's start: past
-// that the buttons are on again, and the API still has the last word.
-const REVIEW_HOLD_DAYS = 7;
-const reviewHolds = (p: InvoiceDetail['payments'][number]) => isReview(p) && Date.now() - Date.parse(p.reviewSince ?? p.createdAt) < REVIEW_HOLD_DAYS * 86_400_000;
-
-// held: a payment for this invoice is under review; the pay buttons are off and say why.
+// held: a payment for this invoice is under review and the API refuses a second one for now (PAYMENT_IN_REVIEW; the
+// invoice's payBlockedUntil says until when, by the days set in Settings → Billing): the pay buttons are off and say why.
 // locked: a payment for this invoice is still being confirmed. While it is, or while one was just sent from here,
 // every pay button is off: a second click must not start a second payment.
 function PayPanel({ d, locked: confirming, held }: { d: InvoiceDetail; locked?: boolean; held?: boolean }) {

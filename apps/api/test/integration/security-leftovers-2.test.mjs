@@ -229,6 +229,46 @@ test('an invoice with a payment under review cannot be paid a second time, by an
   assert.deepEqual(marked.json().closedReviews, [pay]);
 });
 
+test('the invoice says until when a review keeps it from being paid (payBlockedUntil), exactly while paying is refused', async () => {
+  const [c, id] = await signUp('held-until@example.test');
+  const invoiceId = (await post('/admin/billing/invoices', { userId: id, currency: 'TRY', lines: [{ description: 'Hizmet', unitPrice: '100' }] }, admin)).json().invoiceId;
+  const until = async (cookie = c, path = '/billing') => { const r = await get(`${path}/invoices/${invoiceId}`, cookie); assert.equal(r.statusCode, 200, r.body); return r.json().invoice.payBlockedUntil; };
+  // The account has no balance: a payment that is not refused for the review stops at the balance, and nothing is made.
+  const refusal = async () => { const r = await post(`/billing/invoices/${invoiceId}/pay`, { method: 'balance' }, c); assert.equal(r.statusCode, 409, r.body); return r.json().code; };
+
+  // No payment under review: nothing blocks.
+  assert.equal(await until(), null);
+  assert.equal(await refusal(), 'INSUFFICIENT_BALANCE');
+
+  // Under review for two days, a window of seven: blocked until the wait's start plus seven days, and refused.
+  const pay = await held(invoiceId, id, 2);
+  const end = (await one('SELECT review_since + make_interval(days => 7) AS t FROM payments WHERE id = $1', [pay])).t;
+  const told = await until();
+  assert.equal(typeof told, 'string');
+  assert.equal(Date.parse(told), end.getTime());
+  assert.ok(Date.parse(told) > Date.now() + 4 * 86_400_000 && Date.parse(told) < Date.now() + 6 * 86_400_000, told);
+  assert.equal(await refusal(), 'PAYMENT_IN_REVIEW');
+  assert.equal(await until(admin, '/admin/billing'), told, 'staff read the same');
+
+  // Past the window, the review still open: not blocked, not refused.
+  await waitsSince(pay, 8);
+  assert.equal(await until(), null);
+  assert.equal(await refusal(), 'INSUFFICIENT_BALANCE');
+
+  // The window switched off (0 days), the review fresh: not blocked, not refused.
+  await waitsSince(pay, 0);
+  assert.equal(await refusal(), 'PAYMENT_IN_REVIEW');
+  await setBilling({ reviewHoldDays: 0 });
+  assert.equal(await until(), null);
+  assert.equal(await refusal(), 'INSUFFICIENT_BALANCE');
+  await setBilling();
+  assert.equal(typeof await until(), 'string');
+
+  // An invoice that is not awaiting payment has nothing to block.
+  await pool.query("UPDATE invoices SET status = 'cancelled' WHERE id = $1", [invoiceId]);
+  assert.equal(await until(), null);
+});
+
 test('an API token of a directory or SSO account works only while the account was confirmed recently, and the token lists say so', async () => {
   const [c, id] = await signUp('token-sso@example.test');
   const made = await post('/account/api-tokens', { name: 'automation', scope: 'read' }, c);

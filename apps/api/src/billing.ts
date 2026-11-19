@@ -340,12 +340,17 @@ async function closeReviews(db: Db, ids: string[], note: string) {
 // invoice is not suspended, terminated or expired, nobody is reminded to pay it, and the customer cannot pay it again;
 // after it, with the review still open, the invoice is collected like any other unpaid one and may be paid again (a
 // server held or deleted for it must have a way out that does not wait for staff).
-const reviewWindowSql = (invoice: string, codes: string, days: string) => `EXISTS (SELECT 1 FROM payments rw WHERE rw.invoice_id = ${invoice} AND rw.status = 'pending' AND rw.error_code = ANY(${codes})
-  AND coalesce(rw.review_since, rw.created_at) > now() - make_interval(days => ${days}::int))`;
-export async function reviewWindow(db: Db, invoiceId: string) {
-  const { rows: [r] } = await db.query(`SELECT ${reviewWindowSql('$1', '$2', '$3')} AS held`, [invoiceId, reviewCodes, (await settings()).reviewHoldDays ?? 7]);
-  return !!r?.held;
+const reviewWindowFrom = (invoice: string, codes: string, days: string) => `FROM payments rw WHERE rw.invoice_id = ${invoice} AND rw.status = 'pending' AND rw.error_code = ANY(${codes})
+  AND coalesce(rw.review_since, rw.created_at) > now() - make_interval(days => ${days}::int)`;
+const reviewWindowSql = (invoice: string, codes: string, days: string) => `EXISTS (SELECT 1 ${reviewWindowFrom(invoice, codes, days)})`;
+// Until when the window holds for one invoice (null: it does not hold): the latest wait inside it, plus the days. The
+// refusal to pay (reviewWindow) and what the invoice's answer tells the customer (payBlockedUntil) are this one query.
+export async function reviewWindowUntil(db: Db, invoiceId: string): Promise<Date | null> {
+  const { rows: [r] } = await db.query(`SELECT max(coalesce(rw.review_since, rw.created_at)) + make_interval(days => $3::int) AS until ${reviewWindowFrom('$1', '$2', '$3')}`,
+    [invoiceId, reviewCodes, (await settings()).reviewHoldDays ?? 7]);
+  return r?.until ?? null;
 }
+export const reviewWindow = async (db: Db, invoiceId: string) => (await reviewWindowUntil(db, invoiceId)) !== null;
 // A second payment for an invoice whose payment is being reviewed could take the money twice: refused while the
 // review window holds, at every way a customer pays (the invoice's pay route: balance, saved card, a provider's page).
 // Card payments one account may start in an hour (startCardPayment): far more than paying one's invoices takes.
@@ -986,6 +991,9 @@ async function invoiceDetail(id: string, ownerId?: string) {
     period_start AS "periodStart", period_end AS "periodEnd" FROM invoice_lines WHERE invoice_id = $1 ORDER BY sort`, [id]);
   const { rows: payments } = await pool.query(`SELECT id, provider, mode, method, status, amount::text, currency, refunded::text, error_code AS "errorCode", error_message AS "errorMessage",
     reference, automatic, created_at AS "createdAt", completed_at AS "completedAt" FROM payments WHERE invoice_id = $1 ORDER BY created_at DESC`, [id]);
+  // payBlockedUntil: until when a payment under review keeps this invoice from being paid again (the pay route answers
+  // PAYMENT_IN_REVIEW until then); null when no review stands in the way. Asked the way the refusal asks.
+  inv.payBlockedUntil = inv.status === 'unpaid' ? await reviewWindowUntil(pool, id) : null;
   return { invoice: inv, lines, payments };
 }
 const subscriptionColumns = `b.id, b.kind, b.server_id AS "serverId", b.vdc_id AS "vdcId", b.description, b.amount::text, b.currency, b.period_months AS "periodMonths", b.status,

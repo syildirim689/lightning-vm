@@ -1,6 +1,15 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { isReview, paymentState, paymentTone, waitedFor, waitingSince } from './billing.ts';
+import { isReview, payBlocked, paymentState, paymentTone, waitedFor, waitingSince } from './billing.ts';
+
+test('paying is off while the invoice says a review blocks it, and no longer', () => {
+  const now = Date.parse('2026-11-19T10:00:00Z');
+  assert.equal(payBlocked({ payBlockedUntil: '2026-11-21T09:00:00.000Z' }, now), true);
+  assert.equal(payBlocked({ payBlockedUntil: '2026-11-19T10:00:00.000Z' }, now), false, 'the window is over at that moment');
+  assert.equal(payBlocked({ payBlockedUntil: '2026-11-19T09:59:59.000Z' }, now), false, 'a page left open past it');
+  assert.equal(payBlocked({ payBlockedUntil: null }, now), false);
+  assert.equal(payBlocked({}, now), false, 'an older API: the pay route still refuses');
+});
 
 test('a payment under review is told apart from one in progress', () => {
   assert.equal(isReview({ status: 'pending', errorCode: 'FRAUD_REVIEW', review: true }), true);

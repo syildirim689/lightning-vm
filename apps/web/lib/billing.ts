@@ -12,7 +12,10 @@ export type Payment = { id: string; provider: string; mode: string; method: stri
   errorMessage: string | null; reference: string | null; automatic: boolean; createdAt: string; completedAt: string | null; email?: string; invoiceId?: string; number?: string | null;
   // Staff lists only: whether the payment waits for a person (review), since when, and what its invoice is now.
   review?: boolean; reviewSince?: string | null; since?: string | null; invoiceStatus?: InvoiceStatus };
-export type InvoiceDetail = { invoice: Invoice & { buyer: Party; seller: Party; note: string | null }; lines: Line[]; payments: Payment[] };
+// payBlockedUntil: until when a payment under review keeps the invoice from being paid again (null: nothing does).
+export type InvoiceDetail = { invoice: Invoice & { buyer: Party; seller: Party; note: string | null; payBlockedUntil?: string | null }; lines: Line[]; payments: Payment[] };
+// Whether paying is refused now (the API would answer PAYMENT_IN_REVIEW), by the invoice's own answer.
+export const payBlocked = (i: { payBlockedUntil?: string | null }, now = Date.now()) => !!i.payBlockedUntil && Date.parse(i.payBlockedUntil) > now;
 export type Subscription = { id: string; kind: 'server' | 'vdc'; serverId: string | null; vdcId: string | null; description: string; amount: string; currency: string; periodMonths: number;
   status: 'pending' | 'active' | 'past_due' | 'suspended' | 'cancelled' | 'ended'; periodStart: string | null; periodEnd: string | null; autoRenew: boolean; cancelAtPeriodEnd: boolean;
   suspendedAt: string | null; createdAt: string; email?: string };
