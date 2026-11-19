@@ -1816,6 +1816,9 @@ test.describe('people, settings and smart features (English browser)', () => {
     expect(await kept4(customer)).toEqual({ content: [], owner: [`${me.id}|`, `${me.id}|`], preference: '1' });
     // And the other way round, back to the customer's own session.
     await plant(customer, 'the staff member');
+    // The cookies are changed with no page of the panel open: one that is open keeps asking the API, and an answer
+    // refused in the moment between the two calls sends it to sign-in, which cuts off the visit that follows.
+    await customer.goto('about:blank');
     await customer.context().clearCookies();
     await customer.context().addCookies(customerCookies);
     await customer.goto('/');
