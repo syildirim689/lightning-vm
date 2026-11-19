@@ -21,6 +21,13 @@ async function choose(page: Page, scope: Page | Locator, label: string | RegExp,
 // React Aria keeps the real input visually hidden under its styled control.
 // Controlled inputs change only after the app (or the API) answers, so click and let expect() wait.
 const tick = (box: Locator) => box.click({ force: true });
+// A page arrives from the server already drawn and listens to the keyboard only once its scripts have run: a key
+// pressed in between is lost. Measured in a new browser, as every test has one (nothing cached): the shortcuts
+// listened 260-430 ms after the load event, and "?" pressed after a click on the heading came first 12 times in 200.
+// The page says when it listens: it hides the loading layer of the first load itself, and did so 200-290 ms after
+// the shortcuts were in place (components/page-loader.tsx). A person does not meet the gap: 400 ms after the page is
+// drawn that layer covers it for as long as it does not listen.
+const interactive = (page: Page) => expect(page.locator('#boot-loader')).toHaveClass(/page-loader-hidden/);
 // The pictures of the tour (test-results/tour/<name>.png), taken once the page stands still: every entrance effect
 // and transition that ends by itself has ended (a spinner that turns for ever is not waited for), so nothing is
 // caught half faded. A picture of the whole page or of one element is stitched from a page that does not scroll, so
@@ -776,6 +783,7 @@ test.describe('server lifecycle (simulator, Turkish customer)', () => {
     // "/" jumps to the list's search from anywhere on the page, selecting what was there.
     await page.goto('/?q=x');
     await expect(page.getByRole('searchbox', { name: 'Ara' })).toHaveValue('x');
+    await interactive(page);
     await page.locator('main h1').click();
     await page.keyboard.press('/');
     await page.keyboard.type('ana web');
@@ -1928,6 +1936,7 @@ test.describe('people, settings and smart features (English browser)', () => {
   test('dialogs are windows: snapped by keys and edges, pulled out, laid out from the menu, resized', async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 720 });
     await signInAdmin(page);
+    await interactive(page);
     await page.getByRole('heading', { level: 1 }).click();
     await page.keyboard.press('Shift+?');
     const win = page.getByRole('dialog', { name: 'Keyboard shortcuts' });
@@ -3183,6 +3192,7 @@ test.describe('people, settings and smart features (English browser)', () => {
       .find((x) => x.subject === 'Cannot reach my server over SSH');
     expect(sshTicket).toBeTruthy();
     await page.goto('/admin');
+    await interactive(page);
     await page.keyboard.press('Control+k');
     await page.getByRole('combobox').fill(String(sshTicket!.number));
     await expect(page.getByRole('option', { name: new RegExp(`#${sshTicket!.number} Cannot reach my server over SSH`) })).toBeVisible();
