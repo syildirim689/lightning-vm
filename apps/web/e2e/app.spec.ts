@@ -1706,7 +1706,7 @@ test.describe('people, settings and smart features (English browser)', () => {
     await expect(page.getByText('No longer a reseller; their customers are ordinary accounts now')).toBeVisible();
     await expect(reseller.getByRole('button', { name: 'Make a reseller' })).toBeVisible();
     expect(((await (await page.request.get(`/api/admin/resellers/${me.id}`)).json()) as { reseller: unknown }).reseller).toBeNull();
-    await page.keyboard.press('Escape');
+    await summary.getByRole('button', { name: 'Close', exact: true }).first().click();
     await expect(summary).toBeHidden();
 
     // ---- What the browser keeps for one account is gone before the next one sees the panel (lib/session-end.ts) ----
