@@ -286,6 +286,7 @@ sunucunun kopyası çıkarılamaz (kopya yalnızca şablondan). Her platformun a
 
 | Ne | Nerede |
 |---|---|
+| **Ekran görüntülerine ilk kez gözle bakılması (2026-11-19).** Uçtan uca paketin aldığı 187 ekran görüntüsünün 115'ine ilk kez gözle bakıldı (72'sine bakılmadı) ve görülenler düzeltildi. Telefonda pencere düğmeleri alt alta dizilir ve pencerenin dışına çıkmaz, komut paleti ekrana sığar, fatura satırları etiket / değer blokları olarak okunur, arka plan işleri düğmesi yalnızca simgeye küçülür; sayfalar seçim çubuğunun altında yer bırakır; bekletilen ödeme her yerde "inceleme bekliyor" diye adlandırılır; yüzdeler, bellek boyutları ve saatlik fiyatlar okuyanın diline göre yazılır; müşteri bir işlemin neden başarısız olduğunu hata kodu olmadan görür (kod, hazır doldurulan destek talebine gider) ve gelen kutusu işlemleri sözle adlandırır (tarayıcı bildirimi, e-posta ve mesajlaşma metinleri hâlâ işlemin ham adını taşır); 640 ile 1280 px arasında geniş tablolar yana kaydığını gösteren bir işaret taşır; Türkçe arayüzde özelliğin adı her yerde "firewall"dur. Bilinen ve bırakılan: "anahtar oluşturuldu" bildirimi yeni anahtarın Kaldır düğmesini örtebilir; yeni giriş bildirimi tarayıcının ham kimlik metnini gösterir. İşletmecinin yapacağı bir şey yok | telefon görünümü · Ctrl+K · fatura sayfası · Yönetim → Faturalandırma → Ödemeler · sunucu sayfası · bildirimler · listeler |
 | **Bekletilen ödemeler, dizin hesaplarının API anahtarları, kuyrukta bekleme süresi ve bayiden ayrılınca liste fiyatı (2026-11-19).** İlk güvenlik turunun bulgu çıkarmadan kapattığı 65 inceleme birimi yeniden okundu (tek inceleyici, yalnızca kaynak okuması; bağımsız doğrulanmış bulgular değildir) ve bulunan dört açık kapatıldı. İşletmeciyi en çok etkileyenler: dizin (LDAP) ve SSO hesaplarının API anahtarları, hesap kaynağında son `DIRECTORY_TOKEN_DAYS` gün (varsayılan 30) içinde doğrulanmadıysa reddedilir (`401 TOKEN_ACCOUNT_UNCONFIRMED`; mevcut hesaplar için süre yükseltme anından başlar); inceleme bekleyen ödemesi olan fatura en çok `reviewHoldDays` gün (varsayılan 7) askıya alınmaz, silinmez ve ikinci kez ödenemez (`409 PAYMENT_IN_REVIEW`); bir hesap saatte en çok 20 kart ödemesi başlatır; bayiden ayrılan müşterinin sunucuları, liste fiyatı kesin bulunabiliyorsa, bir sonraki faturadan itibaren liste fiyatıyla faturalanır; hesap payını bekleyen işlemin bekleme süresi son tarihine eklenir (`OPERATIONS_HELD_HOURS`, varsayılan 6); bayinin müşterinin sunucularında yaptığı konsol, zamanlama, etiket, disk, imaj, ad ve kilit işlemleri de müşterinin etkinlik listesindedir; kullanıcı adına oturum açan personel hesabı bayiden ayıramaz ve sunucu devralamaz; fatura, incelemenin ödemeyi ne zamana kadar engellediğini söyler (`payBlockedUntil`) ve fatura sayfası ödeme düğmelerini o zamana kadar kapatır. Klavye: onaylayan bir düğme işleminden sonra kaybolduğunda (örneğin kullanıcı özetindeki "Artık bayi değil") klavye öndeki pencerede kalır, yani Escape onu yine kapatır; bu her pencere için geçerlidir. Migration `086` ve `087` kendiliğinden uygulanır; yükseltmede API, worker'dan önce ya da onunla birlikte başlatılmalıdır. **Yükseltmeden önce okuyun** | Ayarlar → Faturalandırma · Ayarlar → API · Hesabım → Geliştirici · Hesabım → Profil · Etkinlik · fatura sayfası · `.env` · [docs/upgrade-notes.md](docs/upgrade-notes.md) · [docs/security-audit.md](docs/security-audit.md) |
 | **Güvenlik turundan kalanların kapatılması ve hesapta saklanan görünümler (2026-11-18).** İkinci güvenlik turunun incelemeden ya da değiştirmeden bıraktığı konular kaynak incelemesi ve testlerle ele alındı (bağımsız doğrulanmış bulgular değildir). İşletmeciyi en çok etkileyenler: dizin ve SSO kullanıcıları her `SESSION_TTL_HOURS` saatte bir yeniden giriş yapar; adresi kanıtlanmamış hesapta ilk "Parolamı unuttum" sıfırlaması API anahtarlarını, SSH anahtarlarını ve **kayıtlı kartları** siler (otomatik yenileme için yeniden kart gerekir; personelin kefil olduğu mevcut hesapları migration `085` kanıtlanmış işaretler, kayıtla ya da bayi eliyle açılmış hesaplar kanıtlanmamış kalır); sunucu devralmak kanıtlanmış adres ister; tek bir hesap işlem kuyruğunu dolduramaz (`OPERATIONS_PER_OWNER`); ayar personeli dizin ayarını kaydederken reddedilebilir; faturayı "Ödeme kaydet" ile kapatmak inceleme bekleyen ödemeyi de kapatır ve yeni "İncelemeyi kapat" işlemi vardır; bayiden ayrılan müşterinin abonelikleri kendisine geçer ve bayi müşterileri bilgilendirilir; yükseltmeden sonraki ilk açılışta tarayıcıdaki taslaklar bir kez silinir. *Ayrıca:* kayıtlı görünümler artık hesapta saklanır (migration `083`), CI'da bağımlılık denetimi gerekçeli ve süreli istisna listesiyle çalışır. Entegrasyon paketi (196 testten 192'si geçti, 4'ü atlandı) ve uçtan uca paket (31 / 31) `eaa0a4e` commit'inde çalıştırıldı. **Yükseltmeden önce okuyun** | Hesabım → Profil · Etkinlik · Yönetim → Faturalandırma → Ödemeler · Kullanıcılar · Ayarlar → Dizin · `.env` · [docs/upgrade-notes.md](docs/upgrade-notes.md) · [docs/security-audit.md](docs/security-audit.md) |
 | **Kayıtlı görünümler, sıradaki adım ve talepte sunucu durumu (2026-11-18).** *Personel:* Sunucular, Kullanıcılar, Destek kuyruğu, Denetim kaydı, fatura ve ödeme listelerinde kayıtlı görünümler (o sürümde tarayıcıda saklanıyordu; artık hesapta, üst satıra bakın); Yönetim → Sunucular'da toplu işlem için satır satır seçim; destek talebinde sunucunun talep açıldığı andaki durumu (yalnızca personel, migration `082`); komut paletinin son açılanlarında kullanıcılar ve yönetimdeki faturalar; panel geri yüklemeden sonra beklemede bulunduğunda `admin.restore_hold` bildirimi; Kötüye kullanım sayacı artık yalnızca kimsenin onaylamadığı bulguları sayar. *Müşteri:* başarısız işlemden sonra önerilen sıradaki adım; bildirim zilinde yinelenen bildirimlerin tek satırda toplanması; "Yaklaşan ödemeler"de yenileme tutarı artık API'nin hesabıdır (hesaplanabildiyse vergi dahil, faturası kesildiyse iki kez gösterilmez); sunucu listesinde kayıtlı görünümler. İşletmecinin yapacağı bir şey yok | Yönetim → Sunucular · Kullanıcılar · Destek · Denetim kaydı · Faturalandırma · Ctrl+K · sunucu sayfası · bildirim zili · Genel bakış · [docs/upgrade-notes.md](docs/upgrade-notes.md) |
@@ -541,12 +542,12 @@ Simülatör (govmomi `vcsim`) gerçek bir vCenter olmadan tüm akışı çalış
 |---|---|
 | API birim testleri (162 test) | `cd apps/api && npm test` |
 | API entegrasyon testleri (PostgreSQL + Redis; güvenlik denetiminin düzeltmeleri için eklenen `security-auth`, `security-billing`, `security-servers`, `security-leftovers` ve `security-leftovers-2` testleri ile `saved-views` testleri bunların içindedir) | `cd apps/api && npm run test:integration` |
-| API entegrasyon testlerinin tamamı (PostgreSQL, Redis, vcsim, VMware adaptörü ve worker'ı Docker'da kendisi kurar). Son olarak 2026-11-19'da, `a2f2ff2` commit'inde, Docker'lı bir Linux sunucusunda çalıştırıldı: 204 testten 200'ü geçti, 4'ü PowerDNS, ISO deposu ya da konsol ağ geçidi istediği için atlandı, başarısız olan yok. | `cd apps/api && npm run test:integration:full` |
+| API entegrasyon testlerinin tamamı (PostgreSQL, Redis, vcsim, VMware adaptörü ve worker'ı Docker'da kendisi kurar). Son olarak 2026-11-19'da, `ea0d19e` commit'inde, Docker'lı bir Linux sunucusunda çalıştırıldı: 204 testten 200'ü geçti, 4'ü PowerDNS, ISO deposu ya da konsol ağ geçidi istediği için atlandı, başarısız olan yok. | `cd apps/api && npm run test:integration:full` |
 | Go servisleri | `cd services/vmware && go test ./...` |
 | Proxmox (26), XCP-ng (19), oVirt (15), Hyper-V (18), libvirt (19) ve Incus (11 test) adaptörleri | `cd services/proxmox && npm test` (aynısı `services/xcpng`, `services/ovirt`, `services/hyperv`, `services/libvirt` ve `services/incus` için; libvirt'in dört betik testi yalnızca Linux'ta çalışır, başka yerde atlanır) |
-| Web birim testleri (121 test: çeviriler, simgeler, pencere düzenleri, tarayıcıda tutulanlar ve diğer hesaplar) | `cd apps/web && npm test` |
+| Web birim testleri (128 test: çeviriler, simgeler, pencere düzenleri, tarayıcıda tutulanlar ve diğer hesaplar) | `cd apps/web && npm test` |
 | Worker (sözdizimi denetimi ve 54 birim testi) | `cd apps/worker && npm run check` |
-| Uçtan uca (Playwright, çalışan bir Compose kurulumuna karşı). Paket kendi geçici Compose kurulumuna karşı çalıştırılır (boş bir veritabanı ve VMware simülatörü); gerçek veri taşıyan bir panele karşı çalıştırılmaz. Son olarak `a2f2ff2` commit'inde çalıştırıldı: 33 testin 33'ü geçti (yaklaşık 12 dakika). | `cd apps/web && npx playwright test` |
+| Uçtan uca (Playwright, çalışan bir Compose kurulumuna karşı). Paket kendi geçici Compose kurulumuna karşı çalıştırılır (boş bir veritabanı ve VMware simülatörü); gerçek veri taşıyan bir panele karşı çalıştırılmaz. Son olarak `ea0d19e` commit'inde çalıştırıldı: 33 testin 33'ü geçti (yaklaşık 14 dakika). Paketin aldığı 187 ekran görüntüsünün 115'ine 2026-11-19'da gözle bakıldı; 72'sine bakılmadı. | `cd apps/web && npx playwright test` |
 
 Bu belgedeki test sayıları ve son çalıştırmaların sonuçları yalnızca yukarıdaki tablodadır; diğer bölümler buraya
 gönderir. 2026-11-18 takibinde entegrasyon paketine 19 test eklendi: `saved-views` (9), `security-leftovers` (4),
@@ -637,9 +638,12 @@ kaynağında en son ne zaman doğrulandığını, `087` bir işlemin hesap payı
   kalır. Silme, panelin o tarayıcıda yeniden açılmasına ya da oturumun orada bitmesine bağlıdır: kapatılıp bir daha
   açılmayan tarayıcıda içerik durur. Kural birim testlidir ve uçtan uca paketin bir adımıdır (kullanıcı adına giriş,
   aynı tarayıcıda başka bir oturum, çıkış); ortak bir bilgisayarda elle denenmedi.
-- **Yeni ekranlar elle gözden geçirilmedi:** 2026-11-17, 2026-11-18 ve 2026-11-19'da eklenen ekranların hiçbirine
-  tarayıcıda elle bakılmadı; bu ekranlar yalnızca uçtan uca paketin baktığı kadar görüldü (son çalıştırmanın sonucu:
-  [Geliştirme ve testler](#-geliştirme-ve-testler)). Paketin bu ekranlarda kapsadıkları: sipariş bağlantısının
+- **Yeni ekranların bir bölümüne gözle bakılmadı:** 2026-11-17, 2026-11-18 ve 2026-11-19'da eklenen ekranların
+  hiçbiri tarayıcıda elle kullanılmadı. 2026-11-19'da uçtan uca paketin aldığı ekran görüntülerine ilk kez gözle
+  bakıldı: 187 görüntünün 115'ine bakıldı, **72'sine bakılmadı**; bakılanlarda görülenler düzeltildi (Son eklenenler).
+  Bunun dışında ekranlar yalnızca uçtan uca paketin baktığı kadar görüldü (son çalıştırmanın sonucu:
+  [Geliştirme ve testler](#-geliştirme-ve-testler)). Bilinen ve bırakılan iki şey: "anahtar oluşturuldu" bildirimi
+  yeni anahtarın Kaldır düğmesini örtebilir; yeni giriş bildirimi tarayıcının ham kimlik metnini gösterir. Paketin bu ekranlarda kapsadıkları: sipariş bağlantısının
   okunması; komut paletinden fatura bulunması, hızlı işlemler (bakiye yükleme, yeni destek talebi) ve personelin son
   açılanlarında bakılan kullanıcı; `/admin/attention` yanıtı (personele `200`, müşteriye `403`; sayısı sıfır olan
   girişte rozet olmaması); sunucu kartı menüsünde ad değiştirme ve kilit (silme yalnızca menüde görünmesiyle);
@@ -647,7 +651,7 @@ kaynağında en son ne zaman doğrulandığını, `087` bir işlemin hesap payı
   hesaptaki kopyaya karşı kaydedilmesi, uygulanması ve silinmesi (yalnızca yönetimdeki sunucu listesinde); destek
   talebindeki sunucu durumu bölümü (personelde var, müşteride yok); bildirim zilindeki gruplama; "Yaklaşan
   ödemeler"de vadesi yaklaşan fatura; ödemeler sayfasında "İnceleme bekleyen" süzgeci ve aramanın adreste kalması;
-  inceleme bekleyen bir ödemenin yolu (Sandbox'ın inceleme kartıyla ödeme, müşterinin "Ödemeniz inceleniyor" notu,
+  inceleme bekleyen bir ödemenin yolu (Sandbox'ın inceleme kartıyla ödeme, müşterinin "Ödemeniz inceleme bekliyor" notu,
   Faturalandırma girişinde sayısı 1 olan rozet, özetteki uyarı, listedeki satır, personelin "İncelemeyi kapat" ile
   kapatması ve rozetin kalkması).
   2026-11-19'dan beri ayrıca: her sayfadaki geri yükleme şeridi ve Sistem sayfasından serbest bırakma, başarısız
@@ -831,7 +835,8 @@ görüntüleriyle geri bildirim verdi; kodu, testleri, belgeleri ve kurulum beti
 
 - Her özellik için birim / entegrasyon / uçtan uca test; her arayüz değişikliği telefon, tablet ve geniş ekranda
   ekran görüntüsüyle kontrol edildi. 2026-11-17, 2026-11-18 ve 2026-11-19'un ekranları bunun dışındadır: uçtan uca paket
-  görüntülerini aldı, ama hiçbirine tarayıcıda elle bakılmadı ([Bilinen sınırlar](#-bilinen-sınırlar)).
+  görüntülerini aldı; bunların bir bölümüne 2026-11-19'da gözle bakıldı, kalanına bakılmadı
+  ([Bilinen sınırlar](#-bilinen-sınırlar)).
 - Her commit öncesi bağımlılık açıkları (npm audit, govulncheck, Dependabot) kontrol edildi.
 - Kullanıcının sunucuya girmesi gerekmeyecek şekilde her işlem panelden yapılabilir tasarlandı.
 
@@ -1021,6 +1026,16 @@ What is not the same everywhere (the table under "Platform kapsamı" above has e
   `PAYMENT_IN_REVIEW` refusal; the invoice page keeps the pay buttons off until then. Keyboard: when a confirming
   button disappears after its action (for example "No longer a reseller" in the user summary), the keyboard stays
   with the window in front, so Escape still closes it; this holds for every window.
+- **Screenshot review on 2026-11-19 (no operator action).** The pictures the end-to-end suite takes were looked at
+  by eye for the first time: 115 of 187 were looked at, 72 were not. What was seen is fixed: on phones dialog
+  buttons stack and never leave the dialog, the command palette fits the screen, invoice lines read as label and
+  value blocks, and the background-work button shrinks to an icon; pages keep room under the selection bar; a held
+  payment is called "awaiting review" ("inceleme bekliyor") everywhere; percentages, memory sizes and hourly prices
+  follow the reader's language; customers see why an operation failed without the error code (the code goes into
+  the pre-filled ticket) and the inbox names operations in words (push, e-mail and chat texts still carry the raw
+  operation name); wide tables between 640 and 1280 px show a cue that they scroll sideways; the product feature is
+  "firewall" throughout the Turkish interface. Known and left: the "token created" toast can cover the Remove
+  button of the new token; the new-sign-in notification shows the raw browser string.
 - **What remains after the two follow-ups:** a directory account's token is put to the directory only once its last
   confirmation is a day old, and is refused from the request after the one that found the account gone; when the
   directory cannot be reached, without a working service account, and for single sign-on accounts, the age limit
@@ -1036,15 +1051,16 @@ What is not the same everywhere (the table under "Platform kapsamı" above has e
   invoiced renewal `nextRenewal` gives the invoice line in full, not what is left on a partly paid invoice (the
   block shows the invoice then, not this line); where invoices are made more than 7 days before the period ends
   (the default is 7), an invoiced renewal is not in the block until its invoice is due within 7 days. None of the
-  screens added on 2026-11-17, 2026-11-18 and 2026-11-19 was looked at by hand in a browser; they were seen only as
-  far as the end-to-end suite looks (its last result: the test table). On these screens it covers: reading an order link; finding
+  screens added on 2026-11-17, 2026-11-18 and 2026-11-19 was used by hand in a browser. On 2026-11-19 the suite's
+  screenshots were looked at by eye for the first time: 115 of 187, **72 were not looked at**. Beyond that the
+  screens were seen only as far as the end-to-end suite looks (its last result: the test table). On these screens it covers: reading an order link; finding
   an invoice, the quick actions (top up, new ticket) and a looked-up user in the recent list of the command
   palette; the answer of `/admin/attention` (200 for staff, 403 for customers, no badge for a count of zero);
   rename and lock in the server card's menu; the reinstall summary; copying an IP address; ticking rows for the
   admin bulk action; saving, applying and deleting a saved view against the account's copy (on the admin server
   list only); the ticket's server-state panel (there for staff, absent for the customer); grouping in the bell; an
   invoice in "upcoming charges"; the review filter and search on the payments page staying in the address; and the
-  path of a payment held for review (paid with the sandbox review card, the customer's "under review" notice, the
+  path of a payment held for review (paid with the sandbox review card, the customer's "awaiting review" notice, the
   Billing entry in the menu with a count of one, the notice on the overview, the row in the list, staff closing
   the review and the count going away).
   Since 2026-11-19 also: the restore-hold bar on every page and the release from the System page; the next step

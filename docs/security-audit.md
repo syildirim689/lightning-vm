@@ -346,19 +346,20 @@ These come from the "left as is" lists of the follow-up of 2026-11-18, not from 
 
 ### How it was checked
 
-By unit tests, which pass at commit `a2f2ff2` (API 162, worker 54, web 121), and by integration tests against
+By unit tests, which pass at commit `ea0d19e` (API 162, worker 54, web 128), and by integration tests against
 PostgreSQL and Redis written for this round (`security-leftovers-2.test.mjs`, 8 tests). The full integration suite was run
 on 2026-11-19 at that commit on a Linux host with Docker: 204 tests, 200 passed, 4 skipped (they need PowerDNS, an
 ISO storage or the console gateway), none failed. The end-to-end suite (Playwright) ran at the same commit against
 its own throwaway Compose stack with a fresh database and the VMware simulator, never against a panel with real
-data: 33 of 33 passed. It now has steps for what the follow-up of 2026-11-18 listed as missing (the reseller card,
+data: 33 of 33 passed, in about 14 minutes. It now has steps for what the follow-up of 2026-11-18 listed as missing (the reseller card,
 leaving, staff releasing a customer, browser content when the account changes) and for a held invoice refusing a
 second payment in the page and at the API. In three of its new steps the state is injected into the page because
 that stack cannot produce it from a browser: the restore hold (the release itself goes to the real route), the
 billing and retry answers of the next step after a failed operation (the support answer comes from a real
 failure), and the count on the Abuse menu entry (the Servers count is real). The "asleep" mark in the token lists,
 the amounts shown before leaving a reseller and the staff notice about kept prices have no end-to-end step. Nothing
-was looked at in a browser by hand.
+was used in a browser by hand; of the 187 screenshots the suite takes, 115 were looked at by eye on 2026-11-19 and
+72 were not.
 
 **The directory lookup on token use has no test of its own and was not tried against a real LDAP server.** The unit
 test covers the age rule, and the integration test sets the confirmation date in the database directly, with no

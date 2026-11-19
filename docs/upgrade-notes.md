@@ -23,15 +23,15 @@ varsayılanıyla çalışır, `.env` dosyasına bir şey eklemeniz gerekmez:
 | `OPERATIONS_HELD_HOURS` | `.env` (worker) | `6` (`0`: bekleme eskisi gibi süreden düşer) | Hesap payını beklerken geçen sürenin, işlemin son tarihine en çok kaç saat eklenebileceği |
 | `reviewHoldDays` | Ayarlar → Faturalandırma | `7` (0-90; `0` kapatır) | İnceleme bekleyen bir ödemenin faturasını kaç gün askıdan, silmeden ve ikinci ödemeden koruduğu |
 
-Bu turun test sonuçları (`a2f2ff2` commit'i): birim testleri API 162, worker 54, web 121, hepsi geçti. Entegrasyon
+Bu turun test sonuçları (`ea0d19e` commit'i): birim testleri API 162, worker 54, web 128, hepsi geçti. Entegrasyon
 paketinin tamamı 2026-11-19'da Docker'lı bir Linux sunucusunda çalıştırıldı: 204 testten 200'ü geçti, 4'ü atlandı
 (PowerDNS, ISO deposu ya da konsol ağ geçidi isteyenler), başarısız olan yok; bu turun `security-leftovers-2`
 testleri bu sayının içindedir. Uçtan uca paket (Playwright) kendi geçici Compose kurulumuna karşı, boş bir
 veritabanı ve VMware simülatörüyle çalıştırıldı (gerçek veri taşıyan bir panele karşı çalıştırılmaz): 33 testin 33'ü
-geçti.
+geçti (yaklaşık 14 dakika).
 Paketin bazı yeni adımlarında durum sayfaya dışarıdan verilir; hangileri olduğu README'nin
-[Geliştirme ve testler](../README.md#-geliştirme-ve-testler) bölümündedir. Hiçbir ekrana tarayıcıda elle bakılmadı
-ve hiçbir şey gerçek bir hipervizörde, gerçek bir Proxmox kümesinde, gerçek bir Param hesabında ya da gerçek bir
+[Geliştirme ve testler](../README.md#-geliştirme-ve-testler) bölümündedir. Hiçbir ekran tarayıcıda elle
+kullanılmadı; paketin aldığı 187 ekran görüntüsünün 115'ine gözle bakıldı, 72'sine bakılmadı. Hiçbir şey gerçek bir hipervizörde, gerçek bir Proxmox kümesinde, gerçek bir Param hesabında ya da gerçek bir
 dizin sunucusunda denenmedi.
 
 Aşağıdaki maddeler işletmecinin fark edeceği her değişikliği sayar; ilk dördü yükseltmeden önce okunmalıdır.
@@ -118,6 +118,16 @@ Aşağıdaki maddeler işletmecinin fark edeceği her değişikliği sayar; ilk 
   kaybolduğunda klavye öndeki pencerede kalır, yani Escape onu yine kapatır (her pencerede). Ayarlar'daki Sandbox
   yardımı ve paneldeki API belgeleri dört test kartını
   da sayar; `4000 0000 0000 4954` ("incelemeye alınır") dahil.
+- **Ekran görüntülerinde görülenler düzeltildi (arayüz; yapacağınız bir şey yok).** Telefonda pencere düğmeleri alt
+  alta dizilir ve pencerenin dışına çıkmaz, komut paleti ekrana sığar, fatura satırları etiket / değer blokları
+  olarak okunur, arka plan işleri düğmesi simgeye küçülür; sayfalar seçim çubuğunun altında yer bırakır; yüzdeler,
+  bellek boyutları ve saatlik fiyatlar okuyanın diline göre yazılır; 640 ile 1280 px arasında geniş tablolar yana
+  kaydığını gösterir. Destek ekibinizin fark edeceği üç ad değişikliği: bekletilen ödeme her yerde "inceleme
+  bekliyor" diye geçer (müşterinin notu: "Ödemeniz inceleme bekliyor"); Türkçe arayüzde özellik her yerde
+  "firewall"dur; müşteri başarısız işlemin nedenini hata kodu olmadan görür (kod hazır doldurulan destek talebine
+  gider) ve gelen kutusu işlemleri sözle adlandırır. Tarayıcı bildirimi, e-posta ve mesajlaşma metinleri hâlâ
+  işlemin ham adını taşır. Bilinen ve bırakılan: "anahtar oluşturuldu" bildirimi yeni anahtarın Kaldır düğmesini
+  örtebilir; yeni giriş bildirimi tarayıcının ham kimlik metnini gösterir.
 - **Bir önceki turun "olduğu gibi bırakılanlar" listesinden kalanlar.** Hesap payı, birlikte hareket eden birden
   çok hesabı sınırlamaz. Bayinin müşterinin sunucularını yalnızca görüntülemesi etkinlik listesinde yoktur. Bayiden
   ayrılma, bayinin tam o anda verdiği bir siparişle çakışabilir. Yalnızca kapatılan (kaldırılmayan) bayi, abonelikleri

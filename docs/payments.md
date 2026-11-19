@@ -149,7 +149,7 @@ Personelin kararını bekleyen ödemeler **bekliyor** durumunda ve bir gerekçe 
   kart) **çekmez**: sağlayıcı müşterinin parasını o fatura için tutuyor olabilir. Personel karar verdikten sonra
   fatura yeniden tahsilata girer.
 - **İnceleme süresi: fatura bekler ve ikinci kez ödenemez (`reviewHoldDays`).** Ayarlar → Faturalandırma'daki
-  "İncelemedeki ödemenin faturasını beklettiği gün sayısı" (`reviewHoldDays`; 0-90, varsayılan 7) bir süre tanımlar.
+  "İnceleme bekleyen ödemenin faturasını beklettiği gün sayısı" (`reviewHoldDays`; 0-90, varsayılan 7) bir süre tanımlar.
   Süre incelemenin başladığı andan sayılır (`payments.review_since`; yoksa ödemenin başladığı an). Bu süre içinde,
   o fatura için:
   - sunucu **askıya alınmaz ve silinmez** (zaten askıda olan abonelikte gün sayımı sürer; silme, süre dolana kadar
@@ -171,9 +171,9 @@ Personelin kararını bekleyen ödemeler **bekliyor** durumunda ve bir gerekçe 
   beklemeyi hem ikinci ödemenin reddini kapatır.
 - **Saatte 20 kart ödemesi.** Bir hesap, bütün faturaları için toplam, saatte en çok 20 kart ödemesi başlatabilir
   (`429 RATE_LIMITED`).
-- **Müşteri ne görür:** inceleme bekleyen ödemesi olan ödenmemiş faturanın sayfasında "Ödemeniz inceleniyor" notu
+- **Müşteri ne görür:** inceleme bekleyen ödemesi olan ödenmemiş faturanın sayfasında "Ödemeniz inceleme bekliyor" notu
   durur ve sayfa sonucu beklemeyi bırakır. Ödeme düğmeleri inceleme süresi boyunca kapalıdır ve gerekçesini söyler
-  ("Bu faturanın bir ödemesi incelemede; şimdilik yeniden ödenemez"); gönderilen bir isteği API yine reddeder.
+  ("Bu faturanın bir ödemesi inceleme bekliyor; şimdilik yeniden ödenemez"); gönderilen bir isteği API yine reddeder.
 - **`payBlockedUntil`:** fatura yanıtı (`GET /api/billing/invoices/:id` ve personelin fatura yanıtı)
   `invoice.payBlockedUntil` alanını taşır: incelemedeki bir ödemenin faturanın yeniden ödenmesini ne zamana kadar
   engellediği (ISO tarih); engel yoksa ve fatura ödeme beklemiyorsa `null`. Değer, `409 PAYMENT_IN_REVIEW` reddini
@@ -199,9 +199,9 @@ Personelin kararını bekleyen ödemeler **bekliyor** durumunda ve bir gerekçe 
 - İnceleme görünümü tarayıcıda elle gözden geçirilmedi. Uçtan uca testler süzgecin sunulduğunu, bekleyen ödeme
   yokken boş liste metnini ve süzgeç ile aramanın adreste kalıp yenilemeden sonra geri geldiğini kapsar. Bildirim ve
   liste `security-billing` entegrasyon testlerindedir.
-- Bekleyen bir ödemeyle ilgili ekranlar için bir uçtan uca adım vardır ve `eaa0a4e` commit'indeki çalıştırmada geçti: Sandbox'taki inceleme kartıyla ödeme, müşterinin faturasındaki "Ödemeniz inceleniyor" notu, menüdeki sayaç (1) ve özetteki uyarı, listedeki satır (durum, gerekçe, "Faturayı aç"), "İncelemeyi kapat" ile kapatma, sayacın kalkması ve kapatılan ödemenin `cancelled` süzgecinde bulunması.
+- Bekleyen bir ödemeyle ilgili ekranlar için bir uçtan uca adım vardır ve `eaa0a4e` commit'indeki çalıştırmada geçti: Sandbox'taki inceleme kartıyla ödeme, müşterinin faturasındaki "Ödemeniz inceleme bekliyor" notu (o sürümde "Ödemeniz inceleniyor"), menüdeki sayaç (1) ve özetteki uyarı, listedeki satır (durum, gerekçe, "Faturayı aç"), "İncelemeyi kapat" ile kapatma, sayacın kalkması ve kapatılan ödemenin `cancelled` süzgecinde bulunması.
   "Ödeme kaydet"in bekleyen ödemeyi kapatması, bekletilen faturada ödeme düğmelerinin kapalı olması, API'nin ikinci
-  ödemeyi reddetmesi ve ayardaki varsayılan 2026-11-19'dan beri uçtan uca adımdır (gerçek duruma karşı; `a2f2ff2`
+  ödemeyi reddetmesi ve ayardaki varsayılan 2026-11-19'dan beri uçtan uca adımdır (gerçek duruma karşı; `ea0d19e`
   commit'indeki çalıştırmada geçti). Satırdaki bekleme süresi uçtan uca sınanmaz.
 - İnceleme süresi kuralı `billing-rules` birim testlerinde ve dört `security-leftovers-2` entegrasyon testindedir
   (süre içinde askı ve silme yok, süre dolunca var; siparişin süresi dolmaz; hiçbir yöntemle ikinci ödeme yok, süre
