@@ -870,9 +870,12 @@ test.describe('server lifecycle (simulator, Turkish customer)', () => {
       let shown: { kind: string; errorCode: string } | null = { kind: 'power_on', errorCode: 'BILLING_HOLD' };
       await page.route(`**/api/servers/${id}`, async (route) => {
         if (route.request().method() !== 'GET' || !shown) return route.continue();
-        const answer = await route.fetch();
-        const body = await answer.json() as { operations: Op[] };
-        await route.fulfill({ response: answer, json: { ...body, operations: body.operations.map((o) => (o.id === failed.id ? { ...o, ...shown } : o)) } });
+        // A read that was on its way when the page reloaded has nobody left to answer: not an error of the test.
+        try {
+          const answer = await route.fetch();
+          const body = await answer.json() as { operations: Op[] };
+          await route.fulfill({ response: answer, json: { ...body, operations: body.operations.map((o) => (o.id === failed.id ? { ...o, ...shown } : o)) } });
+        } catch { /* the page moved on */ }
       });
       // Money stands in the way: the invoices, not a ticket and not a retry.
       await page.reload();
@@ -905,7 +908,7 @@ test.describe('server lifecycle (simulator, Turkish customer)', () => {
       await expect.poll(async () => { const [last] = await operations(); return [last?.kind, last?.status]; }, { timeout: 45_000 }).toEqual(['reset', 'succeeded']);
       await expect(main.getByText('Reset başarısız oldu', { exact: true })).toHaveCount(0, { timeout: 20_000 });
       shown = null;
-      await page.unroute(`**/api/servers/${id}`);
+      await page.unrouteAll({ behavior: 'ignoreErrors' });
       await page.reload();
       await expect(page.getByText(/Hazır · açık/).first()).toBeVisible({ timeout: 30_000 });
       await expect(main.getByText(/başarısız oldu$/)).toHaveCount(0);
@@ -1502,10 +1505,13 @@ test.describe('people, settings and smart features (English browser)', () => {
     let held = true;
     let real: { failedOperations?: number; abuse?: number; restoreHold?: unknown } = {};
     const releases: { status: number; body: unknown }[] = [];
+    // (A read that was on its way when the page moved on has nobody left to answer: not an error of the test.)
     await page.route('**/api/admin/attention', async (route) => {
-      const answer = await route.fetch();
-      real = await answer.json() as typeof real;
-      await route.fulfill({ response: answer, json: { ...real, abuse: 3, restoreHold: held ? { since, backup } : null } });
+      try {
+        const answer = await route.fetch();
+        real = await answer.json() as typeof real;
+        await route.fulfill({ response: answer, json: { ...real, abuse: 3, restoreHold: held ? { since, backup } : null } });
+      } catch { /* the page moved on */ }
     });
     await page.route('**/api/admin/system/restore-hold', async (route) => {
       if (route.request().method() === 'DELETE') {
@@ -1515,7 +1521,7 @@ test.describe('people, settings and smart features (English browser)', () => {
         return route.fulfill({ response: answer });
       }
       if (!held) return route.continue();
-      await route.fulfill({ json: { held: true, backup, restoredAt: since, detail: { backup, restored_at: since } } });
+      await route.fulfill({ json: { held: true, backup, restoredAt: since, detail: { backup, restored_at: since } } }).catch(() => undefined);
     });
     await page.goto('/admin');
     const menu = page.getByRole('navigation', { name: 'Main navigation' });
@@ -1601,8 +1607,7 @@ test.describe('people, settings and smart features (English browser)', () => {
     await page.goto('/admin');
     await expect(page.getByRole('heading', { level: 1 })).toHaveText('Overview');
     await expect(bar).toHaveCount(0);
-    await page.unroute('**/api/admin/attention');
-    await page.unroute('**/api/admin/system/restore-hold');
+    await page.unrouteAll({ behavior: 'ignoreErrors' });
   });
 
   test('a reseller\'s customer sees who manages the account and leaves; staff take another one out; the browser keeps nothing of one account for the next', async ({ page, browser }) => {
