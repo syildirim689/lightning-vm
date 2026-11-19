@@ -14,7 +14,7 @@ import { MethodBadge } from '../../api-docs/reference';
 
 type Rules = { who: 'everyone' | 'staff' | 'off'; maxDays: number; staffExpiry: boolean; rateLimit: number; networks: string[]; log: boolean; logDays: number };
 type Token = { id: string; name: string; hint: string; scope: 'read' | 'write'; permissions: string[] | null; allowedIps: string[]; expiresAt: string | null; lastUsedAt: string | null;
-  lastUsedIp: string | null; createdAt: string; owner: { id: string; email: string; name: string; role: string }; requests24h: number; errors24h: number };
+  lastUsedIp: string | null; createdAt: string; owner: { id: string; email: string; name: string; role: string }; requests24h: number; errors24h: number; asleep?: string | boolean | null };
 type LogRow = { id: string; tokenId: string | null; tokenName: string | null; owner: string | null; method: string; route: string; path: string; status: number; durationMs: number; ip: string | null; createdAt: string };
 type Log = { requests: LogRow[]; summary: { requests: number; errors: number; limited: number; avgMs: number; tokens: number }; top: { method: string; route: string; n: number }[] };
 
@@ -91,7 +91,8 @@ function Tokens({ readOnly }: { readOnly: boolean }) {
         columns={[{ id: 'n', label: t('col.token') }, { id: 'o', label: t('col.owner') }, { id: 'a', label: t('col.access') }, { id: 'u', label: t('col.used') }, { id: 'r', label: t('col.today') },
           { id: 'e', label: t('col.expires') }, { id: 'x', label: <span className="sr-only">{t('revoke')}</span> }]}
         cells={(x) => [
-          <span key="n" className="flex flex-col"><span className="font-medium">{x.name}</span><span className="font-mono text-xs text-muted">lvm_…{x.hint}</span></span>,
+          <span key="n" className="flex flex-col items-start gap-0.5"><span className="font-medium">{x.name}</span><span className="font-mono text-xs text-muted">lvm_…{x.hint}</span>
+            {x.asleep && <span title={t('asleepHelp')}><StatusChip tone="warning">{t('asleep')}</StatusChip><span className="sr-only">: {t('asleepHelp')}</span></span>}</span>,
           <span key="o" className="flex min-w-0 flex-col"><span className="[overflow-wrap:anywhere]">{x.owner.email}</span><span className="text-xs text-muted">{x.owner.role}</span></span>,
           <span key="a" className="flex flex-col items-start gap-1">
             <StatusChip tone={x.scope === 'write' ? 'warning' : 'default'}>{t(`scope.${x.scope}`)}</StatusChip>

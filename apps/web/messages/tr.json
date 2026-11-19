@@ -389,7 +389,7 @@
     "ISO_SIZE_UNKNOWN": "ISO'nun boyutu belirlenemedi: adres boyutu bildirmiyor. Doğrudan indirme bağlantısı kullanın.",
     "ISO_INCOMPLETE": "ISO eksik indirildi. Yeniden deneyin.",
     "SHUTDOWN_TIMEOUT": "Sunucu zamanında kapanmadı; işletim sistemi isteği yok saydı. Zorla kapatmayı kullanabilirsiniz.",
-    "NOT_WHILE_IMPERSONATING": "Başka bir kullanıcı olarak oturum açmışken bu işlem yapılamaz (API anahtarları, webhook'lar, geçiş anahtarları, bağlı hesaplar, parola, iki adımlı doğrulama, telefon, bildirim kanalları, fatura e-postası). Önce kendi hesabınıza dönün.",
+    "NOT_WHILE_IMPERSONATING": "Başka bir kullanıcı olarak oturum açmışken bu işlem yapılamaz (API anahtarları, webhook'lar, geçiş anahtarları, bağlı hesaplar, parola, iki adımlı doğrulama, telefon, bildirim kanalları, fatura e-postası, bayiden ayrılma, sunucu devrini kabul etme). Önce kendi hesabınıza dönün.",
     "E_WINDOW_NEVER": "Bakım penceresi saatlik zamanlayıcının çalıştığı hiçbir anı içermiyor. Pencereyi en az bir saat on dakika yapın.",
     "E_BACKUP_VERIFY": "Yedek dosyası yazıldıktan sonra geri okunamadı (disk dolu olabilir mi?).",
     "E_BACKUP_WRITE": "Yedek dosyası yazılamadı. Yedek klasöründeki boş alanı ve izinleri kontrol edin.",
@@ -2794,6 +2794,9 @@
       "leaveTitle": "{name} bayisinden ayrılmak istiyor musunuz?",
       "leaveBody1": "Sunucularınız sizde kalır ve çalışmaya devam eder. Abonelikleri size geçer ve henüz ödenmemiş ilk dönemden başlayarak size faturalanır; fiyatlar değişmez.",
       "leaveBody2": "{name} artık sunucularınızı göremez ve yönetemez: açık konsolları kapatılır, hesabınıza eklediği SSH anahtarı kaldırılır.",
+      "afterLeaveTitle": "Ayrıldıktan sonra aylık ödeyeceğiniz",
+      "afterLeaveLine": "{name}: {to} (şu an {from})",
+      "afterLeaveNote": "Bayinin indirimi ilk faturanızla biter; ödenmiş dönem yeniden faturalanmaz.",
       "leaveBody3": "Bu işlem panelden geri alınamaz.",
       "left": "Hesabınız artık bir bayiye bağlı değil. Bundan sonra size faturalanacak sunucu sayısı: {servers}.",
       "gone": "Bu hesap artık bir bayiye bağlı değil."
@@ -4752,6 +4755,8 @@
       "disputeWindowDays": "Faturaya itiraz süresi (gün)",
       "disputeWindowHelp": "Fatura düzenlendikten sonra.",
       "disputeAnswerDays": "İtiraza karar süresi (gün)",
+      "reviewHoldDays": "İncelemedeki ödemenin faturasını beklettiği gün sayısı",
+      "reviewHoldHelp": "Bir ödeme incelemedeyken askıya alma, silme ve hatırlatmalar en çok bu kadar bekler; bu süre içinde ikinci bir ödeme reddedilir. 0 kapatır.",
       "disputeAnswerHelp": "Geçince ekibe hatırlatılır."
     },
     "einvoice": {
@@ -4860,6 +4865,8 @@
         "write": "Tam yetkili"
       },
       "narrowed": "{n} yetkiyle sınırlı",
+      "asleep": "Uykuda",
+      "asleepHelp": "Sahibinin dizin ya da tek oturum açma hesabı yakın zamanda doğrulanmadı; panele yeniden giriş yapana kadar anahtar reddedilir.",
       "allPermissions": "Sahibinin tüm yetkileri",
       "addresses": "{n} adres",
       "never": "Hiç kullanılmadı",
@@ -7377,6 +7384,7 @@
     "transferAmount": "Tutar",
     "topUpShort": "Eksik {amount} tutarını yükle",
     "reviewTitle": "Ödemeniz inceleniyor",
+    "reviewLocked": "Bu faturanın bir ödemesi incelemede; şimdilik yeniden ödenemez.",
     "reviewHelp": "Ödeme kuruluşu bu ödemeyi denetim için bekletiyor ya da ödeme kendiliğinden doğrulanamadı. Ekibimiz inceliyor; doğrulandığında fatura ödendi olarak işaretlenir. Bu sırada yeniden ödeme yapmanız gerekmez."
   },
   "BillingAdmin": {
@@ -7645,6 +7653,10 @@
       "create": "Anahtar oluştur",
       "empty": "Henüz API anahtarı yok.",
       "lastUsed": "Son kullanım",
+      "asleep": "Uykuda",
+      "asleepHelp": "Şu an kabul edilmiyor: hesap yakın zamanda dizini ya da tek oturum açma sağlayıcısı üzerinden giriş yapmadı. Panele yeniden giriş yapın, anahtar çalışır.",
+      "confirmation": "Bu hesap {source, select, ldap {bir dizin} other {tek oturum açma}} üzerinden giriş yapıyor. API anahtarları yalnızca hesap son {days} gün içinde bu yolla giriş yaptıysa çalışır: şu an için {until} tarihine kadar.",
+      "confirmationNever": "Bu hesap {source, select, ldap {bir dizin} other {tek oturum açma}} üzerinden giriş yapıyor. API anahtarları yalnızca hesap son {days} gün içinde bu yolla giriş yaptıysa çalışır. Bu kural başladığından beri böyle bir giriş yok: hesap yeniden giriş yapana kadar anahtarlar uykuda.",
       "neverUsed": "Hiç kullanılmadı",
       "expired": "Süresi doldu",
       "usage": "Bu paneldeki /api/… adreslerine \"Authorization: Bearer <anahtar>\" başlığıyla gönderin.",
@@ -7974,6 +7986,8 @@
       "release": "Bayiden çıkar",
       "releaseTitle": "{email} bu bayiden çıkarılsın mı?",
       "releaseBody": "Bayi bu müşterinin sunucularını artık göremez ve yönetemez. Sunucuların abonelikleri müşteriye geçer ve ödenmemiş ilk dönemden başlayarak ona faturalanır; bayinin bu sunucular için ödenmemiş yenileme faturaları geri çekilir. İki tarafa da bildirim gider.",
+      "pricesKept": "{n, plural, one {# sunucunun fiyatı kesin olarak değiştirilemedi ve olduğu gibi bırakıldı. Kontrol edin:} other {# sunucunun fiyatı kesin olarak değiştirilemedi ve olduğu gibi bırakıldı. Kontrol edin:}}",
+      "pricesKeptOpen": "{id} sunucusunu aç",
       "released": "{email} bayiden çıkarıldı. Sunucu: {servers} · devredilen abonelik: {subscriptions} · geri çekilen fatura: {withdrawn} · bayide kalan fatura: {left}."
     },
     "notReseller": "Bu hesap bayi değil. Sunucu satmak isterseniz bize yazın.",

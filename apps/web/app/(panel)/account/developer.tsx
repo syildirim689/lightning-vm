@@ -14,7 +14,11 @@ import { useMe } from '../../../lib/me';
 import { permissionGroups } from '../../../lib/permissions';
 import { useApiQuery } from '../../../lib/query';
 
-type Token = { id: string; name: string; hint: string; scope: 'read' | 'write'; permissions: string[] | null; allowedIps: string[]; expiresAt: string | null; lastUsedAt: string | null; lastUsedIp: string | null; createdAt: string };
+type Token = { id: string; name: string; hint: string; scope: 'read' | 'write'; permissions: string[] | null; allowedIps: string[]; expiresAt: string | null; lastUsedAt: string | null; lastUsedIp: string | null; createdAt: string;
+  // The refusal's code while the token of a directory or single sign-on account is not accepted (null or absent: it is).
+  asleep?: string | boolean | null };
+// For a directory or single sign-on account: until when its tokens work without another sign-in through that source.
+type Confirmation = { source: string; days: number; confirmedAt: string | null; until: string | null };
 type Webhook = { id: string; url: string; description: string; events: string[]; active: boolean; failures: number; createdAt: string; lastDelivery: { status: string; responseCode: number | null; at: string } | null };
 type Delivery = { id: string; event: string; status: 'pending' | 'succeeded' | 'failed'; attempts: number; responseCode: number | null; error: string | null; durationMs: number | null; createdAt: string };
 
@@ -49,7 +53,7 @@ function Tokens() {
   const client = useQueryClient();
   const tp = useTranslations('Permissions');
   const me = useMe();
-  const q = useApiQuery<{ tokens: Token[]; max: number; rules?: { maxDays: number; expiryRequired: boolean; rateLimit: number } }>(['api-tokens'], '/account/api-tokens');
+  const q = useApiQuery<{ tokens: Token[]; max: number; rules?: { maxDays: number; expiryRequired: boolean; rateLimit: number }; confirmation?: Confirmation | null }>(['api-tokens'], '/account/api-tokens');
   const rules = q.data?.rules;
   // Narrowing: only some of my permissions, and only from some addresses.
   const [narrow, setNarrow] = useState(false);
@@ -82,6 +86,7 @@ function Tokens() {
     catch (err) { toast.danger(error(err)); }
   }
   const list = q.data?.tokens ?? [];
+  const conf = q.data?.confirmation;
   const full = !!q.data && list.length >= q.data.max;
   const now = Date.now();
   // Tokens nobody used for 90 days (or ever, after 30) are likely forgotten: worth removing.
@@ -120,10 +125,14 @@ function Tokens() {
       </form>
       {rules && <p className="text-xs text-muted">{[rules.rateLimit ? t('tokens.ruleRate', { n: rules.rateLimit }) : '', rules.maxDays ? t('tokens.ruleDays', { n: rules.maxDays }) : '',
         rules.expiryRequired ? t('tokens.ruleExpiry') : ''].filter(Boolean).join(' · ')} <a className="text-accent hover:underline" href="/api-docs">{t('tokens.docs')}</a></p>}
+      {conf && <Notice tone={list.some((x) => x.asleep) ? 'warning' : 'default'}>{conf.until
+        ? t('tokens.confirmation', { source: conf.source, days: conf.days, until: format.dateTime(new Date(conf.until), { dateStyle: 'medium', timeStyle: 'short' }) })
+        : t('tokens.confirmationNever', { source: conf.source, days: conf.days })}</Notice>}
       {list.length === 0 ? <Empty icon={<I name="key-round" size={20}/>} title={t('tokens.empty')}/>
         : <DataTable label={t('tokens.title')} rows={list} rowKey={(x) => x.id} minWidth={560}
           columns={[{ id: 'name', label: t('tokens.name') }, { id: 'scope', label: t('tokens.scope') }, { id: 'used', label: t('tokens.lastUsed') }, { id: 'expires', label: t('tokens.expires') }, { id: 'x', label: '' }]}
-          cells={(x) => [<span key="n" className="flex flex-col"><span className="font-medium">{x.name}</span><span className="text-xs text-muted">lvm_…{x.hint}</span></span>,
+          cells={(x) => [<span key="n" className="flex flex-col items-start gap-0.5"><span className="font-medium">{x.name}</span><span className="text-xs text-muted">lvm_…{x.hint}</span>
+              {x.asleep && <span title={t('tokens.asleepHelp')}><StatusChip tone="warning">{t('tokens.asleep')}</StatusChip><span className="sr-only">: {t('tokens.asleepHelp')}</span></span>}</span>,
             <span key="s" className="flex flex-col items-start gap-1"><StatusChip tone={x.scope === 'write' ? 'warning' : 'default'}>{t(`tokens.${x.scope}`)}</StatusChip>
               {(x.permissions || x.allowedIps?.length > 0) && <span className="text-xs text-muted">{[x.permissions ? t('tokens.narrowed', { n: x.permissions.length }) : '', x.allowedIps?.length ? t('tokens.addresses', { n: x.allowedIps.length }) : ''].filter(Boolean).join(' · ')}</span>}</span>,
             x.lastUsedAt ? <span key="u" className="flex flex-col"><span title={when(x.lastUsedAt)}>{ago(x.lastUsedAt)}</span>{x.lastUsedIp && <span className="text-xs text-muted">{x.lastUsedIp}</span>}</span> : t('tokens.neverUsed'),

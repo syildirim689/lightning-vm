@@ -4,7 +4,7 @@ import { useAutoAnimate } from '@formkit/auto-animate/react';
 import { useQueryClient } from '@tanstack/react-query';
 import NextLink from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useTranslations } from 'next-intl';
+import { useFormatter, useTranslations } from 'next-intl';
 import { I } from '../../../components/icon';
 import { ButtonLink, ConfirmButton, Notice, Section, TextInput } from '../../../components/ui';
 import { apiFetch, useErrorText } from '../../../lib/api';
@@ -14,12 +14,16 @@ import { useApiAction, useApiQuery } from '../../../lib/query';
 
 type Project = { id: string; name: string; servers: number };
 // GET /reseller/summary, managedBy: the reseller this account belongs to (null for everybody else).
-type ManagedBy = { name: string; email: string; brand: string | null; active: boolean; canLeave: boolean };
+// afterLeave: the servers whose monthly price changes once the account leaves (the reseller's discount ends), with
+// what each costs now; empty or absent (an older API): nothing changes.
+type ManagedBy = { name: string; email: string; brand: string | null; active: boolean; canLeave: boolean;
+  afterLeave?: { serverId: string; name: string; currency: string; from: string; to: string }[] };
 
 // For a reseller's customer: who manages the account, what that reseller can and cannot do, how to reach it, and the
 // way out. Leaving is asked first, with what follows from it (the servers are billed to the customer from then on).
 export function ManagedAccount() {
   const t = useTranslations('Account.managed');
+  const format = useFormatter();
   const tc = useTranslations('Order');
   const { error } = useErrorText();
   const client = useQueryClient();
@@ -57,7 +61,12 @@ export function ManagedAccount() {
       {/* Not offered to a staff member signed in as the customer: staff take a customer out from the reseller's own record. */}
       {m.canLeave && !me?.impersonatedBy && <div>
         <ConfirmButton variant="danger-soft" icon={<I name="log-out" size={16}/>} label={t('leave')} title={t('leaveTitle', { name })} confirmLabel={t('leave')} cancelLabel={tc('projects.cancel')} onConfirm={leave}
-          body={<span className="flex flex-col gap-2"><span>{t('leaveBody1')}</span><span>{t('leaveBody2', { name })}</span><span>{t('leaveBody3')}</span></span>}/>
+          body={<span className="flex flex-col gap-2"><span>{t('leaveBody1')}</span><span>{t('leaveBody2', { name })}</span>
+            {!!m.afterLeave?.length && <span className="flex flex-col gap-1 rounded-lg border border-border p-2 text-foreground"><span className="font-medium">{t('afterLeaveTitle')}</span>
+              <span role="list" className="flex flex-col gap-0.5">{m.afterLeave.map((p) => <span role="listitem" key={p.serverId} className="[overflow-wrap:anywhere]">{t('afterLeaveLine', { name: p.name,
+                to: format.number(Number(p.to), { style: 'currency', currency: p.currency }), from: format.number(Number(p.from), { style: 'currency', currency: p.currency }) })}</span>)}</span>
+              <span className="text-xs text-muted">{t('afterLeaveNote')}</span></span>}
+            <span>{t('leaveBody3')}</span></span>}/>
       </div>}
     </div>
   </Section>;

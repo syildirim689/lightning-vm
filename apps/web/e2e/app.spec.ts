@@ -1623,7 +1623,7 @@ test.describe('people, settings and smart features (English browser)', () => {
       idOf[email] = (await made.json() as { id: string }).id;
     }
     // The reseller typed the address and knows no password; staff set one so that the customer can sign in here.
-    const password = await page.request.post('/api/auth/admin/set-user-password', { headers: csrf, data: { userId: idOf[leaver.email], newPassword: leaver.password } });
+    const password = await page.request.post('/api/auth/admin/set-user-password', { headers: { ...csrf, origin: new URL(page.url()).origin }, data: { userId: idOf[leaver.email], newPassword: leaver.password } });
     expect(password.ok(), await password.text()).toBe(true);
 
     // ---- The customer: who manages the account, what that means, and the way out ----
@@ -2136,6 +2136,9 @@ test.describe('people, settings and smart features (English browser)', () => {
     // Settings → Billing: turned on with the seller and the sandbox provider.
     await page.goto('/admin/settings?tab=billing');
     await expect(page.getByText('Billing on', { exact: true }).first()).toBeVisible();
+    // How long a payment under review holds its invoice: seven days unless the admin says otherwise.
+    await expect(page.getByRole('textbox', { name: 'Days a payment under review holds its invoice' })).toHaveValue('7');
+    await expect(page.getByText('While a payment is under review, suspension, deletion and reminders wait for at most this long, and a second payment is refused for that time. 0 turns it off.')).toBeVisible();
     await page.getByLabel('Company title').fill('Lightning Bilişim A.Ş.');
     await page.getByLabel('VKN').fill('1234567890');
     await page.getByLabel('Tax office').fill('Kadıköy');
@@ -2320,6 +2323,12 @@ test.describe('people, settings and smart features (English browser)', () => {
     await expect(page.getByText('Pro forma · awaiting payment')).toBeVisible();
     await expect(page.getByText('Awaiting payment', { exact: true }).first()).toBeVisible();
     await expect(page.getByText('Checking the payment…')).toHaveCount(0);
+    // No second payment while this one waits for staff (it could take the money twice): the pay buttons are off and
+    // say why, and the API refuses one that is sent anyway.
+    await expect(page.getByText('A payment for this invoice is under review, so it cannot be paid again for now.', { exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: /Sandbox/ })).toBeDisabled();
+    const second = await page.request.post(`/api/billing/invoices/${heldId}/pay`, { headers: csrf, data: { method: 'card', provider: 'sandbox' } });
+    expect([second.status(), (await second.json() as { code: string }).code]).toEqual([409, 'PAYMENT_IN_REVIEW']);
     await page.waitForTimeout(400);
     await shot('billing-invoice-review');
     // Staff: the menu's Billing entry says that one payment awaits review, and the overview's notice leads to the
@@ -2375,7 +2384,10 @@ test.describe('people, settings and smart features (English browser)', () => {
     expect(heldInvoice.payments.map((p) => [p.status, p.errorCode])).toEqual([['cancelled', 'FRAUD_REVIEW']]);
     // The other way a held payment ends: the money did arrive (a bank transfer, say) and staff record it on the
     // invoice. The customer pays with the held card once more, so a payment is under review again...
+    // (The first review is closed, so the invoice can be paid again: no note, and the button is on.)
     await page.goto(`/billing/invoices/${heldId}`);
+    await expect(page.getByRole('button', { name: /Sandbox/ })).toBeEnabled();
+    await expect(page.getByText('A payment for this invoice is under review, so it cannot be paid again for now.')).toHaveCount(0);
     await page.getByRole('button', { name: /Sandbox/ }).click();
     await expect(page).toHaveURL(/\/billing\/checkout\//);
     await page.getByLabel('Card number').fill('4000 0000 0000 4954');

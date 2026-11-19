@@ -7,7 +7,7 @@ import { useEffect, useState } from 'react';
 import NextLink from 'next/link';
 import { useFormatter, useNow, useTranslations } from 'next-intl';
 import { I } from '../../../../components/icon';
-import { ConfirmButton, Stat, StatusChip } from '../../../../components/ui';
+import { ConfirmButton, Notice, Stat, StatusChip } from '../../../../components/ui';
 import { useApiQuery } from '../../../../lib/query';
 import { apiFetch, useErrorText } from '../../../../lib/api';
 import { useMe } from '../../../../lib/me';
@@ -115,6 +115,8 @@ function ResellerAccess({ id }: { id: string }) {
   const [v, setV] = useState<Record<string, string> | null>(null);
   const [fields, setFields] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
+  // Servers of the customers taken out here whose price could not be put back to the list price with certainty.
+  const [keptPrices, setKeptPrices] = useState<string[]>([]);
   if (!q.data) return null;
   const r = q.data.reseller;
   const doc = v ?? Object.fromEntries((['maxCustomers', 'maxServers', 'maxVcpu', 'maxMemoryMb', 'maxDiskGb', 'discountPct'] as const).map((k) => [k, r?.[k] == null ? '' : String(k === 'maxMemoryMb' ? (r[k] as number) / 1024 : r[k])]));
@@ -134,7 +136,8 @@ function ResellerAccess({ id }: { id: string }) {
   // One customer out of the reseller's hands (the same as the customer leaving): the result says what moved.
   async function release(c: ResellerCustomer) {
     try {
-      const out = await apiFetch<{ servers: number; subscriptions: number; withdrawnInvoices?: string[]; leftInvoices?: string[] }>(`/admin/resellers/${id}/customers/${c.id}`, { method: 'DELETE' });
+      const out = await apiFetch<{ servers: number; subscriptions: number; withdrawnInvoices?: string[]; leftInvoices?: string[]; listPrices?: unknown[]; pricesKept?: string[] }>(`/admin/resellers/${id}/customers/${c.id}`, { method: 'DELETE' });
+      if (out.pricesKept?.length) setKeptPrices((now) => [...new Set([...now, ...out.pricesKept!])]);
       toast.success(t('released', { email: c.email, servers: out.servers ?? 0, subscriptions: out.subscriptions ?? 0, withdrawn: out.withdrawnInvoices?.length ?? 0, left: out.leftInvoices?.length ?? 0 }));
     } catch (e) {
       toast.danger(error(e));
@@ -161,6 +164,8 @@ function ResellerAccess({ id }: { id: string }) {
       {r?.active && <Button size="sm" variant="ghost" isDisabled={busy} onPress={() => void save(false)}>{t('pause')}</Button>}
       {r && <ConfirmButton size="sm" variant="danger-soft" isDisabled={busy} label={t('stop')} title={t('stopTitle')} body={t('stopBody')} confirmLabel={t('stop')} cancelLabel={t('cancel')} onConfirm={stop}/>}
     </div>
+    {keptPrices.length > 0 && <div className="mt-3"><Notice tone="warning">{t('pricesKept', { n: keptPrices.length })}{' '}
+      {keptPrices.map((sid, i) => <span key={sid}>{i > 0 && ', '}<NextLink href={`/servers/${sid}`} aria-label={t('pricesKeptOpen', { id: sid.slice(0, 8) })} className="font-mono font-medium text-accent hover:underline">{sid.slice(0, 8)}</NextLink></span>)}</Notice></div>}
     {r && q.data.customers && <div className="mt-3 border-t border-separator pt-3">
       <h4 className="mb-2 text-xs font-semibold">{t('customersTitle', { n: q.data.customers.length })}</h4>
       {q.data.customers.length === 0 ? <p className="text-xs text-muted">{t('noCustomers')}</p> : <ul className="divide-y divide-separator rounded-lg border border-border">

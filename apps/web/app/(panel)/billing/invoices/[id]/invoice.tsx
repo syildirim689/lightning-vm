@@ -58,7 +58,7 @@ export default function InvoicePage({ id }: { id: string }) {
     </div>
     {checking && <Notice tone="default" title={t('checking')}>{t('checkingHelp')}</Notice>}
     {d.invoice.status === 'unpaid' && d.payments.some(isReview) && <Notice tone="warning" title={t('reviewTitle')}>{t('reviewHelp')}</Notice>}
-    {d.invoice.status === 'unpaid' && <PayPanel d={d} locked={checking && !waited}/>}
+    {d.invoice.status === 'unpaid' && <PayPanel d={d} locked={checking && !waited} held={d.payments.some(reviewHolds)}/>}
     <InvoiceSheet d={d}/>
     <InvoiceDisputes d={d}/>
   </div>;
@@ -67,9 +67,18 @@ export default function InvoicePage({ id }: { id: string }) {
 // A payment whose answer may still come by itself: open, and not waiting for staff.
 const stillOpen = (p: InvoiceDetail['payments'][number] | undefined) => !p || (p.status === 'pending' && !isReview(p));
 
+// A payment under review keeps the invoice from being paid a second time (the API answers PAYMENT_IN_REVIEW) for the
+// days set in Settings → Billing, counted from when the review began. The customer's answer carries neither, so the
+// page goes by the default (7 days) from when the payment was made, which is never later than the review's start: past
+// that the buttons are on again, and the API still has the last word.
+const REVIEW_HOLD_DAYS = 7;
+const reviewHolds = (p: InvoiceDetail['payments'][number]) => isReview(p) && Date.now() - Date.parse(p.reviewSince ?? p.createdAt) < REVIEW_HOLD_DAYS * 86_400_000;
+
+// held: a payment for this invoice is under review; the pay buttons are off and say why.
 // locked: a payment for this invoice is still being confirmed. While it is, or while one was just sent from here,
 // every pay button is off: a second click must not start a second payment.
-function PayPanel({ d, locked }: { d: InvoiceDetail; locked?: boolean }) {
+function PayPanel({ d, locked: confirming, held }: { d: InvoiceDetail; locked?: boolean; held?: boolean }) {
+  const locked = confirming || held;
   const t = useTranslations('Billing');
   const format = useFormatter();
   const router = useRouter();
@@ -102,6 +111,7 @@ function PayPanel({ d, locked }: { d: InvoiceDetail; locked?: boolean }) {
     </div>
     {inv.kind === 'order' && <p className="mt-1 text-sm text-muted">{t('orderWaits')}</p>}
     {failed && <p className="mt-2 flex items-center gap-1.5 text-sm text-danger"><I name="circle-alert" size={14}/>{t('lastFailed', { reason: t.has(`decline.${failed.errorCode}` as 'decline.CARD_DECLINED') ? t(`decline.${failed.errorCode}` as 'decline.CARD_DECLINED') : failed.errorMessage || failed.errorCode || '' })}</p>}
+    {held && <p role="note" className="mt-2 flex items-center gap-1.5 text-sm font-medium text-warning"><I name="circle-pause" size={14}/>{t('reviewLocked')}</p>}
     <div className="mt-4 grid gap-3 md:grid-cols-2">
       {s.methods.balance && inv.kind !== 'topup' && <div className="flex flex-col gap-2 rounded-2xl border border-border bg-surface p-4">
         <p className="flex items-center gap-2 font-medium"><I name="wallet" size={16}/>{t('withBalance')}</p>

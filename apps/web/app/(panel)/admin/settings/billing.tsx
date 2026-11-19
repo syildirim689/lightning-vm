@@ -13,7 +13,7 @@ import { useApiQuery } from '../../../../lib/query';
 type Company = { name: string; taxId: string; taxOffice: string; address: string; district: string; city: string; country: string; postalCode: string; phone: string; email: string; website: string; mersis: string; tradeRegistry: string };
 type Doc = { enabled: boolean; requirePayment: boolean; orderExpiryHours: number; taxRate: number; pricesIncludeTax: boolean; exportExempt: boolean; invoicePrefix: string;
   invoiceDaysBefore: number; reminderDays: number[]; suspendAfterDays: number; terminateAfterDays: number; autoCharge: boolean; chargeRetries: number; balance: boolean;
-  topupMin: number; topupMax: number; sandbox: boolean; hourly: boolean; hourlyMinHours: number; disputeWindowDays: number; disputeAnswerDays: number; bankTransfer: { enabled: boolean; bank: string; holder: string; iban: string }; company: Company };
+  topupMin: number; topupMax: number; sandbox: boolean; hourly: boolean; hourlyMinHours: number; disputeWindowDays: number; disputeAnswerDays: number; reviewHoldDays?: number; bankTransfer: { enabled: boolean; bank: string; holder: string; iban: string }; company: Company };
 
 export default function BillingSettings({ readOnly }: { readOnly: boolean }) {
   const t = useTranslations('Settings.billing');
@@ -47,6 +47,7 @@ export default function BillingSettings({ readOnly }: { readOnly: boolean }) {
         {toggle('hourly', t('hourly'), t('hourlyHelp'))}
         <TextInput format="integer" unit={tf('unit.days')} label={t('disputeWindowDays')} value={String(v.disputeWindowDays ?? 60)} onChange={num('disputeWindowDays')} error={errors.disputeWindowDays} isDisabled={readOnly} help={t('disputeWindowHelp')}/>
         <TextInput format="integer" unit={tf('unit.days')} label={t('disputeAnswerDays')} value={String(v.disputeAnswerDays ?? 7)} onChange={num('disputeAnswerDays')} error={errors.disputeAnswerDays} isDisabled={readOnly} help={t('disputeAnswerHelp')}/>
+        <TextInput format="integer" unit={tf('unit.days')} label={t('reviewHoldDays')} value={String(v.reviewHoldDays ?? 7)} onChange={num('reviewHoldDays')} error={errors.reviewHoldDays} isDisabled={readOnly} help={t('reviewHoldHelp')}/>
         {v.hourly && <TextInput format="integer" unit={tf('unit.hours')} label={t('hourlyMinHours')} value={String(v.hourlyMinHours ?? 24)} onChange={num('hourlyMinHours')} error={errors.hourlyMinHours} isDisabled={readOnly} help={t('hourlyMinHoursHelp')}/>}
       </div>
       <Notice tone="default">{t('providers')} <NextLink href="/admin/settings?tab=payments" className="font-medium text-accent hover:underline">{t('providersLink')}</NextLink></Notice>

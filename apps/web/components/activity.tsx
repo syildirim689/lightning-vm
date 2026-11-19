@@ -11,7 +11,7 @@ import { useApiQuery } from '../lib/query';
 import { I } from './icon';
 import { StatusChip, Loading } from './ui';
 
-export type AuditEvent = { id: string; at: string; action: string; outcome: 'success' | 'failure' | 'denied'; ip: string | null; metadata: Record<string, unknown>; actorEmail: string | null; actorId: string | null };
+export type AuditEvent = { id: string; at: string; action: string; outcome: 'success' | 'failure' | 'denied'; ip: string | null; metadata: Record<string, unknown>; actorEmail: string | null; actorName?: string | null; actorId: string | null };
 
 export function useActionLabel() {
   const t = useTranslations('Activity');
@@ -66,7 +66,7 @@ export function MyActivity() {
             {doneBy(e) && <StatusChip tone="warning">{t(doneBy(e)!)}</StatusChip>}</span>
           <span className="text-xs text-muted">
             <time dateTime={e.at} title={format.dateTime(new Date(e.at), { dateStyle: 'medium', timeStyle: 'medium' })}>{format.relativeTime(new Date(e.at))}</time>
-            {e.ip && <> · {e.ip}</>}{doneBy(e) === 'byReseller' && e.actorEmail && <> · {e.actorEmail}</>}</span>
+            {e.ip && <> · {e.ip}</>}{doneBy(e) === 'byReseller' && (e.actorName || e.actorEmail) && <> · {e.actorName || e.actorEmail}</>}</span>
         </div>
       </li>)}
     </ol>
