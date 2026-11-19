@@ -16,6 +16,7 @@ import { useApiQuery } from '../lib/query';
 import { I } from './icon';
 import { mayLeave } from '../lib/edits';
 import { groupRuns } from '../lib/notification-groups';
+import { readableNotification, type Say } from '../lib/notification-text';
 
 type Text = { title: string; body: string };
 // texts: both languages (newer notifications), so the inbox follows the panel's language.
@@ -31,9 +32,22 @@ export default function NotificationBell() {
   const router = useRouter();
   const client = useQueryClient();
   const { error } = useErrorText();
+
   const q = useApiQuery<{ notifications: Item[]; unread: number }>(['notifications'], '/notifications', { refetchInterval: 120_000 });
   const locale = useLocale() === 'tr' ? 'tr' : 'en';
-  const items = (q.data?.notifications ?? []).map((n) => ({ ...n, ...n.texts?.[locale] }));
+  // The API's texts, with what they carry as code names said in words (lib/notification-text.ts).
+  const ts = useTranslations('Servers');
+  const tp = useTranslations('Support');
+  const { code } = useErrorText();
+  const say: Say = {
+    operation: (k) => (ts.has(`kind.${k}` as 'kind.create') ? ts(`kind.${k}` as 'kind.create') : null),
+    failure: (c) => { const text = code(c); return text === c ? null : text; },
+    priority: (v) => (tp.has(`priority.${v}` as 'priority.high') ? tp(`priority.${v}` as 'priority.high') : null),
+    money: (amount, currency) => format.number(amount, { style: 'currency', currency }),
+    operationDone: (name, operation) => t('operationDone', { name, operation }),
+    operationFailed: (operation, reason) => t('operationFailed', { operation, reason }),
+  };
+  const items = (q.data?.notifications ?? []).map((n) => { const text = { ...n, ...n.texts?.[locale] }; return { ...text, ...readableNotification(n.event, text, say) }; });
   const unread = q.data?.unread ?? 0;
   // Only the unread ones, and one kind; both reset when the inbox empties of them.
   const [onlyUnread, setOnlyUnread] = useState(false);

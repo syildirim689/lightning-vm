@@ -398,7 +398,7 @@
     "E_RESTORE_DUMP": "Yedekteki veritabanı dökümü okunamadı. Yedek bozuk ya da yedek anahtarı yanlış olabilir.",
     "E_RESTORE_NO_SAFETY": "Mevcut verinin güvenlik kopyası alınamadığı için geri yükleme başlatılmadı. Hiçbir şey değiştirilmedi.",
     "UPDATE_SKIPPED": "Otomatik güncelleme bu sürümü atladı; çünkü daha önce bir kez başarısız oldu. Nedeni giderince elle güncelleyin.",
-    "PAYMENT_IN_REVIEW": "Bu fatura için yapılan bir ödeme ekibimizce inceleniyor; bu yüzden şu anda yeniden ödenemez. Karar verildiğinde size bildirilir; iki kez ödemeniz gerekmez.",
+    "PAYMENT_IN_REVIEW": "Bu fatura için yapılan bir ödeme ekibimizin incelemesini bekliyor; bu yüzden şu anda yeniden ödenemez. Karar verildiğinde size bildirilir; iki kez ödemeniz gerekmez.",
     "TOKEN_ACCOUNT_UNCONFIRMED": "Bu API anahtarı uykuda: hesap bir dizinden ya da tek oturum açmadan geliyor ve yakın zamanda orada doğrulanmadı. Panelde yeniden oturum açtığınızda anahtar eskisi gibi çalışır.",
     "PAYMENT_NOT_IN_REVIEW": "Bu ödeme artık inceleme beklemiyor; bu arada sonuçlandırılmış ya da kapatılmış."
   },
@@ -663,7 +663,7 @@
     "BILLED_ELSEWHERE": "Saatlik sunucular ve başka sistemde faturalanan sunucular devredilemez.",
     "RESELLER_ACCOUNT": "Bayilerin ve müşterilerinin sunucularını bayi taşır.",
     "UNPAID_INVOICE": "Önce sunucunun açık faturasını ödeyin.",
-    "HAS_FIREWALLS": "Önce güvenlik duvarlarınızı sunucudan kaldırın.",
+    "HAS_FIREWALLS": "Önce firewall'larınızı sunucudan kaldırın.",
     "HAS_PRIVATE_NETWORKS": "Önce sunucuyu özel ağlarınızdan çıkarın.",
     "CLONE_PENDING": "Bu sunucunun bir kopyası hâlâ siparişte; bitmesini bekleyin ya da önce onu iptal edin.",
     "PRIVATE_ISO_MOUNTED": "Önce sunucunun sürücüsündeki ISO'yu çıkarın.",
@@ -2289,7 +2289,7 @@
       "bulkHelp": "Önce süzün (durum, etiket, arama); bir seferde en fazla 200.",
       "onlyStarred": "Yalnızca favoriler",
       "import": "İçe aktar",
-      "bulkDeleteNote": "Sunucular kapatılır ve geri alma süresi bitince silinir; sahiplerine bildirim gider. Bekleme süresi 0 ise toplu silme yapılmaz.",
+      "bulkDeleteNote": "Sunucular kapatılır ve geri alma süresi bitince silinir; sahiplerine bildirim gider. Geri alma süresi 0 ise toplu silme yapılmaz.",
       "opFind": "Sunucu, sahip, işlem veya hata kodu ara",
       "opShow": {
         "all": "Tümü",
@@ -2844,6 +2844,8 @@
       "earlier": "Daha önce"
     },
     "open": "Göster",
+    "operationDone": "{name}: {operation} tamamlandı",
+    "operationFailed": "“{operation}” işlemi tamamlanamadı: {reason}",
     "show": "Gösterilenler",
     "all": "Tümü",
     "unread": "Okunmamış",
@@ -3035,7 +3037,7 @@
       },
       "OFF_BUT_BILLED": {
         "title": "{name} {days} gündür kapalı",
-        "body": "Kapalı sunucular da ücretlendirilir ({price} {currency}/ay). Artık gerekmiyorsa silerek tasarruf edebilirsiniz."
+        "body": "Kapalı sunucular da ücretlendirilir (ayda {price}). Artık gerekmiyorsa silerek tasarruf edebilirsiniz."
       },
       "STAFF_INACTIVE": {
         "title": "{count} personel hesabı 90 gündür kullanılmadı",
@@ -3046,8 +3048,8 @@
         "body": "Sunucu kapalı ve silinmeyi bekliyor. Tutmak istiyorsanız sunucu sayfasından geri alın."
       },
       "NO_FIREWALL": {
-        "title": "{n, plural, one {{name} sunucusunda güvenlik duvarı yok} other {# sunucuda güvenlik duvarı yok}}",
-        "body": "Gelen tüm trafik açık. Güvenlik duvarları sayfasından tek tıkla koruyabilirsiniz."
+        "title": "{n, plural, one {{name} sunucusunda firewall yok} other {# sunucuda firewall yok}}",
+        "body": "Gelen tüm trafik açık. Firewall'lar sayfasından tek tıkla koruyabilirsiniz."
       }
     },
     "hide": {
@@ -4755,8 +4757,8 @@
       "disputeWindowDays": "Faturaya itiraz süresi (gün)",
       "disputeWindowHelp": "Fatura düzenlendikten sonra.",
       "disputeAnswerDays": "İtiraza karar süresi (gün)",
-      "reviewHoldDays": "İncelemedeki ödemenin faturasını beklettiği gün sayısı",
-      "reviewHoldHelp": "Bir ödeme incelemedeyken askıya alma, silme ve hatırlatmalar en çok bu kadar bekler; bu süre içinde ikinci bir ödeme reddedilir. 0 kapatır.",
+      "reviewHoldDays": "İnceleme bekleyen ödemenin faturasını beklettiği gün sayısı",
+      "reviewHoldHelp": "Bir ödeme inceleme beklerken askıya alma, silme ve hatırlatmalar en çok bu kadar bekler; bu süre içinde ikinci bir ödeme reddedilir. 0 kapatır.",
       "disputeAnswerHelp": "Geçince ekibe hatırlatılır."
     },
     "einvoice": {
@@ -4989,16 +4991,16 @@
     "copied": "\"{name}\" oluşturuldu. Sunuculara bağlamayı unutmayın.",
     "riskShort": "Herkese açık: {ports}",
     "stats": {
-      "firewalls": "Güvenlik duvarı",
+      "firewalls": "Firewall",
       "protected": "Korunan sunucu",
       "unprotectedHint": "{n, plural, =0 {Korumasız sunucu yok} other {# sunucu korumasız}}",
       "failed": "Uygulanamayan",
       "risky": "Riskli duvar"
     },
-    "unprotectedTitle": "{n, plural, one {# sunucunuzda} other {# sunucunuzda}} güvenlik duvarı yok",
+    "unprotectedTitle": "{n, plural, one {# sunucunuzda} other {# sunucunuzda}} firewall yok",
     "unprotectedBody": "Bu sunuculara gelen tüm trafik açık. Tek tıkla hepsini kapsayan bir duvar oluşturabilirsiniz.",
     "protectAll": "Bunlar için duvar oluştur",
-    "noneMatch": "Bu filtreye uyan güvenlik duvarı yok.",
+    "noneMatch": "Bu filtreye uyan firewall yok.",
     "showAll": "Hepsini göster",
     "quickHas": "{name} kuralı zaten var",
     "scopeAll": "Herkese açık",
@@ -5250,7 +5252,7 @@
       "suspended": "Askıda",
       "unknown": "Bilinmiyor"
     },
-    "find": "Ad, IP, sahip ya da güvenlik duvarı ara",
+    "find": "Ad, IP, sahip ya da firewall ara",
     "sort": "Sırala",
     "sortTraffic": "En çok trafik",
     "sortState": "Önce sorunlular",
@@ -5523,7 +5525,7 @@
       "u": "Destek taleplerim",
       "y": "Sistem",
       "b": "Faturalar",
-      "f": "Güvenlik duvarları"
+      "f": "Firewall'lar"
     },
     "search": "Sayfadaki aramaya git",
     "send": "Uzun metni formundan gönder",
@@ -7285,6 +7287,7 @@
     },
     "payment": {
       "pending": "Sürüyor",
+      "review": "İnceleme bekliyor",
       "succeeded": "Başarılı",
       "failed": "Başarısız",
       "cancelled": "İptal",
@@ -7322,6 +7325,8 @@
     "orderWaits": "Ödeme yapıldığı anda sunucunuz kurulur.",
     "lastFailed": "Son deneme başarısız: {reason}",
     "withBalance": "Bakiyeden",
+    "subscriptionServer": "Sunucu {name}",
+    "subscriptionVdc": "Sanal veri merkezi {name}",
     "balanceHas": "Bakiye: {amount}",
     "balanceShort": "Bakiye yetersiz",
     "payAmount": "{amount} öde",
@@ -7383,8 +7388,9 @@
     "removeConfirm": "Kartı kaldır",
     "transferAmount": "Tutar",
     "topUpShort": "Eksik {amount} tutarını yükle",
-    "reviewTitle": "Ödemeniz inceleniyor",
-    "reviewLocked": "Bu faturanın bir ödemesi incelemede; şimdilik yeniden ödenemez.",
+    "reviewTitle": "Ödemeniz inceleme bekliyor",
+    "reviewLocked": "Bu faturanın bir ödemesi inceleme bekliyor; şimdilik yeniden ödenemez.",
+    "topUpHeld": "Bakiye yine de yükleyebilirsiniz; bu faturayı bakiyeden ödemek incelemenin sonucunu bekler.",
     "reviewHelp": "Ödeme kuruluşu bu ödemeyi denetim için bekletiyor ya da ödeme kendiliğinden doğrulanamadı. Ekibimiz inceliyor; doğrulandığında fatura ödendi olarak işaretlenir. Bu sırada yeniden ödeme yapmanız gerekmez."
   },
   "BillingAdmin": {
@@ -7614,10 +7620,10 @@
       "becomes": "yerine",
       "sameImage": "Aynı imaj, temiz kurulum.",
       "kept": "Kalır",
-      "keptList": "IP adresleri ({address}), güvenlik duvarları, plan ({vcpu} vCPU · {memory} · {disk} GB), fiyat ve sunucu adı",
+      "keptList": "IP adresleri ({address}), firewall'lar, plan ({vcpu} vCPU · {memory} · {disk} GB), fiyat ve sunucu adı",
       "erased": "Silinir",
       "erasedList": "Diskteki tüm veriler ve anlık görüntüler",
-      "help": "Bir imajdan temiz kurulum. IP adresleri, güvenlik duvarları, fiyat ve sunucu adı kalır; diskteki her şey silinir.",
+      "help": "Bir imajdan temiz kurulum. IP adresleri, firewall'lar, fiyat ve sunucu adı kalır; diskteki her şey silinir.",
       "image": "İmaj",
       "current": "şu an kurulu",
       "newKey": "Başka bir SSH anahtarı kullan",
@@ -8693,14 +8699,14 @@
       "none": "Sunucunun genel IP adresi yok."
     },
     "firewall": {
-      "loading": "Güvenlik duvarları okunuyor…",
-      "none": "Güvenlik duvarı yok: tüm portlar açık.",
+      "loading": "Firewall'lar okunuyor…",
+      "none": "Firewall yok: tüm portlar açık.",
       "ok": "{service} (port {port}) \"{name}\" tarafından izinli.",
       "pending": "{service} (port {port}) \"{name}\" tarafından izinli; yeni kurallar hâlâ uygulanıyor.",
       "closed": "{service} (port {port}) için gelen bağlantıya izin veren kural yok.",
       "fix": "{name} içine ekle",
-      "failed": "Güvenlik duvarı kuralları uygulanamadı; eski kurallar hâlâ geçerli olabilir.",
-      "open": "Güvenlik duvarları"
+      "failed": "Firewall kuralları uygulanamadı; eski kurallar hâlâ geçerli olabilir.",
+      "open": "Firewall'lar"
     }
   },
   "Formats": {

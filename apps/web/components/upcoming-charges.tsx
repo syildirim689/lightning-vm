@@ -8,6 +8,7 @@ import { useFormatter, useNow, useTranslations } from 'next-intl';
 import type { Invoice, Summary } from '../lib/billing';
 import { useApiQuery } from '../lib/query';
 import { dueInvoices, renewalLine, runOut } from '../lib/upcoming';
+import { useSubscriptionLabel } from '../lib/subscription-label';
 import { I } from './icon';
 
 const SHOWN = 3;
@@ -29,6 +30,7 @@ function Row({ icon, tone = 'default', title, detail, amount, note, children }: 
 
 export default function UpcomingCharges() {
   const t = useTranslations('Upcoming');
+  const subscription = useSubscriptionLabel();
   const format = useFormatter();
   const now = useNow({ updateInterval: 60_000 });
   const s = useApiQuery<Summary>(['notifications', 'billing-summary'], '/billing/summary').data;
@@ -72,7 +74,7 @@ export default function UpcomingCharges() {
       {renewal && <Row icon={<I name="repeat" size={15}/>} amount={money(renewal.amount, renewal.currency)} note={renewal.gross ? t('gross') : undefined}
         title={t('renewal', { date: day(renewal.at), when: format.relativeTime(new Date(renewal.at), now) })}
         detail={<>{renewal.items.slice(0, 2).map((x, k) => <span key={x.id}>{k > 0 && ', '}
-          {x.serverId ? <NextLink href={`/servers/${x.serverId}`} className="rounded hover:text-foreground hover:underline focus-visible:outline-2 focus-visible:outline-accent">{x.description}</NextLink> : x.description}</span>)}
+          {x.serverId ? <NextLink href={`/servers/${x.serverId}`} className="rounded hover:text-foreground hover:underline focus-visible:outline-2 focus-visible:outline-accent">{subscription(x.description)}</NextLink> : subscription(x.description)}</span>)}
           {renewal.items.length > 2 && <> {t('more', { n: renewal.items.length - 2 })}</>}
           {renewal.items.length === 0 && renewal.servers > 0 && t('servers', { n: renewal.servers })}</>}/>}
       {spending.map((r) => <Row key={r.currency} icon={<I name="hourglass" size={15}/>} tone={r.empty ? 'danger' : r.soon ? 'warning' : 'default'} amount={money(r.amount, r.currency)}

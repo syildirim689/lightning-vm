@@ -58,3 +58,11 @@ export function waitedFor(since: string | number | Date | null | undefined, now:
   if (minutes < 48 * 60) return { unit: 'hour', n: Math.floor(minutes / 60) };
   return { unit: 'day', n: Math.floor(minutes / 1440) };
 }
+
+// A subscription's description is written once by the API, with the kind of thing in Turkish before its name
+// ("Sunucu web-1", "Sanal veri merkezi Ankara"). What kind it is and the name alone, so the page can say the kind in
+// the reader's language; a description of another shape (older data, a manual one) has no kind and is shown as it is.
+export function subscriptionName(description: string): { kind: 'server' | 'vdc' | null; name: string } {
+  const m = /^(Sunucu|Server|Sanal veri merkezi|Virtual data center) (.+)$/s.exec(description);
+  return m ? { kind: m[1] === 'Sunucu' || m[1] === 'Server' ? 'server' : 'vdc', name: m[2] } : { kind: null, name: description };
+}

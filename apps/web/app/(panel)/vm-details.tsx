@@ -34,7 +34,7 @@ function Row({ label, value, copy, mono }: { label: string; value: React.ReactNo
   return <div className="contents">
     <dt className="text-xs text-muted sm:text-sm">{label}</dt>
     <dd className="flex min-w-0 items-center gap-1 text-sm">
-      <span className={`min-w-0 break-all ${mono ? 'font-mono text-[0.85em]' : ''}`}>{value}</span>
+      <span className={`min-w-0 ${mono ? 'break-all font-mono text-[0.85em]' : '[overflow-wrap:anywhere]'}`}>{value}</span>
       {copy && <Copy text={copy} label={label} className="-my-2 shrink-0"/>}
     </dd>
   </div>;

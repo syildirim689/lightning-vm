@@ -4,6 +4,7 @@
 import { Button, Card, Modal, Tabs, toast } from '@heroui/react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useFormatter, useTranslations } from 'next-intl';
+import { usePercent } from '../../../../lib/percent';
 import { useState } from 'react';
 import { Area, Bar, ComposedChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { I } from '../../../../components/icon';
@@ -76,6 +77,7 @@ function EnergySettings({ s, onSaved }: { s: Settings; onSaved: () => void }) {
 export default function Energy() {
   const t = useTranslations('Energy');
   const format = useFormatter();
+  const percent = usePercent();
   const me = useMe();
   const client = useQueryClient();
   const { error } = useErrorText();
@@ -139,7 +141,7 @@ export default function Energy() {
             <span key="w" className="flex min-w-24 flex-col gap-1"><span className="tabular-nums">{n(h.watts, 0)} W</span>
               {totalWatts > 0 && <span className="h-1.5 overflow-hidden rounded-full bg-default" title={t('share', { pct: Math.round(h.watts / totalWatts * 100) })}>
                 <span className="block h-full rounded-full bg-accent" style={{ width: `${Math.round(h.watts / totalWatts * 100)}%` }}/></span>}</span>, <StatusChip key="s" tone={h.source === 'measured' ? 'success' : 'warning'}>{t(`sources.${h.source}`)}</StatusChip>,
-            h.cpuUtil === null ? '–' : `%${n(h.cpuUtil * 100, 0)}`, `${n(h.kwh, 2)} kWh`,
+            h.cpuUtil === null ? '–' : percent(h.cpuUtil * 100), `${n(h.kwh, 2)} kWh`,
             <span key="p" className="flex items-center gap-2 text-xs text-muted">{h.idleWatts !== null ? `${h.idleWatts}–${h.maxWatts} W` : t('defaultShort')}
               {can(me?.permissions, 'settings.manage') && <Button size="sm" variant="ghost" onPress={() => setEditing(h)}><I name="pencil" size={13}/>{t('edit')}</Button>}</span>]}/>
       </Section>

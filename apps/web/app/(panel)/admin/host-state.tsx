@@ -5,6 +5,7 @@
 import { Button, SearchField, toast } from '@heroui/react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useFormatter, useNow, useTranslations } from 'next-intl';
+import { usePercent } from '../../../lib/percent';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { I } from '../../../components/icon';
 import { Notice, Section, SelectInput, StatusChip, type Tone } from '../../../components/ui';
@@ -57,6 +58,7 @@ const lineTone = (l: string) => (/\b(error|fatal|panic|critical|emerg|"level":"(
 export default function HostState() {
   const t = useTranslations('HostState');
   const format = useFormatter();
+  const percent = usePercent();
   const now = useNow({ updateInterval: 30_000 });
   const bytes = useBytes();
   const { error } = useErrorText();
@@ -109,12 +111,12 @@ export default function HostState() {
         <ul className="list-disc pl-5">{problems.map((p) => <li key={p}>{p}</li>)}</ul></Notice>}
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <Tile icon={<I name="cpu" size={18}/>} label={t('cpu')} value={d.cpu.percent === null ? '–' : `${format.number(cpu, { maximumFractionDigits: 1 })}%`} tone={d.cpu.percent === null ? 'default' : toneOf(cpu)}>
+        <Tile icon={<I name="cpu" size={18}/>} label={t('cpu')} value={d.cpu.percent === null ? '–' : percent(cpu, 1)} tone={d.cpu.percent === null ? 'default' : toneOf(cpu)}>
           <Spark values={d.history.map((h) => h.cpu)} max={100} tone={toneOf(cpu)} label={t('chart', { what: t('cpu') })}/>
           <p className="text-xs text-muted">{t('cores', { n: d.cpu.cores })}{d.cpu.iowait !== null && d.cpu.iowait >= 1 && <> · {t('iowait', { n: format.number(d.cpu.iowait, { maximumFractionDigits: 1 }) })}</>}</p>
           {d.cpu.model && <p className="truncate text-xs text-muted" title={d.cpu.model}>{d.cpu.model}</p>}
         </Tile>
-        <Tile icon={<I name="memory-stick" size={18}/>} label={t('memory')} value={d.memory ? `${format.number(mem, { maximumFractionDigits: 0 })}%` : '–'} tone={d.memory ? toneOf(mem) : 'default'}>
+        <Tile icon={<I name="memory-stick" size={18}/>} label={t('memory')} value={d.memory ? percent(mem) : '–'} tone={d.memory ? toneOf(mem) : 'default'}>
           <Spark values={d.history.map((h) => h.memory)} max={100} tone={toneOf(mem)} label={t('chart', { what: t('memory') })}/>
           {d.memory && <><p className="text-xs text-muted">{t('usedOf', { used: bytes(d.memory.used), total: bytes(d.memory.total) })}</p>
             <p className="text-xs text-muted">{t('cached', { n: bytes(d.memory.cached) })}{d.memory.swapTotal > 0 && <> · {t('swap', { used: bytes(d.memory.swapUsed), total: bytes(d.memory.swapTotal) })}</>}</p></>}
@@ -124,7 +126,7 @@ export default function HostState() {
           <p className="text-xs text-muted">{t('loadAvg', { a: d.cpu.load[0] ?? 0, b: d.cpu.load[1] ?? 0, c: d.cpu.load[2] ?? 0 })}</p>
           <p className="text-xs text-muted">{t('loadHelp', { n: d.cpu.cores })}</p>
         </Tile>
-        <Tile icon={<I name="hard-drive" size={18}/>} label={t('disk')} value={d.disk ? `${format.number(disk, { maximumFractionDigits: 0 })}%` : '–'} tone={d.disk ? toneOf(disk) : 'default'}>
+        <Tile icon={<I name="hard-drive" size={18}/>} label={t('disk')} value={d.disk ? percent(disk) : '–'} tone={d.disk ? toneOf(disk) : 'default'}>
           <div className="flex h-12 items-center">{d.disk && <div className="w-full"><Bar percent={disk} tone={toneOf(disk)} label={t('disk')}/></div>}</div>
           {d.disk && <p className="text-xs text-muted">{t('freeOf', { free: bytes(d.disk.free), total: bytes(d.disk.total) })}</p>}
           <p className="text-xs text-muted">{t('diskHelp')}</p>
@@ -147,7 +149,7 @@ export default function HostState() {
               return <li key={x.service} className={`flex items-center gap-3 rounded-xl border px-3 py-2.5 ${bad ? 'border-danger/50 bg-danger/5' : 'border-border'}`}>
                 <span aria-hidden className={`size-2.5 shrink-0 rounded-full ${bad ? 'bg-danger' : ok ? 'bg-success' : 'bg-default-foreground/30'}`}/>
                 <div className="min-w-0 flex-1"><p className="truncate text-sm font-medium">{x.service}</p><p className="truncate text-xs text-muted" title={x.status}>{x.status}{x.restarts > 0 && ` · ${t('restarts', { n: x.restarts })}`}</p></div>
-                {ok && <div className="shrink-0 text-right text-xs tabular-nums"><p className={x.cpu >= 80 ? 'text-warning' : ''}>{format.number(x.cpu, { maximumFractionDigits: 1 })}% CPU</p><p className="text-muted">{x.memory || '–'}</p></div>}
+                {ok && <div className="shrink-0 text-right text-xs tabular-nums"><p className={x.cpu >= 80 ? 'text-warning' : ''}>{percent(x.cpu, 1)} CPU</p><p className="text-muted">{x.memory || '–'}</p></div>}
               </li>; })}
           </ul>
         </div>
@@ -159,7 +161,7 @@ export default function HostState() {
               {s.disks.map((x) => { const p = x.total ? (x.used / x.total) * 100 : 0;
                 return <li key={x.mount} className="flex flex-col gap-1.5">
                   <div className="flex items-baseline justify-between gap-3 text-sm"><span className="min-w-0 truncate font-mono text-xs" title={x.device}>{x.mount}</span>
-                    <span className={`shrink-0 tabular-nums ${text[toneOf(p)]}`}>{format.number(p, { maximumFractionDigits: 0 })}%</span></div>
+                    <span className={`shrink-0 tabular-nums ${text[toneOf(p)]}`}>{percent(p)}</span></div>
                   <Bar percent={p} tone={toneOf(p)} label={x.mount}/>
                   <p className="text-xs text-muted">{t('freeOf', { free: bytes(x.free), total: bytes(x.total) })}</p>
                 </li>; })}
@@ -174,7 +176,7 @@ export default function HostState() {
                 <thead><tr className="text-left text-xs text-muted"><th className="px-4 py-2 font-medium">{t('proc.name')}</th><th className="px-2 py-2 text-right font-medium">PID</th><th className="px-2 py-2 text-right font-medium">CPU</th><th className="px-4 py-2 text-right font-medium">{t('memory')}</th></tr></thead>
                 <tbody className="divide-y divide-separator">
                   {s.processes.map((p) => <tr key={p.pid}><td className="max-w-40 truncate px-4 py-2 font-mono text-xs">{p.name}</td><td className="px-2 py-2 text-right tabular-nums text-muted">{p.pid}</td>
-                    <td className={`px-2 py-2 text-right tabular-nums ${p.cpu >= 80 ? 'text-warning' : ''}`}>{format.number(p.cpu, { maximumFractionDigits: 1 })}%</td><td className="px-4 py-2 text-right tabular-nums">{bytes(p.rss)}</td></tr>)}
+                    <td className={`px-2 py-2 text-right tabular-nums ${p.cpu >= 80 ? 'text-warning' : ''}`}>{percent(p.cpu, 1)}</td><td className="px-4 py-2 text-right tabular-nums">{bytes(p.rss)}</td></tr>)}
                 </tbody>
               </table>
             </div>

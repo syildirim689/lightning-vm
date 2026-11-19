@@ -111,7 +111,9 @@ function PayPanel({ d, locked: confirming, held }: { d: InvoiceDetail; locked?: 
         <p className="flex items-center gap-2 font-medium"><I name="wallet" size={16}/>{t('withBalance')}</p>
         <p className="text-sm text-muted">{t('balanceHas', { amount: money(balance) })}</p>
         {balance < due
-          ? <ButtonLink className="mt-auto" variant="secondary" href={`/billing?topup=${Math.ceil((due - balance) * 100) / 100}`}><I name="plus" size={16}/>{t('topUpShort', { amount: money(due - balance) })}</ButtonLink>
+          // Topping up is allowed while a payment waits for review (only paying this invoice is not): said beside the link.
+          ? <>{held && <p className="text-xs text-muted">{t('topUpHeld')}</p>}
+            <ButtonLink className="mt-auto" variant="secondary" href={`/billing?topup=${Math.ceil((due - balance) * 100) / 100}`}><I name="plus" size={16}/>{t('topUpShort', { amount: money(due - balance) })}</ButtonLink></>
           : <Button className="mt-auto" isPending={busy === 'balance'} isDisabled={!!busy || locked} onPress={() => void pay({ method: 'balance' }, 'balance')}>{t('payAmount', { amount: money(due) })}</Button>}
       </div>}
       {card && <div className="flex flex-col gap-2 rounded-2xl border border-border bg-surface p-4">

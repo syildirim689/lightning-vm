@@ -36,7 +36,8 @@ export default function Digest() {
   return <section aria-labelledby="digest" className="rounded-3xl border border-border bg-surface p-4 sm:p-5">
     <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
       <h2 id="digest" className="flex items-center gap-2 font-semibold"><I name="history" size={17} className="text-accent"/>{since ? t('title') : t('titleDay')}</h2>
-      <span className="text-xs text-muted"><Ago at={q.data.since}/></span>
+      {/* "Since your last visit" says when that was; "in the last 24 hours" already did. */}
+      {since && <span className="text-xs text-muted"><Ago at={q.data.since}/></span>}
     </div>
     {shown.length === 0 ? <p className="flex items-center gap-2 text-sm text-muted"><I name="circle-check" size={15} className="text-success"/>{t('nothing')}</p>
       : <ul className="flex flex-wrap gap-2">{shown.map((i, n) => <motion.li key={i.k} initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: n * 0.04 }}>

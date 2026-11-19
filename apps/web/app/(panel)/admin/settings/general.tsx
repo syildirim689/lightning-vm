@@ -4,6 +4,7 @@
 import { Card } from '@heroui/react';
 import { motion } from 'motion/react';
 import { useFormatter, useNow, useTranslations } from 'next-intl';
+import { usePercent } from '../../../../lib/percent';
 import Link from 'next/link';
 import { I } from '../../../../components/icon';
 import { useApiQuery } from '../../../../lib/query';
@@ -27,6 +28,7 @@ const pretty = (id: unknown) => (typeof id !== 'string' || id === 'none' ? '' : 
 export default function GeneralSettings({ onOpen }: { onOpen: (tab: string) => void }) {
   const t = useTranslations('Settings.general');
   const format = useFormatter();
+  const percent = usePercent();
   const now = useNow({ updateInterval: 60_000 });
   const q = useApiQuery<Doc>(['settings', 'overview'], '/admin/settings/overview');
   if (!q.data) return <div className="grid gap-4"><div className="h-40 animate-pulse rounded-3xl bg-default/50"/><div className="h-64 animate-pulse rounded-3xl bg-default/50"/></div>;
@@ -48,7 +50,7 @@ export default function GeneralSettings({ onOpen }: { onOpen: (tab: string) => v
             <motion.circle cx="18" cy="18" r="15.5" fill="none" strokeWidth="3" strokeLinecap="round" className={warn.length ? 'stroke-warning' : 'stroke-success'}
               strokeDasharray="97.4" initial={{ strokeDashoffset: 97.4 }} animate={{ strokeDashoffset: 97.4 * (1 - pct / 100) }} transition={{ duration: 0.8, ease: 'easeOut' }}/>
           </svg>
-          <span className="text-xl font-semibold tabular-nums">{pct}%</span>
+          <span className="text-xl font-semibold tabular-nums">{percent(pct)}</span>
         </div>
         <div className="min-w-0 flex-1">
           <h2 className="text-lg font-semibold">{t('title')}</h2>

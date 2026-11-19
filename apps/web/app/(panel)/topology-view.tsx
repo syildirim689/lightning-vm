@@ -4,6 +4,7 @@
 import { Button, SearchField, Tabs } from '@heroui/react';
 import NextLink from 'next/link';
 import { useFormatter, useTranslations } from 'next-intl';
+import { usePercent } from '../../lib/percent';
 import { parseAsStringLiteral, useQueryState } from 'nuqs';
 import { useState } from 'react';
 import { I } from '../../components/icon';
@@ -88,6 +89,7 @@ function customerTree(d: { locations: Loc[]; servers: Server[] }, t: Tr): TopoNo
 }
 
 function Totals({ servers, hosts }: { servers: Server[]; hosts?: { cpuUsedMhz: number; cpuTotalMhz: number }[] }) {
+  const percent = usePercent();
   const t = useTranslations('Topology');
   const rx = servers.reduce((a, s) => a + (s.rxKBps ?? 0), 0), tx = servers.reduce((a, s) => a + (s.txKBps ?? 0), 0);
   const cpu = hosts?.length ? hosts.reduce((a, h) => a + h.cpuUsedMhz, 0) / Math.max(1, hosts.reduce((a, h) => a + h.cpuTotalMhz, 0)) : null;
@@ -95,7 +97,7 @@ function Totals({ servers, hosts }: { servers: Server[]; hosts?: { cpuUsedMhz: n
     <Stat label={t('servers')} value={servers.length} hint={t('running', { n: servers.filter((s) => s.power === 'poweredOn').length })} icon={<I name="server" size={18}/>}/>
     <Stat label={t('inbound')} value={rate(rx)} icon={<I name="arrow-down-to-line" size={18}/>} tone="accent"/>
     <Stat label={t('outbound')} value={rate(tx)} icon={<I name="arrow-up-from-line" size={18}/>} tone="success"/>
-    {cpu !== null ? <Stat label={t('hostCpu')} value={`${Math.round(cpu * 100)}%`} hint={t('hostsN', { n: hosts!.length })} icon={<I name="cpu" size={18}/>} tone={cpu > 0.85 ? 'danger' : cpu > 0.6 ? 'warning' : 'default'}/>
+    {cpu !== null ? <Stat label={t('hostCpu')} value={percent(cpu * 100)} hint={t('hostsN', { n: hosts!.length })} icon={<I name="cpu" size={18}/>} tone={cpu > 0.85 ? 'danger' : cpu > 0.6 ? 'warning' : 'default'}/>
       : <Stat label={t('firewalled')} value={servers.filter((s) => s.firewalls.length).length} icon={<I name="brick-wall-fire" size={18}/>}/>}
   </div>;
 }

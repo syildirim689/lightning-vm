@@ -21,8 +21,38 @@ async function choose(page: Page, scope: Page | Locator, label: string | RegExp,
 // React Aria keeps the real input visually hidden under its styled control.
 // Controlled inputs change only after the app (or the API) answers, so click and let expect() wait.
 const tick = (box: Locator) => box.click({ force: true });
+// The pictures of the tour (test-results/tour/<name>.png), taken once the page stands still: every entrance effect
+// and transition that ends by itself has ended (a spinner that turns for ever is not waited for), so nothing is
+// caught half faded. A picture of the whole page or of one element is stitched from a page that does not scroll, so
+// what stays in place while the page scrolls (the menu beside the page, the bar above it, a section menu) is drawn
+// where it starts instead of across the middle of the picture: for those pictures alone it is laid out in the flow.
+const inFlow = '[data-shell-nav] { position: relative !important; height: auto !important; overflow: visible !important; }'
+  + ' [data-shell-bar], [data-section-menu] { position: relative !important; top: auto !important; }';
+async function settled(page: Page) {
+  await page.waitForFunction(() => document.getAnimations().every((a) => a.playState !== 'running' || a.effect?.getComputedTiming().iterations === Infinity),
+    null, { timeout: 3_000 }).catch(() => undefined);
+  // Effects driven by script (the charts, the layout animations) have no entry there: two quiet frames after them.
+  await page.evaluate(() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(() => done(null)))));
+}
+async function tour(target: Page | Locator, name: string, fullPage = false) {
+  const element = 'page' in target ? target : null;
+  await settled(element ? element.page() : target as Page);
+  const path = `test-results/tour/${name}.png`;
+  if (element) await element.screenshot({ path, style: inFlow });
+  else await (target as Page).screenshot({ path, fullPage, ...(fullPage && { style: inFlow }) });
+}
 // No sideways scrolling at the page's current width; on failure the message names the innermost elements sticking out.
 // Charts redraw at the new width a moment after a resize, so the check waits up to 3 s for the layout to settle.
+// Something that must be whole on the screen (a dialog, its buttons, a search field): every one of the elements lies
+// between the left and the right edge of the window.
+async function expectInside(page: Page, what: Locator, label: string) {
+  const width = page.viewportSize()!.width;
+  await expect(what.first(), label).toBeVisible();
+  await expect.poll(async () => {
+    const boxes = await what.evaluateAll((list) => list.map((e) => { const r = e.getBoundingClientRect(); return [Math.round(r.left), Math.round(r.right)]; }));
+    return boxes.filter(([left, right]) => left < 0 || right > width).map(([left, right]) => `${left}..${right}`).join(', ');
+  }, { message: `${label}: inside 0..${width}`, timeout: 3_000 }).toBe('');
+}
 async function expectNoOverflow(page: Page, label: string) {
   await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth), { timeout: 3_000 }).toBeLessThanOrEqual(1).catch(() => undefined);
   const [overflow, culprits] = await page.evaluate(() => {
@@ -70,7 +100,7 @@ test.describe('first run (Turkish browser)', () => {
     const saveAndContinue = () => page.getByRole('button', { name: 'Devam et' }).click();
     const skip = () => page.getByRole('button', { name: 'Şimdilik atla' }).click();
     const check = () => page.getByRole('button', { name: 'Kontrol et' }).click();
-    const shot = (name: string) => page.screenshot({ path: `test-results/tour/wizard-${name}.png`, fullPage: true });
+    const shot = (name: string) => tour(page, `wizard-${name}`, true);
 
     await page.goto('/setup');
     // The token card keeps its own height and sits in the middle of the screen (it once stretched top to bottom).
@@ -161,10 +191,10 @@ test.describe('first run (Turkish browser)', () => {
     await expect(page.getByRole('textbox', { name: 'Parola' })).toHaveAttribute('type', 'text');
     await expect(page.getByText('Parola gücü: Güçlü')).toBeVisible();
     await expect(page.getByRole('status').filter({ hasText: /Parola (panoya kopyalandı|görünür hâlde)/ })).toBeVisible();
-    await page.screenshot({ path: 'test-results/tour/setup-password-generated.png', fullPage: true });
+    await tour(page, 'setup-password-generated', true);
     await page.setViewportSize({ width: 390, height: 900 });
     await expectNoOverflow(page, 'setup password at 390 px');
-    await page.screenshot({ path: 'test-results/tour/setup-password-generated-390.png', fullPage: true });
+    await tour(page, 'setup-password-generated-390', true);
     await page.setViewportSize({ width: 1280, height: 720 });
     await page.getByRole('textbox', { name: 'Parola' }).fill(admin.password);
     await page.getByRole('button', { name: 'Yönetici hesabını oluştur' }).click();
@@ -427,7 +457,7 @@ test.describe('VMware connections (simulator, English browser)', () => {
     await page.getByRole('searchbox', { name: 'Search name or operating system' }).fill('');
     await page.setViewportSize({ width: 390, height: 900 });
     await expectNoOverflow(page, 'vmware connection at 390 px');
-    await page.screenshot({ path: 'test-results/tour/vmware-detail-390.png', fullPage: true });
+    await tour(page, 'vmware-detail-390', true);
     await page.setViewportSize({ width: 1280, height: 720 });
 
     // Console: browser -> Caddy (wss) -> console gateway -> the simulator's fake WebMKS endpoint.
@@ -459,7 +489,7 @@ test.describe('VMware connections (simulator, English browser)', () => {
     await expectNoOverflow(page, 'console commands at 390 px');
     await expect(page.getByText('Command saved.')).toBeHidden({ timeout: 15_000 });
     await mine.evaluate((el) => el.scrollIntoView({ block: 'center' }));
-    await page.screenshot({ path: 'test-results/tour/console-snippets-390.png' });
+    await tour(page, 'console-snippets-390');
     await page.setViewportSize({ width: 1280, height: 720 });
     // Copy works without a console; editing loads the form and saves in place.
     await page.getByRole('button', { name: 'Copy to clipboard: Uptime check' }).click();
@@ -561,9 +591,9 @@ test.describe('VMware connections (simulator, English browser)', () => {
     await expect(page.getByText(/Weekly, next/)).toBeVisible();
     await page.setViewportSize({ width: 390, height: 900 });
     await expectNoOverflow(page, 'vmware discovery at 390 px');
-    await page.locator('#discovery').screenshot({ path: 'test-results/tour/vmware-discovery-390.png' });
+    await tour(page.locator('#discovery'), 'vmware-discovery-390');
     await page.setViewportSize({ width: 1280, height: 900 });
-    await page.locator('#discovery').screenshot({ path: 'test-results/tour/vmware-discovery.png' });
+    await tour(page.locator('#discovery'), 'vmware-discovery');
     await choose(page, page, /How often/, 'Off');
     await page.getByRole('button', { name: 'Save', exact: true }).click();
     await expect(page.getByText('Automatic scan saved.').first()).toBeVisible();
@@ -623,7 +653,7 @@ test.describe('server lifecycle (simulator, Turkish customer)', () => {
     await page.getByLabel('Sunucu adı').fill('web-1');
     await expect(missing).toBeHidden();
     await page.locator('#order-summary').scrollIntoViewIfNeeded();
-    await page.screenshot({ path: 'test-results/tour/order-summary.png', fullPage: true });
+    await tour(page, 'order-summary', true);
     await page.getByRole('button', { name: 'Sunucuyu oluştur' }).click();
 
     await expect(page).toHaveURL(/\/servers\/[0-9a-f-]{36}$/);
@@ -646,7 +676,7 @@ test.describe('server lifecycle (simulator, Turkish customer)', () => {
     const check = page.getByRole('list', { name: 'Bağlantı denetimi' });
     await expect(check).toContainText('Sunucu açık.');
     await expect(check).toContainText(/ağ kartı|Ağ kartı/);
-    await expect(check).toContainText('Güvenlik duvarı yok: tüm portlar açık.');
+    await expect(check).toContainText('Firewall yok: tüm portlar açık.');
     // Health score with its reasons; a new server has no week of CPU data, so no sizing advice yet.
     await expect(page.getByRole('img', { name: /Sağlık puanı 100 üzerinden \d+/ })).toBeVisible();
     await expect(page.getByText('Henüz yeterli veri yok', { exact: false })).toBeVisible();
@@ -708,10 +738,10 @@ test.describe('server lifecycle (simulator, Turkish customer)', () => {
     // The page, not the toast that the live notification shows at the same moment.
     await expect(page.locator('main').getByText('guncelleme-oncesi')).toBeVisible({ timeout: 45_000 });
     await expect(page.getByText('Şu anki durum buna dayanıyor')).toBeVisible();
-    await page.screenshot({ path: 'test-results/tour/server-page.png', fullPage: true });
+    await tour(page, 'server-page', true);
     await page.setViewportSize({ width: 390, height: 900 });
     await expectNoOverflow(page, 'server page with schedules at 390 px');
-    await page.screenshot({ path: 'test-results/tour/server-page-390.png', fullPage: true });
+    await tour(page, 'server-page-390', true);
     await page.setViewportSize({ width: 1280, height: 720 });
     // Section bar: a chip jumps to its section, marks it and offers a way back to the top.
     const sections = page.getByRole('navigation', { name: 'Bölümler' });
@@ -726,13 +756,13 @@ test.describe('server lifecycle (simulator, Turkish customer)', () => {
     await expect(sections.locator('[data-lead]')).toBeVisible();
     await expect(sections.locator('[data-lead]')).toContainText('web-1');
     await page.waitForTimeout(400);
-    await page.screenshot({ path: 'test-results/tour/server-sections.png' });
+    await tour(page, 'server-sections');
     await page.setViewportSize({ width: 390, height: 900 });
     await expectNoOverflow(page, 'server section bar at 390 px');
-    await page.screenshot({ path: 'test-results/tour/server-sections-390.png' });
+    await tour(page, 'server-sections-390');
     await page.setViewportSize({ width: 768, height: 1024 });
     await expectNoOverflow(page, 'server section bar at 768 px');
-    await page.screenshot({ path: 'test-results/tour/server-sections-768.png' });
+    await tour(page, 'server-sections-768');
     await sections.getByRole('button', { name: 'Başa dön' }).click();
     await expect.poll(() => page.evaluate(() => scrollY)).toBeLessThan(5);
     await expect(sections.locator('[data-lead]').locator('..')).toHaveAttribute('aria-hidden', 'true');
@@ -762,9 +792,9 @@ test.describe('server lifecycle (simulator, Turkish customer)', () => {
     await page.getByRole('button', { name: 'web-1 için hızlı işlemler' }).click();
     await page.getByRole('menuitem', { name: 'SSH komutunu kopyala' }).click();
     await expect(page.getByText('SSH komutu panoya kopyalandı.')).toBeVisible();
-    await page.screenshot({ path: 'test-results/tour/servers-quick-390.png' });
+    await tour(page, 'servers-quick-390');
     await expect(page).toHaveURL(/\/\?q=/);
-    await page.screenshot({ path: 'test-results/tour/servers-note-search-390.png' });
+    await tour(page, 'servers-note-search-390');
     await page.setViewportSize({ width: 1280, height: 720 });
     // The same menu offers a new name, the delete lock and deleting. Renamed from the list, the card shows the new
     // name (and back again, for the rest of this tour); locked and unlocked without opening the server.
@@ -842,7 +872,10 @@ test.describe('server lifecycle (simulator, Turkish customer)', () => {
       expect([failed.kind, failed.errorCode]).toEqual(['snapshot_revert', 'SNAPSHOT_NOT_FOUND']);
       await page.reload();
       await expect(main.getByText('Anlık görüntüye dönme başarısız oldu', { exact: true })).toBeVisible();
-      await expect(main.getByText(/^Bu anlık görüntü artık yok\. \(SNAPSHOT_NOT_FOUND\) · /)).toBeVisible();
+      // The customer reads the sentence; the code support will ask for is on it (shown on hover), not in the text.
+      await expect(main.getByText(/^Bu anlık görüntü artık yok\. · /)).toBeVisible();
+      await expect(main.getByText('Bu anlık görüntü artık yok.', { exact: true }).first()).toHaveAttribute('title', 'SNAPSHOT_NOT_FOUND');
+      await expect(main.getByText('SNAPSHOT_NOT_FOUND')).toHaveCount(0);
       await expect(main.getByText('Yeniden denemek bunu kendiliğinden düzeltmez. Destek ekibine yazın; ayrıntılar sizin için dolduruldu.', { exact: true })).toBeVisible();
       await expect(main.getByRole('button', { name: 'Yeniden dene' })).toHaveCount(0);
       const toSupport = main.getByRole('link', { name: 'Destek ekibine yaz', exact: true });
@@ -854,11 +887,12 @@ test.describe('server lifecycle (simulator, Turkish customer)', () => {
       expect(ticketLink.searchParams.get('body')).toContain('Hata: Bu anlık görüntü artık yok. (SNAPSHOT_NOT_FOUND)');
       expect(ticketLink.searchParams.get('body')).toContain(`İşlem: ${failed.id}`);
       // The row of the history carries the same way out.
-      const failedRow = history.getByRole('row').filter({ hasText: 'SNAPSHOT_NOT_FOUND' });
+      const failedRow = history.getByRole('row').filter({ has: page.locator('[data-code="SNAPSHOT_NOT_FOUND"]') });
+      await expect(failedRow).toContainText('Bu anlık görüntü artık yok.');
       await expect(failedRow).toContainText('Başarısız');
       expect(await failedRow.getByRole('link', { name: 'Bunu destekle paylaş' }).getAttribute('href')).toBe(await toSupport.getAttribute('href'));
       await page.waitForTimeout(300);
-      await page.screenshot({ path: 'test-results/tour/server-failed-support.png', fullPage: true });
+      await tour(page, 'server-failed-support', true);
       await page.setViewportSize({ width: 390, height: 900 });
       await expectNoOverflow(page, 'server page with a failed operation at 390 px');
       await page.setViewportSize({ width: 1280, height: 720 });
@@ -880,10 +914,11 @@ test.describe('server lifecycle (simulator, Turkish customer)', () => {
       // Money stands in the way: the invoices, not a ticket and not a retry.
       await page.reload();
       await expect(main.getByText('Açma başarısız oldu', { exact: true })).toBeVisible();
-      await expect(main.getByText(/^Sunucu, ödenmeyen fatura ödenene kadar askıda\. \(BILLING_HOLD\) · /)).toBeVisible();
+      await expect(main.getByText(/^Sunucu, ödenmeyen fatura ödenene kadar askıda\. · /)).toBeVisible();
+      await expect(main.getByText('BILLING_HOLD')).toHaveCount(0);
       await expect(main.getByText('İşlemin önünde bir ödeme var. Açık faturayı ödeyin ya da bakiye yükleyin, sonra işlemi yeniden başlatın.', { exact: true })).toBeVisible();
       await expect(main.getByRole('link', { name: 'Faturalara git' }).first()).toHaveAttribute('href', '/billing?show=open');
-      await expect(history.getByRole('row').filter({ hasText: 'BILLING_HOLD' }).getByRole('link', { name: 'Faturalara git' })).toHaveAttribute('href', '/billing?show=open');
+      await expect(history.getByRole('row').filter({ has: page.locator('[data-code="BILLING_HOLD"]') }).getByRole('link', { name: 'Faturalara git' })).toHaveAttribute('href', '/billing?show=open');
       await expect(main.getByRole('link', { name: 'Destek ekibine yaz', exact: true })).toHaveCount(0);
       await expect(main.getByRole('button', { name: 'Yeniden dene' })).toHaveCount(0);
       // Usually temporary (a timeout) on an action that loses nothing when repeated: "try again" is the page's own
@@ -895,7 +930,7 @@ test.describe('server lifecycle (simulator, Turkish customer)', () => {
       await expect(main.getByText('Bu çoğunlukla geçici bir durumdur. Şimdi yeniden deneyebilirsiniz.', { exact: true })).toBeVisible();
       await expect(main.getByRole('link', { name: 'Destek ekibine yaz', exact: true })).toHaveCount(0);
       await page.waitForTimeout(300);
-      await page.screenshot({ path: 'test-results/tour/server-failed-retry.png', fullPage: true });
+      await tour(page, 'server-failed-retry', true);
       await main.getByRole('button', { name: 'Yeniden dene', exact: true }).click();
       const sure = page.getByRole('alertdialog', { name: 'Reset' });
       await expect(sure).toContainText('kaydedilmemiş veriler kaybolabilir');
@@ -913,7 +948,7 @@ test.describe('server lifecycle (simulator, Turkish customer)', () => {
       await expect(page.getByText(/Hazır · açık/).first()).toBeVisible({ timeout: 30_000 });
       await expect(main.getByText(/başarısız oldu$/)).toHaveCount(0);
       // The failed operation stays in the history, with its way to support.
-      await expect(history.getByRole('row').filter({ hasText: 'SNAPSHOT_NOT_FOUND' }).getByRole('link', { name: 'Bunu destekle paylaş' })).toBeVisible();
+      await expect(history.getByRole('row').filter({ has: page.locator('[data-code="SNAPSHOT_NOT_FOUND"]') }).getByRole('link', { name: 'Bunu destekle paylaş' })).toBeVisible();
     }
 
     // Deleting a ready server first moves it to the grace period (24 hours by default).
@@ -927,17 +962,17 @@ test.describe('server lifecycle (simulator, Turkish customer)', () => {
     const deleteSection = page.locator('#section-sunucuyu-sil');
     await expect(page.getByText('Silme koruması açık')).toHaveCount(2);
     await expect(del).toBeDisabled();
-    await page.screenshot({ path: 'test-results/tour/server-locked.png', fullPage: true });
+    await tour(page, 'server-locked', true);
     await deleteSection.getByRole('button', { name: 'Kilidi aç' }).click();
     await expect(page.getByText('Silme koruması kapalı')).toBeVisible();
     await expect(del).toBeEnabled();
     await del.click();
     await expect(page.getByText('Bu sunucu silinmek üzere')).toBeVisible();
     await expect(page.getByText(/kalıcı olarak silinecek/)).toBeVisible();
-    await page.screenshot({ path: 'test-results/tour/server-trash.png', fullPage: true });
+    await tour(page, 'server-trash', true);
     await page.setViewportSize({ width: 390, height: 900 });
     await expectNoOverflow(page, 'server waiting for deletion at 390 px');
-    await page.screenshot({ path: 'test-results/tour/server-trash-390.png', fullPage: true });
+    await tour(page, 'server-trash-390', true);
     await page.setViewportSize({ width: 1280, height: 720 });
     // The home page points it out; the finding can be hidden for a day and shown again.
     const serverUrl = page.url();
@@ -951,12 +986,12 @@ test.describe('server lifecycle (simulator, Turkish customer)', () => {
     await expect(showHidden).toBeVisible();
     await page.setViewportSize({ width: 390, height: 900 });
     await expectNoOverflow(page, 'home with a hidden finding at 390 px');
-    await page.screenshot({ path: 'test-results/tour/insights-hidden-390.png', fullPage: true });
+    await tour(page, 'insights-hidden-390', true);
     await page.setViewportSize({ width: 1280, height: 720 });
     await showHidden.click();
     await expect(finding).toBeVisible();
     await page.waitForTimeout(800); // layout animation of the returning cards
-    await page.screenshot({ path: 'test-results/tour/insights-pending-deletion.png', fullPage: true });
+    await tour(page, 'insights-pending-deletion', true);
     // The finding's own button takes the server back without opening it.
     await page.getByRole('button', { name: 'web-1 sunucusunu geri al' }).click();
     await expect(page.getByText('İşlem başlatıldı')).toBeVisible();
@@ -993,11 +1028,11 @@ test.describe('server lifecycle (simulator, Turkish customer)', () => {
     await expect(page.locator('[data-row]')).toHaveCount(2);
     await expect(page.getByRole('button', { name: 'Liste', exact: true })).toHaveAttribute('aria-pressed', 'true');
     await expect(page.locator('#boot-loader')).toHaveCSS('opacity', '0');
-    await page.screenshot({ path: 'test-results/tour/servers-rows.png', fullPage: true });
+    await tour(page, 'servers-rows', true);
     for (const width of [390, 768]) {
       await page.setViewportSize({ width, height: 900 });
       await expectNoOverflow(page, `server rows at ${width} px`);
-      await page.screenshot({ path: `test-results/tour/servers-rows-${width}.png`, fullPage: true });
+      await tour(page, `servers-rows-${width}`, true);
     }
     await page.setViewportSize({ width: 1280, height: 720 });
     await page.getByRole('button', { name: 'Kart', exact: true }).click();
@@ -1021,10 +1056,17 @@ test.describe('server lifecycle (simulator, Turkish customer)', () => {
         const barBox = (await page.getByRole('region', { name: 'Seçili sunucular için işlemler' }).boundingBox())!;
         expect(barBox.y + barBox.height, `selection bar above the tasks button at ${width} px`).toBeLessThanOrEqual((await tasksButton.boundingBox())!.y);
       }
-      await page.screenshot({ path: `test-results/tour/servers-select-${width}.png` });
+      // At the end of the page the bar stands under the list and its totals, not on them.
+      await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+      await expect.poll(async () => {
+        const totals = (await page.getByRole('status', { name: 'Gösterilen sunucuların toplamı' }).boundingBox())!;
+        const bar = (await page.getByRole('region', { name: 'Seçili sunucular için işlemler' }).boundingBox())!;
+        return Math.round(totals.y + totals.height - bar.y);
+      }, { message: `totals row clear of the selection bar at the end of the page at ${width} px`, timeout: 3_000 }).toBeLessThanOrEqual(0);
+      await tour(page, `servers-select-${width}`);
     }
     await page.setViewportSize({ width: 1280, height: 720 });
-    await page.screenshot({ path: 'test-results/tour/servers-select.png', fullPage: true });
+    await tour(page, 'servers-select', true);
     await page.getByRole('region', { name: 'Seçili sunucular için işlemler' }).getByRole('button', { name: "IP'leri kopyala" }).click();
     await expect(page.getByText('2 IP panoya kopyalandı (her satırda bir tane).')).toBeVisible();
     await page.getByRole('region', { name: 'Seçili sunucular için işlemler' }).getByRole('button', { name: 'SSH yapılandırması' }).click();
@@ -1042,7 +1084,7 @@ test.describe('server lifecycle (simulator, Turkish customer)', () => {
     await expect(tags.getByRole('button', { name: 'ops etiketini hepsinden kaldır' })).toBeVisible();
     await page.setViewportSize({ width: 390, height: 900 });
     await expectNoOverflow(page, 'bulk tags at 390 px');
-    await page.screenshot({ path: 'test-results/tour/servers-bulk-tags-390.png' });
+    await tour(page, 'servers-bulk-tags-390');
     await page.setViewportSize({ width: 1280, height: 720 });
     await tags.getByRole('button', { name: 'e2e etiketini hepsinden kaldır' }).click();
     await expect(tags.getByRole('button', { name: 'e2e etiketini hepsinden kaldır' })).toBeHidden();
@@ -1067,11 +1109,11 @@ test.describe('server lifecycle (simulator, Turkish customer)', () => {
     await expect(web1Card.getByText('Firewall', { exact: true })).toBeVisible({ timeout: 60_000 });
     await expect(page.getByRole('link', { name: /^web-2/ }).getByText(/^Firewall/)).toHaveCount(0);
     await expect(page.locator('#boot-loader')).toHaveCSS('opacity', '0');
-    await page.screenshot({ path: 'test-results/tour/servers-firewall-pill.png' });
+    await tour(page, 'servers-firewall-pill');
     await page.setViewportSize({ width: 390, height: 900 });
     await web1Card.scrollIntoViewIfNeeded();
     await expectNoOverflow(page, 'firewall pill at 390 px');
-    await page.screenshot({ path: 'test-results/tour/servers-firewall-pill-390.png' });
+    await tour(page, 'servers-firewall-pill-390');
     await page.setViewportSize({ width: 1280, height: 720 });
 
     // Ctrl+K copies a server's SSH command without opening its page.
@@ -1080,7 +1122,12 @@ test.describe('server lifecycle (simulator, Turkish customer)', () => {
     const sshOption = page.getByRole('option', { name: /web-1: SSH komutunu kopyala/ });
     await expect(sshOption).toContainText('ssh root@');
     await page.setViewportSize({ width: 390, height: 900 });
-    await page.screenshot({ path: 'test-results/tour/palette-ssh-390.png' });
+    // On a phone the palette is as wide as the screen and no wider: its search field and its rows are whole.
+    const palette = page.getByRole('dialog', { name: 'Komut paleti' });
+    await expectInside(page, palette, 'command palette at 390 px');
+    await expectInside(page, palette.locator('input, [role="option"]'), 'the search field and rows of the command palette at 390 px');
+    await expectNoOverflow(page, 'command palette at 390 px');
+    await tour(page, 'palette-ssh-390');
     await page.setViewportSize({ width: 1280, height: 720 });
     await sshOption.click();
     await expect(page.getByText('web-1 SSH komutu kopyalandı.')).toBeVisible();
@@ -1093,7 +1140,9 @@ test.describe('server lifecycle (simulator, Turkish customer)', () => {
     const tagOption = page.getByRole('option', { name: /Etiket: ops/ });
     await expect(tagOption).toContainText('2 sunucu');
     await page.setViewportSize({ width: 390, height: 900 });
-    await page.screenshot({ path: 'test-results/tour/palette-tag-390.png' });
+    await expectInside(page, palette, 'command palette (a tag) at 390 px');
+    await expectInside(page, palette.locator('input, [role="option"]'), 'the search field and rows of the command palette (a tag) at 390 px');
+    await tour(page, 'palette-tag-390');
     await page.setViewportSize({ width: 1280, height: 720 });
     await tagOption.click();
     await expect(page).toHaveURL(/\?tag=ops$/);
@@ -1104,7 +1153,7 @@ test.describe('server lifecycle (simulator, Turkish customer)', () => {
     await page.setViewportSize({ width: 390, height: 900 });
     await expectNoOverflow(page, 'tag rename at 390 px');
     await rename.scrollIntoViewIfNeeded();
-    await page.screenshot({ path: 'test-results/tour/servers-tag-rename-390.png' });
+    await tour(page, 'servers-tag-rename-390');
     await page.setViewportSize({ width: 1280, height: 720 });
     await rename.getByRole('button', { name: 'Kaydet' }).click();
     await expect(page.getByText('2 sunucuda etiket yeniden adlandırıldı.')).toBeVisible();
@@ -1145,10 +1194,10 @@ test.describe('server lifecycle (simulator, Turkish customer)', () => {
     await expect(diag.getByText('10.30.0.20', { exact: true })).toBeVisible();
     await expect(diag.getByText('Son işlemler', { exact: true })).toBeVisible();
     await expect(diag.getByRole('link', { name: /web-1 sunucusunu aç/ })).toHaveAttribute('href', `/servers/${web1Id}`);
-    await staff.screenshot({ path: 'test-results/tour/support-diagnostics.png', fullPage: true });
+    await tour(staff, 'support-diagnostics', true);
     await staff.setViewportSize({ width: 390, height: 900 });
     await expectNoOverflow(staff, 'ticket diagnostics at 390 px');
-    await staff.screenshot({ path: 'test-results/tour/support-diagnostics-390.png', fullPage: true });
+    await tour(staff, 'support-diagnostics-390', true);
     await staff.setViewportSize({ width: 1280, height: 720 });
     const staffTicket = await (await staff.request.get(`/api/support/tickets/${ticket.id}`)).json() as { staff: boolean; diagnostics?: { server?: { name?: string; addresses?: string[] } } | null };
     expect(staffTicket.staff).toBe(true);
@@ -1185,7 +1234,7 @@ test.describe('server lifecycle (simulator, Turkish customer)', () => {
     await staff.setViewportSize({ width: 390, height: 900 });
     await expectNoOverflow(staff, 'user list filtered to the owner at 390 px');
     await staff.getByRole('link', { name: `${user.email} kişisinin 2 sunucusunu göster` }).scrollIntoViewIfNeeded();
-    await staff.screenshot({ path: 'test-results/tour/admin-user-servers-390.png' });
+    await tour(staff, 'admin-user-servers-390');
     await staff.setViewportSize({ width: 1280, height: 720 });
     // Their summary links to the same filtered server list.
     await staff.getByRole('button', { name: new RegExp(user.email) }).first().click();
@@ -1198,7 +1247,7 @@ test.describe('server lifecycle (simulator, Turkish customer)', () => {
     const recentUser = staff.locator(`[role="option"][id$="r:/admin/users?q=${encodeURIComponent(user.email)}"]`);
     await expect(recentUser).toContainText(user.email);
     await expect(recentUser).toContainText('Kullanıcı');
-    await staff.screenshot({ path: 'test-results/tour/palette-recent-user.png' });
+    await tour(staff, 'palette-recent-user');
     await staff.keyboard.press('Escape');
     await expect(staff.getByRole('dialog', { name: 'Komut paleti' })).toBeHidden();
     await staff.getByRole('link', { name: `${user.email} kişisinin 2 sunucusunu göster` }).click();
@@ -1208,7 +1257,7 @@ test.describe('server lifecycle (simulator, Turkish customer)', () => {
     await expect(staff.getByText('2 sunucudan 2 gösteriliyor')).toBeVisible();
     await staff.setViewportSize({ width: 390, height: 900 });
     await expectNoOverflow(staff, 'admin servers filtered to an owner at 390 px');
-    await staff.screenshot({ path: 'test-results/tour/admin-servers-owner-390.png' });
+    await tour(staff, 'admin-servers-owner-390');
     await staff.setViewportSize({ width: 1280, height: 720 });
     await staff.getByRole('button', { name: `Sahip süzgecini kaldır: ${user.email}` }).click();
     await expect(staff).not.toHaveURL(/owner=/);
@@ -1218,7 +1267,9 @@ test.describe('server lifecycle (simulator, Turkish customer)', () => {
     const ownerOption = staff.getByRole('option', { name: new RegExp(`Sunucuları: ${user.email}`) });
     await expect(ownerOption).toContainText('2 sunucu');
     await staff.setViewportSize({ width: 390, height: 900 });
-    await staff.screenshot({ path: 'test-results/tour/palette-owner-390.png' });
+    await expectInside(staff, staff.getByRole('dialog', { name: 'Komut paleti' }), 'command palette (an owner) at 390 px');
+    await expectInside(staff, staff.getByRole('dialog', { name: 'Komut paleti' }).locator('input, [role="option"]'), 'the search field and rows of the command palette (an owner) at 390 px');
+    await tour(staff, 'palette-owner-390');
     await staff.setViewportSize({ width: 1280, height: 720 });
     await ownerOption.click();
     await expect(staff).toHaveURL(/\/admin\/servers\?owner=/);
@@ -1247,7 +1298,10 @@ test.describe('server lifecycle (simulator, Turkish customer)', () => {
     for (const width of [390, 1280]) {
       await staff.setViewportSize({ width, height: 900 });
       await staff.waitForTimeout(400);
-      await staff.screenshot({ path: `test-results/tour/admin-bulk-delete-${width}.png` });
+      // Both buttons of the question are whole on the screen at every width (stacked on a phone, the long one wrapping).
+      await expectInside(staff, ask.getByRole('button'), `buttons of the bulk delete question at ${width} px`);
+      await expectInside(staff, ask, `the bulk delete question at ${width} px`);
+      await tour(staff, `admin-bulk-delete-${width}`);
     }
     await ask.getByRole('button', { name: 'Vazgeç' }).click();
     await expect(ask).toBeHidden();
@@ -1300,8 +1354,10 @@ test.describe('server lifecycle (simulator, Turkish customer)', () => {
     await expect(each.getByRole('listitem')).toHaveCount(2);
     await expect(each.getByRole('button').first()).toContainText('(Okunmamış)');
     await expect(grouped.getByRole('button', { name: 'Tek tek bildirimleri gizle', exact: true })).toHaveAttribute('aria-expanded', 'true');
+    // Operations are named in words in the inbox, never by their code names.
+    await expect(page.getByText(/: (power_on|power_off|shutdown|reset) tamamlandı/)).toHaveCount(0);
     await page.waitForTimeout(300);
-    await page.screenshot({ path: 'test-results/tour/bell-group.png' });
+    await tour(page, 'bell-group');
     await groupRow.click();
     await expect(page).toHaveURL(new RegExp(`/support/${ticket.id}$`));
     await expect.poll(async () => (await replyNotes()).every((n) => !!n.readAt)).toBe(true);
@@ -1345,7 +1401,7 @@ test.describe('server lifecycle (simulator, Turkish customer)', () => {
         await expect(page.getByText(/Silinecek · /)).toBeVisible();
         await page.setViewportSize({ width: 390, height: 900 });
         await expectNoOverflow(page, 'list filtered to servers awaiting deletion at 390 px');
-        await page.screenshot({ path: 'test-results/tour/servers-trash-filter-390.png', fullPage: true });
+        await tour(page, 'servers-trash-filter-390', true);
         await page.setViewportSize({ width: 1280, height: 720 });
         await page.getByRole('link', { name: /^web-1 / }).click();
         await page.getByRole('button', { name: 'Şimdi kalıcı olarak sil' }).click();
@@ -1443,7 +1499,7 @@ test.describe('people, settings and smart features (English browser)', () => {
     await expect(newUser.getByRole('textbox', { name: 'Password' })).not.toHaveValue(initial);
     await expect(newUser.getByRole('button', { name: 'Copy' })).toBeEnabled();
     await expect(page.locator('#boot-loader')).toHaveCSS('opacity', '0');
-    await page.screenshot({ path: 'test-results/tour/user-new-password.png' });
+    await tour(page, 'user-new-password');
     await newUser.getByRole('button', { name: 'Cancel' }).click();
     await page.getByRole('link', { name: 'Roles' }).click();
     for (const name of ['Administrator', 'Customer', 'Operator', 'Support', 'Auditor']) await expect(page.getByRole('heading', { name: new RegExp('^' + name) })).toBeVisible();
@@ -1471,7 +1527,7 @@ test.describe('people, settings and smart features (English browser)', () => {
     await expect(page.getByText('Two-factor is off')).toBeVisible();
     await expect(page.getByText('No forgotten sign-ins')).toBeVisible();
     await expect(page.locator('#boot-loader')).toHaveCSS('opacity', '0');
-    await page.screenshot({ path: 'test-results/tour/security-score.png' });
+    await tour(page, 'security-score');
     await page.getByRole('button', { name: 'Fix: Two-factor is off' }).click();
     await expect(page.locator('#two-factor')).toHaveClass(/ring-2/);
     await expect(page.locator('#two-factor')).toBeInViewport();
@@ -1483,12 +1539,12 @@ test.describe('people, settings and smart features (English browser)', () => {
     await expect(page.getByText('The new password cannot be the same as the current one.')).toBeVisible();
     await page.getByLabel('Current password', { exact: true }).fill('');
     await page.getByLabel('New password', { exact: true }).fill('same-password-123');
-    await page.screenshot({ path: 'test-results/tour/change-password.png' });
+    await tour(page, 'change-password');
     await page.getByLabel('New password', { exact: true }).fill('');
     await page.setViewportSize({ width: 390, height: 900 });
     await page.evaluate(() => window.scrollTo(0, 0));
     await expectNoOverflow(page, 'security score at 390 px');
-    await page.screenshot({ path: 'test-results/tour/security-score-390.png', fullPage: true });
+    await tour(page, 'security-score-390', true);
     await page.setViewportSize({ width: 1280, height: 720 });
   });
 
@@ -1545,7 +1601,7 @@ test.describe('people, settings and smart features (English browser)', () => {
       await expect(serversEntry.locator('[aria-hidden=true]').filter({ hasText: /^\d+\+?$/ })).toHaveText(String(real.failedOperations));
     } else if (!real.failedOperations) await expect(serversEntry).toHaveAccessibleName(/^Servers$/);
     await page.waitForTimeout(300);
-    await page.screenshot({ path: 'test-results/tour/nav-attention.png' });
+    await tour(page, 'nav-attention');
 
     // The hold: a bar above every page, in the page's flow, with since when and the way to the page that releases it.
     const bar = page.getByRole('complementary', { name: 'Restore hold' });
@@ -1560,14 +1616,14 @@ test.describe('people, settings and smart features (English browser)', () => {
     });
     expect(edges.headerTop).toBeGreaterThanOrEqual(edges.barBottom);
     await page.waitForTimeout(300);
-    await page.screenshot({ path: 'test-results/tour/restore-hold-bar.png' });
+    await tour(page, 'restore-hold-bar');
     await page.setViewportSize({ width: 390, height: 844 });
     await expectNoOverflow(page, 'restore-hold bar at 390 px');
     // On a phone: the fact, since when and the link; the sentence of help is left out.
     await expect(bar).toContainText('The panel is on hold after a restore');
     await expect(bar.getByText('It does nothing by itself until you release it.')).toBeHidden();
     await expect(bar.getByRole('link', { name: 'Open the System page' })).toBeVisible();
-    await page.screenshot({ path: 'test-results/tour/restore-hold-bar-390.png' });
+    await tour(page, 'restore-hold-bar-390');
     await page.setViewportSize({ width: 1280, height: 720 });
     await page.goto('/admin/users');
     await expect(bar).toBeVisible();
@@ -1585,7 +1641,7 @@ test.describe('people, settings and smart features (English browser)', () => {
     await expect(hold).toContainText('docker compose exec api node dist/cli.js release-restore-hold');
     await expect(health(page)).toHaveText('API, PostgreSQL and Redis are reachable');
     await page.waitForTimeout(300);
-    await page.screenshot({ path: 'test-results/tour/restore-hold-system.png', fullPage: true });
+    await tour(page, 'restore-hold-system', true);
     await page.setViewportSize({ width: 390, height: 844 });
     await expectNoOverflow(page, 'restore hold on the System page at 390 px');
     await page.setViewportSize({ width: 1280, height: 720 });
@@ -1647,7 +1703,7 @@ test.describe('people, settings and smart features (English browser)', () => {
     await expect(managed.getByRole('link', { name: 'Open activity' })).toHaveAttribute('href', '/account?tab=activity');
     await expect(managed.getByText('The reseller is switched off right now')).toHaveCount(0);
     await customer.waitForTimeout(300);
-    await customer.screenshot({ path: 'test-results/tour/account-managed.png', fullPage: true });
+    await tour(customer, 'account-managed', true);
     await customer.setViewportSize({ width: 390, height: 844 });
     await expectNoOverflow(customer, 'account managed by a reseller at 390 px');
     await customer.setViewportSize({ width: 1280, height: 720 });
@@ -1658,7 +1714,7 @@ test.describe('people, settings and smart features (English browser)', () => {
     await expect(leaving).toContainText('can no longer see or manage your servers');
     await expect(leaving).toContainText('This cannot be undone from the panel.');
     await customer.waitForTimeout(300);
-    await customer.screenshot({ path: 'test-results/tour/account-managed-leave.png' });
+    await tour(customer, 'account-managed-leave');
     await leaving.getByRole('button', { name: 'Cancel' }).click();
     await expect(leaving).toBeHidden();
     expect(((await (await customer.request.get('/api/reseller/summary')).json()) as { managedBy: unknown }).managedBy).toBeTruthy();
@@ -1685,7 +1741,7 @@ test.describe('people, settings and smart features (English browser)', () => {
     await expect(reseller.getByRole('listitem')).toContainText('Kept Customer · 0 servers');
     await expect(reseller).not.toContainText(leaver.email);
     await page.waitForTimeout(300);
-    await page.screenshot({ path: 'test-results/tour/reseller-customers.png' });
+    await tour(page, 'reseller-customers');
     await reseller.getByRole('button', { name: `Remove from reseller ${kept.email}` }).click();
     const releasing = page.getByRole('alertdialog', { name: `Remove ${kept.email} from this reseller?` });
     await expect(releasing).toContainText('The reseller can no longer see or manage this customer’s servers.');
@@ -1990,10 +2046,10 @@ test.describe('people, settings and smart features (English browser)', () => {
     await page.getByRole('button', { name: 'Rule', exact: true }).first().click();
     await page.getByRole('textbox', { name: 'Port or range' }).last().fill('22');
     await expect(page.getByText('The "TCP 22" rule appears twice')).toBeVisible();
-    await page.screenshot({ path: 'test-results/tour/firewall-hints.png', fullPage: true });
+    await tour(page, 'firewall-hints', true);
     await page.setViewportSize({ width: 390, height: 900 });
     await expectNoOverflow(page, 'firewall rules at 390 px');
-    await page.screenshot({ path: 'test-results/tour/firewall-hints-390.png', fullPage: true });
+    await tour(page, 'firewall-hints-390', true);
     await page.setViewportSize({ width: 1280, height: 720 });
     await page.getByRole('button', { name: 'Discard' }).click();
     await expect(page.getByText('You may want to check')).toHaveCount(0);
@@ -2016,10 +2072,10 @@ test.describe('people, settings and smart features (English browser)', () => {
     await page.getByRole('button', { name: 'Show all' }).click();
     await expect(card).toBeVisible();
     await expect(page.locator('#boot-loader')).toHaveCSS('opacity', '0');
-    await page.screenshot({ path: 'test-results/tour/firewalls-list.png', fullPage: true });
+    await tour(page, 'firewalls-list', true);
     await page.setViewportSize({ width: 390, height: 900 });
     await expectNoOverflow(page, 'firewall cards at 390 px');
-    await page.screenshot({ path: 'test-results/tour/firewalls-list-390.png', fullPage: true });
+    await tour(page, 'firewalls-list-390', true);
     await page.setViewportSize({ width: 1280, height: 720 });
     await card.click();
     await page.getByRole('button', { name: 'Delete' }).click();
@@ -2067,10 +2123,10 @@ test.describe('people, settings and smart features (English browser)', () => {
     expect(doc.openapi).toBe('3.1.0');
     expect(doc.paths['/servers/{id}/actions'].post.parameters.some((x: { name: string }) => x.name === 'Idempotency-Key')).toBe(true);
     await page.setViewportSize({ width: 390, height: 900 });
-    await page.screenshot({ path: 'test-results/tour/api-docs-390.png', fullPage: true });
+    await tour(page, 'api-docs-390', true);
     await expectNoOverflow(page, 'api reference at 390 px');
     await page.setViewportSize({ width: 1280, height: 900 });
-    await page.screenshot({ path: 'test-results/tour/api-docs.png' });
+    await tour(page, 'api-docs');
 
     // A token narrowed to viewing VMware: it may read connections, not users; every answer carries the rate headers.
     const made = await page.request.post('/api/account/api-tokens', { headers: csrf, data: { name: 'e2e narrowed', scope: 'read', expiresInDays: 30, permissions: ['vmware.view'] } });
@@ -2137,15 +2193,15 @@ test.describe('people, settings and smart features (English browser)', () => {
 
   test('billing: an invoice awaits payment, a declined card keeps it awaiting, a good one pays it; staff see it all', async ({ page }) => {
     test.setTimeout(240_000);
-    const shot = async (name: string) => page.screenshot({ path: `test-results/tour/${name}.png`, fullPage: true });
+    const shot = async (name: string) => tour(page, name, true);
     const csrf = { 'x-lightning-csrf': '1' };
     await signInAdmin(page);
     // Settings → Billing: turned on with the seller and the sandbox provider.
     await page.goto('/admin/settings?tab=billing');
     await expect(page.getByText('Billing on', { exact: true }).first()).toBeVisible();
     // How long a payment under review holds its invoice: seven days unless the admin says otherwise.
-    await expect(page.getByRole('textbox', { name: 'Days a payment under review holds its invoice' })).toHaveValue('7');
-    await expect(page.getByText('While a payment is under review, suspension, deletion and reminders wait for at most this long, and a second payment is refused for that time. 0 turns it off.')).toBeVisible();
+    await expect(page.getByRole('textbox', { name: 'Days a payment awaiting review holds its invoice' })).toHaveValue('7');
+    await expect(page.getByText('While a payment is awaiting review, suspension, deletion and reminders wait for at most this long, and a second payment is refused for that time. 0 turns it off.')).toBeVisible();
     await page.getByLabel('Company title').fill('Lightning Bilişim A.Ş.');
     await page.getByLabel('VKN').fill('1234567890');
     await page.getByLabel('Tax office').fill('Kadıköy');
@@ -2182,6 +2238,8 @@ test.describe('people, settings and smart features (English browser)', () => {
     await shot('upcoming-charges');
     await page.setViewportSize({ width: 390, height: 844 });
     await expectNoOverflow(page, 'upcoming charges at 390 px');
+    // The monthly budget keeps its action on a phone.
+    await expectInside(page, page.getByRole('button', { name: 'Set a budget', exact: true }), '"Set a budget" at 390 px');
     await shot('upcoming-charges-390');
     await page.setViewportSize({ width: 1280, height: 720 });
     await page.goto('/billing');
@@ -2247,6 +2305,12 @@ test.describe('people, settings and smart features (English browser)', () => {
     await shot('billing-invoice-paid');
     await page.setViewportSize({ width: 390, height: 844 });
     await expectNoOverflow(page, 'paid invoice at 390 px');
+    // On a phone every figure of a line is whole on the screen, under the line's name (no table cut off at the edge);
+    // the tax rate is written the English way.
+    const lineCells = page.getByRole('article').locator('tbody td');
+    await expectInside(page, lineCells, 'invoice line figures at 390 px');
+    await expect(lineCells.filter({ hasText: /^20%$/ }).first()).toBeVisible();
+    await expect(page.getByRole('article').getByText('%20')).toHaveCount(0);
     await shot('billing-invoice-390');
     await page.goto('/billing');
     await expectNoOverflow(page, 'billing at 390 px');
@@ -2325,14 +2389,14 @@ test.describe('people, settings and smart features (English browser)', () => {
     await page.getByLabel('Card number').fill('4000 0000 0000 4954');
     await page.getByRole('button', { name: 'Pay', exact: true }).click();
     await expect(page).toHaveURL(new RegExp(`/billing/invoices/${heldId}`));
-    await expect(page.getByText('Your payment is under review')).toBeVisible();
+    await expect(page.getByText('Your payment is awaiting review')).toBeVisible();
     await expect(page.getByText('The payment provider is reviewing the payment.')).toBeVisible();
     await expect(page.getByText('Pro forma · awaiting payment')).toBeVisible();
     await expect(page.getByText('Awaiting payment', { exact: true }).first()).toBeVisible();
     await expect(page.getByText('Checking the payment…')).toHaveCount(0);
     // No second payment while this one waits for staff (it could take the money twice): the pay buttons are off and
     // say why, and the API refuses one that is sent anyway.
-    await expect(page.getByText('A payment for this invoice is under review, so it cannot be paid again for now.', { exact: true })).toBeVisible();
+    await expect(page.getByText('A payment for this invoice is awaiting review, so it cannot be paid again for now.', { exact: true })).toBeVisible();
     await expect(page.getByRole('button', { name: /Sandbox/ })).toBeDisabled();
     const second = await page.request.post(`/api/billing/invoices/${heldId}/pay`, { headers: csrf, data: { method: 'card', provider: 'sandbox' } });
     expect([second.status(), (await second.json() as { code: string }).code]).toEqual([409, 'PAYMENT_IN_REVIEW']);
@@ -2394,13 +2458,13 @@ test.describe('people, settings and smart features (English browser)', () => {
     // (The first review is closed, so the invoice can be paid again: no note, and the button is on.)
     await page.goto(`/billing/invoices/${heldId}`);
     await expect(page.getByRole('button', { name: /Sandbox/ })).toBeEnabled();
-    await expect(page.getByText('A payment for this invoice is under review, so it cannot be paid again for now.')).toHaveCount(0);
+    await expect(page.getByText('A payment for this invoice is awaiting review, so it cannot be paid again for now.')).toHaveCount(0);
     await page.getByRole('button', { name: /Sandbox/ }).click();
     await expect(page).toHaveURL(/\/billing\/checkout\//);
     await page.getByLabel('Card number').fill('4000 0000 0000 4954');
     await page.getByRole('button', { name: 'Pay', exact: true }).click();
     await expect(page).toHaveURL(new RegExp(`/billing/invoices/${heldId}`));
-    await expect(page.getByText('Your payment is under review')).toBeVisible();
+    await expect(page.getByText('Your payment is awaiting review')).toBeVisible();
     // ...and staff open the invoice from the review list and record the payment. The dialog says what is recorded;
     // the answer says that the payment which waited for review was closed with it.
     await page.goto('/admin/billing?tab=payments&status=review');
@@ -2437,7 +2501,7 @@ test.describe('people, settings and smart features (English browser)', () => {
     // The customer's page of the invoice no longer says "under review".
     await page.goto(`/billing/invoices/${heldId}`);
     await expect(page.getByText('Paid', { exact: true }).first()).toBeVisible();
-    await expect(page.getByText('Your payment is under review')).toHaveCount(0);
+    await expect(page.getByText('Your payment is awaiting review')).toHaveCount(0);
     await page.goto(`/admin/billing/invoices/${invoiceId}`);
     await page.getByRole('button', { name: 'Refund', exact: true }).click();
     await page.getByLabel('Amount', { exact: true }).fill('50');
@@ -2726,7 +2790,12 @@ test.describe('people, settings and smart features (English browser)', () => {
       await expect(page.getByRole('heading', { name: heading, level: 1 })).toBeVisible();
       expect(await page.evaluate(() => document.documentElement.classList.contains('dark') || document.documentElement.dataset.theme === 'dark')).toBe(true);
       await page.waitForTimeout(2000);
-      await page.screenshot({ path: `test-results/tour/${name}.png`, fullPage: true });
+      // The capacity chart draws its bars in the dark theme too (a bar as wide as its share, not only axes and a legend).
+      if (name === 'dark-dashboard') {
+        const bars = page.getByRole('img', { name: 'vCPU capacity per pool' }).locator('.recharts-bar-rectangle path');
+        await expect.poll(async () => Math.max(0, ...(await bars.evaluateAll((list) => list.map((e) => e.getBoundingClientRect().width)))), { message: 'capacity bars drawn in dark mode', timeout: 10_000 }).toBeGreaterThan(20);
+      }
+      await tour(page, name, true);
     }
     // With billing off, staff get a way to turn it on.
     await page.goto('/billing');
@@ -2735,7 +2804,7 @@ test.describe('people, settings and smart features (English browser)', () => {
 
   test('tour of the newer screens', async ({ browser }) => {
     test.setTimeout(360_000);
-    const shot = async (page: Page, name: string) => page.screenshot({ path: `test-results/tour/${name}.png`, fullPage: true });
+    const shot = async (page: Page, name: string) => tour(page, name, true);
     const guest = await (await browser.newContext({ locale: 'tr-TR' })).newPage();
     // The public status page needs no sign-in.
     await guest.goto('/status');
@@ -3102,7 +3171,7 @@ test.describe('people, settings and smart features (English browser)', () => {
     await expect(visitor.getByRole('button', { name: 'Continue with GitHub' })).toBeVisible();
     await expect(visitor.getByLabel('E-mail or user name')).toBeVisible();
     await visitor.waitForTimeout(500);
-    await visitor.screenshot({ path: 'test-results/tour/login-methods.png', fullPage: true });
+    await tour(visitor, 'login-methods', true);
     await visitor.close();
     expect((await page.request.put('/api/admin/settings/sign-in', { headers: { 'x-lightning-csrf': '1' }, data: { username: false, providers: { github: { enabled: false } } } })).ok()).toBe(true);
     // The command palette finds a ticket by its number (read from the API: the server lifecycle test opens a ticket
@@ -3115,7 +3184,7 @@ test.describe('people, settings and smart features (English browser)', () => {
     await page.getByRole('combobox').fill(String(sshTicket!.number));
     await expect(page.getByRole('option', { name: new RegExp(`#${sshTicket!.number} Cannot reach my server over SSH`) })).toBeVisible();
     await page.waitForTimeout(300);
-    await page.screenshot({ path: 'test-results/tour/palette-ticket.png' });
+    await tour(page, 'palette-ticket');
     await page.keyboard.press('Enter');
     await expect(page).toHaveURL(/\/admin\/support\/[0-9a-f-]{36}$/);
     const ticketId = page.url().split('/').pop()!;
@@ -3123,7 +3192,7 @@ test.describe('people, settings and smart features (English browser)', () => {
     await page.getByRole('button', { name: /notifications/i }).first().click();
     await expect(page.getByRole('dialog').getByText('Today')).toBeVisible();
     await page.waitForTimeout(500);
-    await page.screenshot({ path: 'test-results/tour/bell.png' });
+    await tour(page, 'bell');
     // Only the unread ones, then one kind; "All" brings the rest back.
     const inbox = page.getByRole('dialog');
     await inbox.getByRole('group', { name: 'Show' }).getByRole('button', { name: /^Unread/ }).click();
@@ -3136,14 +3205,14 @@ test.describe('people, settings and smart features (English browser)', () => {
       expect(await bg(0), 'the chosen kind stands out').not.toBe(await bg(1));
     }
     await page.waitForTimeout(300);
-    await page.screenshot({ path: 'test-results/tour/bell-filters.png' });
+    await tour(page, 'bell-filters');
     await inbox.getByRole('group', { name: 'Show' }).getByRole('button', { name: 'All', exact: true }).click();
     await page.keyboard.press('Escape');
     // Unread notifications lead the tab title; losing the connection says so, and coming back refreshes.
     await expect(page).toHaveTitle(/^\(\d+\+?\) /);
     await page.context().setOffline(true);
     await expect(page.getByRole('status').filter({ hasText: 'Connection lost' })).toBeVisible();
-    await page.screenshot({ path: 'test-results/tour/offline.png' });
+    await tour(page, 'offline');
     await page.context().setOffline(false);
     await expect(page.getByText('Back online; the page is up to date.')).toBeVisible();
     await expect(page.getByRole('status').filter({ hasText: 'Connection lost' })).toBeHidden();
@@ -3172,7 +3241,7 @@ test.describe('people, settings and smart features (English browser)', () => {
     await page.getByRole('status').getByRole('button', { name: 'Clear filters' }).click();
     await expect(ssh).toBeVisible();
     await expect(page.getByRole('group', { name: 'By status' }).getByRole('button', { name: /^All 2/ })).toHaveAttribute('aria-pressed', 'true');
-    await page.screenshot({ path: 'test-results/tour/support-list.png' });
+    await tour(page, 'support-list');
     await page.goto('/admin/support');
     await expect(page.getByRole('link', { name: /Cannot reach my server over SSH/ }).getByText('Draft', { exact: true })).toBeVisible();
     await page.setViewportSize({ width: 390, height: 844 });
@@ -3379,9 +3448,9 @@ test('second step at sign-in offers only the methods the account has', async ({ 
   await expect(tabs.getByRole('tab')).toHaveText(['Uygulama', 'Yedek kod']);
   await expect(tabs.getByRole('tab', { name: 'Uygulama' })).toHaveAttribute('aria-selected', 'true');
   await expectNoOverflow(again, 'second step at 390 px');
-  await again.screenshot({ path: 'test-results/tour/login-second-step-390.png' });
+  await tour(again, 'login-second-step-390');
   await again.setViewportSize({ width: 1280, height: 800 });
-  await again.screenshot({ path: 'test-results/tour/login-second-step.png' });
+  await tour(again, 'login-second-step');
   // A fresh code (the one used for setup may not be taken twice).
   await expect.poll(async () => totp(secret), { timeout: 35_000, intervals: [1000] }).not.toBe(await totp(secret));
   await again.getByRole('textbox', { name: 'Doğrulama kodu' }).fill(await totp(secret));

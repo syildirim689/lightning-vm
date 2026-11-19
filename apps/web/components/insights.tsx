@@ -33,8 +33,14 @@ export default function Insights({ scope }: { scope: 'staff' | 'mine' }) {
   const ago = (v: unknown) => { const at = typeof v === 'string' || typeof v === 'number' ? new Date(v).getTime() : NaN; return Number.isNaN(at) ? t('aWhileAgo') : format.relativeTime(new Date(Math.min(at, now.getTime())), now); };
   // A finding the panel has no text for yet (a newer API) is still said in words, never as its code.
   const text = (i: Insight, part: 'title' | 'body') => t.has(`codes.${i.code}.${part}` as 'codes.POOL_NEARLY_FULL.title') ? t(`codes.${i.code}.${part}` as 'codes.POOL_NEARLY_FULL.title', p(i)) : t(`unknown.${part}`);
+  // Counts are numbers for the texts ("1 operation", "3 operations"), whichever way the API wrote them; a price is
+  // written as money with its currency.
+  const counts = ['count', 'n', 'days', 'hours', 'free', 'servers'];
   const p = (i: Insight): Record<string, string | number> => ({ oldest: ago(null), ...Object.fromEntries(Object.entries(i.params ?? {})
-    .map(([k, v]) => [k, k === 'resource' ? t(`resource.${v}` as 'resource.vcpu') : k === 'oldest' ? ago(v) : v ?? ''])) });
+    .map(([k, v]) => [k, k === 'resource' ? t(`resource.${v}` as 'resource.vcpu') : k === 'oldest' ? ago(v)
+      : counts.includes(k) && typeof v === 'string' && v.trim() !== '' && Number.isFinite(Number(v)) ? Number(v)
+      : k === 'price' && v !== null && v !== '' && Number.isFinite(Number(v)) && typeof i.params.currency === 'string' && /^[A-Z]{3}$/.test(i.params.currency)
+        ? format.number(Number(v), { style: 'currency', currency: i.params.currency }) : v ?? ''])) });
   return <section aria-labelledby={`insights-${scope}`} className="flex flex-col gap-3">
     <div className="flex items-center gap-2">
       <h2 id={`insights-${scope}`} className="text-base font-semibold">{t('title')}</h2>

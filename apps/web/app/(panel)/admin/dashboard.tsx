@@ -1,7 +1,7 @@
 "use client";
 import { Card, ProgressBar } from '@heroui/react';
 import NextLink from 'next/link';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useFormatter, useNow, useTranslations } from 'next-intl';
 import { Bar, BarChart, CartesianGrid, Cell, Legend, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { I } from '../../../components/icon';
@@ -56,7 +56,9 @@ export default function Dashboard({ setupOpen }: { setupOpen: boolean }) {
     const inDay = (ops ?? []).filter((o) => { const c = new Date(o.createdAt); return c >= d && c.getTime() < d.getTime() + 86_400_000; });
     return { day: format.dateTime(d, { weekday: 'short' }), ok: inDay.filter((o) => o.status === 'succeeded').length, failed: inDay.filter((o) => o.status === 'failed').length };
   });
-  const capacityData = (pools ?? []).map((p) => ({ name: p.name, used: p.capacity.used.vcpu ?? 0, reserved: p.capacity.reserved.vcpu ?? 0, available: p.capacity.available.vcpu ?? 0 }));
+  // The same rows object while the pools are the same: the page redraws every few seconds (operations, servers, the
+  // clock), and a chart handed new rows each time starts its bars again from nothing.
+  const capacityData = useMemo(() => (pools ?? []).map((p) => ({ name: p.name, used: p.capacity.used.vcpu ?? 0, reserved: p.capacity.reserved.vcpu ?? 0, available: p.capacity.available.vcpu ?? 0 })), [pools]);
 
   return <div className="flex flex-col gap-6">
     <PageHeader eyebrow={t('eyebrow')} title={t('title')} description={t('intro')}/>

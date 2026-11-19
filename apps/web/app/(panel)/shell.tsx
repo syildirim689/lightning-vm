@@ -195,7 +195,7 @@ function RestoreHoldBar({ user }: { user: User }) {
       <span className="min-w-0">
         <span className="font-medium">{t('barTitle')}</span>
         {hold.since && <span className="opacity-90"> · {t('barSince', { time: format.dateTime(hold.since, { dateStyle: 'medium', timeStyle: 'short' }) })}</span>}
-        <span className={release ? 'hidden opacity-90 sm:inline' : 'opacity-90'}> ·{t(release ? 'barHelp' : 'barAsk')}</span>
+        <span className={release ? 'hidden opacity-90 sm:inline' : 'opacity-90'}> · {t(release ? 'barHelp' : 'barAsk')}</span>
       </span>
     </p>
     {release && <NextLink href="/admin/system" className="shrink-0 rounded font-semibold underline underline-offset-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-current">{t('barOpen')}</NextLink>}
@@ -228,13 +228,13 @@ export default function Shell({ user, branding, version, children }: { user: Use
     <AnnouncementBar/>
     <RestoreHoldBar user={user}/>
     <div className="flex min-h-0 flex-1">
-      <aside className="sticky top-0 hidden h-dvh w-64 shrink-0 flex-col gap-4 overflow-y-auto border-r border-separator bg-surface px-3 py-5 lg:flex">
+      <aside data-shell-nav className="sticky top-0 hidden h-dvh w-64 shrink-0 flex-col gap-4 overflow-y-auto border-r border-separator bg-surface px-3 py-5 lg:flex">
         <Brand branding={branding} href={home}/>
         <NavList user={user}/>
         {footer}
       </aside>
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-30 flex h-14 items-center gap-1 border-b border-separator bg-background/85 px-3 backdrop-blur sm:gap-2 md:px-6">
+        <header data-shell-bar className="sticky top-0 z-30 flex h-14 items-center gap-1 border-b border-separator bg-background/85 px-3 backdrop-blur sm:gap-2 md:px-6">
           <Drawer>
             <Button isIconOnly variant="ghost" size="sm" aria-label={t('openMenu')} className="lg:hidden" onPress={() => setOpen(true)}><I name="menu" size={20}/></Button>
             <Drawer.Backdrop isOpen={open} onOpenChange={setOpen}>

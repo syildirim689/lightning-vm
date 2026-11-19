@@ -4,6 +4,7 @@
 // older API, a ticket without a server or a snapshot that could not be taken sends none, and nothing is drawn.
 import NextLink from 'next/link';
 import { useFormatter, useTranslations } from 'next-intl';
+import { memoryGb } from '../../../../../lib/sizes';
 import { I } from '../../../../../components/icon';
 import { Ago, Mono, StatusChip, type Tone } from '../../../../../components/ui';
 import { useErrorText } from '../../../../../lib/api';
@@ -44,7 +45,7 @@ export function TicketDiagnostics({ id }: { id: string }) {
   const stateText = s.state ? `${say(ts, `state.${s.state}`, s.state)}${s.state === 'ready' && s.power ? ` · ${say(ts, `power.${s.power}`, s.power)}` : ''}` : null;
   const stateTone: Tone = s.state === 'ready' ? (s.power === 'poweredOn' ? 'success' : 'default') : s.state === 'error' || s.state === 'missing' ? 'danger' : 'accent';
   const size = typeof s.vcpu === 'number' && typeof s.memoryMb === 'number' && typeof s.diskGb === 'number' && (s.vcpu || s.memoryMb || s.diskGb)
-    ? ts('size', { vcpu: s.vcpu, memory: s.memoryMb / 1024, disk: s.diskGb }) : null;
+    ? ts('size', { vcpu: s.vcpu, memory: memoryGb(format, s.memoryMb), disk: s.diskGb }) : null;
   const traffic = s.traffic && typeof s.traffic.allowanceGb === 'number' ? s.traffic : null;
   const facts: [string, React.ReactNode][] = [
     [t('state'), stateText && <span className="flex flex-wrap items-center gap-1.5"><StatusChip tone={stateTone}>{stateText}</StatusChip>

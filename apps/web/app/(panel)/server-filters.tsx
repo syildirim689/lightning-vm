@@ -102,7 +102,7 @@ export function ServerTotals({ servers }: { servers: Server[] }) {
   return <p role="status" aria-label={t('label')} className="flex flex-wrap items-center gap-x-4 gap-y-1.5 rounded-xl border border-dashed border-border px-4 py-2.5 text-sm tabular-nums">
     <span className="font-medium">{t('servers', { n: servers.length })}</span>
     {item('cpu', t('vcpu', { n: sum('vcpu') }))}
-    {item('memory-stick', t('memory', { n: Math.round(sum('memoryMb') / 102.4) / 10 }))}
+    {item('memory-stick', t('memory', { n: format.number(sum('memoryMb') / 1024, { maximumFractionDigits: 1 }) }))}
     {item('hard-drive', t('disk', { n: sum('diskGb') }))}
     {money.length > 0 && <span className="flex items-center gap-1.5 sm:ml-auto"><I name="wallet" size={14} className="text-muted"/>{t('monthly', { price: money.join(' + ') })}</span>}
   </p>;

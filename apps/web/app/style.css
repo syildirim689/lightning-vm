@@ -13,6 +13,9 @@
   /* Fields and unselected controls need a visible edge on cards. */
   --field-border: var(--border);
   --field-border-width: 1px;
+  /* Warning as text: the amber of the warning surfaces is too pale to read on white (about 2:1), so words get a
+     darker shade of it (over 4.5:1 on white and on the tinted cards). */
+  --warning-text: oklch(0.5 0.125 62);
 }
 .dark,
 [data-theme="dark"] {
@@ -28,7 +31,10 @@
   --focus: oklch(0.82 0.16 78);
   --default: oklch(0.3 0.022 262);
   --field-background: oklch(0.235 0.02 262);
+  --warning-text: var(--warning);
 }
+/* Every "text-warning" in the panel reads with that shade (icons beside the words take it too). */
+.text-warning { color: var(--warning-text); }
 
 @theme inline {
   --font-sans: var(--font-fira-sans), ui-sans-serif, system-ui, sans-serif;
@@ -133,6 +139,9 @@ html[data-a11y-transparency="reduce"] .page-loader { background: var(--backgroun
 .modal__dialog, .alert-dialog__dialog { translate: var(--win-x, 0px) var(--win-y, 0px); }
 .win-controls, .win-grip, .win-menu, .win-preview { display: none; }
 .modal__header + .modal__body { margin-top: 1.25rem; }
+/* The buttons under a dialog never leave it: a row that does not fit goes on to a second line. */
+.modal__footer, .alert-dialog__footer { flex-wrap: wrap; }
+:is(.modal__footer, .alert-dialog__footer) > * { max-width: 100%; }
 @media (min-width: 640px) {
   /* Sizes with room: a form, a detail view and a wide one. Never wider than the screen. */
   .modal__container { padding: 1.5rem; }
@@ -249,6 +258,12 @@ html[data-a11y-transparency="reduce"] .page-loader { background: var(--backgroun
   /* A sheet: full width, rounded only on top, never taller than the screen, with a handle to show it can be closed. */
   .modal__header { padding-inline-end: 2.75rem; padding-bottom: 0.875rem; border-bottom: 1px solid var(--separator); }
   .modal__container:not(.modal__container--full) { padding: 0; }
-  .modal__container:not(.modal__container--full) > .modal__dialog { max-width: none; border-bottom-left-radius: 0; border-bottom-right-radius: 0; padding-bottom: calc(1.5rem + env(safe-area-inset-bottom)); max-height: calc(var(--visual-viewport-height, 100dvh) - 1.5rem); }
+  /* The buttons under a sheet are stacked, the confirming one on top, each as wide as the sheet; a label longer
+     than the sheet wraps inside its button. */
+  .modal__footer, .alert-dialog__footer { flex-direction: column-reverse; align-items: stretch; }
+  :is(.modal__footer, .alert-dialog__footer) > * { width: 100%; margin-inline: 0; }
+  :is(.modal__footer, .alert-dialog__footer) > :is(button, a) { height: auto; min-height: 2.5rem; padding-block: 0.375rem; white-space: normal; text-align: center; }
+  /* A sheet is as wide as the screen and never wider, whatever width the dialog asked for (the command palette's 40rem). */
+  .modal__container:not(.modal__container--full) > .modal__dialog { width: 100%; max-width: 100%; border-bottom-left-radius: 0; border-bottom-right-radius: 0; padding-bottom: calc(1.5rem + env(safe-area-inset-bottom)); max-height: calc(var(--visual-viewport-height, 100dvh) - 1.5rem); }
   .modal__container:not(.modal__container--full) > .modal__dialog::before { content: ""; position: absolute; top: 0.5rem; left: 50%; width: 2.25rem; height: 0.25rem; margin-left: -1.125rem; border-radius: 9999px; background: var(--separator); }
 }

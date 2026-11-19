@@ -233,17 +233,18 @@ export default function Order() {
             onApply={() => { if (d.type === 'package' && recommended) d.set({ packageId: recommended }); else if (custom && need) d.set(snap(need, custom)); }}/>
           {d.type === 'package' && <RadioGroup aria-label={t('package')} value={d.packageId} onChange={(v) => d.set({ packageId: v })} className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
             {packages.map((p) => <Radio key={p.id} value={p.id} isDisabled={!!blocked(p)} aria-label={t('packageOption', { name: p.name, vcpu: p.vcpu, memory: gb(p.memoryMb), disk: p.diskGb, price: money(p.priceMonthly, p.currency) })}
-              className="group relative rounded-xl border border-border p-4 transition-all duration-150 hover:-translate-y-0.5 hover:shadow-md data-[disabled=true]:translate-y-0 data-[disabled=true]:opacity-60 data-[disabled=true]:shadow-none data-[selected=true]:border-accent data-[selected=true]:bg-accent-soft">
+              className="group relative rounded-xl border border-border p-4 transition-all duration-150 hover:-translate-y-0.5 hover:shadow-md data-[disabled=true]:translate-y-0 data-[disabled=true]:opacity-100 data-[disabled=true]:shadow-none data-[selected=true]:border-accent data-[selected=true]:bg-accent-soft">
               {bestValue === p.id && <span className="absolute -top-2.5 right-3 rounded-full bg-success px-2 py-0.5 text-[10px] font-semibold uppercase text-success-foreground">{t('bestValue')}</span>}
               {recommended === p.id && <motion.span initial={{ scale: 0.6, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="absolute -top-2.5 left-3 inline-flex items-center gap-1 rounded-full bg-accent px-2 py-0.5 text-[10px] font-semibold uppercase text-accent-foreground"><I name="wand-sparkles" size={10}/>{t('advisor.recommended')}</motion.span>}
               <Radio.Content className="flex w-full items-start gap-3">
-                <Radio.Control className="mt-0.5"><Radio.Indicator/></Radio.Control>
-                <span className="flex flex-col gap-1">
+                {/* A package that cannot be chosen is dimmed, but not the line that says why. */}
+                <Radio.Control className="mt-0.5 group-data-[disabled=true]:opacity-50"><Radio.Indicator/></Radio.Control>
+                <span className="flex flex-col gap-1 group-data-[disabled=true]:[&>:not([data-why])]:opacity-60">
                   <span className="font-semibold">{p.name}</span>
                   <span className="text-xs text-muted">{t('shape', { vcpu: p.vcpu, memory: gb(p.memoryMb), disk: p.diskGb })}</span>
                   <span className="text-lg font-semibold tabular-nums">{money(p.priceMonthly, p.currency)}<span className="text-xs font-normal text-muted"> / {t('perMonth')}</span></span>
                   <span className="text-[11px] tabular-nums text-muted">{t('perVcpu', { price: money(Number(p.priceMonthly) / p.vcpu, p.currency) })}</span>
-                  {blocked(p) && <span className="flex items-center gap-1 text-xs text-warning"><I name="triangle-alert" size={12}/>{blocked(p)}</span>}
+                  {blocked(p) && <span data-why className="flex items-center gap-1 text-xs font-medium text-warning"><I name="triangle-alert" size={12}/>{blocked(p)}</span>}
                 </span>
               </Radio.Content>
             </Radio>)}

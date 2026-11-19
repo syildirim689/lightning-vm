@@ -78,7 +78,7 @@ export default function Payments({ readOnly }: { readOnly: boolean }) {
           return <motion.button key={p.id} type="button" onClick={() => setOpen(p.id)} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: Math.min(i, 20) * 0.015 }}
             className="flex flex-col gap-2 rounded-2xl border border-border bg-surface p-4 text-left outline-offset-2 transition hover:-translate-y-0.5 hover:border-accent hover:shadow-lg">
             <span className="flex items-start justify-between gap-2">
-              <span className="min-w-0"><span className="block truncate font-semibold">{p.name}</span><span className="block truncate text-xs text-muted">{p.platform}</span></span>
+              <span className="min-w-0"><span className="line-clamp-2 font-semibold [overflow-wrap:anywhere]" title={p.name}>{p.name}</span><span className="block truncate text-xs text-muted">{p.platform}</span></span>
               <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-default text-muted"><I name={({ bank: 'landmark', wallet: 'wallet', gateway: 'credit-card', international: 'globe' } as const)[p.kind]} size={18}/></span>
             </span>
             <span className="flex flex-wrap gap-1.5">

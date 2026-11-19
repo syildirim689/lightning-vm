@@ -19,6 +19,7 @@ import { downloadCsv, localDay } from '../../../../lib/csv';
 import { fold } from '../../../../lib/note-line';
 import { apiFetch, useErrorText } from '../../../../lib/api';
 import type { Invoice, Payment, Subscription } from '../../../../lib/billing';
+import { useSubscriptionLabel } from '../../../../lib/subscription-label';
 import { invoiceState, invoiceTone, isReview, isReviewCode, paymentState, paymentTone, subscriptionTone, waitedFor, waitingSince } from '../../../../lib/billing';
 import { useMe } from '../../../../lib/me';
 import { can } from '../../../../lib/permissions';
@@ -183,6 +184,7 @@ function Invoices() {
 const subscriptionFilters = ['active', 'past_due', 'suspended', 'pending', 'cancelled', 'ended'] as const;
 
 function Subscriptions({ manage }: { manage: boolean }) {
+  const subscription = useSubscriptionLabel();
   const t = useTranslations('BillingAdmin');
   const tb = useTranslations('Billing');
   const format = useFormatter();
@@ -216,7 +218,7 @@ function Subscriptions({ manage }: { manage: boolean }) {
       empty={!list ? '…' : find || status ? <>{t('noMatch')} <button type="button" className="font-medium text-accent hover:underline" onClick={clear}>{t('clear')}</button></> : t('noSubscriptions')}
       columns={[{ id: 'what', label: t('what') }, { id: 'who', label: t('customer') }, { id: 'amount', label: tb('col.amount') }, { id: 'end', label: t('periodEnd') }, { id: 'status', label: tb('col.status') }, { id: 'act', label: <span className="sr-only">{tb('col.actions')}</span> }]}
       cells={(s) => [
-        <span key="w">{s.serverId ? <NextLink href={`/servers/${s.serverId}`} className="text-accent hover:underline">{s.description}</NextLink> : s.description}</span>,
+        <span key="w">{s.serverId ? <NextLink href={`/servers/${s.serverId}`} className="text-accent hover:underline">{subscription(s.description)}</NextLink> : subscription(s.description)}</span>,
         <span key="u" className="text-sm">{s.email}</span>,
         <span key="a" className="tabular-nums">{format.number(Number(s.amount), { style: 'currency', currency: s.currency })}{s.periodMonths > 1 && ` × ${s.periodMonths}`}</span>,
         <span key="e" className="text-sm">{s.periodEnd ? format.dateTime(new Date(s.periodEnd), { dateStyle: 'medium' }) : '–'}{s.cancelAtPeriodEnd && <span className="block text-xs text-warning">{t('endsThen')}</span>}</span>,

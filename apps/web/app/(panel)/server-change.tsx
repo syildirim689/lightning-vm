@@ -5,6 +5,7 @@ import { Button, toast } from '@heroui/react';
 import { useUnits } from '../../lib/units';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useFormatter, useTranslations } from 'next-intl';
+import { memoryGb } from '../../lib/sizes';
 import { useState } from 'react';
 import { I } from '../../components/icon';
 import { CheckboxInput, ConfirmButton, NumberInput, Notice, Section, SelectInput, TextInput } from '../../components/ui';
@@ -58,7 +59,7 @@ export function ServerResize({ server, busy }: { server: Server; busy: boolean }
       {packages.length > 0 && custom && <SelectInput className="max-w-xs" label={t('resize.kind')} value={type} onChange={(v) => setType(v as 'package' | 'custom')}
         options={[{ id: 'package', label: t('resize.package') }, { id: 'custom', label: t('resize.custom') }]}/>}
       {type === 'package' ? <SelectInput className="max-w-md" label={t('resize.package')} value={packageId} onChange={setPackageId}
-        options={packages.map((p) => ({ id: p.id, label: p.name, description: `${p.vcpu} vCPU · ${p.memoryMb / 1024} GB · ${p.diskGb} GB · ${format.number(Number(p.priceMonthly), { style: 'currency', currency: p.currency })}`,
+        options={packages.map((p) => ({ id: p.id, label: p.name, description: `${p.vcpu} vCPU · ${memoryGb(format, p.memoryMb)} GB · ${p.diskGb} GB · ${format.number(Number(p.priceMonthly), { style: 'currency', currency: p.currency })}`,
           isDisabled: p.diskGb < server.diskGb }))}/>
         : custom && <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
           <NumberInput label="vCPU" value={shape.vcpu} onChange={(v) => setShape({ ...shape, vcpu: v ?? server.vcpu })} minValue={custom.cpuMin} maxValue={custom.cpuMax} step={custom.cpuStep}/>

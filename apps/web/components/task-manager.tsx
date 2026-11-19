@@ -112,9 +112,12 @@ export default function TaskManager({ permissions }: { permissions: string[] }) 
       </motion.section>}
     </AnimatePresence>
     <motion.button type="button" layout onClick={() => setOpen((v) => !v)} aria-expanded={open} whileTap={{ scale: 0.96 }}
-      className="pointer-events-auto flex min-h-11 items-center gap-2 rounded-full border border-border bg-overlay px-4 text-sm font-medium text-overlay-foreground shadow-lg outline-offset-2 hover:border-accent">
+      title={active.length ? t('running', { n: active.length }) : failed.length ? t('failedCount', { n: failed.length }) : t('recent', { n: ops.length })}
+      className="pointer-events-auto flex min-h-11 min-w-11 items-center justify-center gap-2 rounded-full border border-border bg-overlay px-3 text-sm font-medium text-overlay-foreground shadow-lg outline-offset-2 hover:border-accent sm:px-4">
       {active.length ? <span aria-hidden><Spinner size="sm" color="current"/></span> : failed.length ? <span className="text-danger"><I name="circle-x" size={16}/></span> : <I name="list-checks" size={16}/>}
-      <span aria-live="polite">{active.length ? t('running', { n: active.length }) : failed.length ? t('failedCount', { n: failed.length }) : t('recent', { n: ops.length })}</span>
+      {/* Phones: the icon and the count only, so the button does not lie over the page's own text and controls. */}
+      <span aria-hidden className="tabular-nums sm:hidden">{active.length || failed.length || ops.length}</span>
+      <span aria-live="polite" className="max-sm:sr-only">{active.length ? t('running', { n: active.length }) : failed.length ? t('failedCount', { n: failed.length }) : t('recent', { n: ops.length })}</span>
     </motion.button>
   </div>;
 }

@@ -5,6 +5,8 @@ import { I } from '../../components/icon';
 import NextLink from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useFormatter, useNow, useTranslations } from 'next-intl';
+import { usePercent } from '../../lib/percent';
+import { memoryGb } from '../../lib/sizes';
 import { useAutoAnimate } from '@formkit/auto-animate/react';
 import { motion } from 'motion/react';
 import { useQueryClient } from '@tanstack/react-query';
@@ -35,7 +37,7 @@ import { ServerDisks } from './server-disks';
 import { SaveAsImage } from './server-image';
 import { TransferServer } from './server-transfer';
 import { useMe } from '../../lib/me';
-import { can } from '../../lib/permissions';
+import { can, isStaff } from '../../lib/permissions';
 import { noteLine } from '../../lib/note-line';
 import { ServerFilters, ServerTotals, useServerFilters } from './server-filters';
 import { flag } from '../../lib/flag';
@@ -67,7 +69,7 @@ export function StateBadge({ server }: { server: Pick<Server, 'state' | 'powerSt
   return <StatusChip tone={tone}>{text}</StatusChip>;
 }
 
-const size = (t: ReturnType<typeof useTranslations<'Servers'>>, s: Pick<Server, 'vcpu' | 'memoryMb' | 'diskGb'>) => t('size', { vcpu: s.vcpu, memory: s.memoryMb / 1024, disk: s.diskGb });
+const size = (t: ReturnType<typeof useTranslations<'Servers'>>, format: ReturnType<typeof useFormatter>, s: Pick<Server, 'vcpu' | 'memoryMb' | 'diskGb'>) => t('size', { vcpu: s.vcpu, memory: memoryGb(format, s.memoryMb), disk: s.diskGb });
 
 export type SshKey = { id: string; name: string; fingerprint: string };
 export const useSshKeys = () => useApiQuery<{ keys: SshKey[] }>(['ssh-keys'], '/ssh-keys').data?.keys ?? [];
@@ -110,6 +112,7 @@ export function SshKeys() {
 }
 
 export function ServerList() {
+  const percent = usePercent();
   const t = useTranslations('Servers');
   const tn = useTranslations('Nav');
   const servers = useApiQuery<{ servers: Server[] }>(['servers'], '/servers', { refetchInterval: (d) => (d?.servers.some(moving) ? 5_000 : 20_000) }).data?.servers;
@@ -119,7 +122,7 @@ export function ServerList() {
   const bytes = useBytes();
   // What the server costs: per hour when billed hourly, else per month.
   const price = (s: Server) => s.billingMode === 'hourly' && s.priceHourly
-    ? t('list.perHour', { price: format.number(Number(s.priceHourly), { style: 'currency', currency: s.currency }) })
+    ? t('list.perHour', { price: format.number(Number(s.priceHourly), { style: 'currency', currency: s.currency, maximumFractionDigits: 4 }) })
     : Number(s.priceMonthly) > 0 ? t('list.perMonth', { price: format.number(Number(s.priceMonthly), { style: 'currency', currency: s.currency }) }) : null;
   // This month's traffic against the quota, when the server has one.
   const traffic = (s: Server) => { if (!s.trafficGb) return null; const used = s.trafficBytes ?? 0, pct = Math.min(100, Math.round((used / (s.trafficGb * 1024 ** 3)) * 100));
@@ -127,7 +130,7 @@ export function ServerList() {
       <I name="arrow-down-up" size={12} className="shrink-0"/>
       <span role="meter" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100} aria-label={t('list.traffic', { used: bytes(used), quota: `${s.trafficGb} GB` })} className="h-1.5 w-20 overflow-hidden rounded-full bg-default">
         <span className={`block h-full rounded-full ${s.trafficThrottled || pct >= 100 ? 'bg-danger' : pct >= 80 ? 'bg-warning' : 'bg-success'}`} style={{ width: `${Math.max(pct, 2)}%` }}/></span>
-      <span className="tabular-nums">%{pct}</span></span>; };
+      <span className="tabular-nums">{percent(pct)}</span></span>; };
   // Selection mode: cards toggle instead of opening, and a bar acts on the chosen ones (only those still shown).
   const [picking, setPicking] = useState(false);
   const [picked, setPicked] = useState<Set<string>>(new Set());
@@ -184,7 +187,7 @@ export function ServerList() {
           <span className="flex min-w-0 items-center gap-1.5 font-semibold sm:w-44"><span className="truncate">{s.name}</span>{s.locked && <I name="lock" size={13} className="shrink-0 text-warning"/>}</span>
           <StateBadge server={s}/>
           <span className="min-w-0 sm:w-32">{s.address ? <Mono>{s.address}</Mono> : <span className="text-muted">–</span>}</span>
-          <span className="flex items-center gap-1.5 text-muted"><I name="cpu" size={14}/>{size(t, s)}</span>
+          <span className="flex items-center gap-1.5 text-muted"><I name="cpu" size={14}/>{size(t, format, s)}</span>
           {price(s) && <span className="text-xs font-medium tabular-nums">{price(s)}</span>}
           <span className="flex items-center gap-1 text-xs text-muted"><I name="map-pin" size={12}/>{s.location || s.poolName}</span>
           {traffic(s)}
@@ -199,7 +202,7 @@ export function ServerList() {
           </Card.Header>
           <Card.Content className="flex flex-col gap-1.5 text-sm">
             <span className="flex items-center gap-2"><span className="text-muted">IP</span>{s.address ? <Mono>{s.address}</Mono> : '–'}</span>
-            <span className="flex items-center justify-between gap-2"><span className="flex min-w-0 items-center gap-2 text-muted"><I name="cpu" size={14} className="shrink-0"/><span className="truncate">{size(t, s)}</span></span>
+            <span className="flex items-center justify-between gap-2"><span className="flex min-w-0 items-center gap-2 text-muted"><I name="cpu" size={14} className="shrink-0"/><span className="truncate">{size(t, format, s)}</span></span>
               {price(s) && <span className="shrink-0 text-xs font-semibold tabular-nums">{price(s)}</span>}</span>
             {traffic(s)}
             <span className="flex items-center justify-between gap-2 text-xs text-muted"><span className="truncate">{s.imageName}</span>
@@ -506,7 +509,15 @@ const runningStates = ['pending', 'running'];
 // handed in by the page (its own button for that action, so the lock, the state and the permissions hold as they do
 // there). The owner gets the links: the invoices, what the quota allows, or a ticket with the details filled in.
 // Staff looking at a customer's server get the reason and, where it applies, the retry.
-function FailedNotice({ op, own, retry, ticket }: { op: Operation; own: boolean; retry: React.ReactNode; ticket: string }) {
+// Why something failed. A customer reads the sentence; the code that support will ask for stays on the element (shown
+// on hover) and goes into the ticket the page writes. Staff read the code beside the sentence.
+function Failure({ code, staff }: { code: string; staff: boolean }) {
+  const t = useTranslations('Servers');
+  const { error } = useErrorText();
+  return staff ? <>{t('errorCode', { message: error({ code }), code })}</> : <span title={code} data-code={code}>{error({ code })}</span>;
+}
+
+function FailedNotice({ op, own, staff: showCode, retry, ticket }: { op: Operation; own: boolean; staff: boolean; retry: React.ReactNode; ticket: string }) {
   const t = useTranslations('Servers');
   const { error } = useErrorText();
   const next = nextStep(op.kind, op.errorCode);
@@ -520,7 +531,7 @@ function FailedNotice({ op, own, retry, ticket }: { op: Operation; own: boolean;
     : link(ticket, 'life-buoy', t('nextStep.supportButton'));
   return <Notice tone="danger" title={t('nextStep.title', { kind: t(`kind.${op.kind as 'create'}`) })}>
     <span className="flex flex-col items-start gap-2">
-      <span>{t('errorCode', { message: error({ code: op.errorCode ?? '' }), code: op.errorCode ?? '' })} · <Ago at={op.finishedAt ?? op.createdAt}/></span>
+      <span><Failure code={op.errorCode ?? ''} staff={showCode}/> · <Ago at={op.finishedAt ?? op.createdAt}/></span>
       {(own || step === 'retry') && <span>{t(staff ? 'nextStep.staff' : `nextStep.${step}`)}</span>}
       {button}
     </span>
@@ -555,6 +566,7 @@ export function ServerDetail({ id }: { id: string }) {
   const allowed = { power: true, console: true, iso: true, rootPassword: true, delete: true, snapshots: true, resize: true, reinstall: true, backups: true, ...q.data.allowed };
   const open = operations.find((o) => runningStates.includes(o.status));
   const own = !!q.data.own; // owner-only helpers: tags and notes, order similar
+  const seesCodes = !own || isStaff(me?.permissions); // error codes beside the sentences: staff, not customers
   const canAct = !open && ['ready', 'error'].includes(s.state);
   // Locked: what would end the server or lose its state waits until it is unlocked (the API refuses it too).
   const locked = !!s.locked;
@@ -598,8 +610,8 @@ export function ServerDetail({ id }: { id: string }) {
     {s.lastOperation?.step === 'awaiting_payment' && <Notice tone="warning" title={t('awaitingPayment')}>{t('awaitingPaymentHelp')} <NextLink href="/billing?show=open" className="font-medium text-accent hover:underline">{t('payNow')}</NextLink></Notice>}
     {s.deleteAt && <TrashBar server={s} canChange={allowed.delete}/>}
     <LockBar id={id} locked={locked} canChange={own || allowed.delete}/>
-    {s.errorCode && s.errorCode !== failure?.errorCode && <Notice tone="danger">{t('errorCode', { message: error({ code: s.errorCode }), code: s.errorCode })}</Notice>}
-    {failure && <FailedNotice op={failure} own={own} retry={retry(failure)} ticket={ticketHref(failure)}/>}
+    {s.errorCode && s.errorCode !== failure?.errorCode && <Notice tone="danger"><Failure code={s.errorCode} staff={seesCodes}/></Notice>}
+    {failure && <FailedNotice op={failure} own={own} staff={seesCodes} retry={retry(failure)} ticket={ticketHref(failure)}/>}
 
     {open && <Section title={t('detail.progress')}>
       <div className="flex flex-col gap-3">
@@ -615,13 +627,13 @@ export function ServerDetail({ id }: { id: string }) {
         const state = `${t(`state.${s.state as 'ready'}`)}${s.state === 'ready' ? ` · ${t(`power.${s.powerState as 'poweredOn'}`)}` : ''}`;
         const price = s.billingMode === 'hourly' && s.priceHourly ? t('detail.hourly', { price: format.number(Number(s.priceHourly), { style: 'currency', currency: s.currency, maximumFractionDigits: 4 }) })
           : format.number(Number(s.priceMonthly), { style: 'currency', currency: s.currency });
-        const lines = [s.name, `IP: ${s.address ?? '–'}`, `${t('col.size')}: ${size(t, s)}`, `${t('detail.location')}: ${s.location || s.poolName}`, `${t('detail.image')}: ${s.imageName}`,
+        const lines = [s.name, `IP: ${s.address ?? '–'}`, `${t('col.size')}: ${size(t, format, s)}`, `${t('detail.location')}: ${s.location || s.poolName}`, `${t('detail.image')}: ${s.imageName}`,
           `${t('col.state')}: ${state}`, `${t('detail.price')}: ${price}`, `${t('detail.created')}: ${format.dateTime(new Date(s.createdAt), { dateStyle: 'medium', timeStyle: 'short' })}`];
         await copy(lines.join('\n'), t('detail.summaryCopied'));
       }}><I name="clipboard-copy" size={15}/>{t('detail.copySummary')}</Button>}>
         <dl className="grid gap-x-6 gap-y-3 text-sm sm:grid-cols-2">
           <div><dt className="text-muted">IP</dt><dd className="mt-0.5">{s.address ? <Mono>{s.address}</Mono> : '–'}</dd></div>
-          <div><dt className="text-muted">{t('col.size')}</dt><dd className="mt-0.5">{size(t, s)}</dd></div>
+          <div><dt className="text-muted">{t('col.size')}</dt><dd className="mt-0.5">{size(t, format, s)}</dd></div>
           <div><dt className="text-muted">{t('detail.location')}</dt><dd className="mt-0.5 flex flex-col">
             <span><span aria-hidden className="mr-1.5">{flag(s.locationCountry ?? '')}</span>{s.location || s.poolName}</span>
             {(s.locationCity || s.locationDatacenter) && <span className="text-xs text-muted">{[s.locationCity, s.locationDatacenter].filter(Boolean).join(' · ')}</span>}</dd></div>
@@ -675,7 +687,7 @@ export function ServerDetail({ id }: { id: string }) {
         columns={[{ id: 'when', label: t('col.when') }, { id: 'op', label: t('col.operation') }, { id: 'state', label: t('col.state') }, { id: 'detail', label: t('col.detail') }]}
         cells={(o) => [<span key="w" className="flex flex-col">{format.dateTime(new Date(o.createdAt), { dateStyle: 'medium', timeStyle: 'medium' })}<span className="text-xs text-muted"><Ago at={o.createdAt}/></span></span>, t(`kind.${o.kind as 'create'}`),
           <StatusChip key="s" tone={o.status === 'succeeded' ? 'success' : o.status === 'failed' ? 'danger' : o.status === 'cancelled' ? 'default' : 'accent'}>{t(`opStatus.${o.status as 'pending'}`)}</StatusChip>,
-          o.errorCode ? <span key="d" className="flex flex-col items-start gap-1">{t('errorCode', { message: error({ code: o.errorCode }), code: o.errorCode })}
+          o.errorCode ? <span key="d" className="flex flex-col items-start gap-1"><Failure code={o.errorCode} staff={seesCodes}/>
             {own && o.status === 'failed' && (() => {
               // The row's link follows the same next step as the notice: the invoices, the quota, or a ticket.
               const step = nextStep(o.kind, o.errorCode).step;

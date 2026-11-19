@@ -422,6 +422,27 @@ export function DataTable<T>({ label, columns, rows, rowKey, cells, empty, minWi
     follow(to, e.ctrlKey || e.metaKey);
   };
 
+  // A table wider than its place scrolls sideways inside it (tablets, a page with a side menu). The edge where more
+  // columns wait fades out under an arrow, so a cut-off column reads as "there is more this way", not as the end.
+  const [more, setMore] = useState({ left: false, right: false });
+  useEffect(() => {
+    const el = box.current?.querySelector<HTMLElement>('.table__scroll-container');
+    if (!el) return;
+    const check = () => {
+      const left = el.scrollLeft > 4, right = el.scrollWidth - el.clientWidth - el.scrollLeft > 4;
+      setMore((m) => (m.left === left && m.right === right ? m : { left, right }));
+    };
+    check();
+    const o = new ResizeObserver(check);
+    o.observe(el);
+    if (el.firstElementChild) o.observe(el.firstElementChild);
+    el.addEventListener('scroll', check, { passive: true });
+    return () => { o.disconnect(); el.removeEventListener('scroll', check); };
+  }, [rows.length, columns.length]);
+  const edge = (side: 'left' | 'right') => more[side] && <span aria-hidden data-table-more={side}
+    className={`pointer-events-none absolute inset-y-0 z-10 flex w-12 items-center text-muted ${side === 'right' ? 'right-0 justify-end bg-gradient-to-l pr-1' : 'left-0 justify-start bg-gradient-to-r pl-1'} from-background via-background/70 to-transparent`}>
+    <span className="grid size-6 place-items-center rounded-full border border-border bg-surface shadow-sm">{side === 'right' ? <I name="chevron-right" size={14}/> : <I name="chevron-left" size={14}/>}</span></span>;
+
   // Phones get one card per row (label: value); wider screens the table.
   const cards = <div className="flex flex-col gap-2 sm:hidden">
     {sortable.length > 0 && rows.length > 1 && <label className="flex items-center justify-end gap-2 text-xs text-muted">
@@ -454,7 +475,7 @@ export function DataTable<T>({ label, columns, rows, rowKey, cells, empty, minWi
     </div>
   </nav>;
   return <><div ref={top} aria-hidden className="scroll-mt-24"/><div ref={box} onClick={onRowClick} onAuxClick={onRowClick} onKeyDownCapture={onRowKey}
-    className="[&_[role=row]:has(>:first-child_:is(a[href],button[data-row-open]))]:cursor-pointer">{cards}<Table className="hidden sm:block">
+    className="[&_[role=row]:has(>:first-child_:is(a[href],button[data-row-open]))]:cursor-pointer">{cards}<div className="relative hidden sm:block">{edge('left')}{edge('right')}<Table>
     <Table.ScrollContainer>
       <Table.Content aria-label={label} style={{ minWidth }} sortDescriptor={sort ?? undefined}
         onSortChange={(d) => setSort({ column: String(d.column), direction: d.direction })}>
@@ -472,7 +493,7 @@ export function DataTable<T>({ label, columns, rows, rowKey, cells, empty, minWi
         </Table.Body>
       </Table.Content>
     </Table.ScrollContainer>
-  </Table></div>{pager}</>;
+  </Table></div></div>{pager}</>;
 }
 
 export function Notice({ tone = 'default', title, children }: { tone?: Tone; title?: React.ReactNode; children?: React.ReactNode }) {
@@ -485,10 +506,12 @@ export function Notice({ tone = 'default', title, children }: { tone?: Tone; tit
   </Alert>;
 }
 
-// A form block with its explanation beside it (stacked on phones): what the fields are for, then the fields.
+// A form block with its explanation beside it on wide screens, above it elsewhere: what the fields are for, then the
+// fields. Beside it only from 1536 px: these forms sit next to a section menu, and on a 1280 px screen the three
+// columns left the fields about 23 rem (labels wrapped after ten characters, placeholders were cut off).
 export function FormSection({ title, description, icon, children, aside }: { title: React.ReactNode; description?: React.ReactNode; icon?: React.ReactNode; children: React.ReactNode; aside?: React.ReactNode }) {
-  return <section className="grid gap-x-8 gap-y-4 border-b border-separator py-6 first:pt-0 last:border-0 last:pb-0 lg:grid-cols-[minmax(0,18rem)_minmax(0,1fr)]">
-    <div className="flex flex-col gap-1">
+  return <section className="grid gap-x-8 gap-y-4 border-b border-separator py-6 first:pt-0 last:border-0 last:pb-0 2xl:grid-cols-[minmax(0,18rem)_minmax(0,1fr)]">
+    <div className="flex max-w-3xl flex-col gap-1">
       <h3 className="flex items-center gap-2 font-semibold">{icon && <span aria-hidden className="text-accent">{icon}</span>}{title}</h3>
       {description && <p className="text-sm text-muted">{description}</p>}
       {aside}
@@ -527,7 +550,7 @@ export function SectionMenu<K extends string>({ label, pickLabel, groups, curren
   return <div className="grid gap-5 lg:grid-cols-[14rem_minmax(0,1fr)] lg:gap-8">
     <div className="lg:hidden"><SelectInput label={pickLabel} value={current} onChange={(k) => onSelect(k as K)}
       options={groups.flatMap((g) => g.items.map((i) => ({ id: i.id, label: `${groups.length > 1 ? `${g.title} · ` : ''}${i.label}${i.attention ? ` (${i.attention})` : ''}` })))}/></div>
-    <nav aria-label={label} className="hidden flex-col gap-4 self-start lg:sticky lg:top-20 lg:flex">
+    <nav aria-label={label} data-section-menu className="hidden flex-col gap-4 self-start lg:sticky lg:top-20 lg:flex">
       {groups.map((g) => <div key={g.title} className="flex flex-col gap-0.5">
         <p className="px-3 pb-1 text-[11px] font-semibold uppercase tracking-wider text-muted">{g.title}</p>
         {g.items.map((i) => <button key={i.id} type="button" aria-current={i.id === current ? 'page' : undefined} onClick={() => onSelect(i.id)}

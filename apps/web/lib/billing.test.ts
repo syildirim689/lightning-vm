@@ -55,3 +55,13 @@ test('since when: the time the API gives, else the payment itself', () => {
   assert.equal(waitingSince({ createdAt: 'a', since: 'b', reviewSince: 'c' }), 'c');
   assert.equal(waitingSince({ createdAt: 'a', since: null }), 'a');
 });
+
+test('a subscription says what kind of thing it is for, apart from its name', async () => {
+  const { subscriptionName } = await import('./billing.ts');
+  assert.deepEqual(subscriptionName('Sunucu web-1'), { kind: 'server', name: 'web-1' });
+  assert.deepEqual(subscriptionName('Sanal veri merkezi E2E Renewal'), { kind: 'vdc', name: 'E2E Renewal' });
+  // A server that is itself called "Sunucu" keeps its name; so does a description of another shape.
+  assert.deepEqual(subscriptionName('Sunucu Sunucu'), { kind: 'server', name: 'Sunucu' });
+  assert.deepEqual(subscriptionName('Yedekleme hizmeti'), { kind: null, name: 'Yedekleme hizmeti' });
+  assert.deepEqual(subscriptionName('Sunucu'), { kind: null, name: 'Sunucu' });
+});

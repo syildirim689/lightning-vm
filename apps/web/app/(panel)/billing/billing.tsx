@@ -16,6 +16,7 @@ import { downloadCsv, localDay } from '../../../lib/csv';
 import type { Card as SavedCard, Invoice, Subscription, Summary } from '../../../lib/billing';
 import { MyDisputes } from './disputes';
 import { invoiceState, invoiceTone, subscriptionTone, type Hourly } from '../../../lib/billing';
+import { useSubscriptionLabel } from '../../../lib/subscription-label';
 import { useApiQuery } from '../../../lib/query';
 import { fold } from '../../../lib/note-line';
 import { useMe } from '../../../lib/me';
@@ -25,6 +26,7 @@ const tabs = ['invoices', 'subscriptions', 'balance', 'cards', 'disputes', 'prof
 
 export default function Billing() {
   const t = useTranslations('Billing');
+  const subscription = useSubscriptionLabel();
   const format = useFormatter();
   const [tab, setTab] = useQueryState('tab', parseAsString.withDefault('invoices'));
   // ?topup=<amount>: opened from an invoice the balance does not cover, with the difference filled in.
@@ -64,7 +66,7 @@ export default function Billing() {
       <motion.li initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="rounded-2xl border border-border bg-surface p-4">
         <p className="flex items-center gap-2 text-xs text-muted"><I name="calendar-clock" size={14}/>{t('kpi.next')}</p>
         <p className="mt-1 text-2xl font-semibold tabular-nums">{next ? money(String(Number(next.amount) * next.periodMonths), next.currency) : '–'}</p>
-        <p className="text-xs text-muted">{next?.periodEnd ? t('kpi.nextOn', { date: format.dateTime(new Date(next.periodEnd), { dateStyle: 'medium' }), name: next.description }) : t('kpi.noSubscriptions')}</p>
+        <p className="text-xs text-muted">{next?.periodEnd ? t('kpi.nextOn', { date: format.dateTime(new Date(next.periodEnd), { dateStyle: 'medium' }), name: subscription(next.description) }) : t('kpi.noSubscriptions')}</p>
         <p className="mt-1 flex items-center gap-1 text-xs text-muted"><I name={s.autoCharge ? 'repeat' : 'hand'} size={12}/>{s.autoCharge ? t('kpi.autoCharge') : t('kpi.manualCharge')}</p>
       </motion.li>
     </ul>
@@ -161,6 +163,7 @@ function SpendChart({ invoices }: { invoices: Invoice[] }) {
 
 function Subscriptions({ list }: { list: Subscription[] }) {
   const t = useTranslations('Billing');
+  const subscription = useSubscriptionLabel();
   const format = useFormatter();
   const { error } = useErrorText();
   const client = useQueryClient();
@@ -181,8 +184,8 @@ function Subscriptions({ list }: { list: Subscription[] }) {
     <ul className="flex flex-col gap-3">{list.map((s) => <li key={s.id} className="flex flex-col gap-3 rounded-2xl border border-border bg-surface p-4 sm:flex-row sm:items-center">
     <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-default text-muted">{s.kind === 'server' ? <I name="server" size={18}/> : <I name="building-2" size={18}/>}</span>
     <span className="min-w-0 flex-1">
-      <span className="flex flex-wrap items-center gap-2">{s.serverId ? <NextLink href={`/servers/${s.serverId}`} className="font-medium hover:text-accent hover:underline">{s.description}</NextLink>
-          : s.vdcId ? <NextLink href="/vdc" className="font-medium hover:text-accent hover:underline">{s.description}</NextLink> : <span className="font-medium">{s.description}</span>}<StatusChip tone={subscriptionTone(s.status)}>{t(`sub.${s.status}`)}</StatusChip>
+      <span className="flex flex-wrap items-center gap-2">{s.serverId ? <NextLink href={`/servers/${s.serverId}`} className="font-medium hover:text-accent hover:underline">{subscription(s.description)}</NextLink>
+          : s.vdcId ? <NextLink href="/vdc" className="font-medium hover:text-accent hover:underline">{subscription(s.description)}</NextLink> : <span className="font-medium">{subscription(s.description)}</span>}<StatusChip tone={subscriptionTone(s.status)}>{t(`sub.${s.status}`)}</StatusChip>
         {s.cancelAtPeriodEnd && <StatusChip tone="warning">{t('sub.ending')}</StatusChip>}</span>
       <span className="block text-sm text-muted">{format.number(Number(s.amount), { style: 'currency', currency: s.currency })} / {t('perMonth')}
         {s.periodEnd && ` · ${s.cancelAtPeriodEnd ? t('endsOn', { date: format.dateTime(new Date(s.periodEnd), { dateStyle: 'medium' }) }) : t('renewsOn', { date: format.dateTime(new Date(s.periodEnd), { dateStyle: 'medium' }) })}`}</span>
@@ -193,7 +196,7 @@ function Subscriptions({ list }: { list: Subscription[] }) {
       {s.cancelAtPeriodEnd
         ? <Button size="sm" variant="secondary" isPending={saving === s.id} onPress={() => void change(s, { cancelAtPeriodEnd: false }, t('kept'))}><I name="rotate-ccw" size={14}/>{t('keep')}</Button>
         : <ConfirmButton size="sm" variant="danger-soft" icon={<I name="calendar-x" size={14}/>} label={t('cancelAtEnd')} title={t('cancelTitle')}
-            body={t('cancelBody', { name: s.description, date: s.periodEnd ? format.dateTime(new Date(s.periodEnd), { dateStyle: 'long' }) : '–' })}
+            body={t('cancelBody', { name: subscription(s.description), date: s.periodEnd ? format.dateTime(new Date(s.periodEnd), { dateStyle: 'long' }) : '–' })}
             confirmLabel={t('cancelConfirm')} cancelLabel={t('cancelKeep')} onConfirm={() => change(s, { cancelAtPeriodEnd: true }, t('cancelled'))}/>}
     </span>
   </li>)}</ul></div>;

@@ -398,7 +398,7 @@
     "E_RESTORE_DUMP": "The database dump in the backup could not be read. The backup may be damaged, or the backup key may be the wrong one.",
     "E_RESTORE_NO_SAFETY": "A safety copy of the current data could not be taken, so the restore was not started. Nothing was changed.",
     "UPDATE_SKIPPED": "The automatic update skipped this version because it already failed once. Update by hand when the cause is fixed.",
-    "PAYMENT_IN_REVIEW": "A payment for this invoice is being reviewed by our team, so it cannot be paid again right now. You will be told when it is decided; there is no need to pay twice.",
+    "PAYMENT_IN_REVIEW": "A payment for this invoice is awaiting review by our team, so it cannot be paid again right now. You will be told when it is decided; there is no need to pay twice.",
     "TOKEN_ACCOUNT_UNCONFIRMED": "This API token is asleep: the account comes from a directory or single sign-on and was not confirmed there recently. Sign in to the panel again and the token works as before.",
     "PAYMENT_NOT_IN_REVIEW": "This payment no longer waits for review; it was settled or closed in the meantime."
   },
@@ -2834,7 +2834,7 @@
     "groupHide": "Hide the single notifications",
     "groupList": "The {n} notifications in this row",
     "title": "Notifications",
-    "unreadLabel": "{n} unread notifications",
+    "unreadLabel": "{n, plural, one {# unread notification} other {# unread notifications}}",
     "markAll": "Mark all read",
     "settings": "Settings",
     "empty": "No notifications yet.",
@@ -2844,6 +2844,8 @@
       "earlier": "Earlier"
     },
     "open": "View",
+    "operationDone": "{name}: {operation} done",
+    "operationFailed": "“{operation}” could not finish: {reason}",
     "show": "Show",
     "all": "All",
     "unread": "Unread",
@@ -2938,7 +2940,7 @@
         "body": "{resource} usage is {used}%."
       },
       "POOL_FORECAST": {
-        "title": "{pool} fills in about {days} days",
+        "title": "{pool} fills in about {days, plural, one {# day} other {# days}}",
         "body": "{resource} runs out first, judging by the last 30 days of new and removed servers."
       },
       "IP_POOL_EMPTY": {
@@ -2946,7 +2948,7 @@
         "body": "No new server can be created here. Add another range."
       },
       "IP_POOL_LOW": {
-        "title": "{pool}: {free} free IP addresses left",
+        "title": "{pool}: {free, plural, one {# free IP address} other {# free IP addresses}} left",
         "body": "New servers may soon find no address."
       },
       "CONNECTION_DOWN": {
@@ -2954,15 +2956,15 @@
         "body": "Last error: {code}. Re-discover the connection."
       },
       "OPERATIONS_STUCK": {
-        "title": "{count} operations passed their deadline",
+        "title": "{count, plural, one {# operation passed its deadline} other {# operations passed their deadline}}",
         "body": "Check them on the Operations tab."
       },
       "OPERATIONS_FAILED": {
-        "title": "{count} operations failed in the last 24 hours",
+        "title": "{count, plural, one {# operation} other {# operations}} failed in the last 24 hours",
         "body": "Look at the error codes and retry."
       },
       "RECONCILE_FINDINGS": {
-        "title": "{count} reconciliation findings open",
+        "title": "{count, plural, one {# reconciliation finding} other {# reconciliation findings}} open",
         "body": "The panel and VMware disagree."
       },
       "WORKER_DOWN": {
@@ -2978,7 +2980,7 @@
         "body": "Turn on the backup schedule on the server."
       },
       "BACKUP_STALE": {
-        "title": "Last successful backup {hours} hours ago",
+        "title": "Last successful backup {hours, plural, one {# hour} other {# hours}} ago",
         "body": "Check the daily backup schedule."
       },
       "PACKAGE_UNSELLABLE": {
@@ -3034,8 +3036,8 @@
         "body": "Right-sizing them would free about {vcpu} vCPU of pool capacity."
       },
       "OFF_BUT_BILLED": {
-        "title": "{name} has been off for {days} days",
-        "body": "Servers that are off are still billed ({price} {currency} a month). If you no longer need it, delete it to save."
+        "title": "{name} has been off for {days, plural, one {# day} other {# days}}",
+        "body": "Servers that are off are still billed ({price} a month). If you no longer need it, delete it to save."
       },
       "STAFF_INACTIVE": {
         "title": "{count, plural, one {# staff account has} other {# staff accounts have}} not been used for 90 days",
@@ -4755,8 +4757,8 @@
       "disputeWindowDays": "Days to dispute an invoice",
       "disputeWindowHelp": "After the invoice is issued.",
       "disputeAnswerDays": "Days to decide a dispute",
-      "reviewHoldDays": "Days a payment under review holds its invoice",
-      "reviewHoldHelp": "While a payment is under review, suspension, deletion and reminders wait for at most this long, and a second payment is refused for that time. 0 turns it off.",
+      "reviewHoldDays": "Days a payment awaiting review holds its invoice",
+      "reviewHoldHelp": "While a payment is awaiting review, suspension, deletion and reminders wait for at most this long, and a second payment is refused for that time. 0 turns it off.",
       "disputeAnswerHelp": "Past it, staff are reminded."
     },
     "einvoice": {
@@ -7285,6 +7287,7 @@
     },
     "payment": {
       "pending": "In progress",
+      "review": "Awaiting review",
       "succeeded": "Succeeded",
       "failed": "Failed",
       "cancelled": "Cancelled",
@@ -7322,6 +7325,8 @@
     "orderWaits": "Your server is set up as soon as this is paid.",
     "lastFailed": "The last attempt failed: {reason}",
     "withBalance": "From your balance",
+    "subscriptionServer": "Server {name}",
+    "subscriptionVdc": "Virtual data center {name}",
     "balanceHas": "Balance: {amount}",
     "balanceShort": "Balance is not enough",
     "payAmount": "Pay {amount}",
@@ -7383,8 +7388,9 @@
     "removeConfirm": "Remove the card",
     "transferAmount": "Amount",
     "topUpShort": "Top up the missing {amount}",
-    "reviewTitle": "Your payment is under review",
-    "reviewLocked": "A payment for this invoice is under review, so it cannot be paid again for now.",
+    "reviewTitle": "Your payment is awaiting review",
+    "reviewLocked": "A payment for this invoice is awaiting review, so it cannot be paid again for now.",
+    "topUpHeld": "You can still top up your balance; paying this invoice from it waits until the review is decided.",
     "reviewHelp": "The payment provider is holding this payment for a check, or it could not be confirmed by itself. Our team is looking at it; the invoice is marked paid once it is confirmed. You do not need to pay again in the meantime."
   },
   "BillingAdmin": {

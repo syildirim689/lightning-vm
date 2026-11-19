@@ -7,6 +7,7 @@ import { Button, Card } from '@heroui/react';
 import { motion, useReducedMotion } from 'motion/react';
 import NextLink from 'next/link';
 import { useFormatter, useTranslations } from 'next-intl';
+import { usePercent } from '../../../../lib/percent';
 import { parseAsInteger, useQueryState } from 'nuqs';
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import CountUp from '../../../../components/count-up';
@@ -37,6 +38,7 @@ const cursor = { fill: 'color-mix(in oklab, var(--muted) 12%, transparent)' };
 const rise = (i: number, reduce: boolean | null) => (reduce ? {} : { initial: { opacity: 0, y: 14 }, animate: { opacity: 1, y: 0 }, transition: { delay: i * 0.06, type: 'spring' as const, stiffness: 260, damping: 26 } });
 
 export default function Statistics() {
+  const percent = usePercent();
   const t = useTranslations('Stats');
   const format = useFormatter();
   const reduce = useReducedMotion();
@@ -75,7 +77,7 @@ export default function Statistics() {
           hint={s.kpis.tickets.rating != null ? t('kpi.ticketsHint', { rating: s.kpis.tickets.rating, hours: s.kpis.tickets.firstResponseHours ?? '–' }) : t('kpi.noRatings')}/>
         <KpiCard i={4} icon="circle-check" label={t('kpi.success')} kpi={{ value: s.kpis.successRate.value ?? 0, change: s.kpis.successRate.change }} points
           spark={series.map((p) => p.opsOk)}
-          format={(n) => (s.kpis.successRate.value == null ? '–' : `${format.number(n, { maximumFractionDigits: 1 })}%`)} hint={t('kpi.successHint')}/>
+          format={(n) => (s.kpis.successRate.value == null ? '–' : percent(n, 1))} hint={t('kpi.successHint')}/>
       </div>
 
       {/* The numbers in words: what changed most, what needs a look. */}
@@ -168,6 +170,7 @@ function download(name: string, text: string) {
 }
 
 function Delta({ change, invert, points }: { change: number | null; invert?: boolean; points?: boolean }) {
+  const percent = usePercent();
   const t = useTranslations('Stats');
   if (change === null) return <span className="rounded-full bg-accent/10 px-2 py-0.5 text-xs font-medium text-accent">{t('new')}</span>;
   // More tickets is not good news: the colour follows what the change means, the arrow follows its direction.
@@ -175,7 +178,7 @@ function Delta({ change, invert, points }: { change: number | null; invert?: boo
   return <motion.span initial={{ scale: 0.6, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ type: 'spring', stiffness: 400, damping: 18, delay: 0.3 }}
     className={`inline-flex items-center gap-0.5 rounded-full px-2 py-0.5 text-xs font-medium tabular-nums ${good === null ? 'bg-default text-muted' : good ? 'bg-success/10 text-success' : 'bg-danger/10 text-danger'}`}
     title={t('vsBefore')}>
-    <I name={change > 0 ? 'trending-up' : change < 0 ? 'trending-down' : 'minus'} size={12}/>{change > 0 ? '+' : ''}{change}{points ? ` ${t('points')}` : '%'}
+    <I name={change > 0 ? 'trending-up' : change < 0 ? 'trending-down' : 'minus'} size={12}/>{points ? `${change > 0 ? '+' : ''}${change} ${t('points')}` : percent(change, 1, true)}
     <span className="sr-only"> {t('vsBefore')}</span>
   </motion.span>;
 }
@@ -241,6 +244,7 @@ function Breakdown({ i, title, icon, rows }: { i: number; title: string; icon: s
 
 // Power states as one bar split into parts, each with its icon and name (never colour alone).
 function PowerCard({ i, rows }: { i: number; rows: { state: string; servers: number }[] }) {
+  const percent = usePercent();
   const t = useTranslations('Stats');
   const reduce = useReducedMotion();
   const total = rows.reduce((a, r) => a + r.servers, 0);
@@ -256,7 +260,7 @@ function PowerCard({ i, rows }: { i: number; rows: { state: string; servers: num
         <ul className="flex flex-col gap-1.5 text-sm">{rows.map((r) => <li key={r.state} className="flex items-center gap-2">
           <span aria-hidden className={`size-2.5 rounded-full ${tone[r.state] ?? tone.unknown}`}/>
           <span className="flex-1">{t(`power.${(['poweredOn', 'poweredOff', 'suspended'].includes(r.state) ? r.state : 'unknown') as 'unknown'}`)}</span>
-          <span className="tabular-nums text-muted">{r.servers} · {Math.round((r.servers / total) * 100)}%</span>
+          <span className="tabular-nums text-muted">{r.servers} · {percent((r.servers / total) * 100)}</span>
         </li>)}</ul>
       </>}
     </Card.Content></Card>

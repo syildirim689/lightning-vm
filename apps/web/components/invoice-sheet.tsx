@@ -2,8 +2,9 @@
 // One invoice as a document (the customer's and the staff's invoice pages, and printing): seller and buyer, the lines
 // with KDV, the totals and the payments. Before it is paid it is a pro forma marked "awaiting payment" with no number.
 import { useFormatter, useTranslations } from 'next-intl';
+import { usePercent } from '../lib/percent';
 import type { InvoiceDetail, Party } from '../lib/billing';
-import { invoiceState, invoiceTone, paymentTone } from '../lib/billing';
+import { invoiceState, invoiceTone, paymentState, paymentTone } from '../lib/billing';
 import { I } from './icon';
 import { StatusChip } from './ui';
 
@@ -20,9 +21,13 @@ function PartyBlock({ title, p }: { title: string; p: Party }) {
   </div>;
 }
 
+// A cell of the lines table on a phone: its column's name on the left, the value on the right.
+const stacked = 'max-sm:flex max-sm:items-baseline max-sm:justify-between max-sm:gap-4 max-sm:p-0 max-sm:before:text-xs max-sm:before:font-normal max-sm:before:text-muted max-sm:before:content-[attr(data-label)]';
+
 export function InvoiceSheet({ d }: { d: InvoiceDetail }) {
   const t = useTranslations('Billing');
   const format = useFormatter();
+  const percent = usePercent();
   const inv = d.invoice;
   const money = (v: string) => format.number(Number(v), { style: 'currency', currency: inv.currency });
   const day = (v: string) => format.dateTime(new Date(v), { dateStyle: 'medium' });
@@ -46,18 +51,20 @@ export function InvoiceSheet({ d }: { d: InvoiceDetail }) {
       <PartyBlock title={t('sheet.seller')} p={inv.seller}/>
       <PartyBlock title={t('sheet.buyer')} p={inv.buyer}/>
     </div>
-    <div className="overflow-x-auto py-5">
-      <table className="w-full min-w-[560px] text-sm">
-        <thead><tr className="border-b border-separator text-left text-xs text-muted">
+    {/* Phones: each line is a block with its figures under their names (five columns do not fit and would be cut off);
+        the same table, laid out by CSS, so every value is in the page once. */}
+    <div className="py-3 sm:overflow-x-auto sm:py-5">
+      <table className="w-full text-sm max-sm:block sm:min-w-[560px]">
+        <thead className="max-sm:sr-only"><tr className="border-b border-separator text-left text-xs text-muted">
           <th className="py-2 pr-3 font-medium">{t('sheet.description')}</th><th className="py-2 pr-3 text-right font-medium">{t('sheet.quantity')}</th>
           <th className="py-2 pr-3 text-right font-medium">{t('sheet.unitPrice')}</th><th className="py-2 pr-3 text-right font-medium">KDV</th><th className="py-2 text-right font-medium">{t('sheet.amount')}</th>
         </tr></thead>
-        <tbody>{d.lines.map((l, i) => <tr key={i} className="border-b border-separator/60 align-top">
-          <td className="py-2.5 pr-3">{l.description}</td>
-          <td className="py-2.5 pr-3 text-right tabular-nums">{format.number(Number(l.quantity))} {l.unit === 'MON' ? t('sheet.month') : t('sheet.piece')}</td>
-          <td className="py-2.5 pr-3 text-right tabular-nums">{money(l.unitPrice)}</td>
-          <td className="py-2.5 pr-3 text-right tabular-nums">%{format.number(Number(l.taxRate))}</td>
-          <td className="py-2.5 text-right tabular-nums">{money(l.net)}</td>
+        <tbody className="max-sm:block">{d.lines.map((l, i) => <tr key={i} className="border-b border-separator/60 align-top max-sm:flex max-sm:flex-col max-sm:gap-1 max-sm:py-3">
+          <td className="py-2.5 pr-3 max-sm:p-0 max-sm:font-medium max-sm:[overflow-wrap:anywhere]">{l.description}</td>
+          <td data-label={t('sheet.quantity')} className={`py-2.5 pr-3 text-right tabular-nums ${stacked}`}>{format.number(Number(l.quantity))} {l.unit === 'MON' ? t('sheet.month') : t('sheet.piece')}</td>
+          <td data-label={t('sheet.unitPrice')} className={`py-2.5 pr-3 text-right tabular-nums ${stacked}`}>{money(l.unitPrice)}</td>
+          <td data-label="KDV" className={`py-2.5 pr-3 text-right tabular-nums ${stacked}`}>{percent(Number(l.taxRate), 2)}</td>
+          <td data-label={t('sheet.amount')} className={`py-2.5 text-right tabular-nums max-sm:font-medium ${stacked}`}>{money(l.net)}</td>
         </tr>)}</tbody>
       </table>
     </div>
@@ -66,7 +73,7 @@ export function InvoiceSheet({ d }: { d: InvoiceDetail }) {
         {inv.taxExemption && <p>{t('sheet.exemption', { code: inv.taxExemption })}</p>}
         {inv.note && <p className="mt-1 whitespace-pre-wrap">{inv.note}</p>}
       </div>
-      <dl className="grid min-w-64 grid-cols-[1fr_auto] gap-x-6 gap-y-1 text-sm">
+      <dl className="grid grid-cols-[1fr_auto] gap-x-6 gap-y-1 text-sm sm:min-w-64">
         <dt className="text-muted">{t('sheet.subtotal')}</dt><dd className="text-right tabular-nums">{money(inv.subtotal)}</dd>
         <dt className="text-muted">KDV</dt><dd className="text-right tabular-nums">{money(inv.taxTotal)}</dd>
         <dt className="border-t border-separator pt-1.5 font-semibold">{t('sheet.total')}</dt><dd className="border-t border-separator pt-1.5 text-right text-lg font-semibold tabular-nums">{money(inv.total)}</dd>
@@ -77,7 +84,7 @@ export function InvoiceSheet({ d }: { d: InvoiceDetail }) {
     {d.payments.length > 0 && <section className="mt-6 border-t border-separator pt-5 print:hidden">
       <h3 className="mb-2 text-sm font-semibold">{t('sheet.payments')}</h3>
       <ul className="flex flex-col gap-1.5 text-sm">{d.payments.map((p) => <li key={p.id} className="flex flex-wrap items-center gap-x-3 gap-y-1">
-        <StatusChip tone={paymentTone(p.status)}>{t(`payment.${p.status as 'succeeded'}`)}</StatusChip>
+        <StatusChip tone={paymentTone(paymentState(p))}>{t(`payment.${paymentState(p) as 'succeeded'}`)}</StatusChip>
         <span className="tabular-nums">{format.number(Number(p.amount), { style: 'currency', currency: p.currency })}</span>
         <span className="text-muted">{t(`method.${p.method as 'card'}`)}{p.provider !== 'balance' && p.provider !== 'manual' && ` · ${p.provider}`}{p.mode === 'test' && ` · ${t('testMode')}`}{p.automatic && ` · ${t('automatic')}`}</span>
         {p.reference && p.status !== 'cancelled' && <span className="font-mono text-xs text-muted">{p.reference}</span>}

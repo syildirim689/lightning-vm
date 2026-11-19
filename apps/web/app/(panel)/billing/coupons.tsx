@@ -4,6 +4,7 @@
 import { Button, ProgressBar, SearchField, toast } from '@heroui/react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useFormatter, useTranslations } from 'next-intl';
+import { usePercent } from '../../../lib/percent';
 import { useState } from 'react';
 import { I } from '../../../components/icon';
 import { CheckboxInput, CheckboxList, ConfirmButton, DataTable, Section, SelectInput, StatusChip, SwitchInput, TextInput } from '../../../components/ui';
@@ -77,6 +78,7 @@ function NewCoupon({ onDone }: { onDone: () => void }) {
 }
 
 export function AdminCoupons({ manage }: { manage: boolean }) {
+  const percent = usePercent();
   const t = useTranslations('Coupons');
   const format = useFormatter();
   const { error } = useErrorText();
@@ -89,7 +91,7 @@ export function AdminCoupons({ manage }: { manage: boolean }) {
   async function remove(c: Coupon) {
     try { await apiFetch(`/admin/coupons/${c.id}`, { method: 'DELETE' }); toast.success(t('deleted', { code: c.code })); reload(); } catch (e) { toast.danger(error(e)); }
   }
-  const off = (c: Coupon) => c.kind === 'percent' ? `%${format.number(Number(c.value))}` : format.number(Number(c.value), { style: 'currency', currency: c.currency ?? 'TRY' });
+  const off = (c: Coupon) => c.kind === 'percent' ? percent(Number(c.value), 2) : format.number(Number(c.value), { style: 'currency', currency: c.currency ?? 'TRY' });
   const expired = (c: Coupon) => !!c.expiresAt && new Date(c.expiresAt) < new Date();
   const usedUp = (c: Coupon) => c.maxUses !== null && c.uses >= c.maxUses;
   // What a customer meets when typing the code: off, expired, used up, or working.

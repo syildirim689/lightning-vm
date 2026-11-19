@@ -6,6 +6,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { apiFetch, useErrorText } from '../lib/api';
 import { useFormatter, useTranslations } from 'next-intl';
+import { usePercent } from '../lib/percent';
 import { useApiQuery } from '../lib/query';
 import { I } from './icon';
 import { Section, TextInput } from './ui';
@@ -30,6 +31,7 @@ export function Ring({ score, grade, label }: { score: number; grade: Health['gr
 
 // since: when the server was created; measured: false when the API says this platform reports no CPU figures.
 export function ServerHealth({ id, since, measured = true }: { id: string; since?: string; measured?: boolean }) {
+  const percent = usePercent();
   const t = useTranslations('Smart');
   const raw = useApiQuery<Health>(['servers', id, 'health'], `/servers/${id}/health`, { refetchInterval: 60_000 }).data;
   if (!raw) return <Section title={t('health')}><div className="h-28 animate-pulse rounded-lg bg-default" aria-busy/></Section>;
@@ -55,7 +57,7 @@ export function ServerHealth({ id, since, measured = true }: { id: string; since
         </ul> : <p className="flex items-center gap-2 text-sm text-muted"><I name="circle-check" size={14} className="text-success"/>{t('noIssues')}</p>}
         {h.cpu && h.cpu.samples >= 24 ? <div className="grid gap-3 sm:grid-cols-2">
           {([['cpuAvg', h.cpu.avg], ['cpuP95', h.cpu.p95]] as const).map(([k, v]) => <div key={k} className="flex flex-col gap-1">
-            <div className="flex justify-between text-xs"><span className="text-muted">{t(k)}</span><span className="tabular-nums">{v}%</span></div>
+            <div className="flex justify-between text-xs"><span className="text-muted">{t(k)}</span><span className="tabular-nums">{percent(v, 1)}</span></div>
             <ProgressBar aria-label={t(k)} value={Math.min(100, v)} size="sm" color={v > 85 ? 'danger' : v > 60 ? 'warning' : 'success'}><ProgressBar.Track><ProgressBar.Fill/></ProgressBar.Track></ProgressBar>
           </div>)}
           <p className="text-xs text-muted sm:col-span-2">{t('samples', { n: h.cpu.samples, days: h.cpu.days })}</p>
