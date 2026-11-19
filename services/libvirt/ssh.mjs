@@ -117,7 +117,8 @@ export function sshFailure(r) {
 }
 
 // Opens nothing yet: checks the host key, writes it (and a private key) into a private folder, and returns the
-// function that runs one script on the host. close() removes the folder.
+// function that runs one script on the host. close() removes the folder and answers when it is gone (a caller that
+// does not wait loses nothing; a removal that fails is left to the system's own cleaning of its temporary folder).
 export async function connect(target, options = {}) {
   const t = options.transport ?? real;
   const host = String(target?.host ?? '').trim(), port = Number(target?.port) || 22, user = String(target?.username ?? ''), secret = String(target?.password ?? '');
@@ -165,6 +166,6 @@ export async function connect(target, options = {}) {
     if (!rows) throw sshFailure(r);
     return rows;
   };
-  sh.close = () => { rm(dir, { recursive: true, force: true }).catch(() => {}); };
+  sh.close = () => rm(dir, { recursive: true, force: true }).catch(() => {});
   return sh;
 }

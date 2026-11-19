@@ -57,7 +57,7 @@ test('a password goes through sshpass in the environment, with only the pinned k
   assert.deepEqual(c.args.slice(-2), ['203.0.113.5', 'timeout -k 5 45 bash -s']);
   await sh('x', { timeout: 110000 }); assert.equal(f.calls.at(-1).args.at(-1), 'timeout -k 5 105 bash -s');
   assert.ok(c.input.startsWith('echo LVMBEGIN\n'));
-  sh.close(); await new Promise((r) => setTimeout(r, 50));
+  await sh.close(); // waits for the removal itself: a fixed pause was too short on a busy disk
   assert.ok(!existsSync(c.folder), 'the temporary folder is gone');
 });
 

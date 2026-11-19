@@ -585,9 +585,9 @@ Adaptör testleri gerçek bir hipervizöre değil, platformu taklit eden sahte s
 worker işleri testlerden sonra bağımlılık denetimini de çalıştırır (`scripts/audit.mjs`, `npm audit --omit=dev`
 çıktısını okur): yüksek ya da kritik her açık işi düşürür. Yalnızca `scripts/audit-allowlist.json` dosyasındaki
 istisnalar geçer; her istisna tek bir uygulama, paketin ulaşıldığı yol, bir gerekçe ve bir son gün taşır ve açıktan
-etkilenmeyen bir sürüm yayımlandığında ya da açık artık bildirilmediğinde kendisi işi düşürür. Şu an tek istisna
-vardır: `apps/web` içinde `picomatch` (GHSA-fc5q-39xc-vjpf; yalnızca next-intl'in ileti çıkarıcısı üzerinden
-ulaşılır, etkilenmeyen bir sürümü yoktur), 2026-12-18'e kadar. Veritabanı şeması
+etkilenmeyen bir sürüm yayımlandığında ya da açık artık bildirilmediğinde kendisi işi düşürür. Şu an istisna
+yoktur: tek kayıt olan `apps/web` içindeki `picomatch` (GHSA-fc5q-39xc-vjpf) açığı 2026-11-18'de GitHub tarafından
+geri çekildi, `npm audit` onu artık bildirmiyor ve kayıt listeden çıkarıldı. Veritabanı şeması
 `apps/api/migrations` altındaki 87 dosyadadır (`001`–`087`; `077`–`080` ikinci güvenlik turuna aittir, `081`
 ödemenin ne zamandan beri inceleme beklediğini, `082` destek talebi açıldığında sunucunun durumunu, `083` kayıtlı
 görünümleri, `084` bir işlemin kimin kuyruk payından sayıldığını ve bayi müşterisinin ne zaman bilgilendirildiğini
@@ -917,9 +917,10 @@ What is not the same everywhere (the table under "Platform kapsamı" above has e
   rows, in order: API unit tests, API integration tests, the full integration run, Go services, the adapters, web
   unit tests, the worker, end to end). The database schema is 87 migrations (`001`–`087`).
   CI runs a dependency audit after the unit tests (`scripts/audit.mjs`): any high or critical advisory fails,
-  except entries in `scripts/audit-allowlist.json`, each with a scope, a reason and an expiry date (one today:
-  `picomatch` in `apps/web`, GHSA-fc5q-39xc-vjpf, until 2026-12-18); an entry stops excusing as soon as an
-  unaffected release exists.
+  except entries in `scripts/audit-allowlist.json`, each with a scope, a reason and an expiry date (none today:
+  the one for `picomatch` in `apps/web`, GHSA-fc5q-39xc-vjpf, was removed when the advisory was withdrawn on
+  2026-11-18); an entry stops excusing as soon as an unaffected release exists, and fails the audit once its
+  advisory is no longer reported.
 - **Private repository installs:** give `get.sh` the access token with `--token-file FILE` or `GIT_TOKEN` in the
   environment (`sudo --preserve-env=GIT_TOKEN sh`); `--token` works but is visible in the process list.
 - **Backups** are encrypted and signed with `secrets/backup.key` (`NAME.tar.enc` plus `NAME.tar.enc.hmac`). Restore

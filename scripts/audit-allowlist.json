@@ -1,13 +1,4 @@
 {
   "comment": "Advisories that scripts/audit.mjs excuses, and why. Every entry needs all six fields. An entry excuses its advisory only for the package directory in `scope`, only while the affected package is reached through nothing but the packages in `via`, only until `expires` (the last day it counts, UTC), and only while the registry has no release newer than the installed one that the advisory does not cover. An entry whose advisory is no longer reported fails the audit too: remove it.",
-  "advisories": [
-    {
-      "id": "GHSA-fc5q-39xc-vjpf",
-      "package": "picomatch",
-      "scope": "apps/web",
-      "via": ["@parcel/watcher", "next-intl"],
-      "reason": "ReDoS in picomatch's extglob matching; every release up to 4.0.7 (the newest) is affected and no fixed version exists. In apps/web it is installed only for next-intl's message extractor (next-intl -> @parcel/watcher -> picomatch): a file watcher whose wrapper turns the ignore globs its caller passes, paths of this project's own source and message files, into regular expressions. No pattern or path comes from a request, and the code that serves requests never loads it.",
-      "expires": "2026-12-18"
-    }
-  ]
+  "advisories": []
 }
