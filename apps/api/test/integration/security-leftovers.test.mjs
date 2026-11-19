@@ -189,7 +189,9 @@ test('a reseller\'s customer sees who manages the account and is told once; leav
   // Who manages the account, on the data the account page reads; nobody for an ordinary account or the reseller itself.
   assert.equal((await told(cId, 'managed')).length, 0);
   const summary = (await get('/reseller/summary', c)).json();
-  assert.deepEqual(summary, { allocation: null, managedBy: { name: 'Acme Hosting', email: 'leave-reseller@example.test', brand: null, active: true, canLeave: true } });
+  // afterLeave: the prices that would change on leaving (none here: these servers are not priced from the catalog;
+  // security-leftovers-2.test.mjs has the ones that are).
+  assert.deepEqual(summary, { allocation: null, managedBy: { name: 'Acme Hosting', email: 'leave-reseller@example.test', brand: null, active: true, canLeave: true, afterLeave: [] } });
   assert.deepEqual((await get('/reseller/summary', other)).json(), { allocation: null, managedBy: null });
   assert.equal((await get('/reseller/summary', r)).json().managedBy, null);
   // Told once, the first time they use the panel; the answer stays, the notice is not repeated.
@@ -211,7 +213,7 @@ test('a reseller\'s customer sees who manages the account and is told once; leav
   assert.deepEqual(await post('/reseller/leave', {}, r).then((x) => [x.statusCode, x.json().code]), [409, 'NOT_MANAGED']);
   const left = await post('/reseller/leave', {}, c);
   assert.equal(left.statusCode, 200, left.body);
-  assert.deepEqual(left.json(), { ok: true, servers: 2, subscriptions: 2 });
+  assert.deepEqual(left.json(), { ok: true, servers: 2, subscriptions: 2, listPrices: [] });
   assert.equal((await one('SELECT reseller_id FROM users WHERE id = $1', [cId])).reseller_id, null);
   assert.equal((await get('/reseller/summary', c)).json().managedBy, null);
   // The reseller no longer reaches the servers, and has no lever left on them: the subscriptions are the customer's,
@@ -258,7 +260,8 @@ test('removing a reseller, or staff taking one customer out, moves what its cust
   assert.equal((await del(`/admin/resellers/${rId}/customers/${rId}`, admin)).statusCode, 404);
   const out = await del(`/admin/resellers/${rId}/customers/${c2Id}`, admin);
   assert.equal(out.statusCode, 200, out.body);
-  assert.deepEqual(out.json(), { ok: true, servers: 1, subscriptions: 1, withdrawnInvoices: [], leftInvoices: [charge] });
+  // listPrices / pricesKept: the server's list price cannot be told (it is not priced from the catalog), so it keeps its price.
+  assert.deepEqual(out.json(), { ok: true, servers: 1, subscriptions: 1, withdrawnInvoices: [], leftInvoices: [charge], listPrices: [], pricesKept: [s2] });
   assert.equal((await sub(b2)).owner_id, c2Id);
   assert.deepEqual(await one('SELECT owner_id, status FROM invoices WHERE id = $1', [charge]), { owner_id: rId, status: 'unpaid' }, 'the charge stays the reseller\'s debt');
   assert.equal((await told(rId, 'customer_left')).length, 1);

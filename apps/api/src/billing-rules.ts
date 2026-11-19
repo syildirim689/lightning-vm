@@ -94,13 +94,23 @@ export const daysBetween = (from: string, to: string) => Math.round((Date.parse(
 export type Dunning = { invoiceDaysBefore: number; reminderDays: number[]; suspendAfterDays: number; terminateAfterDays: number };
 // What an unpaid renewal needs today, by days past its due date: a reminder before it is due, the overdue notice
 // on the day after, suspension after N days, termination after M more days (0 = never).
-export function collectionStep(daysPastDue: number, s: Dunning, state: { reminded: boolean; overdueNotified: boolean; suspended: boolean; suspendedDays: number }) {
-  if (state.suspended) return s.terminateAfterDays > 0 && state.suspendedDays >= s.terminateAfterDays ? 'terminate' : null;
-  if (daysPastDue >= s.suspendAfterDays && daysPastDue > 0) return 'suspend';
+// sheltered: a payment for the invoice waits for staff and its wait is still within the review window (inReviewWindow):
+// nothing is suspended or terminated and nobody is reminded to pay what they may have paid; the overdue notice is
+// still sent once (it says the payment is being checked), so a suspension after the window does not come unannounced.
+export function collectionStep(daysPastDue: number, s: Dunning, state: { reminded: boolean; overdueNotified: boolean; suspended: boolean; suspendedDays: number; sheltered?: boolean }) {
+  if (state.suspended) return !state.sheltered && s.terminateAfterDays > 0 && state.suspendedDays >= s.terminateAfterDays ? 'terminate' : null;
+  if (daysPastDue >= s.suspendAfterDays && daysPastDue > 0 && !state.sheltered) return 'suspend';
   if (daysPastDue > 0 && !state.overdueNotified) return 'overdue';
-  if (daysPastDue <= 0 && s.reminderDays.includes(-daysPastDue) && !state.reminded) return 'remind';
+  if (daysPastDue <= 0 && !state.sheltered && s.reminderDays.includes(-daysPastDue) && !state.reminded) return 'remind';
   return null;
 }
+// The review window of a payment that waits for staff: from when the wait began (payments.review_since) for `days`
+// days (Settings → Billing, reviewHoldDays; 0: no window). Inside it the invoice is not collected further and cannot
+// be paid a second time; after it, with the review still open, everything goes on as for any unpaid invoice, so a
+// review nobody decides shelters an unpaid server for that long and no longer. billing.ts asks the same in SQL
+// (reviewWindowSql); this is the rule where it can be read and tested.
+export const inReviewWindow = (since: Date | string | null | undefined, days: number, now: Date | number = Date.now()) =>
+  !!since && days > 0 && new Date(now).getTime() - new Date(since).getTime() < days * 86_400_000;
 
 // A price increase mid-period: the difference for the days left (today until the period's end), in cents. A decrease costs nothing now.
 export function prorate(diffCents: number, day: string, periodStart: string, periodEnd: string) {
@@ -127,6 +137,24 @@ export const hourlyOf = (monthly: string) => (Math.round((Number(monthly) / 730)
 
 // A server's monthly price: its package or shape, plus each extra disk (disks.ts). A resize prices the new shape and keeps the disks.
 export const sumMoney = (base: string, more: string[]) => fromCents(more.reduce((a, m) => a + toCents(m), toCents(base)));
+
+// A reseller's price: the catalog price less their discount (percent), to the cent.
+export const discounted = (monthly: string, pct: number) => (Math.round(Number(monthly) * (100 - pct)) / 100).toFixed(2);
+// A server's price without the reseller's discount, or null when it cannot be told. The panel stores one price per
+// server (and one per extra disk), not the list price or the discount that was applied, so the list price is worked
+// out from the catalog as it is now (`base`: the package or custom shape with its extra IPv4 and application; `disks`:
+// each extra disk) and accepted only when the reseller's discount on exactly that gives the price the server has. Then
+// nothing is guessed: the server is priced at today's catalog less this discount, and the list price is the catalog's.
+// Otherwise (the catalog or the discount changed since, staff set a price by hand, no discount) the price is left
+// alone (reseller.ts, listPrices).
+export function undiscounted(current: string, pct: number, base: string, disks: string[]): string | null {
+  if (!(pct > 0)) return null;
+  const expected = sumMoney(discounted(base, pct), disks.map((d) => discounted(d, pct)));
+  return toCents(expected) === toCents(current) ? sumMoney(base, disks) : null;
+}
+// "120.00 TRY", or "120.00 TRY + 15.00 EUR": monthly prices summed per currency, for a notice.
+export const monthlyTotals = (rows: { currency: string; amount: string }[]) => [...new Set(rows.map((r) => r.currency))].sort()
+  .map((c) => `${fromCents(rows.filter((r) => r.currency === c).reduce((a, r) => a + toCents(r.amount), 0))} ${c}`).join(' + ');
 
 // A server held for an unpaid invoice may only be stopped or deleted until it is paid, whoever asks (the owner, a reseller,
 // a schedule); staff still may do anything, and billing's own run is what puts the hold on and takes it off.

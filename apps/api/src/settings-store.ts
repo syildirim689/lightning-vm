@@ -71,6 +71,9 @@ export type BillingSettings = { enabled: boolean; requirePayment: boolean; order
   hourly: boolean; hourlyMinHours: number;
   // Disputes: how long after an invoice a customer may dispute it, and how many days staff have to decide.
   disputeWindowDays: number; disputeAnswerDays: number;
+  // How many days a payment that waits for staff keeps its invoice from being suspended, deleted or paid a second
+  // time, counted from when the wait began (billing.ts, reviewWindow); 0: not at all.
+  reviewHoldDays: number;
   bankTransfer: { enabled: boolean; bank: string; holder: string; iban: string }; company: Company };
 // e-Fatura / e-Arşiv through an integrator (einvoice.ts); 'none' issues invoices in the panel only.
 // values: the integrator's plain fields (and an endpoint override); its secrets are encrypted together in credentialsEnc.
@@ -82,7 +85,7 @@ export type RdnsSettings = { provider: 'none' | 'powerdns'; apiUrl: string; apiK
 const defaults = {
   einvoice: { provider: 'none', mode: 'test', values: {}, credentialsEnc: null, efaturaSeries: 'LVF', earsivSeries: 'LVA', profile: 'TEMELFATURA', senderAlias: '', check: null } as EinvoiceSettings,
   billing: { enabled: false, requirePayment: true, orderExpiryHours: 24, taxRate: 20, pricesIncludeTax: false, exportExempt: false, invoicePrefix: 'LVM',
-    invoiceDaysBefore: 7, reminderDays: [3, 1], suspendAfterDays: 3, terminateAfterDays: 0, autoCharge: true, chargeRetries: 3, balance: true, topupMin: 50, topupMax: 50000, sandbox: false, hourly: false, hourlyMinHours: 24, disputeWindowDays: 60, disputeAnswerDays: 7,
+    invoiceDaysBefore: 7, reminderDays: [3, 1], suspendAfterDays: 3, terminateAfterDays: 0, autoCharge: true, chargeRetries: 3, balance: true, topupMin: 50, topupMax: 50000, sandbox: false, hourly: false, hourlyMinHours: 24, disputeWindowDays: 60, disputeAnswerDays: 7, reviewHoldDays: 7,
     bankTransfer: { enabled: false, bank: '', holder: '', iban: '' },
     company: { name: '', taxId: '', taxOffice: '', address: '', district: '', city: '', country: 'TR', postalCode: '', phone: '', email: '', website: '', mersis: '', tradeRegistry: '' } } as BillingSettings,
   branding: { name: 'Lightning VM', accent: null, logo: null, favicon: null, passwordPrefix: '' } as Branding,

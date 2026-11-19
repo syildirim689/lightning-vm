@@ -60,7 +60,8 @@ export async function ssoSignedIn(s: OidcSettings, userId: string, ip: string) {
   const wanted = rolesFromGroups(s, seen?.groups ?? []).filter((k) => roles.has(k));
   const fresh = u.auth_source !== 'oidc';
   const role = s.groupRoles.length || fresh ? (wanted.length ? wanted : ['user']).join(',') : u.role;
-  await pool.query("UPDATE users SET auth_source = 'oidc', role = $2, updated_at = now() WHERE id = $1", [userId, role]);
+  // source_confirmed_at: the provider vouched for the account just now (its API tokens count from here: ldap.ts, tokenAsleep).
+  await pool.query("UPDATE users SET auth_source = 'oidc', role = $2, source_confirmed_at = now(), updated_at = now() WHERE id = $1", [userId, role]);
   if (fresh) await pool.query("INSERT INTO audit_events (actor_id, action, outcome, metadata) VALUES ($1, 'auth.sso_user_created', 'success', $2)", [userId, { role }]);
   else if (role !== u.role) await publishLive(userId, 'access');
   return ipAllowed(limitsOf(role).allowedIps, ip);

@@ -6,7 +6,7 @@ import { countRequest } from './api-rate';
 import { getAuth } from './better-auth';
 import { config } from './config';
 import { pool } from './db';
-import { directorySessionOver } from './ldap';
+import { directorySessionOver, tokenAsleep } from './ldap';
 import { apiError } from './errors';
 import { can, covers, customerLevel, limitsOf, permissionsOf, permissionsOfMany, splitRoles } from './permissions';
 import { ipAllowed, narrowedTokenMay } from './role-limits';
@@ -31,9 +31,36 @@ export function capped(v: unknown, depth = 0): unknown {
   return Object.getPrototypeOf(v) === Object.prototype ? Object.fromEntries(Object.entries(v).map(([k, x]) => [k, capped(x, depth + 1)])) : v;
 }
 
+// An event somebody recorded for another account (metadata.forOwner, with actingAs 'reseller' when it was that
+// account's reseller) is shown in that account's own activity (audit-log.ts). Those two fields are therefore never
+// taken from a caller's metadata, which often repeats request input: they are written only from actingFor() (a key no
+// request body can carry) or from what findServer noted on the request (actedOn).
+const ACTED = Symbol('lvm.actedFor');
+type Acted = { forOwner: string; actingAs?: 'reseller' };
+export const actingFor = (forOwner: string, actingAs?: 'reseller'): object => ({ [ACTED]: { forOwner, ...(actingAs && { actingAs }) } });
+// findServer (servers.ts) answered for a server that is not the caller's and not through a staff permission: the
+// caller is the owner's reseller. Whatever this request audits about that server is the owner's to see as well:
+// opening the console, a schedule, labels, a disk, an image made from it, not only the operations.
+export function actedOn(req: FastifyRequest, serverId: string, ownerId: string) {
+  const r = req as FastifyRequest & { actedOn?: Map<string, string> };
+  (r.actedOn ??= new Map()).set(serverId, ownerId);
+}
+export function auditMetadata(req: FastifyRequest, metadata: object): Record<string, unknown> {
+  const { forOwner: _f, actingAs: _a, ...plain } = metadata as Record<string, unknown>; // eslint-disable-line @typescript-eslint/no-unused-vars
+  let mark = (metadata as Record<symbol, Acted | undefined>)[ACTED];
+  const noted = (req as { actedOn?: Map<string, string> }).actedOn;
+  if (!mark && noted?.size) {
+    // The event names the server, or the request touched exactly one such server and the event names none.
+    const serverId = typeof plain.serverId === 'string' ? plain.serverId : plain.serverId === undefined && noted.size === 1 ? [...noted.keys()][0] : null;
+    const owner = serverId ? noted.get(serverId) : undefined;
+    if (owner) { mark = { forOwner: owner, actingAs: 'reseller' }; plain.serverId = serverId; }
+  }
+  return { ...(capped(plain) as Record<string, unknown>), ...mark };
+}
+
 export async function audit(req: FastifyRequest, action: string, outcome: 'success' | 'failure' | 'denied', actorId: string | null, metadata: object = {}) {
   await pool.query('INSERT INTO audit_events (actor_id, action, outcome, request_id, ip, metadata) VALUES ($1, $2, $3, $4, $5, $6)',
-    [actorId, action, outcome, req.id, req.ip, capped(metadata)]);
+    [actorId, action, outcome, req.id, req.ip, auditMetadata(req, metadata)]);
 }
 
 // Validation runs on the server whatever the browser checked. Field codes are translated by the web UI.
@@ -53,9 +80,23 @@ export function readCredentials(body: unknown) {
 async function tokenSession(req: FastifyRequest, token: string): Promise<{ user: User; token: string; id: string } | null> {
   const { rows: [t] } = await pool.query(`UPDATE api_tokens a SET last_used_at = now(), last_used_ip = $2::inet FROM users u
       WHERE a.token_hash = $1 AND u.id = a.user_id AND (a.expires_at IS NULL OR a.expires_at > now()) AND NOT coalesce(u.banned, false) AND u.disabled_at IS NULL
-      RETURNING a.id, a.name AS token_name, a.scope, a.permissions AS token_permissions, a.allowed_ips, u.id AS user_id, u.email, u.name, u.role, u.locale, u.time_zone, u.username, u.two_factor_enabled, u.phone_number, u.phone_number_verified`,
+      RETURNING a.id, a.name AS token_name, a.scope, a.permissions AS token_permissions, a.allowed_ips, u.id AS user_id, u.email, u.name, u.role, u.locale, u.time_zone, u.username, u.two_factor_enabled, u.phone_number, u.phone_number_verified,
+        u.auth_source, u.source_confirmed_at`,
   [createHash('sha256').update(token).digest('hex'), req.ip]).catch(() => ({ rows: [] }));
   if (!t) return null;
+  // A directory or single sign-on account: the panel is not told when the person leaves, and a token needs no
+  // sign-in. It is accepted only while the account's source confirmed it within DIRECTORY_TOKEN_DAYS (ldap.ts,
+  // tokenAsleep); a directory with a service account is asked again here (directory-signin.ts, reconfirmDirectory):
+  // before a token that sleeps is refused, and in the background once the confirmation is a day old.
+  const days = config.DIRECTORY_TOKEN_DAYS;
+  if (days > 0 && (t.auth_source === 'ldap' || t.auth_source === 'oidc')) {
+    let asleep = tokenAsleep(t.auth_source, t.source_confirmed_at, days);
+    if (t.auth_source === 'ldap' && (asleep || Date.now() - new Date(t.source_confirmed_at).getTime() > 86_400_000)) {
+      const asked = import('./directory-signin').then((d) => d.reconfirmDirectory(t.user_id, t.email)).catch(() => 'unknown' as const);
+      if (asleep) asleep = (await asked) !== 'found';
+    }
+    if (asleep) throw apiError(401, 'TOKEN_ACCOUNT_UNCONFIRMED', 'This account comes from a directory or single sign-on and was not confirmed there recently; sign in to the panel again to use its API tokens');
+  }
   if (!ipAllowed(limitsOf(t.role ?? null).allowedIps, req.ip)) return null;
   // The administrator's addresses for all tokens (Settings → API) and the token's own.
   const api = await getSettings('api');

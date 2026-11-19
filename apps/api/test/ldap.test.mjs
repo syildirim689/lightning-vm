@@ -49,3 +49,21 @@ test('a directory or single sign-on session ends a fixed time after it was made;
   }
   for (const source of ['local', 'social', undefined, null]) assert.equal(directorySessionOver(source, new Date(now - 1000 * hour), 12, now), false, String(source));
 });
+
+test('an API token of a directory or SSO account sleeps when its source has not confirmed the account within the limit', async () => {
+  const { tokenAsleep, tokenAsleepSql } = await import('../dist/ldap.js');
+  const now = Date.parse('2026-11-19T12:00:00Z');
+  const ago = (days) => new Date(now - days * 86_400_000);
+  for (const source of ['ldap', 'oidc']) {
+    assert.equal(tokenAsleep(source, ago(1), 30, now), false);
+    assert.equal(tokenAsleep(source, ago(29.9), 30, now), false);
+    assert.equal(tokenAsleep(source, ago(30.1), 30, now), true);
+    assert.equal(tokenAsleep(source, null, 30, now), true, 'never confirmed, or the directory no longer lists the account');
+    assert.equal(tokenAsleep(source, ago(400), 0, now), false, '0 days switches the rule off');
+    assert.equal(tokenAsleep(source, null, 0, now), false);
+  }
+  // The panel's own accounts (and social ones) have no source that could stop vouching for them.
+  for (const source of ['local', 'social', null, undefined]) assert.equal(tokenAsleep(source, null, 30, now), false);
+  assert.equal(tokenAsleep('ldap', ago(2).toISOString(), 30, now), false, 'a date as text, as a driver may hand it over');
+  assert.match(tokenAsleepSql('u', '$2'), /u\.auth_source IN \('ldap', 'oidc'\) AND \$2::int > 0/);
+});

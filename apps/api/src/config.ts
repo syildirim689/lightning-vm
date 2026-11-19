@@ -15,6 +15,9 @@ const schema = z.object({
   TURNSTILE_SITE_KEY: z.string().optional().or(z.literal('').transform(() => undefined)),
   TURNSTILE_SECRET_KEY: z.string().optional().or(z.literal('').transform(() => undefined)),
   SESSION_TTL_HOURS: z.coerce.number().int().min(1).max(24 * 30).default(12),
+  // A personal API token of a directory (LDAP) or single sign-on account works only while the account's source
+  // confirmed it within this many days (auth.ts, tokenSession; ldap.ts, tokenAsleep). 0 turns the rule off.
+  DIRECTORY_TOKEN_DAYS: z.coerce.number().int().min(0).max(3650).default(30),
 });
 
 export const config = schema.parse(process.env);

@@ -651,7 +651,8 @@ async function rollbackCreate(db, ctx) {
 // operation counts against operations.capped_for (the API: servers.ts cappedFor; the account that started it, the
 // owner for a schedule; NULL for staff, the billing run and the billing integration, which are never held back). At most
 // `cap` of one account's operations are under way at once (begun and not finished, a retry's pause included);
-// further ones are put back with a delay and leave the slot to the next job in the queue. Only the first start is
+// further ones are put back with a delay and leave the slot to the next job in the queue (the wait does not count
+// against the operation's deadline, within a bound: beginAfterHold below). Only the first start is
 // gated: an operation that has begun is always resumed (its task may be running on the platform), and so is one that
 // is to be cancelled. Checked and taken under one lock per account, so jobs picked at the same moment cannot all pass.
 // OPERATIONS_PER_OWNER: the cap (default half of OPERATIONS_CONCURRENCY, at least 1; 0 switches it off).
@@ -664,10 +665,30 @@ export function ownerCap(env = process.env) {
 // it (so they start roughly in the order they were asked for, and a long line does not poll every few seconds).
 export const holdDelayMs = (ahead, cap) => Math.min(60_000, 3000 * (1 + Math.floor(Math.max(0, ahead) / Math.max(1, cap))));
 const begin = "UPDATE operations SET status = 'running', started_at = COALESCE(started_at, now()), attempts = attempts + 1, updated_at = now() WHERE id = $1";
+// The time an operation spent held back by its account's share does not count against its deadline: the deadline was
+// set when the operation was asked for, for the work itself. The first time it is held the moment is kept
+// (operations.held_since, migration 087); when it starts, the deadline moves on by the time since then, at most by
+// heldHoursMax, and the mark is cleared. An operation still held when even that longest extension of its deadline has
+// passed is no longer held: it is let through to the deadline check, which ends it as TIMEOUT like any operation that
+// waited too long, so nothing stays in the line for ever.
+// OPERATIONS_HELD_HOURS: the most the wait can add to a deadline (default 6).
+export function heldHoursMax(env = process.env) {
+  const n = Number(env.OPERATIONS_HELD_HOURS);
+  return env.OPERATIONS_HELD_HOURS !== undefined && env.OPERATIONS_HELD_HOURS !== '' && Number.isFinite(n) && n >= 0 ? n : 6;
+}
+// The extension in milliseconds: the time held, never negative, never more than the bound. No mark, no extension.
+export const heldExtensionMs = (heldSince, now, maxHours) => (heldSince ? Math.min(Math.max(0, new Date(now).getTime() - new Date(heldSince).getTime()), maxHours * 3_600_000) : 0);
+const beginAfterHold = `UPDATE operations SET status = 'running', attempts = attempts + 1, updated_at = now(),
+  deadline_at = CASE WHEN started_at IS NULL AND held_since IS NOT NULL THEN deadline_at + LEAST(GREATEST(now() - held_since, interval '0'), $2::float8 * interval '1 hour') ELSE deadline_at END,
+  held_since = NULL, started_at = COALESCE(started_at, now()) WHERE id = $1`;
 // Marks the operation running; { held: ms } instead when its account already has `cap` under way. A database from
 // before the column (the API migrates on its start) has no caps yet.
-export async function admit(db, op, cap = ownerCap()) {
-  if (!cap || !op.capped_for || op.started_at || op.cancel_requested) { await db.query(begin, [op.id]); return {}; }
+export async function admit(db, op, cap = ownerCap(), maxHours = heldHoursMax()) {
+  if (!cap || !op.capped_for || op.started_at || op.cancel_requested) {
+    // One that was held before (the cap was switched off since, or it is to be cancelled) still gets its time back.
+    await db.query(op.held_since && !op.started_at ? beginAfterHold : begin, op.held_since && !op.started_at ? [op.id, maxHours] : [op.id]);
+    return {};
+  }
   const c = await db.connect();
   try {
     await c.query('BEGIN');
@@ -675,8 +696,15 @@ export async function admit(db, op, cap = ownerCap()) {
     const { rows: [n] } = await c.query(`SELECT count(*) FILTER (WHERE started_at IS NOT NULL)::int AS busy,
         count(*) FILTER (WHERE started_at IS NULL AND step IS DISTINCT FROM 'awaiting_payment' AND created_at < $3)::int AS ahead
       FROM operations WHERE capped_for = $1 AND id <> $2 AND status IN ('pending', 'running')`, [op.capped_for, op.id, op.created_at ?? new Date()]);
-    if ((n?.busy ?? 0) >= cap) { await c.query('ROLLBACK'); return { held: holdDelayMs(n.ahead ?? 0, cap) }; }
-    await c.query(begin, [op.id]);
+    const full = (n?.busy ?? 0) >= cap;
+    if (full) {
+      // Held: the moment the wait began is kept (once), and whether the wait has outlasted its bound is read with it.
+      const { rows: [h] } = await c.query(`UPDATE operations SET held_since = COALESCE(held_since, now()) WHERE id = $1 AND started_at IS NULL
+        RETURNING deadline_at + $2::float8 * interval '1 hour' < now() AS expired`, [op.id, maxHours]);
+      if (!h?.expired) { await c.query('COMMIT'); return { held: holdDelayMs(n.ahead ?? 0, cap) }; }
+    }
+    if (full || op.held_since) await c.query(beginAfterHold, [op.id, maxHours]);
+    else await c.query(begin, [op.id]);
     await c.query('COMMIT');
     return {};
   } catch (e) { await c.query('ROLLBACK').catch(() => undefined); throw e; } finally { c.release(); }

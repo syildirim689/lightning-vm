@@ -5,7 +5,7 @@ import type { FastifyReply } from 'fastify';
 import type { PoolClient } from 'pg';
 import { pool, redis } from './db';
 import { apiError } from './errors';
-import { audit, SessionGuard, type AuthedRequest } from './auth';
+import { actedOn, actingFor, audit, SessionGuard, type AuthedRequest } from './auth';
 import { Can, PermissionGuard } from './rbac';
 import { can, limitsOf, type Permission } from './permissions';
 import { capacityOf, limitsFor, resolveOrder, usageOf } from './catalog';
@@ -99,6 +99,8 @@ export async function findServer(req: AuthedRequest, id: string, manage = false)
   const { rows: [s] } = await pool.query(`SELECT * FROM servers WHERE id = $1 AND state <> 'deleted' AND (owner_id = $2 OR $3
     OR owner_id IN (SELECT u.id FROM users u JOIN resellers r ON r.user_id = u.reseller_id AND r.active WHERE u.reseller_id = $2))`, [id, req.user.id, staff]);
   if (!s) throw apiError(404, 'NOT_FOUND', 'Unknown server');
+  // Reached as the owner's reseller: what this request audits about the server is also in the owner's activity (auth.ts).
+  if (s.owner_id !== req.user.id && !staff) actedOn(req, s.id, s.owner_id);
   return s;
 }
 
@@ -187,7 +189,7 @@ export const cappedFor = (req: AuthedRequest, ownerId: string) => ((req as { bil
   : (req as { capFor?: string }).capFor ?? req.user?.id ?? ownerId);
 // An operation somebody other than the owner or staff started on the server (the owner's reseller, findServer): the
 // audit event says for whom, so it is also in the owner's own activity (audit-log.ts).
-const actedFor = (req: AuthedRequest, ownerId: string) => (req.user?.id && req.user.id !== ownerId && !can(req.user.permissions ?? [], 'servers.manage_all') && !forBilling(req) ? { forOwner: ownerId, actingAs: 'reseller' } : {});
+const actedFor = (req: AuthedRequest, ownerId: string) => (req.user?.id && req.user.id !== ownerId && !can(req.user.permissions ?? [], 'servers.manage_all') && !forBilling(req) ? actingFor(ownerId, 'reseller') : {});
 
 // prepare: what must be in place before the worker can pick the operation up (an invoice, tracking rows); it runs after
 // the operation exists and before it is queued. If it fails, the operation ends there and never runs.

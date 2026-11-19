@@ -452,7 +452,7 @@ export default {
   'GET /account/api-tokens': {
     tag: 'account',
     summary: { tr: 'API anahtarlarınızı listeler.', en: 'Lists your API tokens.' },
-    returns: { tr: 'tokens: id, name, hint (son 4 karakter), scope, expiresAt, lastUsedAt, lastUsedIp, createdAt; ve en fazla sayı max (20).', en: 'tokens: id, name, hint (last 4 characters), scope, expiresAt, lastUsedAt, lastUsedIp, createdAt; and the limit max (20).' },
+    returns: { tr: 'tokens: id, name, hint (son 4 karakter), scope, expiresAt, lastUsedAt, lastUsedIp, createdAt, asleep; ve en fazla sayı max (20). asleep: hesap bir dizinden (LDAP) ya da tek oturum açmadan geliyorsa ve kaynağı hesabı yakın zamanda doğrulamadıysa \'TOKEN_ACCOUNT_UNCONFIRMED\' (anahtar o sırada 401 ile reddedilir; yeniden oturum açınca çalışır), değilse null. confirmation: böyle bir hesap için { source, days, confirmedAt, until }, değilse null.', en: 'tokens: id, name, hint (last 4 characters), scope, expiresAt, lastUsedAt, lastUsedIp, createdAt, asleep; and the limit max (20). asleep: \'TOKEN_ACCOUNT_UNCONFIRMED\' while the account comes from a directory (LDAP) or single sign-on and its source has not confirmed it recently (the token is refused with 401 meanwhile and works again after a sign-in), else null. confirmation: for such an account { source, days, confirmedAt, until }, else null.' },
   },
   'POST /account/api-tokens': {
     tag: 'account',

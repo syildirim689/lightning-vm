@@ -140,6 +140,8 @@ export class TransfersController {
 
   @Post('transfers/:id/accept') @HttpCode(200)
   async accept(@Req() req: AuthedRequest, @Param('id', ParseUUIDPipe) id: string) {
+    // Taking a server over (and paying for it from then on) is the person's own decision, not staff's acting as them.
+    if (req.user.impersonatedBy) throw apiError(403, 'NOT_WHILE_IMPERSONATING', 'Not while acting as another user');
     const client = await pool.connect();
     let t: { server_id: string; from_id: string };
     let name: string, moved: Server;

@@ -55,7 +55,7 @@ export default {
   'POST /billing/invoices/:id/pay': {
     tag: 'billing',
     summary: { tr: 'Bir faturayı öder: bakiyeden, kayıtlı karttan ya da kartla.', en: 'Pays an invoice: from the balance, with a saved card, or by card.' },
-    details: { tr: 'Bakiye ve kayıtlı kart hemen sonuç verir. Kartla ödemede sağlayıcının 3D Secure sayfasına gidilir; ödeme sağlayıcıdan onay gelince kaydedilir. Bakiye yükleme faturası bakiyeden ödenemez.', en: 'Balance and saved card settle at once. A card payment continues on the provider\'s 3D Secure page and is recorded when the provider confirms it. A top-up cannot be paid from the balance.' },
+    details: { tr: 'Bakiye ve kayıtlı kart hemen sonuç verir. Kartla ödemede sağlayıcının 3D Secure sayfasına gidilir; ödeme sağlayıcıdan onay gelince kaydedilir. Bakiye yükleme faturası bakiyeden ödenemez. Fatura için yapılmış bir ödeme personel incelemesi bekliyorsa (inceleme süresi boyunca) hiçbir yolla yeniden ödenemez: 409 PAYMENT_IN_REVIEW. Bir hesap saatte en çok 20 kart ödemesi başlatabilir (429 RATE_LIMITED).', en: 'Balance and saved card settle at once. A card payment continues on the provider\'s 3D Secure page and is recorded when the provider confirms it. A top-up cannot be paid from the balance. While a payment for the invoice waits for staff review (for the review window) it cannot be paid again by any method: 409 PAYMENT_IN_REVIEW. An account can start at most 20 card payments an hour (429 RATE_LIMITED).' },
     params: [invoiceId],
     body: [
       { name: 'method', type: 'string', required: true, values: ['balance', 'saved_card', 'card'], text: { tr: 'Ödeme yolu. saved_card varsayılan kayıtlı kartı (yoksa en yenisini) dener.', en: 'How to pay. saved_card tries the default saved card (or the newest).' } },
@@ -64,7 +64,7 @@ export default {
     ],
     example: { method: 'card', provider: 'iyzico', saveCard: true },
     returns: { tr: 'Bakiye ve kayıtlı kartta { paid: true }. Kartta { paymentId, redirect } ya da { paymentId, html } (sağlayıcının sayfası).', en: 'Balance and saved card: { paid: true }. Card: { paymentId, redirect } or { paymentId, html } (the provider\'s page).' },
-    errors: ['NOT_FOUND', 'INVOICE_NOT_PAYABLE', 'PAYMENT_METHOD_UNAVAILABLE', 'INSUFFICIENT_BALANCE', 'PAYMENT_FAILED', 'PAYMENT_PROVIDER_ERROR'],
+    errors: ['NOT_FOUND', 'INVOICE_NOT_PAYABLE', 'PAYMENT_IN_REVIEW', 'PAYMENT_METHOD_UNAVAILABLE', 'INSUFFICIENT_BALANCE', 'PAYMENT_FAILED', 'PAYMENT_PROVIDER_ERROR', 'RATE_LIMITED'],
   },
   'GET /billing/payments/:id': {
     tag: 'billing',
@@ -581,9 +581,9 @@ export default {
   'POST /reseller/leave': {
     tag: 'reseller',
     summary: { tr: 'Hesabı bayiden ayırır (müşterinin kendisi çağırır).', en: 'Takes the account out of its reseller\'s hands (called by the customer).' },
-    details: { tr: 'Bayi artık bu hesabın sunucularını göremez ve yönetemez; açık konsolları kapanır ve hesaba eklediği SSH anahtarı kaldırılır. Sunucuların çalışan abonelikleri müşteriye geçer (bayinin ayarladığı dönem sonu iptali kalkar); bayinin bu sunucular için ödenmemiş yenileme faturaları geri çekilir ve bir sonraki faturalama çalışması, ödenmemiş ilk dönemi müşteriye faturalar. Fiyat değişmez. İki tarafa da bildirim gider; olay müşterinin etkinlik kaydında görünür.', en: 'The reseller can no longer see or manage this account\'s servers; its open consoles are closed and the SSH key it added to the account is removed. The servers\' running subscriptions become the customer\'s (a cancellation the reseller booked is cleared); the reseller\'s unpaid renewal invoices for them are withdrawn and the next billing run invoices the customer for the first unpaid period. Prices do not change. Both sides are notified; the event is in the customer\'s activity.' },
-    returns: { tr: '{ ok, servers, subscriptions }', en: '{ ok, servers, subscriptions }' },
-    errors: ['NOT_MANAGED'],
+    details: { tr: 'Bayi artık bu hesabın sunucularını göremez ve yönetemez; açık konsolları kapanır ve hesaba eklediği SSH anahtarı kaldırılır. Sunucuların çalışan abonelikleri müşteriye geçer (bayinin ayarladığı dönem sonu iptali kalkar); bayinin bu sunucular için ödenmemiş yenileme faturaları geri çekilir ve bir sonraki faturalama çalışması, ödenmemiş ilk dönemi müşteriye faturalar. Bayinin indirimi bu sunucuların fiyatından kalkar: bayinin ödediği dönem için bir şey istenmez, sonraki fatura liste fiyatıyladır (yeni tutarlar listPrices içinde ve bildirimde; önceden GET /reseller/summary managedBy.afterLeave ile görülebilir). Liste fiyatı kesin olarak bulunamayan sunucunun fiyatı değişmez. İki tarafa da bildirim gider; olay müşterinin etkinlik kaydında görünür. Müşteri adına işlem yapan personel bunu çağıramaz.', en: 'The reseller can no longer see or manage this account\'s servers; its open consoles are closed and the SSH key it added to the account is removed. The servers\' running subscriptions become the customer\'s (a cancellation the reseller booked is cleared); the reseller\'s unpaid renewal invoices for them are withdrawn and the next billing run invoices the customer for the first unpaid period. The reseller\'s discount comes off those servers\' prices: nothing is charged for the period the reseller paid, and the next invoice is at the list price (the new amounts are in listPrices and in the notice; GET /reseller/summary shows them beforehand as managedBy.afterLeave). A server whose list price cannot be told for certain keeps its price. Both sides are notified; the event is in the customer\'s activity. Not available to staff acting as the customer.' },
+    returns: { tr: '{ ok, servers, subscriptions, listPrices: [{ serverId, name, currency, from, to }] }', en: '{ ok, servers, subscriptions, listPrices: [{ serverId, name, currency, from, to }] }' },
+    errors: ['NOT_MANAGED', 'NOT_WHILE_IMPERSONATING'],
   },
   'GET /reseller/brand': {
     tag: 'reseller',

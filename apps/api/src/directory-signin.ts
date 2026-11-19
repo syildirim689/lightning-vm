@@ -5,8 +5,8 @@
 // so better-auth then accepts it. A wrong directory password is refused even if an older hash would match.
 import { APIError } from 'better-auth/api';
 import { endImpersonations, getAuth } from './better-auth';
-import { pool } from './db';
-import { ldapAuthenticate, rolesFromGroups, spelledOnce } from './ldap';
+import { pool, redis } from './db';
+import { ldapAuthenticate, ldapLookup, rolesFromGroups, spelledOnce } from './ldap';
 import { publishLive } from './live-bus';
 import { logEvent } from './log';
 import { ensureRoles, releaseTickets, roles } from './permissions';
@@ -54,13 +54,14 @@ export async function directorySignIn(ctx: unknown, body: Input) {
   if (!u) {
     const created = await c.internalAdapter.createUser({ email, name: r.user.name || email, emailVerified: true, role });
     await c.internalAdapter.linkAccount({ userId: created.id, providerId: 'credential', accountId: created.id, password: hash });
-    await pool.query("UPDATE users SET auth_source = 'ldap', external_id = $2 WHERE id = $1", [created.id, r.user.dn]);
+    await pool.query("UPDATE users SET auth_source = 'ldap', external_id = $2, source_confirmed_at = now() WHERE id = $1", [created.id, r.user.dn]);
     await pool.query("INSERT INTO audit_events (actor_id, action, outcome, metadata) VALUES ($1, 'auth.directory_user_created', 'success', $2)", [created.id, { dn: r.user.dn, role }]);
     return;
   }
   // Roles follow the directory only when groups are mapped; otherwise the panel's roles stay.
   const nextRole = s.groupRoles.length ? role : u.role;
-  await pool.query('UPDATE users SET name = coalesce(nullif($2, \'\'), name), role = $3, external_id = $4, updated_at = now() WHERE id = $1', [u.id, r.user.name, nextRole, r.user.dn]);
+  // source_confirmed_at: the directory accepted the account just now (its API tokens count from here: ldap.ts, tokenAsleep).
+  await pool.query('UPDATE users SET name = coalesce(nullif($2, \'\'), name), role = $3, external_id = $4, source_confirmed_at = now(), updated_at = now() WHERE id = $1', [u.id, r.user.name, nextRole, r.user.dn]);
   if (await c.internalAdapter.findCredentialAccount(u.id)) await c.internalAdapter.updatePassword(u.id, hash);
   else await c.internalAdapter.linkAccount({ userId: u.id, providerId: 'credential', accountId: u.id, password: hash });
   if (nextRole !== u.role) {
@@ -69,6 +70,36 @@ export async function directorySignIn(ctx: unknown, body: Input) {
     await endImpersonations(u.id);
     await releaseTickets([u.id]);
   }
+}
+
+// Asks the directory, with its service account, whether it still lists a directory account, when one of the account's
+// API tokens is used (auth.ts, tokenSession): nobody signs in to use a token, so this is how a person who left is
+// noticed before the age limit, and how the token of somebody who is still there keeps working without a sign-in
+// every few weeks. At most once an hour per account. 'found': listed once under the account's address, the
+// confirmation is renewed. 'missing': the search worked and found nobody: the confirmation is taken away, so the
+// account's tokens sleep from now on (until a sign-in the directory accepts). 'unknown': directory sign-in is off,
+// the directory did not answer, the answer was ambiguous, or it was asked within the hour: nothing changes, and the
+// age limit decides. Single sign-on has nothing to ask: its accounts have the age limit alone.
+export async function reconfirmDirectory(userId: string, email: string): Promise<'found' | 'missing' | 'unknown'> {
+  const s = (await getSettings('directory')).ldap;
+  if (!s.enabled) return 'unknown';
+  if (!(await redis.set(`ldap:reconfirm:${userId}`, '1', 'EX', 3600, 'NX').catch(() => null))) return 'unknown';
+  const r = await ldapLookup(s, bindPassword(s), String(email).trim().toLowerCase()).catch(() => null);
+  if (!r) return 'unknown';
+  if (!('error' in r)) {
+    await pool.query("UPDATE users SET source_confirmed_at = now() WHERE id = $1 AND auth_source = 'ldap'", [userId]);
+    return 'found';
+  }
+  if (r.error !== 'LDAP_USER_NOT_FOUND') {
+    if (r.error !== 'LDAP_AMBIGUOUS') logEvent('error', 'ldap_failed', { code: r.error, detail: (r as { detail?: string }).detail });
+    return 'unknown';
+  }
+  const { rowCount } = await pool.query("UPDATE users SET source_confirmed_at = NULL WHERE id = $1 AND auth_source = 'ldap' AND source_confirmed_at IS NOT NULL", [userId]);
+  if (rowCount) {
+    await pool.query("INSERT INTO audit_events (actor_id, action, outcome, metadata) VALUES ($1, 'auth.directory_user_missing', 'success', $2)", [userId, { target: userId, tokens: 'asleep' }]);
+    logEvent('warn', 'directory_user_missing', { userId });
+  }
+  return 'missing';
 }
 
 // The directory (or the single sign-on provider) owns these passwords: they are not changed or reset in the panel.

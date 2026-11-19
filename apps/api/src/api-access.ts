@@ -3,8 +3,10 @@
 // and the administrator's view of every token.
 import { Body, Controller, Delete, Get, HttpCode, Param, ParseUUIDPipe, Put, Query, Req, UseGuards } from '@nestjs/common';
 import { audit, type AuthedRequest } from './auth';
+import { config } from './config';
 import { pool } from './db';
 import { apiError } from './errors';
+import { tokenAsleepSql } from './ldap';
 import { Can, PermissionGuard } from './rbac';
 import { validCidr } from './role-limits';
 import { getSettings, saveSettings } from './settings-store';
@@ -47,15 +49,17 @@ export class ApiAdminController {
     return { ...api, who };
   }
 
-  // Every token of every account, with its owner and how much it was used today.
+  // Every token of every account, with its owner and how much it was used today. asleep: the refusal's code while the
+  // token of a directory or single sign-on account is not accepted (ldap.ts, tokenAsleep); null otherwise.
   @Get('tokens') @Can('settings.view', 'settings.manage', 'users.view')
   async tokens() {
     const { rows } = await pool.query(`SELECT t.id, t.name, t.hint, t.scope, t.permissions, t.allowed_ips AS "allowedIps", t.expires_at AS "expiresAt",
         t.last_used_at AS "lastUsedAt", host(t.last_used_ip) AS "lastUsedIp", t.created_at AS "createdAt",
         json_build_object('id', u.id, 'email', u.email, 'name', u.name, 'role', coalesce(u.role, 'user')) AS owner,
         (SELECT count(*)::int FROM api_request_log l WHERE l.token_id = t.id AND l.created_at > now() - interval '24 hours') AS "requests24h",
-        (SELECT count(*)::int FROM api_request_log l WHERE l.token_id = t.id AND l.created_at > now() - interval '24 hours' AND l.status >= 400) AS "errors24h"
-      FROM api_tokens t JOIN users u ON u.id = t.user_id ORDER BY t.last_used_at DESC NULLS LAST, t.created_at DESC`);
+        (SELECT count(*)::int FROM api_request_log l WHERE l.token_id = t.id AND l.created_at > now() - interval '24 hours' AND l.status >= 400) AS "errors24h",
+        ${tokenAsleepSql('u', '$1')} AS asleep
+      FROM api_tokens t JOIN users u ON u.id = t.user_id ORDER BY t.last_used_at DESC NULLS LAST, t.created_at DESC`, [config.DIRECTORY_TOKEN_DAYS]);
     return { tokens: rows };
   }
 

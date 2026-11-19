@@ -74,7 +74,9 @@ export async function staffInsights(): Promise<Insight[]> {
   for (const c of conns) add('CONNECTION_DOWN', 'danger', { connection: c.name, code: c.last_error_code ?? '' }, `/admin/vmware/${c.id}`, `conn:${c.id}`);
 
   const { rows: [ops] } = await pool.query(`SELECT count(*) FILTER (WHERE status = 'failed' AND created_at > now() - interval '24 hours')::int AS failed,
-    count(*) FILTER (WHERE status IN ('pending', 'running') AND deadline_at < now())::int AS stuck FROM operations`);
+    count(*) FILTER (WHERE status IN ('pending', 'running') AND deadline_at < now() AND NOT (started_at IS NULL AND held_since IS NOT NULL))::int AS stuck FROM operations`);
+  // (Not one that waits for its account's share of the worker's slots, held_since: that wait does not count against
+  // its deadline, and the worker ends it by itself when it lasts too long: worker/operations.mjs, admit.)
   if (ops.stuck) add('OPERATIONS_STUCK', 'danger', { count: ops.stuck }, '/admin/servers?tab=operations');
   if (ops.failed) add('OPERATIONS_FAILED', 'warning', { count: ops.failed }, '/admin/servers?tab=operations');
 

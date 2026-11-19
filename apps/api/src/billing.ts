@@ -15,6 +15,7 @@ import { notify } from './notify';
 import { activeGateway, testModeOver } from './payments';
 import { Can, PermissionGuard } from './rbac';
 import { decryptSecret, encryptSecret } from './secrets';
+import { rateLimit } from './security';
 import { getSettings, saveSettings, type BillingSettings } from './settings-store';
 import { enqueue, startOperation } from './servers';
 import { finalResult, gateways, needsReview, reviewCodes, sandboxPay, underReview, type Result } from './billing-gateways';
@@ -262,6 +263,11 @@ export async function payFromBalance(invoiceId: string, automatic = false, by: s
     // A renewal is paid at its server's price of now (priceRenewal); what that changed stays, whether or not the balance
     // then covers the invoice.
     if (inv && await priceRenewal(client, invoiceId, after)) ({ rows: [inv] } = await client.query(open, [invoiceId]));
+    // Not while a payment for it is being reviewed (reviewWindow): the customer is told so, an automatic try just waits.
+    if (inv && await reviewWindow(client, invoiceId)) {
+      if (!automatic) throw inReview();
+      inv = undefined;
+    }
     if (inv) {
       await client.query('SELECT 1 FROM users WHERE id = $1 FOR UPDATE', [inv.owner_id]); // one balance spend at a time
       const due = toCents(inv.total) - toCents(inv.paid_total);
@@ -329,6 +335,23 @@ async function closeReviews(db: Db, ids: string[], note: string) {
   return rows.map((r) => r.id as string);
 }
 
+// The review window (billing-rules.ts, inReviewWindow) as SQL, for an invoice id expression: a payment of the invoice
+// waits for staff and began to wait less than `days` days ago (Settings → Billing, reviewHoldDays). While it holds, the
+// invoice is not suspended, terminated or expired, nobody is reminded to pay it, and the customer cannot pay it again;
+// after it, with the review still open, the invoice is collected like any other unpaid one and may be paid again (a
+// server held or deleted for it must have a way out that does not wait for staff).
+const reviewWindowSql = (invoice: string, codes: string, days: string) => `EXISTS (SELECT 1 FROM payments rw WHERE rw.invoice_id = ${invoice} AND rw.status = 'pending' AND rw.error_code = ANY(${codes})
+  AND coalesce(rw.review_since, rw.created_at) > now() - make_interval(days => ${days}::int))`;
+export async function reviewWindow(db: Db, invoiceId: string) {
+  const { rows: [r] } = await db.query(`SELECT ${reviewWindowSql('$1', '$2', '$3')} AS held`, [invoiceId, reviewCodes, (await settings()).reviewHoldDays ?? 7]);
+  return !!r?.held;
+}
+// A second payment for an invoice whose payment is being reviewed could take the money twice: refused while the
+// review window holds, at every way a customer pays (the invoice's pay route: balance, saved card, a provider's page).
+// Card payments one account may start in an hour (startCardPayment): far more than paying one's invoices takes.
+export const paymentsPerHour = 20;
+const inReview = () => apiError(409, 'PAYMENT_IN_REVIEW', 'A payment for this invoice is being reviewed; it cannot be paid again until that is decided');
+
 // Starts a card payment at the chosen provider; returns where the customer goes to finish it (3D Secure).
 async function startCardPayment(req: AuthedRequest, inv: Row, provider: string, saveCard: boolean) {
   const s = await settings();
@@ -337,6 +360,11 @@ async function startCardPayment(req: AuthedRequest, inv: Row, provider: string, 
   if (!gw || !impl) throw apiError(409, 'PAYMENT_METHOD_UNAVAILABLE', 'This payment method is not available');
   // A provider that collects only some currencies (Param: lira) would take this invoice's number in its own.
   if (impl.currencies && !impl.currencies.includes(String(inv.currency).trim())) throw apiError(409, 'PAYMENT_METHOD_UNAVAILABLE', 'This payment method is not available');
+  // Here, where every card payment begins, whichever route asked: none while one for the invoice is being reviewed.
+  if (await reviewWindow(pool, inv.id)) throw inReview();
+  // Each started payment is a row staff may have to look at, and one that comes under review tells everybody who
+  // manages billing (noteReview): an account starts only so many an hour, across its invoices.
+  await rateLimit(`pay-start:${inv.owner_id}`, paymentsPerHour, 3600);
   const due = toCents(inv.total) - toCents(inv.paid_total);
   const { rows: [p] } = await pool.query(`INSERT INTO payments (invoice_id, owner_id, provider, mode, method, status, amount, currency, save_card, created_by)
     VALUES ($1, $2, $3, $4, 'card', 'pending', $5, $6, $7, $8) RETURNING id`, [inv.id, inv.owner_id, provider, gw.mode, fromCents(due), inv.currency, saveCard, req.user.id]);
@@ -360,7 +388,7 @@ async function chargeSavedCard(seen: Row) {
   // The amount is read after the invoice took its server's price of now (priceNow); the caller's row may be older.
   await priceNow(seen.id);
   const { rows: [inv] } = await pool.query("SELECT * FROM invoices WHERE id = $1 AND status = 'unpaid'", [seen.id]);
-  if (!inv) return false;
+  if (!inv || await reviewWindow(pool, inv.id)) return false;
   const { rows: [card] } = await pool.query('SELECT * FROM saved_cards WHERE owner_id = $1 ORDER BY is_default DESC, created_at DESC LIMIT 1', [inv.owner_id]);
   const impl = card && gateways[card.provider];
   if (!card || !impl?.chargeSaved || (impl.currencies && !impl.currencies.includes(String(inv.currency).trim()))) return false;
@@ -523,8 +551,9 @@ async function dropOrder(db: Db, invoiceId: string) {
 //   - any other unpaid invoice of the reseller that names these servers (a built server's first invoice, a resize or
 //     disk charge, one partly paid or shared with other servers) stays the reseller's debt and is returned as `left`
 //     for staff: it is collected from the reseller, and while it is open it still counts against the subscription.
-// Prices are not changed: a server keeps the price it has (the reseller's discount included) until it is resized or
-// staff change it. Returns what changed; `enqueue`: operations to queue once the transaction is committed.
+// Prices are not changed here; reseller.ts (listPrices) then takes the reseller's discount off the servers whose
+// subscription moved, so the customer's first invoice and every renewal are at the list price, while the period the
+// reseller already paid stays as it is. Returns what changed; `enqueue`: operations to queue once the transaction is committed.
 export async function directBilling(db: PoolClient, customerId: string, resellerId: string) {
   const theirs = `SELECT 1 FROM invoice_lines l JOIN subscriptions b ON b.id = l.subscription_id JOIN servers s ON s.id = b.server_id
     WHERE l.invoice_id = i.id AND NOT l.withdrawn AND s.owner_id = $1 AND b.owner_id = $2`;
@@ -545,7 +574,11 @@ export async function directBilling(db: PoolClient, customerId: string, reseller
   const { rows: subs } = await db.query(`UPDATE subscriptions b SET owner_id = $1, status = 'active', suspended_at = NULL, cancel_at_period_end = false, auto_renew = true, updated_at = now()
     FROM servers s WHERE s.id = b.server_id AND s.owner_id = $1 AND b.owner_id = $2 AND b.status IN ('active', 'past_due', 'suspended') RETURNING b.id, b.server_id`, [customerId, resellerId]);
   await db.query(`UPDATE servers SET billing_hold = false, updated_at = now() WHERE owner_id = $1 AND id = ANY($2::uuid[]) AND billing_hold`, [customerId, subs.map((b) => b.server_id)]);
-  await db.query("UPDATE servers SET billing_remove = NULL, updated_at = now() WHERE owner_id = $1 AND billing_remove IS NOT NULL AND state IN ('ready', 'error')", [customerId]);
+  // Only those servers: one whose subscription had already ended or been cancelled (by the customer for a server they
+  // paid themselves, or by the reseller before the release) keeps billing's decision to delete it; cleared, the next
+  // run would give it a fresh subscription (adopt) and it would live on, billed, against that decision.
+  await db.query("UPDATE servers SET billing_remove = NULL, updated_at = now() WHERE owner_id = $1 AND id = ANY($2::uuid[]) AND billing_remove IS NOT NULL AND state IN ('ready', 'error')",
+    [customerId, subs.map((b) => b.server_id)]);
   return { subscriptions: subs.map((b) => b.id as string), servers: subs.map((b) => b.server_id as string), withdrawn, left, enqueue: queue };
 }
 
@@ -622,7 +655,7 @@ export async function runBilling(now = new Date()) {
   const { rows: moved } = await pool.query(`SELECT b.server_id FROM subscriptions b JOIN servers s ON s.id = b.server_id
     WHERE b.status IN ('active', 'past_due', 'suspended') AND s.billing_mode = 'monthly' AND (s.price_monthly <> b.amount
       OR EXISTS (SELECT 1 FROM invoice_lines l JOIN invoices i ON i.id = l.invoice_id WHERE l.subscription_id = b.id AND NOT l.withdrawn AND l.period_start >= $1::date
-        AND i.kind = 'renewal' AND i.status = 'unpaid' AND l.unit_price <> s.price_monthly))`, [day]);
+        AND i.kind = 'renewal' AND i.status = 'unpaid' AND i.owner_id = b.owner_id AND l.unit_price <> s.price_monthly))`, [day]);
   for (const m of moved) out.repriced += await repriceOpenRenewal(m.server_id);
 
   // Renewal invoices N days before the period ends, one per subscription and period. With automatic renewal off the
@@ -674,14 +707,17 @@ export async function runBilling(now = new Date()) {
 
   // Reminders, overdue notices, suspension and termination for every unpaid invoice of a running subscription: renewals,
   // the first (order) invoice when the server was built before payment, and the invoices of a resize or an extra disk.
-  const { rows: unpaid } = await pool.query(`SELECT i.*, b.id AS sub_id, b.status AS sub_status, b.suspended_at, b.server_id, b.vdc_id FROM invoices i
+  // While a payment for the invoice is being reviewed (reviewWindow) nothing is suspended or terminated for it and
+  // nobody is reminded to pay it: the customer may have paid, and staff have not decided yet. For the window only.
+  const reviewDays = s.reviewHoldDays ?? 7;
+  const { rows: unpaid } = await pool.query(`SELECT i.*, b.id AS sub_id, b.status AS sub_status, b.suspended_at, b.server_id, b.vdc_id, ${reviewWindowSql('i.id', '$1', '$2')} AS in_review FROM invoices i
       JOIN invoice_lines l ON l.invoice_id = i.id JOIN subscriptions b ON b.id = l.subscription_id
-      WHERE i.status = 'unpaid' AND i.kind IN ('renewal', 'order', 'manual') AND NOT i.disputed AND b.status IN ('active', 'past_due', 'suspended')`);
+      WHERE i.status = 'unpaid' AND i.kind IN ('renewal', 'order', 'manual') AND NOT i.disputed AND b.status IN ('active', 'past_due', 'suspended')`, [reviewCodes, reviewDays]);
   for (const i of unpaid) {
     // Counted from the due date, or from the later day this invoice came under collection (dunning_from, migration 071).
     const dueOn = dueDay(today(i.due_at), i.dunning_from ? today(i.dunning_from) : null);
     const step = collectionStep(daysBetween(dueOn, day), s, { reminded: !!i.reminded_at && today(i.reminded_at) === day, overdueNotified: !!i.overdue_notified_at,
-      suspended: i.sub_status === 'suspended', suspendedDays: i.suspended_at ? daysBetween(today(i.suspended_at), day) : 0 });
+      suspended: i.sub_status === 'suspended', suspendedDays: i.suspended_at ? daysBetween(today(i.suspended_at), day) : 0, sheltered: i.in_review });
     const d = { invoiceId: i.id, total: i.total, currency: i.currency, due: dueOn };
     if (step === 'remind') {
       await pool.query('UPDATE invoices SET reminded_at = now() WHERE id = $1', [i.id]);
@@ -689,12 +725,14 @@ export async function runBilling(now = new Date()) {
     } else if (step === 'overdue') {
       await pool.query('UPDATE invoices SET overdue_notified_at = now() WHERE id = $1', [i.id]);
       await pool.query("UPDATE subscriptions SET status = 'past_due', updated_at = now() WHERE id = $1 AND status = 'active'", [i.sub_id]);
-      await notify('billing.overdue', [i.owner_id], { ...d, days: String(s.suspendAfterDays) }); out.overdue++;
+      // review: the notice says the payment is being checked instead of asking for it again.
+      await notify('billing.overdue', [i.owner_id], { ...d, days: String(s.suspendAfterDays), ...(i.in_review && { review: true }) }); out.overdue++;
     } else if (step === 'suspend') {
       // The list was read before this loop began: only if the invoice is still unpaid now, and once per subscription
       // (one with several unpaid invoices is no longer active or overdue the second time).
+      // Nor when a payment for it came under review since the list was read.
       const { rowCount } = await pool.query(`UPDATE subscriptions SET status = 'suspended', suspended_at = now(), updated_at = now() WHERE id = $1 AND status IN ('active', 'past_due')
-        AND EXISTS (SELECT 1 FROM invoices x WHERE x.id = $2 AND x.status = 'unpaid')`, [i.sub_id, i.id]);
+        AND EXISTS (SELECT 1 FROM invoices x WHERE x.id = $2 AND x.status = 'unpaid' AND NOT ${reviewWindowSql('x.id', '$3', '$4')})`, [i.sub_id, i.id, reviewCodes, reviewDays]);
       if (!rowCount) continue;
       await hold(i, day);
       await notify('billing.suspended', [i.owner_id], { ...d, days: String(s.terminateAfterDays) }); out.suspended++;
@@ -707,7 +745,7 @@ export async function runBilling(now = new Date()) {
       try {
         await client.query('BEGIN');
         const { rows: [cur] } = await client.query('SELECT status, paid_total::text AS paid FROM invoices WHERE id = $1 FOR UPDATE', [i.id]);
-        if (cur?.status === 'unpaid') {
+        if (cur?.status === 'unpaid' && !(await reviewWindow(client, i.id))) {
           if (toCents(cur.paid) === 0) {
             await client.query("UPDATE invoices SET status = 'cancelled', cancelled_at = now() WHERE id = $1", [i.id]);
             await withdrawLines(client, [i.id]);
@@ -725,8 +763,10 @@ export async function runBilling(now = new Date()) {
 
   // Orders not paid in time: the invoice is withdrawn and the waiting build cancelled (its address and capacity freed).
   // Only while the subscription still waits for it: a server built before payment keeps its invoice, collected above.
+  // Not while a payment for the order is being reviewed (reviewWindow): the build and its address wait that long too.
   const { rows: stale } = await pool.query(`UPDATE invoices i SET status = 'cancelled', cancelled_at = now() WHERE i.status = 'unpaid' AND i.kind = 'order' AND NOT i.disputed AND i.paid_total = 0 AND i.due_at < now()
-    AND EXISTS (SELECT 1 FROM invoice_lines l JOIN subscriptions b ON b.id = l.subscription_id WHERE l.invoice_id = i.id AND b.status = 'pending') RETURNING i.id`);
+    AND EXISTS (SELECT 1 FROM invoice_lines l JOIN subscriptions b ON b.id = l.subscription_id WHERE l.invoice_id = i.id AND b.status = 'pending')
+    AND NOT ${reviewWindowSql('i.id', '$1', '$2')} RETURNING i.id`, [reviewCodes, reviewDays]);
   await withdrawLines(pool, stale.map((x) => x.id));
   for (const inv of stale) {
     for (const id of await dropOrder(pool, inv.id)) await enqueue(id);
@@ -890,7 +930,10 @@ async function runHourly(now: Date) {
           AND state IN ('ready', 'error') AND held_at <= now() - make_interval(days => $3)`, [o.owner_id, o.currency, s.terminateAfterDays]);
         const { rows: [owed] } = old.length ? await pool.query(`SELECT id, total::text, currency, due_at FROM invoices WHERE owner_id = $1 AND currency = $2 AND kind = 'usage'
           AND status = 'unpaid' AND NOT disputed ORDER BY created_at LIMIT 1`, [o.owner_id, o.currency]) : { rows: [] };
-        if (owed && await available(pool, o.owner_id, o.currency) < 0) {
+        // Not while a payment for one of the owner's unpaid usage invoices is being reviewed (reviewWindow).
+        const { rows: [waits] } = owed ? await pool.query(`SELECT 1 FROM invoices i WHERE i.owner_id = $1 AND i.currency = $2 AND i.kind = 'usage' AND i.status = 'unpaid'
+          AND ${reviewWindowSql('i.id', '$3', '$4')} LIMIT 1`, [o.owner_id, o.currency, reviewCodes, s.reviewHoldDays ?? 7]) : { rows: [] };
+        if (owed && !waits && await available(pool, o.owner_id, o.currency) < 0) {
           for (const srv of old) await removeServer(srv.id, 'terminate');
           await notify('billing.terminated', [o.owner_id], { invoiceId: owed.id, total: owed.total, currency: owed.currency, due: today(owed.due_at) });
           out.terminated += old.length;
@@ -1067,6 +1110,8 @@ export class BillingController {
     // A renewal takes its server's price of now before a payment is begun for the amount due.
     if (inv.status === 'unpaid' && inv.kind === 'renewal') { await priceNow(id); ({ rows: [inv] } = await pool.query('SELECT * FROM invoices WHERE id = $1', [id])); }
     if (inv.status !== 'unpaid') throw apiError(409, 'INVOICE_NOT_PAYABLE', 'This invoice is not awaiting payment');
+    // Whatever the method: a payment for it waits for staff, and a second one could take the money twice.
+    if (await reviewWindow(pool, id)) throw inReview();
     const s = await settings();
     if (body?.method === 'balance') {
       if (!s.balance || inv.kind === 'topup') throw apiError(409, 'PAYMENT_METHOD_UNAVAILABLE', 'This payment method is not available');
@@ -1146,7 +1191,9 @@ export class BillingController {
     const { rows: [b] } = await pool.query(`UPDATE subscriptions b SET ${sets.join(', ')}, updated_at = now() WHERE b.id = $1 AND b.owner_id = $2 AND b.status IN ('active', 'past_due', 'suspended')
       RETURNING ${subscriptionColumns}`, vals);
     if (!b) throw apiError(404, 'NOT_FOUND', 'Unknown subscription');
-    await audit(req, 'billing.subscription_changed', 'success', req.user.id, { subscriptionId: id, ...body });
+    // Only what was read above, never the body as it came: the audit log is shown to people (audit-log.ts).
+    await audit(req, 'billing.subscription_changed', 'success', req.user.id, { subscriptionId: id,
+      ...(typeof body?.cancelAtPeriodEnd === 'boolean' && { cancelAtPeriodEnd: body.cancelAtPeriodEnd }), ...(typeof body?.autoRenew === 'boolean' && { autoRenew: body.autoRenew }) });
     return { subscription: b };
   }
 
@@ -1353,7 +1400,9 @@ export class BillingAdminController {
       await pool.query("UPDATE subscriptions SET status = 'cancelled', cancelled_at = now(), staff_cancelled = true WHERE id = $1", [id]);
       await pool.query('UPDATE servers SET billing_hold = false, hold_power_off = false WHERE id = $1 OR vdc_id = $2', [b.server_id, b.vdc_id]);
     }
-    await audit(req, 'billing.subscription_updated', 'success', req.user.id, { subscriptionId: id, ...body });
+    await audit(req, 'billing.subscription_updated', 'success', req.user.id, { subscriptionId: id, target: b.owner_id,
+      ...(body?.amount !== undefined && { amount: String(body.amount) }), ...(body?.periodMonths !== undefined && { periodMonths: Number(body.periodMonths) }),
+      ...(body?.periodEnd !== undefined && { periodEnd: String(body.periodEnd) }), ...(action !== undefined && { action: String(action) }) });
     const { rows: [row] } = await pool.query(`SELECT ${subscriptionColumns} FROM subscriptions b WHERE b.id = $1`, [id]);
     return { subscription: row };
   }
@@ -1443,7 +1492,8 @@ export class BillingSettingsController {
       autoCharge: bool('autoCharge'), chargeRetries: int('chargeRetries', 1, 10), balance: bool('balance'), topupMin: int('topupMin', 1, 1_000_000), topupMax: int('topupMax', 1, 10_000_000),
       sandbox: bool('sandbox'), hourly: bool('hourly'), hourlyMinHours: b.hourlyMinHours === undefined ? cur.hourlyMinHours ?? 24 : int('hourlyMinHours', 1, 720),
       disputeWindowDays: b.disputeWindowDays === undefined ? cur.disputeWindowDays ?? 60 : int('disputeWindowDays', 1, 730),
-      disputeAnswerDays: b.disputeAnswerDays === undefined ? cur.disputeAnswerDays ?? 7 : int('disputeAnswerDays', 1, 90), bankTransfer: bank, company };
+      disputeAnswerDays: b.disputeAnswerDays === undefined ? cur.disputeAnswerDays ?? 7 : int('disputeAnswerDays', 1, 90),
+      reviewHoldDays: b.reviewHoldDays === undefined ? cur.reviewHoldDays ?? 7 : int('reviewHoldDays', 0, 90), bankTransfer: bank, company };
     if (next.topupMax < next.topupMin) fields.topupMax = 'MIN_ABOVE_MAX';
     if (next.enabled && (!company.name || !company.taxId || !company.address)) fields['company.name'] = 'COMPANY_REQUIRED';
     if (Object.keys(fields).length) throw apiError(400, 'VALIDATION_FAILED', 'Invalid input', fields);
@@ -1502,14 +1552,16 @@ export async function repriceOpenRenewal(serverId: string, db?: PoolClient, afte
   }
   const s = await settings();
   if (!s.enabled) return 0;
-  const { rows: subs } = await db.query(`SELECT b.id, b.coupon_id, b.currency, s.price_monthly::text AS price FROM subscriptions b JOIN servers s ON s.id = b.server_id
+  const { rows: subs } = await db.query(`SELECT b.id, b.owner_id, b.coupon_id, b.currency, s.price_monthly::text AS price FROM subscriptions b JOIN servers s ON s.id = b.server_id
     WHERE b.server_id = $1 AND b.status IN ('active', 'past_due', 'suspended') AND s.billing_mode = 'monthly'`, [serverId]);
   let changed = 0;
   for (const b of subs) {
     // The invoice is locked first, the subscription after it, as a payment does (markPaid, grant).
+    // Only the invoices of who pays the subscription now: one that stayed with a previous payer (a reseller's partly
+    // paid renewal after the customer left: directBilling's `left`) keeps the price it was made at.
     const { rows: lines } = await db.query(`SELECT l.id, l.invoice_id, l.description, l.quantity::float8 AS quantity, l.tax_rate::float8 AS rate, l.unit_price::numeric(14,2)::text AS unit, l.gross::text AS gross,
         i.total::text AS total, i.paid_total::text AS paid, i.owner_id, i.currency FROM invoice_lines l JOIN invoices i ON i.id = l.invoice_id
-      WHERE l.subscription_id = $1 AND NOT l.withdrawn AND l.period_start >= $2::date AND i.kind = 'renewal' AND i.status = 'unpaid' FOR UPDATE OF i, l`, [b.id, today()]);
+      WHERE l.subscription_id = $1 AND NOT l.withdrawn AND l.period_start >= $2::date AND i.kind = 'renewal' AND i.status = 'unpaid' AND i.owner_id = $3 FOR UPDATE OF i, l`, [b.id, today(), b.owner_id]);
     for (const l of lines) {
       // A line the coupon discounted (its description says so) keeps the coupon, whatever is left of it by now.
       const coupon = l.description.includes(' · kupon ') ? await renewalPrice(db, { coupon_id: b.coupon_id, coupon_left: null, currency: b.currency }, b.price) : null;

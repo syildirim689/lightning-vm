@@ -4,9 +4,10 @@
 import { Body, Controller, Delete, Get, HttpCode, Param, ParseUUIDPipe, Post, Put, Req, UseGuards } from '@nestjs/common';
 import { randomBytes, randomUUID } from 'node:crypto';
 import type { PoolClient } from 'pg';
-import { audit, SessionGuard, type AuthedRequest } from './auth';
+import { actingFor, audit, SessionGuard, type AuthedRequest } from './auth';
 import { getAuth } from './better-auth';
 import { directBilling } from './billing';
+import { discounted, monthlyTotals, toCents, undiscounted } from './billing-rules';
 import { revokeConsoles } from './console-revoke';
 import { pool } from './db';
 import { apiError } from './errors';
@@ -54,8 +55,47 @@ export async function checkResellerRoom(r: Reseller, more: { servers: number; vc
   if (over.length) throw apiError(409, 'RESELLER_ALLOCATION_EXCEEDED', 'The reseller allocation is used up', Object.fromEntries(over.map((o) => [o, 'RESELLER_ALLOCATION_EXCEEDED'])));
 }
 
-// The reseller's price: the catalog price less their discount, to the cent.
-export const discounted = (monthly: string, pct: number) => (Math.round(Number(monthly) * (100 - pct)) / 100).toFixed(2);
+// The reseller's price: the catalog price less their discount, to the cent (billing-rules.ts).
+export { discounted };
+
+export type ListPrice = { serverId: string; name: string; currency: string; from: string; to: string };
+// The reseller's discount comes off the servers of a customer who stops being the reseller's (`serverIds`: those whose
+// subscription the reseller paid, billing.ts directBilling). Only the price for what is invoiced from now on changes:
+// the server's price, its extra disks' and the subscription's amount; nothing is charged for the period that runs (the
+// reseller paid it), and the next renewal, or the first period nobody paid, is invoiced at the list price. `apply`
+// false only tells (for the account page, before the customer decides). kept: servers whose list price cannot be told
+// (undiscounted), which keep their price until staff look.
+export async function listPrices(db: Db, customerId: string, serverIds: string[], pct: number, apply: boolean): Promise<{ changed: ListPrice[]; kept: string[] }> {
+  const changed: ListPrice[] = [], kept: string[] = [];
+  if (!serverIds.length || !(pct > 0)) return { changed, kept };
+  const { rows } = await db.query(`SELECT s.id, s.name, s.price_monthly::text AS price, trim(s.currency) AS currency, s.vcpu, s.memory_mb, s.disk_gb, s.extra_ipv4, s.package_id, s.application_id,
+      s.pool_id, s.vdc_id, s.external_source, s.billing_mode, rp.extra_ipv4_price::text AS ip_price, rp.extra_disk_price_gb::text AS disk_price
+    FROM servers s JOIN resource_pools rp ON rp.id = s.pool_id WHERE s.owner_id = $1 AND s.id = ANY($2::uuid[]) AND s.state <> 'deleted' ORDER BY s.name ${apply ? 'FOR UPDATE OF s' : ''}`, [customerId, serverIds]);
+  for (const s of rows) {
+    // The shape's price, as an order prices it (catalog.ts, resolveOrder), in the server's currency.
+    const { rows: [shape] } = s.vdc_id || s.external_source || s.billing_mode !== 'monthly' ? { rows: [] } : s.package_id
+      ? await db.query('SELECT price_monthly::text AS monthly FROM packages WHERE id = $1 AND vcpu = $2 AND memory_mb = $3 AND disk_gb = $4 AND trim(currency) = $5', [s.package_id, s.vcpu, s.memory_mb, s.disk_gb, s.currency])
+      : await db.query(`SELECT ($2::int * price_vcpu + $3::numeric / 1024 * price_memory_gb + $4::int * price_disk_gb)::numeric(12,2)::text AS monthly FROM custom_rules
+          WHERE pool_id = $1 AND trim(currency) = $5`, [s.pool_id, s.vcpu, s.memory_mb, s.disk_gb, s.currency]);
+    const { rows: [app] } = s.application_id ? await db.query('SELECT price_monthly::text AS monthly FROM applications WHERE id = $1', [s.application_id]) : { rows: [{ monthly: '0' }] };
+    const { rows: disks } = await db.query('SELECT id, size_gb, price_monthly::text AS price FROM server_disks WHERE server_id = $1 ORDER BY created_at', [s.id]);
+    let to: string | null = null;
+    const diskList = disks.map((d) => (s.disk_price === null ? null : (Math.round(d.size_gb * Number(s.disk_price) * 100) / 100).toFixed(2)));
+    if (shape && app && !diskList.includes(null)) {
+      const { rows: [base] } = await db.query('SELECT ($1::numeric + $2::int * $3::numeric + $4::numeric)::numeric(12,2)::text AS monthly', [shape.monthly, s.extra_ipv4, s.ip_price, app.monthly]);
+      to = undiscounted(s.price, pct, base.monthly, diskList as string[]);
+    }
+    if (to === null) { kept.push(s.id); continue; }
+    if (toCents(to) === toCents(s.price)) continue;
+    changed.push({ serverId: s.id, name: s.name, currency: s.currency, from: s.price, to });
+    if (!apply) continue;
+    await db.query('UPDATE servers SET price_monthly = $2, updated_at = now() WHERE id = $1', [s.id, to]);
+    for (const [i, d] of disks.entries()) await db.query('UPDATE server_disks SET price_monthly = $2 WHERE id = $1', [d.id, diskList[i]]);
+    await db.query("UPDATE subscriptions SET amount = $2, updated_at = now() WHERE server_id = $1 AND owner_id = $3 AND status IN ('active', 'past_due', 'suspended')", [s.id, to, customerId]);
+  }
+  return { changed, kept };
+}
+const discountOf = async (db: Db, resellerId: string) => Number((await db.query('SELECT discount_pct FROM resellers WHERE user_id = $1', [resellerId])).rows[0]?.discount_pct ?? 0);
 
 // Who manages the signed-in account, for its account page: the reseller it belongs to (users.reseller_id), or null.
 // A reseller can see the account's servers, order servers for it and manage them, and pays for them; it cannot sign in
@@ -74,7 +114,12 @@ async function managedBy(req: AuthedRequest) {
       await audit(req, 'reseller.customer_told', 'success', req.user.id, { reseller: m.id });
     }
   }
-  return { name: m.name ?? '', email: m.email as string, brand: (m.brand ?? null) as string | null, active: !!m.active, canLeave: true };
+  // afterLeave: what the servers the reseller pays for would cost the customer a month once the account leaves the
+  // reseller (listPrices; an empty list: nothing changes), so the choice is not made blind.
+  const { rows: paid } = await pool.query(`SELECT b.server_id FROM subscriptions b JOIN servers s ON s.id = b.server_id
+    WHERE s.owner_id = $1 AND b.owner_id = $2 AND b.status IN ('active', 'past_due', 'suspended')`, [req.user.id, m.id]);
+  const after = await listPrices(pool, req.user.id, paid.map((p) => p.server_id), await discountOf(pool, m.id), false).catch(() => ({ changed: [] as ListPrice[] }));
+  return { name: m.name ?? '', email: m.email as string, brand: (m.brand ?? null) as string | null, active: !!m.active, canLeave: true, afterLeave: after.changed };
 }
 
 // Customers stop being the reseller's (one, or all of them with `only` null): the reseller can no longer act on their
@@ -82,17 +127,22 @@ async function managedBy(req: AuthedRequest) {
 // reseller's unpaid renewals for them are withdrawn so the customer is invoiced from the first unpaid period). The key
 // the reseller put on the account for the servers it ordered (order, below) is no longer offered to new servers or a
 // reinstall; what is inside a running server stays there, and the customer is told. All in one transaction that holds
-// the customers' rows; `end` runs in it too (removing the reseller). Afterwards the reseller's open consoles are
+// the customers' rows; `end` runs in it too (removing the reseller). The reseller's discount comes off those servers'
+// prices in the same transaction (listPrices), for what is invoiced from now on. Afterwards the reseller's open consoles are
 // closed and both sides are told (the reseller not when it is being removed itself).
-type Released = { id: string; email: string; servers: number; subscriptions: number; withdrawn: string[]; left: string[]; keys: number };
+type Released = { id: string; email: string; servers: number; subscriptions: number; withdrawn: string[]; left: string[]; keys: number; prices: { changed: ListPrice[]; kept: string[] } };
 async function releaseCustomers(resellerId: string, only: string | null, tellReseller: boolean, end?: (db: PoolClient) => Promise<unknown>): Promise<Released[]> {
   const client = await pool.connect();
   const out: Released[] = [], queue: string[] = [];
   try {
     await client.query('BEGIN');
     const { rows } = await client.query('SELECT id, email FROM users WHERE reseller_id = $1 AND ($2::uuid IS NULL OR id = $2) ORDER BY id FOR UPDATE', [resellerId, only]);
+    const pct = await discountOf(client, resellerId);
     for (const c of rows) {
       const b = await directBilling(client, c.id, resellerId);
+      // The discount was the reseller's: the servers that are the customer's to pay now cost the list price from the
+      // next invoice on (listPrices). The same for every way out: the customer leaving, staff, the reseller removed.
+      const prices = await listPrices(client, c.id, b.servers, pct, true);
       const { rows: keys } = await client.query("DELETE FROM ssh_keys WHERE owner_id = $1 AND name = 'reseller' RETURNING public_key", [c.id]);
       if (keys.length) {
         await client.query(`UPDATE servers SET ssh_public_keys = ARRAY(SELECT k FROM unnest(ssh_public_keys) k WHERE k <> ALL($2::text[])), updated_at = now()
@@ -101,7 +151,7 @@ async function releaseCustomers(resellerId: string, only: string | null, tellRes
       await client.query('UPDATE users SET reseller_id = NULL WHERE id = $1', [c.id]);
       const { rows: [n] } = await client.query("SELECT count(*)::int AS n FROM servers WHERE owner_id = $1 AND state <> 'deleted'", [c.id]);
       queue.push(...b.enqueue);
-      out.push({ id: c.id, email: c.email, servers: n.n, subscriptions: b.subscriptions.length, withdrawn: b.withdrawn, left: b.left, keys: keys.length });
+      out.push({ id: c.id, email: c.email, servers: n.n, subscriptions: b.subscriptions.length, withdrawn: b.withdrawn, left: b.left, keys: keys.length, prices });
     }
     if (end) await end(client);
     await client.query('COMMIT');
@@ -111,15 +161,17 @@ async function releaseCustomers(resellerId: string, only: string | null, tellRes
   await revokeConsoles({ userId: resellerId });
   const { rows: [r] } = await pool.query('SELECT name, email FROM users WHERE id = $1', [resellerId]);
   for (const c of out) {
-    await notify('account.reseller', [c.id], { step: 'left', name: r?.name ?? '', email: r?.email ?? '', servers: c.servers, keys: c.keys });
+    // priced: how many servers lost the reseller's discount; monthly / was: what they cost a month from the next invoice, and did.
+    await notify('account.reseller', [c.id], { step: 'left', name: r?.name ?? '', email: r?.email ?? '', servers: c.servers, keys: c.keys, priced: c.prices.changed.length,
+      monthly: monthlyTotals(c.prices.changed.map((p) => ({ currency: p.currency, amount: p.to }))), was: monthlyTotals(c.prices.changed.map((p) => ({ currency: p.currency, amount: p.from }))) });
     if (tellReseller) await notify('account.reseller', [resellerId], { step: 'customer_left', email: c.email, servers: c.servers, left: c.left.length });
   }
   return out;
 }
 // What the audit event of a release says about one customer. forOwner: the event is also in that customer's own
 // activity (audit-log.ts).
-const releasedDetail = (c: Released, resellerId: string, by: 'staff' | 'customer') => ({ target: c.id, forOwner: c.id, reseller: resellerId, by, servers: c.servers, subscriptions: c.subscriptions,
-  withdrawnInvoices: c.withdrawn, leftInvoices: c.left, removedKeys: c.keys });
+const releasedDetail = (c: Released, resellerId: string, by: 'staff' | 'customer') => ({ target: c.id, ...actingFor(c.id), reseller: resellerId, by, servers: c.servers, subscriptions: c.subscriptions,
+  withdrawnInvoices: c.withdrawn, leftInvoices: c.left, removedKeys: c.keys, listPrices: c.prices.changed, pricesKept: c.prices.kept });
 
 const customerColumns = `u.id, u.email, u.name, u.created_at AS "createdAt", u.last_seen_at AS "lastSeenAt",
   (SELECT count(*)::int FROM servers s WHERE s.owner_id = u.id AND s.state <> 'deleted') AS servers,
@@ -143,12 +195,15 @@ export class ResellerController {
   // servers, and the servers are billed to the customer from the first period nobody has paid (releaseCustomers).
   @Post('leave') @HttpCode(200)
   async leave(@Req() req: AuthedRequest) {
+    // Who manages the account and who pays for its servers is the person's own decision: not staff acting as them
+    // (staff take a customer out of a reseller's hands as themselves: admin/resellers/:id/customers/:customerId).
+    if (req.user.impersonatedBy) throw apiError(403, 'NOT_WHILE_IMPERSONATING', 'Not while acting as another user');
     const { rows: [u] } = await pool.query('SELECT reseller_id FROM users WHERE id = $1', [req.user.id]);
     if (!u?.reseller_id) throw apiError(409, 'NOT_MANAGED', 'This account is not managed by a reseller');
     const [c] = await releaseCustomers(u.reseller_id, req.user.id, true);
     if (!c) throw apiError(409, 'NOT_MANAGED', 'This account is not managed by a reseller');
     await audit(req, 'reseller.customer_released', 'success', req.user.id, releasedDetail(c, u.reseller_id, 'customer'));
-    return { ok: true, servers: c.servers, subscriptions: c.subscriptions };
+    return { ok: true, servers: c.servers, subscriptions: c.subscriptions, listPrices: c.prices.changed };
   }
 
   // The brand a signed-in person sees: their reseller's (for a reseller's customer, or the reseller), if one is set.
@@ -191,7 +246,7 @@ export class ResellerController {
     // Not marked verified: the reseller typed the address, nobody proved it. Signing in with the password (set through
     // "forgot password") needs no verified address; the first sign-in by e-mail code or link proves it.
     await pool.query('UPDATE users SET reseller_id = $2 WHERE id = $1', [user.id, r.id]);
-    await audit(req, 'reseller.customer_created', 'success', req.user.id, { target: user.id, forOwner: user.id, actingAs: 'reseller' });
+    await audit(req, 'reseller.customer_created', 'success', req.user.id, { target: user.id, ...actingFor(user.id, 'reseller') });
     return { id: user.id };
   }
 
@@ -229,7 +284,7 @@ export class ResellerController {
       // The build counts against the reseller's share of the worker's slots, not each customer's (servers.ts cappedFor).
       capFor: req.user.id });
     const out = await new ServersController().create(owner, `reseller-${randomUUID()}`, { ...body, sshKeyIds, billingCycle: 'monthly' });
-    await audit(req, 'reseller.server_ordered', 'success', req.user.id, { target: id, serverId: out.serverId, forOwner: id, actingAs: 'reseller' });
+    await audit(req, 'reseller.server_ordered', 'success', req.user.id, { target: id, serverId: out.serverId, ...actingFor(id, 'reseller') });
     return out;
   }
 }
@@ -301,6 +356,6 @@ export class ResellersAdminController {
     const [c] = await releaseCustomers(id, customerId, true);
     if (!c) throw apiError(404, 'NOT_FOUND', 'Not a customer of this reseller');
     await audit(req, 'reseller.customer_released', 'success', req.user.id, releasedDetail(c, id, 'staff'));
-    return { ok: true, servers: c.servers, subscriptions: c.subscriptions, withdrawnInvoices: c.withdrawn, leftInvoices: c.left };
+    return { ok: true, servers: c.servers, subscriptions: c.subscriptions, withdrawnInvoices: c.withdrawn, leftInvoices: c.left, listPrices: c.prices.changed, pricesKept: c.prices.kept };
   }
 }

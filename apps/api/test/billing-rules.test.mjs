@@ -179,3 +179,47 @@ test('the next renewal: the earliest day, one currency, summed; invoiced only on
   assert.deepEqual(r.nextRenewalOf([part('2026-12-01', 6000), part('2026-12-01', 900, { currency: 'EUR' }), part('2026-12-01', 1100, { currency: 'EUR' })]),
     { day: '2026-12-01', currency: 'EUR', cents: 2000, servers: 2, invoiced: false, mixedCurrencies: true });
 });
+
+test('a payment under review shelters its invoice: no reminder, suspension or termination; the overdue notice still goes out once', () => {
+  const s = { invoiceDaysBefore: 7, reminderDays: [3, 1], suspendAfterDays: 3, terminateAfterDays: 14 };
+  const st = { reminded: false, overdueNotified: false, suspended: false, suspendedDays: 0, sheltered: true };
+  assert.equal(r.collectionStep(-3, s, st), null, 'nobody is reminded to pay what they may have paid');
+  assert.equal(r.collectionStep(1, s, st), 'overdue');
+  assert.equal(r.collectionStep(5, s, st), 'overdue', 'past the suspension day: the notice, not the suspension');
+  assert.equal(r.collectionStep(5, s, { ...st, overdueNotified: true }), null);
+  assert.equal(r.collectionStep(30, s, { ...st, suspended: true, suspendedDays: 20 }), null, 'a suspended one is not terminated');
+  // Once the window is over the steps are the usual ones.
+  assert.equal(r.collectionStep(5, s, { ...st, sheltered: false, overdueNotified: true }), 'suspend');
+  assert.equal(r.collectionStep(30, s, { ...st, sheltered: false, suspended: true, suspendedDays: 20 }), 'terminate');
+});
+
+test('the review window runs from when the wait began for the set days; 0 days is no window', () => {
+  const now = Date.parse('2026-11-19T12:00:00Z');
+  const ago = (days) => new Date(now - days * 86_400_000);
+  assert.equal(r.inReviewWindow(ago(0), 7, now), true);
+  assert.equal(r.inReviewWindow(ago(6.9), 7, now), true);
+  assert.equal(r.inReviewWindow(ago(7), 7, now), false, 'a stuck review shelters nothing after the window');
+  assert.equal(r.inReviewWindow(ago(400), 7, now), false);
+  assert.equal(r.inReviewWindow(ago(1), 0, now), false);
+  assert.equal(r.inReviewWindow(null, 7, now), false, 'no payment under review');
+  assert.equal(r.inReviewWindow(ago(2).toISOString(), 7, now), true);
+});
+
+test('a reseller price is undone only when today\'s catalog less the discount gives exactly the price the server has', () => {
+  assert.equal(r.discounted('100.00', 20), '80.00');
+  assert.equal(r.undiscounted('80.00', 20, '100.00', []), '100.00');
+  // With extra disks, each discounted by itself as disks.ts does.
+  assert.equal(r.undiscounted(r.sumMoney(r.discounted('99.99', 15), [r.discounted('12.35', 15), r.discounted('7.01', 15)]), 15, '99.99', ['12.35', '7.01']), '119.35');
+  // Not told: the catalog moved, another discount applied when it was priced, a price staff set, no discount at all.
+  assert.equal(r.undiscounted('80.00', 20, '110.00', []), null);
+  assert.equal(r.undiscounted('80.00', 25, '100.00', []), null);
+  assert.equal(r.undiscounted('79.99', 20, '100.00', []), null);
+  assert.equal(r.undiscounted('100.00', 0, '100.00', []), null);
+  assert.equal(r.undiscounted('80.00', 20, '100.00', ['10.00']), null, 'a disk the price does not contain');
+});
+
+test('monthly totals for a notice are summed per currency', () => {
+  assert.equal(r.monthlyTotals([]), '');
+  assert.equal(r.monthlyTotals([{ currency: 'TRY', amount: '100.00' }, { currency: 'TRY', amount: '20.50' }]), '120.50 TRY');
+  assert.equal(r.monthlyTotals([{ currency: 'TRY', amount: '100.00' }, { currency: 'EUR', amount: '15.00' }]), '15.00 EUR + 100.00 TRY');
+});

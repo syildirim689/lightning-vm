@@ -3,7 +3,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { fakeAdapter, fakeDb, ids } from './harness.mjs';
-import { admit, holdDelayMs, ownerCap, processOperation } from '../operations.mjs';
+import { admit, heldExtensionMs, heldHoursMax, holdDelayMs, ownerCap, processOperation } from '../operations.mjs';
 
 const counts = (busy, ahead = 0) => [[/^SELECT count\(\*\) FILTER \(WHERE started_at IS NOT NULL\)/, () => [{ busy, ahead }]]];
 const queued = { kind: 'power_on', capped_for: ids.owner, started_at: null, created_at: new Date('2026-11-18T10:00:00Z') };
@@ -31,7 +31,9 @@ test('an account with its share under way: the next one is held, under the accou
   const db = fakeDb({ op: queued, routes: counts(4, 2) });
   assert.deepEqual(await admit(db, db.op, 4), { held: 3000 });
   assert.equal(db.op.status, 'pending');
-  assert.deepEqual(db.log.map((q) => q.sql.split(/[ (]/)[0] + (q.sql.includes('pg_advisory_xact_lock') ? ' lock' : '')), ['BEGIN', 'SELECT lock', 'SELECT', 'ROLLBACK']);
+  // The one write of a hold: since when it waits (the deadline does not run meanwhile; the tests below).
+  assert.deepEqual(db.log.map((q) => q.sql.split(/[ (]/)[0] + (q.sql.includes('pg_advisory_xact_lock') ? ' lock' : '')), ['BEGIN', 'SELECT lock', 'SELECT', 'UPDATE', 'COMMIT']);
+  assert.match(db.ran(/^UPDATE/)[0].sql, /^UPDATE operations SET held_since = COALESCE\(held_since, now\(\)\) WHERE id = \$1 AND started_at IS NULL/);
   assert.deepEqual(db.ran(/pg_advisory_xact_lock/)[0].params, [ids.owner]);
   assert.deepEqual(db.ran(/^SELECT count/)[0].params.slice(0, 2), [ids.owner, ids.op], 'counted for its account, without itself');
 });
@@ -63,7 +65,8 @@ test('a held operation is put back with a delay and its lock token: no step, no 
   assert.equal(db.op.status, 'pending');
   assert.equal(db.op.attempts, 0);
   assert.equal(calls.length, 0);
-  assert.equal(db.ran(/^UPDATE/).length, 0);
+  // Nothing of the operation is written but since when it waits: no status, step, attempt or task.
+  assert.deepEqual(db.ran(/^UPDATE/).map((q) => q.sql.split(' WHERE')[0]), ['UPDATE operations SET held_since = COALESCE(held_since, now())']);
   assert.deepEqual(logged.map((l) => l.event), ['operation_held_for_owner']);
 });
 
@@ -79,4 +82,63 @@ test('with room it runs as before; a retry of one that has begun is not asked ag
   await processOperation(resumed, job(resumed, moved), () => {});
   assert.equal(resumed.op.status, 'succeeded');
   assert.equal(moved.length, 0);
+});
+
+// The wait behind the account's share does not count against the operation's deadline (held_since, migration 087).
+const holdMark = (expired) => [/^UPDATE operations SET held_since/, () => [{ expired }]];
+
+test('the time held is given back to the deadline, within OPERATIONS_HELD_HOURS (default 6)', () => {
+  assert.equal(heldHoursMax({}), 6);
+  assert.equal(heldHoursMax({ OPERATIONS_HELD_HOURS: '2' }), 2);
+  assert.equal(heldHoursMax({ OPERATIONS_HELD_HOURS: '0' }), 0, '0: the wait counts against the deadline, as before');
+  assert.equal(heldHoursMax({ OPERATIONS_HELD_HOURS: 'long' }), 6);
+  assert.equal(heldHoursMax({ OPERATIONS_HELD_HOURS: '-1' }), 6);
+  const t = Date.parse('2026-11-19T10:00:00Z');
+  assert.equal(heldExtensionMs(null, t, 6), 0, 'never held: nothing is added');
+  assert.equal(heldExtensionMs(new Date(t - 20 * 60_000), t, 6), 20 * 60_000);
+  assert.equal(heldExtensionMs(new Date(t - 9 * 3_600_000), t, 6), 6 * 3_600_000, 'never more than the bound');
+  assert.equal(heldExtensionMs(new Date(t + 5000), t, 6), 0, 'a clock that went back adds nothing');
+  assert.equal(heldExtensionMs(new Date(t - 3_600_000), t, 0), 0);
+});
+
+test('an operation that was held starts with its deadline moved on and the mark cleared; one never held starts as before', async () => {
+  const held = fakeDb({ op: { ...queued, held_since: new Date(Date.now() - 600_000) }, routes: counts(1) });
+  assert.deepEqual(await admit(held, held.op, 4, 6), {});
+  assert.equal(held.op.status, 'running');
+  const start = held.ran(/^UPDATE operations SET status = 'running'/)[0];
+  assert.match(start.sql, /deadline_at = CASE WHEN started_at IS NULL AND held_since IS NOT NULL THEN deadline_at \+ LEAST\(GREATEST\(now\(\) - held_since, interval '0'\), \$2::float8 \* interval '1 hour'\) ELSE deadline_at END/);
+  assert.match(start.sql, /held_since = NULL/);
+  assert.deepEqual(start.params, [ids.op, 6]);
+
+  const fresh = fakeDb({ op: queued, routes: counts(1) });
+  await admit(fresh, fresh.op, 4, 6);
+  assert.doesNotMatch(fresh.ran(/^UPDATE operations SET status = 'running'/)[0].sql, /deadline_at/, 'its deadline is not touched');
+});
+
+test('held again and again it keeps the first moment; once even the longest extension has passed it is let through to time out', async () => {
+  const waiting = fakeDb({ op: { ...queued, held_since: new Date(Date.now() - 3_600_000) }, routes: [...counts(4, 1), holdMark(false)] });
+  assert.deepEqual(await admit(waiting, waiting.op, 4, 6), { held: 3000 });
+  assert.equal(waiting.op.status, 'pending');
+  assert.deepEqual(waiting.ran(/^UPDATE operations SET held_since/)[0].params, [ids.op, 6], 'the bound is asked with the mark');
+
+  // deadline + bound is over: no longer held, although its account is still at its share.
+  const over = fakeDb({ op: { ...queued, held_since: new Date(Date.now() - 9 * 3_600_000), late: true }, routes: [...counts(4, 1), holdMark(true)] });
+  assert.deepEqual(await admit(over, over.op, 4, 6), {});
+  assert.equal(over.op.status, 'running');
+  // ... and the deadline check ends it, for good, without a step or an adapter call.
+  const db = fakeDb({ op: { ...queued, held_since: new Date(Date.now() - 9 * 3_600_000), late: true }, routes: [...counts(4, 1), holdMark(true)] });
+  const calls = fakeAdapter(() => ({})), moved = [];
+  await assert.rejects(processOperation(db, job(db, moved), () => {}, undefined, undefined, 'tok-2'), { name: 'UnrecoverableError', message: 'TIMEOUT' });
+  assert.equal(moved.length, 0);
+  assert.equal(db.op.status, 'failed');
+  assert.equal(db.op.error_code, 'TIMEOUT');
+  assert.equal(calls.length, 0);
+});
+
+test('with the cap switched off since, or a cancel asked for, an operation that was held still gets its time back', async () => {
+  for (const [over, cap] of [[{}, 0], [{ cancel_requested: true }, 4]]) {
+    const db = fakeDb({ op: { ...queued, held_since: new Date(Date.now() - 60_000), ...over }, routes: counts(99) });
+    assert.deepEqual(await admit(db, db.op, cap, 6), {});
+    assert.match(db.ran(/^UPDATE operations SET status = 'running'/)[0].sql, /held_since = NULL/);
+  }
 });

@@ -4,8 +4,10 @@ import { Body, Controller, Delete, Get, HttpCode, Param, ParseUUIDPipe, Post, Pu
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { audit, SessionGuard, type AuthedRequest } from './auth';
 import { publicUrl } from './chat-apps';
+import { config } from './config';
 import { pool } from './db';
 import { apiError } from './errors';
+import { tokenAsleepSql } from './ldap';
 import { catalog, notify } from './notify';
 import { customerLevel } from './permissions';
 import { decryptSecret, encryptSecret } from './secrets';
@@ -40,11 +42,20 @@ const eventsFor = (req: AuthedRequest) => Object.entries(catalog).filter(([, d])
 export class DeveloperController {
   @Get('api-tokens')
   async tokens(@Req() req: AuthedRequest) {
-    const { rows } = await pool.query(`SELECT id, name, hint, scope, permissions, allowed_ips AS "allowedIps", expires_at AS "expiresAt", last_used_at AS "lastUsedAt",
-        host(last_used_ip) AS "lastUsedIp", created_at AS "createdAt" FROM api_tokens WHERE user_id = $1 ORDER BY created_at DESC`, [req.user.id]);
+    // asleep: 'TOKEN_ACCOUNT_UNCONFIRMED' while the token is refused because the account's directory or single
+    // sign-on provider has not confirmed the account recently (ldap.ts, tokenAsleep); null otherwise.
+    const { rows } = await pool.query(`SELECT a.id, a.name, a.hint, a.scope, a.permissions, a.allowed_ips AS "allowedIps", a.expires_at AS "expiresAt", a.last_used_at AS "lastUsedAt",
+        host(a.last_used_ip) AS "lastUsedIp", a.created_at AS "createdAt", ${tokenAsleepSql('u', '$2')} AS asleep
+      FROM api_tokens a JOIN users u ON u.id = a.user_id WHERE a.user_id = $1 ORDER BY a.created_at DESC`, [req.user.id, config.DIRECTORY_TOKEN_DAYS]);
     const api = await getSettings('api');
+    // confirmation: for a directory or single sign-on account, when its source last confirmed it and until when its
+    // tokens work without another confirmation (null for a panel account, or with the rule switched off).
+    const { rows: [u] } = await pool.query('SELECT auth_source, source_confirmed_at FROM users WHERE id = $1', [req.user.id]);
+    const days = config.DIRECTORY_TOKEN_DAYS;
+    const confirmation = days > 0 && ['ldap', 'oidc'].includes(u?.auth_source) ? { source: u.auth_source as string, days, confirmedAt: (u.source_confirmed_at ?? null) as Date | null,
+      until: u.source_confirmed_at ? new Date(new Date(u.source_confirmed_at).getTime() + days * 86_400_000) : null } : null;
     // The rules the form has to follow: the longest life (0: none) and whether this person must set one.
-    return { tokens: rows, max: maxTokens, rules: { maxDays: api.maxDays, expiryRequired: api.maxDays > 0 || (api.staffExpiry && staff(req)), rateLimit: api.rateLimit } };
+    return { tokens: rows, max: maxTokens, rules: { maxDays: api.maxDays, expiryRequired: api.maxDays > 0 || (api.staffExpiry && staff(req)), rateLimit: api.rateLimit }, confirmation };
   }
 
   // The token is returned once; only its hash is stored.

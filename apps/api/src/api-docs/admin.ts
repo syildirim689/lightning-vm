@@ -752,7 +752,7 @@ export default {
   'GET /activity': {
     tag: 'account',
     summary: { tr: 'Hesabınızın etkinliğini listeler: girişler, değişiklikler, sunucu işlemleri.', en: 'Lists your account activity: sign-ins, changes, server actions.' },
-    details: { tr: 'Güç zamanlamalarınızın sunucularınızda yaptıkları da gelir. Sayfa başına 50 olay.', en: 'Includes what your power schedules did on your servers. 50 events a page.' },
+    details: { tr: 'Güç zamanlamalarınızın sunucularınızda yaptıkları ve hesabınızı yöneten bayinin sunucularınızda yaptıkları da gelir (işlemler, konsol, zamanlamalar, etiketler, diskler; metadata.actingAs "reseller", actorEmail ve actorName bayinin adresi ve adı ya da markası; IP adresi verilmez). Sayfa başına 50 olay.', en: 'Includes what your power schedules did on your servers, and what the reseller that manages your account did on them (operations, the console, schedules, labels, disks; metadata.actingAs is "reseller", actorEmail and actorName are the reseller\'s address and its name or brand; no IP address). 50 events a page.' },
     query: [{ name: 'before', type: 'string', text: { tr: 'Bu olay kimliğinden eskiler (önceki yanıttaki `nextBefore`).', en: 'Events older than this id (`nextBefore` from the last answer).' } }],
     returns: { tr: '`events` ve `nextBefore`.', en: '`events` and `nextBefore`.' },
   },

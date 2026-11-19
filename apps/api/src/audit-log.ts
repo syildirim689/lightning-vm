@@ -6,6 +6,9 @@ import { pool } from './db';
 import { Can, PermissionGuard } from './rbac';
 
 const page = 50;
+// Events whose metadata was, in earlier versions, the request body as it came (billing.ts): a "forOwner" in one of
+// them was typed by its actor, so they are only ever part of the actor's own activity.
+const ownActions = ['billing.subscription_changed', 'billing.subscription_updated'];
 const columns = `e.id::text, e.created_at AS "at", e.action, e.outcome, host(e.ip) AS ip, e.metadata, u.email AS "actorEmail", e.actor_id AS "actorId"`;
 const before = (v?: string) => (v && /^\d{1,19}$/.test(v) ? v : null);
 const more = (rows: { id: string }[]) => ({ events: rows.slice(0, page), nextBefore: rows.length > page ? rows[page - 1].id : null });
@@ -43,13 +46,18 @@ export class ActivityController {
   @Get('activity')
   async mine(@Req() req: AuthedRequest, @Query('before') b?: string) {
     // Also what somebody else did for this account and recorded as such (metadata.forOwner): a reseller acting on the
-    // customer's servers or ordering for them, the account leaving a reseller. Of those the customer sees what and
-    // when, and who only when it was their reseller (actingAs); never another person's address.
+    // customer's servers or account (operations, the console, schedules, labels, disks, an order), the account leaving
+    // a reseller. Of those the customer sees what and when, and who only when it was their reseller (actingAs): the
+    // reseller's address and its name (actorName: the brand it set, else its account name); never another person's
+    // IP address. forOwner is written by the panel alone (auth.ts, auditMetadata); the events of the two routes that
+    // once stored a request body as it came (ownActions) are never shown to anybody but their actor.
     const { rows } = await pool.query(`SELECT ${columns.replace('host(e.ip) AS ip', () => 'CASE WHEN e.actor_id = $1 OR e.actor_id IS NULL THEN host(e.ip) END AS ip')
-        .replace('u.email AS "actorEmail"', () => `CASE WHEN e.actor_id = $1 OR e.metadata->>'actingAs' = 'reseller' THEN u.email END AS "actorEmail"`)} FROM audit_events e LEFT JOIN users u ON u.id = e.actor_id
+        .replace('u.email AS "actorEmail"', () => `CASE WHEN e.actor_id = $1 OR e.metadata->>'actingAs' = 'reseller' THEN u.email END AS "actorEmail",
+          CASE WHEN e.actor_id = $1 THEN nullif(u.name, '') WHEN e.metadata->>'actingAs' = 'reseller' THEN coalesce((SELECT nullif(x.brand_name, '') FROM resellers x WHERE x.user_id = e.actor_id), nullif(u.name, '')) END AS "actorName"`)}
+      FROM audit_events e LEFT JOIN users u ON u.id = e.actor_id
       WHERE ($2::bigint IS NULL OR e.id < $2) AND (e.actor_id = $1 OR (e.actor_id IS NULL AND e.request_id LIKE 'schedule:%'
-        AND e.metadata->>'serverId' IN (SELECT id::text FROM servers WHERE owner_id = $1)) OR e.metadata->>'forOwner' = ($1::uuid)::text)
-      ORDER BY e.id DESC LIMIT ${page + 1}`, [req.user.id, before(b)]);
+        AND e.metadata->>'serverId' IN (SELECT id::text FROM servers WHERE owner_id = $1)) OR (e.metadata->>'forOwner' = ($1::uuid)::text AND e.action <> ALL($3::text[])))
+      ORDER BY e.id DESC LIMIT ${page + 1}`, [req.user.id, before(b), ownActions]);
     return more(rows);
   }
 }

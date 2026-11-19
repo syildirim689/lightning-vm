@@ -53,6 +53,10 @@ async function find(s: LdapSettings, bindPassword: string, email: string): Promi
   } finally { await c?.unbind().catch(() => undefined); }
 }
 
+// The same lookup without anybody's password, for asking whether a directory account is still there
+// (directory-signin.ts, reconfirmDirectory).
+export const ldapLookup = (s: LdapSettings, bindPassword: string, email: string) => find(s, bindPassword, email);
+
 export async function ldapAuthenticate(s: LdapSettings, bindPassword: string, email: string, password: string): Promise<LdapResult> {
   // An empty password is an "unauthenticated bind", which many servers accept: never a sign-in.
   if (!password) return { ok: false, code: 'LDAP_AUTH_FAILED' };
@@ -105,3 +109,14 @@ export const spelledOnce = (email: string) => email.length > 2 && email.includes
 // library would keep extending it), so the directory is asked again at least that often.
 export const directorySessionOver = (authSource: string | null | undefined, createdAt: Date | string, ttlHours: number, now = Date.now()) =>
   (authSource === 'ldap' || authSource === 'oidc') && now - new Date(createdAt).getTime() > ttlHours * 3_600_000;
+
+// A personal API token outlives every session, and nobody signs in to use it: the token of a directory or single
+// sign-on account is accepted only while its source confirmed the account within `days` days (users.source_confirmed_at:
+// the last sign-in the directory or the provider accepted, or the last time the directory still listed the account).
+// Older than that, or never confirmed, the token is asleep: refused, not removed, and it works again at the person's
+// next sign-in. 0 days: no such rule. Panel accounts (their password is the panel's own) are never asleep.
+export const tokenAsleep = (authSource: string | null | undefined, confirmedAt: Date | string | null | undefined, days: number, now = Date.now()) =>
+  (authSource === 'ldap' || authSource === 'oidc') && days > 0 && (!confirmedAt || now - new Date(confirmedAt).getTime() > days * 86_400_000);
+// The same as an SQL value for a token list: the refusal's code while asleep, else NULL. `u`: the users alias; `days`: a parameter.
+export const tokenAsleepSql = (u: string, days: string) => `CASE WHEN ${u}.auth_source IN ('ldap', 'oidc') AND ${days}::int > 0
+  AND (${u}.source_confirmed_at IS NULL OR ${u}.source_confirmed_at < now() - make_interval(days => ${days}::int)) THEN 'TOKEN_ACCOUNT_UNCONFIRMED' END`;
