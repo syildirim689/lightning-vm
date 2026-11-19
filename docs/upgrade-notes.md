@@ -23,11 +23,12 @@ varsayılanıyla çalışır, `.env` dosyasına bir şey eklemeniz gerekmez:
 | `OPERATIONS_HELD_HOURS` | `.env` (worker) | `6` (`0`: bekleme eskisi gibi süreden düşer) | Hesap payını beklerken geçen sürenin, işlemin son tarihine en çok kaç saat eklenebileceği |
 | `reviewHoldDays` | Ayarlar → Faturalandırma | `7` (0-90; `0` kapatır) | İnceleme bekleyen bir ödemenin faturasını kaç gün askıdan, silmeden ve ikinci ödemeden koruduğu |
 
-Bu turun test sonuçları (`ad4b0d8` commit'i): birim testleri API 162, worker 54, web 120, hepsi geçti. Entegrasyon
-paketinin tamamı 2026-11-19'da Docker'lı bir Linux sunucusunda çalıştırıldı: 203 testten 199'u geçti, 4'ü atlandı
+Bu turun test sonuçları (`a2f2ff2` commit'i): birim testleri API 162, worker 54, web 121, hepsi geçti. Entegrasyon
+paketinin tamamı 2026-11-19'da Docker'lı bir Linux sunucusunda çalıştırıldı: 204 testten 200'ü geçti, 4'ü atlandı
 (PowerDNS, ISO deposu ya da konsol ağ geçidi isteyenler), başarısız olan yok; bu turun `security-leftovers-2`
 testleri bu sayının içindedir. Uçtan uca paket (Playwright) kendi geçici Compose kurulumuna karşı, boş bir
-veritabanı ve VMware simülatörüyle çalıştırıldı (gerçek veri taşıyan bir panele karşı çalıştırılmaz): 33 test geçti.
+veritabanı ve VMware simülatörüyle çalıştırıldı (gerçek veri taşıyan bir panele karşı çalıştırılmaz): 33 testin 33'ü
+geçti.
 Paketin bazı yeni adımlarında durum sayfaya dışarıdan verilir; hangileri olduğu README'nin
 [Geliştirme ve testler](../README.md#-geliştirme-ve-testler) bölümündedir. Hiçbir ekrana tarayıcıda elle bakılmadı
 ve hiçbir şey gerçek bir hipervizörde, gerçek bir Proxmox kümesinde, gerçek bir Param hesabında ya da gerçek bir
@@ -68,7 +69,9 @@ Aşağıdaki maddeler işletmecinin fark edeceği her değişikliği sayar; ilk 
   varsayılan 7): o fatura için sunucu askıya alınmaz ve silinmez, ödenmemiş sipariş süresi dolduğu için geri
   çekilmez ve hatırlatma gönderilmez. Gecikme bildirimi yine bir kez gider ve ödemenin incelendiğini, yeniden ödemek
   gerekmediğini söyler. Aynı süre içinde **müşteri faturayı ikinci kez ödeyemez** (`409 PAYMENT_IN_REVIEW`; bakiye,
-  kayıtlı kart ve kart, hepsi); fatura sayfasındaki ödeme düğmeleri gerekçesiyle kapalıdır. Önceden askı adımları
+  kayıtlı kart ve kart, hepsi); fatura yanıtı engelin ne zamana kadar sürdüğünü söyler (`invoice.payBlockedUntil`,
+  ISO tarih ya da `null`; retle aynı işlevden) ve fatura sayfasındaki ödeme düğmeleri o zamana kadar, gerekçesiyle,
+  kapalıdır. Önceden askı adımları
   inceleme sırasında sürüyordu ve müşteri aynı faturaya ikinci bir ödeme başlatabiliyordu.
   - **Süre dolduğunda koruma biter.** İnceleme hâlâ açıksa fatura her ödenmemiş fatura gibi yeniden tahsilata girer
     (hatırlatma, askı, ayarlıysa silme) ve müşteri yeniden ödeyebilir. Kimsenin karar vermediği bir inceleme
@@ -111,7 +114,9 @@ Aşağıdaki maddeler işletmecinin fark edeceği her değişikliği sayar; ilk 
   Bundan da uzun bekleyen işlem serbest bırakılır ve zaman aşımıyla (`TIMEOUT`) biter. Payı bekleyen işlem "takılmış
   işlem" içgörüsünde sayılmaz. `0`, eski davranıştır ([operations.md](operations.md#kuyrukta-hesap-payı)).
 - **Web.** Önceki sürümün tarayıcıda bıraktığı kayıtlı görünümler, hesap çıkış yaparken tarayıcı temizlenmeden önce
-  o hesaba gönderilir (başkasına ait olanlar gönderilmeden silinir). Ayarlar'daki Sandbox yardımı dört test kartını
+  o hesaba gönderilir (başkasına ait olanlar gönderilmeden silinir). Onaylayan bir düğme işleminden sonra
+  kaybolduğunda klavye öndeki pencerede kalır, yani Escape onu yine kapatır (her pencerede). Ayarlar'daki Sandbox
+  yardımı ve paneldeki API belgeleri dört test kartını
   da sayar; `4000 0000 0000 4954` ("incelemeye alınır") dahil.
 - **Bir önceki turun "olduğu gibi bırakılanlar" listesinden kalanlar.** Hesap payı, birlikte hareket eden birden
   çok hesabı sınırlamaz. Bayinin müşterinin sunucularını yalnızca görüntülemesi etkinlik listesinde yoktur. Bayiden

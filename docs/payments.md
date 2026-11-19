@@ -172,8 +172,14 @@ Personelin kararını bekleyen ödemeler **bekliyor** durumunda ve bir gerekçe 
 - **Saatte 20 kart ödemesi.** Bir hesap, bütün faturaları için toplam, saatte en çok 20 kart ödemesi başlatabilir
   (`429 RATE_LIMITED`).
 - **Müşteri ne görür:** inceleme bekleyen ödemesi olan ödenmemiş faturanın sayfasında "Ödemeniz inceleniyor" notu
-  durur ve sayfa sonucu beklemeyi bırakır. Ödeme düğmeleri inceleme sürerken kapalıdır ve gerekçesini söyler ("Bu
-  faturanın bir ödemesi incelemede; şimdilik yeniden ödenemez"); gönderilen bir isteği API yine reddeder.
+  durur ve sayfa sonucu beklemeyi bırakır. Ödeme düğmeleri inceleme süresi boyunca kapalıdır ve gerekçesini söyler
+  ("Bu faturanın bir ödemesi incelemede; şimdilik yeniden ödenemez"); gönderilen bir isteği API yine reddeder.
+- **`payBlockedUntil`:** fatura yanıtı (`GET /api/billing/invoices/:id` ve personelin fatura yanıtı)
+  `invoice.payBlockedUntil` alanını taşır: incelemedeki bir ödemenin faturanın yeniden ödenmesini ne zamana kadar
+  engellediği (ISO tarih); engel yoksa ve fatura ödeme beklemiyorsa `null`. Değer, `409 PAYMENT_IN_REVIEW` reddini
+  veren aynı işlevle hesaplanır (süre içindeki en geç incelemenin başlangıcı artı `reviewHoldDays` gün), yani alan
+  ile ret birbirinden ayrılmaz. Fatura sayfası ödeme düğmelerini bu ana kadar kapalı tutar; alanı göndermeyen eski
+  bir API'ye karşı düğmeler açık kalır ve reddi ödeme rotası verir.
 - **Sandbox'ta denemek:** panelin test sağlayıcısında `4000 0000 0000 4954` numaralı kart ödemeyi `FRAUD_REVIEW`
   gerekçesiyle incelemede bırakır; gerçek bir sağlayıcının bekletilen ödemesiyle aynı yolu izler ve kart
   kaydedilmez. Diğer test kartları: `4242 4242 4242 4242` onaylanır, `4000 0000 0000 0002` reddedilir,
@@ -195,12 +201,13 @@ Personelin kararını bekleyen ödemeler **bekliyor** durumunda ve bir gerekçe 
   liste `security-billing` entegrasyon testlerindedir.
 - Bekleyen bir ödemeyle ilgili ekranlar için bir uçtan uca adım vardır ve `eaa0a4e` commit'indeki çalıştırmada geçti: Sandbox'taki inceleme kartıyla ödeme, müşterinin faturasındaki "Ödemeniz inceleniyor" notu, menüdeki sayaç (1) ve özetteki uyarı, listedeki satır (durum, gerekçe, "Faturayı aç"), "İncelemeyi kapat" ile kapatma, sayacın kalkması ve kapatılan ödemenin `cancelled` süzgecinde bulunması.
   "Ödeme kaydet"in bekleyen ödemeyi kapatması, bekletilen faturada ödeme düğmelerinin kapalı olması, API'nin ikinci
-  ödemeyi reddetmesi ve ayardaki varsayılan 2026-11-19'dan beri uçtan uca adımdır (gerçek duruma karşı; `ad4b0d8`
+  ödemeyi reddetmesi ve ayardaki varsayılan 2026-11-19'dan beri uçtan uca adımdır (gerçek duruma karşı; `a2f2ff2`
   commit'indeki çalıştırmada geçti). Satırdaki bekleme süresi uçtan uca sınanmaz.
-- İnceleme süresi kuralı `billing-rules` birim testlerinde ve üç `security-leftovers-2` entegrasyon testindedir
+- İnceleme süresi kuralı `billing-rules` birim testlerinde ve dört `security-leftovers-2` entegrasyon testindedir
   (süre içinde askı ve silme yok, süre dolunca var; siparişin süresi dolmaz; hiçbir yöntemle ikinci ödeme yok, süre
-  dolunca var, saatlik kart ödemesi sınırı); testler 2026-11-19 tarihli tam çalıştırmada geçti. Gerçek bir sağlayıcı
-  hesabıyla denenmedi.
+  dolunca var, saatlik kart ödemesi sınırı; `payBlockedUntil` tam olarak ödemenin reddedildiği sürece doludur ve
+  personel aynı değeri okur); testler 2026-11-19 tarihli tam çalıştırmada geçti. Sayfanın düğmeleri alana göre
+  kapatması bir web birim testindedir. Gerçek bir sağlayıcı hesabıyla denenmedi.
 - "Ödeme kaydet"in incelemeyi kapatması, sonradan gelen "ödendi" yanıtının bir şey yazmaması, elle kapatma ve otomatik tahsilatın beklemesi bir `security-billing` entegrasyon testindedir; test 2026-11-18 tarihli tam çalıştırmada geçti.
   İnceleme kartı ve PayTR tutar denetimi birim testlidir (`billing-providers`).
 - Ödeme listesinde "Görünümler" düğmesiyle süzgeç ve arama kayıtlı görünüm olarak saklanabilir; görünümler hesapla
