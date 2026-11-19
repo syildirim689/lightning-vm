@@ -260,7 +260,10 @@ export default function Shell({ user, branding, version, children }: { user: Use
             <UserMenu user={user}/>
           </div>
         </header>
-        <main className="mx-auto w-full max-w-[150rem] flex-1 px-4 py-6 pb-24 md:px-8 md:py-8 2xl:px-10">
+        {/* Room under every page for what floats at the bottom (the background-work button, a selection bar that sticks
+            4.5rem above the edge): 6rem at every width. "md:py-8" used to take it away from 768 px on, and at the end of
+            a page the selection bar then stood on the last row. */}
+        <main className="mx-auto w-full max-w-[150rem] flex-1 px-4 pb-24 pt-6 md:px-8 md:pt-8 2xl:px-10">
           {/* Each page fades in; no exit animation, so navigation never waits on it. */}
           <motion.div key={path} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2, ease: 'easeOut' }}>{children}</motion.div>
         </main>
