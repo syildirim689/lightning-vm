@@ -55,7 +55,8 @@ denetim kaydına `admin.user.<işlem>` olarak yazılır:
   Bu oturumda hesapta kalıcı iz bırakan işlemler reddedilir (`NOT_WHILE_IMPERSONATING`): passkey ve bağlı hesap
   ekleme, API anahtarı, webhook, tarayıcı bildirimi ve mesajlaşma bağlantısı oluşturma, parola, telefon ve iki adımlı
   doğrulama değişikliği, fatura e-postasını değiştirme, kayıtlı görünüm kaydetme, değiştirme ve silme (kullanıcının
-  görünümleri uygulanabilir). Bu oturum başlarken ve biterken tarayıcıdaki içerik (taslaklar, son açılanlar, yarım
+  görünümleri uygulanabilir), hesabı bayiden ayırma (`POST /reseller/leave`) ve devredilen bir sunucuyu kabul etme
+  (ikisi de `403`: kimin yönettiği ve kimin ödediği hesabın sahibinin kararıdır). Bu oturum başlarken ve biterken tarayıcıdaki içerik (taslaklar, son açılanlar, yarım
   sipariş) silinir: personelinki müşterinin paneline, müşterininki personele geçmez
   ([operations-modules.md](operations-modules.md#tarayıcıda-tutulanlar-ve-oturum-sonu));
 - silme: kullanıcının sunucusu varsa reddedilir (`USER_HAS_SERVERS`).
@@ -310,6 +311,7 @@ Bu koşullar sağlanmazsa API `403 CSRF_REJECTED` döner. better-auth ayrıca ç
 | İki adımlı doğrulama kodu (SMS ya da e-posta), hesap başına | 8 / saat |
 | Bildirim testi, hesap başına (SMS'te ayrıca numara başına, mesajlaşmada ayrıca adres başına) | 6 / saat |
 | Mesajlaşma bağlantısı kurma ve bağlantı testi, hesap başına | 20 / saat |
+| Kart ödemesi başlatma, hesap başına (bütün faturaları için ortak) | 20 / saat |
 | Dizin ayarı testi (e-posta ve parolayla), e-posta başına | girişin e-posta sınırından düşer (10 / 15 dk, ortak) |
 | Kayıtlı görünüm kaydetme, değiştirme, silme, kişi başına | 120 / 10 dk |
 | Müşterinin talep yanıtı ve puanı | talep başına 10, müşteri başına 30 / 10 dk |
@@ -351,7 +353,8 @@ Bu, e-postanın kayıtlı olduğunu açığa çıkarır; açık kayıtlı bir pa
   müşteri hesaplarını açar ve onların sunucularını yönetir; `apps/api/src/reseller.ts`. Müşteri hesabını kimin
   yönettiğini Hesabım → Profil'de görür, bir kez bildirim alır ve bayiden ayrılabilir;
   [billing.md](billing.md#bayiler-kim-öder).)
-- Dizinde kapatılan bir hesabın **kişisel API anahtarları** panelde çalışmaya devam eder
+- SSO sağlayıcısında kapatılan bir hesabın **kişisel API anahtarları** panele hemen bildirilmez: en geç
+  `DIRECTORY_TOKEN_DAYS` gün sonra durur. Dizin (LDAP) hesaplarında panel dizine kendisi sorar
   ([aşağıda](#dizin-ldap--active-directory-ile-giriş)).
 
 ## Hesap verileri ve ekip notları
@@ -424,13 +427,40 @@ Dizin ve SSO için ortak, sonradan eklenen kurallar:
   Parolasız test (yalnızca bağlantı ve arama) sayılmaz.
 - **Kimlik belirteciyle giriş reddi sürüyor:** sağlayıcının kimlik belirtecini doğrudan göndererek giriş ya da bağlama
   yeniden denetlendi ve reddediliyor.
-- **Açık bırakılan:** dizin ya da SSO hesabının oluşturduğu **kişisel API anahtarları** oturum değildir; hesap dizinde
-  kapatılsa da panelde yasaklanana ya da devre dışı bırakılana kadar çalışmaya devam eder. Dizinden çıkardığınız
-  kişiyi panelde de yasaklayın ya da API anahtarlarını silin.
+- **API anahtarları kaynağın doğrulamasına bağlıdır (`DIRECTORY_TOKEN_DAYS`).** Kişisel API anahtarı oturum değildir:
+  her oturumdan uzun yaşar ve kullanmak için kimse giriş yapmaz; panele de kişinin dizinden çıkarıldığı bildirilmez.
+  Bu yüzden dizin (`ldap`) ya da SSO (`oidc`) hesabının anahtarı yalnızca hesap, kaynağında son
+  `DIRECTORY_TOKEN_DAYS` gün içinde doğrulanmışsa kabul edilir (`.env`; varsayılan 30, 0-3650, `0` kuralı kapatır).
+  Değilse istek `401 TOKEN_ACCOUNT_UNCONFIRMED` yanıtı alır. Anahtar silinmez, **uykudadır:** bir sonraki doğrulamada
+  yeniden çalışır. Yerel hesapların (parolası panelin olanların) anahtarları hiç uyumaz.
+  - **Doğrulama** `users.source_confirmed_at` alanına yazılır (migration `086`): dizinin ya da sağlayıcının kabul
+    ettiği her giriş onu şimdiye çeker. Yükseltme anında var olan dizin ve SSO hesapları o an doğrulanmış sayılır,
+    yani süre yükseltmeden başlar.
+  - **LDAP'ta panel dizine kendisi sorar** (`reconfirmDirectory`, `directory-signin.ts`): anahtar kullanıldığında,
+    son doğrulamanın üstünden bir gün geçtiyse ya da anahtar uykudaysa, servis hesabıyla kişiyi e-postasından arar;
+    hesap başına en çok saatte bir. **Bulunursa** doğrulama yenilenir: yalnızca API kullanan bir dizin hesabının
+    panele girmesi gerekmez. **Arama çalışır ve kimseyi bulamazsa** doğrulama alınır: hesabın anahtarları o andan
+    itibaren uykudadır (kişi dizinin kabul ettiği bir giriş yapana kadar) ve denetim kaydına
+    `auth.directory_user_missing` yazılır. **Diğer her durumda** (dizin girişi kapalı, dizin yanıt vermedi, yanıt
+    belirsiz, aynı saat içinde zaten soruldu) hiçbir şey değişmez ve yaş sınırı karar verir. Uykuda olmayan bir
+    anahtarda soru arka planda sorulur: hesabın bulunamadığını öğrenen istek yanıtını alır, sonraki istekler
+    reddedilir.
+  - **SSO'da sorulacak bir yer yoktur:** bu hesaplarda yalnızca yaş sınırı vardır; kişi en az o kadar sık panele SSO
+    ile girmelidir.
+  - **Panelde:** Hesabım → Geliştirici'deki anahtar listesi ve Ayarlar → API'deki "Tüm anahtarlar" listesi uykudaki
+    anahtarı "Uykuda" diye işaretler (`asleep` alanı, değeri ret kodu). Dizin ya da SSO hesabı kendi sayfasında
+    anahtarlarının ne zamana kadar çalışacağını okur (`GET /account/api-tokens` yanıtında `confirmation`: `source`,
+    `days`, `confirmedAt`, `until`).
+  - Dizinden çıkardığınız kişinin erişimini hemen kesmek istiyorsanız yine panelde yasaklayın ya da anahtarlarını
+    silin: dizine en çok saatte bir ve son doğrulamadan bir gün sonra sorulur.
 
 Bu kurallar `ldap` birim testlerinde ve iki `security-auth` entegrasyon testindedir; ikisi de 2026-11-18 tarihli tam
-çalıştırmada geçti.
-Gerçek bir dizin sunucusunda (Active Directory, OpenLDAP) ve gerçek bir SSO sağlayıcısında denenmedi.
+çalıştırmada geçti. API anahtarının yaş kuralı `ldap` birim testlerinde ve bir `security-leftovers-2` entegrasyon
+testindedir (2026-11-19 tarihli tam çalıştırmada geçti); bu test doğrulama tarihini veritabanında doğrudan değiştirir,
+dizin kurulu değildir.
+Gerçek bir dizin sunucusunda (Active Directory, OpenLDAP) ve gerçek bir SSO sağlayıcısında denenmedi. **Dizine sorma
+yolunun (`reconfirmDirectory`) kendi testi yoktur** ve gerçek bir LDAP sunucusuna karşı çalıştırılmadı: dizinin
+"bulundu", "bulunamadı" ve hata yanıtlarında olanlar yalnızca kaynaktan okundu.
 
 ## Tek oturum açma (OpenID Connect)
 Ayarlar → Dizin → Tek oturum açma: issuer adresi (panel `/.well-known/openid-configuration` belgesini okur), client ID

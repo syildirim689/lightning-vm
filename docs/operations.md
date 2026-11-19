@@ -333,6 +333,9 @@ doldurup herkesi bekletebiliyordu. Bunun için hesap başına bir pay vardır:
 - **`OPERATIONS_PER_OWNER`** (`.env`): bir hesabın aynı anda yürüyebilen işlem sayısı. Varsayılan,
   `OPERATIONS_CONCURRENCY` değerinin yarısıdır (en az 1; varsayılan kurulumda 4). `0` payı kapatır. Değişiklik için
   worker yeniden oluşturulur: `docker compose up -d worker`.
+- **`OPERATIONS_HELD_HOURS`** (`.env`): payı beklerken geçen sürenin işlemin son tarihine en çok kaç saat
+  eklenebileceği. Varsayılan `6`; `0`, bekleme süresini eskisi gibi işlemin süresinden düşer. Worker'ın ayarıdır;
+  değişiklik için worker yeniden oluşturulur.
 - **Kimin payından sayılır:** işlemi başlatan hesabın (`operations.capped_for`, migration `084`). Müşterinin kendi
   işlemleri müşterinin; bayinin müşterisinin sunucusunda başlattığı işlem ve müşterisi için verdiği sipariş bayinin;
   güç zamanlamasının başlattığı işlem sunucunun sahibinin payındandır.
@@ -348,12 +351,21 @@ doldurup herkesi bekletebiliyordu. Bunun için hesap başına bir pay vardır:
 
 Sınırları:
 
-- **İşlemin süresi beklerken de işler.** Son tarih (`deadline_at`) işlem kabul edildiğinde yazılır; payı beklerken
-  geçen süre bundan düşer. Çok uzun bir sıranın sonundaki işlem, başlamadan süresini doldurabilir.
+- **Bekleme süresi işlemin süresinden düşmez, bir sınıra kadar.** Son tarih (`deadline_at`) işlem kabul edildiğinde,
+  işin kendisi için yazılır. İşlem ilk kez bekletildiğinde o an kaydedilir (`operations.held_since`, migration
+  `087`); başladığında son tarih, o andan beri geçen süre kadar ileri alınır ve işaret silinir. Eklenen süre en çok
+  `OPERATIONS_HELD_HOURS` saattir. Son tarihinin o kadar uzatılmış hâli de geçmiş bir işlem artık bekletilmez:
+  serbest bırakılır ve süre denetiminde, çok beklemiş her işlem gibi, `TIMEOUT` ile biter; sırada hiçbir şey
+  süresiz kalmaz. Payı bekleyen işlem Genel bakış'taki "takılmış işlem" içgörüsünde sayılmaz. Pay sonradan
+  kapatılsa ya da işlemin iptali istense de bekletilmiş işlem süresini geri alır.
+- **Yükseltmede sıra:** worker bu sütunu kullanır; API (ve migration'lar) worker'dan önce ya da onunla birlikte
+  başlatılmalıdır. Olağan güncelleme bunu kendisi yapar.
 - **Birlikte hareket eden hesaplar sınırlanmaz.** Pay hesap başınadır; birkaç hesap açan biri her birinin payını ayrı
   ayrı kullanır. Rolün saatlik işlem sınırı ([auth.md](auth.md#rol-sınırları)) ve kota bunun yanında geçerlidir.
 - Pay, platformun yükünü değil worker'ın yerlerini paylaştırır; personelin toplu işlemleri sınırsızdır.
 - Kural birim testlidir (`apps/worker/test/fairness.test.mjs`) ve kimin payından sayıldığı bir entegrasyon testindedir (`security-leftovers`); test 2026-11-18 tarihli tam çalıştırmada geçti.
+  Bekleme süresinin geri verilmesi aynı birim testlerinde ve worker'ın sorgularını test veritabanında çalıştıran bir
+  `security-leftovers-2` testindedir (2026-11-19 tarihli tam çalıştırmada geçti).
   Gerçek bir hipervizörde, yük altında denenmedi.
 
 ## İzleme

@@ -26,7 +26,15 @@ in Turkish and English. It can be searched, filtered to the routes the reader ma
 - **Request log:** method, route pattern, path, status, duration, address and token of every request made with a
   token, kept 1–365 days (14 by default). Bodies are never stored. The tab shows the last 24 hours, the most called
   routes, errors and 429s.
-- **All tokens:** every account's tokens with owner, access, last use and 24-hour counts; revoke one (audited).
+- **All tokens:** every account's tokens with owner, access, last use and 24-hour counts; revoke one (audited). A
+  token of a directory or single sign-on account that is not accepted right now is marked "asleep" (below).
+- **Tokens of directory (LDAP) and single sign-on accounts** are accepted only while the account was confirmed by
+  its source within `DIRECTORY_TOKEN_DAYS` (`.env`; default 30, 0 switches the rule off): by a sign-in the directory
+  or the provider accepted or, for LDAP with a working service account, by the directory still listing the account
+  when the token is used (asked at most once an hour per account). Otherwise the request gets
+  `401 TOKEN_ACCOUNT_UNCONFIRMED`; the token is not removed and works again after the person signs in. In
+  `GET /account/api-tokens` each token has `asleep` (the refusal's code, or null), and `confirmation` says for such
+  an account when it was last confirmed and until when its tokens work. Details: [auth.md](auth.md) (Turkish).
 
 ## Tokens
 

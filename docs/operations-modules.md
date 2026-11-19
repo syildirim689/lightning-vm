@@ -202,7 +202,10 @@ Kurallar `apps/api/src/smart-rules.ts` içindedir ve birim testleri vardır. Ver
   - Listede olmayan her kod: ayrıntıları doldurulmuş destek talebi.
   - Bağlantılar (faturalar, kota, destek) yalnızca sunucunun sahibine gösterilir; başkasının sunucusuna bakan
     personel gerekçeyi ve, uygunsa, yeniden denemeyi görür. İşlem geçmişindeki satır bağlantısı da aynı öneriyi izler.
-  - Kurallar birim testlidir; bildirimin uçtan uca testi yoktur ve tarayıcıda elle gözden geçirilmedi.
+  - Kurallar birim testlidir. 2026-11-19'dan beri bildirimin bir uçtan uca adımı vardır: destek önerisi gerçek bir
+    hatadan gelir (artık var olmayan bir anlık görüntüye dönme); fatura ve "yeniden dene" önerileri için aynı
+    başarısız işlem sayfaya başka bir tür ve hata koduyla **dışarıdan verilir** (simülatör bu hataları üretemez),
+    düğmenin yaptığı iş yine gerçektir. Tarayıcıda elle gözden geçirilmedi.
 - **Bildirim zilinde gruplama:** aynı konudaki art arda bildirimler sayısıyla tek satırda toplanır
   ([notifications.md](notifications.md)).
 
@@ -218,13 +221,19 @@ panelin yazdığı her anahtarın bu listelerden birinde olduğunu denetler.
 | Personel özetindeki "son bakışınızdan beri" işareti (`lvm-dashboard-seen`) | `localStorage` | Oturum sonu; panel başkası için açıldığında |
 | Yarım kalmış sipariş (`lvm-order`; projeyi, SSH anahtarlarını ve kopyalanan sunucuyu taşır) | `sessionStorage` (sekme) | Oturum sonu; panel başkası için açıldığında. Açık sekmenin belleğindeki kopya da bırakılır |
 | Kenara alınan görevler (`lvm:tasks-cleared`), izlenen sunucu yeniden başlatması ya da güncellemesi (`lvm:host-task`), tabloların sıralaması ve sayfası (`lvm:table:*`; adreste sunucu, talep ya da kişi kimliği olabilir) | `sessionStorage` (sekme) | Oturum sonu; panel başkası için açıldığında |
-| Önceki sürümden kalan kayıtlı görünümler (`lvm:views:*`) | `localStorage` | Sahibi listeyi açtığında hesaba taşınıp silinir; taşınmamış olanlar oturum sonunda silinir. Panel başkası için açıldığında **durur** (sahibi taşıyabilsin diye) |
+| Önceki sürümden kalan kayıtlı görünümler (`lvm:views:*`) | `localStorage` | Sahibi listeyi açtığında hesaba taşınıp silinir. Çıkışta, çıkış yapan hesabın taşınmamış görünümleri önce o hesaba gönderilir, sonra hepsi silinir; oturum başka bir yolla bittiğinde gönderilmeden silinir. Panel başkası için açıldığında **durur** (sahibi taşıyabilsin diye) |
 | Ekranda duran tarayıcı bildirimleri ve o tarayıcının bildirim aboneliği | tarayıcı | Çıkışta bildirimler kapatılır, abonelik API'den ve tarayıcıdan silinir. Oturum başka yolla bittiğinde tarayıcı tarafı silinir (API satırını bir sonraki gönderimde siler). Klavyedeki kişi değiştiğinde de silinir |
 | Tercihler: tema, erişilebilirlik (`lvm-a11y`), açık menü, sunucu listesi görünümü, terminal yazı tipi, komut parçası işletim sistemi, gizlenen ilk adımlar, kapatılan duyuru, son kullanılan ikinci adım yöntemi; dil ve saat dilimi çerezleri | `localStorage`, çerez | Silinmez: kimsenin verisini taşımaz |
 
 - **Oturum sonu:** kullanıcının çıkışı ve oturumun başka bir yolla bitmesi (süresi doldu, başka yerden kapatıldı, hesap
   yasaklandı, parola değişti). İkisi de aynı listeyi siler. Tek istisna: oturumu, sayfada kaydedilmemiş yazı varken
   dolan kullanıcıda sayfa yerinde kalır ve yeniden giriş istenir; içerik o anda silinmez.
+- **Çıkışta eski görünümler:** çıkışta hâlâ bir oturum vardır; tarayıcı temizlenmeden önce, önceki sürümden kalan
+  kayıtlı görünümlerden çıkış yapan hesaba ait olanlar o hesaba gönderilir (`lib/auth-client.ts`,
+  `uploadLocalViews`). Hesap, tarayıcının hatırladığı değil, API'nin o oturum için söylediği hesaptır; yalnızca o
+  hesabın kimliğini taşıyan anahtarlar okunur, yani o tarayıcıyı kullanmış başka birinin görünümleri hiç
+  gönderilmez. Personel bir kullanıcı adına oturum açmışken hiçbir şey gönderilmez. Gönderme en çok dört saniye
+  sürer; o zamana kadar gönderilemeyen, eskisi gibi gönderilmeden silinir.
 - **Panel başkası için açıldığında:** panel her açılışta, içeriğin kimin için yazıldığını (`lvm-owner`: hesap ve varsa
   onun adına oturum açan personel) şimdiki oturumla karşılaştırır ve farklıysa içeriği **okumadan önce** siler. Bu
   şunları kapsar: çıkış yapılmadan aynı tarayıcıda başka bir hesapla giriş; tarayıcı kapalıyken biten oturum; geri
@@ -239,8 +248,10 @@ panelin yazdığı her anahtarın bu listelerden birinde olduğunu denetler.
 - **Sınırlar:** depolamayı engelleyen bir tarayıcıda hiçbir şey yazılmaz ve silinecek bir şey de olmaz. Silme, panelin
   o tarayıcıda yeniden açılmasına ya da oturumun orada bitmesine bağlıdır: tarayıcı kapatılıp panel bir daha
   açılmazsa içerik diskte durur. Tarayıcının kendi geçmişi, form otomatik doldurması ve indirilen dosyalar panelin
-  elinde değildir. Kurallar birim testlidir (`session-end.test.ts`); gerçek bir tarayıcıda, ortak bilgisayar
-  senaryosuyla uçtan uca denenmedi.
+  elinde değildir. Kurallar birim testlidir (`session-end.test.ts`) ve 2026-11-19'dan beri uçtan uca paketin bir
+  adımıdır: içerik anahtarları panelin yazdığı biçimde tarayıcıya konur ve "kullanıcı adına giriş"in iki ucunda,
+  aynı tarayıcıda başka bir oturumda ve çıkışta silindikleri, tercihin kaldığı ve çıkış yapan hesabın eski
+  görünümlerinin gönderildiği denetlenir. Ortak bir bilgisayarda elle denenmedi.
 
 ## Güç zamanlaması ve toplu işlemler
 
@@ -278,11 +289,26 @@ panelin yazdığı her anahtarın bu listelerden birinde olduğunu denetler.
   sunucularında güç zamanlamalarının yaptıkları da dahil ("Zamanlama" etiketiyle).
   - **Başkasının bu hesap için yaptıkları da listededir** (denetim kaydında `forOwner` ile işaretlenenler): bayinin
     müşterisinin sunucusunda başlattığı işlemler (açma, kapatma, yeniden kurma, silme ve diğerleri), müşteri adına
-    verdiği sipariş ve hesabı açması "Bayiniz yaptı" etiketiyle ve bayinin e-postasıyla; hesabın bayiden ayrılması,
+    verdiği sipariş ve hesabı açması "Bayiniz yaptı" etiketiyle, bayinin e-postasıyla ve adıyla (`actorName`: bayinin
+    belirlediği marka, yoksa hesap adı); hesabın bayiden ayrılması,
     personel yaptıysa "Destek ekibi yaptı" etiketiyle ve ad verilmeden. Başkasının yaptığı kayıtta IP adresi
     gösterilmez; bayi dışındaki kişilerin e-postası müşteriye gönderilmez.
-  - Kapsamadıkları: bayinin işlem başlatmayan eylemleri (örneğin müşterinin sunucularını görüntülemesi) müşterinin
-    listesinde yoktur. Bu sürümden önceki bayi işlemleri işaretli olmadığı için geriye dönük görünmez.
+  - **2026-11-19'dan beri bayinin sunucuda işlem başlatmadan yaptıkları da listededir:** konsol açma, güç
+    zamanlaması ekleme, değiştirme ve silme, etiketler, disk ekleme ve kaldırma, sunucudan imaj alma, ad değiştirme,
+    kilitleme ve kilidi açma. Kural tektir: bir istek, sahibinin bayisi olarak bir sunucuya ulaştıysa, o isteğin o
+    sunucu hakkında denetim kaydına yazdığı her olay sahibinin de listesindedir.
+  - **Bu işaret istekten gelmez.** `forOwner` ve `actingAs` alanlarını yalnızca denetim işlevi yazar; bir çağıranın
+    ayrıntılarında gelen aynı adlı alanlar atılır. Önceden abonelik değişikliği rotası istek gövdesini olduğu gibi
+    denetim kaydına yazıyordu ve bir müşteri bu yolla başka bir hesabın etkinlik listesine kayıt koyabiliyordu. O iki
+    olay (`billing.subscription_changed`, `billing.subscription_updated`) artık yalnızca doğrulanmış alanları taşır
+    ve eski kayıtları dahil yalnızca işlemi yapanın kendi listesinde görünür.
+  - Kapsamadıkları: bayinin müşterinin sunucularını yalnızca görüntülemesi müşterinin listesinde yoktur. Bayi
+    eylemleri ancak eklendikleri sürümden itibaren işaretlidir; öncekiler geriye dönük görünmez.
+  - Bir `security-leftovers-2` entegrasyon testindedir: bayinin müşteri sunucusunda zamanlama eklemesi, değiştirmesi,
+    silmesi ve etiketleri müşterinin listesinde, bayinin e-postası ve markasıyla, IP adresi olmadan; bayinin kendi
+    sunucusundaki aynı eylem kimsenin listesinde değil; istek gövdesi başka bir hesabın listesine yazamaz. Konsol,
+    disk, imaj, ad ve kilit aynı kuraldan geçer ama testte tek tek denenmez. Listede bayinin adının görünmesinin
+    uçtan uca adımı yoktur.
 - **Duyuru** (Ayarlar → Duyuru, `PUT /admin/settings/announcement`; okuma: `GET /announcement`): oturum açılmış
   her sayfanın üstünde görünen nottur.
   - Metin Türkçe ve İngilizce girilir. Ton (bilgi, uyarı, kritik, iyi haber), isteğe bağlı bağlantı (panel yolu

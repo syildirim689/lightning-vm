@@ -5,6 +5,119 @@ madde neyin değiştiğini ve işletmecinin yapması gereken bir şey varsa onu 
 davranışı değiştirmeyen işler burada yoktur. Tahsilat çalıştırması API içinde beş dakikada bir çalışır; yani "ilk
 çalıştırma" yükseltmeden birkaç dakika sonradır.
 
+## Bekletilen ödemeler, dizin hesaplarının API anahtarları, kuyrukta bekleme ve bayiden ayrılınca liste fiyatı (2026-11-19)
+
+İlk güvenlik turunun bulgu çıkarmadan kapattığı 65 inceleme birimi bu turda yeniden okundu ve bir önceki turun
+"olduğu gibi bırakılanlar" listesinin dördü değiştirildi. Yeniden okuma tek bir inceleyiciyle ve yalnızca kaynak
+üzerinde yapıldı; bağımsız doğrulamadan geçmiş bir denetim turu **değildir**
+([security-audit.md](security-audit.md#re-review-of-the-units-round-one-closed-without-a-finding-2026-11-19)).
+
+Veri değişiklikleri iki dosyadadır ve yükseltme sırasında kendiliğinden uygulanır:
+`apps/api/migrations/086_source_confirmed.sql` (`users.source_confirmed_at`) ve
+`087_operation_held_since.sql` (`operations.held_since`). İki yeni `.env` değişkeni ve bir yeni ayar vardır; üçü de
+varsayılanıyla çalışır, `.env` dosyasına bir şey eklemeniz gerekmez:
+
+| Ad | Nerede | Varsayılan | Ne yapar |
+|---|---|---|---|
+| `DIRECTORY_TOKEN_DAYS` | `.env` (API) | `30` (0-3650; `0` kuralı kapatır) | Dizin ya da SSO hesabının API anahtarı, hesap kaynağında en son doğrulandıktan sonra kaç gün çalışır |
+| `OPERATIONS_HELD_HOURS` | `.env` (worker) | `6` (`0`: bekleme eskisi gibi süreden düşer) | Hesap payını beklerken geçen sürenin, işlemin son tarihine en çok kaç saat eklenebileceği |
+| `reviewHoldDays` | Ayarlar → Faturalandırma | `7` (0-90; `0` kapatır) | İnceleme bekleyen bir ödemenin faturasını kaç gün askıdan, silmeden ve ikinci ödemeden koruduğu |
+
+Bu turun test sonuçları (`ad4b0d8` commit'i): birim testleri API 162, worker 54, web 120, hepsi geçti. Entegrasyon
+paketinin tamamı 2026-11-19'da Docker'lı bir Linux sunucusunda çalıştırıldı: 203 testten 199'u geçti, 4'ü atlandı
+(PowerDNS, ISO deposu ya da konsol ağ geçidi isteyenler), başarısız olan yok; bu turun `security-leftovers-2`
+testleri bu sayının içindedir. Uçtan uca paket (Playwright) kendi geçici Compose kurulumuna karşı, boş bir
+veritabanı ve VMware simülatörüyle çalıştırıldı (gerçek veri taşıyan bir panele karşı çalıştırılmaz): 33 test geçti.
+Paketin bazı yeni adımlarında durum sayfaya dışarıdan verilir; hangileri olduğu README'nin
+[Geliştirme ve testler](../README.md#-geliştirme-ve-testler) bölümündedir. Hiçbir ekrana tarayıcıda elle bakılmadı
+ve hiçbir şey gerçek bir hipervizörde, gerçek bir Proxmox kümesinde, gerçek bir Param hesabında ya da gerçek bir
+dizin sunucusunda denenmedi.
+
+Aşağıdaki maddeler işletmecinin fark edeceği her değişikliği sayar; ilk dördü yükseltmeden önce okunmalıdır.
+
+- **Başlatma sırası: API, worker'dan önce ya da onunla birlikte.** Yeni worker `operations.held_since` sütununu
+  (migration `087`) kullanır. Olağan güncelleme (`install.sh update` ya da `docker compose up -d`) migration'ları
+  `migrate` servisiyle API ve worker başlamadan uygular; yapacağınız bir şey yoktur. Yalnızca worker'ı tek başına
+  yeni sürüme alırsanız, migration uygulanana kadar payı dolu bir hesabın sıradaki işlemleri bekletilemez ve hata
+  verir.
+- **Dizin (LDAP) ve SSO hesaplarının API anahtarları 30 günde bir doğrulama ister.** Böyle bir hesabın kişisel API
+  anahtarı yalnızca hesap, kaynağında son `DIRECTORY_TOKEN_DAYS` gün içinde doğrulanmışsa kabul edilir; değilse
+  istek `401 TOKEN_ACCOUNT_UNCONFIRMED` yanıtı alır. Anahtar silinmez, "uykuda"dır: kişi panele dizin ya da SSO
+  üzerinden yeniden girdiğinde yeniden çalışır. Önceden bu anahtarlar, hesap dizinde kapatılsa da, panelde
+  yasaklanana kadar çalışıyordu.
+  - **Süre yükseltme anından başlar.** Migration `086` mevcut dizin ve SSO hesaplarını yükseltme anında doğrulanmış
+    sayar; anahtarları çalışmaya devam eder ve ilk kesinti en erken 30 gün sonradır.
+  - **Doğrulama nedir:** dizinin ya da sağlayıcının kabul ettiği her panel girişi. LDAP'ta, servis hesabı (bind)
+    çalışıyorsa, panel ayrıca anahtar kullanıldığında dizine kendisi sorar (hesap başına en çok saatte bir, son
+    doğrulamanın üstünden bir gün geçtiyse): hesap bulunursa doğrulama yenilenir, yani yalnızca API kullanan bir
+    dizin hesabının 30 günde bir panele girmesi gerekmez. Arama çalışır ve kimseyi bulamazsa hesabın anahtarları
+    hemen uykuya alınır ve denetim kaydına `auth.directory_user_missing` yazılır. Dizin yanıt vermezse, yanıt
+    belirsizse ya da dizin girişi kapalıysa hiçbir şey değişmez; yaş sınırı karar verir.
+  - **SSO hesaplarında sorulacak bir yer yoktur:** bu hesaplar en az `DIRECTORY_TOKEN_DAYS` günde bir panele SSO
+    ile girmelidir. SSO hesabıyla çalışan otomasyonunuz varsa bunu takvime koyun, süreyi `.env` içinde büyütün ya
+    da otomasyon için yerel bir hesap kullanın. `DIRECTORY_TOKEN_DAYS=0` kuralı tümüyle kapatır (değişiklik için
+    API yeniden oluşturulur: `docker compose up -d api`).
+  - **Panelde:** Hesabım → Geliştirici'deki anahtar listesi ve Ayarlar → API'deki "Tüm anahtarlar" listesi uykudaki
+    anahtarı "Uykuda" diye işaretler; dizin ya da SSO hesabı kendi sayfasında anahtarlarının ne zamana kadar
+    çalışacağını okur. API: `GET /api/account/api-tokens` yanıtında `asleep` ve `confirmation`.
+  - Dizine sorma yolunun kendi testi yoktur ve gerçek bir LDAP sunucusunda denenmedi; testler yalnızca yaş kuralını
+    kapsar ([auth.md](auth.md#dizin-ldap--active-directory-ile-giriş)). Dizinden çıkardığınız kişinin erişimini
+    hemen kesmek için yine panelde yasaklayın ya da anahtarlarını silin.
+- **İnceleme bekleyen ödeme, faturasını bekletir (`reviewHoldDays`).** Bir faturanın inceleme bekleyen ödemesi
+  varken, incelemenin başladığı andan itibaren en çok `reviewHoldDays` gün (Ayarlar → Faturalandırma; 0-90,
+  varsayılan 7): o fatura için sunucu askıya alınmaz ve silinmez, ödenmemiş sipariş süresi dolduğu için geri
+  çekilmez ve hatırlatma gönderilmez. Gecikme bildirimi yine bir kez gider ve ödemenin incelendiğini, yeniden ödemek
+  gerekmediğini söyler. Aynı süre içinde **müşteri faturayı ikinci kez ödeyemez** (`409 PAYMENT_IN_REVIEW`; bakiye,
+  kayıtlı kart ve kart, hepsi); fatura sayfasındaki ödeme düğmeleri gerekçesiyle kapalıdır. Önceden askı adımları
+  inceleme sırasında sürüyordu ve müşteri aynı faturaya ikinci bir ödeme başlatabiliyordu.
+  - **Süre dolduğunda koruma biter.** İnceleme hâlâ açıksa fatura her ödenmemiş fatura gibi yeniden tahsilata girer
+    (hatırlatma, askı, ayarlıysa silme) ve müşteri yeniden ödeyebilir. Kimsenin karar vermediği bir inceleme
+    ödenmemiş bir sunucuyu süresiz korumaz ve müşteriyi süresiz kilitlemez. İncelemeleri bu süre içinde kapatın.
+  - `0` ikisini birden kapatır: askı adımları inceleme sırasında işler ve ikinci ödeme reddedilmez (bir önceki
+    sürümün davranışı).
+  - **Kapsamadığı:** saatlik kullanımda bakiyesi eksiye düşen hesabın sunucularının saat başı kapatılması bu
+    beklemenin dışındadır (silinmeleri bekler). Otomatik tahsilat, bir önceki sürümdeki gibi, böyle bir faturadan
+    çekmez ([payments.md](payments.md#incelemedeki-ödemeler)).
+- **Bayiden ayrılan müşterinin sunucuları liste fiyatına geçer.** Müşteri bayiden ayrıldığında, personel onu
+  ayırdığında ya da bayilik kaldırıldığında, aboneliği müşteriye geçen sunuculardan bayinin indirimi kalkar: **bir
+  sonraki faturadan itibaren** liste fiyatıyla faturalanırlar; bayinin ödediği dönem için müşteriden bir şey
+  istenmez. Önceden müşteri bayinin indirimli fiyatını ödemeye devam ediyordu.
+  - **Yalnızca fiyat kesinse.** Panel sunucu başına tek bir fiyat saklar; liste fiyatını bugünkü katalogdan hesaplar
+    ve yalnızca bugünkü katalog fiyatından bayinin şimdiki indirimi düşüldüğünde sunucunun fiyatı kuruşu kuruşuna
+    çıkıyorsa değiştirir. Katalog ya da indirim o günden beri değiştiyse, personel fiyatı elle belirlediyse ya da
+    sunucu bir sanal veri merkezine aitse **fiyat olduğu gibi kalır** ve sunucu personele listelenir: yanıtta ve
+    `reseller.customer_released` denetim olayında `pricesKept`, panelde kullanıcı özeti penceresinde bir uyarı.
+    Bu sunucuların fiyatına personelin bakması gerekir.
+  - Müşteri yeni aylık tutarları ayrılmadan önce onay sorusunda ve ayrıldıktan sonra bildirimde görür
+    (`GET /api/reseller/summary` → `managedBy.afterLeave`; yanıtta `listPrices`).
+  - Tahsilatın silinmek üzere işaretlediği bir sunucu, aboneliği zaten bitmiş ya da iptal edilmişse, sahibi bayiden
+    ayrıldığında artık yeni bir abonelik almaz; silme kararı yerinde kalır ([billing.md](billing.md#bayiler-kim-öder)).
+- **Kullanıcı adına oturum açmış personel hesabı bayiden ayıramaz ve devredilen sunucuyu kabul edemez**
+  (`403 NOT_WHILE_IMPERSONATING`). İkisi de hesabın sahibinin kararıdır. Personel bir müşteriyi bayiden kendi
+  hesabıyla, Yönetim → Kullanıcılar'daki "Bayiden çıkar" ile ayırır.
+- **Bir hesap saatte en çok 20 kart ödemesi başlatabilir** (`429 RATE_LIMITED`; hesabın bütün faturaları için
+  ortak). Olağan kullanımda bu sınıra gelinmez.
+- **Bayinin yaptıkları müşterinin etkinlik listesinde.** Bayinin müşterisinin sunucusunda işlem başlatmadan
+  yaptıkları da artık müşterinin Hesabım → Etkinlik listesindedir: konsol açma, güç zamanlaması, etiket, disk,
+  sunucudan imaj alma, ad değiştirme ve kilit. Satırda bayinin adı ya da markası yazar. Bu sürümden önceki
+  eylemler geriye dönük görünmez.
+- **Etkinlik listesine istek gövdesinden kayıt yazılamaz.** Bir olayı başka bir hesabın etkinlik listesine koyan
+  alanlar (`forOwner`, `actingAs`) artık yalnızca denetim işlevinin kendisi tarafından yazılır. Abonelik değişikliği
+  olayları (`billing.subscription_changed`, `billing.subscription_updated`) denetim kaydında yalnızca doğrulanmış
+  alanları taşır (önceden istek gövdesinin tamamı yazılıyordu) ve yalnızca işlemi yapanın kendi etkinlik listesinde
+  görünür.
+- **Kuyrukta bekleme süresi işlemin süresinden düşmez (`OPERATIONS_HELD_HOURS`).** Hesap payını bekleyen bir işlem
+  başladığında, beklediği süre son tarihine geri eklenir; en çok `OPERATIONS_HELD_HOURS` saat (varsayılan 6).
+  Bundan da uzun bekleyen işlem serbest bırakılır ve zaman aşımıyla (`TIMEOUT`) biter. Payı bekleyen işlem "takılmış
+  işlem" içgörüsünde sayılmaz. `0`, eski davranıştır ([operations.md](operations.md#kuyrukta-hesap-payı)).
+- **Web.** Önceki sürümün tarayıcıda bıraktığı kayıtlı görünümler, hesap çıkış yaparken tarayıcı temizlenmeden önce
+  o hesaba gönderilir (başkasına ait olanlar gönderilmeden silinir). Ayarlar'daki Sandbox yardımı dört test kartını
+  da sayar; `4000 0000 0000 4954` ("incelemeye alınır") dahil.
+- **Bir önceki turun "olduğu gibi bırakılanlar" listesinden kalanlar.** Hesap payı, birlikte hareket eden birden
+  çok hesabı sınırlamaz. Bayinin müşterinin sunucularını yalnızca görüntülemesi etkinlik listesinde yoktur. Bayiden
+  ayrılma, bayinin tam o anda verdiği bir siparişle çakışabilir. Yalnızca kapatılan (kaldırılmayan) bayi, abonelikleri
+  ödemeye devam eder.
+
 ## Güvenlik turundan kalanların kapatılması ve hesapta saklanan görünümler (2026-11-18)
 
 İkinci güvenlik turunun "incelenmedi" ya da "değiştirilmedi" diye bıraktığı konular bu turda ele alındı. Bu, kaynak

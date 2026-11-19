@@ -145,14 +145,35 @@ Personelin kararını bekleyen ödemeler **bekliyor** durumunda ve bir gerekçe 
     ya da tutar bakiye düzeltmesiyle verilir; panel bunu kendiliğinden yapmaz.
   - Kapatılan bir ödemeyi sonradan gelen hiçbir dönüş, bildirim ya da yeniden sorma değiştirmez (bunlar yalnızca
     bekleyen ödemeye işler). Kapatılan ödemeler listede `cancelled` durum süzgeciyle bulunur.
-- **Otomatik tahsilat bekler, hatırlatmalar beklemez.** İnceleme bekleyen ödemesi olan bir faturadan otomatik tahsilat
-  (bakiye ve kayıtlı kart) **çekmez**: sağlayıcı müşterinin parasını o fatura için tutuyor olabilir. Personel karar
-  verdikten sonra fatura yeniden tahsilata girer. Hatırlatma, gecikme (`past_due`), askıya alma ve ayarlıysa silme
-  adımları ise **sürer**; bu bilerek olduğu gibi bırakıldı. İnceleme bekleyen bir ödeme vadesini geçerse müşterinin
-  sunucusu askıya alınabilir: kararı geciktirmeyin.
+- **Otomatik tahsilat bekler.** İnceleme bekleyen ödemesi olan bir faturadan otomatik tahsilat (bakiye ve kayıtlı
+  kart) **çekmez**: sağlayıcı müşterinin parasını o fatura için tutuyor olabilir. Personel karar verdikten sonra
+  fatura yeniden tahsilata girer.
+- **İnceleme süresi: fatura bekler ve ikinci kez ödenemez (`reviewHoldDays`).** Ayarlar → Faturalandırma'daki
+  "İncelemedeki ödemenin faturasını beklettiği gün sayısı" (`reviewHoldDays`; 0-90, varsayılan 7) bir süre tanımlar.
+  Süre incelemenin başladığı andan sayılır (`payments.review_since`; yoksa ödemenin başladığı an). Bu süre içinde,
+  o fatura için:
+  - sunucu **askıya alınmaz ve silinmez** (zaten askıda olan abonelikte gün sayımı sürer; silme, süre dolana kadar
+    bekler);
+  - ödenmemiş **sipariş, süresi dolduğu için geri çekilmez** (kurulum ve ayrılan adres o kadar bekler);
+  - **hatırlatma gönderilmez.** Gecikme bildirimi (`billing.overdue`) yine bir kez gider ve abonelik `past_due`
+    olur, ama bildirim ödemenin incelendiğini ve yeniden ödemek gerekmediğini söyler; böylece süre dolduktan sonraki
+    bir askı habersiz gelmez;
+  - **müşteri faturayı ikinci kez ödeyemez:** `POST /api/billing/invoices/:id/pay` her yöntemde (bakiye, kayıtlı
+    kart, kart) `409 PAYMENT_IN_REVIEW` döner; denetim kart ödemesinin başladığı yerde ve bakiye ödemesinin içinde
+    yeniden yapılır. İkinci bir ödeme parayı iki kez alabilirdi ve her biri personele ayrı bir bildirim
+    gönderirdi.
+  - Saatlik kullanımda, kullanım faturalarından birinin ödemesi incelemedeyken hesabın sunucuları **silinmez.**
+    Bakiyesi eksiye düşen hesabın sunucularının saat başı **kapatılması bu beklemenin dışındadır.**
+- **Süre dolduğunda koruma biter.** İnceleme hâlâ açıksa fatura her ödenmemiş fatura gibi yeniden tahsilata girer
+  (hatırlatma, askı, ayarlıysa silme) ve yeniden ödenebilir. Kimsenin karar vermediği bir inceleme ödenmemiş bir
+  sunucuyu o kadar korur, daha fazla değil, ve müşteriyi süresiz kilitlemez: askıya alınmış ya da silinecek bir
+  sunucunun personeli beklemeyen bir çıkış yolu olmalıdır. **İncelemeleri bu süre içinde kapatın.** `0`, hem
+  beklemeyi hem ikinci ödemenin reddini kapatır.
+- **Saatte 20 kart ödemesi.** Bir hesap, bütün faturaları için toplam, saatte en çok 20 kart ödemesi başlatabilir
+  (`429 RATE_LIMITED`).
 - **Müşteri ne görür:** inceleme bekleyen ödemesi olan ödenmemiş faturanın sayfasında "Ödemeniz inceleniyor" notu
-  durur ve sayfa sonucu beklemeyi bırakır; müşteriden yeniden ödeme yapması istenmez (ödeme düğmeleri yine de
-  durur).
+  durur ve sayfa sonucu beklemeyi bırakır. Ödeme düğmeleri inceleme sürerken kapalıdır ve gerekçesini söyler ("Bu
+  faturanın bir ödemesi incelemede; şimdilik yeniden ödenemez"); gönderilen bir isteği API yine reddeder.
 - **Sandbox'ta denemek:** panelin test sağlayıcısında `4000 0000 0000 4954` numaralı kart ödemeyi `FRAUD_REVIEW`
   gerekçesiyle incelemede bırakır; gerçek bir sağlayıcının bekletilen ödemesiyle aynı yolu izler ve kart
   kaydedilmez. Diğer test kartları: `4242 4242 4242 4242` onaylanır, `4000 0000 0000 0002` reddedilir,
@@ -161,7 +182,9 @@ Personelin kararını bekleyen ödemeler **bekliyor** durumunda ve bir gerekçe 
 - **Bildirim:** bir ödeme incelemeye girdiğinde `billing.manage` izni olan personele `billing.payment_review`
   bildirimi gider (varsayılan kanallar panel ve e-posta; Ayarlar → Bildirim kuralları'ndan değiştirilir). Ödeme
   başına bir kez gönderilir; aynı ödeme için sonradan gelen yanıtlar yeniden bildirmez. Olay günlüğe de yazılır
-  (`payment_needs_review`). Müşteri gerçekten ödemişse faturası bu sırada vadesini geçebilir; bekletmeyin.
+  (`payment_needs_review`). Müşteri gerçekten ödemişse faturası inceleme süresi dolduktan sonra yeniden tahsilata
+  girer; bekletmeyin. İnceleme süresince ikinci ödeme reddedildiği için bir müşteri aynı faturayı yeniden ödeyerek
+  bu bildirimi çoğaltamaz.
 - **Bekleme süresi** `payments.review_since` alanından okunur (migration `081`). Yükseltmeden önce incelemeye girmiş
   ödemelerde süre ödemenin başladığı andan sayılır. Gerekçe sonradan değişse de süre baştan başlamaz.
 - Yönetici API'si: `GET /api/admin/billing/payments?status=review` (isteğe bağlı `q`) aynı listeyi verir; her
@@ -171,7 +194,13 @@ Personelin kararını bekleyen ödemeler **bekliyor** durumunda ve bir gerekçe 
   yokken boş liste metnini ve süzgeç ile aramanın adreste kalıp yenilemeden sonra geri geldiğini kapsar. Bildirim ve
   liste `security-billing` entegrasyon testlerindedir.
 - Bekleyen bir ödemeyle ilgili ekranlar için bir uçtan uca adım vardır ve `eaa0a4e` commit'indeki çalıştırmada geçti: Sandbox'taki inceleme kartıyla ödeme, müşterinin faturasındaki "Ödemeniz inceleniyor" notu, menüdeki sayaç (1) ve özetteki uyarı, listedeki satır (durum, gerekçe, "Faturayı aç"), "İncelemeyi kapat" ile kapatma, sayacın kalkması ve kapatılan ödemenin `cancelled` süzgecinde bulunması.
-  "Ödeme kaydet"in bekleyen ödemeyi kapatması ve satırdaki bekleme süresi uçtan uca sınanmaz.
+  "Ödeme kaydet"in bekleyen ödemeyi kapatması, bekletilen faturada ödeme düğmelerinin kapalı olması, API'nin ikinci
+  ödemeyi reddetmesi ve ayardaki varsayılan 2026-11-19'dan beri uçtan uca adımdır (gerçek duruma karşı; `ad4b0d8`
+  commit'indeki çalıştırmada geçti). Satırdaki bekleme süresi uçtan uca sınanmaz.
+- İnceleme süresi kuralı `billing-rules` birim testlerinde ve üç `security-leftovers-2` entegrasyon testindedir
+  (süre içinde askı ve silme yok, süre dolunca var; siparişin süresi dolmaz; hiçbir yöntemle ikinci ödeme yok, süre
+  dolunca var, saatlik kart ödemesi sınırı); testler 2026-11-19 tarihli tam çalıştırmada geçti. Gerçek bir sağlayıcı
+  hesabıyla denenmedi.
 - "Ödeme kaydet"in incelemeyi kapatması, sonradan gelen "ödendi" yanıtının bir şey yazmaması, elle kapatma ve otomatik tahsilatın beklemesi bir `security-billing` entegrasyon testindedir; test 2026-11-18 tarihli tam çalıştırmada geçti.
   İnceleme kartı ve PayTR tutar denetimi birim testlidir (`billing-providers`).
 - Ödeme listesinde "Görünümler" düğmesiyle süzgeç ve arama kayıtlı görünüm olarak saklanabilir; görünümler hesapla

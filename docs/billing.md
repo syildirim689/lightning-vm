@@ -21,7 +21,7 @@ Kod: `apps/api/src/billing.ts` (akış ve uç noktalar), `billing-rules.ts` (par
 
 1. **Sipariş**: "Kurulumdan önce ödeme" açıksa sunucu kaydı ve adresleri ayrılır, kurulum işlemi `awaiting_payment` adımında bekler,
    müşteri faturaya yönlenir. Bakiye yetiyorsa hemen ödenir. Ödeme gelince kurulum başlar. Süresinde ödenmeyen sipariş geri çekilir ve
-   kurulum iptal edilerek adresler serbest kalır.
+   kurulum iptal edilerek adresler serbest kalır (ödemesi inceleme bekleyen sipariş, inceleme süresi boyunca geri çekilmez).
 2. **Yenileme**: dönem bitiminden N gün önce fatura kesilir. Otomatik tahsilat açıksa önce bakiyeden, sonra varsayılan kayıtlı karttan
    çekilir (günde bir, en fazla ayarlanan sayıda deneme). Dönemi başlamamış, ödenmemiş yenileme faturası **sunucunun güncel fiyatını
    izler** ([aşağıda](#yenileme-faturası-sunucunun-fiyatını-izler)). İnceleme bekleyen bir ödemesi olan fatura otomatik tahsilata
@@ -29,7 +29,11 @@ Kod: `apps/api/src/billing.ts` (akış ve uç noktalar), `billing-rules.ts` (par
    ([payments.md](payments.md#incelemedeki-ödemeler)).
 3. **Ödenmeyen yenileme**: son ödeme gününden önce hatırlatma; ertesi gün gecikme bildirimi (`past_due`); X gün sonra askıya alma
    (sunucu kapatılır ve müşteriye kilitlenir; kapatma ve silme dışında işlem, konsol yok); ayarlanmışsa Y gün sonra silme.
-   Ödeme yapılınca askı kalkar ve sunucu yeniden açılır. Bu adımlar, faturanın inceleme bekleyen bir ödemesi olsa da **sürer**.
+   Ödeme yapılınca askı kalkar ve sunucu yeniden açılır. Faturanın inceleme bekleyen bir ödemesi varsa hatırlatma, askıya alma ve
+   silme, incelemenin başladığı andan itibaren en çok `reviewHoldDays` gün **bekler** (Ayarlar → Faturalandırma; varsayılan 7, `0`
+   kapatır) ve müşteri o faturayı ikinci kez ödeyemez (`409 PAYMENT_IN_REVIEW`); gecikme bildirimi bir kez gider ve ödemenin
+   incelendiğini söyler. Süre dolduğunda, inceleme hâlâ açıksa, adımlar kaldığı yerden işler
+   ([payments.md](payments.md#incelemedeki-ödemeler)).
 4. **İptal**: müşteri "dönem sonunda iptal" seçer; sunucu dönem sonuna kadar çalışır, sonra silinir.
 5. **İade**: karta (sağlayıcı üzerinden) ya da bakiyeye; kısmi olabilir. e-Arşiv faturası teslimden itibaren 8 gün içinde tamamen
    iade edilirse entegratörde iptal edilir; aksi halde ekibe iade faturası gerektiği bildirilir (e-Fatura alıcısında iadeyi alıcı keser).
@@ -123,7 +127,9 @@ Kalan sınırlar:
 Hesap `billing-rules` birim testleri ve bir `security-billing` entegrasyon testiyle sınanır. Blok için bir uçtan uca
 adım vardır (üç gün içinde vadesi dolan fatura tutarı ve "Öde" bağlantısıyla listelenir; ödendikten sonra blok hiç
 çizilmez); adım `eaa0a4e` commit'indeki çalıştırmada geçti.
-Yenileme satırı ve saatlik bakiye satırı uçtan uca sınanmaz; blok tarayıcıda elle gözden geçirilmedi.
+Yenileme satırı ve saatlik bakiye satırı 2026-11-19'dan beri uçtan uca adımdır (simülatörün kapasitesinde gerçek
+durumdan: küçük bir bakiyeyle saatlik bir sunucu ve aylık yenilenen bir sanal veri merkezi). Blok tarayıcıda elle
+gözden geçirilmedi.
 
 ## Bayiler: kim öder
 Bayi, müşterisi için sunucu sipariş eder: sunucu müşterinindir, aboneliği ise bayinindir ve bayi indirimiyle bayiye
@@ -135,7 +141,7 @@ Bir müşteri üç yolla bayiden ayrılır:
 
 | Yol | Kim | Nereden |
 |---|---|---|
-| Müşteri kendisi ayrılır | müşteri | Hesabım → Profil → "Bayiden ayrıl" (`POST /api/reseller/leave`; bayisi olmayan hesapta `409 NOT_MANAGED`) |
+| Müşteri kendisi ayrılır | müşteri | Hesabım → Profil → "Bayiden ayrıl" (`POST /api/reseller/leave`; bayisi olmayan hesapta `409 NOT_MANAGED`; müşteri adına oturum açmış personele `403 NOT_WHILE_IMPERSONATING`: bu karar hesabın sahibinindir) |
 | Personel tek bir müşteriyi ayırır | `users.manage` | Yönetim → Kullanıcılar → bayinin kullanıcı özeti penceresi → müşteri listesinde "Bayiden çıkar" (`DELETE /api/admin/resellers/:id/customers/:customerId`). Listeyi `GET /api/admin/resellers/:id` yanıtındaki `customers` alanı verir (e-posta, ad, sunucu sayısı; en çok 500 müşteri) |
 | Bayilik kaldırılır | `users.manage` | `DELETE /api/admin/resellers/:id`; bütün müşterileri birlikte ayrılır |
 
@@ -143,7 +149,11 @@ Bir müşteri üç yolla bayiden ayrılır:
 
 - **Çalışan abonelikler müşteriye geçer** (`active`, `past_due`, `suspended` olanlar). Temiz başlar: durum `active`
   olur, ödeme askısı kalkar, bayinin kaydettiği dönem sonu iptali silinir, otomatik yenileme açılır, tahsilatın o
-  sunucular için koyduğu silme işareti geri alınır. Bayinin gecikmesi müşterinin borcu değildir.
+  sunucular için koyduğu silme işareti geri alınır. Bayinin gecikmesi müşterinin borcu değildir. Silme işareti
+  **yalnızca aboneliği geçen sunucular için** geri alınır: aboneliği daha önce bitmiş ya da iptal edilmiş bir
+  sunucuda (müşterinin kendi ödediği bir sunucu ya da bayinin ayrılmadan önce iptal ettiği) tahsilatın silme kararı
+  yerinde kalır. Önceden bu işaret müşterinin bütün sunucularından kalkıyor ve bir sonraki tahsilat çalıştırması o
+  sunucuya yeni bir abonelik açıyordu.
 - **Bayinin o sunucular için kesilmiş yenileme faturaları iptal edilir**, ama yalnızca hiç ödenmemiş ve yalnızca bu
   sunucuların satırlarını taşıyanlar. Dönemleri serbest kalır; bir sonraki tahsilat çalıştırması **ödenmemiş ilk
   dönemi** müşteriye, kendi vadesi ve hatırlatmalarıyla faturalar.
@@ -153,15 +163,29 @@ Bir müşteri üç yolla bayiden ayrılır:
   kısmen ödenmiş olanlar ve başka sunucularla ortak olanlar. Bunlar bayiden tahsil edilir, denetim kaydına
   `leftInvoices` olarak yazılır ve açık kaldıkları sürece ilgili aboneliğe bağlı ödenmemiş fatura olarak sayılmaya
   devam eder. Personelin bu faturalara bakması gerekir (tahsil etmek ya da iptal etmek).
-- **Fiyat değişmez.** Sunucu, bayi indirimi dahil, o andaki fiyatını korur; boyutu değiştirilene ya da personel
-  fiyatı değiştirene kadar müşteri o fiyattan faturalanır.
+- **Bayinin indirimi kalkar, fiyat kesinse.** Aboneliği müşteriye geçen sunucular bir sonraki faturadan itibaren
+  liste fiyatıyla faturalanır (`listPrices`, `reseller.ts`): sunucunun fiyatı, ek disklerinin fiyatı ve aboneliğin
+  tutarı değişir. Süren dönem için bir şey istenmez (bayi ödedi); bir sonraki yenileme ya da kimsenin ödemediği ilk
+  dönem liste fiyatıyla kesilir. Bayide kalan bir fatura kesildiği fiyatı korur.
+  - Panel sunucu başına tek bir fiyat saklar; uygulanmış indirimi ve liste fiyatını saklamaz. Liste fiyatı bu yüzden
+    **bugünkü katalogdan** hesaplanır (paket ya da özel yapılandırma, ek IPv4, uygulama ve her ek disk) ve yalnızca
+    bundan **bayinin şimdiki indirimi** düşüldüğünde sunucunun fiyatı kuruşu kuruşuna çıkıyorsa kabul edilir. O zaman
+    tahmin yoktur: sunucu bugünkü katalog fiyatından bu indirimle fiyatlanmıştır.
+  - Tutmuyorsa (katalog ya da indirim o günden beri değişti, personel fiyatı elle belirledi, bayinin indirimi yok,
+    sunucu bir sanal veri merkezinde, dışarıdan faturalanıyor ya da aylık değil) **fiyat olduğu gibi kalır** ve
+    sunucu personele listelenir: personelin ayırma yanıtında ve `reseller.customer_released` denetim olayında
+    `pricesKept` (sunucu kimlikleri); panelde, kullanıcı özeti penceresinde sunuculara bağlantı veren bir uyarı.
+    Fiyatı düzeltmek personelin işidir.
+  - Müşteri yeni tutarları önceden görür: `GET /api/reseller/summary` → `managedBy.afterLeave` (sunucu, para birimi,
+    şimdiki ve sonraki aylık fiyat; boş liste: bir şey değişmez). "Bayiden ayrıl" sorusu bunları listeler; ayrılma
+    yanıtı (`listPrices`) ve bildirim de söyler.
 - **Erişim kapanır:** bayinin açık konsolları kapatılır; bayinin sipariş verirken hesaba eklediği SSH anahtarı
   (`reseller` adlı) hesaptan ve sunucuların kayıtlı anahtar listesinden silinir, yani yeni sunucuya ve yeniden
   kuruluma verilmez. Çalışan sunucuların **içindeki** anahtara dokunulmaz; müşteriye giden bildirim bunu söyler.
 - İki tarafa `account.reseller` bildirimi gider ([notifications.md](notifications.md#bayi-bildirimi-accountreseller));
   bayilik kaldırılırken bayiye gönderilmez. Olay `reseller.customer_released` olarak, kimin yaptığı (`by`), geçen
-  abonelik sayısı, iptal edilen ve bayide kalan faturalarla denetim kaydına yazılır ve müşterinin Hesabım → Etkinlik
-  listesinde görünür.
+  abonelik sayısı, iptal edilen ve bayide kalan faturalar, liste fiyatına geçen sunucular (`listPrices`) ve fiyatı
+  korunanlarla (`pricesKept`) denetim kaydına yazılır ve müşterinin Hesabım → Etkinlik listesinde görünür.
 
 **Bayiyi kapatmak ayırmak değildir.** `PUT /api/admin/resellers/:id` ile `active: false` yapılan bayi müşterilerinin
 sunucularında işlem yapamaz, ama müşteriler onun müşterisi ve abonelikler onun aboneliği olarak kalır (yeniden
@@ -169,18 +193,26 @@ açılabilsin diye). Yanıt ve denetim kaydı bayinin kaç çalışan abonelik �
 bitirmek için bayiliği kaldırın ya da müşterileri tek tek ayırın.
 
 **Müşteri ne görür:** `GET /api/reseller/summary` yanıtındaki `managedBy` alanı (bayinin adı, e-postası, markası,
-açık olup olmadığı) Hesabım → Profil'de bir kart olarak gösterilir: bayinin neleri yapabildiği, neleri yapamadığı,
-iletişim adresi ve ayrılma düğmesi. Müşteri paneli ilk kullandığında bir kez bildirim alır.
+açık olup olmadığı, `afterLeave`) Hesabım → Profil'de bir kart olarak gösterilir: bayinin neleri yapabildiği, neleri
+yapamadığı, iletişim adresi ve ayrılma düğmesi. Ayrılma sorusu, fiyatı değişecek sunucuları ayrıldıktan sonraki aylık
+tutarlarıyla listeler. Müşteri paneli ilk kullandığında bir kez bildirim alır.
 
 Bilinen boşluklar:
 
 - Ayrılma, bayinin tam o anda verdiği bir siparişle çakışırsa o sipariş ayrılmanın dışında kalabilir (bayiye
   faturalanmış ya da bayinin anahtarını taşıyor olabilir). Bu yarış kapatılmadı.
-- Müşterinin etkinlik listesinde bayinin yalnızca sunucu işlemleri, siparişleri ve hesabı açması vardır; işlem
-  başlatmayan eylemleri yoktur.
-- Müşteri, bayinin indirimli fiyatını ayrıldıktan sonra da öder; fiyatı liste fiyatına çekmek personelin işidir.
-- Bu akış iki `security-leftovers` entegrasyon testindedir (ayrılma; bayiliğin kaldırılması ve personelin tek müşteriyi ayırması); ikisi de 2026-11-18 tarihli tam çalıştırmada geçti.
-  Hesap sayfasındaki kartın ve yönetimdeki "Bayiden çıkar" düğmesinin uçtan uca testi yoktur.
+- Müşterinin etkinlik listesinde bayinin sunucu işlemleri, siparişleri, hesabı açması ve, 2026-11-19'dan beri,
+  sunucuda işlem başlatmadan yaptıkları (konsol, zamanlama, etiket, disk, imaj, ad, kilit) vardır. Bayinin sunucuları
+  yalnızca görüntülemesi yoktur ([operations-modules.md](operations-modules.md#denetim-kaydı-hesap-etkinliği-ve-duyuru)).
+- Liste fiyatı kesin bulunamayan sunucu, bayinin indirimli fiyatını ayrıldıktan sonra da korur; personel
+  `pricesKept` listesine bakıp düzeltene kadar müşteri o fiyattan faturalanır.
+- Liste fiyatı bugünkü katalogdan ve bayinin şimdiki indiriminden çıkar. Katalog ve indirim birlikte, sunucunun
+  fiyatını yine aynı kuruşa getirecek biçimde değiştiyse panel bunu ayırt edemez; fiyat bugünkü kataloğa çekilir.
+- Bu akış iki `security-leftovers` entegrasyon testindedir (ayrılma; bayiliğin kaldırılması ve personelin tek
+  müşteriyi ayırması) ve bir `security-leftovers-2` testindedir (liste fiyatı, fiyatı korunan sunucu, tahsilatın
+  silme kararının kalması, personelin müşteri adına ayrılamaması); `billing-rules` birim testleri kuralı sınar.
+  Hesap sayfasındaki kart, "Bayiden ayrıl" ve yönetimdeki "Bayiden çıkar" 2026-11-19'dan beri uçtan uca adımdır;
+  ayrılma sorusundaki yeni tutarların ve personelin gördüğü fiyat uyarısının uçtan uca adımı yoktur.
 
 ## Saatlik kullanım, bütçe ve boyut değişikliği
 
@@ -204,7 +236,7 @@ Bilinen boşluklar:
   Entegrasyonun açtığı müşteriler, panelin faturalaması kapalıyken panelden sipariş veremez (`EXTERNALLY_BILLED`);
   faturalama açıksa panelden verdikleri sipariş panelde faturalanır.
 - **Fatura e-postası:** müşteri adına oturum açmış personel fatura profilindeki e-posta adresini değiştiremez
-  (`NOT_WHILE_IMPERSONATING`).
+  (`NOT_WHILE_IMPERSONATING`). Aynı oturum hesabı bayiden ayıramaz ve devredilen sunucuyu kabul edemez.
 
 ## e-Fatura / e-Arşiv
 

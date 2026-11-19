@@ -70,6 +70,11 @@ bildirimiyle (`admin.restore_hold`) gider: bekleme API kapalıyken konduğu içi
 bildirimi yinelemez, yeni bir geri yükleme yeniden bildirilir. İnceleme bekleyen ödemeler kendi bildirimiyle
 (`billing.payment_review`) gider.
 
+Gecikme bildirimi (`billing.overdue`), faturanın inceleme bekleyen bir ödemesi varsa ve inceleme süresi
+(`reviewHoldDays`) dolmadıysa başka bir metinle gider: ödemenin ekipçe incelendiğini, yeniden ödemek gerekmediğini
+ve ödeme doğrulanamazsa hizmetin askıya alınacağını söyler. Aynı süre içinde ödeme hatırlatması (`billing.reminder`)
+gönderilmez ([payments.md](payments.md#incelemedeki-ödemeler)).
+
 Paneldeki bildirim zili, aynı olayın aynı bağlantıya ait art arda gelen bildirimlerini (örneğin bir talepteki beş
 yanıt) sayısıyla tek satırda gösterir. Yalnızca listede yan yana duranlar birleşir, gün başlığı değişince satır
 bölünür, bağlantısı olmayan bildirim tek kalır. Satıra basmak içindeki okunmamışların hepsini okundu işaretler ve
@@ -90,7 +95,10 @@ uygulamalarıdır (SMS yok); varsayılanı panel ve e-postadır.
   bayi müşterileri de bir sonraki ziyaretlerinde alır (`users.reseller_notice_at`, migration `084`).
 - **"Hesabınız artık bir bayiye bağlı değil"** (müşteriye): hesap bayiden ayrıldığında (müşteri kendisi ayrıldı,
   personel ayırdı ya da bayilik kaldırıldı). Kaç sunucunun bundan sonra müşteriye faturalanacağını ve, bayinin hesaba
-  eklediği SSH anahtarı kaldırıldıysa, anahtarın çalışan sunucuların içinde hâlâ durabileceğini söyler.
+  eklediği SSH anahtarı kaldırıldıysa, anahtarın çalışan sunucuların içinde hâlâ durabileceğini söyler. Bayinin
+  indirimi kalkan sunucu varsa kaç sunucunun bir sonraki faturadan itibaren liste fiyatıyla faturalanacağını, yeni
+  aylık toplamı ve şimdiye kadarki toplamı da söyler (para birimi başına; bayinin ödediği dönem için bir şey
+  istenmez).
 - **"… artık müşteriniz değil"** (bayiye): müşteri kendisi ayrıldığında ya da personel tek bir müşteriyi ayırdığında.
   Bayilik kaldırılırken bayiye gönderilmez. Bayide kalan ödenmemiş fatura varsa sayısını söyler.
 
