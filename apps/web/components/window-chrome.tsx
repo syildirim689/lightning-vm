@@ -262,15 +262,23 @@ export default function WindowChrome() {
     // that confirms "stop" and is gone once that is done, its question still closing): the focus is then nowhere, and
     // Escape, which a dialog hears only from inside itself, would close nothing. One frame later (whoever closes gives
     // the focus back within that frame, where there is something to give it back to) it is put on the window in front.
+    // A key pressed inside that frame does not wait for it: the window takes the focus at once, and an Escape that was
+    // on its way to the page is handed to the window.
     let stray = 0;
+    const front = () => (document.activeElement !== document.body || waiting() ? null
+      : [...document.querySelectorAll<HTMLElement>(DIALOG)].filter((d) => !d.closest('[data-exiting]')).at(-1) ?? null);
     const keep = () => {
       if (stray || document.activeElement !== document.body) return;
-      stray = requestAnimationFrame(() => {
-        stray = 0;
-        if (document.activeElement !== document.body || waiting()) return;
-        const front = [...document.querySelectorAll<HTMLElement>(DIALOG)].filter((d) => !d.closest('[data-exiting]')).at(-1);
-        front?.focus({ preventScroll: true });
-      });
+      stray = requestAnimationFrame(() => { stray = 0; front()?.focus({ preventScroll: true }); });
+    };
+    const strayKey = (e: KeyboardEvent) => {
+      if (e.target !== document.body || !e.isTrusted) return;
+      const d = front();
+      if (!d) return;
+      d.focus({ preventScroll: true });
+      if (e.key !== 'Escape' || document.activeElement !== d) return;
+      e.preventDefault(); e.stopImmediatePropagation();
+      d.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', bubbles: true, cancelable: true }));
     };
     const seen = new MutationObserver((list) => {
       if (list.some((m) => m.removedNodes.length)) keep();
@@ -429,6 +437,7 @@ export default function WindowChrome() {
     const early = { capture: true } as const;
     for (const type of ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click', 'keydown'] as const) window.addEventListener(type, back, early);
     window.addEventListener('keydown', keys, early);
+    window.addEventListener('keydown', strayKey, early);
     document.addEventListener('focusin', roam);
     document.addEventListener('pointerdown', outside, early);
     document.addEventListener('pointerdown', down);
@@ -441,7 +450,7 @@ export default function WindowChrome() {
     return () => {
       seen.disconnect(); cancelAnimationFrame(stray); shut(false); preview(null, null);
       for (const type of ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click', 'keydown'] as const) window.removeEventListener(type, back, early);
-      window.removeEventListener('keydown', keys, early);
+      window.removeEventListener('keydown', keys, early); window.removeEventListener('keydown', strayKey, early);
       document.removeEventListener('focusin', roam); document.body.removeAttribute('data-react-aria-top-layer');
       document.removeEventListener('pointerdown', outside, early);
       document.removeEventListener('pointerdown', down); document.removeEventListener('pointermove', move); document.removeEventListener('pointerup', up);
