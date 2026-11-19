@@ -8,6 +8,7 @@ import { useFormatter, useLocale, useNow, useTranslations } from 'next-intl';
 import { parseAsString, useQueryState } from 'nuqs';
 import { I } from '../../../../components/icon';
 import { SavedViews } from '../../../../components/saved-views';
+import { VIEW_LISTS } from '../../../../lib/saved-views';
 import { Ago, Empty, PageHeader, SelectInput, Stat } from '../../../../components/ui';
 import { useMe } from '../../../../lib/me';
 import { can } from '../../../../lib/permissions';
@@ -17,7 +18,7 @@ import CannedReplies from './canned';
 import { Deadline, departmentName, DraftBadge, PriorityBadge, StatusBadge, useDepartments, useDrafts, type Ticket } from '../../support/ui';
 
 // The status is 'active' when the address does not name one; an empty status means every ticket.
-const viewKeys = { status: 'active', priority: '', department: '', assignee: '', q: '' };
+const viewKeys = VIEW_LISTS['admin-support'];
 type Stats = { active: number; waiting: number; overdue: number; unassigned: number; firstResponseHours: number | null; rating: number | null };
 
 export default function SupportQueue() {

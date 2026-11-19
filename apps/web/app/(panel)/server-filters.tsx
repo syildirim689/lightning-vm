@@ -7,6 +7,7 @@ import { parseAsString, parseAsStringLiteral, useQueryState } from 'nuqs';
 import { useState } from 'react';
 import { I } from '../../components/icon';
 import { SavedViews } from '../../components/saved-views';
+import { VIEW_LISTS } from '../../lib/saved-views';
 import { ConfirmButton, SelectInput, TextInput } from '../../components/ui';
 import { apiFetch } from '../../lib/api';
 import { fold } from '../../lib/note-line';
@@ -19,8 +20,8 @@ export const stateGroup = (s: Pick<Server, 'state' | 'powerState' | 'deleteAt'>)
 
 const attention = ['problem', 'busy', 'stopped', 'running', 'trash'];
 // What a saved view of each list holds: its address parameters and the value each has when absent.
-const ownViews = { q: '', state: 'all', tag: '', project: '', sort: 'newest' };
-const staffViews = { q: '', state: 'all', tag: '', owner: '', sort: 'newest', starred: 'false' };
+const ownViews = VIEW_LISTS.servers;
+const staffViews = VIEW_LISTS['admin-servers'];
 
 export function useServerFilters(all: Server[]) {
   const [q, setQ] = useQueryState('q', parseAsString.withDefault(''));

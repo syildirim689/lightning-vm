@@ -398,6 +398,8 @@
     "E_RESTORE_DUMP": "Yedekteki veritabanı dökümü okunamadı. Yedek bozuk ya da yedek anahtarı yanlış olabilir.",
     "E_RESTORE_NO_SAFETY": "Mevcut verinin güvenlik kopyası alınamadığı için geri yükleme başlatılmadı. Hiçbir şey değiştirilmedi.",
     "UPDATE_SKIPPED": "Otomatik güncelleme bu sürümü atladı; çünkü daha önce bir kez başarısız oldu. Nedeni giderince elle güncelleyin.",
+    "PAYMENT_IN_REVIEW": "Bu fatura için yapılan bir ödeme ekibimizce inceleniyor; bu yüzden şu anda yeniden ödenemez. Karar verildiğinde size bildirilir; iki kez ödemeniz gerekmez.",
+    "TOKEN_ACCOUNT_UNCONFIRMED": "Bu API anahtarı uykuda: hesap bir dizinden ya da tek oturum açmadan geliyor ve yakın zamanda orada doğrulanmadı. Panelde yeniden oturum açtığınızda anahtar eskisi gibi çalışır.",
     "PAYMENT_NOT_IN_REVIEW": "Bu ödeme artık inceleme beklemiyor; bu arada sonuçlandırılmış ya da kapatılmış."
   },
   "Auth": {
@@ -4741,7 +4743,7 @@
       "testing": "Test",
       "testingHelp": "Gerçek kuruluş olmadan tüm akışı deneyin.",
       "sandbox": "Test ödeme kuruluşu",
-      "sandboxHelp": "Müşteriler test kartlarıyla ödeyebilir (4242 4242 4242 4242). Gerçek müşteriler varken asla açık bırakmayın.",
+      "sandboxHelp": "Müşteriler test kartlarıyla ödeyebilir: 4242 4242 4242 4242 onaylanır, 4000 0000 0000 0002 reddedilir, 4000 0000 0000 9995 yetersiz bakiye verir, 4000 0000 0000 4954 incelemeye alınır (Faturalandırma → Ödemeler altında personeli bekler). Gerçek müşteriler varken asla açık bırakmayın.",
       "save": "Kaydet",
       "hourly": "Kullandıkça öde",
       "hourlyHelp": "Müşteriler bakiyeden ödenen saatlik sunucu sipariş edebilir (bakiye açık olmalı). Her ayın kullanımı tek faturaya dönüşür.",

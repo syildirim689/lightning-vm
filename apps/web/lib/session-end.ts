@@ -12,6 +12,8 @@ import { forgetLocalViews } from './saved-views.ts';
 //   nobody's data and stay.
 // - separateKeys are being moved to the account by their own code (lib/saved-views.ts, when their owner opens the
 //   list): they stay through claimLocal so that they can still be moved, and go when a session ends (forgetLocal).
+//   A sign-out sends the signing-out account's own to the account first (lib/auth-client.ts, while there still is a
+//   session to send them with); any other end of a session has none, and removes them unsent.
 type Keys = { exact: readonly string[]; prefix: readonly string[] };
 export const contentKeys: { local: Keys; session: Keys } = {
   local: {

@@ -8,12 +8,13 @@ import React, { useState } from 'react';
 import { ActivityIcon, outcomeTone, useActionLabel, type AuditEvent } from '../../../../components/activity';
 import { I } from '../../../../components/icon';
 import { SavedViews } from '../../../../components/saved-views';
+import { VIEW_LISTS } from '../../../../lib/saved-views';
 import { Mono, PageHeader, SelectInput, StatusChip } from '../../../../components/ui';
 import { apiFetch, useErrorText } from '../../../../lib/api';
 import { downloadCsv } from '../../../../lib/csv';
 import { useApiQuery } from '../../../../lib/query';
 
-const viewKeys = { q: '', outcome: '', category: '' };
+const viewKeys = VIEW_LISTS['admin-audit'];
 type Page = { events: AuditEvent[]; nextBefore: string | null; categories: string[] };
 
 export default function Audit() {

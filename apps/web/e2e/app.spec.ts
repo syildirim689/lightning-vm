@@ -825,6 +825,94 @@ test.describe('server lifecycle (simulator, Turkish customer)', () => {
     await expect(page.getByText(/Hazır · açık/).first()).toBeVisible({ timeout: 30_000 });
     await expect(page.getByRole('grid', { name: 'İşlem geçmişi' })).toContainText('Oluşturma');
 
+    // A failed operation, and the one next step the page offers after it (lib/next-step.ts). The failure is a real
+    // one: going back to a snapshot that is no longer there, asked of the API as a page left open would ask it. The
+    // worker fails it for good (SNAPSHOT_NOT_FOUND), which no second try would fix: the page sends to support, with
+    // a ticket that already says what happened.
+    {
+      const main = page.locator('main');
+      const history = page.getByRole('grid', { name: 'İşlem geçmişi' });
+      const id = page.url().split('/').pop()!;
+      type Op = { id: string; kind: string; status: string; errorCode: string | null };
+      const operations = async () => ((await (await page.request.get(`/api/servers/${id}`)).json()) as { operations: Op[] }).operations;
+      const asked = await page.request.post(`/api/servers/${id}/snapshots/snapshot-999999/revert`, { headers: { 'x-lightning-csrf': '1', 'idempotency-key': `e2e-revert-${Date.now()}` } });
+      expect(asked.status(), await asked.text()).toBe(202);
+      await expect.poll(async () => (await operations())[0]?.status, { timeout: 45_000 }).toBe('failed');
+      const failed = (await operations())[0]!;
+      expect([failed.kind, failed.errorCode]).toEqual(['snapshot_revert', 'SNAPSHOT_NOT_FOUND']);
+      await page.reload();
+      await expect(main.getByText('Anlık görüntüye dönme başarısız oldu', { exact: true })).toBeVisible();
+      await expect(main.getByText(/^Bu anlık görüntü artık yok\. \(SNAPSHOT_NOT_FOUND\) · /)).toBeVisible();
+      await expect(main.getByText('Yeniden denemek bunu kendiliğinden düzeltmez. Destek ekibine yazın; ayrıntılar sizin için dolduruldu.', { exact: true })).toBeVisible();
+      await expect(main.getByRole('button', { name: 'Yeniden dene' })).toHaveCount(0);
+      const toSupport = main.getByRole('link', { name: 'Destek ekibine yaz', exact: true });
+      const ticketLink = new URL((await toSupport.getAttribute('href'))!, page.url());
+      expect(ticketLink.pathname).toBe('/support');
+      expect(ticketLink.searchParams.get('new')).toBe('1');
+      expect(ticketLink.searchParams.get('server')).toBe(id);
+      expect(ticketLink.searchParams.get('subject')).toBe('web-1: Anlık görüntüye dönme başarısız oldu');
+      expect(ticketLink.searchParams.get('body')).toContain('Hata: Bu anlık görüntü artık yok. (SNAPSHOT_NOT_FOUND)');
+      expect(ticketLink.searchParams.get('body')).toContain(`İşlem: ${failed.id}`);
+      // The row of the history carries the same way out.
+      const failedRow = history.getByRole('row').filter({ hasText: 'SNAPSHOT_NOT_FOUND' });
+      await expect(failedRow).toContainText('Başarısız');
+      expect(await failedRow.getByRole('link', { name: 'Bunu destekle paylaş' }).getAttribute('href')).toBe(await toSupport.getAttribute('href'));
+      await page.waitForTimeout(300);
+      await page.screenshot({ path: 'test-results/tour/server-failed-support.png', fullPage: true });
+      await page.setViewportSize({ width: 390, height: 900 });
+      await expectNoOverflow(page, 'server page with a failed operation at 390 px');
+      await page.setViewportSize({ width: 1280, height: 720 });
+
+      // The other two answers depend on the error code alone. The simulator cannot be made to time out or to refuse
+      // for an unpaid invoice, so for these the page is handed the same failed operation with another kind and code
+      // (only that operation, in the page's own read of the server; everything else is the API's answer). What the
+      // button then does is real again.
+      let shown: { kind: string; errorCode: string } | null = { kind: 'power_on', errorCode: 'BILLING_HOLD' };
+      await page.route(`**/api/servers/${id}`, async (route) => {
+        if (route.request().method() !== 'GET' || !shown) return route.continue();
+        const answer = await route.fetch();
+        const body = await answer.json() as { operations: Op[] };
+        await route.fulfill({ response: answer, json: { ...body, operations: body.operations.map((o) => (o.id === failed.id ? { ...o, ...shown } : o)) } });
+      });
+      // Money stands in the way: the invoices, not a ticket and not a retry.
+      await page.reload();
+      await expect(main.getByText('Açma başarısız oldu', { exact: true })).toBeVisible();
+      await expect(main.getByText(/^Sunucu, ödenmeyen fatura ödenene kadar askıda\. \(BILLING_HOLD\) · /)).toBeVisible();
+      await expect(main.getByText('İşlemin önünde bir ödeme var. Açık faturayı ödeyin ya da bakiye yükleyin, sonra işlemi yeniden başlatın.', { exact: true })).toBeVisible();
+      await expect(main.getByRole('link', { name: 'Faturalara git' }).first()).toHaveAttribute('href', '/billing?show=open');
+      await expect(history.getByRole('row').filter({ hasText: 'BILLING_HOLD' }).getByRole('link', { name: 'Faturalara git' })).toHaveAttribute('href', '/billing?show=open');
+      await expect(main.getByRole('link', { name: 'Destek ekibine yaz', exact: true })).toHaveCount(0);
+      await expect(main.getByRole('button', { name: 'Yeniden dene' })).toHaveCount(0);
+      // Usually temporary (a timeout) on an action that loses nothing when repeated: "try again" is the page's own
+      // button for that action. A reset asks first, as it always does, and then really resets the server; with the
+      // newest operation a success, the notice is gone.
+      shown = { kind: 'reset', errorCode: 'TIMEOUT' };
+      await page.reload();
+      await expect(main.getByText('Reset başarısız oldu', { exact: true })).toBeVisible();
+      await expect(main.getByText('Bu çoğunlukla geçici bir durumdur. Şimdi yeniden deneyebilirsiniz.', { exact: true })).toBeVisible();
+      await expect(main.getByRole('link', { name: 'Destek ekibine yaz', exact: true })).toHaveCount(0);
+      await page.waitForTimeout(300);
+      await page.screenshot({ path: 'test-results/tour/server-failed-retry.png', fullPage: true });
+      await main.getByRole('button', { name: 'Yeniden dene', exact: true }).click();
+      const sure = page.getByRole('alertdialog', { name: 'Reset' });
+      await expect(sure).toContainText('kaydedilmemiş veriler kaybolabilir');
+      const [sent] = await Promise.all([
+        page.waitForResponse((r) => r.request().method() === 'POST' && new URL(r.url()).pathname === `/api/servers/${id}/actions`),
+        sure.getByRole('button', { name: 'Evet, Reset' }).click(),
+      ]);
+      expect(sent.status()).toBe(202);
+      expect(sent.request().postDataJSON()).toEqual({ action: 'reset' });
+      await expect.poll(async () => { const [last] = await operations(); return [last?.kind, last?.status]; }, { timeout: 45_000 }).toEqual(['reset', 'succeeded']);
+      await expect(main.getByText('Reset başarısız oldu', { exact: true })).toHaveCount(0, { timeout: 20_000 });
+      shown = null;
+      await page.unroute(`**/api/servers/${id}`);
+      await page.reload();
+      await expect(page.getByText(/Hazır · açık/).first()).toBeVisible({ timeout: 30_000 });
+      await expect(main.getByText(/başarısız oldu$/)).toHaveCount(0);
+      // The failed operation stays in the history, with its way to support.
+      await expect(history.getByRole('row').filter({ hasText: 'SNAPSHOT_NOT_FOUND' }).getByRole('link', { name: 'Bunu destekle paylaş' })).toBeVisible();
+    }
+
     // Deleting a ready server first moves it to the grace period (24 hours by default).
     await expect(page.getByText('24 saat bekler', { exact: false })).toBeVisible();
     const del = page.getByRole('button', { name: 'Sunucuyu sil', exact: true });
@@ -1067,6 +1155,15 @@ test.describe('server lifecycle (simulator, Turkish customer)', () => {
     for (const body of ['Güvenlik duvarını denetliyoruz.', 'Kural düzeltildi, yeniden dener misiniz?'])
       expect((await staff.request.post(`/api/support/tickets/${ticket.id}/messages`, { headers: csrf, data: { body, attachments: [] } })).status()).toBe(201);
     await staff.goto('/admin/servers');
+    // The menu's Servers entry counts what failed in the last 24 hours (the snapshot that was gone, above): the
+    // figure for the eye, the sentence for a screen reader.
+    {
+      const failedCount = ((await (await staff.request.get('/api/admin/attention')).json()) as { failedOperations?: number }).failedOperations ?? 0;
+      expect(failedCount).toBeGreaterThanOrEqual(1);
+      const entry = staff.getByRole('navigation', { name: 'Ana menü' }).locator('a[href="/admin/servers"]');
+      await expect(entry).toHaveAccessibleName(new RegExp(`^Sunucular\\s*,\\s*Son 24 saatte ${failedCount} işlem başarısız oldu$`));
+      await expect(entry.locator('[aria-hidden=true]').filter({ hasText: /^\d+\+?$/ })).toHaveText(String(failedCount));
+    }
     // The table copies an IP in one tap, and the owner's e-mail opens that customer in the user list.
     await staff.getByRole('button', { name: 'Kopyala: web-1 IP' }).click();
     await expect(staff.getByText('web-1 IP kopyalandı.')).toBeVisible();
@@ -1390,6 +1487,306 @@ test.describe('people, settings and smart features (English browser)', () => {
     await expectNoOverflow(page, 'security score at 390 px');
     await page.screenshot({ path: 'test-results/tour/security-score-390.png', fullPage: true });
     await page.setViewportSize({ width: 1280, height: 720 });
+  });
+
+  test('what waits for staff is counted in the menu; a restore hold shows on every page and is released from System', async ({ page }) => {
+    await signInAdmin(page);
+    // Two of the states behind GET /admin/attention cannot be produced on this stack from a browser: an abuse finding
+    // needs a server whose address answers on a watched port, and the hold after a restore is written by
+    // `install.sh restore` straight into the database (maintenance_state, key restore_hold); the API can only read and
+    // release it. For these the page is handed the API's own answer with the two fields set; the hold's own route
+    // answers "held" until the page releases it, and the release itself goes to the real route. Everything else in
+    // the answers is the API's (the failed operations of the server lifecycle test, when the simulator is there).
+    const since = new Date(Date.now() - 2 * 3_600_000).toISOString();
+    const backup = 'lightning-20261118T031500Z.tar.enc';
+    let held = true;
+    let real: { failedOperations?: number; abuse?: number; restoreHold?: unknown } = {};
+    const releases: { status: number; body: unknown }[] = [];
+    await page.route('**/api/admin/attention', async (route) => {
+      const answer = await route.fetch();
+      real = await answer.json() as typeof real;
+      await route.fulfill({ response: answer, json: { ...real, abuse: 3, restoreHold: held ? { since, backup } : null } });
+    });
+    await page.route('**/api/admin/system/restore-hold', async (route) => {
+      if (route.request().method() === 'DELETE') {
+        const answer = await route.fetch();
+        releases.push({ status: answer.status(), body: await answer.json() });
+        held = false;
+        return route.fulfill({ response: answer });
+      }
+      if (!held) return route.continue();
+      await route.fulfill({ json: { held: true, backup, restoredAt: since, detail: { backup, restored_at: since } } });
+    });
+    await page.goto('/admin');
+    const menu = page.getByRole('navigation', { name: 'Main navigation' });
+    // Folded away, "More tools" still says what waits inside it; opened, the count sits on the Abuse entry itself.
+    const more = menu.getByRole('button', { name: /^More tools \(\d+\)/ });
+    await expect(more).toHaveAttribute('aria-expanded', 'false');
+    await expect(more).toHaveAccessibleName(/^More tools \(\d+\)\s*,\s*3 open abuse findings$/);
+    await more.click();
+    await expect(more).toHaveAttribute('aria-expanded', 'true');
+    await expect(more).toHaveAccessibleName(/^More tools \(\d+\)$/);
+    const abuseEntry = menu.locator('a[href="/admin/abuse"]');
+    await expect(abuseEntry).toHaveAccessibleName(/^Abuse\s*,\s*3 open abuse findings$/);
+    await expect(abuseEntry.locator('[aria-hidden=true]').filter({ hasText: /^\d+\+?$/ })).toHaveText('3');
+    // The real answer has no abuse finding and no hold: the two fields above are the only ones that were set.
+    expect(real.abuse).toBe(0);
+    expect(real.restoreHold).toBeNull();
+    const serversEntry = menu.locator('a[href="/admin/servers"]');
+    if (process.env.E2E_VCSIM_HOST) {
+      expect(real.failedOperations).toBeGreaterThanOrEqual(1);
+      await expect(serversEntry).toHaveAccessibleName(new RegExp(`^Servers\\s*,\\s*${real.failedOperations} operations? failed in the last 24 hours$`));
+      await expect(serversEntry.locator('[aria-hidden=true]').filter({ hasText: /^\d+\+?$/ })).toHaveText(String(real.failedOperations));
+    } else if (!real.failedOperations) await expect(serversEntry).toHaveAccessibleName(/^Servers$/);
+    await page.waitForTimeout(300);
+    await page.screenshot({ path: 'test-results/tour/nav-attention.png' });
+
+    // The hold: a bar above every page, in the page's flow, with since when and the way to the page that releases it.
+    const bar = page.getByRole('complementary', { name: 'Restore hold' });
+    await expect(bar).toContainText('The panel is on hold after a restore');
+    await expect(bar).toContainText(/since [A-Z][a-z]{2} \d{1,2}, \d{4}, \d{1,2}:\d{2}\s?[AP]M/);
+    await expect(bar.getByText('It does nothing by itself until you release it.')).toBeVisible();
+    await expect(bar.getByRole('link', { name: 'Open the System page' })).toHaveAttribute('href', '/admin/system');
+    // It pushes the page down instead of covering it: the header starts where the bar ends.
+    const edges = await page.evaluate(() => {
+      const b = document.querySelector('aside[aria-label="Restore hold"]')!.getBoundingClientRect(), h = document.querySelector('header')!.getBoundingClientRect();
+      return { barBottom: Math.round(b.bottom), headerTop: Math.round(h.top) };
+    });
+    expect(edges.headerTop).toBeGreaterThanOrEqual(edges.barBottom);
+    await page.waitForTimeout(300);
+    await page.screenshot({ path: 'test-results/tour/restore-hold-bar.png' });
+    await page.setViewportSize({ width: 390, height: 844 });
+    await expectNoOverflow(page, 'restore-hold bar at 390 px');
+    // On a phone: the fact, since when and the link; the sentence of help is left out.
+    await expect(bar).toContainText('The panel is on hold after a restore');
+    await expect(bar.getByText('It does nothing by itself until you release it.')).toBeHidden();
+    await expect(bar.getByRole('link', { name: 'Open the System page' })).toBeVisible();
+    await page.screenshot({ path: 'test-results/tour/restore-hold-bar-390.png' });
+    await page.setViewportSize({ width: 1280, height: 720 });
+    await page.goto('/admin/users');
+    await expect(bar).toBeVisible();
+    await bar.getByRole('link', { name: 'Open the System page' }).click();
+    await expect(page).toHaveURL(/\/admin\/system$/);
+    // On the System page the full notice stands instead of the bar: which backup, when, what to check first.
+    const hold = page.locator('[data-section="Restore hold"]');
+    await expect(hold).toBeVisible();
+    await expect(bar).toHaveCount(0);
+    const notice = hold.getByRole('status');
+    await expect(notice).toContainText('The panel is on hold after a restore');
+    await expect(notice).toContainText(new RegExp(`The backup ${backup.replaceAll('.', '\\.')} was restored on [A-Z][a-z]{2} \\d{1,2}, \\d{4}, \\d{1,2}:\\d{2}\\s?[AP]M\\. Until you release the hold, the panel does nothing by itself`));
+    await expect(hold.getByText('Check before you release')).toBeVisible();
+    await expect(hold.getByRole('listitem')).toHaveCount(3);
+    await expect(hold).toContainText('docker compose exec api node dist/cli.js release-restore-hold');
+    await expect(health(page)).toHaveText('API, PostgreSQL and Redis are reachable');
+    await page.waitForTimeout(300);
+    await page.screenshot({ path: 'test-results/tour/restore-hold-system.png', fullPage: true });
+    await page.setViewportSize({ width: 390, height: 844 });
+    await expectNoOverflow(page, 'restore hold on the System page at 390 px');
+    await page.setViewportSize({ width: 1280, height: 720 });
+    // Releasing asks first and says that it cannot be taken back; "Cancel" sends nothing.
+    await hold.getByRole('button', { name: 'Release', exact: true }).click();
+    const ask = page.getByRole('alertdialog', { name: 'Release the hold?' });
+    await expect(ask).toContainText('The panel acts on the restored data at once');
+    await expect(ask).toContainText('This cannot be taken back.');
+    await ask.getByRole('button', { name: 'Cancel' }).click();
+    await expect(ask).toBeHidden();
+    expect(releases).toEqual([]);
+    await expect(hold).toBeVisible();
+    await hold.getByRole('button', { name: 'Release', exact: true }).click();
+    await ask.getByRole('button', { name: 'Release', exact: true }).click();
+    await expect(page.getByText('The hold was released')).toBeVisible();
+    // One DELETE reached the API's own route, which answered as it does when nothing is held.
+    expect(releases).toEqual([{ status: 200, body: { held: false, released: false } }]);
+    await expect(hold).toHaveCount(0);
+    await page.goto('/admin');
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Overview');
+    await expect(bar).toHaveCount(0);
+    await page.unroute('**/api/admin/attention');
+    await page.unroute('**/api/admin/system/restore-hold');
+  });
+
+  test('a reseller\'s customer sees who manages the account and leaves; staff take another one out; the browser keeps nothing of one account for the next', async ({ page, browser }) => {
+    test.setTimeout(180_000);
+    const csrf = { 'x-lightning-csrf': '1' };
+    await signInAdmin(page);
+    const me = await (await page.request.get('/api/auth/me')).json() as { id: string; email: string };
+    // The admin's own account is the reseller here: the reseller's side needs a session, and one more sign-in of an
+    // existing account would press on the sign-in limit. It stops being one at the end of the test.
+    expect((await page.request.put(`/api/admin/resellers/${me.id}`, { headers: csrf, data: {} })).ok()).toBe(true);
+    const stamp = Date.now();
+    const leaver = { email: `leaver-${stamp}@example.test`, password: 'e2e leaver passphrase 2026' };
+    const kept = { email: `kept-${stamp}@example.test` };
+    const idOf: Record<string, string> = {};
+    for (const [email, name] of [[leaver.email, 'Leaving Customer'], [kept.email, 'Kept Customer']]) {
+      const made = await page.request.post('/api/reseller/customers', { headers: csrf, data: { email, name } });
+      expect(made.status(), await made.text()).toBe(201);
+      idOf[email] = (await made.json() as { id: string }).id;
+    }
+    // The reseller typed the address and knows no password; staff set one so that the customer can sign in here.
+    const password = await page.request.post('/api/auth/admin/set-user-password', { headers: csrf, data: { userId: idOf[leaver.email], newPassword: leaver.password } });
+    expect(password.ok(), await password.text()).toBe(true);
+
+    // ---- The customer: who manages the account, what that means, and the way out ----
+    const customer = await (await browser.newContext({ locale: 'en-US' })).newPage();
+    await signIn(customer, leaver);
+    await expect(customer).toHaveURL(/\/$/);
+    await customer.goto('/account');
+    const managed = customer.locator('[data-section$="manages your account"]');
+    await expect(managed).toBeVisible();
+    await expect(managed).toContainText('A reseller opened this account for you and pays for your servers.');
+    await expect(managed.getByRole('listitem')).toHaveCount(5);
+    await expect(managed).toContainText('order new servers for you');
+    await expect(managed).toContainText('read your support tickets');
+    await expect(managed).toContainText('see or reset your password');
+    await expect(managed.getByRole('link', { name: me.email })).toHaveAttribute('href', `mailto:${me.email}`);
+    await expect(managed.getByRole('link', { name: 'Open activity' })).toHaveAttribute('href', '/account?tab=activity');
+    await expect(managed.getByText('The reseller is switched off right now')).toHaveCount(0);
+    await customer.waitForTimeout(300);
+    await customer.screenshot({ path: 'test-results/tour/account-managed.png', fullPage: true });
+    await customer.setViewportSize({ width: 390, height: 844 });
+    await expectNoOverflow(customer, 'account managed by a reseller at 390 px');
+    await customer.setViewportSize({ width: 1280, height: 720 });
+    // Leaving asks first, with what follows from it; "Cancel" leaves everything as it is.
+    await managed.getByRole('button', { name: 'Leave the reseller' }).click();
+    const leaving = customer.getByRole('alertdialog', { name: /^Leave .+\?$/ });
+    await expect(leaving).toContainText('Your servers stay yours and keep running.');
+    await expect(leaving).toContainText('can no longer see or manage your servers');
+    await expect(leaving).toContainText('This cannot be undone from the panel.');
+    await customer.waitForTimeout(300);
+    await customer.screenshot({ path: 'test-results/tour/account-managed-leave.png' });
+    await leaving.getByRole('button', { name: 'Cancel' }).click();
+    await expect(leaving).toBeHidden();
+    expect(((await (await customer.request.get('/api/reseller/summary')).json()) as { managedBy: unknown }).managedBy).toBeTruthy();
+    await managed.getByRole('button', { name: 'Leave the reseller' }).click();
+    await leaving.getByRole('button', { name: 'Leave the reseller' }).click();
+    await expect(customer.getByText('Your account is no longer managed by a reseller. Servers billed to you from now on: 0.')).toBeVisible();
+    await expect(managed).toHaveCount(0);
+    expect(((await (await customer.request.get('/api/reseller/summary')).json()) as { managedBy: unknown }).managedBy).toBeNull();
+    await customer.reload();
+    await expect(customer.getByRole('heading', { level: 1 })).toBeVisible();
+    await expect(managed).toHaveCount(0);
+
+    // ---- Staff: the reseller's record lists its customers; one is taken out behind a question ----
+    await page.goto(`/admin/users?q=${encodeURIComponent(me.email)}`);
+    const users = page.getByRole('grid', { name: 'Users' });
+    await users.getByRole('row').filter({ hasText: me.email }).locator('[data-row-open]').click();
+    const summary = page.getByRole('dialog');
+    const reseller = summary.locator('section').filter({ has: page.getByRole('heading', { name: 'Reseller', exact: true }) });
+    await expect(reseller.getByText('Active', { exact: true })).toBeVisible();
+    // The one who left is no longer listed.
+    await expect(reseller.getByRole('heading', { name: 'Customers of this reseller (1)' })).toBeVisible();
+    await expect(reseller.getByRole('listitem')).toHaveCount(1);
+    await expect(reseller.getByRole('listitem')).toContainText(kept.email);
+    await expect(reseller.getByRole('listitem')).toContainText('Kept Customer · 0 servers');
+    await expect(reseller).not.toContainText(leaver.email);
+    await page.waitForTimeout(300);
+    await page.screenshot({ path: 'test-results/tour/reseller-customers.png' });
+    await reseller.getByRole('button', { name: `Remove from reseller ${kept.email}` }).click();
+    const releasing = page.getByRole('alertdialog', { name: `Remove ${kept.email} from this reseller?` });
+    await expect(releasing).toContainText('The reseller can no longer see or manage this customer’s servers.');
+    await releasing.getByRole('button', { name: 'Cancel' }).click();
+    await expect(releasing).toBeHidden();
+    await expect(reseller.getByRole('listitem')).toHaveCount(1);
+    await reseller.getByRole('button', { name: `Remove from reseller ${kept.email}` }).click();
+    await releasing.getByRole('button', { name: 'Remove from reseller' }).click();
+    await expect(page.getByText(`${kept.email} was removed from the reseller. Servers: 0 · subscriptions moved: 0 · invoices withdrawn: 0 · left with the reseller: 0.`)).toBeVisible();
+    await expect(reseller.getByRole('heading', { name: 'Customers of this reseller (0)' })).toBeVisible();
+    await expect(reseller.getByText('No customers yet.')).toBeVisible();
+    const after = await (await page.request.get(`/api/admin/resellers/${me.id}`)).json() as { customers: unknown[] };
+    expect(after.customers).toEqual([]);
+    // The account stops being a reseller (asked first), as it was before this test.
+    await reseller.getByRole('button', { name: 'No longer a reseller' }).click();
+    const stopping = page.getByRole('alertdialog', { name: 'Stop this reseller?' });
+    await stopping.getByRole('button', { name: 'No longer a reseller' }).click();
+    await expect(page.getByText('No longer a reseller; their customers are ordinary accounts now')).toBeVisible();
+    await expect(reseller.getByRole('button', { name: 'Make a reseller' })).toBeVisible();
+    expect(((await (await page.request.get(`/api/admin/resellers/${me.id}`)).json()) as { reseller: unknown }).reseller).toBeNull();
+    await page.keyboard.press('Escape');
+    await expect(summary).toBeHidden();
+
+    // ---- What the browser keeps for one account is gone before the next one sees the panel (lib/session-end.ts) ----
+    // Content keys of both storages are written as the panel writes them (a half-written ticket, a draft, the recent
+    // list, an order being composed, a table's sort), next to a preference that names nobody and must stay.
+    const plant = (who: Page, mark: string) => who.evaluate((m) => {
+      localStorage.setItem('lvm:support-new-draft', JSON.stringify({ subject: `ticket of ${m}`, body: 'half written' }));
+      localStorage.setItem('lvm:draft:dispute:e2e', `dispute of ${m}`);
+      localStorage.setItem('lvm-recent', JSON.stringify([{ href: '/servers/e2e', label: `server of ${m}`, kind: 'server' }]));
+      sessionStorage.setItem('lvm-order', JSON.stringify({ state: { name: `order-of-${m}` }, version: 0 }));
+      sessionStorage.setItem('lvm:table:/admin/users/e2e:Sessions', JSON.stringify({ sort: m }));
+      localStorage.setItem('lvm-first-steps-hidden', '1');
+    }, mark);
+    const kept4 = (who: Page) => who.evaluate(() => ({
+      content: [localStorage.getItem('lvm:support-new-draft'), localStorage.getItem('lvm:draft:dispute:e2e'), localStorage.getItem('lvm-recent'),
+        sessionStorage.getItem('lvm-order'), sessionStorage.getItem('lvm:table:/admin/users/e2e:Sessions')].filter((v) => v !== null),
+      owner: [localStorage.getItem('lvm-owner'), sessionStorage.getItem('lvm-owner')], preference: localStorage.getItem('lvm-first-steps-hidden') }));
+    // "Sign in as": the staff member's content does not follow into the customer's panel...
+    await expect(page).toHaveURL(/\/admin\/users/);
+    await plant(page, 'the staff member');
+    expect((await kept4(page)).content).toHaveLength(5);
+    expect((await kept4(page)).owner).toEqual([`${me.id}|`, `${me.id}|`]);
+    await page.goto(`/admin/users?q=${encodeURIComponent(kept.email)}`);
+    expect((await kept4(page)).content).toHaveLength(5); // the same account on another page: nothing is removed
+    await users.getByRole('row').filter({ hasText: kept.email }).getByRole('button', { name: `Actions for ${kept.email}` }).click();
+    await page.getByRole('menuitem', { name: 'Sign in as user' }).click();
+    const asking = page.getByRole('alertdialog', { name: `Sign in as ${kept.email}?` });
+    await expect(asking).toContainText('it is recorded in the audit log');
+    await asking.getByRole('button', { name: 'Sign in as user' }).click();
+    await expect(page.getByRole('status').filter({ hasText: `You are viewing as ${kept.email}.` })).toBeVisible();
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Your servers');
+    expect(await kept4(page)).toEqual({ content: [], owner: [`${idOf[kept.email]}|${me.id}`, `${idOf[kept.email]}|${me.id}`], preference: '1' });
+    // ...nor what they wrote there back out of it.
+    await plant(page, 'the customer, written by staff');
+    await page.getByRole('button', { name: 'Back to my account' }).click();
+    await expect(page).toHaveURL(/\/admin\/users$/);
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Users');
+    expect(await kept4(page)).toEqual({ content: [], owner: [`${me.id}|`, `${me.id}|`], preference: '1' });
+
+    // Another account opens the panel in a browser whose last one never signed out (here: the customer's tab gets the
+    // staff member's session): the customer's content is removed before anything reads it.
+    await customer.goto('/account');
+    await plant(customer, 'the customer');
+    expect(await kept4(customer)).toEqual({ content: expect.arrayContaining([expect.stringContaining('the customer')]), owner: [`${idOf[leaver.email]}|`, `${idOf[leaver.email]}|`], preference: '1' });
+    const customerCookies = await customer.context().cookies();
+    await customer.context().addCookies(await page.context().cookies());
+    await customer.goto('/admin');
+    await expect(customer.getByRole('heading', { level: 1 })).toHaveText('Overview');
+    expect(await kept4(customer)).toEqual({ content: [], owner: [`${me.id}|`, `${me.id}|`], preference: '1' });
+    // And the other way round, back to the customer's own session.
+    await plant(customer, 'the staff member');
+    await customer.context().clearCookies();
+    await customer.context().addCookies(customerCookies);
+    await customer.goto('/');
+    await expect(customer.getByRole('heading', { level: 1 })).toHaveText('Your servers');
+    expect(await kept4(customer)).toEqual({ content: [], owner: [`${idOf[leaver.email]}|`, `${idOf[leaver.email]}|`], preference: '1' });
+    // Signing out: the content goes with the session, the marker of whose it was too; the preference stays.
+    // Saved views an earlier version kept in the browser go as well, but the ones of the account that signs out are
+    // sent to that account first, while there still is a session; those of anybody else are removed unsent. (Planted
+    // on a page without a list of its own, which would otherwise move its views by itself.)
+    await customer.goto('/account');
+    await expect(customer.getByRole('heading', { level: 1 })).toBeVisible();
+    await plant(customer, 'the customer');
+    const viewKeys = [`lvm:views:${idOf[leaver.email]}:servers`, `lvm:views:${me.id}:admin-users`];
+    await customer.evaluate(([own, other]) => {
+      localStorage.setItem(own, JSON.stringify([{ id: 'old-1', name: 'Stopped ones', query: 'state=stopped&page=3', isDefault: true }]));
+      localStorage.setItem(other, JSON.stringify([{ id: 'old-2', name: 'Of somebody else', query: 'status=banned' }]));
+    }, viewKeys);
+    const viewWrites: Promise<{ status: number; sent: unknown; answer: unknown }>[] = [];
+    customer.on('response', (r) => {
+      if (r.request().method() === 'POST' && new URL(r.url()).pathname === '/api/saved-views')
+        viewWrites.push(r.json().catch(() => null).then((answer) => ({ status: r.status(), sent: r.request().postDataJSON(), answer })));
+    });
+    await customer.getByRole('button', { name: 'Account menu' }).click();
+    await customer.getByRole('menuitem', { name: 'Sign out' }).click();
+    await expect(customer).toHaveURL(/\/login$/);
+    expect(await kept4(customer)).toEqual({ content: [], owner: [null, null], preference: '1' });
+    expect(await customer.evaluate((keys) => keys.map((k) => localStorage.getItem(k)), viewKeys)).toEqual([null, null]);
+    const written = await Promise.all(viewWrites);
+    expect(written.map((w) => [w.status, w.sent])).toEqual([[201, { list: 'servers', name: 'Stopped ones', params: { state: 'stopped' }, isDefault: true }]]);
+    expect(written[0]!.answer).toMatchObject({ name: 'Stopped ones', params: { state: 'stopped' }, isDefault: true });
+    expect((await customer.request.get('/api/auth/me')).status()).toBe(401);
+    await customer.context().close();
+    // The staff member's own session is as it was.
+    expect((await page.request.get('/api/auth/me')).status()).toBe(200);
   });
 
   test('settings: branding colour and notification rules; inbox and command palette', async ({ page }) => {
@@ -1970,12 +2367,58 @@ test.describe('people, settings and smart features (English browser)', () => {
     await expect(closedRow).toContainText('Cancelled');
     await expect(closedRow).toContainText('Closed by staff without settling: No collection at the provider');
     await expect(closedRow.getByRole('button', { name: /Close review/ })).toHaveCount(0);
-    // Nothing was settled: the invoice still awaits payment. It is withdrawn so the rest of the suite finds no open invoice.
-    const heldInvoice = await (await page.request.get(`/api/admin/billing/invoices/${heldId}`)).json() as { invoice: { status: string; paidTotal: string }; payments: { status: string; errorCode: string | null }[] };
+    // Nothing was settled: the invoice still awaits payment.
+    type HeldInvoice = { invoice: { status: string; total: string; paidTotal: string }; payments: { status: string; method: string; errorCode: string | null }[] };
+    const heldInvoice = await (await page.request.get(`/api/admin/billing/invoices/${heldId}`)).json() as HeldInvoice;
     expect(heldInvoice.invoice.status).toBe('unpaid');
     expect(Number(heldInvoice.invoice.paidTotal)).toBe(0);
     expect(heldInvoice.payments.map((p) => [p.status, p.errorCode])).toEqual([['cancelled', 'FRAUD_REVIEW']]);
-    expect((await page.request.post(`/api/admin/billing/invoices/${heldId}/cancel`, { headers: csrf, data: {} })).ok()).toBe(true);
+    // The other way a held payment ends: the money did arrive (a bank transfer, say) and staff record it on the
+    // invoice. The customer pays with the held card once more, so a payment is under review again...
+    await page.goto(`/billing/invoices/${heldId}`);
+    await page.getByRole('button', { name: /Sandbox/ }).click();
+    await expect(page).toHaveURL(/\/billing\/checkout\//);
+    await page.getByLabel('Card number').fill('4000 0000 0000 4954');
+    await page.getByRole('button', { name: 'Pay', exact: true }).click();
+    await expect(page).toHaveURL(new RegExp(`/billing/invoices/${heldId}`));
+    await expect(page.getByText('Your payment is under review')).toBeVisible();
+    // ...and staff open the invoice from the review list and record the payment. The dialog says what is recorded;
+    // the answer says that the payment which waited for review was closed with it.
+    await page.goto('/admin/billing?tab=payments&status=review');
+    await expect(billingEntry).toHaveAccessibleName(/^Billing\s*,\s*1 payment awaiting review$/);
+    const heldAgain = paymentGrid.getByRole('row').filter({ hasText: heldRef });
+    await expect(heldAgain).toHaveCount(1);
+    await heldAgain.getByRole('link', { name: /Open invoice/ }).click();
+    await expect(page).toHaveURL(new RegExp(`/admin/billing/invoices/${heldId}$`));
+    await page.getByRole('button', { name: 'Record a payment', exact: true }).click();
+    const recording = page.getByRole('dialog', { name: 'Record a payment' });
+    await expect(recording).toContainText('For money that arrived outside the panel');
+    await expect(recording).toContainText('120');
+    await expect(recording.getByRole('button', { name: /Method/ })).toContainText('Bank transfer');
+    await recording.getByLabel('Reference').fill('EFT 2026-11-19 / 000123');
+    await page.waitForTimeout(300);
+    await shot('billing-admin-record-payment');
+    await recording.getByRole('button', { name: 'Record', exact: true }).click();
+    await expect(page.getByText('Payment recorded; the invoice is issued. 1 payment awaiting review was closed.')).toBeVisible();
+    await expect(recording).toBeHidden();
+    await expect(page.getByText('Paid', { exact: true }).first()).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Record a payment', exact: true })).toHaveCount(0);
+    // Nothing waits for review any more: the menu's badge is gone and the review list is empty.
+    await expect(billingEntry).toHaveAccessibleName(/^Billing$/);
+    expect(((await (await page.request.get('/api/admin/attention')).json()) as { paymentsInReview?: number }).paymentsInReview).toBe(0);
+    await page.goto('/admin/billing?tab=payments&status=review');
+    await expect(paymentGrid.getByText('No payments are awaiting review')).toBeVisible();
+    // The invoice is paid in full by the recorded payment alone; neither card payment collected anything.
+    const settled = await (await page.request.get(`/api/admin/billing/invoices/${heldId}`)).json() as HeldInvoice;
+    expect(settled.invoice.status).toBe('paid');
+    expect(Number(settled.invoice.paidTotal)).toBe(Number(settled.invoice.total));
+    expect(settled.payments.filter((p) => p.status === 'succeeded').map((p) => p.method)).toEqual(['bank_transfer']);
+    expect(settled.payments.filter((p) => p.errorCode === 'FRAUD_REVIEW').map((p) => p.status)).toEqual(['cancelled', 'cancelled']);
+    expect(settled.payments.some((p) => p.status === 'pending')).toBe(false);
+    // The customer's page of the invoice no longer says "under review".
+    await page.goto(`/billing/invoices/${heldId}`);
+    await expect(page.getByText('Paid', { exact: true }).first()).toBeVisible();
+    await expect(page.getByText('Your payment is under review')).toHaveCount(0);
     await page.goto(`/admin/billing/invoices/${invoiceId}`);
     await page.getByRole('button', { name: 'Refund', exact: true }).click();
     await page.getByLabel('Amount', { exact: true }).fill('50');
@@ -1988,8 +2431,90 @@ test.describe('people, settings and smart features (English browser)', () => {
     await page.waitForTimeout(600);
     await shot('billing-admin-820');
     await page.setViewportSize({ width: 1280, height: 720 });
+    // "Upcoming charges", the two lines no invoice stands behind. Both from real state on the simulator's capacity
+    // (the catalog test set it up; without the simulator there is nothing to order from): a server paid by the hour
+    // from a small balance, then something that renews monthly.
+    if (process.env.E2E_VCSIM_HOST) {
+      const upcomingNow = page.getByRole('region', { name: 'Upcoming charges' });
+      const money = (v: number | string, currency: string, digits = 2) => new Intl.NumberFormat('en-US', { style: 'currency', currency, maximumFractionDigits: digits }).format(Number(v));
+      type Summary = { hourly: { servers: { id: string }[]; available: { currency: string; amount: string; perHour: string }[] };
+        nextRenewal: { at: string; amount: string | number; currency: string; gross: boolean; servers: number; invoiced: boolean } | null; subscriptions: { description: string }[] };
+      const summary = async () => (await (await page.request.get('/api/billing/summary')).json()) as Summary;
+      const key = (name: string) => ({ ...csrf, 'idempotency-key': `e2e-${name}-${Date.now()}` });
+      // Pay as you go is switched on, the account gets 0.20 EUR, and the smallest package is ordered by the hour.
+      expect((await page.request.put('/api/admin/settings/billing', { headers: csrf, data: { hourly: true, balance: true, hourlyMinHours: 1 } })).ok()).toBe(true);
+      expect((await page.request.post('/api/admin/billing/balance', { headers: csrf, data: { userId: me.id, currency: 'EUR', amount: '0.20', note: 'E2E: pay as you go' } })).status()).toBe(201);
+      const offered = await (await page.request.get('/api/catalog')).json() as { packages: { id: string; name: string; currency: string; poolIds: string[]; imageIds: string[] }[] };
+      const tiny = offered.packages.find((x) => x.name.includes('E2E Tiny'))!;
+      expect(tiny.currency.trim()).toBe('EUR');
+      const keys = (await (await page.request.get('/api/ssh-keys')).json() as { keys: { id: string }[] }).keys;
+      const sshKey = keys[0]?.id ?? (await (await page.request.post('/api/ssh-keys', { headers: csrf,
+        data: { name: 'e2e-hourly', publicKey: 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMa0iBTtZu9kbSNXzg5M6pZ1rn8F1143iWq3JIcGimfn e2e' } })).json() as { id: string }).id;
+      expect(sshKey).toBeTruthy();
+      const ordered = await page.request.post('/api/servers', { headers: key('hourly'),
+        data: { type: 'package', poolId: tiny.poolIds[0], packageId: tiny.id, imageId: tiny.imageIds[0], name: 'e2e-hourly', sshKeyIds: [sshKey], billingCycle: 'hourly' } });
+      expect(ordered.status(), await ordered.text()).toBe(202);
+      const hourlyId = (await ordered.json() as { serverId: string }).serverId;
+      const paygo = (await summary()).hourly;
+      expect(paygo.servers.map((x) => x.id)).toEqual([hourlyId]);
+      const [left] = paygo.available;
+      expect(left.currency).toBe('EUR');
+      expect(Number(left.perHour)).toBeGreaterThan(0);
+      // Under three days of running left: the line warns, says the rate and when the balance ends, and offers a
+      // top-up of about a week's worth (at least 1).
+      expect(Number(left.amount) / Number(left.perHour)).toBeLessThan(72);
+      await page.goto('/');
+      await expect(upcomingNow.getByText(/^Hourly usage: at this rate the balance runs out (in \d+ (hours|days)|tomorrow)$/)).toBeVisible();
+      const hourlyLine = upcomingNow.getByRole('listitem').filter({ hasText: 'Hourly usage' });
+      await expect(hourlyLine).toContainText(`${money(left.perHour, 'EUR', 4)} per hour`);
+      await expect(hourlyLine).toContainText(money(left.amount, 'EUR'));
+      await expect(hourlyLine.getByRole('link', { name: 'Top up' })).toHaveAttribute('href', `/billing?tab=balance&topup=${Math.max(1, Math.ceil(Number(left.perHour) * 168))}`);
+      await expect(upcomingNow.getByText(/^Renews on /)).toHaveCount(0);
+      await page.waitForTimeout(400);
+      await shot('upcoming-charges-hourly');
+      await page.setViewportSize({ width: 390, height: 844 });
+      await expectNoOverflow(page, 'upcoming charges with hourly usage at 390 px');
+      await page.setViewportSize({ width: 1280, height: 720 });
+      // The server goes again as soon as it is built (the pool is small and later tests size themselves by what is left).
+      const stateOf = async () => { const r = await page.request.get(`/api/servers/${hourlyId}`); return r.ok() ? ((await r.json()) as { server: { state: string } }).server.state : 'gone'; };
+      await expect.poll(stateOf, { timeout: 120_000, intervals: [2_000] }).toBe('ready');
+      const removed = await page.request.delete(`/api/servers/${hourlyId}`, { headers: key('hourly-delete'), data: { confirm: 'e2e-hourly', now: true } });
+      expect(removed.status(), await removed.text()).toBe(202);
+      await expect.poll(stateOf, { timeout: 120_000, intervals: [2_000] }).toMatch(/^(deleted|gone)$/);
+      expect((await summary()).hourly.servers).toEqual([]);
+
+      // A renewal: a virtual data center with a monthly price, which the collection run takes under a subscription.
+      const room = ((await (await page.request.get('/api/admin/pools')).json()).pools as { id: string; capacity: { available: { memoryMb: number } } }[])
+        .toSorted((x, y) => y.capacity.available.memoryMb - x.capacity.available.memoryMb)[0];
+      const vdcMade = await page.request.post('/api/admin/vdcs', { headers: csrf, data: { name: 'E2E Renewal', ownerId: me.id, poolId: room.id, vcpu: 1, memoryMb: 512, diskGb: 10, maxServers: 1, priceMonthly: '50', currency: 'TRY' } });
+      expect(vdcMade.status(), await vdcMade.text()).toBe(201);
+      const ran = await page.request.post('/api/admin/billing/run', { headers: csrf, data: {} });
+      expect(ran.status(), await ran.text()).toBe(200);
+      expect((await ran.json() as { adopted: number }).adopted).toBeGreaterThanOrEqual(1);
+      const renewal = (await summary()).nextRenewal!;
+      expect(renewal).toBeTruthy();
+      expect([renewal.currency, renewal.invoiced]).toEqual(['TRY', false]);
+      // About a month away, nothing invoiced yet: the line gives the day, what will be charged as the API works it
+      // out (with tax when the buyer's tax is known) and what renews.
+      expect(Date.parse(renewal.at) - Date.now()).toBeGreaterThan(26 * 86_400_000);
+      await page.goto('/');
+      await expect(upcomingNow.getByText(/^Renews on [A-Z][a-z]{2} \d{1,2}, \d{4} \((in \d+ (days|weeks)|next month|in 1 month)\)$/)).toBeVisible();
+      const renewalLine = upcomingNow.getByRole('listitem').filter({ hasText: 'Renews on' });
+      await expect(renewalLine).toContainText(money(renewal.amount, 'TRY'));
+      expect(Number(renewal.amount)).toBe(renewal.gross ? 60 : 50);
+      if (renewal.gross) await expect(renewalLine).toContainText('incl. tax');
+      await expect(renewalLine).toContainText('E2E Renewal');
+      await expect(upcomingNow.getByText(/Hourly usage/)).toHaveCount(0);
+      await page.waitForTimeout(400);
+      await shot('upcoming-charges-renewal');
+      await page.setViewportSize({ width: 390, height: 844 });
+      await expectNoOverflow(page, 'upcoming charges with a renewal at 390 px');
+      await page.setViewportSize({ width: 1280, height: 720 });
+      const vdcId = ((await (await page.request.get('/api/admin/vdcs')).json()).vdcs as { id: string; name: string }[]).find((x) => x.name === 'E2E Renewal')!.id;
+      expect((await page.request.delete(`/api/admin/vdcs/${vdcId}`, { headers: csrf })).status()).toBe(204);
+    }
     // Off again for the rest of the suite.
-    expect((await page.request.put('/api/admin/settings/billing', { headers: csrf, data: { enabled: false, sandbox: false } })).ok()).toBe(true);
+    expect((await page.request.put('/api/admin/settings/billing', { headers: csrf, data: { enabled: false, sandbox: false, hourly: false } })).ok()).toBe(true);
   });
 
   test('Quotas: a user is found by typing, the form starts from the default, the row is edited and removed', async ({ page }) => {
@@ -2118,7 +2643,8 @@ test.describe('people, settings and smart features (English browser)', () => {
     await expect(page.getByText('Limit reached: at most 100 characters')).toBeVisible();
     await name.fill('unsaved project');
     await expect(page).toHaveTitle(/^(\(\d+\+?\) )?\u270E /);
-    const away = page.getByRole('link', { name: 'Servers', exact: true }).first();
+    // (By its address: the entry's name also carries a count while operations have failed in the last 24 hours.)
+    const away = page.getByRole('navigation', { name: 'Main navigation' }).locator('a[href="/admin/servers"]');
     await away.click();
     const leave = page.getByRole('alertdialog', { name: 'Leave without saving?' });
     await expect(leave).toBeVisible();

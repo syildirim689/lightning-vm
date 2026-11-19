@@ -11,6 +11,7 @@ import NextLink from 'next/link';
 import { I } from '../../../../components/icon';
 import { UserSummary } from './user-summary';
 import { SavedViews } from '../../../../components/saved-views';
+import { VIEW_LISTS } from '../../../../lib/saved-views';
 import SessionList, { LastSeen, PresenceDot, type Presence, type SessionRow } from '../../../../components/session-list';
 import { CheckboxList, ConfirmButton, ConfirmDialog, DataTable, Notice, PageHeader, SelectInput, StatusChip, TextInput } from '../../../../components/ui';
 import { apiFetch, useErrorText } from '../../../../lib/api';
@@ -28,7 +29,7 @@ type Row = { id: string; email: string; name: string; role: string; locale: stri
 type Role = { key: string; name: string; description: string; permissions: string[]; builtin: boolean; members: number };
 type Override = { permission: string; effect: 'allow' | 'deny' };
 type ClientError = { code?: string; status?: number } | null;
-const viewKeys = { q: '', role: '', status: '' };
+const viewKeys = VIEW_LISTS['admin-users'];
 const codeOf = (e: ClientError) => ({ code: e?.code ?? (e?.status === 429 ? 'RATE_LIMITED' : 'UNKNOWN') });
 
 // A generated password the admin can see, replace and copy (it goes to the user by another channel).

@@ -398,6 +398,8 @@
     "E_RESTORE_DUMP": "The database dump in the backup could not be read. The backup may be damaged, or the backup key may be the wrong one.",
     "E_RESTORE_NO_SAFETY": "A safety copy of the current data could not be taken, so the restore was not started. Nothing was changed.",
     "UPDATE_SKIPPED": "The automatic update skipped this version because it already failed once. Update by hand when the cause is fixed.",
+    "PAYMENT_IN_REVIEW": "A payment for this invoice is being reviewed by our team, so it cannot be paid again right now. You will be told when it is decided; there is no need to pay twice.",
+    "TOKEN_ACCOUNT_UNCONFIRMED": "This API token is asleep: the account comes from a directory or single sign-on and was not confirmed there recently. Sign in to the panel again and the token works as before.",
     "PAYMENT_NOT_IN_REVIEW": "This payment no longer waits for review; it was settled or closed in the meantime."
   },
   "Auth": {
@@ -4741,7 +4743,7 @@
       "testing": "Testing",
       "testingHelp": "Try the whole flow without a real provider.",
       "sandbox": "Sandbox provider",
-      "sandboxHelp": "Customers can pay with test cards (4242 4242 4242 4242). Never on with real customers.",
+      "sandboxHelp": "Customers can pay with test cards: 4242 4242 4242 4242 is approved, 4000 0000 0000 0002 declined, 4000 0000 0000 9995 has insufficient funds, and 4000 0000 0000 4954 is held for review (it waits for staff under Billing → Payments). Never on with real customers.",
       "save": "Save",
       "hourly": "Pay as you go",
       "hourlyHelp": "Customers may order hourly servers paid from their balance (needs the balance). Each month's use becomes one invoice.",

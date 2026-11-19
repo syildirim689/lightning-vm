@@ -13,6 +13,7 @@ import { useState } from 'react';
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { I } from '../../../../components/icon';
 import { SavedViews } from '../../../../components/saved-views';
+import { VIEW_LISTS } from '../../../../lib/saved-views';
 import { ButtonLink, ConfirmButton, DataTable, LoadFailed, Notice, PageHeader, SelectInput, StatusChip, TextInput } from '../../../../components/ui';
 import { downloadCsv, localDay } from '../../../../lib/csv';
 import { fold } from '../../../../lib/note-line';
@@ -29,7 +30,7 @@ type Overview = { mrr: Money[]; open: (Money & { n: number; overdue: number })[]
 const tooltipStyle = { background: 'var(--overlay)', border: '1px solid var(--border)', borderRadius: 8, color: 'var(--overlay-foreground)', fontSize: 12 };
 const tabs = ['invoices', 'subscriptions', 'payments', 'disputes', 'coupons'] as const;
 // The invoice and payment lists share these address parameters; each keeps its own saved views.
-const viewKeys = { status: '', q: '' };
+const viewKeys = VIEW_LISTS['admin-invoices']; // the payments list has the same two
 
 export default function AdminBilling() {
   const t = useTranslations('BillingAdmin');

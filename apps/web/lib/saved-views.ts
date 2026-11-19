@@ -7,6 +7,17 @@ export type SavedView = { id: string; name: string; query: string; isDefault?: b
 export type ViewKeys = Record<string, string>;
 export const VIEW_LIMIT = 12;
 export const VIEW_NAME_MAX = 60;
+// Every list that has views, with its parameters (the API keeps the same names: apps/api saved-views.ts). The lists'
+// pages take their keys from here, and so does the upload at sign-out, which has no page to ask.
+export const VIEW_LISTS = {
+  servers: { q: '', state: 'all', tag: '', project: '', sort: 'newest' },
+  'admin-servers': { q: '', state: 'all', tag: '', owner: '', sort: 'newest', starred: 'false' },
+  'admin-users': { q: '', role: '', status: '' },
+  'admin-audit': { q: '', outcome: '', category: '' },
+  'admin-invoices': { status: '', q: '' },
+  'admin-payments': { status: '', q: '' },
+  'admin-support': { status: 'active', priority: '', department: '', assignee: '', q: '' },
+} as const satisfies Record<string, ViewKeys>;
 const QUERY_MAX = 2000;
 
 // Where an earlier version kept a person's views of a list in the browser (read once more, to move them; see below).
@@ -178,6 +189,30 @@ export async function moveLocalViews(call: ViewCall, userId: string, list: strin
     if (!later) try { store?.removeItem(key); } catch { /* storage is blocked: nothing to remove */ }
   } finally { moving.delete(key); }
   return views;
+}
+
+// Before a sign-out clears this browser: what it still holds for the account that is signing out goes to that
+// account first (every list of VIEW_LISTS, as moveLocalViews does it for one). Only keys that carry this account's
+// id are read, so nothing of another person who used this browser is ever sent; theirs is removed unsent by
+// forgetLocalViews, as before. A list the API cannot be asked about is skipped (its copy is removed unsent too).
+// Never throws; answers how many lists were looked at.
+export async function uploadLocalViews(call: ViewCall, userId: string, store: Store | null = browserStore()): Promise<number> {
+  if (!userId || !store) return 0;
+  const prefix = `${LOCAL_PREFIX}${userId}:`;
+  const lists: string[] = [];
+  try { for (let i = 0; i < store.length; i++) { const k = store.key(i); if (k?.startsWith(prefix)) lists.push(k.slice(prefix.length)); } } catch { return 0; }
+  let done = 0;
+  for (const list of lists) {
+    if (!Object.hasOwn(VIEW_LISTS, list)) continue;
+    const keys: ViewKeys = VIEW_LISTS[list as keyof typeof VIEW_LISTS];
+    try { await moveLocalViews(call, userId, list, keys, await fetchViews(call, list, keys), store); done++; } catch { /* not now: this list is not sent */ }
+  }
+  return done;
+}
+// Whether this browser still holds views of an earlier version (anybody's): asked before a sign-out spends a request on them.
+export function hasLocalViews(store: Store | null = browserStore()): boolean {
+  try { for (let i = 0; i < (store?.length ?? 0); i++) if (store!.key(i)?.startsWith(LOCAL_PREFIX)) return true; } catch { /* storage is blocked */ }
+  return false;
 }
 
 // Removes every saved view an earlier version left in this browser, whoever it belonged to. Safe to call always

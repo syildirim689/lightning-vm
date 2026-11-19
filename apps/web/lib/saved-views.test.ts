@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
+import { existsSync, readFileSync } from 'node:fs';
 import { test } from 'node:test';
-import { activeView, changeView, cleanName, createView, defaultFor, deleteView, fetchViews, forgetLocalViews, fromApi, moveLocalViews, parseViews, removeView, renameView, routeMissing, saveView,
-  setDefaultView, viewParams, viewQuery, viewsKey, viewValues, VIEW_LIMIT, VIEW_NAME_MAX, type SavedView, type ViewCall } from './saved-views.ts';
+import { activeView, changeView, cleanName, createView, defaultFor, deleteView, fetchViews, forgetLocalViews, fromApi, hasLocalViews, moveLocalViews, parseViews, removeView, renameView, routeMissing, saveView,
+  setDefaultView, uploadLocalViews, viewParams, viewQuery, viewsKey, viewValues, VIEW_LIMIT, VIEW_LISTS, VIEW_NAME_MAX, type SavedView, type ViewCall } from './saved-views.ts';
 
 const keys = { q: '', state: 'all', sort: 'newest' };
 
@@ -252,4 +253,49 @@ test('forgetting removes the leftover views of every person from the browser and
   forgetLocalViews(null);
   forgetLocalViews({ getItem: () => null, removeItem: () => { throw new Error('blocked'); }, key: () => { throw new Error('blocked'); }, length: 3 });
   forgetLocalViews(); // no localStorage here at all
+});
+
+test('a sign-out sends the views of the account that signs out, of every list, and of nobody else', async () => {
+  const own = [{ id: 'l1', name: 'Stopped', query: 'state=stopped', isDefault: true }];
+  const staff = [{ id: 'l2', name: 'Banned', query: 'status=banned&q=ada%40example.test' }];
+  const store = fakeStore({ [viewsKey('u1', 'servers')]: JSON.stringify(own), [viewsKey('u1', 'admin-users')]: JSON.stringify(staff), [viewsKey('u1', 'no-such-list')]: JSON.stringify(own),
+    [viewsKey('u2', 'servers')]: JSON.stringify([{ id: 'x', name: 'Of another person', query: 'q=secret' }]), [viewsKey('u11', 'servers')]: JSON.stringify(own), unrelated: 'x' });
+  assert.equal(hasLocalViews(store), true);
+  const api = fakeApi();
+  assert.equal(await uploadLocalViews(api.call, 'u1', store), 2);
+  assert.deepEqual(api.calls.filter((c) => c.method === 'POST').map((c) => c.body), [
+    { list: 'servers', name: 'Stopped', params: { state: 'stopped' }, isDefault: true },
+    { list: 'admin-users', name: 'Banned', params: { status: 'banned', q: 'ada@example.test' } }]);
+  // What was sent is gone from the browser; a list the panel does not know, and everything of other people
+  // (also of an id that only begins the same), is left as it was for forgetLocalViews to remove unsent.
+  assert.deepEqual([...store.data.keys()].sort(), [viewsKey('u1', 'no-such-list'), viewsKey('u11', 'servers'), viewsKey('u2', 'servers'), 'unrelated'].sort());
+  assert.equal(store.writes(), 0);
+  forgetLocalViews(store);
+  assert.deepEqual([...store.data.keys()], ['unrelated']);
+  assert.equal(hasLocalViews(store), false);
+});
+
+test('a sign-out with nothing to send, nobody to send for or an API that does not answer asks little and never throws', async () => {
+  const api = fakeApi();
+  assert.equal(await uploadLocalViews(api.call, 'u1', fakeStore({ [viewsKey('u2', 'servers')]: '[]' })), 0);
+  assert.equal(await uploadLocalViews(api.call, '', fakeStore({ [viewsKey('', 'servers')]: '[]' })), 0);
+  assert.equal(await uploadLocalViews(api.call, 'u1', null), 0);
+  assert.equal(api.calls.length, 0);
+  // The API refuses the read (the session is already gone): nothing is sent and the copy stays for the removal.
+  const down = fakeApi([], () => 'UNAUTHENTICATED');
+  const store = fakeStore({ [viewsKey('u1', 'servers')]: JSON.stringify([{ id: 'l1', name: 'Web', query: 'q=web' }]) });
+  assert.equal(await uploadLocalViews(down.call, 'u1', store), 0);
+  assert.deepEqual(down.calls.map((c) => c.method), ['GET']);
+  assert.notEqual(store.getItem(viewsKey('u1', 'servers')), null);
+  assert.equal(hasLocalViews(null), false);
+  assert.equal(hasLocalViews({ getItem: () => null, removeItem: () => undefined, key: () => { throw new Error('blocked'); }, length: 2 }), false);
+});
+
+test('the lists and their parameters are the ones the API keeps views for', () => {
+  const source = new URL('../../api/src/saved-views.ts', import.meta.url);
+  if (!existsSync(source)) return; // the web app built on its own (its image): nothing to compare with
+  const block = /VIEW_LISTS[^=]*=\s*\{([\s\S]*?)\n\};/.exec(readFileSync(source, 'utf8'))?.[1] ?? '';
+  assert.ok(block, 'the API\'s list of lists was not found where it used to be');
+  const api = Object.fromEntries([...block.matchAll(/^\s*'?([\w-]+)'?:\s*\[([^\]]*)\]/gm)].map((m) => [m[1]!, [...m[2]!.matchAll(/'([^']+)'/g)].map((x) => x[1]!).sort()]));
+  assert.deepEqual(api, Object.fromEntries(Object.entries(VIEW_LISTS).map(([list, keys]) => [list, Object.keys(keys).sort()])));
 });
