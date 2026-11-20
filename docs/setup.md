@@ -5,8 +5,12 @@ Varsayılan kurulum tek komuttur ve sonunda çalışan bir panel verir:
 sudo sh scripts/install.sh
 ```
 Betik sırasıyla şunları yapar:
-1. İşletim sistemi ve kaynak kontrolleri. Docker yoksa Docker'ın resmî apt deposundan kurar.
-2. Sırları ve `.env`'i oluşturur, servisleri derleyip başlatır, hazır olmasını bekler.
+1. Ön kontrol raporu: işletim sistemi, mimari, işlemci, bellek, disk, portlar, Docker, saat eşitlemesi, alan adının
+   DNS kaydı ve bu dizinde zaten bir kurulum olup olmadığı. Ardından yapılacakların listesi. Buraya kadar hiçbir
+   şey kurulmaz ve hiçbir dosya yazılmaz; uçbirimde "Devam edilsin mi?" diye sorulur (`--yes` sormaz; uçbirim
+   yoksa hiç sorulmaz).
+2. Docker yoksa Docker'ın resmî apt deposundan kurar; sırları ve `.env`'i oluşturur, imajları derler, servisleri
+   başlatır ve hazır olmasını bekler.
 3. Erişim: `--domain` verildiyse o ad; sunucunun genel bir IPv4 adresi varsa
    `<ip-tireli>.sslip.io` (ör. `49-12-109-190.sslip.io`). İki durumda da Caddy Let's Encrypt
    sertifikası alır. Genel IP yoksa veya `--local` verildiyse panel yalnızca
@@ -14,7 +18,12 @@ Betik sırasıyla şunları yapar:
 4. RAM 3.8 GB veya üstündeyse izleme yığınını (Prometheus, Grafana, Loki) açar.
 5. İlk yöneticiyi rastgele parolayla oluşturur (docs/auth.md).
 6. Günlük yedek zamanlayıcısını kurar ve ilk yedeği alır.
-7. Panel adresini, yönetici e-postasını ve parolasını, Grafana bilgilerini özetler.
+7. Özet: panel adresi, yönetici e-postası ve parolası, Grafana bilgileri, sürümler, verinin, yedeklerin ve
+   kayıtların yeri, en sık gereken komutlar, toplam süre, belge ve sorun bildirme bağlantıları.
+
+Bu sekiz iş uçbirimde numaralı adımlar olarak görünür (`[3/8] İmajların derlenmesi`); her adım ne yaptığını ve
+nedenini bir iki cümleyle söyler, beklerken geçen süreyi ve ilerlemeyi gösterir (kaç imaj derlendi, kaç servis hazır,
+hangisi bekleniyor) ve `✓` ya da `✗` ile, süresiyle biter. Ayrıntı: [Dil, çıktı ve kayıt](#dil-çıktı-ve-kayıt).
 
 | Seçenek | Etki |
 |---|---|
@@ -24,13 +33,18 @@ Betik sırasıyla şunları yapar:
 | `--setup-wizard` | Yöneticiyi betik değil tarayıcı sihirbazı oluşturur (kurulum anahtarıyla) |
 | `--no-monitoring` | İzleme yığınını açma |
 | `--no-schedule` | Yedek zamanlayıcısını kurma |
+| `--lang tr\|en` | Çıktı dili (her komutta). Verilmezse `install` uçbirimde bir kez sorar |
+| `--yes`, `-y` | Ön kontrol raporundan sonra "Devam edilsin mi?" diye sorma |
+| `--plain` | Uçbirimde de renksiz, animasyonsuz, satır satır çıktı |
+| `help`, `--help`, `-h` | Bütün komutlar ve seçenekler, seçilen dilde |
 
 Betiği tekrar çalıştırmak güvenlidir: mevcut yönetici, sırlar ve veriler korunur.
 
 ## 1. Kurulum betiği
 
 ```sh
-sh scripts/install.sh [install|check|recover-setup|update|...] [--lang tr|en] [--install-docker] [--allow-unsupported-os]
+sh scripts/install.sh [install|check|recover-setup|update|...] [--lang tr|en] [--install-docker] [--allow-unsupported-os] [--yes] [--plain]
+sh scripts/install.sh help          # bütün komutlar ve seçenekler (Türkçe ya da İngilizce)
 ```
 
 | Mod | Ne yapar | Değişiklik yapar mı |
@@ -72,8 +86,45 @@ kurulum anahtarı.
 | `E_DOCKER_MISSING`, `E_DOCKER_DENIED`, `E_COMPOSE_MISSING` | Docker Engine / erişim / Compose v2 | Hata |
 | `E_PORT_IN_USE` | `LISTEN_ADDRESS:HTTP_PORT` başka süreçte (bizim proxy değil) | Hata |
 | `W_DNS`, `W_OUTBOUND` | Docker Hub / npm çözümlenemiyor veya erişilemiyor | Uyarı |
+| `W_TIME_UNSYNCED` | Sunucu saati NTP ile eşitlenmemiş (`timedatectl`) | Uyarı |
+| `W_DNS_NO_A` | Panelin alacağı adın (`--domain` ya da `<ip>.sslip.io`) A kaydı yok | Uyarı: HTTPS kurulamaz, panel yalnızca yerelde açılır |
+| `W_PORT_IN_USE` | O ad için gereken 80 ya da 443 başka bir süreçte | Uyarı: aynı sonuç (`behind-proxy` ile mevcut web sunucusunun arkasına alınabilir) |
 
-Ön kontrollerden biri başarısız olursa betik dosya oluşturmadan durur (`E_PRECHECK`).
+Son üçü yalnızca `install` raporunda görünür (`check` çıktısı değişmedi). Ön kontrollerden biri başarısız olursa
+betik hiçbir şey kurmadan ve dosya oluşturmadan durur (`E_PRECHECK`); Docker da ancak kontroller geçtikten sonra
+kurulur. Rapor ayrıca bu dizinde ne bulduğunu söyler (`STATE`): kurulum yok (sıfırdan kurulur), yarıda kalmış
+(kaldığı yerden sürer) ya da tamamlanmış (ayarlar ve veriler korunur, servisler yeniden derlenip başlatılır; sürüm
+yükseltmek için `update` kullanılır).
+
+### Dil, çıktı ve kayıt
+
+**Dil.** `--lang tr|en` verilirse o dil kullanılır. Verilmezse:
+- `install` (ve tek komutla kurulumda `get.sh`) **uçbirimde** bir kez, her şeyden önce sorar:
+  `1) Türkçe  2) English`. Varsayılan `LC_ALL`, `LC_MESSAGES`, `LANG` sırasıyla yereldeki dildir; Enter ya da
+  30 saniye sessizlik varsayılanı seçer. Yanıt tek tuştur ve `/dev/tty`'den okunur: `curl … | sudo sh` biçiminde
+  standart girdi betiğin kendisidir.
+- **Uçbirim yoksa hiçbir şey sorulmaz**: cloud-init, CI, systemd, panelin ajanı, çıktısı bir dosyaya ya da boruya
+  giden çalıştırmalar varsayılan dili kullanır ve onay beklemeden sürer. `TERM=dumb` ve `--plain` de böyle sayılır.
+- Diğer komutlar (`update`, `backup`, `domain`…) hiçbir zaman dil sormaz; yereldeki dili ya da `--lang` değerini
+  kullanır. Zamanlayıcı ve ajan, kuruldukları andaki dille çalışır.
+
+**Uçbirimde çıktı.** Başlık (sürüm, kanal, dizin, kayıtların yeri, beta notu), ön kontrol raporu, yapılacaklar,
+numaralı adımlar ve özet. Uzun beklemelerde süreyi gösteren bir dönen işaret vardır; `update`, `backup`, `restore`,
+`domain`, `behind-proxy`, `monitoring`, `terminal` ve `uninstall` komutlarının uzun adımları da aynı işareti
+kullanır. `NO_COLOR` renkleri kapatır; UTF-8 olmayan yerelde işaretler ASCII olur (`[ok]`, `[xx]`, `[!!]`, `[..]`).
+Ctrl-C imleci geri getirir, dönen işareti durdurur ve kaydın yerini yazar.
+
+**Uçbirim değilse** her satır eskiden olduğu gibi `DÜZEY KOD metin` biçimindedir; satır başı karakteri, imleç ya da
+renk kodu yazılmaz. `install` ve `update` çıktısına yeni satırlar eklendi: `INFO INSTALLER`, `INFO PLAN`,
+`INFO STEP`, `OK STEP_DONE`, `INFO PROGRESS` (ilerleme değiştikçe), bir adım başarısız olursa `INFO LOG_TAIL` ile
+başarısız komutun son satırları (`      | ` ile başlar), `INFO HINT` ve `INFO LOG`. Hata her zaman **son satırdır**;
+`backup`, `check`, `releases` ve bir hatayla hemen biten komutların çıktısı bayt bayt aynıdır.
+
+**Kayıt.** Betiğin çalıştırdığı komutların (apt, docker compose, git) çıktısı ekrana değil
+`data/logs/<komut>-<UTC zamanı>-<pid>.log` dosyasına yazılır (izin `600`, klasör `700`; en yeni 30 dosya tutulur).
+Bir adım başarısız olursa son 20 satırı kendiliğinden gösterilir, yanında hata kodu, ne yapılacağı ve dosyanın
+tam yolu. Bir adım kendi hata iletisi olmadan biterse (örneğin Docker kurulurken apt hata verirse) `install`
+`E_STEP_FAILED` yazar ve o komutun çıkış koduyla biter.
 
 Çıkış kodları:
 
@@ -82,7 +133,7 @@ kurulum anahtarı.
 | 0 | Başarılı (güncelleme için: güncel olduğu için bir şey yapılmadıysa da 0) |
 | 1 | Ön kontrol başarısız (`E_PRECHECK`); alan adı ayarlanamadı (`E_DOMAIN_FAILED`); `uninstall` bir adımı tamamlayamadı |
 | 2 | Geçersiz argüman ya da değer (bilinmeyen seçenek, geçersiz alan adı, port, saat dilimi, güncelleme penceresi, yedek dosyası yok; sertifika: `E_CERT_FILES`, `E_CERT_UNREADABLE`, `E_CERT_DATES`, `E_CERT_KEY_MISMATCH`; `behind-proxy`: `E_PUBLIC_URL_MISSING`, `E_PUBLIC_URL_INVALID`, `E_CIDR_INVALID`) |
-| 3 | `restore` onaysız çalıştırıldı: yalnızca denetledi, hiçbir şeyi değiştirmedi (`--yes-replace-data` ekleyin) |
+| 3 | `restore` onaysız çalıştırıldı: yalnızca denetledi, hiçbir şeyi değiştirmedi (`--yes-replace-data` ekleyin); `install` uçbirimde "Devam edilsin mi?" sorusuna hayır yanıtı aldı: hiçbir şey kurulmadı |
 | 13 | Yetki ya da Docker: root gerekli (`E_NEEDS_ROOT`), Docker yok ya da kurulamadı (`E_DOCKER_MISSING`) |
 | 17 | Yapılandırma hatası: `.env` örnek parola içeriyor, Compose dosyası geçersiz, sırların sahibi yanlış, henüz kurulmamış (`E_NOT_INSTALLED`) |
 | 18 | Servisler başlamadı; kurtarma ya da parola sıfırlama çalışmadı; host ajanı, zamanlayıcı, profil ya da host ayarı için gereken sistem parçası yok (systemd, timesyncd, resolved, desteklenmeyen işletim sistemi) |

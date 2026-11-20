@@ -58,10 +58,25 @@
 #                                        (systemd units and drop-ins, the apt setting, stored git credentials);
 #                                        .env, secrets/, backups/ and data/ stay, and so do the Docker volumes
 #                                        unless --purge-data is given
+#   sh scripts/install.sh help         this list in the chosen language (also --help, -h)
 # Options: --lang tr|en  --install-docker  --allow-unsupported-os
+#          --yes   install: do not ask "continue?" after the pre-flight report (asked only on a terminal anyway)
+#          --plain line-oriented output without colours, spinners or cursor codes, also on a terminal (it is
+#                  what a pipe, a log file, CI and the panel's agent get by themselves)
+# Language: --lang decides; without it `install` on a terminal asks once (1 Türkçe, 2 English; Enter or 30 s
+# of silence take the default from LC_ALL/LC_MESSAGES/LANG); with no terminal nothing is ever asked.
+# On a terminal the output is a banner, a pre-flight report, numbered steps with a spinner and a summary; what
+# the wrapped commands print goes to data/logs/<mode>-<time>-<pid>.log (root-only, the newest 30 are kept) and
+# its last lines are shown when a step fails. NO_COLOR and TERM=dumb are respected; a locale that is not UTF-8
+# gets ASCII marks. Not on a terminal the lines are "LEVEL CODE text" as they always were.
 # It never changes firewall, SSH or other web server settings, and never prints secrets.
 # shellcheck disable=SC1091 # /etc/os-release exists only on the target host
 set -eu
+# The caller's locale, read before it is replaced below: it decides the default language and whether the terminal
+# takes UTF-8. Handed on in the environment, because `update` starts this script again after LC_ALL is set.
+LVM_LOCALE_MSG=${LVM_LOCALE_MSG:-${LC_ALL:-${LC_MESSAGES:-${LANG:-}}}}; LVM_LOCALE_CTYPE=${LVM_LOCALE_CTYPE:-${LC_ALL:-${LC_CTYPE:-${LANG:-}}}}
+export LVM_LOCALE_MSG LVM_LOCALE_CTYPE
+UI_T0=$(date +%s)
 # Patterns mean the same on every server: [a-z] and [0-9] are ASCII whatever locale systemd or the shell passes on.
 LC_ALL=C; export LC_ALL
 cd "${LVM_ROOT:-$(dirname "$0")/..}"
@@ -77,10 +92,14 @@ RESTORE_FILE="" YES=0 TO="" AUTO=0 SWITCH="" CHANNEL="" WINDOW="" BRANCH="" PURG
 PUBLIC_URL=""
 HOST_NAME="" HOST_TZ="" HOST_NTP="" HOST_DNS="" OS_ACT=""
 LOCAL=0 WIZARD=0 MONITORING=1 SCHEDULE=1 ADMIN_EMAIL="" RESET_EMAIL="" DISABLE_2FA=""
-case "${LANG:-}" in tr*) UI="tr" ;; *) UI="en" ;; esac
+CONFIRMED=0 PLAIN=0 LANG_GIVEN=0 NEED_DOCKER=0 STATE=new
+case "$LVM_LOCALE_MSG" in tr*) UI="tr" ;; *) UI="en" ;; esac
 while [ $# -gt 0 ]; do
   case "$1" in
     install|check|recover-setup|update|behind-proxy|local-only|backup|maintenance|releases|run-requests|state|uninstall) MODE=$1 ;;
+    help|--help|-h) MODE=help ;;
+    --yes|-y) CONFIRMED=1 ;;
+    --plain) PLAIN=1 ;;
     restore) MODE=restore; if [ $# -gt 1 ]; then shift; RESTORE_FILE=$1; fi ;;
     reset-password) MODE=reset-password; if [ $# -gt 1 ]; then shift; RESET_EMAIL=$1; fi ;;
     --disable-2fa) DISABLE_2FA=--disable-2fa ;;
@@ -118,7 +137,7 @@ while [ $# -gt 0 ]; do
     --port) shift; PROXY_PORT=${1:-} ;;
     --trusted-cidr) shift; TRUSTED_CIDR=${1:-} ;;
     --public-url) shift; PUBLIC_URL=${1:-} ;;
-    --lang) shift; UI=${1:-en} ;;
+    --lang) shift; UI=${1:-en}; LANG_GIVEN=1 ;;
     --install-docker) INSTALL_DOCKER=1 ;;
     --allow-unsupported-os) ALLOW_OS=1 ;;
     *) echo "unknown argument: $1" >&2; exit 2 ;;
@@ -128,11 +147,263 @@ done
 # The language also goes into the systemd units this script writes: only the two it knows.
 case "$UI" in tr|en) ;; *) UI=en ;; esac
 
+# ---- Output ---------------------------------------------------------------------------------------
+# Two forms of the same messages.
+# Not on a terminal (a pipe, a file, CI, systemd, the panel's agent) every line is "LEVEL CODE text", as it
+# always was: run-requests takes the CODE of the last line as the result of a panel request and the panel shows
+# the lines as they come. Nothing with a carriage return, a cursor code or a colour is ever written there.
+# On a terminal the lines get a mark and colours, a long wait gets a spinner with the time it has taken, and the
+# installation is a banner, a pre-flight report, numbered steps and a summary. NO_COLOR takes the colours away,
+# TERM=dumb or --plain the whole terminal form, a locale without UTF-8 the non-ASCII marks.
+UI_TTY=0 UI_COLOR=0 UI_UTF=0
+if [ "$PLAIN" != 1 ] && [ -t 1 ] && [ "${TERM:-dumb}" != dumb ]; then
+  UI_TTY=1
+  [ -n "${NO_COLOR:-}" ] || UI_COLOR=1
+  case "$LVM_LOCALE_CTYPE" in *[Uu][Tt][Ff]-8*|*[Uu][Tt][Ff]8*) UI_UTF=1 ;; esac
+fi
+C_0="" C_B="" C_DIM="" C_RED="" C_GRN="" C_YEL="" C_CYA=""
+if [ "$UI_COLOR" = 1 ]; then
+  C_0=$(printf '\033[0m'); C_B=$(printf '\033[1m'); C_DIM=$(printf '\033[2m')
+  C_RED=$(printf '\033[31m'); C_GRN=$(printf '\033[32m'); C_YEL=$(printf '\033[33m'); C_CYA=$(printf '\033[36m')
+fi
+if [ "$UI_UTF" = 1 ]; then
+  M_OK='✓' M_FAIL='✗' M_WARN='!' M_INFO='•' M_SEP='·'
+  M_RULE='────────────────────────────────────────────────────────────────'
+else
+  M_OK='[ok]' M_FAIL='[xx]' M_WARN='[!!]' M_INFO='[..]' M_SEP='-'
+  M_RULE='----------------------------------------------------------------'
+fi
+# What a wrapped command prints goes here; /dev/null until a log could be opened (ui_log_open).
+UI_LOG=/dev/null UI_DIED=0 TTY_SAVED=""
+BUSY="" BUSY_T0=0 BUSY_PROBE="" BUSY_MARK=0 SPIN_PID="" SPIN_PAUSED=0 UI_TICK="" UI_PROBE_EVERY=1
+STEP_N=0 STEP_TOTAL=0 STEP_TITLE="" BUILD_TOTAL=0
+
+# tx "türkçe" "english": the one in the chosen language.
+tx() { if [ "$UI" = tr ]; then printf '%s\n' "$1"; else printf '%s\n' "$2"; fi; }
+# Process id of this very shell ($$ is the main script's also inside a subshell).
+self_pid() { exec sh -c 'echo "$PPID"'; }
+fmt_dur() { # seconds
+  if [ "$1" -ge 60 ]; then tx "$(($1 / 60)) dk $(($1 % 60)) sn" "$(($1 / 60))m $(($1 % 60))s"; else tx "$1 sn" "$1s"; fi
+}
+
 # msg LEVEL CODE "türkçe" "english"
-msg() { if [ "$UI" = tr ]; then t=$3; else t=$4; fi; printf '%-5s %-22s %s\n' "$1" "$2" "$t"; }
+msg() {
+  if [ "$UI" = tr ]; then t=$3; else t=$4; fi
+  if [ "$UI_TTY" != 1 ]; then printf '%-5s %-22s %s\n' "$1" "$2" "$t"; return; fi
+  case "$1" in
+    OK) m_c=$C_GRN m_m=$M_OK ;; WARN) m_c=$C_YEL m_m=$M_WARN ;; FAIL) m_c=$C_RED m_m=$M_FAIL ;; *) m_c=$C_CYA m_m=$M_INFO ;;
+  esac
+  # A terminal without UTF-8 gets the arrows of the menu paths in ASCII too.
+  if [ "$UI_UTF" != 1 ]; then case "$t" in *→*) t=$(printf '%s\n' "$t" | sed 's/→/->/g') ;; esac; fi
+  spin_pause
+  printf '  %s%s%s %s%-16s%s %s\n' "$m_c" "$m_m" "$C_0" "$C_DIM" "$2" "$C_0" "$t"
+  spin_resume
+}
 FAILED=0
 fail() { msg FAIL "$1" "$2" "$3"; FAILED=$((FAILED + 1)); }
-die() { msg FAIL "$2" "$3" "$4"; exit "$1"; }
+# The error is the last line (the agent reads its CODE); what explains it comes before: the end of what the
+# failed command printed, what to do next and where the whole log is. On a terminal the error comes first.
+die() {
+  UI_DIED=1; d_busy=$BUSY
+  idle fail
+  [ "$UI_TTY" != 1 ] || msg FAIL "$2" "$3" "$4"
+  if [ -n "$d_busy" ]; then log_tail; fi
+  if [ -n "$d_busy" ] || [ "$UI_TTY" = 1 ]; then hint "$2"; fi
+  if [ -n "$d_busy" ]; then log_where; fi
+  [ "$UI_TTY" = 1 ] || msg FAIL "$2" "$3" "$4"
+  exit "$1"
+}
+# What to do about the failures people meet most; the message itself already names the command to look with.
+hint() { # code
+  case "$1" in
+    E_PRECHECK) msg INFO HINT "FAIL satırlarını düzeltip aynı komutu yeniden çalıştırın; hiçbir şey kurulmadı. Yalnızca denetlemek için: sh scripts/install.sh check" "Fix the FAIL lines and run the same command again; nothing was installed. To check only: sh scripts/install.sh check" ;;
+    E_START_FAILED|E_NOT_READY|E_STEP_FAILED) msg INFO HINT "Hangi servisin sağlıksız olduğu: docker compose ps; nedeni: docker compose logs --tail 50 SERVİS. Düzelttikten sonra aynı komutu yeniden çalıştırın: parolalar ve veriler korunur, biten işler yinelenmez" "Which service is unhealthy: docker compose ps; why: docker compose logs --tail 50 SERVICE. Then run the same command again: passwords and data are kept, finished work is not repeated" ;;
+    E_DOCKER_MISSING|E_DOCKER_DENIED|E_COMPOSE_MISSING) msg INFO HINT "Docker Engine ve Compose eklentisi gerekir: betiği root olarak (sudo) çalıştırın, kendisi kurar; ya da docs.docker.com/engine/install/ubuntu" "Docker Engine and its Compose plugin are needed: run the script as root (sudo) and it installs them; or see docs.docker.com/engine/install/ubuntu" ;;
+    E_UPDATE_FETCH) msg INFO HINT "Ağı ve depoya erişimi denetleyin: git fetch --tags (özel depoda erişim anahtarının süresi dolmuş olabilir)" "Check the network and the access to the repository: git fetch --tags (in a private repository the token may have expired)" ;;
+    E_UPDATE_LOCAL_CHANGES) msg INFO HINT "Değişen dosyalar: git status. Kendi ayarlarınız .env ve data/ altında durur; kaynaktaki bir değişikliği geri almak için: git checkout -- DOSYA" "Changed files: git status. Your own settings live in .env and data/; to drop a change in the source: git checkout -- FILE" ;;
+    E_DOMAIN_FAILED) msg INFO HINT "Alan adının A kaydı bu sunucuyu göstermeli, 80 ve 443 dışarıdan açık olmalı; durum: sh scripts/install.sh check. Önceki adres geri yüklendi" "The name's A record must point to this server and ports 80 and 443 must be open from outside; state: sh scripts/install.sh check. The previous address was put back" ;;
+    E_BACKUP_WRITE|E_BACKUP_VERIFY) msg INFO HINT "Boş yer: df -h . ; eski yedekler backups/ altında durur (BACKUP_KEEP kadarı tutulur)" "Free space: df -h . ; older backups are in backups/ (BACKUP_KEEP of them are kept)" ;;
+  esac
+}
+log_where() { [ "$UI_LOG" = /dev/null ] || msg INFO LOG "Tam kayıt (yalnızca root okur): $(pwd)/$UI_LOG" "Full log (root only): $(pwd)/$UI_LOG"; }
+# The last lines the wrapped commands wrote since `busy`: what the failed one said. Escape codes and carriage
+# returns never leave the log file, and what could be a secret in a URL is masked as in the panel's log copies.
+log_tail() {
+  [ "$UI_LOG" != /dev/null ] || return 0
+  lt=$(tail -n +"$((BUSY_MARK + 2))" "$UI_LOG" 2>/dev/null | tr -d '\033\r' | grep -v '^[[:space:]]*$' | tail -n 20 | mask_secrets) || true
+  [ -n "$lt" ] || return 0
+  msg INFO LOG_TAIL "Başarısız adımın son satırları:" "The last lines of the step that failed:"
+  printf '%s\n' "$lt" | sed 's/^/      | /'
+}
+# One log per run, for root only: data/logs/<mode>-<UTC time>-<pid>.log; the newest 30 stay. Without the right
+# to write there (a check run without sudo) the wrapped output is dropped, as it was before there was a log.
+ui_log_open() {
+  [ "$UI_LOG" = /dev/null ] || return 0
+  { (umask 077; mkdir -p data/logs) && [ ! -L data/logs ]; } 2>/dev/null || return 0
+  lo="data/logs/$MODE-$(date -u +%Y%m%dT%H%M%SZ)-$$.log"
+  (umask 077; set -C; : > "$lo") 2>/dev/null || return 0
+  UI_LOG=$lo
+  printf 'Lightning VM %s, %s, %s\n' "$(app_version)" "$MODE" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$UI_LOG"
+  # shellcheck disable=SC2012 # the names are ours: mode, time and process id
+  ls -1t data/logs/*.log 2>/dev/null | tail -n +31 | while IFS= read -r lo_old; do rm -f "$lo_old"; done
+}
+
+# busy "türkçe" "english" [probe]: a wait begins. On a terminal a spinner with the elapsed time runs until `idle`;
+# the commands in between run in this shell as before (their variables and exit codes are theirs), only the
+# spinner is a child process. It ends with this script whatever happens: idle, die and the EXIT handler stop it,
+# and it looks for this script's process on every turn. probe: a function that prints one short line about how
+# far the work is (3/11 images); shown next to the spinner, and not on a terminal as an INFO PROGRESS line
+# whenever it changes.
+busy() {
+  ui_log_open
+  BUSY=$(tx "$1" "$2"); BUSY_PROBE=${3:-}; BUSY_T0=$(date +%s)
+  BUSY_MARK=0; [ "$UI_LOG" = /dev/null ] || BUSY_MARK=$(wc -l < "$UI_LOG")
+  printf '== %s %s\n' "$(date -u +%H:%M:%SZ)" "$BUSY" >> "$UI_LOG"
+  spin_start
+}
+# idle ok|fail ["türkçe" "english"]: the wait is over; on a terminal one line says how it went and how long it took.
+idle() {
+  [ -n "$BUSY" ] || return 0
+  spin_stop
+  if [ "$UI_TTY" = 1 ]; then
+    id_t=$BUSY; [ $# -lt 3 ] || id_t=$(tx "$2" "$3")
+    id_d=$(fmt_dur $(($(date +%s) - BUSY_T0)))
+    if [ "${1:-ok}" = ok ]; then printf '  %s%s%s %s %s(%s)%s\n' "$C_GRN" "$M_OK" "$C_0" "$id_t" "$C_DIM" "$id_d" "$C_0"
+    else printf '  %s%s%s %s %s(%s)%s\n' "$C_RED" "$M_FAIL" "$C_0" "$id_t" "$C_DIM" "$id_d" "$C_0"; fi
+  fi
+  BUSY=""; BUSY_PROBE=""
+}
+spin_start() {
+  { [ -n "$BUSY" ] && [ -z "$SPIN_PID" ]; } || return 0
+  { [ "$UI_TTY" = 1 ] || [ -n "$BUSY_PROBE" ]; } || return 0
+  # Only the main shell keeps a spinner: a subshell could not stop it again.
+  [ "$(self_pid)" = "$$" ] || return 0
+  if [ -z "$UI_TICK" ]; then
+    if [ "$UI_TTY" != 1 ]; then UI_TICK=5 UI_PROBE_EVERY=1
+    elif sleep 0.1 2>/dev/null; then UI_TICK=0.1 UI_PROBE_EVERY=30
+    else UI_TICK=1 UI_PROBE_EVERY=3; fi
+  fi
+  # The cursor is hidden and a long line is cut at the edge instead of wrapping while the spinner line is redrawn.
+  [ "$UI_TTY" != 1 ] || printf '\033[?25l\033[?7l'
+  (exec 9>&-; ticker) &
+  SPIN_PID=$!
+}
+spin_stop() {
+  [ -n "$SPIN_PID" ] || return 0
+  [ "$(self_pid)" = "$$" ] || return 0
+  kill "$SPIN_PID" 2>/dev/null || true
+  wait "$SPIN_PID" 2>/dev/null || true
+  SPIN_PID=""
+  [ "$UI_TTY" != 1 ] || printf '\r\033[K\033[?7h\033[?25h'
+}
+# A message while the spinner runs: the spinner steps aside for the line and comes back under it.
+spin_pause() {
+  [ -n "$BUSY" ] || return 0
+  if [ -n "$SPIN_PID" ] && [ "$(self_pid)" = "$$" ]; then spin_stop; SPIN_PAUSED=1; else printf '\r\033[K'; fi
+}
+spin_resume() { [ "$SPIN_PAUSED" = 1 ] || return 0; SPIN_PAUSED=0; spin_start; }
+ticker() {
+  set +e
+  # Its own sleep goes with it: stopped in the middle of a five-second wait, it leaves no process behind.
+  tk_s=""; trap 'kill "$tk_s" 2>/dev/null; exit 0' TERM
+  tk_i=0; tk_last=""; tk_detail=""
+  while kill -0 "$$" 2>/dev/null; do
+    if [ -n "$BUSY_PROBE" ] && [ $((tk_i % UI_PROBE_EVERY)) = 0 ]; then tk_detail=$("$BUSY_PROBE" 2>/dev/null | tr -d '\033\r' | head -n 1); fi
+    if [ "$UI_TTY" = 1 ]; then
+      if [ "$UI_UTF" = 1 ]; then
+        case $((tk_i % 10)) in 0) tk_f='⠋' ;; 1) tk_f='⠙' ;; 2) tk_f='⠹' ;; 3) tk_f='⠸' ;; 4) tk_f='⠼' ;; 5) tk_f='⠴' ;; 6) tk_f='⠦' ;; 7) tk_f='⠧' ;; 8) tk_f='⠇' ;; *) tk_f='⠏' ;; esac
+      else
+        case $((tk_i % 4)) in 0) tk_f='[|]' ;; 1) tk_f='[/]' ;; 2) tk_f='[-]' ;; *) tk_f='[\]' ;; esac
+      fi
+      printf '\r  %s%s%s %s %s%s%s%s\033[K' "$C_CYA" "$tk_f" "$C_0" "$BUSY" "$C_DIM" "$(fmt_dur $(($(date +%s) - BUSY_T0)))" "${tk_detail:+ $M_SEP $tk_detail}" "$C_0"
+    elif [ -n "$tk_detail" ] && [ "$tk_detail" != "$tk_last" ]; then
+      printf '%-5s %-22s %s\n' INFO PROGRESS "$tk_detail"; tk_last=$tk_detail
+    fi
+    sleep "$UI_TICK" & tk_s=$!
+    wait "$tk_s"; tk_i=$((tk_i + 1))
+  done
+}
+# How far a build is: images the log says are built, of those the compose file builds.
+probe_build() {
+  pb_n=$(tail -n +"$((BUSY_MARK + 1))" "$UI_LOG" 2>/dev/null | sed -n 's/^ *\(Image \|Service \|Container \)\{0,1\}\([A-Za-z0-9._/-]\{1,\}\) \{1,\}Built *$/\2/p' | sort -u | wc -l | tr -d ' ')
+  if [ "$BUILD_TOTAL" -gt 0 ]; then tx "$pb_n/$BUILD_TOTAL imaj derlendi" "$pb_n/$BUILD_TOTAL images built"
+  else tx "$pb_n imaj derlendi" "$pb_n images built"; fi
+}
+# How far the start is: services that run (and are healthy, where they have a health check) or have finished
+# (the migrations), and the first ones still waited for.
+probe_health() {
+  docker compose ps -a --format '{{.Service}}|{{.State}}|{{.Health}}' 2>/dev/null | awk -F'|' -v lang="$UI" '
+    NF >= 2 { n++
+      if (($2 == "running" && ($3 == "" || $3 == "healthy")) || $2 == "exited") ok++
+      else if (w++ < 3) wait = wait (wait == "" ? "" : ", ") $1 }
+    END { if (!n) exit
+      if (lang == "tr") printf "%d/%d servis hazır%s\n", ok, n, (wait == "" ? "" : "; beklenen: " wait (w > 3 ? ", ..." : ""))
+      else printf "%d/%d services ready%s\n", ok, n, (wait == "" ? "" : "; waiting for: " wait (w > 3 ? ", ..." : "")) }'
+}
+
+# A numbered step of the installation or of an update. The total is known before the first one starts.
+# step "başlık" "title" "ne ve neden" "what and why" [probe]
+step() {
+  STEP_N=$((STEP_N + 1)); STEP_TITLE=$(tx "$1" "$2")
+  if [ "$UI_TTY" = 1 ]; then
+    printf '\n%s[%s/%s]%s %s%s%s\n' "$C_CYA" "$STEP_N" "$STEP_TOTAL" "$C_0" "$C_B" "$STEP_TITLE" "$C_0"
+    printf '%s' "$C_DIM"; tx "$3" "$4" | fold -s -w 76 | sed 's/^/      /'; printf '%s' "$C_0"
+  else
+    msg INFO STEP "[$STEP_N/$STEP_TOTAL] $1: $3" "[$STEP_N/$STEP_TOTAL] $2: $4"
+  fi
+  busy "$1" "$2" "${5:-}"
+}
+# step_ok ["sonuç" "result"]
+step_ok() {
+  so_d=$(fmt_dur $(($(date +%s) - BUSY_T0)))
+  if [ $# -ge 2 ]; then idle ok "$1" "$2"; else idle ok "Tamamlandı" "Done"; fi
+  [ "$UI_TTY" = 1 ] || msg OK STEP_DONE "[$STEP_N/$STEP_TOTAL] $STEP_TITLE ($so_d)" "[$STEP_N/$STEP_TOTAL] $STEP_TITLE ($so_d)"
+}
+# A heading between the parts of the terminal form; nothing where lines are read by programs.
+heading() { [ "$UI_TTY" != 1 ] || printf '\n  %s%s%s\n' "$C_B" "$(tx "$1" "$2")" "$C_0"; }
+
+# ---- Questions ------------------------------------------------------------------------------------
+# Asked only when a person can answer: the output is a terminal (not --plain, not TERM=dumb) and the controlling
+# terminal can be opened. Answers are read from /dev/tty, never from standard input: under `curl ... | sudo sh`
+# standard input is the script itself. cloud-init, CI, systemd and the panel's agent have no terminal: nothing
+# is asked there and the defaults apply.
+ui_interactive() { [ "$UI_TTY" = 1 ] && (: < /dev/tty) 2>/dev/null; }
+# read_key SECONDS (0: wait for ever): one key press into KEY, as two hex digits ("0a" Enter); "" when the time
+# is over. Without stty a whole line is read instead, with no time limit, and its first character counts.
+read_key() {
+  KEY=""
+  if rk_saved=$(stty -g < /dev/tty 2>/dev/null) && [ -n "$rk_saved" ]; then
+    TTY_SAVED=$rk_saved
+    # No line editing, no echo, and a read gives up after a second: the loop counts the seconds.
+    stty -icanon -echo min 0 time 10 < /dev/tty
+    rk_left=$1
+    while :; do
+      KEY=$(dd bs=1 count=1 2>/dev/null < /dev/tty | od -An -tx1 | tr -d ' \n')
+      [ -z "$KEY" ] || break
+      if [ "$1" -gt 0 ]; then rk_left=$((rk_left - 1)); [ "$rk_left" -gt 0 ] || break; fi
+    done
+    stty "$TTY_SAVED" < /dev/tty; TTY_SAVED=""
+    [ "$KEY" != 0d ] || KEY=0a
+  else
+    rk_line=""; IFS= read -r rk_line < /dev/tty || true
+    if [ -z "$rk_line" ]; then KEY=0a; else KEY=$(printf '%s' "$rk_line" | cut -c 1 | od -An -tx1 | tr -d ' \n'); fi
+  fi
+}
+# Türkçe or English, asked in both: the default is the caller's locale; Enter or 30 seconds of silence take it.
+ask_language() {
+  if [ "$UI" = tr ]; then al_def=1; else al_def=2; fi
+  printf '\n  %sLightning VM%s\n\n  Dil / Language\n    1) Türkçe\n    2) English\n\n  Seçiminiz / Your choice [%s]: ' "$C_B" "$C_0" "$al_def"
+  read_key 30
+  case "$KEY" in 31) UI="tr" ;; 32) UI="en" ;; esac
+  if [ "$UI" = tr ]; then printf 'Türkçe\n'; else printf 'English\n'; fi
+}
+# Enter, e, E, y, Y: yes; anything else: no.
+ask_continue() {
+  printf '\n  %s ' "$(tx "Devam edilsin mi? [E/h]" "Continue? [Y/n]")"
+  read_key 0
+  case "$KEY" in 0a|65|45|79|59) tx "evet" "yes"; return 0 ;; esac
+  tx "hayır" "no"; return 1
+}
 
 # What has to be undone when the script ends in the middle of a backup or a restore (a failed step, Ctrl-C,
 # a kill): one EXIT handler for the whole script, so no function replaces another's trap. Each function sets
@@ -140,6 +411,7 @@ die() { msg FAIL "$2" "$3" "$4"; exit "$1"; }
 BACKUP_WORK="" RESTORE_WORK="" RESTORE_STAGE="" REQUEST_WORK="" PANEL_TMP="" LOCK_MINE=""
 on_exit() {
   rc=$?; trap - EXIT
+  ui_exit "$rc"
   # A snapshot for the panel that was not finished.
   [ -z "$PANEL_TMP" ] || rm -f "$PANEL_TMP"
   [ -z "$LOCK_MINE" ] || drop_lock
@@ -159,6 +431,33 @@ on_exit() {
     else msg FAIL E_RESTORE_START "Durdurulan servisler başlatılamadı: docker compose up -d; docker compose logs" "The stopped services could not be started: docker compose up -d; docker compose logs"; fi
   fi
   exit "$rc"
+}
+# No spinner, hidden cursor or changed terminal mode outlives the script, however it ends. On a terminal a run
+# that did not end well says which wait it was in, shows the end of what that command printed and where the
+# whole log is. Not on a terminal nothing is added after the last message (its CODE is the result the agent
+# records), except for `install`, which no program reads: there a step that ended the script without a message
+# of its own gets one (E_STEP_FAILED), with the end of the log before it.
+ui_exit() { # exit code
+  [ "$(self_pid)" = "$$" ] || return 0
+  if [ -n "$TTY_SAVED" ]; then stty "$TTY_SAVED" < /dev/tty 2>/dev/null || true; TTY_SAVED=""; fi
+  if [ "$1" = 0 ] || [ "$UI_DIED" = 1 ]; then spin_stop; BUSY=""; return 0; fi
+  ue_busy=$BUSY
+  if [ "$UI_TTY" = 1 ]; then
+    idle fail
+    case "$1" in
+      129|130|143) printf '\n'; msg WARN INTERRUPTED "Yarıda kesildi. Aynı komut yeniden çalıştırılabilir: parolalar ve veriler korunur" "Interrupted. The same command can be run again: passwords and data are kept" ;;
+      *) [ -z "$ue_busy" ] || log_tail ;;
+    esac
+    [ -z "$ue_busy" ] || log_where
+  else
+    spin_stop; BUSY=""
+    if [ -n "$ue_busy" ] && [ "$MODE" = install ]; then
+      case "$1" in 129|130|143) ;; *)
+        log_tail; hint E_STEP_FAILED; log_where
+        msg FAIL E_STEP_FAILED "Adım tamamlanamadı (çıkış kodu $1): $ue_busy" "The step did not finish (exit code $1): $ue_busy" ;;
+      esac
+    fi
+  fi
 }
 # A signal ends the script through the same handler. Called again inside a subshell, where traps start empty.
 arm_exit() { trap on_exit EXIT; trap 'exit 129' HUP; trap 'exit 130' INT; trap 'exit 143' TERM; }
@@ -230,14 +529,14 @@ host_checks() {
   else msg OK DISK "${disk_gb} GB boş" "${disk_gb} GB free"; fi
 
   for tool in openssl curl; do
-    if command -v "$tool" >/dev/null; then msg OK TOOLS "$tool" "$tool"; else fail E_TOOL_MISSING "$tool gerekli: apt-get install $tool" "$tool required: apt-get install $tool"; fi
+    if command -v "$tool" >/dev/null; then msg OK TOOLS "$tool" "$tool"
+    # The Docker step installs curl with it, as it always did.
+    elif [ "$tool" = curl ] && [ "$NEED_DOCKER" = 1 ]; then msg INFO TOOLS "curl yok: Docker ile birlikte kurulacak" "curl is missing: it is installed together with Docker"
+    else fail E_TOOL_MISSING "$tool gerekli: apt-get install $tool" "$tool required: apt-get install $tool"; fi
   done
 
-  if command -v docker >/dev/null && docker info >/dev/null 2>&1; then msg OK DOCKER "$(docker version --format '{{.Server.Version}}')" "$(docker version --format '{{.Server.Version}}')"
-  elif command -v docker >/dev/null; then fail E_DOCKER_DENIED "Docker var ama erişilemiyor (root veya docker grubu gerekir)" "Docker present but not accessible (root or docker group needed)"
-  else fail E_DOCKER_MISSING "Docker Engine yok. Resmî depodan kurmak için: --install-docker" "Docker Engine missing. To install from the official repository: --install-docker"; fi
-  if docker compose version >/dev/null 2>&1; then msg OK COMPOSE "$(docker compose version --short)" "$(docker compose version --short)"
-  elif command -v docker >/dev/null; then fail E_COMPOSE_MISSING "Docker Compose v2 eklentisi yok (docker-compose-plugin)" "Docker Compose v2 plugin missing (docker-compose-plugin)"; fi
+  if [ "$NEED_DOCKER" = 1 ]; then msg INFO DOCKER_INSTALL "Docker Engine yok: resmî apt deposundan kurulacak (docs.docker.com/engine/install/ubuntu)" "Docker Engine is missing: it will be installed from the official apt repository (docs.docker.com/engine/install/ubuntu)"
+  else docker_checks; fi
 
   # Our own proxy holding the port is not a conflict.
   ports_free "$PORT" "$TLS_PORT"
@@ -249,14 +548,21 @@ host_checks() {
   done
 }
 
+docker_checks() {
+  if command -v docker >/dev/null && docker info >/dev/null 2>&1; then msg OK DOCKER "$(docker version --format '{{.Server.Version}}')" "$(docker version --format '{{.Server.Version}}')"
+  elif command -v docker >/dev/null; then fail E_DOCKER_DENIED "Docker var ama erişilemiyor (root veya docker grubu gerekir)" "Docker present but not accessible (root or docker group needed)"
+  else fail E_DOCKER_MISSING "Docker Engine yok. Resmî depodan kurmak için: --install-docker" "Docker Engine missing. To install from the official repository: --install-docker"; fi
+  if docker compose version >/dev/null 2>&1; then msg OK COMPOSE "$(docker compose version --short)" "$(docker compose version --short)"
+  elif command -v docker >/dev/null; then fail E_COMPOSE_MISSING "Docker Compose v2 eklentisi yok (docker-compose-plugin)" "Docker Compose v2 plugin missing (docker-compose-plugin)"; fi
+}
+
+# Docker from its official apt repository. The caller sends what this prints to the log; root is checked there.
 install_docker() {
-  [ "$(id -u)" = 0 ] || die 13 E_DOCKER_MISSING "Docker kurulumu için root gerekir" "Installing Docker requires root"
-  msg INFO DOCKER_INSTALL "Docker resmî apt deposundan kuruluyor (docs.docker.com/engine/install/ubuntu)" "Installing Docker from the official apt repository (docs.docker.com/engine/install/ubuntu)"
-  apt-get update -qq && apt-get install -y -qq ca-certificates curl >/dev/null
+  apt-get update -qq && apt-get install -y -qq ca-certificates curl
   install -m 0755 -d /etc/apt/keyrings
   curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc && chmod a+r /etc/apt/keyrings/docker.asc
   echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo "$VERSION_CODENAME") stable" > /etc/apt/sources.list.d/docker.list
-  apt-get update -qq && apt-get install -y -qq docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin >/dev/null
+  apt-get update -qq && apt-get install -y -qq docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
 }
 
 # Cloud images (Hetzner's, and others) let cloud-init react to a new network interface. A container's interface is
@@ -481,8 +787,6 @@ lock_file() {
   (umask 077; : >> "$LOCK") 2>/dev/null || return 1
 }
 lock_id() { stat -Lc %d:%i "$1" 2>/dev/null || true; }
-# Process id of this very shell ($$ is the main script's also inside a subshell).
-self_pid() { exec sh -c 'echo "$PPID"'; }
 # Opens the lock as descriptor 9 and takes it: "wait" waits for the job that holds it, "try" returns 1 then.
 # 2: the lock file could not be made. The lock is the file the name stands for at the moment it is held: a job
 # removes the file when it ends (drop_lock), so after waiting the name is compared with what was locked and,
@@ -685,6 +989,7 @@ do_restore() {
   take_lock
   [ -f "$file" ] || die 2 E_RESTORE_FILE "Yedek dosyası bulunamadı: '$file'" "Backup file not found: '$file'"
   [ -s secrets/backup.key ] || die 21 E_BACKUP_KEY_MISSING "secrets/backup.key yok; yedeğin anahtarını oraya koyun" "secrets/backup.key missing; put the backup's key there"
+  busy "Yedek doğrulanıyor (imza, şifre çözme, içerik)" "Checking the backup (signature, decryption, contents)"
   # One read of the archive. It is copied, under its own name (the name is part of what is signed) and with its
   # signature, into a work directory only root can open, and from here on only that copy is checked, decrypted
   # and unpacked: whoever can write where the backup is kept cannot put other bytes under the name between the
@@ -720,6 +1025,7 @@ do_restore() {
   while read -r v; do
     [ -f "apps/api/migrations/$v.sql" ] || { rm -rf "$work"; die 22 E_RESTORE_NEWER "Yedek daha yeni bir sürümden ($(cat "$work/version" 2>/dev/null)); önce o sürüme güncelleyin" "The backup is from a newer version ($(cat "$work/version" 2>/dev/null)); update to that version first"; }
   done < "$work/migrations"
+  idle ok "Yedek doğrulandı" "The backup is sound"
   msg WARN RESTORE_PLAN "Şunlar DEĞİŞTİRİLECEK: tüm veritabanı, secrets/master.key, secrets/vmware.token ve sertifikalar ($(cat "$work/version" 2>/dev/null) yedeği)" "This REPLACES: the whole database, secrets/master.key, secrets/vmware.token and the certificates (backup of $(cat "$work/version" 2>/dev/null))"
   if [ "$YES" != 1 ]; then
     rm -rf "$work"
@@ -735,19 +1041,23 @@ do_restore() {
     msg WARN W_NO_SAFETY_BACKUP "--no-safety-backup: mevcut verinin yedeği ALINMIYOR; bu geri yükleme geri alınamaz" "--no-safety-backup: the current data is NOT backed up; this restore cannot be undone"
   else
     msg INFO SAFETY_BACKUP "Önce mevcut verinin yedeği alınıyor" "Backing up the current data first"
+    busy "Mevcut verinin yedeği alınıyor" "Backing up the current data"
     do_backup pre-restore || true
     safety=${BACKUP_FILE:-}
+    if [ -n "$safety" ]; then idle ok "Mevcut veri yedeklendi" "The current data is backed up"; else idle fail; fi
     [ -n "$safety" ] || die 22 E_RESTORE_NO_SAFETY "Mevcut verinin yedeği alınamadı; geri yükleme yapılmadı. Yedeksiz devam etmek (geri dönüşü yoktur) için: --no-safety-backup" "The current data could not be backed up; nothing was restored. To go on without that backup (no way back): --no-safety-backup"
   fi
   # From here on the script does not end with the services down: see on_exit.
   RESTORE_STAGE=stopped
-  docker compose stop api worker web console vmware proxmox xcpng ovirt hyperv libvirt incus proxy >/dev/null 2>&1 || true
+  busy "Servisler durduruluyor, veritabanı yedekteki veriyle değiştiriliyor" "Stopping the services and replacing the database with the backup's data"
+  docker compose stop api worker web console vmware proxmox xcpng ovirt hyperv libvirt incus proxy >> "$UI_LOG" 2>&1 || true
   # One transaction: the old schema goes and the dump comes in, or nothing changes at all. psql ends quietly
   # when its input stops short, so COMMIT and the marker are sent only after pg_restore wrote the whole dump.
   restored=$(docker compose exec -T postgres sh -c '{ echo "BEGIN; DROP SCHEMA public CASCADE; CREATE SCHEMA public;"; pg_restore --no-owner -f - && printf "%s\n" "COMMIT;" "\\echo LVM_RESTORE_COMMITTED"; } | psql -q -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB"' < "$work/db.dump" 2>/dev/null || true)
   case "$restored" in
     *LVM_RESTORE_COMMITTED*) ;;
     *) record restore failed E_RESTORE_DB ",\"file\":\"$(basename "$file")\""
+      idle fail
       msg FAIL E_RESTORE_DB "Veritabanı geri yüklenemedi; işlem geri alındı${safety:+. Mevcut verinin yedeği: $safety}" "The database could not be restored; the transaction was rolled back${safety:+. Backup of the current data: $safety}"
       exit 22 ;;
   esac
@@ -802,7 +1112,10 @@ do_restore() {
       || msg WARN W_RESTORE_CERTS "Sertifikalar geri yüklenemedi; Caddy yenilerini alır" "Certificates not restored; Caddy will request new ones"
   fi
   rm -rf "$work"; RESTORE_WORK=""; RESTORE_STAGE=""
-  if docker compose up -d --wait --wait-timeout 300 >/dev/null 2>&1 && local_get /api/ready >/dev/null 2>&1; then
+  idle ok "Veritabanı, anahtarlar ve sertifikalar geri kondu" "The database, the keys and the certificates are back"
+  busy "Servisler başlatılıyor" "Starting the services" probe_health
+  if docker compose up -d --wait --wait-timeout 300 >> "$UI_LOG" 2>&1 && local_get /api/ready >/dev/null 2>&1; then
+    idle ok "Servisler çalışıyor" "The services are running"
     record restore ok - ",\"file\":\"$(basename "$file")\""
     msg OK RESTORED "Geri yüklendi. Yedekteki ayarlar: .env.from-backup ve data/observability/alertmanager.yml.from-backup (geçerli ayarlar değiştirilmedi). Önceki veri: ${safety:--}" "Restored. Settings from the backup: .env.from-backup and data/observability/alertmanager.yml.from-backup (the current settings were kept). Previous data: ${safety:--}"
     # The address and the certificate mode live in .env, which a restore never replaces.
@@ -843,7 +1156,7 @@ edge_ref() { b=$(env_value UPDATE_BRANCH); echo "$(git remote | head -n 1)/${b:-
 target_for() { if [ "$1" = edge ]; then git rev-parse -q --verify "$(edge_ref)^{commit}" 2>/dev/null || true; else latest_tag "$1"; fi; }
 
 up_and_ready() {
-  docker compose up -d --build --wait --wait-timeout 600 >/dev/null 2>&1 || return 1
+  docker compose up -d --build --wait --wait-timeout 600 >> "$UI_LOG" 2>&1 < /dev/null || return 1
   i=0; until local_get /api/ready >/dev/null 2>&1 || [ $i -ge 12 ]; do sleep 5; i=$((i + 1)); done
   local_get /api/ready >/dev/null 2>&1
 }
@@ -863,8 +1176,9 @@ do_update() {
   [ -z "$(git status --porcelain --untracked-files=no)" ] || die 20 E_UPDATE_LOCAL_CHANGES "Kaynakta yerel değişiklikler var (git status); güncelleme yapılmadı" "The source has local changes (git status); not updating"
   channel=$(env_value UPDATE_CHANNEL); channel=${channel:-stable}
   take_lock
+  busy "Sürümler ve uyumluluk denetleniyor" "Checking the versions and whether the update fits"
   if [ -n "$(git remote)" ]; then
-    git fetch --quiet --tags --force "$(git remote | head -n 1)" 2>/dev/null || { record update failed E_UPDATE_FETCH; die 20 E_UPDATE_FETCH "Sürümler alınamadı (git fetch)" "Could not fetch releases (git fetch)"; }
+    git fetch --quiet --tags --force "$(git remote | head -n 1)" 2>> "$UI_LOG" || { record update failed E_UPDATE_FETCH; die 20 E_UPDATE_FETCH "Sürümler alınamadı (git fetch)" "Could not fetch releases (git fetch)"; }
   fi
   current=$(git rev-parse HEAD); current_name=$(app_version)
   if [ -n "$TO" ]; then target=$TO; else target=$(target_for "$channel"); fi
@@ -898,11 +1212,20 @@ do_update() {
     fi
     msg WARN W_UPDATE_BUSY "$open açık işlem var; worker durdurulacak, yeni sürümde kaldığı adımdan sürer" "$open open operations; the worker stops and the new version continues them from their last step"
   fi
+  idle ok "Güncelleme yapılabilir" "The update can go ahead"
   msg INFO UPDATE "$current_name -> $target" "$current_name -> $target"
+  STEP_N=0; STEP_TOTAL=3
+  step "Güncelleme öncesi yedek" "Backup before the update" \
+    "Veritabanı, ayarlar, anahtarlar ve sertifikalar şifreli olarak yedeklenir. Yedek alınamazsa hiçbir şey değiştirilmez." \
+    "The database, settings, keys and certificates are backed up, encrypted. Without that backup nothing is changed."
   do_backup pre-update || die 21 E_BACKUP_COPY "Güncelleme öncesi yedek tamamlanmadı; güncelleme yapılmadı" "The pre-update backup did not complete; not updating"
   pre=$BACKUP_FILE
+  step_ok "Yedek alındı" "Backup taken"
+  step "Yeni sürümün kaynağına geçiş" "Switching the source to the new version" \
+    "Worker durdurulur (yarım kalan işlemler yeni sürümde kaldığı adımdan sürer) ve kaynak $target sürümüne alınır." \
+    "The worker is stopped (open operations continue from their last step in the new version) and the source is switched to $target."
   msg INFO DRAINING "Worker durduruluyor (çalışan adımın bitmesi en çok 120 sn beklenir)" "Stopping the worker (waits up to 120 s for the running step)"
-  docker compose stop -t 120 worker >/dev/null 2>&1 || true
+  docker compose stop -t 120 worker >> "$UI_LOG" 2>&1 || true
   update_rollback() { # code: back to the version that was running, services up again, the failure in the history
     # Forced: local changes were refused above, so only what the failed step left half done is discarded.
     git -c advice.detachedHead=false checkout -q -f --detach "$current" 2>/dev/null || true
@@ -912,22 +1235,31 @@ do_update() {
   }
   # The worker is down from here on: a checkout that fails (full disk, damaged repository) must not end the
   # script with it stopped.
-  if ! git -c advice.detachedHead=false checkout -q --detach "$target" 2>/dev/null; then
+  if ! git -c advice.detachedHead=false checkout -q --detach "$target" 2>> "$UI_LOG"; then
+    idle fail; log_tail
     msg FAIL E_UPDATE_CHECKOUT "$target kaynağına geçilemedi (git checkout; disk dolu olabilir); $current_name sürümüne geri dönülüyor" "Could not switch the source to $target (git checkout; the disk may be full); going back to $current_name"
     update_rollback E_UPDATE_CHECKOUT
     msg WARN UPDATE_ROLLED_BACK "Güncelleme yapılmadı; $current_name yeniden başlatıldı (çalışıyor: $rb). Veritabanı değişmedi" "Not updated; $current_name was started again (running: $rb). The database was not changed"
     exit 23
   fi
   set_env APP_VERSION "$(app_version)"
+  step_ok "Kaynak: $(app_version)" "Source: $(app_version)"
+  step "Derleme ve başlatma" "Build and start" \
+    "Değişen imajlar derlenir, veritabanı şeması yükseltilir ve servisler yeni sürümle başlatılır; hepsi sağlıklı olana ve API yanıt verene kadar beklenir (en çok 10 dk). Olmazsa önceki sürüm geri gelir." \
+    "Changed images are built, the database schema is migrated and the services start on the new version; this waits until all are healthy and the API answers (10 minutes at most). Otherwise the previous version comes back." probe_health
   if up_and_ready; then
+    step_ok "$target çalışıyor, API hazır" "$target is running, the API is ready"
     record update ok - ",\"from\":\"$current_name\",\"to\":\"$target\""
     # Every build leaves layers behind; on a server that updates often they fill the disk. What is older than
     # a week is dropped (the next build only gets a little slower); images in use are never touched.
     (docker builder prune -f --filter until=168h; docker image prune -f) >/dev/null 2>&1 || true
     msg OK UPDATED "$target çalışıyor" "$target is running"; exit 0
   fi
+  idle fail; log_tail; log_where
   msg FAIL E_UPDATE_FAILED "$target hazır olmadı; $current_name sürümüne geri dönülüyor" "$target did not become ready; rolling back to $current_name"
+  busy "Önceki sürüm yeniden başlatılıyor" "Starting the previous version again" probe_health
   update_rollback E_UPDATE_FAILED
+  idle ok
   msg WARN DB_NOT_ROLLED_BACK "Container'lar geri alındı (çalışıyor: $rb). Veritabanı otomatik geri alınmaz; eski sürüm sorun çıkarırsa: sh scripts/install.sh restore $pre --yes-replace-data" "Containers rolled back (running: $rb). The database is not rolled back automatically; if the old version misbehaves: sh scripts/install.sh restore $pre --yes-replace-data"
   exit 23
 }
@@ -1204,6 +1536,7 @@ drop_in() {
 host_info() {
   maint_dir
   td() { timedatectl show -p "$1" --value 2>/dev/null || true; }
+  # shellcheck disable=SC2015 # the last command of the && list cannot fail: || is the else
   conf() { [ -f "$1" ] && sed -n "s/^$2=//p" "$1" | tr ' ' ',' || true; }
   os=$( (. /etc/os-release 2>/dev/null && printf '%s' "${PRETTY_NAME:-}") || true)
   resolvers=$(grep -E '^nameserver ' /etc/resolv.conf 2>/dev/null | awk '{ print $2 }' | paste -sd, - || true)
@@ -1219,7 +1552,7 @@ host_info() {
 do_host() {
   if [ -n "$HOST_NAME$HOST_TZ$HOST_NTP$HOST_DNS" ]; then
     [ "$(id -u)" = 0 ] || die 13 E_NEEDS_ROOT "Sunucu ayarları için root gerekir (sudo)" "Server settings need root (sudo)"
-    command -v timedatectl >/dev/null && command -v hostnamectl >/dev/null || die 18 E_NO_SYSTEMD "systemd (hostnamectl, timedatectl) yok" "systemd (hostnamectl, timedatectl) is missing"
+    { command -v timedatectl >/dev/null && command -v hostnamectl >/dev/null; } || die 18 E_NO_SYSTEMD "systemd (hostnamectl, timedatectl) yok" "systemd (hostnamectl, timedatectl) is missing"
   fi
   if [ -n "$HOST_NAME" ]; then
     valid_hostname "$HOST_NAME" || die 2 E_HOSTNAME_INVALID "Geçersiz sunucu adı: '$HOST_NAME' (küçük harf, rakam, tire ve nokta)" "Invalid host name: '$HOST_NAME' (lowercase letters, digits, hyphens and dots)"
@@ -1327,6 +1660,7 @@ do_state() {
 os_info() {
   maint_dir
   mgr=none; total=0; sec=0; pk=""; auto=false; held=0; lists=""; changed=""
+  # shellcheck disable=SC2015 # the last command of the && list cannot fail: || is the else
   stamp() { [ -e "$1" ] && date -u -d "@$(stat -c %Y "$1")" +%Y-%m-%dT%H:%M:%SZ || true; }
   if command -v apt-get >/dev/null 2>&1; then
     mgr=apt
@@ -1435,7 +1769,7 @@ configure_domain() {
 # Starts the proxy with the current .env (recreated when it changed) and reloads its configuration: a changed
 # TLS snippet alone does not recreate the container. Fails on an invalid certificate or configuration.
 proxy_apply() {
-  docker compose up -d --wait --wait-timeout 120 proxy >/dev/null 2>&1 &&
+  docker compose up -d --wait --wait-timeout 120 proxy >> "$UI_LOG" 2>&1 &&
     docker compose exec -T proxy caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile >/dev/null 2>&1
 }
 
@@ -1481,7 +1815,7 @@ custom_report() {
 }
 
 restart_proxy() {
-  docker compose up -d --wait --wait-timeout 120 proxy >/dev/null 2>&1 || die 18 E_START_FAILED "Proxy başlamadı: docker compose logs proxy" "Proxy did not start: docker compose logs proxy"
+  docker compose up -d --wait --wait-timeout 120 proxy >> "$UI_LOG" 2>&1 || die 18 E_START_FAILED "Proxy başlamadı: docker compose logs proxy" "Proxy did not start: docker compose logs proxy"
 }
 
 # Takes the installation off this server without touching what cannot be made again: the settings, the keys,
@@ -1490,8 +1824,8 @@ do_uninstall() {
   [ "$(id -u)" = 0 ] || die 13 E_NEEDS_ROOT "Kaldırma için root gerekir (sudo)" "Uninstalling needs root (sudo)"
   take_lock
   if command -v systemctl >/dev/null; then
-    (SWITCH=off; set_schedule) || true
-    (SWITCH=off; set_agent) || true
+    # shellcheck disable=SC2030 # in a subshell on purpose: SWITCH is this run's own argument further down
+    { (SWITCH=off; set_schedule) || true; (SWITCH=off; set_agent) || true; }
   fi
   # Everything this script wrote outside the project directory.
   restart=""
@@ -1511,21 +1845,237 @@ do_uninstall() {
   fi
   if command -v docker >/dev/null && docker compose version >/dev/null 2>&1; then
     # Every profile, whether it is on in .env or not.
+    busy "Container'lar durdurulup kaldırılıyor" "Stopping and removing the containers"
     if [ "$PURGE" = 1 ]; then
-      COMPOSE_PROFILES=observability,terminal docker compose down --remove-orphans --volumes >/dev/null 2>&1 || fail E_UNINSTALL_DOWN "Container'lar ve veri birimleri kaldırılamadı: docker compose down --volumes" "The containers and data volumes could not be removed: docker compose down --volumes"
+      COMPOSE_PROFILES=observability,terminal docker compose down --remove-orphans --volumes >> "$UI_LOG" 2>&1 || fail E_UNINSTALL_DOWN "Container'lar ve veri birimleri kaldırılamadı: docker compose down --volumes" "The containers and data volumes could not be removed: docker compose down --volumes"
       [ "$FAILED" -ne 0 ] || msg WARN PURGED "Container'lar ve Docker veri birimleri (veritabanı, sertifikalar, izleme verisi) SİLİNDİ" "The containers and the Docker data volumes (database, certificates, monitoring data) were DELETED"
     else
-      COMPOSE_PROFILES=observability,terminal docker compose down --remove-orphans >/dev/null 2>&1 || fail E_UNINSTALL_DOWN "Container'lar durdurulamadı: docker compose down" "The containers could not be stopped: docker compose down"
+      COMPOSE_PROFILES=observability,terminal docker compose down --remove-orphans >> "$UI_LOG" 2>&1 || fail E_UNINSTALL_DOWN "Container'lar durdurulamadı: docker compose down" "The containers could not be stopped: docker compose down"
       [ "$FAILED" -ne 0 ] || msg OK STOPPED "Container'lar durduruldu ve kaldırıldı" "The containers were stopped and removed"
       msg INFO KEPT "Docker veri birimleri (veritabanı dahil) duruyor; silmek için: sudo sh scripts/install.sh uninstall --purge-data" "The Docker data volumes (the database among them) were kept; to delete them: sudo sh scripts/install.sh uninstall --purge-data"
     fi
+    if [ "$FAILED" -eq 0 ]; then idle ok; else idle fail; fi
   fi
   msg INFO KEPT "$(pwd) altında duranlar: .env, secrets/ (yedek anahtarı dahil), yedekler, data/ ve kaynak. Tamamen silmek için bu klasörü kendiniz silin" "Kept in $(pwd): .env, secrets/ (the backup key among them), the backups, data/ and the source. To remove everything, delete this directory yourself"
   msg INFO KEPT "Dokunulmayanlar: Docker Engine ve imajları, sunucu adı, saat dilimi ve /etc/hosts satırı" "Not touched: Docker Engine and its images, the host name, the time zone and the /etc/hosts line"
   [ "$FAILED" -eq 0 ] || exit 1
 }
 
+# ---- Help -----------------------------------------------------------------------------------------
+usage() {
+  if [ "$UI" = tr ]; then cat <<'EOF'
+Lightning VM kurulum ve bakım betiği (beta)
+
+Kullanım: sudo sh scripts/install.sh [KOMUT] [SEÇENEKLER]
+
+Kurulum
+  install (varsayılan)     Her şeyi kurar: Docker (yoksa), servisler, HTTPS, izleme, ilk yönetici, günlük yedek.
+                           Yeniden çalıştırmak güvenlidir: ayarlar, parolalar ve veriler korunur.
+    --domain AD            Paneli bu alan adında HTTPS ile sun (A kaydı bu sunucuyu göstermeli, 80/443 açık olmalı)
+    --local                Dışarıya açma: yalnızca 127.0.0.1:8080 (SSH tüneli)
+    --admin-email E-POSTA  İlk yöneticinin e-postası
+    --setup-wizard         Yöneticiyi betik değil tarayıcıdaki sihirbaz oluşturur (kurulum anahtarı gösterilir)
+    --no-monitoring        İzleme bileşenlerini (Prometheus, Grafana, Loki, Alertmanager) açma
+    --no-schedule          Saatlik bakım zamanlayıcısını (günlük yedek) kurma
+    --install-docker       Docker yoksa resmî apt deposundan kur (root ile zaten kurulur)
+    --allow-unsupported-os Ubuntu 22.04/24.04/26.04 dışındaki sistemde de dene
+    --channel stable|beta|edge, --branch DAL
+                           Güncellemelerin izleyeceği kanal (scripts/get.sh verir)
+    --yes, -y              Ön kontrol raporundan sonra "Devam edilsin mi?" diye sorma
+  check                    Yalnızca denetler: ön kontroller ve kurulu sistemin durumu; hiçbir şeyi değiştirmez
+  uninstall [--purge-data] Servisleri durdurur, betiğin bu dizin dışına yazdıklarını kaldırır; .env, secrets/,
+                           yedekler ve data/ kalır; Docker veri birimleri yalnızca --purge-data ile silinir
+
+Yedek ve güncelleme
+  backup                   Veritabanı, ayarlar, anahtarlar ve sertifikaların şifreli yedeği (backups/)
+  restore DOSYA [--yes-replace-data] [--no-safety-backup] [--allow-unsigned] [--no-hold]
+                           Yedeği geri yükler; --yes-replace-data olmadan yalnızca denetler ve açıklar
+  update [--to vX.Y.Z]     Kanalın son sürümüne (ya da verilen sürüme) geçer: önce yedek, olmazsa geri dönüş
+  releases                 Sürümleri çeker ve listeler (data/maintenance/releases.json)
+  auto-update on|off [--channel stable|beta|edge] [--window SS:DD-SS:DD] [--branch DAL]
+  schedule on|off          Saatlik systemd zamanlayıcısı: günlük yedek ve otomatik güncelleme
+  agent on|off             Panelin isteklerini (güncelleme, yedek, alan adı...) çalıştıran systemd birimi
+
+Erişim
+  domain AD [--acme-staging | --tls custom --cert fullchain.pem --key key.pem]
+  behind-proxy --public-url https://panel.example.com [--port 8080] [--trusted-cidr CIDR]
+  local-only               Yalnızca 127.0.0.1:8080
+
+Hesaplar ve bileşenler
+  reset-password E-POSTA [--disable-2fa]   Yeni parola üretir ve bir kez gösterir
+  recover-setup            Tarayıcıdaki kurulum sihirbazını yeniden açar
+  monitoring on|off        İzleme bileşenleri
+  terminal on|off          Yöneticilerin tarayıcıdan bu sunucuya terminali (varsayılan: kapalı)
+
+Bu sunucu
+  host [--hostname AD] [--timezone Bölge/Şehir] [--ntp a,b|default] [--dns ip,ip|default]
+  os check|upgrade|security|reboot|auto-on|auto-off|info   İşletim sistemi güncellemeleri (apt)
+  state                    Sunucu durumunun panel için anlık görüntüsü
+
+Her komutta
+  --lang tr|en             Çıktı dili. Verilmezse: install, uçbirimde bir kez sorar (Enter ya da 30 sn sessizlik
+                           yereldeki dili seçer); uçbirim yoksa hiçbir şey sorulmaz, LC_ALL/LC_MESSAGES/LANG geçerlidir
+  --plain                  Uçbirimde de renksiz, animasyonsuz, satır satır çıktı (boru, dosya ve CI zaten böyle alır)
+  help, --help, -h         Bu metin
+
+Çıktı: uçbirimde renkli ve animasyonludur (NO_COLOR renkleri, TERM=dumb hepsini kapatır; UTF-8 olmayan yerelde
+ASCII işaretler). Uçbirim değilse her satır "DÜZEY KOD metin" biçimindedir. Komut çıktıları data/logs/ altında
+yalnızca root'un okuyabildiği bir dosyaya yazılır; bir adım başarısız olursa son satırları gösterilir.
+Çıkış kodları ve hata adları: docs/setup.md. Belgeler: https://github.com/syildirim689/lightning-vm
+EOF
+  else cat <<'EOF'
+Lightning VM installer and maintenance script (beta)
+
+Usage: sudo sh scripts/install.sh [COMMAND] [OPTIONS]
+
+Installing
+  install (default)        Does everything: Docker (if missing), services, HTTPS, monitoring, the first
+                           administrator, daily backups. Safe to run again: settings, passwords and data are kept.
+    --domain NAME          Serve the panel on this name over HTTPS (its A record must point here, 80/443 open)
+    --local                No public access: 127.0.0.1:8080 only (SSH tunnel)
+    --admin-email EMAIL    E-mail of the first administrator
+    --setup-wizard         The browser wizard creates the administrator, not the script (a setup token is shown)
+    --no-monitoring        Do not start the monitoring components (Prometheus, Grafana, Loki, Alertmanager)
+    --no-schedule          Do not install the hourly maintenance timer (daily backup)
+    --install-docker       Install Docker from the official apt repository when it is missing (root does anyway)
+    --allow-unsupported-os Try on a system other than Ubuntu 22.04/24.04/26.04
+    --channel stable|beta|edge, --branch NAME
+                           The channel updates follow (scripts/get.sh passes these)
+    --yes, -y              Do not ask "Continue?" after the pre-flight report
+  check                    Read-only: the pre-flight checks and the state of an installation; changes nothing
+  uninstall [--purge-data] Stops the services and removes what the script wrote outside this directory; .env,
+                           secrets/, the backups and data/ stay; Docker volumes go only with --purge-data
+
+Backups and updates
+  backup                   Encrypted backup of the database, settings, keys and certificates (backups/)
+  restore FILE [--yes-replace-data] [--no-safety-backup] [--allow-unsigned] [--no-hold]
+                           Restores a backup; without --yes-replace-data it only checks and explains
+  update [--to vX.Y.Z]     Moves to the channel's newest version (or the given one): backup first, rollback on failure
+  releases                 Fetches and lists the versions (data/maintenance/releases.json)
+  auto-update on|off [--channel stable|beta|edge] [--window HH:MM-HH:MM] [--branch NAME]
+  schedule on|off          Hourly systemd timer: daily backup and the automatic update
+  agent on|off             The systemd unit that runs what the panel asks for (update, backup, domain...)
+
+Access
+  domain NAME [--acme-staging | --tls custom --cert fullchain.pem --key key.pem]
+  behind-proxy --public-url https://panel.example.com [--port 8080] [--trusted-cidr CIDR]
+  local-only               127.0.0.1:8080 only
+
+Accounts and components
+  reset-password EMAIL [--disable-2fa]   Makes a new password and shows it once
+  recover-setup            Reopens the setup wizard in the browser
+  monitoring on|off        The monitoring components
+  terminal on|off          The administrators' browser terminal to this server (off by default)
+
+This server
+  host [--hostname NAME] [--timezone Area/City] [--ntp a,b|default] [--dns ip,ip|default]
+  os check|upgrade|security|reboot|auto-on|auto-off|info   Operating system updates (apt)
+  state                    A snapshot of this server's state for the panel
+
+With every command
+  --lang tr|en             Output language. Without it: install asks once on a terminal (Enter or 30 s of silence
+                           take the locale's language); with no terminal nothing is asked and
+                           LC_ALL/LC_MESSAGES/LANG decide
+  --plain                  Line-oriented output without colours or animation on a terminal too (a pipe, a file
+                           and CI get that anyway)
+  help, --help, -h         This text
+
+Output: on a terminal it has colours and animation (NO_COLOR turns the colours off, TERM=dumb all of it; a locale
+without UTF-8 gets ASCII marks). Not on a terminal every line is "LEVEL CODE text". What the commands print goes
+to a root-only file under data/logs/; when a step fails its last lines are shown.
+Exit codes and error names: docs/setup.md. Documentation: https://github.com/syildirim689/lightning-vm
+EOF
+  fi
+}
+
+# ---- The installation's own screens ---------------------------------------------------------------
+# row "etiket" "label" value: labels are ASCII in both languages, so the columns line up in every locale.
+row() { if [ "$UI" = tr ]; then printf '  %-12s %s\n' "$1" "$3"; else printf '  %-12s %s\n' "$2" "$3"; fi; }
+rule() { [ "$UI_TTY" != 1 ] || printf '  %s%s%s\n' "$C_DIM" "$M_RULE" "$C_0"; }
+
+banner() {
+  bn_v=$(app_version); bn_c=${CHANNEL:-$(env_value UPDATE_CHANNEL)}; bn_c=${bn_c:-stable}
+  if [ "$UI_TTY" != 1 ]; then
+    msg INFO INSTALLER "Lightning VM $bn_v (beta, kanal: $bn_c) kuruluyor: $(pwd). Komut çıktıları: $(pwd)/data/logs/" "Installing Lightning VM $bn_v (beta, channel: $bn_c) in $(pwd). Command output: $(pwd)/data/logs/"
+    return 0
+  fi
+  printf '\n  %sLightning VM%s  %sbeta%s\n' "$C_B" "$C_0" "$C_YEL" "$C_0"
+  tx "  Sunucu satış ve yönetim paneli: ücretsiz, açık kaynak (Apache-2.0)" "  Server sales and management panel: free and open source (Apache-2.0)"
+  rule
+  row "Versiyon" "Version" "$bn_v ($(tx kanal channel): $bn_c)"
+  row "Dizin" "Directory" "$(pwd)"
+  row "Loglar" "Logs" "$(pwd)/data/logs/ ($(tx "yalnızca root okur" "root only"))"
+  row "Durum" "Status" "$(tx "beta: üretimde kullanmadan önce deneyin; sorunlar için github.com/syildirim689/lightning-vm/issues" "beta: try it before production use; problems: github.com/syildirim689/lightning-vm/issues")"
+  rule
+}
+
+# What the host checks do not look at: the clock, the address the panel will get, and what is here already.
+PF_ACCESS=""
+preflight_more() {
+  if command -v timedatectl >/dev/null 2>&1; then
+    case "$(timedatectl show -p NTPSynchronized --value 2>/dev/null || true)" in
+      yes) msg OK TIME "Sunucu saati eşitlenmiş (NTP)" "The clock is synchronised (NTP)" ;;
+      no) msg WARN W_TIME_UNSYNCED "Sunucu saati eşitlenmemiş: sertifikalar ve iki adımlı doğrulama kodları doğru saate dayanır (timedatectl set-ntp true)" "The clock is not synchronised: certificates and two-step codes rely on the right time (timedatectl set-ntp true)" ;;
+    esac
+  fi
+  # The same choice the address step makes later; here it only reports, nothing fails on it.
+  pf_site=""
+  if [ -n "$DOMAIN" ] && [ "$DOMAIN" != "$SITE" ]; then pf_site=$DOMAIN
+  elif [ "$LOCAL" != 1 ] && [ -z "$(env_value PANEL_SITE)" ] && pf_ip=$(public_ipv4) && [ -n "$pf_ip" ]; then pf_site="$(echo "$pf_ip" | tr . -).sslip.io"; fi
+  if [ -n "$pf_site" ]; then
+    PF_ACCESS="https://$pf_site"
+    pf_v4=$(getent ahostsv4 "$pf_site" 2>/dev/null | awk '{print $1}' | sort -u | tr '\n' ' ')
+    if [ -n "$pf_v4" ]; then msg OK DNS "$pf_site -> $pf_v4" "$pf_site -> $pf_v4"
+    else msg WARN W_DNS_NO_A "DNS: $pf_site için A kaydı yok. Kayıt bu sunucuyu gösterene kadar HTTPS kurulamaz; panel yalnızca yerelde açılır (sonra: sudo sh scripts/install.sh domain $pf_site)" "DNS: no A record for $pf_site. Until it points to this server HTTPS cannot be set up; the panel opens locally only (later: sudo sh scripts/install.sh domain $pf_site)"; fi
+    pf_ours=$(docker compose ps -q --status running proxy 2>/dev/null || true)
+    for pf_p in 80 443; do
+      if [ -z "$pf_ours" ] && ss -Htln "sport = :$pf_p" 2>/dev/null | grep -q .; then
+        msg WARN W_PORT_IN_USE "Port $pf_p başka bir süreçte: HTTPS bu adreste kurulamaz, panel yalnızca yerelde açılır (mevcut web sunucusunun arkasına almak için: behind-proxy)" "Port $pf_p is held by another process: HTTPS cannot be set up on this address, the panel opens locally only (to put it behind the existing web server: behind-proxy)"
+      else msg OK PORT "0.0.0.0:$pf_p" "0.0.0.0:$pf_p"; fi
+    done
+  else
+    case "$SITE" in
+      :*) PF_ACCESS="http://127.0.0.1:$PORT ($(tx "yalnızca yerel; SSH tüneli" "local only; SSH tunnel"))" ;;
+      *) PF_ACCESS="https://$SITE" ;;
+    esac
+  fi
+  case "$STATE" in
+    installed) msg INFO STATE "Bu dizinde tamamlanmış bir kurulum var ($(env_value APP_VERSION)): ayarlar, parolalar ve veriler korunur, servisler yeniden derlenip başlatılır. Yeni sürüme geçmek için bunun yerine: sh scripts/install.sh update" "A finished installation is here ($(env_value APP_VERSION)): settings, passwords and data are kept, the services are built and started again. To move to a new version use instead: sh scripts/install.sh update" ;;
+    partial) msg INFO STATE "Yarıda kalmış bir kurulum var: kaldığı yerden sürer; .env ve anahtarlar korunur" "An unfinished installation is here: it continues; .env and the keys are kept" ;;
+    *) msg INFO STATE "Bu dizinde kurulum yok: sıfırdan kurulacak" "Nothing is installed here: this is a fresh installation" ;;
+  esac
+}
+
+# What this run is about to do on this server, before it does it.
+plan() {
+  if [ "$NEED_DOCKER" = 1 ]; then pl_1=$(tx "Docker Engine ve Compose eklentisi resmî apt deposundan kurulur" "Docker Engine and its Compose plugin are installed from the official apt repository")
+  else pl_1=$(tx "Docker Engine kurulu, dokunulmaz" "Docker Engine is present and is left as it is"); fi
+  if [ "$WIZARD" = 1 ]; then pl_6=$(tx "İlk yönetici için tarayıcı sihirbazının kurulum anahtarı üretilir" "A setup token for the browser wizard that creates the first administrator")
+  else pl_6=$(tx "İlk yönetici rastgele bir parolayla oluşturulur (varsa dokunulmaz)" "The first administrator is created with a random password (left alone if there is one)"); fi
+  if [ "$(id -u)" = 0 ] && command -v systemctl >/dev/null 2>&1; then
+    if [ "$SCHEDULE" = 1 ]; then pl_7=$(tx "systemd: saatlik bakım zamanlayıcısı (günlük yedek) ve panel ajanı" "systemd: the hourly maintenance timer (daily backup) and the panel agent")
+    else pl_7=$(tx "systemd: panel ajanı (zamanlayıcı istenmedi)" "systemd: the panel agent (no timer was asked for)"); fi
+  else pl_7=$(tx "Zamanlayıcı ve panel ajanı kurulmaz (root ve systemd gerekir)" "No timer and no panel agent (they need root and systemd)"); fi
+  heading "Bu sunucuda yapılacaklar" "What this will do on this server"
+  pl_n=0
+  for pl_line in "$pl_1" \
+    "$(tx ".env ve secrets/: rastgele parolalar ve şifreleme anahtarları (var olanlar değiştirilmez)" ".env and secrets/: random passwords and encryption keys (existing ones are never replaced)")" \
+    "$(tx "İmajlar bu sunucuda kaynak koddan derlenir (ilk seferde birkaç dakika)" "The images are built on this server from the source (a few minutes the first time)")" \
+    "$(tx "Servisler başlatılır: PostgreSQL, Redis, API, worker, web, platform bağdaştırıcıları, Caddy" "The services are started: PostgreSQL, Redis, API, worker, web, the platform adapters, Caddy")" \
+    "$(tx "Panel adresi: $PF_ACCESS" "Panel address: $PF_ACCESS")" \
+    "$pl_6" "$pl_7" \
+    "$(tx "İlk şifreli yedek alınır (backups/)" "A first encrypted backup is taken (backups/)")"; do
+    pl_n=$((pl_n + 1))
+    if [ "$UI_TTY" = 1 ]; then printf '    %s%s.%s %s\n' "$C_CYA" "$pl_n" "$C_0" "$pl_line"
+    else msg INFO PLAN "[$pl_n/8] $pl_line" "[$pl_n/8] $pl_line"; fi
+  done
+  if [ "$UI_TTY" = 1 ]; then
+    printf '  %s%s%s\n' "$C_DIM" "$(tx "Dokunulmayanlar: güvenlik duvarı, SSH, başka web sunucuları, diğer sistem paketleri." "Not touched: the firewall, SSH, other web servers, other system packages.")" "$C_0"
+  fi
+}
+
 case "$MODE" in
+  help) usage; exit 0 ;;
   uninstall) do_uninstall; exit 0 ;;
   domain)
     [ -f .env ] || die 17 E_NOT_INSTALLED "Önce kurulum yapın: sh scripts/install.sh" "Install first: sh scripts/install.sh"
@@ -1543,7 +2093,9 @@ case "$MODE" in
     esac
     # A failed change puts the previous address and certificate back, so the panel stays reachable.
     cp .env .env.before-domain; rm -rf data/tls.before; if [ -d data/tls ]; then cp -a data/tls data/tls.before; fi
+    busy "Alan adı ve HTTPS ayarlanıyor" "Setting up the name and HTTPS"
     if ! configure_domain "$DOMAIN"; then
+      idle fail
       msg WARN W_ROLLBACK "Önceki adres ve sertifika geri yükleniyor" "Restoring the previous address and certificate"
       # Contents only: the proxy bind-mounts data/tls, and a replaced directory would no longer be the one it sees.
       mv .env.before-domain .env; (umask 077; mkdir -p data/tls); rm -f data/tls/*; if [ -d data/tls.before ]; then cp -a data/tls.before/. data/tls/; rm -rf data/tls.before; fi
@@ -1551,6 +2103,7 @@ case "$MODE" in
       die 1 E_DOMAIN_FAILED "HTTPS kurulamadı; yukarıdaki satırlara bakın" "HTTPS could not be set up; see the lines above"
     fi
     rm -rf .env.before-domain data/tls.before
+    idle ok "Alan adı ve HTTPS hazır" "The name and HTTPS are set up"
     msg OK READY "https://$DOMAIN" "https://$DOMAIN"
     msg INFO NEXT "Mevcut oturumlar yeni adreste geçerli olmaz; yeniden giriş yapın" "Existing sessions do not carry over to the new address; sign in again"
     exit 0 ;;
@@ -1588,7 +2141,9 @@ case "$MODE" in
       set_env TRUSTED_PROXY_CIDRS 127.0.0.1/32
     fi
     write_tls auto; set_env PANEL_TLS_MODE none
+    busy "Proxy yeni ayarla başlatılıyor" "Starting the proxy with the new settings"
     load_settings; restart_proxy; proxy_apply || true; write_settings
+    idle ok
     local_get /api/ready >/dev/null 2>&1 || die 19 E_NOT_READY "API hazır değil: docker compose logs proxy api" "API is not ready: docker compose logs proxy api"
     msg OK READY "http://127.0.0.1:$PORT" "http://127.0.0.1:$PORT"
     if [ "$MODE" = behind-proxy ]; then
@@ -1600,7 +2155,9 @@ case "$MODE" in
   backup)
     [ -f .env ] || die 17 E_NOT_INSTALLED "Önce kurulum yapın: sh scripts/install.sh" "Install first: sh scripts/install.sh"
     take_lock
-    do_backup manual || exit 21
+    busy "Yedek alınıyor (veritabanı, ayarlar, anahtarlar, sertifikalar)" "Taking a backup (database, settings, keys, certificates)"
+    do_backup manual || { idle fail; exit 21; }
+    idle ok "Yedek tamamlandı" "The backup is complete"
     exit 0 ;;
   restore) [ -f .env ] || die 17 E_NOT_INSTALLED "Önce kurulum yapın: sh scripts/install.sh" "Install first: sh scripts/install.sh"
     do_restore; exit 0 ;;
@@ -1622,29 +2179,34 @@ case "$MODE" in
     # running exactly as they are (no recreate, whatever compose files they were started with).
     all=$(mktemp); base=$(mktemp)
     COMPOSE_PROFILES=$profile docker compose config --services 2>/dev/null | sort > "$all"
-    COMPOSE_PROFILES= docker compose config --services 2>/dev/null | sort > "$base"
+    COMPOSE_PROFILES='' docker compose config --services 2>/dev/null | sort > "$base"
     extra=$(comm -23 "$all" "$base" | tr '\n' ' '); rm -f "$all" "$base"
     [ -n "$extra" ] || die 18 E_PROFILE "Compose dosyasında $profile servisi yok" "No $profile services in the compose file"
     others=$(profiles_without "$profile")
+    # shellcheck disable=SC2031 # uninstall's subshells never get here
     if [ "$SWITCH" = on ]; then
       [ "$profile" = observability ] && write_observability
       set_env COMPOSE_PROFILES "$(printf '%s\n%s\n' "$others" "$profile" | grep -v '^$' | paste -sd, -)"
+      busy "$profile bileşenleri derlenip başlatılıyor" "Building and starting the $profile components"
       # shellcheck disable=SC2086
-      COMPOSE_PROFILES=$profile docker compose up -d --no-deps --build --wait $extra >/dev/null 2>&1 ||
+      COMPOSE_PROFILES=$profile docker compose up -d --no-deps --build --wait $extra >> "$UI_LOG" 2>&1 ||
         die 18 E_PROFILE "$profile bileşenleri başlatılamadı (docker compose ps ile bakın)" "$profile could not be started (see docker compose ps)"
+      idle ok
       if [ "$profile" = observability ]; then msg OK MONITORING "İzleme açık: Prometheus, Grafana, Loki ve Alertmanager çalışıyor" "Monitoring on: Prometheus, Grafana, Loki and Alertmanager are running"
       else msg OK TERMINAL "Yönetici terminali açık" "Administrator terminal on"; fi
     else
       set_env COMPOSE_PROFILES "$others"
+      busy "$profile bileşenleri durduruluyor" "Stopping the $profile components"
       # shellcheck disable=SC2086
-      COMPOSE_PROFILES=$profile docker compose rm -sf $extra >/dev/null 2>&1 || true
+      COMPOSE_PROFILES=$profile docker compose rm -sf $extra >> "$UI_LOG" 2>&1 || true
+      idle ok
       if [ "$profile" = observability ]; then msg OK MONITORING "İzleme kapatıldı (veriler korunur)" "Monitoring off (its data is kept)"
       else msg OK TERMINAL "Yönetici terminali kapatıldı" "Administrator terminal off"; fi
     fi
     exit 0 ;;
   reset-password)
     [ -n "$RESET_EMAIL" ] || die 2 E_USAGE "Kullanım: sh scripts/install.sh reset-password E-POSTA [--disable-2fa]" "Usage: sh scripts/install.sh reset-password EMAIL [--disable-2fa]"
-    new_password=$(docker compose exec -T api node dist/cli.js reset-password "$RESET_EMAIL" $DISABLE_2FA 2>/dev/null) && [ -n "$new_password" ] ||
+    { new_password=$(docker compose exec -T api node dist/cli.js reset-password "$RESET_EMAIL" $DISABLE_2FA 2>/dev/null) && [ -n "$new_password" ]; } ||
       die 18 E_RESET_FAILED "Şifre sıfırlanamadı: bu e-postayla bir hesap yok veya servisler çalışmıyor" "Password not reset: no account with this e-mail, or the services are not running"
     msg OK PASSWORD_RESET "Yeni şifre (yalnızca şimdi gösterilir; tüm oturumlar kapatıldı):" "New password (shown only now; every session was signed out):"
     printf '\n    %s\n    %s\n\n' "$RESET_EMAIL" "$new_password"
@@ -1661,16 +2223,51 @@ case "$MODE" in
 esac
 
 # install (also resumes an interrupted install: every step below is safe to repeat)
-if ! command -v docker >/dev/null && { [ "$INSTALL_DOCKER" = 1 ] || [ "$(id -u)" = 0 ]; }; then install_docker; fi
-quiet_hotplug
+# Nothing is written before the checks have passed and, on a terminal, the plan was agreed to.
+case "$CHANNEL" in ''|stable|beta|edge) ;; *) die 2 E_CHANNEL_INVALID "Kanal stable, beta veya edge olmalı" "Channel must be stable, beta or edge" ;; esac
+if [ "$LANG_GIVEN" != 1 ] && ui_interactive; then ask_language; fi
+if ! command -v docker >/dev/null && { [ "$INSTALL_DOCKER" = 1 ] || [ "$(id -u)" = 0 ]; }; then
+  [ "$(id -u)" = 0 ] || die 13 E_DOCKER_MISSING "Docker kurulumu için root gerekir" "Installing Docker requires root"
+  NEED_DOCKER=1
+fi
+# What is here already decides what this run is: a fresh installation, the rest of an interrupted one, or a
+# repeat over a finished one (its first backup is in the history).
+if [ -f .env ] && [ -s data/maintenance/history.jsonl ]; then STATE=installed; elif [ -f .env ]; then STATE=partial; fi
+banner
+heading "Ön kontrol" "Pre-flight checks"
 host_checks
+preflight_more
 [ "$FAILED" -eq 0 ] || die 1 E_PRECHECK "Ön kontroller başarısız; yukarıdaki FAIL satırlarını düzeltin" "Pre-checks failed; fix the FAIL lines above"
+plan
+if [ "$CONFIRMED" != 1 ] && ui_interactive; then
+  ask_continue || { msg INFO CONFIRM "Hiçbir şey kurulmadı. Sorusuz kurmak için: --yes" "Nothing was installed. To install without the question: --yes"; exit 3; }
+fi
+STEP_N=0; STEP_TOTAL=8
+
+if [ "$NEED_DOCKER" = 1 ]; then
+  step "Docker Engine" "Docker Engine" \
+    "Bütün servisler kapsayıcı olarak çalışır. Docker bu sunucuda yok: Engine ve Compose eklentisi Docker'ın resmî apt deposundan (download.docker.com) kurulur." \
+    "Every service runs as a container. Docker is not on this server: Engine and its Compose plugin are installed from Docker's official apt repository (download.docker.com)."
+  install_docker >> "$UI_LOG" 2>&1 < /dev/null
+  FAILED=0; docker_checks
+  [ "$FAILED" -eq 0 ] || die 1 E_PRECHECK "Ön kontroller başarısız; yukarıdaki FAIL satırlarını düzeltin" "Pre-checks failed; fix the FAIL lines above"
+  step_ok "Docker kuruldu" "Docker is installed"
+else
+  step "Docker Engine" "Docker Engine" \
+    "Bütün servisler kapsayıcı olarak çalışır. Docker bu sunucuda kurulu; olduğu gibi kullanılır." \
+    "Every service runs as a container. Docker is already on this server and is used as it is."
+  step_ok "Docker $(docker version --format '{{.Server.Version}}' 2>/dev/null || true), Compose $(docker compose version --short 2>/dev/null || true)" "Docker $(docker version --format '{{.Server.Version}}' 2>/dev/null || true), Compose $(docker compose version --short 2>/dev/null || true)"
+fi
+
+step "Ayarlar ve anahtarlar" "Settings and keys" \
+  "Veritabanı, Redis ve Grafana için rastgele parolalar .env dosyasına (izin 600), şifreleme ve yedek anahtarları secrets/ altına yazılır. Var olan hiçbir parola ya da anahtar değiştirilmez." \
+  "Random passwords for the database, Redis and Grafana go to .env (mode 600), the encryption and backup keys to secrets/. No existing password or key is ever replaced."
+quiet_hotplug
 write_env
 write_secrets
 write_observability
 set_env APP_VERSION "$(app_version)"
 # Where updates come from (scripts/get.sh passes these): released versions, or a branch for test servers.
-case "$CHANNEL" in ''|stable|beta|edge) ;; *) die 2 E_CHANNEL_INVALID "Kanal stable, beta veya edge olmalı" "Channel must be stable, beta or edge" ;; esac
 [ -z "$CHANNEL" ] || set_env UPDATE_CHANNEL "$CHANNEL"
 [ -z "$BRANCH" ] || set_env UPDATE_BRANCH "$BRANCH"
 # Monitoring runs by default where it fits (4 GB RAM); COMPOSE_PROFILES in .env applies to every compose command.
@@ -1685,8 +2282,22 @@ if ! grep -q '^PANEL_TLS=' .env; then case "$SITE" in :*) set_env PANEL_TLS 0 ;;
 if ! grep -q '^PANEL_PUBLIC_URL=' .env; then case "$SITE" in :*) ;; *) set_env PANEL_PUBLIC_URL "https://$SITE" ;; esac; fi
 write_settings
 docker compose config --quiet || die 17 E_COMPOSE_INVALID "Compose yapılandırması geçersiz" "Compose configuration is invalid"
+step_ok ".env ve secrets/ hazır" ".env and secrets/ are in place"
+
+# The images are built first and on their own, so that the wait shows how many are done. `up --build` below
+# is the command that always ran here: it finds them built and starts them.
+BUILD_TOTAL=$(docker compose config 2>/dev/null | grep -c '^    build:' || true)
+step "İmajların derlenmesi" "Building the images" \
+  "Panel, API, worker ve platform bağdaştırıcıları bu sunucuda kaynak koddan derlenir; hazır imaj indirilmez. İlk seferde birkaç dakika sürer, sonrakiler önbellekten gelir." \
+  "The panel, the API, the worker and the platform adapters are built on this server from the source; no ready-made image is pulled. A few minutes the first time, from the cache afterwards." probe_build
+docker compose build >> "$UI_LOG" 2>&1 < /dev/null || die 18 E_START_FAILED "İmajlar derlenemedi (docker compose build)" "The images could not be built (docker compose build)"
+step_ok "İmajlar hazır" "The images are built"
+
+step "Servislerin başlatılması" "Starting the services" \
+  "PostgreSQL ve Redis başlar, veritabanı şeması kurulur (migrate), ardından API, worker, web, bağdaştırıcılar ve Caddy açılır. Hepsi sağlıklı olana ve API yanıt verene kadar beklenir (en çok 10 dk)." \
+  "PostgreSQL and Redis start, the database schema is created (migrate), then the API, the worker, the web app, the adapters and Caddy come up. This waits until all are healthy and the API answers (10 minutes at most)." probe_health
 msg INFO STARTING "Servisler derleniyor ve başlatılıyor (birkaç dakika sürebilir)" "Building and starting services (may take a few minutes)"
-docker compose up -d --build --wait --wait-timeout 600 >/dev/null 2>&1 || die 18 E_START_FAILED "Servisler başlamadı: docker compose ps; docker compose logs" "Services did not start: docker compose ps; docker compose logs"
+docker compose up -d --build --wait --wait-timeout 600 >> "$UI_LOG" 2>&1 < /dev/null || die 18 E_START_FAILED "Servisler başlamadı: docker compose ps; docker compose logs" "Services did not start: docker compose ps; docker compose logs"
 i=0; until local_get /api/ready >/dev/null 2>&1 || [ $i -ge 12 ]; do sleep 5; i=$((i + 1)); done
 local_get /api/ready >/dev/null 2>&1 || die 19 E_NOT_READY "API hazır değil: docker compose logs api" "API is not ready: docker compose logs api"
 # Grafana takes its admin password only on first start; keep it equal to .env when its volume is older.
@@ -1694,9 +2305,14 @@ if grep -Eq '^COMPOSE_PROFILES=(.*,)?observability(,|$)' .env; then
   # On standard input: an argument would show in the process list, the container's processes included.
   env_value GRAFANA_PASSWORD | docker compose exec -T grafana grafana cli admin reset-admin-password --password-from-stdin >/dev/null 2>&1 || msg WARN W_GRAFANA "Grafana parolası eşitlenemedi" "Could not sync the Grafana password"
 fi
+started=$(probe_health || true)
+step_ok "${started:-Servisler çalışıyor}; API hazır" "${started:-The services are running}; the API is ready"
 
 # Access: an explicit --domain; on a first install with a public IPv4, <ip>.sslip.io (a public DNS name that
 # resolves to that IP) with a real certificate; otherwise local only. A failed attempt falls back to local.
+step "Adres ve HTTPS" "Address and HTTPS" \
+  "Alan adı verildiyse o ad, verilmediyse ve sunucunun genel bir IPv4 adresi varsa <ip>.sslip.io kullanılır; Caddy Let's Encrypt sertifikasını kendisi alır ve yeniler. İkisi de yoksa ya da olmazsa panel yalnızca bu sunucudan (127.0.0.1) açılır." \
+  "Your own name if you gave one, otherwise <ip>.sslip.io when the server has a public IPv4 address; Caddy gets and renews the Let's Encrypt certificate itself. With neither, or when that fails, the panel is reachable from this server only (127.0.0.1)."
 site_target=""
 if [ -n "$DOMAIN" ] && [ "$DOMAIN" != "$SITE" ]; then site_target=$DOMAIN
 elif [ -z "$(env_value PANEL_SITE)" ] && ip4=$(public_ipv4) && [ -n "$ip4" ]; then
@@ -1709,11 +2325,21 @@ if [ -n "$site_target" ] && ! configure_domain "$site_target"; then
 fi
 [ -n "$(env_value PANEL_SITE)" ] || set_env PANEL_SITE :80
 load_settings
+case "$SITE" in
+  :*) step_ok "Yalnızca yerel: http://127.0.0.1:$PORT" "Local only: http://127.0.0.1:$PORT" ;;
+  *) step_ok "https://$SITE" "https://$SITE" ;;
+esac
 
 # The first admin: created here with a generated password unless --setup-wizard asks for the browser wizard.
-admin_email="" admin_password=""
+step "İlk yönetici" "First administrator" \
+  "Panele girecek ilk hesap. Parola rastgele üretilir, bir kez özette gösterilir ve secrets/initial-admin.txt dosyasına (izin 600) yazılır; --setup-wizard ile hesabı tarayıcıdaki sihirbaz oluşturur. Yönetici zaten varsa dokunulmaz." \
+  "The first account that can sign in. Its password is generated, shown once in the summary and written to secrets/initial-admin.txt (mode 600); with --setup-wizard the browser wizard creates the account instead. An existing administrator is left alone."
+admin_email="" admin_password="" token=""
 if [ "$WIZARD" = 1 ]; then
-  if token=$(docker compose exec -T api node dist/cli.js bootstrap-token 2>/dev/null); then
+  token=$(docker compose exec -T api node dist/cli.js bootstrap-token 2>/dev/null) || token=""
+  if [ -n "$token" ]; then step_ok "Kurulum anahtarı üretildi" "A setup token was made"
+  else step_ok "Yönetici zaten var; yeni anahtar üretilmedi" "An administrator exists already; no new token was made"; fi
+  if [ -n "$token" ]; then
     msg INFO SETUP_TOKEN "Kurulum anahtarı (1 saat geçerli, yalnızca burada gösterilir):" "Setup token (valid 1 hour, shown only here):"
     echo "      $token"
   fi
@@ -1721,9 +2347,13 @@ else
   case "$SITE" in :*) admin_email=${ADMIN_EMAIL:-admin@lightning.local} ;; *) admin_email=${ADMIN_EMAIL:-admin@$SITE} ;; esac
   if admin_password=$(docker compose exec -T api node dist/cli.js create-admin "$admin_email" "$UI" 2>/dev/null) && [ -n "$admin_password" ]; then
     (umask 077; printf 'email=%s\npassword=%s\n' "$admin_email" "$admin_password" > secrets/initial-admin.txt)
-  else admin_email=""; fi
+    step_ok "$admin_email oluşturuldu" "$admin_email was created"
+  else admin_email=""; step_ok "Yönetici zaten var; dokunulmadı" "An administrator exists already; left alone"; fi
 fi
 
+step "Zamanlanmış yedek ve panel ajanı" "Scheduled backups and the panel agent" \
+  "İki systemd birimi: saatlik bakım zamanlayıcısı (günde bir şifreli yedek; açıksa otomatik güncelleme) ve panelin isteklerini (güncelleme, yedek, alan adı) bu sunucuda çalıştıran ajan. Panelin kendisi sunucuda komut çalıştıramaz." \
+  "Two systemd units: the hourly maintenance timer (one encrypted backup a day; the automatic update when it is on) and the agent that runs what the panel asks for (update, backup, domain) on this server. The panel itself cannot run anything on the host."
 # Daily backups (hourly timer) and a first backup right away.
 if [ "$SCHEDULE" = 1 ] && [ "$(id -u)" = 0 ] && command -v systemctl >/dev/null && [ ! -f /etc/systemd/system/lightning-vm-maintenance.timer ]; then
   (SWITCH=on; set_schedule) >/dev/null 2>&1 || msg WARN W_TIMER "Zamanlanmış yedek kurulamadı: sh scripts/install.sh schedule on" "Scheduled backups not set up: sh scripts/install.sh schedule on"
@@ -1732,13 +2362,24 @@ fi
 if [ "$(id -u)" = 0 ] && command -v systemctl >/dev/null && [ ! -f /etc/systemd/system/lightning-vm-requests.path ]; then
   (SWITCH=on; set_agent) >/dev/null 2>&1 || msg WARN W_AGENT "Panel ajanı kurulamadı: sudo sh scripts/install.sh agent on" "Panel agent not set up: sudo sh scripts/install.sh agent on"
 fi
-(do_backup install) >/dev/null 2>&1 || msg WARN W_BACKUP "İlk yedek alınamadı: sh scripts/install.sh backup" "The first backup failed: sh scripts/install.sh backup"
+if [ -f /etc/systemd/system/lightning-vm-maintenance.timer ]; then sched=$(tx "zamanlayıcı açık" "timer on"); else sched=$(tx "zamanlayıcı yok" "no timer"); fi
+if [ -f /etc/systemd/system/lightning-vm-requests.path ]; then agent=$(tx "ajan açık" "agent on"); else agent=$(tx "ajan yok" "no agent"); fi
+step_ok "$sched, $agent" "$sched, $agent"
+
+step "İlk yedek" "First backup" \
+  "Veritabanı, .env, anahtarlar ve sertifikalar tek bir dosyada, secrets/backup.key ile şifrelenip imzalanarak backups/ altına yazılır ve geri okunarak doğrulanır." \
+  "The database, .env, the keys and the certificates go into one file under backups/, encrypted and signed with secrets/backup.key, and are read back to prove it."
+if (do_backup install) >/dev/null 2>&1; then step_ok "Yedek alındı ve doğrulandı" "Backup taken and verified"
+else
+  msg WARN W_BACKUP "İlk yedek alınamadı: sh scripts/install.sh backup" "The first backup failed: sh scripts/install.sh backup"
+  step_ok "Yedek alınamadı (kurulum tamam)" "No backup (the installation is complete)"
+fi
 write_settings
 
 # Summary: everything needed to start, in one place.
-row() { if [ "$UI" = tr ]; then printf '  %-12s %s\n' "$1" "$3"; else printf '  %-12s %s\n' "$2" "$3"; fi; }
 host_ip=$(public_ipv4 || true); host_ip=${host_ip:-SUNUCU_IP}
 echo
+rule
 msg OK DONE "Lightning VM hazır" "Lightning VM is ready"
 case "$SITE" in
   :*) row "Panel" "Panel" "http://127.0.0.1:$PORT  (uzaktan: ssh -L $PORT:127.0.0.1:$PORT root@$host_ip)" ;;
@@ -1758,5 +2399,23 @@ if grep -Eq '^COMPOSE_PROFILES=(.*,)?observability(,|$)' .env; then
 fi
 if [ -f /etc/systemd/system/lightning-vm-maintenance.timer ]; then row "Yedek" "Backups" "$(if [ "$UI" = tr ]; then echo 'her gün'; else echo daily; fi) -> backups/"
 else row "Yedek" "Backups" "$(if [ "$UI" = tr ]; then echo 'elle: sh scripts/install.sh backup'; else echo 'manual: sh scripts/install.sh backup'; fi)"; fi
+sum_channel=$(env_value UPDATE_CHANNEL)
+row "Versiyon" "Version" "$(app_version) ($(tx kanal channel): ${sum_channel:-stable}); Docker $(docker version --format '{{.Server.Version}}' 2>/dev/null || true), Compose $(docker compose version --short 2>/dev/null || true)"
+row "Dizin" "Directory" "$(pwd)"
+row "Veri" "Data" "$(tx "veritabanı ve sertifikalar Docker birimlerinde (docker volume ls); ayarlar .env, anahtarlar secrets/, panel verisi data/" "database and certificates in Docker volumes (docker volume ls); settings in .env, keys in secrets/, panel data in data/")"
+row "Loglar" "Logs" "$(tx "bu kurulum" "this run"): $(pwd)/$UI_LOG; $(tx "servisler" "services"): docker compose logs SERVICE"
+row "Toplam" "Elapsed" "$(fmt_dur $(($(date +%s) - UI_T0)))"
+heading "Sık kullanılan komutlar ($(pwd) içinde)" "Commands you will need (in $(pwd))"
+row "Komut" "Command" "sudo sh scripts/install.sh update            $(tx "# son sürüme geç (önce yedek alır)" "# move to the newest version (backup first)")"
+row "" "" "sudo sh scripts/install.sh backup            $(tx "# şimdi yedek al" "# take a backup now")"
+row "" "" "sudo sh scripts/install.sh reset-password E  $(tx "# unutulan parola (E: e-posta)" "# lost password (E: the e-mail)")"
+row "" "" "sudo sh scripts/install.sh domain AD         $(tx "# kendi alan adınız ve HTTPS" "# your own name with HTTPS (AD: the name)")"
+row "" "" "sh scripts/install.sh check                  $(tx "# durum denetimi (hiçbir şeyi değiştirmez)" "# health check (changes nothing)")"
+row "" "" "sudo sh scripts/install.sh uninstall         $(tx "# kaldır (veriler kalır)" "# remove (the data stays)")"
+row "" "" "sh scripts/install.sh help                   $(tx "# tüm komutlar" "# every command")"
+row "Belgeler" "Docs" "https://github.com/syildirim689/lightning-vm#readme, https://lightningvm.app"
+row "Sorunlar" "Issues" "https://github.com/syildirim689/lightning-vm/issues"
+row "Lisans" "Licence" "Apache-2.0 ($(pwd)/LICENSE)"
+rule
 msg INFO NEXT "Panelde: Yönetim → Bağlantılar → vCenter ekleyin, sonra Katalog'dan havuz, şablon, IP havuzu ve paket oluşturun" "In the panel: Admin → Connections → add vCenter, then create a pool, template, IP pool and package in Catalog"
 msg WARN BACKUP_KEY "secrets/backup.key dosyasını sunucu dışında saklayın; o olmadan yedekler açılamaz" "Keep a copy of secrets/backup.key off this server; backups cannot be opened without it"

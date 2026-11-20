@@ -28,8 +28,20 @@ sudo sh get.sh --token-file /root/lvm-token
 sudo sh get.sh --version v1.2.0                                # belirli bir sürüm
 sudo sh get.sh --branch main                                   # test sunucusu: daldaki her değişikliği izler (edge)
 sudo sh get.sh --repo git@github.com:ORG/lightning-vm.git      # SSH deploy key ile
-sudo sh get.sh -- --domain panel.example.com --lang tr         # "--" sonrası install.sh seçenekleri
+sudo sh get.sh -- --domain panel.example.com                   # "--" sonrası install.sh seçenekleri
+sudo sh get.sh --lang en --yes                                 # dili sorma, ön kontrol raporundan sonra onay bekleme
+sh get.sh --help                                               # seçenekler (Türkçe ya da İngilizce)
 ```
+
+- **Dil ve sorular:** `--lang tr|en` verilmezse betik **uçbirimde** bir kez, her şeyden önce dili sorar
+  (`1) Türkçe  2) English`; Enter ya da 30 saniye sessizlik yereldeki dili seçer) ve seçimi `install.sh`
+  betiğine `--lang` ile geçirir. Kurulumun ön kontrol raporundan sonraki "Devam edilsin mi?" sorusunu `--yes`
+  atlar. Uçbirim yoksa (cloud-init, CI, çıktı bir dosyaya gidiyorsa) hiçbir şey sorulmaz. Yanıtlar `/dev/tty`'den
+  okunur; `install.sh`'in standart girdisi `/dev/null`'dır. Ayrıntı: [setup.md](setup.md#dil-çıktı-ve-kayıt).
+- **Çıktı:** uçbirimde kısa bir başlık ve üç numaralı adım (git, kaynağın indirilmesi, sürümün seçilmesi), sonra
+  `install.sh`'in kendi ekranları. Uçbirim değilse `DÜZEY metin` satırları. git ve apt çıktısı yalnızca root'un
+  okuyabildiği geçici bir dosyaya gider (`/tmp/lightning-vm-get.XXXXXX`); bir adım başarısız olursa son satırları
+  gösterilir ve dosya saklanır, yoksa silinir.
 
 - **Erişim anahtarı:** `/root/.lightning-vm-git-credentials` dosyasında (izin 600) saklanır. Uzak depo adresine
   yazılmaz; sonraki güncellemeler bu dosyayı kullanır. Anahtarı `--token-file DOSYA` ile ya da `GIT_TOKEN` ortam
@@ -115,6 +127,26 @@ Eski kurulumlarda ajanı bir kez açın: `sudo sh scripts/install.sh agent on`.
 | `edge` | `UPDATE_BRANCH` dalındaki her değişiklik; test sunucuları içindir, sürüm değildir |
 
 Sürüm yayımlamak: `git tag -a v1.2.0 -m "notlar"` ve `git push --tags`. Panel notları etiketten gösterir.
+
+## Sürümler
+- **Nerede:** <https://github.com/syildirim689/lightning-vm/releases>; her sürümde neyin değiştiği
+  [CHANGELOG.md](../CHANGELOG.md) dosyasındadır. İşletmecinin yapması gerekenler
+  [upgrade-notes.md](upgrade-notes.md) sayfasındadır.
+- **0.x sürümleri betadır.** GitHub'da "pre-release" olarak işaretlenir ve başlıklarında "beta" yazar. Etiketleri
+  yine düz `vX.Y.Z` biçimindedir; bu yüzden tek komutla kurulum ve `stable` kanalı onları kurar ve izler. Yani
+  bugün `stable` "yayımlanmış en yeni beta sürüm" demektir; 1.0'dan sonra da aynı kanal kararlı sürümleri izler.
+  `vX.Y.Z-rc.1` gibi ekli etiketler yalnızca `beta` kanalında görünür.
+- **Sürümü kim seçer:** kurulum ve güncelleme GitHub'ın "son sürüm" bilgisine değil, depodaki **git etiketlerine**
+  bakar (`git tag`, sürüm sırasına göre en yenisi). GitHub'daki "pre-release" işareti bu seçimi etkilemez.
+  `get.sh --version v0.4.0` belirli bir sürümü kurar; `install.sh update --to v0.4.0` belirli bir sürüme geçer.
+- **Otomatik güncelleme yalnızca ileri gider:** kanalın en yeni etiketi çalışan sürümün devamı (git geçmişinde
+  ondan sonra) değilse hiçbir şey yapılmaz (`UP_TO_DATE`); daha eski bir sürüme yalnızca açıkça `--to` ile dönülür
+  ve migration denetimi buna çoğu zaman izin vermez.
+- **Panelde görünen sürüm** `git describe` çıktısıdır: tam bir sürüm etiketindeyseniz `v0.4.0`, etiketten sonraki
+  bir commit'teyseniz `v0.4.0-12-gabc1234`.
+- **Yayımlama:** `v*` etiketi gönderildiğinde `.github/workflows/release.yaml` birim testlerini çalıştırır,
+  imajları ghcr.io'ya gönderir ve GitHub sürümünü `CHANGELOG.md` dosyasındaki ilgili bölümle oluşturur (0.x ve
+  `-rc`/`-beta` ekli etiketler pre-release olur). Etiketten önce `CHANGELOG.md`'ye o sürümün bölümü yazılmalıdır.
 
 ## Komut satırı
 ```sh

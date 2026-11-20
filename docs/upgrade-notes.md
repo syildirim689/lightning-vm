@@ -5,6 +5,29 @@ madde neyin değiştiğini ve işletmecinin yapması gereken bir şey varsa onu 
 davranışı değiştirmeyen işler burada yoktur. Tahsilat çalıştırması API içinde beş dakikada bir çalışır; yani "ilk
 çalıştırma" yükseltmeden birkaç dakika sonradır.
 
+## 0.4.0 (beta): kurulum betiğinin yeni çıktısı ve sürüm numarası (2026-11-21)
+
+Bu sürümde veri değişikliği, yeni `.env` değişkeni ya da yeni ayar yoktur. Değişen, kurulum betiklerinin
+(`scripts/get.sh`, `scripts/install.sh`) ekrana ne yazdığı ve `install` komutunun sırasıdır. Betiği kendi
+otomasyonundan çağıran ya da çıktısını okuyan işletmeci şunlara bakmalıdır:
+
+| Ne değişti | Kimi etkiler | Ne yapmalı |
+|---|---|---|
+| `install` uçbirimde iki soru sorar: dil (yalnızca `--lang` verilmediyse; 30 sn sonra varsayılanla sürer) ve ön kontrol raporundan sonra "Devam edilsin mi?" (süresiz bekler). "Hayır" çıkış kodu `3` verir ve hiçbir şey kurulmaz | Betiği **uçbirimde** ama başında kimse olmadan çalıştıranlar (`ssh -t`, `expect`, tmux içinde bir betik) | `--lang tr\|en --yes` ekleyin. Uçbirim olmayan çalıştırmalarda (cloud-init, CI, `nohup … > dosya`, systemd, panelin ajanı) hiçbir şey sorulmaz; bir şey yapmanız gerekmez |
+| Ön kontroller artık Docker kurulmadan **önce** yapılır. Eskiden root ile çalışan betik önce Docker'ı kurar, sonra denetlerdi | Desteklenmeyen işletim sisteminde ya da yetersiz bellekle deneyenler: betik artık Docker'ı kurmadan durur | Bir şey yapmanız gerekmez |
+| `install`, servisleri başlatmadan önce `docker compose build` çalıştırır (ilerlemeyi gösterebilmek için); ardından her zamanki `docker compose up -d --build --wait` gelir | Yok; imaj derlenemezse hata yine `E_START_FAILED` (çıkış 18), iletisi "İmajlar derlenemedi" | — |
+| Uçbirim olmayan çıktıda yeni satırlar: `INFO INSTALLER`, `INFO PLAN`, `INFO STEP`, `OK STEP_DONE`, `INFO PROGRESS`, başarısız adımda `INFO LOG_TAIL` + `      \| …` satırları, `INFO HINT`, `INFO LOG`; `install` raporunda `OK TIME` / `W_TIME_UNSYNCED`, `W_DNS_NO_A`, `W_PORT_IN_USE`, `INFO STATE` | `install` ya da `update` çıktısını satır sayısına ya da sırasına göre okuyan betikler | Kodu satırın ikinci alanından okuyun; hata ve sonuç yine **son satırdır** (`OK UPDATED`, `OK UP_TO_DATE`, `FAIL E_…`, geri dönüşte `WARN DB_NOT_ROLLED_BACK`). `backup`, `check`, `releases` çıktısı bayt bayt aynıdır |
+| Uçbirimdeki çıktı artık `DÜZEY KOD metin` değil, işaretli ve renkli satırlardır (`✓ KOD metin`) | Uçbirim çıktısını `script`/`expect` ile okuyanlar | `--plain` ekleyin ya da `TERM=dumb` verin: eski satır biçimi |
+| Betiğin çalıştırdığı komutların çıktısı `data/logs/<komut>-<zaman>-<pid>.log` dosyalarına yazılır (izin 600; en yeni 30 dosya). Docker kurulumunda apt'nin hata çıktısı da artık ekrana değil oraya gider; adım başarısız olursa son 20 satırı gösterilir | `data/` klasörünü yedekleyen ya da izleyenler: yeni bir alt klasör | — |
+| Bir adım kendi hata iletisi olmadan biterse `install` `FAIL E_STEP_FAILED` yazar; çıkış kodu o komutunkidir (eskiden de öyleydi, ileti yoktu) | — | — |
+| Dil varsayılanı artık `LC_ALL`, `LC_MESSAGES`, `LANG` sırasıyla okunur (eskiden yalnızca `LANG`) | `LANG=tr_TR.UTF-8` ama `LC_ALL=C` ile çalıştıranlar: çıktı artık İngilizce | `--lang tr` verin |
+| `get.sh` seçtiği dili `install.sh`'e her zaman `--lang` ile geçirir; iletileri iki dillidir (uçbirim olmayan İngilizce çıktıda `OK    source at vX.Y.Z` satırı aynı kaldı); `install.sh`'in standart girdisi `/dev/null`'dır | `get.sh` çıktısını okuyanlar | — |
+| Paneldeki sürüm etiketi "Erken sürüm / Early build" yerine "Beta" yazar; paketlerin `package.json` sürümü `0.4.0` | — | — |
+
+**Sürüm numarası.** Yayımlanan sürümler `v0.1.0` ve `v0.4.0`'dır. `0.1.1`-`0.3.0` numaraları yalnızca iç test
+kurulumlarında kullanıldı ve yayımlanmadı; depoyu GitHub'dan alan bir kurulumda bu etiketler yoktur. `v0.1.0`'dan
+yükseltenler bu sayfanın **tamamını** okumalıdır: aşağıdaki bütün turlar bu sürümün içindedir.
+
 ## Bekletilen ödemeler, dizin hesaplarının API anahtarları, kuyrukta bekleme ve bayiden ayrılınca liste fiyatı (2026-11-19)
 
 İlk güvenlik turunun bulgu çıkarmadan kapattığı 65 inceleme birimi bu turda yeniden okundu ve bir önceki turun
