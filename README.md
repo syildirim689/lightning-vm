@@ -313,11 +313,17 @@ sunucunun kopyası çıkarılamaz (kopya yalnızca şablondan). Her platformun a
 
 | Yönetici genel bakış | Müşteri sunucuları |
 |---|---|
-| ![Yönetici paneli](docs/screenshots/admin-dashboard.png) | ![Sunucularım](docs/screenshots/my-servers.png) |
+| ![Yönetici paneli](docs/screenshots/tr/admin-dashboard.png) | ![Sunucularım](docs/screenshots/tr/my-servers.png) |
 | **Akıllı sipariş** | **Topoloji** |
-| ![Sipariş](docs/screenshots/order.png) | ![Topoloji](docs/screenshots/admin-topology.png) |
+| ![Sipariş](docs/screenshots/tr/order.png) | ![Topoloji](docs/screenshots/tr/admin-topology.png) |
 | **E-posta sağlayıcıları** | **Mesajlaşma uygulamaları** |
-| ![E-posta ayarları](docs/screenshots/mail.png) | ![Mesajlaşma](docs/screenshots/chat-settings.png) |
+| ![E-posta ayarları](docs/screenshots/tr/mail.png) | ![Mesajlaşma](docs/screenshots/tr/chat-settings.png) |
+
+Aynı altı ekranın İngilizcesi [`docs/screenshots/en`](docs/screenshots/en) klasöründedir (aşağıda, İngilizce özetin içinde de
+durur). İki dildeki görüntü aynı sayfadan, aynı veriyle ve aynı boyutta alınır: uçtan uca paketin ayrı bir adımı
+(`apps/web/e2e/showcase.spec.ts`) VMware simülatörlü geçici bir kurulumu uydurma adlarla doldurur, her ekranı önce
+Türkçe sonra İngilizce çeker. Bu adım olağan test çalıştırmasına dahil değildir; yalnızca istendiğinde çalışır
+(`E2E_SHOWCASE=1` ya da başlık süzgecinde `showcase`).
 
 ## 🚀 Kurulum
 
@@ -862,6 +868,18 @@ hourly), resellers, support desk, 17 notification channels (in-app, browser push
 apps and webhooks), customer webhooks, LDAP / OIDC sign-in, passkeys and two-factor, live state of the panel host
 (CPU, memory, disk, services, logs), operating system updates for the host and for customers' servers, window-style
 dialogs (move, put aside, snap to halves and quarters, centre, resize, keyboard shortcuts), and accessibility controls.
+
+Screenshots (the same six screens in Turkish are under "Ekran görüntüleri" above; each pair is taken from one page
+with the same data, on a throwaway stack with the VMware simulator and invented names, by
+`apps/web/e2e/showcase.spec.ts`):
+
+| Admin overview | Customer's servers |
+|---|---|
+| ![Admin overview](docs/screenshots/en/admin-dashboard.png) | ![My servers](docs/screenshots/en/my-servers.png) |
+| **Smart ordering** | **Topology** |
+| ![Order](docs/screenshots/en/order.png) | ![Topology](docs/screenshots/en/admin-topology.png) |
+| **E-mail providers** | **Messaging apps** |
+| ![E-mail settings](docs/screenshots/en/mail.png) | ![Messaging](docs/screenshots/en/chat-settings.png) |
 
 What is not the same everywhere (the table under "Platform kapsamı" above has every platform):
 
