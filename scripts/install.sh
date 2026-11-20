@@ -323,9 +323,15 @@ ticker() {
     wait "$tk_s"; tk_i=$((tk_i + 1))
   done
 }
-# How far a build is: images the log says are built, of those the compose file builds.
+# How far a build is: images the log says are finished, of those the compose file builds. BuildKit writes
+# "#12 naming to docker.io/library/NAME:latest done" as each image is finished; Compose lists them once more at
+# the very end (" Image NAME Built", in older versions " SERVICE  Built"). Both are counted, each image once.
 probe_build() {
-  pb_n=$(tail -n +"$((BUSY_MARK + 1))" "$UI_LOG" 2>/dev/null | sed -n 's/^ *\(Image \|Service \|Container \)\{0,1\}\([A-Za-z0-9._/-]\{1,\}\) \{1,\}Built *$/\2/p' | sort -u | wc -l | tr -d ' ')
+  pb_n=$(tail -n +"$((BUSY_MARK + 1))" "$UI_LOG" 2>/dev/null | sed -n \
+    -e 's/^#[0-9]\{1,\} naming to \([^ ]\{1,\}\) .*done$/\1/p' \
+    -e 's/^ *Image \{1,\}\([^ ]\{1,\}\) \{1,\}Built *$/\1/p' \
+    -e 's/^ *Service \{1,\}\([^ ]\{1,\}\) \{1,\}Built *$/\1/p' \
+    -e 's/^ \{1,\}\([^ ]\{1,\}\) \{1,\}Built *$/\1/p' | sed -e 's#^.*/##' -e 's/:[^:]*$//' | sort -u | wc -l | tr -d ' ')
   if [ "$BUILD_TOTAL" -gt 0 ]; then tx "$pb_n/$BUILD_TOTAL imaj derlendi" "$pb_n/$BUILD_TOTAL images built"
   else tx "$pb_n imaj derlendi" "$pb_n images built"; fi
 }
@@ -2377,12 +2383,12 @@ fi
 write_settings
 
 # Summary: everything needed to start, in one place.
-host_ip=$(public_ipv4 || true); host_ip=${host_ip:-SUNUCU_IP}
+host_ip=$(public_ipv4 || true); host_ip=${host_ip:-$(tx SUNUCU_IP SERVER_IP)}
 echo
 rule
 msg OK DONE "Lightning VM hazır" "Lightning VM is ready"
 case "$SITE" in
-  :*) row "Panel" "Panel" "http://127.0.0.1:$PORT  (uzaktan: ssh -L $PORT:127.0.0.1:$PORT root@$host_ip)" ;;
+  :*) row "Panel" "Panel" "http://127.0.0.1:$PORT  ($(tx uzaktan "from elsewhere"): ssh -L $PORT:127.0.0.1:$PORT root@$host_ip)" ;;
   *) row "Panel" "Panel" "https://$SITE" ;;
 esac
 if [ -n "$admin_email" ]; then
@@ -2409,7 +2415,7 @@ heading "Sık kullanılan komutlar ($(pwd) içinde)" "Commands you will need (in
 row "Komut" "Command" "sudo sh scripts/install.sh update            $(tx "# son sürüme geç (önce yedek alır)" "# move to the newest version (backup first)")"
 row "" "" "sudo sh scripts/install.sh backup            $(tx "# şimdi yedek al" "# take a backup now")"
 row "" "" "sudo sh scripts/install.sh reset-password E  $(tx "# unutulan parola (E: e-posta)" "# lost password (E: the e-mail)")"
-row "" "" "sudo sh scripts/install.sh domain AD         $(tx "# kendi alan adınız ve HTTPS" "# your own name with HTTPS (AD: the name)")"
+row "" "" "sudo sh scripts/install.sh domain $(tx "AD  " NAME)       $(tx "# kendi alan adınız ve HTTPS" "# your own name with HTTPS")"
 row "" "" "sh scripts/install.sh check                  $(tx "# durum denetimi (hiçbir şeyi değiştirmez)" "# health check (changes nothing)")"
 row "" "" "sudo sh scripts/install.sh uninstall         $(tx "# kaldır (veriler kalır)" "# remove (the data stays)")"
 row "" "" "sh scripts/install.sh help                   $(tx "# tüm komutlar" "# every command")"

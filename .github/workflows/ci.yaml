@@ -149,7 +149,9 @@ jobs:
           file=$(sudo sh -c 'ls -1 backups/lightning-*.tar.enc | tail -n 1')
           # Without the flag nothing changes (exit 3); with it the data is replaced and the stack comes back.
           set +e; sudo sh scripts/install.sh restore "$file"; test $? -eq 3; set -e
-          sudo sh scripts/install.sh restore "$file" --yes-replace-data
+          # --no-hold: the backup was taken a moment ago; on hold the panel shows a bar on every page, and the
+          # browser tests further down expect the panel as an installation leaves it.
+          sudo sh scripts/install.sh restore "$file" --yes-replace-data --no-hold
           sudo grep -c '"kind":"restore","status":"ok"' data/maintenance/history.jsonl
           # restore starts the base stack; the simulators need their overlay again
           sudo docker compose -f compose.yaml -f compose.simulator.yaml up -d --wait
