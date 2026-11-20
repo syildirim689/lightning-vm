@@ -213,9 +213,17 @@ test('identifiers are bounded before a limiter key or an audit row sees them; re
   assert.equal((await one("SELECT metadata->>'email' AS email FROM audit_events WHERE action = 'auth.login' ORDER BY id DESC LIMIT 1")).email, edge);
   assert.ok((await one('SELECT coalesce(max(length(metadata::text)), 0)::int AS n FROM audit_events')).n < 4000);
   // Where the browser goes afterwards is a path on the panel, never another site (whatever host the request names).
+  const libraryChecksToo = process.env.NODE_ENV !== 'test' && !process.env.TEST;
   for (const target of ['https://evil.example/x', '//evil.example/x', '/\\evil.example', 'javascript:alert(1)']) {
-    assert.equal((await post('/auth/sign-in/social', { provider: 'github', callbackURL: target })).statusCode, 400, target);
-    assert.equal((await post('/auth/request-password-reset', { email: 'ayse@example.test', redirectTo: target })).statusCode, 400, target);
+    // Two checks refuse it on a POST: the library's own (403, against its trusted origins) and, behind it, the panel's
+    // (400, panel paths only). The library turns its check off when NODE_ENV is "test" (run.sh), and there the panel's
+    // answers alone; as the API is deployed (NODE_ENV unset, as in CI) the library answers first where it objects.
+    for (const r of [await post('/auth/sign-in/social', { provider: 'github', callbackURL: target }), await post('/auth/request-password-reset', { email: 'ayse@example.test', redirectTo: target })]) {
+      assert.ok(libraryChecksToo ? [400, 403].includes(r.statusCode) : r.statusCode === 400, `${target}: ${r.statusCode}`);
+      if (r.statusCode === 400) assert.equal(r.json().code, 'VALIDATION_FAILED', target);
+      assert.equal(r.headers.location, undefined, target);
+    }
+    // A GET is the panel's to refuse in either case.
     assert.equal((await get(`/auth/reset-password/some-token?callbackURL=${encodeURIComponent(target)}`)).statusCode, 400, target);
   }
 });

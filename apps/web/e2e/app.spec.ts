@@ -2096,7 +2096,7 @@ test.describe('people, settings and smart features (English browser)', () => {
     await expect(page.getByRole('link', { name: new RegExp(name) })).toHaveCount(0);
   });
 
-  test('API: rules in Settings, the reference with its PDF and OpenAPI, a narrowed token, rate headers, the request log and a revoke', async ({ page }) => {
+  test('API: rules in Settings, the reference with its PDF and OpenAPI, a narrowed token, rate headers, the request log and a revoke', async ({ page, baseURL }) => {
     test.setTimeout(180_000);
     const csrf = { 'x-lightning-csrf': '1' };
     await signInAdmin(page);
@@ -2144,7 +2144,7 @@ test.describe('people, settings and smart features (English browser)', () => {
     const made = await page.request.post('/api/account/api-tokens', { headers: csrf, data: { name: 'e2e narrowed', scope: 'read', expiresInDays: 30, permissions: ['vmware.view'] } });
     expect(made.status()).toBe(201);
     const { token, id } = await made.json();
-    const ctx = await (await import('@playwright/test')).request.newContext({ baseURL: process.env.E2E_BASE_URL ?? 'https://localhost', ignoreHTTPSErrors: true });
+    const ctx = await (await import('@playwright/test')).request.newContext({ baseURL, ignoreHTTPSErrors: true }); // the address the suite runs against (playwright.config.ts)
     const bearer = { authorization: `Bearer ${token}` };
     const ok = await ctx.get('/api/admin/vmware/connections', { headers: bearer });
     expect(ok.status()).toBe(200);
@@ -2814,7 +2814,7 @@ test.describe('people, settings and smart features (English browser)', () => {
     if (await page.getByText('Billing is not turned on in this panel.').isVisible()) await expect(page.getByRole('link', { name: 'Open billing settings' })).toHaveAttribute('href', '/admin/settings?tab=billing');
   });
 
-  test('tour of the newer screens', async ({ browser }) => {
+  test('tour of the newer screens', async ({ browser, baseURL }) => {
     test.setTimeout(360_000);
     const shot = async (page: Page, name: string) => tour(page, name, true);
     const guest = await (await browser.newContext({ locale: 'tr-TR' })).newPage();
@@ -2928,7 +2928,7 @@ test.describe('people, settings and smart features (English browser)', () => {
     await expect(project).toHaveCount(0);
     // The panel address follows the domain the proxy serves, not a loopback address from the wizard.
     await page.goto('/admin/settings');
-    await expect(page.getByRole('link', { name: new URL(process.env.E2E_BASE_URL ?? 'https://localhost').host })).toBeVisible();
+    await expect(page.getByRole('link', { name: new URL(baseURL!).host })).toBeVisible();
     // The getting-started list folds its done steps away and marks the next one.
     await page.goto('/admin');
     const setup = page.getByRole('button', { name: /^Show the \d+ done steps$/ });
