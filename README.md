@@ -338,14 +338,14 @@ sunucuya (sanal da olabilir) kurun.
 Yeni bir sunucuda yalnızca bu satırı çalıştırın; `git clone` gerekmez:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/syildirim689/lightning-vm/main/scripts/get.sh | sudo sh
+curl -fsSL https://lightningvm.app/install.sh | sudo sh
 ```
 
 Komut kaynağı `/opt/lightning-vm` dizinine indirir, en yeni kararlı sürümü seçer ve kurulumu başlatır; panel
 sonradan kendini bu dizinden günceller. Kendi alan adınızla:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/syildirim689/lightning-vm/main/scripts/get.sh | sudo sh -s -- -- --domain panel.example.com
+curl -fsSL https://lightningvm.app/install.sh | sudo sh -s -- -- --domain panel.example.com
 ```
 
 | `get.sh` seçeneği | Ne yapar |
@@ -358,7 +358,7 @@ curl -fsSL https://raw.githubusercontent.com/syildirim689/lightning-vm/main/scri
 | `-- …` | `--` sonrasındaki her şey aşağıdaki kurulum seçenekleridir |
 
 > [!NOTE]
-> Bu adres, depo herkese açık (public) olduğunda doğrudan çalışır. Depo özelken komutu bir erişim anahtarıyla
+> Özel (private) bir depodan, örneğin kendi çatalınızdan (`--repo`) kurarken komutu bir erişim anahtarıyla
 > çalıştırın: [docs/updates.md](docs/updates.md).
 
 ### Elle kurulum
@@ -1131,7 +1131,7 @@ open a public issue; follow [SECURITY.md](SECURITY.md).
 Quick start on Ubuntu 22.04 / 24.04 / 26.04:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/syildirim689/lightning-vm/main/scripts/get.sh | sudo sh -s -- -- --domain panel.example.com --lang en
+curl -fsSL https://lightningvm.app/install.sh | sudo sh -s -- -- --domain panel.example.com --lang en
 ```
 
 The command downloads the source to `/opt/lightning-vm`, picks the latest stable release and runs the installer;

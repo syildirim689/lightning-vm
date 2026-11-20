@@ -12,16 +12,16 @@
 Kaynak git kopyası olduğu için kurulum daha sonra kendini güncelleyebilir.
 
 ```sh
-# Depo herkese açıksa
-curl -fsSL https://raw.githubusercontent.com/syildirim689/lightning-vm/main/scripts/get.sh | sudo sh
+# Herkese açık depo (varsayılan)
+curl -fsSL https://lightningvm.app/install.sh | sudo sh
 
-# Özel depo: salt-okunur bir erişim anahtarıyla (fine-grained token, yalnızca "Contents: read").
+# Özel depo (örneğin kendi çatalınız, --repo ile): salt-okunur bir erişim anahtarıyla (fine-grained token, yalnızca "Contents: read").
 # Anahtar komut satırına yazılmaz: ortam değişkeninden okunur ve sudo yalnızca onu geçirir.
 export GIT_TOKEN   # değeri önceden, ekrana yazdırmadan atayın: read -rs GIT_TOKEN
-curl -fsSL -H "Authorization: Bearer $GIT_TOKEN" https://raw.githubusercontent.com/syildirim689/lightning-vm/main/scripts/get.sh \
-  | sudo --preserve-env=GIT_TOKEN sh
+curl -fsSL https://lightningvm.app/install.sh | sudo --preserve-env=GIT_TOKEN sh
 
 # Ya da anahtarı yalnızca root'un okuyabildiği bir dosyadan (ilk satırı okunur):
+curl -fsSL -o get.sh https://lightningvm.app/install.sh
 sudo sh get.sh --token-file /root/lvm-token
 
 # Seçenekler
@@ -36,8 +36,7 @@ sudo sh get.sh -- --domain panel.example.com --lang tr         # "--" sonrası i
   değişkeniyle (`sudo --preserve-env=GIT_TOKEN sh`) verin; betik değişkeni başlattığı git, apt ve kurulum
   süreçlerine aktarmaz. `--token ANAHTAR` hâlâ çalışır, ama anahtar kurulum boyunca süreç listesinde (`ps`)
   sunucudaki her hesaba görünür; eski `sudo GIT_TOKEN="…" sh` biçimi de anahtarı sudo'nun komut satırına yazar.
-  İkisini de kullanmayın. `curl` satırındaki `Authorization` başlığı da indirme süresince süreç listesinde görünür;
-  sunucuda başka kabuk hesabı varsa betiği dosyaya indirip `--token-file` ile çalıştırın.
+  İkisini de kullanmayın. Betik `lightningvm.app` adresinden anahtarsız iner: anahtarı `curl` satırına yazmayın.
 - **SSH deploy key:** root'un SSH anahtarı depoya salt-okunur deploy key olarak eklenir.
 - **Varsayılan dizin:** `/opt/lightning-vm`.
 - **Tekrar çalıştırma:** aynı komut kurulu bir sunucuda yeniden kurulum yapmaz, ne yaptığı duruma bağlıdır:

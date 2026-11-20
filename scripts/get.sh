@@ -4,7 +4,7 @@
 # Run again on a server that is already installed, it updates that installation the way `install.sh update`
 # does (backup first, rollback on failure) and leaves its update channel as it is.
 #
-#   curl -fsSL https://raw.githubusercontent.com/OWNER/lightning-vm/main/scripts/get.sh | sudo sh -s -- [options] [-- install options]
+#   curl -fsSL https://lightningvm.app/install.sh | sudo sh -s -- [options] [-- install options]
 #
 # Options:
 #   --repo URL        git repository (default: the one below; SSH URLs work with a deploy key)
