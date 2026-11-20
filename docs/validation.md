@@ -597,8 +597,12 @@ denemeler. Etiket `46508f2` commit'indedir.
   (4 geçti, 1 başarısız, 28 çalışmadı): geri yüklemeden sonraki bekletme şeridi "System" bağlantısını üçe
   çıkarıyordu; iş artık `restore --no-hold` kullanıyor. İkinci elle çalıştırmada (`46508f2`) kurulum, yedek / geri yükleme ve izleme
   adımları yine geçti; tarayıcı testlerinin 21'i geçti, biri başarısız oldu (API başvurusu testi,
-  `connect ECONNREFUSED ::1:443`: test koşucunun kendi 443 portuna bağlanmaya çalışıyor), 11'i çalışmadı. Bu
-  başarısızlık incelenmedi; aynı paket demo sunucusunda 33/33 geçiyor.
+  `connect ECONNREFUSED ::1:443`: test koşucunun kendi 443 portuna bağlanmaya çalışıyor), 11'i çalışmadı.
+  Nedeni testin kendisiydi: `E2E_BASE_URL` verilmediğinde iki yerde `https://localhost` varsayıyordu, paketin geri
+  kalanı ise `playwright.config.ts` içindeki `http://127.0.0.1:8080` adresini kullanıyordu; `--local` kurulumda 443'te
+  dinleyen yoktur (demo sunucusunda `E2E_BASE_URL` verildiği için görünmüyordu). İki yer artık paketin adresini
+  kullanıyor. `818f075` üzerinde elle çalıştırmada (çalıştırma 44830397971) bütün işler geçti: tarayıcı testleri
+  33/33 (11,5 dk), `api-integration` 204 testte 141 geçti, 0 başarısız, 63 atlandı.
 - **Demo sunucusunda gerçek güncelleme:** `b0fb02a` eski betikle kuruldu (33/33 tarayıcı testi, testler boyunca
   demo `/api/ready` 43 yanıtın 43'ünde 200). `46508f2` **yeni** betiğin `update` yoluyla kuruldu: yedek, worker'ın
   durdurulması, derleme ve başlatma (1 dk 6 sn), `OK UPDATED`; kayıt `data/logs/update-…log` (izin 600, 652 satır).
@@ -615,5 +619,11 @@ denemeler. Etiket `46508f2` commit'indedir.
 - **Çalıştırılmayanlar:** gerçek Docker ile uçbirimde (etkileşimli) kurulum; Docker'ın apt ile kurulduğu adım;
   yeni çıktıyla `domain`, `behind-proxy`, `local-only`, `monitoring`, `terminal`, `uninstall`; gerçek sunucuda
   `curl … | sudo sh` ile baştan sona kurulum (lightningvm.app adresindeki kopya yeniden eşitlendikten sonra
-  denenmeli); `api-integration` işi GitHub'da 204 testin birinde başarısız (`security-auth.test.mjs:217`, 400
-  beklenirken 403; 140 geçti, 63 atlandı): bu işte API'ye dokunulmadı, iş GitHub'da daha önce hiç çalışmamıştı.
+  denenmeli).
+- **`api-integration` işindeki 403 (çözüldü, API değişmedi):** `security-auth.test.mjs:217` başka siteye giden bir
+  `callbackURL` için 400 bekliyordu, GitHub'da 403 geldi. İkisi de rettir: POST isteklerinde önce better-auth'un kendi
+  denetimi (güvenilen origin'ler, 403), ardından panelin denetimi (yalnızca panel yolları, 400) çalışır. Kütüphane
+  kendi denetimini `NODE_ENV=test` iken kapatır; `run.sh` bunu ayarlar, CI ayarlamaz (API orada kurulumdaki gibi
+  çalışır). Test artık `NODE_ENV=test` iken yalnızca 400'ü, değilken 400 veya 403'ü kabul ediyor ve yanıtta
+  `Location` olmadığını da denetliyor; GET isteğinde beklenti 400 olarak kaldı. Bu değişiklikten sonra `run.sh` ile
+  (`NODE_ENV=test`) yerelde yeniden çalıştırılmadı: bu makinede Docker yok.
