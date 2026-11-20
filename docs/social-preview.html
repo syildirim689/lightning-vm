@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<style>
+  html, body { margin: 0; width: 1280px; height: 640px; overflow: hidden; }
+  body {
+    background: #0f172a;
+    background-image: radial-gradient(900px 500px at 105% -10%, rgba(217, 119, 6, .38), transparent 60%),
+      radial-gradient(700px 420px at -10% 110%, rgba(217, 119, 6, .16), transparent 60%);
+    color: #f8fafc; font-family: "Segoe UI", system-ui, -apple-system, Roboto, Arial, sans-serif;
+    box-sizing: border-box; padding: 72px 88px; display: flex; flex-direction: column; justify-content: space-between;
+  }
+  .top { display: flex; align-items: center; gap: 28px; }
+  .logo { width: 104px; height: 104px; flex: none; }
+  h1 { margin: 0; font-size: 84px; font-weight: 700; letter-spacing: -2px; line-height: 1; }
+  .beta { font-size: 26px; font-weight: 600; color: #0f172a; background: #fbbf24; border-radius: 999px; padding: 6px 20px; margin-left: 8px; align-self: flex-start; margin-top: 10px; }
+  p.lead { margin: 0; font-size: 40px; line-height: 1.28; font-weight: 500; color: #e2e8f0; max-width: 1060px; }
+  p.lead b { color: #fbbf24; font-weight: 600; }
+  .chips { display: flex; flex-wrap: nowrap; gap: 10px; }
+  .chip { white-space: nowrap; font-size: 22px; font-weight: 600; color: #f1f5f9; border: 1.5px solid rgba(248, 250, 252, .32); border-radius: 12px; padding: 8px 14px; background: rgba(15, 23, 42, .55); }
+  .foot { white-space: nowrap; display: flex; justify-content: space-between; align-items: baseline; font-size: 24px; color: #cbd5e1; }
+  .foot code { font-family: Consolas, "Cascadia Mono", monospace; color: #fde68a; font-size: 23px; }
+</style>
+</head>
+<body>
+  <div class="top">
+    <svg class="logo" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="16" fill="#d97706"/><path d="M35 12 17 36h14l-3 16 19-25H33l2-15z" fill="#fff" stroke="#fff" stroke-width="2" stroke-linejoin="round"/></svg>
+    <h1>Lightning VM</h1>
+    <span class="beta">beta</span>
+  </div>
+  <p class="lead">Free, <b>open-source</b>, self-hosted panel for selling and managing virtual servers</p>
+  <div class="chips">
+    <span class="chip">VMware vSphere</span><span class="chip">Proxmox VE</span><span class="chip">XCP-ng</span><span class="chip">oVirt</span><span class="chip">Hyper-V</span><span class="chip">KVM (libvirt)</span><span class="chip">Incus / LXD</span>
+  </div>
+  <div class="foot">
+    <code>curl -fsSL https://lightningvm.app/install.sh | sudo sh</code>
+    <span>lightningvm.app &nbsp;·&nbsp; Apache-2.0</span>
+  </div>
+</body>
+</html>

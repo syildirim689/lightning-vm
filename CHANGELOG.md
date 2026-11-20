@@ -1,0 +1,127 @@
+# Changelog
+
+All notable changes to Lightning VM are listed here. The format follows
+[Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
+[Semantic Versioning](https://semver.org/spec/v2.0.0.html). While the version is below 1.0 the project is in
+**beta**: any release may change behaviour, and each one says what an operator has to do.
+
+Operators who upgrade an installed panel should read [docs/upgrade-notes.md](docs/upgrade-notes.md) (Turkish): it
+lists every changed behaviour with its effect on existing data. Releases are published at
+<https://github.com/syildirim689/lightning-vm/releases>.
+
+*Türkçe: Bu dosya sürümler arasında nelerin değiştiğini özetler. Kurulu bir paneli yükseltmeden önce ayrıntılı ve
+Türkçe [docs/upgrade-notes.md](docs/upgrade-notes.md) sayfasını okuyun.*
+
+## [Unreleased]
+
+## [0.4.0] - 2026-11-21
+
+Second public release and the first one marked **beta**. It gathers about 430 commits since 0.1.0. The version
+numbers 0.1.1 to 0.3.0 were used for internal test builds and were never published, which is why this release is
+0.4.0.
+
+### Upgrading from 0.1.0
+
+- Read [docs/upgrade-notes.md](docs/upgrade-notes.md) first. The database migrations run by themselves during
+  `install.sh update`; a backup is taken before anything changes and the previous version comes back if the new
+  one does not become ready.
+- Restart the proxy after the upgrade (`docker compose restart proxy`): its configuration changed.
+- `install.sh behind-proxy` now needs `--public-url https://panel.example.com` unless one is already stored.
+- Backups are now signed. A backup written by 0.1.0 has only a checksum and is restored only with
+  `--allow-unsigned`.
+- After a restore everyone is signed out and the panel is **on hold** until an administrator releases it
+  (Admin → System).
+- Param payments are confirmed by hand; WHMCS / WISECP map only the accounts they opened themselves.
+- Directory (LDAP) and SSO users sign in again every `SESSION_TTL_HOURS`; their API tokens stop working when the
+  account was not confirmed at its source for `DIRECTORY_TOKEN_DAYS` days (default 30).
+
+### Added
+
+- **Six more platforms, as first releases**, next to VMware: Proxmox VE, XCP-ng / XenServer, oVirt / RHV,
+  Microsoft Hyper-V, plain KVM hosts (libvirt over SSH) and Incus / LXD (virtual machines and containers). What
+  each one can and cannot do is in the README's platform table.
+- **Installer experience.** `scripts/get.sh` and `scripts/install.sh` ask for the language once on a terminal
+  (Türkçe / English), print a pre-flight report (operating system, CPU, memory, disk, ports, DNS, Docker, clock,
+  what is installed already) and a plan, and run numbered steps with a spinner, elapsed times and a summary at
+  the end. Not on a terminal (CI, cloud-init, the panel's agent) the output stays line-oriented and nothing is
+  ever asked. What the wrapped commands print goes to a root-only log under `data/logs/`; the end of it is shown
+  when a step fails. New options: `--yes`, `--plain`, `--help` (both scripts, both languages).
+- **This server from the panel**: live state of the panel host (CPU, memory, load, disks, services, processes,
+  logs), operating system updates with automatic security updates and restart, host name, time zone, NTP and
+  DNS settings, and an administrators' browser terminal that is off by default.
+- **Updates inside customers' servers**: a notifier installed at first boot on new Linux servers; pending
+  updates are shown on the server page and to staff.
+- **Billing**: payments held for review with filters, reasons and a waiting time; upcoming payments for
+  customers; invoices say until when a review blocks paying.
+- **Staff tools**: saved views on the long lists (stored in the account), bulk selection, counters in the menu,
+  three more insights, the state of a server at the time its support ticket was opened, a user's sign-in details
+  with two-factor reset, passkey and linked-account management.
+- **Interface**: dialogs behave like windows (move, put aside, snap to halves and quarters, centre, resize,
+  keyboard shortcuts and a layout menu); sliders for text size and spacing; a search that understands Turkish
+  letters; a command palette with recent items and quick actions.
+- **Project**: this changelog, a code of conduct, a support page, issue-template links to Discussions, private
+  vulnerability reporting, an English README (`README.en.md`), and a GitHub Release created by the release
+  workflow for every `v*` tag.
+
+### Changed
+
+- 49 behaviour changes from an end-to-end review of the API, the worker, the web app, the seven adapters and the
+  installer; the most important ones are in billing (subscriptions with automatic renewal off are invoiced,
+  unpaid orders and data-centre invoices enter the collection steps).
+- Views saved in the browser by an earlier build now live in the account.
+- A reseller's customer who leaves the reseller pays list prices from then on.
+- Time spent waiting for the account's share of the queue no longer counts against an operation's deadline
+  (`OPERATIONS_HELD_HOURS`, default 6).
+- The installer checks the host **before** it installs Docker or writes any file, and on a terminal asks before
+  it starts (`--yes` skips the question; without a terminal nothing is asked).
+- The one-line install command is served from the short address `https://lightningvm.app/install.sh`.
+
+### Fixed
+
+- Notification e-mails are sent again (they were not under Node 22).
+- Phone layout: window buttons, the command palette, invoice lines and the selection bar fit the screen; pages
+  leave room under the selection bar from 768 px on.
+- A key pressed in the frame in which a window loses the focus goes to the window in front.
+- On Proxmox the VM number is bound to the server.
+
+### Security
+
+- Two rounds of an AI-driven, partial security review (November 2026): 48 confirmed findings fixed (1 high,
+  20 medium, 26 low, 1 informational), followed by a re-read of the units the first round had closed without a
+  finding and of what the second round had left open. Not an independent third-party audit; its limits are listed
+  in [docs/security-audit.md](docs/security-audit.md).
+- Backups are signed with a key derived from `secrets/backup.key`; a restore checks the signature before
+  anything is decrypted, works on a root-only copy of the archive, ends every session and puts the panel on hold.
+- The maintenance directory and its lock belong to root alone; a panel request is validated again on the host
+  before anything runs.
+- Sign-in routes the panel does not use are closed; servers managed by WHMCS / WISECP cannot be resized from the
+  panel; a first password reset on an account with an unproven address removes its API tokens, SSH keys and
+  saved cards.
+
+### Known limits
+
+- Not audited by an independent third party and not recommended for production with real customers and real
+  money before you have tried it in your own environment.
+- VMware was tested mostly against the govmomi simulator; no payment provider was tried with a real merchant
+  account. The full list is in the README ("Bilinen sınırlar" / "Known limits").
+
+## [0.1.0] - 2026-10-24
+
+First tagged version.
+
+### Added
+
+- One-command installation (`scripts/get.sh`, `scripts/install.sh`): Docker, HTTPS, the first administrator,
+  backups and the panel agent.
+- VMware ESXi / vCenter connections (6.x to 9.x), inventory and a browser console.
+- Catalog: locations, packages, custom resources, templates, IP pools and quotas.
+- Automatic server setup (cloud-init), power actions, deletion and reconciliation.
+- Firewalls (vDS port filter).
+- IP management: extra IPv4, IPv6, quarantine and reverse DNS (PowerDNS).
+- Users, roles and permissions, two-factor sign-in and phone verification.
+- Settings: branding, SMTP, CAPTCHA, SMS providers, payment methods and notification rules.
+- Updates and backups from the panel, monitoring and alerts.
+
+[Unreleased]: https://github.com/syildirim689/lightning-vm/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/syildirim689/lightning-vm/compare/v0.1.0...v0.4.0
+[0.1.0]: https://github.com/syildirim689/lightning-vm/releases/tag/v0.1.0

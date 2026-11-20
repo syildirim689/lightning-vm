@@ -25,9 +25,12 @@ değişiklikler: [docs/upgrade-notes.md](docs/upgrade-notes.md).
 ## Açık bildirme
 
 - Güvenlik açıklarını sır veya istismar ayrıntılarıyla **herkese açık issue olarak paylaşmayın**.
-- GitHub'ın özel bildirimini kullanın: deponun **Security → Report a vulnerability** sayfası (Private Vulnerability
-  Reporting). Bu düğme görünmüyorsa özellik henüz açılmamıştır; ayrıntı vermeden bir issue açıp depo sahibinden özel
-  bir bildirim kanalı isteyin.
+- GitHub'ın özel bildirimini kullanın: deponun **Security → Report a vulnerability** sayfası
+  (<https://github.com/syildirim689/lightning-vm/security/advisories/new>; Private Vulnerability Reporting bu depoda
+  açıktır). Bildirim yalnızca depo sahibine ulaşır. Düğmeyi göremiyorsanız ayrıntı vermeden
+  [Discussions](https://github.com/syildirim689/lightning-vm/discussions) üzerinden özel bir kanal isteyin.
+- Desteklenen sürüm yalnızca en son yayımlanan sürümdür (şu an 0.x, beta); düzeltmeler `main` dalına ve bir
+  sonraki sürüme girer.
 - Bildirimde etkilenen sürümü (commit), bileşeni, gereken koşulları ve gözlediğiniz sonucu yazın. Denemelerinizi
   yalnızca kendi kurulumunuzda ve kendi verinizle yapın.
 
@@ -36,5 +39,7 @@ değişiklikler: [docs/upgrade-notes.md](docs/upgrade-notes.md).
 **English.** Not production-ready and not audited by an independent third party. An AI-driven, partial security
 review was run in two rounds in November 2026 (commits `641aa4d` and `d9f90d3`); its 48 confirmed findings (22 in
 round one, 26 in round two) are fixed and its limits are listed in [docs/security-audit.md](docs/security-audit.md). Please do not open public issues with exploit details or secrets:
-use GitHub's private vulnerability reporting (Security → Report a vulnerability) or, if it is not enabled, ask the
-maintainer for a private channel. Test only against your own installation.
+use GitHub's private vulnerability reporting (Security → Report a vulnerability,
+<https://github.com/syildirim689/lightning-vm/security/advisories/new>; it is enabled for this repository and reaches
+only the maintainer). Only the latest release (0.x, beta) is supported; fixes land on `main` and in the next release.
+Test only against your own installation.

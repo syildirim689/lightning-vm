@@ -1,5 +1,11 @@
 blank_issues_enabled: true
 contact_links:
+  - name: Soru, kurulum yardımı, fikir / Questions, help with installing, ideas
+    url: https://github.com/syildirim689/lightning-vm/discussions
+    about: Hata olmayan her şey için Discussions / GitHub Discussions for everything that is not a bug.
   - name: Güvenlik açığı / Security vulnerability
-    url: https://github.com/syildirim689/lightning-vm/security/policy
-    about: Lütfen herkese açık issue açmayın / Please do not open a public issue.
+    url: https://github.com/syildirim689/lightning-vm/security/advisories/new
+    about: Lütfen herkese açık issue açmayın; özel bildirim formu / Please do not open a public issue; use the private report form.
+  - name: Site ve canlı demo / Website and live demo
+    url: https://lightningvm.app
+    about: Tanıtım, ekran görüntüleri ve tek komutla kurulum / Overview, screenshots and the one-command install.

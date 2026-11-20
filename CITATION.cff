@@ -1,0 +1,20 @@
+cff-version: 1.2.0
+message: If you refer to this software, please cite it with the metadata below.
+title: Lightning VM
+abstract: >-
+  Free, open-source, self-hosted panel for selling and managing virtual servers on VMware vSphere, Proxmox VE,
+  XCP-ng, oVirt, Hyper-V, KVM (libvirt) and Incus / LXD. In beta.
+type: software
+authors:
+  - name: The Lightning VM authors
+repository-code: https://github.com/syildirim689/lightning-vm
+url: https://lightningvm.app
+license: Apache-2.0
+version: 0.4.0
+date-released: 2026-11-21
+keywords:
+  - hosting panel
+  - virtualization
+  - VMware vSphere
+  - Proxmox VE
+  - self-hosted
