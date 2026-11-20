@@ -565,3 +565,55 @@ yalnızca orada oluşturulan test etiketleri kullanıldı.
 - Yeni davranış nedeniyle değiştirilen test: iki adresli test havuzu artık karantinasız (`quarantineHours: 0`).
   Aksi halde silinen adres 24 saat beklediği için sonraki testler `IP_EXHAUSTED` alıyordu.
 - Gerçek colocation bloğunda ve gerçek bir konuk işletim sisteminde (IPv6 ile ek IPv4 için netplan) denenmedi.
+
+## Kurulum ekranı ve 0.4.0 (beta) sürümü — 2026-11-21
+
+Kurulum betiklerinin yeni çıktısı (`scripts/get.sh`, `scripts/install.sh`) ve `v0.4.0` etiketi için yapılan
+denemeler. Etiket `46508f2` commit'indedir.
+
+- **Sözdizimi ve lint:** `sh -n`, `dash -n`, `busybox ash -n`; `shellcheck -s sh` 0.9.0 ve 0.10.0: bulgu yok
+  (önceki betikte 7 not vardı).
+- **Test düzeneği (test sunucusunda, iki atılabilir kapsayıcı; Docker ve curl yerine taklitleri):** Ubuntu 24.04'te
+  (`sh` = dash) ve Alpine 3.20'de (`sh` = busybox ash) 103'er denetim, hepsi geçti:
+  - uçbirim olmayan kurulum: kaçış kodu ve satır başı karakteri yok, hiçbir şey sorulmuyor, son satır değişmedi,
+    kayıt dosyası 600;
+  - `script(1)` ile kaydedilen uçbirimde kurulum (iki dilde), `NO_COLOR`, UTF-8 olmayan yerel (yalnızca ASCII),
+    `TERM=dumb`;
+  - başarısız derleme ve başarısız başlatma: çıkış kodu 18 korunuyor, komutun son satırları gösteriliyor, geride
+    süreç kalmıyor; dönen işaret sırasında Ctrl-C: çıkış 130, imleç geri geliyor, geride süreç kalmıyor;
+  - planın reddi (çıkış 3, `.env` yok), dil sorusunun 30 saniyede varsayılanı seçmesi;
+  - `get.sh`: boruyla `sh`'e verildiğinde uçbirim yokken hiçbir şey sormuyor, uçbirimde tuşu `/dev/tty`'den okuyor;
+    kurulu dizinde ikinci çalıştırma güncelleme yoluna gidiyor; başarısız `git clone` kaydını saklıyor;
+  - güncelleme (`v0.2.0 → v0.2.1`, düzeneğin kendi etiketleri) ve hazır olmayan güncelleme (çıkış 23, geri dönüş,
+    son satır eskisi gibi); `backup`, `check`, `releases` ve olmayan bir dosyanın `restore` çıktısı önceki betikle
+    bayt bayt aynı; panel ajanı üzerinden iki istek (`status.json` içinde `BACKUP` ve `UPDATED`);
+  - derleme ilerlemesi derleme sürerken artıyor (taklit, test sunucusundaki gerçek `docker compose build`
+    çıktısının biçimini yazar).
+- **Temiz bir makinede gerçek kurulum (GitHub Actions, elle başlatılan `compose` işi):** Ubuntu 26.04, x86_64,
+  Docker 29.4.2, Compose 5.1.3. `b0fb02a` üzerinde `install.sh --local --setup-wizard` uçbirimsiz biçimde sekiz
+  adımı tamamladı (2 dk 26 sn), ardından `check`, `backup`, onaysız `restore` (çıkış 3) ve gerçek `restore` geçti.
+  Bu çalıştırma iki şeyi buldu ve `46508f2` ile düzeltildi: derleme ilerlemesi derleme bitene kadar `0/12`'de
+  kalıyordu; özetin üç yeri İngilizce çıktıda Türkçeydi. Aynı işin tarayıcı testleri ilk yönetici testinde durdu
+  (4 geçti, 1 başarısız, 28 çalışmadı): geri yüklemeden sonraki bekletme şeridi "System" bağlantısını üçe
+  çıkarıyordu; iş artık `restore --no-hold` kullanıyor. İkinci elle çalıştırmada (`46508f2`) kurulum, yedek / geri yükleme ve izleme
+  adımları yine geçti; tarayıcı testlerinin 21'i geçti, biri başarısız oldu (API başvurusu testi,
+  `connect ECONNREFUSED ::1:443`: test koşucunun kendi 443 portuna bağlanmaya çalışıyor), 11'i çalışmadı. Bu
+  başarısızlık incelenmedi; aynı paket demo sunucusunda 33/33 geçiyor.
+- **Demo sunucusunda gerçek güncelleme:** `b0fb02a` eski betikle kuruldu (33/33 tarayıcı testi, testler boyunca
+  demo `/api/ready` 43 yanıtın 43'ünde 200). `46508f2` **yeni** betiğin `update` yoluyla kuruldu: yedek, worker'ın
+  durdurulması, derleme ve başlatma (1 dk 6 sn), `OK UPDATED`; kayıt `data/logs/update-…log` (izin 600, 652 satır).
+  Demo `git describe` ile `v0.4.0` gösteriyor; web ve API kapsayıcılarında `APP_VERSION=v0.4.0`. Ardından 33/33 tarayıcı testi geçti; testler boyunca demo `/api/ready` 44 yanıtın 44'ünde 200.
+  Demo `stable` kanalında ve otomatik güncellemesi açık: kanalın en yeni etiketi artık çalışan commit'in kendisi
+  olduğundan gece çalışması `UP_TO_DATE` ile biter (denetlendi: hedef `v0.4.0` = `HEAD`). Test sunucusunun
+  deposundaki eski iç test etiketlerine (`v0.1.1`-`v0.3.0`) dokunulmadı; hepsi `v0.4.0`'dan küçüktür.
+- **Sürüm:** `v0.4.0` etiketi GitHub'a gönderildi; yayın iş akışı (birim işleri, 11 imaj, sürüm sayfası) geçti.
+  Sürüm sayfası "Lightning VM v0.4.0 (beta)" adıyla ve pre-release işaretiyle oluştu, notları `CHANGELOG.md`
+  dosyasının 0.4.0 bölümüdür. Kimliksiz yeni bir kopyada etiketler `v0.1.0` ve `v0.4.0`; `get.sh`'in seçtiği
+  `v0.4.0`. `https://lightningvm.app/install.sh` adresindeki betiğin sha256'sı depodaki `scripts/get.sh` ile aynı
+  (`d94f0488…6de2`). GitHub'ın `releases/latest` uç noktası yalnızca pre-release olduğu için 404 döner; kurulum ve
+  panel bu uç noktayı kullanmaz.
+- **Çalıştırılmayanlar:** gerçek Docker ile uçbirimde (etkileşimli) kurulum; Docker'ın apt ile kurulduğu adım;
+  yeni çıktıyla `domain`, `behind-proxy`, `local-only`, `monitoring`, `terminal`, `uninstall`; gerçek sunucuda
+  `curl … | sudo sh` ile baştan sona kurulum (lightningvm.app adresindeki kopya yeniden eşitlendikten sonra
+  denenmeli); `api-integration` işi GitHub'da 204 testin birinde başarısız (`security-auth.test.mjs:217`, 400
+  beklenirken 403; 140 geçti, 63 atlandı): bu işte API'ye dokunulmadı, iş GitHub'da daha önce hiç çalışmamıştı.
