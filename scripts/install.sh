@@ -1190,7 +1190,17 @@ do_update() {
   if [ -n "$TO" ]; then target=$TO; else target=$(target_for "$channel"); fi
   [ -n "$target" ] || die 20 E_UPDATE_NO_RELEASE "Yayımlanmış sürüm etiketi (vX.Y.Z) yok" "No released version tag (vX.Y.Z)"
   git rev-parse -q --verify "$target^{commit}" >/dev/null || die 20 E_UPDATE_UNKNOWN_VERSION "Bilinmeyen sürüm: $target" "Unknown version: $target"
-  if [ "$(git rev-parse "$target^{commit}")" = "$current" ]; then msg OK UP_TO_DATE "Güncel: $current_name" "Up to date: $current_name"; exit 0; fi
+  if [ "$(git rev-parse "$target^{commit}")" = "$current" ]; then
+    # The same commit under a new name: it was tagged after it was installed (a commit that was tested first and
+    # released afterwards). The panel shows the name it was started with, so it would go on calling itself
+    # "v0.4.0-27-gabc1234" beside a release list that says v0.5.0. The name is written down and the services that
+    # carry it are started again with it; nothing is built, backed up or migrated.
+    if [ -f .env ] && [ "$(env_value APP_VERSION)" != "$current_name" ]; then
+      set_env APP_VERSION "$current_name"
+      up_and_ready || msg WARN E_NOT_READY "Servisler $current_name adıyla yeniden başlatıldı ama hazır görünmüyor: sh scripts/install.sh check" "The services were started again as $current_name but do not look ready: sh scripts/install.sh check"
+    fi
+    msg OK UP_TO_DATE "Güncel: $current_name" "Up to date: $current_name"; exit 0
+  fi
   # The channel's newest version is behind the running one: nothing to update (an explicit --to may still go there,
   # and the migration check below refuses what the database cannot run).
   if [ -z "$TO" ] && ! git merge-base --is-ancestor "$current" "$target" 2>/dev/null; then

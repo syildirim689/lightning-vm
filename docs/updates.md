@@ -142,6 +142,10 @@ Sürüm yayımlamak: `git tag -a v1.2.0 -m "notlar"` ve `git push --tags`. Panel
 - **Otomatik güncelleme yalnızca ileri gider:** kanalın en yeni etiketi çalışan sürümün devamı (git geçmişinde
   ondan sonra) değilse hiçbir şey yapılmaz (`UP_TO_DATE`); daha eski bir sürüme yalnızca açıkça `--to` ile dönülür
   ve migration denetimi buna çoğu zaman izin vermez.
+- **Sonradan etiketlenen commit:** çalışan commit kurulduktan sonra etiketlendiyse (önce denenip sonra yayımlanan
+  bir sürüm), bir sonraki güncelleme denetimi yapacak bir şey bulmaz ama panelin gösterdiği adı yeniler: `.env`
+  içindeki `APP_VERSION` yeni ada alınır ve onu taşıyan servisler (API, web) o adla yeniden başlatılır. Derleme,
+  yedek ya da migration yoktur. (Önceden panel eski adı, ör. `v0.4.0-27-gabc1234`, göstermeye devam ediyordu.)
 - **Panelde görünen sürüm** `git describe` çıktısıdır: tam bir sürüm etiketindeyseniz `v0.4.0`, etiketten sonraki
   bir commit'teyseniz `v0.4.0-12-gabc1234`.
 - **Yayımlama:** `v*` etiketi gönderildiğinde `.github/workflows/release.yaml` birim testlerini çalıştırır,
