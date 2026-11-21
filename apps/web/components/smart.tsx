@@ -13,8 +13,8 @@ import { Section, TextInput } from './ui';
 
 type Health = { score: number; grade: 'good' | 'fair' | 'poor'; factors: { code: string; impact: number }[]; advice: 'idle' | 'down' | 'up' | null;
   suggestedVcpu: number; vcpu: number; cpu: { avg: number; p95: number; samples: number; days: number } | null };
-type Budget = { amount: number; currency: string; monthly: number; ratio: number; state: 'ok' | 'near' | 'over' } | null;
-type Usage = { costs: { currency: string; monthly: number; accrued: number; forecast: number; daysLeft: number }[]; usage: { servers: number; vcpu: number; memoryMb: number; diskGb: number }; budget: Budget };
+type Budget = { amount: number; currency: string; monthly: number; ratio: number; state: 'ok' | 'near' | 'over'; forecast?: number; forecastRatio?: number; forecastState?: 'ok' | 'near' | 'over' } | null;
+type Usage = { costs: { currency: string; monthly: number; accrued: number; forecast: number; daysLeft: number; hourly?: { accrued: number; hours: number; perHour: number; forecast: number } | null }[]; usage: { servers: number; vcpu: number; memoryMb: number; diskGb: number }; budget: Budget };
 
 const gradeTone = { good: 'text-success', fair: 'text-warning', poor: 'text-danger' };
 
@@ -88,6 +88,9 @@ export function CostForecast() {
         </dl>
         <ProgressBar aria-label={t('accrued')} value={c.forecast > 0 ? Math.round((c.accrued / c.forecast) * 100) : 0} size="sm"><ProgressBar.Track><ProgressBar.Fill/></ProgressBar.Track></ProgressBar>
         <p className="text-xs text-muted">{t('daysLeft', { n: c.daysLeft })}</p>
+        {/* Servers billed by the hour: what is recorded so far and the rate the forecast continues with. */}
+        {c.hourly && <p className="flex items-start gap-2 text-xs text-muted"><I name="hourglass" size={13} className="mt-0.5 shrink-0"/>
+          <span>{t('hourlyLine', { accrued: money(c.hourly.accrued, c.currency), hours: c.hourly.hours, rate: format.number(c.hourly.perHour, { style: 'currency', currency: c.currency, maximumFractionDigits: 4 }), forecast: money(c.hourly.forecast, c.currency) })}</span></p>}
       </div>)}
       <BudgetRow budget={d.budget} currency={d.costs[0]?.currency ?? 'TRY'}/>
       <p className="flex flex-wrap items-center gap-2 border-t border-border pt-3 text-sm"><I name="layers" size={14} className="text-muted"/>
@@ -125,6 +128,9 @@ function BudgetRow({ budget, currency }: { budget: Budget; currency: string }) {
       <ProgressBar aria-label={t('budget')} value={Math.min(100, Math.round(budget.ratio * 100))} size="sm" color={tone}><ProgressBar.Track><ProgressBar.Fill/></ProgressBar.Track></ProgressBar>
       <p className={`text-xs ${budget.state === 'ok' ? 'text-muted' : budget.state === 'near' ? 'text-warning' : 'text-danger'}`}>
         {t(`budgetState.${budget.state}`, { monthly: money(budget.monthly, budget.currency), amount: money(budget.amount, budget.currency), pct: Math.round(budget.ratio * 100) })}</p>
+      {/* The same budget against what this month will cost at the current rate (hourly usage included). */}
+      {budget.forecastState && <p data-budget-forecast={budget.forecastState} className={`text-xs ${budget.forecastState === 'ok' ? 'text-muted' : budget.forecastState === 'near' ? 'text-warning' : 'text-danger'}`}>
+        {t(`budgetForecast.${budget.forecastState}`, { forecast: money(budget.forecast ?? 0, budget.currency), amount: money(budget.amount, budget.currency), pct: Math.round((budget.forecastRatio ?? 0) * 100) })}</p>}
     </>}
     {!budget && !editing && <p className="text-xs text-muted">{t('budgetHelp')}</p>}
     {editing && <form className="flex flex-wrap items-start gap-2" onSubmit={(e) => { e.preventDefault(); void save(amount); }}>

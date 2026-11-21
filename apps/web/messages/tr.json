@@ -3090,6 +3090,14 @@
       "USAGE_ANOMALIES": {
         "title": "{count, plural, one {# sunucu} other {# sunucu}} olağanından çok farklı kullanılıyor",
         "body": "Her sunucu kendi geçmişiyle karşılaştırıldı. {suspicious, plural, =0 {Kötüye kullanıma benzeyen yok.} one {# tanesi kötüye kullanıma benziyor.} other {# tanesi kötüye kullanıma benziyor.}}"
+      },
+      "BUDGET_FORECAST_OVER": {
+        "title": "Bu ay bütçenizi aşacak görünüyor",
+        "body": "Bu gidişle {forecast} {currency} tutacak; bütçeniz {amount} {currency} (%{pct})."
+      },
+      "BUDGET_FORECAST_NEAR": {
+        "title": "Bu ay bütçenize yaklaşıyor",
+        "body": "Bu gidişle {forecast} {currency} tutacak: {amount} {currency} bütçenizin %{pct} kadarı."
       }
     },
     "hide": {
@@ -3407,6 +3415,10 @@
       "server_usage_anomaly": {
         "title": "Olağan dışı kullanım",
         "help": "Bir sunucunun işlemci ya da ağ kullanımı kendi yakın geçmişinden keskin biçimde ayrıldığında (saatte bir bakılır; bulgu başına bir kez)."
+      },
+      "billing_budget_forecast": {
+        "title": "Bütçe: bu ayın tahmini",
+        "help": "Bu ayın bu gidişle tutacağı tutar (saatlik kullanım dahil) bütçenizi aştığında; ayda bir kez."
       }
     },
     "policyTitle": "Önce yönetici, sonra kullanıcı",
@@ -5538,7 +5550,7 @@
       "none": "Boyut yüke uygun."
     },
     "cost": "Bu ay",
-    "costHelp": "Her sunucu ve sanal veri merkezinin bu ay var olduğu günlere göre oranlanır.",
+    "costHelp": "Her sunucu ve sanal veri merkezi bu ay var olduğu günlere göre oranlanır. Saatlik faturalanan sunucular, şimdiye kadar kaydedilen kullanım ve kalan saatler için saatlik fiyatlarıyla sayılır.",
     "accrued": "Şu ana kadar",
     "forecast": "Ay sonu beklenen",
     "monthly": "Aylık toplam",
@@ -5553,13 +5565,19 @@
     "budgetAmount": "Aylık tutar",
     "budgetCurrency": "Para birimi",
     "save": "Kaydet",
-    "budgetHelp": "Bir aylık tutar belirleyin; aşıldığında haber verilir, sipariş sayfası aşmadan önce uyarır.",
+    "budgetHelp": "Aylık bir tutar belirleyin; aşıldığında ya da bu ayın gidişi onu aşacak göründüğünde haber verilir, sipariş sayfası da aşmadan önce uyarır.",
     "budgetState": {
       "ok": "Aylık tutar {monthly} · bütçe {amount} (%{pct})",
       "near": "Bütçenin %{pct} kadarı kullanılıyor: {monthly} / {amount}",
       "over": "Bütçe aşıldı: aylık {monthly}, bütçe {amount}"
     },
-    "notMeasured": "Bu sunucu için CPU ölçümü gelmiyor; bu yüzden boyut önerisi yok: sanallaştırma platformu bu veriyi sağlamıyor."
+    "notMeasured": "Bu sunucu için CPU ölçümü gelmiyor; bu yüzden boyut önerisi yok: sanallaştırma platformu bu veriyi sağlamıyor.",
+    "hourlyLine": "Bunun saatlik kullanımı: şimdiye kadar {accrued} ({hours, plural, one {# saat} other {# saat}}); saatte {rate} ile ay sonunda {forecast}.",
+    "budgetForecast": {
+      "ok": "Bu ayın tahmini: {forecast}, bütçenin %{pct} kadarı.",
+      "near": "Bu ay {forecast} tutacak görünüyor: {amount} bütçenizin %{pct} kadarı.",
+      "over": "Bu ay {forecast} tutacak görünüyor; {amount} bütçenizi aşıyor (%{pct})."
+    }
   },
   "Shortcuts": {
     "title": "Klavye kısayolları",

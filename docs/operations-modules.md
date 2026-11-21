@@ -75,7 +75,9 @@ Sonradan eklenen yardımcılar (olağan dışı kullanım ve diğerleri) kuralla
 
   85 ve üstü sağlıklı, 60 ve üstü göz atılmalı, altı sorunlu sayılır. Nedenler sunucu sayfasında listelenir.
 - **Bu ayın maliyeti** (`GET /usage/summary`): sunucu ve VDC aylık fiyatları, bu ay var oldukları günlere göre
-  oranlanır (UTC). Şu ana kadarki tutar, ay sonu tahmini ve aylık toplam para birimi başına gösterilir.
+  oranlanır (UTC). Şu ana kadarki tutar, ay sonu tahmini ve aylık toplam para birimi başına gösterilir. Saatlik
+  faturalanan sunucular kaydedilen kullanımla sayılır ve bütçe bu tahmine göre de ölçülür:
+  [smart-features.md](smart-features.md#ay-sonu-maliyet-tahmini-ve-bütçe).
 - **Kurulum listesi** (`GET /admin/onboarding`): vCenter, lokasyon, havuz, şablon, paket, IP havuzu, e-posta, ilk
   yedek ve iki adımlı giriş. Tüm adımlar bitene kadar yönetim özetinde görünür.
 - **Klavye kısayolları:** `?` listeyi açar. `g` ardından bir harf sayfaya gider: `h` sunucularım, `o` yeni sunucu,

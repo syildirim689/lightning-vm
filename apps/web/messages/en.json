@@ -3090,6 +3090,14 @@
       "USAGE_ANOMALIES": {
         "title": "{count, plural, one {# server uses} other {# servers use}} far more or less than usual",
         "body": "Compared with each server’s own history. {suspicious, plural, =0 {None resembles abuse.} one {# resembles abuse.} other {# resemble abuse.}}"
+      },
+      "BUDGET_FORECAST_OVER": {
+        "title": "This month is heading over your budget",
+        "body": "At the current rate it will cost {forecast} {currency}; your budget is {amount} {currency} ({pct}%)."
+      },
+      "BUDGET_FORECAST_NEAR": {
+        "title": "This month is close to your budget",
+        "body": "At the current rate it will cost {forecast} {currency}: {pct}% of your {amount} {currency} budget."
       }
     },
     "hide": {
@@ -3407,6 +3415,10 @@
       "server_usage_anomaly": {
         "title": "Unusual use",
         "help": "When a server’s CPU or network use departs sharply from its own recent history (checked hourly; told once per finding)."
+      },
+      "billing_budget_forecast": {
+        "title": "Budget: this month’s forecast",
+        "help": "When what this month will cost at the current rate (hourly usage included) passes your budget; once a month."
       }
     },
     "policyTitle": "The admin first, then each user",
@@ -5538,7 +5550,7 @@
       "none": "The size fits the load."
     },
     "cost": "This month",
-    "costHelp": "Prorated by the days each server and virtual datacenter exists this month.",
+    "costHelp": "Prorated by the days each server and virtual datacenter exists this month. Servers billed by the hour count with the usage recorded so far plus their rate for the hours left.",
     "accrued": "So far",
     "forecast": "Expected by month end",
     "monthly": "Monthly total",
@@ -5553,13 +5565,19 @@
     "budgetAmount": "Monthly amount",
     "budgetCurrency": "Currency",
     "save": "Save",
-    "budgetHelp": "Set a monthly amount; you are told when it is exceeded, and the order page warns before you go over.",
+    "budgetHelp": "Set a monthly amount; you are told when it is exceeded or when this month is heading over it, and the order page warns before you go over.",
     "budgetState": {
       "ok": "Monthly {monthly} · budget {amount} ({pct}%)",
       "near": "{pct}% of the budget in use: {monthly} / {amount}",
       "over": "Budget exceeded: {monthly} a month, budget {amount}"
     },
-    "notMeasured": "No CPU measurements arrive for this server, so there is no sizing advice: its virtualisation platform does not report them."
+    "notMeasured": "No CPU measurements arrive for this server, so there is no sizing advice: its virtualisation platform does not report them.",
+    "hourlyLine": "Of which hourly usage: {accrued} so far ({hours, plural, one {# hour} other {# hours}}); at the current {rate} an hour, {forecast} by month end.",
+    "budgetForecast": {
+      "ok": "This month’s forecast: {forecast}, {pct}% of the budget.",
+      "near": "This month is heading for {forecast}: {pct}% of your {amount} budget.",
+      "over": "This month is heading for {forecast}, over your {amount} budget ({pct}%)."
+    }
   },
   "Shortcuts": {
     "title": "Keyboard shortcuts",

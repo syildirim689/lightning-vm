@@ -111,3 +111,26 @@ test('smart: the usage watch says what it compared, a finding says its numbers a
   await page.getByRole('tab', { name: /^Open/ }).click();
   await expect(page.getByRole('searchbox', { name: 'Search findings' })).toBeVisible();
 });
+
+test('smart: the month forecast counts hourly usage, and the budget is measured against what the month will cost', async ({ page }) => {
+  await signInAdmin(page);
+  // The card as the deployment has it: figures when something is billed, a plain sentence when nothing is.
+  await page.goto('/');
+  const cost = page.locator('[data-section="This month"]');
+  await expect(cost).toContainText(/Expected by month end|Nothing billed this month\./);
+  // A month with a server billed by the hour, and a budget the monthly total stays under but the month will pass.
+  await page.route('**/api/usage/summary', (route) => json(route, {
+    costs: [{ currency: 'EUR', monthly: 66.5, accrued: 20, forecast: 53, daysLeft: 15, hourly: { accrued: 5, hours: 100, perHour: 0.05, forecast: 23 } }],
+    usage: { servers: 2, vcpu: 4, memoryMb: 4096, diskGb: 40 },
+    budget: { amount: 50, currency: 'EUR', monthly: 45, ratio: 0.9, state: 'near', forecast: 53, forecastRatio: 1.06, forecastState: 'over' } }));
+  await page.route('**/api/insights', (route) => json(route, { hidden: 0, insights: [
+    { code: 'BUDGET_FORECAST_OVER', severity: 'warning', params: { forecast: '53.00', amount: '50.00', currency: 'EUR', pct: 106 }, link: '/', key: 'budget-forecast:2026-11' }] }));
+  await page.reload();
+  await expect(cost).toContainText('Of which hourly usage: €5.00 so far (100 hours); at the current €0.05 an hour, €23.00 by month end.');
+  await expect(cost.locator('[data-budget-forecast="over"]')).toHaveText('This month is heading for €53.00, over your €50.00 budget (106%).');
+  await expect(page.getByText('This month is heading over your budget')).toBeVisible();
+  await expect(page.getByText('At the current rate it will cost 53.00 EUR; your budget is 50.00 EUR (106%).')).toBeVisible();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await noSidewaysScroll(page, 'overview with the forecast at 390 px');
+  await expect(cost.locator('[data-budget-forecast="over"]')).toBeVisible();
+});

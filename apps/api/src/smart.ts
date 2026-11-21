@@ -12,7 +12,8 @@ import { Can, PermissionGuard } from './rbac';
 import { findServer, ownerWrite } from './servers';
 import { mailReady } from './settings-store';
 import { budgetState, checkBudget } from './budget';
-import { cleanLabels, health, monthCost, sizing, type CpuStats } from './smart-rules';
+import { budgetForecast, checkBudgetForecast, costForecast } from './cost-forecast';
+import { cleanLabels, health, sizing, type CpuStats } from './smart-rules';
 import { publishLive } from './live-bus';
 import { endSession, sessionsOf } from './presence';
 import { dropPush } from './notify';
@@ -77,25 +78,20 @@ export class SmartController {
     return { changed };
   }
 
-  // Spending of this month per currency (servers and virtual data centers), with the resources in use.
+  // Spending of this month per currency (servers and virtual data centers), with the resources in use, and the budget
+  // against both the monthly run rate and the month's forecast.
   @Get('usage/summary')
   async usage(@Req() req: AuthedRequest) {
-    const { rows } = await pool.query(`SELECT price_monthly::float8 AS price, currency, created_at FROM servers WHERE owner_id = $1 AND state <> 'deleted' AND price_monthly > 0
-      UNION ALL SELECT price_monthly::float8, currency, created_at FROM vdcs WHERE owner_id = $1 AND active AND price_monthly > 0`, [req.user.id]);
-    const now = new Date();
-    const currencies = [...new Set(rows.map((r) => r.currency.trim()))].sort();
-    return {
-      costs: currencies.map((c) => ({ currency: c, ...monthCost(rows.filter((r) => r.currency.trim() === c).map((r) => ({ price: r.price, createdAt: new Date(r.created_at) })), now) })),
-      usage: await usageOf(req.user.id),
-      budget: await budgetState(req.user.id),
-    };
+    // Hourly servers count with the usage billing recorded this month plus their rate for the hours left (cost-forecast.ts).
+    const costs = await costForecast(req.user.id);
+    return { costs, usage: await usageOf(req.user.id), budget: await budgetForecast(req.user.id, await budgetState(req.user.id), costs) };
   }
 
   // The monthly budget: an amount and a currency, or null to remove it.
   @Put('usage/budget')
   async setBudget(@Req() req: AuthedRequest, @Body() body: { amount?: unknown; currency?: unknown }) {
     if (body?.amount === null || body?.amount === '' || body?.amount === undefined) {
-      await pool.query('UPDATE users SET budget_monthly = NULL, budget_currency = NULL, budget_alerted = NULL WHERE id = $1', [req.user.id]);
+      await pool.query('UPDATE users SET budget_monthly = NULL, budget_currency = NULL, budget_alerted = NULL, budget_forecast_alerted = NULL WHERE id = $1', [req.user.id]);
     } else {
       const amount = Number(String(body.amount).replace(',', '.'));
       const currency = String(body?.currency ?? '').toUpperCase();
@@ -104,11 +100,13 @@ export class SmartController {
       if (!/^[A-Z]{3}$/.test(currency)) fields.currency = 'INVALID_CURRENCY';
       if (Object.keys(fields).length) throw apiError(400, 'VALIDATION_FAILED', 'Invalid input', fields);
       // A new amount may be exceeded again this month: the notice can go out again.
-      await pool.query('UPDATE users SET budget_monthly = $2, budget_currency = $3, budget_alerted = NULL WHERE id = $1', [req.user.id, amount.toFixed(2), currency]);
+      await pool.query('UPDATE users SET budget_monthly = $2, budget_currency = $3, budget_alerted = NULL, budget_forecast_alerted = NULL WHERE id = $1', [req.user.id, amount.toFixed(2), currency]);
       await checkBudget(req.user.id);
+      // Under the budget by run rate, over it by what the month will cost: said at once as well.
+      await checkBudgetForecast(req.user.id).catch(() => false);
     }
     await audit(req, 'usage.budget', 'success', req.user.id, { amount: body?.amount ?? null, currency: body?.currency ?? null });
-    return { budget: await budgetState(req.user.id) };
+    return { budget: await budgetForecast(req.user.id, await budgetState(req.user.id)) };
   }
 
   // Starred servers (any server the person can see).

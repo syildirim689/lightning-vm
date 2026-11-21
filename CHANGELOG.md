@@ -33,9 +33,17 @@ Türkçe [docs/upgrade-notes.md](docs/upgrade-notes.md) sayfasını okuyun.*
   finding resembles mining or an outbound flood. Platforms without CPU figures say "not enough data". Rules and
   thresholds: [docs/smart-features.md](docs/smart-features.md). Migration 088 adds two tables and one index; nothing
   for the operator to do.
+- **Month-end forecast with hourly usage, and the budget against it.** "This month" now counts servers billed by the
+  hour with the usage billing recorded so far (also of servers deleted since) plus their rate for the hours left,
+  instead of their monthly list price. A budget is also measured against that forecast: the card and an insight say
+  when the month is close to it or heading over it, and `billing.budget_forecast` tells the customer once a month.
+  `GET /usage/summary` gains `costs[].hourly` and `budget.forecast`, `forecastRatio`, `forecastState`.
 
 ### Changed
 
+- `GET /usage/summary`: for an account with hourly servers, `accrued` and `forecast` are now the recorded usage
+  and its projection (they were the prorated monthly list price). Accounts without hourly servers get the same
+  figures as before.
 - **For existing installs with e-mail turned on in Settings:** accounts that register from now on receive the
   verification mail, and accounts whose address is not verified see a notice on Account → Profile. Nobody is
   blocked from anything unless the administrator turns the order rule on.

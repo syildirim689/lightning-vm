@@ -71,6 +71,7 @@ import { LocationsController } from './locations';
 import { TopologyAdminController, TopologyController } from './topology';
 import { PowerController } from './power';
 import { AbuseController } from './abuse';
+import { startBudgetForecasts } from './cost-forecast';
 import { AnomaliesAdminController, AnomaliesController } from './anomalies';
 import { VdcAdminController, VdcController } from './vdc';
 import { RdnsSettingsController, ServerIpsController, startRdnsWorker } from './rdns';
@@ -197,6 +198,7 @@ async function main() {
   startVmwareAutoScan();
   startScheduler();
   startBilling();
+  startBudgetForecasts();
   startEinvoice();
   startStatusSampler();
   startSupportJanitor();

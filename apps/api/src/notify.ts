@@ -91,6 +91,10 @@ export const catalog: Record<string, EventDef> = {
   'billing.budget_exceeded': { audience: 'user', channels: all, defaults: ['inApp', 'email'], link: () => '/',
     text: { tr: (d) => ({ title: 'Aylık bütçeniz aşıldı', body: `Sunucularınızın aylık tutarı ${d.monthly} ${d.currency}; belirlediğiniz bütçe ${d.amount} ${d.currency}.` }),
       en: (d) => ({ title: 'Your monthly budget is exceeded', body: `Your servers cost ${d.monthly} ${d.currency} a month; your budget is ${d.amount} ${d.currency}.` }) } },
+  // cost-forecast.ts: the month's forecast passes the budget (hourly usage, or money already spent on servers deleted since).
+  'billing.budget_forecast': { audience: 'user', channels: all, defaults: ['inApp', 'email'], link: () => '/',
+    text: { tr: (d) => ({ title: 'Bu ay bütçenizi aşacak görünüyor', body: `Şimdiye kadar ${d.accrued} ${d.currency}; bu gidişle ay sonunda ${d.forecast} ${d.currency} (kalan ${d.days} gün). Belirlediğiniz bütçe ${d.amount} ${d.currency}.` }),
+      en: (d) => ({ title: 'This month is heading over your budget', body: `${d.accrued} ${d.currency} so far; at this rate ${d.forecast} ${d.currency} by month end (${d.days} days left). Your budget is ${d.amount} ${d.currency}.` }) } },
   'support.reply': { audience: 'user', channels: all, defaults: ['inApp', 'email', 'push'], link: (d) => '/support/' + d.ticketId,
     text: { tr: (d) => ({ title: 'Destek talebinize yanıt geldi', body: '#' + d.number + ' · ' + d.subject }), en: (d) => ({ title: 'Your support ticket has a reply', body: '#' + d.number + ' · ' + d.subject }) } },
   'support.rate': { audience: 'user', channels: ['inApp', 'email', 'push', 'chat'], defaults: ['inApp', 'email'], link: (d) => '/support/' + d.ticketId,

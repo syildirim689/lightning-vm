@@ -88,7 +88,9 @@ girmeniz gerekmez. Özelliklerin tamamı yalnızca VMware'de vardır; diğer alt
 - **İşletim sistemi güncellemeleri:** sunucunun içindeki bekleyen ve güvenlik güncellemeleri, "yalnız haber ver / güvenliği kur /
   hepsini kur" politikası, seçilen saatte otomatik yeniden başlatma (Linux: apt, dnf, yum)
 - Faturalar ve ödeme, **saatlik kullanım** (bakiyeden; bakiye bitince bekletme, ay sonunda kullanım faturası),
-  **aylık bütçe uyarısı** (aylık gidiş bütçeyi aşınca ayda bir bildirim; siparişte önceden uyarı), destek talepleri.
+  **aylık bütçe uyarısı** (aylık gidiş bütçeyi aşınca ayda bir bildirim; siparişte önceden uyarı), **ay sonu tahmini**
+  (saatlik kullanım kaydedildiği kadarıyla ve kalan saatlerin fiyatıyla sayılır; tahmin bütçeye yaklaşınca ya da
+  aşacak görününce kart, içgörü ve ayda bir bildirim), destek talepleri.
   Genel bakışta **Yaklaşan ödemeler:** vadesi geçmiş ya da 7 gün içinde dolacak faturalar, sıradaki yenileme
   (faturada alınacak tutarla; vergi hesaplanabildiyse "vergi dahil" notuyla) ve saatlik kullanımda bakiyenin ne
   zaman biteceği

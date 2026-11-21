@@ -4,6 +4,8 @@
 import { Body, Controller, Delete, Get, HttpCode, Put, Req, UseGuards } from '@nestjs/common';
 import { anomalyCounts, anomalyKey, openAnomaliesOf } from './anomalies';
 import { audit, SessionGuard, type AuthedRequest } from './auth';
+import { budgetState } from './budget';
+import { budgetForecast } from './cost-forecast';
 import { paymentsInReview } from './billing';
 import { capacityOf, limitsFor, usageOf } from './catalog';
 import { pool, redis } from './db';
@@ -182,6 +184,11 @@ export async function customerInsights(userId: string): Promise<Insight[]> {
   const { rows: open } = await pool.query(`SELECT s.name FROM servers s JOIN resource_pools p ON p.id = s.pool_id JOIN vmware_connections c ON c.id = p.connection_id
     WHERE s.owner_id = $1 AND s.state = 'ready' AND s.delete_at IS NULL AND c.operations->>'firewall' = 'true' AND NOT EXISTS (SELECT 1 FROM firewall_servers fs WHERE fs.server_id = s.id) ORDER BY s.name`, [userId]);
   if (open.length) add('NO_FIREWALL', 'info', { n: open.length, name: open[0].name }, '/firewalls', 'firewall');
+  // The month's forecast against the budget, when it is close to it or over it (the numbers: cost-forecast.ts). A new
+  // month is a new key, so hiding it lasts for the month it was hidden in.
+  const budget = await budgetForecast(userId, await budgetState(userId)).catch(() => null);
+  if (budget && budget.forecastState !== 'ok') add(budget.forecastState === 'over' ? 'BUDGET_FORECAST_OVER' : 'BUDGET_FORECAST_NEAR', 'warning',
+    { forecast: budget.forecast.toFixed(2), amount: budget.amount.toFixed(2), currency: budget.currency, pct: Math.round(budget.forecastRatio * 100) }, '/', `budget-forecast:${new Date().toISOString().slice(0, 7)}`);
   const withOld = (await oldSnapshots(userId)).filter((s) => s.n > 0);
   // One server: the finding leads to it (and names it); several: to the list.
   if (withOld.length) add('SNAPSHOTS_OLD', 'info', { n: withOld.reduce((a, s) => a + s.n, 0), servers: withOld.length, ...(withOld.length === 1 && { serverId: withOld[0].id, name: withOld[0].name }) },

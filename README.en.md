@@ -44,7 +44,8 @@ itself from the browser, including updates and backups. It ships with a one-comm
 automatic HTTPS. The UI is in Turkish and English.
 
 Highlights: smart ordering, rule-based helpers computed inside the panel from its own data (a usage watch that compares each
-server with its own history; [docs/smart-features.md](docs/smart-features.md), Turkish), reinstall, resize and clone, snapshots, extra disks, billing and invoices (monthly and
+server with its own history, a month-end cost forecast that counts hourly usage and measures the budget against it;
+[docs/smart-features.md](docs/smart-features.md), Turkish), reinstall, resize and clone, snapshots, extra disks, billing and invoices (monthly and
 hourly), resellers, support desk, 17 notification channels (in-app, browser push, e-mail, SMS and 13 messaging
 apps and webhooks), customer webhooks, LDAP / OIDC sign-in, passkeys and two-factor, e-mail address verification
 for registered accounts (a mailed code, entered while signed in; an optional rule that only verified accounts may

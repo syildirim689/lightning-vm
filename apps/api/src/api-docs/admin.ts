@@ -659,19 +659,21 @@ export default {
   'GET /usage/summary': {
     tag: 'insights',
     summary: { tr: 'Bu ayın harcamasını, ay sonu tahminini, kaynak kullanımını ve bütçeyi verir.', en: 'Returns this month\'s spend, the month-end forecast, resource use and the budget.' },
-    details: { tr: 'Sunucular ve sanal veri merkezleri, ay içinde var oldukları süreye göre hesaplanır (UTC).', en: 'Servers and virtual data centers count for the part of the month they existed (UTC).' },
-    returns: { tr: '`costs` (para birimine göre aylık, bugüne kadar, tahmin, kalan gün), `usage` ve `budget` (yoksa null).', en: '`costs` (per currency: monthly, so far, forecast, days left), `usage` and `budget` (null when none).' },
+    details: { tr: 'Aylık faturalanan sunucular ve sanal veri merkezleri, ay içinde var oldukları süreye göre hesaplanır (UTC). Saatlik faturalanan sunucular, faturalamanın bu ay kaydettiği kullanım (ay içinde silinenlerinki dahil) artı kalan tam saatler için saatlik fiyatlarıyla sayılır; bakiye bittiği için bekletilen ve kapalı duran sunucunun fiyatı ileriye taşınmaz. Bütçe hem aylık gidişe (`state`) hem bu tahmine (`forecastState`) göre ölçülür; eşik %80 ve %100.',
+      en: 'Servers and virtual data centers billed by the month count for the part of the month they existed (UTC). Servers billed by the hour count with the usage billing recorded this month (also of those deleted since) plus their hourly price for the whole hours left; a server held for an empty balance and switched off is not projected. The budget is measured against the monthly run rate (`state`) and against this forecast (`forecastState`); the thresholds are 80% and 100%.' },
+    returns: { tr: '`costs` (para birimine göre `monthly`, `accrued`, `forecast`, `daysLeft` ve saatlik sunucu varsa `hourly`: `accrued`, `hours`, `perHour`, `forecast`), `usage` ve `budget` (yoksa null; `amount`, `currency`, `monthly`, `ratio`, `state`, `forecast`, `forecastRatio`, `forecastState`).',
+      en: '`costs` (per currency `monthly`, `accrued`, `forecast`, `daysLeft` and, with hourly servers, `hourly`: `accrued`, `hours`, `perHour`, `forecast`), `usage` and `budget` (null when none; `amount`, `currency`, `monthly`, `ratio`, `state`, `forecast`, `forecastRatio`, `forecastState`).' },
   },
   'PUT /usage/budget': {
     tag: 'insights',
     summary: { tr: 'Aylık bütçeyi ayarlar veya kaldırır.', en: 'Sets or removes the monthly budget.' },
-    details: { tr: 'Aylık tutar bütçeyi aşınca ayda bir bildirim gelir; yeni tutar kaydedilince bildirim yeniden gönderilebilir.', en: 'A notice goes out once a month when the monthly amount passes the budget; saving a new amount lets it go out again.' },
+    details: { tr: 'Aylık tutar bütçeyi aşınca ayda bir bildirim gelir (`billing.budget_exceeded`); bu ayın tahmini bütçeyi aşınca da ayda bir kez (`billing.budget_forecast`; aynı ay ilki gittiyse gönderilmez). Yeni tutar kaydedilince ikisi de yeniden gönderilebilir.', en: 'A notice goes out once a month when the monthly amount passes the budget (`billing.budget_exceeded`), and once a month when this month\'s forecast passes it (`billing.budget_forecast`; not in a month in which the first one went out). Saving a new amount lets both go out again.' },
     body: [
       { name: 'amount', type: 'number', text: { tr: 'Tutar, 0\'dan büyük, en çok 1e9; virgül de kabul edilir. null veya boş bütçeyi kaldırır.', en: 'Amount, above 0, up to 1e9; a comma is accepted. null or empty removes the budget.' } },
       { name: 'currency', type: 'string', text: { tr: 'Üç harfli para birimi, örn. TRY; tutar verilince zorunlu.', en: 'Three-letter currency, e.g. TRY; required with an amount.' } },
     ],
     example: { amount: 2500, currency: 'TRY' },
-    returns: { tr: '`budget`: tutar, para birimi, aylık toplam, oran ve durum (ok, near, over); kaldırıldıysa null.', en: '`budget`: amount, currency, monthly total, ratio and state (ok, near, over); null when removed.' },
+    returns: { tr: '`budget`: tutar, para birimi, aylık toplam, oran ve durum (ok, near, over), bu ayın tahmini ile onun oranı ve durumu (`forecast`, `forecastRatio`, `forecastState`); kaldırıldıysa null.', en: '`budget`: amount, currency, monthly total, ratio and state (ok, near, over), this month\'s forecast with its ratio and state (`forecast`, `forecastRatio`, `forecastState`); null when removed.' },
     errors: ['VALIDATION_FAILED'],
   },
   'PUT /servers/:id/favorite': {

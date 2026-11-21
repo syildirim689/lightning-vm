@@ -3,6 +3,8 @@
 import { pool } from './db';
 import { notify } from './notify';
 
+// From this share of the budget on, the panel says "close to your budget".
+export const BUDGET_NEAR = 0.8;
 export type Budget = { amount: number; currency: string } | null;
 export type BudgetState = { amount: number; currency: string; monthly: number; ratio: number; state: 'ok' | 'near' | 'over' } | null;
 
@@ -20,7 +22,7 @@ export async function budgetState(userId: string, extra = 0): Promise<BudgetStat
       UNION ALL SELECT price_monthly FROM vdcs WHERE owner_id = $1 AND active AND trim(currency) = $2) x`, [userId, b.currency]);
   const monthly = r.monthly + extra;
   const ratio = monthly / b.amount;
-  return { ...b, monthly, ratio, state: ratio > 1 ? 'over' : ratio >= 0.8 ? 'near' : 'ok' };
+  return { ...b, monthly, ratio, state: ratio > 1 ? 'over' : ratio >= BUDGET_NEAR ? 'near' : 'ok' };
 }
 
 // After the run rate grew (a new server): over budget notifies, at most once per month.

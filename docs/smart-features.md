@@ -46,3 +46,28 @@ Başka sunucularla karşılaştırma yapılmaz.
 - **Arka plan maliyeti:** her çalışmada (1) son toplanan saatten bu yana gelen ham örnekler okunup saatlik satırlara
   yazılır (`server_cpu_hourly`, 63 gün tutulur; ham örnekler 14 gün), (2) 200'er sunuculuk gruplar hâlinde her
   sunucunun en çok 15 × 24 saatlik satırı ve 16 günlük trafik satırı okunur. Kapanan bulgular 90 gün sonra silinir.
+
+## Ay sonu maliyet tahmini ve bütçe
+
+Genel bakıştaki "Bu ay" kartı (`GET /usage/summary`) para birimi başına şimdiye kadarki tutarı, ay sonu tahminini ve
+aylık toplamı gösterir. Fiyatlar faturalamanın tuttuğu yerden okunur; burada yeniden fiyat hesaplanmaz.
+
+- **Aylık faturalanan** sunucular ve sanal veri merkezleri: aylık fiyat, bu ay (UTC) var oldukları süreye oranlanır
+  (`smart-rules.ts`, `monthCost`; eskisi gibi).
+- **Saatlik faturalanan** sunucular: faturalamanın bu ay için kaydettiği kullanım (`server_usage`; ay içinde silinen
+  sunucuların saatleri de buradadır) **artı** hâlâ kullanım biriktiren sunucuların saatlik fiyatı × ayın kalan tam
+  saatleri. Başlamış saat zaten kayıtlıdır (faturalama saati başlarken yazar). Bakiye bittiği için bekletilen ve
+  kapalı duran sunucu kullanım biriktirmez; fiyatı ileriye taşınmaz. Kural: `apps/api/src/forecast-rules.ts`
+  (`monthForecast`), birim testleri `apps/api/test/forecast-rules.test.mjs`.
+- **Bütçe iki şeye göre ölçülür:** aylık gidiş (sunucuların aylık fiyat toplamı; eskisi gibi, `billing.budget_exceeded`)
+  ve **bu ayın tahmini**. İkincisi birincinin göremediğini görür: saatlik kullanım ya da ay içinde silinmiş ama para
+  harcamış sunucular.
+  - Eşikler: bütçenin %80'i ve üstü "yaklaşıyor", %100'ün üstü "aşıyor" (`BUDGET_NEAR = 0.8`, `budget.ts`).
+  - Kartta ikinci bir satır ve içgörü (`BUDGET_FORECAST_NEAR`, `BUDGET_FORECAST_OVER`; sayılarıyla, gizlenebilir;
+    her ay yeni anahtar).
+  - Tahmin bütçeyi aşınca `billing.budget_forecast` bildirimi **ayda bir kez** gider (varsayılan: panel ve e-posta).
+    Aynı ay "bütçeniz aşıldı" bildirimi gittiyse üstüne gönderilmez. Bütçe değiştirilince yeniden gönderilebilir.
+- **Arka plan maliyeti:** API'de 6 saatte bir (`cost-forecast.ts`, `BUDGET_FORECAST_HOURS`), yalnızca bütçesi olan ve
+  bu ay henüz uyarılmamış hesaplar için, bir çalışmada en çok 500 hesap; hesap başına üç küçük sorgu. Yedekten geri
+  yükleme beklemesinde çalışmaz. Bütçe kaydedildiğinde de hemen bakılır.
+- Bütçesi olmayan hesap için hiçbir karşılaştırma yapılmaz. Saatlik sunucusu olmayan hesabın rakamları öncekiyle aynıdır.
