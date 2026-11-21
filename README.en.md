@@ -473,8 +473,8 @@ each is in [CHANGELOG.md](CHANGELOG.md), and what an operator has to do when upg
 pre-releases on GitHub. Their tags are plain `vX.Y.Z`, so the one-line install picks the newest one and the `stable`
 update channel follows them; `vX.Y.Z-rc.1`-style tags are seen only by the `beta` channel, and `edge` follows a
 branch. The installer and the panel read the repository's git tags, not GitHub's release list, and an update by
-itself only ever moves forward. A given release: `… | sudo sh -s -- --version v0.4.0`; on an installed panel
-`sudo sh scripts/install.sh update --to v0.4.0`.
+itself only ever moves forward. A given release: `… | sudo sh -s -- --version v0.5.0`; on an installed panel
+`sudo sh scripts/install.sh update --to v0.5.0`.
 
 ## Contributing, support and licence
 

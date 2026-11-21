@@ -14,6 +14,24 @@ Türkçe [docs/upgrade-notes.md](docs/upgrade-notes.md) sayfasını okuyun.*
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-11-21
+
+Third public release, still **beta**. It gathers what was added to `main` since 0.4.0 (e-mail verification, quotas
+per project, the Stripe webhook, running requests from the API reference, the monitoring switch, and seven
+rule-based helpers computed inside the panel) and the faults a review of all of it found before it was tagged.
+None of the helpers acts on a server, an invoice or a ticket by itself.
+
+### Upgrading from 0.4.0
+
+Update from Admin → System → Updates or with `sudo sh scripts/install.sh update`. Migrations 088 to 091 run by
+themselves: three new tables, one new column and an index on the CPU samples; no existing table is rewritten
+(with 750 000 CPU samples in place they took one to four seconds on a development machine, see
+[docs/validation.md](docs/validation.md)). Two minutes after the update the worker rolls the 14 days of CPU
+samples up into hourly rows once. Operators should read
+[docs/upgrade-notes.md](docs/upgrade-notes.md) (Turkish) for what changes for existing accounts: the verification
+mail for new registrations where mail is on, the figures of the "This month" card for hourly servers, and the new
+notifications.
+
 ### Added
 
 - **E-mail address verification for registered accounts.** After registration the panel mails a six-digit code
@@ -112,7 +130,7 @@ Türkçe [docs/upgrade-notes.md](docs/upgrade-notes.md) sayfasını okuyun.*
 
 ### Fixed
 
-Found by a review of everything added since 0.4.0, before it was released (what was run:
+Found by a review of everything added since 0.4.0, before this release was tagged (what was run:
 [docs/validation.md](docs/validation.md)):
 
 - **Power schedules could be stopped for everyone by one schedule's time zone.** A schedule could be saved with a
@@ -278,6 +296,7 @@ First tagged version.
 - Settings: branding, SMTP, CAPTCHA, SMS providers, payment methods and notification rules.
 - Updates and backups from the panel, monitoring and alerts.
 
-[Unreleased]: https://github.com/syildirim689/lightning-vm/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/syildirim689/lightning-vm/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/syildirim689/lightning-vm/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/syildirim689/lightning-vm/compare/v0.1.0...v0.4.0
 [0.1.0]: https://github.com/syildirim689/lightning-vm/releases/tag/v0.1.0

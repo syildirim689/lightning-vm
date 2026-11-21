@@ -5,7 +5,7 @@ madde neyin değiştiğini ve işletmecinin yapması gereken bir şey varsa onu 
 davranışı değiştirmeyen işler burada yoktur. Tahsilat çalıştırması API içinde beş dakikada bir çalışır; yani "ilk
 çalıştırma" yükseltmeden birkaç dakika sonradır.
 
-## 0.4.0'dan sonra eklenenler (yayımlanmamış)
+## 0.5.0 (beta): 0.4.0'dan sonra eklenenler (2026-11-21)
 
 Her madde kendi başına yüklenir; veritabanı değişikliği olanlarda migration kendiliğinden çalışır.
 
@@ -69,7 +69,7 @@ otomasyonundan çağıran ya da çıktısını okuyan işletmeci şunlara bakmal
 | `get.sh` seçtiği dili `install.sh`'e her zaman `--lang` ile geçirir; iletileri iki dillidir (uçbirim olmayan İngilizce çıktıda `OK    source at vX.Y.Z` satırı aynı kaldı); `install.sh`'in standart girdisi `/dev/null`'dır | `get.sh` çıktısını okuyanlar | — |
 | Paneldeki sürüm etiketi "Erken sürüm / Early build" yerine "Beta" yazar; paketlerin `package.json` sürümü `0.4.0` | — | — |
 
-**Sürüm numarası.** Yayımlanan sürümler `v0.1.0` ve `v0.4.0`'dır. `0.1.1`-`0.3.0` numaraları yalnızca iç test
+**Sürüm numarası.** Yayımlanan sürümler `v0.1.0`, `v0.4.0` ve `v0.5.0`'dır. `0.1.1`-`0.3.0` numaraları yalnızca iç test
 kurulumlarında kullanıldı ve yayımlanmadı; depoyu GitHub'dan alan bir kurulumda bu etiketler yoktur. `v0.1.0`'dan
 yükseltenler bu sayfanın **tamamını** okumalıdır: aşağıdaki bütün turlar bu sürümün içindedir.
 
