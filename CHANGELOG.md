@@ -110,6 +110,57 @@ Türkçe [docs/upgrade-notes.md](docs/upgrade-notes.md) sayfasını okuyun.*
   task at a time, audited. Without the agent the card shows the command instead. The agent side
   (`install.sh monitoring on|off`) is unchanged. See [docs/operations.md](docs/operations.md#i̇zleme).
 
+### Fixed
+
+Found by a review of everything added since 0.4.0, before it was released (what was run:
+[docs/validation.md](docs/validation.md)):
+
+- **Power schedules could be stopped for everyone by one schedule's time zone.** A schedule could be saved with a
+  time zone name the panel's runtime knows and PostgreSQL does not (Java-style short names such as `AET` anywhere;
+  renamed zones such as `Asia/Calcutta`, which is what a browser in India reports, on a database without the old
+  names). The scheduler reads the clock in the schedule's zone in one statement for all schedules, so that one row
+  made the statement fail every minute: no power schedule, automatic snapshot or scheduled backup ran for anyone.
+  A zone is now stored under a name the database knows (the renamed one where needed) or refused; the scheduler
+  reads the clock only for zones the database knows, renames rows saved earlier and reports one it cannot use
+  (`schedule_timezone_unknown`) instead of stopping. Admin → Statistics falls back to UTC for such a zone.
+- **Usage watch: an office server was reported "far below usual" every weekend**, and a weekly job "far above
+  usual" every week, each with a notice to the owner. A departure must now also hold against the same hours of the
+  same weekday one and two weeks earlier. A gap in the measurements (the platform not answering, the worker
+  stopped) no longer closes open findings and tells every owner again when the measurements return: a finding that
+  cannot be judged is kept for six hours. Around midnight UTC two nights of history passed for the four days the
+  rule needs.
+- **Schedule suggestion:** working one out held the API's only thread for about a quarter of a second per server
+  (a date formatter was built for every row of history), also on the overview page that asks for up to 20 servers.
+  "Create these schedules" pressed twice, or in two tabs, could create the pair twice; a server one schedule short
+  of its limit got the shutdown without the start. Both schedules are now written together, once.
+- **Stripe webhook:** a signed "paid" for a payment the panel had already closed as failed (a charge whose answer
+  never came back, a payment page finished late) was acknowledged and dropped: the invoice stayed unpaid and the
+  next billing run charged the card again. It is now recorded like any other payment (on the invoice, or as balance
+  when the invoice was paid meanwhile).
+- **Month forecast and budget:** the periodic budget check looked at the same first 500 accounts with a budget at
+  every run; with more than that, the rest were never checked. In the last three hours of a month (UTC) the forecast
+  of an account with hourly servers showed next month's usage beside this month's remaining hours.
+- **Payment risk:** the card warning judged "some saved card lasts", but renewals are charged to the default card
+  only: an account whose default card ends before the renewal was not warned when it had a spare. A payment page
+  the customer left or let expire counted as a "failed charge" in the staff list.
+- **Quotas:** two extra disks asked for at the same moment on two servers of one account (or project) were both
+  checked against the same free room and could together pass the quota; the check and the write are now one step
+  under the owner's lock, as for an order. `PUT /api/admin/quotas/...` without a body answered 500; it is a 400.
+- **Load on a small host:** the overview's insights are asked for every minute by every open page, and each call
+  read a week of CPU samples for each of the account's servers (the staff list: for every running server, 400 000
+  rows with 200 servers). The week's figures are now kept for ten minutes per server. The hourly usage watch
+  searched all rows of a batch again for every server; it sorts them once. The index the hourly roll-up finds new
+  samples with now summarizes its ranges as they fill (migration 091, a setting on the index) instead of at the
+  next vacuum.
+- **Version name after a release:** a panel running a commit that was tagged afterwards went on showing the
+  name it was installed under (`v0.4.0-27-gabc1234`). The next update check now takes the tag's name and starts
+  the services that show it again; nothing is built or migrated.
+- **E-mail verification:** a wrong or late confirmation could delete a code that another request had just mailed
+  to the same account. **Support suggestions:** the per-person counter could be left without its expiry and then
+  silence the suggestions for good. **Insights:** hiding a finding accepts only keys the panel could have made (one
+  with a NUL character answered 500) and keeps at most 500 per person. **API reference:** a secret inside a longer
+  value of a JSON answer ("Bearer lvm_...") is hidden like one that stands alone.
+
 ### Changed
 
 - `GET /usage/summary`: for an account with hourly servers, `accrued` and `forecast` are now the recorded usage

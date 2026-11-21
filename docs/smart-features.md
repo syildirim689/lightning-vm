@@ -25,7 +25,16 @@ Başka sunucularla karşılaştırma yapılmaz.
   - **Olağandan düşük:** yalnızca olağanı en az %15 olan sunucuda; son saatler olağanın %20'sine ya da altına
     indiğinde açılır, %50'sine çıkınca kapanır (çalışan bir hizmet durmuş olabilir).
   - 3 saatin en az 2'sinde ölçüm olmalıdır; tek saatlik sıçrama bulgu değildir.
-  - **En az geçmiş:** önceki 4 ayrı günden toplam 12 saat. Daha azında sonuç "yeterli veri yok"tur.
+  - **En az geçmiş:** önceki 4 ayrı günden toplam 12 saat. Daha azında sonuç "yeterli veri yok"tur. Günler pencereden
+    geriye doğru sayılır (takvim gününe göre değil): gece yarısı (UTC) çevresindeki pencerede bir gece iki gün sayılmaz.
+  - **Haftalık düzen bulgu değildir:** ayrılma, **bir ve iki hafta önceki aynı günün aynı saatlerine** göre de
+    geçerli olmalıdır (o saatlerden en az 2'si varsa). Hafta içi çalışıp hafta sonu boşta duran sunucu hafta sonu
+    "olağandan düşük", her pazar gecesi çalışan iş "olağandan yüksek" sayılmaz. Bir haftadan kısa geçmişte bu düzen
+    bilinemez; kural yalnızca günlük karşılaştırmadır. Bu bakış yalnızca bulgu **eler**: haftada bir çalışan bir işin
+    çalışmaması fark edilmez.
+  - **Ölçüm boşluğu:** son saatlerde ölçüm yoksa (platform yanıt vermedi, worker durdu, sunucu kapalı) açık bulgu
+    hemen kapanmaz; sayılarının en son doğrulandığı andan sonra 6 saat tutulur (`UNJUDGED_KEEP_HOURS`), ölçüm
+    dönerse aynı bulgu sürer ve sahibine ikinci kez yazılmaz.
 - **Ağ:** panel trafiği gün gün tutar. Bugünün şimdiye kadarki toplamı ile dünün toplamından büyüğü, ondan önceki 14
   günün medyanıyla karşılaştırılır. En az 7 gün gerekir. **Açılır:** en az 5 GiB, olağan günün en az 3 katı ve z ≥ 4
   (yayılım en az 1 GiB ve olağanın %25'i). **Kapanır:** z < 2.
@@ -45,7 +54,10 @@ Başka sunucularla karşılaştırma yapılmaz.
   bulgusu **oluşturmaz**, o modülün kendi denetimleri ve onay akışı aynen sürer.
 - **Arka plan maliyeti:** her çalışmada (1) son toplanan saatten bu yana gelen ham örnekler okunup saatlik satırlara
   yazılır (`server_cpu_hourly`, 63 gün tutulur; ham örnekler 14 gün), (2) 200'er sunuculuk gruplar hâlinde her
-  sunucunun en çok 15 × 24 saatlik satırı ve 16 günlük trafik satırı okunur. Kapanan bulgular 90 gün sonra silinir.
+  sunucunun en çok 15 × 24 saatlik satırı ve 16 günlük trafik satırı okunur; grubun satırları sunucularına bir kez
+  dağıtılır. Kapanan bulgular 90 gün sonra silinir. "Son saatten beri gelen örnekler" örneklerin zamanı üzerindeki
+  blok aralığı dizininden (BRIN) bulunur; dizin, aralıkları doldukça özetler (`autosummarize`, migration 091).
+  200 sunucu ve 14 günlük örnekle (yaklaşık 800 000 satır) ölçülen süreler: [validation.md](validation.md).
 
 ## Ay sonu maliyet tahmini ve bütçe
 
@@ -68,7 +80,8 @@ aylık toplamı gösterir. Fiyatlar faturalamanın tuttuğu yerden okunur; burad
   - Tahmin bütçeyi aşınca `billing.budget_forecast` bildirimi **ayda bir kez** gider (varsayılan: panel ve e-posta).
     Aynı ay "bütçeniz aşıldı" bildirimi gittiyse üstüne gönderilmez. Bütçe değiştirilince yeniden gönderilebilir.
 - **Arka plan maliyeti:** API'de 6 saatte bir (`cost-forecast.ts`, `BUDGET_FORECAST_HOURS`), yalnızca bütçesi olan ve
-  bu ay henüz uyarılmamış hesaplar için, bir çalışmada en çok 500 hesap; hesap başına üç küçük sorgu. Yedekten geri
+  bu ay henüz uyarılmamış hesaplar için, 500'er hesaplık sayfalar hâlinde **hepsi** (kimlik sırasıyla; bütçesinin
+  altındaki hesap işaretlenmediği için "ilk 500" her çalışmada aynı 500'dü); hesap başına üç küçük sorgu. Yedekten geri
   yükleme beklemesinde çalışmaz. Bütçe kaydedildiğinde de hemen bakılır.
 - Bütçesi olmayan hesap için hiçbir karşılaştırma yapılmaz. Saatlik sunucusu olmayan hesabın rakamları öncekiyle aynıdır.
 
@@ -93,13 +106,22 @@ oluşturulur.
   - **En az geçmiş:** 21 gün. Daha azında "yeterli veri yok" denir ve kaç gün olduğu yazılır. İşlemci ölçümü
     vermeyen platformlarda (XCP-ng, oVirt, libvirt, Incus) hiçbir şey önerilmez; sayfa bunu söyler.
   - Yaz saati geçişi: saatler yerel saate göre dağıtıldığı için öneri saat değişiminden etkilenmez.
+  - **Saat dilimi adları:** zamanlayıcı saati SQL içinde zamanlamanın diliminde okur. Çalışma zamanının tanıyıp
+    PostgreSQL'in tanımadığı adlar vardır (`AET` gibi kısa adlar; eski adları taşımayan veritabanında
+    `Asia/Calcutta`, `Europe/Kiev` gibi yeniden adlandırılmış dilimler). Böyle bir ad artık saklanmaz: dilimin
+    veritabanının tanıdığı öteki adı yazılır, o da yoksa istek reddedilir (`timezone: INVALID_VALUE`). Zamanlayıcı
+    saati yalnızca tanınan dilimler için okur; eskiden kalmış bir satır yeniden adlandırılır ya da atlanıp bir kez
+    `schedule_timezone_unknown` olarak kaydedilir. (Önceden böyle tek bir satır bütün zamanlamaları durduruyordu.)
 - **Zaten zamanlaması olan sunucu:** etkin bir açma ya da kapatma zamanlaması varsa öneri yapılmaz.
 - **Ne kazandırır:** faturalama kapalı sunucudan daha az ücret **almaz** (abonelik dönemliktir; saatlik kullanım
   sunucu var olduğu her saat için yazılır), bu yüzden para vaat edilmez ve sayfa bunu açıkça söyler
   (`OFF_SERVER_COSTS_LESS = false`, `schedule-suggest.ts`). Enerji ölçülen platformlarda sunucunun son 7 gündeki
   ortalama güç payı × haftalık kapalı saat, kWh olarak gösterilir; ölçülmeyenlerde yalnızca kapalı saat söylenir.
 - **Tek tıkla oluşturma** (`POST /servers/:id/schedule-suggestion`): öneri sunucu tarafında, o anki geçmişten
-  yeniden hesaplanır; istekte saat diliminden başka hiçbir şey dikkate alınmaz. Elle eklemedeki denetimler aynen
+  yeniden hesaplanır; istekte saat diliminden başka hiçbir şey dikkate alınmaz. İki zamanlama **tek işlemde**, sunucu
+  kilidi altında yazılır ve "henüz güç zamanlaması yok" koşulu o işlemin içinde yeniden bakılır: düğmeye iki kez
+  basmak (ya da iki sekme) çifti iki kez oluşturmaz, sınıra bir kalmış sunucuya açılışı olmayan bir kapanış yazılmaz.
+  Saat dilimi veritabanının tanıdığı adla saklanır (aşağıya bakın). Elle eklemedeki denetimler aynen
   geçerlidir: `server.power` yetkisi, yöneticinin "müşteri güç işlemleri" anahtarı, sunucu başına 10 zamanlama
   sınırı, sahiplik kilidi ve `server.schedule_created` denetim kaydı (`suggested: true`).
 - **Gizleme:** "Şimdi değil" içgörülerin kendi gizlemesidir (7 gün); içgörü `SCHEDULE_SUGGESTED`.
@@ -194,8 +216,9 @@ faturalamanın kendi akışında kalır ([billing.md](billing.md)).
 - **Müşteri** (içgörüler; yalnızca Faturalama ayarlarında otomatik tahsilat açıkken; faturalarını elle ödeyen hesaba
   bir şey söylenmez). Sıradaki yenileme, faturalamanın keseceği tutarla (`nextRenewal`) ve en çok 30 gün ilerisi
   için ele alınır; yenilemenin faturası zaten kesildiyse o faturanın kendi hatırlatmaları geçerlidir.
-  - `CARD_EXPIRES_BEFORE_RENEWAL`: kayıtlı kartların **hepsinin** süresi yenileme tarihinden önce doluyor ve bakiye
-    tutarı karşılamıyor. Kart, son kullanma ayının son gününe kadar geçerli sayılır; son kullanma tarihi bilinmeyen
+  - `CARD_EXPIRES_BEFORE_RENEWAL`: **faturalamanın çekeceği kartın** (varsayılan kart; yoksa en yeni kart;
+    faturalama başka kartı denemez) süresi yenileme tarihinden önce doluyor ve bakiye tutarı karşılamıyor. Süresi
+    yeten yedek bir kart uyarıyı kaldırmaz; varsayılan yapılınca kalkar. Kart, son kullanma ayının son gününe kadar geçerli sayılır; son kullanma tarihi bilinmeyen
     kart hakkında sonuç çıkarılmaz. Varsayılan kart adıyla (son dört hane, AA/YY), tarih ve tutar söylenir.
   - `RENEWAL_NOT_COVERED`: süresi yeten kart yok, hesapta bakiye var ama yenilemeden az. Bakiye, eksik tutar,
     tarih ve tutar söylenir. Faturalama ayarlarında bakiye kapalıysa bakiye hesaba katılmaz.
@@ -203,7 +226,8 @@ faturalamanın kendi akışında kalır ([billing.md](billing.md)).
 - **Personel** (`GET /admin/billing/risk`, `billing.view`; Yönetim → Faturalandırma → "Risk altında" sekmesi ve
   `PAYMENT_RISK` içgörüsü). Hesap ve para birimi başına bir satır:
   - Listeye giren: vadesi geçmiş ödenmemiş faturası olan (itirazlı faturalar ve bakiye yüklemeleri sayılmaz) ya da
-    son 30 günde en az 2 başarısız tahsilatı olan hesap.
+    son 30 günde en az 2 başarısız tahsilatı olan hesap. Müşterinin yarıda bıraktığı ya da süresi dolan ödeme
+    sayfası (`CANCELLED_BY_CUSTOMER`, `EXPIRED`) başarısız tahsilat sayılmaz.
   - **Risk altındaki tutar:** vadesi geçmiş toplam; vadesi geçmiş yoksa başarısız tahsilatların ait olduğu açık tutar.
   - **Büyüyor:** vadesi geçmiş tutarın bir bölümü son 7 günde eklenmiş, bir bölümü daha eski.
   - Sıra: risk altındaki tutar büyükten küçüğe (farklı para birimleri sayı olarak karşılaştırılır; liste bir toplam

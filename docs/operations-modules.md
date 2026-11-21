@@ -59,7 +59,8 @@ Kurallar `apps/api/src/smart-rules.ts` içindedir ve birim testleri vardır. Ver
 Sonradan eklenen yardımcılar (olağan dışı kullanım ve diğerleri) kuralları ve eşikleriyle [smart-features.md](smart-features.md) sayfasındadır.
 
 - **Doğru boyutlandırma:** son 7 günün CPU örnekleri (`server_cpu_samples`) kullanılır. Öneri için en az 3 gün ve 24
-  örnek gerekir.
+  örnek gerekir. Haftalık rakamlar sunucu başına 10 dakika Redis'te tutulur (`cpustats:<sunucu>`; öneri için yeterli
+  geçmiş yokken 1 dakika): içgörüleri her dakika soran sayfalar bir haftalık örneği her seferinde yeniden okumaz.
   - Ortalama < %2 ve 95. yüzdelik < %5: **boşta** (`IDLE_SERVER`).
   - Ortalama < %10 ve 95. yüzdelik < %30 (1 vCPU'dan büyükse): **büyük** (`RIGHT_SIZE_DOWN`).
   - 95. yüzdelik > %85: **küçük** (`RIGHT_SIZE_UP`).

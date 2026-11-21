@@ -43,6 +43,8 @@ Her madde kendi başına yüklenir; veritabanı değişikliği olanlarda migrati
 - **Bakım için en sakin saatler ve dönemsel özet.** İkisi de kendiliğinden bir şey yapmaz.
   - En sakin saatler yalnızca gösterilir (Sistem → Otomatik güncellemeler, bağlantı → Host'lar); güncelleme
     penceresi ancak düğmeye basılırsa değişir. 21 günlük işlemci geçmişi ister. Veritabanı değişikliği yoktur.
+  - Migration 091 yalnızca bir dizin ayarıdır (`server_cpu_samples_at`, `autosummarize = on`): veri okunmaz,
+    yeniden yazılmaz.
   - Dönemsel özet **kapalı** gelir: personel kendi özetini Hesabım → Bildirimler'den açar; müşteriler için önce
     Ayarlar → Bildirim kuralları'nda `account.digest` olayını açmanız gerekir (varsayılan: kapalı). Migration 090
     boş bir tablo (`digest_preferences`) ve bir dizin ekler; mevcut veri okunmaz ve değişmez. API beş dakikada

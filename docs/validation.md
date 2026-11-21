@@ -662,3 +662,171 @@ Aynı saatlerde başka bir çalışma "akıllı özellikler"i ekledi; aşağıda
 - **Denenmeyenler:** gerçek bir posta sunucusu; gerçek Stripe (olaylar testte bir test anahtarıyla imzalandı,
   Stripe'a istek gitmedi); ajanın `monitoring on|off` isteğini bir sunucuda çalıştırması; proje kotasıyla gerçek
   bir hipervizörde sunucu kurulması (testler siparişin kabul ya da reddine kadar gider).
+
+## 0.4.0'dan sonra eklenenlerin gözden geçirilmesi, iki yeni yardımcı ve ölçümler — 2026-11-21
+
+`v0.4.0` etiketinden sonra `main`'e giren her şey (adres doğrulama, proje kotası, Stripe webhook'u, belgelerden istek,
+izleme anahtarı, beş akıllı yardımcı) yayımlanmadan önce başkasının işi gözüyle okundu; iki yardımcı daha eklendi
+(bakım için en sakin saatler `d8d5490`, dönemsel özet `d85b6a3`). Bulunan her kusur kökünden düzeltildi ve aşağıda
+yazılı; kullanıcıya görünenler `CHANGELOG.md` içinde "Fixed" başlığındadır.
+
+### Bulunan kusurlar ve düzeltmeleri
+
+Önem sırasıyla. "Önceden vardı" denenler 0.4.0'da da vardı; yeni eklenenler onlara yeni bir yol açtığı ya da aynı
+kodu kullandığı için ele alındı.
+
+| # | Önem | Kusur | Neden | Düzeltme (commit) |
+|---|---|---|---|---|
+| 1 | yüksek | Tek bir zamanlamanın saat dilimi bütün zamanlamaları durdurabiliyordu (güç, otomatik anlık görüntü, zamanlanmış yedek; herkes için, her dakika). | Zamanlayıcı saati tek SQL ifadesinde `AT TIME ZONE p.timezone` ile okur; saat dilimi yalnızca çalışma zamanına (Intl) soruluyordu. Node `AET`, `PNT` gibi kısa adları ve `Asia/Calcutta`, `Europe/Kiev` gibi eski adları tanır (Chrome'un Hindistan'da bildirdiği ad `Asia/Calcutta`'dır); PostgreSQL kısa adları hiç, eski adları yalnızca tzdata'sı onları taşıyorsa tanır. Önceden vardı; zamanlama önerisi ikinci bir giriş yolu ekledi. Bu makinedeki PostgreSQL 18.6 ile doğrulandı (Node'un 418 kanonik adından 18'ini tanımıyor); demo'daki `postgres:17-alpine` eski adları taşıyor, kısa adları taşımıyor. | Saklanan ad veritabanının kabul ettiği addır (`time-zone-db.ts`): verilen ad, yoksa dilimin öteki adı, o da yoksa 400. Zamanlayıcı saati yalnızca tanınan dilimler için okur (`CASE`), eski satırı yeniden adlandırır ya da atlayıp bir kez kaydeder. İstatistik sayfası UTC'ye düşer. (`567f55f`) |
+| 2 | yüksek | Zamanlama önerisi hesaplanırken API'nin tek iş parçacığı sunucu başına yaklaşık çeyrek saniye (bu makinede 2,6 sn) kilitleniyordu; genel bakış 20 sunucuya kadar bunu art arda yapıyordu. | `slotOf` geçmişin her satırı (672) için yeni bir `Intl.DateTimeFormat` kuruyordu. | Saat dilimi başına tek biçimlendirici. (`d8d5490`) |
+| 3 | orta | Kullanım takibi hafta içi çalışan sunucuyu her hafta sonu "olağandan çok düşük", haftalık işi her hafta "olağandan çok yüksek" buluyor ve sahibine her seferinde bildirim gidiyordu. | Taban "önceki günlerin aynı saatleri"ydi; haftanın günü hesaba katılmıyordu. Tohumlanmış geçmişle uçtan uca çalıştırılırken (cumartesi) görüldü. | Ayrılma, bir ve iki hafta önceki aynı pencereye göre de geçerli olmalı. (`1701d16`) |
+| 4 | orta | Ölçümde birkaç saatlik boşluk (platform yanıt vermedi, worker durdu) bütün açık bulguları kapatıyor, ölçüm dönünce yeniden açıp sahiplere ikinci kez yazıyordu. | "Yargılanamıyor" da "kapandı" sayılıyordu. | Yargılanamayan bulgu 6 saat tutulur. (`1701d16`) |
+| 5 | orta | Stripe webhook'u, panelin başarısız diye kapattığı bir ödeme için gelen imzalı "ödendi" bildirimini onaylayıp atıyordu: fatura ödenmemiş kalıyor, sonraki faturalama çalıştırması kartı ikinci kez çekiyordu. | Yalnızca `pending` ödemeler ele alınıyordu (yanıtı 30 sn içinde gelmeyen kayıtlı kart tahsilatı `PROVIDER_ERROR` ile kapanır). Önceki test bu davranışı "kapalı ödeme kapalı kalır" diye sabitliyordu. | Ödeme yeniden açılıp her ödeme gibi kaydedilir (faturaya; fatura bu arada ödendiyse bakiyeye). (`0105b32`) |
+| 6 | orta | "Bu zamanlamaları oluştur" iki kez basılınca (ya da iki sekmede) çift iki kez oluşuyor; sınıra bir kalmış sunucuya açılışı olmayan kapanış yazılıyordu. | Denetimler kilidin dışında, iki ekleme ayrı işlemlerdeydi. | Tek işlem, sunucu kilidi altında, koşul içeride yeniden bakılıyor. (`567f55f`) |
+| 7 | orta | Bütçe tahmini denetimi her çalışmada aynı ilk 500 hesaba bakıyordu; 500'den fazla bütçeli hesapta kalanlar hiç denetlenmiyordu. | `ORDER BY id LIMIT 500` ve bütçesinin altındaki hesabın işaretlenmemesi. | Kimlik sırasıyla sayfa sayfa hepsi. (`0105b32`) |
+| 8 | orta | Genel bakıştaki içgörüler her dakika, açık her sayfa için hesabın her sunucusunun bir haftalık işlemci örneğini yeniden okuyordu; personel listesi çalışan her sunucu için (200 sunucuda 405 400 satır, tablodan satır satır). | `cpuStats` her çağrıda `server_cpu_samples` okur. Önceden vardı. | Haftalık rakamlar sunucu başına 10 dakika Redis'te. (`0d3430a`) |
+| 9 | düşük | Kart uyarısı "kayıtlı kartlardan biri yetiyor mu"ya bakıyordu; faturalama yalnızca varsayılan kartı çeker. Varsayılanı yenilemeden önce biten, yedeği yeten hesap uyarılmıyordu. | Kural ile `chargeSavedCard` aynı kartı seçmiyordu. | Çekilecek kart yargılanır; metinler buna göre. (`0105b32`) |
+| 10 | düşük | Müşterinin yarıda bıraktığı ya da süresi dolan ödeme sayfası personel listesinde "başarısız tahsilat" sayılıyordu. | `status = 'failed'` her ikisini de kapsar. | `EXPIRED` ve `CANCELLED_BY_CUSTOMER` sayılmaz. (`0105b32`) |
+| 11 | düşük | Ayın son üç saatinde (UTC) saatlik sunuculu hesabın tahmini, gelecek ayın kullanımını bu ayın kalan saatleriyle gösteriyordu. | Kullanım faturalamanın ayıyla (İstanbul günü), oran ve kalan saat UTC ayıyla okunuyordu. | İkisi de UTC ayı. (`0105b32`) |
+| 12 | düşük | Kullanım takibi gece yarısı (UTC) çevresinde iki gecelik geçmişi dört gün sayıyordu. | Günler takvim gününe göre sayılıyordu. | Pencereden geriye sayılır. (`1701d16`) |
+| 13 | düşük | Aynı anda iki sunucuya istenen ek disk, aynı boş kotaya karşı ölçülüp ikisi de geçebiliyordu (hesap ya da proje kotası). | Denetim ile yazma ayrı adımlardı. Önceden vardı; proje kotası aynı kodu kullanıyor. | Sahibin kilidi altında tek işlem. Yeniden boyutlandırmada aynı pencere **duruyor**: aşağıda. (`545b686`) |
+| 14 | düşük | Adres doğrulamada, kod bulamayan bir onay ya da geç başarısız olan bir posta, başka bir isteğin az önce yazdığı kodu silebiliyordu. | Koşulsuz `DEL`. | Kod yalnızca sahibi olan istekçe silinir (Lua). (`545b686`) |
+| 15 | düşük | Destek önerilerinin sayacı süresiz kalıp önerileri kalıcı susturabiliyordu; kota `PUT` isteği gövdesiz gelince 500 dönüyordu; içgörü gizleme anahtarı NUL karakteriyle 500 dönüyor ve sınırsız satır yazılabiliyordu; belgelerden çalıştırılan isteğin JSON yanıtında daha uzun bir değerin içindeki gizli değer gizlenmiyordu; her öneri oluşturmada Redis `KEYS` taraması yapılıyordu. | Ayrı küçük eksikler. | `545b686`, `1701d16`, `567f55f`. |
+| 16 | düşük | Worker'ın saatlik çalışması, grubun bütün satırlarını her sunucu için yeniden tarıyordu (200 sunucu, iki haftalık saatler: 1,4 sn; bir kez dağıtınca 0,12 sn). | `hours.filter(...)` sunucu başına. | Satırlar sunucularına bir kez dağıtılır. (`1701d16`) |
+
+**Doğrulanmayan şüpheler:** örneklerin zamanı üzerindeki blok aralığı dizininin (BRIN), eski satırlar silinip yerleri
+yeniden kullanıldıkça işe yaramaz hale geleceği düşünüldü; ölçüldü ve öyle olmadığı görüldü (aşağıda). Tek eksik,
+yeni aralıkların ancak bir sonraki vakumda özetlenmesiydi: migration 091 dizinde `autosummarize`'ı açar.
+
+**Bilinip düzeltilmeyen:** yeniden boyutlandırmada kota, işlem kabul edilirken ölçülür ve kullanım ancak worker
+işlemi bitirince artar; aynı hesabın iki sunucusu aynı anda büyütülürse ikisi de aynı boş kotaya karşı ölçülür.
+0.4.0'da da böyleydi; düzeltmesi bekleyen yeniden boyutlandırmaların kullanıma sayılmasını gerektirir ve bu turda
+yapılmadı.
+
+**Sağlam bulunanlar:** yeni yolların hepsinde yetki ve sahiplik (içgörüler, bulgular, zamanlama önerisi, destek
+önerileri ve benzer talepler, ödeme riski, proje kotaları, adres doğrulama, kullanım özeti, izleme anahtarı):
+bir müşteri başka bir müşterinin verisini hiçbirinden okuyamıyor; salt okunur API anahtarı yazamıyor. Belgelerden
+istek çalıştırma: yalnızca belgelenmiş panel yollarına gidebiliyor (yol parametreleri `encodeURIComponent` ile,
+`.`/`..` reddedilir), başka siteden sürülemiyor (CSRF başlığı ve Origin denetimi `X-Lightning-Try`'dan bağımsız; CORS
+yok), hız sınırını ve yetkileri aşmıyor (başlık yalnızca bir sayaç ekler). Sipariş kotası: denetim ve ekleme aynı
+işlemde, proje ve hesap kotasının ortak kilidi altında. Doğrulama kodu denemeleri atomik sayılıyor, karşılaştırma
+sabit süreli. Stripe'ta "bir kez kaydedilir" veritabanında sağlanıyor (ödeme satırı kilitli). Zamanlayıcılar Redis
+kilidi altında; birden çok kopyada üst üste binen çalışma ya da yakalanmamış hata yolu yok. Migration 088-091 var
+olan veride tablo yeniden yazmıyor.
+
+### Ölçümler: 200 sunucu, 14 günlük örnek
+
+`apps/api/test/integration/seeded-history.test.mjs` (`SEEDED=1`; tohumlama `seed-history.mjs` içinde bir test
+yardımcısıdır, hiçbir gerçek veritabanına yazmaz): 20 müşterinin 200 sunucusu, beş kullanım biçimi (ofis, düz, gece
+işi, boşta, günlük dalga), 14 gün × 5 dakikalık **806 600** işlemci örneği, dört haftalık **134 600** saatlik satır,
+16 günlük trafik. Geliştirme makinesi, PostgreSQL 18.6 ve Redis 8.0.5 WSL içinde geçici bir dizinden; API ile
+veritabanı arasında her sorgu yaklaşık 14 ms gidiş-dönüş tutuyor (WSL köprüsü), yani **süreler şişkindir ve
+çalıştırmadan çalıştırmaya oynar**; sorgu ve sayfa sayıları taşınabilir olanlardır. "Önce" `467b939` derlemesidir.
+
+| Ölçüm | Önce | Sonra |
+|---|---|---|
+| Zamanlama önerisi, tek sunucu (`GET /servers/:id/schedule-suggestion`) | 2 600 ms | 12 sorgu, 76-119 ms |
+| `GET /insights`, 10 sunuculu müşteri, ilk çağrı (hiçbir şey saklı değil) | 10 983 ms | 56 sorgu, 483-3 540 ms (üç çalıştırma) |
+| `GET /insights`, sonraki dakikaların çağrıları | her çağrıda bir haftalık örnek okunur (10 sunucu: 3 200 sayfa, 97-206 ms plan); 149-546 ms | 20 sorgu, örnek okunmaz; 66-350 ms |
+| `GET /admin/insights`, liste yeniden hesaplanırken (pano açıkken dakikada bir, uyarılar için 10 dakikada bir) | 405 400 satır örnek okunur (410 013 sayfa erişimi, plan 1,3-3,7 sn); 7 397 ms | 24 sorgu, örnek okunmaz; 92-385 ms. Rakamlar da saklı değilken (10 dakikada en çok bir): 28 sorgu, 2,4-3,2 sn |
+| `GET /admin/insights`, saklanan liste | 74 ms | 4 sorgu, 16-27 ms |
+| Kullanım takibi, 200 sunucu (saatlik) | satır dağıtma 1 395 ms | 7 sorgu (3 bulguyla 10); satır dağıtma 121 ms; toplam 1,7-4,7 sn (çoğu 62 800 satırın okunması) |
+| Saatlik toplama (yalnızca en yeni saat) | aynı | 2 sorgu, 14-46 ms; 5 931 sayfalık tablodan 49 sayfa (BRIN) |
+| Aynı okuma, bir gün silinip yeri yeniden kullanıldıktan sonra | aynı | 173 sayfa (dizin işe yaramaya devam ediyor) |
+| İlk toplama (14 günün tamamı, yükseltmeden sonra bir kez) | aynı | 2 sorgu, 13-22 sn |
+| En sakin saatler, bütün kurulum (ilk / saklanan yanıt) | yoktu | 7 sorgu, 452-674 ms / 3 sorgu, 19-70 ms |
+| En sakin saatler, bağlantı ve 4 host | yoktu | 7 sorgu, 1,3 sn (yanıt 30 dakika saklanır) |
+| Migration 088-091, 748 800 örnek ve 21 kullanıcı yerindeyken | | 1,0-3,7 sn; satır kaybı yok, her biri bir kez kayıtlı, ikinci çalıştırma hiçbir şey uygulamıyor |
+
+**Sonuçlar anlamlı mı (aynı veriyle uçtan uca):**
+
+- **Toplama:** 200 sunucunun her biri için 14 günün her saati (67 400 satır), tam saatlerde 12 örnek; ikinci
+  çalıştırma hiçbir şeyi ikilemiyor.
+- **Kullanım takibi:** olağan kullanımda **0 bulgu** (ofis sunucuları hafta sonu boşta, gece işi her gece, günlük
+  dalga: hiçbiri bulgu değil; düzeltme 3'ten önce cumartesi günü ofis sunucuları "düşük" çıkıyordu). Üç gerçek
+  ayrılma eklenince tam o üçü: son üç saatte %97'ye çıkan boş sunucu (`cpu_pinned` notuyla), susan düz sunucu,
+  78 GB giden trafiği olan sunucu (`outbound`). Sahiplere birer kez yazılıyor; sonraki çalıştırma yenisini açmıyor.
+- **Zamanlama önerisi:** ofis sunucusu için 19:00 kapanış / 07:00 açılış, pazartesi-cuma, haftada 108 saat; boşta
+  sunucu `always_idle`, düz, dalgalı ve gece işi olan sunucular `no_window`. Üç saat %97'de çalıştırılan boş sunucu
+  artık "her zaman boş" sayılmıyor.
+- **En sakin saatler:** gece işi 01:00-03:59, ofisler 08:00-17:59, dalganın dibi 02:00: en sakin iki saat işin
+  hemen öncesi (23:00-01:00) ya da hemen sonrası (04:00-06:00); ikisi 32,9 meşgul vCPU ile neredeyse eşit (haftanın
+  ortalaması 62,1, en yoğun saat 93,6). Bağlantı aynı sonucu, dört host 50'şer sunucuyla kendi sonucunu veriyor.
+- **İçgörüler:** müşteriye iki ofis sunucusu için `SCHEDULE_SUGGESTED`, iki boş sunucu için `IDLE_SERVER`.
+
+### Demo sunucusu (yalnızca okuma, SSH)
+
+`467b939` ile yerinde güncellenmiş hali, güncellemeden yaklaşık bir saat sonra:
+
+- 24 kapsayıcının hepsi çalışıyor, sağlık denetimi olanlar `healthy`, **yeniden başlatma sayısı hepsinde 0**, OOM yok.
+- Bellek: API 91 MiB, web 69 MiB, worker 34 MiB, PostgreSQL 35 MiB; sunucuda 15,6 GiB'ın 13,9'u kullanılabilir.
+  Disk %37. Yük ortalaması 0,6.
+- API günlüğü (son dağıtımdan beri 6 768 satır, 3 383 istek): `error` / `warn` düzeyinde satır **yok**, 5xx yanıt yok,
+  2 saniyeyi aşan istek yok. Worker günlüğü: başlangıç ve yarım saatlik port taramaları, hata yok. Web günlüğü:
+  dışarıdan gelen dört geçersiz Next.js "server action" denemesi (tarayıcı botları), başka bir şey yok.
+- PostgreSQL günlüğü (24 saat): kilit bekleme ya da deadlock yok. İki sözdizimi hatası elle yazılmış inceleme
+  sorgularına ait (biri önceki çalışmanın, biri bu incelemenin; hiçbiri bir şey değiştirmedi). 20 Kasım 20:40'taki
+  "terminating connection" satırları sunucunun planlı yeniden başlatılmasıdır.
+- `schema_migrations`: 89 satır, 89 ayrı sürüm; `088_usage_anomalies` ve `089_budget_forecast` birer kez (03:24 UTC).
+- Sunucu ajanı: bakım zamanlayıcısı saatte bir sorunsuz bitiyor; son yedi güncellemenin hepsi `ok`, her birinden
+  önce yedek alınmış.
+- Demo'da hiç sunucu ve örnek yok (`server_cpu_samples` ve `server_cpu_hourly` boş): akıllı yardımcılar orada
+  yalnızca "yeterli veri yok" halleriyle çalışıyor. Koda yansıyan bir anormallik bulunmadı.
+
+### Tarayıcı paketi, iki tema ve 390 px
+
+- **Genişlik testi** (390, 768, 1920 px) 0.4.0'dan sonra eklenen ekranları da geziyor: kotalar (proje kotalarıyla),
+  projeler, ödeme ayarları (Stripe adresi), olağan dışı kullanım, risk altındaki hesaplar, profil (adres doğrulama),
+  faturalar. Zamanlama önerisi, kullanım takibi, en sakin saatler ve dönemsel özet kendi testlerinde 390 px'te,
+  içleri doluyken ölçülüyor.
+- **Tema testi** yeni blokları iki temada, içleri doluyken açıyor (yeni bir kurulumda geçmiş olmadığı için ilgili
+  tek rotanın yanıtı hazır verilir): yardımcıların içgörüleri, en sakin saatler (Sistem ve bağlantının host'ları),
+  izleme kartı, dönemsel özet, olağan dışı kullanım, risk altındaki hesaplar, kotalar, projeler, ödeme ayarları,
+  belgelerden istek çalıştırma, sunucu sayfasında kullanım takibi ve zamanlama önerisi. Her blokta **her metnin rengi
+  arkasındakiyle ölçülür** (sayfadan aşağı arka planlar saydamlıklarıyla üst üste boyanır; WCAG kontrast oranı;
+  taban 3:1). Ölçümün kendisi önce bilinen örneklerle sınanır (koyu zeminde koyu yazı ve beyaza yakın katmanda
+  soluk yazı bulunmalı, okunaklı yazı bulunmamalı). **İki temada da 3:1'in altında metin bulunmadı.**
+- **Çalıştırmalar (test sunucusunda, her biri atılabilir kendi yığınında; demo'nun verisine dokunulmaz):**
+  - `e758595`, demo güncellemesiyle: 44 testin 40'ı geçti, 2'si başarısız, 2'si çalışmadı; demo `/api/ready` 34
+    yanıtın 34'ünde 200. Aynı commit'te GitHub'daki elle tam çalıştırmanın (`44884186309`) `compose` işi **aynı iki
+    testte** durdu (40 geçti, 2 başarısız, 2 çalışmadı): rastgele değil, iki gerçek hata.
+    1. Dönemsel özetin önizlemesi ekranda hesabın diliyle (Türkçe) yazılıyordu, sayfa İngilizceyken de. Mesaj hesabın
+       diliyle gitmeye devam ediyor; yanıt artık iki dili de taşıyor ve sayfa kendi dilini gösteriyor (`a4c65b9`).
+    2. Tema testi, belgelerdeki bir rotayı açmadan "isteği çalıştır" bölümünü arıyordu (testin hatası; `a4c65b9`).
+  - `a4c65b9`, demo'ya dokunmadan: **44/44** (17,0 dk); demo `/api/ready` 53 yanıtın 53'ünde 200.
+  - Aynı elle çalıştırmanın diğer işleri geçti: `api-integration` (yeni entegrasyon dosyaları dahil, PostgreSQL 17
+    ile), birim işleri (API, web ve derlemesi, worker), altı adaptör, iki Go servisi (`gofmt`, `go vet`,
+    `go test`), 11 imaj derlemesi, `node scripts/audit.mjs` (yüksek ve kritik bağımlılık uyarısı yok).
+  - Sürüm commit'inin iki tam çalıştırması ve karşılaştırması aşağıdaki sürüm bölümündedir.
+
+### Yerelde çalıştırılanlar
+
+Geliştirme makinesinde (Docker yok; PostgreSQL 18.6 ve Redis 8.0.5 WSL içinde geçici dizinden, iş bitince silindi),
+dosya dosya:
+
+- API birim testleri 206/206, worker 66/66 (`npm run check`), web 131/131 ile ileti ve simge denetimleri;
+  `tsc` (API) ve `tsc --noEmit` (web) temiz.
+- Entegrasyon: `smart-maintenance-hours` 4/4, `smart-digest` 8/8, `smart-schedule` 6/6, `smart-anomalies` 5/5,
+  `smart-forecast` 4/4, `smart-payment-risk` 3/3, `stripe-webhook` 8/8, `email-verification` 8/8,
+  `project-quota` 4/4, `platform` 42/42, `security-servers` 14/14, `security-billing` 18/18,
+  `seeded-history` 6/6 (`SEEDED=1`). Makine yük altındayken iki kez "connection timeout" görüldü (havuzun 3
+  saniyelik bağlantı süresi, WSL köprüsü); aynı dosyalar tek başına yeniden çalıştırıldığında geçti.
+
+### Çalıştırılmayanlar ve doğrulanmayanlar
+
+- Süreler küçük bir gerçek sunucuda ölçülmedi; yalnızca geliştirme makinesinde, PostgreSQL 18 ile. Panelin
+  PostgreSQL'i 17'dir: planlar farklı olabilir (18'in birincil anahtarda "skip scan"i 17'de yok; BRIN okuması bu
+  yüzden ayrıca, dizin taraması kapatılarak ölçüldü).
+- Dönemsel özetin e-posta ve mesajlaşma uygulaması teslimatı gerçek bir posta sunucusu ya da uygulamayla denenmedi;
+  gelen kutusu teslimatı entegrasyon testinde ve tarayıcı testinde görüldü. Sessiz saatler özet için ayrıca
+  sınanmadı: özet sıradan bir bildirimdir ve tüketicinin var olan kuralından geçer (`quiet-hours.test.mjs`).
+- Saat dilimi düzeltmesinin "yeniden adlandırma" yolu yalnızca eski adları tanımayan yerel PostgreSQL 18'de
+  çalıştı; panelin `postgres:17-alpine` imajı eski adları tanıdığı için orada o yol hiç çalışmaz (kısa adların
+  reddi ve zamanlayıcının korunması CI'da, PostgreSQL 17 ile çalıştı).
+- Stripe'ın geç gelen "ödendi" bildirimi burada imzalanan olaylarla sınandı; gerçek Stripe ile denenmedi.
+- Kurulum betiğindeki ad yenileme (`install.sh update`, sonradan etiketlenen commit) 103 denetimlik kurulum
+  düzeneğiyle denenmedi; `sh -n`, `dash -n` ve CI'daki `shellcheck` ile, sonra demo sunucusunda gerçek
+  çalıştırmayla doğrulandı (sürüm bölümü).
+- `servers.test.mjs` (worker ve simülatör ister) yerelde ve CI'da çalışmaz; `compose` işi ve tarayıcı paketi aynı
+  yolları uçtan uca geçer.
+- Proje sitesi (lightningvm.app) bu turda güncellenmedi; `scripts/get.sh` değişmedi.
