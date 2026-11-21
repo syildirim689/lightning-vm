@@ -1,19 +1,31 @@
 import { expect, test, type BrowserContext, type Page, type Route } from '@playwright/test';
+import { readFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 // The rule-based helpers on their screens. Runs after app.spec.ts (files run in name order, one worker) on the
 // deployment that suite has set up: its administrator, and the catalog its tests opened for sale. What the helpers
 // say depends on weeks of usage history a fresh deployment does not have, so each test first shows the true state of
 // such a deployment ("not enough data"), and then the answer of the one API route in question is replaced by a
 // prepared one, to see the screen with findings in it. Everything else the page asks for is the real API.
-test.describe.configure({ mode: 'serial' });
+// The tests do not build on each other: one that fails does not keep the others from running.
 test.use({ locale: 'en-US' });
 
 const admin = { email: process.env.E2E_ADMIN_EMAIL ?? 'admin@example.test', password: process.env.E2E_ADMIN_PASSWORD ?? 'e2e admin passphrase 2026' };
 const csrf = { 'x-lightning-csrf': '1' };
 let cookies: Awaited<ReturnType<BrowserContext['cookies']>> | undefined;
 
+// The administrator's session. After app.spec.ts this address has signed in too often to do it again within minutes
+// (sign-in is limited per address), so that file leaves its session for the ones after it; run alone, this file signs in.
 async function signInAdmin(page: Page) {
-  if (cookies) { await page.context().addCookies(cookies); await page.goto('/admin'); return; }
+  if (!cookies) { try { cookies = JSON.parse(readFileSync(join(tmpdir(), 'lightning-e2e-admin-session.json'), 'utf8')); } catch { /* run alone */ } }
+  if (cookies) {
+    await page.context().addCookies(cookies);
+    if ((await page.request.get('/api/auth/me')).ok()) { await page.goto('/admin'); return; }
+    // A session left by an earlier run of another deployment: not this one's.
+    await page.context().clearCookies();
+    cookies = undefined;
+  }
   await page.goto('/login');
   await page.getByLabel(/E-posta|Email/).fill(admin.email);
   await page.getByLabel(/Parola|Password/).fill(admin.password);

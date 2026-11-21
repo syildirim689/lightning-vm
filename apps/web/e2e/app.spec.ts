@@ -1,4 +1,7 @@
 import { expect, test, type BrowserContext, type Locator, type Page } from '@playwright/test';
+import { writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 // Serial: the first tests perform first-run setup that later tests rely on.
 test.describe.configure({ mode: 'serial' });
@@ -1487,6 +1490,10 @@ async function signInAdmin(page: Page) {
   await signIn(page, admin);
   await expect(page).toHaveURL(/\/admin$/);
   adminCookies = await page.context().cookies();
+  // Kept for the spec files that run after this one (smart.spec.ts): by then this address has signed in too often to
+  // do it again (sign-in is limited per address), and this session is still good. Outside the results folder, which
+  // is copied and uploaded when a run fails.
+  try { writeFileSync(join(tmpdir(), 'lightning-e2e-admin-session.json'), JSON.stringify(adminCookies)); } catch { /* the later files sign in themselves */ }
 }
 
 test.describe('people, settings and smart features (English browser)', () => {
