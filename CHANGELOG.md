@@ -45,6 +45,19 @@ Türkçe [docs/upgrade-notes.md](docs/upgrade-notes.md) sayfasını okuyun.*
   *Türkçe: aynı anda istenen boyut büyütmeleri konumun son kapasitesini ya da bayinin son tahsisini birlikte
   alabiliyordu; artık konumun ve bayinin kilidi altında kabul edilir ve bekleyen büyütme ikisinde de sayılır
   ([docs/validation.md](docs/validation.md#050dan-sonra-boyut-büyütmede-konum-kapasitesi-ve-bayi-tahsisi--2026-11-21)).*
+- **Admin → Statistics scrolled sideways on a phone.** At 390 px the page was 202 px wider than the screen as soon
+  as its numbers had loaded. The last two cards ("Biggest customers" and "When people act") sit in a grid that has
+  one column on a narrow screen, and that column was as wide as its widest content: the heatmap, 34rem wide and
+  meant to scroll inside its own card, widened the card, its neighbour and the page instead. The column may now be
+  narrower than its content (as the two-column layout of wide screens already was), so the heatmap scrolls inside
+  its card and the page keeps the width of the screen; the grids of the charts and of the breakdowns got the same
+  column. Nothing else on the page changed, and wider screens look as before. The browser test that walks every
+  page at 390 px had not seen it: it measured a page as soon as its heading was there, which is before the API has
+  answered, so it measured the placeholders; it now waits until the page's API calls have ended. No database
+  change.
+  *Türkçe: Yönetim → İstatistikler telefonda yana kayıyordu (390 px'te 202 px taşma); ısı haritası artık kendi
+  kartının içinde kayar, sayfa ekran genişliğinde kalır
+  ([docs/validation.md](docs/validation.md#050dan-sonra-istatistik-sayfasının-telefonda-taşması-ve-iki-kararsız-tarayıcı-testi--2026-11-21)).*
 
 ## [0.5.0] - 2026-11-21
 

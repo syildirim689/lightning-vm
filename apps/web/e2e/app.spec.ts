@@ -21,6 +21,19 @@ async function choose(page: Page, scope: Page | Locator, label: string | RegExp,
   await scope.getByRole('button', { name: label }).click();
   await page.getByRole('option', { name: option }).first().click();
 }
+// A list that filters while typing (React Aria ComboBox): typed into, then one option clicked. Its list comes in over
+// 150 ms and, unlike a select's, leaves the page behind it free to scroll; React Aria closes such a list, and puts back
+// the text that was typed, as soon as the page scrolls. An option clicked while it still moves in is "not stable" for
+// Playwright, which tries again, and its third try first scrolls the option to the middle of the window: the page
+// scrolled, the list closed, the option was gone ("element was detached from the DOM") and nothing opened it again.
+// On a development machine that was 4 of 20 runs. So the option is clicked once the list has arrived and stands still.
+async function pick(page: Page, box: Locator, typed: string, option: string | RegExp, exact = false) {
+  await box.fill(typed);
+  const item = page.getByRole('option', { name: option, exact });
+  await expect(item).toBeVisible();
+  await expect(page.locator('[data-trigger="ComboBox"][data-entering]')).toHaveCount(0);
+  await item.click();
+}
 // React Aria keeps the real input visually hidden under its styled control.
 // Controlled inputs change only after the app (or the API) answers, so click and let expect() wait.
 const tick = (box: Locator) => box.click({ force: true });
@@ -105,7 +118,43 @@ async function unreadable(page: Page, selector: string): Promise<string[]> {
     return out;
   }, selector);
 }
+// A page's heading is in the HTML the server sends; its cards, charts and tables come with the API's answers. A width
+// measured between the two is the width of the placeholder: /admin/stats was 202 px too wide at 390 px once its heatmap
+// was drawn, and the check below saw 0 for as long as it ran before the answer came (it failed only when the answer won).
+// watchApi() is called before a page loads anything: every document of that page then counts its own calls to the API
+// (fetch, so the live-events stream, which never ends, is not among them). apiQuiet() waits until the page listens
+// (its scripts have run and asked for their data), no call is in flight and none has started or ended for 400 ms (one
+// answer often starts the next call). A page that is not watched is measured as it is: its test waits for the content
+// it means.
+type ApiCalls = { open: Map<number, string>; last: number; n: number };
+const watched = new WeakSet<Page>();
+async function watchApi(page: Page) {
+  await page.addInitScript(() => {
+    const calls: ApiCalls = { open: new Map(), last: Date.now(), n: 0 };
+    (window as unknown as { __apiCalls: ApiCalls }).__apiCalls = calls;
+    const real = window.fetch;
+    window.fetch = (...args: Parameters<typeof fetch>) => {
+      const url = new URL(args[0] instanceof Request ? args[0].url : String(args[0]), location.href);
+      if (url.origin !== location.origin || !url.pathname.startsWith('/api/')) return real(...args);
+      const id = ++calls.n;
+      calls.open.set(id, url.pathname);
+      calls.last = Date.now();
+      return real(...args).finally(() => { calls.open.delete(id); calls.last = Date.now(); });
+    };
+  });
+  watched.add(page);
+}
+async function apiQuiet(page: Page, label: string) {
+  if (!watched.has(page)) return;
+  await interactive(page);
+  // On failure the calls still open are named.
+  await expect.poll(() => page.evaluate(() => {
+    const calls = (window as unknown as { __apiCalls?: ApiCalls }).__apiCalls;
+    return !calls ? 'not counted' : calls.open.size ? [...calls.open.values()].join(', ') : Date.now() - calls.last >= 400 ? 'quiet' : 'a call has just ended';
+  }).catch(() => 'the page is being replaced'), { message: `${label}: the page's API calls have ended`, timeout: 15_000, intervals: [100] }).toBe('quiet');
+}
 async function expectNoOverflow(page: Page, label: string) {
+  await apiQuiet(page, label);
   await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth), { timeout: 3_000 }).toBeLessThanOrEqual(1).catch(() => undefined);
   const [overflow, culprits] = await page.evaluate(() => {
     // Measured from the left edge of the page: a page already scrolled sideways would hide what sticks out.
@@ -2852,8 +2901,7 @@ test.describe('people, settings and smart features (English browser)', () => {
     await page.goto('/admin/catalog?tab=quotas');
     await page.getByRole('button', { name: 'Set quota' }).click();
     const dialog = page.getByRole('dialog');
-    await dialog.getByRole('combobox', { name: 'Scope' }).fill('admin@');
-    await page.getByRole('option', { name: 'admin@example.test', exact: true }).click();
+    await pick(page, dialog.getByRole('combobox', { name: 'Scope' }), 'admin@', 'admin@example.test', true);
     await expect(dialog.getByText('no quota of their own yet')).toBeVisible();
     await dialog.getByRole('textbox', { name: 'Maximum servers' }).fill('7');
     await dialog.getByRole('button', { name: 'Save quota' }).click();
@@ -2894,8 +2942,7 @@ test.describe('people, settings and smart features (English browser)', () => {
       await page.goto('/admin/catalog?tab=quotas');
       await page.getByRole('button', { name: 'Set quota' }).click();
       const dialog = page.getByRole('dialog');
-      await dialog.getByRole('combobox', { name: 'Scope' }).fill('Quota lab');
-      await page.getByRole('option', { name: `Quota lab (project of ${owner.email})` }).click();
+      await pick(page, dialog.getByRole('combobox', { name: 'Scope' }), 'Quota lab', `Quota lab (project of ${owner.email})`);
       await expect(dialog.getByText('This project has no quota of its own yet')).toBeVisible();
       await expect(dialog.getByText('A project quota replaces its owner\'s quota')).toBeVisible();
       await dialog.getByRole('textbox', { name: 'Maximum servers' }).fill('1');
@@ -3095,8 +3142,11 @@ test.describe('people, settings and smart features (English browser)', () => {
   // Phone, tablet and a wide desktop: no sideways scrolling, and on the wide screen the content uses the width
   // beside the menu instead of sitting in a narrow middle column.
   for (const viewport of [{ width: 390, height: 844 }, { width: 768, height: 1024 }, { width: 1920, height: 1080 }]) test(`every page fits ${viewport.width} px without sideways scrolling`, async ({ browser }) => {
-    test.setTimeout(200_000);
+    // 57 pages, each measured once its content is there: that wait is about a second a page (66 s became 118 s on a
+    // development machine), on top of the 200 s the walk had when it measured the pages as they arrived.
+    test.setTimeout(300_000);
     const page = await (await browser.newContext({ locale: 'en-US', viewport })).newPage();
+    await watchApi(page); // each page is measured with its content, not with its placeholders
     await signInAdmin(page);
     await expect(page).toHaveURL(/\/admin$/);
     for (const path of ['/admin', '/admin/servers', '/admin/vmware', '/admin/catalog', '/admin/users', '/admin/roles', '/admin/settings?tab=mail', '/admin/system', '/', '/order', '/firewalls', '/admin/settings?tab=rdns', '/admin/catalog?tab=ip', '/account?tab=security',
@@ -3637,13 +3687,11 @@ test.describe('people, settings and smart features (English browser)', () => {
     await page.setViewportSize({ width: 1280, height: 720 });
     // A personal time zone: searched, picked, saved; then back to automatic.
     await page.goto('/account');
-    await page.getByRole('combobox', { name: 'Time zone' }).fill('Istanbul');
-    await page.getByRole('option', { name: /Europe\/Istanbul/ }).click();
+    await pick(page, page.getByRole('combobox', { name: 'Time zone' }), 'Istanbul', /Europe\/Istanbul/);
     await expect(page.getByText('Time zone saved').first()).toBeVisible();
     await page.waitForTimeout(600);
     await shot(page, 'account-region');
-    await page.getByRole('combobox', { name: 'Time zone' }).fill('Automatic');
-    await page.getByRole('option', { name: /^Automatic/ }).click();
+    await pick(page, page.getByRole('combobox', { name: 'Time zone' }), 'Automatic', /^Automatic/);
     // This server: its clock, details and settings form (applied by the host agent).
     await page.goto('/admin/system');
     await expect(page.getByRole('heading', { name: 'This server' })).toBeVisible();

@@ -1003,8 +1003,14 @@ ediliyordu.
   `servers.test.mjs` ve benzerleri, 6'sı `seeded-history`); içinde `resize-capacity` 4/4, `resize-quota` 4/4,
   `project-quota` 4/4, `security-servers` 14/14. Var olan hiçbir testin değişmesi gerekmedi. Worker ve web'e
   dokunulmadı, testleri yerelde yeniden çalıştırılmadı.
-- GitHub CI ve demo sunucusundaki tarayıcı paketi bu commit gönderildikten sonra çalıştırılır; sonuçları bu
-  sayfaya yazılmadı.
+- **GitHub CI, elle tam çalıştırma `44928387319` (`fdb2b04`):** üçüncü denemede yeşil. İlk iki denemede `compose`
+  işindeki tarayıcı paketinden birer test kaldı, ikisi de bu commit'in dokunmadığı `apps/web` içinde: 1. denemede
+  "tour of the newer screens" (saat dilimi seçeneği tıklanırken DOM'dan ayrıldı; 42 geçti, 1 kaldı, 1 çalışmadı),
+  2. denemede "every page fits 390 px" (`/admin/stats` 202 px taştı; 37 geçti, 1 kaldı, 6 çalışmadı). Öteki işler
+  her denemede geçti. İkisinin nedeni ve düzeltmesi bir sonraki bölümdedir.
+- **Demo sunucusu (`fdb2b04`):** `/root/demo-e2e.sh` demo'yu bu commit'e güncelledi; atılabilir yığında tarayıcı
+  paketi **44/44** (17,3 dk); testler boyunca demo `/api/ready` 54 yanıtın 54'ünde 200. Etiket ya da sürüm
+  oluşturulmadı.
 
 **Bilinen ve dokunulmayan:** bayinin kullanımındaki disk toplamı (`resellerUsage`) sunucuların sistem diskini
 sayar, **ek diskleri saymaz** (bu değişiklikten önce de böyleydi). Ek disk eklenirken tahsise karşı ölçülür ama
@@ -1015,3 +1021,80 @@ yapılmadı.
 **Çalıştırılmayanlar:** gerçek bir hipervizörde ya da simülatörde worker ile büyütmenin sonuna kadar gitmesi
 (testte worker'ın yaptığı SQL ile taklit edilir); kilit sırasının yük altında, çok sayıda eşzamanlı istekle
 denenmesi (testler ikişer istekle çalışır; kilitlenme olmadığı sıranın kendisinden çıkarılır, ölçülmedi).
+
+## 0.5.0'dan sonra: istatistik sayfasının telefonda taşması ve iki kararsız tarayıcı testi — 2026-11-21
+
+CI çalıştırması `44928387319` (`fdb2b04`) ilk iki denemesinde birer tarayıcı testinden kaldı, üçüncüde geçti; demo
+sunucusundaki paket aynı commit'te 44/44 geçti. Commit `apps/web` altında hiçbir şeyi değiştirmediği için ikisi de
+aralıklıydı. İkisinin de nedeni bulundu; biri arayüzde gerçek bir kusur, öteki testin kendisinde. Henüz bir sürümde
+değildir (`CHANGELOG.md`, Unreleased).
+
+**1. `/admin/stats` 390 px'te 202 px taşıyor: arayüz kusuru, ve onu göremeyen test.**
+
+- *Kusur* (`apps/web/app/(panel)/admin/stats/stats.tsx`, son ızgara): "En büyük müşteriler" ve "İnsanlar ne zaman
+  işlem yapıyor" kartları dar ekranda tek sütunlu bir ızgaradadır. Sütun tanımsızdı (`xl:` altında `grid-cols` yok),
+  tanımsız sütun da en geniş içeriği kadar genişler. Isı haritası 34rem (544 px) genişliğindedir ve kendi kartının
+  içinde yana kaysın diye `overflow-x-auto` içine konmuştur; ama kaydırma kutusu kartın içinde, ızgara öğesinin
+  kendisinde değildir, bu yüzden sütunu 544 + 32 px'e genişletti: 16 px kenar boşluğuyla 592 px, yani 390 px'lik
+  ekranda **202 px** taşma. Sayfa veri gelir gelmez her seferinde taşıyordu; aralıklı olan sayfa değil testti.
+- *Test neden görmüyordu* (`apps/web/e2e/app.spec.ts`, `expectNoOverflow`): "every page fits" testi her sayfada
+  yalnızca başlığı (`h1`) bekleyip ölçüyordu. Başlık sunucunun gönderdiği HTML'dedir; kartlar, grafikler ve
+  tablolar API yanıtlarıyla gelir. Arada ölçülen genişlik yer tutucuların genişliğidir (istatistik sayfasında beş
+  gri kutu, taşma 0). Test ancak yanıt ölçümden önce yetiştiğinde kalıyordu; 2. denemede olan budur.
+- *Düzeltme, arayüz:* ızgaraya `grid-cols-1` (`minmax(0, 1fr)`: sütun içeriğinden dar olabilir; geniş ekranın iki
+  sütunu zaten böyleydi). Isı haritası artık kartının içinde kayar. Aynı sayfanın grafik ve döküm ızgaralarına da
+  aynı sütun verildi (uzun bir konum ya da imaj adı aynı yoldan taşırabilirdi). Geniş ekranlarda görünüm aynıdır.
+- *Düzeltme, test:* `watchApi(page)` sayfa bir şey yüklemeden önce çağrılır ve her belgenin kendi API çağrılarını
+  (`fetch`) saydırır; `expectNoOverflow` ölçmeden önce sayfanın dinlemeye başlamasını, açık çağrı kalmamasını ve
+  400 ms boyunca yenisinin başlamamasını bekler (bir yanıt çoğu kez bir sonraki çağrıyı başlatır). Hiç bitmeyen
+  canlı olay akışı `fetch` olmadığı için sayılmaz. Bekleme 15 sn'de bitmezse test açık kalan çağrıların adıyla
+  kalır. Ölçülen genişlik sınırı (1 px) değişmedi. Test artık 57 sayfanın her birinde içeriği beklediği için
+  uzadı (geliştirme makinesinde 66 sn → 90-118 sn); süre sınırı 200 sn'den 300 sn'ye çıkarıldı. Bu, bir kararsızlığı
+  örtmek için değil, eklenen işin süresi içindir.
+- *Yeniden üretme* (geliştirme makinesi, Docker yok: PostgreSQL 18.6 ve Redis 8.0.5 WSL içinde geçici dizinden,
+  API ve `next build`/`next start` Windows'ta, önlerinde Caddy'nin yaptığını yapan küçük bir vekil; simülatör ve
+  worker yok, veritabanı neredeyse boş; kurulu Chrome ile):
+  - Düzeltmeden önce, yalnızca bu sayfa: 5 çalıştırmanın 5'inde başlık göründüğünde taşma 0 (5 yer tutucu), veri
+    geldikten sonra **202 px**. Düzeltmeden sonra: 20 çalıştırmanın 20'sinde 0.
+  - Paketin kendi testi, yeni bekleyişle, **eski** arayüze karşı: `/admin/stats at 390 px … Received: 202`, CI'daki
+    iletinin aynısı (üç çalıştırmadan sayfaya ulaşan birinde; öteki ikisi daha önce, oturum açma adımında kaldı,
+    aşağıya bakın). Eski test aynı (düzeltilmiş) derlemede 66 sn'de geçiyordu.
+  - Yeni test, düzeltilmiş arayüze karşı: 390 px beş kez art arda 5/5; 390, 768 ve 1920 px birlikte iki kez 3/3.
+    Yerelde ölçülen öteki 56 sayfanın hiçbiri içeriğiyle taşmadı; ama bu veritabanı neredeyse boştur, CI ve demo
+    önceki testlerin bıraktığı veriyle ölçer.
+
+**2. "tour of the newer screens": saat dilimi seçeneği tıklanırken DOM'dan ayrılıyor: test kusuru.**
+
+- *Neden:* saat dilimi alanı yazdıkça süzen bir listedir (React Aria `ComboBox`). Listesi 150 ms'lik bir girişle
+  açılır ve bir seçim kutusununkinden farklı olarak arkasındaki sayfanın kaymasını engellemez; React Aria böyle
+  bir listeyi, sayfa kayar kaymaz kapatır ve yazılanı geri alır (`useCloseOnScroll`). Test yazıp hemen seçeneğe
+  tıklıyordu. Liste hâlâ girerken tıklanan seçenek Playwright için "not stable"dır; Playwright yeniden dener ve
+  üçüncü denemesinde seçeneği önce pencerenin ortasına kaydırır (`scrollIntoView({ block: 'center' })`). Sayfa
+  kaydı (ölçülen: `scrollY` 0 → 156), liste kapandı, alan eski değerine döndü, seçenek DOM'dan ayrıldı ve onu
+  yeniden açan bir şey olmadığı için tıklama 20 sn sonra zaman aşımına uğradı. Liste girişini bitirmişse ilk
+  deneme tutar ve hiçbir şey kaymaz; bu yüzden aralıklıdır.
+- *Arayüzde kusur var mı:* hayır. Şüphelenilen iki şey ölçüldü ve hiçbiri listeyi kapatmıyor: sunucudan gelen
+  yeniden çizim (`router.refresh`, liste açıkken gelsin diye 2,2 sn geciktirilerek) ve "kaydedildi" bildiriminin
+  kapanması: 3 çalıştırmanın 3'ünde liste ikisinden sonra da açık ve yazılan yerinde kaldı. Sayfa kayınca listenin kapanması React Aria'nın
+  bütün açılır listelerde bilinçli davranışıdır. Bir kişi listeyi görmeden tıklayamaz; yarış yalnızca listenin
+  açıldığı anda tıklayan bir otomasyonda vardır.
+- *Düzeltme* (`apps/web/e2e/app.spec.ts`, `pick`): yazar, seçeneğin görünmesini ve listenin girişinin bitmesini
+  (`[data-trigger="ComboBox"][data-entering]` kalmaması) bekler, sonra tıklar. Aynı adımı atan iki kota testi
+  ("Scope" alanı) de bunu kullanır. Yeniden deneme, zaman aşımı ya da atlama eklenmedi.
+- *Yeniden üretme* (aynı yerel yığın, testin kendi adımlarıyla): düzeltmeden önce 20 çalıştırmanın **4'ü** kaldı
+  (3'ü "Automatic", 1'i "Istanbul" tıklamasında), hepsi CI'daki izle: iki kez "element is not stable", sonra
+  "element was detached from the DOM"; bir başka 10 çalıştırmada 2.'si aynı biçimde kaldı. Düzeltilmiş adımlarla
+  30 çalıştırmanın 30'u geçti.
+- *Doğrulanamayan:* CI'daki kayıtta üçüncü denemenin kaydırması görünmüyor (seçenek, üçüncü deneme daha
+  beklerken ayrılmış). Yerelde her kalışta kapanmayı başlatan Playwright'ın kendi kaydırmasıydı; CI'da sayfayı
+  neyin kaydırdığı (ya da listeyi başka neyin kapattığı) o çalıştırmanın izleri yüklenmediği için görülemedi.
+  İşlemci dört kat yavaşlatıldığında 12 çalıştırmanın hiçbiri kalmadı (yavaş makinede yazma, girişten uzun
+  sürüyor). Düzeltme yerelde görülen yolu kapatır; CI'daki kalışın tam olarak aynı yol olduğu **doğrulanmadı**.
+
+**Bu sırada görülen, dokunulmayan:** yerel tekrarlarda bir test kaldıktan sonra yeni işçi yeniden oturum açarken
+iki kez `/login`'de kaldı ya da oturum açıldıktan sonra sayfa değişti (3 çalıştırmanın 2'si). Paketin olağan
+akışında yönetici bir kez oturum açar ve çerezi paylaşılır; CI'da görülmedi, nedeni araştırılmadı.
+
+**Çalıştırılmayanlar:** tarayıcı paketinin tamamı yerelde çalıştırılamadı (Docker yok: kurulum sihirbazı,
+simülatörler ve worker gerektirir); yerelde yalnızca "every page fits" testleri ve saat dilimi adımları koştu.
+"Scope" alanını kullanan iki kota testi ve "tour" testinin tamamı yalnızca CI'da ve demo sunucusunda çalışır.

@@ -101,7 +101,7 @@ export default function Statistics() {
           </div>)}
       </motion.div>
 
-      <div className="grid gap-6 xl:grid-cols-2">
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
         <ChartCard i={6} title={t('charts.servers')} description={t('charts.serversHelp')}>
           <AreaChart data={series} margin={{ left: 0, right: 8, top: 8 }}>
             <defs>
@@ -146,14 +146,16 @@ export default function Statistics() {
       </div>
 
       {/* What the live servers are made of. */}
-      <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-4">
         <Breakdown i={10} title={t('by.location')} icon="map-pin" rows={s.byLocation.map((r) => ({ label: r.name, value: r.servers }))}/>
         <Breakdown i={11} title={t('by.image')} icon="disc" rows={s.byImage.map((r) => ({ label: r.name, value: r.servers }))}/>
         <Breakdown i={12} title={t('by.package')} icon="package" rows={s.byPackage.map((r) => ({ label: r.name || t('by.custom'), value: r.servers }))}/>
         <PowerCard i={13} rows={s.byPower}/>
       </div>
 
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]">
+      {/* One column on a phone, and it may shrink below its content (grid-cols-1 is minmax(0,1fr)): an implicit column is as
+          wide as its widest item, and the heatmap, 34rem wide inside its own scroll box, pushed the page 202 px sideways. */}
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]">
         <TopCustomers i={14} rows={s.top}/>
         <Heatmap i={15} cells={s.heat}/>
       </div>
