@@ -192,3 +192,33 @@ test('a day of traffic far above the usual, mostly outbound; a deleted server cl
   assert.deepEqual(await open(s), []);
   await pool.query('DELETE FROM servers WHERE id = $1', [s]);
 });
+
+test('a gap in the samples neither closes a finding nor tells the owner again; one that stays unjudged for hours closes', async () => {
+  const s = await server(aId, 'gap-1');
+  await samples(s, end - 10 * DAY, end - 3 * HOUR, 10);
+  await samples(s, end - 3 * HOUR, end, 96);
+  sent.length = 0;
+  assert.deepEqual(await run(), { servers: 1, opened: 1, resolved: 0 });
+  // The platform did not answer for the last hours (or the worker was down): there is nothing recent to judge.
+  const forget = async () => {
+    await pool.query('DELETE FROM server_cpu_samples WHERE server_id = $1 AND at >= $2', [s, new Date(end - 3 * HOUR)]);
+    await pool.query('DELETE FROM server_cpu_hourly WHERE server_id = $1 AND hour >= $2', [s, new Date(end - 3 * HOUR)]);
+  };
+  await forget();
+  assert.deepEqual(await run(), { servers: 1, opened: 0, resolved: 0 });
+  assert.equal((await open(s)).length, 1, 'kept while it cannot be judged');
+  // The samples are back and still high: the same finding, and nobody is told a second time.
+  await samples(s, end - 3 * HOUR, end, 96);
+  assert.deepEqual(await run(), { servers: 1, opened: 0, resolved: 0 });
+  assert.equal(sent.length, 1);
+  assert.equal((await one('SELECT count(*)::int AS n FROM usage_anomalies WHERE server_id = $1', [s])).n, 1);
+  // Unjudged for longer than the grace (a server that was switched off): closed.
+  await forget();
+  await pool.query("UPDATE usage_anomalies SET last_seen = now() - interval '7 hours' WHERE server_id = $1", [s]);
+  assert.deepEqual(await run(), { servers: 1, opened: 0, resolved: 1 });
+  assert.deepEqual(await open(s), []);
+  // A key the panel could not have made is refused, also one PostgreSQL could not store.
+  for (const key of ['', 'with space', 'a\u0000b', 'x'.repeat(201), 42]) assert.equal((await put('/insights/dismissals', { key, days: 7 }, a)).statusCode, 400, JSON.stringify(key));
+  assert.equal((await put('/insights/dismissals', { key: 'budget-forecast:2026-11', days: 7 }, a)).statusCode, 204);
+  await pool.query('DELETE FROM servers WHERE id = $1', [s]);
+});

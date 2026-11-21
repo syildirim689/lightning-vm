@@ -304,6 +304,7 @@ async function visible(userId: string, list: Insight[]) {
   return { insights, hidden: list.length - insights.length };
 }
 
+export const MAX_DISMISSALS = 500;
 @Controller('insights') @UseGuards(SessionGuard)
 export class InsightsController {
   @Get()
@@ -312,8 +313,13 @@ export class InsightsController {
   // Hide one finding for 1 or 7 days, or for good (days null). It comes back by itself when it is gone and returns.
   @Put('dismissals') @HttpCode(204)
   async dismiss(@Req() req: AuthedRequest, @Body() b: { key?: unknown; days?: unknown }) {
-    if (typeof b?.key !== 'string' || !b.key || b.key.length > 200) throw apiError(400, 'VALIDATION_FAILED', 'Check the key', { key: 'INVALID_VALUE' });
+    // Keys are made of names, ids and dates ("srv:<uuid>", "budget-forecast:2026-11"): anything else is refused, also what PostgreSQL cannot store.
+    if (typeof b?.key !== 'string' || !/^[\w:.-]{1,200}$/.test(b.key)) throw apiError(400, 'VALIDATION_FAILED', 'Check the key', { key: 'INVALID_VALUE' });
     if (b.days !== null && b.days !== 1 && b.days !== 7) throw apiError(400, 'VALIDATION_FAILED', 'Check the days', { days: 'INVALID_VALUE' });
+    // Those that ran out go first; a person keeps at most 500, so the table cannot be filled through this route.
+    await pool.query('DELETE FROM insight_dismissals WHERE user_id = $1 AND until < now()', [req.user.id]);
+    const { rows: [n] } = await pool.query('SELECT count(*)::int AS n, bool_or(key = $2) AS has FROM insight_dismissals WHERE user_id = $1', [req.user.id, b.key]);
+    if (n.n >= MAX_DISMISSALS && !n.has) throw apiError(409, 'LIMIT_REACHED', 'Too many hidden findings; show them again first');
     await pool.query(`INSERT INTO insight_dismissals (user_id, key, until) VALUES ($1, $2, CASE WHEN $3::int IS NULL THEN NULL ELSE now() + make_interval(days => $3::int) END)
       ON CONFLICT (user_id, key) DO UPDATE SET until = EXCLUDED.until`, [req.user.id, b.key, b.days]);
   }

@@ -9,6 +9,11 @@ import { abuseHint, cpuAnomaly, cpuRule, trafficAnomaly, trafficRule, DAY } from
 
 export const ROLLUP_KEEP_DAYS = 63;
 export const RESOLVED_KEEP_DAYS = 90;
+// An open finding that cannot be judged now (no recent samples: the platform did not answer, the worker was down, the
+// server is switched off) is kept this long from when its numbers last held, then closed. Closing it at once meant
+// that a gap of two hours in the samples closed every open finding, and the next run opened them again and told
+// every owner a second time.
+export const UNJUDGED_KEEP_HOURS = 6;
 const BATCH = 200;
 
 export async function rollupCpu(db) {
@@ -36,15 +41,20 @@ export async function detectAnomalies(db, notify = async () => {}, log = () => {
     const [{ rows: hours }, { rows: traffic }, { rows: open }] = await Promise.all([
       db.query('SELECT server_id, hour, avg_pct::float8 AS v FROM server_cpu_hourly WHERE server_id = ANY($1::uuid[]) AND hour >= $2', [ids, new Date(now.getTime() - (cpuRule.baselineDays + 1) * DAY)]),
       db.query('SELECT server_id, day::text AS day, rx_bytes::float8 AS rx, tx_bytes::float8 AS tx FROM server_traffic WHERE server_id = ANY($1::uuid[]) AND day >= $2::date - $3::int', [ids, today, trafficRule.baselineDays + 2]),
-      db.query('SELECT id, server_id, metric, direction FROM usage_anomalies WHERE resolved_at IS NULL AND server_id = ANY($1::uuid[])', [ids]),
+      db.query('SELECT id, server_id, metric, direction, last_seen FROM usage_anomalies WHERE resolved_at IS NULL AND server_id = ANY($1::uuid[])', [ids]),
     ]);
+    // The rows of the batch are sorted to their servers once (searching all of them again for every server made a
+    // batch of 200 servers with two weeks of hours take ten times as long as the reading itself).
+    const hoursOf = new Map(), trafficOf = new Map();
+    for (const h of hours) { let list = hoursOf.get(h.server_id); if (!list) hoursOf.set(h.server_id, list = []); list.push({ t: new Date(h.hour).getTime(), v: h.v }); }
+    for (const t of traffic) { let list = trafficOf.get(t.server_id); if (!list) trafficOf.set(t.server_id, list = []); list.push(t); }
     for (const s of batch) {
       out.servers++;
       const was = (metric) => open.find((a) => a.server_id === s.id && a.metric === metric)?.direction ?? null;
-      const cpu = cpuAnomaly(hours.filter((h) => h.server_id === s.id).map((h) => ({ t: new Date(h.hour).getTime(), v: h.v })), now.getTime(), was('cpu'));
+      const cpu = cpuAnomaly(hoursOf.get(s.id) ?? [], now.getTime(), was('cpu'));
       // Traffic: a row of zeros for each day the server existed without any; no row before it was created. A server
       // that has never had a traffic row (a platform that reports none) is not judged at all.
-      const mine = traffic.filter((t) => t.server_id === s.id);
+      const mine = trafficOf.get(s.id) ?? [];
       const days = [];
       if (mine.length) {
         const first = Math.max(Date.parse(`${iso(s.created_at)}T00:00:00Z`) + DAY, Date.parse(`${today}T00:00:00Z`) - (trafficRule.baselineDays + 1) * DAY);
@@ -53,7 +63,9 @@ export async function detectAnomalies(db, notify = async () => {}, log = () => {
       const net = trafficAnomaly(days, today, was('network'));
       for (const [metric, r] of [['cpu', cpu], ['network', net]]) {
         if (!r.state) {
-          // Not enough to judge (the server was off, history too short) closes too: a finding is only kept while its numbers hold.
+          // Judged and within its usual range: closed. Not enough to judge: kept for a few hours (see above), then closed too.
+          const held = open.find((a) => a.server_id === s.id && a.metric === metric);
+          if (held && !r.enough && now.getTime() - new Date(held.last_seen).getTime() < UNJUDGED_KEEP_HOURS * 3_600_000) continue;
           if (was(metric)) out.resolved += (await db.query('UPDATE usage_anomalies SET resolved_at = now() WHERE server_id = $1 AND metric = $2 AND resolved_at IS NULL', [s.id, metric])).rowCount;
           continue;
         }

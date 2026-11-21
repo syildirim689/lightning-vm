@@ -123,3 +123,55 @@ test('what a finding resembles, for staff', () => {
   assert.equal(abuseHint('network', 'high', { outShare: 0.93 }), 'outbound');
   assert.equal(abuseHint('network', 'high', { outShare: 0.5 }), null);
 });
+
+test('CPU: around midnight UTC a night of history counts as one day, not as two', () => {
+  // Judged are 23:00, 00:00 and 01:00; with the band the baseline is 22:00 to 02:59 of each earlier night.
+  const at = Date.parse('2026-11-18T02:10:00Z'), start = Date.parse('2026-11-17T23:00:00Z');
+  const nights = (n) => {
+    const hours = [];
+    for (let k = 1; k <= n; k++) for (let j = -1; j <= 3; j++) hours.push({ t: start - k * DAY + j * HOUR, v: 10 });
+    for (let j = 0; j < 3; j++) hours.push({ t: start + j * HOUR, v: 95 });
+    return hours;
+  };
+  const three = cpuAnomaly(nights(3), at);
+  assert.deepEqual([three.enough, three.state, three.days, three.baseline], [false, null, 3, 15], 'three nights are fewer than the four needed, whatever the calendar says');
+  const four = cpuAnomaly(nights(4), at);
+  assert.deepEqual([four.enough, four.state, four.days, four.baseline], [true, 'high', 4, 20]);
+  // Away from midnight nothing changes: the same history by day.
+  assert.equal(cpuAnomaly(history(5, 10, [95, 95, 95]), now).days, 5);
+});
+
+test('CPU: a weekly rhythm is not a departure, a real one on top of it still is', () => {
+  // Fifteen days of hourly rows up to `at`, from what the server does at each moment.
+  const rows = (use, at, last = null) => {
+    const out = [], stop = Math.floor(at / HOUR) * HOUR;
+    for (let t = stop - 15 * DAY; t < stop; t += HOUR) out.push({ t, v: last !== null && t >= stop - 3 * HOUR ? last : use(new Date(t)) });
+    return out;
+  };
+  const weekday = (d) => (d.getUTCDay() + 6) % 7; // 0 = Monday
+  // An office server: busy 08:00-17:59 on working days, idle otherwise.
+  const office = (d) => (weekday(d) < 5 && d.getUTCHours() >= 8 && d.getUTCHours() <= 17 ? 42 : 0.8);
+  // Saturday and Sunday midday it is idle, as on every weekend: nothing to report (it used to be "far below usual").
+  for (const at of ['2026-11-21T12:20:00Z', '2026-11-21T16:20:00Z', '2026-11-22T11:20:00Z']) {
+    const r = cpuAnomaly(rows(office, Date.parse(at)), Date.parse(at));
+    assert.deepEqual([r.enough, r.state, r.recent, r.usual], [true, null, 0.8, 42], at);
+  }
+  // Monday morning it works again, as on every Monday.
+  assert.equal(cpuAnomaly(rows(office, Date.parse('2026-11-23T11:20:00Z')), Date.parse('2026-11-23T11:20:00Z')).state, null);
+  // A job that runs every Sunday night: busy then, every week.
+  const weekly = (d) => (weekday(d) === 6 && d.getUTCHours() >= 1 && d.getUTCHours() <= 3 ? 92 : 6);
+  const sunday = Date.parse('2026-11-22T04:20:00Z');
+  assert.deepEqual([cpuAnomaly(rows(weekly, sunday), sunday).state, cpuAnomaly(rows(weekly, sunday), sunday).recent], [null, 92]);
+  // A real departure on top of the rhythm is still one: the office server pinned on a Saturday, and silent on a Tuesday.
+  const saturday = Date.parse('2026-11-21T12:20:00Z'), tuesday = Date.parse('2026-11-17T12:20:00Z');
+  assert.equal(cpuAnomaly(rows(office, saturday, 96), saturday).state, 'high');
+  assert.equal(cpuAnomaly(rows(office, tuesday, 0.5), tuesday).state, 'low');
+  // (The weekly look only takes findings away. A weekly job that did not run is as quiet as the server is on every
+  // other night, so the daily baseline has nothing to open: that is not noticed.)
+  assert.equal(cpuAnomaly(rows(weekly, sunday, 6), sunday).state, null);
+  // An open finding is not closed by the weekly look while its numbers hold.
+  assert.equal(cpuAnomaly(rows(office, saturday, 96), saturday, 'high').state, 'high');
+  // With less than a week of history the rhythm cannot be known: the rule is the daily one, as before.
+  const young = rows(office, saturday).filter((h) => h.t >= saturday - 6 * DAY);
+  assert.equal(cpuAnomaly(young, saturday).state, 'low');
+});

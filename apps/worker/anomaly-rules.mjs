@@ -16,6 +16,7 @@ export const cpuRule = {
   hourBand: 1,        // baseline: the window's hours of the day, widened by this many hours on each side
   minDays: 4,         // earlier days that must contribute to the baseline; fewer: "not enough data"
   minBaseline: 12,    // baseline hours needed in all
+  minWeekly: 2,       // hours of the same window a week (and two) earlier needed before a weekly rhythm is believed
   minScale: 5,        // percentage points: on a flat baseline a ripple is not an anomaly
   openZ: 4,           // robust z-score at which a finding opens
   closeZ: 2,          // and below which an open one closes
@@ -62,7 +63,9 @@ export function cpuAnomaly(hours, now, was = null, rule = cpuRule) {
   const want = new Set();
   for (let k = -rule.hourBand; k < rule.recentHours + rule.hourBand; k++) want.add((((start / HOUR + k) % 24) + 24) % 24);
   const base = hours.filter((h) => h.t < start - 12 * HOUR && h.t >= end - rule.baselineDays * DAY && Number.isFinite(h.v) && want.has((h.t / HOUR) % 24));
-  const days = new Set(base.map((h) => Math.floor(h.t / DAY))).size;
+  // Earlier days that contribute, counted back from the window (the window d days ago, with its band): by calendar
+  // day a window around midnight UTC counted every night twice, and two nights passed for the four that are needed.
+  const days = new Set(base.map((h) => Math.round((start - h.t) / DAY))).size;
   const none = { enough: false, state: null, recent: null, usual: null, scale: null, z: null, baseline: base.length, days };
   if (recentRows.length < rule.minRecent || base.length < rule.minBaseline || days < rule.minDays) return none;
   const recent = median(recentRows.map((h) => h.v));
@@ -74,6 +77,22 @@ export function cpuAnomaly(hours, now, was = null, rule = cpuRule) {
   else if (was === 'high' && z >= rule.closeZ && delta >= rule.closeDelta) state = 'high';
   else if (usual >= rule.lowBaseline && z <= -rule.openZ && recent <= usual * rule.lowRatio) state = 'low';
   else if (was === 'low' && usual >= rule.lowBaseline && recent < usual * rule.lowCloseRatio) state = 'low';
+  // A weekly rhythm is the server's own usual too: an office server is idle every weekend, a weekly job is busy every
+  // Sunday night. Against "the same time on the last days" each of them left its baseline once a week, and its owner
+  // was told every weekend. So a departure must also hold against the same hours of the same weekday one and two
+  // weeks earlier (the window's own hours, without the band), once the history has them; with less than a week of
+  // history that rhythm cannot be known yet.
+  if (state) {
+    const sameWeekday = base.filter((h) => {
+      const d = Math.round((start - h.t) / DAY), k = (h.t - (start - d * DAY)) / HOUR;
+      return d % 7 === 0 && k >= 0 && k < rule.recentHours;
+    }).map((h) => h.v);
+    if (sameWeekday.length >= rule.minWeekly) {
+      const weekly = median(sameWeekday);
+      if (state === 'high' && recent - weekly < (was === 'high' ? rule.closeDelta : rule.openDelta)) state = null;
+      else if (state === 'low' && !(weekly >= rule.lowBaseline && recent <= weekly * (was === 'low' ? rule.lowCloseRatio : rule.lowRatio))) state = null;
+    }
+  }
   return { enough: true, state, recent: round(recent), usual: round(usual), scale: round(scale), z: round(z), baseline: base.length, days };
 }
 
