@@ -3128,6 +3128,18 @@
       "SCHEDULE_SUGGESTED": {
         "title": "{name} haftada yaklaşık {hours} saat boşta",
         "body": "Haftalardır her hafta aynı saatlerde. Sayfasında, bu saatlerde kapalı tutacak bir zamanlama önerilir; ücret değişmez, enerji kullanımı azalır."
+      },
+      "CARD_EXPIRES_BEFORE_RENEWAL": {
+        "title": "Kartınızın süresi sıradaki yenilemeden önce doluyor",
+        "body": "{last4} ile biten kart {expiry} sonuna kadar geçerli; {date} tarihinde {price} ödenecek ve bu karttan çekilemeyecek. Süresi yeten bir kart ekleyin ya da bakiye yükleyin."
+      },
+      "RENEWAL_NOT_COVERED": {
+        "title": "Bakiyeniz sıradaki yenilemeyi karşılamıyor",
+        "body": "{date} tarihinde {price} ödenecek; bakiyeniz {balance}, {short} eksik ve o tarihe kadar geçerli kayıtlı kartınız yok."
+      },
+      "PAYMENT_RISK": {
+        "title": "{count, plural, one {# hesabın} other {# hesabın}} ödemesi risk altında",
+        "body": "Vadesi geçmiş faturalar ya da tekrarlayan başarısız tahsilatlar. En büyüğü: {price} ({email})."
       }
     },
     "hide": {
@@ -7610,7 +7622,8 @@
       "subscriptions": "Abonelikler",
       "payments": "Ödemeler",
       "disputes": "İtirazlar",
-      "coupons": "Kuponlar"
+      "coupons": "Kuponlar",
+      "risk": "Risk altında"
     },
     "search": "Numara, ad, e-posta ya da vergi no",
     "status": "Durum",
@@ -9359,5 +9372,26 @@
     "notEnough": "Zamanlama önerisi: henüz yeterli veri yok ({min} günün {days} günü kadar işlemci geçmişi var).",
     "notMeasured": "Zamanlama önerisi: yeterli veri yok. Bu platform işlemci ölçümü bildirmiyor, bu yüzden bir şey önerilmez.",
     "noWindow": "Zamanlama önerisi: son {weeks} haftada düzenli bir boş aralık yok."
+  },
+  "PaymentRisk": {
+    "title": "Risk altındaki hesaplar",
+    "help": "Vadesi geçmiş faturası olan ya da son {days} günde en az {failures} başarısız tahsilatı olan hesaplar; risk altındaki tutarı en büyük olan üstte. Bakılacaklar listesidir: buradan hiçbir şey gönderilmez ya da askıya alınmaz.",
+    "none": "Vadesi geçmiş faturası ya da tekrarlayan başarısız tahsilatı olan hesap yok.",
+    "account": "Hesap",
+    "atRisk": "Risk altında",
+    "overdue": "Vadesi geçmiş",
+    "failed": "Başarısız tahsilat ({days} gün)",
+    "why": "Neden",
+    "actions": "İşlemler",
+    "overdueLine": "{n, plural, one {# fatura} other {# fatura}}, en eskisi {days, plural, one {# gün} other {# gün}} gecikmiş",
+    "noOverdue": "Vadesi geçmiş yok",
+    "newLine": "{amount} kadarı son {days} günde",
+    "failedLine": "{n, plural, =0 {Yok} one {# başarısız tahsilat} other {# başarısız tahsilat}}",
+    "invoices": "Faturalar",
+    "reason": {
+      "OVERDUE": "Vadesi geçmiş",
+      "OVERDUE_GROWING": "Vadesi geçmiş ve büyüyor",
+      "REPEATED_FAILURES": "Tekrarlayan başarısız tahsilat"
+    }
   }
 }

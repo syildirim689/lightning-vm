@@ -3128,6 +3128,18 @@
       "SCHEDULE_SUGGESTED": {
         "title": "{name} is idle about {hours} hours a week",
         "body": "The same hours every week, for weeks. Its page suggests a schedule that switches it off through them; the price does not change, the energy use does."
+      },
+      "CARD_EXPIRES_BEFORE_RENEWAL": {
+        "title": "Your card ends before the next renewal",
+        "body": "The card ending in {last4} is valid through {expiry}; {price} is due on {date} and cannot be charged to it. Add a card that lasts, or top up your balance."
+      },
+      "RENEWAL_NOT_COVERED": {
+        "title": "Your balance does not cover the next renewal",
+        "body": "{price} is due on {date}; your balance is {balance}, {short} short, and there is no saved card that lasts until then."
+      },
+      "PAYMENT_RISK": {
+        "title": "{count, plural, one {# account has} other {# accounts have}} payments at risk",
+        "body": "Overdue invoices or repeated failed charges. The largest: {price} ({email})."
       }
     },
     "hide": {
@@ -7610,7 +7622,8 @@
       "subscriptions": "Subscriptions",
       "payments": "Payments",
       "disputes": "Disputes",
-      "coupons": "Coupons"
+      "coupons": "Coupons",
+      "risk": "At risk"
     },
     "search": "Number, name, e-mail or tax number",
     "status": "Status",
@@ -9359,5 +9372,26 @@
     "notEnough": "Schedule suggestion: not enough data yet ({days} of {min} days of CPU history).",
     "notMeasured": "Schedule suggestion: not enough data. This platform does not report CPU figures, so nothing is suggested.",
     "noWindow": "Schedule suggestion: no stable idle window in the last {weeks} weeks."
+  },
+  "PaymentRisk": {
+    "title": "Accounts at risk",
+    "help": "Accounts with invoices past their due date or with at least {failures} failed charges in the last {days} days, largest amount at risk first. A list to look through: nothing is sent or suspended from here.",
+    "none": "No account has overdue invoices or repeated failed charges.",
+    "account": "Account",
+    "atRisk": "At risk",
+    "overdue": "Overdue",
+    "failed": "Failed charges ({days} days)",
+    "why": "Why",
+    "actions": "Actions",
+    "overdueLine": "{n, plural, one {# invoice} other {# invoices}}, the oldest {days, plural, one {# day} other {# days}} overdue",
+    "noOverdue": "Nothing overdue",
+    "newLine": "{amount} of it in the last {days} days",
+    "failedLine": "{n, plural, =0 {None} one {# failed charge} other {# failed charges}}",
+    "invoices": "Invoices",
+    "reason": {
+      "OVERDUE": "Overdue",
+      "OVERDUE_GROWING": "Overdue and growing",
+      "REPEATED_FAILURES": "Repeated failed charges"
+    }
   }
 }

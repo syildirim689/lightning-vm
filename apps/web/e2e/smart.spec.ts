@@ -188,3 +188,48 @@ test('smart: a schedule is suggested with its reasons, created only on a click a
   await page.reload();
   await expect(page.locator('[data-schedule-suggestion="not_measured"]')).toContainText('This platform does not report CPU figures, so nothing is suggested.');
 });
+
+test('smart: payment risk is said to the customer before the renewal, and listed for staff by the amount at risk', async ({ page }) => {
+  await signInAdmin(page);
+  // Staff: the tab on the billing page, as this deployment has it (nothing overdue is a plain sentence, not an empty table).
+  await page.goto('/admin/billing?tab=risk');
+  await expect(page.getByRole('tab', { name: 'At risk' })).toHaveAttribute('aria-selected', 'true');
+  await expect(page.getByRole('heading', { name: 'Accounts at risk' })).toBeVisible();
+  await expect(page.getByText('Accounts with invoices past their due date or with at least 2 failed charges in the last 30 days')).toBeVisible();
+  // With two accounts on it.
+  const rule = { lookaheadDays: 30, failedDays: 30, minFailures: 2, growthDays: 7 };
+  await page.route('**/api/admin/billing/risk', (route) => json(route, { rule, accounts: [
+    { userId: 'u1', email: 'a@example.test', currency: 'EUR', atRisk: 1200, overdue: 1200, overdueCount: 2, oldestDays: 40, newOverdue: 300, failedCharges: 0, failedAmount: 0, reasons: ['OVERDUE_GROWING'] },
+    { userId: 'u2', email: 'b@example.test', currency: 'EUR', atRisk: 120, overdue: 0, overdueCount: 0, oldestDays: 0, newOverdue: 0, failedCharges: 3, failedAmount: 120, reasons: ['REPEATED_FAILURES'] }] }));
+  await page.reload();
+  await expect(page.getByText('a@example.test').first()).toBeVisible();
+  await expect(page.getByText('€1,200.00').first()).toBeVisible();
+  await expect(page.getByText('2 invoices, the oldest 40 days overdue').first()).toBeVisible();
+  await expect(page.getByText('€300.00 of it in the last 7 days').first()).toBeVisible();
+  await expect(page.getByText('Overdue and growing').first()).toBeVisible();
+  await expect(page.getByText('3 failed charges').first()).toBeVisible();
+  await expect(page.getByText('Repeated failed charges').first()).toBeVisible();
+  await expect(page.getByText('Nothing overdue').first()).toBeVisible();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await noSidewaysScroll(page, 'accounts at risk at 390 px');
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await page.unroute('**/api/admin/billing/risk');
+  // The staff finding leads there.
+  await page.route('**/api/admin/insights', (route) => json(route, { hidden: 0, insights: [
+    { code: 'PAYMENT_RISK', severity: 'warning', params: { count: 2, price: '1200.00', currency: 'EUR', email: 'a@example.test' }, link: '/admin/billing?tab=risk', key: 'PAYMENT_RISK' }] }));
+  await page.goto('/admin');
+  await expect(page.getByText('2 accounts have payments at risk')).toBeVisible();
+  await expect(page.getByText('Overdue invoices or repeated failed charges. The largest: €1,200.00 (a@example.test).')).toBeVisible();
+  await page.unroute('**/api/admin/insights');
+
+  // The customer: the card that ends before the renewal, and the balance that does not cover it, with date and amounts.
+  await page.route('**/api/insights', (route) => json(route, { hidden: 0, insights: [
+    { code: 'CARD_EXPIRES_BEFORE_RENEWAL', severity: 'warning', params: { last4: '1881', expiry: '10/26', date: '2026-12-11', price: '96.00', currency: 'EUR' }, link: '/billing?tab=cards', key: 'card-expiry:2026-12-11' },
+    { code: 'RENEWAL_NOT_COVERED', severity: 'warning', params: { balance: '30.00', short: '66.00', date: '2026-12-11', price: '96.00', currency: 'EUR' }, link: '/billing?tab=balance', key: 'renewal-cover:2026-12-11' }] }));
+  await page.goto('/');
+  await expect(page.getByText('Your card ends before the next renewal')).toBeVisible();
+  await expect(page.getByText('The card ending in 1881 is valid through 10/26; €96.00 is due on Dec 11, 2026 and cannot be charged to it. Add a card that lasts, or top up your balance.')).toBeVisible();
+  await expect(page.getByText('€96.00 is due on Dec 11, 2026; your balance is €30.00, €66.00 short, and there is no saved card that lasts until then.')).toBeVisible();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await noSidewaysScroll(page, 'overview with payment warnings at 390 px');
+});

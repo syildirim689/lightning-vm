@@ -39,7 +39,8 @@ export default function Insights({ scope }: { scope: 'staff' | 'mine' }) {
   const p = (i: Insight): Record<string, string | number> => ({ oldest: ago(null), ...Object.fromEntries(Object.entries(i.params ?? {})
     .map(([k, v]) => [k, k === 'resource' ? t(`resource.${v}` as 'resource.vcpu') : k === 'oldest' ? ago(v)
       : counts.includes(k) && typeof v === 'string' && v.trim() !== '' && Number.isFinite(Number(v)) ? Number(v)
-      : k === 'price' && v !== null && v !== '' && Number.isFinite(Number(v)) && typeof i.params.currency === 'string' && /^[A-Z]{3}$/.test(i.params.currency)
+      : k === 'date' && typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v) ? format.dateTime(new Date(`${v}T12:00:00Z`), { dateStyle: 'medium', timeZone: 'UTC' })
+      : ['price', 'balance', 'short'].includes(k) && v !== null && v !== '' && Number.isFinite(Number(v)) && typeof i.params.currency === 'string' && /^[A-Z]{3}$/.test(i.params.currency)
         ? format.number(Number(v), { style: 'currency', currency: i.params.currency }) : v ?? ''])) });
   return <section aria-labelledby={`insights-${scope}`} className="flex flex-col gap-3">
     <div className="flex items-center gap-2">

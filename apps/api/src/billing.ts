@@ -1039,6 +1039,14 @@ async function nextRenewal(ownerId: string, s: Awaited<ReturnType<typeof setting
   return { at: rows.find((b) => b.day === next.day)!.at as Date, amount: fromCents(next.cents), currency: next.currency, gross: counted.every((p) => p.gross), servers: next.servers, invoiced: next.invoiced };
 }
 
+// For payment-risk.ts: the next renewal as the summary shows it, with the two settings that decide whether and from
+// where it is collected by itself (the automatic collection in runBilling: the balance first, then the saved card).
+export async function upcomingRenewal(ownerId: string) {
+  const s = await settings();
+  if (!s.enabled) return null;
+  return { autoCharge: !!s.autoCharge, balance: !!s.balance, renewal: await nextRenewal(ownerId, s).catch(() => null) };
+}
+
 // ---- Customer ----
 
 @Controller('billing') @UseGuards(SessionGuard)

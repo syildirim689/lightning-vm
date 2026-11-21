@@ -13,6 +13,7 @@ import { apiError } from './errors';
 import { logEvent } from './log';
 import { summary as maintenance } from './maintenance';
 import { notify } from './notify';
+import { renewalRisksOf, riskAccounts } from './payment-risk';
 import { can, customerLevel, type Permission } from './permissions';
 import { Can, PermissionGuard } from './rbac';
 import { clearRestoreHoldNotice, restoreHold } from './restore-hold';
@@ -131,6 +132,9 @@ export async function staffInsights(): Promise<Insight[]> {
   const st = await cpuStats(on.map((s) => s.id));
   const spare = on.map((s) => ({ s, r: sizing(s.vcpu, st.get(s.id) ?? null) })).filter((x) => x.r.advice === 'idle' || x.r.advice === 'down');
   if (spare.length) add('OVERSIZED_SERVERS', 'info', { count: spare.length, vcpu: spare.reduce((a, x) => a + x.s.vcpu - x.r.suggestedVcpu, 0) }, '/admin/servers');
+  // Accounts with overdue invoices or repeated failed charges, by the money at risk (payment-risk.ts).
+  const risk = await riskAccounts().catch(() => []);
+  if (risk.length) add('PAYMENT_RISK', 'warning', { count: risk.length, price: risk[0].atRisk.toFixed(2), currency: risk[0].currency, email: risk[0].email }, '/admin/billing?tab=risk');
   // Servers whose use left their own baseline (the worker's hourly check); "suspicious" are those that resemble abuse.
   const unusual = await anomalyCounts();
   if (unusual.open) add('USAGE_ANOMALIES', unusual.suspicious ? 'warning' : 'info', { count: unusual.open, suspicious: unusual.suspicious }, '/admin/abuse?tab=usage');
@@ -185,6 +189,12 @@ export async function customerInsights(userId: string): Promise<Insight[]> {
   const { rows: open } = await pool.query(`SELECT s.name FROM servers s JOIN resource_pools p ON p.id = s.pool_id JOIN vmware_connections c ON c.id = p.connection_id
     WHERE s.owner_id = $1 AND s.state = 'ready' AND s.delete_at IS NULL AND c.operations->>'firewall' = 'true' AND NOT EXISTS (SELECT 1 FROM firewall_servers fs WHERE fs.server_id = s.id) ORDER BY s.name`, [userId]);
   if (open.length) add('NO_FIREWALL', 'info', { n: open.length, name: open[0].name }, '/firewalls', 'firewall');
+  // The next renewal will not be collected as things stand: the saved card ends before it, or the balance is short.
+  for (const r of await renewalRisksOf(userId).catch(() => [])) {
+    const date = r.at.slice(0, 10);
+    if (r.kind === 'CARD_EXPIRES_BEFORE_RENEWAL') add(r.kind, 'warning', { last4: r.last4, expiry: r.expiry, date, price: r.amount.toFixed(2), currency: r.currency }, '/billing?tab=cards', `card-expiry:${date}`);
+    else add(r.kind, 'warning', { balance: r.balance.toFixed(2), short: r.short.toFixed(2), date, price: r.amount.toFixed(2), currency: r.currency }, '/billing?tab=balance', `renewal-cover:${date}`);
+  }
   // Servers idle through the same hours week after week: a power schedule is offered on the server's page.
   for (const s of await scheduleInsights(userId).catch(() => [])) add('SCHEDULE_SUGGESTED', 'info', { name: s.name, hours: s.offHours }, `/servers/${s.id}`, scheduleKey(s.id));
   // The month's forecast against the budget, when it is close to it or over it (the numbers: cost-forecast.ts). A new
@@ -324,7 +334,7 @@ async function cachedStaffInsights(): Promise<Insight[]> {
 }
 
 // Findings about an area only those who may open it see (the list is computed once for all staff).
-const findingNeeds: Record<string, Permission[]> = { PAYMENTS_IN_REVIEW: ['billing.view'], USAGE_ANOMALIES: ['servers.view_all'] };
+const findingNeeds: Record<string, Permission[]> = { PAYMENTS_IN_REVIEW: ['billing.view'], USAGE_ANOMALIES: ['servers.view_all'], PAYMENT_RISK: ['billing.view'] };
 export const maySeeFinding = (permissions: string[], i: Pick<Insight, 'code' | 'link'>) =>
   (!i.link.startsWith('/admin/settings') || can(permissions, 'settings.view') || can(permissions, 'settings.manage'))
   && (!findingNeeds[i.code] || findingNeeds[i.code].some((p) => can(permissions, p)));

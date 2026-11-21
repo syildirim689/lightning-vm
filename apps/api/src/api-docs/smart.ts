@@ -47,6 +47,16 @@ const docs: Docs = {
     returns: { tr: '`schedules`: oluşturulan zamanlamalar (201).', en: '`schedules`: the schedules created (201).' },
     errors: ['NOT_FOUND', 'NO_SUGGESTION', 'VALIDATION_FAILED', 'ACTION_NOT_PERMITTED', 'ACTION_DISABLED'],
   },
+  // ---- payment-risk.ts ----
+  'GET /admin/billing/risk': {
+    tag: 'admin-billing',
+    summary: { tr: 'Ödeme riski taşıyan hesapları, risk altındaki tutara göre sıralı verir.', en: 'Lists the accounts with payment risk, ordered by the amount at risk.' },
+    details: { tr: 'billing.view yetkisi gerekir. Listeye girenler: vadesi geçmiş ödenmemiş faturası olan (itirazlı faturalar ve bakiye yüklemeleri hariç) ya da son 30 günde en az 2 başarısız tahsilatı olan hesaplar, para birimi başına bir satır. Risk altındaki tutar vadesi geçmiş toplamdır; vadesi geçmiş yoksa başarısız tahsilatların ait olduğu açık tutardır. Vadesi geçmiş tutarın bir bölümü son 7 günde eklendiyse neden OVERDUE_GROWING olur. En çok 200 satır. Kimseye bildirim göndermez, hiçbir şeyi askıya almaz.',
+      en: 'Needs billing.view. Listed: accounts with unpaid invoices past their due date (disputed invoices and top-ups left out) or with at least 2 failed charges in the last 30 days, one row per currency. The amount at risk is the overdue total; with nothing overdue, the open amount the failed charges were for. When part of the overdue amount was added in the last 7 days the reason is OVERDUE_GROWING. At most 200 rows. It notifies nobody and suspends nothing.' },
+    returns: { tr: '`accounts` (`userId`, `email`, `currency`, `atRisk`, `overdue`, `overdueCount`, `oldestDays`, `newOverdue`, `failedCharges`, `failedAmount`, `reasons`: OVERDUE, OVERDUE_GROWING, REPEATED_FAILURES) ve kullanılan eşikler `rule`.',
+      en: '`accounts` (`userId`, `email`, `currency`, `atRisk`, `overdue`, `overdueCount`, `oldestDays`, `newOverdue`, `failedCharges`, `failedAmount`, `reasons`: OVERDUE, OVERDUE_GROWING, REPEATED_FAILURES) and the thresholds used, `rule`.' },
+    errors: ['FORBIDDEN'],
+  },
 };
 
 export default docs;

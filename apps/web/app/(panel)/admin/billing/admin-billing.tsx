@@ -13,6 +13,7 @@ import { useState } from 'react';
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { I } from '../../../../components/icon';
 import { SavedViews } from '../../../../components/saved-views';
+import { PaymentRisk } from '../../../../components/payment-risk';
 import { VIEW_LISTS } from '../../../../lib/saved-views';
 import { ButtonLink, ConfirmButton, DataTable, LoadFailed, Notice, PageHeader, SelectInput, StatusChip, TextInput } from '../../../../components/ui';
 import { downloadCsv, localDay } from '../../../../lib/csv';
@@ -29,7 +30,7 @@ type Money = { currency: string; amount: string };
 type Overview = { mrr: Money[]; open: (Money & { n: number; overdue: number })[]; collectedThisMonth: (Money & { n: number })[]; series: (Money & { month: string })[];
   subscriptions: Record<string, number>; recentPayments: Payment[]; paymentsInReview?: { n: number; oldest: string | null } };
 const tooltipStyle = { background: 'var(--overlay)', border: '1px solid var(--border)', borderRadius: 8, color: 'var(--overlay-foreground)', fontSize: 12 };
-const tabs = ['invoices', 'subscriptions', 'payments', 'disputes', 'coupons'] as const;
+const tabs = ['invoices', 'subscriptions', 'payments', 'risk', 'disputes', 'coupons'] as const;
 // The invoice and payment lists share these address parameters; each keeps its own saved views.
 const viewKeys = VIEW_LISTS['admin-invoices']; // the payments list has the same two
 
@@ -136,6 +137,7 @@ export default function AdminBilling() {
       <Tabs.Panel id="invoices" className="pt-5"><Invoices/></Tabs.Panel>
       <Tabs.Panel id="subscriptions" className="pt-5"><Subscriptions manage={manage}/></Tabs.Panel>
       <Tabs.Panel id="payments" className="pt-5"><Payments manage={manage}/></Tabs.Panel>
+      <Tabs.Panel id="risk" className="pt-5"><PaymentRisk/></Tabs.Panel>
       <Tabs.Panel id="disputes" className="pt-5"><AdminDisputes manage={manage}/></Tabs.Panel>
       <Tabs.Panel id="coupons" className="pt-5"><AdminCoupons manage={manage}/></Tabs.Panel>
     </Tabs>

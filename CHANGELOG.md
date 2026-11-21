@@ -44,6 +44,11 @@ Türkçe [docs/upgrade-notes.md](docs/upgrade-notes.md) sayfasını okuyun.*
   record); nothing is created otherwise. No saving is promised that the bill does not show: a switched-off server
   is billed the same, so the page says so and gives the energy estimate instead. New routes:
   `GET` and `POST /api/servers/:id/schedule-suggestion`.
+- **Payment risk.** Customers (where the panel collects by itself) get an insight when the next renewal, up to 30
+  days ahead, will not go through as things stand: every saved card ends before it, or the balance is there but too
+  small. Staff with `billing.view` get an "At risk" tab on the billing page and a finding: accounts with overdue
+  invoices or at least two failed charges in 30 days, largest amount at risk first
+  (`GET /api/admin/billing/risk`). It only lists: nothing is charged, suspended or sent.
 
 - **Per-project quotas.** Staff with `catalog.manage` give a project a quota of its own in Catalog → Quotas (the
   form finds projects by name or by their owner's e-mail). It replaces the owner's quota for servers ordered into

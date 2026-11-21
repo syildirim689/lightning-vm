@@ -105,3 +105,29 @@ oluşturulur.
 - **Gizleme:** "Şimdi değil" içgörülerin kendi gizlemesidir (7 gün); içgörü `SCHEDULE_SUGGESTED`.
 - **Maliyet:** arka plan işi yoktur. Sunucu sayfası açıldığında tek sunucunun en çok 672 saatlik satırı okunur;
   içgörüler için hesap sahibinin en çok 20 çalışan sunucusuna bakılır ve sonuç sunucu başına 6 saat saklanır.
+
+## Ödeme riski
+
+Kurallar `apps/api/src/payment-risk-rules.ts` içindedir (birim testleri `apps/api/test/payment-risk-rules.test.mjs`);
+hiçbiri tahsilat yapmaz, hizmet askıya almaz ya da kimseye yazmaz. Hatırlatma, askıya alma ve silme adımları
+faturalamanın kendi akışında kalır ([billing.md](billing.md)).
+
+- **Müşteri** (içgörüler; yalnızca Faturalama ayarlarında otomatik tahsilat açıkken; faturalarını elle ödeyen hesaba
+  bir şey söylenmez). Sıradaki yenileme, faturalamanın keseceği tutarla (`nextRenewal`) ve en çok 30 gün ilerisi
+  için ele alınır; yenilemenin faturası zaten kesildiyse o faturanın kendi hatırlatmaları geçerlidir.
+  - `CARD_EXPIRES_BEFORE_RENEWAL`: kayıtlı kartların **hepsinin** süresi yenileme tarihinden önce doluyor ve bakiye
+    tutarı karşılamıyor. Kart, son kullanma ayının son gününe kadar geçerli sayılır; son kullanma tarihi bilinmeyen
+    kart hakkında sonuç çıkarılmaz. Varsayılan kart adıyla (son dört hane, AA/YY), tarih ve tutar söylenir.
+  - `RENEWAL_NOT_COVERED`: süresi yeten kart yok, hesapta bakiye var ama yenilemeden az. Bakiye, eksik tutar,
+    tarih ve tutar söylenir. Faturalama ayarlarında bakiye kapalıysa bakiye hesaba katılmaz.
+  - İkisi de gizlenebilir; anahtar yenileme tarihini içerir, sonraki dönemde yeniden görünür.
+- **Personel** (`GET /admin/billing/risk`, `billing.view`; Yönetim → Faturalandırma → "Risk altında" sekmesi ve
+  `PAYMENT_RISK` içgörüsü). Hesap ve para birimi başına bir satır:
+  - Listeye giren: vadesi geçmiş ödenmemiş faturası olan (itirazlı faturalar ve bakiye yüklemeleri sayılmaz) ya da
+    son 30 günde en az 2 başarısız tahsilatı olan hesap.
+  - **Risk altındaki tutar:** vadesi geçmiş toplam; vadesi geçmiş yoksa başarısız tahsilatların ait olduğu açık tutar.
+  - **Büyüyor:** vadesi geçmiş tutarın bir bölümü son 7 günde eklenmiş, bir bölümü daha eski.
+  - Sıra: risk altındaki tutar büyükten küçüğe (farklı para birimleri sayı olarak karşılaştırılır; liste bir toplam
+    değil, bakılacaklar sırasıdır), sonra en eski gecikme. En çok 200 satır.
+- **Maliyet:** arka plan işi yoktur. Müşteri içgörüsü için hesabın yenilemesi, kartları ve bakiyesi okunur; personel
+  listesi, faturalar ve ödemeler üzerinde gruplanmış tek sorgudur (personel içgörüleri 60 saniye önbellekte tutulur).
