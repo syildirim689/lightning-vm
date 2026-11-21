@@ -180,7 +180,8 @@ export class PeriodicDigestController {
 
   // "Send me a preview now": the digest as it would be written at this moment, through the same channels. It does
   // not count as a period (the next digest still compares with the last real one). Nothing to say: nothing is sent,
-  // and the answer says so. The words are returned as well, so the page can show them where no channel is set.
+  // and the answer says so. The words are returned as well, so the page can show them where no channel is set: in
+  // the account's language as they are sent (title, body), and in both (texts), so the page can show its own.
   @Post('preview') @HttpCode(200)
   async preview(@Req() req: AuthedRequest) {
     if (req.user.impersonatedBy) throw apiError(403, 'NOT_WHILE_IMPERSONATING', 'Not while acting as another user');
@@ -194,6 +195,7 @@ export class PeriodicDigestController {
     const channels = await reach(req.user.id, await channelsFor(req.user.id, event, policy));
     if (!empty && channels.length) await send(kind, req.user.id, digest, true);
     await audit(req, 'account.digest_preview', 'success', req.user.id, { empty, channels });
-    return { sent: !empty && channels.length > 0, empty, channels, ...digestText(req.user.locale === 'tr' ? 'tr' : 'en', digest, true) };
+    const texts = { tr: digestText('tr', digest, true), en: digestText('en', digest, true) };
+    return { sent: !empty && channels.length > 0, empty, channels, ...texts[req.user.locale === 'tr' ? 'tr' : 'en'], texts };
   }
 }

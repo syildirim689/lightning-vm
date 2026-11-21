@@ -111,7 +111,7 @@ const docs: Docs = {
     summary: { tr: 'Özetin şu anki halini size hemen gönderir.', en: 'Sends you the digest as it would be written now.' },
     details: { tr: 'Aynı kanallardan, başlığında "Önizleme" ile gider; dönem sayılmaz (sonraki özet yine son gerçek özetle karşılaştırır). Söylenecek bir şey yoksa hiçbir şey gönderilmez ve yanıt `empty: true` der. Saatte 5 önizleme.',
       en: 'It goes through the same channels with "Preview" in its title and does not count as a period (the next digest still compares with the last real one). With nothing to say nothing is sent and the answer says `empty: true`. Five previews an hour.' },
-    returns: { tr: '`sent`, `empty`, `channels`, ayrıca özetin `title` ve `body` metni.', en: '`sent`, `empty`, `channels`, and the `title` and `body` of the digest.' },
+    returns: { tr: '`sent`, `empty`, `channels`, ayrıca özetin hesabın dilindeki `title` ve `body` metni ve iki dildeki hali (`texts.tr`, `texts.en`).', en: '`sent`, `empty`, `channels`, and the `title` and `body` of the digest in the language of the account, with both languages in `texts.tr` and `texts.en`.' },
     errors: ['DIGEST_NOT_AVAILABLE', 'NOT_WHILE_IMPERSONATING', 'RATE_LIMITED'],
   },
   // ---- maintenance-hours.ts ----

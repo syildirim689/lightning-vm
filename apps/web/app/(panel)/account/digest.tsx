@@ -5,7 +5,7 @@
 // "Periodic digest" in the list below), and "Send me a preview now" sends the digest as it would be written at this
 // moment through those channels and shows its words here.
 import { Button, toast } from '@heroui/react';
-import { useFormatter, useTranslations } from 'next-intl';
+import { useFormatter, useLocale, useTranslations } from 'next-intl';
 import { useEffect, useState } from 'react';
 import { I } from '../../../components/icon';
 import { Notice, Section, SelectInput, SwitchInput } from '../../../components/ui';
@@ -16,12 +16,14 @@ import { useApiAction, useApiQuery } from '../../../lib/query';
 type Channel = 'inApp' | 'push' | 'email' | 'sms' | 'chat';
 type State = { kind: 'staff' | 'customer'; event: string; available: boolean; enabled: boolean; frequency: 'weekly' | 'daily'; day: number; hour: number; timezone: string | null;
   nextAt: string | null; lastSentAt: string | null; channels: Channel[]; reach: Channel[] };
-type Preview = { sent: boolean; empty: boolean; channels: Channel[]; title: string; body: string };
+type Preview = { sent: boolean; empty: boolean; channels: Channel[]; title: string; body: string; texts: Record<'tr' | 'en', { title: string; body: string }> };
 
 export default function DigestCard() {
   const t = useTranslations('PeriodicDigest');
   const tn = useTranslations('Notify');
   const format = useFormatter();
+  // The message goes out in the account's language; here it is shown in the language of the page.
+  const locale = useLocale() === 'tr' ? 'tr' : 'en';
   const me = useMe();
   const key = ['account', 'digest'];
   const d = useApiQuery<State>(key, '/account/digest').data;
@@ -63,8 +65,8 @@ export default function DigestCard() {
       {shown && <div role="status" aria-label={t('previewTitle')} className="flex flex-col gap-2 rounded-xl border border-border bg-default/40 p-4">
         <p className="text-sm font-medium">{shown.empty ? t('previewEmpty') : shown.sent ? t('previewTitle') : t('previewNotSent')}</p>
         {!shown.empty && <>
-          <p className="text-sm font-semibold">{shown.title}</p>
-          <pre className="max-h-80 overflow-auto font-sans text-sm leading-relaxed whitespace-pre-wrap">{shown.body}</pre>
+          <p className="text-sm font-semibold">{(shown.texts?.[locale] ?? shown).title}</p>
+          <pre className="max-h-80 overflow-auto font-sans text-sm leading-relaxed whitespace-pre-wrap">{(shown.texts?.[locale] ?? shown).body}</pre>
         </>}
       </div>}
     </div>

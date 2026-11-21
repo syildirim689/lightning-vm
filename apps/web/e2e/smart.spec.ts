@@ -432,7 +432,8 @@ test('smart: the periodic digest is off until turned on, says when the next one 
     await expect(shown).toContainText(/Preview: Panel digest: (\d+ open findings?|no open findings)/);
     await expect(shown).toContainText(/Since \d{4}-\d\d-\d\d\./);
     await expect(page.getByText('Preview sent: In the panel').first()).toBeVisible();
-    await expect.poll(async () => ((await (await page.request.get('/api/notifications')).json()) as { notifications: { event: string; title: string }[] }).notifications.some((n) => n.event === 'admin.digest' && n.title.startsWith('Preview: Panel digest')),
+    // (The inbox keeps the words in both languages; the title column is in the account's own.)
+    await expect.poll(async () => ((await (await page.request.get('/api/notifications')).json()) as { notifications: { event: string; title: string; texts: { en: { title: string } } | null }[] }).notifications.some((n) => n.event === 'admin.digest' && (n.texts?.en.title ?? n.title).startsWith('Preview: Panel digest')),
       { message: 'the preview arrives in the inbox', timeout: 20_000 }).toBe(true);
   }
   // The preview did not move the next digest.

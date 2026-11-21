@@ -234,6 +234,9 @@ test('the preview goes out now, marked as one, and does not count as a period; f
   assert.equal(p.statusCode, 200, p.body);
   assert.deepEqual([p.json().sent, p.json().empty, p.json().channels], [true, false, ['inApp']]);
   assert.match(p.json().title, /^Preview: Panel digest: \d+ open findings$/);
+  // Both languages come back, for a page shown in another language than the account's.
+  assert.deepEqual([p.json().texts.en.title, p.json().texts.en.body], [p.json().title, p.json().body]);
+  assert.match(p.json().texts.tr.title, /^Önizleme: Panel özeti: \d+ açık bulgu$/);
   assert.match(p.json().body, /^Since \d{4}-\d\d-\d\d\.\nOpen findings: /);
   const jobs = await queued(adminId);
   assert.deepEqual(jobs.map((j) => j.preview), [false, true]);

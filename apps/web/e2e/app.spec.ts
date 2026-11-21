@@ -3267,7 +3267,7 @@ test.describe('people, settings and smart features (English browser)', () => {
       ['/admin/catalog?tab=quotas', 'new-quotas', ['main']],
       ['/account?tab=projects', 'new-projects', ['main']],
       ['/admin/settings?tab=payments', 'new-payments', ['main']],
-      ['/api-docs', 'new-api-try', ['[data-testid="try-request"]']],
+      ['/api-docs', 'new-api-try', ['[data-testid="try-request"]'], async () => { await page.getByRole('searchbox', { name: 'Search endpoints' }).fill('/auth/me'); await page.locator('#get-auth-me').locator('summary').click(); }],
       ...(serverId ? [[`/servers/${serverId}`, 'new-server', ['[data-section="Usage watch"]', '[data-schedule-suggestion="suggested"]']] as [string, string, string[]]] : []),
       ...(connectionId ? [[`/admin/vmware/${connectionId}`, 'new-connection-hosts', ['[data-quiet-hours="suggested"]'], () => page.getByRole('tab', { name: /Hosts/ }).click()] as [string, string, string[], () => Promise<void>]] : []),
     ];
