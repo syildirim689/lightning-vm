@@ -242,6 +242,7 @@ Yanıt olarak yalnızca sonuç kodu döner.
   - Bileşenler hazır olana kadar (en fazla 3 dakika) sayfa birkaç saniyede bir kontrol eder.
   - İşaret kaldırılırsa `monitoring off` gönderilir. Yalnızca izleme servisleri durur, verileri korunur.
   - Ajan kurulu değilse sihirbaz bunu söyler ve tek komutu gösterir: `sudo sh scripts/install.sh agent on`.
-- **Elle karşılığı:** `sh scripts/install.sh monitoring on|off`.
+- **Elle karşılığı:** `sh scripts/install.sh monitoring on|off`. Kurulumdan sonra aynı anahtar Yönetim → Sistem →
+  İzleme kartındadır ([operations.md](operations.md#i̇zleme)).
 - **Alan adı adımı:** DNS'i kontrol eder. HTTPS sertifikası kurulumdan sonra Ayarlar → Alan adı ve SSL'den
   panelin kendisi tarafından kurulur.

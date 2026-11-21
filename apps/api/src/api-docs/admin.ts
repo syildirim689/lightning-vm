@@ -17,14 +17,20 @@ export default {
     details: { tr: 'system.view veya dashboard.view yetkisi gerekir.', en: 'Needs system.view or dashboard.view.' },
     returns: { tr: 'Bakım özeti (sürüm, son yedek, otomatik güncelleme), `releases` ve `agent` (`installed`, bekleyen istek sayısı, son çalışma ve günlüğü).', en: 'The maintenance summary (version, last backup, automatic updates), `releases` and `agent` (`installed`, pending requests, the last run and its log).' },
   },
+  'GET /admin/maintenance/monitoring': {
+    tag: 'admin-system',
+    summary: { tr: 'İzleme bileşenlerinin şu anki durumunu verir.', en: 'Returns the monitoring components as they answer now.' },
+    details: { tr: 'system.view veya dashboard.view yetkisi gerekir. Prometheus, Grafana ve Loki\'ye o anda sorulur (her biri en çok 3 sn). Açıp kapatmak için `POST /admin/maintenance/requests` (`action: monitoring`) kullanılır.', en: 'Needs system.view or dashboard.view. Prometheus, Grafana and Loki are asked at that moment (3 s each at most). To turn it on or off use `POST /admin/maintenance/requests` (`action: monitoring`).' },
+    returns: { tr: '`state` (`on`: hepsi yanıt veriyor, `off`: hiçbiri, `partial`: bir kısmı), `checks` (bileşen başına `id`, `ok`, `code`) ve `agent` (`installed`, `pending`, `busy`, son izleme isteğinin durumu ve günlüğünün son satırları).', en: '`state` (`on`: all answer, `off`: none, `partial`: some), `checks` (`id`, `ok`, `code` per component) and `agent` (`installed`, `pending`, `busy`, the last monitoring request\'s status and the last lines of its log).' },
+  },
   'POST /admin/maintenance/requests': {
     tag: 'admin-system',
-    summary: { tr: 'Sunucu ajanından güncelleme denetimi, güncelleme, yedek veya otomatik güncelleme ayarı ister.', en: 'Asks the host agent to check for updates, update, back up or change automatic updates.' },
+    summary: { tr: 'Sunucu ajanından güncelleme denetimi, güncelleme, yedek, otomatik güncelleme ayarı ya da izlemeyi açıp kapatmayı ister.', en: 'Asks the host agent to check for updates, update, back up, change automatic updates or turn monitoring on or off.' },
     details: { tr: 'system.update yetkisi gerekir. Aynı anda tek istek çalışır; ajan isteği yeniden denetleyip scripts/install.sh ile yürütür. Yanıt 202 döner, sonuç GET /admin/maintenance ile izlenir.', en: 'Needs system.update. One request runs at a time; the agent checks it again and runs scripts/install.sh. Answers 202; follow the result with GET /admin/maintenance.' },
     body: [
-      { name: 'action', type: 'string', required: true, values: ['check', 'update', 'backup', 'auto-update'], text: { tr: 'Yapılacak iş.', en: 'What to do.' } },
+      { name: 'action', type: 'string', required: true, values: ['check', 'update', 'backup', 'auto-update', 'monitoring'], text: { tr: 'Yapılacak iş. `monitoring`: izleme bileşenlerini (Prometheus, Grafana, Loki, Alertmanager) başlatır ya da durdurur (`install.sh monitoring on|off`); panelin kendi servislerine dokunulmaz, kapatınca veriler korunur.', en: 'What to do. `monitoring`: starts or stops the monitoring components (Prometheus, Grafana, Loki, Alertmanager; `install.sh monitoring on|off`); the panel\'s own services are not touched, and turning it off keeps the data.' } },
       { name: 'to', type: 'string', text: { tr: 'Yalnız `update` için: hedef sürüm etiketi (v1.2.3) veya 7-40 karakterlik commit. Verilmezse en son sürüm.', en: 'Only for `update`: the target tag (v1.2.3) or a 7-40 character commit. Without it, the latest release.' } },
-      { name: 'enabled', type: 'boolean', text: { tr: 'Yalnız `auto-update` için: otomatik güncellemeyi açar; `true` dışındaki her değer kapatır.', en: 'Only for `auto-update`: turns automatic updates on; anything but `true` turns them off.' } },
+      { name: 'enabled', type: 'boolean', text: { tr: '`auto-update` için: otomatik güncellemeyi açar; `true` dışındaki her değer kapatır. `monitoring` için zorunludur ve `true` ya da `false` olmalıdır.', en: 'For `auto-update`: turns automatic updates on; anything but `true` turns them off. Required for `monitoring`, and must be `true` or `false`.' } },
       { name: 'channel', type: 'string', values: ['stable', 'beta', 'edge'], text: { tr: 'Yalnız `auto-update` için: güncelleme kanalı.', en: 'Only for `auto-update`: the update channel.' } },
       { name: 'window', type: 'string', text: { tr: 'Yalnız `auto-update` için: güncelleme saat aralığı, "HH:MM-HH:MM".', en: 'Only for `auto-update`: the update time window, "HH:MM-HH:MM".' } },
     ],

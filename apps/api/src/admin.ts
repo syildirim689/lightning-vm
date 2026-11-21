@@ -11,6 +11,7 @@ import { dropPush, notify } from './notify';
 import { uptime } from 'node:os';
 import { agentStatus, bootId, hostInfo, osInfo, pendingRequests, queueRequest, releases, runLog, runSetUp, settings as maintenanceSettings, summary } from './maintenance';
 import { readHostChange } from './host-rules';
+import { monitoringChecks } from './checks';
 import { hostLive, hostLog, logSources } from './host-live';
 import { endImpersonations, reloadAuth } from './better-auth';
 
@@ -30,14 +31,31 @@ export class AdminController {
       agent: { installed: maintenanceSettings().agent === 'on', pending: Math.max(0, pendingRequests()), status, log: status ? runLog(status.id) : [] } };
   }
 
-  // Asks the host agent to check for updates, update, back up or change the automatic-update settings.
+  // The monitoring components (Prometheus, Grafana, Loki; Alertmanager starts and stops with them) as they answer
+  // now, and whether the host agent is switching them. state: 'on' when all answer, 'off' when none does, 'partial'
+  // otherwise (starting, stopping, or one of them down). Turning them on or off is a maintenance request below.
+  @Get('maintenance/monitoring') @Can('system.view', 'dashboard.view')
+  async monitoring() {
+    const checks = await monitoringChecks();
+    const up = checks.filter((c) => c.ok).length;
+    const status = agentStatus();
+    const mine = status?.action === 'monitoring' ? status : null;
+    const running = status?.state === 'running' && Date.now() - Date.parse(status.startedAt) < 3 * 3600_000;
+    return { state: up === checks.length ? 'on' : up === 0 ? 'off' : 'partial', checks,
+      agent: { installed: maintenanceSettings().agent === 'on', pending: Math.max(0, pendingRequests()), busy: pendingRequests() > 0 || running, status: mine, log: mine ? runLog(mine.id, 20) : [] } };
+  }
+
+  // Asks the host agent to check for updates, update, back up, change the automatic-update settings or turn the
+  // monitoring components on or off (install.sh monitoring on|off, as the setup wizard asks for it).
   // One request at a time; the agent validates everything again before running scripts/install.sh.
   @Post('maintenance/requests') @HttpCode(202) @Can('system.update')
   async request(@Req() req: AuthedRequest, @Body() body: Record<string, unknown>) {
     const action = String(body?.action ?? '');
     const fields: Record<string, string> = {};
     const out: Record<string, string> = { action };
-    if (!['check', 'update', 'backup', 'auto-update'].includes(action)) fields.action = 'INVALID_VALUE';
+    if (!['check', 'update', 'backup', 'auto-update', 'monitoring'].includes(action)) fields.action = 'INVALID_VALUE';
+    // On or off must be said: a missing or mistyped value does not quietly turn monitoring (and its alerts) off.
+    if (action === 'monitoring') { if (typeof body?.enabled === 'boolean') out.switch = body.enabled ? 'on' : 'off'; else fields.enabled = 'INVALID_VALUE'; }
     if (action === 'update' && body?.to) {
       if (/^(v\d+\.\d+\.\d+(-[0-9A-Za-z.]+)?|[0-9a-f]{7,40})$/.test(String(body.to))) out.to = String(body.to); else fields.to = 'INVALID_VALUE';
     }

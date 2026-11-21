@@ -27,7 +27,7 @@ yalnızca **olmayanlar** ve **denenmemiş olanlar** durur. Tarih ya da söz veri
 - **Kimlik:** bir projeyi birden çok kullanıcının paylaştığı ekip yapısı.
 - **Ağ:** çalışan bir sunucuya sonradan ek IP ekleme. Ayrı IPv6 havuzları ve sunucu başına birden çok IPv6 adresi
   (bugün: IPv4 havuzuna eklenen önekten tek adres). Yük dengeleyici.
-- **İşletim:** izlemeyi kurulumdan sonra panelden açıp kapatma (yalnızca `install.sh monitoring on|off`). Birden çok
+- **İşletim:** birden çok
   sunucuda çalışma (cluster; [cluster.md](cluster.md) yalnızca tasarımdır). GHCR imajlarıyla sürümlü, imzalı kurulum
   paketi (kurulum ve güncelleme kaynak koddan derler). Panel sunucusunda Debian / Ubuntu dışındaki dağıtımlar için
   işletim sistemi güncellemeleri; müşteri sunucularında Windows güncellemeleri.

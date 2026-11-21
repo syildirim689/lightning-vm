@@ -271,8 +271,10 @@ girmeniz gerekmez. Özelliklerin tamamı yalnızca VMware'de vardır; diğer alt
 - **Kuyrukta hesap payı:** tek bir hesap worker'ın bütün işlem yerlerini dolduramaz (`OPERATIONS_PER_OWNER`,
   varsayılan yerlerin yarısı); personelin ve tahsilatın işlemleri bekletilmez. Payı beklerken geçen süre işlemin son
   tarihine geri eklenir (en çok `OPERATIONS_HELD_HOURS` saat, varsayılan 6)
-- İsteğe bağlı Prometheus, Grafana, Loki, Alertmanager. Kurulumda açılır; sonradan yalnızca komut satırından açılıp
-  kapatılır (`install.sh monitoring on|off`). Panelde bunun düğmesi yalnız kurulum sihirbazında vardır
+- İsteğe bağlı Prometheus, Grafana, Loki, Alertmanager. Kurulumda açılır; sonradan **panelden** (Yönetim → Sistem →
+  İzleme: bileşenlerin o anki yanıtı ve onay isteyen açma / kapatma düğmesi; istek, yedek ve güncellemeyle aynı
+  izin ve tek-iş kuralıyla sunucudaki ajana gider) ya da komut satırından açılıp kapatılır
+  (`install.sh monitoring on|off`)
 - Türkçe / İngilizce arayüz, koyu / açık tema, telefondan geniş ekrana tam uyumlu
 - **Pencere mantığı:** tüm iletişim kutuları başlık çubuğundan taşınır, kenara alınır, büyütülür; sola / sağa / üste / alta yaslanır, köşelere yerleşir, ortalanır, kenarından ve köşesinden boyutlandırılır. Kenara sürüklerken yerleşeceği alan önizlenir; düzen menüsü (başlıkta sağ tık ya da düzen düğmesi) ve Ctrl+Alt+← → ↑ ↓ / C kısayolları (telefonda alttan açılan sayfa)
 - **Erişilebilirlik:** %75–%200 yazı boyutu ve metin aralığı kaydırıcıları, yüksek kontrast, okunaklı yazı tipi, azaltılmış hareket
@@ -330,6 +332,7 @@ sunucunun kopyası çıkarılamaz (kopya yalnızca şablondan). Her platformun a
 
 | Ne | Nerede |
 |---|---|
+| **İzlemeyi panelden açıp kapatma (2026-11-21).** Sistem sayfasındaki İzleme kartı Prometheus, Grafana ve Loki'nin o anki yanıtını gösterir; açma / kapatma onay ister ve yedek ile güncellemenin kullandığı aynı yoldan (aynı izin, aynı anda tek iş, denetim kaydı) sunucudaki ajana gider. Ajan yoksa kart komut satırındaki karşılığını söyler | Yönetim → Sistem → İzleme · [docs/operations.md](docs/operations.md#i̇zleme) |
 | **API belgelerinde istek çalıştırma (2026-11-21).** Belgelerdeki her rota tarayıcıdan, açık oturumla çalıştırılabilir: istek gitmeden önce gösterilir, GET dışındakiler onay ister, yalnızca bu panelin belgelenmiş rotalarına gider, kişi başına API hız sınırına sayılır; sır veren rotalar sunulmaz ve yanıttaki sırlar gizlenir | API belgeleri (`/api-docs`) · [docs/api.md](docs/api.md#running-a-request-from-the-reference) |
 | **Stripe webhook'u (2026-11-21).** Stripe ödemenin sonucunu imzalı bildirimle panele kendisi söyler; imza ham gövde üzerinden doğrulanır, beş dakikadan eski imza reddedilir ve sonuç, tarayıcı dönüşü ve tahsilat çalıştırmasıyla aynı yoldan bir kez kaydedilir. Ayarlar ekranı Stripe'a girilecek adresi ve olayları gösterir. Kendi imzaladığımız olaylarla sınandı; gerçek Stripe'la denenmedi | Ayarlar → Ödemeler → Stripe · [docs/payments.md](docs/payments.md#stripe-webhooku) |
 | **Proje başına kota (2026-11-21).** Personel bir projeye kendi kotasını verir; o projeye verilen siparişlerde sahibinin kotasının yerine geçer ve yalnızca o projenin sunucularını sayar. Kotalar listesinde kullanılan / sınır; müşteride projede ve sipariş özetinde kotanın bu sunucuyla varacağı durum; aşan sipariş `PROJECT_QUOTA_EXCEEDED` ile reddedilir | Katalog → Kotalar · Hesabım → Projeler · Sipariş · [docs/catalog.md](docs/catalog.md#kotalar-ve-projeler) |
@@ -909,7 +912,8 @@ kaynağında en son ne zaman doğrulandığını, `087` bir işlemin hesap payı
   gönderildi. Nilvera, EDM, QNB eFinans, BirFatura ve Paraşüt belgelere göre yazıldı ve denenmedi; e-Fatura (mükellef
   alıcı) gönderimi hiçbir gerçek entegratörde denenmedi ([docs/billing.md](docs/billing.md)).
 - **IPv6:** ayrı IPv6 havuzu yoktur; IPv4 havuzuna eklenen önekten sunucu başına tek adres verilir.
-- **İzleme:** kurulumdan sonra panelden açılıp kapatılamaz (`install.sh monitoring on|off`).
+- **İzleme:** panelden açıp kapatma isteğinin ajana doğru gittiği sınandı; ajanın bileşenleri gerçekten durdurup
+  başlatması bu yolla bir sunucuda denenmedi ([docs/operations.md](docs/operations.md#i̇zleme)).
 - **Küme (cluster):** birden çok sunucuda çalışma bir tasarımdır, yazılmadı ([docs/cluster.md](docs/cluster.md)).
 - **E-posta adresi doğrulama, gerçek posta sunucusuyla denenmedi:** kayıtla açılan hesaba doğrulama kodu gönderilir
   (yalnızca sahte bir SMTP sunucusuyla sınandı) ve varsayılan olarak hiçbir şeyi engellemez; doğrulanmamış hesabın

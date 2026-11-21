@@ -373,6 +373,28 @@ Sınırları:
 sudo docker compose --profile observability up -d
 ```
 
+**Panelden açıp kapatma (kurulumdan sonra):** Yönetim → Sistem → **İzleme** kartı, Prometheus, Grafana ve Loki'nin
+o anda yanıt verip vermediğini gösterir (`GET /api/admin/maintenance/monitoring`) ve "İzlemeyi aç" / "İzlemeyi
+kapat" düğmesini taşır. Düğme önce ne olacağını sorar; onaylanınca panel, yedek ve güncellemede kullandığı aynı
+yoldan sunucudaki ajana bir istek bırakır (`POST /api/admin/maintenance/requests`, `action: monitoring`,
+`enabled: true|false`) ve ajan `install.sh monitoring on|off` çalıştırır.
+
+- **Aynı kurallar:** izin yedek ve güncellemeyle aynıdır (`system.update`; durumu görmek için `system.view`);
+  istek denetim kaydına `maintenance.request` olarak, kimin istediğiyle yazılır; aynı anda tek bakım işi çalışır
+  (sırada ya da çalışan bir yedek, güncelleme ya da ayar varken `409 MAINTENANCE_BUSY`); ajan kurulu değilse
+  `409 MAINTENANCE_AGENT_MISSING` döner ve kart komut satırındaki karşılığını gösterir. Ajan isteği yeniden
+  doğrular (`switch` yalnızca `on` ya da `off` olabilir) ve betiğin kendi kilidiyle çalıştırır.
+- **Açık mı kapalı mı söylenmelidir:** `enabled` alanı `true` ya da `false` değilse istek reddedilir; eksik bir alan
+  izlemeyi (ve uyarıları) sessizce kapatmaz.
+- **Ne değişir:** yalnızca izleme bileşenleri başlatılır ya da durdurulur; panelin kendi servislerine dokunulmaz.
+  Kapatınca veriler (Prometheus, Loki, Grafana birimleri) korunur, ama izleme yeniden açılana kadar **uyarı
+  gönderilmez**, ölçüm ve günlük toplanmaz. Açmak birkaç dakika sürer (imajlar derlenir); kart ajan çalışırken
+  birkaç saniyede bir yeniden sorar ve betiğin son satırlarını gösterir.
+- **Denenen ve denenmeyen:** panelin isteği doğru biçimde, doğru izinle, tek tek ve denetim kaydıyla bıraktığı
+  entegrasyon testleriyle denendi (`apps/api/test/integration/monitoring-switch.test.mjs`); kart tarayıcı
+  testinde görünür. **Ajanın bu isteği alıp bileşenleri gerçekten durdurup başlatması bu çalışmada bir sunucuda
+  denenmedi**; o yol kurulum sihirbazının izleme adımının kullandığı aynı `monitoring on|off` isteğidir.
+
 | Bileşen | Görevi | Erişim |
 |---|---|---|
 | Prometheus | API metrikleri, host (node-exporter), dış erişim probe'u (blackbox) | http://127.0.0.1:9090 |

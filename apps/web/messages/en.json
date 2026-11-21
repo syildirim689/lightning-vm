@@ -9446,5 +9446,40 @@
     "incidentResolved": "Resolved recently:",
     "yourTicket": "Your ticket #{number}: {subject}",
     "privacy": "From your own earlier tickets and the public status page only."
+  },
+  "MonitoringSwitch": {
+    "title": "Monitoring",
+    "intro": "Prometheus (metrics and alert rules), Grafana (dashboards), Loki (logs) and Alertmanager (sends the alerts). They run beside the panel and can be turned off and on here; the panel itself keeps running either way.",
+    "loading": "Asking the monitoring components…",
+    "components": "Monitoring components",
+    "state": {
+      "on": "On",
+      "off": "Off",
+      "partial": "Partly answering",
+      "switching": "Switching…"
+    },
+    "stateHelp": {
+      "on": "All components answer.",
+      "off": "No component answers: monitoring is off (or cannot be reached from the panel).",
+      "partial": "Some components answer and some do not: it is starting or stopping, or one of them is down."
+    },
+    "answers": "answers",
+    "noAnswer": "no answer: {reason}",
+    "turnOn": "Turn monitoring on",
+    "turnOff": "Turn monitoring off",
+    "onTitle": "Turn monitoring on?",
+    "onBody": "The server's agent builds and starts Prometheus, Grafana, Loki and Alertmanager. This takes a few minutes and needs about 1 GB of memory; 4 GB in all is recommended for a server with monitoring. Nothing else is restarted.",
+    "offTitle": "Turn monitoring off?",
+    "offBody": "Prometheus, Grafana, Loki and Alertmanager stop. Until monitoring is on again no alert is sent, no metric or log is collected, and the charts fed by Prometheus stay empty. The data collected so far is kept. The panel and the customers' servers are not touched.",
+    "cancel": "Cancel",
+    "refresh": "Ask again",
+    "onQueued": "Asked the server to turn monitoring on.",
+    "offQueued": "Asked the server to turn monitoring off.",
+    "progress": "What the server is doing",
+    "otherTask": "Another maintenance task (a backup, an update or a setting) is queued or running; monitoring can be switched when it has finished.",
+    "lastFailed": "The last switch did not finish: {code}",
+    "agentMissingTitle": "The server's agent is not installed",
+    "agentMissing": "Monitoring is switched by the agent on the server. Until it is installed, use the command line (sudo sh scripts/install.sh monitoring on|off) or install the agent:",
+    "needsPermission": "Switching monitoring needs the permission to update the panel."
   }
 }

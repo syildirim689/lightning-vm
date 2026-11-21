@@ -97,8 +97,10 @@ What is not the same everywhere (the table under "Platform kapsamı" above has e
 - **e-Invoice (Turkey):** of seven integrators only İzibiz and Uyumsoft were sent a real e-Arşiv invoice, in their
   test systems.
 - **IPv6:** an optional prefix on an IPv4 pool, one address per server; there are no separate IPv6 pools.
-- **Monitoring** (Prometheus, Grafana, Loki, Alertmanager) can be switched from the panel only in the setup wizard;
-  afterwards with `install.sh monitoring on|off`.
+- **Monitoring** (Prometheus, Grafana, Loki, Alertmanager) is switched from the panel in the setup wizard and, after
+  installation, on Admin → System (the request goes to the host agent like a backup or an update), or with
+  `install.sh monitoring on|off`. That the panel hands the request over correctly is tested; the agent stopping and
+  starting the components through it was not run on a server in this work.
 - **Real hardware:** only the Incus adapter (containers, Incus 6.0) ran against a real server. VMware was tested
   mostly against the govmomi simulator; Proxmox VE, XCP-ng, oVirt, Hyper-V and libvirt against imitations only.
 - **Upgrading:** the last rounds changed behaviour an operator can notice: a full audit of the API, worker,

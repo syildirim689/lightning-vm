@@ -9446,5 +9446,40 @@
     "incidentResolved": "Yakın zamanda çözüldü:",
     "yourTicket": "#{number} numaralı talebiniz: {subject}",
     "privacy": "Yalnızca kendi önceki talepleriniz ve herkese açık durum sayfasından."
+  },
+  "MonitoringSwitch": {
+    "title": "İzleme",
+    "intro": "Prometheus (ölçümler ve uyarı kuralları), Grafana (panolar), Loki (günlükler) ve Alertmanager (uyarıları gönderir). Panelin yanında çalışırlar ve buradan kapatılıp açılabilirler; panel her iki durumda da çalışmaya devam eder.",
+    "loading": "İzleme bileşenlerine soruluyor…",
+    "components": "İzleme bileşenleri",
+    "state": {
+      "on": "Açık",
+      "off": "Kapalı",
+      "partial": "Kısmen yanıt veriyor",
+      "switching": "Değiştiriliyor…"
+    },
+    "stateHelp": {
+      "on": "Bütün bileşenler yanıt veriyor.",
+      "off": "Hiçbir bileşen yanıt vermiyor: izleme kapalı (ya da panelden ulaşılamıyor).",
+      "partial": "Bazı bileşenler yanıt veriyor, bazıları vermiyor: açılıyor ya da kapanıyor, ya da biri çalışmıyor."
+    },
+    "answers": "yanıt veriyor",
+    "noAnswer": "yanıt yok: {reason}",
+    "turnOn": "İzlemeyi aç",
+    "turnOff": "İzlemeyi kapat",
+    "onTitle": "İzleme açılsın mı?",
+    "onBody": "Sunucudaki ajan Prometheus, Grafana, Loki ve Alertmanager'ı derleyip başlatır. Bu birkaç dakika sürer ve yaklaşık 1 GB bellek ister; izlemeli bir sunucu için toplam 4 GB önerilir. Başka hiçbir şey yeniden başlatılmaz.",
+    "offTitle": "İzleme kapatılsın mı?",
+    "offBody": "Prometheus, Grafana, Loki ve Alertmanager durur. İzleme yeniden açılana kadar uyarı gönderilmez, ölçüm ve günlük toplanmaz, Prometheus'tan beslenen grafikler boş kalır. O ana kadar toplanan veriler korunur. Panele ve müşterilerin sunucularına dokunulmaz.",
+    "cancel": "Vazgeç",
+    "refresh": "Yeniden sor",
+    "onQueued": "Sunucudan izlemeyi açması istendi.",
+    "offQueued": "Sunucudan izlemeyi kapatması istendi.",
+    "progress": "Sunucu şu an ne yapıyor",
+    "otherTask": "Başka bir bakım işi (yedek, güncelleme ya da bir ayar) sırada ya da çalışıyor; izleme o bittiğinde değiştirilebilir.",
+    "lastFailed": "Son değiştirme tamamlanmadı: {code}",
+    "agentMissingTitle": "Sunucu ajanı kurulu değil",
+    "agentMissing": "İzlemeyi sunucudaki ajan açıp kapatır. Ajan kurulana kadar komut satırını kullanın (sudo sh scripts/install.sh monitoring on|off) ya da ajanı kurun:",
+    "needsPermission": "İzlemeyi açıp kapatmak için paneli güncelleme izni gerekir."
   }
 }

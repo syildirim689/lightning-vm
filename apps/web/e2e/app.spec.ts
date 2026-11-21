@@ -2171,6 +2171,58 @@ test.describe('people, settings and smart features (English browser)', () => {
     await page.setViewportSize({ width: 1280, height: 720 });
   });
 
+  test('monitoring: System shows what the components answer and a switch that asks first; nothing is switched without the confirmation or without the agent', async ({ page }) => {
+    await signInAdmin(page);
+    const csrf = { 'x-lightning-csrf': '1' };
+    const read = async () => (await (await page.request.get('/api/admin/maintenance/monitoring')).json()) as { state: 'on' | 'off' | 'partial'; checks: { id: string; ok: boolean }[]; agent: { installed: boolean; pending: number; busy: boolean } };
+    const before = await read();
+    expect(before.checks.map((c) => c.id)).toEqual(['prometheus', 'grafana', 'loki']);
+    await page.goto('/admin/system');
+    const card = page.getByTestId('monitoring-switch');
+    await expect(card).toBeVisible();
+    for (const name of ['Prometheus', 'Grafana', 'Loki']) await expect(card.getByRole('listitem').filter({ hasText: name })).toBeVisible();
+    // The card says what the API says: every component with its answer, and the state in words.
+    await expect(card).toContainText({ on: 'All components answer.', off: 'No component answers', partial: 'Some components answer' }[before.state]);
+    await expect(card.getByRole('listitem')).toHaveCount(3);
+    if (before.state === 'on') await expect(card.getByRole('listitem').filter({ hasText: 'no answer' })).toHaveCount(0);
+    if (before.state === 'off') await expect(card.getByRole('listitem').filter({ hasText: 'no answer' })).toHaveCount(3);
+    // On or off must be said, whoever asks.
+    const vague = await page.request.post('/api/admin/maintenance/requests', { headers: csrf, data: { action: 'monitoring' } });
+    expect([vague.status(), (await vague.json()).fields]).toEqual([400, { enabled: 'INVALID_VALUE' }]);
+    const off = card.getByRole('button', { name: 'Turn monitoring off' });
+    const on = card.getByRole('button', { name: 'Turn monitoring on' });
+    const button = before.state === 'off' ? on : off;
+    if (!before.agent.installed) {
+      // No agent on this server: the card says how to switch instead, the button does nothing, and the API refuses.
+      await expect(card.getByText('The server\'s agent is not installed')).toBeVisible();
+      await expect(button).toBeDisabled();
+      const refused = await page.request.post('/api/admin/maintenance/requests', { headers: csrf, data: { action: 'monitoring', enabled: before.state === 'off' } });
+      expect([refused.status(), (await refused.json()).code]).toEqual([409, 'MAINTENANCE_AGENT_MISSING']);
+    } else if (await button.isEnabled()) {
+      // The switch asks first and says what stops; leaving the dialog sends nothing to the server's agent.
+      await button.click();
+      const ask = page.getByRole('alertdialog');
+      await expect(ask).toContainText(before.state === 'off' ? 'Turn monitoring on?' : 'Turn monitoring off?');
+      await expect(ask).toContainText(before.state === 'off' ? 'Nothing else is restarted.' : 'no alert is sent');
+      await ask.getByRole('button', { name: 'Cancel' }).click();
+      await expect(ask).toBeHidden();
+    } else {
+      // The agent is busy with another task (this page asks it for the server's updates): the card says so.
+      await expect(card.getByText('Another maintenance task')).toBeVisible();
+    }
+    // Nothing was asked of the agent about monitoring, and monitoring is as it was.
+    await expect(page.getByText('Asked the server to turn monitoring')).toHaveCount(0);
+    expect((await read()).state).toBe(before.state);
+    await page.setViewportSize({ width: 390, height: 844 });
+    await card.scrollIntoViewIfNeeded();
+    await expectNoOverflow(page, 'System with the monitoring card at 390 px');
+    await tour(card, 'system-monitoring-phone');
+    await page.emulateMedia({ colorScheme: 'dark' });
+    await tour(card, 'system-monitoring-phone-dark');
+    await page.emulateMedia({ colorScheme: 'light' });
+    await page.setViewportSize({ width: 1280, height: 720 });
+  });
+
   test('API reference: a request is run from the page, shown before it is sent; a change waits for a confirmation; secrets are not shown; permissions hold', async ({ page, browser }) => {
     await signInAdmin(page);
     await page.goto('/api-docs');

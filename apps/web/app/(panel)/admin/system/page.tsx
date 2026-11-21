@@ -5,6 +5,7 @@ import HostState from '../host-state';
 import OsUpdates from '../os-updates';
 import RestoreHold from '../restore-hold';
 import Maintenance from '../maintenance';
+import Monitoring from '../monitoring';
 import Status from '../status';
 import Updates from '../updates';
 
@@ -18,6 +19,7 @@ export default async function SystemPage() {
     <HostSettings/>
     <OsUpdates/>
     <Updates/>
+    <Monitoring/>
     <Maintenance/>
   </div>;
 }

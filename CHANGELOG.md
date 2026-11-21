@@ -81,6 +81,12 @@ Türkçe [docs/upgrade-notes.md](docs/upgrade-notes.md) sayfasını okuyun.*
   are counted per person and minute against the API rate limit of Settings → API, with the same `X-RateLimit-*`
   headers; permissions, the CSRF rule and the audit log apply as for any request of that session. See
   [docs/api.md](docs/api.md#running-a-request-from-the-reference).
+- **Monitoring is switched from the panel after installation.** Admin → System has a Monitoring card: what
+  Prometheus, Grafana and Loki answer right now (`GET /api/admin/maintenance/monitoring`) and a switch that asks
+  first. It uses the request to the host agent that backups and updates use (`POST /api/admin/maintenance/requests`
+  with `action: "monitoring"` and `enabled: true|false`): the same permission (`system.update`), one maintenance
+  task at a time, audited. Without the agent the card shows the command instead. The agent side
+  (`install.sh monitoring on|off`) is unchanged. See [docs/operations.md](docs/operations.md#i̇zleme).
 
 ### Changed
 
