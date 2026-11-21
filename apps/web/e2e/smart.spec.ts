@@ -304,3 +304,80 @@ test('smart: staff see similar resolved tickets with the reason; a customer writ
   await dialog.getByLabel('Message').fill('');
   await expect(before).toHaveCount(0);
 });
+
+test('smart: the quietest hours are offered under the update window and on a connection\'s hosts, with their numbers; the window changes only on a click, through the ordinary request', async ({ page }) => {
+  test.skip(!process.env.E2E_VCSIM_HOST, 'needs compose.simulator.yaml and E2E_VCSIM_HOST');
+  test.setTimeout(180_000);
+  await signInAdmin(page);
+  // What the API says about this deployment as it is: three weeks of history are needed and it has none of them.
+  const real = await (await page.request.get('/api/admin/maintenance/quiet-hours')).json() as { state: string; days: number; minDays: number; window: string | null; timezone: string };
+  expect(['not_enough_data', 'not_measured']).toContain(real.state);
+  expect([real.minDays, real.window]).toEqual([21, null]);
+  await page.goto('/admin/system');
+  const line = page.locator(`[data-quiet-hours="${real.state}"]`);
+  if (await page.getByText('Automatic updates', { exact: true }).isVisible()) {
+    await expect(line).toContainText(real.state === 'not_enough_data' ? /Quietest hours for updates: not enough data yet \(\d+ of 21 days of CPU history\)\./ : 'No connected platform reports CPU figures');
+    await expect(page.getByRole('button', { name: /as the update window/ })).toHaveCount(0);
+  }
+
+  // The same page with four weeks of history behind it. The host agent is said to be installed and idle, so that the
+  // page may ask; what it asks is caught here and never reaches an agent.
+  const advice = { state: 'suggested', days: 28, minDays: 21, weeks: 4, servers: 12, usual: 6.4, peak: 14.25, timezone: 'Europe/Istanbul', zoneKnown: true, window: '03:00-05:00', current: '01:00-03:00',
+    weekly: { day: 7, time: '04:00', end: '06:00', hours: 2, load: 0.6 }, daily: { day: 0, time: '03:00', end: '05:00', hours: 2, load: 1.2, worst: 2.5 } };
+  let answer: Record<string, unknown> = advice;
+  await page.route('**/api/admin/maintenance/quiet-hours', (route) => json(route, answer));
+  await page.route('**/api/admin/maintenance', async (route) => {
+    const body = await (await route.fetch()).json();
+    return json(route, { ...body, settings: { ...body.settings, agent: 'on', autoUpdate: 'on', updateChannel: 'stable', updateWindow: '01:00-03:00' }, agent: { installed: true, pending: 0, status: null, log: [] } });
+  });
+  const asked: Record<string, unknown>[] = [];
+  await page.route('**/api/admin/maintenance/requests', (route) => { asked.push(route.request().postDataJSON()); return route.fulfill({ status: 202, contentType: 'application/json', body: JSON.stringify({ id: '00000000-0000-4000-8000-000000000001' }) }); });
+  await page.reload();
+  const box = page.getByRole('region', { name: 'Quietest hours for updates' });
+  await expect(box).toContainText('Quietest hours for updates: 03:00–05:00');
+  await expect(box).toContainText('From 4 weeks of CPU history (28 days, about 12 servers measured each hour): every day between 03:00 and 05:00 the servers are least busy, 1.2 busy vCPUs on average against 6.4 across the week and 14.25 in the busiest hour; on its busiest day that stretch had 2.5.');
+  await expect(box).toContainText('Quietest of the whole week: Sunday 04:00–06:00, 0.6 busy vCPUs.');
+  await expect(box).toContainText('Times in Europe/Istanbul.');
+  await page.setViewportSize({ width: 390, height: 844 });
+  await noSidewaysScroll(page, 'System with a suggested update window at 390 px');
+  await page.setViewportSize({ width: 1280, height: 720 });
+  expect(asked).toEqual([]);
+  await box.getByRole('button', { name: 'Use 03:00–05:00 as the update window' }).click();
+  await expect.poll(() => asked.length).toBe(1);
+  // The saved switch and channel go along unchanged; the record will say the window was the suggested one.
+  expect(asked[0]).toEqual({ action: 'auto-update', enabled: true, channel: 'stable', window: '03:00-05:00', suggested: true });
+
+  // Already set to these hours: said, and nothing to press. A server whose zone is not known: shown in UTC, not offered.
+  answer = { ...advice, current: '03:00-05:00' };
+  await page.reload();
+  await expect(box).toContainText('The update window is already set to these hours.');
+  await expect(box.getByRole('button')).toHaveCount(0);
+  answer = { ...advice, timezone: 'UTC', zoneKnown: false };
+  await page.reload();
+  await expect(box).toContainText('these times are in UTC and are not offered as a window');
+  await expect(box.getByRole('button')).toHaveCount(0);
+  await page.unroute('**/api/admin/maintenance/quiet-hours');
+  await page.unroute('**/api/admin/maintenance/requests');
+  await page.unroute('**/api/admin/maintenance');
+
+  // A connection's hosts: the connection as a whole and each host that runs panel servers; it only says when.
+  const { connections } = await (await page.request.get('/api/admin/vmware/connections')).json() as { connections: { id: string }[] };
+  expect(connections.length, 'a connection (the VMware tests of app.spec.ts add the simulators)').toBeGreaterThan(0);
+  const id = connections[0].id;
+  const own = await page.request.get(`/api/admin/vmware/connections/${id}/quiet-hours?timezone=Europe%2FIstanbul`);
+  expect(['not_enough_data', 'not_measured']).toContain((await own.json()).connection.state);
+  expect((await page.request.get(`/api/admin/vmware/connections/${id}/quiet-hours?timezone=Mars%2FOlympus`)).status()).toBe(400);
+  const { daily: _d, weekly: _w, ...few } = advice;
+  await page.route(`**/api/admin/vmware/connections/${id}/quiet-hours**`, (route) => json(route, { timezone: 'Europe/Istanbul', connection: advice,
+    hosts: [{ moref: 'host-1', name: 'esx-a.example', ...advice, servers: 9, daily: { ...advice.daily, time: '02:00', end: '04:00', load: 0.9 } }, { moref: 'host-2', name: 'esx-b.example', ...few, state: 'not_enough_data', days: 9 }] }));
+  await page.goto(`/admin/vmware/${id}`);
+  await page.getByRole('tab', { name: /Hosts/ }).click();
+  const hosts = page.getByRole('region', { name: 'Quietest hours for maintenance' });
+  await expect(hosts).toContainText('Quietest hours for maintenance: 03:00–05:00');
+  await expect(hosts.locator('[data-quiet-host="esx-a.example"]')).toContainText('9 servers: every day between 02:00 and 04:00 the servers are least busy, 0.9 busy vCPUs on average');
+  await expect(hosts.locator('[data-quiet-host="esx-b.example"]')).toContainText('not enough data yet (9 of 21 days of CPU history).');
+  await expect(hosts).toContainText('This only suggests a time: nothing is moved or scheduled.');
+  await expect(hosts.getByRole('button')).toHaveCount(0);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await noSidewaysScroll(page, 'connection hosts with quiet hours at 390 px');
+});

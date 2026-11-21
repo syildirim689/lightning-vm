@@ -25,8 +25,20 @@ export type ScheduleSuggestion =
 
 // The hour of the week (0 = Monday 00:00 ... 167 = Sunday 23:00) of a moment in a time zone. Local time, so a schedule
 // follows the clock people live by; where the clock changes, one hour of one week is seen twice or not at all.
+// One formatter per zone is kept: building one costs far more than using it, and a history has hundreds of rows
+// (672 formatters for one suggestion held the API's only thread for a quarter of a second).
+const formatters = new Map<string, Intl.DateTimeFormat>();
+function formatterOf(timeZone: string) {
+  let f = formatters.get(timeZone);
+  if (!f) {
+    if (formatters.size >= 64) formatters.clear(); // zones come from requests: the map stays small
+    f = new Intl.DateTimeFormat('en-GB', { timeZone, weekday: 'short', hour: '2-digit', hourCycle: 'h23' });
+    formatters.set(timeZone, f);
+  }
+  return f;
+}
 export function slotOf(t: number, timeZone: string): number {
-  const parts = new Intl.DateTimeFormat('en-GB', { timeZone, weekday: 'short', hour: '2-digit', hourCycle: 'h23' }).formatToParts(new Date(t));
+  const parts = formatterOf(timeZone).formatToParts(new Date(t));
   const day = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].indexOf(parts.find((p) => p.type === 'weekday')!.value);
   return day * 24 + Number(parts.find((p) => p.type === 'hour')!.value);
 }

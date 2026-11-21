@@ -106,6 +106,43 @@ oluşturulur.
 - **Maliyet:** arka plan işi yoktur. Sunucu sayfası açıldığında tek sunucunun en çok 672 saatlik satırı okunur;
   içgörüler için hesap sahibinin en çok 20 çalışan sunucusuna bakılır ve sonuç sunucu başına 6 saat saklanır.
 
+## Bakım için en sakin saatler
+
+Sunucuları rahatsız eden işler (panelin kendini güncellemesi, bir host'un bakıma alınması) için panel, sunucuların
+**en az meşgul olduğu saatleri** kullanım geçmişinden çıkarır ve personelin bu işleri planladığı iki yerde gösterir.
+Yalnızca öneridir: hiçbir şeyi kendiliğinden taşımaz, zamanlamaz ya da değiştirmez.
+
+- **Veri:** kullanım takibinin tuttuğu saatlik işlemci satırları (`server_cpu_hourly`). Yük birimi **meşgul vCPU**'dur:
+  her sunucunun saatlik işlemci ortalaması × vCPU sayısı, o saatte ölçülen sunucular üzerinden toplanır. Silinmiş
+  sunucular ve işlemci ölçümü vermeyen platformlar (XCP-ng, oVirt, libvirt, Incus) sayılmaz.
+- **Kural** (`apps/api/src/quiet-hour-rules.ts`, birim testleri `apps/api/test/quiet-hour-rules.test.mjs`): son 4
+  haftanın saatleri haftanın 168 saatine dağıtılır.
+  - Haftanın bir saati ancak **en az 3 haftada** görülmüşse karşılaştırılır; yükü bu haftaların ortalamasıdır.
+  - Aranan dilim **2 saattir** ve içindeki her saatin karşılaştırılabilir olması gerekir.
+  - **Günlük dilim:** haftanın yedi gününde de aynı saatte başlayan dilimlerin ortalaması en düşük olanı. En yoğun
+    olduğu günün yükü de ayrıca söylenir (`worst`).
+  - **Haftalık dilim:** haftanın tamamındaki en sakin 2 saat (ör. pazar 04:00–06:00).
+  - Eşitlikte haftanın / günün daha erken dilimi seçilir; yanıt bir çalıştırmadan ötekine oynamaz.
+  - **En az geçmiş:** 21 gün. Daha azında, ya da hiçbir dilim yeterince görülmemişse "yeterli veri yok" denir ve kaç
+    gün olduğu yazılır. İşlemci ölçümü veren hiçbir bağlantı yoksa "ölçülmüyor" denir.
+  - Dilim yerel saate göre hesaplanır; gece yarısını ve hafta sonunu aşabilir.
+- **Gösterilen sayılar:** dilimin ortalama yükü, haftanın genel ortalaması (`usual`), en yoğun saatin yükü
+  (`peak`), kaç haftalık ve kaç günlük geçmişe dayandığı, saat başına ölçülen sunucu sayısı.
+- **Otomatik güncelleme penceresi** (Yönetim → Sistem → Otomatik güncellemeler; `GET /admin/maintenance/quiet-hours`,
+  `system.view` ya da `dashboard.view`): kurulumun bütün sunucuları, **panel sunucusunun kendi saat diliminde**
+  (pencereyi `scripts/install.sh` orada okur). "Güncelleme penceresi olarak kullan" düğmesi günlük dilimi var olan
+  istekle kaydeder: `POST /admin/maintenance/requests` (`action: auto-update`), yani aynı yetki (`system.update`),
+  aynı anda tek bakım işi ve `maintenance.request` denetim kaydı; kayıtta `suggested: true` yazar. Açık / kapalı ve
+  kanal ayarı kayıtlı olduğu gibi gönderilir. Pencere zaten bu saatlerdeyse düğme yerine bunu söyler. Sunucu ajanı
+  saat dilimini kaydetmemişse saatler UTC olarak gösterilir ve pencere olarak **önerilmez**.
+- **Host bakımı** (Yönetim → VMware → bağlantı → Host'lar; `GET /admin/vmware/connections/:id/quiet-hours`,
+  `vmware.view`, `vmware.manage` ya da `catalog.manage`): bağlantının tamamı ve panel sunucusu çalıştıran her host
+  için, görüntüleyenin saat diliminde. Bir sunucu **şu anda çalıştığı** host'a yazılır (son envanter); taşınmış bir
+  sunucunun taşınmadan önceki saatleri de şimdiki host'una sayılır. Host'u boşaltma düğmesi eskisi gibidir ve
+  hemen çalışır; panel taşımayı bu saate zamanlamaz.
+- **Maliyet:** arka plan işi ve ek tablo yoktur. Yanıt başına saatlik satırlar üzerinde gruplanmış tek sorgu (en çok
+  4 haftalık satır), sonuç 30 dakika Redis'te saklanır (`quiet:*`).
+
 ## Ödeme riski
 
 Kurallar `apps/api/src/payment-risk-rules.ts` içindedir (birim testleri `apps/api/test/payment-risk-rules.test.mjs`);

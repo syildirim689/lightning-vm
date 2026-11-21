@@ -12,6 +12,7 @@ import { apiVersions, versionLabel, type Connection } from '../connections';
 import { SelectInput } from '../../../../../components/ui';
 import { downloadCsv } from '../../../../../lib/csv';
 import { fold } from '../../../../../lib/note-line';
+import { ConnectionQuietHours } from '../../../../../components/quiet-hours';
 
 // Tab label with its count beside it.
 const Count = ({ n }: { n: number }) => <span className="ml-1.5 rounded-full bg-default px-1.5 text-xs tabular-nums">{n}</span>;
@@ -97,6 +98,7 @@ export default function ConnectionDetail({ id }: { id: string }) {
             <VmList c={c} vms={d.vms}/>
           </Tabs.Panel>
           <Tabs.Panel id="hosts" className="pt-4">
+            <ConnectionQuietHours connectionId={id}/>
             <DataTable label={t('hostsTitle')} rows={d.hosts} rowKey={(h) => String(h.moref)}
               columns={[{ id: 'name', label: t('col.name') }, { id: 'state', label: t('col.state') }, { id: 'cpu', label: 'CPU' }, { id: 'mem', label: t('cap.memory') }, { id: 'ver', label: t('col.version') }, { id: 'act', label: <span className="sr-only">{t('evacuate')}</span> }]}
               cells={(h) => [String(h.name), `${h.connection_state} / ${h.power_state}${h.in_maintenance ? ` · ${t('maintenance')}` : ''}`,

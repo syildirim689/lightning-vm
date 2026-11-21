@@ -49,6 +49,15 @@ Türkçe [docs/upgrade-notes.md](docs/upgrade-notes.md) sayfasını okuyun.*
   small. Staff with `billing.view` get an "At risk" tab on the billing page and a finding: accounts with overdue
   invoices or at least two failed charges in 30 days, largest amount at risk first
   (`GET /api/admin/billing/risk`). It only lists: nothing is charged, suspended or sent.
+- **Quietest hours for maintenance.** From the hourly CPU history the usage watch keeps, the panel works out the two
+  hours in which the servers are least busy (busy vCPUs: each server's hourly average times its vCPUs, added up),
+  over four weeks, comparing only hours of the week seen in at least three of them. Admin → System → Automatic
+  updates shows them for the whole installation in the panel server's own time zone, with the numbers behind them
+  and a button that sets the update window to them through the ordinary request (`system.update`, one task at a
+  time, audited with `suggested: true`); a connection's Hosts tab shows them for the connection and for every
+  host that runs panel servers, to pick the hour before a host is emptied. It only suggests. Under 21 days of
+  history, and on platforms without CPU figures, it says "not enough data". New routes:
+  `GET /api/admin/maintenance/quiet-hours`, `GET /api/admin/vmware/connections/:id/quiet-hours`.
 - **Support help.** A ticket's page shows staff the closed tickets most like it, each with the answer that closed it
   and the words the two share (`GET /api/admin/support/tickets/:id/similar`). A customer writing a new ticket is
   shown, before sending, what may already answer it, from their own answered tickets and the public status page

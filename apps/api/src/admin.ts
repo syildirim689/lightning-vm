@@ -71,7 +71,8 @@ export class AdminController {
     const running = status?.state === 'running' && Date.now() - Date.parse(status.startedAt) < 3 * 3600_000;
     if (pendingRequests() > 0 || running) throw apiError(409, 'MAINTENANCE_BUSY', 'Another maintenance task is queued or running');
     const id = queueRequest({ ...out, by: req.user.id });
-    await audit(req, 'maintenance.request', 'success', req.user.id, { id, ...out });
+    // suggested: the window is the one the panel proposed from the usage history (maintenance-hours.ts); the record says so.
+    await audit(req, 'maintenance.request', 'success', req.user.id, { id, ...out, ...(action === 'auto-update' && body?.suggested === true && { suggested: true }) });
     return { id };
   }
 

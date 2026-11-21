@@ -81,6 +81,26 @@ const docs: Docs = {
     returns: { tr: '`incidents` (`id`, `title`, `impact`, `status`, `open`, `createdAt`, `resolvedAt`) ve `answers` (`id`, `number`, `subject`, `status`, `shared`, `answer`).',
       en: '`incidents` (`id`, `title`, `impact`, `status`, `open`, `createdAt`, `resolvedAt`) and `answers` (`id`, `number`, `subject`, `status`, `shared`, `answer`).' },
   },
+  // ---- maintenance-hours.ts ----
+  'GET /admin/maintenance/quiet-hours': {
+    tag: 'admin-system',
+    summary: { tr: 'Kurulumdaki sunucuların en sakin saatlerini, otomatik güncelleme penceresi için öneri olarak verir.', en: 'Returns the hours in which the installation\'s servers are least busy, as a suggestion for the automatic update window.' },
+    details: { tr: 'system.view veya dashboard.view yetkisi gerekir. Son 4 haftanın saatlik işlemci geçmişi (meşgul vCPU: her sunucunun saatlik ortalaması × vCPU sayısı, toplanır) haftanın 168 saatine dağıtılır; en az 3 haftada görülmüş saatler karşılaştırılır ve en sakin 2 saatlik dilim bulunur: haftanın tamamında (`weekly`) ve her gün aynı saatte (`daily`). 21 günden kısa geçmişte `not_enough_data`, işlemci ölçümü veren hiçbir bağlantı yoksa `not_measured` döner. Saatler panel sunucusunun saat dilimindedir (güncelleme penceresi orada okunur); ajan saat dilimini kaydetmemişse UTC kullanılır ve `zoneKnown` false olur. Yalnızca öneridir: pencere `POST /admin/maintenance/requests` (`action: auto-update`) ile değişir. Yanıt 30 dakika saklanır.',
+      en: 'Needs system.view or dashboard.view. The hourly CPU history of the last 4 weeks (busy vCPUs: each server\'s hourly average times its vCPUs, summed) is laid over the 168 hours of the week; hours seen in at least 3 weeks are compared and the quietest 2-hour stretch is found: in the whole week (`weekly`) and at the same time every day (`daily`). With under 21 days of history the answer is `not_enough_data`, without any connection that reports CPU figures `not_measured`. Times are in the panel server\'s time zone (where the update window is read); when the agent has not recorded it they are in UTC and `zoneKnown` is false. It only suggests: the window changes through `POST /admin/maintenance/requests` (`action: auto-update`). The answer is kept for 30 minutes.' },
+    returns: { tr: '`state` (suggested, not_enough_data, not_measured), `days`, `minDays`, `weeks`, `timezone`, `zoneKnown`, `current` (kayıtlı pencere), öneri varsa `window` ("HH:00-HH:00"), `servers` (saat başına ölçülen sunucu), `usual` ve `peak` (haftanın ortalama ve en yüksek saatlik yükü), `weekly` (`day` 1 = Pazartesi, `time`, `end`, `hours`, `load`) ve `daily` (`time`, `end`, `hours`, `load`, `worst`: en yoğun günündeki yük).',
+      en: '`state` (suggested, not_enough_data, not_measured), `days`, `minDays`, `weeks`, `timezone`, `zoneKnown`, `current` (the saved window), and with a suggestion `window` ("HH:00-HH:00"), `servers` (servers measured per hour), `usual` and `peak` (the week\'s mean and highest hourly load), `weekly` (`day` 1 = Monday, `time`, `end`, `hours`, `load`) and `daily` (`time`, `end`, `hours`, `load`, `worst`: the load on its busiest day).' },
+    errors: ['FORBIDDEN'],
+  },
+  'GET /admin/vmware/connections/:id/quiet-hours': {
+    tag: 'admin-vmware',
+    summary: { tr: 'Bir bağlantının ve host\'larının sunucularının en sakin saatlerini verir (bakım planlamak için).', en: 'Returns the hours in which the servers of a connection and of each of its hosts are least busy (for planning maintenance).' },
+    details: { tr: 'vmware.view, vmware.manage veya catalog.manage yetkisi gerekir. Kural `GET /admin/maintenance/quiet-hours` ile aynıdır; yalnızca bu bağlantının sunucuları, host başına da o host\'ta şu anda çalışan panel sunucuları sayılır (taşınmış bir sunucu, taşınmadan önceki saatleriyle birlikte şimdiki host\'una yazılır). İşlemci ölçümü vermeyen platformlarda (XCP-ng, oVirt, libvirt, Incus) `not_measured` döner. Hiçbir şey taşımaz ya da zamanlamaz.',
+      en: 'Needs vmware.view, vmware.manage or catalog.manage. The rule is that of `GET /admin/maintenance/quiet-hours`; only this connection\'s servers count, and per host the panel servers running on it now (a server that was moved counts for its present host, with the hours before the move). Platforms without CPU figures (XCP-ng, oVirt, libvirt, Incus) answer `not_measured`. Nothing is moved or scheduled.' },
+    params: [{ name: 'id', type: 'uuid', required: true, text: { tr: 'Bağlantı kimliği.', en: 'Connection id.' } }],
+    query: [{ name: 'timezone', type: 'string', text: { tr: 'Saatlerin hesaplanacağı IANA saat dilimi. Verilmezse hesabın saat dilimi, o da yoksa UTC.', en: 'The IANA time zone the times are worked out in. Left out: the account\'s zone, else UTC.' } }],
+    returns: { tr: '`timezone`, `connection` (yukarıdaki öneri alanları) ve `hosts` (panel sunucusu çalıştıran her host için `moref`, `name` ve aynı alanlar).', en: '`timezone`, `connection` (the suggestion fields above) and `hosts` (for every host that runs panel servers: `moref`, `name` and the same fields).' },
+    errors: ['NOT_FOUND', 'VALIDATION_FAILED', 'FORBIDDEN'],
+  },
 };
 
 export default docs;

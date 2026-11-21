@@ -14,6 +14,7 @@ import { useMe } from '../../../lib/me';
 import { can } from '../../../lib/permissions';
 import { agentRunning } from '../../../lib/agent';
 import { useApiQuery } from '../../../lib/query';
+import { UpdateWindowSuggestion } from '../../../components/quiet-hours';
 
 type Release = { version: string; date: string; notes: string; newer?: boolean };
 type Status = { id: string; action: 'check' | 'update' | 'backup' | 'auto-update' | 'domain'; state: 'running' | 'succeeded' | 'failed' | 'rejected'; startedAt: string; finishedAt: string; exitCode: number | null; code: string };
@@ -135,7 +136,7 @@ function Fact({ label, children }: { label: string; children: React.ReactNode })
   return <div className="rounded-xl bg-default/60 p-3"><dt className="text-xs text-muted">{label}</dt><dd className="mt-1">{children}</dd></div>;
 }
 
-function AutoUpdate({ settings: s, disabled, onSave }: { settings: Record<string, string>; disabled: boolean; onSave: (b: { enabled: boolean; channel: string; window: string }) => void }) {
+function AutoUpdate({ settings: s, disabled, onSave }: { settings: Record<string, string>; disabled: boolean; onSave: (b: { enabled: boolean; channel: string; window: string; suggested?: boolean }) => void }) {
   const t = useTranslations('Updates');
   const [enabled, setEnabled] = useState(s.autoUpdate === 'on');
   const [channel, setChannel] = useState(s.updateChannel ?? 'stable');
@@ -160,6 +161,8 @@ function AutoUpdate({ settings: s, disabled, onSave }: { settings: Record<string
         <p className={`text-xs ${valid ? 'text-muted' : 'text-danger'}`}>{valid ? t('windowHelp') : t('windowInvalid')}</p>
       </fieldset>
     </div>
+    {/* The quietest hours of the servers' own history; the button asks for that window as saved settings stand, nothing else changes. */}
+    <UpdateWindowSuggestion canApply={!disabled} onUse={(w) => { setWindow(w); onSave({ enabled: s.autoUpdate === 'on', channel: s.updateChannel ?? 'stable', window: w, suggested: true }); }}/>
     {s.schedule !== 'on' && enabled && <Notice tone="warning">{t('noTimer')} <Mono>sudo sh scripts/install.sh schedule on</Mono></Notice>}
     <div><Button size="sm" isDisabled={disabled || !valid || !changed} onPress={() => onSave({ enabled, channel, window })}><I name="check" size={14}/>{t('saveAuto')}</Button></div>
   </div>;

@@ -75,6 +75,7 @@ import { AbuseController } from './abuse';
 import { SupportSimilarController, SupportSuggestController } from './support-suggest';
 import { PaymentRiskController } from './payment-risk';
 import { ScheduleSuggestionController } from './schedule-suggest';
+import { MaintenanceHoursController } from './maintenance-hours';
 import { startBudgetForecasts } from './cost-forecast';
 import { AnomaliesAdminController, AnomaliesController } from './anomalies';
 import { VdcAdminController, VdcController } from './vdc';
@@ -102,7 +103,7 @@ export const controllers = [HealthController, SavedViewsController, ApiAdminCont
   SettingsController, SettingsOverviewController, SmsSettingsController, RolesController, NotificationsController, NotificationPolicyController,
   InsightsController, StaffInsightsController, AttentionController, ApplicationsController, ApplicationCallbackController, UserSecurityController, ServerUpdatesController, GuestUpdatesController, AdminServerUpdatesController, IsoAdminController, ServerIsoController, DomainController, LocationsController, TopologyAdminController, TopologyController, PowerController, AbuseController, VdcAdminController, VdcController, SmartController, OnboardingController, DigestController, AccountExportController, TimeZoneController, MySessionsController, EmailVerificationController, SchedulesController, AuditController, ActivityController, AnnouncementController, AnnouncementAdminController, SnapshotsController, AlertsController, TerminalController, ChatController, ChatSettingsController, LiveController, DirectorySettingsController, StatusController, StatusPageSettingsController, UserSummaryController, IncidentsController, SupportController, SupportAdminController, StatsController, SignInMethodsController,
   // Rule-based helpers (docs/smart-features.md), on their own line so that the long one above is not touched for them.
-  AnomaliesController, AnomaliesAdminController, ScheduleSuggestionController, PaymentRiskController, SupportSimilarController, SupportSuggestController,
+  AnomaliesController, AnomaliesAdminController, ScheduleSuggestionController, MaintenanceHoursController, PaymentRiskController, SupportSimilarController, SupportSuggestController,
   BillingController, BillingCallbackController, BillingAdminController, BillingSettingsController, EinvoiceSettingsController, EinvoiceDocumentController, DeveloperController, ImportController, DisputesController, DisputesAdminController, ExternalController, BackupsController, BackupsAdminController, ResellerController, ResellersAdminController, PlacementController, DisksController, DiskPriceController, PrivateNetworksController, PrivateNetworkSettingsController, ImagesController, CouponsAdminController, TransfersController, TransfersAdminController];
 reference.controllers = controllers;
 @Module({ controllers })

@@ -9410,6 +9410,22 @@
     "notMeasured": "Schedule suggestion: not enough data. This platform does not report CPU figures, so nothing is suggested.",
     "noWindow": "Schedule suggestion: no stable idle window in the last {weeks} weeks."
   },
+  "QuietHours": {
+    "window": "Quietest hours for updates",
+    "maintenance": "Quietest hours for maintenance",
+    "basis": "From {weeks} weeks of CPU history ({days} days, about {servers, plural, one {# server} other {# servers}} measured each hour):",
+    "daily": "every day between {from} and {to} the servers are least busy, {load} busy vCPUs on average against {usual} across the week and {peak} in the busiest hour; on its busiest day that stretch had {worst}.",
+    "weekly": "Quietest of the whole week: {day} {from}–{to}, {load} busy vCPUs.",
+    "host": "{servers, plural, one {# server} other {# servers}}:",
+    "zone": "Times in {zone}.",
+    "zoneUnknown": "The panel server's time zone is not recorded yet (the host agent writes it), so these times are in UTC and are not offered as a window.",
+    "meaning": "Busy vCPUs: each server's hourly CPU average times its vCPUs, added up; only hours seen in at least 3 weeks are compared.",
+    "onlySuggests": "This only suggests a time: nothing is moved or scheduled.",
+    "use": "Use {window} as the update window",
+    "same": "The update window is already set to these hours.",
+    "notEnough": "not enough data yet ({days} of {min} days of CPU history).",
+    "notMeasured": "not enough data. No connected platform reports CPU figures, so nothing is suggested."
+  },
   "PaymentRisk": {
     "title": "Accounts at risk",
     "help": "Accounts with invoices past their due date or with at least {failures} failed charges in the last {days} days, largest amount at risk first. A list to look through: nothing is sent or suspended from here.",

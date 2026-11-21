@@ -9410,6 +9410,22 @@
     "notMeasured": "Zamanlama önerisi: yeterli veri yok. Bu platform işlemci ölçümü bildirmiyor, bu yüzden bir şey önerilmez.",
     "noWindow": "Zamanlama önerisi: son {weeks} haftada düzenli bir boş aralık yok."
   },
+  "QuietHours": {
+    "window": "Güncelleme için en sakin saatler",
+    "maintenance": "Bakım için en sakin saatler",
+    "basis": "{weeks} haftalık işlemci geçmişinden ({days} gün, her saat yaklaşık {servers} sunucu ölçüldü):",
+    "daily": "sunucular her gün {from} ile {to} arasında en sakin; ortalama {load} meşgul vCPU, haftanın geneli {usual}, en yoğun saat {peak}; bu dilimin en yoğun günü {worst}.",
+    "weekly": "Haftanın en sakin dilimi: {day} {from}–{to}, {load} meşgul vCPU.",
+    "host": "{servers} sunucu:",
+    "zone": "Saatler {zone} saat dilimindedir.",
+    "zoneUnknown": "Panel sunucusunun saat dilimi henüz kayıtlı değil (sunucu ajanı yazar); bu yüzden saatler UTC'dir ve pencere olarak önerilmez.",
+    "meaning": "Meşgul vCPU: her sunucunun saatlik işlemci ortalaması × vCPU sayısı, toplanır; yalnızca en az 3 haftada görülen saatler karşılaştırılır.",
+    "onlySuggests": "Yalnızca bir zaman önerir: hiçbir şey taşınmaz ya da zamanlanmaz.",
+    "use": "Güncelleme penceresi olarak {window} kullan",
+    "same": "Güncelleme penceresi zaten bu saatlere ayarlı.",
+    "notEnough": "henüz yeterli veri yok ({min} günlük işlemci geçmişinin {days} günü var).",
+    "notMeasured": "yeterli veri yok. Bağlı hiçbir platform işlemci ölçümü bildirmiyor, bu yüzden bir şey önerilmiyor."
+  },
   "PaymentRisk": {
     "title": "Risk altındaki hesaplar",
     "help": "Vadesi geçmiş faturası olan ya da son {days} günde en az {failures} başarısız tahsilatı olan hesaplar; risk altındaki tutarı en büyük olan üstte. Bakılacaklar listesidir: buradan hiçbir şey gönderilmez ya da askıya alınmaz.",

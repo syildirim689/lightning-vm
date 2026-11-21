@@ -101,6 +101,9 @@ girmeniz gerekmez. Özelliklerin tamamı yalnızca VMware'de vardır; diğer alt
 - **Zamanlama önerisi:** sunucu haftalardır her hafta aynı saatlerde boşta kalıyorsa (geceler, hafta sonları)
   bu saatlerde kapalı tutacak güç zamanlaması gerekçesiyle önerilir ve tek tıkla oluşturulur. Kapalı sunucu aynı
   ücretle faturalandığı için para vaat edilmez; kazanılan enerji söylenir
+- **Bakım için en sakin saatler:** dört haftalık işlemci geçmişinden sunucuların en az meşgul olduğu iki saat
+  bulunur; Yönetim → Sistem'de otomatik güncelleme penceresi için (tek tıkla, aynı yetki ve denetim kaydıyla),
+  bağlantı sayfasında host bakımı için sayılarıyla gösterilir. Yalnızca öneridir; az veride "yeterli veri yok" der
 - **Talep yazarken öneriler:** yeni destek talebi gönderilmeden önce, yanıtı olabilecek kendi eski talepleriniz ve
   durum sayfasındaki olaylar gösterilir (başka müşterilerin talepleri asla)
 - **Ödeme riski uyarısı:** sıradaki yenilemeden önce süresi dolan kayıtlı kart ya da yenilemeyi karşılamayan
