@@ -63,6 +63,48 @@ async function expectInside(page: Page, what: Locator, label: string) {
     return boxes.filter(([left, right]) => left < 0 || right > width).map(([left, right]) => `${left}..${right}`).join(', ');
   }, { message: `${label}: inside 0..${width}`, timeout: 3_000 }).toBe('');
 }
+// Text that cannot be read in the theme the page is shown in: its colour against what is really behind it (the
+// backgrounds from the page down, with their transparency, painted one over the other), by the WCAG contrast ratio.
+// Returns the offenders with their ratio. 3:1 is the floor asked of both themes here (what WCAG asks of large text):
+// low enough for the muted second lines, far above a dark word on a dark card. Text that is not shown, and the text
+// of controls that are switched off, is left out; pictures and gradients behind text are not looked at.
+async function unreadable(page: Page, selector: string): Promise<string[]> {
+  return page.evaluate((sel) => {
+    const canvas = document.createElement('canvas');
+    canvas.width = canvas.height = 1;
+    const ctx = canvas.getContext('2d', { willReadFrequently: true })!;
+    const dark = document.documentElement.classList.contains('dark');
+    const pixel = () => [...ctx.getImageData(0, 0, 1, 1).data.slice(0, 3)];
+    const paint = (colour: string) => { ctx.fillStyle = '#000'; ctx.fillStyle = colour; if (ctx.fillStyle !== '#000000' || /^(rgb\(0, 0, 0\)|#0+|black)$/.test(colour)) ctx.fillRect(0, 0, 1, 1); };
+    const luminance = (c: number[]) => { const [r, g, b] = c.map((v) => { const x = v / 255; return x <= 0.03928 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4; }); return 0.2126 * r + 0.7152 * g + 0.0722 * b; };
+    const out: string[] = [];
+    const seen = new Set<Element>();
+    for (const root of document.querySelectorAll(sel)) {
+      const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+      for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+        const el = node.parentElement, text = (node.textContent ?? '').trim();
+        if (!el || !text || seen.has(el)) continue;
+        seen.add(el);
+        const style = getComputedStyle(el), box = el.getBoundingClientRect();
+        if (box.width <= 1 || box.height <= 1 || style.visibility === 'hidden' || el.closest('[disabled], [aria-disabled="true"], [data-disabled], [aria-hidden="true"]')) continue;
+        const chain: Element[] = [];
+        let shown = true;
+        for (let e: Element | null = el; e; e = e.parentElement) { chain.unshift(e); if (Number(getComputedStyle(e).opacity) === 0) shown = false; }
+        if (!shown) continue;
+        ctx.globalCompositeOperation = 'source-over';
+        ctx.fillStyle = dark ? '#000000' : '#ffffff';
+        ctx.fillRect(0, 0, 1, 1);
+        for (const e of chain) { const bg = getComputedStyle(e).backgroundColor; if (bg && bg !== 'rgba(0, 0, 0, 0)' && bg !== 'transparent') paint(bg); }
+        const behind = pixel();
+        paint(style.color);
+        const a = luminance(behind), b = luminance(pixel());
+        const ratio = (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+        if (ratio < 3) out.push(`"${text.slice(0, 40)}" ${ratio.toFixed(2)}:1 (${style.color} on ${behind.join(',')})`);
+      }
+    }
+    return out;
+  }, selector);
+}
 async function expectNoOverflow(page: Page, label: string) {
   await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth), { timeout: 3_000 }).toBeLessThanOrEqual(1).catch(() => undefined);
   const [overflow, culprits] = await page.evaluate(() => {
@@ -3053,13 +3095,15 @@ test.describe('people, settings and smart features (English browser)', () => {
   // Phone, tablet and a wide desktop: no sideways scrolling, and on the wide screen the content uses the width
   // beside the menu instead of sitting in a narrow middle column.
   for (const viewport of [{ width: 390, height: 844 }, { width: 768, height: 1024 }, { width: 1920, height: 1080 }]) test(`every page fits ${viewport.width} px without sideways scrolling`, async ({ browser }) => {
-    test.setTimeout(150_000);
+    test.setTimeout(200_000);
     const page = await (await browser.newContext({ locale: 'en-US', viewport })).newPage();
     await signInAdmin(page);
     await expect(page).toHaveURL(/\/admin$/);
     for (const path of ['/admin', '/admin/servers', '/admin/vmware', '/admin/catalog', '/admin/users', '/admin/roles', '/admin/settings?tab=mail', '/admin/system', '/', '/order', '/firewalls', '/admin/settings?tab=rdns', '/admin/catalog?tab=ip', '/account?tab=security',
       '/admin/topology', '/admin/energy', '/admin/abuse', '/admin/catalog?tab=locations', '/admin/catalog?tab=isos', '/admin/catalog?tab=vdcs', '/admin/settings?tab=domain', '/admin/settings?tab=servers', '/topology', '/vdc', '/account?tab=accessibility',
-      '/admin/catalog?tab=packages', '/admin/catalog?tab=apps', '/admin/settings?tab=security', '/admin/settings?tab=notifications', '/account?tab=keys', '/account?tab=notifications', '/admin/audit', '/account?tab=activity', '/admin/settings?tab=announcement', '/admin/terminal', '/admin/settings?tab=chat', '/admin/settings?tab=directory', '/admin/roles', '/admin/settings?tab=status', '/status', '/support', '/admin/support', '/admin/settings?tab=support', '/admin/stats', '/account?tab=api', '/reseller', '/networks', '/api-docs', '/admin/settings?tab=api']) {
+      '/admin/catalog?tab=packages', '/admin/catalog?tab=apps', '/admin/settings?tab=security', '/admin/settings?tab=notifications', '/account?tab=keys', '/account?tab=notifications', '/admin/audit', '/account?tab=activity', '/admin/settings?tab=announcement', '/admin/terminal', '/admin/settings?tab=chat', '/admin/settings?tab=directory', '/admin/roles', '/admin/settings?tab=status', '/status', '/support', '/admin/support', '/admin/settings?tab=support', '/admin/stats', '/account?tab=api', '/reseller', '/networks', '/api-docs', '/admin/settings?tab=api',
+      // Added after 0.4.0: quotas with project quotas and their use, projects, the Stripe address, unusual use, accounts at risk, the profile with its address check.
+      '/admin/catalog?tab=quotas', '/account?tab=projects', '/admin/settings?tab=payments', '/admin/abuse?tab=usage', '/admin/billing?tab=risk', '/account?tab=profile', '/billing']) {
       await page.goto(path);
       await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
       await expectNoOverflow(page, `${path} at ${viewport.width} px`);
@@ -3166,7 +3210,7 @@ test.describe('people, settings and smart features (English browser)', () => {
   });
 
   test('dark mode on the newer screens', async ({ browser }) => {
-    test.setTimeout(120_000);
+    test.setTimeout(300_000);
     const page = await (await browser.newContext({ locale: 'en-US', colorScheme: 'dark', viewport: { width: 1280, height: 900 } })).newPage();
     await signInAdmin(page);
     for (const [path, name, heading] of [['/admin/stats', 'dark-stats', 'Statistics'], ['/admin/system', 'dark-system', 'System'], ['/admin/support', 'dark-support', 'Support queue'],
@@ -3185,6 +3229,66 @@ test.describe('people, settings and smart features (English browser)', () => {
     // With billing off, staff get a way to turn it on.
     await page.goto('/billing');
     if (await page.getByText('Billing is not turned on in this panel.').isVisible()) await expect(page.getByRole('link', { name: 'Open billing settings' })).toHaveAttribute('href', '/admin/settings?tab=billing');
+
+    // The screens added after 0.4.0 (the rule-based helpers, quotas per project, running a request, the monitoring
+    // switch, the quietest hours, the digest), each with something in it: a fresh deployment has no history, so the
+    // answer of the one route in question is a prepared one. Looked at in both themes: every piece of text in the new
+    // blocks must stand out from what is behind it, and the dark pictures go to test-results/tour for review.
+    const answer = (route: import('@playwright/test').Route, body: unknown) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
+    const finding = { id: '5b1f6f0e-6a53-4c0e-9d57-0d6f3a1f7c11', metric: 'cpu', direction: 'high', openedAt: new Date(Date.now() - 2 * 3_600_000).toISOString(), lastSeen: new Date().toISOString(),
+      detail: { recent: 96, usual: 10, scale: 5, z: 17.2, baseline: 46, days: 10, hint: 'cpu_pinned' } };
+    const quiet = { state: 'suggested', days: 28, minDays: 21, weeks: 4, servers: 12, usual: 6.4, peak: 14.25, weekly: { day: 7, time: '04:00', end: '06:00', hours: 2, load: 0.6 }, daily: { day: 0, time: '03:00', end: '05:00', hours: 2, load: 1.2, worst: 2.5 } };
+    const servers = ((await (await page.request.get('/api/servers')).json()) as { servers: { id: string; state: string }[] }).servers;
+    const serverId = servers.find((s) => s.state === 'ready')?.id;
+    const connectionId = ((await (await page.request.get('/api/admin/vmware/connections')).json()) as { connections: { id: string }[] }).connections[0]?.id;
+    await page.route('**/api/insights', (route) => answer(route, { hidden: 0, insights: [
+      { code: 'USAGE_ANOMALY_CPU_HIGH', severity: 'warning', params: { name: 'web-1', recent: 96, usual: 10, baseline: 46 }, link: '/servers', key: 'anomaly:1' },
+      { code: 'SCHEDULE_SUGGESTED', severity: 'info', params: { name: 'web-1', hours: 108 }, link: '/servers', key: 'schedule:1' },
+      { code: 'CARD_EXPIRES_BEFORE_RENEWAL', severity: 'warning', params: { last4: '1881', expiry: '10/26', date: '2026-12-11', price: '96.00', currency: 'EUR' }, link: '/billing?tab=cards', key: 'card-expiry:2026-12-11' },
+      { code: 'BUDGET_FORECAST_OVER', severity: 'warning', params: { forecast: '120.00', amount: '100.00', currency: 'EUR', pct: 120 }, link: '/', key: 'budget-forecast:2026-11' }] }));
+    await page.route('**/api/admin/maintenance/quiet-hours', (route) => answer(route, { ...quiet, timezone: 'Europe/Istanbul', zoneKnown: true, window: '03:00-05:00', current: '01:00-03:00' }));
+    await page.route('**/api/admin/vmware/connections/*/quiet-hours**', (route) => answer(route, { timezone: 'Europe/Istanbul', connection: quiet, hosts: [{ moref: 'host-1', name: 'esx-a.example', ...quiet, servers: 9 }, { moref: 'host-2', name: 'esx-b.example', state: 'not_enough_data', days: 9, minDays: 21, weeks: 4 }] }));
+    await page.route('**/api/admin/anomalies', (route) => answer(route, { anomalies: [{ ...finding, resolvedAt: null, serverId: serverId ?? finding.id, serverName: 'web-1', owner: 'a@example.test', location: 'Istanbul', abuseOpen: 1 }] }));
+    await page.route('**/api/admin/billing/risk', (route) => answer(route, { rule: { lookaheadDays: 30, failedDays: 30, minFailures: 2, growthDays: 7 }, accounts: [
+      { userId: 'u1', email: 'a@example.test', currency: 'EUR', atRisk: 1200, overdue: 1200, overdueCount: 2, oldestDays: 40, newOverdue: 300, failedCharges: 0, failedAmount: 0, reasons: ['OVERDUE_GROWING'] },
+      { userId: 'u2', email: 'b@example.test', currency: 'EUR', atRisk: 120, overdue: 0, overdueCount: 0, oldestDays: 0, newOverdue: 0, failedCharges: 3, failedAmount: 120, reasons: ['REPEATED_FAILURES'] }] }));
+    if (serverId) {
+      await page.route(`**/api/servers/${serverId}/anomalies`, (route) => answer(route, { measured: true, days: 10, minDays: 5, enough: true, anomalies: [finding], hidden: 0 }));
+      await page.route(`**/api/servers/${serverId}/schedule-suggestion**`, (route) => answer(route, { state: 'suggested', timezone: 'UTC', days: 27, minDays: 21, weeks: 4, kind: 'nightly', offHours: 108, idleHours: 118, savesMoney: false, energyKwhPerWeek: 5.4, hidden: false,
+        schedules: [{ action: 'shutdown', days: [1, 2, 3, 4, 5], time: '19:00' }, { action: 'power_on', days: [1, 2, 3, 4, 5], time: '07:00' }] }));
+    }
+    // [the page, the picture's name, the blocks that must be there and readable, what to press first]
+    const added: [string, string, string[], (() => Promise<void>)?][] = [
+      ['/', 'new-insights', ['section[aria-labelledby^="insights-"]']],
+      ['/admin/system', 'new-system', ['[data-quiet-hours="suggested"]', '[data-testid="monitoring-switch"]']],
+      ['/account?tab=notifications', 'new-digest', ['[data-testid="periodic-digest"]']],
+      ['/admin/abuse?tab=usage', 'new-unusual-use', ['[role="grid"][aria-label="Unusual use"]']],
+      ['/admin/billing?tab=risk', 'new-at-risk', ['[role="grid"][aria-label="Accounts at risk"]']],
+      ['/admin/catalog?tab=quotas', 'new-quotas', ['main']],
+      ['/account?tab=projects', 'new-projects', ['main']],
+      ['/admin/settings?tab=payments', 'new-payments', ['main']],
+      ['/api-docs', 'new-api-try', ['[data-testid="try-request"]']],
+      ...(serverId ? [[`/servers/${serverId}`, 'new-server', ['[data-section="Usage watch"]', '[data-schedule-suggestion="suggested"]']] as [string, string, string[]]] : []),
+      ...(connectionId ? [[`/admin/vmware/${connectionId}`, 'new-connection-hosts', ['[data-quiet-hours="suggested"]'], () => page.getByRole('tab', { name: /Hosts/ }).click()] as [string, string, string[], () => Promise<void>]] : []),
+    ];
+    const problems: string[] = [];
+    for (const scheme of ['dark', 'light'] as const) {
+      await page.emulateMedia({ colorScheme: scheme });
+      for (const [path, name, blocks, open] of added) {
+        await page.goto(path);
+        await expect(page.getByRole('heading', { level: 1 }).first()).toBeVisible();
+        await expect.poll(() => page.evaluate(() => document.documentElement.classList.contains('dark')), { message: `${path} follows the ${scheme} theme` }).toBe(scheme === 'dark');
+        await open?.();
+        for (const block of blocks) {
+          await expect(page.locator(block).first(), `${path}: ${block}`).toBeVisible();
+          await settled(page);
+          problems.push(...(await unreadable(page, block)).map((x) => `${scheme} ${path} ${block}: ${x}`));
+        }
+        if (scheme === 'dark') await tour(page, `dark-${name}`, true);
+      }
+    }
+    expect(problems, 'text that does not stand out from what is behind it').toEqual([]);
+    await page.unrouteAll({ behavior: 'ignoreErrors' });
   });
 
   test('tour of the newer screens', async ({ browser, baseURL }) => {
