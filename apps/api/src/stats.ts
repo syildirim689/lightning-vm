@@ -4,7 +4,7 @@
 import { Controller, Get, Query, UseGuards } from '@nestjs/common';
 import { pool } from './db';
 import { Can, PermissionGuard } from './rbac';
-import { validTimeZone } from './time-zone';
+import { storedTimeZone } from './time-zone-db';
 
 export const ranges = [7, 30, 90, 365] as const;
 type Row = Record<string, unknown>;
@@ -19,7 +19,8 @@ export const change = (now: number, before: number) => (before > 0 ? Math.round(
 export class StatsController {
   @Get() @Can('dashboard.view')
   async stats(@Query('days') raw?: string, @Query('tz') rawTz?: string) {
-    const tz = validTimeZone(rawTz) ?? 'UTC';
+    // Read in SQL below: a name the database knows (time-zone.ts), else UTC.
+    const tz = (await storedTimeZone(rawTz).catch(() => null)) ?? 'UTC';
     const days = ranges.find((r) => String(r) === raw) ?? 30;
     // A year is drawn by week; shorter periods by day.
     const unit = days > 90 ? 'week' : 'day';

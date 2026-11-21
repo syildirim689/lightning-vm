@@ -149,3 +149,49 @@ test('a server at the limit of schedules gets none of the two', async () => {
   assert.deepEqual([r.statusCode, r.json().fields], [400, { action: 'TOO_MANY' }]);
   assert.equal((await schedules(s)).length, 9);
 });
+
+test('two requests at the same moment create the pair once', async () => {
+  const s = await server(aId, 'twice');
+  await office(s);
+  // (Two zone names for the same clock, so the two requests are not one request sent twice.)
+  const both = await Promise.all([post(`/servers/${s}/schedule-suggestion`, { timezone: 'UTC' }, a), post(`/servers/${s}/schedule-suggestion`, { timezone: 'Etc/UTC' }, a)]);
+  assert.deepEqual(both.map((r) => r.statusCode).sort(), [201, 409], both.map((r) => r.body).join(' | '));
+  assert.equal(both.find((r) => r.statusCode === 409).json().code, 'NO_SUGGESTION');
+  assert.deepEqual((await schedules(s)).map((x) => x.action), ['shutdown', 'power_on']);
+});
+
+test('a zone is stored under a name the database knows; a row with a name it does not know cannot stop the scheduler', async () => {
+  const { otherName } = await import('../../dist/time-zone.js');
+  const { storedTimeZone, databaseKnows } = await import('../../dist/time-zone-db.js');
+  const { runSchedules } = await import('../../dist/schedules.js');
+  const s = await server(aId, 'zones');
+  // Java-style short names are zones to the runtime and unknown to PostgreSQL: not stored, by either way in.
+  assert.equal(await databaseKnows('AET'), false);
+  assert.equal(await storedTimeZone('AET'), null);
+  const refused = await post(`/servers/${s}/schedules`, { action: 'power_on', days: [1], time: '03:00', timezone: 'AET' }, a);
+  assert.deepEqual([refused.statusCode, refused.json().fields], [400, { timezone: 'INVALID_VALUE' }]);
+  await office(s);
+  assert.equal((await post(`/servers/${s}/schedule-suggestion`, { timezone: 'AET' }, a)).statusCode, 400);
+  assert.deepEqual(await schedules(s), []);
+  // A renamed zone (what a browser in India reports) is stored under the name this database has.
+  assert.deepEqual([otherName('Asia/Calcutta'), otherName('Asia/Kolkata'), otherName('Europe/Istanbul')], ['Asia/Kolkata', 'Asia/Calcutta', null]);
+  const kept = await storedTimeZone('Asia/Calcutta');
+  assert.ok(kept === 'Asia/Calcutta' || kept === 'Asia/Kolkata', String(kept));
+  assert.equal(await databaseKnows(kept), true);
+  const made = await post(`/servers/${s}/schedules`, { action: 'power_on', days: [1], time: '03:00', timezone: 'Asia/Calcutta' }, a);
+  assert.deepEqual([made.statusCode, made.json().timezone], [201, kept]);
+
+  // Rows as an earlier version could have left them: due now, one in a zone the database knows, one in a zone it
+  // does not know at all, and (where this database has only one of a zone's two names) one under the other name.
+  const row = async (timezone) => (await one(`INSERT INTO power_schedules (server_id, action, days, at_time, timezone) VALUES ($1, 'power_on', '{1,2,3,4,5,6,7}',
+    date_trunc('minute', now() AT TIME ZONE 'UTC')::time, $2) RETURNING id`, [s, timezone])).id;
+  const state = (id) => one('SELECT timezone, last_run_at, last_result FROM power_schedules WHERE id = $1', [id]);
+  const good = await row('UTC'), poison = await row('AET');
+  const old = (await databaseKnows('Asia/Calcutta')) ? null : await row('Asia/Calcutta');
+  await runSchedules(); // used to fail as a whole: "time zone \"AET\" not recognized"
+  // The server is already on: the schedule ran and found nothing to do.
+  assert.deepEqual([(await state(good)).last_result, (await state(poison)).last_run_at], ['skipped_state', null]);
+  if (old) assert.equal((await state(old)).timezone, 'Asia/Kolkata', 'renamed to the name the database has');
+  await runSchedules();
+  await pool.query('DELETE FROM servers WHERE id = $1', [s]);
+});

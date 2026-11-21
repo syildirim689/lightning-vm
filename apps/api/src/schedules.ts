@@ -2,6 +2,7 @@
 // (in the API, every minute, one instance at a time) starts an ordinary operation, so the task list, history
 // and notifications behave as if the owner had pressed the button.
 import { randomUUID } from 'node:crypto';
+import type { PoolClient } from 'pg';
 import { Body, Controller, Delete, Get, HttpCode, Param, ParseUUIDPipe, Post, Put, Req, UseGuards } from '@nestjs/common';
 import { audit, SessionGuard, type AuthedRequest } from './auth';
 import { Can } from './rbac';
@@ -17,6 +18,8 @@ import { MAX_SNAPSHOTS } from './snapshots';
 import { callAdapter, storedTarget } from './vmware';
 import { cleanSchedule } from './smart-rules';
 import { startBackup } from './backups';
+import { otherName } from './time-zone';
+import { databaseKnows, storedTimeZone } from './time-zone-db';
 
 // Schedules one server may have.
 export const MAX_SCHEDULES = 10;
@@ -34,13 +37,13 @@ export class SchedulesController {
   @Post() @HttpCode(201) @Can('server.power', 'server.snapshots', 'server.backups')
   async create(@Req() req: AuthedRequest, @Param('id', ParseUUIDPipe) id: string, @Body() body: Record<string, unknown>) {
     const s = await findServer(req, id, true);
-    return addSchedule(req, s, valid(body));
+    return addSchedule(req, s, await valid(body));
   }
 
   @Put(':sid') @Can('server.power', 'server.snapshots', 'server.backups')
   async update(@Req() req: AuthedRequest, @Param('id', ParseUUIDPipe) id: string, @Param('sid', ParseUUIDPipe) sid: string, @Body() body: Record<string, unknown>) {
     const s = await findServer(req, id, true);
-    const v = valid(body);
+    const v = await valid(body);
     await customerMay(req, v.action === 'snapshot' ? 'snapshots' : v.action === 'backup' ? 'backups' : 'power');
     const { rows: [row] } = await ownerWrite(s, (db) => db.query(`UPDATE power_schedules SET action = $3, days = $4, at_time = $5, timezone = $6, enabled = $7, keep = $8, pending_since = NULL WHERE id = $2 AND server_id = $1 RETURNING ${columns}`,
       [id, sid, v.action, v.days, v.time, v.timezone, v.enabled, v.keep ?? null]));
@@ -62,23 +65,58 @@ export class SchedulesController {
 // administrator's switch for the action, the limit, the write under the owner's lock and the audit record. The route
 // above uses it, and the schedule suggestion (schedule-suggest.ts) for the schedules a person accepted; `note` goes
 // into the audit record with the rest.
-export async function addSchedule(req: AuthedRequest, s: { id: string; owner_id: string }, v: { action: string; days: number[]; time: string; timezone: string; enabled: boolean; keep?: number }, note: Record<string, unknown> = {}) {
-  await customerMay(req, v.action === 'snapshot' ? 'snapshots' : v.action === 'backup' ? 'backups' : 'power');
+type NewSchedule = { action: string; days: number[]; time: string; timezone: string; enabled: boolean; keep?: number };
+export const addSchedule = async (req: AuthedRequest, s: { id: string; owner_id: string }, v: NewSchedule, note: Record<string, unknown> = {}) => (await addSchedules(req, s, [v], note))[0];
+
+// Several schedules that belong together (the two of a suggestion) are written together or not at all: the limit is
+// counted and every row inserted in one transaction under the server's lock, so a second request arriving at the same
+// moment waits and then sees them. `unless` runs first in that transaction and refuses by throwing.
+export async function addSchedules(req: AuthedRequest, s: { id: string; owner_id: string }, list: NewSchedule[], note: Record<string, unknown> = {}, unless?: (db: PoolClient) => Promise<void>) {
+  for (const v of list) await customerMay(req, v.action === 'snapshot' ? 'snapshots' : v.action === 'backup' ? 'backups' : 'power');
   // Written only while the server is still this owner's (servers.ts ownerWrite): a hand-over deletes the schedules.
-  const row = await ownerWrite(s, async (db) => {
+  const rows = await ownerWrite(s, async (db) => {
+    await unless?.(db);
     const { rows: [n] } = await db.query('SELECT count(*)::int AS n FROM power_schedules WHERE server_id = $1', [s.id]);
-    if (n.n >= MAX_SCHEDULES) throw apiError(400, 'VALIDATION_FAILED', 'Too many schedules', { action: 'TOO_MANY' });
-    return (await db.query(`INSERT INTO power_schedules (server_id, action, days, at_time, timezone, enabled, keep) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING ${columns}`,
-      [s.id, v.action, v.days, v.time, v.timezone, v.enabled, v.keep ?? null])).rows[0];
+    if (n.n + list.length > MAX_SCHEDULES) throw apiError(400, 'VALIDATION_FAILED', 'Too many schedules', { action: 'TOO_MANY' });
+    const out = [];
+    for (const v of list) out.push((await db.query(`INSERT INTO power_schedules (server_id, action, days, at_time, timezone, enabled, keep) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING ${columns}`,
+      [s.id, v.action, v.days, v.time, v.timezone, v.enabled, v.keep ?? null])).rows[0]);
+    return out;
   });
-  await audit(req, 'server.schedule_created', 'success', req.user.id, { serverId: s.id, scheduleId: row.id, action: v.action, days: v.days, time: v.time, timezone: v.timezone, ...note });
-  return row;
+  for (const [i, row] of rows.entries()) await audit(req, 'server.schedule_created', 'success', req.user.id, { serverId: s.id, scheduleId: row.id, action: list[i].action, days: list[i].days, time: list[i].time, timezone: list[i].timezone, ...note });
+  return rows;
 }
 
-function valid(body: Record<string, unknown>) {
+// The zone is stored as a name the database knows (time-zone.ts): the run below reads the clock in it, in SQL.
+async function valid(body: Record<string, unknown>) {
   const v = cleanSchedule(body);
   if ('fields' in v) throw apiError(400, 'VALIDATION_FAILED', 'Invalid input', v.fields);
-  return v;
+  const timezone = await storedTimeZone(v.timezone);
+  if (!timezone) throw apiError(400, 'VALIDATION_FAILED', 'Invalid input', { timezone: 'INVALID_VALUE' });
+  return { ...v, timezone };
+}
+
+// The zones of the enabled schedules that the database can read the clock in. A row saved before zones were checked
+// against the database (or restored from another server's backup) may carry a name this database does not know; such
+// a row used to fail the whole statement below, for every customer, every minute. It is now renamed when the zone has
+// another name the database knows, and otherwise left out of the run and reported once.
+const reported = new Set<string>();
+async function usableZones(): Promise<string[]> {
+  const { rows } = await pool.query('SELECT DISTINCT timezone FROM power_schedules WHERE enabled');
+  const usable: string[] = [];
+  for (const { timezone } of rows as { timezone: string }[]) {
+    if (await databaseKnows(timezone)) { usable.push(timezone); continue; }
+    const other = otherName(timezone);
+    if (other && (await databaseKnows(other))) {
+      await pool.query('UPDATE power_schedules SET timezone = $2 WHERE timezone = $1', [timezone, other]);
+      usable.push(other);
+      logEvent('warn', 'schedule_timezone_renamed', { from: timezone, to: other });
+    } else if (!reported.has(timezone)) {
+      reported.add(timezone);
+      logEvent('error', 'schedule_timezone_unknown', { timezone: timezone.slice(0, 64) });
+    }
+  }
+  return usable;
 }
 
 // Schedules due now: the local time is within 5 minutes after the set time on a chosen weekday, and the schedule
@@ -86,12 +124,15 @@ function valid(body: Record<string, unknown>) {
 // first stays pending (for up to an hour) and is picked up again on the next ticks until it takes the snapshot. shortcut: a tick missed for more
 // than 5 minutes (API down) skips that run; a catch-up rule would be needed for longer outages.
 export async function runSchedules() {
+  const zones = await usableZones();
   const { rows } = await pool.query(`SELECT p.id, p.action, p.keep, p.timezone, s.id AS server_id, s.owner_id, s.state, s.power_state, s.vm_moref, s.pool_id, s.billing_hold, u.role AS owner_role,
       EXISTS (SELECT 1 FROM operations o WHERE o.server_id = s.id AND o.status IN ('pending', 'running')) AS busy
     FROM power_schedules p JOIN servers s ON s.id = p.server_id JOIN users u ON u.id = s.owner_id
+      -- The clock in the schedule's zone, read only for zones the database knows (CASE: the other branch is never evaluated).
+      CROSS JOIN LATERAL (SELECT CASE WHEN p.timezone = ANY($1::text[]) THEN now() AT TIME ZONE p.timezone END AS local) z
     WHERE p.enabled AND s.state <> 'deleted' AND (p.pending_since > now() - interval '1 hour' OR ((p.last_run_at IS NULL OR p.last_run_at < now() - interval '10 minutes')
-      AND EXTRACT(ISODOW FROM now() AT TIME ZONE p.timezone)::smallint = ANY (p.days)
-      AND ((now() AT TIME ZONE p.timezone)::time - p.at_time) BETWEEN interval '0' AND interval '5 minutes'))`);
+      AND EXTRACT(ISODOW FROM z.local)::smallint = ANY (p.days)
+      AND (z.local::time - p.at_time) BETWEEN interval '0' AND interval '5 minutes'))`, [zones]);
   const customer = (await getSettings('servers')).customer;
   const allowed = customer.power;
   for (const r of rows) {

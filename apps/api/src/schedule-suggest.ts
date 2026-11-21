@@ -7,13 +7,15 @@
 import { Body, Controller, Get, HttpCode, Param, ParseUUIDPipe, Post, Query, Req, UseGuards } from '@nestjs/common';
 import { SessionGuard, type AuthedRequest } from './auth';
 import { noCpuKinds } from './capacity';
+import type { PoolClient } from 'pg';
 import { pool, redis } from './db';
 import { apiError } from './errors';
 import { Can } from './rbac';
-import { addSchedule, MAX_SCHEDULES } from './schedules';
+import { addSchedules } from './schedules';
 import { scheduleRule, suggestSchedule, type Suggested } from './schedule-rules';
 import { findServer } from './servers';
 import { validTimeZone } from './time-zone';
+import { storedTimeZone } from './time-zone-db';
 
 // A server that is switched off is billed as one that runs (billing.ts: renewals are per period; runHourly adds every
 // started hour while the server exists and only stops for a server held for an empty balance). Should billing ever
@@ -71,7 +73,6 @@ export async function scheduleInsights(userId: string): Promise<{ id: string; na
   }
   return out;
 }
-const forget = async (serverId: string) => { for (const k of await redis.keys(`insight:schedule:${serverId}:*`).catch(() => [] as string[])) await redis.del(k).catch(() => undefined); };
 
 @Controller('servers/:id/schedule-suggestion') @UseGuards(SessionGuard)
 export class ScheduleSuggestionController {
@@ -88,14 +89,20 @@ export class ScheduleSuggestionController {
   @Post() @HttpCode(201) @Can('server.power')
   async apply(@Req() req: AuthedRequest, @Param('id', ParseUUIDPipe) id: string, @Body() body: { timezone?: unknown }) {
     const s = await findServer(req, id, true);
-    const timezone = await this.zone(req, body?.timezone);
+    // Saved under a name the database knows (the scheduler reads the clock in it): the zone asked for, or its other name.
+    const timezone = await storedTimeZone(await this.zone(req, body?.timezone));
+    if (!timezone) throw apiError(400, 'VALIDATION_FAILED', 'Invalid input', { timezone: 'INVALID_VALUE' });
+    const none = () => apiError(409, 'NO_SUGGESTION', 'There is no schedule to suggest for this server now');
     const a = await scheduleAdvice(req.user.id, s, timezone);
-    if (a.state !== 'suggested' || !a.schedules) throw apiError(409, 'NO_SUGGESTION', 'There is no schedule to suggest for this server now');
-    const { rows: [n] } = await pool.query('SELECT count(*)::int AS n FROM power_schedules WHERE server_id = $1', [id]);
-    if (n.n + a.schedules.length > MAX_SCHEDULES) throw apiError(400, 'VALIDATION_FAILED', 'Too many schedules', { action: 'TOO_MANY' });
-    const created = [];
-    for (const x of a.schedules) created.push(await addSchedule(req, s, { ...x, timezone, enabled: true }, { suggested: true, offHours: a.offHours }));
-    await forget(id);
+    if (a.state !== 'suggested' || !a.schedules) throw none();
+    // Both schedules or neither, and once: written in one transaction under the server's lock, in which "it has no
+    // power schedule yet" is looked at again. A second click, or the same request from another tab, waits for the
+    // first and then finds the server scheduled; a server one schedule short of its limit gets none of the two,
+    // not a shutdown without its start.
+    const created = await addSchedules(req, s, a.schedules.map((x) => ({ ...x, timezone, enabled: true })), { suggested: true, offHours: a.offHours }, async (db: PoolClient) => {
+      if ((await db.query("SELECT 1 FROM power_schedules WHERE server_id = $1 AND enabled AND action IN ('shutdown', 'power_on') LIMIT 1", [id])).rowCount) throw none();
+    });
+    // (The insights do not need telling: they ask only about servers without a power schedule.)
     return { schedules: created };
   }
 
