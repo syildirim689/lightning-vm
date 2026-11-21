@@ -69,6 +69,10 @@ test('running a request: what looks like a secret in an answer is not shown', ()
     credentials: { username: hiddenMark, anything: hiddenMark }, backupCodes: [hiddenMark, hiddenMark], pem: hiddenMark, code: 'QUOTA_EXCEEDED', message: 'Quota exceeded' });
   assert.equal(m.hidden, 11);
   assert.deepEqual(maskSecrets([{ a: 1 }, 'x']).value, [{ a: 1 }, 'x']);
+  // A secret inside a longer value is replaced where it stands; the rest of the value stays readable.
+  const inside = maskSecrets({ header: 'Authorization: Bearer lvm_abcdefghijklmnopqrstuvwxyz', link: `https://panel.example/hook?sig=${jwt}&x=1`, plain: 'lvm_short' });
+  assert.deepEqual(inside.value, { header: `Authorization: Bearer ${hiddenMark}`, link: `https://panel.example/hook?sig=${hiddenMark}&x=1`, plain: 'lvm_short' });
+  assert.equal(inside.hidden, 2);
   // The body as shown: JSON pretty and masked; plain text masked by shape; anything else not shown at all.
   const shown = shownBody('application/json; charset=utf-8', JSON.stringify({ token: 'lvm_abcdefghijklmnopqrstuvwxyz', ok: true }), false);
   assert.deepEqual([shown.kind, shown.hidden, shown.text.includes('lvm_'), shown.text.includes('"ok": true')], ['json', 1, false, true]);

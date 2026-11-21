@@ -77,12 +77,14 @@ export function previewRequest(r: BuiltRequest, cookieNote: string) {
 // true/false and empty values stay, so "passwordSet: true" still reads. hidden: how many values were replaced.
 const secretName = /pass(word|phrase)|secret|token|api_?key|private_?key|authori[sz]ation|cookie|credential|backup_?codes|totp|otpauth|recovery/i;
 const secretShape = /^(lvm_[\w-]{20,}|whsec_\w{8,}|(sk|rk|pk)_(live|test)_\w{8,}|eyJ[\w-]{10,}\.[\w-]{10,}\.[\w-]{5,})$|-----BEGIN [A-Z ]*PRIVATE KEY-----/;
+// The same shapes wherever they stand inside a longer text ("Authorization: Bearer lvm_...", an address carrying a token).
+const secretInside = /lvm_[\w-]{20,}|whsec_\w{8,}|(?:sk|rk|pk)_(?:live|test)_\w{8,}|eyJ[\w-]{10,}\.[\w-]{10,}\.[\w-]{5,}/g;
 export const hiddenMark = '•••••• (hidden)';
 export function maskSecrets(value: unknown): { value: unknown; hidden: number } {
   let hidden = 0;
   const hide = () => { hidden++; return hiddenMark; };
   const walk = (v: unknown, named: boolean, depth: number): unknown => {
-    if (typeof v === 'string') return v && (named || secretShape.test(v)) ? hide() : v;
+    if (typeof v === 'string') return v && (named || secretShape.test(v)) ? hide() : v.replace(secretInside, hide);
     if (!v || typeof v !== 'object' || depth > 40) return v;
     if (Array.isArray(v)) return v.map((x) => walk(x, named, depth + 1));
     return Object.fromEntries(Object.entries(v as Record<string, unknown>).map(([k, x]) => [k, walk(x, named || secretName.test(k), depth + 1)]));
@@ -101,7 +103,7 @@ export function shownBody(contentType: string, text: string, truncated: boolean)
   }
   if (!/^text\/(plain|csv)/i.test(contentType)) return { kind: 'other', text: '', hidden: 0 };
   let hidden = 0;
-  const masked = text.replace(/lvm_[\w-]{20,}|whsec_\w{8,}|(?:sk|rk|pk)_(?:live|test)_\w{8,}|eyJ[\w-]{10,}\.[\w-]{10,}\.[\w-]{5,}/g, () => { hidden++; return hiddenMark; });
+  const masked = text.replace(secretInside, () => { hidden++; return hiddenMark; });
   return { kind: 'text', text: masked, hidden };
 }
 

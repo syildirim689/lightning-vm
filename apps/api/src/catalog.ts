@@ -164,6 +164,7 @@ function readRule(body: Input) {
 }
 
 function readLimits(body: Input): Limits {
+  if (!body || typeof body !== 'object' || Array.isArray(body)) throw apiError(400, 'VALIDATION_FAILED', 'Invalid input', { maxServers: 'INVALID_VALUE' });
   const f = new Fields(body);
   const opt = (name: string, max: number) => body[name] === null || body[name] === '' || body[name] === undefined ? null : f.int(name, 0, max);
   const l = { max_servers: opt('maxServers', 10000), max_vcpu: opt('maxVcpu', 100000), max_memory_mb: opt('maxMemoryMb', 1 << 30), max_disk_gb: opt('maxDiskGb', 1 << 30) };

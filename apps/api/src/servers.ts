@@ -112,10 +112,13 @@ export async function findServer(req: AuthedRequest, id: string, manage = false)
 // server still belongs to the account findServer answered for; otherwise 404, as for a request sent after the move.
 // startOperation makes the same check in its own statement and is called outside of this (on another connection it
 // would wait for the lock held here). Staff routes that act across owners (admin/...) do not need it.
-export async function ownerWrite<T>(server: { id: string; owner_id: string }, write: (db: PoolClient) => Promise<T>): Promise<T> {
+// lockOwner: the owner's account is locked first, as an order locks it (the lock a quota is counted under), so that
+// what `write` counts and then adds cannot be counted by a second request in between.
+export async function ownerWrite<T>(server: { id: string; owner_id: string }, write: (db: PoolClient) => Promise<T>, lockOwner = false): Promise<T> {
   const db = await pool.connect();
   try {
     await db.query('BEGIN');
+    if (lockOwner) await db.query('SELECT 1 FROM users WHERE id = $1 FOR UPDATE', [server.owner_id]);
     const { rows: [now] } = await db.query("SELECT owner_id FROM servers WHERE id = $1 AND state <> 'deleted' FOR UPDATE", [server.id]);
     if (now?.owner_id !== server.owner_id) throw apiError(404, 'NOT_FOUND', 'Unknown server');
     const out = await write(db);

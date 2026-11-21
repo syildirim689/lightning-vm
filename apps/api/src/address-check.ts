@@ -27,6 +27,12 @@ const hashOf = (userId: string, email: string, code: string) => sha256(`${userId
 // (Settings → E-mail). Off: the account page shows nothing and the order rule below asks nothing.
 export const verificationAvailable = () => mailUse('verification');
 
+// Deletes the pending code only while it is still the one named (ARGV[1]: its hash, or '' for "no code there"). A
+// request that finds no code, uses one up or could not mail one must not remove the code another request has just
+// written for the same account (a resend arriving at that moment, a mail that failed after a later one went out).
+const dropIf = "local h = redis.call('hget', KEYS[1], 'hash') if (h or '') == ARGV[1] then return redis.call('del', KEYS[1]) end return 0";
+const dropCode = (userId: string, hash: string) => redis.eval(dropIf, 1, pendingKey(userId), hash).then(() => undefined, () => undefined);
+
 // One mail with a new code (the earlier one stops working). A few per account: one a minute, five an hour, ten a
 // day, counted whether or not the mail could be sent. The first one after registration counts too.
 export async function sendVerification(user: { id: string; email: string; locale?: string | null }) {
@@ -35,12 +41,13 @@ export async function sendVerification(user: { id: string; email: string; locale
   await rateLimit(`emailverify:send:hour:${user.id}`, 5, 3600);
   await rateLimit(`emailverify:send:day:${user.id}`, 10, 86_400);
   const code = String(randomInt(0, 1_000_000)).padStart(6, '0');
-  await redis.multi().del(pendingKey(user.id)).hset(pendingKey(user.id), { hash: hashOf(user.id, user.email, code), attempts: 0 }).expire(pendingKey(user.id), codeMinutes * 60).exec();
+  const hash = hashOf(user.id, user.email, code);
+  await redis.multi().del(pendingKey(user.id)).hset(pendingKey(user.id), { hash, attempts: 0 }).expire(pendingKey(user.id), codeMinutes * 60).exec();
   // The link opens the account page with the code filled in; without a public address the mail carries the code only.
   const link = await absolute(`/account?tab=profile&verify=${code}`).catch(() => null);
   // A mail that could not be sent leaves no code behind: the page then offers to send one, not to enter one.
   try { await sendAddressCheck(user.email, user.locale ?? undefined, code, link); }
-  catch (err) { await clearVerification(user.id); throw err; }
+  catch (err) { await dropCode(user.id, hash); throw err; }
 }
 
 // After registration: the first mail, without making the registration wait for it or fail with it.
@@ -59,10 +66,10 @@ export async function confirmVerification(user: { id: string; email: string }, c
   // Counted before it is compared, in one step: tries made at the same moment cannot share a count.
   const res = await redis.multi().hget(pendingKey(user.id), 'hash').hincrby(pendingKey(user.id), 'attempts', 1).exec();
   const stored = res?.[0]?.[1] as string | null | undefined, tries = Number(res?.[1]?.[1]);
-  if (!stored || tries > attemptsPerCode) { await redis.del(pendingKey(user.id)); throw invalid(); }
+  if (!stored || tries > attemptsPerCode) { await dropCode(user.id, stored ?? ''); throw invalid(); }
   const given = Buffer.from(hashOf(user.id, user.email, code)), kept = Buffer.from(stored);
   if (given.length !== kept.length || !timingSafeEqual(given, kept)) throw invalid();
-  await redis.del(pendingKey(user.id));
+  await dropCode(user.id, stored);
   const { rowCount } = await pool.query('UPDATE users SET email_verified = true, updated_at = now() WHERE id = $1 AND lower(email) = lower($2) AND NOT email_verified', [user.id, user.email]);
   return !!rowCount;
 }

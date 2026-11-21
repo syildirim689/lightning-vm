@@ -42,10 +42,7 @@ export class DisksController {
     const { rows: [p] } = await pool.query('SELECT * FROM resource_pools WHERE id = $1', [s.pool_id]);
     if (p.extra_disk_price_gb === null) throw apiError(409, 'EXTRA_DISKS_NOT_SOLD', 'This location does not sell extra disks');
     if ((await pool.query("SELECT 1 FROM server_disks WHERE server_id = $1 AND status <> 'failed'", [id])).rowCount! >= MAX_EXTRA_DISKS) throw apiError(409, 'DISK_LIMIT', 'Too many extra disks');
-    // The owner's quota and the location's free storage, as for any disk.
-    const quota = await limitsFor(s.owner_id, s.project_id ?? undefined);
-    const over = exceededQuota({ ...quota, max_servers: null }, await usageOf(s.owner_id, s.project_id ?? undefined), { vcpu: 0, memoryMb: 0, diskGb: size });
-    if (over.length) throw quotaExceeded(quota, over, { sizeGb: 'QUOTA_EXCEEDED' });
+    // The location's free storage, as for any disk (the owner's quota is checked where the disk is written, below).
     if (size > (await capacityOf(p)).available.storageGb) throw apiError(409, 'CAPACITY_EXHAUSTED', 'Not enough storage in this location');
     const reseller = await resellerOf(s.owner_id);
     if (reseller) await checkResellerRoom(reseller, { servers: 0, vcpu: 0, memoryMb: 0, diskGb: size });
@@ -53,7 +50,15 @@ export class DisksController {
     const price = reseller ? discounted(raw, reseller.discountPct) : raw;
     const diskId = randomUUID();
     // Only while the server is still this owner's (servers.ts ownerWrite); startOperation checks the same again.
-    await ownerWrite(s, (db) => db.query('INSERT INTO server_disks (id, server_id, size_gb, price_monthly) VALUES ($1, $2, $3, $4)', [diskId, id, size, price]));
+    // The quota (the project's, else the account's) is counted and the disk added under the owner's lock, in one
+    // transaction: two disks asked for at the same moment, on two servers of one account, used to be counted against
+    // the same free room and could both pass.
+    await ownerWrite(s, async (db) => {
+      const quota = await limitsFor(s.owner_id, s.project_id ?? undefined);
+      const over = exceededQuota({ ...quota, max_servers: null }, await usageOf(s.owner_id, s.project_id ?? undefined, db), { vcpu: 0, memoryMb: 0, diskGb: size });
+      if (over.length) throw quotaExceeded(quota, over, { sizeGb: 'QUOTA_EXCEEDED' });
+      await db.query('INSERT INTO server_disks (id, server_id, size_gb, price_monthly) VALUES ($1, $2, $3, $4)', [diskId, id, size, price]);
+    }, true);
     let operation;
     try {
       operation = await startOperation(req, s, 'disk_add', `disk:${diskId}`, hashOf({ id, disk: diskId }), { diskId, sizeGb: size });

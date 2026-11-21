@@ -52,7 +52,8 @@ export class SupportSuggestController {
     const text = typeof body?.body === 'string' ? body.body.slice(0, 4000) : '';
     const none = { incidents: [], answers: [] };
     if (tokens(`${subject} ${text}`).length < 2) return none;
-    const n = await redis.incr(`rl:suggest:${req.user.id}`).catch(() => 0); if (n === 1) await redis.expire(`rl:suggest:${req.user.id}`, 600).catch(() => undefined);
+    // Counted and given its ten minutes in one step: a counter left without an expiry would silence the suggestions for good.
+    const n = await redis.multi().incr(`rl:suggest:${req.user.id}`).expire(`rl:suggest:${req.user.id}`, 600, 'NX').exec().then((r) => Number(r?.[0]?.[1]) || 0, () => 0);
     if (n > SUGGEST_PER_10_MIN) return none;
     const query = asText(subject, text);
 
