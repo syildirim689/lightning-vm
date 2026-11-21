@@ -92,6 +92,9 @@ girmeniz gerekmez. Özelliklerin tamamı yalnızca VMware'de vardır; diğer alt
   Genel bakışta **Yaklaşan ödemeler:** vadesi geçmiş ya da 7 gün içinde dolacak faturalar, sıradaki yenileme
   (faturada alınacak tutarla; vergi hesaplanabildiyse "vergi dahil" notuyla) ve saatlik kullanımda bakiyenin ne
   zaman biteceği
+- **Kullanım takibi:** sunucunun işlemci ve ağ kullanımı saatte bir kendi geçmişiyle karşılaştırılır; olağandan
+  keskin ayrılma sayılarıyla birlikte sunucu sayfasında ve içgörülerde görünür, gizlenebilir, istenirse bildirilir.
+  Ölçüm vermeyen platformlarda "yeterli veri yok" denir ([docs/smart-features.md](docs/smart-features.md))
 - **Başarısız işlemden sonra sıradaki adım:** sunucu sayfasının üstünde neyin ters gittiği ve tek bir öneri. Geçici
   hatalarda "Yeniden dene" (yalnızca açma, düzgün kapatma, reset ve anlık görüntü alma için), ödeme engelinde
   faturalar, kota engelinde kota, diğerlerinde ayrıntıları doldurulmuş destek talebi; ekibin bakması gereken

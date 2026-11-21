@@ -2,6 +2,7 @@
 // and where to fix it. Staff see platform findings; customers see findings about their own servers.
 // Critical staff findings are also sent as the "admin.insight" notification, at most once a day each.
 import { Body, Controller, Delete, Get, HttpCode, Put, Req, UseGuards } from '@nestjs/common';
+import { anomalyCounts, anomalyKey, openAnomaliesOf } from './anomalies';
 import { audit, SessionGuard, type AuthedRequest } from './auth';
 import { paymentsInReview } from './billing';
 import { capacityOf, limitsFor, usageOf } from './catalog';
@@ -127,6 +128,9 @@ export async function staffInsights(): Promise<Insight[]> {
   const st = await cpuStats(on.map((s) => s.id));
   const spare = on.map((s) => ({ s, r: sizing(s.vcpu, st.get(s.id) ?? null) })).filter((x) => x.r.advice === 'idle' || x.r.advice === 'down');
   if (spare.length) add('OVERSIZED_SERVERS', 'info', { count: spare.length, vcpu: spare.reduce((a, x) => a + x.s.vcpu - x.r.suggestedVcpu, 0) }, '/admin/servers');
+  // Servers whose use left their own baseline (the worker's hourly check); "suspicious" are those that resemble abuse.
+  const unusual = await anomalyCounts();
+  if (unusual.open) add('USAGE_ANOMALIES', unusual.suspicious ? 'warning' : 'info', { count: unusual.open, suspicious: unusual.suspicious }, '/admin/abuse?tab=usage');
   const order = { danger: 0, warning: 1, info: 2 };
   return out.sort((x, y) => order[x.severity] - order[y.severity]);
 }
@@ -160,6 +164,13 @@ export async function customerInsights(userId: string): Promise<Insight[]> {
     const prev = out.findIndex((x) => x.key === `off:${s.id}`);
     if (days >= 7 && prev >= 0) out.splice(prev, 1);
     if (days >= 7) add('OFF_BUT_BILLED', 'info', { name: s.name, days, price: s.price, currency: s.currency }, `/servers/${s.id}`, `off:${s.id}`, { kind: 'power_on', serverId: s.id });
+  }
+  // Use that left the server's own baseline: the numbers the finding was opened on (CPU in percent, traffic in GB).
+  for (const a of await openAnomaliesOf(userId)) {
+    const gb = (x: unknown) => Math.round((Number(x) || 0) / 1e8) / 10;
+    add(`USAGE_ANOMALY_${a.metric.toUpperCase()}_${a.direction.toUpperCase()}`, a.direction === 'high' ? 'warning' : 'info', { name: a.name,
+      recent: a.metric === 'cpu' ? Math.round(a.detail.recent ?? 0) : gb(a.detail.value), usual: a.metric === 'cpu' ? Math.round(a.detail.usual ?? 0) : gb(a.detail.usual), baseline: a.detail.baseline ?? 0 },
+    `/servers/${a.serverId}`, anomalyKey(a.id));
   }
   const [limits, usage] = await Promise.all([limitsFor(userId), usageOf(userId)]);
   for (const [k, l] of [['servers', 'max_servers'], ['vcpu', 'max_vcpu'], ['memoryMb', 'max_memory_mb'], ['diskGb', 'max_disk_gb']] as const) {
@@ -303,7 +314,7 @@ async function cachedStaffInsights(): Promise<Insight[]> {
 }
 
 // Findings about an area only those who may open it see (the list is computed once for all staff).
-const findingNeeds: Record<string, Permission[]> = { PAYMENTS_IN_REVIEW: ['billing.view'] };
+const findingNeeds: Record<string, Permission[]> = { PAYMENTS_IN_REVIEW: ['billing.view'], USAGE_ANOMALIES: ['servers.view_all'] };
 export const maySeeFinding = (permissions: string[], i: Pick<Insight, 'code' | 'link'>) =>
   (!i.link.startsWith('/admin/settings') || can(permissions, 'settings.view') || can(permissions, 'settings.manage'))
   && (!findingNeeds[i.code] || findingNeeds[i.code].some((p) => can(permissions, p)));

@@ -43,6 +43,7 @@ diğerleri eklendi). Güncel ve tam liste koddaki katalogdur; panelde Ayarlar �
 | `server.failed` (işlem başarısız) | sahibi | panel, tarayıcı, e-posta |
 | `server.deleted` | sahibi | panel |
 | `server.power` (güç işlemi tamamlandı) | sahibi | panel |
+| `server.usage_anomaly` (kullanım kendi olağanından ayrıldı, bulgu başına bir kez; [smart-features.md](smart-features.md#olağan-dışı-kullanım)) | sahibi | panel |
 | `auth.sign_in` (yeni giriş) | kullanıcı | panel, e-posta |
 | `auth.password_changed` | kullanıcı | panel, e-posta |
 | `auth.two_factor_changed` | kullanıcı | panel, e-posta |

@@ -3,6 +3,7 @@ import { processFirewall, processOperation, reconcile, restoreHold } from './ope
 import { processIso } from './iso.mjs';
 import { samplePower } from './power.mjs';
 import { scanPorts } from './abuse.mjs';
+import { runAnomalies } from './anomalies.mjs';
 import pg from 'pg';
 import { Redis } from 'ioredis';
 import { writeFile } from 'node:fs/promises';
@@ -87,6 +88,15 @@ const reconcileTimer = setInterval(reconcileOnce, (Number(process.env.RECONCILE_
 const powerOnce = (wait = false) => withLock(redis, 'lock:power', 240,
   () => samplePower(pool, log, notify).catch((e) => log('error', 'power_failed', { code: e.code, error: String(e.message).slice(0, 200) })), { wait, log });
 const powerTimer = setInterval(() => powerOnce(), (Number(process.env.POWER_SAMPLE_MINUTES) || 5) * 60000);
+// Usage anomalies (anomalies.mjs): the hourly roll-up of the CPU samples and the check of every server against its own
+// baseline. One copy at a time; not while a restore is held (what the database says is from then). First run two
+// minutes after the start, then every ANOMALY_MINUTES (default 60).
+const anomaliesOnce = () => withLock(redis, 'lock:anomalies', 900, async () => {
+  if (await restoreHold(pool)) return;
+  await runAnomalies(pool, notify, log).catch((e) => log('error', 'anomalies_failed', { code: e.code, error: String(e.message).slice(0, 200) }));
+}, { log });
+const anomalyStart = setTimeout(anomaliesOnce, 120_000);
+const anomalyTimer = setInterval(anomaliesOnce, (Number(process.env.ANOMALY_MINUTES) || 60) * 60000);
 // "Measure now" from the energy page.
 const powerWorker = new Worker('power', () => powerOnce(true), { connection: redis.duplicate(), concurrency: 1 });
 // Port scan of every server address (abuse.mjs) at the admin's interval, and "scan now".
@@ -149,7 +159,7 @@ async function copyConsoleEvents() {
 }
 copyConsoleEvents();
 
-async function close() { if (closing) return; closing = true; clearInterval(timer); clearInterval(recoveryTimer); clearInterval(reconcileTimer); clearInterval(powerTimer); clearInterval(scanTimer); await worker.close(); await firewallWorker.close(); await isoWorker.close(); await powerWorker.close(); await abuseWorker.close(); await firewalls.close(); await rdnsQueue.close(); await isos.close(); await maintenance.close(); await operations.close(); events.disconnect(); redis.disconnect(); await pool.end(); }
+async function close() { if (closing) return; closing = true; clearInterval(timer); clearInterval(recoveryTimer); clearInterval(reconcileTimer); clearInterval(powerTimer); clearInterval(scanTimer); clearInterval(anomalyTimer); clearTimeout(anomalyStart); await worker.close(); await firewallWorker.close(); await isoWorker.close(); await powerWorker.close(); await abuseWorker.close(); await firewalls.close(); await rdnsQueue.close(); await isos.close(); await maintenance.close(); await operations.close(); events.disconnect(); redis.disconnect(); await pool.end(); }
 process.on('SIGTERM', close); process.on('SIGINT', close);
 // Last line of defence: a promise nobody awaited must not end the process in the middle of other operations.
 process.on('unhandledRejection', (e) => log('error', 'unhandled_rejection', { error: String(e?.message ?? e).slice(0, 200) }));

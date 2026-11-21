@@ -1,7 +1,8 @@
 "use client";
 // Abuse monitoring: risky ports open on customer servers and mining suspicions (CPU near full for hours),
 // with acknowledgement, a scan on demand, and the settings. The tab, the search and the tile filter are kept in the
-// address, so a list can be linked to and Back returns to it as it was.
+// address, so a list can be linked to and Back returns to it as it was. A third tab lists servers whose use left their
+// own baseline (the hourly usage check): statistics, kept apart from the findings, with a note when one resembles them.
 import { Button, Modal, SearchField, Tabs, toast } from '@heroui/react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useFormatter, useTranslations } from 'next-intl';
@@ -15,12 +16,37 @@ import { useMe } from '../../../../lib/me';
 import { fold } from '../../../../lib/note-line';
 import { can } from '../../../../lib/permissions';
 import { useApiQuery } from '../../../../lib/query';
+import { gigabytes, type Anomaly } from '../../../../components/anomalies';
 
 type Finding = { id: string; kind: 'port' | 'cpu'; address: string | null; port: number | null; detail: { label?: string; avg?: number; hours?: number };
   firstSeen: string; lastSeen: string; resolvedAt: string | null; acknowledgedAt: string | null; acknowledgedBy: string | null; note: string;
   serverId: string; serverName: string; owner: string; location: string };
 type Settings = { portScan: boolean; scanMinutes: number; cpu: boolean; cpuThreshold: number; cpuHours: number; notifyCustomer: boolean; ports: { port: number; label: string }[] };
 const key = ['admin', 'abuse'];
+type Unusual = Anomaly & { resolvedAt: string | null; serverId: string; serverName: string; owner: string; location: string; abuseOpen: number };
+
+// Servers whose CPU or network use left their own baseline, open ones first. "Resembles abuse" is said when the numbers
+// look like what this page watches for, and the abuse findings open on the same server are counted next to it.
+function UnusualUse({ rows }: { rows: Unusual[] }) {
+  const t = useTranslations('Abuse');
+  const ta = useTranslations('Anomalies');
+  const format = useFormatter();
+  const when = (x: string) => format.relativeTime(new Date(x));
+  const up = (a: Unusual) => a.direction === 'high';
+  return <DataTable label={t('usage')} rows={rows} rowKey={(a) => a.id} empty={t('usageNone')} minWidth={880}
+    columns={[{ id: 'k', label: t('finding') }, { id: 's', label: t('server') }, { id: 'f', label: t('firstSeen') }, { id: 'l', label: t('lastSeen') }, { id: 'a', label: t('status') }, { id: 'x', label: <span className="sr-only">{t('actions')}</span> }]}
+    cells={(a) => [
+      <span key="k" className="flex flex-col"><span className="flex items-center gap-1.5 font-medium"><I name={up(a) ? 'trending-up' : 'trending-down'} size={14} className={up(a) ? 'text-warning' : 'text-muted'}/>{ta(`kind.${a.metric}.${a.direction}` as 'kind.cpu.high')}</span>
+        <span className="text-xs text-muted">{a.metric === 'cpu' ? ta('cpuNumbers', { recent: Math.round(a.detail.recent ?? 0), usual: Math.round(a.detail.usual ?? 0), hours: a.detail.baseline ?? 0, days: a.detail.days ?? 0 })
+          : ta('networkNumbers', { recent: gigabytes(a.detail.value), usual: gigabytes(a.detail.usual), days: a.detail.baseline ?? 0, out: Math.round((a.detail.outShare ?? 0) * 100) })}</span></span>,
+      <span key="s" className="flex flex-col"><span className="font-medium">{a.serverName}</span><span className="text-xs text-muted">{a.owner}{a.location && ` · ${a.location}`}</span></span>,
+      when(a.openedAt), a.resolvedAt ? when(a.resolvedAt) : when(a.lastSeen),
+      <span key="a" className="flex flex-col items-start gap-1">
+        {a.resolvedAt ? <StatusChip tone="success">{t('closed')}</StatusChip> : a.detail.hint ? <StatusChip tone="warning">{t(`hint.${a.detail.hint}`)}</StatusChip> : <StatusChip tone="default">{t('usageOpen')}</StatusChip>}
+        {a.abuseOpen > 0 && <span className="text-xs text-danger">{t('usageAbuseOpen', { n: a.abuseOpen })}</span>}
+      </span>,
+      <ButtonLink key="x" size="sm" variant="ghost" href={`/servers/${a.serverId}`}><I name="external-link" size={13}/>{t('openServer')}</ButtonLink>]}/>;
+}
 
 function AbuseSettings({ initial }: { initial: Settings }) {
   const t = useTranslations('Abuse');
@@ -61,7 +87,8 @@ export default function Abuse() {
   const me = useMe();
   const client = useQueryClient();
   const q = useApiQuery<{ findings: Finding[]; settings: Settings }>(key, '/admin/abuse', { refetchInterval: 30_000 });
-  const [tab, setTab] = useQueryState('tab', parseAsStringLiteral(['open', 'resolved'] as const).withDefault('open'));
+  const [tab, setTab] = useQueryState('tab', parseAsStringLiteral(['open', 'resolved', 'usage'] as const).withDefault('open'));
+  const unusual = useApiQuery<{ anomalies: Unusual[] }>(['admin', 'anomalies'], '/admin/anomalies', { refetchInterval: 60_000 }).data?.anomalies ?? [];
   const [ack, setAck] = useState<Finding | null>(null);
   const [note, setNote] = useState('');
   const [find, setFind] = useQueryState('q', parseAsString.withDefault('').withOptions({ history: 'replace', throttleMs: 300 }));
@@ -94,12 +121,13 @@ export default function Abuse() {
         <Stat label={t('mining')} value={open.filter((f) => f.kind === 'cpu').length} icon={<I name="pickaxe" size={18}/>} tone={open.some((f) => f.kind === 'cpu') ? 'danger' : 'default'} pressed={only === 'cpu'} onPress={() => pick('cpu')}/>
         <Stat label={t('unacknowledged')} value={open.filter((f) => !f.acknowledgedAt).length} icon={<I name="bell-ring" size={18}/>} pressed={only === 'unack'} onPress={() => pick('unack')}/>
       </div>
-      <Tabs selectedKey={tab} onSelectionChange={(k) => void setTab(k === 'resolved' ? 'resolved' : null)}>
+      <Tabs selectedKey={tab} onSelectionChange={(k) => void setTab(k === 'resolved' || k === 'usage' ? k : null)}>
         <Tabs.ListContainer><Tabs.List aria-label={t('title')}>
           <Tabs.Tab id="open">{t('open')}<span className="ml-1.5 rounded-full bg-default px-1.5 text-xs tabular-nums">{open.length}</span><Tabs.Indicator/></Tabs.Tab>
           <Tabs.Tab id="resolved">{t('resolved')}<span className="ml-1.5 rounded-full bg-default px-1.5 text-xs tabular-nums">{d.findings.length - open.length}</span><Tabs.Indicator/></Tabs.Tab>
+          <Tabs.Tab id="usage">{t('usage')}<span className="ml-1.5 rounded-full bg-default px-1.5 text-xs tabular-nums">{unusual.filter((a) => !a.resolvedAt).length}</span><Tabs.Indicator/></Tabs.Tab>
         </Tabs.List></Tabs.ListContainer>
-        <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center">
+        {tab !== 'usage' && <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center">
           <SearchField aria-label={t('find')} value={find} onChange={(v) => void setFind(v || null)} className="w-full sm:w-80">
             <SearchField.Group><SearchField.SearchIcon/><SearchField.Input placeholder={t('findPlaceholder')}/><SearchField.ClearButton/></SearchField.Group>
           </SearchField>
@@ -107,9 +135,9 @@ export default function Abuse() {
           {list.length > 0 && <Button size="sm" variant="ghost" className="sm:ml-auto" onPress={() => downloadCsv('abuse', ['kind', 'finding', 'address', 'server', 'owner', 'location', 'first_seen', 'last_seen', 'resolved', 'acknowledged_by', 'note'],
             list.map((f) => [f.kind, f.kind === 'port' ? f.detail.label ?? '' : `${f.detail.avg ?? 0}% / ${f.detail.hours ?? 0}h`, f.address ? `${f.address}:${f.port ?? ''}` : '', f.serverName, f.owner, f.location, f.firstSeen, f.lastSeen, f.resolvedAt ?? '', f.acknowledgedBy ?? '', f.note]))}>
             <I name="download" size={14}/>{t('export')}</Button>}
-        </div>
+        </div>}
         <Tabs.Panel id={tab} className="pt-4">
-          <DataTable label={t('title')} rows={list} rowKey={(f) => f.id} empty={needle || only ? t('noMatch') : tab === 'open' ? t('none') : t('noneResolved')} minWidth={880}
+          {tab === 'usage' ? <><p className="mb-3 text-sm text-muted">{t('usageHelp')}</p><UnusualUse rows={unusual}/></> : <DataTable label={t('title')} rows={list} rowKey={(f) => f.id} empty={needle || only ? t('noMatch') : tab === 'open' ? t('none') : t('noneResolved')} minWidth={880}
             columns={[{ id: 'k', label: t('finding') }, { id: 's', label: t('server') }, { id: 'f', label: t('firstSeen') }, { id: 'l', label: t('lastSeen') }, { id: 'a', label: t('status') }, { id: 'x', label: <span className="sr-only">{t('actions')}</span> }]}
             cells={(f) => [
               f.kind === 'port' ? <span key="k" className="flex flex-col"><span className="flex items-center gap-1.5 font-medium"><I name="door-open" size={14} className="text-warning"/>{f.detail.label || t('port')}</span><Mono>{f.address}:{f.port}</Mono></span>
@@ -121,7 +149,7 @@ export default function Abuse() {
               <span key="x" className="flex gap-1">
                 <ButtonLink size="sm" variant="ghost" href={`/servers/${f.serverId}`}><I name="external-link" size={13}/>{t('openServer')}</ButtonLink>
                 {!f.resolvedAt && !f.acknowledgedAt && can(me?.permissions, 'servers.manage_all') && <Button size="sm" variant="ghost" onPress={() => setAck(f)}><I name="check" size={13}/>{t('acknowledge')}</Button>}
-              </span>]}/>
+              </span>]}/>}
         </Tabs.Panel>
       </Tabs>
       <p className="text-xs text-muted">{t('disclaimer')}</p>

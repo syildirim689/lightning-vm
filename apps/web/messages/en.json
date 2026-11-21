@@ -3074,6 +3074,22 @@
       "NO_FIREWALL": {
         "title": "{n, plural, one {{name} has no firewall} other {# servers have no firewall}}",
         "body": "All incoming traffic is open. You can protect them in one click on the Firewalls page."
+      },
+      "USAGE_ANOMALY_CPU_HIGH": {
+        "title": "{name}: CPU use is far above usual",
+        "body": "{recent}% on average over the last 3 hours; {usual}% is usual at this time of day (from {baseline} hours of history)."
+      },
+      "USAGE_ANOMALY_CPU_LOW": {
+        "title": "{name}: CPU use is far below usual",
+        "body": "{recent}% on average over the last 3 hours; {usual}% is usual at this time of day (from {baseline} hours of history). A service may have stopped."
+      },
+      "USAGE_ANOMALY_NETWORK_HIGH": {
+        "title": "{name}: network traffic is far above usual",
+        "body": "{recent} GB in a day; a usual day is {usual} GB (from the {baseline} days before)."
+      },
+      "USAGE_ANOMALIES": {
+        "title": "{count, plural, one {# server uses} other {# servers use}} far more or less than usual",
+        "body": "Compared with each server’s own history. {suspicious, plural, =0 {None resembles abuse.} one {# resembles abuse.} other {# resemble abuse.}}"
       }
     },
     "hide": {
@@ -3387,6 +3403,10 @@
       "account_reseller": {
         "title": "Reseller and your account",
         "help": "When a reseller starts or stops managing your account, or one of your customers leaves you."
+      },
+      "server_usage_anomaly": {
+        "title": "Unusual use",
+        "help": "When a server’s CPU or network use departs sharply from its own recent history (checked hourly; told once per finding)."
       }
     },
     "policyTitle": "The admin first, then each user",
@@ -5407,7 +5427,16 @@
     "findPlaceholder": "Server, customer, address or port",
     "export": "Download CSV",
     "noMatch": "No finding matches the search.",
-    "clearFilter": "Clear filter: {what}"
+    "clearFilter": "Clear filter: {what}",
+    "usage": "Unusual use",
+    "usageNone": "No server’s use has left its own baseline.",
+    "usageOpen": "Open",
+    "usageAbuseOpen": "{n, plural, one {# abuse finding open} other {# abuse findings open}}",
+    "usageHelp": "Servers whose CPU or network use departs sharply from their own recent history (checked hourly). These are statistics, not evidence: the owner sees the same finding on the server’s page. “Resembles abuse” marks numbers that look like what the findings above watch for.",
+    "hint": {
+      "cpu_pinned": "Resembles mining: CPU held near full",
+      "outbound": "Resembles a flood: nearly all outbound"
+    }
   },
   "Vdc": {
     "title": "Virtual datacenters",
@@ -9214,5 +9243,39 @@
   },
   "Capabilities": {
     "unavailable": "Not available on this platform."
+  },
+  "Anomalies": {
+    "title": "Usage watch",
+    "help": "Once an hour the panel compares this server’s CPU and network use with its own recent history. A finding is a signal to look, not a verdict; nothing is changed on the server.",
+    "kind": {
+      "cpu": {
+        "high": "CPU use is far above usual",
+        "low": "CPU use is far below usual"
+      },
+      "network": {
+        "high": "Network traffic is far above usual",
+        "low": "Network traffic is far below usual"
+      }
+    },
+    "cpuNumbers": "Last 3 hours: {recent}% on average. Usual at this time of day: {usual}% (from {hours} hours of history over {days} days).",
+    "networkNumbers": "Busiest of today and yesterday: {recent} GB, {out}% of it outbound. A usual day: {usual} GB (from the {days} days before).",
+    "since": "Since {when}",
+    "advice": {
+      "cpu": {
+        "high": "If you did not start anything heavy, look at what is running.",
+        "low": "A service that normally works may have stopped."
+      },
+      "network": {
+        "high": "If you did not expect the traffic, look at what is sending or receiving it.",
+        "low": "Nothing to do."
+      }
+    },
+    "hide": "Hide",
+    "hideLabel": "Hide for 7 days: {what}",
+    "hidden": "Hidden for 7 days",
+    "hiddenCount": "{n, plural, one {# finding is hidden.} other {# findings are hidden.}} “Show hidden findings” on the first page brings them back.",
+    "normal": "Nothing unusual. Compared with this server’s own last {days, plural, one {# day} other {# days}}.",
+    "notEnough": "Not enough data yet: {days, plural, =0 {no history} one {# day of history} other {# days of history}}, {min} are needed before anything is concluded.",
+    "notMeasured": "Not enough data: this platform does not report CPU figures, so nothing is concluded about this server’s use."
   }
 }

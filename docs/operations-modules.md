@@ -56,6 +56,7 @@
 ## Akıllı özellikler
 
 Kurallar `apps/api/src/smart-rules.ts` içindedir ve birim testleri vardır. Veriler `apps/api/src/smart.ts` uçlarından gelir.
+Sonradan eklenen yardımcılar (olağan dışı kullanım ve diğerleri) kuralları ve eşikleriyle [smart-features.md](smart-features.md) sayfasındadır.
 
 - **Doğru boyutlandırma:** son 7 günün CPU örnekleri (`server_cpu_samples`) kullanılır. Öneri için en az 3 gün ve 24
   örnek gerekir.

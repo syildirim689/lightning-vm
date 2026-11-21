@@ -3074,6 +3074,22 @@
       "NO_FIREWALL": {
         "title": "{n, plural, one {{name} sunucusunda firewall yok} other {# sunucuda firewall yok}}",
         "body": "Gelen tüm trafik açık. Firewall'lar sayfasından tek tıkla koruyabilirsiniz."
+      },
+      "USAGE_ANOMALY_CPU_HIGH": {
+        "title": "{name}: işlemci kullanımı olağandan çok yüksek",
+        "body": "Son 3 saatte ortalama %{recent}; günün bu saatlerinde olağanı %{usual} ({baseline} saatlik geçmişten)."
+      },
+      "USAGE_ANOMALY_CPU_LOW": {
+        "title": "{name}: işlemci kullanımı olağandan çok düşük",
+        "body": "Son 3 saatte ortalama %{recent}; günün bu saatlerinde olağanı %{usual} ({baseline} saatlik geçmişten). Bir hizmet durmuş olabilir."
+      },
+      "USAGE_ANOMALY_NETWORK_HIGH": {
+        "title": "{name}: ağ trafiği olağandan çok yüksek",
+        "body": "Bir günde {recent} GB; olağan bir gün {usual} GB (önceki {baseline} günden)."
+      },
+      "USAGE_ANOMALIES": {
+        "title": "{count, plural, one {# sunucu} other {# sunucu}} olağanından çok farklı kullanılıyor",
+        "body": "Her sunucu kendi geçmişiyle karşılaştırıldı. {suspicious, plural, =0 {Kötüye kullanıma benzeyen yok.} one {# tanesi kötüye kullanıma benziyor.} other {# tanesi kötüye kullanıma benziyor.}}"
       }
     },
     "hide": {
@@ -3387,6 +3403,10 @@
       "account_reseller": {
         "title": "Bayi ve hesabınız",
         "help": "Bir bayi hesabınızı yönetmeye başladığında ya da bıraktığında, veya bir müşteriniz sizden ayrıldığında."
+      },
+      "server_usage_anomaly": {
+        "title": "Olağan dışı kullanım",
+        "help": "Bir sunucunun işlemci ya da ağ kullanımı kendi yakın geçmişinden keskin biçimde ayrıldığında (saatte bir bakılır; bulgu başına bir kez)."
       }
     },
     "policyTitle": "Önce yönetici, sonra kullanıcı",
@@ -5407,7 +5427,16 @@
     "findPlaceholder": "Sunucu, müşteri, adres veya port",
     "export": "CSV indir",
     "noMatch": "Aramaya uyan bulgu yok.",
-    "clearFilter": "Süzgeci kaldır: {what}"
+    "clearFilter": "Süzgeci kaldır: {what}",
+    "usage": "Olağan dışı kullanım",
+    "usageNone": "Hiçbir sunucunun kullanımı kendi olağanının dışına çıkmadı.",
+    "usageOpen": "Açık",
+    "usageAbuseOpen": "{n, plural, one {# kötüye kullanım bulgusu açık} other {# kötüye kullanım bulgusu açık}}",
+    "usageHelp": "İşlemci ya da ağ kullanımı kendi yakın geçmişinden keskin biçimde ayrılan sunucular (saatte bir bakılır). Bunlar kanıt değil istatistiktir: sunucunun sahibi aynı bulguyu sunucu sayfasında görür. “Kötüye kullanıma benziyor” yukarıdaki bulguların aradığına benzeyen sayıları işaretler.",
+    "hint": {
+      "cpu_pinned": "Madenciliğe benziyor: işlemci sürekli dolu",
+      "outbound": "Saldırı trafiğine benziyor: neredeyse tamamı giden"
+    }
   },
   "Vdc": {
     "title": "Sanal veri merkezleri",
@@ -9214,5 +9243,39 @@
   },
   "Capabilities": {
     "unavailable": "Bu platformda kullanılamıyor."
+  },
+  "Anomalies": {
+    "title": "Kullanım takibi",
+    "help": "Panel saatte bir bu sunucunun işlemci ve ağ kullanımını kendi yakın geçmişiyle karşılaştırır. Bulgu bir hüküm değil, bakmanız için bir işarettir; sunucuda hiçbir şey değiştirilmez.",
+    "kind": {
+      "cpu": {
+        "high": "İşlemci kullanımı olağandan çok yüksek",
+        "low": "İşlemci kullanımı olağandan çok düşük"
+      },
+      "network": {
+        "high": "Ağ trafiği olağandan çok yüksek",
+        "low": "Ağ trafiği olağandan çok düşük"
+      }
+    },
+    "cpuNumbers": "Son 3 saat: ortalama %{recent}. Günün bu saatlerinde olağanı: %{usual} ({days} güne yayılan {hours} saatlik geçmişten).",
+    "networkNumbers": "Bugün ve dünün yükseği: {recent} GB, %{out} kadarı giden. Olağan bir gün: {usual} GB (önceki {days} günden).",
+    "since": "{when} başladı",
+    "advice": {
+      "cpu": {
+        "high": "Ağır bir iş başlatmadıysanız neyin çalıştığına bakın.",
+        "low": "Normalde çalışan bir hizmet durmuş olabilir."
+      },
+      "network": {
+        "high": "Bu trafiği beklemiyorsanız neyin gönderip aldığına bakın.",
+        "low": "Yapılacak bir şey yok."
+      }
+    },
+    "hide": "Gizle",
+    "hideLabel": "7 gün gizle: {what}",
+    "hidden": "7 gün gizlendi",
+    "hiddenCount": "{n, plural, one {# bulgu gizli.} other {# bulgu gizli.}} İlk sayfadaki “gizlenen bulguları göster” geri getirir.",
+    "normal": "Olağan dışı bir şey yok. Sunucunun kendi son {days, plural, one {# günü} other {# günü}} ile karşılaştırıldı.",
+    "notEnough": "Henüz yeterli veri yok: {days, plural, =0 {geçmiş yok} one {# günlük geçmiş var} other {# günlük geçmiş var}}, bir sonuca varmak için {min} gün gerekir.",
+    "notMeasured": "Yeterli veri yok: bu platform işlemci ölçümü bildirmiyor, bu yüzden sunucunun kullanımı hakkında bir sonuca varılmaz."
   }
 }

@@ -26,6 +26,13 @@ Türkçe [docs/upgrade-notes.md](docs/upgrade-notes.md) sayfasını okuyun.*
   by link or code, first password reset by mail, accounts made by staff, a directory, single sign-on or the billing
   integration) stay verified. New routes: `GET /api/account/email-verification`, `POST …/send`, `POST …/confirm`;
   `GET /api/auth/me` now returns `emailVerified`. See [docs/auth.md](docs/auth.md#e-posta-adresi-doğrulama).
+- **Usage watch.** Once an hour the worker compares every server's CPU and network use with its own recent history
+  (median and median absolute deviation, a minimum of history, separate thresholds to open and to close). The owner
+  sees a finding with its numbers on the server's page and in the insights, can hide it, and is told once
+  (`server.usage_anomaly`, in-app by default). Staff get an "Unusual use" tab on the abuse page with a note when a
+  finding resembles mining or an outbound flood. Platforms without CPU figures say "not enough data". Rules and
+  thresholds: [docs/smart-features.md](docs/smart-features.md). Migration 088 adds two tables and one index; nothing
+  for the operator to do.
 
 ### Changed
 

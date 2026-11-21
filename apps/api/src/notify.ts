@@ -80,6 +80,14 @@ export const catalog: Record<string, EventDef> = {
         : d.kind === 'restart' ? { title: d.name + ': restart needed', body: 'Installed updates only take effect after a restart. Restart the server from its page at a convenient time.' }
         : d.kind === 'installed' ? { title: d.name + ': updates installed', body: d.restart === 'true' ? 'The automatic update finished. The server must restart for it to take effect.' : 'The automatic update finished; no restart is needed.' }
         : { title: d.name + ': updates not installed', body: 'The update failed (' + (d.message || '-') + '). Connect to the server and look at the package manager\'s output.' } } },
+  // From the worker's hourly check (anomalies.mjs): a server's use left its own baseline. Told once when the finding opens.
+  'server.usage_anomaly': { audience: 'user', channels: all, defaults: ['inApp'], link: (d) => `/servers/${d.serverId}`,
+    text: { tr: (d) => d.metric === 'network' ? { title: `${d.name}: ağ trafiği olağandan çok yüksek`, body: `Son günde ${d.recent} GB; bu sunucunun olağan günü ${d.usual} GB. Beklediğiniz bir şey değilse sunucuya bakın.` }
+        : d.direction === 'low' ? { title: `${d.name}: işlemci kullanımı olağandan çok düşük`, body: `Son saatlerde ortalama %${d.recent}; bu saatlerde olağanı %${d.usual}. Bir hizmet durmuş olabilir.` }
+        : { title: `${d.name}: işlemci kullanımı olağandan çok yüksek`, body: `Son saatlerde ortalama %${d.recent}; bu saatlerde olağanı %${d.usual}. Beklediğiniz bir şey değilse sunucuya bakın.` },
+      en: (d) => d.metric === 'network' ? { title: `${d.name}: network traffic far above usual`, body: `${d.recent} GB in the last day; this server's usual day is ${d.usual} GB. Have a look if you did not expect it.` }
+        : d.direction === 'low' ? { title: `${d.name}: CPU use far below usual`, body: `${d.recent}% on average over the last hours; ${d.usual}% is usual at this time of day. A service may have stopped.` }
+        : { title: `${d.name}: CPU use far above usual`, body: `${d.recent}% on average over the last hours; ${d.usual}% is usual at this time of day. Have a look if you did not expect it.` } } },
   'billing.budget_exceeded': { audience: 'user', channels: all, defaults: ['inApp', 'email'], link: () => '/',
     text: { tr: (d) => ({ title: 'Aylık bütçeniz aşıldı', body: `Sunucularınızın aylık tutarı ${d.monthly} ${d.currency}; belirlediğiniz bütçe ${d.amount} ${d.currency}.` }),
       en: (d) => ({ title: 'Your monthly budget is exceeded', body: `Your servers cost ${d.monthly} ${d.currency} a month; your budget is ${d.amount} ${d.currency}.` }) } },

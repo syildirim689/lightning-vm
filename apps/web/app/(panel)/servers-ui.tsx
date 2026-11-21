@@ -19,6 +19,7 @@ import { useApiAction, useApiQuery } from '../../lib/query';
 import { VmDetails } from './vm-details';
 import { ServerIso } from './server-iso';
 import { ServerHealth } from '../../components/smart';
+import { ServerAnomalies } from '../../components/anomalies';
 import { CloneServer, Copy, OrderSimilar, QuickConnect, RenameForm, RenameServer, ServerLabels } from './server-extras';
 import { remember } from '../../lib/recent';
 import { useDocTitle } from '../../lib/title';
@@ -662,6 +663,7 @@ export function ServerDetail({ id }: { id: string }) {
     </div>
 
     <div className={`grid grid-cols-1 gap-6 ${s.address ? 'lg:grid-cols-2' : ''}`}><ServerHealth id={s.id} since={s.createdAt} measured={supports(s, 'metrics')}/><QuickConnect server={s}/></div>
+    {s.state === 'ready' && <ServerAnomalies id={s.id}/>}
     {own && <ServerLabels key={`${s.tags?.join()}|${s.notes}`} server={s}/>}
     {own && (allowed.power || allowed.snapshots || allowed.backups) && s.state !== 'provisioning' && <PowerSchedules serverId={s.id} power={allowed.power} snapshots={allowed.snapshots} backups={allowed.backups}/>}
     {allowed.snapshots && ['ready', 'error'].includes(s.state) && <ServerSnapshots serverId={s.id} busy={!!open}/>}
