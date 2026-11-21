@@ -16,6 +16,37 @@ in Turkish and English. It can be searched, filtered to the routes the reader ma
   controllers; `apps/api/src/api-docs/*.ts` hold the words. `test/api-reference.test.mjs` fails when a route has no
   entry, an entry has no route, a text is missing in one language or a path parameter is not described.
 
+## Running a request from the reference
+
+Every route of the reference has a **Run this request** part ("Try it"). It sends that route to the panel you are
+looking at, from your browser, with the session you are signed in with.
+
+- **What is sent is on the page first.** The request is built from the documented route and what you typed (path
+  values, the documented query fields, a JSON body) and shown as it will go: method, address, headers, body. The
+  session cookie is the browser's own; the page never reads or shows it.
+- **A change waits for a confirmation.** A `GET` is sent with one press. Anything else (`POST`, `PUT`, `PATCH`,
+  `DELETE`) opens a dialog that repeats the request and is sent only from there. These are real requests on live
+  data; there is no dry run.
+- **It is not a way around anything.** The API sees an ordinary request of your session: the route's permission, the
+  CSRF rule, two-factor and the audit log apply as for the same action in the panel. Routes your account may not
+  call are not offered. The request goes only to this panel's own API: a path value is one encoded segment of the
+  documented route (`../../x` stays `..%2F..%2Fx`), and no other address can be typed.
+- **Rate limit.** Requests sent from here carry `X-Lightning-Try: 1` and are counted per person and minute against
+  the limit of Settings → API (the one for tokens, default 600), with the same `X-RateLimit-*` headers and the same
+  `429`. One request is sent per press; nothing repeats by itself.
+- **Secrets.** Routes that hand out or change secrets (creating an API token, webhook secrets, the console: the
+  ones the reference marks "panel only") are not offered here; they stay on their own screens. In an answer, text
+  under a name that says secret (password, secret, token, key, cookie, credentials...) and text shaped like one
+  (an API token, a signing secret, a private key) is replaced before it is shown, and the page says how many values
+  it hid. A JSON answer that is cut off or does not parse is not shown at all. Nothing typed or answered is stored
+  in the browser or written to its console.
+- **Limits of the page.** At most 200 kB of an answer is read and 30 seconds waited; files (PDF, archives) are
+  named by their type, not shown. Internal routes (setup wizard, sign-in flows, provider callbacks) are not offered.
+
+Code: `apps/web/lib/api-reference.ts` (`buildRequest`, `maskSecrets`, `shownBody`; unit tests beside it),
+`apps/web/app/(panel)/api-docs/try-request.tsx`, the count in `apps/api/src/auth.ts`; API tests in
+`apps/api/test/integration/api-try.test.mjs`.
+
 ## Settings → API (administrators)
 
 - **Who may create tokens:** everyone, staff only or nobody (the same switch Security used to hold).

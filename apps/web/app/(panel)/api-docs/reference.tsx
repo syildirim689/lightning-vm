@@ -13,6 +13,7 @@ import { apiFetch, useErrorText } from '../../../lib/api';
 import { anchor, curl, exampleBody, guide, javascript, python, type Endpoint, type Field, type Lang, type Reference as Ref } from '../../../lib/api-reference';
 import { useApiQuery } from '../../../lib/query';
 import type { PublicConfig } from '../../../lib/session';
+import { TryRequest } from './try-request';
 
 const methods = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'] as const;
 const methodTone: Record<string, string> = { GET: 'bg-success/15 text-success', POST: 'bg-accent-soft text-accent', PUT: 'bg-warning/15 text-warning',
@@ -86,6 +87,7 @@ function EndpointBody({ e, lang }: { e: Endpoint; lang: Lang }) {
         <Tabs.Panel id="Python" className="pt-2"><CodeBlock code={python(e)} label={t('copyCode', { lang: 'Python' })}/></Tabs.Panel>
       </Tabs>
     </div>
+    <TryRequest e={e} lang={lang}/>
     {e.returns && <p className="text-sm"><span className="font-semibold">{t('returns')}: </span>{e.returns[lang]}</p>}
     {!!e.errors?.length && <div className="flex flex-wrap items-center gap-1.5 text-sm"><span className="font-semibold">{t('errors')}:</span>
       {e.errors.map((c) => <code key={c} className="rounded bg-default px-1.5 py-0.5 font-mono text-xs">{c}</code>)}</div>}

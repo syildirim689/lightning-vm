@@ -2171,6 +2171,122 @@ test.describe('people, settings and smart features (English browser)', () => {
     await page.setViewportSize({ width: 1280, height: 720 });
   });
 
+  test('API reference: a request is run from the page, shown before it is sent; a change waits for a confirmation; secrets are not shown; permissions hold', async ({ page, browser }) => {
+    await signInAdmin(page);
+    await page.goto('/api-docs');
+    // Opens one route of the reference and returns its "Run this request" part.
+    const runner = async (p: Page, find: string, anchorId: string) => {
+      await p.getByRole('searchbox', { name: 'Search endpoints' }).fill(find);
+      const route = p.locator(`#${anchorId}`);
+      await route.locator('summary').click();
+      const part = route.getByTestId('try-request');
+      await expect(part).toBeVisible();
+      return part;
+    };
+    const projects = async () => ((await (await page.request.get('/api/projects')).json()) as { projects: { id: string; name: string }[] }).projects;
+
+    // A read: the request is on the page before anything is sent, then the answer; the session cookie is never shown.
+    let part = await runner(page, '/auth/me', 'get-auth-me');
+    await expect(part.getByTestId('try-preview')).toHaveCount(0);
+    await part.getByRole('button', { name: 'Try it' }).click();
+    await expect(part.getByText('it reads live data')).toBeVisible();
+    await expect(part.getByTestId('try-preview')).toHaveText(/^GET \/api\/auth\/me\s+X-Lightning-Try: 1\s+Cookie: your session \(added by the browser, not shown\)$/);
+    await expect(part.getByTestId('try-response')).toHaveCount(0);
+    await part.getByRole('button', { name: 'Send request' }).click();
+    const answer = part.getByTestId('try-response');
+    await expect(answer).toContainText('200');
+    await expect(answer).toContainText(admin.email);
+    await expect(answer).toContainText('content-type');
+    // Counted like a token's request: the answer carries the limit of Settings → API.
+    await expect(answer).toContainText('x-ratelimit-remaining');
+    const cookie = (await page.context().cookies()).find((c) => c.name.endsWith('lvm.session_token'))!.value;
+    expect(await page.locator('body').innerText()).not.toContain(cookie.slice(0, 16));
+
+    // A change: broken input is named and cannot be sent; a good request waits for the confirmation that repeats it.
+    part = await runner(page, '/projects', 'post-projects');
+    await part.getByRole('button', { name: 'Try it' }).click();
+    await expect(part.getByText('It is sent only after you confirm it.')).toBeVisible();
+    const body = part.getByLabel('Body (JSON)');
+    await expect(body).toHaveValue(/"name"/);
+    await body.fill('{oops');
+    await expect(part.getByTestId('try-problems')).toContainText('The body is not valid JSON.');
+    await expect(part.getByRole('button', { name: 'Send request' })).toBeDisabled();
+    // The name is shaped like an API token: the API echoes it, the page must not.
+    const secretLike = `lvm_e2e${'x'.repeat(24)}`;
+    await body.fill(JSON.stringify({ name: secretLike }));
+    await expect(part.getByTestId('try-preview')).toContainText('POST /api/projects');
+    await expect(part.getByTestId('try-preview')).toContainText('X-Lightning-CSRF: 1');
+    await part.getByRole('button', { name: 'Send request' }).click();
+    const ask = page.getByRole('alertdialog');
+    await expect(ask).toContainText('Send this POST request?');
+    await expect(ask).toContainText('POST /api/projects');
+    await ask.getByRole('button', { name: 'Cancel' }).click();
+    await expect(ask).toBeHidden();
+    await expect(part.getByTestId('try-response')).toHaveCount(0);
+    expect((await projects()).some((p) => p.name === secretLike), 'nothing was sent without the confirmation').toBe(false);
+    await part.getByRole('button', { name: 'Send request' }).click();
+    await page.getByRole('alertdialog').getByRole('button', { name: 'Send POST' }).click();
+    await expect(part.getByTestId('try-response')).toContainText('201');
+    await expect(part.getByTestId('try-response')).toContainText('•••••• (hidden)');
+    await expect(part.getByTestId('try-response')).toContainText('1 value that looks like a secret is hidden.');
+    await expect(part.getByTestId('try-response')).not.toContainText(secretLike);
+    const made = (await projects()).find((p) => p.name === secretLike);
+    expect(made, 'the confirmed request was really sent').toBeTruthy();
+    // A phone: the open runner with its answer fits, in the dark theme too.
+    await page.setViewportSize({ width: 390, height: 844 });
+    await expectNoOverflow(page, 'API reference with an answer at 390 px');
+    await tour(part, 'api-docs-try-phone');
+    await page.emulateMedia({ colorScheme: 'dark' });
+    await tour(part, 'api-docs-try-phone-dark');
+    await page.emulateMedia({ colorScheme: 'light' });
+    await page.setViewportSize({ width: 1280, height: 900 });
+
+    // A path value stays inside its route: what is typed is one encoded segment, never another address.
+    part = await runner(page, '/projects', 'delete-projects-id');
+    await part.getByRole('button', { name: 'Try it' }).click();
+    await expect(part.getByTestId('try-problems')).toContainText('Fill in “id”.');
+    await expect(part.getByRole('button', { name: 'Send request' })).toBeDisabled();
+    await part.getByLabel('id', { exact: true }).fill('../../admin/users');
+    await expect(part.getByTestId('try-preview')).toContainText('DELETE /api/projects/..%2F..%2Fadmin%2Fusers');
+    await part.getByLabel('id', { exact: true }).fill(made!.id);
+    await expect(part.getByTestId('try-preview')).toContainText(`DELETE /api/projects/${made!.id}`);
+    await part.getByRole('button', { name: 'Send request' }).click();
+    await page.getByRole('alertdialog').getByRole('button', { name: 'Send DELETE' }).click();
+    await expect(part.getByTestId('try-response')).toContainText('204');
+    await expect(part.getByTestId('try-response')).toContainText('No body.');
+    expect((await projects()).some((p) => p.id === made!.id)).toBe(false);
+
+    // A route that hands out a secret is not run from here at all.
+    part = await runner(page, '/account/api-tokens', 'post-account-api-tokens');
+    await expect(part).toContainText('this route hands out or changes secrets');
+    await expect(part.getByRole('button', { name: 'Try it' })).toHaveCount(0);
+
+    // A customer: what the account may not call is not offered, and what it may call answers as it does everywhere.
+    const customer = await (await browser.newContext({ locale: 'en-US' })).newPage();
+    try {
+      await customer.goto('/register');
+      await customer.getByLabel('Email').fill(`runner-${Date.now()}@example.test`);
+      await customer.getByLabel('Password').fill('e2e runner passphrase 2026');
+      await customer.getByRole('button', { name: 'Create account' }).click();
+      await expect(customer).toHaveURL(/\/$/);
+      await customer.goto('/api-docs');
+      // The page lists only what the account can use; with that filter off the staff routes show, locked.
+      await customer.getByRole('searchbox', { name: 'Search endpoints' }).fill('/admin/users');
+      await expect(customer.locator('#get-admin-users')).toHaveCount(0);
+      const onlyMine = customer.getByRole('switch', { name: 'Only those I can use' });
+      await tick(onlyMine);
+      await expect(onlyMine).not.toBeChecked();
+      let own = await runner(customer, '/admin/users', 'get-admin-users');
+      await expect(own).toContainText('your account does not have the permission this route needs');
+      await expect(own.getByRole('button', { name: 'Try it' })).toHaveCount(0);
+      own = await runner(customer, '/servers', 'get-servers');
+      await own.getByRole('button', { name: 'Try it' }).click();
+      await own.getByRole('button', { name: 'Send request' }).click();
+      await expect(own.getByTestId('try-response')).toContainText('200');
+      await expect(own.getByTestId('try-response')).toContainText('"servers": []');
+    } finally { await customer.context().close(); }
+  });
+
   test('payments: live credentials saved apart from test ones, checked, activated and removed', async ({ page }) => {
     await signInAdmin(page);
     await expect(page).toHaveURL(/\/admin$/);

@@ -8621,7 +8621,44 @@
         "p4": "If a token may have leaked, remove it at once. An administrator can see and revoke every account's tokens in Settings → API and follow what they did in the request log."
       }
     },
-    "pdfButton": "Download PDF"
+    "pdfButton": "Download PDF",
+    "try": {
+      "title": "Run this request",
+      "intro": "Send this request to this panel from your browser, with the session you are signed in with. You see the request before it goes; your permissions and the panel's limits apply as everywhere.",
+      "open": "Try it",
+      "close": "Close",
+      "realRead": "A real request to this panel, as you: it reads live data.",
+      "realChange": "A real request to this panel, as you: it changes live data. It is sent only after you confirm it.",
+      "body": "Body (JSON)",
+      "preview": "The request that will be sent",
+      "cookieNote": "your session (added by the browser, not shown)",
+      "send": "Send request",
+      "cancel": "Cancel",
+      "confirmTitle": "Send this {method} request?",
+      "confirmSend": "Send {method}",
+      "confirmBody": "This is not a test: the request below is sent to this panel with your account and does what it says.",
+      "answer": "Answer",
+      "took": "{ms} ms",
+      "redirected": "redirect (not followed)",
+      "noBody": "No body.",
+      "notShown": "The body is not shown ({type}).",
+      "tooLarge": "The body is larger than {kb} kB and is not shown ({type}).",
+      "hidden": "{n, plural, one {# value that looks like a secret is hidden.} other {# values that look like secrets are hidden.}}",
+      "problem": {
+        "REQUIRED": "Fill in “{field}”.",
+        "INVALID_VALUE": "“{field}” cannot be used in the address.",
+        "INVALID_JSON": "The body is not valid JSON."
+      },
+      "failed": {
+        "network": "The request did not reach the panel.",
+        "timeout": "No complete answer within {seconds} seconds; the request was stopped here (the panel may still finish it)."
+      },
+      "not": {
+        "internal": "Not offered here: this route belongs to the panel's own flows (setup, sign-in, provider callbacks).",
+        "panelOnly": "Not offered here: this route hands out or changes secrets and is used from its own screen in the panel.",
+        "notAllowed": "Not offered here: your account does not have the permission this route needs."
+      }
+    }
   },
   "Table": {
     "sortBy": "Sort by",

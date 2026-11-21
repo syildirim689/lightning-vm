@@ -8621,7 +8621,44 @@
         "p4": "Bir anahtarın sızdığından şüphelenirseniz hemen silin. Yönetici Ayarlar → API'den her hesabın anahtarını görebilir, iptal edebilir ve istek günlüğünden ne yapıldığını izleyebilir."
       }
     },
-    "pdfButton": "PDF indir"
+    "pdfButton": "PDF indir",
+    "try": {
+      "title": "Bu isteği çalıştır",
+      "intro": "Bu isteği tarayıcınızdan, açık olan oturumunuzla bu panele gönderin. İsteği gitmeden önce görürsünüz; izinleriniz ve panelin sınırları her yerde olduğu gibi geçerlidir.",
+      "open": "Dene",
+      "close": "Kapat",
+      "realRead": "Bu panele sizin adınıza giden gerçek bir istek: canlı veriyi okur.",
+      "realChange": "Bu panele sizin adınıza giden gerçek bir istek: canlı veriyi değiştirir. Yalnızca siz onayladıktan sonra gönderilir.",
+      "body": "Gövde (JSON)",
+      "preview": "Gönderilecek istek",
+      "cookieNote": "oturumunuz (tarayıcı ekler, gösterilmez)",
+      "send": "İsteği gönder",
+      "cancel": "Vazgeç",
+      "confirmTitle": "Bu {method} isteği gönderilsin mi?",
+      "confirmSend": "{method} gönder",
+      "confirmBody": "Bu bir deneme değildir: aşağıdaki istek hesabınızla bu panele gönderilir ve yazdığını yapar.",
+      "answer": "Yanıt",
+      "took": "{ms} ms",
+      "redirected": "yönlendirme (izlenmedi)",
+      "noBody": "Gövde yok.",
+      "notShown": "Gövde gösterilmiyor ({type}).",
+      "tooLarge": "Gövde {kb} kB'den büyük, gösterilmiyor ({type}).",
+      "hidden": "{n, plural, one {Sır gibi görünen # değer gizlendi.} other {Sır gibi görünen # değer gizlendi.}}",
+      "problem": {
+        "REQUIRED": "“{field}” alanını doldurun.",
+        "INVALID_VALUE": "“{field}” adreste kullanılamaz.",
+        "INVALID_JSON": "Gövde geçerli bir JSON değil."
+      },
+      "failed": {
+        "network": "İstek panele ulaşmadı.",
+        "timeout": "{seconds} saniye içinde tam bir yanıt gelmedi; istek burada durduruldu (panel işlemi yine de bitirebilir)."
+      },
+      "not": {
+        "internal": "Burada sunulmaz: bu rota panelin kendi akışlarına aittir (kurulum, giriş, sağlayıcı dönüşleri).",
+        "panelOnly": "Burada sunulmaz: bu rota sır verir ya da değiştirir ve paneldeki kendi ekranından kullanılır.",
+        "notAllowed": "Burada sunulmaz: hesabınızda bu rotanın gerektirdiği izin yok."
+      }
+    }
   },
   "Table": {
     "sortBy": "Sırala",

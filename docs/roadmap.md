@@ -31,5 +31,4 @@ yalnızca **olmayanlar** ve **denenmemiş olanlar** durur. Tarih ya da söz veri
   sunucuda çalışma (cluster; [cluster.md](cluster.md) yalnızca tasarımdır). GHCR imajlarıyla sürümlü, imzalı kurulum
   paketi (kurulum ve güncelleme kaynak koddan derler). Panel sunucusunda Debian / Ubuntu dışındaki dağıtımlar için
   işletim sistemi güncellemeleri; müşteri sunucularında Windows güncellemeleri.
-- **API belgelerinde** tarayıcıdan istek çalıştırma.
 - GPU geçişi, NUMA ayarları.

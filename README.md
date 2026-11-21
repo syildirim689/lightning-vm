@@ -115,8 +115,9 @@ girmeniz gerekmez. Özelliklerin tamamı yalnızca VMware'de vardır; diğer alt
   sunucuyu sıfırlama)
 - **Kayıtlı görünümler:** sunucu listesindeki süzgeç ve sıralama adla kaydedilir, tek tıkla geri çağrılır; biri
   varsayılan yapılabilir. Hesapla birlikte saklanır: her cihazda görünür, yalnızca sahibi görür
-- **API anahtarları ve API belgeleri:** arama, süzgeçler, örnek istekler, OpenAPI ve PDF indirme (istekler tarayıcıdan
-  çalıştırılamaz). **Webhook'lar:** imzalı, yeniden denenen, teslimat kaydı ve sınama düğmesiyle
+- **API anahtarları ve API belgeleri:** arama, süzgeçler, örnek istekler, OpenAPI ve PDF indirme. **İstek
+  tarayıcıdan çalıştırılır:** açık oturumla, gitmeden önce gösterilerek; GET dışındaki her istek onay ister, sır
+  veren rotalar sunulmaz, yanıttaki sır görünümlü değerler gizlenir, izinler ve API hız sınırı aynen geçerlidir. **Webhook'lar:** imzalı, yeniden denenen, teslimat kaydı ve sınama düğmesiyle
 - **Verilerimi indir:** hesabın panelde tutulan verileri tek JSON dosyası olarak (parola, oturum ve gizli anahtarlar hariç)
 - **Özel ağlar** ve **firewall** şablonları (ikisi de yalnız VMware'de, dağıtık anahtarla), ters DNS (PTR), SSH
   anahtarları (GitHub'dan içe aktarma)
@@ -329,6 +330,7 @@ sunucunun kopyası çıkarılamaz (kopya yalnızca şablondan). Her platformun a
 
 | Ne | Nerede |
 |---|---|
+| **API belgelerinde istek çalıştırma (2026-11-21).** Belgelerdeki her rota tarayıcıdan, açık oturumla çalıştırılabilir: istek gitmeden önce gösterilir, GET dışındakiler onay ister, yalnızca bu panelin belgelenmiş rotalarına gider, kişi başına API hız sınırına sayılır; sır veren rotalar sunulmaz ve yanıttaki sırlar gizlenir | API belgeleri (`/api-docs`) · [docs/api.md](docs/api.md#running-a-request-from-the-reference) |
 | **Stripe webhook'u (2026-11-21).** Stripe ödemenin sonucunu imzalı bildirimle panele kendisi söyler; imza ham gövde üzerinden doğrulanır, beş dakikadan eski imza reddedilir ve sonuç, tarayıcı dönüşü ve tahsilat çalıştırmasıyla aynı yoldan bir kez kaydedilir. Ayarlar ekranı Stripe'a girilecek adresi ve olayları gösterir. Kendi imzaladığımız olaylarla sınandı; gerçek Stripe'la denenmedi | Ayarlar → Ödemeler → Stripe · [docs/payments.md](docs/payments.md#stripe-webhooku) |
 | **Proje başına kota (2026-11-21).** Personel bir projeye kendi kotasını verir; o projeye verilen siparişlerde sahibinin kotasının yerine geçer ve yalnızca o projenin sunucularını sayar. Kotalar listesinde kullanılan / sınır; müşteride projede ve sipariş özetinde kotanın bu sunucuyla varacağı durum; aşan sipariş `PROJECT_QUOTA_EXCEEDED` ile reddedilir | Katalog → Kotalar · Hesabım → Projeler · Sipariş · [docs/catalog.md](docs/catalog.md#kotalar-ve-projeler) |
 | **E-posta adresi doğrulama (2026-11-21).** Kayıtla açılan hesaba altı haneli kod postalanır; kod yalnızca o hesabın oturumunda geçer ve hesapta hiçbir şeyi silmez. Profilde doğrulanmamış adres uyarısı ve yeniden gönderme; isteğe bağlı "doğrulanmamış hesap sipariş veremez" kuralı (varsayılan kapalı). E-posta ayarlı değilse görünmez | Hesabım → Profil · Ayarlar → Giriş güvenliği · [docs/auth.md](docs/auth.md#e-posta-adresi-doğrulama) |

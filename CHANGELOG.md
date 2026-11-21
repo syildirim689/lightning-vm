@@ -74,6 +74,13 @@ Türkçe [docs/upgrade-notes.md](docs/upgrade-notes.md) sayfasını okuyun.*
   send (`payment_intent.succeeded`, `checkout.session.expired`). Tested with events signed here with a test
   secret; **not tried against Stripe itself**. Nothing changes until a signing secret is saved. See
   [docs/payments.md](docs/payments.md#stripe-webhooku).
+- **Running a request from the API reference.** Every route on `/api-docs` can be sent from the page with the
+  signed-in session: the request is shown before it goes, anything but a `GET` is sent only after a confirmation
+  that repeats it, it can only reach this panel's documented routes, and routes that hand out secrets are not
+  offered. Answers are shown without values that look like secrets. Such requests carry `X-Lightning-Try: 1` and
+  are counted per person and minute against the API rate limit of Settings → API, with the same `X-RateLimit-*`
+  headers; permissions, the CSRF rule and the audit log apply as for any request of that session. See
+  [docs/api.md](docs/api.md#running-a-request-from-the-reference).
 
 ### Changed
 

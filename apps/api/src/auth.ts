@@ -164,6 +164,10 @@ export async function currentSession(req: FastifyRequest): Promise<{ user: User;
   const staff = permissions.some((p) => !customerLevel(p));
   // Single sign-on accounts have no panel password: their provider does the second factor.
   const twoFactorRequired = !u.twoFactorEnabled && !impersonatedBy && !['oidc', 'social'].includes((u as { authSource?: string }).authSource ?? '') && (policy === 'all' || (policy === 'staff' && staff) || !!limits.require2fa);
+  // A request run from the API reference page says so (X-Lightning-Try): it is counted per person and minute against
+  // the administrator's limit for API tokens (Settings → API) and answered with the same rate headers, so trying a
+  // route there behaves as a token would. Everything else about it is this session's ordinary request.
+  if (req.headers['x-lightning-try'] === '1') await countRequest(req, `try:${u.id}`, (await getSettings('api')).rateLimit);
   return { user: { id: u.id, email: u.email, name: u.name ?? '', roles: splitRoles(u.role), permissions,
     locale: u.locale === 'tr' ? 'tr' : 'en', timeZone: (u as { timeZone?: string | null }).timeZone ?? null, username: (u as { username?: string | null }).username ?? null, impersonatedBy, twoFactorEnabled: !!u.twoFactorEnabled, twoFactorRequired, phoneNumber: u.phoneNumber ?? null,
     phoneNumberVerified: !!u.phoneNumberVerified, emailVerified: !!u.emailVerified }, token: s.session.token, id: s.session.id };
