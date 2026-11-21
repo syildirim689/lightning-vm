@@ -3271,6 +3271,12 @@ test.describe('people, settings and smart features (English browser)', () => {
       ...(serverId ? [[`/servers/${serverId}`, 'new-server', ['[data-section="Usage watch"]', '[data-schedule-suggestion="suggested"]']] as [string, string, string[]]] : []),
       ...(connectionId ? [[`/admin/vmware/${connectionId}`, 'new-connection-hosts', ['[data-quiet-hours="suggested"]'], () => page.getByRole('tab', { name: /Hosts/ }).click()] as [string, string, string[], () => Promise<void>]] : []),
     ];
+    // The measuring is checked on known cases first: a dark word on a dark card and a pale one on a nearly white layer
+    // are found, a clear one is not. (A check that finds nothing because it measures nothing would pass for ever.)
+    await page.evaluate(() => document.body.insertAdjacentHTML('beforeend', '<div id="contrast-probe"><p style="color:#333;background:#111">dim</p><p style="color:#eee;background:#111">clear</p>'
+      + '<div style="background:rgba(255,255,255,0.92)"><p style="color:#f2f2f2">pale</p></div><p style="color:#333;background:#111" aria-hidden="true">not shown</p></div>'));
+    expect((await unreadable(page, '#contrast-probe')).map((x) => x.split('"')[1])).toEqual(['dim', 'pale']);
+    await page.evaluate(() => document.getElementById('contrast-probe')?.remove());
     const problems: string[] = [];
     for (const scheme of ['dark', 'light'] as const) {
       await page.emulateMedia({ colorScheme: scheme });
