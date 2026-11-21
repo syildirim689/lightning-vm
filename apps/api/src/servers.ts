@@ -197,8 +197,11 @@ const actedFor = (req: AuthedRequest, ownerId: string) => (req.user?.id && req.u
 
 // prepare: what must be in place before the worker can pick the operation up (an invoice, tracking rows); it runs after
 // the operation exists and before it is queued. If it fails, the operation ends there and never runs.
+// admit: what must still hold at the moment the operation is accepted (a resize: the quota). It runs in the transaction
+// that writes the operation, after the owner's account is locked (the lock an order counts its quota under), so two
+// requests of one account are admitted one after the other and the second counts what the first was given.
 export async function startOperation(req: AuthedRequest, server: { id: string; owner_id: string }, kind: Kind, key: string, requestHash: string, params: object = {},
-  prepare?: (op: { id: string }) => Promise<void>) {
+  prepare?: (op: { id: string }) => Promise<void>, admit?: (db: PoolClient) => Promise<void>) {
   await refuseOnRestoreHold();
   // Read here, for every caller (the server page, bulk actions, schedules, data centers).
   if (lockedKinds.has(kind) && (await pool.query('SELECT 1 FROM servers WHERE id = $1 AND locked', [server.id])).rowCount) {
@@ -221,9 +224,21 @@ export async function startOperation(req: AuthedRequest, server: { id: string; o
   try {
     // Only while the server is still the owner's the caller read (ownerWrite says why): the locking read waits for a
     // hand-over in progress and then sees the new owner, and an operation accepted first keeps the hand-over out (busy).
-    const { rows: [op] } = await pool.query(`INSERT INTO operations (kind, status, idempotency_key, request_hash, server_id, owner_id, step, deadline_at, params, started_by, capped_for)
+    const insert = async (db: PoolClient | typeof pool) => (await db.query(`INSERT INTO operations (kind, status, idempotency_key, request_hash, server_id, owner_id, step, deadline_at, params, started_by, capped_for)
       SELECT $1, 'pending', $2, $3, s.id, s.owner_id, 'queued', now() + make_interval(mins => $6), $7, $8, $9 FROM servers s WHERE s.id = $4 AND s.owner_id = $5 FOR SHARE OF s
-      RETURNING id, kind, status`, [kind, key, requestHash, server.id, server.owner_id, deadlineMinutes[kind], params, startedBy(req), cappedFor(req, server.owner_id)]);
+      RETURNING id, kind, status`, [kind, key, requestHash, server.id, server.owner_id, deadlineMinutes[kind], params, startedBy(req), cappedFor(req, server.owner_id)])).rows[0];
+    let op;
+    if (admit) {
+      const db = await pool.connect();
+      try {
+        await db.query('BEGIN');
+        await db.query('SELECT 1 FROM users WHERE id = $1 FOR UPDATE', [server.owner_id]);
+        // Another operation open on this server is the refusal the caller gets (below), not what `admit` makes of it.
+        if (!(await db.query("SELECT 1 FROM operations WHERE server_id = $1 AND status IN ('pending', 'running')", [server.id])).rowCount) await admit(db);
+        op = await insert(db);
+        await db.query('COMMIT');
+      } catch (err) { await db.query('ROLLBACK').catch(() => undefined); throw err; } finally { db.release(); }
+    } else op = await insert(pool);
     if (!op) throw apiError(404, 'NOT_FOUND', 'Unknown server');
     if (prepare) {
       await prepare(op).catch(async (err) => {
@@ -241,7 +256,8 @@ export async function startOperation(req: AuthedRequest, server: { id: string; o
 }
 
 // A resize's target: priced like an order in the server's own location (with its extra IPv4 and application), the disk
-// never smaller, and the increase within the owner's quota and the location's free capacity.
+// never smaller, and the increase within the owner's quota and the location's free capacity. The quota is read here
+// for the quote and for an early refusal; what decides is admitGrowth, under the owner's lock, where the resize is accepted.
 async function resizeTarget(req: AuthedRequest, server: Record<string, any>, body: Input) {
   if (server.vdc_id) throw apiError(409, 'VDC_SERVER', 'Change the virtual data center instead');
   const order = await resolveOrder(server.pool_id, { type: body?.type, packageId: body?.packageId, vcpu: body?.vcpu, memoryMb: body?.memoryMb, diskGb: body?.diskGb,
@@ -254,7 +270,7 @@ async function resizeTarget(req: AuthedRequest, server: Record<string, any>, bod
   if (img?.family === 'esxi' && (shape.vcpu < 2 || shape.memoryMb < 4096)) throw apiError(400, 'VALIDATION_FAILED', 'ESXi needs 2 vCPU and 4 GB', { type: 'ESXI_NEEDS_MORE' });
   const more = { vcpu: Math.max(0, shape.vcpu - server.vcpu), memoryMb: Math.max(0, shape.memoryMb - server.memory_mb), diskGb: Math.max(0, shape.diskGb - server.disk_gb) };
   // The billing system's own change of package is not held to the account's quota (as its order is not).
-  const over = forBilling(req) ? [] : exceededQuota({ ...(await limitsFor(server.owner_id, server.project_id ?? undefined)), max_servers: null }, await usageOf(server.owner_id, server.project_id ?? undefined), more);
+  const over = forBilling(req) ? [] : exceededQuota({ ...(await limitsFor(server.owner_id, server.project_id ?? undefined)), max_servers: null }, await usageOf(server.owner_id, server.project_id ?? undefined, pool, server.id), more);
   if (over.length) throw quotaExceeded(await limitsFor(server.owner_id, server.project_id ?? undefined), over);
   const cap = await capacityOf(order.rp);
   if (more.vcpu > cap.available.vcpu || more.memoryMb > cap.available.memoryMb || more.diskGb > cap.available.storageGb) throw apiError(409, 'CAPACITY_EXHAUSTED', 'Not enough capacity in this location');
@@ -266,7 +282,17 @@ async function resizeTarget(req: AuthedRequest, server: Record<string, any>, bod
   // Extra disks stay through a resize: their prices (already in the server's current price) are added to the new shape's.
   const { rows: disks } = await pool.query('SELECT price_monthly::text AS price FROM server_disks WHERE server_id = $1', [server.id]);
   if (disks.length) order.price = { ...order.price, monthly: sumMoney(order.price.monthly, disks.map((d) => d.price)) };
-  return { order, billTo: reseller?.id ?? server.owner_id, charge: await resizeCharge(server.id, server.price_monthly, order.price.monthly) };
+  return { order, more, billTo: reseller?.id ?? server.owner_id, charge: await resizeCharge(server.id, server.price_monthly, order.price.monthly) };
+}
+
+// Whether a server's growth still fits the quota it is held to (the project's own, else the account's), counted on
+// `db`: the transaction that holds the owner's lock and then writes the operation whose growth usageOf counts from
+// then on. An order and an extra disk count under the same lock, so none of them is measured against room another
+// request has just been given.
+async function admitGrowth(db: PoolClient, server: { owner_id: string; project_id?: string | null }, more: { vcpu: number; memoryMb: number; diskGb: number }) {
+  const quota = await limitsFor(server.owner_id, server.project_id ?? undefined, db);
+  const over = exceededQuota({ ...quota, max_servers: null }, await usageOf(server.owner_id, server.project_id ?? undefined, db), more);
+  if (over.length) throw quotaExceeded(quota, over);
 }
 
 const serverColumns = `s.id, s.name, s.state, s.power_state AS "powerState", s.guest_ready AS "guestReady", s.vcpu, s.memory_mb AS "memoryMb", s.disk_gb AS "diskGb",
@@ -783,7 +809,11 @@ export class ServersController {
           throw err;
         }
         await repriced(id);
-      });
+      // The quota once more, where it decides: under the owner's lock, in the transaction that accepts the resize. Two
+      // servers of one account grown at the same moment were each measured against the same free room (resizeTarget
+      // reads without a lock, and the usage rose only when the worker had finished). The billing system's change of
+      // package is not held to the quota, as in resizeTarget.
+      }, forBilling(req) ? undefined : (db) => admitGrowth(db, server, r.more));
     return { serverId: id, operation, ...(invoiceId && { invoiceId }) };
   }
 
@@ -1050,10 +1080,27 @@ export class ServersAdminController {
     // is an operation that ended without learning its task's outcome (OUTCOME_UNKNOWN, worker): its task id is kept, so the
     // retry reads what became of it instead of issuing the step a second time. A cancel asked for before it failed is
     // forgotten: staff want it run now, and the worker would otherwise end it as cancelled again at once.
-    const { rows: [op] } = await pool.query(`UPDATE operations o SET status = 'pending', cancel_requested = false, error_code = NULL, error_detail = NULL, finished_at = NULL,
+    const reopen = async (db: PoolClient | typeof pool) => (await db.query(`UPDATE operations o SET status = 'pending', cancel_requested = false, error_code = NULL, error_detail = NULL, finished_at = NULL,
       provider_task_id = CASE WHEN o.error_code = 'OUTCOME_UNKNOWN' THEN o.provider_task_id END, deadline_at = now() + interval '45 minutes', updated_at = now()
       FROM operations old WHERE o.id = $1 AND old.id = o.id AND o.status = 'failed' RETURNING o.id, o.server_id, o.kind, o.step, o.params, old.error_code AS was, old.error_detail AS detail`, [id])
-      .catch((err) => { if (err.constraint === 'operations_one_open_per_server') throw apiError(409, 'OPERATION_IN_PROGRESS', 'Another operation is open'); throw err; });
+      .catch((err) => { if (err.constraint === 'operations_one_open_per_server') throw apiError(409, 'OPERATION_IN_PROGRESS', 'Another operation is open'); throw err; })).rows[0];
+    // A failed resize that still has to grow the server stopped counting against the quota when it failed, and the
+    // room may have been given to something else since: it is admitted again like a new resize, under the owner's
+    // lock (admitGrowth). Not a server billed elsewhere, whose resize was the billing system's and outside the quota.
+    const { rows: [grow] } = await pool.query(`SELECT s.owner_id, s.project_id, greatest(0, (o.params->>'vcpu')::int - s.vcpu) AS vcpu, greatest(0, (o.params->>'memoryMb')::int - s.memory_mb) AS "memoryMb",
+      greatest(0, (o.params->>'diskGb')::int - s.disk_gb) AS "diskGb" FROM operations o JOIN servers s ON s.id = o.server_id
+      WHERE o.id = $1 AND o.kind = 'resize' AND o.status = 'failed' AND s.external_source IS NULL AND s.vdc_id IS NULL`, [id]);
+    let op;
+    if (grow && (grow.vcpu || grow.memoryMb || grow.diskGb)) {
+      const db = await pool.connect();
+      try {
+        await db.query('BEGIN');
+        await db.query('SELECT 1 FROM users WHERE id = $1 FOR UPDATE', [grow.owner_id]);
+        await admitGrowth(db, grow, grow);
+        op = await reopen(db);
+        await db.query('COMMIT');
+      } catch (err) { await db.query('ROLLBACK').catch(() => undefined); throw err; } finally { db.release(); }
+    } else op = await reopen(pool);
     if (!op) throw apiError(409, 'INVALID_SERVER_STATE', 'Only failed operations can be retried');
     // The server goes back to the state its operation works in: being deleted, or being built; any other kind leaves it as it is.
     if (op.kind === 'delete') await pool.query("UPDATE servers SET state = 'deleting', error_code = NULL WHERE id = $1 AND state = 'error'", [op.server_id]);

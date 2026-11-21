@@ -94,12 +94,23 @@ export async function reservedFor(poolId: string, db: Db = pool) {
       UNION ALL SELECT vcpu, memory_mb, disk_gb FROM vdcs WHERE pool_id = $1 AND active) x`, [poolId]);
   return r as { vcpu: number; memoryMb: number; diskGb: number };
 }
+// What a quota counts of `servers` rows joined to their open resize (at most one: a server has one open operation).
+const openResize = (and = '') => `LEFT JOIN LATERAL (SELECT (o.params->>'vcpu')::int AS to_vcpu, (o.params->>'memoryMb')::int AS to_memory_mb, (o.params->>'diskGb')::int AS to_disk_gb
+      FROM operations o WHERE o.server_id = servers.id AND o.kind = 'resize' AND o.status IN ('pending', 'running') ${and}) r ON true`;
+const usedSums = { vcpu: 'COALESCE(sum(GREATEST(vcpu, COALESCE(r.to_vcpu, 0))), 0)::int', memoryMb: 'COALESCE(sum(GREATEST(memory_mb, COALESCE(r.to_memory_mb, 0))), 0)::int',
+  diskGb: `COALESCE(sum(${withDisks} + GREATEST(0, COALESCE(r.to_disk_gb, 0) - disk_gb)), 0)::int` };
 // Counted against the limits limitsFor gives: a project's servers only when the project has a quota of its own; otherwise
 // everything the owner has (projects cost nothing to make, so they must not each start a fresh count).
-export async function usageOf(userId: string, projectId?: string, db: Db = pool) {
-  const { rows: [u] } = await db.query(`SELECT count(*)::int AS servers, COALESCE(sum(vcpu), 0)::int AS vcpu, COALESCE(sum(memory_mb), 0)::int AS "memoryMb",
-    COALESCE(sum(${withDisks}), 0)::int AS "diskGb" FROM servers WHERE state <> 'deleted' AND vdc_id IS NULL
-      AND (CASE WHEN $2::uuid IS NOT NULL AND EXISTS (SELECT 1 FROM quotas q WHERE q.scope = 'project' AND q.subject_id = $2) THEN project_id = $2 ELSE owner_id = $1 END)`, [userId, projectId ?? null]);
+// A resize that is accepted and not finished counts with the size it grows to: the server's row changes only when the
+// worker has resized it, and until then a second request (a resize of another server, an order, an extra disk) would be
+// measured against room that is already given away. Once the row has the new size, or the resize failed, nothing is added.
+// notGrowing: a server counted as its row says, whatever is open on it (a resize asked for while another is open on the
+// same server is refused as that, an open operation, and not by a quota its own first resize filled).
+export async function usageOf(userId: string, projectId?: string, db: Db = pool, notGrowing?: string) {
+  const { rows: [u] } = await db.query(`SELECT count(*)::int AS servers, ${usedSums.vcpu} AS vcpu, ${usedSums.memoryMb} AS "memoryMb", ${usedSums.diskGb} AS "diskGb" FROM servers
+    ${openResize('AND o.server_id IS DISTINCT FROM $3::uuid')}
+    WHERE state <> 'deleted' AND vdc_id IS NULL
+      AND (CASE WHEN $2::uuid IS NOT NULL AND EXISTS (SELECT 1 FROM quotas q WHERE q.scope = 'project' AND q.subject_id = $2) THEN project_id = $2 ELSE owner_id = $1 END)`, [userId, projectId ?? null, notGrowing ?? null]);
   return u as { servers: number; vcpu: number; memoryMb: number; diskGb: number };
 }
 
@@ -463,13 +474,13 @@ export class CatalogAdminController {
 
   // The default row, the users' own and the projects' own. email: the user, or the project's owner; projectName only
   // on a project's row. usage: what counts against that row today (a user: all their servers outside data centers; a
-  // project: its own), null for the default. A quota whose project is gone is not listed (deleteProject removes it).
+  // project: its own; counted as usageOf counts, an open resize with the size it grows to), null for the default. A quota whose project is gone is not listed (deleteProject removes it).
   @Get('quotas') @Can('catalog.view', 'catalog.manage')
   async quotas() {
     const { rows } = await pool.query(`SELECT q.scope, q.subject_id AS "subjectId", u.email, p.name AS "projectName", p.owner_id AS "ownerId", q.max_servers AS "maxServers", q.max_vcpu AS "maxVcpu",
       q.max_memory_mb AS "maxMemoryMb", q.max_disk_gb AS "maxDiskGb",
-      CASE WHEN q.scope = 'default' THEN NULL ELSE (SELECT json_build_object('servers', count(*)::int, 'vcpu', COALESCE(sum(vcpu), 0)::int, 'memoryMb', COALESCE(sum(memory_mb), 0)::int, 'diskGb', COALESCE(sum(${withDisks}), 0)::int)
-        FROM servers WHERE state <> 'deleted' AND vdc_id IS NULL AND (CASE WHEN q.scope = 'project' THEN project_id = q.subject_id ELSE owner_id = q.subject_id END)) END AS usage
+      CASE WHEN q.scope = 'default' THEN NULL ELSE (SELECT json_build_object('servers', count(*)::int, 'vcpu', ${usedSums.vcpu}, 'memoryMb', ${usedSums.memoryMb}, 'diskGb', ${usedSums.diskGb})
+        FROM servers ${openResize()} WHERE state <> 'deleted' AND vdc_id IS NULL AND (CASE WHEN q.scope = 'project' THEN project_id = q.subject_id ELSE owner_id = q.subject_id END)) END AS usage
       FROM quotas q LEFT JOIN projects p ON q.scope = 'project' AND p.id = q.subject_id LEFT JOIN users u ON u.id = COALESCE(p.owner_id, q.subject_id)
       WHERE q.scope <> 'project' OR p.id IS NOT NULL ORDER BY q.scope, u.email, p.name`);
     return { quotas: rows };

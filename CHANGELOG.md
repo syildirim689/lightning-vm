@@ -14,6 +14,23 @@ Türkçe [docs/upgrade-notes.md](docs/upgrade-notes.md) sayfasını okuyun.*
 
 ## [Unreleased]
 
+### Fixed
+
+- **Resizes asked for at the same moment could together exceed a quota.** A resize was measured against the quota
+  when it was accepted, without a lock, and the usage rose only when the worker had resized the server: two servers
+  of one account (or of one project with a quota of its own) grown at the same moment, or one shortly after the
+  other, were each measured against the same free room, and both were accepted. Known since before 0.4.0 and
+  written down as open in 0.5.0. A resize is now admitted in one transaction under the owner's lock (the lock an
+  order and an extra disk count under), and an accepted resize that has not finished counts with the size it grows
+  to, for the next resize, an order, an extra disk, the quote and the quota lists. The request that no longer fits
+  gets the quota's own refusal (`409 QUOTA_EXCEEDED`, or `409 PROJECT_QUOTA_EXCEEDED`); a second resize of the same
+  server is still `409 OPERATION_IN_PROGRESS`. A failed resize gives its room back, so staff's retry of it
+  (`POST /api/admin/operations/:id/retry`) is admitted again like a new resize and can now be refused by the quota.
+  The billing integration's change of package stays outside the quota, as before. No database change.
+  *Türkçe: aynı anda istenen boyut büyütmeleri birlikte kotayı aşabiliyordu; artık sahibin kilidi altında tek tek
+  kabul edilir ve kabul edilmiş, bitmemiş büyütme kullanıma sayılır
+  ([docs/validation.md](docs/validation.md#050dan-sonra-yeniden-boyutlandırmada-kota--2026-11-21)).*
+
 ## [0.5.0] - 2026-11-21
 
 Third public release, still **beta**. It gathers what was added to `main` since 0.4.0 (e-mail verification, quotas

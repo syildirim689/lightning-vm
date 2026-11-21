@@ -5,6 +5,18 @@ madde neyin değiştiğini ve işletmecinin yapması gereken bir şey varsa onu 
 davranışı değiştirmeyen işler burada yoktur. Tahsilat çalıştırması API içinde beş dakikada bir çalışır; yani "ilk
 çalıştırma" yükseltmeden birkaç dakika sonradır.
 
+## 0.5.0'dan sonra, henüz yayımlanmadı: boyut büyütme ve kota (2026-11-21)
+
+- **Bekleyen boyut büyütme kotaya sayılır.** Kabul edilmiş ama worker'ın henüz bitirmediği bir büyütme, hesabın
+  (ya da kotası olan projenin) kullanımında büyüyeceği boyutla görünür: sipariş özetinde, Projeler'de ve Katalog
+  → Kotalar'da "kullanılan" o sürede daha yüksektir, o yer başka bir siparişe, büyütmeye ya da ek diske verilmez.
+  Önceden aynı anda istenen iki büyütme kotayı birlikte aşabiliyordu. İşletmecinin yapacağı bir şey yoktur;
+  veritabanı değişikliği yoktur. Kotası daha önce bu yolla aşılmış bir hesaba dokunulmaz (yeni istekleri
+  reddedilir, mevcut sunucuları çalışır).
+- **Yeniden denenen boyut büyütme `409 QUOTA_EXCEEDED` dönebilir.** Personel başarısız bir büyütmeyi yeniden
+  denediğinde, büyütmenin yeri o arada başka bir şeye verildiyse istek reddedilir ve işlem
+  başarısız kalır; kotayı genişletin ya da yer açın. Faturalama entegrasyonunun açtığı büyütmeler kota dışıdır.
+
 ## 0.5.0 (beta): 0.4.0'dan sonra eklenenler (2026-11-21)
 
 Her madde kendi başına yüklenir; veritabanı değişikliği olanlarda migration kendiliğinden çalışır.

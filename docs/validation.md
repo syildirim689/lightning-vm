@@ -689,7 +689,7 @@ kodu kullandığı için ele alındı.
 | 10 | düşük | Müşterinin yarıda bıraktığı ya da süresi dolan ödeme sayfası personel listesinde "başarısız tahsilat" sayılıyordu. | `status = 'failed'` her ikisini de kapsar. | `EXPIRED` ve `CANCELLED_BY_CUSTOMER` sayılmaz. (`0105b32`) |
 | 11 | düşük | Ayın son üç saatinde (UTC) saatlik sunuculu hesabın tahmini, gelecek ayın kullanımını bu ayın kalan saatleriyle gösteriyordu. | Kullanım faturalamanın ayıyla (İstanbul günü), oran ve kalan saat UTC ayıyla okunuyordu. | İkisi de UTC ayı. (`0105b32`) |
 | 12 | düşük | Kullanım takibi gece yarısı (UTC) çevresinde iki gecelik geçmişi dört gün sayıyordu. | Günler takvim gününe göre sayılıyordu. | Pencereden geriye sayılır. (`1701d16`) |
-| 13 | düşük | Aynı anda iki sunucuya istenen ek disk, aynı boş kotaya karşı ölçülüp ikisi de geçebiliyordu (hesap ya da proje kotası). | Denetim ile yazma ayrı adımlardı. Önceden vardı; proje kotası aynı kodu kullanıyor. | Sahibin kilidi altında tek işlem. Yeniden boyutlandırmada aynı pencere **duruyor**: aşağıda. (`545b686`) |
+| 13 | düşük | Aynı anda iki sunucuya istenen ek disk, aynı boş kotaya karşı ölçülüp ikisi de geçebiliyordu (hesap ya da proje kotası). | Denetim ile yazma ayrı adımlardı. Önceden vardı; proje kotası aynı kodu kullanıyor. | Sahibin kilidi altında tek işlem. Yeniden boyutlandırmadaki aynı pencere 0.5.0'da duruyordu, sonra kapatıldı: [sayfanın sonunda](#050dan-sonra-yeniden-boyutlandırmada-kota--2026-11-21). (`545b686`) |
 | 14 | düşük | Adres doğrulamada, kod bulamayan bir onay ya da geç başarısız olan bir posta, başka bir isteğin az önce yazdığı kodu silebiliyordu. | Koşulsuz `DEL`. | Kod yalnızca sahibi olan istekçe silinir (Lua). (`545b686`) |
 | 15 | düşük | Destek önerilerinin sayacı süresiz kalıp önerileri kalıcı susturabiliyordu; kota `PUT` isteği gövdesiz gelince 500 dönüyordu; içgörü gizleme anahtarı NUL karakteriyle 500 dönüyor ve sınırsız satır yazılabiliyordu; belgelerden çalıştırılan isteğin JSON yanıtında daha uzun bir değerin içindeki gizli değer gizlenmiyordu; her öneri oluşturmada Redis `KEYS` taraması yapılıyordu. | Ayrı küçük eksikler. | `545b686`, `1701d16`, `567f55f`. |
 | 16 | düşük | Worker'ın saatlik çalışması, grubun bütün satırlarını her sunucu için yeniden tarıyordu (200 sunucu, iki haftalık saatler: 1,4 sn; bir kez dağıtınca 0,12 sn). | `hours.filter(...)` sunucu başına. | Satırlar sunucularına bir kez dağıtılır. (`1701d16`) |
@@ -698,10 +698,10 @@ kodu kullandığı için ele alındı.
 yeniden kullanıldıkça işe yaramaz hale geleceği düşünüldü; ölçüldü ve öyle olmadığı görüldü (aşağıda). Tek eksik,
 yeni aralıkların ancak bir sonraki vakumda özetlenmesiydi: migration 091 dizinde `autosummarize`'ı açar.
 
-**Bilinip düzeltilmeyen:** yeniden boyutlandırmada kota, işlem kabul edilirken ölçülür ve kullanım ancak worker
-işlemi bitirince artar; aynı hesabın iki sunucusu aynı anda büyütülürse ikisi de aynı boş kotaya karşı ölçülür.
-0.4.0'da da böyleydi; düzeltmesi bekleyen yeniden boyutlandırmaların kullanıma sayılmasını gerektirir ve bu turda
-yapılmadı.
+**Bilinip bu turda düzeltilmeyen (0.5.0 bununla çıktı; sonra düzeltildi):** yeniden boyutlandırmada kota, işlem
+kabul edilirken ölçülüyor ve kullanım ancak worker işlemi bitirince artıyordu; aynı hesabın iki sunucusu aynı anda
+büyütülürse ikisi de aynı boş kotaya karşı ölçülüyordu. 0.4.0'da da böyleydi. Düzeltmesi ve neyin denendiği:
+[0.5.0'dan sonra: yeniden boyutlandırmada kota](#050dan-sonra-yeniden-boyutlandırmada-kota--2026-11-21).
 
 **Sağlam bulunanlar:** yeni yolların hepsinde yetki ve sahiplik (içgörüler, bulgular, zamanlama önerisi, destek
 önerileri ve benzer talepler, ödeme riski, proje kotaları, adres doğrulama, kullanım özeti, izleme anahtarı):
@@ -863,3 +863,74 @@ dosya dosya:
   commit'i `--local` ile kurar); 0.4.0 kurulu gerçek bir panelin, verisi olan bir veritabanıyla 0.5.0'a
   güncellenmesi (demo yerinde güncellendi ama orada sunucu ve örnek yok; migration'lar verili veritabanında yalnızca
   yerel ölçümde çalıştı); yayımlanan `ghcr.io` imajlarının çekilip çalıştırılması; proje sitesinin güncellenmesi.
+
+## 0.5.0'dan sonra: yeniden boyutlandırmada kota — 2026-11-21
+
+0.5.0'ın "bilinip düzeltilmeyen" tek maddesi kapatıldı. Henüz bir sürümde değildir (`CHANGELOG.md`, Unreleased).
+
+**Kusur.** `POST /api/servers/:id/resize` kotayı kilitsiz okuyup işlemi ayrı bir adımda yazıyordu ve kullanım
+(`usageOf`) sunucu satırlarından toplandığı için ancak worker boyutu değiştirince artıyordu. Aynı hesabın (ya da
+kendi kotası olan aynı projenin) iki sunucusu aynı anda, hatta biri ötekinden dakikalar sonra ama ilki bitmeden
+büyütülürse, ikisi de aynı boş yere karşı ölçülüp kabul ediliyordu. Aynı sunucunun iki isteği zaten
+`OPERATION_IN_PROGRESS` ile ayrılıyordu; kusur farklı sunucular arasındaydı.
+
+**Düzeltme** (`apps/api/src/servers.ts`, `apps/api/src/catalog.ts`), ek diskteki (`545b686`) kilidin aynısıyla:
+
+- Boyut büyütme, işlem satırını yazan işlemin içinde ve **sahibin satırı kilitliyken** (`users … FOR UPDATE`;
+  siparişin ve ek diskin saydığı kilit) kotaya karşı yeniden ölçülür (`startOperation`'ın `admit` adımı,
+  `admitGrowth`). Proje bir hesabındır, yani proje kotası da aynı kilidin altındadır.
+- **Kabul edilmiş, bitmemiş büyütme kullanıma sayılır:** `usageOf`, açık (`pending` / `running`) bir `resize`
+  işlemi olan sunucuyu büyüyeceği boyutla toplar. Satır yeni boyutu alınca fark sıfırlanır (iki kez sayılmaz);
+  işlem başarısız olunca yer geri döner. Aynı sayım siparişte, ek diskte, fiyat teklifinde, proje listesinde ve
+  personelin Kotalar listesinde kullanılır; yani bekleyen bir büyütmenin yerini sonraki sipariş de alamaz.
+- Sığmayan istek kotanın kendi koduyla reddedilir (`409 QUOTA_EXCEEDED` ya da `409 PROJECT_QUOTA_EXCEEDED`), 500
+  değil; hiçbir şey yazılmaz (fiyat, paket, fatura). Aynı sunucuya ikinci istek eskisi gibi
+  `409 OPERATION_IN_PROGRESS` alır, kota dolu olsa bile.
+
+**Boyut değiştiren yollar ve hangisinin kapsandığı:**
+
+| Yol | Durum |
+|-----|-------|
+| Müşteri, bayi (müşterisi adına), personel ve API anahtarı: `POST /api/servers/:id/resize` (tek uç nokta) | Kilitli denetimden geçer |
+| Personelin başarısız bir büyütmeyi yeniden denemesi: `POST /api/admin/operations/:id/retry` | Artık aynı kilit altında yeniden kabul edilir; yer başka şeye verildiyse `QUOTA_EXCEEDED` (önceden hiç ölçülmüyordu) |
+| Faturalama entegrasyonu: `POST /api/admin/external/:source/servers/:reference/resize` | Bilerek kota dışı (siparişi de öyle); değişmedi. Yaptığı büyütme, açıkken hesabın kullanımına sayılır |
+| Ek disk (`545b686`), sipariş | Zaten aynı kilidin altındaydı; artık bekleyen büyütmeleri de sayarlar |
+| Sanal veri merkezindeki sunucu | `VDC_SERVER` ile reddedilir; VDC'nin kendi sınırı ayrı bir konudur |
+| "Boşta sunucu" / küçültme önerileri (içgörüler) | Yalnızca öneridir; uygulayan bir yol yok, kullanıcı aynı uç noktayı çağırır |
+| İçe aktarma (`import.ts`, disk boyutunu VM'den okur) | Personel işi, kota ölçmez; değişmedi |
+
+**Kapsanmayan, aynı türden iki pencere (ayrı konular, dokunulmadı):** konumun boş kapasitesi (`capacityOf` /
+`reservedFor`) ve bayinin tahsisi (`checkResellerRoom`) boyut büyütmede hâlâ kilitsiz okunur ve bekleyen
+büyütmeleri saymaz; aynı anda iki büyütme konumun ya da bayinin son yerini birlikte alabilir. Kota için olan
+kilit bunları kapsamaz (konum kilidi sipariştedir, boyut büyütmede değil).
+
+**Denenenler.**
+
+- Yeni entegrasyon dosyası `apps/api/test/integration/resize-quota.test.mjs` (4 test, gerçek PostgreSQL ve Redis,
+  worker yok):
+  1. 20 vCPU kotalı hesapta dört küçük sunucu (8 vCPU) aynı anda büyük pakete (+6) istenir: her biri tek başına,
+     ikisi birlikte sığar, üçü sığmaz. **Tam iki** `202`, iki `409 QUOTA_EXCEEDED` (`vcpu`); iki açık işlem;
+     reddedilenin fiyatı ve paketi aynı; kullanım 20 görünür (satırlar hâlâ 2'şer vCPU); sonraki büyütme ve
+     sipariş reddedilir.
+  2. Başarısız olan büyütmenin yeri geri gelir (14), başka sunucu o yeri alır, personelin yeniden denemesi
+     `409 QUOTA_EXCEEDED` alır ve işlem `failed` kalır; biten büyütme iki kez sayılmaz; kota genişleyince yeniden
+     deneme kabul edilir.
+  3. Kendi kotası (10 vCPU) olan projenin iki sunucusu aynı anda: bir `202`, bir `409 PROJECT_QUOTA_EXCEEDED`;
+     aynı hesabın proje dışındaki sunucusu hesabın kotasıyla büyür.
+  4. Aynı sunucuya aynı anda iki istek, kota yalnızca birine yeterken: bir `202`, bir `409 OPERATION_IN_PROGRESS`.
+- **Düzeltmeden önceki kodla** (yalnızca `apps/api/src` geri alınarak, aynı test dosyası): 4 testin 4'ü kaldı;
+  birincide dört isteğin dördü de `202` döndü, üçüncüde ikisi de.
+- **Yerelde, düzeltilmiş kodla** (geliştirme makinesi, Docker yok; PostgreSQL 18.6 ve Redis 8.0.5 WSL içinde geçici
+  dizinden, iş bitince silindi): API birim testleri 206/206, `tsc` temiz; entegrasyon paketinin tamamı
+  (`npm run test:integration`, 27 dosya) 273 testte **204 geçti, 0 başarısız, 69 atlandı** (63'ü simülatör isteyen
+  `servers.test.mjs` ve benzerleri, 6'sı `seeded-history`); içinde `resize-quota` 4/4, `project-quota` 4/4,
+  `security-servers` 14/14. `security-servers` içindeki "yeniden denenen boyut değişikliği" testi ilk çalıştırmada
+  kaldı: hesabı önceki testlerden varsayılan kotanın üstünde sunucu taşıyordu ve yeniden deneme artık kotaya
+  tabi; teste, dosyanın başka bir testinin de yaptığı gibi sınırsız hesap kotası eklendi. Worker ve web'e
+  dokunulmadı, testleri yerelde yeniden çalıştırılmadı.
+- GitHub CI ve demo sunucusundaki tarayıcı paketi bu commit gönderildikten sonra çalıştırılır; sonuçları bu
+  sayfaya yazılmadı.
+
+**Çalıştırılmayanlar:** gerçek bir hipervizörde (ya da simülatörde worker ile) iki büyütmenin sonuna kadar
+gitmesi; testte işlemler açık kalır ve worker'ın yaptığı (satırı güncellemek, başarısızlıkta fiyatı geri almak)
+SQL ile taklit edilir. Simülatör isteyen `servers.test.mjs` yerelde atlandı (Docker yok), CI'da çalışır.

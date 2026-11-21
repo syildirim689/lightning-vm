@@ -87,8 +87,9 @@ fiziksel çekirdeklerde çalışır. Arayüz bunu sipariş ekranında açıkça 
     sunucuları sayılır (kotası olan projedekiler de). Proje açmak tek başına kotayı büyütmez.
   - Aşıldığında sipariş, boyut büyütme ve ek disk `409 PROJECT_QUOTA_EXCEEDED` ile reddedilir (alanlar hangi
     sınırın aşıldığını söyler: `servers`, `vcpu`, `memoryMb`, `diskGb`); hesabın kotasında kod eskisi gibi
-    `QUOTA_EXCEEDED`'dir. Aynı anda gelen iki sipariş son yeri birlikte alamaz (sipariş, sahibin satırı kilitliyken
-    sayar).
+    `QUOTA_EXCEEDED`'dir. Aynı anda gelen iki sipariş, iki boyut büyütme ya da iki ek disk son yeri birlikte alamaz
+    (hepsi sahibin satırı kilitliyken sayar). Kabul edilmiş ama henüz bitmemiş bir boyut büyütme, büyüyeceği
+    boyutla kullanıma sayılır (tekliflerde ve listelerde de öyle görünür); başarısız olursa yeri geri döner.
   - Sunucunun projesi yalnızca siparişte seçilir, sonradan değiştirilemez. Proje silinirse kotası da silinir;
     sunucuları projesiz kalır ve hesabın kotasına sayılır. Aynı adla açılan yeni proje kotasız başlar.
   - Kotalar listesi kullanıcı ve proje satırlarında her sınırın yanında **kullanılanı** gösterir ("3 / 5").

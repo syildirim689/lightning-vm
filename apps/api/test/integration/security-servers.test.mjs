@@ -478,6 +478,9 @@ test('a retried resize keeps what the server gained since, forgets an old cancel
   const failed = (extra = {}) => operation(id, aId, aId, { kind: 'resize', status: 'failed', step: 'resize', error_code: 'CANCELLED', cancel_requested: true, params, ...extra });
   const retry = (op) => post(`/admin/operations/${op}/retry`, undefined, admin);
   const opRow = (op) => one('SELECT status, cancel_requested, error_code, provider_task_id FROM operations WHERE id = $1', [op]);
+  // A retried resize is held to the quota again (resize-quota.test.mjs); this is about its price, so the account has
+  // no limits here (the earlier tests left it more servers than the default quota allows).
+  await pool.query("INSERT INTO quotas (scope, subject_id) VALUES ('user', $1)", [aId]);
   // The resize failed (the worker put 30.00 back); since then the customer added a disk for 10.00 a month.
   const first = await failed();
   await pool.query('UPDATE servers SET price_monthly = 40 WHERE id = $1', [id]);
@@ -498,6 +501,7 @@ test('a retried resize keeps what the server gained since, forgets an old cancel
   assert.equal((await serverRow(id)).price_monthly, '80.00');
   assert.deepEqual(await opRow(unknown), { status: 'pending', cancel_requested: false, error_code: null, provider_task_id: 'task-9' });
   await settle(id);
+  await pool.query("DELETE FROM quotas WHERE scope = 'user' AND subject_id = $1", [aId]);
 });
 
 test('after a restore of an older backup nothing is started until staff release the hold', async () => {
