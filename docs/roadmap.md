@@ -25,7 +25,8 @@ yalnızca **olmayanlar** ve **denenmemiş olanlar** durur. Tarih ya da söz veri
 - **Ödeme:** listedeki 46 sağlayıcıdan 41'iyle tahsilat. Param dönüşünün Param'a sorularak doğrulanması (o zamana kadar Param ödemeleri personelce elle onaylanır). PayTR ve Param'da kayıtlı
   kartla otomatik yenileme.
 - **Kimlik:** bir projeyi birden çok kullanıcının paylaştığı ekip yapısı.
-- **Ağ:** çalışan bir sunucuya sonradan ek IP ekleme. Ayrı IPv6 havuzları ve sunucu başına birden çok IPv6 adresi
+- **Ağ:** çalışan bir sunucuya sonradan ek IP ekleme (neyin hazır, neyin eksik olduğu:
+  [ip-management.md](ip-management.md#çalışan-sunucuya-sonradan-ek-ip-neden-yok-ne-gerekir)). Ayrı IPv6 havuzları ve sunucu başına birden çok IPv6 adresi
   (bugün: IPv4 havuzuna eklenen önekten tek adres). Yük dengeleyici.
 - **İşletim:** birden çok
   sunucuda çalışma (cluster; [cluster.md](cluster.md) yalnızca tasarımdır). GHCR imajlarıyla sürümlü, imzalı kurulum

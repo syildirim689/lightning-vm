@@ -42,8 +42,44 @@ Konum: Ayarlar → **Ters DNS**.
 Katalog → Havuzlar → konum kartı → "Satılık ek IPv4": sunucu başına en fazla adet (0-32) ve adet başı aylık
 fiyat. Fiyat, paketin veya özel teklifin para biriminde toplama eklenir.
 
-Sınır: ek IP'ler sipariş sırasında seçilir. Çalışan bir sunucuya sonradan IP eklemek, sunucunun içinde
-yapılandırma gerektirdiği için bu sürümde yok.
+Sınır: ek IP'ler sipariş sırasında seçilir. Çalışan bir sunucuya sonradan IP eklemek bu sürümde yok
+([aşağıda](#çalışan-sunucuya-sonradan-ek-ip-neden-yok-ne-gerekir)).
+
+## Çalışan sunucuya sonradan ek IP: neden yok, ne gerekir
+2026-11-21'de incelendi ve **yazılmadı**. Hazır olanlar ve eksikler:
+
+**Hazır olan (bugünkü kod):**
+- Veri modeli sunucu başına birden çok adresi taşır: `ip_allocations` satırları `primary`, `extra`, `ipv6`
+  türündedir ve hepsi aynı IP havuzundan (tek alt ağ, tek ağ geçidi) gelir.
+- Silmede worker, sunucunun **bütün** adreslerini bırakır ve havuzun karantinasına alır
+  (`apps/worker/operations.mjs`); PTR kayıtları adres başınadır (`apps/api/src/rdns.ts`).
+- Yeniden kurulumda misafire yazılan ağ ayarı veritabanındaki bütün adreslerden üretilir; sonradan eklenen bir
+  adres de ilk yeniden kurulumda kendiliğinden yazılırdı.
+- İncelenen kodda (worker, firewall, adaptörler) sunucunun adreslerine bağlı bir kural ya da adres süzgeci
+  görülmedi: adresler yalnızca misafire yazılan ağ ayarında kullanılır. Hipervizör tarafında yapılacak bir iş
+  yoktur; bu yüzden VMware simülatöründe sınanacak bir adım da yoktur.
+
+**Eksik olan (yazılması gereken):**
+1. **Ayırma ucu:** siparişteki kilit sırasıyla (sahip, sonra konum) birincil adresin havuzundan boş, hariç
+   tutulmamış, karantinada olmayan tek adres; konumun "sunucu başına en fazla ek IPv4" sınırı; aynı anda gelen iki
+   isteğin aynı adresi alamaması.
+2. **Faturalama (dört yerde para):** sunucunun aylık (ve saatlik) fiyatına ek IPv4 fiyatının eklenmesi, kalan
+   dönemin ek disk ve boyut büyütmedeki gibi faturalanması (`resizeCharge`, `billResize`), bayi indirimi ve bayi
+   payı, dış faturalama sisteminin (WISECP / WHMCS) sunucularında reddi. `servers.extra_ipv4` sayacı doğru
+   tutulmazsa yenileme fiyatı (bugünkü katalogdan hesaplanır) yanlış çıkar.
+3. **Geri verme ucu:** eklenebilen adres geri de verilebilmelidir; yoksa müşteri onu sunucuyu silene kadar öder.
+   Geri verilen adresin karantinaya girmesi, PTR'ının silinmesi, fiyatın düşmesi ve bunun dönem içindeki karşılığı.
+4. **Misafir içi yapılandırma:** panel çalışan bir sunucunun içine yazamaz (cloud-init yalnızca ilk açılışta ve
+   yeniden kurulumda çalışır; misafir ajanı yoktur). Ekran, müşteriye adresi, önek uzunluğunu ve ağ geçidini verip
+   Linux (netplan / `ip addr add`) ve Windows için ne yapacağını söylemek zorundadır; adres müşteri bunu yapana
+   kadar faturalanır ama çalışmaz.
+5. **Ekran:** sunucu sayfasında adres listesi, fiyatıyla onay isteyen ekleme, geri verme, yukarıdaki yönerge.
+
+**Neden bu turda yazılmadı:** iş, ilk bakışta göründüğünden büyüktür (madde 2 ve 3 faturalamanın dört yoluna
+dokunur ve ancak birlikte doğru olur) ve asıl sonucu, yani eklenen adresin misafirde çalışması, gerçek bir ağ
+olmadan sınanamaz: simülatörde hipervizör tarafında adım yoktur, entegrasyon testleri yalnızca ayırmayı, fiyatı ve
+karantinayı görebilirdi. Yarım hâliyle (adres ayrılıp faturalanırken geri verilemeyen ya da nasıl kurulacağı
+söylenmeyen bir özellik) yayımlanması müşteriye para kaybettirirdi; bu yüzden hiçbiri eklenmedi.
 
 ## Doğrulama
 - **Entegrasyon:** gerçek worker, VMware simülatörü ve **gerçek PowerDNS** ile denendi
