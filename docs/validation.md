@@ -797,7 +797,7 @@ veritabanı arasında her sorgu yaklaşık 14 ms gidiş-dönüş tutuyor (WSL k�
   - Aynı elle çalıştırmanın diğer işleri geçti: `api-integration` (yeni entegrasyon dosyaları dahil, PostgreSQL 17
     ile), birim işleri (API, web ve derlemesi, worker), altı adaptör, iki Go servisi (`gofmt`, `go vet`,
     `go test`), 11 imaj derlemesi, `node scripts/audit.mjs` (yüksek ve kritik bağımlılık uyarısı yok).
-  - Sürüm commit'inin iki tam çalıştırması ve karşılaştırması aşağıdaki sürüm bölümündedir.
+  - Sürüm commit'inin art arda iki tam çalıştırması ve karşılaştırması sayfanın sonundaki sürüm bölümündedir.
 
 ### Yerelde çalıştırılanlar
 
@@ -830,3 +830,36 @@ dosya dosya:
 - `servers.test.mjs` (worker ve simülatör ister) yerelde ve CI'da çalışmaz; `compose` işi ve tarayıcı paketi aynı
   yolları uçtan uca geçer.
 - Proje sitesi (lightningvm.app) bu turda güncellenmedi; `scripts/get.sh` değişmedi.
+
+### 0.5.0 (beta) sürümü
+
+`v0.5.0` etiketi `b176948` commit'indedir (açıklamalı etiket). Etiket, o commit denendikten sonra kondu:
+
+- **GitHub CI, elle tam çalıştırma `44888461456` (`b176948`):** bütün işler geçti. `api-integration` 269 testte 200
+  geçti, 0 başarısız, 69 atlandı (63'ü simülatör isteyen `servers.test.mjs` ve benzerleri, 6'sı yalnızca istenince
+  çalışan `seeded-history`); `compose` işi (`shellcheck`, gerçek kurulum, yedek / geri yükleme, izleme, tarayıcı
+  paketi) 44/44 (15,4 dk); API birim testleri 206, altı adaptör, iki Go servisi, 11 imaj derlemesi.
+- **Demo sunucusu, aynı commit, art arda iki tam tarayıcı çalıştırması (atılabilir yığın):**
+  1. demo `b176948`'e güncellendi (`OK UPDATED`, derleme ve başlatma 2 dk 37 sn), ardından **44/44** (17,0 dk);
+     testler boyunca demo `/api/ready` 52 yanıtın 52'sinde 200;
+  2. demo'ya dokunmadan yeniden: **44/44** (16,6 dk); `/api/ready` 51 yanıtın 51'inde 200.
+  İki çalıştırmada aynı 44 test çalıştı, hiçbiri yeniden denenmedi, sonuçlar aynı: bir kez geçip bir kez kalan test
+  yok. (Bu commit'ten önceki iki çalıştırmada görülen iki hata yukarıda yazılıdır; ikisi de her çalıştırmada ve
+  CI'da aynı yerde kaldı, rastgele değildi.)
+- **Etiket:** `origin`'e ve test sunucusunun deposuna yalnızca `refs/tags/v0.5.0` gönderildi. Test sunucusunun
+  deposundaki eski iç test etiketleri (`v0.1.1`-`v0.3.0`) ve `v0.1.0`, `v0.4.0` gönderimden önce ve sonra
+  karşılaştırıldı: değişmedi; hiçbiri GitHub'a gitmedi (GitHub'daki etiketler `v0.1.0`, `v0.4.0`, `v0.5.0`).
+- **Yayın iş akışı `44892152768`:** birim işleri, 11 imaj (`ghcr.io/syildirim689/lightning-vm/*:v0.5.0`) ve sürüm
+  sayfası geçti. Sayfa "Lightning VM v0.5.0 (beta)" adıyla ve **pre-release** işaretiyle oluştu; notları
+  `CHANGELOG.md` dosyasının 0.5.0 bölümüdür.
+- **Kimliksiz yeni bir kopya:** etiketler `v0.1.0`, `v0.4.0`, `v0.5.0`; kurulumun seçtiği en yeni düz etiket
+  `v0.5.0` (`b176948`).
+- **Demo `v0.5.0` gösteriyor:** etiket konduktan sonra aynı commit için güncelleme yeniden çalıştırıldı; yapacak bir
+  şey yoktu (`OK UP_TO_DATE Up to date: v0.5.0`) ve betiğin bu sürümle gelen yolu adı yeniledi: `.env` içinde ve
+  API ile web kapsayıcılarında `APP_VERSION=v0.5.0`, `git describe` `v0.5.0`, servisler sağlıklı, `/api/ready` 200.
+  (Etiketten önce panel `v0.4.0-30-gb176948` gösteriyordu.) Demo `stable` kanalında ve otomatik güncellemesi açık:
+  kanalın en yeni etiketi çalışan commit'in kendisidir.
+- **Çalıştırılmayanlar:** temiz bir makinede `curl … | sudo sh` ile 0.5.0 kurulumu (CI'daki `compose` işi aynı
+  commit'i `--local` ile kurar); 0.4.0 kurulu gerçek bir panelin, verisi olan bir veritabanıyla 0.5.0'a
+  güncellenmesi (demo yerinde güncellendi ama orada sunucu ve örnek yok; migration'lar verili veritabanında yalnızca
+  yerel ölçümde çalıştı); yayımlanan `ghcr.io` imajlarının çekilip çalıştırılması; proje sitesinin güncellenmesi.
