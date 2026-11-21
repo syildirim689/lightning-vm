@@ -5,7 +5,7 @@ import type { FastifyReply } from 'fastify';
 import { audit, SessionGuard, type AuthedRequest } from './auth';
 import { usageOf } from './catalog';
 import { noCpuKinds } from './capacity';
-import { pool } from './db';
+import { pool, redis } from './db';
 import { apiError } from './errors';
 import { summary as maintenance } from './maintenance';
 import { Can, PermissionGuard } from './rbac';
@@ -20,8 +20,36 @@ import { dropPush } from './notify';
 import { validTimeZone } from './time-zone';
 
 // CPU of the servers given over the last 7 days (server_cpu_samples, written with each energy sample).
+// A week's figures move slowly and reading them is the costly part of the insights (2 000 samples per server, each a
+// row fetched from the table: for 200 servers 400 000 rows, seconds on a small host), while the overview asks for
+// them every minute per open page and the staff list for every running server. They are therefore kept per server:
+// ten minutes once there is enough history for advice, one minute before that (and for a server without samples),
+// so a new server's first figures still show up promptly. Without Redis every call reads the table, as before.
+export const CPU_STATS_KEEP_SECONDS = 600;
+const statsKey = (id: string) => `cpustats:${id}`;
 export async function cpuStats(ids: string[]): Promise<Map<string, CpuStats>> {
-  if (!ids.length) return new Map();
+  const out = new Map<string, CpuStats>();
+  if (!ids.length) return out;
+  const kept = await redis.mget(ids.map(statsKey)).catch(() => [] as (string | null)[]);
+  const missing: string[] = [];
+  ids.forEach((id, i) => {
+    const hit = kept[i];
+    if (hit === '-') return; // known to have no samples
+    try { if (hit) { out.set(id, JSON.parse(hit) as CpuStats); return; } } catch { /* read again below */ }
+    missing.push(id);
+  });
+  if (!missing.length) return out;
+  const read = await readCpuStats(missing);
+  const pipe = redis.pipeline();
+  for (const id of missing) {
+    const s = read.get(id);
+    if (s) out.set(id, s);
+    pipe.set(statsKey(id), s ? JSON.stringify(s) : '-', 'EX', s && s.days >= 3 && s.samples >= 24 ? CPU_STATS_KEEP_SECONDS : 60);
+  }
+  await pipe.exec().catch(() => undefined);
+  return out;
+}
+async function readCpuStats(ids: string[]): Promise<Map<string, CpuStats>> {
   const { rows } = await pool.query(`SELECT server_id AS id, avg(cpu_pct)::float8 AS avg, percentile_cont(0.95) WITHIN GROUP (ORDER BY cpu_pct)::float8 AS p95,
       count(*)::int AS samples, (EXTRACT(EPOCH FROM max(at) - min(at)) / 86400)::float8 AS days
     FROM server_cpu_samples WHERE server_id = ANY($1::uuid[]) AND at > now() - interval '7 days'

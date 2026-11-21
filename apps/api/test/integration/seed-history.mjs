@@ -32,21 +32,23 @@ export async function seedSite(pool, encryptSecret, { name = 'seed', kind = 'esx
   return { connection, pool: rp.id, image: img.id };
 }
 
-// `count` ready, running servers spread over the owners given (round robin), 2 vCPUs each; shape = position % 5.
+// `count` ready, running servers spread over the owners given (round robin), 2 vCPUs each. The shapes are dealt so that
+// every owner gets all of them (with 20 owners and 200 servers: two servers of each shape per owner).
 export async function seedServers(pool, site, owners, count = 200, prefix = 'seed') {
   const { rows } = await pool.query(`INSERT INTO servers (owner_id, pool_id, image_id, name, vcpu, memory_mb, disk_gb, price_monthly, currency, state, power_state, vm_moref, created_at)
     SELECT ($1::uuid[])[1 + (n % cardinality($1::uuid[]))], $2, $3, $4 || '-' || lpad(n::text, 4, '0'), 2, 2048, 20, 80, 'TRY', 'ready', 'poweredOn', 'vm-' || $4 || '-' || n, now() - interval '60 days'
     FROM generate_series(0, $5::int - 1) n RETURNING id, name`, [owners, site.pool, site.image, prefix, count]);
-  return rows.sort((x, y) => x.name.localeCompare(y.name)).map((r, i) => ({ id: r.id, name: r.name, shape: i % SHAPES.length }));
+  return rows.sort((x, y) => x.name.localeCompare(y.name)).map((r, i) => ({ id: r.id, name: r.name, shape: (i + Math.floor(i / owners.length)) % SHAPES.length }));
 }
 
-// Five-minute samples of the last `days` days, as the worker's power sampling writes them (and keeps for 14 days).
+// Five-minute samples of the last `days` days, as the worker's power sampling writes them (and keeps for 14 days):
+// in the order of their time, all servers at each moment, which is what the index on the time relies on.
 export async function seedSamples(pool, servers, days = 14) {
   await pool.query('SELECT setseed(0.42)');
   const { rowCount } = await pool.query(`INSERT INTO server_cpu_samples (server_id, at, cpu_pct)
     SELECT s.id, t, round(${cpuSql('t', 's.shape', 'random()')}::numeric, 2)
     FROM unnest($1::uuid[], $2::int[]) s(id, shape), generate_series(now() - make_interval(days => $3), now(), interval '5 minutes') t
-    ON CONFLICT DO NOTHING`, [servers.map((s) => s.id), servers.map((s) => s.shape), days]);
+    ORDER BY t, s.id ON CONFLICT DO NOTHING`, [servers.map((s) => s.id), servers.map((s) => s.shape), days]);
   return rowCount;
 }
 
@@ -70,26 +72,33 @@ export async function seedTraffic(pool, servers, days = 16) {
   return rowCount;
 }
 
-// The statements a piece of work sends, counted: `await counted(pool, () => work())` gives { result, queries, ms }.
+// The statements a piece of work sends, counted: `await counted(pool, () => work())` gives { result, queries, ms,
+// statements } (statements: the text of each, to see which tables a request read).
 // Statements sent through a client checked out of the pool (transactions) are counted as well.
 export async function counted(pool, work) {
   let queries = 0;
+  const statements = [];
+  const note = (q) => { queries++; statements.push(String(typeof q === 'string' ? q : q?.text ?? '').replace(/\s+/g, ' ').slice(0, 400)); };
   const poolQuery = pool.query, connect = pool.connect;
-  pool.query = function (...args) { queries++; return poolQuery.apply(this, args); };
-  const clients = [];
+  pool.query = function (...args) { note(args[0]); return poolQuery.apply(this, args); };
+  // A client checked out for a transaction counts its statements while it is out; when it is released it is the
+  // pool's again (pool.query counts those itself: counting on the client too would count them twice).
+  const out = new Set();
   pool.connect = function (...args) {
     // With a callback it is pool.query's own checkout, counted above already.
     if (typeof args[0] === 'function') return connect.apply(this, args);
     return connect.apply(this, args).then((client) => {
-      if (!clients.some((c) => c.client === client)) {
-        const plain = client.query;
-        clients.push({ client, plain });
-        client.query = function (...a) { queries++; return plain.apply(this, a); };
-      }
+      if (out.has(client)) return client;
+      const plain = client.query, release = client.release;
+      out.add(client);
+      const back = () => { client.query = plain; client.release = release; out.delete(client); };
+      client.query = function (...a) { note(a[0]); return plain.apply(this, a); };
+      client.release = function (...a) { back(); return release.apply(this, a); };
+      client.__back = back;
       return client;
     });
   };
   const started = performance.now();
-  try { return { result: await work(), queries, ms: Math.round(performance.now() - started) }; }
-  finally { pool.query = poolQuery; pool.connect = connect; for (const c of clients) c.client.query = c.plain; }
+  try { return { result: await work(), queries, ms: Math.round(performance.now() - started), statements }; }
+  finally { pool.query = poolQuery; pool.connect = connect; for (const client of [...out]) client.__back(); }
 }
