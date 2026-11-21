@@ -24,6 +24,22 @@ Her madde kendi başına yüklenir; veritabanı değişikliği olanlarda migrati
   değişmez. Veritabanı değişikliği yoktur (`quotas` tablosu `project` kapsamını baştan beri taşıyordu). Kotası olan
   bir projede sınır aşılınca API `QUOTA_EXCEEDED` yerine `PROJECT_QUOTA_EXCEEDED` döner; bu kodu yalnızca proje
   kotası tanımlayan kurulumlar görür. Ayrıntı: [catalog.md](catalog.md#kotalar-ve-projeler).
+- **Akıllı yardımcılar** (kullanım takibi, ay sonu tahmini, zamanlama önerisi, ödeme riski, destek yardımı;
+  kurallar ve eşikler: [smart-features.md](smart-features.md)). İşletmecinin yapacağı bir şey yoktur; hiçbiri
+  kendiliğinden bir sunucuda, faturada ya da talepte değişiklik yapmaz.
+  - **Veritabanı:** migration 088 iki tablo (`usage_anomalies`, `server_cpu_hourly`) ve
+    `server_cpu_samples` üzerinde bir BRIN dizini ekler; 089 `users` tablosuna bir sütun ekler. Mevcut veri
+    değişmez. Yükseltmeden iki dakika sonra worker, eldeki 14 günlük işlemci örneklerini bir kez saatlik satırlara
+    toplar; sonrasında saatte bir yalnızca yeni örnekleri okur.
+  - **Değişen rakam:** saatlik faturalanan sunucusu olan hesaplarda genel bakıştaki "Bu ay" kartı ve
+    `GET /usage/summary` artık aylık liste fiyatını değil, faturalamanın kaydettiği saatlik kullanımı ve onun ay
+    sonuna izdüşümünü gösterir. Saatlik sunucusu olmayan hesaplarda rakamlar aynıdır. Faturalar etkilenmez.
+  - **Yeni bildirimler:** `server.usage_anomaly` (varsayılan: yalnız panel) ve `billing.budget_forecast`
+    (varsayılan: panel ve e-posta; yalnızca bütçe belirlemiş müşterilere, ayda bir). Kapatmak isteyen işletmeci
+    Ayarlar → Bildirim kuralları'ndan kanallarını kaldırır.
+  - **Geçmiş gerektirenler:** kullanım takibi yaklaşık 5 gün, zamanlama önerisi 21 gün işlemci geçmişi ister; o
+    zamana kadar ve işlemci ölçümü vermeyen platformlarda (XCP-ng, oVirt, libvirt, Incus) "yeterli veri yok" denir.
+  - **Yeni ortam değişkeni (isteğe bağlı):** worker için `ANOMALY_MINUTES` (varsayılan 60).
 
 ## 0.4.0 (beta): kurulum betiğinin yeni çıktısı ve sürüm numarası (2026-11-21)
 

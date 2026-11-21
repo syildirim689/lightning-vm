@@ -9382,7 +9382,7 @@
     "hidden": "7 gün gizlendi",
     "hiddenCount": "{n, plural, one {# bulgu gizli.} other {# bulgu gizli.}} İlk sayfadaki “gizlenen bulguları göster” geri getirir.",
     "normal": "Olağan dışı bir şey yok. Sunucunun kendi son {days, plural, one {# günü} other {# günü}} ile karşılaştırıldı.",
-    "notEnough": "Henüz yeterli veri yok: {days, plural, =0 {geçmiş yok} one {# günlük geçmiş var} other {# günlük geçmiş var}}, bir sonuca varmak için {min} gün gerekir.",
+    "notEnough": "Karşılaştırma için geçmiş henüz kısa: {days, plural, =0 {geçmiş yok} one {# günlük geçmiş var} other {# günlük geçmiş var}}, bir sonuca varmak için {min} gün gerekir.",
     "notMeasured": "Yeterli veri yok: bu platform işlemci ölçümü bildirmiyor, bu yüzden sunucunun kullanımı hakkında bir sonuca varılmaz."
   },
   "ScheduleSuggestion": {
@@ -9406,7 +9406,7 @@
     "notNow": "Şimdi değil",
     "hidden": "7 gün gizlendi",
     "noPower": "Rolünüz bu sunucuyu açıp kapatamaz; zamanlamaları siz oluşturamazsınız.",
-    "notEnough": "Zamanlama önerisi: henüz yeterli veri yok ({min} günün {days} günü kadar işlemci geçmişi var).",
+    "notEnough": "Zamanlama önerisi: işlemci geçmişi henüz kısa ({min} günün {days} günü var).",
     "notMeasured": "Zamanlama önerisi: yeterli veri yok. Bu platform işlemci ölçümü bildirmiyor, bu yüzden bir şey önerilmez.",
     "noWindow": "Zamanlama önerisi: son {weeks} haftada düzenli bir boş aralık yok."
   },

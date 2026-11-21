@@ -96,14 +96,16 @@ test('smart: the usage watch says what it compared, a finding says its numbers a
   // Staff: the third tab of the abuse page. Empty on this deployment; then with one that resembles mining.
   await page.goto('/admin/abuse?tab=usage');
   await expect(page.getByRole('tab', { name: /Unusual use/ })).toHaveAttribute('aria-selected', 'true');
-  await expect(page.getByText('No server’s use has left its own baseline.')).toBeVisible();
+  const unusual = page.getByRole('grid', { name: 'Unusual use' });
+  await expect(unusual.getByText('No server’s use has left its own baseline.')).toBeVisible();
   await expect(page.getByRole('searchbox', { name: 'Search findings' })).toHaveCount(0);
   await page.route('**/api/admin/anomalies', (route) => json(route, { anomalies: [{ ...finding, resolvedAt: null, serverId: id, serverName: 'web-1', owner: 'a@example.test', location: 'Istanbul', abuseOpen: 1 }] }));
   await page.reload();
-  await expect(page.getByText('CPU use is far above usual').first()).toBeVisible();
-  await expect(page.getByText('Last 3 hours: 96% on average. Usual at this time of day: 10% (from 46 hours of history over 10 days).').first()).toBeVisible();
-  await expect(page.getByText('Resembles mining: CPU held near full').first()).toBeVisible();
-  await expect(page.getByText('1 abuse finding open').first()).toBeVisible();
+  await expect(unusual.getByText('CPU use is far above usual')).toBeVisible();
+  await expect(unusual.getByText('Last 3 hours: 96% on average. Usual at this time of day: 10% (from 46 hours of history over 10 days).')).toBeVisible();
+  await expect(unusual.getByText('Resembles mining: CPU held near full')).toBeVisible();
+  await expect(unusual.getByText('1 abuse finding open')).toBeVisible();
+  await expect(unusual.getByText('web-1')).toBeVisible();
   await page.setViewportSize({ width: 390, height: 844 });
   await noSidewaysScroll(page, 'unusual use at 390 px');
   await page.setViewportSize({ width: 1280, height: 720 });
@@ -141,8 +143,12 @@ test('smart: a schedule is suggested with its reasons, created only on a click a
   await signInAdmin(page);
   const id = await ownServer(page);
   await page.goto(`/servers/${id}`);
-  // A new server: three weeks of history are needed, and the line says how many days there are.
-  await expect(page.locator('[data-schedule-suggestion="not_enough_data"]')).toHaveText(/Schedule suggestion: not enough data yet \(\d+ of 21 days of CPU history\)\./);
+  // What the API says about this server as it is: three weeks of history are needed and a deployment this young has
+  // none of them (the line says how many days there are); a server that already has a power schedule is left alone.
+  const real = await (await page.request.get(`/api/servers/${id}/schedule-suggestion`)).json() as { state: string; days: number; minDays: number; savesMoney: boolean };
+  expect(['not_enough_data', 'scheduled']).toContain(real.state);
+  expect([real.minDays, real.savesMoney]).toEqual([21, false]);
+  if (real.state === 'not_enough_data') await expect(page.locator('[data-schedule-suggestion="not_enough_data"]')).toHaveText(/Schedule suggestion: not enough data yet \(\d+ of 21 days of CPU history\)\./);
   await expect(page.getByRole('button', { name: 'Create these schedules' })).toHaveCount(0);
 
   // The same page with a suggestion; the two requests it may make are answered here and looked at.
@@ -202,14 +208,16 @@ test('smart: payment risk is said to the customer before the renewal, and listed
     { userId: 'u1', email: 'a@example.test', currency: 'EUR', atRisk: 1200, overdue: 1200, overdueCount: 2, oldestDays: 40, newOverdue: 300, failedCharges: 0, failedAmount: 0, reasons: ['OVERDUE_GROWING'] },
     { userId: 'u2', email: 'b@example.test', currency: 'EUR', atRisk: 120, overdue: 0, overdueCount: 0, oldestDays: 0, newOverdue: 0, failedCharges: 3, failedAmount: 120, reasons: ['REPEATED_FAILURES'] }] }));
   await page.reload();
-  await expect(page.getByText('a@example.test').first()).toBeVisible();
-  await expect(page.getByText('€1,200.00').first()).toBeVisible();
-  await expect(page.getByText('2 invoices, the oldest 40 days overdue').first()).toBeVisible();
-  await expect(page.getByText('€300.00 of it in the last 7 days').first()).toBeVisible();
-  await expect(page.getByText('Overdue and growing').first()).toBeVisible();
-  await expect(page.getByText('3 failed charges').first()).toBeVisible();
-  await expect(page.getByText('Repeated failed charges').first()).toBeVisible();
-  await expect(page.getByText('Nothing overdue').first()).toBeVisible();
+  const table = page.getByRole('grid', { name: 'Accounts at risk' });
+  const first = table.getByRole('row').filter({ hasText: 'a@example.test' }), second = table.getByRole('row').filter({ hasText: 'b@example.test' });
+  await expect(first).toContainText('€1,200.00');
+  await expect(first).toContainText('2 invoices, the oldest 40 days overdue');
+  await expect(first).toContainText('€300.00 of it in the last 7 days');
+  await expect(first).toContainText('Overdue and growing');
+  await expect(second).toContainText('€120.00');
+  await expect(second).toContainText('Nothing overdue');
+  await expect(second).toContainText('3 failed charges');
+  await expect(second).toContainText('Repeated failed charges');
   await page.setViewportSize({ width: 390, height: 844 });
   await noSidewaysScroll(page, 'accounts at risk at 390 px');
   await page.setViewportSize({ width: 1280, height: 720 });
@@ -267,8 +275,8 @@ test('smart: staff see similar resolved tickets with the reason; a customer writ
     answers: [{ id: ticket, number: 1001, subject: 'SSH does not connect', status: 'closed', shared: ['ssh', 'port'], answer: 'Port 22 was closed in your firewall rule; we added the rule and SSH works again.' }] }); });
   await page.goto('/support?new=1');
   const dialog = page.getByRole('dialog');
-  await dialog.getByLabel('Subject', { exact: true }).fill('SSH refuses the connection');
-  await dialog.getByLabel('Message', { exact: true }).fill('Port 22 answers with connection refused.');
+  await dialog.getByLabel('Subject').fill('SSH refuses the connection');
+  await dialog.getByLabel('Message').fill('Port 22 answers with connection refused.');
   const before = dialog.getByRole('region', { name: 'Before you send: this may already answer it' });
   await expect(before).toContainText('Open incident: Network outage in Istanbul');
   await expect(before).toContainText('Your ticket #1001: SSH does not connect');
@@ -280,7 +288,7 @@ test('smart: staff see similar resolved tickets with the reason; a customer writ
   await expect(before).toBeVisible();
   await noSidewaysScroll(page, 'new ticket with suggestions at 390 px');
   // Nothing was sent: the dialog is closed and the draft cleared.
-  await dialog.getByLabel('Subject', { exact: true }).fill('');
-  await dialog.getByLabel('Message', { exact: true }).fill('');
+  await dialog.getByLabel('Subject').fill('');
+  await dialog.getByLabel('Message').fill('');
   await expect(before).toHaveCount(0);
 });
