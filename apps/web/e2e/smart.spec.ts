@@ -248,8 +248,8 @@ test('smart: payment risk is said to the customer before the renewal, and listed
     { code: 'RENEWAL_NOT_COVERED', severity: 'warning', params: { balance: '30.00', short: '66.00', date: '2026-12-11', price: '96.00', currency: 'EUR' }, link: '/billing?tab=balance', key: 'renewal-cover:2026-12-11' }] }));
   await page.goto('/');
   await expect(page.getByText('Your card ends before the next renewal')).toBeVisible();
-  await expect(page.getByText('The card ending in 1881 is valid through 10/26; €96.00 is due on Dec 11, 2026 and cannot be charged to it. Add a card that lasts, or top up your balance.')).toBeVisible();
-  await expect(page.getByText('€96.00 is due on Dec 11, 2026; your balance is €30.00, €66.00 short, and there is no saved card that lasts until then.')).toBeVisible();
+  await expect(page.getByText('The card ending in 1881 is valid through 10/26; €96.00 is due on Dec 11, 2026 and cannot be charged to it. Renewals are charged to your default card only: make a card that lasts the default (or add one), or top up your balance.')).toBeVisible();
+  await expect(page.getByText('€96.00 is due on Dec 11, 2026; your balance is €30.00, €66.00 short, and the card renewals are charged to does not last until then.')).toBeVisible();
   await page.setViewportSize({ width: 390, height: 844 });
   await noSidewaysScroll(page, 'overview with payment warnings at 390 px');
 });

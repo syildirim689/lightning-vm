@@ -3132,11 +3132,11 @@
       },
       "CARD_EXPIRES_BEFORE_RENEWAL": {
         "title": "Kartınızın süresi sıradaki yenilemeden önce doluyor",
-        "body": "{last4} ile biten kart {expiry} sonuna kadar geçerli; {date} tarihinde {price} ödenecek ve bu karttan çekilemeyecek. Süresi yeten bir kart ekleyin ya da bakiye yükleyin."
+        "body": "{last4} ile biten kart {expiry} sonuna kadar geçerli; {date} tarihinde {price} ödenecek ve bu karttan çekilemeyecek. Yenilemeler yalnızca varsayılan kartınızdan çekilir: süresi yeten bir kartı varsayılan yapın (ya da ekleyin) veya bakiye yükleyin."
       },
       "RENEWAL_NOT_COVERED": {
         "title": "Bakiyeniz sıradaki yenilemeyi karşılamıyor",
-        "body": "{date} tarihinde {price} ödenecek; bakiyeniz {balance}, {short} eksik ve o tarihe kadar geçerli kayıtlı kartınız yok."
+        "body": "{date} tarihinde {price} ödenecek; bakiyeniz {balance}, {short} eksik ve yenilemelerin çekildiği kart o tarihe kadar geçerli değil."
       },
       "PAYMENT_RISK": {
         "title": "{count, plural, one {# hesabın} other {# hesabın}} ödemesi risk altında",

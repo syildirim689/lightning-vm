@@ -155,3 +155,16 @@ test('in a month in which "budget exceeded" went out, the forecast is not announ
   assert.deepEqual(await runBudgetForecasts(), { checked: 0, warned: 0 });
   assert.deepEqual((await cards(a)).map((x) => x.code), ['BUDGET_FORECAST_OVER']);
 });
+
+test('the periodic run looks at every account with a budget, page after page', async () => {
+  const { BUDGET_FORECAST_PAGE } = await import('../../dist/cost-forecast.js');
+  assert.equal(BUDGET_FORECAST_PAGE, 500);
+  await pool.query('UPDATE users SET budget_monthly = NULL, budget_currency = NULL');
+  const ids = [];
+  for (let i = 0; i < 5; i++) ids.push((await signUp(`page-${i}@example.test`))[1]);
+  // Budgets nobody is near: such accounts are not marked, so the next run meets them again.
+  await pool.query("UPDATE users SET budget_monthly = 900000, budget_currency = 'TRY' WHERE id = ANY($1::uuid[])", [ids]);
+  assert.deepEqual(await runBudgetForecasts(new Date(), 2), { checked: 5, warned: 0 }, 'pages of two: all five are reached');
+  assert.deepEqual(await runBudgetForecasts(new Date(), 5), { checked: 5, warned: 0 }, 'a last page that is exactly full');
+  assert.deepEqual(await runBudgetForecasts(), { checked: 5, warned: 0 });
+});

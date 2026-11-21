@@ -24,7 +24,9 @@ export type RenewalRisk =
 
 // renewal: the next one as billing will invoice it (billing.ts, nextRenewal), null when there is none or its invoice
 // exists already (that invoice has its own reminders). balance: what the account holds in the renewal's currency.
-// - Saved cards, and every one of them expires before the renewal: the card it would be charged to is named.
+// cards: in the order billing takes them (the default first, then the newest: billing.ts, chargeSavedCard); it
+// charges the first one and no other.
+// - The card billing will charge expires before the renewal (a spare that lasts does not help: it is never tried): named.
 // - No card that lasts, and a balance that is there but smaller than the renewal: the shortfall is named.
 // An account with neither a card nor a balance pays its invoices by hand; nothing is said to it.
 export function renewalRisks(o: { renewal: { at: Date; amount: number; currency: string; invoiced?: boolean } | null; cards: Card[]; balance: number; now: Date }, rule = riskRule): RenewalRisk[] {
@@ -34,10 +36,11 @@ export function renewalRisks(o: { renewal: { at: Date; amount: number; currency:
   if (days > rule.lookaheadDays || days < 0) return [];
   const out: RenewalRisk[] = [];
   const base = { at: r.at.toISOString(), amount: r.amount, currency: r.currency };
-  const lasting = o.cards.filter((c) => !cardExpiresBefore(c, r.at));
+  const charged = o.cards.find((x) => x.isDefault) ?? o.cards[0];
+  const lasting = charged && !cardExpiresBefore(charged, r.at) ? [charged] : [];
   const covered = o.balance >= r.amount;
-  if (o.cards.length && !lasting.length && !covered) {
-    const c = o.cards.find((x) => x.isDefault) ?? o.cards[0];
+  if (charged && !lasting.length && !covered) {
+    const c = charged;
     const year = (c.expYear ?? 0) < 100 ? 2000 + (c.expYear ?? 0) : c.expYear ?? 0;
     out.push({ ...base, last4: c.last4 ?? '', expiry: `${String(c.expMonth).padStart(2, '0')}/${String(year).slice(-2)}`, kind: 'CARD_EXPIRES_BEFORE_RENEWAL' });
   }

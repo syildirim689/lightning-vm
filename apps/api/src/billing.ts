@@ -1281,6 +1281,17 @@ export class BillingCallbackController {
       if (finalResult(r)) await settlePayment(p.id, r);
       else await noteReview(p.id, r);
       logEvent(r.ok ? 'info' : 'warn', 'payment_webhook', { provider: 'stripe', paymentId: p.id, event: event.type, ok: r.ok, ...(!r.ok && { code: r.code }) });
+    } else if (ours && p.status === 'failed') {
+      // Closed as failed here (a charge whose answer never came back, a page given up) and Stripe now says, signed and
+      // with our amount, that it was paid: the money was taken, so it is recorded. Left as it was, the invoice stayed
+      // unpaid and the next billing run charged the card a second time. The payment is opened again and settled by
+      // the same code as any other: on the invoice if that is still unpaid, as balance otherwise.
+      const r = stripeEventResult(event, p);
+      if (r.ok) {
+        const { rowCount } = await pool.query("UPDATE payments SET status = 'pending', completed_at = NULL WHERE id = $1 AND status = 'failed'", [p.id]);
+        if (rowCount) await settlePayment(p.id, r);
+        logEvent('warn', 'payment_webhook_paid_after_failure', { provider: 'stripe', paymentId: p.id, event: event.type });
+      }
     }
     // Remembered only once it was handled: a delivery that failed half way is handled again when Stripe retries.
     await redis.set(seen, '1', 'EX', 3 * 86_400).catch(() => undefined);

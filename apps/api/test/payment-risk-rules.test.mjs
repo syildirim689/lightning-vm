@@ -32,8 +32,12 @@ test('the saved card ends before the renewal: said with the card and the date, u
   // Renewal on 3 December; the card ends with November.
   const r = renewalRisks({ renewal: renewal(12), cards: [card(11, 2026, { isDefault: true })], balance: 0, now });
   assert.deepEqual(r, [{ kind: 'CARD_EXPIRES_BEFORE_RENEWAL', last4: '4242', expiry: '11/26', at: inDays(12).toISOString(), amount: 100, currency: 'EUR' }]);
-  // Another card lasts: fine.
-  assert.deepEqual(renewalRisks({ renewal: renewal(12), cards: [card(11, 2026), card(6, 2028)], balance: 0, now }), []);
+  // Billing charges one card, the default (else the first of its list, the newest), and no other: when that one
+  // lasts, fine; a spare that lasts does not help when the one that is charged ends.
+  assert.deepEqual(renewalRisks({ renewal: renewal(12), cards: [card(6, 2028), card(11, 2026)], balance: 0, now }), []);
+  assert.deepEqual(renewalRisks({ renewal: renewal(12), cards: [card(11, 2026), card(6, 2028, { isDefault: true })], balance: 0, now }), [], 'the default lasts, wherever it stands in the list');
+  assert.deepEqual(renewalRisks({ renewal: renewal(12), cards: [card(6, 2028), card(11, 2026, { isDefault: true })], balance: 0, now }).map((x) => x.kind), ['CARD_EXPIRES_BEFORE_RENEWAL']);
+  assert.deepEqual(renewalRisks({ renewal: renewal(12), cards: [card(11, 2026), card(6, 2028)], balance: 0, now }).map((x) => x.kind), ['CARD_EXPIRES_BEFORE_RENEWAL'], 'no default: the first is charged');
   // The balance pays it whatever the card does.
   assert.deepEqual(renewalRisks({ renewal: renewal(12), cards: [card(11, 2026)], balance: 100, now }), []);
   // Two cards, both ending: the default one is named.

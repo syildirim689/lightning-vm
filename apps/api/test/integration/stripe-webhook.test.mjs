@@ -232,9 +232,19 @@ test('another amount or currency is left for staff; an expired page closes the p
     data: { object: { id: 'cs_test_x', object: 'checkout.session', client_reference_id: paymentId, payment_status: 'unpaid', status: 'expired', ...o } } });
   assert.deepEqual((await deliver(expired(other))).json(), { received: true });
   assert.deepEqual([(await payment(other)).status, (await payment(other)).error_code], ['failed', 'EXPIRED']);
-  // Then a payment for it after all: a closed payment stays closed, the invoice unpaid.
+  // Then Stripe says, signed and with our amount, that it was paid after all (a charge whose answer was lost, a page
+  // finished late): the money was taken, so it is recorded and the invoice is paid, not left to be charged again.
+  const late = (await one('SELECT invoice_id FROM payments WHERE id = $1', [other])).invoice_id;
+  assert.equal((await invoice(late)).status, 'unpaid');
+  // Another amount than ours does not reopen it.
+  assert.equal((await deliver(paid(other, { amount_received: 1200 }))).statusCode, 200);
+  assert.deepEqual([(await payment(other)).status, (await invoice(late)).status], ['failed', 'unpaid']);
   assert.equal((await deliver(paid(other))).statusCode, 200);
-  assert.equal((await payment(other)).status, 'failed');
+  assert.deepEqual([(await payment(other)).status, (await invoice(late)).status], ['succeeded', 'paid']);
+  // Said twice: recorded once.
+  const held = await balance();
+  assert.equal((await deliver(paid(other))).statusCode, 200);
+  assert.deepEqual([(await payment(other)).status, await balance()], ['succeeded', held]);
   // An "expired" for a payment already recorded as paid changes nothing.
   inv = await invoiceFor(); p = await pending(inv);
   assert.equal((await deliver(paid(p))).statusCode, 200);

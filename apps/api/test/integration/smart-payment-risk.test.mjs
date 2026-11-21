@@ -93,8 +93,11 @@ test('the saved card ends before the next renewal: the owner is told which card,
   await setBilling({ autoCharge: false });
   assert.deepEqual(await cards(a), []);
   await setBilling();
-  // A second card that lasts.
+  // A second card that lasts, as a spare: billing still charges the default one, so the warning stays and names it.
   await card(aId, 12, new Date().getUTCFullYear() + 3, '4242', false);
+  assert.deepEqual((await cards(a)).map((x) => [x.code, x.params.last4]), [['CARD_EXPIRES_BEFORE_RENEWAL', '1881']]);
+  // Made the default: that is the card the renewal is charged to, and it lasts.
+  await pool.query("UPDATE saved_cards SET is_default = (last4 = '4242') WHERE owner_id = $1", [aId]);
   assert.deepEqual(await cards(a), []);
 });
 

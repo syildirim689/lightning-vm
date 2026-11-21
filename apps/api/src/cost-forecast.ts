@@ -6,7 +6,6 @@
 // A budget is exceeded "by forecast" when that total passes it, which a run rate under the budget does not rule out
 // (hourly usage, servers deleted after they cost money): the customer is told once per month, and it is an insight.
 import { budgetOf, BUDGET_NEAR, type BudgetState } from './budget';
-import { today } from './billing';
 import { pool, redis } from './db';
 import { logEvent } from './log';
 import { notify } from './notify';
@@ -17,7 +16,10 @@ export type CurrencyForecast = MonthForecast & { currency: string };
 export type BudgetForecast = NonNullable<BudgetState> & { forecast: number; forecastRatio: number; forecastState: 'ok' | 'near' | 'over' };
 
 export async function costForecast(userId: string, now = new Date()): Promise<CurrencyForecast[]> {
-  const month = `${today(now).slice(0, 7)}-01`; // the month billing books usage into
+  // The UTC month, as the proration and the hours left below are counted (forecast-rules.ts). Billing books usage by its
+  // own calendar (Istanbul days), which is a month ahead for the last three hours of a UTC month: read by billing's
+  // month, those hours showed next month's usage (nearly nothing) beside this month's remaining hours.
+  const month = `${now.toISOString().slice(0, 7)}-01`;
   const [{ rows: fixed }, { rows: hourly }, { rows: used }] = await Promise.all([
     pool.query(`SELECT price_monthly::float8 AS price, trim(currency) AS currency, created_at FROM servers WHERE owner_id = $1 AND state <> 'deleted' AND price_monthly > 0 AND billing_mode <> 'hourly'
       UNION ALL SELECT price_monthly::float8, trim(currency), created_at FROM vdcs WHERE owner_id = $1 AND active AND price_monthly > 0`, [userId]),
@@ -55,15 +57,26 @@ export async function checkBudgetForecast(userId: string, now = new Date()): Pro
   return true;
 }
 
-// Accounts with a budget that were not warned this month, at most 500 a run (the next run takes the rest).
+// Every account with a budget that was not warned this month, read 500 at a time in id order. (An account that is
+// within its budget is not marked, so "the first 500 not yet warned" was the same 500 at every run: with more
+// accounts than that, the rest were never looked at.)
 export const BUDGET_FORECAST_HOURS = 6;
-export async function runBudgetForecasts(now = new Date()) {
+export const BUDGET_FORECAST_PAGE = 500;
+export async function runBudgetForecasts(now = new Date(), page = BUDGET_FORECAST_PAGE) {
   const month = now.toISOString().slice(0, 7);
-  const { rows } = await pool.query(`SELECT id FROM users WHERE budget_monthly IS NOT NULL AND budget_forecast_alerted IS DISTINCT FROM $1 AND budget_alerted IS DISTINCT FROM $1
-    AND NOT coalesce(banned, false) AND disabled_at IS NULL ORDER BY id LIMIT 500`, [month]);
-  let warned = 0;
-  for (const u of rows) if (await checkBudgetForecast(u.id, now).catch(() => false)) warned++;
-  return { checked: rows.length, warned };
+  let checked = 0, warned = 0, failed = 0, after = '00000000-0000-0000-0000-000000000000';
+  for (;;) {
+    const { rows } = await pool.query(`SELECT id FROM users WHERE id > $2 AND budget_monthly IS NOT NULL AND budget_forecast_alerted IS DISTINCT FROM $1 AND budget_alerted IS DISTINCT FROM $1
+      AND NOT coalesce(banned, false) AND disabled_at IS NULL ORDER BY id LIMIT $3`, [month, after, page]);
+    for (const u of rows) {
+      checked++;
+      if (await checkBudgetForecast(u.id, now).catch(() => { failed++; return false; })) warned++;
+    }
+    if (rows.length < page) break;
+    after = rows[rows.length - 1].id;
+  }
+  if (failed) logEvent('error', 'budget_forecast_accounts_failed', { failed });
+  return { checked, warned };
 }
 
 export function startBudgetForecasts() {

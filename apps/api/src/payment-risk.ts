@@ -25,6 +25,8 @@ export async function renewalRisksOf(userId: string, now = new Date()): Promise<
 // Per account and currency: what is overdue (unpaid, past its due date, not disputed, top-ups left out), how much of
 // it became overdue in the last days, and the failed charges of the last 30 days with the open amount they were for.
 // Two grouped statements over indexed columns; at most 200 rows are returned.
+// A charge that failed: not a payment page the customer left or let run out, which is closed as "failed" too.
+const charged = (alias: string) => `coalesce(${alias}.error_code, '') NOT IN ('EXPIRED', 'CANCELLED_BY_CUSTOMER')`;
 export async function riskAccounts(): Promise<ReturnType<typeof rankRisk>> {
   const { rows } = await pool.query(`WITH due AS (
       SELECT owner_id, trim(currency) AS currency, sum(total - paid_total)::float8 AS overdue, count(*)::int AS n,
@@ -34,8 +36,8 @@ export async function riskAccounts(): Promise<ReturnType<typeof rankRisk>> {
     failed AS (
       SELECT x.owner_id, x.currency, x.n,
         coalesce((SELECT sum(i.total - i.paid_total) FROM invoices i WHERE i.owner_id = x.owner_id AND trim(i.currency) = x.currency AND i.status = 'unpaid' AND i.kind <> 'topup'
-          AND EXISTS (SELECT 1 FROM payments f WHERE f.invoice_id = i.id AND f.status = 'failed' AND f.created_at > now() - make_interval(days => $2))), 0)::float8 AS amount
-      FROM (SELECT owner_id, trim(currency) AS currency, count(*)::int AS n FROM payments WHERE status = 'failed' AND created_at > now() - make_interval(days => $2) GROUP BY owner_id, trim(currency)) x)
+          AND EXISTS (SELECT 1 FROM payments f WHERE f.invoice_id = i.id AND f.status = 'failed' AND ${charged('f')} AND f.created_at > now() - make_interval(days => $2))), 0)::float8 AS amount
+      FROM (SELECT owner_id, trim(currency) AS currency, count(*)::int AS n FROM payments p WHERE status = 'failed' AND ${charged('p')} AND created_at > now() - make_interval(days => $2) GROUP BY owner_id, trim(currency)) x)
     SELECT u.id AS "userId", u.email, coalesce(d.currency, f.currency) AS currency, coalesce(d.overdue, 0) AS overdue, coalesce(d.n, 0) AS "overdueCount", coalesce(d.oldest, 0) AS "oldestDays",
       coalesce(d.fresh, 0) AS "newOverdue", coalesce(f.n, 0) AS "failedCharges", coalesce(f.amount, 0) AS "failedAmount"
     FROM due d FULL JOIN failed f ON f.owner_id = d.owner_id AND f.currency = d.currency JOIN users u ON u.id = coalesce(d.owner_id, f.owner_id)

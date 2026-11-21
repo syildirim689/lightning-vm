@@ -3132,11 +3132,11 @@
       },
       "CARD_EXPIRES_BEFORE_RENEWAL": {
         "title": "Your card ends before the next renewal",
-        "body": "The card ending in {last4} is valid through {expiry}; {price} is due on {date} and cannot be charged to it. Add a card that lasts, or top up your balance."
+        "body": "The card ending in {last4} is valid through {expiry}; {price} is due on {date} and cannot be charged to it. Renewals are charged to your default card only: make a card that lasts the default (or add one), or top up your balance."
       },
       "RENEWAL_NOT_COVERED": {
         "title": "Your balance does not cover the next renewal",
-        "body": "{price} is due on {date}; your balance is {balance}, {short} short, and there is no saved card that lasts until then."
+        "body": "{price} is due on {date}; your balance is {balance}, {short} short, and the card renewals are charged to does not last until then."
       },
       "PAYMENT_RISK": {
         "title": "{count, plural, one {# account has} other {# accounts have}} payments at risk",
