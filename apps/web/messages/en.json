@@ -410,6 +410,7 @@
     "WEBHOOK_SIGNATURE_INVALID": "The webhook signature does not match.",
     "WEBHOOK_TIMESTAMP_OUT_OF_RANGE": "The webhook signature is too old.",
     "WEBHOOK_EVENT_INVALID": "This is not an event of this webhook address.",
+    "DIGEST_NOT_AVAILABLE": "The digest is not turned on in this panel.",
     "NO_SUGGESTION": "There is no schedule to suggest for this server any more. Reload the page."
   },
   "Auth": {
@@ -3261,6 +3262,14 @@
       "admin_operation_failed": {
         "title": "A customer's operation failed",
         "help": "When any customer's operation fails for good."
+      },
+      "admin_digest": {
+        "title": "Periodic digest",
+        "help": "The panel's state in one message on the day and hour you choose (turned on above, under Periodic digest): open findings, what opened and closed, payment risk, failed operations, capacity."
+      },
+      "account_digest": {
+        "title": "Periodic digest",
+        "help": "Your account in one message on the day and hour you choose (turned on above, under Periodic digest): findings on your servers, the month's forecast, the upcoming renewal. Off for everyone until an administrator turns it on."
       },
       "admin_insight": {
         "title": "Critical alert",
@@ -9425,6 +9434,32 @@
     "same": "The update window is already set to these hours.",
     "notEnough": "not enough data yet ({days} of {min} days of CPU history).",
     "notMeasured": "not enough data. No connected platform reports CPU figures, so nothing is suggested."
+  },
+  "PeriodicDigest": {
+    "title": "Periodic digest",
+    "introStaff": "One message on the day and hour you choose that says where the panel stands: open findings by severity, what opened and closed since the last digest, accounts at payment risk, failed operations and capacity. Only what you may see elsewhere in the panel.",
+    "introCustomer": "One message on the day and hour you choose that says where your account stands: findings on your servers, the forecast for this month and the upcoming renewal.",
+    "on": "Digest on",
+    "off": "Digest off",
+    "frequency": "How often",
+    "weekly": "Every week",
+    "daily": "Every day",
+    "day": "Day",
+    "hour": "Hour",
+    "zone": "Times in {zone} (the time zone of your account).",
+    "rules": "A digest with nothing to say is not sent. During your quiet hours it does not reach messaging apps; e-mail and the inbox still get it.",
+    "next": "Next digest: {when}",
+    "last": "last sent {when}",
+    "goesTo": "It goes to: {channels}. Change this in the list below, in the row \"Periodic digest\".",
+    "noChannel": "No working channel is chosen for the digest, so it would reach nobody. Tick one in the list below, in the row \"Periodic digest\" (e-mail needs outgoing mail to be set up, messaging a connected app).",
+    "save": "Save",
+    "saved": "Digest saved",
+    "savedOff": "Digest turned off",
+    "preview": "Send me a preview now",
+    "previewSent": "Preview sent: {channels}",
+    "previewTitle": "The digest as it would be written now",
+    "previewNotSent": "The digest as it would be written now (not sent: no working channel is chosen)",
+    "previewEmpty": "There is nothing to report right now. An empty digest is not sent."
   },
   "PaymentRisk": {
     "title": "Accounts at risk",

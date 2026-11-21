@@ -104,6 +104,10 @@ girmeniz gerekmez. Özelliklerin tamamı yalnızca VMware'de vardır; diğer alt
 - **Bakım için en sakin saatler:** dört haftalık işlemci geçmişinden sunucuların en az meşgul olduğu iki saat
   bulunur; Yönetim → Sistem'de otomatik güncelleme penceresi için (tek tıkla, aynı yetki ve denetim kaydıyla),
   bağlantı sayfasında host bakımı için sayılarıyla gösterilir. Yalnızca öneridir; az veride "yeterli veri yok" der
+- **Dönemsel özet:** olay başına bildirim yerine, seçtiğiniz gün ve saatte durumu söyleyen tek mesaj (haftalık ya
+  da günlük, kendi saat diliminizde). Personele panelin özeti (açık bulgular, açılan ve kapananlar, ödeme riski,
+  başarısız işlemler, kapasite), yönetici açtıysa müşteriye kendi hesabının özeti. Açılmadıkça kapalıdır; boş özet
+  gönderilmez; "şimdi önizleme gönder" düğmesi vardır
 - **Talep yazarken öneriler:** yeni destek talebi gönderilmeden önce, yanıtı olabilecek kendi eski talepleriniz ve
   durum sayfasındaki olaylar gösterilir (başka müşterilerin talepleri asla)
 - **Ödeme riski uyarısı:** sıradaki yenilemeden önce süresi dolan kayıtlı kart ya da yenilemeyi karşılamayan

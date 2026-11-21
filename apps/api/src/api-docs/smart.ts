@@ -81,6 +81,39 @@ const docs: Docs = {
     returns: { tr: '`incidents` (`id`, `title`, `impact`, `status`, `open`, `createdAt`, `resolvedAt`) ve `answers` (`id`, `number`, `subject`, `status`, `shared`, `answer`).',
       en: '`incidents` (`id`, `title`, `impact`, `status`, `open`, `createdAt`, `resolvedAt`) and `answers` (`id`, `number`, `subject`, `status`, `shared`, `answer`).' },
   },
+  // ---- periodic-digest.ts ----
+  'GET /account/digest': {
+    tag: 'account',
+    summary: { tr: 'Dönemsel özet ayarınızı verir.', en: 'Returns your periodic digest setting.' },
+    details: { tr: 'Özet, olay başına bildirim yerine belirlediğiniz gün ve saatte (kendi saat diliminizde) durumu tek mesajda söyler; siz açmadıkça kapalıdır. Personel (dashboard.view) panelin özetini alır: önem derecesine göre açık bulgular, son özetten beri açılan ve kapananlar, ödeme riski altındaki hesaplar, başarısız işlemler, kapasite. Müşteriler kendi özetlerini (sunucularının bulguları, ayın tahmini, yaklaşan yenileme) yalnızca yönetici `account.digest` bildirimini açtıysa alabilir (`available`). Özet sıradan bir bildirim olarak gider: seçtiğiniz kanallar, yöneticinin kuralları ve sessiz saatler geçerlidir. Söyleyecek bir şeyi olmayan özet gönderilmez.',
+      en: 'The digest says where things stand in one message, on the day and hour you choose (in your own time zone), instead of one notice per event; it is off until you turn it on. Staff (dashboard.view) get the digest of the panel: open findings by severity, what opened and closed since the last digest, accounts at payment risk, failed operations, capacity. Customers can have their own (findings on their servers, the forecast for the month, the upcoming renewal) only where the administrator has turned the `account.digest` notification on (`available`). It is sent as an ordinary notification: the channels you chose, the rules of the administrator and quiet hours apply. A digest with nothing to say is not sent.' },
+    returns: { tr: '`kind` (staff, customer), `event`, `available`, `enabled`, `frequency` (weekly, daily), `day` (1 = Pazartesi), `hour` (0-23), `timezone`, `nextAt`, `lastSentAt` ve `channels` (özetin şu an gideceği kanallar).',
+      en: '`kind` (staff, customer), `event`, `available`, `enabled`, `frequency` (weekly, daily), `day` (1 = Monday), `hour` (0-23), `timezone`, `nextAt`, `lastSentAt` and `channels` (where the digest goes as things stand).' },
+  },
+  'PUT /account/digest': {
+    tag: 'account',
+    summary: { tr: 'Dönemsel özeti açar, kapatır ya da zamanını değiştirir.', en: 'Turns the periodic digest on or off, or changes when it is sent.' },
+    details: { tr: 'Sonraki özet, saatiniz seçilen saati bir sonraki geçtiğinde gönderilir. Yaz saatine geçişte atlanan saat, boşluktan sonraki ilk an sayılır; geri alınan saatte özet bir kez gider. Başka bir kullanıcı adına hareket edilirken değiştirilemez.',
+      en: 'The next digest goes out the next time your clock passes the chosen hour. An hour skipped by a clock change counts as the first moment after the gap; an hour that comes twice sends once. Cannot be changed while acting as another user.' },
+    body: [
+      { name: 'enabled', type: 'boolean', required: true, text: { tr: 'Açık ya da kapalı.', en: 'On or off.' } },
+      { name: 'frequency', type: 'string', values: ['weekly', 'daily'], text: { tr: 'Varsayılan weekly.', en: 'Defaults to weekly.' } },
+      { name: 'day', type: 'integer', text: { tr: 'Haftalık özetin günü, 1 (Pazartesi) - 7 (Pazar). Varsayılan 1.', en: 'The day of a weekly digest, 1 (Monday) to 7 (Sunday). Defaults to 1.' } },
+      { name: 'hour', type: 'integer', text: { tr: 'Saat, 0-23. Varsayılan 8.', en: 'The hour, 0-23. Defaults to 8.' } },
+      { name: 'timezone', type: 'string', required: true, text: { tr: 'IANA saat dilimi, ör. Europe/Istanbul.', en: 'IANA time zone, e.g. Europe/Istanbul.' } },
+    ],
+    example: { enabled: true, frequency: 'weekly', day: 1, hour: 8, timezone: 'Europe/Istanbul' },
+    returns: { tr: '`GET /account/digest` ile aynı.', en: 'The same as `GET /account/digest`.' },
+    errors: ['VALIDATION_FAILED', 'DIGEST_NOT_AVAILABLE', 'NOT_WHILE_IMPERSONATING'],
+  },
+  'POST /account/digest/preview': {
+    tag: 'account',
+    summary: { tr: 'Özetin şu anki halini size hemen gönderir.', en: 'Sends you the digest as it would be written now.' },
+    details: { tr: 'Aynı kanallardan, başlığında "Önizleme" ile gider; dönem sayılmaz (sonraki özet yine son gerçek özetle karşılaştırır). Söylenecek bir şey yoksa hiçbir şey gönderilmez ve yanıt `empty: true` der. Saatte 5 önizleme.',
+      en: 'It goes through the same channels with "Preview" in its title and does not count as a period (the next digest still compares with the last real one). With nothing to say nothing is sent and the answer says `empty: true`. Five previews an hour.' },
+    returns: { tr: '`sent`, `empty`, `channels`, ayrıca özetin `title` ve `body` metni.', en: '`sent`, `empty`, `channels`, and the `title` and `body` of the digest.' },
+    errors: ['DIGEST_NOT_AVAILABLE', 'NOT_WHILE_IMPERSONATING', 'RATE_LIMITED'],
+  },
   // ---- maintenance-hours.ts ----
   'GET /admin/maintenance/quiet-hours': {
     tag: 'admin-system',

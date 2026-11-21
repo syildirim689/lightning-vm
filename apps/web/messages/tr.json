@@ -410,6 +410,7 @@
     "WEBHOOK_SIGNATURE_INVALID": "Webhook imzası uyuşmuyor.",
     "WEBHOOK_TIMESTAMP_OUT_OF_RANGE": "Webhook imzası çok eski.",
     "WEBHOOK_EVENT_INVALID": "Bu, bu webhook adresine ait bir olay değil.",
+    "DIGEST_NOT_AVAILABLE": "Özet bu panelde açık değil.",
     "NO_SUGGESTION": "Bu sunucu için artık önerilecek bir zamanlama yok. Sayfayı yenileyin."
   },
   "Auth": {
@@ -3261,6 +3262,14 @@
       "admin_operation_failed": {
         "title": "Müşteri işlemi başarısız",
         "help": "Herhangi bir müşterinin işlemi kalıcı olarak başarısız olduğunda."
+      },
+      "admin_digest": {
+        "title": "Dönemsel özet",
+        "help": "Seçtiğiniz gün ve saatte panelin durumu tek mesajda (yukarıda, Dönemsel özet bölümünden açılır): açık bulgular, açılan ve kapananlar, ödeme riski, başarısız işlemler, kapasite."
+      },
+      "account_digest": {
+        "title": "Dönemsel özet",
+        "help": "Seçtiğiniz gün ve saatte hesabınız tek mesajda (yukarıda, Dönemsel özet bölümünden açılır): sunucularınızdaki bulgular, ayın tahmini, yaklaşan yenileme. Yönetici açana kadar herkes için kapalıdır."
       },
       "admin_insight": {
         "title": "Kritik uyarı",
@@ -9425,6 +9434,32 @@
     "same": "Güncelleme penceresi zaten bu saatlere ayarlı.",
     "notEnough": "henüz yeterli veri yok ({min} günlük işlemci geçmişinin {days} günü var).",
     "notMeasured": "yeterli veri yok. Bağlı hiçbir platform işlemci ölçümü bildirmiyor, bu yüzden bir şey önerilmiyor."
+  },
+  "PeriodicDigest": {
+    "title": "Dönemsel özet",
+    "introStaff": "Seçtiğiniz gün ve saatte panelin durumunu söyleyen tek mesaj: önem derecesine göre açık bulgular, son özetten beri açılan ve kapananlar, ödeme riski altındaki hesaplar, başarısız işlemler ve kapasite. Yalnızca panelin başka yerlerinde görebildikleriniz.",
+    "introCustomer": "Seçtiğiniz gün ve saatte hesabınızın durumunu söyleyen tek mesaj: sunucularınızdaki bulgular, bu ayın tahmini ve yaklaşan yenileme.",
+    "on": "Özet açık",
+    "off": "Özet kapalı",
+    "frequency": "Sıklık",
+    "weekly": "Her hafta",
+    "daily": "Her gün",
+    "day": "Gün",
+    "hour": "Saat",
+    "zone": "Saatler {zone} saat dilimindedir (hesabınızın saat dilimi).",
+    "rules": "Söyleyecek bir şeyi olmayan özet gönderilmez. Sessiz saatlerinizde mesajlaşma uygulamalarına gitmez; e-posta ve gelen kutusu yine alır.",
+    "next": "Sonraki özet: {when}",
+    "last": "son gönderim {when}",
+    "goesTo": "Gittiği yer: {channels}. Aşağıdaki listede \"Dönemsel özet\" satırından değiştirebilirsiniz.",
+    "noChannel": "Özet için çalışan bir kanal seçili değil; kimseye ulaşmaz. Aşağıdaki listede \"Dönemsel özet\" satırında bir kanal işaretleyin (e-posta için posta gönderimi ayarlı, mesajlaşma için bir uygulama bağlı olmalıdır).",
+    "save": "Kaydet",
+    "saved": "Özet kaydedildi",
+    "savedOff": "Özet kapatıldı",
+    "preview": "Bana şimdi bir önizleme gönder",
+    "previewSent": "Önizleme gönderildi: {channels}",
+    "previewTitle": "Özetin şu anki hali",
+    "previewNotSent": "Özetin şu anki hali (gönderilmedi: çalışan bir kanal seçili değil)",
+    "previewEmpty": "Şu anda bildirilecek bir şey yok. Boş özet gönderilmez."
   },
   "PaymentRisk": {
     "title": "Risk altındaki hesaplar",

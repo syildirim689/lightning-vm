@@ -45,6 +45,8 @@ diğerleri eklendi). Güncel ve tam liste koddaki katalogdur; panelde Ayarlar �
 | `server.power` (güç işlemi tamamlandı) | sahibi | panel |
 | `server.usage_anomaly` (kullanım kendi olağanından ayrıldı, bulgu başına bir kez; [smart-features.md](smart-features.md#olağan-dışı-kullanım)) | sahibi | panel |
 | `billing.budget_forecast` (bu ayın tahmini bütçeyi aşıyor, ayda bir kez; [smart-features.md](smart-features.md#ay-sonu-maliyet-tahmini-ve-bütçe)) | kullanıcı | panel, e-posta |
+| `admin.digest` (dönemsel özet, kişi kendi açtıysa; [smart-features.md](smart-features.md#dönemsel-özet)) | `dashboard.view` yetkisi olan, özeti açmış kişi | e-posta |
+| `account.digest` (müşterinin dönemsel özeti; **olay varsayılan olarak kapalıdır**, yönetici açar, sonra müşteri kendi özetini açar) | kullanıcı | e-posta |
 | `auth.sign_in` (yeni giriş) | kullanıcı | panel, e-posta |
 | `auth.password_changed` | kullanıcı | panel, e-posta |
 | `auth.two_factor_changed` | kullanıcı | panel, e-posta |

@@ -381,3 +381,71 @@ test('smart: the quietest hours are offered under the update window and on a con
   await page.setViewportSize({ width: 390, height: 844 });
   await noSidewaysScroll(page, 'connection hosts with quiet hours at 390 px');
 });
+
+test('smart: the periodic digest is off until turned on, says when the next one is due, and a preview is sent now through the chosen channel; customers have none until the administrator allows it', async ({ page }) => {
+  test.setTimeout(120_000);
+  await signInAdmin(page);
+  type Digest = { kind: string; available: boolean; enabled: boolean; frequency: string; day: number; hour: number; timezone: string | null; nextAt: string | null; channels: string[]; reach: string[] };
+  const read = async () => (await (await page.request.get('/api/account/digest')).json()) as Digest;
+  // As the deployment stands: off, and for customers not even offered (the event is off until the administrator turns it on).
+  await page.request.put('/api/account/digest', { headers: csrf, data: { enabled: false, timezone: 'UTC' } });
+  expect([(await read()).kind, (await read()).available, (await read()).enabled]).toEqual(['staff', true, false]);
+  const policy = await (await page.request.get('/api/admin/settings/notifications')).json() as { events: { event: string; enabled: boolean }[] };
+  expect(policy.events.find((e) => e.event === 'account.digest')?.enabled).toBe(false);
+  expect(policy.events.find((e) => e.event === 'admin.digest')?.enabled).toBe(true);
+  // The inbox is a channel that works on any deployment; e-mail (the default) needs a mail server.
+  expect((await page.request.put('/api/notifications/preferences', { headers: csrf, data: { event: 'admin.digest', channels: ['inApp'] } })).ok()).toBe(true);
+
+  await page.goto('/account?tab=notifications');
+  const card = page.getByTestId('periodic-digest');
+  await expect(card).toBeVisible();
+  await expect(card.getByText('Digest off')).toBeVisible();
+  await expect(card).toContainText('A digest with nothing to say is not sent.');
+  await expect(card).toContainText('It goes to: In the panel.');
+  await expect(card.getByRole('button', { name: 'Save' })).toBeDisabled();
+  await expect(card.getByText(/^Next digest:/)).toHaveCount(0);
+
+  // Turned on with the defaults: weekly, Monday, 08:00, in the account's (or the browser's) time zone.
+  await card.getByText('Digest off').click();
+  await expect(card.getByText('Digest on')).toBeVisible();
+  await card.getByRole('button', { name: 'Save' }).click();
+  await expect(page.getByText('Digest saved').first()).toBeVisible();
+  await expect(card.getByText(/^Next digest: /)).toBeVisible();
+  const saved = await read();
+  expect([saved.enabled, saved.frequency, saved.day, saved.hour]).toEqual([true, 'weekly', 1, 8]);
+  expect(saved.timezone).toBeTruthy();
+  expect(new Date(saved.nextAt!).getTime()).toBeGreaterThan(Date.now());
+  expect(new Date(saved.nextAt!).getTime() - Date.now()).toBeLessThanOrEqual(7 * 86_400_000 + 60_000);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await noSidewaysScroll(page, 'notification settings with the digest on at 390 px');
+  await page.setViewportSize({ width: 1280, height: 720 });
+
+  // The preview: sent now through the inbox, shown on the page, marked as a preview. A new deployment always has
+  // something to say to staff (no backup yet, or the like); should it not, the page says so instead.
+  await card.getByRole('button', { name: 'Send me a preview now' }).click();
+  const shown = card.getByRole('status');
+  await expect(shown).toBeVisible();
+  if (await shown.getByText('There is nothing to report right now. An empty digest is not sent.').isVisible()) {
+    expect((await (await page.request.post('/api/account/digest/preview', { headers: csrf })).json()).empty).toBe(true);
+  } else {
+    await expect(shown).toContainText('The digest as it would be written now');
+    await expect(shown).toContainText(/Preview: Panel digest: (\d+ open findings?|no open findings)/);
+    await expect(shown).toContainText(/Since \d{4}-\d\d-\d\d\./);
+    await expect(page.getByText('Preview sent: In the panel').first()).toBeVisible();
+    await expect.poll(async () => ((await (await page.request.get('/api/notifications')).json()) as { notifications: { event: string; title: string }[] }).notifications.some((n) => n.event === 'admin.digest' && n.title.startsWith('Preview: Panel digest')),
+      { message: 'the preview arrives in the inbox', timeout: 20_000 }).toBe(true);
+  }
+  // The preview did not move the next digest.
+  expect((await read()).nextAt).toBe(saved.nextAt);
+
+  // What the API refuses: a zone it does not know, a day that does not exist.
+  const bad = await page.request.put('/api/account/digest', { headers: csrf, data: { enabled: true, day: 9, timezone: 'Mars/Olympus' } });
+  expect([bad.status(), (await bad.json()).fields]).toEqual([400, { day: 'INVALID_VALUE', timezone: 'INVALID_VALUE' }]);
+
+  // Off again: nothing is due.
+  await card.getByText('Digest on').click();
+  await card.getByRole('button', { name: 'Save' }).click();
+  await expect(page.getByText('Digest turned off').first()).toBeVisible();
+  expect([(await read()).enabled, (await read()).nextAt]).toEqual([false, null]);
+  await expect(card.getByText(/^Next digest:/)).toHaveCount(0);
+});

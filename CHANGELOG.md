@@ -58,6 +58,19 @@ Türkçe [docs/upgrade-notes.md](docs/upgrade-notes.md) sayfasını okuyun.*
   host that runs panel servers, to pick the hour before a host is emptied. It only suggests. Under 21 days of
   history, and on platforms without CPU figures, it says "not enough data". New routes:
   `GET /api/admin/maintenance/quiet-hours`, `GET /api/admin/vmware/connections/:id/quiet-hours`.
+- **Periodic digest.** One message that says where things stand instead of a notice per event: weekly by default
+  (or daily), on the weekday and hour a person chooses in their own time zone. **Off unless turned on.** Staff with
+  `dashboard.view` turn their own on in Account → Notifications and get the panel's digest: open findings by
+  severity, what opened and closed since the last digest, accounts at payment risk, failed operations and the
+  capacity findings, each only where the person may see it elsewhere. Customers can have one about their own
+  account (findings on their servers, the month's forecast, the upcoming renewal) only after an administrator turns
+  the new `account.digest` notification on in Settings → Notifications (off by default) and the customer turns
+  their own on. It is delivered as an ordinary notification (`admin.digest`, `account.digest`; inbox, e-mail,
+  messaging apps), so the person's channel choice, the administrator's policy and quiet hours apply. A digest with
+  nothing new to say is not sent, and each period is worked out exactly once however many API copies run. "Send me
+  a preview now" sends it at once and shows its words. New routes: `GET` and `PUT /api/account/digest`,
+  `POST /api/account/digest/preview`. Migration 090 adds one table; nothing for the operator to do. Rules:
+  [docs/smart-features.md](docs/smart-features.md#dönemsel-özet).
 - **Support help.** A ticket's page shows staff the closed tickets most like it, each with the answer that closed it
   and the words the two share (`GET /api/admin/support/tickets/:id/similar`). A customer writing a new ticket is
   shown, before sending, what may already answer it, from their own answered tickets and the public status page

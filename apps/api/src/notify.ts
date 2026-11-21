@@ -17,6 +17,7 @@ import { brandFor } from './mail';
 import { eventTime, mailHtml, mailText, type MailContent, type Tone } from './mail-layout';
 import { publishLive } from './live-bus';
 import { alwaysSent, inQuietHours, loudChannels, type QuietHours } from './quiet-hours';
+import { digestText, type Digest } from './digest-rules';
 
 export type Text = { title: string; body: string };
 type EventDef = {
@@ -24,11 +25,16 @@ type EventDef = {
   permission?: Permission; // staff events: who receives them
   channels: Channel[];     // channels that make sense for this event
   defaults: Channel[];
+  off?: true;              // not sent to anyone until the administrator turns the event on (Settings → Notifications)
   link?: (d: Record<string, string>) => string;
   text: { tr: (d: Record<string, string>) => Text; en: (d: Record<string, string>) => Text };
 };
 
 export const all: Channel[] = ['inApp', 'push', 'email', 'sms', 'chat'];
+// The periodic digest (periodic-digest.ts) arrives as its own event with the whole digest as data; the words are digest-rules.ts.
+const digestWords = (l: 'tr' | 'en') => (d: Record<string, string>): Text => {
+  try { return digestText(l, JSON.parse(d.payload) as Digest, d.preview === '1'); } catch { return { title: l === 'tr' ? 'Özet' : 'Digest', body: '' }; }
+};
 export const catalog: Record<string, EventDef> = {
   'server.ready': { audience: 'user', channels: all, defaults: ['inApp', 'push', 'email'], link: (d) => `/servers/${d.serverId}`,
     text: { tr: (d) => ({ title: `${d.name} hazır`, body: `Sunucunuz kuruldu ve çalışıyor. IP: ${d.address || '-'}` }),
@@ -243,12 +249,17 @@ export const catalog: Record<string, EventDef> = {
   'admin.restore_hold': { audience: 'staff', permission: 'system.update', channels: all, defaults: ['inApp', 'email'], link: () => '/admin/system',
     text: { tr: (d) => ({ title: 'Panel yedekten geri yüklendi ve beklemede', body: `${d.backup ? `"${d.backup}" yedeği geri yüklendi` : 'Eski bir yedek geri yüklendi'}${d.since ? ` (${eventTime('tr', null, new Date(d.since))})` : ''}. Siz beklemeyi kaldırana kadar panel kendiliğinden hiçbir şey yapmaz: işlem başlatılmaz, zamanlamalar, süresi dolan silmeler ve faturalama çalışmaz. Yedekten sonra değişenleri (ödemeler, siparişler, silmeler, sunucular) gözden geçirip Sistem sayfasından beklemeyi kaldırın.` }),
       en: (d) => ({ title: 'The panel was restored from a backup and is on hold', body: `${d.backup ? `The backup "${d.backup}" was restored` : 'An older backup was restored'}${d.since ? ` (${eventTime('en', null, new Date(d.since))})` : ''}. Until you release the hold the panel does nothing by itself: no operation is started, and schedules, due deletions and billing do not run. Review what changed since the backup (payments, orders, deletions, servers), then release the hold on the System page.` }) } },
+  // periodic-digest.ts: to the one person who turned their own digest on, never to the team in their place.
+  'admin.digest': { audience: 'staff', permission: 'dashboard.view', channels: ['inApp', 'email', 'chat'], defaults: ['email'], link: () => '/admin',
+    text: { tr: digestWords('tr'), en: digestWords('en') } },
+  'account.digest': { audience: 'user', off: true, channels: ['inApp', 'email', 'chat'], defaults: ['email'], link: () => '/',
+    text: { tr: digestWords('tr'), en: digestWords('en') } },
   'admin.insight': { audience: 'staff', permission: 'dashboard.view', channels: all, defaults: ['inApp', 'email'], link: () => '/admin',
     text: { tr: (d) => ({ title: d.titleTr, body: d.bodyTr }), en: (d) => ({ title: d.titleEn, body: d.bodyEn }) } },
 };
 export type EventKey = keyof typeof catalog;
 
-const defaultPolicy = (e: EventDef): NotificationPolicy => ({ enabled: true, allowed: e.channels, defaults: e.defaults, userCanChange: true });
+const defaultPolicy = (e: EventDef): NotificationPolicy => ({ enabled: !e.off, allowed: e.channels, defaults: e.defaults, userCanChange: true });
 export async function policies() {
   const saved = await getSettings('notifications');
   return Object.fromEntries(Object.entries(catalog).map(([k, e]) => {
@@ -283,7 +294,7 @@ async function recipients(to: string[] | string, def: EventDef): Promise<Person[
 }
 
 // The channels one user gets for one event: the admin's policy, then the user's choice within it.
-async function channelsFor(userId: string, event: string, p: NotificationPolicy): Promise<Channel[]> {
+export async function channelsFor(userId: string, event: string, p: NotificationPolicy): Promise<Channel[]> {
   if (!p.enabled) return [];
   if (!p.userCanChange) return p.defaults;
   const { rows: [pref] } = await pool.query('SELECT channels FROM notification_preferences WHERE user_id = $1 AND event = $2', [userId, event]);
@@ -329,6 +340,7 @@ const mailLabels: Record<string, { tr: string; en: string }> = {
   auth: { tr: 'Hesap güvenliği', en: 'Account security' }, account: { tr: 'Hesap', en: 'Account' }, admin: { tr: 'Yönetici uyarısı', en: 'Admin alert' },
 };
 export function mailTone(event: string): Tone {
+  if (event.endsWith('.digest')) return 'info';
   if (/failed|overdue|suspended|terminated|abuse|exceeded|hold|disabled|port_open|einvoice_return/.test(event)) return 'danger';
   if (/^admin\.|low|reminder|delete_scheduled|new_device|sign_in|dispute|changed|budget|payment_review|credentials_reset/.test(event)) return 'warning';
   if (/ready|paid|payment_received|installed|refunded|snapshot|backup|reply/.test(event)) return 'success';
@@ -347,9 +359,9 @@ export async function deliver(u: Recipient, channel: Channel, t: Text, link: str
   if (channel === 'email' && (await mailReady())) {
     const b = await brandFor(u.locale);
     const url = await absolute(link);
-    const label = mailLabels[event.split('.')[0]]?.[b.locale];
+    const label = (event.endsWith('.digest') ? { tr: 'Özet', en: 'Digest' } : mailLabels[event.split('.')[0]])?.[b.locale];
     const at = eventTime(b.locale, u.time_zone);
-    const c: MailContent = { preheader: t.body, label, tone: mailTone(event), heading: t.title, intro: [t.body], details: [[b.locale === 'tr' ? 'Zaman' : 'Time', at]], button: url ? { label: b.locale === 'tr' ? 'Panelde aç' : 'Open in the panel', url } : undefined,
+    const c: MailContent = { preheader: t.body, label, tone: mailTone(event), heading: t.title, intro: t.body.split('\n').filter((line) => line.trim()), details: [[b.locale === 'tr' ? 'Zaman' : 'Time', at]], button: url ? { label: b.locale === 'tr' ? 'Panelde aç' : 'Open in the panel', url } : undefined,
       note: b.locale === 'tr' ? 'Hangi bildirimleri e-postayla alacağınızı Hesap sayfasındaki Bildirimler bölümünden değiştirebilirsiniz.'
         : 'Choose which notifications reach you by e-mail in the Notifications section of the Account page.' };
     await sendMail(u.email, `${brand}: ${t.title}`, mailText(c, b), mailHtml(c, b));
@@ -370,7 +382,7 @@ export function startNotificationWorker() {
     let people = await recipients(to, def);
     // Addressed to someone who may no longer see it (a ticket still assigned to a former agent): the team gets it
     // instead, so it is not lost. Not "assigned to you", which is about that one person.
-    if (!people.length && Array.isArray(to) && to.length && def.audience === 'staff' && def.permission && event !== 'support.assigned') people = await recipients(`staff:${def.permission}`, def);
+    if (!people.length && Array.isArray(to) && to.length && def.audience === 'staff' && def.permission && event !== 'support.assigned' && event !== 'admin.digest') people = await recipients(`staff:${def.permission}`, def);
     // Webhooks get the event for everyone it reached, whatever their notification channels.
     await queueWebhooks(event, people.map((u) => u.id), data).catch(() => logEvent('error', 'webhook_queue_failed', { event }));
     for (const u of people) {

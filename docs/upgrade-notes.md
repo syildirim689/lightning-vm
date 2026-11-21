@@ -40,6 +40,13 @@ Her madde kendi başına yüklenir; veritabanı değişikliği olanlarda migrati
   - **Geçmiş gerektirenler:** kullanım takibi yaklaşık 5 gün, zamanlama önerisi 21 gün işlemci geçmişi ister; o
     zamana kadar ve işlemci ölçümü vermeyen platformlarda (XCP-ng, oVirt, libvirt, Incus) "yeterli veri yok" denir.
   - **Yeni ortam değişkeni (isteğe bağlı):** worker için `ANOMALY_MINUTES` (varsayılan 60).
+- **Bakım için en sakin saatler ve dönemsel özet.** İkisi de kendiliğinden bir şey yapmaz.
+  - En sakin saatler yalnızca gösterilir (Sistem → Otomatik güncellemeler, bağlantı → Host'lar); güncelleme
+    penceresi ancak düğmeye basılırsa değişir. 21 günlük işlemci geçmişi ister. Veritabanı değişikliği yoktur.
+  - Dönemsel özet **kapalı** gelir: personel kendi özetini Hesabım → Bildirimler'den açar; müşteriler için önce
+    Ayarlar → Bildirim kuralları'nda `account.digest` olayını açmanız gerekir (varsayılan: kapalı). Migration 090
+    boş bir tablo (`digest_preferences`) ve bir dizin ekler; mevcut veri okunmaz ve değişmez. API beş dakikada
+    bir, vadesi gelen özet olup olmadığına tek dizinli sorguyla bakar.
 
 ## 0.4.0 (beta): kurulum betiğinin yeni çıktısı ve sürüm numarası (2026-11-21)
 

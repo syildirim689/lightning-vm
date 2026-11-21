@@ -14,6 +14,7 @@ import { currentSubscription, disablePush, enablePush, pushSupported } from '../
 import { useApiQuery } from '../../../lib/query';
 import { fold } from '../../../lib/note-line';
 import ChatConnections from './chat-connections';
+import DigestCard from './digest';
 
 export type Channel = 'inApp' | 'push' | 'email' | 'sms' | 'chat';
 export const channels: Channel[] = ['inApp', 'push', 'email', 'sms', 'chat'];
@@ -22,7 +23,7 @@ export const channelIcon: Record<Channel, React.ReactNode> = { inApp: <I name="b
 
 // Rows are grouped by the area an event comes from (its first part; account events sit with sign-in security).
 const groups = ['server', 'support', 'billing', 'auth', 'admin', 'other'] as const;
-const groupOf = (event: string) => { const k = event.split('.')[0] === 'account' ? 'auth' : event.split('.')[0]; return (groups as readonly string[]).includes(k) ? k : 'other'; };
+const groupOf = (event: string) => { const k = event.endsWith('.digest') ? 'other' : event.split('.')[0] === 'account' ? 'auth' : event.split('.')[0]; return (groups as readonly string[]).includes(k) ? k : 'other'; };
 
 export default function NotificationPrefs() {
   const t = useTranslations('Notify');
@@ -95,6 +96,8 @@ export default function NotificationPrefs() {
     <ChatConnections/>
 
     <QuietHours value={q.data.quietHours}/>
+
+    <DigestCard/>
 
     <Section title={t('title')} description={t('intro')}>
       {events.length > 0 && <SearchField aria-label={t('find')} value={find} onChange={setFind} className="mb-3 w-full md:w-80">

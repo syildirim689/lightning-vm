@@ -143,6 +143,48 @@ Yalnızca öneridir: hiçbir şeyi kendiliğinden taşımaz, zamanlamaz ya da de
 - **Maliyet:** arka plan işi ve ek tablo yoktur. Yanıt başına saatlik satırlar üzerinde gruplanmış tek sorgu (en çok
   4 haftalık satır), sonuç 30 dakika Redis'te saklanır (`quiet:*`).
 
+## Dönemsel özet
+
+Olay başına bildirim yerine, kişinin seçtiği gün ve saatte durumu **tek mesajda** söyler. **Açılmadıkça kapalıdır.**
+İçeriği panelin zaten hesapladığı şeylerden toplanır (içgörüler, ödeme riski, ay sonu tahmini); yeni bir kural ya da
+dış servis yoktur. Kod: `apps/api/src/periodic-digest.ts`; saf kurallar `apps/api/src/digest-rules.ts` (birim
+testleri `apps/api/test/digest-rules.test.mjs`, entegrasyon testi `test/integration/smart-digest.test.mjs`).
+
+- **Kim alır:**
+  - **Personel** (`dashboard.view`): Hesabım → Bildirimler → "Dönemsel özet" bölümünden kendi özetini açar. Olay
+    `admin.digest`. İçerik: önem derecesine göre açık bulgular, son özetten beri **açılan ve kapanan** bulgular,
+    ödeme riski altındaki hesaplar (sayı ve en büyük üç tutar; yalnızca `billing.view` varsa), son özetten beri
+    başarısız işlemler, kapasite bulguları (havuz doluluğu ve dolma tahmini). Her satır, kişinin panelde zaten
+    görebildiği şeydir: bulgular içgörü listesiyle aynı yetki süzgecinden geçer (`maySeeFinding`).
+  - **Müşteri:** yalnızca yönetici Ayarlar → Bildirim kuralları'nda `account.digest` olayını açtıysa (**varsayılan:
+    kapalı**) ve müşteri kendi özetini açtıysa. İçerik: kendi sunucularının bulguları (içgörüler), bu ayın şimdiye
+    kadarki tutarı ve ay sonu tahmini (bütçe varsa durumuyla), 14 gün içindeki yenileme (tarih ve tutar). Başka
+    müşterinin hiçbir verisi okunmaz: bütün sorgular hesabın kendisini adlandırır.
+- **Zaman:** haftalık (varsayılan: pazartesi 08:00) ya da günlük; gün ve saat **kişinin kendi saat dilimindedir**.
+  Sonraki özet, kişinin saati seçilen saati bir sonraki geçtiğinde gönderilir (`nextSlot`): yaz saatine geçişte
+  atlanan saat boşluktan sonraki ilk an sayılır, geri alınan saatte özet bir kez gider; yarım saatlik dilimler
+  (ör. Asia/Kolkata) desteklenir.
+- **Teslimat:** sıradan bir bildirimdir. Kanalları kişi olay satırından seçer (panel, e-posta, mesajlaşma;
+  varsayılan e-posta), yöneticinin olay kuralı geçerlidir, **sessiz saatlerde** mesajlaşma uygulamalarına gitmez
+  (e-posta ve gelen kutusu alır). Bölüm, seçili kanallardan hangilerinin şu anda gerçekten ulaşacağını söyler
+  (posta ayarlı mı, uygulama bağlı mı); hiçbiri ulaşmıyorsa uyarır.
+- **Boş özet gönderilmez:** "bilgi" düzeyinin üstünde açık bulgu yoksa, son özetten beri açılan ya da kapanan yoksa
+  ve rakamlar boşsa (risk altındaki hesap, başarısız işlem, kapasite bulgusu; müşteride tutar ve yenileme) o dönem
+  mesaj gitmez. "İki adımlı doğrulama kapalı" gibi kalıcı notlar tek başına haftalık mesaj olmaz; ilk özet onları
+  bir kez listeler. Dönem yine de işlenmiş sayılır.
+- **Açılan / kapanan:** her çalıştırma, kişinin görebildiği bulguların anahtarlarını saklar (en çok 200); sonraki
+  özet bunlarla karşılaştırır. Kişinin **gizlediği** bulgu listede görünmez ama "kapandı" da sayılmaz.
+- **Tam bir kez:** API'de beş dakikada bir, faturalama ve zamanlama sayaçlarındaki gibi bir Redis kilidi altında
+  çalışır (`lock:digest`). Asıl güvence veritabanındadır: her kişinin satırı, `next_at` değerini ileri alan tek
+  bir koşullu `UPDATE` ile sahiplenilir; kilidi aşan ikinci bir kopya vadesi gelmiş satır bulamaz (entegrasyon
+  testi aynı anda dört çalıştırmayla bunu sınar). Çalıştırma başına en çok 200 kişi; kalanı beş dakika sonra.
+  Yedekten geri yükleme beklemesinde çalışmaz. Özet hazırlanırken hata olursa o dönem atlanır ve
+  `digest_failed` olarak kaydedilir (iki kez göndermektense hiç göndermemek).
+- **Önizleme** (`POST /account/digest/preview`): özetin o anki halini aynı kanallardan, başlığında "Önizleme" ile
+  hemen gönderir ve metnini ekranda gösterir; dönem sayılmaz. Saatte 5.
+- **Maliyet:** vadesi gelenler için kısmi dizinli tek sorgu (`digest_preferences_due`); özet başına içgörü
+  listesinin sorguları. Personel listesi bir çalıştırmada bir kez hesaplanır, kişi başına değil.
+
 ## Ödeme riski
 
 Kurallar `apps/api/src/payment-risk-rules.ts` içindedir (birim testleri `apps/api/test/payment-risk-rules.test.mjs`);
