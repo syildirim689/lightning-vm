@@ -87,16 +87,21 @@ export async function platformCan(poolId: string, what: keyof Capabilities) {
 // Live (not deleted) servers are the pool's reserved capacity and the owner's quota usage; a server's disk is its system
 // disk plus its extra disks (disks.ts).
 const withDisks = "disk_gb + COALESCE((SELECT sum(d.size_gb) FROM server_disks d WHERE d.server_id = servers.id AND d.status <> 'failed'), 0)";
-// Reserved in a pool: its servers outside VDCs, plus every active VDC allocation (whose servers live inside it).
-export async function reservedFor(poolId: string, db: Db = pool) {
+// A server's open resize, joined to its row as `r` (at most one: a server has one open operation). What is counted of a
+// server while it is open is the larger of the row and the size it grows to: for the owner's quota (usageOf), the
+// location's reserved capacity (reservedFor) and a reseller's allocation (reseller.ts, resellerUsage), so that room
+// given to an accepted resize is not given again before the worker has written the new size.
+export const openResize = (and = '', servers = 'servers') => `LEFT JOIN LATERAL (SELECT (o.params->>'vcpu')::int AS to_vcpu, (o.params->>'memoryMb')::int AS to_memory_mb, (o.params->>'diskGb')::int AS to_disk_gb
+      FROM operations o WHERE o.server_id = ${servers}.id AND o.kind = 'resize' AND o.status IN ('pending', 'running') ${and}) r ON true`;
+// Reserved in a pool: its servers outside VDCs (one that is being resized with the size it grows to), plus every active
+// VDC allocation (whose servers live inside it). notGrowing: as in usageOf.
+export async function reservedFor(poolId: string, db: Db = pool, notGrowing?: string) {
   const { rows: [r] } = await db.query(`SELECT COALESCE(sum(vcpu), 0)::int AS vcpu, COALESCE(sum(memory_mb), 0)::int AS "memoryMb", COALESCE(sum(disk_gb), 0)::int AS "diskGb" FROM (
-      SELECT vcpu, memory_mb, ${withDisks} AS disk_gb FROM servers WHERE pool_id = $1 AND state <> 'deleted' AND vdc_id IS NULL
-      UNION ALL SELECT vcpu, memory_mb, disk_gb FROM vdcs WHERE pool_id = $1 AND active) x`, [poolId]);
+      SELECT GREATEST(vcpu, COALESCE(r.to_vcpu, 0)) AS vcpu, GREATEST(memory_mb, COALESCE(r.to_memory_mb, 0)) AS memory_mb, ${withDisks} + GREATEST(0, COALESCE(r.to_disk_gb, 0) - disk_gb) AS disk_gb
+        FROM servers ${openResize('AND o.server_id IS DISTINCT FROM $2::uuid')} WHERE pool_id = $1 AND state <> 'deleted' AND vdc_id IS NULL
+      UNION ALL SELECT vcpu, memory_mb, disk_gb FROM vdcs WHERE pool_id = $1 AND active) x`, [poolId, notGrowing ?? null]);
   return r as { vcpu: number; memoryMb: number; diskGb: number };
 }
-// What a quota counts of `servers` rows joined to their open resize (at most one: a server has one open operation).
-const openResize = (and = '') => `LEFT JOIN LATERAL (SELECT (o.params->>'vcpu')::int AS to_vcpu, (o.params->>'memoryMb')::int AS to_memory_mb, (o.params->>'diskGb')::int AS to_disk_gb
-      FROM operations o WHERE o.server_id = servers.id AND o.kind = 'resize' AND o.status IN ('pending', 'running') ${and}) r ON true`;
 const usedSums = { vcpu: 'COALESCE(sum(GREATEST(vcpu, COALESCE(r.to_vcpu, 0))), 0)::int', memoryMb: 'COALESCE(sum(GREATEST(memory_mb, COALESCE(r.to_memory_mb, 0))), 0)::int',
   diskGb: `COALESCE(sum(${withDisks} + GREATEST(0, COALESCE(r.to_disk_gb, 0) - disk_gb)), 0)::int` };
 // Counted against the limits limitsFor gives: a project's servers only when the project has a quota of its own; otherwise
@@ -114,7 +119,7 @@ export async function usageOf(userId: string, projectId?: string, db: Db = pool,
   return u as { servers: number; vcpu: number; memoryMb: number; diskGb: number };
 }
 
-export async function capacityOf(p: Record<string, unknown>, db: Db = pool) {
+export async function capacityOf(p: Record<string, unknown>, db: Db = pool, notGrowing?: string) {
   const [hosts, datastores, vms] = await Promise.all([
     db.query('SELECT cpu_cores, memory_bytes, moref FROM vmware_hosts WHERE connection_id = $1 AND parent = $2', [p.connection_id, p.compute_moref]),
     db.query('SELECT capacity_bytes, free_bytes, uncommitted_bytes FROM vmware_datastores WHERE connection_id = $1 AND moref = ANY($2)', [p.connection_id, p.datastore_morefs]),
@@ -124,7 +129,7 @@ export async function capacityOf(p: Record<string, unknown>, db: Db = pool) {
   ]);
   const settings = { cpu_overcommit: Number(p.cpu_overcommit), memory_overcommit: Number(p.memory_overcommit), storage_overcommit: Number(p.storage_overcommit),
     reserve_cpu_pct: Number(p.reserve_cpu_pct), reserve_memory_pct: Number(p.reserve_memory_pct), reserve_storage_pct: Number(p.reserve_storage_pct) };
-  return poolCapacity(settings, hosts.rows, datastores.rows, vms.rows, await reservedFor(String(p.id), db));
+  return poolCapacity(settings, hosts.rows, datastores.rows, vms.rows, await reservedFor(String(p.id), db, notGrowing));
 }
 
 async function readPool(body: Input, client: PoolClient | typeof pool = pool) {

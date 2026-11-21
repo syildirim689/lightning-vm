@@ -12,7 +12,7 @@ import { pool } from './db';
 import { apiError } from './errors';
 import { Can, PermissionGuard } from './rbac';
 import { checkResellerRoom, discounted, resellerOf } from './reseller';
-import { customerMay, findServer, hashOf, ownerWrite, refuseBilledElsewhere, repriced, startOperation } from './servers';
+import { admitRoom, customerMay, findServer, hashOf, ownerWrite, refuseBilledElsewhere, repriced, startOperation } from './servers';
 
 export const MAX_EXTRA_DISKS = 4;
 const columns = `id, size_gb AS "sizeGb", price_monthly::text AS "priceMonthly", status, created_at AS "createdAt"`;
@@ -42,7 +42,8 @@ export class DisksController {
     const { rows: [p] } = await pool.query('SELECT * FROM resource_pools WHERE id = $1', [s.pool_id]);
     if (p.extra_disk_price_gb === null) throw apiError(409, 'EXTRA_DISKS_NOT_SOLD', 'This location does not sell extra disks');
     if ((await pool.query("SELECT 1 FROM server_disks WHERE server_id = $1 AND status <> 'failed'", [id])).rowCount! >= MAX_EXTRA_DISKS) throw apiError(409, 'DISK_LIMIT', 'Too many extra disks');
-    // The location's free storage, as for any disk (the owner's quota is checked where the disk is written, below).
+    // The location's free storage and the reseller's allocation, as for any disk: read here for an early refusal, and
+    // decided where the disk is written, below (as the owner's quota is).
     if (size > (await capacityOf(p)).available.storageGb) throw apiError(409, 'CAPACITY_EXHAUSTED', 'Not enough storage in this location');
     const reseller = await resellerOf(s.owner_id);
     if (reseller) await checkResellerRoom(reseller, { servers: 0, vcpu: 0, memoryMb: 0, diskGb: size });
@@ -57,6 +58,9 @@ export class DisksController {
       const quota = await limitsFor(s.owner_id, s.project_id ?? undefined);
       const over = exceededQuota({ ...quota, max_servers: null }, await usageOf(s.owner_id, s.project_id ?? undefined, db), { vcpu: 0, memoryMb: 0, diskGb: size });
       if (over.length) throw quotaExceeded(quota, over, { sizeGb: 'QUOTA_EXCEEDED' });
+      // The location's storage and the reseller's allocation under their own locks (servers.ts, admitRoom): they are
+      // counted across accounts, so two disks of two accounts were not kept apart by the owner's lock.
+      await admitRoom(db, s as { owner_id: string; pool_id: string }, { vcpu: 0, memoryMb: 0, diskGb: size }, 'storage');
       await db.query('INSERT INTO server_disks (id, server_id, size_gb, price_monthly) VALUES ($1, $2, $3, $4)', [diskId, id, size, price]);
     }, true);
     let operation;

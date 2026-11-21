@@ -16,7 +16,7 @@ Bu öğelerin hepsi bağlantının keşfedilmiş envanterinde bulunmalıdır (`N
 | Fiziksel toplam | hostların fiziksel çekirdekleri (hyper-thread sayılmaz) | hostların RAM toplamı | seçilen datastore'ların kapasitesi |
 | Yönetim ve güvenlik payı | fiziksel × `reserve_cpu_pct` | fiziksel × `reserve_memory_pct` | fiziksel × `reserve_storage_pct` |
 | Satışa açılan | (fiziksel − pay) × **CPU oranı** | (fiziksel − pay) × **RAM oranı** | (fiziksel − pay) × **depolama oranı** |
-| Rezerve | platformun oluşturduğu, silinmemiş sunucular | aynı | aynı |
+| Rezerve | platformun oluşturduğu, silinmemiş sunucular (büyütülmekte olan, büyüyeceği boyutla) | aynı | aynı |
 | Gerçek kullanım | o hostlardaki mevcut VM'lerin vCPU toplamı (şablonlar hariç) | VM'lerin RAM toplamı | yazılmış ve thin olarak tahsis edilmiş alan ayrı ayrı |
 | Kalan satılabilir | satışa açılan − kullanım − rezerve (0'ın altına inmez) | aynı | satışa açılan − tahsis edilen − rezerve |
 

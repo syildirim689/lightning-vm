@@ -9,6 +9,7 @@ import { getAuth } from './better-auth';
 import { directBilling } from './billing';
 import { discounted, monthlyTotals, toCents, undiscounted } from './billing-rules';
 import { revokeConsoles } from './console-revoke';
+import { openResize } from './catalog';
 import { pool } from './db';
 import { apiError } from './errors';
 import { notify } from './notify';
@@ -34,18 +35,25 @@ const activeReseller = async (userId: string) => {
   return row(r);
 };
 
-// What the reseller and all their customers run now (servers not deleted).
-export async function resellerUsage(id: string, db: Db = pool) {
-  const { rows: [u] } = await db.query(`SELECT count(*)::int AS servers, coalesce(sum(s.vcpu), 0)::int AS vcpu, coalesce(sum(s.memory_mb), 0)::int AS "memoryMb", coalesce(sum(s.disk_gb), 0)::int AS "diskGb",
+// What the reseller and all their customers run now (servers not deleted). A server that is being resized counts with
+// the size it grows to, as in the owner's quota (catalog.ts, openResize); notGrowing: as in usageOf.
+export async function resellerUsage(id: string, db: Db = pool, notGrowing?: string) {
+  const { rows: [u] } = await db.query(`SELECT count(*)::int AS servers, coalesce(sum(greatest(s.vcpu, coalesce(r.to_vcpu, 0))), 0)::int AS vcpu,
+      coalesce(sum(greatest(s.memory_mb, coalesce(r.to_memory_mb, 0))), 0)::int AS "memoryMb", coalesce(sum(greatest(s.disk_gb, coalesce(r.to_disk_gb, 0))), 0)::int AS "diskGb",
       coalesce(sum(s.price_monthly), 0)::text AS monthly, mode() WITHIN GROUP (ORDER BY s.currency) AS currency
-      FROM servers s JOIN users o ON o.id = s.owner_id WHERE s.state <> 'deleted' AND (o.id = $1 OR o.reseller_id = $1)`, [id]);
+      FROM servers s JOIN users o ON o.id = s.owner_id ${openResize('AND o.server_id IS DISTINCT FROM $2::uuid', 's')}
+      WHERE s.state <> 'deleted' AND (o.id = $1 OR o.reseller_id = $1)`, [id, notGrowing ?? null]);
   // `currency`: the one most of these servers are priced in (null with no servers), for showing `monthly`.
   return u as { servers: number; vcpu: number; memoryMb: number; diskGb: number; monthly: string; currency: string | null };
 }
 
 // Whether `more` (a new server, or a resize's increase) still fits the reseller's allocation; throws the limits it passes.
-export async function checkResellerRoom(r: Reseller, more: { servers: number; vcpu: number; memoryMb: number; diskGb: number }, db: Db = pool) {
-  const u = await resellerUsage(r.id, db);
+// lock: in a transaction that then writes what it counted (an order, an accepted resize, an extra disk), the reseller's
+// row is locked first, so that two of the reseller's customers (each holds only their own account's lock) are counted
+// one after the other. It is the last lock such a transaction takes: owner, server, location, reseller (servers.ts).
+export async function checkResellerRoom(r: Reseller, more: { servers: number; vcpu: number; memoryMb: number; diskGb: number }, db: Db = pool, lock = false, notGrowing?: string) {
+  if (lock) await db.query('SELECT 1 FROM resellers WHERE user_id = $1 FOR UPDATE', [r.id]);
+  const u = await resellerUsage(r.id, db, notGrowing);
   const over = [
     r.maxServers !== null && u.servers + more.servers > r.maxServers && 'servers',
     r.maxVcpu !== null && u.vcpu + more.vcpu > r.maxVcpu && 'vcpu',

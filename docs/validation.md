@@ -899,10 +899,10 @@ büyütülürse, ikisi de aynı boş yere karşı ölçülüp kabul ediliyordu. 
 | "Boşta sunucu" / küçültme önerileri (içgörüler) | Yalnızca öneridir; uygulayan bir yol yok, kullanıcı aynı uç noktayı çağırır |
 | İçe aktarma (`import.ts`, disk boyutunu VM'den okur) | Personel işi, kota ölçmez; değişmedi |
 
-**Kapsanmayan, aynı türden iki pencere (ayrı konular, dokunulmadı):** konumun boş kapasitesi (`capacityOf` /
-`reservedFor`) ve bayinin tahsisi (`checkResellerRoom`) boyut büyütmede hâlâ kilitsiz okunur ve bekleyen
-büyütmeleri saymaz; aynı anda iki büyütme konumun ya da bayinin son yerini birlikte alabilir. Kota için olan
-kilit bunları kapsamaz (konum kilidi sipariştedir, boyut büyütmede değil).
+**Bu commit'te (`04212c3`) kapsanmayan, aynı türden iki pencere (sonraki commit'te kapatıldı):** konumun boş
+kapasitesi (`capacityOf` / `reservedFor`) ve bayinin tahsisi (`checkResellerRoom`) boyut büyütmede kilitsiz
+okunuyor ve bekleyen büyütmeleri saymıyordu; aynı anda iki büyütme konumun ya da bayinin son yerini birlikte
+alabiliyordu. Düzeltmesi: [konum kapasitesi ve bayi tahsisi](#050dan-sonra-boyut-büyütmede-konum-kapasitesi-ve-bayi-tahsisi--2026-11-21).
 
 **Denenenler.**
 
@@ -928,9 +928,90 @@ kilit bunları kapsamaz (konum kilidi sipariştedir, boyut büyütmede değil).
   kaldı: hesabı önceki testlerden varsayılan kotanın üstünde sunucu taşıyordu ve yeniden deneme artık kotaya
   tabi; teste, dosyanın başka bir testinin de yaptığı gibi sınırsız hesap kotası eklendi. Worker ve web'e
   dokunulmadı, testleri yerelde yeniden çalıştırılmadı.
-- GitHub CI ve demo sunucusundaki tarayıcı paketi bu commit gönderildikten sonra çalıştırılır; sonuçları bu
-  sayfaya yazılmadı.
+- **GitHub CI, elle tam çalıştırma `44911238990` (`04212c3`):** bütün işler geçti. `api-integration` 273 testte
+  204 geçti, 0 başarısız, 69 atlandı (`resize-quota`'nın dört testi içinde); `compose` işindeki tarayıcı paketi
+  44/44 (15,3 dk).
+- **Demo sunucusu (`04212c3`):** `/root/demo-e2e.sh` demo'yu bu commit'e güncelledi (`OK UPDATED`), atılabilir
+  yığında tarayıcı paketi **44/44** (17,7 dk); testler boyunca demo `/api/ready` 55 yanıtın 55'inde 200, sonrasında
+  200; test yığınından geriye 0 kapsayıcı, 0 birim kaldı. Demo `v0.5.0-2-g04212c3` gösterdi. Etiket ya da sürüm
+  oluşturulmadı; `stable` kanalındaki gece güncellemesi, çalışan commit `v0.5.0`'ın ilerisinde olduğu için yerinde
+  kalır ("kanalın son sürümü bundan eski").
 
 **Çalıştırılmayanlar:** gerçek bir hipervizörde (ya da simülatörde worker ile) iki büyütmenin sonuna kadar
 gitmesi; testte işlemler açık kalır ve worker'ın yaptığı (satırı güncellemek, başarısızlıkta fiyatı geri almak)
 SQL ile taklit edilir. Simülatör isteyen `servers.test.mjs` yerelde atlandı (Docker yok), CI'da çalışır.
+
+## 0.5.0'dan sonra: boyut büyütmede konum kapasitesi ve bayi tahsisi — 2026-11-21
+
+Bir önceki bölümün açık bıraktığı iki pencere kapatıldı. Henüz bir sürümde değildir (`CHANGELOG.md`, Unreleased).
+
+**Kusur.** Konumun boş kapasitesi ve bayinin tahsisi hesaplar arasında sayılır. Boyut büyütme ikisini de kilitsiz
+okuyordu ve ikisi de (`reservedFor`, `resellerUsage`) sunucu satırlarından toplandığı için kabul edilmiş, bitmemiş
+büyütmeyi saymıyordu. `04212c3`'ün sahip kilidi yalnızca aynı hesabın isteklerini sıraya sokar: iki ayrı hesabın
+(ya da bir bayinin iki müşterisinin) aynı anda istediği iki büyütme aynı boş yere karşı ölçülüp ikisi de kabul
+ediliyordu.
+
+**Önceden hangi yol neyi kilitliyordu.**
+
+| Yol | Konum kapasitesi | Bayi tahsisi |
+|-----|------------------|--------------|
+| Sipariş | Konum satırı (`resource_pools … FOR UPDATE`) kilitliyken sayıyordu: sağlam | Yalnızca siparişi verenin hesabı ve konum kilitliydi; bayinin iki müşterisi **iki ayrı konumda** aynı anda sipariş verince tahsis kilitsiz sayılıyordu |
+| Ek disk | Kilitsiz | Kilitsiz |
+| Boyut büyütme, personelin yeniden denemesi | Kilitsiz, bekleyen büyütme sayılmıyor | Kilitsiz, bekleyen büyütme sayılmıyor |
+
+**Düzeltme** (`apps/api/src/servers.ts`, `catalog.ts`, `reseller.ts`, `disks.ts`):
+
+- **Tek kilit sırası**, yer sayıp sonra o yeri alan her işlem için (sipariş, ek disk, kabul edilen boyut büyütme,
+  personelin yeniden denemesi): **1. sahibin hesabı** (`users`), **2. sunucunun satırı** (`servers`),
+  **3. konum** (`resource_pools`), **4. bayinin satırı** (`resellers`). Bir işlem gerekenleri alır, hiçbirini
+  sıradaki bir sonrakinden sonra almaz; iki işlem birbirini bekleyemez. Sipariş zaten 1 → 3 alıyordu, 4 eklendi
+  (tek satır); ek disk 1 → 2 alıyordu, 3 ve 4 eklendi; boyut büyütme ve yeniden deneme dördünü de alır
+  (`admitGrowth` / `admitRoom`). VDC oluşturma ve değiştirme yalnızca 3'ü alır; bayiden ayrılma müşterilerin
+  hesaplarını, sonra sunucularını kilitler (1 → 2), sıraya uyar.
+- **Bekleyen büyütme iki yerde de sayılır:** konumun "rezerve"si ve bayinin kullanımı, açık (`pending` /
+  `running`) `resize` işlemi olan sunucuyu büyüyeceği boyutla toplar (kotadaki sayımın aynısı, `openResize`).
+  Satır yeni boyutu alınca iki kez sayılmaz; başarısız olunca yer geri döner.
+- **Gösterilen sayılar kabulün kullandığı sayılardır:** konum listesindeki "rezerve" ve "kalan satılabilir",
+  `lightning_pool_capacity` ölçümleri, içgörüler, müşterinin paket uygunluğu, bayinin özeti ve personelin bayi
+  listesindeki kullanım aynı işlevlerden gelir; ayrı bir "gösterim" toplamı yoktur.
+- Sığmayan istek mevcut kodlarla reddedilir (`409 CAPACITY_EXHAUSTED`, `409 RESELLER_ALLOCATION_EXCEEDED`), 500
+  değil; hiçbir şey yazılmaz. Aynı sunucuya ikinci büyütme eskisi gibi `409 OPERATION_IN_PROGRESS` alır.
+- Faturalama entegrasyonunun büyütmesi kota dışıdır ama konum kapasitesine ve bayi tahsisine eskisi gibi tabidir;
+  artık o da kilitli sayılır. Personelin yeniden denemesinde faturası dışarıda kesilen sunucu da kapasiteye tabidir.
+
+**Denenenler.**
+
+- Yeni entegrasyon dosyası `apps/api/test/integration/resize-capacity.test.mjs` (4 test, gerçek PostgreSQL ve
+  Redis, worker yok; üç konum):
+  1. 14 vCPU'luk konumda **iki ayrı hesabın** birer küçük sunucusu (4 vCPU) aynı anda +6 ister: bir `202`, bir
+     `409 CAPACITY_EXHAUSTED`; reddedilenin fiyatı ve paketi aynı; konum listesi rezerveyi 10, kalanı 4
+     gösterir (satırlar hâlâ 2'şer vCPU); sonraki büyütme ve 8 vCPU'luk sipariş reddedilir; büyüyen sunucuya
+     ikinci istek `OPERATION_IN_PROGRESS`; büyütme başarısız olunca yer geri gelir, öteki sunucu alır, personelin
+     yeniden denemesi `409 CAPACITY_EXHAUSTED` alır ve işlem `failed` kalır.
+  2. 10 vCPU tahsisli bayinin iki müşterisi, **iki ayrı konumda**, aynı anda +6 ister: bir `202`, bir
+     `409 RESELLER_ALLOCATION_EXCEEDED` (`vcpu`); bayinin özeti ve personelin bayi listesi kullanımı 10 gösterir;
+     başarısızlıkta yer geri gelir, öteki müşteri alır, yeniden deneme tahsise takılır.
+  3. Bayinin iki müşterisi iki ayrı konumda aynı anda sipariş verir, tahsiste bir sunucu yeri varken: bir `202`,
+     bir `409 RESELLER_ALLOCATION_EXCEEDED`.
+  4. İki ayrı hesap, 150 GB yeri kalan konumda aynı anda 100 GB'lık ek disk ister: bir `202`, bir
+     `409 CAPACITY_EXHAUSTED`; tek disk satırı.
+- **Düzeltmeden önceki kodla** (`04212c3`; yalnızca `apps/api/src` geri alınarak, aynı test dosyası): 4 testin 4'ü
+  kaldı, dördünde de iki istek birden `202` döndü.
+- **Yerelde, düzeltilmiş kodla** (geliştirme makinesi, Docker yok; PostgreSQL 18.6 ve Redis 8.0.5 WSL içinde geçici
+  dizinden, iş bitince silindi): API birim testleri 206/206, `tsc` temiz; entegrasyon paketinin tamamı
+  (`npm run test:integration`, 28 dosya) 277 testte **208 geçti, 0 başarısız, 69 atlandı** (63'ü simülatör isteyen
+  `servers.test.mjs` ve benzerleri, 6'sı `seeded-history`); içinde `resize-capacity` 4/4, `resize-quota` 4/4,
+  `project-quota` 4/4, `security-servers` 14/14. Var olan hiçbir testin değişmesi gerekmedi. Worker ve web'e
+  dokunulmadı, testleri yerelde yeniden çalıştırılmadı.
+- GitHub CI ve demo sunucusundaki tarayıcı paketi bu commit gönderildikten sonra çalıştırılır; sonuçları bu
+  sayfaya yazılmadı.
+
+**Bilinen ve dokunulmayan:** bayinin kullanımındaki disk toplamı (`resellerUsage`) sunucuların sistem diskini
+sayar, **ek diskleri saymaz** (bu değişiklikten önce de böyleydi). Ek disk eklenirken tahsise karşı ölçülür ama
+eklendikten sonra kullanımda görünmez; yani bayinin disk tahsisi ek disklerle aşılabilir. Düzeltmek, ek diski olan
+bayilerin gösterilen kullanımını yükseltir ve bazılarını tahsisin üstüne çıkarabilir; ayrı bir karar olduğu için
+yapılmadı.
+
+**Çalıştırılmayanlar:** gerçek bir hipervizörde ya da simülatörde worker ile büyütmenin sonuna kadar gitmesi
+(testte worker'ın yaptığı SQL ile taklit edilir); kilit sırasının yük altında, çok sayıda eşzamanlı istekle
+denenmesi (testler ikişer istekle çalışır; kilitlenme olmadığı sıranın kendisinden çıkarılır, ölçülmedi).

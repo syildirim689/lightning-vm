@@ -30,6 +30,21 @@ Türkçe [docs/upgrade-notes.md](docs/upgrade-notes.md) sayfasını okuyun.*
   *Türkçe: aynı anda istenen boyut büyütmeleri birlikte kotayı aşabiliyordu; artık sahibin kilidi altında tek tek
   kabul edilir ve kabul edilmiş, bitmemiş büyütme kullanıma sayılır
   ([docs/validation.md](docs/validation.md#050dan-sonra-yeniden-boyutlandırmada-kota--2026-11-21)).*
+- **Resizes asked for at the same moment could together take a location's last capacity or a reseller's last
+  allocation.** Both are counted across accounts, and a resize read them without a lock and without counting
+  resizes that were accepted and not finished; the owner's lock of the entry above does not keep two accounts
+  apart. A resize now takes, in the transaction that accepts it, the location's lock (the one an order counts
+  capacity under) and then the reseller's, and an accepted resize counts with the size it grows to in the
+  location's reserved capacity and in the reseller's usage (the locations list, the capacity metrics, the reseller's
+  summary and the resellers list show the same figures admission uses). The request that no longer fits gets
+  `409 CAPACITY_EXHAUSTED` or `409 RESELLER_ALLOCATION_EXCEEDED`. Staff's retry of a failed resize is admitted the
+  same way. Two smaller windows of the same kind are closed with the same locks: orders of two customers of one
+  reseller in two locations could together exceed the reseller's allocation, and two extra disks of two accounts
+  could together take a location's last storage. Every such transaction locks in one order (owner's account,
+  server, location, reseller). No database change.
+  *Türkçe: aynı anda istenen boyut büyütmeleri konumun son kapasitesini ya da bayinin son tahsisini birlikte
+  alabiliyordu; artık konumun ve bayinin kilidi altında kabul edilir ve bekleyen büyütme ikisinde de sayılır
+  ([docs/validation.md](docs/validation.md#050dan-sonra-boyut-büyütmede-konum-kapasitesi-ve-bayi-tahsisi--2026-11-21)).*
 
 ## [0.5.0] - 2026-11-21
 

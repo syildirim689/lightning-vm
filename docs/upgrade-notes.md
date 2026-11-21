@@ -5,7 +5,7 @@ madde neyin değiştiğini ve işletmecinin yapması gereken bir şey varsa onu 
 davranışı değiştirmeyen işler burada yoktur. Tahsilat çalıştırması API içinde beş dakikada bir çalışır; yani "ilk
 çalıştırma" yükseltmeden birkaç dakika sonradır.
 
-## 0.5.0'dan sonra, henüz yayımlanmadı: boyut büyütme ve kota (2026-11-21)
+## 0.5.0'dan sonra, henüz yayımlanmadı: boyut büyütmede kota, konum kapasitesi ve bayi tahsisi (2026-11-21)
 
 - **Bekleyen boyut büyütme kotaya sayılır.** Kabul edilmiş ama worker'ın henüz bitirmediği bir büyütme, hesabın
   (ya da kotası olan projenin) kullanımında büyüyeceği boyutla görünür: sipariş özetinde, Projeler'de ve Katalog
@@ -13,9 +13,18 @@ davranışı değiştirmeyen işler burada yoktur. Tahsilat çalıştırması AP
   Önceden aynı anda istenen iki büyütme kotayı birlikte aşabiliyordu. İşletmecinin yapacağı bir şey yoktur;
   veritabanı değişikliği yoktur. Kotası daha önce bu yolla aşılmış bir hesaba dokunulmaz (yeni istekleri
   reddedilir, mevcut sunucuları çalışır).
+- **Bekleyen boyut büyütme konumun kapasitesine ve bayinin tahsisine de sayılır.** Konum listesindeki
+  "rezerve" ve "kalan satılabilir", `lightning_pool_capacity` ölçümleri (`reserved`, `available`), bayinin
+  özetindeki ve personelin bayi listesindeki kullanım, kabul edilmiş ama bitmemiş büyütmeyi büyüyeceği boyutla gösterir;
+  büyütme bitince sayı değişmez, başarısız olursa geri düşer. Önceden aynı anda istenen iki büyütme konumun son
+  kapasitesini ya da bayinin son tahsisini birlikte alabiliyordu; aynısı bir bayinin iki müşterisinin iki ayrı
+  konumdaki siparişleri ve iki hesabın aynı konumdaki ek diskleri için de kapatıldı. Kapasite ölçümlerine uyarı
+  bağlayan işletmeci, büyütme sırasında "rezerve"nin daha erken yükseldiğini görür; yapılacak bir şey yoktur.
 - **Yeniden denenen boyut büyütme `409 QUOTA_EXCEEDED` dönebilir.** Personel başarısız bir büyütmeyi yeniden
   denediğinde, büyütmenin yeri o arada başka bir şeye verildiyse istek reddedilir ve işlem
   başarısız kalır; kotayı genişletin ya da yer açın. Faturalama entegrasyonunun açtığı büyütmeler kota dışıdır.
+  Aynı yeniden deneme konumda yer kalmadıysa `409 CAPACITY_EXHAUSTED`, bayinin tahsisi dolduysa
+  `409 RESELLER_ALLOCATION_EXCEEDED` döner.
 
 ## 0.5.0 (beta): 0.4.0'dan sonra eklenenler (2026-11-21)
 
