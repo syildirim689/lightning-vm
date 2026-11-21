@@ -101,6 +101,8 @@ girmeniz gerekmez. Özelliklerin tamamı yalnızca VMware'de vardır; diğer alt
 - **Zamanlama önerisi:** sunucu haftalardır her hafta aynı saatlerde boşta kalıyorsa (geceler, hafta sonları)
   bu saatlerde kapalı tutacak güç zamanlaması gerekçesiyle önerilir ve tek tıkla oluşturulur. Kapalı sunucu aynı
   ücretle faturalandığı için para vaat edilmez; kazanılan enerji söylenir
+- **Talep yazarken öneriler:** yeni destek talebi gönderilmeden önce, yanıtı olabilecek kendi eski talepleriniz ve
+  durum sayfasındaki olaylar gösterilir (başka müşterilerin talepleri asla)
 - **Ödeme riski uyarısı:** sıradaki yenilemeden önce süresi dolan kayıtlı kart ya da yenilemeyi karşılamayan
   bakiye, tarih ve tutarlarıyla önceden söylenir (otomatik tahsilat açıksa)
 - **Başarısız işlemden sonra sıradaki adım:** sunucu sayfasının üstünde neyin ters gittiği ve tek bir öneri. Geçici
@@ -138,6 +140,8 @@ girmeniz gerekmez. Özelliklerin tamamı yalnızca VMware'de vardır; diğer alt
 - **Mevcut VM'leri devralma:** panel dışında oluşturulmuş bir VM, bir müşterinin sunucusu olur (çalışmaya devam eder)
 - **Taşıma ve host boşaltma** (yalnız VMware): sunucuyu çalışırken başka hosta ya da veri deposuna taşıma, bakım
   öncesi bir hosttaki tüm sunucuları taşıma
+- **Destek yardımı:** talep sayfasında en çok benzeyen çözülmüş talepler, kapatan yanıtları ve ortak sözcükleriyle
+  (Türkçe harflere duyarlı eşleştirme; kendiliğinden hiçbir şey gönderilmez)
 - **Risk altındaki hesaplar:** vadesi geçmiş faturası ya da tekrarlayan başarısız tahsilatı olan hesaplar, risk
   altındaki tutara göre sıralı (Faturalandırma → Risk altında); yalnızca listeler, kimseye bir şey göndermez
 - **İçgörüler:** dolan havuz tahmini, azalan IP, boşta / büyük / küçük sunucular, takılan işler, inceleme bekleyen

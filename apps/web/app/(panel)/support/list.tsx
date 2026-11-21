@@ -2,6 +2,7 @@
 // The customer's tickets: those with an answer first, then by last change. A new ticket opens in a dialog that
 // suggests a higher priority when the chosen server is in trouble.
 import { Button, Modal, SearchField, toast } from '@heroui/react';
+import { TicketSuggestions } from './suggestions';
 import { useQueryClient } from '@tanstack/react-query';
 import { motion } from 'motion/react';
 import NextLink from 'next/link';
@@ -144,6 +145,8 @@ function NewTicket({ initialServer, initialSubject, initialBody, mine, onClose }
               className="flex items-center gap-2 self-start rounded-lg bg-warning/10 px-3 py-2 text-xs text-warning hover:bg-warning/20"><I name="lightbulb" size={14}/>{t('suggestHigh', { name: server!.name })}</button>}
           </div>
           <TextInput transient maxLength={5000} multiline label={t('message')} value={v.body} onChange={(x) => setV({ ...v, body: x })} help={`${t('messageHelp')} ${t('pasteHint')}`}/>
+          {/* What may already answer it: the customer's own answered tickets and the public status page, nothing else. */}
+          <TicketSuggestions subject={v.subject} body={v.body}/>
           <div className="flex flex-wrap items-center gap-2">
             <input ref={pick} type="file" multiple accept="image/png,image/jpeg,image/gif,image/webp,application/pdf,text/plain,.log,.txt" className="sr-only"
               onChange={(e) => { addFiles(Array.from(e.target.files ?? [])); e.target.value = ''; }}/>

@@ -131,3 +131,30 @@ faturalamanın kendi akışında kalır ([billing.md](billing.md)).
     değil, bakılacaklar sırasıdır), sonra en eski gecikme. En çok 200 satır.
 - **Maliyet:** arka plan işi yoktur. Müşteri içgörüsü için hesabın yenilemesi, kartları ve bakiyesi okunur; personel
   listesi, faturalar ve ödemeler üzerinde gruplanmış tek sorgudur (personel içgörüleri 60 saniye önbellekte tutulur).
+
+## Destek yardımı
+
+Eşleştirme panelin içinde, sözcük ortaklığıyla yapılır (`apps/api/src/similarity-rules.ts`, birim testleri
+`apps/api/test/similarity-rules.test.mjs`); metin hiçbir dış servise gitmez ve saklanmaz.
+
+- **Kural:** metin, aramadaki sadeleştirmeyle sözcüklere ayrılır (`db.ts` içindeki `foldText` ile aynı: büyük-küçük
+  harf yok, Türkçe harfler düz; "Şifre" = "sifre", "IŞIK" = "isik"). 3 harften kısa sözcükler ve sık geçen Türkçe ve
+  İngilizce sözcükler ("merhaba", "lütfen", "the", "please"…) atılır. Benzerlik, TF-IDF ağırlıklı kosinüstür: birçok
+  metinde geçen sözcük az sayılır. Eşik: en az **2 ortak sözcük** ve **0,12** benzerlik; en çok **3** sonuç. Her
+  sonuç ortak sözcüklerini taşır; ekranda "gösterilme nedeni" olarak yazılır. Talebin metni: konu (iki kez
+  sayılır) ve müşterinin ilk mesajı.
+- **Personel** (`GET /admin/support/tickets/:id/similar`, `support.view`; talep sayfasında "Benzer çözülmüş
+  talepler"): son 365 günde kapanmış ve personelin yanıtladığı en yeni 300 talep karşılaştırılır. Her sonuçta
+  talebi kapatan **son herkese açık personel yanıtı** gösterilir (iç notlar asla) ve kopyalanabilir. Kendiliğinden
+  hiçbir şey gönderilmez; müşteriye ne yazılacağı personelin kararıdır.
+- **Müşteri** (`POST /support/suggestions`; yeni talep penceresinde mesajın altında, yazma durduktan kısa süre
+  sonra): yalnızca müşterinin zaten görebildiği kaynaklar okunur:
+  - kendi taleplerinden personelin yanıtladıkları (en yeni 50) ve o yanıtlar;
+  - durum sayfası açıksa oradaki olaylar: süren olayların hepsi, son 7 günde çözülenlerden konuya benzeyenler.
+    Durum sayfası kapalıysa hiçbir olay gösterilmez.
+
+  Başka müşterilerin talepleri müşteri için **hiçbir koşulda** okunmaz: sorgu, talebin sahibi olarak çağıranı
+  adlandırır ve başka kaynak yoktur (entegrasyon testi, neredeyse aynı metni yazan iki müşteriyle bunu sınar).
+  Çok kısa metinde ya da 10 dakikada 60 istekten sonra hata yerine boş yanıt döner; form çalışmaya devam eder.
+- **Maliyet:** arka plan işi ve ek tablo yoktur. Personel isteği başına en çok 300 talebin konusu ve ilk mesajının
+  ilk 2000 karakteri okunur; müşteri isteği başına en çok 50 talep ve 20 olay.

@@ -9393,5 +9393,21 @@
       "OVERDUE_GROWING": "Overdue and growing",
       "REPEATED_FAILURES": "Repeated failed charges"
     }
+  },
+  "SupportHelp": {
+    "similarTitle": "Similar resolved tickets",
+    "similarHelp": "Compared with the {n, plural, =0 {closed tickets (none yet)} one {last closed ticket} other {last # closed tickets}} by the words they share. Nothing is sent by itself.",
+    "similarNone": "No closed ticket is enough like this one.",
+    "closed": "closed",
+    "rated": "rated {rating}/5",
+    "shares": "Shown because it shares: {words}",
+    "copy": "Copy the answer",
+    "copyLabel": "Copy the answer of ticket #{number}",
+    "copied": "Answer copied",
+    "before": "Before you send: this may already answer it",
+    "incidentOpen": "Open incident:",
+    "incidentResolved": "Resolved recently:",
+    "yourTicket": "Your ticket #{number}: {subject}",
+    "privacy": "From your own earlier tickets and the public status page only."
   }
 }

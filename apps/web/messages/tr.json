@@ -9393,5 +9393,21 @@
       "OVERDUE_GROWING": "Vadesi geçmiş ve büyüyor",
       "REPEATED_FAILURES": "Tekrarlayan başarısız tahsilat"
     }
+  },
+  "SupportHelp": {
+    "similarTitle": "Benzer çözülmüş talepler",
+    "similarHelp": "{n, plural, =0 {Kapanmış taleplerle (henüz yok)} one {Son kapanan taleple} other {Son # kapanmış taleple}} ortak sözcüklere göre karşılaştırıldı. Kendiliğinden hiçbir şey gönderilmez.",
+    "similarNone": "Buna yeterince benzeyen kapanmış talep yok.",
+    "closed": "kapandı:",
+    "rated": "puan {rating}/5",
+    "shares": "Gösterilme nedeni, ortak sözcükler: {words}",
+    "copy": "Yanıtı kopyala",
+    "copyLabel": "#{number} numaralı talebin yanıtını kopyala",
+    "copied": "Yanıt kopyalandı",
+    "before": "Göndermeden önce: yanıtı burada olabilir",
+    "incidentOpen": "Süren olay:",
+    "incidentResolved": "Yakın zamanda çözüldü:",
+    "yourTicket": "#{number} numaralı talebiniz: {subject}",
+    "privacy": "Yalnızca kendi önceki talepleriniz ve herkese açık durum sayfasından."
   }
 }

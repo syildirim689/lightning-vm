@@ -45,7 +45,8 @@ automatic HTTPS. The UI is in Turkish and English.
 
 Highlights: smart ordering, rule-based helpers computed inside the panel from its own data (a usage watch that compares each
 server with its own history, a month-end cost forecast that counts hourly usage and measures the budget against it, a power schedule suggested
-from the hours a server is idle every week, payment risk said before a renewal and listed for staff;
+from the hours a server is idle every week, payment risk said before a renewal and listed for staff, similar resolved tickets for support and suggestions while a
+customer writes one;
 [docs/smart-features.md](docs/smart-features.md), Turkish), reinstall, resize and clone, snapshots, extra disks, billing and invoices (monthly and
 hourly), resellers, support desk, 17 notification channels (in-app, browser push, e-mail, SMS and 13 messaging
 apps and webhooks), customer webhooks, LDAP / OIDC sign-in, passkeys and two-factor, e-mail address verification

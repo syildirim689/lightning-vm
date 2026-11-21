@@ -233,3 +233,54 @@ test('smart: payment risk is said to the customer before the renewal, and listed
   await page.setViewportSize({ width: 390, height: 844 });
   await noSidewaysScroll(page, 'overview with payment warnings at 390 px');
 });
+
+test('smart: staff see similar resolved tickets with the reason; a customer writing a ticket is shown their own answers and the status page only', async ({ page }) => {
+  await signInAdmin(page);
+  // A ticket to look at as staff (the administrator's own, opened through the API).
+  const deps = (await (await page.request.get('/api/support/departments')).json() as { departments: { id: string }[] }).departments;
+  expect(deps.length).toBeGreaterThan(0);
+  const opened = await page.request.post('/api/support/tickets', { headers: csrf, data: { subject: 'E2E: SSH does not connect', body: 'Connection refused on port 22 since this morning.', departmentId: deps[0].id } });
+  expect(opened.status(), await opened.text()).toBe(201);
+  const ticket = (await opened.json() as { id: string }).id;
+  await page.goto(`/admin/support/${ticket}`);
+  const similar = page.getByRole('region', { name: 'Similar resolved tickets' });
+  // Whatever this deployment's closed tickets are, the block says how many it compared.
+  await expect(similar).toContainText(/Compared with the (closed tickets \(none yet\)|last closed ticket|last \d+ closed tickets) by the words they share\. Nothing is sent by itself\./);
+  await page.route(`**/api/admin/support/tickets/${ticket}/similar`, (route) => json(route, { compared: 12, similar: [
+    { id: '0f0e7c1a-3a3e-4d6e-8a57-1c2d3e4f5a6b', number: 1001, subject: 'SSH bağlantısı kurulamıyor', closedAt: new Date(Date.now() - 3 * 86_400_000).toISOString(), rating: 5, score: 0.61, shared: ['ssh', 'port', 'refused'],
+      answer: 'Port 22 was closed in your firewall rule; we added the rule and SSH works again.' }] }));
+  await page.reload();
+  await expect(similar).toContainText('Compared with the last 12 closed tickets');
+  await expect(similar.getByRole('link', { name: '#1001 · SSH bağlantısı kurulamıyor' })).toHaveAttribute('href', '/admin/support/0f0e7c1a-3a3e-4d6e-8a57-1c2d3e4f5a6b');
+  await expect(similar).toContainText('Shown because it shares: ssh, port, refused');
+  await expect(similar).toContainText('Port 22 was closed in your firewall rule; we added the rule and SSH works again.');
+  await expect(similar).toContainText('rated 5/5');
+  await expect(similar.getByRole('button', { name: 'Copy the answer of ticket #1001' })).toBeVisible();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await noSidewaysScroll(page, 'ticket with similar tickets at 390 px');
+  await page.setViewportSize({ width: 1280, height: 720 });
+
+  // The customer's side: suggestions appear under the message while a new ticket is written.
+  const asked: { subject?: string; body?: string }[] = [];
+  await page.route('**/api/support/suggestions', (route) => { asked.push(route.request().postDataJSON()); return json(route, {
+    incidents: [{ id: 'i1', title: 'Network outage in Istanbul', impact: 'major', status: 'investigating', open: true, createdAt: new Date().toISOString(), resolvedAt: null }],
+    answers: [{ id: ticket, number: 1001, subject: 'SSH does not connect', status: 'closed', shared: ['ssh', 'port'], answer: 'Port 22 was closed in your firewall rule; we added the rule and SSH works again.' }] }); });
+  await page.goto('/support?new=1');
+  const dialog = page.getByRole('dialog');
+  await dialog.getByLabel('Subject', { exact: true }).fill('SSH refuses the connection');
+  await dialog.getByLabel('Message', { exact: true }).fill('Port 22 answers with connection refused.');
+  const before = dialog.getByRole('region', { name: 'Before you send: this may already answer it' });
+  await expect(before).toContainText('Open incident: Network outage in Istanbul');
+  await expect(before).toContainText('Your ticket #1001: SSH does not connect');
+  await expect(before).toContainText('Shown because it shares: ssh, port');
+  await expect(before).toContainText('From your own earlier tickets and the public status page only.');
+  // Only the two texts being written are sent for the comparison.
+  expect(Object.keys(asked.at(-1)!).sort()).toEqual(['body', 'subject']);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(before).toBeVisible();
+  await noSidewaysScroll(page, 'new ticket with suggestions at 390 px');
+  // Nothing was sent: the dialog is closed and the draft cleared.
+  await dialog.getByLabel('Subject', { exact: true }).fill('');
+  await dialog.getByLabel('Message', { exact: true }).fill('');
+  await expect(before).toHaveCount(0);
+});

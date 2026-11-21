@@ -57,6 +57,30 @@ const docs: Docs = {
       en: '`accounts` (`userId`, `email`, `currency`, `atRisk`, `overdue`, `overdueCount`, `oldestDays`, `newOverdue`, `failedCharges`, `failedAmount`, `reasons`: OVERDUE, OVERDUE_GROWING, REPEATED_FAILURES) and the thresholds used, `rule`.' },
     errors: ['FORBIDDEN'],
   },
+  // ---- support-suggest.ts ----
+  'GET /admin/support/tickets/:id/similar': {
+    tag: 'support',
+    summary: { tr: 'Bir talebe en çok benzeyen kapanmış talepleri, kapatan yanıtlarıyla verir.', en: 'Returns the closed tickets most like a ticket, with the answers that closed them.' },
+    details: { tr: 'support.view yetkisi gerekir. Talebin konusu ve müşterinin ilk mesajı, son 365 günde kapanmış ve personelin yanıtladığı en yeni 300 taleple karşılaştırılır. Sözcükler aramadaki gibi sadeleştirilir (büyük-küçük harf yok, Türkçe harfler düz: Şifre = sifre), sık geçen sözcükler atılır, benzerlik TF-IDF ağırlıklı kosinüsle ölçülür. En az 2 ortak sözcük ve 0,12 benzerlik gerekir; en çok 3 sonuç döner ve her biri ortak sözcükleri (neden gösterildiği) taşır. Hiçbir şey göndermez.',
+      en: 'Needs support.view. The ticket\'s subject and the customer\'s first message are compared with the newest 300 tickets closed in the last 365 days that staff answered. Words are folded as in search (no capitals, plain letters for Turkish ones: Şifre = sifre), common words are dropped, and similarity is the TF-IDF weighted cosine. At least 2 shared words and a similarity of 0.12 are needed; at most 3 results come back, each with the shared words (why it is shown). It sends nothing.' },
+    params: [{ name: 'id', type: 'uuid', required: true, text: { tr: 'Talep kimliği.', en: 'Ticket id.' } }],
+    returns: { tr: '`compared` (karşılaştırılan talep sayısı) ve `similar`: `id`, `number`, `subject`, `closedAt`, `rating`, `score`, `shared`, `answer` (personelin son yanıtı, en çok 600 karakter).',
+      en: '`compared` (how many tickets were compared) and `similar`: `id`, `number`, `subject`, `closedAt`, `rating`, `score`, `shared`, `answer` (the last staff answer, at most 600 characters).' },
+    errors: ['NOT_FOUND', 'FORBIDDEN'],
+  },
+  'POST /support/suggestions': {
+    tag: 'support',
+    summary: { tr: 'Yeni talep yazılırken, onu yanıtlayabilecek mevcut içerikleri verir.', en: 'While a new ticket is written, returns what may already answer it.' },
+    details: { tr: 'Yalnızca çağıranın zaten görebildiği kaynaklara bakılır: kendi taleplerinden personelin yanıtladıkları (en yeni 50) ve durum sayfası açıksa oradaki olaylar (açık olanların hepsi, son 7 günde çözülenlerden konuya benzeyenler). Başka müşterilerin talepleri hiçbir koşulda okunmaz. Gönderilen metin saklanmaz. Çok kısa metinde ya da 10 dakikada 60 istekten sonra hata yerine boş yanıt döner.',
+      en: 'Only sources the caller can already see are read: their own tickets that staff answered (the newest 50) and, when the status page is on, its incidents (every open one, and those resolved in the last 7 days that are about the same thing). Other customers\' tickets are never read. The text sent is not stored. With too little text, or after 60 requests in 10 minutes, the answer is empty rather than an error.' },
+    body: [
+      { name: 'subject', type: 'string', text: { tr: 'Yazılmakta olan konu.', en: 'The subject being written.' } },
+      { name: 'body', type: 'string', text: { tr: 'Yazılmakta olan mesaj (ilk 4000 karakteri okunur).', en: 'The message being written (its first 4000 characters are read).' } },
+    ],
+    example: { subject: 'SSH ile bağlanamıyorum', body: 'Port 22 kapalı görünüyor, connection refused hatası alıyorum.' },
+    returns: { tr: '`incidents` (`id`, `title`, `impact`, `status`, `open`, `createdAt`, `resolvedAt`) ve `answers` (`id`, `number`, `subject`, `status`, `shared`, `answer`).',
+      en: '`incidents` (`id`, `title`, `impact`, `status`, `open`, `createdAt`, `resolvedAt`) and `answers` (`id`, `number`, `subject`, `status`, `shared`, `answer`).' },
+  },
 };
 
 export default docs;

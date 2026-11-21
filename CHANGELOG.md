@@ -49,6 +49,11 @@ Türkçe [docs/upgrade-notes.md](docs/upgrade-notes.md) sayfasını okuyun.*
   small. Staff with `billing.view` get an "At risk" tab on the billing page and a finding: accounts with overdue
   invoices or at least two failed charges in 30 days, largest amount at risk first
   (`GET /api/admin/billing/risk`). It only lists: nothing is charged, suspended or sent.
+- **Support help.** A ticket's page shows staff the closed tickets most like it, each with the answer that closed it
+  and the words the two share (`GET /api/admin/support/tickets/:id/similar`). A customer writing a new ticket is
+  shown, before sending, what may already answer it, from their own answered tickets and the public status page
+  only (`POST /api/support/suggestions`); another customer's ticket is never read for them. Matching is by shared
+  words with the search's Turkish-aware folding, inside the panel.
 
 - **Per-project quotas.** Staff with `catalog.manage` give a project a quota of its own in Catalog → Quotas (the
   form finds projects by name or by their owner's e-mail). It replaces the owner's quota for servers ordered into
