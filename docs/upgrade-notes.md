@@ -5,6 +5,17 @@ madde neyin değiştiğini ve işletmecinin yapması gereken bir şey varsa onu 
 davranışı değiştirmeyen işler burada yoktur. Tahsilat çalıştırması API içinde beş dakikada bir çalışır; yani "ilk
 çalıştırma" yükseltmeden birkaç dakika sonradır.
 
+## 0.4.0'dan sonra eklenenler (yayımlanmamış)
+
+Her madde kendi başına yüklenir; veritabanı değişikliği olanlarda migration kendiliğinden çalışır.
+
+- **E-posta adresi doğrulama.** Ayarlar → E-posta'da postası açık olan kurulumlarda, bundan sonra **kayıt olan**
+  hesaplara doğrulama kodu postalanır ve adresi doğrulanmamış her hesap Hesabım → Profil'de bir uyarı görür
+  (kayıtla açılmış ve bayinin açtığı mevcut hesaplar dahil). **Hiçbir şey engellenmez:** sipariş kuralı (Ayarlar →
+  Giriş güvenliği) kapalı gelir. Postayı istemeyen işletmeci Ayarlar → E-posta → "Adres doğrulama" işaretini
+  kaldırır. Yalnızca `.env` içindeki `SMTP_URL` ile posta gönderen kurulumlarda özellik kapalıdır. Veritabanı
+  değişikliği yoktur (kodlar Redis'te, 30 dakika). Ayrıntı: [auth.md](auth.md#e-posta-adresi-doğrulama).
+
 ## 0.4.0 (beta): kurulum betiğinin yeni çıktısı ve sürüm numarası (2026-11-21)
 
 Bu sürümde veri değişikliği, yeni `.env` değişkeni ya da yeni ayar yoktur. Değişen, kurulum betiklerinin

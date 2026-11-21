@@ -14,6 +14,7 @@ import { authClient } from '../../../lib/auth-client';
 import { useMe } from '../../../lib/me';
 import { SshKeys } from '../servers-ui';
 import { ManagedAccount, Projects } from './account';
+import { EmailVerification, useEmailVerification } from './email-verification';
 import NotificationPrefs from './notifications';
 import Security, { SecurityScore } from './security';
 import Developer from './developer';
@@ -97,10 +98,12 @@ export default function AccountTabs() {
   const current: Tab = tabs.includes(tab as Tab) ? tab as Tab : 'profile';
   const me = useMe();
   // Two-step sign-in off: the Security section is marked until it is on.
-  const attention: Partial<Record<Tab, string>> = me && !me.twoFactorEnabled ? { security: t('twoFactorOff') } : {};
+  // An address the panel could verify and has not: the Profile section is marked the same way.
+  const address = useEmailVerification();
+  const attention: Partial<Record<Tab, string>> = { ...(me && !me.twoFactorEnabled && { security: t('twoFactorOff') }), ...(address?.available && !address.verified && { profile: t('emailVerification.attention') }) };
   return <SectionMenu label={t('title')} pickLabel={t('section')} current={current} onSelect={(k) => setTab(k)}
     groups={groups.map(([g, ks]) => ({ title: t(`groups.${g}`), items: ks.map((k) => ({ id: k, label: t(`tabs.${k}`), icon: <I name={tabIcons[k]} size={16}/>, attention: attention[k] })) }))}>
-    {current === 'profile' && <><ManagedAccount/><Profile/><Regional/><ExportData/></>}
+    {current === 'profile' && <><ManagedAccount/><EmailVerification/><Profile/><Regional/><ExportData/></>}
     {current === 'security' && <>
       <SecurityScore/>
       <Section title={t('twoFactor.sectionTitle')} description={t('twoFactor.sectionIntro')}>

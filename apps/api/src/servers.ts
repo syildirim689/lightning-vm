@@ -9,6 +9,7 @@ import { actedOn, actingFor, audit, SessionGuard, type AuthedRequest } from './a
 import { Can, PermissionGuard } from './rbac';
 import { can, limitsOf, type Permission } from './permissions';
 import { capacityOf, limitsFor, resolveOrder, usageOf } from './catalog';
+import { orderNeedsVerifiedAddress } from './address-check';
 import { capabilitiesOf, exceededQuota } from './capacity';
 import { checkBudget } from './budget';
 import { openConsole } from './console';
@@ -480,6 +481,12 @@ export class ServersController {
     // a server ordered here. (With it on, the panel invoices the order like anyone's.)
     if (!external && !(await getSettings('billing')).enabled && (await pool.query('SELECT 1 FROM users WHERE id = $1 AND external_source IS NOT NULL', [req.user.id])).rowCount) {
       throw apiError(409, 'EXTERNALLY_BILLED', 'Servers of this account are ordered through your hosting account');
+    }
+
+    // Settings → Sign-in security: an unverified address does not order. Asked of whoever places the order: the
+    // reseller for a customer's server (capFor), never the outside billing system.
+    if (!external && await orderNeedsVerifiedAddress((req as { capFor?: string }).capFor ?? req.user.id)) {
+      throw apiError(403, 'EMAIL_NOT_VERIFIED', 'Verify the e-mail address of this account before ordering a server');
     }
 
     const fields: Record<string, string> = {};

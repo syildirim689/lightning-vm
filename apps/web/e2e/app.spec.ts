@@ -2637,6 +2637,91 @@ test.describe('people, settings and smart features (English browser)', () => {
     await expect(page.getByRole('row', { name: /admin@example\.test/ })).toHaveCount(0);
   });
 
+  test('e-mail verification: hidden without mail; an unverified account sees it, cannot order while the rule is on, a wrong code is refused; verified, it is gone', async ({ page, browser }) => {
+    await signInAdmin(page);
+    const csrf = { 'x-lightning-csrf': '1' };
+    const fresh = { email: `verify-${Date.now()}@example.test`, password: 'e2e verify passphrase 2026' };
+    const customer = await (await browser.newContext({ locale: 'en-US' })).newPage();
+    const order = () => customer.request.post('/api/servers', { headers: { ...csrf, 'idempotency-key': `e2e-verify-${Date.now()}` }, data: {} });
+    // The sign-in rules as the suite has them now: put back exactly at the end.
+    const rulesBefore = await (await page.request.get('/api/admin/settings/security')).json();
+    try {
+      // No mail on this panel yet: the account page says nothing about verification, and nothing is asked.
+      await customer.goto('/register');
+      await customer.getByLabel('Email').fill(fresh.email);
+      await customer.getByLabel('Password').fill(fresh.password);
+      await customer.getByRole('button', { name: 'Create account' }).click();
+      await expect(customer).toHaveURL(/\/$/);
+      await customer.goto('/account');
+      await expect(customer.getByText('The name shown in the panel.')).toBeVisible();
+      await expect(customer.locator('#email-verification')).toHaveCount(0);
+      // Mail set up towards a port where nothing listens (inside the API's own machine): the panel can now verify
+      // addresses, and every mail it tries fails there. Nothing leaves the machine.
+      expect((await page.request.put('/api/admin/settings/mail', { headers: csrf, data: { enabled: true, provider: 'smtp', host: '127.0.0.1', port: 9, security: 'none',
+        fromAddress: 'panel@example.test', use: { passwordReset: false, twoFactor: false, verification: true } } })).status()).toBe(200);
+      await page.goto('/admin/settings?tab=mail');
+      await expect(page.getByRole('checkbox', { name: /^Address verification/ })).toBeChecked();
+      // Settings → Sign-in security: only verified addresses order.
+      await page.goto('/admin/settings?tab=security');
+      const rule = page.getByRole('switch', { name: 'Only accounts with a verified e-mail address may order' });
+      await expect(rule).not.toBeChecked();
+      await tick(rule);
+      await expect(rule).toBeChecked();
+      await page.getByRole('button', { name: 'Save' }).click();
+      await expect(page.getByText('Sign-in security saved.').first()).toBeVisible();
+
+      // The account now shows the state, why it matters here, and a way to get a code.
+      await customer.goto('/account');
+      const section = customer.locator('#email-verification');
+      await expect(section.getByText('This address is not verified yet')).toBeVisible();
+      await expect(section.getByText('You cannot order a server until this address is verified.')).toBeVisible();
+      await expect(customer.getByText('E-mail address not verified').first()).toBeAttached();
+      await section.getByRole('button', { name: 'Send verification code' }).click();
+      await expect(customer.getByText('The e-mail could not be sent.').first()).toBeVisible();
+      // The attempt counts: another one has to wait, and the button says for how long.
+      await expect(section.getByRole('button', { name: /New code in \d+ s/ })).toBeDisabled();
+      // The link of a verification mail with a code that is not the account's: refused, and taken out of the address.
+      await customer.goto('/account?tab=profile&verify=123456');
+      await expect(customer.getByText('This code is wrong or no longer valid.').first()).toBeVisible();
+      await expect(customer).not.toHaveURL(/verify=/);
+      await expect(section.getByText('This address is not verified yet')).toBeVisible();
+      // The order page says what stands in the way, and the API refuses the order itself.
+      await customer.goto('/order');
+      await expect(customer.getByText('Verify your e-mail address first')).toBeVisible();
+      await expect(customer.getByRole('link', { name: 'Verify in Account → Profile' })).toHaveAttribute('href', '/account?tab=profile');
+      const refused = await order();
+      expect([refused.status(), (await refused.json()).code]).toEqual([403, 'EMAIL_NOT_VERIFIED']);
+      // A phone: the section fits, in the dark theme too.
+      await customer.setViewportSize({ width: 390, height: 844 });
+      await customer.goto('/account');
+      await expect(section.getByText('This address is not verified yet')).toBeVisible();
+      await expectNoOverflow(customer, 'account with the unverified address at 390 px');
+      await tour(customer, 'account-email-unverified-phone', true);
+      await customer.emulateMedia({ colorScheme: 'dark' });
+      await expectNoOverflow(customer, 'account with the unverified address at 390 px, dark');
+      await tour(customer, 'account-email-unverified-phone-dark', true);
+      await customer.emulateMedia({ colorScheme: 'light' });
+      await customer.setViewportSize({ width: 1280, height: 720 });
+
+      // Staff confirm the address another way (Admin → Users has the button; here by its API): the section and the
+      // notice are gone and the order reaches its own checks.
+      const id = (await (await customer.request.get('/api/auth/me')).json()).id;
+      expect((await page.request.put(`/api/admin/users/${id}/email-verified`, { headers: csrf, data: { verified: true } })).status()).toBe(200);
+      await customer.goto('/account');
+      await expect(customer.getByText('The name shown in the panel.')).toBeVisible();
+      await expect(customer.locator('#email-verification')).toHaveCount(0);
+      await customer.goto('/order');
+      await expect(customer.getByRole('heading', { level: 1 })).toBeVisible();
+      await expect(customer.getByText('Verify your e-mail address first')).toHaveCount(0);
+      expect((await (await order()).json()).code).toBe('VALIDATION_FAILED');
+    } finally {
+      // As the rest of the suite expects it: no mail, no rule.
+      await page.request.put('/api/admin/settings/security', { headers: csrf, data: { ...rulesBefore, verifiedEmailToOrder: false } });
+      await page.request.put('/api/admin/settings/mail', { headers: csrf, data: { enabled: false, provider: 'smtp', host: '', port: 587, security: 'starttls', fromAddress: '' } });
+      await customer.context().close();
+    }
+  });
+
   test('IP pools: quarantine and IPv6 are edited, addresses are listed; reverse DNS settings validate', async ({ page }) => {
     await signInAdmin(page);
     await page.goto('/admin/catalog?tab=ip');

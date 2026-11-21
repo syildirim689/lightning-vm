@@ -11,7 +11,7 @@ import { useMe } from '../../../../lib/me';
 import { useApiQuery } from '../../../../lib/query';
 import type { PublicConfig } from '../../../../lib/session';
 
-type Doc = { require2fa: 'none' | 'staff' | 'all'; emailCodeSignIn: boolean; apiTokens: 'everyone' | 'staff' | 'off' };
+type Doc = { require2fa: 'none' | 'staff' | 'all'; emailCodeSignIn: boolean; apiTokens: 'everyone' | 'staff' | 'off'; verifiedEmailToOrder?: boolean };
 
 export default function Security({ readOnly }: { readOnly: boolean }) {
   const t = useTranslations('Settings.security');
@@ -28,7 +28,7 @@ export default function Security({ readOnly }: { readOnly: boolean }) {
     setBusy(true);
     // Only what this form edits is sent: who may create API tokens belongs to Settings → API and is left as it is.
     try {
-      const r = await apiFetch<Doc>('/admin/settings/security', { method: 'PUT', body: { require2fa: v!.require2fa, emailCodeSignIn: v!.emailCodeSignIn } });
+      const r = await apiFetch<Doc>('/admin/settings/security', { method: 'PUT', body: { require2fa: v!.require2fa, emailCodeSignIn: v!.emailCodeSignIn, verifiedEmailToOrder: !!v!.verifiedEmailToOrder } });
       client.setQueryData(['settings', 'security'], r); setV(r); toast.success(t('saved')); client.invalidateQueries({ queryKey: ['public-config'] });
     }
     catch (e) { toast.danger(error(e)); } finally { setBusy(false); }
@@ -49,6 +49,10 @@ export default function Security({ readOnly }: { readOnly: boolean }) {
     <FormSection title={t('emailCode')} description={t('emailCodeHelp')} icon={<I name="mail-check" size={16}/>}>
       <SwitchInput label={t('emailCodeOn')} isSelected={v.emailCodeSignIn} onChange={(x) => setV({ ...v, emailCodeSignIn: x })} isDisabled={readOnly}/>
       {v.emailCodeSignIn && !mailReady && <Notice tone="warning">{t('needsMail')}</Notice>}
+    </FormSection>
+    <FormSection title={t('verifiedOrder')} description={t('verifiedOrderHelp')} icon={<I name="mail-check" size={16}/>}>
+      <SwitchInput label={t('verifiedOrderOn')} isSelected={!!v.verifiedEmailToOrder} onChange={(x) => setV({ ...v, verifiedEmailToOrder: x })} isDisabled={readOnly}/>
+      {v.verifiedEmailToOrder && cfg && !cfg.emailVerification && <Notice tone="warning">{t('verifiedOrderNeedsMail')}</Notice>}
     </FormSection>
     <FormSection title={t('apiTokens')} description={t('apiTokensMoved')} icon={<I name="key-round" size={16}/>}>
       <div><ButtonLink href="/admin/settings?tab=api" variant="secondary"><I name="code-xml" size={16}/>{t('apiTokensOpen')}</ButtonLink></div>

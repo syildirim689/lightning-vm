@@ -52,7 +52,7 @@ iki adımlı doğrulama (uygulama, SMS, e-posta, yedek kodlar), passkey, LDAP ve
 anahtarla (`secrets/master.key`) şifrelenmesi, denetim kaydı, kullanıcının verdiği adreslere yalnızca herkese açık
 HTTPS üzerinden istek ([auth.md](auth.md)).
 
-Olmayanlar: kayıtla açılan hesabın e-posta adresi doğrulanmaz; bir projeyi ya da sunucuyu birden çok kullanıcının
+Olmayanlar: bir projeyi ya da sunucuyu birden çok kullanıcının
 paylaştığı bir ekip yapısı yoktur (proje tek sahibe aittir; bayi ve müşterileri ayrı bir yapıdır). Proje bağımsız bir
 güvenlik denetiminden geçmedi (yapay zekâ destekli kısmi bir iç denetimin özeti: [security-audit.md](security-audit.md)). HTTPS olmadan yalnızca loopback üzerinde kullanılmalıdır.
 

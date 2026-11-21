@@ -400,7 +400,11 @@
     "UPDATE_SKIPPED": "The automatic update skipped this version because it already failed once. Update by hand when the cause is fixed.",
     "PAYMENT_IN_REVIEW": "A payment for this invoice is awaiting review by our team, so it cannot be paid again right now. You will be told when it is decided; there is no need to pay twice.",
     "TOKEN_ACCOUNT_UNCONFIRMED": "This API token is asleep: the account comes from a directory or single sign-on and was not confirmed there recently. Sign in to the panel again and the token works as before.",
-    "PAYMENT_NOT_IN_REVIEW": "This payment no longer waits for review; it was settled or closed in the meantime."
+    "PAYMENT_NOT_IN_REVIEW": "This payment no longer waits for review; it was settled or closed in the meantime.",
+    "EMAIL_NOT_VERIFIED": "Verify the e-mail address of this account before ordering a server (Account → Profile).",
+    "EMAIL_ALREADY_VERIFIED": "This e-mail address is verified already.",
+    "VERIFICATION_CODE_INVALID": "This code is wrong or no longer valid. Ask for a new one and try again.",
+    "MAIL_SEND_FAILED": "The e-mail could not be sent. Try again in a little while."
   },
   "Auth": {
     "required": "required",
@@ -2800,6 +2804,26 @@
       "leaveBody3": "This cannot be undone from the panel.",
       "left": "Your account is no longer managed by a reseller. Servers billed to you from now on: {servers}.",
       "gone": "This account is no longer managed by a reseller."
+    },
+    "emailVerification": {
+      "title": "E-mail address",
+      "intro": "Show that {email} is yours: we mail a code, you enter it here.",
+      "unverified": "This address is not verified yet",
+      "why": "A verified address shows that you receive the mail the panel sends to this account. Everything on the account stays as it is.",
+      "neededToOrder": "You cannot order a server until this address is verified. Everything on the account stays as it is.",
+      "send": "Send verification code",
+      "resend": "Send a new code",
+      "resendIn": "New code in {seconds} s",
+      "sent": "A code was sent to {email}.",
+      "codeSent": "We sent a 6-digit code to {email}. It is valid for {minutes} minutes; you can also open the link in that mail while signed in.",
+      "code": "Verification code",
+      "verify": "Verify",
+      "verified": "E-mail address verified.",
+      "notWhileActing": "Only the account's owner can verify the address. Staff mark an address as verified in Admin → Users.",
+      "attention": "E-mail address not verified",
+      "orderNotice": "Verify your e-mail address first",
+      "orderNoticeBody": "This panel takes orders only from accounts with a verified e-mail address.",
+      "orderNoticeLink": "Verify in Account → Profile"
     }
   },
   "AuthLayout": {
@@ -3932,7 +3956,9 @@
         "accessKeyId": "Access key ID",
         "secretAccessKey": "Secret access key",
         "sendMailToken": "Send mail token"
-      }
+      },
+      "useVerification": "Address verification",
+      "useVerificationHelp": "Accounts that register get a code to verify their e-mail address."
     },
     "captcha": {
       "solveFirst": "Complete the check first.",
@@ -4256,7 +4282,11 @@
         "off": "Nobody"
       },
       "apiTokensMoved": "Token rules, the rate limit, address limits and the request log are now on the API tab.",
-      "apiTokensOpen": "Open API settings"
+      "apiTokensOpen": "Open API settings",
+      "verifiedOrder": "Orders and e-mail verification",
+      "verifiedOrderHelp": "Accounts that register get a code by e-mail to verify their address (Account → Profile). With this on, an account whose address is not verified cannot order a server. Accounts made by staff, and addresses already proven by a sign-in link, an e-mail code or a password reset, count as verified.",
+      "verifiedOrderOn": "Only accounts with a verified e-mail address may order",
+      "verifiedOrderNeedsMail": "E-mail is not set up, or address verification is turned off in Settings → E-mail: nobody could verify, so the rule is not applied until it is."
     },
     "domain": {
       "current": "Current address",

@@ -825,8 +825,8 @@ export default {
     summary: { tr: 'Oturum açmış kullanıcıyı verir.', en: 'Returns the signed-in user.' },
     details: { tr: 'İki aşamalı doğrulama zorunlu ama kurulmamışsa yalnızca bu uç yanıt verir.', en: 'When two-factor is required but not set up, this is the only route that answers.' },
     returns: {
-      tr: 'id, email, name, roles, permissions, locale, timeZone, username, twoFactorEnabled, phoneNumber, phoneNumberVerified, impersonatedBy ve isteğin geldiği ip.',
-      en: 'id, email, name, roles, permissions, locale, timeZone, username, twoFactorEnabled, phoneNumber, phoneNumberVerified, impersonatedBy and the caller\'s ip.',
+      tr: 'id, email, emailVerified, name, roles, permissions, locale, timeZone, username, twoFactorEnabled, phoneNumber, phoneNumberVerified, impersonatedBy ve isteğin geldiği ip.',
+      en: 'id, email, emailVerified, name, roles, permissions, locale, timeZone, username, twoFactorEnabled, phoneNumber, phoneNumberVerified, impersonatedBy and the caller\'s ip.',
     },
   },
   'GET /live': {

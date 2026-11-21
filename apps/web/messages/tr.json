@@ -400,7 +400,11 @@
     "UPDATE_SKIPPED": "Otomatik güncelleme bu sürümü atladı; çünkü daha önce bir kez başarısız oldu. Nedeni giderince elle güncelleyin.",
     "PAYMENT_IN_REVIEW": "Bu fatura için yapılan bir ödeme ekibimizin incelemesini bekliyor; bu yüzden şu anda yeniden ödenemez. Karar verildiğinde size bildirilir; iki kez ödemeniz gerekmez.",
     "TOKEN_ACCOUNT_UNCONFIRMED": "Bu API anahtarı uykuda: hesap bir dizinden ya da tek oturum açmadan geliyor ve yakın zamanda orada doğrulanmadı. Panelde yeniden oturum açtığınızda anahtar eskisi gibi çalışır.",
-    "PAYMENT_NOT_IN_REVIEW": "Bu ödeme artık inceleme beklemiyor; bu arada sonuçlandırılmış ya da kapatılmış."
+    "PAYMENT_NOT_IN_REVIEW": "Bu ödeme artık inceleme beklemiyor; bu arada sonuçlandırılmış ya da kapatılmış.",
+    "EMAIL_NOT_VERIFIED": "Sunucu sipariş etmeden önce bu hesabın e-posta adresini doğrulayın (Hesabım → Profil).",
+    "EMAIL_ALREADY_VERIFIED": "Bu e-posta adresi zaten doğrulanmış.",
+    "VERIFICATION_CODE_INVALID": "Bu kod yanlış ya da artık geçerli değil. Yeni bir kod isteyip tekrar deneyin.",
+    "MAIL_SEND_FAILED": "E-posta gönderilemedi. Biraz sonra tekrar deneyin."
   },
   "Auth": {
     "required": "zorunlu",
@@ -2800,6 +2804,26 @@
       "leaveBody3": "Bu işlem panelden geri alınamaz.",
       "left": "Hesabınız artık bir bayiye bağlı değil. Bundan sonra size faturalanacak sunucu sayısı: {servers}.",
       "gone": "Bu hesap artık bir bayiye bağlı değil."
+    },
+    "emailVerification": {
+      "title": "E-posta adresi",
+      "intro": "{email} adresinin sizin olduğunu gösterin: bir kod göndeririz, buraya girersiniz.",
+      "unverified": "Bu adres henüz doğrulanmadı",
+      "why": "Doğrulanmış adres, panelin bu hesaba gönderdiği postaların size ulaştığını gösterir. Hesaptaki her şey olduğu gibi kalır.",
+      "neededToOrder": "Bu adres doğrulanana kadar sunucu sipariş edemezsiniz. Hesaptaki her şey olduğu gibi kalır.",
+      "send": "Doğrulama kodu gönder",
+      "resend": "Yeni kod gönder",
+      "resendIn": "Yeni kod için {seconds} sn",
+      "sent": "{email} adresine bir kod gönderildi.",
+      "codeSent": "{email} adresine 6 haneli bir kod gönderdik. Kod {minutes} dakika geçerlidir; oturumunuz açıkken o postadaki bağlantıyı da açabilirsiniz.",
+      "code": "Doğrulama kodu",
+      "verify": "Doğrula",
+      "verified": "E-posta adresi doğrulandı.",
+      "notWhileActing": "Adresi yalnızca hesabın sahibi doğrulayabilir. Personel bir adresi Yönetim → Kullanıcılar'dan doğrulanmış olarak işaretler.",
+      "attention": "E-posta adresi doğrulanmadı",
+      "orderNotice": "Önce e-posta adresinizi doğrulayın",
+      "orderNoticeBody": "Bu panel yalnızca e-posta adresi doğrulanmış hesaplardan sipariş alır.",
+      "orderNoticeLink": "Hesabım → Profil'de doğrulayın"
     }
   },
   "AuthLayout": {
@@ -3932,7 +3956,9 @@
         "accessKeyId": "Erişim anahtarı kimliği",
         "secretAccessKey": "Gizli erişim anahtarı",
         "sendMailToken": "Gönderim anahtarı (send mail token)"
-      }
+      },
+      "useVerification": "Adres doğrulama",
+      "useVerificationHelp": "Kayıt olan hesaplara e-posta adreslerini doğrulamaları için kod gönderilir."
     },
     "captcha": {
       "solveFirst": "Önce doğrulamayı tamamlayın.",
@@ -4256,7 +4282,11 @@
         "off": "Hiç kimse"
       },
       "apiTokensMoved": "Anahtar kuralları, istek sınırı, adres kısıtları ve istek günlüğü artık API sekmesinde.",
-      "apiTokensOpen": "API ayarlarını aç"
+      "apiTokensOpen": "API ayarlarını aç",
+      "verifiedOrder": "Sipariş ve e-posta doğrulama",
+      "verifiedOrderHelp": "Kayıt olan hesaplara adreslerini doğrulamaları için e-postayla kod gönderilir (Hesabım → Profil). Bu açıkken adresi doğrulanmamış hesap sunucu sipariş edemez. Personelin açtığı hesaplar ile giriş bağlantısı, e-posta kodu ya da parola sıfırlamayla daha önce kanıtlanmış adresler doğrulanmış sayılır.",
+      "verifiedOrderOn": "Yalnızca e-posta adresi doğrulanmış hesaplar sipariş verebilsin",
+      "verifiedOrderNeedsMail": "E-posta ayarlı değil ya da adres doğrulama Ayarlar → E-posta'da kapalı: kimse doğrulayamayacağı için kural o zamana kadar uygulanmaz."
     },
     "domain": {
       "current": "Şu anki adres",

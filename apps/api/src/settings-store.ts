@@ -13,7 +13,8 @@ import { mailProviders, readProviderFields } from './mail-providers';
 // passwordPrefix: starts the strong root password generated when a customer picks a weak one (passwords.ts).
 export type Branding = { name: string; accent: string | null; logo: string | null; favicon: string | null; passwordPrefix: string };
 // Transactional mail only; notifications choose their channels in notify.ts.
-export type MailUse = { passwordReset: boolean; twoFactor: boolean };
+// verification: the code that verifies a registered account's address (address-check.ts).
+export type MailUse = { passwordReset: boolean; twoFactor: boolean; verification: boolean };
 // provider: 'smtp' (host, port, account below) or one of mail-providers.ts sent through its HTTP API, with its
 // plain fields in api and its secrets encrypted together in apiSecretEnc.
 export type MailSettings = { enabled: boolean; provider: string; host: string; port: number; security: 'none' | 'starttls' | 'tls'; username: string; passwordEnc: string | null;
@@ -56,7 +57,8 @@ export type EnergySettings = { pricePerKwh: string; currency: string; pue: numbe
 export type AbuseSettings = { portScan: boolean; scanMinutes: number; cpu: boolean; cpuThreshold: number; cpuHours: number; notifyCustomer: boolean; ports: { port: number; label: string }[] };
 // A notice on every signed-in page (announcement.ts); a new id per saved version.
 export type Announcement = { id: string; active: boolean; tone: 'info' | 'warning' | 'danger' | 'success'; textTr: string; textEn: string; link: string; startsAt: string | null; endsAt: string | null };
-export type SecuritySettings = { require2fa: 'none' | 'staff' | 'all'; emailCodeSignIn: boolean; apiTokens: 'everyone' | 'staff' | 'off' };
+// verifiedEmailToOrder: an account whose e-mail address is not verified cannot order a server (address-check.ts).
+export type SecuritySettings = { require2fa: 'none' | 'staff' | 'all'; emailCodeSignIn: boolean; apiTokens: 'everyone' | 'staff' | 'off'; verifiedEmailToOrder: boolean };
 export type NotificationPolicy = { enabled: boolean; allowed: Channel[]; defaults: Channel[]; userCanChange: boolean };
 export type CaptchaSettings = { provider: CaptchaProvider; siteKey: string; secretEnc: string | null; minScore: number; use: CaptchaUse };
 // Reverse DNS (rdns.ts): PowerDNS's HTTP API holds the in-addr.arpa / ip6.arpa zones of the routed blocks.
@@ -90,12 +92,12 @@ const defaults = {
     company: { name: '', taxId: '', taxOffice: '', address: '', district: '', city: '', country: 'TR', postalCode: '', phone: '', email: '', website: '', mersis: '', tradeRegistry: '' } } as BillingSettings,
   branding: { name: 'Lightning VM', accent: null, logo: null, favicon: null, passwordPrefix: '' } as Branding,
   mail: { enabled: false, provider: 'smtp', host: '', port: 587, security: 'starttls', username: '', passwordEnc: null, api: {}, apiSecretEnc: null, fromName: '', fromAddress: '',
-    use: { passwordReset: true, twoFactor: true } } as MailSettings,
+    use: { passwordReset: true, twoFactor: true, verification: true } } as MailSettings,
   captcha: { provider: 'none', siteKey: '', secretEnc: null, minScore: 0.5, use: { signIn: true, signUp: true, passwordReset: true } } as CaptchaSettings,
   sms: { provider: 'none', sender: '', credentialsEnc: null, commercial: false, use: { twoFactor: true, phoneVerification: true } } as SmsSettings,
   // Per notification event (notify.ts): the admin's policy. Missing events use the catalog defaults.
   notifications: {} as Record<string, NotificationPolicy>,
-  security: { require2fa: 'none', emailCodeSignIn: false, apiTokens: 'everyone' } as SecuritySettings,
+  security: { require2fa: 'none', emailCodeSignIn: false, apiTokens: 'everyone', verifiedEmailToOrder: false } as SecuritySettings,
   announcement: { id: '', active: false, tone: 'info', textTr: '', textEn: '', link: '', startsAt: null, endsAt: null } as Announcement,
   energy: { pricePerKwh: '0', currency: 'TRY', pue: 1.5, co2GramsPerKwh: 420 } as EnergySettings,
   abuse: { portScan: true, scanMinutes: 30, cpu: true, cpuThreshold: 90, cpuHours: 6, notifyCustomer: false,
@@ -292,7 +294,8 @@ export function readMail(body: Input, saved: MailSettings): { value: MailSetting
   const passwordEnc = !username ? null : password ? encryptSecret(password, 'settings:mail') : moved ? null : saved.passwordEnc;
   const apiSecretEnc = smtp ? saved.apiSecretEnc : Object.keys(api.secrets).length ? encryptSecret(JSON.stringify(api.secrets), 'settings:mail-api') : null;
   return { value: { enabled, provider, host, port, security, username, passwordEnc, api: smtp ? saved.api : api.plain, apiSecretEnc, fromName, fromAddress,
-    use: { passwordReset: bool(use.passwordReset), twoFactor: bool(use.twoFactor) } }, password, secrets: api.secrets };
+    // verification: a form from before it existed does not send it and leaves it as it was (on, unless turned off).
+    use: { passwordReset: bool(use.passwordReset), twoFactor: bool(use.twoFactor), verification: use.verification === undefined ? saved.use?.verification !== false : bool(use.verification) } }, password, secrets: api.secrets };
 }
 
 export function readCaptcha(body: Input, saved: CaptchaSettings): { value: CaptchaSettings; secret?: string } {
@@ -329,6 +332,8 @@ export async function publicConfig() {
     otpChannels: { sms: smsCodes, email: mailCodes },
     // Sign-in with a one-time code sent by e-mail (the admin turns it on; needs working mail).
     emailCodeSignIn: mailCodes && (await getSettings('security')).emailCodeSignIn,
+    // Address verification codes can be mailed (address-check.ts); off: the account page shows no such section.
+    emailVerification: await mailUse('verification'),
     // Other sign-in methods: social buttons, the e-mail link, user names, and One Tap's public client id.
     signIn: await getSettings('signIn').then(async (s) => {
       const { enabledSocial } = await import('./social-providers');

@@ -14,6 +14,25 @@ Türkçe [docs/upgrade-notes.md](docs/upgrade-notes.md) sayfasını okuyun.*
 
 ## [Unreleased]
 
+### Added
+
+- **E-mail address verification for registered accounts.** After registration the panel mails a six-digit code
+  (valid for 30 minutes, with a link that opens Account → Profile). The code counts only in a signed-in session of
+  that account, so nothing on the account is removed. Account → Profile shows an unverified address with a resend
+  button (one mail a minute, five an hour, ten a day per account). Settings → Sign-in security has a new switch,
+  **off by default**, that keeps accounts with an unverified address from ordering a server
+  (`403 EMAIL_NOT_VERIFIED`); Settings → E-mail has a switch for the verification mail, on by default. Without
+  working mail the feature hides itself and the order rule is not applied. Addresses already proven (first sign-in
+  by link or code, first password reset by mail, accounts made by staff, a directory, single sign-on or the billing
+  integration) stay verified. New routes: `GET /api/account/email-verification`, `POST …/send`, `POST …/confirm`;
+  `GET /api/auth/me` now returns `emailVerified`. See [docs/auth.md](docs/auth.md#e-posta-adresi-doğrulama).
+
+### Changed
+
+- **For existing installs with e-mail turned on in Settings:** accounts that register from now on receive the
+  verification mail, and accounts whose address is not verified see a notice on Account → Profile. Nobody is
+  blocked from anything unless the administrator turns the order rule on.
+
 ## [0.4.0] - 2026-11-21
 
 Second public release and the first one marked **beta**. It gathers about 430 commits since 0.1.0. The version

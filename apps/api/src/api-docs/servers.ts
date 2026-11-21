@@ -179,7 +179,7 @@ export default {
     ],
     example: { type: 'package', poolId: '2f1c6a0e-5d3b-4a8e-9c71-0b6f4e2d1a93', packageId: '7b9e2c41-3f6d-4e8a-a1c5-92d0e6f7b384', imageId: 'c4d8a1f2-6e3b-4b7a-8d9c-1e2f3a4b5c6d', name: 'web-1', sshKeyIds: ['5a6b7c8d-9e0f-4a1b-8c2d-3e4f5a6b7c8d'], firewallIds: [], extraIpv4: 0 },
     returns: { tr: '`serverId`, `operation`; gerekirse `passwordReplaced`, `invoiceId` ve `awaitingPayment`.', en: '`serverId`, `operation`; when relevant `passwordReplaced`, `invoiceId` and `awaitingPayment`.' },
-    errors: ['FORBIDDEN', 'IDEMPOTENCY_KEY_REQUIRED', 'IDEMPOTENCY_MISMATCH', 'VALIDATION_FAILED', 'NOT_FOUND', 'LOCATION_UNAVAILABLE', 'LOCATION_NOT_ALLOWED', 'QUOTA_EXCEEDED', 'CAPACITY_EXHAUSTED', 'IP_EXHAUSTED', 'BALANCE_TOO_LOW', 'PROVISIONING_NOT_SUPPORTED', 'FIREWALL_NOT_SUPPORTED', 'VDC_LIMIT', 'VDC_INACTIVE', 'RESELLER_ALLOCATION_EXCEEDED'],
+    errors: ['FORBIDDEN', 'IDEMPOTENCY_KEY_REQUIRED', 'IDEMPOTENCY_MISMATCH', 'VALIDATION_FAILED', 'NOT_FOUND', 'LOCATION_UNAVAILABLE', 'LOCATION_NOT_ALLOWED', 'QUOTA_EXCEEDED', 'CAPACITY_EXHAUSTED', 'IP_EXHAUSTED', 'BALANCE_TOO_LOW', 'PROVISIONING_NOT_SUPPORTED', 'FIREWALL_NOT_SUPPORTED', 'VDC_LIMIT', 'VDC_INACTIVE', 'RESELLER_ALLOCATION_EXCEEDED', 'EMAIL_NOT_VERIFIED'],
     idempotencyKey: true,
   },
   'GET /servers/:id/root-password': {

@@ -25,8 +25,7 @@ yalnızca **olmayanlar** ve **denenmemiş olanlar** durur. Tarih ya da söz veri
 - **Ödeme:** listedeki 46 sağlayıcıdan 41'iyle tahsilat. Stripe için webhook (ödeme bugün müşterinin
   tarayıcısı panele dönünce ya da tahsilat çalıştırması Stripe'a yeniden sorunca işlenir). Param dönüşünün Param'a sorularak doğrulanması (o zamana kadar Param ödemeleri personelce elle onaylanır). PayTR ve Param'da kayıtlı
   kartla otomatik yenileme.
-- **Kimlik:** kayıtla açılan hesabın e-posta adresinin doğrulanması. Bir projeyi birden çok kullanıcının paylaştığı
-  ekip yapısı. Proje başına kota (okuyan kod var, tanımlayan ekran ya da API yok).
+- **Kimlik:** bir projeyi birden çok kullanıcının paylaştığı ekip yapısı. Proje başına kota (okuyan kod var, tanımlayan ekran ya da API yok).
 - **Ağ:** çalışan bir sunucuya sonradan ek IP ekleme. Ayrı IPv6 havuzları ve sunucu başına birden çok IPv6 adresi
   (bugün: IPv4 havuzuna eklenen önekten tek adres). Yük dengeleyici.
 - **İşletim:** izlemeyi kurulumdan sonra panelden açıp kapatma (yalnızca `install.sh monitoring on|off`). Birden çok

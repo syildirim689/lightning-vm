@@ -30,6 +30,11 @@ const texts = {
       preheader: 'Tek kullanımlık doğrulama kodunuz (5 dakika geçerli).', label: 'Doğrulama kodu', heading: 'Doğrulama kodunuz',
       intro: [`${n} hesabınızda işlemi tamamlamak için bu kodu girin. Kod 5 dakika geçerlidir.`], code,
       note: 'Bu kodu kimseyle paylaşmayın; destek ekibi de dahil hiç kimse sizden bu kodu istemez.' }],
+    verify: (n: string, code: string, url: string | null): [string, MailContent] => [`${n}: e-posta adresinizi doğrulayın`, {
+      preheader: 'E-posta adresinizi doğrulamak için kodunuz (30 dakika geçerli).', label: 'Adres doğrulama', heading: 'E-posta adresinizi doğrulayın',
+      intro: [`${n} hesabınız bu adresle açıldı. Adresin sizin olduğunu göstermek için panele giriş yapın ve Hesabım sayfasında bu kodu girin${url ? ' ya da aşağıdaki düğmeyi kullanın' : ''}. Kod 30 dakika geçerlidir.`], code,
+      ...(url && { button: { label: 'Adresi doğrula', url } }),
+      note: 'Kod yalnızca hesaba giriş yapmış kişinin işine yarar. Bu hesabı siz açmadıysanız kodu kimseye vermeyin; hesabı "Parolamı unuttum" ile kendinize alabilirsiniz.' }],
   },
   en: {
     reset: (n: string, url: string): [string, MailContent] => [`${n} password reset`, {
@@ -49,6 +54,11 @@ const texts = {
       preheader: 'Your one-time verification code (valid for 5 minutes).', label: 'Verification code', heading: 'Your verification code',
       intro: [`Enter this code to finish in your ${n} account. It is valid for 5 minutes.`], code,
       note: 'Do not share this code; nobody, support included, will ever ask you for it.' }],
+    verify: (n: string, code: string, url: string | null): [string, MailContent] => [`${n}: verify your e-mail address`, {
+      preheader: 'Your code to verify your e-mail address (valid for 30 minutes).', label: 'Address verification', heading: 'Verify your e-mail address',
+      intro: [`Your ${n} account was opened with this address. To show that it is yours, sign in to the panel and enter this code on the Account page${url ? ', or use the button below' : ''}. The code is valid for 30 minutes.`], code,
+      ...(url && { button: { label: 'Verify address', url } }),
+      note: 'The code is only of use to someone signed in to the account. If you did not open this account, give the code to nobody; you can take the account over with "Forgot password".' }],
   },
 };
 const lang = (locale?: string) => texts[locale === 'tr' ? 'tr' : 'en'];
@@ -67,6 +77,9 @@ export const sendSignInAlert = (to: string, locale: string | undefined, ip: stri
 export const sendSignInLink = (to: string, locale: string | undefined, url: string) => send(to, locale, (n) => lang(locale).link(n, url));
 
 export const sendOtpMail = (to: string, locale: string | undefined, code: string) => send(to, locale, (n) => lang(locale).otp(n, code));
+
+// The code that verifies an account's address (address-check.ts); url opens the account page with it filled in.
+export const sendAddressCheck = (to: string, locale: string | undefined, code: string, url: string | null) => send(to, locale, (n) => lang(locale).verify(n, code, url));
 
 export const otpText = (locale: string | undefined, name: string, code: string) =>
   locale === 'tr' ? `${name} doğrulama kodunuz: ${code}. Kimseyle paylaşmayın.` : `${name} verification code: ${code}. Do not share it.`;

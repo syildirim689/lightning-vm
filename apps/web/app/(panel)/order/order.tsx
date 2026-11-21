@@ -22,6 +22,7 @@ import { copyText, useCopy } from '../../../lib/clipboard';
 import { orderLinkKeys, orderLinkQuery, parseOrderLink } from '../../../lib/order-link';
 import { PlatformHint, supports, type Platformed } from '../../../components/capabilities';
 import { Strength } from '../../(auth)/credentials-form';
+import { useEmailVerification } from '../account/email-verification';
 
 type Custom = { cpuMin: number; cpuMax: number; cpuStep: number; memoryMinMb: number; memoryMaxMb: number; memoryStepMb: number; diskMinGb: number; diskMaxGb: number; diskStepGb: number; currency: string };
 type Catalog = { packages: { id: string; name: string; vcpu: number; memoryMb: number; diskGb: number; priceMonthly: string; currency: string; poolIds: string[]; imageIds: string[] }[];
@@ -51,6 +52,9 @@ export default function Order() {
   const queryClient = useQueryClient();
   const keys = useSshKeys();
   const tf = useTranslations('Firewalls');
+  // Settings → Sign-in security may ask for a verified e-mail address before an order (the API refuses it too).
+  const tv = useTranslations('Account.emailVerification');
+  const mustVerify = !!useEmailVerification()?.requiredToOrder;
   const firewalls = useApiQuery<{ firewalls: { id: string; name: string }[] }>(['firewalls'], '/firewalls').data?.firewalls ?? [];
   const [firewallIds, setFirewallIds] = useState<string[]>([]);
   // Not kept in the draft (sessionStorage): a password stays only on this page.
@@ -162,7 +166,7 @@ export default function Order() {
     !nameOk && { key: 'name', at: t('access') },
     !d.sshKeyIds.length && { key: 'keys', at: t('access') },
   ].filter((m): m is { key: 'image' | 'plan' | 'name' | 'keys'; at: string } => !!m);
-  const canCreate = ready && !missing.length && quote.data && !quote.data.quota.exceeded.length && quote.data.capacityAvailable && !couponError;
+  const canCreate = ready && !missing.length && quote.data && !quote.data.quota.exceeded.length && quote.data.capacityAvailable && !couponError && !mustVerify;
   const jump = (title: string) => document.querySelector(`[data-section="${CSS.escape(title)}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   const steps = [
     { label: t('steps.location'), done: !!d.poolId && !!d.imageId, at: t('location') },
@@ -206,6 +210,8 @@ export default function Order() {
         {i < steps.length - 1 && <span aria-hidden className="mx-1 hidden h-px w-8 bg-separator sm:block"/>}
       </li>)}
     </ol>
+    {mustVerify && <div className="mb-6"><Notice tone="warning" title={tv('orderNotice')}>{tv('orderNoticeBody')}{' '}
+      <NextLink href="/account?tab=profile" className="font-medium text-accent hover:underline">{tv('orderNoticeLink')}</NextLink></Notice></div>}
     {d.cloneFrom && <div className="mb-6"><Notice tone="accent" title={t('clone.title', { name: d.cloneName })}>{t('clone.help')}{' '}
       <button type="button" className="font-medium text-accent hover:underline" onClick={() => d.set({ cloneFrom: '', cloneName: '' })}>{t('clone.stop')}</button></Notice></div>}
     <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_22rem]">

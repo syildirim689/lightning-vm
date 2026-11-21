@@ -45,7 +45,9 @@ automatic HTTPS. The UI is in Turkish and English.
 
 Highlights: smart ordering, reinstall, resize and clone, snapshots, extra disks, billing and invoices (monthly and
 hourly), resellers, support desk, 17 notification channels (in-app, browser push, e-mail, SMS and 13 messaging
-apps and webhooks), customer webhooks, LDAP / OIDC sign-in, passkeys and two-factor, live state of the panel host
+apps and webhooks), customer webhooks, LDAP / OIDC sign-in, passkeys and two-factor, e-mail address verification
+for registered accounts (a mailed code, entered while signed in; an optional rule that only verified accounts may
+order, off by default), live state of the panel host
 (CPU, memory, disk, services, logs), operating system updates for the host and for customers' servers, window-style
 dialogs (move, put aside, snap to halves and quarters, centre, resize, keyboard shortcuts), and accessibility controls.
 

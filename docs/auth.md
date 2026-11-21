@@ -189,8 +189,48 @@ ve yalnızca onun numarasını doğrular; telefon numarasıyla giriş ve telefon
 (`404`). Doğrulanmış numaraya SMS ile iki adımlı doğrulama kodu ve SMS
 bildirimleri gönderilebilir. SMS ayarlanmamışsa bu bölüm bilgilendirme gösterir.
 
+## E-posta adresi doğrulama
+Kayıtla açılan hesap, adresi doğrulanmamış olarak başlar. Panel posta gönderebiliyorsa (Ayarlar → E-posta açık ve
+orada "Adres doğrulama" işaretli; varsayılan işaretlidir) kayıttan hemen sonra adrese **altı haneli bir kod**
+gönderir. Kod 30 dakika geçerlidir; postadaki bağlantı Hesabım → Profil'i kodu doldurulmuş olarak açar.
+
+- **Kod yalnızca o hesabın oturumunda geçer** (`POST /api/account/email-verification/confirm`). Böylece hesabın
+  parolasını bilen kişinin posta kutusunu da okuduğu gösterilmiş olur: hesabı kuran ile adresin sahibi aynı kişidir,
+  bu yüzden **hesapta hiçbir şey silinmez** ([ilk kanıt](#adresin-ilk-kanıtı)'ın tersine). Bağlantıyı oturumu
+  olmayan biri açarsa giriş sayfasına düşer; adresi başkasının kaydettiği kişi hesabı yine "Parolamı unuttum" ile
+  alır ve o zaman ilk kanıtın temizliği işler.
+- **Hesabım → Profil** doğrulanmamış adresi uyarıyla gösterir; "Doğrulama kodu gönder" / "Yeni kod gönder" düğmesi
+  ve kod alanı oradadır. Hesap menüsünde Profil işaretlenir. Yeni kod öncekini geçersiz kılar.
+- **Sınırlar (hesap başına):** dakikada 1, saatte 5, günde 10 posta (kayıt sırasında giden ilk posta da sayılır);
+  bir kod 5 kez, hesap günde 20 kez denenebilir. Yanlış, süresi dolmuş, kullanılmış ya da hiç gönderilmemiş kod
+  aynı yanıtı alır (`VERIFICATION_CODE_INVALID`). Kod Redis'te özet olarak, hesaba ve gönderildiği adrese bağlı
+  tutulur: adres bu arada değiştirildiyse eski adrese giden kod yeni adresi doğrulamaz.
+- **Adres taraması yapılamaz:** üç rota da yalnızca oturum açmış hesabın kendisi hakkında yanıt verir; oturumsuz
+  istek `401` alır ve hiçbiri bir adresin kayıtlı olup olmadığını söylemez.
+- Kullanıcı adına oturum açmış personel ve API anahtarları doğrulama yapamaz (`NOT_WHILE_IMPERSONATING`,
+  `TOKEN_NOT_ALLOWED`). Personel bir adresi Yönetim → Kullanıcılar → kullanıcı → "Doğrulanmış işaretle" ile,
+  kendi adıyla denetim kaydına geçerek işaretler.
+- **Sipariş kuralı (varsayılan kapalı):** Ayarlar → Giriş güvenliği → "Yalnızca e-posta adresi doğrulanmış hesaplar
+  sipariş verebilsin" açıldığında adresi doğrulanmamış hesabın siparişi `403 EMAIL_NOT_VERIFIED` ile reddedilir
+  ve sipariş sayfası nedenini, Profil'e bağlantıyla söyler. Bayinin müşterisi için verdiği siparişte bayinin kendi
+  adresine bakılır; dış faturalama sisteminin (WISECP / WHMCS) siparişlerine bakılmaz.
+- **E-posta ayarlı değilse özellik görünmez:** Profil'de bölüm çıkmaz, rotalar `MAIL_NOT_CONFIGURED` döner ve
+  sipariş kuralı açık olsa bile uygulanmaz (kimse doğrulayamazdı). `.env` içindeki eski `SMTP_URL` ile çalışan
+  kurulumlarda da böyledir: doğrulama postası için e-postanın Ayarlar → E-posta'dan açılması gerekir.
+- Eski yollarla kanıtlanmış adresler (aşağıdaki ilk kanıt; kurulum yöneticisi; personelin, dizinin, SSO'nun ve
+  faturalama entegrasyonunun açtığı hesaplar) doğrulanmış kalır.
+- Denetim kaydı: `auth.email_verification_sent`, `auth.email_verified` (başarı ve hatalı kod).
+
+Kod: `apps/api/src/address-check.ts` (kurallar), `email-verification.ts` (rotalar); testler
+`apps/api/test/integration/email-verification.test.mjs`.
+
+**Denenmeyen:** gerçek bir posta sunucusuyla gönderim (testler bu makinedeki sahte bir SMTP sunucusunu kullanır) ve
+tarayıcıda kodun girilip adresin doğrulanması (tarayıcı testlerinin kurulumunda posta alan bir sunucu yoktur; orada
+bölümün görünmesi, gönderimin başarısızlığı, yanlış kod, sipariş kuralı ve personel işaretleyince bölümün kalkması
+denenir).
+
 ## Adresin ilk kanıtı
-Panel kayıtta e-posta adresini doğrulamaz; bu yüzden bir hesabı ilk açan kişi adresin sahibi olmayabilir (açık
+Kayıttaki doğrulama kodu girilene kadar adres doğrulanmamıştır; bu yüzden bir hesabı ilk açan kişi adresin sahibi olmayabilir (açık
 kayıtta herkes başkasının adresiyle hesap açabilir; bayi müşterisinin adresini kendisi yazar). Adresi hiç
 doğrulanmamış bir hesapta, posta kutusuna ulaşabildiğini gösteren **ilk** işlem adresi sahibi tarafından kanıtlanmış
 sayar. Kanıt sayılan üç yol:
@@ -309,6 +349,8 @@ Bu koşullar sağlanmazsa API `403 CSRF_REJECTED` döner. better-auth ayrıca ç
 | Parola sıfırlama postası, posta kutusu başına (hesap olsun olmasın sayılır) | 5 / saat |
 | Telefon doğrulama kodu (SMS), hesap başına ve numara başına | 5 / gün |
 | İki adımlı doğrulama kodu (SMS ya da e-posta), hesap başına | 8 / saat |
+| Adres doğrulama postası, hesap başına | 1 / dk, 5 / saat, 10 / gün |
+| Adres doğrulama kodu denemesi, hesap başına (ayrıca kod başına 5) | 20 / gün |
 | Bildirim testi, hesap başına (SMS'te ayrıca numara başına, mesajlaşmada ayrıca adres başına) | 6 / saat |
 | Mesajlaşma bağlantısı kurma ve bağlantı testi, hesap başına | 20 / saat |
 | Kart ödemesi başlatma, hesap başına (bütün faturaları için ortak) | 20 / saat |
@@ -346,9 +388,6 @@ Bu, e-postanın kayıtlı olduğunu açığa çıkarır; açık kayıtlı bir pa
   Boş kurulumda `E2E_BOOTSTRAP_TOKEN` gerekir.
 
 ## Henüz yok
-- E-posta adresi doğrulama: kayıtla açılan hesabın adresi doğrulanmaz. Adres, hesap ilk kez giriş bağlantısıyla ya da
-  e-posta koduyla girdiğinde veya ilk kez postayla parola sıfırladığında kanıtlanmış sayılır
-  ([yukarıda](#adresin-ilk-kanıtı)).
 - Organizasyon / ekip yapısı: bir projeyi ya da sunucuyu birden çok kullanıcı paylaşamaz. (Bayiler vardır: bayi kendi
   müşteri hesaplarını açar ve onların sunucularını yönetir; `apps/api/src/reseller.ts`. Müşteri hesabını kimin
   yönettiğini Hesabım → Profil'de görür, bir kez bildirim alır ve bayiden ayrılabilir;

@@ -190,7 +190,7 @@ function Branding({ readOnly }: { readOnly: boolean }) {
 type MailField = { key: string; secret?: boolean; optional?: boolean; options?: string[] };
 type MailDoc = { enabled: boolean; provider: string; host: string; port: number; security: 'none' | 'starttls' | 'tls'; username: string; fromName: string; fromAddress: string;
   api: Record<string, string>; secretsSet: string[]; providers: { id: string; name: string; website: string; docs: string; fields: MailField[] }[];
-  use: { passwordReset: boolean; twoFactor: boolean }; passwordSet: boolean; envFallback: boolean; password?: string };
+  use: { passwordReset: boolean; twoFactor: boolean; verification?: boolean }; passwordSet: boolean; envFallback: boolean; password?: string };
 const mailPresets: Record<string, Pick<MailDoc, 'host' | 'port' | 'security'>> = {
   gmail: { host: 'smtp.gmail.com', port: 587, security: 'starttls' }, outlook: { host: 'smtp.office365.com', port: 587, security: 'starttls' },
   yandex: { host: 'smtp.yandex.com', port: 465, security: 'tls' }, zoho: { host: 'smtp.zoho.eu', port: 587, security: 'starttls' },
@@ -266,6 +266,7 @@ function Mail({ readOnly, myEmail }: { readOnly: boolean; myEmail: string }) {
     <FormSection title={t('mail.use')} description={t('mail.useHelp')} icon={<I name="list-checks" size={16}/>}>
       <CheckboxInput label={t('mail.usePasswordReset')} help={t('mail.usePasswordResetHelp')} isSelected={v.use.passwordReset} onChange={(x) => f.set('use')({ ...v.use, passwordReset: x })} isDisabled={readOnly}/>
       <CheckboxInput label={t('mail.useTwoFactor')} help={t('mail.useTwoFactorHelp')} isSelected={v.use.twoFactor} onChange={(x) => f.set('use')({ ...v.use, twoFactor: x })} isDisabled={readOnly}/>
+      <CheckboxInput label={t('mail.useVerification')} help={t('mail.useVerificationHelp')} isSelected={v.use.verification !== false} onChange={(x) => f.set('use')({ ...v.use, verification: x })} isDisabled={readOnly}/>
       <p className="text-xs text-muted">{t('mail.notificationsNote')}</p>
     </FormSection>
     {!readOnly && <FormSection title={t('mail.test')} description={t('mail.testHelp')} icon={<I name="flask-conical" size={16}/>}>

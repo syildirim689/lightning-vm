@@ -139,7 +139,9 @@ export class SettingsController {
     const current = await getSettings('security');
     const apiTokens = body?.apiTokens === undefined ? current.apiTokens : ['everyone', 'staff', 'off'].includes(String(body.apiTokens)) ? String(body.apiTokens) as 'everyone' | 'staff' | 'off' : null;
     if (!apiTokens) throw apiError(400, 'VALIDATION_FAILED', 'Invalid input', { apiTokens: 'INVALID_VALUE' });
-    const value = { require2fa, emailCodeSignIn: body?.emailCodeSignIn === true, apiTokens };
+    // Left as it is by a form that does not know it (an older web build, a script written before it existed).
+    const verifiedEmailToOrder = body?.verifiedEmailToOrder === undefined ? current.verifiedEmailToOrder === true : body.verifiedEmailToOrder === true;
+    const value = { require2fa, emailCodeSignIn: body?.emailCodeSignIn === true, apiTokens, verifiedEmailToOrder };
     // Asking fewer people for two-factor, or letting a code in a mailbox stand in for the password: administrators.
     const rank = { none: 0, staff: 1, all: 2 };
     if (rank[require2fa] < rank[current.require2fa] || (value.emailCodeSignIn && !current.emailCodeSignIn)) await assertAdmin(req);

@@ -17,7 +17,9 @@ import { endSession, touch } from './presence';
 // member signed in as this user, if any.
 // timeZone: the person's chosen zone, or null for their browser's.
 export type User = { id: string; email: string; name: string; roles: string[]; permissions: string[]; locale: 'tr' | 'en'; timeZone: string | null; username: string | null; twoFactorRequired?: boolean;
-  impersonatedBy: string | null; twoFactorEnabled: boolean; phoneNumber: string | null; phoneNumberVerified: boolean };
+  impersonatedBy: string | null; twoFactorEnabled: boolean; phoneNumber: string | null; phoneNumberVerified: boolean;
+  // Whether the account's e-mail address was verified or proven (address-check.ts); absent on requests made up for another account (reseller, billing).
+  emailVerified?: boolean };
 // sessionToken: better-auth's stored token; the console gateway keys its revocations on its hash. sessionId: its row.
 export type AuthedRequest = FastifyRequest & { user: User; sessionToken: string; sessionId: string };
 
@@ -81,7 +83,7 @@ async function tokenSession(req: FastifyRequest, token: string): Promise<{ user:
   const { rows: [t] } = await pool.query(`UPDATE api_tokens a SET last_used_at = now(), last_used_ip = $2::inet FROM users u
       WHERE a.token_hash = $1 AND u.id = a.user_id AND (a.expires_at IS NULL OR a.expires_at > now()) AND NOT coalesce(u.banned, false) AND u.disabled_at IS NULL
       RETURNING a.id, a.name AS token_name, a.scope, a.permissions AS token_permissions, a.allowed_ips, u.id AS user_id, u.email, u.name, u.role, u.locale, u.time_zone, u.username, u.two_factor_enabled, u.phone_number, u.phone_number_verified,
-        u.auth_source, u.source_confirmed_at`,
+        u.auth_source, u.source_confirmed_at, u.email_verified`,
   [createHash('sha256').update(token).digest('hex'), req.ip]).catch(() => ({ rows: [] }));
   if (!t) return null;
   // A directory or single sign-on account: the panel is not told when the person leaves, and a token needs no
@@ -109,7 +111,7 @@ async function tokenSession(req: FastifyRequest, token: string): Promise<{ user:
   const permissions = t.token_permissions ? (own.includes('*') ? t.token_permissions : own.filter((p: string) => t.token_permissions.includes(p))) : own;
   return { user: { id: t.user_id, email: t.email, name: t.name ?? '', roles: splitRoles(t.role), permissions,
     locale: t.locale === 'tr' ? 'tr' : 'en', timeZone: t.time_zone ?? null, username: t.username ?? null, impersonatedBy: null, twoFactorEnabled: !!t.two_factor_enabled,
-    twoFactorRequired: false, phoneNumber: t.phone_number ?? null, phoneNumberVerified: !!t.phone_number_verified }, token: '', id: `token:${t.id}` };
+    twoFactorRequired: false, phoneNumber: t.phone_number ?? null, phoneNumberVerified: !!t.phone_number_verified, emailVerified: !!t.email_verified }, token: '', id: `token:${t.id}` };
 }
 
 // Whether the staff member behind an impersonation session may still act as this person: the account exists, is not
@@ -164,7 +166,7 @@ export async function currentSession(req: FastifyRequest): Promise<{ user: User;
   const twoFactorRequired = !u.twoFactorEnabled && !impersonatedBy && !['oidc', 'social'].includes((u as { authSource?: string }).authSource ?? '') && (policy === 'all' || (policy === 'staff' && staff) || !!limits.require2fa);
   return { user: { id: u.id, email: u.email, name: u.name ?? '', roles: splitRoles(u.role), permissions,
     locale: u.locale === 'tr' ? 'tr' : 'en', timeZone: (u as { timeZone?: string | null }).timeZone ?? null, username: (u as { username?: string | null }).username ?? null, impersonatedBy, twoFactorEnabled: !!u.twoFactorEnabled, twoFactorRequired, phoneNumber: u.phoneNumber ?? null,
-    phoneNumberVerified: !!u.phoneNumberVerified }, token: s.session.token, id: s.session.id };
+    phoneNumberVerified: !!u.phoneNumberVerified, emailVerified: !!u.emailVerified }, token: s.session.token, id: s.session.id };
 }
 export const currentUser = async (req: FastifyRequest) => (await currentSession(req))?.user ?? null;
 

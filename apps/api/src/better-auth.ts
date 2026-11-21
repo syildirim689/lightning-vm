@@ -7,6 +7,7 @@ import { admin, emailOTP, genericOAuth, lastLoginMethod, magicLink, oneTap, phon
 import { isPasswordCompromised } from 'better-auth/plugins/haveibeenpwned';
 import MailChecker from 'mailchecker';
 import { passkey } from '@better-auth/passkey';
+import { clearVerification, sendFirstVerification } from './address-check';
 import { authSecret, config } from './config';
 import { pool, redis } from './db';
 import { logEvent } from './log';
@@ -222,6 +223,7 @@ async function addressProven(userId: string, path: string, ip: string | null, li
   // this covers what is left.
   await closeConsoles(userId);
   await endImpersonations(userId);
+  await clearVerification(userId); // a verification code still waiting has nothing left to verify
   await auditAuth(userId, 'auth.address_proven', 'success', ip, { method: provenBy(path), removed: { password: true, linkedAccounts: true, otherSessions: true, ...removed }, kept });
   await publishLive(userId, 'sessions');
   // The person is told what happened, when something of theirs is gone: an account nothing was set up on (one staff
@@ -318,7 +320,11 @@ const recordSignIn = createAuthMiddleware(async (ctx) => {
   await auditAuth(created?.user.id ?? null, action, created ? 'success' : 'failure', ip,
     created ? { method, device } : { email: String(body.email ?? '').toLowerCase().slice(0, 254) });
   if (!created) return;
-  if (action === 'auth.register') await notify('admin.user_registered', 'staff:users.view', { email: created.user.email });
+  if (action === 'auth.register') {
+    await notify('admin.user_registered', 'staff:users.view', { email: created.user.email });
+    // The address is asked to be verified straight away (when mail works; address-check.ts). Not awaited.
+    if (!created.user.emailVerified) sendFirstVerification({ id: created.user.id, email: created.user.email, locale: (created.user as { locale?: string }).locale });
+  }
   else await notify(seen === false ? 'auth.new_device' : 'auth.sign_in', [created.user.id], { ip: ip ?? '', agent, method, device });
   // An administrator signed in and the panel still knows no address of its own: this one is kept (chat-delivery.ts).
   if (action === 'auth.login' && String((created.user as { role?: string }).role ?? '').split(',').includes('admin') && !(await panelBase().catch(() => 'unknown'))) {
