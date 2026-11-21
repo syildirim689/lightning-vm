@@ -18,6 +18,8 @@ import { callAdapter, storedTarget } from './vmware';
 import { cleanSchedule } from './smart-rules';
 import { startBackup } from './backups';
 
+// Schedules one server may have.
+export const MAX_SCHEDULES = 10;
 const columns = `id, action, days, to_char(at_time, 'HH24:MI') AS time, timezone, enabled, keep, last_run_at AS "lastRunAt", last_result AS "lastResult"`;
 
 @Controller('servers/:id/schedules') @UseGuards(SessionGuard)
@@ -32,17 +34,7 @@ export class SchedulesController {
   @Post() @HttpCode(201) @Can('server.power', 'server.snapshots', 'server.backups')
   async create(@Req() req: AuthedRequest, @Param('id', ParseUUIDPipe) id: string, @Body() body: Record<string, unknown>) {
     const s = await findServer(req, id, true);
-    const v = valid(body);
-    await customerMay(req, v.action === 'snapshot' ? 'snapshots' : v.action === 'backup' ? 'backups' : 'power');
-    // Written only while the server is still this owner's (servers.ts ownerWrite): a hand-over deletes the schedules.
-    const row = await ownerWrite(s, async (db) => {
-      const { rows: [n] } = await db.query('SELECT count(*)::int AS n FROM power_schedules WHERE server_id = $1', [id]);
-      if (n.n >= 10) throw apiError(400, 'VALIDATION_FAILED', 'Too many schedules', { action: 'TOO_MANY' });
-      return (await db.query(`INSERT INTO power_schedules (server_id, action, days, at_time, timezone, enabled, keep) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING ${columns}`,
-        [id, v.action, v.days, v.time, v.timezone, v.enabled, v.keep ?? null])).rows[0];
-    });
-    await audit(req, 'server.schedule_created', 'success', req.user.id, { serverId: id, scheduleId: row.id, action: v.action, days: v.days, time: v.time, timezone: v.timezone });
-    return row;
+    return addSchedule(req, s, valid(body));
   }
 
   @Put(':sid') @Can('server.power', 'server.snapshots', 'server.backups')
@@ -64,6 +56,23 @@ export class SchedulesController {
     if (!rowCount) throw apiError(404, 'NOT_FOUND', 'Unknown schedule');
     await audit(req, 'server.schedule_deleted', 'success', req.user.id, { serverId: id, scheduleId: sid });
   }
+}
+
+// One schedule written for a server the caller may manage (findServer with manage): the member's own permission and the
+// administrator's switch for the action, the limit, the write under the owner's lock and the audit record. The route
+// above uses it, and the schedule suggestion (schedule-suggest.ts) for the schedules a person accepted; `note` goes
+// into the audit record with the rest.
+export async function addSchedule(req: AuthedRequest, s: { id: string; owner_id: string }, v: { action: string; days: number[]; time: string; timezone: string; enabled: boolean; keep?: number }, note: Record<string, unknown> = {}) {
+  await customerMay(req, v.action === 'snapshot' ? 'snapshots' : v.action === 'backup' ? 'backups' : 'power');
+  // Written only while the server is still this owner's (servers.ts ownerWrite): a hand-over deletes the schedules.
+  const row = await ownerWrite(s, async (db) => {
+    const { rows: [n] } = await db.query('SELECT count(*)::int AS n FROM power_schedules WHERE server_id = $1', [s.id]);
+    if (n.n >= MAX_SCHEDULES) throw apiError(400, 'VALIDATION_FAILED', 'Too many schedules', { action: 'TOO_MANY' });
+    return (await db.query(`INSERT INTO power_schedules (server_id, action, days, at_time, timezone, enabled, keep) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING ${columns}`,
+      [s.id, v.action, v.days, v.time, v.timezone, v.enabled, v.keep ?? null])).rows[0];
+  });
+  await audit(req, 'server.schedule_created', 'success', req.user.id, { serverId: s.id, scheduleId: row.id, action: v.action, days: v.days, time: v.time, timezone: v.timezone, ...note });
+  return row;
 }
 
 function valid(body: Record<string, unknown>) {

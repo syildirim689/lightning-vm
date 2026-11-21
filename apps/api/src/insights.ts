@@ -19,6 +19,7 @@ import { clearRestoreHoldNotice, restoreHold } from './restore-hold';
 import { activeCaptcha, mailReady } from './settings-store';
 import { cpuStats } from './smart';
 import { sizing } from './smart-rules';
+import { scheduleInsights, scheduleKey } from './schedule-suggest';
 import { callAdapter, storedTarget } from './vmware';
 
 // action: a one-click fix the card offers next to its link (customer findings about one server).
@@ -184,6 +185,8 @@ export async function customerInsights(userId: string): Promise<Insight[]> {
   const { rows: open } = await pool.query(`SELECT s.name FROM servers s JOIN resource_pools p ON p.id = s.pool_id JOIN vmware_connections c ON c.id = p.connection_id
     WHERE s.owner_id = $1 AND s.state = 'ready' AND s.delete_at IS NULL AND c.operations->>'firewall' = 'true' AND NOT EXISTS (SELECT 1 FROM firewall_servers fs WHERE fs.server_id = s.id) ORDER BY s.name`, [userId]);
   if (open.length) add('NO_FIREWALL', 'info', { n: open.length, name: open[0].name }, '/firewalls', 'firewall');
+  // Servers idle through the same hours week after week: a power schedule is offered on the server's page.
+  for (const s of await scheduleInsights(userId).catch(() => [])) add('SCHEDULE_SUGGESTED', 'info', { name: s.name, hours: s.offHours }, `/servers/${s.id}`, scheduleKey(s.id));
   // The month's forecast against the budget, when it is close to it or over it (the numbers: cost-forecast.ts). A new
   // month is a new key, so hiding it lasts for the month it was hidden in.
   const budget = await budgetForecast(userId, await budgetState(userId)).catch(() => null);

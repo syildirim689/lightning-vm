@@ -11,6 +11,7 @@ import { apiFetch, useErrorText } from '../../lib/api';
 import { useApiForm } from '../../lib/form';
 import { useApiAction, useApiQuery } from '../../lib/query';
 import { clashes, nextRun, sameJob } from '../../lib/schedule';
+import { ScheduleSuggestion } from '../../components/schedule-suggestion';
 
 type Schedule = { id: string; action: 'power_on' | 'shutdown' | 'snapshot' | 'backup'; keep: number | null; days: number[]; time: string; timezone: string; enabled: boolean; lastRunAt: string | null; lastResult: string | null };
 const week = [1, 2, 3, 4, 5, 6, 7];
@@ -55,6 +56,8 @@ export function PowerSchedules({ serverId, power = true, snapshots = false, back
       {backups && <Button size="sm" variant="secondary" isPending={busy} onPress={() => preset([{ action: 'backup', days: week, time: '03:00', keep: 7 }])}><I name="archive" size={15}/>{t('nightlyBackup')}</Button>}
     </span>}>
     <div className="flex flex-col gap-5">
+      {/* From the server's usage history: a schedule through the hours it is idle every week, created only on a click. */}
+      <ScheduleSuggestion serverId={serverId} zone={zone} canPower={power} onCreated={reload}/>
       {(() => { const n = list && nextRun(list, zone); return n && <p className="flex flex-wrap items-center gap-2 self-start rounded-xl border border-accent/40 bg-accent-soft/40 px-3 py-2 text-sm">
         <I name="alarm-clock" size={15} className="text-accent"/><span className="font-medium">{t('next', { action: t(`action.${n.s.action}`) })}</span>
         <span className="tabular-nums">{format.dateTime(n.at, { weekday: 'long', hour: '2-digit', minute: '2-digit' })}</span>

@@ -71,3 +71,37 @@ aylık toplamı gösterir. Fiyatlar faturalamanın tuttuğu yerden okunur; burad
   bu ay henüz uyarılmamış hesaplar için, bir çalışmada en çok 500 hesap; hesap başına üç küçük sorgu. Yedekten geri
   yükleme beklemesinde çalışmaz. Bütçe kaydedildiğinde de hemen bakılır.
 - Bütçesi olmayan hesap için hiçbir karşılaştırma yapılmaz. Saatlik sunucusu olmayan hesabın rakamları öncekiyle aynıdır.
+
+## Güç zamanlaması önerisi
+
+Bir sunucunun işlemci geçmişi, haftanın belirli saatlerinde **haftalardır her hafta** boşta kaldığını gösteriyorsa,
+panel bu saatlerde kapalı tutacak zamanlamayı önerir. Öneri yalnızca öneridir: zamanlama, sunucuyu açıp kapatma
+yetkisi olan birinin düğmeye basmasıyla ve sıradan zamanlamaların kendi koduyla (`schedules.ts`, `addSchedule`)
+oluşturulur.
+
+- **Kural** (`apps/api/src/schedule-rules.ts`, birim testleri `apps/api/test/schedule-rules.test.mjs`): son 4 haftanın
+  saatlik işlemci satırları (`server_cpu_hourly`) haftanın 168 saatine, isteyenin saat diliminde dağıtılır.
+  - Bir saat **boş** sayılır: en az 3 haftada görülmüş ve her birinde saatlik ortalama %3'ün, en yüksek örnek
+    %10'un altında. Ölçümü olmayan saat (sunucu kapalıydı) **kullanımda** sayılır.
+  - **Gece penceresi:** hiçbir gün kullanılmayan en uzun saat aralığı (gece yarısını aşabilir). Sunucu, kullanıldığı
+    görülen saatlerden 1 saat önce açılır, 1 saat sonra kapatılır; kalan pencere en az 6 saat olmalıdır. Açma
+    zamanlaması yalnızca sunucunun o gün kullanıldığı günlere konur: hafta sonu kullanılmayan sunucu cuma akşamı
+    kapanır, pazartesi sabahı açılır.
+  - **Haftalık pencere:** gece penceresi yoksa haftadaki en uzun boş aralık (ör. hafta sonu), en az 24 saat.
+  - Haftada 20 saatten az kapalı kalacaksa bir şey önerilmez. Her an boşta olan sunucu için de önerilmez (o durum
+    `IDLE_SERVER` önerisinin konusudur).
+  - **En az geçmiş:** 21 gün. Daha azında "yeterli veri yok" denir ve kaç gün olduğu yazılır. İşlemci ölçümü
+    vermeyen platformlarda (XCP-ng, oVirt, libvirt, Incus) hiçbir şey önerilmez; sayfa bunu söyler.
+  - Yaz saati geçişi: saatler yerel saate göre dağıtıldığı için öneri saat değişiminden etkilenmez.
+- **Zaten zamanlaması olan sunucu:** etkin bir açma ya da kapatma zamanlaması varsa öneri yapılmaz.
+- **Ne kazandırır:** faturalama kapalı sunucudan daha az ücret **almaz** (abonelik dönemliktir; saatlik kullanım
+  sunucu var olduğu her saat için yazılır), bu yüzden para vaat edilmez ve sayfa bunu açıkça söyler
+  (`OFF_SERVER_COSTS_LESS = false`, `schedule-suggest.ts`). Enerji ölçülen platformlarda sunucunun son 7 gündeki
+  ortalama güç payı × haftalık kapalı saat, kWh olarak gösterilir; ölçülmeyenlerde yalnızca kapalı saat söylenir.
+- **Tek tıkla oluşturma** (`POST /servers/:id/schedule-suggestion`): öneri sunucu tarafında, o anki geçmişten
+  yeniden hesaplanır; istekte saat diliminden başka hiçbir şey dikkate alınmaz. Elle eklemedeki denetimler aynen
+  geçerlidir: `server.power` yetkisi, yöneticinin "müşteri güç işlemleri" anahtarı, sunucu başına 10 zamanlama
+  sınırı, sahiplik kilidi ve `server.schedule_created` denetim kaydı (`suggested: true`).
+- **Gizleme:** "Şimdi değil" içgörülerin kendi gizlemesidir (7 gün); içgörü `SCHEDULE_SUGGESTED`.
+- **Maliyet:** arka plan işi yoktur. Sunucu sayfası açıldığında tek sunucunun en çok 672 saatlik satırı okunur;
+  içgörüler için hesap sahibinin en çok 20 çalışan sunucusuna bakılır ve sonuç sunucu başına 6 saat saklanır.

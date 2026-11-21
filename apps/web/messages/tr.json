@@ -409,7 +409,8 @@
     "WEBHOOK_NOT_CONFIGURED": "Bu sağlayıcı için webhook imza anahtarı kaydedilmemiş.",
     "WEBHOOK_SIGNATURE_INVALID": "Webhook imzası uyuşmuyor.",
     "WEBHOOK_TIMESTAMP_OUT_OF_RANGE": "Webhook imzası çok eski.",
-    "WEBHOOK_EVENT_INVALID": "Bu, bu webhook adresine ait bir olay değil."
+    "WEBHOOK_EVENT_INVALID": "Bu, bu webhook adresine ait bir olay değil.",
+    "NO_SUGGESTION": "Bu sunucu için artık önerilecek bir zamanlama yok. Sayfayı yenileyin."
   },
   "Auth": {
     "required": "zorunlu",
@@ -3123,6 +3124,10 @@
       "BUDGET_FORECAST_NEAR": {
         "title": "Bu ay bütçenize yaklaşıyor",
         "body": "Bu gidişle {forecast} {currency} tutacak: {amount} {currency} bütçenizin %{pct} kadarı."
+      },
+      "SCHEDULE_SUGGESTED": {
+        "title": "{name} haftada yaklaşık {hours} saat boşta",
+        "body": "Haftalardır her hafta aynı saatlerde. Sayfasında, bu saatlerde kapalı tutacak bir zamanlama önerilir; ücret değişmez, enerji kullanımı azalır."
       }
     },
     "hide": {
@@ -9329,5 +9334,30 @@
     "normal": "Olağan dışı bir şey yok. Sunucunun kendi son {days, plural, one {# günü} other {# günü}} ile karşılaştırıldı.",
     "notEnough": "Henüz yeterli veri yok: {days, plural, =0 {geçmiş yok} one {# günlük geçmiş var} other {# günlük geçmiş var}}, bir sonuca varmak için {min} gün gerekir.",
     "notMeasured": "Yeterli veri yok: bu platform işlemci ölçümü bildirmiyor, bu yüzden sunucunun kullanımı hakkında bir sonuca varılmaz."
+  },
+  "ScheduleSuggestion": {
+    "title": "Önerilen zamanlama",
+    "intro": "Bu sunucu {weeks} haftadır her hafta aynı saatlerde boşta: haftada {hours} saat. Bir zamanlama bu saatlerde kapalı tutabilir.",
+    "kind": {
+      "nightly": "Her gece kapalı, yalnızca kullanıldığı günlerde açık",
+      "weekly": "Haftada bir kez, uzun boş aralığı boyunca kapalı"
+    },
+    "shutdown": "Kapat",
+    "start": "Aç",
+    "at": "{days}, {time}",
+    "zone": "Saatler {zone} saat dilimindedir. Kullanıldığı görülen saatlerden bir saat önce açılır, bir saat sonra kapatılır.",
+    "why": "Neden gösteriliyor: son {days} günde, haftanın 168 saatinin {idle} tanesinde saatlik işlemci ortalaması her hafta %{avg} altında kaldı (hiçbir örnek %{max} üstünde değil).",
+    "noMoney": "Ücret değişmez: kapalı sunucu, çalışan sunucu gibi faturalanır.",
+    "energy": "Kazandırdığı: haftada yaklaşık {kwh} kWh enerji ve hiçbir şeyin çalışmadığı, erişilemediği {hours} saat.",
+    "noEnergy": "Kazandırdığı: haftada hiçbir şeyin çalışmadığı, erişilemediği {hours} saat (bu platform enerji ölçümü bildirmiyor).",
+    "money": "Sunucu kapalıyken faturalama daha az ücret alır.",
+    "create": "Bu zamanlamaları oluştur",
+    "created": "Zamanlamalar oluşturuldu. Sıradan zamanlamalardır: aşağıdan düzenleyebilir ya da kaldırabilirsiniz.",
+    "notNow": "Şimdi değil",
+    "hidden": "7 gün gizlendi",
+    "noPower": "Rolünüz bu sunucuyu açıp kapatamaz; zamanlamaları siz oluşturamazsınız.",
+    "notEnough": "Zamanlama önerisi: henüz yeterli veri yok ({min} günün {days} günü kadar işlemci geçmişi var).",
+    "notMeasured": "Zamanlama önerisi: yeterli veri yok. Bu platform işlemci ölçümü bildirmiyor, bu yüzden bir şey önerilmez.",
+    "noWindow": "Zamanlama önerisi: son {weeks} haftada düzenli bir boş aralık yok."
   }
 }

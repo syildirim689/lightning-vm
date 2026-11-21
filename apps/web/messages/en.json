@@ -409,7 +409,8 @@
     "WEBHOOK_NOT_CONFIGURED": "No webhook signing secret is saved for this provider.",
     "WEBHOOK_SIGNATURE_INVALID": "The webhook signature does not match.",
     "WEBHOOK_TIMESTAMP_OUT_OF_RANGE": "The webhook signature is too old.",
-    "WEBHOOK_EVENT_INVALID": "This is not an event of this webhook address."
+    "WEBHOOK_EVENT_INVALID": "This is not an event of this webhook address.",
+    "NO_SUGGESTION": "There is no schedule to suggest for this server any more. Reload the page."
   },
   "Auth": {
     "required": "required",
@@ -3123,6 +3124,10 @@
       "BUDGET_FORECAST_NEAR": {
         "title": "This month is close to your budget",
         "body": "At the current rate it will cost {forecast} {currency}: {pct}% of your {amount} {currency} budget."
+      },
+      "SCHEDULE_SUGGESTED": {
+        "title": "{name} is idle about {hours} hours a week",
+        "body": "The same hours every week, for weeks. Its page suggests a schedule that switches it off through them; the price does not change, the energy use does."
       }
     },
     "hide": {
@@ -9329,5 +9334,30 @@
     "normal": "Nothing unusual. Compared with this server’s own last {days, plural, one {# day} other {# days}}.",
     "notEnough": "Not enough data yet: {days, plural, =0 {no history} one {# day of history} other {# days of history}}, {min} are needed before anything is concluded.",
     "notMeasured": "Not enough data: this platform does not report CPU figures, so nothing is concluded about this server’s use."
+  },
+  "ScheduleSuggestion": {
+    "title": "Suggested schedule",
+    "intro": "For {weeks} weeks this server has been idle in the same hours of every week: {hours} hours a week. A schedule can switch it off through them.",
+    "kind": {
+      "nightly": "Off every night, on only on the days it is used",
+      "weekly": "Off once a week, through its long idle stretch"
+    },
+    "shutdown": "Shut down",
+    "start": "Start",
+    "at": "{days} at {time}",
+    "zone": "Times in {zone}. It is started an hour before, and stopped an hour after, the hours it was seen in use.",
+    "why": "Why this is shown: in the last {days} days the hourly CPU average stayed under {avg}% (no sample above {max}%) in {idle} of the 168 hours of the week, every week.",
+    "noMoney": "The price does not change: a switched-off server is billed like a running one.",
+    "energy": "What it saves: about {kwh} kWh of energy a week, and {hours} hours a week in which nothing runs or can be reached.",
+    "noEnergy": "What it saves: {hours} hours a week in which nothing runs or can be reached (this platform reports no energy figures).",
+    "money": "Billing charges less while the server is off.",
+    "create": "Create these schedules",
+    "created": "Schedules created. They are ordinary schedules: edit or remove them below.",
+    "notNow": "Not now",
+    "hidden": "Hidden for 7 days",
+    "noPower": "Your role may not power this server, so the schedules cannot be created by you.",
+    "notEnough": "Schedule suggestion: not enough data yet ({days} of {min} days of CPU history).",
+    "notMeasured": "Schedule suggestion: not enough data. This platform does not report CPU figures, so nothing is suggested.",
+    "noWindow": "Schedule suggestion: no stable idle window in the last {weeks} weeks."
   }
 }

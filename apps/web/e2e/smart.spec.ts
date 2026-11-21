@@ -134,3 +134,57 @@ test('smart: the month forecast counts hourly usage, and the budget is measured 
   await noSidewaysScroll(page, 'overview with the forecast at 390 px');
   await expect(cost.locator('[data-budget-forecast="over"]')).toBeVisible();
 });
+
+test('smart: a schedule is suggested with its reasons, created only on a click and through the API\'s own reading; without history the page says so', async ({ page }) => {
+  test.skip(!process.env.E2E_VCSIM_HOST, 'needs compose.simulator.yaml and E2E_VCSIM_HOST');
+  test.setTimeout(300_000);
+  await signInAdmin(page);
+  const id = await ownServer(page);
+  await page.goto(`/servers/${id}`);
+  // A new server: three weeks of history are needed, and the line says how many days there are.
+  await expect(page.locator('[data-schedule-suggestion="not_enough_data"]')).toHaveText(/Schedule suggestion: not enough data yet \(\d+ of 21 days of CPU history\)\./);
+  await expect(page.getByRole('button', { name: 'Create these schedules' })).toHaveCount(0);
+
+  // The same page with a suggestion; the two requests it may make are answered here and looked at.
+  const suggested = { state: 'suggested', timezone: 'UTC', days: 27, minDays: 21, weeks: 4, kind: 'nightly', offHours: 108, idleHours: 118, savesMoney: false, energyKwhPerWeek: 5.4, hidden: false,
+    schedules: [{ action: 'shutdown', days: [1, 2, 3, 4, 5], time: '19:00' }, { action: 'power_on', days: [1, 2, 3, 4, 5], time: '07:00' }] };
+  let state: 'suggested' | 'scheduled' = 'suggested';
+  const sent: { timezone?: string }[] = [];
+  await page.route(`**/api/servers/${id}/schedule-suggestion**`, async (route) => {
+    if (route.request().method() === 'POST') { sent.push(route.request().postDataJSON()); state = 'scheduled'; return route.fulfill({ status: 201, contentType: 'application/json', body: JSON.stringify({ schedules: [] }) }); }
+    return json(route, state === 'suggested' ? suggested : { ...suggested, state: 'scheduled', schedules: undefined });
+  });
+  await page.reload();
+  const box = page.getByRole('region', { name: 'Suggested schedule' });
+  await expect(box).toContainText('Suggested schedule: Off every night, on only on the days it is used');
+  await expect(box).toContainText('For 4 weeks this server has been idle in the same hours of every week: 108 hours a week.');
+  await expect(box.getByRole('listitem').filter({ hasText: 'Shut down' })).toContainText('Weekdays at 19:00');
+  await expect(box.getByRole('listitem').filter({ hasText: 'Start' })).toContainText('Weekdays at 07:00');
+  await expect(box).toContainText('Why this is shown: in the last 27 days the hourly CPU average stayed under 3% (no sample above 10%) in 118 of the 168 hours of the week, every week.');
+  // No money is promised: the bill does not change for a server that is off.
+  await expect(box).toContainText('The price does not change: a switched-off server is billed like a running one.');
+  await expect(box).toContainText('What it saves: about 5.4 kWh of energy a week, and 108 hours a week in which nothing runs or can be reached.');
+  await page.setViewportSize({ width: 390, height: 844 });
+  await noSidewaysScroll(page, 'server page with a schedule suggestion at 390 px');
+  await page.setViewportSize({ width: 1280, height: 720 });
+  expect(sent).toEqual([]);
+  await box.getByRole('button', { name: 'Create these schedules' }).click();
+  await expect(page.getByText('Schedules created. They are ordinary schedules: edit or remove them below.').first()).toBeVisible();
+  // Only the time zone goes with the request; which schedules are created is the API's decision.
+  expect(sent.length).toBe(1);
+  expect(Object.keys(sent[0])).toEqual(['timezone']);
+  await expect(box).toHaveCount(0);
+
+  // "Not now" hides it with the insights' dismissal for this server.
+  state = 'suggested';
+  await page.reload();
+  await expect(box).toBeVisible();
+  const dismissal = page.waitForRequest((r) => r.url().endsWith('/api/insights/dismissals') && r.method() === 'PUT');
+  await box.getByRole('button', { name: 'Not now' }).click();
+  expect((await dismissal).postDataJSON()).toEqual({ key: `schedule:${id}`, days: 7 });
+  await page.unroute(`**/api/servers/${id}/schedule-suggestion**`);
+  // A platform without CPU figures: said, not guessed.
+  await page.route(`**/api/servers/${id}/schedule-suggestion**`, (route) => json(route, { state: 'not_measured', timezone: 'UTC', days: 0, minDays: 21, weeks: 4, savesMoney: false, energyKwhPerWeek: null, hidden: false }));
+  await page.reload();
+  await expect(page.locator('[data-schedule-suggestion="not_measured"]')).toContainText('This platform does not report CPU figures, so nothing is suggested.');
+});

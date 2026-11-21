@@ -98,6 +98,9 @@ girmeniz gerekmez. Özelliklerin tamamı yalnızca VMware'de vardır; diğer alt
 - **Kullanım takibi:** sunucunun işlemci ve ağ kullanımı saatte bir kendi geçmişiyle karşılaştırılır; olağandan
   keskin ayrılma sayılarıyla birlikte sunucu sayfasında ve içgörülerde görünür, gizlenebilir, istenirse bildirilir.
   Ölçüm vermeyen platformlarda "yeterli veri yok" denir ([docs/smart-features.md](docs/smart-features.md))
+- **Zamanlama önerisi:** sunucu haftalardır her hafta aynı saatlerde boşta kalıyorsa (geceler, hafta sonları)
+  bu saatlerde kapalı tutacak güç zamanlaması gerekçesiyle önerilir ve tek tıkla oluşturulur. Kapalı sunucu aynı
+  ücretle faturalandığı için para vaat edilmez; kazanılan enerji söylenir
 - **Başarısız işlemden sonra sıradaki adım:** sunucu sayfasının üstünde neyin ters gittiği ve tek bir öneri. Geçici
   hatalarda "Yeniden dene" (yalnızca açma, düzgün kapatma, reset ve anlık görüntü alma için), ödeme engelinde
   faturalar, kota engelinde kota, diğerlerinde ayrıntıları doldurulmuş destek talebi; ekibin bakması gereken

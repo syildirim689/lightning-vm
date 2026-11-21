@@ -38,6 +38,12 @@ Türkçe [docs/upgrade-notes.md](docs/upgrade-notes.md) sayfasını okuyun.*
   instead of their monthly list price. A budget is also measured against that forecast: the card and an insight say
   when the month is close to it or heading over it, and `billing.budget_forecast` tells the customer once a month.
   `GET /usage/summary` gains `costs[].hourly` and `budget.forecast`, `forecastRatio`, `forecastState`.
+- **Power schedule suggestion.** When four weeks of CPU history show hours of the week in which a server is idle
+  every week (nights, weekends), its page and an insight suggest the schedule that keeps it off through them, with
+  the numbers behind it. One click creates it through the ordinary schedules (same permission, limit and audit
+  record); nothing is created otherwise. No saving is promised that the bill does not show: a switched-off server
+  is billed the same, so the page says so and gives the energy estimate instead. New routes:
+  `GET` and `POST /api/servers/:id/schedule-suggestion`.
 
 - **Per-project quotas.** Staff with `catalog.manage` give a project a quota of its own in Catalog → Quotas (the
   form finds projects by name or by their owner's e-mail). It replaces the owner's quota for servers ordered into
