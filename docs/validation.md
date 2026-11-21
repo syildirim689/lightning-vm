@@ -627,3 +627,38 @@ denemeler. Etiket `46508f2` commit'indedir.
   çalışır). Test artık `NODE_ENV=test` iken yalnızca 400'ü, değilken 400 veya 403'ü kabul ediyor ve yanıtta
   `Location` olmadığını da denetliyor; GET isteğinde beklenti 400 olarak kaldı. Bu değişiklikten sonra `run.sh` ile
   (`NODE_ENV=test`) yerelde yeniden çalıştırılmadı: bu makinede Docker yok.
+
+## Yol haritasından beş iş: adres doğrulama, proje kotası, Stripe webhook'u, belgelerden istek, izleme anahtarı — 2026-11-21
+
+Beş iş ayrı commit'lerle `main`'e girdi (`bff6553` adres doğrulama, `d667d76` proje kotası, `e0d078e` Stripe
+webhook'u, `2b81e2b` API belgelerinden istek çalıştırma, `c5934dc` izleme anahtarı); altıncısı, çalışan sunucuya
+sonradan ek IP, **yazılmadı** (`1a007c5` yalnızca nedenini ve eksikleri yazar: [ip-management.md](ip-management.md)).
+Aynı saatlerde başka bir çalışma "akıllı özellikler"i ekledi; aşağıdaki sayılar iki işin toplamıdır.
+
+- **Yerel çalıştırma (geliştirme makinesi, Docker yok):** PostgreSQL 18 ve Redis 8, WSL içinde geçici bir dizinden;
+  testler Windows'taki Node 26 ile, dosya dosya. Yeni entegrasyon dosyaları: `email-verification` 8/8,
+  `project-quota` 4/4, `stripe-webhook` 8/8, `api-try` 2/2, `monitoring-switch` 4/4. Dokunulan kodun eski
+  dosyaları: `auth` 15/15, `security-auth` 21/21, `platform` 42/42, `security-billing` 18/18,
+  `security-servers` 14/14, `saved-views` 9/9, `security-leftovers` 4/4. Aynı makinede birkaç dosya tek komutla
+  çalıştırıldığında birbirinin şemasını sildiği görüldü (yalnızca bu makinede; CI'da sıralı çalışır); bu yüzden
+  dosya dosya çalıştırıldı. API birim testleri 186/186, web birim testleri 131/131.
+- **Yerel tarayıcı denemesi:** API ve üretim derlemesiyle web, küçük bir vekilin arkasında, hipervizörsüz bir
+  katalogla; kurulu Edge ile. Yeni ve değişen beş tarayıcı testi tek tek geçti (adres doğrulama, proje kotası,
+  ödemeler / Stripe adresi, belgelerden istek, izleme: ajan yokken ve varken). Paketin kurulumunda yapılamayan iki
+  şey yalnızca burada, depoya girmeyen iki denemeyle görüldü: postayla gelen kodun ve bağlantının tarayıcıda adresi
+  doğrulaması (bu makinede dinleyen sahte bir SMTP sunucusuyla) ve onaylanan izleme anahtarının ajan için doğru
+  istek dosyasını bırakması (ajan çalışmıyordu; dosya okundu).
+- **GitHub CI:** itmeden sonraki birim işleri her commit'te geçti. Elle tam çalıştırma `1a007c5` üzerinde
+  (çalıştırma 44865023856): `api-integration` 247 testte 184 geçti, 0 başarısız, 63 atlandı; birim, adaptör, Go ve
+  imaj derleme işleri geçti; `compose` işi (gerçek kurulum ve tarayıcı paketi) daha yeni bir itme yüzünden
+  **iptal edildi**. Bu işlerin hepsini içeren `161d387` üzerinde diğer çalışmanın başlattığı elle tam çalıştırmada
+  (çalıştırma 44865854195) bütün işler geçti; `compose` işindeki tarayıcı paketi 42/42 (14,1 dk).
+- **Demo sunucusu:** `bff6553` ile güncelleme ve tarayıcı paketi: 34/34 (14,1 dk), testler boyunca demo
+  `/api/ready` 44 yanıtın 44'ünde 200. `d667d76`: 10 geçti, 2 başarısız, 25 çalışmadı; iki başarısızlık da diğer
+  çalışmanın eklediği metinlerin bir sayfada iki kez görünmesindendi (o çalışma `adc68f7` ile düzeltti).
+  `1a007c5`: 42 testin 37'si geçti (`app.spec.ts`'in tamamı, bu işin dört yeni ve iki genişletilmiş testi
+  dahil), 1 başarısız, 4 çalışmadı: başarısız olan `smart.spec.ts`'in ilk testiydi (yönetici girişi `/login`'de
+  kaldı; diğer çalışma `161d387` ile düzeltti). Testler boyunca demo `/api/ready` 46 yanıtın 46'sında 200.
+- **Denenmeyenler:** gerçek bir posta sunucusu; gerçek Stripe (olaylar testte bir test anahtarıyla imzalandı,
+  Stripe'a istek gitmedi); ajanın `monitoring on|off` isteğini bir sunucuda çalıştırması; proje kotasıyla gerçek
+  bir hipervizörde sunucu kurulması (testler siparişin kabul ya da reddine kadar gider).
