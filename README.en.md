@@ -77,8 +77,11 @@ What is not the same everywhere (the table under "Platform kapsamı" above has e
   the real SDK.
 - **Payments:** only iyzico, PayTR, Craftgate, Param and Stripe (plus the built-in sandbox) can take a payment. The
   other 41 listed providers are credential forms, most with a check that moves no money. None was tried with a real
-  merchant account. Stripe has no webhook: a payment whose customer never returns to the panel is settled when the
-  billing run asks Stripe again (as for iyzico and Craftgate; not for PayTR and Param). **Param does not settle by
+  merchant account. Stripe has a webhook (signature checked on the raw body, old signatures refused, recorded once
+  together with the browser's return and the billing run; the settings screen shows the address to enter at
+  Stripe), tested with events signed locally and not against Stripe itself. Without it a payment whose customer
+  never returns to the panel is settled when the billing run asks Stripe again (the only way for iyzico and
+  Craftgate; not available for PayTR and Param). **Param does not settle by
   itself:** its return cannot be confirmed with Param, so the payment stays pending as "awaiting confirmation" and
   staff mark the invoice paid after checking the Param panel. Param is offered for TRY invoices only, and the flow
   was not confirmed with the provider. Payments waiting for staff (Param's unconfirmed returns, another amount,

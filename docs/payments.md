@@ -73,10 +73,11 @@ araştırma (alanlar, adresler, imza yöntemleri, kaynaklar): [research-payments
 ## Sınırlar
 - **Tahsilat yalnızca beş sağlayıcıda var:** iyzico, PayTR, Craftgate, Param ve Stripe
   (`apps/api/src/billing-providers.ts`). Geri kalan 41 sağlayıcıda bu sayfa yalnızca bilgileri saklar ve sınar.
-- **Stripe'ta webhook yok:** ödeme, müşterinin tarayıcısı Stripe'ın ödeme sayfasından panele döndüğünde Stripe'a
-  sorularak işlenir. Müşteri ödedikten sonra panele dönmezse (sekmeyi kapatır, bağlantısı kopar) ödemeyi tahsilat
-  çalıştırması Stripe'a yeniden sorarak işler: ödeme başladıktan beş dakika sonra başlar, bir gün sürer; o süre
-  içinde fatura ödenmemiş görünür. iyzico ve Craftgate'te de böyledir.
+- **Stripe ödemesi üç yoldan kaydedilir, bir kez:** müşterinin tarayıcısı Stripe'ın sayfasından panele döndüğünde
+  (panel Stripe'a sorar), [webhook](#stripe-webhooku) geldiğinde (Stripe'ın imzalı bildirimi) ve ikisi de olmazsa
+  tahsilat çalıştırması Stripe'a yeniden sorduğunda (ödeme başladıktan beş dakika sonra başlar, bir gün sürer).
+  Webhook kurulmamışsa ödeyip panele dönmeyen müşterinin faturası o birkaç dakika ödenmemiş görünür. iyzico ve
+  Craftgate'te webhook yoktur; orada yalnızca dönüş ve yeniden sorma vardır.
 - **Param'da ödeme elle onaylanır** ([aşağıda](#param-elle-onay)): dönüş, ödemenin kanıtı sayılmaz. Param'ın sorgu
   servisi (`TP_Islem_Sorgulama4`) bir üye işyeri hesabıyla denenemediği için kullanılmıyor.
 - **Tutarı ya da para birimi tutmayan ödeme:** sağlayıcının farklı bir tutar ya da para birimiyle bildirdiği veya
@@ -91,6 +92,51 @@ araştırma (alanlar, adresler, imza yöntemleri, kaynaklar): [research-payments
 - Hiçbir sağlayıcı gerçek bir üye işyeri hesabıyla denenmedi. İmzalar ve istekler dokümanlara ve açık kaynak
   entegrasyonlara göre yazıldı; birim testleri bunları doğrular. Hata mesajlarının biçimi sağlayıcıdan
   sağlayıcıya değişir; ilk gerçek testte sağlayıcının yanıtını API günlüğünden okuyun.
+
+## Stripe webhook'u
+Stripe, bir ödemenin sonucunu panele kendisi bildirir; müşteri ödedikten sonra sekmeyi kapatsa da fatura hemen
+ödenmiş olur.
+
+**Kurulum (işletmeci):**
+1. Ayarlar → Ödemeler → Stripe penceresi **webhook adresini** gösterir:
+   `https://<panel adresi>/api/billing/callback/stripe` ("Adresi kopyala"). Adres internetten HTTPS ile erişilebilir
+   olmalıdır; pencere HTTPS olmayan ya da yerel bir adreste açıksa bunu söyler.
+2. Stripe panelinde (Developers → Webhooks) bu adresle bir uç nokta ekleyin ve iki olayı seçin:
+   `payment_intent.succeeded` ve `checkout.session.expired`. Başka olay göndermenin zararı yoktur; yalnızca
+   onaylanır.
+3. Stripe'ın uç nokta için gösterdiği **imza anahtarını** (`whsec_...`) aynı pencerede "Webhook imza anahtarı"
+   alanına kaydedin. Test ve canlı modun uç noktaları ve anahtarları ayrıdır; her birini kendi sekmesine girin.
+   Anahtar diğer ödeme sırları gibi ana anahtarla şifrelenerek saklanır ve API'den geri dönmez.
+
+**Panel ne yapar** (`apps/api/src/billing.ts` `stripeWebhook`, `billing-providers.ts` `stripeSignature`):
+- **İmza, gövdenin geldiği baytlar üzerinden doğrulanır:** `Stripe-Signature: t=<saniye>,v1=<hex>` başlığındaki
+  `v1`, `HMAC-SHA256(imza anahtarı, "<t>.<ham gövde>")` ile sabit zamanda karşılaştırılır. Aynı JSON başka
+  baytlarla (yeniden biçimlenmiş) gelirse reddedilir. Kayıtlı test ve canlı anahtarların ikisi de denenir; olayın
+  `livemode` değeri doğrulayan anahtarın moduyla aynı olmalıdır.
+- **Tekrar oynatma koruması:** imzası doğru olsa da zaman damgası beş dakikadan eski (ya da ileri) olan bildirim
+  `400 WEBHOOK_TIMESTAMP_OUT_OF_RANGE` ile reddedilir. Stripe her gönderim denemesini yeniden imzalar, bu yüzden
+  kendi yeniden denemeleri buna takılmaz. İşlenmiş olayın kimliği üç gün hatırlanır; yeniden gelirse
+  `{ received: true, duplicate: true }` döner.
+- **Tek kayıt yolu:** olay, tarayıcı dönüşünün ve tahsilat çalıştırmasının kullandığı aynı işlevle
+  (`settlePayment`: ödemeyi kilitler, sonucu yalnızca "bekliyor" durumundaysa yazar) kaydedilir. Üç yoldan hangisi
+  önce gelirse gelsin, aynı anda ya da defalarca gelsin, fatura **bir kez** ödenir, bakiyeye fazladan bir şey
+  yazılmaz ve kart (ödeme kaydetmeyi istediyse) bir kez saklanır.
+- **Hangi olay ne yapar:** `payment_intent.succeeded` ödemeyi (olayın `metadata.payment_id` alanındaki) ödenmiş
+  kaydeder; tutar ya da para birimi ödemeninkinden farklıysa ödeme kapanmaz, `AMOUNT_MISMATCH` ile
+  [personel incelemesine](#incelemedeki-ödemeler) kalır. `checkout.session.expired` ödenmemiş ödemeyi "süresi doldu"
+  olarak kapatır. Diğer olaylar, bilinmeyen ödemeler, başka modun ödemeleri ve sağlayıcı canlıya alındıktan sonra
+  gelen test ödemeleri `{ received: true, ignored: true }` ile onaylanır, hiçbir şey değişmez.
+- **Reddedilenler:** imza yok, yanlış ya da başka gövdeye ait: `400 WEBHOOK_SIGNATURE_INVALID`; kayıtlı imza
+  anahtarı yok: `404 WEBHOOK_NOT_CONFIGURED`. Yanlış imzalar adres başına sayılır (dakikada 120).
+- Günlükte olayın türü ve ödeme kimliği yazılır (`payment_webhook`); gövde, imza ve anahtar yazılmaz.
+
+**Nasıl sınandı, ne sınanmadı:** birim testleri imza işlevini (yanlış anahtar, değişmiş gövde, eski ve ileri
+tarihli damga, birden çok `v1`) ve olaydan sonuca çevirmeyi; entegrasyon testleri
+(`apps/api/test/integration/stripe-webhook.test.mjs`) gerçek PostgreSQL ve Redis üzerinde üç yolun her sırasını,
+aynı anda gelmelerini, kart saklamayı, tutar uyuşmazlığını ve mod ayrımını dener. Olaylar testte **bir test
+anahtarıyla bizim imzaladığımız** gövdelerdir ve Stripe'a hiçbir istek gitmez (dönüş ve yeniden sorma yollarında
+Stripe'ın yerine testin içindeki bir yanıtlayıcı konur). **Gerçek Stripe hesabıyla, Stripe'ın gönderdiği gerçek
+bir olayla denenmedi:** olay gövdesinin alanları Stripe belgelerine göre yazıldı.
 
 ## Param: elle onay
 Param'ın tarayıcı dönüşü, üye işyerine özgü bir sırla imzalı değildir ve panel sonucu Param'a ayrıca soramaz. Bu

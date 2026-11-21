@@ -49,6 +49,15 @@ Türkçe [docs/upgrade-notes.md](docs/upgrade-notes.md) sayfasını okuyun.*
   `GET /api/admin/quotas`, `POST /api/catalog/quote` and `GET /api/catalog/availability` carry the new fields.
   No project has a quota until staff give it one, so nothing changes for existing installs.
   See [docs/catalog.md](docs/catalog.md#kotalar-ve-projeler).
+- **Stripe webhook.** `POST /api/billing/callback/stripe` records a Stripe payment from Stripe's signed
+  notification, so a customer who pays and closes the tab no longer waits for the billing run. The signature is
+  verified over the raw body with the endpoint's signing secret (the existing "Webhook signing secret" field of
+  the Stripe provider, stored encrypted, one per mode), a signature older than five minutes is refused, and the
+  outcome goes through the same code as the browser's return and the billing run, so a payment is recorded once
+  whichever arrives first. Settings → Payments → Stripe shows the address to enter at Stripe and the two events to
+  send (`payment_intent.succeeded`, `checkout.session.expired`). Tested with events signed here with a test
+  secret; **not tried against Stripe itself**. Nothing changes until a signing secret is saved. See
+  [docs/payments.md](docs/payments.md#stripe-webhooku).
 
 ### Changed
 

@@ -212,3 +212,48 @@ test('Param: the review note names the payment and keeps the instruction whateve
   const declined = await verify({ TURKPOS_RETVAL_Sonuc: '-1', TURKPOS_RETVAL_Sonuc_Str: 'x'.repeat(1000) });
   assert.deepEqual([declined.code, declined.message.length], ['CARD_DECLINED', 120]);
 });
+
+// ---- Stripe webhook (nothing here talks to Stripe: the payloads are signed with a made-up secret) ----
+const { stripeSignature, stripeEventPayment, stripeEventResult } = await import('../dist/billing-providers.js');
+
+test('Stripe webhook: the signature is over "<t>.<body>" as the bytes arrived, any listed v1 may match, and age is judged after it', () => {
+  const secret = 'whsec_unit_test_secret', now = 1_800_000_000_000, t = now / 1000;
+  const raw = Buffer.from('{"id":"evt_1","type":"payment_intent.succeeded"}');
+  const v1 = (body, key = secret, at = t) => createHmac('sha256', key).update(`${at}.`).update(body).digest('hex');
+  assert.equal(stripeSignature(raw, `t=${t},v1=${v1(raw)}`, secret, now), 'ok');
+  // Stripe lists several signatures while a secret is being rolled, and other schemes beside v1.
+  assert.equal(stripeSignature(raw, `t=${t},v1=${'0'.repeat(64)},v1=${v1(raw)},v0=whatever`, secret, now), 'ok');
+  assert.equal(stripeSignature(raw, ` t = ${t} , v1 = ${v1(raw)} `, secret, now), 'ok');
+  // Not ours: another secret, another body (one byte), another timestamp, the scheme v0, upper-case hex, nothing.
+  assert.equal(stripeSignature(raw, `t=${t},v1=${v1(raw, 'whsec_other')}`, secret, now), 'invalid');
+  assert.equal(stripeSignature(Buffer.from(`${raw} `), `t=${t},v1=${v1(raw)}`, secret, now), 'invalid');
+  assert.equal(stripeSignature(raw, `t=${t + 1},v1=${v1(raw)}`, secret, now), 'invalid');
+  assert.equal(stripeSignature(raw, `t=${t},v0=${v1(raw)}`, secret, now), 'invalid');
+  assert.equal(stripeSignature(raw, `t=${t},v1=${v1(raw).toUpperCase()}`, secret, now), 'invalid');
+  for (const header of [undefined, null, '', 'v1=', `v1=${v1(raw)}`, `t=,v1=${v1(raw)}`, `t=abc,v1=${v1(raw)}`, `t=${t}`, ['x'], { t }, 'x'.repeat(5000)]) assert.equal(stripeSignature(raw, header, secret, now), 'invalid', String(header));
+  assert.equal(stripeSignature(raw, `t=${t},v1=${v1(raw, '')}`, '', now), 'invalid', 'no secret configured never verifies');
+  // Rightly signed and outside five minutes, either way: stale. Just inside: ok. A wrong signature stays invalid however old.
+  assert.equal(stripeSignature(raw, `t=${t - 301},v1=${v1(raw, secret, t - 301)}`, secret, now), 'stale');
+  assert.equal(stripeSignature(raw, `t=${t + 301},v1=${v1(raw, secret, t + 301)}`, secret, now), 'stale');
+  assert.equal(stripeSignature(raw, `t=${t - 300},v1=${v1(raw, secret, t - 300)}`, secret, now), 'ok');
+  assert.equal(stripeSignature(raw, `t=${t - 9999},v1=${'0'.repeat(64)}`, secret, now), 'invalid');
+});
+
+test('Stripe webhook: which payment an event is about, and the same result the return path records', () => {
+  const pi = (o = {}) => ({ id: 'evt_1', type: 'payment_intent.succeeded', livemode: false, data: { object: { id: 'pi_1', status: 'succeeded', amount_received: 12000, currency: 'try', customer: 'cus_1', payment_method: 'pm_1',
+    setup_future_usage: null, metadata: { payment_id: payment.id }, ...o } } });
+  assert.equal(stripeEventPayment(pi()), payment.id);
+  assert.equal(stripeEventPayment(pi({ metadata: { payment_id: payment.id.toUpperCase() } })), payment.id);
+  assert.equal(stripeEventPayment({ type: 'checkout.session.expired', data: { object: { client_reference_id: payment.id } } }), payment.id);
+  for (const e of [pi({ metadata: {} }), pi({ metadata: { payment_id: 'x' } }), pi({ metadata: { payment_id: { $ne: null } } }), { ...pi(), type: 'payment_intent.payment_failed' }, { ...pi(), type: 'charge.succeeded' },
+    { type: 'checkout.session.completed', data: { object: { client_reference_id: payment.id } } }, { type: 'payment_intent.succeeded' }, {}, null]) assert.equal(stripeEventPayment(e), null);
+  assert.deepEqual(stripeEventResult(pi(), payment), { ok: true, ref: 'pi_1' });
+  assert.deepEqual(stripeEventResult(pi({ setup_future_usage: 'off_session' }), payment), { ok: true, ref: 'pi_1', card: { token: 'cus_1|pm_1' } });
+  assert.deepEqual(stripeEventResult(pi({ setup_future_usage: 'off_session', customer: { id: 'cus_2' }, payment_method: { id: 'pm_2' } }), payment), { ok: true, ref: 'pi_1', card: { token: 'cus_2|pm_2' } });
+  assert.deepEqual(stripeEventResult(pi({ setup_future_usage: 'off_session', customer: null }), payment), { ok: true, ref: 'pi_1' });
+  for (const o of [{ amount_received: 11999 }, { amount_received: '12000' }, { currency: 'usd' }, { amount_received: undefined }]) assert.equal(stripeEventResult(pi(o), payment).code, 'AMOUNT_MISMATCH', JSON.stringify(o));
+  for (const o of [{ status: 'processing' }, { status: 'requires_action' }, { id: 'cs_1' }, { id: 12 }]) assert.equal(stripeEventResult(pi(o), payment).code, 'PENDING', JSON.stringify(o));
+  assert.equal(stripeEventResult(pi(), { amount: '120.00', currency: 'TRY ' }).ok, true, 'a padded currency column');
+  assert.equal(stripeEventResult({ type: 'checkout.session.expired', data: { object: { payment_status: 'unpaid' } } }, payment).code, 'EXPIRED');
+  assert.equal(stripeEventResult({ type: 'checkout.session.expired', data: { object: { payment_status: 'paid' } } }, payment).code, 'PENDING');
+});

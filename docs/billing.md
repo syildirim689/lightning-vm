@@ -73,10 +73,11 @@ almadan önce her biriyle test modunda bir ödeme ve bir iade yapın.
 
 Bilinen iki açık:
 
-- **Stripe:** Stripe'tan bildirim alan bir webhook yok. Müşteri ödemeyi yapıp panele dönmeden sekmeyi kapatırsa
-  ödeme hemen işlenmez; tahsilat çalıştırması (beş dakikada bir) açık kalan ödemeyi başladıktan beş dakika sonra
-  Stripe'a sormaya başlar ve sonucu işler, bir gün içinde ödenmeyen ödemeyi "süresi doldu" olarak kapatır. Aynı
-  yeniden sorma iyzico ve Craftgate'te de vardır; PayTR ve Param'da yoktur.
+- **Stripe:** webhook **gerçek Stripe'la denenmedi** (kendi imzaladığımız olaylarla sınandı;
+  [payments.md](payments.md#stripe-webhooku)). Webhook kurulmamışsa müşteri ödemeyi yapıp panele dönmeden sekmeyi
+  kapattığında ödeme hemen işlenmez; tahsilat çalıştırması (beş dakikada bir) açık kalan ödemeyi başladıktan beş
+  dakika sonra Stripe'a sormaya başlar ve sonucu işler, bir gün içinde ödenmeyen ödemeyi "süresi doldu" olarak
+  kapatır. Aynı yeniden sorma iyzico ve Craftgate'te de vardır; PayTR ve Param'da yoktur.
 - **Param:** dönüş Param'a sorularak doğrulanamadığı için ödemenin kanıtı sayılmaz. Başarılı bir dönüş ödemeyi
   "onay bekliyor" (`NEEDS_CONFIRMATION`) olarak bırakır; personel tahsilatı Param panelinde görüp faturayı elle
   kapatır. Ödeme incelemeye girdikten sonraki dönüşler ("reddedildi" dahil) yok sayılır. Kendiliğinden işleyen bir

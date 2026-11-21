@@ -22,8 +22,7 @@ yalnızca **olmayanlar** ve **denenmemiş olanlar** durur. Tarih ya da söz veri
 - **Altı yeni platformda** konsol, firewall, hız sınırlama, yedek ve geri yükleme, kişisel imaj, ISO kitaplığı, özel
   ağ, taşıma, ağ taraması. XCP-ng, oVirt, Hyper-V, KVM ve Incus'ta kullanım grafikleri ve trafik sayımı; XCP-ng,
   oVirt, KVM ve Incus'ta sunucu başına işlemci ölçümü. Hyper-V, KVM ve Incus'ta Windows misafir özelleştirmesi.
-- **Ödeme:** listedeki 46 sağlayıcıdan 41'iyle tahsilat. Stripe için webhook (ödeme bugün müşterinin
-  tarayıcısı panele dönünce ya da tahsilat çalıştırması Stripe'a yeniden sorunca işlenir). Param dönüşünün Param'a sorularak doğrulanması (o zamana kadar Param ödemeleri personelce elle onaylanır). PayTR ve Param'da kayıtlı
+- **Ödeme:** listedeki 46 sağlayıcıdan 41'iyle tahsilat. Param dönüşünün Param'a sorularak doğrulanması (o zamana kadar Param ödemeleri personelce elle onaylanır). PayTR ve Param'da kayıtlı
   kartla otomatik yenileme.
 - **Kimlik:** bir projeyi birden çok kullanıcının paylaştığı ekip yapısı.
 - **Ağ:** çalışan bir sunucuya sonradan ek IP ekleme. Ayrı IPv6 havuzları ve sunucu başına birden çok IPv6 adresi

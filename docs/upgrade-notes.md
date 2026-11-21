@@ -15,6 +15,11 @@ Her madde kendi başına yüklenir; veritabanı değişikliği olanlarda migrati
   Giriş güvenliği) kapalı gelir. Postayı istemeyen işletmeci Ayarlar → E-posta → "Adres doğrulama" işaretini
   kaldırır. Yalnızca `.env` içindeki `SMTP_URL` ile posta gönderen kurulumlarda özellik kapalıdır. Veritabanı
   değişikliği yoktur (kodlar Redis'te, 30 dakika). Ayrıntı: [auth.md](auth.md#e-posta-adresi-doğrulama).
+- **Stripe webhook'u.** Stripe kullanan kurulumda bir şey yapılmazsa davranış aynıdır (dönüş ve yeniden sorma).
+  Webhook'u açmak için: Ayarlar → Ödemeler → Stripe'ta gösterilen adresi Stripe'ta uç nokta olarak ekleyin,
+  `payment_intent.succeeded` ve `checkout.session.expired` olaylarını seçin, Stripe'ın verdiği imza anahtarını
+  (`whsec_...`) aynı ekranda "Webhook imza anahtarı" alanına kaydedin (test ve canlı için ayrı). Veritabanı
+  değişikliği yoktur. Ayrıntı: [payments.md](payments.md#stripe-webhooku).
 - **Proje başına kota.** Hiçbir projenin kotası yoktur, personel verene kadar da olmaz: mevcut kurulumda davranış
   değişmez. Veritabanı değişikliği yoktur (`quotas` tablosu `project` kapsamını baştan beri taşıyordu). Kotası olan
   bir projede sınır aşılınca API `QUOTA_EXCEEDED` yerine `PROJECT_QUOTA_EXCEEDED` döner; bu kodu yalnızca proje

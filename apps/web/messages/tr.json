@@ -405,7 +405,11 @@
     "EMAIL_ALREADY_VERIFIED": "Bu e-posta adresi zaten doğrulanmış.",
     "VERIFICATION_CODE_INVALID": "Bu kod yanlış ya da artık geçerli değil. Yeni bir kod isteyip tekrar deneyin.",
     "MAIL_SEND_FAILED": "E-posta gönderilemedi. Biraz sonra tekrar deneyin.",
-    "PROJECT_QUOTA_EXCEEDED": "Bu projenin kotası buna izin vermiyor. Başka bir proje seçin ya da proje için daha yüksek kota isteyin."
+    "PROJECT_QUOTA_EXCEEDED": "Bu projenin kotası buna izin vermiyor. Başka bir proje seçin ya da proje için daha yüksek kota isteyin.",
+    "WEBHOOK_NOT_CONFIGURED": "Bu sağlayıcı için webhook imza anahtarı kaydedilmemiş.",
+    "WEBHOOK_SIGNATURE_INVALID": "Webhook imzası uyuşmuyor.",
+    "WEBHOOK_TIMESTAMP_OUT_OF_RANGE": "Webhook imzası çok eski.",
+    "WEBHOOK_EVENT_INVALID": "Bu, bu webhook adresine ait bir olay değil."
   },
   "Auth": {
     "required": "zorunlu",
@@ -4270,6 +4274,15 @@
         "param": "3D Secure’lu Ortak Ödeme sayfası; kart saklama yok. Sunucunuzun IP adresine Param izin vermeli. Haberlere göre Param Temmuz 2026’dan beri TMSF kayyımı altında.",
         "none": "Bilgiler kaydedilip kontrol edilebilir; bu kuruluşla fatura tahsilatı henüz yapılmadı.",
         "paytrUrl": "PayTR panelinde Bildirim URL olarak bunu girin"
+      },
+      "webhook": {
+        "title": "Webhook adresi",
+        "help": "Bu adresi sağlayıcıda webhook uç noktası olarak ekleyin. Sağlayıcı o zaman bir ödeme başarılı olduğunda panele kendisi haber verir; müşteri ödedikten sonra sayfayı kapatsa bile. Eklenmezse panel birkaç dakika sonra sağlayıcıya kendisi sorar.",
+        "copy": "Adresi kopyala",
+        "copied": "Webhook adresi kopyalandı.",
+        "events": "Gönderilecek olaylar:",
+        "secret": "Sağlayıcı uç nokta için bir imza anahtarı gösterir: onu aşağıda “Webhook imza anahtarı” alanına, test ve canlı mod için ayrı ayrı kaydedin (her modun kendi uç noktası ve anahtarı vardır). Panel yalnızca bu anahtarla imzalanmış bildirimleri kabul eder.",
+        "notPublic": "Bu sayfa sağlayıcının ulaşamayacağı bir adreste açık (HTTPS yok ya da bu bilgisayar). Gösterilen adres yerine panelin herkese açık HTTPS adresini kullanın."
       }
     },
     "rdns": {

@@ -12,11 +12,14 @@ import { ConfirmButton, Empty, FormSection, Mono, Notice, SelectInput, StatusChi
 import { apiFetch, useErrorText } from '../../../../lib/api';
 import { useApiQuery } from '../../../../lib/query';
 import { fold } from '../../../../lib/note-line';
+import { useCopy } from '../../../../lib/clipboard';
 
 type Mode = 'live' | 'test';
 type Field = { key: string; label: [string, string]; secret?: boolean; optional?: boolean; unverifiable?: boolean };
 type Provider = { id: string; name: string; kind: 'gateway' | 'bank' | 'wallet' | 'international'; platform: string; website: string; docs: string; confidence: 'docs' | 'partial' | 'community';
-  fields: Field[]; hosts: Record<Mode, string>; threeD: string[]; notes: string[]; checkable: boolean; testCredentials: Record<string, string> | null; testCards: string[] };
+  fields: Field[]; hosts: Record<Mode, string>; threeD: string[]; notes: string[]; checkable: boolean; testCredentials: Record<string, string> | null; testCards: string[];
+  // The provider reports payments to the panel by itself: the path under /api to register at the provider, and the events to send there.
+  webhook?: { path: string; events: string[] } | null };
 type CheckStatus = 'ok' | 'rejected' | 'inconclusive' | 'network' | 'unverifiable';
 type Check = { status: CheckStatus; message?: string; unverified?: string[]; at: string; current: boolean };
 type Side = { values: Record<string, string>; secretsSet: Record<string, boolean>; complete: boolean; configured: boolean; check: Check | null };
@@ -211,6 +214,7 @@ function Editor({ provider: p, gateway: g, readOnly, onClose }: { provider: Prov
             ? <Notice tone="success" title={t('charges.title')}>{t(`charges.${p.id as 'iyzico'}`)}</Notice>
             : <Notice tone="default">{t('charges.none')}</Notice>}
           {p.id === 'paytr' && <Notice tone="warning" title={t('charges.paytrUrl')}><Mono>{typeof window === 'undefined' ? '' : window.location.origin}/api/billing/callback/paytr</Mono></Notice>}
+          {p.webhook && <WebhookAddress path={p.webhook.path} events={p.webhook.events}/>}
           <div className="grid gap-4 sm:grid-cols-2">
             <TextInput label={t('label')} value={label} onChange={setLabel} placeholder={p.name} help={t('labelHelp')} isDisabled={readOnly} maxLength={60}/>
             <SelectInput label={t('useMode')} value={mode} onChange={(v) => setMode((v || 'test') as Mode)} isDisabled={readOnly} help={t('useModeHelp')}
@@ -241,6 +245,26 @@ function Editor({ provider: p, gateway: g, readOnly, onClose }: { provider: Prov
       </Modal.Dialog>
     </Modal.Container>
   </Modal.Backdrop>;
+}
+
+// The address to enter at the provider so that it tells the panel about payments by itself, with what to choose there.
+// Shown with the address this page was opened on: the provider must be able to reach it from the internet over HTTPS.
+function WebhookAddress({ path, events }: { path: string; events: string[] }) {
+  const t = useTranslations('Settings.payments');
+  const copy = useCopy();
+  const url = `${typeof window === 'undefined' ? '' : window.location.origin}/api${path}`;
+  const local = typeof window !== 'undefined' && (window.location.protocol !== 'https:' || /^(localhost|127\.|\[::1\])/.test(window.location.hostname));
+  return <section aria-label={t('webhook.title')} data-testid="provider-webhook" className="flex flex-col gap-2 rounded-xl border border-border p-3">
+    <h3 className="flex items-center gap-2 text-sm font-semibold"><I name="webhook" size={16} className="text-accent"/>{t('webhook.title')}</h3>
+    <p className="text-sm text-muted">{t('webhook.help')}</p>
+    <div className="flex flex-wrap items-center gap-2">
+      <span className="min-w-0 [overflow-wrap:anywhere]"><Mono>{url}</Mono></span>
+      <Button size="sm" variant="secondary" onPress={() => void copy(url, t('webhook.copied'))}><I name="copy" size={14}/>{t('webhook.copy')}</Button>
+    </div>
+    <p className="text-xs text-muted">{t('webhook.events')}{' '}{events.map((e, i) => <span key={e}>{i > 0 && ', '}<Mono>{e}</Mono></span>)}</p>
+    <p className="text-xs text-muted">{t('webhook.secret')}</p>
+    {local && <Notice tone="warning">{t('webhook.notPublic')}</Notice>}
+  </section>;
 }
 
 function CheckView({ check, fields, labelOf }: { check: { status: CheckStatus; message?: string; unverified?: string[] }; fields: Field[]; labelOf: (f: Field) => string }) {

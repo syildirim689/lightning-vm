@@ -19,6 +19,8 @@ export type Provider = {
   name: string; kind: Kind; platform: string; website: string; docs: string; confidence: 'docs' | 'partial' | 'community';
   fields: Field[]; hosts: Record<Mode, string>; threeD: string[]; notes: Note[];
   testCredentials?: Record<string, string>; testCards?: string[];
+  // The provider tells the panel about payments by itself: the path (under /api) to register there, and which events.
+  webhook?: { path: string; events: string[] };
   check?: (c: Record<string, string>, base: string, mode: Mode) => Promise<CheckResult>;
 };
 
@@ -410,6 +412,7 @@ const stripe: Provider = {
     secret('webhookSecret', 'Webhook imza anahtarı (whsec_...)', 'Webhook signing secret (whsec_...)', { optional: true, unverifiable: true })],
   hosts: { live: 'https://api.stripe.com', test: 'https://api.stripe.com' }, threeD: ['Payment Intents (3DS2)', 'Checkout'], notes: ['SAME_HOST_FOR_TEST'],
   testCards: ['4242424242424242', '4000002500003155'],
+  webhook: { path: '/billing/callback/stripe', events: ['payment_intent.succeeded', 'checkout.session.expired'] },
   check: async (c, base, mode) => keyMode(c.secretKey, mode, /^(sk|rk)_live_/, /^(sk|rk)_test_/) ?? readCheck(`${base}/v1/balance`, bearer(c.secretKey)),
 };
 const paypal: Provider = {

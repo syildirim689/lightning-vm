@@ -112,7 +112,7 @@ export class PaymentsController {
     const { rows } = await pool.query<Row>('SELECT * FROM payment_gateways ORDER BY sort, id');
     return {
       providers: Object.entries(providers).map(([id, p]) => ({ id, name: p.name, kind: p.kind, platform: p.platform, website: p.website, docs: p.docs, confidence: p.confidence,
-        fields: p.fields, hosts: p.hosts, threeD: p.threeD, notes: p.notes, checkable: !!p.check, testCredentials: p.testCredentials ?? null, testCards: p.testCards ?? [] })),
+        fields: p.fields, hosts: p.hosts, threeD: p.threeD, notes: p.notes, checkable: !!p.check, testCredentials: p.testCredentials ?? null, testCards: p.testCards ?? [], webhook: p.webhook ?? null })),
       gateways: rows.filter((r) => providers[r.id]).map(view),
     };
   }

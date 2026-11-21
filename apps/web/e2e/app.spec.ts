@@ -2201,6 +2201,24 @@ test.describe('people, settings and smart features (English browser)', () => {
     await page.getByRole('dialog').getByRole('button', { name: 'Remove' }).click();
     await page.getByRole('alertdialog').getByRole('button', { name: 'Remove' }).click();
     await expect(page.getByText('Provider removed.')).toBeVisible();
+    // Stripe: the dialog shows the webhook address to enter at Stripe, the events to send, and where its secret goes.
+    await page.getByLabel('Search providers').fill('stripe');
+    await page.getByRole('button', { name: /Stripe/ }).last().click();
+    const hook = page.getByRole('dialog').getByTestId('provider-webhook');
+    await expect(hook).toContainText(`${new URL(page.url()).origin}/api/billing/callback/stripe`);
+    await expect(hook).toContainText('payment_intent.succeeded');
+    await expect(hook).toContainText('checkout.session.expired');
+    await expect(hook).toContainText('Webhook signing secret');
+    await expect(hook.getByRole('button', { name: 'Copy address' })).toBeVisible();
+    await expect(page.getByRole('dialog').getByLabel('Webhook signing secret (whsec_...)')).toHaveValue('');
+    await page.setViewportSize({ width: 390, height: 844 });
+    await expectInside(page, hook, 'the webhook address at 390 px');
+    await tour(hook, 'payments-stripe-webhook-phone');
+    await page.setViewportSize({ width: 1280, height: 720 });
+    // The address answers, and refuses what Stripe did not sign: no secret is saved here, so it is not there at all.
+    const unsigned = await page.request.post('/api/billing/callback/stripe', { data: { id: 'evt_e2e', type: 'payment_intent.succeeded' } });
+    expect([unsigned.status(), (await unsigned.json()).code]).toEqual([404, 'WEBHOOK_NOT_CONFIGURED']);
+    await page.getByRole('dialog').getByRole('button', { name: 'Close' }).last().click();
   });
 
   test('billing: an invoice awaits payment, a declined card keeps it awaiting, a good one pays it; staff see it all', async ({ page }) => {

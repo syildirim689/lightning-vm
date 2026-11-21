@@ -5,8 +5,9 @@
 import { providers } from './payment-providers';
 import { randomBytes } from 'node:crypto';
 import { All, Body, Controller, Delete, Get, HttpCode, Param, ParseUUIDPipe, Post, Put, Query, Req, Res, UseGuards } from '@nestjs/common';
-import type { FastifyReply } from 'fastify';
+import type { FastifyReply, FastifyRequest } from 'fastify';
 import type { Pool, PoolClient } from 'pg';
+import { stripeEventPayment, stripeEventResult, stripeSignature } from './billing-providers';
 import { audit, SessionGuard, type AuthedRequest } from './auth';
 import { pool, redis, foldSql, foldText } from './db';
 import { apiError } from './errors';
@@ -1234,6 +1235,48 @@ export class BillingCallbackController {
   @All(':provider/:id')
   async back(@Res() reply: FastifyReply, @Param('provider') provider: string, @Param('id', ParseUUIDPipe) id: string, @Query() query: Record<string, string>, @Body() body: Record<string, unknown>) {
     return this.handle(reply, provider, id, query ?? {}, body ?? {});
+  }
+
+  // Stripe's webhook (Settings → Payments → Stripe shows this address): the signed notification of how a payment
+  // ended, for the customer who paid and never came back to the panel, without waiting for the billing run to ask.
+  // Nothing here trusts the caller: the body counts only with a signature made with the endpoint's signing secret
+  // (the test or the live one, whichever verifies; the event must be of that mode) over the bytes as they arrived,
+  // and not older than five minutes. The outcome then takes the one way every outcome takes (settlePayment locks the
+  // payment and records a result once), so the return, the billing run and this event can arrive in any order, any
+  // number of times, and the invoice is paid once. An event already handled is answered without being handled again.
+  @Post('stripe') @HttpCode(200)
+  async stripeWebhook(@Req() req: FastifyRequest & { rawBody?: Buffer }, @Body() event: Record<string, unknown>) {
+    const secrets: { mode: 'live' | 'test'; secret: string }[] = [];
+    for (const mode of ['live', 'test'] as const) {
+      const secret = ((await activeGateway('stripe', mode))?.creds as Record<string, string> | undefined)?.webhookSecret;
+      if (secret) secrets.push({ mode, secret });
+    }
+    if (!secrets.length) throw apiError(404, 'WEBHOOK_NOT_CONFIGURED', 'No webhook signing secret is saved for Stripe');
+    const checks = req.rawBody ? secrets.map((s) => ({ ...s, verdict: stripeSignature(req.rawBody!, req.headers['stripe-signature'], s.secret) })) : [];
+    const signed = checks.find((c) => c.verdict !== 'invalid');
+    if (!signed || signed.verdict === 'stale') {
+      // Guesses are counted per address (a wrong secret at Stripe's end fails the same way, far below this).
+      await rateLimit(`stripe-webhook:${req.ip}`, 120, 60);
+      logEvent('warn', 'stripe_webhook_refused', { reason: signed ? 'stale' : 'signature' });
+      throw signed ? apiError(400, 'WEBHOOK_TIMESTAMP_OUT_OF_RANGE', 'The signature is older than the tolerance') : apiError(400, 'WEBHOOK_SIGNATURE_INVALID', 'The signature does not match');
+    }
+    const eventId = typeof event?.id === 'string' && /^evt_\w{1,200}$/.test(event.id) ? event.id : null;
+    if (!eventId || typeof event.type !== 'string' || event.livemode !== (signed.mode === 'live')) throw apiError(400, 'WEBHOOK_EVENT_INVALID', 'Not an event of this endpoint');
+    const seen = `stripe:event:${eventId}`;
+    if (await redis.exists(seen).catch(() => 0)) return { received: true, duplicate: true };
+    const paymentId = stripeEventPayment(event);
+    const { rows: [p] } = paymentId ? await pool.query("SELECT id, amount::text, currency, status, mode FROM payments WHERE id = $1 AND provider = 'stripe'", [paymentId]) : { rows: [] };
+    // Not one of ours, of the other mode, or a test payment after the provider went live: acknowledged, nothing done.
+    const ours = p && p.mode === signed.mode && !(await testModeOver('stripe', p.mode));
+    if (ours && p.status === 'pending') {
+      const r = stripeEventResult(event, p);
+      if (finalResult(r)) await settlePayment(p.id, r);
+      else await noteReview(p.id, r);
+      logEvent(r.ok ? 'info' : 'warn', 'payment_webhook', { provider: 'stripe', paymentId: p.id, event: event.type, ok: r.ok, ...(!r.ok && { code: r.code }) });
+    }
+    // Remembered only once it was handled: a delivery that failed half way is handled again when Stripe retries.
+    await redis.set(seen, '1', 'EX', 3 * 86_400).catch(() => undefined);
+    return { received: true, ...(!ours && { ignored: true }) };
   }
 
   @Post(':provider')

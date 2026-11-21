@@ -1,5 +1,6 @@
 import 'reflect-metadata';
 import { Controller, Get, Module, Res } from '@nestjs/common';
+import { Transform } from 'node:stream';
 import { NestFactory } from '@nestjs/core';
 import { FastifyAdapter, NestFastifyApplication } from '@nestjs/platform-fastify';
 import fastifyCookie from '@fastify/cookie';
@@ -133,6 +134,14 @@ export async function createApp() {
       const limit = largeBodies[`${method} ${route.url}`];
       if (limit) route.bodyLimit = limit;
     }
+  });
+  // Stripe's webhook is verified over the body's bytes as they arrived (billing.ts): they are kept beside the parsed
+  // body, for that one route.
+  app.getHttpAdapter().getInstance().addHook('preParsing', async (req, _reply, payload) => {
+    if (req.method !== 'POST' || req.routeOptions.url !== '/billing/callback/stripe') return payload;
+    const chunks: Buffer[] = [];
+    const copy = new Transform({ transform(chunk: Buffer, _enc, done) { chunks.push(chunk); done(null, chunk); }, flush(done) { (req as { rawBody?: Buffer }).rawBody = Buffer.concat(chunks); done(); } });
+    return payload.pipe(copy);
   });
   registerApiHooks(app.getHttpAdapter().getInstance());
   app.getHttpAdapter().getInstance().addHook('onRequest', async (req, reply) => {

@@ -205,7 +205,9 @@ girmeniz gerekmez. Özelliklerin tamamı yalnızca VMware'de vardır; diğer alt
 - **SMS:** Türkiye'deki 18 sağlayıcı + Twilio, Vonage, Infobip, Plivo, Sinch, Telnyx, Clickatell, MessageBird
   ve özel HTTP API
 - **Ödeme:** kartla tahsilat yalnızca **iyzico, PayTR, Craftgate, Param ve Stripe** ile (ve panelin kendi test
-  sağlayıcısıyla) yapılır. Bunlardan **Param'da ödeme kendiliğinden işlenmez:** müşteri Param'ın sayfasında öder,
+  sağlayıcısıyla) yapılır. **Stripe webhook'u:** imzası ham gövde üzerinden doğrulanan, eski imzayı reddeden ve
+  ödemeyi dönüş ve yeniden sormayla aynı yoldan bir kez kaydeden bildirim adresi; ayar ekranı Stripe'a girilecek
+  adresi gösterir. Bunlardan **Param'da ödeme kendiliğinden işlenmez:** müşteri Param'ın sayfasında öder,
   ödeme "onay bekliyor" kalır ve personel tahsilatı Param panelinde görüp faturayı elle kapatır (Yönetici
   paneli, "İnceleme bekleyen ödemeler"); Param yalnızca TRY faturalar için sunulur. Listedeki diğer 41 sağlayıcının (Türkiye'deki ödeme kuruluşları, banka sanal POS'ları,
   Papara, PayPal, Mollie, Adyen, Checkout.com, Razorpay, Square, Paddle) yalnızca hesap bilgileri kaydedilir ve çoğu
@@ -316,6 +318,7 @@ sunucunun kopyası çıkarılamaz (kopya yalnızca şablondan). Her platformun a
 
 | Ne | Nerede |
 |---|---|
+| **Stripe webhook'u (2026-11-21).** Stripe ödemenin sonucunu imzalı bildirimle panele kendisi söyler; imza ham gövde üzerinden doğrulanır, beş dakikadan eski imza reddedilir ve sonuç, tarayıcı dönüşü ve tahsilat çalıştırmasıyla aynı yoldan bir kez kaydedilir. Ayarlar ekranı Stripe'a girilecek adresi ve olayları gösterir. Kendi imzaladığımız olaylarla sınandı; gerçek Stripe'la denenmedi | Ayarlar → Ödemeler → Stripe · [docs/payments.md](docs/payments.md#stripe-webhooku) |
 | **Proje başına kota (2026-11-21).** Personel bir projeye kendi kotasını verir; o projeye verilen siparişlerde sahibinin kotasının yerine geçer ve yalnızca o projenin sunucularını sayar. Kotalar listesinde kullanılan / sınır; müşteride projede ve sipariş özetinde kotanın bu sunucuyla varacağı durum; aşan sipariş `PROJECT_QUOTA_EXCEEDED` ile reddedilir | Katalog → Kotalar · Hesabım → Projeler · Sipariş · [docs/catalog.md](docs/catalog.md#kotalar-ve-projeler) |
 | **E-posta adresi doğrulama (2026-11-21).** Kayıtla açılan hesaba altı haneli kod postalanır; kod yalnızca o hesabın oturumunda geçer ve hesapta hiçbir şeyi silmez. Profilde doğrulanmamış adres uyarısı ve yeniden gönderme; isteğe bağlı "doğrulanmamış hesap sipariş veremez" kuralı (varsayılan kapalı). E-posta ayarlı değilse görünmez | Hesabım → Profil · Ayarlar → Giriş güvenliği · [docs/auth.md](docs/auth.md#e-posta-adresi-doğrulama) |
 | **0.4.0 (beta) sürümü, yeni kurulum ekranı ve proje sayfaları (2026-11-21).** İkinci yayımlanan sürüm ve "beta" olarak işaretlenen ilki; 0.1.0'dan bu yana birikenlerin tamamını içerir ve GitHub'da sürüm sayfasıyla yayımlanır. Kurulum betikleri (`get.sh`, `install.sh`) uçbirimde dili bir kez sorar (Türkçe / English), ön kontrol raporu ve yapılacakların listesini gösterir, numaralı adımları dönen işaret, geçen süre ve ilerlemeyle (kaç imaj derlendi, kaç servis hazır) yürütür, sonunda adresleri, komutları ve süreyi özetler; bir adım başarısız olursa komutun son satırlarını, ne yapılacağını ve kaydın yerini yazar. Uçbirim yoksa (CI, cloud-init, panelin ajanı) hiçbir şey sorulmaz ve çıktı satır satır kalır. Kontroller artık Docker kurulmadan **önce** yapılır. Yeni: `--yes`, `--plain`, `--help`; `CHANGELOG.md`, `README.en.md`, davranış kuralları, destek sayfası, özel güvenlik bildirimi. Denemeler: betik düzeneğinde dash ve busybox ash altında 103'er denetim, GitHub'ın temiz koşucusunda gerçek kurulum, yedek ve geri yükleme, demo sunucusunda yeni betikle gerçek güncelleme ve 33/33 tarayıcı testi; gerçek Docker ile etkileşimli kurulum ve Docker'ın kurulduğu adım **denenmedi** ([docs/validation.md](docs/validation.md)) | [Kurulum](#-kurulum) · [Sürümler](#-sürümler--releases) · [CHANGELOG.md](CHANGELOG.md) · [docs/setup.md](docs/setup.md#dil-çıktı-ve-kayıt) · [docs/upgrade-notes.md](docs/upgrade-notes.md) |
@@ -783,9 +786,10 @@ kaynağında en son ne zaman doğrulandığını, `087` bir işlemin hesap payı
   yok; kurulumu yapan kişi ekler. Geçit ve bilet akışı sınandı, ancak **bütün, gerçek SDK ile hiç denenmedi**: ekranın
   göründüğü, klavye ve farenin çalıştığı doğrulanmadı ([docs/console.md](docs/console.md)).
 - **Ödeme:** kartla tahsilat yalnız iyzico, PayTR, Craftgate, Param ve Stripe ile; diğer 41 sağlayıcı yalnızca bilgi
-  kaydıdır. Beşinden **hiçbiri gerçek bir üye işyeri hesabıyla denenmedi**. **Stripe:** webhook yok; müşteri ödedikten sonra
+  kaydıdır. Beşinden **hiçbiri gerçek bir üye işyeri hesabıyla denenmedi**. **Stripe:** webhook vardır ama gerçek
+  Stripe'la denenmedi (kendi imzaladığımız olaylarla sınandı); webhook kurulmamışsa müşteri ödedikten sonra
   sekmeyi kapatırsa ödeme, tahsilat çalıştırması Stripe'a yeniden sorduğunda işlenir (beş dakika sonra başlar, bir
-  gün sürer; iyzico ve Craftgate'te de böyledir, PayTR ve Param'da yoktur). **Param:** dönüş Param'a sorularak
+  gün sürer; iyzico ve Craftgate'te yalnızca bu vardır, PayTR ve Param'da o da yoktur). **Param:** dönüş Param'a sorularak
   doğrulanamadığı için ödemenin kanıtı sayılmaz: ödeme "onay bekliyor" kalır, personel Param panelinde doğrulayıp
   faturayı elle kapatır; kendiliğinden işleyen bir Param tahsilatı yoktur. Param yalnızca TRY için sunulur ve bu
   akış **sağlayıcıyla teyit edilmedi**. **İncelemeye giren ödemeler kendiliğinden kapanmaz:** Param'ın onay

@@ -174,6 +174,45 @@ export const stripe: Gateway = {
   },
 };
 
+// ---- Stripe webhook: the signed notification of a payment's outcome (billing.ts has the route) ----
+// Stripe-Signature: t=<unix seconds>,v1=<hex>[,v1=<hex>...]; a v1 is HMAC-SHA256(endpoint secret, "<t>.<body>") over
+// the body's bytes exactly as they arrived. The signature is checked first; only a body that carries a good one is
+// then held to the clock: outside the tolerance it is a replay ('stale'), whoever sends it. Stripe signs every
+// delivery attempt anew, so its own retries are never stale.
+export const stripeTolerance = 300;
+export function stripeSignature(raw: Buffer, header: unknown, secret: string, nowMs = Date.now(), toleranceSeconds = stripeTolerance): 'ok' | 'invalid' | 'stale' {
+  if (typeof header !== 'string' || header.length > 2000 || !secret) return 'invalid';
+  const parts = header.split(',').map((p) => { const i = p.indexOf('='); return [p.slice(0, i).trim(), p.slice(i + 1).trim()]; });
+  const t = parts.find(([k]) => k === 't')?.[1] ?? '';
+  const given = parts.filter(([k, v]) => k === 'v1' && /^[0-9a-f]{64}$/.test(v)).map(([, v]) => Buffer.from(v, 'hex'));
+  if (!/^\d{1,12}$/.test(t) || !given.length) return 'invalid';
+  const expected = createHmac('sha256', secret).update(`${t}.`, 'utf8').update(raw).digest();
+  if (!given.some((g) => timingSafeEqual(g, expected))) return 'invalid';
+  return Math.abs(nowMs / 1000 - Number(t)) > toleranceSeconds ? 'stale' : 'ok';
+}
+// The events that say how one of our payments ended, and which payment: payment_intent.succeeded carries our id in
+// its metadata (checkout() and chargeSaved() both put it there) with the amount, and the customer and card for later
+// charges; checkout.session.expired closes a payment page nobody paid on. Every other event is acknowledged and
+// left alone (null): a declined try on the hosted page is not the end, the customer may still pay there.
+const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+type StripeEvent = { id?: unknown; type?: unknown; livemode?: unknown; data?: { object?: Record<string, any> } }; // eslint-disable-line @typescript-eslint/no-explicit-any
+export function stripeEventPayment(event: StripeEvent): string | null {
+  const o = event?.data?.object;
+  const id = event?.type === 'payment_intent.succeeded' ? o?.metadata?.payment_id : event?.type === 'checkout.session.expired' ? o?.client_reference_id : null;
+  return typeof id === 'string' && uuidPattern.test(id) ? id.toLowerCase() : null;
+}
+// The same Result verify() gives for that outcome when it asks Stripe itself, so whichever of the three arrives first
+// (the browser's return, the billing run's question, this event) records the same thing and the others find it done.
+export function stripeEventResult(event: StripeEvent, payment: { amount: string; currency: string }): Result {
+  const o = event.data?.object ?? {};
+  if (event.type === 'checkout.session.expired') return o.payment_status === 'paid' ? fail('PENDING') : fail('EXPIRED', 'The payment page expired');
+  if (o.status !== 'succeeded' || typeof o.id !== 'string' || !/^pi_\w+$/.test(o.id)) return fail('PENDING');
+  if (o.amount_received !== cents(payment.amount) || String(o.currency).toUpperCase() !== payment.currency.trim()) return fail('AMOUNT_MISMATCH', 'Stripe reported a different amount');
+  const pm = typeof o.payment_method === 'string' ? o.payment_method : o.payment_method?.id;
+  const customer = typeof o.customer === 'string' ? o.customer : o.customer?.id;
+  return { ok: true, ref: o.id, ...(customer && pm && o.setup_future_usage && { card: { token: `${customer}|${pm}` } }) };
+}
+
 // ---- Craftgate: Ortak Ödeme Formu (hosted, 3DS, stores the card), stored-card charge, refunds ----
 async function craft(creds: Record<string, string>, method: string, path: string, payload?: object, idem?: string) {
   const url = `${creds.endpoint}${path}`;

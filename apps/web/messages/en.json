@@ -405,7 +405,11 @@
     "EMAIL_ALREADY_VERIFIED": "This e-mail address is verified already.",
     "VERIFICATION_CODE_INVALID": "This code is wrong or no longer valid. Ask for a new one and try again.",
     "MAIL_SEND_FAILED": "The e-mail could not be sent. Try again in a little while.",
-    "PROJECT_QUOTA_EXCEEDED": "The quota of this project does not allow this. Choose another project, or ask for a higher quota for it."
+    "PROJECT_QUOTA_EXCEEDED": "The quota of this project does not allow this. Choose another project, or ask for a higher quota for it.",
+    "WEBHOOK_NOT_CONFIGURED": "No webhook signing secret is saved for this provider.",
+    "WEBHOOK_SIGNATURE_INVALID": "The webhook signature does not match.",
+    "WEBHOOK_TIMESTAMP_OUT_OF_RANGE": "The webhook signature is too old.",
+    "WEBHOOK_EVENT_INVALID": "This is not an event of this webhook address."
   },
   "Auth": {
     "required": "required",
@@ -4270,6 +4274,15 @@
         "param": "Hosted payment page (Ortak Ödeme) with 3D Secure; no saved cards. Your server’s IP must be allowed by Param. News reports place Param under a TMSF trustee since July 2026.",
         "none": "Credentials can be saved and checked; taking invoice payments with this provider is not built yet.",
         "paytrUrl": "Set this as the notification URL (Bildirim URL) in the PayTR panel"
+      },
+      "webhook": {
+        "title": "Webhook address",
+        "help": "Add this address as a webhook endpoint at the provider. It then tells the panel when a payment succeeds, also when the customer closes the page after paying; without it the panel asks the provider itself a few minutes later.",
+        "copy": "Copy address",
+        "copied": "Webhook address copied.",
+        "events": "Events to send:",
+        "secret": "The provider shows a signing secret for the endpoint: save it below as “Webhook signing secret”, once for test and once for live mode (each mode has its own endpoint and secret). The panel accepts only notifications signed with it.",
+        "notPublic": "This page is open on an address the provider cannot reach (no HTTPS, or this computer). Use the panel's public HTTPS address instead of the one shown."
       }
     },
     "rdns": {

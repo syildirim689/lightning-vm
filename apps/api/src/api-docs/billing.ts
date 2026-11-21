@@ -147,6 +147,20 @@ export default {
     errors: ['NOT_FOUND', 'PAYMENT_METHOD_UNAVAILABLE'],
     internal: true,
   },
+  'POST /billing/callback/stripe': {
+    tag: 'internal',
+    summary: { tr: 'Stripe webhook\'u: bir ödemenin sonucunu Stripe\'ın imzalı bildirimiyle kaydeder.', en: 'Stripe\'s webhook: records a payment\'s outcome from Stripe\'s signed notification.' },
+    details: { tr: 'Oturum gerekmez; yalnızca Stripe çağırır. Gövde, `Stripe-Signature` başlığındaki imza uç noktanın imza anahtarıyla (test ya da canlı; Ayarlar → Ödemeler → Stripe) gövdenin geldiği baytlar üzerinden doğrulanırsa ve beş dakikadan eski değilse dikkate alınır. `payment_intent.succeeded` ödemeyi ödenmiş olarak kaydeder (tutar ve para birimi ödemeninkiyle aynıysa; değilse ödeme personel incelemesine kalır), `checkout.session.expired` ödenmemiş ödemeyi kapatır; diğer olaylar yalnızca onaylanır. Sonuç, tarayıcı dönüşü ve tahsilat çalıştırmasıyla aynı yoldan kaydedilir: hangisi önce gelirse gelsin fatura bir kez ödenir. Aynı olay yeniden gelirse `duplicate: true` döner.', en: 'No session; only Stripe calls it. The body counts only when the signature in the `Stripe-Signature` header verifies with the endpoint\'s signing secret (test or live; Settings → Payments → Stripe) over the bytes as they arrived, and is not older than five minutes. `payment_intent.succeeded` records the payment as paid (when amount and currency are the payment\'s; otherwise it is left for staff review), `checkout.session.expired` closes an unpaid payment; other events are only acknowledged. The outcome is recorded the same way as by the browser\'s return and the billing run: whichever arrives first, the invoice is paid once. The same event again answers `duplicate: true`.' },
+    body: [
+      { name: 'id', type: 'string', required: true, text: { tr: 'Stripe olay kimliği (`evt_...`).', en: 'Stripe\'s event id (`evt_...`).' } },
+      { name: 'type', type: 'string', required: true, text: { tr: 'Olay türü.', en: 'The event type.' } },
+      { name: 'livemode', type: 'boolean', required: true, text: { tr: 'İmzayı doğrulayan anahtarın moduyla aynı olmalı.', en: 'Must be the mode of the secret that verified the signature.' } },
+      { name: 'data.object', type: 'object', required: true, text: { tr: 'Olayın nesnesi (PaymentIntent ya da Checkout Session).', en: 'The event\'s object (a PaymentIntent or a Checkout Session).' } },
+    ],
+    returns: { tr: '`received`: true; bizim olmayan ya da başka moddaki bir ödeme için ayrıca `ignored`, daha önce işlenmiş olay için `duplicate`.', en: '`received`: true; with `ignored` for a payment that is not ours or of the other mode, `duplicate` for an event handled before.' },
+    errors: ['WEBHOOK_NOT_CONFIGURED', 'WEBHOOK_SIGNATURE_INVALID', 'WEBHOOK_TIMESTAMP_OUT_OF_RANGE', 'WEBHOOK_EVENT_INVALID', 'RATE_LIMITED'],
+    internal: true,
+  },
   'POST /billing/callback/:provider': {
     tag: 'internal',
     summary: { tr: 'Ödeme kimliğini gövdede taşıyan sağlayıcı bildirimi (örneğin PayTR).', en: 'A provider notification that carries the payment id in its body (e.g. PayTR).' },
