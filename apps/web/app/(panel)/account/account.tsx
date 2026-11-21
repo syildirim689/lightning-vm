@@ -12,7 +12,9 @@ import { useApiForm } from '../../../lib/form';
 import { useMe } from '../../../lib/me';
 import { useApiAction, useApiQuery } from '../../../lib/query';
 
-type Project = { id: string; name: string; servers: number };
+// quota: the project's own quota when staff gave it one (null limit: unlimited), with what its servers use of it.
+type ProjectQuota = { maxServers: number | null; maxVcpu: number | null; maxMemoryMb: number | null; maxDiskGb: number | null; usage: { servers: number; vcpu: number; memoryMb: number; diskGb: number } };
+type Project = { id: string; name: string; servers: number; quota?: ProjectQuota | null };
 // GET /reseller/summary, managedBy: the reseller this account belongs to (null for everybody else).
 // afterLeave: the servers whose monthly price changes once the account leaves (the reseller's discount ends), with
 // what each costs now; empty or absent (an older API): nothing changes.
@@ -72,8 +74,21 @@ export function ManagedAccount() {
   </Section>;
 }
 
+// A project's own quota as one line: each limit that is set, with what is used of it.
+export function useQuotaLine() {
+  const t = useTranslations('Order');
+  const format = useFormatter();
+  return (q: ProjectQuota) => {
+    const gb = (mb: number) => format.number(mb / 1024, { maximumFractionDigits: 1 });
+    const parts = [q.maxServers != null && t('quotaUse.servers', { used: q.usage.servers, max: q.maxServers }), q.maxVcpu != null && t('quotaUse.vcpu', { used: q.usage.vcpu, max: q.maxVcpu }),
+      q.maxMemoryMb != null && t('quotaUse.memory', { used: gb(q.usage.memoryMb), max: gb(q.maxMemoryMb) }), q.maxDiskGb != null && t('quotaUse.disk', { used: q.usage.diskGb, max: q.maxDiskGb })].filter(Boolean);
+    return parts.length ? parts.join(' · ') : t('quotaUse.unlimited');
+  };
+}
+
 export function Projects() {
   const t = useTranslations('Order');
+  const quotaLine = useQuotaLine();
   const client = useQueryClient();
   const projects = useApiQuery<{ projects: Project[] }>(['projects'], '/projects').data?.projects;
   const [listRef] = useAutoAnimate<HTMLUListElement>();
@@ -82,10 +97,12 @@ export function Projects() {
   return <Section title={t('projects.title')}>
     <div className="flex flex-col gap-4">
       {projects?.length === 0 && <p className="text-sm text-muted">{t('projects.empty')}</p>}
+      {projects?.some((p) => p.quota) && <p className="text-sm text-muted">{t('projects.quotaHelp')}</p>}
       {!!projects?.length && <ul ref={listRef} className="flex flex-col divide-y divide-separator rounded-lg border border-border">
         {projects.map((p) => <li key={p.id} className="flex items-center gap-3 px-3 py-2.5">
           <I name="folder" size={16} className="text-muted"/>
-          <span className="min-w-0 flex-1"><span className="block truncate font-medium">{p.name}</span><span className="block text-xs text-muted">{t('projects.servers', { n: p.servers })}</span></span>
+          <span className="min-w-0 flex-1"><span className="block truncate font-medium">{p.name}</span><span className="block text-xs text-muted">{t('projects.servers', { n: p.servers })}</span>
+            {p.quota && <span className="block text-xs text-muted [overflow-wrap:anywhere]"><span className="font-medium text-foreground">{t('projects.quota')}</span>{' '}{quotaLine(p.quota)}</span>}</span>
           {p.servers > 0 && <ButtonLink size="sm" variant="ghost" href={`/?project=${p.id}`}><I name="server" size={15}/><span className="sr-only sm:not-sr-only">{t('projects.show')}</span></ButtonLink>}
           <ConfirmButton size="sm" variant="ghost" icon={<I name="trash-2" size={15}/>} label={<span className="sr-only sm:not-sr-only">{t('projects.remove')}</span>}
             title={t('projects.removeTitle', { name: p.name })} body={t('projects.removeBody', { n: p.servers })} confirmLabel={t('projects.remove')} cancelLabel={t('projects.cancel')}

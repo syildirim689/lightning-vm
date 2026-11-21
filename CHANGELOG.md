@@ -39,6 +39,17 @@ Türkçe [docs/upgrade-notes.md](docs/upgrade-notes.md) sayfasını okuyun.*
   when the month is close to it or heading over it, and `billing.budget_forecast` tells the customer once a month.
   `GET /usage/summary` gains `costs[].hourly` and `budget.forecast`, `forecastRatio`, `forecastState`.
 
+- **Per-project quotas.** Staff with `catalog.manage` give a project a quota of its own in Catalog → Quotas (the
+  form finds projects by name or by their owner's e-mail). It replaces the owner's quota for servers ordered into
+  that project and counts only that project's servers; orders outside it stay under the account's quota. The quota
+  list shows what is used beside every limit; the owner sees a project's quota in Account → Projects, and the order
+  summary shows the quota the order counts against as it would stand with the new server. An order, a resize or an
+  extra disk over a project's quota is refused with `409 PROJECT_QUOTA_EXCEEDED`. New routes:
+  `GET /api/admin/quotas/projects`, `PUT` and `DELETE /api/admin/quotas/projects/:id`; `GET /api/projects`,
+  `GET /api/admin/quotas`, `POST /api/catalog/quote` and `GET /api/catalog/availability` carry the new fields.
+  No project has a quota until staff give it one, so nothing changes for existing installs.
+  See [docs/catalog.md](docs/catalog.md#kotalar-ve-projeler).
+
 ### Changed
 
 - `GET /usage/summary`: for an account with hourly servers, `accrued` and `forecast` are now the recorded usage

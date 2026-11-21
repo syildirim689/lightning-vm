@@ -404,7 +404,8 @@
     "EMAIL_NOT_VERIFIED": "Verify the e-mail address of this account before ordering a server (Account → Profile).",
     "EMAIL_ALREADY_VERIFIED": "This e-mail address is verified already.",
     "VERIFICATION_CODE_INVALID": "This code is wrong or no longer valid. Ask for a new one and try again.",
-    "MAIL_SEND_FAILED": "The e-mail could not be sent. Try again in a little while."
+    "MAIL_SEND_FAILED": "The e-mail could not be sent. Try again in a little while.",
+    "PROJECT_QUOTA_EXCEEDED": "The quota of this project does not allow this. Choose another project, or ask for a higher quota for it."
   },
   "Auth": {
     "required": "required",
@@ -1351,7 +1352,9 @@
       "removed": "Project deleted.",
       "removeTitle": "Delete the project “{name}”?",
       "removeBody": "{n, plural, =0 {The project has no servers.} one {Its server is not deleted; it is just left without a project.} other {Its # servers are not deleted; they are just left without a project.}}",
-      "cancel": "Cancel"
+      "cancel": "Cancel",
+      "quota": "Project quota:",
+      "quotaHelp": "A project with a quota of its own is counted by itself: servers ordered into it are held to that quota instead of your account's."
     },
     "name": "Server name",
     "nameHelp": "Also used as the host name, for example web-1.",
@@ -1467,7 +1470,19 @@
       "name": "Enter a valid server name that is not in use",
       "keys": "Choose at least one SSH key"
     },
-    "passwordGeneratedNotCopied": "A strong password was generated, but it could not be copied to the clipboard. Show it in the field and note it down."
+    "passwordGeneratedNotCopied": "A strong password was generated, but it could not be copied to the clipboard. Show it in the field and note it down.",
+    "projectQuotaExceeded": "This exceeds the quota of the chosen project: {limits}.",
+    "quotaUse": {
+      "ofProject": "Quota of the project “{name}”",
+      "ofAccount": "Your quota",
+      "after": "{after} of {max}",
+      "afterHelp": "As it would stand with this server.",
+      "servers": "{used} of {max} servers",
+      "vcpu": "{used} of {max} vCPU",
+      "memory": "{used} of {max} GB RAM",
+      "disk": "{used} of {max} GB disk",
+      "unlimited": "no limits set"
+    }
   },
   "Catalog": {
     "eyebrow": "ADMIN · CATALOG",
@@ -1609,7 +1624,7 @@
     },
     "quotas": {
       "title": "Quotas",
-      "explain": "The default quota applies to everyone; a user quota replaces the default. An empty field is unlimited.",
+      "explain": "The default quota applies to everyone; a user quota replaces the default, and a project quota replaces its owner's for servers ordered into that project. An empty field is unlimited. Rows of users and projects show what is used beside each limit.",
       "scope": "Scope",
       "default": "Default",
       "servers": "Servers",
@@ -1631,9 +1646,15 @@
       "removeTitle": "Remove the quota of {email}?",
       "removeBody": "They go back to the default quota and their role’s limits. Their running servers are not touched.",
       "removed": "Quota removed: {email}",
-      "searchUser": "Type an e-mail to search",
+      "searchUser": "Type an e-mail or a project name to search",
       "hasOwn": "This user already has a quota of their own; saving replaces it.",
-      "fromDefault": "This user has no quota of their own yet; the fields start from the default."
+      "fromDefault": "This user has no quota of their own yet; the fields start from the default.",
+      "project": "Project",
+      "projectOf": "{project} (project of {email})",
+      "projectHasOwn": "This project already has a quota of its own; saving replaces it.",
+      "projectFromOwner": "This project has no quota of its own yet; the fields start from what applies to it today (its owner's quota, or the default).",
+      "projectHelp": "A project quota replaces its owner's quota for servers ordered into that project and counts only that project's servers. Orders outside the project stay under the owner's quota.",
+      "removeProjectBody": "The project goes back to its owner's quota. Its running servers are not touched."
     },
     "removeConfirm": "Remove “{name}”? This cannot be undone.",
     "cancel": "Cancel",
@@ -1677,7 +1698,7 @@
       "range": "Address range",
       "rangeHelp": "Servers get addresses from this range in order. Excluded ones are skipped.",
       "dnsServers": "DNS servers",
-      "scopeHelp": "The default applies to everyone; pick a user to set theirs.",
+      "scopeHelp": "The default applies to everyone; pick a user or a project to set theirs.",
       "limits": "Limits"
     },
     "ipm": {

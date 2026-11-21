@@ -404,7 +404,8 @@
     "EMAIL_NOT_VERIFIED": "Sunucu sipariş etmeden önce bu hesabın e-posta adresini doğrulayın (Hesabım → Profil).",
     "EMAIL_ALREADY_VERIFIED": "Bu e-posta adresi zaten doğrulanmış.",
     "VERIFICATION_CODE_INVALID": "Bu kod yanlış ya da artık geçerli değil. Yeni bir kod isteyip tekrar deneyin.",
-    "MAIL_SEND_FAILED": "E-posta gönderilemedi. Biraz sonra tekrar deneyin."
+    "MAIL_SEND_FAILED": "E-posta gönderilemedi. Biraz sonra tekrar deneyin.",
+    "PROJECT_QUOTA_EXCEEDED": "Bu projenin kotası buna izin vermiyor. Başka bir proje seçin ya da proje için daha yüksek kota isteyin."
   },
   "Auth": {
     "required": "zorunlu",
@@ -1351,7 +1352,9 @@
       "removed": "Proje silindi.",
       "removeTitle": "“{name}” projesi silinsin mi?",
       "removeBody": "{n, plural, =0 {Projede sunucu yok.} one {İçindeki sunucu silinmez, yalnızca projesiz kalır.} other {İçindeki # sunucu silinmez, yalnızca projesiz kalır.}}",
-      "cancel": "Vazgeç"
+      "cancel": "Vazgeç",
+      "quota": "Proje kotası:",
+      "quotaHelp": "Kendi kotası olan proje ayrı sayılır: o projeye sipariş edilen sunucular hesabınızın kotası yerine o kotaya tabidir."
     },
     "name": "Sunucu adı",
     "nameHelp": "Ana bilgisayar adı olarak da kullanılır, örnek: web-1.",
@@ -1467,7 +1470,19 @@
       "name": "Geçerli ve kullanılmayan bir sunucu adı girin",
       "keys": "En az bir SSH anahtarı seçin"
     },
-    "passwordGeneratedNotCopied": "Güçlü bir parola üretildi ama panoya kopyalanamadı. Alanda gösterip not edin."
+    "passwordGeneratedNotCopied": "Güçlü bir parola üretildi ama panoya kopyalanamadı. Alanda gösterip not edin.",
+    "projectQuotaExceeded": "Seçilen projenin kotası aşılıyor: {limits}.",
+    "quotaUse": {
+      "ofProject": "“{name}” projesinin kotası",
+      "ofAccount": "Kotanız",
+      "after": "{after} / {max}",
+      "afterHelp": "Bu sunucuyla birlikte varacağı durum.",
+      "servers": "{used} / {max} sunucu",
+      "vcpu": "{used} / {max} vCPU",
+      "memory": "{used} / {max} GB RAM",
+      "disk": "{used} / {max} GB disk",
+      "unlimited": "sınır tanımlı değil"
+    }
   },
   "Catalog": {
     "eyebrow": "YÖNETİM · KATALOG",
@@ -1609,7 +1624,7 @@
     },
     "quotas": {
       "title": "Kotalar",
-      "explain": "Varsayılan kota herkese uygulanır; kullanıcıya özel kota varsayılanın yerine geçer. Boş bırakılan alan sınırsızdır.",
+      "explain": "Varsayılan kota herkese uygulanır; kullanıcıya özel kota varsayılanın yerine geçer, projeye özel kota da o projeye sipariş edilen sunucular için sahibinin kotasının yerine geçer. Boş bırakılan alan sınırsızdır. Kullanıcı ve proje satırlarında her sınırın yanında kullanılan miktar görünür.",
       "scope": "Kapsam",
       "default": "Varsayılan",
       "servers": "Sunucu",
@@ -1631,9 +1646,15 @@
       "removeTitle": "{email} kotası kaldırılsın mı?",
       "removeBody": "Kullanıcı yeniden varsayılan kotaya ve rolünün sınırlarına tabi olur. Çalışan sunucularına dokunulmaz.",
       "removed": "Kota kaldırıldı: {email}",
-      "searchUser": "Aramak için e-posta yazın",
+      "searchUser": "Aramak için e-posta ya da proje adı yazın",
       "hasOwn": "Bu kullanıcının zaten kendi kotası var; kaydetmek onu değiştirir.",
-      "fromDefault": "Bu kullanıcının henüz kendi kotası yok; alanlar varsayılan kotadan başlar."
+      "fromDefault": "Bu kullanıcının henüz kendi kotası yok; alanlar varsayılan kotadan başlar.",
+      "project": "Proje",
+      "projectOf": "{project} ({email} projesi)",
+      "projectHasOwn": "Bu projenin zaten kendi kotası var; kaydetmek onu değiştirir.",
+      "projectFromOwner": "Bu projenin henüz kendi kotası yok; alanlar bugün ona uygulanandan başlar (sahibinin kotası ya da varsayılan).",
+      "projectHelp": "Proje kotası, o projeye sipariş edilen sunucular için sahibinin kotasının yerine geçer ve yalnızca o projenin sunucularını sayar. Proje dışındaki siparişler sahibinin kotasına tabi kalır.",
+      "removeProjectBody": "Proje yeniden sahibinin kotasına tabi olur. Çalışan sunucularına dokunulmaz."
     },
     "removeConfirm": "“{name}” kaldırılsın mı? Bu işlem geri alınamaz.",
     "cancel": "Vazgeç",
@@ -1677,7 +1698,7 @@
       "range": "Adres aralığı",
       "rangeHelp": "Sunuculara bu aralıktan sırayla adres verilir. Dışarıda tutulanlar atlanır.",
       "dnsServers": "DNS sunucuları",
-      "scopeHelp": "Varsayılan herkese uygulanır; kullanıcı seçerseniz yalnızca ona.",
+      "scopeHelp": "Varsayılan herkese uygulanır; kullanıcı ya da proje seçerseniz yalnızca ona.",
       "limits": "Sınırlar"
     },
     "ipm": {

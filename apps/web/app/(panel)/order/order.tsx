@@ -29,7 +29,11 @@ type Catalog = { packages: { id: string; name: string; vcpu: number; memoryMb: n
   locations: OrderLocation[];
   pools: ({ id: string; name: string; location: string; locationId: string | null; custom: Custom | null; extraIpv4Max: number; extraIpv4Price: string; ipv6: boolean } & Platformed)[]; images: { id: string; name: string; family: string; minDiskGb: number; poolIds?: string[] }[];
   applications: { id: string; name: string; kind: string; description: string; minMemoryMb: number; minDiskGb: number; priceMonthly: string; available: boolean }[] };
-type Quote = { shape: { vcpu: number; memoryMb: number; diskGb: number }; price: { monthly: string; currency: string }; quota: { exceeded: string[] }; capacityAvailable: boolean;
+// quota.scope: 'project' when the chosen project has a quota of its own (it then decides instead of the account's).
+// limits / usage: absent from an older API.
+type Quote = { shape: { vcpu: number; memoryMb: number; diskGb: number }; price: { monthly: string; currency: string };
+  quota: { exceeded: string[]; scope?: 'project' | 'account'; usage?: { servers: number; vcpu: number; memoryMb: number; diskGb: number };
+    limits?: { max_servers: number | null; max_vcpu: number | null; max_memory_mb: number | null; max_disk_gb: number | null } }; capacityAvailable: boolean;
   budget: { amount: number; currency: string; monthly: number; state: 'ok' | 'near' | 'over' } | null;
   coupon: { code: string; monthly: string; periods: number | null } | { error: string } | null };
 type Project = { id: string; name: string };
@@ -64,7 +68,8 @@ export default function Order() {
   const mineQ = useApiQuery<{ servers: { name: string }[] }>(['servers'], '/servers');
   const mine = mineQ.data?.servers ?? [];
   const keysQ = useApiQuery<{ keys: { id: string }[] }>(['ssh-keys'], '/ssh-keys');
-  const availability = useApiQuery<Availability>(['availability', d.poolId], d.poolId ? `/catalog/availability?poolId=${d.poolId}` : null).data;
+  // For the chosen project: when it has a quota of its own, that one says which packages still fit.
+  const availability = useApiQuery<Availability>(['availability', d.poolId, d.projectId], d.poolId ? `/catalog/availability?poolId=${d.poolId}${d.projectId ? `&projectId=${d.projectId}` : ''}` : null).data;
   const [failure, setFailure] = useState<ApiError & { text: string }>();
   const [busy, setBusy] = useState(false);
   const [nameError, setNameError] = useState<string>();
@@ -166,6 +171,17 @@ export default function Order() {
     !nameOk && { key: 'name', at: t('access') },
     !d.sshKeyIds.length && { key: 'keys', at: t('access') },
   ].filter((m): m is { key: 'image' | 'plan' | 'name' | 'keys'; at: string } => !!m);
+  // The quota this order counts against (the project's own, or the account's), as it would stand after the order.
+  const projectQuota = quote.data?.quota.scope === 'project';
+  const quotaRows = (() => {
+    const q = quote.data?.quota;
+    if (!q?.limits || !q.usage) return [];
+    const gb = (mb: number) => format.number(mb / 1024, { maximumFractionDigits: 1 });
+    const s = quote.data!.shape;
+    return ([['servers', q.limits.max_servers, q.usage.servers + 1, String], ['vcpu', q.limits.max_vcpu, q.usage.vcpu + s.vcpu, String],
+      ['memoryMb', q.limits.max_memory_mb, q.usage.memoryMb + s.memoryMb, (n: number) => `${gb(n)} GB`], ['diskGb', q.limits.max_disk_gb, q.usage.diskGb + s.diskGb, (n: number) => `${n} GB`]] as const)
+      .filter(([, max]) => max != null).map(([key, max, after, show]) => ({ key, after: show(after), max: show(max!), over: after > max! }));
+  })();
   const canCreate = ready && !missing.length && quote.data && !quote.data.quota.exceeded.length && quote.data.capacityAvailable && !couponError && !mustVerify;
   const jump = (title: string) => document.querySelector(`[data-section="${CSS.escape(title)}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   const steps = [
@@ -348,7 +364,14 @@ export default function Order() {
                     </form>)}
                   {quote.data.budget && quote.data.budget.state !== 'ok' && <p className={`flex items-start gap-1.5 text-sm ${quote.data.budget.state === 'over' ? 'text-danger' : 'text-warning'}`}>
                     <I name="wallet" size={15} className="mt-0.5 shrink-0"/>{t(quote.data.budget.state === 'over' ? 'budgetOver' : 'budgetNear', { monthly: money(quote.data.budget.monthly, quote.data.budget.currency), amount: money(quote.data.budget.amount, quote.data.budget.currency) })}</p>}
-                  {quote.data.quota.exceeded.length > 0 && <p className="text-danger">{t('quotaExceeded', { limits: quote.data.quota.exceeded.map((x) => t(`quota.${x as 'vcpu'}`)).join(', ') })}</p>}
+                  {quotaRows.length > 0 && <div data-testid="order-quota" className="flex flex-col gap-1 rounded-lg border border-border p-2.5 text-xs">
+                    <p className="font-medium [overflow-wrap:anywhere]">{projectQuota ? t('quotaUse.ofProject', { name: projects.find((p) => p.id === d.projectId)?.name ?? '' }) : t('quotaUse.ofAccount')}</p>
+                    <dl className="grid grid-cols-[1fr_auto] gap-x-3 gap-y-0.5">{quotaRows.map((r) => <div key={r.key} className="contents">
+                      <dt className="text-muted">{t(`quota.${r.key}`)}</dt>
+                      <dd className={`text-right tabular-nums ${r.over ? 'font-medium text-danger' : ''}`}>{t('quotaUse.after', { after: r.after, max: r.max })}</dd></div>)}</dl>
+                    <p className="text-muted">{t('quotaUse.afterHelp')}</p>
+                  </div>}
+                  {quote.data.quota.exceeded.length > 0 && <p className="text-danger" role="status">{t(projectQuota ? 'projectQuotaExceeded' : 'quotaExceeded', { limits: quote.data.quota.exceeded.map((x) => t(`quota.${x as 'vcpu'}`)).join(', ') })}</p>}
                   {!quote.data.capacityAvailable && <p className="text-danger">{t('noCapacity')}</p>}
                 </motion.div>}
             {failure && <p role="alert" className="text-danger">{failure.text}</p>}

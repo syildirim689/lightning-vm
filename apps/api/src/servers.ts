@@ -8,7 +8,7 @@ import { apiError } from './errors';
 import { actedOn, actingFor, audit, SessionGuard, type AuthedRequest } from './auth';
 import { Can, PermissionGuard } from './rbac';
 import { can, limitsOf, type Permission } from './permissions';
-import { capacityOf, limitsFor, resolveOrder, usageOf } from './catalog';
+import { capacityOf, limitsFor, quotaExceeded, resolveOrder, usageOf } from './catalog';
 import { orderNeedsVerifiedAddress } from './address-check';
 import { capabilitiesOf, exceededQuota } from './capacity';
 import { checkBudget } from './budget';
@@ -252,7 +252,7 @@ async function resizeTarget(req: AuthedRequest, server: Record<string, any>, bod
   const more = { vcpu: Math.max(0, shape.vcpu - server.vcpu), memoryMb: Math.max(0, shape.memoryMb - server.memory_mb), diskGb: Math.max(0, shape.diskGb - server.disk_gb) };
   // The billing system's own change of package is not held to the account's quota (as its order is not).
   const over = forBilling(req) ? [] : exceededQuota({ ...(await limitsFor(server.owner_id, server.project_id ?? undefined)), max_servers: null }, await usageOf(server.owner_id, server.project_id ?? undefined), more);
-  if (over.length) throw apiError(409, 'QUOTA_EXCEEDED', 'Quota exceeded', Object.fromEntries(over.map((o) => [o, 'QUOTA_EXCEEDED'])));
+  if (over.length) throw quotaExceeded(await limitsFor(server.owner_id, server.project_id ?? undefined), over);
   const cap = await capacityOf(order.rp);
   if (more.vcpu > cap.available.vcpu || more.memoryMb > cap.available.memoryMb || more.diskGb > cap.available.storageGb) throw apiError(409, 'CAPACITY_EXHAUSTED', 'Not enough capacity in this location');
   const reseller = await resellerOf(server.owner_id);
@@ -572,8 +572,10 @@ export class ServersController {
       if (again.rowCount) { await client.query('ROLLBACK'); return (await replay(key, requestHash))!; }
       if (vdc) await checkVdcRoom(client, vdc.vdcId, order.shape); // reserved in the pool already; the VDC's own limits apply
       else {
-        const over = external ? [] : exceededQuota(await limitsFor(req.user.id, projectId ?? undefined, client), await usageOf(req.user.id, projectId ?? undefined, client), order.shape);
-        if (over.length) throw apiError(409, 'QUOTA_EXCEEDED', 'Quota exceeded', Object.fromEntries(over.map((o) => [o, 'QUOTA_EXCEEDED'])));
+        // The project's own quota when it has one (PROJECT_QUOTA_EXCEEDED), else the account's (QUOTA_EXCEEDED).
+        const quota = await limitsFor(req.user.id, projectId ?? undefined, client);
+        const over = external ? [] : exceededQuota(quota, await usageOf(req.user.id, projectId ?? undefined, client), order.shape);
+        if (over.length) throw quotaExceeded(quota, over);
         const cap = await capacityOf(order.rp, client);
         if (order.shape.vcpu > cap.available.vcpu || order.shape.memoryMb > cap.available.memoryMb || order.shape.diskGb > cap.available.storageGb) {
           throw apiError(409, 'CAPACITY_EXHAUSTED', 'Not enough capacity in this location');

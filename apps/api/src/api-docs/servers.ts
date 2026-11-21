@@ -179,7 +179,7 @@ export default {
     ],
     example: { type: 'package', poolId: '2f1c6a0e-5d3b-4a8e-9c71-0b6f4e2d1a93', packageId: '7b9e2c41-3f6d-4e8a-a1c5-92d0e6f7b384', imageId: 'c4d8a1f2-6e3b-4b7a-8d9c-1e2f3a4b5c6d', name: 'web-1', sshKeyIds: ['5a6b7c8d-9e0f-4a1b-8c2d-3e4f5a6b7c8d'], firewallIds: [], extraIpv4: 0 },
     returns: { tr: '`serverId`, `operation`; gerekirse `passwordReplaced`, `invoiceId` ve `awaitingPayment`.', en: '`serverId`, `operation`; when relevant `passwordReplaced`, `invoiceId` and `awaitingPayment`.' },
-    errors: ['FORBIDDEN', 'IDEMPOTENCY_KEY_REQUIRED', 'IDEMPOTENCY_MISMATCH', 'VALIDATION_FAILED', 'NOT_FOUND', 'LOCATION_UNAVAILABLE', 'LOCATION_NOT_ALLOWED', 'QUOTA_EXCEEDED', 'CAPACITY_EXHAUSTED', 'IP_EXHAUSTED', 'BALANCE_TOO_LOW', 'PROVISIONING_NOT_SUPPORTED', 'FIREWALL_NOT_SUPPORTED', 'VDC_LIMIT', 'VDC_INACTIVE', 'RESELLER_ALLOCATION_EXCEEDED', 'EMAIL_NOT_VERIFIED'],
+    errors: ['FORBIDDEN', 'IDEMPOTENCY_KEY_REQUIRED', 'IDEMPOTENCY_MISMATCH', 'VALIDATION_FAILED', 'NOT_FOUND', 'LOCATION_UNAVAILABLE', 'LOCATION_NOT_ALLOWED', 'QUOTA_EXCEEDED', 'PROJECT_QUOTA_EXCEEDED', 'CAPACITY_EXHAUSTED', 'IP_EXHAUSTED', 'BALANCE_TOO_LOW', 'PROVISIONING_NOT_SUPPORTED', 'FIREWALL_NOT_SUPPORTED', 'VDC_LIMIT', 'VDC_INACTIVE', 'RESELLER_ALLOCATION_EXCEEDED', 'EMAIL_NOT_VERIFIED'],
     idempotencyKey: true,
   },
   'GET /servers/:id/root-password': {
@@ -237,7 +237,7 @@ export default {
     body: shapeFields,
     example: { type: 'custom', vcpu: 4, memoryMb: 8192, diskGb: 120 },
     returns: { tr: '`shape`, yeni `priceMonthly`, `currency`, şimdi ödenecek `chargeNow` ve dönem sonu `periodEnd`.', en: '`shape`, the new `priceMonthly`, `currency`, `chargeNow` due today and `periodEnd`.' },
-    errors: ['NOT_FOUND', 'ACTION_NOT_PERMITTED', 'ACTION_DISABLED', 'VALIDATION_FAILED', 'VDC_SERVER', 'LOCATION_UNAVAILABLE', 'LOCATION_NOT_ALLOWED', 'QUOTA_EXCEEDED', 'CAPACITY_EXHAUSTED', 'RESELLER_ALLOCATION_EXCEEDED'],
+    errors: ['NOT_FOUND', 'ACTION_NOT_PERMITTED', 'ACTION_DISABLED', 'VALIDATION_FAILED', 'VDC_SERVER', 'LOCATION_UNAVAILABLE', 'LOCATION_NOT_ALLOWED', 'QUOTA_EXCEEDED', 'PROJECT_QUOTA_EXCEEDED', 'CAPACITY_EXHAUSTED', 'RESELLER_ALLOCATION_EXCEEDED'],
   },
   'POST /servers/:id/resize': {
     tag: 'servers',
@@ -247,7 +247,7 @@ export default {
     body: shapeFields,
     example: { type: 'package', packageId: '7b9e2c41-3f6d-4e8a-a1c5-92d0e6f7b384' },
     returns: { tr: '`serverId`, `operation`; bir tutar kesildiyse `invoiceId`.', en: '`serverId`, `operation`; `invoiceId` when something was invoiced.' },
-    errors: ['VALIDATION_FAILED', 'VDC_SERVER', 'QUOTA_EXCEEDED', 'CAPACITY_EXHAUSTED', 'RESELLER_ALLOCATION_EXCEEDED', 'DISK_HAS_SNAPSHOTS', ...opErrors],
+    errors: ['VALIDATION_FAILED', 'VDC_SERVER', 'QUOTA_EXCEEDED', 'PROJECT_QUOTA_EXCEEDED', 'CAPACITY_EXHAUSTED', 'RESELLER_ALLOCATION_EXCEEDED', 'DISK_HAS_SNAPSHOTS', ...opErrors],
     idempotencyKey: true,
   },
   'POST /servers/:id/reinstall': {
@@ -592,7 +592,7 @@ export default {
     body: [{ name: 'sizeGb', type: 'integer', required: true, text: { tr: 'Disk boyutu, 1–16384 GB.', en: 'Disk size, 1–16384 GB.' } }],
     example: { sizeGb: 100 },
     returns: { tr: '`diskId`, `operation`; bir tutar kesildiyse `invoiceId`.', en: '`diskId`, `operation`; `invoiceId` when something was invoiced.' },
-    errors: ['NOT_FOUND', 'ACTION_NOT_PERMITTED', 'ACTION_DISABLED', 'INVALID_SERVER_STATE', 'VDC_SERVER', 'VALIDATION_FAILED', 'EXTRA_DISKS_NOT_SOLD', 'DISK_LIMIT', 'QUOTA_EXCEEDED', 'CAPACITY_EXHAUSTED', 'RESELLER_ALLOCATION_EXCEEDED', 'BILLING_HOLD', 'OPERATION_RATE_LIMITED', 'OPERATION_IN_PROGRESS'],
+    errors: ['NOT_FOUND', 'ACTION_NOT_PERMITTED', 'ACTION_DISABLED', 'INVALID_SERVER_STATE', 'VDC_SERVER', 'VALIDATION_FAILED', 'EXTRA_DISKS_NOT_SOLD', 'DISK_LIMIT', 'QUOTA_EXCEEDED', 'PROJECT_QUOTA_EXCEEDED', 'CAPACITY_EXHAUSTED', 'RESELLER_ALLOCATION_EXCEEDED', 'BILLING_HOLD', 'OPERATION_RATE_LIMITED', 'OPERATION_IN_PROGRESS'],
   },
   'DELETE /servers/:id/disks/:diskId': {
     tag: 'server-data',

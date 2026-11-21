@@ -77,11 +77,30 @@ fiziksel çekirdeklerde çalışır. Arayüz bunu sipariş ekranında açıkça 
 - **Kota sırası:** kullanıcıya özel kota varsa o uygulanır; yoksa varsayılan kota, kullanıcının rolünün sınırlarıyla
   birlikte (docs/auth.md, Rol sınırları). Boş bırakılan bir sınır sınırsızdır. Sınırlar: sunucu sayısı, vCPU, RAM
   ve disk.
-- **Proje kotası yok:** kod bir `project` kapsamlı kota satırını okuyabilir, ama onu oluşturan bir ekran ya da API
-  ucu yoktur; pratikte hiçbir projenin kendi kotası olmaz. Bu yüzden projedeki sunucular **sahibinin** kotasından
-  sayılır: proje açmak kotayı büyütmez. (Böyle bir satır veritabanına elle eklenirse o projenin kullanımı ayrı sayılır.)
-- **Fiyat teklifi:** teklif ekranı yeni bir sunucunun hangi sınırları aşacağını gösterir. Kullanım, silinmemiş
-  sunuculardan hesaplanır.
+- **Proje kotası:** personel (`catalog.manage`) bir projeye kendi kotasını verebilir: Katalog → Kotalar → "Kota
+  ata" → kapsam alanında proje adı ya da sahibinin e-postası yazılır (`PUT /api/admin/quotas/projects/:id`,
+  kaldırma `DELETE`; ikisi de denetim kaydına `catalog.quota_set` / `catalog.quota_removed` olarak yazılır).
+  - Proje kotası, **o projeye verilen siparişlerde** sahibinin kotasının (kullanıcıya özel ya da varsayılan + rol)
+    **yerine geçer** ve yalnızca o projenin sunucularını sayar. Sahibinin kotasından dar da geniş de olabilir; bu
+    yüzden onu sahibi değil personel tanımlar.
+  - Proje dışındaki (ya da kendi kotası olmayan projedeki) siparişler hesabın kotasına tabidir ve hesabın **bütün**
+    sunucuları sayılır (kotası olan projedekiler de). Proje açmak tek başına kotayı büyütmez.
+  - Aşıldığında sipariş, boyut büyütme ve ek disk `409 PROJECT_QUOTA_EXCEEDED` ile reddedilir (alanlar hangi
+    sınırın aşıldığını söyler: `servers`, `vcpu`, `memoryMb`, `diskGb`); hesabın kotasında kod eskisi gibi
+    `QUOTA_EXCEEDED`'dir. Aynı anda gelen iki sipariş son yeri birlikte alamaz (sipariş, sahibin satırı kilitliyken
+    sayar).
+  - Sunucunun projesi yalnızca siparişte seçilir, sonradan değiştirilemez. Proje silinirse kotası da silinir;
+    sunucuları projesiz kalır ve hesabın kotasına sayılır. Aynı adla açılan yeni proje kotasız başlar.
+  - Kotalar listesi kullanıcı ve proje satırlarında her sınırın yanında **kullanılanı** gösterir ("3 / 5").
+- **Müşteri ne görür:** Hesabım → Projeler, kendi kotası olan projede sınırları ve kullanımı yazar. Sipariş
+  özeti, siparişin sayılacağı kotayı (seçilen projenin kotası ya da "Kotanız") **bu sunucuyla birlikte varacağı
+  durumla** gösterir; aşılan sınır kırmızıdır, hangi kotanın aşıldığı yazılır ve "Sunucu oluştur" kapanır. Paket
+  listesindeki "kotanızı aşıyor" gerekçesi de seçilen projeye göre hesaplanır.
+- **Fiyat teklifi:** teklif (`POST /api/catalog/quote`) kotanın kime ait olduğunu (`scope`: `project` / `account`),
+  sınırları, bugünkü kullanımı ve yeni sunucunun hangi sınırları aşacağını döner. Kullanım, silinmemiş
+  sunuculardan hesaplanır (sanal veri merkezindekiler sayılmaz).
+- **Denenmeyen:** proje kotası gerçek bir hipervizörde sunucu kurarak denenmedi; testler siparişin kabul ya da
+  reddedildiği ana kadar gider (`apps/api/test/integration/project-quota.test.mjs`, hipervizörsüz bir konumla).
 - **Projeler:** projeler sahibine aittir. Sorgular sahipliği kendisi kontrol eder; başka bir kullanıcının
   proje kimliğini bilmek ona erişim sağlamaz (`404`).
 

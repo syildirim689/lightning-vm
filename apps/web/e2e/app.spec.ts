@@ -2618,7 +2618,7 @@ test.describe('people, settings and smart features (English browser)', () => {
     await page.getByRole('button', { name: 'Set quota' }).click();
     const dialog = page.getByRole('dialog');
     await dialog.getByRole('combobox', { name: 'Scope' }).fill('admin@');
-    await page.getByRole('option', { name: 'admin@example.test' }).click();
+    await page.getByRole('option', { name: 'admin@example.test', exact: true }).click();
     await expect(dialog.getByText('no quota of their own yet')).toBeVisible();
     await dialog.getByRole('textbox', { name: 'Maximum servers' }).fill('7');
     await dialog.getByRole('button', { name: 'Save quota' }).click();
@@ -2635,6 +2635,101 @@ test.describe('people, settings and smart features (English browser)', () => {
     await row.getByRole('button', { name: 'Remove the quota of admin@example.test' }).click();
     await page.getByRole('alertdialog').getByRole('button', { name: 'Remove quota' }).click();
     await expect(page.getByRole('row', { name: /admin@example\.test/ })).toHaveCount(0);
+  });
+
+  test('project quotas: staff give a project its own quota; its owner sees the use of it on the project and on the order page, and an order over it is refused', async ({ page, browser }) => {
+    await signInAdmin(page);
+    const csrf = { 'x-lightning-csrf': '1' };
+    const owner = { email: `quota-${Date.now()}@example.test`, password: 'e2e quota passphrase 2026' };
+    const customer = await (await browser.newContext({ locale: 'en-US' })).newPage();
+    try {
+      // A customer with a project.
+      await customer.goto('/register');
+      await customer.getByLabel('Email').fill(owner.email);
+      await customer.getByLabel('Password').fill(owner.password);
+      await customer.getByRole('button', { name: 'Create account' }).click();
+      await expect(customer).toHaveURL(/\/$/);
+      await customer.goto('/account?tab=projects');
+      await customer.getByLabel('Project name').fill('Quota lab');
+      await customer.getByRole('button', { name: 'Create project' }).click();
+      await expect(customer.getByText('Project created.').first()).toBeVisible();
+      await expect(customer.getByText('Project quota:')).toHaveCount(0);
+
+      // Staff: Catalog → Quotas → the project is found by its name, and its form says where the numbers start from.
+      await page.goto('/admin/catalog?tab=quotas');
+      await page.getByRole('button', { name: 'Set quota' }).click();
+      const dialog = page.getByRole('dialog');
+      await dialog.getByRole('combobox', { name: 'Scope' }).fill('Quota lab');
+      await page.getByRole('option', { name: `Quota lab (project of ${owner.email})` }).click();
+      await expect(dialog.getByText('This project has no quota of its own yet')).toBeVisible();
+      await expect(dialog.getByText('A project quota replaces its owner\'s quota')).toBeVisible();
+      await dialog.getByRole('textbox', { name: 'Maximum servers' }).fill('1');
+      await dialog.getByRole('textbox', { name: 'Maximum vCPU' }).fill('0');
+      await dialog.getByRole('button', { name: 'Save quota' }).click();
+      await expect(dialog).toBeHidden();
+      const row = page.getByRole('row', { name: /Quota lab/ });
+      await expect(row).toContainText(owner.email);
+      await expect(row).toContainText('Project');
+      await expect(row).toContainText('0 / 1');
+      // Editing opens on that project, with its own values.
+      await row.getByRole('button', { name: `Edit the quota of Quota lab (project of ${owner.email})` }).click();
+      await expect(dialog.getByText('This project already has a quota of its own')).toBeVisible();
+      await expect(dialog.getByRole('textbox', { name: 'Maximum servers' })).toHaveValue('1');
+      await dialog.getByRole('button', { name: 'Cancel' }).click();
+      await expect(dialog).toBeHidden();
+      await page.setViewportSize({ width: 390, height: 844 });
+      await expectNoOverflow(page, 'quotas with a project row at 390 px');
+      await page.setViewportSize({ width: 1280, height: 720 });
+
+      // The owner: the project carries its quota and what is used of it.
+      await customer.goto('/account?tab=projects');
+      await expect(customer.getByText('Project quota:')).toBeVisible();
+      await expect(customer.getByText('0 of 1 servers · 0 of 0 vCPU')).toBeVisible();
+      // The order page, with a package of the catalog: without the project the account's quota is shown and fits.
+      const catalog = await (await customer.request.get('/api/catalog')).json() as { packages: { id: string; poolIds: string[]; imageIds: string[] }[]; images: { id: string; poolIds?: string[] }[] };
+      const pkg = catalog.packages.find((p) => p.poolIds.length)!;
+      const image = catalog.images.find((i) => (!pkg.imageIds.length || pkg.imageIds.includes(i.id)) && (!i.poolIds || i.poolIds.includes(pkg.poolIds[0])))!;
+      expect(pkg && image, 'the catalog offers a package with an image').toBeTruthy();
+      await customer.goto(`/order?loc=${pkg.poolIds[0]}&pkg=${pkg.id}&image=${image.id}`);
+      const quota = customer.getByTestId('order-quota');
+      await expect(quota).toContainText('Your quota');
+      await expect(customer.getByText('This exceeds the quota of the chosen project')).toHaveCount(0);
+      // With the project chosen its own quota decides: it is named, shown as it would stand, and says what does not fit.
+      await choose(customer, customer, 'Project', 'Quota lab');
+      await expect(quota).toContainText('Quota of the project “Quota lab”');
+      await expect(quota).toContainText('1 of 1');
+      await expect(customer.getByText('This exceeds the quota of the chosen project: vCPU.')).toBeVisible();
+      await expect(customer.getByRole('button', { name: 'Create server' })).toBeDisabled();
+      await customer.setViewportSize({ width: 390, height: 844 });
+      await expectNoOverflow(customer, 'order page with a project quota at 390 px');
+      await tour(quota, 'order-project-quota-phone');
+      await customer.emulateMedia({ colorScheme: 'dark' });
+      await tour(quota, 'order-project-quota-phone-dark');
+      await customer.emulateMedia({ colorScheme: 'light' });
+      await customer.setViewportSize({ width: 1280, height: 720 });
+      // The API refuses the order itself, with the project's own code; nothing is created.
+      const projectId = (await (await customer.request.get('/api/projects')).json()).projects[0].id;
+      const sshKey = (await (await customer.request.post('/api/ssh-keys', { headers: csrf,
+        data: { name: 'e2e-quota', publicKey: 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMa0iBTtZu9kbSNXzg5M6pZ1rn8F1143iWq3JIcGimfn e2e' } })).json() as { id: string }).id;
+      expect(sshKey).toBeTruthy();
+      const refused = await customer.request.post('/api/servers', { headers: { ...csrf, 'idempotency-key': `e2e-quota-${Date.now()}` },
+        data: { type: 'package', poolId: pkg.poolIds[0], packageId: pkg.id, imageId: image.id, name: 'quota-lab-1', sshKeyIds: [sshKey], projectId } });
+      const answer = await refused.json();
+      expect([refused.status(), answer.code, answer.fields]).toEqual([409, 'PROJECT_QUOTA_EXCEEDED', { vcpu: 'QUOTA_EXCEEDED' }]);
+      expect((await (await customer.request.get('/api/servers')).json()).servers).toHaveLength(0);
+
+      // Staff remove the quota: the project is back under its owner's.
+      await page.goto('/admin/catalog?tab=quotas');
+      await row.getByRole('button', { name: `Remove the quota of Quota lab (project of ${owner.email})` }).click();
+      await expect(page.getByRole('alertdialog')).toContainText('The project goes back to its owner\'s quota.');
+      await page.getByRole('alertdialog').getByRole('button', { name: 'Remove quota' }).click();
+      await expect(page.getByRole('row', { name: /Quota lab/ })).toHaveCount(0);
+      await customer.goto('/account?tab=projects');
+      await expect(customer.getByText('Quota lab')).toBeVisible();
+      await expect(customer.getByText('Project quota:')).toHaveCount(0);
+    } finally {
+      await customer.context().close();
+    }
   });
 
   test('e-mail verification: hidden without mail; an unverified account sees it, cannot order while the rule is on, a wrong code is refused; verified, it is gone', async ({ page, browser }) => {

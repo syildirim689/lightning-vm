@@ -26,7 +26,7 @@ test('money and limits point to billing and to the quota, whatever the operation
     assert.deepEqual(nextStep('power_on', code), { step: 'billing' });
     assert.deepEqual(nextStep('resize', code), { step: 'billing' });
   }
-  for (const code of ['QUOTA_EXCEEDED', 'LIMIT_REACHED', 'VDC_LIMIT']) {
+  for (const code of ['QUOTA_EXCEEDED', 'PROJECT_QUOTA_EXCEEDED', 'LIMIT_REACHED', 'VDC_LIMIT']) {
     assert.deepEqual(nextStep('create', code), { step: 'quota' });
     assert.deepEqual(nextStep('snapshot_create', code), { step: 'quota' });
   }

@@ -17,7 +17,7 @@ const TRANSIENT = new Set(['TIMEOUT', 'SHUTDOWN_TIMEOUT', 'READINESS_TIMEOUT', '
   'ENGINE_BUSY', 'SERVER_BUSY', 'MAINTENANCE_BUSY', 'OPERATION_RATE_LIMITED', 'RATE_LIMITED',
   'VMWARE_SERVICE_UNAVAILABLE', 'DEPENDENCY_UNAVAILABLE', 'SERVICE_UNAVAILABLE', 'STORAGE_UNREACHABLE', 'CONNECTION_REFUSED', 'NETWORK']);
 const BILLING = new Set(['INSUFFICIENT_BALANCE', 'BALANCE_TOO_LOW', 'UNPAID_INVOICE', 'BILLING_HOLD', 'PAYMENT_FAILED', 'PAYMENT_REQUIRED']);
-const QUOTA = new Set(['QUOTA_EXCEEDED', 'LIMIT_REACHED', 'VDC_LIMIT', 'RESELLER_ALLOCATION_EXCEEDED']);
+const QUOTA = new Set(['QUOTA_EXCEEDED', 'PROJECT_QUOTA_EXCEEDED', 'LIMIT_REACHED', 'VDC_LIMIT', 'RESELLER_ALLOCATION_EXCEEDED']);
 // The only operations offered again with one press: they cost nothing, lose nothing and are asked for with no more
 // than the page already knows. Creating, deleting, reinstalling, resizing, restoring (a snapshot or a backup) and
 // everything priced are never retried from here.

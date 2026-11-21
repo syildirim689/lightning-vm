@@ -7,7 +7,7 @@ import { audit, SessionGuard, type AuthedRequest } from './auth';
 import { billResize, resizeCharge } from './billing';
 import { hourlyOf } from './billing-rules';
 import { exceededQuota } from './capacity';
-import { capacityOf, limitsFor, usageOf } from './catalog';
+import { capacityOf, limitsFor, quotaExceeded, usageOf } from './catalog';
 import { pool } from './db';
 import { apiError } from './errors';
 import { Can, PermissionGuard } from './rbac';
@@ -43,8 +43,9 @@ export class DisksController {
     if (p.extra_disk_price_gb === null) throw apiError(409, 'EXTRA_DISKS_NOT_SOLD', 'This location does not sell extra disks');
     if ((await pool.query("SELECT 1 FROM server_disks WHERE server_id = $1 AND status <> 'failed'", [id])).rowCount! >= MAX_EXTRA_DISKS) throw apiError(409, 'DISK_LIMIT', 'Too many extra disks');
     // The owner's quota and the location's free storage, as for any disk.
-    const over = exceededQuota({ ...(await limitsFor(s.owner_id, s.project_id ?? undefined)), max_servers: null }, await usageOf(s.owner_id, s.project_id ?? undefined), { vcpu: 0, memoryMb: 0, diskGb: size });
-    if (over.length) throw apiError(409, 'QUOTA_EXCEEDED', 'Quota exceeded', { sizeGb: 'QUOTA_EXCEEDED' });
+    const quota = await limitsFor(s.owner_id, s.project_id ?? undefined);
+    const over = exceededQuota({ ...quota, max_servers: null }, await usageOf(s.owner_id, s.project_id ?? undefined), { vcpu: 0, memoryMb: 0, diskGb: size });
+    if (over.length) throw quotaExceeded(quota, over, { sizeGb: 'QUOTA_EXCEEDED' });
     if (size > (await capacityOf(p)).available.storageGb) throw apiError(409, 'CAPACITY_EXHAUSTED', 'Not enough storage in this location');
     const reseller = await resellerOf(s.owner_id);
     if (reseller) await checkResellerRoom(reseller, { servers: 0, vcpu: 0, memoryMb: 0, diskGb: size });

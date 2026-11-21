@@ -334,8 +334,32 @@ export default {
   },
   'GET /admin/quotas': {
     tag: 'admin-catalog',
-    summary: { tr: 'Varsayılan ve kullanıcıya özel kotaları listeler.', en: 'Lists the default and per-user quotas.' },
-    returns: { tr: '{ quotas: [{ scope, subjectId, email, maxServers, maxVcpu, maxMemoryMb, maxDiskGb }] }', en: '{ quotas: [{ scope, subjectId, email, maxServers, maxVcpu, maxMemoryMb, maxDiskGb }] }' },
+    summary: { tr: 'Varsayılan kotayı, kullanıcıya ve projeye özel kotaları listeler.', en: 'Lists the default quota and the per-user and per-project quotas.' },
+    details: { tr: '`scope`: `default`, `user` ya da `project`. Proje satırında `subjectId` proje kimliğidir, `projectName` adı, `email` ve `ownerId` sahibidir. `usage` o satıra bugün sayılanları verir (kullanıcıda bütün sunucuları, projede yalnızca o projenin sunucuları; sanal veri merkezindekiler sayılmaz); varsayılan satırda null.', en: '`scope`: `default`, `user` or `project`. On a project row `subjectId` is the project id, `projectName` its name, `email` and `ownerId` its owner. `usage` is what counts against that row today (a user: all their servers; a project: only its own; servers inside a virtual data center are not counted); null on the default row.' },
+    returns: { tr: '{ quotas: [{ scope, subjectId, email, projectName, ownerId, maxServers, maxVcpu, maxMemoryMb, maxDiskGb, usage: { servers, vcpu, memoryMb, diskGb } }] }', en: '{ quotas: [{ scope, subjectId, email, projectName, ownerId, maxServers, maxVcpu, maxMemoryMb, maxDiskGb, usage: { servers, vcpu, memoryMb, diskGb } }] }' },
+  },
+  'GET /admin/quotas/projects': {
+    tag: 'admin-catalog',
+    summary: { tr: 'Kota verilebilecek projeleri sahipleriyle listeler.', en: 'Lists the projects a quota can be given to, with their owners.' },
+    returns: { tr: '{ projects: [{ id, name, ownerId, email, servers }] }', en: '{ projects: [{ id, name, ownerId, email, servers }] }' },
+  },
+  'PUT /admin/quotas/projects/:id': {
+    tag: 'admin-catalog',
+    summary: { tr: 'Bir projeye özel kota tanımlar veya günceller.', en: 'Sets or updates a project\'s own quota.' },
+    details: { tr: 'Proje kotası, o projeye verilen siparişlerde sahibinin kotasının (kullanıcıya özel ya da varsayılan) yerine geçer ve yalnızca o projenin sunucularını sayar; sahibinin kotasından geniş de dar da olabilir. Proje dışındaki siparişler hesabın kotasına tabidir ve hesabın bütün sunucuları sayılır. Aşıldığında sipariş, boyut değişikliği ve ek disk `PROJECT_QUOTA_EXCEEDED` ile reddedilir. Denetim kaydına `catalog.quota_set` olarak yazılır.', en: 'A project quota replaces its owner\'s quota (their own or the default) for orders into that project and counts only that project\'s servers; it may be wider or narrower than the owner\'s. Orders outside the project are held to the account\'s quota, counted over all of the account\'s servers. When it is exceeded, an order, a resize and an extra disk are refused with `PROJECT_QUOTA_EXCEEDED`. Audited as `catalog.quota_set`.' },
+    params: [id('Proje.', 'Project.')],
+    body: limitFields,
+    example: { maxServers: 3, maxVcpu: 8, maxMemoryMb: 16384, maxDiskGb: 200 },
+    returns: { tr: 'Kaydedilen sınırlar (max_servers, max_vcpu, max_memory_mb, max_disk_gb).', en: 'The saved limits (max_servers, max_vcpu, max_memory_mb, max_disk_gb).' },
+    errors: ['VALIDATION_FAILED', 'NOT_FOUND'],
+  },
+  'DELETE /admin/quotas/projects/:id': {
+    tag: 'admin-catalog',
+    summary: { tr: 'Projeye özel kotayı kaldırır.', en: 'Removes a project\'s own quota.' },
+    details: { tr: 'Proje yeniden sahibinin kotasına tabi olur. Çalışan sunuculara dokunulmaz.', en: 'The project falls back to its owner\'s quota. Running servers are not touched.' },
+    params: [id('Proje.', 'Project.')],
+    returns: { tr: '204, gövde yok.', en: '204, no body.' },
+    errors: ['NOT_FOUND'],
   },
   'PUT /admin/quotas/default': {
     tag: 'admin-catalog',
@@ -369,7 +393,8 @@ export default {
   'GET /projects': {
     tag: 'catalog',
     summary: { tr: 'Projelerinizi listeler.', en: 'Lists your projects.' },
-    returns: { tr: '{ projects: [{ id, name, createdAt, servers }] }', en: '{ projects: [{ id, name, createdAt, servers }] }' },
+    details: { tr: '`quota`: yönetici projeye özel kota verdiyse sınırları (null: sınırsız) ve projenin sunucularının bunlardan ne kadarını kullandığı; null ise projeye hesabınızın kotası uygulanır.', en: '`quota`: when staff gave the project a quota of its own, its limits (null: unlimited) and how much of them the project\'s servers use; null: your account\'s quota applies to the project.' },
+    returns: { tr: '{ projects: [{ id, name, createdAt, servers, quota: { maxServers, maxVcpu, maxMemoryMb, maxDiskGb, usage: { servers, vcpu, memoryMb, diskGb } } | null }] }', en: '{ projects: [{ id, name, createdAt, servers, quota: { maxServers, maxVcpu, maxMemoryMb, maxDiskGb, usage: { servers, vcpu, memoryMb, diskGb } } | null }] }' },
   },
   'POST /projects': {
     tag: 'catalog',
@@ -382,7 +407,7 @@ export default {
   'DELETE /projects/:id': {
     tag: 'catalog',
     summary: { tr: 'Projeyi siler.', en: 'Deletes a project.' },
-    details: { tr: 'Yalnızca kendi projeniz; başkasının proje kimliğini bilmek yetmez.', en: 'Only your own project; knowing another account\'s project id is not enough.' },
+    details: { tr: 'Yalnızca kendi projeniz; başkasının proje kimliğini bilmek yetmez. Sunucuları silinmez, projesiz kalır; projeye özel kota varsa projeyle birlikte kalkar ve o sunucular hesabın kotasına sayılır.', en: 'Only your own project; knowing another account\'s project id is not enough. Its servers are not deleted, they are left without a project; a quota of its own goes with the project and those servers count against the account\'s quota.' },
     params: [id('Proje.', 'Project.')],
     returns: { tr: 'İçerik yok (204).', en: 'No content (204).' },
     errors: ['NOT_FOUND'],
@@ -397,14 +422,15 @@ export default {
     tag: 'catalog',
     summary: { tr: 'Bir konumdaki paketlerin şu an sipariş edilip edilemeyeceğini söyler.', en: 'Tells which packages of a location can be ordered right now.' },
     details: { tr: 'Her paket için kapasite ve kota durumunu verir; sunucu oluştururken yeniden denetlenir.', en: 'Gives capacity and quota status per package; checked again when the server is created.' },
-    query: [{ name: 'poolId', type: 'uuid', required: true, text: { tr: 'Kaynak havuzu (konum).', en: 'Resource pool (location).' } }],
+    query: [{ name: 'poolId', type: 'uuid', required: true, text: { tr: 'Kaynak havuzu (konum).', en: 'Resource pool (location).' } },
+      { name: 'projectId', type: 'uuid', text: { tr: 'Siparişin verileceği proje; kendi kotası varsa hesabınızınki yerine o uygulanır. Sizin olmayan proje yok sayılır.', en: 'The project the order is for; when it has a quota of its own, that one applies instead of your account\'s. A project that is not yours is ignored.' } }],
     returns: { tr: '{ packages: { <paket id>: { capacity, quota } }, available }', en: '{ packages: { <package id>: { capacity, quota } }, available }' },
     errors: ['NOT_FOUND'],
   },
   'POST /catalog/quote': {
     tag: 'catalog',
     summary: { tr: 'Siparişi doğrular ve fiyatlar.', en: 'Validates an order and prices it.' },
-    details: { tr: 'Sunucu oluşturmaz. Kota, kapasite, bütçe ve kupon durumunu da döner; bütçe aşımı yalnızca uyarıdır. Kupon geçmezse nedeni coupon.error içinde gelir.', en: 'Creates nothing. Also returns quota, capacity, budget and coupon status; a budget overrun is only a warning. A coupon that does not apply comes back with coupon.error.' },
+    details: { tr: 'Sunucu oluşturmaz. Kota, kapasite, bütçe ve kupon durumunu da döner; bütçe aşımı yalnızca uyarıdır. Kupon geçmezse nedeni coupon.error içinde gelir. `quota`: `scope` (`project`: seçilen projenin kendi kotası; `account`: hesabınızın kotası), `limits`, `usage` (bugün sayılanlar) ve `exceeded` (bu siparişle aşılacak sınırlar).', en: 'Creates nothing. Also returns quota, capacity, budget and coupon status; a budget overrun is only a warning. A coupon that does not apply comes back with coupon.error. `quota`: `scope` (`project`: the chosen project\'s own quota; `account`: your account\'s), `limits`, `usage` (what counts today) and `exceeded` (the limits this order would go over).' },
     body: [
       { name: 'poolId', type: 'uuid', required: true, text: { tr: 'Kaynak havuzu (konum).', en: 'Resource pool (location).' } },
       { name: 'type', type: 'string', required: true, values: ['package', 'custom'], text: { tr: 'Paket veya özel boyut.', en: 'Package or custom shape.' } },

@@ -460,11 +460,49 @@ export class CatalogAdminController {
     await audit(req, 'catalog.ip_pool_deleted', 'success', req.user.id, { id });
   }
 
+  // The default row, the users' own and the projects' own. email: the user, or the project's owner; projectName only
+  // on a project's row. usage: what counts against that row today (a user: all their servers outside data centers; a
+  // project: its own), null for the default. A quota whose project is gone is not listed (deleteProject removes it).
   @Get('quotas') @Can('catalog.view', 'catalog.manage')
   async quotas() {
-    const { rows } = await pool.query(`SELECT q.scope, q.subject_id AS "subjectId", u.email, q.max_servers AS "maxServers", q.max_vcpu AS "maxVcpu",
-      q.max_memory_mb AS "maxMemoryMb", q.max_disk_gb AS "maxDiskGb" FROM quotas q LEFT JOIN users u ON u.id = q.subject_id ORDER BY q.scope, u.email`);
+    const { rows } = await pool.query(`SELECT q.scope, q.subject_id AS "subjectId", u.email, p.name AS "projectName", p.owner_id AS "ownerId", q.max_servers AS "maxServers", q.max_vcpu AS "maxVcpu",
+      q.max_memory_mb AS "maxMemoryMb", q.max_disk_gb AS "maxDiskGb",
+      CASE WHEN q.scope = 'default' THEN NULL ELSE (SELECT json_build_object('servers', count(*)::int, 'vcpu', COALESCE(sum(vcpu), 0)::int, 'memoryMb', COALESCE(sum(memory_mb), 0)::int, 'diskGb', COALESCE(sum(${withDisks}), 0)::int)
+        FROM servers WHERE state <> 'deleted' AND vdc_id IS NULL AND (CASE WHEN q.scope = 'project' THEN project_id = q.subject_id ELSE owner_id = q.subject_id END)) END AS usage
+      FROM quotas q LEFT JOIN projects p ON q.scope = 'project' AND p.id = q.subject_id LEFT JOIN users u ON u.id = COALESCE(p.owner_id, q.subject_id)
+      WHERE q.scope <> 'project' OR p.id IS NOT NULL ORDER BY q.scope, u.email, p.name`);
     return { quotas: rows };
+  }
+
+  // Every project with its owner, for the picker of the quota form.
+  @Get('quotas/projects') @Can('catalog.view', 'catalog.manage')
+  async quotaProjects() {
+    const { rows } = await pool.query(`SELECT p.id, p.name, p.owner_id AS "ownerId", u.email,
+      (SELECT count(*)::int FROM servers s WHERE s.project_id = p.id AND s.state <> 'deleted') AS servers FROM projects p JOIN users u ON u.id = p.owner_id ORDER BY u.email, p.name LIMIT 5000`);
+    return { projects: rows };
+  }
+
+  // A project's own quota: it replaces the owner's limits for servers ordered into that project and counts only that
+  // project's servers (limitsFor, usageOf). It can be wider or narrower than the owner's, so staff set it, not the owner.
+  @Put('quotas/projects/:id') @Can('catalog.manage')
+  async setProjectQuota(@Req() req: AuthedRequest, @Param('id', ParseUUIDPipe) id: string, @Body() body: Input) {
+    const l = readLimits(body);
+    const { rows: [p] } = await pool.query('SELECT owner_id FROM projects WHERE id = $1', [id]);
+    if (!p) throw apiError(404, 'NOT_FOUND', 'Unknown project');
+    await guarded(() => pool.query(`INSERT INTO quotas (scope, subject_id, max_servers, max_vcpu, max_memory_mb, max_disk_gb) SELECT 'project', id, $2, $3, $4, $5 FROM projects WHERE id = $1
+      ON CONFLICT (scope, COALESCE(subject_id, '00000000-0000-0000-0000-000000000000')) DO UPDATE
+      SET max_servers=EXCLUDED.max_servers, max_vcpu=EXCLUDED.max_vcpu, max_memory_mb=EXCLUDED.max_memory_mb, max_disk_gb=EXCLUDED.max_disk_gb`,
+      [id, l.max_servers, l.max_vcpu, l.max_memory_mb, l.max_disk_gb]));
+    await audit(req, 'catalog.quota_set', 'success', req.user.id, { scope: 'project', subjectId: id, ownerId: p.owner_id, ...l });
+    return l;
+  }
+
+  // The project goes back to its owner's quota (their own, or the default with their role's limits).
+  @Delete('quotas/projects/:id') @HttpCode(204) @Can('catalog.manage')
+  async removeProjectQuota(@Req() req: AuthedRequest, @Param('id', ParseUUIDPipe) id: string) {
+    const { rowCount } = await pool.query("DELETE FROM quotas WHERE scope = 'project' AND subject_id = $1", [id]);
+    if (!rowCount) throw apiError(404, 'NOT_FOUND', 'This project has no quota of its own');
+    await audit(req, 'catalog.quota_removed', 'success', req.user.id, { scope: 'project', subjectId: id });
   }
 
   @Put('quotas/default') @Can('catalog.manage')
@@ -561,6 +599,16 @@ export async function resolveOrder(poolId: string, body: Input, allowedLocations
   return { rp, shape, price, extraIpv4, application, packageId: body.type === 'package' ? String(body.packageId) : null, imageId: body.imageId ? String(body.imageId) : null, trafficGb };
 }
 
+// Whose limits limitsFor gave: a project's own quota, or the account's (the user's own, or the default with the role's).
+export const quotaScope = (l: Limits): 'project' | 'account' => ((l as Limits & { scope?: string }).scope === 'project' ? 'project' : 'account');
+// The refusal when something does not fit them. A project's quota has its own code, so the page can say which
+// quota it is (the fields say which limits: servers, vcpu, memoryMb, diskGb, or the input that asked for too much).
+export function quotaExceeded(limits: Limits, over: string[], fields?: Record<string, string>) {
+  const project = quotaScope(limits) === 'project';
+  return apiError(409, project ? 'PROJECT_QUOTA_EXCEEDED' : 'QUOTA_EXCEEDED', project ? 'The quota of this project is exceeded' : 'Quota exceeded', fields ?? Object.fromEntries(over.map((o) => [o, 'QUOTA_EXCEEDED'])));
+}
+const camelLimits = (l: Limits) => ({ maxServers: l.max_servers, maxVcpu: l.max_vcpu, maxMemoryMb: l.max_memory_mb, maxDiskGb: l.max_disk_gb });
+
 // Effective limits: project override, else user override, else the role's limits over the default row.
 export async function limitsFor(userId: string, projectId?: string, db: Db = pool): Promise<Limits> {
   const { rows } = await db.query(`SELECT scope, max_servers, max_vcpu, max_memory_mb, max_disk_gb FROM quotas
@@ -576,11 +624,15 @@ export async function limitsFor(userId: string, projectId?: string, db: Db = poo
 
 @Controller() @UseGuards(SessionGuard)
 export class CatalogController {
+  // quota: the project's own quota when staff gave it one (limits, null = unlimited) with what its servers use of it;
+  // null: the account's quota applies to it.
   @Get('projects')
   async projects(@Req() req: AuthedRequest) {
     const { rows } = await pool.query(`SELECT p.id, p.name, p.created_at AS "createdAt",
-      (SELECT count(*)::int FROM servers s WHERE s.project_id = p.id AND s.state <> 'deleted') AS servers FROM projects p WHERE p.owner_id = $1 ORDER BY p.name`, [req.user.id]);
-    return { projects: rows };
+      (SELECT count(*)::int FROM servers s WHERE s.project_id = p.id AND s.state <> 'deleted') AS servers,
+      (SELECT row_to_json(q) FROM (SELECT max_servers, max_vcpu, max_memory_mb, max_disk_gb FROM quotas WHERE scope = 'project' AND subject_id = p.id) q) AS quota
+      FROM projects p WHERE p.owner_id = $1 ORDER BY p.name`, [req.user.id]);
+    return { projects: await Promise.all(rows.map(async (p) => ({ ...p, quota: p.quota ? { ...camelLimits(p.quota), usage: await usageOf(req.user.id, p.id) } : null }))) };
   }
 
   @Post('projects') @HttpCode(201)
@@ -598,7 +650,9 @@ export class CatalogController {
   async deleteProject(@Req() req: AuthedRequest, @Param('id', ParseUUIDPipe) id: string) {
     const { rowCount } = await pool.query('DELETE FROM projects WHERE id = $1 AND owner_id = $2', [id, req.user.id]);
     if (!rowCount) throw apiError(404, 'NOT_FOUND', 'Unknown project');
-    await audit(req, 'project.deleted', 'success', req.user.id, { id });
+    // Its own quota goes with it (the servers stay, without a project, under the account's quota).
+    const { rowCount: quota } = await pool.query("DELETE FROM quotas WHERE scope = 'project' AND subject_id = $1", [id]);
+    await audit(req, 'project.deleted', 'success', req.user.id, { id, ...(quota && { quotaRemoved: true }) });
   }
 
   // What a customer may order: active packages and active pools' custom offerings. No internals.
@@ -638,10 +692,12 @@ export class CatalogController {
   // For the order page: which packages of a location can be ordered right now by this user, and if not, why
   // (no capacity there, over the user's quota). The API checks again on create.
   @Get('catalog/availability')
-  async availability(@Req() req: AuthedRequest, @Query('poolId') poolId?: string) {
+  async availability(@Req() req: AuthedRequest, @Query('poolId') poolId?: string, @Query('projectId') project?: string) {
     const { rows: [rp] } = await pool.query('SELECT * FROM resource_pools WHERE id = $1 AND active', [poolId]).catch(() => ({ rows: [] }));
     if (!rp) throw apiError(404, 'NOT_FOUND', 'Unknown pool');
-    const [cap, limits, usage, { rows: pkgs }] = await Promise.all([capacityOf(rp), limitsFor(req.user.id), usageOf(req.user.id),
+    // The project the order is for, when it is the caller's: its own quota (if it has one) decides instead of the account's.
+    const projectId = project && (await pool.query('SELECT 1 FROM projects WHERE id = $1 AND owner_id = $2', [project, req.user.id]).catch(() => ({ rowCount: 0 }))).rowCount ? project : undefined;
+    const [cap, limits, usage, { rows: pkgs }] = await Promise.all([capacityOf(rp), limitsFor(req.user.id, projectId), usageOf(req.user.id, projectId),
       pool.query('SELECT p.id, p.vcpu, p.memory_mb, p.disk_gb FROM packages p JOIN package_pools pp ON pp.package_id = p.id AND pp.pool_id = $1 WHERE p.active', [rp.id])]);
     const packages = Object.fromEntries(pkgs.map((p) => {
       const shape = { vcpu: p.vcpu, memoryMb: p.memory_mb, diskGb: p.disk_gb };
@@ -668,7 +724,8 @@ export class CatalogController {
       throw apiError(400, 'VALIDATION_FAILED', 'Unknown image', { imageId: 'NOT_AVAILABLE' });
     }
     const limits = await limitsFor(req.user.id, projectId);
-    const over = exceededQuota(limits, await usageOf(req.user.id, projectId), shape);
+    const usage = await usageOf(req.user.id, projectId);
+    const over = exceededQuota(limits, usage, shape);
     const cap = await capacityOf(rp);
     const fits = shape.vcpu <= cap.available.vcpu && shape.memoryMb <= cap.available.memoryMb && shape.diskGb <= cap.available.storageGb;
     // The budget after this order, so the page can warn before it is placed (never a block).
@@ -682,6 +739,7 @@ export class CatalogController {
           return { error: (e.getResponse() as { fields?: Record<string, string> }).fields?.coupon ?? 'COUPON_UNKNOWN' };
         })
       : null;
-    return { shape, price, quota: { limits, exceeded: over }, capacityAvailable: fits, budget, coupon };
+    // scope: whose quota this is ('project': the chosen project's own; 'account': the caller's). usage: what counts against it now.
+    return { shape, price, quota: { limits, exceeded: over, usage, scope: quotaScope(limits) }, capacityAvailable: fits, budget, coupon };
   }
 }

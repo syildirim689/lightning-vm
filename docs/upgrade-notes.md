@@ -15,6 +15,10 @@ Her madde kendi başına yüklenir; veritabanı değişikliği olanlarda migrati
   Giriş güvenliği) kapalı gelir. Postayı istemeyen işletmeci Ayarlar → E-posta → "Adres doğrulama" işaretini
   kaldırır. Yalnızca `.env` içindeki `SMTP_URL` ile posta gönderen kurulumlarda özellik kapalıdır. Veritabanı
   değişikliği yoktur (kodlar Redis'te, 30 dakika). Ayrıntı: [auth.md](auth.md#e-posta-adresi-doğrulama).
+- **Proje başına kota.** Hiçbir projenin kotası yoktur, personel verene kadar da olmaz: mevcut kurulumda davranış
+  değişmez. Veritabanı değişikliği yoktur (`quotas` tablosu `project` kapsamını baştan beri taşıyordu). Kotası olan
+  bir projede sınır aşılınca API `QUOTA_EXCEEDED` yerine `PROJECT_QUOTA_EXCEEDED` döner; bu kodu yalnızca proje
+  kotası tanımlayan kurulumlar görür. Ayrıntı: [catalog.md](catalog.md#kotalar-ve-projeler).
 
 ## 0.4.0 (beta): kurulum betiğinin yeni çıktısı ve sürüm numarası (2026-11-21)
 
