@@ -1142,3 +1142,68 @@ sonra kondu:
   çalıştırılması; panele tarayıcıdan oturum açıp gösterilen sürümün gözle görülmesi (ad kapsayıcıların ortam
   değişkeninden okundu); proje sitesinin güncellenmesi (site sürüm numarası yazmaz). Üç düzeltmenin kendi
   bölümlerindeki "çalıştırılmayanlar" aynen geçerlidir.
+
+## Yönetim → Sistem: sürüm listesi, servislerin ayrıntısı ve yeniden başlatma, hareketli grafikler — 2026-11-23
+
+Sahibin bildirdiği üç kusur (`b467a5f`, test düzeltmesi `e9bd7bc`).
+
+**Bulunan nedenler:**
+- *Sürümler eksikti:* `scripts/install.sh` `do_releases` etiketleri `head -n 10` ile en yeni ona kesiyordu; daha
+  önemlisi liste (`data/maintenance/releases.json`) yalnızca panelden istenen "denetle" ya da güncelleme sonrasında
+  yazılıyordu. Demo komut satırından (`install.sh update --to <commit>`) güncellendiği için listesi
+  2026-11-16'dan kalmıştı ve `v0.3.0`'ı anlatıyordu (`current: v0.3.0-384-gfc25fdd`): `v0.4.0`, `v0.5.0`, `v0.5.1`
+  hiç görünmüyordu. Kararlı kanalın `-rc` etiketlerini göstermemesi bilinçlidir.
+- *`migrate Exited (0)`:* hangi servisin tek seferlik olduğu bilinmiyordu; sayfa Docker'ın ham durum metnini
+  gösteriyor ve sınıflandırmayı ad ve metin üzerinden düzenli ifadeyle tarayıcıda yapıyordu. Ayrıntı, yeniden
+  başlatma ve sürüm hiç yoktu; ajan sürüm, çıkış kodu, yeniden başlatma politikası ve bağlantı noktalarını
+  toplamıyordu.
+- *Grafikler:* her yoklamada çizgi yerinde yeniden çiziliyordu; giriş, geçiş ve üzerine gelme yoktu.
+
+**Çalıştırılanlar:**
+- **API birim testleri:** 214/214 (yeni `host-services.test.mjs` 8/8: tek seferlik işin tanımdan anlaşılması, durum
+  sınıflandırması, eski anlık görüntüyle geriye uyum, sürümler, servis başına kurallar, izin listesi ve
+  reddedilenler, günlük maskeleme). **Web birim testleri** 131/131, `check-messages` (TR/EN anahtarları eşit),
+  `next build` başarılı. `shellcheck -s sh scripts/install.sh` temiz (demo sunucusundaki shellcheck'e stdin ile).
+- **Entegrasyon (geliştirme makinesi, Docker yok; PostgreSQL 18.6 ve Redis 8.0.5 WSL içinde geçici dizinden, iş
+  bitince silindi):** yeni `service-restart` 5/5 (izin, istek dosyası, denetim kaydı, izin listesi, postgres/redis/
+  tek seferlik/compose dışı reddi, aynı anda tek iş, ayrıntı uç noktası ve maskeleme, eski liste uyarısı);
+  dokunulan kodun `monitoring-switch` 4/4 ve `monitoring` 2/2.
+- **Yerel tarayıcı denemesi** (API ve `next start`, önünde küçük bir vekil, elle yazılmış ajan anlık görüntüsü,
+  kurulu Chrome): yeni tarayıcı testi tek başına geçti; "her sayfa 390 px'e sığar" ve izleme testleri geçti.
+  Grafikler bu makinede ölçülemediği için (`/proc` yok) uydurulmuş bir geçmişle ayrıca bakıldı: ilk açılışta
+  soldan çizim, her yoklamada çizgi grubunda tek adımlık kayma (`translateX`), üzerine gelince değer ve saat,
+  azaltılmış hareket isteyen tarayıcıda hiç animasyon yok; her iki temada ekran görüntüsüne gözle bakıldı.
+- **GitHub CI, elle tam çalıştırma `45073488387` (`b467a5f`):** **başarısız.** Yeni "Services snapshot, restart and
+  refusals" adımı gerçek Docker'da geçti (anlık görüntüde migrate `exitCode 0`, `restartPolicy no`, `awaited 1`;
+  simülatör `managed 0`; postgres, redis, migrate restart, worker run, compose dışı ve olmayan servis reddedildi;
+  `service restart worker` ve `service run migrate` başarılı). Tarayıcı paketinde yeni test kaldı: onay iptal
+  edildikten hemen sonra basılan Escape çekmeceye ulaşmadı (odak henüz dönmemişti), 30 geçti, 1 başarısız, 14
+  çalışmadı. Test çekmeceyi kendi kapatma düğmesiyle kapatacak biçimde düzeltildi (`e9bd7bc`); düğme artık panelin
+  dilinde adlandırılır. Escape'in onaydan hemen sonra çekmeceyi kapatmaması klavye için küçük bir kusur olarak
+  kaldı, düzeltilmedi.
+- **GitHub CI, elle tam çalıştırma `45075449200` (`e9bd7bc`):** ilk denemede yeşil, bütün işler geçti.
+  `api-integration` 282 testte 213 geçti, 0 başarısız, 69 atlandı; `compose` işinde servis adımı yine geçti ve
+  tarayıcı paketi **45/45** (14,6 dk).
+- **Demo sunucusu:** `/root/demo-e2e.sh b467a5f`: güncelleme `OK UPDATED`, atılabilir yığında **45/45** (18,7 dk;
+  yeni test burada geçti), demo `/api/ready` 58 yanıtın 58'inde 200, geriye 0 kapsayıcı, 0 birim. Sonra
+  `/root/demo-e2e.sh e9bd7bc`: **45/45** (18,5 dk), `/api/ready` 57/57 200, sonrasında 200, geriye 0 kapsayıcı.
+  İlk güncelleme henüz eski betikle çalıştığı için sürüm listesini yeniden yazmadı; ikincisi yeni betikle yazdı:
+  `releases.json` artık `v0.5.1`, `v0.5.0`, `v0.4.0`, `v0.3.0`, `v0.2.3`, `v0.2.2`, `v0.2.1`, `v0.2.0`, `v0.1.1`,
+  `v0.1.0` (on etiketin onu, yeniden eskiye), `base: v0.5.1`, `current: v0.5.1-3-ge9bd7bc`. `v0.1.1`-`v0.3.0`
+  demo deposundaki eski iç test etiketleridir, GitHub'da yayımlanmadılar; panel sunucunun güncellendiği depodaki
+  bütün `vX.Y.Z` etiketlerini listeler ve ada göre süzmez, bu yüzden demoda görünürler. Demo'da `install.sh state`
+  elle bir kez çalıştırıldı: migrate `exitCode 0`, `restartPolicy no`, `awaited 1`; simülatörler `managed 0`;
+  proxy `caddy:2-alpine`, sürüm etiketi `v2.11.7`. **Demo'da yalnızca bir servis yeniden başlatıldı:** `blackbox`
+  (izlemenin dış erişim yoklayıcısı), `install.sh service restart blackbox` ile; `SERVICE_RESTARTED`, başlama
+  zamanı 2026-11-20'den 2026-11-22T22:34'e değişti, `/api/ready` 200. `service restart postgres` aynı yerde
+  `E_SERVICE_PROTECTED` ile reddedildi (hiçbir şey yapılmadı).
+- **Proje sitesi** (`lightningvm-web-app`, ayrı worktree'den `9c0fabb`): "Yönetim paneli" ve "Kurulum, güncelleme ve
+  yedek" sayfaları iki dilde; dört adres 200 ve yeni metni içeriyor.
+- **Çalıştırılmayanlar:** panele tarayıcıdan oturum açıp yeniden başlatma isteğinin **ajan tarafından** alınıp
+  yürütülmesi (ajan yolu komut satırından ve CI'da `install.sh service` ile denendi; panelin bıraktığı istek
+  dosyası entegrasyon testinde okundu; ikisi arasındaki `run-requests` ayrıştırması gerçek bir sunucuda
+  denenmedi); api, web ya da proxy'nin panelden yeniden başlatılıp sayfanın yeniden bağlanması; yeniden başlama
+  döngüsü, `unhealthy` ve `paused` durumlarının gerçek bir kapsayıcıda görülmesi (yalnız birim testi ve
+  hazırlanmış yanıtla tarayıcı testi); günlük maskelemenin gerçek servis günlüklerinde gözden geçirilmesi;
+  saatlik zamanlayıcının listeyi günde bir yenilemesi (kod okundu, beklenmedi); grafiklerin Linux'taki gerçek
+  geçmişle gözle görülmesi (CI ve demoda tarayıcı testi grafiğin üzerine gelip değeri okudu, ekrana bakılmadı).
