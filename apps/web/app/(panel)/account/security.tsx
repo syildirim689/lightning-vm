@@ -3,7 +3,7 @@ import { Button, toast } from '@heroui/react';
 import { useAutoAnimate } from '@formkit/auto-animate/react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useFormatter, useTranslations } from 'next-intl';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { z } from 'zod';
 import { I } from '../../../components/icon';
 import { CheckboxInput, ConfirmButton, Notice, Section, TextInput } from '../../../components/ui';
@@ -16,6 +16,8 @@ import type { PublicConfig } from '../../../lib/session';
 import ProviderMark, { providerNames } from '../../../components/provider-mark';
 import { Ring } from '../../../components/smart';
 import { useMe } from '../../../lib/me';
+import { passkeyName, readAgent, type Agent, type AgentHints } from '../../../lib/proposals';
+import { useProposal } from '../../../lib/use-proposal';
 
 type ClientError = { code?: string; status?: number } | null;
 const codeOf = (e: ClientError) => ({ code: e?.code ?? (e?.status === 429 ? 'RATE_LIMITED' : 'UNKNOWN') });
@@ -149,8 +151,20 @@ function ChangePassword() {
   </form>;
 }
 
+// This browser and device, read here only (userAgentData where the browser has it, else the user agent); only the
+// name the person keeps is ever sent.
+function useAgent() {
+  const [agent, setAgent] = useState<Agent>();
+  useEffect(() => {
+    const nav = navigator as Navigator & { userAgentData?: AgentHints };
+    setAgent(readAgent(nav.userAgent, nav.userAgentData, nav.maxTouchPoints));
+  }, []);
+  return agent;
+}
+
 function Passkeys() {
   const t = useTranslations('Account');
+  const tp = useTranslations('Proposals');
   const format = useFormatter();
   const { error } = useErrorText();
   const client = useQueryClient();
@@ -159,12 +173,27 @@ function Passkeys() {
   const [busy, setBusy] = useState(false);
   const list = useQuery(passkeysQuery);
   const secure = typeof window === 'undefined' || window.isSecureContext;
+  // "Chrome · Windows · Masaüstü", free among this account's passkeys; once the browser says the passkey is on a
+  // security key or a phone, that is put in front.
+  const agent = useAgent();
+  const words = { desktop: tp('desktop'), phone: tp('phone'), tablet: tp('tablet'), browser: tp('browser'), securityKey: tp('securityKey'), otherPhone: tp('otherPhone') };
+  const taken = (list.data ?? []).map((p) => p.name);
+  const proposal = agent && list.data ? passkeyName(agent, words, taken) : undefined;
+  const { proposed, again } = useProposal(proposal, name, setName);
   async function add() {
     setBusy(true);
-    const res = await authClient.passkey.addPasskey({ name: name || undefined });
+    const chosen = name.trim();
+    const res = await authClient.passkey.addPasskey({ name: chosen || undefined, returnWebAuthnResponse: true });
+    if (res?.error) { setBusy(false); if (codeOf(res.error).code !== 'REGISTRATION_CANCELLED') toast.danger(error(codeOf(res.error))); return; }
+    // The proposal, kept as it was: the authenticator's kind goes in front when it was not this device's own.
+    const made = res?.data as { id?: string } | null | undefined;
+    const via = (res as { webauthn?: { response?: { authenticatorAttachment?: string | null; response?: { transports?: string[] } } } }).webauthn?.response;
+    if (proposed && agent && made?.id && via?.authenticatorAttachment === 'cross-platform') {
+      const better = passkeyName(agent, words, taken, { attachment: via.authenticatorAttachment, transports: via.response?.transports });
+      if (better !== chosen) await authClient.passkey.updatePasskey({ id: made.id, name: better }).catch(() => undefined);
+    }
     setBusy(false);
-    if (res?.error) { if (codeOf(res.error).code !== 'REGISTRATION_CANCELLED') toast.danger(error(codeOf(res.error))); return; }
-    setName(''); toast.success(t('security.passkeyAdded')); client.invalidateQueries({ queryKey: ['passkeys'] });
+    setName(''); again(); toast.success(t('security.passkeyAdded')); client.invalidateQueries({ queryKey: ['passkeys'] });
   }
   async function remove(id: string) {
     const { error: err } = await authClient.passkey.deletePasskey({ id });
@@ -186,7 +215,7 @@ function Passkeys() {
       </li>)}
     </ul>}
     <div className="flex flex-wrap items-start gap-2">
-      <TextInput className="min-w-40 flex-1" label={t('security.passkeyName')} value={name} onChange={setName} placeholder={t('security.passkeyNamePlaceholder')}/>
+      <TextInput className="min-w-40 flex-1" label={t('security.passkeyName')} value={name} onChange={setName} placeholder={t('security.passkeyNamePlaceholder')} maxLength={60} proposed={proposed}/>
       <Button className="mt-6" variant="secondary" isDisabled={!secure} isPending={busy} onPress={add}><I name="plus" size={16}/>{t('security.addPasskey')}</Button>
     </div>
   </div>;

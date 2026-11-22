@@ -10,6 +10,8 @@ import { I } from '../../../../components/icon';
 import { CheckboxInput, CheckboxList, ConfirmButton, DataTable, Empty, FieldGroup, Mono, NumberInput, SelectInput, StatusChip, TextInput } from '../../../../components/ui';
 import { apiFetch, useErrorText, type ApiError } from '../../../../lib/api';
 import { useApiAction, useApiQuery } from '../../../../lib/query';
+import { hostOf, uniqueName } from '../../../../lib/proposals';
+import { useProposal } from '../../../../lib/use-proposal';
 
 type Field = { key: string; type: 'text' | 'number' | 'bool' | 'textarea'; required?: boolean; secret?: boolean; default?: string | number | boolean };
 type Source = { id: string; name: string; protocol: string; config: Record<string, string | number | boolean>; basePath: string; secretsSet: string[]; isos: number };
@@ -95,7 +97,7 @@ export function IsoLibrary({ pools }: { pools: { id: string; name: string }[] })
         </span>]}/>
 
     <Dialog open={editing !== null} setOpen={(v) => !v && setEditing(null)} title={editing === 'new' ? t('newSource') : t('editSource')}>
-      {editing && <SourceForm source={editing === 'new' ? null : editing} protocols={src.protocols} onDone={() => setEditing(null)}/>}
+      {editing && <SourceForm source={editing === 'new' ? null : editing} protocols={src.protocols} taken={src.sources.map((x) => x.name)} onDone={() => setEditing(null)}/>}
     </Dialog>
     <Dialog open={browsing !== null} setOpen={(v) => !v && setBrowsing(null)} title={browsing ? t('browseTitle', { name: browsing.name }) : ''}>
       {browsing && <Browser source={browsing} pools={pools} onDone={() => setBrowsing(null)}/>}
@@ -103,7 +105,9 @@ export function IsoLibrary({ pools }: { pools: { id: string; name: string }[] })
   </>;
 }
 
-function SourceForm({ source, protocols, onDone }: { source: Source | null; protocols: Record<string, Field[]>; onDone: () => void }) {
+const protocolShort: Record<string, string> = { ftp: 'FTP', sftp: 'SFTP', webdav: 'WebDAV', s3: 'S3', smb: 'SMB', http: 'HTTP' };
+
+function SourceForm({ source, protocols, taken = [], onDone }: { source: Source | null; protocols: Record<string, Field[]>; taken?: string[]; onDone: () => void }) {
   const t = useTranslations('Catalog.isos');
   const { error, field } = useErrorText();
   const client = useQueryClient();
@@ -115,6 +119,9 @@ function SourceForm({ source, protocols, onDone }: { source: Source | null; prot
   const [busy, setBusy] = useState<'save' | 'test'>();
   const [tested, setTested] = useState<string>();
   const body = () => ({ id: source?.id, name, protocol, config, basePath });
+  // A new source is named by how and where it is reached ("SMB · nas.local"), once the address is typed.
+  const where = String(config.host ?? '').trim() || hostOf(String(config.url ?? '')) || hostOf(String(config.endpoint ?? ''));
+  const { proposed } = useProposal(source ? undefined : where ? uniqueName(`${protocolShort[protocol] ?? protocol.toUpperCase()} · ${where}`, taken, { max: 60 }) : '', name, setName);
   const set = (k: string) => (v: string | number | boolean | undefined) => { setConfig((c) => ({ ...c, [k]: v ?? '' })); setFields((f) => ({ ...f, [k]: '' })); setTested(undefined); };
   async function call(kind: 'save' | 'test') {
     setBusy(kind); setFields({}); setTested(undefined);
@@ -140,7 +147,7 @@ function SourceForm({ source, protocols, onDone }: { source: Source | null; prot
   };
   return <form className="flex flex-col gap-4" noValidate onSubmit={(e) => { e.preventDefault(); void call('save'); }}>
     <FieldGroup title={t('identity')}>
-      <TextInput maxLength={60} label={t('name')} value={name} onChange={setName} error={field(fields.name)} isRequired placeholder="NAS ISO"/>
+      <TextInput maxLength={60} label={t('name')} value={name} onChange={setName} error={field(fields.name)} isRequired placeholder="NAS ISO" proposed={proposed}/>
       <SelectInput label={t('protocol')} value={protocol} onChange={(v) => {
           // Fields the new protocol also has (host, user, password…) keep what was typed; the rest are dropped.
           const keep = new Set((protocols[v] ?? []).map((x) => x.key));

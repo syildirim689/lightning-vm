@@ -16,6 +16,7 @@ import { useApiQuery } from '../../../../lib/query';
 import { supports, usePlatformHint, type Platformed } from '../../../../components/capabilities';
 import { useUnsaved } from '../../../../lib/unsaved';
 import { anywhere, covers, hasPort, openDbPorts, protocols, quick, statusTone, type Firewall, type Limits, type Rule } from '../model';
+import { ruleName } from '../../../../lib/proposals';
 
 type Detail = Firewall & { limits: Limits };
 const ipsText = (ips: string[]) => ips.join(', ');
@@ -99,7 +100,14 @@ function RulesEditor({ firewall, onSaved }: { firewall: Detail; onSaved: () => v
   // Someone else saved meanwhile and this form is untouched: show their version.
   useEffect(() => { if (!dirty) { setRules(firewall.rules); setIpText(firewall.rules.map((r) => ipsText(r.ips))); } }, [saved]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const update = (i: number, patch: Partial<Rule>) => setRules((rs) => rs.map((r, j) => (j === i ? { ...r, ...patch } : r)));
+  // A rule's description follows its protocol and port ("HTTPS", "TCP 8000-8100") while it is empty or still the
+  // name the panel gave it; one typed by the person is left alone.
+  const update = (i: number, patch: Partial<Rule>) => setRules((rs) => rs.map((r, j) => {
+    if (j !== i) return r;
+    const next = { ...r, ...patch };
+    const named = !(r.description ?? '').trim() || r.description === ruleName(r.protocol, r.port);
+    return named && patch.description === undefined && ('port' in patch || 'protocol' in patch) ? { ...next, description: ruleName(next.protocol, next.port) } : next;
+  }));
   const add = (rule: Rule) => { setRules((rs) => [...rs, rule]); setIpText((x) => [...x, ipsText(rule.ips)]); };
   const removeAt = (i: number) => { setRules((rs) => rs.filter((_, j) => j !== i)); setIpText((x) => x.filter((_, j) => j !== i)); setFields({}); };
   const reset = () => { setRules(firewall.rules); setIpText(firewall.rules.map((r) => ipsText(r.ips))); setFields({}); };
@@ -121,7 +129,7 @@ function RulesEditor({ firewall, onSaved }: { firewall: Detail; onSaved: () => v
             onPress={() => add({ direction, ...r })}><I name={has ? 'check' : 'plus'} size={14}/>{r.description}</Button>;
         })}
         <Button size="sm" variant="secondary" isDisabled={rules.length >= firewall.limits.rulesPerFirewall}
-          onPress={() => add({ direction, protocol: 'tcp', port: '', ips: anywhere, description: '' })}><I name="plus" size={14}/>{t('addRule')}</Button>
+          onPress={() => add({ direction, protocol: 'tcp', port: '', ips: anywhere, description: ruleName('tcp', '') })}><I name="plus" size={14}/>{t('addRule')}</Button>
       </div>}>
       {list.length === 0 ? <p className="rounded-xl border border-dashed border-border py-5 text-center text-sm text-muted">{t(direction === 'in' ? 'noInbound' : 'noOutbound')}</p>
         : <ul className="flex flex-col gap-3">

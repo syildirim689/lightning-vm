@@ -13,6 +13,7 @@ import { useOrder } from '../../lib/order-store';
 import { useUnsaved } from '../../lib/unsaved';
 import { useCopy } from '../../lib/clipboard';
 import type { Server } from './servers-ui';
+import { hostLabel, hostName, uniqueName } from '../../lib/proposals';
 
 // Copies through lib/clipboard: the fallback for a panel opened over plain HTTP, and "copied" only when it really was.
 export function Copy({ text, label, className = '' }: { text: string; label: string; className?: string }) {
@@ -82,11 +83,10 @@ export function OrderSimilar({ server, names }: { server: Server; names: string[
   const router = useRouter();
   const set = useOrder((s) => s.set);
   if (server.vdcId) return null;
-  const base = server.name.replace(/-\d+$/, '');
-  let n = 2; while (names.includes(`${base}-${n}`)) n++;
+  const name = hostName(server.name.replace(/-\d+$/, ''), names);
   return <Button variant="secondary" onPress={() => {
     set({ poolId: server.poolId, imageId: server.imageId, type: server.packageId ? 'package' : 'custom', packageId: server.packageId ?? '',
-      vcpu: server.vcpu, memoryMb: server.memoryMb, diskGb: server.diskGb, name: `${base}-${n}`.slice(0, 63) });
+      vcpu: server.vcpu, memoryMb: server.memoryMb, diskGb: server.diskGb, name });
     router.push('/order');
   }}><I name="copy-plus" size={16}/>{t('orderSimilar')}</Button>;
 }
@@ -130,10 +130,11 @@ export function CloneServer({ server, names }: { server: Server; names: string[]
   const router = useRouter();
   const set = useOrder((s) => s.set);
   if (server.vdcId || server.state !== 'ready') return null;
-  let n = 1; while (names.includes(`${server.name}-copy${n > 1 ? n : ''}`)) n++;
+  // "web-1-copy", "web-1-copy2": always a valid host name, also for a 63-character original.
+  const name = uniqueName(`${hostLabel(server.name, 58)}-copy`, names, { max: 63, sep: '' });
   return <Button variant="ghost" onPress={() => {
     set({ poolId: server.poolId, imageId: server.imageId, type: server.packageId ? 'package' : 'custom', packageId: server.packageId ?? '', applicationId: '',
-      vcpu: server.vcpu, memoryMb: server.memoryMb, diskGb: server.diskGb, name: `${server.name}-copy${n > 1 ? n : ''}`.slice(0, 63), cloneFrom: server.id, cloneName: server.name });
+      vcpu: server.vcpu, memoryMb: server.memoryMb, diskGb: server.diskGb, name, cloneFrom: server.id, cloneName: server.name });
     router.push('/order');
   }}><I name="copy" size={16}/>{t('clone')}</Button>;
 }

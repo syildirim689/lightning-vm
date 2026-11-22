@@ -16,6 +16,8 @@ import { useApiQuery } from '../../../lib/query';
 import { supports, usePlatformHint, type Platformed } from '../../../components/capabilities';
 import { fold } from '../../../lib/note-line';
 import { openDbPorts, openToAll, statusTone, templates, type Firewall, type Limits } from './model';
+import { uniqueName } from '../../../lib/proposals';
+import { useProposal } from '../../../lib/use-proposal';
 
 export default function Firewalls() {
   const t = useTranslations('Firewalls');
@@ -116,11 +118,12 @@ function CreateFirewall({ limits, initialServers, existing, onClose }: { limits:
   // "copy:<id>" starts from the rules of a firewall the user already has.
   const source = template.startsWith('copy:') ? existing.find((f) => f.id === template.slice(5)) : undefined;
   const rules = source ? source.rules : templates[template] ?? [];
-  const choose = (v: string) => {
-    setTemplate(v || 'empty');
-    const f = v.startsWith('copy:') ? existing.find((x) => x.id === v.slice(5)) : undefined;
-    if (f && !name.trim()) setName(t('copyName', { name: f.name }).slice(0, 64));
-  };
+  const choose = (v: string) => setTemplate(v || 'empty');
+  // Named after the starting point ("Web sunucusu", "web-fw (kopya)"), free among the firewalls listed here; it
+  // follows the template until the person types a name.
+  const tp = useTranslations('Proposals');
+  const base = source ? t('copyName', { name: source.name }) : tp(`firewall.${(template in templates ? template : 'empty') as 'web'}`);
+  const { proposed } = useProposal(uniqueName(base, existing.map((x) => x.name), { max: 64 }), name, setName);
   async function save() {
     setBusy(true); setFields({});
     try {
@@ -134,7 +137,7 @@ function CreateFirewall({ limits, initialServers, existing, onClose }: { limits:
         <Modal.CloseTrigger/>
         <Modal.Header><Modal.Heading>{t('create')}</Modal.Heading></Modal.Header>
         <Modal.Body className="flex flex-col gap-4">
-          <TextInput label={t('name')} value={name} onChange={setName} error={field(fields.name)} isRequired maxLength={64} placeholder="web-firewall"/>
+          <TextInput label={t('name')} value={name} onChange={setName} error={field(fields.name)} isRequired maxLength={64} placeholder="web-firewall" proposed={proposed}/>
           <SelectInput label={t('template')} value={template} onChange={choose} help={t('templateHelp')}
             options={[...Object.keys(templates).map((k) => ({ id: k, label: t(`templates.${k as 'web'}`), description: t(`templateDesc.${k as 'web'}`) })),
               ...existing.map((f) => ({ id: `copy:${f.id}`, label: t('copyOf', { name: f.name }), description: t('ruleCount', { in: f.rules.filter((r) => r.direction === 'in').length, out: f.rules.filter((r) => r.direction === 'out').length }) }))]}/>

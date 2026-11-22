@@ -16,6 +16,24 @@ Türkçe [docs/upgrade-notes.md](docs/upgrade-notes.md) sayfasını okuyun.*
 
 ### Added
 
+- Forms propose a name where the panel can work one out, instead of an empty field ([docs/proposals.md](docs/proposals.md)
+  has the full list and what is deliberately left empty). The proposal is an ordinary, editable value, selected when
+  the field is entered so typing replaces it, marked "Proposed by the panel"; it follows what it is made from until the
+  person types, is free among the person's own names (" 2", " 3"…), respects each field's length and characters, and is
+  in the panel's language. Nothing that exists is ever renamed. A passkey: browser · system · device, read in the
+  browser only ("Chrome · Windows · Desktop"), with "Security key" or "Phone" in front once the browser says the
+  passkey is on one. An API token: its access and the day. An SSH key: the key's comment, else its type and fingerprint.
+  A snapshot: the server and the local date and time ("web-1 2026-11-23 14:05"). Also a webhook (its host), project,
+  chat connection, private network, firewall (its template) and firewall rule (the port's service, "HTTPS"), saved
+  console command and, for staff, pool, package ("2 vCPU · 4 GB · 40 GB"), image, IP pool, location, ISO source, canned
+  reply and hypervisor connection. A ticket's subject is never filled in: the message's first line is offered with one
+  click. A field that still holds the proposal does not count as unsaved work.
+- Authenticator apps and passkey managers show the installation's own name (Settings → Branding) instead of
+  "Lightning VM", and the account by its e-mail address: the TOTP URI's label and `issuer` both, percent-encoded (a
+  space is `%20`, not `+`); the WebAuthn `rp.name`, `user.name` and `user.displayName` (better-auth used the passkey's
+  own name as the user name). The setup dialog says how the app will list it; the backup codes download as
+  `<panel-name>-backup-codes.txt`. The owner of a passkey can rename it (`POST /api/auth/passkey/update-passkey`).
+
 - Admin → System → Server state → Services: a click on a service opens its detail (a drawer, also on a phone):
   state, health check, exit code, started and ended, restarts, image, version, ports, what the state means and what
   to do (Turkish and English), and the last 200 lines of its log, refreshable. Log lines are for administrators only;
@@ -36,6 +54,8 @@ Türkçe [docs/upgrade-notes.md](docs/upgrade-notes.md) sayfasını okuyun.*
 
 ### Fixed
 
+- Host names proposed for a copy of a server stay valid for a 63-character original (it used to propose the
+  original's own name), and Turkish letters such as "ı" are written plainly instead of becoming a hyphen.
 - A one-shot job that ended with exit code 0 (migrate) is shown as "Completed" with when, not as a stopped
   service. Which services are one-shot is read from the compose definition (`restart: "no"`, or another service
   waits for it with `service_completed_successfully`); a non-zero exit, a restart loop and a failing health check

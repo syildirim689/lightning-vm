@@ -15,6 +15,7 @@ import { Ago, Empty, PageHeader, SelectInput, TextInput } from '../../../compone
 import { apiFetch, useErrorText, type ApiError } from '../../../lib/api';
 import { fold } from '../../../lib/note-line';
 import { useApiQuery } from '../../../lib/query';
+import { firstLine } from '../../../lib/proposals';
 import { departmentName, DraftBadge, PriorityBadge, StatusBadge, useDepartments, useDrafts, type Ticket } from './ui';
 
 export default function SupportList() {
@@ -95,6 +96,10 @@ function NewTicket({ initialServer, initialSubject, initialBody, mine, onClose }
   // A server in an error state or off: suggest a higher priority (the customer decides).
   const troubled = server && (server.state === 'error' || server.state === 'missing' || (server.state === 'ready' && server.powerState !== 'poweredOn'));
   const already = v.serverId ? mine.find((x) => x.serverId === v.serverId && x.status !== 'closed') : undefined;
+  // No subject yet but a message: its first line, with the server's name in front when one is chosen, offered with one
+  // click (never filled in: the subject is the customer's own words to support).
+  const line = firstLine(v.body, 80);
+  const subjectIdea = !v.subject.trim() && line.length >= 3 ? (server && !fold(line).includes(fold(server.name)) ? `${server.name}: ${firstLine(v.body, 78 - server.name.length)}` : line) : '';
   async function submit() {
     setBusy(true); setFields({});
     try {
@@ -133,7 +138,8 @@ function NewTicket({ initialServer, initialSubject, initialBody, mine, onClose }
                 <I name={{ ssh: 'square-terminal', slow: 'gauge', network: 'wifi-off', billing: 'receipt-text', feature: 'lightbulb' }[k]} size={13}/>{t(`quick.${k}.label`)}</button>)}
             </div>
           </div>}
-          <TextInput label={t('subject')} value={v.subject} onChange={(x) => setV({ ...v, subject: x })} maxLength={160} error={field(fields.subject)} placeholder={t('subjectExample')}/>
+          <TextInput label={t('subject')} value={v.subject} onChange={(x) => setV({ ...v, subject: x })} maxLength={160} error={field(fields.subject)} placeholder={t('subjectExample')}
+            suggestions={subjectIdea ? [subjectIdea] : undefined}/>
           <div className="flex flex-col gap-2">
             <p className="text-sm font-medium">{t('priorityLabel')}</p>
             <div role="radiogroup" aria-label={t('priorityLabel')} className="grid grid-cols-2 gap-2 sm:grid-cols-4">

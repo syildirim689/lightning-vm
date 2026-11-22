@@ -6056,7 +6056,7 @@
     "removeYes": "Yes, remove",
     "name": "Name",
     "namePlaceholder": "before-upgrade",
-    "nameHelp": "Empty: the date and time.",
+    "nameHelp": "Empty: the server's name, date and time.",
     "description": "Note",
     "optional": "Optional.",
     "auto": "Snapshot",
@@ -9665,5 +9665,28 @@
     "agentMissingTitle": "The server's agent is not installed",
     "agentMissing": "Monitoring is switched by the agent on the server. Until it is installed, use the command line (sudo sh scripts/install.sh monitoring on|off) or install the agent:",
     "needsPermission": "Switching monitoring needs the permission to update the panel."
+  },
+  "Proposals": {
+    "proposed": "Proposed by the panel; what you type replaces it.",
+    "suggested": "Suggestion",
+    "desktop": "Desktop",
+    "phone": "Phone",
+    "tablet": "Tablet",
+    "browser": "Browser",
+    "securityKey": "Security key",
+    "otherPhone": "Phone",
+    "tokenRead": "Read-only token",
+    "tokenWrite": "Full-access token",
+    "project": "Project",
+    "network": "{location} private network",
+    "networkPlain": "Private network",
+    "firewall": {
+      "empty": "Firewall",
+      "web": "Web server",
+      "ssh": "SSH only",
+      "windows": "Windows RDP"
+    },
+    "codesFile": "backup-codes",
+    "appShows": "Your app will show it as: {issuer} ({account})"
   }
 }

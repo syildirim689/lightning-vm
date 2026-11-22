@@ -10,6 +10,8 @@ import { ConfirmButton, DataTable, FieldGroup, NumberInput, SelectInput, StatusC
 import { apiFetch, useErrorText, type ApiError } from '../../../../lib/api';
 import { flag } from '../../../../lib/flag';
 import { useApiAction, useApiQuery } from '../../../../lib/query';
+import { uniqueName } from '../../../../lib/proposals';
+import { useProposal } from '../../../../lib/use-proposal';
 
 export { flag };
 
@@ -68,6 +70,9 @@ function LocationForm({ location, onDone }: { location: Location | null; onDone:
   const [fields, setFields] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
   const set = <K extends keyof typeof v>(k: K) => (x: (typeof v)[K]) => { setV((s) => ({ ...s, [k]: x })); setFields((f) => ({ ...f, [k]: '' })); };
+  // A new location is named by its city and data centre ("İstanbul · Equinix IL2"), free among the locations.
+  const others = useLocations().map((l) => l.name);
+  const { proposed } = useProposal(location ? undefined : uniqueName([v.city.trim(), v.datacenter.trim()].filter(Boolean).join(' · '), others, { max: 100 }), v.name, set('name'));
   async function save(e: React.FormEvent) {
     e.preventDefault(); setBusy(true); setFields({});
     try {
@@ -78,7 +83,7 @@ function LocationForm({ location, onDone }: { location: Location | null; onDone:
   }
   return <form className="flex flex-col gap-4" noValidate onSubmit={save}>
     <FieldGroup title={t('identity')}>
-      <TextInput maxLength={100} label={t('name')} value={v.name} onChange={set('name')} error={field(fields.name)} isRequired placeholder="Istanbul-1"/>
+      <TextInput maxLength={100} label={t('name')} value={v.name} onChange={set('name')} error={field(fields.name)} isRequired placeholder="Istanbul-1" proposed={proposed}/>
       <SelectInput label={t('status')} value={v.status} onChange={(x) => set('status')(x as Location['status'])} help={t(`statusHelp.${v.status}`)}
         options={(['active', 'maintenance', 'hidden'] as const).map((s) => ({ id: s, label: t(`statuses.${s}`) }))}/>
       <div className="sm:col-span-2"><TextInput maxLength={500} label={t('description')} value={v.description} onChange={set('description')} error={field(fields.description)} help={t('descriptionHelp')}/></div>

@@ -16,6 +16,7 @@ import { UsageBar, type Vdc } from '../admin/catalog/vdc-ui';
 import { useIntentKey } from '../servers-ui';
 import { fold } from '../../../lib/note-line';
 import { Copy } from '../server-extras';
+import { hostName } from '../../../lib/proposals';
 
 type Mine = Vdc & { servers: { id: string; name: string; state: string; vcpu: number; memoryMb: number; diskGb: number; address: string | null }[];
   images: { id: string; name: string; family: string; minDiskGb: number }[] };
@@ -28,9 +29,7 @@ function NewServer({ vdc, onDone }: { vdc: Mine; onDone: () => void }) {
   const keys = useApiQuery<{ keys: { id: string; name: string }[] }>(['ssh-keys'], '/ssh-keys').data?.keys ?? [];
   const left = { vcpu: vdc.vcpu - vdc.used.vcpu, memoryGb: (vdc.memoryMb - vdc.used.memoryMb) / 1024, diskGb: vdc.diskGb - vdc.used.diskGb };
   // A free name from the data centre's own ("lab-3"), so the form can be sent as it opens; it is just a suggestion.
-  const suggest = (base: string) => { const taken = new Set(vdc.servers.map((x) => x.name)); let n = vdc.servers.length + 1; while (taken.has(`${base}-${n}`)) n++; return `${base}-${n}`; };
-  const base = vdc.name.toLocaleLowerCase('en').normalize('NFD').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'server';
-  const [v, setV] = useState({ name: suggest(base), imageId: vdc.images[0]?.id ?? '', vcpu: Math.min(1, left.vcpu), memoryGb: Math.min(1, left.memoryGb), diskGb: Math.min(20, left.diskGb), sshKeyIds: [] as string[] });
+  const [v, setV] = useState({ name: hostName(vdc.name, vdc.servers.map((x) => x.name)), imageId: vdc.images[0]?.id ?? '', vcpu: Math.min(1, left.vcpu), memoryGb: Math.min(1, left.memoryGb), diskGb: Math.min(20, left.diskGb), sshKeyIds: [] as string[] });
   // With a single saved key it is ticked for you, until you change the selection yourself.
   const [keysTouched, setKeysTouched] = useState(false);
   const sshKeyIds = keysTouched ? v.sshKeyIds : keys.length === 1 ? [keys[0]!.id] : v.sshKeyIds;

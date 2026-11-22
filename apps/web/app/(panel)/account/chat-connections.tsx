@@ -10,6 +10,8 @@ import { I } from '../../../components/icon';
 import { ConfirmButton, Notice, Section, TextInput } from '../../../components/ui';
 import { apiFetch, useErrorText, type ApiError } from '../../../lib/api';
 import { useApiQuery } from '../../../lib/query';
+import { uniqueName } from '../../../lib/proposals';
+import { useProposal } from '../../../lib/use-proposal';
 
 type Field = { key: string; secret?: boolean; optional?: boolean; placeholder?: string };
 type App = { id: string; name: string; website: string; docs: string; fields: Field[]; needs: string | null };
@@ -79,7 +81,9 @@ function ConnectDialog({ open, onOpenChange, doc, onDone }: { open: boolean; onO
   const [problem, setProblem] = useState<{ text: string; detail?: string }>();
   const [busy, setBusy] = useState(false);
   const [tg, setTg] = useState<{ code: string; url: string } | null>(null);
-  const reset = (a: App | null) => { setApp(a); setValues({}); setLabel(''); setFields({}); setProblem(undefined); setTg(null); };
+  // The app's name ("Slack", "Slack 2" for a second one), so two connections of one app can be told apart.
+  const { proposed, again } = useProposal(app ? uniqueName(app.name, doc.connections.map((c) => c.label), { max: 60 }) : undefined, label, setLabel);
+  const reset = (a: App | null) => { setApp(a); setValues({}); setLabel(''); again(); setFields({}); setProblem(undefined); setTg(null); };
   const fieldLabel = (k: string) => (t.has(`field.${k}` as 'field.url') ? t(`field.${k}` as 'field.url') : k);
 
   async function run(f: () => Promise<unknown>) {
@@ -125,7 +129,7 @@ function ConnectDialog({ open, onOpenChange, doc, onDone }: { open: boolean; onO
                     value={values[f.key] ?? ''} onChange={(v) => setValues({ ...values, [f.key]: v })} placeholder={f.placeholder} spellCheck={false} autoComplete="off"
                     error={field(fields[`fields.${f.key}`])} help={t.has(`fieldHelp.${f.key}` as 'fieldHelp.secret') ? t(`fieldHelp.${f.key}` as 'fieldHelp.secret') : undefined}/>)}
                 </div>}
-              {app.id !== 'telegram' || tg ? <TextInput label={`${t('label')} (${t('optional')})`} value={label} onChange={setLabel} maxLength={60} placeholder={app.name}/> : null}
+              {app.id !== 'telegram' || tg ? <TextInput label={`${t('label')} (${t('optional')})`} value={label} onChange={setLabel} maxLength={60} placeholder={app.name} proposed={proposed}/> : null}
               {app.docs && <a href={app.docs} target="_blank" rel="noreferrer noopener" className="inline-flex w-fit items-center gap-1 text-sm text-accent hover:underline">{t('docs')}<I name="external-link" size={13}/></a>}
               {problem && <Notice tone="danger" title={problem.text}>{problem.detail && <code className="break-all text-xs">{problem.detail}</code>}</Notice>}
             </>}

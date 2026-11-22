@@ -6056,7 +6056,7 @@
     "removeYes": "Evet, kaldır",
     "name": "Ad",
     "namePlaceholder": "guncelleme-oncesi",
-    "nameHelp": "Boş bırakılırsa tarih ve saat.",
+    "nameHelp": "Boş bırakılırsa sunucunun adı, tarih ve saat.",
     "description": "Not",
     "optional": "İsteğe bağlı.",
     "auto": "Anlık görüntü",
@@ -9665,5 +9665,28 @@
     "agentMissingTitle": "Sunucu ajanı kurulu değil",
     "agentMissing": "İzlemeyi sunucudaki ajan açıp kapatır. Ajan kurulana kadar komut satırını kullanın (sudo sh scripts/install.sh monitoring on|off) ya da ajanı kurun:",
     "needsPermission": "İzlemeyi açıp kapatmak için paneli güncelleme izni gerekir."
+  },
+  "Proposals": {
+    "proposed": "Panelin önerisi; yazdığınız onun yerine geçer.",
+    "suggested": "Öneri",
+    "desktop": "Masaüstü",
+    "phone": "Telefon",
+    "tablet": "Tablet",
+    "browser": "Tarayıcı",
+    "securityKey": "Güvenlik anahtarı",
+    "otherPhone": "Telefon",
+    "tokenRead": "Salt okunur anahtar",
+    "tokenWrite": "Tam yetkili anahtar",
+    "project": "Proje",
+    "network": "{location} özel ağı",
+    "networkPlain": "Özel ağ",
+    "firewall": {
+      "empty": "Güvenlik duvarı",
+      "web": "Web sunucusu",
+      "ssh": "Yalnızca SSH",
+      "windows": "Windows RDP"
+    },
+    "codesFile": "yedek-kodlar",
+    "appShows": "Uygulamada görünecek ad: {issuer} ({account})"
   }
 }

@@ -84,15 +84,18 @@ const masksText = () => typeof CSS !== 'undefined' && CSS.supports('-webkit-text
 // Text field with a visible label, help text, and a translated server-side error under it.
 // `format` gives a typed value its keyboard, an example, tidying when the field is left (MAC spellings, spaces,
 // upper case) and a message as soon as it is wrong; `list` accepts several values separated by commas or lines.
-export function TextInput({ label, value, onChange, error, help, type = 'text', name, isRequired, autoComplete, autofill, placeholder, multiline, isDisabled, maxLength, className, spellCheck, format, list, datePresets, unit, transient, revealable, draft }: {
+export function TextInput({ label, value, onChange, error, help, type = 'text', name, isRequired, autoComplete, autofill, placeholder, multiline, isDisabled, maxLength, className, spellCheck, format, list, datePresets, unit, transient, revealable, draft, proposed, suggestions }: {
   label: string; value: string; onChange: (v: string) => void; error?: string; help?: React.ReactNode; type?: string; name?: string; isRequired?: boolean;
   autoComplete?: string; autofill?: boolean; placeholder?: string; multiline?: boolean; isDisabled?: boolean; maxLength?: number; className?: string; spellCheck?: boolean;
   format?: Format; list?: boolean; datePresets?: boolean; unit?: string;
   transient?: boolean; // a filter or a typed confirmation: leaving it is not losing work
   revealable?: boolean; // a secret with a Show button
   draft?: string; // kept in this browser under this key until it is sent (the parent empties the value then)
+  proposed?: boolean; // the value is the panel's proposal (lib/use-proposal.ts): selected on focus, so typing replaces it
+  suggestions?: string[]; // one-click proposals under the field, where filling it in would be wrong (a ticket's subject)
 }) {
   const tf = useTranslations('Formats');
+  const tp = useTranslations('Proposals');
   const fd = useFormatter();
   // Masked text from the first paint: a password field that exists even for a moment is filled by the browser
   // (and the field before it taken for a user name). Only a browser that cannot mask text gets a password field.
@@ -105,6 +108,8 @@ export function TextInput({ label, value, onChange, error, help, type = 'text', 
   // focused. It stays when the field is left: a line that vanished on blur would move the send button under the pointer.
   const [sendable, setSendable] = useState(false);
   const loaded = useRef(false);
+  // A proposal is selected when the field is entered, and the click that entered it does not undo the selection.
+  const fresh = useRef(false);
   useEffect(() => { if (!draft) return; const kept = readDraft(draft); if (kept && !value) { onChange(kept); setRestored(true); } }, [draft]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (!draft) return; if (!loaded.current) { loaded.current = true; return; } writeDraft(draft, value); if (!value) setRestored(false); }, [draft, value]);
   useEffect(() => { setMasked(!autofill && type === 'password' && masksText()); }, [autofill, type]);
@@ -131,7 +136,8 @@ export function TextInput({ label, value, onChange, error, help, type = 'text', 
   const count = !!maxLength && !isDisabled && !hidden && type !== 'password' && value.length >= maxLength * (multiline ? 0.5 : 0.8);
   const full = !!maxLength && value.length >= maxLength;
   return <TextField className={`min-w-0 ${className ?? ''}`} name={autofill ? name : undefined} type={masked || revealed ? 'text' : type} value={value} onChange={onChange} isInvalid={!!shown} isRequired={isRequired} isDisabled={isDisabled} validationBehavior="aria"
-    onFocus={(e) => setSendable(!!multiline && !!(e.target as Element as HTMLTextAreaElement).form?.querySelector('button[type="submit"]'))}
+    onFocus={(e) => { const el = e.target as Element as HTMLInputElement; setSendable(!!multiline && !!el.form?.querySelector('button[type="submit"]'));
+      if (proposed) { el.select(); fresh.current = true; setTimeout(() => { fresh.current = false; }, 400); } }}
     onBlur={tidy} data-transient={transient || !!draft || undefined}>
     <Label>{label}{unit && <span className="sr-only"> ({unit})</span>}</Label>
     {multiline ? <TextArea rows={4} placeholder={ph} maxLength={maxLength} spellCheck={spellCheck} {...fill} {...extra} className={fmt?.mono ? 'font-mono text-sm' : undefined}/>
@@ -141,14 +147,20 @@ export function TextInput({ label, value, onChange, error, help, type = 'text', 
         <button type="button" onClick={() => setRevealed((v) => !v)} aria-pressed={revealed} disabled={isDisabled} aria-label={tf(revealed ? 'hide' : 'show')}
           className="absolute inset-y-0 right-1 my-auto grid h-8 min-w-8 place-items-center rounded-lg px-2 text-xs font-medium text-muted hover:bg-default hover:text-foreground focus-visible:outline-2 focus-visible:outline-accent disabled:opacity-50">
           <span aria-hidden className="flex items-center gap-1"><I name={revealed ? 'eye-off' : 'eye'} size={16}/><span className="hidden sm:inline">{tf(revealed ? 'hide' : 'show')}</span></span></button></div>
-      : <Input placeholder={ph} maxLength={maxLength} spellCheck={masked ? false : spellCheck} {...fill} {...extra} className={fmt?.mono ? 'min-w-0 font-mono' : 'min-w-0'} style={masked ? { WebkitTextSecurity: 'disc' } as React.CSSProperties : undefined}/>}
-    {shown ? <FieldError>{shown}</FieldError> : when || help ? <Description>{when && <span className="block font-medium text-foreground/80">{when}</span>}{help}</Description> : null}
+      : <Input placeholder={ph} maxLength={maxLength} spellCheck={masked ? false : spellCheck} {...fill} {...extra} className={fmt?.mono ? 'min-w-0 font-mono' : 'min-w-0'} style={masked ? { WebkitTextSecurity: 'disc' } as React.CSSProperties : undefined}
+        onMouseUp={(e) => { if (fresh.current) { e.preventDefault(); fresh.current = false; } }} data-proposed={proposed || undefined}/>}
+    {shown ? <FieldError>{shown}</FieldError> : when || help || proposed ? <Description>{when && <span className="block font-medium text-foreground/80">{when}</span>}
+      {proposed && <span className="flex items-center gap-1 text-accent"><I name="sparkles" size={12}/>{tp('proposed')}</span>}{help}</Description> : null}
     {count && <p className={`mt-0.5 text-right text-xs tabular-nums ${full ? 'font-medium text-warning' : 'text-muted'}`} aria-live={full ? 'polite' : 'off'}>
       {full ? tf('atLimit', { max: maxLength! }) : tf('count', { n: value.length, max: maxLength! })}</p>}
     {sendable && value.trim() && <p className="mt-0.5 text-xs text-muted">{tf('sendHint', { keys: sendKeys() })}</p>}
     {draft && value.trim() && !isDisabled && <p className="mt-0.5 flex flex-wrap items-center gap-x-2 text-xs text-muted">
       <span className="inline-flex items-center gap-1"><I name="save" size={12}/>{tf(restored ? 'draftRestored' : 'draftKept')}</span>
       <button type="button" onClick={() => { onChange(''); setRestored(false); }} className="rounded px-1 font-medium text-accent hover:underline focus-visible:outline-2 focus-visible:outline-accent">{tf('draftDiscard')}</button></p>}
+    {!!suggestions?.length && !isDisabled && <div role="group" aria-label={tp('suggested')} className="mt-1 flex flex-wrap items-center gap-1.5">
+      <span aria-hidden className="flex items-center gap-1 text-xs text-muted"><I name="sparkles" size={12} className="text-accent"/>{tp('suggested')}:</span>
+      {suggestions.map((x) => <button key={x} type="button" aria-pressed={value === x} onClick={() => onChange(x)}
+        className={`min-h-8 max-w-full truncate rounded-full border px-2.5 text-left text-xs transition-colors ${value === x ? 'border-accent bg-accent-soft text-accent-soft-foreground' : 'border-border hover:border-accent'}`}>{x}</button>)}</div>}
     {presets && <div role="group" aria-label={tf('quick')} className="mt-1 flex flex-wrap gap-1.5">{presets.map(([k, d]) =>
       <button key={k} type="button" aria-pressed={value === d} onClick={() => onChange(d)}
         className={`min-h-8 rounded-full border px-2.5 text-xs transition-colors ${value === d ? 'border-accent bg-accent-soft text-accent-soft-foreground' : 'border-border hover:border-accent'}`}>{tf(`preset.${k}` as 'preset.today')}</button>)}</div>}

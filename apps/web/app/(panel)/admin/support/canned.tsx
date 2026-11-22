@@ -12,6 +12,8 @@ import { apiFetch, useErrorText } from '../../../../lib/api';
 import { fillCanned } from '../../../../lib/canned';
 import { fold } from '../../../../lib/note-line';
 import { useApiQuery } from '../../../../lib/query';
+import { firstLine, uniqueName } from '../../../../lib/proposals';
+import { useProposal } from '../../../../lib/use-proposal';
 
 type Canned = { id: string; title: string; body: string };
 const vars = ['{name}', '{ticket}', '{server}'];
@@ -27,7 +29,9 @@ export default function CannedReplies() {
   const [busy, setBusy] = useState(false);
   const list = useApiQuery<{ canned: Canned[] }>(['admin', 'support', 'canned'], open ? '/admin/support/canned' : null).data?.canned;
   const refresh = () => client.invalidateQueries({ queryKey: ['admin', 'support', 'canned'] });
-  const reset = () => { setV({ title: '', body: '' }); setEditing(null); };
+  // A new answer is titled by its first line until a title is typed (staff only see these).
+  const { proposed, again } = useProposal(editing ? undefined : uniqueName(firstLine(v.body, 80), (list ?? []).map((c) => c.title), { max: 80 }), v.title, (title) => setV((x) => ({ ...x, title })));
+  const reset = () => { setV({ title: '', body: '' }); setEditing(null); again(); };
   async function save() {
     setBusy(true);
     try {
@@ -65,7 +69,7 @@ export default function CannedReplies() {
                 </li>)}</ul>}
             <div className="flex flex-col gap-3 rounded-xl border border-dashed border-border p-3">
               {editing && <p className="flex items-center gap-2 text-sm font-medium text-accent"><I name="pencil" size={14}/>{t('cannedEditing', { title: editing.title })}</p>}
-              <TextInput label={t('cannedTitle')} value={v.title} onChange={(x) => setV({ ...v, title: x })} maxLength={80}/>
+              <TextInput label={t('cannedTitle')} value={v.title} onChange={(x) => setV({ ...v, title: x })} maxLength={80} proposed={proposed}/>
               <TextInput multiline label={t('cannedBody')} value={v.body} onChange={(x) => setV({ ...v, body: x })} help={t('cannedVars', { a: '{name}', b: '{ticket}', c: '{server}' })}/>
               <div role="group" aria-label={t('cannedInsert')} className="flex flex-wrap items-center gap-1.5 text-xs">
                 <span className="text-muted">{t('cannedInsert')}:</span>

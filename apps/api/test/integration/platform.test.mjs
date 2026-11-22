@@ -151,6 +151,8 @@ test('two-factor: authenticator app, then sign-in needs the code; backup codes w
   const en = await post('/auth/two-factor/enable', { password }, user);
   assert.equal(en.statusCode, 200, en.body);
   const { totpURI, backupCodes } = en.json();
+  // The authenticator app shows the panel's name and the account's address, both as label and as issuer (labels.ts).
+  assert.match(totpURI, /^otpauth:\/\/totp\/Lightning%20VM:ayse%40example\.test\?secret=[A-Z2-7]+&issuer=Lightning%20VM&digits=6(&|$)/);
   const v = await post('/auth/two-factor/verify-totp', { code: totp(totpURI) }, user);
   assert.equal(v.statusCode, 200, v.body);
   user = cookieOf(v) ?? user; // turning two-factor on replaces the session
@@ -178,6 +180,21 @@ test('branding: name, colour and raster images only; served publicly', async () 
   assert.equal(logo.headers['content-type'], 'image/png');
   assert.equal(logo.headers['x-content-type-options'], 'nosniff');
   assert.equal((await put('/admin/settings/branding', { name: 'Acme Cloud' }, user)).statusCode, 403);
+  // A passkey made now is filed under the panel's own name and the account's address, even when the browser asks for
+  // the passkey's name as its user name (better-auth would take it); renaming a passkey is open to its owner.
+  const reg = await call('GET', '/auth/passkey/generate-register-options?name=' + encodeURIComponent('Chrome · Windows · Desktop'), user);
+  assert.equal(reg.statusCode, 200, reg.body);
+  assert.equal(reg.json().rp.name, 'Acme Cloud');
+  assert.equal(reg.json().user.name, 'ayse@example.test');
+  assert.ok(reg.json().challenge);
+  // (The web app names a new passkey once the browser said what kind of authenticator it was.)
+  const { rows: [pk] } = await pool.query(`INSERT INTO auth_passkeys (name, public_key, user_id, credential_id, counter, device_type, backed_up, created_at)
+    VALUES ('Chrome · Windows', 'x', $1, 'cred-1', 0, 'singleDevice', false, now()) RETURNING id`, [userId]);
+  const rename = await post('/auth/passkey/update-passkey', { id: pk.id, name: 'Security key · Chrome · Windows' }, user);
+  assert.equal(rename.statusCode, 200, rename.body);
+  assert.equal((await pool.query('SELECT name FROM auth_passkeys WHERE id = $1', [pk.id])).rows[0].name, 'Security key · Chrome · Windows');
+  assert.notEqual((await post('/auth/passkey/update-passkey', { id: pk.id, name: 'Mine now' }, admin)).statusCode, 200, 'only its owner renames it');
+  await pool.query('DELETE FROM auth_passkeys WHERE id = $1', [pk.id]);
 });
 
 test('mail settings never return the password, and a failed test says why', async () => {

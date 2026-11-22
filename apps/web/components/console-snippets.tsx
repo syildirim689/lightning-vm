@@ -11,6 +11,8 @@ import { can } from '../lib/permissions';
 import { useApiAction, useApiQuery } from '../lib/query';
 import { I } from './icon';
 import { CheckboxInput, ConfirmButton, Section, TextInput } from './ui';
+import { firstLine, uniqueName } from '../lib/proposals';
+import { useProposal } from '../lib/use-proposal';
 
 type Snippet = { id: string; name: string; command: string; shared: boolean; mine: boolean };
 // Read-only: they show the state, never change it. Windows ones are PowerShell.
@@ -56,7 +58,9 @@ export function ConsoleSnippets({ send, ready, linuxOnly }: { send: (text: strin
   const all = useApiQuery<{ snippets: Snippet[] }>(['console-snippets'], '/console-snippets').data?.snippets ?? [];
   const f = fold(filter.trim());
   const saved = f ? all.filter((s) => fold(`${s.name}\n${s.command}`).includes(f)) : all;
-  const reset = (s?: Snippet) => { setEditing(s); setText(s?.command ?? ''); setName(s?.name ?? ''); setShare(!!s?.shared); };
+  // A new command is named by its first line until a name is typed (an edited one keeps its name).
+  const { proposed, again } = useProposal(editing ? undefined : uniqueName(firstLine(text, 60), all.map((s) => s.name), { max: 60 }), name, setName);
+  const reset = (s?: Snippet) => { setEditing(s); setText(s?.command ?? ''); setName(s?.name ?? ''); setShare(!!s?.shared); again(); };
   const save = useApiAction(() => apiFetch(editing ? `/console-snippets/${editing.id}` : '/console-snippets',
     { method: editing ? 'PUT' : 'POST', body: { name, command: text, shared: mayShare && share } }),
     { invalidate: [['console-snippets']], success: editing ? t('updated') : t('saved'), onSuccess: () => reset() });
@@ -100,7 +104,7 @@ export function ConsoleSnippets({ send, ready, linuxOnly }: { send: (text: strin
         </ul>)}
       <div className="grid gap-3 md:grid-cols-[1fr_14rem]">
         <TextInput label={t('text')} value={text} onChange={setText} multiline spellCheck={false} maxLength={2000} help={linuxOnly ? t('textHelpShell') : t('textHelp')}/>
-        <TextInput label={t('name')} value={name} onChange={setName} maxLength={60} help={t('nameHelp')}/>
+        <TextInput label={t('name')} value={name} onChange={setName} maxLength={60} help={t('nameHelp')} proposed={proposed}/>
       </div>
       {mayShare && <CheckboxInput label={t('share')} isSelected={share} onChange={setShare} help={t('shareHelp')}/>}
       {editing && <p role="status" className="text-sm font-medium text-accent">{t('editing', { name: editing.name })}</p>}

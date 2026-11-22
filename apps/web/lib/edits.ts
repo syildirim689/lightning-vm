@@ -16,7 +16,8 @@ const changed = () => {
   const out: (HTMLInputElement | HTMLTextAreaElement)[] = [];
   for (const [el, was] of first) {
     if (!el.isConnected) first.delete(el);
-    else if (el.value !== was) out.push(el);
+    // A field that still holds the panel's proposal (lib/use-proposal.ts) is no work of the person's to lose.
+    else if (el.value !== was && !el.matches('[data-proposed]')) out.push(el);
   }
   return out;
 };

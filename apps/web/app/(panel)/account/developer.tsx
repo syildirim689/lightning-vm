@@ -13,6 +13,8 @@ import { useCopy } from '../../../lib/clipboard';
 import { useMe } from '../../../lib/me';
 import { permissionGroups } from '../../../lib/permissions';
 import { useApiQuery } from '../../../lib/query';
+import { day, hostOf, uniqueName } from '../../../lib/proposals';
+import { useProposal } from '../../../lib/use-proposal';
 
 type Token = { id: string; name: string; hint: string; scope: 'read' | 'write'; permissions: string[] | null; allowedIps: string[]; expiresAt: string | null; lastUsedAt: string | null; lastUsedIp: string | null; createdAt: string;
   // The refusal's code while the token of a directory or single sign-on account is not accepted (null or absent: it is).
@@ -71,6 +73,11 @@ function Tokens() {
   const [fields, setFields] = useState<Record<string, string>>({});
   const [made, setMade] = useState<string>();
   const [busy, setBusy] = useState(false);
+  // "Salt okunur anahtar 2026-11-23": what it may do and when it was made, free among this account's tokens; it
+  // follows the scope until the person types a name of their own.
+  const tn = useTranslations('Proposals');
+  const proposal = q.data ? uniqueName(`${tn(scope === 'write' ? 'tokenWrite' : 'tokenRead')} ${day()}`, q.data.tokens.map((x) => x.name), { max: 60 }) : undefined;
+  const { proposed, again } = useProposal(proposal, name, setName);
   const when = (d: string | null) => (d ? format.dateTime(new Date(d), { dateStyle: 'medium' }) : '–');
   const ago = (d: string) => format.relativeTime(new Date(Math.min(Date.parse(d), Date.now())), new Date());
   async function create(e: React.FormEvent) {
@@ -78,7 +85,7 @@ function Tokens() {
     try {
       const out = await apiFetch<{ token: string }>('/account/api-tokens', { method: 'POST', body: { name, scope, expiresInDays: expires === 'never' ? null : Number(expires),
         ...(narrow && { permissions: picked }), allowedIps: ips.split(/[\s,]+/).filter(Boolean) } });
-      setMade(out.token); setName(''); setPicked([]); setIps(''); setNarrow(false); client.invalidateQueries({ queryKey: ['api-tokens'] });
+      setMade(out.token); setName(''); again(); setPicked([]); setIps(''); setNarrow(false); client.invalidateQueries({ queryKey: ['api-tokens'] });
     } catch (err) { setFields((err as ApiError).fields ?? {}); toast.danger(error(err)); } finally { setBusy(false); }
   }
   async function remove(id: string) {
@@ -98,7 +105,7 @@ function Tokens() {
       {full && <Notice tone="warning">{t('tokens.full', { max: q.data!.max })}</Notice>}
       {idle > 0 && <Notice tone="default">{t('tokens.idle', { n: idle })}</Notice>}
       <form onSubmit={create} noValidate className="grid gap-3 sm:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)_auto] sm:items-end">
-        <TextInput label={t('tokens.name')} value={name} onChange={setName} maxLength={60} error={field(fields.name)} placeholder={t('tokens.namePlaceholder')}/>
+        <TextInput label={t('tokens.name')} value={name} onChange={setName} maxLength={60} error={field(fields.name)} placeholder={t('tokens.namePlaceholder')} proposed={proposed}/>
         <SelectInput label={t('tokens.scope')} value={scope} onChange={(v) => setScope(v as 'read' | 'write')}
           options={[{ id: 'read', label: t('tokens.read') }, { id: 'write', label: t('tokens.write') }]}/>
         <SelectInput label={t('tokens.expires')} value={expires} onChange={setExpires}
@@ -150,6 +157,8 @@ function WebhookForm({ events, initial, onDone }: { events: string[]; initial?: 
   const { error, field } = useErrorText();
   const [url, setUrl] = useState(initial?.url ?? '');
   const [description, setDescription] = useState(initial?.description ?? '');
+  // A new webhook is described by the host it calls ("hooks.example.com") until the person writes something else.
+  const { proposed } = useProposal(initial ? undefined : hostOf(url), description, setDescription);
   const [all, setAll] = useState(initial ? initial.events.includes('*') : true);
   const [picked, setPicked] = useState<string[]>(initial?.events.filter((e) => e !== '*') ?? []);
   const [fields, setFields] = useState<Record<string, string>>({});
@@ -165,7 +174,7 @@ function WebhookForm({ events, initial, onDone }: { events: string[]; initial?: 
   return <form onSubmit={save} noValidate className="flex flex-col gap-4 rounded-xl border border-border p-4">
     <div className="grid gap-3 sm:grid-cols-2">
       <TextInput format="url" label={t('webhooks.url')} value={url} onChange={setUrl} placeholder="https://example.com/hooks/lightning" type="url" error={field(fields.url)} help={t('webhooks.urlHelp')}/>
-      <TextInput label={t('webhooks.description')} value={description} onChange={setDescription} maxLength={200}/>
+      <TextInput label={t('webhooks.description')} value={description} onChange={setDescription} maxLength={200} proposed={proposed}/>
     </div>
     <CheckboxInput label={t('webhooks.all')} isSelected={all} onChange={setAll} help={t('webhooks.allHelp')}/>
     {!all && <fieldset className="grid gap-x-4 gap-y-1 sm:grid-cols-2 lg:grid-cols-3" aria-label={t('webhooks.events')}>

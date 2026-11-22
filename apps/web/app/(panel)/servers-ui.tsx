@@ -33,6 +33,8 @@ import { latestFailure, nextStep } from '../../lib/next-step';
 const ServerMetrics = dynamic(() => import('./metrics'), { ssr: false });
 const ServerTraffic = dynamic(() => import('./server-traffic').then((m) => m.ServerTraffic), { ssr: false });
 import { ServerBackups } from './server-backups';
+import { keyFingerprint, parseKey, snapshotName, sshKeyName } from '../../lib/proposals';
+import { useProposal } from '../../lib/use-proposal';
 import { ServerPlacement } from './server-placement';
 import { ServerDisks } from './server-disks';
 import { SaveAsImage } from './server-image';
@@ -78,9 +80,20 @@ export const useSshKeys = () => useApiQuery<{ keys: SshKey[] }>(['ssh-keys'], '/
 export function SshKeys() {
   const t = useTranslations('Servers');
   const client = useQueryClient();
-  const keys = useSshKeys();
+  const keysQ = useApiQuery<{ keys: SshKey[] }>(['ssh-keys'], '/ssh-keys');
+  const keys = keysQ.data?.keys ?? [];
   const [listRef] = useAutoAnimate<HTMLUListElement>();
   const f = useApiForm({ name: '', publicKey: '' });
+  // The key's own comment ("serhat@laptop"), else its type and fingerprint, as soon as a key is pasted.
+  const pasted = parseKey(f.values.publicKey);
+  const [fingerprint, setFingerprint] = useState<string | null>(null);
+  useEffect(() => {
+    let live = true; setFingerprint(null);
+    if (pasted && !pasted.comment) keyFingerprint(pasted.blob).then((x) => { if (live) setFingerprint(x); }).catch(() => undefined);
+    return () => { live = false; };
+  }, [pasted?.blob, pasted?.comment]); // eslint-disable-line react-hooks/exhaustive-deps
+  const proposal = keysQ.data ? sshKeyName(f.values.publicKey, fingerprint, keys.map((k) => k.name)) ?? '' : undefined;
+  const { proposed, again } = useProposal(proposal, f.values.name, f.set('name'));
   const gh = useApiForm({ username: '' });
   const remove = useApiAction((id: string) => apiFetch(`/ssh-keys/${id}`, { method: 'DELETE' }), { invalidate: [['ssh-keys']] });
   return <Section title={t('keys.title')} description={t('keys.explain')}>
@@ -95,8 +108,8 @@ export function SshKeys() {
         </li>)}
       </ul>}
       <form className="grid gap-4 md:grid-cols-[minmax(0,14rem)_minmax(0,1fr)_auto] md:items-start" noValidate
-        onSubmit={async (e) => { e.preventDefault(); if (await f.submit('POST', '/ssh-keys')) { f.reset(); client.invalidateQueries({ queryKey: ['ssh-keys'] }); toast.success(t('keys.added')); } }}>
-        <TextInput maxLength={100} label={t('keys.name')} value={f.values.name} onChange={f.set('name')} error={f.fieldError('name')}/>
+        onSubmit={async (e) => { e.preventDefault(); if (await f.submit('POST', '/ssh-keys')) { f.reset(); again(); client.invalidateQueries({ queryKey: ['ssh-keys'] }); toast.success(t('keys.added')); } }}>
+        <TextInput maxLength={100} label={t('keys.name')} value={f.values.name} onChange={f.set('name')} error={f.fieldError('name')} proposed={proposed}/>
         <TextInput format="sshKey" label={t('keys.publicKey')} value={f.values.publicKey} onChange={f.set('publicKey')} error={f.fieldError('publicKey')} help={t('keys.publicKeyHelp')}
           placeholder="ssh-ed25519 AAAA… user@host" spellCheck={false}/>
         <Button type="submit" className="md:mt-6" isPending={f.busy}><I name="plus" size={16}/>{t('keys.add')}</Button>
@@ -541,7 +554,6 @@ function FailedNotice({ op, own, staff: showCode, retry, ticket }: { op: Operati
 
 export function ServerDetail({ id }: { id: string }) {
   const t = useTranslations('Servers');
-  const ts = useTranslations('Snapshots');
   const format = useFormatter();
   const now = useNow({ updateInterval: 60_000 });
   const { error } = useErrorText();
@@ -587,8 +599,7 @@ export function ServerDetail({ id }: { id: string }) {
   const retry = (o: Operation) => {
     const label = t('nextStep.retryButton'), icon = <I name="rotate-cw" size={14}/>;
     if (o.kind === 'snapshot_create') return allowed.snapshots && ['ready', 'error'].includes(s.state)
-      ? <Button size="sm" isDisabled={!canAct} onPress={() => act(`/servers/${id}/snapshots`, 'POST', { description: '',
-          name: `${ts('auto')} ${format.dateTime(new Date(), { dateStyle: 'short', timeStyle: 'short' }).replace(/[/,]/g, '.').replace(/\s+/g, ' ')}` })}>{icon}{label}</Button> : null;
+      ? <Button size="sm" isDisabled={!canAct} onPress={() => act(`/servers/${id}/snapshots`, 'POST', { description: '', name: snapshotName(s.name) })}>{icon}{label}</Button> : null;
     if (!allowed.power) return null;
     return o.kind === 'power_on' ? power('power_on', icon, off, label) : o.kind === 'shutdown' ? power('shutdown', icon, on, label) : o.kind === 'reset' ? risky('reset', icon, label) : null;
   };
@@ -666,7 +677,7 @@ export function ServerDetail({ id }: { id: string }) {
     {s.state === 'ready' && <ServerAnomalies id={s.id}/>}
     {own && <ServerLabels key={`${s.tags?.join()}|${s.notes}`} server={s}/>}
     {own && (allowed.power || allowed.snapshots || allowed.backups) && s.state !== 'provisioning' && <PowerSchedules serverId={s.id} power={allowed.power} snapshots={allowed.snapshots} backups={allowed.backups}/>}
-    {allowed.snapshots && ['ready', 'error'].includes(s.state) && <ServerSnapshots serverId={s.id} busy={!!open}/>}
+    {allowed.snapshots && ['ready', 'error'].includes(s.state) && <ServerSnapshots serverId={s.id} serverName={s.name} busy={!!open}/>}
     {allowed.backups && supports(s, 'backup') && ['ready', 'error'].includes(s.state) && <ServerBackups serverId={s.id} serverName={s.name} busy={!!open}/>}
     {['ready', 'error'].includes(s.state) && <ServerUpdates serverId={s.id} windows={/windows/i.test(s.imageName)} canChange={own || can(me?.permissions, 'servers.manage_all')} powered={s.powerState === 'poweredOn'}/>}
     <ServerIps server={s}/>

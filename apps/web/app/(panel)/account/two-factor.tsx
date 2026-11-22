@@ -15,12 +15,17 @@ import { authClient } from '../../../lib/auth-client';
 import { useMe } from '../../../lib/me';
 import { useApiQuery } from '../../../lib/query';
 import type { PublicConfig } from '../../../lib/session';
+import { hostLabel, totpLabel } from '../../../lib/proposals';
 
 type ClientError = { code?: string; status?: number } | null;
 const codeOf = (e: ClientError) => ({ code: e?.code ?? (e?.status === 429 ? 'RATE_LIMITED' : 'UNKNOWN') });
 
 function BackupCodes({ codes }: { codes: string[] }) {
   const t = useTranslations('Account');
+  const tp = useTranslations('Proposals');
+  // The file says whose codes they are: "acme-cloud-backup-codes.txt" (the panel's name, in the panel's language).
+  const brand = useApiQuery<PublicConfig>(['public-config'], '/public/config').data?.branding.name ?? '';
+  const file = `${[hostLabel(brand, 40), tp('codesFile')].filter(Boolean).join('-')}.txt`;
   const text = codes.join('\n');
   const copy = useCopy();
   return <div className="flex flex-col gap-3">
@@ -28,7 +33,7 @@ function BackupCodes({ codes }: { codes: string[] }) {
     <ul className="grid grid-cols-2 gap-2 rounded-lg border border-border bg-default/40 p-3 font-mono text-sm sm:grid-cols-5">{codes.map((c) => <li key={c}>{c}</li>)}</ul>
     <div className="flex flex-wrap gap-2">
       <Button size="sm" variant="secondary" onPress={() => void copy(text, t('twoFactor.copied'))}><I name="copy" size={15}/>{t('twoFactor.copy')}</Button>
-      <Button size="sm" variant="secondary" onPress={() => { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([text], { type: 'text/plain' })); a.download = 'backup-codes.txt'; a.click(); }}>
+      <Button size="sm" variant="secondary" onPress={() => { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([text], { type: 'text/plain' })); a.download = file; a.click(); }}>
         <I name="download" size={15}/>{t('twoFactor.download')}</Button>
     </div>
   </div>;
@@ -38,6 +43,7 @@ const methodIcon = (m: 'app' | 'code', channel: string) => m === 'app' ? 'smartp
 
 export function TwoFactor() {
   const t = useTranslations('Account');
+  const tp = useTranslations('Proposals');
   const { error } = useErrorText();
   const client = useQueryClient();
   const me = useMe();
@@ -55,6 +61,8 @@ export function TwoFactor() {
   useEffect(() => { if (uri) void QRCode.toDataURL(uri, { margin: 1, width: 220 }).then(setQr); }, [uri]);
   const enabled = !!me?.twoFactorEnabled;
   const secret = uri ? new URL(uri).searchParams.get('secret') ?? '' : '';
+  // What the authenticator app will list: the issuer and the account the panel put in the URI.
+  const [issuer, account] = uri ? totpLabel(uri) : ['', ''];
   const close = () => { setStep('idle'); setPassword(''); setCode(''); };
   const refresh = () => client.invalidateQueries({ queryKey: ['me'] });
 
@@ -145,6 +153,7 @@ export function TwoFactor() {
                     {/* eslint-disable-next-line @next/next/no-img-element -- generated locally from the otpauth URI */}
                     {qr && <img src={qr} alt={t('twoFactor.qrAlt')} className="size-48 rounded-lg bg-white p-2"/>}
                     <p className="text-center text-xs text-muted">{t('twoFactor.manual')} <code className="break-all font-mono">{secret}</code></p>
+                    {issuer && <p className="text-center text-xs text-muted [overflow-wrap:anywhere]" data-testid="totp-label">{tp('appShows', { issuer, account })}</p>}
                     <InputOTP maxLength={6} value={code} onChange={setCode} onComplete={() => void verify()} aria-label={t('twoFactor.code')}>
                       <InputOTP.Group>{[0, 1, 2, 3, 4, 5].map((i) => <InputOTP.Slot key={i} index={i}/>)}</InputOTP.Group>
                     </InputOTP>

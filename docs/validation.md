@@ -1207,3 +1207,33 @@ Sahibin bildirdiği üç kusur (`b467a5f`, test düzeltmesi `e9bd7bc`).
   hazırlanmış yanıtla tarayıcı testi); günlük maskelemenin gerçek servis günlüklerinde gözden geçirilmesi;
   saatlik zamanlayıcının listeyi günde bir yenilemesi (kod okundu, beklenmedi); grafiklerin Linux'taki gerçek
   geçmişle gözle görülmesi (CI ve demoda tarayıcı testi grafiğin üzerine gelip değeri okudu, ekrana bakılmadı).
+
+## Önerilen adlar (passkey, TOTP etiketi, API anahtarı, SSH anahtarı ve diğerleri) — 2026-11-23
+
+Ne değişti: [proposals.md](proposals.md). Formlar boş ad alanı yerine panelin önerisini yazar; doğrulama uygulaması ve
+passkey yöneticisi panelin kendi adını ve hesabın e-postasını gösterir.
+
+**Çalıştırılanlar:**
+- **Web birim testleri** 142/142 (yeni `lib/proposals.test.ts` 11/11: gerçek kullanıcı ajanı tablosu, bilinmeyen
+  ajanlar, `userAgentData` öncelikli, iPad'in Mac gibi görünmesi, güvenlik anahtarı/telefon, benzersizlik, Türkçe büyük
+  harf karşılaştırması, uzunluk sınırları ve vekil çiftlerin bölünmemesi, sunucu adı kuralı, anlık görüntü adı kuralı,
+  SSH parmak izi `ssh-keygen -lf` çıktısıyla aynı, iki dilde kelimelerin varlığı ve karışmaması),
+  `check-messages` (TR/EN eşit), `message-scope` (yeni `Proposals` ad alanı genel sayfalara eklendi), `tsc` ve
+  `next build` başarılı.
+- **API birim testleri** 218/218 (yeni `labels.test.mjs` 4/4: yayımcı adının temizlenmesi, URI'nin etiket ve
+  `issuer` parametresinde yüzde kodlaması, `+` olmaması, better-auth'un URI'sinin gizli anahtar/basamak/süre korunarak
+  yeniden etiketlenmesi, WebAuthn seçeneklerinde `rp`/`user` değişip challenge ve kimliklerin kalması).
+- **Entegrasyon** (geliştirme makinesi, Docker yok; PostgreSQL 18.6 ve Redis 8.0.5 WSL içinde geçici dizinden, iş
+  bitince silindi): `platform.test.mjs` 42/42. Yeni denetimler: etkinleştirilen TOTP URI'si
+  `otpauth://totp/Lightning%20VM:ayse%40example.test?secret=…&issuer=Lightning%20VM&digits=6`; markalama "Acme Cloud"
+  yapıldıktan sonra passkey kayıt seçeneklerinde `rp.name` "Acme Cloud", `user.name` e-posta (istekte passkey adı
+  gönderilse de); `update-passkey` sahibine açık ve adı değiştiriyor, başka bir hesap değiştiremiyor.
+- **Yerel tarayıcı denemesi** (API, worker ve `next start`, önünde küçük bir vekil, kurulu Chrome, Windows): yeni
+  "names are proposed…" testi (passkey önerisi ve ipucu; sahte bir USB güvenlik anahtarıyla kayıt: sunucunun gerçek
+  seçeneklerinde `rp.name`/`user.name`, kayıttan sonra adın "Security key · Chrome · Windows" olması; API anahtarı
+  adının erişimi izlemesi ve yazılınca durması; SSH anahtarı adının açıklamadan gelmesi; talep konusunun
+  doldurulmayıp tek tıkla önerilmesi, 390 px), TOTP etiketi ve yedek kod dosya adı eklenen "second step at sign-in"
+  testi, "a registered user gets…", güvenlik duvarı testi (elle eklenen kuralın "SSH" adını alması), "every page fits
+  390 px" ve "a session that ends while something is typed…" geçti. Kurulum sihirbazı testi bu makinede izleme
+  bileşenleri olmadığı için ilerleyemedi (değişiklikle ilgisiz); yönetici sihirbazın önceki adımlarıyla oluştu ve
+  kayıt açma doğrudan veritabanından yapıldı.

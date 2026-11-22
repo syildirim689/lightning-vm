@@ -7,6 +7,7 @@ import { useState } from 'react';
 import { apiFetch, useErrorText, type ApiError } from '../../../../lib/api';
 import { FieldGroup, Mono, Notice, SelectInput, TextInput } from '../../../../components/ui';
 import { apiVersions, versionLabel } from './connections';
+import { useProposal } from '../../../../lib/use-proposal';
 
 type Certificate = { subject: string; issuer: string; notAfter: string; sha256: string; dnsNames: string[] | null; ips: string[] | null };
 type Failure = ApiError & { text: string; certificate?: Certificate; kind?: string; conflicts?: { host: string; connection: string }[] };
@@ -48,6 +49,8 @@ export default function ConnectionForm({ onSaved, initial, editing }: { onSaved:
   const [testedFor, setTestedFor] = useState('');
   const [busy, setBusy] = useState<'test' | 'save'>();
   const set = (k: keyof typeof form) => (v: string) => setForm((f) => ({ ...f, [k]: v }));
+  // A new connection is called by its address ("vcenter.example.com") until a name is typed.
+  const { proposed: nameProposed } = useProposal(editing || initial?.name ? undefined : form.host.trim().slice(0, 100), form.name, set('name'));
   const proxmox = form.platform === 'proxmox', xcpng = form.platform === 'xcpng', ovirt = form.platform === 'ovirt', hyperv = form.platform === 'hyperv', libvirt = form.platform === 'libvirt', incus = form.platform === 'incus', other = proxmox || xcpng || ovirt || hyperv || libvirt || incus;
   // The other platform answers on another port; a port typed by hand is kept.
   const choose = (p: Form['platform']) => setForm((x) => ({ ...x, platform: p, port: ['443', '8006', '5986', '22', '8443', ''].includes(x.port) ? (p === 'proxmox' ? '8006' : p === 'hyperv' ? '5986' : p === 'libvirt' ? '22' : p === 'incus' ? '8443' : '443') : x.port,
@@ -99,7 +102,7 @@ export default function ConnectionForm({ onSaved, initial, editing }: { onSaved:
       </div>
     </div>}
     <FieldGroup title={t('form.groupEndpoint')} description={t(proxmox ? 'platform.endpointHelp' : xcpng ? 'platform.xcpngEndpointHelp' : ovirt ? 'platform.ovirtEndpointHelp' : hyperv ? 'platform.hypervEndpointHelp' : libvirt ? 'platform.libvirtEndpointHelp' : incus ? 'platform.incusEndpointHelp' : 'form.groupEndpointHelp')}>
-      <TextInput maxLength={100} label={t('form.name')} value={form.name} onChange={set('name')} error={err('name')} help={help('name')} isRequired/>
+      <TextInput maxLength={100} label={t('form.name')} value={form.name} onChange={set('name')} error={err('name')} help={help('name')} isRequired proposed={nameProposed}/>
       <TextInput format="hostOrIp" label={t('form.host')} value={form.host} onChange={set('host')} error={err('host')} help={platformHelp('host')} isRequired autoComplete="off" spellCheck={false}/>
       <TextInput format="port" label={t('form.port')} value={form.port} onChange={set('port')} error={err('port')} help={platformHelp('port')} autoComplete="off"/>
     </FieldGroup>

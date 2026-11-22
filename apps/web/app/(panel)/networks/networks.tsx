@@ -11,6 +11,8 @@ import { ConfirmButton, Empty, Mono, Notice, PageHeader, Section, SelectInput, S
 import { apiFetch, type ApiError, useErrorText } from '../../../lib/api';
 import { useApiQuery } from '../../../lib/query';
 import { Copy } from '../server-extras';
+import { uniqueName } from '../../../lib/proposals';
+import { useProposal } from '../../../lib/use-proposal';
 
 type Member = { serverId: string; name: string; address: string; mac: string | null; status: 'joining' | 'joined' | 'leaving' | 'failed' };
 type Network = { id: string; name: string; cidr: string; vlan: number; poolId: string; poolName: string; createdAt: string; members: Member[] };
@@ -100,12 +102,18 @@ export default function Networks() {
   const refresh = () => { void client.invalidateQueries({ queryKey: ['networks'] }); void client.invalidateQueries({ queryKey: ['servers'] }); };
   async function create(e: React.FormEvent) {
     e.preventDefault(); setBusy(true); setFields({});
-    try { await apiFetch('/networks', { method: 'POST', body: v }); toast.success(t('created')); setV({ name: '', poolId: v.poolId, cidr: '' }); refresh(); }
+    try { await apiFetch('/networks', { method: 'POST', body: v }); toast.success(t('created')); setV({ name: '', poolId: v.poolId, cidr: '' }); again(); refresh(); }
     catch (err) { setFields((err as ApiError).fields ?? {}); toast.danger(error(err)); } finally { setBusy(false); }
   }
   const d = q.data;
   const onlyPool = d?.pools.length === 1 ? d.pools[0].id : '';
   useEffect(() => { if (onlyPool) setV((x) => (x.poolId ? x : { ...x, poolId: onlyPool })); }, [onlyPool]);
+  // "İstanbul özel ağı" for the location chosen, free among this account's networks; follows the location.
+  const tp = useTranslations('Proposals');
+  const at = d?.pools.find((p) => p.id === v.poolId);
+  const place = at?.location || at?.name || '';
+  const { proposed, again } = useProposal(d ? uniqueName(place ? tp('network', { location: place }) : tp('networkPlain'), d.networks.map((n) => n.name), { max: 60 }) : undefined,
+    v.name, (name) => setV((x) => ({ ...x, name })));
   const full = !!d && d.networks.length >= d.max;
   return <>
     <PageHeader title={t('title')} description={t('intro')} actions={d && <span className={`rounded-full border px-3 py-1 text-xs font-medium tabular-nums ${full ? 'border-warning/40 bg-warning/10 text-warning' : 'border-border text-muted'}`}>
@@ -114,7 +122,7 @@ export default function Networks() {
       {d.pools.length === 0 ? <Notice tone="default">{t('noLocations')}</Notice>
         : <Section title={t('create')}>
           <form onSubmit={create} noValidate className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_auto] sm:items-end">
-            <TextInput label={t('name')} value={v.name} onChange={(x) => setV({ ...v, name: x })} maxLength={60} error={field(fields.name)} placeholder="backend"/>
+            <TextInput label={t('name')} value={v.name} onChange={(x) => setV({ ...v, name: x })} maxLength={60} error={field(fields.name)} placeholder="backend" proposed={proposed}/>
             <SelectInput label={t('location')} value={v.poolId} onChange={(x) => setV({ ...v, poolId: x })} error={field(fields.poolId)} options={d.pools.map((p) => ({ id: p.id, label: p.location ? `${p.name} · ${p.location}` : p.name }))}/>
             <TextInput format="privateCidr" label={t('subnet')} value={v.cidr} onChange={(x) => setV({ ...v, cidr: x })} error={field(fields.cidr)} placeholder="10.10.0.0/24" help={t('subnetHelp')}/>
             <Button type="submit" isPending={busy} isDisabled={!v.name.trim() || !v.poolId || full}><I name="plus" size={15}/>{t('add')}</Button>

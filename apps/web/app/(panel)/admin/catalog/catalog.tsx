@@ -18,6 +18,8 @@ import { IsoLibrary } from './iso-ui';
 import { flag, Locations, PoolLocation, useLocations } from './locations-ui';
 import { VdcAdmin } from './vdc-ui';
 import { IpAddresses, IpPoolEdit, PoolIpOptions, type IpPoolRow } from './ip-ui';
+import { packageName, uniqueName } from '../../../../lib/proposals';
+import { useProposal } from '../../../../lib/use-proposal';
 
 type Inventory = { compute: { moref: string; name: string; kind: string }[]; datastores: { moref: string; name: string }[]; networks: { moref: string; name: string; vlan: number | null }[]; vms: { moref: string; name: string; template: boolean }[] };
 type Connection = { id: string; name: string };
@@ -104,7 +106,7 @@ export default function Catalog() {
       <Tabs.Panel id="pools" className="flex flex-col gap-4 pt-5">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <p className="max-w-3xl text-sm text-muted">{t('poolsExplain')}</p>
-          {connections.length > 0 && <FormModal title={t('pools.new')} label={t('pools.new')}>{(close) => <PoolForm connections={connections} onSaved={close}/>}</FormModal>}
+          {connections.length > 0 && <FormModal title={t('pools.new')} label={t('pools.new')}>{(close) => <PoolForm connections={connections} taken={pools.map((x) => x.name)} onSaved={close}/>}</FormModal>}
         </div>
         {!connections.length && needConnection}
         {pools.length === 0 ? <Empty icon={<I name="layers" size={28}/>} title={t('pools.empty')}/>
@@ -118,7 +120,7 @@ export default function Catalog() {
         <div className="flex flex-wrap items-center justify-end gap-2">{search(packages.length)}<span className="flex-1"/>{packages.length > 0 && <Button variant="secondary" onPress={() => downloadCsv('packages', ['name', 'vcpu', 'memory_gb', 'disk_gb', 'price_monthly', 'currency', 'traffic_gb', 'locations'],
           packages.map((p) => [p.name, p.vcpu, p.memoryMb / 1024, p.diskGb, p.priceMonthly, p.currency, p.trafficGb ?? '', p.poolIds.map((id) => pools.find((x) => x.id === id)?.name ?? id).join(' / ')]))}>
           <I name="download" size={15}/>{t('export')}</Button>}
-          {pools.length > 0 && <FormModal title={t('packages.new')} label={t('packages.new')}>{(close) => <PackageForm pools={pools} images={images} onSaved={close}/>}</FormModal>}</div>
+          {pools.length > 0 && <FormModal title={t('packages.new')} label={t('packages.new')}>{(close) => <PackageForm pools={pools} images={images} taken={packages.map((x) => x.name)} onSaved={close}/>}</FormModal>}</div>
         {!pools.length && <Notice tone="warning"><span className="flex flex-wrap items-center gap-3">{t('packages.needPool')}
           <Button size="sm" variant="secondary" onPress={() => setTab('pools')}>{t('packages.toPools')}<I name="arrow-right" size={14}/></Button></span></Notice>}
         <DataTable label={t('packages.title')} rows={shownPackages} rowKey={(p) => p.id} empty={find ? t('noMatch') : t('packages.empty')}
@@ -133,7 +135,7 @@ export default function Catalog() {
       <Tabs.Panel id="images" className="flex flex-col gap-4 pt-5">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <p className="max-w-3xl text-sm text-muted">{t('images.explain')}</p>
-          {connections.length > 0 && <FormModal title={t('images.new')} label={t('images.new')}>{(close) => <ImageForm connections={connections} onSaved={close}/>}</FormModal>}
+          {connections.length > 0 && <FormModal title={t('images.new')} label={t('images.new')}>{(close) => <ImageForm connections={connections} taken={images.map((x) => x.name)} onSaved={close}/>}</FormModal>}
         </div>
         {!connections.length && needConnection}
         {search(images.length)}
@@ -148,7 +150,7 @@ export default function Catalog() {
       <Tabs.Panel id="ip" className="flex flex-col gap-4 pt-5">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <p className="max-w-3xl text-sm text-muted">{t('ip.explain')}</p>
-          {pools.length > 0 && <FormModal title={t('ip.new')} label={t('ip.new')}>{(close) => <IpPoolForm pools={pools} onSaved={close}/>}</FormModal>}
+          {pools.length > 0 && <FormModal title={t('ip.new')} label={t('ip.new')}>{(close) => <IpPoolForm pools={pools} taken={ipPools.map((x) => x.name)} onSaved={close}/>}</FormModal>}
         </div>
         <DataTable label={t('ip.title')} rows={ipPools} rowKey={(i) => i.id} empty={t('ip.empty')} minWidth={760}
           columns={[{ id: 'name', label: t('col.name') }, { id: 'pool', label: t('ip.pool') }, { id: 'cidr', label: t('ip.subnet') }, { id: 'gw', label: t('ip.gateway') }, { id: 'range', label: t('ip.range') },
@@ -300,7 +302,7 @@ const str = (v: number | undefined) => (v === undefined ? '' : String(v));
 
 // New pool, or the core settings of an existing one (pool given). Its connection stays: servers and inventory
 // references belong to it. The location, extra IPv4 and traffic have their own controls on the card and are kept.
-function PoolForm({ connections, pool, onSaved }: { connections: Connection[]; pool?: Pool; onSaved: () => void }) {
+function PoolForm({ connections, pool, taken = [], onSaved }: { connections: Connection[]; pool?: Pool; taken?: string[]; onSaved: () => void }) {
   const t = useTranslations('Catalog');
   const tv = useTranslations('Vmware');
   const saved = useSaved(onSaved);
@@ -312,6 +314,9 @@ function PoolForm({ connections, pool, onSaved }: { connections: Connection[]; p
     : { name: '', locationId: '', connectionId: connections[0].id, computeMoref: '', networkMoref: '', cpuOvercommit: '4', memoryOvercommit: '1', storageOvercommit: '1',
       reserveCpuPct: '10', reserveMemoryPct: '10', reserveStoragePct: '15' });
   const inv = useApiQuery<Inventory>(['vmware', 'connection', f.values.connectionId], `/admin/vmware/connections/${f.values.connectionId}`).data;
+  // A new pool takes its location's name ("İstanbul", "İstanbul 2"), free among the pools; an existing one keeps its own.
+  const place = locations.find((l) => l.id === f.values.locationId);
+  const { proposed: nameProposed } = useProposal(pool ? undefined : place ? uniqueName(place.city || place.name, taken, { max: 100 }) : '', f.values.name, f.set('name'));
   const [stores, setStores] = useState<string[]>(pool?.datastoreMorefs ?? []);
   const submit = () => pool
     ? f.submit('PUT', `/admin/pools/${pool.id}`, { ...f.values, datastoreMorefs: stores, location: pool.location || undefined, active: pool.active,
@@ -325,7 +330,7 @@ function PoolForm({ connections, pool, onSaved }: { connections: Connection[]; p
       minValue={0} maxValue={0.9} step={0.05} error={f.fieldError(k)} formatOptions={{ style: 'percent' }}/>;
   return <form className="flex flex-col gap-4" noValidate onSubmit={async (e) => { e.preventDefault(); saved(await submit()); }}>
     <FieldGroup title={t('form.identity')} description={t('form.poolIdentityHelp')}>
-      <TextInput maxLength={100} label={t('col.name')} value={f.values.name} onChange={f.set('name')} error={f.fieldError('name')} isRequired placeholder="Istanbul-1"/>
+      <TextInput maxLength={100} label={t('col.name')} value={f.values.name} onChange={f.set('name')} error={f.fieldError('name')} isRequired placeholder="Istanbul-1" proposed={nameProposed}/>
       {!pool && <SelectInput label={t('pools.location')} help={t('pools.locationHelp')} value={f.values.locationId} onChange={f.set('locationId')} error={f.fieldError('locationId')}
         options={[{ id: '', label: '–' }, ...locations.map((l) => ({ id: l.id, label: `${flag(l.countryCode)} ${l.name}`.trim(), description: [l.city, l.datacenter].filter(Boolean).join(' · ') || undefined }))]}/>}
     </FieldGroup>
@@ -376,16 +381,19 @@ function RuleForm({ poolId, rule }: { poolId: string; rule: Record<string, unkno
   </form>;
 }
 
-function ImageForm({ connections, image, onSaved }: { connections: Connection[]; image?: Image; onSaved: () => void }) {
+function ImageForm({ connections, image, taken = [], onSaved }: { connections: Connection[]; image?: Image; taken?: string[]; onSaved: () => void }) {
   const t = useTranslations('Catalog');
   const saved = useSaved(onSaved);
   const f = useApiForm(image ? { name: image.name, family: image.family, connectionId: image.connectionId, templateMoref: image.templateMoref, minDiskGb: String(image.minDiskGb) }
     : { name: '', family: 'linux', connectionId: connections[0]?.id ?? '', templateMoref: '', minDiskGb: '20' });
   const vms = useApiQuery<Inventory>(['vmware', 'connection', f.values.connectionId], f.values.connectionId ? `/admin/vmware/connections/${f.values.connectionId}` : null).data?.vms.filter((v) => v.template) ?? [];
+  // A new image is named after the template chosen, until a name is typed.
+  const template = vms.find((v) => v.moref === f.values.templateMoref);
+  const { proposed: nameProposed } = useProposal(image ? undefined : template ? uniqueName(template.name, taken, { max: 100 }) : '', f.values.name, f.set('name'));
   return <form className="flex flex-col gap-4" noValidate onSubmit={async (e) => { e.preventDefault();
     saved(await (image ? f.submit('PUT', `/admin/images/${image.id}`, { ...f.values, cloudInit: image.cloudInit }) : f.submit('POST', '/admin/images'))); }}>
     <FieldGroup title={t('form.identity')} description={t('form.imageIdentityHelp')}>
-      <TextInput maxLength={100} label={t('col.name')} value={f.values.name} onChange={f.set('name')} error={f.fieldError('name')} isRequired placeholder="Ubuntu 24.04 LTS"/>
+      <TextInput maxLength={100} label={t('col.name')} value={f.values.name} onChange={f.set('name')} error={f.fieldError('name')} isRequired placeholder="Ubuntu 24.04 LTS" proposed={nameProposed}/>
       <SelectInput label={t('images.family')} value={f.values.family} onChange={f.set('family')} options={[{ id: 'linux', label: 'Linux' }, { id: 'windows', label: 'Windows' }, { id: 'esxi', label: t('images.esxi'), description: t('images.esxiHelp') }]}/>
     </FieldGroup>
     <FieldGroup title={t('form.template')} description={t('form.templateHelp')}>
@@ -400,7 +408,7 @@ function ImageForm({ connections, image, onSaved }: { connections: Connection[];
   </form>;
 }
 
-function PackageForm({ pools, images, pkg, onSaved }: { pools: Pool[]; images: Image[]; pkg?: Pkg; onSaved: () => void }) {
+function PackageForm({ pools, images, pkg, taken = [], onSaved }: { pools: Pool[]; images: Image[]; pkg?: Pkg; taken?: string[]; onSaved: () => void }) {
   const t = useTranslations('Catalog');
   const format = useFormatter();
   const saved = useSaved(onSaved);
@@ -408,6 +416,8 @@ function PackageForm({ pools, images, pkg, onSaved }: { pools: Pool[]; images: I
     priceMonthly: pkg.priceMonthly, priceHourly: pkg.priceHourly ?? '', currency: pkg.currency }
     : { name: '', vcpu: '2', memoryMb: '4096', diskGb: '40', trafficGb: '', priceMonthly: '', priceHourly: '', currency: 'EUR' });
   const [poolIds, setPoolIds] = useState<string[]>(pkg ? pkg.poolIds : pools.length === 1 ? [pools[0].id] : []);
+  // A new package is named by what it gives ("2 vCPU · 4 GB · 40 GB") and follows the sizes until a name is typed.
+  const { proposed: nameProposed } = useProposal(pkg ? undefined : packageName(Number(f.values.vcpu), Number(f.values.memoryMb), Number(f.values.diskGb), taken) ?? '', f.values.name, f.set('name'));
   const [imageIds, setImageIds] = useState<string[]>(pkg?.imageIds ?? []);
   const price = Number(f.values.priceMonthly.replace(',', '.'));
   // Hourly price suggested from the monthly one (730 hours), unless the admin typed their own.
@@ -419,7 +429,7 @@ function PackageForm({ pools, images, pkg, onSaved }: { pools: Pool[]; images: I
       // Sort order and on/off are not on this form; an edit keeps them.
       saved(await (pkg ? f.submit('PUT', `/admin/packages/${pkg.id}`, { ...body, sort: pkg.sort, active: pkg.active }) : f.submit('POST', '/admin/packages', body))); }}>
     <FieldGroup title={t('form.identity')} cols={1}>
-      <TextInput maxLength={100} label={t('col.name')} value={f.values.name} onChange={f.set('name')} error={f.fieldError('name')} isRequired placeholder="Standard 2"/>
+      <TextInput maxLength={100} label={t('col.name')} value={f.values.name} onChange={f.set('name')} error={f.fieldError('name')} isRequired placeholder="Standard 2" proposed={nameProposed}/>
     </FieldGroup>
     <FieldGroup title={t('form.resources')} description={t('form.resourcesHelp')} cols={3}>
       <NumberInput label="vCPU" value={num(f.values.vcpu)} onChange={(v) => f.set('vcpu')(str(v))} minValue={1} maxValue={256} error={f.fieldError('vcpu')}/>
@@ -459,16 +469,19 @@ function cidrSuggest(cidr: string) {
   return { gateway: dot(net + 1), start: dot(net + 2), end: dot(net + size - 2), usable: size - 3 };
 }
 
-function IpPoolForm({ pools, onSaved }: { pools: Pool[]; onSaved: () => void }) {
+function IpPoolForm({ pools, taken = [], onSaved }: { pools: Pool[]; taken?: string[]; onSaved: () => void }) {
   const t = useTranslations('Catalog');
   const saved = useSaved(onSaved);
   const f = useApiForm({ name: '', poolId: pools[0].id, cidr: '', gateway: '', rangeStart: '', rangeEnd: '', dns: '1.1.1.1, 8.8.8.8', excluded: '', quarantineHours: '24', ipv6Prefix: '', ipv6Gateway: '' });
   const list = (s: string) => s.split(/[\s,]+/).filter(Boolean);
   const hint = cidrSuggest(f.values.cidr);
+  // "İstanbul-1 · 203.0.113.0/24": the pool and the subnet, once a subnet is typed.
+  const owner = pools.find((p) => p.id === f.values.poolId);
+  const { proposed: nameProposed } = useProposal(hint && owner ? uniqueName(`${owner.name} · ${f.values.cidr.trim()}`, taken, { max: 100 }) : '', f.values.name, f.set('name'));
   const fill = () => hint && f.setValues((v) => ({ ...v, gateway: hint.gateway, rangeStart: hint.start, rangeEnd: hint.end }));
   return <form className="flex flex-col gap-4" noValidate onSubmit={async (e) => { e.preventDefault(); saved(await f.submit('POST', '/admin/ip-pools', { ...f.values, dns: list(f.values.dns), excluded: list(f.values.excluded) })); }}>
     <FieldGroup title={t('form.identity')}>
-      <TextInput maxLength={100} label={t('col.name')} value={f.values.name} onChange={f.set('name')} error={f.fieldError('name')} isRequired placeholder="Public v4"/>
+      <TextInput maxLength={100} label={t('col.name')} value={f.values.name} onChange={f.set('name')} error={f.fieldError('name')} isRequired placeholder="Public v4" proposed={nameProposed}/>
       <SelectInput label={t('ip.pool')} value={f.values.poolId} onChange={f.set('poolId')} options={pools.map((p) => ({ id: p.id, label: p.name }))}/>
     </FieldGroup>
     <FieldGroup title={t('form.network')} description={t('form.networkHelp')}>

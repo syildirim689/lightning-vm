@@ -23,6 +23,7 @@ import { orderLinkKeys, orderLinkQuery, parseOrderLink } from '../../../lib/orde
 import { PlatformHint, supports, type Platformed } from '../../../components/capabilities';
 import { Strength } from '../../(auth)/credentials-form';
 import { useEmailVerification } from '../account/email-verification';
+import { hostName } from '../../../lib/proposals';
 
 type Custom = { cpuMin: number; cpuMax: number; cpuStep: number; memoryMinMb: number; memoryMaxMb: number; memoryStepMb: number; diskMinGb: number; diskMaxGb: number; diskStepGb: number; currency: string };
 type Catalog = { packages: { id: string; name: string; vcpu: number; memoryMb: number; diskGb: number; priceMonthly: string; currency: string; poolIds: string[]; imageIds: string[] }[];
@@ -38,7 +39,6 @@ type Quote = { shape: { vcpu: number; memoryMb: number; diskGb: number }; price:
   coupon: { code: string; monthly: string; periods: number | null } | { error: string } | null };
 type Project = { id: string; name: string };
 type Availability = { packages: Record<string, { capacity: boolean; quota: string[] }> };
-const slug = (s: string) => s.toLocaleLowerCase('en').normalize('NFD').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'server';
 
 // Builds, prices and places an order. Every value is validated again by the API.
 export default function Order() {
@@ -97,12 +97,8 @@ export default function Order() {
     const packagesHere = catalog.packages.filter((p) => p.poolIds.includes(d.poolId));
     if (d.type === 'package' && !d.packageId && packagesHere.length === 1) patch.packageId = packagesHere[0].id;
     const img = catalog.images.find((i) => i.id === (patch.imageId ?? d.imageId));
-    if (!d.name && img && mineQ.data) {
-      const used = new Set(mineQ.data.servers.map((m) => m.name));
-      const base = slug(img.name.split(/\s/)[0] ?? 'server');
-      let n = 1; while (used.has(`${base}-${n}`)) n++;
-      patch.name = `${base}-${n}`;
-    }
+    // A free host name from the image's first word ("ubuntu-1", "debian-2"), lib/proposals.ts.
+    if (!d.name && img && mineQ.data) patch.name = hostName(img.name.split(/\s/)[0] ?? '', mineQ.data.servers.map((m) => m.name));
     if (Object.keys(patch).length) d.set(patch);
   }, [catalog, d.poolId, d.imageId, d.type, mineQ.data]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -159,7 +155,7 @@ export default function Order() {
   const recommended = advice?.pkg?.id ?? null;
   const bestValue = orderable.length > 1 ? orderable.reduce((a, b) => (Number(a.priceMonthly) / a.vcpu <= Number(b.priceMonthly) / b.vcpu ? a : b)).id : null;
   const taken = new Set(mine.map((m) => m.name));
-  const suggest = () => { const base = slug(image?.name.split(/\s/)[0] ?? 'server'); let n = 1; while (taken.has(`${base}-${n}`)) n++; return `${base}-${n}`; };
+  const suggest = () => hostName(image?.name.split(/\s/)[0] ?? '', taken);
   const couponOk = quote.data?.coupon && 'code' in quote.data.coupon ? quote.data.coupon : null;
   const couponError = quote.data?.coupon && 'error' in quote.data.coupon ? quote.data.coupon.error : undefined;
   const nameTaken = !!d.name && taken.has(d.name);

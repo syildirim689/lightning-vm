@@ -2155,7 +2155,9 @@ test.describe('people, settings and smart features (English browser)', () => {
     await expect(page.getByText('Open to everyone').first()).toBeVisible();
     await page.getByRole('button', { name: 'Rule', exact: true }).first().click();
     await page.getByRole('textbox', { name: 'Port or range' }).last().fill('22');
-    await expect(page.getByText('The "TCP 22" rule appears twice')).toBeVisible();
+    // A rule added by hand is described by its port's service until a description is typed.
+    await expect(page.getByRole('textbox', { name: 'Description' }).last()).toHaveValue('SSH');
+    await expect(page.getByText('The "SSH" rule appears twice')).toBeVisible();
     await tour(page, 'firewall-hints', true);
     await page.setViewportSize({ width: 390, height: 900 });
     await expectNoOverflow(page, 'firewall rules at 390 px');
@@ -4111,6 +4113,82 @@ async function totp(secret: string) {
   return String((h.readUInt32BE(o) & 0x7fffffff) % 1_000_000).padStart(6, '0');
 }
 
+// What authenticator apps and passkey managers show for this panel: its own name, as Settings → Branding has it.
+const issuerOf = (brand: string) => brand.replace(/[\u0000-\u001f\u007f:]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 64).trim() || 'Lightning VM';
+const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+test('names are proposed: a passkey by browser and authenticator, an API token by its access, an SSH key by its comment, a ticket subject offered from the message', async ({ browser }) => {
+  const page = await (await browser.newContext({ locale: 'en-US' })).newPage();
+  page.on('dialog', (d) => void d.accept()); // fields are left half-typed on purpose: leaving the page is fine
+  await signIn(page, user);
+  await expect(page).toHaveURL(/\/$/);
+  const brand = (await (await page.request.get('/api/public/config')).json()).branding.name as string;
+  // Passkey: browser, system and device from this browser, ready to be sent; the hint says it is a proposal.
+  await page.goto('/account?tab=security');
+  const passkeyName = page.getByRole('textbox', { name: 'Name (optional)' });
+  await expect(passkeyName).toHaveValue(/^(Chrome|Chromium) · (Linux|Windows|macOS|ChromeOS) · Desktop$/);
+  await expect(page.locator('#passkeys').getByText('Proposed by the panel; what you type replaces it.')).toBeVisible();
+  const proposed = await passkeyName.inputValue();
+  // No authenticator in a test browser: navigator.credentials answers as a USB security key would, and the panel's
+  // verify and rename calls are caught here (nothing is stored). The server's own options are real.
+  let renamed: { id?: string; name?: string } | undefined;
+  await page.route('**/api/auth/passkey/verify-registration', (route) => route.fulfill({ json: { id: 'e2e-passkey', name: route.request().postDataJSON().name, createdAt: new Date().toISOString() } }));
+  await page.route('**/api/auth/passkey/update-passkey', (route) => { renamed = route.request().postDataJSON(); return route.fulfill({ json: { passkey: { id: 'e2e-passkey', name: renamed?.name } } }); });
+  await page.evaluate(() => {
+    const buf = (n: number) => new Uint8Array([n, n, n]).buffer;
+    Object.defineProperty(navigator.credentials, 'create', { configurable: true, value: async () => ({ id: 'AQID', rawId: buf(1), type: 'public-key', authenticatorAttachment: 'cross-platform',
+      response: { clientDataJSON: buf(2), attestationObject: buf(3), getTransports: () => ['usb'] }, getClientExtensionResults: () => ({}) }) });
+  });
+  const options = page.waitForResponse((r) => r.url().includes('/api/auth/passkey/generate-register-options'));
+  await page.getByRole('button', { name: 'Add passkey' }).click();
+  const sent = await options;
+  // The passkey manager files it under the panel's name and the account's address, not under the passkey's name.
+  expect(new URL(sent.url()).searchParams.get('name')).toBe(proposed);
+  const opts = await sent.json() as { rp: { name: string }; user: { name: string } };
+  expect([opts.rp.name, opts.user.name]).toEqual([issuerOf(brand), user.email]);
+  await expect(page.getByText('Passkey added.')).toBeVisible();
+  // The browser said it was a security key: that goes in front, the device kind (this computer's) goes.
+  expect(renamed).toEqual({ id: 'e2e-passkey', name: `Security key · ${proposed.replace(/ · Desktop$/, '')}` });
+  await page.unrouteAll({ behavior: 'ignoreErrors' });
+
+  // API token: what it may do and the day, following the access chosen until a name is typed.
+  await page.goto('/account?tab=api');
+  const today = await page.evaluate(() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; });
+  const tokenName = page.getByRole('textbox', { name: 'Name', exact: true });
+  await expect(tokenName).toHaveValue(`Read-only token ${today}`);
+  await choose(page, page, / Access$/, 'Full access');
+  await expect(tokenName).toHaveValue(`Full-access token ${today}`);
+  await tokenName.fill('deploy script');
+  await choose(page, page, / Access$/, 'Read-only');
+  await expect(tokenName).toHaveValue('deploy script');
+  await tokenName.fill('');
+  await expect(page.getByRole('button', { name: 'Create token' })).toBeDisabled();
+
+  // SSH key: the key's own comment, as soon as it is pasted.
+  await page.goto('/account?tab=keys');
+  await page.getByLabel('Public key').fill('ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl laptop@e2e');
+  await expect(page.getByLabel('Key name')).toHaveValue('laptop@e2e');
+  await page.getByLabel('Public key').fill('');
+  await expect(page.getByLabel('Key name')).toHaveValue('');
+
+  // Ticket: the subject is never filled in for the customer; the message's first line is offered with one click.
+  await page.goto('/support?new=1');
+  const dialog = page.getByRole('dialog');
+  await dialog.getByLabel('Message').fill('SSH refuses the connection since this morning.\nPort 22 answers with connection refused.');
+  const idea = dialog.getByRole('group', { name: 'Suggestion' }).getByRole('button');
+  await expect(idea).toHaveText('SSH refuses the connection since this morning.');
+  await expect(dialog.getByLabel('Subject')).toHaveValue('');
+  await idea.click();
+  await expect(dialog.getByLabel('Subject')).toHaveValue('SSH refuses the connection since this morning.');
+  await expect(idea).toHaveCount(0);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expectNoOverflow(page, 'new ticket with a proposed subject at 390 px');
+  // Nothing is sent; the draft goes.
+  await dialog.getByLabel('Subject').fill('');
+  await dialog.getByLabel('Message').fill('');
+  await page.context().close();
+});
+
 test('second step at sign-in offers only the methods the account has', async ({ browser }) => {
   test.setTimeout(120_000); // waits for the next 30-second code window
   const page = await (await browser.newContext({ locale: 'tr-TR' })).newPage();
@@ -4121,9 +4199,21 @@ test('second step at sign-in offers only the methods the account has', async ({ 
   const dialog = page.getByRole('dialog');
   // E2E has no mail or SMS, so the app is the only way to set it up.
   await dialog.getByLabel('Mevcut parola').fill(user.password);
+  const enabled = page.waitForResponse((r) => r.url().endsWith('/api/auth/two-factor/enable'));
   await dialog.getByRole('button', { name: 'Devam' }).click();
+  // The authenticator app lists the panel by its own name and the account by its address: label and issuer both,
+  // percent-encoded (a space is %20, never "+").
+  const issuer = issuerOf((await (await page.request.get('/api/public/config')).json()).branding.name as string);
+  const uri = (await (await enabled).json()).totpURI as string;
+  expect(uri).toMatch(new RegExp(`^otpauth://totp/${escape(encodeURIComponent(issuer))}:${escape(encodeURIComponent(user.email))}\\?secret=[A-Z2-7]+&issuer=${escape(encodeURIComponent(issuer))}&digits=6`));
+  expect(uri).not.toContain('+');
+  await expect(dialog.getByTestId('totp-label')).toHaveText(`Uygulamada görünecek ad: ${issuer} (${user.email})`);
   const secret = (await dialog.locator('code').innerText()).trim();
   await dialog.getByRole('textbox', { name: 'Doğrulama kodu' }).fill(await totp(secret));
+  // The backup codes' file says whose they are, in the panel's language.
+  const download = page.waitForEvent('download');
+  await dialog.getByRole('button', { name: 'İndir' }).click();
+  expect((await download).suggestedFilename()).toMatch(/^([a-z0-9-]+-)?yedek-kodlar\.txt$/);
   await dialog.getByRole('button', { name: 'Kodları kaydettim' }).click();
   await expect(page.getByText('İki adımlı doğrulama açıldı.')).toBeVisible();
 

@@ -27,6 +27,7 @@ import { activeCaptcha, getSettings, mailReady, mailUse, verifyCaptcha, type Oid
 import { socialProviders, socialIds } from './social-providers';
 import { mayLink, providerId as ssoProviderId, ssoProvider, ssoSignedIn } from './sso';
 import { sendSms, smsUse } from './sms';
+import { relabelRegistration, relabelTotp } from './labels';
 
 // Browser consoles and host terminals opened with any of these people's sessions are closed (the gateways match
 // sha256 of the token; console-revoke.ts also leaves the marker that refuses a ticket not redeemed yet). Also called when someone's access shrinks (rbac.ts), so an open one does not outlive it.
@@ -66,9 +67,10 @@ const panelPaths = new Set(['/ok', '/error', '/get-session', '/list-sessions', '
   '/list-accounts', '/link-social', '/unlink-account',
   '/two-factor/enable', '/two-factor/disable', '/two-factor/generate-backup-codes', '/two-factor/send-otp', '/two-factor/verify-otp', '/two-factor/verify-totp', '/two-factor/verify-backup-code',
   '/phone-number/send-otp', '/phone-number/verify',
-  '/passkey/generate-register-options', '/passkey/verify-registration', '/passkey/generate-authenticate-options', '/passkey/verify-authentication', '/passkey/list-user-passkeys', '/passkey/delete-passkey']);
+  '/passkey/generate-register-options', '/passkey/verify-registration', '/passkey/generate-authenticate-options', '/passkey/verify-authentication', '/passkey/list-user-passkeys', '/passkey/delete-passkey',
+  '/passkey/update-passkey']);
 // What stays on an account after the session that did it: not for staff acting as someone (as with API tokens, developer.ts).
-const lastingPaths = new Set(['/passkey/generate-register-options', '/passkey/verify-registration', '/link-social', '/change-password', '/phone-number/send-otp', '/phone-number/verify',
+const lastingPaths = new Set(['/passkey/generate-register-options', '/passkey/verify-registration', '/passkey/update-passkey', '/link-social', '/change-password', '/phone-number/send-otp', '/phone-number/verify',
   '/two-factor/enable', '/two-factor/disable', '/two-factor/generate-backup-codes']);
 // Where the browser is sent afterwards: a path on this panel, whatever host name the request came with.
 const redirectFields = ['callbackURL', 'errorCallbackURL', 'newUserCallbackURL', 'redirectTo'];
@@ -289,6 +291,19 @@ async function checkAdminEndpoint(path: string, headers: Headers, body: Record<s
   // Here, while the session still says whose it is; the other calls name the account and are handled afterwards.
   if (target && path === '/admin/revoke-user-session') await dropPush(target);
 }
+
+// What the person's authenticator app and passkey manager will show (labels.ts): the panel's own name from Settings →
+// Branding instead of better-auth's fixed one, and the account by its e-mail address, also when the browser asked for
+// the passkey's own name as the WebAuthn user name. Only the labels change; secrets, challenges and ids stay.
+const labelPaths = new Set(['/two-factor/enable', '/two-factor/get-totp-uri', '/passkey/generate-register-options']);
+const panelLabels = createAuthMiddleware(async (ctx) => {
+  const r = ctx.context.returned as Record<string, unknown> | undefined;
+  const user = (ctx.context.session as { user?: { email?: string; name?: string | null } } | null)?.user;
+  if (!r || r instanceof Error || r instanceof Response || typeof r !== 'object' || !user?.email) return;
+  const brand = (await getSettings('branding')).name;
+  if (ctx.path === '/passkey/generate-register-options') return ctx.json(relabelRegistration(r, brand, { email: user.email, name: user.name }));
+  if (typeof r.totpURI === 'string') return ctx.json({ ...r, totpURI: relabelTotp(r.totpURI, brand, user.email) });
+});
 
 // Sign-ins and registrations: recorded and announced once the session really exists. This runs as the last plugin's
 // hook, after the two-factor plugin's: for an account with two-factor the password step ends with that plugin taking
@@ -689,6 +704,7 @@ function createAuth() {
         rpName: 'Lightning VM',
         schema: { passkey: { modelName: 'auth_passkeys', fields: { publicKey: 'public_key', userId: 'user_id', credentialID: 'credential_id', deviceType: 'device_type', backedUp: 'backed_up', createdAt: 'created_at' } } },
       }),
+      { id: 'panel-labels', hooks: { after: [{ matcher: (ctx) => labelPaths.has(ctx.path ?? ''), handler: panelLabels }] } },
       // Last, so its hook sees what the others left (see recordSignIn).
       { id: 'sign-in-record', hooks: { after: [{ matcher: () => true, handler: recordSignIn }] } },
     ],

@@ -9,10 +9,12 @@ import { I } from '../../components/icon';
 import { ConfirmButton, Notice, Section, StatusChip, TextInput } from '../../components/ui';
 import { apiFetch, type ApiError, useErrorText } from '../../lib/api';
 import { useApiQuery } from '../../lib/query';
+import { snapshotName } from '../../lib/proposals';
+import { useProposal } from '../../lib/use-proposal';
 
 type Snapshot = { id: string; name: string; description: string; created: string; current: boolean; parent: string };
 
-export function ServerSnapshots({ serverId, busy }: { serverId: string; busy: boolean }) {
+export function ServerSnapshots({ serverId, serverName, busy }: { serverId: string; serverName: string; busy: boolean }) {
   const t = useTranslations('Snapshots');
   const format = useFormatter();
   const { error, field } = useErrorText();
@@ -31,6 +33,10 @@ export function ServerSnapshots({ serverId, busy }: { serverId: string; busy: bo
   const ageDays = (s: Snapshot) => Math.floor((Date.now() - Date.parse(s.created)) / 86_400_000);
   const old = list.filter((s) => ageDays(s) >= 3).length;
   const oldest = list.reduce<Snapshot | undefined>((a, s) => (!a || s.created < a.created ? s : a), undefined);
+  // The server and the local date and time ("web-1 2026-11-23 14:05"), so the list reads in order; a ready name
+  // below or anything typed replaces it. The time is the one when the form was shown or last sent.
+  const [at, setAt] = useState(() => new Date());
+  const { proposed, again } = useProposal(q.data ? snapshotName(serverName, at, list.map((s) => s.name)) : undefined, name, setName);
 
   async function run(path: string, method: string, body?: object) {
     setSending(true); setFields({});
@@ -42,8 +48,6 @@ export function ServerSnapshots({ serverId, busy }: { serverId: string; busy: bo
     } catch (e) { setFields((e as ApiError).fields ?? {}); toast.danger(error(e)); return false; }
     finally { setSending(false); }
   }
-  // A suggested name: the date and time, so the list sorts itself in the user's head.
-  const suggestion = () => `${t('auto')} ${format.dateTime(new Date(), { dateStyle: 'short', timeStyle: 'short' }).replace(/[/,]/g, '.').replace(/\s+/g, ' ')}`;
 
   return <Section title={t('title')} description={t('help')} actions={<StatusChip tone={full ? 'warning' : 'default'}>{t('count', { n: list.length, max })}</StatusChip>}>
     <div className="flex flex-col gap-5">
@@ -72,10 +76,10 @@ export function ServerSnapshots({ serverId, busy }: { serverId: string; busy: bo
 
       <form className="flex flex-col gap-3" noValidate onSubmit={async (e) => {
         e.preventDefault();
-        if (await run(`/servers/${serverId}/snapshots`, 'POST', { name: name.trim() || suggestion(), description })) { setName(''); setDescription(''); }
+        if (await run(`/servers/${serverId}/snapshots`, 'POST', { name: name.trim() || snapshotName(serverName, new Date(), list.map((s) => s.name)), description })) { setName(''); setDescription(''); setAt(new Date()); again(); }
       }}>
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-          <TextInput label={t('name')} value={name} onChange={setName} maxLength={80} placeholder={t('namePlaceholder')} error={field(fields.name)} help={t('nameHelp')}/>
+          <TextInput label={t('name')} value={name} onChange={setName} maxLength={80} placeholder={t('namePlaceholder')} error={field(fields.name)} help={t('nameHelp')} proposed={proposed}/>
           <TextInput label={t('description')} value={description} onChange={setDescription} maxLength={500} error={field(fields.description)} help={t('optional')}/>
         </div>
         <div role="group" aria-label={t('presets')} className="flex flex-wrap items-center gap-1.5">

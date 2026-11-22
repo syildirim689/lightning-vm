@@ -11,6 +11,8 @@ import { apiFetch, useErrorText } from '../../../lib/api';
 import { useApiForm } from '../../../lib/form';
 import { useMe } from '../../../lib/me';
 import { useApiAction, useApiQuery } from '../../../lib/query';
+import { uniqueName } from '../../../lib/proposals';
+import { useProposal } from '../../../lib/use-proposal';
 
 // quota: the project's own quota when staff gave it one (null limit: unlimited), with what its servers use of it.
 type ProjectQuota = { maxServers: number | null; maxVcpu: number | null; maxMemoryMb: number | null; maxDiskGb: number | null; usage: { servers: number; vcpu: number; memoryMb: number; diskGb: number } };
@@ -93,6 +95,9 @@ export function Projects() {
   const projects = useApiQuery<{ projects: Project[] }>(['projects'], '/projects').data?.projects;
   const [listRef] = useAutoAnimate<HTMLUListElement>();
   const f = useApiForm({ name: '' });
+  // "Proje 1", "Proje 2"…: a number free among this account's projects, nothing personal (members see the name).
+  const tp = useTranslations('Proposals');
+  const { proposed, again } = useProposal(projects ? uniqueName(tp('project'), projects.map((p) => p.name), { max: 100, numbered: true }) : undefined, f.values.name, f.set('name'));
   const remove = useApiAction((id: string) => apiFetch(`/projects/${id}`, { method: 'DELETE' }), { invalidate: [['projects'], ['servers']], success: t('projects.removed') });
   return <Section title={t('projects.title')}>
     <div className="flex flex-col gap-4">
@@ -110,8 +115,8 @@ export function Projects() {
         </li>)}
       </ul>}
       <form className="flex flex-wrap items-start gap-3" noValidate
-        onSubmit={async (e) => { e.preventDefault(); if (await f.submit('POST', '/projects')) { f.reset(); client.invalidateQueries({ queryKey: ['projects'] }); toast.success(t('projects.created')); } }}>
-        <TextInput maxLength={100} className="min-w-60 flex-1" label={t('projects.name')} value={f.values.name} onChange={f.set('name')} error={f.fieldError('name')}/>
+        onSubmit={async (e) => { e.preventDefault(); if (await f.submit('POST', '/projects')) { f.reset(); again(); client.invalidateQueries({ queryKey: ['projects'] }); toast.success(t('projects.created')); } }}>
+        <TextInput maxLength={100} className="min-w-60 flex-1" label={t('projects.name')} value={f.values.name} onChange={f.set('name')} error={f.fieldError('name')} proposed={proposed}/>
         <Button type="submit" variant="secondary" className="mt-6" isPending={f.busy}><I name="plus" size={16}/>{t('projects.create')}</Button>
       </form>
     </div>
