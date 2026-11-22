@@ -9388,6 +9388,7 @@
       "other": "Its health check is the one in the compose file (healthcheck:); the log says what it tried."
     },
     "svc": {
+      "close": "Close",
       "docker": "Docker says",
       "title": "Service {service}",
       "titleEmpty": "Service",

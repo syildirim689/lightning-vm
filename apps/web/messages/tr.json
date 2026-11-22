@@ -9388,6 +9388,7 @@
       "other": "Sağlık denetimi compose dosyasındakidir (healthcheck:); ne denediğini günlük söyler."
     },
     "svc": {
+      "close": "Kapat",
       "docker": "Docker'ın gördüğü",
       "title": "{service} servisi",
       "titleEmpty": "Servis",

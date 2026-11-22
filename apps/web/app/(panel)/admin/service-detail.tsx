@@ -42,7 +42,7 @@ export function ServiceDrawer({ name, onClose }: { name: string | null; onClose:
     <Drawer.Backdrop isOpen={!!name} onOpenChange={(open) => { if (!open) onClose(); }}>
       <Drawer.Content placement="right">
         <Drawer.Dialog aria-label={name ? t('svc.title', { service: name }) : t('svc.titleEmpty')} className="w-[min(100vw,36rem)] max-w-full" data-testid="service-detail">
-          <Drawer.CloseTrigger/>
+          <Drawer.CloseTrigger aria-label={t('svc.close')}/>
           {name && <ServiceBody name={name}/>}
         </Drawer.Dialog>
       </Drawer.Content>

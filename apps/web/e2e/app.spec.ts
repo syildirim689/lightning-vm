@@ -2389,6 +2389,8 @@ test.describe('people, settings and smart features (English browser)', () => {
     // ---- the detail of the unhealthy worker: what it means, what to do, the log, and a restart that asks first ----
     await box.getByRole('button', { name: /^worker/ }).click();
     const detail = page.getByTestId('service-detail');
+    // Closed with its own button: what Escape reaches depends on where focus came back to after the confirmation.
+    const closeDetail = async () => { await detail.getByRole('button', { name: 'Close' }).click(); await expect(detail).toBeHidden(); };
     await expect(detail).toContainText('Unhealthy');
     await expect(detail).toContainText('its health check fails');
     await expect(detail).toContainText('health.mjs');
@@ -2406,8 +2408,7 @@ test.describe('people, settings and smart features (English browser)', () => {
     await ask.getByRole('button', { name: 'Cancel' }).click();
     await expect(ask).toBeHidden();
     expect(asked).toBe(0);
-    await page.keyboard.press('Escape');
-    await expect(detail).toBeHidden();
+    await closeDetail();
 
     // A finished one-shot job: completed, with when; run again only because migrate is harmless to run twice.
     await box.getByRole('button', { name: /^migrate/ }).click();
@@ -2415,13 +2416,13 @@ test.describe('people, settings and smart features (English browser)', () => {
     await expect(detail).toContainText('This is not a fault.');
     await expect(detail.getByRole('button', { name: 'Run again' })).toBeVisible();
     await expect(detail.getByRole('button', { name: 'Restart' })).toHaveCount(0);
-    await page.keyboard.press('Escape');
+    await closeDetail();
     // The database: no restart from the panel, and the sentence why.
     await box.getByRole('button', { name: /^postgres/ }).click();
     await expect(detail.getByTestId('service-refused')).toContainText('docker compose restart postgres');
     await expect(detail.getByRole('button', { name: 'Restart' })).toHaveCount(0);
     await expect(detail).toContainText('17.2');
-    await page.keyboard.press('Escape');
+    await closeDetail();
     expect(detailCalls).toBeGreaterThan(0);
 
     // The API refuses what the page does not offer, whatever is sent: a name that is not a service, a made-up act.
@@ -2456,8 +2457,7 @@ test.describe('people, settings and smart features (English browser)', () => {
       expect(await unreadable(page, '[data-testid="service-detail"]'), `${scheme}: text in the drawer`).toEqual([]);
       await tour(page, `system-service-detail-phone-${scheme}`);
     }
-    await page.keyboard.press('Escape');
-    await expect(detail).toBeHidden();
+    await closeDetail();
     await page.emulateMedia({ colorScheme: 'light' });
     await expectNoOverflow(page, 'System with services and versions at 390 px');
     await page.setViewportSize({ width: 1280, height: 720 });
