@@ -90,7 +90,7 @@ esac; fi
 MODE=install INSTALL_DOCKER=0 ALLOW_OS=0 DOMAIN="" ACME_STAGING=0 PROXY_PORT=8080 TRUSTED_CIDR="" TLS_MODE="" CERT_FILE="" KEY_FILE=""
 RESTORE_FILE="" YES=0 TO="" AUTO=0 SWITCH="" CHANNEL="" WINDOW="" BRANCH="" PURGE=0 NO_SAFETY=0 ALLOW_UNSIGNED=0 NO_HOLD=0
 PUBLIC_URL=""
-HOST_NAME="" HOST_TZ="" HOST_NTP="" HOST_DNS="" OS_ACT=""
+HOST_NAME="" HOST_TZ="" HOST_NTP="" HOST_DNS="" OS_ACT="" SVC_ACT="" SVC_NAME=""
 LOCAL=0 WIZARD=0 MONITORING=1 SCHEDULE=1 ADMIN_EMAIL="" RESET_EMAIL="" DISABLE_2FA=""
 CONFIRMED=0 PLAIN=0 LANG_GIVEN=0 NEED_DOCKER=0 STATE=new
 case "$LVM_LOCALE_MSG" in tr*) UI="tr" ;; *) UI="en" ;; esac
@@ -117,6 +117,8 @@ while [ $# -gt 0 ]; do
       echo "$BRANCH" | grep -Eq '^[A-Za-z0-9._/-]{1,100}$' || { echo "invalid --branch" >&2; exit 2; } ;;
     --window) shift; WINDOW=${1:-} ;;
     domain) MODE=domain; if [ $# -gt 1 ]; then shift; DOMAIN=$1; fi ;;
+    service) MODE=service; if [ $# -gt 1 ]; then shift; SVC_ACT=$1; fi; if [ $# -gt 1 ]; then shift; SVC_NAME=$1; fi
+      case "$SVC_ACT" in restart|run) ;; *) echo "service: restart <name> or run <name>" >&2; exit 2 ;; esac ;;
     host) MODE=host ;;
     os) MODE=os; if [ $# -gt 1 ]; then shift; OS_ACT=$1; fi
       case "$OS_ACT" in check|upgrade|security|reboot|auto-on|auto-off|info) ;; *) echo "os: check, upgrade, security, reboot, auto-on, auto-off or info" >&2; exit 2 ;; esac ;;
@@ -1199,6 +1201,7 @@ do_update() {
       set_env APP_VERSION "$current_name"
       up_and_ready || msg WARN E_NOT_READY "Servisler $current_name adıyla yeniden başlatıldı ama hazır görünmüyor: sh scripts/install.sh check" "The services were started again as $current_name but do not look ready: sh scripts/install.sh check"
     fi
+    releases_quiet
     msg OK UP_TO_DATE "Güncel: $current_name" "Up to date: $current_name"; exit 0
   fi
   # The channel's newest version is behind the running one: nothing to update (an explicit --to may still go there,
@@ -1269,6 +1272,9 @@ do_update() {
     # Every build leaves layers behind; on a server that updates often they fill the disk. What is older than
     # a week is dropped (the next build only gets a little slower); images in use are never touched.
     (docker builder prune -f --filter until=168h; docker image prune -f) >/dev/null 2>&1 || true
+    # The version list is written again for the version that runs now, also after an update from the command line
+    # (up to 0.5.1 only a panel request did that, and the list went on describing the old version).
+    releases_quiet
     msg OK UPDATED "$target çalışıyor" "$target is running"; exit 0
   fi
   idle fail; log_tail; log_where
@@ -1292,6 +1298,8 @@ do_maintenance() {
   fi
   (os_info) >/dev/null 2>&1 || true
   (do_state) >/dev/null 2>&1 || true
+  # The version list once a day, so new releases show on the panel without anyone pressing "Check".
+  [ -n "$(find data/maintenance/releases.json -mmin -1380 2>/dev/null)" ] || releases_quiet
   AUTO=1; do_update
 }
 
@@ -1336,6 +1344,16 @@ set_auto_update() {
 # set of actions with validated values and runs this script for them. Progress and results are written to
 # data/maintenance (read-only for the panel), so the panel can follow an update that restarts it.
 
+# What changed in a version: its section of CHANGELOG.md as that version has it ("## [0.5.1] - 2026-11-22" up to
+# the next "## ["), else the tag's own message, else its commit's. At most 8000 bytes.
+release_notes() {
+  rn=$(git show "$1:CHANGELOG.md" 2>/dev/null | awk -v h="## [${1#v}]" 'index($0, h) == 1 { on = 1; next } on && /^## \[/ { exit } on { print }' | sed '/./,$!d')
+  [ -n "$rn" ] || rn=$(git tag -l --format='%(contents)' "$1"); [ -n "$rn" ] || rn=$(git log -1 --format=%B "$1")
+  printf '%s' "$rn" | head -c 8000
+}
+# The version list again, quietly and without failing the caller (after an update, and once a day by the timer).
+releases_quiet() { (do_releases) >/dev/null 2>&1 || true; }
+
 # Available versions for the configured channel: data/maintenance/releases.json.
 do_releases() {
   maint_dir
@@ -1360,15 +1378,22 @@ do_releases() {
       list="$list,{\"version\":\"$(git rev-parse --short "$c")\",\"date\":\"$(git log -1 --format=%cI "$c")\",\"notes\":\"$(git log -1 --format=%B "$c" | head -c 2000 | json_str)\"}"
     done
   else
-    for t in $(git -c versionsort.suffix=- tag -l 'v[0-9]*' --sort=-v:refname | grep -E "$(tag_pattern "$channel")" | head -n 10); do
-      notes=$(git tag -l --format='%(contents)' "$t"); [ -n "$notes" ] || notes=$(git log -1 --format=%B "$t")
-      if git merge-base --is-ancestor HEAD "$t" 2>/dev/null && [ "$(git rev-parse "$t^{commit}")" != "$(git rev-parse HEAD)" ]; then newer=true; else newer=false; fi
-      list="$list,{\"version\":\"$t\",\"date\":\"$(git log -1 --format=%cI "$t")\",\"notes\":\"$(printf '%s' "$notes" | head -c 2000 | json_str)\",\"newer\":$newer}"
+    # Every published version of the channel (up to 0.5.1 only the newest ten): the page shows the first few and
+    # the rest on request. running: the tag is the very commit that runs here.
+    head=$(git rev-parse HEAD)
+    for t in $(git -c versionsort.suffix=- tag -l 'v[0-9]*' --sort=-v:refname | grep -E "$(tag_pattern "$channel")"); do
+      tc=$(git rev-parse "$t^{commit}")
+      if git merge-base --is-ancestor HEAD "$t" 2>/dev/null && [ "$tc" != "$head" ]; then newer=true; else newer=false; fi
+      if [ "$tc" = "$head" ]; then running=true; else running=false; fi
+      d=$(git for-each-ref --format='%(creatordate:iso-strict)' "refs/tags/$t"); [ -n "$d" ] || d=$(git log -1 --format=%cI "$t")
+      list="$list,{\"version\":\"$t\",\"date\":\"$d\",\"notes\":\"$(release_notes "$t" | json_str)\",\"newer\":$newer,\"running\":$running}"
     done
   fi
   latest=""; [ -z "$target" ] || latest=$(git describe --tags --always "$target")
-  printf '{"checkedAt":"%s","channel":"%s","branch":"%s","current":"%s","commit":"%s","latest":"%s","updateAvailable":%s,"error":"%s","releases":[%s]}\n' \
-    "$now" "$channel" "$(env_value UPDATE_BRANCH)" "$(app_version)" "$(git rev-parse --short HEAD)" "$latest" "$available" "$err" "${list#,}" > "$out.tmp"
+  # base: the newest version tag the running build contains (v0.5.1 for v0.5.1-4-gabc1234); the page marks it.
+  base=$(git describe --tags --abbrev=0 --match 'v[0-9]*' HEAD 2>/dev/null || true)
+  printf '{"checkedAt":"%s","channel":"%s","branch":"%s","current":"%s","commit":"%s","base":"%s","latest":"%s","updateAvailable":%s,"error":"%s","releases":[%s]}\n' \
+    "$now" "$channel" "$(env_value UPDATE_BRANCH)" "$(app_version)" "$(git rev-parse --short HEAD)" "$base" "$latest" "$available" "$err" "${list#,}" > "$out.tmp"
   chmod 644 "$out.tmp"; mv "$out.tmp" "$out"
   if [ -n "$err" ]; then die 20 E_UPDATE_FETCH "Sürümler alınamadı (git fetch)" "Could not fetch releases (git fetch)"; fi
   if [ "$available" = true ]; then msg OK UPDATE_AVAILABLE "Yeni sürüm: $latest" "New version: $latest"; else msg OK UP_TO_DATE "Güncel: $(app_version)" "Up to date: $(app_version)"; fi
@@ -1412,11 +1437,11 @@ run_requests() {
     # only there, when it is a regular file of at most 1024 bytes: of anything else not one value is read.
     rq=$(mktemp -d); REQUEST_WORK=$rq
     ok=1
-    action="" to="" channel="" window="" switch="" by="" domain="" tls="" hname="" htz="" hntp="" hdns="" act=""
+    action="" to="" channel="" window="" switch="" by="" domain="" tls="" hname="" htz="" hntp="" hdns="" act="" svc=""
     if mv "$f" "$rq/req" 2>/dev/null && [ ! -L "$rq/req" ] && [ -f "$rq/req" ] && [ "$(wc -c < "$rq/req")" -le 1024 ]; then
       val() { sed -n "s/^$1=//p" "$rq/req" | head -n 1; }
       action=$(val action); to=$(val to); channel=$(val channel); window=$(val window); switch=$(val switch); by=$(val by); domain=$(val domain); tls=$(val tls)
-      hname=$(val hostname); htz=$(val timezone); hntp=$(val ntp); hdns=$(val dns); act=$(val act)
+      hname=$(val hostname); htz=$(val timezone); hntp=$(val ntp); hdns=$(val dns); act=$(val act); svc=$(val service)
     else ok=0; fi
     rm -f "$f" "$rq/req"
     echo "$by" | grep -Eq '^[0-9a-f-]{36}$' || by=""
@@ -1454,6 +1479,10 @@ run_requests() {
       monitoring|terminal) case "$switch" in on|off) set -- "$action" "$switch" "$@" ;; *) ok=0 ;; esac ;;
       os) case "$act" in check|upgrade|security|reboot|auto-on|auto-off) set -- os "$act" "$@" ;; *) ok=0 ;; esac ;;
       state) set -- state "$@" ;;
+      # The name is checked here as a name; `service` checks it against the compose file and the refusals again.
+      service) case "$act" in restart|run) ;; *) ok=0 ;; esac
+        echo "$svc" | grep -Eq '^[a-z0-9][a-z0-9_-]{0,40}$' || ok=0
+        set -- service "$act" "$svc" "$@" ;;
       auto-update) case "$switch" in on|off) set -- auto-update "$switch" "$@" ;; *) ok=0 ;; esac
         case "$channel" in '') ;; stable|beta|edge) set -- "$@" --channel "$channel" ;; *) ok=0 ;; esac
         if [ -n "$window" ]; then echo "$window" | grep -Eq '^([01][0-9]|2[0-3]):[0-5][0-9]-([01][0-9]|2[0-3]):[0-5][0-9]$' && set -- "$@" --window "$window" || ok=0; fi ;;
@@ -1479,8 +1508,9 @@ run_requests() {
     code=$(awk 'NF >= 2 { c = $2 } END { print c }' "$log" | tr -cd 'A-Z0-9_')
     if [ "$rc" = 0 ]; then status succeeded 0 "$code"; else status failed "$rc" "$code"; fi
     rm -rf "$rq"; REQUEST_WORK=""
-    # After an update the version list describes the old version: refresh it (best effort, quietly).
-    if [ "$action" = update ]; then sh "$(pwd)/scripts/install.sh" releases --lang "$UI" >/dev/null 2>&1 || true; fi
+    # A finished update has written the version list itself; one that stopped early (refused, rolled back) may have
+    # left it describing another state: refresh it (best effort, quietly).
+    if [ "$action" = update ] && [ "$rc" != 0 ]; then sh "$(pwd)/scripts/install.sh" releases --lang "$UI" >/dev/null 2>&1 || true; fi
     find data/maintenance/runs -name '*.log' -type f -printf '%T@ %p\n' | sort -rn | tail -n +21 | cut -d' ' -f2- | xargs -r rm -f
   done
   # What never became a request: a certificate or key whose .req did not come, a request the API did not finish
@@ -1608,9 +1638,17 @@ do_host() {
 # answer among the proxy's request headers are replaced. The proxy and the collector mask the same
 # (deploy/caddy/Caddyfile, deploy/observability/otel.yaml); this covers every service's lines, whoever wrote them.
 mask_secrets() {
+  # URL secrets (reset links, sign-in callbacks), then what a program may print about itself: Authorization and
+  # Cookie headers, Bearer tokens, the password of a connection string, key=value secrets. The API masks the lines
+  # again before it hands them out (apps/api/src/host-services.ts).
   sed -E -e 's#(/reset-password/)[^/?&"\\[:space:]]+#\1***#g' \
     -e 's#(([?&]|\\u0026)(token|code|state|session_id)=)[^&"\\[:space:]]+#\1***#g' \
-    -e 's#("[Xx]-[Cc]aptcha-[Rr]esponse":\[")[^"]*#\1***#g'
+    -e 's#("[Xx]-[Cc]aptcha-[Rr]esponse":\[")[^"]*#\1***#g' \
+    -e 's#([Aa]uthorization["]?[[:space:]]*[:=][[:space:]]*["]?([A-Za-z]+[[:space:]]+)?)[^[:space:]",;]+#\1***#g' \
+    -e 's#([Cc]ookie["]?[[:space:]]*[:=][[:space:]]*["]?)[^"]+#\1***#g' \
+    -e 's#([Bb]earer[[:space:]]+)[A-Za-z0-9._~+/=-]{8,}#\1***#g' \
+    -e 's#([a-z][a-z0-9+.-]*://[^[:space:]:/@"]+:)[^[:space:]@/"]+@#\1***@#g' \
+    -e 's#(([Pp][Aa][Ss][Ss][Ww][Oo][Rr][Dd]|[Ss][Ee][Cc][Rr][Ee][Tt]|[Aa][Pp][Ii]_?[Kk][Ee][Yy])["]?[[:space:]]*[:=][[:space:]]*["]?)[^[:space:]",;&}]+#\1***#g'
 }
 
 # ---- This server's state for the panel (Admin → System → Server state) -----------------------------
@@ -1634,14 +1672,22 @@ do_state() {
   services='[]'; docker_disk='[]'
   if docker compose ps >/dev/null 2>&1; then
     stats=$(timeout 20 docker stats --no-stream --format '{{.Name}}|{{.CPUPerc}}|{{.MemUsage}}|{{.MemPerc}}' 2>/dev/null || true)
-    services=$(docker compose ps -a --format '{{.Service}}|{{.Name}}|{{.State}}|{{.Health}}|{{.Status}}' 2>/dev/null | sort | while IFS='|' read -r svc name state health status; do
+    # What the compose file says about the services, for the panel to tell a one-shot job from a service that went
+    # down: the services this compose file defines (only those can be restarted from the panel: `service` below),
+    # and which ones others wait for to complete (depends_on: service_completed_successfully, on the dependants' labels).
+    defined=$(docker compose config --services 2>/dev/null | tr '\n' ' ')
+    awaited=$(docker compose ps -aq 2>/dev/null | xargs -r docker inspect -f '{{index .Config.Labels "com.docker.compose.depends_on"}}' 2>/dev/null | tr ',' '\n' | sed -n 's/^\([a-z0-9_-]*\):service_completed_successfully:.*/\1/p' | sort -u | tr '\n' ' ')
+    services=$(docker compose ps -a --format '{{.Service}}|{{.Name}}|{{.State}}|{{.Health}}|{{.Status}}|{{.Ports}}' 2>/dev/null | sort | while IFS='|' read -r svc name state health status ports; do
       [ -n "$svc" ] || continue
       line=$(printf '%s\n' "$stats" | awk -F'|' -v n="$name" '$1 == n { print $2 "|" $3 "|" $4; exit }')
       cpu=$(printf '%s' "$line" | cut -d'|' -f1); mem=$(printf '%s' "$line" | cut -d'|' -f2 | sed 's| /.*||'); memp=$(printf '%s' "$line" | cut -d'|' -f3)
-      restarts=$(docker inspect -f '{{.RestartCount}}' "$name" 2>/dev/null || echo 0)
-      started=$(docker inspect -f '{{.State.StartedAt}}' "$name" 2>/dev/null || true)
-      printf '%s|%s|%s|%s|%s|%s|%s|%s|%s\n' "$svc" "$state" "$health" "$status" "${cpu:-0}" "$mem" "${memp:-0}" "$restarts" "$started"
-    done | rows 'service,state,health,status,cpu#,memory,memoryPercent#,restarts#,startedAt')
+      # One inspect per container: restarts, start and end, exit code, restart policy, image and its version label.
+      facts=$(docker inspect -f '{{.RestartCount}}|{{.State.StartedAt}}|{{.State.FinishedAt}}|{{.State.ExitCode}}|{{.HostConfig.RestartPolicy.Name}}|{{.Config.Image}}|{{index .Config.Labels "org.opencontainers.image.version"}}' "$name" 2>/dev/null | tr -d '\r' | sed 's/<no value>//g' || true)
+      [ -n "$facts" ] || facts='0||||||'
+      case " $awaited " in *" $svc "*) aw=1 ;; *) aw=0 ;; esac
+      case " $defined " in *" $svc "*) mg=1 ;; *) mg=0 ;; esac
+      printf '%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s\n' "$svc" "$state" "$health" "$status" "${cpu:-0}" "$mem" "${memp:-0}" "$facts" "$(printf '%s' "$ports" | tr '|' ' ')" "$aw" "$mg"
+    done | rows 'service,state,health,status,cpu#,memory,memoryPercent#,restarts#,startedAt,finishedAt,exitCode#,restartPolicy,image,imageVersion,ports,awaited#,managed#')
     docker_disk=$(timeout 30 docker system df --format '{{.Type}}|{{.Size}}|{{.Reclaimable}}' 2>/dev/null | rows 'type,size,reclaimable' || echo '[]')
     # The last lines of every service (the panel shows them; rotated by Docker, nothing is kept here beyond this).
     rm -f "$out"/logs/*.log
@@ -1664,10 +1710,60 @@ do_state() {
   addresses=$(ip -o -4 addr show scope global 2>/dev/null | awk '{ print $2 "|" $4 }' | head -n 8 | rows 'interface,address' || echo '[]')
   net=$(awk -F'[: ]+' 'NR > 2 && $2 != "lo" && $2 !~ /^(veth|br-|docker)/ { print $2 "|" $3 "|" $11 }' /proc/net/dev 2>/dev/null | head -n 6 | rows 'interface,rx#,tx#')
   panel_new "$out/state.json"
-  printf '{"checkedAt":"%s","services":%s,"disks":%s,"inodesPercent":%s,"processes":%s,"failedUnits":%s,"addresses":%s,"network":%s,"dockerDisk":%s,"docker":"%s","users":%s}\n' \
-    "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "${services:-[]}" "${disks:-[]}" "${inodes:-0}" "${processes:-[]}" "${failed:-[]}" "${addresses:-[]}" "${net:-[]}" "${docker_disk:-[]}" \
+  # commit: the source checkout that runs (the panel shows it beside its version).
+  printf '{"checkedAt":"%s","commit":"%s","services":%s,"disks":%s,"inodesPercent":%s,"processes":%s,"failedUnits":%s,"addresses":%s,"network":%s,"dockerDisk":%s,"docker":"%s","users":%s}\n' \
+    "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$(git rev-parse --short HEAD 2>/dev/null | tr -cd '0-9a-f')" "${services:-[]}" "${disks:-[]}" "${inodes:-0}" "${processes:-[]}" "${failed:-[]}" "${addresses:-[]}" "${net:-[]}" "${docker_disk:-[]}" \
     "$(docker version --format '{{.Server.Version}}' 2>/dev/null | json_str || true)" "$(who 2>/dev/null | wc -l | tr -d ' ')" > "$PANEL_TMP"
   panel_put "$out/state.json"
+}
+
+# ---- One service of the stack: restart it, or run a one-shot job again (Admin → System → Services) -------
+# The panel asks for it by name; everything is checked here again, because the panel is not trusted with the host:
+# the name must be a service this compose file defines (an allow-list: `docker compose config --services`, nothing
+# typed reaches a shell), postgres and redis are refused (every other service holds connections to them; restart
+# them from this command line at a quiet time), a one-shot job (restart policy "no") is not restarted, and only
+# migrate is run again (it applies only what is not recorded yet, under a lock). api, web and proxy may be
+# restarted: the panel answered the request before this runs, and it is back within seconds.
+do_service() {
+  [ -f .env ] || die 17 E_NOT_INSTALLED "Önce kurulum yapın: sh scripts/install.sh" "Install first: sh scripts/install.sh"
+  echo "$SVC_NAME" | grep -Eq '^[a-z0-9][a-z0-9_-]{0,40}$' || die 2 E_SERVICE_UNKNOWN "Geçersiz servis adı" "Invalid service name"
+  case " $(docker compose config --services 2>/dev/null | tr '\n' ' ') " in
+    *" $SVC_NAME "*) ;;
+    *) die 2 E_SERVICE_UNKNOWN "$SVC_NAME bu compose dosyasında tanımlı bir servis değil" "$SVC_NAME is not a service of this compose file" ;;
+  esac
+  case "$SVC_NAME" in postgres|redis)
+    die 2 E_SERVICE_PROTECTED "$SVC_NAME panelden yeniden başlatılmaz: diğer bütün servisler ona bağlı. Gerekirse sakin bir saatte sunucuda: docker compose restart $SVC_NAME" "$SVC_NAME is not restarted from the panel: every other service depends on it. If needed, at a quiet time on the server: docker compose restart $SVC_NAME" ;;
+  esac
+  cid=$(docker compose ps -aq "$SVC_NAME" 2>/dev/null | head -n 1)
+  [ -n "$cid" ] || die 2 E_SERVICE_UNKNOWN "$SVC_NAME için bir container yok (hiç başlatılmamış)" "There is no container for $SVC_NAME (it was never started)"
+  policy=$(docker inspect -f '{{.HostConfig.RestartPolicy.Name}}' "$cid" 2>/dev/null || true)
+  take_lock
+  if [ "$SVC_ACT" = run ]; then
+    [ "$SVC_NAME" = migrate ] || die 2 E_SERVICE_ONE_SHOT "$SVC_NAME panelden yeniden çalıştırılmaz (iki kez çalışmasının zararsız olduğu bilinmiyor)" "$SVC_NAME is not run again from the panel (running it twice is not known to be harmless)"
+    busy "$SVC_NAME yeniden çalıştırılıyor" "Running $SVC_NAME again"
+    docker compose start "$SVC_NAME" >> "$UI_LOG" 2>&1 || { idle fail; die 24 E_SERVICE_FAILED "$SVC_NAME başlatılamadı: docker compose logs $SVC_NAME" "$SVC_NAME could not be started: docker compose logs $SVC_NAME"; }
+    code=$(timeout 900 docker wait "$cid" 2>/dev/null || echo timeout)
+    if [ "$code" != 0 ]; then idle fail; (do_state) >/dev/null 2>&1 || true
+      die 24 E_SERVICE_FAILED "$SVC_NAME çıkış kodu $code ile bitti: docker compose logs $SVC_NAME" "$SVC_NAME ended with exit code $code: docker compose logs $SVC_NAME"; fi
+    idle ok
+    (do_state) >/dev/null 2>&1 || true
+    msg OK SERVICE_RAN "$SVC_NAME çalıştı ve 0 koduyla bitti" "$SVC_NAME ran and ended with code 0"; return 0
+  fi
+  [ "$policy" != no ] || die 2 E_SERVICE_ONE_SHOT "$SVC_NAME tek seferlik bir iş; yeniden başlatılmaz" "$SVC_NAME is a one-shot job; it is not restarted"
+  busy "$SVC_NAME yeniden başlatılıyor" "Restarting $SVC_NAME"
+  docker compose restart -t 120 "$SVC_NAME" >> "$UI_LOG" 2>&1 || { idle fail; die 24 E_SERVICE_FAILED "$SVC_NAME yeniden başlatılamadı: docker compose logs $SVC_NAME" "$SVC_NAME could not be restarted: docker compose logs $SVC_NAME"; }
+  # Running again, and healthy where it has a health check: up to two minutes.
+  i=0; st=""
+  while [ $i -lt 40 ]; do
+    st=$(docker inspect -f '{{.State.Status}} {{if .State.Health}}{{.State.Health.Status}}{{end}}' "$cid" 2>/dev/null || true)
+    case "$st" in "running "|"running healthy") break ;; esac
+    sleep 3; i=$((i + 1))
+  done
+  (do_state) >/dev/null 2>&1 || true
+  case "$st" in
+    "running "|"running healthy") idle ok; msg OK SERVICE_RESTARTED "$SVC_NAME yeniden başlatıldı ve çalışıyor" "$SVC_NAME was restarted and is running" ;;
+    *) idle fail; die 24 E_SERVICE_NOT_HEALTHY "$SVC_NAME yeniden başlatıldı ama sağlıklı değil ($st): docker compose logs $SVC_NAME" "$SVC_NAME was restarted but is not healthy ($st): docker compose logs $SVC_NAME" ;;
+  esac
 }
 
 # ---- This server's operating system updates (apt: Debian and Ubuntu) -------------------------------
@@ -1927,6 +2023,7 @@ Bu sunucu
   host [--hostname AD] [--timezone Bölge/Şehir] [--ntp a,b|default] [--dns ip,ip|default]
   os check|upgrade|security|reboot|auto-on|auto-off|info   İşletim sistemi güncellemeleri (apt)
   state                    Sunucu durumunun panel için anlık görüntüsü
+  service restart|run AD   Bir servisi yeniden başlatır / tek seferlik işi (migrate) yeniden çalıştırır; postgres ve redis hariç
 
 Her komutta
   --lang tr|en             Çıktı dili. Verilmezse: install, uçbirimde bir kez sorar (Enter ya da 30 sn sessizlik
@@ -1987,6 +2084,7 @@ This server
   host [--hostname NAME] [--timezone Area/City] [--ntp a,b|default] [--dns ip,ip|default]
   os check|upgrade|security|reboot|auto-on|auto-off|info   Operating system updates (apt)
   state                    A snapshot of this server's state for the panel
+  service restart|run NAME Restarts a service / runs a one-shot job (migrate) again; not postgres or redis
 
 With every command
   --lang tr|en             Output language. Without it: install asks once on a terminal (Enter or 30 s of silence
@@ -2184,6 +2282,7 @@ case "$MODE" in
   host) do_host; exit 0 ;;
   os) do_os; exit 0 ;;
   state) do_state; exit 0 ;;
+  service) do_service; exit 0 ;;
   agent) set_agent; exit 0 ;;
   schedule) set_schedule; exit 0 ;;
   auto-update) [ -f .env ] || die 17 E_NOT_INSTALLED "Önce kurulum yapın: sh scripts/install.sh" "Install first: sh scripts/install.sh"

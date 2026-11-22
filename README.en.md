@@ -53,7 +53,7 @@ apps and webhooks), customer webhooks, LDAP / OIDC sign-in, passkeys and two-fac
 for registered accounts (a mailed code, entered while signed in; an optional rule that only verified accounts may
 order, off by default), an API reference whose requests can be run from the browser (shown first, confirmed when
 they change something, secrets hidden), quotas per account and per project (with what is used shown to staff and on the order page), live state of the panel host
-(CPU, memory, disk, services, logs), operating system updates for the host and for customers' servers, window-style
+(CPU, memory, disk, services with their version, detail and a restart from the panel, logs), operating system updates for the host and for customers' servers, window-style
 dialogs (move, put aside, snap to halves and quarters, centre, resize, keyboard shortcuts), and accessibility controls.
 
 Screenshots (the same six screens in Turkish are in [README.md](README.md#-ekran-görüntüleri); each pair is taken from one page
@@ -101,6 +101,16 @@ What is not the same everywhere (the table under "Platform kapsamı" above has e
   installation, on Admin → System (the request goes to the host agent like a backup or an update), or with
   `install.sh monitoring on|off`. That the panel hands the request over correctly is tested; the agent stopping and
   starting the components through it was not run on a server in this work.
+- **Services on Admin → System:** each service shows its state in one word (a one-shot job such as migrate that
+  ended with exit code 0 is "Completed", not a fault; told from the compose definition) and its version (the
+  panel's version and commit for its own services, the image tag or the version the service reports for the
+  others). A click opens the detail: health, exit code, start and end, restarts, image, ports, what the state means
+  and what to do (Turkish and English), and the last 200 log lines (administrators only, secrets masked on the
+  server). **Restart** asks first and goes to the host agent like a backup (`system.update`, one task at a time,
+  audited); PostgreSQL and Redis are refused with the reason, migrate can be run again. **Updates → Versions** lists
+  every published version of the channel, newest first, with the running one marked and its changelog section; the
+  list is rewritten after every update and once a day. The server-state charts slide with each new sample and show
+  the value on hover, without motion when the browser asks for reduced motion.
 - **Real hardware:** only the Incus adapter (containers, Incus 6.0) ran against a real server. VMware was tested
   mostly against the govmomi simulator; Proxmox VE, XCP-ng, oVirt, Hyper-V and libvirt against imitations only.
 - **Upgrading:** the last rounds changed behaviour an operator can notice: a full audit of the API, worker,

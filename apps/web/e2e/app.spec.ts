@@ -2321,6 +2321,148 @@ test.describe('people, settings and smart features (English browser)', () => {
     await page.setViewportSize({ width: 1280, height: 720 });
   });
 
+  test('System: every published version newest first with the running one marked; a finished one-shot job is not a fault; a service opens its detail with what to do, restart that asks first, version and log', async ({ page }) => {
+    await signInAdmin(page);
+    const csrf = { 'x-lightning-csrf': '1' };
+    const answer = (route: import('@playwright/test').Route, body: unknown) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
+    // The test stack has no host agent: what the agent would have recorded (its snapshot of the services, the version
+    // list it fetched) is a prepared answer of the routes that read it; the rest of each answer is the real one.
+    const now = Date.now(), iso = (ago: number) => new Date(now - ago).toISOString();
+    const tags = ['v0.5.1', 'v0.5.0', 'v0.4.0', 'v0.3.0', 'v0.2.3', 'v0.2.2', 'v0.2.1', 'v0.2.0', 'v0.1.1', 'v0.1.0'];
+    await page.route('**/api/admin/maintenance', async (route) => {
+      const real = await (await route.fetch()).json();
+      await answer(route, { ...real, releases: { checkedAt: iso(60_000), channel: 'stable', branch: '', current: real.version, commit: 'abc1234', base: 'v0.5.1', latest: 'v0.5.1', updateAvailable: false, error: '', stale: false,
+        releases: tags.map((version, i) => ({ version, date: iso((i + 1) * 86_400_000), notes: i === 0 ? '### Fixed\n- **Admin → System** shows every version.' : `${version}: notes`, newer: false, running: false })) } });
+    });
+    const svc = (over: Record<string, unknown> & { service: string }) => ({ health: '', status: '', cpu: 0.4, memory: '40MiB', memoryPercent: 1, restarts: 0, startedAt: iso(3_600_000), finishedAt: '0001-01-01T00:00:00Z', exitCode: 0,
+      restartPolicy: 'unless-stopped', image: '', imageVersion: '', ports: '', managed: 1, oneShot: false, fault: false,
+      rule: { restart: true, run: false, refused: '', interrupts: 'none' }, version: { panel: true, version: 'v0.5.1-3-gabc1234', commit: 'abc1234' }, ...over });
+    const services = [
+      svc({ service: 'api', state: 'running', health: 'healthy', kind: 'healthy', image: 'lightning-vm-api', ports: '4000/tcp', rule: { restart: true, run: false, refused: '', interrupts: 'panel' } }),
+      svc({ service: 'migrate', state: 'exited', kind: 'completed', oneShot: true, status: 'Exited (0) 28 minutes ago', finishedAt: iso(28 * 60_000), restartPolicy: 'no', image: 'lightning-vm-migrate', cpu: 0, memory: '',
+        rule: { restart: false, run: true, refused: '', interrupts: 'none' } }),
+      svc({ service: 'worker', state: 'running', health: 'unhealthy', kind: 'unhealthy', fault: true, restarts: 3, image: 'lightning-vm-worker', rule: { restart: true, run: false, refused: '', interrupts: 'operations' } }),
+      svc({ service: 'postgres', state: 'running', health: 'healthy', kind: 'healthy', image: 'postgres:17-alpine', ports: '5432/tcp', version: { panel: false, tag: '17-alpine', label: '', reported: '17.2' },
+        rule: { restart: false, run: false, refused: 'SERVICE_PROTECTED', interrupts: 'panel' } }),
+      svc({ service: 'grafana', state: 'exited', kind: 'failed', fault: true, exitCode: 1, status: 'Exited (1) 3 minutes ago', finishedAt: iso(180_000), image: 'grafana/grafana:11.6.0', cpu: 0, memory: '',
+        version: { panel: false, tag: '11.6.0', label: '', reported: '' } }),
+    ];
+    await page.route('**/api/admin/host/live', async (route) => {
+      const real = await (await route.fetch()).json();
+      await answer(route, { ...real, state: { checkedAt: iso(5_000), commit: 'abc1234', services, disks: [], inodesPercent: 3, processes: [], failedUnits: [], addresses: [], network: [], dockerDisk: [], docker: '29.0.0', users: 0 },
+        logs: [], agent: { installed: true, busy: false } });
+    });
+    const lines = ['2026-11-22T19:47:56Z worker ready', '2026-11-22T19:48:01Z {"level":"error","msg":"heartbeat failed","headers":{"authorization":"Bearer [masked]"}}'];
+    let detailCalls = 0;
+    await page.route('**/api/admin/host/services/*', async (route) => {
+      detailCalls++;
+      const name = new URL(route.request().url()).pathname.split('/').pop()!;
+      const s = services.find((x) => x.service === name)!;
+      await answer(route, { checkedAt: iso(5_000), service: s, logs: name === 'worker' ? lines : [], agent: { installed: true, busy: false, status: null, log: [] } });
+    });
+
+    await page.goto('/admin/system');
+    // ---- the version list: all ten, newest first, the running build's release marked, five shown at first ----
+    const list = page.getByTestId('release-list');
+    await list.locator('summary').first().click();
+    await expect(list.locator('li[data-version]')).toHaveCount(5);
+    await expect(list.locator('li[data-version]').first()).toHaveAttribute('data-version', 'v0.5.1');
+    await expect(list.locator('li[data-version="v0.5.1"]')).toContainText('Running build is based on this');
+    await expect(list.locator('li[data-version="v0.5.1"]')).toContainText('Admin → System shows every version.');
+    await list.getByRole('button', { name: 'Show all 10 versions' }).click();
+    expect(await list.locator('li[data-version]').evaluateAll((items) => items.map((x) => x.getAttribute('data-version')))).toEqual(tags);
+    await list.getByRole('button', { name: 'Show only the newest 5' }).click();
+    await expect(list.locator('li[data-version]')).toHaveCount(5);
+
+    // ---- the services: a one-shot job that finished is "Completed", not a warning; faults are named ----
+    const box = page.getByTestId('services');
+    await expect(box.getByRole('button', { name: /^migrate: Completed/ })).toBeVisible();
+    await expect(box.getByRole('button', { name: /^migrate/ })).toContainText('Completed');
+    await expect(page.getByText('The service migrate is not running.')).toHaveCount(0);
+    await expect(page.getByText('The service grafana is not running.')).toBeVisible();
+    await expect(page.getByText('The service worker fails its health check.')).toBeVisible();
+    // Versions: the panel's own for what is built with it, the reported one or the image tag for the others.
+    await expect(box.getByRole('button', { name: /^api/ })).toContainText('v0.5.1-3-gabc1234');
+    await expect(box.getByRole('button', { name: /^postgres/ })).toContainText('17.2');
+    await expect(box.getByRole('button', { name: /^grafana/ })).toContainText('11.6.0');
+
+    // ---- the detail of the unhealthy worker: what it means, what to do, the log, and a restart that asks first ----
+    await box.getByRole('button', { name: /^worker/ }).click();
+    const detail = page.getByTestId('service-detail');
+    await expect(detail).toContainText('Unhealthy');
+    await expect(detail).toContainText('its health check fails');
+    await expect(detail).toContainText('health.mjs');
+    await expect(detail).toContainText('worker ready');
+    await expect(detail).toContainText('Bearer [masked]');
+    await expect(detail).toContainText('lightning-vm-worker');
+    await detail.getByRole('button', { name: 'Restart' }).click();
+    const ask = page.getByRole('alertdialog');
+    await expect(ask).toContainText('Restart worker?');
+    await expect(ask).toContainText('Operations that run right now pause');
+    await expect(ask).toContainText('audit log');
+    // Leaving the dialog sends nothing.
+    let asked = 0;
+    page.on('request', (r) => { if (r.method() === 'POST' && r.url().includes('/api/admin/maintenance/requests')) asked++; });
+    await ask.getByRole('button', { name: 'Cancel' }).click();
+    await expect(ask).toBeHidden();
+    expect(asked).toBe(0);
+    await page.keyboard.press('Escape');
+    await expect(detail).toBeHidden();
+
+    // A finished one-shot job: completed, with when; run again only because migrate is harmless to run twice.
+    await box.getByRole('button', { name: /^migrate/ }).click();
+    await expect(detail).toContainText('A one-shot job');
+    await expect(detail).toContainText('This is not a fault.');
+    await expect(detail.getByRole('button', { name: 'Run again' })).toBeVisible();
+    await expect(detail.getByRole('button', { name: 'Restart' })).toHaveCount(0);
+    await page.keyboard.press('Escape');
+    // The database: no restart from the panel, and the sentence why.
+    await box.getByRole('button', { name: /^postgres/ }).click();
+    await expect(detail.getByTestId('service-refused')).toContainText('docker compose restart postgres');
+    await expect(detail.getByRole('button', { name: 'Restart' })).toHaveCount(0);
+    await expect(detail).toContainText('17.2');
+    await page.keyboard.press('Escape');
+    expect(detailCalls).toBeGreaterThan(0);
+
+    // The API refuses what the page does not offer, whatever is sent: a name that is not a service, a made-up act.
+    for (const [data, code] of [[{ action: 'service', service: 'worker; reboot', act: 'restart' }, 'VALIDATION_FAILED'], [{ action: 'service', service: 'worker', act: 'stop' }, 'VALIDATION_FAILED']] as const) {
+      const r = await page.request.post('/api/admin/maintenance/requests', { headers: csrf, data });
+      expect([r.status(), (await r.json()).code]).toEqual([400, code]);
+    }
+
+    // ---- the charts: pointing shows the value and the time; with reduced motion nothing animates ----
+    const chart = page.getByRole('img', { name: 'Processor: last ten minutes' });
+    if (await chart.count()) {
+      // Measured where it stands still: in the middle of the window, its entrance over.
+      await chart.evaluate((el) => el.scrollIntoView({ block: 'center' }));
+      await settled(page);
+      await chart.hover({ position: { x: 20, y: 20 } });
+      await expect(chart.locator('xpath=..').getByRole('status')).toContainText('%');
+      await page.emulateMedia({ reducedMotion: 'reduce' });
+      await page.reload();
+      await expect(page.getByRole('img', { name: 'Processor: last ten minutes' })).toBeVisible();
+      expect(await page.evaluate(() => document.getAnimations().filter((a) => (a.effect as KeyframeEffect | null)?.target?.closest?.('svg[role="img"]')).length)).toBe(0);
+      await page.emulateMedia({ reducedMotion: 'no-preference' });
+    }
+
+    // ---- a phone's width, both themes: the drawer fits and its text can be read ----
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.getByTestId('services').getByRole('button', { name: /^worker/ }).click();
+    await expect(detail).toContainText('worker ready');
+    await expectInside(page, detail.getByRole('button', { name: 'Restart' }), 'the restart button in the drawer at 390 px');
+    for (const scheme of ['light', 'dark'] as const) {
+      await page.emulateMedia({ colorScheme: scheme });
+      await settled(page);
+      expect(await unreadable(page, '[data-testid="service-detail"]'), `${scheme}: text in the drawer`).toEqual([]);
+      await tour(page, `system-service-detail-phone-${scheme}`);
+    }
+    await page.keyboard.press('Escape');
+    await expect(detail).toBeHidden();
+    await page.emulateMedia({ colorScheme: 'light' });
+    await expectNoOverflow(page, 'System with services and versions at 390 px');
+    await page.setViewportSize({ width: 1280, height: 720 });
+  });
+
   test('API reference: a request is run from the page, shown before it is sent; a change waits for a confirmation; secrets are not shown; permissions hold', async ({ page, browser }) => {
     await signInAdmin(page);
     await page.goto('/api-docs');

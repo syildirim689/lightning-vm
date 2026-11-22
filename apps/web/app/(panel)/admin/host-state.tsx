@@ -3,10 +3,11 @@
 // the API every five seconds (the charts show the last ten minutes); services, file systems, the busiest processes
 // and the last log lines come from the host agent's snapshot, refreshed when this page opens and on demand.
 import { Button, SearchField, toast } from '@heroui/react';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useFormatter, useNow, useTranslations } from 'next-intl';
 import { usePercent } from '../../../lib/percent';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useReducedMotion } from 'motion/react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { I } from '../../../components/icon';
 import { Notice, Section, SelectInput, StatusChip, type Tone } from '../../../components/ui';
 import { apiFetch, useErrorText } from '../../../lib/api';
@@ -15,9 +16,9 @@ import { can } from '../../../lib/permissions';
 import { useApiQuery } from '../../../lib/query';
 import { fold } from '../../../lib/search';
 import { useBytes } from '../../../lib/units';
+import { kindTone, lineTone, ServiceDrawer, versionText, type ServiceRow } from './service-detail';
 
-type Service = { service: string; state: string; health: string; status: string; cpu: number; memory: string; memoryPercent: number; restarts: number; startedAt: string };
-type State = { checkedAt: string; services: Service[]; disks: { mount: string; device: string; total: number; used: number; free: number }[]; inodesPercent: number;
+type State = { checkedAt: string; services: ServiceRow[]; disks: { mount: string; device: string; total: number; used: number; free: number }[]; inodesPercent: number;
   processes: { pid: number; cpu: number; memory: number; rss: number; name: string }[]; failedUnits: { unit: string }[]; addresses: { interface: string; address: string }[];
   dockerDisk: { type: string; size: string; reclaimable: string }[]; docker: string; users: number };
 type Live = { supported: boolean; cpu: { percent: number | null; iowait: number | null; cores: number; model: string; load: number[] };
@@ -30,19 +31,57 @@ const toneOf = (p: number): Tone => (p >= 90 ? 'danger' : p >= 75 ? 'warning' : 
 const text = { success: 'text-success', warning: 'text-warning', danger: 'text-danger', accent: 'text-accent', default: 'text-foreground' } as Record<Tone, string>;
 const fill = { success: 'bg-success', warning: 'bg-warning', danger: 'bg-danger', accent: 'bg-accent', default: 'bg-accent' } as Record<Tone, string>;
 
-// The last ten minutes as a small area chart; the title says what it shows for people who cannot see it.
-function Spark({ values, max, label, tone }: { values: number[]; max: number; label: string; tone: Tone }) {
-  if (values.length < 2) return <div className="h-12 rounded-lg bg-default/40" aria-hidden/>;
-  const w = 240, h = 48, top = Math.max(max, ...values, 1);
-  const pts = values.map((v, i) => `${((i / (values.length - 1)) * w).toFixed(1)},${(h - 2 - (v / top) * (h - 6)).toFixed(1)}`);
-  return <svg viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none" className={`h-12 w-full ${text[tone]}`} role="img" aria-label={label}>
-    <polygon points={`0,${h} ${pts.join(' ')} ${w},${h}`} fill="currentColor" opacity="0.14"/>
-    <polyline points={pts.join(' ')} fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke"/>
-  </svg>;
+// The last ten minutes as a small area chart; the label says what it shows for people who cannot see it.
+// Motion, all of it skipped when the viewer asks for reduced motion: the chart is drawn in from the left the first
+// time; each new sample (every five seconds) slides the line one step to the left instead of jumping; pointing at it
+// shows the value and the time of the nearest sample. The animations run on the compositor (a transform and a
+// clip-path through the Web Animations API): no layout is read or changed, and the chart is not mounted again per poll.
+function Spark({ points, max, label, tone, show }: { points: { at: number; v: number }[]; max: number; label: string; tone: Tone; show: (v: number) => string }) {
+  const format = useFormatter();
+  const reduce = useReducedMotion();
+  const svg = useRef<SVGSVGElement>(null), line = useRef<SVGGElement>(null), seen = useRef<number | null>(null);
+  const [hover, setHover] = useState<number | null>(null);
+  const n = points.length, w = 240, h = 48, top = Math.max(max, ...points.map((p) => p.v), 1);
+  const last = n ? points[n - 1].at : null;
+  const x = (i: number) => (n > 1 ? (i / (n - 1)) * w : w);
+  const y = (v: number) => h - 2 - (v / top) * (h - 6);
+  // Before the browser paints the new line: the first time, a reveal from the left; afterwards a slide of one step.
+  useLayoutEffect(() => {
+    if (last === null || n < 2) return;
+    const first = seen.current === null, moved = seen.current !== null && seen.current !== last;
+    seen.current = last;
+    if (reduce || typeof Element.prototype.animate !== 'function') return;
+    if (first) svg.current?.animate([{ clipPath: 'inset(0 100% 0 0)' }, { clipPath: 'inset(0 0 0 0)' }], { duration: 900, easing: 'cubic-bezier(.2,.7,.2,1)' });
+    else if (moved) line.current?.animate([{ transform: `translateX(${(w / (n - 1)).toFixed(2)}px)` }, { transform: 'translateX(0)' }], { duration: 600, easing: 'cubic-bezier(.2,.7,.2,1)' });
+  }, [last, n, reduce]);
+  if (n < 2) return <div className="h-12 rounded-lg bg-default/40" aria-hidden/>;
+  const pts = points.map((p, i) => `${x(i).toFixed(1)},${y(p.v).toFixed(1)}`);
+  const at = hover === null ? null : points[Math.min(n - 1, hover)];
+  const pick = (e: React.PointerEvent<SVGSVGElement>) => {
+    const box = e.currentTarget.getBoundingClientRect();
+    setHover(Math.round(Math.min(1, Math.max(0, (e.clientX - box.left) / box.width)) * (n - 1)));
+  };
+  return <div className="relative">
+    <svg ref={svg} viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none" className={`group h-12 w-full touch-pan-y ${text[tone]}`} role="img" aria-label={label}
+      onPointerMove={pick} onPointerDown={pick} onPointerLeave={() => setHover(null)}>
+      <g ref={line}>
+        <polygon points={`0,${h} ${pts.join(' ')} ${w},${h}`} fill="currentColor" className="opacity-[.14] transition-opacity duration-200 group-hover:opacity-25 motion-reduce:transition-none"/>
+        <polyline points={pts.join(' ')} fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke"
+          className="transition-[stroke-width] duration-200 group-hover:[stroke-width:2.4] motion-reduce:transition-none"/>
+      </g>
+    </svg>
+    {at && hover !== null && <>
+      <span aria-hidden className="pointer-events-none absolute top-0 bottom-0 w-px bg-current opacity-40" style={{ left: `${(x(hover) / w) * 100}%` }}/>
+      <span aria-hidden className={`pointer-events-none absolute size-2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-current ring-2 ring-background ${text[tone]}`}
+        style={{ left: `${(x(hover) / w) * 100}%`, top: `${(y(at.v) / h) * 100}%` }}/>
+      <span role="status" className={`pointer-events-none absolute top-full z-10 mt-1 rounded-md border border-border bg-surface px-1.5 py-0.5 text-[11px] whitespace-nowrap text-foreground tabular-nums shadow-sm ${x(hover) / w > 0.6 ? '-translate-x-full' : ''}`}
+        style={{ left: `${(x(hover) / w) * 100}%` }}>{show(at.v)} · {format.dateTime(new Date(at.at), { timeStyle: 'medium' })}</span>
+    </>}
+  </div>;
 }
 function Bar({ percent, tone, label }: { percent: number; tone: Tone; label: string }) {
   return <div role="meter" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(percent)} aria-label={label} className="h-2 overflow-hidden rounded-full bg-default">
-    <div className={`h-full rounded-full transition-[width] duration-500 ${fill[tone]}`} style={{ width: `${Math.min(100, Math.max(1.5, percent))}%` }}/></div>;
+    <div className={`h-full origin-left rounded-full transition-[width] duration-500 motion-reduce:transition-none ${fill[tone]}`} style={{ width: `${Math.min(100, Math.max(1.5, percent))}%` }}/></div>;
 }
 function Tile({ icon, label, value, tone = 'default', children }: { icon: React.ReactNode; label: string; value: React.ReactNode; tone?: Tone; children?: React.ReactNode }) {
   return <div className="flex flex-col gap-3 rounded-2xl border border-border p-4">
@@ -53,7 +92,6 @@ function Tile({ icon, label, value, tone = 'default', children }: { icon: React.
     {children}
   </div>;
 }
-const lineTone = (l: string) => (/\b(error|fatal|panic|critical|emerg|"level":"(error|fatal)")\b/i.test(l) ? 'text-danger' : /\b(warn|warning|"level":"warn")\b/i.test(l) ? 'text-warning' : '');
 
 export default function HostState() {
   const t = useTranslations('HostState');
@@ -67,6 +105,7 @@ export default function HostState() {
   const q = useApiQuery<Live>(['admin', 'host-live'], '/admin/host/live', { refetchInterval: 5_000 });
   const d = q.data;
   const [asking, setAsking] = useState(false);
+  const [open, setOpen] = useState<string | null>(null);
   // again: a quiet request the agent refused (it was busy with another quiet request of this page) is asked once more.
   const refresh = async (quiet = false, again = true) => {
     setAsking(true);
@@ -90,8 +129,9 @@ export default function HostState() {
   const disk = d.disk && d.disk.total ? ((d.disk.total - d.disk.free) / d.disk.total) * 100 : 0;
   const load = d.cpu.load[0] ?? 0, loadPct = d.cpu.cores ? (load / d.cpu.cores) * 100 : 0;
   const swap = d.memory && d.memory.swapTotal ? (d.memory.swapUsed / d.memory.swapTotal) * 100 : 0;
-  const down = (s?.services ?? []).filter((x) => x.state !== 'running' && !(x.state === 'exited' && /Exited \(0\)/.test(x.status)));
-  const unhealthy = (s?.services ?? []).filter((x) => x.health === 'unhealthy');
+  // A one-shot job that finished (migrate, exit code 0) is not a fault: the API says which states are (host-services.ts).
+  const down = (s?.services ?? []).filter((x) => x.fault && x.kind !== 'unhealthy');
+  const unhealthy = (s?.services ?? []).filter((x) => x.kind === 'unhealthy');
   const fullDisks = (s?.disks ?? []).filter((x) => x.total && x.used / x.total >= 0.9);
   const problems = [
     cpu >= 90 && t('warn.cpu', { n: Math.round(cpu) }), mem >= 90 && t('warn.memory', { n: Math.round(mem) }), loadPct >= 150 && t('warn.load', { load, cores: d.cpu.cores }),
@@ -112,17 +152,18 @@ export default function HostState() {
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <Tile icon={<I name="cpu" size={18}/>} label={t('cpu')} value={d.cpu.percent === null ? '–' : percent(cpu, 1)} tone={d.cpu.percent === null ? 'default' : toneOf(cpu)}>
-          <Spark values={d.history.map((h) => h.cpu)} max={100} tone={toneOf(cpu)} label={t('chart', { what: t('cpu') })}/>
+          <Spark points={d.history.map((h) => ({ at: h.at, v: h.cpu }))} max={100} tone={toneOf(cpu)} label={t('chart', { what: t('cpu') })} show={(v) => percent(v, 1)}/>
           <p className="text-xs text-muted">{t('cores', { n: d.cpu.cores })}{d.cpu.iowait !== null && d.cpu.iowait >= 1 && <> · {t('iowait', { n: format.number(d.cpu.iowait, { maximumFractionDigits: 1 }) })}</>}</p>
           {d.cpu.model && <p className="truncate text-xs text-muted" title={d.cpu.model}>{d.cpu.model}</p>}
         </Tile>
         <Tile icon={<I name="memory-stick" size={18}/>} label={t('memory')} value={d.memory ? percent(mem) : '–'} tone={d.memory ? toneOf(mem) : 'default'}>
-          <Spark values={d.history.map((h) => h.memory)} max={100} tone={toneOf(mem)} label={t('chart', { what: t('memory') })}/>
+          <Spark points={d.history.map((h) => ({ at: h.at, v: h.memory }))} max={100} tone={toneOf(mem)} label={t('chart', { what: t('memory') })} show={(v) => percent(v)}/>
           {d.memory && <><p className="text-xs text-muted">{t('usedOf', { used: bytes(d.memory.used), total: bytes(d.memory.total) })}</p>
             <p className="text-xs text-muted">{t('cached', { n: bytes(d.memory.cached) })}{d.memory.swapTotal > 0 && <> · {t('swap', { used: bytes(d.memory.swapUsed), total: bytes(d.memory.swapTotal) })}</>}</p></>}
         </Tile>
         <Tile icon={<I name="gauge" size={18}/>} label={t('load')} value={format.number(load, { maximumFractionDigits: 2 })} tone={loadPct >= 150 ? 'danger' : loadPct >= 100 ? 'warning' : 'success'}>
-          <Spark values={d.history.map((h) => h.load)} max={d.cpu.cores} tone={loadPct >= 150 ? 'danger' : loadPct >= 100 ? 'warning' : 'success'} label={t('chart', { what: t('load') })}/>
+          <Spark points={d.history.map((h) => ({ at: h.at, v: h.load }))} max={d.cpu.cores} tone={loadPct >= 150 ? 'danger' : loadPct >= 100 ? 'warning' : 'success'} label={t('chart', { what: t('load') })}
+            show={(v) => format.number(v, { maximumFractionDigits: 2 })}/>
           <p className="text-xs text-muted">{t('loadAvg', { a: d.cpu.load[0] ?? 0, b: d.cpu.load[1] ?? 0, c: d.cpu.load[2] ?? 0 })}</p>
           <p className="text-xs text-muted">{t('loadHelp', { n: d.cpu.cores })}</p>
         </Tile>
@@ -144,14 +185,24 @@ export default function HostState() {
         : !s ? <p role="status" className="flex items-center gap-2 text-sm text-muted"><I name="loader" size={14} className="animate-spin motion-reduce:animate-none"/>{t('firstSnapshot')}</p> : <>
         <div className="flex flex-col gap-3">
           <div className="flex flex-wrap items-baseline justify-between gap-2"><h3 className="text-sm font-semibold">{t('services', { n: s.services.length })}</h3><p className="text-xs text-muted">{t('snapshot', { when: ago(s.checkedAt) })}</p></div>
-          <ul className="grid gap-2 md:grid-cols-2 2xl:grid-cols-3">
-            {s.services.map((x) => { const ok = x.state === 'running', done = x.state === 'exited' && /Exited \(0\)/.test(x.status), bad = x.health === 'unhealthy' || (!ok && !done);
-              return <li key={x.service} className={`flex items-center gap-3 rounded-xl border px-3 py-2.5 ${bad ? 'border-danger/50 bg-danger/5' : 'border-border'}`}>
-                <span aria-hidden className={`size-2.5 shrink-0 rounded-full ${bad ? 'bg-danger' : ok ? 'bg-success' : 'bg-default-foreground/30'}`}/>
-                <div className="min-w-0 flex-1"><p className="truncate text-sm font-medium">{x.service}</p><p className="truncate text-xs text-muted" title={x.status}>{x.status}{x.restarts > 0 && ` · ${t('restarts', { n: x.restarts })}`}</p></div>
-                {ok && <div className="shrink-0 text-right text-xs tabular-nums"><p className={x.cpu >= 80 ? 'text-warning' : ''}>{percent(x.cpu, 1)} CPU</p><p className="text-muted">{x.memory || '–'}</p></div>}
+          {/* Each service opens its detail: what its state means, what to do, restart, version, ports and its log. */}
+          <ul className="grid gap-2 md:grid-cols-2 2xl:grid-cols-3" data-testid="services">
+            {s.services.map((x) => { const ok = x.state === 'running', bad = x.fault, tone = kindTone[x.kind];
+              const done = x.kind === 'completed' && x.finishedAt && !x.finishedAt.startsWith('0001-') ? ago(x.finishedAt) : '';
+              return <li key={x.service}>
+                <button type="button" onClick={() => setOpen(x.service)} aria-label={t('svc.open', { service: x.service, state: t(`kind.${x.kind}`) })}
+                  className={`flex w-full items-center gap-3 rounded-xl border px-3 py-2.5 text-left transition-colors hover:border-accent focus-visible:outline-2 focus-visible:outline-accent motion-reduce:transition-none ${bad ? 'border-danger/50 bg-danger/5' : 'border-border'}`}>
+                  <span aria-hidden className={`size-2.5 shrink-0 rounded-full ${bad ? 'bg-danger' : tone === 'success' ? 'bg-success' : tone === 'accent' ? 'bg-accent' : 'bg-default-foreground/30'}`}/>
+                  <span className="min-w-0 flex-1"><span className="flex min-w-0 items-baseline gap-2"><span className="truncate text-sm font-medium">{x.service}</span>
+                    <span className="truncate text-[11px] text-muted" title={versionText(x.version)}>{versionText(x.version)}</span></span>
+                    <span className={`block truncate text-xs ${bad ? 'text-danger' : 'text-muted'}`} title={x.status}>
+                      {x.kind === 'completed' ? t('svc.completedAgo', { when: done || '–' }) : t(`kind.${x.kind}`)}{x.kind === 'failed' && x.exitCode !== null && ` (${x.exitCode})`}{x.restarts > 0 && ` · ${t('restarts', { n: x.restarts })}`}</span></span>
+                  {ok && <span className="shrink-0 text-right text-xs tabular-nums"><span className={`block ${x.cpu >= 80 ? 'text-warning' : ''}`}>{percent(x.cpu, 1)} CPU</span><span className="block text-muted">{x.memory || '–'}</span></span>}
+                  <I name="chevron-right" size={14} className="shrink-0 text-muted"/>
+                </button>
               </li>; })}
           </ul>
+          <ServiceDrawer name={open} onClose={() => setOpen(null)}/>
         </div>
 
         <div className="grid gap-6 xl:grid-cols-2">
@@ -197,7 +248,8 @@ function Logs({ sources, snapshotAt }: { sources: string[]; snapshotAt: string }
   const [find, setFind] = useState('');
   const [only, setOnly] = useState(false);
   const [wrap, setWrap] = useState(false);
-  const q = useApiQuery<{ lines: string[] }>(['admin', 'host-logs', source, snapshotAt], `/admin/host/logs?source=${encodeURIComponent(source)}&lines=300`);
+  // gcTime 0: log lines (masked by the API, but still logs) are not kept in the browser beyond this view.
+  const q = useQuery<{ lines: string[] }>({ queryKey: ['admin', 'host-logs', source, snapshotAt], queryFn: ({ signal }) => apiFetch<{ lines: string[] }>(`/admin/host/logs?source=${encodeURIComponent(source)}&lines=300`, { signal }), gcTime: 0 });
   const box = useRef<HTMLPreElement>(null);
   const lines = q.data?.lines ?? [];
   const needle = fold(find.trim());

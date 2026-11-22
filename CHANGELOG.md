@@ -14,6 +14,38 @@ Türkçe [docs/upgrade-notes.md](docs/upgrade-notes.md) sayfasını okuyun.*
 
 ## [Unreleased]
 
+### Added
+
+- Admin → System → Server state → Services: a click on a service opens its detail (a drawer, also on a phone):
+  state, health check, exit code, started and ended, restarts, image, version, ports, what the state means and what
+  to do (Turkish and English), and the last 200 lines of its log, refreshable. Log lines are for administrators only;
+  what looks like a secret (Authorization and Cookie headers, Bearer tokens, passwords and keys as `key=value`, the
+  password of a connection string, JWTs, private keys) is masked by the API, and the host agent masks more than
+  before. The browser drops the lines when the drawer closes.
+- A service is restarted from that drawer through the host agent (`POST /admin/maintenance/requests`, action
+  `service`, `act` `restart` or `run`; `install.sh service restart|run <name>`): staff with `system.update`, a
+  confirmation that says what is interrupted, one maintenance task at a time, audited. The name must be a service of
+  the compose file in the agent's last snapshot. postgres and redis are refused (409 `SERVICE_PROTECTED`, with the
+  command to run on the server); api, web and proxy are restarted by the agent after the panel has answered; a
+  one-shot job is not restarted (`SERVICE_ONE_SHOT`), and migrate can be run again (it applies only what is not yet
+  recorded). New `GET /admin/host/services/:name`.
+- Every service shows its version: the panel's version and commit for the services built with the panel, the version
+  PostgreSQL and Redis report, else the image's version label or its tag.
+- The server-state charts animate: drawn in from the left the first time, sliding one step with each new sample,
+  value and time on hover. Nothing moves when the browser asks for reduced motion.
+
+### Fixed
+
+- A one-shot job that ended with exit code 0 (migrate) is shown as "Completed" with when, not as a stopped
+  service. Which services are one-shot is read from the compose definition (`restart: "no"`, or another service
+  waits for it with `service_completed_successfully`); a non-zero exit, a restart loop and a failing health check
+  are faults.
+- Admin → System → Updates lists every published version of the channel, newest first (it stopped at the newest
+  ten), marks the running one (or the release a build between releases is based on) and shows each version's
+  section of CHANGELOG.md. The list is rewritten after every update, also one run from the command line (before,
+  only a panel request did that, so the demo's list still described v0.3.0), and once a day by the maintenance
+  timer; the page says when the list was written for another version.
+
 ## [0.5.1] - 2026-11-22
 
 Fourth public release, still **beta**. Three fixes since 0.5.0 and nothing new: resizes asked for at the same

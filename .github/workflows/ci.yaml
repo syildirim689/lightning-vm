@@ -155,6 +155,25 @@ jobs:
           sudo grep -c '"kind":"restore","status":"ok"' data/maintenance/history.jsonl
           # restore starts the base stack; the simulators need their overlay again
           sudo docker compose -f compose.yaml -f compose.simulator.yaml up -d --wait
+      - name: Services snapshot, restart and refusals (host agent side)
+        run: |
+          # The snapshot the panel reads: migrate is a one-shot job others wait for, it ended with 0, and the
+          # simulators (an extra compose file) are not services the agent may restart.
+          sudo sh scripts/install.sh state
+          sudo jq -e '.services[] | select(.service == "migrate") | .exitCode == 0 and .restartPolicy == "no" and .awaited == 1 and .managed == 1' data/maintenance/state.json
+          sudo jq -e '.services[] | select(.service == "vcsim-esxi") | .managed == 0' data/maintenance/state.json
+          sudo jq -e '.services[] | select(.service == "proxy") | .image == "caddy:2-alpine" and (.ports | length > 0)' data/maintenance/state.json
+          sudo jq -e '.commit | length >= 7' data/maintenance/state.json
+          # Refused without touching anything: the database, Redis, a one-shot restart, a name outside the file.
+          for args in "restart postgres" "restart redis" "restart migrate" "run worker" "restart vcsim-esxi" "restart nope"; do
+            set +e; sudo sh scripts/install.sh service $args --lang en; rc=$?; set -e
+            test "$rc" -ne 0 || { echo "service $args was not refused"; exit 1; }
+          done
+          # A restart of a long-running service and migrate run again, each waited for and healthy afterwards.
+          sudo sh scripts/install.sh service restart worker --lang en
+          sudo sh scripts/install.sh service run migrate --lang en
+          sudo docker compose -f compose.yaml -f compose.simulator.yaml up -d --wait
+          curl --fail --retry 10 --retry-delay 3 --retry-all-errors http://127.0.0.1:8080/api/ready
       - name: Monitoring data flow
         run: |
           sudo docker compose -f compose.yaml -f compose.simulator.yaml --profile observability up -d --wait

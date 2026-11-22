@@ -259,6 +259,18 @@ sudo sh scripts/install.sh auto-update on --channel stable --window 03:00-05:00
   sudo sh scripts/install.sh schedule off
   ```
 
+**Sürüm listesi (Yönetim → Sistem → Güncellemeler → Sürümler):** `install.sh releases` kanalın yayımlanmış
+**bütün** sürümlerini (`stable`: `vX.Y.Z`, `beta`: `-rc` gibi ekli olanlar da) yeniden eskiye
+`data/maintenance/releases.json` dosyasına yazar: tarih (etiketin tarihi), sürümün `CHANGELOG.md` bölümü (yoksa
+etiketin ya da commit'in mesajı, en çok 8000 bayt), daha yeni olup olmadığı ve çalışan commit'in kendisi olup
+olmadığı; ayrıca çalışan derlemenin içerdiği en yeni etiket (`base`, örneğin `v0.5.1-4-gabc1234` için `v0.5.1`).
+Panel ilk beşini gösterir, kalanını bir tıkla; çalışan sürüm (ya da iki sürüm arasındaki bir derlemenin dayandığı
+sürüm) işaretlidir. Liste "Güncellemeleri denetle" ile, **her güncellemenin sonunda** (komut satırından yapılanda
+da) ve saatlik zamanlayıcıyla günde bir kez yeniden yazılır. 0.5.1'e kadar liste yalnızca en yeni on etiketi
+alıyordu ve yalnızca panelden istenen güncellemeden sonra yenileniyordu; komut satırıyla güncellenen bir sunucuda
+(demo gibi) eski sürümü anlatmaya devam ediyordu. Liste çalışan sürümden başka bir sürüm için yazılmışsa sayfa bunu
+söyler.
+
 **Geçmiş:**
 - `data/maintenance/history.jsonl`: son 500 kayıt.
 - `data/maintenance/settings.json`: ayarların özeti.
@@ -299,6 +311,63 @@ yüzden betik (`scripts/install.sh`) root olarak çalışırken şunları yapar:
 
 Bu yollar yalnızca `dash` ve `bash` altında, sahte dosya ve dizinlerle denendi. Gerçek bir kurulumda, systemd
 zamanlayıcısı ve panel ajanıyla birlikte çalıştırılmadı.
+
+## Servisler ve yeniden başlatma
+Yönetim → Sistem → **Sunucu durumu → Servisler**, ajanın son anlık görüntüsündeki (`install.sh state`,
+`data/maintenance/state.json`) her servisi durumu ve sürümüyle listeler; bir servise tıklamak ayrıntısını açar
+(`GET /api/admin/host/services/<ad>`).
+
+**Durumlar** (`apps/api/src/host-services.ts`): çalışıyor, sağlıklı, başlıyor (sağlık denetimi henüz karar
+vermedi), sağlıksız, yeniden başlıyor, **tamamlandı**, hata ile bitti, durdu, başlatılmadı, duraklatıldı.
+Tek seferlik bir iş compose tanımından anlaşılır: başka bir servis onun başarıyla bitmesini bekliyorsa
+(`depends_on: … condition: service_completed_successfully`) ya da yeniden başlatma politikası `"no"` olup
+bitmişse. Böyle bir iş 0 koduyla bittiyse "Tamamlandı"dır (ne zaman bittiğiyle) ve **hata sayılmaz**; sıfırdan
+farklı çıkış kodu, yeniden başlama döngüsü, başarısız sağlık denetimi ve sürekli çalışması gereken bir servisin
+durması hatadır. Ayrıntıda her durum için "bu ne demek / ne yapmalı" metni, sağlık denetiminin neye baktığı ve
+yeniden başlama döngüsünün olağan nedenleri yazar.
+
+**Sürüm:** panelle derlenen servislerde (api, web, worker, migrate, adaptörler …) panelin sürümü ve commit'i;
+PostgreSQL ve Redis'te servisin kendi bildirdiği sürüm; diğerlerinde imajın sürüm etiketi
+(`org.opencontainers.image.version`) ya da imaj etiketi (`prom/prometheus:v3.2.1` → `v3.2.1`).
+
+**Günlük:** ayrıntı, servisin anlık görüntüdeki son 200 satırını gösterir; "Yenile" ajandan yeni bir anlık görüntü
+ister. Satırlar yalnızca yöneticilere (tüm yetkiler) verilir. Gizli görünen değerler hem ajan tarafından hem
+API tarafından maskelenir: Authorization ve Cookie başlıkları, Bearer belirteçleri, `password=`, `secret=`,
+`token=`, `api_key=` gibi değerler (JSON'da da), bağlantı dizelerindeki parola (`postgresql://kullanıcı:***@`),
+JWT'ler ve özel anahtar blokları, adreslerdeki sıfırlama ve giriş belirteçleri. Tarayıcı satırları ayrıntı
+kapanınca bellekten atar.
+
+**Yeniden başlatma:** ayrıntıdaki "Yeniden başlat" (tek seferlik işte "Yeniden çalıştır") önce ne kesileceğini
+söyleyen bir onay ister; onaylanınca panel, yedek ve güncellemenin kullandığı yoldan ajana istek bırakır
+(`POST /api/admin/maintenance/requests`, `action: service`, `service: <ad>`, `act: restart|run`) ve ajan
+`install.sh service restart|run <ad>` çalıştırır. Komut satırından da aynısı:
+```sh
+sudo sh scripts/install.sh service restart worker
+```
+```sh
+sudo sh scripts/install.sh service run migrate
+```
+- **İzin ve kurallar:** `system.update` (görmek için `system.view`); aynı anda tek bakım işi (`409 MAINTENANCE_BUSY`);
+  istek denetim kaydına `maintenance.request` olarak, servis adı ve kimin istediğiyle yazılır.
+- **İzin listesi:** ad, ajanın son anlık görüntüsündeki bir servis olmalıdır (`400 VALIDATION_FAILED`,
+  `UNKNOWN_SERVICE`); anlık görüntü yoksa `409 HOST_STATE_MISSING`. Ajan adı bir kez daha
+  `docker compose config --services` listesine karşı denetler; serbest metin kabuğa ulaşmaz.
+- **Servis başına karar:**
+
+  | Servis | Panelden | Neden |
+  |---|---|---|
+  | postgres, redis | **Reddedilir** (`409 SERVICE_PROTECTED`) | Diğer bütün servisler bunlara bağlıdır; çalışan işlemler ve panelin kendisi yarıda kesilir. Gerekirse sakin bir saatte sunucuda `docker compose restart <ad>` |
+  | api, web, proxy | Yeniden başlatılır | Panel isteği yanıtladıktan (202) sonra ajan yeniden başlatır; istek kendini kesmez. Panele birkaç saniye ulaşılamaz, sayfa kendiliğinden yeniden bağlanır |
+  | worker | Yeniden başlatılır | Çalışan işlemler bekler ve worker geri gelince kaldığı adımdan sürer (durdurmada en çok 120 sn beklenir) |
+  | terminal | Yeniden başlatılır | Açık terminal oturumları kapanır |
+  | migrate | **Yeniden çalıştırılır**, yeniden başlatılmaz | İki kez çalışması zararsızdır: kilit altında yalnızca `schema_migrations`'ta kayıtlı olmayanları uygular |
+  | başka bir tek seferlik iş | Reddedilir (`409 SERVICE_ONE_SHOT`) | İki kez çalışmasının zararsız olduğu bilinmiyor |
+  | compose dosyası dışındaki servis (demo simülatörleri) | Reddedilir (`409 SERVICE_NOT_MANAGED`) | Ajanın çalıştırdığı compose dosyasında yok |
+  | diğerleri (adaptörler, izleme bileşenleri) | Yeniden başlatılır | Birkaç saniye kullanılamaz |
+
+- **Sonuç:** ajan servisi yeniden başlatır ve iki dakikaya kadar çalışır (sağlık denetimi varsa sağlıklı) olmasını
+  bekler; olmazsa `E_SERVICE_NOT_HEALTHY` ile biter. Ardından yeni bir anlık görüntü alır. Ayrıntı penceresi
+  ajanın son servis işinin sonucunu ve son satırlarını gösterir.
 
 ## Kaldırma
 ```sh

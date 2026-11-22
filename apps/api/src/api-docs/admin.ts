@@ -15,7 +15,7 @@ export default {
     tag: 'admin-system',
     summary: { tr: 'Sürüm, yedek ve güncelleme durumunu, sunucu ajanının durumunu verir.', en: 'Returns version, backup and update state, and the host agent\'s state.' },
     details: { tr: 'system.view veya dashboard.view yetkisi gerekir.', en: 'Needs system.view or dashboard.view.' },
-    returns: { tr: 'Bakım özeti (sürüm, son yedek, otomatik güncelleme), `releases` ve `agent` (`installed`, bekleyen istek sayısı, son çalışma ve günlüğü).', en: 'The maintenance summary (version, last backup, automatic updates), `releases` and `agent` (`installed`, pending requests, the last run and its log).' },
+    returns: { tr: 'Bakım özeti (sürüm, son yedek, otomatik güncelleme), `releases` (kanalın yayımlanmış tüm sürümleri, yeniden eskiye, değişiklik notlarıyla; `stale`: liste çalışan sürümden önce yazılmış) ve `agent` (`installed`, bekleyen istek sayısı, son çalışma ve günlüğü).', en: 'The maintenance summary (version, last backup, automatic updates), `releases` (every published version of the channel, newest first, with its changelog; `stale`: the list was written before the running version) and `agent` (`installed`, pending requests, the last run and its log).' },
   },
   'GET /admin/maintenance/monitoring': {
     tag: 'admin-system',
@@ -36,7 +36,7 @@ export default {
     ],
     example: { action: 'auto-update', enabled: true, channel: 'stable', window: '03:00-05:00' },
     returns: { tr: '`id`: kuyruğa alınan isteğin kimliği.', en: '`id`: the queued request\'s id.' },
-    errors: ['VALIDATION_FAILED', 'MAINTENANCE_AGENT_MISSING', 'MAINTENANCE_BUSY'],
+    errors: ['VALIDATION_FAILED', 'MAINTENANCE_AGENT_MISSING', 'MAINTENANCE_BUSY', 'HOST_STATE_MISSING', 'SERVICE_PROTECTED', 'SERVICE_ONE_SHOT', 'SERVICE_NOT_ONE_SHOT', 'SERVICE_NOT_MANAGED'],
   },
   'GET /admin/host': {
     tag: 'admin-system',
@@ -56,6 +56,15 @@ export default {
     details: { tr: 'system.view yetkisi gerekir. Sunucuda hiçbir şey değişmez; servisler, diskler, süreçler ve günlüklerin son satırları yeniden okunur.', en: 'Needs system.view. Nothing changes on the server; services, disks, processes and the last log lines are read again.' },
     returns: { tr: 'İsteğin kimliği (202).', en: 'The request id (202).' },
     errors: ['MAINTENANCE_AGENT_MISSING', 'MAINTENANCE_BUSY'],
+  },
+  'GET /admin/host/services/:name': {
+    tag: 'admin-system',
+    summary: { tr: 'Bir servisin ayrıntısını verir: durum, sağlık, çıkış kodu, sürüm, bağlantı noktaları, yapılabilecekler ve günlüğün son satırları.', en: 'Returns one service in detail: state, health, exit code, version, ports, what may be done to it and the last lines of its log.' },
+    details: { tr: 'system.view yetkisi gerekir; günlük satırları yalnız yöneticilere (tüm yetkiler) verilir, diğerlerine `logs: null`. Gizli görünen değerler (Authorization ve Cookie başlıkları, Bearer belirteçleri, parolalar, bağlantı dizelerindeki parola, JWT, özel anahtarlar) sunucuda maskelenir. Tek seferlik bir işin 0 koduyla bitmesi hata değildir (`kind: completed`).', en: 'Needs system.view; log lines go to administrators (every permission) only, others get `logs: null`. What looks like a secret (Authorization and Cookie headers, Bearer tokens, passwords, the password in connection strings, JWTs, private keys) is masked on the server. A one-shot job that ended with code 0 is not a fault (`kind: completed`).' },
+    params: [{ name: 'name', type: 'string', text: { tr: 'Servis adı (api, worker, migrate ...).', en: 'The service name (api, worker, migrate ...).' } }],
+    query: [{ name: 'lines', type: 'integer', text: { tr: 'Günlük satırı sayısı, 10-300. Varsayılan 200.', en: 'How many log lines, 10-300. Default 200.' } }],
+    returns: { tr: '`checkedAt`, `service` (`kind`, `fault`, `oneShot`, `exitCode`, `version`, `rule` ve anlık görüntünün alanları), `logs` ve `agent` (son servis isteğinin durumu ve günlüğü).', en: '`checkedAt`, `service` (`kind`, `fault`, `oneShot`, `exitCode`, `version`, `rule` and the fields of the snapshot), `logs` and `agent` (status and log of the last service request).' },
+    errors: ['NOT_FOUND'],
   },
   'GET /admin/host/logs': {
     tag: 'admin-system',

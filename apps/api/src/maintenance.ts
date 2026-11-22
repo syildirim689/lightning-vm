@@ -31,7 +31,7 @@ export function summary() {
 // The panel writes one small key=value file; the agent validates it again and runs install.sh. Results come
 // back through the read-only mount: status.json (the current or last request), runs/<id>.log, releases.json.
 const requests = process.env.MAINTENANCE_REQUESTS_DIR ?? '/maintenance-requests';
-export type Action = 'check' | 'update' | 'backup' | 'auto-update' | 'domain' | 'monitoring' | 'terminal' | 'host' | 'os' | 'state';
+export type Action = 'check' | 'update' | 'backup' | 'auto-update' | 'domain' | 'monitoring' | 'terminal' | 'host' | 'os' | 'state' | 'service';
 export type AgentStatus = { id: string; action: Action; by: string; state: 'running' | 'succeeded' | 'failed' | 'rejected'; startedAt: string; finishedAt: string; exitCode: number | null; code: string };
 
 const readJson = <T>(file: string): T | null => { try { return JSON.parse(readFileSync(join(dir, file), 'utf8')) as T; } catch { return null; } };

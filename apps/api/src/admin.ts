@@ -12,7 +12,8 @@ import { uptime } from 'node:os';
 import { agentStatus, bootId, hostInfo, osInfo, pendingRequests, queueRequest, releases, runLog, runSetUp, settings as maintenanceSettings, summary } from './maintenance';
 import { readHostChange } from './host-rules';
 import { monitoringChecks } from './checks';
-import { hostLive, hostLog, logSources } from './host-live';
+import { hostLive, hostLog, hostState, logSources, serviceDetail } from './host-live';
+import { checkServiceRequest, SERVICE_NAME } from './host-services';
 import { endImpersonations, reloadAuth } from './better-auth';
 
 @Controller('admin') @UseGuards(PermissionGuard)
@@ -27,7 +28,10 @@ export class AdminController {
   @Get('maintenance') @Can('system.view', 'dashboard.view')
   maintenance() {
     const status = agentStatus();
-    return { ...summary(), releases: releases(),
+    const list = releases();
+    // stale: the list was written for another version than the one running now (an update from the command line
+    // up to 0.5.1 did not rewrite it): the page says so and offers the check.
+    return { ...summary(), releases: list && { ...list, stale: !!list.current && list.current !== (process.env.APP_VERSION || 'dev') },
       agent: { installed: maintenanceSettings().agent === 'on', pending: Math.max(0, pendingRequests()), status, log: status ? runLog(status.id) : [] } };
   }
 
@@ -45,15 +49,22 @@ export class AdminController {
       agent: { installed: maintenanceSettings().agent === 'on', pending: Math.max(0, pendingRequests()), busy: pendingRequests() > 0 || running, status: mine, log: mine ? runLog(mine.id, 20) : [] } };
   }
 
-  // Asks the host agent to check for updates, update, back up, change the automatic-update settings or turn the
-  // monitoring components on or off (install.sh monitoring on|off, as the setup wizard asks for it).
-  // One request at a time; the agent validates everything again before running scripts/install.sh.
+  // Asks the host agent to check for updates, update, back up, change the automatic-update settings, turn the
+  // monitoring components on or off (install.sh monitoring on|off, as the setup wizard asks for it), or restart one
+  // service of the stack / run a one-shot job again (install.sh service restart|run <name>; host-services.ts says
+  // which services may be). One request at a time; the agent validates everything again before running scripts/install.sh.
   @Post('maintenance/requests') @HttpCode(202) @Can('system.update')
   async request(@Req() req: AuthedRequest, @Body() body: Record<string, unknown>) {
     const action = String(body?.action ?? '');
     const fields: Record<string, string> = {};
     const out: Record<string, string> = { action };
-    if (!['check', 'update', 'backup', 'auto-update', 'monitoring'].includes(action)) fields.action = 'INVALID_VALUE';
+    if (!['check', 'update', 'backup', 'auto-update', 'monitoring', 'service'].includes(action)) fields.action = 'INVALID_VALUE';
+    // A service by name: only one in the agent's last snapshot of the compose file, and only what the rules allow.
+    if (action === 'service') {
+      const c = checkServiceRequest(hostState()?.services ?? null, body?.service, body?.act);
+      if (!c.ok) throw apiError(c.status, c.code, c.code === 'VALIDATION_FAILED' ? 'Invalid input' : 'This service cannot be restarted from the panel', c.fields);
+      out.service = c.service; out.act = c.act;
+    }
     // On or off must be said: a missing or mistyped value does not quietly turn monitoring (and its alerts) off.
     if (action === 'monitoring') { if (typeof body?.enabled === 'boolean') out.switch = body.enabled ? 'on' : 'off'; else fields.enabled = 'INVALID_VALUE'; }
     if (action === 'update' && body?.to) {
@@ -115,6 +126,23 @@ export class AdminController {
     const found = hostLog(String(source ?? ''), n);
     if (!found) throw apiError(404, 'NOT_FOUND', 'Unknown log');
     return { source, lines: found.map(maskSecrets), sources: logSources() };
+  }
+
+  // One service of the stack in detail: its state, whether that is a fault, version, ports, what may be done to it,
+  // the last lines of its log (administrators only, secrets masked here: host-services.ts) and the agent's last
+  // restart or run of a service with the end of its log.
+  @Get('host/services/:name') @Can('system.view')
+  async hostService(@Req() req: AuthedRequest, @Param('name') name: string, @Query('lines') lines?: string) {
+    if (!SERVICE_NAME.test(name)) throw apiError(404, 'NOT_FOUND', 'Unknown service');
+    const found = await serviceDetail(name);
+    if (!found) throw apiError(404, 'NOT_FOUND', 'Unknown service');
+    const admin = req.user.permissions.includes('*');
+    const n = Math.min(300, Math.max(10, Number(lines) || 200));
+    const status = agentStatus();
+    const mine = status?.action === 'service' ? status : null;
+    const running = status?.state === 'running' && Date.now() - Date.parse(status.startedAt) < 3 * 3600_000;
+    return { ...found, logs: admin ? (hostLog(name, n) ?? []).map(maskSecrets) : null,
+      agent: { installed: maintenanceSettings().agent === 'on', busy: pendingRequests() > 0 || running, status: mine, log: mine ? runLog(mine.id, 20).map(maskSecrets) : [] } };
   }
 
   // Changes the server's name, time zone, time servers or DNS servers through the host agent (it checks again).

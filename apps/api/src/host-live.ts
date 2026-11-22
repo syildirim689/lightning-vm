@@ -6,6 +6,8 @@ import { readFileSync, statfsSync } from 'node:fs';
 import { cpus, loadavg, release, uptime } from 'node:os';
 import { join } from 'node:path';
 import { pool, redis } from './db';
+import { classify, redactLine, ruleOf, versionOf, type RawService } from './host-services';
+import { releases } from './maintenance';
 
 const dir = process.env.MAINTENANCE_DIR ?? '/maintenance';
 const EVERY = 5_000, KEEP = 120;
@@ -39,13 +41,27 @@ function sample() {
 export function startHostLive() { sample(); setInterval(sample, EVERY).unref(); }
 
 const disk = () => { try { const s = statfsSync(dir); return { total: s.blocks * s.bsize, free: s.bavail * s.bsize }; } catch { return null; } };
-export type HostState = { checkedAt: string; services: Record<string, unknown>[]; disks: Record<string, unknown>[]; [k: string]: unknown };
+export type HostState = { checkedAt: string; services: RawService[]; disks: Record<string, unknown>[]; commit?: string; [k: string]: unknown };
 export const hostState = (): HostState | null => { try { return JSON.parse(readFileSync(join(dir, 'state.json'), 'utf8')) as HostState; } catch { return null; } };
+
+// The running panel: its version (APP_VERSION, as install.sh started it) and commit (the agent's snapshot, else the
+// last release check).
+export const panelBuild = (state = hostState()) => ({ version: process.env.APP_VERSION || 'dev', commit: String(state?.commit ?? releases()?.commit ?? '') });
+// Each service with what the page needs to say about it: its state in one word (and whether that is a fault), the
+// version it runs, and what may be done to it from the panel (host-services.ts).
+export function describe(s: RawService, build: { version: string; commit: string }, reported: Record<string, string> = {}) {
+  return { ...s, ...classify(s), version: versionOf(s, build, reported), rule: ruleOf(s) };
+}
+const described = (state: HostState | null) => {
+  if (!state) return null;
+  const build = panelBuild(state);
+  return { ...state, services: (state.services ?? []).map((s) => describe(s, build)) };
+};
 
 // The last lines of one service (or of the system journal) as the agent's snapshot recorded them.
 export function hostLog(source: string, lines: number) {
   if (!/^[a-z0-9][a-z0-9_-]{0,40}$/.test(source)) return null;
-  try { return readFileSync(join(dir, 'logs', `${source}.log`), 'utf8').split('\n').filter(Boolean).slice(-lines).map((l) => (l.length > 2000 ? `${l.slice(0, 2000)}…` : l)); } catch { return null; }
+  try { return readFileSync(join(dir, 'logs', `${source}.log`), 'utf8').split(/\r?\n/).filter(Boolean).slice(-lines).map((l) => redactLine(l.length > 2000 ? `${l.slice(0, 2000)}…` : l)); } catch { return null; }
 }
 export function logSources() {
   const state = hostState();
@@ -66,5 +82,22 @@ export async function hostLive() {
     memory: memory(), disk: disk(), uptime: Math.round(uptime()), kernel: release(),
     history: samples.map((s) => ({ at: s.at, cpu: s.cpu, memory: s.memory, load: s.load })),
     panel: { apiMemory: process.memoryUsage().rss, apiUptime: Math.round(process.uptime()), node: process.version, databaseSize: db, connections, redisMemory: store },
-    state: hostState(), logs: logSources() };
+    state: described(hostState()), logs: logSources() };
+}
+
+// What PostgreSQL and Redis say their version is (asked only for the detail of one service).
+export async function reportedVersions(): Promise<Record<string, string>> {
+  const [pg, rd] = await Promise.all([
+    pool.query('SHOW server_version').then((r) => String(r.rows[0]?.server_version ?? '').split(' ')[0], () => ''),
+    redis.info('server').then((t) => /redis_version:([^\s]+)/.exec(t)?.[1] ?? '', () => ''),
+  ]);
+  return { ...(pg && { postgres: pg }), ...(rd && { redis: rd }) };
+}
+
+// One service in detail: everything in the list, the version the service itself reports where it can be asked.
+export async function serviceDetail(name: string) {
+  const state = hostState();
+  const s = state?.services?.find((x) => x.service === name);
+  if (!state || !s) return null;
+  return { checkedAt: state.checkedAt, service: describe(s, panelBuild(state), await reportedVersions()) };
 }

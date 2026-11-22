@@ -411,7 +411,17 @@
     "WEBHOOK_TIMESTAMP_OUT_OF_RANGE": "The webhook signature is too old.",
     "WEBHOOK_EVENT_INVALID": "This is not an event of this webhook address.",
     "DIGEST_NOT_AVAILABLE": "The digest is not turned on in this panel.",
-    "NO_SUGGESTION": "There is no schedule to suggest for this server any more. Reload the page."
+    "NO_SUGGESTION": "There is no schedule to suggest for this server any more. Reload the page.",
+    "HOST_STATE_MISSING": "The server's agent has not recorded its services yet; refresh the server state first.",
+    "SERVICE_PROTECTED": "This service is not restarted from the panel (the database and Redis): restart it on the server at a quiet time.",
+    "SERVICE_ONE_SHOT": "This is a one-shot job: it is not restarted, and only migrate is run again from the panel.",
+    "SERVICE_NOT_ONE_SHOT": "Only a one-shot job is run again; restart this service instead.",
+    "SERVICE_NOT_MANAGED": "This service is not in the compose file the server's agent runs.",
+    "E_SERVICE_UNKNOWN": "The server's agent did not find that service in its compose file.",
+    "E_SERVICE_PROTECTED": "The server's agent refused: the database and Redis are not restarted from the panel.",
+    "E_SERVICE_ONE_SHOT": "The server's agent refused: a one-shot job is not restarted, and only migrate is run again.",
+    "E_SERVICE_FAILED": "The service could not be restarted or ended with an error; its log says why.",
+    "E_SERVICE_NOT_HEALTHY": "The service was restarted but did not become healthy within two minutes; its log says why."
   },
   "Auth": {
     "required": "required",
@@ -688,7 +698,8 @@
     "EXPIRY_REQUIRED": "The administrator requires an expiry.",
     "EXPIRY_TOO_LONG": "Longer than the administrator allows.",
     "PASSWORD_REQUIRED_FOR_NEW_ADDRESS": "Type the password again when the address or port changes.",
-    "INVALID_USERNAME": "Enter your e-mail address or a valid user name (3–30 letters, digits, dots, hyphens or underscores)."
+    "INVALID_USERNAME": "Enter your e-mail address or a valid user name (3–30 letters, digits, dots, hyphens or underscores).",
+    "UNKNOWN_SERVICE": "There is no such service in the server's last snapshot."
   },
   "Setup": {
     "title": "Setup wizard",
@@ -5222,7 +5233,15 @@
       "state": "Server state snapshot"
     },
     "windowFrom": "From",
-    "windowTo": "To"
+    "windowTo": "To",
+    "runningHere": "Running",
+    "basedOn": "Running build is based on this",
+    "showAll": "Show all {n} versions",
+    "showFewer": "Show only the newest {n}",
+    "changes": "What changed",
+    "noNotes": "No notes for this version.",
+    "stale": "This list was written for {listed}; the panel now runs {running}. Check for updates to write it again.",
+    "releasesHelp": "Every published version of the {channel} channel, newest first."
   },
   "A11y": {
     "title": "Accessibility",
@@ -9314,7 +9333,120 @@
     "logsOf": "Log of {source}",
     "logNoMatch": "No line matches.",
     "logEmpty": "No lines from this source.",
-    "logCount": "Showing {shown} of {total} lines"
+    "logCount": "Showing {shown} of {total} lines",
+    "kind": {
+      "running": "Running",
+      "healthy": "Running, healthy",
+      "starting": "Starting (health check pending)",
+      "unhealthy": "Unhealthy",
+      "restarting": "Restarting",
+      "completed": "Completed",
+      "failed": "Failed",
+      "stopped": "Stopped",
+      "created": "Not started",
+      "paused": "Paused"
+    },
+    "meaning": {
+      "running": "The service is up. It has no health check of its own, so \"up\" is all Docker can say about it.",
+      "healthy": "The service is up and its health check passes.",
+      "starting": "The service has started and its health check has not decided yet. That takes up to a minute after a start.",
+      "unhealthy": "The service runs, but its health check fails: it is up and not doing its job.",
+      "restarting": "The service stops and Docker starts it again, over and over: a restart loop. Look at the restart count.",
+      "completed": "A one-shot job: it runs once when the stack starts and ends. It ended with exit code 0, which means it did its work. This is not a fault.",
+      "failed": "The service ended with exit code {code}: it stopped because of an error.",
+      "stopped": "The service ended with exit code 0, but it is meant to keep running: someone or something stopped it.",
+      "created": "The container was made but has not started (it may be waiting for another service).",
+      "paused": "The service was paused (docker pause): it is frozen and answers nothing."
+    },
+    "todo": {
+      "running": "Nothing to do.",
+      "healthy": "Nothing to do.",
+      "starting": "Wait a minute and look again. If it stays like this, read the log below.",
+      "unhealthy": "Read the log below for the error that keeps the check failing. If the cause is gone (a database that was away, say), restart the service.",
+      "restarting": "Read the log below: the last lines before each stop say why it ends. Restarting it again rarely helps until that is fixed.",
+      "completed": "Nothing to do. It runs again by itself with the next update or start of the stack.",
+      "failed": "Read the log below for the error, fix its cause, then restart the service. On the server: docker compose logs {service}",
+      "stopped": "Restart the service. If it stops again, read the log below.",
+      "created": "Look at the services it waits for. If they are fine, restart this one.",
+      "paused": "On the server: docker compose unpause {service}"
+    },
+    "hc": {
+      "api": "Its health check asks the API's /ready every 15 seconds; /ready answers only when the database and Redis answer. A failing check usually means PostgreSQL or Redis is away.",
+      "web": "Its health check asks for the panel's home page every 15 seconds. It fails when the web server hangs or cannot reach the API.",
+      "worker": "Its health check (health.mjs) looks at the worker's last heartbeat. It fails when the worker is stuck or cannot reach the database or Redis.",
+      "postgres": "Its health check runs pg_isready: whether the database accepts connections.",
+      "redis": "Its health check runs redis-cli ping.",
+      "console": "Its health check asks the console gateway whether it answers and reaches Redis.",
+      "terminal": "Its health check asks the terminal gateway whether it answers and reaches Redis.",
+      "vmware": "Its health check asks the adapter's own health address; it does not need a connected hypervisor.",
+      "proxmox": "Its health check asks the adapter's own health address; it does not need a connected hypervisor.",
+      "xcpng": "Its health check asks the adapter's own health address; it does not need a connected hypervisor.",
+      "ovirt": "Its health check asks the adapter's own health address; it does not need a connected hypervisor.",
+      "hyperv": "Its health check asks the adapter's own health address; it does not need a connected hypervisor.",
+      "libvirt": "Its health check asks the adapter's own health address; it does not need a connected hypervisor.",
+      "incus": "Its health check asks the adapter's own health address; it does not need a connected hypervisor.",
+      "other": "Its health check is the one in the compose file (healthcheck:); the log says what it tried."
+    },
+    "svc": {
+      "docker": "Docker says",
+      "title": "Service {service}",
+      "titleEmpty": "Service",
+      "open": "{service}: {state}. Open the details",
+      "completedAgo": "Completed {when}",
+      "oneShot": "One-shot job",
+      "state": "State",
+      "health": "Health check",
+      "healthOf": {
+        "healthy": "Passing",
+        "unhealthy": "Failing",
+        "starting": "Not decided yet"
+      },
+      "noHealth": "None defined",
+      "exitCode": "Exit code",
+      "started": "Started",
+      "finished": "Ended",
+      "restartCount": "Restarts by Docker",
+      "image": "Image",
+      "version": "Version",
+      "panelVersion": "Built with the panel: the panel's version",
+      "reported": "As the service reports it (image tag {tag})",
+      "ports": "Ports",
+      "noPorts": "None",
+      "meaningTitle": "What this means",
+      "todoTitle": "What to do",
+      "loopCauses": "Usual causes of a restart loop: a setting or secret it cannot read, a database or Redis it cannot reach at start, a port that is taken, too little memory (exit code 137: stopped by the kernel), or a broken image after an interrupted update.",
+      "actions": "Actions",
+      "restart": "Restart",
+      "runAgain": "Run again",
+      "cancel": "Cancel",
+      "restartTitle": "Restart {service}?",
+      "runTitle": "Run {service} again?",
+      "interrupts": {
+        "panel": "{service} is part of the panel itself: the panel is unreachable for a few seconds while it comes back, and this page reconnects by itself. The server's agent restarts it after the panel has answered this request, so the request does not cut itself off.",
+        "operations": "Operations that run right now pause while the worker restarts and continue from their last step when it is back (up to two minutes).",
+        "terminal": "Open terminal sessions to this server end; they can be opened again afterwards.",
+        "none": "{service} is unavailable for a few seconds; the panel and running operations are not interrupted."
+      },
+      "runBody": "{service} applies the database changes that are not applied yet and ends. Running it again is harmless: what is recorded as applied is skipped, and it waits for any other run.",
+      "audited": "The server's agent does it (one maintenance task at a time) and the request is written to the audit log with your name.",
+      "restartQueued": "Asked the server to restart {service}",
+      "runQueued": "Asked the server to run {service} again",
+      "waiting": "The server's agent is working on it…",
+      "waitingPanel": "The server's agent is restarting it; the panel may be away for a few seconds…",
+      "panelAway": "The panel does not answer at the moment; this is expected while it restarts. The page keeps trying.",
+      "lastOk": "The last restart or run of a service went through",
+      "lastFailed": "The last restart or run of a service did not go through: {code}",
+      "otherTask": "Another maintenance task is queued or running.",
+      "needsPermission": "Restarting needs the system update permission.",
+      "refused": {
+        "SERVICE_PROTECTED": "{service} is not restarted from the panel: every other service holds connections to it, so running operations and the panel itself would be cut off mid-way. If it must be restarted, do it on the server at a quiet time: docker compose restart {service}",
+        "SERVICE_ONE_SHOT": "{service} is a one-shot job. It is not run again from the panel, because running it twice is not known to be harmless; it runs by itself with the next update or start of the stack.",
+        "SERVICE_NOT_MANAGED": "{service} is not in the compose file the server's agent runs (it came from an extra file, such as the simulators of a test server), so it is not restarted from here."
+      },
+      "log": "Last lines of its log",
+      "logAdminOnly": "Log lines are shown to administrators only.",
+      "logHelp": "{n} lines from the last snapshot; what looks like a password, token or key is masked. They are not kept in the browser after this panel closes."
+    }
   },
   "Views": {
     "button": "Views",

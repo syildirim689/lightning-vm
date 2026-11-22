@@ -411,7 +411,17 @@
     "WEBHOOK_TIMESTAMP_OUT_OF_RANGE": "Webhook imzası çok eski.",
     "WEBHOOK_EVENT_INVALID": "Bu, bu webhook adresine ait bir olay değil.",
     "DIGEST_NOT_AVAILABLE": "Özet bu panelde açık değil.",
-    "NO_SUGGESTION": "Bu sunucu için artık önerilecek bir zamanlama yok. Sayfayı yenileyin."
+    "NO_SUGGESTION": "Bu sunucu için artık önerilecek bir zamanlama yok. Sayfayı yenileyin.",
+    "HOST_STATE_MISSING": "Sunucu ajanı servisleri henüz kaydetmedi; önce sunucu durumunu yenileyin.",
+    "SERVICE_PROTECTED": "Bu servis panelden yeniden başlatılmaz (veritabanı ve Redis): sakin bir saatte sunucuda yeniden başlatın.",
+    "SERVICE_ONE_SHOT": "Bu tek seferlik bir iş: yeniden başlatılmaz; panelden yalnızca migrate yeniden çalıştırılır.",
+    "SERVICE_NOT_ONE_SHOT": "Yalnızca tek seferlik bir iş yeniden çalıştırılır; bu servisi yeniden başlatın.",
+    "SERVICE_NOT_MANAGED": "Bu servis, sunucu ajanının çalıştırdığı compose dosyasında yok.",
+    "E_SERVICE_UNKNOWN": "Sunucu ajanı bu servisi compose dosyasında bulamadı.",
+    "E_SERVICE_PROTECTED": "Sunucu ajanı reddetti: veritabanı ve Redis panelden yeniden başlatılmaz.",
+    "E_SERVICE_ONE_SHOT": "Sunucu ajanı reddetti: tek seferlik bir iş yeniden başlatılmaz; yalnızca migrate yeniden çalıştırılır.",
+    "E_SERVICE_FAILED": "Servis yeniden başlatılamadı ya da hatayla bitti; nedenini günlüğü söyler.",
+    "E_SERVICE_NOT_HEALTHY": "Servis yeniden başlatıldı ama iki dakika içinde sağlıklı olmadı; nedenini günlüğü söyler."
   },
   "Auth": {
     "required": "zorunlu",
@@ -688,7 +698,8 @@
     "EXPIRY_REQUIRED": "Yönetici bitiş tarihi koymayı zorunlu kıldı.",
     "EXPIRY_TOO_LONG": "Yöneticinin izin verdiği en uzun süreyi aşıyor.",
     "PASSWORD_REQUIRED_FOR_NEW_ADDRESS": "Adres veya port değişince parolayı yeniden yazın.",
-    "INVALID_USERNAME": "E-posta adresinizi ya da geçerli bir kullanıcı adı girin (3–30 harf, rakam, nokta, tire veya alt çizgi)."
+    "INVALID_USERNAME": "E-posta adresinizi ya da geçerli bir kullanıcı adı girin (3–30 harf, rakam, nokta, tire veya alt çizgi).",
+    "UNKNOWN_SERVICE": "Sunucunun son anlık görüntüsünde böyle bir servis yok."
   },
   "Setup": {
     "title": "Kurulum sihirbazı",
@@ -5222,7 +5233,15 @@
       "state": "Sunucu durumu okuması"
     },
     "windowFrom": "Başlangıç",
-    "windowTo": "Bitiş"
+    "windowTo": "Bitiş",
+    "runningHere": "Çalışan",
+    "basedOn": "Çalışan derleme bunun üzerine",
+    "showAll": "{n} sürümün hepsini göster",
+    "showFewer": "Yalnız en yeni {n} sürümü göster",
+    "changes": "Neler değişti",
+    "noNotes": "Bu sürüm için not yok.",
+    "stale": "Bu liste {listed} için yazılmıştı; panel şimdi {running} çalıştırıyor. Yeniden yazılması için güncellemeleri denetleyin.",
+    "releasesHelp": "{channel} kanalının yayımlanmış bütün sürümleri, yeniden eskiye."
   },
   "A11y": {
     "title": "Erişilebilirlik",
@@ -9314,7 +9333,120 @@
     "logsOf": "{source} günlüğü",
     "logNoMatch": "Süzgece uyan satır yok.",
     "logEmpty": "Bu kaynakta satır yok.",
-    "logCount": "{shown} / {total} satır gösteriliyor"
+    "logCount": "{shown} / {total} satır gösteriliyor",
+    "kind": {
+      "running": "Çalışıyor",
+      "healthy": "Çalışıyor, sağlıklı",
+      "starting": "Başlıyor (sağlık denetimi bekleniyor)",
+      "unhealthy": "Sağlıksız",
+      "restarting": "Yeniden başlıyor",
+      "completed": "Tamamlandı",
+      "failed": "Hata ile bitti",
+      "stopped": "Durdu",
+      "created": "Başlatılmadı",
+      "paused": "Duraklatıldı"
+    },
+    "meaning": {
+      "running": "Servis çalışıyor. Kendi sağlık denetimi yok; Docker yalnızca \"ayakta\" diyebilir.",
+      "healthy": "Servis çalışıyor ve sağlık denetimi geçiyor.",
+      "starting": "Servis başladı, sağlık denetimi henüz karar vermedi. Bu, başlangıçtan sonra bir dakikaya kadar sürer.",
+      "unhealthy": "Servis çalışıyor ama sağlık denetimi başarısız: ayakta, işini yapmıyor.",
+      "restarting": "Servis duruyor ve Docker onu tekrar tekrar başlatıyor: yeniden başlama döngüsü. Yeniden başlama sayısına bakın.",
+      "completed": "Tek seferlik bir iş: yığın başlarken bir kez çalışır ve biter. 0 çıkış koduyla bitti, yani işini yaptı. Bu bir hata değildir.",
+      "failed": "Servis {code} çıkış koduyla bitti: bir hata yüzünden durdu.",
+      "stopped": "Servis 0 koduyla bitti ama sürekli çalışması gerekir: biri ya da bir şey onu durdurdu.",
+      "created": "Container oluşturuldu ama başlamadı (başka bir servisi bekliyor olabilir).",
+      "paused": "Servis duraklatıldı (docker pause): donmuş durumda, hiçbir şeye yanıt vermez."
+    },
+    "todo": {
+      "running": "Yapılacak bir şey yok.",
+      "healthy": "Yapılacak bir şey yok.",
+      "starting": "Bir dakika bekleyip yeniden bakın. Böyle kalırsa aşağıdaki günlüğü okuyun.",
+      "unhealthy": "Denetimin neden başarısız olduğunu aşağıdaki günlükte arayın. Neden ortadan kalktıysa (örneğin erişilemeyen veritabanı geri geldiyse) servisi yeniden başlatın.",
+      "restarting": "Aşağıdaki günlüğü okuyun: her duruştan önceki son satırlar nedenini söyler. Bu düzelmeden yeniden başlatmak çoğu zaman işe yaramaz.",
+      "completed": "Yapılacak bir şey yok. Bir sonraki güncellemede ya da yığın başlarken kendiliğinden yeniden çalışır.",
+      "failed": "Hatayı aşağıdaki günlükte bulun, nedenini giderin, sonra servisi yeniden başlatın. Sunucuda: docker compose logs {service}",
+      "stopped": "Servisi yeniden başlatın. Yine durursa aşağıdaki günlüğü okuyun.",
+      "created": "Beklediği servislere bakın. Onlar iyiyse bu servisi yeniden başlatın.",
+      "paused": "Sunucuda: docker compose unpause {service}"
+    },
+    "hc": {
+      "api": "Sağlık denetimi 15 saniyede bir API'nin /ready adresini sorar; /ready yalnızca veritabanı ve Redis yanıt verdiğinde yanıt verir. Başarısız denetim çoğunlukla PostgreSQL ya da Redis'e ulaşılamadığını gösterir.",
+      "web": "Sağlık denetimi 15 saniyede bir panelin ana sayfasını ister. Web sunucusu takıldığında ya da API'ye ulaşamadığında başarısız olur.",
+      "worker": "Sağlık denetimi (health.mjs) worker'ın son sinyaline bakar. Worker takıldığında ya da veritabanına veya Redis'e ulaşamadığında başarısız olur.",
+      "postgres": "Sağlık denetimi pg_isready çalıştırır: veritabanı bağlantı kabul ediyor mu.",
+      "redis": "Sağlık denetimi redis-cli ping çalıştırır.",
+      "console": "Sağlık denetimi konsol geçidine yanıt verip vermediğini ve Redis'e ulaşıp ulaşmadığını sorar.",
+      "terminal": "Sağlık denetimi terminal geçidine yanıt verip vermediğini ve Redis'e ulaşıp ulaşmadığını sorar.",
+      "vmware": "Sağlık denetimi bağdaştırıcının kendi sağlık adresini sorar; bağlı bir hipervizör gerekmez.",
+      "proxmox": "Sağlık denetimi bağdaştırıcının kendi sağlık adresini sorar; bağlı bir hipervizör gerekmez.",
+      "xcpng": "Sağlık denetimi bağdaştırıcının kendi sağlık adresini sorar; bağlı bir hipervizör gerekmez.",
+      "ovirt": "Sağlık denetimi bağdaştırıcının kendi sağlık adresini sorar; bağlı bir hipervizör gerekmez.",
+      "hyperv": "Sağlık denetimi bağdaştırıcının kendi sağlık adresini sorar; bağlı bir hipervizör gerekmez.",
+      "libvirt": "Sağlık denetimi bağdaştırıcının kendi sağlık adresini sorar; bağlı bir hipervizör gerekmez.",
+      "incus": "Sağlık denetimi bağdaştırıcının kendi sağlık adresini sorar; bağlı bir hipervizör gerekmez.",
+      "other": "Sağlık denetimi compose dosyasındakidir (healthcheck:); ne denediğini günlük söyler."
+    },
+    "svc": {
+      "docker": "Docker'ın gördüğü",
+      "title": "{service} servisi",
+      "titleEmpty": "Servis",
+      "open": "{service}: {state}. Ayrıntıyı aç",
+      "completedAgo": "Tamamlandı, {when}",
+      "oneShot": "Tek seferlik iş",
+      "state": "Durum",
+      "health": "Sağlık denetimi",
+      "healthOf": {
+        "healthy": "Geçiyor",
+        "unhealthy": "Başarısız",
+        "starting": "Henüz karar vermedi"
+      },
+      "noHealth": "Tanımlı değil",
+      "exitCode": "Çıkış kodu",
+      "started": "Başladı",
+      "finished": "Bitti",
+      "restartCount": "Docker'ın yeniden başlatması",
+      "image": "İmaj",
+      "version": "Sürüm",
+      "panelVersion": "Panelle derlenir: panelin sürümü",
+      "reported": "Servisin kendi bildirdiği (imaj etiketi {tag})",
+      "ports": "Bağlantı noktaları",
+      "noPorts": "Yok",
+      "meaningTitle": "Bu ne demek",
+      "todoTitle": "Ne yapmalı",
+      "loopCauses": "Yeniden başlama döngüsünün olağan nedenleri: okuyamadığı bir ayar ya da gizli değer, başlarken ulaşamadığı veritabanı ya da Redis, dolu bir bağlantı noktası, yetersiz bellek (çıkış kodu 137: çekirdek durdurdu) ya da yarıda kalmış bir güncellemeden bozuk imaj.",
+      "actions": "İşlemler",
+      "restart": "Yeniden başlat",
+      "runAgain": "Yeniden çalıştır",
+      "cancel": "Vazgeç",
+      "restartTitle": "{service} yeniden başlatılsın mı?",
+      "runTitle": "{service} yeniden çalıştırılsın mı?",
+      "interrupts": {
+        "panel": "{service} panelin kendi parçasıdır: geri gelene kadar panele birkaç saniye ulaşılamaz, bu sayfa kendiliğinden yeniden bağlanır. Sunucu ajanı onu panel bu isteğe yanıt verdikten sonra yeniden başlatır; istek kendini yarıda kesmez.",
+        "operations": "O anda çalışan işlemler worker yeniden başlarken bekler ve geri geldiğinde kaldığı adımdan sürer (en çok iki dakika).",
+        "terminal": "Bu sunucuya açık terminal oturumları kapanır; sonra yeniden açılabilir.",
+        "none": "{service} birkaç saniye kullanılamaz; panel ve çalışan işlemler kesilmez."
+      },
+      "runBody": "{service} henüz uygulanmamış veritabanı değişikliklerini uygular ve biter. Yeniden çalıştırmak zararsızdır: uygulanmış olarak kayıtlı olanlar atlanır ve başka bir çalışmayı bekler.",
+      "audited": "Bunu sunucu ajanı yapar (aynı anda tek bakım işi) ve istek adınızla denetim kaydına yazılır.",
+      "restartQueued": "Sunucudan {service} servisini yeniden başlatması istendi",
+      "runQueued": "Sunucudan {service} işini yeniden çalıştırması istendi",
+      "waiting": "Sunucu ajanı üzerinde çalışıyor…",
+      "waitingPanel": "Sunucu ajanı yeniden başlatıyor; panel birkaç saniye yanıt vermeyebilir…",
+      "panelAway": "Panel şu anda yanıt vermiyor; yeniden başlarken bu beklenir. Sayfa denemeyi sürdürür.",
+      "lastOk": "Bir servisin son yeniden başlatılması ya da çalıştırılması tamamlandı",
+      "lastFailed": "Bir servisin son yeniden başlatılması ya da çalıştırılması tamamlanmadı: {code}",
+      "otherTask": "Başka bir bakım işi sırada ya da çalışıyor.",
+      "needsPermission": "Yeniden başlatmak için sistem güncelleme yetkisi gerekir.",
+      "refused": {
+        "SERVICE_PROTECTED": "{service} panelden yeniden başlatılmaz: diğer bütün servisler ona bağlıdır; çalışan işlemler ve panelin kendisi yarıda kesilir. Gerekirse sakin bir saatte sunucuda: docker compose restart {service}",
+        "SERVICE_ONE_SHOT": "{service} tek seferlik bir iştir. İki kez çalışmasının zararsız olduğu bilinmediği için panelden yeniden çalıştırılmaz; bir sonraki güncellemede ya da yığın başlarken kendiliğinden çalışır.",
+        "SERVICE_NOT_MANAGED": "{service}, sunucu ajanının çalıştırdığı compose dosyasında değil (test sunucusunun simülatörleri gibi ek bir dosyadan geliyor); buradan yeniden başlatılmaz."
+      },
+      "log": "Günlüğünün son satırları",
+      "logAdminOnly": "Günlük satırları yalnızca yöneticilere gösterilir.",
+      "logHelp": "Son anlık görüntüden {n} satır; parola, belirteç ya da anahtar gibi görünenler maskelenir. Bu panel kapanınca tarayıcıda tutulmaz."
+    }
   },
   "Views": {
     "button": "Görünümler",

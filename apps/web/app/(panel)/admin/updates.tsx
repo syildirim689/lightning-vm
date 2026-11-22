@@ -16,11 +16,11 @@ import { agentRunning } from '../../../lib/agent';
 import { useApiQuery } from '../../../lib/query';
 import { UpdateWindowSuggestion } from '../../../components/quiet-hours';
 
-type Release = { version: string; date: string; notes: string; newer?: boolean };
+type Release = { version: string; date: string; notes: string; newer?: boolean; running?: boolean };
 type Status = { id: string; action: 'check' | 'update' | 'backup' | 'auto-update' | 'domain'; state: 'running' | 'succeeded' | 'failed' | 'rejected'; startedAt: string; finishedAt: string; exitCode: number | null; code: string };
 type Data = {
   version: string; settings: Record<string, string>;
-  releases: { checkedAt: string; channel: string; branch?: string; current: string; commit?: string; latest: string; updateAvailable: boolean; error: string; releases: Release[] } | null;
+  releases: { checkedAt: string; channel: string; branch?: string; current: string; commit?: string; base?: string; latest: string; updateAvailable: boolean; error: string; stale?: boolean; releases: Release[] } | null;
   agent: { installed: boolean; pending: number; status: Status | null; log: string[] };
 };
 const stateTone: Record<Status['state'], Tone> = { running: 'accent', succeeded: 'success', failed: 'danger', rejected: 'danger' };
@@ -110,26 +110,57 @@ export default function Updates() {
         </motion.div>}
       </AnimatePresence>
 
-      {!!r?.releases.length && <details className="rounded-2xl border border-border p-4" open={r.updateAvailable}>
-        <summary className="cursor-pointer font-medium">{t('releases', { n: r.releases.length })}</summary>
-        <ul className="mt-3 flex flex-col divide-y divide-separator">
-          {r.releases.map((x) => <li key={x.version} className="flex flex-col gap-1 py-3">
-            <div className="flex flex-wrap items-center gap-2">
-              <Mono>{x.version}</Mono>
-              <span className="text-xs text-muted">{format.dateTime(new Date(x.date), { dateStyle: 'medium' })}</span>
-              {x.version === r.latest && <StatusChip tone="accent">{t('latest')}</StatusChip>}
-              {manage && x.version !== r.latest && r.channel !== 'edge' && x.newer !== false && <ConfirmButton size="sm" variant="ghost" label={t('switchTo')} isDisabled={blocked}
-                title={t('confirmTitle', { from: data.version, to: x.version })} body={t('switchHelp')} confirmLabel={t('switchTo')} cancelLabel={t('cancel')}
-                onConfirm={() => ask({ action: 'update', to: x.version }, t('updateQueued'))}/>}
-            </div>
-            {x.notes && <p className="text-sm whitespace-pre-line text-muted">{x.notes}</p>}
-          </li>)}
-        </ul>
-      </details>}
+      {r?.stale && <Notice tone="warning">{t('stale', { listed: r.current, running: data.version })}</Notice>}
+
+      {!!r?.releases.length && <Releases data={data} manage={manage} blocked={blocked} onSwitch={(to) => ask({ action: 'update', to }, t('updateQueued'))}/>}
 
       {manage && <AutoUpdate settings={s} disabled={blocked} onSave={(body) => ask({ action: 'auto-update', ...body }, t('settingsQueued'))}/>}
     </div>
   </Section>;
+}
+
+// Every published version of the channel, newest first (install.sh releases lists them all after 0.5.1), with its date,
+// a mark for the one that runs here and what changed in it (its CHANGELOG.md section). The newest five show at first;
+// the rest on request. The running one is the tag of the very commit that runs, else the newest tag the running
+// build contains ("based on"): a build between two releases is marked on the release it grew from.
+const FIRST = 5;
+function Releases({ data, manage, blocked, onSwitch }: { data: Data; manage: boolean; blocked: boolean; onSwitch: (to: string) => void }) {
+  const t = useTranslations('Updates');
+  const format = useFormatter();
+  const r = data.releases!;
+  const [all, setAll] = useState(false);
+  const exact = r.releases.find((x) => x.running || x.version === data.version)?.version;
+  const based = exact ? undefined : r.base || undefined;
+  // Keep the running one in view even when it is older than the first five.
+  const runIndex = r.releases.findIndex((x) => x.version === (exact ?? based));
+  const shown = all ? r.releases : r.releases.filter((_, i) => i < FIRST || i === runIndex);
+  // The changelog is Markdown; shown as text: no emphasis marks, headings without their #, links as their words.
+  const plain = (notes: string) => notes.replace(/\*\*|`/g, '').replace(/^#{1,6}\s+/gm, '').replace(/\[([^\]]+)\]\([^)]+\)/g, '$1').trim();
+  return <details className="rounded-2xl border border-border p-4" open={r.updateAvailable} data-testid="release-list">
+    <summary className="cursor-pointer font-medium">{t('releases', { n: r.releases.length })}</summary>
+    <p className="mt-1 text-xs text-muted">{t('releasesHelp', { channel: t(`channels.${(r.channel || 'stable') as 'stable'}`) })}</p>
+    <ul className="mt-3 flex flex-col divide-y divide-separator">
+      {shown.map((x, i) => <li key={x.version} className="flex min-w-0 flex-col gap-1 py-3" data-version={x.version}>
+        <div className="flex flex-wrap items-center gap-2">
+          <Mono>{x.version}</Mono>
+          <span className="text-xs text-muted">{format.dateTime(new Date(x.date), { dateStyle: 'medium' })}</span>
+          {x.version === r.latest && <StatusChip tone="accent">{t('latest')}</StatusChip>}
+          {x.version === exact && <StatusChip tone="success">{t('runningHere')}</StatusChip>}
+          {x.version === based && <StatusChip tone="success">{t('basedOn')}</StatusChip>}
+          {manage && x.version !== r.latest && r.channel !== 'edge' && x.newer !== false && <ConfirmButton size="sm" variant="ghost" label={t('switchTo')} isDisabled={blocked}
+            title={t('confirmTitle', { from: data.version, to: x.version })} body={t('switchHelp')} confirmLabel={t('switchTo')} cancelLabel={t('cancel')}
+            onConfirm={() => onSwitch(x.version)}/>}
+        </div>
+        {/* The newest version's notes are open; older ones on request (a release's section can be long). */}
+        {x.notes ? <details className="group text-sm" open={i === 0}>
+          <summary className="cursor-pointer text-xs text-muted hover:text-foreground">{t('changes')}</summary>
+          <p className="mt-2 max-h-80 overflow-auto text-sm whitespace-pre-line text-muted [overflow-wrap:anywhere]">{plain(x.notes)}</p>
+        </details> : <p className="text-xs text-muted">{t('noNotes')}</p>}
+      </li>)}
+    </ul>
+    {r.releases.length > FIRST && <Button size="sm" variant="ghost" onPress={() => setAll(!all)}>
+      <I name={all ? 'chevron-up' : 'chevron-down'} size={14}/>{all ? t('showFewer', { n: FIRST }) : t('showAll', { n: r.releases.length })}</Button>}
+  </details>;
 }
 
 function Fact({ label, children }: { label: string; children: React.ReactNode }) {
