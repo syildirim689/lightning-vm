@@ -138,7 +138,7 @@ Sürüm yayımlamak: `git tag -a v1.2.0 -m "notlar"` ve `git push --tags`. Panel
   `vX.Y.Z-rc.1` gibi ekli etiketler yalnızca `beta` kanalında görünür.
 - **Sürümü kim seçer:** kurulum ve güncelleme GitHub'ın "son sürüm" bilgisine değil, depodaki **git etiketlerine**
   bakar (`git tag`, sürüm sırasına göre en yenisi). GitHub'daki "pre-release" işareti bu seçimi etkilemez.
-  `get.sh --version v0.5.0` belirli bir sürümü kurar; `install.sh update --to v0.5.0` belirli bir sürüme geçer.
+  `get.sh --version v0.5.1` belirli bir sürümü kurar; `install.sh update --to v0.5.1` belirli bir sürüme geçer.
 - **Otomatik güncelleme yalnızca ileri gider:** kanalın en yeni etiketi çalışan sürümün devamı (git geçmişinde
   ondan sonra) değilse hiçbir şey yapılmaz (`UP_TO_DATE`); daha eski bir sürüme yalnızca açıkça `--to` ile dönülür
   ve migration denetimi buna çoğu zaman izin vermez.
@@ -146,8 +146,8 @@ Sürüm yayımlamak: `git tag -a v1.2.0 -m "notlar"` ve `git push --tags`. Panel
   bir sürüm), bir sonraki güncelleme denetimi yapacak bir şey bulmaz ama panelin gösterdiği adı yeniler: `.env`
   içindeki `APP_VERSION` yeni ada alınır ve onu taşıyan servisler (API, web) o adla yeniden başlatılır. Derleme,
   yedek ya da migration yoktur. (Önceden panel eski adı, ör. `v0.4.0-27-gabc1234`, göstermeye devam ediyordu.)
-- **Panelde görünen sürüm** `git describe` çıktısıdır: tam bir sürüm etiketindeyseniz `v0.5.0`, etiketten sonraki
-  bir commit'teyseniz `v0.5.0-12-gabc1234`.
+- **Panelde görünen sürüm** `git describe` çıktısıdır: tam bir sürüm etiketindeyseniz `v0.5.1`, etiketten sonraki
+  bir commit'teyseniz `v0.5.1-12-gabc1234`.
 - **Yayımlama:** `v*` etiketi gönderildiğinde `.github/workflows/release.yaml` birim testlerini çalıştırır,
   imajları ghcr.io'ya gönderir ve GitHub sürümünü `CHANGELOG.md` dosyasındaki ilgili bölümle oluşturur (0.x ve
   `-rc`/`-beta` ekli etiketler pre-release olur). Etiketten önce `CHANGELOG.md`'ye o sürümün bölümü yazılmalıdır.

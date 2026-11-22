@@ -866,7 +866,7 @@ dosya dosya:
 
 ## 0.5.0'dan sonra: yeniden boyutlandırmada kota — 2026-11-21
 
-0.5.0'ın "bilinip düzeltilmeyen" tek maddesi kapatıldı. Henüz bir sürümde değildir (`CHANGELOG.md`, Unreleased).
+0.5.0'ın "bilinip düzeltilmeyen" tek maddesi kapatıldı. 0.5.1 sürümündedir (`CHANGELOG.md`).
 
 **Kusur.** `POST /api/servers/:id/resize` kotayı kilitsiz okuyup işlemi ayrı bir adımda yazıyordu ve kullanım
 (`usageOf`) sunucu satırlarından toplandığı için ancak worker boyutu değiştirince artıyordu. Aynı hesabın (ya da
@@ -943,7 +943,7 @@ SQL ile taklit edilir. Simülatör isteyen `servers.test.mjs` yerelde atlandı (
 
 ## 0.5.0'dan sonra: boyut büyütmede konum kapasitesi ve bayi tahsisi — 2026-11-21
 
-Bir önceki bölümün açık bıraktığı iki pencere kapatıldı. Henüz bir sürümde değildir (`CHANGELOG.md`, Unreleased).
+Bir önceki bölümün açık bıraktığı iki pencere kapatıldı. 0.5.1 sürümündedir (`CHANGELOG.md`).
 
 **Kusur.** Konumun boş kapasitesi ve bayinin tahsisi hesaplar arasında sayılır. Boyut büyütme ikisini de kilitsiz
 okuyordu ve ikisi de (`reservedFor`, `resellerUsage`) sunucu satırlarından toplandığı için kabul edilmiş, bitmemiş
@@ -1026,8 +1026,8 @@ denenmesi (testler ikişer istekle çalışır; kilitlenme olmadığı sıranın
 
 CI çalıştırması `44928387319` (`fdb2b04`) ilk iki denemesinde birer tarayıcı testinden kaldı, üçüncüde geçti; demo
 sunucusundaki paket aynı commit'te 44/44 geçti. Commit `apps/web` altında hiçbir şeyi değiştirmediği için ikisi de
-aralıklıydı. İkisinin de nedeni bulundu; biri arayüzde gerçek bir kusur, öteki testin kendisinde. Henüz bir sürümde
-değildir (`CHANGELOG.md`, Unreleased).
+aralıklıydı. İkisinin de nedeni bulundu; biri arayüzde gerçek bir kusur, öteki testin kendisinde. 0.5.1 sürümündedir
+(`CHANGELOG.md`).
 
 **1. `/admin/stats` 390 px'te 202 px taşıyor: arayüz kusuru, ve onu göremeyen test.**
 
@@ -1098,3 +1098,12 @@ akışında yönetici bir kez oturum açar ve çerezi paylaşılır; CI'da gör�
 **Çalıştırılmayanlar:** tarayıcı paketinin tamamı yerelde çalıştırılamadı (Docker yok: kurulum sihirbazı,
 simülatörler ve worker gerektirir); yerelde yalnızca "every page fits" testleri ve saat dilimi adımları koştu.
 "Scope" alanını kullanan iki kota testi ve "tour" testinin tamamı yalnızca CI'da ve demo sunucusunda çalışır.
+
+**CI'da ve demo sunucusunda (`d02008c`, bu bölümün commit'i):**
+
+- **GitHub CI, elle tam çalıştırma `44948792934` (`d02008c`):** ilk denemede yeşil, bütün işler geçti; `compose`
+  işindeki tarayıcı paketi 44/44 (15,2 dk). Yeniden deneme yapılmadı.
+- **Demo sunucusu (`d02008c`):** `/root/demo-e2e.sh` demo'yu bu commit'e güncelledi; atılabilir yığında tarayıcı
+  paketi **44/44** (19,2 dk); testler boyunca demo `/api/ready` 59 yanıtın 59'unda 200.
+- Tek bir yeşil çalıştırma, aralıklı bir kalışın bittiğini kanıtlamaz: iki kalışın yerelde görülen yolu kapatıldı,
+  CI'da aynı testler bu commit'te bir kez çalışıp geçti.

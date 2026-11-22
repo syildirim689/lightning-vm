@@ -339,6 +339,7 @@ sunucunun kopyası çıkarılamaz (kopya yalnızca şablondan). Her platformun a
 
 | Ne | Nerede |
 |---|---|
+| **0.5.1 (beta) sürümü (2026-11-22).** Dördüncü yayımlanan sürüm; yalnızca 0.5.0'dan sonraki üç düzeltme, yeni özellik ve veritabanı değişikliği yok: aynı anda istenen boyut büyütmeleri artık kotayı, konumun kapasitesini ya da bayinin tahsisini birlikte aşamaz (kabul edilmiş, bitmemiş büyütme üçünde de sayılır); Yönetim → İstatistikler telefonda yana kaymaz | [CHANGELOG.md](CHANGELOG.md) · [docs/upgrade-notes.md](docs/upgrade-notes.md) · [docs/validation.md](docs/validation.md) |
 | **0.5.0 (beta) sürümü (2026-11-21).** Üçüncü yayımlanan sürüm: 0.4.0'dan sonra eklenenlerin tamamı (adres doğrulama, proje kotası, Stripe webhook'u, belgelerden istek, izleme anahtarı ve yedi akıllı yardımcı) ile yayımlanmadan önce yapılan gözden geçirmenin bulduğu kusurların düzeltmeleri. En önemlileri: tek bir zamanlamanın saat dilimi artık bütün zamanlamaları durduramaz; kullanım takibi haftalık düzeni (hafta sonu boşta duran sunucu) bulgu saymaz; Stripe'ın geç gelen "ödendi" bildirimi kaydedilir; genel bakış her dakika bir haftalık örneği yeniden okumaz | [CHANGELOG.md](CHANGELOG.md) · [docs/upgrade-notes.md](docs/upgrade-notes.md) · [docs/validation.md](docs/validation.md) |
 | **Dönemsel özet (2026-11-21).** Olay başına bildirim yerine, seçtiğiniz gün ve saatte (kendi saat diliminizde; haftalık ya da günlük) durumu söyleyen tek mesaj. Personele panelin özeti (önem derecesine göre açık bulgular, son özetten beri açılan ve kapananlar, ödeme riski altındaki hesaplar, başarısız işlemler, kapasite), yönetici açtıysa müşteriye kendi hesabının özeti. Açılmadıkça kapalıdır, boş özet gönderilmez, birden çok API kopyasında bile dönem başına tam bir kez gider; "şimdi önizleme gönder" düğmesi vardır | Hesabım → Bildirimler → Dönemsel özet · Ayarlar → Bildirim kuralları (`account.digest`) · [docs/smart-features.md](docs/smart-features.md#dönemsel-özet) |
 | **Bakım için en sakin saatler (2026-11-21).** Dört haftalık işlemci geçmişinden sunucuların en az meşgul olduğu iki saat bulunur ve arkasındaki sayılarla gösterilir: otomatik güncelleme penceresi için (tek tıkla, var olan yetki ve denetim kaydıyla uygulanır) ve bağlantı sayfasında host başına. Yalnızca öneridir; 21 günden kısa geçmişte ve işlemci ölçümü vermeyen platformlarda "yeterli veri yok" der | Yönetim → Sistem → Otomatik güncellemeler · Yönetim → VMware → bağlantı → Host'lar · [docs/smart-features.md](docs/smart-features.md#bakım-için-en-sakin-saatler) |
@@ -694,8 +695,8 @@ Ayrıntılar: [docs/operations.md](docs/operations.md), [docs/updates.md](docs/u
   [docs/upgrade-notes.md](docs/upgrade-notes.md) sayfasında.
 - **0.x sürümleri betadır**: GitHub'da "pre-release" olarak işaretlenir. Etiketleri yine düz `vX.Y.Z` biçimindedir;
   bu yüzden tek komutla kurulum en yeni 0.x sürümünü kurar ve `stable` kanalı onu izler.
-- Belirli bir sürüm: `curl -fsSL https://lightningvm.app/install.sh | sudo sh -s -- --version v0.5.0`; kurulu
-  panelde `sudo sh scripts/install.sh update --to v0.5.0`.
+- Belirli bir sürüm: `curl -fsSL https://lightningvm.app/install.sh | sudo sh -s -- --version v0.5.1`; kurulu
+  panelde `sudo sh scripts/install.sh update --to v0.5.1`.
 - Kanallar: `stable` yalnızca `vX.Y.Z` etiketlerini, `beta` ekli ön sürümleri de (`vX.Y.Z-rc.1`), `edge` bir daldaki
   her değişikliği izler. Kurulum ve güncelleme GitHub'ın sürüm listesine değil depodaki git etiketlerine bakar ve
   kendiliğinden yalnızca ileri gider ([docs/updates.md](docs/updates.md#sürümler)).

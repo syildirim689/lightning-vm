@@ -14,6 +14,19 @@ Türkçe [docs/upgrade-notes.md](docs/upgrade-notes.md) sayfasını okuyun.*
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-11-22
+
+Fourth public release, still **beta**. Three fixes since 0.5.0 and nothing new: resizes asked for at the same
+moment can no longer together exceed a quota, a location's capacity or a reseller's allocation, and
+Admin → Statistics fits a phone's width.
+
+### Upgrading from 0.5.0
+
+Update from Admin → System → Updates or with `sudo sh scripts/install.sh update`. There is no migration and no
+setting to change. A resize that is accepted and not finished now counts in the quota, in the location's reserved
+capacity and in the reseller's usage, so those figures rise when the resize is accepted instead of when it ends;
+[docs/upgrade-notes.md](docs/upgrade-notes.md) (Turkish) says what an operator sees.
+
 ### Fixed
 
 - **Resizes asked for at the same moment could together exceed a quota.** A resize was measured against the quota
@@ -341,7 +354,8 @@ First tagged version.
 - Settings: branding, SMTP, CAPTCHA, SMS providers, payment methods and notification rules.
 - Updates and backups from the panel, monitoring and alerts.
 
-[Unreleased]: https://github.com/syildirim689/lightning-vm/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/syildirim689/lightning-vm/compare/v0.5.1...HEAD
+[0.5.1]: https://github.com/syildirim689/lightning-vm/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/syildirim689/lightning-vm/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/syildirim689/lightning-vm/compare/v0.1.0...v0.4.0
 [0.1.0]: https://github.com/syildirim689/lightning-vm/releases/tag/v0.1.0
