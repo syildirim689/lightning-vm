@@ -1107,3 +1107,38 @@ simülatörler ve worker gerektirir); yerelde yalnızca "every page fits" testle
   paketi **44/44** (19,2 dk); testler boyunca demo `/api/ready` 59 yanıtın 59'unda 200.
 - Tek bir yeşil çalıştırma, aralıklı bir kalışın bittiğini kanıtlamaz: iki kalışın yerelde görülen yolu kapatıldı,
   CI'da aynı testler bu commit'te bir kez çalışıp geçti.
+
+## 0.5.1 (beta) sürümü — 2026-11-22
+
+`v0.5.1` etiketi `da84d05` commit'indedir (açıklamalı etiket). İçinde 0.5.0'dan sonraki üç düzeltme vardır
+(yukarıdaki üç bölüm); `da84d05` yalnızca sürüm numaralarını ve belgeleri değiştirir. Etiket, o commit denendikten
+sonra kondu:
+
+- **GitHub CI, elle tam çalıştırma `45060050005` (`da84d05`):** ilk denemede yeşil, bütün işler geçti; yeniden
+  deneme yapılmadı. `api-integration` 277 testte 208 geçti, 0 başarısız, 69 atlandı; `compose` işindeki tarayıcı
+  paketi 44/44 (14,5 dk); birim işleri, altı adaptör, iki Go servisi, 11 imaj derlemesi. (Aynı commit'in `push` ile
+  başlayan çalıştırması `45060048822` iptal edildi: bir saniye sonra başlatılan elle çalıştırma onun yerini aldı.)
+- **Demo sunucusu (`da84d05`), etiketten önce:** `/root/demo-e2e.sh` demo'yu bu commit'e güncelledi (`OK UPDATED`,
+  derleme ve başlatma 2 dk 41 sn), atılabilir yığında tarayıcı paketi **44/44** (18,5 dk); testler boyunca demo
+  `/api/ready` 57 yanıtın 57'sinde 200, sonrasında 200; test yığınından geriye 0 kapsayıcı, 0 birim kaldı. 0.5.0'dan
+  farklı olarak paket bu commit'te demo'da bir kez çalıştırıldı, art arda iki kez değil.
+- **Etiket:** `origin`'e ve test sunucusunun deposuna yalnızca `refs/tags/v0.5.1` gönderildi. Test sunucusunun
+  deposundaki öteki etiketler (`v0.1.0`-`v0.5.0`, eski iç test etiketleri dahil) gönderimden önce ve sonra
+  karşılaştırıldı: değişmedi; hiçbiri GitHub'a gitmedi (GitHub'daki etiketler `v0.1.0`, `v0.4.0`, `v0.5.0`,
+  `v0.5.1`).
+- **Yayın iş akışı `45062729099`:** ilk denemede geçti: birim işleri, 11 imaj
+  (`ghcr.io/syildirim689/lightning-vm/*:v0.5.1`) ve sürüm sayfası. Sayfa "Lightning VM v0.5.1 (beta)" adıyla ve
+  **pre-release** işaretiyle oluştu; notları `CHANGELOG.md` dosyasının 0.5.1 bölümüdür (satır satır karşılaştırıldı).
+  GitHub'daki üç sürümün üçü de pre-release olduğu için hiçbiri "latest" işaretli değildir; liste en üstte 0.5.1'i
+  gösterir.
+- **Demo `v0.5.1` gösteriyor:** etiket konduktan sonra aynı commit için `install.sh update --to v0.5.1`
+  çalıştırıldı; yapacak bir şey yoktu (`OK UP_TO_DATE Up to date: v0.5.1`) ve ad yenilendi: `.env` içinde ve API ile
+  web kapsayıcılarında `APP_VERSION=v0.5.1`, `git describe` `v0.5.1`, `/api/ready` 200, öncesindeki gibi 24
+  kapsayıcı çalışıyor. (Etiketten önce panel `v0.5.0-5-gda84d05` gösteriyordu.) Yedek, derleme ya da migration
+  çalışmadı; veritabanına dokunulmadı.
+- **Çalıştırılmayanlar:** temiz bir makinede `curl … | sudo sh` ile 0.5.1 kurulumu ve kimliksiz yeni bir kopyada
+  kurulumun `v0.5.1`'i seçtiğinin denenmesi; 0.5.0 kurulu, verisi olan gerçek bir panelin 0.5.1'e güncellenmesi
+  (demo yerinde güncellendi ama orada açık boyut büyütme yok); yayımlanan `ghcr.io` imajlarının çekilip
+  çalıştırılması; panele tarayıcıdan oturum açıp gösterilen sürümün gözle görülmesi (ad kapsayıcıların ortam
+  değişkeninden okundu); proje sitesinin güncellenmesi (site sürüm numarası yazmaz). Üç düzeltmenin kendi
+  bölümlerindeki "çalıştırılmayanlar" aynen geçerlidir.
