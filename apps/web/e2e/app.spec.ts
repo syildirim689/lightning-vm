@@ -801,13 +801,17 @@ test.describe('server lifecycle (simulator, Turkish customer)', () => {
     await page.getByRole('button', { name: 'Mesai saatleri' }).click();
     await expect(page.getByText('08:00', { exact: true })).toBeVisible();
     await expect(page.getByText('19:00', { exact: true })).toBeVisible();
-    // The week view shows both; pressing the preset again adds no copies; deleting asks first.
+    // The week view shows both; pressing the preset again adds no copies; deleting asks nothing but offers Undo, and
+    // the schedule is removed once the message goes.
     await expect(page.getByRole('list', { name: 'Haftalık görünüm' })).toBeVisible();
     await page.getByRole('button', { name: 'Mesai saatleri' }).click();
     await expect(page.getByText('Bu zamanlamalar zaten var.')).toBeVisible();
+    const scheduleGone = page.waitForResponse((r) => r.request().method() === 'DELETE' && /\/schedules\//.test(r.url()));
     await page.getByRole('button', { name: /19:00 Kapat zamanlamasını kaldır/ }).click();
-    await page.getByRole('alertdialog', { name: /19:00 Kapat zamanlamasını kaldır/ }).getByRole('button', { name: 'Sil' }).click();
     await expect(page.getByText('19:00', { exact: true })).toBeHidden();
+    await expect(page.getByText(/^Zamanlama kaldırıldı\. Kapat · 19:00/)).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Geri al' })).toBeVisible();
+    expect((await scheduleGone).ok()).toBe(true);
     // Automatic snapshots: "nightly snapshot" adds a daily 02:00 one that keeps the newest three.
     await page.getByRole('button', { name: 'Gece anlık görüntüsü' }).click();
     await expect(page.getByText('02:00', { exact: true })).toBeVisible();
@@ -1548,9 +1552,14 @@ test.describe('language', () => {
     await page.route('**/api/ready', (r) => r.fulfill({ status: 503, json: { code: 'DEPENDENCY_UNAVAILABLE', message: 'x' } }));
     await page.goto('/admin/system');
     await expect(health(page)).toHaveText('PostgreSQL veya Redis şu anda erişilemiyor.');
+    // A code without a sentence (a newer API) is named with what to do, not called "unknown"; an answer without any
+    // code (a gateway page) gives its HTTP status.
     await page.route('**/api/ready', (r) => r.fulfill({ status: 500, json: { code: 'SOMETHING_NEW' } }));
     await page.reload();
-    await expect(health(page)).toHaveText('Bilinmeyen bir hata oluştu.');
+    await expect(health(page)).toHaveText('Panel bunu reddetti (SOMETHING_NEW). Yeniden deneyin; sürerse bu kodu ve saati desteğe iletin.');
+    await page.route('**/api/ready', (r) => r.fulfill({ status: 502, contentType: 'text/html', body: '<h1>Bad Gateway</h1>' }));
+    await page.reload();
+    await expect(health(page)).toHaveText(/HTTP 502/);
     await page.route('**/api/ready', (r) => r.abort());
     await page.reload();
     await expect(health(page)).toContainText('Sunucuya ulaşılamadı');
