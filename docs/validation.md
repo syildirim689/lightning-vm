@@ -1250,3 +1250,100 @@ passkey yöneticisi panelin kendi adını ve hesabın e-postasını gösterir.
   yönetim katalog formlarındaki (havuz, paket, imaj, IP havuzu, konum, ISO kaynağı, hazır yanıt, bağlantı) önerilere
   tarayıcıda ayrıca bakılmadı (mevcut testler bu formlara ad yazıyor ve geçti); TR arayüzde passkey önerisi yalnızca
   birim testinde.
+
+## Canlı ekranlar (Sistem, İstatistikler, Enerji) — 2026-11-23
+
+Ne değişti: [live-walls.md](live-walls.md). Yönetim → Sistem, İstatistikler ve Enerji'den açılan tam ekran, gerçek
+zamanlı 3B ekranlar (three.js 0.187.0), aynı veriyle tasarlanmış bir 2B ekran, kalite katmanları ve çalışırken kare
+süresi denetleyicisi; API'de `GET /admin/power` yanıtına `hosts[].lastAt`.
+
+**Makine:** Windows 11 sanal makinesi, Intel Xeon E5-2699 v4 (4 vCPU), 16 GB; ekran bağdaştırıcısı "VMware SVGA 3D".
+**Gerçek bir GPU yok:** Chrome 157 burada WebGL'i yalnız yazılımla çiziyor — bayraksız başsız modda SwiftShader
+(bağlamı yalnız "ciddi performans uyarısıyla" veriyor), `--use-angle=d3d11 --ignore-gpu-blocklist` ile Microsoft
+Basic Render Driver (WARP). Ekranın kendi seçimi iki durumda da doğru olarak **2B** (`software`). Aşağıdaki 3B ölçümleri
+`?quality=…&hold=1` ile elle seçilmiş katmanlarda, WARP üzerinde alındı; bir GPU'daki kare hızını **göstermez**.
+
+**Çalıştırılanlar:**
+- **Web birim testleri** 166/166 (yeni: `wall-quality` 5, `wall-governor` 8, `wall-state` 7, `wall-poller` 4 —
+  katman seçimi ve yazılım çizicisi tanıma, merdivenin yalnız eksiltmesi, 4K piksel sınırı; kayıtlı kare süresi
+  dizileriyle denetleyici: 60 fps'ye dokunmaz, ısınma ve gizli sekme sayılmaz, 40 fps'de adım adım iner ve tutunur,
+  saniyede 8 karede her pencerede bir adım iner sonra 2B'ye geçer, saniyede 1 karede doğrudan son adıma ve birkaç
+  saniyede 2B'ye geçer, 30 fps katmanında 30 fps'ye dokunmaz, son adımda 25 fps'de 3B kalır, sekerek geri çıkarken
+  bekleme iki katına çıkar; veri → sahne: arıza renk dışında da işaretli, bitmiş tek seferlik iş arıza değil, eski ve
+  eksik veri canlı gibi çizilmez, Linux olmayan hostta sıfır yerine "yok", eski anlık görüntü; istatistik sırası kendi
+  en yükseğine göre; enerji akışı gerçek watt'la ölçekli, son 15 dakikada örneği olmayan host akmaz, 24'ten fazla host
+  toplanır; yoklayıcı: kaynak başına kendi hızı ve tek istek, gizliyken hiç istek yok, 2/4/8 kat geri çekilme, ret
+  durdurur, durdurma iptal eder ve susturur), `check-messages` (TR/EN eşit, yeni `Wall` ad alanı), `icons --check`,
+  `session-end` (üç yeni tercih anahtarı listede), `tsc` ve `next build` başarılı.
+- **API birim testleri** 218/218, `tsc` temiz. `servers.test.mjs`'ye `lastAt` denetimi eklendi (simülatör ister;
+  CI'da ve burada atlanır — aşağıda demo tarayıcı testi API'den okuyup denetler).
+- **Paket boyutları** (`next build`, her rotanın istemci başvuru bildiriminden ilk JS'i; değişiklikten önceki commit
+  `489ba52` ayrı bir çalışma ağacında aynı yolla derlendi):
+  - three.js ve sahneler **hiçbir rotanın ilk JS'inde yok**; yalnız 3B çizilecekse yüklenen iki parça: 381 KB
+    (91 KB gzip) ve 217 KB (57 KB gzip), enerji sahnesi ayrıca 12 KB.
+  - `/wall/[scene]` ilk JS'i 822 KB (245 KB gzip); bunun yalnız ekrana ait kısmı 2 parça, 43,5 KB (14,4 KB gzip).
+  - Diğer bütün rotalar: ham boyut **−317 bayt**, parça başına gzip toplamı +1,1…+1,25 KB (Turbopack ortak kök kodunu
+    farklı parçalara böldü; içlerinde ekran kodu yok; `icons.json`'a 5 simge eklendi). Giriş düğmesi olan
+    üç sayfa ayrıca ~+0,85 KB ham (/admin/system 377,0 → 378,6, /admin/stats 493,3 → 494,9, /admin/energy 476,2 →
+    477,9 KB gzip).
+- **Yerel yığın** (Docker yok; PostgreSQL 18.6 ve Redis 8.0.5 WSL içinde geçici dizinden; API WSL içinde Node 22 ile —
+  `host/live` gerçek `/proc` okur —, `next start` ve küçük bir vekil Windows'ta; host ajanı anlık görüntüsü
+  hazırlanmış bir `state.json`): giriş düğmesi Yönetim → Sistem'de "2 uyarı" yazısının 12 px solunda ve aynı satırda,
+  İstatistikler ve Enerji'de başlık düğmelerinin başında; üç sayfa da 1920'de yatay kaymasız.
+- **Tarayıcı testleri, yerelde** (`e2e/wall.spec.ts`, kurulu Chrome 157 başsız, SwiftShader): 4/4, iki kez üst üste
+  (son kodla; daha önceki iki çalıştırma bulunan hataları gösterdi, aşağıda). Testler: düğmenin yeri ve etiketi üç sayfada; ekranın değerleri hazırlanmış `host/live` yanıtıyla
+  (%42,5 / %75 / %60 / 1,25, 2 uyarı, iki arıza); WebGL'siz tarayıcıda 2B ekran nedeniyle ve **aynı değerlerle**,
+  rafta ARIZA etiketi, migrate'in arıza sayılmaması; istatistik ve enerjinin gerçek yanıtı, enerjide örnek yoksa
+  söylemesi, 503'te "Panel yanıt vermedi" ve "Yeniden dene"; 390 px'de yatay kayma yok, sahne üstte rakamlar altta;
+  azaltılmış harekette `data-motion="still"`, karelerin çizilmesi ve kameranın 1,5 sn'de kıpırdamaması, Tur
+  düğmesinin kapalı olması; → ile sonraki ekran ve yeni sahnenin **kendi bağlamıyla** çizmesi, Esc ile sayfasına
+  dönüş ve ekranın açtığı **bütün WebGL bağlamlarının geri verilmiş** olması; müşteri hesabının üç ekranda da 403
+  görmesi ve hiçbir şey çizilmemesi, API'nin üç okumayı 403 ile reddetmesi.
+- **Kare süreleri** (WARP, yazılım; `hold=1`, örnek İstatistik/Enerji verisi, Sistem gerçek `/proc`; son 60 karenin
+  ortalaması):
+
+  | Boyut | Sahne | yüksek | orta | düşük |
+  |---|---|---|---|---|
+  | 1920×1080 | Sistem | 0,7 fps (1412 ms; 118 çağrı, 25 bin üçgen) | 1,2 fps (817 ms) | 1,8 fps (566 ms; 47 çağrı) |
+  | 1920×1080 | İstatistik | 0,7 fps (1402 ms) | 1,3 fps (758 ms) | 2,0 fps (506 ms) |
+  | 1920×1080 | Enerji | 0,8 fps (1178 ms; 43 bin üçgen) | 1,7 fps (586 ms) | 3,2 fps (309 ms) |
+  | 390×844 | Sistem | 6,5 fps (154 ms) | 11,6 fps (86 ms) | 16,2 fps (62 ms) |
+  | 390×844 | İstatistik | 6,1 fps (165 ms) | 10,8 fps (93 ms) | 16,6 fps (60 ms) |
+  | 390×844 | Enerji | 7,4 fps (136 ms) | 16,2 fps (62 ms) | 32,3 fps (31 ms) |
+
+  Denetleyici açıkken (elle `medium`, 1280×720) WARP'ta ilk saniyelerde son adıma iniyor (piksel oranı 0,55, bloom ve
+  gölge yok) ve orada 11–15 fps'de kalıyor; elle seçilen katmanda 2B'ye geçmediği doğrulandı. Kendiliğinden seçimde
+  bu makine hiç 3B'ye girmiyor.
+- **10 dakikalık çalışma** (Sistem, elle `medium`, 1280×720, WARP, 5 sn'lik yoklama; her dakika zorla çöp toplamadan
+  sonra): JS yığını 10,6 → 11,6 MB, DOM düğümü 241 → 245, dinleyici 434 → 443; three'nin GPU nesneleri baştan sona sabit
+  (26 geometri, 13 doku, 33 gölgelendirici), 7 758 kare. Ekranlar arasında 12 geçiş (→; her geçişte bir motor kurulup bırakılıyor; azaltılmış hareket, düşük katman, SwiftShader): her an tek bir canlı WebGL bağlamı, açılan 26 bağlamın 25'i geri verilip çöp toplayıcıyla gitti; JS yığını 10,4 → 11,7 → 12,4 MB (geçiş başına ~170 KB; kaynağı bulunmadı), DOM düğümü 358 → 374. On dakikalık ölçümdeki +1 MB ve geçişlerdeki artışın saatler içinde durup durmadığı ölçülmedi.
+- **Ekran görüntüleri:** `docs/screenshots/walls/` (10 dosya, liste [live-walls.md](live-walls.md)'de).
+
+**Bulunan ve düzeltilen hatalar** (bu iş sırasında, yayımlanmadan):
+- three r187'de `PCFSoftShadowMap` kaldırılmış (uyarı veriyordu): tek filtreli gölge türü, "yumuşak" daha geniş yarıçap
+  ve daha çok örnek.
+- Azaltılmış hareket sunucuda bilinmediği için ilk HTML'de "hareketli" yazıyordu ve hidrasyon özniteliği düzeltmiyordu:
+  tercih tarayıcıda yüklendikten sonra uygulanıyor.
+- Sahne değiştirince (→) yeni motor, bir öncekinin geri verdiği bağlamla aynı tuvali kullanıyordu (çizemezdi; 5 sn
+  sonra kendini yeniliyordu): her motora yeni tuval; tarayıcı testi yeni sahnenin bağlamının kayıp olmadığını denetliyor.
+- Bir kalite adımı çizim tamponunu yeniden boyutlandırıp temizliyordu; yavaş cihazda bir kare boyunca siyah görünüyordu:
+  adımdan hemen sonra çiziliyor.
+- Çizim çağrısı sayacı yalnız son geçişi (ekrana kopya) sayıyordu: kare başına sayılıyor.
+- Yazılım çizicisinde sahnenin kurulması (ortam haritası, gölgelendiriciler) sayfayı birkaç saniye tutabiliyor: ekrandan
+  çıkarken önce sahne kaldırılıyor, sonra sayfaya gidiliyor.
+
+**Çalıştırılmayanlar / doğrulanamayanlar:**
+- **Gerçek bir GPU'da** hiçbir 3B ölçüm yapılmadı: 60 fps hedefi, yüksek katmanın 1080p ve 4K'da tutup tutmadığı,
+  denetleyicinin gerçek bir GPU'da hangi adımda dengeye geldiği, ısınma süresi, bağlam kaybı ve geri gelişi (yalnız kod
+  okundu; olay işleyicileri test edilmedi), uzun süre (saatler) açık kalan bir TV'de bellek ve sıcaklık. Görüntüler
+  yazılım çizicisiyle, saniyede 1 karenin altında alındı; gerçek bir ekranda yumuşak bölgeler, bloom ve alan derinliği
+  farklı görünebilir.
+- **Gerçek bir TV**: 3 metreden okunabilirlik, 4K TV tarayıcıları, uzaktan kumandayla gezinme, ekran uyku kilidinin
+  (Wake Lock) bir TV'de gerçekten tuttuğu, ekran yanığı. Wake Lock yalnız başsız Chrome'da istendi ve alındı.
+- Tam ekran (Fullscreen API) başsız tarayıcıda denenmedi; F tuşu ve düğme yalnız kod olarak var.
+- Safari/iOS, Firefox ve Android tarayıcıları; dokunmatik telefonda orta katmanın kendiliğinden seçilmesi (yalnız birim
+  testi).
+- Enerji ekranı yerelde gerçek güç örneğiyle görülmedi (yerel yığında VMware yok; ekran görüntüsü örnek veriyle). Demo'da
+  simülatör örnekleriyle tarayıcı testi `hosts[].lastAt`'ı API'den okuyup denetler.
+- 1920 px'de ekranlar "every page fits" döngüsüne eklenmedi (o test panelin menüsünü ölçüyor); 390 px ekran testinde
+  ve yerel ekran görüntülerinde yatay kayma 0.
