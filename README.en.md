@@ -111,7 +111,7 @@ What is not the same everywhere (the table under "Platform kapsamı" above has e
   installation, on Admin → System (the request goes to the host agent like a backup or an update), or with
   `install.sh monitoring on|off`. That the panel hands the request over correctly is tested; the agent stopping and
   starting the components through it was not run on a server in this work.
-- **Services on Admin → System (2026-11-23, after 0.5.1; not in a release yet):** each service shows its state in one word (a one-shot job such as migrate that
+- **Services on Admin → System (2026-11-23, in 0.6.0):** each service shows its state in one word (a one-shot job such as migrate that
   ended with exit code 0 is "Completed", not a fault; told from the compose definition) and its version (the
   panel's version and commit for its own services, the image tag or the version the service reports for the
   others). A click opens the detail: health, exit code, start and end, restarts, image, ports, what the state means
@@ -121,7 +121,7 @@ What is not the same everywhere (the table under "Platform kapsamı" above has e
   every published version of the channel, newest first, with the running one marked and its changelog section; the
   list is rewritten after every update and once a day. The server-state charts slide with each new sample and show
   the value on hover, without motion when the browser asks for reduced motion.
-- **Live walls (2026-11-23, after 0.5.1; not in a release yet).** Admin → System, Statistics and Energy each open a
+- **Live walls (2026-11-23, in 0.6.0).** Admin → System, Statistics and Energy each open a
   full-screen, real-time 3D view for a TV or a second screen (also on a laptop or a phone) from a small button
   beside the page's status (`/wall/system`, `/wall/stats`, `/wall/energy`; a session and the page's own permission
   are needed, there is no public address). Every figure, colour and motion comes from the panel's own data; old or
@@ -132,7 +132,7 @@ What is not the same everywhere (the table under "Platform kapsamı" above has e
   machine shows the 2D wall): the 60 fps target, 4K, a real GPU, a TV left on for hours, a remote control, Safari /
   iOS, Firefox and Android were not tried ([docs/live-walls.md](docs/live-walls.md), Turkish;
   [docs/validation.md](docs/validation.md)).
-- **Proposed names (2026-11-23, after 0.5.1; not in a release yet).** The panel never leaves a name field empty
+- **Proposed names (2026-11-23, in 0.6.0).** The panel never leaves a name field empty
   when creating something: it proposes browser, system and device for a passkey, access and date for an API token,
   the key's comment for an SSH key, and the server and time for a snapshot (also firewalls and their rules, private
   networks, projects, catalogue entries and more). A proposal is only a starting point; what you type replaces it,
@@ -512,8 +512,8 @@ each is in [CHANGELOG.md](CHANGELOG.md), and what an operator has to do when upg
 pre-releases on GitHub. Their tags are plain `vX.Y.Z`, so the one-line install picks the newest one and the `stable`
 update channel follows them; `vX.Y.Z-rc.1`-style tags are seen only by the `beta` channel, and `edge` follows a
 branch. The installer and the panel read the repository's git tags, not GitHub's release list, and an update by
-itself only ever moves forward. A given release: `… | sudo sh -s -- --version v0.5.1`; on an installed panel
-`sudo sh scripts/install.sh update --to v0.5.1`.
+itself only ever moves forward. A given release: `… | sudo sh -s -- --version v0.6.0`; on an installed panel
+`sudo sh scripts/install.sh update --to v0.6.0`.
 
 ## Contributing, support and licence
 

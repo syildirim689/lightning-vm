@@ -14,6 +14,26 @@ Türkçe [docs/upgrade-notes.md](docs/upgrade-notes.md) sayfasını okuyun.*
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-11-23
+
+Fifth public release, still **beta**. Three things are new since 0.5.1: Admin → System lists every published
+version, opens each service's detail with its version and log and restarts it through the host agent, and its
+charts move; forms propose a name where the panel can work one out, and authenticator apps and passkey managers show
+the panel's own name; and Admin → System, Statistics and Energy each open a live wall, a full-screen, real-time 3D
+view for a TV or a second screen. The live walls were measured only on a software renderer, not on a real graphics
+card or a TV ([docs/validation.md](docs/validation.md)).
+
+### Upgrading from 0.5.1
+
+Update from Admin → System → Updates or with `sudo sh scripts/install.sh update`. There is no migration, no new
+`.env` variable and no setting to change. The web image gains one dependency, three.js (0.187.0, MIT), loaded only
+on the live walls; the other images are unchanged in that respect. The versions list on Admin → System → Updates is
+rewritten at the end of the update, also when it is run from the command line, so it names 0.6.0 as running right
+after the update. Restarting a service from the panel goes through the host agent like a backup or an update and
+needs `system.update`; postgres and redis are refused. The owner of a passkey can now rename it, and
+`GET /api/admin/power` gives each host's newest sample time (`hosts[].lastAt`), an added field.
+[docs/upgrade-notes.md](docs/upgrade-notes.md) (Turkish) says what an operator sees.
+
 ### Added
 
 - Live walls: full-screen, real-time 3D views of Admin → System (`/wall/system`), Statistics (`/wall/stats`) and
@@ -422,7 +442,8 @@ First tagged version.
 - Settings: branding, SMTP, CAPTCHA, SMS providers, payment methods and notification rules.
 - Updates and backups from the panel, monitoring and alerts.
 
-[Unreleased]: https://github.com/syildirim689/lightning-vm/compare/v0.5.1...HEAD
+[Unreleased]: https://github.com/syildirim689/lightning-vm/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/syildirim689/lightning-vm/compare/v0.5.1...v0.6.0
 [0.5.1]: https://github.com/syildirim689/lightning-vm/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/syildirim689/lightning-vm/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/syildirim689/lightning-vm/compare/v0.1.0...v0.4.0

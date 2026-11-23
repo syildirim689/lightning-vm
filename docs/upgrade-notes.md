@@ -5,6 +5,28 @@ madde neyin değiştiğini ve işletmecinin yapması gereken bir şey varsa onu 
 davranışı değiştirmeyen işler burada yoktur. Tahsilat çalıştırması API içinde beş dakikada bir çalışır; yani "ilk
 çalıştırma" yükseltmeden birkaç dakika sonradır.
 
+## 0.6.0 (beta): Sistem sayfasında sürümler ve servisler, önerilen adlar, canlı ekranlar (2026-11-23)
+
+Migration, yeni `.env` değişkeni ve değiştirilecek ayar yoktur.
+
+- **Yeni bağımlılık yalnızca web imajında:** three.js (0.187.0, MIT); yalnızca canlı ekranlarda (`/wall/system`,
+  `/wall/stats`, `/wall/energy`) yüklenir. Öteki imajların bağımlılıkları bu yönden değişmez. Ayrıntı:
+  [live-walls.md](live-walls.md).
+- **Sürüm listesi güncellemeden sonra yeniden yazılır.** Yönetim → Sistem → Güncellemeler → Sürümler'in okuduğu
+  `data/maintenance/releases.json`, her güncellemenin sonunda (komut satırından yapılanda da) ve günde bir kez
+  yazılır; 0.6.0'a geçen bir panel listede 0.6.0'ı çalışan sürüm olarak gösterir. Liste artık en yeni on etiketle
+  sınırlı değildir. Yapılacak bir şey yoktur. Ayrıntı: [operations.md](operations.md#servisler-ve-yeniden-başlatma).
+- **Servisi panelden yeniden başlatmak sunucudaki ajan üzerinden gider** (yedek ve güncelleme gibi):
+  `system.update` yetkisi, aynı anda tek bakım işi, denetim kaydı. postgres ve redis reddedilir
+  (`409 SERVICE_PROTECTED`, sunucuda çalıştırılacak komutla); api, web ve proxy ajan tarafından istek
+  yanıtlandıktan sonra yeniden başlatılır. Komut satırında aynısı: `install.sh service restart|run <ad>`.
+- **Passkey'in sahibi onu yeniden adlandırabilir** (`POST /api/auth/passkey/update-passkey`). Doğrulama
+  uygulamaları ve passkey yöneticileri bundan sonra kurulan kayıtlarda kurulumun adını (Ayarlar → Marka) ve hesabın
+  e-posta adresini gösterir; daha önce eklenmiş kayıtlar uygulamada eski adlarıyla kalır, yeniden kurmak gerekmez.
+  Ayrıntı: [proposals.md](proposals.md).
+- **API'de eklenen alan:** `GET /api/admin/power` yanıtında her hostun en yeni örneğinin zamanı
+  (`hosts[].lastAt`). Var olan alanlar değişmedi.
+
 ## 0.5.1 (beta): boyut büyütmede kota, konum kapasitesi ve bayi tahsisi (2026-11-22)
 
 - **Bekleyen boyut büyütme kotaya sayılır.** Kabul edilmiş ama worker'ın henüz bitirmediği bir büyütme, hesabın
@@ -90,7 +112,7 @@ otomasyonundan çağıran ya da çıktısını okuyan işletmeci şunlara bakmal
 | `get.sh` seçtiği dili `install.sh`'e her zaman `--lang` ile geçirir; iletileri iki dillidir (uçbirim olmayan İngilizce çıktıda `OK    source at vX.Y.Z` satırı aynı kaldı); `install.sh`'in standart girdisi `/dev/null`'dır | `get.sh` çıktısını okuyanlar | — |
 | Paneldeki sürüm etiketi "Erken sürüm / Early build" yerine "Beta" yazar; paketlerin `package.json` sürümü `0.4.0` | — | — |
 
-**Sürüm numarası.** Yayımlanan sürümler `v0.1.0`, `v0.4.0`, `v0.5.0` ve `v0.5.1`'dir. `0.1.1`-`0.3.0` numaraları yalnızca iç test
+**Sürüm numarası.** Yayımlanan sürümler `v0.1.0`, `v0.4.0`, `v0.5.0`, `v0.5.1` ve `v0.6.0`'dır. `0.1.1`-`0.3.0` numaraları yalnızca iç test
 kurulumlarında kullanıldı ve yayımlanmadı; depoyu GitHub'dan alan bir kurulumda bu etiketler yoktur. `v0.1.0`'dan
 yükseltenler bu sayfanın **tamamını** okumalıdır: aşağıdaki bütün turlar bu sürümün içindedir.
 

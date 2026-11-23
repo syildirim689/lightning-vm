@@ -1145,7 +1145,7 @@ sonra kondu:
 
 ## Yönetim → Sistem: sürüm listesi, servislerin ayrıntısı ve yeniden başlatma, hareketli grafikler — 2026-11-23
 
-Sahibin bildirdiği üç kusur (`b467a5f`, test düzeltmesi `e9bd7bc`).
+Sahibin bildirdiği üç kusur (`b467a5f`, test düzeltmesi `e9bd7bc`). 0.6.0 sürümündedir (`CHANGELOG.md`).
 
 **Bulunan nedenler:**
 - *Sürümler eksikti:* `scripts/install.sh` `do_releases` etiketleri `head -n 10` ile en yeni ona kesiyordu; daha
@@ -1211,7 +1211,7 @@ Sahibin bildirdiği üç kusur (`b467a5f`, test düzeltmesi `e9bd7bc`).
 ## Önerilen adlar (passkey, TOTP etiketi, API anahtarı, SSH anahtarı ve diğerleri) — 2026-11-23
 
 Ne değişti: [proposals.md](proposals.md). Formlar boş ad alanı yerine panelin önerisini yazar; doğrulama uygulaması ve
-passkey yöneticisi panelin kendi adını ve hesabın e-postasını gösterir.
+passkey yöneticisi panelin kendi adını ve hesabın e-postasını gösterir. 0.6.0 sürümündedir (`CHANGELOG.md`).
 
 **Çalıştırılanlar:**
 - **Web birim testleri** 142/142 (yeni `lib/proposals.test.ts` 11/11: gerçek kullanıcı ajanı tablosu, bilinmeyen
@@ -1255,7 +1255,7 @@ passkey yöneticisi panelin kendi adını ve hesabın e-postasını gösterir.
 
 Ne değişti: [live-walls.md](live-walls.md). Yönetim → Sistem, İstatistikler ve Enerji'den açılan tam ekran, gerçek
 zamanlı 3B ekranlar (three.js 0.187.0), aynı veriyle tasarlanmış bir 2B ekran, kalite katmanları ve çalışırken kare
-süresi denetleyicisi; API'de `GET /admin/power` yanıtına `hosts[].lastAt`.
+süresi denetleyicisi; API'de `GET /admin/power` yanıtına `hosts[].lastAt`. 0.6.0 sürümündedir (`CHANGELOG.md`).
 
 **Makine:** Windows 11 sanal makinesi, Intel Xeon E5-2699 v4 (4 vCPU), 16 GB; ekran bağdaştırıcısı "VMware SVGA 3D".
 **Gerçek bir GPU yok:** Chrome 157 burada WebGL'i yalnız yazılımla çiziyor — bayraksız başsız modda SwiftShader
