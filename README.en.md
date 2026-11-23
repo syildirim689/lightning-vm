@@ -53,7 +53,10 @@ apps and webhooks), customer webhooks, LDAP / OIDC sign-in, passkeys and two-fac
 for registered accounts (a mailed code, entered while signed in; an optional rule that only verified accounts may
 order, off by default), an API reference whose requests can be run from the browser (shown first, confirmed when
 they change something, secrets hidden), quotas per account and per project (with what is used shown to staff and on the order page), live state of the panel host
-(CPU, memory, disk, services with their version, detail and a restart from the panel, logs), operating system updates for the host and for customers' servers, window-style
+(CPU, memory, disk, services with their version, detail and a restart from the panel, logs), **live walls** (full-screen,
+real-time 3D views of Admin → System, Statistics and Energy for a TV or a second screen, with a designed 2D wall
+where 3D would not run well), **proposed names** in forms (a passkey, API token, SSH key, snapshot or firewall rule
+starts with an editable name instead of an empty field), operating system updates for the host and for customers' servers, window-style
 dialogs (move, put aside, snap to halves and quarters, centre, resize, keyboard shortcuts), and accessibility controls.
 
 Screenshots (the same six screens in Turkish are in [README.md](README.md#-ekran-görüntüleri); each pair is taken from one page
@@ -67,6 +70,13 @@ with the same data, on a throwaway stack with the VMware simulator and invented 
 | ![Order](docs/screenshots/en/order.png) | ![Topology](docs/screenshots/en/admin-topology.png) |
 | **E-mail providers** | **Messaging apps** |
 | ![E-mail settings](docs/screenshots/en/mail.png) | ![Messaging](docs/screenshots/en/chat-settings.png) |
+| **Live wall: System** (CPU, memory, load and history measured for real; the service list is a prepared snapshot) | **Live wall: Energy** (example data) |
+| ![System live wall](docs/screenshots/walls/wall-system-tr-1920.jpg) | ![Energy live wall](docs/screenshots/walls/wall-energy-tr-1920.jpg) |
+
+The live-wall pictures are not from the showcase run: they were taken by hand on a development machine with no
+graphics card, on a software renderer (the high tier's look), and they show the Turkish interface; the figures on
+the Statistics and Energy walls are example data. English phone (390 px), 2D and day-look pictures of all three
+are in [`docs/screenshots/walls`](docs/screenshots/walls).
 
 What is not the same everywhere (the table under "Platform kapsamı" above has every platform):
 
@@ -101,7 +111,7 @@ What is not the same everywhere (the table under "Platform kapsamı" above has e
   installation, on Admin → System (the request goes to the host agent like a backup or an update), or with
   `install.sh monitoring on|off`. That the panel hands the request over correctly is tested; the agent stopping and
   starting the components through it was not run on a server in this work.
-- **Services on Admin → System:** each service shows its state in one word (a one-shot job such as migrate that
+- **Services on Admin → System (2026-11-23, after 0.5.1; not in a release yet):** each service shows its state in one word (a one-shot job such as migrate that
   ended with exit code 0 is "Completed", not a fault; told from the compose definition) and its version (the
   panel's version and commit for its own services, the image tag or the version the service reports for the
   others). A click opens the detail: health, exit code, start and end, restarts, image, ports, what the state means
@@ -111,6 +121,25 @@ What is not the same everywhere (the table under "Platform kapsamı" above has e
   every published version of the channel, newest first, with the running one marked and its changelog section; the
   list is rewritten after every update and once a day. The server-state charts slide with each new sample and show
   the value on hover, without motion when the browser asks for reduced motion.
+- **Live walls (2026-11-23, after 0.5.1; not in a release yet).** Admin → System, Statistics and Energy each open a
+  full-screen, real-time 3D view for a TV or a second screen (also on a laptop or a phone) from a small button
+  beside the page's status (`/wall/system`, `/wall/stats`, `/wall/energy`; a session and the page's own permission
+  are needed, there is no public address). Every figure, colour and motion comes from the panel's own data; old or
+  missing data is shown as such, and a failed service is marked by more than colour (it sticks out of its rack with
+  a "FAULT" plate). Quality adapts to the device while it runs, a designed 2D wall with the same figures takes over
+  without WebGL 2 or on a software renderer, and three.js loads only on these pages. **Measured only on a virtual
+  machine with no graphics card, on a software renderer** (1–3 frames a second at 1080p; on its own choice that
+  machine shows the 2D wall): the 60 fps target, 4K, a real GPU, a TV left on for hours, a remote control, Safari /
+  iOS, Firefox and Android were not tried ([docs/live-walls.md](docs/live-walls.md), Turkish;
+  [docs/validation.md](docs/validation.md)).
+- **Proposed names (2026-11-23, after 0.5.1; not in a release yet).** The panel never leaves a name field empty
+  when creating something: it proposes browser, system and device for a passkey, access and date for an API token,
+  the key's comment for an SSH key, and the server and time for a snapshot (also firewalls and their rules, private
+  networks, projects, catalogue entries and more). A proposal is only a starting point; what you type replaces it,
+  nothing that exists is renamed, and proposals follow the panel's language. Where filling in would be wrong (a
+  ticket's subject) the field stays empty and the proposal is one click away. Authenticator apps and passkey
+  managers now show the installation's own name and the account's e-mail address
+  ([docs/proposals.md](docs/proposals.md), Turkish).
 - **Real hardware:** only the Incus adapter (containers, Incus 6.0) ran against a real server. VMware was tested
   mostly against the govmomi simulator; Proxmox VE, XCP-ng, oVirt, Hyper-V and libvirt against imitations only.
 - **Upgrading:** the last rounds changed behaviour an operator can notice: a full audit of the API, worker,

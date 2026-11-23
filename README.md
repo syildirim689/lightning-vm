@@ -122,6 +122,11 @@ girmeniz gerekmez. Özelliklerin tamamı yalnızca VMware'de vardır; diğer alt
   sunucuyu sıfırlama)
 - **Kayıtlı görünümler:** sunucu listesindeki süzgeç ve sıralama adla kaydedilir, tek tıkla geri çağrılır; biri
   varsayılan yapılabilir. Hesapla birlikte saklanır: her cihazda görünür, yalnızca sahibi görür
+- **Önerilen adlar:** yeni bir şey oluştururken ad alanı boş kalmaz: passkey için tarayıcı · sistem · cihaz, API
+  anahtarı için erişim düzeyi ve gün, SSH anahtarı için anahtarın açıklaması, anlık görüntü için sunucu adı ve saat,
+  firewall kuralı için portun hizmeti ("HTTPS"). Öneri yalnızca bir başlangıçtır; yazdığınız onun yerine geçer, var
+  olan hiçbir şeyin adı değişmez, öneri panelin dilindedir. Doğrulama uygulamaları ve passkey yöneticileri kurulumun
+  kendi adını ve hesabın e-posta adresini gösterir ([docs/proposals.md](docs/proposals.md))
 - **API anahtarları ve API belgeleri:** arama, süzgeçler, örnek istekler, OpenAPI ve PDF indirme. **İstek
   tarayıcıdan çalıştırılır:** açık oturumla, gitmeden önce gösterilerek; GET dışındaki her istek onay ister, sır
   veren rotalar sunulmaz, yanıttaki sır görünümlü değerler gizlenir, izinler ve API hız sınırı aynen geçerlidir. **Webhook'lar:** imzalı, yeniden denenen, teslimat kaydı ve sınama düğmesiyle
@@ -176,6 +181,13 @@ girmeniz gerekmez. Özelliklerin tamamı yalnızca VMware'de vardır; diğer alt
 - **Herkese açık durum sayfası** (`/status`): panelin parçalarının ve konumların durumu; yönetici olay (incident)
   açar ve güncelleme yazar
 - **İstatistikler:** önceki döneme göre eğilimli KPI’lar, zaman serileri, konum/işletim sistemi/paket kırılımı, en büyük müşteriler ve gün × saat işlem haritası (animasyonlu)
+- **Canlı ekranlar:** Yönetim → Sistem, İstatistikler ve Enerji, durum yazısının yanındaki küçük bir düğmeyle bir TV
+  ya da ikinci ekran için tam ekran, gerçek zamanlı bir 3B görünüm açar (`/wall/system`, `/wall/stats`,
+  `/wall/energy`; dizüstünde ve telefonda da çalışır, sayfasıyla aynı izni ister). Ekrandaki her sayı, renk ve hareket
+  panelin kendi verisinden gelir; eski ya da eksik veri de öyle gösterilir. Kalite çalışırken cihaza göre ayarlanır;
+  WebGL 2 olmayan ya da yazılımla çizen cihazda aynı rakamlarla tasarlanmış bir 2B ekran devreye girer; three.js
+  yalnızca bu sayfalarda yüklenir. Yalnızca GPU'suz bir makinede, yazılım çizicisiyle ölçüldü; gerçek bir GPU'da ve
+  TV'de denenmedi ([docs/live-walls.md](docs/live-walls.md))
 - **Denetim kaydı**, duyuru bandı, toplu sunucu işlemleri (satır başındaki kutularla seçilen sunuculara ya da,
   açıkça seçilirse, süzgecin gösterdiklerinin tümüne; bir seferde en çok 200)
 - **Destek sistemi:** öncelik ve SLA, departmanlar, iç notlar, değişkenli hazır yanıtlar, puanlama ve kapanışta memnuniyet isteği; müşteri yanıtlarında hız sınırı, art arda yanıtlar için tek bildirim; bir sunucuyla açılan talepte sunucunun **talep açıldığı andaki durumu** (veritabanındaki haliyle; yalnızca personel görür)
@@ -349,7 +361,9 @@ sunucunun kopyası çıkarılamaz (kopya yalnızca şablondan). Her platformun a
 
 | Ne | Nerede |
 |---|---|
-| **Sistem sayfasında servisler, sürüm listesi ve canlı grafikler (2026-11-23).** *Servisler:* tek seferlik işler (migrate) 0 koduyla bittiyse "Tamamlandı" olarak gösterilir, artık hata sayılmaz; tek seferlik olduğu compose tanımından (yeniden başlatma politikası ve `service_completed_successfully` bağımlılığı) anlaşılır. Her servisin sürümü listede, tıklayınca ayrıntı penceresi (telefonda da): durum, sağlık, çıkış kodu, başlama / bitiş, yeniden başlama, imaj, bağlantı noktaları, durum başına "bu ne demek / ne yapmalı" (TR / EN) ve günlüğün son 200 satırı (yalnız yöneticiye; parola, belirteç, bağlantı dizesi, Authorization başlığı sunucuda maskelenir, tarayıcıda pencere kapanınca tutulmaz). **Yeniden başlatma** onay ister, ne kesileceğini söyler ve sunucudaki ajana gider (`system.update`, aynı anda tek iş, denetim kaydı); postgres ve redis reddedilir (nedeniyle), api / web / proxy ajan tarafından istek yanıtlandıktan sonra yeniden başlatılır, migrate "yeniden çalıştır" ile çalışır. *Sürümler:* liste artık en yeni on etiketle sınırlı değil, komut satırından yapılan güncellemeden sonra da yenilenir ve günde bir kez kendiliğinden tazelenir; çalışan sürüm işaretlidir, notlar CHANGELOG'dan gelir. *Grafikler:* yeni örnek gelince kayarak ilerler, ilk açılışta soldan çizilir, üzerine gelince değer ve saat görünür; "azaltılmış hareket" isteyen tarayıcıda hiç hareket etmez | Yönetim → Sistem → Sunucu durumu · Güncellemeler · [docs/operations.md](docs/operations.md#servisler-ve-yeniden-başlatma) |
+| **Canlı ekranlar (2026-11-23, 0.5.1'den sonra; henüz bir sürümde yayımlanmadı).** Yönetim → Sistem, İstatistikler ve Enerji, durum yazısının yanındaki küçük bir düğmeyle bir TV ya da ikinci ekran için tam ekran, gerçek zamanlı bir 3B görünüm açar (dizüstünde ve telefonda da çalışır). *Sistem:* her servis bir kabin ünitesi (arızalı ünite yalnız renkle değil, dışarı çıkıp "ARIZA" etiketiyle de işaretlenir), işlemci, bellek, disk ve yük için cam tüpler, son on dakikanın şeritleri. *İstatistikler:* dönemin her günü için bir kule, her ölçü kendi en yükseğine göre. *Enerji:* her host bir kabin, tesise akan ışık hostun watt'ıyla orantılı; ölçülen ve tahmin edilen güç desenle de ayrılır. Ekrandaki her sayı, renk ve hareket panelin kendi verisinden gelir; eski ya da eksik veri de öyle gösterilir. Kalite çalışırken cihaza göre ayarlanır; WebGL 2 olmayan ya da yazılımla çizen cihazda aynı rakamlarla tasarlanmış bir 2B ekran devreye girer ve three.js yalnızca bu sayfalarda yüklenir. Oturum ve sayfasıyla aynı izin gerekir; herkese açık adresi yoktur. **Yalnızca grafik kartı olmayan bir sanal makinede, yazılım çizicisiyle ölçüldü; gerçek bir GPU'da, 4K'da ve TV'de denenmedi** ([docs/validation.md](docs/validation.md)) | Yönetim → Sistem · İstatistikler · Enerji · `/wall/system` · `/wall/stats` · `/wall/energy` · [docs/live-walls.md](docs/live-walls.md) |
+| **Önerilen adlar (2026-11-23, 0.5.1'den sonra; henüz bir sürümde yayımlanmadı).** Panel, yeni bir şey oluştururken boş ad alanı bırakmaz: passkey için tarayıcı, sistem ve cihazı, API anahtarı için erişim düzeyini ve günü, SSH anahtarı için anahtarın açıklamasını, anlık görüntü için sunucu adını ve saati önerir (ayrıca firewall, firewall kuralı, özel ağ, proje, katalog kayıtları ve daha fazlası). Öneri yalnızca bir başlangıçtır; yazdığınız onun yerine geçer, var olan hiçbir şeyin adı değişmez ve öneri panelin dilindedir. Doldurmanın yanlış olacağı yerde (destek talebinin konusu) alan boş kalır, öneri tek tıkla alınır. Doğrulama uygulamaları ve passkey yöneticileri artık kurulumun kendi adını ve hesabın e-posta adresini gösterir | Hesabım → Güvenlik · API · SSH anahtarları · sunucu → Anlık görüntüler · Firewall · Katalog · [docs/proposals.md](docs/proposals.md) |
+| **Sistem sayfasında servisler, sürüm listesi ve canlı grafikler (2026-11-23, 0.5.1'den sonra; henüz bir sürümde yayımlanmadı).** *Servisler:* tek seferlik işler (migrate) 0 koduyla bittiyse "Tamamlandı" olarak gösterilir, artık hata sayılmaz; tek seferlik olduğu compose tanımından (yeniden başlatma politikası ve `service_completed_successfully` bağımlılığı) anlaşılır. Her servisin sürümü listede, tıklayınca ayrıntı penceresi (telefonda da): durum, sağlık, çıkış kodu, başlama / bitiş, yeniden başlama, imaj, bağlantı noktaları, durum başına "bu ne demek / ne yapmalı" (TR / EN) ve günlüğün son 200 satırı (yalnız yöneticiye; parola, belirteç, bağlantı dizesi, Authorization başlığı sunucuda maskelenir, tarayıcıda pencere kapanınca tutulmaz). **Yeniden başlatma** onay ister, ne kesileceğini söyler ve sunucudaki ajana gider (`system.update`, aynı anda tek iş, denetim kaydı); postgres ve redis reddedilir (nedeniyle), api / web / proxy ajan tarafından istek yanıtlandıktan sonra yeniden başlatılır, migrate "yeniden çalıştır" ile çalışır. *Sürümler:* liste artık en yeni on etiketle sınırlı değil, komut satırından yapılan güncellemeden sonra da yenilenir ve günde bir kez kendiliğinden tazelenir; çalışan sürüm işaretlidir, notlar CHANGELOG'dan gelir. *Grafikler:* yeni örnek gelince kayarak ilerler, ilk açılışta soldan çizilir, üzerine gelince değer ve saat görünür; "azaltılmış hareket" isteyen tarayıcıda hiç hareket etmez | Yönetim → Sistem → Sunucu durumu · Güncellemeler · [docs/operations.md](docs/operations.md#servisler-ve-yeniden-başlatma) |
 | **0.5.1 (beta) sürümü (2026-11-22).** Dördüncü yayımlanan sürüm; yalnızca 0.5.0'dan sonraki üç düzeltme, yeni özellik ve veritabanı değişikliği yok: aynı anda istenen boyut büyütmeleri artık kotayı, konumun kapasitesini ya da bayinin tahsisini birlikte aşamaz (kabul edilmiş, bitmemiş büyütme üçünde de sayılır); Yönetim → İstatistikler telefonda yana kaymaz | [CHANGELOG.md](CHANGELOG.md) · [docs/upgrade-notes.md](docs/upgrade-notes.md) · [docs/validation.md](docs/validation.md) |
 | **0.5.0 (beta) sürümü (2026-11-21).** Üçüncü yayımlanan sürüm: 0.4.0'dan sonra eklenenlerin tamamı (adres doğrulama, proje kotası, Stripe webhook'u, belgelerden istek, izleme anahtarı ve yedi akıllı yardımcı) ile yayımlanmadan önce yapılan gözden geçirmenin bulduğu kusurların düzeltmeleri. En önemlileri: tek bir zamanlamanın saat dilimi artık bütün zamanlamaları durduramaz; kullanım takibi haftalık düzeni (hafta sonu boşta duran sunucu) bulgu saymaz; Stripe'ın geç gelen "ödendi" bildirimi kaydedilir; genel bakış her dakika bir haftalık örneği yeniden okumaz | [CHANGELOG.md](CHANGELOG.md) · [docs/upgrade-notes.md](docs/upgrade-notes.md) · [docs/validation.md](docs/validation.md) |
 | **Dönemsel özet (2026-11-21).** Olay başına bildirim yerine, seçtiğiniz gün ve saatte (kendi saat diliminizde; haftalık ya da günlük) durumu söyleyen tek mesaj. Personele panelin özeti (önem derecesine göre açık bulgular, son özetten beri açılan ve kapananlar, ödeme riski altındaki hesaplar, başarısız işlemler, kapasite), yönetici açtıysa müşteriye kendi hesabının özeti. Açılmadıkça kapalıdır, boş özet gönderilmez, birden çok API kopyasında bile dönem başına tam bir kez gider; "şimdi önizleme gönder" düğmesi vardır | Hesabım → Bildirimler → Dönemsel özet · Ayarlar → Bildirim kuralları (`account.digest`) · [docs/smart-features.md](docs/smart-features.md#dönemsel-özet) |
@@ -392,12 +406,19 @@ sunucunun kopyası çıkarılamaz (kopya yalnızca şablondan). Her platformun a
 | ![Sipariş](docs/screenshots/tr/order.png) | ![Topoloji](docs/screenshots/tr/admin-topology.png) |
 | **E-posta sağlayıcıları** | **Mesajlaşma uygulamaları** |
 | ![E-posta ayarları](docs/screenshots/tr/mail.png) | ![Mesajlaşma](docs/screenshots/tr/chat-settings.png) |
+| **Canlı ekran: Sistem** (işlemci, bellek, yük ve geçmiş gerçek ölçüm; servis listesi hazırlanmış bir anlık görüntü) | **Canlı ekran: Enerji** (örnek veri) |
+| ![Sistem canlı ekranı](docs/screenshots/walls/wall-system-tr-1920.jpg) | ![Enerji canlı ekranı](docs/screenshots/walls/wall-energy-tr-1920.jpg) |
 
 Aynı altı ekranın İngilizcesi [`docs/screenshots/en`](docs/screenshots/en) klasöründedir (aşağıda, İngilizce özetin içinde de
 durur). İki dildeki görüntü aynı sayfadan, aynı veriyle ve aynı boyutta alınır: uçtan uca paketin ayrı bir adımı
 (`apps/web/e2e/showcase.spec.ts`) VMware simülatörlü geçici bir kurulumu uydurma adlarla doldurur, her ekranı önce
 Türkçe sonra İngilizce çeker. Bu adım olağan test çalıştırmasına dahil değildir; yalnızca istendiğinde çalışır
 (`E2E_SHOWCASE=1` ya da başlık süzgecinde `showcase`).
+
+Canlı ekran görüntüleri bu paketten değil, grafik kartı olmayan bir geliştirme makinesinde yazılım çizicisiyle
+(yüksek katmanın görünüşü) elle alındı; İstatistik ve Enerji ekranlarındaki rakamlar örnek veridir. Üç ekranın
+telefon (390 px), 2B ve gündüz görüntüleri [`docs/screenshots/walls`](docs/screenshots/walls) klasöründedir
+([docs/live-walls.md](docs/live-walls.md#ekran-görüntüleri)).
 
 ## 🚀 Kurulum
 
@@ -936,6 +957,11 @@ kaynağında en son ne zaman doğrulandığını, `087` bir işlemin hesap payı
 - **IPv6:** ayrı IPv6 havuzu yoktur; IPv4 havuzuna eklenen önekten sunucu başına tek adres verilir.
 - **İzleme:** panelden açıp kapatma isteğinin ajana doğru gittiği sınandı; ajanın bileşenleri gerçekten durdurup
   başlatması bu yolla bir sunucuda denenmedi ([docs/operations.md](docs/operations.md#i̇zleme)).
+- **Canlı ekranlar, gerçek bir GPU'da ve TV'de denenmedi:** 3B ölçümlerin hepsi grafik kartı olmayan bir sanal
+  makinede, yazılım çizicisiyle (saniyede 1–3 kare, 1080p) alındı; 60 fps hedefinin, 4K'nın, saatlerce açık kalan bir
+  TV'nin, uzaktan kumandanın ve tam ekran düğmesinin gerçek davranışı ölçülmedi. Safari / iOS, Firefox ve Android
+  tarayıcılarında denenmedi. Kendiliğinden seçimde bu makine hiç 3B'ye girmedi, 2B ekranı gösterdi
+  ([docs/validation.md](docs/validation.md), [docs/live-walls.md](docs/live-walls.md)).
 - **Küme (cluster):** birden çok sunucuda çalışma bir tasarımdır, yazılmadı ([docs/cluster.md](docs/cluster.md)).
 - **E-posta adresi doğrulama, gerçek posta sunucusuyla denenmedi:** kayıtla açılan hesaba doğrulama kodu gönderilir
   (yalnızca sahte bir SMTP sunucusuyla sınandı) ve varsayılan olarak hiçbir şeyi engellemez; doğrulanmamış hesabın
