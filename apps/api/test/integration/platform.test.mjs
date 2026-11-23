@@ -323,7 +323,9 @@ test('insights explain what needs attention; the task list starts empty', async 
 
   // Smart cards: the getting-started list for staff, this month's cost for the customer.
   const steps = (await get('/admin/onboarding', admin)).json().steps;
-  assert.equal(steps.length, 9);
+  // Nine steps to start with, then the health steps (onboarding-rules.ts; which ones depends on the installation).
+  assert.equal(steps.filter((s) => s.group === 'start').length, 9);
+  assert.ok(steps.some((s) => s.group === 'health' && s.key === 'backupSchedule'));
   assert.equal(steps.find((s) => s.key === 'backup').done, false);
   assert.equal((await get('/admin/onboarding', user)).statusCode, 403);
   const usage = (await get('/usage/summary', user)).json();
