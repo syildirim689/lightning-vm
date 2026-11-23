@@ -1318,6 +1318,8 @@ Basic Render Driver (WARP). Ekranın kendi seçimi iki durumda da doğru olarak 
   sonra): JS yığını 10,6 → 11,6 MB, DOM düğümü 241 → 245, dinleyici 434 → 443; three'nin GPU nesneleri baştan sona sabit
   (26 geometri, 13 doku, 33 gölgelendirici), 7 758 kare. Ekranlar arasında 12 geçiş (→; her geçişte bir motor kurulup bırakılıyor; azaltılmış hareket, düşük katman, SwiftShader): her an tek bir canlı WebGL bağlamı, açılan 26 bağlamın 25'i geri verilip çöp toplayıcıyla gitti; JS yığını 10,4 → 11,7 → 12,4 MB (geçiş başına ~170 KB; kaynağı bulunmadı), DOM düğümü 358 → 374. On dakikalık ölçümdeki +1 MB ve geçişlerdeki artışın saatler içinde durup durmadığı ölçülmedi.
 - **Ekran görüntüleri:** `docs/screenshots/walls/` (10 dosya, liste [live-walls.md](live-walls.md)'de).
+- **GitHub CI, elle tam çalıştırma `45104033887` (`ea4ba50`):** ilk denemede `compose` işi kaldı: ilk testte kurulum sihirbazının "Panel adresi" denetimi beklenen "Yerel adres; doğrulanamaz" satırını göstermedi, yönetici oluşmadığı için sonraki 11 test girişte kaldı (ekranlarla ilgisiz; aynı commit demoda geçti). Yalnız kalan iş yeniden çalıştırıldı: ikinci denemede 50/50, bütün işler yeşil. Neden kaldığı araştırılmadı.
+- **Demo sunucusu:** `/root/demo-e2e.sh ea4ba50`: demo güncellendi (`/opt/lightning-vm` `ea4ba50`), atılabilir yığında **50/50** (19,4 dk; 4 yeni ekran testi dahil), demo `/api/ready` testler sırasında 60 yanıtın 60'ında 200, sonrasında 200, geriye 0 test kapsayıcısı.
 
 **Bulunan ve düzeltilen hatalar** (bu iş sırasında, yayımlanmadan):
 - three r187'de `PCFSoftShadowMap` kaldırılmış (uyarı veriyordu): tek filtreli gölge türü, "yumuşak" daha geniş yarıçap
