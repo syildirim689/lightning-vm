@@ -127,6 +127,21 @@ girmeniz gerekmez. Özelliklerin tamamı yalnızca VMware'de vardır; diğer alt
   firewall kuralı için portun hizmeti ("HTTPS"). Öneri yalnızca bir başlangıçtır; yazdığınız onun yerine geçer, var
   olan hiçbir şeyin adı değişmez, öneri panelin dilindedir. Doğrulama uygulamaları ve passkey yöneticileri kurulumun
   kendi adını ve hesabın e-posta adresini gösterir ([docs/proposals.md](docs/proposals.md))
+- **Beklenen süre:** çalışan işlemler bu panelde genellikle ne kadar sürdüğünü ("genellikle yaklaşık 2 dakika";
+  aynı türden önceki işlemlerin ortancası) ve uzadığında bunu söyler; az geçmişte bir şey söylenmez
+- **Onay yerine "Geri al":** SSH anahtarı, proje, zamanlama, güvenlik duvarı bağlantısı ve hazır yanıt silmek onay
+  sormaz; birkaç saniye "Geri al" sunulur, geri alınan silme API'ye hiç gitmez
+- **Oturum uyarısı:** oturum bitmeden 5 dakika önce panel uyarır; "Oturumu açık tut" yalnızca tıklamayla uzatır,
+  sabit bitişlerde (kullanıcı adına giriş, dizin / SSO) nedeni söylenir
+- **Panel yanıt vermezken:** listeler duraklar, panel artan aralıklarla (2 sn'den 30 sn'ye) yeniden dener ya da "Şimdi
+  dene" ile hemen; dönünce sayfa yenilenmeden sürer. O sırada gönderilen değişiklik hemen başarısız olur, form
+  yazılanı tutar
+- **Siparişte son seçimler:** sipariş formu son sunucunuzun seçimleriyle (konum, imaj, paket ya da boyut, proje)
+  başlar ve bunu söyler; "Boş başla" ile temizlenir
+- **SSH anahtarı yapıştırma:** yapıştırılan anahtar birleştirilir ve türü, boyutu ve açıklamasıyla gösterilir; özel
+  anahtar hemen uyarılır. Tek satırlık alana satır satır yapıştırılan listeler (güvenlik duvarı kaynakları) ayrı kalır
+- **Hata iletileri** nedenini ve sonraki adımı söyler; kodsuz yanıt (vekil ya da ağ geçidi sayfası) HTTP durumuyla
+  adlandırılır ([docs/ux-review.md](docs/ux-review.md))
 - **API anahtarları ve API belgeleri:** arama, süzgeçler, örnek istekler, OpenAPI ve PDF indirme. **İstek
   tarayıcıdan çalıştırılır:** açık oturumla, gitmeden önce gösterilerek; GET dışındaki her istek onay ister, sır
   veren rotalar sunulmaz, yanıttaki sır görünümlü değerler gizlenir, izinler ve API hız sınırı aynen geçerlidir. **Webhook'lar:** imzalı, yeniden denenen, teslimat kaydı ve sınama düğmesiyle
@@ -176,6 +191,10 @@ girmeniz gerekmez. Özelliklerin tamamı yalnızca VMware'de vardır; diğer alt
 - **Komut paletinde son açılanlar** personel için bakılan kullanıcıları ve yönetimdeki faturaları da tutar
 - **Enerji raporu:** kWh, maliyet ve karbon tahmini (işlemci kullanımından hesaplanır; XCP-ng, oVirt, KVM ve
   Incus'ta anlamlı değildir)
+- **Kurulum listesi sağlığı da denetler:** genel bakıştaki liste e-postanın gerçekten gidip gitmediğini, yedek
+  zamanlamasını, izlemeyi, güncellemeleri, ödeme yöntemini (faturalama açıksa) ve personelin iki adımlı
+  doğrulamasını da gerçek durumdan denetler; her adım neye dayandığını ve nerede düzeltileceğini söyler. "Bir şey
+  değişene kadar gizle" listeyi kaldırır, bozulan adım onu geri getirir
 - **Genel bakışta özet:** son bakışınızdan beri yeni kullanıcı, sunucu, başarısız işlem, kötüye kullanım bulgusu,
   alarm ve reddedilen / başarısız giriş sayıları
 - **Herkese açık durum sayfası** (`/status`): panelin parçalarının ve konumların durumu; yönetici olay (incident)
@@ -361,6 +380,7 @@ sunucunun kopyası çıkarılamaz (kopya yalnızca şablondan). Her platformun a
 
 | Ne | Nerede |
 |---|---|
+| **Günlük işi kolaylaştıranlar (2026-11-23, henüz bir sürümde değil).** Müşteri, bayi ve yönetici tarafının kullanım incelemesinden (34 bulgu; 22'si düzeltildi, 1'i kısmen, 11'i nedeniyle bırakıldı). Çalışan işlemler bu panelde genellikle ne kadar sürdüğünü ("genellikle yaklaşık 2 dakika") ve uzadığında bunu söyler. SSH anahtarı, proje, zamanlama, güvenlik duvarı bağlantısı ve hazır yanıt silmek onay sormaz; birkaç saniye "Geri al" sunulur. Oturum bitmeden 5 dakika önce panel uyarır; "Oturumu açık tut" yalnızca tıklamayla uzatır. Panel yanıt vermezken listeler duraklar, panel artan aralıklarla yeniden dener ve sayfa yenilenmeden sürer. Yönetici genel bakışındaki kurulum listesi e-posta, yedek zamanlaması, izleme, güncellemeler, ödeme yöntemi ve personelin iki adımlı doğrulamasını da denetler. Sipariş formu son sunucunuzun seçimleriyle başlar ve bunu söyler. Yapıştırılan SSH anahtarı birleştirilir ve türüyle gösterilir, özel anahtar hemen uyarılır; satır satır yapıştırılan listeler ayrı kalır. Hata iletileri nedenini ve sonraki adımı söyler. Hepsi panelin kendi verisinden hesaplanır, hiçbiri tıklamadan bir şey yapmaz; veritabanı değişikliği yok. Demo sunucusunda 57/57 tarayıcı testi | Sunucu sayfası · SSH anahtarları · Projeler · Güvenlik duvarı · Sipariş · Yönetim → Genel bakış · [docs/ux-review.md](docs/ux-review.md) · [docs/smart-features.md](docs/smart-features.md#günlük-işi-kolaylaştıranlar) · [CHANGELOG.md](CHANGELOG.md) |
 | **0.6.0 (beta) sürümü (2026-11-23).** Beşinci yayımlanan sürüm; 0.5.1'den sonra eklenen üç iş: Yönetim → Sistem'de bütün sürümler, servislerin ayrıntısı, sürümü, günlüğü ve ajan üzerinden yeniden başlatma, hareketli grafikler; formlarda önerilen adlar ve doğrulama uygulamalarında panelin kendi adı; Sistem, İstatistikler ve Enerji'den açılan canlı ekranlar. Migration ve yeni ayar yok; yeni bağımlılık (three.js) yalnızca web imajında. Canlı ekranlar yalnızca yazılım çizicisiyle ölçüldü, gerçek bir GPU'da ya da TV'de denenmedi | [CHANGELOG.md](CHANGELOG.md) · [docs/upgrade-notes.md](docs/upgrade-notes.md) · [docs/validation.md](docs/validation.md) |
 | **Canlı ekranlar (2026-11-23, 0.6.0 sürümünde).** Yönetim → Sistem, İstatistikler ve Enerji, durum yazısının yanındaki küçük bir düğmeyle bir TV ya da ikinci ekran için tam ekran, gerçek zamanlı bir 3B görünüm açar (dizüstünde ve telefonda da çalışır). *Sistem:* her servis bir kabin ünitesi (arızalı ünite yalnız renkle değil, dışarı çıkıp "ARIZA" etiketiyle de işaretlenir), işlemci, bellek, disk ve yük için cam tüpler, son on dakikanın şeritleri. *İstatistikler:* dönemin her günü için bir kule, her ölçü kendi en yükseğine göre. *Enerji:* her host bir kabin, tesise akan ışık hostun watt'ıyla orantılı; ölçülen ve tahmin edilen güç desenle de ayrılır. Ekrandaki her sayı, renk ve hareket panelin kendi verisinden gelir; eski ya da eksik veri de öyle gösterilir. Kalite çalışırken cihaza göre ayarlanır; WebGL 2 olmayan ya da yazılımla çizen cihazda aynı rakamlarla tasarlanmış bir 2B ekran devreye girer ve three.js yalnızca bu sayfalarda yüklenir. Oturum ve sayfasıyla aynı izin gerekir; herkese açık adresi yoktur. **Yalnızca grafik kartı olmayan bir sanal makinede, yazılım çizicisiyle ölçüldü; gerçek bir GPU'da, 4K'da ve TV'de denenmedi** ([docs/validation.md](docs/validation.md)) | Yönetim → Sistem · İstatistikler · Enerji · `/wall/system` · `/wall/stats` · `/wall/energy` · [docs/live-walls.md](docs/live-walls.md) |
 | **Önerilen adlar (2026-11-23, 0.6.0 sürümünde).** Panel, yeni bir şey oluştururken boş ad alanı bırakmaz: passkey için tarayıcı, sistem ve cihazı, API anahtarı için erişim düzeyini ve günü, SSH anahtarı için anahtarın açıklamasını, anlık görüntü için sunucu adını ve saati önerir (ayrıca firewall, firewall kuralı, özel ağ, proje, katalog kayıtları ve daha fazlası). Öneri yalnızca bir başlangıçtır; yazdığınız onun yerine geçer, var olan hiçbir şeyin adı değişmez ve öneri panelin dilindedir. Doldurmanın yanlış olacağı yerde (destek talebinin konusu) alan boş kalır, öneri tek tıkla alınır. Doğrulama uygulamaları ve passkey yöneticileri artık kurulumun kendi adını ve hesabın e-posta adresini gösterir | Hesabım → Güvenlik · API · SSH anahtarları · sunucu → Anlık görüntüler · Firewall · Katalog · [docs/proposals.md](docs/proposals.md) |

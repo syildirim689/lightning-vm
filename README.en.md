@@ -46,7 +46,8 @@ automatic HTTPS. The UI is in Turkish and English.
 Highlights: smart ordering, rule-based helpers computed inside the panel from its own data (a usage watch that compares each
 server with its own history, a month-end cost forecast that counts hourly usage and measures the budget against it, a power schedule suggested
 from the hours a server is idle every week, the quietest hours of the servers' own history offered for the update window and for host maintenance, a periodic digest (weekly or daily, off unless turned on) for staff and, where the administrator allows it, for customers, payment risk said before a renewal and listed for staff, similar resolved tickets for support and suggestions while a
-customer writes one;
+customer writes one, and everyday helpers (how long an operation usually takes, "Undo" instead of a confirmation, a
+warning before the session ends, pasted SSH keys checked at once);
 [docs/smart-features.md](docs/smart-features.md), Turkish), reinstall, resize and clone, snapshots, extra disks, billing and invoices (monthly and
 hourly), resellers, support desk, 17 notification channels (in-app, browser push, e-mail, SMS and 13 messaging
 apps and webhooks), customer webhooks, LDAP / OIDC sign-in, passkeys and two-factor, e-mail address verification
@@ -140,6 +141,18 @@ What is not the same everywhere (the table under "Platform kapsamı" above has e
   ticket's subject) the field stays empty and the proposal is one click away. Authenticator apps and passkey
   managers now show the installation's own name and the account's e-mail address
   ([docs/proposals.md](docs/proposals.md), Turkish).
+- **Everyday helpers (2026-11-23, not yet in a release).** From a usability review of the customer, reseller and
+  admin sides (34 findings; 22 fixed, 1 in part, 11 left with the reason). Running operations say how long they
+  usually take on this panel ("usually about 2 minutes"), and when one is taking longer. Removing an SSH key,
+  project, schedule, firewall attachment or canned reply asks nothing and offers "Undo" for a few seconds. Five
+  minutes before the session ends the panel warns; "Stay signed in" extends it only on a click. While the panel does
+  not answer, lists pause, it retries with growing waits and resumes without a reload. The admin setup list also
+  checks mail delivery, backup schedule, monitoring, updates, payment method and staff two-factor. The order form
+  starts from your last server's choices and says so. Pasted SSH keys are joined and named, private keys are flagged
+  at once, and lists pasted one per line stay separate. Error messages give the cause and the next step. All of it is
+  computed inside the panel from its own data and nothing acts without a click; no migration
+  ([docs/ux-review.md](docs/ux-review.md), Turkish; [docs/smart-features.md](docs/smart-features.md#günlük-işi-kolaylaştıranlar);
+  [CHANGELOG.md](CHANGELOG.md)).
 - **Real hardware:** only the Incus adapter (containers, Incus 6.0) ran against a real server. VMware was tested
   mostly against the govmomi simulator; Proxmox VE, XCP-ng, oVirt, Hyper-V and libvirt against imitations only.
 - **Upgrading:** the last rounds changed behaviour an operator can notice: a full audit of the API, worker,
