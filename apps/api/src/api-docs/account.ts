@@ -290,6 +290,20 @@ export default {
     summary: { tr: 'Son bildirimlerinizi listeler.', en: 'Lists your latest notifications.' },
     returns: { tr: 'notifications: son 50 bildirim (event, title, body, link, createdAt, readAt) ve okunmamış sayısı unread.', en: 'notifications: the latest 50 (event, title, body, link, createdAt, readAt) and the unread count.' },
   },
+  'GET /notifications/away': {
+    tag: 'account',
+    summary: { tr: '"Siz yokken" listesini verir: son "görüldü"den beri biten ve başarısız işlemler, faturalar ve talep yanıtları.', en: 'Returns the "while you were away" list: finished and failed operations, invoices and ticket answers since the last "seen".' },
+    details: { tr: 'Yalnızca gelen kutusundaki kendi bildirimleriniz; en çok 30 gün geriye, ilk kez açılınca hesabın açıldığı andan. Okumak hiçbir şeyi değiştirmez.',
+      en: 'Only your own notifications already in the inbox; at most 30 days back, from the account\'s start the first time. Reading it changes nothing.' },
+    returns: { tr: '`since`, `counts` (`done`, `failed`, `billing`, `support`), `total` ve en yeni 30 öğe `items` (bildirim alanları ve `kind`).', en: '`since`, `counts` (`done`, `failed`, `billing`, `support`), `total` and the newest 30 `items` (the notification\'s fields and `kind`).' },
+  },
+  'POST /notifications/away/seen': {
+    tag: 'account',
+    summary: { tr: '"Siz yokken" listesini görüldü olarak işaretler.', en: 'Marks the "while you were away" list as seen.' },
+    body: [{ name: 'ids[]', type: 'uuid[]', text: { tr: 'Listenin gösterdiği bildirimler: gelen kutusunda da okundu olur.', en: 'The notifications the list showed: they are marked read in the inbox too.' } }],
+    example: { ids: ['0f1e2d3c-4b5a-4968-8776-5a4b3c2d1e0f'] },
+    returns: { tr: 'İçerik yok (204). Liste bundan sonrasından başlar.', en: 'No content (204). The list starts again from now.' },
+  },
   'POST /notifications/read': {
     tag: 'account',
     summary: { tr: 'Bildirimleri okundu olarak işaretler.', en: 'Marks notifications as read.' },

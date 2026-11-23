@@ -13,6 +13,7 @@ import { getSettings, mailReady, saveSettings, type Channel, type NotificationPo
 import { smsReady } from './sms';
 import { validQuietHours } from './quiet-hours';
 import { chatDestinations, chatReady } from './chat-delivery';
+import { awayEvents, awaySince, awaySummary } from './away-rules';
 
 const maxPushDevices = 20;
 const channelList = (v: unknown, from: Channel[]) => (Array.isArray(v) ? [...new Set(v.map(String))] : []).filter((c): c is Channel => from.includes(c as Channel));
@@ -29,6 +30,27 @@ export class NotificationsController {
       pool.query('SELECT count(*)::int AS n FROM notifications WHERE user_id = $1 AND read_at IS NULL', [req.user.id]),
     ]);
     return { notifications: rows, unread: c.n };
+  }
+
+  // "While you were away": the person's own finished and failed operations, invoices and ticket answers since they
+  // last marked this list as seen (at most 30 days back). Only notifications already in the inbox: nothing new is
+  // computed, sent or stored by reading it.
+  @Get('away')
+  async away(@Req() req: AuthedRequest) {
+    const { rows: [u] } = await pool.query('SELECT away_seen_at, created_at FROM users WHERE id = $1', [req.user.id]);
+    const since = awaySince(u?.away_seen_at ?? null, u?.created_at ?? new Date());
+    const { rows } = await pool.query(`SELECT id, event, title, body, link, texts, created_at AS "createdAt", read_at AS "readAt" FROM notifications
+      WHERE user_id = $1 AND created_at > $2 AND event = ANY($3) ORDER BY created_at DESC LIMIT 500`, [req.user.id, since, awayEvents]);
+    return { since: since.toISOString(), ...awaySummary(rows) };
+  }
+
+  // Marked as seen, only on the person's click: the list starts again from now, and what it showed is read in the
+  // inbox too (the ids it showed, the person's own only).
+  @Post('away/seen') @HttpCode(204)
+  async awaySeen(@Req() req: AuthedRequest, @Body() body: { ids?: unknown }) {
+    const ids = Array.isArray(body?.ids) ? body.ids.map(String).filter((x) => /^[0-9a-f-]{36}$/.test(x)).slice(0, 500) : [];
+    await pool.query('UPDATE users SET away_seen_at = now() WHERE id = $1', [req.user.id]);
+    if (ids.length) await pool.query('UPDATE notifications SET read_at = now() WHERE user_id = $1 AND id = ANY($2::uuid[]) AND read_at IS NULL', [req.user.id, ids]);
   }
 
   @Post('read') @HttpCode(204)

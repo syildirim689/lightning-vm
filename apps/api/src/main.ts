@@ -79,6 +79,7 @@ import { MaintenanceHoursController } from './maintenance-hours';
 import { PeriodicDigestController, startPeriodicDigests } from './periodic-digest';
 import { startBudgetForecasts } from './cost-forecast';
 import { AnomaliesAdminController, AnomaliesController } from './anomalies';
+import { ServerHintsController } from './server-hints';
 import { VdcAdminController, VdcController } from './vdc';
 import { RdnsSettingsController, ServerIpsController, startRdnsWorker } from './rdns';
 import { SavedViewsController } from './saved-views';
@@ -104,7 +105,7 @@ export const controllers = [HealthController, SavedViewsController, ApiAdminCont
   SettingsController, SettingsOverviewController, SmsSettingsController, RolesController, NotificationsController, NotificationPolicyController,
   InsightsController, StaffInsightsController, AttentionController, ApplicationsController, ApplicationCallbackController, UserSecurityController, ServerUpdatesController, GuestUpdatesController, AdminServerUpdatesController, IsoAdminController, ServerIsoController, DomainController, LocationsController, TopologyAdminController, TopologyController, PowerController, AbuseController, VdcAdminController, VdcController, SmartController, OnboardingController, DigestController, AccountExportController, TimeZoneController, MySessionsController, EmailVerificationController, SchedulesController, AuditController, ActivityController, AnnouncementController, AnnouncementAdminController, SnapshotsController, AlertsController, TerminalController, ChatController, ChatSettingsController, LiveController, DirectorySettingsController, StatusController, StatusPageSettingsController, UserSummaryController, IncidentsController, SupportController, SupportAdminController, StatsController, SignInMethodsController,
   // Rule-based helpers (docs/smart-features.md), on their own line so that the long one above is not touched for them.
-  AnomaliesController, AnomaliesAdminController, ScheduleSuggestionController, MaintenanceHoursController, PeriodicDigestController, PaymentRiskController, SupportSimilarController, SupportSuggestController,
+  AnomaliesController, AnomaliesAdminController, ServerHintsController, ScheduleSuggestionController, MaintenanceHoursController, PeriodicDigestController, PaymentRiskController, SupportSimilarController, SupportSuggestController,
   BillingController, BillingCallbackController, BillingAdminController, BillingSettingsController, EinvoiceSettingsController, EinvoiceDocumentController, DeveloperController, ImportController, DisputesController, DisputesAdminController, ExternalController, BackupsController, BackupsAdminController, ResellerController, ResellersAdminController, PlacementController, DisksController, DiskPriceController, PrivateNetworksController, PrivateNetworkSettingsController, ImagesController, CouponsAdminController, TransfersController, TransfersAdminController];
 reference.controllers = controllers;
 @Module({ controllers })
@@ -163,7 +164,6 @@ export async function createApp() {
     if (!(await claimRequest(key))) return reply.status(409).send({ code: 'DUPLICATE_REQUEST', message: 'The same request is already being processed' });
     (req as { dedupeKey?: string }).dedupeKey = key;
   });
-  // Route templates (/servers/:id), not raw URLs, keep the label set bounded.
   // The claim ends when the work has: normally with the answer (onResponse below). A browser that went away before
   // the answer (a reload or a closed tab during a check) never gets onResponse, and its claim used to stay for the
   // full two minutes, refusing the same request when it was sent again ("already being processed"). onSend runs
@@ -177,6 +177,7 @@ export async function createApp() {
     }
     return payload;
   });
+  // Route templates (/servers/:id), not raw URLs, keep the label set bounded.
   app.getHttpAdapter().getInstance().addHook('onResponse', async (req, reply) => {
     const key = (req as { dedupeKey?: string }).dedupeKey;
     if (key) await releaseRequest(key);

@@ -2152,6 +2152,7 @@
     "readinessExplain": "\"Ready\": the VM is on, VMware Tools runs and the operating system reports the assigned IP address. A powered-on VM alone is not ready.",
     "metricsEmpty": "No metrics are collected for this server yet. No sample or estimated values are shown.",
     "detail": {
+      "id": "ID",
       "overview": "Overview",
       "image": "Operating system",
       "price": "Monthly price",
@@ -5733,6 +5734,8 @@
     "save": "Save the form you are typing in"
   },
   "Extras": {
+    "user": "User",
+    "rdp": "Remote Desktop",
     "copy": "Copy",
     "copied": "{what} copied.",
     "ip": "IP",
@@ -9906,5 +9909,63 @@
       "directory": "Accounts from the company directory or single sign-on sign in again regularly, so the directory is asked again. Save what you are doing.",
       "role": "Your role allows sessions of a limited length, set by the administrator. Save what you are doing; you can sign in again afterwards."
     }
+  },
+  "ServerHints": {
+    "title": "What next",
+    "basis": "Read from this server's current state; nothing is changed until you act.",
+    "severity": {
+      "warning": "Worth doing soon",
+      "info": "Suggestion"
+    },
+    "hide": "Hide",
+    "hideMenu": "Hide: {title}",
+    "week": "For a week",
+    "forever": "Don't show again",
+    "hidden": "Hidden. Settings are not changed.",
+    "NO_BACKUP": {
+      "title": "{never, select, yes {No backup yet} other {Last backup {days} days ago}}",
+      "body": "A backup is kept apart from the server; a snapshot is lost with it. Counted: ready backups of the last {limit} days.",
+      "action": "Take a backup"
+    },
+    "NO_FIREWALL": {
+      "title": "No firewall attached",
+      "body": "Everything coming in reaches the server. This location can apply a firewall in front of it.",
+      "action": "Choose a firewall"
+    },
+    "ROOT_PASSWORD_KEPT": {
+      "title": "The panel still keeps the root password",
+      "body": "Once you have it somewhere safe (or sign in with an SSH key), the panel's copy can be forgotten.",
+      "action": "Go to the root password"
+    },
+    "SNAPSHOTS_OLD": {
+      "title": "{n, plural, one {# snapshot older than {days} days} other {# snapshots older than {days} days}}",
+      "body": "Old snapshots slow the disk and take space; one kept only for safety is better as a backup.",
+      "action": "Go to snapshots"
+    }
+  },
+  "Away": {
+    "title": "While you were away",
+    "since": "Since you last marked it seen:",
+    "seen": "Seen",
+    "seenDone": "Marked as seen. New ones will appear here.",
+    "more": "{n, plural, one {# more in the inbox} other {# more in the inbox}}",
+    "count": {
+      "failed": "{n, plural, one {# failed} other {# failed}}",
+      "billing": "{n, plural, one {# about an invoice} other {# about invoices}}",
+      "support": "{n, plural, one {# ticket answer} other {# ticket answers}}",
+      "done": "{n, plural, one {# finished} other {# finished}}"
+    },
+    "kind": {
+      "failed": "Failed",
+      "billing": "Invoice",
+      "support": "Ticket answer",
+      "done": "Finished"
+    }
+  },
+  "CopyValue": {
+    "copy": "Copy: {what}",
+    "copied": "{what} copied",
+    "invoiceNumber": "Invoice number",
+    "ticketNumber": "Ticket number"
   }
 }

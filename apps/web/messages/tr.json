@@ -2152,6 +2152,7 @@
     "readinessExplain": "\"Hazır\": VM açık, VMware Tools çalışıyor ve işletim sistemi atanan IP adresini bildiriyor. VM'nin açık olması tek başına hazır olduğu anlamına gelmez.",
     "metricsEmpty": "Bu sunucu için henüz metrik toplanmıyor. Örnek veya tahmini değer gösterilmez.",
     "detail": {
+      "id": "Kimlik",
       "overview": "Genel bakış",
       "image": "İşletim sistemi",
       "price": "Aylık fiyat",
@@ -5733,6 +5734,8 @@
     "save": "Yazdığınız formu kaydet"
   },
   "Extras": {
+    "user": "Kullanıcı",
+    "rdp": "Uzak Masaüstü",
     "copy": "Kopyala",
     "copied": "{what} kopyalandı.",
     "ip": "IP",
@@ -9906,5 +9909,63 @@
       "directory": "Şirket dizini ya da tek oturum açma hesapları, dizine yeniden sorulsun diye düzenli olarak yeniden giriş yapar. Yaptığınızı kaydedin.",
       "role": "Rolünüzün oturum süresi yönetici tarafından sınırlandı. Yaptığınızı kaydedin; ardından yeniden giriş yapabilirsiniz."
     }
+  },
+  "ServerHints": {
+    "title": "Sıradaki adımlar",
+    "basis": "Bu sunucunun şu anki durumundan okunur; siz bir şey yapmadıkça hiçbir şey değişmez.",
+    "severity": {
+      "warning": "Yakında yapılması iyi olur",
+      "info": "Öneri"
+    },
+    "hide": "Gizle",
+    "hideMenu": "Gizle: {title}",
+    "week": "Bir hafta",
+    "forever": "Bir daha gösterme",
+    "hidden": "Gizlendi. Hiçbir ayar değişmedi.",
+    "NO_BACKUP": {
+      "title": "{never, select, yes {Henüz yedek yok} other {Son yedek {days} gün önce}}",
+      "body": "Yedek sunucudan ayrı tutulur; anlık görüntü sunucuyla birlikte kaybolur. Sayılan: son {limit} günün hazır yedekleri.",
+      "action": "Yedek al"
+    },
+    "NO_FIREWALL": {
+      "title": "Güvenlik duvarı bağlı değil",
+      "body": "Gelen her bağlantı sunucuya ulaşıyor. Bu konum önüne bir güvenlik duvarı koyabilir.",
+      "action": "Güvenlik duvarı seç"
+    },
+    "ROOT_PASSWORD_KEPT": {
+      "title": "Panel kök parolayı hâlâ saklıyor",
+      "body": "Güvenli bir yere kaydettikten sonra (ya da SSH anahtarıyla giriyorsanız) panelin kopyası unutulabilir.",
+      "action": "Kök parolaya git"
+    },
+    "SNAPSHOTS_OLD": {
+      "title": "{days} günden eski {n} anlık görüntü",
+      "body": "Eski anlık görüntüler diski yavaşlatır ve yer kaplar; yalnızca güvenlik için tutulan biri yedek olarak daha iyidir.",
+      "action": "Anlık görüntülere git"
+    }
+  },
+  "Away": {
+    "title": "Siz yokken",
+    "since": "Son \"Görüldü\" dediğinizden beri:",
+    "seen": "Görüldü",
+    "seenDone": "Görüldü olarak işaretlendi. Yenileri burada görünecek.",
+    "more": "Gelen kutusunda {n} tane daha",
+    "count": {
+      "failed": "{n} başarısız",
+      "billing": "Faturalarla ilgili {n}",
+      "support": "{n} talep yanıtı",
+      "done": "{n} tamamlandı"
+    },
+    "kind": {
+      "failed": "Başarısız",
+      "billing": "Fatura",
+      "support": "Talep yanıtı",
+      "done": "Tamamlandı"
+    }
+  },
+  "CopyValue": {
+    "copy": "Kopyala: {what}",
+    "copied": "{what} kopyalandı",
+    "invoiceNumber": "Fatura numarası",
+    "ticketNumber": "Talep numarası"
   }
 }

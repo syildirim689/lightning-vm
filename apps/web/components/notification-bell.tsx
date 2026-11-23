@@ -25,6 +25,23 @@ type Item = Text & { id: string; event: string; link: string | null; createdAt: 
 const kindIcons: Record<string, string> = { server: 'server', support: 'life-buoy', auth: 'shield-check', billing: 'wallet', admin: 'activity' };
 const kindOf = (n: Pick<Item, 'event'>) => { const k = n.event.split('.')[0]; return k in kindIcons ? k : 'other'; };
 
+// What the inbox needs to say the API's code names in words; shared with "while you were away" (components/away.tsx).
+export function useNotificationSay(): Say {
+  const t = useTranslations('Inbox');
+  const format = useFormatter();
+  const ts = useTranslations('Servers');
+  const tp = useTranslations('Support');
+  const { code } = useErrorText();
+  return {
+    operation: (k) => (ts.has(`kind.${k}` as 'kind.create') ? ts(`kind.${k}` as 'kind.create') : null),
+    failure: (c) => { const text = code(c); return text === c ? null : text; },
+    priority: (v) => (tp.has(`priority.${v}` as 'priority.high') ? tp(`priority.${v}` as 'priority.high') : null),
+    money: (amount, currency) => format.number(amount, { style: 'currency', currency }),
+    operationDone: (name, operation) => t('operationDone', { name, operation }),
+    operationFailed: (operation, reason) => t('operationFailed', { operation, reason }),
+  };
+}
+
 export default function NotificationBell() {
   const t = useTranslations('Inbox');
   const format = useFormatter();
@@ -36,17 +53,7 @@ export default function NotificationBell() {
   const q = useApiQuery<{ notifications: Item[]; unread: number }>(['notifications'], '/notifications', { refetchInterval: 120_000 });
   const locale = useLocale() === 'tr' ? 'tr' : 'en';
   // The API's texts, with what they carry as code names said in words (lib/notification-text.ts).
-  const ts = useTranslations('Servers');
-  const tp = useTranslations('Support');
-  const { code } = useErrorText();
-  const say: Say = {
-    operation: (k) => (ts.has(`kind.${k}` as 'kind.create') ? ts(`kind.${k}` as 'kind.create') : null),
-    failure: (c) => { const text = code(c); return text === c ? null : text; },
-    priority: (v) => (tp.has(`priority.${v}` as 'priority.high') ? tp(`priority.${v}` as 'priority.high') : null),
-    money: (amount, currency) => format.number(amount, { style: 'currency', currency }),
-    operationDone: (name, operation) => t('operationDone', { name, operation }),
-    operationFailed: (operation, reason) => t('operationFailed', { operation, reason }),
-  };
+  const say = useNotificationSay();
   const items = (q.data?.notifications ?? []).map((n) => { const text = { ...n, ...n.texts?.[locale] }; return { ...text, ...readableNotification(n.event, text, say) }; });
   const unread = q.data?.unread ?? 0;
   // Only the unread ones, and one kind; both reset when the inbox empties of them.

@@ -16,6 +16,16 @@ const docs: Docs = {
       en: '`measured`, `days` (days with CPU history in the last 14), `minDays`, `enough`, `anomalies` (`id`, `metric`: cpu or network, `direction`: high or low, `openedAt`, `lastSeen`, `detail`: `recent` or `value`, `usual`, `scale`, `z`, `baseline`, `days`, `outShare`, `hint`) and `hidden`.' },
     errors: ['NOT_FOUND'],
   },
+  'GET /servers/:id/hints': {
+    tag: 'servers',
+    summary: { tr: 'Sunucu sayfasının "sıradaki adım" önerilerini verir.', en: 'Returns the "what next" hints of a server\'s page.' },
+    details: { tr: 'Sunucunun gerçek durumundan hesaplanır: 30 günden yeni hazır yedek yok (yedek alınabilen bir konumda ve çağıran yedek alabiliyorsa; siparişten sonraki ilk gün söylenmez), güvenlik duvarı eklenebildiği hâlde hiçbiri bağlı değil, panel kök parolayı hâlâ saklıyor (ilk gün söylenmez), 30 günden eski anlık görüntüler. Yalnızca hazır ve çöp kutusunda olmayan sunucular için. Diskin doluluğu ve parolayla girişin açık olup olmadığı platformlardan okunamadığı için söylenmez. Çağıranın gizlediği öneriler (`PUT /insights/dismissals`, öneri anahtarıyla) listede yer almaz, yalnızca sayılır. Sunucuda hiçbir şey değiştirmez.',
+      en: 'Computed from the server\'s real state: no ready backup newer than 30 days (at a location that keeps backups, for a caller who may take one; not on the first day after the order), no firewall attached where one can be, the panel still keeping the root password (not on the first day), snapshots older than 30 days. Only for ready servers that are not in the trash. How full the disk is and whether password logins are on are not said: the platforms do not report them. Hints the caller hid (`PUT /insights/dismissals` with the hint\'s key) are not listed, only counted. Changes nothing on the server.' },
+    params: [serverId],
+    returns: { tr: '`hints` (`code`: NO_BACKUP, NO_FIREWALL, ROOT_PASSWORD_KEPT ya da SNAPSHOTS_OLD, `severity`, `key`, `params`, `action`: sayfanın bir bölümü `section` ya da bir sayfa `href`), `hidden` ve `snapshotDays`.',
+      en: '`hints` (`code`: NO_BACKUP, NO_FIREWALL, ROOT_PASSWORD_KEPT or SNAPSHOTS_OLD, `severity`, `key`, `params`, `action`: a part of the page `section` or a page `href`), `hidden` and `snapshotDays`.' },
+    errors: ['NOT_FOUND'],
+  },
   'GET /admin/anomalies': {
     tag: 'admin-servers',
     summary: { tr: 'Tüm sunuculardaki olağan dışı kullanım bulgularını listeler.', en: 'Lists the unusual-use findings of all servers.' },

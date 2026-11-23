@@ -89,7 +89,7 @@ export async function roomFor(req: AuthedRequest, limit: 'maxSshKeys' | 'maxFire
   const { rows: [r] } = await pool.query(countSql, [req.user.id]);
   return Math.max(0, max - r.n);
 }
-const allowedFor = async (req: AuthedRequest) => {
+export const allowedFor = async (req: AuthedRequest) => {
   const c = (await getSettings('servers')).customer;
   return can(req.user.permissions, 'servers.manage_all') ? Object.fromEntries(Object.keys(c).map((k) => [k, true]))
     : Object.fromEntries(Object.entries(c).map(([k, on]) => [k, on && can(req.user.permissions, actionPermission[k as keyof typeof c])]));

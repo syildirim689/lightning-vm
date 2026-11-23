@@ -21,6 +21,7 @@ import { ServerIso } from './server-iso';
 import { ServerHealth } from '../../components/smart';
 import { ServerAnomalies } from '../../components/anomalies';
 import { CloneServer, Copy, OrderSimilar, QuickConnect, RenameForm, RenameServer, ServerLabels } from './server-extras';
+import { ServerHints } from '../../components/server-hints';
 import { remember } from '../../lib/recent';
 import { useDocTitle } from '../../lib/title';
 import { PowerSchedules } from './server-schedules';
@@ -667,6 +668,7 @@ export function ServerDetail({ id }: { id: string }) {
     {s.errorCode && s.errorCode !== failure?.errorCode && <Notice tone="danger"><Failure code={s.errorCode} staff={seesCodes}/></Notice>}
     {failure && <FailedNotice op={failure} own={own} staff={seesCodes} retry={retry(failure)} ticket={ticketHref(failure)}/>}
     {!open && !failure && <JustFinished operations={operations}/>}
+    {!open && s.state === 'ready' && <ServerHints id={s.id}/>}
 
     {open && <Section title={t('detail.progress')}>
       <div className="flex flex-col gap-3">

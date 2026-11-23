@@ -222,12 +222,14 @@ export const snapshotAgeDays = 30;
 export function countOldSnapshots(snapshots: { name?: string; created?: string }[], now = Date.now(), days = snapshotAgeDays) {
   return snapshots.filter((s) => !String(s.name ?? '').startsWith('lightning-backup ') && now - Date.parse(String(s.created ?? '')) > days * 86_400_000).length;
 }
-async function oldSnapshots(userId: string): Promise<{ id: string; name: string; n: number }[]> {
+// serverId: one server only (its page's hints, server-hints.ts).
+export async function oldSnapshots(userId: string, serverId: string | null = null): Promise<{ id: string; name: string; n: number }[]> {
   const { rows } = await pool.query(`SELECT s.id, s.name, s.vm_moref, c.id AS connection, (SELECT o.id || ':' || o.status FROM operations o WHERE o.server_id = s.id ORDER BY o.created_at DESC LIMIT 1) AS latest
     FROM servers s JOIN resource_pools p ON p.id = s.pool_id JOIN vmware_connections c ON c.id = p.connection_id
     WHERE s.owner_id = $1 AND s.deleted_at IS NULL AND s.state IN ('ready', 'error') AND s.vm_moref IS NOT NULL AND c.status = 'ok'
       AND EXISTS (SELECT 1 FROM operations o WHERE o.server_id = s.id AND o.kind = 'snapshot_create' AND o.status = 'succeeded' AND o.created_at < now() - make_interval(days => $2))
-    ORDER BY s.name LIMIT 20`, [userId, snapshotAgeDays]);
+      AND ($3::uuid IS NULL OR s.id = $3)
+    ORDER BY s.name LIMIT 20`, [userId, snapshotAgeDays, serverId]);
   return Promise.all(rows.map(async (s) => {
     const key = `insight:snapshots:${s.id}:${s.vm_moref}:${s.latest}`;
     let list: { name?: string; created?: string }[] | null = null;
