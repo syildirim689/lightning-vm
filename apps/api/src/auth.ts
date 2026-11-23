@@ -215,7 +215,9 @@ const cookieNamed = (req: FastifyRequest, suffix: string) => {
   for (const part of (req.headers.cookie ?? '').split(';')) {
     const at = part.indexOf('=');
     const name = part.slice(0, at).trim();
-    if (at > 0 && (name === `lvm.${suffix}` || name === `__Secure-lvm.${suffix}`)) return { name, value: part.slice(at + 1).trim() };
+    // An emptied cookie (cleared by a later sign-in) counts as absent.
+    const value = part.slice(at + 1).trim();
+    if (at > 0 && value && (name === `lvm.${suffix}` || name === `__Secure-lvm.${suffix}`)) return { name, value };
   }
   return null;
 };

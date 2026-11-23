@@ -26,6 +26,11 @@ export function sessionEnd(s: {
   if (s.roleHours && s.roleHours > 0) ends.push({ at: s.createdAt + s.roleHours * hour, kind: 'fixed', why: 'role' });
   if (s.remembered) ends.push({ at: Math.max(s.createdAt, s.stayedAt ?? 0) + s.ttlHours * hour, kind: 'renewable', why: 'cookie' });
   ends.push({ at: s.expiresAt, kind: 'renewable', why: 'idle' });
-  // The earliest wins; at the same moment a fixed end is the one to tell (staying would not help).
-  return ends.reduce((a, b) => (b.at < a.at || (b.at === a.at && b.kind === 'fixed' && a.kind !== 'fixed') ? b : a));
+  // The earliest wins. Ends within a minute of it count as the same moment (the stored expiry and the row's creation
+  // time are written a few milliseconds apart): then a fixed end is the one to tell (staying would not help), and the
+  // cookie before the stored session (in the order listed above).
+  const first = Math.min(...ends.map((e) => e.at));
+  const near = ends.filter((e) => e.at - first < SAME_MOMENT_MS);
+  return { ...(near.find((e) => e.kind === 'fixed') ?? near[0]), at: first };
 }
+export const SAME_MOMENT_MS = 60_000;

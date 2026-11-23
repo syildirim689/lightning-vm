@@ -37,3 +37,10 @@ test('a "sign in as" session is not a directory session even for a directory acc
 test('a role limit longer than the cookie leaves the cookie as the end', () => {
   assert.deepEqual(sessionEnd({ ...base, roleHours: 24, expiresAt: 30 * h }), { at: 12 * h, kind: 'renewable', why: 'cookie' });
 });
+
+test('ends a few milliseconds apart are the same moment: the fixed one, else the cookie, is told', () => {
+  // The stored expiry is computed before the row's creation time is written.
+  assert.deepEqual(sessionEnd({ ...base, expiresAt: 12 * h - 4 }), { at: 12 * h - 4, kind: 'renewable', why: 'cookie' });
+  assert.deepEqual(sessionEnd({ ...base, directory: true, expiresAt: 12 * h - 4 }), { at: 12 * h - 4, kind: 'fixed', why: 'directory' });
+  assert.deepEqual(sessionEnd({ ...base, expiresAt: 12 * h - 120_000 }), { at: 12 * h - 120_000, kind: 'renewable', why: 'idle' }, 'two minutes apart are not');
+});
