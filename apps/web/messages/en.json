@@ -56,6 +56,10 @@
     "workerStale": "May be stuck (last signal {time})"
   },
   "errors": {
+    "UNTRANSLATED": "The panel refused this ({code}). Try again; if it keeps happening, send support this code and the time.",
+    "SERVER_STATUS": "The panel's server failed to answer properly (HTTP {status}). It may be restarting or updating: try again in a minute.",
+    "CLIENT_STATUS": "The request was refused (HTTP {status}). Reload the page and try again; if it keeps happening, tell support.",
+    "SESSION_FIXED": "This session ends at a fixed time and cannot be extended. Sign in again when it ends.",
     "NETWORK": "The server could not be reached. Check your network connection or reverse proxy.",
     "DEPENDENCY_UNAVAILABLE": "PostgreSQL or Redis is currently unreachable.",
     "NOT_FOUND": "The requested resource was not found.",
@@ -1326,6 +1330,18 @@
     }
   },
   "Order": {
+    "remembered": {
+      "title": "Filled in from your last server, {name}",
+      "body": "Taken over where still offered: {what}. Change anything below; nothing is ordered until you confirm.",
+      "fresh": "Start empty",
+      "what": {
+        "location": "location",
+        "image": "image",
+        "package": "package",
+        "size": "size",
+        "project": "project"
+      }
+    },
     "link": {
       "copy": "Copy link to this configuration",
       "copied": "Link copied.",
@@ -2193,7 +2209,8 @@
         "confirm": "Apply “{action}” to {n} servers?",
         "restore": "Take back {n}",
         "delete": "Delete",
-        "deleteConfirm": "Shut down {n} servers and hold them for deletion? Until the grace period ends you can take them back from the list.",
+        "deleteConfirm": "Shut down {n} servers and hold them for deletion? For {hours} hours you can take them back from the list; after that they and their disks are deleted for good.",
+        "deleteNoGrace": "Deleting several servers at once needs a deletion grace period, which is off here: delete them one by one from their pages.",
         "tags": "Tags",
         "tagsTitle": "Tags of {n} servers",
         "tagsKnown": "Tags you use",
@@ -2297,6 +2314,8 @@
       "removed": "Key \"{name}\" removed."
     },
     "admin": {
+      "empty": "No customer has a server yet. Servers appear here once one is ordered, or bring existing VMs in with the Import tab on this page.",
+      "emptyFiltered": "No server matches these filters. Clear the search or the filters to see all of them.",
       "eyebrow": "ADMIN · SERVERS",
       "title": "Servers and operations",
       "intro": "All servers, automation jobs, failed operations and reconciliation with VMware.",
@@ -2556,6 +2575,8 @@
     "moreTools": "More tools ({n})"
   },
   "Dashboard": {
+    "setupHealth": "Keep it healthy",
+    "setupHealthHelp": "Checked against the installation itself each time this page opens. Each item links to where it is fixed.",
     "eyebrow": "ADMINISTRATION",
     "title": "Overview",
     "intro": "Servers, sellable capacity, operations and connections at a glance.",
@@ -2564,6 +2585,29 @@
     "gettingStarted": "Getting started",
     "gettingStartedHelp": "Complete these steps before customers can create servers.",
     "steps": {
+      "mailDelivers": "Make mail go out again",
+      "backupSchedule": "Schedule backups",
+      "monitoring": "Turn on monitoring",
+      "updates": "Keep the panel up to date",
+      "payments": "Turn on a payment method",
+      "staffTwoFactor": "Two-factor for every staff account",
+      "hide": "Hide until something changes",
+      "reopened": "Back because something changed: {steps}",
+      "basis": "Read from this installation's own state (settings, host agent files, the last mail sent); nothing leaves the panel.",
+      "group": {
+        "start": "Before customers can order",
+        "health": "Keeps it healthy"
+      },
+      "detail": {
+        "mailDelivers": "The last message failed {when}",
+        "mailDeliversWhy": "The last message failed {when}: {reason}",
+        "backupSchedule": "Backup schedule: {schedule, select, off {off (no timer on the host)} daily {every day} weekly {every week} other {{schedule}}}",
+        "monitoring": "Monitoring is {state, select, partial {only partly up} other {off}}",
+        "updatesWaiting": "{latest} is waiting on the {channel} channel; automatic updates are off",
+        "updatesAuto": "Automatic updates are off ({channel} channel)",
+        "payments": "Billing is on but no payment method is active",
+        "staffTwoFactor": "{n, plural, one {# staff account signs in} other {# staff accounts sign in}} without two-factor"
+      },
       "connection": "Connect vCenter",
       "pool": "Create a resource pool",
       "image": "Add an OS template",
@@ -3521,6 +3565,7 @@
     "columnOff": "{channel} turned off for {n, plural, one {# notification} other {# notifications}}"
   },
   "Users": {
+    "emptyAll": "No accounts yet besides the setup. Invite people from here with “New user”, or open registration in Settings → Security.",
     "eyebrow": "People",
     "title": "Users",
     "intro": "Accounts, roles, personal permissions, sessions and security status.",
@@ -6049,7 +6094,8 @@
     "cancel": "Cancel",
     "started": "Started; follow it in the task list.",
     "revertTitle": "Go back to “{name}”?",
-    "revertBody": "Everything written to the disks after this snapshot is lost. The server restarts if it was running.",
+    "revertBody": "Everything written to the disks of {server} since {when} is lost: files, databases and settings changed after this snapshot. The snapshot itself stays. The server restarts if it was running. This cannot be undone.",
+    "revertConfirm": "Type {name} to confirm",
     "revertYes": "Yes, go back",
     "removeTitle": "Remove “{name}”?",
     "removeBody": "The restore point is merged into the disks; the server keeps running and its data stays as it is now.",
@@ -8501,6 +8547,9 @@
     "topUp": "Top up"
   },
   "Connection": {
+    "retryIn": "Trying again in {s} s. Lists are paused meanwhile; what you typed stays.",
+    "checking": "Checking…",
+    "tryNow": "Try now",
     "lost": "Connection lost",
     "lostHelp": "The panel refreshes itself once the internet is back; actions cannot be sent until then.",
     "back": "Back online; the page is up to date.",
@@ -8904,6 +8953,17 @@
     }
   },
   "Formats": {
+    "sshInfo": "{type} key, {bits} bits",
+    "sshInfoComment": "{type} key, {bits} bits · {comment}",
+    "pasteTidied": "The pasted text was put on one line (line breaks became commas, a broken key was joined). Check it before saving.",
+    "sshProblem": {
+      "private": "This is a PRIVATE key. Never paste it anywhere: paste the public key instead (the .pub file, e.g. ~/.ssh/id_ed25519.pub).",
+      "putty": "This is a PuTTY key file. In PuTTYgen, copy the text under “Public key for pasting into OpenSSH authorized_keys file”.",
+      "ssh2": "This key is in the SSH2 (RFC 4716) form. Paste it again and the panel turns it into the one-line OpenSSH form, or use ssh-keygen -i -f key.pub.",
+      "sk": "Keys for a hardware security key (sk-…) are not accepted here. Use an ed25519 key: ssh-keygen -t ed25519.",
+      "dss": "DSA (ssh-dss) keys are too weak and not accepted. Create an ed25519 key: ssh-keygen -t ed25519.",
+      "mismatch": "This key is damaged or cut short: its type does not match its content. Copy the whole line again."
+    },
     "example": "e.g. {example}",
     "invalid": "This is not a valid {kind}. Example: {example}",
     "invalidItem": "\"{value}\" is not a valid {kind}. Example: {example}",
@@ -9810,6 +9870,41 @@
       "others": "+{n} more hosts",
       "othersLine": "{n, plural, one {# more host} other {# more hosts}}: {w} W",
       "day": "The last 24 hours"
+    }
+  },
+  "Eta": {
+    "usual": "Usually about {time}",
+    "late": "Taking longer than usual (usually about {time})",
+    "basis": "Median of the last {n} successful “{kind}” operations on this panel, {sized, select, true {for disks of this size} other {all disk sizes}}",
+    "under": "under a minute",
+    "minutes": "{n, plural, one {# minute} other {# minutes}}",
+    "hours": "{n, plural, one {# hour} other {# hours}}",
+    "elapsed": "Started {time} ago",
+    "finished": "{kind} finished in {time}."
+  },
+  "Undo": {
+    "undo": "Undo",
+    "undone": "Brought back. Nothing was removed.",
+    "failed": "Could not remove it: {reason}",
+    "sshKey": "SSH key {name} removed. Servers that already have it keep it.",
+    "removeNamed": "Delete {name}",
+    "project": "Project {name} removed.",
+    "schedule": "Schedule removed.",
+    "detached": "{server} is no longer protected by this firewall.",
+    "canned": "Saved reply {name} removed."
+  },
+  "SessionClock": {
+    "title": "Your session ends in {left} (at {at})",
+    "stay": "Stay signed in",
+    "later": "Not now",
+    "ok": "Got it",
+    "stayed": "You stay signed in until {at} at least.",
+    "why": {
+      "cookie": "Sessions last a fixed time after signing in. Anything you have not saved is kept on screen if it runs out.",
+      "idle": "The session ends after a long time without use. Anything you have not saved is kept on screen if it runs out.",
+      "impersonation": "Signing in as someone else lasts one hour. Save what you are doing; then sign in as them again if needed.",
+      "directory": "Accounts from the company directory or single sign-on sign in again regularly, so the directory is asked again. Save what you are doing.",
+      "role": "Your role allows sessions of a limited length, set by the administrator. Save what you are doing; you can sign in again afterwards."
     }
   }
 }

@@ -32,6 +32,8 @@ export const contentKeys: { local: Keys; session: Keys } = {
 };
 export const preferenceKeys: readonly string[] = [
   'lvm-a11y', 'theme', 'lvm-nav-open', 'lvm-server-view', 'lvm.terminalFont', 'lvm.snippetOs', 'lvm-first-steps-hidden', 'lvm-announcement-closed',
+  // The admin's setup checklist put away with these steps still open (lib/setup-checklist.ts): which steps, not whose.
+  'lvm-setup-hidden',
   // Read by the sign-in form before there is a session: which second step was used last.
   'lvm-2fa-method',
   // The live walls' look, tour and keeping the screen on (components/wall/hooks.ts): how this screen shows a wall.

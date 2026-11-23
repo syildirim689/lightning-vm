@@ -56,6 +56,10 @@
     "workerStale": "Yanıt vermiyor olabilir (son sinyal {time})"
   },
   "errors": {
+    "UNTRANSLATED": "Panel bunu reddetti ({code}). Yeniden deneyin; sürerse bu kodu ve saati desteğe iletin.",
+    "SERVER_STATUS": "Panel sunucusu düzgün yanıt veremedi (HTTP {status}). Yeniden başlıyor ya da güncelleniyor olabilir: bir dakika sonra yeniden deneyin.",
+    "CLIENT_STATUS": "İstek reddedildi (HTTP {status}). Sayfayı yenileyip yeniden deneyin; sürerse desteğe bildirin.",
+    "SESSION_FIXED": "Bu oturum sabit bir saatte biter ve uzatılamaz. Bitince yeniden giriş yapın.",
     "NETWORK": "Sunucuya ulaşılamadı. Ağ bağlantınızı veya ters proxy'yi kontrol edin.",
     "DEPENDENCY_UNAVAILABLE": "PostgreSQL veya Redis şu anda erişilemiyor.",
     "NOT_FOUND": "İstenen kaynak bulunamadı.",
@@ -1326,6 +1330,18 @@
     }
   },
   "Order": {
+    "remembered": {
+      "title": "Son sunucunuz {name} esas alınarak dolduruldu",
+      "body": "Hâlâ sunulanlar alındı: {what}. Aşağıda istediğinizi değiştirin; siz onaylamadan sipariş verilmez.",
+      "fresh": "Boş başla",
+      "what": {
+        "location": "konum",
+        "image": "imaj",
+        "package": "paket",
+        "size": "boyut",
+        "project": "proje"
+      }
+    },
     "link": {
       "copy": "Bu yapılandırmanın bağlantısını kopyala",
       "copied": "Bağlantı kopyalandı.",
@@ -2193,7 +2209,8 @@
         "confirm": "{n} sunucuya “{action}” uygulansın mı?",
         "restore": "{n} sunucuyu geri al",
         "delete": "Sil",
-        "deleteConfirm": "{n} sunucu kapatılıp silinmek üzere bekletilsin mi? Geri alma süresi bitene kadar listeden geri alabilirsiniz.",
+        "deleteConfirm": "{n} sunucu kapatılıp silinmek üzere bekletilsin mi? {hours} saat boyunca listeden geri alabilirsiniz; sonra sunucular ve diskleri kalıcı olarak silinir.",
+        "deleteNoGrace": "Birden çok sunucuyu birlikte silmek için silme bekleme süresi gerekir ve burada kapalı: sunucuları kendi sayfalarından tek tek silin.",
         "tags": "Etiket",
         "tagsTitle": "{n} sunucunun etiketleri",
         "tagsKnown": "Kullandığınız etiketler",
@@ -2297,6 +2314,8 @@
       "removed": "\"{name}\" anahtarı silindi."
     },
     "admin": {
+      "empty": "Henüz hiçbir müşterinin sunucusu yok. Sunucular sipariş verilince burada görünür; var olan sanal makineleri bu sayfadaki İçe aktar sekmesiyle alabilirsiniz.",
+      "emptyFiltered": "Bu süzgeçlere uyan sunucu yok. Hepsini görmek için aramayı ya da süzgeçleri temizleyin.",
       "eyebrow": "YÖNETİM · SUNUCULAR",
       "title": "Sunucular ve işlemler",
       "intro": "Tüm sunucular, otomasyon işleri, başarısız işlemler ve VMware ile uzlaştırma.",
@@ -2556,6 +2575,8 @@
     "moreTools": "Diğer araçlar ({n})"
   },
   "Dashboard": {
+    "setupHealth": "Sağlıklı tutun",
+    "setupHealthHelp": "Bu sayfa her açıldığında kurulumun kendisine bakılarak denetlenir. Her madde düzeltileceği yere götürür.",
     "eyebrow": "YÖNETİM",
     "title": "Genel bakış",
     "intro": "Sunucular, satılabilir kapasite, işlemler ve bağlantılar tek bakışta.",
@@ -2564,6 +2585,29 @@
     "gettingStarted": "Başlarken",
     "gettingStartedHelp": "Müşterilerin sunucu oluşturabilmesi için bu adımları tamamlayın.",
     "steps": {
+      "mailDelivers": "E-postanın yeniden gitmesini sağlayın",
+      "backupSchedule": "Yedekleri zamanlayın",
+      "monitoring": "İzlemeyi açın",
+      "updates": "Paneli güncel tutun",
+      "payments": "Bir ödeme yöntemi açın",
+      "staffTwoFactor": "Her personel hesabında iki adımlı doğrulama",
+      "hide": "Bir şey değişene kadar gizle",
+      "reopened": "Bir şey değiştiği için yeniden gösteriliyor: {steps}",
+      "basis": "Bu kurulumun kendi durumundan okunur (ayarlar, sunucu ajanının dosyaları, son gönderilen e-posta); panelden hiçbir şey çıkmaz.",
+      "group": {
+        "start": "Müşteriler sipariş vermeden önce",
+        "health": "Sağlıklı tutar"
+      },
+      "detail": {
+        "mailDelivers": "Son ileti {when} gönderilemedi",
+        "mailDeliversWhy": "Son ileti {when} gönderilemedi: {reason}",
+        "backupSchedule": "Yedek zamanlaması: {schedule, select, off {kapalı (sunucuda zamanlayıcı yok)} daily {günlük} weekly {haftalık} other {{schedule}}}",
+        "monitoring": "İzleme {state, select, partial {yalnızca kısmen çalışıyor} other {kapalı}}",
+        "updatesWaiting": "{channel} kanalında {latest} bekliyor; otomatik güncelleme kapalı",
+        "updatesAuto": "Otomatik güncelleme kapalı ({channel} kanalı)",
+        "payments": "Faturalama açık ama etkin bir ödeme yöntemi yok",
+        "staffTwoFactor": "{n} personel hesabı iki adımlı doğrulama olmadan giriş yapıyor"
+      },
       "connection": "vCenter bağlayın",
       "pool": "Kaynak havuzu oluşturun",
       "image": "İşletim sistemi şablonu ekleyin",
@@ -3521,6 +3565,7 @@
     "columnOff": "{channel}, {n, plural, one {# bildirim} other {# bildirim}} için kapatıldı"
   },
   "Users": {
+    "emptyAll": "Kurulum dışında henüz hesap yok. Buradan “Yeni kullanıcı” ile kişi ekleyin ya da Ayarlar → Güvenlik'ten kaydı açın.",
     "eyebrow": "Kişiler",
     "title": "Kullanıcılar",
     "intro": "Hesaplar, roller, kişiye özel izinler, oturumlar ve güvenlik durumu.",
@@ -6049,7 +6094,8 @@
     "cancel": "Vazgeç",
     "started": "Başlatıldı; görev listesinden izleyebilirsiniz.",
     "revertTitle": "“{name}” noktasına dönülsün mü?",
-    "revertBody": "Bu anlık görüntüden sonra disklere yazılan her şey kaybolur. Sunucu açıksa yeniden başlatılır.",
+    "revertBody": "{server} disklerine {when} tarihinden bu yana yazılan her şey kaybolur: bu anlık görüntüden sonra değişen dosyalar, veritabanları ve ayarlar. Anlık görüntünün kendisi kalır. Sunucu açıksa yeniden başlatılır. Bu geri alınamaz.",
+    "revertConfirm": "Onaylamak için {name} yazın",
     "revertYes": "Evet, geri dön",
     "removeTitle": "“{name}” kaldırılsın mı?",
     "removeBody": "Geri dönüş noktası disklere birleştirilir; sunucu çalışmaya devam eder ve veriler şu anki haliyle kalır.",
@@ -8501,6 +8547,9 @@
     "topUp": "Bakiye yükle"
   },
   "Connection": {
+    "retryIn": "{s} sn sonra yeniden denenecek. Bu arada listeler duraklatıldı; yazdıklarınız yerinde kalır.",
+    "checking": "Denetleniyor…",
+    "tryNow": "Şimdi dene",
     "lost": "Bağlantı kesildi",
     "lostHelp": "İnternet geri gelince panel kendini güncelleyecek; bu arada yapılan işlemler gönderilemez.",
     "back": "Bağlantı geri geldi; sayfa güncellendi.",
@@ -8904,6 +8953,17 @@
     }
   },
   "Formats": {
+    "sshInfo": "{type} anahtarı, {bits} bit",
+    "sshInfoComment": "{type} anahtarı, {bits} bit · {comment}",
+    "pasteTidied": "Yapıştırılan metin tek satıra getirildi (satır sonları virgül oldu, bölünmüş anahtar birleştirildi). Kaydetmeden önce denetleyin.",
+    "sshProblem": {
+      "private": "Bu bir ÖZEL anahtar. Hiçbir yere yapıştırmayın: onun yerine açık anahtarı yapıştırın (.pub dosyası, ör. ~/.ssh/id_ed25519.pub).",
+      "putty": "Bu bir PuTTY anahtar dosyası. PuTTYgen'de “Public key for pasting into OpenSSH authorized_keys file” altındaki metni kopyalayın.",
+      "ssh2": "Bu anahtar SSH2 (RFC 4716) biçiminde. Yeniden yapıştırın, panel tek satırlık OpenSSH biçimine çevirir; ya da ssh-keygen -i -f key.pub kullanın.",
+      "sk": "Donanım güvenlik anahtarı anahtarları (sk-…) burada kabul edilmez. Bir ed25519 anahtarı kullanın: ssh-keygen -t ed25519.",
+      "dss": "DSA (ssh-dss) anahtarları zayıftır ve kabul edilmez. Bir ed25519 anahtarı oluşturun: ssh-keygen -t ed25519.",
+      "mismatch": "Bu anahtar bozuk ya da eksik kopyalanmış: türü içeriğiyle uyuşmuyor. Satırın tamamını yeniden kopyalayın."
+    },
     "example": "örn. {example}",
     "invalid": "Geçerli bir {kind} değil. Örnek: {example}",
     "invalidItem": "\"{value}\" geçerli bir {kind} değil. Örnek: {example}",
@@ -9810,6 +9870,41 @@
       "others": "+{n} host daha",
       "othersLine": "{n, plural, other {# host daha}}: {w} W",
       "day": "Son 24 saat"
+    }
+  },
+  "Eta": {
+    "usual": "Genellikle yaklaşık {time}",
+    "late": "Her zamankinden uzun sürüyor (genellikle yaklaşık {time})",
+    "basis": "Bu paneldeki son {n} başarılı “{kind}” işleminin ortancası, {sized, select, true {bu boyuttaki diskler için} other {tüm disk boyutları}}",
+    "under": "bir dakikadan az",
+    "minutes": "{n} dakika",
+    "hours": "{n} saat",
+    "elapsed": "{time} önce başladı",
+    "finished": "{kind} {time} içinde bitti."
+  },
+  "Undo": {
+    "undo": "Geri al",
+    "undone": "Geri getirildi. Hiçbir şey silinmedi.",
+    "failed": "Kaldırılamadı: {reason}",
+    "sshKey": "{name} SSH anahtarı kaldırıldı. Onu almış sunucularda kalır.",
+    "removeNamed": "{name} öğesini sil",
+    "project": "{name} projesi kaldırıldı.",
+    "schedule": "Zamanlama kaldırıldı.",
+    "detached": "{server} artık bu güvenlik duvarıyla korunmuyor.",
+    "canned": "{name} hazır yanıtı kaldırıldı."
+  },
+  "SessionClock": {
+    "title": "Oturumunuz {left} sonra bitiyor (saat {at})",
+    "stay": "Oturumu açık tut",
+    "later": "Şimdi değil",
+    "ok": "Anladım",
+    "stayed": "Oturumunuz en az {at} saatine kadar açık.",
+    "why": {
+      "cookie": "Oturumlar girişten sonra belirli bir süre açık kalır. Süre dolarsa kaydetmediğiniz şeyler ekranda kalır.",
+      "idle": "Oturum uzun süre kullanılmazsa biter. Süre dolarsa kaydetmediğiniz şeyler ekranda kalır.",
+      "impersonation": "Başkasının hesabına girmek bir saat sürer. Yaptığınızı kaydedin; gerekirse sonra yeniden girin.",
+      "directory": "Şirket dizini ya da tek oturum açma hesapları, dizine yeniden sorulsun diye düzenli olarak yeniden giriş yapar. Yaptığınızı kaydedin.",
+      "role": "Rolünüzün oturum süresi yönetici tarafından sınırlandı. Yaptığınızı kaydedin; ardından yeniden giriş yapabilirsiniz."
     }
   }
 }

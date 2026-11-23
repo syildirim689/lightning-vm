@@ -60,7 +60,7 @@ export function LocationPicker({ locations, pools, poolId, onPool }: { locations
             {closed && <StatusChip tone="warning">{t('maintenance')}</StatusChip>}
             {g.pools.some((x) => x.ipv6) && <StatusChip tone="default">IPv6</StatusChip>}
             {l?.testIp && <StatusChip tone="default">{t('testIp', { ip: l.testIp })}</StatusChip>}
-            {l?.pingUrl && <Button size="sm" variant="ghost" className="relative z-10 h-7 px-2" isDisabled={p === 'busy'} onPress={() => test(l)}>
+            {l?.pingUrl && <Button size="sm" variant="ghost" className="hit-44 relative z-10 h-7 px-2" isDisabled={p === 'busy'} onPress={() => test(l)}>
               <I name="activity" size={13}/>{p === 'busy' ? t('measuring') : typeof p === 'number' ? t('latency', { ms: p }) : p === null ? t('unreachable') : t('measure')}</Button>}
             {l?.lookingGlassUrl && <a href={l.lookingGlassUrl} target="_blank" rel="noreferrer noopener" className="relative z-10 inline-flex items-center gap-1 text-xs text-accent hover:underline">
               {t('lookingGlass')}<I name="external-link" size={11}/></a>}

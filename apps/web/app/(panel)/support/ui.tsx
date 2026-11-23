@@ -137,7 +137,7 @@ export function Composer({ ticketId, staff, closed, onSent, vars, onWriting }: {
     </div>
     <AnimatePresence>{files.length > 0 && <motion.ul initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex flex-wrap gap-2">
       {files.map((f, i) => <li key={i} className="inline-flex max-w-full items-center gap-1 rounded-lg bg-default px-2 py-1 text-xs"><span className="truncate">{f.name}</span>
-        <button type="button" aria-label={t('removeFile', { name: f.name })} onClick={() => setFiles(files.filter((_, j) => j !== i))} className="grid size-5 place-items-center rounded hover:bg-default-foreground/10"><I name="x" size={12}/></button></li>)}
+        <button type="button" aria-label={t('removeFile', { name: f.name })} onClick={() => setFiles(files.filter((_, j) => j !== i))} className="hit-44 grid size-5 place-items-center rounded hover:bg-default-foreground/10"><I name="x" size={12}/></button></li>)}
     </motion.ul>}</AnimatePresence>
     {fieldErr && <p className="text-xs text-danger">{field(fieldErr)}</p>}
     <div className="flex flex-wrap items-center justify-between gap-2">

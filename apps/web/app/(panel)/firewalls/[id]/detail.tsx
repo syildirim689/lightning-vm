@@ -17,6 +17,7 @@ import { supports, usePlatformHint, type Platformed } from '../../../../componen
 import { useUnsaved } from '../../../../lib/unsaved';
 import { anywhere, covers, hasPort, openDbPorts, protocols, quick, statusTone, type Firewall, type Limits, type Rule } from '../model';
 import { ruleName } from '../../../../lib/proposals';
+import { useUndoableRemove } from '../../../../components/undo';
 
 type Detail = Firewall & { limits: Limits };
 const ipsText = (ips: string[]) => ips.join(', ');
@@ -187,11 +188,15 @@ function Servers({ firewall, onChanged }: { firewall: Detail; onChanged: () => v
     setBusy(true);
     try { await apiFetch(path, { method, body }); onChanged(); setPick([]); } catch (e) { toast.danger(error(e)); } finally { setBusy(false); }
   };
+  // Detaching waits a few seconds behind Undo (components/undo.tsx): the server keeps its rules until the message goes.
+  const tu = useTranslations('Undo');
+  const { hidden, remove } = useUndoableRemove();
+  const servers = firewall.servers.filter((s) => !hidden.has(`firewall:${firewall.id}:${s.id}`));
   const failed = firewall.servers.some((s) => s.status === 'failed');
   return <Section title={t('servers')} description={t('serversHelp', { n: firewall.limits.firewallsPerServer })}
     actions={failed && <Button size="sm" variant="secondary" isPending={busy} onPress={() => call(`/firewalls/${firewall.id}/apply`, 'POST')}><I name="rotate-ccw" size={14}/>{t('reapply')}</Button>}>
     <div className="flex flex-col gap-4">
-      <DataTable label={t('servers')} minWidth={560} rows={firewall.servers} rowKey={(s) => s.id} empty={t('noServers')}
+      <DataTable label={t('servers')} minWidth={560} rows={servers} rowKey={(s) => s.id} empty={t('noServers')}
         columns={[{ id: 'name', label: t('server') }, { id: 'ip', label: 'IP' }, { id: 'status', label: t('state') }, { id: 'act', label: '' }]}
         cells={(s) => [
           <NextLink key="n" href={`/servers/${s.id}`} className="font-medium hover:underline">{s.name}</NextLink>,
@@ -201,7 +206,9 @@ function Servers({ firewall, onChanged }: { firewall: Detail; onChanged: () => v
             {s.status === 'failed' && s.errorCode && <span className="text-xs text-danger">{error({ code: s.errorCode })}</span>}
             {s.status === 'applied' && s.appliedAt && <span className="text-xs text-muted"><Ago at={s.appliedAt}/></span>}
           </div>,
-          <Button key="a" size="sm" variant="ghost" isDisabled={busy} onPress={() => call(`/firewalls/${firewall.id}/servers/${s.id}`, 'DELETE')}><I name="unlink" size={14}/>{t('detach')}</Button>,
+          <Button key="a" size="sm" variant="ghost" isDisabled={busy} className="min-h-11 sm:min-h-9" aria-label={`${t('detach')}: ${s.name}`}
+            onPress={() => remove({ id: `firewall:${firewall.id}:${s.id}`, text: tu('detached', { server: s.name }),
+              commit: ({ keepalive }) => apiFetch(`/firewalls/${firewall.id}/servers/${s.id}`, { method: 'DELETE', keepalive }), done: onChanged })}><I name="unlink" size={14}/>{t('detach')}</Button>,
         ]}/>
       {candidates.length > 0 && <div className="flex flex-col gap-3 rounded-xl border border-border p-3">
         <CheckboxList label={t('applyTo')} value={pick} onChange={setPick} options={candidates.map((s) => ({ id: s.id, label: supports(s, 'firewall') ? s.name : `${s.name} · ${hint}`, isDisabled: !supports(s, 'firewall') }))}/>

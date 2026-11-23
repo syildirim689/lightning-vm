@@ -29,6 +29,9 @@ import { ServerSnapshots } from './server-snapshots';
 import { ServerReinstall, ServerResize } from './server-change';
 import { useBytes } from '../../lib/units';
 import { latestFailure, nextStep } from '../../lib/next-step';
+import { EtaLine, useSpoken } from '../../components/eta';
+import { ETA_KINDS } from '../../lib/eta';
+import { useUndoableRemove } from '../../components/undo';
 // The charts (and their library) load with the server page's lower part, not with the server list.
 const ServerMetrics = dynamic(() => import('./metrics'), { ssr: false });
 const ServerTraffic = dynamic(() => import('./server-traffic').then((m) => m.ServerTraffic), { ssr: false });
@@ -44,7 +47,7 @@ import { can, isStaff } from '../../lib/permissions';
 import { noteLine } from '../../lib/note-line';
 import { ServerFilters, ServerTotals, useServerFilters } from './server-filters';
 import { flag } from '../../lib/flag';
-import { Ago, ButtonLink, CheckboxInput, ConfirmButton, DataTable, Empty, LoadFailed, Mono, Notice, PageHeader, Section, StatusChip, TextInput, type Tone, Loading } from '../../components/ui';
+import { Ago, ButtonLink, CheckboxInput, ConfirmButton, DataTable, Empty, LoadFailed, Mono, Notice, PageHeader, Section, StatusChip, TextInput, type Tone, Loading, returnFocus } from '../../components/ui';
 import { SectionNav } from '../../components/section-nav';
 import { ConnectCheck } from './connect-check';
 
@@ -95,16 +98,22 @@ export function SshKeys() {
   const proposal = keysQ.data ? sshKeyName(f.values.publicKey, fingerprint, keys.map((k) => k.name)) ?? '' : undefined;
   const { proposed, again } = useProposal(proposal, f.values.name, f.set('name'));
   const gh = useApiForm({ username: '' });
-  const remove = useApiAction((id: string) => apiFetch(`/ssh-keys/${id}`, { method: 'DELETE' }), { invalidate: [['ssh-keys']] });
+  // Removing a key changes nothing on servers that have it already (it is only left out of new orders): it waits a
+  // few seconds behind Undo instead of asking first (components/undo.tsx).
+  const tu = useTranslations('Undo');
+  const { hidden, remove } = useUndoableRemove();
+  const shown = keys.filter((k) => !hidden.has(`ssh-key:${k.id}`));
   return <Section title={t('keys.title')} description={t('keys.explain')}>
     <div className="flex flex-col gap-5">
-      {keys.length > 0 && <ul ref={listRef} className="flex flex-col divide-y divide-separator rounded-lg border border-border">
-        {keys.map((k) => <li key={k.id} className="flex flex-wrap items-center gap-3 px-3 py-2.5">
+      {shown.length > 0 && <ul ref={listRef} className="flex flex-col divide-y divide-separator rounded-lg border border-border">
+        {shown.map((k) => <li key={k.id} className="flex flex-wrap items-center gap-3 px-3 py-2.5">
           <I name="key-round" size={16} className="text-muted"/>
           <span className="font-medium">{k.name}</span>
           <span className="min-w-0 flex-1 truncate font-mono text-xs text-muted">{k.fingerprint}</span>
-          <ConfirmButton size="sm" variant="ghost" icon={<I name="trash-2" size={15}/>} label={t('keys.remove')} title={t('keys.removeTitle', { name: k.name })} body={t('keys.removeBody')}
-            confirmLabel={t('keys.remove')} cancelLabel={t('confirm.no')} onConfirm={() => remove.mutateAsync(k.id).then(() => { toast.success(t('keys.removed', { name: k.name })); })}/>
+          <Button size="sm" variant="ghost" className="min-h-11 sm:min-h-9" aria-label={tu('removeNamed', { name: k.name })}
+            onPress={() => remove({ id: `ssh-key:${k.id}`, text: tu('sshKey', { name: k.name }),
+              commit: ({ keepalive }) => apiFetch(`/ssh-keys/${k.id}`, { method: 'DELETE', keepalive }), done: () => client.invalidateQueries({ queryKey: ['ssh-keys'] }) })}>
+            <I name="trash-2" size={15}/>{t('keys.remove')}</Button>
         </li>)}
       </ul>}
       <form className="grid gap-4 md:grid-cols-[minmax(0,14rem)_minmax(0,1fr)_auto] md:items-start" noValidate
@@ -256,6 +265,9 @@ function BulkBar({ servers, known, onDone }: { servers: Server[]; known: string[
     { invalidate: [['servers'], ['tasks'], ['insights']], success: (r) => (r.tag ? t('list.select.tagDone', { n: r.started }) : t('list.select.bulkDone', { started: r.started, skipped: r.skipped })) });
   const act = (action: string) => run.mutateAsync({ action }).then(onDone, () => undefined);
   const label = (a: string) => t(`action.${a as 'power_on'}`);
+  // Deleting several at once only goes through the admin's grace period (the API refuses it without one): the
+  // confirmation names the hours, and without a grace period the button is not offered at all.
+  const grace = useApiQuery<ServerPage>(['servers', ids[0]], ids[0] ? `/servers/${ids[0]}` : null).data?.deleteGraceHours;
   const copy = useCopy();
   const bar = useRef<HTMLDivElement>(null);
   const [height, setHeight] = useState(0);
@@ -285,8 +297,9 @@ function BulkBar({ servers, known, onDone }: { servers: Server[]; known: string[
     }}><I name="square-terminal" size={15}/>{t('list.select.copySsh')}</Button>}
     <BulkTags servers={servers} known={known} busy={run.isPending} onTag={(action, tag) => run.mutateAsync({ action, tag }).catch(() => undefined)}/>
     {waiting > 0 && <Button size="sm" variant="secondary" isPending={run.isPending} onPress={() => act('restore')}><I name="undo-2" size={15}/>{t('list.select.restore', { n: waiting })}</Button>}
-    {waiting < servers.length && <ConfirmButton size="sm" variant="danger-soft" isDisabled={run.isPending} icon={<I name="trash-2" size={15}/>} label={t('list.select.delete')}
-      title={t('list.select.delete')} body={t('list.select.deleteConfirm', { n: servers.length - waiting })} confirmLabel={t('list.select.delete')} cancelLabel={t('confirm.no')} onConfirm={() => act('delete')}/>}
+    {waiting < servers.length && !!grace && grace > 0 && <ConfirmButton size="sm" variant="danger-soft" isDisabled={run.isPending} icon={<I name="trash-2" size={15}/>} label={t('list.select.delete')}
+      title={t('list.select.delete')} body={t('list.select.deleteConfirm', { n: servers.length - waiting, hours: grace })} confirmLabel={t('list.select.delete')} cancelLabel={t('confirm.no')} onConfirm={() => act('delete')}/>}
+    {waiting < servers.length && grace === 0 && <span className="text-xs text-muted">{t('list.select.deleteNoGrace')}</span>}
   </motion.div></>;
 }
 
@@ -317,7 +330,7 @@ function BulkTags({ servers, known, busy, onTag }: { servers: Server[]; known: s
           <ul className="flex flex-wrap gap-1.5">{on.map((x) => <li key={x} className="flex min-h-8 items-center gap-1 rounded-full bg-accent-soft py-0.5 pl-2.5 pr-1 text-xs text-accent-soft-foreground">
             {x}{!everywhere(x) && <span className="text-[10px] opacity-70">{t('list.select.tagSome')}</span>}
             <button type="button" disabled={busy} onClick={() => void onTag('untag', x).then(() => form.current?.querySelector('input')?.focus())} aria-label={t('list.select.tagRemove', { tag: x })}
-              className="grid size-6 place-items-center rounded-full hover:bg-accent/20 focus-visible:outline-2 focus-visible:outline-accent disabled:opacity-50"><I name="x" size={12}/></button></li>)}</ul></div>}
+              className="hit-44 grid size-6 place-items-center rounded-full hover:bg-accent/20 focus-visible:outline-2 focus-visible:outline-accent disabled:opacity-50"><I name="x" size={12}/></button></li>)}</ul></div>}
       </Popover.Dialog>
     </Popover.Content>
   </Popover>;
@@ -333,6 +346,9 @@ function QuickMenu({ s, className }: { s: Server; className: string }) {
   const copy = useCopy();
   const lock = useServerLock(s.id, !!s.locked);
   const [dialog, setDialog] = useState<'rename' | 'delete' | null>(null);
+  // The menu item that opened a dialog is gone by the time it closes: focus goes back to the menu's button.
+  const opener = useRef<HTMLButtonElement>(null);
+  const closeDialog = () => { setDialog(null); returnFocus(opener.current); };
   const ready = s.state === 'ready' && !s.deleteAt;
   const start = useApiAction(() => apiFetch(`/servers/${s.id}/actions`, { method: 'POST', body: { action: 'power_on' }, headers: { 'idempotency-key': crypto.randomUUID() } }),
     { invalidate: [['servers'], ['tasks']], success: t('list.quick.started', { name: s.name }) });
@@ -345,7 +361,7 @@ function QuickMenu({ s, className }: { s: Server; className: string }) {
     else if (k === 'lock') void lock.flip();
   };
   return <><Dropdown>
-    <Button isIconOnly size="sm" variant="ghost" aria-label={t('list.quick.label', { name: s.name })} className={`min-h-9 min-w-9 ${className}`}><I name="ellipsis" size={17}/></Button>
+    <Button ref={opener} isIconOnly size="sm" variant="ghost" aria-label={t('list.quick.label', { name: s.name })} className={`min-h-11 min-w-11 sm:min-h-9 sm:min-w-9 ${className}`}><I name="ellipsis" size={17}/></Button>
     <Dropdown.Popover placement="bottom end">
       <Dropdown.Menu aria-label={t('list.quick.label', { name: s.name })} onAction={run}>
         {ready && supports(s, 'console') ? <Dropdown.Item id="console" textValue={t('action.console')}><I name="square-terminal" size={15}/><Label>{t('action.console')}</Label></Dropdown.Item> : null}
@@ -358,10 +374,10 @@ function QuickMenu({ s, className }: { s: Server; className: string }) {
       </Dropdown.Menu>
     </Dropdown.Popover>
   </Dropdown>
-  {dialog === 'rename' && <QuickDialog title={t('list.quick.renameTitle', { name: s.name })} onClose={() => setDialog(null)}>
-    <RenameForm server={s} autoFocus onClose={() => setDialog(null)}/>
+  {dialog === 'rename' && <QuickDialog title={t('list.quick.renameTitle', { name: s.name })} onClose={closeDialog}>
+    <RenameForm server={s} autoFocus onClose={closeDialog}/>
   </QuickDialog>}
-  {dialog === 'delete' && <QuickDialog title={t('list.quick.deleteTitle', { name: s.name })} onClose={() => setDialog(null)}><DeleteFromList id={s.id} onClose={() => setDialog(null)}/></QuickDialog>}
+  {dialog === 'delete' && <QuickDialog title={t('list.quick.deleteTitle', { name: s.name })} onClose={closeDialog}><DeleteFromList id={s.id} onClose={closeDialog}/></QuickDialog>}
   </>;
 }
 
@@ -552,6 +568,31 @@ function FailedNotice({ op, own, staff: showCode, retry, ticket }: { op: Operati
   </Notice>;
 }
 
+// How long the running operation has taken and how long such operations usually take here (components/eta.tsx),
+// ticking every few seconds; the page already polls every 3 s while it runs.
+function OperationTime({ op, diskGb }: { op: Operation; diskGb: number }) {
+  const te = useTranslations('Eta');
+  const say = useSpoken();
+  const now = useNow({ updateInterval: 5_000 });
+  const elapsed = Math.max(0, (now.getTime() - Date.parse(op.createdAt)) / 1000);
+  return <p className="flex flex-col gap-0.5 text-sm">
+    <span className="text-muted">{te('elapsed', { time: say(elapsed) })}</span>
+    <EtaLine kind={op.kind} diskGb={diskGb} elapsed={elapsed} basis/>
+  </p>;
+}
+
+// A long operation that just succeeded says so with the time it took (for two minutes), so the result is not only a
+// changed badge. Power actions and the like are left out: they take seconds and the state shows them.
+function JustFinished({ operations }: { operations: Operation[] }) {
+  const t = useTranslations('Servers');
+  const te = useTranslations('Eta');
+  const say = useSpoken();
+  const now = useNow({ updateInterval: 30_000 });
+  const o = operations.find((x) => x.finishedAt);
+  if (!o || o.status !== 'succeeded' || !(ETA_KINDS as readonly string[]).includes(o.kind) || now.getTime() - Date.parse(o.finishedAt!) > 120_000) return null;
+  return <div role="status"><Notice tone="success">{te('finished', { kind: t(`kind.${o.kind as 'create'}`), time: say((Date.parse(o.finishedAt!) - Date.parse(o.createdAt)) / 1000) })}</Notice></div>;
+}
+
 export function ServerDetail({ id }: { id: string }) {
   const t = useTranslations('Servers');
   const format = useFormatter();
@@ -624,11 +665,13 @@ export function ServerDetail({ id }: { id: string }) {
     <LockBar id={id} locked={locked} canChange={own || allowed.delete}/>
     {s.errorCode && s.errorCode !== failure?.errorCode && <Notice tone="danger"><Failure code={s.errorCode} staff={seesCodes}/></Notice>}
     {failure && <FailedNotice op={failure} own={own} staff={seesCodes} retry={retry(failure)} ticket={ticketHref(failure)}/>}
+    {!open && !failure && <JustFinished operations={operations}/>}
 
     {open && <Section title={t('detail.progress')}>
       <div className="flex flex-col gap-3">
         <p role="status" className="text-sm">{t(`kind.${open.kind as 'create'}`)}: {t(`step.${(open.step ?? 'queued') as 'queued'}`)}{open.attempts > 1 && ` · ${t('attempt', { n: open.attempts })}`}</p>
         <ProgressBar aria-label={t('detail.progress')} isIndeterminate size="sm"><ProgressBar.Track><ProgressBar.Fill/></ProgressBar.Track></ProgressBar>
+        <OperationTime op={open} diskGb={s.diskGb}/>
         {open.kind === 'create' && <div><Button size="sm" variant="secondary" onPress={() => act(`/servers/${id}/operations/${open.id}/cancel`, 'POST')}>{actionLabel('cancel')}</Button></div>}
       </div>
     </Section>}

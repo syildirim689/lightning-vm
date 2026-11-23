@@ -65,7 +65,8 @@ export function ServerSnapshots({ serverId, serverName, busy }: { serverId: stri
             </div>
             <span className="flex flex-wrap gap-2">
               <ConfirmButton size="sm" variant="secondary" icon={<I name="history" size={15}/>} isDisabled={busy || sending} label={t('revert')}
-                title={t('revertTitle', { name: s.name })} body={t('revertBody')} confirmLabel={t('revertYes')} cancelLabel={t('cancel')}
+                title={t('revertTitle', { name: s.name })} body={t('revertBody', { server: serverName, when: format.dateTime(new Date(s.created), { dateStyle: 'medium', timeStyle: 'short' }) })}
+                typed={serverName} typedLabel={t('revertConfirm', { name: serverName })} confirmLabel={t('revertYes')} cancelLabel={t('cancel')}
                 onConfirm={() => run(`/servers/${serverId}/snapshots/${s.id}/revert`, 'POST').then(() => undefined)}/>
               <ConfirmButton size="sm" variant="danger-soft" icon={<I name="trash-2" size={15}/>} isDisabled={busy || sending} label={t('remove')}
                 title={t('removeTitle', { name: s.name })} body={t('removeBody')} confirmLabel={t('removeYes')} cancelLabel={t('cancel')}

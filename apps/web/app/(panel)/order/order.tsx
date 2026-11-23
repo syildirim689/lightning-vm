@@ -24,6 +24,7 @@ import { PlatformHint, supports, type Platformed } from '../../../components/cap
 import { Strength } from '../../(auth)/credentials-form';
 import { useEmailVerification } from '../account/email-verification';
 import { hostName } from '../../../lib/proposals';
+import { lastChoices, type LastServer, type Remembered } from '../../../lib/last-order';
 
 type Custom = { cpuMin: number; cpuMax: number; cpuStep: number; memoryMinMb: number; memoryMaxMb: number; memoryStepMb: number; diskMinGb: number; diskMaxGb: number; diskStepGb: number; currency: string };
 type Catalog = { packages: { id: string; name: string; vcpu: number; memoryMb: number; diskGb: number; priceMonthly: string; currency: string; poolIds: string[]; imageIds: string[] }[];
@@ -60,12 +61,14 @@ export default function Order() {
   const tv = useTranslations('Account.emailVerification');
   const mustVerify = !!useEmailVerification()?.requiredToOrder;
   const firewalls = useApiQuery<{ firewalls: { id: string; name: string }[] }>(['firewalls'], '/firewalls').data?.firewalls ?? [];
-  const [firewallIds, setFirewallIds] = useState<string[]>([]);
+  // In the draft (ids only), so leaving the page to add an SSH key or a firewall does not lose the choice.
+  const firewallIds = d.firewallIds ?? [];
+  const setFirewallIds = (v: string[]) => d.set({ firewallIds: v });
   // Not kept in the draft (sessionStorage): a password stays only on this page.
   const [rootPassword, setRootPassword] = useState('');
   const catalog = useApiQuery<Catalog>(['catalog'], '/catalog').data;
   const projects = useApiQuery<{ projects: Project[] }>(['projects'], '/projects').data?.projects ?? [];
-  const mineQ = useApiQuery<{ servers: { name: string }[] }>(['servers'], '/servers');
+  const mineQ = useApiQuery<{ servers: LastServer[] }>(['servers'], '/servers');
   const mine = mineQ.data?.servers ?? [];
   const keysQ = useApiQuery<{ keys: { id: string }[] }>(['ssh-keys'], '/ssh-keys');
   // For the chosen project: when it has a quota of its own, that one says which packages still fit.
@@ -78,13 +81,24 @@ export default function Order() {
   const [couponInput, setCouponInput] = useState('');
   const [coupon, setCoupon] = useState('');
 
-  // First pool by default, and drop selections that no longer exist in the catalog.
+  // A fresh order starts from the newest server's choices (lib/last-order.ts) and says so; else the first pool. Not for a
+  // draft being composed, "order similar" or a shared order link (those set the pool themselves).
+  const [remembered, setRemembered] = useState<Remembered | null>(null);
+  const projectsQ = useApiQuery<{ projects: Project[] }>(['projects'], '/projects');
   useEffect(() => {
-    if (!catalog) return;
-    if (!catalog.pools.some((p) => p.id === d.poolId)) d.set({ poolId: catalog.pools[0]?.id ?? '' });
+    if (!catalog || d.poolId || !mineQ.data || !projectsQ.data || orderLinkKeys.some((k) => params.has(k))) return;
+    const last = lastChoices(mineQ.data.servers, catalog, projectsQ.data.projects.map((p) => p.id));
+    if (last) { d.set({ ...last.patch, cloneFrom: '', cloneName: '' }); setRemembered(last); }
+  }, [catalog, mineQ.data, projectsQ.data]); // eslint-disable-line react-hooks/exhaustive-deps
+  const startFresh = () => { setRemembered(null); d.clear(); setFirewallIds([]); d.set({ poolId: catalog?.pools[0]?.id ?? '' }); };
+  // First pool by default (once the servers are known, so the remembered one can come first), and drop selections that
+  // no longer exist in the catalog.
+  useEffect(() => {
+    if (!catalog || (!d.poolId && (mineQ.isPending || projectsQ.isPending))) return;
+    if (!catalog.pools.some((p) => p.id === d.poolId) && !(!d.poolId && lastChoices(mineQ.data?.servers, catalog, (projectsQ.data?.projects ?? []).map((p) => p.id)))) d.set({ poolId: catalog.pools[0]?.id ?? '' });
     if (d.packageId && !catalog.packages.some((p) => p.id === d.packageId)) d.set({ packageId: '' });
     if (d.applicationId && !catalog.applications.some((a) => a.id === d.applicationId)) d.set({ applicationId: '' });
-  }, [catalog]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [catalog, mineQ.isPending, projectsQ.isPending]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Choices with only one answer are made for the person: the only image, the only package here, and a free name
   // once the image is known (the person can change all of them).
@@ -224,6 +238,9 @@ export default function Order() {
     </ol>
     {mustVerify && <div className="mb-6"><Notice tone="warning" title={tv('orderNotice')}>{tv('orderNoticeBody')}{' '}
       <NextLink href="/account?tab=profile" className="font-medium text-accent hover:underline">{tv('orderNoticeLink')}</NextLink></Notice></div>}
+    {remembered && !d.cloneFrom && <div className="mb-6" data-remembered><Notice tone="default" title={t('remembered.title', { name: remembered.from })}>
+      {t('remembered.body', { what: remembered.picked.map((k) => t(`remembered.what.${k}`)).join(', ') })}{' '}
+      <button type="button" className="min-h-11 font-medium text-accent hover:underline sm:min-h-0" onClick={startFresh}>{t('remembered.fresh')}</button></Notice></div>}
     {d.cloneFrom && <div className="mb-6"><Notice tone="accent" title={t('clone.title', { name: d.cloneName })}>{t('clone.help')}{' '}
       <button type="button" className="font-medium text-accent hover:underline" onClick={() => d.set({ cloneFrom: '', cloneName: '' })}>{t('clone.stop')}</button></Notice></div>}
     <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_22rem]">

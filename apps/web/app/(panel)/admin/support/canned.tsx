@@ -7,7 +7,8 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useTranslations } from 'next-intl';
 import { useState } from 'react';
 import { I } from '../../../../components/icon';
-import { ConfirmButton, Empty, TextInput } from '../../../../components/ui';
+import { Empty, TextInput } from '../../../../components/ui';
+import { useUndoableRemove } from '../../../../components/undo';
 import { apiFetch, useErrorText } from '../../../../lib/api';
 import { fillCanned } from '../../../../lib/canned';
 import { fold } from '../../../../lib/note-line';
@@ -39,13 +40,15 @@ export default function CannedReplies() {
       reset(); toast.success(t('cannedSaved')); await refresh();
     } catch (e) { toast.danger(error(e)); } finally { setBusy(false); }
   }
-  async function remove(c: Canned) {
-    try { await apiFetch(`/admin/support/canned/${c.id}`, { method: 'DELETE' }); toast.success(t('cannedRemoved')); if (editing?.id === c.id) reset(); }
-    catch (e) { toast.danger(error(e)); }
-    await refresh();
-  }
+  // Removed behind Undo (components/undo.tsx): nothing is sent until the message goes.
+  const tu = useTranslations('Undo');
+  const { hidden, remove: hold } = useUndoableRemove();
+  const remove = (c: Canned) => {
+    if (editing?.id === c.id) reset();
+    hold({ id: `canned:${c.id}`, text: tu('canned', { name: c.title }), commit: ({ keepalive }) => apiFetch(`/admin/support/canned/${c.id}`, { method: 'DELETE', keepalive }), done: () => void refresh() });
+  };
   const needle = fold(find.trim());
-  const shown = (list ?? []).filter((c) => !needle || fold(`${c.title} ${c.body}`).includes(needle));
+  const shown = (list ?? []).filter((c) => !hidden.has(`canned:${c.id}`) && (!needle || fold(`${c.title} ${c.body}`).includes(needle)));
   const sample = fillCanned(v.body, { name: t('cannedSample.name'), ticket: '#1042', server: 'web-1' });
   return <>
     <Button variant="secondary" onPress={() => setOpen(true)}><I name="message-square-text" size={16}/>{t('cannedManage')}</Button>
@@ -63,9 +66,8 @@ export default function CannedReplies() {
               : shown.length === 0 ? <p role="status" className="rounded-xl border border-dashed border-border py-6 text-center text-sm text-muted">{t('cannedNoMatch')}</p>
               : <ul className="flex flex-col gap-2">{shown.map((c) => <li key={c.id} className={`flex items-start gap-2 rounded-xl border p-3 ${editing?.id === c.id ? 'border-accent bg-accent-soft/30' : 'border-border'}`}>
                   <span className="min-w-0 flex-1"><span className="block font-medium">{c.title}</span><span className="line-clamp-2 whitespace-pre-line text-xs text-muted">{c.body}</span></span>
-                  <Button isIconOnly size="sm" variant="ghost" aria-label={t('cannedEdit', { title: c.title })} onPress={() => { setEditing(c); setV({ title: c.title, body: c.body }); }}><I name="pencil" size={14}/></Button>
-                  <ConfirmButton size="sm" variant="ghost" label={<><I name="trash-2" size={14}/><span className="sr-only">{t('cannedRemove', { title: c.title })}</span></>}
-                    title={t('cannedRemove', { title: c.title })} body={t('cannedRemoveBody')} confirmLabel={t('cannedRemoveYes')} cancelLabel={t('cancel')} onConfirm={() => remove(c)}/>
+                  <Button isIconOnly size="sm" variant="ghost" className="min-h-11 min-w-11 sm:min-h-9 sm:min-w-9" aria-label={t('cannedEdit', { title: c.title })} onPress={() => { setEditing(c); setV({ title: c.title, body: c.body }); }}><I name="pencil" size={14}/></Button>
+                  <Button isIconOnly size="sm" variant="ghost" className="min-h-11 min-w-11 sm:min-h-9 sm:min-w-9" aria-label={t('cannedRemove', { title: c.title })} onPress={() => remove(c)}><I name="trash-2" size={14}/></Button>
                 </li>)}</ul>}
             <div className="flex flex-col gap-3 rounded-xl border border-dashed border-border p-3">
               {editing && <p className="flex items-center gap-2 text-sm font-medium text-accent"><I name="pencil" size={14}/>{t('cannedEditing', { title: editing.title })}</p>}

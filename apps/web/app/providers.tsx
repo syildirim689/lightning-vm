@@ -19,7 +19,10 @@ export default function Providers({ locale, loadingLabel, children }: { locale: 
   const router = useRouter();
   // The API is the source of truth: data is refetched on focus and retried once, never served stale for long.
   const motion = useA11y((s) => s.motion);
-  const [client] = useState(() => new QueryClient({ defaultOptions: { queries: { staleTime: 2_000, retry: 1, refetchOnWindowFocus: true } } }));
+  // While the panel's server does not answer, reads pause (components/connection-banner.tsx sets the online state);
+  // a change the person sends is never held back to run by itself later: it fails at once, says why, and the form
+  // keeps what was typed (networkMode "always").
+  const [client] = useState(() => new QueryClient({ defaultOptions: { queries: { staleTime: 2_000, retry: 1, refetchOnWindowFocus: true }, mutations: { networkMode: 'always' } } }));
   return <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
     <QueryClientProvider client={client}>
       <NuqsAdapter>

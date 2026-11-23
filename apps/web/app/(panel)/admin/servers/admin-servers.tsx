@@ -128,7 +128,7 @@ export default function AdminServers() {
               </div>
               <p className="text-xs text-muted" aria-live="polite">{scope === 'shown' ? t('admin.bulkHelp') : chosen.length ? (pool.length > targets.length ? t('admin.bulkLimit', { n: pool.length, max: targets.length }) : t('list.select.rangeHint')) : t('admin.bulkPick')}</p>
             </div>}
-            <DataTable label={t('admin.servers')} rows={shown} rowKey={(s) => s.id} empty={t('list.empty')} minWidth={900}
+            <DataTable label={t('admin.servers')} rows={shown} rowKey={(s) => s.id} empty={filters.servers.length ? t('admin.emptyFiltered') : t('admin.empty')} minWidth={900}
               columns={[{ id: 'name', label: t('col.name') }, { id: 'owner', label: t('admin.owner') }, { id: 'state', label: t('col.state') }, { id: 'ip', label: 'IP' }, { id: 'size', label: t('col.size') }, { id: 'loc', label: t('col.location') }, { id: 'tags', label: t('admin.tags') }]}
               cells={(s) => [<span key="n" className="flex items-center gap-1">{mayBulk && <button type="button" role="checkbox" aria-checked={picked.has(s.id)} aria-label={t('list.select.toggle', { name: s.name })} onClick={(e) => flip(s.id, e.shiftKey)}
                   onMouseDown={(e) => { if (e.shiftKey) e.preventDefault(); /* a range click must not select the text between */ }}

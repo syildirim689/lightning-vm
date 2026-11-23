@@ -2410,7 +2410,10 @@ test.describe('people, settings and smart features (English browser)', () => {
     await ask.getByRole('button', { name: 'Cancel' }).click();
     await expect(ask).toBeHidden();
     expect(asked).toBe(0);
-    await closeDetail();
+    // Focus is back on the Restart button that opened the confirmation, so Escape closes the drawer at once.
+    await expect(detail.getByRole('button', { name: 'Restart' })).toBeFocused();
+    await page.keyboard.press('Escape');
+    await expect(detail).toBeHidden();
 
     // A finished one-shot job: completed, with when; run again only because migrate is harmless to run twice.
     await box.getByRole('button', { name: /^migrate/ }).click();
@@ -3397,9 +3400,10 @@ test.describe('people, settings and smart features (English browser)', () => {
     await name.press('Control+s');
     await expect(page.getByText('Project created.')).toBeVisible();
     const row = page.getByRole('listitem').filter({ hasText: 'Saved with keys' });
-    await row.getByRole('button', { name: 'Delete' }).click();
-    await page.getByRole('alertdialog').getByRole('button', { name: 'Delete' }).click();
-    await expect(page.getByText('Project deleted.')).toBeVisible();
+    const removed = page.waitForResponse((r) => r.request().method() === 'DELETE' && r.url().includes('/api/projects/'));
+    await row.getByRole('button', { name: 'Delete Saved with keys' }).click();
+    await expect(row).toHaveCount(0);
+    expect((await removed).ok()).toBe(true);
     await context.close();
   });
 
@@ -3597,12 +3601,26 @@ test.describe('people, settings and smart features (English browser)', () => {
     await page.getByRole('button', { name: 'Create project' }).click();
     const project = page.getByRole('listitem').filter({ hasText: 'E2E Project' });
     await expect(project).toContainText('No servers');
-    await project.getByRole('button', { name: 'Delete' }).click();
-    const ask = page.getByRole('alertdialog', { name: /Delete the project/ });
-    await expect(ask).toContainText('The project has no servers.');
-    await ask.getByRole('button', { name: 'Delete' }).click();
-    await expect(page.getByText('Project deleted.')).toBeVisible();
+    // Deleting a project asks nothing: it leaves the list, the message says what happens to its servers and offers
+    // Undo, and the request is sent only when the message goes. An undone removal never reaches the API.
+    const deletes: string[] = [];
+    const onRequest = (r: import('@playwright/test').Request) => { if (r.method() === 'DELETE' && r.url().includes('/api/projects/')) deletes.push(r.url()); };
+    page.on('request', onRequest);
+    await project.getByRole('button', { name: 'Delete E2E Project' }).click();
     await expect(project).toHaveCount(0);
+    await expect(page.getByText('Project E2E Project removed. The project has no servers.')).toBeVisible();
+    await page.getByRole('button', { name: 'Undo' }).click();
+    await expect(project).toBeVisible();
+    await expect(page.getByText('Brought back. Nothing was removed.')).toBeVisible();
+    expect(deletes).toEqual([]);
+    const gone = page.waitForResponse((r) => r.request().method() === 'DELETE' && r.url().includes('/api/projects/'));
+    await project.getByRole('button', { name: 'Delete E2E Project' }).click();
+    await expect(project).toHaveCount(0);
+    expect((await gone).status()).toBe(204);
+    page.off('request', onRequest);
+    expect(deletes).toHaveLength(1);
+    await page.reload();
+    await expect(page.getByRole('listitem').filter({ hasText: 'E2E Project' })).toHaveCount(0);
     // The panel address follows the domain the proxy serves, not a loopback address from the wizard.
     await page.goto('/admin/settings');
     await expect(page.getByRole('link', { name: new URL(baseURL!).host })).toBeVisible();
@@ -3793,9 +3811,17 @@ test.describe('people, settings and smart features (English browser)', () => {
     await page.getByLabel('Title').fill('Firewall check-up');
     await page.getByRole('button', { name: 'Save changes' }).click();
     await expect(page.getByRole('dialog').getByText('Firewall check-up', { exact: true })).toBeVisible();
+    // Removing one asks nothing: it leaves the list with Undo for a few seconds (the message outlives the dialog),
+    // and Undo brings it back before anything is sent.
     await page.getByRole('dialog').getByRole('button', { name: 'Remove “Firewall check-up”' }).click();
-    await expect(page.getByRole('alertdialog', { name: 'Remove “Firewall check-up”' })).toContainText('Replies already sent stay');
-    await page.getByRole('alertdialog', { name: 'Remove “Firewall check-up”' }).getByRole('button', { name: 'Cancel' }).click();
+    await expect(page.getByRole('dialog').getByText('Firewall check-up', { exact: true })).toHaveCount(0);
+    await expect(page.getByText('Saved reply Firewall check-up removed.')).toBeVisible();
+    await page.getByRole('dialog').getByRole('button', { name: 'Close' }).last().click();
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    await page.getByRole('button', { name: 'Undo' }).click();
+    await expect(page.getByText('Brought back. Nothing was removed.')).toBeVisible();
+    await page.getByRole('button', { name: 'Canned replies' }).click();
+    await expect(page.getByRole('dialog').getByText('Firewall check-up', { exact: true })).toBeVisible();
     await page.getByRole('dialog').getByRole('button', { name: 'Close' }).last().click();
     await expect(page.getByRole('dialog')).toHaveCount(0);
     await page.getByText('Cannot reach my server over SSH').click();

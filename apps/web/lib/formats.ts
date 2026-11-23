@@ -194,3 +194,85 @@ export const inputProps: Record<Format, { inputMode?: 'text' | 'numeric' | 'deci
 
 // Several values in one box (pasted lists): split on commas, spaces, semicolons or new lines.
 export const splitList = (s: string) => s.split(/[\s,;]+/).map((x) => x.trim()).filter(Boolean);
+
+// ---- Pasting: what a paste most likely meant, offered as the field's new text instead of a wrong value ----
+
+const b64ToBytes = (b64: string): Uint8Array | null => {
+  if (!/^[A-Za-z0-9+/]+={0,2}$/.test(b64) || b64.length % 4 !== 0) return null;
+  try { return Uint8Array.from(atob(b64), (c) => c.charCodeAt(0)); } catch { return null; }
+};
+// An SSH public key blob is a run of length-prefixed fields that ends exactly at the end: name, then the key's parts.
+function blobFields(bytes: Uint8Array): Uint8Array[] | null {
+  const out: Uint8Array[] = [];
+  let i = 0;
+  while (i < bytes.length) {
+    if (i + 4 > bytes.length) return null;
+    const n = ((bytes[i] << 24) | (bytes[i + 1] << 16) | (bytes[i + 2] << 8) | bytes[i + 3]) >>> 0;
+    i += 4;
+    if (n > bytes.length - i) return null;
+    out.push(bytes.subarray(i, i + n)); i += n;
+  }
+  return out.length >= 2 ? out : null;
+}
+const text = (b: Uint8Array) => String.fromCharCode(...b);
+const sshTypes = ['ssh-ed25519', 'ssh-rsa', 'ecdsa-sha2-nistp256', 'ecdsa-sha2-nistp384', 'ecdsa-sha2-nistp521'];
+
+export type SshKeyInfo = { ok: true; type: 'ED25519' | 'RSA' | 'ECDSA'; bits: number; comment: string }
+  | { ok: false; problem: 'private' | 'putty' | 'ssh2' | 'sk' | 'dss' | 'mismatch' | 'unknown' };
+
+// What a pasted or typed key is: its type and size, or why it cannot be used (a private key, a PuTTY file, a key
+// for a hardware security key, an old DSA key, a damaged one). Empty text: null.
+export function sshKeyInfo(raw: string): SshKeyInfo | null {
+  const s = raw.trim();
+  if (!s) return null;
+  if (/-----BEGIN [A-Z ]*PRIVATE KEY-----/.test(s)) return { ok: false, problem: 'private' };
+  if (/^PuTTY-User-Key-File-/m.test(s)) return { ok: false, problem: 'putty' };
+  if (/---- BEGIN SSH2 PUBLIC KEY ----/.test(s)) return { ok: false, problem: 'ssh2' };
+  if (/^sk-(ssh-ed25519|ecdsa-sha2-nistp256)@openssh\.com\s/.test(s)) return { ok: false, problem: 'sk' };
+  if (/^ssh-dss\s/.test(s)) return { ok: false, problem: 'dss' };
+  const m = /^(\S+) ([A-Za-z0-9+/]+={0,2})(?: (.*))?$/.exec(s.replace(/\s+/g, ' '));
+  if (!m || !sshTypes.includes(m[1])) return { ok: false, problem: 'unknown' };
+  const fields = blobFields(b64ToBytes(m[2]) ?? new Uint8Array());
+  if (!fields || text(fields[0]) !== m[1]) return { ok: false, problem: 'mismatch' };
+  const comment = (m[3] ?? '').trim();
+  if (m[1] === 'ssh-ed25519') return { ok: true, type: 'ED25519', bits: 256, comment };
+  if (m[1] === 'ssh-rsa') { const n = fields[2] ?? new Uint8Array(); const lead = n[0] === 0 ? 1 : 0; return { ok: true, type: 'RSA', bits: (n.length - lead) * 8, comment }; }
+  return { ok: true, type: 'ECDSA', bits: Number(m[1].slice(-3)), comment };
+}
+
+// The pasted text as the field should take it, or null to let the paste through as it is.
+// - Several values pasted into a one-line list field (one per line, from a spreadsheet or a file): commas, because
+//   a one-line field would otherwise run the lines together into one wrong value.
+// - An SSH key: the RFC 4716 form ("---- BEGIN SSH2 PUBLIC KEY ----", PuTTYgen's export) becomes the one-line OpenSSH
+//   form, and a key broken over several lines (mail, a terminal) is joined again where its blob says it ends.
+export function repairPaste(format: Format | undefined, pasted: string, opts: { list?: boolean; multiline?: boolean } = {}): string | null {
+  if (format === 'sshKey') return repairKey(pasted);
+  if (opts.list && !opts.multiline && /[\r\n]/.test(pasted.trim())) return splitList(pasted).join(', ');
+  return null;
+}
+
+function repairKey(pasted: string): string | null {
+  const s = pasted.trim();
+  const ssh2 = /---- BEGIN SSH2 PUBLIC KEY ----([\s\S]*?)---- END SSH2 PUBLIC KEY ----/.exec(s);
+  if (ssh2) {
+    // Header lines ("Comment: ...") may continue on the next line after a backslash; the rest is the base64 body.
+    let comment = '', body = '';
+    for (const line of ssh2[1].replace(/\\\r?\n/g, '').split(/\r?\n/).map((x) => x.trim()).filter(Boolean)) {
+      const header = /^([\w-]+):\s*(.*)$/.exec(line);
+      if (header) { if (header[1].toLowerCase() === 'comment') comment = header[2].replace(/^"(.*)"$/, '$1'); continue; }
+      body += line;
+    }
+    const fields = blobFields(b64ToBytes(body) ?? new Uint8Array());
+    const type = fields && text(fields[0]);
+    return type && sshTypes.includes(type) ? `${type} ${body}${comment ? ` ${comment}` : ''}` : null;
+  }
+  if (!/[\r\n]/.test(s)) return null;
+  const tokens = s.split(/\s+/);
+  if (!sshTypes.includes(tokens[0])) return null;
+  for (let k = 2; k <= tokens.length; k++) {
+    const blob = tokens.slice(1, k).join('');
+    const fields = blobFields(b64ToBytes(blob) ?? new Uint8Array());
+    if (fields && text(fields[0]) === tokens[0]) return [tokens[0], blob, ...tokens.slice(k)].join(' ');
+  }
+  return null;
+}

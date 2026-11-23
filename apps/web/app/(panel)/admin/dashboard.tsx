@@ -1,7 +1,7 @@
 "use client";
-import { Card, ProgressBar } from '@heroui/react';
+import { Button, Card, ProgressBar } from '@heroui/react';
 import NextLink from 'next/link';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useFormatter, useNow, useTranslations } from 'next-intl';
 import { Bar, BarChart, CartesianGrid, Cell, Legend, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { I } from '../../../components/icon';
@@ -11,7 +11,23 @@ import Digest from '../../../components/digest';
 import OnlineNow from '../../../components/online-now';
 import { DataTable, Notice, PageHeader, Section, Stat, StatusChip } from '../../../components/ui';
 import { useApiQuery } from '../../../lib/query';
+import { useErrorText } from '../../../lib/api';
 import type { Server } from '../servers-ui';
+import { checklistShown, HIDDEN_KEY, openKeys, parseHidden, reopenedBy, type SetupStep } from '../../../lib/setup-checklist';
+
+// What a health step is based on, in a few words ("Last message failed 2 hours ago: the server refused the sign-in").
+function stepDetail(t: ReturnType<typeof useTranslations<'Dashboard'>>, format: ReturnType<typeof useFormatter>, x: SetupStep, reason: (code: string) => string): string {
+  const d = x.detail ?? {};
+  switch (x.key) {
+    case 'mailDelivers': return d.at ? (d.code ? t('steps.detail.mailDeliversWhy', { when: format.relativeTime(new Date(String(d.at))), reason: reason(String(d.code)) }) : t('steps.detail.mailDelivers', { when: format.relativeTime(new Date(String(d.at))) })) : '';
+    case 'backupSchedule': return t('steps.detail.backupSchedule', { schedule: String(d.schedule ?? 'off') });
+    case 'monitoring': return t('steps.detail.monitoring', { state: String(d.state ?? 'off') });
+    case 'updates': return d.latest ? t('steps.detail.updatesWaiting', { latest: String(d.latest), channel: String(d.channel ?? '') }) : t('steps.detail.updatesAuto', { channel: String(d.channel ?? '') });
+    case 'payments': return t('steps.detail.payments');
+    case 'staffTwoFactor': return t('steps.detail.staffTwoFactor', { n: Number(d.n ?? 0) });
+    default: return '';
+  }
+}
 
 type Layer = Record<string, number>;
 type Pool = { id: string; name: string; capacity: { offered: Layer; reserved: Layer; used: Layer; available: Layer } };
@@ -31,12 +47,22 @@ export default function Dashboard({ setupOpen }: { setupOpen: boolean }) {
   const pools = useApiQuery<{ pools: Pool[] }>(['catalog', 'pools'], '/admin/pools', { refetchInterval: 30_000 }).data?.pools;
   const ops = useApiQuery<{ operations: Operation[] }>(['admin', 'operations'], '/admin/operations', { refetchInterval: 15_000 }).data?.operations;
   const connections = useApiQuery<{ connections: Connection[] }>(['vmware', 'connections'], '/admin/vmware/connections').data?.connections;
-  // Getting-started checklist, shown until every step is done.
-  const steps = useApiQuery<{ steps: { key: string; done: boolean; link: string }[] }>(['admin', 'onboarding'], '/admin/onboarding').data?.steps;
+  // Setup checklist from the installation's real state (lib/setup-checklist.ts): the start steps, then what keeps it
+  // healthy. Shown while a step is open; "Hide until something changes" puts it away until a step opens that was fine.
+  const steps = useApiQuery<{ steps: SetupStep[] }>(['admin', 'onboarding'], '/admin/onboarding').data?.steps
+    ?.map((x) => ({ ...x, group: x.group ?? 'start' } as SetupStep));
   const doneSteps = steps?.filter((x) => x.done).length ?? 0;
   // Done steps fold away (one tap shows them); the first open step is marked as the next one.
   const [showDone, setShowDone] = useState(false);
   const nextStep = steps?.find((x) => !x.done)?.key;
+  const [hidden, setHidden] = useState<string[] | null>(null);
+  useEffect(() => { try { setHidden(parseHidden(localStorage.getItem(HIDDEN_KEY))); } catch { /* storage blocked */ } }, []);
+  const putAway = () => { const open = openKeys(steps ?? []); setHidden(open); try { localStorage.setItem(HIDDEN_KEY, JSON.stringify(open)); } catch { /* storage blocked */ } };
+  const showList = !!steps && checklistShown(steps, hidden);
+  const reopened = steps ? reopenedBy(steps, hidden) : [];
+  const anyStart = !!steps?.some((x) => x.group === 'start' && !x.done);
+  const { code: reason } = useErrorText();
+  const detailText = (x: SetupStep) => stepDetail(t, format, x, reason);
 
   const ready = servers?.filter((s) => s.state === 'ready').length ?? 0;
   const failed24h = ops?.filter((o) => o.status === 'failed' && Date.now() - Date.parse(o.createdAt) < 86_400_000).length ?? 0;
@@ -64,22 +90,29 @@ export default function Dashboard({ setupOpen }: { setupOpen: boolean }) {
     <PageHeader eyebrow={t('eyebrow')} title={t('title')} description={t('intro')}/>
     {setupOpen && <Notice tone="accent" title={t('setupIncomplete')}><NextLink href="/setup" className="underline">{t('continueSetup')}</NextLink></Notice>}
 
-    {steps && doneSteps < steps.length && <Section title={t('gettingStarted')} description={t('gettingStartedHelp')}
-      actions={<span className="text-xs tabular-nums text-muted">{t('steps.progress', { done: doneSteps, total: steps.length })}</span>}>
+    {showList && steps && <Section title={t(anyStart ? 'gettingStarted' : 'setupHealth')} description={t(anyStart ? 'gettingStartedHelp' : 'setupHealthHelp')}
+      actions={<span className="flex flex-wrap items-center gap-2"><span className="text-xs tabular-nums text-muted">{t('steps.progress', { done: doneSteps, total: steps.length })}</span>
+        <Button size="sm" variant="ghost" className="min-h-11 sm:min-h-9" onPress={putAway}><I name="eye-off" size={14}/>{t('steps.hide')}</Button></span>}>
+      {reopened.length > 0 && <p role="status" className="mb-3 flex items-center gap-2 text-sm text-warning"><I name="triangle-alert" size={14}/>{t('steps.reopened', { steps: reopened.map((k) => t(`steps.${k as 'pool'}`)).join(', ') })}</p>}
       <ProgressBar aria-label={t('steps.progress', { done: doneSteps, total: steps.length })} value={Math.round((doneSteps / steps.length) * 100)} size="sm" color="success" className="mb-3">
         <ProgressBar.Track><ProgressBar.Fill/></ProgressBar.Track></ProgressBar>
-      <ol className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-        {steps.map((s, i) => (!s.done || showDone) && <li key={s.key}>
-          <NextLink href={s.link} className={`flex h-full min-h-11 items-center gap-3 rounded-lg border px-3 py-3 text-sm transition-colors duration-150 ${s.done ? 'border-success/40 text-muted' : s.key === nextStep ? 'border-accent bg-accent-soft/40 hover:bg-accent-soft' : 'border-border hover:border-accent'}`}>
-            <span className={`grid size-7 shrink-0 place-items-center rounded-full text-xs font-semibold ${s.done ? 'bg-success text-success-foreground' : 'bg-default'}`}>{s.done ? <I name="check" size={14}/> : i + 1}</span>
-            <span className={`min-w-0 flex-1 ${s.done ? 'line-through' : 'font-medium'}`}>{s.done && <span className="sr-only">✓ </span>}{t(`steps.${s.key as 'pool'}`)}
-              {s.key === nextStep && <span className="mt-0.5 block text-[11px] font-semibold uppercase tracking-wider text-accent">{t('steps.next')}</span>}</span>
-            {!s.done && <I name="arrow-right" size={14} className="shrink-0 text-muted"/>}
-          </NextLink>
-        </li>)}
-      </ol>
-      {doneSteps > 0 && <button type="button" aria-expanded={showDone} onClick={() => setShowDone((v) => !v)} className="mt-3 flex items-center gap-1.5 text-xs font-medium text-muted hover:text-foreground">
+      {(['start', 'health'] as const).map((g) => steps.some((x) => x.group === g && (!x.done || showDone)) && <div key={g} className="mb-3 last:mb-0">
+        <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted">{t(`steps.group.${g}`)}</h3>
+        <ol className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+          {steps.map((x, i) => x.group === g && (!x.done || showDone) && <li key={x.key}>
+            <NextLink href={x.link} data-step={x.key} className={`flex h-full min-h-11 items-center gap-3 rounded-lg border px-3 py-3 text-sm transition-colors duration-150 ${x.done ? 'border-success/40 text-muted' : x.key === nextStep ? 'border-accent bg-accent-soft/40 hover:bg-accent-soft' : 'border-border hover:border-accent'}`}>
+              <span className={`grid size-7 shrink-0 place-items-center rounded-full text-xs font-semibold ${x.done ? 'bg-success text-success-foreground' : 'bg-default'}`}>{x.done ? <I name="check" size={14}/> : i + 1}</span>
+              <span className="min-w-0 flex-1"><span className={x.done ? 'line-through' : 'font-medium'}>{x.done && <span className="sr-only">✓ </span>}{t(`steps.${x.key as 'pool'}`)}</span>
+                {!x.done && detailText(x) && <span className="mt-0.5 block text-xs text-muted">{detailText(x)}</span>}
+                {x.key === nextStep && <span className="mt-0.5 block text-[11px] font-semibold uppercase tracking-wider text-accent">{t('steps.next')}</span>}</span>
+              {!x.done && <I name="arrow-right" size={14} className="shrink-0 text-muted"/>}
+            </NextLink>
+          </li>)}
+        </ol>
+      </div>)}
+      {doneSteps > 0 && <button type="button" aria-expanded={showDone} onClick={() => setShowDone((v) => !v)} className="mt-1 flex min-h-11 items-center gap-1.5 text-xs font-medium text-muted hover:text-foreground">
         <I name={showDone ? 'chevron-up' : 'chevron-down'} size={14}/>{showDone ? t('steps.hideDone') : t('steps.showDone', { n: doneSteps })}</button>}
+      <p className="mt-2 text-xs text-muted">{t('steps.basis')}</p>
     </Section>}
 
     <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">

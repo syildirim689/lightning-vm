@@ -10,9 +10,11 @@ export type OrderDraft = { poolId: string; imageId: string; projectId: string; t
   // A copy of one of the user's servers (its disk is cloned): its id and name.
   cloneFrom: string; cloneName: string;
   // Paid monthly (an invoice per period) or by the hour from the balance.
-  billingCycle: 'monthly' | 'hourly' };
+  billingCycle: 'monthly' | 'hourly';
+  // Firewalls to put on the new server (their ids; older drafts have none).
+  firewallIds?: string[] };
 
-const initial: OrderDraft = { poolId: '', imageId: '', projectId: '', type: 'package', packageId: '', vcpu: 2, memoryMb: 4096, diskGb: 40, name: '', sshKeyIds: [], extraIpv4: 0, applicationId: '', cloneFrom: '', cloneName: '', billingCycle: 'monthly' };
+const initial: OrderDraft = { poolId: '', imageId: '', projectId: '', type: 'package', packageId: '', vcpu: 2, memoryMb: 4096, diskGb: 40, name: '', sshKeyIds: [], extraIpv4: 0, applicationId: '', cloneFrom: '', cloneName: '', billingCycle: 'monthly', firewallIds: [] };
 
 export const useOrder = create<OrderDraft & { set: (patch: Partial<OrderDraft>) => void; clear: () => void }>()(persist(
   (set) => ({ ...initial, set: (patch) => set(patch), clear: () => set(initial) }),

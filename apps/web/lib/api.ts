@@ -1,10 +1,11 @@
 "use client";
 import { useTranslations } from 'next-intl';
 import { loginFrom } from './back-to';
+import { errorKey } from './error-key';
 import { editsSaved, hasPendingEdits } from './edits';
 import { sessionEnded } from './session-end';
 
-export type ApiError = { code: string; fields?: Record<string, string> };
+export type ApiError = { code: string; fields?: Record<string, string>; status?: number };
 
 // Whether the panel's server answers: a failed connection or a gateway error page (502/503/504 without the API's
 // JSON) says no, any API answer says yes. The connection banner listens.
@@ -31,10 +32,12 @@ let sessionExpected = false;
 export const expectSession = (on: boolean) => { sessionExpected = on; };
 
 // Browser calls go through Caddy at /api. The CSRF header is required by the API on every state change.
-export async function apiFetch<T = unknown>(path: string, init: { method?: string; body?: unknown; signal?: AbortSignal; headers?: Record<string, string> } = {}): Promise<T> {
+export async function apiFetch<T = unknown>(path: string, init: { method?: string; body?: unknown; signal?: AbortSignal; headers?: Record<string, string>; keepalive?: boolean } = {}): Promise<T> {
   const res = await fetch(`/api${path}`, {
     method: init.method ?? 'GET',
     signal: init.signal,
+    // A removal sent while the page unloads (components/undo.tsx) must outlive it.
+    keepalive: init.keepalive,
     headers: { 'x-lightning-csrf': '1', ...(init.body !== undefined && { 'content-type': 'application/json' }), ...init.headers },
     body: init.body === undefined ? undefined : JSON.stringify(init.body),
   }).catch((e) => { if (!init.signal?.aborted) reach(false); throw init.signal?.aborted ? e : ({ code: 'NETWORK' } satisfies ApiError); });
@@ -50,7 +53,8 @@ export async function apiFetch<T = unknown>(path: string, init: { method?: strin
     // A form the server sent back with field errors: once they are shown, the first wrong field takes the focus.
     if (body?.fields && Object.keys(body.fields).length && (init.method ?? 'GET') !== 'GET') focusFirstInvalid();
     // Keep structured context (certificate, conflicts) for the UI; only the code is required.
-    throw { ...body, code: body?.code ?? 'UNKNOWN' } satisfies ApiError;
+    // The HTTP status goes along: an answer without the API's code (a proxy's error page) is then still explained.
+    throw { ...body, code: body?.code ?? 'UNKNOWN', status: res.status } satisfies ApiError;
   }
   reach(true);
   if ((init.method ?? 'GET') !== 'GET') editsSaved();
@@ -64,7 +68,10 @@ export function useErrorText() {
   const tf = useTranslations('fieldErrors');
   return {
     code: (code: string) => (te.has(code as 'UNKNOWN') ? te(code as 'UNKNOWN') : code),
-    error: (e: unknown) => { const code = (e as ApiError)?.code ?? 'UNKNOWN'; return te.has(code as 'UNKNOWN') ? te(code as 'UNKNOWN') : te('UNKNOWN'); },
+    // A code with its own sentence says it. Otherwise the cause in plain words and the next step, never a bare
+    // "unknown error": a code without a sentence (a newer API) is named so support can look it up, and an answer
+    // without any code (a proxy or gateway page) gives its HTTP status.
+    error: (e: unknown) => { const k = errorKey(e, (c) => te.has(c as 'UNKNOWN')); return te(k.key as 'UNTRANSLATED', k.values as { code: string }); },
     field: (code?: string) => !code ? undefined : tf.has(code as 'INVALID_VALUE') ? tf(code as 'INVALID_VALUE') : tf('INVALID_VALUE'),
   };
 }

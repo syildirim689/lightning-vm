@@ -10,9 +10,10 @@ import { ButtonLink, ConfirmButton, Notice, Section, TextInput } from '../../../
 import { apiFetch, useErrorText } from '../../../lib/api';
 import { useApiForm } from '../../../lib/form';
 import { useMe } from '../../../lib/me';
-import { useApiAction, useApiQuery } from '../../../lib/query';
+import { useApiQuery } from '../../../lib/query';
 import { uniqueName } from '../../../lib/proposals';
 import { useProposal } from '../../../lib/use-proposal';
+import { useUndoableRemove } from '../../../components/undo';
 
 // quota: the project's own quota when staff gave it one (null limit: unlimited), with what its servers use of it.
 type ProjectQuota = { maxServers: number | null; maxVcpu: number | null; maxMemoryMb: number | null; maxDiskGb: number | null; usage: { servers: number; vcpu: number; memoryMb: number; diskGb: number } };
@@ -98,20 +99,25 @@ export function Projects() {
   // "Proje 1", "Proje 2"…: a number free among this account's projects, nothing personal (members see the name).
   const tp = useTranslations('Proposals');
   const { proposed, again } = useProposal(projects ? uniqueName(tp('project'), projects.map((p) => p.name), { max: 100, numbered: true }) : undefined, f.values.name, f.set('name'));
-  const remove = useApiAction((id: string) => apiFetch(`/projects/${id}`, { method: 'DELETE' }), { invalidate: [['projects'], ['servers']], success: t('projects.removed') });
+  // Removed behind Undo (components/undo.tsx): nothing is sent until the message goes.
+  const tu = useTranslations('Undo');
+  const { hidden, remove } = useUndoableRemove();
+  const shown = projects?.filter((p) => !hidden.has(`project:${p.id}`));
   return <Section title={t('projects.title')}>
     <div className="flex flex-col gap-4">
-      {projects?.length === 0 && <p className="text-sm text-muted">{t('projects.empty')}</p>}
+      {shown?.length === 0 && <p className="text-sm text-muted">{t('projects.empty')}</p>}
       {projects?.some((p) => p.quota) && <p className="text-sm text-muted">{t('projects.quotaHelp')}</p>}
-      {!!projects?.length && <ul ref={listRef} className="flex flex-col divide-y divide-separator rounded-lg border border-border">
-        {projects.map((p) => <li key={p.id} className="flex items-center gap-3 px-3 py-2.5">
+      {!!shown?.length && <ul ref={listRef} className="flex flex-col divide-y divide-separator rounded-lg border border-border">
+        {shown.map((p) => <li key={p.id} className="flex items-center gap-3 px-3 py-2.5">
           <I name="folder" size={16} className="text-muted"/>
           <span className="min-w-0 flex-1"><span className="block truncate font-medium">{p.name}</span><span className="block text-xs text-muted">{t('projects.servers', { n: p.servers })}</span>
             {p.quota && <span className="block text-xs text-muted [overflow-wrap:anywhere]"><span className="font-medium text-foreground">{t('projects.quota')}</span>{' '}{quotaLine(p.quota)}</span>}</span>
           {p.servers > 0 && <ButtonLink size="sm" variant="ghost" href={`/?project=${p.id}`}><I name="server" size={15}/><span className="sr-only sm:not-sr-only">{t('projects.show')}</span></ButtonLink>}
-          <ConfirmButton size="sm" variant="ghost" icon={<I name="trash-2" size={15}/>} label={<span className="sr-only sm:not-sr-only">{t('projects.remove')}</span>}
-            title={t('projects.removeTitle', { name: p.name })} body={t('projects.removeBody', { n: p.servers })} confirmLabel={t('projects.remove')} cancelLabel={t('projects.cancel')}
-            onConfirm={() => remove.mutateAsync(p.id).then(() => undefined)}/>
+          <Button size="sm" variant="ghost" className="min-h-11 min-w-11 sm:min-h-9" aria-label={tu('removeNamed', { name: p.name })}
+            onPress={() => remove({ id: `project:${p.id}`, text: `${tu('project', { name: p.name })} ${t('projects.removeBody', { n: p.servers })}`,
+              commit: ({ keepalive }) => apiFetch(`/projects/${p.id}`, { method: 'DELETE', keepalive }),
+              done: () => { void client.invalidateQueries({ queryKey: ['projects'] }); void client.invalidateQueries({ queryKey: ['servers'] }); } })}>
+            <I name="trash-2" size={15}/><span className="sr-only sm:not-sr-only">{t('projects.remove')}</span></Button>
         </li>)}
       </ul>}
       <form className="flex flex-wrap items-start gap-3" noValidate

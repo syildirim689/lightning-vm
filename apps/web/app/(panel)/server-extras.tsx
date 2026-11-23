@@ -62,7 +62,7 @@ export function ServerLabels({ server }: { server: Server }) {
         {f.values.tags.length > 0 && <ul className="flex flex-wrap gap-2" aria-label={t('tags')}>
           {f.values.tags.map((tag) => <li key={tag} className="flex items-center gap-1 rounded-full bg-accent-soft py-0.5 pl-3 pr-1 text-sm text-accent-soft-foreground">
             <I name="tag" size={12}/>{tag}
-            <button type="button" aria-label={t('removeTag', { tag })} className="grid size-7 place-items-center rounded-full hover:bg-default"
+            <button type="button" aria-label={t('removeTag', { tag })} className="hit-44 grid size-7 place-items-center rounded-full hover:bg-default"
               onClick={() => f.set('tags')(f.values.tags.filter((x) => x !== tag))}><I name="x" size={12}/></button>
           </li>)}
         </ul>}
@@ -86,7 +86,7 @@ export function OrderSimilar({ server, names }: { server: Server; names: string[
   const name = hostName(server.name.replace(/-\d+$/, ''), names);
   return <Button variant="secondary" onPress={() => {
     set({ poolId: server.poolId, imageId: server.imageId, type: server.packageId ? 'package' : 'custom', packageId: server.packageId ?? '',
-      vcpu: server.vcpu, memoryMb: server.memoryMb, diskGb: server.diskGb, name });
+      vcpu: server.vcpu, memoryMb: server.memoryMb, diskGb: server.diskGb, name, cloneFrom: '', cloneName: '', projectId: server.projectId ?? '' });
     router.push('/order');
   }}><I name="copy-plus" size={16}/>{t('orderSimilar')}</Button>;
 }

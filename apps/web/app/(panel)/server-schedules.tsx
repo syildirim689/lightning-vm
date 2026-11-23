@@ -6,12 +6,13 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useFormatter, useTranslations } from 'next-intl';
 import { useState } from 'react';
 import { I } from '../../components/icon';
-import { Ago, ConfirmButton, Notice, Section, SelectInput, StatusChip, SwitchInput, TextInput } from '../../components/ui';
+import { Ago, Notice, Section, SelectInput, StatusChip, SwitchInput, TextInput } from '../../components/ui';
 import { apiFetch, useErrorText } from '../../lib/api';
 import { useApiForm } from '../../lib/form';
 import { useApiAction, useApiQuery } from '../../lib/query';
 import { clashes, nextRun, sameJob } from '../../lib/schedule';
 import { ScheduleSuggestion } from '../../components/schedule-suggestion';
+import { useUndoableRemove } from '../../components/undo';
 
 type Schedule = { id: string; action: 'power_on' | 'shutdown' | 'snapshot' | 'backup'; keep: number | null; days: number[]; time: string; timezone: string; enabled: boolean; lastRunAt: string | null; lastResult: string | null };
 const week = [1, 2, 3, 4, 5, 6, 7];
@@ -25,12 +26,15 @@ export function PowerSchedules({ serverId, power = true, snapshots = false, back
   const { error } = useErrorText();
   const client = useQueryClient();
   const key = ['servers', serverId, 'schedules'];
-  const list = useApiQuery<{ schedules: Schedule[] }>(key, `/servers/${serverId}/schedules`).data?.schedules;
+  const listed = useApiQuery<{ schedules: Schedule[] }>(key, `/servers/${serverId}/schedules`).data?.schedules;
   const zone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
   const f = useApiForm({ action: power ? 'shutdown' : snapshots ? 'snapshot' : 'backup', days: [1, 2, 3, 4, 5], time: power ? '19:00' : '02:00', timezone: zone, keep: '3' });
   const [busy, setBusy] = useState(false);
   const toggle = useApiAction((s: Schedule) => apiFetch(`/servers/${serverId}/schedules/${s.id}`, { method: 'PUT', body: { ...s, enabled: !s.enabled } }), { invalidate: [key] });
-  const remove = useApiAction((id: string) => apiFetch(`/servers/${serverId}/schedules/${id}`, { method: 'DELETE' }), { invalidate: [key], success: t('removed') });
+  // Removed behind Undo (components/undo.tsx): the schedule stays until the message goes, so an undo loses no run.
+  const tu = useTranslations('Undo');
+  const { hidden, remove } = useUndoableRemove();
+  const list = listed?.filter((x) => !hidden.has(`schedule:${x.id}`));
   // Monday 2024-01-01 is ISO weekday 1, so day d is 2024-01-0d.
   const dayName = (d: number, style: 'short' | 'long') => format.dateTime(new Date(2024, 0, d), { weekday: style });
   const daysText = (days: number[]) => days.length === 7 ? t('everyDay') : days.join() === '1,2,3,4,5' ? t('weekdays') : days.join() === '6,7' ? t('weekend') : days.map((d) => dayName(d, 'short')).join(', ');
@@ -82,9 +86,9 @@ export function PowerSchedules({ serverId, power = true, snapshots = false, back
             {t(`result.${s.lastResult as 'started'}`)}{s.lastRunAt && <> · <Ago at={s.lastRunAt}/></>}</StatusChip>}
           <span className="ml-auto flex items-center gap-1">
             <SwitchInput isSelected={s.enabled} onChange={() => toggle.mutate(s)} label={<span className="sr-only">{t('enabledFor', { action: t(`action.${s.action}`), time: s.time })}</span>}/>
-            <ConfirmButton size="sm" variant="ghost" label={<><I name="trash-2" size={15}/><span className="sr-only">{t('remove', { action: t(`action.${s.action}`), time: s.time })}</span></>}
-              title={t('remove', { action: t(`action.${s.action}`), time: s.time })} body={t('removeBody', { days: daysText(s.days) })} confirmLabel={t('removeYes')} cancelLabel={t('cancel')}
-              onConfirm={() => remove.mutateAsync(s.id).then(() => undefined)}/>
+            <Button size="sm" variant="ghost" isIconOnly className="min-h-11 min-w-11 sm:min-h-9 sm:min-w-9" aria-label={t('remove', { action: t(`action.${s.action}`), time: s.time })}
+              onPress={() => remove({ id: `schedule:${s.id}`, text: `${tu('schedule')} ${t(`action.${s.action}` as 'action.shutdown')} · ${s.time} · ${daysText(s.days)}`,
+                commit: ({ keepalive }) => apiFetch(`/servers/${serverId}/schedules/${s.id}`, { method: 'DELETE', keepalive }), done: reload })}><I name="trash-2" size={15}/></Button>
           </span>
         </li>)}
       </ul>}

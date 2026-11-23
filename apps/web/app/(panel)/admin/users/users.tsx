@@ -104,7 +104,7 @@ export default function Users() {
           rows.map((u) => [u.email, u.name, u.role, u.banned ? 'banned' : 'active', u.twoFactorEnabled, u.authSource ?? '', u.servers, u.sessions, u.lastSeen ?? '', u.createdAt, u.pinnedNote ?? '']))}><I name="download" size={16}/>{t('exportCsv')}</Button>
       </span>
     </div>
-    <DataTable label={t('title')} rows={rows} rowKey={(u) => u.id} empty={users ? t('empty') : '…'} minWidth={900}
+    <DataTable label={t('title')} rows={rows} rowKey={(u) => u.id} empty={!users ? '…' : users.length ? t('empty') : t('emptyAll')} minWidth={900}
       sortBy={{ user: (u) => u.name || u.email, status: (u) => (u.banned ? 1 : 0), servers: (u) => u.servers, seen: (u) => (u.presence === 'online' ? Date.now() : u.lastSeen ? Date.parse(u.lastSeen) : null) }}
       columns={[{ id: 'user', label: t('col.user') }, { id: 'roles', label: t('col.roles') }, { id: 'status', label: t('col.status') }, { id: 'security', label: t('col.security') },
         { id: 'servers', label: t('col.servers') }, { id: 'seen', label: t('col.lastSeen') }, { id: 'act', label: <span className="sr-only">{t('col.actions')}</span> }]}

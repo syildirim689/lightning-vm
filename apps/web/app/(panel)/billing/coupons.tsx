@@ -120,7 +120,7 @@ export function AdminCoupons({ manage }: { manage: boolean }) {
         { id: 'until', label: t('expires') }, { id: 'state', label: t('state') }, { id: 'x', label: '' }]}
       cells={(c) => [
         <span key="c" className="flex flex-col"><span className="flex items-center gap-1"><span className="font-mono font-medium">{c.code}</span>
-          <Button size="sm" variant="ghost" isIconOnly className="size-7 min-w-7" aria-label={t('copy', { code: c.code })} onPress={() => void copy(c.code)}><I name="copy" size={13}/></Button></span>
+          <Button size="sm" variant="ghost" isIconOnly className="hit-44 size-7 min-w-7" aria-label={t('copy', { code: c.code })} onPress={() => void copy(c.code)}><I name="copy" size={13}/></Button></span>
           {c.note && <span className="text-xs text-muted">{c.note}</span>}</span>,
         <span key="o" className="flex flex-col"><span className="tabular-nums">{off(c)}</span>
           <span className="text-xs text-muted">{[c.oncePerUser && t('oncePerUserShort'), c.newCustomers && t('newCustomersShort'), c.packageIds && t('packagesShort', { n: c.packageIds.length })].filter(Boolean).join(' · ')}</span></span>,

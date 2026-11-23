@@ -24,7 +24,7 @@ const localContent = ['lvm-recent', 'lvm-dashboard-seen', 'lvm:support-new-draft
   'lvm:draft:bulk-message:subject', 'lvm:draft:bulk-message:body', 'lvm:draft:incident:new:title', 'lvm:draft:incident:new:body', 'lvm:draft:incident:42'];
 const sessionContent = ['lvm-order', 'lvm:tasks-cleared', 'lvm:host-task', 'lvm:table:/servers:Servers', 'lvm:table:/admin/users/u_9:Sessions'];
 const localKept = ['lvm-a11y', 'theme', 'lvm-nav-open', 'lvm-server-view', 'lvm.terminalFont', 'lvm.snippetOs', 'lvm-first-steps-hidden', 'lvm-announcement-closed', 'lvm-2fa-method',
-  'better-auth.message', 'somebody-else'];
+  'lvm-setup-hidden', 'better-auth.message', 'somebody-else'];
 // Saved views an earlier version left here (separateKeys): gone when a session ends, kept when the panel opens for an
 // account (their owner's next visit to the list moves them to the account).
 const localViews = ['lvm:views:u_1:servers', 'lvm:views:u_2:admin-payments'];
@@ -178,7 +178,7 @@ test('storage is written only by the files this list was made from', () => {
     // Left out: its keys are being moved to the account by its own code.
     .filter((f) => f !== 'lib/saved-views.ts').sort();
   assert.deepEqual(writers, [
-    'app/(auth)/credentials-form.tsx', 'app/(panel)/account/two-factor.tsx', 'app/(panel)/admin/terminal/terminal.tsx', 'app/(panel)/order/order.tsx', 'app/(panel)/servers-ui.tsx',
+    'app/(auth)/credentials-form.tsx', 'app/(panel)/account/two-factor.tsx', 'app/(panel)/admin/dashboard.tsx', 'app/(panel)/admin/terminal/terminal.tsx', 'app/(panel)/order/order.tsx', 'app/(panel)/servers-ui.tsx',
     'app/(panel)/shell.tsx', 'app/(panel)/support/list.tsx', 'app/(panel)/support/ui.tsx', 'components/activity.tsx', 'components/console-snippets.tsx', 'components/digest.tsx',
     'components/first-steps.tsx', 'components/host-task.tsx', 'components/task-manager.tsx', 'components/time-zone-sync.tsx', 'components/ui.tsx', 'components/wall/hooks.ts', 'lib/a11y-prefs.ts', 'lib/a11y.ts',
     'lib/drafts.ts', 'lib/order-store.ts', 'lib/recent.ts', 'lib/session-end.ts',

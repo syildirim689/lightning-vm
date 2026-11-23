@@ -10,7 +10,7 @@ import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'reac
 import { useQueryClient, type QueryKey } from '@tanstack/react-query';
 import { useErrorText } from '../lib/api';
 import { readDraft, writeDraft } from '../lib/drafts';
-import { type Format, inputProps, isValid, normalize, splitList } from '../lib/formats';
+import { type Format, inputProps, isValid, normalize, repairPaste, splitList, sshKeyInfo } from '../lib/formats';
 import { I } from './icon';
 
 export function PageHeader({ eyebrow, title, description, actions }: { eyebrow?: string; title: React.ReactNode; description?: React.ReactNode; actions?: React.ReactNode }) {
@@ -118,9 +118,25 @@ export function TextInput({ label, value, onChange, error, help, type = 'text', 
   const fmt = format ? inputProps[format] : undefined;
   const items = format ? (list ? splitList(value) : value.trim() ? [value.trim()] : []) : [];
   const bad = format ? items.find((x) => !isValid(format, normalize(format, x))) : undefined;
+  // An SSH key says what it is (type, size, comment), or exactly why it cannot be used; a private key at once.
+  const key = format === 'sshKey' ? sshKeyInfo(value) : null;
+  const keyProblem = key && !key.ok && key.problem !== 'unknown' ? key.problem : null;
   // Wrong values are named once the field has been left (or at once when fixing one), never while first typing.
-  const own = bad !== undefined && (left || !!error) ? tf(list ? 'invalidItem' : 'invalid', { kind: tf(`kind.${format}` as 'kind.ip'), value: bad, example: fmt!.example }) : undefined;
+  const own = keyProblem && (left || !!error || keyProblem === 'private') ? tf(`sshProblem.${keyProblem}`)
+    : bad !== undefined && (left || !!error) ? tf(list ? 'invalidItem' : 'invalid', { kind: tf(`kind.${format}` as 'kind.ip'), value: bad, example: fmt!.example }) : undefined;
   const shown = error ?? own;
+  // A paste that was tidied on its way in (lib/formats.ts repairPaste) says so once.
+  const [tidied, setTidied] = useState(false);
+  const onPaste = (e: React.ClipboardEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    if (!format && !list) return;
+    const fixed = repairPaste(format, e.clipboardData.getData('text'), { list, multiline });
+    if (fixed === null) return;
+    e.preventDefault();
+    const el = e.currentTarget, from = el.selectionStart ?? value.length, to = el.selectionEnd ?? value.length;
+    onChange(value.slice(0, from) + fixed + value.slice(to));
+    setTidied(true);
+  };
+  const keyLine = key?.ok ? tf(key.comment ? 'sshInfoComment' : 'sshInfo', { type: key.type, bits: key.bits, comment: key.comment }) : null;
   const tidy = () => {
     setLeft(true);
     if (!format) return;
@@ -140,16 +156,18 @@ export function TextInput({ label, value, onChange, error, help, type = 'text', 
       if (proposed) { el.select(); fresh.current = true; setTimeout(() => { fresh.current = false; }, 400); } }}
     onBlur={tidy} data-transient={transient || !!draft || undefined}>
     <Label>{label}{unit && <span className="sr-only"> ({unit})</span>}</Label>
-    {multiline ? <TextArea rows={4} placeholder={ph} maxLength={maxLength} spellCheck={spellCheck} {...fill} {...extra} className={fmt?.mono ? 'font-mono text-sm' : undefined}/>
-      : unit ? <div className="relative"><Input placeholder={ph} maxLength={maxLength} spellCheck={false} {...fill} {...extra} className={`w-full min-w-0 pr-14 tabular-nums ${fmt?.mono ? 'font-mono' : ''}`}/>
+    {multiline ? <TextArea rows={4} placeholder={ph} maxLength={maxLength} spellCheck={spellCheck} {...fill} {...extra} onPaste={onPaste} className={fmt?.mono ? 'font-mono text-sm' : undefined}/>
+      : unit ? <div className="relative"><Input placeholder={ph} maxLength={maxLength} spellCheck={false} {...fill} {...extra} onPaste={onPaste} className={`w-full min-w-0 pr-14 tabular-nums ${fmt?.mono ? 'font-mono' : ''}`}/>
         <span aria-hidden className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-sm text-muted">{unit}</span></div>
       : revealable && type === 'password' ? <div className="relative"><Input placeholder={ph} maxLength={maxLength} spellCheck={false} {...fill} {...extra} className="w-full min-w-0 pr-20 font-mono" style={hidden ? { WebkitTextSecurity: 'disc' } as React.CSSProperties : undefined}/>
         <button type="button" onClick={() => setRevealed((v) => !v)} aria-pressed={revealed} disabled={isDisabled} aria-label={tf(revealed ? 'hide' : 'show')}
           className="absolute inset-y-0 right-1 my-auto grid h-8 min-w-8 place-items-center rounded-lg px-2 text-xs font-medium text-muted hover:bg-default hover:text-foreground focus-visible:outline-2 focus-visible:outline-accent disabled:opacity-50">
           <span aria-hidden className="flex items-center gap-1"><I name={revealed ? 'eye-off' : 'eye'} size={16}/><span className="hidden sm:inline">{tf(revealed ? 'hide' : 'show')}</span></span></button></div>
-      : <Input placeholder={ph} maxLength={maxLength} spellCheck={masked ? false : spellCheck} {...fill} {...extra} className={fmt?.mono ? 'min-w-0 font-mono' : 'min-w-0'} style={masked ? { WebkitTextSecurity: 'disc' } as React.CSSProperties : undefined}
+      : <Input placeholder={ph} maxLength={maxLength} spellCheck={masked ? false : spellCheck} {...fill} {...extra} onPaste={onPaste} className={fmt?.mono ? 'min-w-0 font-mono' : 'min-w-0'} style={masked ? { WebkitTextSecurity: 'disc' } as React.CSSProperties : undefined}
         onMouseUp={(e) => { if (fresh.current) { e.preventDefault(); fresh.current = false; } }} data-proposed={proposed || undefined}/>}
-    {shown ? <FieldError>{shown}</FieldError> : when || help || proposed ? <Description>{when && <span className="block font-medium text-foreground/80">{when}</span>}
+    {shown ? <FieldError>{shown}</FieldError> : when || help || proposed || keyLine || tidied ? <Description>{when && <span className="block font-medium text-foreground/80">{when}</span>}
+      {keyLine && <span className="flex items-center gap-1 font-medium text-foreground/80" data-key-info><I name="key-round" size={12} className="text-success"/>{keyLine}</span>}
+      {tidied && <span className="block text-accent">{tf('pasteTidied')}</span>}
       {proposed && <span className="flex items-center gap-1 text-accent"><I name="sparkles" size={12}/>{tp('proposed')}</span>}{help}</Description> : null}
     {count && <p className={`mt-0.5 text-right text-xs tabular-nums ${full ? 'font-medium text-warning' : 'text-muted'}`} aria-live={full ? 'polite' : 'off'}>
       {full ? tf('atLimit', { max: maxLength! }) : tf('count', { n: value.length, max: maxLength! })}</p>}
@@ -298,31 +316,55 @@ export function SwitchInput({ label, isSelected, onChange, isDisabled }: { label
   </Switch>;
 }
 
-// A destructive action behind an explicit confirmation dialog.
-export function ConfirmButton({ label, title, body, confirmLabel, cancelLabel, onConfirm, variant = 'danger', size = 'md', isDisabled, icon }: {
+// A destructive action behind an explicit confirmation dialog. `typed`: for what cannot be undone, the confirm button
+// waits until this text (the server's name) is typed. Focus goes back to the button when the dialog closes, also when
+// the dialog's own button that held it is gone by then (a drawer behind it would otherwise lose Escape).
+export function ConfirmButton({ label, title, body, confirmLabel, cancelLabel, onConfirm, variant = 'danger', size = 'md', isDisabled, icon, typed, typedLabel, className }: {
   label: React.ReactNode; title: string; body: React.ReactNode; confirmLabel: string; cancelLabel: string; onConfirm: () => void | Promise<void>;
-  variant?: Variant | 'danger-soft'; size?: 'sm' | 'md'; isDisabled?: boolean; icon?: React.ReactNode;
+  variant?: Variant | 'danger-soft'; size?: 'sm' | 'md'; isDisabled?: boolean; icon?: React.ReactNode; typed?: string; typedLabel?: string; className?: string;
 }) {
   const [busy, setBusy] = useState(false);
+  const [text, setText] = useState('');
+  const trigger = useRef<HTMLButtonElement>(null);
   // A primary button confirms something wanted (it costs, it starts), not something lost: a calm dialog.
   const calm = variant === 'primary';
-  return <AlertDialog>
-    <Button variant={variant} size={size} isDisabled={isDisabled}>{icon}{label}</Button>
+  const ok = !typed || text.trim() === typed;
+  return <AlertDialog onOpenChange={(open) => { if (open) return; setText(''); returnFocus(trigger.current); }}>
+    <Button ref={trigger} variant={variant} size={size} isDisabled={isDisabled} className={className}>{icon}{label}</Button>
     <AlertDialog.Backdrop>
       <AlertDialog.Container>
         <AlertDialog.Dialog className="sm:max-w-[440px]">
           {({ close }) => <>
             <AlertDialog.Header><AlertDialog.Icon status={calm ? 'accent' : 'danger'}/><AlertDialog.Heading>{title}</AlertDialog.Heading></AlertDialog.Header>
-            <AlertDialog.Body><div className="text-sm text-muted">{body}</div></AlertDialog.Body>
+            <AlertDialog.Body><div className="flex flex-col gap-3 text-sm text-muted">{body}
+              {typed && <form noValidate onSubmit={(e) => { e.preventDefault(); }}><TextInput transient label={typedLabel ?? typed} value={text} onChange={setText}/></form>}</div></AlertDialog.Body>
             <AlertDialog.Footer>
               <Button slot="close" variant="tertiary">{cancelLabel}</Button>
-              <Button variant={calm ? 'primary' : 'danger'} isPending={busy} onPress={async () => { setBusy(true); try { await onConfirm(); close(); } catch { /* the caller showed why */ } finally { setBusy(false); } }}>{confirmLabel}</Button>
+              <Button variant={calm ? 'primary' : 'danger'} isPending={busy} isDisabled={!ok} onPress={async () => { setBusy(true); try { await onConfirm(); close(); } catch { /* the caller showed why */ } finally { setBusy(false); } }}>{confirmLabel}</Button>
             </AlertDialog.Footer>
           </>}
         </AlertDialog.Dialog>
       </AlertDialog.Container>
     </AlertDialog.Backdrop>
   </AlertDialog>;
+}
+
+// After a dialog closes: focus back on what opened it. Waits while the closing dialog still holds the focus (its exit
+// animation), then puts it back if it was dropped on the page; leaves it alone when the person has already moved on,
+// or when the opener is gone or disabled. Tried for about a second.
+export function returnFocus(el: HTMLElement | null) {
+  if (typeof window === 'undefined' || !el) return;
+  let tries = 0;
+  const go = () => {
+    const at = document.activeElement as HTMLElement | null;
+    if (at === el) return;
+    const closing = !!at?.closest('[role="alertdialog"], [role="dialog"]') && !at?.closest('[role="dialog"]')?.contains(el);
+    const dropped = !at || at === document.body || !at.isConnected;
+    if (!closing && !dropped) return;
+    if (dropped && el.isConnected && !el.hasAttribute('disabled') && el.getAttribute('aria-disabled') !== 'true') { el.focus({ preventScroll: true }); if (document.activeElement === el) return; }
+    if (++tries < 20) setTimeout(go, 50);
+  };
+  setTimeout(go, 0);
 }
 
 // The same confirmation opened from elsewhere (a menu item): the caller holds whether it is open.

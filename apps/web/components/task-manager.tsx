@@ -13,8 +13,9 @@ import { useErrorText } from '../lib/api';
 import { useApiQuery } from '../lib/query';
 import { I } from './icon';
 import { mayLeave } from '../lib/edits';
+import { EtaLine } from './eta';
 
-type Op = { id: string; kind: string; status: string; step: string | null; attempts: number; errorCode: string | null; createdAt: string; finishedAt: string | null; serverId: string; serverName: string };
+type Op = { id: string; kind: string; status: string; step: string | null; attempts: number; errorCode: string | null; createdAt: string; finishedAt: string | null; serverId: string; serverName: string; diskGb?: number | null };
 const steps: Record<string, string[]> = {
   create: ['queued', 'clone', 'power_on', 'readiness', 'done'],
   delete: ['queued', 'destroy', 'verify_gone', 'done'],
@@ -104,6 +105,7 @@ export default function TaskManager({ permissions }: { permissions: string[] }) 
                   {!o.finishedAt && stepAt(o) && <span className="text-muted"> · {t('stepOf', stepAt(o)!)}</span>}</span>
                 {!o.finishedAt && <span className="shrink-0 tabular-nums">{clock(now.getTime() - Date.parse(o.createdAt))}</span>}
               </span>
+              {!o.finishedAt && <EtaLine kind={o.kind} diskGb={o.diskGb} elapsed={(now.getTime() - Date.parse(o.createdAt)) / 1000} className="text-xs"/>}
               {(o.status === 'pending' || o.status === 'running') && <ProgressBar aria-label={t('progress')} value={progress(o)} size="sm"><ProgressBar.Track><ProgressBar.Fill/></ProgressBar.Track></ProgressBar>}
             </button>
           </motion.li>)}

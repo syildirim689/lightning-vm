@@ -292,3 +292,10 @@ html[data-a11y-transparency="reduce"] .page-loader { background: var(--backgroun
 .wall-blink-slow { animation: wall-blink 1.6s steps(1) infinite; }
 .wall[data-motion="still"] :is(.wall-blink-fast, .wall-blink-slow) { animation: none; }
 @media (prefers-reduced-motion: reduce) { :is(.wall-blink-fast, .wall-blink-slow) { animation: none; } }
+
+/* Small icon buttons (a tag's ×, an attachment's ×, a copy icon) keep their look but take a 44 px touch area on
+   touch screens, centred on them (WCAG 2.5.5 / Apple HIG). The element needs no other positioning. */
+@media (pointer: coarse) {
+  .hit-44 { position: relative; }
+  .hit-44::after { content: ""; position: absolute; left: 50%; top: 50%; width: max(100%, 44px); height: max(100%, 44px); transform: translate(-50%, -50%); }
+}
