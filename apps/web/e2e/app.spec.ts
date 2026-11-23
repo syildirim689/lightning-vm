@@ -3408,7 +3408,8 @@ test.describe('people, settings and smart features (English browser)', () => {
     await name.fill('Saved with keys');
     await name.press('Control+s');
     await expect(page.getByText('Project created.')).toBeVisible();
-    const row = page.getByRole('listitem').filter({ hasText: 'Saved with keys' });
+    // In the page (the message saying it was removed is a list item too, in the message region).
+    const row = page.locator('main').getByRole('listitem').filter({ hasText: 'Saved with keys' });
     const removed = page.waitForResponse((r) => r.request().method() === 'DELETE' && r.url().includes('/api/projects/'));
     await row.getByRole('button', { name: 'Delete Saved with keys' }).click();
     await expect(row).toHaveCount(0);
@@ -3608,7 +3609,7 @@ test.describe('people, settings and smart features (English browser)', () => {
     await page.goto('/account?tab=projects');
     await page.getByLabel('Project name').fill('E2E Project');
     await page.getByRole('button', { name: 'Create project' }).click();
-    const project = page.getByRole('listitem').filter({ hasText: 'E2E Project' });
+    const project = page.locator('main').getByRole('listitem').filter({ hasText: 'E2E Project' });
     await expect(project).toContainText('No servers');
     // Deleting a project asks nothing: it leaves the list, the message says what happens to its servers and offers
     // Undo, and the request is sent only when the message goes. An undone removal never reaches the API.
@@ -3629,7 +3630,7 @@ test.describe('people, settings and smart features (English browser)', () => {
     page.off('request', onRequest);
     expect(deletes).toHaveLength(1);
     await page.reload();
-    await expect(page.getByRole('listitem').filter({ hasText: 'E2E Project' })).toHaveCount(0);
+    await expect(page.locator('main').getByRole('listitem').filter({ hasText: 'E2E Project' })).toHaveCount(0);
     // The panel address follows the domain the proxy serves, not a loopback address from the wizard.
     await page.goto('/admin/settings');
     await expect(page.getByRole('link', { name: new URL(baseURL!).host })).toBeVisible();

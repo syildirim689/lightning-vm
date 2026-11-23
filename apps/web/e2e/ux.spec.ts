@@ -171,14 +171,19 @@ test('ux: a pasted SSH key is joined and named, a private key is refused at once
   await field.fill('-----BEGIN OPENSSH PRIVATE KEY-----');
   await expect(page.getByText(/This is a PRIVATE key\. Never paste it anywhere/)).toBeVisible();
   await field.fill('');
-  // A firewall's sources (app.spec.ts made firewalls): a list pasted one address per line keeps its entries apart.
-  const firewalls = (await (await page.request.get('/api/firewalls')).json() as { firewalls: { id: string; rules: unknown[] }[] }).firewalls.filter((f) => f.rules.length);
-  test.skip(!firewalls.length, 'no firewall with rules to paste into');
-  await page.goto(`/firewalls/${firewalls[0].id}`);
-  const sources = page.getByLabel('Source addresses').first();
-  await paste(sources, '203.0.113.10\n198.51.100.0/24\r\n2001:db8::1\n');
-  await expect(sources).toHaveValue(/203\.0\.113\.10, 198\.51\.100\.0\/24, 2001:db8::1$/);
-  await page.getByRole('button', { name: 'Discard' }).click();
+  // A firewall's sources: a list pasted one address per line keeps its entries apart. (A firewall of its own, made
+  // and removed here: app.spec.ts removes the ones it makes.)
+  const made = await page.request.post('/api/firewalls', { headers: { 'x-lightning-csrf': '1' },
+    data: { name: `ux-paste-${Date.now()}`, rules: [{ direction: 'in', protocol: 'tcp', port: '22', ips: ['0.0.0.0/0'], description: '' }], serverIds: [] } });
+  expect(made.status(), await made.text()).toBe(201);
+  const firewall = (await made.json() as { id: string }).id;
+  try {
+    await page.goto(`/firewalls/${firewall}`);
+    const sources = page.getByLabel('Source addresses').first();
+    await paste(sources, '203.0.113.10\n198.51.100.0/24\r\n2001:db8::1\n');
+    await expect(sources).toHaveValue('203.0.113.10, 198.51.100.0/24, 2001:db8::1');
+    await page.getByRole('button', { name: 'Discard' }).click();
+  } finally { await page.request.delete(`/api/firewalls/${firewall}`, { headers: { 'x-lightning-csrf': '1' } }); }
 });
 
 test('ux: the order form starts from the newest server and says so; "Start empty" clears it', async ({ page }) => {
