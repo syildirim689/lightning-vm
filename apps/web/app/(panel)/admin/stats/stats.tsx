@@ -17,6 +17,7 @@ import { useApiQuery } from '../../../../lib/query';
 import { highlights, seriesCsv } from '../../../../lib/stats';
 import { useMe } from '../../../../lib/me';
 import { browserTimeZone } from '../../../../components/time-zone-picker';
+import WallLink from '../../../../components/wall/wall-link';
 
 type Point = { at: string; /* YYYY-MM-DD, a local day */ created: number; deleted: number; signups: number; ticketsOpened: number; ticketsClosed: number; opsOk: number; opsFailed: number };
 type Kpi = { value: number; change: number | null };
@@ -55,6 +56,7 @@ export default function Statistics() {
 
   return <div className="flex flex-col gap-6">
     <PageHeader eyebrow={t('eyebrow')} title={t('title')} description={t('intro', { tz: s?.tz ?? tz })} actions={<div className="flex flex-wrap items-center gap-2">
+      <WallLink scene="stats"/>
       <Button variant="secondary" isDisabled={!s} onPress={() => s && download(`statistics-${days}d.csv`, seriesCsv(s.series, ['date', ...(['created', 'deleted', 'signups', 'opened', 'closed', 'opsOk', 'opsFailed'] as const).map((k) => t(`csv.${k}`))]))}>
         <I name="download" size={16}/>{t('csv.button')}</Button>
       <div role="radiogroup" aria-label={t('range')} className="relative flex rounded-full border border-border bg-surface p-1">

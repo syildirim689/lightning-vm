@@ -267,3 +267,28 @@ html[data-a11y-transparency="reduce"] .page-loader { background: var(--backgroun
   .modal__container:not(.modal__container--full) > .modal__dialog { width: 100%; max-width: 100%; border-bottom-left-radius: 0; border-bottom-right-radius: 0; padding-bottom: calc(1.5rem + env(safe-area-inset-bottom)); max-height: calc(var(--visual-viewport-height, 100dvh) - 1.5rem); }
   .modal__container:not(.modal__container--full) > .modal__dialog::before { content: ""; position: absolute; top: 0.5rem; left: 50%; width: 2.25rem; height: 0.25rem; margin-left: -1.125rem; border-radius: 9999px; background: var(--separator); }
 }
+
+/* Live walls (/wall/*): their own colours, independent of the panel's theme. "night" (the default) is dark for a
+   room or a TV left on; "day" is light. Status words keep at least 4.5:1 on both backgrounds and on the panels. */
+.wall {
+  --w-bg: #05070b; --w-fg: #e8eef7; --w-muted: #a3b2c6; --w-panel: rgb(9 12 19 / 0.78); --w-line: rgb(148 163 184 / 0.24); --w-soft: rgb(148 163 184 / 0.12);
+  --w-ok: #4ae08f; --w-warn: #ffb429; --w-bad: #ff6b76; --w-accent: #6cb4ff; --w-amber: #ffad42; --w-none: #8d99ab;
+  background: var(--w-bg); color: var(--w-fg); color-scheme: dark;
+}
+.wall[data-look="day"] {
+  --w-bg: #e6ebf1; --w-fg: #0d1420; --w-muted: #3a475a; --w-panel: rgb(250 251 253 / 0.86); --w-line: rgb(15 23 42 / 0.16); --w-soft: rgb(15 23 42 / 0.06);
+  --w-ok: #0a6d37; --w-warn: #874d00; --w-bad: #b01220; --w-accent: #1750b8; --w-amber: #8a4b00; --w-none: #536073;
+  color-scheme: light;
+}
+.wall-panel { background: var(--w-panel); border: 1px solid var(--w-line); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); }
+/* 2D wall: power flows along a host's line; still for people who ask for less motion. */
+@keyframes wall-flow { to { background-position: 40px 0; } }
+.wall-flow { background-image: repeating-linear-gradient(90deg, currentColor 0 10px, transparent 10px 20px); background-size: 40px 100%; animation: wall-flow linear infinite; }
+.wall-flow[data-source="estimated"] { background-image: repeating-linear-gradient(90deg, currentColor 0 4px, transparent 4px 10px); }
+@media (prefers-reduced-motion: reduce) { .wall-flow { animation: none; } }
+.wall[data-motion="still"] .wall-flow { animation: none; }
+@keyframes wall-blink { 50% { opacity: 0.15; } }
+.wall-blink-fast { animation: wall-blink 0.45s steps(1) infinite; }
+.wall-blink-slow { animation: wall-blink 1.6s steps(1) infinite; }
+.wall[data-motion="still"] :is(.wall-blink-fast, .wall-blink-slow) { animation: none; }
+@media (prefers-reduced-motion: reduce) { :is(.wall-blink-fast, .wall-blink-slow) { animation: none; } }

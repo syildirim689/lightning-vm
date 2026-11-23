@@ -17,6 +17,7 @@ import { useApiQuery } from '../../../lib/query';
 import { fold } from '../../../lib/search';
 import { useBytes } from '../../../lib/units';
 import { kindTone, lineTone, ServiceDrawer, versionText, type ServiceRow } from './service-detail';
+import WallLink from '../../../components/wall/wall-link';
 
 type State = { checkedAt: string; services: ServiceRow[]; disks: { mount: string; device: string; total: number; used: number; free: number }[]; inodesPercent: number;
   processes: { pid: number; cpu: number; memory: number; rss: number; name: string }[]; failedUnits: { unit: string }[]; addresses: { interface: string; address: string }[];
@@ -142,6 +143,8 @@ export default function HostState() {
 
   return <Section title={t('title')} description={t('intro')}
     actions={<div className="flex flex-wrap items-center gap-2">
+      {/* The live wall of this state, right before its verdict. */}
+      <WallLink scene="system"/>
       <StatusChip tone={problems.length ? (down.length || cpu >= 90 || mem >= 90 || fullDisks.length ? 'danger' : 'warning') : 'success'}>{problems.length ? t('attention', { n: problems.length }) : t('healthy')}</StatusChip>
       {d.agent.installed && <Button size="sm" variant="secondary" isPending={asking} isDisabled={d.agent.busy} onPress={() => void refresh()}><I name="refresh-cw" size={14}/>{t('refresh')}</Button>}
     </div>}>

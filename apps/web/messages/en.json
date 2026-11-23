@@ -9688,5 +9688,128 @@
     },
     "codesFile": "backup-codes",
     "appShows": "Your app will show it as: {issuer} ({account})"
+  },
+  "Wall": {
+    "open": "Open the live wall ({name})",
+    "openHint": "A full-screen live view for a TV or a second screen",
+    "scene": {
+      "system": "System",
+      "stats": "Statistics",
+      "energy": "Energy"
+    },
+    "title": {
+      "system": "System, live",
+      "stats": "Statistics, live",
+      "energy": "Energy, live"
+    },
+    "sceneLabel": {
+      "system": "The panel's services as units in a rack, with gauges for processor, memory, disk and load and the last ten minutes as ribbons",
+      "stats": "The period's figures as rows of towers, one per day",
+      "energy": "Each host's power flowing to the facility, and the last 24 hours around it"
+    },
+    "home": "To the start page",
+    "back": {
+      "system": "Back to System",
+      "stats": "Back to Statistics",
+      "energy": "Back to Energy"
+    },
+    "backShort": "Back",
+    "previous": "Previous wall: {name}",
+    "next": "Next wall: {name}",
+    "controls": "Wall controls",
+    "figures": "Figures",
+    "tour": "Tour",
+    "tourHelp": "The camera moves between points of interest every 18 seconds",
+    "tourReduced": "Off: this device asks for less motion",
+    "toDay": "Light colours",
+    "toNight": "Dark colours",
+    "awake": "Keep on",
+    "awakeHelp": "Keeps the screen from sleeping while the wall is shown",
+    "awakeUnsupported": "This browser cannot keep the screen on",
+    "details": "Details",
+    "fullscreen": "Full screen",
+    "exitFullscreen": "Leave full screen",
+    "keys": "Keys: F full screen · Esc back · ← → other walls · T tour · I details",
+    "updated": "Updated {time}",
+    "stale": "No new data since {time}",
+    "waiting": "Waiting for the first answer",
+    "failed": "The panel did not answer",
+    "retry": "Try again",
+    "ended": "Your session has ended.",
+    "signIn": "Sign in again",
+    "lost": "The graphics card reset the view; drawing it again…",
+    "try3d": "Try 3D",
+    "flat": {
+      "no-webgl": "2D: this browser has no WebGL 2",
+      "software": "2D: this device draws 3D without a graphics card",
+      "slow": "2D: 3D ran under 20 frames a second here",
+      "lost": "2D: the graphics card reset twice in a minute",
+      "chosen": "2D, as asked"
+    },
+    "quality": {
+      "high": "high quality",
+      "medium": "medium quality",
+      "low": "low quality"
+    },
+    "info": {
+      "renderer": "Drawing",
+      "gpu": "Graphics",
+      "fps": "Frames a second",
+      "steps": "Quality steps taken back",
+      "pixels": "Canvas",
+      "calls": "Draw calls · triangles",
+      "memory": "Geometries · textures · shaders",
+      "awake": "Screen kept on",
+      "on": "Yes",
+      "off": "No",
+      "software": "This is a software renderer: the 3D view is slow here."
+    },
+    "noData": "No data yet",
+    "noDataShort": "no data",
+    "fault": "FAULT",
+    "history": {
+      "cpu": "Processor",
+      "memory": "Memory",
+      "load": "Load"
+    },
+    "system": {
+      "api": {
+        "up": "API, PostgreSQL and Redis reachable",
+        "down": "The API is not ready",
+        "unknown": "API: unknown"
+      },
+      "worker": {
+        "running": "Worker running (last signal {time})",
+        "stale": "Worker may be stuck (last signal {time})",
+        "none": "No worker heartbeat",
+        "unknown": "Worker: unknown"
+      },
+      "agentOff": "Services: the host agent is not installed",
+      "noSnapshot": "Services: no snapshot yet",
+      "services": "{n, plural, one {# service} other {# services}} · {faults, plural, =0 {no fault} one {# fault} other {# faults}}",
+      "snapshot": "Services as of {time}",
+      "snapshotOld": "Services as of {time}: an old snapshot",
+      "rack": "Services",
+      "historyLabel": "Processor, memory and load over the last ten minutes"
+    },
+    "stats": {
+      "period": "Last {days} days, against the {days} before",
+      "new": "new in this period",
+      "same": "same as before",
+      "max": "max {n}",
+      "total": "total {n}",
+      "maxShort": "max {n}"
+    },
+    "energy": {
+      "noFlow": "No power sample in the last 15 minutes",
+      "noFlowShort": "No recent power sample",
+      "measured": "measured",
+      "estimated": "estimated",
+      "facilityW": "{w} at the facility",
+      "itW": "{w} drawn by the hosts",
+      "others": "+{n} more hosts",
+      "othersLine": "{n, plural, one {# more host} other {# more hosts}}: {w} W",
+      "day": "The last 24 hours"
+    }
   }
 }

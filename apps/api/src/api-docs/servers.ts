@@ -618,7 +618,7 @@ export default {
     summary: { tr: 'Enerji raporunu verir.', en: 'Returns the energy report.' },
     details: { tr: 'Host gücü ölçülmüş veya tahmini olabilir; maliyet ve karbon enerji ayarlarındaki fiyat, PUE ve şebeke katsayısıyla hesaplanır.', en: 'Host power is measured or estimated; cost and carbon use the price, PUE and grid factor from the energy settings.' },
     query: [{ name: 'range', type: 'string', values: ['1d', '7d', '30d'], text: { tr: 'Zaman aralığı, varsayılan 1d.', en: 'The time range, default 1d.' } }],
-    returns: { tr: '`settings`, `now` (anlık watt), `energy` (kWh, maliyet, CO2), `series`, `hosts`, `locations`, `servers`.', en: '`settings`, `now` (current watts), `energy` (kWh, cost, CO2), `series`, `hosts`, `locations`, `servers`.' },
+    returns: { tr: '`settings`, `now` (anlık watt), `energy` (kWh, maliyet, CO2), `series`, `hosts` (her birinin en yeni örneğinin zamanı `lastAt` ile), `locations`, `servers`.', en: '`settings`, `now` (current watts), `energy` (kWh, cost, CO2), `series`, `hosts` (each with the time of its newest sample in `lastAt`), `locations`, `servers`.' },
   },
   'PUT /admin/power/profiles': {
     tag: 'admin-system',

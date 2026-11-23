@@ -180,7 +180,7 @@ test('storage is written only by the files this list was made from', () => {
   assert.deepEqual(writers, [
     'app/(auth)/credentials-form.tsx', 'app/(panel)/account/two-factor.tsx', 'app/(panel)/admin/terminal/terminal.tsx', 'app/(panel)/order/order.tsx', 'app/(panel)/servers-ui.tsx',
     'app/(panel)/shell.tsx', 'app/(panel)/support/list.tsx', 'app/(panel)/support/ui.tsx', 'components/activity.tsx', 'components/console-snippets.tsx', 'components/digest.tsx',
-    'components/first-steps.tsx', 'components/host-task.tsx', 'components/task-manager.tsx', 'components/time-zone-sync.tsx', 'components/ui.tsx', 'lib/a11y-prefs.ts', 'lib/a11y.ts',
+    'components/first-steps.tsx', 'components/host-task.tsx', 'components/task-manager.tsx', 'components/time-zone-sync.tsx', 'components/ui.tsx', 'components/wall/hooks.ts', 'lib/a11y-prefs.ts', 'lib/a11y.ts',
     'lib/drafts.ts', 'lib/order-store.ts', 'lib/recent.ts', 'lib/session-end.ts',
   ].sort(), 'a file that uses browser storage was added or removed: check its keys against lib/session-end.ts, then update this list');
 });

@@ -30,9 +30,10 @@ export class PowerController {
       pool.query(`SELECT (SELECT ${kwh} FROM power_samples WHERE at >= date_trunc('day', now())) AS today,
         (SELECT ${kwh} FROM power_samples WHERE at >= date_trunc('month', now())) AS month,
         (SELECT ${kwh} FROM power_samples WHERE at > now() - $1::interval) AS range`, [range.interval]),
+      // lastAt: the host's newest sample, so a view can tell "now" from "earlier in the range" per host (the live wall).
       pool.query(`SELECT s.connection_id AS "connectionId", c.name AS connection, s.host_moref AS moref, max(s.host_name) AS name, ${kwh} AS kwh,
           (array_agg(s.watts::float8 ORDER BY s.at DESC))[1] AS watts, (array_agg(s.source ORDER BY s.at DESC))[1] AS source,
-          (array_agg(s.cpu_util::float8 ORDER BY s.at DESC))[1] AS "cpuUtil", p.idle_watts AS "idleWatts", p.max_watts AS "maxWatts"
+          (array_agg(s.cpu_util::float8 ORDER BY s.at DESC))[1] AS "cpuUtil", max(s.at) AS "lastAt", p.idle_watts AS "idleWatts", p.max_watts AS "maxWatts"
         FROM power_samples s JOIN vmware_connections c ON c.id = s.connection_id
         LEFT JOIN power_host_profiles p ON p.connection_id = s.connection_id AND p.host_moref = s.host_moref
         WHERE s.at > now() - $1::interval GROUP BY s.connection_id, c.name, s.host_moref, p.idle_watts, p.max_watts ORDER BY kwh DESC`, [range.interval]),

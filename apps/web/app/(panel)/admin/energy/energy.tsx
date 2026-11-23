@@ -15,6 +15,7 @@ import { flag } from '../../../../lib/flag';
 import { useMe } from '../../../../lib/me';
 import { can } from '../../../../lib/permissions';
 import { useApiQuery } from '../../../../lib/query';
+import WallLink from '../../../../components/wall/wall-link';
 
 type Settings = { pricePerKwh: string; currency: string; pue: number; co2GramsPerKwh: number };
 type Host = { connectionId: string; connection: string; moref: string; name: string; kwh: number; watts: number; source: 'measured' | 'estimated'; cpuUtil: number | null; idleWatts: number | null; maxWatts: number | null };
@@ -101,7 +102,7 @@ export default function Energy() {
   const chart = (d?.series ?? []).map((p) => ({ ...p, label: format.dateTime(new Date(p.t), range === '30d' ? { dateStyle: 'short' } : { timeStyle: 'short', ...(range === '7d' && { dateStyle: 'short' }) }) }));
   return <>
     <PageHeader eyebrow={t('eyebrow')} title={t('title')} description={t('intro')}
-      actions={<Button variant="secondary" onPress={measure}><I name="zap" size={16}/>{t('measureNow')}</Button>}/>
+      actions={<><WallLink scene="energy"/><Button variant="secondary" onPress={measure}><I name="zap" size={16}/>{t('measureNow')}</Button></>}/>
     {!d ? <p role="status" className="text-sm text-muted">{t('loading')}</p> : <div className="flex flex-col gap-6">
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
         <Stat label={t('now')} value={`${n(d.now.watts / 1000, 2)} kW`} hint={t('facility', { kw: n(d.now.facilityWatts / 1000, 2), pue: d.settings.pue })} icon={<I name="zap" size={18}/>} tone="accent"/>

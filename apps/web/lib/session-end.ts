@@ -34,6 +34,8 @@ export const preferenceKeys: readonly string[] = [
   'lvm-a11y', 'theme', 'lvm-nav-open', 'lvm-server-view', 'lvm.terminalFont', 'lvm.snippetOs', 'lvm-first-steps-hidden', 'lvm-announcement-closed',
   // Read by the sign-in form before there is a session: which second step was used last.
   'lvm-2fa-method',
+  // The live walls' look, tour and keeping the screen on (components/wall/hooks.ts): how this screen shows a wall.
+  'lvm-wall-look', 'lvm-wall-tour', 'lvm-wall-awake',
   // Cookies the panel's own pages set: language and time zone.
   'NEXT_LOCALE', 'lvm-tz',
 ];

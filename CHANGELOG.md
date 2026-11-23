@@ -16,6 +16,22 @@ Türkçe [docs/upgrade-notes.md](docs/upgrade-notes.md) sayfasını okuyun.*
 
 ### Added
 
+- Live walls: full-screen, real-time 3D views of Admin → System (`/wall/system`), Statistics (`/wall/stats`) and
+  Energy (`/wall/energy`) for a TV or a second screen, as usable on a laptop and a phone
+  ([docs/live-walls.md](docs/live-walls.md)). Each is opened from a labelled button on its page (on System right
+  before "All good" / "N warnings"), with the same permission as that page and no public address. System is a rack row
+  where every unit is a service of the stack (lights steady, blinking or dim by its state, its activity light
+  flickering with the service's own processor use, a faulty unit standing out of the rack with a striped plate and a
+  FAULT badge), glass gauges for processor, memory, disk and load and the last ten minutes as ribbons; Statistics is
+  the period's measures as rows of towers, one per day; Energy is each host's power flowing to the facility as light,
+  faster with more watts, dashed for estimated hosts, with the last 24 hours around the core. Every value comes from
+  the page's own API answers, read by one poller per wall at the page's pace (paused in a hidden tab, backing off
+  after errors); old data is drawn grey and still and says since when. three.js (0.187.0, MIT) loads only on these
+  pages; the quality (high, medium, low) is chosen from the device and adjusted while it runs by a frame-time
+  governor, and a designed 2D wall with the same figures replaces 3D where there is no WebGL 2, only a software
+  renderer, or under 20 frames a second. Reduced motion keeps the camera still and the lights steady; keys F (full
+  screen), Esc (back), ← → (other walls), T (tour), I (details); a night and a day look; optional screen wake lock.
+  `GET /api/admin/power` gives each host's newest sample time (`hosts[].lastAt`).
 - Forms propose a name where the panel can work one out, instead of an empty field ([docs/proposals.md](docs/proposals.md)
   has the full list and what is deliberately left empty). The proposal is an ordinary, editable value, selected when
   the field is entered so typing replaces it, marked "Proposed by the panel"; it follows what it is made from until the

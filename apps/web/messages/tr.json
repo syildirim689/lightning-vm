@@ -9688,5 +9688,128 @@
     },
     "codesFile": "yedek-kodlar",
     "appShows": "Uygulamada görünecek ad: {issuer} ({account})"
+  },
+  "Wall": {
+    "open": "Canlı ekranı aç ({name})",
+    "openHint": "Bir TV ya da ikinci ekran için tam ekran canlı görünüm",
+    "scene": {
+      "system": "Sistem",
+      "stats": "İstatistikler",
+      "energy": "Enerji"
+    },
+    "title": {
+      "system": "Sistem, canlı",
+      "stats": "İstatistikler, canlı",
+      "energy": "Enerji, canlı"
+    },
+    "sceneLabel": {
+      "system": "Panelin servisleri bir kabindeki sunucular olarak; işlemci, bellek, disk ve yük göstergeleri ve son on dakika şeritler halinde",
+      "stats": "Dönemin rakamları kule sıraları halinde, her gün bir kule",
+      "energy": "Her hostun gücü tesise akıyor; çevresinde son 24 saat"
+    },
+    "home": "Başlangıç sayfasına",
+    "back": {
+      "system": "Sistem sayfasına dön",
+      "stats": "İstatistiklere dön",
+      "energy": "Enerji sayfasına dön"
+    },
+    "backShort": "Geri",
+    "previous": "Önceki ekran: {name}",
+    "next": "Sonraki ekran: {name}",
+    "controls": "Ekran denetimleri",
+    "figures": "Rakamlar",
+    "tour": "Tur",
+    "tourHelp": "Kamera her 18 saniyede bir ilgi noktaları arasında gezinir",
+    "tourReduced": "Kapalı: bu cihaz daha az hareket istiyor",
+    "toDay": "Açık renkler",
+    "toNight": "Koyu renkler",
+    "awake": "Açık tut",
+    "awakeHelp": "Ekran gösterilirken cihazın uykuya geçmesini önler",
+    "awakeUnsupported": "Bu tarayıcı ekranı açık tutamıyor",
+    "details": "Ayrıntılar",
+    "fullscreen": "Tam ekran",
+    "exitFullscreen": "Tam ekrandan çık",
+    "keys": "Tuşlar: F tam ekran · Esc geri · ← → diğer ekranlar · T tur · I ayrıntılar",
+    "updated": "Güncellendi: {time}",
+    "stale": "{time} saatinden beri yeni veri yok",
+    "waiting": "İlk yanıt bekleniyor",
+    "failed": "Panel yanıt vermedi",
+    "retry": "Yeniden dene",
+    "ended": "Oturumunuz sona erdi.",
+    "signIn": "Yeniden giriş yapın",
+    "lost": "Ekran kartı görüntüyü sıfırladı; yeniden çiziliyor…",
+    "try3d": "3B dene",
+    "flat": {
+      "no-webgl": "2B: bu tarayıcıda WebGL 2 yok",
+      "software": "2B: bu cihaz 3B görüntüyü ekran kartı olmadan çiziyor",
+      "slow": "2B: 3B burada saniyede 20 karenin altında kaldı",
+      "lost": "2B: ekran kartı bir dakikada iki kez sıfırlandı",
+      "chosen": "İstendiği gibi 2B"
+    },
+    "quality": {
+      "high": "yüksek kalite",
+      "medium": "orta kalite",
+      "low": "düşük kalite"
+    },
+    "info": {
+      "renderer": "Çizim",
+      "gpu": "Grafik",
+      "fps": "Saniyedeki kare",
+      "steps": "Geri alınan kalite adımı",
+      "pixels": "Tuval",
+      "calls": "Çizim çağrısı · üçgen",
+      "memory": "Geometri · doku · gölgelendirici",
+      "awake": "Ekran açık tutuluyor",
+      "on": "Evet",
+      "off": "Hayır",
+      "software": "Bu bir yazılım çizicisi: 3B görünüm burada yavaş."
+    },
+    "noData": "Henüz veri yok",
+    "noDataShort": "veri yok",
+    "fault": "ARIZA",
+    "history": {
+      "cpu": "İşlemci",
+      "memory": "Bellek",
+      "load": "Yük"
+    },
+    "system": {
+      "api": {
+        "up": "API, PostgreSQL ve Redis erişilebilir",
+        "down": "API hazır değil",
+        "unknown": "API: bilinmiyor"
+      },
+      "worker": {
+        "running": "Worker çalışıyor (son sinyal {time})",
+        "stale": "Worker takılmış olabilir (son sinyal {time})",
+        "none": "Worker sinyali yok",
+        "unknown": "Worker: bilinmiyor"
+      },
+      "agentOff": "Servisler: host ajanı kurulu değil",
+      "noSnapshot": "Servisler: henüz anlık görüntü yok",
+      "services": "{n, plural, other {# servis}} · {faults, plural, =0 {arıza yok} other {# arıza}}",
+      "snapshot": "Servisler, {time} itibarıyla",
+      "snapshotOld": "Servisler, {time} itibarıyla: eski bir anlık görüntü",
+      "rack": "Servisler",
+      "historyLabel": "Son on dakikada işlemci, bellek ve yük"
+    },
+    "stats": {
+      "period": "Son {days} gün, önceki {days} güne göre",
+      "new": "bu dönemde yeni",
+      "same": "öncekiyle aynı",
+      "max": "en çok {n}",
+      "total": "toplam {n}",
+      "maxShort": "en çok {n}"
+    },
+    "energy": {
+      "noFlow": "Son 15 dakikada güç örneği yok",
+      "noFlowShort": "Yakın zamanda güç örneği yok",
+      "measured": "ölçülen",
+      "estimated": "tahmini",
+      "facilityW": "Tesiste {w}",
+      "itW": "Hostlar {w} çekiyor",
+      "others": "+{n} host daha",
+      "othersLine": "{n, plural, other {# host daha}}: {w} W",
+      "day": "Son 24 saat"
+    }
   }
 }

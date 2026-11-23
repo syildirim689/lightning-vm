@@ -694,6 +694,7 @@ test('energy: samples estimated from a host profile, shares per server, kWh, cos
   const h = r.hosts[0];
   assert.equal(h.source, 'estimated', 'the simulator reports no power counter');
   assert.ok(h.watts >= 120 && h.watts <= 400, `default profile: ${h.watts}`);
+  assert.ok(Date.now() - Date.parse(h.lastAt) < 600_000, `the newest sample's time: ${h.lastAt}`);
   assert.equal(r.settings.currency, 'TRY');
   assert.equal(r.now.facilityWatts.toFixed(2), (r.now.watts * 1.4).toFixed(2));
 
