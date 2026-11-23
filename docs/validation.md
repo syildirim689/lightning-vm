@@ -1399,8 +1399,8 @@ sürüm numaralarını ve belgeleri değiştirir. Etiket, o commit denendikten s
 İnceleme: [ux-review.md](ux-review.md) (34 bulgu: 5 yüksek, 17 orta, 12 düşük). Ne yapıldığı:
 [smart-features.md](smart-features.md#günlük-işi-kolaylaştıranlar). Commit'ler `b6fcd67` … `fb4bce9`.
 
-- **Birim testleri (geliştirme makinesi, Node 26):** API `npm test` 237/237 → 245/245 (yeni: `eta-rules`,
-  `session-rules` (8), `onboarding-rules` (7)); web `npm test` 203/203 (yeni: `eta`, `undo`, `reconnect`,
+- **Birim testleri (geliştirme makinesi, Node 26):** API `npm test` 238/238 (önceden 218; 20 yeni: `eta-rules` 5,
+  `session-rules` 8, `onboarding-rules` 7); web `npm test` 203/203 (önceden 166; 37 yeni: `eta`, `undo`, `reconnect`,
   `session-clock`, `setup-checklist`, `paste`, `last-order`, `error-key`; `session-end` yeni tarayıcı anahtarıyla),
   `check-messages` (8093 anahtar, iki dil), `icons --check`, `tsc` (web, API), `next build`.
 - **Paket boyutları** (`next build`, her rotanın istemci başvuru bildirimindeki giriş JS dosyaları; değişiklikten önceki
