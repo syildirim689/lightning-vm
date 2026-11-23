@@ -21,6 +21,10 @@
   /* White on HeroUI's red was 3.5:1 (badges, danger buttons, the incident bar); this one is 5.2:1, and 5.4:1 as text. */
   --danger: oklch(0.55 0.2 25);
   --danger-text: var(--danger);
+  /* The words on the soft (tinted) chips: "ready", "paid", "overdue" read 4.5:1 or more on their own tint. */
+  --success-soft-foreground: oklch(0.44 0.12 152);
+  --warning-soft-foreground: oklch(0.45 0.11 62);
+  --danger-soft-foreground: oklch(0.5 0.2 25);
   /* Second lines, hints and inactive tabs. HeroUI's zinc-500 reads 4.0-4.4:1 on the grey of fields, tabs and the
      search box (axe-core, WCAG 1.4.3 asks 4.5:1 for small text); one step darker reads 4.9:1 there, 6:1 on white. */
   --muted: oklch(0.5 0.016 286);
@@ -46,6 +50,10 @@
   /* Red behind white text (4.6:1) and a lighter red for words on the dark surfaces (6:1). */
   --danger: oklch(0.58 0.2 25);
   --danger-text: oklch(0.72 0.16 22);
+  /* HeroUI's own soft-chip words for the dark theme, said again (the light ones above would apply to both). */
+  --success-soft-foreground: color-mix(in oklab, var(--success) 80%, var(--foreground) 30%);
+  --warning-soft-foreground: color-mix(in oklab, var(--warning) 80%, var(--foreground) 30%);
+  --danger-soft-foreground: color-mix(in oklab, var(--danger-text) 80%, var(--foreground) 30%);
 }
 /* Every "text-warning", "text-success" and "text-danger" in the panel reads with that shade (icons beside the words take it too). */
 .text-warning { color: var(--warning-text); }

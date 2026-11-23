@@ -42,6 +42,6 @@ export default function OnlineNow() {
       {here.length > 14 && <li className="text-xs text-muted">+{here.length - 14}</li>}
       {!here.length && <li className="text-sm text-muted">{t('nobody')}</li>}
     </ul>
-    <NextLink href="/admin/users?status=online" className="text-sm text-accent hover:underline">{t('seeAll')}</NextLink>
+    <NextLink href="/admin/users?status=online" className="inline-flex min-h-6 items-center text-sm text-accent hover:underline">{t('seeAll')}</NextLink>
   </Card.Content></Card>;
 }

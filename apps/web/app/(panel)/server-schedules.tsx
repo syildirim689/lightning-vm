@@ -107,9 +107,11 @@ export function PowerSchedules({ serverId, power = true, snapshots = false, back
         <fieldset className="flex flex-col gap-2">
           <legend className="mb-1 text-sm font-medium">{t('days')}</legend>
           <div className="flex flex-wrap gap-1.5">
-            {week.map((d) => { const on = f.values.days.includes(d); return <button key={d} type="button" aria-pressed={on} aria-label={dayName(d, 'long')}
+            {week.map((d) => { const on = f.values.days.includes(d); return <button key={d} type="button" aria-pressed={on}
               onClick={() => f.set('days')(on ? f.values.days.filter((x) => x !== d) : [...f.values.days, d].sort())}
-              className={`min-h-11 min-w-11 rounded-lg border px-2 text-sm transition-colors duration-150 ${on ? 'border-accent bg-accent-soft text-accent-soft-foreground' : 'border-border hover:border-accent'}`}>{dayName(d, 'short')}</button>; })}
+              className={`min-h-11 min-w-11 rounded-lg border px-2 text-sm transition-colors duration-150 ${on ? 'border-accent bg-accent-soft text-accent-soft-foreground' : 'border-border hover:border-accent'}`}>
+                {/* Named by the full day (hidden words), not aria-label: the short one is on the button (WCAG 2.5.3). */}
+                <span aria-hidden>{dayName(d, 'short')}</span><span className="sr-only">{dayName(d, 'long')}</span></button>; })}
           </div>
           <div className="flex flex-wrap gap-3 text-sm">
             {([['weekdays', [1, 2, 3, 4, 5]], ['weekend', [6, 7]], ['everyDay', week]] as const).map(([k, days]) => <button key={k} type="button" className="text-accent hover:underline" onClick={() => f.set('days')([...days])}>{t(k)}</button>)}

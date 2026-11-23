@@ -1,7 +1,7 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type BrowserContext, type Page, type Route } from '@playwright/test';
 import { generateKeyPairSync } from 'node:crypto';
-import { readFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -34,6 +34,8 @@ async function signInAdmin(page: Page, to = '/admin') {
   await page.getByRole('button', { name: /^(Giriş yap|Sign in)$/ }).click();
   await expect(page).toHaveURL(/\/admin$/);
   cookies = await page.context().cookies();
+  // As app.spec.ts does: the next worker (a new one after a failure, or another browser) need not sign in again.
+  try { writeFileSync(join(tmpdir(), 'lightning-e2e-admin-session.json'), JSON.stringify(cookies)); } catch { /* it signs in itself */ }
   if (to !== '/admin') await page.goto(to);
 }
 // A new, valid ed25519 public key each time (the panel refuses a key it already has).
@@ -70,10 +72,24 @@ async function ownServer(page: Page): Promise<{ id: string; name: string; addres
 
 // axe-core's WCAG 2.x A and AA rules; what fails the test is what axe calls serious or critical. Each one is named
 // with the elements it was found on, so a failure says what to fix.
+// Contrast is measured on what the page shows at rest: cards and lists fade in (motion writes the opacity inline), and
+// a colour read half way through a fade is no colour the page has. So the check waits until no element is part way.
+async function settle(page: Page) {
+  await expect.poll(() => page.evaluate(() => [...document.querySelectorAll<HTMLElement>('[style*="opacity"]')]
+    .filter((e) => { const o = Number(e.style.opacity); return o > 0 && o < 1; }).length
+    + document.getAnimations().filter((a) => a.playState === 'running' && a.effect?.getComputedTiming().iterations !== Infinity).length),
+  { timeout: 10_000, message: 'the page stood still' }).toBe(0).catch(() => undefined);
+}
 async function axe(page: Page, label: string) {
+  await settle(page);
   const r = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa']).analyze();
+  // Each finding with where it is and, for contrast and target size, the numbers axe measured.
+  const detail = (n: { target: unknown[]; any: { data?: unknown }[] }) => {
+    const d = n.any[0]?.data as { contrastRatio?: number; fgColor?: string; bgColor?: string; width?: number; height?: number } | undefined;
+    return `${n.target.join(' ')}${d?.contrastRatio ? ` ${d.contrastRatio}:1 ${d.fgColor} on ${d.bgColor}` : d?.width ? ` ${Math.round(d.width)}x${Math.round(d.height ?? 0)}` : ''}`;
+  };
   return r.violations.filter((v) => v.impact === 'serious' || v.impact === 'critical')
-    .map((v) => `${label}: ${v.id} (${v.impact}) ${v.help} — ${v.nodes.slice(0, 4).map((n) => n.target.join(' ')).join(' | ')}`);
+    .map((v) => `${label}: ${v.id} (${v.impact}) ${v.help} — ${v.nodes.slice(0, 4).map(detail).join(' | ')}`);
 }
 // The page has drawn what its API calls bring: its heading, and no loading placeholder left.
 async function drawn(page: Page, heading: RegExp | string) {

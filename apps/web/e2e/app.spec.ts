@@ -1462,7 +1462,8 @@ test.describe('server lifecycle (simulator, Turkish customer)', () => {
     expect((await replyNotes()).every((n) => !n.readAt)).toBe(true);
     await page.goto('/');
     const bell = page.getByRole('button', { name: /^(\d+ okunmamış bildirim|Bildirimler)$/ }).first();
-    const unreadShown = async () => Number(/^\d+/.exec((await bell.getAttribute('aria-label')) ?? '')?.[0] ?? 0);
+    // The count leads the bell's spoken name (its hidden words, since the badge's "9+" is on the button too).
+    const unreadShown = async () => Number(/^\d+/.exec((await bell.locator('.sr-only').textContent()) ?? '')?.[0] ?? 0);
     await expect(bell).toHaveAccessibleName(/^\d+ okunmamış bildirim$/);
     const unreadBefore = await unreadShown();
     expect(unreadBefore).toBeGreaterThanOrEqual(2);
