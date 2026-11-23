@@ -192,6 +192,7 @@ test.describe('first run (Turkish browser)', () => {
   });
 
   test('the setup wizard runs end to end, resumes after reload, then closes', async ({ page, request }) => {
+    test.setTimeout(120_000); // eleven steps, three of them waiting on real checks (one a 5 s probe of an address that never answers)
     const { completed } = await (await request.get('/api/setup/status')).json();
     test.skip(completed, 'setup already completed on this deployment');
     const token = process.env.E2E_BOOTSTRAP_TOKEN;
@@ -241,6 +242,24 @@ test.describe('first run (Turkish browser)', () => {
     // Progress lives on the server: a reload returns to the first unfinished step.
     await page.reload();
     await expect(heading).toHaveText('Dağıtım ve erişim adresi');
+
+    // A check left behind by a reload does not hold up the same check afterwards. The API's guard against the same
+    // request twice let go of a request only once its answer was sent, and a browser that left never got one: the
+    // same check was refused as "already being processed" for two minutes. This test's occasional failure was that:
+    // the check the step runs on entry, cut off by the reload above, was the one for the address typed below.
+    // 192.0.2.1 (TEST-NET-1) answers nothing: the probe waits for its 5 s limit, so the reload lands mid-check.
+    const slow = 'http://192.0.2.1:8080';
+    await page.getByLabel('Panel adresi').fill(slow);
+    const sent = page.waitForRequest((r) => r.url().endsWith('/api/setup/test/access') && (r.postData() ?? '').includes('192.0.2.1'));
+    await check();
+    await sent;
+    await page.reload();
+    await expect(heading).toHaveText('Dağıtım ve erişim adresi');
+    await page.getByLabel('Panel adresi').fill(slow);
+    await check();
+    // Still running on the server: the wizard waits for it and asks again instead of showing the refusal.
+    await expect(page.locator('li.fail', { hasText: 'Panel adresi' })).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByText('Aynı istek zaten işleniyor', { exact: false })).toHaveCount(0);
 
     // A changed address makes the earlier result stale: the action becomes "Kontrol et" again.
     await page.getByLabel('Panel adresi').fill('http://panel.example.com/yol');

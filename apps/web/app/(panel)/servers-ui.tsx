@@ -48,6 +48,7 @@ import { noteLine } from '../../lib/note-line';
 import { ServerFilters, ServerTotals, useServerFilters } from './server-filters';
 import { flag } from '../../lib/flag';
 import { Ago, ButtonLink, CheckboxInput, ConfirmButton, DataTable, Empty, LoadFailed, Mono, Notice, PageHeader, Section, StatusChip, TextInput, type Tone, Loading, returnFocus } from '../../components/ui';
+import { useLatest } from '../../lib/latest';
 import { SectionNav } from '../../components/section-nav';
 import { ConnectCheck } from './connect-check';
 
@@ -770,16 +771,20 @@ function RootPassword({ id }: { id: string }) {
   const client = useQueryClient();
   const [shown, setShown] = useState<string>();
   async function reveal() {
-    try { setShown((await apiFetch<{ password: string }>(`/servers/${id}/root-password`)).password); } catch (e) { toast.danger(error(e)); }
+    const isLatest = latest.begin();
+    try { const { password } = await apiFetch<{ password: string }>(`/servers/${id}/root-password`); if (isLatest()) setShown(password); } catch (e) { if (isLatest()) toast.danger(error(e)); }
   }
   async function forget() {
+  // A reveal still on its way when the password is forgotten (or hidden) must not show it afterwards.
+  const latest = useLatest();
     try { await apiFetch(`/servers/${id}/root-password`, { method: 'DELETE' }); setShown(undefined); toast.success(t('forgotten')); client.invalidateQueries({ queryKey: ['servers', id] }); }
     catch (e) { toast.danger(error(e)); throw e; }
   }
   return <Section title={t('title')} description={t('help')}>
+    latest.drop();
     <div className="flex flex-wrap items-center gap-2">
       {shown ? <><Mono>{shown}</Mono><Button size="sm" variant="ghost" onPress={() => void copy(shown, t('copied'))}><I name="copy" size={14}/>{t('copy')}</Button>
-          <Button size="sm" variant="ghost" onPress={() => setShown(undefined)}><I name="eye-off" size={14}/>{t('hide')}</Button></>
+          <Button size="sm" variant="ghost" onPress={() => { latest.drop(); setShown(undefined); }}><I name="eye-off" size={14}/>{t('hide')}</Button></>
         : <Button size="sm" variant="secondary" onPress={reveal}><I name="eye" size={14}/>{t('show')}</Button>}
       <ConfirmButton size="sm" variant="ghost" icon={<I name="trash-2" size={14}/>} label={t('forget')} title={t('forgetTitle')} body={t('forgetBody')}
         confirmLabel={t('forget')} cancelLabel={t('cancel')} onConfirm={forget}/>

@@ -8,6 +8,7 @@ import { I } from '../../../../components/icon';
 import { FormActions, FormSection, Notice, SelectInput, SwitchInput, TextInput, Loading } from '../../../../components/ui';
 import { apiFetch, type ApiError, useErrorText } from '../../../../lib/api';
 import { useApiQuery } from '../../../../lib/query';
+import { keepEdits } from '../../../../lib/latest';
 
 type Doc = { active: boolean; tone: 'info' | 'warning' | 'danger' | 'success'; textTr: string; textEn: string; link: string; startsAt: string | null; endsAt: string | null; live?: boolean };
 // <input type="datetime-local"> wants local "YYYY-MM-DDTHH:mm"; the API stores ISO (UTC).
@@ -26,9 +27,10 @@ export default function AnnouncementSettings({ readOnly }: { readOnly: boolean }
   if (!v) return <Loading of={['settings', 'announcement']}/>;
   async function save() {
     setBusy(true); setFields({});
+    const sent = v;
     try {
       const r = await apiFetch<Doc>('/admin/settings/announcement', { method: 'PUT', body: { ...v, startsAt: v!.startsAt ?? '', endsAt: v!.endsAt ?? '' } });
-      client.setQueryData(['settings', 'announcement'], r); setV(r);
+      client.setQueryData(['settings', 'announcement'], r); setV(keepEdits(sent, r));
       toast.success(t('saved')); client.invalidateQueries({ queryKey: ['announcement'] });
     } catch (e) { setFields((e as ApiError).fields ?? {}); toast.danger(error(e)); } finally { setBusy(false); }
   }

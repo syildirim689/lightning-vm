@@ -25,13 +25,15 @@ export default function Audit() {
   const [outcome, setOutcome] = useQueryState('outcome', parseAsString.withDefault(''));
   const [category, setCategory] = useQueryState('category', parseAsString.withDefault(''));
   const params = new URLSearchParams({ q, outcome, category }).toString();
-  const first = useApiQuery<Page>(['admin', 'audit', params], `/admin/audit?${params}`).data;
+  const firstQ = useApiQuery<Page>(['admin', 'audit', params], `/admin/audit?${params}`, { keep: true });
+  // While a new filter loads, the last answer stays on screen; "more" waits for the answer that belongs to the filter.
+  const first = firstQ.data, stale = firstQ.isPlaceholderData;
   const [more, setMore] = useState<{ params: string; events: AuditEvent[]; next: string | null } | null>(null);
   const [busy, setBusy] = useState(false);
   const { error } = useErrorText();
   const extra = more?.params === params ? more : null;
   const events = [...(first?.events ?? []), ...(extra?.events ?? [])];
-  const cursor = extra ? extra.next : first?.nextBefore;
+  const cursor = stale ? null : extra ? extra.next : first?.nextBefore;
   const dayOf = (at: string | number) => format.dateTime(new Date(at), { year: 'numeric', month: '2-digit', day: '2-digit' });
   const today = dayOf(Date.now()), yesterday = dayOf(Date.now() - 864e5);
   const dayLabel = (at: string) => dayOf(at) === today ? t('today') : dayOf(at) === yesterday ? t('yesterday') : format.dateTime(new Date(at), { dateStyle: 'full' });

@@ -9,6 +9,7 @@ import { motion } from 'motion/react';
 import { useRouter } from 'next/navigation';
 import { useFormatter, useLocale, useTranslations } from 'next-intl';
 import { useCallback, useEffect, useRef, useState, useTransition } from 'react';
+import { useLatest } from '../../../lib/latest';
 import { I } from '../../../components/icon';
 import { ButtonLink, CheckboxInput, Notice, StatusChip, TextInput } from '../../../components/ui';
 import { apiFetch, useErrorText, type ApiError } from '../../../lib/api';
@@ -101,13 +102,27 @@ export default function Wizard() {
   const fresh = !!p && result?.step === current && result.key === p.key;
   const passed = fresh && result!.checks.every((c) => c.ok);
 
+  // Only the newest check writes its answer (lib/latest.ts): one started on a step that has since been left, or
+  // overtaken by a newer one, is dropped. The same check still running on the server (a reload during a check, or
+  // another tab) is answered "already being processed": the check is asked again a moment later instead.
+  const latest = useLatest();
   async function runChecks() {
     const pr = probe();
     if (!pr) return;
+    const isLatest = latest.begin();
     setChecking(true); setFailure(undefined);
-    try { const r = await apiFetch<{ checks: Check[] }>(pr.path, { method: 'POST', body: pr.body }); setResult({ step: current, key: pr.key, checks: r.checks }); }
-    catch (e) { setResult(undefined); setFailure({ ...(e as ApiError), text: error(e) }); }
-    finally { setChecking(false); }
+    for (let attempt = 0; ; attempt++) {
+      try {
+        const r = await apiFetch<{ checks: Check[] }>(pr.path, { method: 'POST', body: pr.body });
+        if (isLatest()) { setResult({ step: current, key: pr.key, checks: r.checks }); setChecking(false); }
+        return;
+      } catch (e) {
+        if (!isLatest()) return;
+        if ((e as ApiError).code === 'DUPLICATE_REQUEST' && attempt < 15) { await new Promise((r) => setTimeout(r, 1000)); if (isLatest()) continue; return; }
+        setResult(undefined); setFailure({ ...(e as ApiError), text: error(e) }); setChecking(false);
+        return;
+      }
+    }
   }
   // Checks that need no input run as soon as the step opens (and the monitoring check when it is switched on).
   useEffect(() => {
@@ -137,7 +152,7 @@ export default function Wizard() {
   const startingNow = current === 'monitoring' && monitoring && starting === 'requested' && !passed && polls < 36;
 
   const direction = useRef(1);
-  const go = (step: Step) => { direction.current = steps.indexOf(step) >= steps.indexOf(current) ? 1 : -1; setCurrent(step); setResult(undefined); setFailure(undefined); };
+  const go = (step: Step) => { latest.drop(); setChecking(false); direction.current = steps.indexOf(step) >= steps.indexOf(current) ? 1 : -1; setCurrent(step); setResult(undefined); setFailure(undefined); };
   const next = () => go(steps[Math.min(steps.indexOf(current) + 1, steps.length - 1)]);
   async function save(status: 'completed' | 'skipped', data?: object) {
     setBusy(true); setFailure(undefined);

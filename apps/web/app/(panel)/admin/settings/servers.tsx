@@ -9,6 +9,7 @@ import { I } from '../../../../components/icon';
 import { FormActions, FormSection, Notice, NumberInput, SelectInput, SwitchInput, Loading } from '../../../../components/ui';
 import { apiFetch, useErrorText } from '../../../../lib/api';
 import { useApiQuery } from '../../../../lib/query';
+import { keepEdits } from '../../../../lib/latest';
 
 type Doc = { customer: { power: boolean; console: boolean; iso: boolean; rootPassword: boolean; delete: boolean; snapshots: boolean; resize: boolean; reinstall: boolean; backups: boolean };
   backups?: { maxPerServer: number }; hardware: { cpuHotAdd: boolean; memoryHotAdd: boolean; nestedHv: boolean };
@@ -26,7 +27,8 @@ export default function ServerSettings({ readOnly }: { readOnly: boolean }) {
   async function save() {
     setBusy(true);
     // The saved document goes back into the cache: a later visit to this tab starts from it, not from the old one.
-    try { const r = await apiFetch<Doc>('/admin/settings/servers', { method: 'PUT', body: v }); client.setQueryData(['settings', 'servers'], r); setV(r); toast.success(t('saved')); }
+    const sent = v;
+    try { const r = await apiFetch<Doc>('/admin/settings/servers', { method: 'PUT', body: sent }); client.setQueryData(['settings', 'servers'], r); setV(keepEdits(sent, r)); toast.success(t('saved')); }
     catch (e) { toast.danger(error(e)); } finally { setBusy(false); }
   }
   const icons = { power: 'power', console: 'square-terminal', iso: 'disc-3', rootPassword: 'key-round', delete: 'trash-2', snapshots: 'camera', resize: 'gauge', reinstall: 'refresh-cw', backups: 'archive' } as const;

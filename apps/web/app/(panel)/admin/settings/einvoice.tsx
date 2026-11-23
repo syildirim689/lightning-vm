@@ -8,6 +8,7 @@ import { I } from '../../../../components/icon';
 import { Ago, FormActions, FormSection, Notice, SelectInput, StatusChip, TextInput, Loading } from '../../../../components/ui';
 import { apiFetch, useErrorText } from '../../../../lib/api';
 import { useApiQuery } from '../../../../lib/query';
+import { keepEdits } from '../../../../lib/latest';
 
 type Field = { key: string; label: [string, string]; secret?: boolean; optional?: boolean };
 type Integrator = { id: string; name: string; website: string; docs: string; verified: string[]; fields: Field[]; hosts: { test: string; live: string } };
@@ -30,16 +31,17 @@ export default function EinvoiceSettings({ readOnly }: { readOnly: boolean }) {
   const label = (f: Field) => (locale === 'tr' ? f.label[0] : f.label[1]);
   async function save() {
     setBusy('save'); setErrors({});
+    const sent = v;
     try {
       const r = await apiFetch<Doc>('/admin/settings/einvoice', { method: 'PUT', body: { provider: v!.provider, mode: v!.mode, values: { ...v!.values, ...secrets }, efaturaSeries: v!.efaturaSeries,
         earsivSeries: v!.earsivSeries, profile: v!.profile, senderAlias: v!.senderAlias } });
-      setV(r); setSecrets({}); toast.success(t('saved'));
+      setV(keepEdits(sent, r)); setSecrets({}); toast.success(t('saved'));
     } catch (e) { const f = (e as { fields?: Record<string, string> }).fields ?? {}; setErrors(Object.fromEntries(Object.entries(f).map(([k, c]) => [k, field(c) ?? c]))); toast.danger(Object.keys(f).length ? t('fixFields') : error(e)); }
     finally { setBusy(null); }
   }
   async function test() {
     setBusy('test');
-    try { const r = await apiFetch<{ check: Doc['check'] }>('/admin/settings/einvoice/test', { method: 'POST' }); setV({ ...v!, check: r.check }); if (r.check?.ok) toast.success(t('testOk')); else toast.danger(t('testFailed')); }
+    try { const r = await apiFetch<{ check: Doc['check'] }>('/admin/settings/einvoice/test', { method: 'POST' }); setV((now) => now && { ...now, check: r.check }); if (r.check?.ok) toast.success(t('testOk')); else toast.danger(t('testFailed')); }
     catch (e) { toast.danger(error(e)); } finally { setBusy(null); }
   }
   return <Card><Card.Content className="flex flex-col">

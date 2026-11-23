@@ -15,6 +15,7 @@ import { apiFetch, useErrorText, type ApiError } from '../../../../lib/api';
 import { useMe } from '../../../../lib/me';
 import { can } from '../../../../lib/permissions';
 import { useApiQuery } from '../../../../lib/query';
+import { keepEdits } from '../../../../lib/latest';
 import NotificationPolicy from './notification-policy';
 import Payments from './payments';
 import ReverseDns from './rdns';
@@ -97,9 +98,10 @@ function useSettingsForm<T extends object>(path: string, key: string) {
   const set = <K extends keyof T>(k: K) => (x: T[K]) => { setV((s) => s && { ...s, [k]: x }); setFields((f) => ({ ...f, [k as string]: '' })); };
   async function save(body: unknown, ok: string) {
     setBusy(true); setFields({});
+    const sent = v;
     try {
       const r = await apiFetch<T>(path, { method: 'PUT', body });
-      client.setQueryData(['settings', key], r); setV(r); toast.success(ok);
+      client.setQueryData(['settings', key], r); setV(keepEdits(sent, r)); toast.success(ok);
       client.invalidateQueries({ queryKey: ['public-config'] });
       return true;
     } catch (e) { setFields((e as ApiError).fields ?? {}); toast.danger(error(e)); return false; } finally { setBusy(false); }

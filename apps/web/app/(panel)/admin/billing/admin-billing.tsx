@@ -152,7 +152,7 @@ function Invoices() {
   const format = useFormatter();
   const [status, setStatus] = useQueryState('status', parseAsString.withDefault(''));
   const [q, setQ] = useQueryState('q', parseAsString.withDefault(''));
-  const list = useApiQuery<{ invoices: Invoice[] }>(['admin', 'billing', 'invoices', status, q], `/admin/billing/invoices?status=${status}&q=${encodeURIComponent(q)}`).data?.invoices;
+  const list = useApiQuery<{ invoices: Invoice[] }>(['admin', 'billing', 'invoices', status, q], `/admin/billing/invoices?status=${status}&q=${encodeURIComponent(q)}`, { keep: true }).data?.invoices;
   return <div className="flex flex-col gap-3">
     <div className="flex flex-wrap items-end gap-3">
       <SearchField aria-label={t('search')} value={q} onChange={(v) => void setQ(v || null)} className="min-w-64 flex-1">
@@ -196,7 +196,7 @@ function Subscriptions({ manage }: { manage: boolean }) {
   const [find, setFind] = useQueryState('q', parseAsString.withDefault('').withOptions({ history: 'replace', throttleMs: 300 }));
   const status = (subscriptionFilters as readonly string[]).includes(rawStatus) ? rawStatus : '';
   const clear = () => { void setStatus(null); void setFind(null); };
-  const all = useApiQuery<{ subscriptions: Subscription[] }>(['admin', 'billing', 'subscriptions', status], `/admin/billing/subscriptions?status=${status}`).data?.subscriptions;
+  const all = useApiQuery<{ subscriptions: Subscription[] }>(['admin', 'billing', 'subscriptions', status], `/admin/billing/subscriptions?status=${status}`, { keep: true }).data?.subscriptions;
   const list = all?.filter((s) => !find.trim() || fold(`${s.description} ${s.email}`).includes(fold(find.trim())));
   const [edit, setEdit] = useState<Subscription | null>(null);
   async function act(s: Subscription, action: string) {
@@ -278,7 +278,7 @@ function Payments({ manage }: { manage: boolean }) {
   const [q, setQ] = useQueryState('q', parseAsString.withDefault('').withOptions({ history: 'replace', throttleMs: 300 }));
   const status = (paymentFilters as readonly string[]).includes(rawStatus) ? (rawStatus as PaymentFilter) : '';
   const find = q.trim();
-  const query = useApiQuery<{ payments: Payment[] }>(['admin', 'billing', 'payments', status, find], `/admin/billing/payments?status=${status}&q=${encodeURIComponent(find)}`);
+  const query = useApiQuery<{ payments: Payment[] }>(['admin', 'billing', 'payments', status, find], `/admin/billing/payments?status=${status}&q=${encodeURIComponent(find)}`, { keep: true });
   const list = query.data?.payments;
   const clear = () => { void setStatus(null); void setQ(null); };
   const clearLink = <button type="button" className="font-medium text-accent hover:underline" onClick={clear}>{t('clear')}</button>;

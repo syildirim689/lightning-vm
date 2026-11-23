@@ -113,7 +113,7 @@ function RequestLog() {
   const [errorsOnly, setErrorsOnly] = useState(false);
   const [needle, setNeedle] = useState('');
   const path = `/admin/api/log?limit=200${errorsOnly ? '&status=errors' : ''}${needle.trim() ? `&q=${encodeURIComponent(needle.trim())}` : ''}`;
-  const q = useApiQuery<Log>(['admin', 'api-log', errorsOnly, needle.trim()], path, { refetchInterval: 30_000 });
+  const q = useApiQuery<Log>(['admin', 'api-log', errorsOnly, needle.trim()], path, { refetchInterval: 30_000, keep: true });
   const d = q.data;
   return <Card id="api-log"><Card.Header>
     <Card.Title className="flex items-center gap-2"><I name="scroll-text" size={18}/>{t('logTitle')}</Card.Title>

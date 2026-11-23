@@ -11,6 +11,7 @@ import { apiFetch, type ApiError, useErrorText } from '../../lib/api';
 import { useApiQuery } from '../../lib/query';
 import { snapshotName } from '../../lib/proposals';
 import { useProposal } from '../../lib/use-proposal';
+import { useOnce } from '../../lib/once';
 
 type Snapshot = { id: string; name: string; description: string; created: string; current: boolean; parent: string };
 
@@ -38,7 +39,10 @@ export function ServerSnapshots({ serverId, serverName, busy }: { serverId: stri
   const [at, setAt] = useState(() => new Date());
   const { proposed, again } = useProposal(q.data ? snapshotName(serverName, at, list.map((s) => s.name)) : undefined, name, setName);
 
-  async function run(path: string, method: string, body?: object) {
+  // "Take snapshot" pressed twice or Enter pressed again in the name field: one snapshot (lib/once.ts).
+  const once = useOnce();
+  const run = (path: string, method: string, body?: object) => once.run(`${method} ${path}`, () => send(path, method, body));
+  async function send(path: string, method: string, body?: object) {
     setSending(true); setFields({});
     try {
       await apiFetch(path, { method, body, headers: { 'idempotency-key': crypto.randomUUID() } });

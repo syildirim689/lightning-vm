@@ -12,6 +12,7 @@ import { GuideButton } from '../../../../components/setup-guide';
 import { FormActions, FormSection, Notice, SwitchInput, TextInput, Loading } from '../../../../components/ui';
 import { apiFetch, useErrorText, type ApiError } from '../../../../lib/api';
 import { useApiQuery } from '../../../../lib/query';
+import { keepEdits } from '../../../../lib/latest';
 
 const ids = ['google', 'microsoft', 'github', 'gitlab', 'discord', 'facebook', 'linkedin'] as const;
 type Id = (typeof ids)[number];
@@ -41,9 +42,10 @@ export default function SignInMethods({ readOnly }: { readOnly: boolean }) {
   async function save() {
     setBusy(true); setFields({});
     const providers = Object.fromEntries(ids.map((id) => [id, { ...v!.providers[id], clientSecret: secrets[id] ?? '' }]));
+    const sent = v;
     try {
       const r = await apiFetch<Doc>('/admin/settings/sign-in', { method: 'PUT', body: { ...v, providers } });
-      client.setQueryData(['settings', 'sign-in'], r); setV(r); setSecrets({}); toast.success(ts('saved'));
+      client.setQueryData(['settings', 'sign-in'], r); setV(keepEdits(sent, r)); setSecrets({}); toast.success(ts('saved'));
     } catch (e) { setFields((e as ApiError).fields ?? {}); toast.danger(error(e)); } finally { setBusy(false); }
   }
   const on = ids.filter((id) => v.providers[id]?.enabled);

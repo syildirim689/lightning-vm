@@ -35,7 +35,7 @@ export default function SupportQueue() {
   const [assignee, setAssignee] = useQueryState('assignee', parseAsString.withDefault(''));
   const [q, setQ] = useQueryState('q', parseAsString.withDefault(''));
   const params = new URLSearchParams({ status, priority, department, assignee, q }).toString();
-  const tickets = useApiQuery<{ tickets: (Ticket & { ownerEmail: string })[] }>(['admin', 'support', 'queue', params], `/admin/support/tickets?${params}`, { refetchInterval: 20_000 }).data?.tickets;
+  const tickets = useApiQuery<{ tickets: (Ticket & { ownerEmail: string })[] }>(['admin', 'support', 'queue', params], `/admin/support/tickets?${params}`, { refetchInterval: 20_000, keep: true }).data?.tickets;
   const stats = useApiQuery<Stats>(['admin', 'support', 'stats'], '/admin/support/stats', { refetchInterval: 30_000 }).data;
   const filtered = status !== 'active' || !!priority || !!department || !!assignee || !!q;
   const clear = () => { void setStatus(null); void setPriority(null); void setDepartment(null); void setAssignee(null); void setQ(null); };

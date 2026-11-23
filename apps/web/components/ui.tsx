@@ -395,7 +395,7 @@ export function Mono({ children }: { children: React.ReactNode }) {
 
 // One table look everywhere: rows are arrays of cells in column order; the first column is the row header.
 // Columns named in `sortBy` can be sorted by clicking their header (or the select on phones); long lists are split
-// into pages of `pageSize` rows. The page goes back to the first one when the rows or the order change.
+// into pages of `pageSize` rows. The page goes back to the first one when the order changes or the rows on it go.
 export type Column = { id: string; label: React.ReactNode; className?: string };
 type SortValue = string | number | null | undefined;
 export function DataTable<T>({ label, columns, rows, rowKey, cells, empty, minWidth = 640, sortBy, pageSize = 50 }: {
@@ -419,9 +419,6 @@ export function DataTable<T>({ label, columns, rows, rowKey, cells, empty, minWi
   }, [memo]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { try { sessionStorage.setItem(memo, JSON.stringify({ sort, page })); } catch { /* storage blocked */ } }, [memo, sort, page]);
   const setSort = (next: Sort | null) => { setSortState(next); setPage(0); };
-  // A changed list (a filter, a new row) starts again on page 1; the list arriving after loading does not.
-  const count = useRef(rows.length);
-  useEffect(() => { if (count.current && count.current !== rows.length) setPage(0); count.current = rows.length; }, [rows.length]);
   // A new page starts at the table's top when the top has scrolled away.
   const top = useRef<HTMLDivElement>(null);
   const turn = (to: number) => {
@@ -445,6 +442,11 @@ export function DataTable<T>({ label, columns, rows, rowKey, cells, empty, minWi
   const pages = Math.max(1, Math.ceil(sorted.length / pageSize));
   const current = Math.min(page, pages - 1);
   const shown = pages > 1 ? sorted.slice(current * pageSize, (current + 1) * pageSize) : sorted;
+  // A changed list starts again on page 1 when the row the person was looking at (the first on the page) is gone,
+  // as after a filter; a refresh that adds or removes a row elsewhere (polling) keeps the page where it was.
+  const seen = useRef<string | null>(null);
+  useEffect(() => { if (seen.current !== null && !rows.some((r) => rowKey(r) === seen.current)) setPage(0); }, [rows]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { seen.current = shown[0] ? rowKey(shown[0]) : null; });
   const sortable = columns.filter((c) => sortBy?.[c.id]);
   const lastIsAction = columns.at(-1)?.id === 'act';
   // The whole row opens what its name opens: a click anywhere outside the row's own controls, or Enter on a row

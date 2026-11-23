@@ -11,6 +11,7 @@ import { I } from '../../components/icon';
 import { CheckboxInput, ConfirmButton, NumberInput, Notice, Section, SelectInput, TextInput } from '../../components/ui';
 import { apiFetch, type ApiError, useErrorText } from '../../lib/api';
 import { useApiQuery } from '../../lib/query';
+import { createOnce, sameKey } from '../../lib/once';
 import type { Server } from './servers-ui';
 
 type Custom = { cpuMin: number; cpuMax: number; cpuStep: number; memoryMinMb: number; memoryMaxMb: number; memoryStepMb: number; diskMinGb: number; diskMaxGb: number; diskStepGb: number };
@@ -18,8 +19,10 @@ type Catalog = { packages: { id: string; name: string; vcpu: number; memoryMb: n
   pools: { id: string; custom: Custom | null }[]; images: { id: string; name: string; family: string; minDiskGb: number; poolIds?: string[] }[] };
 type Quote = { shape: { vcpu: number; memoryMb: number; diskGb: number }; priceMonthly: string; currency: string; chargeNow: string; periodEnd: string | null };
 
+// The same resize or reinstall pressed again while the first is on its way sends nothing more (lib/once.ts).
+const sending = createOnce();
 async function send(path: string, body: object) {
-  return apiFetch<{ invoiceId?: string }>(path, { method: 'POST', body, headers: { 'idempotency-key': crypto.randomUUID() } });
+  return sending.run(sameKey([path, body]), () => apiFetch<{ invoiceId?: string }>(path, { method: 'POST', body, headers: { 'idempotency-key': crypto.randomUUID() } }));
 }
 
 export function ServerResize({ server, busy }: { server: Server; busy: boolean }) {

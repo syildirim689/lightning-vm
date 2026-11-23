@@ -1,12 +1,16 @@
 "use client";
-import { useMutation, useQuery, useQueryClient, type QueryKey } from '@tanstack/react-query';
+import { keepPreviousData, useMutation, useQuery, useQueryClient, type QueryKey } from '@tanstack/react-query';
 import { toast } from '@heroui/react';
 import { apiFetch, useErrorText } from './api';
 import type { Attention } from './attention';
+import { sameKey, useOnce } from './once';
 
 // GET through the API with React Query: shared cache per key, optional polling for live state.
-export function useApiQuery<T>(key: QueryKey, path: string | null, opts: { refetchInterval?: number | false | ((data: T | undefined) => number | false); enabled?: boolean } = {}) {
+// keep: a list whose key holds its filters keeps showing the last answer while the next one loads (no flash of "…"
+// and no jump on every typed letter); isPlaceholderData says it is the old one.
+export function useApiQuery<T>(key: QueryKey, path: string | null, opts: { refetchInterval?: number | false | ((data: T | undefined) => number | false); enabled?: boolean; keep?: boolean } = {}) {
   return useQuery<T>({
+    ...(opts.keep && { placeholderData: keepPreviousData }),
     // A disabled caller (no path) gets its own entry: sharing the key would hand its path-less fetch to the real query.
     queryKey: path === null ? [...key, 'off'] : key,
     queryFn: ({ signal }) => apiFetch<T>(path!, { signal }),
@@ -40,7 +44,10 @@ export function useAttention(staff: boolean) {
 export function useApiAction<V = void, R = unknown>(run: (vars: V) => Promise<R>, opts: { invalidate?: QueryKey[]; success?: string | ((r: R) => string); onSuccess?: (r: R, vars: V) => void } = {}) {
   const client = useQueryClient();
   const { error } = useErrorText();
-  return useMutation<R, unknown, V>({
+  // The same action with the same variables while it is still running is not sent again (lib/once.ts): a double
+  // click gets one request, one toast. Different variables (another row) run side by side as before.
+  const once = useOnce();
+  const m = useMutation<R, unknown, V>({
     mutationFn: run,
     onSuccess: (r, vars) => {
       opts.invalidate?.forEach((key) => client.invalidateQueries({ queryKey: key }));
@@ -50,4 +57,8 @@ export function useApiAction<V = void, R = unknown>(run: (vars: V) => Promise<R>
     },
     onError: (e) => { toast.danger(error(e)); },
   });
+  type Rest = Parameters<typeof m.mutateAsync>;
+  const mutateAsync = ((...args: Rest) => once.run(sameKey(args[0]), () => m.mutateAsync(...args))) as typeof m.mutateAsync;
+  const mutate = ((...args: Rest) => { if (!once.busy(sameKey(args[0]))) mutateAsync(...args).catch(() => undefined); }) as typeof m.mutate;
+  return { ...m, mutate, mutateAsync };
 }

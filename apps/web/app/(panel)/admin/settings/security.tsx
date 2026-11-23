@@ -10,6 +10,7 @@ import { apiFetch, useErrorText } from '../../../../lib/api';
 import { useMe } from '../../../../lib/me';
 import { useApiQuery } from '../../../../lib/query';
 import type { PublicConfig } from '../../../../lib/session';
+import { keepEdits } from '../../../../lib/latest';
 
 type Doc = { require2fa: 'none' | 'staff' | 'all'; emailCodeSignIn: boolean; apiTokens: 'everyone' | 'staff' | 'off'; verifiedEmailToOrder?: boolean };
 
@@ -27,9 +28,10 @@ export default function Security({ readOnly }: { readOnly: boolean }) {
   async function save() {
     setBusy(true);
     // Only what this form edits is sent: who may create API tokens belongs to Settings → API and is left as it is.
+    const sent = v;
     try {
       const r = await apiFetch<Doc>('/admin/settings/security', { method: 'PUT', body: { require2fa: v!.require2fa, emailCodeSignIn: v!.emailCodeSignIn, verifiedEmailToOrder: !!v!.verifiedEmailToOrder } });
-      client.setQueryData(['settings', 'security'], r); setV(r); toast.success(t('saved')); client.invalidateQueries({ queryKey: ['public-config'] });
+      client.setQueryData(['settings', 'security'], r); setV(keepEdits(sent, r)); toast.success(t('saved')); client.invalidateQueries({ queryKey: ['public-config'] });
     }
     catch (e) { toast.danger(error(e)); } finally { setBusy(false); }
   }

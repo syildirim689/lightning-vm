@@ -9,6 +9,7 @@ import { I } from '../../../../../components/icon';
 import { Mono, Notice, TextInput, Loading } from '../../../../../components/ui';
 import { apiFetch, useErrorText } from '../../../../../lib/api';
 import { useApiQuery } from '../../../../../lib/query';
+import { useOnce } from '../../../../../lib/once';
 
 type P = { id: string; invoiceId: string; provider: string; status: string; amount: string; currency: string; saveCard: boolean };
 
@@ -20,8 +21,11 @@ export default function Checkout({ id }: { id: string }) {
   const p = useApiQuery<{ payment: P }>(['billing', 'payment', id], `/billing/payments/${id}`).data?.payment;
   const [card, setCard] = useState('4242 4242 4242 4242');
   const [busy, setBusy] = useState(false);
+  const once = useOnce();
   if (!p) return <Loading of={['billing', 'payment', id]}><div className="mx-auto h-80 max-w-md animate-pulse rounded-3xl bg-default/50"/></Loading>;
-  async function submit(cancel = false) {
+  // Enter in the card field pressed again, or "Pay" pressed twice, while the payment is on its way: one payment.
+  const submit = (cancel = false) => once.run('pay', () => pay(cancel));
+  async function pay(cancel: boolean) {
     setBusy(true);
     try {
       const r = await apiFetch<{ status: string; code?: string }>(`/billing/payments/${id}/sandbox`, { method: 'POST', body: cancel ? { cancel: true } : { card } });
