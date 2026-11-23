@@ -1393,3 +1393,59 @@ sürüm numaralarını ve belgeleri değiştirir. Etiket, o commit denendikten s
   uzaktan kumanda, Safari/iOS, Firefox ve Android denenmedi). Ekranlar arasındaki her geçişte JS yığını yaklaşık
   170 KB büyüyor; kaynağı bulunmadı ve saatler içinde durup durmadığı ölçülmedi. Üç işin kendi bölümlerindeki
   "çalıştırılmayanlar" aynen geçerlidir.
+
+## Kullanım incelemesi ve günlük işi kolaylaştıranlar — 2026-11-23
+
+İnceleme: [ux-review.md](ux-review.md) (34 bulgu: 5 yüksek, 17 orta, 12 düşük). Ne yapıldığı:
+[smart-features.md](smart-features.md#günlük-işi-kolaylaştıranlar). Commit'ler `b6fcd67` … `fb4bce9`.
+
+- **Birim testleri (geliştirme makinesi, Node 26):** API `npm test` 237/237 → 245/245 (yeni: `eta-rules`,
+  `session-rules` (8), `onboarding-rules` (7)); web `npm test` 203/203 (yeni: `eta`, `undo`, `reconnect`,
+  `session-clock`, `setup-checklist`, `paste`, `last-order`, `error-key`; `session-end` yeni tarayıcı anahtarıyla),
+  `check-messages` (8093 anahtar, iki dil), `icons --check`, `tsc` (web, API), `next build`.
+- **Paket boyutları** (`next build`, her rotanın istemci başvuru bildirimindeki giriş JS dosyaları; değişiklikten önceki
+  `33b9a10` aynı makinede aynı yolla derlendi):
+  - Herkese açık sayfalar (giriş, kayıt, kurulum, durum, 404, canlı ekran): +4,2 KB ham / +1,6 KB gzip (ortak
+    `TextInput`'a giren SSH anahtarı ve yapıştırma kuralları).
+  - Panelin her sayfası: +9,3 KB ham / +3,2 KB gzip (bağlantı şeridi, oturum uyarısı, süre tahmini, hata metni).
+  - En çok büyüyenler: `/order` +13,8 KB / +4,7 KB gzip, `/account` +12,1 / +4,3, `/admin/servers` +12,0 / +4,2,
+    `/`, `/servers/[id]`, `/vdc` +12,0 / +4,2, `/admin` +11,7 / +4,0, `/firewalls/[id]` +10,8 / +3,8.
+  - Yeni bağımlılık yok. Yeni yoklama yok: süre tahmini 10 dakikada bir en çok bir okuma (Redis'te 10 dakika),
+    oturum uyarısı zaten dakikada bir okunan `/auth/me` yanıtından; panel yanıt vermezken listeler duruyor.
+- **GitHub CI, elle tam çalıştırma:**
+  - `45156095351` (`2cde7b0`): iptal edildi; e2e testi güç zamanlaması silmede hâlâ onay penceresini bekliyordu
+    (test güncellendi, `a2bb5ff`). İptalden önce birim işleri, adaptörler, Go servisleri ve imaj derlemeleri geçmişti.
+  - `45156522153` (`a2bb5ff`): `api-integration` kaldı (`platform.test.mjs` kurulum listesinde tam 9 adım
+    bekliyordu → başlangıç adımlarını sayıyor, `678a5b9`); `compose` işi, aynı dala yapılan push'un başlattığı
+    çalıştırma tarafından (eşzamanlılık kuralı) iptal edildi.
+  - `45158922100` (`678a5b9`): `api-integration` kaldı: yeni `ux-helpers` testinde dizin hesabının sabit bitişi bir
+    kez "uzatılabilir" çıktı. **Gerçek hata:** saklanan bitiş, oturum satırının oluşma zamanından birkaç milisaniye
+    önce hesaplanıyor; eşit sayılması gereken bitişlerden saklanan oturumunki önde kalıyordu → bir dakika içindeki
+    bitişler aynı an sayılıyor, sabit olan söyleniyor (`fcf84db`, birim testi). `compose` 51/57: iki e2e testi proje
+    satırını sayfa yerine "kaldırıldı" iletisinde de buldu (iletiler de liste öğesi) → `main` içinde aranıyor (`fb4bce9`).
+  - **`45162396637` (`fb4bce9`): yeşil, bütün işler geçti.** `api-integration` 287 testte 218 geçti, 0 başarısız, 69
+    atlandı (yeni `ux-helpers` 5/5); `compose` tarayıcı paketi **57/57** (17,6 dk; 7 yeni `ux` testi dahil).
+  - Push ile başlayan çalıştırmalar (`45156080847`, `45156471398`, `45158406144`, `45162347499`) elle çalıştırma
+    lehine iptal edildi.
+- **Kurulum sihirbazı testi** (önceki aralıklı kalış): bu işin dört tarayıcı koşusunda (iki CI, iki demo) ilk testte
+  hep geçti; kalış görülmedi, kanıt toplanamadı, neden bulunmadı. Kodu okununca bir olasılık: erişim adımı açılınca
+  denetim kendiliğinden çalışıyor (`wizard.tsx`); test aynı anda adresi değiştirip "Kontrol et"e basarsa sonradan
+  dönen eski yanıt `result`'u ezebilir. Doğrulanmadı.
+- **Demo sunucusu:** `/root/demo-e2e.sh fb4bce9`: demo güncellendi (`/opt/lightning-vm` `fb4bce9`), atılabilir
+  yığında **57/57** (20,5 dk), testler boyunca demo `/api/ready` 63 yanıtın 63'ünde 200, sonrasında 200, geriye 0 test
+  kapsayıcısı. Önceki iki demo koşusu (`2cde7b0`, `678a5b9`) yukarıdaki iki test hatasıyla kaldı (1 başarısız; ux
+  testleri ikisinde de geçti).
+
+**Çalıştırılmayanlar / doğrulanamayanlar:**
+- Yerel tarayıcı testi yok (bu makinede Docker ve VMware simülatörü yok); tarayıcı testleri yalnız CI'da ve demo'nun
+  atılabilir yığınında koştu. WSL'de PostgreSQL/Redis kurulmadı; entegrasyon testleri yalnız CI'da koştu.
+- Oturum uyarısı gerçek bir 12 saatlik oturumun sonunda görülmedi: tarayıcı testi `/auth/me` yanıtındaki kalan süreyi
+  değiştiriyor; çerezin yeniden yazılması ve sabit bitişlerin reddi entegrasyon testinde gerçek istekle denendi.
+  Gerçek bir dizin/SSO hesabıyla ve rol oturum süresiyle denenmedi.
+- "Panel yanıt vermiyor" şeridi tarayıcıda istekleri reddederek denendi; gerçek bir API yeniden başlatması
+  sırasında gözle bakılmadı. Canlı olay akışı (EventSource) bu sürede tarayıcının kendi yeniden bağlanmasıyla sürüyor.
+- Süre tahmini demo'nun kendi geçmişiyle gözle görülmedi (tarayıcı testi hazırlanmış yanıt kullanıyor; gerçek uçtan
+  yalnız biçim ve en az 5 kuralı denetleniyor).
+- Geri alma iletisinin klavye ile (F6 ile ileti bölgesi) kullanılması ve ekran okuyucuyla dinlenmesi elle denenmedi.
+- 44 px dokunma alanları dokunmatik bir cihazda denenmedi (`pointer: coarse` medya sorgusu).
+- Safari, Firefox ve gerçek telefonlar denenmedi; 390 px yalnız Chromium'da.
