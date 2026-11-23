@@ -5,9 +5,9 @@ madde neyin değiştiğini ve işletmecinin yapması gereken bir şey varsa onu 
 davranışı değiştirmeyen işler burada yoktur. Tahsilat çalıştırması API içinde beş dakikada bir çalışır; yani "ilk
 çalıştırma" yükseltmeden birkaç dakika sonradır.
 
-## Yayımlanmadı: günlük işi kolaylaştıranlar (kullanım incelemesi)
+## 0.7.0 (beta): günlük işi kolaylaştıranlar (kullanım incelemesi) (2026-11-23)
 
-Migration, yeni `.env` değişkeni ve değiştirilecek ayar yoktur. Ayrıntı: [smart-features.md](smart-features.md#günlük-işi-kolaylaştıranlar),
+Migration, yeni `.env` değişkeni, yeni bağımlılık ve değiştirilecek ayar yoktur. Ayrıntı: [smart-features.md](smart-features.md#günlük-işi-kolaylaştıranlar),
 inceleme: [ux-review.md](ux-review.md).
 
 - **Oturum bitmeden uyarı ve "Oturumu açık tut".** "Beni hatırla" ile açılan oturumun çerezi, kullanılsa da girişten
@@ -134,7 +134,7 @@ otomasyonundan çağıran ya da çıktısını okuyan işletmeci şunlara bakmal
 | `get.sh` seçtiği dili `install.sh`'e her zaman `--lang` ile geçirir; iletileri iki dillidir (uçbirim olmayan İngilizce çıktıda `OK    source at vX.Y.Z` satırı aynı kaldı); `install.sh`'in standart girdisi `/dev/null`'dır | `get.sh` çıktısını okuyanlar | — |
 | Paneldeki sürüm etiketi "Erken sürüm / Early build" yerine "Beta" yazar; paketlerin `package.json` sürümü `0.4.0` | — | — |
 
-**Sürüm numarası.** Yayımlanan sürümler `v0.1.0`, `v0.4.0`, `v0.5.0`, `v0.5.1` ve `v0.6.0`'dır. `0.1.1`-`0.3.0` numaraları yalnızca iç test
+**Sürüm numarası.** Yayımlanan sürümler `v0.1.0`, `v0.4.0`, `v0.5.0`, `v0.5.1`, `v0.6.0` ve `v0.7.0`'dır. `0.1.1`-`0.3.0` numaraları yalnızca iç test
 kurulumlarında kullanıldı ve yayımlanmadı; depoyu GitHub'dan alan bir kurulumda bu etiketler yoktur. `v0.1.0`'dan
 yükseltenler bu sayfanın **tamamını** okumalıdır: aşağıdaki bütün turlar bu sürümün içindedir.
 

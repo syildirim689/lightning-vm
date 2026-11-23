@@ -14,17 +14,27 @@ Türkçe [docs/upgrade-notes.md](docs/upgrade-notes.md) sayfasını okuyun.*
 
 ## [Unreleased]
 
-Everyday helpers from a usability review of the customer, reseller and admin sides ([docs/ux-review.md](docs/ux-review.md):
-34 findings, 5 high, 17 medium, 12 low; 22 fixed, 1 in part, 11 left with the reason). Everything is computed inside
-the panel from its own data; nothing acts without a click ([docs/smart-features.md](docs/smart-features.md#günlük-işi-kolaylaştıranlar)).
+## [0.7.0] - 2026-11-23
 
-### Upgrading
+Sixth public release, still **beta**. One piece of work is new since 0.6.0: everyday helpers from a usability review
+of the customer, reseller and admin sides ([docs/ux-review.md](docs/ux-review.md): 34 findings, 5 high, 17 medium,
+12 low; 22 fixed, 1 in part, 11 left with the reason). Running operations say how long they usually take, removals
+can be undone, the session warns before it ends, the panel waits out a server that does not answer, the admin setup
+list checks what keeps an installation healthy, the order form starts from the newest server, pasted SSH keys are
+read and error messages name the cause. Everything is computed inside the panel from its own data; nothing acts
+without a click ([docs/smart-features.md](docs/smart-features.md#günlük-işi-kolaylaştıranlar)). Safari, Firefox,
+real phones and touch screens were not tried ([docs/validation.md](docs/validation.md)).
 
-No migration and no new `.env` variable. New routes: `GET /api/operations/estimates` and `POST /api/auth/stay`;
-`GET /api/auth/me` gains `session` (when the browser session ends and whether it can be extended),
-`GET /api/operations/active` gains `diskGb`, and `GET /api/admin/onboarding` gains health steps with `group` and
-`detail`. The API keeps the outcome of the last mail it sent (no address, no subject) in Redis for 30 days. A new audit
-event, `session.extended`, and a new error code, `SESSION_FIXED`.
+### Upgrading from 0.6.0
+
+Update from Admin → System → Updates or with `sudo sh scripts/install.sh update`. There is no migration, no new
+`.env` variable, no new dependency and no setting to change. New routes: `GET /api/operations/estimates` and
+`POST /api/auth/stay`; `GET /api/auth/me` gains `session` (when the browser session ends and whether it can be
+extended), `GET /api/operations/active` gains `diskGb`, and `GET /api/admin/onboarding` gains health steps with
+`group` and `detail`. The API keeps the outcome of the last mail it sent (no address, no subject) in Redis for 30
+days. A new audit event, `session.extended`, and a new error code, `SESSION_FIXED`. Removals that offer "Undo" are
+sent a few seconds later, so the audit log records only what happened. [docs/upgrade-notes.md](docs/upgrade-notes.md)
+(Turkish) says what an operator sees.
 
 ### Added
 
@@ -496,7 +506,8 @@ First tagged version.
 - Settings: branding, SMTP, CAPTCHA, SMS providers, payment methods and notification rules.
 - Updates and backups from the panel, monitoring and alerts.
 
-[Unreleased]: https://github.com/syildirim689/lightning-vm/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/syildirim689/lightning-vm/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/syildirim689/lightning-vm/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/syildirim689/lightning-vm/compare/v0.5.1...v0.6.0
 [0.5.1]: https://github.com/syildirim689/lightning-vm/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/syildirim689/lightning-vm/compare/v0.4.0...v0.5.0
