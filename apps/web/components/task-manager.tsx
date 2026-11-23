@@ -77,7 +77,7 @@ export default function TaskManager({ permissions }: { permissions: string[] }) 
   const tone = (o: Op) => o.status === 'succeeded' ? 'text-success' : o.status === 'failed' ? 'text-danger' : o.status === 'cancelled' ? 'text-muted' : 'text-accent';
   const icon = (o: Op) => o.status === 'succeeded' ? <I name="circle-check" size={16}/> : o.status === 'failed' ? <I name="circle-x" size={16}/> : o.status === 'cancelled' ? <I name="square" size={14}/> : <Spinner size="sm" color="current"/>;
 
-  return <div className="pointer-events-none fixed inset-x-2 bottom-2 z-40 flex flex-col items-end gap-2 pb-[env(safe-area-inset-bottom)] sm:inset-x-auto sm:bottom-4 sm:right-4">
+  return <div data-floating className="pointer-events-none fixed inset-x-2 bottom-2 z-40 flex flex-col items-end gap-2 pb-[env(safe-area-inset-bottom)] sm:inset-x-auto sm:bottom-4 sm:right-4">
     <span role="status" className="sr-only">{said}</span>
     <AnimatePresence>
       {open && <motion.section initial={{ opacity: 0, y: 12, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 8, scale: 0.98 }}

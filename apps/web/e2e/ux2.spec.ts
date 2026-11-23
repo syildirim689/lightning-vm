@@ -80,15 +80,30 @@ async function settle(page: Page) {
     + document.getAnimations().filter((a) => a.playState === 'running' && a.effect?.getComputedTiming().iterations !== Infinity).length),
   { timeout: 10_000, message: 'the page stood still' }).toBe(0).catch(() => undefined);
 }
+// A message that happens to be up (a notification that just arrived, a "copied") sits over the page's corner for a few
+// seconds and is not part of the page: it is closed first, so it does not count as covering the targets beneath it.
+async function closeMessages(page: Page) {
+  const close = page.getByRole('region', { name: /notification/i }).getByRole('alertdialog').getByRole('button', { name: /^(Close|Kapat)$/ });
+  for (let i = 0; i < 5 && await close.count(); i++) await close.first().click().catch(() => undefined);
+}
 async function axe(page: Page, label: string) {
   await settle(page);
-  const r = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa']).analyze();
-  // Each finding with where it is and, for contrast and target size, the numbers axe measured.
-  const detail = (n: { target: unknown[]; any: { data?: unknown }[] }) => {
+  await closeMessages(page);
+  const tags = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'];
+  const r = await new AxeBuilder({ page }).withTags(tags).disableRules(['target-size']).analyze();
+  // Target size is the page's own: what floats over a corner for a while (the running operations list, a message)
+  // is set aside for this one rule, or every target under it would count as covered.
+  const floating = '[data-floating], [role="region"]:has([role="alertdialog"])';
+  await page.evaluate((sel) => document.querySelectorAll<HTMLElement>(sel).forEach((e) => { e.dataset.axeVisibility = e.style.visibility; e.style.visibility = 'hidden'; }), floating);
+  const size = await new AxeBuilder({ page }).withRules(['target-size']).analyze();
+  await page.evaluate((sel) => document.querySelectorAll<HTMLElement>(sel).forEach((e) => { e.style.visibility = e.dataset.axeVisibility ?? ''; }), floating);
+  // Each finding with where it is and, for contrast and target size, the numbers axe measured (and what covers a target).
+  const detail = (n: { target: unknown[]; any: { data?: unknown; relatedNodes?: { target: unknown[] }[] }[] }) => {
     const d = n.any[0]?.data as { contrastRatio?: number; fgColor?: string; bgColor?: string; width?: number; height?: number } | undefined;
-    return `${n.target.join(' ')}${d?.contrastRatio ? ` ${d.contrastRatio}:1 ${d.fgColor} on ${d.bgColor}` : d?.width ? ` ${Math.round(d.width)}x${Math.round(d.height ?? 0)}` : ''}`;
+    const by = n.any[0]?.relatedNodes?.slice(0, 2).map((x) => x.target.join(' ')).join(', ');
+    return `${n.target.join(' ')}${d?.contrastRatio ? ` ${d.contrastRatio}:1 ${d.fgColor} on ${d.bgColor}` : d?.width ? ` ${Math.round(d.width)}x${Math.round(d.height ?? 0)}` : ''}${by ? ` (near ${by})` : ''}`;
   };
-  return r.violations.filter((v) => v.impact === 'serious' || v.impact === 'critical')
+  return [...r.violations, ...size.violations].filter((v) => v.impact === 'serious' || v.impact === 'critical')
     .map((v) => `${label}: ${v.id} (${v.impact}) ${v.help} — ${v.nodes.slice(0, 4).map(detail).join(' | ')}`);
 }
 // The page has drawn what its API calls bring: its heading, and no loading placeholder left.

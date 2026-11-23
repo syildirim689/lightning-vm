@@ -196,7 +196,7 @@ export default function HostState() {
                 <button type="button" onClick={() => setOpen(x.service)}
                   className={`flex w-full items-center gap-3 rounded-xl border px-3 py-2.5 text-left transition-colors hover:border-accent focus-visible:outline-2 focus-visible:outline-accent motion-reduce:transition-none ${bad ? 'border-danger/50 bg-danger/5' : 'border-border'}`}>
                   <span aria-hidden className={`size-2.5 shrink-0 rounded-full ${bad ? 'bg-danger' : tone === 'success' ? 'bg-success' : tone === 'accent' ? 'bg-accent' : 'bg-default-foreground/30'}`}/>
-                  <span className="min-w-0 flex-1"><span className="flex min-w-0 items-baseline gap-2"><span className="truncate text-sm font-medium">{x.service}<span className="sr-only">{t('svc.open', { service: '', state: t(`kind.${x.kind}`) })}</span></span>
+                  <span className="min-w-0 flex-1"><span className="flex min-w-0 items-baseline gap-2"><span aria-hidden className="truncate text-sm font-medium">{x.service}</span><span className="sr-only">{t('svc.open', { service: x.service, state: t(`kind.${x.kind}`) })}</span>
                     <span aria-hidden className="truncate text-[11px] text-muted" title={versionText(x.version)}>{versionText(x.version)}</span></span>
                     {/* The button is named by its words, "<service>: <state>. Open the details" (hidden ones after the name; no aria-label, whose
                         name would not contain the version and figures written on the button, WCAG 2.5.3); the rest is for the eye. */}
