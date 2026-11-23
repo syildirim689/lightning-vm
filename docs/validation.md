@@ -1449,3 +1449,39 @@ sürüm numaralarını ve belgeleri değiştirir. Etiket, o commit denendikten s
 - Geri alma iletisinin klavye ile (F6 ile ileti bölgesi) kullanılması ve ekran okuyucuyla dinlenmesi elle denenmedi.
 - 44 px dokunma alanları dokunmatik bir cihazda denenmedi (`pointer: coarse` medya sorgusu).
 - Safari, Firefox ve gerçek telefonlar denenmedi; 390 px yalnız Chromium'da.
+
+## 0.7.0 (beta) sürümü — 2026-11-23
+
+`v0.7.0` etiketi `47df01d` commit'indedir (açıklamalı etiket). İçinde 0.6.0'dan sonraki tek iş vardır (yukarıdaki
+"Kullanım incelemesi ve günlük işi kolaylaştıranlar" bölümü, `b6fcd67` … `fb4bce9`); ondan sonraki commit'ler
+yalnızca belgeleri, `47df01d` de yalnızca sürüm numaralarını ve belgeleri değiştirir. Etiket, o commit denendikten
+sonra kondu:
+
+- **GitHub CI, elle tam çalıştırma `45177311336` (`47df01d`):** ilk denemede yeşil, bütün işler geçti; yeniden
+  deneme yapılmadı. `api-integration` 287 testte 218 geçti, 0 başarısız, 69 atlandı; `compose` işindeki tarayıcı
+  paketi **57/57** (18,3 dk); birim işleri, altı adaptör, iki Go servisi, 11 imaj derlemesi. (Aynı commit'in `push`
+  ile başlayan çalıştırması `45177292896` iptal edildi: elle çalıştırma onun yerini aldı.) Kurulum sihirbazı testi
+  bu çalıştırmada da ilk denemede geçti.
+- **Demo sunucusu (`47df01d`), etiketten önce:** `/root/demo-e2e.sh` demo'yu bu commit'e güncelledi (`OK UPDATED`,
+  derleme ve başlatma 2 dk 41 sn), atılabilir yığında tarayıcı paketi **57/57** (20,3 dk); testler boyunca demo
+  `/api/ready` 63 yanıtın 63'ünde 200; test yığınından geriye 0 kapsayıcı, 0 birim kaldı.
+- **Etiket:** `origin`'e ve test sunucusunun deposuna yalnızca `refs/tags/v0.7.0` gönderildi. Test sunucusunun
+  deposundaki etiketler gönderimden önce ve sonra karşılaştırıldı: tek fark yeni `v0.7.0`; eski iç test etiketleri
+  (`v0.1.1`-`v0.3.0`) yerinde kaldı ve hiçbiri GitHub'a gitmedi (GitHub'daki etiketler `v0.1.0`, `v0.4.0`, `v0.5.0`,
+  `v0.5.1`, `v0.6.0`, `v0.7.0`).
+- **Yayın iş akışı `45182422439`:** ilk denemede geçti: birim işleri, 11 imaj
+  (`ghcr.io/syildirim689/lightning-vm/*:v0.7.0`; iş akışının günlüğünde her birinin gönderildiği görüldü) ve sürüm
+  sayfası. Sayfa "Lightning VM v0.7.0 (beta)" adıyla ve **pre-release** işaretiyle oluştu (taslak değil); notları
+  `CHANGELOG.md` dosyasının 0.7.0 bölümüdür (satır satır karşılaştırıldı), altında iş akışının her sürüme eklediği
+  kurulum ve güncelleme satırları.
+- **Demo `v0.7.0` gösteriyor:** etiket konduktan sonra `install.sh update --to v0.7.0` çalıştırıldı; yapacak bir
+  şey yoktu (`OK UP_TO_DATE Up to date: v0.7.0`) ve ad yenilendi: `.env` içinde ve API ile web kapsayıcılarında
+  `APP_VERSION=v0.7.0`, `git describe` `v0.7.0`, `/api/ready` 200, öncesindeki gibi 24 kapsayıcı çalışıyor.
+  `data/maintenance/releases.json`: `current` ve `base` `v0.7.0`, listede ilk sırada `v0.7.0`. Etiketten önce panel
+  `v0.6.0-12-g47df01d` gösteriyordu. Yedek, derleme ya da migration çalışmadı; veritabanına dokunulmadı.
+- **Çalıştırılmayanlar:** temiz bir makinede `curl … | sudo sh` ile 0.7.0 kurulumu; 0.6.0 kurulu, verisi olan
+  gerçek bir panelin 0.7.0'a güncellenmesi (demo bu commit'e etiketten önce, dalın ucundan güncellendi);
+  yayımlanan `ghcr.io` imajlarının çekilip çalıştırılması (imajlardan `api`, `web`, `worker`, `console` ve `vmware`
+  oturumsuz çekilemiyor, 0.6.0'ınkiler de öyle; öteki altısı oturumsuz çekilebiliyor); panele tarayıcıdan oturum
+  açıp gösterilen sürümün gözle görülmesi. Kullanım incelemesi bölümündeki "çalıştırılmayanlar" (Safari, Firefox,
+  gerçek telefonlar, dokunmatik ekran, ekran okuyucu, gerçek bir oturum sonu) aynen geçerlidir.
