@@ -164,6 +164,19 @@ export async function createApp() {
     (req as { dedupeKey?: string }).dedupeKey = key;
   });
   // Route templates (/servers/:id), not raw URLs, keep the label set bounded.
+  // The claim ends when the work has: normally with the answer (onResponse below). A browser that went away before
+  // the answer (a reload or a closed tab during a check) never gets onResponse, and its claim used to stay for the
+  // full two minutes, refusing the same request when it was sent again ("already being processed"). onSend runs
+  // once the handler is done, whether or not anyone is still listening: the claim is let go when the connection
+  // closes, which for a browser already gone is now.
+  app.getHttpAdapter().getInstance().addHook('onSend', async (req, reply, payload) => {
+    const key = (req as { dedupeKey?: string }).dedupeKey;
+    if (key) {
+      if (reply.raw.destroyed) await releaseRequest(key);
+      else reply.raw.once('close', () => void releaseRequest(key));
+    }
+    return payload;
+  });
   app.getHttpAdapter().getInstance().addHook('onResponse', async (req, reply) => {
     const key = (req as { dedupeKey?: string }).dedupeKey;
     if (key) await releaseRequest(key);
