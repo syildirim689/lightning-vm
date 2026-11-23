@@ -1237,3 +1237,16 @@ passkey yöneticisi panelin kendi adını ve hesabın e-postasını gösterir.
   390 px" ve "a session that ends while something is typed…" geçti. Kurulum sihirbazı testi bu makinede izleme
   bileşenleri olmadığı için ilerleyemedi (değişiklikle ilgisiz); yönetici sihirbazın önceki adımlarıyla oluştu ve
   kayıt açma doğrudan veritabanından yapıldı.
+- **GitHub CI, elle tam çalıştırma `45084842733` (`10dbe2e`):** ilk denemede yeşil, bütün işler geçti
+  (`api-integration`, `compose` içindeki tarayıcı paketi dahil).
+- **Demo sunucusu:** `/root/demo-e2e.sh 10dbe2e`: demo güncellendi (`/opt/lightning-vm` `10dbe2e`), atılabilir
+  yığında **46/46** (18,6 dk; yeni test dahil), demo `/api/ready` testler sırasında 57 yanıtın 57'sinde 200, sonrasında
+  200, geriye 0 kapsayıcı. Betiğin ekran çıktısı yanlışlıkla `/dev/null`'a yönlendirildi; sonuç `/opt/e2e/result.txt`
+  ve `/opt/e2e/demo-ready.log`'dan okundu.
+- **Çalıştırılmayanlar:** gerçek bir doğrulayıcıyla (Windows Hello, Touch ID, YubiKey, telefon) passkey kaydı —
+  tarayıcı testinde `navigator.credentials` taklit edildi, doğrulama ve yeniden adlandırma çağrıları yakalandı; telefon
+  ("hybrid") durumu yalnızca birim testinde; bir doğrulama uygulamasının (Google Authenticator vb.) QR kodunu okuyup
+  adı nasıl gösterdiği gözle denenmedi (URI biçimi test edildi); macOS, iOS ve Android tarayıcılarında öneri metni;
+  yönetim katalog formlarındaki (havuz, paket, imaj, IP havuzu, konum, ISO kaynağı, hazır yanıt, bağlantı) önerilere
+  tarayıcıda ayrıca bakılmadı (mevcut testler bu formlara ad yazıyor ve geçti); TR arayüzde passkey önerisi yalnızca
+  birim testinde.
