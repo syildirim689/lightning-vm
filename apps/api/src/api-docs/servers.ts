@@ -119,7 +119,16 @@ export default {
     tag: 'operations',
     summary: { tr: 'Süren ve son 15 dakikada biten işlemleri listeler.', en: 'Lists running operations and those finished in the last 15 minutes.' },
     query: [{ name: 'scope', type: 'string', values: ['all'], text: { tr: '`all`: herkesin işlemleri (servers.view_all yetkisi gerekir; yoksa yok sayılır).', en: '`all`: everyone\'s operations (needs servers.view_all; ignored otherwise).' } }],
-    returns: { tr: '`operations` (en çok 20): `id`, `kind`, `status`, `step`, `attempts`, `errorCode`, zamanlar, `serverId`, `serverName`.', en: '`operations` (at most 20): `id`, `kind`, `status`, `step`, `attempts`, `errorCode`, times, `serverId`, `serverName`.' },
+    returns: { tr: '`operations` (en çok 20): `id`, `kind`, `status`, `step`, `attempts`, `errorCode`, zamanlar, `serverId`, `serverName`, `diskGb` (süre tahmininin boyut grubu için).', en: '`operations` (at most 20): `id`, `kind`, `status`, `step`, `attempts`, `errorCode`, times, `serverId`, `serverName`, `diskGb` (for the size group of the time estimate).' },
+  },
+  'GET /operations/estimates': {
+    tag: 'operations',
+    summary: { tr: 'Uzun işlemlerin bu kurulumda genellikle ne kadar sürdüğünü verir.', en: 'Returns how long long-running operations usually take on this installation.' },
+    details: {
+      tr: 'Son 90 günde ilk denemede başarıyla biten ve ödeme beklemeyen işlemlerin, tıklamadan bitişe kadar geçen sürelerinin ortancası ve 90. yüzdeliği; tür başına en yeni 200 işlem, disk boyutu grubuna göre (`s` ≤ 40 GB, `m` ≤ 100, `l` ≤ 300, `xl` daha büyük). Beşten az işlem olan grup ya da tür için tahmin yoktur. Yalnız süreler döner: sunucu, sahip ya da ad dönmez. Yanıt 10 dakika önbellekte tutulur.',
+      en: 'The median and 90th percentile of the time from the click to the end, for operations of the last 90 days that succeeded at the first attempt and never waited for a payment; the newest 200 per kind, by disk size group (`s` up to 40 GB, `m` up to 100, `l` up to 300, `xl` larger). A group or kind with fewer than five has no estimate. Only durations come back: no server, owner or name. The answer is cached for 10 minutes.',
+    },
+    returns: { tr: '`estimates`: türe göre `all` ve `sizes` (her biri `median`, `p90` saniye ve `n`); `minSamples`, `windowDays`.', en: '`estimates`: per kind, `all` and `sizes` (each `median`, `p90` seconds and `n`); `minSamples`, `windowDays`.' },
   },
   'GET /servers/:id/metrics': {
     tag: 'servers',

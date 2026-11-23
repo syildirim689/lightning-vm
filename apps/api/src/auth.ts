@@ -1,17 +1,18 @@
-import { CanActivate, Controller, ExecutionContext, Get, Injectable, Req, SetMetadata, UseGuards } from '@nestjs/common';
+import { CanActivate, Controller, ExecutionContext, Get, HttpCode, Injectable, Post, Req, Res, SetMetadata, UseGuards } from '@nestjs/common';
 import { fromNodeHeaders } from 'better-auth/node';
 import { createHash } from 'node:crypto';
-import type { FastifyRequest } from 'fastify';
+import type { FastifyReply, FastifyRequest } from 'fastify';
 import { countRequest } from './api-rate';
 import { getAuth } from './better-auth';
 import { config } from './config';
-import { pool } from './db';
+import { pool, redis } from './db';
 import { directorySessionOver, tokenAsleep } from './ldap';
 import { apiError } from './errors';
 import { can, covers, customerLevel, limitsOf, permissionsOf, permissionsOfMany, splitRoles } from './permissions';
 import { ipAllowed, narrowedTokenMay } from './role-limits';
 import { getSettings } from './settings-store';
 import { endSession, touch } from './presence';
+import { sessionEnd } from './session-rules';
 
 // roles: the role keys; permissions: the effective set ('*' for administrators). impersonatedBy: the staff
 // member signed in as this user, if any.
@@ -21,7 +22,7 @@ export type User = { id: string; email: string; name: string; roles: string[]; p
   // Whether the account's e-mail address was verified or proven (address-check.ts); absent on requests made up for another account (reseller, billing).
   emailVerified?: boolean };
 // sessionToken: better-auth's stored token; the console gateway keys its revocations on its hash. sessionId: its row.
-export type AuthedRequest = FastifyRequest & { user: User; sessionToken: string; sessionId: string };
+export type AuthedRequest = FastifyRequest & { user: User; sessionToken: string; sessionId: string; sessionInfo?: SessionInfo };
 
 // Audit details often repeat request input, and the audit log is kept: no single text in them is longer than this.
 const auditTextMax = 1000;
@@ -129,7 +130,9 @@ async function impersonatorMay(by: string, userId: string, target: string[]) {
   return true;
 }
 
-export async function currentSession(req: FastifyRequest): Promise<{ user: User; token: string; id: string } | null> {
+// What decides when a browser session ends (session-rules.ts): kept on the request for GET /auth/me and POST /auth/stay.
+export type SessionInfo = { createdAt: number; expiresAt: number; impersonated: boolean; directory: boolean; roleHours: number | null };
+export async function currentSession(req: FastifyRequest): Promise<{ user: User; token: string; id: string; info?: SessionInfo } | null> {
   const bearer = req.headers.cookie ? null : /^Bearer (lvm_[\w-]{20,100})$/.exec(req.headers.authorization ?? '')?.[1];
   if (bearer) return tokenSession(req, bearer);
   const s = await getAuth().api.getSession({ headers: fromNodeHeaders(req.headers) }).catch(() => null);
@@ -170,7 +173,9 @@ export async function currentSession(req: FastifyRequest): Promise<{ user: User;
   if (req.headers['x-lightning-try'] === '1') await countRequest(req, `try:${u.id}`, (await getSettings('api')).rateLimit);
   return { user: { id: u.id, email: u.email, name: u.name ?? '', roles: splitRoles(u.role), permissions,
     locale: u.locale === 'tr' ? 'tr' : 'en', timeZone: (u as { timeZone?: string | null }).timeZone ?? null, username: (u as { username?: string | null }).username ?? null, impersonatedBy, twoFactorEnabled: !!u.twoFactorEnabled, twoFactorRequired, phoneNumber: u.phoneNumber ?? null,
-    phoneNumberVerified: !!u.phoneNumberVerified, emailVerified: !!u.emailVerified }, token: s.session.token, id: s.session.id };
+    phoneNumberVerified: !!u.phoneNumberVerified, emailVerified: !!u.emailVerified }, token: s.session.token, id: s.session.id,
+    info: { createdAt: new Date(s.session.createdAt).getTime(), expiresAt: new Date(s.session.expiresAt).getTime(), impersonated: !!impersonatedBy,
+      directory: ['ldap', 'oidc'].includes((u as { authSource?: string }).authSource ?? ''), roleHours: limits.sessionHours ?? null } };
 }
 export const currentUser = async (req: FastifyRequest) => (await currentSession(req))?.user ?? null;
 
@@ -186,7 +191,7 @@ export class SessionGuard implements CanActivate {
     const req = ctx.switchToHttp().getRequest<AuthedRequest>();
     const s = await currentSession(req);
     if (!s) throw apiError(401, 'UNAUTHENTICATED', 'Sign in required');
-    req.user = s.user; req.sessionToken = s.token; req.sessionId = s.id;
+    req.user = s.user; req.sessionToken = s.token; req.sessionId = s.id; req.sessionInfo = s.info;
     // A narrowed token, on every route behind this guard (role-limits.ts has the rule).
     if ((req as { apiToken?: { narrowed?: boolean } }).apiToken?.narrowed) {
       const handler = ctx.getHandler();
@@ -204,9 +209,51 @@ export class SessionGuard implements CanActivate {
 }
 
 // Sign-in, sign-up, sign-out and the rest are better-auth's routes under /auth/* (registered in main.ts).
+// The browser's own session cookie as it came in (the token and its signature, still encoded), and whether the sign-in
+// asked not to be remembered (better-auth then writes a cookie without an expiry, closed with the browser).
+const cookieNamed = (req: FastifyRequest, suffix: string) => {
+  for (const part of (req.headers.cookie ?? '').split(';')) {
+    const at = part.indexOf('=');
+    const name = part.slice(0, at).trim();
+    if (at > 0 && (name === `lvm.${suffix}` || name === `__Secure-lvm.${suffix}`)) return { name, value: part.slice(at + 1).trim() };
+  }
+  return null;
+};
+const stayKey = (sessionId: string) => `stay:${sessionId}`;
+
+async function sessionEndOf(req: AuthedRequest) {
+  const info = req.sessionInfo;
+  if (!info) return null; // an API token: no browser session
+  const stayed = await redis.get(stayKey(req.sessionId)).catch(() => null);
+  const end = sessionEnd({ ...info, ttlHours: config.SESSION_TTL_HOURS, remembered: !cookieNamed(req, 'dont_remember'), stayedAt: stayed ? Number(stayed) : null });
+  return { endsAt: new Date(end.at).toISOString(), msLeft: Math.max(0, end.at - Date.now()), kind: end.kind, why: end.why };
+}
+
 @Controller('auth')
 export class AuthController {
+  // session: when this browser session ends and whether "stay signed in" can move it (session-rules.ts).
   @Get('me') @UseGuards(SessionGuard)
-  me(@Req() req: AuthedRequest) { return { ...req.user, ip: req.ip }; } // ip: the firewall editor's "my IP" shortcut
+  async me(@Req() req: AuthedRequest) { return { ...req.user, ip: req.ip, session: await sessionEndOf(req) }; } // ip: the firewall editor's "my IP" shortcut
+
+  // "Stay signed in", pressed in the warning before a renewable end: the stored session and the browser's cookie get
+  // SESSION_TTL_HOURS again from now. The cookie is the one the browser sent (same token, same signature), only
+  // its lifetime is written again; a sign-in that was not remembered keeps a cookie that ends with the browser.
+  // A fixed end ("sign in as", directory and single sign-on accounts, a role's session length) cannot be moved.
+  @Post('stay') @HttpCode(200) @UseGuards(SessionGuard)
+  async stay(@Req() req: AuthedRequest, @Res({ passthrough: true }) reply: FastifyReply) {
+    const before = await sessionEndOf(req);
+    if (!before) throw apiError(409, 'SESSION_FIXED', 'This is not a browser session');
+    if (before.kind === 'fixed') throw apiError(409, 'SESSION_FIXED', 'This session ends at a fixed time');
+    const cookie = cookieNamed(req, 'session_token');
+    if (!cookie) throw apiError(401, 'UNAUTHENTICATED', 'Sign in required');
+    const ttl = config.SESSION_TTL_HOURS * 3600;
+    await pool.query("UPDATE auth_sessions SET expires_at = now() + make_interval(secs => $2), updated_at = now() WHERE id = $1", [req.sessionId, ttl]);
+    await redis.set(stayKey(req.sessionId), String(Date.now()), 'EX', ttl).catch(() => undefined);
+    const remembered = !cookieNamed(req, 'dont_remember');
+    reply.header('set-cookie', `${cookie.name}=${cookie.value}; Path=/; HttpOnly; SameSite=Lax${remembered ? `; Max-Age=${ttl}` : ''}${cookie.name.startsWith('__Secure-') || config.PANEL_TLS === '1' ? '; Secure' : ''}`);
+    req.sessionInfo = req.sessionInfo && { ...req.sessionInfo, expiresAt: Date.now() + ttl * 1000 };
+    await audit(req, 'session.extended', 'success', req.user.id, {});
+    return { session: await sessionEndOf(req) };
+  }
 }
 

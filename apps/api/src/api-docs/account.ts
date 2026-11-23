@@ -825,9 +825,19 @@ export default {
     summary: { tr: 'Oturum açmış kullanıcıyı verir.', en: 'Returns the signed-in user.' },
     details: { tr: 'İki aşamalı doğrulama zorunlu ama kurulmamışsa yalnızca bu uç yanıt verir.', en: 'When two-factor is required but not set up, this is the only route that answers.' },
     returns: {
-      tr: 'id, email, emailVerified, name, roles, permissions, locale, timeZone, username, twoFactorEnabled, phoneNumber, phoneNumberVerified, impersonatedBy ve isteğin geldiği ip.',
-      en: 'id, email, emailVerified, name, roles, permissions, locale, timeZone, username, twoFactorEnabled, phoneNumber, phoneNumberVerified, impersonatedBy and the caller\'s ip.',
+      tr: 'id, email, emailVerified, name, roles, permissions, locale, timeZone, username, twoFactorEnabled, phoneNumber, phoneNumberVerified, impersonatedBy, isteğin geldiği ip ve `session`: tarayıcı oturumunun ne zaman biteceği (`endsAt`, `msLeft`), `kind` (`renewable`: POST /auth/stay ile uzatılabilir; `fixed`: uzatılamaz) ve `why` (`cookie`, `idle`, `impersonation`, `directory`, `role`). API anahtarıyla `session` null değerindedir.',
+      en: 'id, email, emailVerified, name, roles, permissions, locale, timeZone, username, twoFactorEnabled, phoneNumber, phoneNumberVerified, impersonatedBy, the caller\'s ip and `session`: when the browser session ends (`endsAt`, `msLeft`), its `kind` (`renewable`: POST /auth/stay extends it; `fixed`: it cannot be extended) and `why` (`cookie`, `idle`, `impersonation`, `directory`, `role`). With an API token `session` is null.',
     },
+  },
+  'POST /auth/stay': {
+    tag: 'account',
+    summary: { tr: 'Tarayıcı oturumunu şimdiden itibaren yeniden SESSION_TTL_HOURS uzatır ("Oturumu açık tut").', en: 'Extends the browser session by SESSION_TTL_HOURS from now ("Stay signed in").' },
+    details: {
+      tr: 'Saklanan oturum ve tarayıcının oturum çerezi yenilenir (aynı belirteç ve imza, yalnız ömrü yeniden yazılır; "beni hatırla" seçilmeden açılan oturumun çerezi tarayıcı kapanınca biten çerez olarak kalır). Sabit biten oturumlar uzatılamaz: "kullanıcı olarak gir" oturumu, dizin ve SSO hesapları, rolün oturum süresi. Denetim kaydı: `session.extended`.',
+      en: 'The stored session and the browser\'s session cookie are renewed (same token and signature, only its lifetime is written again; a sign-in that was not remembered keeps a cookie that ends with the browser). Sessions with a fixed end cannot be extended: "sign in as", directory and single sign-on accounts, a role\'s session length. Audit event: `session.extended`.',
+    },
+    returns: { tr: '`session`: GET /auth/me yanıtındaki gibi.', en: '`session`: as in GET /auth/me.' },
+    errors: ['SESSION_FIXED', 'UNAUTHENTICATED'],
   },
   'GET /live': {
     tag: 'internal',

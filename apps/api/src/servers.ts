@@ -30,6 +30,7 @@ import { heldRefuses, hourlyOf, sumMoney } from './billing-rules';
 import { checkCoupon } from './coupons';
 import { checkResellerRoom, discounted, resellerOf } from './reseller';
 import { clearRestoreHoldNotice, forgetRestoreHold, restoreHold } from './restore-hold';
+import { ETA_KINDS, MAX_PER_KIND, MIN_SAMPLES, WINDOW_DAYS, estimates } from './eta-rules';
 
 type Input = Record<string, unknown>;
 // BullMQ carries only the operation id (also the job id, so re-adding is harmless);
@@ -442,11 +443,30 @@ export class ServersController {
   async active(@Req() req: AuthedRequest, @Query('scope') scope?: string) {
     const all = scope === 'all' && can(req.user.permissions, 'servers.view_all');
     const { rows } = await pool.query(`SELECT o.id, o.kind, o.status, o.step, o.attempts, o.error_code AS "errorCode", o.created_at AS "createdAt",
-        o.started_at AS "startedAt", o.finished_at AS "finishedAt", s.id AS "serverId", s.name AS "serverName"
+        o.started_at AS "startedAt", o.finished_at AS "finishedAt", s.id AS "serverId", s.name AS "serverName", COALESCE((o.params->>'diskGb')::int, s.disk_gb) AS "diskGb"
       FROM operations o JOIN servers s ON s.id = o.server_id
       WHERE (o.status IN ('pending', 'running') OR o.finished_at > now() - interval '15 minutes') AND ($2 OR o.owner_id = $1)
       ORDER BY (o.status IN ('pending', 'running')) DESC, o.created_at DESC LIMIT 20`, [req.user.id, all]);
     return { operations: rows };
+  }
+
+  // How long each kind of long operation usually takes on this installation (eta-rules.ts): from the click to the end,
+  // for operations that succeeded at the first attempt and never waited for a payment. Durations only, of everyone's
+  // operations together (no server, owner or name leaves the query), and nothing for a kind with fewer than five.
+  // Kept ten minutes: it moves slowly and every open task list asks for it.
+  @Get('operations/estimates')
+  async estimates() {
+    const kept = await redis.get('eta:v1').catch(() => null);
+    if (kept) return JSON.parse(kept);
+    const { rows } = await pool.query(`SELECT kind, "diskGb", seconds FROM (
+        SELECT o.kind, COALESCE((o.params->>'diskGb')::int, s.disk_gb) AS "diskGb", extract(epoch FROM o.finished_at - o.created_at)::float8 AS seconds,
+          row_number() OVER (PARTITION BY o.kind ORDER BY o.finished_at DESC) AS n
+        FROM operations o LEFT JOIN servers s ON s.id = o.server_id
+        WHERE o.status = 'succeeded' AND o.kind = ANY($1) AND o.attempts <= 1 AND o.held_since IS NULL AND o.finished_at > now() - make_interval(days => $2)) x
+      WHERE n <= $3`, [ETA_KINDS, WINDOW_DAYS, MAX_PER_KIND]);
+    const body = { estimates: estimates(rows), minSamples: MIN_SAMPLES, windowDays: WINDOW_DAYS };
+    await redis.set('eta:v1', JSON.stringify(body), 'EX', 600).catch(() => undefined);
+    return body;
   }
 
   // Live performance from vCenter/ESXi (20-second samples, about the last 15 minutes), cached briefly

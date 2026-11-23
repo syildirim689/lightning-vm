@@ -4,7 +4,7 @@
 import { createHash } from 'node:crypto';
 import { createTransport } from 'nodemailer';
 import { config } from './config';
-import { pool } from './db';
+import { pool, redis } from './db';
 import { apiError } from './errors';
 import { logEvent } from './log';
 import { decryptSecret, encryptSecret } from './secrets';
@@ -170,12 +170,18 @@ export async function mailUse(kind: keyof MailUse) {
   return (await mailReady()) && (m.enabled ? m.use[kind] : kind === 'passwordReset');
 }
 
+// The outcome of the last message the panel tried to send (no address, no subject): the admin's setup checklist says
+// "mail is set up but the last message failed" from it (onboarding-rules.ts). Kept 30 days.
+export const MAIL_LAST_KEY = 'mail:last';
+const noteMail = (ok: boolean, err?: unknown) =>
+  redis.set(MAIL_LAST_KEY, JSON.stringify({ ok, at: new Date().toISOString(), ...(!ok && { code: mailErrorCode(err) }) }), 'EX', 30 * 86400).catch(() => undefined);
+
 // html: the designed version (mail-layout.ts); text stays as the plain alternative every client can show.
 export async function sendMail(to: string, subject: string, text: string, html?: string) {
   const m = await getSettings('mail');
   if (m.enabled && m.provider !== 'smtp' && mailProviders[m.provider]) {
-    try { await sendViaProvider(m, mailSecrets(m), to, subject, text, html); logEvent('info', 'mail_sent', { subject, provider: m.provider }); }
-    catch (err) { logEvent('error', 'mail_failed', { provider: m.provider, error: err instanceof Error ? err.message.slice(0, 200) : 'unknown' }); throw err; }
+    try { await sendViaProvider(m, mailSecrets(m), to, subject, text, html); logEvent('info', 'mail_sent', { subject, provider: m.provider }); void noteMail(true); }
+    catch (err) { logEvent('error', 'mail_failed', { provider: m.provider, error: err instanceof Error ? err.message.slice(0, 200) : 'unknown' }); void noteMail(false, err); throw err; }
     return;
   }
   const t = await transportFor(m);
@@ -183,8 +189,10 @@ export async function sendMail(to: string, subject: string, text: string, html?:
   try {
     await t.transport.sendMail({ from: t.from, to, subject, text, html });
     logEvent('info', 'mail_sent', { subject });
+    void noteMail(true);
   } catch (err) {
     logEvent('error', 'mail_failed', { error: err instanceof Error ? err.message : 'unknown' });
+    void noteMail(false, err);
     throw err;
   }
 }

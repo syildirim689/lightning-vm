@@ -7,10 +7,13 @@ import { usageOf } from './catalog';
 import { noCpuKinds } from './capacity';
 import { pool, redis } from './db';
 import { apiError } from './errors';
-import { summary as maintenance } from './maintenance';
+import { releases, summary as maintenance } from './maintenance';
 import { Can, PermissionGuard } from './rbac';
 import { findServer, ownerWrite } from './servers';
-import { mailReady } from './settings-store';
+import { getSettings, mailReady, MAIL_LAST_KEY } from './settings-store';
+import { steps } from './onboarding-rules';
+import { monitoringChecks } from './checks';
+import { customerLevel, permissionsOfMany } from './permissions';
 import { budgetState, checkBudget } from './budget';
 import { budgetForecast, checkBudgetForecast, costForecast } from './cost-forecast';
 import { cleanLabels, health, sizing, type CpuStats } from './smart-rules';
@@ -154,26 +157,37 @@ export class SmartController {
 
 @Controller('admin') @UseGuards(PermissionGuard)
 export class OnboardingController {
-  // What a new installation still needs before customers can order, in the order it is usually done.
+  // What a new installation still needs before customers can order, in the order it is usually done, then what keeps
+  // it healthy (onboarding-rules.ts). Read from the real state on every call: a step that stops being true comes back.
   @Get('onboarding') @Can('dashboard.view')
   async steps(@Req() req: AuthedRequest) {
     const { rows: [n] } = await pool.query(`SELECT
       (SELECT count(*)::int FROM vmware_connections) AS connection, (SELECT count(*)::int FROM locations) AS location,
       (SELECT count(*)::int FROM resource_pools WHERE active) AS pool, (SELECT count(*)::int FROM os_images WHERE active) AS image,
       (SELECT count(*)::int FROM packages WHERE active) + (SELECT count(*)::int FROM custom_rules WHERE active) AS package,
-      (SELECT count(*)::int FROM ip_pools) AS ip, (SELECT two_factor_enabled FROM users WHERE id = $1) AS twofa`, [req.user.id]);
-    const done: [string, boolean, string][] = [
-      ['connection', n.connection > 0, '/admin/vmware'],
-      ['location', n.location > 0, '/admin/catalog?tab=locations'],
-      ['pool', n.pool > 0, '/admin/catalog?tab=pools'],
-      ['image', n.image > 0, '/admin/catalog?tab=images'],
-      ['package', n.package > 0, '/admin/catalog?tab=packages'],
-      ['ip', n.ip > 0, '/admin/catalog?tab=ip'],
-      ['mail', await mailReady(), '/admin/settings?tab=mail'],
-      ['backup', !!maintenance().lastSuccessfulBackup, '/admin/system'],
-      ['twoFactor', !!n.twofa, '/account?tab=security'],
-    ];
-    return { steps: done.map(([key, ok, link]) => ({ key, done: ok, link })) };
+      (SELECT count(*)::int FROM ip_pools) AS ip, (SELECT two_factor_enabled FROM users WHERE id = $1) AS twofa,
+      (SELECT count(*) FILTER (WHERE enabled)::int FROM payment_gateways) AS gateways`, [req.user.id]);
+    // Staff accounts (any permission beyond a customer's own servers) that sign in without two-factor. Single sign-on
+    // accounts are left out: their provider does the second step (as the sign-in policy treats them).
+    const { rows: maybe } = await pool.query(`SELECT u.id FROM users u WHERE NOT coalesce(u.banned, false) AND u.disabled_at IS NULL AND NOT coalesce(u.two_factor_enabled, false)
+      AND coalesce(u.auth_source, 'local') NOT IN ('oidc', 'social')
+      AND (coalesce(u.role, 'user') <> 'user' OR EXISTS (SELECT 1 FROM user_permission_overrides o WHERE o.user_id = u.id AND o.effect = 'allow'))`);
+    const staffWithout = maybe.length ? (await permissionsOfMany(maybe.map((r) => r.id as string))).filter((u) => u.permissions.some((p) => !customerLevel(p))).length : 0;
+    const lastMail = await redis.get(MAIL_LAST_KEY).then((x) => (x ? JSON.parse(x) : null), () => null);
+    const m = maintenance();
+    const host = m.settings as Record<string, string>;
+    const rel = releases();
+    const monitoring = await monitoringChecks().then((c) => { const up = c.filter((x) => x.ok).length; return up === c.length ? 'on' as const : up === 0 ? 'off' as const : 'partial' as const; }, () => null);
+    const list = steps({
+      counts: { connection: n.connection, location: n.location, pool: n.pool, image: n.image, package: n.package, ip: n.ip },
+      mail: { ready: await mailReady(), last: lastMail },
+      backup: { lastOk: m.lastSuccessfulBackup?.time ?? null, timer: host.schedule === 'on', schedule: host.backupSchedule ?? null },
+      monitoring,
+      updates: { autoUpdate: host.autoUpdate ?? null, channel: host.updateChannel ?? rel?.channel ?? null, updateAvailable: rel ? !!rel.updateAvailable : null, latest: rel?.latest ?? null },
+      billing: { enabled: (await getSettings('billing')).enabled, gateways: n.gateways },
+      twoFactor: { me: !!n.twofa, staffWithout },
+    });
+    return { steps: list };
   }
 }
 

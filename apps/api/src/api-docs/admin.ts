@@ -710,8 +710,11 @@ export default {
   'GET /admin/onboarding': {
     tag: 'admin-system',
     summary: { tr: 'Yeni kurulumda müşteriler sipariş verebilmeden önce kalan adımları verir.', en: 'Returns the steps a new installation still needs before customers can order.' },
-    details: { tr: 'dashboard.view yetkisi gerekir. Adımlar: bağlantı, konum, havuz, imaj, paket, IP havuzu, e-posta, yedek ve kendi iki adımlı doğrulamanız.', en: 'Needs dashboard.view. Steps: connection, location, pool, image, package, IP pool, mail, backup and your own two-factor.' },
-    returns: { tr: '`steps`: `key`, `done` ve `link`.', en: '`steps`: `key`, `done` and `link`.' },
+    details: {
+      tr: 'dashboard.view yetkisi gerekir. Başlangıç adımları (`group: start`): bağlantı, konum, havuz, imaj, paket, IP havuzu, e-posta, yedek ve kendi iki adımlı doğrulamanız. Sağlık adımları (`group: health`): son iletinin gönderilebilmesi (e-posta ayarlıysa), yedeklerin zamanlanmış olması, izlemenin açık olması, güncellemeler (otomatik güncelleme açık ya da en yeni sürüm çalışıyor), ödeme yöntemi (faturalama açıksa) ve iki adımlı doğrulaması olmayan personel. Her çağrıda gerçek durumdan okunur; bozulan bir adım yeniden görünür.',
+      en: 'Needs dashboard.view. Start steps (`group: start`): connection, location, pool, image, package, IP pool, mail, backup and your own two-factor. Health steps (`group: health`): the last message went out (when mail is set up), backups are scheduled, monitoring is on, updates (automatic updates on, or the newest version running), a payment method (when billing is on) and staff without two-factor. Read from the real state on every call; a step that stops being true comes back.',
+    },
+    returns: { tr: '`steps`: `key`, `group`, `done`, `link` ve isteğe bağlı `detail` (adımın dayandığı değerler: zaman, kod, sayı, kanal).', en: '`steps`: `key`, `group`, `done`, `link` and an optional `detail` (what the step is based on: a time, a code, a count, a channel).' },
   },
   'GET /admin/digest': {
     tag: 'admin-system',
