@@ -26,7 +26,10 @@ export function Copy({ text, label, className = '' }: { text: string; label: str
 export function QuickConnect({ server }: { server: Server }) {
   const t = useTranslations('Extras');
   if (!server.address) return null;
-  const rows: [string, string][] = [[t('ip'), server.address], [t('ssh'), `ssh root@${server.address}`], [t('scp'), `scp ./file root@${server.address}:/root/`]];
+  // Windows is reached with Remote Desktop as Administrator, not with SSH as root.
+  const windows = /windows/i.test(server.imageName ?? '');
+  const rows: [string, string][] = windows ? [[t('ip'), server.address], [t('rdp'), `mstsc /v:${server.address}`], [t('user'), 'Administrator']]
+    : [[t('ip'), server.address], [t('ssh'), `ssh root@${server.address}`], [t('scp'), `scp ./file root@${server.address}:/root/`]];
   return <Section title={t('connect')} description={t('connectHelp')}>
     <ul className="flex flex-col divide-y divide-separator">
       {rows.map(([label, text]) => <li key={label} className="flex items-center gap-3 py-2">

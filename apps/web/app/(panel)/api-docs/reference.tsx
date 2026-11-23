@@ -14,6 +14,7 @@ import { anchor, curl, exampleBody, guide, javascript, python, type Endpoint, ty
 import { useApiQuery } from '../../../lib/query';
 import type { PublicConfig } from '../../../lib/session';
 import { TryRequest } from './try-request';
+import { useCopy } from '../../../lib/clipboard';
 
 const methods = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'] as const;
 const methodTone: Record<string, string> = { GET: 'bg-success/15 text-success', POST: 'bg-accent-soft text-accent', PUT: 'bg-warning/15 text-warning',
@@ -25,7 +26,8 @@ export function MethodBadge({ method }: { method: string }) {
 
 function CopyButton({ text, label }: { text: string; label: string }) {
   const t = useTranslations('ApiDocs');
-  return <Button size="sm" variant="secondary" aria-label={label} onPress={() => { void navigator.clipboard?.writeText(text); toast.success(t('copied')); }}>
+  const copy = useCopy();
+  return <Button size="sm" variant="secondary" aria-label={label} onPress={() => void copy(text, t('copied'))}>
     <I name="copy" size={14}/>{t('copy')}</Button>;
 }
 

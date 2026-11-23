@@ -9,6 +9,7 @@ import { useFormatter, useLocale, useNow, useTranslations } from 'next-intl';
 import { useRef, useState, useEffect } from 'react';
 import { I } from '../../../components/icon';
 import { Ago, SelectInput, TextInput, Loading } from '../../../components/ui';
+import { CopyValue } from '../../../components/copy-value';
 import { apiFetch, useErrorText, type ApiError } from '../../../lib/api';
 import { fillCanned, type CannedVars } from '../../../lib/canned';
 import { useMe } from '../../../lib/me';
@@ -175,6 +176,7 @@ function PresenceBar({ others }: { others: Present[] }) {
 // before: shown above the thread (the staff page puts the server's snapshot there; the customer's page passes nothing).
 export function TicketPage({ id, staff, before }: { id: string; staff: boolean; before?: React.ReactNode }) {
   const t = useTranslations('Support');
+  const tc = useTranslations('CopyValue');
   const locale = useLocale();
   const format = useFormatter();
   const { error } = useErrorText();
@@ -204,7 +206,7 @@ export function TicketPage({ id, staff, before }: { id: string; staff: boolean; 
   const mine = tk.ownerId === me?.id;
   return <div className="flex flex-col gap-5">
     <header className="flex flex-col gap-2">
-      <p className="text-sm text-muted">#{tk.number} · {departmentName(tk, locale)}{tk.serverName && <> · <I name="server" size={12} className="inline"/> {tk.serverName}</>}</p>
+      <p className="flex flex-wrap items-center text-sm text-muted"><span className="inline-flex items-center">#{tk.number}<CopyValue text={`#${tk.number}`} what={tc('ticketNumber')}/></span> · {departmentName(tk, locale)}{tk.serverName && <> · <I name="server" size={12} className="inline"/> {tk.serverName}</>}</p>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <h1 className="min-w-0 text-2xl font-semibold tracking-tight">{tk.subject}</h1>
         <div className="flex flex-wrap items-center gap-2"><StatusBadge status={tk.status}/><PriorityBadge priority={tk.priority}/>{staff && <Deadline dueAt={tk.dueAt}/>}</div>

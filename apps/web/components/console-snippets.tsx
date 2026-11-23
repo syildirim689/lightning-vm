@@ -13,6 +13,7 @@ import { I } from './icon';
 import { CheckboxInput, ConfirmButton, Section, TextInput } from './ui';
 import { firstLine, uniqueName } from '../lib/proposals';
 import { useProposal } from '../lib/use-proposal';
+import { useCopy } from '../lib/clipboard';
 
 type Snippet = { id: string; name: string; command: string; shared: boolean; mine: boolean };
 // Read-only: they show the state, never change it. Windows ones are PowerShell.
@@ -43,6 +44,7 @@ const osKey = 'lvm.snippetOs';
 // linuxOnly: the host terminal (a Linux shell that takes pasted text itself): no Windows commands, no paste note.
 export function ConsoleSnippets({ send, ready, linuxOnly }: { send: (text: string) => void; ready: boolean; linuxOnly?: boolean }) {
   const t = useTranslations('Snippets');
+  const copy = useCopy();
   const [text, setText] = useState('');
   const [name, setName] = useState('');
   const [enter, setEnter] = useState(false);
@@ -92,7 +94,7 @@ export function ConsoleSnippets({ send, ready, linuxOnly }: { send: (text: strin
             <Button size="sm" variant="ghost" className={chip} isDisabled={!ready} aria-label={t('typeOne', { name: s.name, command: s.command })}
               onPress={() => type(s.command, s.name)}><I name={s.shared ? 'users' : 'bookmark'} size={14}/>{s.name}</Button>
             <Button size="sm" variant="ghost" isIconOnly className="min-h-9 min-w-9 shrink-0" aria-label={t('copy', { name: s.name })}
-              onPress={async () => { await navigator.clipboard?.writeText(s.command).catch(() => undefined); toast.success(t('copied', { name: s.name })); }}><I name="copy" size={14}/></Button>
+              onPress={() => void copy(s.command, t('copied', { name: s.name }))}><I name="copy" size={14}/></Button>
             {(s.mine || (s.shared && mayShare)) && <>
               <Button size="sm" variant="ghost" isIconOnly className="min-h-9 min-w-9 shrink-0" aria-label={t('edit', { name: s.name })}
                 onPress={() => reset(s)}><I name="pencil" size={14}/></Button>

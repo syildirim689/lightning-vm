@@ -7,6 +7,7 @@ import type { InvoiceDetail, Party } from '../lib/billing';
 import { invoiceState, invoiceTone, paymentState, paymentTone } from '../lib/billing';
 import { I } from './icon';
 import { StatusChip } from './ui';
+import { CopyValue } from './copy-value';
 
 function PartyBlock({ title, p }: { title: string; p: Party }) {
   const t = useTranslations('Billing.sheet');
@@ -26,6 +27,7 @@ const stacked = 'max-sm:flex max-sm:items-baseline max-sm:justify-between max-sm
 
 export function InvoiceSheet({ d }: { d: InvoiceDetail }) {
   const t = useTranslations('Billing');
+  const tc = useTranslations('CopyValue');
   const format = useFormatter();
   const percent = usePercent();
   const inv = d.invoice;
@@ -36,7 +38,8 @@ export function InvoiceSheet({ d }: { d: InvoiceDetail }) {
     <header className="flex flex-col gap-4 border-b border-separator pb-5 sm:flex-row sm:items-start sm:justify-between">
       <div>
         <p className="text-[11px] font-semibold uppercase tracking-wider text-muted">{inv.kind === 'topup' ? t('sheet.receipt') : inv.number ? (inv.einvoiceProfile === 'EARSIVFATURA' ? t('sheet.earsiv') : inv.einvoiceProfile ? t('sheet.efatura') : t('sheet.invoice')) : t('sheet.proforma')}</p>
-        <h2 className="mt-1 font-mono text-xl font-semibold">{inv.number ?? `#${inv.id.slice(0, 8).toUpperCase()}`}</h2>
+        <h2 className="mt-1 flex items-center gap-1 font-mono text-xl font-semibold">{inv.number ?? `#${inv.id.slice(0, 8).toUpperCase()}`}
+          <CopyValue text={inv.number ?? inv.id} what={tc('invoiceNumber')}/></h2>
         <p className="mt-1 text-sm text-muted">{inv.issuedAt ? t('sheet.issued', { date: day(inv.issuedAt) }) : t('sheet.created', { date: day(inv.createdAt) })}
           {inv.status === 'unpaid' && ` · ${t('sheet.due', { date: day(inv.dueAt) })}`}</p>
       </div>

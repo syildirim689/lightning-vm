@@ -6,6 +6,7 @@ import { Button, Modal } from '@heroui/react';
 import { useTranslations } from 'next-intl';
 import { useState } from 'react';
 import { I } from './icon';
+import { useCopy } from '../lib/clipboard';
 
 type Section = { title: string; text?: string; steps?: string[]; code?: string; note?: string };
 type Guide = { title: string; intro: string; sections: Section[]; links?: { label: string; url: string }[] };
@@ -13,9 +14,11 @@ type Guide = { title: string; intro: string; sections: Section[]; links?: { labe
 function Code({ text }: { text: string }) {
   const t = useTranslations('Guides');
   const [copied, setCopied] = useState(false);
+  // "Copied" only when it was (lib/clipboard.ts falls back for a panel opened over plain HTTP and says when it failed).
+  const copy = useCopy();
   return <div className="group relative">
     <pre className="overflow-x-auto rounded-xl bg-default/60 p-3 pr-12 font-mono text-xs leading-relaxed"><code>{text}</code></pre>
-    <button type="button" aria-label={t('copy')} onClick={() => { void navigator.clipboard?.writeText(text).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500); }); }}
+    <button type="button" aria-label={t('copy')} onClick={() => { void copy(text).then((ok) => { if (ok) { setCopied(true); setTimeout(() => setCopied(false), 1500); } }); }}
       className="absolute right-2 top-2 grid size-8 place-items-center rounded-lg text-muted hover:bg-default hover:text-foreground focus-visible:outline-2 focus-visible:outline-accent">
       <I name={copied ? 'check' : 'copy'} size={14}/>
     </button>

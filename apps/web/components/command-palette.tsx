@@ -2,6 +2,7 @@
 // Ctrl/⌘+K: jump to any page the user may open, any server by name or IP, a ticket or an invoice by its number,
 // or run a quick action. A combobox with a listbox (arrow keys, Enter, Escape); results are filtered as you type.
 import { fold } from '../lib/search';
+import { matchScore } from '../lib/fuzzy';
 import { Kbd, Modal, toast } from '@heroui/react';
 import { useRouter } from 'next/navigation';
 import { useFormatter, useLocale, useTranslations } from 'next-intl';
@@ -168,7 +169,10 @@ export default function CommandPalette({ permissions, isOpen, onOpenChange }: { 
   }, [permissions, servers, users, tickets, invoices, canTopUp, resolvedTheme, locale, isOpen, billing, reseller]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const q = fold(query.trim());
-  const results = q ? commands.filter((c) => c.group !== 'recent').filter((c) => c.found || fold(`${c.label} ${c.hint ?? ''}`).includes(q) || (c.group === 'invoices' && fold(c.label).includes(q.replace(/^#/, ''))))
+  // Typed text finds the exact matches first, then those with a slip in a word ("sevrer", "faturlar"; lib/fuzzy.ts).
+  const score = (c: Cmd) => c.found ? 3 : Math.max(matchScore(q, `${c.label} ${c.hint ?? ''}`), c.group === 'invoices' && fold(c.label).includes(q.replace(/^#/, '')) ? 3 : 0);
+  const results = q ? commands.filter((c) => c.group !== 'recent').map((c) => [c, score(c)] as const).filter(([, n]) => n > 0)
+      .sort((a, b) => b[1] - a[1]).map(([c]) => c)
     : commands.filter((c) => c.group !== 'tickets' && c.group !== 'invoices' && !/^s[atoc]:/.test(c.id) && ((c.group !== 'servers' && c.group !== 'users') || commands.indexOf(c) < 40));
   useEffect(() => setActive(0), [query, isOpen]);
   useEffect(() => { if (!isOpen) setQuery(''); }, [isOpen]);
