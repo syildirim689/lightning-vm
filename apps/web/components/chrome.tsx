@@ -28,7 +28,7 @@ export function LanguageMenu() {
   const [, start] = useTransition();
   const choose = (l: string) => start(async () => { const f = new FormData(); f.set('locale', l); await setLocale(f); router.refresh(); });
   return <Dropdown>
-    <Button variant="ghost" size="sm" aria-label={t('language')}><span className="font-mono text-xs uppercase">{locale}</span></Button>
+    <Button variant="ghost" size="sm" aria-label={`${t('language')}: ${locale}`}><span className="font-mono text-xs uppercase">{locale}</span></Button>
     <Dropdown.Popover placement="bottom end">
       <Dropdown.Menu aria-label={t('language')} onAction={(k) => choose(String(k))}>
         <Dropdown.Item id="tr" textValue="Türkçe"><Label lang="tr">Türkçe</Label></Dropdown.Item>

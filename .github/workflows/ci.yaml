@@ -197,7 +197,8 @@ jobs:
         working-directory: apps/web
         run: |
           npm ci
-          npx playwright install --with-deps chromium
+          # The whole suite in Chromium, the @smoke tests also in Firefox and WebKit (apps/web/playwright.config.ts).
+          npx playwright install --with-deps chromium firefox webkit
           E2E_VCSIM_HOST=vcsim-vcenter E2E_BOOTSTRAP_TOKEN="$(sudo docker compose --project-directory ../.. exec -T api node dist/cli.js bootstrap-token)" npm run test:e2e
       - name: Logs on failure
         if: failure()

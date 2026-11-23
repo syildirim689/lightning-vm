@@ -6,7 +6,7 @@
 :root,
 [data-theme="light"] {
   /* Darker amber on white so accent text (links, ghost buttons) keeps 4.5:1 contrast. */
-  --accent: oklch(0.56 0.15 50);
+  --accent: oklch(0.53 0.15 50); /* 4.6:1 also on the grey of tabs and fields (axe-core) */
   --accent-foreground: oklch(0.99 0 0);
   --focus: oklch(0.6 0.16 55);
   --radius: 0.55rem;
@@ -16,11 +16,21 @@
   /* Warning as text: the amber of the warning surfaces is too pale to read on white (about 2:1), so words get a
      darker shade of it (over 4.5:1 on white and on the tinted cards). */
   --warning-text: oklch(0.5 0.125 62);
+  /* The same for success: HeroUI's green is 2.2:1 on white ("Operational" on the status page, "ready" chips). */
+  --success-text: oklch(0.5 0.13 152);
+  /* White on HeroUI's red was 3.5:1 (badges, danger buttons, the incident bar); this one is 5.2:1, and 5.4:1 as text. */
+  --danger: oklch(0.55 0.2 25);
+  --danger-text: var(--danger);
+  /* Second lines, hints and inactive tabs. HeroUI's zinc-500 reads 4.0-4.4:1 on the grey of fields, tabs and the
+     search box (axe-core, WCAG 1.4.3 asks 4.5:1 for small text); one step darker reads 4.9:1 there, 6:1 on white. */
+  --muted: oklch(0.5 0.016 286);
 }
 .dark,
 [data-theme="dark"] {
   --background: oklch(0.165 0.018 262);
   --foreground: oklch(0.96 0.006 250);
+  /* HeroUI's own dark value, said again: the light one above would otherwise apply to both. */
+  --muted: oklch(0.705 0.015 286.067);
   --surface: oklch(0.205 0.02 262);
   --surface-foreground: oklch(0.96 0.006 250);
   --overlay: oklch(0.225 0.022 262);
@@ -32,9 +42,15 @@
   --default: oklch(0.3 0.022 262);
   --field-background: oklch(0.235 0.02 262);
   --warning-text: var(--warning);
+  --success-text: var(--success);
+  /* Red behind white text (4.6:1) and a lighter red for words on the dark surfaces (6:1). */
+  --danger: oklch(0.58 0.2 25);
+  --danger-text: oklch(0.72 0.16 22);
 }
-/* Every "text-warning" in the panel reads with that shade (icons beside the words take it too). */
+/* Every "text-warning", "text-success" and "text-danger" in the panel reads with that shade (icons beside the words take it too). */
 .text-warning { color: var(--warning-text); }
+.text-success { color: var(--success-text); }
+.text-danger { color: var(--danger-text); }
 
 @theme inline {
   --font-sans: var(--font-fira-sans), ui-sans-serif, system-ui, sans-serif;

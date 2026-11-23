@@ -100,8 +100,9 @@ export default function NotificationBell() {
   const focus = 'focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent';
 
   return <Popover>
-    <Button isIconOnly variant="ghost" size="sm" aria-label={label} className="relative">
-      <I name="bell" size={18}/>
+    {/* Named by its own (hidden) words, not aria-label: the badge's "9+" is on the button too (WCAG 2.5.3). */}
+    <Button isIconOnly variant="ghost" size="sm" className="relative">
+      <I name="bell" size={18}/><span className="sr-only">{label}</span>
       <AnimatePresence>{unread > 0 && <motion.span key={unread} initial={{ scale: 0 }} animate={{ scale: 1 }} exit={{ scale: 0 }} aria-hidden
         className="absolute -right-0.5 -top-0.5 grid h-4 min-w-4 place-items-center rounded-full bg-danger px-1 text-[10px] font-semibold leading-none text-danger-foreground">{unread > 9 ? '9+' : unread}</motion.span>}</AnimatePresence>
     </Button>

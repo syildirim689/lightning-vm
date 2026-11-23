@@ -18,7 +18,7 @@ import { useCopy } from '../../../lib/clipboard';
 
 const methods = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'] as const;
 const methodTone: Record<string, string> = { GET: 'bg-success/15 text-success', POST: 'bg-accent-soft text-accent', PUT: 'bg-warning/15 text-warning',
-  PATCH: 'bg-warning/15 text-warning', DELETE: 'bg-danger/10 text-danger', ALL: 'bg-default text-muted' };
+  PATCH: 'bg-warning/15 text-warning', DELETE: 'bg-danger/10 text-danger dark:text-red-300', ALL: 'bg-default text-muted' };
 
 export function MethodBadge({ method }: { method: string }) {
   return <span className={`inline-flex w-16 shrink-0 justify-center rounded-md px-1.5 py-0.5 font-mono text-[11px] font-semibold ${methodTone[method] ?? methodTone.ALL}`}>{method}</span>;
