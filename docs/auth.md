@@ -115,7 +115,12 @@ Uç noktalar `/api/auth/*` altındadır; Fastify bunları better-auth'a iletir.
 - Cookie: `lvm.session_token`, imzalı, `HttpOnly`, `SameSite=Lax`, `Path=/`. Panel HTTPS ile
   sunuluyorsa (`PANEL_TLS=1`, kurulum betiği ayarlar) `Secure` ve `__Secure-` öneki eklenir.
 - İmza anahtarı `secrets/master.key`'den türetilir (HMAC); ayrı bir sır gerekmez.
-- Süre: 12 saat. `.env` dosyasındaki `SESSION_TTL_HOURS` ile değiştirilir (1-720).
+- Süre: 12 saat. `.env` dosyasındaki `SESSION_TTL_HOURS` ile değiştirilir (1-720). "Beni hatırla" ile açılan
+  oturumun çerezi girişte bu süreyle yazılır ve istekler onu yeniden yazmaz: kullanım veritabanındaki oturumu uzatsa da
+  çerez girişten (ya da son "Oturumu açık tut"tan) bu süre sonra biter. Panel bitişten 5 dakika önce uyarır;
+  "Oturumu açık tut" (`POST /auth/stay`, yalnız tıklamayla) oturumu ve çerezi şimdiden itibaren yeniler. Sabit
+  bitişler (kullanıcı olarak gir, dizin/SSO, rolün oturum süresi) uzatılamaz. Ayrıntı:
+  [smart-features.md](smart-features.md#bağlantı-ve-oturum).
   Bir rolün "oturum süresi"
   sınırı (aşağıda, Rol sınırları) üyelerinin oturumunu daha erken bitirir. Süresi dolan oturumlar ve devre dışı veya
   yasaklı kullanıcılar reddedilir; devre dışı kullanıcıya yeni oturum açılmaz.

@@ -14,6 +14,60 @@ Türkçe [docs/upgrade-notes.md](docs/upgrade-notes.md) sayfasını okuyun.*
 
 ## [Unreleased]
 
+Everyday helpers from a usability review of the customer, reseller and admin sides ([docs/ux-review.md](docs/ux-review.md):
+34 findings, 5 high, 17 medium, 12 low; 22 fixed, 1 in part, 11 left with the reason). Everything is computed inside
+the panel from its own data; nothing acts without a click ([docs/smart-features.md](docs/smart-features.md#günlük-işi-kolaylaştıranlar)).
+
+### Upgrading
+
+No migration and no new `.env` variable. New routes: `GET /api/operations/estimates` and `POST /api/auth/stay`;
+`GET /api/auth/me` gains `session` (when the browser session ends and whether it can be extended),
+`GET /api/operations/active` gains `diskGb`, and `GET /api/admin/onboarding` gains health steps with `group` and
+`detail`. The API keeps the outcome of the last mail it sent (no address, no subject) in Redis for 30 days. A new audit
+event, `session.extended`, and a new error code, `SESSION_FIXED`.
+
+### Added
+
+- Running operations say how long such operations usually take on this installation ("Usually about 2 minutes"), from
+  the median of earlier ones of the same kind and disk size, and "Taking longer than usual" past the slow ones; with
+  fewer than five earlier ones nothing is said. The server page shows the time so far and what the figure is based on,
+  and a long operation that just finished says how long it took.
+- Removing an SSH key, a project, a power schedule, a server from a firewall or a canned reply asks nothing: the item
+  leaves the list with "Undo" for a few seconds, and the request is sent only when the message goes (or the tab is
+  closed). An undone removal never reaches the API, so the audit log records only what happened.
+- Five minutes before the browser session ends a bar says when and why. "Stay signed in" renews it, only on the click;
+  a fixed end ("sign in as", a directory or single sign-on account, a role's session length) is explained instead.
+- When the panel's server stops answering, every list stops polling and one small request retries after 2, 4, 8, 16 and
+  then every 30 seconds, or at once with "Try now"; the first answer resumes the page without a reload.
+- The admin dashboard's setup list also checks what keeps an installation healthy: the last mail went out, backups are
+  scheduled, monitoring is on, updates (automatic, or the newest version running), a payment method (when billing is
+  on) and staff accounts without two-factor. Each step says what it is based on and links to where it is fixed; "Hide
+  until something changes" puts the list away until a step opens that was fine.
+- The order form starts from the person's newest server (location, image, package or size, project, as far as the
+  catalog still offers them) and says so, with "Start empty"; the order draft keeps the chosen firewalls.
+- A pasted SSH key shows its type, size and comment; a key broken over lines is joined, the SSH2 (RFC 4716) form is
+  turned into the OpenSSH line, and a private key, a PuTTY file, a security-key (sk-) or DSA key is named for what it is.
+  A list pasted one per line into a one-line field (a firewall's sources) keeps its entries apart.
+- Error messages name the cause and the next step where the text had none: a code without a sentence is named, an
+  answer without a code (a proxy or gateway page) gives its HTTP status.
+
+### Changed
+
+- Going back to a snapshot asks for the server's name, like a backup restore, and says from when the data is lost.
+- The bulk delete confirmation names the grace period's hours; without a grace period the button is not offered (the
+  API refused it after the confirmation).
+- A change sent while the panel does not answer fails at once and keeps the form, instead of waiting to run later.
+
+### Fixed
+
+- After a confirmation dialog closes, focus is back on the button that opened it (Escape right after cancelling the
+  restart in a service's drawer now closes the drawer); dialogs opened from the server list's menu give focus back to
+  its "…" button.
+- "Order similar" cleared neither an earlier copy draft nor carried the project over.
+- The admin server list said "You have no servers yet" when empty; the users list said "No matching users" without a
+  filter.
+- Small icon buttons (a tag's ×, an attachment's ×, coupon copy, location ping) get a 44 px touch area on touch screens.
+
 ## [0.6.0] - 2026-11-23
 
 Fifth public release, still **beta**. Three things are new since 0.5.1: Admin → System lists every published

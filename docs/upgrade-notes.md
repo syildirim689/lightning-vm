@@ -5,6 +5,28 @@ madde neyin değiştiğini ve işletmecinin yapması gereken bir şey varsa onu 
 davranışı değiştirmeyen işler burada yoktur. Tahsilat çalıştırması API içinde beş dakikada bir çalışır; yani "ilk
 çalıştırma" yükseltmeden birkaç dakika sonradır.
 
+## Yayımlanmadı: günlük işi kolaylaştıranlar (kullanım incelemesi)
+
+Migration, yeni `.env` değişkeni ve değiştirilecek ayar yoktur. Ayrıntı: [smart-features.md](smart-features.md#günlük-işi-kolaylaştıranlar),
+inceleme: [ux-review.md](ux-review.md).
+
+- **Oturum bitmeden uyarı ve "Oturumu açık tut".** "Beni hatırla" ile açılan oturumun çerezi, kullanılsa da girişten
+  `SESSION_TTL_HOURS` saat sonra bitiyordu (veritabanındaki oturum uzuyor, çerez yeniden yazılmıyordu); bu değişmedi,
+  artık 5 dakika önceden söyleniyor ve kişi tıklarsa `POST /api/auth/stay` ikisini de şimdiden itibaren yeniliyor
+  (denetim kaydı `session.extended`). Kendiliğinden hiçbir oturum uzatılmaz. "Kullanıcı olarak gir", dizin/SSO
+  hesapları ve rolün oturum süresi uzatılamaz (`409 SESSION_FIXED`). `GET /api/auth/me` yanıtına `session` eklendi.
+- **Kaldırmalar geri alınabilir:** SSH anahtarı, proje, güç zamanlaması, güvenlik duvarından sunucu ayırma ve hazır yanıt
+  silme onay sormaz; istek birkaç saniye sonra (ileti kapanınca) gider, "Geri al" ile hiç gitmez. Denetim kaydında
+  yalnızca gerçekleşen kaldırma görünür. Anlık görüntüye dönüş artık sunucunun adı yazılarak onaylanır.
+- **Kurulum listesine sağlık adımları eklendi** (yönetici genel bakışı): son e-postanın gidip gitmediği, yedek
+  zamanlaması, izleme, güncellemeler, ödeme yöntemi (faturalama açıksa), iki adımlı doğrulaması olmayan personel. API,
+  gönderdiği son e-postanın sonucunu (adres ve konu olmadan) Redis'te 30 gün tutar (`mail:last`). `GET
+  /api/admin/onboarding` adımlarına `group` ve `detail` eklendi; var olan alanlar değişmedi.
+- **Eklenen uçlar ve alanlar:** `GET /api/operations/estimates` (uzun işlemlerin bu kurulumdaki ortanca süreleri;
+  yalnız süreler, 10 dakika önbellek), `GET /api/operations/active` yanıtına `diskGb`.
+- **Panel yanıt vermezken** listeler yoklamayı durdurur ve tek bir istek (`/api/health`) artan aralıklarla dener; bu
+  sırada gönderilen değişiklik beklemeye alınmaz, hemen başarısız olur.
+
 ## 0.6.0 (beta): Sistem sayfasında sürümler ve servisler, önerilen adlar, canlı ekranlar (2026-11-23)
 
 Migration, yeni `.env` değişkeni ve değiştirilecek ayar yoktur.

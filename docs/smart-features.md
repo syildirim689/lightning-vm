@@ -261,3 +261,115 @@ Eşleştirme panelin içinde, sözcük ortaklığıyla yapılır (`apps/api/src/
   Çok kısa metinde ya da 10 dakikada 60 istekten sonra hata yerine boş yanıt döner; form çalışmaya devam eder.
 - **Maliyet:** arka plan işi ve ek tablo yoktur. Personel isteği başına en çok 300 talebin konusu ve ilk mesajının
   ilk 2000 karakteri okunur; müşteri isteği başına en çok 50 talep ve 20 olay.
+
+## Günlük işi kolaylaştıranlar
+
+Bir kullanım incelemesinden ([ux-review.md](ux-review.md)) çıkan yardımcılar. Hepsi panelin içinde, panelin kendi
+verisinden hesaplanır; yeni bir dış servis, yeni bir arka plan işi ya da yeni bir yoklama yoktur. Hiçbiri kişinin
+tıklaması olmadan bir şey yapmaz.
+
+### İşlemin süresi
+
+- **Nerede:** sağ alttaki görev listesi (her satırda) ve sunucu sayfasının "İlerleme" bölümü (geçen süre, tahmin ve
+  neye dayandığı). Biten uzun bir işlem iki dakika boyunca süresiyle söylenir ("Boyut değiştirme 2 dakika içinde bitti").
+- **Kural** (`apps/api/src/eta-rules.ts`, birim testleri `apps/api/test/eta-rules.test.mjs`; `GET /operations/estimates`):
+  son 90 günde **ilk denemede başarıyla biten** ve ödeme beklemeyen işlemlerin tıklamadan bitişe kadar geçen süreleri,
+  tür başına en yeni 200 işlem. Disk boyutuna göre dört grup (≤ 40, ≤ 100, ≤ 300 GB, daha büyük): ortanca ve 90.
+  yüzdelik. **Beşten az işlem olan grup için tahmin yoktur**; o zaman türün bütün boyutları kullanılır ve bu söylenir,
+  o da beşten azsa hiçbir şey gösterilmez. 6 saatten uzun süren işlem (başka bir şeyi bekledi) süre sayılmaz.
+- **"Her zamankinden uzun":** geçen süre 90. yüzdeliği ve ortancanın 1,5 katını (ve ortancayı en az 30 sn) aşınca.
+  Yalnızca söylenir; işlemin kendi zaman aşımı değişmez.
+- **Gizlilik:** yanıtta yalnız süreler vardır; sunucu, sahip ya da ad dönmez. 10 dakika Redis'te tutulur.
+- **Türler:** kişinin beklediği uzun işler: oluşturma, silme, boyut, yeniden kurulum, anlık görüntü (al, dön, sil),
+  yedek (al, geri yükle), taşıma, disk ekleme, imaj. Güç işlemleri saniyeler sürer, tahmin yoktur.
+
+### Geri alınabilen kaldırmalar
+
+- **Nerede:** SSH anahtarı silme (Hesap → SSH anahtarları), proje silme (Hesap → Projeler), güç zamanlaması silme
+  (sunucu sayfası), güvenlik duvarından sunucu ayırma, hazır yanıt silme (personel, Destek). "Emin misiniz?" yerine öğe
+  listeden hemen çıkar ve "Geri al" düğmeli bir ileti birkaç saniye (6 sn) görünür. İleti üzerine gelindiğinde ya da
+  odaklandığında açık kalır; en geç 60 saniyede kaldırma gider.
+- **Kural** (`apps/web/lib/undo.ts`, birim testleri `undo.test.ts`; sayfa tarafı `components/undo.tsx`): istek ileti
+  kapanınca gönderilir; "Geri al" basılırsa **hiç gönderilmez**. Sekme kapanır ya da yenilenirse bekleyenler `keepalive`
+  ile gönderilir. İstek başarısız olursa öğe geri gelir ve neden söylenir.
+- **Yetki ve denetim:** API'ye eskisiyle aynı istek gider; yetki, kota, kilit ve denetim kaydı değişmez. Denetim kaydı
+  yalnızca **gerçekleşen** kaldırmayı yazar; geri alınan hiç API'ye ulaşmadığı için kayıtta yoktur.
+- **Geri alınamayanlar** adı yazılarak onaylanır ve neyin kaybolacağını söyler: sunucu silme, yeniden kurulum,
+  yedekten geri yükleme ve artık **anlık görüntüye dönme** (tarihiyle: o andan sonra yazılan her şey kaybolur). API
+  anahtarı iptali ve oturum kapatma bilerek bekletilmez.
+- **Toplu silme** onayı yöneticinin bekleme süresini saatiyle söyler; süre kapalıysa düğme yerine nedeni yazılır (API
+  böyle bir toplu silmeyi zaten reddeder).
+
+### Bağlantı ve oturum
+
+- **Panel yanıt vermezken** (iki istek üst üste başarısız, ya da tarayıcı çevrimdışı): bir şerit bunu söyler, bütün
+  listeler yoklamayı **durdurur** (React Query'nin çevrimiçi durumu kapatılır; istekler yığılmaz), tek küçük bir istek
+  (`/api/health`) 2, 4, 8, 16, sonra her 30 saniyede bir dener; "Şimdi dene" hemen dener. İlk başarılı yanıtta her şey
+  sayfa yenilenmeden sürer ve ekrandakiler tazelenir. Kural: `apps/web/lib/reconnect.ts` (birim testleri). Bu sırada
+  gönderilen bir değişiklik beklemeye alınmaz: hemen başarısız olur, neden söylenir ve form yazılanı tutar. Canlı olay
+  akışı (EventSource) tarayıcının kendi yeniden bağlanmasıyla sürer.
+- **Oturum bitmeden önce** (`GET /auth/me` yanıtındaki `session`, kural `apps/api/src/session-rules.ts`): bitişten 5
+  dakika önce bir şerit ne zaman ve neden biteceğini söyler.
+  - **Uzatılabilen** bitişler: "beni hatırla" ile açılan oturumun çerezi girişten (ya da son "Oturumu açık tut"tan)
+    `SESSION_TTL_HOURS` saat sonra biter (kullanım veritabanındaki oturumu uzatır ama çerezi yeniden yazmaz); saklanan
+    oturum son kullanımdan `SESSION_TTL_HOURS` sonra biter. "Oturumu açık tut" (`POST /auth/stay`) ikisini de şimdiden
+    itibaren yeniler: tarayıcının gönderdiği aynı çerez (aynı belirteç ve imza) yalnız ömrü yeniden yazılarak gönderilir;
+    "beni hatırla" seçilmemişse çerez tarayıcı kapanınca biten çerez kalır. Denetim kaydı: `session.extended`.
+  - **Sabit** bitişler uzatılamaz ve nedenleri söylenir: "kullanıcı olarak gir" (1 saat), dizin ve SSO hesapları
+    (`SESSION_TTL_HOURS`), rolün oturum süresi. API de bunları `SESSION_FIXED` ile reddeder.
+  - Hiçbir şey kendiliğinden uzatılmaz. Yeni bir yoklama yoktur: uyarı zaten dakikada bir okunan `/auth/me` yanıtının
+    "kalan milisaniye" değerinden, yanıtın geldiği andan sayılarak hesaplanır (saati kaymış bir bilgisayar uyarıyı
+    kaydırmaz). Süre dolduktan sonrası eskisi gibidir (kaydedilmemiş metin ekranda kalır).
+
+### Yönetici kurulum listesi
+
+- **Nerede:** yönetici genel bakışı (`GET /admin/onboarding`, kural `apps/api/src/onboarding-rules.ts`, birim
+  testleri). Önceki dokuz başlangıç adımına ek olarak "Sağlıklı tutar" adımları:
+  - **E-posta gidiyor mu:** e-posta ayarlıysa, panelin gönderdiği son iletinin sonucu (adres ve konu tutulmaz; Redis
+    `mail:last`, 30 gün). Başarısızsa ne zaman ve nedeni (sağlayıcının kodu) yazılır.
+  - **Yedekler zamanlanmış mı:** sunucudaki bakım zamanlayıcısı kurulu ve yedek zamanlaması kapalı değil
+    (`data/maintenance/settings.json`).
+  - **İzleme açık mı:** Prometheus, Grafana ve Loki yanıt veriyor mu (Sistem sayfasının denetimi). Denetlenemezse
+    adım gösterilmez.
+  - **Güncellemeler:** otomatik güncelleme açık ya da en yeni sürüm çalışıyor; değilse bekleyen sürüm ve kanal yazılır.
+  - **Ödeme yöntemi:** yalnızca faturalama açıksa, etkin bir ödeme yöntemi var mı.
+  - **Personelde iki adımlı doğrulama:** müşterinin kendi sunucularından öte yetkisi olan, iki adımlı doğrulaması
+    kapalı hesap sayısı (SSO hesapları sayılmaz: ikinci adımı sağlayıcı yapar).
+- Her adım düzeltileceği sayfaya götürür ve neye dayandığını yazar. **"Bir şey değişene kadar gizle"** o an açık olan
+  adımları bu tarayıcıda hatırlar (`lvm-setup-hidden`; kimin olduğunu değil hangi adımların açık olduğunu tutar); o
+  sırada açık olmayan bir adım açılınca (bozulma ya da yeni adım) liste "Bir şey değiştiği için yeniden gösteriliyor"
+  diyerek geri gelir. Kural: `apps/web/lib/setup-checklist.ts` (birim testleri).
+
+### Yapıştırma ve hatalar
+
+- **SSH anahtarı** (`apps/web/lib/formats.ts` `sshKeyInfo`, `repairPaste`; birim testleri `paste.test.ts`): türü,
+  boyutu ve yorumu alanın altında yazılır ("ED25519 anahtarı, 256 bit · laptop"). Birkaç satıra bölünmüş anahtar,
+  içeriğinin bittiği yerde birleştirilir (yorumu base64'e benzese de yutulmaz); RFC 4716 / SSH2 biçimi (PuTTYgen'in
+  dışa aktarımı) tek satırlık OpenSSH biçimine çevrilir. **Özel anahtar** yapıştırılınca alan daha bırakılmadan uyarır;
+  PuTTY dosyası, güvenlik anahtarı (sk-), DSA ve bozuk anahtar için ne yapılacağı söylenir. Kabul kuralı değişmedi
+  (API ile aynı).
+- **Liste alanları** (güvenlik duvarı kaynakları ve hedefleri, diğer tek satırlık listeler): satır satır yapıştırılan
+  liste virgülle ayrılır; alan bunu söyler. Yanlış öğe eskisi gibi adıyla gösterilir.
+- **Hatalar** (`apps/web/lib/error-key.ts`, birim testleri): çevirisi olan kod kendi cümlesini söyler; çevirisi
+  olmayan kod (daha yeni bir API) adıyla söylenir ("Panel bunu reddetti (KOD) … bu kodu desteğe iletin"); kod
+  taşımayan yanıt (vekil ya da ağ geçidi sayfası) HTTP durumuyla ve ne yapılacağıyla. Yalnızca hiçbir bilgi yoksa
+  "bilinmeyen hata" denir. API'nin, adaptörlerin ve worker'ın gönderebildiği her kodun iki dilde cümlesi olduğunu
+  `scripts/check-messages.mjs` denetler.
+
+### Hatırlanan seçimler
+
+- **Sipariş formu**, taslak yoksa, kişinin **en yeni sunucusunun** konumu, imajı, paketi (ya da serbest boyutu) ve
+  projesiyle başlar; katalog bunlardan neyi hâlâ sunuyorsa yalnızca onu alır ve "Son sunucunuz web-3 esas alınarak
+  dolduruldu … konum, imaj, paket" der; "Boş başla" temizler. Kural: `apps/web/lib/last-order.ts` (birim testleri).
+  Tarayıcıya bunun için bir şey yazılmaz: sayfanın zaten okuduğu sunucu listesinden çıkarılır. Süren bir taslak,
+  "benzerini sipariş et" ve paylaşılan sipariş bağlantısı buna dokunmaz. SSH anahtarı, parola ya da kart taşınmaz.
+- Sipariş taslağı güvenlik duvarı seçimini de tutar (yalnız kimlikler); sayfadan SSH anahtarı eklemeye çıkınca
+  kaybolmaz. "Benzerini sipariş et" artık projeyi de alır ve önceki bir kopyalama taslağını temizler.
+
+### Klavye, odak ve dokunma
+
+- Onay pencereleri kapanınca odak onları açan düğmeye döner, kapanış animasyonu odağı bıraktıktan sonra da (çekmece
+  içindeki onaydan sonra Escape çekmeceyi kapatır). Sunucu listesinin hızlı menüsünden açılan pencereler kapanınca odak
+  "…" düğmesine döner. "?" kısayol listesini açar (eskisi gibi).
+- Küçük simge düğmeleri (etiket ×, ek dosya ×, kupon kopyalama, konum ping) dokunmatik ekranda görünüşleri aynı kalarak
+  44 px alan alır (`.hit-44`).
