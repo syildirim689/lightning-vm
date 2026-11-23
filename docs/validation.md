@@ -1349,3 +1349,47 @@ Basic Render Driver (WARP). Ekranın kendi seçimi iki durumda da doğru olarak 
   simülatör örnekleriyle tarayıcı testi `hosts[].lastAt`'ı API'den okuyup denetler.
 - 1920 px'de ekranlar "every page fits" döngüsüne eklenmedi (o test panelin menüsünü ölçüyor); 390 px ekran testinde
   ve yerel ekran görüntülerinde yatay kayma 0.
+
+## 0.6.0 (beta) sürümü — 2026-11-23
+
+`v0.6.0` etiketi `48cf206` commit'indedir (açıklamalı etiket). İçinde 0.5.1'den sonraki üç iş vardır (yukarıdaki üç
+bölüm: Yönetim → Sistem'de sürümler, servisler ve grafikler; önerilen adlar; canlı ekranlar); `48cf206` yalnızca
+sürüm numaralarını ve belgeleri değiştirir. Etiket, o commit denendikten sonra kondu:
+
+- **GitHub CI, elle tam çalıştırma `45119101458` (`48cf206`):** ilk denemede yeşil, bütün işler geçti; yeniden
+  deneme yapılmadı. `api-integration` 282 testte 213 geçti, 0 başarısız, 69 atlandı; `compose` işindeki tarayıcı
+  paketi 50/50 (17,5 dk); birim işleri, altı adaptör, iki Go servisi, 11 imaj derlemesi. (Aynı commit'in `push` ile
+  başlayan çalıştırması `45119089465` iptal edildi: elle çalıştırma onun yerini aldı.)
+- **Kurulum sihirbazı testinin geçmişi:** `45104033887` (`ea4ba50`) ilk denemesinde `compose` işi, kurulum
+  sihirbazının "Panel adresi" denetimi beklenen "Yerel adres; doğrulanamaz" satırını göstermediği için kalmış,
+  yönetici oluşmadığından sonraki 11 test girişte kalmıştı; yeniden denemede geçmişti. Bu sürümün çalıştırmasında
+  aynı test ilk denemede geçti. Neden araştırılmadı ve bulunmadı; bir yeşil çalıştırma aralıklı kalışın bittiğini
+  göstermez.
+- **Demo sunucusu (`48cf206`), etiketten önce:** `/root/demo-e2e.sh` demo'yu bu commit'e güncelledi (`OK UPDATED`,
+  derleme ve başlatma 2 dk 41 sn), atılabilir yığında tarayıcı paketi **50/50** (19,2 dk; 4 canlı ekran testi
+  dahil); testler boyunca demo `/api/ready` 59 yanıtın 59'unda 200, sonrasında 200; test yığınından geriye 0
+  kapsayıcı, 0 birim kaldı.
+- **Etiket:** `origin`'e ve test sunucusunun deposuna yalnızca `refs/tags/v0.6.0` gönderildi. Test sunucusunun
+  deposundaki öteki etiketler (`v0.1.0`-`v0.5.1`, eski iç test etiketleri dahil) gönderimden önce ve sonra
+  karşılaştırıldı: tek fark yeni `v0.6.0`; hiçbiri GitHub'a gitmedi (GitHub'daki etiketler `v0.1.0`, `v0.4.0`,
+  `v0.5.0`, `v0.5.1`, `v0.6.0`).
+- **Yayın iş akışı `45122269033`:** ilk denemede geçti: birim işleri, 11 imaj
+  (`ghcr.io/syildirim689/lightning-vm/*:v0.6.0`) ve sürüm sayfası. Sayfa "Lightning VM v0.6.0 (beta)" adıyla ve
+  **pre-release** işaretiyle oluştu (taslak değil); notları `CHANGELOG.md` dosyasının 0.6.0 bölümüdür (satır satır
+  karşılaştırıldı), altında iş akışının her sürüme eklediği kurulum ve güncelleme satırları.
+- **Demo `v0.6.0` gösteriyor:** etiket konduktan sonra `install.sh update --to v0.6.0` çalıştırıldı; yapacak bir
+  şey yoktu (`OK UP_TO_DATE Up to date: v0.6.0`) ve ad yenilendi: `.env` içinde ve API ile web kapsayıcılarında
+  `APP_VERSION=v0.6.0`, `git describe` `v0.6.0`, `/api/ready` 200, öncesindeki gibi 24 kapsayıcı çalışıyor.
+  Sistem sayfasının okuduğu `data/maintenance/releases.json` aynı komutla yeniden yazıldı: `current` ve `base`
+  `v0.6.0`, listede ilk sırada `v0.6.0` çalışan sürüm olarak işaretli, güncelleme yok. (Liste demo deposundaki eski iç
+  test etiketlerini de içerir; GitHub'dan kurulan bir panelde onlar yoktur.) Etiketten önce panel
+  `v0.5.1-11-g48cf206` gösteriyordu. Yedek, derleme ya da migration çalışmadı; veritabanına dokunulmadı.
+- **Çalıştırılmayanlar:** temiz bir makinede `curl … | sudo sh` ile 0.6.0 kurulumu; 0.5.1 kurulu, verisi olan
+  gerçek bir panelin 0.6.0'a güncellenmesi (demo bu commit'e etiketten önce, dalın ucundan güncellendi);
+  yayımlanan `ghcr.io` imajlarının çekilip çalıştırılması; panele tarayıcıdan oturum açıp gösterilen sürümün ve
+  sürüm listesinin gözle görülmesi (ad kapsayıcıların ortam değişkeninden, liste dosyadan okundu).
+- **Canlı ekranlar için açık kalanlar:** gerçek bir GPU'da ve gerçek bir TV'de hiç ölçülmedi; bütün ölçümler grafik
+  kartı olmayan bir sanal makinede, yazılım çizicisiyle yapıldı (60 fps hedefi, 4K, saatlerce açık kalan bir ekran,
+  uzaktan kumanda, Safari/iOS, Firefox ve Android denenmedi). Ekranlar arasındaki her geçişte JS yığını yaklaşık
+  170 KB büyüyor; kaynağı bulunmadı ve saatler içinde durup durmadığı ölçülmedi. Üç işin kendi bölümlerindeki
+  "çalıştırılmayanlar" aynen geçerlidir.
