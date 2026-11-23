@@ -110,6 +110,10 @@ export function TextInput({ label, value, onChange, error, help, type = 'text', 
   const loaded = useRef(false);
   // A proposal is selected when the field is entered, and the click that entered it does not undo the selection.
   const fresh = useRef(false);
+  // A proposal that arrives while the field already has the focus (the list it is made from was still loading) is
+  // selected too: what is typed next replaces it instead of being added after it ("Project 1kept…").
+  const input = useRef<HTMLInputElement>(null);
+  useEffect(() => { const el = input.current; if (proposed && el && document.activeElement === el && el.value === value) el.select(); }, [proposed, value]);
   useEffect(() => { if (!draft) return; const kept = readDraft(draft); if (kept && !value) { onChange(kept); setRestored(true); } }, [draft]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (!draft) return; if (!loaded.current) { loaded.current = true; return; } writeDraft(draft, value); if (!value) setRestored(false); }, [draft, value]);
   useEffect(() => { setMasked(!autofill && type === 'password' && masksText()); }, [autofill, type]);
@@ -164,7 +168,7 @@ export function TextInput({ label, value, onChange, error, help, type = 'text', 
           className="absolute inset-y-0 right-1 my-auto grid h-8 min-w-8 place-items-center rounded-lg px-2 text-xs font-medium text-muted hover:bg-default hover:text-foreground focus-visible:outline-2 focus-visible:outline-accent disabled:opacity-50">
           <span aria-hidden className="flex items-center gap-1"><I name={revealed ? 'eye-off' : 'eye'} size={16}/><span className="hidden sm:inline">{tf(revealed ? 'hide' : 'show')}</span></span></button></div>
       : <Input placeholder={ph} maxLength={maxLength} spellCheck={masked ? false : spellCheck} {...fill} {...extra} onPaste={onPaste} className={fmt?.mono ? 'min-w-0 font-mono' : 'min-w-0'} style={masked ? { WebkitTextSecurity: 'disc' } as React.CSSProperties : undefined}
-        onMouseUp={(e) => { if (fresh.current) { e.preventDefault(); fresh.current = false; } }} data-proposed={proposed || undefined}/>}
+        onMouseUp={(e) => { if (fresh.current) { e.preventDefault(); fresh.current = false; } }} data-proposed={proposed || undefined} ref={input}/>}
     {shown ? <FieldError>{shown}</FieldError> : when || help || proposed || keyLine || tidied ? <Description>{when && <span className="block font-medium text-foreground/80">{when}</span>}
       {keyLine && <span className="flex items-center gap-1 font-medium text-foreground/80" data-key-info><I name="key-round" size={12} className="text-success"/>{keyLine}</span>}
       {tidied && <span className="block text-accent">{tf('pasteTidied')}</span>}

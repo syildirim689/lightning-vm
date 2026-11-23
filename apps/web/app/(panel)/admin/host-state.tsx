@@ -193,12 +193,13 @@ export default function HostState() {
             {s.services.map((x) => { const ok = x.state === 'running', bad = x.fault, tone = kindTone[x.kind];
               const done = x.kind === 'completed' && x.finishedAt && !x.finishedAt.startsWith('0001-') ? ago(x.finishedAt) : '';
               return <li key={x.service}>
-                <button type="button" onClick={() => setOpen(x.service)} aria-label={t('svc.open', { service: x.service, state: t(`kind.${x.kind}`) })}
+                <button type="button" onClick={() => setOpen(x.service)}
                   className={`flex w-full items-center gap-3 rounded-xl border px-3 py-2.5 text-left transition-colors hover:border-accent focus-visible:outline-2 focus-visible:outline-accent motion-reduce:transition-none ${bad ? 'border-danger/50 bg-danger/5' : 'border-border'}`}>
                   <span aria-hidden className={`size-2.5 shrink-0 rounded-full ${bad ? 'bg-danger' : tone === 'success' ? 'bg-success' : tone === 'accent' ? 'bg-accent' : 'bg-default-foreground/30'}`}/>
-                  <span className="min-w-0 flex-1"><span className="flex min-w-0 items-baseline gap-2"><span className="truncate text-sm font-medium">{x.service}</span>
+                  <span className="min-w-0 flex-1"><span className="flex min-w-0 items-baseline gap-2"><span className="truncate text-sm font-medium">{x.service}<span className="sr-only">{t('svc.open', { service: '', state: t(`kind.${x.kind}`) })}</span></span>
                     <span aria-hidden className="truncate text-[11px] text-muted" title={versionText(x.version)}>{versionText(x.version)}</span></span>
-                    {/* The button is named "<service>: <state>. Open the details"; what else it shows is for the eye (and the detail), so the name contains all that is read out (WCAG 2.5.3). */}
+                    {/* The button is named by its words, "<service>: <state>. Open the details" (hidden ones after the name; no aria-label, whose
+                        name would not contain the version and figures written on the button, WCAG 2.5.3); the rest is for the eye. */}
                     <span aria-hidden className={`block truncate text-xs ${bad ? 'text-danger' : 'text-muted'}`} title={x.status}>
                       {x.kind === 'completed' ? t('svc.completedAgo', { when: done || '–' }) : t(`kind.${x.kind}`)}{x.kind === 'failed' && x.exitCode !== null && ` (${x.exitCode})`}{x.restarts > 0 && ` · ${t('restarts', { n: x.restarts })}`}</span></span>
                   {ok && <span aria-hidden className="shrink-0 text-right text-xs tabular-nums"><span className={`block ${x.cpu >= 80 ? 'text-warning' : ''}`}>{percent(x.cpu, 1)} CPU</span><span className="block text-muted">{x.memory || '–'}</span></span>}

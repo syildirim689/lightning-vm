@@ -3353,6 +3353,8 @@ test.describe('people, settings and smart features (English browser)', () => {
     await signIn(page, admin);
     await expect(page).toHaveURL(/\/admin$/);
     await page.goto('/account?tab=projects');
+    // The field's proposed name arrives with the project list; typed before it, the text could end up behind it.
+    await expect(page.getByLabel('Project name')).toHaveValue(/\S/);
     await page.getByLabel('Project name').fill('kept after expiry');
     // The session cookie disappears (as if it expired). Saving is refused, or live updates notice first: either
     // way the text stays and a dialog explains.
@@ -4015,7 +4017,8 @@ test.describe('people, settings and smart features (English browser)', () => {
     await page.keyboard.press('Escape');
     // A person at a glance from the user list.
     await page.goto('/admin/users');
-    await page.getByRole('button', { name: /admin@example.test/ }).first().click();
+    // The user's row in the list (the header's account menu now says the signed-in address too).
+    await page.getByRole('main').getByRole('button', { name: /admin@example.test/ }).first().click();
     await expect(page.getByRole('dialog')).toContainText('Recent activity');
     await page.waitForTimeout(900);
     await shot(page, 'user-summary');

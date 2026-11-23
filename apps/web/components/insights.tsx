@@ -50,8 +50,11 @@ export default function Insights({ scope }: { scope: 'staff' | 'mine' }) {
     {list.length === 0 ? <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex items-center gap-2 rounded-xl border border-success/40 bg-success/5 px-4 py-3 text-sm">
       <I name="circle-check" size={18} className="text-success"/>{t('allGood')}</motion.p>
       : <ul className="grid gap-3 md:grid-cols-2 2xl:grid-cols-3">
-        <AnimatePresence initial>{list.map((i, n) => <motion.li key={i.key} layout initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.97 }} transition={{ delay: n * 0.04 }} className="relative">
-          <NextLink href={i.link} className={`group flex h-full items-start gap-3 rounded-xl border pl-4 pr-12 pt-3 transition-shadow ${i.action ? 'pb-14' : 'pb-3'} hover:shadow-md ${style[i.severity]}`}>
+        {/* The card is the item; the link, the fix and the hide menu sit side by side in it, none on top of another
+            (a link under the hide button was left a 12 px strip that a pointer can rely on: WCAG 2.5.8, axe-core). */}
+        <AnimatePresence initial>{list.map((i, n) => <motion.li key={i.key} layout initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.97 }} transition={{ delay: n * 0.04 }}
+          className={`relative flex h-full flex-col rounded-xl border transition-shadow hover:shadow-md ${style[i.severity]}`}>
+          <NextLink href={i.link} className="group mr-10 flex flex-1 items-start gap-3 rounded-xl py-3 pl-4 pr-1 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent">
             <span className="mt-0.5 shrink-0">{icon(i.severity)}</span>
             <span className="min-w-0 flex-1 text-foreground">
               <span className="sr-only">{t(`severity.${i.severity}`)}: </span>
@@ -60,10 +63,10 @@ export default function Insights({ scope }: { scope: 'staff' | 'mine' }) {
             </span>
             <span aria-hidden className="mt-0.5 shrink-0 self-end text-muted transition-transform group-hover:translate-x-0.5 group-hover:text-accent"><I name="arrow-right" size={14}/></span>
           </NextLink>
-          {i.action && <Button size="sm" variant="secondary" className="absolute bottom-3 left-[2.875rem]" isPending={fix.isPending && fix.variables?.serverId === i.action.serverId}
+          {i.action && <div className="pb-3 pl-[2.875rem]"><Button size="sm" variant="secondary" isPending={fix.isPending && fix.variables?.serverId === i.action.serverId}
             onPress={() => fix.mutate(i.action!)}>
             {i.action.kind === 'restore' ? <I name="undo-2" size={16}/> : <I name="power" size={16}/>}{t(`fix.${i.action.kind}`, { name: String(i.params.name ?? '') })}
-          </Button>}
+          </Button></div>}
           <Dropdown>
             <Button isIconOnly variant="ghost" size="sm" aria-label={t('hide.menu', { title: text(i, 'title') })} className="absolute right-1.5 top-1.5 text-muted">
               <I name="eye-off" size={16}/>

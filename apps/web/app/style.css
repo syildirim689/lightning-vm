@@ -20,7 +20,8 @@
   --success-text: oklch(0.5 0.13 152);
   /* White on HeroUI's red was 3.5:1 (badges, danger buttons, the incident bar); this one is 5.2:1, and 5.4:1 as text. */
   --danger: oklch(0.55 0.2 25);
-  --danger-text: var(--danger);
+  /* Red words also sit on red tints (the menu's failure count: 4.25:1 with the red above); a shade darker, 5.2:1. */
+  --danger-text: oklch(0.5 0.19 25);
   /* The words on the soft (tinted) chips: "ready", "paid", "overdue" read 4.5:1 or more on their own tint. */
   --success-soft-foreground: oklch(0.44 0.12 152);
   --warning-soft-foreground: oklch(0.45 0.11 62);
