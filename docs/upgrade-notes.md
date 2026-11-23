@@ -5,6 +5,28 @@ madde neyin değiştiğini ve işletmecinin yapması gereken bir şey varsa onu 
 davranışı değiştirmeyen işler burada yoktur. Tahsilat çalıştırması API içinde beş dakikada bir çalışır; yani "ilk
 çalıştırma" yükseltmeden birkaç dakika sonradır.
 
+## Yayımlanmadı: kararlılık, erişilebilirlik ve yeni yardımcılar (kullanım incelemesi, ikinci tur)
+
+Henüz bir sürümde değil. Bir migration vardır (`092_away_seen`: `users` tablosuna boş olabilen bir sütun,
+`away_seen_at`; hiçbir satır yeniden yazılmaz, DDL kadar kilit). Yeni `.env` değişkeni, yeni çalışma zamanı
+bağımlılığı ve değiştirilecek ayar yoktur. Ayrıntı:
+[smart-features.md](smart-features.md#kararlılık-ve-yeni-yardımcılar-ikinci-tur), inceleme:
+[ux-review.md](ux-review.md#round-2--kararlılık-erişilebilirlik-ve-yeni-yardımcılar-2026-11-23).
+
+- **Eş istek koruması düzeltildi.** Yanıtı beklemeden ayrılan bir tarayıcının isteği (sayfa yenileme, kapanan sekme)
+  artık iş bitince bırakılır; önceden iki dakika kalıyor, aynı istek o süre `409 DUPLICATE_REQUEST` alıyordu. İş
+  sürerken aynı istek eskisi gibi reddedilir. Yapılacak bir şey yoktur.
+- **Yeni uçlar:** `GET /api/servers/:id/hints` (sunucu sayfasının önerileri; sunucuyu görebilen herkes, kendi
+  gizlemeleriyle), `GET /api/notifications/away` ve `POST /api/notifications/away/seen` (kişinin kendi bildirimleri).
+  Öneriler var olan `PUT /api/insights/dismissals` ile gizlenir (anahtar `hint:<kod>:<sunucu>`). Var olan uçlar
+  değişmedi.
+- **Görünüş:** açık temada ikincil metinler bir ton koyu, yeşil "başarılı" metinleri koyu yeşil (okunurluk). Başlıktaki
+  dil, hesap menüsü ve arama düğmelerinin ekran okuyucu adları görünen metinle başlar ("Language: en", "AB ad@…,
+  Account menu"); bu adlara göre çalışan kendi otomasyonunuz varsa onu güncelleyin.
+- **Tarayıcı testleri** (yalnız geliştirme): `@axe-core/playwright` geliştirme bağımlılığı; Playwright artık
+  Chromium'un yanında Firefox ve WebKit'i de ister (`npx playwright install --with-deps chromium firefox webkit`); yalnız
+  Chromium ile koşmak için `E2E_BROWSERS=chromium`.
+
 ## 0.7.0 (beta): günlük işi kolaylaştıranlar (kullanım incelemesi) (2026-11-23)
 
 Migration, yeni `.env` değişkeni, yeni bağımlılık ve değiştirilecek ayar yoktur. Ayrıntı: [smart-features.md](smart-features.md#günlük-işi-kolaylaştıranlar),

@@ -14,6 +14,57 @@ Türkçe [docs/upgrade-notes.md](docs/upgrade-notes.md) sayfasını okuyun.*
 
 ## [Unreleased]
 
+A second usability round, stability and accessibility first ([docs/ux-review.md](docs/ux-review.md), "Round 2": 15
+candidates, 9 done, 1 in part, 5 left with the reason; 14 defects found and fixed). Everything is computed inside the
+panel from its own data; nothing acts without a click
+([docs/smart-features.md](docs/smart-features.md#kararlılık-ve-yeni-yardımcılar-ikinci-tur)).
+
+### Upgrading
+
+Update from Admin → System → Updates or with `sudo sh scripts/install.sh update`. One migration (`092_away_seen`: a
+nullable column `users.away_seen_at`, no row rewritten), no new `.env` variable, no new runtime dependency and no setting
+to change. New routes: `GET /api/servers/:id/hints`, `GET /api/notifications/away` and
+`POST /api/notifications/away/seen`. [docs/upgrade-notes.md](docs/upgrade-notes.md) (Turkish) says what an operator
+sees.
+
+### Added
+
+- A server's page says what to do next from the server's real state: no backup in the last 30 days, no firewall where
+  one can be attached, the panel still keeping the root password, snapshots older than 30 days. Each leads to the part
+  of the page where it is done and can be hidden for a week or for good; the disk's fill level and password logins
+  are not guessed (the platforms do not report them).
+- "While you were away" on the dashboard: one's own finished and failed operations, invoices and ticket answers since
+  the list was last marked seen, worst first, each with its link. "Seen" is only ever a click.
+- The command palette finds what was typed with a slip in a word (a letter missing, extra, wrong or swapped); exact
+  matches come first, addresses and numbers must be exact, Turkish İ/I/ı/i never count as a slip.
+- Copy buttons for a server's address and id, the invoice number and the ticket number. A Windows server's connect box
+  shows Remote Desktop and `Administrator` instead of `ssh root@`.
+
+### Fixed
+
+- The API's guard against the same request twice kept a request whose browser left before the answer (a reload during
+  a check, a closed tab) for two minutes, so the same request was refused as "already being processed". It is now let
+  go when the work ends. This was the cause of the setup wizard browser test failing now and then.
+- A second press (a double click, Enter pressed again) no longer sends a second request: forms, actions, the snapshot
+  form (which could take two snapshots), resize and reinstall, and the payment page.
+- An answer that was overtaken no longer overwrites a newer one: the setup wizard's checks, showing the root password
+  after it was forgotten, and six settings forms that dropped what was typed while saving. The e-invoice "Test" no
+  longer puts the form back as it was before.
+- Lists that filter keep the last answer on screen while the next loads; a table no longer jumps to its first page when
+  a refresh adds or removes a row.
+- Accessibility, found by axe-core: the light theme's second-line text, the green "success" text (2.2:1 on white),
+  white on red (3.5:1), the accent on grey, the words on soft status chips, the dark theme's DELETE label in the API
+  reference; header buttons, the bell, a schedule's weekday buttons and System's service rows whose spoken name did
+  not contain their visible text; a list on the users page; a 20 px link, and an insight card's link lying under its
+  own buttons.
+- A proposed name arriving while its field already had the focus ended up in front of what was then typed. Three copy buttons said "copied" when copying had failed.
+
+### Tests
+
+- Browser tests run axe-core (WCAG 2.x A and AA) on the main pages in both themes and fail on a serious or critical
+  finding; the Undo message is checked for F6, announcement, time held while focused, and focus. Tests named "@smoke"
+  also run in Firefox and WebKit.
+
 ## [0.7.0] - 2026-11-23
 
 Sixth public release, still **beta**. One piece of work is new since 0.6.0: everyday helpers from a usability review

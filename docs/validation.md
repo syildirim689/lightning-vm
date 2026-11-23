@@ -1485,3 +1485,63 @@ sonra kondu:
   oturumsuz çekilemiyor, 0.6.0'ınkiler de öyle; öteki altısı oturumsuz çekilebiliyor); panele tarayıcıdan oturum
   açıp gösterilen sürümün gözle görülmesi. Kullanım incelemesi bölümündeki "çalıştırılmayanlar" (Safari, Firefox,
   gerçek telefonlar, dokunmatik ekran, ekran okuyucu, gerçek bir oturum sonu) aynen geçerlidir.
+
+## Kullanım incelemesi, ikinci tur: kararlılık, erişilebilirlik ve yeni yardımcılar — 2026-11-23
+
+İnceleme: [ux-review.md](ux-review.md#round-2--kararlılık-erişilebilirlik-ve-yeni-yardımcılar-2026-11-23) (15 aday;
+14 kusur). Ne yapıldığı: [smart-features.md](smart-features.md#kararlılık-ve-yeni-yardımcılar-ikinci-tur). Kod
+commit'leri `41a57b8` … `159b2a6`; henüz bir sürümde değil (`CHANGELOG.md`, Unreleased).
+
+- **Birim testleri (geliştirme makinesi, Node 26):** API `npm test` 249/249 (önceden 238; 11 yeni:
+  `server-hint-rules` 8, `away-rules` 3); web `npm test` 218/218 (önceden 203; 15 yeni: `latest` 4, `once` 5,
+  `fuzzy` 6), `check-messages` (iki dil), `icons --check`, `tsc` (web, API), `next build`.
+- **Entegrasyon testleri, yerel** (WSL'de ev dizinine açılmış PostgreSQL 18 ve Redis 8, iş bitince kaldırıldı): yeni
+  `stability.test.mjs` 4/4; değişen alanlara dokunan sekiz dosya (`platform`, `security-auth`, `security-billing`,
+  `security-leftovers`, `smart-anomalies`, `setup-wizard`, `stability`, `ux-helpers`) 107/107.
+- **Kurulum sihirbazı kalışının kanıtı** ([ux-review.md](ux-review.md#kurulum-sihirbazı-testinin-ara-sıra-kalması-neden-ve-kanıt)):
+  Fastify deneyi; entegrasyon testi düzeltmeden önce 409, sonra 200; yerel yığında tarayıcıyla zorlanmış gecikme
+  (düzeltmeden önce "Aynı istek zaten işleniyor" ve sonuç yok, sonra sonuç satırı). Sihirbaz testinin yeni bölümü
+  yerel yığında geçti.
+- **axe-core, yerel yığın** (Chromium, 21 sayfa, iki tema, yönetici oturumu, sunucusuz): ilk taramada 23 sayfa-tema
+  çiftinde ciddi bulgu (kontrast, ad-içerik uyumu, liste), düzeltmelerden sonra 0. Bulguların bir kısmı yalnız veri
+  dolu yığında çıktı (içgörü kartları, çipler, servis satırları, gün düğmeleri); onlar CI ve demo koşularıyla bulundu.
+- **WebKit, yerel:** `@smoke` testleri 3/3 (Windows'ta). Firefox yerelde başlatılamadı (`spawn UNKNOWN`, indirilen
+  ikili çalıştırılamadı); Firefox yalnız CI'da ve demo'da koştu.
+- **Paket boyutları** (`next build`, her rotanın istemci başvuru bildirimindeki giriş JS dosyaları; `df9dfb6` aynı
+  makinede aynı yolla derlendi): gösterge paneli `/` +10,3 KB ham / +3,0 KB gzip (siz yokken, öneriler, palet); hesap,
+  sipariş, yönetici sunucuları, sunucu sayfası, VDC +6,9 / +2,2; 46 rotanın ortancası +2,7 KB ham; herkese açık
+  sayfalar (giriş, kayıt, durum) +1,0 / +0,2–0,3, kurulum +1,5 / +0,5. Yeni çalışma zamanı bağımlılığı
+  yok; `@axe-core/playwright` 4.14.0 yalnız testlerin geliştirme bağımlılığı.
+- **GitHub CI, elle tam çalıştırmalar** (her biri bütün işler; `compose` işinin tarayıcı paketi Chromium'da tam,
+  Firefox ve WebKit'te `@smoke`):
+  - `45209827233` (`8bfdbcc`): `compose` kaldı: sunucu yaşam döngüsü testi zilin okunmamış sayısını `aria-label`
+    özniteliğinden okuyordu (zil artık adını gizli sözcüklerden alıyor; test adı okuyacak biçimde düzeltildi), seri
+    dosyanın kalanı koşmadı; axe iki temada geçiş animasyonu sırasında ölçtü ve gerçek bulgular verdi (yumuşak
+    çipler, gün düğmeleri, servis satırları, 20 px bağlantı) → `4466883`. Öteki işler yeşil.
+  - `45214704218` (`4466883`): `compose` 3 kaldı: oturum sonu testinde geç gelen önerilen ad yazılanın önüne geçti
+    (ürün hatası K14, düzeltildi; test önce öneriyi bekler), axe: kırmızı zemin üstünde kırmızı yazı 4,25:1, içgörü
+    bağlantısı kendi düğmelerinin altında → `a9be8ec`.
+  - `45222305698` (`a9be8ec`): `compose` 3 kaldı: servis satırının adı "worker : Running" çıktı (gizli parça ayrı
+    blok sayıldı) → tek gizli cümle; axe hedef boyutunda sağ alttaki çalışan işlemler listesini engel saydı → ölçüm o
+    katman bir kenara alınarak (`159b2a6`).
+  - **`45227428263` (`159b2a6`): yeşil, bütün işler geçti.** `api-integration` 291 testte 222 geçti, 0 başarısız,
+    69 atlandı (yeni `stability.test.mjs` 4/4); `compose` tarayıcı paketi **71/71** (20,2 dk: Chromium 65, Firefox 3,
+    WebKit 3), `compose` işi toplam 32 dk; birim işleri, altı adaptör, iki Go servisi, 11 imaj derlemesi.
+  - Push ile başlayan çalıştırmalar (`45209781033`, `45214679840`, `45222297749`, `45227419484`) elle çalıştırma
+    lehine iptal edildi.
+- **Demo sunucusu:** `/root/demo-e2e.sh 159b2a6`: demo güncellendi (`OK UPDATED`, derleme ve başlatma 2 dk 15
+  sn; `/opt/lightning-vm` `159b2a6`, `APP_VERSION=v0.7.0-9-g159b2a6`), atılabilir yığında **71/71** (24,4 dk:
+  Chromium 65, Firefox 3, WebKit 3), testler boyunca demo `/api/ready` 75 yanıtın 75'inde 200, sonrasında 200, geriye
+  0 kapsayıcı, 0 birim. Önceki koşular: `8bfdbcc` (demo güncellenmeden, seçili testler; yukarıdaki sunucu yaşam
+  döngüsü hatasıyla 24 geçti, 13 kaldı), `4466883` (60 geçti, 3 kaldı: tur testi başlıktaki hesap menüsünü kullanıcı
+  satırı sandı → test kullanıcı listesinde arar; axe ikisi), `a9be8ec` (49 geçti, 1 kaldı: servis satırı adı).
+
+**Çalıştırılmayanlar / doğrulanamayanlar:**
+- Ekran okuyucuyla (NVDA, VoiceOver) elle dinlenmedi; erişilebilirlik yalnız axe-core'un otomatik kurallarıyla ve
+  tarayıcı testinin rol/odak denetimleriyle denendi. Dokunmatik ekran ve gerçek telefonlar denenmedi.
+- Firefox ve WebKit'te yalnız `@smoke` testleri koştu (bütün paket değil).
+- "Siz yokken" ve sunucu önerileri tarayıcı testinde hazırlanmış yanıtlarla görüldü; gerçek uçlar entegrasyon
+  testinde gerçek veriyle ve tarayıcı testinde biçimce denendi. Demo'nun kendi verisiyle gözle bakılmadı (demo
+  paneline oturum açılmadı).
+- Eski anlık görüntü önerisi platformdan okunduğu için gerçek bir 30 günlük anlık görüntüyle denenmedi (birim testi).
+- Bütün API entegrasyon paketi yerelde koşmadı (yalnız sekiz dosya); tamamı CI'da koştu.

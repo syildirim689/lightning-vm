@@ -373,3 +373,91 @@ tıklaması olmadan bir şey yapmaz.
   "…" düğmesine döner. "?" kısayol listesini açar (eskisi gibi).
 - Küçük simge düğmeleri (etiket ×, ek dosya ×, kupon kopyalama, konum ping) dokunmatik ekranda görünüşleri aynı kalarak
   44 px alan alır (`.hit-44`).
+
+## Kararlılık ve yeni yardımcılar (ikinci tur)
+
+Kullanım incelemesinin ikinci turundan ([ux-review.md](ux-review.md#round-2--kararlılık-erişilebilirlik-ve-yeni-yardımcılar-2026-11-23)).
+Hepsi panelin içinde, panelin kendi verisinden hesaplanır; dışarıya hiçbir şey gitmez, yeni bir dış servis ya da arka
+plan işi yoktur ve hiçbiri kişinin tıklaması olmadan bir şey yapmaz. Yetki API'de denetlenir. Yeni çalışma zamanı
+bağımlılığı yoktur; yalnız tarayıcı testleri için `@axe-core/playwright` (geliştirme bağımlılığı) eklendi.
+
+### Sunucu sayfasında "sıradaki adımlar"
+
+- **Nerede:** sunucu sayfasının üstünde, sunucu hazırken ve sürmekte olan bir işlem yokken (`GET
+  /servers/:id/hints`, kural `apps/api/src/server-hint-rules.ts`, birim testleri `test/server-hint-rules.test.mjs`,
+  entegrasyon testi `test/integration/stability.test.mjs`).
+- **Öneriler**, her biri sunucunun şu anki durumundan:
+  - **Yedek yok ya da eski:** son 30 günde hazır yedek yok. Yalnız konum yedek tutabiliyorsa ve bakan kişi yedek
+    alabiliyorsa (yönetici müşterilere yedeği kapatmışsa müşteriye söylenmez); siparişten sonraki ilk gün söylenmez.
+    "Yedek al" sayfanın Yedekler bölümüne götürür.
+  - **Güvenlik duvarı yok:** konum güvenlik duvarı uygulayabiliyor, sunucuya hiçbiri bağlı değil. Güvenlik duvarları
+    sayfasına götürür.
+  - **Panel kök parolayı saklıyor:** sipariş sırasında belirlenen parolanın panel kopyası duruyor (ilk gün
+    söylenmez). Kök parola bölümüne götürür; unutmak orada, onayla.
+  - **Eski anlık görüntüler:** 30 günden eski anlık görüntü sayısı (platformdan, gösterge panelindeki bulguyla aynı
+    önbellekle). Anlık görüntüler bölümüne götürür.
+- Bölüme götüren düğme bölümü görünür yapar ve odağı ilk denetimine verir (klavye ve ekran okuyucu da oraya varır).
+- **Gizle:** bir hafta ya da kalıcı; kişinin kendi bulgu gizlemeleri (`PUT /insights/dismissals`, anahtar
+  `hint:<kod>:<sunucu>`). Personel aynı sunucuda kendi listesini görür.
+- **Bilerek yok:** diskin doluluğu ve konuk işletim sisteminde parolayla girişin açık olup olmadığı. Platformlar
+  bunları panele söylemiyor; tahmin eden bir öneri yarı yarıya yanlış olurdu.
+
+### Siz yokken
+
+- **Nerede:** müşteri gösterge paneli, karşılamanın altında (`GET /notifications/away`, kural
+  `apps/api/src/away-rules.ts`, birim testleri `test/away-rules.test.mjs`).
+- **Ne:** kişinin **kendi gelen kutusundaki** bildirimlerden, son "Görüldü"den beri: biten işlemler (sunucu hazır,
+  yedek, anlık görüntü, güç ve boyut), başarısız işlemler (sunucu işlemi, güvenlik duvarı), faturalar (yeni, hatırlatma,
+  gecikmiş, ödeme başarısız) ve talep yanıtları. Önce sayılar ("1 başarısız · 2 talep yanıtı · 3 tamamlandı"), sonra en
+  kötüsü önde liste; her satır olduğu yere bağlantı. En çok 30 gün geriye; ilk kez açılınca hesabın açıldığı andan.
+- **"Görüldü"** yalnız tıklamayla (`POST /notifications/away/seen`): liste o andan başlar, gösterdiği bildirimler
+  gelen kutusunda da okundu olur. Okumak hiçbir şeyi değiştirmez. Yeni sütun: `users.away_seen_at`
+  (`092_away_seen.sql`).
+
+### Kararlılık
+
+- **Eski yanıt yenisini ezmez** (`apps/web/lib/latest.ts`, birim testleri): `useLatest` her isteğe bir sıra verir,
+  yalnız en yenisinin yanıtı yazılır. Kurulum sihirbazının denetimleri (bırakılan adımın ya da geride kalan denetimin
+  yanıtı yazılmaz; aynı denetim sunucuda hâlâ sürüyorsa sihirbaz bir saniye arayla en çok 15 kez yeniden sorar) ve
+  kök parolayı göster (unutulduktan ya da gizlendikten sonra gelen yanıt parolayı göstermez). `keepEdits`: ayar
+  formları (sunucular, duyuru, güvenlik, genel sekmeler, giriş yöntemleri, e-fatura) kaydederken yazılanı ezmez.
+- **Çift gönderme yok** (`apps/web/lib/once.ts`, birim testleri): aynı istek yolda iken ikinci basış ikinci isteği
+  göndermez, ilkinin yanıtını alır. Bütün `useApiForm` formları (Enter tekrarı dahil), `useApiAction` eylemleri
+  (aynı değişkenlerle; başka satırdaki aynı düğme ayrı çalışır), anlık görüntü formu, boyut değiştirme ve yeniden
+  kurulum, ödeme sayfası. API'nin kendi korumaları (`Idempotency-Key`, aynı çerezle aynı POST için 409) arkada durur.
+- **Geç gelen öneri:** alanın önerilen adı, alan odaktayken gelirse (dayandığı liste hâlâ yükleniyorken) seçili
+  gelir; yazılan onun yerine geçer, arkasına eklenmez.
+- **API'nin eş istek koruması:** yanıtı beklemeden ayrılan tarayıcının isteği artık iş bitince bırakılır (önceden iki
+  dakika kalıyor, aynı istek "zaten işleniyor" alıyordu). Kurulum sihirbazı testinin ara sıra kalmasının nedeni
+  buydu.
+- **Listeler:** süzgeç ya da arama değişince (yönetici faturaları, abonelikler, ödemeler, destek kuyruğu, denetim
+  kaydı, API istek günlüğü) yeni yanıt gelene kadar önceki satırlar kalır; denetim kaydında "daha fazla" yalnız yeni
+  süzgecin yanıtıyla açılır. Tablolar yoklama bir satır ekleyince ilk sayfaya atlamaz.
+
+### Kopyalama ve bağlantı
+
+- Sunucu özetinde IP ve sunucu kimliği (kısa gösterilir, tamamı kopyalanır), fatura numarası, talep numarası için
+  kopyalama düğmesi; "kopyalandı" yalnız gerçekten kopyalandığında (`lib/clipboard.ts`). Bağlantı kutusu Windows
+  sunucuda SSH yerine Uzak Masaüstü komutunu ve `Administrator` kullanıcısını gösterir.
+
+### Komut paletinde yazım hatası
+
+- `apps/web/lib/fuzzy.ts` (birim testleri): önce tam eşleşenler, sonra sözcükleri herhangi bir sırada içerenler,
+  sonra sözcüklerinden birinde bir harfi eksik, fazla, yanlış ya da yer değiştirmiş olanlar ("sevrer", "faturlar";
+  8 harften uzun sözcükte iki). Türkçe İ/I/ı/i, büyük harf ve aksan hata sayılmaz. Rakam içeren sözcükler (IP, numara)
+  ve 4 harften kısa sözcükler tam yazılmalı: "10.0.0.6" 10.0.0.5'i bulmaz. Arama yine tarayıcıda, palete zaten
+  yüklenen listeler üzerinde; yetki her listenin kendi ucunda.
+
+### Erişilebilirlik
+
+- Tarayıcı testleri (`e2e/ux2.spec.ts`) giriş ve durum sayfasını, yönetici ve müşteri sayfalarını ve bir sunucu
+  sayfasını açık ve koyu temada axe-core'dan geçirir (WCAG 2.0/2.1/2.2 A ve AA kuralları); ciddi ya da kritik bulgu
+  testi düşürür. Bu turda düzeltilenler: açık temada ikincil metin, yeşil ve kırmızı metin ve yumuşak durum
+  çipleri, kırmızı üstünde beyaz, gri üstünde vurgu rengi, koyu temada DELETE etiketi; başlık düğmeleri, bildirim zili,
+  zamanlamanın gün düğmeleri ve Sistem'deki servis satırlarının ekran okuyucu adı; kullanıcılar sayfasındaki liste
+  yapısı; 20 px'lik bir bağlantı ve kendi düğmelerinin altında kalan içgörü bağlantısı; kırmızı zemin üstünde kırmızı
+  yazı. Ölçüm, sayfada yarı yolda bir geçiş kalmayınca yapılır; hedef boyutu, köşede bir süre duran katmanlar
+  (çalışan işlemler listesi, iletiler) bir kenara alınarak ölçülür.
+- Geri al iletisi (React Aria): F6 ile ulaşılan "Bildirimler" bölgesi, `alertdialog` içinde `alert` ile duyurulur,
+  üzerine gelinince ya da odaktayken süresi durur, odağı sayfadan almaz; tarayıcı testi saati ileri sararak denetler.
+- `@smoke` adlı testler Firefox ve WebKit'te de koşar.

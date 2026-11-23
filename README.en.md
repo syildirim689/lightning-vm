@@ -47,7 +47,8 @@ Highlights: smart ordering, rule-based helpers computed inside the panel from it
 server with its own history, a month-end cost forecast that counts hourly usage and measures the budget against it, a power schedule suggested
 from the hours a server is idle every week, the quietest hours of the servers' own history offered for the update window and for host maintenance, a periodic digest (weekly or daily, off unless turned on) for staff and, where the administrator allows it, for customers, payment risk said before a renewal and listed for staff, similar resolved tickets for support and suggestions while a
 customer writes one, and everyday helpers (how long an operation usually takes, "Undo" instead of a confirmation, a
-warning before the session ends, pasted SSH keys checked at once);
+warning before the session ends, pasted SSH keys checked at once; not yet in a release: "what next" hints on a server's page,
+"while you were away" on the dashboard and a command palette that forgives a typo);
 [docs/smart-features.md](docs/smart-features.md), Turkish), reinstall, resize and clone, snapshots, extra disks, billing and invoices (monthly and
 hourly), resellers, support desk, 17 notification channels (in-app, browser push, e-mail, SMS and 13 messaging
 apps and webhooks), customer webhooks, LDAP / OIDC sign-in, passkeys and two-factor, e-mail address verification
@@ -141,6 +142,19 @@ What is not the same everywhere (the table under "Platform kapsamı" above has e
   ticket's subject) the field stays empty and the proposal is one click away. Authenticator apps and passkey
   managers now show the installation's own name and the account's e-mail address
   ([docs/proposals.md](docs/proposals.md), Turkish).
+- **Stability, accessibility and new helpers (2026-11-23, not yet in a release).** Round two of the usability review
+  (15 candidates: 9 done, 1 in part, 5 left with the reason; 14 defects found and fixed on the way). A server's page
+  says what to do next from its real state (no recent backup, no firewall, the panel still keeping the root password,
+  old snapshots), each leading to where it is done and hideable; the dashboard lists what happened while you were away
+  (finished and failed operations, invoices, ticket answers) with links, marked seen only on a click; the command
+  palette forgives a slip in a word; addresses, server ids, invoice and ticket numbers copy in one click, and a Windows
+  server's connect box shows Remote Desktop. A second press no longer sends a second request and an overtaken answer
+  no longer overwrites a newer one. The API's duplicate-request guard kept a request for two minutes when its browser
+  left before the answer (the cause of the setup wizard test's occasional failure); fixed. The main pages are checked
+  with axe-core in both themes and what it found is fixed; smoke tests also run in Firefox and WebKit. One migration
+  (a nullable column), no new runtime dependency; 71 of 71 browser tests in CI and on the demo server (Chromium 65,
+  Firefox 3, WebKit 3) ([docs/ux-review.md](docs/ux-review.md), Turkish;
+  [docs/smart-features.md](docs/smart-features.md#kararlılık-ve-yeni-yardımcılar-ikinci-tur); [CHANGELOG.md](CHANGELOG.md)).
 - **Everyday helpers (2026-11-23, in 0.7.0).** From a usability review of the customer, reseller and
   admin sides (34 findings; 22 fixed, 1 in part, 11 left with the reason). Running operations say how long they
   usually take on this panel ("usually about 2 minutes"), and when one is taking longer. Removing an SSH key,
