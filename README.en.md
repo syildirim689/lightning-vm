@@ -47,7 +47,7 @@ Highlights: smart ordering, rule-based helpers computed inside the panel from it
 server with its own history, a month-end cost forecast that counts hourly usage and measures the budget against it, a power schedule suggested
 from the hours a server is idle every week, the quietest hours of the servers' own history offered for the update window and for host maintenance, a periodic digest (weekly or daily, off unless turned on) for staff and, where the administrator allows it, for customers, payment risk said before a renewal and listed for staff, similar resolved tickets for support and suggestions while a
 customer writes one, and everyday helpers (how long an operation usually takes, "Undo" instead of a confirmation, a
-warning before the session ends, pasted SSH keys checked at once; not yet in a release: "what next" hints on a server's page,
+warning before the session ends, pasted SSH keys checked at once; in 0.8.0: "what next" hints on a server's page,
 "while you were away" on the dashboard and a command palette that forgives a typo);
 [docs/smart-features.md](docs/smart-features.md), Turkish), reinstall, resize and clone, snapshots, extra disks, billing and invoices (monthly and
 hourly), resellers, support desk, 17 notification channels (in-app, browser push, e-mail, SMS and 13 messaging
@@ -142,7 +142,7 @@ What is not the same everywhere (the table under "Platform kapsamı" above has e
   ticket's subject) the field stays empty and the proposal is one click away. Authenticator apps and passkey
   managers now show the installation's own name and the account's e-mail address
   ([docs/proposals.md](docs/proposals.md), Turkish).
-- **Stability, accessibility and new helpers (2026-11-23, not yet in a release).** Round two of the usability review
+- **Stability, accessibility and new helpers (2026-11-23, in 0.8.0).** Round two of the usability review
   (15 candidates: 9 done, 1 in part, 5 left with the reason; 14 defects found and fixed on the way). A server's page
   says what to do next from its real state (no recent backup, no firewall, the panel still keeping the root password,
   old snapshots), each leading to where it is done and hideable; the dashboard lists what happened while you were away
@@ -539,8 +539,8 @@ each is in [CHANGELOG.md](CHANGELOG.md), and what an operator has to do when upg
 pre-releases on GitHub. Their tags are plain `vX.Y.Z`, so the one-line install picks the newest one and the `stable`
 update channel follows them; `vX.Y.Z-rc.1`-style tags are seen only by the `beta` channel, and `edge` follows a
 branch. The installer and the panel read the repository's git tags, not GitHub's release list, and an update by
-itself only ever moves forward. A given release: `… | sudo sh -s -- --version v0.7.0`; on an installed panel
-`sudo sh scripts/install.sh update --to v0.7.0`.
+itself only ever moves forward. A given release: `… | sudo sh -s -- --version v0.8.0`; on an installed panel
+`sudo sh scripts/install.sh update --to v0.8.0`.
 
 ## Contributing, support and licence
 

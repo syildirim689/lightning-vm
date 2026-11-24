@@ -14,18 +14,27 @@ Türkçe [docs/upgrade-notes.md](docs/upgrade-notes.md) sayfasını okuyun.*
 
 ## [Unreleased]
 
-A second usability round, stability and accessibility first ([docs/ux-review.md](docs/ux-review.md), "Round 2": 15
-candidates, 9 done, 1 in part, 5 left with the reason; 14 defects found and fixed). Everything is computed inside the
-panel from its own data; nothing acts without a click
-([docs/smart-features.md](docs/smart-features.md#kararlılık-ve-yeni-yardımcılar-ikinci-tur)).
+## [0.8.0] - 2026-11-24
 
-### Upgrading
+Seventh public release, still **beta**. One piece of work is new since 0.7.0: a second usability round, stability and
+accessibility first ([docs/ux-review.md](docs/ux-review.md), "Round 2": 15 candidates, 9 done, 1 in part, 5 left with
+the reason; 14 defects found and fixed). A second press no longer sends a second request, an overtaken answer no longer
+overwrites a newer one, and the API lets go of a request whose browser left. A server's page says what to do next from
+the server's real state, the dashboard lists what happened while one was away, the command palette forgives a slip in a
+word and addresses and numbers have copy buttons. axe-core now checks the main pages in both themes, and what it found
+is fixed. Everything is computed inside the panel from its own data; nothing acts without a click
+([docs/smart-features.md](docs/smart-features.md#kararlılık-ve-yeni-yardımcılar-ikinci-tur)). Screen readers, real
+phones and touch screens were not tried, and Firefox and WebKit ran only the smoke tests
+([docs/validation.md](docs/validation.md)).
+
+### Upgrading from 0.7.0
 
 Update from Admin → System → Updates or with `sudo sh scripts/install.sh update`. One migration (`092_away_seen`: a
-nullable column `users.away_seen_at`, no row rewritten), no new `.env` variable, no new runtime dependency and no setting
-to change. New routes: `GET /api/servers/:id/hints`, `GET /api/notifications/away` and
-`POST /api/notifications/away/seen`. [docs/upgrade-notes.md](docs/upgrade-notes.md) (Turkish) says what an operator
-sees.
+nullable column `users.away_seen_at`, no row rewritten; it runs by itself during the update), no new `.env` variable, no
+new runtime dependency and no setting to change. New routes: `GET /api/servers/:id/hints`, `GET /api/notifications/away`
+and `POST /api/notifications/away/seen`. The light theme's second-line text and green "success" text are slightly
+darker (contrast), and some header buttons' spoken names now start with their visible text; automation that finds them
+by name may need updating. [docs/upgrade-notes.md](docs/upgrade-notes.md) (Turkish) says what an operator sees.
 
 ### Added
 
@@ -557,7 +566,8 @@ First tagged version.
 - Settings: branding, SMTP, CAPTCHA, SMS providers, payment methods and notification rules.
 - Updates and backups from the panel, monitoring and alerts.
 
-[Unreleased]: https://github.com/syildirim689/lightning-vm/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/syildirim689/lightning-vm/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/syildirim689/lightning-vm/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/syildirim689/lightning-vm/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/syildirim689/lightning-vm/compare/v0.5.1...v0.6.0
 [0.5.1]: https://github.com/syildirim689/lightning-vm/compare/v0.5.0...v0.5.1

@@ -1490,7 +1490,7 @@ sonra kondu:
 
 İnceleme: [ux-review.md](ux-review.md#round-2--kararlılık-erişilebilirlik-ve-yeni-yardımcılar-2026-11-23) (15 aday;
 14 kusur). Ne yapıldığı: [smart-features.md](smart-features.md#kararlılık-ve-yeni-yardımcılar-ikinci-tur). Kod
-commit'leri `41a57b8` … `159b2a6`; henüz bir sürümde değil (`CHANGELOG.md`, Unreleased).
+commit'leri `41a57b8` … `159b2a6`. 0.8.0 sürümündedir (`CHANGELOG.md`).
 
 - **Birim testleri (geliştirme makinesi, Node 26):** API `npm test` 249/249 (önceden 238; 11 yeni:
   `server-hint-rules` 8, `away-rules` 3); web `npm test` 218/218 (önceden 203; 15 yeni: `latest` 4, `once` 5,
